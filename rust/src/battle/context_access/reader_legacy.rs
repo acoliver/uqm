@@ -2,8 +2,6 @@
 use crate::engine::battle::ShipId;
 #[cfg(not(test))]
 use crate::ships::native::abi::{COUNT, RPG_PLAYER_NUM};
-#[cfg(not(test))]
-use std::ffi::c_void;
 
 #[cfg(not(test))]
 /// # Safety
@@ -16,23 +14,21 @@ pub unsafe fn get_encounter_star_ship(
 ) -> Option<ShipId> {
     // SAFETY: the game-thread picker retains its selected ship through this synchronous handoff.
     unsafe {
-        get_encounter_star_ship_with_picker(input, activity, last, player, |player, result| {
-            crate::supermelee::native::battle_picker::live::get_next_melee_star_ship(
-                input, player, result,
-            )
+        get_encounter_star_ship_with_picker(input, activity, last, player, |player| {
+            crate::supermelee::native::battle_picker::live::get_next_melee_star_ship(input, player)
         })
     }
 }
 
 /// # Safety
-/// Last is null or live; a successful picker must return a live selected ship address.
+/// Last and selected ship identities must belong to their live player fleets.
 #[cfg(not(test))]
 pub unsafe fn get_encounter_star_ship_with_picker(
     input: &crate::engine::input::InputSession,
     activity: crate::engine::world::activity::ActivityControl,
     last: Option<ShipId>,
     player: u16,
-    pick: impl FnOnce(u16, *mut *mut c_void) -> u32,
+    pick: impl FnOnce(u16) -> Option<ShipId>,
 ) -> Option<ShipId> {
     // SAFETY: the Native picker retains only an identity while the blocking UI runs.
     unsafe { crate::pickship::ffi::encounter_ship(input, last, player, activity, pick) }

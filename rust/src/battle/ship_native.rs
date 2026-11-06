@@ -176,7 +176,6 @@ pub(crate) mod engine {
     use crate::battle::status_native::PostProcessStatus;
     use crate::engine::battle::{Cx, ElementId, ShipId};
     use crate::ships::native::normalize_facing;
-    use std::ptr;
 
     const TARGET_DAMAGED_FOR_1_PT_NATIVE: i16 = 2;
     const TARGET_DAMAGED_FOR_6_PLUS_PT_NATIVE: i16 = 5;
@@ -454,22 +453,15 @@ pub(crate) mod engine {
     /// Player queues and encounter/melee selection state must be initialized.
     pub unsafe fn initial_star_ships(cx: &mut Cx<'_>) -> BOOLEAN {
         if cx.world.activity() as BYTE == SUPER_MELEE as BYTE {
-            let mut ships = [ptr::null_mut(); NUM_PLAYERS as usize];
             let runtime = cx.kernel.input_runtime();
-            if cx.with_legacy(|| get_initial_melee_star_ships(runtime.input(), ships.as_mut_ptr()))
-                == 0
-            {
+            let Some(ships) = cx.with_legacy(|| get_initial_melee_star_ships(runtime.input()))
+            else {
                 return 0;
-            }
+            };
             for rank in 0..NUM_PLAYERS as COUNT {
                 let player = cx.kernel.player_order(rank);
-                let ship = {
-                    let queue = cx.kernel.ships(player as usize);
-                    let selected = queue
-                        .id(ships[player as usize] as usize)
-                        .unwrap_or_else(|| panic!("successful picker returned no initial ship"));
-                    queue.ship_id(selected)
-                };
+                let ship = ships[player as usize]
+                    .unwrap_or_else(|| panic!("successful picker returned no initial ship"));
                 if spawn_ship(cx, ship) == 0 {
                     return 0;
                 }

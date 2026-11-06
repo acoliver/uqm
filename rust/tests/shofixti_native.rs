@@ -904,9 +904,9 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
                                         activity,
                                         Some(last),
                                         player,
-                                        |player, out| {
+                                        |player| {
                                             selected[side] = true;
-                                            let mut state: GETMELEE_STATE = mem::zeroed();
+                                            let mut state = GETMELEE_STATE::default();
                                             let p = &mut state.player[player as usize];
                                             p.selecting = 1;
                                             p.ships_left = 1;
@@ -925,10 +925,9 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
                                             assert_eq!(state.player[side].done, 1);
                                             assert_eq!(
                                                 state.player[side].hBattleShip,
-                                                (&raw mut *reserves[side]).cast()
+                                                Some(reserves[side].ship_id)
                                             );
-                                            *out = state.player[side].hBattleShip;
-                                            1
+                                            state.player[side].hBattleShip
                                         },
                                     );
                                     assert_eq!(chosen.is_some(), expected_selection);

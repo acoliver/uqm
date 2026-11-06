@@ -100,8 +100,7 @@ pub mod live {
             return false;
         };
         s.choice = choice;
-        let queue = link_queue::ships(player as usize);
-        s.hBattleShip = queue.raw(queue.link(ship));
+        s.hBattleShip = Some(ship);
         if network {
             PlayMenuSound(1);
             if let Some(net) = &(*state).net {
@@ -253,7 +252,7 @@ pub mod live {
             for p in &mut (*state).player {
                 if p.selecting != 0 {
                     p.choice = 0;
-                    p.hBattleShip = ptr::null_mut();
+                    p.hBattleShip = None;
                 }
             }
             crate::engine::World::current()
@@ -531,10 +530,9 @@ pub mod live {
     unsafe fn get_ships(
         input: &crate::engine::input::InputSession,
         mask: u16,
-        ships: *mut *mut std::ffi::c_void,
-    ) -> u32 {
+    ) -> Option<[Option<ShipId>; 2]> {
         crate::app::bridge::enter(|cx| {
-            let mut state: GETMELEE_STATE = mem::zeroed();
+            let mut state = GETMELEE_STATE::default();
             let counters = cx.b.counters;
             let net = cx.b.network();
             state.net = Some(net.clone());
@@ -562,6 +560,7 @@ pub mod live {
                 let inputs = cx.kernel.player_input.clone();
                 cx.with_legacy(|| choose(input, &mut state, &inputs) != 0)
             });
+            let mut ships = [None; 2];
             cx.with_legacy(|| {
                 WaitForSoundEnd(0);
                 for (player, p) in state.player.iter_mut().enumerate() {
@@ -569,7 +568,7 @@ pub mod live {
                         continue;
                     }
                     if p.done != 0 {
-                        *ships.add(player) = p.hBattleShip;
+                        ships[player] = p.hBattleShip;
                     } else {
                         flash_terminate(p.flashContext);
                         p.flashContext = ptr::null_mut();
@@ -587,36 +586,29 @@ pub mod live {
                     .set_activity(cx.world.activity() & !(IN_BATTLE as u16));
             }
             net.end_selection();
-            u32::from(ok)
+            ok.then_some(ships)
         })
     }
     /// # Safety
-    /// Output has two slots and both battle fleets are initialized.
+    /// Both battle fleets and their selection resources must be initialized.
     pub unsafe fn get_initial_melee_star_ships(
         input: &crate::engine::input::InputSession,
-        ships: *mut *mut std::ffi::c_void,
-    ) -> u32 {
+    ) -> Option<[Option<ShipId>; 2]> {
         for player in 0..2 {
             value(SetAbsFrameIndex(PickMeleeFrame, player as u16), player);
             draw(player);
         }
         SleepThreadUntil(FadeScreen(FADE_ALL_TO_COLOR, 840 / 2).wrapping_add(840 / 60));
         FlushColorXForms();
-        get_ships(input, 3, ships)
+        get_ships(input, 3)
     }
     /// # Safety
-    /// Output has one slot and the selected player's battle fleet is live.
+    /// The selected player's battle fleet and selection resources must be initialized.
     pub unsafe fn get_next_melee_star_ship(
         input: &crate::engine::input::InputSession,
         player: u16,
-        result: *mut *mut std::ffi::c_void,
-    ) -> u32 {
+    ) -> Option<ShipId> {
         draw(player as usize);
-        let mut ships = [ptr::null_mut(); 2];
-        let ok = get_ships(input, 1 << player, ships.as_mut_ptr());
-        if ok != 0 {
-            *result = ships[player as usize];
-        }
-        ok
+        get_ships(input, 1 << player)?[player as usize]
     }
 }

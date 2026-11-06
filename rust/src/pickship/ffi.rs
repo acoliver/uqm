@@ -12,7 +12,7 @@ use crate::engine::{
     Kernel as KernelOwner, World as WorldOwner, WorldData as WorldFields,
 };
 
-use std::ffi::{c_char, c_int, c_void};
+use std::ffi::{c_char, c_int};
 
 use super::{
     crew_label, crew_strip, find_escort, highlight, icon_origin, moved, name_strip, slot, Area,
@@ -127,10 +127,7 @@ pub(crate) fn live_escort_indices() -> Vec<u16> {
 /// Every `STARSHIP` of the player's queue before the flagship, which is the
 /// tail.
 fn escort_links() -> Vec<(ShipId, Escort)> {
-    let tail = LinkQueue::<Starship>::identify_ship(
-        RPG_PLAYER_NUM,
-        LinkQueue::<Starship>::tail_of(RPG_PLAYER_NUM),
-    );
+    let tail = LinkQueue::<Starship>::last_ship(RPG_PLAYER_NUM);
     LinkQueue::<Starship>::all_links()
         .into_iter()
         .filter(|id| Some(*id) != tail)
@@ -180,10 +177,7 @@ unsafe fn change_selection(state: &mut PickerState) {
     };
 
     state.chosen = match slot(state.cursor) {
-        Slot::Flagship => LinkQueue::<Starship>::identify_ship(
-            RPG_PLAYER_NUM,
-            LinkQueue::<Starship>::tail_of(RPG_PLAYER_NUM),
-        ),
+        Slot::Flagship => LinkQueue::<Starship>::last_ship(RPG_PLAYER_NUM),
         Slot::Escort(ship_index) => {
             let links = escort_links();
             let escorts: Vec<Escort> = links.iter().map(|(_, escort)| *escort).collect();
@@ -308,11 +302,11 @@ fn base_activity_aborted(activity: &ActivityControl) -> bool {
 unsafe fn get_armada_star_ship(
     input: &crate::engine::input::InputSession,
     activity: ActivityControl,
-) -> *mut c_void {
+) -> Option<ShipId> {
     // SAFETY: `battle_counter` has a slot for each side.
     if unsafe { crate::app::bridge::battle(|b| b.counters[1]) } == 0 {
         // No opponents left.
-        return std::ptr::null_mut();
+        return None;
     }
 
     // SAFETY: the context global is set at startup.
@@ -343,8 +337,7 @@ unsafe fn get_armada_star_ship(
 
     let chosen = state.chosen;
     if chosen.is_some() {
-        if LinkQueue::<Starship>::ship_raw(chosen) == LinkQueue::<Starship>::tail_of(RPG_PLAYER_NUM)
-        {
+        if chosen == LinkQueue::<Starship>::last_ship(RPG_PLAYER_NUM) {
             // Player chose SIS. There will be no more choices.
             // SAFETY: `battle_counter` has a slot for each side.
             unsafe { crate::app::bridge::battle(|b| b.counters[RPG_PLAYER_NUM] = 1) };
@@ -355,7 +348,7 @@ unsafe fn get_armada_star_ship(
 
     // SAFETY: restores the context saved above.
     unsafe { base::SetContext(old_context) };
-    LinkQueue::<Starship>::ship_raw(chosen)
+    chosen
 }
 
 pub use crate::battle::context_access::reader_legacy::{
@@ -365,14 +358,14 @@ pub use crate::battle::context_access::reader_legacy::{
 /// Resolve the next ship with an explicit boundary for the blocking melee UI.
 ///
 /// # Safety
-/// As for `get_encounter_star_ship`. The picker must write a live selected
-/// ship handle when it succeeds.
+/// As for `get_encounter_star_ship`. The picker must return an identity
+/// from the requested player's live fleet.
 pub(crate) unsafe fn encounter_ship(
     input: &crate::engine::input::InputSession,
     last: Option<crate::engine::battle::ShipId>,
     which_player: u16,
     activity: ActivityControl,
-    pick: impl FnOnce(u16, *mut *mut c_void) -> u32,
+    pick: impl FnOnce(u16) -> Option<ShipId>,
 ) -> Option<crate::engine::battle::ShipId> {
     let activity_word = activity.activity();
     let side = usize::from(which_player);
@@ -396,12 +389,7 @@ pub(crate) unsafe fn encounter_ship(
             // One side is out of ships. Game over.
             return None;
         }
-        let mut ship = std::ptr::null_mut();
-        // SAFETY: `ship` is a valid out-parameter.
-        if pick(which_player, &mut ship) == 0 {
-            return None;
-        }
-        return LinkQueue::<Starship>::identify_ship(side, ship);
+        return pick(which_player);
     }
 
     // Full game.
@@ -412,17 +400,12 @@ pub(crate) unsafe fn encounter_ship(
         if last.is_none() && ships_left == 1 {
             // First time picking a ship and player has no escorts: SIS is the
             // last ship in the queue (though there is only one).
-            return LinkQueue::<Starship>::identify_ship(
-                side,
-                LinkQueue::<Starship>::tail_of(side),
-            );
+            return LinkQueue::<Starship>::last_ship(side);
         }
         if ships_left != 0 {
             // Player still has ships left
             // SAFETY: game thread inside a full-game battle.
-            return LinkQueue::<Starship>::identify_ship(side, unsafe {
-                get_armada_star_ship(input, activity)
-            });
+            return unsafe { get_armada_star_ship(input, activity) };
         }
         if last.is_some() {
             // The last ship was the flagship.
