@@ -510,18 +510,19 @@ pub(crate) mod engine {
     }
 
     unsafe fn draw_fade_text(
+        cx: &mut crate::engine::battle::Cx<'_>,
         input: &crate::engine::input::InputSession,
-        kernel: &crate::engine::Kernel,
         str1: &std::ffi::CStr,
         str2: &std::ffi::CStr,
         fade_in: BOOLEAN,
         rect: &RECT,
     ) {
         let context = crate::graphics::context_abi::ContextLease::retain(
-            std::ptr::NonNull::new(kernel.space_context)
+            std::ptr::NonNull::new(cx.kernel.space_context)
                 .unwrap_or_else(|| panic!("salvage requires a space context")),
         );
-        let font = kernel
+        let font = cx
+            .kernel
             .micro_font_lease()
             .unwrap_or_else(|| panic!("salvage requires the micro font"));
         let baseline = POINT {
@@ -551,7 +552,7 @@ pub(crate) mod engine {
                 }
                 let v = TEXT_FADE[i];
                 render(rgb15(v, v, v));
-                SleepThreadUntil(time.wrapping_add(ONE_SECOND / 20));
+                cx.with_legacy(|| SleepThreadUntil(time.wrapping_add(ONE_SECOND / 20)));
                 time = GetTimeCounter();
                 i += 1;
             }
@@ -563,7 +564,7 @@ pub(crate) mod engine {
                 }
                 let v = TEXT_FADE[i as usize];
                 render(rgb15(v, v, v));
-                SleepThreadUntil(time.wrapping_add(ONE_SECOND / 20));
+                cx.with_legacy(|| SleepThreadUntil(time.wrapping_add(ONE_SECOND / 20)));
                 time = GetTimeCounter();
                 i -= 1;
             }
@@ -612,18 +613,23 @@ pub(crate) mod engine {
                 if victory < 0 {
                     victory = 0;
                 } else {
-                    draw_sisframe();
-                    DrawSISMessage(ptr::null());
+                    cx.with_legacy(|| {
+                        draw_sisframe();
+                        DrawSISMessage(ptr::null());
+                    });
                     if in_hqspace(cx.world) != 0 {
-                        DrawHyperCoords(cx.world.data.game.ship_stamp.origin);
+                        let point = cx.world.data.game.ship_stamp.origin;
+                        cx.with_legacy(|| DrawHyperCoords(point));
                     } else if cx.world.data.game.ip_planet == 0 {
-                        DrawHyperCoords((*cx.world.star_pointer(current_catalog())).star_pt);
+                        let point = (*cx.world.star_pointer(current_catalog())).star_pt;
+                        cx.with_legacy(|| DrawHyperCoords(point));
                     } else {
-                        DrawSISTitle(cx.world.data.flagship.planet_name.as_mut_ptr().cast());
+                        let name = cx.world.data.flagship.planet_name.as_mut_ptr().cast();
+                        cx.with_legacy(|| DrawSISTitle(name));
                     }
                     SetContext(cx.kernel.space_context);
                     if victory != 0 {
-                        DrawArmadaPickShip(1, &mut salvage_rect);
+                        cx.with_legacy(|| DrawArmadaPickShip(1, &mut salvage_rect));
                     }
                 }
             }
@@ -639,9 +645,9 @@ pub(crate) mod engine {
                         killed = killed.wrapping_add(1);
                         if victory != 0 {
                             if killed == 1 {
-                                let kernel = &*cx.kernel;
                                 recycle = 0;
-                                DrawStatusMessage(ptr::null());
+                                cx.with_legacy(|| DrawStatusMessage(ptr::null()));
+                                let kernel = &*cx.kernel;
                                 stamp.origin.x = salvage_rect.corner.x.wrapping_add(32);
                                 stamp.origin.y = salvage_rect.corner.y.wrapping_add(56);
                                 stamp.frame = IncFrameIndex(frag.icons);
@@ -663,7 +669,7 @@ pub(crate) mod engine {
                                 str2 = kernel
                                     .game_text((ENCOUNTER_STRING_BASE + 5) as usize)
                                     .to_owned();
-                                draw_fade_text(input, kernel, &str1, &str2, 1, &salvage_rect);
+                                draw_fade_text(cx, input, &str1, &str2, 1, &salvage_rect);
                             }
                             rect.corner.y = salvage_rect.corner.y.wrapping_add(9);
                             rect.extent.height = 22;
@@ -676,23 +682,19 @@ pub(crate) mod engine {
                             DrawFilledRectangle(&mut rect);
                             let bounty = RACE_BOUNTY[cx.world.encounter_race as usize] >> 3;
                             recycle = recycle.wrapping_add(bounty);
-                            sprintf(buf.as_mut_ptr(), c"%u".as_ptr(), recycle as u32);
-                            let bytes = buf.map(|byte| byte as u8);
-                            let amount = std::ffi::CStr::from_bytes_until_nul(&bytes)
-                                .unwrap_or_else(|error| {
-                                    panic!("unterminated salvage amount: {error}")
-                                });
+                            let amount = std::ffi::CString::new(recycle.to_string())
+                                .unwrap_or_else(|error| panic!("invalid salvage amount: {error}"));
                             SetContextForeGroundColor(rgb15(0, 0, 24));
                             draw_salvage_line(
                                 cx.kernel,
-                                amount,
+                                &amount,
                                 POINT {
                                     x: (rect.corner.x as i32 + rect.extent.width as i32 - 1) as i16,
                                     y: rect.corner.y.wrapping_add(14),
                                 },
                                 SalvageText::Amount,
                             );
-                            DeltaSISGauges(0, 0, bounty as i32);
+                            cx.with_legacy(|| DeltaSISGauges(0, 0, bounty as i32));
                             let before = victory;
                             victory = victory.wrapping_add(1);
                             if (before - 1) % 5 != 0 {
@@ -715,7 +717,9 @@ pub(crate) mod engine {
                                     }
                                     SetContextForeGroundColor(rgb15(r, g, b));
                                     DrawFilledStamp(&mut stamp);
-                                    SleepThreadUntil(time.wrapping_add(ONE_SECOND / 15));
+                                    cx.with_legacy(|| {
+                                        SleepThreadUntil(time.wrapping_add(ONE_SECOND / 15))
+                                    });
                                     time = GetTimeCounter();
                                 }
                             }
@@ -728,30 +732,26 @@ pub(crate) mod engine {
         }
         SetStatusMessageMode(previous_mode);
         if victory != 0 {
-            WaitForAnyButton(1, ONE_SECOND * 3, 0);
+            cx.with_legacy(|| WaitForAnyButton(1, ONE_SECOND * 3, 0));
             if !escape_pressed(input) {
-                draw_fade_text(input, cx.kernel, &str1, &str2, 0, &salvage_rect);
+                draw_fade_text(cx, input, &str1, &str2, 0, &salvage_rect);
                 if !escape_pressed(input) {
                     SetContextForeGroundColor(rgb15(0, 0, 0));
                     rect.corner.x = salvage_rect.corner.x.wrapping_add(10);
                     rect.extent.width = 132;
                     DrawFilledRectangle(&mut rect);
-                    sprintf(
-                        buf.as_mut_ptr(),
-                        c"%u %s".as_ptr(),
-                        recycle as u32,
+                    let mut total = format!("{recycle} ").into_bytes();
+                    total.extend_from_slice(
                         cx.kernel
                             .game_text((STATUS_STRING_BASE + 1) as usize)
-                            .as_ptr()
-                            .cast::<UNICODE>(),
+                            .to_bytes(),
                     );
-                    let bytes = buf.map(|byte| byte as u8);
-                    let total = std::ffi::CStr::from_bytes_until_nul(&bytes)
-                        .unwrap_or_else(|error| panic!("unterminated salvage total: {error}"));
+                    let total = std::ffi::CString::new(total)
+                        .unwrap_or_else(|error| panic!("invalid salvage total: {error}"));
                     SetContextForeGroundColor(rgb15(0, 0, 24));
                     draw_salvage_line(
                         cx.kernel,
-                        total,
+                        &total,
                         POINT {
                             x: (rect.corner.x as i32 + (rect.extent.width as i32 >> 1)) as i16,
                             y: rect.corner.y.wrapping_add(14),
@@ -766,14 +766,14 @@ pub(crate) mod engine {
                         .kernel
                         .game_text((ENCOUNTER_STRING_BASE + 7) as usize)
                         .to_owned();
-                    draw_fade_text(input, cx.kernel, &str1, &str2, 1, &salvage_rect);
-                    WaitForAnyButton(1, ONE_SECOND * 2, 0);
+                    draw_fade_text(cx, input, &str1, &str2, 1, &salvage_rect);
+                    cx.with_legacy(|| WaitForAnyButton(1, ONE_SECOND * 2, 0));
                     if !escape_pressed(input) {
-                        draw_fade_text(input, cx.kernel, &str1, &str2, 0, &salvage_rect);
+                        draw_fade_text(cx, input, &str1, &str2, 0, &salvage_rect);
                     }
                 }
             }
-            DrawStatusMessage(ptr::null());
+            cx.with_legacy(|| DrawStatusMessage(ptr::null()));
         }
         killed = apply_thraddash_body_count(cx.world, killed);
         killed

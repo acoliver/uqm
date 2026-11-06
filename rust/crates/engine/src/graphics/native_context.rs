@@ -126,7 +126,10 @@ impl ContextLease {
         // Set-frame retains its new allocation; clipping and drawing retain the
         // selected target before entering this native operation boundary.
         unsafe {
-            let previous = context_abi::SetContext(selected);
+            let previous = match operation {
+                Operation::BeginBatch | Operation::EndBatch => context_abi::_pCurContext,
+                _ => context_abi::SetContext(selected),
+            };
             match operation {
                 Operation::Select | Operation::Deselect => (),
                 Operation::BeginBatch => super::gfx_common_abi::batch_graphics(),
