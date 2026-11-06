@@ -473,6 +473,57 @@ mod tests {
 
     #[test]
     #[serial_test::serial]
+    fn scoped_clip_and_origin_restore_after_unwind_and_target_changes() {
+        let raw = allocated_context();
+        let context = ContextLease::retain(std::ptr::NonNull::new(raw).unwrap());
+        // SAFETY: the serial fixture owns this new two-frame drawable and its context.
+        let drawable = unsafe { super::super::drawable_abi::AllocDrawable(2) };
+        // SAFETY: both frames belong to this initialized allocation.
+        let (first, second) = unsafe {
+            let first = super::super::pixmap_abi::CaptureDrawable(drawable);
+            (
+                first,
+                super::super::drawable_abi::retain_frame_allocations(&[first])[0]
+                    .frame(1)
+                    .unwrap(),
+            )
+        };
+        let first = ContextFrame::retain(std::ptr::NonNull::new(first));
+        let second = ContextFrame::retain(std::ptr::NonNull::new(second));
+        first.replace_hotspot(POINT { x: -3, y: 7 });
+        second.replace_hotspot(POINT { x: 9, y: 8 });
+        context.set_frame(first.clone());
+        context.clear_clip();
+        let clip = RECT {
+            corner: POINT { x: 1, y: 2 },
+            extent: EXTENT {
+                width: 3,
+                height: 4,
+            },
+        };
+        let rejected = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            context.with_clip(clip, || {
+                assert_eq!(context.clip_rect().extent.width, 3);
+                context.with_origin(POINT { x: 4, y: 5 }, || {
+                    assert_eq!((first.rect().corner.x, first.rect().corner.y), (-4, -5));
+                    context.set_frame(second.clone());
+                    panic!("fixture drawing failure");
+                });
+            });
+        }));
+        assert!(rejected.is_err());
+        assert_eq!((first.rect().corner.x, first.rect().corner.y), (3, -7));
+        assert_eq!((second.rect().corner.x, second.rect().corner.y), (-9, -8));
+        // SAFETY: inspect the retained context, then release only the fixture's native owners.
+        unsafe {
+            assert_eq!((*raw).ClipRect.extent.width, 0);
+            assert_eq!(super::super::drawable_abi::DestroyDrawable(drawable), 1);
+            assert_eq!(DestroyContext(raw), 1);
+        }
+    }
+
+    #[test]
+    #[serial_test::serial]
     fn context_retention_rejects_unowned_and_retired_addresses() {
         assert!(
             std::panic::catch_unwind(|| ContextLease::retain(std::ptr::NonNull::dangling()))

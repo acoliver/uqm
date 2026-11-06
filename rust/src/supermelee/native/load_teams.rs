@@ -107,8 +107,9 @@ pub(crate) mod live {
         }
     }
     unsafe fn fill_view(state: *mut MELEE_STATE) -> bool {
-        let directory =
-            Directory::retain(std::ptr::NonNull::new(meleeDir.cast()).expect("melee directory"));
+        let directory = Directory::retain(
+            std::ptr::NonNull::new(meleeDir.cast()).unwrap_or_else(|| panic!("melee directory")),
+        );
         (*state).load.fill_view(&directory)
     }
     unsafe fn select(state: *mut MELEE_STATE, highlighted: bool) {
@@ -193,7 +194,7 @@ pub(crate) mod live {
             if keys[KEY_MENU_SELECT as usize] != 0 {
                 let team = (*state).load.view[((*state).load.current - (*state).load.top) as usize]
                     .clone();
-                Melee_LocalChange_team(state, (*state).side as usize, &team);
+                local_change_team(state, (*state).side as usize, &team);
             }
             (*state).phase = crate::supermelee::netplay::session::MenuPhase::Menu;
             (*state).last_input_time = GetTimeCounter();
@@ -229,14 +230,15 @@ pub(crate) mod live {
     }
     /// # Safety
     /// State must own a live load view on the game thread.
-    pub unsafe fn LoadTeamList(state: *mut MELEE_STATE) {
-        let directory =
-            Directory::retain(std::ptr::NonNull::new(meleeDir.cast()).expect("melee directory"));
+    pub unsafe fn load_team_list(state: *mut MELEE_STATE) {
+        let directory = Directory::retain(
+            std::ptr::NonNull::new(meleeDir.cast()).unwrap_or_else(|| panic!("melee directory")),
+        );
         (*state).load.refresh(&directory);
     }
     /// # Safety
     /// State must own the team being saved on the game thread.
-    pub unsafe fn DoSaveTeam(state: *mut MELEE_STATE) {
+    pub unsafe fn do_save_team(state: *mut MELEE_STATE) {
         let mut filename = (*state).melee_setup.teams[(*state).side as usize]
             .c_name()
             .to_bytes()
@@ -247,8 +249,9 @@ pub(crate) mod live {
         let old = SetContext(KernelOwner::current().read(|owner| owner.screen_context));
         let mut saved = mem::zeroed();
         ConfirmSaveLoad(&mut saved);
-        let directory =
-            Directory::retain(std::ptr::NonNull::new(meleeDir.cast()).expect("melee directory"));
+        let directory = Directory::retain(
+            std::ptr::NonNull::new(meleeDir.cast()).unwrap_or_else(|| panic!("melee directory")),
+        );
         let team = &(*state).melee_setup.teams[(*state).side as usize];
         let ok = write_team(&directory, &filename, team).is_ok();
         (*state).load.top = 0;
@@ -259,7 +262,7 @@ pub(crate) mod live {
         if !ok {
             SaveProblem();
         }
-        LoadTeamList(state);
+        load_team_list(state);
         if let Some(index) = (*state).load.file_index(&filename) {
             assert!(index < (*state).load.count());
             (*state).load.current = index;

@@ -353,7 +353,7 @@ pub mod live {
     /// # Safety
     /// The setup, master queue and empty battle queues must be initialized.
     #[no_mangle]
-    pub unsafe fn FillPickMeleeFrame(setup: &crate::supermelee::setup::team::MeleeSetup) {
+    pub unsafe fn fill_pick_melee_frame(setup: &crate::supermelee::setup::team::MeleeSetup) {
         let (context, order, catalog) = KernelOwner::current().read(|owner| {
             (
                 owner.off_screen_context,

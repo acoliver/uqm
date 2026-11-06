@@ -307,13 +307,13 @@ pub(super) unsafe fn status(message: *const c_char) {
     }
     SetContext(old);
 }
-pub(super) unsafe fn status_player(player: isize) {
+pub(super) unsafe fn status_player(state: *mut MELEE_STATE, player: isize) {
     assert!((-1..2).contains(&player));
     if player == -1 {
         status(c"".as_ptr());
         return;
     }
-    let index = match connection(player as usize) {
+    let index = match connection(&*state, player as usize) {
         None => 0,
         Some(conn) => match conn.state {
             0 => 0,

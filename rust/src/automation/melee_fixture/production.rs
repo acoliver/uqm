@@ -359,10 +359,10 @@ fn configure(cx: &mut Cx<'_>, request: &MeleeSetupRequest) -> Result<(), String>
                     side,
                     slot,
                     crate::supermelee::types::MeleeShip::from_u8(ship as u8)
-                        .expect("validated fixture ship"),
+                        .unwrap_or_else(|| panic!("validated fixture ship")),
                     |ship| crate::ships::master_native::choice_cost(&state.catalog, ship as u16),
                 )
-                .expect("validated fixture fleet slot");
+                .unwrap_or_else(|error| panic!("validated fixture fleet slot: {error}"));
         }
     }
     Ok(())

@@ -8,15 +8,17 @@ pub(super) unsafe fn view_name(state: *mut MELEE_STATE, side: u16) {
     }
 }
 unsafe fn change_ship(state: *mut MELEE_STATE, side: u16, index: u16, ship: u32) -> bool {
-    let ship_kind = SetupShip::from_u8(u8::try_from(ship).expect("melee ship width"))
-        .expect("validated melee ship");
+    let ship_kind = SetupShip::from_u8(
+        u8::try_from(ship).unwrap_or_else(|error| panic!("melee ship width: {error}")),
+    )
+    .unwrap_or_else(|| panic!("validated melee ship"));
     let menu = &mut *state;
     let changed = menu
         .melee_setup
         .set_ship_with_cost(side as usize, index, ship_kind, |ship| {
             crate::ships::master_native::choice_cost(&menu.catalog, ship as u16)
         })
-        .expect("validated melee fleet slot");
+        .unwrap_or_else(|error| panic!("validated melee fleet slot: {error}"));
     if !changed {
         return false;
     }
@@ -50,25 +52,20 @@ unsafe fn change_name(state: *mut MELEE_STATE, side: u16, value: &std::ffi::CStr
 }
 /// # Safety
 /// The menu and its graphics must be live on the game thread.
-pub unsafe fn Melee_LocalChange_ship(
-    state: *mut MELEE_STATE,
-    side: u16,
-    index: u16,
-    ship: u32,
-) -> bool {
+pub unsafe fn local_change_ship(state: *mut MELEE_STATE, side: u16, index: u16, ship: u32) -> bool {
     if !change_ship(state, side, index, ship) {
         return false;
     }
     if (*state).melee_setup.sent[side as usize].ships[index as usize] == SetupShip::MeleeUnset {
         netplay_notify_all_set_ship(&*state, side, index);
         (*state).melee_setup.sent[side as usize].ships[index as usize] =
-            SetupShip::from_u8(ship as u8).expect("validated melee ship");
+            SetupShip::from_u8(ship as u8).unwrap_or_else(|| panic!("validated melee ship"));
     }
     true
 }
 /// # Safety
 /// The menu and its graphics must be live on the game thread.
-pub unsafe fn Melee_LocalChange_teamName(
+pub unsafe fn local_change_team_name(
     state: *mut MELEE_STATE,
     side: u16,
     value: &std::ffi::CStr,
@@ -84,16 +81,16 @@ pub unsafe fn Melee_LocalChange_teamName(
 }
 /// # Safety
 /// The menu and its graphics must be live on the game thread.
-pub unsafe fn Melee_LocalChange_team(
+pub unsafe fn local_change_team(
     state: *mut MELEE_STATE,
     side: usize,
     team: &crate::supermelee::setup::team::MeleeTeam,
 ) -> bool {
     let mut changed = false;
     for (index, ship) in team.ships.iter().enumerate() {
-        changed |= Melee_LocalChange_ship(state, side as u16, index as u16, *ship as u32);
+        changed |= local_change_ship(state, side as u16, index as u16, *ship as u32);
     }
-    changed |= Melee_LocalChange_teamName(state, side as u16, team.c_name());
+    changed |= local_change_team_name(state, side as u16, team.c_name());
     changed
 }
 /// # Safety
@@ -132,7 +129,7 @@ pub(super) unsafe fn remote_ship(
     if (*state).melee_setup.teams[side as usize].ships[index as usize] != sent {
         netplay_notify_all_set_ship(&*state, side, index);
         (*state).melee_setup.sent[side as usize].ships[index as usize] =
-            SetupShip::from_u8(ship as u8).expect("validated remote ship");
+            SetupShip::from_u8(ship as u8).unwrap_or_else(|| panic!("validated remote ship"));
     }
 }
 /// # Safety
@@ -261,7 +258,8 @@ pub(crate) unsafe fn apply_protocol_event(
                 state,
                 event.player,
                 side,
-                std::ffi::CStr::from_bytes_until_nul(&terminated).expect("terminated remote name"),
+                std::ffi::CStr::from_bytes_until_nul(&terminated)
+                    .unwrap_or_else(|error| panic!("terminated remote name: {error}")),
             );
         }
         Effect::Seed(seed) => {

@@ -3998,10 +3998,10 @@ pub type MELEE_OPTIONS = BYTE;
 pub use crate::supermelee::native::load_teams::live::do_load_team;
 
 #[cfg(not(test))]
-pub use crate::supermelee::native::load_teams::live::DoSaveTeam;
+pub use crate::supermelee::native::load_teams::live::do_save_team;
 
 #[cfg(not(test))]
-pub use crate::supermelee::native::load_teams::live::LoadTeamList;
+pub use crate::supermelee::native::load_teams::live::load_team_list;
 pub const MeleeShip_MELEE_ANDROSYNTH: MeleeShip = 0;
 pub const MeleeShip_MELEE_ARILOU: MeleeShip = 1;
 pub const MeleeShip_MELEE_CHENJESU: MeleeShip = 2;
@@ -4061,14 +4061,14 @@ pub use crate::supermelee::native::menu::live::drawing::Melee_flashSelection;
 
 
 #[cfg(not(test))]
-pub use crate::supermelee::native::menu::live::changes::Melee_LocalChange_ship;
+pub use crate::supermelee::native::menu::live::changes::local_change_ship;
 
 #[cfg(not(test))]
-pub use crate::supermelee::native::menu::live::changes::Melee_LocalChange_teamName;
+pub use crate::supermelee::native::menu::live::changes::local_change_team_name;
 
 
 #[cfg(not(test))]
-pub use crate::supermelee::native::menu::live::changes::Melee_LocalChange_team;
+pub use crate::supermelee::native::menu::live::changes::local_change_team;
 
 
 
@@ -4095,7 +4095,7 @@ pub use crate::supermelee::native::battle_picker::live::BuildPickMeleeFrame;
 pub use crate::supermelee::native::battle_picker::live::DestroyPickMeleeFrame;
 
 #[cfg(not(test))]
-pub use crate::supermelee::native::battle_picker::live::FillPickMeleeFrame;
+pub use crate::supermelee::native::battle_picker::live::fill_pick_melee_frame;
 pub const ENEMY_SHIP_INDEX: _bindgen_ty_28 = 0;
 pub const CREW_OBJECT_INDEX: _bindgen_ty_28 = 1;
 pub const ENEMY_WEAPON_INDEX: _bindgen_ty_28 = 2;

@@ -23,7 +23,7 @@ use crate::c_bindings::controller_input::{
 };
 
 use crate::comm::{
-    locdata::{CColor, CPoint, CRect, CStamp},
+    locdata::{CColor, CPoint, CRect},
     sis_graphics::CText,
 };
 
@@ -43,8 +43,6 @@ const MENU_SOUND_ARROWS: u16 = 0x0F;
 const MENU_SOUND_SELECT: u16 = 1 << 4;
 /// `ALIGN_CENTER`.
 const ALIGN_CENTER: c_int = 1;
-/// `SC2_PICK_PMAP_ANIM`.
-const PICK_GRAPHIC: &[u8] = b"graphics.pickship\0";
 /// `RUN_AWAY_FUEL_COST`.
 const RUN_AWAY_FUEL_COST: u32 = 5 * FUEL_TANK_SCALE;
 
@@ -52,10 +50,8 @@ use crate::sound::heart_ffi::wait_for_sound_end as WaitForSoundEnd;
 
 use crate::graphics::{
     context_abi::SetContextForeGroundColor,
-    drawable_abi::SetFrameHot,
     font_abi::{font_DrawText, SetContextFont},
-    frame_abi::{DrawFilledRectangle, DrawFilledStamp, DrawStamp},
-    pixmap_abi::{DecFrameIndex, IncFrameIndex, SetAbsFrameIndex},
+    frame_abi::DrawFilledRectangle,
 };
 
 use crate::ui::sis::{capacity::GetCrewPodCapacity, SetFlashRect};
@@ -492,124 +488,120 @@ pub(crate) unsafe fn encounter_ship(
 /// `pick_rect` is valid for writing; game thread only.
 #[export_name = "DrawArmadaPickShip"]
 pub unsafe extern "C" fn draw_armada_pick_ship(draw_salvage_frame: c_int, pick_rect: *mut CRect) {
-    // SAFETY: the context global is set at startup.
-    let old_context =
-        unsafe { base::SetContext(KernelOwner::current().read(|kernel| kernel.space_context)) };
-    // SAFETY: `PICK_GRAPHIC` is NUL terminated.
-    let pick_frame = unsafe {
-        base::CaptureDrawable((base::LoadGraphicInstance(PICK_GRAPHIC.as_ptr().cast())).cast())
+    use crate::graphics::{
+        context_abi::ContextLease, drawable_abi::LoadedDrawable, native_font::FontLease,
     };
-
-    // SAFETY: balanced by `UnbatchGraphics` below.
-    unsafe { base::BatchGraphics() };
-
-    let mut stamp = CStamp {
-        origin: CPoint::default(),
-        frame: (pick_frame).cast(),
-    };
-    let no_hot_spot = CPoint { x: 0, y: 0 };
-    let mut pick = CRect::default();
-    let mut clip = CRect::default();
-    // SAFETY: the rectangles are valid for the calls and the frame is loaded.
-    unsafe {
-        SetFrameHot((stamp.frame).cast(), no_hot_spot);
-        crate::battle::c_bridge::GetFrameRect(
-            (stamp.frame).cast(),
-            std::ptr::addr_of_mut!(pick).cast(),
-        );
-        crate::c_bindings::global_state::GetContextClipRect(std::ptr::addr_of_mut!(clip).cast());
-    }
-    pick.corner.x = (clip.width >> 1) - (pick.width >> 1);
-    pick.corner.y = (clip.height >> 1) - (pick.height >> 1);
-
-    if draw_salvage_frame == 0 {
-        // SAFETY: the caller's contract.
-        unsafe { *pick_rect = pick };
-    } else {
-        stamp.origin.x = clip.width >> 1;
-        let mut salvage = CRect::default();
-        // SAFETY: the frames are loaded and `salvage` is valid.
-        unsafe {
-            stamp.frame = (IncFrameIndex((stamp.frame).cast())).cast();
-            SetFrameHot((stamp.frame).cast(), no_hot_spot);
-            crate::battle::c_bridge::GetFrameRect(
-                (stamp.frame).cast(),
-                std::ptr::addr_of_mut!(salvage).cast(),
-            );
-        }
-        stamp.origin.x -= salvage.width >> 1;
-        stamp.origin.y = pick.corner.y - (salvage.height >> 1);
-        // SAFETY: as above.
-        unsafe {
-            DrawStamp(std::ptr::from_mut(&mut stamp).cast());
-            stamp.frame = (DecFrameIndex((stamp.frame).cast())).cast();
-        }
-        pick.corner.y = stamp.origin.y + salvage.height;
-
-        salvage.corner.x = pick.corner.x;
-        salvage.corner.y = stamp.origin.y;
-        // SAFETY: the caller's contract.
-        unsafe { *pick_rect = salvage };
-    }
-    stamp.origin = pick.corner;
-    // SAFETY: the stamp's frame is loaded.
-    unsafe { DrawStamp(std::ptr::from_mut(&mut stamp).cast()) };
-
-    // SAFETY: the game thread owns `GlobData`; the name is a C string.
-    let ship_name = WorldFields::current().read(|world| world.flagship.ship_name);
-    set_color(Rgba::rgb15(0x12, 0x12, 0x12));
-    // SAFETY: font globals are set at startup.
-    unsafe { SetContextFont((KernelOwner::current().read(|kernel| kernel.star_con_font)).cast()) };
-    draw_text(
-        pick.corner.x + (pick.width >> 1),
-        pick.corner.y + pick.height - 5,
-        ship_name.as_ptr().cast(),
-        u16::MAX,
-    );
-
-    for id in LinkQueue::<Starship>::all_links() {
-        // SAFETY: every link of `race_q` is a `STARSHIP`.
-        let ship = LinkQueue::<Starship>::ship_value(id);
-        if ship.captain == 0 {
-            // SIS, not an escort
-            continue;
-        }
-        let (x, y) = icon_origin((pick.corner.x, pick.corner.y), ship.index);
-        stamp.origin = CPoint { x, y };
-        stamp.frame = LinkQueue::with_ship_resources(id, |r| r.icon().raw()).cast();
-        set_color(Rgba::BLACK);
-        fill(Area {
-            x,
-            y,
-            width: ICON_WIDTH,
-            height: ICON_HEIGHT,
-        });
-        let species = ship.species;
-        if species != NO_ID || ship.crew == 0 {
-            // SAFETY: the icon frame belongs to the ship.
-            unsafe { DrawStamp(std::ptr::from_mut(&mut stamp).cast()) };
-            if species == NO_ID {
-                // Dead ship - mark with an X.
-                stamp.origin.x -= 1;
-                // SAFETY: `StatusFrame` is loaded at startup.
-                unsafe {
-                    let status_frame = KernelOwner::current().read(|kernel| kernel.status_frame);
-                    stamp.frame = SetAbsFrameIndex(status_frame.cast(), 3).cast();
-                    DrawStamp(std::ptr::from_mut(&mut stamp).cast());
-                }
-            }
+    use std::{ffi::CStr, ptr::NonNull};
+    let (context, font, status_frame) = KernelOwner::current().read(|kernel| {
+        (
+            ContextLease::retain(
+                NonNull::new(kernel.space_context.cast())
+                    .unwrap_or_else(|| panic!("missing picker context")),
+            ),
+            FontLease::retain(
+                NonNull::new(kernel.star_con_font.cast())
+                    .unwrap_or_else(|| panic!("missing picker font")),
+            ),
+            crate::graphics::drawable_abi::retain_frame_allocations(&[kernel.status_frame.cast()])
+                [0]
+            .context_frame(3),
+        )
+    });
+    let owner = LoadedDrawable::load(c"graphics.pickship")
+        .unwrap_or_else(|| panic!("missing picker graphic"));
+    let frames = owner.lease();
+    let frame = frames.context_frame(0);
+    frame.replace_hotspot(crate::graphics::native_abi::POINT { x: 0, y: 0 });
+    let mut pick = frame.rect();
+    let result = context.draw_batch(|| {
+        use crate::graphics::native_abi::POINT;
+        let clip = context.clip_rect();
+        pick.corner.x = (clip.extent.width >> 1) - (pick.extent.width >> 1);
+        pick.corner.y = (clip.extent.height >> 1) - (pick.extent.height >> 1);
+        let result = if draw_salvage_frame == 0 {
+            pick
         } else {
-            // Ship ran away
-            set_color(Rgba::rgb15(0x00, 0x00, 0x14));
-            // SAFETY: the icon frame belongs to the ship.
-            unsafe { DrawFilledStamp(std::ptr::from_mut(&mut stamp).cast()) };
+            let salvage_frame = frames.context_frame(1);
+            salvage_frame.replace_hotspot(POINT { x: 0, y: 0 });
+            let mut salvage = salvage_frame.rect();
+            let origin = POINT {
+                x: (clip.extent.width >> 1) - (salvage.extent.width >> 1),
+                y: pick.corner.y - (salvage.extent.height >> 1),
+            };
+            context.draw_stamp(&salvage_frame, origin);
+            pick.corner.y = origin.y + salvage.extent.height;
+            salvage.corner = POINT {
+                x: pick.corner.x,
+                y: origin.y,
+            };
+            salvage
+        };
+        context.draw_stamp(&frame, pick.corner);
+        let ship_name = WorldFields::current().read(|world| world.flagship.ship_name);
+        let ship_name = CStr::from_bytes_until_nul(&ship_name)
+            .unwrap_or_else(|error| panic!("unterminated flagship name: {error}"));
+        context.draw_text(
+            &font,
+            ship_name,
+            POINT {
+                x: pick.corner.x + (pick.extent.width >> 1),
+                y: pick.corner.y + pick.extent.height - 5,
+            },
+            1,
+            color(Rgba::rgb15(0x12, 0x12, 0x12)),
+        );
+        for id in LinkQueue::<Starship>::all_links() {
+            draw_escort_icon(&context, &status_frame, id, pick);
         }
-    }
-
-    // SAFETY: balances `BatchGraphics`; the frame is released once.
+        result
+    });
+    // SAFETY: the legacy caller supplies its output; resources stay retained through the batch.
     unsafe {
-        base::UnbatchGraphics();
-        base::DestroyDrawable(base::ReleaseDrawable(pick_frame));
-        base::SetContext(old_context);
+        *pick_rect = CRect {
+            corner: CPoint {
+                x: result.corner.x,
+                y: result.corner.y,
+            },
+            width: result.extent.width,
+            height: result.extent.height,
+        };
+    }
+}
+
+fn draw_escort_icon(
+    context: &crate::graphics::context_abi::ContextLease,
+    status: &crate::graphics::context_abi::ContextFrame,
+    id: ShipId,
+    pick: crate::graphics::native_abi::RECT,
+) {
+    use crate::graphics::{
+        context_abi::ContextFrame,
+        native_abi::{EXTENT, POINT, RECT},
+    };
+    let ship = LinkQueue::<Starship>::ship_value(id);
+    if ship.captain == 0 {
+        return;
+    }
+    let (x, y) = icon_origin((pick.corner.x, pick.corner.y), ship.index);
+    let icon = LinkQueue::with_ship_resources(id, |resources| {
+        ContextFrame::retain(std::ptr::NonNull::new(resources.icon().raw().cast()))
+    });
+    context.fill_rectangle(
+        color(Rgba::BLACK),
+        RECT {
+            corner: POINT { x, y },
+            extent: EXTENT {
+                width: ICON_WIDTH,
+                height: ICON_HEIGHT,
+            },
+        },
+    );
+    if ship.species != NO_ID || ship.crew == 0 {
+        context.draw_stamp(&icon, POINT { x, y });
+        if ship.species == NO_ID {
+            context.draw_stamp(status, POINT { x: x - 1, y });
+        }
+    } else {
+        context.draw_filled_stamp(&icon, POINT { x, y }, color(Rgba::rgb15(0x00, 0x00, 0x14)));
     }
 }

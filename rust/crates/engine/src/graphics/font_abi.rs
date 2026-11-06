@@ -107,7 +107,7 @@ pub unsafe extern "C" fn GetContextFontLeadingWidth(width: *mut i16) -> BOOLEAN 
     u32::from(!_CurFontPtr.is_null())
 }
 
-unsafe fn measure(
+pub(super) unsafe fn measure(
     font: *mut font_desc,
     text: *mut TEXT,
     rect: *mut RECT,

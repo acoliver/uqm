@@ -30,9 +30,7 @@ pub(crate) mod live {
     pub(crate) mod drawing;
     mod editing;
     use battle::*;
-    use changes::{
-        view_name, Melee_LocalChange_ship, Melee_LocalChange_team, Melee_LocalChange_teamName,
-    };
+    use changes::{local_change_ship, local_change_team, local_change_team_name, view_name};
     use drawing::{
         controls, current, highlight, init_screen, name, redraw, rgb, ship_box, status,
         status_player, text, worth, DrawMeleeShipStrings, GetShipBox, MeleeFrame,
@@ -71,7 +69,7 @@ pub(crate) mod live {
             2 | 6 => {
                 (*state).side = u16::from((*state).melee_option != 2);
                 if (*state).melee_setup.fleet_value[(*state).side as usize] > 0 {
-                    DoSaveTeam(state);
+                    do_save_team(state);
                 } else {
                     PlayMenuSound(2);
                 }
@@ -88,7 +86,7 @@ pub(crate) mod live {
                     (*state).phase = crate::supermelee::netplay::session::MenuPhase::Connecting;
                 }
             }
-            1 | 7 => next_control(usize::from((*state).melee_option == 1)),
+            1 | 7 => next_control(state, usize::from((*state).melee_option == 1)),
             _ => {}
         }
     }
@@ -155,7 +153,7 @@ pub(crate) mod live {
             }
             if next != (*state).melee_option {
                 if (*state).melee_option == 1 || (*state).melee_option == 7 {
-                    status_player(-1);
+                    status_player(state, -1);
                 }
                 highlight((*state).melee_option, false);
                 (*state).melee_option = next;
@@ -163,7 +161,7 @@ pub(crate) mod live {
                 if next == 1 || next == 7 {
                     let side = usize::from(next == 1);
                     let control = KernelOwner::current().read(|owner| owner.player_control[side]);
-                    status_player(super::rules::network_status_side(side, control));
+                    status_player(state, super::rules::network_status_side(side, control));
                 }
             }
             if key(input, KEY_MENU_SELECT) || force {
@@ -176,7 +174,7 @@ pub(crate) mod live {
         }
         // SAFETY: DoMelee owns the menu and its session on the game thread.
         unsafe { (*state).netplay.flush_packet_queues() };
-        disconnects();
+        disconnects(state);
         Melee_flashSelection(state);
         SleepThreadUntil(time.wrapping_add(840 / 30));
         1
@@ -184,8 +182,9 @@ pub(crate) mod live {
     unsafe fn load_config(state: *mut MELEE_STATE) -> bool {
         use std::io::Read;
         use uqm_engine::io::uio_owned::Directory;
-        let directory =
-            Directory::retain(std::ptr::NonNull::new(configDir.cast()).expect("config directory"));
+        let directory = Directory::retain(
+            std::ptr::NonNull::new(configDir.cast()).unwrap_or_else(|| panic!("config directory")),
+        );
         let Ok(mut stream) = directory.open(c"melee.cfg") else {
             return false;
         };
@@ -213,8 +212,9 @@ pub(crate) mod live {
     unsafe fn write_config(state: *mut MELEE_STATE) -> bool {
         use std::io::Write;
         use uqm_engine::io::uio_owned::Directory;
-        let directory =
-            Directory::retain(std::ptr::NonNull::new(configDir.cast()).expect("config directory"));
+        let directory = Directory::retain(
+            std::ptr::NonNull::new(configDir.cast()).unwrap_or_else(|| panic!("config directory")),
+        );
         let Ok(mut stream) = directory.create(c"melee.cfg") else {
             return false;
         };
@@ -308,14 +308,14 @@ pub(crate) mod live {
             KernelOwner::current().write(|kernel| {
                 init_space(kernel, WorldOwner::current().read(|world| world.activity()))
             });
-            LoadTeamList(&mut state);
+            load_team_list(&mut state);
             if !load_config(&mut state) {
                 (**KernelOwner::current()).player_control[0] = HUMAN_CONTROL | 16;
                 let team = state.load.builtins[0].clone();
-                Melee_LocalChange_team(&mut state, 0, &team);
+                local_change_team(&mut state, 0, &team);
                 (**KernelOwner::current()).player_control[1] = COMPUTER_CONTROL | 16;
                 let team = state.load.builtins[1].clone();
-                Melee_LocalChange_team(&mut state, 1, &team);
+                local_change_team(&mut state, 1, &team);
             }
             state.side = 0;
             SetMenuSounds(input, 15, 16);

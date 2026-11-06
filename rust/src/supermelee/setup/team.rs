@@ -196,7 +196,8 @@ impl SentTeam {
         }
         self.name = name.map(|name| {
             let bytes = name.to_bytes();
-            std::ffi::CString::new(&bytes[..bytes.len().min(TEAM_NAME_BUF - 1)]).unwrap()
+            std::ffi::CString::new(&bytes[..bytes.len().min(TEAM_NAME_BUF - 1)])
+                .unwrap_or_else(|error| panic!("bounded C name: {error}"))
         });
         true
     }

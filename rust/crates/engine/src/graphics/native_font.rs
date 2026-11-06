@@ -10,7 +10,7 @@ pub(super) struct Allocation {
 #[derive(Clone)]
 pub struct FontLease(Rc<Allocation>);
 impl FontLease {
-    fn retain(font: NonNull<font_desc>) -> Self {
+    pub fn retain(font: NonNull<font_desc>) -> Self {
         let allocation = ffi::native_allocations()
             .fonts
             .get(&(font.as_ptr() as usize))
@@ -20,10 +20,60 @@ impl FontLease {
         Self(allocation)
     }
 
+    pub fn measure(
+        &self,
+        string: &CStr,
+        baseline: super::native_abi::POINT,
+        align: super::native_abi::TEXT_ALIGN,
+        characters: u16,
+    ) -> TextMeasurement {
+        let mut measured = TextMeasurement {
+            rect: super::native_abi::RECT {
+                corner: baseline,
+                extent: super::native_abi::EXTENT {
+                    width: 0,
+                    height: 0,
+                },
+            },
+            characters: characters.min(100),
+            deltas: [0; 100],
+            leading: 0,
+            visible: false,
+        };
+        let mut text = super::native_abi::TEXT {
+            baseline,
+            pStr: string.as_ptr(),
+            align,
+            CharCount: measured.characters,
+        };
+        let font = self.as_raw();
+        // SAFETY: the lease retains this font; the terminated string and the
+        // bounded character count keep all input and delta accesses in their buffers.
+        unsafe {
+            measured.leading = (*font).Leading as i16;
+            measured.visible = super::font_abi::measure(
+                font,
+                &mut text,
+                &mut measured.rect,
+                measured.deltas.as_mut_ptr(),
+            ) != 0;
+        }
+        measured.characters = text.CharCount;
+        measured
+    }
+
     pub(super) fn as_raw(&self) -> *mut font_desc {
         self.0.owned.assert_thread();
         self.0.font.as_ptr()
     }
+}
+
+pub struct TextMeasurement {
+    pub rect: super::native_abi::RECT,
+    pub characters: u16,
+    pub deltas: [u8; 100],
+    pub leading: i16,
+    pub visible: bool,
 }
 
 /// Exclusive logical release authority, with leases retaining the physical allocation.
@@ -86,6 +136,40 @@ pub(super) fn release(font: NonNull<font_desc>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[serial_test::serial]
+    fn bounded_measurement_preserves_empty_and_invalid_legacy_name_behavior() {
+        // SAFETY: the fixture transfers its initialized empty font to the registry.
+        let raw = unsafe {
+            let raw = NonNull::new(
+                crate::memory::rust_hcalloc(std::mem::size_of::<font_desc>()).cast::<font_desc>(),
+            )
+            .unwrap();
+            (*raw.as_ptr()).Leading = 17;
+            register(raw);
+            raw
+        };
+        let owner = LoadedFont {
+            lease: FontLease::retain(raw),
+        };
+        let lease = owner.lease();
+        let baseline = super::super::native_abi::POINT { x: 20, y: 30 };
+        for name in [c"", CStr::from_bytes_with_nul(&[0xe9, 0]).unwrap()] {
+            let measured = lease.measure(name, baseline, 0, 30);
+            assert!(!measured.visible);
+            assert_eq!((measured.rect.corner.x, measured.rect.corner.y), (20, 30));
+            assert_eq!(
+                (measured.rect.extent.width, measured.rect.extent.height),
+                (0, 0)
+            );
+            assert_eq!(measured.characters, 30);
+            assert_eq!(measured.deltas, [0; 100]);
+            assert_eq!(measured.leading, 17);
+        }
+        drop(owner);
+        assert_eq!(lease.measure(c"", baseline, 0, u16::MAX).characters, 100);
+    }
 
     #[test]
     #[serial_test::serial]

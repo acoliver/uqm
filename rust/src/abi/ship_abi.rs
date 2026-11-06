@@ -1144,7 +1144,7 @@ unsafe extern "C" {
 pub use crate::supermelee::native::menu::live::drawing::Melee_flashSelection;
 
 #[cfg(not(test))]
-pub use crate::supermelee::native::menu::live::changes::Melee_LocalChange_team;
+pub use crate::supermelee::native::menu::live::changes::local_change_team;
 #[cfg(not(test))]
 pub unsafe fn Flash_createHighlight(gfxContext: CONTEXT, rect: *const RECT) -> *mut FlashContext {
     crate::ui::flash::Flash_createHighlight(gfxContext.cast(), rect.cast()).cast()

@@ -194,25 +194,15 @@ impl DrawableLease {
     }
 
     pub fn frame_rect(&self, index: usize) -> super::native_abi::RECT {
-        let frame = self
-            .frame(index)
-            .unwrap_or_else(|| panic!("drawable frame index {index}"));
-        let mut rect = std::mem::MaybeUninit::uninit();
-        self._allocation._owned.assert_thread();
-        // SAFETY: this lease retains the registered frame and the provider initializes rect.
-        unsafe {
-            super::drawable_abi::GetFrameRect(frame, rect.as_mut_ptr());
-            rect.assume_init()
-        }
+        self.context_frame(index).rect()
     }
 
     pub fn set_hotspot(&self, index: usize, hot: super::native_abi::HOT_SPOT) {
-        let frame = self
-            .frame(index)
-            .unwrap_or_else(|| panic!("drawable frame index {index}"));
+        self.context_frame(index).replace_hotspot(hot);
+    }
+
+    pub(super) fn assert_thread(&self) {
         self._allocation._owned.assert_thread();
-        // SAFETY: all writes to this retained frame are serialized on the owning graphics thread.
-        unsafe { super::drawable_abi::SetFrameHot(frame, hot) };
     }
 
     pub fn owns_frame(&self, frame: FRAME) -> bool {
