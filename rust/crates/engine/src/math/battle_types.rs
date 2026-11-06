@@ -59,22 +59,27 @@ pub const SPECIAL: u32 = 0x1000;
 // Conversion Functions
 // ---------------------------------------------------------------------------
 
+#[inline]
 pub const fn normalize_facing(f: u16) -> u16 {
     f & (NUM_FACINGS - 1)
 }
 
+#[inline]
 pub const fn facing_to_angle(f: u16) -> u16 {
     f << (CIRCLE_SHIFT - FACING_SHIFT)
 }
 
+#[inline]
 pub const fn angle_to_facing(a: u16) -> u16 {
     (a + (1 << (CIRCLE_SHIFT - FACING_SHIFT - 1))) >> (CIRCLE_SHIFT - FACING_SHIFT)
 }
 
+#[inline]
 pub const fn normalize_angle(a: u16) -> u16 {
     a & (FULL_CIRCLE - 1)
 }
 
+#[inline]
 pub const fn display_to_world(x: i32) -> i32 {
     x << ONE_SHIFT
 }
@@ -96,6 +101,7 @@ pub const fn display_to_world(x: i32) -> i32 {
 ///
 /// # Returns
 /// The wrapped X coordinate
+#[inline]
 pub fn wrap_x(x: i32, log_width: u32) -> i32 {
     let width = 1i32 << log_width;
     let mask = width - 1;
@@ -111,6 +117,7 @@ pub fn wrap_x(x: i32, log_width: u32) -> i32 {
 ///
 /// # Returns
 /// The wrapped Y coordinate
+#[inline]
 pub fn wrap_y(y: i32, log_height: u32) -> i32 {
     let height = 1i32 << log_height;
     let mask = height - 1;
@@ -129,6 +136,7 @@ pub fn wrap_y(y: i32, log_height: u32) -> i32 {
 ///
 /// # Returns
 /// The shortest delta (may be negative)
+#[inline]
 pub fn shortest_path_delta(from: i32, to: i32, size: i32) -> i32 {
     let mut delta = to - from;
     let half_size = size / 2;
@@ -163,12 +171,14 @@ pub const SINE_TABLE: [i32; 64] = [
     -12665, -13623, -14449, -15137, -15679, -16069, -16305,
 ];
 
+#[inline]
 pub fn sine(angle: u16, magnitude: i32) -> i32 {
     let angle = normalize_angle(angle) as usize;
     let sin_val = SINE_TABLE[angle];
     ((sin_val as i64 * magnitude as i64) >> SIN_SHIFT) as i32
 }
 
+#[inline]
 pub fn cosine(angle: u16, magnitude: i32) -> i32 {
     sine(angle + QUADRANT, magnitude)
 }

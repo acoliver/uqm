@@ -35,6 +35,7 @@ pub use crate::graphics::native_abi::extent as Extent;
 
 impl VelocityDesc {
     /// Creates a new zeroed VelocityDesc
+    #[inline]
     pub const fn new() -> Self {
         VelocityDesc {
             travel_angle: 0,
@@ -47,12 +48,14 @@ impl VelocityDesc {
 
     /// Zeroes all velocity components
     /// Matches C's ZeroVelocityComponents macro
+    #[inline]
     pub fn zero(&mut self) {
         *self = VelocityDesc::new();
     }
 
     /// Tests if velocity is zero
     /// Matches C's IsVelocityZero inline function
+    #[inline]
     pub fn is_zero(&self) -> bool {
         self.vector.width == 0
             && self.vector.height == 0
@@ -66,6 +69,7 @@ impl VelocityDesc {
     /// Matches C's GetCurrentVelocityComponents exactly
     /// C: dx = WORLD_TO_VELOCITY(vector.width) + (fract.width - (SIZE)HIBYTE(incr.width))
     /// REQ-BAT-081
+    #[inline]
     pub fn get_current_components(&self) -> (i32, i32) {
         // Extract HIBYTE from incr fields (unsigned byte cast to SIZE in C)
         let hibyte_x = ((self.incr.width as u16) >> 8) as i32;
@@ -83,6 +87,7 @@ impl VelocityDesc {
     /// MUTATES error state (same as C)
     /// C: e = error + fract*num_frames; dx = vector*num_frames + LOBYTE(incr)*(e>>5); error = e&31
     /// REQ-BAT-081, REQ-BAT-085
+    #[inline]
     pub fn get_next_components(&mut self, num_frames: u16) -> (i32, i32) {
         // X component
         let e_x = (self.error.width as u16)
@@ -107,6 +112,7 @@ impl VelocityDesc {
     /// Converts facing to angle, then uses trigonometry
     /// Matches C's SetVelocityVector exactly
     /// REQ-BAT-082
+    #[inline]
     pub fn set_vector(&mut self, magnitude: i32, facing: u16) {
         use super::battle_types::{facing_to_angle, normalize_facing};
 
@@ -154,6 +160,7 @@ impl VelocityDesc {
     /// Computes travel angle via arctangent
     /// Matches C's SetVelocityComponents exactly
     /// REQ-BAT-083
+    #[inline]
     pub fn set_components(&mut self, dx: i32, dy: i32) {
         use super::battle_types::FULL_CIRCLE;
 
@@ -205,6 +212,7 @@ impl VelocityDesc {
     /// Adds delta to current velocity
     /// Matches C's DeltaVelocityComponents exactly
     /// REQ-BAT-084
+    #[inline]
     pub fn delta_components(&mut self, ddx: i32, ddy: i32) {
         // Get current velocity (using GetCurrentVelocityComponents formula)
         let hibyte_x = ((self.incr.width as u16) >> 8) as i32;
@@ -221,11 +229,13 @@ impl VelocityDesc {
     }
 
     /// Inspect displacement without consuming this record's error accumulators.
+    #[inline]
     pub fn preview_next_components(mut self, num_frames: u16) -> (i32, i32) {
         self.get_next_components(num_frames)
     }
 
     /// Gets the travel angle (0-63)
+    #[inline]
     pub fn get_travel_angle(&self) -> u16 {
         self.travel_angle
     }
@@ -249,16 +259,19 @@ pub const VELOCITY_SHIFT: u32 = 5;
 pub const VELOCITY_SCALE: i32 = 1 << VELOCITY_SHIFT;
 
 /// Converts velocity coordinates to world coordinates
+#[inline]
 pub const fn velocity_to_world(v: i32) -> i32 {
     v >> VELOCITY_SHIFT
 }
 
 /// Converts world coordinates to velocity coordinates
+#[inline]
 pub const fn world_to_velocity(l: i32) -> i32 {
     l << VELOCITY_SHIFT
 }
 
 /// Set velocity from a world-space magnitude and a ship facing.
+#[inline]
 pub fn set_velocity_vector(velocity: &mut VelocityDesc, magnitude: i16, facing: u16) {
     velocity.set_vector(i32::from(magnitude), facing);
 }
