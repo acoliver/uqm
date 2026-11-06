@@ -287,6 +287,7 @@ mod journal_regressions {
     fn pinned(name: &str) -> Scenario {
         Scenario {
             path: format!("rust/scripts/{name}.json"),
+            expected_input_ticks: None,
             outer_child_timeout_ms: None,
         }
     }
@@ -410,6 +411,7 @@ mod journal_regressions {
         let root = temporary.path().join("suite");
         let selected = vec![Scenario {
             path: "rust/scripts/a.json".into(),
+            expected_input_ticks: None,
             outer_child_timeout_ms: None,
         }];
         let mut suite = SuiteAccounting::create(&root, &selected).unwrap();
@@ -450,6 +452,7 @@ mod journal_regressions {
         let root = temporary.path().join("suite");
         let selected = vec![Scenario {
             path: "rust/scripts/a.json".into(),
+            expected_input_ticks: None,
             outer_child_timeout_ms: None,
         }];
         let mut suite = SuiteAccounting::create(&root, &selected).unwrap();
@@ -499,6 +502,7 @@ mod journal_regressions {
         let root = temporary.path().join("suite");
         let selected = vec![Scenario {
             path: "rust/scripts/a.json".into(),
+            expected_input_ticks: None,
             outer_child_timeout_ms: None,
         }];
         let mut suite = SuiteAccounting::create(&root, &selected).unwrap();
@@ -526,6 +530,7 @@ mod journal_regressions {
         let root = temporary.path().join("suite");
         let selected = vec![Scenario {
             path: "rust/scripts/a.json".into(),
+            expected_input_ticks: None,
             outer_child_timeout_ms: None,
         }];
         let mut suite = SuiteAccounting::create(&root, &selected).unwrap();
@@ -558,6 +563,7 @@ mod journal_regressions {
         let root = temporary.path().join("suite");
         let selected = vec![Scenario {
             path: "rust/scripts/a.json".into(),
+            expected_input_ticks: None,
             outer_child_timeout_ms: None,
         }];
         let mut suite = SuiteAccounting::create(&root, &selected).unwrap();
@@ -606,6 +612,7 @@ mod teardown_regressions {
     fn pinned(name: &str) -> Scenario {
         Scenario {
             path: format!("rust/scripts/{name}.json"),
+            expected_input_ticks: None,
             outer_child_timeout_ms: None,
         }
     }
@@ -2571,6 +2578,7 @@ mod tests {
             ["a", "b", "c"]
                 .map(|id| Scenario {
                     path: format!("rust/scripts/{id}.json"),
+                    expected_input_ticks: None,
                     outer_child_timeout_ms: None,
                 })
                 .to_vec()
@@ -2651,8 +2659,16 @@ mod tests {
         let admitted = preflight(root, &scenarios).unwrap();
         assert_eq!(admitted.len(), scenarios.len());
         for admission in &admitted {
-            let expected = if admission.budgets.max_wallclock_seconds > 300 {
-                (admission.budgets.max_wallclock_seconds * 1000 + 95_000 + 5_000).max(900_000)
+            let wall_ms = admission.script.expected_input_ticks.map_or(
+                u128::from(admission.budgets.max_wallclock_seconds) * 1000,
+                |ticks| {
+                    uqm_rust::automation::native_timing::wall_budget(ticks)
+                        .unwrap()
+                        .as_millis()
+                },
+            );
+            let expected = if wall_ms > 300_000 {
+                (wall_ms as u64 + 95_000 + 5_000).max(900_000)
             } else {
                 300_000
             };
@@ -2681,6 +2697,7 @@ mod tests {
         let scripts: Vec<Scenario> = (0..2)
             .map(|index| Scenario {
                 path: format!("rust/scripts/missing-{index}.json"),
+                expected_input_ticks: None,
                 outer_child_timeout_ms: None,
             })
             .collect();
@@ -2699,6 +2716,7 @@ mod finalization_regressions {
     fn test_scenario() -> Scenario {
         Scenario {
             path: "rust/scripts/battle-v1.json".into(),
+            expected_input_ticks: None,
             outer_child_timeout_ms: None,
         }
     }
@@ -2838,6 +2856,7 @@ mod finalization_regressions {
         let root = temp.path().join("suite");
         let selected = vec![Scenario {
             path: "rust/scripts/fixture.json".into(),
+            expected_input_ticks: None,
             outer_child_timeout_ms: None,
         }];
         let mut suite = SuiteAccounting::create(&root, &selected).unwrap();

@@ -4109,6 +4109,7 @@ mod tests {
 
     fn runtime_contract() -> NativeWindowRuntimeContract {
         NativeWindowRuntimeContract {
+            expected_input_ticks: None,
             capture_timeout_ms: 30_000,
             capture_kill_grace_ms: 5_000,
             observer_timeout_ms: 40_000,

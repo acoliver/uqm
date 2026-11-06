@@ -42,6 +42,7 @@ pub const ACCEPTANCE_POLICY: NativeAcceptancePolicy = NativeAcceptancePolicy {
 };
 
 const RUNTIME_CONTRACT: NativeWindowRuntimeContract = NativeWindowRuntimeContract {
+    expected_input_ticks: None,
     capture_timeout_ms: 30_000,
     capture_kill_grace_ms: 5_000,
     observer_timeout_ms: 40_000,
@@ -75,6 +76,8 @@ const RUNTIME_CONTRACT: NativeWindowRuntimeContract = NativeWindowRuntimeContrac
 #[serde(deny_unknown_fields)]
 pub struct Scenario {
     pub path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expected_input_ticks: Option<u64>,
     /// Present only on scenarios that outlast the default outer deadline.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub outer_child_timeout_ms: Option<u64>,
@@ -91,6 +94,7 @@ impl Scenario {
     #[must_use]
     pub fn runtime_contract(&self) -> NativeWindowRuntimeContract {
         let mut contract = RUNTIME_CONTRACT;
+        contract.expected_input_ticks = self.expected_input_ticks;
         if let Some(timeout) = self.outer_child_timeout_ms {
             contract.outer_child_timeout_ms = timeout;
         }
@@ -103,11 +107,18 @@ fn scenario_for(root: &Path, path: String) -> Result<Scenario, String> {
     let bytes = std::fs::read(&full).map_err(|error| format!("read {path}: {error}"))?;
     let document = parse_script(&bytes, &full).map_err(|error| format!("{path}: {error}"))?;
     let script = validate_script(document, &full).map_err(|error| format!("{path}: {error}"))?;
-    let wall_ms = script
-        .budgets()
-        .max_wallclock_seconds
-        .checked_mul(1000)
-        .ok_or_else(|| format!("{path}: wall budget overflows milliseconds"))?;
+    let expected_input_ticks = recorded_input_ticks(root, &path)?;
+    let wall_ms = match expected_input_ticks {
+        Some(ticks) => {
+            u64::try_from(uqm_rust::automation::native_timing::wall_budget(ticks)?.as_millis())
+                .map_err(|error| error.to_string())?
+        }
+        None => script
+            .budgets()
+            .max_wallclock_seconds
+            .checked_mul(1000)
+            .ok_or_else(|| format!("{path}: wall budget overflows milliseconds"))?,
+    };
     let outer_child_timeout_ms = if wall_ms > RUNTIME_CONTRACT.outer_child_timeout_ms {
         // Let the child report its own deadline and finish a pending observation.
         let deadline = wall_ms
@@ -120,8 +131,42 @@ fn scenario_for(root: &Path, path: String) -> Result<Scenario, String> {
     };
     Ok(Scenario {
         path,
+        expected_input_ticks,
         outer_child_timeout_ms,
     })
+}
+
+fn recorded_input_ticks(root: &Path, script_path: &str) -> Result<Option<u64>, String> {
+    let name = Path::new(script_path)
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .ok_or("native script has no scenario name")?;
+    let path = root
+        .join("rust/tests/golden/parity/counts")
+        .join(format!("{name}.toml"));
+    let text = match std::fs::read_to_string(&path) {
+        Ok(text) => text,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(format!("read {}: {error}", path.display())),
+    };
+    let document = text
+        .parse::<toml_edit::DocumentMut>()
+        .map_err(|error| error.to_string())?;
+    let tables = document
+        .get("scenario")
+        .and_then(|value| value.as_array_of_tables())
+        .ok_or_else(|| format!("{}: missing scenario counts", path.display()))?;
+    let row = tables
+        .iter()
+        .find(|row| row.get("name").and_then(|value| value.as_str()) == Some(name))
+        .ok_or_else(|| format!("{}: missing counts for {name}", path.display()))?;
+    let ticks = row
+        .get("input_seen")
+        .and_then(|value| value.as_integer())
+        .and_then(|value| u64::try_from(value).ok())
+        .filter(|value| *value > 0)
+        .ok_or_else(|| format!("{}: invalid recorded input length", path.display()))?;
+    Ok(Some(ticks))
 }
 
 /// Every scenario under `rust/scripts`, in name order.
@@ -188,6 +233,16 @@ mod tests {
     }
 
     #[test]
+    fn recorded_campaign_length_drives_the_native_deadline() {
+        let scenario =
+            scenario_for(&root(), "rust/scripts/campaign-s06c-utwig-bomb.json".into()).unwrap();
+        assert_eq!(
+            scenario.runtime_contract().outer_child_timeout_ms,
+            2_585_688
+        );
+    }
+
+    #[test]
     fn proof_client_fits_the_1080p_desktop_work_area() {
         let work_area = NativeWindowBounds {
             x: 0,
@@ -217,29 +272,42 @@ mod tests {
         assert_eq!(battle.outer_child_timeout_ms, None);
         let long = all
             .iter()
-            .find(|scenario| scenario.path.ends_with("/comm-encounter-v1.json"))
-            .expect("comm-encounter-v1 exists");
-        assert_eq!(
-            long.runtime_contract().outer_child_timeout_ms,
-            LONG_SCRIPT_OUTER_CHILD_TIMEOUT_MS
-        );
+            .find(|scenario| scenario.path.ends_with("/campaign-s06c-utwig-bomb.json"))
+            .expect("campaign scenario exists");
+        assert_eq!(long.runtime_contract().outer_child_timeout_ms, 2_585_688);
         assert!(long.runtime_contract().has_valid_deadline_order());
     }
 
     #[test]
-    fn outer_deadline_covers_the_scripts_declared_wall_budget() {
+    fn outer_deadline_covers_the_derived_wall_budget() {
         let scenario = scenario_for(
             &root(),
             "rust/scripts/campaign-s07-taalo-protected.json".into(),
         )
         .expect("campaign scenario exists");
-        let bytes = std::fs::read(root().join(&scenario.path)).unwrap();
-        let document = parse_script(&bytes, Path::new(&scenario.path)).unwrap();
-        let script = validate_script(document, Path::new(&scenario.path)).unwrap();
-        assert!(
-            scenario.runtime_contract().outer_child_timeout_ms
-                > script.budgets().max_wallclock_seconds * 1000
+        let wall = uqm_rust::automation::native_timing::wall_budget(
+            scenario.expected_input_ticks.unwrap(),
+        )
+        .unwrap();
+        assert!(u128::from(scenario.runtime_contract().outer_child_timeout_ms) > wall.as_millis());
+    }
+
+    #[test]
+    fn missing_recorded_length_keeps_the_script_budget_and_malformed_counts_fail() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = "rust/scripts/campaign-s06c-utwig-bomb.json";
+        std::fs::create_dir_all(directory.path().join("rust/scripts")).unwrap();
+        std::fs::copy(root().join(path), directory.path().join(path)).unwrap();
+        let scenario = scenario_for(directory.path(), path.into()).unwrap();
+        assert_eq!(scenario.expected_input_ticks, None);
+        assert_eq!(
+            scenario.runtime_contract().outer_child_timeout_ms,
+            1_900_000
         );
+        let counts = directory.path().join("rust/tests/golden/parity/counts");
+        std::fs::create_dir_all(&counts).unwrap();
+        std::fs::write(counts.join("campaign-s06c-utwig-bomb.toml"), "invalid").unwrap();
+        assert!(scenario_for(directory.path(), path.into()).is_err());
     }
 
     #[test]

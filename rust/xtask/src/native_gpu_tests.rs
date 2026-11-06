@@ -132,6 +132,7 @@ fn gpu_logs_are_retained_and_indexed_without_rewriting_the_child_bundle() {
     let root = temporary.path().join("suite");
     let selected = vec![crate::native_config::Scenario {
         path: "rust/scripts/super-melee-v1.json".into(),
+        expected_input_ticks: None,
         outer_child_timeout_ms: None,
     }];
     let mut suite = SuiteAccounting::create(&root, &selected).unwrap();
@@ -170,6 +171,7 @@ fn supervised_child_outcomes_and_gpu_diagnoses_are_retained_together() {
         let root = temporary.path().join("suite");
         let selected = vec![crate::native_config::Scenario {
             path: "rust/scripts/super-melee-v1.json".into(),
+            expected_input_ticks: None,
             outer_child_timeout_ms: None,
         }];
         let mut suite = SuiteAccounting::create(&root, &selected).unwrap();

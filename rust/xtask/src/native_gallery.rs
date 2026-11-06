@@ -909,6 +909,7 @@ mod tests {
     fn pinned(path: &str) -> Scenario {
         Scenario {
             path: path.to_string(),
+            expected_input_ticks: None,
             outer_child_timeout_ms: None,
         }
     }
@@ -1208,6 +1209,7 @@ mod tests {
                 index: 0,
                 script: Scenario {
                     path: hostile.into(),
+                    expected_input_ticks: None,
                     outer_child_timeout_ms: None,
                 },
                 directory: "scenarios/0000".into(),
