@@ -26,10 +26,14 @@ pub fn compose(
         .iter()
         .map(|(source, target)| (target.clone(), source.clone()))
         .collect();
-    let source = matching(&reverse, old).map_or_else(
-        || old.to_owned(),
-        |(target, source)| format!("{source}{}", &old[target.len()..]),
-    );
+    let source = if identities(base).any(|f| prefix(&f.identity, old)) {
+        old.to_owned()
+    } else {
+        matching(&reverse, old).map_or_else(
+            || old.to_owned(),
+            |(target, source)| format!("{source}{}", &old[target.len()..]),
+        )
+    };
     let mut moves = previous.clone();
     let mut followed = false;
     for target in moves.values_mut() {
@@ -42,7 +46,11 @@ pub fn compose(
         || identities(base)
             .any(|f| prefix(&f.identity, old) && matching(previous, &f.identity).is_none())
     {
-        register(&mut moves, &source, new)?;
+        // Landed moves retained for another host's lint keys own no base declarations.
+        let mut declaration_moves = moves.clone();
+        retire(&mut declaration_moves, base);
+        register(&mut declaration_moves, &source, new)?;
+        moves.insert(source, new.into());
     }
     Ok(moves)
 }
@@ -150,14 +158,25 @@ pub fn validate(
         }
     }
     for (old, new) in moves {
-        register(&mut unique, old, new)?;
+        if old == new || old.is_empty() || new.is_empty() {
+            return Err("move needs distinct nonempty identities".into());
+        }
         let sources = sources_by_move.get(old).cloned().unwrap_or_default();
-        if sources.is_empty() && identities(base).any(|f| prefix(&f.identity, new)) {
+        if sources.is_empty()
+            && identities(base).any(|f| {
+                let identity = matching(moves, &f.identity).map_or_else(
+                    || f.identity.clone(),
+                    |(source, target)| format!("{target}{}", &f.identity[source.len()..]),
+                );
+                prefix(&identity, new)
+            })
+        {
             continue;
         }
         if sources.is_empty() {
             return Err(format!("move source {old} does not exist at base"));
         }
+        register(&mut unique, old, new)?;
         for source in sources {
             let target = format!("{new}{}", &source[old.len()..]);
             if let Some(previous) = targets.insert(target.clone(), source) {

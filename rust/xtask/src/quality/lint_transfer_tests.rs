@@ -589,3 +589,126 @@ fn vacated_observation_namespace_accepts_independently_owned_campaign_data() {
     assert_eq!(baseline.moved[old], port);
     assert_eq!(baseline.moved[core], old);
 }
+
+fn landed_input_move() -> (Baseline, Measurement, Measurement) {
+    let old = "uqm-engine::input";
+    let base = composition_state(old, "Io");
+    let current = composition_state("uqm-engine::input_port", "Io");
+    let mut baseline = Baseline {
+        moved: [("uqm::input".into(), old.into())].into(),
+        lint: [
+            (
+                "linux".into(),
+                [
+                    ("clippy::unwrap_used|uqm::input::Io".into(), 1),
+                    (
+                        "clippy::unwrap_used|uqm::@path::src::input::tests.rs".into(),
+                        2,
+                    ),
+                ]
+                .into(),
+            ),
+            (
+                "macos".into(),
+                [(format!("clippy::unwrap_used|{old}::Io"), 1)].into(),
+            ),
+        ]
+        .into(),
+        ..Default::default()
+    };
+    super::budgets::set_scoped(
+        &mut baseline.budget,
+        "stage_b_raw",
+        1,
+        [(format!("ffi|raw_records|{old}::Io"), 1)].into(),
+        false,
+    )
+    .unwrap();
+    baseline.entries = super::budgets::scoped_entries(&base, &baseline.budget);
+    (baseline, base, current)
+}
+
+#[test]
+fn a_landed_module_can_move_again_with_pending_host_lint_credits() {
+    let (mut baseline, base, current) = landed_input_move();
+    let old = "uqm-engine::input";
+    let new = "uqm-engine::input_port";
+    let prior_lint = baseline.lint.clone();
+    baseline.add_move(old, new, &current, &base).unwrap();
+    assert_eq!(baseline.moved["uqm::input"], new);
+    assert_eq!(baseline.moved[old], new);
+    assert_eq!(baseline.budget["stage_b_raw"].limit, 1);
+    assert_eq!(
+        baseline.budget["stage_b_raw"].scopes,
+        [(format!("ffi|raw_records|{new}::Io"), 1)].into()
+    );
+    assert_eq!(
+        baseline.entries,
+        super::budgets::scoped_entries(&current, &baseline.budget)
+    );
+    assert_eq!(baseline.lint["linux"], prior_lint["linux"]);
+    let measured = [(format!("clippy::unwrap_used|{new}::Io"), 1)].into();
+    assert_eq!(baseline.lint["macos"], measured);
+    for host in ["linux", "macos"] {
+        super::tool::compare(&measured, &prior_lint[host], &baseline.moved).unwrap();
+        assert!(super::tool::compare(
+            &[(format!("clippy::unwrap_used|{new}::Io"), 2)].into(),
+            &prior_lint[host],
+            &baseline.moved
+        )
+        .is_err());
+    }
+    super::tool::compare(
+        &[(
+            "clippy::unwrap_used|uqm-engine::@path::src::input_port::tests.rs".into(),
+            2,
+        )]
+        .into(),
+        &prior_lint["linux"],
+        &baseline.moved,
+    )
+    .unwrap();
+    let duplicate = [
+        ("clippy::unwrap_used|uqm::input::Io".into(), 1),
+        (format!("clippy::unwrap_used|{old}::Io"), 1),
+    ]
+    .into();
+    assert!(super::tool::compare(&measured, &duplicate, &baseline.moved)
+        .unwrap_err()
+        .contains("multiple transfer credits"));
+}
+
+#[test]
+fn landed_lint_history_does_not_permit_missing_targets_or_retained_sources() {
+    for retain_source in [false, true] {
+        let (mut baseline, base, mut current) = landed_input_move();
+        if retain_source {
+            current.findings.extend(base.findings.clone());
+        } else {
+            current.findings.clear();
+        }
+        let previous = (
+            baseline.entries.clone(),
+            baseline.budget.clone(),
+            baseline.lint.clone(),
+            baseline.moved.clone(),
+        );
+        assert!(baseline
+            .add_move(
+                "uqm-engine::input",
+                "uqm-engine::input_port",
+                &current,
+                &base
+            )
+            .is_err());
+        assert_eq!(
+            (
+                baseline.entries,
+                baseline.budget,
+                baseline.lint,
+                baseline.moved,
+            ),
+            previous
+        );
+    }
+}

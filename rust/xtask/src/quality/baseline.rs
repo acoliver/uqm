@@ -173,15 +173,22 @@ impl Baseline {
         let previous = self.remaining_moves(base);
         let moves = super::transfers::compose(&previous, old, new, base)?;
         super::transfers::validate(current, base, &moves)?;
-        let reverse = previous
+        let mut declaration_moves = previous.clone();
+        super::transfers::retire(&mut declaration_moves, base);
+        let reverse = declaration_moves
             .iter()
             .map(|(old, new)| (new.clone(), old.clone()))
             .collect();
         let original_budgets = super::budgets::relocated(&self.budget, &reverse)?;
         let measured = super::budgets::scoped_entries(base, &original_budgets);
-        let intermediate = super::transfers::reverse_step(current, old, new, &previous)?;
-        let before =
-            super::transfers::limits(&measured, &intermediate, base, &previous, &original_budgets)?;
+        let intermediate = super::transfers::reverse_step(current, old, new, &declaration_moves)?;
+        let before = super::transfers::limits(
+            &measured,
+            &intermediate,
+            base,
+            &declaration_moves,
+            &original_budgets,
+        )?;
         let after = super::transfers::limits(&measured, current, base, &moves, &original_budgets)?;
         let budget = super::budgets::relocated(&self.budget, &[(old.into(), new.into())].into())?;
         let entries = super::transfers::adjust(&self.entries, &before, &after)?;
