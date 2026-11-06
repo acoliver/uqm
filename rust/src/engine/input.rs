@@ -81,7 +81,7 @@ impl Cx<'_> {
     /// Suspend this context for a synchronous provider that still uses the A4 slot.
     pub(crate) fn with_legacy<R>(&mut self, call: impl FnOnce() -> R) -> R {
         // SAFETY: the unique context is inaccessible to the caller until publication returns.
-        unsafe { crate::app::bridge::publish(self, call) }
+        unsafe { crate::engine::handoff::publish(self, call) }
     }
 
     pub fn nested_input<R>(

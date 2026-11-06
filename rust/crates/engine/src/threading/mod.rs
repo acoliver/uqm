@@ -21,6 +21,7 @@
 //! # Reference
 //! See `sc2/src/libs/threads/` for the original C implementation.
 
+pub mod affinity;
 #[cfg(target_os = "macos")]
 pub mod critical_timer;
 #[cfg(unix)]

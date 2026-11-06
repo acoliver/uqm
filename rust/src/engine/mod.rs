@@ -2,6 +2,7 @@ pub mod battle;
 pub mod clock;
 pub mod observe;
 
+pub mod handoff;
 pub mod input;
 pub mod kernel;
 mod owner;
