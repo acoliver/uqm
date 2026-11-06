@@ -131,5 +131,22 @@ mod tests {
         highlight.process();
         drop(highlight);
         assert!(weak.upgrade().is_none());
+        // SAFETY: the serialized fixture has released its only highlight.
+        unsafe { super::super::flash::release_work_context_for_test() };
+        assert!(
+            ffi::native_allocations().contexts.is_empty(),
+            "highlight fixture must release its cached work context"
+        );
+        std::thread::spawn(|| {
+            // SAFETY: the fixture holds the serial guard and only this joined thread
+            // accesses graphics while verifying the next fixture's ownership handoff.
+            unsafe {
+                let drawable = super::super::drawable_abi::AllocDrawable(2);
+                assert!(!drawable.is_null());
+                assert_eq!(super::super::drawable_abi::DestroyDrawable(drawable), 1);
+            }
+        })
+        .join()
+        .unwrap_or_else(|_| panic!("graphics fixture ownership handoff failed"));
     }
 }
