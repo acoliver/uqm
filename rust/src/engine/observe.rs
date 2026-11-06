@@ -11,7 +11,7 @@ pub type Io<'a> = uqm_engine::observe_port::ObservationIo<'a, Option<CampaignVie
 #[derive(Clone)]
 pub struct CampaignView {
     pub(crate) activity: u16,
-    pub(crate) flagship: crate::engine::world::SisState,
+    pub(crate) flagship: super::world::SisState,
     pub(crate) velocity: (i32, i32),
     pub(crate) ship_position: (i16, i16),
     pub(crate) ship_facing: i32,
@@ -19,8 +19,8 @@ pub struct CampaignView {
     pub(crate) autopilot: (i16, i16),
     pub(crate) combat_flags: u8,
     pub(crate) date: (u8, u8, u16),
-    pub(crate) story: Option<crate::engine::world::story::GameState>,
-    pub(crate) current_star: Option<crate::engine::StarId>,
+    pub(crate) story: Option<super::world::story::GameState>,
+    pub(crate) current_star: Option<super::StarId>,
     pub(crate) contact_race: Option<u8>,
     pub(crate) escorts: Vec<(u8, u16)>,
     pub(crate) groups: Vec<(u8, u8, (i16, i16))>,
@@ -30,13 +30,11 @@ impl CampaignView {
     pub(crate) fn capture(world: &World, kernel: &Kernel) -> Self {
         let game = &world.data.game;
         let mut view = Self::from_world(world);
-        view.flight_facing = crate::engine::save::hyper_save::read_flagship_facing(
-            &kernel.races[0],
-            &kernel.elements,
-        )
-        .ok()
-        .flatten()
-        .and_then(|facing| u8::try_from(facing).ok());
+        view.flight_facing =
+            super::save::hyper_save::read_flagship_facing(&kernel.races[0], &kernel.elements)
+                .ok()
+                .flatten()
+                .and_then(|facing| u8::try_from(facing).ok());
         if !game.ship_stamp.frame.is_null() {
             // SAFETY: the supplied world retains this game-thread graphics frame.
             view.ship_facing = i32::from(unsafe {
@@ -100,14 +98,14 @@ impl CampaignView {
         }
     }
 
-    pub(crate) fn story_value(&self, key: crate::engine::StoryKey) -> Option<u8> {
+    pub(crate) fn story_value(&self, key: super::StoryKey) -> Option<u8> {
         self.story
             .as_ref()
             .map(|story| story.get_state(key.start(), key.end()))
     }
 
     pub(crate) fn named_state_value(&self, name: &str) -> Option<u8> {
-        self.story_value(crate::engine::StoryKey::from_name(name)?)
+        self.story_value(super::StoryKey::from_name(name)?)
     }
 }
 
@@ -118,7 +116,7 @@ mod tests {
     #[test]
     fn capture_reads_flagship_facing_from_its_unpublished_kernel() {
         let world = World::new();
-        let mut kernel = crate::engine::Kernel::new();
+        let mut kernel = super::super::Kernel::new();
         kernel.reset_ship_capacity(0, 1);
         kernel.reset_element_capacity(1);
         let element = kernel.elements.alloc().unwrap();
@@ -130,7 +128,7 @@ mod tests {
         ships.put(link);
         let record = kernel.elements.fixture_record_mut(element);
         record.state_flags = 1 << 2;
-        record.parent = crate::engine::battle::Parent::Ship(owner);
+        record.parent = super::super::battle::Parent::Ship(owner);
         kernel.elements.put(element);
         let captured = CampaignView::capture(&world, &kernel);
         kernel.ships(0).get_mut(link).ship_facing = 11;

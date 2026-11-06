@@ -1,11 +1,11 @@
 //! Typed link-order views over fixed-capacity owned pools.
 
+use super::super::super::battle::ShipId;
 use crate::collections::pool::{Id, OrderedPool};
-use crate::engine::battle::ShipId;
 pub const NAME_OFFSET: u32 = 5;
 pub const NUM_CAPTAINS_NAMES: u32 = 16;
 pub struct RacePool {
-    pub(super) pool: OrderedPool<crate::engine::battle::record::ShipRecord, 32>,
+    pub(super) pool: OrderedPool<super::super::super::battle::record::ShipRecord, 32>,
     side: u8,
 }
 impl RacePool {
@@ -33,7 +33,7 @@ pub trait QueueRecord: queue_record::Sealed + Eq {
     type Record;
 }
 impl QueueRecord for Starship {
-    type Record = crate::engine::battle::record::ShipRecord;
+    type Record = super::super::super::battle::record::ShipRecord;
 }
 
 use std::marker::PhantomData;
@@ -455,21 +455,21 @@ impl LinkQueue<'_, Starship> {
     pub(crate) fn element_handle(
         &self,
         id: LinkId<Starship>,
-    ) -> Option<crate::engine::battle::ElementId> {
+    ) -> Option<super::super::super::battle::ElementId> {
         self.record(id).hShip
     }
 }
 
 /// Read-only resource projection borrowed from its owning ship queue.
 pub struct PickerResources<'a> {
-    owner: &'a crate::engine::battle::record::ShipRecord,
-    icon: crate::engine::battle::frames::FrameSelection,
+    owner: &'a super::super::super::battle::record::ShipRecord,
+    icon: super::super::super::battle::frames::FrameSelection,
 }
 impl PickerResources<'_> {
     pub fn strings(&self) -> crate::graphics::native_abi::STRING {
         self.owner.race_strings
     }
-    pub fn icon(&self) -> crate::engine::battle::views::FrameRef<'_> {
+    pub fn icon(&self) -> super::super::super::battle::views::FrameRef<'_> {
         self.icon.view()
     }
 }
@@ -477,7 +477,9 @@ impl LinkQueue<'_, Starship> {
     pub fn resources(&self, id: LinkId<Starship>) -> PickerResources<'_> {
         PickerResources {
             owner: self.record(id),
-            icon: crate::engine::battle::frames::FrameSelection::retain(self.record(id).icons),
+            icon: super::super::super::battle::frames::FrameSelection::retain(
+                self.record(id).icons,
+            ),
         }
     }
 }
@@ -486,18 +488,18 @@ impl LinkQueue<'_, Starship> {
 impl RacePool {
     pub(crate) fn fixture_pool(
         &mut self,
-    ) -> &mut OrderedPool<crate::engine::battle::record::ShipRecord, 32> {
+    ) -> &mut OrderedPool<super::super::super::battle::record::ShipRecord, 32> {
         &mut self.pool
     }
     pub(crate) fn fixture_records(
         &self,
-    ) -> &OrderedPool<crate::engine::battle::record::ShipRecord, 32> {
+    ) -> &OrderedPool<super::super::super::battle::record::ShipRecord, 32> {
         &self.pool
     }
 }
 
 #[cfg(not(test))]
-pub(crate) use crate::engine::battle::access::links::ships;
+pub(crate) use super::access::links::ships;
 
 #[cfg(test)]
 mod identity_tests {

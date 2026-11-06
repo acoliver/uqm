@@ -1,7 +1,7 @@
 //! Fixed-capacity element ownership and queue order on the game thread.
 
+use super::super::super::battle::record::ElementRecord;
 use crate::collections::pool::{Id, OrderedPool};
-use crate::engine::battle::record::ElementRecord;
 use std::ffi::c_void;
 use std::ops::{Index, IndexMut};
 
@@ -27,7 +27,7 @@ pub struct ShipId {
 pub enum Parent {
     None,
     Ship(ShipId),
-    IpGroup(super::link_queue::LinkId<crate::engine::world::queues::Group>),
+    IpGroup(super::link_queue::LinkId<super::super::super::world::queues::Group>),
 }
 
 pub struct ElementTable {
@@ -255,7 +255,7 @@ impl ShipId {
 
 #[cfg(test)]
 mod tests {
-    use crate::engine::battle::ElementTable;
+    use super::super::super::super::battle::ElementTable;
 
     #[test]
     fn paired_elements_mutate_the_checked_owner_in_argument_order() {
@@ -322,7 +322,7 @@ impl ElementTable {
     }
 }
 #[cfg(any(test, feature = "test-support"))]
-impl crate::engine::Kernel {
+impl super::super::super::Kernel {
     pub(crate) fn fixture_elements(&mut self) -> &mut ElementTable {
         &mut self.elements
     }
