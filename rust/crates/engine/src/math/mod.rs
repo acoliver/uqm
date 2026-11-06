@@ -3,6 +3,9 @@
 //! Park-Miller minimal standard RNG (CACM 1988) + integer square root.
 //! The game uses these providers directly through Rust imports.
 
+pub mod battle_types;
+pub mod velocity;
+
 /// Native fixed-point SINE: normalize to the 64-entry table, multiply in i64,
 /// then retain the original signed SIZE truncation.
 pub fn sine(angle: i32, magnitude: i32) -> i16 {

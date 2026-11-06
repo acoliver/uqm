@@ -94,7 +94,7 @@ pub trait Observer<W = ()> {
     fn presented(&mut self, presented: &mut Presented);
 }
 
-pub struct Io<'a, W = ()> {
+pub struct ObservationIo<'a, W = ()> {
     pub observer: &'a mut dyn Observer<W>,
 }
 
@@ -128,7 +128,7 @@ mod tests {
     #[test]
     fn unobserved_boundaries_do_not_inject_or_stop() {
         let mut observer = Unobserved;
-        let io = Io {
+        let io = ObservationIo {
             observer: &mut observer,
         };
         assert_eq!(

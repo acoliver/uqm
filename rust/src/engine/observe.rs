@@ -5,7 +5,7 @@ pub use uqm_engine::observe::{
     CheckpointView, DeviceObservation, Injected, InputSetup, InputView, Observer, PeerSetup,
     Presented, Unobserved,
 };
-pub type Io<'a> = uqm_engine::observe::Io<'a, Option<CampaignView>>;
+pub type Io<'a> = uqm_engine::observe::ObservationIo<'a, Option<CampaignView>>;
 
 /// Values copied for one observer call; this view never outlives its input boundary.
 #[derive(Clone)]
@@ -26,6 +26,37 @@ pub struct CampaignView {
 }
 
 impl CampaignView {
+    pub(crate) fn capture(world: &World) -> Self {
+        let game = &world.data.game;
+        let mut view = Self::from_world(world);
+        if !game.ship_stamp.frame.is_null() {
+            // SAFETY: the supplied world retains this game-thread graphics frame.
+            view.ship_facing = i32::from(unsafe {
+                crate::graphics::pixmap_abi::GetFrameIndex(game.ship_stamp.frame.cast())
+            });
+        }
+        let npcs = world.npc_built_ships_ref();
+        view.contact_race = npcs.head().map(|id| npcs.get(id).race_id);
+        let ships = world.built_ships_ref();
+        let mut next = ships.head();
+        while let Some(id) = next {
+            let ship = ships.get(id);
+            view.escorts.push((ship.race_id, ship.crew_level));
+            next = ships.succ(id);
+        }
+        let groups = world.ip_groups_ref();
+        let mut next = groups.head();
+        while let Some(id) = next {
+            let group = groups.get(id);
+            if group.in_system != 0 {
+                view.groups
+                    .push((group.race_id, group.sys_loc, (group.loc.x, group.loc.y)));
+            }
+            next = groups.succ(id);
+        }
+        view
+    }
+
     pub(crate) fn for_input(view: InputView, capture: impl FnOnce() -> Self) -> Option<Self> {
         matches!(
             view,
@@ -73,5 +104,53 @@ impl CampaignView {
     #[cfg(test)]
     pub(crate) fn empty() -> Self {
         Self::from_world(&World::new())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn capture_preserves_queue_order_and_freezes_the_supplied_world() {
+        let mut world = World::new();
+        world.data.flagship.fuel_on_board = 42;
+        {
+            let mut ships = world.built_ships();
+            for (race, crew) in [(3, 12), (7, 19)] {
+                let id = ships.alloc().unwrap();
+                ships.get_mut(id).race_id = race;
+                ships.get_mut(id).crew_level = crew;
+                ships.put(id);
+            }
+        }
+        {
+            let mut ships = world.npc_built_ships();
+            let id = ships.alloc().unwrap();
+            ships.get_mut(id).race_id = 5;
+            ships.put(id);
+        }
+        {
+            let mut groups = world.ip_groups();
+            for (race, in_system, location) in [(2, 1, 8), (4, 0, 9), (6, 1, 10)] {
+                let id = groups.alloc().unwrap();
+                let group = groups.get_mut(id);
+                group.race_id = race;
+                group.in_system = in_system;
+                group.sys_loc = location;
+                group.loc.x = i16::from(race);
+                group.loc.y = -i16::from(race);
+                groups.put(id);
+            }
+        }
+        let captured = CampaignView::capture(&world);
+        world.data.flagship.fuel_on_board = 99;
+        let first = world.built_ships_ref().head().unwrap();
+        world.built_ships().get_mut(first).crew_level = 99;
+        assert_eq!(captured.flagship.fuel_on_board, 42);
+        assert_eq!(captured.contact_race, Some(5));
+        assert_eq!(captured.escorts, vec![(3, 12), (7, 19)]);
+        assert_eq!(captured.groups, vec![(2, 8, (2, -2)), (6, 10, (6, -6))]);
+        assert_eq!(CampaignView::capture(&world).escorts[0], (3, 99));
     }
 }

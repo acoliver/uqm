@@ -5,7 +5,7 @@
 pub mod ai;
 pub mod ai_entry;
 pub mod battle_native;
-pub mod battle_types;
+pub use crate::math::battle_types;
 pub mod build_native;
 pub mod c_bridge;
 pub(crate) mod context_access;
@@ -24,7 +24,7 @@ pub mod ship_native;
 pub mod sounds;
 pub mod status_native;
 pub mod tactrans_native;
-pub mod velocity;
+pub use crate::math::velocity;
 pub mod weapon_native;
 pub mod world_elements;
 
