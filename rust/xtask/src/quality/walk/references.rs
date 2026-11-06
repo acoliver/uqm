@@ -1,6 +1,12 @@
 use super::*;
 
 impl Walker {
+    pub(super) fn is_bridge_call(&self, path: &str) -> bool {
+        path.contains("app::bridge::")
+            || path.contains("engine::handoff::")
+            || (self.context.package == "uqm-engine" && path.starts_with("crate::handoff::"))
+    }
+
     pub(super) fn projection_key(&self, path: &str) -> String {
         let absolute = super::super::layers::absolute(&self.context.lexical_module, path);
         absolute
@@ -56,14 +62,18 @@ impl Walker {
     }
 
     pub(super) fn record_owner_call(&mut self, resolved: &str, span: Span) {
-        if self.context.file != "src/app/bridge.rs"
+        let handoff_implementation = matches!(
+            self.context.file.as_str(),
+            "src/app/bridge.rs" | "src/engine/handoff.rs" | "crates/engine/src/handoff.rs"
+        );
+        if !handoff_implementation
             && resolved.contains("engine::")
             && ["Kernel::current", "World::current", "WorldData::current"]
                 .iter()
                 .any(|suffix| resolved.ends_with(suffix))
         {
             self.add("ffi", "owner_projections", span, 1);
-        } else if self.names.is_none() && self.context.file != "src/app/bridge.rs" {
+        } else if self.names.is_none() && !handoff_implementation {
             let key = format!(
                 "owner-call|{}|{}:{}|{}",
                 self.context.file,

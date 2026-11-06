@@ -3,12 +3,114 @@ use std::collections::{BTreeMap, BTreeSet};
 use super::layers::prefix;
 use super::metrics::{Finding, Measurement};
 
+pub fn matching<'a>(
+    moves: &'a BTreeMap<String, String>,
+    identity: &str,
+) -> Option<(&'a String, &'a String)> {
+    moves
+        .iter()
+        .filter(|(old, _)| prefix(identity, old))
+        .max_by_key(|(old, _)| old.len())
+}
+
+pub fn compose(
+    previous: &BTreeMap<String, String>,
+    old: &str,
+    new: &str,
+    base: &Measurement,
+) -> Result<BTreeMap<String, String>, String> {
+    if old == new || old.is_empty() || new.is_empty() {
+        return Err("move needs distinct nonempty identities".into());
+    }
+    let reverse = previous
+        .iter()
+        .map(|(source, target)| (target.clone(), source.clone()))
+        .collect();
+    let source = matching(&reverse, old).map_or_else(
+        || old.to_owned(),
+        |(target, source)| format!("{source}{}", &old[target.len()..]),
+    );
+    let mut moves = previous.clone();
+    let mut followed = false;
+    for target in moves.values_mut() {
+        if prefix(target, old) {
+            *target = format!("{new}{}", &target[old.len()..]);
+            followed = true;
+        }
+    }
+    if !followed
+        || identities(base)
+            .any(|f| prefix(&f.identity, old) && matching(previous, &f.identity).is_none())
+    {
+        register(&mut moves, &source, new)?;
+    }
+    Ok(moves)
+}
+
+pub fn reverse_step(
+    current: &Measurement,
+    old: &str,
+    new: &str,
+    previous: &BTreeMap<String, String>,
+) -> Result<Measurement, String> {
+    let already_moved: Vec<_> = previous
+        .values()
+        .filter(|target| prefix(target, new) && !prefix(target, old))
+        .collect();
+    let relocate = |identity: &str| {
+        if prefix(identity, new) && !already_moved.iter().any(|target| prefix(identity, target)) {
+            format!("{old}{}", &identity[new.len()..])
+        } else {
+            identity.to_owned()
+        }
+    };
+    let mut before = current.clone();
+    for finding in before.findings.iter_mut().chain(&mut before.declarations) {
+        let identity = relocate(&finding.identity);
+        if identity != finding.identity {
+            finding.identity = identity;
+            let (package, path) = finding
+                .identity
+                .split_once("::")
+                .unwrap_or((&finding.identity, ""));
+            finding.package = package.into();
+            finding.subsystem = if package == "uqm" {
+                path.split("::")
+                    .next()
+                    .filter(|name| !name.is_empty())
+                    .unwrap_or(package)
+                    .into()
+            } else {
+                package.into()
+            };
+        }
+    }
+    for coverage in &mut before.allow_coverage {
+        if already_moved
+            .iter()
+            .any(|target| prefix(&coverage.item, target))
+        {
+            continue;
+        }
+        coverage.item = relocate(&coverage.item);
+        let (head, identity) = coverage
+            .scope
+            .rsplit_once('|')
+            .ok_or("missing allow identity")?;
+        coverage.scope = format!("{head}|{}", relocate(identity));
+    }
+    Ok(before)
+}
+
 pub fn register(moves: &mut BTreeMap<String, String>, old: &str, new: &str) -> Result<(), String> {
     if old == new || old.is_empty() || new.is_empty() {
         return Err("move needs distinct nonempty identities".into());
     }
     for (source, target) in moves.iter() {
-        if prefix(old, source) || prefix(source, old) {
+        if old == source
+            || (prefix(old, source) && !prefix(new, target))
+            || (prefix(source, old) && !prefix(target, new))
+        {
             return Err(format!("move source {old} already credited"));
         }
         if new == target {
@@ -38,23 +140,23 @@ pub fn validate(
     let mut unique = BTreeMap::new();
     let mut targets = BTreeMap::new();
     let current_ids: BTreeSet<_> = identities(current).map(|f| f.identity.as_str()).collect();
+    let mut sources_by_move = BTreeMap::<&String, BTreeSet<&str>>::new();
+    for finding in identities(base).filter(|f| !root_layer_reference(f)) {
+        if let Some((source, _)) = matching(moves, &finding.identity) {
+            sources_by_move
+                .entry(source)
+                .or_default()
+                .insert(&finding.identity);
+        }
+    }
     for (old, new) in moves {
         register(&mut unique, old, new)?;
-        let sources: BTreeSet<_> = identities(base)
-            .filter(|f| prefix(&f.identity, old) && !root_layer_reference(f))
-            .map(|f| f.identity.as_str())
-            .collect();
+        let sources = sources_by_move.get(old).cloned().unwrap_or_default();
         if sources.is_empty() && identities(base).any(|f| prefix(&f.identity, new)) {
             continue;
         }
         if sources.is_empty() {
             return Err(format!("move source {old} does not exist at base"));
-        }
-        if identities(base).any(|f| prefix(&f.identity, new)) {
-            return Err(format!("move would merge debt into {new}"));
-        }
-        if identities(current).any(|f| prefix(&f.identity, old)) {
-            return Err(format!("move source {old} still exists"));
         }
         for source in sources {
             let target = format!("{new}{}", &source[old.len()..]);
@@ -68,6 +170,32 @@ pub fn validate(
                     "move target {target} is absent; function transfers cannot split"
                 ));
             }
+        }
+    }
+    let mut base_entries = BTreeMap::new();
+    for finding in identities(base) {
+        let unbudgeted_file_loc = finding.counter == "loc"
+            && finding.metric == "loc"
+            && finding.value <= super::metrics::limit("loc", "loc");
+        *base_entries
+            .entry(finding.identity.as_str())
+            .or_insert(true) &= unbudgeted_file_loc;
+    }
+    for (target, source) in &targets {
+        if base_entries
+            .get(target.as_str())
+            .is_some_and(|default_loc| {
+                matching(moves, target).is_none() && !(*default_loc && base_entries[source])
+            })
+        {
+            return Err(format!("move would merge debt into {target}"));
+        }
+    }
+    for old in moves.keys() {
+        if identities(current).any(|finding| {
+            prefix(&finding.identity, old) && !targets.contains_key(&finding.identity)
+        }) {
+            return Err(format!("move source {old} still exists"));
         }
     }
     Ok(())
@@ -96,7 +224,7 @@ pub fn limits(
         .collect();
     for finding in &base.findings {
         let mut finding = finding.clone();
-        if let Some((old, new)) = moves.iter().find(|(old, _)| prefix(&finding.identity, old)) {
+        if let Some((old, new)) = matching(moves, &finding.identity) {
             let target = format!("{new}{}", &finding.identity[old.len()..]);
             let owner = match owners.get(target.as_str()) {
                 Some(owner) => owner,
@@ -150,14 +278,20 @@ fn transfer_allows(
     moves: &BTreeMap<String, String>,
 ) -> Result<(), String> {
     let mut credited = BTreeMap::<(String, String, usize), String>::new();
+    let mut coverage_by_move = BTreeMap::<&String, Vec<_>>::new();
+    for coverage in &base.allow_coverage {
+        if let Some((source, _)) = matching(moves, &coverage.item) {
+            coverage_by_move.entry(source).or_default().push(coverage);
+        }
+    }
     for (old, new) in moves {
-        for coverage in base.allow_coverage.iter().filter(|c| prefix(&c.item, old)) {
+        for coverage in coverage_by_move.remove(old).unwrap_or_default() {
             let scope = coverage
                 .scope
                 .splitn(3, '|')
                 .nth(2)
                 .ok_or_else(|| format!("missing allow identity in {}", coverage.scope))?;
-            if prefix(scope, old) {
+            if matching(moves, scope).is_some() {
                 continue; // Direct allows already relocate with their finding.
             }
             let target_item = format!("{new}{}", &coverage.item[old.len()..]);

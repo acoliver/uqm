@@ -771,6 +771,39 @@ fn planned_bridge_calls_are_budgeted_without_hiding_alias_or_other_upward_edges(
 }
 
 #[test]
+fn moved_handoff_calls_keep_existing_bridge_accounting() {
+    for target in ["crate::engine::handoff", "uqm_engine::handoff"] {
+        let source =
+            format!("mod engine {{ mod input {{ fn run() {{ {target}::publish(); }} }} }}");
+        let measured = fixture(&[("src/lib.rs", &source)], None, false);
+        assert_eq!(
+            measured.report("bridge_calls", None).unwrap(),
+            1,
+            "{target}"
+        );
+        assert_eq!(measured.report("module_edges", None).unwrap(), 0);
+        assert_eq!(measured.report("planned_engine_core", None).unwrap(), 0);
+    }
+    let measured = fixture(
+        &[
+            ("src/lib.rs", "mod engine { mod handoff; } fn caller() { crate::engine::handoff::enter(); crate::engine::World::current(); }"),
+            ("src/engine/handoff.rs", "fn project() -> crate::engine::Projection<()> { todo!() } impl crate::engine::World { fn current() -> crate::engine::Projection<()> { project() } }"),
+        ],
+        None,
+        false,
+    );
+    assert_eq!(measured.report("bridge_calls", None).unwrap(), 1);
+    assert_eq!(measured.report("owner_projections", None).unwrap(), 1);
+
+    let root = tempfile::tempdir().unwrap();
+    let mut walker = Walker::new(root.path().into(), None, false);
+    walker.context.package = "uqm-engine".into();
+    assert!(walker.is_bridge_call("crate::handoff::publish"));
+    walker.context.package = "uqm".into();
+    assert!(!walker.is_bridge_call("crate::handoff::publish"));
+}
+
+#[test]
 fn reviewed_macro_handlers_follow_crate_source_moves() {
     let m = fixture(&[
         ("src/lib.rs", "#[path = \"../crates/engine/src/collections/hash_table.rs\"] mod table;"),
