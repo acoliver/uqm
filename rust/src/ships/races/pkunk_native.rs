@@ -8,6 +8,12 @@
 
 #[cfg(not(test))]
 pub(crate) mod engine {
+    #[cfg(not(test))]
+    use crate::battle::context_access::race_access::RaceOps;
+    #[cfg(not(test))]
+    use crate::battle::context_access::ContextOps;
+    #[cfg(not(test))]
+    use crate::battle::context_access::TransitionOps;
     use crate::engine::battle::{
         Concerns, Cx, ElementId, RaceState, Selection, ShipId, WeaponOrigin, WeaponSpawn,
     };

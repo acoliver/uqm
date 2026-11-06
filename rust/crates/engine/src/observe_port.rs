@@ -189,7 +189,7 @@ mod tests {
             ) -> Result<Option<u16>, String> {
                 assert_eq!((player, server, port), (1, true, 2020));
                 self.effects.push("connect");
-                let io = Io { observer };
+                let io = ObservationIo { observer };
                 assert_eq!(
                     io.observer.input_admitted(&InputView::Nested, &()),
                     Injected::default()

@@ -1,3 +1,4 @@
+use uqm_rust::battle::ContextOps;
 #[test]
 fn terminal_outcome_survives_descriptor_teardown_until_the_next_battle() {
     battle_context::run(|_| {

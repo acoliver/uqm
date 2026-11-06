@@ -1,5 +1,7 @@
 //! Encounter fleet construction, decision screen, combat entry, and salvage.
 
+#[cfg(not(test))]
+use crate::battle::context_access::ContextOps;
 pub const ENCOUNTER_DISPLAY_POINTS: [(i16, i16); 10] = [
     (10, 51),
     (-10, 51),
@@ -125,6 +127,7 @@ pub(crate) mod engine {
     };
     use crate::engine::battle::link_queue;
     use crate::engine::StoryKey;
+    use crate::pickship::ffi::draw_armada_pick_ship_in as draw_armada;
     use crate::ships::native::abi::*;
     use crate::ships::native::{cosine, sine};
     use std::{mem, ptr};
@@ -632,7 +635,7 @@ pub(crate) mod engine {
                     }
                     SetContext(cx.kernel.space_context);
                     if victory != 0 {
-                        cx.with_legacy(|| DrawArmadaPickShip(1, &mut salvage_rect));
+                        draw_armada(cx.kernel, cx.world, 1, (&raw mut salvage_rect).cast());
                     }
                 }
             }

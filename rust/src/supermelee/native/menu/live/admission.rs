@@ -90,7 +90,7 @@ pub(crate) fn observe(
     io: &mut Io<'_>,
     view: InputView,
 ) -> Injected {
-    let campaign = CampaignView::for_input(view, || CampaignView::capture(cx.world));
+    let campaign = CampaignView::for_input(view, || CampaignView::capture(cx.world, cx.kernel));
     io.observer
         .input_admitted_with_setup(&view, &campaign, &mut Setup { state, cx })
 }

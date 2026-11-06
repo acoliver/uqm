@@ -1,5 +1,6 @@
 //! Exercise the Arilou live descriptor and registered callbacks against the linked engine.
 
+use uqm_rust::battle::ContextOps;
 #[path = "support/battle.rs"]
 mod battle;
 #[path = "support/battle_context.rs"]

@@ -23,6 +23,7 @@ pub struct CampaignView {
     pub(crate) current_star: Option<super::StarId>,
     pub(crate) contact_race: Option<u8>,
     pub(crate) escorts: Vec<(u8, u16)>,
+    pub(crate) player_ships: Vec<crate::engine::battle::link_queue::PickShip>,
     pub(crate) groups: Vec<(u8, u8, (i16, i16))>,
 }
 
@@ -40,6 +41,12 @@ impl CampaignView {
             view.ship_facing = i32::from(unsafe {
                 crate::graphics::pixmap_abi::GetFrameIndex(game.ship_stamp.frame.cast())
             });
+        }
+        let ships = kernel.ships_ref(0);
+        let mut next = ships.head();
+        while let Some(id) = next {
+            view.player_ships.push(ships.get(id));
+            next = ships.succ(id);
         }
         let npcs = world.npc_built_ships_ref();
         view.contact_race = npcs.head().map(|id| npcs.get(id).race_id);
@@ -94,6 +101,7 @@ impl CampaignView {
             current_star: world.current_star,
             contact_race: None,
             escorts: Vec::new(),
+            player_ships: Vec::new(),
             groups: Vec::new(),
         }
     }
@@ -136,6 +144,37 @@ mod tests {
         assert_eq!(
             CampaignView::capture(&world, &kernel).flight_facing,
             Some(11)
+        );
+    }
+
+    #[test]
+    fn capture_freezes_player_ship_values_in_link_order_without_publication() {
+        let world = World::new();
+        let mut kernel = Kernel::new();
+        kernel.reset_ship_capacity(0, 3);
+        for (species, index, crew) in [(4, 7, 9), (0, 2, 0), (1, 0, 42)] {
+            let mut ships = kernel.ships(0);
+            let id = ships.alloc().unwrap();
+            let record = ships.get_mut(id);
+            record.SpeciesID = species;
+            record.index = index;
+            record.crew_level = crew;
+            ships.put(id);
+        }
+        let captured = CampaignView::capture(&world, &kernel);
+        let first = kernel.ships_ref(0).head().unwrap();
+        kernel.ships(0).get_mut(first).crew_level = 1;
+        assert_eq!(
+            captured
+                .player_ships
+                .iter()
+                .map(|ship| (ship.species, ship.index, ship.crew))
+                .collect::<Vec<_>>(),
+            [(4, 7, 9), (0, 2, 0), (1, 0, 42)],
+        );
+        assert_eq!(
+            CampaignView::capture(&world, &kernel).player_ships[0].crew,
+            1
         );
     }
 

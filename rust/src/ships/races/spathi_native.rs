@@ -4,6 +4,8 @@
 //! `units.h` is translated here with the same `int` promotion the C macros
 //! get, so facing math wraps exactly as the original does.
 
+#[cfg(not(test))]
+use crate::battle::context_access::ContextOps;
 use crate::ships::native::abi::{CIRCLE_SHIFT, FACING_SHIFT, HALF_CIRCLE, QUADRANT};
 
 /// `ANGLE_TO_FACING`: rounds an angle to the nearest of sixteen facings.

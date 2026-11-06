@@ -2,6 +2,14 @@
 #![cfg(not(test))]
 use super::abi::*;
 use super::{get, set};
+#[cfg(not(test))]
+use crate::battle::context_access::navigation::NavigationOps;
+#[cfg(not(test))]
+use crate::battle::context_access::race_access::RaceOps;
+#[cfg(not(test))]
+use crate::battle::context_access::ContextOps;
+#[cfg(not(test))]
+use crate::battle::context_access::StarOps;
 use crate::engine::StoryKey;
 use std::ptr;
 

@@ -786,7 +786,13 @@ pub(crate) fn fleet_fight_observation(world: &CampaignView) -> super::fleet_figh
         active.then(|| super::fleet_fight::Picker {
             generation,
             cursor: super::ui_observation::ship_picker_cursor(),
-            escorts: crate::pickship::ffi::live_escort_indices(),
+            escorts: world
+                .player_ships
+                .iter()
+                .take(world.player_ships.len().saturating_sub(1))
+                .filter(|ship| ship.species != super::super::pickship::NO_ID)
+                .map(|ship| ship.index)
+                .collect(),
         })
     };
     #[cfg(test)]

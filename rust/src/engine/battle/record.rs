@@ -569,14 +569,7 @@ impl RaceDescriptor {
 }
 
 use std::ptr;
-#[cfg(not(test))]
-pub(crate) fn ship_queue(
-    side: usize,
-) -> std::ptr::NonNull<crate::engine::battle::link_queue::RacePool> {
-    assert!(side < 2, "invalid ship side {side}");
-    // SAFETY: callers use this only while the owning Kernel is published on the game thread.
-    std::ptr::NonNull::from(unsafe { &mut (**Kernel::current()).races[side] })
-}
+
 impl ElementState {
     fn encode(self) -> ElementRecord {
         ElementRecord {

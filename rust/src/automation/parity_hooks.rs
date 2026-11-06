@@ -1,5 +1,7 @@
 //! Callback lookup tables; raw addresses never leave the recorder.
 #[cfg(not(test))]
+use crate::battle::context_access::TransitionOps;
+#[cfg(not(test))]
 pub(super) fn hooks() -> Vec<(usize, &'static str)> {
     [part0(), part1(), part2(), status()]
         .into_iter()

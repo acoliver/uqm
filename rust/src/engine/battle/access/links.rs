@@ -1,14 +1,5 @@
 #[cfg(not(test))]
 use super::link_queue::*;
-/// # Safety
-/// Only the game thread may take a view, and it must end it before a legacy call.
-#[cfg(not(test))]
-pub(crate) unsafe fn ships<'a>(side: usize) -> LinkQueue<'a, Starship> {
-    assert!(side < 2, "invalid ship side {side}");
-    // SAFETY: callers serialize the address-stable battle ship authority.
-    unsafe { LinkQueue::new(&mut *crate::engine::battle::record::ship_queue(side).as_ptr()) }
-}
-
 #[cfg(not(test))]
 impl LinkQueue<'_, Starship> {
     /// # Safety

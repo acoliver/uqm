@@ -1,5 +1,9 @@
 //! Live planet, asteroid, rubble, damage and floating-crew callbacks.
 
+#[cfg(not(test))]
+use crate::battle::context_access::ai_legacy::AiOps;
+#[cfg(not(test))]
+use crate::battle::context_access::ContextOps;
 use crate::ships::native::abi::*;
 
 fn damage_object(mass: u8, hp: &mut u16, life: &mut u16, flags: &mut u16, damage: i16) {

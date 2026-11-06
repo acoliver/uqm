@@ -5,6 +5,10 @@
 //! `gfxlib.h` builds them: `BUILD_COLOR` returns its RGB argument and drops
 //! the legacy palette index, and `MAKE_RGB15` always yields alpha 255.
 
+#[cfg(not(test))]
+use crate::battle::context_access::race_access::RaceOps;
+#[cfg(not(test))]
+use crate::battle::context_access::ContextOps;
 use crate::ships::native::abi::{Color, CIRCLE_SHIFT, FACING_SHIFT};
 
 /// `ANGLE_TO_FACING`: rounds an angle to the nearest of sixteen facings.

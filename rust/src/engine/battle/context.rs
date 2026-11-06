@@ -49,6 +49,13 @@ impl super::record::Kernel {
     ) -> super::link_queue::LinkQueue<'_, super::link_queue::Starship> {
         super::link_queue::LinkQueue::new(&mut self.races[side])
     }
+    #[inline]
+    pub fn ships_ref(
+        &self,
+        side: usize,
+    ) -> super::link_queue::LinkQueue<'_, super::link_queue::Starship> {
+        super::link_queue::LinkQueue::borrow(&self.races[side])
+    }
     pub fn reset_ship_capacity(&mut self, side: usize, capacity: usize) {
         self.races[side].reset_capacity(capacity);
     }

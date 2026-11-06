@@ -32,3 +32,5 @@ pub use access::template;
 pub use template::{RaceResources, RaceTemplate};
 
 pub use access::schema;
+
+mod descriptor;

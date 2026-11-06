@@ -29,6 +29,8 @@ mod tests {
 #[cfg(not(test))]
 pub mod live {
     use super::move_cursor;
+    #[cfg(not(test))]
+    use crate::battle::context_access::ContextOps;
     use crate::battle::{NETWORK_CONTROL, PSYTRON_CONTROL};
     use crate::engine::battle::schema::GETMELEE_STATE;
     use crate::graphics::{context_abi::ContextLease, native_abi as render};

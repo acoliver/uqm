@@ -498,9 +498,6 @@ impl RacePool {
     }
 }
 
-#[cfg(not(test))]
-pub(crate) use super::access::links::ships;
-
 #[cfg(test)]
 mod identity_tests {
     use super::*;

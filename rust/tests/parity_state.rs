@@ -1,4 +1,5 @@
 //! Production checkpoint and fighter callers, including cross-process address stability.
+use uqm_rust::battle::ContextOps;
 #[path = "support/battle.rs"]
 mod battle;
 #[path = "support/battle_context.rs"]

@@ -23,9 +23,7 @@ operation!(uqm_get_mouse_button_down() -> u32 { crate::input::sdl_input::MouseBu
 pub use crate::time::counter_abi::GetTimeCounter as uqm_get_time_counter;
 operation!(uqm_sleep_thread_until(time: u32) { crate::threading::pacing::linked::sleep_thread_until(time); });
 operation!(uqm_sleep_thread(time: u32) { crate::threading::pacing::linked::sleep_thread(time); });
-operation!(uqm_reinit_race_queues() {
-    for side in 0..2 { crate::engine::battle::link_queue::ships(side).reinit(); }
-});
+
 operation!(uqm_assign_star_planet_globals() { crate::planets::starmap::star_array = ptr::addr_of_mut!(crate::planets::tables::STARMAP_ARRAY).cast(); });
 pub fn uqm_do_popup_window_msg(
     cx: &mut crate::engine::battle::Cx<'_>,

@@ -1,5 +1,7 @@
 //! Exercise the production crew accounting without native graphics.
 
+#[cfg(not(test))]
+use crate::battle::context_access::race_access::RaceOps;
 #[path = "crew.rs"]
 mod crew;
 

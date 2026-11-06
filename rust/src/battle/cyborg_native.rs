@@ -3,6 +3,8 @@
 //! The arithmetic helpers are kept independent of engine state so their C
 //! integer-width behavior can be tested without linking the game archive.
 
+#[cfg(not(test))]
+use crate::battle::context_access::{ai_legacy::AiOps, ContextOps};
 use crate::math::{angle_to_facing, facing_to_angle, normalize_angle, normalize_facing};
 use crate::ships::native::abi;
 
@@ -135,11 +137,9 @@ fn axis_possible(t0: i32, t1: i32, velocity: i32) -> bool {
 }
 
 #[cfg(not(test))]
-#[cfg(not(test))]
 use crate::engine::battle::{Concern, Concerns, Cx, Parent, ShipId, Subject};
 #[cfg(not(test))]
 use abi::*;
-#[cfg(not(test))]
 #[cfg(not(test))]
 fn subject_owner(subject: &Subject) -> ShipId {
     match subject.parent {

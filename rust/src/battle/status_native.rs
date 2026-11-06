@@ -1,5 +1,9 @@
 //! Live captain-window rendering and crew/energy bookkeeping from status.c.
 
+#[cfg(not(test))]
+use crate::battle::context_access::ContextOps;
+#[cfg(not(test))]
+use crate::battle::context_access::StatusOps;
 use crate::ships::native::abi::*;
 
 pub fn init_status_offsets(kernel: &mut crate::engine::Kernel, height_pixels: i32) {

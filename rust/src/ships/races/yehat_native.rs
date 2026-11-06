@@ -1,6 +1,8 @@
 //! Live yehat callbacks translated from ships/yehat/yehat.c.
 #[cfg(not(test))]
 pub(crate) mod engine {
+    #[cfg(not(test))]
+    use crate::battle::context_access::ContextOps;
     use crate::ships::native::{abi::*, cosine, facing_to_angle, sine};
     fn descriptor(_world: &mut crate::engine::battle::World) -> crate::engine::battle::RaceDesc {
         let mut d = RaceTemplate::default();

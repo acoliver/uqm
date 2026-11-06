@@ -2,6 +2,10 @@
 
 #[cfg(not(test))]
 pub(crate) mod engine {
+    #[cfg(not(test))]
+    use crate::battle::context_access::race_access::RaceOps;
+    #[cfg(not(test))]
+    use crate::battle::context_access::ContextOps;
     use crate::engine::battle::views::Missile;
     use crate::engine::battle::{
         Concerns, Cx, ElementId, Race, RaceTemplate, ShipId, WeaponOrigin, WeaponSpawn,

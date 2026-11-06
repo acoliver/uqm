@@ -2,6 +2,8 @@
 #![cfg(not(test))]
 use super::abi::*;
 use super::get;
+#[cfg(not(test))]
+use crate::battle::context_access::ContextOps;
 use crate::engine::StoryKey;
 
 use super::hyper_transition::{init_transition, sis_element};

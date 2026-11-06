@@ -26,7 +26,9 @@ pub(super) unsafe fn save_load_game(
         }
         name_buf[SAVE_NAME_SIZE as usize] = 0;
         // SAFETY: the game-thread picker retains its graphics context and the writable name buffer.
-        if cx.with_legacy(|| unsafe { name_save_game(input, game_index, name_buf.as_mut_ptr()) }) != 0 {
+        if cx.with_legacy(|| unsafe { name_save_game(input, game_index, name_buf.as_mut_ptr()) })
+            != 0
+        {
             play_menu_sound(cx.kernel, cx.world, MENU_SUCCESS as u16);
             // SAFETY: the game-thread picker retains the stamp, selected summary and name buffer.
             cx.with_legacy(|| unsafe { ConfirmSaveLoad(&mut save_stamp) });

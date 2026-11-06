@@ -1,5 +1,6 @@
 //! Empty native descriptors have explicit scalar and optional-handle initialization.
-use super::abi::*;
+use super::record::*;
+use crate::graphics::native_abi::POINT;
 
 impl RaceDescriptor {
     pub const EMPTY: Self = Self {

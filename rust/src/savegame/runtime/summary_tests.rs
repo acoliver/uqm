@@ -14,6 +14,8 @@
 //! solar tests runs the real Rust computation (`solar`) over a wired
 //! `SOLARSYS_STATE` and checks what ends up in the summary.
 
+#[cfg(not(test))]
+use crate::battle::context_access::race_access::RaceOps;
 use crate::engine::World;
 use std::cell::Cell;
 

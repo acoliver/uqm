@@ -1,5 +1,7 @@
 //! Three live parallax star planes, with the original sort and wrap order.
 
+#[cfg(not(test))]
+use crate::battle::context_access::ContextOps;
 use crate::ships::native::abi::{Color, POINT};
 
 pub use crate::engine::battle::kernel::StarPlane as STAR_BLOCK;

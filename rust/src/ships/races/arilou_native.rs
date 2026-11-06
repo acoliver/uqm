@@ -5,6 +5,10 @@
 //! live screen size, so they are translated here with the same `int`/COUNT
 //! /COORD conversions the C macros perform.
 
+#[cfg(not(test))]
+use crate::battle::context_access::race_access::RaceOps;
+#[cfg(not(test))]
+use crate::battle::context_access::ContextOps;
 #[cfg(test)]
 use crate::ships::native::abi::SIN_SHIFT;
 use crate::ships::native::abi::{CIRCLE_SHIFT, FACING_SHIFT, ONE_SHIFT};

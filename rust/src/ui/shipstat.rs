@@ -1,7 +1,7 @@
 #![cfg(not(test))]
 
 use crate::battle::status_native::draw_battle_crew_amount as draw_crew;
-use crate::engine::battle::{link_queue, ShipId};
+use crate::engine::battle::link_queue::PickShip;
 use crate::engine::{Kernel, WorldData};
 use crate::graphics::context_abi::_pCurContext;
 use crate::navigation::abi::*;
@@ -128,13 +128,9 @@ pub unsafe extern "C" fn OutlineShipStatus(y: COORD) {
 pub(crate) unsafe fn init_ship_status(
     font: Option<&crate::graphics::native_font::FontLease>,
     siptr: *mut SHIP_INFO,
-    starship: Option<ShipId>,
+    starship: Option<PickShip>,
     clip_rect: *mut RECT,
 ) {
-    let starship = starship.map(|id| {
-        let ships = link_queue::ships(id.side() as usize);
-        ships.get(ships.link(id))
-    });
     let mut y: COORD = 0;
     let mut stamp: STAMP = mem::zeroed();
     let mut old_clip: RECT = mem::zeroed();

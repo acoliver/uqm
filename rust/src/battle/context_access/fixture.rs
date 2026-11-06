@@ -1,4 +1,6 @@
 //! Typed, value-only command planning views for synchronous automation fixtures.
+#[cfg(not(test))]
+use crate::battle::context_access::race_access::RaceOps;
 #[cfg(test)]
 #[test]
 fn ship_detachment_is_an_explicit_fixture_command() {
@@ -82,82 +84,7 @@ impl Ship {
         self.clear_element = true;
     }
 }
-#[cfg(not(test))]
-impl Cx<'_> {
-    pub(crate) fn fixture_element(&self, id: ElementId) -> Element {
-        Element {
-            state: self.element(id),
-            parent: self.parent(id),
-            target: self.target(id),
-            pred: self.elements().pred(id),
-        }
-    }
-    pub(crate) fn fixture_ship(&self, id: ShipId) -> Ship {
-        let s = self.ship(id);
-        let mut view = Ship {
-            state: self.ship_state(id),
-            species: s.SpeciesID,
-            index: s.index,
-            element: s.hShip,
-            clear_element: false,
-            info: None,
-            data: None,
-            characteristics: None,
-            phoenix: None,
-        };
-        if s.descriptor.is_none() {
-            return view;
-        }
-        let d = self.desc(id);
-        let stats = self.race_stats(id);
-        view.info = Some(stats.ship_info);
-        view.characteristics = Some(stats.characteristics);
-        view.data = Some(ShipFrames {
-            ship: self.ship_frame_set(id, 0),
-            weapon: self.ship_frame_set(id, 1),
-            special: self.ship_frame_set(id, 2),
-            captain_special: d.ship_data.captain_control.special.clone(),
-        });
-        view.phoenix = match d.race_state {
-            crate::engine::battle::RaceState::Pkunk {
-                phoenix,
-                saved_pre,
-                saved_post,
-                saved_death,
-            } => Some(Phoenix {
-                handle: phoenix,
-                hooks: [saved_pre, saved_post, saved_death].map(|f| f.map_or(0, |f| f.address())),
-            }),
-            _ => None,
-        };
-        view
-    }
-    pub(crate) fn apply_fixture_ship(&mut self, id: ShipId, ship: &Ship) {
-        *self.ship_state_mut(id) = ship.state;
-        self.set_ship_identity(id, ship.species, ship.index);
-        if ship.clear_element {
-            self.set_ship_element(id, None);
-        }
-        if let Some(info) = ship.info {
-            self.race_stats_mut(id).ship_info = info;
-        }
-        if let Some(data) = &ship.data {
-            self.set_captain_special(id, data.captain_special.clone());
-        }
-    }
-    pub(crate) fn ship_address(&self, id: ShipId) -> usize {
-        self.ship_pointer(id) as usize
-    }
-    pub(crate) fn detach_descriptor(&mut self, id: ShipId) -> Descriptor {
-        Descriptor(self.take_descriptor(id))
-    }
-    pub(crate) fn fixture_spawn(&mut self, id: ShipId) -> bool {
-        crate::battle::ship_native::spawn_ship(self, id) != 0
-    }
-    pub(crate) fn fixture_damage(&mut self, id: ElementId, damage: i16) {
-        self.damage(id, damage);
-    }
-}
+
 #[cfg(not(test))]
 pub(crate) struct Descriptor(Option<crate::engine::battle::RaceDesc>);
 #[cfg(not(test))]
@@ -168,65 +95,7 @@ impl Descriptor {
         }
     }
 }
-#[cfg(not(test))]
-impl Cx<'_> {
-    pub(crate) fn fixture_think(&mut self, ship: ShipId, crew: u16) {
-        let input = crate::battle::cyborg_native::tactical(self, ship);
-        self.ship_state_mut(ship).input = crate::battle::battle_native::ship_input(input, crew);
-    }
-    pub(crate) fn fixture_intelligence(
-        &mut self,
-        element: ElementId,
-        objects: [crate::engine::battle::Concern; 4],
-    ) {
-        let ship = self.owner(element);
-        let count = objects.len() as u16;
-        let mut scratch = [crate::engine::battle::Concern {
-            object: None,
-            facing: 0,
-            which_turn: 0,
-            movement: 0,
-        }; 10];
-        scratch[..objects.len()].copy_from_slice(&objects);
-        let mut concerns = crate::engine::battle::Concerns {
-            count,
-            objects: scratch,
-            subject: self.weapon_origin(element),
-        };
-        assert!(
-            self.race_intelligence(ship, &mut concerns),
-            "fixture intelligence callback"
-        );
-    }
-    pub(crate) fn zoom_sample(
-        &self,
-        frames: Frames,
-        element: ElementId,
-        view: usize,
-        index: u16,
-    ) -> ZoomSample {
-        assert!(view < 3, "fixture zoom view");
-        // SAFETY: the fixture retains the descriptor's three views and all selected drawable images.
-        unsafe {
-            let frame = &*self.element(element).current.image.frame.raw();
-            let expected = &**frames.raw().add(view);
-            let mipmap = (view == 1).then(|| {
-                let adjacent = &*crate::graphics::pixmap_abi::SetAbsFrameIndex(
-                    (*frames.raw().add(view + 1)).cast(),
-                    index,
-                );
-                let selected = &*frame.image;
-                let adjacent = &*adjacent.image;
-                (selected.MipmapImg as usize, adjacent.NormalImg as usize)
-            });
-            (
-                (frame.parent as usize, frame.Index),
-                (expected.parent as usize, index),
-                mipmap,
-            )
-        }
-    }
-}
+
 #[cfg(test)]
 impl Element {
     pub(crate) fn new() -> Self {
@@ -270,6 +139,164 @@ impl Ship {
             }),
             characteristics: Some(d.characteristics),
             phoenix: None,
+        }
+    }
+}
+
+#[cfg(not(test))]
+pub(crate) trait FixtureOps {
+    fn fixture_element(&self, id: ElementId) -> Element;
+    fn fixture_ship(&self, id: ShipId) -> Ship;
+    fn apply_fixture_ship(&mut self, id: ShipId, ship: &Ship);
+    fn ship_address(&self, id: ShipId) -> usize;
+    fn detach_descriptor(&mut self, id: ShipId) -> Descriptor;
+    fn fixture_spawn(&mut self, id: ShipId) -> bool;
+    fn fixture_damage(&mut self, id: ElementId, damage: i16);
+    fn fixture_think(&mut self, ship: ShipId, crew: u16);
+    fn fixture_intelligence(
+        &mut self,
+        element: ElementId,
+        objects: [crate::engine::battle::Concern; 4],
+    );
+    fn zoom_sample(
+        &self,
+        frames: Frames,
+        element: ElementId,
+        view: usize,
+        index: u16,
+    ) -> ZoomSample;
+}
+
+#[cfg(not(test))]
+impl FixtureOps for Cx<'_> {
+    fn fixture_element(&self, id: ElementId) -> Element {
+        Element {
+            state: self.element(id),
+            parent: self.parent(id),
+            target: self.target(id),
+            pred: self.elements().pred(id),
+        }
+    }
+    fn fixture_ship(&self, id: ShipId) -> Ship {
+        let s = self.ship(id);
+        let mut view = Ship {
+            state: self.ship_state(id),
+            species: s.SpeciesID,
+            index: s.index,
+            element: s.hShip,
+            clear_element: false,
+            info: None,
+            data: None,
+            characteristics: None,
+            phoenix: None,
+        };
+        if s.descriptor.is_none() {
+            return view;
+        }
+        let d = self.desc(id);
+        let stats = self.race_stats(id);
+        view.info = Some(stats.ship_info);
+        view.characteristics = Some(stats.characteristics);
+        view.data = Some(ShipFrames {
+            ship: self.ship_frame_set(id, 0),
+            weapon: self.ship_frame_set(id, 1),
+            special: self.ship_frame_set(id, 2),
+            captain_special: d.ship_data.captain_control.special.clone(),
+        });
+        view.phoenix = match d.race_state {
+            crate::engine::battle::RaceState::Pkunk {
+                phoenix,
+                saved_pre,
+                saved_post,
+                saved_death,
+            } => Some(Phoenix {
+                handle: phoenix,
+                hooks: [saved_pre, saved_post, saved_death].map(|f| f.map_or(0, |f| f.address())),
+            }),
+            _ => None,
+        };
+        view
+    }
+    fn apply_fixture_ship(&mut self, id: ShipId, ship: &Ship) {
+        *self.ship_state_mut(id) = ship.state;
+        self.set_ship_identity(id, ship.species, ship.index);
+        if ship.clear_element {
+            self.set_ship_element(id, None);
+        }
+        if let Some(info) = ship.info {
+            self.race_stats_mut(id).ship_info = info;
+        }
+        if let Some(data) = &ship.data {
+            self.set_captain_special(id, data.captain_special.clone());
+        }
+    }
+    fn ship_address(&self, id: ShipId) -> usize {
+        self.ship_pointer(id) as usize
+    }
+    fn detach_descriptor(&mut self, id: ShipId) -> Descriptor {
+        Descriptor(self.take_descriptor(id))
+    }
+    fn fixture_spawn(&mut self, id: ShipId) -> bool {
+        crate::battle::ship_native::spawn_ship(self, id) != 0
+    }
+    fn fixture_damage(&mut self, id: ElementId, damage: i16) {
+        self.damage(id, damage);
+    }
+
+    fn fixture_think(&mut self, ship: ShipId, crew: u16) {
+        let input = crate::battle::cyborg_native::tactical(self, ship);
+        self.ship_state_mut(ship).input = crate::battle::battle_native::ship_input(input, crew);
+    }
+    fn fixture_intelligence(
+        &mut self,
+        element: ElementId,
+        objects: [crate::engine::battle::Concern; 4],
+    ) {
+        let ship = self.owner(element);
+        let count = objects.len() as u16;
+        let mut scratch = [crate::engine::battle::Concern {
+            object: None,
+            facing: 0,
+            which_turn: 0,
+            movement: 0,
+        }; 10];
+        scratch[..objects.len()].copy_from_slice(&objects);
+        let mut concerns = crate::engine::battle::Concerns {
+            count,
+            objects: scratch,
+            subject: self.weapon_origin(element),
+        };
+        assert!(
+            self.race_intelligence(ship, &mut concerns),
+            "fixture intelligence callback"
+        );
+    }
+    fn zoom_sample(
+        &self,
+        frames: Frames,
+        element: ElementId,
+        view: usize,
+        index: u16,
+    ) -> ZoomSample {
+        assert!(view < 3, "fixture zoom view");
+        // SAFETY: the fixture retains the descriptor's three views and all selected drawable images.
+        unsafe {
+            let frame = &*self.element(element).current.image.frame.raw();
+            let expected = &**frames.raw().add(view);
+            let mipmap = (view == 1).then(|| {
+                let adjacent = &*crate::graphics::pixmap_abi::SetAbsFrameIndex(
+                    (*frames.raw().add(view + 1)).cast(),
+                    index,
+                );
+                let selected = &*frame.image;
+                let adjacent = &*adjacent.image;
+                (selected.MipmapImg as usize, adjacent.NormalImg as usize)
+            });
+            (
+                (frame.parent as usize, frame.Index),
+                (expected.parent as usize, index),
+                mipmap,
+            )
         }
     }
 }

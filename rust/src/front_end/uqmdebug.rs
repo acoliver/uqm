@@ -2,9 +2,9 @@
 #![cfg(feature = "debug-process")]
 
 #[cfg(not(test))]
-use crate::engine::battle::Cx;
+use crate::battle::context_access::ContextOps;
 #[cfg(not(test))]
-use crate::engine::{input::InputSession, Kernel, StoryKey, WorldData};
+use crate::engine::{battle::Cx, input::InputSession, Kernel, StoryKey, WorldData};
 use crate::navigation::abi::*;
 use std::ffi::{c_char, c_int};
 

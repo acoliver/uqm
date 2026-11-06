@@ -445,7 +445,7 @@ mod tests {
             effects: vec![],
             ready: false,
         };
-        let world = Some(CampaignView::empty());
+        let world = Some(campaign_state::empty_view());
         assert!(
             !handle
                 .input_admitted_with_setup(&InputView::BeforeUpdate, &world, &mut setup)

@@ -2,7 +2,7 @@
 #![cfg(not(test))]
 #![allow(non_snake_case)]
 use super::abi::*;
-use crate::engine::StoryKey;
+use crate::{battle::context_access::ContextOps, engine::StoryKey};
 
 use super::hyper_encounters::{allocate, ambient, process_all, XOFFS, YOFFS};
 use super::hyper_transition::{portal_collision, portal_death, star_collision, star_death};

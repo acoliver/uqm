@@ -1,5 +1,9 @@
 //! Live laser/missile, collision, silhouette and homing behavior from weapon.c.
 
+#[cfg(not(test))]
+use crate::battle::context_access::ai_legacy::AiOps;
+#[cfg(not(test))]
+use crate::battle::context_access::ContextOps;
 use crate::ships::native::{abi::*, angle_to_facing, normalize_facing};
 
 mod projectile;

@@ -365,10 +365,11 @@ impl RestartMenuOps for CffiOps<'_, '_, '_> {
     }
 
     fn reinit_race_queues(&self) {
-        self.legacy(|| {
-            // SAFETY: Reinitializes the race queue arrays.
-            unsafe { c_extern::uqm_reinit_race_queues() }
-        })
+        self.owned(|cx, _| {
+            for side in 0..2 {
+                cx.kernel.ships(side).reinit();
+            }
+        });
     }
 
     fn set_screen_context(&self) {

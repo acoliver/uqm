@@ -1,5 +1,6 @@
 //! Exercise the Pkunk descriptor and callbacks against the linked engine.
 
+use uqm_rust::battle::ContextOps;
 #[path = "support/battle_context.rs"]
 mod battle_context;
 #[path = "support/battle.rs"]

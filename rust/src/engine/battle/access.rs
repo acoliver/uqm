@@ -53,7 +53,6 @@ impl Cx<'_> {
 
 #[cfg(not(test))]
 #[cfg(not(test))]
-#[cfg(not(test))]
 use super::Parent;
 use super::{Cx, ElementId, ShipId};
 
@@ -140,9 +139,6 @@ impl Cx<'_> {
     }
     pub fn frame_number(&self, frame: FrameRef<'_>) -> u16 {
         self.frame_index(frame.raw())
-    }
-    pub fn silhouette_frame(&mut self, id: ElementId, frame: FrameSelection, flags: u8) {
-        self.silhouette(id, frame, flags);
     }
 }
 
@@ -845,5 +841,24 @@ impl Cx<'_> {
                 i32::from(hot.y),
             );
         }
+    }
+}
+
+#[cfg(not(test))]
+impl Cx<'_> {
+    pub fn insert_before(&mut self, id: ElementId, before: Option<ElementId>) {
+        assert!(!self.elements().linked(id), "element already linked");
+        if let Some(before) = before {
+            assert!(
+                self.elements().linked(before),
+                "insertion reference is not linked"
+            );
+        }
+        self.link_storage(id, before);
+    }
+    pub fn ship_sound_count(&self, ship: ShipId) -> u16 {
+        let sounds = self.desc(ship).ship_data.ship_sounds;
+        // SAFETY: loaded sound entries are retained by the descriptor.
+        unsafe { crate::strings::string_table::GetStringTableCount(sounds.cast()) }
     }
 }

@@ -1,6 +1,8 @@
 //! VUX behavior over the battle context's ids and per-ship descriptor.
 #[cfg(not(test))]
 pub(crate) mod engine {
+    #[cfg(not(test))]
+    use crate::battle::context_access::ContextOps;
     fn build_descriptor(
         _world: &mut crate::engine::battle::World,
     ) -> crate::engine::battle::RaceDesc {
