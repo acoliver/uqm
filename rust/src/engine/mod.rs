@@ -1,6 +1,7 @@
 pub mod battle;
 pub mod clock;
 pub mod observe;
+pub use uqm_engine::observe_port;
 
 pub mod handoff;
 pub mod input;

@@ -1,11 +1,11 @@
 //! Observation ports specialized to the owned campaign view.
 
-use super::{Kernel, World};
-pub use uqm_engine::observe_port::{
+pub use super::observe_port::{
     CheckpointView, DeviceObservation, Injected, InputSetup, InputView, Observer, PeerSetup,
     Presented, Unobserved,
 };
-pub type Io<'a> = uqm_engine::observe_port::ObservationIo<'a, Option<CampaignView>>;
+use super::{Kernel, World};
+pub type Io<'a> = super::observe_port::ObservationIo<'a, Option<CampaignView>>;
 
 /// Values copied for one observer call; this view never outlives its input boundary.
 #[derive(Clone)]
