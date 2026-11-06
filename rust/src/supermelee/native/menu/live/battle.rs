@@ -107,10 +107,7 @@ pub(super) unsafe fn start(state: *mut MELEE_STATE) {
     FlushColorXForms();
     stop_music();
     FadeMusic(NORMAL_VOLUME as u8, 0);
-    if !(*state).h_music.is_null() {
-        DestroyMusic((*state).h_music);
-        (*state).h_music = ptr::null_mut();
-    }
+    drop((*state).h_music.take());
     if set_player_input_all() != 0 {
         crate::supermelee::native::battle_picker::live::fill_pick_melee_frame(
             &(*state).melee_setup,

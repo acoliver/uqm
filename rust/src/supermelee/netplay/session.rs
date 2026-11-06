@@ -16,8 +16,8 @@ pub enum MenuPhase {
 }
 
 #[repr(C)]
-#[derive(Debug)]
 pub struct MeleeState {
+    pub activity: crate::engine::world::activity::ActivityControl,
     pub phase: MenuPhase,
     pub initialized: BOOLEAN,
     pub melee_started: BOOLEAN,
@@ -30,11 +30,40 @@ pub struct MeleeState {
     pub current_ship: MeleeShip,
     pub cur_index: COUNT,
     pub build_pick_confirmed: BOOLEAN,
-    pub random_context: *mut RandomContext,
     pub last_input_time: TimeCount,
-    pub h_music: MUSIC_REF,
+    pub h_music: Option<uqm_engine::sound::resource_types::LoadedMusic>,
     pub netplay: NetplaySession,
     pub(crate) catalog: Vec<crate::ships::master_native::ShipChoice>,
+}
+
+impl MeleeState {
+    pub(crate) fn new(
+        input: crate::engine::input::InputSession,
+        activity: crate::engine::world::activity::ActivityControl,
+        catalog: Vec<crate::ships::master_native::ShipChoice>,
+    ) -> Self {
+        Self {
+            activity,
+            phase: MenuPhase::Menu,
+            initialized: 0,
+            melee_started: 0,
+            melee_option: 0,
+            side: 0,
+            row: 0,
+            col: 0,
+            melee_setup: crate::supermelee::setup::team::MeleeSetup::new(),
+            load: crate::supermelee::setup::browser::TeamBrowser::new(
+                crate::supermelee::setup::persistence::builtin_teams(),
+            ),
+            current_ship: 0,
+            cur_index: 0,
+            build_pick_confirmed: 0,
+            last_input_time: 0,
+            h_music: None,
+            netplay: NetplaySession::with_input(input),
+            catalog,
+        }
+    }
 }
 
 #[derive(Debug, Default)]
@@ -190,6 +219,31 @@ fn poll_replay_wait(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn new_menu_owns_teams_and_retains_the_supplied_input() {
+        let input = crate::engine::input::InputSession::default();
+        input.set_player_control(1, 5);
+        let mut world = crate::engine::World::default();
+        let mut menu = MeleeState::new(input.clone(), world.activity_control(), Vec::new());
+        world.set_activity(0x1004);
+        assert_eq!(menu.activity.activity(), 0x1004);
+        assert_eq!(menu.phase, MenuPhase::Menu);
+        assert_eq!(menu.melee_setup.teams.len(), 2);
+        assert_eq!(menu.load.builtins.len(), 15);
+        assert!(menu.h_music.is_none());
+        assert_eq!(
+            menu.netplay.controller().immediate_ptr(),
+            input.immediate_ptr()
+        );
+        assert_eq!(menu.netplay.controller().player_controls()[1], 5);
+        let first = menu.netplay.battle_net();
+        let identity = std::rc::Rc::as_ptr(&first);
+        drop(first);
+        menu.melee_setup.teams[0].rename(c"owned fleet");
+        let second = menu.netplay.battle_net();
+        assert!(std::ptr::addr_eq(identity, std::rc::Rc::as_ptr(&second)));
+        assert_eq!(menu.melee_setup.teams[0].c_name(), c"owned fleet");
+    }
     #[test]
     fn protocol_session_retains_the_supplied_input_and_configuration() {
         let input = crate::engine::input::InputSession::default();

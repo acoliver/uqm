@@ -6,11 +6,10 @@ pub(crate) mod live {
     use crate::comm::hail::game_string;
     use crate::engine::{Kernel as KernelOwner, World as WorldOwner};
 
-    use crate::game_init::macro_abi::{LoadMusic, LoadSound};
+    use crate::game_init::macro_abi::LoadSound;
     use crate::graphics::{drawable_abi, resgfx::LoadGraphicInstance as LoadGraphic};
 
     use crate::mainloop::restart_menu::c_extern::{do_popup_window, FadeMusic, SeedRandomNumbers};
-    use crate::math::{delete_context, new_context};
     use crate::navigation::abi::{init_space, uninit_space, MeleeConnectDialog, TEXTENTRY_STATE};
 
     use crate::ships::native::abi::*;
@@ -99,21 +98,22 @@ pub(crate) mod live {
     ) -> u32 {
         let time = GetTimeCounter();
         input.set_paused(false);
-        let activity = crate::engine::World::current().read(|world| world.activity());
-        if activity & CHECK_ABORT as u16 != 0 {
+        if (*state).activity.activity() & CHECK_ABORT as u16 != 0 {
             return 0;
         }
         SetMenuSounds(input, 15, 16);
         if (*state).initialized == 0 {
-            if !(*state).h_music.is_null() {
+            if (*state).h_music.is_some() {
                 stop_music();
-                DestroyMusic((*state).h_music);
-                (*state).h_music = ptr::null_mut();
+                drop((*state).h_music.take());
             }
-            (*state).h_music = LoadMusic(MELEE_MUSIC.as_ptr().cast()).cast();
+            let music_name = std::ffi::CStr::from_bytes_with_nul(MELEE_MUSIC)
+                .unwrap_or_else(|error| panic!("melee music resource name: {error}"));
+            (*state).h_music = uqm_engine::sound::resource_types::LoadedMusic::load(music_name);
             (*state).initialized = 1;
             (*state).melee_option = 4;
-            PlayMusic((*state).h_music, 1, 1);
+            let music = (*state).h_music.as_ref().map(|music| music.as_raw());
+            PlayMusic(music.unwrap_or_default().cast(), 1, 1);
             init_screen();
             FadeScreen(FADE_ALL_TO_COLOR, 840 / 2);
             (*state).last_input_time = GetTimeCounter();
@@ -166,8 +166,7 @@ pub(crate) mod live {
             }
             if key(input, KEY_MENU_SELECT) || force {
                 select_option(input, state);
-                let activity = crate::engine::World::current().read(|world| world.activity());
-                if activity & CHECK_ABORT as u16 != 0 {
+                if (*state).activity.activity() & CHECK_ABORT as u16 != 0 {
                     return 0;
                 }
             }
@@ -236,33 +235,6 @@ pub(crate) mod live {
             true
         }
     }
-    fn new_menu_state(
-        kernel: &KernelOwner,
-        input: &crate::engine::input::InputSession,
-    ) -> MELEE_STATE {
-        MELEE_STATE {
-            phase: crate::supermelee::netplay::session::MenuPhase::Menu,
-            initialized: 0,
-            melee_started: 0,
-            melee_option: 0,
-            side: 0,
-            row: 0,
-            col: 0,
-            melee_setup: crate::supermelee::setup::team::MeleeSetup::new(),
-            load: crate::supermelee::setup::browser::TeamBrowser::new(
-                crate::supermelee::setup::persistence::builtin_teams(),
-            ),
-            current_ship: 0,
-            cur_index: 0,
-            build_pick_confirmed: 0,
-            random_context: ptr::null_mut(),
-            last_input_time: 0,
-            h_music: ptr::null_mut(),
-            netplay: crate::supermelee::netplay::NetplaySession::with_input(input.clone()),
-            catalog: crate::ships::master_native::choices(&kernel.master_queue),
-        }
-    }
-
     /// # Safety
     /// Run on the initialized game thread with exclusive access to native menu resources.
     pub unsafe fn melee(
@@ -272,25 +244,24 @@ pub(crate) mod live {
         let runtime = cx.kernel.input_runtime();
         let input = runtime.input();
         cx.world.reset_game_data();
-        let mut state = new_menu_state(cx.kernel, input);
+        let mut state = MELEE_STATE::new(
+            input.clone(),
+            cx.world.activity_control(),
+            crate::ships::master_native::choices(&cx.kernel.master_queue),
+        );
         // SAFETY: state remains in this stack frame through all synchronous callbacks and cleanup.
         cx.with_legacy(|| {
             P_MELEE_STATE = &mut state;
             state.phase = crate::supermelee::netplay::session::MenuPhase::Menu;
-            state.random_context = new_context();
             let fallback = GetTimeCounter();
-            let seed = io
-                .observer
-                .input_admitted(
-                    &crate::engine::observe::InputView::Seed {
-                        domain: 1,
-                        fallback,
-                    },
-                    &None,
-                )
-                .seed
-                .unwrap_or(fallback);
-            (*state.random_context).reseed(seed);
+            // Seed admission is part of the recorded input sequence.
+            io.observer.input_admitted(
+                &crate::engine::observe::InputView::Seed {
+                    domain: 1,
+                    fallback,
+                },
+                &None,
+            );
             state.current_ship = 255;
             state.cur_index = u16::MAX;
             for (index, team) in state.load.builtins.iter_mut().take(5).enumerate() {
@@ -330,10 +301,7 @@ pub(crate) mod live {
             stop_music();
             WaitForSoundEnd(u16::MAX);
             write_config(&mut state);
-            if !state.h_music.is_null() {
-                DestroyMusic(state.h_music);
-                state.h_music = ptr::null_mut();
-            }
+            drop(state.h_music.take());
             KernelOwner::current().write(uninit_space);
             crate::supermelee::native::battle_picker::live::DestroyPickMeleeFrame();
             DestroyDrawable(ReleaseDrawable(MeleeFrame));
@@ -345,7 +313,6 @@ pub(crate) mod live {
                 release_sound(KernelOwner::current().read(|owner| owner.game_sounds)).cast(),
             );
             (**KernelOwner::current()).game_sounds = ptr::null_mut();
-            delete_context(state.random_context);
             FlushInput(input);
         });
     }
