@@ -387,7 +387,8 @@ pub mod live {
         master: &crate::ships::master_native::engine::MasterShip,
         side: usize,
         index: u16,
-    ) -> crate::graphics::context_abi::ContextFrame {
+        context: &crate::graphics::context_abi::ContextLease,
+    ) {
         let random = cx.rng;
         let mut queue = cx.kernel.ships(side);
         let captain = queue.captain_name(master.species, random);
@@ -397,6 +398,13 @@ pub mod live {
         let icon = crate::graphics::context_abi::ContextFrame::retain(std::ptr::NonNull::new(
             master.info.icons.cast(),
         ));
+        context.draw_stamp(
+            &icon,
+            render::POINT {
+                x: 4 + 18 * (index % 7) as i16,
+                y: 10 + 18 * (index / 7) as i16,
+            },
+        );
         queue.edit(built, |ship| {
             ship.index = index;
             ship.cost = master.info.ship_cost;
@@ -406,7 +414,6 @@ pub mod live {
             ship.max_crew = 0;
         });
         queue.clear_descriptor(built);
-        icon
     }
     pub(crate) fn fill_pick_melee_frame(
         cx: &mut crate::engine::battle::Cx<'_>,
@@ -461,14 +468,7 @@ pub mod live {
                     let master = catalog
                         .get(ship as usize)
                         .unwrap_or_else(|| panic!("melee master ship {ship}"));
-                    let icon = build_fleet_ship(cx, master, side, index);
-                    context.draw_stamp(
-                        &icon,
-                        render::POINT {
-                            x: 4 + 18 * (index % 7) as i16,
-                            y: 10 + 18 * (index / 7) as i16,
-                        },
-                    );
+                    build_fleet_ship(cx, master, side, index, &context);
                 }
             }
         });
