@@ -179,6 +179,104 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
             uqm_rust::engine::input::InputSession::default(),
         )));
         uqm_rust::app::bridge::with_game(&mut game, || {
+            uqm_rust::ui::shipstat::outline_ship_status(&context_lease, 0);
+            uqm_rust::ui::shipstat::clear_ship_status(&context_lease, 0);
+            TFB_FlushGraphics();
+            for y in 0..66 {
+                for x in 0..65 {
+                    let shade = if x >= 64 || y == 65 {
+                        None
+                    } else if y == 0 {
+                        Some(0)
+                    } else if y == 1 || x < 2 {
+                        Some(66)
+                    } else if x == 63 || (x == 62 && y >= 3) {
+                        Some(132)
+                    } else if y == 2 {
+                        Some(66)
+                    } else {
+                        Some(82)
+                    };
+                    let expected = shade.map_or((9, 17, 25), |shade| (shade, shade, shade));
+                    let pixel = GetFramePixel(frame, POINT { x, y });
+                    assert_eq!((pixel.r, pixel.g, pixel.b), expected, "status ({x},{y})");
+                }
+            }
+            for saving in [true, false] {
+                SetContext(previous);
+                let saved = uqm_rust::ui::save_problem::render_save_confirmation(
+                    &context_lease,
+                    &font_lease,
+                    c"A",
+                    saving,
+                );
+                assert_eq!(saved.is_some(), saving);
+                assert_eq!(SetContext(previous), previous);
+                TFB_FlushGraphics();
+                // Recorded from the original ConfirmSaveLoad with the same one-glyph font.
+                let rows = [
+                    "lllllllll",
+                    "lllllllld",
+                    "lliiiiidd",
+                    "lliiiiidd",
+                    "lliiTiidd",
+                    "lliiiiidd",
+                    "lliiiiidd",
+                    "lliiiiidd",
+                    "ldddddddd",
+                    "ddddddddd",
+                ];
+                for y in 115..131 {
+                    for x in 150..171 {
+                        let expected = if (156..165).contains(&x) && (119..129).contains(&y) {
+                            let shade =
+                                match rows[(y - 119) as usize].as_bytes()[(x - 156) as usize] {
+                                    b'l' => 132,
+                                    b'd' => 66,
+                                    b'i' => 82,
+                                    b'T' => 165,
+                                    _ => unreachable!(),
+                                };
+                            (shade, shade, shade)
+                        } else {
+                            (9, 17, 25)
+                        };
+                        let pixel = GetFramePixel(frame, POINT { x, y });
+                        assert_eq!(
+                            (pixel.r, pixel.g, pixel.b),
+                            expected,
+                            "saving={saving}, ({x},{y})"
+                        );
+                    }
+                }
+                if let Some(saved) = saved {
+                    saved.restore();
+                    assert_eq!(SetContext(previous), previous);
+                    TFB_FlushGraphics();
+                    for y in 119..129 {
+                        for x in 156..165 {
+                            let pixel = GetFramePixel(frame, POINT { x, y });
+                            assert_eq!((pixel.r, pixel.g, pixel.b), (9, 17, 25));
+                        }
+                    }
+                } else {
+                    context_lease.fill_rectangle(
+                        Color {
+                            r: 9,
+                            g: 17,
+                            b: 25,
+                            a: 255,
+                        },
+                        RECT {
+                            corner: POINT { x: 0, y: 0 },
+                            extent: EXTENT {
+                                width: 320,
+                                height: 240,
+                            },
+                        },
+                    );
+                }
+            }
             for text in [b'A', 0] {
                 *(*message).data = text as std::ffi::c_char;
                 (*message).length = i32::from(text != 0);

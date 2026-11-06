@@ -9,14 +9,6 @@ pub(super) fn rgb(r: u8, g: u8, b: u8) -> Color {
         a: 255,
     }
 }
-pub(super) unsafe fn text(x: i16, y: i16, align: u32, s: *const c_char) -> TEXT {
-    TEXT {
-        baseline: POINT { x, y },
-        align,
-        pStr: s,
-        CharCount: u16::MAX,
-    }
-}
 pub(crate) fn draw_melee_icon(state: &MeleeSession, index: u16) {
     state
         .menu_context
@@ -547,59 +539,62 @@ pub unsafe fn draw_ship_strings(
     state: &MeleeSession,
     ship: u32,
 ) {
-    let (context, master, font) = (
-        cx.kernel.status_context,
-        crate::ships::master_native::master_in(cx.kernel, ship as u16),
-        cx.kernel.battle_font(),
+    let context = ContextLease::retain(
+        NonNull::new(cx.kernel.status_context.cast())
+            .unwrap_or_else(|| panic!("melee status context not admitted")),
     );
-    let old = SetContext(context);
-    let mut clip = mem::zeroed();
-    get_context_clip_rect(&mut clip);
-    let mut r = clip;
-    r.corner.x += (SAFE_X as i16 * 2 - 32) + 29;
-    r.corner.y += 76;
-    r.extent.height = SHIP_INFO_HEIGHT as i16;
-    set_context_clip_rect(&mut r);
-    BatchGraphics();
-    if ship == 255 {
-        ClearShipStatus(0);
-        SetContextFont(cx.kernel.star_con_font);
-        let mut rect = RECT {
-            corner: POINT { x: 3, y: 4 },
-            extent: EXTENT {
-                width: 57,
-                height: 60,
-            },
-        };
-        SetContextForeGroundColor(rgb(0, 0, 0));
-        DrawRectangle(&mut rect);
-        let base = MELEE_STRING_BASE as i32 + if state.row < 2 { 0 } else { 2 };
-        let first = cx.kernel.game_text(base as usize).to_owned();
-        let second = cx.kernel.game_text((base + 1) as usize).to_owned();
-        let mut t = text(
-            STATUS_WIDTH as i16 >> 1,
-            32,
-            TEXT_ALIGN_ALIGN_CENTER,
-            first.as_ptr(),
-        );
-        font_DrawText(&mut t);
-        t.pStr = second.as_ptr();
-        t.baseline.y += TINY_TEXT_HEIGHT as i16;
-        font_DrawText(&mut t);
-    } else {
-        let mut master = master.unwrap_or_else(|| panic!("melee master ship {ship}"));
-        cx.with_legacy(|| {
-            crate::ui::shipstat::init_ship_status(
-                font.as_ref(),
-                &mut master.info,
-                None,
-                ptr::null_mut(),
-            )
+    let master = crate::ships::master_native::master_in(cx.kernel, ship as u16);
+    let font = cx.kernel.battle_font();
+    context.with_selected(|| {
+        let mut rect = context.clip_rect();
+        rect.corner.x += (SAFE_X as i16 * 2 - 32) + 29;
+        rect.corner.y += 76;
+        rect.extent.height = SHIP_INFO_HEIGHT as i16;
+        context.with_clip(rect, || {
+            context.draw_batch(|| {
+                if ship == 255 {
+                    crate::ui::shipstat::clear_ship_status(&context, 0);
+                    let font = font
+                        .as_ref()
+                        .unwrap_or_else(|| panic!("melee status font not admitted"));
+                    context.set_font(font);
+                    context.draw_rectangle(
+                        rgb(0, 0, 0),
+                        RECT {
+                            corner: POINT { x: 3, y: 4 },
+                            extent: EXTENT {
+                                width: 57,
+                                height: 60,
+                            },
+                        },
+                    );
+                    let base = MELEE_STRING_BASE as usize + if state.row < 2 { 0 } else { 2 };
+                    for (index, y) in [(base, 32), (base + 1, 32 + TINY_TEXT_HEIGHT as i16)] {
+                        context.draw_text(
+                            font,
+                            cx.kernel.game_text(index),
+                            POINT {
+                                x: STATUS_WIDTH as i16 >> 1,
+                                y,
+                            },
+                            TEXT_ALIGN_ALIGN_CENTER,
+                            rgb(0, 0, 0),
+                        );
+                    }
+                } else {
+                    let mut master = master.unwrap_or_else(|| panic!("melee master ship {ship}"));
+                    cx.with_legacy(|| {
+                        crate::ui::shipstat::init_ship_status(
+                            font.as_ref(),
+                            &mut master.info,
+                            None,
+                            ptr::null_mut(),
+                        )
+                    });
+                }
+            });
         });
-    }
-    UnbatchGraphics();
-    set_context_clip_rect(&mut clip);
-    SetContext(old);
+    });
 }
 pub(super) unsafe fn current(cx: &mut crate::engine::battle::Cx<'_>, state: &mut MeleeSession) {
     state.current_ship = if state.row == 2 {
