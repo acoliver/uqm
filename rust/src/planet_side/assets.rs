@@ -27,14 +27,14 @@ impl LanderSoundTable {
 /// Concrete audio adapter for an already loaded lander sound table.
 pub struct CffiPlanetSideAudio {
     sounds: LanderSoundTable,
-    channels: std::rc::Rc<std::cell::RefCell<crate::engine::battle::record::Channels>>,
+    channels: std::rc::Rc<std::cell::RefCell<crate::engine::battle::kernel::Channels>>,
 }
 
 impl CffiPlanetSideAudio {
     #[must_use]
     pub(crate) const fn new(
         sounds: LanderSoundTable,
-        channels: std::rc::Rc<std::cell::RefCell<crate::engine::battle::record::Channels>>,
+        channels: std::rc::Rc<std::cell::RefCell<crate::engine::battle::kernel::Channels>>,
     ) -> Self {
         Self { sounds, channels }
     }

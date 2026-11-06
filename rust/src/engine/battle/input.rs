@@ -6,7 +6,7 @@ use std::rc::Rc;
 pub const NUM_PLAYERS: usize = 2;
 const NETWORK_CONTROL: u8 = 8;
 
-impl crate::engine::Kernel {
+impl super::super::Kernel {
     pub fn install_player_input(&mut self, player: u16) {
         let slot = &mut self.player_input[usize::from(player)];
         assert!(slot.is_none(), "player input already installed");

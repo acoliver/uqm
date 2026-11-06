@@ -3,6 +3,9 @@
 
 use std::fmt;
 
+mod schema;
+pub use schema::{lookup_game_state_bits, native_bits, GAME_STATE_FIELDS, STATE_KEYS};
+
 pub use super::StoryKey;
 pub use uqm_save::NUM_GAME_STATE_BYTES;
 pub const NUM_GAME_STATE_BITS: usize = StoryKey::SAMATRA_GRPOFFS3.end() + 1;

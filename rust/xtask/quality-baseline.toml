@@ -2415,6 +2415,7 @@ u6_04_world_projection = { limit = 118, ends = "U6-04", scopes = { "ffi|owner_pr
 "complexity|cyclomatic|uqm::comm::races::vux::dialogue::<Dialogue<'_,A>>::menagerie" = 45
 "complexity|cyclomatic|uqm::comm::races::yehat::dialogue::<Dialogue<'_,A>>::space" = 27
 "complexity|cyclomatic|uqm::comm::races::zoqfot::<Dialogue<'_,A>>::zoq_fot_home" = 26
+"complexity|cyclomatic|uqm::engine::world::story::schema::lookup_game_state_bits" = 449
 "complexity|cyclomatic|uqm::front_end::credits::runtime::render_text_frame" = 33
 "complexity|cyclomatic|uqm::front_end::intro::runtime::presentation_commands" = 71
 "complexity|cyclomatic|uqm::front_end::setupmenu::runtime::init_widgets" = 27
@@ -2440,7 +2441,6 @@ u6_04_world_projection = { limit = 118, ends = "U6-04", scopes = { "ffi|owner_pr
 "complexity|cyclomatic|uqm::ships::registry::descriptor_template_for_species" = 30
 "complexity|cyclomatic|uqm::ships::types::<SpeciesId>::from_i32" = 31
 "complexity|cyclomatic|uqm::starbase::draw::draw_ship_piece" = 32
-"complexity|cyclomatic|uqm::state::game_state::schema::macro#1::lookup_game_state_bits" = 449
 "complexity|cyclomatic|uqm::supermelee::native::menu::live::drawing::highlight" = 28
 "complexity|cyclomatic|uqm::supermelee::setup::team::ship_cost" = 27
 "complexity|cyclomatic|uqm::supermelee::types::<MeleeShip>::from_u8" = 29
@@ -2614,6 +2614,7 @@ u6_04_world_projection = { limit = 118, ends = "U6-04", scopes = { "ffi|owner_pr
 "complexity|loc|uqm::comm::races::zoqfot::<Dialogue<'_,A>>::zoq_fot_home" = 171
 "complexity|loc|uqm::comm::races::zoqfot::<Dialogue<'_,A>>::zoq_fot_info" = 94
 "complexity|loc|uqm::comm::races::zoqfot::<Dialogue<'_,A>>::zoq_fot_intro" = 100
+"complexity|loc|uqm::engine::world::story::schema::lookup_game_state_bits" = 453
 "complexity|loc|uqm::front_end::credits::runtime::process_frame" = 101
 "complexity|loc|uqm::front_end::credits::runtime::render_text_frame" = 148
 "complexity|loc|uqm::front_end::gameopt::runtime::draw_game_selection" = 89
@@ -2655,7 +2656,6 @@ u6_04_world_projection = { limit = 118, ends = "U6-04", scopes = { "ffi|owner_pr
 "complexity|loc|uqm::starbase::draw::draw_ship_piece" = 130
 "complexity|loc|uqm::starbase::screen::<OutfitScreen<'a,P>>::initialize" = 86
 "complexity|loc|uqm::starbase::shipyard_screen::<ShipyardScreen<'a,P>>::show_combat_ships" = 93
-"complexity|loc|uqm::state::game_state::schema::macro#1::lookup_game_state_bits" = 453
 "complexity|loc|uqm::supermelee::native::menu::live::do_melee" = 82
 "complexity|loc|uqm::supermelee::setup::persistence::builtin_teams" = 94
 "complexity|loc|uqm::target::uqm-gameplay-proof::build_gallery" = 83
@@ -4910,6 +4910,7 @@ u6_04_world_projection = { limit = 118, ends = "U6-04", scopes = { "ffi|owner_pr
 "uqm::c_bindings::global_state::STARBASE_STRING_BASE" = "uqm::engine::save::summary::STARBASE_STRING_BASE"
 "uqm::engine::battle::access::<Cx<'_>>::silhouette_frame" = "uqm::battle::context_access::<Cx<'_> as ContextOps>::silhouette_frame"
 "uqm::engine::battle::access::observe::ship" = "uqm::engine::battle::access::observe::ship_resources"
+"uqm::engine::battle::input::<crate::engine::Kernel>" = "uqm::engine::battle::input::<super::super::Kernel>"
 "uqm::front_end::gameopt::runtime::load_game_descriptions" = "uqm::savegame::live::load::load_game_descriptions"
 "uqm::graphics" = "uqm-engine::graphics"
 "uqm::input" = "uqm-engine::input_port"
@@ -4928,6 +4929,7 @@ u6_04_world_projection = { limit = 118, ends = "U6-04", scopes = { "ffi|owner_pr
 "uqm::ships::loader_native::<crate::engine::battle::RaceDesc>::load" = "uqm::ships::loader_native::<crate::engine::battle::RaceDesc as DescriptorLoader>::load"
 "uqm::ships::native::descriptor" = "uqm::engine::battle::descriptor"
 "uqm::sound" = "uqm-engine::sound"
+"uqm::state::game_state::schema::macro#1::lookup_game_state_bits" = "uqm::engine::world::story::schema::lookup_game_state_bits"
 "uqm::supermelee::native::menu::live::drawing::DrawMeleeShipStrings" = "uqm::supermelee::native::menu::live::drawing::draw_ship_strings"
 "uqm::supermelee::native::menu::live::drawing::RepairMeleeFrame" = "uqm::supermelee::native::menu::live::drawing::repair_frame"
 "uqm::threading" = "uqm-engine::threading"

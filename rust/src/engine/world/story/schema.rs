@@ -5,22 +5,17 @@ const _: () = assert!(NUM_GAME_STATE_BITS.div_ceil(8) == super::NUM_GAME_STATE_B
 
 macro_rules! game_state_fields {
     ($($name:ident ($end_name:ident): $start:literal..=$end:literal,)*) => {
-        #[cfg(not(test))]
-        const _: () = {
-            $(
-                assert!(crate::navigation::abi::$name as usize == $start);
-                assert!(crate::navigation::abi::$end_name as usize == $end);
-                assert!(crate::ships::native::abi::$name as usize == $start);
-                assert!(crate::ships::native::abi::$end_name as usize == $end);
-            )*
-        };
-
-        pub use crate::engine::world::StoryKey;
+        pub use super::StoryKey;
         impl StoryKey {
             $(pub const $name: Self = Self::new($start, $end);)*
             pub fn from_name(name: &str) -> Option<Self> {
                 lookup_game_state_bits(name).map(|(start, end)| Self::new(start, end))
             }
+        }
+
+        pub mod native_bits {
+            pub const NUM_GAME_STATE_BITS: u32 = super::NUM_GAME_STATE_BITS as u32;
+            $(pub const $name: u32 = $start; pub const $end_name: u32 = $end;)*
         }
 
         pub const STATE_KEYS: &[(&str, u32, u32)] = &[

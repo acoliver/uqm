@@ -827,8 +827,6 @@ pub struct RaceDescriptor {
     pub race_callbacks: crate::engine::battle::race::Callbacks,
 }
 
-pub(crate) use crate::engine::battle::kernel::{Channels, SoundQueue};
-
 pub use crate::engine::kernel::Kernel;
 
 #[cfg(test)]
