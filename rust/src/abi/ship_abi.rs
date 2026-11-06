@@ -1134,20 +1134,7 @@ pub struct MeleeSetup {
     pub sentTeams: [MeleeTeam; 2usize],
     pub haveSentTeamName: [bool; 2usize],
 }
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct melee_load_state {
-    pub preBuiltList: *mut *mut MeleeTeam,
-    pub preBuiltCount: COUNT,
-    pub dirEntries: DIRENTRY,
-    pub entryIndices: *mut COUNT,
-    pub numIndices: COUNT,
-    pub view: [*mut MeleeTeam; 5usize],
-    pub top: COUNT,
-    pub bot: COUNT,
-    pub cur: COUNT,
-    pub viewSize: COUNT,
-}
+pub use crate::supermelee::setup::browser::TeamBrowser as melee_load_state;
 pub use crate::supermelee::netplay::session::MeleeState as melee_state;
 
 #[cfg(not(test))]

@@ -103,19 +103,16 @@ pub unsafe extern "C" fn Melee_LocalChange_fleet(
     }
     changed
 }
-#[no_mangle]
 /// # Safety
-/// Call on the game thread with initialized melee UI resources. All pointers
-/// must remain live through notification callbacks; side and slot indices must be in range.
-pub unsafe extern "C" fn Melee_LocalChange_team(
+/// The menu and its graphics must be live on the game thread.
+pub unsafe fn Melee_LocalChange_team(
     state: *mut MELEE_STATE,
     side: usize,
-    team: *const MeleeTeam,
+    team: &crate::supermelee::setup::team::MeleeTeam,
 ) -> bool {
-    let fleet = MeleeTeam_getFleet(team);
-    let value = MeleeTeam_getTeamName(team);
-    let mut changed = Melee_LocalChange_fleet(state, side, fleet);
-    changed |= Melee_LocalChange_teamName(state, side as u16, value);
+    let fleet = team.ships.map(|ship| ship as u32);
+    let mut changed = Melee_LocalChange_fleet(state, side, fleet.as_ptr());
+    changed |= Melee_LocalChange_teamName(state, side as u16, team.c_name().as_ptr());
     changed
 }
 /// # Safety

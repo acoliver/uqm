@@ -117,6 +117,13 @@ pub struct uio_DirHandle {
     root_end: PathBuf,
 }
 
+impl uio_DirHandle {
+    pub(super) fn retain_reference(&self) {
+        let previous = self.refcount.fetch_add(1, Ordering::SeqCst);
+        assert!(previous > 0, "retaining a closed UIO directory");
+    }
+}
+
 #[repr(C)]
 pub struct uio_Repository {
     flags: c_int,
@@ -7782,3 +7789,7 @@ mod fileblock_tests;
 #[cfg(test)]
 #[path = "uio_mount_ops_tests.rs"]
 mod mount_ops_tests;
+
+#[cfg(test)]
+#[path = "uio_owned_tests.rs"]
+mod owned_tests;

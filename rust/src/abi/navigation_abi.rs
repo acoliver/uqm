@@ -3995,11 +3995,7 @@ pub type MELEE_STATE = melee_state;
 pub type MELEE_OPTIONS = BYTE;
 pub use crate::ships::native::abi::melee_load_state;
 
-#[cfg(not(test))]
-pub use crate::supermelee::native::load_teams::live::InitMeleeLoadState;
 
-#[cfg(not(test))]
-pub use crate::supermelee::native::load_teams::live::UninitMeleeLoadState;
 
 #[cfg(not(test))]
 pub use crate::supermelee::native::load_teams::live::do_load_team;

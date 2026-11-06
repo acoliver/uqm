@@ -252,8 +252,9 @@ pub(crate) mod live {
             row: 0,
             col: 0,
             melee_setup: ptr::null_mut(),
-            // SAFETY: the native load-state record contains integers and nullable pointers.
-            load: unsafe { mem::zeroed() },
+            load: crate::supermelee::setup::browser::TeamBrowser::new(
+                crate::supermelee::setup::persistence::builtin_teams(),
+            ),
             current_ship: 0,
             cur_index: 0,
             build_pick_confirmed: 0,
@@ -296,7 +297,11 @@ pub(crate) mod live {
             (*state.random_context).reseed(seed);
             state.current_ship = 255;
             state.cur_index = u16::MAX;
-            InitMeleeLoadState(&mut state);
+            for (index, team) in state.load.builtins.iter_mut().take(5).enumerate() {
+                team.rename(std::ffi::CStr::from_ptr(game_string(
+                    MELEE_STRING_BASE as i32 + 4 + index as i32,
+                )));
+            }
             crate::engine::World::current().write(|world| world.set_activity(SUPER_MELEE as u16));
             (**KernelOwner::current()).game_sounds =
                 capture_sound(LoadSound(GAME_SOUNDS.as_ptr().cast()));
@@ -310,9 +315,11 @@ pub(crate) mod live {
             LoadTeamList(&mut state);
             if !load_config(&mut state) {
                 (**KernelOwner::current()).player_control[0] = HUMAN_CONTROL | 16;
-                Melee_LocalChange_team(&mut state, 0, *state.load.preBuiltList);
+                let team = state.load.builtins[0].clone();
+                Melee_LocalChange_team(&mut state, 0, &team);
                 (**KernelOwner::current()).player_control[1] = COMPUTER_CONTROL | 16;
-                Melee_LocalChange_team(&mut state, 1, *state.load.preBuiltList.add(1));
+                let team = state.load.builtins[1].clone();
+                Melee_LocalChange_team(&mut state, 1, &team);
             }
             state.side = 0;
             SetMenuSounds(input, 15, 16);
@@ -327,8 +334,6 @@ pub(crate) mod live {
             stop_music();
             WaitForSoundEnd(u16::MAX);
             write_config(&mut state);
-            DestroyStringTable(ReleaseStringTable(state.load.dirEntries));
-            state.load.dirEntries = ptr::null_mut();
             if !state.h_music.is_null() {
                 DestroyMusic(state.h_music);
                 state.h_music = ptr::null_mut();
@@ -344,7 +349,6 @@ pub(crate) mod live {
                 release_sound(KernelOwner::current().read(|owner| owner.game_sounds)).cast(),
             );
             (**KernelOwner::current()).game_sounds = ptr::null_mut();
-            UninitMeleeLoadState(&mut state);
             delete_context(state.random_context);
             MeleeSetup_delete(state.melee_setup);
             FlushInput(input);

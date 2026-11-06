@@ -37,76 +37,22 @@ pub(crate) mod live {
     use super::page;
     use crate::engine::Kernel as KernelOwner;
 
-    use crate::io::uio_bridge::{uio_fclose, uio_fopen, uio_unlink};
-    use crate::memory::{rust_hfree, rust_hmalloc};
+    use crate::io::uio_owned::Directory;
     use crate::ships::native::abi::*;
     use crate::supermelee::native::teams::*;
+    use crate::supermelee::setup::{
+        browser::write_team,
+        team::{ship_cost, MeleeTeam as OwnedTeam},
+    };
     use crate::ui::save_problem::SaveProblem;
     use std::{
         ffi::{c_char, CStr, CString},
         mem, ptr,
     };
 
-    unsafe fn load_image(entry: STRING, team: *mut MeleeTeam) -> bool {
-        let stream = uio_fopen(meleeDir.cast(), GetStringAddress(entry), c"rb".as_ptr());
-        if stream.is_null() {
-            return false;
-        }
-        if MeleeTeam_deserialize(team, stream) == -1 {
-            return false;
-        }
-        uio_fclose(stream);
-        true
-    }
-    unsafe fn fleet(state: *mut MELEE_STATE, mut index: u16, result: *mut MeleeTeam) -> bool {
-        let load = &mut (*state).load;
-        if index < load.preBuiltCount {
-            MeleeTeam_copy(result, *load.preBuiltList.add(index as usize));
-            return true;
-        }
-        index -= load.preBuiltCount;
-        let first = index;
-        while index < load.numIndices {
-            let entry =
-                SetAbsStringTableIndex(load.dirEntries, *load.entryIndices.add(index as usize));
-            if load_image(entry, result) {
-                break;
-            }
-            log::warn!(
-                "File '{}' is not a valid SuperMelee team",
-                CStr::from_ptr(GetStringAddress(entry)).to_string_lossy()
-            );
-            index += 1;
-        }
-        if index != first {
-            let count = index - first;
-            assert!(first + count <= load.numIndices);
-            load.numIndices -= count;
-            ptr::copy(
-                load.entryIndices.add(index as usize),
-                load.entryIndices.add(first as usize),
-                (load.numIndices - first) as usize,
-            );
-        }
-        index < load.numIndices
-    }
-    unsafe fn file_index(state: *mut MELEE_STATE, name: *const c_char) -> u16 {
-        let load = &(*state).load;
-        for index in 0..load.numIndices {
-            let entry =
-                SetAbsStringTableIndex(load.dirEntries, *load.entryIndices.add(index as usize));
-            if std::ffi::CStr::from_ptr(GetStringAddress(entry))
-                .to_bytes()
-                .eq_ignore_ascii_case(std::ffi::CStr::from_ptr(name).to_bytes())
-            {
-                return load.preBuiltCount + index;
-            }
-        }
-        u16::MAX
-    }
     unsafe fn draw_entry(
         catalog: &[crate::ships::master_native::engine::MasterShip],
-        team: *const MeleeTeam,
+        team: &OwnedTeam,
         origin: POINT,
         ships: bool,
         highlighted: bool,
@@ -120,11 +66,19 @@ pub(crate) mod live {
         let mut text = TEXT {
             baseline: origin,
             align: TEXT_ALIGN_ALIGN_LEFT as _,
-            pStr: MeleeTeam_getTeamName(team),
+            pStr: team.c_name().as_ptr(),
             CharCount: u16::MAX,
         };
         font_DrawText(&mut text);
-        let value = CString::new(MeleeTeam_getValue(team).to_string()).unwrap();
+        let value = CString::new(
+            team.ships
+                .iter()
+                .copied()
+                .map(ship_cost)
+                .sum::<u16>()
+                .to_string(),
+        )
+        .unwrap();
         text.baseline.x += 7 * 35 - 1;
         text.align = TEXT_ALIGN_ALIGN_RIGHT as _;
         text.pStr = value.as_ptr();
@@ -137,8 +91,8 @@ pub(crate) mod live {
                 },
                 frame: ptr::null_mut(),
             };
-            for ship in (*team).ships {
-                if ship != 255 {
+            for ship in team.ships {
+                if ship.is_valid() && ship as u8 != 255 {
                     stamp.frame = catalog
                         .get(ship as u8 as usize)
                         .map_or(ptr::null_mut(), |ship| ship.info.icons);
@@ -157,27 +111,18 @@ pub(crate) mod live {
         }
     }
     unsafe fn fill_view(state: *mut MELEE_STATE) -> bool {
-        let mut n = 0;
-        while n < 5 {
-            if !fleet(state, (*state).load.top + n, (*state).load.view[n as usize]) {
-                break;
-            }
-            n += 1;
-        }
-        if n == 0 {
-            return false;
-        }
-        (*state).load.bot = (*state).load.top + n;
-        true
+        let directory =
+            Directory::retain(std::ptr::NonNull::new(meleeDir.cast()).expect("melee directory"));
+        (*state).load.fill_view(&directory)
     }
     unsafe fn select(state: *mut MELEE_STATE, highlighted: bool) {
-        let index = (*state).load.cur - (*state).load.top;
+        let index = (*state).load.current - (*state).load.top;
         let old = SetContext(KernelOwner::current().read(|owner| owner.space_context));
         SetContextFont(KernelOwner::current().read(|owner| owner.micro_font));
         BatchGraphics();
         draw_entry(
             &[],
-            (*state).load.view[index as usize],
+            &(*state).load.view[index as usize],
             POINT {
                 x: 5,
                 y: 34 + index as i16 * 32,
@@ -200,11 +145,11 @@ pub(crate) mod live {
         BatchGraphics();
         DrawMeleeIcon(28);
         if fill_view(state) {
-            for index in (*state).load.top..(*state).load.bot {
+            for index in (*state).load.top..(*state).load.bottom {
                 let relative = index - (*state).load.top;
                 draw_entry(
                     &catalog,
-                    (*state).load.view[relative as usize],
+                    &(*state).load.view[relative as usize],
                     POINT {
                         x: 5,
                         y: 34 + relative as i16 * 32,
@@ -217,15 +162,13 @@ pub(crate) mod live {
         UnbatchGraphics();
         SetContext(old);
     }
-    static mut NEXT_FLASH: u32 = 0;
-    static mut HIGHLIGHTED: bool = false;
     unsafe fn flash(state: *mut MELEE_STATE) {
         let now = GetTimeCounter();
-        if now >= NEXT_FLASH {
-            NEXT_FLASH = now.wrapping_add(840 / 9);
-            HIGHLIGHTED = !HIGHLIGHTED;
+        if now >= (*state).load.next_flash {
+            (*state).load.next_flash = now.wrapping_add(840 / 9);
+            (*state).load.highlighted = !(*state).load.highlighted;
             let old = SetContext(KernelOwner::current().read(|owner| owner.space_context));
-            select(state, HIGHLIGHTED);
+            select(state, (*state).load.highlighted);
             SetContext(old);
         }
     }
@@ -252,11 +195,9 @@ pub(crate) mod live {
         let keys = input.pulsed().menu;
         if keys[KEY_MENU_SELECT as usize] != 0 || keys[KEY_MENU_CANCEL as usize] != 0 {
             if keys[KEY_MENU_SELECT as usize] != 0 {
-                Melee_LocalChange_team(
-                    state,
-                    (*state).side as usize,
-                    (*state).load.view[((*state).load.cur - (*state).load.top) as usize],
-                );
+                let team = (*state).load.view[((*state).load.current - (*state).load.top) as usize]
+                    .clone();
+                Melee_LocalChange_team(state, (*state).side as usize, &team);
             }
             (*state).phase = crate::supermelee::netplay::session::MenuPhase::Menu;
             (*state).last_input_time = GetTimeCounter();
@@ -267,9 +208,9 @@ pub(crate) mod live {
         }
         let (top, index) = page(
             (*state).load.top,
-            (*state).load.bot,
-            (*state).load.cur,
-            (*state).load.numIndices + (*state).load.preBuiltCount,
+            (*state).load.bottom,
+            (*state).load.current,
+            (*state).load.count(),
             [
                 keys[KEY_MENU_UP as usize] != 0,
                 keys[KEY_MENU_DOWN as usize] != 0,
@@ -277,14 +218,14 @@ pub(crate) mod live {
                 keys[KEY_MENU_PAGE_DOWN as usize] != 0,
             ],
         );
-        if index != (*state).load.cur {
+        if index != (*state).load.current {
             if top == (*state).load.top {
                 select(state, false);
             } else {
                 (*state).load.top = top;
                 draw(state);
             }
-            (*state).load.cur = index;
+            (*state).load.current = index;
         }
         flash(state);
         SleepThreadUntil(time.wrapping_add(840 / 30));
@@ -292,33 +233,14 @@ pub(crate) mod live {
     }
     /// # Safety
     /// State must own a live load view on the game thread.
-    #[no_mangle]
-    pub unsafe extern "C" fn LoadTeamList(state: *mut MELEE_STATE) {
-        let load = &mut (*state).load;
-        DestroyStringTable(ReleaseStringTable(load.dirEntries));
-        load.dirEntries = crate::strings::string_table::CaptureStringTable(
-            LoadDirEntryTable(
-                meleeDir.cast(),
-                c"".as_ptr(),
-                c".mle".as_ptr(),
-                match_MatchType_match_MATCH_SUFFIX,
-            )
-            .cast(),
-        )
-        .cast();
-        if !load.entryIndices.is_null() {
-            rust_hfree(load.entryIndices.cast());
-        }
-        load.numIndices = crate::strings::string_table::GetStringTableCount(load.dirEntries.cast());
-        load.entryIndices = rust_hmalloc(load.numIndices as usize * mem::size_of::<u16>()).cast();
-        for index in 0..load.numIndices {
-            *load.entryIndices.add(index as usize) = index;
-        }
+    pub unsafe fn LoadTeamList(state: *mut MELEE_STATE) {
+        let directory =
+            Directory::retain(std::ptr::NonNull::new(meleeDir.cast()).expect("melee directory"));
+        (*state).load.refresh(&directory);
     }
     /// # Safety
     /// State must own the team being saved on the game thread.
-    #[no_mangle]
-    pub unsafe extern "C" fn DoSaveTeam(state: *mut MELEE_STATE) -> u32 {
+    pub unsafe fn DoSaveTeam(state: *mut MELEE_STATE) {
         let mut filename = CStr::from_ptr(MeleeSetup_getTeamName(
             (*state).melee_setup,
             (*state).side as usize,
@@ -331,20 +253,19 @@ pub(crate) mod live {
         let old = SetContext(KernelOwner::current().read(|owner| owner.screen_context));
         let mut saved = mem::zeroed();
         ConfirmSaveLoad(&mut saved);
-        let stream = uio_fopen(meleeDir.cast(), filename.as_ptr(), c"wb".as_ptr());
-        let mut ok = false;
-        if !stream.is_null() {
-            ok = MeleeTeam_serialize(
-                &(*(*state).melee_setup).teams[(*state).side as usize],
-                stream,
-            ) == 0;
-            uio_fclose(stream);
-            if !ok {
-                uio_unlink(meleeDir.cast(), filename.as_ptr());
-            }
-        }
+        let directory =
+            Directory::retain(std::ptr::NonNull::new(meleeDir.cast()).expect("melee directory"));
+        let original = &(*(*state).melee_setup).teams[(*state).side as usize];
+        let team = OwnedTeam {
+            ships: original.ships.map(|ship| {
+                crate::supermelee::types::MeleeShip::from_u8(ship as u8)
+                    .unwrap_or(crate::supermelee::types::MeleeShip::MeleeNone)
+            }),
+            name: original.name.map(|byte| byte as u8),
+        };
+        let ok = write_team(&directory, &filename, &team).is_ok();
         (*state).load.top = 0;
-        (*state).load.cur = 0;
+        (*state).load.current = 0;
         DrawStamp(&mut saved);
         DestroyDrawable(ReleaseDrawable(saved.frame));
         SetContext(old);
@@ -352,59 +273,10 @@ pub(crate) mod live {
             SaveProblem();
         }
         LoadTeamList(state);
-        let index = file_index(state, filename.as_ptr());
-        if index != u16::MAX {
-            assert!(index < (*state).load.preBuiltCount + (*state).load.numIndices);
-            (*state).load.cur = index;
+        if let Some(index) = (*state).load.file_index(&filename) {
+            assert!(index < (*state).load.count());
+            (*state).load.current = index;
             (*state).load.top = index.saturating_sub(2);
-        }
-        u32::from(!stream.is_null())
-    }
-    /// # Safety
-    /// State must be allocated and initialized on the game thread.
-    #[no_mangle]
-    pub unsafe extern "C" fn InitMeleeLoadState(state: *mut MELEE_STATE) {
-        let load = &mut (*state).load;
-        load.entryIndices = ptr::null_mut();
-        let catalog = crate::supermelee::setup::persistence::builtin_teams();
-        load.preBuiltCount = catalog.len() as u16;
-        load.preBuiltList = rust_hmalloc(catalog.len() * mem::size_of::<*mut MeleeTeam>()).cast();
-        for (index, original) in catalog.iter().enumerate() {
-            let team = MeleeTeam_new();
-            *load.preBuiltList.add(index) = team;
-            (*team).ships = original.ships.map(|s| s as u32);
-            if index < 5 {
-                MeleeTeam_setName(
-                    team,
-                    crate::comm::hail::game_string(MELEE_STRING_BASE as i32 + 4 + index as i32),
-                );
-            } else {
-                ptr::copy_nonoverlapping(
-                    original.name.as_ptr().cast(),
-                    (*team).name.as_mut_ptr(),
-                    55,
-                );
-            }
-        }
-        for team in &mut load.view {
-            *team = MeleeTeam_new();
-        }
-    }
-    /// # Safety
-    /// State must own its load view and prebuilt catalog.
-    #[no_mangle]
-    pub unsafe extern "C" fn UninitMeleeLoadState(state: *mut MELEE_STATE) {
-        let load = &mut (*state).load;
-        for team in load.view {
-            MeleeTeam_delete(team);
-        }
-        for index in 0..load.preBuiltCount {
-            MeleeTeam_delete(*load.preBuiltList.add(index as usize));
-        }
-        rust_hfree(load.preBuiltList.cast());
-        load.preBuiltCount = 0;
-        if !load.entryIndices.is_null() {
-            rust_hfree(load.entryIndices.cast());
         }
     }
 }
