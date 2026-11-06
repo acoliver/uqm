@@ -3901,8 +3901,6 @@ pub const ANDROSYNTH_DEFINED: _bindgen_ty_27 = 44;
 pub const MYCON_TRAP_DEFINED: _bindgen_ty_27 = 45;
 pub type _bindgen_ty_27 = ::std::os::raw::c_uint;
 
-pub use crate::ships::native::abi::MeleeSetup;
-pub use crate::ships::native::abi::MeleeTeam;
 pub type FleetShipIndex = COUNT;
 
 #[cfg(not(test))]
@@ -4069,8 +4067,6 @@ pub use crate::supermelee::native::menu::live::changes::Melee_LocalChange_ship;
 #[cfg(not(test))]
 pub use crate::supermelee::native::menu::live::changes::Melee_LocalChange_teamName;
 
-#[cfg(not(test))]
-pub use crate::supermelee::native::menu::live::changes::Melee_LocalChange_fleet;
 
 #[cfg(not(test))]
 pub use crate::supermelee::native::menu::live::changes::Melee_LocalChange_team;
@@ -4078,34 +4074,20 @@ pub use crate::supermelee::native::menu::live::changes::Melee_LocalChange_team;
 
 
 
-pub use crate::supermelee::native::teams::MeleeTeam_getFleet;
-
-pub use crate::supermelee::native::teams::MeleeTeam_getTeamName;
-
-pub use crate::supermelee::native::teams::MeleeSetup_getSentShip;
-
-pub use crate::supermelee::native::teams::MeleeSetup_getSentTeamName;
-
-pub use crate::supermelee::native::teams::MeleeSetup_setSentShip;
-
-pub use crate::supermelee::native::teams::MeleeSetup_setSentTeamName;
-
-pub use crate::supermelee::native::teams::MeleeSetup_new;
-
-pub use crate::supermelee::native::teams::MeleeSetup_delete;
 
 
-pub use crate::supermelee::native::teams::MeleeSetup_getShip;
 
-pub use crate::supermelee::native::teams::MeleeSetup_setTeamName;
 
-pub use crate::supermelee::native::teams::MeleeSetup_getTeamName;
 
-pub use crate::supermelee::native::teams::MeleeSetup_getFleetValue;
 
-pub use crate::supermelee::native::teams::MeleeSetup_deserializeTeam;
 
-pub use crate::supermelee::native::teams::MeleeSetup_serializeTeam;
+
+
+
+
+
+
+
 
 #[cfg(not(test))]
 pub use crate::supermelee::native::battle_picker::live::BuildPickMeleeFrame;

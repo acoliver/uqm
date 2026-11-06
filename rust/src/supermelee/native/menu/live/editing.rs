@@ -87,7 +87,7 @@ pub(super) unsafe fn edit(
             let mut buf = [0 as std::ffi::c_char; 31];
             libc::strncpy(
                 buf.as_mut_ptr(),
-                MeleeSetup_getTeamName((*state).melee_setup, side as usize),
+                (*state).melee_setup.teams[side as usize].c_name().as_ptr(),
                 30,
             );
             let mut entry: TEXTENTRY_STATE = mem::zeroed();
@@ -100,7 +100,9 @@ pub(super) unsafe fn edit(
             entry.FrameCallback = Some(frame);
             do_text_entry(input, &mut entry);
             (*state).cur_index = u16::MAX;
-            if entry.Success == 0 || !Melee_LocalChange_teamName(state, side, buf.as_ptr()) {
+            if entry.Success == 0
+                || !Melee_LocalChange_teamName(state, side, std::ffi::CStr::from_ptr(buf.as_ptr()))
+            {
                 view_name(state, side);
             }
             return 1;

@@ -225,6 +225,7 @@ pub struct MeleeSetup {
     pub fleet_value: [u16; NUM_SIDES],
     /// Control mode for each side.
     pub player_control: [PlayerControl; NUM_SIDES],
+    pub sent: [SentTeam; NUM_SIDES],
 }
 
 impl Default for MeleeSetup {
@@ -241,7 +242,12 @@ impl MeleeSetup {
             teams: [MeleeTeam::new(), MeleeTeam::new()],
             fleet_value: [0; NUM_SIDES],
             player_control: [PlayerControl::HUMAN_CONTROL; NUM_SIDES],
+            sent: std::array::from_fn(|_| SentTeam::default()),
         }
+    }
+
+    pub fn reset_sent(&mut self) {
+        self.sent.iter_mut().for_each(SentTeam::reset);
     }
 
     // -----------------------------------------------------------------------
@@ -400,6 +406,22 @@ mod tests {
             .set_ship_with_cost(1, 13, MeleeShip::Androsynth, cost)
             .unwrap());
         assert_eq!(setup.fleet_value, [0, 22]);
+    }
+
+    #[test]
+    fn live_setup_owns_pending_acknowledgments_independently_of_editable_teams() {
+        let mut setup = MeleeSetup::new();
+        assert!(setup.sent.iter().all(SentTeam::is_synchronized));
+        setup.teams[0].rename(c"Live fleet");
+        setup.teams[0].ships[3] = MeleeShip::Chmmr;
+        setup.sent[0].ships[3] = MeleeShip::Chmmr;
+        setup.sent[0].set_name(Some(c""));
+        assert!(!setup.sent[0].is_synchronized());
+        assert_eq!(setup.teams[0].c_name(), c"Live fleet");
+        setup.reset_sent();
+        assert!(setup.sent.iter().all(SentTeam::is_synchronized));
+        assert_eq!(setup.teams[0].ships[3], MeleeShip::Chmmr);
+        assert_eq!(setup.teams[0].c_name(), c"Live fleet");
     }
 
     #[test]

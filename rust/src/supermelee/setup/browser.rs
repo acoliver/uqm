@@ -1,10 +1,10 @@
 //! Owned saved-fleet browser state over the existing UIO directories.
 use super::team::MeleeTeam;
-use crate::io::uio_owned::Directory;
 use std::{
     ffi::{CStr, CString},
     io,
 };
+use uqm_engine::io::uio_owned::Directory;
 use uqm_save::mle::Team as TeamRecord;
 
 pub fn read_team(directory: &Directory, name: &CStr) -> io::Result<MeleeTeam> {

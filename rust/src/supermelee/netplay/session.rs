@@ -25,7 +25,7 @@ pub struct MeleeState {
     pub side: COUNT,
     pub row: COUNT,
     pub col: COUNT,
-    pub melee_setup: *mut MeleeSetup,
+    pub melee_setup: crate::supermelee::setup::team::MeleeSetup,
     pub load: melee_load_state,
     pub current_ship: MeleeShip,
     pub cur_index: COUNT,

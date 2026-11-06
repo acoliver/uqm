@@ -1120,20 +1120,6 @@ pub const MeleeShip_MELEE_ZOQFOTPIK: MeleeShip = 24;
 pub const MeleeShip_MELEE_UNSET: MeleeShip = 254;
 pub const MeleeShip_MELEE_NONE: MeleeShip = 255;
 pub type MeleeShip = ::std::os::raw::c_uint;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct MeleeTeam {
-    pub ships: [MeleeShip; 14usize],
-    pub name: [::std::os::raw::c_char; 55usize],
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct MeleeSetup {
-    pub teams: [MeleeTeam; 2usize],
-    pub fleetValue: [COUNT; 2usize],
-    pub sentTeams: [MeleeTeam; 2usize],
-    pub haveSentTeamName: [bool; 2usize],
-}
 pub use crate::supermelee::setup::browser::TeamBrowser as melee_load_state;
 pub use crate::supermelee::netplay::session::MeleeState as melee_state;
 

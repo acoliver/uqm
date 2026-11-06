@@ -353,13 +353,16 @@ fn configure(cx: &mut Cx<'_>, request: &MeleeSetupRequest) -> Result<(), String>
         state.melee_option = 4;
         state.phase = crate::supermelee::netplay::session::MenuPhase::Menu;
         for (side, slot, ship) in ships {
-            crate::supermelee::native::teams::set_ship(
-                &mut *state.melee_setup,
-                &state.catalog,
-                side,
-                slot,
-                ship,
-            );
+            state
+                .melee_setup
+                .set_ship_with_cost(
+                    side,
+                    slot,
+                    crate::supermelee::types::MeleeShip::from_u8(ship as u8)
+                        .expect("validated fixture ship"),
+                    |ship| crate::ships::master_native::choice_cost(&state.catalog, ship as u16),
+                )
+                .expect("validated fixture fleet slot");
         }
     }
     Ok(())

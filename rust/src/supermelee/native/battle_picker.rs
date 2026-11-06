@@ -61,7 +61,6 @@ pub mod live {
     };
     use crate::graphics::drawable_abi;
     use crate::ships::native::abi::*;
-    use crate::supermelee::native::teams::*;
     use std::{ffi::CString, mem, ptr};
     #[no_mangle]
     pub static mut PickMeleeFrame: FRAME = ptr::null_mut();
@@ -354,7 +353,7 @@ pub mod live {
     /// # Safety
     /// The setup, master queue and empty battle queues must be initialized.
     #[no_mangle]
-    pub unsafe extern "C" fn FillPickMeleeFrame(setup: *mut MeleeSetup) {
+    pub unsafe fn FillPickMeleeFrame(setup: &crate::supermelee::setup::team::MeleeSetup) {
         let (context, order, catalog) = KernelOwner::current().read(|owner| {
             (
                 owner.off_screen_context,
@@ -375,7 +374,7 @@ pub mod live {
                     y: r.extent.height - 7 + 4,
                 },
                 align: TEXT_ALIGN_ALIGN_CENTER,
-                pStr: MeleeSetup_getTeamName(setup, side_i as usize),
+                pStr: setup.teams[side_i as usize].c_name().as_ptr(),
                 CharCount: u16::MAX,
             };
             r.corner.x += 2;
@@ -392,8 +391,7 @@ pub mod live {
             SetContextFont(KernelOwner::current().read(|owner| owner.tiny_font));
             SetContextForeGroundColor(rgb(10, 10, 31));
             font_DrawText(&mut t);
-            let text =
-                CString::new(MeleeSetup_getFleetValue(setup, side_i as usize).to_string()).unwrap();
+            let text = CString::new(setup.fleet_value[side_i as usize].to_string()).unwrap();
             t.baseline = POINT { x: 4, y: 7 };
             t.align = TEXT_ALIGN_ALIGN_LEFT;
             t.pStr = text.as_ptr();
@@ -401,7 +399,7 @@ pub mod live {
             font_DrawText(&mut t);
             assert!(link_queue::ships(side).head().is_none());
             for index in 0..14 {
-                let ship = MeleeSetup_getShip(setup, side_i as usize, index);
+                let ship = setup.teams[side_i as usize].ships[index as usize] as u32;
                 if ship == 255 {
                     continue;
                 }

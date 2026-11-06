@@ -120,7 +120,7 @@ pub(super) unsafe fn start(state: *mut MELEE_STATE) {
         (*state).h_music = ptr::null_mut();
     }
     if set_player_input_all() != 0 {
-        crate::supermelee::native::battle_picker::live::FillPickMeleeFrame((*state).melee_setup);
+        crate::supermelee::native::battle_picker::live::FillPickMeleeFrame(&(*state).melee_setup);
         WaitForSoundEnd(u16::MAX);
         KernelOwner::current().write(|kernel| {
             load_gravity_well(
@@ -155,9 +155,7 @@ pub(super) unsafe fn start(state: *mut MELEE_STATE) {
     (*state).initialized = 0;
 }
 pub(super) unsafe fn start_button(state: *mut MELEE_STATE) {
-    if MeleeSetup_getFleetValue((*state).melee_setup, 0) == 0
-        || MeleeSetup_getFleetValue((*state).melee_setup, 1) == 0
-    {
+    if (*state).melee_setup.fleet_value[0] == 0 || (*state).melee_setup.fleet_value[1] == 0 {
         PlayMenuSound(2);
         return;
     }

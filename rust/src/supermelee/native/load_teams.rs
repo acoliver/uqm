@@ -37,18 +37,14 @@ pub(crate) mod live {
     use super::page;
     use crate::engine::Kernel as KernelOwner;
 
-    use crate::io::uio_owned::Directory;
     use crate::ships::native::abi::*;
-    use crate::supermelee::native::teams::*;
     use crate::supermelee::setup::{
         browser::write_team,
         team::{ship_cost, MeleeTeam as OwnedTeam},
     };
     use crate::ui::save_problem::SaveProblem;
-    use std::{
-        ffi::{c_char, CStr, CString},
-        mem, ptr,
-    };
+    use std::{ffi::CString, mem, ptr};
+    use uqm_engine::io::uio_owned::Directory;
 
     unsafe fn draw_entry(
         catalog: &[crate::ships::master_native::engine::MasterShip],
@@ -241,12 +237,10 @@ pub(crate) mod live {
     /// # Safety
     /// State must own the team being saved on the game thread.
     pub unsafe fn DoSaveTeam(state: *mut MELEE_STATE) {
-        let mut filename = CStr::from_ptr(MeleeSetup_getTeamName(
-            (*state).melee_setup,
-            (*state).side as usize,
-        ))
-        .to_bytes()
-        .to_vec();
+        let mut filename = (*state).melee_setup.teams[(*state).side as usize]
+            .c_name()
+            .to_bytes()
+            .to_vec();
         filename.extend(b".mle");
         filename.truncate(254);
         let filename = CString::new(filename).unwrap();
@@ -255,15 +249,8 @@ pub(crate) mod live {
         ConfirmSaveLoad(&mut saved);
         let directory =
             Directory::retain(std::ptr::NonNull::new(meleeDir.cast()).expect("melee directory"));
-        let original = &(*(*state).melee_setup).teams[(*state).side as usize];
-        let team = OwnedTeam {
-            ships: original.ships.map(|ship| {
-                crate::supermelee::types::MeleeShip::from_u8(ship as u8)
-                    .unwrap_or(crate::supermelee::types::MeleeShip::MeleeNone)
-            }),
-            name: original.name.map(|byte| byte as u8),
-        };
-        let ok = write_team(&directory, &filename, &team).is_ok();
+        let team = &(*state).melee_setup.teams[(*state).side as usize];
+        let ok = write_team(&directory, &filename, team).is_ok();
         (*state).load.top = 0;
         (*state).load.current = 0;
         DrawStamp(&mut saved);
