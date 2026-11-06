@@ -484,7 +484,7 @@ impl LinkQueue<'_, Starship> {
     }
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 impl RacePool {
     pub(crate) fn fixture_pool(
         &mut self,

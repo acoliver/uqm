@@ -489,6 +489,12 @@ pub mod table;
 
 #[cfg(not(test))]
 impl Cx<'_> {
+    pub(crate) fn screen_dimensions(&self) -> (i32, i32) {
+        use crate::graphics::gfx_common_abi::{ScreenHeight, ScreenWidth};
+        // SAFETY: dimensions are initialized by the owning game thread.
+        unsafe { (ScreenWidth, ScreenHeight) }
+    }
+
     pub(crate) fn sound_point(&self, id: ElementId) -> crate::graphics::native_abi::POINT {
         let index = usize::from(self.elements()[id].PrimIndex);
         let primitive = self.kernel.display.get(index as u16);

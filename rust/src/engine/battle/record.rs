@@ -890,7 +890,7 @@ impl RaceDesc {
     }
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 impl RaceDesc {
     pub(crate) fn fixture(raw: Box<RaceDescriptor>) -> Self {
         Self::from_storage(raw)

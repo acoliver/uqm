@@ -1,7 +1,5 @@
 //! Three live parallax star planes, with the original sort and wrap order.
 
-#[cfg(not(test))]
-use crate::battle::context_access::ContextOps;
 use crate::ships::native::abi::{Color, POINT};
 
 pub use crate::engine::battle::kernel::StarPlane as STAR_BLOCK;
@@ -47,8 +45,14 @@ const fn color(r: u8, g: u8, b: u8) -> Color {
     }
 }
 
-impl STAR_BLOCK {
-    pub(crate) fn sort(&mut self) {
+trait StarPlaneOps {
+    fn sort(&mut self);
+    fn translate(&mut self, index: usize, dx: i16, dy: i16);
+    fn wrap(&mut self, plane: i16, dx: i16, dy: i16, log_height: i32);
+}
+
+impl StarPlaneOps for STAR_BLOCK {
+    fn sort(&mut self) {
         for i in 0..self.points.len() {
             for j in (i + 1..self.points.len()).rev() {
                 if self.points[i].y > self.points[j].y {
@@ -59,13 +63,13 @@ impl STAR_BLOCK {
         self.min_star_index = 0;
     }
 
-    pub(crate) fn translate(&mut self, index: usize, dx: i16, dy: i16) {
+    fn translate(&mut self, index: usize, dx: i16, dy: i16) {
         let point = &mut self.points[index];
         point.y = point.y.wrapping_add(dy);
         point.x = point.x.wrapping_add(dx);
     }
 
-    pub(crate) fn wrap(&mut self, plane: i16, dx: i16, mut dy: i16, log_height: i32) {
+    fn wrap(&mut self, plane: i16, dx: i16, mut dy: i16, log_height: i32) {
         let mut i = self.min_star_index as usize;
         let mut point = i as isize;
         let count = self.points.len();

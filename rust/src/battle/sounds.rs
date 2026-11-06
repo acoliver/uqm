@@ -1,8 +1,6 @@
 //! Battle sound queue, effect-channel reuse and positional-object tracking.
 
 #[cfg(not(test))]
-use crate::battle::context_access::ContextOps;
-#[cfg(not(test))]
 use crate::engine::battle::Cx;
 use crate::engine::battle::ElementId;
 

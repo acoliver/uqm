@@ -222,17 +222,24 @@ fn native_races_cannot_escape_the_real_accessor_boundary() -> Result<(), Box<dyn
         actual_modules.push_str(line);
         actual_modules.push('\n');
     }
-    // Match Cargo's exact dependency versions and feature builds.
-    let hash = executable
+    // Build the production graph separately so dev-dependency feature unification
+    // cannot expose test-support APIs or mix incompatible dependency artifacts.
+    let library = production_metadata(root, &profile.join("native-boundary-production"))?;
+    let deps = library
+        .parent()
+        .ok_or("production metadata has no directory")?;
+    let profile = deps
+        .parent()
+        .ok_or("production deps have no profile directory")?;
+    let hash = library
         .file_stem()
-        .and_then(|s| s.to_str())
-        .and_then(|s| s.rsplit_once('-'))
-        .ok_or("test executable has no Cargo hash")?
-        .1;
+        .and_then(|name| name.to_str())
+        .and_then(|name| name.strip_prefix("libuqm_rust-"))
+        .ok_or("production metadata has no Cargo hash")?;
     let fingerprints = profile.join(".fingerprint");
-    let manifest: serde_json::Value = serde_json::from_slice(&std::fs::read(fingerprints.join(
-        format!("uqm-{hash}/test-integration-test-native_race_api.json"),
-    ))?)?;
+    let manifest: serde_json::Value = serde_json::from_slice(&std::fs::read(
+        fingerprints.join(format!("uqm-{hash}/lib-uqm_rust.json")),
+    )?)?;
     let libraries = std::fs::read_dir(&fingerprints)?
         .map(|entry| entry.map(|e| e.path()))
         .collect::<std::io::Result<Vec<_>>>()?;
@@ -267,7 +274,7 @@ fn native_races_cannot_escape_the_real_accessor_boundary() -> Result<(), Box<dyn
             .1;
         externs.push(format!(
             "{name}={}",
-            deps.join(format!("lib{name}-{hash}.rlib")).display()
+            deps.join(format!("lib{name}-{hash}.rmeta")).display()
         ));
     }
     let probes = [
@@ -289,7 +296,8 @@ fn native_races_cannot_escape_the_real_accessor_boundary() -> Result<(), Box<dyn
         ("decoder", "fn probe(raw: &crate::engine::battle::record::ElementRecord) { let _ = crate::engine::battle::views::ElementState::decode(raw); }", "E0624"),
         ("legacy_table", "fn probe(cx: &mut Cx<'_>, id: ElementId) { cx.records()[id].next.image.frames = crate::engine::battle::views::Frames::ABSENT; }", "E0599"),
         ("legacy_subject", "fn probe(cx: &mut Cx<'_>, raw: &crate::engine::battle::record::ElementRecord) { let _ = cx.legacy_subject(raw); }", "E0599"),
-        ("sound", "fn probe(cx: &mut Cx<'_>) { cx.queue_sound(1, None); }", "E0624"),
+        ("sound", "fn probe(cx: &mut Cx<'_>) { cx.queue_sound(1, None); }", "E0599"),
+        ("sound_trait", "use crate::battle::context_access::SoundOps;", "E0603"),
         ("subject", "fn probe(mut subject: crate::engine::battle::Subject) { subject.intersect.IntersectStamp.frame = std::ptr::NonNull::dangling().as_ptr(); }", "E0616"),
     ];
     let probes = probes.into_iter().chain([
@@ -311,7 +319,7 @@ fn native_races_cannot_escape_the_real_accessor_boundary() -> Result<(), Box<dyn
     for (name, probe, error) in probes {
         let input = scratch.path().join(format!("{name}.rs"));
         let output = scratch.path().join(format!("{name}.rmeta"));
-        std::fs::write(&input, format!("{actual_modules}\nmod native_race_probe {{ use crate::engine::battle::{{Cx, ElementId, ShipId}}; {probe} }}"))?;
+        std::fs::write(&input, format!("{actual_modules}\nmod native_race_probe {{ use crate::battle::context_access::ContextOps; use crate::battle::context_access::race_access::RaceOps; use crate::engine::battle::{{Cx, ElementId, ShipId}}; {probe} }}"))?;
         let mut command = Command::new("rustc");
         command
             .args([
@@ -349,4 +357,44 @@ fn native_races_cannot_escape_the_real_accessor_boundary() -> Result<(), Box<dyn
         }
     }
     Ok(())
+}
+
+fn production_metadata(
+    root: &std::path::Path,
+    target: &std::path::Path,
+) -> Result<std::path::PathBuf, Box<dyn std::error::Error>> {
+    let result = std::process::Command::new(env!("CARGO"))
+        .args([
+            "check",
+            "--locked",
+            "--lib",
+            "--no-default-features",
+            "--features",
+            "audio_heart,debug-process",
+            "--message-format=json",
+        ])
+        .arg("--manifest-path")
+        .arg(root.join("Cargo.toml"))
+        .arg("--target-dir")
+        .arg(target)
+        .output()?;
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8(result.stderr)?
+    );
+    for line in String::from_utf8(result.stdout)?.lines() {
+        let artifact: serde_json::Value = serde_json::from_str(line)?;
+        if artifact["reason"] == "compiler-artifact" && artifact["target"]["name"] == "uqm_rust" {
+            let library = artifact["filenames"]
+                .as_array()
+                .ok_or("root artifact has no filenames")?
+                .iter()
+                .filter_map(|name| name.as_str())
+                .find(|name| name.ends_with(".rmeta"))
+                .ok_or("root artifact has no Rust metadata")?;
+            return Ok(library.into());
+        }
+    }
+    Err("Cargo did not emit the production root artifact".into())
 }

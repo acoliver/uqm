@@ -416,7 +416,7 @@ pub unsafe extern "C" fn draw_armada_pick_ship(draw_salvage_frame: c_int, pick_r
     KernelOwner::current().read(|kernel| {
         crate::engine::World::current().read(|world| {
             // SAFETY: the original ABI retains the supplied game-thread owners and output.
-            unsafe { draw_armada_pick_ship_in(kernel, world, draw_salvage_frame, pick_rect) }
+            unsafe { draw_armada_pick_ship_in(kernel, world, draw_salvage_frame, &mut *pick_rect) }
         })
     });
 }
@@ -431,7 +431,7 @@ pub(crate) unsafe fn draw_armada_pick_ship_in(
     kernel: &KernelOwner,
     world: &crate::engine::World,
     draw_salvage_frame: c_int,
-    pick_rect: *mut CRect,
+    pick_rect: &mut CRect,
 ) {
     use crate::graphics::{
         context_abi::ContextLease, drawable_abi::LoadedDrawable, native_font::FontLease,
@@ -500,17 +500,14 @@ pub(crate) unsafe fn draw_armada_pick_ship_in(
         }
         result
     });
-    // SAFETY: the legacy caller supplies its output; resources stay retained through the batch.
-    unsafe {
-        *pick_rect = CRect {
-            corner: CPoint {
-                x: result.corner.x,
-                y: result.corner.y,
-            },
-            width: result.extent.width,
-            height: result.extent.height,
-        };
-    }
+    *pick_rect = CRect {
+        corner: CPoint {
+            x: result.corner.x,
+            y: result.corner.y,
+        },
+        width: result.extent.width,
+        height: result.extent.height,
+    };
 }
 
 fn draw_escort_icon(

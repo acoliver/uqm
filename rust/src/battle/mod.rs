@@ -16,7 +16,7 @@ pub use context_access::navigation::NavigationOps;
 #[cfg(not(test))]
 pub use context_access::race_access::RaceOps;
 #[cfg(not(test))]
-pub use context_access::{ContextOps, SoundOps, StarContact, StarOps, StatusOps, TransitionOps};
+pub use context_access::{ContextOps, StarContact, StarOps, StatusOps, TransitionOps};
 
 pub mod cyborg_native;
 pub mod element;

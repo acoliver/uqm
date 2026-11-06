@@ -163,7 +163,7 @@ mod status_native_access {
 mod sounds_access {
 
     #[cfg(not(test))]
-    pub trait SoundOps {
+    pub(super) trait SoundOps {
         fn queue_sound(
             &mut self,
             sound: Option<crate::sound::owned_bank::SoundClip>,
@@ -276,7 +276,7 @@ pub use tactrans_native_access::TransitionOps;
 pub use status_native_access::StatusOps;
 
 #[cfg(not(test))]
-pub use sounds_access::SoundOps;
+use sounds_access::SoundOps;
 
 #[cfg(not(test))]
 pub use star_access::{StarContact, StarOps};
@@ -297,7 +297,6 @@ pub trait ContextOps {
         net: &dyn crate::engine::battle::net::BattleNet,
         state: u32,
     ) -> bool;
-    fn screen_dimensions(&self) -> (i32, i32);
     fn process_ship_sound(
         &mut self,
         ship: ShipId,
@@ -439,11 +438,6 @@ impl ContextOps for Cx<'_> {
         crate::supermelee::native::protocol::with_battle_driver(self, &mut io, |driver| {
             net.negotiate(true, state, driver)
         })
-    }
-
-    fn screen_dimensions(&self) -> (i32, i32) {
-        // SAFETY: dimensions are initialized by the owning game thread.
-        unsafe { (ScreenWidth, ScreenHeight) }
     }
 
     fn process_ship_sound(
