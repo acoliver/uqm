@@ -67,7 +67,7 @@ const TEAM_NAME_BUF: usize = uqm_save::mle::NAME_BYTES;
 ///
 /// Memory layout intentionally mirrors the C `struct MeleeTeam` so that
 /// future serialisation code can validate byte offsets easily.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MeleeTeam {
     /// Fleet slots; initialised to `MeleeShip::MeleeNone`.
     pub ships: [MeleeShip; MELEE_FLEET_SIZE],
@@ -120,6 +120,22 @@ impl MeleeTeam {
         String::from_utf8_lossy(&self.name[..end])
     }
 
+    pub fn c_name(&self) -> &std::ffi::CStr {
+        std::ffi::CStr::from_bytes_until_nul(&self.name)
+            .unwrap_or_else(|_| panic!("team name is not terminated"))
+    }
+
+    pub fn rename(&mut self, name: &std::ffi::CStr) -> bool {
+        if self.c_name() == name {
+            return false;
+        }
+        let bytes = name.to_bytes();
+        let count = bytes.len().min(TEAM_NAME_BUF - 1);
+        self.name[..count].copy_from_slice(&bytes[..count]);
+        self.name[count..].fill(0);
+        true
+    }
+
     /// Sets the team name, clamping to `MAX_TEAM_CHARS` bytes.
     ///
     /// Copies up to `MAX_TEAM_CHARS` bytes from `name`, then writes a NUL
@@ -159,6 +175,42 @@ impl From<uqm_save::mle::Team> for MeleeTeam {
     }
 }
 
+/// Outstanding setup acknowledgments, independent of the editable fleet.
+#[derive(Debug, Clone)]
+pub struct SentTeam {
+    pub ships: [MeleeShip; MELEE_FLEET_SIZE],
+    pub name: Option<std::ffi::CString>,
+}
+impl Default for SentTeam {
+    fn default() -> Self {
+        Self {
+            ships: [MeleeShip::MeleeUnset; MELEE_FLEET_SIZE],
+            name: None,
+        }
+    }
+}
+impl SentTeam {
+    pub fn set_name(&mut self, name: Option<&std::ffi::CStr>) -> bool {
+        if self.name.as_deref() == name {
+            return false;
+        }
+        self.name = name.map(|name| {
+            let bytes = name.to_bytes();
+            std::ffi::CString::new(&bytes[..bytes.len().min(TEAM_NAME_BUF - 1)])
+                .unwrap_or_else(|error| panic!("bounded C name: {error}"))
+        });
+        true
+    }
+
+    pub fn reset(&mut self) {
+        *self = Self::default();
+    }
+
+    pub fn is_synchronized(&self) -> bool {
+        self.name.is_none() && self.ships.iter().all(|ship| *ship == MeleeShip::MeleeUnset)
+    }
+}
+
 // ---------------------------------------------------------------------------
 // MeleeSetup
 // ---------------------------------------------------------------------------
@@ -174,6 +226,7 @@ pub struct MeleeSetup {
     pub fleet_value: [u16; NUM_SIDES],
     /// Control mode for each side.
     pub player_control: [PlayerControl; NUM_SIDES],
+    pub sent: [SentTeam; NUM_SIDES],
 }
 
 impl Default for MeleeSetup {
@@ -190,7 +243,12 @@ impl MeleeSetup {
             teams: [MeleeTeam::new(), MeleeTeam::new()],
             fleet_value: [0; NUM_SIDES],
             player_control: [PlayerControl::HUMAN_CONTROL; NUM_SIDES],
+            sent: std::array::from_fn(|_| SentTeam::default()),
         }
+    }
+
+    pub fn reset_sent(&mut self) {
+        self.sent.iter_mut().for_each(SentTeam::reset);
     }
 
     // -----------------------------------------------------------------------
@@ -235,18 +293,31 @@ impl MeleeSetup {
         slot: FleetShipIndex,
         ship: MeleeShip,
     ) -> Result<(), SuperMeleeError> {
+        self.set_ship_with_cost(side, slot, ship, ship_cost)
+            .map(|_| ())
+    }
+
+    pub fn set_ship_with_cost(
+        &mut self,
+        side: usize,
+        slot: FleetShipIndex,
+        ship: MeleeShip,
+        cost: impl Fn(MeleeShip) -> u16,
+    ) -> Result<bool, SuperMeleeError> {
         Self::check_side(side)?;
         Self::check_slot(slot)?;
-
         let old_ship = self.teams[side].ships[slot as usize];
-        if old_ship != ship {
-            self.fleet_value[side] = self.fleet_value[side]
-                .saturating_sub(ship_cost(old_ship))
-                .saturating_add(ship_cost(ship));
-            self.teams[side].ships[slot as usize] = ship;
+        if old_ship == ship {
+            return Ok(false);
         }
-
-        Ok(())
+        if old_ship != MeleeShip::MeleeNone {
+            self.fleet_value[side] = self.fleet_value[side].wrapping_sub(cost(old_ship));
+        }
+        self.teams[side].ships[slot as usize] = ship;
+        if ship != MeleeShip::MeleeNone {
+            self.fleet_value[side] = self.fleet_value[side].wrapping_add(cost(ship));
+        }
+        Ok(true)
     }
 
     /// Removes the ship at `slot` for `side` (sets it to `MeleeNone`).
@@ -309,6 +380,93 @@ mod tests {
     use super::*;
 
     #[test]
+    fn live_ship_changes_use_the_supplied_catalog_and_wrapping_totals() {
+        let mut setup = MeleeSetup::new();
+        let cost = |ship: MeleeShip| match ship {
+            MeleeShip::Androsynth => 23,
+            MeleeShip::Arilou => 16,
+            _ => 0,
+        };
+        assert!(setup
+            .set_ship_with_cost(0, 3, MeleeShip::Androsynth, cost)
+            .unwrap());
+        assert_eq!(setup.fleet_value, [23, 0]);
+        assert!(!setup
+            .set_ship_with_cost(0, 3, MeleeShip::Androsynth, cost)
+            .unwrap());
+        assert!(setup
+            .set_ship_with_cost(0, 3, MeleeShip::Arilou, cost)
+            .unwrap());
+        assert_eq!(setup.fleet_value, [16, 0]);
+        assert!(setup
+            .set_ship_with_cost(0, 3, MeleeShip::MeleeNone, cost)
+            .unwrap());
+        assert_eq!(setup.fleet_value, [0, 0]);
+        setup.fleet_value[1] = u16::MAX;
+        assert!(setup
+            .set_ship_with_cost(1, 13, MeleeShip::Androsynth, cost)
+            .unwrap());
+        assert_eq!(setup.fleet_value, [0, 22]);
+    }
+
+    #[test]
+    fn legacy_team_roundtrip_retains_slots_costs_and_import_name_limit() {
+        let mut team = MeleeTeam::new();
+        team.ships[0] = MeleeShip::Chmmr;
+        team.ships[13] = MeleeShip::ZoqFotPik;
+        team.rename(c"A fleet name that exceeds thirty characters by a bit");
+        let bytes = uqm_save::mle::Team::from(&team).to_bytes();
+        assert_eq!(bytes[0], 3);
+        assert_eq!(bytes[13], 24);
+        let copy = MeleeTeam::from(uqm_save::mle::Team::from_bytes(&bytes));
+        assert_eq!(copy.ships, team.ships);
+        assert_eq!(copy.name[30], 0);
+        assert_eq!(copy.ships.into_iter().map(ship_cost).sum::<u16>(), 30 + 6);
+    }
+
+    #[test]
+    fn pending_name_preserves_unset_empty_and_duplicate_transitions() {
+        let mut sent = SentTeam::default();
+        assert_eq!(sent.ships[0], MeleeShip::MeleeUnset);
+        assert!(sent.name.is_none());
+        assert!(sent.set_name(Some(c"")));
+        assert_eq!(sent.name.as_deref(), Some(c""));
+        assert!(!sent.set_name(Some(c"")));
+        assert!(sent.set_name(None));
+        assert!(!sent.set_name(None));
+    }
+
+    #[test]
+    fn live_setup_owns_pending_acknowledgments_independently_of_editable_teams() {
+        let mut setup = MeleeSetup::new();
+        assert!(setup.sent.iter().all(SentTeam::is_synchronized));
+        setup.teams[0].rename(c"Live fleet");
+        setup.teams[0].ships[3] = MeleeShip::Chmmr;
+        setup.sent[0].ships[3] = MeleeShip::Chmmr;
+        setup.sent[0].set_name(Some(c""));
+        assert!(!setup.sent[0].is_synchronized());
+        assert_eq!(setup.teams[0].c_name(), c"Live fleet");
+        setup.reset_sent();
+        assert!(setup.sent.iter().all(SentTeam::is_synchronized));
+        assert_eq!(setup.teams[0].ships[3], MeleeShip::Chmmr);
+        assert_eq!(setup.teams[0].c_name(), c"Live fleet");
+    }
+
+    #[test]
+    fn sent_team_ownership_distinguishes_unset_empty_and_pending_names() {
+        let mut sent = SentTeam::default();
+        assert_eq!(sent.ships, [MeleeShip::MeleeUnset; MELEE_FLEET_SIZE]);
+        assert!(sent.name.is_none());
+        sent.name = Some(c"".to_owned());
+        assert_eq!(sent.name.as_deref(), Some(c""));
+        sent.name = Some(c"Pending fleet".to_owned());
+        sent.ships[3] = MeleeShip::Arilou;
+        sent.reset();
+        assert_eq!(sent.ships, [MeleeShip::MeleeUnset; MELEE_FLEET_SIZE]);
+        assert!(sent.name.is_none());
+    }
+
+    #[test]
     fn importing_legacy_bytes_normalizes_only_ships_and_the_display_terminator() {
         let mut record = uqm_save::mle::Team {
             ships: [255; MELEE_FLEET_SIZE],
@@ -325,6 +483,20 @@ mod tests {
         expected_name[MAX_TEAM_CHARS] = 0;
         assert_eq!(imported.name, expected_name);
         assert_eq!(record.name[MAX_TEAM_CHARS], 0xa5);
+    }
+
+    #[test]
+    fn live_names_preserve_non_utf8_and_use_the_full_native_buffer() {
+        let mut team = MeleeTeam::new();
+        let bytes = [0xe9; 70];
+        let value = std::ffi::CString::new(bytes).unwrap();
+        assert!(team.rename(&value));
+        assert_eq!(team.c_name().to_bytes(), [0xe9; 54]);
+        assert_eq!(team.name[54], 0);
+        assert!(!team.rename(team.c_name().to_owned().as_c_str()));
+        assert!(team.rename(c""));
+        assert_eq!(team.c_name(), c"");
+        assert_eq!(team.name, [0; TEAM_NAME_BUF]);
     }
 
     #[test]

@@ -10,20 +10,14 @@ pub(super) struct ConnectionView {
     pub server: bool,
     pub discriminant: bool,
 }
-pub(super) unsafe fn connection(player: usize) -> Option<ConnectionView> {
-    // SAFETY: The live menu retains its session; the returned view copies only scalar fields.
-    unsafe {
-        (*P_MELEE_STATE)
-            .netplay
-            .connection(player)
-            .map(|conn| ConnectionView {
-                player,
-                state: conn.state,
-                connected: conn.flags.connected,
-                server: conn.options.server,
-                discriminant: conn.flags.discriminant,
-            })
-    }
+pub(super) fn connection(state: &MELEE_STATE, player: usize) -> Option<ConnectionView> {
+    state.netplay.connection(player).map(|conn| ConnectionView {
+        player,
+        state: conn.state,
+        connected: conn.flags.connected,
+        server: conn.options.server,
+        discriminant: conn.flags.discriminant,
+    })
 }
 pub(super) fn net_connection_is_connected(conn: Option<ConnectionView>) -> bool {
     conn.is_some_and(|conn| conn.connected)
@@ -31,46 +25,32 @@ pub(super) fn net_connection_is_connected(conn: Option<ConnectionView>) -> bool 
 pub(super) fn is_server(conn: Option<ConnectionView>) -> bool {
     conn.is_some_and(|conn| conn.server)
 }
-pub(super) unsafe fn netplay_notify_seed_random(conn: Option<ConnectionView>, seed: u32) {
-    // SAFETY: The menu retains the session for this synchronous notification.
-    unsafe {
-        (*P_MELEE_STATE).netplay.notify_seed(
-            conn.unwrap_or_else(|| panic!("seed connection")).player,
-            seed,
-        );
-    }
+pub(super) fn netplay_notify_seed_random(
+    state: &MELEE_STATE,
+    conn: Option<ConnectionView>,
+    seed: u32,
+) {
+    state.netplay.notify_seed(
+        conn.unwrap_or_else(|| panic!("seed connection")).player,
+        seed,
+    );
 }
-pub(super) unsafe fn netplay_notify_all_set_ship(state: *mut MELEE_STATE, side: u16, index: u16) {
-    // SAFETY: The menu owns the setup and the caller supplies an in-range fleet slot.
-    unsafe {
-        let ship = MeleeSetup_getShip((*state).melee_setup, side as usize, index);
-        (*state)
-            .netplay
-            .notify_ship(side as usize, index as usize, ship);
-    }
+pub(super) fn netplay_notify_all_set_ship(state: &MELEE_STATE, side: u16, index: u16) {
+    let ship = state.melee_setup.teams[side as usize].ships[index as usize] as u32;
+    state
+        .netplay
+        .notify_ship(side as usize, index as usize, ship);
 }
-pub(super) unsafe fn netplay_notify_all_set_team_name(state: *mut MELEE_STATE, side: u16) {
-    // SAFETY: The menu owns the setup and its NUL-terminated team names.
-    unsafe {
-        let name =
-            std::ffi::CStr::from_ptr(MeleeSetup_getTeamName((*state).melee_setup, side as usize));
-        (*state).netplay.notify_name(side as usize, name.to_bytes());
-    }
+pub(super) fn netplay_notify_all_set_team_name(state: &MELEE_STATE, side: u16) {
+    let name = state.melee_setup.teams[side as usize].c_name();
+    state.netplay.notify_name(side as usize, name.to_bytes());
 }
-pub(super) unsafe fn netplay_notify_all_set_fleet(state: *mut MELEE_STATE, side: usize) {
-    // SAFETY: The menu owns the setup and each fleet contains all fourteen slots.
-    unsafe {
-        let ships = std::slice::from_raw_parts(MeleeSetup_getFleet((*state).melee_setup, side), 14);
-        (*state).netplay.notify_fleet(side, ships);
-    }
+pub(super) fn netplay_notify_all_set_fleet(state: &MELEE_STATE, side: usize) {
+    let ships = state.melee_setup.teams[side].ships.map(|ship| ship as u32);
+    state.netplay.notify_fleet(side, &ships);
 }
-pub(super) unsafe fn close_player_network_connection(player: u16) {
-    // SAFETY: The live menu retains the session until synchronous close feedback completes.
-    unsafe {
-        (*P_MELEE_STATE)
-            .netplay
-            .close_player_network_connection(player);
-    }
+pub(super) fn close_player_network_connection(state: &MELEE_STATE, player: u16) {
+    state.netplay.close_player_network_connection(player);
 }
 pub(super) unsafe fn open_player_network_connection(
     player: u16,
@@ -82,7 +62,7 @@ pub(super) unsafe fn open_player_network_connection(
         if session.open_player_network_connection(player, &mut |event| {
             changes::apply_protocol_event(state, event)
         }) {
-            connection(player as usize)
+            connection(&*state, player as usize)
         } else {
             None
         }

@@ -1,4 +1,4 @@
-use crate::engine::battle::schema::{FlashState, FlashType};
+use crate::graphics::flash::{FlashState, FlashType};
 pub use crate::engine::battle::{CollisionHook, ElementHook};
 // Shared engine records used by the Rust runtime.
 
@@ -3038,53 +3038,53 @@ pub const FlashType_FlashType_transition: FlashType = 1;
 pub const FlashType_FlashType_overlay: FlashType = 2;
 
 #[cfg(not(test))]
-pub use crate::ui::flash::Flash_createHighlight;
+pub use crate::graphics::flash::Flash_createHighlight;
 
 #[cfg(not(test))]
-pub use crate::ui::flash::Flash_createOverlay;
+pub use crate::graphics::flash::Flash_createOverlay;
 
 #[cfg(not(test))]
-pub use crate::ui::flash::Flash_setState;
+pub use crate::graphics::flash::Flash_setState;
 
 #[cfg(not(test))]
-pub use crate::ui::flash::Flash_start;
+pub use crate::graphics::flash::Flash_start;
 
 #[cfg(not(test))]
-pub use crate::ui::flash::Flash_terminate;
+pub use crate::graphics::flash::Flash_terminate;
 
 #[cfg(not(test))]
-pub use crate::ui::flash::Flash_pause;
+pub use crate::graphics::flash::Flash_pause;
 
 #[cfg(not(test))]
-pub use crate::ui::flash::Flash_continue;
+pub use crate::graphics::flash::Flash_continue;
 
 #[cfg(not(test))]
-pub use crate::ui::flash::Flash_process;
+pub use crate::graphics::flash::Flash_process;
 
 #[cfg(not(test))]
-pub use crate::ui::flash::Flash_setSpeed;
+pub use crate::graphics::flash::Flash_setSpeed;
 
 #[cfg(not(test))]
-pub use crate::ui::flash::Flash_setMergeFactors;
+pub use crate::graphics::flash::Flash_setMergeFactors;
 
 #[cfg(not(test))]
-pub use crate::ui::flash::Flash_setFrameTime;
+pub use crate::graphics::flash::Flash_setFrameTime;
 
 #[cfg(not(test))]
-pub use crate::ui::flash::Flash_nextTime;
+pub use crate::graphics::flash::Flash_nextTime;
 
 #[cfg(not(test))]
-pub use crate::ui::flash::Flash_setRect;
+pub use crate::graphics::flash::Flash_setRect;
 
 #[cfg(not(test))]
-pub use crate::ui::flash::Flash_setOverlay;
+pub use crate::graphics::flash::Flash_setOverlay;
 
 #[cfg(not(test))]
-pub use crate::ui::flash::Flash_preUpdate;
+pub use crate::graphics::flash::Flash_preUpdate;
 
 pub use crate::ships::native::abi::menu_state;
 #[cfg(not(test))]
-pub use crate::ui::flash::Flash_postUpdate;
+pub use crate::graphics::flash::Flash_postUpdate;
 pub type MENU_STATE = menu_state;
 pub const PM_SCAN: _bindgen_ty_13 = 0;
 pub const PM_STARMAP: _bindgen_ty_13 = 1;
@@ -3901,8 +3901,6 @@ pub const ANDROSYNTH_DEFINED: _bindgen_ty_27 = 44;
 pub const MYCON_TRAP_DEFINED: _bindgen_ty_27 = 45;
 pub type _bindgen_ty_27 = ::std::os::raw::c_uint;
 
-pub use crate::ships::native::abi::MeleeSetup;
-pub use crate::ships::native::abi::MeleeTeam;
 pub type FleetShipIndex = COUNT;
 
 #[cfg(not(test))]
@@ -3993,22 +3991,17 @@ pub const NetplaySide_NetplaySide_remote: NetplaySide = 1;
 pub type NetplaySide = ::std::os::raw::c_uint;
 pub type MELEE_STATE = melee_state;
 pub type MELEE_OPTIONS = BYTE;
-pub use crate::ships::native::abi::melee_load_state;
 
-#[cfg(not(test))]
-pub use crate::supermelee::native::load_teams::live::InitMeleeLoadState;
 
-#[cfg(not(test))]
-pub use crate::supermelee::native::load_teams::live::UninitMeleeLoadState;
 
 #[cfg(not(test))]
 pub use crate::supermelee::native::load_teams::live::do_load_team;
 
 #[cfg(not(test))]
-pub use crate::supermelee::native::load_teams::live::DoSaveTeam;
+pub use crate::supermelee::native::load_teams::live::do_save_team;
 
 #[cfg(not(test))]
-pub use crate::supermelee::native::load_teams::live::LoadTeamList;
+pub use crate::supermelee::native::load_teams::live::load_team_list;
 pub const MeleeShip_MELEE_ANDROSYNTH: MeleeShip = 0;
 pub const MeleeShip_MELEE_ARILOU: MeleeShip = 1;
 pub const MeleeShip_MELEE_CHENJESU: MeleeShip = 2;
@@ -4068,48 +4061,32 @@ pub use crate::supermelee::native::menu::live::drawing::Melee_flashSelection;
 
 
 #[cfg(not(test))]
-pub use crate::supermelee::native::menu::live::changes::Melee_LocalChange_ship;
+pub use crate::supermelee::native::menu::live::changes::local_change_ship;
 
 #[cfg(not(test))]
-pub use crate::supermelee::native::menu::live::changes::Melee_LocalChange_teamName;
+pub use crate::supermelee::native::menu::live::changes::local_change_team_name;
+
 
 #[cfg(not(test))]
-pub use crate::supermelee::native::menu::live::changes::Melee_LocalChange_fleet;
-
-#[cfg(not(test))]
-pub use crate::supermelee::native::menu::live::changes::Melee_LocalChange_team;
+pub use crate::supermelee::native::menu::live::changes::local_change_team;
 
 
 
 
-pub use crate::supermelee::native::teams::MeleeTeam_getFleet;
-
-pub use crate::supermelee::native::teams::MeleeTeam_getTeamName;
-
-pub use crate::supermelee::native::teams::MeleeSetup_getSentShip;
-
-pub use crate::supermelee::native::teams::MeleeSetup_getSentTeamName;
-
-pub use crate::supermelee::native::teams::MeleeSetup_setSentShip;
-
-pub use crate::supermelee::native::teams::MeleeSetup_setSentTeamName;
-
-pub use crate::supermelee::native::teams::MeleeSetup_new;
-
-pub use crate::supermelee::native::teams::MeleeSetup_delete;
 
 
-pub use crate::supermelee::native::teams::MeleeSetup_getShip;
 
-pub use crate::supermelee::native::teams::MeleeSetup_setTeamName;
 
-pub use crate::supermelee::native::teams::MeleeSetup_getTeamName;
 
-pub use crate::supermelee::native::teams::MeleeSetup_getFleetValue;
 
-pub use crate::supermelee::native::teams::MeleeSetup_deserializeTeam;
 
-pub use crate::supermelee::native::teams::MeleeSetup_serializeTeam;
+
+
+
+
+
+
+
 
 #[cfg(not(test))]
 pub use crate::supermelee::native::battle_picker::live::BuildPickMeleeFrame;
@@ -4118,7 +4095,7 @@ pub use crate::supermelee::native::battle_picker::live::BuildPickMeleeFrame;
 pub use crate::supermelee::native::battle_picker::live::DestroyPickMeleeFrame;
 
 #[cfg(not(test))]
-pub use crate::supermelee::native::battle_picker::live::FillPickMeleeFrame;
+pub use crate::supermelee::native::battle_picker::live::fill_pick_melee_frame;
 pub const ENEMY_SHIP_INDEX: _bindgen_ty_28 = 0;
 pub const CREW_OBJECT_INDEX: _bindgen_ty_28 = 1;
 pub const ENEMY_WEAPON_INDEX: _bindgen_ty_28 = 2;

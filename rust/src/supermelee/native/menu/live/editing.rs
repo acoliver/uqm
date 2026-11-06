@@ -26,6 +26,31 @@ unsafe fn frame(entry: *mut TEXTENTRY_STATE, _input: &crate::engine::input::Inpu
 unsafe fn advance(state: *mut MELEE_STATE) {
     ((*state).row, (*state).col) = super::super::rules::advance_cursor((*state).row, (*state).col);
 }
+unsafe fn edit_name(
+    state: *mut MELEE_STATE,
+    side: u16,
+    input: &crate::engine::input::InputSession,
+) {
+    (*state).cur_index = 0;
+    name(state, side, 1, ptr::null());
+    let mut buf =
+        super::super::rules::name_editor_buffer((*state).melee_setup.teams[side as usize].c_name());
+    let mut entry: TEXTENTRY_STATE = mem::zeroed();
+    entry.Initialized = 0;
+    entry.BaseStr = buf.as_mut_ptr().cast();
+    entry.CursorPos = 0;
+    entry.MaxSize = 31;
+    entry.CbParam = state.cast();
+    entry.ChangeCallback = Some(changed);
+    entry.FrameCallback = Some(frame);
+    do_text_entry(input, &mut entry);
+    (*state).cur_index = u16::MAX;
+    if entry.Success == 0
+        || !local_change_team_name(state, side, std::ffi::CStr::from_ptr(buf.as_ptr().cast()))
+    {
+        view_name(state, side);
+    }
+}
 pub(super) unsafe fn edit(
     state: *mut MELEE_STATE,
     input: &crate::engine::input::InputSession,
@@ -58,7 +83,7 @@ pub(super) unsafe fn edit(
         (*state).melee_option = 11;
         let ok = crate::supermelee::native::build_picker::live::build_pick_ship(input, state);
         if ok {
-            Melee_LocalChange_ship(
+            local_change_ship(
                 state,
                 (*state).side,
                 (*state).row * 7 + (*state).col,
@@ -76,33 +101,13 @@ pub(super) unsafe fn edit(
         highlight(10, false);
     } else if row < 2 && key(input, KEY_MENU_DELETE) {
         highlight(10, false);
-        Melee_LocalChange_ship(state, (*state).side, row * 7 + col, 255);
+        local_change_ship(state, (*state).side, row * 7 + col, 255);
         advance(state);
         current(state);
     } else {
         let (mut side, mut row, mut col) = ((*state).side, row, col);
         if row == 2 && key(input, KEY_MENU_SELECT) {
-            (*state).cur_index = 0;
-            name(state, side, 1, ptr::null());
-            let mut buf = [0 as std::ffi::c_char; 31];
-            libc::strncpy(
-                buf.as_mut_ptr(),
-                MeleeSetup_getTeamName((*state).melee_setup, side as usize),
-                30,
-            );
-            let mut entry: TEXTENTRY_STATE = mem::zeroed();
-            entry.Initialized = 0;
-            entry.BaseStr = buf.as_mut_ptr();
-            entry.CursorPos = 0;
-            entry.MaxSize = 31;
-            entry.CbParam = state.cast();
-            entry.ChangeCallback = Some(changed);
-            entry.FrameCallback = Some(frame);
-            do_text_entry(input, &mut entry);
-            (*state).cur_index = u16::MAX;
-            if entry.Success == 0 || !Melee_LocalChange_teamName(state, side, buf.as_ptr()) {
-                view_name(state, side);
-            }
+            edit_name(state, side, input);
             return 1;
         }
         (side, row, col) = super::super::rules::move_cursor(

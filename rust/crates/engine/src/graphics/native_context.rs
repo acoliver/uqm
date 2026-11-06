@@ -9,6 +9,7 @@ pub(super) struct Allocation {
     font: RefCell<Option<super::native_font::FontLease>>,
 }
 
+#[derive(Clone)]
 pub struct ContextFrame {
     frame: FRAME,
     _allocations: Vec<native_drawables::DrawableLease>,
@@ -21,6 +22,27 @@ impl ContextFrame {
             _allocations: native_drawables::retain_frame_allocations(&[frame]),
         }
     }
+
+    pub fn rect(&self) -> RECT {
+        assert!(!self.frame.is_null(), "absent frame has no bounds");
+        for allocation in &self._allocations {
+            allocation.assert_thread();
+        }
+        let mut rect = std::mem::MaybeUninit::uninit();
+        // SAFETY: retained allocations keep this non-null frame live on the owning thread.
+        unsafe {
+            drawable_abi::GetFrameRect(self.frame, rect.as_mut_ptr());
+            rect.assume_init()
+        }
+    }
+
+    pub fn replace_hotspot(&self, hotspot: HOT_SPOT) -> HOT_SPOT {
+        for allocation in &self._allocations {
+            allocation.assert_thread();
+        }
+        // SAFETY: retained allocations keep this optional frame live on the owning thread.
+        unsafe { drawable_abi::SetFrameHot(self.frame, hotspot) }
+    }
 }
 
 enum Operation {
@@ -30,9 +52,11 @@ enum Operation {
     EndBatch,
     Background(Color),
     Frame(FRAME),
-    Clip(RECT),
+    Clip(Option<RECT>),
     Clear,
     Fill(Color, RECT),
+    Outline(Color, RECT),
+    FilledStamp(Color, STAMP),
     Stamp(STAMP),
     Text(super::native_font::FontLease, TEXT, Color),
 }
@@ -52,6 +76,25 @@ impl Drop for ContextBatch {
         } else {
             self.context.apply(Operation::Deselect);
         }
+    }
+}
+
+struct ContextClip {
+    context: ContextLease,
+    previous: Option<RECT>,
+}
+impl Drop for ContextClip {
+    fn drop(&mut self) {
+        self.context.apply(Operation::Clip(self.previous));
+    }
+}
+struct ContextOrigin {
+    frame: ContextFrame,
+    previous: POINT,
+}
+impl Drop for ContextOrigin {
+    fn drop(&mut self) {
+        self.frame.replace_hotspot(self.previous);
     }
 }
 
@@ -88,12 +131,22 @@ impl ContextLease {
                     drawable_abi::SetContextFGFrame(frame);
                 }
                 Operation::Clip(mut rect) => {
-                    context_abi::SetContextClipRect(&mut rect);
+                    context_abi::SetContextClipRect(
+                        rect.as_mut().map_or(std::ptr::null_mut(), |rect| rect),
+                    );
                 }
                 Operation::Clear => frame_abi::ClearDrawable(),
                 Operation::Fill(color, mut rect) => {
                     context_abi::SetContextForeGroundColor(color);
                     frame_abi::DrawFilledRectangle(&mut rect);
+                }
+                Operation::Outline(color, mut rect) => {
+                    context_abi::SetContextForeGroundColor(color);
+                    frame_abi::DrawRectangle(&mut rect);
+                }
+                Operation::FilledStamp(color, mut stamp) => {
+                    context_abi::SetContextForeGroundColor(color);
+                    frame_abi::DrawFilledStamp(&mut stamp);
                 }
                 Operation::Stamp(mut stamp) => frame_abi::DrawStamp(&mut stamp),
                 Operation::Text(font, mut text, color) => {
@@ -138,7 +191,67 @@ impl ContextLease {
 
     pub fn set_clip(&self, rect: RECT) {
         let _target = self.retain_target();
-        self.apply(Operation::Clip(rect));
+        self.apply(Operation::Clip(Some(rect)));
+    }
+
+    fn clip_snapshot(&self) -> (RECT, bool) {
+        let _target = self.retain_target();
+        let mut rect = RECT {
+            corner: POINT { x: 0, y: 0 },
+            extent: EXTENT {
+                width: 0,
+                height: 0,
+            },
+        };
+        // SAFETY: retain_target selects this retained context and keeps its frame live.
+        let explicit = unsafe { context_abi::GetContextClipRect(&mut rect) } != 0;
+        (rect, explicit)
+    }
+
+    pub fn clip_rect(&self) -> RECT {
+        self.clip_snapshot().0
+    }
+
+    pub fn clear_clip(&self) {
+        let _target = self.retain_target();
+        self.apply(Operation::Clip(None));
+    }
+
+    pub fn with_clip<R>(&self, clip: RECT, draw: impl FnOnce() -> R) -> R {
+        let (previous, explicit) = self.clip_snapshot();
+        let restore = ContextClip {
+            context: self.clone(),
+            previous: explicit.then_some(previous),
+        };
+        self.set_clip(clip);
+        let result = draw();
+        drop(restore);
+        result
+    }
+
+    pub fn with_origin<R>(&self, origin: POINT, draw: impl FnOnce() -> R) -> R {
+        let frame = self.retain_target();
+        let previous = frame.replace_hotspot(origin);
+        let restore = ContextOrigin { frame, previous };
+        let result = draw();
+        drop(restore);
+        result
+    }
+
+    pub fn draw_rectangle(&self, color: Color, rect: RECT) {
+        let _target = self.retain_target();
+        self.apply(Operation::Outline(color, rect));
+    }
+
+    pub fn draw_filled_stamp(&self, source: &ContextFrame, origin: POINT, color: Color) {
+        let _target = self.retain_target();
+        self.apply(Operation::FilledStamp(
+            color,
+            STAMP {
+                origin,
+                frame: source.frame,
+            },
+        ));
     }
 
     pub fn fill_rectangle(&self, color: Color, rect: RECT) {
@@ -162,7 +275,6 @@ impl ContextLease {
         align: TEXT_ALIGN,
         color: Color,
     ) {
-        assert!(string.to_str().is_ok(), "font text must be UTF-8");
         let _target = self.retain_target();
         *self.0.font.borrow_mut() = Some(font.clone());
         let text = TEXT {

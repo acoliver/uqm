@@ -276,37 +276,37 @@ pub use crate::graphics::gfx_common_abi::SetTransitionSource;
 pub use crate::ui::settings::PlayMusic;
 
 #[cfg(not(test))]
-pub use crate::ui::flash::Flash_createOverlay;
+pub use crate::graphics::flash::Flash_createOverlay;
 
 #[cfg(not(test))]
-pub use crate::ui::flash::Flash_process;
+pub use crate::graphics::flash::Flash_process;
 
 #[cfg(not(test))]
-pub use crate::ui::flash::Flash_pause;
+pub use crate::graphics::flash::Flash_pause;
 
 #[cfg(not(test))]
-pub use crate::ui::flash::Flash_continue;
+pub use crate::graphics::flash::Flash_continue;
 
 #[cfg(not(test))]
-pub use crate::ui::flash::Flash_start;
+pub use crate::graphics::flash::Flash_start;
 
 #[cfg(not(test))]
-pub use crate::ui::flash::Flash_terminate;
+pub use crate::graphics::flash::Flash_terminate;
 
 #[cfg(not(test))]
-pub use crate::ui::flash::Flash_setMergeFactors;
+pub use crate::graphics::flash::Flash_setMergeFactors;
 
 #[cfg(not(test))]
-pub use crate::ui::flash::Flash_setSpeed;
+pub use crate::graphics::flash::Flash_setSpeed;
 
 #[cfg(not(test))]
-pub use crate::ui::flash::Flash_setFrameTime;
+pub use crate::graphics::flash::Flash_setFrameTime;
 
 #[cfg(not(test))]
-pub use crate::ui::flash::Flash_setState;
+pub use crate::graphics::flash::Flash_setState;
 
 #[cfg(not(test))]
-pub use crate::ui::flash::Flash_setOverlay;
+pub use crate::graphics::flash::Flash_setOverlay;
 
 #[cfg(not(test))]
 pub use crate::ui::confirm::do_popup_window;

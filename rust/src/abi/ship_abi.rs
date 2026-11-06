@@ -1,4 +1,4 @@
-use crate::engine::battle::schema::{FlashContext};
+use crate::graphics::flash::FlashContext;
 pub use crate::engine::battle::{ElementHook, CollisionHook};
 pub use crate::engine::battle::record::{
     captain_stuff, state, state__bindgen_ty_1,
@@ -1120,34 +1120,6 @@ pub const MeleeShip_MELEE_ZOQFOTPIK: MeleeShip = 24;
 pub const MeleeShip_MELEE_UNSET: MeleeShip = 254;
 pub const MeleeShip_MELEE_NONE: MeleeShip = 255;
 pub type MeleeShip = ::std::os::raw::c_uint;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct MeleeTeam {
-    pub ships: [MeleeShip; 14usize],
-    pub name: [::std::os::raw::c_char; 55usize],
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct MeleeSetup {
-    pub teams: [MeleeTeam; 2usize],
-    pub fleetValue: [COUNT; 2usize],
-    pub sentTeams: [MeleeTeam; 2usize],
-    pub haveSentTeamName: [bool; 2usize],
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct melee_load_state {
-    pub preBuiltList: *mut *mut MeleeTeam,
-    pub preBuiltCount: COUNT,
-    pub dirEntries: DIRENTRY,
-    pub entryIndices: *mut COUNT,
-    pub numIndices: COUNT,
-    pub view: [*mut MeleeTeam; 5usize],
-    pub top: COUNT,
-    pub bot: COUNT,
-    pub cur: COUNT,
-    pub viewSize: COUNT,
-}
 pub use crate::supermelee::netplay::session::MeleeState as melee_state;
 
 #[cfg(not(test))]
@@ -1172,21 +1144,21 @@ unsafe extern "C" {
 pub use crate::supermelee::native::menu::live::drawing::Melee_flashSelection;
 
 #[cfg(not(test))]
-pub use crate::supermelee::native::menu::live::changes::Melee_LocalChange_team;
+pub use crate::supermelee::native::menu::live::changes::local_change_team;
 #[cfg(not(test))]
 pub unsafe fn Flash_createHighlight(gfxContext: CONTEXT, rect: *const RECT) -> *mut FlashContext {
-    crate::ui::flash::Flash_createHighlight(gfxContext.cast(), rect.cast()).cast()
+    crate::graphics::flash::Flash_createHighlight(gfxContext.cast(), rect.cast()).cast()
 }
 #[cfg(test)]
 #[cfg(not(test))]
-pub use crate::ui::flash::Flash_createHighlight;
+pub use crate::graphics::flash::Flash_createHighlight;
 #[cfg(not(test))]
 pub unsafe fn Flash_setRect(context: *mut FlashContext, rect: *const RECT) {
-    crate::ui::flash::Flash_setRect(context.cast(), rect.cast());
+    crate::graphics::flash::Flash_setRect(context.cast(), rect.cast());
 }
 #[cfg(test)]
 #[cfg(not(test))]
-pub use crate::ui::flash::Flash_setRect;
+pub use crate::graphics::flash::Flash_setRect;
 pub const KEY_UP: _bindgen_ty_1 = 0;
 pub const KEY_DOWN: _bindgen_ty_1 = 1;
 pub const KEY_LEFT: _bindgen_ty_1 = 2;

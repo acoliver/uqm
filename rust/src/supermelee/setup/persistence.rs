@@ -29,7 +29,7 @@ pub fn load_team_file(path: &Path) -> Result<MeleeTeam, SuperMeleeError> {
 
 /// Saves a team to a `.mle` file at `path`.
 ///
-/// On write failure, the partial file is removed (matching C `DoSaveTeam`).
+/// On write failure, the partial file is removed (matching C `do_save_team`).
 pub fn save_team_file(team: &MeleeTeam, path: &Path) -> Result<(), SuperMeleeError> {
     let buf = TeamRecord::from(team).to_bytes();
 

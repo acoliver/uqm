@@ -106,16 +106,10 @@ fn get_mount_registry() -> &'static Mutex<Vec<MountInfo>> {
 
 // Types matching C structures from io.h and uiostream.h
 
-#[repr(C)]
-pub struct uio_DirHandle {
-    path: PathBuf,
-    /// The original virtual path (e.g. "/packages") used for mount resolution.
-    /// `path` holds the resolved host path; this holds the pre-resolution virtual path.
-    virtual_path: PathBuf,
-    refcount: std::sync::atomic::AtomicI32,
-    repository: *mut uio_Repository,
-    root_end: PathBuf,
-}
+pub use owned::uio_DirHandle;
+
+#[path = "uio_owned.rs"]
+pub mod owned;
 
 #[repr(C)]
 pub struct uio_Repository {
@@ -7782,3 +7776,7 @@ mod fileblock_tests;
 #[cfg(test)]
 #[path = "uio_mount_ops_tests.rs"]
 mod mount_ops_tests;
+
+#[cfg(test)]
+#[path = "uio_owned_tests.rs"]
+mod owned_tests;

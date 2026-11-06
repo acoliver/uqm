@@ -9,7 +9,6 @@ pub(crate) mod live {
     use crate::game_init::macro_abi::{LoadMusic, LoadSound};
     use crate::graphics::{drawable_abi, resgfx::LoadGraphicInstance as LoadGraphic};
 
-    use crate::io::uio_bridge;
     use crate::mainloop::restart_menu::c_extern::{do_popup_window, FadeMusic, SeedRandomNumbers};
     use crate::math::{delete_context, new_context};
     use crate::navigation::abi::{init_space, uninit_space, MeleeConnectDialog, TEXTENTRY_STATE};
@@ -21,7 +20,7 @@ pub(crate) mod live {
     use boundary::*;
     const FADE_ALL_TO_COLOR: u32 = 253;
     const FADE_ALL_TO_BLACK: u32 = 252;
-    use crate::supermelee::native::{load_teams::live::*, teams::*};
+    use crate::supermelee::native::load_teams::live::*;
     use std::{
         ffi::{c_char, CString},
         mem, ptr,
@@ -31,9 +30,7 @@ pub(crate) mod live {
     pub(crate) mod drawing;
     mod editing;
     use battle::*;
-    use changes::{
-        view_name, Melee_LocalChange_ship, Melee_LocalChange_team, Melee_LocalChange_teamName,
-    };
+    use changes::{local_change_ship, local_change_team, local_change_team_name, view_name};
     use drawing::{
         controls, current, highlight, init_screen, name, redraw, rgb, ship_box, status,
         status_player, text, worth, DrawMeleeShipStrings, GetShipBox, MeleeFrame,
@@ -71,8 +68,8 @@ pub(crate) mod live {
             }
             2 | 6 => {
                 (*state).side = u16::from((*state).melee_option != 2);
-                if MeleeSetup_getFleetValue((*state).melee_setup, (*state).side as usize) > 0 {
-                    DoSaveTeam(state);
+                if (*state).melee_setup.fleet_value[(*state).side as usize] > 0 {
+                    do_save_team(state);
                 } else {
                     PlayMenuSound(2);
                 }
@@ -89,7 +86,7 @@ pub(crate) mod live {
                     (*state).phase = crate::supermelee::netplay::session::MenuPhase::Connecting;
                 }
             }
-            1 | 7 => next_control(usize::from((*state).melee_option == 1)),
+            1 | 7 => next_control(state, usize::from((*state).melee_option == 1)),
             _ => {}
         }
     }
@@ -156,7 +153,7 @@ pub(crate) mod live {
             }
             if next != (*state).melee_option {
                 if (*state).melee_option == 1 || (*state).melee_option == 7 {
-                    status_player(-1);
+                    status_player(state, -1);
                 }
                 highlight((*state).melee_option, false);
                 (*state).melee_option = next;
@@ -164,7 +161,7 @@ pub(crate) mod live {
                 if next == 1 || next == 7 {
                     let side = usize::from(next == 1);
                     let control = KernelOwner::current().read(|owner| owner.player_control[side]);
-                    status_player(super::rules::network_status_side(side, control));
+                    status_player(state, super::rules::network_status_side(side, control));
                 }
             }
             if key(input, KEY_MENU_SELECT) || force {
@@ -177,67 +174,67 @@ pub(crate) mod live {
         }
         // SAFETY: DoMelee owns the menu and its session on the game thread.
         unsafe { (*state).netplay.flush_packet_queues() };
-        disconnects();
+        disconnects(state);
         Melee_flashSelection(state);
         SleepThreadUntil(time.wrapping_add(840 / 30));
         1
     }
     unsafe fn load_config(state: *mut MELEE_STATE) -> bool {
-        let stream = uio_bridge::uio_fopen(configDir.cast(), c"melee.cfg".as_ptr(), c"rb".as_ptr());
-        if stream.is_null() {
+        use std::io::Read;
+        use uqm_engine::io::uio_owned::Directory;
+        let directory = Directory::retain(
+            std::ptr::NonNull::new(configDir.cast()).unwrap_or_else(|| panic!("config directory")),
+        );
+        let Ok(mut stream) = directory.open(c"melee.cfg") else {
+            return false;
+        };
+        if stream.len().ok() != Some(140) {
             return false;
         }
-        let mut sb: libc::stat = mem::zeroed();
-        let mut ok = uio_bridge::uio_fstat(uio_bridge::uio_streamHandle(stream), &mut sb) == 0
-            && sb.st_size == 140;
-        if ok {
-            for side in [0usize, 1] {
-                let byte = crate::resource::ffi_bridge::GetResFileChar(stream.cast());
-                if byte == -1 {
-                    ok = false;
-                    break;
-                }
-                (**KernelOwner::current()).player_control[side] = byte as u8;
-                if MeleeSetup_deserializeTeam((*state).melee_setup, side, stream.cast()) == -1 {
-                    ok = false;
-                    break;
-                }
-                if KernelOwner::current().read(|owner| owner.player_control[side]) & NETWORK_CONTROL
-                    != 0
-                {
-                    (**KernelOwner::current()).player_control[side] = HUMAN_CONTROL | 16;
-                }
+        for side in 0..2 {
+            let mut control = [0];
+            if stream.read_exact(&mut control).is_err() {
+                return false;
+            }
+            (**KernelOwner::current()).player_control[side] = control[0];
+            let Ok(record) = uqm_save::mle::Team::read_from(&mut stream) else {
+                return false;
+            };
+            let setup = &mut (*state).melee_setup;
+            setup.teams[side] = record.into();
+            setup.fleet_value[side] = setup.recompute_fleet_value(side);
+            if control[0] & NETWORK_CONTROL != 0 {
+                (**KernelOwner::current()).player_control[side] = HUMAN_CONTROL | 16;
             }
         }
-        uio_bridge::uio_fclose(stream);
-        ok
+        true
     }
     unsafe fn write_config(state: *mut MELEE_STATE) -> bool {
-        use crate::resource::ffi_bridge::{res_CloseResFile, res_OpenResFile, DeleteResFile};
-        let stream = res_OpenResFile(configDir.cast(), c"melee.cfg".as_ptr(), c"wb".as_ptr());
-        if stream.is_null() {
+        use std::io::Write;
+        use uqm_engine::io::uio_owned::Directory;
+        let directory = Directory::retain(
+            std::ptr::NonNull::new(configDir.cast()).unwrap_or_else(|| panic!("config directory")),
+        );
+        let Ok(mut stream) = directory.create(c"melee.cfg") else {
             return false;
-        }
-        let mut ok = true;
-        for side in [0usize, 1] {
-            if crate::resource::ffi_bridge::PutResFileChar(
-                KernelOwner::current().read(|owner| owner.player_control[side]) as std::ffi::c_char,
-                stream.cast(),
-            ) == -1
-                || MeleeSetup_serializeTeam((*state).melee_setup, side, stream.cast()) == -1
-            {
-                ok = false;
-                break;
+        };
+        let result = (|| -> std::io::Result<()> {
+            for side in 0..2 {
+                stream.write_all(&[
+                    KernelOwner::current().read(|owner| owner.player_control[side])
+                ])?;
+                uqm_save::mle::Team::from(&(*state).melee_setup.teams[side])
+                    .write_to(&mut stream)?;
             }
+            Ok(())
+        })();
+        let closed = stream.finish();
+        if result.and(closed).is_err() {
+            let _ = directory.remove(c"melee.cfg");
+            false
+        } else {
+            true
         }
-        if ok {
-            ok = res_CloseResFile(stream) != 0;
-        }
-        if !ok {
-            res_CloseResFile(stream);
-            DeleteResFile(configDir.cast(), c"melee.cfg".as_ptr());
-        }
-        ok
     }
     fn new_menu_state(
         kernel: &KernelOwner,
@@ -251,9 +248,10 @@ pub(crate) mod live {
             side: 0,
             row: 0,
             col: 0,
-            melee_setup: ptr::null_mut(),
-            // SAFETY: the native load-state record contains integers and nullable pointers.
-            load: unsafe { mem::zeroed() },
+            melee_setup: crate::supermelee::setup::team::MeleeSetup::new(),
+            load: crate::supermelee::setup::browser::TeamBrowser::new(
+                crate::supermelee::setup::persistence::builtin_teams(),
+            ),
             current_ship: 0,
             cur_index: 0,
             build_pick_confirmed: 0,
@@ -279,7 +277,6 @@ pub(crate) mod live {
         cx.with_legacy(|| {
             P_MELEE_STATE = &mut state;
             state.phase = crate::supermelee::netplay::session::MenuPhase::Menu;
-            state.melee_setup = MeleeSetup_new();
             state.random_context = new_context();
             let fallback = GetTimeCounter();
             let seed = io
@@ -296,7 +293,11 @@ pub(crate) mod live {
             (*state.random_context).reseed(seed);
             state.current_ship = 255;
             state.cur_index = u16::MAX;
-            InitMeleeLoadState(&mut state);
+            for (index, team) in state.load.builtins.iter_mut().take(5).enumerate() {
+                team.rename(std::ffi::CStr::from_ptr(game_string(
+                    MELEE_STRING_BASE as i32 + 4 + index as i32,
+                )));
+            }
             crate::engine::World::current().write(|world| world.set_activity(SUPER_MELEE as u16));
             (**KernelOwner::current()).game_sounds =
                 capture_sound(LoadSound(GAME_SOUNDS.as_ptr().cast()));
@@ -307,12 +308,14 @@ pub(crate) mod live {
             KernelOwner::current().write(|kernel| {
                 init_space(kernel, WorldOwner::current().read(|world| world.activity()))
             });
-            LoadTeamList(&mut state);
+            load_team_list(&mut state);
             if !load_config(&mut state) {
                 (**KernelOwner::current()).player_control[0] = HUMAN_CONTROL | 16;
-                Melee_LocalChange_team(&mut state, 0, *state.load.preBuiltList);
+                let team = state.load.builtins[0].clone();
+                local_change_team(&mut state, 0, &team);
                 (**KernelOwner::current()).player_control[1] = COMPUTER_CONTROL | 16;
-                Melee_LocalChange_team(&mut state, 1, *state.load.preBuiltList.add(1));
+                let team = state.load.builtins[1].clone();
+                local_change_team(&mut state, 1, &team);
             }
             state.side = 0;
             SetMenuSounds(input, 15, 16);
@@ -327,8 +330,6 @@ pub(crate) mod live {
             stop_music();
             WaitForSoundEnd(u16::MAX);
             write_config(&mut state);
-            DestroyStringTable(ReleaseStringTable(state.load.dirEntries));
-            state.load.dirEntries = ptr::null_mut();
             if !state.h_music.is_null() {
                 DestroyMusic(state.h_music);
                 state.h_music = ptr::null_mut();
@@ -344,9 +345,7 @@ pub(crate) mod live {
                 release_sound(KernelOwner::current().read(|owner| owner.game_sounds)).cast(),
             );
             (**KernelOwner::current()).game_sounds = ptr::null_mut();
-            UninitMeleeLoadState(&mut state);
             delete_context(state.random_context);
-            MeleeSetup_delete(state.melee_setup);
             FlushInput(input);
         });
     }

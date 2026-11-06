@@ -107,7 +107,7 @@ pub(super) unsafe fn teams() {
                 &(*state).catalog,
                 side as u16,
                 index,
-                MeleeSetup_getShip((*state).melee_setup, side, index as u16),
+                (*state).melee_setup.teams[side].ships[index] as u32,
                 false,
             );
         }
@@ -187,9 +187,7 @@ pub(super) unsafe fn worth(state: *mut MELEE_STATE, side: u16, highlight: u16) {
         return;
     }
     SetContextFont(KernelOwner::current().read(|owner| owner.micro_font));
-    let value =
-        CString::new(MeleeSetup_getFleetValue((*state).melee_setup, side as usize).to_string())
-            .unwrap();
+    let value = CString::new((*state).melee_setup.fleet_value[side as usize].to_string()).unwrap();
     let mut t = text(
         r.corner.x + r.extent.width,
         r.corner.y + r.extent.height - 3,
@@ -216,7 +214,7 @@ pub(super) unsafe fn name(
     }
     SetContextFont(KernelOwner::current().read(|owner| owner.micro_font));
     let value = if value.is_null() {
-        MeleeSetup_getTeamName((*state).melee_setup, side as usize)
+        (*state).melee_setup.teams[side as usize].c_name().as_ptr()
     } else {
         value
     };
@@ -309,13 +307,13 @@ pub(super) unsafe fn status(message: *const c_char) {
     }
     SetContext(old);
 }
-pub(super) unsafe fn status_player(player: isize) {
+pub(super) unsafe fn status_player(state: *mut MELEE_STATE, player: isize) {
     assert!((-1..2).contains(&player));
     if player == -1 {
         status(c"".as_ptr());
         return;
     }
-    let index = match connection(player as usize) {
+    let index = match connection(&*state, player as usize) {
         None => 0,
         Some(conn) => match conn.state {
             0 => 0,
@@ -362,7 +360,8 @@ pub(super) unsafe fn highlight(option: u8, on: bool) {
                         &s.catalog,
                         s.side,
                         (s.row * 7 + s.col) as usize,
-                        MeleeSetup_getShip(s.melee_setup, s.side as usize, s.row * 7 + s.col),
+                        s.melee_setup.teams[s.side as usize].ships[(s.row * 7 + s.col) as usize]
+                            as u32,
                         on,
                     );
                 } else if s.cur_index == u16::MAX {
@@ -475,11 +474,8 @@ pub(super) unsafe fn current(state: *mut MELEE_STATE) {
     (*state).current_ship = if (*state).row == 2 {
         255
     } else {
-        MeleeSetup_getShip(
-            (*state).melee_setup,
-            (*state).side as usize,
-            (*state).row * 7 + (*state).col,
-        )
+        (*state).melee_setup.teams[(*state).side as usize].ships
+            [((*state).row * 7 + (*state).col) as usize] as u32
     };
     DrawMeleeShipStrings(state, (*state).current_ship);
 }
