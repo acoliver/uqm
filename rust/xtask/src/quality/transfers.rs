@@ -151,18 +151,12 @@ pub fn validate(
     }
     for (old, new) in moves {
         register(&mut unique, old, new)?;
-        let sources = sources_by_move.remove(old).unwrap_or_default();
+        let sources = sources_by_move.get(old).cloned().unwrap_or_default();
         if sources.is_empty() && identities(base).any(|f| prefix(&f.identity, new)) {
             continue;
         }
         if sources.is_empty() {
             return Err(format!("move source {old} does not exist at base"));
-        }
-        if identities(base).any(|f| prefix(&f.identity, new)) {
-            return Err(format!("move would merge debt into {new}"));
-        }
-        if identities(current).any(|f| prefix(&f.identity, old)) {
-            return Err(format!("move source {old} still exists"));
         }
         for source in sources {
             let target = format!("{new}{}", &source[old.len()..]);
@@ -176,6 +170,32 @@ pub fn validate(
                     "move target {target} is absent; function transfers cannot split"
                 ));
             }
+        }
+    }
+    let mut base_entries = BTreeMap::new();
+    for finding in identities(base) {
+        let unbudgeted_file_loc = finding.counter == "loc"
+            && finding.metric == "loc"
+            && finding.value <= super::metrics::limit("loc", "loc");
+        *base_entries
+            .entry(finding.identity.as_str())
+            .or_insert(true) &= unbudgeted_file_loc;
+    }
+    for (target, source) in &targets {
+        if base_entries
+            .get(target.as_str())
+            .is_some_and(|default_loc| {
+                matching(moves, target).is_none() && !(*default_loc && base_entries[source])
+            })
+        {
+            return Err(format!("move would merge debt into {target}"));
+        }
+    }
+    for old in moves.keys() {
+        if identities(current).any(|finding| {
+            prefix(&finding.identity, old) && !targets.contains_key(&finding.identity)
+        }) {
+            return Err(format!("move source {old} still exists"));
         }
     }
     Ok(())

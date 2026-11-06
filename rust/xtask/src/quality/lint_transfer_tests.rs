@@ -445,3 +445,147 @@ fn final_child_destination_can_be_registered_before_its_enclosing_move() {
     )
     .is_err());
 }
+
+fn extraction_measurement(items: &[(&str, &str, u64)]) -> Measurement {
+    Measurement {
+        findings: items
+            .iter()
+            .map(|&(identity, metric, value)| {
+                let (package, path) = identity.split_once("::").unwrap();
+                Finding {
+                    counter: if metric == "loc" { "loc" } else { "ffi" }.into(),
+                    metric: metric.into(),
+                    identity: identity.into(),
+                    file: "src/lib.rs".into(),
+                    package: package.into(),
+                    subsystem: if package == "uqm" {
+                        path.split("::").next().unwrap()
+                    } else {
+                        package
+                    }
+                    .into(),
+                    value,
+                }
+            })
+            .collect(),
+        ..Default::default()
+    }
+}
+
+#[test]
+fn seeded_engine_container_accepts_distinct_core_declarations() {
+    let old = "uqm::engine";
+    let new = "uqm-engine";
+    let mut base = extraction_measurement(&[
+        ("uqm::engine::world::state", "static_mut", 1),
+        ("uqm-engine::graphics::native", "static_mut", 1),
+        ("uqm::engine::@file", "loc", 17),
+        ("uqm-engine::@file", "loc", 23),
+    ]);
+    let mut current = extraction_measurement(&[
+        ("uqm-engine::world::state", "static_mut", 1),
+        ("uqm-engine::graphics::native", "static_mut", 1),
+        ("uqm-engine::@file", "loc", 40),
+    ]);
+    let retained = composition_state("uqm-engine::graphics", "retained");
+    base.findings.extend(retained.findings.clone());
+    base.allow_coverage.extend(retained.allow_coverage.clone());
+    current.findings.extend(retained.findings);
+    current.allow_coverage.extend(retained.allow_coverage);
+    let mut baseline = Baseline {
+        entries: base.baseline(),
+        ..Default::default()
+    };
+    baseline.add_move(old, new, &current, &base).unwrap();
+    assert_eq!(baseline.entries, current.baseline());
+    assert_eq!(baseline.moved[old], new);
+    let mut oversized = current.clone();
+    oversized
+        .findings
+        .iter_mut()
+        .find(|finding| finding.counter == "loc")
+        .unwrap()
+        .value = 801;
+    assert!(super::baseline::check_limits(
+        &oversized.baseline(),
+        &baseline.entries,
+        &baseline.moved,
+        true
+    )
+    .is_err());
+
+    let mut collision = base.clone();
+    collision.findings.push(
+        extraction_measurement(&[("uqm-engine::world::state", "static_mut", 1)])
+            .findings
+            .remove(0),
+    );
+    let mut baseline = Baseline {
+        entries: collision.baseline(),
+        ..Default::default()
+    };
+    assert!(baseline.add_move(old, new, &current, &collision).is_err());
+    assert!(baseline.moved.is_empty());
+}
+
+#[test]
+fn vacated_observation_namespace_accepts_independently_owned_campaign_data() {
+    let old = "uqm-engine::observe";
+    let port = "uqm-engine::observe_port";
+    let core = "uqm::engine::observe";
+    let base = extraction_measurement(&[
+        ("uqm-engine::observe::Io", "static_mut", 1),
+        ("uqm-engine::observe::InputView", "static_mut", 1),
+        ("uqm::engine::observe::Io", "static_mut", 3),
+        ("uqm::engine::observe::CampaignView", "static_mut", 2),
+    ]);
+    let prepared = extraction_measurement(&[
+        ("uqm-engine::observe_port::ObservationIo", "static_mut", 1),
+        ("uqm-engine::observe_port::InputView", "static_mut", 1),
+        ("uqm::engine::observe::Io", "static_mut", 3),
+        ("uqm::engine::observe::CampaignView", "static_mut", 2),
+    ]);
+    let current = extraction_measurement(&[
+        ("uqm-engine::observe_port::ObservationIo", "static_mut", 1),
+        ("uqm-engine::observe_port::InputView", "static_mut", 1),
+        ("uqm-engine::observe::Io", "static_mut", 3),
+        ("uqm-engine::observe::CampaignView", "static_mut", 2),
+    ]);
+    let mut baseline = Baseline {
+        entries: base.baseline(),
+        lint: [(
+            "macos".into(),
+            [
+                ("clippy::unwrap_used|uqm-engine::observe::Io".into(), 1),
+                ("clippy::unwrap_used|uqm::engine::observe::Io".into(), 3),
+            ]
+            .into(),
+        )]
+        .into(),
+        ..Default::default()
+    };
+    baseline
+        .add_move(
+            &format!("{old}::Io"),
+            &format!("{port}::ObservationIo"),
+            &prepared,
+            &base,
+        )
+        .unwrap();
+    baseline.add_move(old, port, &prepared, &base).unwrap();
+    baseline.add_move(core, old, &current, &base).unwrap();
+    assert_eq!(baseline.entries, current.baseline());
+    assert_eq!(
+        baseline.lint["macos"],
+        [
+            (
+                "clippy::unwrap_used|uqm-engine::observe_port::ObservationIo".into(),
+                1
+            ),
+            ("clippy::unwrap_used|uqm-engine::observe::Io".into(), 3),
+        ]
+        .into()
+    );
+    assert_eq!(baseline.moved[old], port);
+    assert_eq!(baseline.moved[core], old);
+}
