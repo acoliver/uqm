@@ -1,6 +1,8 @@
 //! Campaign state owned by one game-thread lifecycle.
 
 use crate::engine::battle::schema::GAME_STATE;
+pub(crate) const SOUND_DISABLED: u8 = 16;
+
 pub mod activity;
 pub mod fleet;
 pub mod new_game;
@@ -59,6 +61,25 @@ pub struct World {
 }
 
 impl World {
+    #[cfg(not(test))]
+    pub(crate) fn play_sound_effect(
+        &self,
+        sound: &crate::sound::owned_bank::SoundClip,
+        channel: usize,
+        position: crate::sound::types::SoundPosition,
+        object: usize,
+        priority: u8,
+    ) {
+        if self.data.game.glob_flags & SOUND_DISABLED == 0 {
+            crate::sound::sfx::set_channel_volume(
+                channel,
+                crate::sound::types::MAX_VOLUME >> 1,
+                i32::from(priority),
+            );
+            sound.play(channel, position, object, priority);
+        }
+    }
+
     pub fn new() -> Self {
         Self {
             activity: activity::ActivityState::new(0),

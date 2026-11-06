@@ -2,8 +2,6 @@
 
 #[cfg(not(test))]
 use super::live::*;
-#[cfg(not(test))]
-use std::ptr;
 
 #[cfg(not(test))]
 fn run_loop(reset: bool, step: &mut InputLoop<'_, '_, '_, '_>) {
@@ -68,29 +66,21 @@ impl InputLoop<'_, '_, '_, '_> {
     }
 
     fn play_menu_sound(&mut self) {
-        let mut sound = self.cx.kernel.menu_sounds;
         let flags = menu_sound_flags(&self.input.pulsed());
         let (first, second) = self.input.menu_sounds();
-        // SAFETY: the game thread retains initialized sound resources.
-        self.legacy(|| unsafe {
-            if !sound.is_null() && flags & (first | second) != 0 {
-                if flags & second != 0 {
-                    sound = crate::strings::string_table::SetAbsStringTableIndex(sound.cast(), 1)
-                        .cast();
-                }
-                crate::ui::settings::PlaySoundEffect(
-                    sound.cast(),
+        if flags & (first | second) != 0 {
+            if let Some(bank) = self.cx.kernel.menu_sound_bank() {
+                let index = u16::from(flags & second != 0);
+                crate::ui::settings::play_loaded_sound(
+                    self.cx.world,
+                    &bank.clip(index),
                     0,
-                    crate::navigation::abi::SoundPosition {
-                        positional: 0,
-                        x: 0,
-                        y: 0,
-                    },
-                    ptr::null_mut(),
+                    crate::sound::types::SoundPosition::non_positional(),
+                    0,
                     0,
                 );
             }
-        });
+        }
     }
 
     fn input_hook(&mut self) {

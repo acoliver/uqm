@@ -4,17 +4,17 @@
 pub(crate) static LAST_PKUNK_SOUND: std::sync::atomic::AtomicU16 =
     std::sync::atomic::AtomicU16::new(0);
 use super::ElementId;
-use crate::graphics::native_abi::{POINT, STRING as SOUND};
+use crate::graphics::native_abi::POINT;
 
 pub(crate) struct SoundQueue {
     pub(crate) count: usize,
-    pub(crate) sounds: [SOUND; 8],
+    pub(crate) sounds: [Option<crate::sound::owned_bank::SoundClip>; 8],
     pub(crate) objects: [Option<ElementId>; 8],
 }
 
 pub(crate) struct Channels {
     pub(crate) lru: [usize; 4],
-    pub(crate) sounds: [SOUND; 4],
+    pub(crate) sounds: [usize; 4],
 }
 
 pub struct StarPlane {

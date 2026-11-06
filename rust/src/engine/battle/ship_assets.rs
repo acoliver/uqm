@@ -26,6 +26,13 @@ pub(crate) struct ShipAssets {
 
 impl RaceDescriptor {
     #[cfg(not(test))]
+    pub(crate) fn sound_bank(&self) -> Option<&crate::sound::owned_bank::LoadedSoundBank> {
+        self.assets
+            .as_ref()
+            .and_then(|assets| assets.sounds.as_ref())
+    }
+
+    #[cfg(not(test))]
     pub(crate) fn victory_music(&self) -> Option<&crate::sound::resource_types::LoadedMusic> {
         self.assets
             .as_ref()

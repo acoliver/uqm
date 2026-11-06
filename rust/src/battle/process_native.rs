@@ -826,7 +826,7 @@ pub(crate) mod engine {
             }
             crate::battle::sounds::engine::flush_sounds(cx);
         } else {
-            cx.kernel.sounds.push(usize::MAX as SOUND, None);
+            cx.kernel.sounds.silence();
             crate::battle::sounds::engine::flush_sounds(cx);
         }
         cx.clear_display_order();

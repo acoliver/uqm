@@ -883,7 +883,7 @@ mod kernel_tests {
         assert_eq!(fresh.status_offsets, [0; 2]);
         assert!(fresh.player_input.iter().all(Option::is_none));
         assert!(fresh.menu_sounds.is_null());
-        assert!(fresh.game_sounds.is_null());
+        assert!(fresh.game_sounds.is_none());
         assert!(fresh.winner.is_none());
         assert_eq!(fresh.sounds.count, 0);
         assert_eq!(fresh.channels.borrow().lru, [0, 1, 2, 3]);

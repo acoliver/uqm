@@ -64,7 +64,7 @@ pub struct Kernel {
     pub(crate) menu_sounds: SOUND,
     #[cfg(not(test))]
     menu_sound_bank: Option<crate::sound::owned_bank::LoadedSoundBank>,
-    pub(crate) game_sounds: SOUND,
+    pub(crate) game_sounds: Option<crate::sound::owned_bank::LoadedSoundBank>,
     pub(crate) sounds: SoundQueue,
     pub(crate) channels: std::rc::Rc<std::cell::RefCell<Channels>>,
     pub(crate) space_origin: POINT,
@@ -245,7 +245,7 @@ impl Kernel {
             menu_sounds: ptr::null_mut(),
             #[cfg(not(test))]
             menu_sound_bank: None,
-            game_sounds: ptr::null_mut(),
+            game_sounds: None,
             sounds: SoundQueue::new(),
             channels: std::rc::Rc::new(std::cell::RefCell::new(Channels::new())),
             space_origin: POINT { x: 0, y: 0 },

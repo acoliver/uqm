@@ -77,12 +77,6 @@ pub(crate) unsafe fn poll_menu(state: *mut MELEE_STATE, timeout: u32) {
         });
     }
 }
-pub(super) unsafe fn capture_sound(sound: *mut std::ffi::c_void) -> SOUND {
-    crate::game_init::macro_abi::CaptureSound(sound.cast()).cast()
-}
-pub(super) unsafe fn release_sound(sound: SOUND) -> *mut std::ffi::c_void {
-    crate::game_init::macro_abi::ReleaseSound(sound.cast()).cast()
-}
 pub(super) fn set_player_input_all() -> i32 {
     i32::from(KernelOwner::current().write(crate::navigation::abi::SetPlayerInputAll))
 }

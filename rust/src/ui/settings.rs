@@ -146,14 +146,7 @@ pub(crate) fn play_loaded_sound(
     object: usize,
     priority: u8,
 ) {
-    if world.data.game.glob_flags & SOUND_DISABLED as u8 == 0 {
-        crate::sound::sfx::set_channel_volume(
-            channel,
-            (MAX_VOLUME >> 1) as i32,
-            i32::from(priority),
-        );
-        sound.play(channel, position, object, priority);
-    }
+    world.play_sound_effect(sound, channel, position, object, priority);
 }
 
 pub(crate) fn stop_battle_music() {

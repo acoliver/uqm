@@ -6,7 +6,7 @@ pub(crate) mod live {
     use crate::comm::hail::game_string;
     use crate::engine::{Kernel as KernelOwner, World as WorldOwner};
 
-    use crate::game_init::macro_abi::{LoadMusic, LoadSound};
+    use crate::game_init::macro_abi::LoadMusic;
     use crate::graphics::{drawable_abi, resgfx::LoadGraphicInstance as LoadGraphic};
 
     use crate::mainloop::restart_menu::c_extern::{do_popup_window, FadeMusic, SeedRandomNumbers};
@@ -300,7 +300,7 @@ pub(crate) mod live {
             }
             crate::engine::World::current().write(|world| world.set_activity(SUPER_MELEE as u16));
             (**KernelOwner::current()).game_sounds =
-                capture_sound(LoadSound(GAME_SOUNDS.as_ptr().cast()));
+                crate::sound::owned_bank::LoadedSoundBank::load(c"sounds.battle");
             crate::supermelee::native::battle_picker::live::BuildPickMeleeFrame();
             MeleeFrame =
                 CaptureDrawable(LoadGraphic(MELEE_SCREEN_PMAP_ANIM.as_ptr().cast()).cast());
@@ -341,10 +341,7 @@ pub(crate) mod live {
             crate::supermelee::native::build_picker::live::destroy_build_pick_frame();
             state.netplay.close_all_connections();
             state.netplay.setup_input_delay(0);
-            DestroySound(
-                release_sound(KernelOwner::current().read(|owner| owner.game_sounds)).cast(),
-            );
-            (**KernelOwner::current()).game_sounds = ptr::null_mut();
+            (**KernelOwner::current()).game_sounds = None;
             delete_context(state.random_context);
             FlushInput(input);
         });

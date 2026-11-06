@@ -69,20 +69,27 @@ impl Cx<'_> {
         source: ElementId,
         priority: u8,
     ) {
-        use crate::battle::sounds::engine::{play_sound, position};
-        let sounds = match bank {
+        use crate::battle::sounds::engine::{play_clip, position};
+        let sound = match bank {
             crate::engine::battle::views::BattleSoundBank::Ship(ship) => {
-                self.desc(ship).ship_data.ship_sounds
+                self.desc(ship).sound_bank().map(|bank| bank.clip(index))
             }
-            crate::engine::battle::views::BattleSoundBank::Game => self.kernel.game_sounds,
+            crate::engine::battle::views::BattleSoundBank::Game => self
+                .kernel
+                .game_sounds
+                .as_ref()
+                .map(|bank| bank.clip(index)),
         };
-        let pos = position(self, Some(source));
-        let channels = self.kernel.channels.clone();
-        let mut channels = channels.borrow_mut();
-        // SAFETY: the borrowed owner retains the sound bank and source during playback.
-        unsafe {
-            let sound = SetAbsStringTableIndex(sounds, index);
-            self.with_legacy(|| play_sound(&mut channels, sound, pos, Some(source), priority));
+        if let Some(sound) = sound {
+            let pos = position(self, Some(source));
+            play_clip(
+                self.world,
+                &mut self.kernel.channels.borrow_mut(),
+                &sound,
+                pos,
+                Some(source),
+                priority,
+            );
         }
     }
 

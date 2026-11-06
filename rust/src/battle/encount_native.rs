@@ -574,7 +574,10 @@ pub(crate) mod engine {
 
     /// # Safety
     /// The game thread must own initialized encounter fleet queues, game state, display, and salvage resources.
-    pub unsafe fn uninit_encounter(cx: &mut crate::engine::battle::Cx<'_>, input: &crate::engine::input::InputSession) -> COUNT {
+    pub unsafe fn uninit_encounter(
+        cx: &mut crate::engine::battle::Cx<'_>,
+        input: &crate::engine::input::InputSession,
+    ) -> COUNT {
         let mut killed = 0u16;
         free_gravity_well(cx.kernel);
         if encounter_has_no_salvage(cx.world) {
@@ -807,15 +810,9 @@ pub(crate) mod engine {
                 }
             }
         }
-        cx.kernel.game_sounds = cx.with_legacy(|| {
-            crate::strings::string_table::CaptureStringTable(
-                crate::sound::resource_types::LoadSoundInstance(GAME_SOUNDS.as_ptr().cast()).cast(),
-            )
-            .cast()
-        });
+        cx.kernel.game_sounds = crate::sound::owned_bank::LoadedSoundBank::load(c"sounds.battle");
         battle(cx, io, None);
-        DestroySound(ReleaseStringTable(cx.kernel.game_sounds));
-        cx.kernel.game_sounds = ptr::null_mut();
+        cx.kernel.game_sounds = None;
         if cx.world.activity() & CHECK_ABORT as u16 != 0 {
             cx.world.data.flagship.crew_enlisted = COUNT::MAX;
         }
