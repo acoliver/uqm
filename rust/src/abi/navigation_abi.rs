@@ -1,4 +1,4 @@
-use crate::engine::battle::schema::{FlashState, FlashType};
+use crate::graphics::flash::{FlashState, FlashType};
 pub use crate::engine::battle::{CollisionHook, ElementHook};
 // Shared engine records used by the Rust runtime.
 
@@ -3038,53 +3038,53 @@ pub const FlashType_FlashType_transition: FlashType = 1;
 pub const FlashType_FlashType_overlay: FlashType = 2;
 
 #[cfg(not(test))]
-pub use crate::ui::flash::Flash_createHighlight;
+pub use crate::graphics::flash::Flash_createHighlight;
 
 #[cfg(not(test))]
-pub use crate::ui::flash::Flash_createOverlay;
+pub use crate::graphics::flash::Flash_createOverlay;
 
 #[cfg(not(test))]
-pub use crate::ui::flash::Flash_setState;
+pub use crate::graphics::flash::Flash_setState;
 
 #[cfg(not(test))]
-pub use crate::ui::flash::Flash_start;
+pub use crate::graphics::flash::Flash_start;
 
 #[cfg(not(test))]
-pub use crate::ui::flash::Flash_terminate;
+pub use crate::graphics::flash::Flash_terminate;
 
 #[cfg(not(test))]
-pub use crate::ui::flash::Flash_pause;
+pub use crate::graphics::flash::Flash_pause;
 
 #[cfg(not(test))]
-pub use crate::ui::flash::Flash_continue;
+pub use crate::graphics::flash::Flash_continue;
 
 #[cfg(not(test))]
-pub use crate::ui::flash::Flash_process;
+pub use crate::graphics::flash::Flash_process;
 
 #[cfg(not(test))]
-pub use crate::ui::flash::Flash_setSpeed;
+pub use crate::graphics::flash::Flash_setSpeed;
 
 #[cfg(not(test))]
-pub use crate::ui::flash::Flash_setMergeFactors;
+pub use crate::graphics::flash::Flash_setMergeFactors;
 
 #[cfg(not(test))]
-pub use crate::ui::flash::Flash_setFrameTime;
+pub use crate::graphics::flash::Flash_setFrameTime;
 
 #[cfg(not(test))]
-pub use crate::ui::flash::Flash_nextTime;
+pub use crate::graphics::flash::Flash_nextTime;
 
 #[cfg(not(test))]
-pub use crate::ui::flash::Flash_setRect;
+pub use crate::graphics::flash::Flash_setRect;
 
 #[cfg(not(test))]
-pub use crate::ui::flash::Flash_setOverlay;
+pub use crate::graphics::flash::Flash_setOverlay;
 
 #[cfg(not(test))]
-pub use crate::ui::flash::Flash_preUpdate;
+pub use crate::graphics::flash::Flash_preUpdate;
 
 pub use crate::ships::native::abi::menu_state;
 #[cfg(not(test))]
-pub use crate::ui::flash::Flash_postUpdate;
+pub use crate::graphics::flash::Flash_postUpdate;
 pub type MENU_STATE = menu_state;
 pub const PM_SCAN: _bindgen_ty_13 = 0;
 pub const PM_STARMAP: _bindgen_ty_13 = 1;

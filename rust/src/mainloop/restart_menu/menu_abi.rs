@@ -1,8 +1,8 @@
 //! Restart-menu state operations formerly supplied by rust_bridge_restart.c.
-use crate::engine::battle::schema::FlashContext;
 use crate::engine::Kernel;
 use crate::engine::StoryKey;
 use crate::engine::World;
+use crate::graphics::flash::FlashContext;
 use crate::ships::native::abi::*;
 use std::ptr;
 

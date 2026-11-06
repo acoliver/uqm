@@ -31,9 +31,9 @@ pub mod live {
     use super::move_cursor;
     use crate::battle::sounds::PlayMenuSound;
     use crate::battle::{NETWORK_CONTROL, PSYTRON_CONTROL};
-    use crate::engine::battle::schema::{FlashContext, GETMELEE_STATE};
     use crate::engine::Kernel as KernelOwner;
     use crate::mainloop::restart_menu::c_extern as flash;
+    use crate::{engine::battle::schema::GETMELEE_STATE, graphics::flash::FlashContext};
 
     const FADE_ALL_TO_COLOR: u32 = 253;
     unsafe fn flash_process(context: *mut FlashContext) {

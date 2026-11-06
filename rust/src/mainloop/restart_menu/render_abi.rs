@@ -51,7 +51,7 @@ pub unsafe fn draw_restart_menu_graphic(menu: *mut MENU_STATE, font: FONT) {
 #[cfg(not(test))]
 pub unsafe fn draw_restart_menu(menu: *mut MENU_STATE, state: u8, frame: FRAME) {
     let origin = crate::navigation::abi::POINT { x: 0, y: 0 };
-    crate::ui::flash::Flash_setOverlay(
+    crate::graphics::flash::Flash_setOverlay(
         (*menu).flashContext.cast(),
         &origin,
         SetAbsFrameIndex(frame, u16::from(state) + 1).cast(),

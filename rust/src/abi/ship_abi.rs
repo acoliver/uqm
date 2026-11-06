@@ -1,4 +1,4 @@
-use crate::engine::battle::schema::{FlashContext};
+use crate::graphics::flash::FlashContext;
 pub use crate::engine::battle::{ElementHook, CollisionHook};
 pub use crate::engine::battle::record::{
     captain_stuff, state, state__bindgen_ty_1,
@@ -1147,18 +1147,18 @@ pub use crate::supermelee::native::menu::live::drawing::Melee_flashSelection;
 pub use crate::supermelee::native::menu::live::changes::local_change_team;
 #[cfg(not(test))]
 pub unsafe fn Flash_createHighlight(gfxContext: CONTEXT, rect: *const RECT) -> *mut FlashContext {
-    crate::ui::flash::Flash_createHighlight(gfxContext.cast(), rect.cast()).cast()
+    crate::graphics::flash::Flash_createHighlight(gfxContext.cast(), rect.cast()).cast()
 }
 #[cfg(test)]
 #[cfg(not(test))]
-pub use crate::ui::flash::Flash_createHighlight;
+pub use crate::graphics::flash::Flash_createHighlight;
 #[cfg(not(test))]
 pub unsafe fn Flash_setRect(context: *mut FlashContext, rect: *const RECT) {
-    crate::ui::flash::Flash_setRect(context.cast(), rect.cast());
+    crate::graphics::flash::Flash_setRect(context.cast(), rect.cast());
 }
 #[cfg(test)]
 #[cfg(not(test))]
-pub use crate::ui::flash::Flash_setRect;
+pub use crate::graphics::flash::Flash_setRect;
 pub const KEY_UP: _bindgen_ty_1 = 0;
 pub const KEY_DOWN: _bindgen_ty_1 = 1;
 pub const KEY_LEFT: _bindgen_ty_1 = 2;

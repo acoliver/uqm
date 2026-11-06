@@ -1,10 +1,60 @@
 #![cfg(not(test))]
 #![allow(non_snake_case)]
 
-use crate::engine::battle::schema::FlashContext;
+use super::{context_abi::*, drawable_abi::*, frame_abi::*, native_abi::*, pixmap_abi::*};
 use crate::memory::{rust_hfree as HFree, rust_hmalloc as HMalloc};
-use crate::navigation::abi::*;
+use crate::time::counter_abi::{GetTimeCounter, ONE_SECOND};
 use std::ptr;
+
+pub type FlashState = ::std::os::raw::c_uint;
+
+pub type FlashType = ::std::os::raw::c_uint;
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct FlashContext {
+    pub gfxContext: CONTEXT,
+    pub rect: RECT,
+    pub original: FRAME,
+    pub type_: FlashType,
+    pub u: FlashFrames,
+    pub startNumer: ::std::os::raw::c_int,
+    pub endNumer: ::std::os::raw::c_int,
+    pub denom: ::std::os::raw::c_int,
+    pub fadeInTime: DWORD,
+    pub onTime: DWORD,
+    pub fadeOutTime: DWORD,
+    pub offTime: DWORD,
+    pub frameTime: DWORD,
+    pub state: FlashState,
+    pub lastStateTime: DWORD,
+    pub lastFrameTime: DWORD,
+    pub started: BOOLEAN,
+    pub paused: BOOLEAN,
+    pub cache: *mut FRAME,
+    pub cacheSize: COUNT,
+    pub lastFrameIndex: COUNT,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub union FlashFrames {
+    pub transition: FlashTransition,
+    pub overlay: FlashOverlay,
+}
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct FlashTransition {
+    pub first: FRAME,
+    pub final_: FRAME,
+}
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct FlashOverlay {
+    pub frame: FRAME,
+}
 
 const HIGHLIGHT: u32 = 0;
 const TRANSITION: u32 = 1;
@@ -69,7 +119,7 @@ unsafe fn grab_original(ctx: &mut FlashContext) {
     let old = SetContext(ctx.gfxContext);
     ctx.original = CaptureDrawable(CopyContextRect(&ctx.rect));
     SetContext(old);
-    FlushGraphics();
+    super::gfx_common_abi::FlushGraphics();
 }
 unsafe fn draw_frame(ctx: &FlashContext, frame: FRAME) {
     let old = SetContext(ctx.gfxContext);
@@ -259,7 +309,7 @@ pub unsafe extern "C" fn Flash_createOverlay(
 /// # Safety
 /// Game-thread access only; the context and all supplied graphics resources must be valid.
 #[no_mangle]
-pub unsafe extern "C" fn Flash_setState(c: *mut FlashContext, state: u32, spent: TimeCount) {
+pub unsafe extern "C" fn Flash_setState(c: *mut FlashContext, state: u32, spent: DWORD) {
     let now = GetTimeCounter();
     (*c).state = state;
     fix_state(&mut *c);
@@ -355,10 +405,10 @@ pub unsafe extern "C" fn Flash_process(c: *mut FlashContext) {
 #[no_mangle]
 pub unsafe extern "C" fn Flash_setSpeed(
     c: *mut FlashContext,
-    fi: TimeCount,
-    on: TimeCount,
-    fo: TimeCount,
-    off: TimeCount,
+    fi: DWORD,
+    on: DWORD,
+    fo: DWORD,
+    off: DWORD,
 ) {
     (*c).fadeInTime = fi;
     (*c).onTime = on;
@@ -389,15 +439,15 @@ pub unsafe extern "C" fn Flash_setMergeFactors(
 /// # Safety
 /// Game-thread access only; the context and all supplied graphics resources must be valid.
 #[no_mangle]
-pub unsafe extern "C" fn Flash_setFrameTime(c: *mut FlashContext, t: TimeCount) {
+pub unsafe extern "C" fn Flash_setFrameTime(c: *mut FlashContext, t: DWORD) {
     (*c).frameTime = t;
 }
 /// # Safety
 /// Game-thread access only; the context and all supplied graphics resources must be valid.
 #[no_mangle]
-pub unsafe extern "C" fn Flash_nextTime(c: *mut FlashContext) -> TimeCount {
+pub unsafe extern "C" fn Flash_nextTime(c: *mut FlashContext) -> DWORD {
     if (*c).started == 0 || (*c).paused != 0 {
-        return TimeCount::MAX;
+        return DWORD::MAX;
     }
     if (*c).state == FADE_IN || (*c).state == FADE_OUT {
         (*c).lastFrameTime.wrapping_add((*c).frameTime)

@@ -26,7 +26,7 @@ pub struct getmelee_struct__bindgen_ty_1 {
     pub randomIndex: COUNT,
     pub selecting: BOOLEAN,
     pub done: BOOLEAN,
-    pub flashContext: *mut FlashContext,
+    pub flashContext: *mut crate::graphics::flash::FlashContext,
     pub remoteSelected: BOOLEAN,
 }
 
@@ -58,54 +58,4 @@ pub struct GAME_STATE {
     pub in_orbit: BYTE,
     pub velocity: VELOCITY_DESC,
     pub battle_group_ref: DWORD,
-}
-
-pub type FlashState = ::std::os::raw::c_uint;
-
-pub type FlashType = ::std::os::raw::c_uint;
-
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub struct FlashContext {
-    pub gfxContext: CONTEXT,
-    pub rect: RECT,
-    pub original: FRAME,
-    pub type_: FlashType,
-    pub u: FlashContext__bindgen_ty_1,
-    pub startNumer: ::std::os::raw::c_int,
-    pub endNumer: ::std::os::raw::c_int,
-    pub denom: ::std::os::raw::c_int,
-    pub fadeInTime: TimeCount,
-    pub onTime: TimeCount,
-    pub fadeOutTime: TimeCount,
-    pub offTime: TimeCount,
-    pub frameTime: TimeCount,
-    pub state: FlashState,
-    pub lastStateTime: TimeCount,
-    pub lastFrameTime: TimeCount,
-    pub started: BOOLEAN,
-    pub paused: BOOLEAN,
-    pub cache: *mut FRAME,
-    pub cacheSize: COUNT,
-    pub lastFrameIndex: COUNT,
-}
-
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub union FlashContext__bindgen_ty_1 {
-    pub transition: FlashContext__bindgen_ty_1__bindgen_ty_1,
-    pub overlay: FlashContext__bindgen_ty_1__bindgen_ty_2,
-}
-
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct FlashContext__bindgen_ty_1__bindgen_ty_1 {
-    pub first: FRAME,
-    pub final_: FRAME,
-}
-
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct FlashContext__bindgen_ty_1__bindgen_ty_2 {
-    pub frame: FRAME,
 }

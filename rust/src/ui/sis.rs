@@ -1,7 +1,7 @@
 #![cfg(not(test))]
 
 use crate::callback::ffi::{AlarmId, Alarm_addAbsoluteMs, Alarm_remove};
-use crate::engine::{battle::schema::FlashContext, Kernel, StoryKey, World, WorldData};
+use crate::engine::{Kernel, StoryKey, World, WorldData};
 use crate::planets::starmap::current_catalog;
 use crate::ui::{palette::pilot_color, rgb15};
 
@@ -16,7 +16,7 @@ static mut CUR_MSG_MODE: StatMsgMode = StatMsgMode_SMM_DEFAULT;
 static mut LAST_PILOT: BOOLEAN = 0;
 static mut NEXT_PILOT_TIME: TimeCount = 0;
 static mut PILOT_CYCLE_INDEX: DWORD = 0;
-static mut FLASH_CONTEXT: *mut FlashContext = ptr::null_mut();
+static mut FLASH_CONTEXT: *mut crate::graphics::flash::FlashContext = ptr::null_mut();
 static mut FLASH_RECT: RECT = unsafe { mem::zeroed() };
 static mut FLASH_ALARM: Option<AlarmId> = None;
 static mut FLASH_PAUSED: BOOLEAN = 0;
