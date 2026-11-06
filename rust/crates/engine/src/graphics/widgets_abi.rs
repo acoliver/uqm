@@ -808,7 +808,10 @@ mod tests {
                 TRUE
             );
             assert_eq!(
-                widget_event(EVENT_LEFT, &crate::input_port::session::InputSession::default()),
+                widget_event(
+                    EVENT_LEFT,
+                    &crate::input_port::session::InputSession::default()
+                ),
                 FALSE
             );
             widget_focus = previous;
