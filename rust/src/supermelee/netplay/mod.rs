@@ -15,6 +15,7 @@ pub(crate) mod crc;
 pub mod netconnection;
 pub(crate) mod netmelee;
 mod netrcv;
+mod netwait;
 mod notify;
 pub mod packet;
 mod packethandlers;
@@ -25,3 +26,5 @@ pub use netconnection::{Effect, Event};
 pub use session::NetplaySession;
 pub(crate) mod netinput;
 use crate::platform::set_errno;
+#[cfg(test)]
+mod driver_tests;

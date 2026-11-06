@@ -70,7 +70,6 @@ pub(in crate::automation::melee_fixture) fn execute(
             )
         };
         let task = match admit(operation, activity, position, registry)? {
-            Admission::Configure(request) => return configure(cx, request).map(|_| None),
             Admission::Complete(proof) => return Ok(proof),
             Admission::Task(task) => task,
         };
@@ -328,59 +327,6 @@ unsafe fn apply(cx: &mut Cx<'_>, effect: Effect, checkpoint: &dyn Fn()) -> Resul
     }
 }
 
-#[cfg(not(test))]
-fn configure(cx: &mut Cx<'_>, request: &MeleeSetupRequest) -> Result<(), String> {
-    use crate::supermelee::native::menu::live::drawing::P_MELEE_STATE;
-    let ships = request.ships.iter().enumerate().flat_map(|(side, fleet)| {
-        fleet
-            .iter()
-            .copied()
-            .chain([255; 7])
-            .enumerate()
-            .map(move |(slot, ship)| (1 - side, slot as u16, u32::from(ship)))
-    });
-    // SAFETY: execute is the admitted live menu input boundary.
-    unsafe {
-        let state = P_MELEE_STATE
-            .as_mut()
-            .ok_or("configure_parity_melee requires the live Super Melee menu")?;
-        configure_menu(
-            state.melee_started != 0,
-            &mut cx.kernel.player_control,
-            cx.world.activity(),
-            request.cyborg,
-        )?;
-        state.melee_option = 4;
-        state.phase = crate::supermelee::netplay::session::MenuPhase::Menu;
-        for (side, slot, ship) in ships {
-            state
-                .melee_setup
-                .set_ship_with_cost(
-                    side,
-                    slot,
-                    crate::supermelee::types::MeleeShip::from_u8(ship as u8)
-                        .unwrap_or_else(|| panic!("validated fixture ship")),
-                    |ship| crate::ships::master_native::choice_cost(&state.catalog, ship as u16),
-                )
-                .unwrap_or_else(|error| panic!("validated fixture fleet slot: {error}"));
-        }
-    }
-    Ok(())
-}
-
-fn configure_menu(
-    started: bool,
-    controls: &mut [u8; 2],
-    activity: u16,
-    cyborg: bool,
-) -> Result<(), String> {
-    if activity & IN_BATTLE as u16 != 0 || started {
-        return Err("cannot replace a fleet during battle".into());
-    }
-    controls.fill(if cyborg { 2 | 64 } else { 1 | 16 });
-    Ok(())
-}
-
 pub(super) fn loaded(reply: Reply) -> Result<(), String> {
     match reply {
         Reply::None | Reply::Loaded(true) => Ok(()),
@@ -402,17 +348,91 @@ mod zoom_tests {
     use super::zoom_matches;
 
     #[test]
-    fn menu_configuration_validates_before_changing_controls() {
-        let mut controls = [99; 2];
-        assert!(super::configure_menu(true, &mut controls, 0, true).is_err());
-        assert!(
-            super::configure_menu(false, &mut controls, super::IN_BATTLE as u16, true).is_err()
+    fn configuration_borrows_its_menu_and_world_without_publication() {
+        use crate::engine::{
+            battle::{Battle, Cx},
+            Game,
+        };
+        use crate::supermelee::{
+            session::{MeleeSession, MenuPhase},
+            types::MeleeShip,
+        };
+        let mut game = Game::new();
+        let mut battle = Battle::new();
+        let cx = Cx::new(
+            &mut battle,
+            &mut game.world,
+            &mut game.kernel,
+            crate::math::random,
         );
-        assert_eq!(controls, [99; 2]);
-        super::configure_menu(false, &mut controls, 0, true).unwrap();
-        assert_eq!(controls, [66; 2]);
-        super::configure_menu(false, &mut controls, 0, false).unwrap();
-        assert_eq!(controls, [17; 2]);
+        let catalog = (0..25)
+            .map(|index| crate::ships::master_native::ShipChoice {
+                cost: index + 1,
+                icon: crate::engine::battle::frames::FrameSelection::ABSENT,
+                melee_icon: crate::engine::battle::frames::FrameSelection::ABSENT,
+            })
+            .collect();
+        let mut menu = MeleeSession::new(cx.world.activity_control(), catalog);
+        let other = MeleeSession::new(cx.world.activity_control(), vec![]);
+        let mut request = super::MeleeSetupRequest {
+            ships: [[255; 7]; 2],
+            cyborg: true,
+        };
+        request.ships[0][0] = 0;
+        request.ships[0][1] = 1;
+        request.ships[1][0] = 24;
+        let expected = request.clone();
+        menu.configure_fleets(
+            &mut cx.kernel.player_control,
+            cx.world.activity() & super::IN_BATTLE as u16 != 0,
+            request.ships,
+            request.cyborg,
+        )
+        .unwrap();
+        assert_eq!(request, expected);
+        assert_eq!(cx.kernel.player_control, [66; 2]);
+        assert_eq!(menu.melee_option, 4);
+        assert_eq!(menu.phase, MenuPhase::Menu);
+        assert_eq!(menu.melee_setup.teams[0].ships[0] as u8, 24);
+        assert_eq!(menu.melee_setup.teams[1].ships[0] as u8, 0);
+        assert_eq!(menu.melee_setup.teams[1].ships[1] as u8, 1);
+        assert!(menu.melee_setup.teams.iter().all(|team| team.ships[7..]
+            .iter()
+            .all(|ship| *ship == MeleeShip::MeleeNone)));
+        assert_eq!(menu.melee_setup.fleet_value, [25, 3]);
+        assert_eq!(other.melee_option, 0);
+        assert!(other
+            .melee_setup
+            .teams
+            .iter()
+            .all(|team| team.ships.iter().all(|ship| *ship == MeleeShip::MeleeNone)));
+        menu.melee_started = 1;
+        assert!(menu
+            .configure_fleets(&mut cx.kernel.player_control, false, request.ships, false)
+            .is_err());
+        menu.melee_started = 0;
+        assert!(menu
+            .configure_fleets(&mut cx.kernel.player_control, true, request.ships, false)
+            .is_err());
+        assert_eq!(cx.kernel.player_control, [66; 2]);
+        menu.configure_fleets(&mut cx.kernel.player_control, false, request.ships, false)
+            .unwrap();
+        assert_eq!(cx.kernel.player_control, [17; 2]);
+        menu.configure_fleets(&mut cx.kernel.player_control, false, request.ships, true)
+            .unwrap();
+        let teams = menu.melee_setup.teams.clone();
+        request.ships[0][0] = 99;
+        request.cyborg = false;
+        assert!(menu
+            .configure_fleets(
+                &mut cx.kernel.player_control,
+                cx.world.activity() & super::IN_BATTLE as u16 != 0,
+                request.ships,
+                request.cyborg
+            )
+            .is_err());
+        assert_eq!(menu.melee_setup.teams, teams);
+        assert_eq!(cx.kernel.player_control, [66; 2]);
     }
 
     #[test]

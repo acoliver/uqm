@@ -30,29 +30,11 @@ mod tests {
 pub mod live {
     use super::move_cursor;
     use crate::battle::{NETWORK_CONTROL, PSYTRON_CONTROL};
+    use crate::engine::battle::schema::GETMELEE_STATE;
     use crate::engine::Kernel as KernelOwner;
-    use crate::mainloop::restart_menu::c_extern as flash;
-    use crate::{engine::battle::schema::GETMELEE_STATE, graphics::flash::FlashContext};
+    use crate::graphics::{context_abi::ContextLease, native_abi as render};
 
     const FADE_ALL_TO_COLOR: u32 = 253;
-    unsafe fn flash_process(context: *mut FlashContext) {
-        flash::Flash_process(context.cast());
-    }
-    unsafe fn flash_terminate(context: *mut FlashContext) {
-        flash::Flash_terminate(context.cast());
-    }
-    unsafe fn flash_set_merge_factors(context: *mut FlashContext, a: i32, b: i32, c: i32) {
-        flash::Flash_setMergeFactors(context.cast(), a, b, c);
-    }
-    unsafe fn flash_set_frame_time(context: *mut FlashContext, t: u32) {
-        flash::Flash_setFrameTime(context.cast(), t);
-    }
-    unsafe fn flash_set_speed(context: *mut FlashContext, a: u32, b: u32, c: u32, d: u32) {
-        flash::Flash_setSpeed(context.cast(), a, b, c, d);
-    }
-    unsafe fn flash_start(context: *mut FlashContext) {
-        flash::Flash_start(context.cast());
-    }
 
     use crate::engine::battle::{
         link_queue::{self, LinkQueue, Starship},
@@ -66,19 +48,22 @@ pub mod live {
     unsafe fn by_index(player: usize, index: u16, used: bool) -> Option<ShipId> {
         link_queue::ships(player).by_index(index, used)
     }
-    unsafe fn changed(state: *mut GETMELEE_STATE, player: usize) {
-        let s = &(*state).player[player];
-        let r = RECT {
-            corner: POINT {
+    fn changed(state: &mut GETMELEE_STATE, player: usize) {
+        let s = &mut state.player[player];
+        let r = render::RECT {
+            corner: render::POINT {
                 x: 57 + 18 * s.col as i16,
                 y: 24 + 18 * s.row as i16 + (1 - player as i16) * 100,
             },
-            extent: EXTENT {
+            extent: render::EXTENT {
                 width: 18,
                 height: 18,
             },
         };
-        Flash_setRect(s.flashContext, &r);
+        s.highlight
+            .as_mut()
+            .unwrap_or_else(|| panic!("selecting player highlight"))
+            .set_rect(r);
     }
     /// # Safety
     /// The selection and live ship queues belong to the game thread.
@@ -135,13 +120,14 @@ pub mod live {
                 s.row = row;
                 s.col = col;
                 crate::ui::settings::play_menu_sound(cx.kernel, cx.world, 0);
-                cx.with_legacy(|| changed(state, player));
+                cx.with_legacy(|| changed(&mut *state, player));
             }
         }
         1
     }
     pub fn select_ship(
         cx: &mut crate::engine::battle::Cx<'_>,
+        io: &mut crate::engine::observe::Io<'_>,
         input: &crate::engine::input::InputSession,
         context: &crate::engine::battle::input::InputContext,
         state: &mut GETMELEE_STATE,
@@ -173,13 +159,15 @@ pub mod live {
                 unsafe { process(cx, input, state, usize::from(player), 8) }
             }
             InputSource::Network(_) => {
-                cx.with_legacy(|| {
-                    state
-                        .net
-                        .as_ref()
-                        .unwrap_or_else(|| panic!("missing net"))
-                        .flush()
-                });
+                state
+                    .net
+                    .as_ref()
+                    .unwrap_or_else(|| panic!("missing net"))
+                    .flush(&mut crate::supermelee::native::protocol::Driver::new(
+                        cx,
+                        io,
+                        &mut crate::supermelee::native::protocol::battle_notice,
+                    ));
                 if let Some(choice) = state
                     .net
                     .as_ref()
@@ -196,6 +184,7 @@ pub mod live {
     }
     unsafe fn choose(
         cx: &mut crate::engine::battle::Cx<'_>,
+        io: &mut crate::engine::observe::Io<'_>,
         input: &crate::engine::input::InputSession,
         state: *mut GETMELEE_STATE,
         inputs: &[Option<crate::engine::battle::input::InputContext>; 2],
@@ -205,19 +194,24 @@ pub mod live {
             (*state).Initialized = 1;
             return 1;
         }
-        cx.with_legacy(|| {
-            for p in &(*state).player {
-                if p.selecting != 0 && p.done == 0 {
-                    flash_process(p.flashContext);
-                }
+        for p in &mut (*state).player {
+            if p.selecting != 0 && p.done == 0 {
+                p.highlight
+                    .as_mut()
+                    .unwrap_or_else(|| panic!("selecting player highlight"))
+                    .process();
             }
-            SleepThread(840 / 120);
-            (*state)
-                .net
-                .as_ref()
-                .unwrap_or_else(|| panic!("missing net"))
-                .poll();
-        });
+        }
+        cx.with_legacy(|| SleepThread(840 / 120));
+        (*state)
+            .net
+            .as_ref()
+            .unwrap_or_else(|| panic!("missing net"))
+            .poll(&mut crate::supermelee::native::protocol::Driver::new(
+                cx,
+                io,
+                &mut crate::supermelee::native::protocol::battle_notice,
+            ));
         let mut abort = !(*state)
             .net
             .as_ref()
@@ -232,6 +226,7 @@ pub mod live {
                 }
                 if select_ship(
                     cx,
+                    io,
                     input,
                     context
                         .as_ref()
@@ -244,20 +239,21 @@ pub mod live {
                 }
                 let p = &mut (*state).player[player];
                 if p.done != 0 {
-                    cx.with_legacy(|| flash_terminate(p.flashContext));
-                    p.flashContext = ptr::null_mut();
+                    p.highlight = None;
                 } else {
                     done = false;
                 }
             }
         }
-        cx.with_legacy(|| {
-            (*state)
-                .net
-                .as_ref()
-                .unwrap_or_else(|| panic!("missing net"))
-                .flush()
-        });
+        (*state)
+            .net
+            .as_ref()
+            .unwrap_or_else(|| panic!("missing net"))
+            .flush(&mut crate::supermelee::native::protocol::Driver::new(
+                cx,
+                io,
+                &mut crate::supermelee::native::protocol::battle_notice,
+            ));
         if abort {
             for p in &mut (*state).player {
                 if p.selecting != 0 {
@@ -525,16 +521,31 @@ pub mod live {
             p.row = 0;
             p.col = 7;
             p.remoteSelected = 0;
-            p.flashContext = Flash_createHighlight(screen_context, ptr::null_mut());
-            flash_set_merge_factors(p.flashContext, 2, 3, 2);
-            flash_set_frame_time(p.flashContext, 840 / 16);
+            let context = ContextLease::retain(
+                std::ptr::NonNull::new(screen_context.cast())
+                    .unwrap_or_else(|| panic!("picker screen context")),
+            );
+            let mut highlight = context.highlight(render::RECT {
+                corner: render::POINT { x: 0, y: 0 },
+                extent: render::EXTENT {
+                    width: 0,
+                    height: 0,
+                },
+            });
+            highlight.set_merge_factors(2, 3, 2);
+            highlight.set_frame_time(840 / 16);
             if controls[player] & NETWORK_CONTROL != 0 {
-                flash_set_speed(p.flashContext, 840 / 2, 0, 840 / 2, 0);
+                highlight.set_speed(840 / 2, 0, 840 / 2, 0);
             } else {
-                flash_set_speed(p.flashContext, 0, 840 / 16, 0, 840 / 16);
+                highlight.set_speed(0, 840 / 16, 0, 840 / 16);
             }
+            p.highlight = Some(highlight);
             changed(state, player);
-            flash_start(state.player[player].flashContext);
+            state.player[player]
+                .highlight
+                .as_mut()
+                .unwrap_or_else(|| panic!("selecting player highlight"))
+                .start();
         }
     }
     unsafe fn get_ships(
@@ -566,9 +577,9 @@ pub mod live {
             let mut io = Io {
                 observer: observer.as_mut(),
             };
-            cx.run_input(&mut io, false, |cx, _| {
+            cx.run_input(&mut io, false, |cx, io| {
                 let inputs = cx.kernel.player_input.clone();
-                choose(cx, input, &mut state, &inputs) != 0
+                choose(cx, io, input, &mut state, &inputs) != 0
             });
             let mut ships = [None; 2];
             cx.with_legacy(|| {
@@ -580,8 +591,7 @@ pub mod live {
                     if p.done != 0 {
                         ships[player] = p.hBattleShip;
                     } else {
-                        flash_terminate(p.flashContext);
-                        p.flashContext = ptr::null_mut();
+                        p.highlight = None;
                         ok = false;
                     }
                 }

@@ -35,6 +35,7 @@ pub mod fleet_fight;
 pub mod flight_position;
 pub mod identity;
 pub mod input;
+pub(crate) mod input_admission;
 pub mod input_ffi;
 #[cfg(unix)]
 pub mod interrupt;

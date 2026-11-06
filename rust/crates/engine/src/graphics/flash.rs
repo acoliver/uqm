@@ -1,4 +1,3 @@
-#![cfg(not(test))]
 #![allow(non_snake_case)]
 
 use super::{context_abi::*, drawable_abi::*, frame_abi::*, native_abi::*, pixmap_abi::*};

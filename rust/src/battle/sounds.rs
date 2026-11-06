@@ -3,10 +3,6 @@
 #[cfg(not(test))]
 use crate::engine::battle::Cx;
 use crate::engine::battle::ElementId;
-#[cfg(not(test))]
-use crate::engine::Kernel as KernelOwner;
-#[cfg(not(test))]
-use std::ptr;
 
 use crate::engine::battle::record::{Channels, SoundQueue};
 
@@ -104,21 +100,6 @@ pub(crate) mod engine {
     }
 
     /// # Safety
-    /// Menu sound resources must be loaded on the game thread.
-    #[no_mangle]
-    pub unsafe extern "C" fn PlayMenuSound(sound: u32) {
-        if let Some(bank) = KernelOwner::current().read(|owner| owner.menu_sound_bank()) {
-            PlaySoundEffect(
-                SetAbsStringTableIndex(bank.as_raw().cast(), sound as u16),
-                0,
-                NON_POSITIONAL,
-                ptr::null_mut(),
-                GAME_SOUND_PRIORITY as u8,
-            );
-        }
-    }
-
-    /// # Safety
     /// Called while the game-thread battle context is published.
     pub(crate) fn position(
         cx: &mut Cx<'_>,
@@ -210,7 +191,7 @@ pub(crate) mod engine {
 }
 
 #[cfg(not(test))]
-pub use engine::{PlayMenuSound, NON_POSITIONAL};
+pub use engine::NON_POSITIONAL;
 
 fn encode_object(object: Option<ElementId>) -> usize {
     object.map_or(0, ElementId::sound_token)

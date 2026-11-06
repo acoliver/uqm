@@ -113,8 +113,8 @@ mod value_helpers;
 
 pub mod flash;
 mod flash_math;
+pub mod native_batch;
 mod native_context;
 mod native_drawables;
 pub mod native_font;
-
-pub mod native_batch;
+mod native_highlight;

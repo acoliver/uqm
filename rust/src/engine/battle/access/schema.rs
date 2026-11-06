@@ -26,7 +26,7 @@ pub struct getmelee_struct__bindgen_ty_1 {
     pub randomIndex: COUNT,
     pub selecting: BOOLEAN,
     pub done: BOOLEAN,
-    pub flashContext: *mut crate::graphics::flash::FlashContext,
+    pub highlight: Option<crate::graphics::context_abi::Highlight>,
     pub remoteSelected: BOOLEAN,
 }
 

@@ -582,6 +582,8 @@ pub(crate) fn service_input(
     observer: &AutomationObserver,
     capture: &mut dyn FnMut() -> CampaignView,
     button_wait: bool,
+    setup: &mut super::input_admission::Target<'_>,
+    sink: &mut dyn crate::engine::observe::Observer<Option<CampaignView>>,
 ) -> i32 {
     // Step 1: ABI entry (saturating).
     let rt = &observer.runtime;
@@ -610,11 +612,7 @@ pub(crate) fn service_input(
     }
 
     // Step 4: Feed the input callback to the coordinator (scheduler+watchdog).
-    let stop = if button_wait {
-        observer.process_button_wait(capture)
-    } else {
-        observer.process_input(capture)
-    };
+    let stop = observer.process_input_admission(capture, button_wait, setup, sink);
     if stop {
         return 1;
     }

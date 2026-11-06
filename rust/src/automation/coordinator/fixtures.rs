@@ -8,8 +8,10 @@ impl AutomationObserver {
         &self,
         inner: &mut CoordInner,
         event: SchedulerEvent,
+        setup: &mut crate::automation::input_admission::Target<'_>,
+        sink: &mut dyn crate::engine::observe::Observer<Option<campaign_state::CampaignView>>,
     ) -> bool {
-        let result = self.execute_parity_fixture(inner, event);
+        let result = self.execute_parity_fixture(inner, event, setup, sink);
         match result {
             Ok(Some(label)) => {
                 let label = successful_label(
@@ -37,19 +39,24 @@ impl AutomationObserver {
         &self,
         inner: &mut CoordInner,
         event: SchedulerEvent,
+        setup: &mut crate::automation::input_admission::Target<'_>,
+        sink: &mut dyn crate::engine::observe::Observer<Option<campaign_state::CampaignView>>,
     ) -> Result<Option<String>, String> {
         let checkpoint = || self.parity_checkpoint("fixture");
-        let witnesses = crate::collections::observation::take_saves();
-        if let Some(run) = inner.parity_fixture.as_mut() {
-            for (slot, loading) in witnesses {
-                if loading {
-                    run.loaded(slot, &checkpoint)?;
-                } else {
-                    run.saved(slot, &checkpoint)?;
+        crate::automation::input_admission::legacy(setup, || -> Result<(), String> {
+            let witnesses = crate::collections::observation::take_saves();
+            if let Some(run) = inner.parity_fixture.as_mut() {
+                for (slot, loading) in witnesses {
+                    if loading {
+                        run.loaded(slot, &checkpoint)?;
+                    } else {
+                        run.saved(slot, &checkpoint)?;
+                    }
                 }
+                run.advance(&checkpoint)?;
             }
-            run.advance(&checkpoint)?;
-        }
+            Ok(())
+        })?;
         if inner.sched_state.phase != ActionPhase::WaitingForInput
             || event != SchedulerEvent::AdmittedInput
         {
@@ -57,32 +64,38 @@ impl AutomationObserver {
         }
         match self.actions.get(inner.sched_state.step_index) {
             Some(Action::ConnectNetplay(request)) => {
-                crate::automation::netplay_fixture::connect(request)?;
+                crate::automation::netplay_fixture::connect(setup, sink, request)?;
                 Ok(Some("netplay_connected".into()))
             }
             Some(Action::ConfigureParityMelee(request)) => {
-                melee_fixture::configure(request, &checkpoint)?;
+                request.validate()?;
+                crate::collections::observation::enable();
+                setup.configure_fleet(request.ships, request.cyborg)?;
                 Ok(Some("parity_melee_configured".into()))
             }
-            Some(Action::RunParityCorpus(request)) => {
-                melee_fixture::corpus(*request, &checkpoint)?;
-                Ok(Some(format!("parity_corpus_completed:{}", request.fleet)))
-            }
-            Some(Action::RunParityFixture(request)) => {
-                if inner.parity_fixture.is_some() {
-                    return Err("a parity fixture is already active".into());
+            _ => crate::automation::input_admission::legacy(setup, || {
+                match self.actions.get(inner.sched_state.step_index) {
+                    Some(Action::RunParityCorpus(request)) => {
+                        melee_fixture::corpus(*request, &checkpoint)?;
+                        Ok(Some(format!("parity_corpus_completed:{}", request.fleet)))
+                    }
+                    Some(Action::RunParityFixture(request)) => {
+                        if inner.parity_fixture.is_some() {
+                            return Err("a parity fixture is already active".into());
+                        }
+                        inner.parity_fixture = Some(melee_fixture::run(request, &checkpoint)?);
+                        Ok(Some("parity_fixture_started".into()))
+                    }
+                    Some(Action::AssertParityFixture) => {
+                        let proof = inner
+                            .parity_fixture
+                            .as_ref()
+                            .ok_or("no active parity fixture")?;
+                        Ok(Some(proof.verify()?))
+                    }
+                    _ => Ok(None),
                 }
-                inner.parity_fixture = Some(melee_fixture::run(request, &checkpoint)?);
-                Ok(Some("parity_fixture_started".into()))
-            }
-            Some(Action::AssertParityFixture) => {
-                let proof = inner
-                    .parity_fixture
-                    .as_ref()
-                    .ok_or("no active parity fixture")?;
-                Ok(Some(proof.verify()?))
-            }
-            _ => Ok(None),
+            }),
         }
     }
 }

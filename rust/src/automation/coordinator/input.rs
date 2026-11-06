@@ -87,76 +87,106 @@ impl AutomationObserver {
         capture: &mut dyn FnMut() -> campaign_state::CampaignView,
         button_wait: bool,
     ) -> bool {
-        let mut inner = self.inner.lock();
+        self.process_input_admission(
+            capture,
+            button_wait,
+            &mut crate::automation::input_admission::Unavailable,
+            &mut crate::engine::observe::Unobserved,
+        )
+    }
 
-        if inner.terminal_class.is_some() {
+    pub(crate) fn process_input_admission(
+        &self,
+        capture: &mut dyn FnMut() -> campaign_state::CampaignView,
+        button_wait: bool,
+        setup: &mut crate::automation::input_admission::Target<'_>,
+        sink: &mut dyn crate::engine::observe::Observer<Option<campaign_state::CampaignView>>,
+    ) -> bool {
+        let mut inner = self.inner.lock();
+        let event = match crate::automation::input_admission::legacy(setup, || {
+            self.prepare_input_boundary(&mut inner, capture, button_wait)
+        }) {
+            std::ops::ControlFlow::Break(stop) => return stop,
+            std::ops::ControlFlow::Continue(event) => event,
+        };
+        if self.parity_fixture_input(&mut inner, event, setup, sink) {
             return true;
         }
-        if self.reject_unobserved_player_input(&mut inner) {
-            return true;
+        crate::automation::input_admission::legacy(setup, || {
+            self.queue_input_fixture(&mut inner, event)
+                || self.commit_input_event(&mut inner, event)
+        })
+    }
+
+    fn prepare_input_boundary(
+        &self,
+        inner: &mut CoordInner,
+        capture: &mut dyn FnMut() -> campaign_state::CampaignView,
+        button_wait: bool,
+    ) -> std::ops::ControlFlow<bool, SchedulerEvent> {
+        if inner.terminal_class.is_some() {
+            return std::ops::ControlFlow::Break(true);
+        }
+        if self.reject_unobserved_player_input(inner) {
+            return std::ops::ControlFlow::Break(true);
         }
 
         let released_semantic_select = inner.release_semantic_select;
         if released_semantic_select {
             let index = i32::from(crate::automation::script::MenuKey::Select.index());
             if !self.inject_menu_key(index, 0) {
-                self.reject_input(&mut inner, "menu", index, 0);
-                return true;
+                self.reject_input(inner, "menu", index, 0);
+                return std::ops::ControlFlow::Break(true);
             }
             inner.release_semantic_select = false;
         }
         let orbit_transition_pending = inner.orbit.transition_pending;
         inner.orbit.transition_pending = false;
 
-        if self.admit_boundary(&mut inner, CallbackKind::Input) {
-            return true;
+        if self.admit_boundary(inner, CallbackKind::Input) {
+            return std::ops::ControlFlow::Break(true);
         }
-        if self.save_input(&mut inner, button_wait) {
-            return true;
+        if self.save_input(inner, button_wait) {
+            return std::ops::ControlFlow::Break(true);
         }
 
-        if self.reserve_nested_button_poll(&inner, button_wait) {
-            return false;
+        if self.reserve_nested_button_poll(inner, button_wait) {
+            return std::ops::ControlFlow::Break(false);
         }
 
         // Keep the next action behind the committed-presentation barrier.
-        if self.native_checkpoint_pending(&inner) {
-            return false;
+        if self.native_checkpoint_pending(inner) {
+            return std::ops::ControlFlow::Break(false);
         }
         if inner.pending_main_menu_ready {
             inner.pending_main_menu_ready = false;
-            return self.apply_main_menu_ready(&mut inner);
+            return std::ops::ControlFlow::Break(self.apply_main_menu_ready(inner));
         }
         let world = &capture();
-        if self.verify_runtime_assertions(world, &mut inner)
-            || self.verify_activity_assertion(world, &mut inner)
+        if self.verify_runtime_assertions(world, inner)
+            || self.verify_activity_assertion(world, inner)
         {
-            return true;
+            return std::ops::ControlFlow::Break(true);
         }
 
         // Step 2: Feed to scheduler. Runtime waits are satisfied only by
         // observed production state, never by injected input.
         let mut scheduler_event = self.service_semantic_waits(
             world,
-            &mut inner,
+            inner,
             released_semantic_select,
             orbit_transition_pending,
         );
         if inner.terminal_class.is_some() {
-            return true;
+            return std::ops::ControlFlow::Break(true);
         }
 
-        scheduler_event = self.service_navigation(world, &mut inner, scheduler_event);
+        scheduler_event = self.service_navigation(world, inner, scheduler_event);
 
         if inner.terminal_class.is_some() {
-            return true;
+            return std::ops::ControlFlow::Break(true);
         }
-        if self.parity_fixture_input(&mut inner, scheduler_event)
-            || self.queue_input_fixture(&mut inner, scheduler_event)
-        {
-            return true;
-        }
-        self.commit_input_event(&mut inner, scheduler_event)
+        std::ops::ControlFlow::Continue(scheduler_event)
     }
 
     fn reserve_nested_button_poll(&self, inner: &CoordInner, button_wait: bool) -> bool {
@@ -328,10 +358,108 @@ mod tests {
             .mirror
             .terminal
             .try_set(TerminalClass::SemanticMismatch);
-        assert_eq!(input_ffi::service_input(&observer, &mut capture, false), 1);
+        assert_eq!(
+            input_ffi::service_input(
+                &observer,
+                &mut capture,
+                false,
+                &mut crate::automation::input_admission::Unavailable,
+                &mut crate::engine::observe::Unobserved
+            ),
+            1
+        );
         assert_eq!(input_ffi::after_input_update(&observer, 0), 1);
         assert!(observer.process_input_at_boundary(&mut capture, false));
         assert_eq!(observer.inner.lock().input_seen, 1);
+    }
+
+    #[test]
+    fn setup_effects_complete_inside_the_admitted_scheduler_transaction() {
+        use crate::engine::observe::{CampaignView, InputSetup, InputView, Observer, PeerSetup};
+        struct Setup<'a> {
+            coordinator: &'a AutomationObserver,
+            effects: Vec<&'static str>,
+            ready: bool,
+        }
+        impl InputSetup<Option<CampaignView>> for Setup<'_> {
+            fn configure_fleet(&mut self, ships: [[u8; 7]; 2], cyborg: bool) -> Result<(), String> {
+                assert_eq!(ships, [[0; 7]; 2]);
+                assert!(cyborg);
+                assert!(self.coordinator.inner.try_lock().is_none());
+                self.effects.push("configure");
+                Ok(())
+            }
+            fn connect_peer(
+                &mut self,
+                player: u16,
+                server: bool,
+                port: u16,
+                observer: &mut dyn Observer<Option<CampaignView>>,
+            ) -> Result<Option<u16>, String> {
+                assert_eq!((player, server, port), (1, true, 0));
+                assert!(self.coordinator.inner.try_lock().is_none());
+                assert!(observer.input_admitted(&InputView::Active, &None).stop);
+                self.effects.push("connect");
+                Ok(Some(2020))
+            }
+            fn peer_setup(&self, _: u16) -> Option<PeerSetup> {
+                Some(PeerSetup {
+                    ready: self.ready,
+                    disconnected: false,
+                })
+            }
+            fn poll_peer(&mut self, observer: &mut dyn Observer<Option<CampaignView>>) {
+                assert!(self.coordinator.inner.try_lock().is_none());
+                assert!(observer.input_admitted(&InputView::Active, &None).stop);
+                self.effects.push("poll");
+                self.ready = true;
+            }
+            fn with_legacy(&mut self, operation: &mut dyn FnMut()) {
+                operation();
+            }
+        }
+        let source = serde_json::to_vec(&serde_json::json!({
+            "version": 1, "name": "borrowed-setup", "steps": [
+                {"action":"configure_parity_melee","ships":[[0,0,0,0,0,0,0],[0,0,0,0,0,0,0]],"cyborg":true},
+                {"action":"connect_netplay","remote_player":1,"server":true,"port":0},
+                {"action":"finish"}
+            ],
+            "budgets":{"max_input_ticks":10,"max_presentations":100,"max_wallclock_seconds":60}
+        })).unwrap();
+        let script = crate::automation::validate_script(
+            crate::automation::parse_script(&source, "test.json").unwrap(),
+            "test.json",
+        )
+        .unwrap();
+        let directory = tempfile::tempdir().unwrap();
+        let coordinator = AutomationObserver::new(
+            script,
+            directory.path().into(),
+            crate::engine::World::new().activity_control(),
+            crate::engine::input::InputControls::default(),
+            Default::default(),
+        );
+        let mut handle = crate::automation::observer::Handle(coordinator.clone());
+        let mut setup = Setup {
+            coordinator: &coordinator,
+            effects: vec![],
+            ready: false,
+        };
+        let world = Some(CampaignView::empty());
+        assert!(
+            !handle
+                .input_admitted_with_setup(&InputView::BeforeUpdate, &world, &mut setup)
+                .stop
+        );
+        assert_eq!(coordinator.inner.lock().sched_state.step_index, 1);
+        assert!(
+            !handle
+                .input_admitted_with_setup(&InputView::BeforeUpdate, &world, &mut setup)
+                .stop
+        );
+        assert_eq!(coordinator.inner.lock().sched_state.step_index, 2);
+        assert_eq!(coordinator.inner.lock().input_seen, 2);
+        assert_eq!(setup.effects, ["configure", "connect", "poll"]);
     }
 
     #[test]

@@ -920,7 +920,12 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
                                                 sample_weapon(runtime.input(), side, true);
                                             }
                                             let result = uqm_rust::app::bridge::enter(|cx| {
-                                                uqm_rust::supermelee::native::battle_picker::live::select_ship(cx, runtime.input(), &inputs[side], &mut state)
+                                                let mut observer =
+                                                    uqm_rust::engine::observe::Unobserved;
+                                                let mut io = uqm_rust::engine::observe::Io {
+                                                    observer: &mut observer,
+                                                };
+                                                uqm_rust::supermelee::native::battle_picker::live::select_ship(cx, &mut io, runtime.input(), &inputs[side], &mut state)
                                             });
                                             sample_weapon(runtime.input(), side, false);
                                             assert_eq!(result, 1);

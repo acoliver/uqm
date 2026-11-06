@@ -58,7 +58,29 @@ pub unsafe fn do_text_entry(text: *mut TEXTENTRY_STATE, input: &InputSession) ->
     if crate::engine::World::current().read(|world| world.activity()) & CHECK_ABORT as u16 != 0 {
         return 0;
     }
-    begin_text_entry(text, input)
+    begin_text_entry(text, || {
+        DoInput(1, &mut |cx: &mut Cx<'_>, io: &mut Io<'_>| {
+            text_entry_frame(text, cx, io, input) != 0
+        });
+    })
+}
+
+/// # Safety
+/// The entry buffers and callbacks remain valid through this synchronous session.
+pub unsafe fn run_text_entry(
+    cx: &mut Cx<'_>,
+    io: &mut Io<'_>,
+    text: *mut TEXTENTRY_STATE,
+    input: &InputSession,
+) -> BOOLEAN {
+    if cx.world.activity() & CHECK_ABORT as u16 != 0 {
+        return 0;
+    }
+    begin_text_entry(text, || {
+        cx.run_input(io, true, |cx, io| {
+            text_entry_frame(text, cx, io, input) != 0
+        });
+    })
 }
 
 /// # Safety
@@ -219,7 +241,7 @@ unsafe fn edit_cursor(
     changed
 }
 
-unsafe fn begin_text_entry(text: *mut TEXTENTRY_STATE, input: &InputSession) -> BOOLEAN {
+unsafe fn begin_text_entry(text: *mut TEXTENTRY_STATE, run: impl FnOnce()) -> BOOLEAN {
     let mut lower_len = 0;
     (*text).Success = 0;
     (*text).Initialized = 1;
@@ -251,9 +273,7 @@ unsafe fn begin_text_entry(text: *mut TEXTENTRY_STATE, input: &InputSession) -> 
     (*text).CacheStr =
         HMalloc(((*text).MaxSize as usize).wrapping_mul(mem::size_of::<UNICODE>())).cast();
     EnterCharacterMode();
-    DoInput(1, &mut |cx: &mut Cx<'_>, io: &mut Io<'_>| {
-        text_entry_frame(text, cx, io, input) != 0
-    });
+    run();
     ExitCharacterMode();
     if !(*text).CacheStr.is_null() {
         HFree((*text).CacheStr.cast());

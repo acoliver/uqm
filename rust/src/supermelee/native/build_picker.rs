@@ -29,120 +29,125 @@ fn navigate(ship: u32, left: bool, right: bool, up: bool, down: bool) -> u32 {
 }
 
 #[cfg(not(test))]
-pub(super) mod live {
+pub(crate) mod live {
     use super::navigate;
-    use crate::engine::Kernel as KernelOwner;
-    use crate::front_end::fmv::DoShipSpin;
-    use crate::graphics::{drawable_abi, geometry_ffi, native_abi};
+    use crate::graphics::{
+        context_abi::{ContextFrame, ContextLease},
+        drawable_abi::{DrawableLease, LoadedDrawable},
+        native_abi as render,
+    };
+    use crate::ships::master_native::ShipChoice;
     use crate::ships::native::abi::*;
-    use std::{mem, ptr};
+    use crate::supermelee::native::menu::live::drawing::{draw_ship_strings, flash_selection};
+    use crate::supermelee::session::MeleeSession;
+    use std::{ptr, ptr::NonNull};
 
-    static mut BUILD_PICK_FRAME: FRAME = ptr::null_mut();
-
-    unsafe fn hot(frame: FRAME, x: i16, y: i16) {
-        drawable_abi::SetFrameHot(frame.cast(), native_abi::HOT_SPOT { x, y });
-    }
-    unsafe fn frame_rect(frame: FRAME) -> RECT {
-        let mut rect = mem::zeroed();
-        GetFrameRect(frame, &mut rect);
-        rect
+    pub(crate) struct BuildPicker {
+        drawable: LoadedDrawable,
+        screen: ContextLease,
     }
 
-    /// # Safety
-    /// Game thread, with the melee graphics and master ship list loaded.
-    pub unsafe fn build_build_pick_frame(catalog: &[crate::ships::master_native::ShipChoice]) {
-        let old = SetContext(KernelOwner::current().read(|owner| owner.off_screen_context));
-        let mut stamp = STAMP {
-            origin: POINT { x: 0, y: 0 },
-            frame: SetAbsFrameIndex(MeleeFrame, 27),
-        };
-        let rect = frame_rect(stamp.frame);
-        BUILD_PICK_FRAME = CaptureDrawable(
-            drawable_abi::CreateDrawable(2, rect.extent.width, rect.extent.height, 1).cast(),
-        );
-        drawable_abi::SetContextFGFrame(BUILD_PICK_FRAME.cast());
-        hot(stamp.frame, 0, 0);
-        DrawStamp(&mut stamp);
-        for ship in 0..25 {
-            draw_pick_icon(catalog, ship, true);
+    impl BuildPicker {
+        pub fn rect(&self) -> RECT {
+            let bounds = self.drawable.lease().frame_rect(0);
+            RECT {
+                corner: POINT {
+                    x: bounds.corner.x,
+                    y: bounds.corner.y,
+                },
+                extent: EXTENT {
+                    width: bounds.extent.width,
+                    height: bounds.extent.height,
+                },
+            }
         }
-        SetContext(old);
-    }
-    /// # Safety
-    /// Game thread; the popup drawable must not be referenced elsewhere.
-    pub unsafe extern "C" fn destroy_build_pick_frame() {
-        DestroyDrawable(ReleaseDrawable(BUILD_PICK_FRAME));
-        BUILD_PICK_FRAME = ptr::null_mut();
-    }
-    /// # Safety
-    /// Game thread, with the popup drawable and ship icons loaded.
-    pub(crate) unsafe fn draw_pick_icon(
-        catalog: &[crate::ships::master_native::ShipChoice],
-        ship: MeleeShip,
-        draw: bool,
-    ) {
-        let rect = frame_rect(BUILD_PICK_FRAME);
-        let mut stamp = STAMP {
-            origin: POINT {
+
+        fn draw_icon_in(
+            context: &ContextLease,
+            frame: &DrawableLease,
+            catalog: &[ShipChoice],
+            ship: u32,
+            draw: bool,
+        ) {
+            let rect = frame.frame_rect(0);
+            let origin = render::POINT {
                 x: rect.corner.x + 20 + (ship % 5) as i16 * 18,
                 y: rect.corner.y + 5 + (ship / 5) as i16 * 18,
-            },
-            frame: catalog
+            };
+            let ship = catalog
                 .get(ship as usize)
-                .map_or(ptr::null_mut(), |ship| ship.icon.raw().cast()),
-        };
-        if draw {
-            DrawStamp(&mut stamp);
-        } else {
-            let old = SetContextForeGroundColor(Color {
-                r: 0,
-                g: 0,
-                b: 0,
-                a: 255,
-            });
-            DrawFilledStamp(&mut stamp);
-            SetContextForeGroundColor(old);
+                .unwrap_or_else(|| panic!("popup ship {ship}"));
+            let icon = ContextFrame::retain(NonNull::new(ship.icon.raw().cast()));
+            if draw {
+                context.draw_stamp(&icon, origin);
+            } else {
+                context.draw_filled_stamp_preserving_color(
+                    &icon,
+                    origin,
+                    render::Color {
+                        r: 0,
+                        g: 0,
+                        b: 0,
+                        a: 255,
+                    },
+                );
+            }
+        }
+
+        pub fn draw_icon(&self, catalog: &[ShipChoice], ship: u32, draw: bool) {
+            Self::draw_icon_in(&self.screen, &self.drawable.lease(), catalog, ship, draw);
+        }
+
+        fn draw_frame(&self, side: u16) {
+            let frame = self.drawable.lease().context_frame(0);
+            let rect = frame.rect();
+            let (x, y) = crate::supermelee::native::menu::rules::popup_hotspot(
+                side,
+                rect.extent.width,
+                rect.extent.height,
+            );
+            frame.replace_hotspot(render::POINT { x, y });
+            self.screen.draw_stamp(&frame, render::POINT { x: 0, y: 0 });
         }
     }
-    /// # Safety
-    /// State must be the active fleet editor on the game thread.
-    pub unsafe extern "C" fn draw_pick_frame(state: *mut MELEE_STATE) {
-        let mut first: RECT = mem::zeroed();
-        let mut last: RECT = mem::zeroed();
-        let mut ships: RECT = mem::zeroed();
-        GetShipBox(&mut first, 0, 0, 0);
-        GetShipBox(&mut last, 1, 1, 6);
-        geometry_ffi::BoxUnion(
-            (&mut first as *mut RECT).cast(),
-            (&mut last as *mut RECT).cast(),
-            (&mut ships as *mut RECT).cast(),
-        );
-        let mut stamp = STAMP {
-            origin: POINT { x: 0, y: 0 },
-            frame: SetAbsFrameIndex(BUILD_PICK_FRAME, 0),
-        };
-        let rect = frame_rect(stamp.frame);
-        let x = -(ships.corner.x + ((ships.extent.width - rect.extent.width) >> 1));
-        let y = if (*state).side != 0 {
-            -ships.corner.y
-        } else {
-            -(ships.corner.y + ships.extent.height - rect.extent.height)
-        };
-        hot(stamp.frame, x, y);
-        DrawStamp(&mut stamp);
-        DrawMeleeShipStrings(state, (*state).current_ship);
-    }
-    /// # Safety
-    /// Rect must be writable and the popup must be initialized.
-    pub unsafe extern "C" fn get_build_pick_frame_rect(rect: *mut RECT) {
-        GetFrameRect(BUILD_PICK_FRAME, rect);
+
+    pub fn build_build_pick_frame(
+        context: ContextLease,
+        screen: ContextLease,
+        source: ContextFrame,
+        catalog: &[ShipChoice],
+    ) -> BuildPicker {
+        let rect = source.rect();
+        let drawable = LoadedDrawable::create(2, rect.extent.width, rect.extent.height, 1)
+            .unwrap_or_else(|| panic!("popup drawable allocation"));
+        let frame = drawable.lease();
+        context.draw_batch(|| {
+            context.set_frame(frame.context_frame(0));
+            source.replace_hotspot(render::POINT { x: 0, y: 0 });
+            context.draw_stamp(&source, render::POINT { x: 0, y: 0 });
+            for ship in 0..25 {
+                BuildPicker::draw_icon_in(&context, &frame, catalog, ship, true);
+            }
+        });
+        BuildPicker { drawable, screen }
     }
 
-    unsafe fn pick(state: *mut MELEE_STATE, input: &crate::engine::input::InputSession) -> u32 {
+    /// # Safety
+    /// State must be the active fleet editor on the game thread.
+    pub unsafe fn draw_pick_frame(state: &MeleeSession) {
+        state.build_picker().draw_frame(state.side);
+        draw_ship_strings(state, state.current_ship);
+    }
+
+    unsafe fn pick(
+        state: *mut MeleeSession,
+        cx: &mut crate::engine::battle::Cx<'_>,
+        io: &mut crate::engine::observe::Io<'_>,
+        input: &crate::engine::input::InputSession,
+    ) -> u32 {
         let time = GetTimeCounter();
         input.set_paused(false);
-        if crate::engine::World::current().read(|world| world.activity()) & CHECK_ABORT as u16 != 0
-        {
+        if cx.world.activity() & CHECK_ABORT as u16 != 0 {
             (*state).build_pick_confirmed = 0;
             return 0;
         }
@@ -154,7 +159,12 @@ pub(super) mod live {
         }
         let current_ship = (*state).current_ship;
         if keys[KEY_MENU_SPECIAL as usize] != 0 && current_ship != 255 {
-            DoShipSpin(current_ship as u16, ptr::null_mut());
+            crate::front_end::fmv::runtime::do_ship_spin(
+                cx,
+                io,
+                current_ship as u16,
+                ptr::null_mut(),
+            );
             return 1;
         }
         let selected = navigate(
@@ -166,36 +176,43 @@ pub(super) mod live {
         );
         if selected != current_ship {
             let catalog = &(*state).catalog;
-            draw_pick_icon(catalog, current_ship, true);
+            (*state)
+                .build_picker()
+                .draw_icon(catalog, current_ship, true);
             (*state).current_ship = selected;
-            DrawMeleeShipStrings(state, selected);
+            cx.with_legacy(|| draw_ship_strings(&*state, selected));
         }
-        Melee_flashSelection(state);
-        SleepThreadUntil(time.wrapping_add(840 / 30));
+        cx.with_legacy(|| {
+            flash_selection(&mut *state);
+            SleepThreadUntil(time.wrapping_add(840 / 30));
+        });
         1
     }
     /// # Safety
     /// State must be the active fleet editor on the game thread.
     pub unsafe fn build_pick_ship(
+        cx: &mut crate::engine::battle::Cx<'_>,
+        io: &mut crate::engine::observe::Io<'_>,
         input: &crate::engine::input::InputSession,
-        state: *mut MELEE_STATE,
+        state: *mut MeleeSession,
     ) -> bool {
-        FlushInput(input);
+        cx.with_legacy(|| FlushInput(input));
         if (*state).current_ship == 255 {
             (*state).current_ship = 0;
         }
-        draw_pick_frame(state);
-        (*state).phase = crate::supermelee::netplay::session::MenuPhase::Building;
-        crate::app::bridge::enter(|cx| {
-            let runtime = cx.kernel.input_runtime();
-            let mut observer = runtime.observer();
-            let mut io = crate::engine::observe::Io {
-                observer: &mut *observer,
-            };
-            cx.run_input(&mut io, false, |cx, _| {
-                cx.with_legacy(|| pick(state, input) != 0)
-            });
-        });
+        cx.with_legacy(|| draw_pick_frame(&*state));
+        (*state).phase = crate::supermelee::session::MenuPhase::Building;
+        {
+            let mut frame = crate::supermelee::native::menu::live::admission::SessionFrame::new(
+                &mut *state,
+                |state: &mut MeleeSession,
+                 cx: &mut crate::engine::battle::Cx<'_>,
+                 io: &mut crate::engine::observe::Io<'_>| {
+                    pick(state, cx, io, input) != 0
+                },
+            );
+            cx.run_input_frame(io, false, &mut frame);
+        }
         (*state).build_pick_confirmed != 0
     }
 }

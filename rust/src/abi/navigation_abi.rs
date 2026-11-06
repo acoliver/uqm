@@ -3667,14 +3667,6 @@ pub use crate::game_init::kernel_abi::uninitIO;
 #[cfg(not(test))]
 pub use crate::game_init::kernel_abi::UninitPlayerInput;
 
-#[cfg(not(test))]
-pub use crate::game_init::kernel_abi::ClearPlayerInputAll;
-#[cfg(not(test))]
-pub use crate::game_init::kernel_abi::SetPlayerInputAll;
-#[cfg(test)]
-extern "C" {
-    pub fn ClearPlayerInputAll();
-}
 
 #[cfg(not(test))]
 pub use crate::navigation::hyper_data::LoadHyperspace;
@@ -3987,7 +3979,6 @@ pub struct crc_State {
 pub const NetplaySide_NetplaySide_local: NetplaySide = 0;
 pub const NetplaySide_NetplaySide_remote: NetplaySide = 1;
 pub type NetplaySide = ::std::os::raw::c_uint;
-pub type MELEE_STATE = melee_state;
 pub type MELEE_OPTIONS = BYTE;
 
 
@@ -4028,28 +4019,13 @@ pub const MeleeShip_MELEE_ZOQFOTPIK: MeleeShip = 24;
 pub const MeleeShip_MELEE_UNSET: MeleeShip = 254;
 pub const MeleeShip_MELEE_NONE: MeleeShip = 255;
 pub type MeleeShip = ::std::os::raw::c_uint;
-pub use crate::ships::native::abi::melee_state;
 
 #[cfg(not(test))]
 pub use crate::supermelee::native::menu::live::do_melee;
 
-#[cfg(not(test))]
-pub use crate::supermelee::native::menu::live::drawing::DrawMeleeIcon;
 
-#[cfg(not(test))]
-pub use crate::supermelee::native::menu::live::drawing::GetShipBox;
 
-#[cfg(not(test))]
-pub use crate::supermelee::native::menu::live::drawing::RepairMeleeFrame;
 
-#[cfg(not(test))]
-pub use crate::supermelee::native::menu::live::drawing::DrawMeleeShipStrings;
-extern "C" {
-    pub static mut MeleeFrame: FRAME;
-}
-
-#[cfg(not(test))]
-pub use crate::supermelee::native::menu::live::drawing::Melee_flashSelection;
 
 
 
@@ -4131,8 +4107,6 @@ pub use crate::mainloop::input_abi::live::SetMenuSounds;
 #[cfg(not(test))]
 pub use crate::mainloop::input_abi::live::GetMenuSounds;
 
-#[cfg(not(test))]
-pub use crate::battle::sounds::engine::PlayMenuSound;
 
 pub const TALK_COMMANDER: _bindgen_ty_29 = 0;
 pub const OUTFIT_STARSHIP: _bindgen_ty_29 = 1;

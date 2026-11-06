@@ -2,12 +2,12 @@
 use super::*;
 use crate::supermelee::types::MeleeShip as SetupShip;
 
-pub(super) unsafe fn view_name(state: *mut MELEE_STATE, side: u16) {
+pub(super) unsafe fn view_name(state: *mut MeleeSession, side: u16) {
     if (*state).melee_started == 0 {
-        name(state, side, 4, ptr::null());
+        name(&*state, side, 4, ptr::null());
     }
 }
-unsafe fn change_ship(state: *mut MELEE_STATE, side: u16, index: u16, ship: u32) -> bool {
+unsafe fn change_ship(state: *mut MeleeSession, side: u16, index: u16, ship: u32) -> bool {
     let ship_kind = SetupShip::from_u8(
         u8::try_from(ship).unwrap_or_else(|error| panic!("melee ship width: {error}")),
     )
@@ -24,24 +24,23 @@ unsafe fn change_ship(state: *mut MELEE_STATE, side: u16, index: u16, ship: u32)
     }
     if menu.melee_started == 0 {
         if ship == 255 {
-            let mut r = mem::zeroed();
-            GetShipBox(&mut r, side, index / 7, index % 7);
-            RepairMeleeFrame(&r);
+            let r = slot_rect(side, index / 7, index % 7);
+            repair_frame(&*state, &r);
         } else {
             ship_box(&menu.catalog, side, index as usize, ship, false);
         }
-        worth(state, side, 4);
+        worth(&*state, side, 4);
     }
     if (*state).melee_option == 10
         && (*state).side == side
         && index == ((*state).row * 7 + (*state).col)
     {
         (*state).current_ship = ship;
-        DrawMeleeShipStrings(state, ship);
+        draw_ship_strings(&*state, ship);
     }
     true
 }
-unsafe fn change_name(state: *mut MELEE_STATE, side: u16, value: &std::ffi::CStr) -> bool {
+unsafe fn change_name(state: *mut MeleeSession, side: u16, value: &std::ffi::CStr) -> bool {
     if !(*state).melee_setup.teams[side as usize].rename(value) {
         return false;
     }
@@ -52,7 +51,12 @@ unsafe fn change_name(state: *mut MELEE_STATE, side: u16, value: &std::ffi::CStr
 }
 /// # Safety
 /// The menu and its graphics must be live on the game thread.
-pub unsafe fn local_change_ship(state: *mut MELEE_STATE, side: u16, index: u16, ship: u32) -> bool {
+pub unsafe fn local_change_ship(
+    state: *mut MeleeSession,
+    side: u16,
+    index: u16,
+    ship: u32,
+) -> bool {
     if !change_ship(state, side, index, ship) {
         return false;
     }
@@ -66,7 +70,7 @@ pub unsafe fn local_change_ship(state: *mut MELEE_STATE, side: u16, index: u16, 
 /// # Safety
 /// The menu and its graphics must be live on the game thread.
 pub unsafe fn local_change_team_name(
-    state: *mut MELEE_STATE,
+    state: *mut MeleeSession,
     side: u16,
     value: &std::ffi::CStr,
 ) -> bool {
@@ -82,7 +86,7 @@ pub unsafe fn local_change_team_name(
 /// # Safety
 /// The menu and its graphics must be live on the game thread.
 pub unsafe fn local_change_team(
-    state: *mut MELEE_STATE,
+    state: *mut MeleeSession,
     side: usize,
     team: &crate::supermelee::setup::team::MeleeTeam,
 ) -> bool {
@@ -95,7 +99,7 @@ pub unsafe fn local_change_team(
 }
 /// # Safety
 /// The menu and its graphics must be live on the game thread.
-pub(super) unsafe fn bootstrap_sync_team(state: *mut MELEE_STATE, side: usize) {
+pub(super) unsafe fn bootstrap_sync_team(state: *mut MeleeSession, side: usize) {
     netplay_notify_all_set_fleet(&*state, side);
     let setup = &mut (*state).melee_setup;
     for index in 0..14 {
@@ -109,7 +113,7 @@ pub(super) unsafe fn bootstrap_sync_team(state: *mut MELEE_STATE, side: usize) {
 /// # Safety
 /// The menu and its graphics must be live on the game thread.
 pub(super) unsafe fn remote_ship(
-    state: *mut MELEE_STATE,
+    state: *mut MeleeSession,
     remote: usize,
     side: u16,
     index: u16,
@@ -135,7 +139,7 @@ pub(super) unsafe fn remote_ship(
 /// # Safety
 /// The menu and its graphics must be live on the game thread.
 pub(super) unsafe fn remote_name(
-    state: *mut MELEE_STATE,
+    state: *mut MeleeSession,
     remote: usize,
     side: u16,
     value: &std::ffi::CStr,
@@ -158,116 +162,68 @@ pub(super) unsafe fn remote_name(
         (*state).melee_setup.sent[side as usize].set_name(None);
     }
 }
-pub(super) unsafe fn confirmation_cancelled(state: *mut MELEE_STATE, side: u16) {
-    status(game_string(
-        NETMELEE_STRING_BASE as i32 + if side == 0 { 16 } else { 17 },
-    ));
-    if (*state).phase == crate::supermelee::netplay::session::MenuPhase::Confirm {
-        (*state).phase = crate::supermelee::netplay::session::MenuPhase::Menu;
+pub(super) unsafe fn confirmation_cancelled(state: *mut MeleeSession, side: u16) {
+    status(
+        &*state,
+        game_string(NETMELEE_STRING_BASE as i32 + if side == 0 { 16 } else { 17 }),
+    );
+    if (*state).phase == crate::supermelee::session::MenuPhase::Confirm {
+        (*state).phase = crate::supermelee::session::MenuPhase::Menu;
     }
 }
-unsafe fn feedback(
-    input: &crate::engine::input::InputSession,
-    battle_active: bool,
-    value: *const c_char,
-    popup: bool,
-) {
-    if !battle_active && !popup {
-        status(value);
-    } else {
-        do_popup_window(input, value);
-    }
-}
-
-pub(crate) fn protocol_feedback(
-    input: &crate::engine::input::InputSession,
-    event: crate::supermelee::netplay::Event,
-) {
-    use crate::supermelee::netplay::Effect;
-    // SAFETY: protocol dispatch runs synchronously in the live menu or its battle.
-    unsafe {
-        let index = match event.effect {
-            Effect::Connected => Some(if event.player == 0 { 8 } else { 9 }),
-            Effect::Error(_) => Some(if event.player == 0 { 10 } else { 11 }),
-            Effect::Closed => Some(if event.player == 0 { 12 } else { 13 }),
-            Effect::Abort(reason) if reason < 4 => Some(25 + reason as i32),
-            Effect::Reset { reason, remote } => {
-                reset_feedback(input, event.battle_active, reason, remote);
-                return;
-            }
-            Effect::ShipSelected => {
-                PlayMenuSound(1);
-                return;
-            }
-            Effect::Abort(_) => None,
-            _ => panic!("setup event requires the borrowed melee menu: {event:?}"),
-        };
-        if let Some(index) = index {
-            feedback(
-                input,
-                event.battle_active,
-                game_string(NETMELEE_STRING_BASE as i32 + index),
-                matches!(event.effect, Effect::Abort(_)),
-            );
-        }
-        if matches!(event.effect, Effect::Connected) {
-            PlayMenuSound(3);
-        }
-    }
-}
-
-unsafe fn reset_feedback(
-    input: &crate::engine::input::InputSession,
-    battle_active: bool,
-    reason: u32,
-    remote: bool,
-) {
-    (*P_MELEE_STATE).netplay.flush_packet_queues();
-    if reason == 2 && !remote {
-        return;
-    }
-    if reason < 3 {
-        feedback(
-            input,
-            battle_active,
-            game_string(NETMELEE_STRING_BASE as i32 + 29 + reason as i32),
-            false,
-        );
-    }
-    crate::engine::World::current()
-        .write(|world| world.set_activity(world.activity() | CHECK_ABORT as u16));
+pub(super) unsafe fn with_protocol_driver<R>(
+    state: *mut MeleeSession,
+    cx: &mut crate::engine::battle::Cx<'_>,
+    io: &mut crate::engine::observe::Io<'_>,
+    action: impl FnOnce(&mut dyn crate::engine::battle::net::ProtocolDriver) -> R,
+) -> R {
+    let mut notices = |cx: &mut crate::engine::battle::Cx<'_>,
+                       io: &mut crate::engine::observe::Io<'_>,
+                       notice| {
+        crate::supermelee::native::protocol::feedback(cx, io, notice, |cx, message| {
+            cx.with_legacy(|| status(&*state, message.as_ptr()));
+        });
+    };
+    let _ = state;
+    action(&mut crate::supermelee::native::protocol::Driver::new(
+        cx,
+        io,
+        &mut notices,
+    ))
 }
 
 pub(crate) unsafe fn apply_protocol_event(
-    state: *mut MELEE_STATE,
+    state: *mut MeleeSession,
+    cx: &mut crate::engine::battle::Cx<'_>,
+    io: &mut crate::engine::observe::Io<'_>,
     event: crate::supermelee::netplay::Event,
 ) {
     use crate::supermelee::netplay::Effect;
     match event.effect {
         Effect::ResetSentTeams => (*state).melee_setup.reset_sent(),
         Effect::Bootstrap => {
-            bootstrap_sync_team(state, event.player);
-            (*state).netplay.flush_packet_queues();
+            cx.with_legacy(|| bootstrap_sync_team(state, event.player));
+            flush_menu(state, cx, io);
         }
-        Effect::ConfirmationCancelled => confirmation_cancelled(state, event.player as u16),
-        Effect::Ship { side, index, ship } => remote_ship(state, event.player, side, index, ship),
+        Effect::ConfirmationCancelled => {
+            cx.with_legacy(|| confirmation_cancelled(state, event.player as u16))
+        }
+        Effect::Ship { side, index, ship } => {
+            cx.with_legacy(|| remote_ship(state, event.player, side, index, ship))
+        }
         Effect::TeamName { side, name } => {
             let mut terminated = name;
             terminated.push(0);
-            remote_name(
-                state,
-                event.player,
-                side,
-                std::ffi::CStr::from_bytes_until_nul(&terminated)
-                    .unwrap_or_else(|error| panic!("terminated remote name: {error}")),
-            );
+            let name = std::ffi::CStr::from_bytes_until_nul(&terminated)
+                .unwrap_or_else(|error| panic!("terminated remote name: {error}"));
+            cx.with_legacy(|| remote_name(state, event.player, side, name));
         }
         Effect::Seed(seed) => {
             crate::math::seed_random(seed);
         }
         _ => {
-            let input = (*state).netplay.controller().clone();
-            protocol_feedback(&input, event);
+            let session = (*state).netplay.clone();
+            with_protocol_driver(state, cx, io, |driver| session.effect(event, driver));
         }
     }
 }

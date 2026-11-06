@@ -27,10 +27,22 @@ operation!(uqm_reinit_race_queues() {
     for side in 0..2 { crate::engine::battle::link_queue::ships(side).reinit(); }
 });
 operation!(uqm_assign_star_planet_globals() { crate::planets::starmap::star_array = ptr::addr_of_mut!(crate::planets::tables::STARMAP_ARRAY).cast(); });
-operation!(uqm_do_popup_window_msg(runtime: &crate::engine::input::InputSession, strings: STRING, id: u16) {
-    let string = crate::strings::string_table::SetAbsStringTableIndex(strings, (MAINMENU_STRING_BASE as u16).wrapping_add(id));
-    crate::ui::confirm::do_popup_window(runtime, crate::strings::string_table::GetStringAddress(string));
-});
+pub fn uqm_do_popup_window_msg(
+    cx: &mut crate::engine::battle::Cx<'_>,
+    io: &mut crate::engine::observe::Io<'_>,
+    id: u16,
+) {
+    let strings = cx.kernel.game_strings;
+    // SAFETY: the retained Kernel owns this table during the bounded copy.
+    let message = cx.with_legacy(|| unsafe {
+        let string = crate::strings::string_table::SetAbsStringTableIndex(
+            strings.cast(),
+            (MAINMENU_STRING_BASE as u16).wrapping_add(id),
+        );
+        std::ffi::CStr::from_ptr(crate::strings::string_table::GetStringAddress(string)).to_owned()
+    });
+    crate::ui::confirm::do_popup_window(cx, io, &message);
+}
 operation!(uqm_get_menu_cur_frame(menu: *mut MENU_STATE) -> FRAME { (*menu).CurFrame });
 operation!(uqm_set_menu_flash_context(menu: *mut MENU_STATE, context: *mut FlashContext) { (*menu).flashContext = context; });
 operation!(uqm_set_menu_initialized(menu: *mut MENU_STATE, value: i16) { (*menu).Initialized = value; });

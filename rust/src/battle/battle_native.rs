@@ -93,10 +93,8 @@ fn initialize_battle(
 ) -> (std::rc::Rc<dyn crate::engine::battle::net::BattleNet>, bool) {
     cx.b.initialize(cx.kernel);
     let had_net = cx.b.net.is_some();
-    let input = cx.kernel.input_runtime().input().clone();
-    cx.b.net.get_or_insert_with(|| {
-        crate::supermelee::netplay::NetplaySession::with_input(input).battle_net()
-    });
+    cx.b.net
+        .get_or_insert_with(|| crate::supermelee::netplay::NetplaySession::default().battle_net());
     let net = cx.b.network();
     for side in 0..2 {
         if cx.kernel.player_control[side] & engine::NETWORK_CONTROL != 0 {
@@ -186,7 +184,7 @@ pub(crate) mod engine {
         net: &dyn crate::engine::battle::net::BattleNet,
         order: [usize; 2],
     ) {
-        net.poll();
+        crate::supermelee::native::protocol::with_battle_driver(cx, io, |driver| net.poll(driver));
         let can_run = run_away_allowed(cx.world);
         for side in order {
             let mut next = cx.first_ship(side);
@@ -208,12 +206,22 @@ pub(crate) mod engine {
                                 Some(ship),
                             )
                         }
-                        crate::engine::battle::input::InputSource::Network(_) => context
-                            .network()
-                            .remote_input(side, &cx.world.activity_control()),
+                        crate::engine::battle::input::InputSource::Network(_) => {
+                            let activity = cx.world.activity_control();
+                            crate::supermelee::native::protocol::with_battle_driver(
+                                cx,
+                                io,
+                                |driver| context.network().remote_input(side, &activity, driver),
+                            )
+                        }
                     };
                     if cx.kernel.player_control[side] & NETWORK_CONTROL == 0 {
-                        input = net.local_input(side, input, &cx.world.activity_control());
+                        let activity = cx.world.activity_control();
+                        input = crate::supermelee::native::protocol::with_battle_driver(
+                            cx,
+                            io,
+                            |driver| net.local_input(side, input, &activity, driver),
+                        );
                     }
                     cx.ship_state_mut(ship).input =
                         ship_input(input, cx.race_stats(ship).ship_info.crew_level);
@@ -227,7 +235,7 @@ pub(crate) mod engine {
                 }
             }
         }
-        net.flush();
+        crate::supermelee::native::protocol::with_battle_driver(cx, io, |driver| net.flush(driver));
         if cx.world.activity() & (CHECK_LOAD | CHECK_ABORT) as u16 != 0 {
             cx.world
                 .set_activity(cx.world.activity() & !(IN_BATTLE as u16));
@@ -276,7 +284,9 @@ pub(crate) mod engine {
             let mut state = mem::zeroed();
             crc_init(&mut state);
             cx.with_legacy(|| crc_processState(&mut state));
-            net.record_checksum(frame, crc_finish(&state));
+            crate::supermelee::native::protocol::with_battle_driver(cx, io, |driver| {
+                net.record_checksum(frame, crc_finish(&state), driver)
+            });
         }
         process_input(
             cx,
@@ -293,7 +303,9 @@ pub(crate) mod engine {
             {
                 cx.world
                     .set_activity(cx.world.activity() | CHECK_ABORT as u16);
-                cx.with_legacy(|| net.reset(NetplayResetReason_ResetReason_syncLoss));
+                crate::supermelee::native::protocol::with_battle_driver(cx, io, |driver| {
+                    net.reset(NetplayResetReason_ResetReason_syncLoss, driver)
+                });
             }
         }
         let mut rect: RECT = mem::zeroed();
@@ -412,7 +424,9 @@ pub(crate) mod engine {
             } else {
                 battle_song(cx.kernel, cx.world, true);
                 net.init_end_frames();
-                if !cx.negotiate_battle(net.as_ref(), NetState_NetState_inBattle) {
+                if !crate::supermelee::native::protocol::with_battle_driver(cx, io, |driver| {
+                    net.negotiate(true, NetState_NetState_inBattle, driver)
+                }) {
                     cx.world
                         .set_activity(cx.world.activity() | CHECK_ABORT as u16);
                 } else {
@@ -424,8 +438,8 @@ pub(crate) mod engine {
             }
             if cx.world.activity() as u8 == SUPER_MELEE as u8 {
                 if cx.world.activity() & CHECK_ABORT as u16 != 0 {
-                    net.wait_reset(NetState_NetState_inSetup, &mut |poll| {
-                        cx.protocol_wait(poll)
+                    crate::supermelee::native::protocol::with_battle_driver(cx, io, |driver| {
+                        net.wait_reset(NetState_NetState_inSetup, driver)
                     });
                     cx.world
                         .set_activity(cx.world.activity() & !(CHECK_ABORT as u16));

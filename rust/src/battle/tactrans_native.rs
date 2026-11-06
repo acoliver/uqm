@@ -189,11 +189,19 @@ pub(crate) mod engine {
         if ditty_playing(cx.kernel) {
             return false;
         }
-        cx.kernel.player_input.clone().iter().all(|input| {
-            input
-                .as_ref()
-                .unwrap_or_else(|| panic!("missing player input"))
-                .battle_end_ready(&mut |poll| cx.protocol_wait(poll))
+        let inputs = cx.kernel.player_input.clone();
+        let runtime = cx.kernel.input_runtime();
+        let mut observer = runtime.observer();
+        let mut io = crate::engine::observe::Io {
+            observer: observer.as_mut(),
+        };
+        crate::supermelee::native::protocol::with_battle_driver(cx, &mut io, |driver| {
+            inputs.iter().all(|input| {
+                input
+                    .as_ref()
+                    .unwrap_or_else(|| panic!("missing player input"))
+                    .battle_end_ready(driver)
+            })
         })
     }
 
