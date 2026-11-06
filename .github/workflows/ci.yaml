@@ -2,7 +2,7 @@ name: CI
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, labeled, unlabeled]
+    types: [opened, synchronize, reopened, labeled, unlabeled, ready_for_review]
   push:
     branches: [main]
   schedule:
@@ -28,6 +28,12 @@ jobs:
       BASE: ${{ github.base_ref }}
     steps:
       - uses: actions/checkout@v4
+      - name: Free unused SDK space for instrumented builds and replay artifacts
+        working-directory: .
+        run: |
+          df -h /
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc
+          df -h /
       - if: github.event_name == 'pull_request'
         run: git fetch --no-tags --depth=1 origin "+refs/heads/$BASE:refs/remotes/origin/$BASE"
       - run: echo "BASE_ARG=${BASE:+--base origin/$BASE}" >> "$GITHUB_ENV"
@@ -81,6 +87,7 @@ jobs:
 
   coverage:
     runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     defaults:
       run:
         working-directory: rust
@@ -114,6 +121,7 @@ jobs:
   game-build:
     name: Game build (${{ matrix.target }})
     runs-on: ${{ matrix.runner }}
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     strategy:
       fail-fast: false
       matrix:
@@ -229,7 +237,7 @@ jobs:
   parity-check:
     name: Parity check (Linux, full goldens)
     needs: parity-policy
-    if: github.event_name != 'schedule'
+    if: github.event_name != 'schedule' && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     defaults:
@@ -275,7 +283,7 @@ jobs:
 
   parity:
     needs: parity-policy
-    if: needs.parity-policy.outputs.record == 'true'
+    if: needs.parity-policy.outputs.record == 'true' && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
     name: Parity (${{ matrix.platform }})
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 360
@@ -369,7 +377,7 @@ jobs:
   parity-platform-compare:
     name: Compare macOS, Ubuntu and loaded jitter parity payloads
     needs: [parity-policy, parity]
-    if: needs.parity-policy.outputs.record == 'true'
+    if: needs.parity-policy.outputs.record == 'true' && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/download-artifact@v4
@@ -385,6 +393,7 @@ jobs:
   failure-scenarios:
     name: Failure scenario (${{ matrix.scenario }})
     runs-on: macos-15
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     timeout-minutes: 25
     strategy:
       fail-fast: false
@@ -418,6 +427,7 @@ jobs:
 
   release-tools:
     runs-on: ubuntu-24.04
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
