@@ -23,6 +23,9 @@ mod flagship_stats;
 pub mod outfit;
 mod outfit_state;
 pub mod shipyard;
+#[cfg(test)]
+#[path = "shipyard/catalog_tests.rs"]
+mod shipyard_catalog_tests;
 #[path = "shipyard/hangar.rs"]
 mod shipyard_hangar;
 pub(crate) mod shipyard_layout;

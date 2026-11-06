@@ -1,14 +1,14 @@
 //! Exercise the private legacy roster helpers with a real published campaign owner.
 
-#[path = "../src/ui/shipyard/catalog.rs"]
+#[path = "catalog.rs"]
 mod catalog;
 
-use uqm_rust::engine::{
+use crate::engine::{
     battle::link_queue::LinkQueue,
     world::queues::{Fleet, FleetInfo},
     Game, World,
 };
-use uqm_rust::navigation::abi::{BYTE, COUNT, GOOD_GUY};
+use crate::navigation::abi::{BYTE, COUNT, GOOD_GUY};
 
 fn avail_race_queue<R>(read: impl FnOnce(&LinkQueue<'_, Fleet, 24>) -> R) -> R {
     World::current().read(|world| read(&world.avail_races_ref()))
@@ -32,7 +32,7 @@ fn with_roster(states: &[u16], check: impl FnOnce()) {
         }
     }
     // SAFETY: this serialized fixture retains the unique game for the full handoff.
-    unsafe { uqm_rust::app::bridge::with_game(&mut game, check) };
+    unsafe { crate::app::bridge::with_game(&mut game, check) };
 }
 
 #[test]
