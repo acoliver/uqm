@@ -19,7 +19,7 @@ struct ControllerState {
 }
 
 pub type InputFrameHook =
-    unsafe fn(&mut dyn FnMut(crate::observe::CheckpointView<'_>), &InputControls);
+    unsafe fn(&mut dyn FnMut(crate::observe_port::CheckpointView<'_>), &InputControls);
 
 /// Clones retain the same allocation; access stays on the provider's owner thread.
 #[derive(Clone)]

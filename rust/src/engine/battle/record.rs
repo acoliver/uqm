@@ -569,6 +569,7 @@ impl RaceDescriptor {
 }
 
 use std::ptr;
+#[cfg(not(test))]
 pub(crate) fn ship_queue(
     side: usize,
 ) -> std::ptr::NonNull<crate::engine::battle::link_queue::RacePool> {

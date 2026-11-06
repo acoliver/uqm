@@ -755,30 +755,6 @@ pub mod schema;
 
 pub(crate) mod lifecycle;
 
-/// The running battle or flight's shared queues, borrowed on the game thread.
-#[cfg(not(test))]
-pub(crate) mod live_queues {
-
-    /// `&race_q[player]`, the `STARSHIP` queue of one side (`RPG_PLAYER_NUM` is
-    /// the human player's).
-    ///
-    /// # Safety
-    /// Game thread only. The caller may read the queue only while no other code is
-    /// changing it.
-    pub unsafe fn player_ships(player: usize) -> *const super::super::link_queue::RacePool {
-        super::super::record::ship_queue(player).as_ptr()
-    }
-
-    /// The Kernel-owned element pool, retained for this game-thread call.
-    ///
-    /// The caller may read through this pointer only on the game thread while no
-    /// other code is changing the queue.
-    pub unsafe fn display_list() -> *const super::super::ElementTable {
-        // SAFETY: the caller retains the published, game-thread-owned Kernel.
-        unsafe { &raw const (**super::super::record::Kernel::current()).elements }
-    }
-}
-
 impl Cx<'_> {
     pub(crate) fn display_pool(&mut self) -> &mut super::display::DisplayPool {
         &mut self.kernel.display
