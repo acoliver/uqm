@@ -21,7 +21,6 @@ fn next_element(current: u8, back: bool, forward: bool) -> u8 {
 #[cfg(not(test))]
 pub(crate) mod live {
     use super::next_element;
-    use crate::battle::c_bridge::SleepThread;
     use crate::c_bindings::controller_input::*;
     use crate::comm::locdata::{CColor, CPoint, CRect};
     use crate::engine::{battle::Cx, observe::Io};
@@ -39,8 +38,6 @@ pub(crate) mod live {
     use crate::ui::util::live::DrawStarConBox;
 
     use crate::mainloop::input_abi::live::SetMenuSounds;
-
-    use crate::battle::sounds::engine::PlayMenuSound;
 
     use crate::ui::sis::ClearSISRect;
 
@@ -217,23 +214,26 @@ pub(crate) mod live {
         current: u8,
     }
 
-    unsafe fn discard(input: &crate::engine::input::InputSession, menu: &mut Menu) -> i32 {
+    unsafe fn discard(
+        cx: &mut Cx<'_>,
+        input: &crate::engine::input::InputSession,
+        menu: &mut Menu,
+    ) -> i32 {
         let pulse = input.pulsed();
-        if crate::engine::World::current().read(|world| world.activity()) & (1 << 14) != 0
-            || pulse.menu[KEY_MENU_CANCEL as usize] != 0
-        {
+        if cx.world.activity() & (1 << 14) != 0 || pulse.menu[KEY_MENU_CANCEL as usize] != 0 {
             return 0;
         }
         if pulse.menu[KEY_MENU_SELECT as usize] != 0 {
-            let amount =
-                &mut (**WorldFields::current()).flagship.element_amounts[usize::from(menu.current)];
+            let amount = &mut cx.world.data.flagship.element_amounts[usize::from(menu.current)];
             if *amount != 0 {
                 *amount -= 1;
-                DrawCargoStrings(menu.current, menu.current);
-                (**WorldFields::current()).flagship.total_element_mass -= 1;
-                ShowRemainingCapacity();
+                // SAFETY: the cargo menu retains the initialized campaign display.
+                cx.with_legacy(|| DrawCargoStrings(menu.current, menu.current));
+                cx.world.data.flagship.total_element_mass -= 1;
+                // SAFETY: the cargo menu retains the initialized capacity display.
+                cx.with_legacy(|| ShowRemainingCapacity());
             } else {
-                PlayMenuSound(2);
+                crate::ui::settings::play_menu_sound(cx.kernel, cx.world, 2);
             }
         } else {
             let next = next_element(
@@ -242,12 +242,16 @@ pub(crate) mod live {
                 pulse.menu[KEY_MENU_DOWN as usize] != 0 || pulse.menu[KEY_MENU_RIGHT as usize] != 0,
             );
             if next != menu.current {
-                DrawCargoStrings(menu.current, next);
-                description(next);
+                // SAFETY: the cargo menu retains its selected element and display resources.
+                cx.with_legacy(|| {
+                    DrawCargoStrings(menu.current, next);
+                    description(next);
+                });
                 menu.current = next;
             }
         }
-        SleepThread(840 / 30);
+        // SAFETY: the admitted menu keeps initialized game-thread pacing callbacks live.
+        cx.with_legacy(|| crate::battle::c_bridge::SleepThread(840 / 30));
         1
     }
 
@@ -262,9 +266,7 @@ pub(crate) mod live {
             description(0);
             SetMenuSounds(input, 15, 16);
         });
-        cx.run_input(io, true, |cx, _| {
-            cx.with_legacy(|| discard(input, &mut menu) != 0)
-        });
+        cx.run_input(io, true, |cx, _| discard(cx, input, &mut menu) != 0);
         cx.with_legacy(|| ClearSISRect(8));
     }
 }

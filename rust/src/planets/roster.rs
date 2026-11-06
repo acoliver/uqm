@@ -76,12 +76,11 @@ fn transfer_crew(crew: &mut u16, maximum: u16, delta: i16) -> bool {
 #[cfg(not(test))]
 pub(crate) mod live {
     use super::{navigate, transfer_crew, SHIP_POS};
-    use crate::battle::c_bridge::SleepThread;
     use crate::c_bindings::controller_input::*;
     use crate::comm::locdata::CRect;
     use crate::engine::battle::link_queue::LinkId;
     use crate::engine::world::queues::Fragment;
-    use crate::engine::{battle::Cx, observe::Io, World, WorldData as WorldFields};
+    use crate::engine::{battle::Cx, observe::Io, World};
     use crate::starbase::cffi::CffiPlatform;
     use crate::starbase::gfx::{ContextId, FlashTarget, Gfx, Point, Rect, Rgba, Stamp};
     use std::ffi::{c_void, CString};
@@ -97,8 +96,6 @@ pub(crate) mod live {
     use crate::ui::sis::DeltaSISGauges;
 
     use crate::mainloop::input_abi::live::SetMenuSounds;
-
-    use crate::battle::sounds::engine::PlayMenuSound;
 
     struct Menu {
         selected: usize,
@@ -209,8 +206,25 @@ pub(crate) mod live {
         }
     }
 
-    unsafe fn modify(input: &crate::engine::input::InputSession, menu: &mut Menu) -> i32 {
-        if crate::engine::World::current().read(|world| world.activity()) & (1 << 14) != 0 {
+    unsafe fn redraw_selection(menu: &mut Menu, next: usize) {
+        let g = CffiPlatform;
+        g.batch();
+        g.set_context(ContextId::Status);
+        if next != menu.selected {
+            draw(menu, false);
+            select(menu, next);
+            menu.selected = next;
+        }
+        flash_ship(menu);
+        g.unbatch();
+    }
+
+    unsafe fn modify(
+        cx: &mut Cx<'_>,
+        input: &crate::engine::input::InputSession,
+        menu: &mut Menu,
+    ) -> i32 {
+        if cx.world.activity() & (1 << 14) != 0 {
             return 0;
         }
         let pulse = input.pulsed();
@@ -225,53 +239,51 @@ pub(crate) mod live {
             return 0;
         } else if select_key || cancel {
             menu.modifying ^= true;
-            if !menu.modifying {
-                g.set_flash(FlashTarget::Off);
-                SetMenuSounds(input, 15, 16);
-            } else {
-                g.set_context(ContextId::Status);
-                g.set_fg_color(Rgba::rgb15(31, 31, 31));
-                draw(menu, true);
-                flash_crew();
-                SetMenuSounds(input, 3, 48);
-            }
+            // SAFETY: the roster retains its selected ship, fonts and display resources.
+            cx.with_legacy(|| {
+                if !menu.modifying {
+                    g.set_flash(FlashTarget::Off);
+                    SetMenuSounds(input, 15, 16);
+                } else {
+                    g.set_context(ContextId::Status);
+                    g.set_fg_color(Rgba::rgb15(31, 31, 31));
+                    draw(menu, true);
+                    flash_crew();
+                    SetMenuSounds(input, 3, 48);
+                }
+            });
         } else if menu.modifying {
             let mut delta = 0;
             let mut failed = false;
             if up {
-                if WorldFields::current().read(|owner| owner.flagship.crew_enlisted) != 0 {
+                if cx.world.data.flagship.crew_enlisted != 0 {
                     delta = 1;
                 } else {
                     failed = true;
                 }
             } else if down {
-                if WorldFields::current().read(|owner| owner.flagship.crew_enlisted)
-                    < GetCrewPodCapacity()
-                {
+                let crew = cx.world.data.flagship.crew_enlisted;
+                let capacity = cx.with_legacy(|| GetCrewPodCapacity());
+                if crew < capacity {
                     delta = -1;
                 } else {
                     failed = true;
                 }
             }
             if delta != 0 {
-                failed = !delta_crew(menu, delta);
+                // SAFETY: the selected roster entry and its campaign fleet remain live.
+                failed = !cx.with_legacy(|| delta_crew(menu, delta));
             }
             if failed {
-                PlayMenuSound(2);
+                crate::ui::settings::play_menu_sound(cx.kernel, cx.world, 2);
             }
         } else {
             let next = navigate(&menu.positions, menu.selected, horizontal, down, up);
-            g.batch();
-            g.set_context(ContextId::Status);
-            if next != menu.selected {
-                draw(menu, false);
-                select(menu, next);
-                menu.selected = next;
-            }
-            flash_ship(menu);
-            g.unbatch();
+            // SAFETY: the roster retains all ship frames and the selected status context.
+            cx.with_legacy(|| redraw_selection(menu, next));
         }
-        SleepThread(840 / 30);
+        // SAFETY: the admitted menu keeps initialized game-thread pacing callbacks live.
+        cx.with_legacy(|| crate::battle::c_bridge::SleepThread(840 / 30));
         1
     }
 
@@ -301,9 +313,7 @@ pub(crate) mod live {
         }) else {
             return 0;
         };
-        cx.run_input(io, true, |cx, _| {
-            cx.with_legacy(|| modify(input, &mut menu) != 0)
-        });
+        cx.run_input(io, true, |cx, _| modify(cx, input, &mut menu) != 0);
         cx.with_legacy(|| {
             CffiPlatform.set_context(ContextId::Status);
             draw(&menu, false);
