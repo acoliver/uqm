@@ -134,11 +134,19 @@ fn transferred<'a>(
         .iter()
         .filter_map(|(old, new)| Some((path_identity(old)?, path_identity(new)?)))
         .collect::<BTreeMap<_, _>>();
+    // The identity may follow a lint name or target-OS discriminator.
+    let (head, identity) = key.rsplit_once('|').unwrap_or(("", key));
     for (old, new) in moves.iter().chain(&path_moves) {
-        // The identity may follow a lint name or target-OS discriminator.
-        let (head, identity) = key.rsplit_once('|').unwrap_or(("", key));
         if super::layers::prefix(identity, new) {
             let source_id = format!("{old}{}", &identity[new.len()..]);
+            let owner = moves
+                .iter()
+                .chain(&path_moves)
+                .filter(|(source, _)| super::layers::prefix(&source_id, source))
+                .max_by_key(|(source, _)| source.len());
+            if owner.is_some_and(|(owner, _)| owner != old) {
+                continue;
+            }
             let source = if head.is_empty() {
                 source_id
             } else {

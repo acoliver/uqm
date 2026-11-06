@@ -171,8 +171,7 @@ impl Baseline {
         base: &Measurement,
     ) -> Result<(), String> {
         let previous = self.remaining_moves(base);
-        let mut moves = previous.clone();
-        super::transfers::register(&mut moves, old, new)?;
+        let moves = super::transfers::compose(&previous, old, new, base)?;
         super::transfers::validate(current, base, &moves)?;
         let reverse = previous
             .iter()
@@ -180,8 +179,9 @@ impl Baseline {
             .collect();
         let original_budgets = super::budgets::relocated(&self.budget, &reverse)?;
         let measured = super::budgets::scoped_entries(base, &original_budgets);
+        let intermediate = super::transfers::reverse_step(current, old, new)?;
         let before =
-            super::transfers::limits(&measured, current, base, &previous, &original_budgets)?;
+            super::transfers::limits(&measured, &intermediate, base, &previous, &original_budgets)?;
         let after = super::transfers::limits(&measured, current, base, &moves, &original_budgets)?;
         let budget = super::budgets::relocated(&self.budget, &[(old.into(), new.into())].into())?;
         let entries = super::transfers::adjust(&self.entries, &before, &after)?;
@@ -264,6 +264,11 @@ fn transferred(
     let mut credits = Vec::new();
     for (old, new) in moves {
         if prefix_matches(id, new) {
+            let source_id = format!("{old}{}", &id[new.len()..]);
+            if super::transfers::matching(moves, &source_id).is_some_and(|(owner, _)| owner != old)
+            {
+                continue;
+            }
             let source = format!(
                 "{}|{old}{}",
                 key.rsplit_once('|').unwrap().0,

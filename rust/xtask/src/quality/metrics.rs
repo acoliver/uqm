@@ -49,7 +49,7 @@ impl Finding {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct AllowCoverage {
     pub item: String,
     pub scope: String,
@@ -57,7 +57,7 @@ pub struct AllowCoverage {
     pub lines: BTreeSet<usize>,
 }
 
-#[derive(Default, Debug)]
+#[derive(Clone, Default, Debug)]
 pub struct Measurement {
     pub findings: Vec<Finding>,
     pub declarations: Vec<Finding>,
