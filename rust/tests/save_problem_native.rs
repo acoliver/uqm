@@ -263,6 +263,79 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
                     }
                 }
             }
+            context_lease.fill_rectangle(
+                Color {
+                    r: 9,
+                    g: 17,
+                    b: 25,
+                    a: 255,
+                },
+                RECT {
+                    corner: POINT { x: 0, y: 0 },
+                    extent: EXTENT {
+                        width: 65,
+                        height: 77,
+                    },
+                },
+            );
+            let mut stats: uqm_rust::navigation::abi::SHIP_INFO = std::mem::zeroed();
+            stats.ship_flags = 1 << 13;
+            let update = |stats: &mut uqm_rust::navigation::abi::SHIP_INFO, crew, energy| {
+                uqm_rust::ui::shipstat::update_statistics(
+                    &context_lease,
+                    false,
+                    false,
+                    None,
+                    stats,
+                    0,
+                    (crew, energy),
+                );
+            };
+            let assert_pixel = |x, y, expected| {
+                TFB_FlushGraphics();
+                let pixel = GetFramePixel(frame, POINT { x, y });
+                assert_eq!(
+                    (pixel.r, pixel.g, pixel.b),
+                    expected,
+                    "statistics ({x},{y})"
+                );
+            };
+            update(&mut stats, 3, 3);
+            assert_eq!((stats.crew_level, stats.energy_level), (3, 3));
+            assert_pixel(8, 54, (82, 82, 255));
+            assert_pixel(5, 54, (0, 165, 0));
+            assert_pixel(8, 52, (0, 165, 0));
+            assert_pixel(56, 54, (165, 0, 0));
+            assert_pixel(53, 54, (165, 0, 0));
+            assert_pixel(56, 52, (165, 0, 0));
+            update(&mut stats, -2, -2);
+            assert_eq!((stats.crew_level, stats.energy_level), (1, 1));
+            for (x, y) in [(5, 54), (8, 52), (53, 54), (56, 52)] {
+                assert_pixel(x, y, (0, 0, 0));
+            }
+            assert_pixel(8, 54, (82, 82, 255));
+            assert_pixel(56, 54, (165, 0, 0));
+            update(&mut stats, 42, 0);
+            assert_eq!(stats.crew_level, 43);
+            assert_pixel(8, 54, (0, 165, 0));
+            update(&mut stats, -1, 0);
+            assert_eq!(stats.crew_level, 42);
+            assert_pixel(8, 54, (82, 82, 255));
+            update(&mut stats, 1, 0);
+            assert_pixel(8, 54, (0, 165, 0));
+            stats.ship_flags = 1 << 6;
+            stats.crew_level = 0;
+            update(&mut stats, 1, 0);
+            assert_pixel(8, 54, (82, 82, 82));
+            stats.ship_flags = 0;
+            stats.crew_level = 60;
+            update(&mut stats, 1, 0);
+            assert_eq!(stats.crew_level, 61);
+            let foreground = (*context).ForeGroundColor;
+            assert_eq!((foreground.r, foreground.g, foreground.b), (0, 165, 0));
+            update(&mut stats, 0, 0);
+            let foreground = (*context).ForeGroundColor;
+            assert_eq!((foreground.r, foreground.g, foreground.b), (0, 165, 0));
             for saving in [true, false] {
                 SetContext(previous);
                 let saved = uqm_rust::ui::save_problem::render_save_confirmation(
