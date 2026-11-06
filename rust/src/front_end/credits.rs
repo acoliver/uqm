@@ -27,8 +27,9 @@ fn scroll_step(rate: c_int) -> (c_int, c_int, TimePeriod) {
 
 #[cfg(not(test))]
 pub(crate) mod runtime {
-    use super::super::intro::{parse_text_lines, rgb15, BLACK_COLOR, WANT_PIXMAP};
+    use super::super::intro::{parse_text_lines, BLACK_COLOR, WANT_PIXMAP};
     use super::*;
+    use crate::ui::rgb15;
 
     use crate::engine::{
         battle::Cx,
@@ -353,7 +354,7 @@ pub(crate) mod runtime {
 
     static mut VICTORY_CREDITS_ACTIVE: bool = false;
 
-    unsafe fn process_frame(io: &mut Io<'_>) {
+    unsafe fn process_frame(checkpoint: &mut dyn FnMut(CheckpointView<'_>)) {
         let now = GetTimeCounter();
         if now < NEXT_TIME {
             return;
@@ -380,7 +381,7 @@ pub(crate) mod runtime {
             }
             CREDITS_RUNNING = (CREDITS_RATE != 0) as BOOLEAN;
             if CREDITS_RUNNING == 0 && VICTORY_CREDITS_ACTIVE {
-                io.observer.checkpoint(&CheckpointView::CreditsCompleted);
+                checkpoint(CheckpointView::CreditsCompleted);
             }
         } else if CREDITS_RUNNING == 0 {
             CREDITS_RUNNING = 1;
@@ -506,9 +507,10 @@ pub(crate) mod runtime {
             CONVERSATION_BLACKURQ_CONVERSATION,
             CONVERSATION_ARILOU_CONVERSATION,
         ];
+        let configuration = cx.kernel.configuration.clone();
         let old_subtitles = cx.with_legacy(|| {
-            let old = optSubtitles;
-            optSubtitles = 1;
+            let old = configuration.preferences().subtitles;
+            configuration.update_preferences(|options| options.subtitles = 1);
             sliderDisabled = 1;
             oscillDisabled = 1;
             old
@@ -520,31 +522,37 @@ pub(crate) mod runtime {
             i += 1;
         }
         cx.with_legacy(|| {
-            optSubtitles = old_subtitles;
+            configuration.update_preferences(|options| options.subtitles = old_subtitles);
             sliderDisabled = 0;
             oscillDisabled = 0;
         });
     }
 
-    unsafe fn menu(key: u32) -> bool {
-        PulsedInputState.menu[key as usize] != 0
+    unsafe fn menu(input: &crate::engine::input::InputSession, key: u32) -> bool {
+        input.pulsed().menu[key as usize] != 0
     }
 
-    unsafe fn credits_input(state: &mut CreditsInputState, activity: u16) -> BOOLEAN {
+    unsafe fn credits_input(
+        input: &crate::engine::input::InputSession,
+        state: &mut CreditsInputState,
+        activity: u16,
+    ) -> BOOLEAN {
         if CREDITS_RUNNING != 0 {
             state.close_time_out = 0;
         }
         if activity & CHECK_ABORT as u16 != 0
-            || (state.allow_cancel != 0 && (menu(KEY_MENU_SELECT) || menu(KEY_MENU_CANCEL)))
+            || (state.allow_cancel != 0
+                && (menu(input, KEY_MENU_SELECT) || menu(input, KEY_MENU_CANCEL)))
         {
             return 0;
         }
-        if state.allow_speed_change != 0 && (menu(KEY_MENU_UP) || menu(KEY_MENU_DOWN)) {
+        if state.allow_speed_change != 0 && (menu(input, KEY_MENU_UP) || menu(input, KEY_MENU_DOWN))
+        {
             let mut new_rate = CREDITS_RATE;
             let step = CREDITS_RATE.abs() / 5 + 1;
-            if menu(KEY_MENU_DOWN) {
+            if menu(input, KEY_MENU_DOWN) {
                 new_rate += step;
-            } else if menu(KEY_MENU_UP) {
+            } else if menu(input, KEY_MENU_UP) {
                 new_rate -= step;
             }
             new_rate = new_rate.clamp(-CREDITS_MAX_RATE, CREDITS_MAX_RATE);
@@ -560,18 +568,22 @@ pub(crate) mod runtime {
                 return 0;
             }
         }
-        if CREDITS_RUNNING == 0 && (menu(KEY_MENU_SELECT) || menu(KEY_MENU_CANCEL)) {
+        if CREDITS_RUNNING == 0 && (menu(input, KEY_MENU_SELECT) || menu(input, KEY_MENU_CANCEL)) {
             return 0;
         }
         SleepThread(ONE_SECOND / CREDITS_FRAME_RATE as u32);
         1
     }
 
-    unsafe fn on_input_frame(io: &mut Io<'_>) {
-        process_frame(io);
+    unsafe fn on_input_frame(
+        checkpoint: &mut dyn FnMut(CheckpointView<'_>),
+        _input: &crate::engine::input::InputControls,
+    ) {
+        process_frame(checkpoint);
     }
 
     unsafe fn prepare_credits(
+        input: &crate::engine::input::InputSession,
         context: CONTEXT,
         with_outtakes: bool,
         io: &mut Io<'_>,
@@ -600,15 +612,19 @@ pub(crate) mod runtime {
         CommWndRect.corner.y = 5;
         init_credits();
         VICTORY_CREDITS_ACTIVE = with_outtakes;
-        SetInputCallback(Some(on_input_frame));
+        SetInputCallback(input, Some(on_input_frame));
         if with_outtakes {
             OUT_TAKES_RUNNING = 1;
         }
         Some(music)
     }
 
-    unsafe fn finish_credits(context: CONTEXT, music: MUSIC_REF) {
-        SetInputCallback(None);
+    unsafe fn finish_credits(
+        input: &crate::engine::input::InputSession,
+        context: CONTEXT,
+        music: MUSIC_REF,
+    ) {
+        SetInputCallback(input, None);
         FadeMusic(0, (ONE_SECOND / 2) as SIZE);
         uninit_credits();
         SetContext(context);
@@ -629,8 +645,11 @@ pub(crate) mod runtime {
     /// # Safety
     /// Graphics, audio, communication and input must be initialized on the game thread.
     pub unsafe fn credits(cx: &mut Cx<'_>, io: &mut Io<'_>, with_outtakes: bool) {
+        let runtime = cx.kernel.input_runtime();
+        let input = runtime.input();
         let context = cx.kernel.screen_context;
-        let Some(music) = cx.with_legacy(|| prepare_credits(context, with_outtakes, io)) else {
+        let Some(music) = cx.with_legacy(|| prepare_credits(input, context, with_outtakes, io))
+        else {
             return;
         };
         if with_outtakes {
@@ -652,14 +671,14 @@ pub(crate) mod runtime {
                 close_when_done: (!with_outtakes) as BOOLEAN,
                 close_time_out: 0,
             };
-            cx.with_legacy(|| SetMenuSounds(0, 0));
+            cx.with_legacy(|| SetMenuSounds(input, 0, 0));
             cx.run_input(io, true, |cx, _| {
                 let activity = cx.world.activity();
-                cx.with_legacy(|| credits_input(&mut state, activity) != 0)
+                cx.with_legacy(|| credits_input(input, &mut state, activity) != 0)
             });
         }
         let context = cx.kernel.screen_context;
-        cx.with_legacy(|| finish_credits(context, music));
+        cx.with_legacy(|| finish_credits(input, context, music));
     }
 }
 

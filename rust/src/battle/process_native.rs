@@ -795,7 +795,7 @@ pub(crate) mod engine {
     /// Engine contexts, element/display pools and sound system are initialized on the game thread.
     pub(crate) unsafe fn redraw_queue(cx: &mut Cx<'_>, clear: bool) {
         SetContext(cx.kernel.status_context);
-        let scale = optMeleeScale;
+        let scale = cx.kernel.configuration.preferences().melee_scale;
         let (bounds, minimum) = preprocess_queue(cx, scale);
         let (w, h) = view_dimensions(cx);
         let (mut sx, mut sy) = view_scroll(bounds.origin, bounds.ships_alive, w, h);
@@ -804,7 +804,7 @@ pub(crate) mod engine {
         }
         let state = calc_view_engine(cx, minimum, (sx, sy), bounds.ships_alive, scale);
         postprocess_queue(cx, state, sx, sy, scale);
-        if optStereoSFX != 0 {
+        if cx.kernel.configuration.preferences().stereo_sfx != 0 {
             crate::battle::sounds::engine::update_positions(cx);
         }
         SetContext(cx.kernel.space_context);
@@ -816,7 +816,7 @@ pub(crate) mod engine {
                 if clear {
                     ClearDrawable();
                 }
-                if optMeleeScale != SCALE_STEP {
+                if cx.kernel.configuration.preferences().melee_scale != SCALE_STEP {
                     let (_, scale) = calc_zoom_stuff(cx.b.zoom_out);
                     SetGraphicScale(i32::from(scale));
                 }

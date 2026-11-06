@@ -75,7 +75,7 @@ pub(crate) mod live {
 
     use crate::strings::string_table::GetStringAddress;
 
-    use crate::planets::sphere::live::InitSphereRotation;
+    use crate::planets::sphere::live::init_sphere_rotation;
 
     use crate::graphics::context_abi::SetContextDrawMode;
 
@@ -261,7 +261,8 @@ pub(crate) mod live {
     /// # Safety
     /// Planet and definition must be live records from the current solar system;
     /// the graphics resources and generation context must be initialized on the game thread.
-    pub unsafe extern "C" fn GeneratePlanetSurface(
+    pub unsafe fn generate_planet_surface(
+        pulsing_shield: bool,
         planet: *mut c::PLANET_DESC,
         mut definition: *mut c::FRAME_DESC,
     ) {
@@ -434,10 +435,8 @@ pub(crate) mod live {
         if shielded {
             (*orbit).ObjectFrame = create_shield();
         }
-        InitSphereRotation(
-            1 - 2 * (i32::from((*info).AxialTilt) & 1),
-            u32::from(shielded),
-        );
+        let direction = 1 - 2 * (i32::from((*info).AxialTilt) & 1);
+        init_sphere_rotation(pulsing_shield, direction, u32::from(shielded));
         if shielded {
             let old = SetContextFGFrame((*system).TopoFrame.cast());
             SetContextClipRect(null_mut());

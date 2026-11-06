@@ -48,7 +48,7 @@ use crate::planets::orbit::live::LoadPlanet;
 
 pub use crate::planets::orbit::live::FreePlanet;
 
-pub use crate::planets::plangen::live::GeneratePlanetSurface;
+pub use crate::planets::plangen::live::generate_planet_surface;
 
 use crate::planets::orbit::live::LoadStdLanderFont;
 

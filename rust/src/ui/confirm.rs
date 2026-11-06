@@ -1,7 +1,7 @@
 #![cfg(not(test))]
 
 use super::palette::*;
-use crate::engine::Kernel;
+use crate::engine::{input::InputSession, Kernel};
 use crate::navigation::abi::*;
 
 use crate::ui::util::live::SaveContextFrame;
@@ -65,8 +65,7 @@ unsafe fn draw_confirmation(answer: BOOLEAN) {
 
 /// # Safety
 /// Input, graphics, flash, audio, and game state must be initialized on the game thread.
-#[no_mangle]
-pub unsafe extern "C" fn DoConfirmExit() -> BOOLEAN {
+pub unsafe fn do_confirm_exit(input: &InputSession) -> BOOLEAN {
     if PlayingTrack() != 0 {
         PauseTrack();
     }
@@ -87,24 +86,24 @@ pub unsafe extern "C" fn DoConfirmExit() -> BOOLEAN {
     let mut response = 0;
     draw_confirmation(response);
     FlushGraphics();
-    FlushInput();
+    FlushInput(input);
     let mut done = false;
     while !done {
-        ExitRequested = 0;
-        GamePaused = 0;
-        UpdateInputState();
+        input.set_exit_requested(false);
+        input.set_paused(false);
+        UpdateInputState(input);
         if crate::engine::World::current().read(|world| world.activity()) & CHECK_ABORT as u16 != 0
         {
             done = true;
             response = 1;
-        } else if PulsedInputState.menu[KEY_MENU_SELECT as usize] != 0 {
+        } else if input.pulsed().menu[KEY_MENU_SELECT as usize] != 0 {
             done = true;
             PlayMenuSound(MENU_SOUND_EFFECT_MENU_SOUND_SUCCESS);
-        } else if PulsedInputState.menu[KEY_MENU_CANCEL as usize] != 0 {
+        } else if input.pulsed().menu[KEY_MENU_CANCEL as usize] != 0 {
             done = true;
             response = 0;
-        } else if PulsedInputState.menu[KEY_MENU_LEFT as usize] != 0
-            || PulsedInputState.menu[KEY_MENU_RIGHT as usize] != 0
+        } else if input.pulsed().menu[KEY_MENU_LEFT as usize] != 0
+            || input.pulsed().menu[KEY_MENU_RIGHT as usize] != 0
         {
             response = u32::from(response == 0);
             draw_confirmation(response);
@@ -124,9 +123,9 @@ pub unsafe extern "C" fn DoConfirmExit() -> BOOLEAN {
     } else {
         0
     };
-    ExitRequested = 0;
-    GamePaused = 0;
-    FlushInput();
+    input.set_exit_requested(false);
+    input.set_paused(false);
+    FlushInput(input);
     SetContextClipRect(&mut old_rect);
     SetContext(old_context);
     continue_flash();
@@ -138,13 +137,13 @@ pub unsafe extern "C" fn DoConfirmExit() -> BOOLEAN {
 
 #[repr(C)]
 struct PopupState {
-    input_func: unsafe extern "C" fn(*mut PopupState) -> BOOLEAN,
+    input_func: unsafe fn(*mut PopupState, &InputSession) -> BOOLEAN,
 }
-unsafe extern "C" fn do_popup(_state: *mut PopupState) -> BOOLEAN {
+unsafe fn do_popup(_state: *mut PopupState, input: &InputSession) -> BOOLEAN {
     SleepThread(ONE_SECOND / 20);
     u32::from(
-        PulsedInputState.menu[KEY_MENU_SELECT as usize] == 0
-            && PulsedInputState.menu[KEY_MENU_CANCEL as usize] == 0
+        input.pulsed().menu[KEY_MENU_SELECT as usize] == 0
+            && input.pulsed().menu[KEY_MENU_CANCEL as usize] == 0
             && crate::engine::World::current().read(|world| world.activity()) & CHECK_ABORT as u16
                 == 0,
     )
@@ -152,8 +151,8 @@ unsafe extern "C" fn do_popup(_state: *mut PopupState) -> BOOLEAN {
 
 /// # Safety
 /// msg must be a NUL-terminated UTF-8 string; widget, graphics, and input systems must be initialized.
-#[no_mangle]
-pub unsafe extern "C" fn DoPopupWindow(msg: *const ::std::ffi::c_char) {
+pub unsafe fn do_popup_window(runtime: &InputSession, msg: *const ::std::ffi::c_char) {
+    let input = runtime;
     let bank = StringBank_Create();
     if bank.is_null() {
         crate::log_abi::log_message(
@@ -166,7 +165,7 @@ pub unsafe extern "C" fn DoPopupWindow(msg: *const ::std::ffi::c_char) {
     let mut label: WIDGET_LABEL = mem::zeroed();
     label.tag = WIDGET_TYPE_WIDGET_TYPE_LABEL;
     label.parent = ptr::null_mut();
-    label.handleEvent = Some(Widget_HandleEventIgnoreAll);
+    label.handleEvent = Some(widget_handle_event_ignore_all);
     label.receiveFocus = Some(Widget_ReceiveFocusRefuseFocus);
     label.draw = Some(Widget_DrawLabel);
     label.height = Some(Widget_HeightLabel);
@@ -196,21 +195,21 @@ pub unsafe extern "C" fn DoPopupWindow(msg: *const ::std::ffi::c_char) {
     SetSystemRect(&window_rect);
     let mut sound0: MENU_SOUND_FLAGS = mem::zeroed();
     let mut sound1: MENU_SOUND_FLAGS = mem::zeroed();
-    GetMenuSounds(&mut sound0, &mut sound1);
-    SetMenuSounds(0, 0);
-    let old_callback = SetInputCallback(None);
+    GetMenuSounds(input, &mut sound0, &mut sound1);
+    SetMenuSounds(input, 0, 0);
+    let old_callback = SetInputCallback(runtime, None);
     let mut state = PopupState {
         input_func: do_popup,
     };
     DoInput((&mut state as *mut PopupState).cast(), 1);
-    SetInputCallback(old_callback);
+    SetInputCallback(runtime, old_callback);
     ClearSystemRect();
     DrawStamp(&mut saved);
     DestroyDrawable(ReleaseDrawable(saved.frame));
     SetContextClipRect(&mut old_rect);
     SetContext(old_context);
     continue_flash();
-    SetMenuSounds(sound0, sound1);
+    SetMenuSounds(input, sound0, sound1);
     StringBank_Free(bank);
 }
 

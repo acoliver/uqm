@@ -311,13 +311,13 @@ pub(crate) mod live {
     pub extern "C" fn InitShips() -> i16 {
         // SAFETY: this entry runs on the published game thread, before the battle loop borrows Cx.
         unsafe {
-            use crate::ships::native::abi::{optMeleeScale, ScreenHeight, ScreenWidth};
+            use crate::ships::native::abi::{ScreenHeight, ScreenWidth};
             let players = crate::app::bridge::enter(|cx| {
                 init_ships(
                     cx,
                     (ScreenWidth - 64) as i16,
                     ScreenHeight as i16,
-                    optMeleeScale == 0,
+                    cx.kernel.configuration.preferences().melee_scale == 0,
                 )
             });
             if players == 1 {

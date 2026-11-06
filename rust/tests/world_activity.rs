@@ -65,8 +65,13 @@ fn presentation_terminal_reads_and_signals_the_supplied_world_without_a_bridge()
     .unwrap();
     let directory = tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR")).unwrap();
     let mut world = World::new();
-    let observer =
-        AutomationObserver::new(script, directory.path().into(), world.activity_control());
+    let observer = AutomationObserver::new(
+        script,
+        directory.path().into(),
+        world.activity_control(),
+        uqm_rust::engine::input::InputControls::default(),
+        Default::default(),
+    );
     world.set_activity(0x0403);
     // Missing frame evidence deliberately terminates from the presentation callback.
     assert!(observer.process_present(None));

@@ -211,6 +211,13 @@ fn starbase_releases_world_before_communication_and_cleanup() {
         fn presented(&mut self, _: &mut Presented) {}
     }
     let mut game = Game::new();
+    game.kernel.install_input_runtime(std::rc::Rc::new(
+        uqm_rust::mainloop::input_abi::NativeInputRuntime::new(
+            None,
+            Default::default(),
+            game.kernel.configuration.clone(),
+        ),
+    ));
     game.world.story = Some(uqm_rust::state::game_state::GameState::new());
     game.world.set_activity(CHECK_ABORT as u16);
     let mut observer = Recording(Vec::new());
@@ -317,10 +324,17 @@ fn encounter_construction_keeps_fragment_order_infinite_crew_and_flagship_last()
 fn encounter_teardown_releases_world_before_activity_queries() {
     let mut game = Game::new();
     game.world.set_activity(CHECK_ABORT as u16);
+    let input = uqm_rust::engine::input::InputSession::new(
+        Default::default(),
+        game.kernel.configuration.clone(),
+    );
     // SAFETY: the serialized fixture owns empty resources and the published lifecycle.
     unsafe {
         bridge::with_game(&mut game, || {
-            assert_eq!(uqm_rust::battle::encount_native::UninitEncounter(), 0)
+            assert_eq!(
+                uqm_rust::battle::encount_native::uninit_encounter(&input),
+                0
+            )
         });
     }
 }

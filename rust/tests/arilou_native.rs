@@ -88,7 +88,7 @@ unsafe fn velocity_of(element: *mut ElementRecord) -> (SIZE, SIZE) {
 
 #[test]
 fn skiff_descriptor_matches_the_c_template() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         unsafe {
             let template = battle::descriptor(SPECIES_ID_ARILOU_ID);
             let desc = &template;
@@ -180,7 +180,7 @@ unsafe fn fire(fleet: &mut Fleet, ship: *mut ElementRecord) -> *mut ElementRecor
 
 #[test]
 fn laser_snaps_to_the_enemy_within_the_turn_and_is_yellow() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         unsafe {
             let _battle = Battle::new(16);
             let mut fleet = Fleet::new(&_battle, 0);
@@ -228,7 +228,7 @@ fn laser_snaps_to_the_enemy_within_the_turn_and_is_yellow() {
 
 #[test]
 fn laser_without_a_target_follows_the_ship_facing() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         unsafe {
             let _battle = Battle::new(16);
             let mut fleet = Fleet::new(&_battle, 0);
@@ -249,7 +249,7 @@ fn laser_without_a_target_follows_the_ship_facing() {
 
 #[test]
 fn laser_aims_exactly_at_a_target_directly_behind() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         unsafe {
             let _battle = Battle::new(16);
             let mut fleet = Fleet::new(&_battle, 0);
@@ -313,7 +313,7 @@ fn threat_concerns(threat: *mut ElementRecord, which_turn: COUNT) -> [EVALUATE_D
 
 #[test]
 fn intelligence_always_thrusts_and_entices_the_enemy() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         unsafe {
             let _battle = Battle::new(16);
             let mut fleet = Fleet::new(&_battle, 0);
@@ -339,7 +339,7 @@ fn intelligence_always_thrusts_and_entices_the_enemy() {
 
 #[test]
 fn intelligence_teleports_from_immediate_weapons_one_time_in_four() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         unsafe {
             let _battle = Battle::new(16);
             let mut fleet = Fleet::new(&_battle, 0);
@@ -374,7 +374,7 @@ fn intelligence_teleports_from_immediate_weapons_one_time_in_four() {
 
 #[test]
 fn intelligence_ignores_threats_past_six_turns_without_touching_the_generator() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         unsafe {
             let _battle = Battle::new(16);
             let mut fleet = Fleet::new(&_battle, 0);
@@ -411,7 +411,7 @@ fn intelligence_ignores_threats_past_six_turns_without_touching_the_generator() 
 
 #[test]
 fn intelligence_teleports_from_homing_weapons_only_when_close_or_fighters() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         unsafe {
             let _battle = Battle::new(16);
             let mut fleet = Fleet::new(&_battle, 0);
@@ -472,7 +472,7 @@ fn intelligence_teleports_from_homing_weapons_only_when_close_or_fighters() {
 
 #[test]
 fn intelligence_skips_objects_that_cannot_intercept() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         unsafe {
             let _battle = Battle::new(16);
             let mut fleet = Fleet::new(&_battle, 0);
@@ -501,7 +501,7 @@ fn intelligence_skips_objects_that_cannot_intercept() {
 
 #[test]
 fn intelligence_stops_firing_when_the_skiff_cannot_afford_both() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         unsafe {
             let _battle = Battle::new(16);
             let mut fleet = Fleet::new(&_battle, 0);
@@ -566,7 +566,7 @@ impl<'a> Skiff<'a> {
 
 #[test]
 fn skiff_stops_dead_unless_the_thrust_delay_is_running() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         unsafe {
             let _battle = Battle::new(16);
             let mut skiff = Skiff::new(&_battle);
@@ -604,7 +604,7 @@ fn skiff_stops_dead_unless_the_thrust_delay_is_running() {
 
 #[test]
 fn special_key_starts_the_teleport() {
-    battle_context::run(|| unsafe {
+    battle_context::run(|_| unsafe {
         let _battle = Battle::new(16);
         let mut skiff = Skiff::new(&_battle);
         let ship = skiff.ship;
@@ -647,7 +647,7 @@ fn special_key_starts_the_teleport() {
 
 #[test]
 fn teleport_needs_the_key_a_ready_counter_and_energy() {
-    battle_context::run(|| unsafe {
+    battle_context::run(|_| unsafe {
         let _battle = Battle::new(16);
         let mut skiff = Skiff::new(&_battle);
         let ship = skiff.ship;
@@ -688,7 +688,7 @@ unsafe fn set_life(ship: *mut ElementRecord, life: COUNT) {
 
 #[test]
 fn teleport_animates_jumps_at_life_three_and_returns_at_life_one() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         unsafe {
             let _battle = Battle::new(16);
             let mut skiff = Skiff::new(&_battle);
@@ -779,7 +779,7 @@ fn teleport_animates_jumps_at_life_three_and_returns_at_life_one() {
 
 #[test]
 fn teleport_destination_scales_with_the_screen_size() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         unsafe {
             let _battle = Battle::new(16);
             ScreenWidth = 640;
@@ -809,7 +809,7 @@ fn teleport_destination_scales_with_the_screen_size() {
 
 #[test]
 fn teleport_wraps_negative_coord_remainders_back_into_logical_space() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         unsafe {
             // At 1280x720 the horizontal extent (1216 * 32 = 38912) exceeds
             // i16::MAX, so a remainder cast to COORD can go negative and WRAP_X
@@ -838,7 +838,7 @@ fn teleport_wraps_negative_coord_remainders_back_into_logical_space() {
 
 #[test]
 fn teleport_frame_ticks_every_counter_and_restores_the_pressed_keys() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         unsafe {
             let _battle = Battle::new(16);
             let mut skiff = Skiff::new(&_battle);
@@ -872,7 +872,7 @@ fn teleport_frame_ticks_every_counter_and_restores_the_pressed_keys() {
 
 #[test]
 fn nonsolid_skiff_off_the_warp_frames_is_left_alone() {
-    battle_context::run(|| unsafe {
+    battle_context::run(|_| unsafe {
         let _battle = Battle::new(16);
         let mut skiff = Skiff::new(&_battle);
         let ship = skiff.ship;
@@ -891,7 +891,7 @@ fn nonsolid_skiff_off_the_warp_frames_is_left_alone() {
 #[test]
 fn init_intersect_start_preserves_endpoint_and_frame() {
     // SAFETY: the isolated game thread owns the pool and retains the ship through the accessor call.
-    battle_context::run(|| unsafe {
+    battle_context::run(|_| unsafe {
         let battle = Battle::new(4);
         let mut ship = Ship::new(&battle, SPECIES_ID_ARILOU_ID, 0);
         let frame = ship.element_mut().IntersectControl.IntersectStamp.frame;

@@ -17,17 +17,24 @@ use std::sync::Arc;
 
 /// Run initialization, the campaign loop and subsystem teardown on the game thread.
 #[cfg(not(test))]
-pub fn run(application: &mut Application, arguments: &[CString]) -> c_int {
+pub fn run(
+    application: &mut Application,
+    arguments: &[CString],
+    parsed: &crate::mainloop::options::ParsedOptions,
+) -> c_int {
     let mut argv: Vec<*mut c_char> = arguments
         .iter()
         .map(|arg| arg.as_ptr().cast_mut())
         .collect();
     argv.push(std::ptr::null_mut());
+    let runtime = application.game.kernel.input_runtime();
     let observer = application.observer().cloned();
     // SAFETY: argv remains live while the application suspends Game for initialization.
     let initialized = unsafe {
         application.legacy(|| {
             crate::mainloop::startup::initialize(
+                runtime.input(),
+                parsed,
                 (argv.len() - 1) as c_int,
                 argv.as_mut_ptr(),
                 observer,

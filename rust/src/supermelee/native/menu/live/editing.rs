@@ -1,6 +1,6 @@
 //! Fleet-slot and team-name editing.
 use super::*;
-unsafe extern "C" fn changed(entry: *mut TEXTENTRY_STATE) -> u32 {
+unsafe fn changed(entry: *mut TEXTENTRY_STATE, _input: &crate::engine::input::InputSession) -> u32 {
     // SAFETY: the function contract requires live, game-thread-owned records
     // and callback arguments for all legacy accesses in this operation.
     unsafe {
@@ -14,7 +14,7 @@ unsafe extern "C" fn changed(entry: *mut TEXTENTRY_STATE) -> u32 {
         )
     }
 }
-unsafe extern "C" fn frame(entry: *mut TEXTENTRY_STATE) -> u32 {
+unsafe fn frame(entry: *mut TEXTENTRY_STATE, _input: &crate::engine::input::InputSession) -> u32 {
     // SAFETY: the function contract requires live, game-thread-owned records
     // and callback arguments for all legacy accesses in this operation.
     unsafe {
@@ -26,13 +26,16 @@ unsafe extern "C" fn frame(entry: *mut TEXTENTRY_STATE) -> u32 {
 unsafe fn advance(state: *mut MELEE_STATE) {
     ((*state).row, (*state).col) = super::super::rules::advance_cursor((*state).row, (*state).col);
 }
-pub(super) unsafe extern "C" fn edit(state: *mut MELEE_STATE) -> u32 {
+pub(super) unsafe fn edit(
+    state: *mut MELEE_STATE,
+    input: &crate::engine::input::InputSession,
+) -> u32 {
     let time = GetTimeCounter();
-    GamePaused = 0;
+    input.set_paused(false);
     if crate::engine::World::current().read(|world| world.activity()) & CHECK_ABORT as u16 != 0 {
         return 0;
     }
-    SetMenuSounds(15, 16 | 512);
+    SetMenuSounds(input, 15, 16 | 512);
     if (*state).initialized == 0 {
         current(state);
         (*state).initialized = 1;
@@ -43,17 +46,17 @@ pub(super) unsafe extern "C" fn edit(state: *mut MELEE_STATE) -> u32 {
     let row = (*state).row;
     let col = (*state).col;
     if (row < 2 || (*state).current_ship == 255)
-        && (key(KEY_MENU_CANCEL) || key(KEY_MENU_RIGHT) && (col == 6 || row == 2))
+        && (key(input, KEY_MENU_CANCEL) || key(input, KEY_MENU_RIGHT) && (col == 6 || row == 2))
     {
         highlight(10, false);
         (*state).current_ship = 255;
         (*state).melee_option = 4;
         (*state).phase = crate::supermelee::netplay::session::MenuPhase::Menu;
         (*state).last_input_time = GetTimeCounter();
-    } else if row < 2 && key(KEY_MENU_SELECT) {
+    } else if row < 2 && key(input, KEY_MENU_SELECT) {
         highlight(10, false);
         (*state).melee_option = 11;
-        let ok = crate::supermelee::native::build_picker::live::build_pick_ship(state);
+        let ok = crate::supermelee::native::build_picker::live::build_pick_ship(input, state);
         if ok {
             Melee_LocalChange_ship(
                 state,
@@ -69,16 +72,16 @@ pub(super) unsafe extern "C" fn edit(state: *mut MELEE_STATE) -> u32 {
         RepairMeleeFrame(&r);
         current(state);
         (*state).phase = crate::supermelee::netplay::session::MenuPhase::Editing;
-    } else if row < 2 && key(KEY_MENU_SPECIAL) {
+    } else if row < 2 && key(input, KEY_MENU_SPECIAL) {
         highlight(10, false);
-    } else if row < 2 && key(KEY_MENU_DELETE) {
+    } else if row < 2 && key(input, KEY_MENU_DELETE) {
         highlight(10, false);
         Melee_LocalChange_ship(state, (*state).side, row * 7 + col, 255);
         advance(state);
         current(state);
     } else {
         let (mut side, mut row, mut col) = ((*state).side, row, col);
-        if row == 2 && key(KEY_MENU_SELECT) {
+        if row == 2 && key(input, KEY_MENU_SELECT) {
             (*state).cur_index = 0;
             name(state, side, 1, ptr::null());
             let mut buf = [0 as std::ffi::c_char; 31];
@@ -95,7 +98,7 @@ pub(super) unsafe extern "C" fn edit(state: *mut MELEE_STATE) -> u32 {
             entry.CbParam = state.cast();
             entry.ChangeCallback = Some(changed);
             entry.FrameCallback = Some(frame);
-            do_text_entry(&mut entry);
+            do_text_entry(input, &mut entry);
             (*state).cur_index = u16::MAX;
             if entry.Success == 0 || !Melee_LocalChange_teamName(state, side, buf.as_ptr()) {
                 view_name(state, side);
@@ -104,10 +107,10 @@ pub(super) unsafe extern "C" fn edit(state: *mut MELEE_STATE) -> u32 {
         }
         (side, row, col) = super::super::rules::move_cursor(
             (side, row, col),
-            key(KEY_MENU_LEFT),
-            key(KEY_MENU_RIGHT),
-            key(KEY_MENU_UP),
-            key(KEY_MENU_DOWN),
+            key(input, KEY_MENU_LEFT),
+            key(input, KEY_MENU_RIGHT),
+            key(input, KEY_MENU_UP),
+            key(input, KEY_MENU_DOWN),
         );
         if (side, row, col) != ((*state).side, (*state).row, (*state).col) {
             highlight(10, false);

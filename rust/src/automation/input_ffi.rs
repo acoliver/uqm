@@ -20,9 +20,8 @@
 use super::campaign_state::CampaignView;
 use crate::automation::coordinator::AutomationObserver;
 #[cfg(not(test))]
-use crate::c_bindings::controller_input::{CurrentInputState, PulsedInputState};
-#[cfg(not(test))]
 use crate::c_bindings::global_state::{PLANET_DESC, SOLARSYS_STATE};
+use crate::engine::input::InputControls;
 
 // ===========================================================================
 //  C global input state — FFI access to ImmediateInputState.menu[]
@@ -82,8 +81,6 @@ impl NavigationSnapshot {
 
 #[cfg(not(test))]
 extern "C" {
-    fn c_automation_set_immediate_menu_key(index: i32, value: i32) -> i32;
-    fn c_automation_set_immediate_player_key(index: i32, value: i32) -> i32;
 
     /// Live orbit predicate: `playerInSolarSystem() && pSolarSysState->InOrbit`.
     #[allow(non_snake_case)]
@@ -650,181 +647,70 @@ pub(crate) fn after_input_update(observer: &AutomationObserver, activity: u16) -
     observer.process_player_input_observation().into()
 }
 
-// ===========================================================================
-//  Bounds-checked production setter (REQ-INJECT-003)
-// ===========================================================================
-
-/// Set `ImmediateInputState.menu[index]` through its native owner.
-///
-/// The C module owns the input state, so it is the single authority for
-/// bounds and normalization; this forwards its verdict unchanged.
-/// Returns 0 on success, -1 on invalid index.
-///
-/// @plan PLAN-20260723-RUNTIME-AUTOMATION.P06
-/// @requirement REQ-INJECT-003
-#[cfg(not(test))]
-pub extern "C" fn rust_automation_set_immediate_menu_key(index: i32, value: i32) -> i32 {
-    unsafe { c_automation_set_immediate_menu_key(index, value) }
-}
-
-/// C-callable bounds-checked setter for `ImmediateInputState.menu[index]`
-/// (stub for non-linked builds — lib tests).
-///
-/// @plan PLAN-20260723-RUNTIME-AUTOMATION.P06
-/// @requirement REQ-INJECT-003
-#[cfg(test)]
-pub extern "C" fn rust_automation_set_immediate_menu_key(index: i32, value: i32) -> i32 {
-    use crate::automation::input::{setter_set_menu_key, SetterResult};
-
-    let Ok(index) = u8::try_from(index) else {
+/// Set an externally supplied menu key, preserving the bounds/normalization contract.
+pub fn rust_automation_set_immediate_menu_key(
+    input: &InputControls,
+    index: i32,
+    value: i32,
+) -> i32 {
+    let Some(index) = menu_key_slot(index) else {
         return -1;
     };
-    match setter_set_menu_key(index, u8::from(value != 0)) {
-        SetterResult::InvalidIndex { .. } => -1,
-        SetterResult::Set { .. } | SetterResult::Cleared { .. } => 0,
+    input.set_menu_key(index, value != 0);
+    0
+}
+
+pub fn rust_automation_set_immediate_player_key(
+    input: &InputControls,
+    index: i32,
+    value: i32,
+) -> i32 {
+    let Ok(index) = usize::try_from(index) else {
+        return -1;
+    };
+    if index >= crate::engine::input::frames::FLIGHT_KEYS {
+        return -1;
     }
+    input.set_player_key(0, index, value != 0);
+    0
 }
 
-// ===========================================================================
-//  Present hook: called from TFB_SwapBuffers
-// ===========================================================================
-
-/// Set one player-one gameplay control through the native owner of
-/// `ImmediateInputState`, forwarding its verdict unchanged.
-#[cfg(not(test))]
-pub extern "C" fn rust_automation_set_immediate_player_key(index: i32, value: i32) -> i32 {
-    unsafe { c_automation_set_immediate_player_key(index, value) }
-}
-
-#[cfg(test)]
-pub extern "C" fn rust_automation_set_immediate_player_key(index: i32, _value: i32) -> i32 {
-    if (0..7).contains(&index) {
-        0
-    } else {
-        -1
-    }
-}
-
-/// Discard the pulse the production input loop derived for a menu key.
-///
-/// `UpdateInputState` turns a key that stays down into a repeat pulse once
-/// `MENU_REPEAT_DELAY` of wall-clock time has passed since the last pulse. A
-/// scripted tap counts input updates, so on a slow host that clock fires
-/// inside one tap and the game sees several presses. Returns `false` for an
-/// index outside the menu key table.
-#[cfg(not(test))]
-pub(crate) fn discard_menu_pulse(index: i32) -> bool {
+pub(crate) fn discard_menu_pulse(input: &InputControls, index: i32) -> bool {
     let Some(index) = menu_key_slot(index) else {
         return false;
     };
-    // SAFETY: the single game thread runs `DoInput`, between
-    // `UpdateInputState` and the consumers of the pulsed state.
-    unsafe {
-        (*std::ptr::addr_of_mut!(PulsedInputState)).menu[index] = 0;
-    }
+    input.clear_menu_pulse(index);
     true
-}
-
-/// Stub for builds without the linked C archive, which have no pulsed state.
-#[cfg(test)]
-pub(crate) fn discard_menu_pulse(index: i32) -> bool {
-    menu_key_slot(index).is_some()
 }
 
 fn menu_key_slot(index: i32) -> Option<usize> {
     usize::try_from(index)
         .ok()
-        .filter(|slot| *slot < usize::from(crate::automation::input::NUM_MENU_KEYS))
+        .filter(|slot| *slot < crate::engine::input::frames::MENU_KEYS)
 }
 
-/// Set when the native owner refuses an automation input write.
-static INJECTION_REJECTED: std::sync::atomic::AtomicBool =
-    std::sync::atomic::AtomicBool::new(false);
-
-/// Write a menu key, recording any rejection by the native owner.
-pub(crate) fn inject_menu_key(index: i32, value: i32) {
-    if rust_automation_set_immediate_menu_key(index, value) != 0 {
-        INJECTION_REJECTED.store(true, std::sync::atomic::Ordering::Release);
+pub(crate) fn inject_menu_key(input: &InputControls, index: i32, value: i32) {
+    if rust_automation_set_immediate_menu_key(input, index, value) != 0 {
+        input.reject_injection();
     }
 }
 
-/// Write a player control, recording any rejection by the native owner.
-pub(crate) fn inject_player_key(index: i32, value: i32) {
-    if rust_automation_set_immediate_player_key(index, value) != 0 {
-        INJECTION_REJECTED.store(true, std::sync::atomic::Ordering::Release);
+pub(crate) fn inject_player_key(input: &InputControls, index: i32, value: i32) {
+    if rust_automation_set_immediate_player_key(input, index, value) != 0 {
+        input.reject_injection();
     }
 }
 
-/// True once the native owner has refused an automation input write.
-///
-/// Typed key domains make this unreachable today; it becomes reachable only
-/// if those domains and the native key tables diverge, and the run must fail
-/// rather than continue against input that never landed.
-pub(crate) fn injection_rejected() -> bool {
-    INJECTION_REJECTED.load(std::sync::atomic::Ordering::Acquire)
+pub(crate) fn current_inputs(input: &InputControls) -> crate::engine::input::frames::InputState {
+    input.current()
 }
 
-// ===========================================================================
-//  Production getters (REQ-INJECT-006)
-// ===========================================================================
-
-#[cfg(not(test))]
-pub(crate) fn current_inputs() -> crate::c_bindings::controller_input::CONTROLLER_INPUT_STATE {
-    // SAFETY: automation admission is synchronous on the game thread.
-    unsafe { std::ptr::addr_of!(CurrentInputState).read() }
-}
-#[cfg(test)]
-pub(crate) fn current_inputs() -> crate::c_bindings::controller_input::CONTROLLER_INPUT_STATE {
-    crate::c_bindings::controller_input::CONTROLLER_INPUT_STATE {
-        key: [[0; 7]; 6],
-        menu: [0; 24],
-    }
+pub fn rust_automation_get_current_menu_key(input: &InputControls, index: i32) -> i32 {
+    menu_key_slot(index).map_or(-1, |index| input.current().menu[index])
 }
 
-/// C-callable getter for `CurrentInputState.menu[index]`.
-///
-/// Returns the value (0 or 1) or -1 on invalid index.
-///
-/// @plan PLAN-20260723-RUNTIME-AUTOMATION.P06
-/// @requirement REQ-INJECT-006
-#[cfg(not(test))]
-pub extern "C" fn rust_automation_get_current_menu_key(index: i32) -> i32 {
-    if index < 0 || index >= i32::from(crate::automation::input::NUM_MENU_KEYS) {
-        return -1;
-    }
-    current_inputs().menu[index as usize]
-}
-
-/// C-callable getter for `CurrentInputState.menu[index]` (stub for tests).
-#[cfg(test)]
-pub extern "C" fn rust_automation_get_current_menu_key(index: i32) -> i32 {
-    if index < 0 || index >= i32::from(crate::automation::input::NUM_MENU_KEYS) {
-        return -1;
-    }
-    0
-}
-
-/// C-callable getter for `PulsedInputState.menu[index]`.
-///
-/// Returns the value (0 or 1) or -1 on invalid index.
-///
-/// @plan PLAN-20260723-RUNTIME-AUTOMATION.P06
-/// @requirement REQ-INJECT-006
-#[cfg(not(test))]
-pub extern "C" fn rust_automation_get_pulsed_menu_key(index: i32) -> i32 {
-    if index < 0 || index >= i32::from(crate::automation::input::NUM_MENU_KEYS) {
-        return -1;
-    }
-    unsafe { PulsedInputState.menu[index as usize] }
-}
-
-/// C-callable getter for `PulsedInputState.menu[index]` (stub for tests).
-#[cfg(test)]
-pub extern "C" fn rust_automation_get_pulsed_menu_key(index: i32) -> i32 {
-    if index < 0 || index >= i32::from(crate::automation::input::NUM_MENU_KEYS) {
-        return -1;
-    }
-    0
+pub fn rust_automation_get_pulsed_menu_key(input: &InputControls, index: i32) -> i32 {
+    menu_key_slot(index).map_or(-1, |index| input.pulsed().menu[index])
 }
 
 // ===========================================================================

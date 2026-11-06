@@ -94,9 +94,11 @@ mod live {
                 .with_legacy(|| crate::time::counter_abi::GetTimeCounter())
         }
         fn skip_sale(&mut self) -> bool {
+            let runtime = self.cx.borrow().kernel.input_runtime();
+            let input = runtime.input();
             self.cx
                 .borrow_mut()
-                .with_legacy(|| unsafe { AnyButtonPress(1) != 0 })
+                .with_legacy(|| unsafe { AnyButtonPress(input, 1) != 0 })
         }
         fn clear_display(&mut self) {
             self.cx.borrow_mut().with_legacy(|| unsafe {

@@ -145,9 +145,9 @@ pub(crate) mod engine {
         let world = WorldFields::current();
         (&raw mut (**world).flagship.planet_name).cast()
     }
-    unsafe fn escape_pressed() -> bool {
-        let template = *(&raw const PlayerControls).cast::<CONTROL_TEMPLATE>();
-        CurrentInputState.key[template as usize][KEY_ESCAPE as usize] != 0
+    unsafe fn escape_pressed(input: &crate::engine::input::InputSession) -> bool {
+        let template = input.player_controls()[0] as usize;
+        input.current().key[template][KEY_ESCAPE as usize] != 0
     }
     unsafe fn draw_text(t: &mut TEXT, string: *const UNICODE) {
         t.pStr = string;
@@ -159,10 +159,12 @@ pub(crate) mod engine {
         cx: &mut crate::engine::battle::Cx<'_>,
         menu: &mut EncounterSelection,
     ) -> bool {
-        SetMenuSounds(0x0f, 1 << 4);
+        let runtime = cx.kernel.input_runtime();
+        let input = runtime.input();
+        SetMenuSounds(input, 0x0f, 1 << 4);
         match menu.advance(
             cx.world.activity() & CHECK_ABORT as u16 != 0,
-            PulsedInputState.menu[KEY_MENU_SELECT as usize] != 0,
+            input.pulsed().menu[KEY_MENU_SELECT as usize] != 0,
             cx.world.activity() as u8 == IN_LAST_BATTLE as u8,
         ) {
             SelectionAction::Finish => return false,
@@ -182,7 +184,7 @@ pub(crate) mod engine {
         }
         let flags = cx.world.data.game.glob_flags;
         cx.with_legacy(|| {
-            crate::ui::menu::choose_menu_state(&mut menu.choice, PM_CONVERSE as u8, flags);
+            crate::ui::menu::choose_menu_state(input, &mut menu.choice, PM_CONVERSE as u8, flags);
         });
         true
     }
@@ -450,6 +452,7 @@ pub(crate) mod engine {
     }
 
     unsafe fn draw_fade_text(
+        input: &crate::engine::input::InputSession,
         str1: *const UNICODE,
         str2: *const UNICODE,
         fade_in: BOOLEAN,
@@ -464,12 +467,12 @@ pub(crate) mod engine {
         let mut t2 = t1;
         t2.baseline.y = t2.baseline.y.wrapping_add(11);
         t2.pStr = str2;
-        FlushInput();
+        FlushInput(input);
         let mut time = GetTimeCounter();
         if fade_in != 0 {
             let mut i = 0usize;
             while i < TEXT_FADE.len() {
-                if AnyButtonPress(1) != 0 {
+                if AnyButtonPress(input, 1) != 0 {
                     i = TEXT_FADE.len() - 1;
                 }
                 let v = TEXT_FADE[i];
@@ -483,7 +486,7 @@ pub(crate) mod engine {
         } else {
             let mut i = TEXT_FADE.len() as i16 - 1;
             while i >= 0 {
-                if AnyButtonPress(1) != 0 {
+                if AnyButtonPress(input, 1) != 0 {
                     i = 0;
                 }
                 let v = TEXT_FADE[i as usize];
@@ -502,8 +505,7 @@ pub(crate) mod engine {
 
     /// # Safety
     /// The game thread must own initialized encounter fleet queues, game state, display, and salvage resources.
-    #[no_mangle]
-    pub unsafe extern "C" fn UninitEncounter() -> COUNT {
+    pub unsafe fn uninit_encounter(input: &crate::engine::input::InputSession) -> COUNT {
         let mut killed = 0u16;
         KernelOwner::current().write(free_gravity_well);
         if activity() & (CHECK_ABORT | CHECK_LOAD) as u16 != 0
@@ -603,7 +605,7 @@ pub(crate) mod engine {
                                 );
                                 str1 = game_string(ENCOUNTER_STRING_BASE + 4);
                                 str2 = game_string(ENCOUNTER_STRING_BASE + 5);
-                                draw_fade_text(str1, str2, 1, &mut salvage_rect);
+                                draw_fade_text(input, str1, str2, 1, &mut salvage_rect);
                             }
                             rect.corner.y = salvage_rect.corner.y.wrapping_add(9);
                             rect.extent.height = 22;
@@ -641,7 +643,7 @@ pub(crate) mod engine {
                             if sleepy {
                                 let mut time = GetTimeCounter();
                                 for (r, g, b) in SHIP_FADE {
-                                    sleepy = AnyButtonPress(1) == 0
+                                    sleepy = AnyButtonPress(input, 1) == 0
                                         && activity() & CHECK_ABORT as u16 == 0;
                                     if !sleepy {
                                         break;
@@ -663,9 +665,9 @@ pub(crate) mod engine {
         SetStatusMessageMode(previous_mode);
         if victory != 0 {
             WaitForAnyButton(1, ONE_SECOND * 3, 0);
-            if !escape_pressed() {
-                draw_fade_text(str1, str2, 0, &mut salvage_rect);
-                if !escape_pressed() {
+            if !escape_pressed(input) {
+                draw_fade_text(input, str1, str2, 0, &mut salvage_rect);
+                if !escape_pressed(input) {
                     SetContextForeGroundColor(rgb15(0, 0, 0));
                     rect.corner.x = salvage_rect.corner.x.wrapping_add(10);
                     rect.extent.width = 132;
@@ -686,10 +688,10 @@ pub(crate) mod engine {
                     font_DrawText(&mut t);
                     str1 = game_string(ENCOUNTER_STRING_BASE + 6);
                     str2 = game_string(ENCOUNTER_STRING_BASE + 7);
-                    draw_fade_text(str1, str2, 1, &mut salvage_rect);
+                    draw_fade_text(input, str1, str2, 1, &mut salvage_rect);
                     WaitForAnyButton(1, ONE_SECOND * 2, 0);
-                    if !escape_pressed() {
-                        draw_fade_text(str1, str2, 0, &mut salvage_rect);
+                    if !escape_pressed(input) {
+                        draw_fade_text(input, str1, str2, 0, &mut salvage_rect);
                     }
                 }
             }

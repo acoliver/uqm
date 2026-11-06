@@ -2,7 +2,6 @@
 use crate::io::uio_bridge::{uio_DirHandle, uio_MountHandle, uio_Repository};
 
 use crate::ships::native::abi as options;
-use std::{ffi::c_char, ptr};
 extern "C" {
     static mut contentMountHandle: *mut uio_MountHandle;
 }
@@ -34,11 +33,6 @@ accessor!(uqm_set_config_dir(value: *mut uio_DirHandle) = options::configDir = v
 accessor!(uqm_set_save_dir(value: *mut uio_DirHandle) = options::saveDir = value.cast());
 accessor!(uqm_set_melee_dir(value: *mut uio_DirHandle) = options::meleeDir = value.cast());
 accessor!(uqm_set_content_mount_handle(value: *mut uio_MountHandle) = contentMountHandle = value.cast());
-accessor!(uqm_set_base_content_path(path: *const c_char) = {
-    let destination = ptr::addr_of_mut!(options::baseContentPath).cast::<c_char>();
-    libc::strncpy(destination, path, super::dir_prep::PATH_MAX - 1);
-    destination.add(super::dir_prep::PATH_MAX - 1).write(0);
-});
 
 /// # Safety
 /// Data is null or points to a complete live LOCDATA on the game thread.

@@ -9,7 +9,7 @@ use crate::engine::battle::Cx;
 use crate::engine::battle::{Concern, ElementId, Parent, ShipId};
 use crate::graphics::native_abi::POINT as Point;
 use crate::ships::native::abi::*;
-use std::{mem, ptr};
+use std::mem;
 
 #[path = "combat.rs"]
 mod combat;

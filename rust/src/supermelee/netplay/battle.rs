@@ -6,15 +6,20 @@ use super::{
 };
 use crate::engine::battle::net::{BattleNet, ProtocolWait};
 
-pub(super) fn effect(event: Event) {
-    match event.effect {
-        Effect::Seed(seed) => {
-            crate::math::seed_random(seed);
+impl SessionCore {
+    pub(super) fn effect(&self, event: Event) {
+        match event.effect {
+            Effect::Seed(seed) => {
+                crate::math::seed_random(seed);
+            }
+            #[cfg(not(test))]
+            _ => crate::supermelee::native::menu::live::changes::protocol_feedback(
+                self.controller(),
+                event,
+            ),
+            #[cfg(test)]
+            _ => panic!("protocol test entered live feedback: {event:?}"),
         }
-        #[cfg(not(test))]
-        _ => crate::supermelee::native::menu::live::changes::protocol_feedback(event),
-        #[cfg(test)]
-        _ => panic!("protocol test entered live feedback: {event:?}"),
     }
 }
 impl BattleNet for SessionCore {

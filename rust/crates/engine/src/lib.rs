@@ -3,6 +3,7 @@
 pub mod bridge_log;
 pub mod callback;
 pub mod collections;
+pub mod configuration;
 pub mod graphics;
 pub mod host;
 pub mod input;

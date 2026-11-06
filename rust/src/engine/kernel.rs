@@ -7,6 +7,7 @@ use crate::graphics::native_abi::{POINT, STRING as SOUND};
 use std::ptr;
 
 pub struct Kernel {
+    pub configuration: uqm_engine::configuration::Configuration,
     pub(super) input_runtime: Option<std::rc::Rc<dyn super::input::InputRuntime>>,
     pub last_activity: u16,
     pub player_control: [u8; 2],
@@ -133,6 +134,7 @@ impl Kernel {
     pub(crate) fn new() -> Self {
         let star_planes = Box::new([30, 60, 90].map(StarPlane::new));
         Self {
+            configuration: uqm_engine::configuration::Configuration::default(),
             input_runtime: None,
             last_activity: 0,
             player_control: [0; 2],

@@ -388,7 +388,7 @@ fn check_fixture(name: &str, text: &str) {
 /// `SysGenRNG`), so the comparisons must not run in parallel.
 #[test]
 fn exported_symbols_reproduce_the_c_fixtures() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let table = unsafe { &planet_array }.as_slice();
         let mut exports = ExportedGenerators::new();
         let base = table.as_ptr() as usize;

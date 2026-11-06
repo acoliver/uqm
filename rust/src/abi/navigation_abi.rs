@@ -1682,7 +1682,7 @@ pub use crate::ui::sis::capacity::GetModuleCrewCapacity;
 pub use crate::ui::sis::capacity::GetCrewPodCapacity;
 
 #[cfg(not(test))]
-pub use crate::ui::sis::capacity::GetCPodCapacity;
+pub use crate::ui::sis::capacity::get_c_pod_capacity;
 
 #[cfg(not(test))]
 pub use crate::ui::sis::capacity::GetModuleStorageCapacity;
@@ -2785,19 +2785,6 @@ pub use crate::mainloop::input_abi::live::CurrentInputToBattleInput;
 
 #[cfg(not(test))]
 pub use crate::mainloop::input_abi::live::PulsedInputToBattleInput;
-extern "C" {
-    pub static mut CurrentInputState: crate::c_bindings::controller_input::_controller_input_state;
-}
-extern "C" {
-    pub static mut PulsedInputState: crate::c_bindings::controller_input::_controller_input_state;
-}
-extern "C" {
-    pub static mut ImmediateInputState:
-        crate::c_bindings::controller_input::_controller_input_state;
-}
-extern "C" {
-    pub static mut PlayerControls: [u32; 2];
-}
 
 #[cfg(not(test))]
 pub use crate::mainloop::input_abi::live::UpdateInputState;
@@ -2815,13 +2802,13 @@ pub use crate::mainloop::input_abi::live::SetDefaultMenuRepeatDelay;
 pub use crate::mainloop::input_abi::live::ResetKeyRepeat;
 
 #[cfg(not(test))]
-pub use crate::ui::util::live::PauseGame;
+pub use crate::ui::util::live::pause_game;
 
 #[cfg(not(test))]
 pub use crate::ui::util::live::SleepGame;
 
 #[cfg(not(test))]
-pub use crate::ui::confirm::DoConfirmExit;
+pub use crate::ui::confirm::do_confirm_exit;
 
 #[cfg(not(test))]
 pub use crate::mainloop::input_abi::live::ConfirmExit;
@@ -2839,7 +2826,7 @@ pub use crate::ui::util::live::WaitForNoInput;
 pub use crate::ui::util::live::WaitForNoInputUntil;
 
 #[cfg(not(test))]
-pub use crate::ui::confirm::DoPopupWindow;
+pub use crate::ui::confirm::do_popup_window;
 pub type InputFrameCallback = ::std::option::Option<unsafe extern "C" fn()>;
 
 #[cfg(not(test))]
@@ -2847,12 +2834,6 @@ pub use crate::mainloop::input_abi::live::SetInputCallback;
 
 #[cfg(not(test))]
 pub use crate::mainloop::input_abi::live::DoInput;
-extern "C" {
-    pub static mut GamePaused: BOOLEAN;
-}
-extern "C" {
-    pub static mut ExitRequested: BOOLEAN;
-}
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct joy_char {
@@ -2863,7 +2844,7 @@ pub type joy_char_t = joy_char;
 #[derive(Debug, Copy, Clone)]
 pub struct textentry_state {
     pub InputFunc:
-        ::std::option::Option<unsafe extern "C" fn(pTES: *mut textentry_state) -> BOOLEAN>,
+        ::std::option::Option<unsafe fn(pTES: *mut textentry_state, input: &crate::engine::input::InputSession) -> BOOLEAN>,
     pub Initialized: BOOLEAN,
     pub NextTime: DWORD,
     pub Success: BOOLEAN,
@@ -2881,15 +2862,15 @@ pub struct textentry_state {
     pub CursorPos: ::std::os::raw::c_int,
     pub MaxSize: ::std::os::raw::c_int,
     pub ChangeCallback:
-        ::std::option::Option<unsafe extern "C" fn(pTES: *mut textentry_state) -> BOOLEAN>,
+        ::std::option::Option<unsafe fn(pTES: *mut textentry_state, input: &crate::engine::input::InputSession) -> BOOLEAN>,
     pub FrameCallback:
-        ::std::option::Option<unsafe extern "C" fn(pTES: *mut textentry_state) -> BOOLEAN>,
+        ::std::option::Option<unsafe fn(pTES: *mut textentry_state, input: &crate::engine::input::InputSession) -> BOOLEAN>,
     pub CbParam: *mut ::std::os::raw::c_void,
 }
 pub type TEXTENTRY_STATE = textentry_state;
 
 #[cfg(not(test))]
-pub use crate::ui::getchar::DoTextEntry;
+pub use crate::ui::getchar::do_text_entry;
 pub const OPT_ENABLABLE_OPTVAL_DISABLED: OPT_ENABLABLE = 0;
 pub const OPT_ENABLABLE_OPTVAL_ENABLED: OPT_ENABLABLE = 1;
 pub type OPT_ENABLABLE = ::std::os::raw::c_uint;
@@ -2955,10 +2936,10 @@ pub type GLOBALOPTS = globalopts_struct;
 
 
 #[cfg(not(test))]
-pub use crate::front_end::setupmenu::runtime::GetGlobalOptions;
+pub use crate::front_end::setupmenu::runtime::get_global_options;
 
 #[cfg(not(test))]
-pub use crate::front_end::setupmenu::runtime::SetGlobalOptions;
+pub use crate::front_end::setupmenu::runtime::set_global_options;
 
 pub const PlanetScanTypes_MINERAL_SCAN: PlanetScanTypes = 0;
 pub const PlanetScanTypes_ENERGY_SCAN: PlanetScanTypes = 1;
@@ -3162,7 +3143,7 @@ pub const PM_ALT_EXIT_SCAN: _bindgen_ty_13 = 53;
 pub type _bindgen_ty_13 = ::std::os::raw::c_uint;
 
 #[cfg(not(test))]
-pub use crate::ui::menu::DoMenuChooser;
+pub use crate::ui::menu::do_menu_chooser;
 
 #[cfg(not(test))]
 pub use crate::ui::menu::DrawMenuStateStrings;
@@ -3565,9 +3546,6 @@ pub struct SUMMARY_DESC {
     pub ShipList: [BYTE; 12usize],
     pub DeviceList: [BYTE; 16usize],
     pub SaveName: [UNICODE; 64usize],
-}
-extern "C" {
-
 }
 
 #[cfg(not(test))]
@@ -3973,48 +3951,6 @@ pub const NetState_NetState_endingBattle: NetState = 8;
 pub const NetState_NetState_endingBattle2: NetState = 9;
 pub type NetState = ::std::os::raw::c_uint;
 extern "C" {
-    pub static mut optWhichCoarseScan: ::std::os::raw::c_int;
-}
-extern "C" {
-    pub static mut optWhichMenu: ::std::os::raw::c_int;
-}
-extern "C" {
-    pub static mut optWhichFonts: ::std::os::raw::c_int;
-}
-extern "C" {
-    pub static mut optWhichIntro: ::std::os::raw::c_int;
-}
-extern "C" {
-    pub static mut optWhichShield: ::std::os::raw::c_int;
-}
-extern "C" {
-    pub static mut optSmoothScroll: ::std::os::raw::c_int;
-}
-extern "C" {
-    pub static mut optMeleeScale: ::std::os::raw::c_int;
-}
-extern "C" {
-    pub static mut opt3doMusic: BOOLEAN;
-}
-extern "C" {
-    pub static mut optRemixMusic: BOOLEAN;
-}
-extern "C" {
-    pub static mut optSpeech: BOOLEAN;
-}
-extern "C" {
-    pub static mut optSubtitles: BOOLEAN;
-}
-extern "C" {
-    pub static mut optStereoSFX: BOOLEAN;
-}
-extern "C" {
-    pub static mut optKeepAspectRatio: BOOLEAN;
-}
-extern "C" {
-    pub static mut optGamma: f32;
-}
-extern "C" {
     pub static mut contentDir: *mut crate::io::uio_bridge::uio_DirHandle;
 }
 extern "C" {
@@ -4025,9 +3961,6 @@ extern "C" {
 }
 extern "C" {
     pub static mut meleeDir: *mut crate::io::uio_bridge::uio_DirHandle;
-}
-extern "C" {
-    pub static mut baseContentPath: [std::ffi::c_char; 4096];
 }
 pub use crate::ships::native::abi::_input_template;
 pub type INPUT_TEMPLATE = _input_template;
@@ -4069,7 +4002,7 @@ pub use crate::supermelee::native::load_teams::live::InitMeleeLoadState;
 pub use crate::supermelee::native::load_teams::live::UninitMeleeLoadState;
 
 #[cfg(not(test))]
-pub use crate::supermelee::native::load_teams::live::DoLoadTeam;
+pub use crate::supermelee::native::load_teams::live::do_load_team;
 
 #[cfg(not(test))]
 pub use crate::supermelee::native::load_teams::live::DoSaveTeam;
@@ -4107,7 +4040,7 @@ pub type MeleeShip = ::std::os::raw::c_uint;
 pub use crate::ships::native::abi::melee_state;
 
 #[cfg(not(test))]
-pub use crate::supermelee::native::menu::live::DoMelee;
+pub use crate::supermelee::native::menu::live::do_melee;
 
 #[cfg(not(test))]
 pub use crate::supermelee::native::menu::live::drawing::DrawMeleeIcon;
@@ -4240,10 +4173,10 @@ extern "C" {
 }
 
 #[cfg(not(test))]
-pub use crate::ui::outfit::DoOutfit;
+pub use crate::ui::outfit::do_outfit;
 
 #[cfg(not(test))]
-pub use crate::ui::shipyard::DoShipyard;
+pub use crate::ui::shipyard::do_shipyard;
 
 #[cfg(not(test))]
 pub use crate::ui::starbase::DrawShipPiece;
@@ -4389,7 +4322,7 @@ pub use crate::graphics::widgets_abi::Widget_SetWindowColors;
 
 pub use crate::graphics::widgets_abi::Widget_SetFont;
 
-pub use crate::graphics::widgets_abi::Widget_Event;
+pub use crate::graphics::widgets_abi::widget_event;
 
 pub use crate::graphics::widgets_abi::Widget_ReceiveFocusMenuScreen;
 
@@ -4401,17 +4334,17 @@ pub use crate::graphics::widgets_abi::Widget_ReceiveFocusControlEntry;
 
 pub use crate::graphics::widgets_abi::Widget_ReceiveFocusRefuseFocus;
 
-pub use crate::graphics::widgets_abi::Widget_HandleEventMenuScreen;
+pub use crate::graphics::widgets_abi::widget_handle_event_menu_screen;
 
-pub use crate::graphics::widgets_abi::Widget_HandleEventChoice;
+pub use crate::graphics::widgets_abi::widget_handle_event_choice;
 
-pub use crate::graphics::widgets_abi::Widget_HandleEventSlider;
+pub use crate::graphics::widgets_abi::widget_handle_event_slider;
 
-pub use crate::graphics::widgets_abi::Widget_HandleEventTextEntry;
+pub use crate::graphics::widgets_abi::widget_handle_event_text_entry;
 
-pub use crate::graphics::widgets_abi::Widget_HandleEventControlEntry;
+pub use crate::graphics::widgets_abi::widget_handle_event_control_entry;
 
-pub use crate::graphics::widgets_abi::Widget_HandleEventIgnoreAll;
+pub use crate::graphics::widgets_abi::widget_handle_event_ignore_all;
 
 pub use crate::graphics::widgets_abi::Widget_HeightChoice;
 

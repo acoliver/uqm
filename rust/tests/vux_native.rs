@@ -8,7 +8,7 @@ use std::mem;
 use uqm_rust::ships::native::{abi::*, angle_to_facing, frame_index, normalize_facing};
 #[test]
 fn descriptor_laser_and_limpet_launch() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(32);
         unsafe {
             let mut ship = Ship::new(&_battle, SPECIES_ID_VUX_ID, 0);
@@ -62,7 +62,7 @@ fn descriptor_laser_and_limpet_launch() {
 }
 #[test]
 fn limpets_saturate_waits_and_reduce_thrust_without_rng_for_nonships() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(32);
         unsafe {
             let mut ship = Ship::new(&_battle, SPECIES_ID_VUX_ID, 0);
@@ -124,7 +124,7 @@ fn limpets_saturate_waits_and_reduce_thrust_without_rng_for_nonships() {
 }
 #[test]
 fn warp_in_is_disabled_in_encounters_and_one_shot_in_melee() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(32);
         unsafe {
             let mut ship = Ship::new(&_battle, SPECIES_ID_VUX_ID, 0);
@@ -170,7 +170,7 @@ fn warp_in_is_disabled_in_encounters_and_one_shot_in_melee() {
 }
 #[test]
 fn ai_changes_threat_state_and_uses_turning_energy_threshold() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(16);
         unsafe {
             let mut ship = Ship::new(&_battle, SPECIES_ID_VUX_ID, 0);

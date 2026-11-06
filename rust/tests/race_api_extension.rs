@@ -1,6 +1,6 @@
 #[test]
 fn owning_frame_slots_reject_foreign_drawables_without_mutation() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let owner = Battle::new(4);
         // SAFETY: both serialized fixtures retain all frame resources for the attempted selections.
         unsafe {
@@ -37,7 +37,7 @@ fn teardown_receives_final_crew_and_owned_state() {
         intelligence: None,
         uninit: Some(uninit),
     };
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let owner = Battle::new(2);
         // SAFETY: the serialized fixture owns the enlisted-crew authority and restores it after teardown.
         unsafe {
@@ -66,7 +66,7 @@ fn teardown_receives_final_crew_and_owned_state() {
 
 #[test]
 fn abandonment_keeps_allocation_rng_parent_and_target_order() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let owner = Battle::new(4);
         // SAFETY: fixtures retain all frames and queue records; the shared frame authority is restored.
         unsafe {
@@ -100,7 +100,7 @@ fn abandonment_keeps_allocation_rng_parent_and_target_order() {
 
 #[test]
 fn self_destruct_selects_a_surviving_opponent_before_the_dead_owner() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let owner = Battle::new(4);
         // SAFETY: both live queue fixtures retain their descriptors during winner selection.
         unsafe {
@@ -120,7 +120,7 @@ fn self_destruct_selects_a_surviving_opponent_before_the_dead_owner() {
 
 #[test]
 fn sound_banks_are_per_ship_and_pkunk_taunts_share_the_existing_authority() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let owner = Battle::new(4);
         let mut a = Ship::bare(&owner, SPECIES_ID_VUX_ID, 0);
         let mut b = Ship::bare(&owner, SPECIES_ID_VUX_ID, 1);
@@ -156,7 +156,7 @@ fn sound_banks_are_per_ship_and_pkunk_taunts_share_the_existing_authority() {
 
 #[test]
 fn sound_bank_selection_rejects_an_out_of_range_index() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let owner = Battle::new(2);
         let ship = Ship::bare(&owner, SPECIES_ID_VUX_ID, 0);
         // SAFETY: the fixture retains its descriptor while the checked operation rejects its absent bank.
@@ -173,7 +173,7 @@ fn sound_bank_selection_rejects_an_out_of_range_index() {
 
 #[test]
 fn self_destruct_winner_preserves_simultaneous_death_and_an_existing_winner() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let owner = Battle::new(4);
         // SAFETY: fixtures own their queue slots and descriptors through winner selection.
         unsafe {
@@ -202,7 +202,7 @@ fn self_destruct_winner_preserves_simultaneous_death_and_an_existing_winner() {
 
 #[test]
 fn abandonment_pool_exhaustion_keeps_crew_and_rng_unchanged() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let owner = Battle::new(2);
         // SAFETY: loaded fixture frames and both ships remain live during the full-pool attempt.
         unsafe {
@@ -220,7 +220,7 @@ fn abandonment_pool_exhaustion_keeps_crew_and_rng_unchanged() {
 
 #[test]
 fn navigation_world_projections_write_the_single_authority() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _owner = Battle::new(2);
         // SAFETY: this test serializes and restores every modified world value.
         unsafe {
@@ -261,7 +261,7 @@ fn navigation_world_projections_write_the_single_authority() {
 
 #[test]
 fn typed_laser_and_thrust_use_live_ship_geometry_and_lifecycle() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let owner = Battle::new(4);
         // SAFETY: fixtures retain pool slots and the serialized battle authority.
         unsafe {
@@ -321,7 +321,7 @@ static EMPTY_RACE: Race = Race {
 
 #[test]
 fn absent_callbacks_remain_absent_in_metadata_and_dispatch() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let owner = Battle::new(4);
         let ship = Ship::native(&owner, &EMPTY_RACE, 0);
         // SAFETY: the serialized fixture retains all pool storage.
@@ -355,7 +355,7 @@ fn absent_callbacks_remain_absent_in_metadata_and_dispatch() {
 
 #[test]
 fn frames_keep_wrapping_bounds_absence_and_ship_view_identity() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let owner = Battle::new(4);
         // SAFETY: fixture frames stay loaded throughout the context operations.
         unsafe {
@@ -395,7 +395,7 @@ fn frames_keep_wrapping_bounds_absence_and_ship_view_identity() {
 
 #[test]
 fn allocated_copy_keeps_primitive_identity_parent_target_and_observations() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let owner = Battle::new(4);
         // SAFETY: the fixtures and destination slot belong to this serialized battle.
         unsafe {
@@ -441,7 +441,7 @@ fn allocated_copy_keeps_primitive_identity_parent_target_and_observations() {
 
 #[test]
 fn per_ship_state_and_control_round_trip_without_sharing() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let owner = Battle::new(4);
         let a = Ship::bare(&owner, SPECIES_ID_VUX_ID, 0);
         let b = Ship::bare(&owner, SPECIES_ID_VUX_ID, 1);
@@ -537,7 +537,7 @@ fn descriptor_world_observes_activity_and_typed_story_and_writes_the_same_author
         descriptor,
         ..EMPTY_RACE
     };
-    battle_context::run(|| {
+    battle_context::run(|_| {
         // SAFETY: the serialized fixture owns and restores the world authorities.
         unsafe {
             let activity = uqm_rust::engine::World::current().read(|world| world.activity());
@@ -603,16 +603,23 @@ fn hyperspace_cancel_observation_preserves_weapon_cancel_and_counter_conditions(
             cx.ship_state_mut(ship).energy_counter += 1;
         }
     }
-    battle_context::run(|| {
+    battle_context::run(|input| {
         let owner = Battle::new(2);
         let ship = Ship::bare(&owner, SPECIES_ID_VUX_ID, 0);
-        // SAFETY: the fixture serializes the input authority and restores it after the matrix.
+        // SAFETY: the fixture serializes the game context throughout the matrix.
         unsafe {
-            let saved = PulsedInputState.menu[KEY_MENU_CANCEL as usize];
             for weapon in [false, true] {
                 for cancel in [false, true] {
                     for counter in [0, 1] {
-                        PulsedInputState.menu[KEY_MENU_CANCEL as usize] = i32::from(cancel);
+                        for pressed in [false, cancel] {
+                            input.set_menu_key(KEY_MENU_CANCEL as usize, pressed);
+                            let sampled = input.immediate();
+                            input.advance(
+                                sampled,
+                                sampled,
+                                uqm_rust::time::counter_abi::GetTimeCounter(),
+                            );
+                        }
                         uqm_rust::app::bridge::enter(|cx| {
                             cx.ship_state_mut(ship.ship_id).status =
                                 if weapon { WEAPON as u16 } else { 0 };
@@ -628,7 +635,13 @@ fn hyperspace_cancel_observation_preserves_weapon_cancel_and_counter_conditions(
                     }
                 }
             }
-            PulsedInputState.menu[KEY_MENU_CANCEL as usize] = saved;
+            input.set_menu_key(KEY_MENU_CANCEL as usize, false);
+            let released = input.immediate();
+            input.advance(
+                released,
+                released,
+                uqm_rust::time::counter_abi::GetTimeCounter(),
+            );
         }
     });
 }

@@ -217,8 +217,8 @@ pub(crate) mod live {
         current: u8,
     }
 
-    unsafe fn discard(menu: &mut Menu) -> i32 {
-        let pulse = std::ptr::addr_of!(PulsedInputState).read();
+    unsafe fn discard(input: &crate::engine::input::InputSession, menu: &mut Menu) -> i32 {
+        let pulse = input.pulsed();
         if crate::engine::World::current().read(|world| world.activity()) & (1 << 14) != 0
             || pulse.menu[KEY_MENU_CANCEL as usize] != 0
         {
@@ -254,13 +254,17 @@ pub(crate) mod live {
     /// # Safety
     /// Call on the game thread with campaign globals and screen resources initialized.
     pub unsafe fn cargo_menu(cx: &mut Cx<'_>, io: &mut Io<'_>) {
+        let runtime = cx.kernel.input_runtime();
+        let input = runtime.input();
         let mut menu = Menu { current: 0 };
         cx.with_legacy(|| {
             DrawCargoStrings(u8::MAX, 0);
             description(0);
-            SetMenuSounds(15, 16);
+            SetMenuSounds(input, 15, 16);
         });
-        cx.run_input(io, true, |cx, _| cx.with_legacy(|| discard(&mut menu) != 0));
+        cx.run_input(io, true, |cx, _| {
+            cx.with_legacy(|| discard(input, &mut menu) != 0)
+        });
         cx.with_legacy(|| ClearSISRect(8));
     }
 }

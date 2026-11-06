@@ -18,9 +18,6 @@
 // These functions are direct translations of C code that accesses
 // mutable statics and uses field reassignment after Default initialization.
 // The patterns are inherent to C ABI compatibility.
-#![allow(clippy::missing_safety_doc)]
-#![allow(clippy::field_reassign_with_default)]
-#![allow(static_mut_refs)]
 
 use crate::comm::locdata::{CColor, CPoint, CRect};
 #[cfg(not(test))]
@@ -167,7 +164,6 @@ mod c_bridge {
 
     pub use crate::graphics::pixmap_abi::SetAbsFrameIndex;
 
-    pub use crate::mainloop::input_abi::live::PulsedInputState;
     pub use crate::sound::heart_ffi::get_first_track_subtitle as GetFirstTrackSubtitle;
     pub use crate::sound::heart_ffi::get_next_track_subtitle as GetNextTrackSubtitle;
     pub use crate::sound::heart_ffi::get_track_subtitle_text as GetTrackSubtitleText;
@@ -196,12 +192,17 @@ static mut LAST_CUR_RESPONSE: u8 = 0;
 // ============================================================================
 
 #[cfg(not(test))]
-unsafe fn do_summary_page_frame(pss: &mut SummaryLoopState, activity: u16) -> std::ffi::c_int {
+unsafe fn do_summary_page_frame(
+    input: &crate::engine::input::InputSession,
+    pss: &mut SummaryLoopState,
+    activity: u16,
+) -> std::ffi::c_int {
     if (activity & CHECK_ABORT) != 0 {
         return 0;
     }
 
-    let menu = &c_bridge::PulsedInputState.menu;
+    let keys = input.pulsed();
+    let menu = &keys.menu;
     if menu[KEY_MENU_SELECT] != 0 || menu[KEY_MENU_CANCEL] != 0 || menu[KEY_MENU_RIGHT] != 0 {
         if !pss.next_sub.is_null() {
             pss.print_next = 1;
@@ -237,10 +238,14 @@ unsafe fn draw_summary_page_contents(pss: &mut SummaryLoopState) {
     c_bridge::SetContextFont((Kernel::current().read(|owner| owner.tiny_font)).cast());
 
     let tw = rect.width - 2 - 2;
-    let mut t = CText::default();
-    t.baseline.x = 2;
-    t.align = ALIGN_LEFT;
-    t.baseline.y = SLIDER_Y + SLIDER_HEIGHT + DELTA_Y_SUMMARY;
+    let mut t = CText {
+        baseline: CPoint {
+            x: 2,
+            y: SLIDER_Y + SLIDER_HEIGHT + DELTA_Y_SUMMARY,
+        },
+        align: ALIGN_LEFT,
+        ..CText::default()
+    };
 
     let mut row: i16 = 0;
     while row < MAX_SUMM_ROWS && !pss.next_sub.is_null() {
@@ -290,11 +295,15 @@ unsafe fn draw_summary_page_contents(pss: &mut SummaryLoopState) {
         let mlen = copy_cstr(more_str, &mut buffer, blen);
         let _ = copy_cstr(more_str_c, &mut buffer, blen + mlen);
 
-        let mut mt = CText::default();
-        mt.baseline.x = SIS_SCREEN_WIDTH >> 1;
-        mt.baseline.y = t.baseline.y;
-        mt.align = ALIGN_CENTER;
-        mt.p_str = buffer.as_ptr() as *const std::ffi::c_char;
+        let mut mt = CText {
+            baseline: CPoint {
+                x: SIS_SCREEN_WIDTH >> 1,
+                y: t.baseline.y,
+            },
+            align: ALIGN_CENTER,
+            p_str: buffer.as_ptr().cast(),
+            ..CText::default()
+        };
         c_bridge::SetContextForeGroundColor(COMM_MORE_TEXT_COLOR);
         c_bridge::font_DrawText(std::ptr::from_mut(&mut mt).cast());
     }
@@ -451,12 +460,16 @@ pub(crate) unsafe fn feedback_player_phrase_with<G: CommWindowGfx>(
         let player_font = gfx.conversation_player_font();
         let old_font = gfx.set_context_font(player_font);
 
-        let mut ct = CText::default();
-        ct.baseline.x = SIS_SCREEN_WIDTH >> 1;
-        ct.baseline.y = SLIDER_Y + SLIDER_HEIGHT + 13;
-        ct.align = ALIGN_CENTER;
-        ct.char_count = u16::MAX;
-        ct.p_str = gfx.game_string(FEEDBACK_STRING_BASE);
+        let mut ct = CText {
+            baseline: CPoint {
+                x: SIS_SCREEN_WIDTH >> 1,
+                y: SLIDER_Y + SLIDER_HEIGHT + 13,
+            },
+            align: ALIGN_CENTER,
+            char_count: u16::MAX,
+            p_str: gfx.game_string(FEEDBACK_STRING_BASE),
+            ..CText::default()
+        };
         gfx.set_foreground_color(COMM_RESPONSE_INTRO_TEXT_COLOR);
         gfx.draw_text(&mut ct);
 
@@ -521,12 +534,16 @@ pub(crate) fn refresh_responses_with<G: CommWindowGfx>(
             continue;
         }
 
-        let mut rt = CText::default();
-        rt.p_str = text_buf.as_ptr() as *const std::ffi::c_char;
-        rt.char_count = u16::MAX;
-        rt.baseline.x = TEXT_X_OFFS + 8;
-        rt.baseline.y = y + leading;
-        rt.align = ALIGN_LEFT;
+        let mut rt = CText {
+            p_str: text_buf.as_ptr().cast(),
+            char_count: u16::MAX,
+            baseline: CPoint {
+                x: TEXT_X_OFFS + 8,
+                y: y + leading,
+            },
+            align: ALIGN_LEFT,
+            ..CText::default()
+        };
 
         if response == cur_response {
             gfx.set_foreground_color(COMM_PLAYER_TEXT_HIGHLIGHT_COLOR);
@@ -709,6 +726,8 @@ pub unsafe fn feedback_player_phrase(activity: u16, text: *const std::ffi::c_cha
 
 /// Render the response list in the SIS comm window.
 #[cfg(not(test))]
+/// # Safety
+/// Response text and graphics must be initialized and accessed on the game thread.
 pub unsafe fn refresh_responses(activity: u16, top: u8, num_responses: u8, cur_response: u8) {
     LAST_TOP_RESPONSE = top;
     LAST_NUM_RESPONSES = num_responses;
@@ -724,6 +743,8 @@ pub unsafe fn refresh_responses(activity: u16, top: u8, num_responses: u8, cur_r
 /// Show conversation history summary page.
 /// Ported from `c_SelectConversationSummary()` in rust_comm.c.
 #[cfg(not(test))]
+/// # Safety
+/// The supplied context must retain the active communication graphics and response state.
 pub unsafe fn select_conversation_summary(
     cx: &mut crate::engine::battle::Cx<'_>,
     io: &mut crate::engine::observe::Io<'_>,
@@ -764,12 +785,14 @@ unsafe fn do_summary_page(
     io: &mut crate::engine::observe::Io<'_>,
     state: &mut SummaryLoopState,
 ) {
+    let runtime = cx.kernel.input_runtime();
+    let input = runtime.input();
     state.print_next = 1;
     state.next_sub = c_bridge::GetFirstTrackSubtitle();
     state.left_over = std::ptr::null();
     cx.run_input(io, false, |cx, _| {
         let activity = cx.world.activity();
-        cx.with_legacy(|| do_summary_page_frame(state, activity) != 0)
+        cx.with_legacy(|| do_summary_page_frame(input, state, activity) != 0)
     });
 }
 

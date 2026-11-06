@@ -35,20 +35,22 @@ const fn rgb15(r: u8, g: u8, b: u8) -> Color {
 /// Status graphics, frames and the active context must be initialized.
 #[no_mangle]
 pub unsafe extern "C" fn DrawCrewFuelString(y: COORD, state: SIZE) {
+    let (retained_status_frame, preferences) =
+        Kernel::current().read(|owner| (owner.status_frame, owner.configuration.preferences()));
     let mut stamp: STAMP = mem::zeroed();
     stamp.origin.y = y + GAUGE_YOFFS + STARCON_TEXT_HEIGHT;
     if state == 0 {
         stamp.origin.x = CREW_XOFFS + (STAT_WIDTH >> 1) + 6;
         stamp.frame = SetAbsFrameIndex(
-            Kernel::current().read(|owner| owner.status_frame),
-            if optWhichMenu == OPT_PC { 4 } else { 0 },
+            retained_status_frame,
+            if preferences.menu == OPT_PC { 4 } else { 0 },
         );
         DrawStamp(&mut stamp);
     }
     stamp.origin.x = ENERGY_XOFFS + (STAT_WIDTH >> 1) - 5;
     stamp.frame = SetAbsFrameIndex(
         Kernel::current().read(|owner| owner.status_frame),
-        if optWhichMenu == OPT_PC { 5 } else { 1 },
+        if preferences.menu == OPT_PC { 5 } else { 1 },
     );
     if state >= 0 {
         DrawStamp(&mut stamp);
@@ -141,7 +143,13 @@ pub(crate) unsafe fn init_ship_status(
         assert!(ship.player >= 0);
         y = Kernel::current().read(|owner| owner.status_offsets[ship.player as usize]);
     }
-    let old_context = SetContext(Kernel::current().read(|owner| owner.status_context));
+    let (context, pc_menu) = Kernel::current().read(|owner| {
+        (
+            owner.status_context,
+            owner.configuration.preferences().menu == OPT_PC,
+        )
+    });
+    let old_context = SetContext(context);
     if !clip_rect.is_null() {
         GetContextClipRect(&mut old_clip);
         let mut r = old_clip;
@@ -169,7 +177,7 @@ pub(crate) unsafe fn init_ship_status(
     let energy_delta = (*siptr).energy_level as SIZE;
     (*siptr).crew_level = 0;
     (*siptr).energy_level = 0;
-    delta_statistics(font, siptr, y, crew_delta, energy_delta);
+    delta_statistics(pc_menu, font, siptr, y, crew_delta, energy_delta);
     UnbatchGraphics();
     if !clip_rect.is_null() {
         SetContextOrigin(old_origin);
@@ -227,6 +235,7 @@ unsafe fn draw_status_title(
 /// # Safety
 /// ShipInfoPtr must be writable and point to valid ship information; graphics context must be initialized.
 pub(crate) unsafe fn delta_statistics(
+    pc_menu: bool,
     font: Option<&crate::graphics::native_font::FontLease>,
     ship: *mut SHIP_INFO,
     y_offs: COORD,
@@ -290,7 +299,7 @@ pub(crate) unsafe fn delta_statistics(
                 }),
                 ship.crew_level,
                 y_offs,
-                optWhichMenu == OPT_PC,
+                pc_menu,
             );
         }
     }

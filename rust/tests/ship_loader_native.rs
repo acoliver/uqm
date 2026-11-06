@@ -43,7 +43,7 @@ static TEARDOWN_RACE: uqm_rust::engine::battle::Race = uqm_rust::engine::battle:
 
 #[test]
 fn code_resources_and_species_loader_preserve_mapping_copy_ownership_and_failures() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(16);
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../tmp/s6");
         std::fs::create_dir_all(&root).unwrap();

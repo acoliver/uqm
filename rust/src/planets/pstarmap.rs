@@ -4,6 +4,8 @@
 //! thread owns the map state; callbacks may reenter drawing and input code.
 
 mod screen;
+use screen::repair_rectangle;
+#[cfg(not(test))]
 #[cfg(not(test))]
 use screen::{finish_star_map, prepare_star_map};
 
@@ -39,7 +41,7 @@ use crate::planets::{
     render::c_api::{draw_filled_oval as DrawFilledOval, draw_oval as DrawOval},
     scan::live::RepairBackRect,
     starmap::{naming::GetClusterName, FindStar},
-    starmap_cursor::DoMoveCursor,
+    starmap_cursor::do_move_cursor,
 };
 
 use crate::savegame::runtime::star::{CStarDesc, NUM_SOLAR_SYSTEMS};
@@ -56,7 +58,7 @@ use std::{
 #[path = "pstarmap/search.rs"]
 pub(crate) mod search;
 #[cfg(not(test))]
-pub use search::DoStarSearch;
+pub use search::do_star_search;
 
 #[cfg(not(test))]
 const MAX_X_UNIVERSE: i32 = 9999;
@@ -875,68 +877,74 @@ pub unsafe fn update_fuel_requirement() {
     DrawStatusMessage(buf.as_ptr());
 }
 
-fn repair_rectangle(last: RECT, next: RECT, width: i32, height: i32) -> RECT {
-    let mut r = RECT {
-        corner: POINT {
-            x: (i32::from(next.corner.x) + i32::from(next.extent.width >> 1) - 25) as i16,
-            y: (i32::from(next.corner.y) + i32::from(next.extent.height >> 1) - 9) as i16,
-        },
-        extent: EXTENT {
-            width: 50,
-            height: 9,
-        },
-    };
-    if r.corner.x < 0 {
-        r.corner.x = 0;
-    } else if i32::from(r.corner.x) + 50 >= width {
-        r.corner.x = (width - 50) as i16;
+#[cfg(not(test))]
+/// # Safety
+/// Game-thread only, with game globals and native UI resources initialized.
+pub unsafe fn star_map(
+    cx: &mut crate::engine::battle::Cx<'_>,
+    io: &mut crate::engine::observe::Io<'_>,
+) -> u32 {
+    let runtime = cx.kernel.input_runtime();
+    let input = runtime.input();
+    let misc_data = cx.kernel.misc_data_frame;
+    let space = cx.kernel.space_context;
+    let autopilot = cx.world.data.game.autopilot;
+    let (mut menu, universe) =
+        cx.with_legacy(|| prepare_star_map(input, misc_data.cast(), space.cast(), autopilot));
+    cx.with_legacy(|| {
+        SetMenuSounds(input, 0, 0);
+        SetMenuRepeatDelay(input, ONE_SECOND / 60, ONE_SECOND / 8, ONE_SECOND / 120, 1);
+    });
+    cx.run_input(io, false, |cx, _| {
+        cx.with_legacy(|| do_move_cursor(&mut menu, input) != 0)
+    });
+    cx.with_legacy(|| {
+        SetMenuSounds(input, 15, 16);
+        SetDefaultMenuRepeatDelay(input);
+        finish_star_map(universe);
+    });
+    if cx.world.data.game.autopilot.x == universe.x && cx.world.data.game.autopilot.y == universe.y
+    {
+        cx.world.data.game.autopilot = POINT { x: -1, y: -1 };
     }
-    if r.corner.y < 0 {
-        r.corner.y = 0;
-    } else if i32::from(r.corner.y) + 9 >= height {
-        r.corner.y = (height - 9) as i16;
-    }
-    r = box_union(last, r);
-    r = box_union(next, r);
-    if r.corner.x < 0 {
-        r.extent.width = r.extent.width.wrapping_add(r.corner.x);
-        r.corner.x = 0;
-    }
-    if i32::from(r.corner.x) + i32::from(r.extent.width) > width {
-        r.extent.width = (width - i32::from(r.corner.x)) as i16;
-    }
-    if r.corner.y < 0 {
-        r.extent.height = r.extent.height.wrapping_add(r.corner.y);
-        r.corner.y = 0;
-    }
-    if i32::from(r.corner.y) + i32::from(r.extent.height) > height {
-        r.extent.height = (height - i32::from(r.corner.y)) as i16;
-    }
-    r.extent.height = r.extent.height.wrapping_add(r.corner.y & 1);
-    r.corner.y &= !1;
-    r
+    u32::from(cx.world.data.game.autopilot.x != -1 && cx.world.data.game.autopilot.y != -1)
 }
+
+#[cfg(test)]
+#[path = "pstarmap/tests.rs"]
+mod tests;
+
+#[cfg(not(test))]
+#[derive(Default)]
+struct Flags {
+    button: bool,
+    interrupted: bool,
+    drawn: bool,
+}
+
 #[cfg(not(test))]
 unsafe fn repair_map(race: u16, last: &mut RECT, next: RECT) {
     let mut r = repair_rectangle(*last, next, width(), height());
     *last = next;
     DrawStarMap(race, &mut r);
 }
+
 #[cfg(not(test))]
-unsafe fn interrupted(button: &mut bool, interrupted: &mut bool, drawn: &mut bool) -> bool {
-    if *button {
-        if AnyButtonPress(1) == 0 {
-            *button = false;
+unsafe fn interrupted(input: &crate::engine::input::InputSession, flags: &mut Flags) -> bool {
+    if flags.button {
+        if AnyButtonPress(input, 1) == 0 {
+            flags.button = false;
         }
     } else {
-        *interrupted = *interrupted || AnyButtonPress(1) != 0;
-        if *interrupted {
-            *drawn = true;
+        flags.interrupted = flags.interrupted || AnyButtonPress(input, 1) != 0;
+        if flags.interrupted {
+            flags.drawn = true;
             return true;
         }
     }
     false
 }
+
 #[cfg(not(test))]
 fn enlarge(r: &mut RECT) {
     r.extent.width = r.extent.width.wrapping_add(1);
@@ -945,20 +953,19 @@ fn enlarge(r: &mut RECT) {
 
 #[cfg(not(test))]
 unsafe fn update_sphere_position(
+    input: &crate::engine::input::InputSession,
     id: LinkId<Fleet>,
     index: u16,
-    button: &mut bool,
-    was_interrupted: &mut bool,
-    drawn: &mut bool,
+    flags: &mut Flags,
 ) {
     let fleet = lock_fleet(id);
     let dx = fleet.loc.x.wrapping_sub(fleet.known_loc.x);
     let dy = fleet.loc.y.wrapping_sub(fleet.known_loc.y);
     if dx != 0 || dy != 0 {
         let mut walk = LineWalk::new(dx, dy);
-        if !*drawn {
+        if !flags.drawn {
             DrawStarMap(u16::MAX, ptr::null_mut());
-            *drawn = true;
+            flags.drawn = true;
         }
         let (initial, mut last) = get_sphere_rect(&lock_fleet(id));
         enlarge(&mut last);
@@ -979,7 +986,7 @@ unsafe fn update_sphere_position(
                     break pair;
                 }
             };
-            if interrupted(button, was_interrupted, drawn) {
+            if interrupted(input, flags) {
                 canceled = true;
                 break;
             }
@@ -1004,26 +1011,27 @@ unsafe fn update_sphere_position(
 }
 
 #[cfg(not(test))]
-unsafe fn update_map() {
-    FlushInput();
-    let mut button = true;
-    let mut drawn = false;
-    let mut was_interrupted = false;
+unsafe fn update_map(input: &crate::engine::input::InputSession) {
+    FlushInput(input);
+    let mut flags = Flags {
+        button: true,
+        ..Flags::default()
+    };
     let mut index = 1u16;
     let mut handle = fleet_queue(|queue| queue.head());
     while let Some(id) = handle {
         let next = fleet_queue(|queue| queue.succ(id));
-        interrupted(&mut button, &mut was_interrupted, &mut drawn);
+        interrupted(input, &mut flags);
         let fleet = lock_fleet(id);
         if fleet.known_strength != 0 {
-            update_sphere_position(id, index, &mut button, &mut was_interrupted, &mut drawn);
+            update_sphere_position(input, id, index, &mut flags);
             let fleet = lock_fleet(id);
             let mut delta =
                 (i32::from(fleet.actual_strength) - i32::from(fleet.known_strength)) as i16;
             if delta != 0 {
-                if !drawn {
+                if !flags.drawn {
                     DrawStarMap(u16::MAX, ptr::null_mut());
-                    drawn = true;
+                    flags.drawn = true;
                 }
                 let dx = if delta > 0 {
                     1i16
@@ -1053,7 +1061,7 @@ unsafe fn update_map() {
                             break pair;
                         }
                     };
-                    if interrupted(&mut button, &mut was_interrupted, &mut drawn) {
+                    if interrupted(input, &mut flags) {
                         canceled = true;
                         break;
                     }
@@ -1081,38 +1089,3 @@ unsafe fn update_map() {
         index += 1;
     }
 }
-
-#[cfg(not(test))]
-/// # Safety
-/// Game-thread only, with game globals and native UI resources initialized.
-pub unsafe fn star_map(
-    cx: &mut crate::engine::battle::Cx<'_>,
-    io: &mut crate::engine::observe::Io<'_>,
-) -> u32 {
-    let misc_data = cx.kernel.misc_data_frame;
-    let space = cx.kernel.space_context;
-    let autopilot = cx.world.data.game.autopilot;
-    let (mut menu, universe) =
-        cx.with_legacy(|| prepare_star_map(misc_data.cast(), space.cast(), autopilot));
-    cx.with_legacy(|| {
-        SetMenuSounds(0, 0);
-        SetMenuRepeatDelay(ONE_SECOND / 60, ONE_SECOND / 8, ONE_SECOND / 120, 1);
-    });
-    cx.run_input(io, false, |cx, _| {
-        cx.with_legacy(|| DoMoveCursor(&mut menu) != 0)
-    });
-    cx.with_legacy(|| {
-        SetMenuSounds(15, 16);
-        SetDefaultMenuRepeatDelay();
-        finish_star_map(universe);
-    });
-    if cx.world.data.game.autopilot.x == universe.x && cx.world.data.game.autopilot.y == universe.y
-    {
-        cx.world.data.game.autopilot = POINT { x: -1, y: -1 };
-    }
-    u32::from(cx.world.data.game.autopilot.x != -1 && cx.world.data.game.autopilot.y != -1)
-}
-
-#[cfg(test)]
-#[path = "pstarmap/tests.rs"]
-mod tests;

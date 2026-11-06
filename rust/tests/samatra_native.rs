@@ -1,6 +1,6 @@
 #[test]
 fn terminal_outcome_survives_descriptor_teardown_until_the_next_battle() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let battle = Battle::new(64);
         // SAFETY: this fixture owns the published battle, descriptors and activity.
         unsafe {
@@ -26,7 +26,8 @@ fn terminal_outcome_survives_descriptor_teardown_until_the_next_battle() {
             assert!(matches!(ship.descriptor_mut().race_state, RaceState::None));
             drop(ship);
             uqm_rust::app::bridge::enter(|cx| {
-                uqm_rust::battle::process_native::init_display_list(cx, optMeleeScale == 0);
+                let scaled = cx.kernel_mut().configuration.preferences().melee_scale == 0;
+                uqm_rust::battle::process_native::init_display_list(cx, scaled);
             });
             uqm_rust::engine::World::current()
                 .write(|world| world.set_activity(WON_LAST_BATTLE as u16));
@@ -47,7 +48,7 @@ fn terminal_outcome_survives_descriptor_teardown_until_the_next_battle() {
 
 #[test]
 fn live_observation_projects_owned_events_generators_hazards_and_player() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let battle = Battle::new(64);
         // SAFETY: the serialized fixture publishes the live context for observation.
         unsafe {
@@ -149,7 +150,7 @@ unsafe fn owned_state(ship: &mut Ship<'_>) -> SaMatraState {
 
 #[test]
 fn lifecycle_counts_each_identity_once_and_retains_gate_entry() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let battle = Battle::new(64);
         // SAFETY: the fixture serializes the live element and ship pools.
         unsafe {
@@ -211,7 +212,7 @@ fn lifecycle_counts_each_identity_once_and_retains_gate_entry() {
 
 #[test]
 fn identity_does_not_depend_on_scrolling_or_survivor_order() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let battle = Battle::new(64);
         // SAFETY: every operand is an allocated pool slot retained by this fixture.
         unsafe {
@@ -235,7 +236,7 @@ fn identity_does_not_depend_on_scrolling_or_survivor_order() {
 
 #[test]
 fn sentinel_tracking_preserves_absent_owner_element() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let battle = Battle::new(64);
         // SAFETY: the ship and sentinel remain allocated through the callback.
         unsafe {
@@ -294,7 +295,7 @@ unsafe fn boss(battle: &Battle) -> Ship<'_> {
 }
 #[test]
 fn generators_spawn_at_exact_offsets_and_decrement_once_before_gate_opens() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(64);
         unsafe {
             let mut ship = boss(&_battle);
@@ -371,7 +372,7 @@ fn generators_spawn_at_exact_offsets_and_decrement_once_before_gate_opens() {
 }
 #[test]
 fn only_player_ship_bomb_carrier_through_open_gate_finishes_battle() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(64);
         unsafe {
             uqm_rust::engine::World::current().write(uqm_rust::state::ffi::rust_init_game_state);
@@ -440,7 +441,7 @@ fn only_player_ship_bomb_carrier_through_open_gate_finishes_battle() {
 }
 #[test]
 fn postprocess_spawns_comets_and_sentinels_only_while_generators_live() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(64);
         unsafe {
             let mut ship = boss(&_battle);
@@ -494,7 +495,7 @@ fn postprocess_spawns_comets_and_sentinels_only_while_generators_live() {
 
 #[test]
 fn sentinel_recoil_stuns_live_player_caps_velocity_and_preserves_sentinel() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(64);
         unsafe {
             let mut ship = boss(&_battle);

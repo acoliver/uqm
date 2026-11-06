@@ -10,7 +10,7 @@ pub(crate) mod live {
     use crate::graphics::{drawable_abi, resgfx::LoadGraphicInstance as LoadGraphic};
 
     use crate::io::uio_bridge;
-    use crate::mainloop::restart_menu::c_extern::{DoPopupWindow, FadeMusic, SeedRandomNumbers};
+    use crate::mainloop::restart_menu::c_extern::{do_popup_window, FadeMusic, SeedRandomNumbers};
     use crate::math::{delete_context, new_context};
     use crate::navigation::abi::{init_space, uninit_space, MeleeConnectDialog, TEXTENTRY_STATE};
 
@@ -41,32 +41,33 @@ pub(crate) mod live {
     };
     use editing::*;
     unsafe fn run_menu_frame(
-        input: *mut MELEE_STATE,
+        state: *mut MELEE_STATE,
         cx: &mut crate::engine::battle::Cx<'_>,
+        input: &crate::engine::input::InputSession,
     ) -> bool {
         use crate::supermelee::netplay::session::MenuPhase;
-        match (*input).phase {
-                MenuPhase::Confirm => confirm(input, cx) != 0,
+        match (*state).phase {
+                MenuPhase::Confirm => confirm(input, state, cx) != 0,
                 phase => cx.with_legacy(|| match phase {
-                    MenuPhase::Menu => DoMelee(input),
-                    MenuPhase::Connecting => connecting(input),
-                    MenuPhase::Editing => edit(input),
-                    MenuPhase::Loading => DoLoadTeam(input),
+                    MenuPhase::Menu => do_melee(state, input),
+                    MenuPhase::Connecting => connecting(state, input),
+                    MenuPhase::Editing => edit(state, input),
+                    MenuPhase::Loading => do_load_team(state, input),
                     MenuPhase::Building => panic!("build picker escaped its nested input loop"),
                     MenuPhase::Confirm => unreachable!(),
                 } != 0),
             }
     }
-    pub(super) unsafe fn key(key: u32) -> bool {
-        PulsedInputState.menu[key as usize] != 0
+    pub(super) unsafe fn key(input: &crate::engine::input::InputSession, key: u32) -> bool {
+        input.pulsed().menu[key as usize] != 0
     }
-    unsafe fn select_option(state: *mut MELEE_STATE) {
+    unsafe fn select_option(input: &crate::engine::input::InputSession, state: *mut MELEE_STATE) {
         match (*state).melee_option {
             4 => start_button(state),
             3 | 5 => {
                 (*state).initialized = 0;
                 (*state).side = u16::from((*state).melee_option != 3);
-                DoLoadTeam(state);
+                do_load_team(state, input);
             }
             2 | 6 => {
                 (*state).side = u16::from((*state).melee_option != 2);
@@ -92,18 +93,20 @@ pub(crate) mod live {
             _ => {}
         }
     }
-    #[no_mangle]
     /// # Safety
     /// Call on the game thread after kernel/resource initialization. Any state
     /// pointer must remain exclusively accessible through the nested input loop.
-    pub unsafe extern "C" fn DoMelee(state: *mut MELEE_STATE) -> u32 {
+    pub unsafe fn do_melee(
+        state: *mut MELEE_STATE,
+        input: &crate::engine::input::InputSession,
+    ) -> u32 {
         let time = GetTimeCounter();
-        GamePaused = 0;
+        input.set_paused(false);
         let activity = crate::engine::World::current().read(|world| world.activity());
         if activity & CHECK_ABORT as u16 != 0 {
             return 0;
         }
-        SetMenuSounds(15, 16);
+        SetMenuSounds(input, 15, 16);
         if (*state).initialized == 0 {
             if !(*state).h_music.is_null() {
                 stop_music();
@@ -120,27 +123,27 @@ pub(crate) mod live {
             return 1;
         }
         poll_menu(state, 0);
-        if key(KEY_MENU_CANCEL) || key(KEY_MENU_LEFT) {
+        if key(input, KEY_MENU_CANCEL) || key(input, KEY_MENU_LEFT) {
             (*state).last_input_time = GetTimeCounter();
             highlight((*state).melee_option, false);
             (*state).melee_option = 10;
             (*state).initialized = 0;
             (*state).side = 0;
-            if key(KEY_MENU_CANCEL) {
+            if key(input, KEY_MENU_CANCEL) {
                 (*state).row = 0;
                 (*state).col = 0;
             } else {
                 (*state).row = 1;
                 (*state).col = 6;
             }
-            edit(state);
+            edit(state, input);
         } else {
             let mut next = (*state).melee_option;
             let mut force = false;
-            if key(KEY_MENU_UP) {
+            if key(input, KEY_MENU_UP) {
                 (*state).last_input_time = GetTimeCounter();
                 next = super::rules::next_option(next, true, false);
-            } else if key(KEY_MENU_DOWN) {
+            } else if key(input, KEY_MENU_DOWN) {
                 (*state).last_input_time = GetTimeCounter();
                 next = super::rules::next_option(next, false, true);
             }
@@ -164,8 +167,8 @@ pub(crate) mod live {
                     status_player(super::rules::network_status_side(side, control));
                 }
             }
-            if key(KEY_MENU_SELECT) || force {
-                select_option(state);
+            if key(input, KEY_MENU_SELECT) || force {
+                select_option(input, state);
                 let activity = crate::engine::World::current().read(|world| world.activity());
                 if activity & CHECK_ABORT as u16 != 0 {
                     return 0;
@@ -236,7 +239,10 @@ pub(crate) mod live {
         }
         ok
     }
-    fn new_menu_state(kernel: &KernelOwner) -> MELEE_STATE {
+    fn new_menu_state(
+        kernel: &KernelOwner,
+        input: &crate::engine::input::InputSession,
+    ) -> MELEE_STATE {
         MELEE_STATE {
             phase: crate::supermelee::netplay::session::MenuPhase::Menu,
             initialized: 0,
@@ -254,7 +260,7 @@ pub(crate) mod live {
             random_context: ptr::null_mut(),
             last_input_time: 0,
             h_music: ptr::null_mut(),
-            netplay: Default::default(),
+            netplay: crate::supermelee::netplay::NetplaySession::with_input(input.clone()),
             catalog: crate::ships::master_native::choices(&kernel.master_queue),
         }
     }
@@ -265,8 +271,10 @@ pub(crate) mod live {
         cx: &mut crate::engine::battle::Cx<'_>,
         io: &mut crate::engine::observe::Io<'_>,
     ) {
+        let runtime = cx.kernel.input_runtime();
+        let input = runtime.input();
         cx.world.reset_game_data();
-        let mut state = new_menu_state(cx.kernel);
+        let mut state = new_menu_state(cx.kernel, input);
         // SAFETY: state remains in this stack frame through all synchronous callbacks and cleanup.
         cx.with_legacy(|| {
             P_MELEE_STATE = &mut state;
@@ -307,12 +315,12 @@ pub(crate) mod live {
                 Melee_LocalChange_team(&mut state, 1, *state.load.preBuiltList.add(1));
             }
             state.side = 0;
-            SetMenuSounds(15, 16);
+            SetMenuSounds(input, 15, 16);
         });
-        let input = &raw mut state;
+        let state_ptr = &raw mut state;
         cx.run_input(io, true, |cx, _| {
             // SAFETY: state and its UI resources outlive the synchronous input loop.
-            unsafe { run_menu_frame(input, cx) }
+            unsafe { run_menu_frame(state_ptr, cx, input) }
         });
         // SAFETY: the input session has stopped and no callback retains these resources.
         cx.with_legacy(|| {
@@ -339,7 +347,7 @@ pub(crate) mod live {
             UninitMeleeLoadState(&mut state);
             delete_context(state.random_context);
             MeleeSetup_delete(state.melee_setup);
-            FlushInput();
+            FlushInput(input);
         });
     }
 }

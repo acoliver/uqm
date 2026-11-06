@@ -125,8 +125,7 @@ pub(crate) mod live {
 
     /// # Safety
     /// Game-thread access to initialized input, graphics and audio state.
-    #[no_mangle]
-    pub unsafe extern "C" fn PauseGame() -> BOOLEAN {
+    pub unsafe fn pause_game(input: &crate::engine::input::InputSession) -> BOOLEAN {
         if Kernel::current()
             .read(|owner| owner.activity_frame)
             .is_null()
@@ -166,19 +165,19 @@ pub(crate) mod live {
         SetSystemRect(&rect);
         DrawStamp(&mut stamp);
         FlushGraphics();
-        while ImmediateInputState.menu[KEY_PAUSE as usize] != 0 && GamePaused != 0 {
+        while input.immediate().menu[KEY_PAUSE as usize] != 0 && input.paused() {
             BeginInputFrame();
             TaskSwitch();
         }
-        while ImmediateInputState.menu[KEY_PAUSE as usize] == 0 && GamePaused != 0 {
+        while input.immediate().menu[KEY_PAUSE as usize] == 0 && input.paused() {
             BeginInputFrame();
             TaskSwitch();
         }
-        while ImmediateInputState.menu[KEY_PAUSE as usize] != 0 && GamePaused != 0 {
+        while input.immediate().menu[KEY_PAUSE as usize] != 0 && input.paused() {
             BeginInputFrame();
             TaskSwitch();
         }
-        GamePaused = 0;
+        input.set_paused(false);
         DrawStamp(&mut saved);
         DestroyDrawable(ReleaseDrawable(saved.frame));
         ClearSystemRect();
@@ -204,8 +203,10 @@ pub(crate) mod live {
         timeout: TimeCount,
         reset: BOOLEAN,
     ) -> BOOLEAN {
+        let runtime = cx.kernel.input_runtime();
+        let input = runtime.input();
         // SAFETY: the synchronous wait owns initialized game-thread input.
-        let mut pressed = cx.with_legacy(|| unsafe { AnyButtonPress(1) });
+        let mut pressed = cx.with_legacy(|| unsafe { AnyButtonPress(input, 1) });
         while (pressed != 0) == released
             && (timeout == TimePeriod::MAX || GetTimeCounter() < timeout)
             && cx.world.activity() & CHECK_ABORT as u16 == 0
@@ -216,7 +217,7 @@ pub(crate) mod live {
                 // SAFETY: the published input scope remains live during the synchronous sleep.
                 cx.with_legacy(|| unsafe {
                     SleepThread(ONE_SECOND / 40);
-                    AnyButtonPress(1)
+                    AnyButtonPress(input, 1)
                 })
             }) else {
                 break;
@@ -225,7 +226,7 @@ pub(crate) mod live {
         }
         if reset != 0 {
             // SAFETY: this wait still owns the initialized input scope.
-            cx.with_legacy(|| unsafe { FlushInput() });
+            cx.with_legacy(|| unsafe { FlushInput(input) });
         }
         u32::from((pressed != 0) != released)
     }

@@ -37,10 +37,10 @@ static OBSERVATION: Mutex<DeviceObservation> = Mutex::new(DeviceObservation {
     activation: None,
 });
 
-pub fn observation() -> DeviceObservation {
+pub fn observation(configuration: &uqm_engine::configuration::Configuration) -> DeviceObservation {
     let mut observed = OBSERVATION.lock().unwrap().clone();
     observed.in_orbit = unsafe { playerInPlanetOrbit() };
-    observed.pc_menu = unsafe { crate::navigation::abi::optWhichMenu == 2 };
+    observed.pc_menu = configuration.preferences().menu == 2;
     observed
 }
 
@@ -64,9 +64,6 @@ use crate::planets::solarsys::{
 };
 
 use crate::ui::{sis::ClearSISRect, util::live::DrawStarConBox};
-
-#[allow(non_snake_case)]
-extern "C" {}
 
 struct Menu {
     list: Vec<u8>,
@@ -347,10 +344,12 @@ fn effect_state() -> std::collections::BTreeMap<String, u32> {
     state
 }
 
-unsafe fn frame(menu: &mut Menu, next_activity: &mut u16) -> i32 {
-    let keys = std::ptr::addr_of!(crate::c_bindings::controller_input::PulsedInputState)
-        .read()
-        .menu;
+unsafe fn frame(
+    input: &crate::engine::input::InputSession,
+    menu: &mut Menu,
+    next_activity: &mut u16,
+) -> i32 {
+    let keys = input.pulsed().menu;
     if crate::engine::World::current().read(|world| world.activity()) & 0x4000 != 0 || keys[10] != 0
     {
         return 0;
@@ -423,17 +422,19 @@ pub unsafe extern "C" fn InventoryDevices(map: *mut u8, size: u16) -> i16 {
 /// # Safety
 /// Requires the initialized UI and campaign on the owning game thread.
 pub unsafe fn devices_menu(cx: &mut Cx<'_>, io: &mut Io<'_>) -> i32 {
+    let runtime = cx.kernel.input_runtime();
+    let input = runtime.input();
     let Some(mut menu) = cx.with_legacy(|| prepare_devices_menu()) else {
         return 0;
     };
-    cx.with_legacy(|| SetMenuSounds(0x000f | 0x0080 | 0x0100, 0x0010));
+    cx.with_legacy(|| SetMenuSounds(input, 0x000f | 0x0080 | 0x0100, 0x0010));
     cx.run_input(io, true, |cx, _| {
         let mut next_activity = 0;
-        let result = cx.with_legacy(|| frame(&mut menu, &mut next_activity) != 0);
+        let result = cx.with_legacy(|| frame(input, &mut menu, &mut next_activity) != 0);
         cx.world.next_activity |= next_activity;
         result
     });
-    cx.with_legacy(|| SetMenuSounds(0x000f, 0x0010));
+    cx.with_legacy(|| SetMenuSounds(input, 0x000f, 0x0010));
     OBSERVATION.lock().unwrap().list = None;
     if cx.world.data.flagship.crew_enlisted == u16::MAX || cx.world.activity() & 0x4000 != 0 {
         return 0;

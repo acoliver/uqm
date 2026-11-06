@@ -3,19 +3,47 @@
 use super::{battle::input::InputContext, battle::Cx, observe::Io};
 use std::rc::Rc;
 
-pub type InputObserver =
-    Box<dyn crate::engine::observe::Observer<Option<crate::engine::observe::CampaignView>>>;
+pub use uqm_engine::input::{controls::InputControls, frames, session::InputSession};
 
-pub type InputFrameHook = unsafe fn(&mut Io<'_>);
+pub use uqm_engine::input::controls::InputFrameHook;
 
-pub type Frame<'a> = dyn FnMut(&mut Cx<'_>, &mut Io<'_>) -> bool + 'a;
+pub trait Frame {
+    fn admit(
+        &mut self,
+        cx: &mut Cx<'_>,
+        io: &mut Io<'_>,
+        view: super::observe::InputView,
+    ) -> super::observe::Injected {
+        admit_observer(cx, io, view)
+    }
+
+    fn frame(&mut self, cx: &mut Cx<'_>, io: &mut Io<'_>) -> bool;
+}
+
+impl<F: FnMut(&mut Cx<'_>, &mut Io<'_>) -> bool> Frame for F {
+    fn frame(&mut self, cx: &mut Cx<'_>, io: &mut Io<'_>) -> bool {
+        self(cx, io)
+    }
+}
+
+pub fn admit_observer(
+    cx: &mut Cx<'_>,
+    io: &mut Io<'_>,
+    view: super::observe::InputView,
+) -> super::observe::Injected {
+    let campaign = super::observe::CampaignView::for_input(view, || {
+        super::observe::CampaignView::capture(cx.world)
+    });
+    cx.with_legacy(|| io.observer.input_admitted(&view, &campaign))
+}
 
 pub trait InputRuntime {
+    fn input(&self) -> &InputSession;
     fn observer(
         &self,
     ) -> Box<dyn crate::engine::observe::Observer<Option<crate::engine::observe::CampaignView>>>;
     fn update(&self);
-    fn run(&self, cx: &mut Cx<'_>, io: &mut Io<'_>, reset: bool, frame: &mut Frame<'_>);
+    fn run(&self, cx: &mut Cx<'_>, io: &mut Io<'_>, reset: bool, frame: &mut dyn Frame);
     fn battle_input(&self, input: &InputContext) -> u8;
 }
 
@@ -26,6 +54,14 @@ impl super::Kernel {
             "input runtime already installed"
         );
         self.input_runtime = Some(runtime);
+    }
+
+    pub fn input_controls(&self) -> &InputControls {
+        self.input_runtime
+            .as_ref()
+            .unwrap_or_else(|| panic!("input runtime is not installed"))
+            .input()
+            .controls()
     }
 
     pub fn input_runtime(&self) -> Rc<dyn InputRuntime> {
@@ -76,7 +112,10 @@ impl Cx<'_> {
         reset: bool,
         mut frame: impl FnMut(&mut Cx<'_>, &mut Io<'_>) -> bool,
     ) {
-        self.kernel.input_runtime().run(self, io, reset, &mut frame);
+        self.run_input_frame(io, reset, &mut frame);
+    }
+    pub fn run_input_frame(&mut self, io: &mut Io<'_>, reset: bool, frame: &mut dyn Frame) {
+        self.kernel.input_runtime().run(self, io, reset, frame);
     }
 }
 
@@ -86,9 +125,13 @@ mod tests {
     use crate::engine::{battle::Battle, observe::Unobserved, Game};
     use std::cell::RefCell;
 
-    struct Driver(Rc<RefCell<Vec<bool>>>);
+    struct Driver(Rc<RefCell<Vec<bool>>>, InputSession);
 
     impl InputRuntime for Driver {
+        fn input(&self) -> &InputSession {
+            &self.1
+        }
+
         fn observer(
             &self,
         ) -> Box<dyn crate::engine::observe::Observer<Option<crate::engine::observe::CampaignView>>>
@@ -98,9 +141,9 @@ mod tests {
 
         fn update(&self) {}
 
-        fn run(&self, cx: &mut Cx<'_>, io: &mut Io<'_>, reset: bool, frame: &mut Frame<'_>) {
+        fn run(&self, cx: &mut Cx<'_>, io: &mut Io<'_>, reset: bool, frame: &mut dyn Frame) {
             self.0.borrow_mut().push(reset);
-            while frame(cx, io) {}
+            while frame.frame(cx, io) {}
         }
 
         fn battle_input(&self, input: &InputContext) -> u8 {
@@ -112,8 +155,11 @@ mod tests {
     fn kernel_driver_receives_the_owner_reset_and_safe_frame_callback() {
         let resets = Rc::new(RefCell::new(Vec::new()));
         let mut game = Game::new();
-        game.kernel
-            .install_input_runtime(Rc::new(Driver(resets.clone())));
+        let configuration = game.kernel.configuration.clone();
+        game.kernel.install_input_runtime(Rc::new(Driver(
+            resets.clone(),
+            InputSession::new(InputControls::default(), configuration),
+        )));
         let mut battle = Battle::new();
         let mut cx = Cx::new(
             &mut battle,
@@ -144,7 +190,7 @@ mod tests {
     fn retained_driver_keeps_its_runtime_after_kernel_teardown() {
         let mut game = Game::new();
         game.kernel
-            .install_input_runtime(Rc::new(Driver(Rc::default())));
+            .install_input_runtime(Rc::new(Driver(Rc::default(), InputSession::default())));
         let driver = game.kernel.input_runtime();
         drop(game);
         assert_eq!(driver.battle_input(&InputContext::new(1, 1)), 8);
@@ -178,7 +224,7 @@ mod tests {
     #[should_panic(expected = "input runtime already installed")]
     fn installing_a_second_driver_is_an_initialization_error() {
         let mut game = Game::new();
-        let driver = Rc::new(Driver(Rc::default()));
+        let driver = Rc::new(Driver(Rc::default(), InputSession::default()));
         game.kernel.install_input_runtime(driver.clone());
         game.kernel.install_input_runtime(driver);
     }

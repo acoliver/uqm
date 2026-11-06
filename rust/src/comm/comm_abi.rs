@@ -21,9 +21,6 @@ use crate::graphics::frame_abi::ClearDrawable;
 use crate::graphics::frame_abi::DrawStamp;
 use crate::sound::heart_ffi::get_track_subtitle as GetTrackSubtitle;
 
-extern "C" {
-    static mut optSubtitles: u32;
-}
 use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
 
 #[no_mangle]
@@ -196,9 +193,8 @@ pub unsafe extern "C" fn comm_CheckSubtitles() {
 
 /// # Safety
 /// Subtitle cache and current drawing context must be live on the game thread.
-#[no_mangle]
-pub unsafe extern "C" fn comm_RedrawSubtitles() {
-    if optSubtitles == 0 {
+pub unsafe fn comm_redraw_subtitles(enabled: bool) {
+    if !enabled {
         return;
     }
     if !SUBTITLE.p_str.is_null() {
@@ -276,12 +272,13 @@ pub unsafe extern "C" fn c_ResetClearSubtitles() {
 #[no_mangle]
 pub unsafe extern "C" fn AlienTalkSegue(track: u16) {
     crate::app::bridge::enter(|cx| {
-        let mut observer = cx.kernel.input_runtime().observer();
+        let runtime = cx.kernel.input_runtime();
+        let mut observer = runtime.observer();
         let mut io = crate::engine::observe::Io {
             observer: &mut *observer,
         };
         super::ffi::observe_responses(&mut io);
-        super::ffi::rust_alien_talk_segue(cx, &mut io, track.into());
+        super::ffi::rust_alien_talk_segue(runtime.input(), cx, &mut io, track.into());
     });
 }
 

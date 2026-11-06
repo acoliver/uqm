@@ -17,7 +17,6 @@ pub use crate::input::sdl_input::TFB_UninitInput;
 #[cfg(not(test))]
 pub use crate::mainloop::options_abi::unprepareAllDirs as uqm_unprepare_all_dirs;
 #[cfg(not(test))]
-pub use crate::mainloop::startup::{free_addons as uqm_free_options_addons, initialize};
 #[cfg(not(test))]
 pub use crate::sound::audio_init::unInitAudio;
 #[cfg(not(test))]
@@ -53,6 +52,5 @@ mod isolated {
         pub fn uqm_unprepare_all_dirs();
         pub fn uninitIO();
         pub fn UnInitThreadSystem();
-        pub fn uqm_free_options_addons();
     }
 }

@@ -152,7 +152,6 @@ impl Cx<'_> {
 #[cfg(not(test))]
 impl Cx<'_> {
     pub fn hyperspace_cancel_pressed(&self) -> bool {
-        // SAFETY: the game-thread context retains the input authority during this value read.
-        unsafe { PulsedInputState.menu[KEY_MENU_CANCEL as usize] != 0 }
+        self.kernel.input_controls().pulsed().menu[KEY_MENU_CANCEL as usize] != 0
     }
 }

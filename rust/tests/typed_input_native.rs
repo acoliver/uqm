@@ -44,8 +44,12 @@ impl Observer<Option<CampaignView>> for Recording {
     }
 
     fn checkpoint(&mut self, view: &CheckpointView<'_>) {
-        assert_eq!(*view, CheckpointView::Simulation("input-loop"));
-        self.events.borrow_mut().push("complete");
+        let event = match view {
+            CheckpointView::Simulation("input-loop") => "complete",
+            CheckpointView::Simulation("input-hook") => "hook",
+            _ => panic!("unexpected checkpoint {view:?}"),
+        };
+        self.events.borrow_mut().push(event);
     }
 
     fn presented(&mut self, _: &mut Presented) {
@@ -53,19 +57,24 @@ impl Observer<Option<CampaignView>> for Recording {
     }
 }
 
-fn record_hook(io: &mut Io<'_>) {
-    io.observer.input_admitted(&InputView::Active, &None);
+unsafe fn record_hook(
+    emit: &mut dyn FnMut(CheckpointView<'_>),
+    input: &uqm_rust::engine::input::InputControls,
+) {
+    assert_eq!(input.menu_sounds(), (32, 64));
+    emit(CheckpointView::Simulation("input-hook"));
 }
 
 #[test]
 fn nested_callbacks_complete_before_the_outer_frame_and_stopped_admission_does_not_update() {
     // SAFETY: the serialized fixture owns input and the draw queue on the game thread.
-    battle_context::run(|| unsafe {
+    battle_context::run(|input| unsafe {
         use uqm_rust::graphics::{dcqueue_abi, sdl::lifecycle_abi};
         lifecycle_abi::GameActive = 1;
         dcqueue_abi::Init_DrawCommandQueue();
-        uqm_rust::mainloop::input_abi::SetDefaultMenuRepeatDelay();
-        uqm_rust::mainloop::input_abi::SetInputCallback(Some(record_hook));
+        uqm_rust::mainloop::input_abi::SetDefaultMenuRepeatDelay(input);
+        input.set_menu_sounds(32, 64);
+        uqm_rust::mainloop::input_abi::SetInputCallback(input, Some(record_hook));
         let events = Rc::new(RefCell::new(Vec::new()));
         let activities = Rc::new(RefCell::new(Vec::new()));
         let mut observer = Recording {
@@ -110,7 +119,77 @@ fn nested_callbacks_complete_before_the_outer_frame_and_stopped_admission_does_n
             })
         });
         assert_eq!(*events.borrow(), ["before"]);
-        uqm_rust::mainloop::input_abi::SetInputCallback(None);
+        uqm_rust::mainloop::input_abi::SetInputCallback(input, None);
+        dcqueue_abi::Uninit_DrawCommandQueue();
+    });
+}
+
+struct AdmittedFrame {
+    events: Rc<RefCell<Vec<&'static str>>>,
+    admissions: usize,
+}
+
+impl uqm_rust::engine::input::Frame for AdmittedFrame {
+    fn admit(
+        &mut self,
+        cx: &mut uqm_rust::engine::battle::Cx<'_>,
+        io: &mut Io<'_>,
+        view: InputView,
+    ) -> Injected {
+        self.events.borrow_mut().push(match view {
+            InputView::BeforeUpdate => "mode-before",
+            InputView::AfterUpdate(_) => "mode-after",
+            _ => panic!("unexpected mode admission {view:?}"),
+        });
+        self.admissions += 1;
+        uqm_rust::engine::input::admit_observer(cx, io, view)
+    }
+
+    fn frame(&mut self, _: &mut uqm_rust::engine::battle::Cx<'_>, _: &mut Io<'_>) -> bool {
+        assert_eq!(self.admissions, 2);
+        self.events.borrow_mut().push("mode-frame");
+        false
+    }
+}
+
+#[test]
+fn mode_owned_frame_admission_keeps_the_native_observer_order() {
+    // SAFETY: this serialized fixture owns input and initializes its draw queue before dispatch.
+    battle_context::run(|input| unsafe {
+        use uqm_rust::graphics::{dcqueue_abi, sdl::lifecycle_abi};
+        lifecycle_abi::GameActive = 1;
+        dcqueue_abi::Init_DrawCommandQueue();
+        uqm_rust::mainloop::input_abi::SetDefaultMenuRepeatDelay(input);
+        let events = Rc::new(RefCell::new(Vec::new()));
+        let mut observer = Recording {
+            events: events.clone(),
+            activities: Default::default(),
+            stop: false,
+        };
+        let mut frame = AdmittedFrame {
+            events: events.clone(),
+            admissions: 0,
+        };
+        uqm_rust::app::bridge::enter(|cx| {
+            cx.run_input_frame(
+                &mut Io {
+                    observer: &mut observer,
+                },
+                false,
+                &mut frame,
+            );
+        });
+        assert_eq!(
+            *events.borrow(),
+            [
+                "mode-before",
+                "before",
+                "mode-after",
+                "after",
+                "mode-frame",
+                "complete"
+            ]
+        );
         dcqueue_abi::Uninit_DrawCommandQueue();
     });
 }

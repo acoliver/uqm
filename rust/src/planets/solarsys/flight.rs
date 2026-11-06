@@ -2,9 +2,9 @@
 
 use super::drawing::{draw_outer_system, draw_system_transition, find_radius, point_within_rect};
 use super::*;
-use crate::c_bindings::controller_input as input;
 use crate::comm::locdata::CPoint;
 use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
+use uqm_engine::input::frames as input;
 
 const MIN_MOON_RADIUS: i32 = 35;
 const MAX_MOONS: i32 = 4;
@@ -41,11 +41,6 @@ use crate::time::clock_abi::live::GameClockTick;
 
 use crate::ui::sis::DrawAutoPilotMessage;
 
-extern "C" {
-
-    static mut CurrentInputState: input::CONTROLLER_INPUT_STATE;
-
-}
 use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
 
 #[inline]
@@ -259,22 +254,21 @@ pub(super) unsafe fn flagship_inertial_thrust(
     0
 }
 
-pub(super) unsafe fn process_ship_controls() {
+pub(super) unsafe fn process_ship_controls(input: &crate::engine::input::InputSession) {
     let state = system();
     let game = ptr::addr_of_mut!((**glob()).game);
-    let input = ptr::addr_of!(CurrentInputState);
-    let player = crate::c_bindings::player_control_template(0)
-        .expect("player zero has a control template") as usize;
-    let mut dy: c::SIZE = if (*input).key[player][input::KEY_UP as usize] != 0 {
+    let player = input.player_controls()[0] as usize;
+    let keys = input.current();
+    let mut dy: c::SIZE = if keys.key[player][input::KEY_UP as usize] != 0 {
         -1
     } else {
         0
     };
     let mut dx: c::SIZE = 0;
-    if (*input).key[player][input::KEY_LEFT as usize] != 0 {
+    if keys.key[player][input::KEY_LEFT as usize] != 0 {
         dx -= 1;
     }
-    if (*input).key[player][input::KEY_RIGHT as usize] != 0 {
+    if keys.key[player][input::KEY_RIGHT as usize] != 0 {
         dx += 1;
     }
 
@@ -459,10 +453,12 @@ pub(super) unsafe fn restore_system_view() {
 }
 
 pub(super) unsafe fn ip_frame(cx: &mut Cx<'_>) {
+    let runtime = cx.kernel.input_runtime();
+    let input = runtime.input();
     let (location_change, new_radius) = cx.with_legacy(|| {
         SetContext(KernelOwner::current().read(|owner| owner.space_context));
         GameClockTick();
-        process_ship_controls();
+        process_ship_controls(input);
 
         let mut new_radius: c::SIZE = 0;
         let location_change = check_ship_location(&mut new_radius);

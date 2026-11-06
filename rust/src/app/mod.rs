@@ -20,6 +20,18 @@ impl Application {
         Self { observer, game }
     }
 
+    #[cfg(not(test))]
+    pub fn install_input(&mut self, input: crate::engine::input::InputControls) {
+        let runtime = crate::mainloop::input_abi::NativeInputRuntime::new(
+            self.observer().cloned(),
+            input,
+            self.game.kernel.configuration.clone(),
+        );
+        self.game
+            .kernel
+            .install_input_runtime(std::rc::Rc::new(runtime));
+    }
+
     /// # Safety
     /// The game-thread call must not retain owner references after returning.
     pub unsafe fn legacy<R>(&mut self, call: impl FnOnce() -> R) -> R {

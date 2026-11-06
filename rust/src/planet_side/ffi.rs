@@ -68,6 +68,8 @@ const fn failure(status: i32) -> PlanetSideReply {
 /// Native handles in context must remain live throughout the synchronous lander session.
 #[cfg(not(test))]
 pub unsafe fn run_session(
+    controls: &crate::engine::input::InputSession,
+    activity: crate::engine::world::activity::ActivityControl,
     cx: &mut crate::engine::battle::Cx<'_>,
     io: &mut crate::engine::observe::Io<'_>,
     context: &mut PlanetSideRunContext,
@@ -83,7 +85,7 @@ pub unsafe fn run_session(
     use super::mask_adapter::extract_lander_masks;
     use super::model::SurfacePoint;
     use super::resources::{LanderGraphic, PlanetSideAssetAccess};
-    use super::runtime::{PlanetSideClock, RuntimeAdapters, ShipStatusPort, Tick};
+    use super::runtime::{AdapterError, PlanetSideClock, RuntimeAdapters, ShipStatusPort, Tick};
     use super::session_factory::create_production_session;
     use super::visual_adapter::CffiSurfaceVisuals;
 
@@ -122,14 +124,7 @@ pub unsafe fn run_session(
                     context.weather_rating,
                     context.temperature,
                 ));
-                Ok::<_, super::runtime::AdapterError>((
-                    generator,
-                    visuals,
-                    persistence,
-                    surface,
-                    ship,
-                    session,
-                ))
+                Ok::<_, AdapterError>((generator, visuals, persistence, surface, ship, session))
             })?;
         let mut world_visuals = super::visual_adapter::CffiWorldVisuals::new(&assets, &mut visuals);
         let automation_active = io.observer.input_admitted(&InputView::Active, &None).stop;
@@ -181,10 +176,10 @@ pub unsafe fn run_session(
             };
             // The orbit/scan menu underneath stays resident, so silence its
             // navigation sounds for the trip. Restored on every exit path by Drop.
-            let menu_silence = super::menu_sounds::MenuSoundSilence::acquire();
+            let menu_silence = super::menu_sounds::MenuSoundSilence::acquire(controls);
             super::telemetry::begin(&session);
             let adapters = RuntimeAdapters {
-                input: CffiPlanetSideInput,
+                input: CffiPlanetSideInput::new(controls.controls().clone(), activity),
                 collision,
                 graphics: CffiPlanetSideGraphics {
                     surface: surface.clone(),
@@ -201,7 +196,7 @@ pub unsafe fn run_session(
                 context.tick_period,
                 context.frame_budget,
             );
-            Ok::<_, super::runtime::AdapterError>((controller, menu_silence))
+            Ok::<_, AdapterError>((controller, menu_silence))
         })?;
         let outcome = controller.run_with_frame(|session, adapters, tick_period| {
             let deadline = Tick(adapters.clock.now().0.wrapping_add(tick_period));
@@ -233,7 +228,7 @@ pub unsafe fn run_session(
                 })?;
             }
             drop(controller);
-            Ok::<_, super::runtime::AdapterError>(outcome)
+            Ok::<_, AdapterError>(outcome)
         })
     })();
 

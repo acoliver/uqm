@@ -80,9 +80,15 @@ impl Cx<'_> {
         let mut io = crate::engine::observe::Io {
             observer: observer.as_mut(),
         };
-        runtime.run(self, &mut io, false, &mut |cx, _| {
-            cx.with_legacy(&mut *poll)
-        });
+        runtime.run(
+            self,
+            &mut io,
+            false,
+            &mut |cx: &mut crate::engine::battle::Cx<'_>,
+                  _: &mut crate::engine::observe::Io<'_>| {
+                cx.with_legacy(&mut *poll)
+            },
+        );
     }
 
     pub(crate) fn negotiate_battle(
@@ -171,7 +177,7 @@ impl Cx<'_> {
         // SAFETY: the descriptor retains its owned status data while graphics are drawn.
         let pc_menu = unsafe {
             self.with_legacy(|| draw_status(font.as_ref(), info, Some(ship), clip));
-            optWhichMenu == OPT_PC as i32
+            self.kernel.configuration.preferences().menu == OPT_PC as i32
         };
         if !clipped {
             let context = std::ptr::NonNull::new(self.kernel.status_context)
@@ -530,7 +536,7 @@ impl Cx<'_> {
     pub fn unlink(&mut self, id: ElementId) {
         assert!(self.elements().linked(id), "element is not linked");
         // SAFETY: stereo configuration belongs to the game thread.
-        if unsafe { optStereoSFX } != 0 {
+        if self.kernel.configuration.preferences().stereo_sfx != 0 {
             crate::battle::sounds::engine::remove_sounds(self.kernel, Some(id));
         }
         self.unlink_storage(id);
@@ -595,9 +601,10 @@ impl Cx<'_> {
         let y = self.status_offset(ship);
         let info = self.ship_info_pointer(ship);
         let font = self.kernel.battle_font();
+        let pc_menu = self.kernel.configuration.preferences().menu == OPT_PC as i32;
         // SAFETY: the checked descriptor and status resources remain live during drawing.
         unsafe {
-            self.with_legacy(|| delta_statistics(font.as_ref(), info, y, crew, energy));
+            self.with_legacy(|| delta_statistics(pc_menu, font.as_ref(), info, y, crew, energy));
         }
     }
 }

@@ -8,7 +8,7 @@ use uqm_rust::ships::native::abi::*;
 
 #[test]
 fn legacy_slylandro_receives_the_fifth_junk_concern() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let battle = Battle::new(16);
         // SAFETY: the fixture owns both pools, ship descriptor, frames and queued object.
         unsafe {
@@ -39,7 +39,7 @@ fn legacy_slylandro_receives_the_fifth_junk_concern() {
 
 #[test]
 fn typed_ai_uses_the_supplied_subject_projection() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let battle = Battle::new(32);
         // SAFETY: the shared fixture retains both pool-backed ships and their frames.
         unsafe {

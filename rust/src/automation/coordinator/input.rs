@@ -2,11 +2,6 @@
 
 use super::*;
 
-pub(super) fn inject_menu_key(index: i32, value: i32) -> bool {
-    input_ffi::inject_menu_key(index, value);
-    !input_ffi::injection_rejected()
-}
-
 /// Discard the repeat pulse of a menu key that a scripted tap only holds.
 ///
 /// Returns `false` when the native owner has no such key.
@@ -18,6 +13,16 @@ pub(super) fn discard_held_repeat(
 }
 
 impl AutomationObserver {
+    pub(super) fn inject_menu_key(&self, index: i32, value: i32) -> bool {
+        input_ffi::inject_menu_key(&self.input, index, value);
+        !self.input.injection_rejected()
+    }
+
+    pub(super) fn inject_player_key(&self, index: i32, value: i32) -> bool {
+        input_ffi::inject_player_key(&self.input, index, value);
+        !self.input.injection_rejected()
+    }
+
     #[must_use]
     pub fn start_scene_replaces_introduction(&self) -> bool {
         self.inner
@@ -94,7 +99,7 @@ impl AutomationObserver {
         let released_semantic_select = inner.release_semantic_select;
         if released_semantic_select {
             let index = i32::from(crate::automation::script::MenuKey::Select.index());
-            if !inject_menu_key(index, 0) {
+            if !self.inject_menu_key(index, 0) {
                 self.reject_input(&mut inner, "menu", index, 0);
                 return true;
             }
@@ -311,6 +316,8 @@ mod tests {
             script,
             temp.path().into(),
             crate::engine::World::new().activity_control(),
+            crate::engine::input::InputControls::default(),
+            Default::default(),
         );
         let mut capture = || panic!("admission must not acquire a campaign owner");
         assert!(!observer.process_input_at_boundary(&mut capture, true));
@@ -375,6 +382,8 @@ mod tests {
                 script,
                 temp.path().into(),
                 game.world.activity_control(),
+                crate::engine::input::InputControls::default(),
+                Default::default(),
             ));
             crate::app::Application::new(game, observer)
         };

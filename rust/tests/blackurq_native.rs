@@ -9,7 +9,7 @@ use uqm_rust::ships::native::{abi::*, frame_index};
 
 #[test]
 fn descriptor_saw_launch_hold_release_decelerate_and_tracking() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(64);
         unsafe {
             let mut ship = Ship::new(&_battle, SPECIES_ID_KOHR_AH_ID, 0);
@@ -64,7 +64,7 @@ fn descriptor_saw_launch_hold_release_decelerate_and_tracking() {
 }
 #[test]
 fn ninth_saw_expires_and_postprocess_requeues_after_ship_with_intersection_points() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(64);
         unsafe {
             let mut ship = Ship::new(&_battle, SPECIES_ID_KOHR_AH_ID, 0);
@@ -111,7 +111,7 @@ fn ninth_saw_expires_and_postprocess_requeues_after_ship_with_intersection_point
 }
 #[test]
 fn fried_launches_sixteen_clouds_in_facing_order_with_inherited_velocity() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(64);
         unsafe {
             let mut ship = Ship::new(&_battle, SPECIES_ID_KOHR_AH_ID, 0);
@@ -142,7 +142,7 @@ fn fried_launches_sixteen_clouds_in_facing_order_with_inherited_velocity() {
 }
 #[test]
 fn saw_collision_splinters_and_cloud_damage_depends_on_ship_flag() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(64);
         unsafe {
             let mut ship = Ship::new(&_battle, SPECIES_ID_KOHR_AH_ID, 0);
@@ -196,7 +196,7 @@ fn saw_collision_splinters_and_cloud_damage_depends_on_ship_flag() {
 }
 #[test]
 fn ai_crew_threat_boundaries_and_no_target_do_not_draw_rng() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(16);
         unsafe {
             let mut ship = Ship::new(&_battle, SPECIES_ID_KOHR_AH_ID, 0);

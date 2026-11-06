@@ -14,7 +14,7 @@ use battle::Battle as Battlefield;
 
 #[test]
 fn descriptor_matches_druuge_c_data() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battlefield::new(8);
         unsafe {
             let d = descriptor(SPECIES_ID_DRUUGE_ID);
@@ -78,7 +78,7 @@ fn descriptor_matches_druuge_c_data() {
 
 #[test]
 fn cannon_launch_uses_mass_driver_missile_parameters() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battlefield::new(8);
         unsafe {
             let mut ship = Ship::bare(&_battle, SPECIES_ID_DRUUGE_ID, 0);
@@ -100,7 +100,7 @@ fn cannon_launch_uses_mass_driver_missile_parameters() {
 
 #[test]
 fn furnace_burns_one_crew_and_adds_sixteen_energy_at_boundaries() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battlefield::new(8);
         unsafe {
             let mut ship = Ship::bare(&_battle, SPECIES_ID_DRUUGE_ID, 0);
@@ -129,7 +129,7 @@ fn furnace_burns_one_crew_and_adds_sixteen_energy_at_boundaries() {
 
 #[test]
 fn intelligence_selects_pursuit_and_furnace_for_weapon_energy_shortfall() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battlefield::new(8);
         unsafe {
             let mut ship = Ship::bare(&_battle, SPECIES_ID_DRUUGE_ID, 0);
@@ -160,7 +160,7 @@ fn intelligence_selects_pursuit_and_furnace_for_weapon_energy_shortfall() {
 
 #[test]
 fn cannon_recoil_is_applied_only_on_the_firing_frame_and_caps_speed() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battlefield::new(8);
         unsafe {
             let mut ship = Ship::bare(&_battle, SPECIES_ID_DRUUGE_ID, 0);

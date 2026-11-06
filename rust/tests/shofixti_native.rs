@@ -193,7 +193,7 @@ unsafe fn object<'a>(
 
 #[test]
 fn complete_descriptor_and_damaged_tanaka_katana_variant_are_fresh_each_call() {
-    battle_context::run(|| unsafe {
+    battle_context::run(|_| unsafe {
         let _battle = Battle::new(8);
         for (activity, recruited, damaged) in [
             (0, false, false),
@@ -335,7 +335,7 @@ fn complete_descriptor_and_damaged_tanaka_katana_variant_are_fresh_each_call() {
 
 #[test]
 fn darts_use_next_location_exact_facing_offset_speed_and_failure_count() {
-    battle_context::run(|| unsafe {
+    battle_context::run(|_| unsafe {
         let _battle = Battle::new(2);
         let mut ship = Ship::new(&_battle, 1);
         for facing in [0, 4, 7, 15, u16::MAX] {
@@ -401,7 +401,7 @@ fn darts_use_next_location_exact_facing_offset_speed_and_failure_count() {
 
 #[test]
 fn glory_ai_toggles_the_switch_and_checks_all_deterministic_threat_branches() {
-    battle_context::run(|| unsafe {
+    battle_context::run(|_| unsafe {
         let _battle = Battle::new(8);
         let mut ship = Ship::new(&_battle, 0);
         let enemy = Ship::new(&_battle, 1);
@@ -453,7 +453,7 @@ fn glory_ai_toggles_the_switch_and_checks_all_deterministic_threat_branches() {
 
 #[test]
 fn glory_ai_intercept_damage_and_random_parity_short_circuit_exactly() {
-    battle_context::run(|| unsafe {
+    battle_context::run(|_| unsafe {
         let _battle = Battle::new(8);
         let mut ship = Ship::new(&_battle, 0);
         let mut threat = Ship::new(&_battle, 1);
@@ -498,7 +498,7 @@ fn glory_ai_intercept_damage_and_random_parity_short_circuit_exactly() {
 
 #[test]
 fn both_switch_edges_advance_and_only_the_third_remaining_frame_detonates() {
-    battle_context::run(|| unsafe {
+    battle_context::run(|_| unsafe {
         let _battle = Battle::new(16);
         let mut ship = Ship::new(&_battle, 0);
 
@@ -547,7 +547,7 @@ fn both_switch_edges_advance_and_only_the_third_remaining_frame_detonates() {
 
 #[test]
 fn deferred_glory_damage_obeys_solidity_marine_identity_radius_and_gravity() {
-    battle_context::run(|| unsafe {
+    battle_context::run(|_| unsafe {
         let _battle = Battle::new(64);
         let mut ship = Ship::new(&_battle, 0);
         let mut enemy = Ship::new(&_battle, 1);
@@ -618,7 +618,7 @@ fn deferred_glory_damage_obeys_solidity_marine_identity_radius_and_gravity() {
 
 #[test]
 fn failed_deferred_allocation_still_kills_the_ship() {
-    battle_context::run(|| unsafe {
+    battle_context::run(|_| unsafe {
         let _battle = Battle::new(1);
         let mut ship = Ship::new(&_battle, 0);
         assert!(with_rng(4, 0, || ship.arm()).is_none());
@@ -632,7 +632,7 @@ fn failed_deferred_allocation_still_kills_the_ship() {
 
 #[test]
 fn glory_death_selects_the_winner_preserves_prior_winners_and_counts_the_death() {
-    battle_context::run(|| unsafe {
+    battle_context::run(|_| unsafe {
         for (other_crew, other_mass, prior, expected_self, ditty) in [
             (6, 1, 0, false, true),
             (0, 1, 0, true, true),
@@ -691,7 +691,7 @@ fn glory_death_selects_the_winner_preserves_prior_winners_and_counts_the_death()
 
 #[test]
 fn glory_flash_switch_and_explosion_color_sequence_use_twelve_frame_ship_death() {
-    battle_context::run(|| unsafe {
+    battle_context::run(|_| unsafe {
         let _battle = Battle::new(8);
         let mut ship = Ship::new(&_battle, 0);
         ship.arm();
@@ -772,7 +772,7 @@ fn glory_flash_switch_and_explosion_color_sequence_use_twelve_frame_ship_death()
 
 #[test]
 fn failed_visual_explosion_allocation_still_hides_the_ship() {
-    battle_context::run(|| unsafe {
+    battle_context::run(|_| unsafe {
         let _battle = Battle::new(1);
         let mut ship = Ship::new(&_battle, 0);
         ship.arm();
@@ -785,9 +785,19 @@ fn failed_visual_explosion_allocation_still_hides_the_ship() {
     })
 }
 
+fn sample_weapon(input: &uqm_rust::engine::input::InputSession, side: usize, pressed: bool) {
+    input.set_player_key(side, KEY_WEAPON as usize, pressed);
+    let sampled = input.immediate();
+    input.advance(
+        sampled,
+        sampled,
+        uqm_rust::time::counter_abi::GetTimeCounter(),
+    );
+}
+
 #[test]
 fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
-    battle_context::run(|| {
+    battle_context::run(|input| {
         use uqm_rust::{
             battle::tactrans_native as transitions,
             pickship::ffi::get_encounter_star_ship_with_picker,
@@ -798,8 +808,7 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
                     let _battle = Battle::new(16);
                     let saved_offscreen =
                         (**uqm_rust::engine::Kernel::current()).off_screen_context;
-                    let saved_controls = PlayerControls;
-                    let saved_pulsed = PulsedInputState;
+                    let saved_controls = input.player_controls();
                     let mut context = mem::zeroed();
                     (**uqm_rust::engine::Kernel::current()).off_screen_context = &mut context;
                     uqm_rust::engine::World::current()
@@ -887,9 +896,11 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
                                 .unwrap();
                             transitions::new_ship_with_picker(cx, outgoing, |cx, last, player| {
                                 let activity = cx.world.activity_control();
+                                let runtime = cx.kernel_mut().input_runtime();
                                 uqm_rust::app::bridge::publish(cx, || {
                                     assert_eq!(player as usize, side);
                                     let chosen = get_encounter_star_ship_with_picker(
+                                        runtime.input(),
                                         activity,
                                         Some(last),
                                         player,
@@ -903,10 +914,13 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
                                             // Expire the computer's display delay without a sleep.
                                             p.timeIn = u32::MAX - 419;
                                             if !(computer && side == 1) {
-                                                PlayerControls[side] = side as u32;
-                                                PulsedInputState.key[side][KEY_WEAPON as usize] = 1;
+                                                runtime
+                                                    .input()
+                                                    .set_player_control(side, side as u32);
+                                                sample_weapon(runtime.input(), side, true);
                                             }
-                                            let result = uqm_rust::supermelee::native::battle_picker::live::select_ship(&inputs[side], &mut state);
+                                            let result = uqm_rust::supermelee::native::battle_picker::live::select_ship(runtime.input(), &inputs[side], &mut state);
+                                            sample_weapon(runtime.input(), side, false);
                                             assert_eq!(result, 1);
                                             assert_eq!(state.player[side].done, 1);
                                             assert_eq!(
@@ -943,8 +957,9 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
                         }
                     });
                     (**uqm_rust::engine::Kernel::current()).off_screen_context = saved_offscreen;
-                    PlayerControls = saved_controls;
-                    PulsedInputState = saved_pulsed;
+                    for (side, template) in saved_controls.into_iter().enumerate() {
+                        input.set_player_control(side, template);
+                    }
                 }
             }
         }

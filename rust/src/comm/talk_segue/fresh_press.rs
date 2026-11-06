@@ -20,9 +20,9 @@ impl FreshPressLatch {
     /// Arm only when the key is already up; an inherited hold must be
     /// released before it can act.
     #[cfg(not(test))]
-    pub(super) fn entering(key: c_int) -> Self {
+    pub(super) fn entering(input: &super::InputSession, key: c_int) -> Self {
         // SAFETY: the replay session reads initialized input on the game thread.
-        Self::from_held(unsafe { c_bridge::current_menu_key(key) } != 0)
+        Self::from_held(c_bridge::current_menu_key(input, key) != 0)
     }
 
     fn from_held(held: bool) -> Self {
@@ -33,12 +33,12 @@ impl FreshPressLatch {
 
     /// Report a fresh press, re-arming whenever the key is released.
     #[cfg(not(test))]
-    pub(super) fn pressed(&mut self, key: c_int) -> bool {
+    pub(super) fn pressed(&mut self, input: &super::InputSession, key: c_int) -> bool {
         // SAFETY: the replay session reads initialized input on the game thread.
-        let held = unsafe { c_bridge::current_menu_key(key) } != 0;
+        let held = c_bridge::current_menu_key(input, key) != 0;
         self.sample(held, || {
             // SAFETY: the same session owns the pulsed input snapshot.
-            (unsafe { c_bridge::pulsed_menu_key(key) }) != 0
+            (c_bridge::pulsed_menu_key(input, key)) != 0
         })
     }
 

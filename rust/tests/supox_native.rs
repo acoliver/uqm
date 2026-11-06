@@ -39,7 +39,7 @@ fn velocity_toward(speed: SIZE, facing: COUNT) -> [i32; 9] {
 
 #[test]
 fn descriptor_matches_the_c_race_data() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         unsafe {
             let desc = descriptor(SPECIES_ID_SUPOX_ID);
             assert!(std::ptr::eq(
@@ -110,7 +110,7 @@ fn descriptor_matches_the_c_race_data() {
 
 #[test]
 fn gob_is_launched_with_the_c_missile_block() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battlefield::new(8);
         unsafe {
             let mut ship = Ship::bare(&_battle, SPECIES_ID_SUPOX_ID, 0);
@@ -156,7 +156,7 @@ unsafe fn thrust_heading(_battle: &Battle, heading: COUNT, flags: u16) -> ([i32;
 
 #[test]
 fn special_thrusts_laterally_and_in_reverse_then_restores_the_facing() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battlefield::new(8);
         observation::enable();
         unsafe {
@@ -202,7 +202,7 @@ fn special_thrusts_laterally_and_in_reverse_then_restores_the_facing() {
 
 #[test]
 fn special_arms_the_wait_counters_and_normal_flight_is_untouched() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battlefield::new(8);
         observation::enable();
         unsafe {
@@ -291,7 +291,7 @@ impl<'a> Chase<'a> {
 
 #[test]
 fn ai_lines_up_the_reverse_burst_with_the_c_conditions() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battlefield::new(8);
         assert_eq!(ARCTAN(0, -1000), 0, "north is angle 0");
         unsafe {
@@ -355,7 +355,7 @@ fn ai_lines_up_the_reverse_burst_with_the_c_conditions() {
 
 #[test]
 fn ai_without_an_enemy_ship_drops_the_special_request() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battlefield::new(8);
         unsafe {
             let mut ship = Ship::bare(&_battle, SPECIES_ID_SUPOX_ID, 0);
@@ -379,7 +379,7 @@ fn dodge(ship: &mut Ship, concerns: &mut [EVALUATE_DESC; 4], weapon: *mut Elemen
 
 #[test]
 fn ai_dodges_with_the_held_turn_or_a_random_side_from_the_byte_draw() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battlefield::new(8);
         unsafe {
             let mut missile_fixture = Object::new(&_battle);

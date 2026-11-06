@@ -4,7 +4,7 @@
 #[cfg(not(test))]
 use crate::engine::battle::Cx;
 #[cfg(not(test))]
-use crate::engine::{Kernel, StoryKey, WorldData};
+use crate::engine::{input::InputSession, Kernel, StoryKey, WorldData};
 use crate::navigation::abi::*;
 use std::ffi::{c_char, c_int};
 
@@ -1463,11 +1463,11 @@ mod runtime {
     }
     #[repr(C)]
     struct WaitState {
-        input_func: Option<unsafe fn(*mut WaitState) -> BOOLEAN>,
+        input_func: Option<unsafe fn(*mut WaitState, &InputSession) -> BOOLEAN>,
     }
-    unsafe fn wait_for_key(_: *mut WaitState) -> BOOLEAN {
-        if PulsedInputState.menu[KEY_MENU_SELECT as usize] != 0
-            || PulsedInputState.menu[KEY_MENU_CANCEL as usize] != 0
+    unsafe fn wait_for_key(_: *mut WaitState, input: &InputSession) -> BOOLEAN {
+        if input.pulsed().menu[KEY_MENU_SELECT as usize] != 0
+            || input.pulsed().menu[KEY_MENU_CANCEL as usize] != 0
         {
             return 0;
         }

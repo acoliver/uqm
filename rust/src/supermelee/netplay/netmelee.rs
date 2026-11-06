@@ -56,7 +56,7 @@ impl super::session::SessionCore {
             .unwrap_or_else(|| panic!("close absent connection"));
     }
     pub fn close_player_network_connection(&self, player: u16) {
-        self.close_player_with(usize::from(player), &mut super::battle::effect);
+        self.close_player_with(usize::from(player), &mut |event| self.effect(event));
     }
     pub fn close_all_connections(&self) {
         for player in 0..2 {
@@ -177,7 +177,7 @@ impl super::session::SessionCore {
                 .filter(|conn| conn.flags.connected)
                 .map(|mut conn| conn.local_reset(reason))
                 .unwrap_or_default();
-            self.apply_events(events, &mut super::battle::effect);
+            self.apply_events(events, &mut |event| self.effect(event));
         }
         true
     }
@@ -218,7 +218,7 @@ impl super::session::SessionCore {
                         Vec::new()
                     }
                 };
-                self.apply_events(effects, &mut super::battle::effect);
+                self.apply_events(effects, &mut |event| self.effect(event));
                 self.flush_packet_queues();
                 self.wait_exchange(side, generation, true, wait);
             }
@@ -281,7 +281,7 @@ impl super::session::SessionCore {
             );
             (generation, effects)
         };
-        self.apply_events(effects, &mut super::battle::effect);
+        self.apply_events(effects, &mut |event| self.effect(event));
         self.flush_packet_queues();
         if self
             .connection(side)
@@ -316,7 +316,7 @@ impl super::session::SessionCore {
                 }
                 conn.local_ready(ReadyAction::EndBattle, true, self.frame_count.get())
             };
-            self.apply_events(effects, &mut super::battle::effect);
+            self.apply_events(effects, &mut |event| self.effect(event));
             if self
                 .connection(side)
                 .unwrap_or_else(|| panic!("end connection"))

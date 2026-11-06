@@ -10,10 +10,7 @@ use uqm_rust::{
     io::uio_bridge as uio,
     mainloop::{
         dir_prep::saveDir,
-        input_abi::{
-            DoInput, FlushInput, ImmediateInputState, PulsedInputState, SetDefaultMenuRepeatDelay,
-            UpdateInputState,
-        },
+        input_abi::{DoInput, FlushInput, SetDefaultMenuRepeatDelay, UpdateInputState},
         restart_menu::{
             do_restart::{do_restart_frame, DoRestartState},
             restart_ops::CffiOps,
@@ -38,17 +35,20 @@ unsafe fn key_event(symbol: i32, down: bool, repeat: bool) {
 
 #[repr(C)]
 struct PickerProbe {
-    callback: unsafe extern "C" fn(*mut std::ffi::c_void) -> u32,
+    callback: unsafe fn(*mut std::ffi::c_void, &uqm_rust::engine::input::InputSession) -> u32,
     occupied: bool,
     actions: Vec<PickerAction>,
     initial_pulses: (i32, i32),
     repeat_pulses: (i32, i32),
 }
 
-unsafe extern "C" fn picker_frame(state: *mut std::ffi::c_void) -> u32 {
+unsafe fn picker_frame(
+    state: *mut std::ffi::c_void,
+    input: &uqm_rust::engine::input::InputSession,
+) -> u32 {
     let state = &mut *state.cast::<PickerProbe>();
-    let select = ptr::addr_of!(PulsedInputState.menu[SELECT]).read();
-    let cancel = ptr::addr_of!(PulsedInputState.menu[CANCEL]).read();
+    let select = input.pulsed().menu[SELECT];
+    let cancel = input.pulsed().menu[CANCEL];
     if state.actions.is_empty() {
         state.initial_pulses = (select, cancel);
     }
@@ -58,11 +58,8 @@ unsafe extern "C" fn picker_frame(state: *mut std::ffi::c_void) -> u32 {
         PickerAction::Continue if state.actions.len() == 1 => {
             key_event(RETURN, true, true);
             key_event(ESCAPE, true, true);
-            UpdateInputState();
-            state.repeat_pulses = (
-                ptr::addr_of!(PulsedInputState.menu[SELECT]).read(),
-                ptr::addr_of!(PulsedInputState.menu[CANCEL]).read(),
-            );
+            UpdateInputState(input);
+            state.repeat_pulses = (input.pulsed().menu[SELECT], input.pulsed().menu[CANCEL]);
             key_event(RETURN, false, false);
             key_event(ESCAPE, false, false);
             key_event(RETURN, true, false);
@@ -77,12 +74,15 @@ unsafe extern "C" fn picker_frame(state: *mut std::ffi::c_void) -> u32 {
     }
 }
 
-unsafe fn open_from_restart_while_select_is_held(occupied: bool) {
-    FlushInput();
+unsafe fn open_from_restart_while_select_is_held(
+    input: &uqm_rust::engine::input::InputSession,
+    occupied: bool,
+) {
+    FlushInput(input);
     uqm_rust::engine::World::current().write(|world| world.set_activity(0));
     key_event(RETURN, true, false);
-    UpdateInputState();
-    assert_ne!(ptr::addr_of!(PulsedInputState.menu[SELECT]).read(), 0);
+    UpdateInputState(input);
+    assert_ne!(input.pulsed().menu[SELECT], 0);
     let mut flash: FlashContext = std::mem::zeroed();
     let mut menu = DoRestartState {
         initialized: true,
@@ -138,7 +138,7 @@ unsafe fn open_from_restart_while_select_is_held(occupied: bool) {
 
 #[test]
 fn first_load_entry_flushes_held_keys_and_enumeration_cannot_exit_the_picker() {
-    battle_context::run(|| {
+    battle_context::run(|input| {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()
             .unwrap()
@@ -148,19 +148,19 @@ fn first_load_entry_flushes_held_keys_and_enumeration_cannot_exit_the_picker() {
         unsafe {
             uqm_rust::graphics::sdl::lifecycle_abi::GameActive = 1;
             Init_DrawCommandQueue();
-            SetDefaultMenuRepeatDelay();
+            SetDefaultMenuRepeatDelay(input);
             assert_eq!(rust_v_control_init(), 0);
             assert_eq!(
                 rust_vcontrol_add_key_binding(
                     RETURN,
-                    ptr::addr_of_mut!(ImmediateInputState.menu[SELECT])
+                    ptr::addr_of_mut!((*input.immediate_ptr()).menu[SELECT])
                 ),
                 0
             );
             assert_eq!(
                 rust_vcontrol_add_key_binding(
                     ESCAPE,
-                    ptr::addr_of_mut!(ImmediateInputState.menu[CANCEL])
+                    ptr::addr_of_mut!((*input.immediate_ptr()).menu[CANCEL])
                 ),
                 0
             );
@@ -170,7 +170,7 @@ fn first_load_entry_flushes_held_keys_and_enumeration_cannot_exit_the_picker() {
             assert!(!profile.path().join("save").exists());
             load_game_descriptions(summaries.as_mut_ptr());
             assert!(summaries.iter().all(|summary| summary.year_index == 0));
-            open_from_restart_while_select_is_held(false);
+            open_from_restart_while_select_is_held(input, false);
 
             let saves = profile.path().join("save");
             std::fs::create_dir(&saves).unwrap();
@@ -227,8 +227,8 @@ fn first_load_entry_flushes_held_keys_and_enumeration_cannot_exit_the_picker() {
                         "slot {slot}"
                     );
                 }
-                open_from_restart_while_select_is_held(true);
-                open_from_restart_while_select_is_held(false);
+                open_from_restart_while_select_is_held(input, true);
+                open_from_restart_while_select_is_held(input, false);
             }
             assert_eq!(
                 picker_action(true, true, true, false, true),

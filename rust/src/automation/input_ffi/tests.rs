@@ -2,32 +2,37 @@ use super::*;
 
 #[test]
 fn setter_valid_index_returns_zero() {
-    assert_eq!(rust_automation_set_immediate_menu_key(6, 1), 0);
+    let input = InputControls::default();
+    assert_eq!(rust_automation_set_immediate_menu_key(&input, 6, 1), 0);
 }
 
 #[test]
 fn setter_invalid_index_returns_negative() {
-    assert_eq!(rust_automation_set_immediate_menu_key(24, 1), -1);
-    assert_eq!(rust_automation_set_immediate_menu_key(-1, 1), -1);
+    let input = InputControls::default();
+    assert_eq!(rust_automation_set_immediate_menu_key(&input, 24, 1), -1);
+    assert_eq!(rust_automation_set_immediate_menu_key(&input, -1, 1), -1);
 }
 
 #[test]
 fn setter_clear_returns_zero() {
-    assert_eq!(rust_automation_set_immediate_menu_key(5, 0), 0);
+    let input = InputControls::default();
+    assert_eq!(rust_automation_set_immediate_menu_key(&input, 5, 0), 0);
 }
 
 #[test]
 fn getter_invalid_index_returns_negative() {
-    assert_eq!(rust_automation_get_current_menu_key(24), -1);
-    assert_eq!(rust_automation_get_current_menu_key(-1), -1);
-    assert_eq!(rust_automation_get_pulsed_menu_key(24), -1);
-    assert_eq!(rust_automation_get_pulsed_menu_key(-1), -1);
+    let input = InputControls::default();
+    assert_eq!(rust_automation_get_current_menu_key(&input, 24), -1);
+    assert_eq!(rust_automation_get_current_menu_key(&input, -1), -1);
+    assert_eq!(rust_automation_get_pulsed_menu_key(&input, 24), -1);
+    assert_eq!(rust_automation_get_pulsed_menu_key(&input, -1), -1);
 }
 
 #[test]
 fn getter_valid_index_returns_zero() {
-    assert_eq!(rust_automation_get_current_menu_key(6), 0);
-    assert_eq!(rust_automation_get_pulsed_menu_key(6), 0);
+    let input = InputControls::default();
+    assert_eq!(rust_automation_get_current_menu_key(&input, 6), 0);
+    assert_eq!(rust_automation_get_pulsed_menu_key(&input, 6), 0);
 }
 
 #[test]

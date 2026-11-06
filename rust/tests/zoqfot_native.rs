@@ -8,7 +8,7 @@ use std::mem;
 use uqm_rust::ships::native::{abi::*, cosine, frame_index, sine};
 #[test]
 fn descriptor_and_spit_animation_preserve_jitter_rng_and_speed() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(32);
         unsafe {
             let mut ship = Ship::new(&_battle, SPECIES_ID_ZOQFOTPIK_ID, 0);
@@ -76,7 +76,7 @@ fn descriptor_and_spit_animation_preserve_jitter_rng_and_speed() {
 }
 #[test]
 fn tongue_chain_extends_in_facing_direction_and_stops_at_zero() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(64);
         unsafe {
             let mut ship = Ship::new(&_battle, SPECIES_ID_ZOQFOTPIK_ID, 0);
@@ -108,7 +108,7 @@ fn tongue_chain_extends_in_facing_direction_and_stops_at_zero() {
 }
 #[test]
 fn first_tongue_collision_damages_but_later_frames_only_cancel_extension() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(64);
         unsafe {
             let mut ship = Ship::new(&_battle, SPECIES_ID_ZOQFOTPIK_ID, 0);
@@ -154,7 +154,7 @@ fn first_tongue_collision_damages_but_later_frames_only_cancel_extension() {
 }
 #[test]
 fn tongue_allocation_failure_still_spends_energy_and_sets_counter() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(1);
         unsafe {
             let mut ship = Ship::new(&_battle, SPECIES_ID_ZOQFOTPIK_ID, 0);
@@ -168,7 +168,7 @@ fn tongue_allocation_failure_still_spends_energy_and_sets_counter() {
 }
 #[test]
 fn ai_tongue_range_and_facing_suppress_spit_without_energy_gate() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(32);
         unsafe {
             let mut ship = Ship::new(&_battle, SPECIES_ID_ZOQFOTPIK_ID, 0);

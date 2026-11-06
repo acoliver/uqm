@@ -59,12 +59,12 @@ impl SubtitleDisplay {
     ///
     /// Does nothing if there is no current text. In test mode, no C calls are
     /// made.
-    pub fn redraw(&self) {
-        let _ = self.current_text.is_none();
+    pub fn redraw(&self, enabled: bool) {
+        let _ = (self.current_text.is_none(), enabled);
 
         #[cfg(not(test))]
         unsafe {
-            c_bridge::comm_RedrawSubtitles();
+            c_bridge::comm_redraw_subtitles(enabled);
         }
     }
 
@@ -101,7 +101,7 @@ impl SubtitleDisplay {
 #[cfg(not(test))]
 mod c_bridge {
 
-    pub use crate::comm::comm_abi::comm_RedrawSubtitles;
+    pub use crate::comm::comm_abi::comm_redraw_subtitles;
 }
 
 // ============================================================================

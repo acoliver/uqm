@@ -12,7 +12,8 @@ pub(super) unsafe fn clear_queues() {
             }
         });
         uqm_rust::app::bridge::enter(|cx| {
-            uqm_rust::battle::process_native::init_display_list(cx, optMeleeScale == 0);
+            let scaled = cx.kernel_mut().configuration.preferences().melee_scale == 0;
+            uqm_rust::battle::process_native::init_display_list(cx, scaled);
         });
     }
 }

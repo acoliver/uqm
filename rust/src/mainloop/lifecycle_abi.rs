@@ -2,7 +2,6 @@
 
 use crate::engine::StoryKey;
 use crate::ships::native::abi::*;
-use std::ptr;
 
 fn on_battle_frame(
     cx: &mut crate::engine::battle::Cx<'_>,
@@ -42,10 +41,11 @@ unsafe fn background_init_kernel(cx: &mut crate::engine::battle::Cx<'_>, timeout
     }
     cx.with_legacy(|| crate::threading::legacy_abi::TaskSwitch());
     crate::game_init::kernel_abi::InitGameKernel(cx.kernel, cx.world.activity());
+    let input = cx.kernel.input_runtime();
     while crate::time::counter_abi::GetTimeCounter() <= timeout
         && cx.world.activity() & CHECK_ABORT as u16 == 0
     {
-        cx.with_legacy(|| super::input_abi::UpdateInputState());
+        cx.with_legacy(|| input.update());
         cx.with_legacy(|| {
             if crate::time::source::is_replay() {
                 crate::threading::pacing::linked::sleep_thread_until(timeout.saturating_add(1));
@@ -76,15 +76,15 @@ pub unsafe fn battle_with_frame_callback(
 
 /// # Safety
 /// Called by the game thread after immediate input has been sampled.
-pub unsafe extern "C" fn process_utility_keys() {
-    let state = ptr::addr_of!(ImmediateInputState).read_volatile();
+pub unsafe fn process_utility_keys(input: &crate::engine::input::InputSession) {
+    let state = input.immediate();
     if state.menu[KEY_ABORT as usize] != 0 {
         crate::log_abi::log_showBox(false, false);
         std::process::exit(0);
     }
     if state.menu[KEY_FULLSCREEN as usize] != 0 {
         let flags = GfxFlags ^ TFB_GFXFLAGS_FULLSCREEN as i32;
-        FlushInput();
+        FlushInput(input);
         crate::graphics::tfb_draw_abi::TFB_DrawScreen_ReinitVideo(
             GraphicsDriver,
             flags,
@@ -94,11 +94,10 @@ pub unsafe extern "C" fn process_utility_keys() {
     }
     #[cfg(feature = "debug-process")]
     {
-        static mut DEBUG_KEY_STATE: i32 = 0;
         let pressed = state.menu[KEY_DEBUG as usize];
-        if pressed != 0 && DEBUG_KEY_STATE == 0 {
+        if pressed != 0 && input.debug_key() == 0 {
             crate::front_end::uqmdebug::debug_key_pressed();
         }
-        DEBUG_KEY_STATE = pressed;
+        input.replace_debug_key(pressed);
     }
 }

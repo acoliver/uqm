@@ -388,7 +388,7 @@ unsafe fn check_trail(ship: &mut Ship, trail: *mut ElementRecord, at: POINT, ang
 
 #[test]
 fn descriptor_matches_every_c_initializer_field() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new();
         unsafe {
             let d = shared::descriptor(SPECIES_ID_PKUNK_ID);
@@ -484,7 +484,7 @@ fn descriptor_matches_every_c_initializer_field() {
 
 #[test]
 fn every_init_copies_the_template_and_gives_the_copy_its_own_zeroed_state() {
-    battle_context::run(|| unsafe {
+    battle_context::run(|_| unsafe {
         let _battle = Battle::new();
         let mut first = Ship::new(&_battle, 0);
         let mut second = Ship::new(&_battle, 1);
@@ -534,7 +534,7 @@ fn every_init_copies_the_template_and_gives_the_copy_its_own_zeroed_state() {
 
 #[test]
 fn ships_keep_independent_phoenix_state() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new();
         unsafe {
             let mut a = Ship::new(&_battle, 0);
@@ -554,7 +554,7 @@ fn ships_keep_independent_phoenix_state() {
 
 #[test]
 fn bug_missiles_launch_fore_left_and_right_inheriting_ship_velocity() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new();
         unsafe {
             let mut ship = Ship::new(&_battle, 1);
@@ -638,7 +638,7 @@ fn bug_missiles_launch_fore_left_and_right_inheriting_ship_velocity() {
 
 #[test]
 fn bug_missile_allocation_failure_leaves_null_slots_but_still_reports_three() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         // The ship takes one slot, so exactly one missile fits.
         let _battle = Battle::with_capacity(2);
         unsafe {
@@ -662,7 +662,7 @@ fn bug_missile_allocation_failure_leaves_null_slots_but_still_reports_three() {
 
 #[test]
 fn bug_missiles_animate_one_frame_per_blast_offset_delay() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new();
         unsafe {
             let mut ship = Ship::new(&_battle, 0);
@@ -700,7 +700,7 @@ fn bug_missiles_animate_one_frame_per_blast_offset_delay() {
 
 #[test]
 fn first_preprocess_with_an_even_draw_spawns_no_phoenix() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new();
         unsafe {
             let mut ship = Ship::new(&_battle, 0);
@@ -720,7 +720,7 @@ fn first_preprocess_with_an_even_draw_spawns_no_phoenix() {
 
 #[test]
 fn first_preprocess_with_an_odd_draw_queues_a_phoenix_at_the_head() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new();
         unsafe {
             let mut ship = Ship::new(&_battle, 1);
@@ -761,7 +761,7 @@ fn first_preprocess_with_an_odd_draw_queues_a_phoenix_at_the_head() {
 
 #[test]
 fn phoenix_allocation_failure_still_consumes_the_draw_and_records_no_phoenix() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::with_capacity(1);
         unsafe {
             let mut ship = Ship::new(&_battle, 0);
@@ -784,7 +784,7 @@ fn phoenix_allocation_failure_still_consumes_the_draw_and_records_no_phoenix() {
 
 #[test]
 fn reincarnation_preprocess_queues_four_trails_around_the_ship() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new();
         unsafe {
             let mut ship = Ship::new(&_battle, 0);
@@ -847,7 +847,7 @@ fn reincarnation_preprocess_queues_four_trails_around_the_ship() {
 
 #[test]
 fn reincarnation_trails_are_limited_by_free_elements() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         // Ship + two trails; the phoenix draw is even so none is queued.
         let _battle = Battle::with_capacity(3);
         unsafe {
@@ -874,7 +874,7 @@ fn reincarnation_trails_are_limited_by_free_elements() {
 
 #[test]
 fn reincarnation_ends_when_life_span_returns_to_normal() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new();
         unsafe {
             let mut ship = Ship::new(&_battle, 0);
@@ -932,7 +932,7 @@ fn reincarnation_ends_when_life_span_returns_to_normal() {
 
 #[test]
 fn trails_hop_forward_until_the_ship_is_solid_again() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new();
         unsafe {
             let mut ship = Ship::new(&_battle, 0);
@@ -971,7 +971,7 @@ fn trails_hop_forward_until_the_ship_is_solid_again() {
 
 #[test]
 fn trail_death_steps_through_the_twelve_ember_colors() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new();
         unsafe {
             let mut ship = Ship::new(&_battle, 0);
@@ -1026,7 +1026,7 @@ fn trail_death_steps_through_the_twelve_ember_colors() {
 
 #[test]
 fn phoenix_death_hook_keeps_a_living_ship_and_arms_reincarnation_for_a_dead_one() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new();
         unsafe {
             let mut ship = Ship::new(&_battle, 0);
@@ -1123,7 +1123,7 @@ fn phoenix_death_hook_keeps_a_living_ship_and_arms_reincarnation_for_a_dead_one(
 
 #[test]
 fn reincarnation_death_explodes_then_new_pkunk_restores_a_fresh_ship() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new();
         unsafe {
             let mut ship = Ship::new(&_battle, 0);
@@ -1304,7 +1304,7 @@ fn reincarnation_death_explodes_then_new_pkunk_restores_a_fresh_ship() {
 
 #[test]
 fn new_pkunk_redraws_its_position_while_a_planet_pulls_on_it() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new();
         unsafe {
             // A seed whose second candidate position is clear of the first.
@@ -1366,7 +1366,7 @@ fn new_pkunk_redraws_its_position_while_a_planet_pulls_on_it() {
 
 #[test]
 fn new_pkunk_macro_expansion_draws_again_for_a_negative_coordinate() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new();
         unsafe {
             // A 1280-wide screen makes LOG_SPACE_WIDTH exceed what a COORD holds, so
@@ -1394,7 +1394,7 @@ fn new_pkunk_macro_expansion_draws_again_for_a_negative_coordinate() {
 
 #[test]
 fn taunt_waits_out_its_cooldown_and_needs_the_key_and_missing_energy() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new();
         unsafe {
             let sounds = Sounds::new(4);
@@ -1447,7 +1447,7 @@ fn taunt_waits_out_its_cooldown_and_needs_the_key_and_missing_energy() {
 
 #[test]
 fn taunt_sound_draws_avoid_the_previous_sound_and_init_forgets_it() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new();
         unsafe {
             let sounds = Sounds::new(4);
@@ -1509,7 +1509,7 @@ fn taunt_sound_draws_avoid_the_previous_sound_and_init_forgets_it() {
 
 #[test]
 fn ai_drops_the_phoenix_only_for_standard_rated_pilots() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new();
         unsafe {
             let mut ship = Ship::new(&_battle, 0);
@@ -1547,7 +1547,7 @@ fn ai_drops_the_phoenix_only_for_standard_rated_pilots() {
 
 #[test]
 fn ai_taunts_when_short_of_energy_and_throttles_on_the_low_byte_of_one_draw() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new();
         unsafe {
             let mut ship = Ship::new(&_battle, 0);
@@ -1589,7 +1589,7 @@ fn ai_taunts_when_short_of_energy_and_throttles_on_the_low_byte_of_one_draw() {
 
 #[test]
 fn ai_finishes_with_the_shared_pass_after_deciding_on_the_taunt() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new();
         unsafe {
             let mut ship = Ship::new(&_battle, 0);

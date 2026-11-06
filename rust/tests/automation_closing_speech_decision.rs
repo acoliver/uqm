@@ -29,7 +29,7 @@ const SCRIPT: &str = r#"{
 
 #[test]
 fn waiting_for_the_conversation_to_end_skips_the_closing_speech() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let document = parse_script(SCRIPT.as_bytes(), "closing-speech-decision.json")
             .expect("the script fixture must parse");
         let script =
@@ -39,12 +39,19 @@ fn waiting_for_the_conversation_to_end_skips_the_closing_speech() {
         std::fs::create_dir_all(&output_root).expect("evidence root");
         let _application = {
             let game = uqm_rust::engine::Game::new();
+            let input = uqm_rust::engine::input::InputControls::default();
             let observer = Some(AutomationObserver::new(
                 script,
                 output_root,
                 game.world.activity_control(),
+                input.clone(),
+                game.kernel.configuration.clone(),
             ));
-            uqm_rust::app::Application::new(game, observer)
+            {
+                let mut application = uqm_rust::app::Application::new(game, observer);
+                application.install_input(input);
+                application
+            }
         };
 
         assert!(

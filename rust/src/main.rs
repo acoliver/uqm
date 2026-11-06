@@ -20,7 +20,7 @@ fn main() {
         .map(|s| CString::new(s.as_str()).unwrap_or_default())
         .collect();
     // Parse command-line options in Rust (replaces C parseOptions)
-    let parsed = options::parse_and_store(&args);
+    let parsed = options::parse(&args);
 
     if parsed.parse_error {
         eprintln!("Invalid option. Run with -h to see the allowed arguments.");
@@ -87,22 +87,18 @@ fn main() {
     }
 
     let game = uqm_rust::engine::Game::new();
+    let input = uqm_rust::engine::input::InputControls::default();
     let observer = setup_observer(
         &auto_opts,
         parsed.native_window_proof.as_deref(),
         game.world.activity_control(),
+        input.clone(),
+        game.kernel.configuration.clone(),
     );
     let mut application = uqm_rust::app::Application::new(game, observer);
 
-    application
-        .game
-        .kernel
-        .install_input_runtime(std::rc::Rc::new(
-            uqm_rust::mainloop::input_abi::NativeInputRuntime {
-                observer: application.observer().cloned(),
-            },
-        ));
-    let exit_code = uqm_rust::app::run(&mut application, &c_args);
+    application.install_input(input);
+    let exit_code = uqm_rust::app::run(&mut application, &c_args, &parsed);
     let observer = application.observer().cloned();
     // SAFETY: finalization runs synchronously before the application releases Game.
     let exit_code = unsafe {
@@ -121,6 +117,8 @@ fn setup_observer(
     auto_opts: &uqm_rust::automation::AutomationOptions,
     native_window_proof: Option<&str>,
     activity: uqm_rust::engine::world::activity::ActivityControl,
+    input: uqm_rust::engine::input::InputControls,
+    configuration: uqm_engine::configuration::Configuration,
 ) -> Option<std::sync::Arc<uqm_rust::automation::AutomationObserver>> {
     // Build capabilities resolved from build.vars at compile time
     let caps = uqm_rust::automation::BuildCapabilities::from_flags(&[
@@ -148,6 +146,8 @@ fn setup_observer(
                 setup.script,
                 setup.output_root,
                 activity,
+                input,
+                configuration,
             ))
         }
         Ok(None) => {

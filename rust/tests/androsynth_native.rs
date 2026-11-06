@@ -44,7 +44,7 @@ fn make_byte(lo: u8, hi: u8) -> u8 {
 
 #[test]
 fn descriptor_matches_the_c_race_data() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         unsafe {
             let desc = battle::descriptor(SPECIES_ID_ANDROSYNTH_ID);
             assert!(std::ptr::eq(
@@ -130,7 +130,7 @@ fn descriptor_matches_the_c_race_data() {
 
 #[test]
 fn bubble_is_launched_with_the_c_missile_block() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(32);
         unsafe {
             let mut ship = Ship::bare(&_battle, SPECIES_ID_ANDROSYNTH_ID, 0).guardian_form();
@@ -156,7 +156,7 @@ fn bubble_is_launched_with_the_c_missile_block() {
 
 #[test]
 fn bubble_wait_nibbles_count_down_then_retarget_with_the_c_rng_order() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(32);
         unsafe {
             let mut ship = Ship::bare(&_battle, SPECIES_ID_ANDROSYNTH_ID, 0).guardian_form();
@@ -202,7 +202,7 @@ fn bubble_wait_nibbles_count_down_then_retarget_with_the_c_rng_order() {
 
 #[test]
 fn bubble_steers_toward_the_nearest_enemy_with_a_random_wobble() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(32);
         unsafe {
             let mut ship = Ship::bare(&_battle, SPECIES_ID_ANDROSYNTH_ID, 0).guardian_form();
@@ -271,7 +271,7 @@ unsafe fn enter_blazer(ship: &mut Ship) {
 
 #[test]
 fn special_switches_to_blazer_and_saves_the_collision_function() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(32);
         unsafe {
             let mut ship = Ship::bare(&_battle, SPECIES_ID_ANDROSYNTH_ID, 0).guardian_form();
@@ -343,7 +343,7 @@ fn special_switches_to_blazer_and_saves_the_collision_function() {
 
 #[test]
 fn low_energy_special_flashes_text_without_switching() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(32);
         unsafe {
             let mut ship = Ship::bare(&_battle, SPECIES_ID_ANDROSYNTH_ID, 0).guardian_form();
@@ -364,7 +364,7 @@ fn low_energy_special_flashes_text_without_switching() {
 
 #[test]
 fn blazer_thrusts_on_its_own_and_turns_one_facing_per_tick() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(32);
         unsafe {
             let mut ship = Ship::bare(&_battle, SPECIES_ID_ANDROSYNTH_ID, 0).guardian_form();
@@ -415,7 +415,7 @@ fn blazer_thrusts_on_its_own_and_turns_one_facing_per_tick() {
 
 #[test]
 fn blazer_clamps_turn_wait_against_vux_slowing() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(32);
         unsafe {
             let mut ship = Ship::bare(&_battle, SPECIES_ID_ANDROSYNTH_ID, 0).guardian_form();
@@ -433,7 +433,7 @@ fn blazer_clamps_turn_wait_against_vux_slowing() {
 
 #[test]
 fn exhausted_blazer_reverts_and_restores_the_saved_collision_function() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(32);
         unsafe {
             let mut ship = Ship::bare(&_battle, SPECIES_ID_ANDROSYNTH_ID, 0).guardian_form();
@@ -488,7 +488,7 @@ fn exhausted_blazer_reverts_and_restores_the_saved_collision_function() {
 
 #[test]
 fn transforming_again_replaces_the_saved_block_instead_of_leaking_it() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(32);
         unsafe {
             let mut ship = Ship::bare(&_battle, SPECIES_ID_ANDROSYNTH_ID, 0).guardian_form();
@@ -542,7 +542,7 @@ fn concern_slot(index: u32) -> usize {
 
 #[test]
 fn blazer_ai_ignores_crew_and_avoids_only_finite_life_weapons() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(32);
         unsafe {
             let mut ship = Ship::bare(&_battle, SPECIES_ID_ANDROSYNTH_ID, 0).blazer_form();
@@ -640,7 +640,7 @@ impl<'a> Duel<'a> {
 
 #[test]
 fn guardian_ai_entices_only_under_the_c_conditions() {
-    battle_context::run(|| unsafe {
+    battle_context::run(|_| unsafe {
         let _battle = Battle::new(32);
         let long = 1000;
         // (special counter, energy, enemy range, enemy crew, enemy maneuverability,
@@ -686,7 +686,7 @@ fn guardian_ai_entices_only_under_the_c_conditions() {
 
 #[test]
 fn guardian_ai_morphs_when_threatened_or_when_outranging_is_possible() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(32);
         unsafe {
             let mut missile = Object::new(&_battle);
@@ -738,7 +738,7 @@ fn guardian_ai_morphs_when_threatened_or_when_outranging_is_possible() {
 
 #[test]
 fn guardian_ai_fires_when_close_or_when_the_target_is_ahead_of_the_drift() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battle::new(32);
         unsafe {
             // Keep the special in cooldown so only the weapon decision runs, and
@@ -786,7 +786,7 @@ mod hooks;
 
 #[test]
 fn guardian_preprocess_keeps_an_absent_optional_image_set() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let pool = Battle::new(8);
         let mut ship = Ship::bare(&pool, SPECIES_ID_ANDROSYNTH_ID, 0);
         // SAFETY: the fixture owns the serialized pool throughout the callback.

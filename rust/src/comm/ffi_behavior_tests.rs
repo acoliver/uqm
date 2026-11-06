@@ -585,9 +585,9 @@ fn the_speech_graphics_and_subtitle_display_refresh_without_a_screen() {
         rust_splice_track(1, line.as_ptr(), 0.0, 3.0);
         assert_eq!(rust_start_track(), 1);
         rust_check_subtitles();
-        rust_redraw_subtitles();
+        rust_redraw_subtitles(&crate::engine::input::InputSession::default());
         rust_clear_subtitles();
-        rust_redraw_subtitles();
+        rust_redraw_subtitles(&crate::engine::input::InputSession::default());
         offer("Choice", 1, None);
         rust_refresh_responses(&crate::engine::World::new());
         assert_eq!(
@@ -637,7 +637,7 @@ fn state_accessors_use_safe_rust_signatures() {
     let _: fn(&crate::engine::World) = rust_refresh_responses;
     let _: fn() = rust_clear_subtitles;
     let _: fn() = rust_check_subtitles;
-    let _: fn() = rust_redraw_subtitles;
+    let _: fn(&crate::engine::input::InputSession) = rust_redraw_subtitles;
 
     let _: fn() -> c_int = rust_init_communication;
     let _: fn() = rust_uninit_communication;

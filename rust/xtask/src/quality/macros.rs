@@ -7,7 +7,6 @@ use quote::{quote, ToTokens};
 use syn::parse::{discouraged::Speculative, ParseStream, Parser};
 
 pub const HANDLERS: &[(&str, &str)] = &[
-    ("src/mainloop/options_abi.rs", "global"),
     ("src/graphics/gfx_common_abi.rs", "screen_global"),
     ("src/mainloop/state_abi.rs", "accessor"),
     ("src/mainloop/main2_abi.rs", "operation"),

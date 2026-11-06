@@ -9,9 +9,7 @@ use serial_test::serial;
 use tempfile::TempDir;
 
 use super::*;
-use super::{
-    baseContentPath, configDir, contentDir, contentMountHandle, meleeDir, repository, saveDir,
-};
+use super::{configDir, contentDir, contentMountHandle, meleeDir, repository, saveDir};
 use crate::io::uio_bridge::{
     uio_DirList_free, uio_close, uio_closeDir, uio_closeRepository, uio_getDirList, uio_init,
     uio_open, uio_openRepository, uio_read, uio_unInit,
@@ -23,6 +21,7 @@ const ENV_KEYS: [&str; 4] = ["HOME", "UQM_CONFIG_DIR", "UQM_SAVE_DIR", "UQM_MELE
 /// environment and the C-global stand-ins when dropped.
 struct Fixture {
     home: TempDir,
+    configuration: uqm_engine::configuration::Configuration,
     saved_env: Vec<(&'static str, Option<String>)>,
 }
 
@@ -41,7 +40,11 @@ impl Fixture {
             uio_init();
             repository = uio_openRepository(0);
         }
-        Fixture { home, saved_env }
+        Fixture {
+            home,
+            saved_env,
+            configuration: Default::default(),
+        }
     }
 
     fn home(&self) -> &Path {
@@ -73,7 +76,6 @@ impl Drop for Fixture {
             saveDir = ptr::null_mut();
             meleeDir = ptr::null_mut();
             contentMountHandle = ptr::null_mut();
-            baseContentPath = [0; 4096];
             uio_unInit();
         }
         for (key, value) in &self.saved_env {
@@ -296,7 +298,7 @@ fn explicit_content_dir_without_version_file_is_rejected() {
     let bare = fx.home().join("bare_content");
     std::fs::create_dir_all(&bare).unwrap();
 
-    let result = prepare_content_dir(Some(bare.to_str().unwrap()), None);
+    let result = prepare_content_dir(&fx.configuration, Some(bare.to_str().unwrap()), None);
 
     match result {
         Err(DirPrepError::NotFound(message)) => {
@@ -315,14 +317,10 @@ fn content_dir_is_mounted_with_packages_and_addon_packs() {
     let fx = Fixture::new();
     let content = build_content_tree(fx.home());
 
-    prepare_content_dir(Some(content.to_str().unwrap()), None).unwrap();
+    prepare_content_dir(&fx.configuration, Some(content.to_str().unwrap()), None).unwrap();
 
-    let recorded = unsafe {
-        CStr::from_ptr(std::ptr::addr_of!(baseContentPath) as *const c_char)
-            .to_str()
-            .unwrap()
-            .to_string()
-    };
+    let recorded = fx.configuration.content_path().unwrap();
+    let recorded = recorded.to_str().unwrap();
     assert_eq!(recorded, content.to_str().unwrap());
     assert!(unsafe { !contentMountHandle.is_null() });
     let dir = unsafe { contentDir };
@@ -355,6 +353,7 @@ fn explicit_addon_dir_is_mounted_under_addons() {
     std::fs::write(extra.join("extra.txt"), b"extra data").unwrap();
 
     prepare_content_dir(
+        &fx.configuration,
         Some(content.to_str().unwrap()),
         Some(extra.to_str().unwrap()),
     )
@@ -374,7 +373,7 @@ fn content_dir_without_an_addons_directory_still_prepares() {
     std::fs::create_dir_all(&content).unwrap();
     std::fs::write(content.join("version"), b"0.8.0\n").unwrap();
 
-    prepare_content_dir(Some(content.to_str().unwrap()), None).unwrap();
+    prepare_content_dir(&fx.configuration, Some(content.to_str().unwrap()), None).unwrap();
 
     assert_eq!(
         read_through_uio(unsafe { contentDir }, "version").as_deref(),
@@ -398,7 +397,7 @@ fn shadow_addons_without_content_dir_do_nothing() {
 fn shadow_content_of_a_listed_addon_overlays_the_content_dir() {
     let fx = Fixture::new();
     let content = build_content_tree(fx.home());
-    prepare_content_dir(Some(content.to_str().unwrap()), None).unwrap();
+    prepare_content_dir(&fx.configuration, Some(content.to_str().unwrap()), None).unwrap();
     let dir = unsafe { contentDir };
     assert_eq!(read_through_uio(dir, "shadowed.txt"), None);
 
@@ -431,11 +430,21 @@ fn ffi_exports_report_success_and_failure_as_zero_and_minus_one() {
         assert_eq!(rust_prepare_save_dir(), 0);
         assert_eq!(rust_prepare_melee_dir(), 0);
         assert_eq!(
-            rust_prepare_content_dir(bare_c.as_ptr(), ptr::null(), exec.as_ptr()),
+            rust_prepare_content_dir(
+                &fx.configuration,
+                bare_c.as_ptr(),
+                ptr::null(),
+                exec.as_ptr()
+            ),
             -1
         );
         assert_eq!(
-            rust_prepare_content_dir(content_c.as_ptr(), ptr::null(), exec.as_ptr()),
+            rust_prepare_content_dir(
+                &fx.configuration,
+                content_c.as_ptr(),
+                ptr::null(),
+                exec.as_ptr()
+            ),
             0
         );
         assert_eq!(rust_prepare_shadow_addons(ptr::null()), 0);
@@ -456,7 +465,7 @@ fn ffi_exports_report_success_and_failure_as_zero_and_minus_one() {
 fn the_mounted_content_dir_lists_its_top_level_entries() {
     let fx = Fixture::new();
     let content = build_content_tree(fx.home());
-    prepare_content_dir(Some(content.to_str().unwrap()), None).unwrap();
+    prepare_content_dir(&fx.configuration, Some(content.to_str().unwrap()), None).unwrap();
 
     let names = list_through_uio(unsafe { contentDir }, "", MATCH_PREFIX);
 

@@ -1,7 +1,7 @@
 //! Setup menus and persistent options, ported from uqm/setupmenu.c.
 
 #[cfg(not(test))]
-use crate::engine::{battle::Cx, observe::Io, Kernel};
+use crate::engine::{battle::Cx, input::InputSession, observe::Io, Kernel};
 use crate::navigation::abi::*;
 use std::ffi::c_int;
 
@@ -129,7 +129,7 @@ pub(crate) mod runtime {
         ((*NEXT).receiveFocus.unwrap())(NEXT, focus_event);
         1
     }
-    unsafe extern "C" fn quit_main_menu(_: *mut WIDGET, event: c_int) -> c_int {
+    unsafe fn quit_main_menu(_: *mut WIDGET, event: c_int, _input: &InputSession) -> c_int {
         if event == WIDGET_EVENT_SELECT as c_int {
             NEXT = ptr::null_mut();
             1
@@ -137,12 +137,12 @@ pub(crate) mod runtime {
             0
         }
     }
-    unsafe extern "C" fn quit_sub_menu(_: *mut WIDGET, event: c_int) -> c_int {
+    unsafe fn quit_sub_menu(_: *mut WIDGET, event: c_int, _input: &InputSession) -> c_int {
         enter_menu(0, event, WIDGET_EVENT_SELECT as c_int)
     }
     macro_rules! menu_handler {
         ($name:ident, $index:expr) => {
-            unsafe extern "C" fn $name(_: *mut WIDGET, event: c_int) -> c_int {
+            unsafe fn $name(_: *mut WIDGET, event: c_int, _input: &InputSession) -> c_int {
                 enter_menu($index, event, WIDGET_EVENT_DOWN as c_int)
             }
         };
@@ -180,7 +180,7 @@ pub(crate) mod runtime {
             }
         }
     }
-    unsafe extern "C" fn do_editkeys(_: *mut WIDGET, event: c_int) -> c_int {
+    unsafe fn do_editkeys(_: *mut WIDGET, event: c_int, _input: &InputSession) -> c_int {
         if event != WIDGET_EVENT_SELECT as c_int {
             return 0;
         }
@@ -236,9 +236,9 @@ pub(crate) mod runtime {
             $opts.$field = CHOICES[$i].selected as _
         };
     }
-    unsafe fn set_defaults() {
+    unsafe fn set_defaults(input: &InputSession) {
         let mut opts: GLOBALOPTS = mem::zeroed();
-        GetGlobalOptions(&mut opts);
+        get_global_options(input, &mut opts);
         CHOICES[0].numopts =
             number_res_options() + c_int::from(opts.res == OPT_RESTYPE_OPTVAL_CUSTOM);
         option_choices!(opts, to_choice);
@@ -248,21 +248,21 @@ pub(crate) mod runtime {
         SLIDERS[2].value = opts.speechvol;
         SLIDERS[3].value = opts.gamma;
     }
-    unsafe fn propagate_results() {
+    unsafe fn propagate_results(input: &InputSession) {
         let mut opts: GLOBALOPTS = mem::zeroed();
         option_choices!(opts, from_choice);
         opts.musicvol = SLIDERS[0].value;
         opts.sfxvol = SLIDERS[1].value;
         opts.speechvol = SLIDERS[2].value;
         opts.gamma = SLIDERS[3].value;
-        SetGlobalOptions(&mut opts);
+        set_global_options(input, &mut opts);
     }
-    unsafe fn do_setup_menu(state: &mut SetupMenuState) -> BOOLEAN {
-        GamePaused = 0;
+    unsafe fn do_setup_menu(input: &InputSession, state: &mut SetupMenuState) -> BOOLEAN {
+        input.set_paused(false);
         if state.initialized == 0 {
-            SetDefaultMenuRepeatDelay();
+            SetDefaultMenuRepeatDelay(input);
             state.next_time = GetTimeCounter();
-            set_defaults();
+            set_defaults(input);
             Widget_SetFont(Kernel::current().read(|owner| owner.star_con_font));
             Widget_SetWindowColors(
                 rgb15(0x14, 0x14, 0x14),
@@ -290,8 +290,8 @@ pub(crate) mod runtime {
             (KEY_MENU_LEFT, WIDGET_EVENT_LEFT),
             (KEY_MENU_RIGHT, WIDGET_EVENT_RIGHT),
         ] {
-            if PulsedInputState.menu[key as usize] != 0 {
-                Widget_Event(event as c_int);
+            if input.pulsed().menu[key as usize] != 0 {
+                widget_event(event as c_int, input);
                 break;
             }
         }
@@ -300,8 +300,8 @@ pub(crate) mod runtime {
             (KEY_MENU_CANCEL, WIDGET_EVENT_CANCEL),
             (KEY_MENU_DELETE, WIDGET_EVENT_DELETE),
         ] {
-            if PulsedInputState.menu[key as usize] != 0 {
-                Widget_Event(event as c_int);
+            if input.pulsed().menu[key as usize] != 0 {
+                widget_event(event as c_int, input);
             }
         }
         SleepThreadUntil(state.next_time.wrapping_add(MENU_FRAME_RATE));
@@ -313,7 +313,7 @@ pub(crate) mod runtime {
         ((*NEXT).draw.unwrap())(NEXT, 0, 0);
         UnbatchGraphics();
     }
-    unsafe extern "C" fn on_text_entry_change(state: *mut TEXTENTRY_STATE) -> BOOLEAN {
+    unsafe fn on_text_entry_change(state: *mut TEXTENTRY_STATE, _input: &InputSession) -> BOOLEAN {
         let widget = (*state).CbParam.cast::<WIDGET_TEXTENTRY>();
         (*widget).cursor_pos = (*state).CursorPos;
         if (*state).JoystickMode != 0 {
@@ -323,13 +323,13 @@ pub(crate) mod runtime {
         }
         1
     }
-    unsafe extern "C" fn on_text_entry_frame(state: *mut TEXTENTRY_STATE) -> BOOLEAN {
+    unsafe fn on_text_entry_frame(state: *mut TEXTENTRY_STATE, _input: &InputSession) -> BOOLEAN {
         redraw_menu();
         SleepThreadUntil((*state).NextTime);
         (*state).NextTime = GetTimeCounter().wrapping_add(MENU_FRAME_RATE);
         1
     }
-    unsafe extern "C" fn on_text_entry_event(widget: *mut WIDGET_TEXTENTRY) -> c_int {
+    unsafe fn on_text_entry_event(widget: *mut WIDGET_TEXTENTRY, input: &InputSession) -> c_int {
         (*widget).cursor_pos = utf8StringCount(((*widget).value.as_ptr()).cast()) as c_int;
         (*widget).state = WIDGET_TEXTENTRY_STATE_WTE_EDITING;
         redraw_menu();
@@ -348,8 +348,8 @@ pub(crate) mod runtime {
         state.CbParam = widget.cast();
         state.ChangeCallback = Some(on_text_entry_change);
         state.FrameCallback = Some(on_text_entry_frame);
-        SetMenuSounds(0, MENU_SOUND_SELECT);
-        if DoTextEntry(&mut state) == 0 {
+        SetMenuSounds(input, 0, MENU_SOUND_SELECT);
+        if do_text_entry(&mut state, input) == 0 {
             utf8StringCopy(
                 ((*widget).value.as_mut_ptr()).cast(),
                 (*widget).maxlen as usize,
@@ -358,12 +358,16 @@ pub(crate) mod runtime {
         } else if let Some(callback) = (*widget).onChange {
             callback(widget);
         }
-        SetMenuSounds(MENU_SOUND_ARROWS, MENU_SOUND_SELECT);
+        SetMenuSounds(input, MENU_SOUND_ARROWS, MENU_SOUND_SELECT);
         (*widget).state = WIDGET_TEXTENTRY_STATE_WTE_NORMAL;
         redraw_menu();
         1
     }
-    unsafe extern "C" fn gamma_handle_event_slider(widget: *mut WIDGET, event: c_int) -> c_int {
+    unsafe fn gamma_handle_event_slider(
+        widget: *mut WIDGET,
+        event: c_int,
+        _input: &InputSession,
+    ) -> c_int {
         let slider = widget.cast::<WIDGET_SLIDER>();
         let previous = (*slider).value;
         if event == WIDGET_EVENT_LEFT as c_int {
@@ -410,15 +414,15 @@ pub(crate) mod runtime {
         text.pStr = buffer.as_ptr();
         font_DrawText(&mut text);
     }
-    unsafe extern "C" fn rebind_control(widget: *mut WIDGET_CONTROLENTRY) {
+    unsafe fn rebind_control(widget: *mut WIDGET_CONTROLENTRY, input: &InputSession) {
         let template = CHOICES[20].selected;
-        FlushInput();
+        FlushInput(input);
         DrawLabelAsWindow(ptr::addr_of_mut!(LABELS[3]), ptr::null_mut());
         RebindInputState(template, (*widget).controlindex, (*widget).highlighted);
         populate_editkeys(template);
-        FlushInput();
+        FlushInput(input);
     }
-    unsafe extern "C" fn clear_control(widget: *mut WIDGET_CONTROLENTRY) {
+    unsafe fn clear_control(widget: *mut WIDGET_CONTROLENTRY, _input: &InputSession) {
         let template = CHOICES[20].selected;
         RemoveInputState(template, (*widget).controlindex, (*widget).highlighted);
         populate_editkeys(template);
@@ -540,7 +544,7 @@ pub(crate) mod runtime {
             widget_header!(
                 m,
                 WIDGET_TYPE_WIDGET_TYPE_MENU_SCREEN,
-                Widget_HandleEventMenuScreen,
+                widget_handle_event_menu_screen,
                 Widget_ReceiveFocusMenuScreen,
                 Widget_DrawMenuScreen,
                 Widget_HeightFullScreen
@@ -568,7 +572,7 @@ pub(crate) mod runtime {
             widget_header!(
                 c,
                 WIDGET_TYPE_WIDGET_TYPE_CHOICE,
-                Widget_HandleEventChoice,
+                widget_handle_event_choice,
                 Widget_ReceiveFocusChoice,
                 Widget_DrawChoice,
                 Widget_HeightChoice
@@ -635,7 +639,7 @@ pub(crate) mod runtime {
             widget_header!(
                 s,
                 WIDGET_TYPE_WIDGET_TYPE_SLIDER,
-                Widget_HandleEventSlider,
+                widget_handle_event_slider,
                 Widget_ReceiveFocusSimple,
                 Widget_DrawSlider,
                 Widget_HeightOneLine
@@ -672,7 +676,7 @@ pub(crate) mod runtime {
         {
             fatal(c"PANIC: Incorrect number of Button Options");
         }
-        let handlers: [unsafe extern "C" fn(*mut WIDGET, c_int) -> c_int; 10] = [
+        let handlers: [unsafe fn(*mut WIDGET, c_int, &InputSession) -> c_int; 10] = [
             quit_main_menu,
             quit_sub_menu,
             do_graphics,
@@ -726,7 +730,7 @@ pub(crate) mod runtime {
             widget_header!(
                 l,
                 WIDGET_TYPE_WIDGET_TYPE_LABEL,
-                Widget_HandleEventIgnoreAll,
+                widget_handle_event_ignore_all,
                 Widget_ReceiveFocusRefuseFocus,
                 Widget_DrawLabel,
                 Widget_HeightLabel
@@ -762,7 +766,7 @@ pub(crate) mod runtime {
         widget_header!(
             t,
             WIDGET_TYPE_WIDGET_TYPE_TEXTENTRY,
-            Widget_HandleEventTextEntry,
+            widget_handle_event_text_entry,
             Widget_ReceiveFocusSimple,
             Widget_DrawTextEntry,
             Widget_HeightOneLine
@@ -799,7 +803,7 @@ pub(crate) mod runtime {
             widget_header!(
                 c,
                 WIDGET_TYPE_WIDGET_TYPE_CONTROLENTRY,
-                Widget_HandleEventControlEntry,
+                widget_handle_event_control_entry,
                 Widget_ReceiveFocusControlEntry,
                 Widget_DrawControlEntry,
                 Widget_HeightOneLine
@@ -854,9 +858,11 @@ pub(crate) mod runtime {
     /// # Safety
     /// Must run on the game thread with graphics, input and resources initialized.
     pub unsafe fn setup_menu(cx: &mut Cx<'_>, io: &mut Io<'_>) {
+        let runtime = cx.kernel.input_runtime();
+        let input = runtime.input();
         let mut state: SetupMenuState = mem::zeroed();
         cx.with_legacy(|| {
-            SetMenuSounds(MENU_SOUND_ARROWS, MENU_SOUND_SELECT);
+            SetMenuSounds(input, MENU_SOUND_ARROWS, MENU_SOUND_SELECT);
             SETUP_TAB =
                 CaptureStringTable(LoadStringTableInstance(SETUP_MENU_STRTAB.as_ptr().cast()));
             if !SETUP_TAB.is_null() {
@@ -866,21 +872,21 @@ pub(crate) mod runtime {
             }
         });
         cx.run_input(io, true, |cx, _| {
-            cx.with_legacy(|| do_setup_menu(&mut state)) != 0
+            cx.with_legacy(|| do_setup_menu(input, &mut state)) != 0
                 && cx.world.activity() & CHECK_ABORT as u16 == 0
         });
         cx.world
             .set_activity(cx.world.activity() & !(CHECK_ABORT as u16));
         cx.with_legacy(|| {
-            propagate_results();
+            propagate_results(input);
             clean_up_widgets();
         });
     }
 
     /// # Safety
     /// `opts` must be writable and access to the live options must be serialized.
-    #[no_mangle]
-    pub unsafe extern "C" fn GetGlobalOptions(opts: *mut GLOBALOPTS) {
+    pub unsafe fn get_global_options(input: &InputSession, opts: *mut GLOBALOPTS) {
+        let preferences = input.preferences();
         let opts = &mut *opts;
         opts.scaler = if GfxFlags & TFB_GFXFLAGS_SCALE_XBRZ3 as c_int != 0 {
             OPT_SCALETYPE_OPTVAL_XBRZ3_SCALE
@@ -892,21 +898,21 @@ pub(crate) mod runtime {
             OPT_SCALETYPE_OPTVAL_XBRZ3_SCALE
         };
         opts.fullscreen = u32::from(GfxFlags & TFB_GFXFLAGS_FULLSCREEN as c_int != 0);
-        opts.subtitles = u32::from(optSubtitles != 0);
+        opts.subtitles = u32::from(preferences.subtitles != 0);
         opts.scanlines = u32::from(GfxFlags & TFB_GFXFLAGS_SCANLINES as c_int != 0);
-        opts.menu = u32::from(optWhichMenu == OPT_3DO as c_int);
-        opts.text = u32::from(optWhichFonts == OPT_3DO as c_int);
-        opts.cscan = u32::from(optWhichCoarseScan == OPT_3DO as c_int);
-        opts.scroll = u32::from(optSmoothScroll == OPT_3DO as c_int);
-        opts.intro = u32::from(optWhichIntro == OPT_3DO as c_int);
-        opts.shield = u32::from(optWhichShield == OPT_3DO as c_int);
+        opts.menu = u32::from(preferences.menu == OPT_3DO as c_int);
+        opts.text = u32::from(preferences.fonts == OPT_3DO as c_int);
+        opts.cscan = u32::from(preferences.coarse_scan == OPT_3DO as c_int);
+        opts.scroll = u32::from(preferences.smooth_scroll == OPT_3DO as c_int);
+        opts.intro = u32::from(preferences.intro == OPT_3DO as c_int);
+        opts.shield = u32::from(preferences.shield == OPT_3DO as c_int);
         opts.fps = u32::from(GfxFlags & TFB_GFXFLAGS_SHOWFPS as c_int != 0);
-        opts.meleezoom = u32::from(optMeleeScale != SCALE_TFB_SCALE_STEP as c_int);
-        opts.stereo = u32::from(optStereoSFX != 0);
-        opts.music3do = u32::from(opt3doMusic != 0);
-        opts.musicremix = u32::from(optRemixMusic != 0);
-        opts.speech = u32::from(optSpeech != 0);
-        opts.keepaspect = u32::from(optKeepAspectRatio != 0);
+        opts.meleezoom = u32::from(preferences.melee_scale != SCALE_TFB_SCALE_STEP as c_int);
+        opts.stereo = u32::from(preferences.stereo_sfx != 0);
+        opts.music3do = u32::from(preferences.music_3do != 0);
+        opts.musicremix = u32::from(preferences.music_remix != 0);
+        opts.speech = u32::from(preferences.speech != 0);
+        opts.keepaspect = u32::from(preferences.keep_aspect_ratio != 0);
         opts.adriver = if snddriver == audio_DRIVER_OPENAL as c_int {
             OPT_ADRIVERTYPE_OPTVAL_OPENAL
         } else if snddriver == audio_DRIVER_MIXSDL as c_int {
@@ -952,27 +958,33 @@ pub(crate) mod runtime {
             };
         }
         let range = &mut *ptr::addr_of_mut!(GAMMA);
-        let which_bound = optGamma < range.max;
-        if optGamma <= range.min {
-            range.min = optGamma - 0.03;
-        } else if optGamma >= range.max {
-            range.max = optGamma + 0.3;
+        let which_bound = preferences.gamma < range.max;
+        if preferences.gamma <= range.min {
+            range.min = preferences.gamma - 0.03;
+        } else if preferences.gamma >= range.max {
+            range.max = preferences.gamma + 0.3;
         }
         range.update_bounds(which_bound);
-        opts.gamma = range.gamma_to_slider(optGamma);
-        let controls = ptr::addr_of!(PlayerControls).cast::<CONTROL_TEMPLATE>();
-        opts.player1 = controls.read();
-        opts.player2 = controls.add(1).read();
+        opts.gamma = range.gamma_to_slider(preferences.gamma);
+        [opts.player1, opts.player2] = input.player_controls();
         opts.musicvol = ((musicVolumeScale * 100.0) as c_int + 2) / 5 * 5;
         opts.sfxvol = ((sfxVolumeScale * 100.0) as c_int + 2) / 5 * 5;
         opts.speechvol = ((speechVolumeScale * 100.0) as c_int + 2) / 5 * 5;
     }
 
+    fn console_type(value: u32) -> u32 {
+        if value == OPT_CONSOLETYPE_OPTVAL_3DO {
+            OPT_3DO
+        } else {
+            OPT_PC
+        }
+    }
+
     /// # Safety
     /// `opts` must point to initialized options. Game, graphics and resource access
     /// must be serialized on the game thread.
-    #[no_mangle]
-    pub unsafe extern "C" fn SetGlobalOptions(opts: *mut GLOBALOPTS) {
+    pub unsafe fn set_global_options(input: &InputSession, opts: *mut GLOBALOPTS) {
+        let mut preferences = input.preferences();
         let opts = &*opts;
         let mut flags = GfxFlags & !(TFB_GFXFLAGS_SCALE_ANY as c_int);
         let mut width = ScreenWidthActual;
@@ -1065,54 +1077,30 @@ pub(crate) mod runtime {
             InitVideoPlayer(1);
         }
         let range = &*ptr::addr_of!(GAMMA);
-        if optGamma != 1.0 || range.slider_to_gamma(opts.gamma) != 1.0 {
-            optGamma = range.slider_to_gamma(opts.gamma);
-            setGammaCorrection(optGamma);
+        if preferences.gamma != 1.0 || range.slider_to_gamma(opts.gamma) != 1.0 {
+            preferences.gamma = range.slider_to_gamma(opts.gamma);
+            setGammaCorrection(preferences.gamma);
         }
-        optSubtitles = BOOLEAN::from(opts.subtitles == OPT_ENABLABLE_OPTVAL_ENABLED);
-        optWhichMenu = if opts.menu == OPT_CONSOLETYPE_OPTVAL_3DO {
-            OPT_3DO
-        } else {
-            OPT_PC
-        } as c_int;
-        optWhichFonts = if opts.text == OPT_CONSOLETYPE_OPTVAL_3DO {
-            OPT_3DO
-        } else {
-            OPT_PC
-        } as c_int;
-        optWhichCoarseScan = if opts.cscan == OPT_CONSOLETYPE_OPTVAL_3DO {
-            OPT_3DO
-        } else {
-            OPT_PC
-        } as c_int;
-        optSmoothScroll = if opts.scroll == OPT_CONSOLETYPE_OPTVAL_3DO {
-            OPT_3DO
-        } else {
-            OPT_PC
-        } as c_int;
-        optWhichShield = if opts.shield == OPT_CONSOLETYPE_OPTVAL_3DO {
-            OPT_3DO
-        } else {
-            OPT_PC
-        } as c_int;
-        optMeleeScale = if opts.meleezoom == OPT_CONSOLETYPE_OPTVAL_3DO {
+        preferences.subtitles = BOOLEAN::from(opts.subtitles == OPT_ENABLABLE_OPTVAL_ENABLED);
+        preferences.menu = console_type(opts.menu) as c_int;
+        preferences.fonts = console_type(opts.text) as c_int;
+        preferences.coarse_scan = console_type(opts.cscan) as c_int;
+        preferences.smooth_scroll = console_type(opts.scroll) as c_int;
+        preferences.shield = console_type(opts.shield) as c_int;
+        preferences.melee_scale = if opts.meleezoom == OPT_CONSOLETYPE_OPTVAL_3DO {
             SCALE_TFB_SCALE_TRILINEAR
         } else {
             SCALE_TFB_SCALE_STEP
         } as c_int;
-        opt3doMusic = BOOLEAN::from(opts.music3do == OPT_ENABLABLE_OPTVAL_ENABLED);
-        optRemixMusic = BOOLEAN::from(opts.musicremix == OPT_ENABLABLE_OPTVAL_ENABLED);
-        optSpeech = BOOLEAN::from(opts.speech == OPT_ENABLABLE_OPTVAL_ENABLED);
-        optWhichIntro = if opts.intro == OPT_CONSOLETYPE_OPTVAL_3DO {
-            OPT_3DO
-        } else {
-            OPT_PC
-        } as c_int;
-        optStereoSFX = BOOLEAN::from(opts.stereo == OPT_ENABLABLE_OPTVAL_ENABLED);
-        optKeepAspectRatio = BOOLEAN::from(opts.keepaspect == OPT_ENABLABLE_OPTVAL_ENABLED);
-        let controls = ptr::addr_of_mut!(PlayerControls).cast::<CONTROL_TEMPLATE>();
-        controls.write(opts.player1);
-        controls.add(1).write(opts.player2);
+        preferences.music_3do = BOOLEAN::from(opts.music3do == OPT_ENABLABLE_OPTVAL_ENABLED);
+        preferences.music_remix = BOOLEAN::from(opts.musicremix == OPT_ENABLABLE_OPTVAL_ENABLED);
+        preferences.speech = BOOLEAN::from(opts.speech == OPT_ENABLABLE_OPTVAL_ENABLED);
+        preferences.intro = console_type(opts.intro) as c_int;
+        preferences.stereo_sfx = BOOLEAN::from(opts.stereo == OPT_ENABLABLE_OPTVAL_ENABLED);
+        preferences.keep_aspect_ratio =
+            BOOLEAN::from(opts.keepaspect == OPT_ENABLABLE_OPTVAL_ENABLED);
+        input.set_player_control(0, opts.player1);
+        input.set_player_control(1, opts.player2);
         for (key, value) in [
             (
                 c"config.subtitles",
@@ -1167,9 +1155,10 @@ pub(crate) mod runtime {
         ] {
             res_PutBoolean(key.as_ptr(), c_int::from(value));
         }
+        input.configuration.set_preferences(preferences);
         res_PutInteger(
             c"config.gamma".as_ptr(),
-            ((optGamma * GAMMA_SCALE as f32) as f64 + 0.5) as c_int,
+            ((preferences.gamma * GAMMA_SCALE as f32) as f64 + 0.5) as c_int,
         );
         res_PutInteger(c"config.player1control".as_ptr(), opts.player1 as c_int);
         res_PutInteger(c"config.player2control".as_ptr(), opts.player2 as c_int);
@@ -1229,7 +1218,7 @@ pub(crate) mod runtime {
 }
 
 #[cfg(not(test))]
-pub use runtime::{setup_menu, GetGlobalOptions, SetGlobalOptions};
+pub use runtime::{get_global_options, set_global_options, setup_menu};
 
 #[cfg(test)]
 mod tests {

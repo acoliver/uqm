@@ -43,7 +43,7 @@ pub(super) struct ChooserArt {
 pub(super) enum ChooserOutcome {
     /// The chooser keeps the input loop.
     Stay(ModuleChooser),
-    /// Control is back with the Outfit menu (`pMS->InputFunc = DoOutfit`).
+    /// Control is back with the Outfit menu (`pMS->InputFunc = do_outfit`).
     BackToOutfit,
 }
 

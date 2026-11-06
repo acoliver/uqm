@@ -19,7 +19,7 @@ use super::{
     Cursor, Direction, Escort, Slot, ICON_HEIGHT, ICON_WIDTH, NO_ID,
 };
 use crate::c_bindings::controller_input::{
-    PulsedInputState, KEY_MENU_DOWN, KEY_MENU_LEFT, KEY_MENU_RIGHT, KEY_MENU_SELECT, KEY_MENU_UP,
+    KEY_MENU_DOWN, KEY_MENU_LEFT, KEY_MENU_RIGHT, KEY_MENU_SELECT, KEY_MENU_UP,
 };
 
 use crate::comm::{
@@ -108,7 +108,7 @@ fn draw_text(x: i16, y: i16, text_ptr: *const c_char, char_count: u16) {
 /// picker.
 #[repr(C)]
 struct PickerState {
-    input_func: unsafe extern "C" fn(*mut PickerState) -> c_int,
+    input_func: unsafe fn(*mut PickerState, &crate::engine::input::InputSession) -> c_int,
     initialized: bool,
     activity: ActivityControl,
     cursor: Cursor,
@@ -151,9 +151,9 @@ fn escort_links() -> Vec<(ShipId, Escort)> {
         .collect()
 }
 
-fn pulsed_directions() -> (Direction, bool) {
+fn pulsed_directions(input: &crate::engine::input::InputSession) -> (Direction, bool) {
     // SAFETY: the input state is updated by `DoInput` on this thread.
-    let menu = unsafe { std::ptr::addr_of!(PulsedInputState).read().menu };
+    let menu = input.pulsed().menu;
     let pressed = |key: u32| menu[key as usize] != 0;
     (
         Direction {
@@ -258,7 +258,10 @@ unsafe fn change_selection(state: &mut PickerState) {
 }
 
 /// `DoPickBattleShip`: one input frame of the picker.
-unsafe extern "C" fn do_pick_battle_ship(state: *mut PickerState) -> c_int {
+unsafe fn do_pick_battle_ship(
+    state: *mut PickerState,
+    input: &crate::engine::input::InputSession,
+) -> c_int {
     // SAFETY: `DoInput` passes the state `get_armada_star_ship` owns.
     let state = unsafe { &mut *state };
     if base_activity_aborted(&state.activity) {
@@ -267,7 +270,7 @@ unsafe extern "C" fn do_pick_battle_ship(state: *mut PickerState) -> c_int {
     }
 
     // SAFETY: plain call.
-    unsafe { base::SetMenuSounds(MENU_SOUND_NONE, MENU_SOUND_NONE) };
+    base::SetMenuSounds(input, MENU_SOUND_NONE, MENU_SOUND_NONE);
 
     if !state.initialized {
         state.initialized = true;
@@ -277,7 +280,7 @@ unsafe extern "C" fn do_pick_battle_ship(state: *mut PickerState) -> c_int {
         // SAFETY: `state` is the running picker.
         unsafe { change_selection(state) };
     } else {
-        let (keys, select) = pulsed_directions();
+        let (keys, select) = pulsed_directions(input);
         if select {
             if !state.chosen.is_none() {
                 // SAFETY: plain call.
@@ -306,7 +309,10 @@ fn base_activity_aborted(activity: &ActivityControl) -> bool {
 ///
 /// # Safety
 /// Game thread, inside a full-game battle.
-unsafe fn get_armada_star_ship(activity: ActivityControl) -> *mut c_void {
+unsafe fn get_armada_star_ship(
+    input: &crate::engine::input::InputSession,
+    activity: ActivityControl,
+) -> *mut c_void {
     // SAFETY: `battle_counter` has a slot for each side.
     if unsafe { crate::app::bridge::battle(|b| b.counters[1]) } == 0 {
         // No opponents left.
@@ -332,7 +338,7 @@ unsafe fn get_armada_star_ship(activity: ActivityControl) -> *mut c_void {
     // SAFETY: `state` starts with the `InputFunc` pointer `DoInput` calls and
     // outlives the loop.
     unsafe {
-        base::SetMenuSounds(MENU_SOUND_ARROWS, MENU_SOUND_SELECT);
+        base::SetMenuSounds(input, MENU_SOUND_ARROWS, MENU_SOUND_SELECT);
         base::DoInput(std::ptr::addr_of_mut!(state).cast(), 0);
     }
     crate::automation::ui_observation::observe_ship_picker(false);
@@ -366,6 +372,7 @@ pub use crate::battle::context_access::reader_legacy::{
 /// As for `get_encounter_star_ship`. The picker must write a live selected
 /// ship handle when it succeeds.
 pub(crate) unsafe fn encounter_ship(
+    input: &crate::engine::input::InputSession,
     last: Option<crate::engine::battle::ShipId>,
     which_player: u16,
     activity: ActivityControl,
@@ -418,7 +425,7 @@ pub(crate) unsafe fn encounter_ship(
             // Player still has ships left
             // SAFETY: game thread inside a full-game battle.
             return LinkQueue::<Starship>::identify_ship(side, unsafe {
-                get_armada_star_ship(activity)
+                get_armada_star_ship(input, activity)
             });
         }
         if last.is_some() {

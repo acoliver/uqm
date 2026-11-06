@@ -35,7 +35,7 @@ use crate::mainloop::input_abi::live::SetMenuSounds;
 
 use crate::planets::pstarmap::flashCurrentLocation;
 
-use crate::planets::pstarmap::search::DoStarSearch;
+use crate::planets::pstarmap::search::do_star_search;
 
 use crate::planets::pstarmap::DrawStarMap;
 
@@ -61,20 +61,21 @@ pub unsafe fn cursor() -> Option<(i16, i16)> {
     })
 }
 
-/// `DoMoveCursor`, including ordinary search, zoom and debug input behavior.
+/// `do_move_cursor`, including ordinary search, zoom and debug input behavior.
 ///
 /// # Safety
 /// `menu` must be the live `MENU_STATE`, called by `DoInput` on the game thread.
-#[no_mangle]
-pub unsafe extern "C" fn DoMoveCursor(menu: *mut MenuHeader) -> u32 {
-    use crate::c_bindings::controller_input::PulsedInputState;
+pub unsafe fn do_move_cursor(
+    menu: *mut MenuHeader,
+    input: &crate::engine::input::InputSession,
+) -> u32 {
     let time_in = crate::time::counter_abi::GetTimeCounter();
     let activity = World::current().read(|world| world.activity());
     let hyper = activity & 0xff == 3;
     let last = std::ptr::addr_of_mut!(LAST_BUF).cast::<u8>();
     if (*menu).Initialized == 0 {
         (*menu).Initialized = 1;
-        (*menu).InputFunc = Some(DoMoveCursor);
+        (*menu).InputFunc = Some(do_move_cursor);
         ACTIVE = true;
         let universe = if hyper {
             let sis = &(**WorldData::current()).flagship;
@@ -93,7 +94,7 @@ pub unsafe extern "C" fn DoMoveCursor(menu: *mut MenuHeader) -> u32 {
         update_fuel_requirement();
         return 1;
     }
-    let keys = std::ptr::addr_of!(PulsedInputState).read().menu;
+    let keys = input.pulsed().menu;
     if keys[10] != 0 {
         ACTIVE = false;
         return 0;
@@ -120,15 +121,15 @@ pub unsafe extern "C" fn DoMoveCursor(menu: *mut MenuHeader) -> u32 {
     } else if keys[21] != 0 {
         if World::current().read(|world| world.story_state(StoryKey::ARILOU_SPACE_SIDE)) <= 1 {
             let old = std::ptr::addr_of!(cursorLoc).read();
-            if DoStarSearch(menu) == 0 {
+            if do_star_search(input, menu) == 0 {
                 UpdateCursorLocation(0, 0, &old);
             }
             let invalid = b"  <random garbage>  \0";
             std::ptr::copy_nonoverlapping(invalid.as_ptr(), last, invalid.len());
             UpdateCursorInfo((last).cast());
             update_fuel_requirement();
-            SetMenuRepeatDelay(14, 105, 7, 1);
-            SetMenuSounds(0, 0);
+            SetMenuRepeatDelay(input, 14, 105, 7, 1);
+            SetMenuSounds(input, 0, 0);
         } else {
             PlayMenuSound(2);
         }

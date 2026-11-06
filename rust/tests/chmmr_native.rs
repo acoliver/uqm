@@ -69,7 +69,7 @@ unsafe fn exhaust() -> Vec<*mut std::ffi::c_void> {
 
 #[test]
 fn descriptor_matches_the_entire_c_template_and_init_reinstalls_callbacks() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battlefield::new(8);
         unsafe {
             let d = battle::descriptor(SPECIES_ID_CHMMR_ID);
@@ -177,7 +177,7 @@ fn descriptor_matches_the_entire_c_template_and_init_reinstalls_callbacks() {
 
 #[test]
 fn laser_uses_frame_hotspot_alignment_facing_rgba_and_cycle() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battlefield::new(16);
         unsafe {
             let mut ship =
@@ -224,7 +224,7 @@ fn laser_uses_frame_hotspot_alignment_facing_rgba_and_cycle() {
 
 #[test]
 fn weapon_allocation_failure_still_returns_one_null_slot() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battlefield::new(2);
         unsafe {
             let mut ship =
@@ -242,7 +242,7 @@ fn weapon_allocation_failure_still_returns_one_null_slot() {
 
 #[test]
 fn laser_death_obeys_range_byte_gate_count_draw_and_animation() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battlefield::new(16);
         unsafe {
             let mut ship =
@@ -325,7 +325,7 @@ fn laser_death_obeys_range_byte_gate_count_draw_and_animation() {
 
 #[test]
 fn muzzle_flash_requires_friendly_appearing_tail_line_and_even_cycle() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battlefield::new(16);
         unsafe {
             let mut ship =
@@ -383,7 +383,7 @@ fn muzzle_flash_requires_friendly_appearing_tail_line_and_even_cycle() {
 
 #[test]
 fn delayed_satellites_spawn_around_live_ship_with_three_ordered_rng_draws() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battlefield::new(16);
         unsafe {
             let mut ship =
@@ -442,7 +442,7 @@ fn delayed_satellites_spawn_around_live_ship_with_three_ordered_rng_draws() {
 
 #[test]
 fn spawn_and_preprocess_allocation_failures_do_not_draw_rng_or_rearm() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battlefield::new(3);
         unsafe {
             let mut ship =
@@ -475,7 +475,7 @@ fn spawn_and_preprocess_allocation_failures_do_not_draw_rng_or_rearm() {
 
 #[test]
 fn satellites_wrap_space_cap_speed_and_preserve_half_space_ties() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battlefield::new(16);
         unsafe {
             let mut ship =
@@ -536,7 +536,7 @@ fn satellites_wrap_space_cap_speed_and_preserve_half_space_ties() {
 
 #[test]
 fn satellite_collision_is_noop_and_death_installs_four_tick_animation() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battlefield::new(16);
         unsafe {
             let mut ship =
@@ -624,7 +624,7 @@ unsafe fn defense(satellite: *mut ElementRecord) -> *mut std::ffi::c_void {
 
 #[test]
 fn point_defense_uses_backward_weakest_nearest_and_stable_tie_order() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battlefield::new(32);
         unsafe {
             let mut ship =
@@ -668,7 +668,7 @@ fn point_defense_uses_backward_weakest_nearest_and_stable_tie_order() {
 
 #[test]
 fn point_defense_respects_collision_cloak_range_and_full_width_hitpoints() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         // (world dx, dy, hit points, excluded condition, should shoot)
         for (dx, dy, hp, exclusion, shoot) in [
             (256, 0, 1, 0, true),
@@ -749,7 +749,7 @@ fn point_defense_respects_collision_cloak_range_and_full_width_hitpoints() {
 
 #[test]
 fn satellite_defense_wait_underflows_on_dead_zero_wait_and_handles_exhaustion() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battlefield::new(8);
         unsafe {
             let mut ship =
@@ -795,7 +795,7 @@ fn satellite_defense_wait_underflows_on_dead_zero_wait_and_handles_exhaustion() 
 
 #[test]
 fn tractor_applies_mass_division_speed_flags_and_head_inserted_blue_shadows() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         for (mass, initial_vx, expected_flags) in [
             (10u8, 0i16, 0u32),
             (10, 1082, SHIP_AT_MAX_SPEED),
@@ -870,7 +870,7 @@ fn tractor_applies_mass_division_speed_flags_and_head_inserted_blue_shadows() {
 
 #[test]
 fn tractor_energy_target_gravity_and_allocation_boundaries() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         for (energy, mass, has_target, exhaust_queue) in [
             (0u8, 10u8, true, false),
             (1, 100, true, false),
@@ -927,7 +927,7 @@ fn tractor_energy_target_gravity_and_allocation_boundaries() {
 
 #[test]
 fn ai_exact_travel_angle_and_turn_gates_follow_shared_intelligence() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battlefield::new(16);
         unsafe {
             let mut ship =
@@ -988,7 +988,7 @@ fn ai_exact_travel_angle_and_turn_gates_follow_shared_intelligence() {
 
 #[test]
 fn tractor_tracking_consumes_only_the_half_turn_rng_before_shadow_allocation() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         for seed in [1, 17, 12345] {
             let _battle = Battlefield::new(4);
             unsafe {
@@ -1023,7 +1023,7 @@ fn tractor_tracking_consumes_only_the_half_turn_rng_before_shadow_allocation() {
 
 #[test]
 fn laser_death_preserves_size_subtraction_and_unsigned_count_magnitude() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battlefield::new(8);
         unsafe {
             let mut ship =
@@ -1074,7 +1074,7 @@ fn laser_death_preserves_size_subtraction_and_unsigned_count_magnitude() {
 
 #[test]
 fn unrequested_special_and_failed_muzzle_allocation_only_reset_cycle() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let _battle = Battlefield::new(3);
         unsafe {
             let mut ship =

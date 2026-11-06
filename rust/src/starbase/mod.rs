@@ -36,9 +36,9 @@
 //!   `DoStarBase`).
 //! - [`visit`]: arrival time passage and post-visit cleanup (`starbase.c`
 //!   `VisitStarBase`, `CleanupAfterStarBase`).
-//! - [`outfit_menu`]: Outfit menu states (`outfit.c` `DoOutfit`).
+//! - [`outfit_menu`]: Outfit menu states (`outfit.c` `do_outfit`).
 //! - [`shipyard`]: Shipyard rules (`shipyard.c`); `shipyard_screen` (private)
-//!   is the screen (`DoShipyard`, `DoModifyShips`).
+//!   is the screen (`do_shipyard`, `DoModifyShips`).
 
 #[cfg(not(test))]
 pub mod cffi;

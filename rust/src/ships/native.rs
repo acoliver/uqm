@@ -45,9 +45,13 @@ pub mod abi {
     };
 
     #[cfg(not(test))]
-    pub unsafe fn DoMenuChooser(menu: *mut MENU_STATE, first: BYTE) -> BOOLEAN {
-        use crate::ui::menu::DoMenuChooser as choose;
-        choose(menu.cast(), first)
+    pub unsafe fn do_menu_chooser(
+        input: &crate::engine::input::InputSession,
+        menu: *mut MENU_STATE,
+        first: BYTE,
+    ) -> BOOLEAN {
+        use crate::ui::menu::do_menu_chooser as choose;
+        choose(input, menu.cast(), first)
     }
 
     // Bindgen does not translate these cast-expression macros from controls.h

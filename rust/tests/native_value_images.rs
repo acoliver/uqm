@@ -8,7 +8,7 @@ use uqm_rust::ships::native::abi::SPECIES_ID_EARTHLING_ID;
 
 #[test]
 fn projected_images_record_provenance_without_borrowing_stack_storage() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let pool = battle::Battle::new(8);
         // SAFETY: the serialized fixture retains all slots, descriptors and frame arrays.
         unsafe {

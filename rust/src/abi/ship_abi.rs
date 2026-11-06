@@ -1047,58 +1047,10 @@ pub const NetState_NetState_inBattle: NetState = 7;
 pub const NetState_NetState_endingBattle: NetState = 8;
 pub const NetState_NetState_endingBattle2: NetState = 9;
 pub type NetState = ::std::os::raw::c_uint;
-unsafe extern "C" {
-    pub static mut optWhichCoarseScan: ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    pub static mut optWhichMenu: ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    pub static mut optWhichFonts: ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    pub static mut optWhichIntro: ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    pub static mut optWhichShield: ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    pub static mut optSmoothScroll: ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    pub static mut optMeleeScale: ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    pub static mut opt3doMusic: BOOLEAN;
-}
-unsafe extern "C" {
-    pub static mut optRemixMusic: BOOLEAN;
-}
-unsafe extern "C" {
-    pub static mut optSpeech: BOOLEAN;
-}
-unsafe extern "C" {
-    pub static mut optSubtitles: BOOLEAN;
-}
-unsafe extern "C" {
-    pub static mut optStereoSFX: BOOLEAN;
-}
-unsafe extern "C" {
-    pub static mut optKeepAspectRatio: BOOLEAN;
-}
-unsafe extern "C" {
-    pub static mut optGamma: f32;
-}
 pub use crate::io::handles::contentDir;
 pub use crate::io::handles::configDir;
 pub use crate::io::handles::saveDir;
 pub use crate::io::handles::meleeDir;
-unsafe extern "C" {
-    pub static mut baseContentPath: [std::ffi::c_char;4096];
-}
-unsafe extern "C" {
-    pub static mut optAddons: *const *const std::ffi::c_char;
-}
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct _input_template {
@@ -1199,7 +1151,7 @@ pub struct melee_load_state {
 pub use crate::supermelee::netplay::session::MeleeState as melee_state;
 
 #[cfg(not(test))]
-pub use crate::supermelee::native::menu::live::DoMelee;
+pub use crate::supermelee::native::menu::live::do_melee;
 
 #[cfg(not(test))]
 pub use crate::supermelee::native::menu::live::drawing::DrawMeleeIcon;
@@ -1278,29 +1230,12 @@ pub const CONTROL_TEMPLATE_CONTROL_TEMPLATE_JOY_2: CONTROL_TEMPLATE = 4;
 pub const CONTROL_TEMPLATE_CONTROL_TEMPLATE_JOY_3: CONTROL_TEMPLATE = 5;
 pub const CONTROL_TEMPLATE_NUM_TEMPLATES: CONTROL_TEMPLATE = 6;
 pub type CONTROL_TEMPLATE = ::std::os::raw::c_uint;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct _controller_input_state {
-    pub key: [[::std::os::raw::c_int; 7usize]; 6usize],
-    pub menu: [::std::os::raw::c_int; 24usize],
-}
+pub type _controller_input_state = uqm_engine::input::frames::InputState;
 pub type CONTROLLER_INPUT_STATE = _controller_input_state;
 pub type BATTLE_INPUT_STATE = UBYTE;
 
 #[cfg(not(test))]
 pub use crate::mainloop::input_abi::live::PulsedInputToBattleInput;
-unsafe extern "C" {
-    pub static mut CurrentInputState: crate::c_bindings::controller_input::_controller_input_state;
-}
-unsafe extern "C" {
-    pub static mut PulsedInputState: crate::c_bindings::controller_input::_controller_input_state;
-}
-unsafe extern "C" {
-    pub static mut ImmediateInputState: crate::c_bindings::controller_input::_controller_input_state;
-}
-unsafe extern "C" {
-    pub static mut PlayerControls: [u32;2];
-}
 
 #[cfg(not(test))]
 pub use crate::mainloop::input_abi::live::FlushInput;
@@ -1313,12 +1248,6 @@ pub use crate::mainloop::input_abi::live::ConfirmExit;
 
 #[cfg(not(test))]
 pub use crate::ui::util::live::WaitForAnyButton;
-unsafe extern "C" {
-    pub static mut GamePaused: BOOLEAN;
-}
-unsafe extern "C" {
-    pub static mut ExitRequested: BOOLEAN;
-}
 
 pub type STATUS_FLAGS = UWORD;
 pub const SPECIES_ID_NO_ID: SPECIES_ID = 0;
@@ -1395,7 +1324,7 @@ pub type _bindgen_ty_4 = ::std::os::raw::c_uint;
 pub use crate::supermelee::native::battle_picker::live::MeleeShipDeath;
 
 #[cfg(not(test))]
-pub use crate::supermelee::native::battle_picker::live::GetInitialMeleeStarShips;
+pub use crate::supermelee::native::battle_picker::live::get_initial_melee_star_ships;
 
 pub const ENEMY_SHIP_INDEX: _bindgen_ty_5 = 0;
 pub const CREW_OBJECT_INDEX: _bindgen_ty_5 = 1;
@@ -2995,7 +2924,7 @@ pub struct GenerateFunctions {
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct menu_state {
-    pub InputFunc: ::std::option::Option<unsafe extern "C" fn(pMS: *mut menu_state) -> BOOLEAN>,
+    pub InputFunc: ::std::option::Option<unsafe fn(pMS: *mut menu_state, input: &crate::engine::input::InputSession) -> BOOLEAN>,
     pub Initialized: SIZE,
     pub CurState: BYTE,
     pub CurFrame: FRAME,

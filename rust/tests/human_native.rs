@@ -11,7 +11,7 @@ use uqm_rust::ships::native::abi::*;
 
 #[test]
 fn cruiser_descriptor_and_registered_weapon_and_defense_callbacks() {
-    battle_context::run(|| {
+    battle_context::run(|_| {
         let battle = Battle::new(8);
         unsafe {
             let mut ship = Ship::new(&battle, SPECIES_ID_EARTHLING_ID, 0);

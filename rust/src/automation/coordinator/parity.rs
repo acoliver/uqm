@@ -112,7 +112,7 @@ impl AutomationObserver {
             return;
         };
         let count = coord.inner.lock().input_seen;
-        let keys = super::super::input_ffi::current_inputs();
+        let keys = super::super::input_ffi::current_inputs(&self.input);
         let result = journal.lock().input(
             count,
             activity,
@@ -155,6 +155,8 @@ mod tests {
                 script,
                 directory.path().into(),
                 game.world.activity_control(),
+                crate::engine::input::InputControls::default(),
+                Default::default(),
             ));
             crate::app::Application::new(game, observer)
         };

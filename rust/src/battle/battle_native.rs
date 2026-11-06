@@ -95,8 +95,10 @@ fn initialize_battle(
 ) -> (std::rc::Rc<dyn crate::engine::battle::net::BattleNet>, bool) {
     cx.b.initialize(cx.kernel);
     let had_net = cx.b.net.is_some();
-    cx.b.net
-        .get_or_insert_with(|| crate::supermelee::netplay::NetplaySession::default().battle_net());
+    let input = cx.kernel.input_runtime().input().clone();
+    cx.b.net.get_or_insert_with(|| {
+        crate::supermelee::netplay::NetplaySession::with_input(input).battle_net()
+    });
     let net = cx.b.network();
     for side in 0..2 {
         if cx.kernel.player_control[side] & engine::NETWORK_CONTROL != 0 {
@@ -289,7 +291,7 @@ pub(crate) mod engine {
         net: &dyn crate::engine::battle::net::BattleNet,
         callback: Option<fn(&mut crate::engine::battle::Cx<'_>, &mut Io<'_>)>,
     ) -> bool {
-        SetMenuSounds(0, 0);
+        SetMenuSounds(cx.kernel.input_controls(), 0, 0);
         let frame = net.frame();
         if net.peer_count() > 0 && frame.is_multiple_of(NETPLAY_CHECKSUM_INTERVAL) {
             let mut state = mem::zeroed();
@@ -416,8 +418,8 @@ pub(crate) mod engine {
                 .set_activity(cx.world.activity() | IN_BATTLE as u16);
             cx.b.counters = std::array::from_fn(|side| cx.kernel.ships(side).count() as u8);
             cx.with_legacy(|| reset_observation(io));
-            if optMeleeScale != SCALE_STEP {
-                SetGraphicScaleMode(optMeleeScale);
+            if cx.kernel.configuration.preferences().melee_scale != SCALE_STEP {
+                SetGraphicScaleMode(cx.kernel.configuration.preferences().melee_scale);
             }
             let mut session = BattleSession {
                 first_time: false,
@@ -449,8 +451,12 @@ pub(crate) mod engine {
                     cx.world
                         .set_activity(cx.world.activity() & !(CHECK_ABORT as u16));
                 } else {
+                    let runtime = cx.kernel.input_runtime();
                     cx.with_legacy(|| {
-                        crate::supermelee::native::battle_picker::live::melee_game_over(io)
+                        crate::supermelee::native::battle_picker::live::melee_game_over(
+                            runtime.input(),
+                            io,
+                        )
                     });
                 }
             }

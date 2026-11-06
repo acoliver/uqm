@@ -192,15 +192,23 @@ pub(super) unsafe fn confirmation_cancelled(state: *mut MELEE_STATE, side: u16) 
         (*state).phase = crate::supermelee::netplay::session::MenuPhase::Menu;
     }
 }
-unsafe fn feedback(battle_active: bool, value: *const c_char, popup: bool) {
+unsafe fn feedback(
+    input: &crate::engine::input::InputSession,
+    battle_active: bool,
+    value: *const c_char,
+    popup: bool,
+) {
     if !battle_active && !popup {
         status(value);
     } else {
-        DoPopupWindow(value);
+        do_popup_window(input, value);
     }
 }
 
-pub(crate) fn protocol_feedback(event: crate::supermelee::netplay::Event) {
+pub(crate) fn protocol_feedback(
+    input: &crate::engine::input::InputSession,
+    event: crate::supermelee::netplay::Event,
+) {
     use crate::supermelee::netplay::Effect;
     // SAFETY: protocol dispatch runs synchronously in the live menu or its battle.
     unsafe {
@@ -210,7 +218,7 @@ pub(crate) fn protocol_feedback(event: crate::supermelee::netplay::Event) {
             Effect::Closed => Some(if event.player == 0 { 12 } else { 13 }),
             Effect::Abort(reason) if reason < 4 => Some(25 + reason as i32),
             Effect::Reset { reason, remote } => {
-                reset_feedback(event.battle_active, reason, remote);
+                reset_feedback(input, event.battle_active, reason, remote);
                 return;
             }
             Effect::ShipSelected => {
@@ -222,6 +230,7 @@ pub(crate) fn protocol_feedback(event: crate::supermelee::netplay::Event) {
         };
         if let Some(index) = index {
             feedback(
+                input,
                 event.battle_active,
                 game_string(NETMELEE_STRING_BASE as i32 + index),
                 matches!(event.effect, Effect::Abort(_)),
@@ -233,13 +242,19 @@ pub(crate) fn protocol_feedback(event: crate::supermelee::netplay::Event) {
     }
 }
 
-unsafe fn reset_feedback(battle_active: bool, reason: u32, remote: bool) {
+unsafe fn reset_feedback(
+    input: &crate::engine::input::InputSession,
+    battle_active: bool,
+    reason: u32,
+    remote: bool,
+) {
     (*P_MELEE_STATE).netplay.flush_packet_queues();
     if reason == 2 && !remote {
         return;
     }
     if reason < 3 {
         feedback(
+            input,
             battle_active,
             game_string(NETMELEE_STRING_BASE as i32 + 29 + reason as i32),
             false,
@@ -270,6 +285,9 @@ pub(crate) unsafe fn apply_protocol_event(
         Effect::Seed(seed) => {
             crate::math::seed_random(seed);
         }
-        _ => protocol_feedback(event),
+        _ => {
+            let input = (*state).netplay.controller().clone();
+            protocol_feedback(&input, event);
+        }
     }
 }
