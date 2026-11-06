@@ -47,49 +47,49 @@ pub(super) fn netplay_notify_all_set_fleet(state: &MeleeSession, side: usize) {
     let ships = state.melee_setup.teams[side].ships.map(|ship| ship as u32);
     state.netplay.notify_fleet(side, &ships);
 }
-pub(super) unsafe fn close_player_network_connection(
-    state: *mut MeleeSession,
+pub(super) fn close_player_network_connection(
+    state: &mut MeleeSession,
     cx: &mut crate::engine::battle::Cx<'_>,
     io: &mut crate::engine::observe::Io<'_>,
     player: u16,
 ) {
-    let session = (*state).netplay.clone();
+    let session = state.netplay.clone();
     session.close_player_network_connection(player, &mut |event| {
         changes::apply_protocol_event(state, cx, io, event)
     });
 }
-pub(super) unsafe fn open_player_network_connection(
+pub(super) fn open_player_network_connection(
     player: u16,
-    state: *mut MeleeSession,
+    state: &mut MeleeSession,
     cx: &mut crate::engine::battle::Cx<'_>,
     io: &mut crate::engine::observe::Io<'_>,
 ) -> Option<ConnectionView> {
-    let session = (*state).netplay.clone();
+    let session = state.netplay.clone();
     if session.open_player_network_connection(player, &mut |event| {
         changes::apply_protocol_event(state, cx, io, event)
     }) {
-        connection(&*state, player as usize)
+        connection(state, player as usize)
     } else {
         None
     }
 }
-pub(crate) unsafe fn poll_menu(
-    state: *mut MeleeSession,
+pub(crate) fn poll_menu(
+    state: &mut MeleeSession,
     cx: &mut crate::engine::battle::Cx<'_>,
     io: &mut crate::engine::observe::Io<'_>,
     timeout: u32,
 ) {
-    let session = (*state).netplay.clone();
+    let session = state.netplay.clone();
     session.net_input_with(timeout, &mut |event| {
         changes::apply_protocol_event(state, cx, io, event)
     });
 }
-pub(super) unsafe fn flush_menu(
-    state: *mut MeleeSession,
+pub(super) fn flush_menu(
+    state: &mut MeleeSession,
     cx: &mut crate::engine::battle::Cx<'_>,
     io: &mut crate::engine::observe::Io<'_>,
 ) {
-    let session = (*state).netplay.clone();
+    let session = state.netplay.clone();
     session.flush_packet_queues(&mut |event| changes::apply_protocol_event(state, cx, io, event));
 }
 
@@ -133,15 +133,6 @@ pub(super) unsafe fn draw_star_con_box(
         convert(inside),
     );
 }
-pub(super) unsafe fn do_text_entry(
-    cx: &mut crate::engine::battle::Cx<'_>,
-    io: &mut crate::engine::observe::Io<'_>,
-    input: &crate::engine::input::InputSession,
-    entry: *mut TEXTENTRY_STATE,
-) -> u32 {
-    crate::ui::getchar::run_text_entry(cx, io, entry.cast(), input)
-}
-
 pub(super) unsafe fn get_context_clip_rect(rect: *mut RECT) -> u32 {
     crate::graphics::context_abi::GetContextClipRect(rect.cast())
 }

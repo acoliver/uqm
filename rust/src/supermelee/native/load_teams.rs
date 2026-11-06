@@ -191,7 +191,7 @@ pub(crate) mod live {
     /// # Safety
     /// State and its load view must be live on the game thread.
     pub unsafe fn do_load_team(
-        state: *mut MeleeSession,
+        state: &mut MeleeSession,
         cx: &mut crate::engine::battle::Cx<'_>,
         input: &crate::engine::input::InputSession,
     ) -> u32 {
@@ -201,26 +201,25 @@ pub(crate) mod live {
             return 0;
         }
         SetMenuSounds(input, 1 | 2 | 128 | 256, 16);
-        if (*state).initialized == 0 {
+        if state.initialized == 0 {
             cx.with_legacy(|| {
-                draw(&mut *state);
-                select(&*state, true);
+                draw(state);
+                select(state, true);
             });
-            (*state).initialized = 1;
-            (*state).phase = crate::supermelee::session::MenuPhase::Loading;
+            state.initialized = 1;
+            state.phase = crate::supermelee::session::MenuPhase::Loading;
             return 1;
         }
         let keys = input.pulsed().menu;
         if keys[KEY_MENU_SELECT as usize] != 0 || keys[KEY_MENU_CANCEL as usize] != 0 {
             if keys[KEY_MENU_SELECT as usize] != 0 {
-                let team = (*state).load.view[((*state).load.current - (*state).load.top) as usize]
-                    .clone();
-                cx.with_legacy(|| local_change_team(state, (*state).side as usize, &team));
+                let team = state.load.view[(state.load.current - state.load.top) as usize].clone();
+                cx.with_legacy(|| local_change_team(state, state.side as usize, &team));
             }
-            (*state).phase = crate::supermelee::session::MenuPhase::Menu;
-            (*state).last_input_time = GetTimeCounter();
+            state.phase = crate::supermelee::session::MenuPhase::Menu;
+            state.last_input_time = GetTimeCounter();
             cx.with_legacy(|| {
-                let bounds = (*state).menu_frames().frame_rect(28);
+                let bounds = state.menu_frames().frame_rect(28);
                 let rect = RECT {
                     corner: POINT {
                         x: bounds.corner.x,
@@ -231,15 +230,15 @@ pub(crate) mod live {
                         height: bounds.extent.height,
                     },
                 };
-                repair_frame(&*state, &rect);
+                repair_frame(state, &rect);
             });
             return 1;
         }
         let (top, index) = page(
-            (*state).load.top,
-            (*state).load.bottom,
-            (*state).load.current,
-            (*state).load.count(),
+            state.load.top,
+            state.load.bottom,
+            state.load.current,
+            state.load.count(),
             [
                 keys[KEY_MENU_UP as usize] != 0,
                 keys[KEY_MENU_DOWN as usize] != 0,
@@ -247,17 +246,17 @@ pub(crate) mod live {
                 keys[KEY_MENU_PAGE_DOWN as usize] != 0,
             ],
         );
-        if index != (*state).load.current {
-            if top == (*state).load.top {
-                cx.with_legacy(|| select(&*state, false));
+        if index != state.load.current {
+            if top == state.load.top {
+                cx.with_legacy(|| select(state, false));
             } else {
-                (*state).load.top = top;
-                cx.with_legacy(|| draw(&mut *state));
+                state.load.top = top;
+                cx.with_legacy(|| draw(state));
             }
-            (*state).load.current = index;
+            state.load.current = index;
         }
         cx.with_legacy(|| {
-            flash(&mut *state);
+            flash(state);
             SleepThreadUntil(time.wrapping_add(840 / 30));
         });
         1
@@ -271,8 +270,8 @@ pub(crate) mod live {
     }
     /// # Safety
     /// State must own the team being saved on the game thread.
-    pub unsafe fn do_save_team(state: *mut MeleeSession, screen: &ContextLease) {
-        let mut filename = (*state).melee_setup.teams[(*state).side as usize]
+    pub unsafe fn do_save_team(state: &mut MeleeSession, screen: &ContextLease) {
+        let mut filename = state.melee_setup.teams[state.side as usize]
             .c_name()
             .to_bytes()
             .to_vec();
@@ -282,10 +281,10 @@ pub(crate) mod live {
         let ok = screen.with_selected(|| {
             let mut saved = mem::zeroed();
             ConfirmSaveLoad(&mut saved);
-            let team = &(*state).melee_setup.teams[(*state).side as usize];
-            let ok = write_team(&(*state).files().teams, &filename, team).is_ok();
-            (*state).load.top = 0;
-            (*state).load.current = 0;
+            let team = &state.melee_setup.teams[state.side as usize];
+            let ok = write_team(&state.files().teams, &filename, team).is_ok();
+            state.load.top = 0;
+            state.load.current = 0;
             DrawStamp(&mut saved);
             DestroyDrawable(ReleaseDrawable(saved.frame));
             ok
@@ -293,11 +292,11 @@ pub(crate) mod live {
         if !ok {
             SaveProblem();
         }
-        load_team_list(&mut *state);
-        if let Some(index) = (*state).load.file_index(&filename) {
-            assert!(index < (*state).load.count());
-            (*state).load.current = index;
-            (*state).load.top = index.saturating_sub(2);
+        load_team_list(state);
+        if let Some(index) = state.load.file_index(&filename) {
+            assert!(index < state.load.count());
+            state.load.current = index;
+            state.load.top = index.saturating_sub(2);
         }
     }
 }

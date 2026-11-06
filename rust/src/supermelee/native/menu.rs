@@ -11,7 +11,7 @@ pub(crate) mod live {
     use std::ptr::NonNull;
 
     use crate::mainloop::restart_menu::c_extern::{FadeMusic, SeedRandomNumbers};
-    use crate::navigation::abi::{init_space, uninit_space, TEXTENTRY_STATE};
+    use crate::navigation::abi::{init_space, uninit_space};
 
     use crate::ships::native::abi::*;
 
@@ -91,13 +91,13 @@ pub(crate) mod live {
     }
 
     unsafe fn run_menu_frame(
-        state: *mut MeleeSession,
+        state: &mut MeleeSession,
         cx: &mut crate::engine::battle::Cx<'_>,
         io: &mut crate::engine::observe::Io<'_>,
         input: &crate::engine::input::InputSession,
     ) -> bool {
         use crate::supermelee::session::MenuPhase;
-        (match (*state).phase {
+        (match state.phase {
             MenuPhase::Menu => do_melee(state, cx, io, input),
             MenuPhase::Confirm => confirm(input, state, cx, io),
             MenuPhase::Connecting => connecting(state, cx, io, input),
@@ -111,20 +111,20 @@ pub(crate) mod live {
     }
     unsafe fn select_option(
         input: &crate::engine::input::InputSession,
-        state: *mut MeleeSession,
+        state: &mut MeleeSession,
         cx: &mut crate::engine::battle::Cx<'_>,
         io: &mut crate::engine::observe::Io<'_>,
     ) {
-        match (*state).melee_option {
+        match state.melee_option {
             4 => start_button(state, cx),
             3 | 5 => {
-                (*state).initialized = 0;
-                (*state).side = u16::from((*state).melee_option != 3);
+                state.initialized = 0;
+                state.side = u16::from(state.melee_option != 3);
                 do_load_team(state, cx, input);
             }
             2 | 6 => {
-                (*state).side = u16::from((*state).melee_option != 2);
-                if (*state).melee_setup.fleet_value[(*state).side as usize] > 0 {
+                state.side = u16::from(state.melee_option != 2);
+                if state.melee_setup.fleet_value[state.side as usize] > 0 {
                     let screen = ContextLease::retain(
                         NonNull::new(cx.kernel.screen_context.cast())
                             .unwrap_or_else(|| panic!("melee save context")),
@@ -138,28 +138,28 @@ pub(crate) mod live {
                 .world
                 .set_activity(cx.world.activity() | CHECK_ABORT as u16),
             0 | 8 => {
-                let side = u16::from((*state).melee_option == 0);
+                let side = u16::from(state.melee_option == 0);
                 let confirmed = crate::front_end::cnctdlg::melee_connect_dialog(
                     cx,
                     io,
-                    &mut (*state).netplay,
+                    &mut state.netplay,
                     side as i32,
                 );
-                cx.with_legacy(|| redraw(&*state));
-                (*state).last_input_time = GetTimeCounter();
+                cx.with_legacy(|| redraw(state));
+                state.last_input_time = GetTimeCounter();
                 if confirmed != 0 {
-                    (*state).initialized = 0;
-                    (*state).phase = crate::supermelee::session::MenuPhase::Connecting;
+                    state.initialized = 0;
+                    state.phase = crate::supermelee::session::MenuPhase::Connecting;
                 }
             }
-            1 | 7 => next_control(state, cx, io, usize::from((*state).melee_option == 1)),
+            1 | 7 => next_control(state, cx, io, usize::from(state.melee_option == 1)),
             _ => {}
         }
     }
     /// # Safety
     /// State and its graphics remain live through this synchronous menu frame.
     pub unsafe fn do_melee(
-        state: *mut MeleeSession,
+        state: &mut MeleeSession,
         cx: &mut crate::engine::battle::Cx<'_>,
         io: &mut crate::engine::observe::Io<'_>,
         input: &crate::engine::input::InputSession,
@@ -170,58 +170,58 @@ pub(crate) mod live {
             return 0;
         }
         input.set_menu_sounds(15, 16);
-        if (*state).initialized == 0 {
-            if (*state).h_music.is_some() {
+        if state.initialized == 0 {
+            if state.h_music.is_some() {
                 cx.with_legacy(|| stop_music());
-                drop((*state).h_music.take());
+                drop(state.h_music.take());
             }
             let music_name = std::ffi::CStr::from_bytes_with_nul(MELEE_MUSIC)
                 .unwrap_or_else(|error| panic!("melee music resource name: {error}"));
-            (*state).h_music = uqm_engine::sound::resource_types::LoadedMusic::load(music_name);
-            (*state).initialized = 1;
-            (*state).melee_option = 4;
-            crate::ui::settings::play_loaded_music(cx.world, (*state).h_music.as_ref(), 1, 1);
+            state.h_music = uqm_engine::sound::resource_types::LoadedMusic::load(music_name);
+            state.initialized = 1;
+            state.melee_option = 4;
+            crate::ui::settings::play_loaded_music(cx.world, state.h_music.as_ref(), 1, 1);
             cx.with_legacy(|| {
-                init_screen(&*state);
+                init_screen(state);
                 FadeScreen(FADE_ALL_TO_COLOR, 840 / 2);
             });
-            (*state).last_input_time = GetTimeCounter();
+            state.last_input_time = GetTimeCounter();
             return 1;
         }
         poll_menu(state, cx, io, 0);
         if key(input, KEY_MENU_CANCEL) || key(input, KEY_MENU_LEFT) {
-            (*state).last_input_time = GetTimeCounter();
-            cx.with_legacy(|| highlight(&*state, (*state).melee_option, false));
-            (*state).melee_option = 10;
-            (*state).initialized = 0;
-            (*state).side = 0;
+            state.last_input_time = GetTimeCounter();
+            cx.with_legacy(|| highlight(state, state.melee_option, false));
+            state.melee_option = 10;
+            state.initialized = 0;
+            state.side = 0;
             if key(input, KEY_MENU_CANCEL) {
-                (*state).row = 0;
-                (*state).col = 0;
+                state.row = 0;
+                state.col = 0;
             } else {
-                (*state).row = 1;
-                (*state).col = 6;
+                state.row = 1;
+                state.col = 6;
             }
             edit(state, cx, io, input);
         } else {
-            let mut next = (*state).melee_option;
+            let mut next = state.melee_option;
             let mut force = false;
             if key(input, KEY_MENU_UP) {
-                (*state).last_input_time = GetTimeCounter();
+                state.last_input_time = GetTimeCounter();
                 next = super::rules::next_option(next, true, false);
             } else if key(input, KEY_MENU_DOWN) {
-                (*state).last_input_time = GetTimeCounter();
+                state.last_input_time = GetTimeCounter();
                 next = super::rules::next_option(next, false, true);
             }
             let controls = cx.kernel.player_control;
             if controls[0] & controls[1] & PSYTRON_CONTROL != 0
-                && GetTimeCounter().wrapping_sub((*state).last_input_time) > 840 * 10
+                && GetTimeCounter().wrapping_sub(state.last_input_time) > 840 * 10
             {
                 force = true;
                 next = 4;
             }
-            if next != (*state).melee_option {
-                change_option(&mut *state, cx, next);
+            if next != state.melee_option {
+                change_option(state, cx, next);
             }
             if key(input, KEY_MENU_SELECT) || force {
                 select_option(input, state, cx, io);
@@ -233,7 +233,7 @@ pub(crate) mod live {
         flush_menu(state, cx, io);
         disconnects(state, cx);
         cx.with_legacy(|| {
-            flash_selection(&mut *state);
+            flash_selection(state);
             SleepThreadUntil(time.wrapping_add(840 / 30));
         });
         1
@@ -318,7 +318,6 @@ pub(crate) mod live {
             );
             cx.run_input_frame(io, true, &mut frame);
         }
-        let state_ptr = &raw mut state;
         // SAFETY: the input session has stopped and no callback retains these resources.
         cx.with_legacy(|| {
             stop_music();
@@ -327,7 +326,7 @@ pub(crate) mod live {
         state.save_config(cx.kernel.player_control);
         let session = state.netplay.clone();
         session.close_all_connections(&mut |event| {
-            changes::apply_protocol_event(state_ptr, cx, io, event)
+            changes::apply_protocol_event(&mut state, cx, io, event)
         });
         cx.with_legacy(|| {
             drop(state.h_music.take());
