@@ -222,36 +222,7 @@ pub(super) unsafe fn connecting(
             state.initialized = 1;
             let conn = open_player_network_connection(side as u16, state, cx, io);
             state.phase = crate::supermelee::session::MenuPhase::Connecting;
-            let font = cx.kernel.star_con_font;
-            cx.with_legacy(|| {
-                let font = SetContextFont(font);
-                let color = SetContextForeGroundColor(rgb(0, 0, 0));
-                BatchGraphics();
-                let mut r = RECT {
-                    corner: POINT {
-                        x: (ScreenWidth as i16 - 200) >> 1,
-                        y: (ScreenHeight as i16 - 30) >> 1,
-                    },
-                    extent: EXTENT {
-                        width: 200,
-                        height: 30,
-                    },
-                };
-                draw_shadowed_box(&mut r, rgb(20, 20, 20), rgb(8, 8, 8), rgb(16, 16, 16));
-                let mut t = text(
-                    ScreenWidth as i16 >> 1,
-                    r.corner.y + 10,
-                    TEXT_ALIGN_ALIGN_CENTER,
-                    game_string(NETMELEE_STRING_BASE as i32 + if is_server(conn) { 1 } else { 2 }),
-                );
-                font_DrawText(&mut t);
-                t.pStr = game_string(NETMELEE_STRING_BASE as i32 + 18);
-                t.baseline.y += 16;
-                font_DrawText(&mut t);
-                SetContextFont(font);
-                SetContextForeGroundColor(color);
-                UnbatchGraphics();
-            });
+            connection_box(state, cx.kernel, is_server(conn));
         }
         poll_menu(state, cx, io, 0);
         if key(input, KEY_MENU_CANCEL) {

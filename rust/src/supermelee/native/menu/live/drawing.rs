@@ -368,6 +368,53 @@ pub(super) unsafe fn status_game(
     let message = cx.kernel.game_text(index).to_owned();
     status(cx, state, &message);
 }
+pub(super) fn connection_box(state: &MeleeSession, kernel: &crate::engine::Kernel, server: bool) {
+    let context = state
+        .menu_context
+        .as_ref()
+        .unwrap_or_else(|| panic!("menu context not admitted"));
+    let size = state
+        .menu_target
+        .as_ref()
+        .unwrap_or_else(|| panic!("menu target not admitted"))
+        .rect()
+        .extent;
+    let font = crate::graphics::native_font::FontLease::retain(
+        std::ptr::NonNull::new(kernel.star_con_font.cast())
+            .unwrap_or_else(|| panic!("connection dialog font not admitted")),
+    );
+    let rect = RECT {
+        corner: POINT {
+            x: (size.width - 200) >> 1,
+            y: (size.height - 30) >> 1,
+        },
+        extent: EXTENT {
+            width: 200,
+            height: 30,
+        },
+    };
+    context.draw_batch(|| {
+        context.with_text_state(|| {
+            context.draw_shadowed_box(rect, rgb(20, 20, 20), rgb(8, 8, 8), rgb(16, 16, 16));
+            let first =
+                kernel.game_text(NETMELEE_STRING_BASE as usize + if server { 1 } else { 2 });
+            let second = kernel.game_text(NETMELEE_STRING_BASE as usize + 18);
+            for (message, y) in [(first, rect.corner.y + 10), (second, rect.corner.y + 26)] {
+                context.draw_text(
+                    &font,
+                    message,
+                    POINT {
+                        x: size.width >> 1,
+                        y,
+                    },
+                    TEXT_ALIGN_ALIGN_CENTER,
+                    rgb(0, 0, 0),
+                );
+            }
+        })
+    });
+}
+
 pub(super) unsafe fn status_player(
     cx: &mut crate::engine::battle::Cx<'_>,
     state: &MeleeSession,

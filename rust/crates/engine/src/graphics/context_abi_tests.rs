@@ -36,6 +36,19 @@ fn filled_stamp_can_restore_color_without_changing_the_existing_setting_variant(
     // SAFETY: this serial fixture owns the context; its absent target skips raster drawing.
     unsafe {
         SetContextForeGroundColor(original);
+        context.draw_shadowed_box(
+            RECT {
+                corner: POINT { x: 10, y: 20 },
+                extent: EXTENT {
+                    width: 30,
+                    height: 40,
+                },
+            },
+            original,
+            fill,
+            fill,
+        );
+        assert_eq!(GetContextForeGroundColor().r, original.r);
         context.draw_filled_stamp_preserving_color(&source, POINT { x: 0, y: 0 }, fill);
         assert_eq!(GetContextForeGroundColor().r, original.r);
         assert_eq!(GetContextForeGroundColor().g, original.g);
