@@ -21,13 +21,11 @@ impl AutomationObserver {
             .and_then(|config| config.runtime_contract.expected_input_ticks);
         #[cfg(not(feature = "debug-process"))]
         let native_ticks = None;
-        let max_wallclock = native_ticks.map_or_else(
-            || Duration::from_secs(budgets.max_wallclock_seconds),
-            |ticks| {
-                super::super::native_timing::wall_budget(ticks)
-                    .unwrap_or_else(|error| panic!("invalid native timing contract: {error}"))
-            },
-        );
+        let max_wallclock = native_wall_deadline(
+            Duration::from_secs(budgets.max_wallclock_seconds),
+            native_ticks,
+        )
+        .unwrap_or_else(|error| panic!("invalid native timing contract: {error}"));
         WatchdogLimits {
             max_input_ticks: budgets.max_input_ticks,
             max_presentations: budgets.max_presentations,
@@ -124,6 +122,16 @@ impl AutomationObserver {
     }
 }
 
+/// The declared budget is the floor because fixed native costs (readiness barriers,
+/// checkpoint acknowledgements) do not scale with input ticks, so a tick-proportional
+/// budget alone can be too short for a valid short script.
+fn native_wall_deadline(declared: Duration, native_ticks: Option<u64>) -> Result<Duration, String> {
+    match native_ticks {
+        None => Ok(declared),
+        Some(ticks) => Ok(declared.max(super::super::native_timing::wall_budget(ticks)?)),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -175,5 +183,43 @@ mod tests {
         assert!(coord.admit_boundary(&mut inner, CallbackKind::Input));
         drop(inner);
         assert_ne!(_app.observer().unwrap().finalize(0).unwrap(), 0);
+    }
+
+    #[test]
+    fn native_deadline_keeps_declared_budget_for_short_scripts() {
+        assert_eq!(
+            native_wall_deadline(Duration::from_secs(120), Some(196)).unwrap(),
+            Duration::from_secs(120)
+        );
+    }
+
+    #[test]
+    fn native_deadline_uses_tick_budget_for_long_scripts() {
+        assert_eq!(
+            native_wall_deadline(Duration::from_secs(1800), Some(39_771)).unwrap(),
+            Duration::from_millis(2_485_688)
+        );
+    }
+
+    #[test]
+    fn native_deadline_keeps_declared_budget_for_single_tick_script() {
+        assert_eq!(
+            native_wall_deadline(Duration::from_secs(30), Some(1)).unwrap(),
+            Duration::from_secs(30)
+        );
+    }
+
+    #[test]
+    fn native_deadline_without_recorded_ticks_is_declared_budget() {
+        assert_eq!(
+            native_wall_deadline(Duration::from_secs(120), None).unwrap(),
+            Duration::from_secs(120)
+        );
+    }
+
+    #[test]
+    fn native_deadline_rejects_invalid_timing_contract() {
+        assert!(native_wall_deadline(Duration::from_secs(120), Some(0)).is_err());
+        assert!(native_wall_deadline(Duration::from_secs(120), Some(u64::MAX)).is_err());
     }
 }
