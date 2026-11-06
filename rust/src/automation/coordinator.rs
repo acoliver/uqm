@@ -3685,9 +3685,7 @@ mod tests {
         // three scans of 84 lines. Dispatch cannot accept input yet.
         coord.inner.lock().release_semantic_select = true;
         for _ in 0..252 {
-            assert!(
-                !coord.process_input_at_boundary(&mut campaign_state::CampaignView::empty, true)
-            );
+            assert!(!coord.process_input_at_boundary(&mut campaign_state::empty_view, true));
         }
         {
             let inner = coord.inner.lock();
@@ -3702,9 +3700,9 @@ mod tests {
             rust_automation_observe_planet_menu, PlanetMenuPhase,
         };
         rust_automation_observe_planet_menu(PlanetMenuPhase::Dispatch as usize);
-        assert!(!coord.process_input_inner(&mut campaign_state::CampaignView::empty));
+        assert!(!coord.process_input_inner(&mut campaign_state::empty_view));
         assert_eq!(coord.inner.lock().sched_state.step_index, 1);
-        assert!(coord.process_input_inner(&mut campaign_state::CampaignView::empty));
+        assert!(coord.process_input_inner(&mut campaign_state::empty_view));
         assert_eq!(_app.observer().unwrap().finalize(0).unwrap(), 0);
     }
 
@@ -3759,7 +3757,7 @@ mod tests {
                 .map(|line| TraceRecord::from_jsonl(line).unwrap())
                 .collect::<Vec<_>>()
         };
-        assert!(!coord.process_input_inner(&mut campaign_state::CampaignView::empty));
+        assert!(!coord.process_input_inner(&mut campaign_state::empty_view));
         assert!(!_app.observer().unwrap().process_present(Some(frame(1, 1))));
         assert_eq!(
             coord.inner.lock().sched_state.step_index,
@@ -3767,16 +3765,16 @@ mod tests {
             "capture must leave activity awaiting its runtime verification"
         );
         assert_eq!(plan.committed(&records()).unwrap().len(), 1);
-        assert!(!coord.process_input_inner(&mut campaign_state::CampaignView::empty));
+        assert!(!coord.process_input_inner(&mut campaign_state::empty_view));
         assert_eq!(coord.inner.lock().sched_state.step_index, 2);
-        assert!(!coord.process_input_inner(&mut campaign_state::CampaignView::empty));
+        assert!(!coord.process_input_inner(&mut campaign_state::empty_view));
         assert!(coord.inner.lock().armed_capture_label.is_none());
         assert!(!_app.observer().unwrap().process_present(Some(frame(2, 1))));
         assert_eq!(plan.committed(&records()).unwrap().len(), 2);
-        assert!(!coord.process_input_inner(&mut campaign_state::CampaignView::empty));
+        assert!(!coord.process_input_inner(&mut campaign_state::empty_view));
         assert!(!_app.observer().unwrap().process_present(Some(frame(3, 2))));
         assert_eq!(plan.committed(&records()).unwrap().len(), 3);
-        assert!(coord.process_input_inner(&mut campaign_state::CampaignView::empty));
+        assert!(coord.process_input_inner(&mut campaign_state::empty_view));
         assert_eq!(_app.observer().unwrap().finalize(0).unwrap(), 0);
         let trace = records();
         let counts: Vec<_> = trace
@@ -3856,7 +3854,7 @@ mod tests {
                 .collect();
             assert_eq!(plan.committed(&records).unwrap().len() as u64, count);
             assert_eq!(
-                coord.process_input_inner(&mut campaign_state::CampaignView::empty),
+                coord.process_input_inner(&mut campaign_state::empty_view),
                 count == 2
             );
         }
@@ -3905,11 +3903,11 @@ mod tests {
             height: 1,
             rgba: vec![1, 2, 3, 255],
         };
-        assert!(!coord.process_input_inner(&mut campaign_state::CampaignView::empty));
+        assert!(!coord.process_input_inner(&mut campaign_state::empty_view));
         assert!(!_app.observer().unwrap().process_present(Some(frame(1, 0))));
         let first = std::fs::read(temp.path().join("trace.jsonl")).unwrap();
         for count in 2..=8 {
-            assert!(!coord.process_input_inner(&mut campaign_state::CampaignView::empty));
+            assert!(!coord.process_input_inner(&mut campaign_state::empty_view));
             assert!(!_app
                 .observer()
                 .unwrap()
@@ -3920,7 +3918,7 @@ mod tests {
             );
         }
         while coord.inner.lock().armed_capture_label.is_none() {
-            assert!(!coord.process_input_inner(&mut campaign_state::CampaignView::empty));
+            assert!(!coord.process_input_inner(&mut campaign_state::empty_view));
         }
         assert!(!_app.observer().unwrap().process_present(Some(frame(9, 1))));
         let boundary = std::fs::read(temp.path().join("trace.jsonl")).unwrap();
@@ -3936,7 +3934,7 @@ mod tests {
             .map(|record| record.presentation.as_ref().unwrap().count)
             .collect();
         assert_eq!(presentations, (1..=9).collect::<Vec<_>>());
-        assert!(coord.process_input_inner(&mut campaign_state::CampaignView::empty));
+        assert!(coord.process_input_inner(&mut campaign_state::empty_view));
         assert_eq!(_app.observer().unwrap().finalize(0).unwrap(), 0);
         let finished = std::fs::read(temp.path().join("trace.jsonl")).unwrap();
         assert!(finished.starts_with(&boundary));
@@ -4058,7 +4056,7 @@ mod tests {
         let coord = _app.observer().cloned().unwrap();
         assert!(!_app.observer().unwrap().process_main_menu_ready());
         for _ in 0..3 {
-            assert!(!coord.process_input_inner(&mut campaign_state::CampaignView::empty));
+            assert!(!coord.process_input_inner(&mut campaign_state::empty_view));
             assert_eq!(coord.inner.lock().sched_state.step_index, 1);
             assert!(coord.inner.lock().armed_capture_label.is_none());
         }
@@ -4082,23 +4080,23 @@ mod tests {
             _app.observer().unwrap().native_window_semantic_snapshot().0
         );
         assert_eq!(plan.committed(&live_records).unwrap().len(), 1);
-        assert!(!coord.process_input_inner(&mut campaign_state::CampaignView::empty));
+        assert!(!coord.process_input_inner(&mut campaign_state::empty_view));
         assert_eq!(coord.inner.lock().sched_state.step_index, 2);
         assert_eq!(coord.inner.lock().pending_transitions.len(), 1);
-        assert!(!coord.process_input_inner(&mut campaign_state::CampaignView::empty));
+        assert!(!coord.process_input_inner(&mut campaign_state::empty_view));
         assert_eq!(coord.inner.lock().sched_state.step_index, 2);
         assert!(!_app.observer().unwrap().process_present(Some(frame(2, 0))));
-        assert!(!coord.process_input_inner(&mut campaign_state::CampaignView::empty));
+        assert!(!coord.process_input_inner(&mut campaign_state::empty_view));
         assert_eq!(coord.inner.lock().sched_state.step_index, 3);
         assert!(coord.inner.lock().pending_transitions.is_empty());
         assert!(!_app.observer().unwrap().process_present(Some(frame(3, 0))));
-        assert!(!coord.process_input_inner(&mut campaign_state::CampaignView::empty));
+        assert!(!coord.process_input_inner(&mut campaign_state::empty_view));
         assert_eq!(
             coord.inner.lock().armed_capture_label.as_deref(),
             Some("menu")
         );
         assert!(!_app.observer().unwrap().process_present(Some(frame(4, 1))));
-        assert!(coord.process_input_inner(&mut campaign_state::CampaignView::empty));
+        assert!(coord.process_input_inner(&mut campaign_state::empty_view));
         assert_eq!(
             coord.inner.lock().terminal_class,
             Some(TerminalClass::Success)

@@ -107,7 +107,7 @@ mod tests {
         let mut captures = 0;
         assert!(observer.save_input(&mut inner, false, &mut || {
             captures += 1;
-            let mut view = campaign_state::CampaignView::empty();
+            let mut view = campaign_state::empty_view();
             view.activity = 0x0804;
             view
         }));

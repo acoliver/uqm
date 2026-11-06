@@ -85,6 +85,7 @@ default = ["audio_heart"]
 audio_heart = ["uqm-engine/audio_heart"]
 debug-process = ["uqm-engine/debug-process"]
 bundled-sdl = ["uqm-engine/bundled-sdl"]
+test-support = ["uqm-engine/test-support"]
 
 [[bin]]
 name = "uqm"
@@ -105,6 +106,7 @@ name = "linked_provider_fixture"
 path = "tests/linked_provider_fixture.rs"
 
 [dev-dependencies]
+uqm-engine = { path = "crates/engine", version = "=0.9.0", default-features = false, features = ["test-support"] }
 rodio = { version = "0.19", default-features = false, features = ["wav", "vorbis"] }
 sdl2-sys = "0.37"
 regex = "1"

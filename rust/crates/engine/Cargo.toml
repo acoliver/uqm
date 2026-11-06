@@ -41,6 +41,7 @@ fast_image_resize = { version = "5.0", features = ["only_u8x4"] }
 default = ["audio_heart"]
 audio_heart = []
 debug-process = []
+test-support = []
 bundled-sdl = ["sdl2/bundled", "sdl2/static-link"]
 
 [dev-dependencies]

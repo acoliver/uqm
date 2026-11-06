@@ -42,6 +42,7 @@ impl Battle {
 }
 
 impl super::record::Kernel {
+    #[inline]
     pub fn ships(
         &mut self,
         side: usize,
@@ -67,15 +68,19 @@ pub struct Cx<'a> {
 }
 
 impl Cx<'_> {
+    #[inline]
     pub fn random(&mut self) -> u32 {
         (self.rng)()
     }
+    #[inline]
     pub fn kernel_mut(&mut self) -> &mut super::record::Kernel {
         self.kernel
     }
+    #[inline]
     pub fn elements(&self) -> &ElementTable {
         &self.kernel.elements
     }
+    #[inline]
     pub(crate) fn groups(
         &self,
     ) -> super::link_queue::LinkQueue<'_, crate::engine::world::queues::Group, 32> {

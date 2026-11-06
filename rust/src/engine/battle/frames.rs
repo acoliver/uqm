@@ -10,7 +10,7 @@ use std::{cell::Cell, rc::Rc};
 struct Array {
     views: [Cell<FRAME>; 3],
     leases: Vec<DrawableLease>,
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     _fixture: Option<Box<dyn std::any::Any>>,
     source: Option<usize>,
 }
@@ -43,7 +43,7 @@ impl FrameArray {
                 })
             }),
             leases,
-            #[cfg(test)]
+            #[cfg(any(test, feature = "test-support"))]
             _fixture: None,
             source,
         })))
@@ -107,7 +107,7 @@ impl FrameArray {
             .as_ref()
             .unwrap_or_else(|| panic!("absent frame array"));
         let base = array.views[resolution].get();
-        #[cfg(test)]
+        #[cfg(any(test, feature = "test-support"))]
         if array._fixture.is_some() {
             assert_eq!(base, frame);
             return 0;
@@ -129,7 +129,7 @@ impl FrameArray {
             .0
             .as_ref()
             .unwrap_or_else(|| panic!("absent frame array"));
-        #[cfg(test)]
+        #[cfg(any(test, feature = "test-support"))]
         if array._fixture.is_some() {
             assert_eq!(index, 0);
             return base;
@@ -142,11 +142,11 @@ impl FrameArray {
             .unwrap_or_else(|| panic!("frame index outside owning drawable"))
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     pub(crate) fn fixture(views: [FRAME; 3], resource: impl std::any::Any) -> Self {
         Self::fixture_source(views, resource, None)
     }
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     pub(crate) fn fixture_source(
         views: [FRAME; 3],
         resource: impl std::any::Any,

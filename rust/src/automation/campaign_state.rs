@@ -458,12 +458,17 @@ impl StateSource for LiveCampaign<'_> {
 }
 
 #[cfg(test)]
+pub(crate) fn empty_view() -> CampaignView {
+    CampaignView::from_world(&World::new())
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn campaign_equipment_and_date_come_from_the_supplied_typed_view() {
-        let mut world = CampaignView::empty();
+        let mut world = empty_view();
         world.flagship.drive_slots[10] = 19;
         world.flagship.jet_slots[7] = 23;
         world.flagship.module_slots[15] = 31;
@@ -488,7 +493,7 @@ mod tests {
 
     #[test]
     fn terminal_observation_comes_from_the_supplied_owner() {
-        let world = CampaignView::empty();
+        let world = empty_view();
         let running = LiveCampaign {
             world: &world,
             flagship_destroyed: false,
@@ -757,7 +762,7 @@ mod tests {
         assert!(evaluate(&stopped, &fake(&[("sis:fuel", 0), ("hyper:stopped", 1)])).held);
         assert_eq!(
             LiveCampaign {
-                world: &CampaignView::empty(),
+                world: &empty_view(),
                 flagship_destroyed: false,
             }
             .read(StateKey::HyperStopped),

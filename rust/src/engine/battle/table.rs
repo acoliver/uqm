@@ -43,6 +43,7 @@ impl ElementTable {
         }
     }
 
+    #[inline]
     fn identify(&self, id: Id<ElementRecord>) -> ElementId {
         ElementId {
             token: id.token(),
@@ -52,12 +53,14 @@ impl ElementTable {
         }
     }
 
+    #[inline]
     fn key(&self, id: ElementId) -> Id<ElementRecord> {
         let key = self.records.pool.id_at(usize::from(id.slot));
         assert!(self.contains(id), "stale element id {id:?}");
         key.unwrap_or_else(|| unreachable!("checked element allocation"))
     }
 
+    #[inline]
     pub fn id_at(&self, slot: usize) -> Option<ElementId> {
         self.records.pool.id_at(slot).map(|id| self.identify(id))
     }
@@ -72,6 +75,7 @@ impl ElementTable {
         self.records.pool.get_pair_mut(left, right)
     }
 
+    #[inline]
     pub fn contains(&self, id: ElementId) -> bool {
         id.owner == self.records.pool.storage_identity()
             && self
@@ -81,6 +85,7 @@ impl ElementTable {
                 .is_some_and(|key| key.generation() == id.gen)
     }
 
+    #[inline]
     pub fn raw(&self, id: ElementId) -> *mut c_void {
         std::ptr::from_ref(self.records.pool.get(self.key(id)))
             .cast_mut()
@@ -115,24 +120,29 @@ impl ElementTable {
         self.records.pool.retired_address(usize::from(id.slot))
     }
 
+    #[inline]
     pub fn head(&self) -> Option<ElementId> {
         self.records.pool.head().map(|id| self.identify(id))
     }
+    #[inline]
     pub fn tail(&self) -> Option<ElementId> {
         self.records.pool.tail().map(|id| self.identify(id))
     }
+    #[inline]
     pub fn succ(&self, id: ElementId) -> Option<ElementId> {
         self.records
             .pool
             .succ(self.key(id))
             .map(|id| self.identify(id))
     }
+    #[inline]
     pub fn pred(&self, id: ElementId) -> Option<ElementId> {
         self.records
             .pool
             .pred(self.key(id))
             .map(|id| self.identify(id))
     }
+    #[inline]
     pub fn linked(&self, id: ElementId) -> bool {
         self.records.pool.linked(self.key(id))
     }
@@ -165,6 +175,7 @@ impl ElementTable {
 
 impl Index<ElementId> for ElementTable {
     type Output = ElementRecord;
+    #[inline]
     fn index(&self, id: ElementId) -> &ElementRecord {
         self.records.pool.get(self.key(id))
     }
@@ -174,11 +185,13 @@ pub struct Records {
 }
 impl Index<ElementId> for Records {
     type Output = ElementRecord;
+    #[inline]
     fn index(&self, id: ElementId) -> &ElementRecord {
         self.pool.get(self.key(id))
     }
 }
 impl Records {
+    #[inline]
     fn key(&self, id: ElementId) -> Id<ElementRecord> {
         assert_eq!(
             id.owner,
@@ -198,6 +211,7 @@ impl Records {
     }
 }
 impl IndexMut<ElementId> for Records {
+    #[inline]
     fn index_mut(&mut self, id: ElementId) -> &mut ElementRecord {
         let key = self.key(id);
         self.pool.get_mut(key)
@@ -213,20 +227,25 @@ impl ElementTable {
     }
 }
 impl ElementId {
+    #[inline]
     pub fn slot(self) -> u8 {
         self.slot
     }
+    #[inline]
     pub fn generation(self) -> u32 {
         self.gen
     }
 }
 impl ShipId {
+    #[inline]
     pub fn side(self) -> u8 {
         self.side
     }
+    #[inline]
     pub fn slot(self) -> u8 {
         self.slot
     }
+    #[inline]
     pub fn generation(self) -> u32 {
         self.gen
     }
@@ -279,7 +298,7 @@ impl ElementId {
         usize::try_from(self.token)
             .unwrap_or_else(|_| panic!("element token exceeds native handle"))
     }
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     pub(crate) fn fixture(slot: u8, gen: u32) -> Self {
         Self {
             slot,
@@ -295,13 +314,13 @@ impl ElementTable {
             .filter_map(|slot| self.id_at(slot))
             .find(|id| id.sound_token() == token)
     }
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     pub(crate) fn fixture_record_mut(&mut self, id: ElementId) -> &mut ElementRecord {
         self.record_mut(id)
     }
 }
 impl ShipId {
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-support"))]
     pub(crate) fn fixture(side: u8, slot: u8, gen: u32) -> Self {
         Self {
             side,

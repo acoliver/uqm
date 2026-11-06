@@ -100,11 +100,6 @@ impl CampaignView {
     pub(crate) fn named_state_value(&self, name: &str) -> Option<u8> {
         self.story_value(crate::engine::StoryKey::from_name(name)?)
     }
-
-    #[cfg(test)]
-    pub(crate) fn empty() -> Self {
-        Self::from_world(&World::new())
-    }
 }
 
 #[cfg(test)]
