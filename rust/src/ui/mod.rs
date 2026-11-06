@@ -24,6 +24,9 @@ pub mod shipyard;
 #[cfg(test)]
 #[path = "shipyard/catalog_tests.rs"]
 mod shipyard_catalog_tests;
+#[cfg(test)]
+#[path = "shipyard/crew_tests.rs"]
+mod shipyard_crew_tests;
 #[path = "shipyard/hangar.rs"]
 mod shipyard_hangar;
 pub(crate) mod shipyard_layout;
