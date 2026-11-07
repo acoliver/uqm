@@ -294,10 +294,8 @@ impl super::coordinator::AutomationObserver {
         use crate::engine::observe::CheckpointView;
         match view {
             CheckpointView::ShipEscaped => self.ui.record_ship_escape(),
-            CheckpointView::EncounterDispatch(id) => {
-                super::scenario::observe_encounter_dispatch(id)
-            }
-            CheckpointView::DialogueDispatch(id) => super::scenario::observe_dialogue_dispatch(id),
+            CheckpointView::EncounterDispatch(id) => self.scene.lock().observe_encounter(id),
+            CheckpointView::DialogueDispatch(id) => self.scene.lock().observe_dialogue(id),
             CheckpointView::EncounterMenu(active) => self.ui.observe_encounter_menu(active),
             CheckpointView::CommunicationResponses(count) => {
                 self.ui.observe_communication_responses(count)

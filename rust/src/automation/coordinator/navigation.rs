@@ -26,7 +26,7 @@ impl AutomationObserver {
         use crate::automation::script::TurnDirection;
 
         let progress = inner.flagship_turn.observe(
-            mode::require_live(world, &self.ui),
+            mode::require_live(world, &self.ui, self.scene.lock().active_scene()),
             world.flight_facing,
             turn.direction,
             turn.facings,

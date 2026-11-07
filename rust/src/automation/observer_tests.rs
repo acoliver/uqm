@@ -37,6 +37,10 @@ fn assert_idle(owner: &AutomationObserver) {
     assert_eq!(ui.ship_picker_cursor(), crate::pickship::Cursor::START);
     assert_eq!(ui.ship_escape_generation(), 0);
     assert_eq!(*owner.ending.lock(), Ending::default());
+    assert_eq!(owner.scene.lock().dispatch_observation(), (0, None, None));
+    assert_eq!(owner.scene.lock().active_scene(), None);
+    #[cfg(feature = "debug-process")]
+    assert!(owner.pending_native_presentation.lock().is_none());
 }
 
 #[test]
@@ -115,4 +119,46 @@ fn campaign_reads_the_supplied_observers_ending_and_encounter_state() {
     assert_eq!(campaign.read(StateKey::Ending(2)), Some(0));
     assert_eq!(campaign.read(StateKey::Ending(3)), Some(0));
     assert_eq!(campaign.read(StateKey::EncounterMenu), Some(1));
+}
+
+#[test]
+fn scene_dispatch_observations_do_not_cross_observer_runs() {
+    use super::scenario::AutomationScene;
+    let (_first_output, mut first) = observer();
+    let (_second_output, second) = observer();
+    first
+        .0
+        .scene
+        .lock()
+        .begin(AutomationScene::SolProbeEncounter);
+    first.checkpoint(&CheckpointView::EncounterDispatch(24));
+    first.checkpoint(&CheckpointView::DialogueDispatch(18));
+    assert_eq!(
+        first.0.scene.lock().dispatch_observation(),
+        (1, Some(24), Some(18))
+    );
+    assert!(first
+        .0
+        .scene
+        .lock()
+        .verify(AutomationScene::SolProbeEncounter)
+        .is_ok());
+    assert_eq!(
+        second.0.scene.lock().dispatch_observation(),
+        (0, None, None)
+    );
+    assert_eq!(second.0.scene.lock().active_scene(), None);
+    first.checkpoint(&CheckpointView::EncounterDispatch(24));
+    assert_eq!(
+        first.0.scene.lock().dispatch_observation(),
+        (1, Some(24), None)
+    );
+    first.checkpoint(&CheckpointView::DialogueDispatch(0));
+    assert!(first
+        .0
+        .scene
+        .lock()
+        .verify(AutomationScene::SolProbeEncounter)
+        .is_err());
+    assert!(second.0.scene.lock().verify_dispatch(24, 18).is_err());
 }

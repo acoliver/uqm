@@ -23,6 +23,7 @@ use input::discard_held_repeat;
 mod navigation;
 mod parity;
 mod save_capture;
+mod scene;
 mod terminal;
 
 use crate::automation::{
@@ -299,7 +300,11 @@ struct CoordInner {
 /// the scheduler/watchdog during the game loop.
 pub struct AutomationObserver {
     pub(crate) ui: super::ui_observation::UiObservation,
+    pub(crate) scene: Mutex<scenario::SceneObservation>,
     pub(crate) ending: Mutex<super::ending::Ending>,
+    #[cfg(feature = "debug-process")]
+    pub(crate) pending_native_presentation:
+        Mutex<Option<super::native_window::NativeWindowChildState>>,
     pub(crate) activity: crate::engine::world::activity::ActivityControl,
     pub(crate) input: crate::engine::input::InputControls,
     _configuration: uqm_engine::configuration::Configuration,
@@ -424,7 +429,10 @@ impl AutomationObserver {
         let native_trace_failed = Self::trace_initialization_failed(&native_trace, "native");
         let coord = AutomationObserver {
             ui: Default::default(),
+            scene: Default::default(),
             ending: Default::default(),
+            #[cfg(feature = "debug-process")]
+            pending_native_presentation: Default::default(),
             activity,
             input,
             _configuration: configuration,
@@ -537,7 +545,7 @@ impl AutomationObserver {
 
         let scene = scene?;
 
-        match scenario::activate(cx, scene, SceneActivationBoundary::GameInitialized, |_| {}) {
+        match self.activate_scene(cx, scene, SceneActivationBoundary::GameInitialized, |_| {}) {
             Ok(plan) => Some(plan),
             Err(error) => {
                 let mut inner = self.inner.lock();
@@ -981,7 +989,7 @@ impl AutomationObserver {
             self.actions.get(inner.sched_state.step_index)
         {
             match inner.battle_loss.observe(
-                mode::require_live(world, &self.ui),
+                mode::require_live(world, &self.ui, self.scene.lock().active_scene()),
                 crate::automation::battle_observer::current_frame(),
                 battle_outcome::live_fleets(),
                 wait.minimum_ships,
@@ -1030,7 +1038,7 @@ impl AutomationObserver {
         } else if let Some(Action::WaitForDispatch(wait)) =
             self.actions.get(inner.sched_state.step_index)
         {
-            let (generation, encounter, dialogue) = scenario::dispatch_observation();
+            let (generation, encounter, dialogue) = self.scene.lock().dispatch_observation();
             if generation > inner.consumed_dispatch_generation
                 && encounter == Some(wait.encounter)
                 && dialogue == Some(wait.dialogue)
@@ -1908,34 +1916,17 @@ impl AutomationObserver {
     ) -> bool {
         // Runtime semantic assertions are checked before allowing the pure
         // scheduler to advance their action.
-        if let Some(Action::AssertScene(assertion)) = self.actions.get(inner.sched_state.step_index)
-        {
-            match scenario::verify(assertion.scene) {
-                Ok(plan) => self.write_trace_labeled(
-                    inner,
-                    RecordKind::SemanticAssertion,
-                    format!(
-                        "scene_verified:{}:encounter={}:dialogue={}",
-                        plan.scene.name(),
-                        plan.expected_encounter_conversation,
-                        plan.expected_dialogue_conversation
-                    ),
-                ),
-                Err(error) => {
-                    self.write_trace_labeled(
-                        inner,
-                        RecordKind::SemanticAssertion,
-                        error.to_string(),
-                    );
-                    self.set_terminal(inner, TerminalClass::SemanticMismatch);
-                    return true;
-                }
-            }
+        if self.verify_scene_assertion(inner) {
+            return true;
         }
 
         if let Some(Action::AssertMode(assertion)) = self.actions.get(inner.sched_state.step_index)
         {
-            match crate::automation::mode::require_live(world, &self.ui) {
+            match crate::automation::mode::require_live(
+                world,
+                &self.ui,
+                self.scene.lock().active_scene(),
+            ) {
                 Ok(observed) if observed == assertion.mode => self.write_trace_labeled(
                     inner,
                     RecordKind::SemanticAssertion,
@@ -1971,7 +1962,11 @@ impl AutomationObserver {
         if let Some(Action::AssertDispatch(assertion)) =
             self.actions.get(inner.sched_state.step_index)
         {
-            match scenario::verify_dispatch(assertion.encounter, assertion.dialogue) {
+            match self
+                .scene
+                .lock()
+                .verify_dispatch(assertion.encounter, assertion.dialogue)
+            {
                 Ok(()) => self.write_trace_labeled(
                     inner,
                     RecordKind::SemanticAssertion,
@@ -2053,7 +2048,7 @@ impl AutomationObserver {
             self.actions.get(inner.sched_state.step_index)
         {
             match inner.flight_position.record(
-                mode::require_live(world, &self.ui),
+                mode::require_live(world, &self.ui, self.scene.lock().active_scene()),
                 flight_position::live_position(world),
             ) {
                 Ok(position) => self.write_trace_labeled(
@@ -2076,7 +2071,7 @@ impl AutomationObserver {
             self.actions.get(inner.sched_state.step_index)
         {
             match inner.flight_position.assert_displacement(
-                mode::require_live(world, &self.ui),
+                mode::require_live(world, &self.ui, self.scene.lock().active_scene()),
                 flight_position::live_position(world),
                 assertion.minimum_logical_units,
             ) {
@@ -2100,7 +2095,7 @@ impl AutomationObserver {
             self.actions.get(inner.sched_state.step_index)
         {
             match inner.flight_position.assert_stationary(
-                mode::require_live(world, &self.ui),
+                mode::require_live(world, &self.ui, self.scene.lock().active_scene()),
                 flight_position::live_position(world),
                 assertion.maximum_logical_units,
             ) {
@@ -2124,7 +2119,7 @@ impl AutomationObserver {
             self.actions.get(inner.sched_state.step_index)
         {
             match inner.flight_position.record_saved(
-                mode::require_live(world, &self.ui),
+                mode::require_live(world, &self.ui, self.scene.lock().active_scene()),
                 flight_position::live_position(world),
             ) {
                 Ok(position) => self.write_trace_labeled(
@@ -2147,7 +2142,7 @@ impl AutomationObserver {
             self.actions.get(inner.sched_state.step_index)
         {
             match inner.flight_position.assert_restored(
-                mode::require_live(world, &self.ui),
+                mode::require_live(world, &self.ui, self.scene.lock().active_scene()),
                 flight_position::live_position(world),
             ) {
                 Ok((saved, observed)) => self.write_trace_labeled(
@@ -2170,7 +2165,7 @@ impl AutomationObserver {
             self.actions.get(inner.sched_state.step_index)
         {
             match ship_resources::assert_ship_resources(
-                mode::require_live(world, &self.ui),
+                mode::require_live(world, &self.ui, self.scene.lock().active_scene()),
                 ship_resources::live_resources(world),
                 *assertion,
             ) {
@@ -2213,7 +2208,7 @@ impl AutomationObserver {
             self.actions.get(inner.sched_state.step_index)
         {
             match ship_element::assert_ship_element(
-                mode::require_live(world, &self.ui),
+                mode::require_live(world, &self.ui, self.scene.lock().active_scene()),
                 ship_element::live_amounts(world),
                 *assertion,
             ) {
@@ -2680,7 +2675,7 @@ impl AutomationObserver {
             self.flush_native_trace()
                 .map_err(|error| format!("cannot finalize native trace: {error}"))?;
             #[cfg(feature = "debug-process")]
-            super::native_window::publish_final_native_window_presentation()?;
+            super::native_window::publish_final_native_window_presentation(self)?;
         } else {
             let mut trace = Vec::new();
             self.runtime

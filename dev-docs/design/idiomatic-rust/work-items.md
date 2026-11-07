@@ -1556,7 +1556,18 @@ Phase 4 · semantic · lane `world` · about 3,000 changed lines · depends on U
   cargo run --release --locked --manifest-path rust/xtask/Cargo.toml -- native gallery "$PWD/tmp/U4-03/v4-run" --output "$PWD/tmp/U4-03/v4-run-gallery"
   ```
 
-**Exit numbers.** crate::automation paths from mode code: 0; automation static state: 0.
+**Exit numbers.** crate::automation paths from mode code: 0; mutable game-observation static state in automation: 0 (UI, ending, scene observations and pending native presentations belong to AutomationObserver).
+
+The automation-static inventory exempts the following storage, which does not hold mutable game observations:
+
+| Storage | Reason |
+|---|---|
+| `interrupt.rs` `INTERRUPTED` | Async-signal-safe flag written by an OS signal handler, outside owned game state. |
+| `native_budget.rs` thread-local `ACTIVE` | Harness run control scoped to a thread. |
+| `star_flight.rs` `STRINGS`; `child_session.rs` `DIGEST`; `native_window.rs` `ACTIVE_NATIVE_WINDOW_CONFIG` | Write-once immutable caches and native-proof configuration. |
+| `child_session.rs` `COUNTER` | Process-unique child-session identifiers in the harness. |
+| Locks and counters under `#[cfg(test)]` | Test isolation and fixture identifiers only. |
+| Foreign `SCREEN_WIDTH`, `SCREEN_HEIGHT` and CoreGraphics key declarations | External storage declarations, not automation storage definitions. |
 
 **Risks**
 - Hook order within a frame (architecture.md 7) is part of the trace; P lines catch a moved present.
