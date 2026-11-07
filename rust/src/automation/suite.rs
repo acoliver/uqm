@@ -828,6 +828,7 @@ pub const MATRIX: &[ScenarioRow] = &[
     ),
     row("load-alpha-centauri-v1", &[Domain::SaveLoad]),
     row("load-save-v1", &[Domain::SaveLoad]),
+    row("sol-save-load-v1", &[Domain::SaveLoad]),
     row(
         "linked-playable-v1",
         &[Domain::BootMenu, Domain::BattleOutcomes],
@@ -849,10 +850,8 @@ const fn row(scenario: &'static str, domains: &'static [Domain]) -> ScenarioRow 
 
 const fn journey(scenario: &'static str, domains: &'static [Domain]) -> ScenarioRow {
     ScenarioRow {
-        scenario,
-        domains,
-        fixture: None,
         composed_journey: true,
+        ..row(scenario, domains)
     }
 }
 

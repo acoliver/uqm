@@ -3793,7 +3793,7 @@ u6_04_world_projection = { limit = 118, ends = "U6-04", scopes = { "ffi|owner_pr
 "loc|loc|uqm::automation::native_window::@file" = 3552
 "loc|loc|uqm::automation::scheduler::@file" = 1429
 "loc|loc|uqm::automation::script::@file" = 1793
-"loc|loc|uqm::automation::suite::@file" = 908
+"loc|loc|uqm::automation::suite::@file" = 907
 "loc|loc|uqm::battle::cyborg_native::@file" = 1009
 "loc|loc|uqm::comm::races::druuge::@file" = 847
 "loc|loc|uqm::comm::races::melnorm::@file" = 1048
