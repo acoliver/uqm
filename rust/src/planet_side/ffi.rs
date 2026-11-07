@@ -62,7 +62,6 @@ use super::runtime::{PlanetSideClock, RuntimeAdapters, Tick};
 use super::session_factory::create_production_session;
 use super::telemetry::TripTelemetry;
 use super::visual_adapter::CffiSurfaceVisuals;
-use crate::engine::observe::CheckpointView;
 
 const fn failure(status: i32) -> PlanetSideReply {
     PlanetSideReply {
@@ -395,6 +394,7 @@ fn valid_context(context: &PlanetSideRunContext) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::engine::observe::CheckpointView;
 
     #[test]
     fn trip_requires_live_resources_and_nonzero_cadence_and_budget() {
