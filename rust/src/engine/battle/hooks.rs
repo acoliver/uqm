@@ -58,4 +58,42 @@ mod tests {
         assert!(empty.0.is_none());
         assert!(empty.1.is_none());
     }
+
+    #[test]
+    fn installation_preserves_callback_addresses_and_clears_absent_hooks() {
+        fn element(_: &mut Cx<'_>, _: ElementId) {}
+        fn collision(_: &mut Cx<'_>, _: ElementId, _: &mut POINT, _: ElementId, _: &mut POINT) {}
+
+        let mut record = ElementRecord::default();
+        ElementHooks {
+            pre: Some(element),
+            post: Some(element),
+            collide: Some(collision),
+            death: Some(element),
+        }
+        .install(&mut record);
+
+        assert_eq!(
+            record.preprocess_func.map(ElementHook::address),
+            Some(element as ElementFn as usize)
+        );
+        assert_eq!(
+            record.postprocess_func.map(ElementHook::address),
+            Some(element as ElementFn as usize)
+        );
+        assert_eq!(
+            record.collision_func.map(CollisionHook::address),
+            Some(collision as CollisionFn as usize)
+        );
+        assert_eq!(
+            record.death_func.map(ElementHook::address),
+            Some(element as ElementFn as usize)
+        );
+
+        ElementHooks::default().install(&mut record);
+        assert!(record.preprocess_func.is_none());
+        assert!(record.postprocess_func.is_none());
+        assert!(record.collision_func.is_none());
+        assert!(record.death_func.is_none());
+    }
 }

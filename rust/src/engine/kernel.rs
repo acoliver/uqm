@@ -260,3 +260,23 @@ impl super::battle::Cx<'_> {
         &self.kernel.races[side]
     }
 }
+
+impl Default for Kernel {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(test)]
+mod default_tests {
+    use super::*;
+
+    #[test]
+    fn default_constructed_owner_has_initial_state() {
+        let mut kernel = Kernel::default();
+        assert_eq!(kernel.space_init_count, 0);
+        assert!(kernel.player_input.iter().all(Option::is_none));
+        assert!(kernel.display.order().is_empty());
+        assert_eq!(kernel.display.alloc(), Some(0));
+    }
+}

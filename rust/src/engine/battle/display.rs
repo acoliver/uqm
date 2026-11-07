@@ -86,6 +86,12 @@ impl DisplayPool {
     }
 }
 
+impl Default for DisplayPool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -158,5 +164,20 @@ mod tests {
             std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| display.free(id))).is_err()
         );
         assert_eq!(display.order(), vec![id]);
+    }
+}
+
+#[cfg(test)]
+mod default_tests {
+    use super::*;
+
+    #[test]
+    fn default_constructed_owner_has_initial_state() {
+        let mut display = DisplayPool::default();
+        assert!(display.order().is_empty());
+        for index in 0..330 {
+            assert_eq!(display.alloc(), Some(index));
+        }
+        assert!(display.alloc().is_none());
     }
 }

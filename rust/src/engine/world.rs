@@ -326,6 +326,12 @@ impl From<&uqm_save::SisState> for SisState {
     }
 }
 
+impl Default for WorldData {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -385,5 +391,19 @@ mod tests {
         world.npc_built_ships().get_mut(npc).crew_level = 17;
         assert_eq!(world.npc_built_ships_ref().get(npc).crew_level, 17);
         assert_eq!(world.built_ships_ref().get(escort).crew_level, 42);
+    }
+}
+
+#[cfg(test)]
+mod default_tests {
+    use super::*;
+
+    #[test]
+    fn default_constructed_owner_has_initial_state() {
+        let world = WorldData::default();
+        assert_eq!(world.game.glob_flags, 0);
+        assert!(world.game.module_cost.iter().all(|cost| *cost == 0));
+        assert!(world.game._display_array.is_null());
+        assert_eq!(world.calendar_date(), (0, 0, 0));
     }
 }
