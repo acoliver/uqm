@@ -147,7 +147,8 @@ pub(crate) mod engine {
         (23, 0, 0),
     ];
 
-    use crate::planets::starmap::{current_catalog, naming::cluster_name};
+    use crate::engine::world::{CStarDesc, CATALOG_LEN};
+    use crate::planets::starmap::naming::cluster_name;
 
     use crate::mainloop::input_abi::live::AnyButtonPress;
 
@@ -450,7 +451,10 @@ pub(crate) mod engine {
 
     /// # Safety
     /// The game thread must own initialized encounter message and audio state.
-    unsafe fn prepare_encounter(cx: &mut crate::engine::battle::Cx<'_>) {
+    unsafe fn prepare_encounter(
+        cx: &mut crate::engine::battle::Cx<'_>,
+        catalog: Option<&[CStarDesc; CATALOG_LEN]>,
+    ) {
         let context = crate::graphics::context_abi::ContextLease::require(cx.kernel.space_context);
         let font = cx
             .kernel
@@ -475,7 +479,7 @@ pub(crate) mod engine {
             let cluster = if in_hqspace(cx.world) == 0 {
                 let star = cx
                     .world
-                    .selected_star(current_catalog())
+                    .selected_star(catalog)
                     .unwrap_or_else(|| panic!("encounter requires a selected star"));
                 Some(cluster_name(cx.kernel, star, STAR_NUMBER_BASE as usize))
             } else {
@@ -504,8 +508,9 @@ pub(crate) mod engine {
     pub unsafe fn init_encounter(
         cx: &mut crate::engine::battle::Cx<'_>,
         io: &mut crate::engine::observe::Io<'_>,
+        catalog: Option<&[CStarDesc; CATALOG_LEN]>,
     ) -> COUNT {
-        prepare_encounter(cx);
+        prepare_encounter(cx, catalog);
         let mut menu = EncounterSelection::new();
         cx.with_legacy(|| {
             DrawMenuStateStrings(PM_CONVERSE as u8, menu.choice as i16);
@@ -587,6 +592,7 @@ pub(crate) mod engine {
     pub unsafe fn uninit_encounter(
         cx: &mut crate::engine::battle::Cx<'_>,
         input: &crate::engine::input::InputSession,
+        catalog: Option<&[CStarDesc; CATALOG_LEN]>,
     ) -> COUNT {
         let mut killed = 0u16;
         free_gravity_well(cx.kernel);
@@ -617,7 +623,8 @@ pub(crate) mod engine {
         let race_index = cx.world.encounter_race as usize;
         if cx.world.avail_races_ref().at(race_index).is_none() {
             victory = -1;
-            init_siscontexts(cx.kernel);
+            let dimensions = cx.screen_dimensions();
+            init_siscontexts(cx.kernel, dimensions);
         }
         let previous_mode = cx.kernel.set_status_message_mode(StatMsgMode_SMM_RES_UNITS);
         let mut sleepy = true;
@@ -630,7 +637,7 @@ pub(crate) mod engine {
                         draw_sisframe();
                         DrawSISMessage(ptr::null());
                     });
-                    display::draw_title(cx, current_catalog());
+                    display::draw_title(cx, catalog);
                     SetContext(cx.kernel.space_context);
                     if victory != 0 {
                         draw_armada(cx.kernel, cx.world, 1, &mut *(&raw mut salvage_rect).cast());

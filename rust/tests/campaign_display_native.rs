@@ -157,6 +157,13 @@ fn retained_campaign_panels_clear_only_their_boxes_and_restore_selection_and_cli
         }
         assert_eq!(GetContextClipRect(&mut clip), 0);
         assert_eq!((clip.extent.width, clip.extent.height), (320, 240));
+        game.kernel.space_context = context;
+        SetContext(previous);
+        uqm_rust::ui::border::init_siscontexts(&game.kernel, (320, 240));
+        assert_eq!(SetContext(context), context);
+        assert_eq!(GetContextClipRect(&mut clip), 1);
+        assert_eq!((clip.corner.x, clip.corner.y), (7, 10));
+        assert_eq!((clip.extent.width, clip.extent.height), (242, 227));
         drop(status);
         SetContext(ptr::null_mut());
         drop(game);

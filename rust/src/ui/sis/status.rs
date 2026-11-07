@@ -68,6 +68,16 @@ pub fn status_message_text(kernel: &Kernel, world: &World) -> CString {
         .unwrap_or_else(|error| panic!("invalid status label: {error}"))
 }
 
+pub(super) fn message_rect() -> RECT {
+    RECT {
+        corner: POINT { x: 2, y: 130 },
+        extent: EXTENT {
+            width: STATUS_MESSAGE_WIDTH,
+            height: STATUS_MESSAGE_HEIGHT,
+        },
+    }
+}
+
 pub fn draw_status_message(kernel: &Kernel, world: &World, text: Option<&CStr>) {
     let status = ContextLease::require(kernel.status_context);
     let context = ContextLease::require(kernel.off_screen_context);
@@ -83,16 +93,10 @@ pub fn draw_status_message(kernel: &Kernel, world: &World, text: Option<&CStr>) 
         let origin = status.clip_rect().corner;
         context.with_selected(|| {
             context.set_frame(screen);
-            context.set_clip(RECT {
-                corner: POINT {
-                    x: origin.x.wrapping_add(2),
-                    y: origin.y.wrapping_add(130),
-                },
-                extent: EXTENT {
-                    width: STATUS_MESSAGE_WIDTH,
-                    height: STATUS_MESSAGE_HEIGHT,
-                },
-            });
+            let mut clip = message_rect();
+            clip.corner.x = clip.corner.x.wrapping_add(origin.x);
+            clip.corner.y = clip.corner.y.wrapping_add(origin.y);
+            context.set_clip(clip);
             context.with_batch(|| {
                 context.set_background(rgb15(0, 8, 0));
                 context.clear();
