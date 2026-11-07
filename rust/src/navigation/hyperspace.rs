@@ -241,7 +241,7 @@ mod tests {
 
     fn movement_game(fuel: u32, side: u32) -> crate::engine::Game {
         let mut game = crate::engine::Game::new();
-        game.world.story = Some(crate::engine::world::story::GameState::new());
+        game.world.story = Some(crate::engine::world::story::StoryState::new());
         game.world
             .set_story_state(StoryKey::ARILOU_SPACE_SIDE, side);
         game.world.data.flagship.fuel_on_board = fuel;
