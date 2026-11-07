@@ -22,8 +22,8 @@ struct LanderFrameState {
     loaded: bool,
 }
 
-// The game kernel serialises all access on the game thread; the Mutex
-// exists only to satisfy static-initialisation requirements.
+// SAFETY: the state stays in its static slot. Loading, borrowing and release
+// check the registered graphics thread before cloning or dropping its sound Rc.
 unsafe impl Send for LanderFrameState {}
 
 static LANDER_FRAMES: Mutex<LanderFrameState> = Mutex::new(LanderFrameState {
@@ -186,6 +186,9 @@ pub fn borrowed_assets(
             "lander_assets_not_loaded",
         ));
     }
+    let _graphics_owner = crate::graphics::context_abi::ContextFrame::retain(
+        std::ptr::NonNull::new(state.frames[0].cast()),
+    );
     Ok(super::resources::BorrowedPlanetSideAssets {
         graphics: state.frames,
         sounds: super::assets::LanderSoundTable::from_bank(

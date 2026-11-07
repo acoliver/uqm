@@ -145,15 +145,7 @@ pub(crate) mod live {
     /// Input, including the nested pause/exit UI, is initialized on the game thread.
     pub unsafe fn AnyButtonPress(cx: &mut Cx<'_>, input: &InputSession, _special: u32) -> u32 {
         UpdateInputState(cx, input);
-        let current = input.current();
-        u32::from(
-            current
-                .key
-                .into_iter()
-                .flatten()
-                .chain(current.menu)
-                .any(|key| key != 0),
-        )
+        u32::from(input.current().any_button_pressed())
     }
 
     /// # Safety
