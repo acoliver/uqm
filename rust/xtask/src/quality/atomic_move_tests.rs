@@ -351,7 +351,12 @@ fn incomplete_pair_lists_are_rejected_before_editing() {
     }
     let mut baseline = Baseline::read(&path).unwrap();
     assert!(baseline
-        .add_moves(&[], &Default::default(), &Default::default())
+        .add_moves(
+            &[],
+            &Default::default(),
+            &Default::default(),
+            &Default::default()
+        )
         .unwrap_err()
         .contains("at least one"));
     assert_eq!(baseline, Baseline::read(&path).unwrap());

@@ -171,7 +171,7 @@ impl Baseline {
         current: &Measurement,
         base: &Measurement,
     ) -> Result<(), String> {
-        self.add_moves(&[(old, new)], current, base)
+        self.add_moves(&[(old, new)], current, base, &BTreeMap::new())
     }
 
     pub fn add_moves(
@@ -179,11 +179,13 @@ impl Baseline {
         steps: &[(&str, &str)],
         current: &Measurement,
         base: &Measurement,
+        base_moves: &BTreeMap<String, String>,
     ) -> Result<(), String> {
         if steps.is_empty() {
             return Err("move needs at least one source and target".into());
         }
-        let previous = self.remaining_moves(base);
+        let retained = self.remaining_moves(base);
+        let previous = super::transfers::pending(&retained, Some(base_moves));
         let mut moves = previous.clone();
         for &(old, new) in steps {
             moves = super::transfers::compose(&moves, old, new, base)?;
@@ -222,7 +224,8 @@ impl Baseline {
         self.entries = entries;
         self.budget = budget;
         self.lint = lint;
-        self.moved = moves;
+        self.moved = retained;
+        self.moved.extend(moves);
         Ok(())
     }
 }

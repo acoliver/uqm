@@ -3,6 +3,19 @@ use std::collections::{BTreeMap, BTreeSet};
 use super::layers::prefix;
 use super::metrics::{Finding, Measurement};
 
+// The archived base already reflects identical landed moves. Only new or
+// changed entries can relocate its identities or spend its transfer credit.
+pub fn pending(
+    moves: &BTreeMap<String, String>,
+    base_moves: Option<&BTreeMap<String, String>>,
+) -> BTreeMap<String, String> {
+    moves
+        .iter()
+        .filter(|(source, target)| base_moves.and_then(|m| m.get(*source)) != Some(*target))
+        .map(|(source, target)| (source.clone(), target.clone()))
+        .collect()
+}
+
 pub fn matching<'a>(
     moves: &'a BTreeMap<String, String>,
     identity: &str,
@@ -675,6 +688,141 @@ mod nested_tests {
         assert_eq!(baseline.entries, current.baseline());
         assert_eq!(baseline.entries.values().sum::<u64>(), debt);
         assert!(!baseline.entries.keys().any(|key| key.ends_with("::@file")));
+        Ok(())
+    }
+
+    #[test]
+    fn historical_post_merge_reused_prefix_and_unrelated_rename_conserve_debt() -> Result<(), String>
+    {
+        let base = input_debt(&[
+            ("uqm-engine::input", 2),
+            ("uqm-engine::input_port::poll", 3),
+            ("uqm-engine::story::get", 4),
+        ]);
+        let current = input_debt(&[
+            ("uqm-engine::input", 2),
+            ("uqm-engine::input_port::poll", 3),
+            ("uqm-engine::story::read", 4),
+        ]);
+        let historical: BTreeMap<String, String> =
+            [("uqm-engine::input".into(), "uqm-engine::input_port".into())].into();
+        let mut moves = historical.clone();
+        moves.insert(
+            "uqm-engine::story::get".into(),
+            "uqm-engine::story::read".into(),
+        );
+        let active = pending(&moves, Some(&historical));
+        let transferred = limits(&base.baseline(), &current, &base, &active, &BTreeMap::new())?;
+        assert_eq!(transferred, current.baseline());
+        assert_eq!(
+            transferred.values().sum::<u64>(),
+            base.baseline().values().sum::<u64>()
+        );
+        let mut baseline = super::super::baseline::Baseline {
+            entries: base.baseline(),
+            moved: historical.clone(),
+            ..Default::default()
+        };
+        baseline.add_moves(
+            &[("uqm-engine::story::get", "uqm-engine::story::read")],
+            &current,
+            &base,
+            &historical,
+        )?;
+        assert_eq!(baseline.entries, transferred);
+        assert_eq!(baseline.moved, moves);
+        Ok(())
+    }
+
+    #[test]
+    fn historical_move_missing_from_base_still_validates_targets_and_sources() -> Result<(), String>
+    {
+        let base = input_debt(&[("uqm-engine::input::poll", 3)]);
+        let moves = [("uqm-engine::input".into(), "uqm-engine::input_port".into())].into();
+        let historical = pending(&moves, Some(&moves));
+        let active = pending(&moves, None);
+        let retained = input_debt(&[
+            ("uqm-engine::input::poll", 3),
+            ("uqm-engine::input_port::poll", 0),
+        ]);
+        for (current, error) in [
+            (&base, "move target uqm-engine::input_port::poll is absent; function transfers cannot split"),
+            (&retained, "move source uqm-engine::input still exists"),
+        ] {
+            validate(&base.baseline(), current, &base, &historical)?;
+            assert_eq!(validate(&base.baseline(), current, &base, &active), Err(error.into()));
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn historical_move_with_changed_target_is_new_and_fully_validated() -> Result<(), String> {
+        let base = input_debt(&[("uqm-engine::input::poll", 3)]);
+        let historical = [("uqm-engine::input".into(), "uqm-engine::input_port".into())].into();
+        validate(
+            &base.baseline(),
+            &base,
+            &base,
+            &pending(&historical, Some(&historical)),
+        )?;
+        let changed = [("uqm-engine::input".into(), "uqm-engine::other_input".into())].into();
+        assert_eq!(
+            validate(&base.baseline(), &base, &base, &pending(&changed, Some(&historical))),
+            Err("move target uqm-engine::other_input::poll is absent; function transfers cannot split".into())
+        );
+        let retained = input_debt(&[
+            ("uqm-engine::input::poll", 3),
+            ("uqm-engine::other_input::poll", 0),
+        ]);
+        assert_eq!(
+            validate(
+                &base.baseline(),
+                &retained,
+                &base,
+                &pending(&changed, Some(&historical))
+            ),
+            Err("move source uqm-engine::input still exists".into())
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn historical_target_chained_move_conserves_credit() -> Result<(), String> {
+        let base = input_debt(&[
+            ("uqm-engine::input", 2),
+            ("uqm-engine::input_port::poll", 3),
+        ]);
+        let current = input_debt(&[("uqm-engine::input", 2), ("uqm-engine::new_port::poll", 3)]);
+        let historical = [("uqm-engine::input".into(), "uqm-engine::input_port".into())].into();
+        let moves = compose(
+            &pending(&historical, Some(&historical)),
+            "uqm-engine::input_port",
+            "uqm-engine::new_port",
+            &base,
+        )?;
+        let transferred = limits(&base.baseline(), &current, &base, &moves, &BTreeMap::new())?;
+        assert_eq!(transferred, current.baseline());
+        assert_eq!(transferred.values().sum::<u64>(), 5);
+        let mut baseline = super::super::baseline::Baseline {
+            entries: base.baseline(),
+            moved: historical.clone(),
+            ..Default::default()
+        };
+        baseline.add_moves(
+            &[("uqm-engine::input_port", "uqm-engine::new_port")],
+            &current,
+            &base,
+            &historical,
+        )?;
+        assert_eq!(baseline.entries, transferred);
+        assert_eq!(
+            baseline.moved["uqm-engine::input"],
+            "uqm-engine::input_port"
+        );
+        assert_eq!(
+            baseline.moved["uqm-engine::input_port"],
+            "uqm-engine::new_port"
+        );
         Ok(())
     }
 

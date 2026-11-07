@@ -297,7 +297,8 @@ fn move_baseline(root: &Path, path: &Path, options: &Options) -> Result<(), Stri
     }
     let mut baseline = Baseline::read(path)?;
     let reference = options.base.as_deref().unwrap_or("origin/main");
-    let (base, _) = baseline::archived_measurement(root, reference)?;
+    let (base, recorded) = baseline::archived_measurement(root, reference)?;
+    let base_moves = recorded.map(|b| b.moved).unwrap_or_default();
     let current = walk::measure(root, None, false)?;
     let pairs: Vec<_> = options.positional[1..]
         .as_chunks::<2>()
@@ -314,7 +315,7 @@ fn move_baseline(root: &Path, path: &Path, options: &Options) -> Result<(), Stri
     {
         return Err("move source is not a declaration; use --prefix for a module or crate".into());
     }
-    baseline.add_moves(&pairs, &current, &base)?;
+    baseline.add_moves(&pairs, &current, &base, &base_moves)?;
     baseline.write(path)
 }
 
@@ -426,6 +427,7 @@ fn compare_base(
     let measured = budgets::scoped_entries(measurement, &baseline.budget);
     let (base, recorded) = baseline::archived_measurement(root, reference)?;
     baseline.retire_moves(&base);
+    let moves = transfers::pending(&baseline.moved, recorded.as_ref().map(|b| &b.moved));
     let base_budgets = recorded
         .as_ref()
         .map(|b| b.budget.clone())
@@ -446,9 +448,8 @@ fn compare_base(
         println!("initial baseline: comparing game debt; recording new xtask tooling");
     }
     if !options.allow_growth {
-        baseline::validate_transfers(&baseline.entries, measurement, &base, &baseline.moved)?;
-        let transferred =
-            transfers::limits(&before, measurement, &base, &baseline.moved, &base_budgets)?;
+        baseline::validate_transfers(&baseline.entries, measurement, &base, &moves)?;
+        let transferred = transfers::limits(&before, measurement, &base, &moves, &base_budgets)?;
         baseline::check_limits(
             &budgets::without_budgeted(&current, &baseline.budget),
             &budgets::without_budgeted(&transferred, &baseline.budget),
@@ -471,13 +472,13 @@ fn compare_base(
                         .map(|(k, v)| (k.clone(), *v)),
                 );
             }
-            let moved_budgets = budgets::relocated(&recorded.budget, &baseline.moved)?;
+            let moved_budgets = budgets::relocated(&recorded.budget, &moves)?;
             budgets::check_growth(&baseline.budget, &moved_budgets)?;
             let transferred = transfers::limits(
                 &recorded_entries,
                 measurement,
                 &base,
-                &baseline.moved,
+                &moves,
                 &recorded.budget,
             )?;
             baseline::check_limits(
