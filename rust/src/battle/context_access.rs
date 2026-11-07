@@ -197,13 +197,9 @@ mod sounds_access {
 }
 
 mod star_access {
-    #[cfg(not(test))]
     use crate::engine::StoryKey;
-    #[cfg(not(test))]
     use crate::navigation::hyper_transition::{element_universe, init_transition};
-    #[cfg(not(test))]
     use crate::planets::starmap::{current_catalog, find_star_in};
-    #[cfg(not(test))]
     #[derive(Clone, Copy)]
     pub struct StarContact {
         pub(super) star: crate::engine::StarId,
@@ -211,7 +207,6 @@ mod star_access {
         pub(crate) current: bool,
     }
 
-    #[cfg(not(test))]
     pub trait StarOps {
         fn portal_counter(&self) -> u8;
         fn autopilot(&self) -> crate::graphics::native_abi::POINT;
@@ -225,7 +220,6 @@ mod star_access {
         );
     }
 
-    #[cfg(not(test))]
     impl StarOps for crate::engine::battle::Cx<'_> {
         fn portal_counter(&self) -> u8 {
             // SAFETY: story state is accessed only on the game thread.
@@ -292,7 +286,8 @@ pub use status_native_access::StatusOps;
 use sounds_access::SoundOps;
 
 #[cfg(not(test))]
-pub use star_access::{StarContact, StarOps};
+pub use star_access::StarContact;
+pub use star_access::StarOps;
 
 #[cfg(not(test))]
 pub trait ContextOps {
@@ -334,7 +329,6 @@ pub trait ContextOps {
     fn draw_final_battle_captain(&mut self, ship: ShipId);
     fn init_ship_status(&mut self, ship: ShipId, clip: Option<RECT>);
     fn start_battle_song_if_ready(&mut self, ship: ShipId);
-    fn setup_element(&mut self, id: ElementId);
     fn hyper_transition(&mut self, id: ElementId) -> bool;
     fn object_cloaked(&mut self, id: ElementId) -> bool;
     fn preprocess_status(&mut self, id: ElementId);
@@ -526,18 +520,6 @@ impl ContextOps for Cx<'_> {
         use crate::battle::tactrans_native::opponent_alive;
         if !crate::sound::music::plr_playing_current() && opponent_alive(self, ship) {
             crate::battle::battle_native::engine::battle_song(self.kernel, self.world, true);
-        }
-    }
-
-    fn setup_element(&mut self, id: ElementId) {
-        self.copy_current_to_next(id);
-        if self.element(id).flags & SKIP_COLLISION as u16 == 0 {
-            self.init_intersect(id);
-            let frame = self.equivalent_frame(
-                self.element_frame_set_first(id, true),
-                self.element(id).next.image.frame.view(),
-            );
-            self.set_intersect_frame(id, frame);
         }
     }
 

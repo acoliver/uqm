@@ -80,6 +80,10 @@ pub struct Kernel {
     pub ships_initialized: bool,
     pub hyperstars: [crate::graphics::native_abi::FRAME; 3],
     pub cmaps: [crate::graphics::native_abi::STRING; 2],
+    pub hyperspace_ship_hooks: (
+        Option<crate::battle::ElementHook>,
+        Option<crate::battle::ElementHook>,
+    ),
     pub portal_point: POINT,
     pub(super) elements: super::battle::ElementTable,
     pub(super) races: [super::battle::link_queue::RacePool; 2],
@@ -261,6 +265,7 @@ impl Kernel {
             ships_initialized: false,
             hyperstars: [ptr::null_mut(); 3],
             cmaps: [ptr::null_mut(); 2],
+            hyperspace_ship_hooks: (None, None),
             portal_point: POINT { x: 0, y: 0 },
             elements: super::battle::ElementTable::with_capacity(150),
             races: std::array::from_fn(|side| {

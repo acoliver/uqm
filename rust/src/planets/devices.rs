@@ -42,12 +42,7 @@ pub fn observation(configuration: &uqm_engine::configuration::Configuration) -> 
     observed
 }
 
-#[cfg(not(test))]
 use crate::navigation::hyper_transition::save_sis_hyper_state;
-#[cfg(test)]
-extern "C" {
-    fn save_sis_hyper_state();
-}
 
 use crate::engine::world::fleet::start_sphere_tracking;
 
@@ -275,10 +270,7 @@ unsafe fn invoke(cx: &mut Cx<'_>, id: u8, next_activity: &mut u16) -> u8 {
                     set(cx.world, StoryKey::SHIP_TO_COMPEL, 1);
                 }
                 cx.world.set_activity(cx.world.activity() & !0x0200);
-                #[cfg(not(test))]
                 save_sis_hyper_state(cx);
-                #[cfg(test)]
-                save_sis_hyper_state();
             } else {
                 cx.with_legacy(|| {
                     crate::c_bindings::global_state::EncounterGroup = 0;

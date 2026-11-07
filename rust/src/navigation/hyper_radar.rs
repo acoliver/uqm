@@ -1,20 +1,21 @@
 //! Hyperspace radar, nearby star and portal elements.
-#![cfg(not(test))]
-#![allow(non_snake_case)]
 use super::abi::*;
-use crate::{battle::context_access::ContextOps, engine::StoryKey};
+use crate::engine::{
+    battle::{hyperspace as resources, Cx},
+    StoryKey,
+};
 
 use super::hyper_encounters::{allocate, ambient, process_all, XOFFS, YOFFS};
 use super::hyper_transition::{portal_collision, portal_death, star_collision, star_death};
-use super::hyperspace::live::{universe_x, universe_y};
+use super::hyper_units::Geometry;
 use super::{color, get};
 use crate::engine::battle::views::FrameSelection as Frame;
-use crate::planets::starmap::find_star_in;
-use std::ptr;
+use crate::graphics::context_abi::{ContextFrame, ContextLease};
+use crate::planets::starmap::find_star_id;
+use std::ptr::NonNull;
 
-unsafe fn grid(ux: i16, uy: i16, ox: i16, oy: i16) {
-    ClearDrawable();
-    SetContextForeGroundColor(color(0, 16, 0));
+fn grid(context: &ContextLease, ux: i16, uy: i16, ox: i16, oy: i16) {
+    context.clear();
     let sx = (ux as i32 - 378).max(0) / 200 * 200;
     let ex = (ux as i32 + 378).min(10000);
     let sy = (uy as i32 - 300).max(0) / 200 * 200;
@@ -35,7 +36,7 @@ unsafe fn grid(ux: i16, uy: i16, ox: i16, oy: i16) {
         .wrapping_add(1);
     for x in (sx..=ex).step_by(200) {
         rect.corner.x = ((x * 56 / 756) as i16).wrapping_sub(ox);
-        DrawFilledRectangle(&mut rect);
+        context.fill_rectangle(color(0, 16, 0), rect);
     }
     rect.corner.x = ((sx * 56 / 756) as i16).wrapping_sub(ox);
     rect.extent.width = ((ex * 56 / 756) as i16)
@@ -45,7 +46,7 @@ unsafe fn grid(ux: i16, uy: i16, ox: i16, oy: i16) {
     rect.extent.height = 1;
     for y in (sy..=ey).step_by(200) {
         rect.corner.y = (((9999 - y) * 53 / 600) as i16).wrapping_sub(oy);
-        DrawFilledRectangle(&mut rect);
+        context.fill_rectangle(color(0, 16, 0), rect);
     }
 }
 fn radar(point: POINT, ox: i16, oy: i16) -> POINT {
@@ -55,39 +56,37 @@ fn radar(point: POINT, ox: i16, oy: i16) -> POINT {
     }
 }
 
-/// # Safety
-/// Hyperspace resources, contexts and queues must be initialized on the game thread.
-pub unsafe fn SeedUniverse() {
-    crate::app::bridge::enter(|cx| {
-        let universe = POINT {
-            x: universe_x(cx.world.data.flagship.log_x),
-            y: universe_y(cx.world.data.flagship.log_y),
-        };
-        let blip = SetAbsFrameIndex(cx.kernel.stars_in_space, 90);
-        SetContext(cx.kernel.radar_context);
-        BatchGraphics();
+pub fn seed_universe(
+    cx: &mut Cx<'_>,
+    catalog: &[crate::engine::world::CStarDesc; crate::engine::world::CATALOG_LEN],
+) -> Option<POINT> {
+    let geometry = Geometry::new(cx.screen_dimensions());
+    let universe = POINT {
+        x: geometry.universe_x(cx.world.data.flagship.log_x),
+        y: geometry.universe_y(cx.world.data.flagship.log_y),
+    };
+    let stars = Frame::retain(cx.kernel.stars_in_space);
+    let blip = cx.absolute_frame(stars.view(), 90);
+    let context = resources::radar_context(cx.kernel);
+    context.select();
+    context.draw_batch(|| {
         let ox = (universe.x as i32 * 56 / 756 - 28) as i16;
         let oy = ((9999 - universe.y as i32) * 53 / 600 - 26) as i16;
         let side = get(cx.world, StoryKey::ARILOU_SPACE_SIDE);
-        grid(universe.x, universe.y, ox, oy);
-        let mut stamp = STAMP {
-            origin: POINT { x: 0, y: 0 },
-            frame: ptr::null_mut(),
-        };
-        let mut star: *mut crate::engine::world::CStarDesc = ptr::null_mut();
-        loop {
-            star = find_star_in(cx.world, star.as_ref(), universe, XOFFS, YOFFS);
-            if star.is_null() {
-                break;
-            }
-            let point = (*star).star_pt;
-            let mut kind = ((*star).star_type >> 3) & 3;
+        grid(&context, universe.x, universe.y, ox, oy);
+        let mut last = None;
+        while let Some(star) = find_star_id(cx.world, catalog, last, universe, XOFFS, YOFFS) {
+            last = Some(star);
+            let point = catalog[star.0].star_pt;
+            let mut kind = (catalog[star.0].star_type >> 3) & 3;
             if side >= 2 && point.x == ARILOU_HOME_X as i16 && point.y == ARILOU_HOME_Y as i16 {
                 kind = SUPER_GIANT_STAR as u8;
             }
-            stamp.origin = radar(point, ox, oy);
-            stamp.frame = SetRelFrameIndex(blip, kind as i16 + 2);
-            DrawStamp(&mut stamp);
+            draw(
+                &context,
+                cx.relative_frame(blip.view(), kind as i16 + 2),
+                radar(point, ox, oy),
+            );
         }
         let (portals, count) = super::portal::portals(cx.world, cx.kernel, universe);
         if count != 0 {
@@ -98,9 +97,11 @@ pub unsafe fn SeedUniverse() {
                 if sx < 0 || sy < 0 || sx >= XOFFS * 2 || sy >= YOFFS * 2 {
                     continue;
                 }
-                stamp.origin = radar(point, ox, oy);
-                stamp.frame = SetAbsFrameIndex(cx.kernel.stars_in_space, 95);
-                DrawStamp(&mut stamp);
+                draw(
+                    &context,
+                    cx.absolute_frame(stars.view(), 95),
+                    radar(point, ox, oy),
+                );
                 if (point.x as i32 - universe.x as i32).abs() > XOFFS as i32 / 12
                     || (point.y as i32 - universe.y as i32).abs() > YOFFS as i32 / 12
                 {
@@ -112,11 +113,14 @@ pub unsafe fn SeedUniverse() {
                 cx.set_frame(
                     element,
                     false,
-                    Frame::retain(SetAbsFrameIndex(
-                        cx.kernel.hyperstars
-                            [1 + (get(cx.world, StoryKey::ARILOU_SPACE_SIDE) >> 1) as usize],
+                    cx.absolute_frame(
+                        Frame::retain(
+                            cx.kernel.hyperstars
+                                [1 + (get(cx.world, StoryKey::ARILOU_SPACE_SIDE) >> 1) as usize],
+                        )
+                        .view(),
                         index,
-                    )),
+                    ),
                 );
                 cx.element_mut(element).pre = None;
                 cx.element_mut(element).post = None;
@@ -126,22 +130,16 @@ pub unsafe fn SeedUniverse() {
                     cx.element_mut(element).death = Some(ElementHook::Native(portal_death));
                 } else {
                     cx.element_mut(element).death = None;
-                    cx.set_intersect_frame(
-                        element,
-                        Frame::retain(DecFrameIndex(cx.kernel.stars_in_space)),
-                    );
+                    cx.set_intersect_frame(element, cx.retreat_frame(stars.view()));
                 }
                 let head = cx.elements().head();
                 cx.insert_before(element, head);
             }
         }
-        star = ptr::null_mut();
-        loop {
-            star = find_star_in(cx.world, star.as_ref(), universe, XOFFS, YOFFS);
-            if star.is_null() {
-                break;
-            }
-            let point = (*star).star_pt;
+        let mut last = None;
+        while let Some(star) = find_star_id(cx.world, catalog, last, universe, XOFFS, YOFFS) {
+            last = Some(star);
+            let point = catalog[star.0].star_pt;
             if (point.x as i32 - universe.x as i32).abs() > XOFFS as i32 / 12
                 || (point.y as i32 - universe.y as i32).abs() > YOFFS as i32 / 12
             {
@@ -150,42 +148,34 @@ pub unsafe fn SeedUniverse() {
             let Some(element) = allocate(cx, point) else {
                 continue;
             };
-            let kind = (*star).star_type;
+            let kind = catalog[star.0].star_type;
             cx.set_frame(
                 element,
                 false,
-                Frame::retain(SetAbsFrameIndex(
-                    cx.kernel.hyperstars
-                        [1 + (get(cx.world, StoryKey::ARILOU_SPACE_SIDE) >> 1) as usize],
+                cx.absolute_frame(
+                    Frame::retain(
+                        cx.kernel.hyperstars
+                            [1 + (get(cx.world, StoryKey::ARILOU_SPACE_SIDE) >> 1) as usize],
+                    )
+                    .view(),
                     (((kind >> 3) & 3) as u16 * NUM_STAR_COLORS as u16) + (kind >> 5) as u16,
-                )),
+                ),
             );
             cx.element_mut(element).pre = None;
             cx.element_mut(element).post = None;
             cx.element_mut(element).collide = Some(CollisionHook::Native(star_collision));
             cx.setup_element(element);
-            if star.cast()
-                == cx
-                    .world
-                    .star_pointer(crate::planets::starmap::current_catalog())
-                && get(cx.world, StoryKey::PORTAL_COUNTER) == 0
-            {
+            if Some(star) == cx.world.current_star && get(cx.world, StoryKey::PORTAL_COUNTER) == 0 {
                 cx.element_mut(element).death = Some(ElementHook::Native(star_death));
             } else {
                 cx.element_mut(element).death = None;
-                cx.set_intersect_frame(
-                    element,
-                    Frame::retain(DecFrameIndex(cx.kernel.stars_in_space)),
-                );
+                cx.set_intersect_frame(element, cx.retreat_frame(stars.view()));
             }
             let head = cx.elements().head();
             cx.insert_before(element, head);
         }
         process_all(cx, universe, ox, oy);
-        stamp.origin = POINT { x: 28, y: 26 };
-        stamp.frame = blip;
-        DrawStamp(&mut stamp);
-        SetContextForeGroundColor(color(14, 14, 14));
+        draw(&context, blip, POINT { x: 28, y: 26 });
         let mut rect = RECT {
             corner: POINT { x: 0, y: 0 },
             extent: EXTENT {
@@ -193,36 +183,59 @@ pub unsafe fn SeedUniverse() {
                 height: 1,
             },
         };
-        DrawFilledRectangle(&mut rect);
+        context.fill_rectangle(color(14, 14, 14), rect);
         rect.extent = EXTENT {
             width: 1,
             height: 52,
         };
-        DrawFilledRectangle(&mut rect);
-        SetContextForeGroundColor(color(6, 6, 6));
+        context.fill_rectangle(color(14, 14, 14), rect);
         rect.corner = POINT { x: 55, y: 1 };
-        DrawFilledRectangle(&mut rect);
+        context.fill_rectangle(color(6, 6, 6), rect);
         rect.corner = POINT { x: 1, y: 52 };
         rect.extent = EXTENT {
             width: 54,
             height: 1,
         };
-        DrawFilledRectangle(&mut rect);
-        SetContextForeGroundColor(color(8, 8, 8));
+        context.fill_rectangle(color(6, 6, 6), rect);
         rect.corner.x = 0;
-        DrawPoint(&mut rect.corner);
+        context.draw_point(color(8, 8, 8), rect.corner);
         rect.corner = POINT { x: 55, y: 0 };
-        DrawPoint(&mut rect.corner);
-        UnbatchGraphics();
-        SetContext(cx.kernel.status_context);
-        if TFB_Random() as u16 & 7 == 0 {
-            ambient(cx);
-        }
-        if universe.x != cx.world.data.game.ship_stamp.origin.x
-            || universe.y != cx.world.data.game.ship_stamp.origin.y
-        {
-            cx.world.data.game.ship_stamp.origin = universe;
-            DrawHyperCoords(universe);
-        }
+        context.draw_point(color(8, 8, 8), rect.corner);
     });
+    resources::status_context(cx.kernel).select();
+    if cx.random() as u16 & 7 == 0 {
+        ambient(cx);
+    }
+    if universe.x != cx.world.data.game.ship_stamp.origin.x
+        || universe.y != cx.world.data.game.ship_stamp.origin.y
+    {
+        cx.world.data.game.ship_stamp.origin = universe;
+        Some(universe)
+    } else {
+        None
+    }
+}
+
+fn draw(context: &ContextLease, frame: Frame, origin: POINT) {
+    context.draw_stamp(&ContextFrame::retain(NonNull::new(frame.raw())), origin);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn radar_projection_centers_ship_and_preserves_axis_scaling() {
+        for point in [
+            POINT { x: 0, y: 0 },
+            POINT { x: 1752, y: 1450 },
+            POINT { x: 9999, y: 9999 },
+        ] {
+            let ox = (point.x as i32 * 56 / 756 - 28) as i16;
+            let oy = ((9999 - point.y as i32) * 53 / 600 - 26) as i16;
+            let center = radar(point, ox, oy);
+            assert_eq!((center.x, center.y), (28, 26));
+        }
+        let point = radar(POINT { x: 756, y: 9399 }, 0, 0);
+        assert_eq!((point.x, point.y), (56, 53));
+    }
 }

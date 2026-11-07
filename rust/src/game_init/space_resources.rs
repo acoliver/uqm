@@ -307,24 +307,46 @@ pub(crate) mod live {
         }
     }
 
-    #[no_mangle]
-    pub extern "C" fn InitShips() -> i16 {
-        // SAFETY: this entry runs on the published game thread, before the battle loop borrows Cx.
-        unsafe {
-            use crate::ships::native::abi::{ScreenHeight, ScreenWidth};
-            let players = crate::app::bridge::enter(|cx| {
-                init_ships(
-                    cx,
-                    (ScreenWidth - 64) as i16,
-                    ScreenHeight as i16,
-                    cx.kernel.configuration.preferences().melee_scale == 0,
-                )
-            });
+    unsafe fn init_published_ships() -> i16 {
+        use crate::ships::native::abi::{ScreenHeight, ScreenWidth};
+        crate::app::bridge::enter(|cx| {
+            let players = init_ships(
+                cx,
+                (ScreenWidth - 64) as i16,
+                ScreenHeight as i16,
+                cx.kernel.configuration.preferences().melee_scale == 0,
+            );
             if players == 1 {
-                crate::navigation::hyper_data::LoadHyperspace();
+                crate::navigation::hyper_data::load_hyperspace(cx, |cx, operation| {
+                    use crate::navigation::hyper_data::EntryDisplay;
+                    if let EntryDisplay::Palette(quasispace) = operation {
+                        crate::engine::battle::hyperspace::select_palette(cx.kernel, quasispace);
+                        return;
+                    }
+                    cx.with_legacy(|| match operation {
+                        EntryDisplay::RepairBorder => crate::ui::sis::repair_sisborder(),
+                        EntryDisplay::DrawFrame => crate::ui::border::draw_sisframe(),
+                        EntryDisplay::DrawGauges => crate::ui::sis::ClearSISRect(
+                            crate::navigation::abi::DRAW_SIS_DISPLAY as u8,
+                        ),
+                        EntryDisplay::ClearMessage => {
+                            crate::ui::sis::DrawSISMessage(std::ptr::null())
+                        }
+                        EntryDisplay::ClearRadar => crate::ui::sis::ClearSISRect(
+                            crate::navigation::abi::CLEAR_SIS_RADAR as u8,
+                        ),
+                        EntryDisplay::Palette(_) => unreachable!(),
+                    });
+                });
             }
             players
-        }
+        })
+    }
+
+    #[no_mangle]
+    pub extern "C" fn InitShips() -> i16 {
+        // SAFETY: this existing ABI entry runs with a published game-thread context before battle.
+        unsafe { init_published_ships() }
     }
     #[no_mangle]
     pub extern "C" fn UninitShips() {

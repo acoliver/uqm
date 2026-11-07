@@ -1,96 +1,82 @@
 //! Hyperspace graphics resources and entry/exit lifecycle.
-#![cfg(not(test))]
-use super::abi::*;
-use crate::engine::StoryKey;
-use crate::engine::World as WorldOwner;
-use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
+use super::{
+    abi::{CHECK_LOAD, POINT},
+    color,
+};
+use crate::engine::{
+    battle::{hyperspace as resources, Cx},
+    Kernel, StoryKey,
+};
 
-use super::{color, get, set};
-use std::ptr;
-
-/// # Safety
-/// Game-thread access, after hyperspace users release their frames and maps.
-pub unsafe fn free_hyper_data() {
-    let kernel = KernelOwner::current();
-    let frames = std::slice::from_raw_parts_mut(ptr::addr_of_mut!((**kernel).hyperstars).cast(), 3);
-    for frame in frames {
-        DestroyDrawable(ReleaseDrawable(*frame));
-        *frame = ptr::null_mut();
-    }
-    let maps = std::slice::from_raw_parts_mut(ptr::addr_of_mut!((**kernel).cmaps).cast(), 2);
-    for map in maps {
-        DestroyStringTable(ReleaseStringTable(*map));
-        *map = ptr::null_mut();
-    }
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EntryDisplay {
+    RepairBorder,
+    DrawFrame,
+    DrawGauges,
+    ClearMessage,
+    Palette(bool),
+    ClearRadar,
 }
 
-unsafe fn load() {
-    if KernelOwner::current()
-        .read(|owner| owner.hyperstars[0])
-        .is_null()
-    {
-        (**KernelOwner::current()).hyperstars[0] =
-            CaptureDrawable(LoadGraphicInstance(AMBIENT_MASK_PMAP_ANIM.as_ptr().cast()).cast());
-        (**KernelOwner::current()).hyperstars[1] =
-            CaptureDrawable(LoadGraphicInstance(HYPERSTARS_MASK_PMAP_ANIM.as_ptr().cast()).cast());
-        (**KernelOwner::current()).cmaps[0] =
-            CaptureStringTable(LoadStringTableInstance(HYPER_COLOR_TAB.as_ptr().cast()).cast());
-        (**KernelOwner::current()).hyperstars[2] =
-            CaptureDrawable(LoadGraphicInstance(ARISPACE_MASK_PMAP_ANIM.as_ptr().cast()).cast());
-        (**KernelOwner::current()).cmaps[1] =
-            CaptureStringTable(LoadStringTableInstance(ARISPACE_COLOR_TAB.as_ptr().cast()).cast());
-    }
-}
+pub use crate::engine::battle::hyperspace::free as free_hyper_data;
 
-/// # Safety
-/// World globals, contexts and resources must be initialized on the game thread.
-#[no_mangle]
-pub unsafe extern "C" fn LoadHyperspace() -> BOOLEAN {
-    super::hyperspace::live::rust_reset_hyper_distance();
-    (**WorldFields::current()).game.ship_stamp.origin = POINT { x: -9999, y: -9999 };
-    load();
-    KernelOwner::current().write(|kernel| {
-        crate::collections::observation::swap_image_view(
-            &mut kernel.hyperstars[0],
-            &mut kernel.stars_in_space,
-        );
+pub fn load_hyperspace(cx: &mut Cx<'_>, mut display: impl FnMut(&mut Cx<'_>, EntryDisplay)) {
+    cx.world.hyper_distance = crate::engine::world::FuelDistance {
+        dx: 0,
+        dy: 0,
+        extra: 0,
+        ticks: 1,
+    };
+    cx.world.data.game.ship_stamp.origin = POINT { x: -9999, y: -9999 };
+    resources::load(cx.kernel);
+    free_hyperspace(cx.kernel);
+    if cx.kernel.last_activity & CHECK_LOAD as u16 == 0 {
+        display(cx, EntryDisplay::RepairBorder);
+    } else if cx.kernel.last_activity as u8 == 0 {
+        display(cx, EntryDisplay::DrawFrame);
+    } else {
+        display(cx, EntryDisplay::DrawGauges);
+        display(cx, EntryDisplay::RepairBorder);
+    }
+    if cx.world.data.game.autopilot.x == -1 || cx.world.data.game.autopilot.y == -1 {
+        display(cx, EntryDisplay::ClearMessage);
+    }
+    let radar = resources::radar_context(cx.kernel);
+    radar.select();
+    radar.set_background(color(0, 14, 0));
+    let space = resources::space_context(cx.kernel);
+    space.select();
+    let quasispace = cx.world.story_state(StoryKey::ARILOU_SPACE_SIDE) > 1;
+    space.set_background(if quasispace {
+        color(0, 26, 0)
+    } else {
+        color(7, 0, 0)
     });
-    if KernelOwner::current().read(|kernel| kernel.last_activity) & CHECK_LOAD as u16 == 0 {
-        repair_sisborder();
-    } else if KernelOwner::current().read(|kernel| kernel.last_activity) as u8 == 0 {
-        draw_sisframe();
-    } else {
-        ClearSISRect(DRAW_SIS_DISPLAY as u8);
-        repair_sisborder();
+    display(cx, EntryDisplay::Palette(quasispace));
+    if quasispace {
+        cx.world.set_story_state(StoryKey::USED_BROADCASTER, 0);
+        cx.world.set_story_state(StoryKey::BROADCASTER_RESPONSE, 0);
     }
-    if WorldFields::current().read(|owner| owner.game.autopilot.x) == -1
-        || WorldFields::current().read(|owner| owner.game.autopilot.y) == -1
-    {
-        DrawSISMessage(ptr::null());
-    }
-    SetContext(KernelOwner::current().read(|kernel| kernel.radar_context));
-    SetContextBackGroundColor(color(0, 14, 0));
-    SetContext(KernelOwner::current().read(|kernel| kernel.space_context));
-    if WorldOwner::current().read(|world| get(world, StoryKey::ARILOU_SPACE_SIDE)) <= 1 {
-        SetContextBackGroundColor(color(7, 0, 0));
-        SetColorMap(GetColorMapAddress(
-            KernelOwner::current().read(|kernel| kernel.cmaps[0]),
-        ));
-    } else {
-        SetContextBackGroundColor(color(0, 26, 0));
-        SetColorMap(GetColorMapAddress(
-            KernelOwner::current().read(|kernel| kernel.cmaps[1]),
-        ));
-        WorldOwner::current().write(|world| set(world, StoryKey::USED_BROADCASTER, 0));
-        WorldOwner::current().write(|world| set(world, StoryKey::BROADCASTER_RESPONSE, 0));
-    }
-    ClearSISRect(CLEAR_SIS_RADAR as u8);
-    1
+    display(cx, EntryDisplay::ClearRadar);
 }
 
-pub fn free_hyperspace(kernel: &mut KernelOwner) {
+pub fn free_hyperspace(kernel: &mut Kernel) {
     crate::collections::observation::swap_image_view(
         &mut kernel.hyperstars[0],
         &mut kernel.stars_in_space,
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn empty_resource_lifecycle_needs_no_published_game() {
+        let mut game = crate::engine::Game::new();
+        free_hyper_data(&mut game.kernel);
+        free_hyperspace(&mut game.kernel);
+        assert!(game.kernel.hyperstars.iter().all(|frame| frame.is_null()));
+        assert!(game.kernel.stars_in_space.is_null());
+        assert!(game.kernel.cmaps.iter().all(|map| map.is_null()));
+    }
 }

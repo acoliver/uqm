@@ -22,15 +22,22 @@ fn on_battle_frame(
             counter - u8::from(counter > 0)
         },
     );
-    if cx.world.activity() & (CHECK_ABORT | CHECK_LOAD) as u16 == 0 {
-        cx.with_legacy(|| {
-            // SAFETY: the published campaign owner retains initialized radar state.
-            unsafe { crate::navigation::hyper_radar::SeedUniverse() }
-        });
-    }
+    let coordinates = if cx.world.activity() & (CHECK_ABORT | CHECK_LOAD) as u16 == 0 {
+        // SAFETY: the campaign retains its loaded star catalog throughout this frame.
+        let catalog = unsafe { crate::planets::starmap::current_catalog() }
+            .unwrap_or_else(|| panic!("hyperspace frame without a star catalog"));
+        crate::navigation::hyper_radar::seed_universe(cx, catalog)
+    } else {
+        None
+    };
     cx.with_legacy(|| {
         // SAFETY: the published campaign owner retains the active SIS display.
-        unsafe { crate::ui::sis::DrawAutoPilotMessage(0) }
+        unsafe {
+            if let Some(universe) = coordinates {
+                crate::ui::sis::DrawHyperCoords(universe);
+            }
+            crate::ui::sis::DrawAutoPilotMessage(0);
+        }
     });
 }
 

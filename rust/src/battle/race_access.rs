@@ -173,8 +173,8 @@ impl RaceOps for Cx<'_> {
         let mut io = crate::engine::observe::Io {
             observer: &mut *observer,
         };
-        // SAFETY: the context owns the initialized hyperspace session.
-        unsafe { hyperspace_menu(self, &mut io) };
+        // SAFETY: Cx retains the live campaign display throughout this synchronous menu.
+        unsafe { crate::ui::menu::hyperspace_menu(self, &mut io) };
     }
 
     fn hyperspace_cancel_pressed(&self) -> bool {

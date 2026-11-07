@@ -84,6 +84,7 @@ impl ContextFrame {
 }
 
 enum Operation {
+    Point(Color, POINT),
     Select,
     Deselect,
     BeginBatch,
@@ -298,6 +299,10 @@ impl ContextLease {
                     context_abi::SetContextClipRect(rectangle);
                 }
                 Operation::Clear => frame_abi::ClearDrawable(),
+                Operation::Point(color, mut point) => {
+                    context_abi::SetContextForeGroundColor(color);
+                    frame_abi::DrawPoint(&mut point);
+                }
                 Operation::Fill(color, mut rect) => {
                     context_abi::SetContextForeGroundColor(color);
                     frame_abi::DrawFilledRectangle(&mut rect);
@@ -458,6 +463,10 @@ impl ContextLease {
         let result = draw();
         drop(restore);
         result
+    }
+
+    pub fn draw_point(&self, color: Color, point: POINT) {
+        self.apply(Operation::Point(color, point));
     }
 
     pub fn draw_rectangle(&self, color: Color, rect: RECT) {
