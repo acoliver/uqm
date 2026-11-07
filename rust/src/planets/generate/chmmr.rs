@@ -5,14 +5,14 @@
 //! flags: `CHMMR_UNLEASHED`, `CHMMR_BOMB_STATE`, `SUN_DEVICE_ON_SHIP`,
 //! `ILWRATH_DECEIVED`.
 
-use crate::engine::StoryKey;
-use crate::battle::battle_types::normalize_angle;
+use crate::engine::math::battle_types::normalize_angle;
 use crate::engine::world::planet::{PlanetDesc, PlanetFrame};
+use crate::engine::StoryKey;
 use crate::math::RandomContext;
 use crate::planets::generate::consts::PLANET_SHIELDED;
 use crate::planets::generate::default;
 use crate::planets::generate::special::{
-    self, Body, Orbit, Story, HIERARCHY_STARBASE, MIN_MOON_RADIUS, SAPPHIRE_WORLD,
+    self, Body, Story, HIERARCHY_STARBASE, MIN_MOON_RADIUS, SAPPHIRE_WORLD,
 };
 use crate::planets::generate::yehat::{CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY};
 
@@ -56,7 +56,7 @@ pub trait ChmmrSite {
     fn load_ip_groups(&mut self);
     /// The starbase visit: lander font, `CHMMR_BASE_STRTAB` report, and the
     /// release of both.
-    fn visit_starbase(&mut self);
+    fn visit_starbase(&mut self, _system: &mut crate::engine::world::generation::SolarSys<'_>);
 }
 
 /// `GenerateChmmr_generatePlanets`.
@@ -66,7 +66,7 @@ pub fn generate_planets(
     star_size: u8,
     star_color: u8,
     planets: &mut [PlanetDesc],
-    story: &impl Story,
+    story: &(impl Story + ?Sized),
 ) -> u8 {
     special::planets_then(rng, plan_data, star_size, star_color, planets, |planets| {
         planets[1].data_index = SAPPHIRE_WORLD;
@@ -108,33 +108,35 @@ pub fn generate_moons(
 /// conversation; while shielded it may instead be the Ilwrath ambush, and the
 /// starbase moon is a report. Anything else is the default orbital.
 pub fn generate_orbital(
-    orbit: &mut Orbit<'_>,
+    system: &mut SolarSys<'_>,
     body: Body,
-    story: &impl Story,
-    site: &mut impl ChmmrSite,
-    load_planet: impl FnOnce(),
+    site: &mut (impl ChmmrSite + Story + super::host::PlanetSite + ?Sized),
 ) -> bool {
-    if enter_orbit(body, story, site) {
+    if enter_orbit(system, body, site) {
         return true;
     }
-    orbit.default_orbital(load_planet)
+    super::special::default_orbital(system, body, site)
 }
 
 /// The part of `generateOrbital` before the default orbital: true when a
 /// conversation or the starbase report took the visit.
-fn enter_orbit(body: Body, story: &impl Story, site: &mut impl ChmmrSite) -> bool {
+fn enter_orbit(
+    system: &mut SolarSys<'_>,
+    body: Body,
+    site: &mut (impl ChmmrSite + Story + ?Sized),
+) -> bool {
     if body == Body::Planet(1) {
-        if story.flag(StoryKey::CHMMR_UNLEASHED) != 0 {
+        if site.flag(StoryKey::CHMMR_UNLEASHED) != 0 {
             site.set_global_flags_and_data(CHMMR_CONTACT_FLAGS);
             site.talk_to_chmmr();
-            if story.flag(StoryKey::CHMMR_BOMB_STATE) == BOMB_DELIVERED {
+            if site.flag(StoryKey::CHMMR_BOMB_STATE) == BOMB_DELIVERED {
                 let activity = site.current_activity();
                 site.set_current_activity(activity | END_INTERPLANETARY);
             }
             return true;
         }
-        if story.flag(StoryKey::SUN_DEVICE_ON_SHIP) != 0
-            && story.flag(StoryKey::ILWRATH_DECEIVED) == 0
+        if site.flag(StoryKey::SUN_DEVICE_ON_SHIP) != 0
+            && site.flag(StoryKey::ILWRATH_DECEIVED) == 0
             && site.start_ilwrath_sphere_tracking()
         {
             ambush_by_ilwrath(site);
@@ -142,7 +144,7 @@ fn enter_orbit(body: Body, story: &impl Story, site: &mut impl ChmmrSite) -> boo
         }
         false
     } else if body == (Body::Moon { planet: 1, moon: 0 }) {
-        site.visit_starbase();
+        site.visit_starbase(system);
         true
     } else {
         false
@@ -152,7 +154,7 @@ fn enter_orbit(body: Body, story: &impl Story, site: &mut impl ChmmrSite) -> boo
 /// The Ilwrath ambush: the interplanetary groups are put away, the Ilwrath
 /// flagship stands alone in the built-ship queue for the conversation, and
 /// unless the conversation aborted or loaded a game the world is put back.
-fn ambush_by_ilwrath(site: &mut impl ChmmrSite) {
+fn ambush_by_ilwrath(site: &mut (impl ChmmrSite + ?Sized)) {
     site.save_ip_groups();
     site.reinit_ip_group_q();
     assert_eq!(
@@ -173,6 +175,47 @@ fn ambush_by_ilwrath(site: &mut impl ChmmrSite) {
         site.set_current_activity(activity & !START_INTERPLANETARY);
         site.reinit_built_ship_q();
         site.load_ip_groups();
+    }
+}
+
+use super::generator::SystemGenerator;
+use super::host::SiteHost;
+use crate::engine::world::generation::SolarSys;
+
+pub struct Generator;
+
+impl SystemGenerator for Generator {
+    fn generate_planets(&self, system: &mut SolarSys<'_>, host: &mut dyn SiteHost) -> bool {
+        system.layout(|rng, table, size, color, planets| {
+            generate_planets(rng, table, size, color, planets, host)
+        });
+        true
+    }
+    fn generate_moons(
+        &self,
+        system: &mut SolarSys<'_>,
+        planet: u8,
+        _host: &mut dyn SiteHost,
+    ) -> bool {
+        system.layout_moons(planet, |rng, size, color, parent, moons| {
+            generate_moons(
+                rng,
+                size,
+                color,
+                parent.num_planets,
+                moons,
+                Body::Planet(planet),
+            )
+        })
+    }
+
+    fn generate_orbital(
+        &self,
+        system: &mut SolarSys<'_>,
+        body: Body,
+        host: &mut dyn SiteHost,
+    ) -> bool {
+        generate_orbital(system, body, host)
     }
 }
 

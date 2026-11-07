@@ -8,9 +8,8 @@
 
 use crate::engine::world::planet::{NodeInfo, PlanetDesc, SystemInfo};
 use crate::math::RandomContext;
-use crate::planet_side::report_adapter::DiscoveryReportPort;
 use crate::planets::generate::default;
-use crate::planets::generate::special::{self, Body, Orbit, WATER_WORLD};
+use crate::planets::generate::special::{self, Body, WATER_WORLD};
 
 /// `START_INTERPLANETARY`, `CHECK_ABORT` and `CHECK_LOAD` of
 /// `GLOBAL (CurrentActivity)`.
@@ -49,7 +48,7 @@ pub trait YehatSite {
     /// `GetGroupInfo (GROUPS_RANDOM, GROUP_LOAD_IP)`.
     fn load_ip_groups(&mut self);
     /// `LoadStdLanderFont`, the ruins mask and the ruins report strings.
-    fn load_ruins_scene(&mut self);
+    fn load_ruins_scene(&mut self, _system: &mut crate::engine::world::generation::SolarSys<'_>);
 }
 
 /// `GenerateYehat_generatePlanets`.
@@ -72,20 +71,23 @@ pub fn generate_planets(
 /// and nothing else; otherwise the ruins scene is loaded before the default
 /// orbital.
 pub fn generate_orbital(
-    orbit: &mut Orbit<'_>,
+    system: &mut SolarSys<'_>,
     body: Body,
-    site: &mut impl YehatSite,
-    load_planet: impl FnOnce(),
+    site: &mut (impl YehatSite + super::host::PlanetSite + ?Sized),
 ) -> bool {
-    if enter_orbit(body, site) {
+    if enter_orbit(system, body, site) {
         return true;
     }
-    orbit.default_orbital(load_planet)
+    super::special::default_orbital(system, body, site)
 }
 
 /// The part of `generateOrbital` before the default orbital: true when the
 /// Yehat conversation took the visit, so the default orbital is skipped.
-fn enter_orbit(body: Body, site: &mut impl YehatSite) -> bool {
+fn enter_orbit(
+    system: &mut SolarSys<'_>,
+    body: Body,
+    site: &mut (impl YehatSite + ?Sized),
+) -> bool {
     if body != Body::Planet(0) {
         return false;
     }
@@ -93,14 +95,14 @@ fn enter_orbit(body: Body, site: &mut impl YehatSite) -> bool {
         meet_yehat(site);
         return true;
     }
-    site.load_ruins_scene();
+    site.load_ruins_scene(system);
     false
 }
 
 /// The contact sequence: the interplanetary groups are put away, the Yehat
 /// flagship stands alone in the built-ship queue for the conversation, and
 /// unless the conversation aborted or loaded a game the world is put back.
-fn meet_yehat(site: &mut impl YehatSite) {
+fn meet_yehat(site: &mut (impl YehatSite + ?Sized)) {
     site.notify_others_all_clear();
     site.save_ip_groups();
     site.reinit_ip_group_q();
@@ -142,11 +144,63 @@ pub fn generate_energy(
 
 /// `GenerateYehat_pickupEnergy`: the ruins give the standard cycled report and
 /// are never taken.
-pub fn pickup_energy(body: Body, report: &mut impl DiscoveryReportPort) -> bool {
+pub fn pickup_energy(
+    system: &mut SolarSys<'_>,
+    body: Body,
+    site: &mut (impl super::host::ReportSite + ?Sized),
+) -> bool {
     if body == Body::Planet(0) {
-        default::lander_report_cycle(report);
+        site.report(
+            system,
+            crate::engine::world::generation::ReportDisposition::Cycle,
+        );
     }
     false
+}
+
+use super::generator::SystemGenerator;
+use super::host::SiteHost;
+use crate::engine::world::generation::SolarSys;
+
+pub struct Generator;
+
+impl SystemGenerator for Generator {
+    fn generate_planets(&self, system: &mut SolarSys<'_>, _host: &mut dyn SiteHost) -> bool {
+        system.layout(|rng, table, size, color, planets| {
+            generate_planets(rng, table, size, color, planets)
+        });
+        true
+    }
+    fn generate_energy(
+        &self,
+        system: &mut SolarSys<'_>,
+        body: Body,
+        node: u16,
+        info: &mut NodeInfo,
+        _host: &dyn SiteHost,
+    ) -> u16 {
+        system.scan(body, |rng, sys, _frame| {
+            generate_energy(rng, sys, body, node, info)
+        })
+    }
+
+    fn generate_orbital(
+        &self,
+        system: &mut SolarSys<'_>,
+        body: Body,
+        host: &mut dyn SiteHost,
+    ) -> bool {
+        generate_orbital(system, body, host)
+    }
+    fn pickup_energy(
+        &self,
+        system: &mut SolarSys<'_>,
+        body: Body,
+        _node: u16,
+        host: &mut dyn SiteHost,
+    ) -> bool {
+        pickup_energy(system, body, host)
+    }
 }
 
 #[cfg(test)]

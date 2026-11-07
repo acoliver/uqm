@@ -92,7 +92,7 @@ impl YehatSite for RecordingSite {
     fn load_ip_groups(&mut self) {
         self.record(Call::LoadIpGroups);
     }
-    fn load_ruins_scene(&mut self) {
+    fn load_ruins_scene(&mut self, _system: &mut crate::engine::world::generation::SolarSys<'_>) {
         self.record(Call::LoadRuinsScene);
     }
 }
@@ -115,7 +115,9 @@ fn contact_prefix() -> Vec<Call> {
 #[test]
 fn contact_that_ends_normally_puts_the_interplanetary_world_back() {
     let mut site = RecordingSite::new(true);
-    assert!(enter_orbit(Body::Planet(0), &mut site));
+    assert!(crate::planets::generate::testing::with_empty(|system| {
+        enter_orbit(system, Body::Planet(0), &mut site)
+    }));
 
     let mut expected = contact_prefix();
     expected.extend([
@@ -133,7 +135,9 @@ fn contact_keeps_the_conversation_state_when_the_game_aborts_or_loads() {
         let mut site = RecordingSite::new(true);
         let during = IN_INTERPLANETARY | START_INTERPLANETARY | flag;
         site.activity_after_talk = Some(during);
-        assert!(enter_orbit(Body::Planet(0), &mut site));
+        assert!(crate::planets::generate::testing::with_empty(|system| {
+            enter_orbit(system, Body::Planet(0), &mut site)
+        }));
 
         assert_eq!(*site.calls.borrow(), contact_prefix(), "flag {flag:#x}");
         assert_eq!(site.activity, during);
@@ -145,7 +149,9 @@ fn contact_clears_only_start_interplanetary_afterwards() {
     let mut site = RecordingSite::new(true);
     let during = IN_INTERPLANETARY | START_INTERPLANETARY | 0x0100;
     site.activity_after_talk = Some(during);
-    assert!(enter_orbit(Body::Planet(0), &mut site));
+    assert!(crate::planets::generate::testing::with_empty(|system| {
+        enter_orbit(system, Body::Planet(0), &mut site)
+    }));
     assert_eq!(site.activity, IN_INTERPLANETARY | 0x0100);
 }
 
@@ -154,7 +160,9 @@ fn contact_needs_the_built_ship_queue_to_be_empty() {
     let mut site = RecordingSite::new(true);
     site.built_ships = 1;
     let visit = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        enter_orbit(Body::Planet(0), &mut site)
+        crate::planets::generate::testing::with_empty(|system| {
+            enter_orbit(system, Body::Planet(0), &mut site)
+        })
     }));
     assert!(visit.is_err());
 }
@@ -162,7 +170,9 @@ fn contact_needs_the_built_ship_queue_to_be_empty() {
 #[test]
 fn no_sphere_tracking_loads_the_ruins_and_leaves_the_orbital_to_the_default() {
     let mut site = RecordingSite::new(false);
-    assert!(!enter_orbit(Body::Planet(0), &mut site));
+    assert!(!crate::planets::generate::testing::with_empty(|system| {
+        enter_orbit(system, Body::Planet(0), &mut site)
+    }));
     assert_eq!(
         *site.calls.borrow(),
         [Call::StartSphereTracking, Call::LoadRuinsScene]
@@ -174,7 +184,9 @@ fn no_sphere_tracking_loads_the_ruins_and_leaves_the_orbital_to_the_default() {
 fn other_worlds_touch_nothing() {
     for body in [Body::Planet(1), Body::Moon { planet: 0, moon: 0 }] {
         let mut site = RecordingSite::new(true);
-        assert!(!enter_orbit(body, &mut site));
+        assert!(!crate::planets::generate::testing::with_empty(|system| {
+            enter_orbit(system, body, &mut site)
+        }));
         assert!(site.calls.borrow().is_empty());
     }
 }

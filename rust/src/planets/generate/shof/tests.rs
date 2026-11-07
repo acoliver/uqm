@@ -1,12 +1,12 @@
 //! The Shofixti group's story gating against a recording fake host.
 
-use crate::engine::StoryKey;
 use super::{
     generate_planets, init_npcs, reinit_npcs, uninit_npcs, ShofixtiSite, METAL_WORLD, NUM_PLANETS,
 };
 use crate::c_bindings::global_state::IP_GROUP;
 use crate::comm::dispatch::ship::{SHOFIXTI_SHIP, UMGAH_SHIP};
 use crate::engine::world::planet::PlanetDesc;
+use crate::engine::StoryKey;
 use crate::math::RandomContext;
 use crate::planets::generate::default::{Npcs, FLEE, IGNORE_FLAGSHIP, REFORM_GROUP};
 use crate::planets::generate::home_contact::tests::FakeStory;

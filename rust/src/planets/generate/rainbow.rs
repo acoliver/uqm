@@ -4,11 +4,11 @@
 //! Overridden: `generatePlanets`, `generateOrbital`. Story flags:
 //! `RAINBOW_WORLD0` (8 bits), `RAINBOW_WORLD1` (2 bits).
 
-use crate::engine::StoryKey;
-use crate::battle::battle_types::{FULL_CIRCLE, QUADRANT};
+use crate::engine::math::battle_types::{FULL_CIRCLE, QUADRANT};
 use crate::engine::world::planet::{PlanetDesc, PlanetFrame};
+use crate::engine::StoryKey;
 use crate::math::RandomContext;
-use crate::planets::generate::special::{self, Body, Orbit, Story, RAINBOW_WORLD};
+use crate::planets::generate::special::{self, Body, Story, RAINBOW_WORLD};
 
 /// `RAINBOW_DEFINED` (`gendef.h`).
 pub const RAINBOW_DEFINED: u8 = 42;
@@ -27,7 +27,7 @@ pub fn generate_planets(
         planet.num_planets = 0;
         planet.radius =
             (i32::from(crate::planets::generate::consts::EARTH_RADIUS) * 50 / 100) as i16;
-        let mut angle = crate::battle::battle_types::arctan(
+        let mut angle = crate::engine::math::battle_types::arctan(
             i32::from(planet.location.x),
             i32::from(planet.location.y),
         );
@@ -50,17 +50,41 @@ pub fn rainbow_ordinal(star_indexes: &[u8], current: usize) -> u8 {
 
 /// `GenerateRainbowWorld_generateOrbital`: mark this rainbow world visited.
 pub fn generate_orbital(
-    orbit: &mut Orbit<'_>,
+    system: &mut SolarSys<'_>,
     body: Body,
     which_rainbow: u8,
-    story: &mut impl Story,
-    load_planet: impl FnOnce(),
+    site: &mut (impl Story + super::host::PlanetSite + ?Sized),
 ) -> bool {
     if body == Body::Planet(0) {
-        let mask = (story.flag(StoryKey::RAINBOW_WORLD0) | story.flag(StoryKey::RAINBOW_WORLD1) << 8) as u16
+        let mask = (site.flag(StoryKey::RAINBOW_WORLD0) | site.flag(StoryKey::RAINBOW_WORLD1) << 8)
+            as u16
             | 1 << which_rainbow;
-        story.set_flag(StoryKey::RAINBOW_WORLD0, u32::from(mask & 0xFF));
-        story.set_flag(StoryKey::RAINBOW_WORLD1, u32::from(mask >> 8));
+        site.set_flag(StoryKey::RAINBOW_WORLD0, u32::from(mask & 0xFF));
+        site.set_flag(StoryKey::RAINBOW_WORLD1, u32::from(mask >> 8));
     }
-    orbit.default_orbital(load_planet)
+    super::special::default_orbital(system, body, site)
+}
+
+use super::generator::SystemGenerator;
+use super::host::SiteHost;
+use crate::engine::world::generation::SolarSys;
+
+pub struct Generator;
+
+impl SystemGenerator for Generator {
+    fn generate_planets(&self, system: &mut SolarSys<'_>, _host: &mut dyn SiteHost) -> bool {
+        system.layout(|rng, table, size, color, planets| {
+            generate_planets(rng, table, size, color, planets)
+        });
+        true
+    }
+
+    fn generate_orbital(
+        &self,
+        system: &mut SolarSys<'_>,
+        body: Body,
+        host: &mut dyn SiteHost,
+    ) -> bool {
+        generate_orbital(system, body, host.rainbow_ordinal(), host)
+    }
 }
