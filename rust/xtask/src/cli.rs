@@ -123,13 +123,16 @@ mod tests {
 
     #[test]
     fn repository_root_outside_a_checkout_names_the_path_it_searched() {
-        let outside = tempfile::tempdir().unwrap();
-        let error = repository_root_from(outside.path()).unwrap_err();
+        let current = env::current_dir().unwrap();
+        // TMPDIR may itself be inside a checkout; this lookup creates no files.
+        let outside = current
+            .ancestors()
+            .last()
+            .unwrap()
+            .join(format!("uqm-xtask-outside-checkout-{}", std::process::id()));
+        let error = repository_root_from(&outside).unwrap_err();
         assert!(error.contains("not inside a uqm checkout"), "{error}");
-        assert!(
-            error.contains(&outside.path().display().to_string()),
-            "{error}"
-        );
+        assert!(error.contains(&outside.display().to_string()), "{error}");
     }
 
     #[cfg(feature = "native")]
