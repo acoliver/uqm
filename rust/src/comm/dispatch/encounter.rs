@@ -54,11 +54,8 @@ pub(super) fn fight_if_selected(cx: &mut Cx<'_>, io: &mut Io<'_>) -> u16 {
                 && cx.world.npc_built_ships_ref().head().is_some(),
         );
         if status != 0 {
-            // SAFETY: dispatch retains the campaign fleet and audio resources through combat.
-            unsafe {
-                crate::battle::encount_native::build_battle(cx.world, cx.kernel, RPG_PLAYER_NUM);
-                crate::battle::encount_native::encounter_battle(cx, io);
-            }
+            crate::battle::encount_native::build_battle(cx.world, cx.kernel, RPG_PLAYER_NUM);
+            crate::battle::encount_native::encounter_battle(cx, io);
         } else {
             cx.world.set_story_state(StoryKey::BATTLE_SEGUE, 0);
         }

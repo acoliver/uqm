@@ -31,7 +31,7 @@ impl PkunkApi for crate::comm::races::script::live::LiveScript<'_, '_, Handler> 
                 unsafe {
                     self.cx
                         .borrow_mut()
-                        .with_legacy(|| crate::battle::build_native::refresh_escorts())
+                        .with_legacy(|| crate::ui::sis::DeltaSISGauges(32767, 32767, 32767))
                 };
                 count
             }

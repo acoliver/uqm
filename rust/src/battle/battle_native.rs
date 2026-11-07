@@ -136,16 +136,6 @@ pub(crate) mod engine {
             a: 255,
         }
     }
-    /// # Safety
-    /// Screen dimensions must be initialized and accessed on the game thread.
-    pub unsafe fn sis_width() -> i32 {
-        ScreenWidth - 64 - 14
-    }
-    /// # Safety
-    /// Screen dimensions must be initialized and accessed on the game thread.
-    pub unsafe fn sis_height() -> i32 {
-        ScreenHeight - 13
-    }
 
     fn run_away(
         cx: &mut crate::engine::battle::Cx<'_>,
