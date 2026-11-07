@@ -31,6 +31,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[serial_test::serial]
     fn noncombat_drone_has_no_encounter_icon() {
         let icon = crate::engine::battle::frames::FrameSelection::retain(std::ptr::null_mut());
         assert!(encounter_icon(icon.view()).is_none());
