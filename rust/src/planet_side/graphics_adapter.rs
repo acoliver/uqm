@@ -1,7 +1,5 @@
 //! Production surface drawing adapter over low-level graphics services.
 
-#[cfg(not(test))]
-use crate::engine::Kernel as KernelOwner;
 use std::collections::HashMap;
 use std::ffi::c_void;
 
@@ -110,7 +108,8 @@ impl SurfaceFrameRegistry {
 }
 /// Concrete graphics adapter. It renders the Rust world in insertion order and
 /// draws the lander at the center of the PlanetContext viewport.
-pub struct CffiPlanetSideGraphics<'a, A: PlanetSideAssetAccess> {
+pub struct CffiPlanetSideGraphics<'a, 'game, A: PlanetSideAssetAccess> {
+    pub game: &'a std::cell::RefCell<crate::engine::battle::Cx<'game>>,
     pub surface: SharedSurface,
     pub assets: &'a A,
     pub last_scan_position: Option<super::model::SurfacePoint>,
@@ -147,81 +146,84 @@ extern "C" {
 #[cfg(not(test))]
 use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
 
-impl<A: PlanetSideAssetAccess> PlanetSideGraphics for CffiPlanetSideGraphics<'_, A> {
+impl<A: PlanetSideAssetAccess> PlanetSideGraphics for CffiPlanetSideGraphics<'_, '_, A> {
     fn render(&mut self, snapshot: &RenderSnapshot) -> Result<(), AdapterError> {
         #[cfg(not(test))]
-        #[cfg(not(test))]
-        unsafe {
-            {
-                crate::app::bridge::enter(|cx| {
-                    super::orbit_scan::sync_positions(cx, &self.surface.borrow())
-                });
-                let scan_position = CPoint {
-                    x: snapshot.lander.position.x as i16,
-                    y: snapshot.lander.position.y as i16,
-                };
-                RedrawSurfaceScan(std::ptr::from_ref(&scan_position).cast());
-                self.last_scan_position = Some(snapshot.lander.position);
-            }
+        {
+            super::orbit_scan::sync_positions(&mut self.game.borrow_mut(), &self.surface.borrow());
+            let radar_context = self.game.borrow().kernel.radar_context;
+            let game = self.game;
+            return game.borrow_mut().with_legacy(|| unsafe {
+                {
+                    let scan_position = CPoint {
+                        x: snapshot.lander.position.x as i16,
+                        y: snapshot.lander.position.y as i16,
+                    };
+                    RedrawSurfaceScan(std::ptr::from_ref(&scan_position).cast());
+                    self.last_scan_position = Some(snapshot.lander.position);
+                }
 
-            if PlanetContext.is_null() {
-                return Err(AdapterError::new("planet_context_not_initialized"));
-            }
-            let old_context = SetContext(PlanetContext);
-            BatchGraphics();
-
-            let topo_frame = surface_topography_frame()?;
-            draw_surface_tiles(topo_frame, snapshot.lander.position);
-
-            draw_surface_entities(&self.surface.borrow(), snapshot.lander.position);
-
-            // Select the lander graphic and frame index based on lifecycle phase.
-            let (lander_graphic, frame_index) = select_lander_graphic(
-                snapshot.phase,
-                snapshot.lander.facing,
-                snapshot.animation_frame,
-            );
-            let lander_base = self.assets.graphic(lander_graphic);
-            if lander_base.is_null() {
-                UnbatchGraphics();
-                SetContext(old_context);
-                return Err(AdapterError::new("lander_frame_not_loaded"));
-            }
-            let lander_y = LANDER_SCREEN_Y as i16 + snapshot.lifecycle_offset() as i16;
-            let mut lander = CStamp {
-                origin: CPoint {
-                    x: LANDER_SCREEN_X as i16,
-                    y: lander_y,
-                },
-                frame: (SetAbsFrameIndex((lander_base).cast(), frame_index)).cast(),
-            };
-            DrawStamp(std::ptr::from_mut(&mut lander).cast());
-            UnbatchGraphics();
-
-            // Draw cargo and crew meters in the radar panel. These overlay the
-            // InitLander status display and must be refreshed every frame so
-            // that active pickups visibly fill the bars and damage visibly
-            // decrements crew — matching the deleted lander.c
-            // FillLanderHold / DeltaLanderCrew behavior.
-            let lander_base_for_meters =
-                self.assets.graphic(super::resources::LanderGraphic::Lander);
-            if !lander_base_for_meters.is_null() {
-                let old_radar_ctx =
-                    SetContext(KernelOwner::current().read(|owner| owner.radar_context));
+                if PlanetContext.is_null() {
+                    return Err(AdapterError::new("planet_context_not_initialized"));
+                }
+                let old_context = SetContext(PlanetContext);
                 BatchGraphics();
-                draw_cargo_meters(lander_base_for_meters, snapshot);
-                draw_crew_meter(lander_base_for_meters, snapshot.lander.crew.get());
-                UnbatchGraphics();
-                SetContext(old_radar_ctx);
-            }
 
-            SetContext(old_context);
-            TFB_FlushGraphicsEx(1);
-            TFB_SwapBuffers(1);
+                let topo_frame = surface_topography_frame()?;
+                draw_surface_tiles(topo_frame, snapshot.lander.position);
+
+                draw_surface_entities(&self.surface.borrow(), snapshot.lander.position);
+
+                // Select the lander graphic and frame index based on lifecycle phase.
+                let (lander_graphic, frame_index) = select_lander_graphic(
+                    snapshot.phase,
+                    snapshot.lander.facing,
+                    snapshot.animation_frame,
+                );
+                let lander_base = self.assets.graphic(lander_graphic);
+                if lander_base.is_null() {
+                    UnbatchGraphics();
+                    SetContext(old_context);
+                    return Err(AdapterError::new("lander_frame_not_loaded"));
+                }
+                let lander_y = LANDER_SCREEN_Y as i16 + snapshot.lifecycle_offset() as i16;
+                let mut lander = CStamp {
+                    origin: CPoint {
+                        x: LANDER_SCREEN_X as i16,
+                        y: lander_y,
+                    },
+                    frame: (SetAbsFrameIndex((lander_base).cast(), frame_index)).cast(),
+                };
+                DrawStamp(std::ptr::from_mut(&mut lander).cast());
+                UnbatchGraphics();
+
+                // Draw cargo and crew meters in the radar panel. These overlay the
+                // InitLander status display and must be refreshed every frame so
+                // that active pickups visibly fill the bars and damage visibly
+                // decrements crew — matching the deleted lander.c
+                // FillLanderHold / DeltaLanderCrew behavior.
+                let lander_base_for_meters =
+                    self.assets.graphic(super::resources::LanderGraphic::Lander);
+                if !lander_base_for_meters.is_null() {
+                    let old_radar_ctx = SetContext(radar_context);
+                    BatchGraphics();
+                    draw_cargo_meters(lander_base_for_meters, snapshot);
+                    draw_crew_meter(lander_base_for_meters, snapshot.lander.crew.get());
+                    UnbatchGraphics();
+                    SetContext(old_radar_ctx);
+                }
+
+                SetContext(old_context);
+                TFB_FlushGraphicsEx(1);
+                TFB_SwapBuffers(1);
+                Ok(())
+            });
         }
         #[cfg(test)]
-        let _ = snapshot;
-        Ok(())
+        {
+            let _ = snapshot;
+            Ok(())
+        }
     }
 }
 

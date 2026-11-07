@@ -52,9 +52,11 @@ mod production {
     const PS_NON_PLAYER: i16 = 1;
     use crate::graphics::pixmap_abi::SetAbsFrameIndex;
 
-    pub unsafe fn generate(cx: &mut Cx<'_>) {
+    pub unsafe fn generate(game: &std::cell::RefCell<Cx<'_>>) {
         let solar = solar_system::current();
-        if solar.is_null() || (*solar).pOrbitalDesc.is_null() || cx.kernel.misc_data_frame.is_null()
+        if solar.is_null()
+            || (*solar).pOrbitalDesc.is_null()
+            || game.borrow().kernel.misc_data_frame.is_null()
         {
             return;
         }
@@ -64,7 +66,7 @@ mod production {
         // biological initial frame is a deterministic placeholder that the scan never
         // reads, so it must not consume the gameplay random stream.
         let Ok(mut generator) =
-            CffiSurfaceGenerator::for_orbit_scan(solar.cast(), (*solar).pOrbitalDesc.cast())
+            CffiSurfaceGenerator::for_orbit_scan(game, solar.cast(), (*solar).pOrbitalDesc.cast())
         else {
             return;
         };
@@ -84,10 +86,13 @@ mod production {
                     continue;
                 };
                 {
+                    let mut cx = game.borrow_mut();
                     let Some(element) = cx.alloc_element() else {
                         continue;
                     };
-                    if initialize_element(cx, element, solar, scan, raw_node, generated).is_err() {
+                    if initialize_element(&mut cx, element, solar, scan, raw_node, generated)
+                        .is_err()
+                    {
                         cx.dispose(element);
                     } else {
                         cx.put(element);
@@ -241,7 +246,13 @@ pub extern "C" fn generate_planet_side() {
                 cx,
                 cx.kernel.configuration.preferences().melee_scale == 0,
             );
-            production::generate(cx);
+            let game = std::cell::RefCell::new(crate::engine::battle::Cx {
+                b: cx.b,
+                world: cx.world,
+                kernel: cx.kernel,
+                rng: cx.rng,
+            });
+            production::generate(&game);
         });
     }
 }

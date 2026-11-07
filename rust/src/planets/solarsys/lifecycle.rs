@@ -152,10 +152,15 @@ fn saved_point(point: c::POINT) -> CPoint {
     }
 }
 
-pub(super) unsafe fn generate_moons(system: *mut c::SOLARSYS_STATE, planet: *mut PlanetDesc) {
+pub(super) unsafe fn generate_moons(
+    cx: &mut Cx<'_>,
+    _io: &mut Io<'_>,
+    system: *mut c::SOLARSYS_STATE,
+    planet: *mut PlanetDesc,
+) {
     (*SysGenRNG).reseed((*planet).rand_seed);
-    ((*(*system).genFuncs).generateName.unwrap())(system, planet);
-    ((*(*system).genFuncs).generateMoons.unwrap())(system, planet);
+    cx.with_legacy(|| ((*(*system).genFuncs).generateName.unwrap())(system, planet));
+    cx.with_legacy(|| ((*(*system).genFuncs).generateMoons.unwrap())(system, planet));
 
     let angle = arctan((*planet).location.x, (*planet).location.y);
     let _facing = (((u32::from(angle) + 2) >> 2) & 15) as c::COUNT;
@@ -186,7 +191,7 @@ pub(super) unsafe fn init_solar_sys_sis_characteristics() {
     }
 }
 
-pub(super) unsafe fn load_solar_sys() -> *mut PlanetDesc {
+pub(super) unsafe fn load_solar_sys(cx: &mut Cx<'_>, io: &mut Io<'_>) -> *mut PlanetDesc {
     const TEMP_COLORS: [c::Color; 5] = [
         rgb15(0x00, 0x00, 0x0e),
         rgb15(0x00, 0x06, 0x08),
@@ -197,8 +202,9 @@ pub(super) unsafe fn load_solar_sys() -> *mut PlanetDesc {
 
     let state = system();
     let mut orbital = ptr::null_mut();
-    let star = World::current()
-        .read(|world| *world.star_pointer(crate::planets::starmap::current_catalog()));
+    let star = *cx
+        .world
+        .star_pointer(crate::planets::starmap::current_catalog());
     (*SysGenRNG).reseed(GetRandomSeedForStar(ptr::from_ref(&star).cast()));
     let sun_type = (star.star_type & 0x18) >> 3;
     SUN_FRAME = SetAbsFrameIndex(SUN_FRAME.cast(), u16::from(sun_type)).cast();
@@ -211,10 +217,10 @@ pub(super) unsafe fn load_solar_sys() -> *mut PlanetDesc {
     (*sun).image.origin = (*sun).location;
     (*sun).image.frame = SUN_FRAME;
 
-    ((*(*state).genFuncs).generatePlanets.unwrap())(state);
-    if World::current().read(|world| world.story_state(StoryKey::PLANETARY_CHANGE)) != 0 {
-        World::current().write(|world| ffi::put_planet_info(world));
-        World::current().write(|world| world.set_story_state(StoryKey::PLANETARY_CHANGE, 0));
+    cx.with_legacy(|| ((*(*state).genFuncs).generatePlanets.unwrap())(state));
+    if cx.world.story_state(StoryKey::PLANETARY_CHANGE) != 0 {
+        ffi::put_planet_info(cx.world);
+        cx.world.set_story_state(StoryKey::PLANETARY_CHANGE, 0);
     }
 
     for i in 0..(*state).PlanetDesc.len() {
@@ -224,9 +230,9 @@ pub(super) unsafe fn load_solar_sys() -> *mut PlanetDesc {
         if i >= usize::from((*sun).num_planets) {
             (*planet).image.frame = ptr::null_mut();
         } else {
-            // The Rust analysis implementation borrows the whole SYSTEM_INFO.
+            // The Rust analysis implementation borrows the whole SystemInfo.
             let mut info: SystemInfo = std::mem::zeroed();
-            do_planetary_analysis_c(ptr::addr_of_mut!(info), planet);
+            cx.with_legacy(|| do_planetary_analysis_c(ptr::addr_of_mut!(info), planet));
             let temperature = info.planet_info.temperature;
             let mut index = ((i32::from(temperature) + 250) / 100) as c::COUNT;
             if usize::from(index) >= TEMP_COLORS.len() {
@@ -235,40 +241,40 @@ pub(super) unsafe fn load_solar_sys() -> *mut PlanetDesc {
             (*planet).temp_color = TEMP_COLORS[usize::from(index)];
         }
     }
-    sort_planet_positions();
+    cx.with_legacy(|| sort_planet_positions());
 
-    if glob().read(|owner| owner.game.ip_planet) == 0 {
+    if cx.world.data.game.ip_planet == 0 {
         (*state).pBaseDesc = (*state).PlanetDesc.as_mut_ptr();
         (*state).pOrbitalDesc = ptr::null_mut();
     } else {
-        (*sun).location = c_point(glob().read(|owner| owner.game.ip_location));
-        (**glob()).game.ip_location = saved_point(displayToLocation(
-            c_point(glob().read(|owner| owner.game.ship_stamp.origin)),
+        (*sun).location = c_point(cx.world.data.game.ip_location);
+        cx.world.data.game.ip_location = saved_point(displayToLocation(
+            c_point(cx.world.data.game.ship_stamp.origin),
             MAX_ZOOM_RADIUS,
         ));
-        let i = usize::from(glob().read(|owner| owner.game.ip_planet) - 1);
+        let i = usize::from(cx.world.data.game.ip_planet - 1);
         (*state).pOrbitalDesc = (*state).PlanetDesc.as_mut_ptr().add(i);
-        generate_moons(state, (*state).pOrbitalDesc);
+        generate_moons(cx, io, state, (*state).pOrbitalDesc);
         (*state).pBaseDesc = (*state).MoonDesc.as_mut_ptr();
-        World::current().write(|world| world.set_story_state(StoryKey::PLANETARY_LANDING, 0));
+        cx.world.set_story_state(StoryKey::PLANETARY_LANDING, 0);
     }
 
-    init_solar_sys_sis_characteristics();
-    if glob().read(|owner| owner.game.in_orbit) != 0 {
-        let i = usize::from(glob().read(|owner| owner.game.in_orbit) - 1);
+    cx.with_legacy(|| init_solar_sys_sis_characteristics());
+    if cx.world.data.game.in_orbit != 0 {
+        let i = usize::from(cx.world.data.game.in_orbit - 1);
         orbital = if i == 0 {
             (*(*state).pBaseDesc).prev_desc
         } else {
             (*state).MoonDesc.as_mut_ptr().add(i - 1)
         };
-        (**glob()).game.ip_location = saved_point((*sun).location);
-        (**glob()).game.in_orbit = 0;
+        cx.world.data.game.ip_location = saved_point((*sun).location);
+        cx.world.data.game.in_orbit = 0;
     } else {
-        let mut i = glob().read(|owner| owner.game.ship_facing);
+        let mut i = cx.world.data.game.ship_facing;
         if i == 0 {
             i += 1;
         }
-        (**glob()).game.ship_stamp.frame = SetAbsFrameIndex(SISIPFRAME.cast(), i - 1).cast();
+        cx.world.data.game.ship_stamp.frame = SetAbsFrameIndex(SISIPFRAME.cast(), i - 1).cast();
     }
     orbital
 }
@@ -320,17 +326,17 @@ pub(super) unsafe fn reset_solar_sys(next_activity: u16) {
 }
 
 unsafe fn run_planet_orbit(cx: &mut Cx<'_>, io: &mut Io<'_>) {
-    if !prepare_planet_orbit(cx) {
+    if !prepare_planet_orbit(cx, io) {
         return;
     }
     if !(*system()).TopoFrame.is_null() {
         ffi::planet_orbit_menu(cx, io);
         cx.with_legacy(|| ffi::FreePlanet());
     }
-    finish_planet_orbit(cx);
+    finish_planet_orbit(cx, io);
 }
 
-unsafe fn prepare_planet_orbit(cx: &mut Cx<'_>) -> bool {
+unsafe fn prepare_planet_orbit(cx: &mut Cx<'_>, _io: &mut Io<'_>) -> bool {
     let state = system();
     cx.with_legacy(|| {
         if (*state).InIpFlight != 0 {
@@ -362,15 +368,15 @@ unsafe fn prepare_planet_orbit(cx: &mut Cx<'_>) -> bool {
     })
 }
 
-unsafe fn finish_planet_orbit(cx: &mut Cx<'_>) {
+unsafe fn finish_planet_orbit(cx: &mut Cx<'_>, io: &mut Io<'_>) {
     if cx.world.activity() & (START_ENCOUNTER | CHECK_ABORT | CHECK_LOAD) == 0
         && cx.world.data.flagship.crew_enlisted != c::COUNT::MAX
     {
         let space_context = cx.kernel.space_context;
         let next_activity = cx.world.next_activity;
+        let orbital = load_solar_sys(cx, io);
+        assert!(orbital.is_null());
         let inner = cx.with_legacy(|| {
-            let orbital = load_solar_sys();
-            assert!(orbital.is_null());
             check_zoom_level();
             validate_orbits();
             validate_inner_orbits();
@@ -390,9 +396,9 @@ enum SolarSystemStart {
     Transition,
 }
 
-unsafe fn start_solar_sys(cx: &mut Cx<'_>) {
+unsafe fn start_solar_sys(cx: &mut Cx<'_>, io: &mut Io<'_>) {
     let next_activity = cx.world.next_activity;
-    let start = cx.with_legacy(|| prepare_solar_sys(next_activity));
+    let start = prepare_solar_sys(cx, io, next_activity);
     match start {
         SolarSystemStart::Orbit => {}
         SolarSystemStart::ResumeLoad => cx.with_legacy(|| ffi::UnbatchGraphics()),
@@ -415,84 +421,103 @@ unsafe fn start_solar_sys(cx: &mut Cx<'_>) {
     }
 }
 
-unsafe fn prepare_solar_sys(next_activity: u16) -> SolarSystemStart {
-    super::resources::LoadIPData();
-    load_lander_data();
+unsafe fn prepare_solar_sys(
+    cx: &mut Cx<'_>,
+    io: &mut Io<'_>,
+    next_activity: u16,
+) -> SolarSystemStart {
+    let (state, reentry) = cx.with_legacy(|| {
+        super::resources::LoadIPData();
+        load_lander_data();
 
-    let state = system();
-    let reentry = glob().read(|owner| owner.game.ship_facing) != 0;
-    if !reentry {
-        (**glob()).game.autopilot = CPoint { x: -1, y: -1 };
-        let (width, height) = sis_dimensions();
-        (**glob()).game.ship_stamp.origin.x = (width >> 1) as _;
-        (**glob()).game.ship_stamp.origin.y = (height - 2) as _;
-        (**glob()).game.ip_location = saved_point(displayToLocation(
-            c_point(glob().read(|owner| owner.game.ship_stamp.origin)),
-            MAX_ZOOM_RADIUS,
-        ));
-    }
-
-    STARS_FRAME = create_star_background();
-    ffi::SetContext(Kernel::current().read(|owner| owner.space_context));
-    ffi::SetContextFGFrame(Kernel::current().read(|owner| owner.screen).cast());
-    ffi::SetContextBackGroundColor(rgb15(0, 0, 0));
-
-    let orbital = load_solar_sys();
-    let inner_system = check_zoom_level() != 0;
-    validate_orbits();
-    if inner_system {
-        validate_inner_orbits();
-    }
-    World::current().write(|world| {
-        if reentry {
-            ((*(*state).genFuncs).reinitNpcs.unwrap())(world, state);
-        } else {
-            world.encounter_race = -1;
-            EncounterGroup = 0;
-            world.data.game.battle_group_ref = 0;
-            world.ip_groups().reinit();
-            world.npc_built_ships().reinit();
-            ((*(*state).genFuncs).initNpcs.unwrap())(world, state);
+        let state = system();
+        let reentry = glob().read(|owner| owner.game.ship_facing) != 0;
+        if !reentry {
+            (**glob()).game.autopilot = CPoint { x: -1, y: -1 };
+            let (width, height) = sis_dimensions();
+            (**glob()).game.ship_stamp.origin.x = (width >> 1) as _;
+            (**glob()).game.ship_stamp.origin.y = (height - 2) as _;
+            (**glob()).game.ip_location = saved_point(displayToLocation(
+                c_point(glob().read(|owner| owner.game.ship_stamp.origin)),
+                MAX_ZOOM_RADIUS,
+            ));
         }
-    });
 
-    if !orbital.is_null() {
-        enter_orbital(orbital);
-        SolarSystemStart::Orbit
-    } else {
+        STARS_FRAME = create_star_background();
         ffi::SetContext(Kernel::current().read(|owner| owner.space_context));
-        ffi::SetTransitionSource(ptr::null_mut());
-        ffi::BatchGraphics();
-        ffi::draw_sisframe();
-        ffi::DrawSISMessage(ptr::null());
-        reset_solar_sys(next_activity);
-        if Kernel::current().read(|owner| owner.last_activity) == CHECK_LOAD | CHECK_RESTART {
-            draw_outer_system();
-            SolarSystemStart::Fade
-        } else if Kernel::current().read(|owner| owner.last_activity) == CHECK_LOAD
-            && next_activity == 0
-        {
-            SolarSystemStart::ResumeLoad
-        } else {
-            if inner_system {
-                draw_inner_system();
-            } else {
-                draw_outer_system();
-            }
-            SolarSystemStart::Transition
+        ffi::SetContextFGFrame(Kernel::current().read(|owner| owner.screen).cast());
+        ffi::SetContextBackGroundColor(rgb15(0, 0, 0));
+
+        (state, reentry)
+    });
+    let orbital = load_solar_sys(cx, io);
+    let inner_system = cx.with_legacy(|| {
+        let inner_system = check_zoom_level() != 0;
+        validate_orbits();
+        if inner_system {
+            validate_inner_orbits();
         }
+        inner_system
+    });
+    if !reentry {
+        let world = &mut *cx.world;
+        world.encounter_race = -1;
+        EncounterGroup = 0;
+        world.data.game.battle_group_ref = 0;
+        world.ip_groups().reinit();
+        world.npc_built_ships().reinit();
     }
+    cx.with_legacy(|| {
+        World::current().write(|world| {
+            if reentry {
+                ((*(*state).genFuncs).reinitNpcs.unwrap())(world, state);
+            } else {
+                ((*(*state).genFuncs).initNpcs.unwrap())(world, state);
+            }
+        })
+    });
+    cx.with_legacy(|| {
+        if !orbital.is_null() {
+            enter_orbital(orbital);
+            SolarSystemStart::Orbit
+        } else {
+            ffi::SetContext(Kernel::current().read(|owner| owner.space_context));
+            ffi::SetTransitionSource(ptr::null_mut());
+            ffi::BatchGraphics();
+            ffi::draw_sisframe();
+            ffi::DrawSISMessage(ptr::null());
+            reset_solar_sys(next_activity);
+            if Kernel::current().read(|owner| owner.last_activity) == CHECK_LOAD | CHECK_RESTART {
+                draw_outer_system();
+                SolarSystemStart::Fade
+            } else if Kernel::current().read(|owner| owner.last_activity) == CHECK_LOAD
+                && next_activity == 0
+            {
+                SolarSystemStart::ResumeLoad
+            } else {
+                if inner_system {
+                    draw_inner_system();
+                } else {
+                    draw_outer_system();
+                }
+                SolarSystemStart::Transition
+            }
+        }
+    })
 }
 
-pub(super) unsafe fn end_interplanetary() {
-    World::current().write(|world| {
-        world.set_activity(world.activity() & !END_INTERPLANETARY);
-        if world.activity() & (CHECK_ABORT | CHECK_LOAD) == 0 {
-            let state = system();
-            ((*(*state).genFuncs).uninitNpcs.unwrap())(world, state);
-            world.set_story_state(StoryKey::USED_BROADCASTER, 0);
-        }
-    });
+pub(super) unsafe fn end_interplanetary(cx: &mut Cx<'_>, _io: &mut Io<'_>) {
+    cx.world
+        .set_activity(cx.world.activity() & !END_INTERPLANETARY);
+    if cx.world.activity() & (CHECK_ABORT | CHECK_LOAD) == 0 {
+        cx.with_legacy(|| {
+            World::current().write(|world| {
+                let state = system();
+                ((*(*state).genFuncs).uninitNpcs.unwrap())(world, state);
+            })
+        });
+        cx.world.set_story_state(StoryKey::USED_BROADCASTER, 0);
+    }
 }
 
 pub(super) unsafe fn closest_planet_interplanetary(point: *const c::POINT) -> *mut PlanetDesc {
@@ -515,28 +540,30 @@ pub(super) unsafe fn closest_planet_interplanetary(point: *const c::POINT) -> *m
     best_planet
 }
 
-pub(super) unsafe fn uninit_solar_sys() {
-    free_solar_sys();
-    ffi::DestroyDrawable(ReleaseDrawable(STARS_FRAME.cast()).cast());
-    STARS_FRAME = ptr::null_mut();
-    if World::current().read(|world| world.activity()) & END_INTERPLANETARY != 0 {
-        end_interplanetary();
+pub(super) unsafe fn uninit_solar_sys(cx: &mut Cx<'_>, io: &mut Io<'_>) {
+    cx.with_legacy(|| {
+        free_solar_sys();
+        ffi::DestroyDrawable(ReleaseDrawable(STARS_FRAME.cast()).cast());
+        STARS_FRAME = ptr::null_mut();
+    });
+    if cx.world.activity() & END_INTERPLANETARY != 0 {
+        end_interplanetary(cx, io);
         return;
     }
-    if World::current().read(|world| world.activity()) & START_ENCOUNTER != 0 && EncounterGroup != 0
-    {
-        crate::engine::World::current().write(|world| {
+    if cx.world.activity() & START_ENCOUNTER != 0 && EncounterGroup != 0 {
+        {
+            let world = &mut *cx.world;
             crate::navigation::groups::live::get_group_info(
                 world,
                 world.data.game.battle_group_ref,
                 EncounterGroup,
             )
-        });
-        if glob().read(|owner| owner.game.ip_planet) == 0 {
-            let point = c_point(glob().read(|owner| owner.game.ship_stamp.origin));
-            let planet = closest_planet_interplanetary(&point);
+        };
+        if cx.world.data.game.ip_planet == 0 {
+            let point = c_point(cx.world.data.game.ship_stamp.origin);
+            let planet = cx.with_legacy(|| closest_planet_interplanetary(&point));
             let state = system();
-            ((*(*state).genFuncs).generateName.unwrap())(state, planet);
+            cx.with_legacy(|| ((*(*state).genFuncs).generateName.unwrap())(state, planet));
         }
     }
 }
@@ -555,13 +582,13 @@ pub unsafe fn run_explore_solar_sys(cx: &mut Cx<'_>, io: &mut Io<'_>) {
     let input = runtime.input();
     let mut solar_sys_state = MaybeUninit::<c::SOLARSYS_STATE>::uninit();
     cx.with_legacy(|| prepare_explore_solar_sys(solar_sys_state.as_mut_ptr()));
-    start_solar_sys(cx);
+    start_solar_sys(cx, io);
     cx.with_legacy(|| ffi::SetMenuSounds(input, MENU_SOUND_NONE, MENU_SOUND_NONE));
     cx.run_input(io, false, |cx, io| {
         do_ip_flight(cx, io, solar_sys_state.as_mut_ptr()) != 0
     });
+    uninit_solar_sys(cx, io);
     cx.with_legacy(|| {
-        uninit_solar_sys();
         P_SOLAR_SYS_STATE = ptr::null_mut();
     });
 }
@@ -781,7 +808,7 @@ unsafe fn do_ip_flight(
         cx.with_legacy(|| ffi::SetMenuSounds(input, MENU_SOUND_NONE, MENU_SOUND_NONE));
     } else {
         assert!((*state).InIpFlight != 0);
-        ip_frame(cx);
+        ip_frame(cx, io);
         cx.with_legacy(|| {
             ffi::SleepThreadUntil(NEXT_TIME);
             NEXT_TIME = ffi::GetTimeCounter().wrapping_add(IP_FRAME_RATE);

@@ -1,10 +1,11 @@
 //! Production-facing PlanetSide adapters available without sharing gameplay state.
 
+use crate::engine::battle::Cx;
+use std::cell::RefCell;
+
 use super::runtime::{AdapterError, PlanetSideClock, PlanetSideInput, ShipStatusPort, Tick};
 use super::session::{ShipDelta, ShipStatus};
 use super::simulation::FrameInput;
-#[cfg(not(test))]
-use crate::engine::WorldData as WorldFields;
 use crate::engine::{input::InputControls, world::activity::ActivityControl};
 
 /// Input adapter retaining the resolved player-one controls and activity signal.
@@ -123,34 +124,22 @@ impl PlanetSideClock for CffiPlanetSideClock {
 }
 
 /// Production ship-state adapter over the current flagship status owner.
-pub struct CffiShipStatus;
+pub struct CffiShipStatus<'a, 'game> {
+    pub game: &'a RefCell<Cx<'game>>,
+}
 
-impl CffiShipStatus {
+impl CffiShipStatus<'_, '_> {
     /// Capture the ship values needed to initialize and settle one trip.
     #[must_use]
     pub fn snapshot(&self) -> ShipStatus {
-        #[cfg(not(test))]
-        #[cfg(not(test))]
-        unsafe {
-            let world = WorldFields::current();
-            let sis = std::ptr::addr_of!((**world).flagship).read();
-            ShipStatus {
-                crew_enlisted: sis.crew_enlisted,
-                landers: sis.num_landers,
-                total_element_mass: sis.total_element_mass,
-                element_amounts: sis.element_amounts,
-                total_bio_mass: sis.total_bio_mass,
-            }
-        }
-        #[cfg(test)]
-        {
-            ShipStatus {
-                crew_enlisted: 0,
-                landers: 0,
-                total_element_mass: 0,
-                element_amounts: [0; 8],
-                total_bio_mass: 0,
-            }
+        let game = self.game.borrow();
+        let sis = &game.world.data.flagship;
+        ShipStatus {
+            crew_enlisted: sis.crew_enlisted,
+            landers: sis.num_landers,
+            total_element_mass: sis.total_element_mass,
+            element_amounts: sis.element_amounts,
+            total_bio_mass: sis.total_bio_mass,
         }
     }
 
@@ -159,7 +148,9 @@ impl CffiShipStatus {
     pub fn storage_capacity(&self) -> u16 {
         #[cfg(not(test))]
         {
-            GetStorageBayCapacity()
+            self.game
+                .borrow_mut()
+                .with_legacy(|| GetStorageBayCapacity())
         }
         #[cfg(test)]
         {
@@ -168,39 +159,47 @@ impl CffiShipStatus {
     }
 }
 
-impl ShipStatusPort for CffiShipStatus {
+impl ShipStatusPort for CffiShipStatus<'_, '_> {
     fn apply(&mut self, delta: &ShipDelta) -> Result<(), AdapterError> {
         #[cfg(not(test))]
-        #[cfg(not(test))]
-        unsafe {
-            if delta.crew != 0 {
-                DeltaSISGauges(delta.crew, 0, 0);
-            }
-            WorldFields::current().write(|world| {
-                let sis = &mut world.flagship;
-                if delta.landers < 0 {
-                    sis.num_landers = sis.num_landers.saturating_sub(delta.landers.unsigned_abs());
-                } else if delta.landers > 0 {
-                    sis.num_landers = sis.num_landers.saturating_add(delta.landers as u8);
-                }
-            });
-            if delta.landers != 0 {
-                draw_landers();
-            }
-            WorldFields::current().write(|world| {
-                let sis = &mut world.flagship;
-                for (current, added) in sis.element_amounts.iter_mut().zip(delta.element_amounts) {
-                    *current = current.saturating_add(added);
-                }
-                sis.total_element_mass = sis.total_element_mass.saturating_add(delta.element_mass);
-                sis.total_bio_mass = sis.total_bio_mass.saturating_add(delta.biological_mass);
-            });
-            if delta.element_mass != 0 {
-                DrawStorageBays(0);
+        if delta.crew != 0 {
+            // SAFETY: the retained game publishes the live gauge owners for this call.
+            self.game
+                .borrow_mut()
+                .with_legacy(|| unsafe { DeltaSISGauges(delta.crew, 0, 0) });
+        }
+        {
+            let mut game = self.game.borrow_mut();
+            let sis = &mut game.world.data.flagship;
+            if delta.landers < 0 {
+                sis.num_landers = sis.num_landers.saturating_sub(delta.landers.unsigned_abs());
+            } else if delta.landers > 0 {
+                sis.num_landers = sis.num_landers.saturating_add(delta.landers as u8);
             }
         }
-        #[cfg(test)]
-        let _ = delta;
+        #[cfg(not(test))]
+        if delta.landers != 0 {
+            // SAFETY: native drawing runs while the retained game owns the graphics state.
+            self.game
+                .borrow_mut()
+                .with_legacy(|| unsafe { draw_landers() });
+        }
+        {
+            let mut game = self.game.borrow_mut();
+            let sis = &mut game.world.data.flagship;
+            for (current, added) in sis.element_amounts.iter_mut().zip(delta.element_amounts) {
+                *current = current.saturating_add(added);
+            }
+            sis.total_element_mass = sis.total_element_mass.saturating_add(delta.element_mass);
+            sis.total_bio_mass = sis.total_bio_mass.saturating_add(delta.biological_mass);
+        }
+        #[cfg(not(test))]
+        if delta.element_mass != 0 {
+            // SAFETY: the storage display reads the game published for this call.
+            self.game
+                .borrow_mut()
+                .with_legacy(|| unsafe { DrawStorageBays(0) });
+        }
         Ok(())
     }
 }
@@ -228,7 +227,15 @@ mod tests {
 
     #[test]
     fn non_linked_ship_snapshot_is_neutral() {
-        let mut ship = CffiShipStatus;
+        let mut owners = crate::engine::Game::new();
+        let mut battle = crate::engine::battle::Battle::new();
+        let game = RefCell::new(Cx::new(
+            &mut battle,
+            &mut owners.world,
+            &mut owners.kernel,
+            crate::math::random,
+        ));
+        let mut ship = CffiShipStatus { game: &game };
         assert_eq!(
             ship.snapshot(),
             ShipStatus {
