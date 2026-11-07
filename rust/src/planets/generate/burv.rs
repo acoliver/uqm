@@ -5,6 +5,7 @@
 //! `generateEnergy`, `pickupEnergy`. Story flags: `BURVIXESE_BROADCASTERS`,
 //! `BURV_BROADCASTERS_ON_SHIP`.
 
+use crate::engine::StoryKey;
 use crate::battle::battle_types::normalize_angle;
 use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
 use crate::math::RandomContext;
@@ -86,7 +87,7 @@ pub fn generate_orbital(
         scenes.load_ruins_scene();
         orbit.sys_info.planet_info.weather = 0;
         orbit.sys_info.planet_info.tectonics = 0;
-    } else if body == BROADCASTERS_MOON && story.flag("BURVIXESE_BROADCASTERS") == 0 {
+    } else if body == BROADCASTERS_MOON && story.flag(StoryKey::BURVIXESE_BROADCASTERS) == 0 {
         scenes.load_broadcasters_scene();
     }
     load_planet();
@@ -106,7 +107,7 @@ pub fn generate_energy(
     if body == HOME {
         return default::generate_ruins(rng, sys_info, which_node, info);
     }
-    if body == BROADCASTERS_MOON && story.flag("BURVIXESE_BROADCASTERS") == 0 {
+    if body == BROADCASTERS_MOON && story.flag(StoryKey::BURVIXESE_BROADCASTERS) == 0 {
         return default::generate_artifact(rng, sys_info, which_node, info);
     }
     0
@@ -127,13 +128,13 @@ pub fn pickup_energy(
     }
     if body == BROADCASTERS_MOON {
         assert!(
-            story.flag("BURVIXESE_BROADCASTERS") == 0 && which_node == 0,
+            story.flag(StoryKey::BURVIXESE_BROADCASTERS) == 0 && which_node == 0,
             "the broadcasters are picked up once, from node 0"
         );
         default::lander_report(report);
         lander.lander_takeoff();
-        story.set_flag("BURVIXESE_BROADCASTERS", 1);
-        story.set_flag("BURV_BROADCASTERS_ON_SHIP", 1);
+        story.set_flag(StoryKey::BURVIXESE_BROADCASTERS, 1);
+        story.set_flag(StoryKey::BURV_BROADCASTERS_ON_SHIP, 1);
         return true;
     }
     false

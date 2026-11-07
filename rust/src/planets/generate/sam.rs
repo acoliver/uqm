@@ -1,5 +1,6 @@
 //! Sa-Matra's guards, moon and final encounter, ported from `gensam.c`.
 
+use crate::engine::StoryKey;
 use crate::battle::battle_types::{arctan, cosine, sine};
 use crate::c_bindings::global_state::{IP_GROUP, POINT};
 use crate::engine::world::planet::{PlanetDesc, PlanetFrame};
@@ -51,7 +52,7 @@ pub trait SamatraSite: HomeContactSite {
 }
 
 pub fn init_npcs(site: &mut (impl GuardSite + Story)) -> bool {
-    if site.flag("URQUAN_MESSED_UP") == 0 {
+    if site.flag(StoryKey::URQUAN_MESSED_UP) == 0 {
         build_guard(site);
     } else {
         site.save_ip_groups();
@@ -60,8 +61,8 @@ pub fn init_npcs(site: &mut (impl GuardSite + Story)) -> bool {
 }
 
 fn build_guard(site: &mut (impl GuardSite + Story)) {
-    site.set_battle_group_ref(site.word("SAMATRA_GRPOFFS0"));
-    let (ship1, ship2) = if site.flag("KOHR_AH_FRENZY") == 0 {
+    site.set_battle_group_ref(site.word(StoryKey::SAMATRA_GRPOFFS0));
+    let (ship1, ship2) = if site.flag(StoryKey::KOHR_AH_FRENZY) == 0 {
         (URQUAN_SHIP, BLACK_URQUAN_SHIP)
     } else {
         (BLACK_URQUAN_SHIP, URQUAN_SHIP)
@@ -73,7 +74,7 @@ fn build_guard(site: &mut (impl GuardSite + Story)) {
     if site.battle_group_ref() == 0 {
         let reference = site.add_new_group();
         site.set_battle_group_ref(reference);
-        site.set_word("SAMATRA_GRPOFFS0", reference);
+        site.set_word(StoryKey::SAMATRA_GRPOFFS0, reference);
     }
     for group in 1..=12 {
         site.store_group(site.battle_group_ref(), group);
@@ -117,7 +118,7 @@ pub fn reinit_npcs(site: &mut (impl GuardSite + Story)) -> bool {
     site.load_ip_groups();
     site.reset_encounter();
     let mut engaged = false;
-    let messed_up = site.flag("URQUAN_MESSED_UP") != 0;
+    let messed_up = site.flag(StoryKey::URQUAN_MESSED_UP) != 0;
     site.for_each_ip_group(&mut |group| {
         if messed_up {
             group.task &= REFORM_GROUP;
@@ -191,8 +192,8 @@ pub(super) fn encounter(story: &mut impl Story, site: &mut impl SamatraSite) -> 
     site.save_ip_groups();
     site.reinit_ip_group_q();
     assert_eq!(site.built_ship_count(), 0);
-    if story.flag("URQUAN_MESSED_UP") == 0 {
-        site.clone_guard_fleet(story.flag("KOHR_AH_FRENZY") != 0);
+    if story.flag(StoryKey::URQUAN_MESSED_UP) == 0 {
+        site.clone_guard_fleet(story.flag(StoryKey::KOHR_AH_FRENZY) != 0);
     } else {
         for _ in 0..3 {
             site.clone_remnant(false);
@@ -201,7 +202,7 @@ pub(super) fn encounter(story: &mut impl Story, site: &mut impl SamatraSite) -> 
     }
     site.set_current_activity(site.current_activity() | START_INTERPLANETARY);
     site.set_global_flags_and_data(1 << 7);
-    story.set_flag("URQUAN_PROTECTING_SAMATRA", 1);
+    story.set_flag(StoryKey::URQUAN_PROTECTING_SAMATRA, 1);
     site.talk();
     let activity = site.current_activity();
     if activity & (CHECK_ABORT | CHECK_LOAD) == 0 {
@@ -210,11 +211,11 @@ pub(super) fn encounter(story: &mut impl Story, site: &mut impl SamatraSite) -> 
         site.reinit_built_ship_q();
         site.load_ip_groups();
         if survivors {
-            story.set_flag("URQUAN_PROTECTING_SAMATRA", 0);
+            story.set_flag(StoryKey::URQUAN_PROTECTING_SAMATRA, 0);
         } else {
             site.reset_encounter();
             site.set_current_activity(LAST_BATTLE);
-            if story.flag("YEHAT_CIVIL_WAR") != 0
+            if story.flag(StoryKey::YEHAT_CIVIL_WAR) != 0
                 && site.track_yehat()
                 && site.rebel_escort_feasible()
             {

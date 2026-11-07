@@ -4,6 +4,7 @@
 //! flags: `SHIP_VAULT_UNLOCKED`, `SYREEN_SHUTTLE_ON_SHIP`, `SYREEN_HOME_VISITS`,
 //! `KNOW_SYREEN_VAULT`.
 
+use crate::engine::StoryKey;
 use crate::engine::world::planet::{NodeInfo, SystemInfo};
 use crate::math::RandomContext;
 use crate::planet_side::report_adapter::DiscoveryReportPort;
@@ -31,9 +32,9 @@ pub fn generate_orbital(
     load_planet: impl FnOnce(),
 ) -> bool {
     if body == VAULT {
-        let first_report = if story.flag("SHIP_VAULT_UNLOCKED") != 0 {
+        let first_report = if story.flag(StoryKey::SHIP_VAULT_UNLOCKED) != 0 {
             2
-        } else if story.flag("SYREEN_SHUTTLE_ON_SHIP") != 0 {
+        } else if story.flag(StoryKey::SYREEN_SHUTTLE_ON_SHIP) != 0 {
             1
         } else {
             0
@@ -70,18 +71,18 @@ pub fn pickup_energy(
         return false;
     }
     assert_eq!(which_node, 0, "the vault has a single energy node");
-    if story.flag("SHIP_VAULT_UNLOCKED") != 0 {
+    if story.flag(StoryKey::SHIP_VAULT_UNLOCKED) != 0 {
         default::lander_report_cycle(report);
-    } else if story.flag("SYREEN_SHUTTLE_ON_SHIP") != 0 {
+    } else if story.flag(StoryKey::SYREEN_SHUTTLE_ON_SHIP) != 0 {
         default::lander_report_cycle(report);
         site.lander_takeoff();
-        story.set_flag("SHIP_VAULT_UNLOCKED", 1);
-        story.set_flag("SYREEN_SHUTTLE_ON_SHIP", 0);
-        story.set_flag("SYREEN_HOME_VISITS", 0);
+        story.set_flag(StoryKey::SHIP_VAULT_UNLOCKED, 1);
+        story.set_flag(StoryKey::SYREEN_SHUTTLE_ON_SHIP, 0);
+        story.set_flag(StoryKey::SYREEN_HOME_VISITS, 0);
     } else {
         default::lander_report(report);
-        if story.flag("KNOW_SYREEN_VAULT") == 0 {
-            story.set_flag("KNOW_SYREEN_VAULT", 1);
+        if story.flag(StoryKey::KNOW_SYREEN_VAULT) == 0 {
+            story.set_flag(StoryKey::KNOW_SYREEN_VAULT, 1);
         }
     }
     false

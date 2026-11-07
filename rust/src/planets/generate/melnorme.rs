@@ -4,6 +4,7 @@
 //! Overridden: `initNpcs`. Story flags: `MELNORME0_GRPOFFS0` to
 //! `MELNORME8_GRPOFFS0` (32-bit group references), picked by the star's index.
 
+use crate::engine::StoryKey;
 use crate::planets::generate::special::{self, FleetGroups, Story, MELNORME_SHIP};
 
 /// `MELNORME0_DEFINED` (`gendef.h`): the star indexes of the nine posts are
@@ -11,15 +12,15 @@ use crate::planets::generate::special::{self, FleetGroups, Story, MELNORME_SHIP}
 pub const MELNORME0_DEFINED: u8 = 7;
 
 const REF_VARS: [&str; 9] = [
-    "MELNORME0_GRPOFFS0",
-    "MELNORME1_GRPOFFS0",
-    "MELNORME2_GRPOFFS0",
-    "MELNORME3_GRPOFFS0",
-    "MELNORME4_GRPOFFS0",
-    "MELNORME5_GRPOFFS0",
-    "MELNORME6_GRPOFFS0",
-    "MELNORME7_GRPOFFS0",
-    "MELNORME8_GRPOFFS0",
+    StoryKey::MELNORME0_GRPOFFS0,
+    StoryKey::MELNORME1_GRPOFFS0,
+    StoryKey::MELNORME2_GRPOFFS0,
+    StoryKey::MELNORME3_GRPOFFS0,
+    StoryKey::MELNORME4_GRPOFFS0,
+    StoryKey::MELNORME5_GRPOFFS0,
+    StoryKey::MELNORME6_GRPOFFS0,
+    StoryKey::MELNORME7_GRPOFFS0,
+    StoryKey::MELNORME8_GRPOFFS0,
 ];
 
 /// `SelectMelnormeRefVar`: the group reference of the post at `star_index`.

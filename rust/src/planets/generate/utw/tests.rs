@@ -1,6 +1,7 @@
 //! The Utwig systems' story gating, guard conversations and pickup against
 //! recording fakes.
 
+use crate::engine::StoryKey;
 use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -9,7 +10,7 @@ use super::{
     generate_energy, generate_orbital, generate_planets, init_npcs, pickup_energy, UtwigSite,
     BOMB_MOON, BOMB_TALK_FLAGS, HOME, HOME_TALK_FLAGS,
 };
-use crate::battle::gendef::{BOMB_DEFINED, UTWIG_DEFINED};
+use crate::planets::generate::identities::{BOMB_DEFINED, UTWIG_DEFINED};
 use crate::c_bindings::global_state::IP_GROUP;
 use crate::comm::dispatch::{CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY};
 use crate::math::RandomContext;
@@ -232,7 +233,7 @@ fn the_home_has_ruins_and_the_bomb_moon_one_artifact_until_taken() {
     assert_eq!(nodes(UTWIG_DEFINED, HOME, &fresh), 16);
     assert_eq!(nodes(BOMB_DEFINED, BOMB_MOON, &fresh), 1);
 
-    let taken = FakeStory::with(&[("UTWIG_BOMB", 1)]);
+    let taken = FakeStory::with(&[(StoryKey::UTWIG_BOMB, 1)]);
     assert_eq!(nodes(BOMB_DEFINED, BOMB_MOON, &taken), 0);
     assert_eq!(nodes(UTWIG_DEFINED, HOME, &taken), 16);
 }
@@ -271,15 +272,15 @@ fn the_home_ruins_only_cycle_the_report() {
     ));
     assert_eq!(report.0, [ReportDisposition::Cycle]);
     assert_eq!(lander.0, 0);
-    assert_eq!(story.flag("UTWIG_BOMB"), 0);
+    assert_eq!(story.flag(StoryKey::UTWIG_BOMB), 0);
 }
 
 #[test]
 fn the_bomb_is_taken_once_and_wins_the_druuge_over() {
     let mut story = FakeStory::with(&[
-        ("DRUUGE_MANNER", 0),
-        ("DRUUGE_VISITS", 3),
-        ("DRUUGE_HOME_VISITS", 4),
+        (StoryKey::DRUUGE_MANNER, 0),
+        (StoryKey::DRUUGE_VISITS, 3),
+        (StoryKey::DRUUGE_HOME_VISITS, 4),
     ]);
     let (mut report, mut lander) = (FakeReport::default(), FakeLander::default());
     assert!(pickup_energy(
@@ -293,11 +294,11 @@ fn the_bomb_is_taken_once_and_wins_the_druuge_over() {
     assert_eq!(report.0, [ReportDisposition::Once]);
     assert_eq!(lander.0, 1);
     for (flag, value) in [
-        ("UTWIG_BOMB", 1),
-        ("UTWIG_BOMB_ON_SHIP", 1),
-        ("DRUUGE_MANNER", 1),
-        ("DRUUGE_VISITS", 0),
-        ("DRUUGE_HOME_VISITS", 0),
+        (StoryKey::UTWIG_BOMB, 1),
+        (StoryKey::UTWIG_BOMB_ON_SHIP, 1),
+        (StoryKey::DRUUGE_MANNER, 1),
+        (StoryKey::DRUUGE_VISITS, 0),
+        (StoryKey::DRUUGE_HOME_VISITS, 0),
     ] {
         assert_eq!(story.flag(flag), value, "{flag}");
     }
@@ -306,7 +307,7 @@ fn the_bomb_is_taken_once_and_wins_the_druuge_over() {
 #[test]
 fn the_bomb_cannot_be_taken_twice_or_from_another_node() {
     for (taken, node) in [(1, 0), (0, 1)] {
-        let mut story = FakeStory::with(&[("UTWIG_BOMB", taken)]);
+        let mut story = FakeStory::with(&[(StoryKey::UTWIG_BOMB, taken)]);
         let (mut report, mut lander) = (FakeReport::default(), FakeLander::default());
         let attempt = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             pickup_energy(
@@ -345,7 +346,7 @@ fn other_worlds_pick_up_nothing() {
         ));
         assert!(report.0.is_empty());
         assert_eq!(lander.0, 0);
-        assert_eq!(story.flag("UTWIG_BOMB"), 0);
+        assert_eq!(story.flag(StoryKey::UTWIG_BOMB), 0);
     }
 }
 
@@ -368,7 +369,7 @@ fn every_other_case_starts_the_default_groups() {
         (0, false, false),
         (BOMB_DEFINED, true, true),
     ] {
-        let mut story = FakeStory::with(&[("UTWIG_BOMB", u32::from(bomb_taken))]);
+        let mut story = FakeStory::with(&[(StoryKey::UTWIG_BOMB, u32::from(bomb_taken))]);
         let calls = Rc::new(RefCell::new(Vec::new()));
         let mut site = Site::new(&calls);
         site.stored_groups = stored;
@@ -505,7 +506,7 @@ fn the_utwig_talk_at_the_bomb_until_the_player_has_the_ultron() {
     let (calls, _, _) = visit(
         BOMB_DEFINED,
         BOMB_MOON,
-        &[("UTWIG_HAVE_ULTRON", 1)],
+        &[(StoryKey::UTWIG_HAVE_ULTRON, 1)],
         |site| {
             site.utwig_tracking = true;
         },
@@ -533,7 +534,7 @@ fn an_aborted_or_loaded_utwig_talk_leaves_everything_as_it_is() {
                     Some(IN_INTERPLANETARY | START_INTERPLANETARY | flag);
             });
             assert_eq!(calls, utwig_contact(flags), "{star_index} {flag:#x}");
-            assert_eq!(story.flag("BOMB_UNPROTECTED"), 0);
+            assert_eq!(story.flag(StoryKey::BOMB_UNPROTECTED), 0);
         }
     }
 }
@@ -552,7 +553,7 @@ fn the_druuge_guard_the_bomb_and_a_defeated_guard_unprotects_it() {
         Call::LoadPlanet,
     ]);
     assert_eq!(calls, expected);
-    assert_eq!(story.flag("BOMB_UNPROTECTED"), 1);
+    assert_eq!(story.flag(StoryKey::BOMB_UNPROTECTED), 1);
 }
 
 #[test]
@@ -565,7 +566,7 @@ fn surviving_druuge_end_the_visit_with_the_bomb_still_guarded() {
     expected.extend(druuge_contact());
     expected.extend(world_restored());
     assert_eq!(calls, expected);
-    assert_eq!(story.flag("BOMB_UNPROTECTED"), 0);
+    assert_eq!(story.flag(StoryKey::BOMB_UNPROTECTED), 0);
 }
 
 #[test]
@@ -579,7 +580,7 @@ fn an_aborted_or_loaded_druuge_talk_leaves_everything_as_it_is() {
         let mut expected = vec![Call::StartSphereTracking];
         expected.extend(druuge_contact());
         assert_eq!(calls, expected, "{flag:#x}");
-        assert_eq!(story.flag("BOMB_UNPROTECTED"), 0);
+        assert_eq!(story.flag(StoryKey::BOMB_UNPROTECTED), 0);
     }
 }
 
@@ -599,7 +600,7 @@ fn an_unprotected_bomb_has_no_guard_and_loads_the_bomb_scene() {
     let (calls, _, _) = visit(
         BOMB_DEFINED,
         BOMB_MOON,
-        &[("BOMB_UNPROTECTED", 1)],
+        &[(StoryKey::BOMB_UNPROTECTED, 1)],
         |site| {
             site.druuge_tracking = true;
         },
@@ -642,7 +643,7 @@ fn without_a_guard_in_reach_the_scene_is_loaded_before_the_default_orbital() {
 
 #[test]
 fn a_taken_bomb_is_just_another_moon() {
-    let (calls, _, _) = visit(BOMB_DEFINED, BOMB_MOON, &[("UTWIG_BOMB", 1)], |site| {
+    let (calls, _, _) = visit(BOMB_DEFINED, BOMB_MOON, &[(StoryKey::UTWIG_BOMB, 1)], |site| {
         site.utwig_tracking = true;
         site.druuge_tracking = true;
     });

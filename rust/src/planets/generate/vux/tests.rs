@@ -1,3 +1,4 @@
+use crate::engine::StoryKey;
 use super::*;
 use crate::engine::world::planet::{PlanetDesc, PlanetFrame, SystemInfo};
 use crate::planet_side::report_adapter::ReportDisposition;
@@ -186,8 +187,8 @@ fn contact_scene_and_abort_matrix() {
                                     ..Site::default()
                                 };
                                 let story = FakeStory::with(&[
-                                    ("SHOFIXTI_MAIDENS", taken),
-                                    ("VUX_BEAST", taken),
+                                    (StoryKey::SHOFIXTI_MAIDENS, taken),
+                                    (StoryKey::VUX_BEAST, taken),
                                 ]);
                                 let calls = Rc::clone(&site.calls);
                                 let (info, _) = with_orbit(|orbit| {
@@ -311,10 +312,10 @@ fn pickup_effects_and_nonartifact_nodes() {
                             vec![]
                         }
                     );
-                    assert_eq!(story.flag("SHOFIXTI_MAIDENS"), u32::from(artifact && !life));
-                    assert_eq!(story.flag("MAIDENS_ON_SHIP"), u32::from(artifact && !life));
-                    assert_eq!(story.flag("VUX_BEAST"), u32::from(artifact && life));
-                    assert_eq!(story.flag("VUX_BEAST_ON_SHIP"), u32::from(artifact && life));
+                    assert_eq!(story.flag(StoryKey::SHOFIXTI_MAIDENS), u32::from(artifact && !life));
+                    assert_eq!(story.flag(StoryKey::MAIDENS_ON_SHIP), u32::from(artifact && !life));
+                    assert_eq!(story.flag(StoryKey::VUX_BEAST), u32::from(artifact && life));
+                    assert_eq!(story.flag(StoryKey::VUX_BEAST_ON_SHIP), u32::from(artifact && life));
                 }
             }
         }
@@ -331,9 +332,9 @@ fn pickup_and_queue_invariants_fail_before_side_effects() {
             let calls = Calls::default();
             let mut story = FakeStory::with(&[(
                 if life {
-                    "VUX_BEAST"
+                    StoryKey::VUX_BEAST
                 } else {
-                    "SHOFIXTI_MAIDENS"
+                    StoryKey::SHOFIXTI_MAIDENS
                 },
                 taken,
             )]);
@@ -476,9 +477,9 @@ fn pickup_reports_takeoff_and_flag_writes_have_c_order() {
             );
         }
         let flags = if life {
-            ["VUX_BEAST", "VUX_BEAST_ON_SHIP"]
+            [StoryKey::VUX_BEAST, StoryKey::VUX_BEAST_ON_SHIP]
         } else {
-            ["SHOFIXTI_MAIDENS", "MAIDENS_ON_SHIP"]
+            [StoryKey::SHOFIXTI_MAIDENS, StoryKey::MAIDENS_ON_SHIP]
         };
         assert_eq!(
             *calls.borrow(),

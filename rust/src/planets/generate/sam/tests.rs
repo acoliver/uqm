@@ -1,3 +1,4 @@
+use crate::engine::StoryKey;
 use super::*;
 use crate::planets::generate::home_contact::tests::FakeStory;
 use crate::planets::generate::vux::tests::{record, with_orbit, Site};
@@ -83,8 +84,8 @@ fn groups(count: usize) -> Vec<IP_GROUP> {
 fn guard_build_order_races_and_full_groups() {
     for frenzy in [0, 1] {
         for reference in [0, u32::MAX] {
-            let mut story = FakeStory::with(&[("KOHR_AH_FRENZY", frenzy)]);
-            story.set_word("SAMATRA_GRPOFFS0", reference);
+            let mut story = FakeStory::with(&[(StoryKey::KOHR_AH_FRENZY, frenzy)]);
+            story.set_word(StoryKey::SAMATRA_GRPOFFS0, reference);
             let mut site = Guard {
                 groups: groups(17),
                 ..Guard::default()
@@ -92,7 +93,7 @@ fn guard_build_order_races_and_full_groups() {
             let mut expected_groups = site.groups.clone();
             assert!(init_npcs(&mut (&mut story, &mut site)));
             let stored = if reference == 0 { 7919 } else { reference };
-            assert_eq!(story.word("SAMATRA_GRPOFFS0"), stored);
+            assert_eq!(story.word(StoryKey::SAMATRA_GRPOFFS0), stored);
             let first = if frenzy == 0 { 18 } else { 21 };
             let second = if frenzy == 0 { 21 } else { 18 };
             let mut expected = vec![format!("ref:{reference}")];
@@ -126,7 +127,7 @@ fn guard_build_order_races_and_full_groups() {
 #[test]
 fn ghosts_are_saved_without_building_and_empty_queue_is_enforced() {
     let mut site = Guard::default();
-    init_npcs(&mut (&mut FakeStory::with(&[("URQUAN_MESSED_UP", 1)]), &mut site));
+    init_npcs(&mut (&mut FakeStory::with(&[(StoryKey::URQUAN_MESSED_UP, 1)]), &mut site));
     assert_eq!(site.calls, ["save"]);
     assert!(std::panic::catch_unwind(|| {
         init_npcs(&mut (
@@ -173,7 +174,7 @@ fn reinit_preserves_full_groups_and_moves_only_engaged_guard() {
                     }
                 }
                 reinit_npcs(&mut (
-                    &mut FakeStory::with(&[("URQUAN_MESSED_UP", messed)]),
+                    &mut FakeStory::with(&[(StoryKey::URQUAN_MESSED_UP, messed)]),
                     &mut site,
                 ));
                 assert_eq!(format!("{:?}", site.groups), format!("{expected:?}"));
@@ -211,9 +212,9 @@ fn final_contact_all_story_survivor_abort_and_rebel_paths() {
                         for feasible in [false, true] {
                             for status in [0, CHECK_ABORT, CHECK_LOAD, CHECK_ABORT | CHECK_LOAD] {
                                 let mut story = FakeStory::with(&[
-                                    ("URQUAN_MESSED_UP", messed),
-                                    ("KOHR_AH_FRENZY", frenzy),
-                                    ("YEHAT_CIVIL_WAR", civil),
+                                    (StoryKey::URQUAN_MESSED_UP, messed),
+                                    (StoryKey::KOHR_AH_FRENZY, frenzy),
+                                    (StoryKey::YEHAT_CIVIL_WAR, civil),
                                 ]);
                                 let mut site = Site {
                                     survivors,
@@ -269,7 +270,7 @@ fn final_contact_all_story_survivor_abort_and_rebel_paths() {
                                 }
                                 assert_eq!(*site.calls.borrow(), expected);
                                 assert_eq!(
-                                    story.flag("URQUAN_PROTECTING_SAMATRA"),
+                                    story.flag(StoryKey::URQUAN_PROTECTING_SAMATRA),
                                     u32::from(status != 0 || !survivors)
                                 );
                             }

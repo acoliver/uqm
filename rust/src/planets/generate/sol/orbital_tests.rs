@@ -1,3 +1,4 @@
+use crate::engine::StoryKey;
 use super::lifecycle_tests::{group, pair, QueueHost, Trace};
 use super::orbital::{Orbital, Queues, Scene};
 use super::*;
@@ -215,8 +216,8 @@ fn orbital_effects_preserve_c_order_and_surface_ownership_on_every_body() {
             for found in [0, 1] {
                 for destroyed in [0, 1] {
                     let (mut story, queue) = pair();
-                    story.flags.insert("FOUND_PLUTO_SPATHI", found);
-                    story.flags.insert("MOONBASE_DESTROYED", destroyed);
+                    story.flags.insert(StoryKey::FOUND_PLUTO_SPATHI, found);
+                    story.flags.insert(StoryKey::MOONBASE_DESTROYED, destroyed);
                     let before_flags = story.flags.clone();
                     let mut host = Site::new(queue, body);
                     assert!(generate_orbital(body, &story, &mut host));
@@ -282,8 +283,8 @@ fn lunar_bio_seed_follows_minerals_and_other_scans_keep_incoming_seeds() {
         PLUTO,
     ] {
         let (mut story, queue) = pair();
-        story.flags.insert("FOUND_PLUTO_SPATHI", 1);
-        story.flags.insert("MOONBASE_DESTROYED", 1);
+        story.flags.insert(StoryKey::FOUND_PLUTO_SPATHI, 1);
+        story.flags.insert(StoryKey::MOONBASE_DESTROYED, 1);
         let mut host = Site::new(queue, body);
         assert!(generate_orbital(body, &story, &mut host));
         assert_eq!(

@@ -1,6 +1,7 @@
 //! VUX home, Zex' maidens and Zex' beast, ported from `genvux.c`.
 
-use crate::battle::gendef::{MAIDENS_DEFINED, VUX_BEAST_DEFINED, VUX_DEFINED};
+use crate::engine::StoryKey;
+use crate::planets::generate::identities::{MAIDENS_DEFINED, VUX_BEAST_DEFINED, VUX_DEFINED};
 use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
 use crate::math::RandomContext;
 use crate::planet_side::report_adapter::DiscoveryReportPort;
@@ -122,10 +123,10 @@ pub(super) fn prepare_orbital(
     }
     if body == WORLD {
         match star {
-            MAIDENS_DEFINED if story.flag("SHOFIXTI_MAIDENS") == 0 => {
+            MAIDENS_DEFINED if story.flag(StoryKey::SHOFIXTI_MAIDENS) == 0 => {
                 site.load_scene(Scene::Maidens)
             }
-            VUX_BEAST_DEFINED if story.flag("VUX_BEAST") == 0 => site.load_scene(Scene::Beast),
+            VUX_BEAST_DEFINED if story.flag(StoryKey::VUX_BEAST) == 0 => site.load_scene(Scene::Beast),
             MAIDENS_DEFINED | VUX_BEAST_DEFINED => {}
             _ => site.load_scene(Scene::Ruins),
         }
@@ -144,7 +145,7 @@ pub fn generate_energy(
 ) -> u16 {
     if body == WORLD {
         if star == MAIDENS_DEFINED {
-            if story.flag("SHOFIXTI_MAIDENS") != 0 {
+            if story.flag(StoryKey::SHOFIXTI_MAIDENS) != 0 {
                 return 0;
             }
             node.loc_pt.x = (crate::planets::generate::consts::MAP_WIDTH / 3) as i16;
@@ -187,11 +188,11 @@ pub fn pickup_energy(
     lander: &mut impl LanderTakeoff,
 ) -> bool {
     if star == MAIDENS_DEFINED && body == WORLD {
-        assert!(story.flag("SHOFIXTI_MAIDENS") == 0 && which == 0);
+        assert!(story.flag(StoryKey::SHOFIXTI_MAIDENS) == 0 && which == 0);
         default::lander_report(report);
         lander.lander_takeoff();
-        story.set_flag("SHOFIXTI_MAIDENS", 1);
-        story.set_flag("MAIDENS_ON_SHIP", 1);
+        story.set_flag(StoryKey::SHOFIXTI_MAIDENS, 1);
+        story.set_flag(StoryKey::MAIDENS_ON_SHIP, 1);
         return true;
     }
     if star == VUX_DEFINED && body == WORLD {
@@ -209,11 +210,11 @@ pub fn pickup_life(
     lander: &mut impl LanderTakeoff,
 ) -> bool {
     if star == VUX_BEAST_DEFINED && body == WORLD && which == 0 {
-        assert_eq!(story.flag("VUX_BEAST"), 0);
+        assert_eq!(story.flag(StoryKey::VUX_BEAST), 0);
         default::lander_report(report);
         lander.lander_takeoff();
-        story.set_flag("VUX_BEAST", 1);
-        story.set_flag("VUX_BEAST_ON_SHIP", 1);
+        story.set_flag(StoryKey::VUX_BEAST, 1);
+        story.set_flag(StoryKey::VUX_BEAST_ON_SHIP, 1);
     }
     true
 }

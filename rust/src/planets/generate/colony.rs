@@ -4,6 +4,7 @@
 //! Overridden: `initNpcs`, `generatePlanets`, `generateOrbital`. Story flags:
 //! `COLONY_GRPOFFS0` (32-bit group reference).
 
+use crate::engine::StoryKey;
 use crate::engine::world::planet::PlanetDesc;
 use crate::math::RandomContext;
 use crate::planets::generate::consts::PLANET_SHIELDED;
@@ -15,7 +16,7 @@ use crate::planets::generate::special::{
 
 /// `GenerateColony_initNpcs`.
 pub fn init_npcs(host: &mut (impl FleetGroups + Story)) -> bool {
-    special::ensure_fleet(host, "COLONY_GRPOFFS0", URQUAN_SHIP);
+    special::ensure_fleet(host, StoryKey::COLONY_GRPOFFS0, URQUAN_SHIP);
     default::init_npcs(host);
     if host.battle_group_ref() != 0 {
         host.head_ip_group(&mut |group| {

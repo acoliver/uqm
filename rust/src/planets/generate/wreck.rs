@@ -3,6 +3,7 @@
 //! Overridden: `generateOrbital`, `generateEnergy`, `pickupEnergy`. Story
 //! flags: `PORTAL_KEY`, `PORTAL_KEY_ON_SHIP`.
 
+use crate::engine::StoryKey;
 use crate::engine::world::planet::{NodeInfo, SystemInfo};
 use crate::math::RandomContext;
 use crate::planet_side::report_adapter::DiscoveryReportPort;
@@ -30,7 +31,7 @@ pub fn generate_orbital(
     load_planet: impl FnOnce(),
 ) -> bool {
     if body == WRECK {
-        site.load_wreck_scene(u16::from(story.flag("PORTAL_KEY") != 0));
+        site.load_wreck_scene(u16::from(story.flag(StoryKey::PORTAL_KEY) != 0));
     }
     orbit.default_orbital(load_planet)
 }
@@ -64,10 +65,10 @@ pub fn pickup_energy(
     }
     assert_eq!(which_node, 0, "the wreck has a single energy node");
     default::lander_report_cycle(report);
-    if story.flag("PORTAL_KEY") == 0 {
+    if story.flag(StoryKey::PORTAL_KEY) == 0 {
         site.lander_takeoff();
-        story.set_flag("PORTAL_KEY", 1);
-        story.set_flag("PORTAL_KEY_ON_SHIP", 1);
+        story.set_flag(StoryKey::PORTAL_KEY, 1);
+        story.set_flag(StoryKey::PORTAL_KEY_ON_SHIP, 1);
     }
     false
 }

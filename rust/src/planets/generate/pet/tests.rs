@@ -1,6 +1,7 @@
 //! The talking pet system's conversation flow, the Ur-Quan abduction and the
 //! ruins against recording fakes.
 
+use crate::engine::StoryKey;
 use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -279,7 +280,7 @@ fn concat(parts: &[&[Call]]) -> Vec<Call> {
 #[test]
 fn the_ruins_scene_is_loaded_when_nothing_calls_for_a_conversation() {
     // The pet is found, the zombies are gone, the Umgah cannot be tracked.
-    let (calls, loaded, weather) = visit(WORLD, &[("TALKING_PET", 1)], |site| {
+    let (calls, loaded, weather) = visit(WORLD, &[(StoryKey::TALKING_PET, 1)], |site| {
         site.tracking = false;
     });
     assert_eq!(
@@ -304,11 +305,11 @@ fn other_bodies_only_get_the_default_orbital() {
 fn each_condition_alone_starts_the_visit_in_the_conversation_flow() {
     for (flags, tracking) in [
         (
-            &[("UMGAH_ZOMBIE_BLOBBIES", 1), ("TALKING_PET", 1)][..],
+            &[(StoryKey::UMGAH_ZOMBIE_BLOBBIES, 1), (StoryKey::TALKING_PET, 1)][..],
             false,
         ),
         (&[][..], false),
-        (&[("TALKING_PET", 1)][..], true),
+        (&[(StoryKey::TALKING_PET, 1)][..], true),
     ] {
         let (calls, loaded, _) = visit(WORLD, flags, |site| site.tracking = tracking);
         let enter = calls
@@ -323,7 +324,7 @@ fn each_condition_alone_starts_the_visit_in_the_conversation_flow() {
 
 #[test]
 fn the_umgah_are_met_while_their_sphere_can_be_tracked() {
-    let (calls, loaded, _) = visit(WORLD, &[("TALKING_PET", 1)], |site| {
+    let (calls, loaded, _) = visit(WORLD, &[(StoryKey::TALKING_PET, 1)], |site| {
         site.tracking = true;
         site.tracking_after = true;
         site.survivors_after_talk = true;
@@ -369,7 +370,7 @@ fn the_zombie_fleet_is_ten_ships_and_the_pet_talks_after_it_is_beaten() {
     for (survivors, pet_talks_after) in [(false, true), (true, false)] {
         let (calls, _, _) = visit(
             WORLD,
-            &[("UMGAH_ZOMBIE_BLOBBIES", 1), ("TALKING_PET", 1)],
+            &[(StoryKey::UMGAH_ZOMBIE_BLOBBIES, 1), (StoryKey::TALKING_PET, 1)],
             |site| {
                 site.tracking = true;
                 site.tracking_after = true;
@@ -399,7 +400,7 @@ fn the_zombie_fleet_is_ten_ships_and_the_pet_talks_after_it_is_beaten() {
 #[test]
 fn an_aborted_or_loaded_conversation_leaves_the_world_alone() {
     for abort in [CHECK_ABORT, CHECK_LOAD] {
-        let (calls, loaded, _) = visit(WORLD, &[("TALKING_PET", 1)], |site| {
+        let (calls, loaded, _) = visit(WORLD, &[(StoryKey::TALKING_PET, 1)], |site| {
             site.tracking = true;
             site.activity_after_talk = Some(IN_INTERPLANETARY | START_INTERPLANETARY | abort);
         });
@@ -416,7 +417,7 @@ fn an_aborted_or_loaded_conversation_leaves_the_world_alone() {
 fn a_hypnotised_player_is_taken_to_the_urquan_after_the_talk() {
     let (calls, _, _) = visit(
         WORLD,
-        &[("TALKING_PET", 1), ("PLAYER_HYPNOTIZED", 1)],
+        &[(StoryKey::TALKING_PET, 1), (StoryKey::PLAYER_HYPNOTIZED, 1)],
         |site| {
             site.tracking = true;
             site.tracking_after = true;

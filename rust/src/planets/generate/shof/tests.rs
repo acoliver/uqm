@@ -1,5 +1,6 @@
 //! The Shofixti group's story gating against a recording fake host.
 
+use crate::engine::StoryKey;
 use super::{
     generate_planets, init_npcs, reinit_npcs, uninit_npcs, ShofixtiSite, METAL_WORLD, NUM_PLANETS,
 };
@@ -128,10 +129,10 @@ fn group(race_id: u8, task: u8) -> IP_GROUP {
 
 fn story(recruited: u32, kia: u32, bro_kia: u32, maidens: u32) -> FakeStory {
     FakeStory::with(&[
-        ("SHOFIXTI_RECRUITED", recruited),
-        ("SHOFIXTI_KIA", kia),
-        ("SHOFIXTI_BRO_KIA", bro_kia),
-        ("MAIDENS_ON_SHIP", maidens),
+        (StoryKey::SHOFIXTI_RECRUITED, recruited),
+        (StoryKey::SHOFIXTI_KIA, kia),
+        (StoryKey::SHOFIXTI_BRO_KIA, bro_kia),
+        (StoryKey::MAIDENS_ON_SHIP, maidens),
     ])
 }
 
@@ -152,7 +153,7 @@ fn a_group_is_made_exactly_when_a_shofixti_remains() {
             .any(|call| matches!(call, Call::CloneShofixtiNamed(_)));
         assert_eq!(cloned, remains, "{bits:04b}");
         assert_eq!(
-            story.word("SHOFIXTI_GRPOFFS0"),
+            story.word(StoryKey::SHOFIXTI_GRPOFFS0),
             if remains { 77 } else { 0 },
             "{bits:04b}"
         );
@@ -190,13 +191,13 @@ fn a_missing_reference_is_stored_as_all_ones_until_the_group_exists() {
          init then finds them"
     );
     assert_eq!(host.group_ref, 77);
-    assert_eq!(story.word("SHOFIXTI_GRPOFFS0"), 77);
+    assert_eq!(story.word(StoryKey::SHOFIXTI_GRPOFFS0), 77);
 }
 
 #[test]
 fn a_stored_reference_resumes_its_group_and_a_lost_one_is_put_again() {
     let mut stored = story(0, 0, 0, 0);
-    stored.set_word("SHOFIXTI_GRPOFFS0", 5);
+    stored.set_word(StoryKey::SHOFIXTI_GRPOFFS0, 5);
 
     let mut host = Host::new(0, true);
     init_npcs(&mut (&mut stored, &mut host));
@@ -217,7 +218,7 @@ fn a_stored_reference_resumes_its_group_and_a_lost_one_is_put_again() {
             Call::BuildGroups,
         ]
     );
-    assert_eq!(stored.word("SHOFIXTI_GRPOFFS0"), 77);
+    assert_eq!(stored.word(StoryKey::SHOFIXTI_GRPOFFS0), 77);
 }
 
 #[test]
@@ -286,7 +287,7 @@ fn a_missing_group_means_a_shofixti_died() {
         ((0, 0, 0, 3, 1, false), (0, 0, 5)),
     ] {
         let mut story = story(recruited, kia, bro_kia, maidens);
-        story.set_flag("SHOFIXTI_VISITS", 5);
+        story.set_flag(StoryKey::SHOFIXTI_VISITS, 5);
         let mut host = Host::new(group_ref, true);
         if present {
             host.groups = vec![group(SHOFIXTI_SHIP, 0)];
@@ -295,9 +296,9 @@ fn a_missing_group_means_a_shofixti_died() {
         assert_eq!(host.calls, saved_and_emptied);
         assert_eq!(
             (
-                story.flag("SHOFIXTI_KIA"),
-                story.flag("SHOFIXTI_BRO_KIA"),
-                story.flag("SHOFIXTI_VISITS")
+                story.flag(StoryKey::SHOFIXTI_KIA),
+                story.flag(StoryKey::SHOFIXTI_BRO_KIA),
+                story.flag(StoryKey::SHOFIXTI_VISITS)
             ),
             expect,
             "{kia}{bro_kia}{maidens}{group_ref}{recruited}{present}"

@@ -1,10 +1,11 @@
+use crate::engine::StoryKey;
 use super::*;
 use crate::engine::world::planet::NodeInfo;
 use std::collections::BTreeMap;
 
 #[test]
 fn special_pickups_reject_retrieved_nodes_and_nonzero_indices_before_effects() {
-    for (body, flag) in [(PLUTO, "FOUND_PLUTO_SPATHI"), (LUNA, "MOONBASE_DESTROYED")] {
+    for (body, flag) in [(PLUTO, StoryKey::FOUND_PLUTO_SPATHI), (LUNA, StoryKey::MOONBASE_DESTROYED)] {
         for (taken, which) in [(1, 0), (0, 1), (1, 1)] {
             let mut host = Host {
                 survive: true,
@@ -107,9 +108,9 @@ fn pluto_pickup_stops_on_crew_failure_and_retains_the_node_on_success() {
             vec!["crew:8:42"]
         };
         assert_eq!(host.calls, expected);
-        assert_eq!(host.flag("FOUND_PLUTO_SPATHI"), u32::from(survive));
-        assert_eq!(host.flag("MOONBASE_DESTROYED"), 0);
-        assert_eq!(host.flag("MOONBASE_ON_SHIP"), 0);
+        assert_eq!(host.flag(StoryKey::FOUND_PLUTO_SPATHI), u32::from(survive));
+        assert_eq!(host.flag(StoryKey::MOONBASE_DESTROYED), 0);
+        assert_eq!(host.flag(StoryKey::MOONBASE_ON_SHIP), 0);
         assert_eq!(host.flag("unrelated"), 93);
         assert!(host.words.is_empty());
         let mut node: NodeInfo = unsafe { std::mem::zeroed() };
@@ -134,9 +135,9 @@ fn luna_pickup_reports_then_takes_off_before_both_story_writes() {
             "flag:MOONBASE_ON_SHIP:1"
         ]
     );
-    assert_eq!(host.flag("MOONBASE_DESTROYED"), 1);
-    assert_eq!(host.flag("MOONBASE_ON_SHIP"), 1);
-    assert_eq!(host.flag("FOUND_PLUTO_SPATHI"), 0);
+    assert_eq!(host.flag(StoryKey::MOONBASE_DESTROYED), 1);
+    assert_eq!(host.flag(StoryKey::MOONBASE_ON_SHIP), 1);
+    assert_eq!(host.flag(StoryKey::FOUND_PLUTO_SPATHI), 0);
     assert_eq!(host.flag("unrelated"), 93);
     assert!(host.words.is_empty());
     assert_eq!(generate_energy(LUNA, None, &host), 0);

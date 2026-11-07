@@ -5,6 +5,7 @@
 //! flags: `CHMMR_UNLEASHED`, `CHMMR_BOMB_STATE`, `SUN_DEVICE_ON_SHIP`,
 //! `ILWRATH_DECEIVED`.
 
+use crate::engine::StoryKey;
 use crate::battle::battle_types::normalize_angle;
 use crate::engine::world::planet::{PlanetDesc, PlanetFrame};
 use crate::math::RandomContext;
@@ -69,7 +70,7 @@ pub fn generate_planets(
 ) -> u8 {
     special::planets_then(rng, plan_data, star_size, star_color, planets, |planets| {
         planets[1].data_index = SAPPHIRE_WORLD;
-        if story.flag("CHMMR_UNLEASHED") == 0 {
+        if story.flag(StoryKey::CHMMR_UNLEASHED) == 0 {
             planets[1].data_index |= PLANET_SHIELDED;
         }
         planets[1].num_planets = 1;
@@ -123,17 +124,17 @@ pub fn generate_orbital(
 /// conversation or the starbase report took the visit.
 fn enter_orbit(body: Body, story: &impl Story, site: &mut impl ChmmrSite) -> bool {
     if body == Body::Planet(1) {
-        if story.flag("CHMMR_UNLEASHED") != 0 {
+        if story.flag(StoryKey::CHMMR_UNLEASHED) != 0 {
             site.set_global_flags_and_data(CHMMR_CONTACT_FLAGS);
             site.talk_to_chmmr();
-            if story.flag("CHMMR_BOMB_STATE") == BOMB_DELIVERED {
+            if story.flag(StoryKey::CHMMR_BOMB_STATE) == BOMB_DELIVERED {
                 let activity = site.current_activity();
                 site.set_current_activity(activity | END_INTERPLANETARY);
             }
             return true;
         }
-        if story.flag("SUN_DEVICE_ON_SHIP") != 0
-            && story.flag("ILWRATH_DECEIVED") == 0
+        if story.flag(StoryKey::SUN_DEVICE_ON_SHIP) != 0
+            && story.flag(StoryKey::ILWRATH_DECEIVED) == 0
             && site.start_ilwrath_sphere_tracking()
         {
             ambush_by_ilwrath(site);

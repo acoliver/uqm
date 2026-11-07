@@ -4,6 +4,7 @@
 //! Overridden: `initNpcs`, `generatePlanets`, `generateOrbital`,
 //! `generateEnergy`, `pickupEnergy`. Story flags: `ZOQFOT_DISTRESS`.
 
+use crate::engine::StoryKey;
 use crate::comm::dispatch::{CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY};
 use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
 use crate::math::RandomContext;
@@ -29,7 +30,7 @@ pub trait ZoqFotPikSite: HomeContactSite {
 /// `GenerateZoqFotPik_initNpcs`: nobody is in orbit while the Zoq-Fot-Pik are
 /// in distress (value 1).
 pub fn init_npcs(host: &mut (impl Npcs + Story)) -> bool {
-    if host.flag("ZOQFOT_DISTRESS") != 1 {
+    if host.flag(StoryKey::ZOQFOT_DISTRESS) != 1 {
         default::init_npcs(host);
     }
     true
@@ -100,7 +101,7 @@ fn meet(story: &impl Story, site: &mut impl ZoqFotPikSite) {
         "the built-ship queue must be empty before the fleet is cloned into it"
     );
 
-    if story.flag("ZOQFOT_DISTRESS") != 0 {
+    if story.flag(StoryKey::ZOQFOT_DISTRESS) != 0 {
         site.clone_black_urquan_into_built_queue();
         begin_talk(site);
         site.talk_black_urquan();

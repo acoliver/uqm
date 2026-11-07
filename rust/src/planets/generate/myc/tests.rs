@@ -1,6 +1,7 @@
 //! The Mycon systems' story gating, guard conversations and pickups against
 //! recording fakes.
 
+use crate::engine::StoryKey;
 use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -9,7 +10,7 @@ use super::{
     generate_energy, generate_life, generate_orbital, generate_planets, pickup_energy, MyconSite,
     Scene, AMBUSH_SHIPS, HOME_TALK_FLAGS, SUN_DEVICE_TALK_FLAGS, WORLD,
 };
-use crate::battle::gendef::{
+use crate::planets::generate::identities::{
     EGG_CASE0_DEFINED, EGG_CASE1_DEFINED, EGG_CASE2_DEFINED, MYCON_DEFINED, SUN_DEVICE_DEFINED,
 };
 use crate::comm::dispatch::{CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY};
@@ -173,7 +174,7 @@ fn the_sun_device_is_one_artifact_until_taken() {
         nodes(SUN_DEVICE_DEFINED, WORLD, &FakeStory::default(), false),
         1
     );
-    let taken = FakeStory::with(&[("SUN_DEVICE", 1)]);
+    let taken = FakeStory::with(&[(StoryKey::SUN_DEVICE, 1)]);
     assert_eq!(nodes(SUN_DEVICE_DEFINED, WORLD, &taken, false), 0);
 }
 
@@ -210,7 +211,7 @@ fn there_is_no_life_in_mycon_systems() {
 
 #[test]
 fn the_sun_device_is_taken_once_from_node_zero() {
-    let mut story = FakeStory::with(&[("MYCON_VISITS", 4)]);
+    let mut story = FakeStory::with(&[(StoryKey::MYCON_VISITS, 4)]);
     let (mut report, mut lander) = (FakeReport::default(), FakeLander::default());
     assert!(pickup_energy(
         SUN_DEVICE_DEFINED,
@@ -223,9 +224,9 @@ fn the_sun_device_is_taken_once_from_node_zero() {
     assert_eq!(report.0, [ReportDisposition::Once]);
     assert_eq!(lander.0, 1);
     for (flag, value) in [
-        ("SUN_DEVICE", 1),
-        ("SUN_DEVICE_ON_SHIP", 1),
-        ("MYCON_VISITS", 0),
+        (StoryKey::SUN_DEVICE, 1),
+        (StoryKey::SUN_DEVICE_ON_SHIP, 1),
+        (StoryKey::MYCON_VISITS, 0),
     ] {
         assert_eq!(story.flag(flag), value, "{flag}");
     }
@@ -234,7 +235,7 @@ fn the_sun_device_is_taken_once_from_node_zero() {
 #[test]
 fn the_sun_device_cannot_be_taken_twice_or_from_another_node() {
     for (taken, node) in [(1, 0), (0, 1)] {
-        let mut story = FakeStory::with(&[("SUN_DEVICE", taken)]);
+        let mut story = FakeStory::with(&[(StoryKey::SUN_DEVICE, taken)]);
         let (mut report, mut lander) = (FakeReport::default(), FakeLander::default());
         let attempt = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             pickup_energy(
@@ -255,9 +256,9 @@ fn the_sun_device_cannot_be_taken_twice_or_from_another_node() {
 #[test]
 fn each_egg_case_system_marks_its_own_egg_case() {
     let flags = [
-        "EGG_CASE0_ON_SHIP",
-        "EGG_CASE1_ON_SHIP",
-        "EGG_CASE2_ON_SHIP",
+        StoryKey::EGG_CASE0_ON_SHIP,
+        StoryKey::EGG_CASE1_ON_SHIP,
+        StoryKey::EGG_CASE2_ON_SHIP,
     ];
     for (taken, star_index) in EGG_CASES.into_iter().enumerate() {
         let mut story = FakeStory::default();
@@ -279,7 +280,7 @@ fn each_egg_case_system_marks_its_own_egg_case() {
                 "{star_index} {flag}"
             );
         }
-        assert_eq!(story.flag("SUN_DEVICE"), 0);
+        assert_eq!(story.flag(StoryKey::SUN_DEVICE), 0);
     }
 }
 
@@ -414,7 +415,7 @@ fn the_mycon_talk_at_their_home_and_win_or_lose_ends_as_the_fleet_does() {
     expected.extend(world_restored());
     expected.extend([Call::RepairSisBorder, Call::LoadPlanet]);
     assert_eq!(calls, expected);
-    assert_eq!(story.flag("SUN_DEVICE_UNGUARDED"), 1);
+    assert_eq!(story.flag(StoryKey::SUN_DEVICE_UNGUARDED), 1);
 
     // Mycon ships survive: the visit ends without the default orbital.
     let (calls, story) = visit(MYCON_DEFINED, WORLD, &[], false, |site| {
@@ -424,7 +425,7 @@ fn the_mycon_talk_at_their_home_and_win_or_lose_ends_as_the_fleet_does() {
     let mut expected = mycon_contact(HOME_TALK_FLAGS, false);
     expected.extend(world_restored());
     assert_eq!(calls, expected);
-    assert_eq!(story.flag("SUN_DEVICE_UNGUARDED"), 0);
+    assert_eq!(story.flag(StoryKey::SUN_DEVICE_UNGUARDED), 0);
 }
 
 #[test]
@@ -432,7 +433,7 @@ fn the_mycon_home_ambush_story_flag_does_not_matter() {
     let (calls, _) = visit(
         MYCON_DEFINED,
         WORLD,
-        &[("MYCON_FELL_FOR_AMBUSH", 1)],
+        &[(StoryKey::MYCON_FELL_FOR_AMBUSH, 1)],
         false,
         |site| site.tracking = true,
     );
@@ -459,12 +460,12 @@ fn the_sun_device_system_is_guarded_until_unguarded() {
         Call::LoadPlanet,
     ]);
     assert_eq!(calls, expected);
-    assert_eq!(story.flag("SUN_DEVICE_UNGUARDED"), 1);
+    assert_eq!(story.flag(StoryKey::SUN_DEVICE_UNGUARDED), 1);
 
     let (calls, _) = visit(
         SUN_DEVICE_DEFINED,
         WORLD,
-        &[("SUN_DEVICE_UNGUARDED", 1)],
+        &[(StoryKey::SUN_DEVICE_UNGUARDED, 1)],
         false,
         |site| site.tracking = true,
     );
@@ -483,7 +484,7 @@ fn a_mycon_fleet_that_fell_for_the_ambush_is_five_finite_ships() {
     let (calls, _) = visit(
         SUN_DEVICE_DEFINED,
         WORLD,
-        &[("MYCON_FELL_FOR_AMBUSH", 1)],
+        &[(StoryKey::MYCON_FELL_FOR_AMBUSH, 1)],
         false,
         |site| {
             site.tracking = true;
@@ -508,7 +509,7 @@ fn an_aborted_or_loaded_talk_leaves_everything_as_it_is() {
                 site.activity_after_talk = Some(IN_INTERPLANETARY | START_INTERPLANETARY | flag);
             });
             assert_eq!(calls, mycon_contact(flags, false), "{star_index} {flag:#x}");
-            assert_eq!(story.flag("SUN_DEVICE_UNGUARDED"), 0);
+            assert_eq!(story.flag(StoryKey::SUN_DEVICE_UNGUARDED), 0);
         }
     }
 }
@@ -529,7 +530,7 @@ fn a_taken_sun_device_loads_no_scene() {
     let (calls, _) = visit(
         SUN_DEVICE_DEFINED,
         WORLD,
-        &[("SUN_DEVICE", 1), ("SUN_DEVICE_UNGUARDED", 1)],
+        &[(StoryKey::SUN_DEVICE, 1), (StoryKey::SUN_DEVICE_UNGUARDED, 1)],
         false,
         |site| site.tracking = true,
     );
@@ -543,7 +544,7 @@ fn an_egg_case_system_teaches_about_the_shattered_worlds_and_loads_the_scene() {
             let (calls, story) = visit(
                 star_index,
                 WORLD,
-                &[("KNOW_ABOUT_SHATTERED", known)],
+                &[(StoryKey::KNOW_ABOUT_SHATTERED, known)],
                 false,
                 |site| site.tracking = true,
             );
@@ -552,7 +553,7 @@ fn an_egg_case_system_teaches_about_the_shattered_worlds_and_loads_the_scene() {
                 [Call::LoadScene(Scene::EggCase), Call::LoadPlanet],
                 "{star_index}"
             );
-            assert_eq!(story.flag("KNOW_ABOUT_SHATTERED"), known.max(1));
+            assert_eq!(story.flag(StoryKey::KNOW_ABOUT_SHATTERED), known.max(1));
         }
     }
 }
@@ -561,7 +562,7 @@ fn an_egg_case_system_teaches_about_the_shattered_worlds_and_loads_the_scene() {
 fn a_taken_egg_case_loads_no_scene_but_the_player_still_learns() {
     let (calls, story) = visit(EGG_CASE0_DEFINED, WORLD, &[], true, |_| {});
     assert_eq!(calls, [Call::LoadPlanet]);
-    assert_eq!(story.flag("KNOW_ABOUT_SHATTERED"), 1);
+    assert_eq!(story.flag(StoryKey::KNOW_ABOUT_SHATTERED), 1);
 }
 
 #[test]
@@ -570,7 +571,7 @@ fn other_worlds_go_straight_to_the_default_orbital() {
         for body in [Body::Planet(1), MOON] {
             let (calls, story) = visit(star_index, body, &[], false, |site| site.tracking = true);
             assert_eq!(calls, [Call::LoadPlanet], "{star_index} {body:?}");
-            assert_eq!(story.flag("KNOW_ABOUT_SHATTERED"), 0);
+            assert_eq!(story.flag(StoryKey::KNOW_ABOUT_SHATTERED), 0);
         }
     }
     let (calls, _) = visit(0, WORLD, &[], false, |site| site.tracking = true);
@@ -599,7 +600,7 @@ fn all_egg_scenes_use_the_energy_retrieval_bit_and_preserve_prior_knowledge() {
                 let (calls, story) = visit(
                     star,
                     WORLD,
-                    &[("KNOW_ABOUT_SHATTERED", known)],
+                    &[(StoryKey::KNOW_ABOUT_SHATTERED, known)],
                     retrieved,
                     |_| {},
                 );
@@ -609,7 +610,7 @@ fn all_egg_scenes_use_the_energy_retrieval_bit_and_preserve_prior_knowledge() {
                     vec![Call::LoadScene(Scene::EggCase), Call::LoadPlanet]
                 };
                 assert_eq!(calls, expected);
-                assert_eq!(story.flag("KNOW_ABOUT_SHATTERED"), known.max(1));
+                assert_eq!(story.flag(StoryKey::KNOW_ABOUT_SHATTERED), known.max(1));
             }
         }
     }
@@ -620,7 +621,7 @@ fn taking_the_sun_device_does_not_skip_a_still_guarded_conversation() {
     let (calls, story) = visit(
         SUN_DEVICE_DEFINED,
         WORLD,
-        &[("SUN_DEVICE", 1)],
+        &[(StoryKey::SUN_DEVICE, 1)],
         false,
         |site| site.tracking = true,
     );
@@ -628,8 +629,8 @@ fn taking_the_sun_device_does_not_skip_a_still_guarded_conversation() {
     expected.extend(world_restored());
     expected.extend([Call::RepairSisBorder, Call::LoadPlanet]);
     assert_eq!(calls, expected);
-    assert_eq!(story.flag("SUN_DEVICE"), 1);
-    assert_eq!(story.flag("SUN_DEVICE_UNGUARDED"), 1);
+    assert_eq!(story.flag(StoryKey::SUN_DEVICE), 1);
+    assert_eq!(story.flag(StoryKey::SUN_DEVICE_UNGUARDED), 1);
 }
 
 #[test]
@@ -641,8 +642,8 @@ fn guard_story_and_conversation_outcomes_have_exact_host_effects() {
                     for survivors in [false, true] {
                         for status in [0, CHECK_ABORT, CHECK_LOAD, CHECK_ABORT | CHECK_LOAD] {
                             let flags = [
-                                ("SUN_DEVICE_UNGUARDED", unguarded),
-                                ("MYCON_FELL_FOR_AMBUSH", ambush),
+                                (StoryKey::SUN_DEVICE_UNGUARDED, unguarded),
+                                (StoryKey::MYCON_FELL_FOR_AMBUSH, ambush),
                             ];
                             let (calls, story) = visit(star, WORLD, &flags, false, |site| {
                                 site.tracking = tracking;
@@ -682,8 +683,8 @@ fn guard_story_and_conversation_outcomes_have_exact_host_effects() {
                                 expected.push(Call::LoadPlanet);
                             }
                             assert_eq!(calls, expected, "star={star} tracking={tracking} flags={flags:?} survivors={survivors} status={status:#x}");
-                            assert_eq!(story.flag("SUN_DEVICE_UNGUARDED"), resulting_unguarded);
-                            assert_eq!(story.flag("MYCON_FELL_FOR_AMBUSH"), ambush);
+                            assert_eq!(story.flag(StoryKey::SUN_DEVICE_UNGUARDED), resulting_unguarded);
+                            assert_eq!(story.flag(StoryKey::MYCON_FELL_FOR_AMBUSH), ambush);
                         }
                     }
                 }
@@ -733,14 +734,14 @@ impl LanderTakeoff for OrderedLander {
 #[test]
 fn pickups_report_then_launch_then_write_only_their_story_flags() {
     for (star, flag) in [
-        (SUN_DEVICE_DEFINED, "SUN_DEVICE"),
-        (EGG_CASE0_DEFINED, "EGG_CASE0_ON_SHIP"),
-        (EGG_CASE1_DEFINED, "EGG_CASE1_ON_SHIP"),
-        (EGG_CASE2_DEFINED, "EGG_CASE2_ON_SHIP"),
+        (SUN_DEVICE_DEFINED, StoryKey::SUN_DEVICE),
+        (EGG_CASE0_DEFINED, StoryKey::EGG_CASE0_ON_SHIP),
+        (EGG_CASE1_DEFINED, StoryKey::EGG_CASE1_ON_SHIP),
+        (EGG_CASE2_DEFINED, StoryKey::EGG_CASE2_ON_SHIP),
     ] {
         let calls = Rc::new(RefCell::new(Vec::new()));
         let mut story = OrderedStory {
-            inner: FakeStory::with(&[("MYCON_VISITS", 7)]),
+            inner: FakeStory::with(&[(StoryKey::MYCON_VISITS, 7)]),
             calls: Rc::clone(&calls),
         };
         assert!(pickup_energy(
@@ -758,8 +759,8 @@ fn pickups_report_then_launch_then_write_only_their_story_flags() {
         ];
         if star == SUN_DEVICE_DEFINED {
             expected.extend([
-                Call::SetFlag("SUN_DEVICE_ON_SHIP", 1),
-                Call::SetFlag("MYCON_VISITS", 0),
+                Call::SetFlag(StoryKey::SUN_DEVICE_ON_SHIP, 1),
+                Call::SetFlag(StoryKey::MYCON_VISITS, 0),
             ]);
         }
         assert_eq!(*calls.borrow(), expected, "{star}");
@@ -782,7 +783,7 @@ fn winning_clears_only_the_activity_bit_then_restores_groups_before_unguarding()
         Call::SetActivity(IN_INTERPLANETARY | 0x0100),
         Call::ReinitBuiltShipQ,
         Call::LoadIpGroups,
-        Call::SetFlag("SUN_DEVICE_UNGUARDED", 1),
+        Call::SetFlag(StoryKey::SUN_DEVICE_UNGUARDED, 1),
         Call::RepairSisBorder,
     ]);
     assert_eq!(*calls.borrow(), expected);

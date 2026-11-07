@@ -1,6 +1,7 @@
 //! The story gating of the Burvixese ruins and broadcasters, and the home
 //! system's orbital, against recording fakes.
 
+use crate::engine::StoryKey;
 use super::{generate_energy, generate_orbital, pickup_energy, BurvScenes};
 use crate::engine::world::planet::{NodeInfo, PlanetFrame, SystemInfo};
 use crate::math::RandomContext;
@@ -64,7 +65,7 @@ fn the_home_world_has_ruins_and_the_moon_one_artifact_until_taken() {
 
 #[test]
 fn taken_broadcasters_leave_no_node() {
-    let taken = FakeStory::with(&[("BURVIXESE_BROADCASTERS", 1)]);
+    let taken = FakeStory::with(&[(StoryKey::BURVIXESE_BROADCASTERS, 1)]);
     assert_eq!(node_count(MOON, &taken), 0);
     assert_eq!(node_count(HOME, &taken), 16);
 }
@@ -94,7 +95,7 @@ fn ruins_only_cycle_the_report() {
     ));
     assert_eq!(report.0, [ReportDisposition::Cycle]);
     assert_eq!(lander.0, 0);
-    assert_eq!(story.flag("BURVIXESE_BROADCASTERS"), 0);
+    assert_eq!(story.flag(StoryKey::BURVIXESE_BROADCASTERS), 0);
 }
 
 #[test]
@@ -104,13 +105,13 @@ fn the_broadcasters_are_taken_once_with_a_single_report() {
     assert!(pickup_energy(MOON, 0, &mut story, &mut report, &mut lander));
     assert_eq!(report.0, [ReportDisposition::Once]);
     assert_eq!(lander.0, 1);
-    assert_eq!(story.flag("BURVIXESE_BROADCASTERS"), 1);
-    assert_eq!(story.flag("BURV_BROADCASTERS_ON_SHIP"), 1);
+    assert_eq!(story.flag(StoryKey::BURVIXESE_BROADCASTERS), 1);
+    assert_eq!(story.flag(StoryKey::BURV_BROADCASTERS_ON_SHIP), 1);
 }
 
 #[test]
 fn the_broadcasters_cannot_be_taken_twice() {
-    let mut story = FakeStory::with(&[("BURVIXESE_BROADCASTERS", 1)]);
+    let mut story = FakeStory::with(&[(StoryKey::BURVIXESE_BROADCASTERS, 1)]);
     let (mut report, mut lander) = (FakeReport::default(), FakeLander::default());
     let again = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         pickup_energy(MOON, 0, &mut story, &mut report, &mut lander)
@@ -147,7 +148,7 @@ fn other_worlds_pick_up_nothing() {
         ));
         assert!(report.0.is_empty());
         assert_eq!(lander.0, 0);
-        assert_eq!(story.flag("BURVIXESE_BROADCASTERS"), 0);
+        assert_eq!(story.flag(StoryKey::BURVIXESE_BROADCASTERS), 0);
     }
 }
 
@@ -195,7 +196,7 @@ fn orbit_scenes(body: Body, story: &FakeStory) -> (u32, u32, (u8, u8), u32) {
 #[test]
 fn orbital_scene_follows_the_world_and_the_broadcasters() {
     let fresh = FakeStory::default();
-    let taken = FakeStory::with(&[("BURVIXESE_BROADCASTERS", 1)]);
+    let taken = FakeStory::with(&[(StoryKey::BURVIXESE_BROADCASTERS, 1)]);
 
     let (ruins, broadcasters, weather, loaded) = orbit_scenes(HOME, &fresh);
     assert_eq!((ruins, broadcasters, weather, loaded), (1, 0, (0, 0), 1));

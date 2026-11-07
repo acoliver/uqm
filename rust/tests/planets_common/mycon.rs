@@ -1,5 +1,6 @@
 //! Full-field Mycon layout and scan records, shared by pure and linked tests.
 
+use uqm::engine::StoryKey;
 use std::fmt::Write as _;
 use uqm_rust::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
 
@@ -133,7 +134,7 @@ struct SunDevice(bool);
 
 impl Story for SunDevice {
     fn flag(&self, name: &'static str) -> u32 {
-        assert_eq!(name, "SUN_DEVICE");
+        assert_eq!(name, StoryKey::SUN_DEVICE);
         u32::from(self.0)
     }
     fn set_flag(&mut self, _name: &'static str, _value: u32) {

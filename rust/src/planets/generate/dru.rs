@@ -5,6 +5,7 @@
 //! Overridden: `generatePlanets`, `generateOrbital`, `generateEnergy`,
 //! `pickupEnergy`. Story flags: `ROSY_SPHERE`, `ROSY_SPHERE_ON_SHIP`.
 
+use crate::engine::StoryKey;
 use crate::battle::battle_types::{HALF_CIRCLE, OCTANT};
 use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
 use crate::math::RandomContext;
@@ -44,7 +45,7 @@ pub fn generate_orbital(
     site: &mut impl HomeContactSite,
     load_planet: impl FnOnce(),
 ) -> bool {
-    if body == Body::Planet(0) && home_contact::enter_orbit(site, story.flag("ROSY_SPHERE") != 0) {
+    if body == Body::Planet(0) && home_contact::enter_orbit(site, story.flag(StoryKey::ROSY_SPHERE) != 0) {
         return true;
     }
     orbit.default_orbital(load_planet);
@@ -79,8 +80,8 @@ pub fn pickup_energy(
             story,
             report,
             lander,
-            "ROSY_SPHERE",
-            &["ROSY_SPHERE_ON_SHIP"],
+            StoryKey::ROSY_SPHERE,
+            &[StoryKey::ROSY_SPHERE_ON_SHIP],
         );
     }
     false

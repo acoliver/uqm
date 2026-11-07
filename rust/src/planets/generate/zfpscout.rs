@@ -4,6 +4,7 @@
 //! Overridden: `initNpcs`, `reinitNpcs`. Story flags: `MET_ZOQFOT`,
 //! `ZOQFOT_GRPOFFS0` (32-bit group reference).
 
+use crate::engine::StoryKey;
 use crate::planets::generate::default;
 use crate::planets::generate::special::{self, FleetGroups, Story, ZOQFOTPIK_SHIP};
 
@@ -12,8 +13,8 @@ use crate::planets::generate::default::{FLEE, IGNORE_FLAGSHIP, REFORM_GROUP};
 
 /// `GenerateZoqFotPikScout_initNpcs`.
 pub fn init_npcs(host: &mut (impl FleetGroups + Story)) -> bool {
-    if host.flag("MET_ZOQFOT") == 0 {
-        special::ensure_fleet(host, "ZOQFOT_GRPOFFS0", ZOQFOTPIK_SHIP);
+    if host.flag(StoryKey::MET_ZOQFOT) == 0 {
+        special::ensure_fleet(host, StoryKey::ZOQFOT_GRPOFFS0, ZOQFOTPIK_SHIP);
     }
     default::init_npcs(host);
     true
