@@ -1,4 +1,6 @@
 //! Legacy callers may borrow disjoint fields without reacquiring their owner.
+#[path = "support/campaign_display.rs"]
+mod campaign_display;
 #[test]
 #[serial_test::serial]
 fn battle_ditty_stop_uses_the_already_borrowed_kernel() {
@@ -74,12 +76,13 @@ fn empty_npc_phrase_does_not_acquire_an_owner() {
 #[serial_test::serial]
 fn sis_slot_snapshot_releases_world_before_support_ship_drawing() {
     let mut game = Game::new();
+    let display = campaign_display::CampaignDisplay::install(&mut game).unwrap();
+    game.world.story = Some(uqm_rust::state::game_state::GameState::new());
     game.world.data.flagship.module_slots.fill(255);
     game.world.data.flagship.drive_slots.fill(255);
     game.world.data.flagship.jet_slots.fill(255);
     game.world.data.flagship.crew_enlisted = 12;
-    // SAFETY: the serialized fixture owns the lifecycle; absent render handles
-    // are valid for the inactive graphics backend used by this test.
+    // SAFETY: the serialized fixture owns the game and its display resources.
     unsafe {
         bridge::with_game(&mut game, || {
             uqm_rust::ui::sis::DeltaSISGauges(i16::MAX, i16::MAX, i32::from(i16::MAX));
@@ -87,6 +90,7 @@ fn sis_slot_snapshot_releases_world_before_support_ship_drawing() {
     }
     assert_eq!(game.world.data.flagship.crew_enlisted, 12);
     assert_eq!(game.world.data.flagship.module_slots, [255; 16]);
+    display.finish(game);
 }
 
 #[test]
@@ -464,6 +468,7 @@ fn campaign_events_schedule_and_dispatch_using_the_existing_world() {
         fn GameClockTick();
     }
     let mut game = Game::new();
+    let display = campaign_display::CampaignDisplay::install(&mut game).unwrap();
     game.world.story = Some(uqm_rust::state::game_state::StoryState::new());
     let clock = &mut game.world.data.game.game_clock;
     clock.year_index = 2155;
@@ -505,6 +510,7 @@ fn campaign_events_schedule_and_dispatch_using_the_existing_world() {
         });
         game.world.clock.uninit();
     }
+    display.finish(game);
 }
 
 #[test]
