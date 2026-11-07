@@ -19,30 +19,6 @@ pub(crate) mod engine {
     use crate::ships::native::abi::*;
 
     /// # Safety
-    /// Called inside a native handoff with a live sound and retained channel state.
-    pub(crate) unsafe fn play_sound(
-        channels: &mut Channels,
-        sound: SOUND,
-        pos: SoundPosition,
-        object: Option<ElementId>,
-        priority: u8,
-    ) {
-        if sound.is_null() {
-            return;
-        }
-        let channel = channels.select(sound as usize, |c| {
-            ChannelPlaying((c + MIN_FX_CHANNEL as usize) as u32) != 0
-        });
-        PlaySoundEffect(
-            sound,
-            (channel + MIN_FX_CHANNEL as usize) as u16,
-            pos,
-            encode_object(object) as *mut std::ffi::c_void,
-            priority,
-        );
-    }
-
-    /// # Safety
     /// Called while the game-thread battle context is published.
     pub(crate) fn position(
         cx: &mut Cx<'_>,
@@ -82,7 +58,7 @@ pub(crate) mod engine {
         }
     }
 
-    pub(crate) fn play_clip(
+    pub(crate) fn play_sound(
         world: &crate::engine::World,
         channels: &mut Channels,
         sound: &crate::sound::owned_bank::SoundClip,
@@ -109,7 +85,7 @@ pub(crate) mod engine {
             let object = cx.kernel.sounds.objects[i];
             let pos = position(cx, object);
             if let Some(sound) = sound {
-                play_clip(
+                play_sound(
                     cx.world,
                     &mut cx.kernel.channels.borrow_mut(),
                     &sound,

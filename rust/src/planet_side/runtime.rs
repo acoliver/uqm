@@ -9,6 +9,7 @@ use super::session::{PlanetSideSession, SessionOutcome, SessionPhase, ShipDelta}
 use super::simulation::{self, FrameInput, LanderState, Shot, SimulationEffect, TickResult};
 use super::special_effects::SpecialPickupEffects;
 use super::world::{HazardChances, HazardSpawn, WorldStepEffects};
+use crate::engine::battle::Cx;
 
 /// Canonical planet-side simulation cadence.
 pub const PLANET_SIDE_HZ: u32 = 35;
@@ -122,6 +123,7 @@ pub trait PlanetSideCollision {
     /// creatures, and play hazard sounds.
     fn apply_world_step(
         &mut self,
+        _cx: &mut Cx<'_>,
         _result: &WorldStepResult,
         _audio: &mut impl PlanetSideAudio,
     ) -> Result<(), AdapterError> {
@@ -136,7 +138,7 @@ pub trait PlanetSideGraphics {
 
 /// Audio adapter consuming typed gameplay cues.
 pub trait PlanetSideAudio {
-    fn play(&mut self, cue: SoundCue) -> Result<(), AdapterError>;
+    fn play(&mut self, _world: &crate::engine::World, cue: SoundCue) -> Result<(), AdapterError>;
 }
 
 /// Monotonic clock adapter. The core never sleeps directly.
@@ -181,6 +183,7 @@ pub struct RuntimeAdapters<I, C, G, A, K, S> {
 
 /// Drive one canonical frame and execute its typed effects in source order.
 pub fn run_frame<I, C, G, A, K, S>(
+    cx: &mut Cx<'_>,
     session: &mut PlanetSideSession,
     adapters: &mut RuntimeAdapters<I, C, G, A, K, S>,
     tick_period: u32,
@@ -195,14 +198,15 @@ where
 {
     let deadline = Tick(adapters.clock.now().0.wrapping_add(tick_period));
     let input = if session.phase == SessionPhase::Active {
-        Some(adapters.input.poll()?)
+        Some(cx.with_legacy(|| adapters.input.poll())?)
     } else {
         None
     };
-    run_frame_at(session, adapters, deadline, input)
+    run_frame_at(cx, session, adapters, deadline, input)
 }
 
 pub(crate) fn run_frame_at<I, C, G, A, K, S>(
+    cx: &mut Cx<'_>,
     session: &mut PlanetSideSession,
     adapters: &mut RuntimeAdapters<I, C, G, A, K, S>,
     deadline: Tick,
@@ -223,13 +227,13 @@ where
             | SessionPhase::Landing
             | SessionPhase::TakingOff
     ) {
-        run_transition_frame(session, adapters, deadline)?;
+        run_transition_frame(cx, session, adapters, deadline)?;
         return Ok(RuntimeStep::Continue);
     }
 
     match session.phase {
-        SessionPhase::Return => return run_return_frame(session, adapters, deadline),
-        SessionPhase::Explosion => return run_explosion_frame(session, adapters, deadline),
+        SessionPhase::Return => return run_return_frame(cx, session, adapters, deadline),
+        SessionPhase::Explosion => return run_explosion_frame(cx, session, adapters, deadline),
         SessionPhase::Active | SessionPhase::Complete | SessionPhase::Aborted => {}
         SessionPhase::Warmup
         | SessionPhase::Launch
@@ -244,6 +248,7 @@ where
     );
 
     if let Some(step) = apply_lander_input(
+        cx,
         session,
         adapters,
         deadline,
@@ -252,15 +257,15 @@ where
         return Ok(step);
     }
 
-    if let Some(step) = step_surface_world(session, adapters, deadline)? {
+    if let Some(step) = step_surface_world(cx, session, adapters, deadline)? {
         return Ok(step);
     }
 
-    if let Some(step) = resolve_lander_contacts(session, adapters, deadline)? {
+    if let Some(step) = resolve_lander_contacts(cx, session, adapters, deadline)? {
         return Ok(step);
     }
 
-    render_active_frame(session, adapters, deadline)
+    render_active_frame(cx, session, adapters, deadline)
 }
 
 /// Present the lifecycle graphic and wait out the frame.
@@ -268,6 +273,7 @@ where
 /// Every path that keeps the session alive without settling ends this way, so
 /// the ordering of render before sleep lives in one place.
 fn continue_after_lifecycle<I, C, G, A, K, S>(
+    cx: &mut Cx<'_>,
     session: &PlanetSideSession,
     adapters: &mut RuntimeAdapters<I, C, G, A, K, S>,
     deadline: Tick,
@@ -276,13 +282,14 @@ where
     G: PlanetSideGraphics,
     K: PlanetSideClock,
 {
-    render_lifecycle(session, adapters)?;
-    adapters.clock.sleep_until(deadline)?;
+    render_lifecycle(cx, session, adapters)?;
+    cx.with_legacy(|| adapters.clock.sleep_until(deadline))?;
     Ok(RuntimeStep::Continue)
 }
 
 /// Begin the destruction sequence once the last crew member dies.
 fn begin_explosion<I, C, G, A, K, S>(
+    cx: &mut Cx<'_>,
     session: &mut PlanetSideSession,
     adapters: &mut RuntimeAdapters<I, C, G, A, K, S>,
 ) -> Result<(), RuntimeError>
@@ -291,12 +298,13 @@ where
 {
     session.phase = SessionPhase::Explosion;
     session.animation.reset();
-    adapters.audio.play(SoundCue::Destroyed)?;
+    adapters.audio.play(cx.world, SoundCue::Destroyed)?;
     Ok(())
 }
 
 /// Advance the return ascent, settling the trip once the animation completes.
 fn run_return_frame<I, C, G, A, K, S>(
+    cx: &mut Cx<'_>,
     session: &mut PlanetSideSession,
     adapters: &mut RuntimeAdapters<I, C, G, A, K, S>,
     deadline: Tick,
@@ -307,19 +315,20 @@ where
     S: ShipStatusPort,
 {
     if !session.advance_return() {
-        return continue_after_lifecycle(session, adapters, deadline);
+        return continue_after_lifecycle(cx, session, adapters, deadline);
     }
 
     let outcome = session.settle();
     if let SessionOutcome::Returned(delta) | SessionOutcome::LanderDestroyed(delta) = &outcome {
-        adapters.ship.apply(delta)?;
+        cx.with_legacy(|| adapters.ship.apply(delta))?;
     }
-    adapters.clock.sleep_until(deadline)?;
+    cx.with_legacy(|| adapters.clock.sleep_until(deadline))?;
     Ok(RuntimeStep::Complete(outcome))
 }
 
 /// Advance the destruction animation, settling once it completes.
 fn run_explosion_frame<I, C, G, A, K, S>(
+    cx: &mut Cx<'_>,
     session: &mut PlanetSideSession,
     adapters: &mut RuntimeAdapters<I, C, G, A, K, S>,
     deadline: Tick,
@@ -330,15 +339,15 @@ where
     S: ShipStatusPort,
 {
     if !session.advance_explosion() {
-        return continue_after_lifecycle(session, adapters, deadline);
+        return continue_after_lifecycle(cx, session, adapters, deadline);
     }
 
     let outcome = session.settle();
     if let SessionOutcome::LanderDestroyed(delta) = &outcome {
-        adapters.ship.apply(delta)?;
+        cx.with_legacy(|| adapters.ship.apply(delta))?;
     }
-    render_lifecycle(session, adapters)?;
-    adapters.clock.sleep_until(deadline)?;
+    render_lifecycle(cx, session, adapters)?;
+    cx.with_legacy(|| adapters.clock.sleep_until(deadline))?;
     Ok(RuntimeStep::Complete(outcome))
 }
 
@@ -348,6 +357,7 @@ where
 /// by entering the takeoff animation.
 #[cfg(test)]
 fn run_lander_simulation<I, C, G, A, K, S>(
+    cx: &mut Cx<'_>,
     session: &mut PlanetSideSession,
     adapters: &mut RuntimeAdapters<I, C, G, A, K, S>,
     deadline: Tick,
@@ -359,11 +369,12 @@ where
     A: PlanetSideAudio,
     K: PlanetSideClock,
 {
-    let input = adapters.input.poll()?;
-    apply_lander_input(session, adapters, deadline, input)
+    let input = cx.with_legacy(|| adapters.input.poll())?;
+    apply_lander_input(cx, session, adapters, deadline, input)
 }
 
 fn apply_lander_input<I, C, G, A, K, S>(
+    cx: &mut Cx<'_>,
     session: &mut PlanetSideSession,
     adapters: &mut RuntimeAdapters<I, C, G, A, K, S>,
     deadline: Tick,
@@ -384,10 +395,10 @@ where
             // Enter the takeoff animation without settling. Settlement happens
             // only after the TakingOff → Return sequence completes.
             session.request_takeoff();
-            continue_after_lifecycle(session, adapters, deadline).map(Some)
+            continue_after_lifecycle(cx, session, adapters, deadline).map(Some)
         }
         TickResult::Continue(effects) => {
-            execute_simulation_effects(&mut adapters.collision, &mut adapters.audio, effects)?;
+            execute_simulation_effects(cx, &mut adapters.collision, &mut adapters.audio, effects)?;
             Ok(None)
         }
     }
@@ -397,6 +408,7 @@ where
 ///
 /// Returns `Some` when the casualties destroy the lander and end the frame.
 fn step_surface_world<I, C, G, A, K, S>(
+    cx: &mut Cx<'_>,
     session: &mut PlanetSideSession,
     adapters: &mut RuntimeAdapters<I, C, G, A, K, S>,
     deadline: Tick,
@@ -407,12 +419,14 @@ where
     A: PlanetSideAudio,
     K: PlanetSideClock,
 {
-    let world_result = adapters
-        .collision
-        .step_world(&session.lander, session.hazard_chances)?;
+    let world_result = cx.with_legacy(|| {
+        adapters
+            .collision
+            .step_world(&session.lander, session.hazard_chances)
+    })?;
     adapters
         .collision
-        .apply_world_step(&world_result, &mut adapters.audio)?;
+        .apply_world_step(cx, &world_result, &mut adapters.audio)?;
 
     if world_result.lightning_kills == 0 {
         return Ok(None);
@@ -423,8 +437,8 @@ where
         return Ok(None);
     }
 
-    begin_explosion(session, adapters)?;
-    continue_after_lifecycle(session, adapters, deadline).map(Some)
+    begin_explosion(cx, session, adapters)?;
+    continue_after_lifecycle(cx, session, adapters, deadline).map(Some)
 }
 
 /// Resolve every contact the lander made this frame.
@@ -432,6 +446,7 @@ where
 /// Returns `Some` when a contact ends the frame, either by requesting takeoff
 /// (a special pickup) or by destroying the lander.
 fn resolve_lander_contacts<I, C, G, A, K, S>(
+    cx: &mut Cx<'_>,
     session: &mut PlanetSideSession,
     adapters: &mut RuntimeAdapters<I, C, G, A, K, S>,
     deadline: Tick,
@@ -442,7 +457,7 @@ where
     A: PlanetSideAudio,
     K: PlanetSideClock,
 {
-    for contact in adapters.collision.contacts(&session.lander)? {
+    for contact in cx.with_legacy(|| adapters.collision.contacts(&session.lander))? {
         let outcome = resolve_lander_collision(
             &mut CollisionState {
                 crew: &mut session.lander.crew,
@@ -453,19 +468,21 @@ where
             contact.collision,
             contact.rolls,
         );
-        execute_collision_effects(&mut adapters.audio, &outcome)?;
-        let effects = adapters
-            .collision
-            .commit(contact, &outcome, session.lander.crew.get())?;
+        execute_collision_effects(cx, &mut adapters.audio, &outcome)?;
+        let effects = cx.with_legacy(|| {
+            adapters
+                .collision
+                .commit(contact, &outcome, session.lander.crew.get())
+        })?;
         session.lander.crew.lose(effects.crew_killed);
 
         if effects.takeoff_requested {
             session.request_takeoff();
-            return continue_after_lifecycle(session, adapters, deadline).map(Some);
+            return continue_after_lifecycle(cx, session, adapters, deadline).map(Some);
         }
         if session.lander.crew.get() == 0 {
-            begin_explosion(session, adapters)?;
-            return continue_after_lifecycle(session, adapters, deadline).map(Some);
+            begin_explosion(cx, session, adapters)?;
+            return continue_after_lifecycle(cx, session, adapters, deadline).map(Some);
         }
     }
     Ok(None)
@@ -476,6 +493,7 @@ where
 /// The cargo meters are rendered from current levels so the life meter visibly
 /// fills on every pickup.
 fn render_active_frame<I, C, G, A, K, S>(
+    cx: &mut Cx<'_>,
     session: &PlanetSideSession,
     adapters: &mut RuntimeAdapters<I, C, G, A, K, S>,
     deadline: Tick,
@@ -484,19 +502,22 @@ where
     G: PlanetSideGraphics,
     K: PlanetSideClock,
 {
-    adapters.graphics.render(&RenderSnapshot {
-        phase: session.phase,
-        lander: session.lander.clone(),
-        mineral_level: session.minerals.level(),
-        biological_level: session.biological.level(),
-        animation_frame: 0,
-        lifecycle_offset: 0,
+    cx.with_legacy(|| {
+        adapters.graphics.render(&RenderSnapshot {
+            phase: session.phase,
+            lander: session.lander.clone(),
+            mineral_level: session.minerals.level(),
+            biological_level: session.biological.level(),
+            animation_frame: 0,
+            lifecycle_offset: 0,
+        })
     })?;
-    adapters.clock.sleep_until(deadline)?;
+    cx.with_legacy(|| adapters.clock.sleep_until(deadline))?;
     Ok(RuntimeStep::Continue)
 }
 
 fn run_transition_frame<I, C, G, A, K, S>(
+    cx: &mut Cx<'_>,
     session: &mut PlanetSideSession,
     adapters: &mut RuntimeAdapters<I, C, G, A, K, S>,
     deadline: Tick,
@@ -510,7 +531,7 @@ where
         SessionPhase::Warmup => {
             session.phase = SessionPhase::Launch;
             session.animation.reset();
-            adapters.audio.play(SoundCue::Departs)?;
+            adapters.audio.play(cx.world, SoundCue::Departs)?;
         }
         SessionPhase::Launch => {
             if session.advance_launch() {
@@ -529,19 +550,20 @@ where
             if session.advance_takeoff() {
                 session.phase = SessionPhase::Return;
                 session.animation.reset();
-                adapters.audio.play(SoundCue::Returns)?;
+                adapters.audio.play(cx.world, SoundCue::Returns)?;
             }
         }
         _ => unreachable!("run_transition_frame requires a transition phase"),
     }
-    render_lifecycle(session, adapters)?;
-    adapters.clock.sleep_until(deadline)?;
+    render_lifecycle(cx, session, adapters)?;
+    cx.with_legacy(|| adapters.clock.sleep_until(deadline))?;
     Ok(())
 }
 
 /// Render one lifecycle animation frame (Launch, Landing, TakingOff, Return,
 /// Explosion).
 fn render_lifecycle<I, C, G, A, K, S>(
+    cx: &mut Cx<'_>,
     session: &PlanetSideSession,
     adapters: &mut RuntimeAdapters<I, C, G, A, K, S>,
 ) -> Result<(), RuntimeError>
@@ -553,38 +575,44 @@ where
         SessionPhase::TakingOff => session.animation.takeoff_offset(),
         _ => 0,
     };
-    adapters.graphics.render(&RenderSnapshot {
-        phase: session.phase,
-        lander: session.lander.clone(),
-        mineral_level: session.minerals.level(),
-        biological_level: session.biological.level(),
-        animation_frame: session.animation.frame(),
-        lifecycle_offset: offset,
+    cx.with_legacy(|| {
+        adapters.graphics.render(&RenderSnapshot {
+            phase: session.phase,
+            lander: session.lander.clone(),
+            mineral_level: session.minerals.level(),
+            biological_level: session.biological.level(),
+            animation_frame: session.animation.frame(),
+            lifecycle_offset: offset,
+        })
     })?;
     Ok(())
 }
 
 fn execute_simulation_effects<C: PlanetSideCollision, A: PlanetSideAudio>(
+    cx: &mut Cx<'_>,
     collision: &mut C,
     audio: &mut A,
     effects: Vec<SimulationEffect>,
 ) -> Result<(), AdapterError> {
     for effect in effects {
         match effect {
-            SimulationEffect::Play(cue) => audio.play(cue)?,
-            SimulationEffect::SpawnShot(shot) => collision.register_shot(shot)?,
+            SimulationEffect::Play(cue) => audio.play(cx.world, cue)?,
+            SimulationEffect::SpawnShot(shot) => {
+                cx.with_legacy(|| collision.register_shot(shot))?
+            }
         }
     }
     Ok(())
 }
 
 fn execute_collision_effects<A: PlanetSideAudio>(
+    cx: &mut Cx<'_>,
     audio: &mut A,
     outcome: &CollisionOutcome,
 ) -> Result<(), AdapterError> {
     if let CollisionOutcome::CrewDamage(damage) = outcome {
         for cue in &damage.sounds {
-            audio.play(*cue)?;
+            audio.play(cx.world, *cue)?;
         }
     } else if let CollisionOutcome::Cargo { pickup, .. } = outcome {
         let cue = if matches!(pickup, super::cargo::CargoPickup::Full) {
@@ -592,7 +620,7 @@ fn execute_collision_effects<A: PlanetSideAudio>(
         } else {
             SoundCue::Pickup
         };
-        audio.play(cue)?;
+        audio.play(cx.world, cue)?;
     }
     Ok(())
 }
@@ -663,7 +691,11 @@ mod tests {
     #[derive(Default)]
     struct Audio(Vec<SoundCue>);
     impl PlanetSideAudio for Audio {
-        fn play(&mut self, cue: SoundCue) -> Result<(), AdapterError> {
+        fn play(
+            &mut self,
+            _world: &crate::engine::World,
+            cue: SoundCue,
+        ) -> Result<(), AdapterError> {
             self.0.push(cue);
             Ok(())
         }
@@ -710,7 +742,17 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn warmup_transitions_to_launch_and_plays_departs_sound() {
+        let mut owner = crate::engine::Game::new();
+        let mut battle = crate::engine::battle::Battle::new();
+        let cx = &mut crate::engine::battle::Cx::new(
+            &mut battle,
+            &mut owner.world,
+            &mut owner.kernel,
+            crate::math::random,
+        );
+
         let mut session = PlanetSideSession::new(
             LanderState::new(
                 SurfacePoint { x: 40, y: 20 },
@@ -733,7 +775,7 @@ mod tests {
         };
 
         assert_eq!(
-            run_frame(&mut session, &mut adapters, 1),
+            run_frame(cx, &mut session, &mut adapters, 1),
             Ok(RuntimeStep::Continue)
         );
         assert_eq!(session.phase, SessionPhase::Launch);
@@ -745,7 +787,17 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn frame_routes_dangerous_collision_damage_and_sounds_before_render() {
+        let mut owner = crate::engine::Game::new();
+        let mut battle = crate::engine::battle::Battle::new();
+        let cx = &mut crate::engine::battle::Cx::new(
+            &mut battle,
+            &mut owner.world,
+            &mut owner.kernel,
+            crate::math::random,
+        );
+
         let mut session = session();
         let mut adapters = RuntimeAdapters {
             input: Input(FrameInput::default()),
@@ -766,7 +818,7 @@ mod tests {
         };
 
         assert_eq!(
-            run_frame(&mut session, &mut adapters, 1),
+            run_frame(cx, &mut session, &mut adapters, 1),
             Ok(RuntimeStep::Continue)
         );
         assert_eq!(session.lander.crew, CrewCount::new(11));
@@ -779,7 +831,17 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn takeoff_enters_takingoff_phase_before_return_sound() {
+        let mut owner = crate::engine::Game::new();
+        let mut battle = crate::engine::battle::Battle::new();
+        let cx = &mut crate::engine::battle::Cx::new(
+            &mut battle,
+            &mut owner.world,
+            &mut owner.kernel,
+            crate::math::random,
+        );
+
         let mut session = session();
         session.minerals.collect(2, 4);
         let mut adapters = RuntimeAdapters {
@@ -796,7 +858,7 @@ mod tests {
 
         // First frame: takeoff is requested; session enters TakingOff phase
         // but does NOT settle immediately.
-        let result = run_frame(&mut session, &mut adapters, 1);
+        let result = run_frame(cx, &mut session, &mut adapters, 1);
         assert_eq!(result, Ok(RuntimeStep::Continue));
         assert_eq!(session.phase, SessionPhase::TakingOff);
         assert!(adapters.audio.0.is_empty());
@@ -809,7 +871,17 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn abort_never_applies_ship_writeback() {
+        let mut owner = crate::engine::Game::new();
+        let mut battle = crate::engine::battle::Battle::new();
+        let cx = &mut crate::engine::battle::Cx::new(
+            &mut battle,
+            &mut owner.world,
+            &mut owner.kernel,
+            crate::math::random,
+        );
+
         let mut session = session();
         let mut adapters = RuntimeAdapters {
             input: Input(FrameInput {
@@ -824,14 +896,24 @@ mod tests {
         };
 
         assert_eq!(
-            run_frame(&mut session, &mut adapters, 1),
+            run_frame(cx, &mut session, &mut adapters, 1),
             Ok(RuntimeStep::Complete(SessionOutcome::Aborted))
         );
         assert!(adapters.ship.0.is_empty());
     }
 
     #[test]
+    #[serial_test::serial]
     fn fatal_collision_enters_explosion_phase_and_delays_settlement() {
+        let mut owner = crate::engine::Game::new();
+        let mut battle = crate::engine::battle::Battle::new();
+        let cx = &mut crate::engine::battle::Cx::new(
+            &mut battle,
+            &mut owner.world,
+            &mut owner.kernel,
+            crate::math::random,
+        );
+
         let mut session = session();
         session.lander.crew = CrewCount::new(1);
         session.minerals.collect(2, 9);
@@ -855,7 +937,7 @@ mod tests {
 
         // First frame: fatal collision enters Explosion phase. The session
         // does NOT settle immediately — it animates the explosion first.
-        let result = run_frame(&mut session, &mut adapters, 1);
+        let result = run_frame(cx, &mut session, &mut adapters, 1);
         assert_eq!(result, Ok(RuntimeStep::Continue));
         assert_eq!(session.phase, SessionPhase::Explosion);
         assert_eq!(
@@ -873,7 +955,7 @@ mod tests {
 
         // Run enough frames to complete the explosion animation.
         for _ in 0..super::super::lifecycle::EXPLOSION_TOTAL_FRAMES {
-            let step = run_frame(&mut session, &mut adapters, 1);
+            let step = run_frame(cx, &mut session, &mut adapters, 1);
             if let Ok(RuntimeStep::Complete(SessionOutcome::LanderDestroyed(delta))) = step {
                 assert_eq!(delta.landers, -1);
                 assert_eq!(delta.element_mass, 0);
@@ -886,7 +968,17 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn special_pickup_effects_update_crew_and_request_takeoff() {
+        let mut owner = crate::engine::Game::new();
+        let mut battle = crate::engine::battle::Battle::new();
+        let cx = &mut crate::engine::battle::Cx::new(
+            &mut battle,
+            &mut owner.world,
+            &mut owner.kernel,
+            crate::math::random,
+        );
+
         let mut session = session();
         let mut adapters = RuntimeAdapters {
             input: Input(FrameInput::default()),
@@ -901,7 +993,7 @@ mod tests {
         };
 
         assert_eq!(
-            run_frame(&mut session, &mut adapters, 1),
+            run_frame(cx, &mut session, &mut adapters, 1),
             Ok(RuntimeStep::Continue)
         );
         assert_eq!(session.lander.crew, CrewCount::new(9));
@@ -912,7 +1004,17 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn special_pickup_auto_takeoff_completes_without_input() {
+        let mut owner = crate::engine::Game::new();
+        let mut battle = crate::engine::battle::Battle::new();
+        let cx = &mut crate::engine::battle::Cx::new(
+            &mut battle,
+            &mut owner.world,
+            &mut owner.kernel,
+            crate::math::random,
+        );
+
         let mut session = session();
         let mut adapters = RuntimeAdapters {
             input: Input(FrameInput::default()),
@@ -927,7 +1029,7 @@ mod tests {
         };
 
         assert_eq!(
-            run_frame(&mut session, &mut adapters, 1),
+            run_frame(cx, &mut session, &mut adapters, 1),
             Ok(RuntimeStep::Continue)
         );
         assert_eq!(session.phase, SessionPhase::TakingOff);
@@ -938,7 +1040,7 @@ mod tests {
             + 2;
         let mut completed = None;
         for _ in 0..frame_limit {
-            match run_frame(&mut session, &mut adapters, 1).expect("special takeoff frame") {
+            match run_frame(cx, &mut session, &mut adapters, 1).expect("special takeoff frame") {
                 RuntimeStep::Continue => {}
                 RuntimeStep::Complete(outcome) => {
                     completed = Some(outcome);
@@ -953,7 +1055,17 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn full_phase_progression_warmup_to_complete_via_takeoff() {
+        let mut owner = crate::engine::Game::new();
+        let mut battle = crate::engine::battle::Battle::new();
+        let cx = &mut crate::engine::battle::Cx::new(
+            &mut battle,
+            &mut owner.world,
+            &mut owner.kernel,
+            crate::math::random,
+        );
+
         let mut session = PlanetSideSession::new(
             LanderState::new(
                 SurfacePoint::default(),
@@ -976,18 +1088,18 @@ mod tests {
 
         // Warmup → Launch
         assert_eq!(
-            run_frame(&mut session, &mut adapters, 1),
+            run_frame(cx, &mut session, &mut adapters, 1),
             Ok(RuntimeStep::Continue)
         );
         assert_eq!(session.phase, SessionPhase::Launch);
 
         // Launch (2 frames)
         assert_eq!(
-            run_frame(&mut session, &mut adapters, 1),
+            run_frame(cx, &mut session, &mut adapters, 1),
             Ok(RuntimeStep::Continue)
         );
         assert_eq!(
-            run_frame(&mut session, &mut adapters, 1),
+            run_frame(cx, &mut session, &mut adapters, 1),
             Ok(RuntimeStep::Continue)
         );
         assert_eq!(session.phase, SessionPhase::Landing);
@@ -996,7 +1108,7 @@ mod tests {
         let landing_total = super::super::lifecycle::LifecycleAnimation::landing_total();
         for _ in 0..landing_total {
             assert_eq!(
-                run_frame(&mut session, &mut adapters, 1),
+                run_frame(cx, &mut session, &mut adapters, 1),
                 Ok(RuntimeStep::Continue)
             );
         }
@@ -1007,7 +1119,7 @@ mod tests {
 
         // Active: one idle frame
         assert_eq!(
-            run_frame(&mut session, &mut adapters, 1),
+            run_frame(cx, &mut session, &mut adapters, 1),
             Ok(RuntimeStep::Continue)
         );
         assert_eq!(session.phase, SessionPhase::Active);
@@ -1025,7 +1137,7 @@ mod tests {
             ship: Ship::default(),
         };
         assert_eq!(
-            run_frame(&mut session, &mut takeoff_input, 1),
+            run_frame(cx, &mut session, &mut takeoff_input, 1),
             Ok(RuntimeStep::Continue)
         );
         assert_eq!(session.phase, SessionPhase::TakingOff);
@@ -1034,7 +1146,7 @@ mod tests {
         let takeoff_total = super::super::lifecycle::LifecycleAnimation::takeoff_total();
         for _ in 0..takeoff_total {
             assert_eq!(
-                run_frame(&mut session, &mut takeoff_input, 1),
+                run_frame(cx, &mut session, &mut takeoff_input, 1),
                 Ok(RuntimeStep::Continue)
             );
         }
@@ -1043,10 +1155,10 @@ mod tests {
 
         // Return (2 frames)
         assert_eq!(
-            run_frame(&mut session, &mut takeoff_input, 1),
+            run_frame(cx, &mut session, &mut takeoff_input, 1),
             Ok(RuntimeStep::Continue)
         );
-        let final_result = run_frame(&mut session, &mut takeoff_input, 1);
+        let final_result = run_frame(cx, &mut session, &mut takeoff_input, 1);
         let Ok(RuntimeStep::Complete(SessionOutcome::Returned(delta))) = final_result else {
             panic!("expected returned outcome, got {:?}", final_result);
         };
@@ -1059,7 +1171,17 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn cargo_meters_update_every_active_frame() {
+        let mut owner = crate::engine::Game::new();
+        let mut battle = crate::engine::battle::Battle::new();
+        let cx = &mut crate::engine::battle::Cx::new(
+            &mut battle,
+            &mut owner.world,
+            &mut owner.kernel,
+            crate::math::random,
+        );
+
         let mut session = session();
         session.minerals.collect(0, 3);
         let mut adapters = RuntimeAdapters {
@@ -1071,18 +1193,28 @@ mod tests {
             ship: Ship::default(),
         };
 
-        run_frame(&mut session, &mut adapters, 1).unwrap();
+        run_frame(cx, &mut session, &mut adapters, 1).unwrap();
         assert_eq!(adapters.graphics.0.last().unwrap().mineral_level, 3);
         assert_eq!(adapters.graphics.0.last().unwrap().biological_level, 0);
 
         // Simulate a bio pickup mid-session.
         session.biological.collect(2);
-        run_frame(&mut session, &mut adapters, 1).unwrap();
+        run_frame(cx, &mut session, &mut adapters, 1).unwrap();
         assert_eq!(adapters.graphics.0.last().unwrap().biological_level, 2);
     }
 
     #[test]
+    #[serial_test::serial]
     fn lifecycle_phases_render_with_animation_frame_and_offset() {
+        let mut owner = crate::engine::Game::new();
+        let mut battle = crate::engine::battle::Battle::new();
+        let cx = &mut crate::engine::battle::Cx::new(
+            &mut battle,
+            &mut owner.world,
+            &mut owner.kernel,
+            crate::math::random,
+        );
+
         let mut session = PlanetSideSession::new(
             LanderState::new(
                 SurfacePoint::default(),
@@ -1103,21 +1235,21 @@ mod tests {
         };
 
         // Warmup → Launch, first launch frame
-        run_frame(&mut session, &mut adapters, 1).unwrap();
+        run_frame(cx, &mut session, &mut adapters, 1).unwrap();
         assert_eq!(session.phase, SessionPhase::Launch);
         let snap = &adapters.graphics.0[0];
         assert_eq!(snap.phase, SessionPhase::Launch);
         assert_eq!(snap.animation_frame, 0);
 
         // Advance one launch frame
-        run_frame(&mut session, &mut adapters, 1).unwrap();
+        run_frame(cx, &mut session, &mut adapters, 1).unwrap();
         let snap = adapters.graphics.0.last().unwrap();
         assert_eq!(snap.phase, SessionPhase::Launch);
         assert_eq!(snap.animation_frame, 1);
 
         // Skip to Landing
         for _ in 0..5 {
-            run_frame(&mut session, &mut adapters, 1).unwrap();
+            run_frame(cx, &mut session, &mut adapters, 1).unwrap();
         }
         assert_eq!(session.phase, SessionPhase::Landing);
         let snap = adapters.graphics.0.last().unwrap();
@@ -1130,7 +1262,17 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn adapter_failure_stops_the_frame_as_a_typed_error() {
+        let mut owner = crate::engine::Game::new();
+        let mut battle = crate::engine::battle::Battle::new();
+        let cx = &mut crate::engine::battle::Cx::new(
+            &mut battle,
+            &mut owner.world,
+            &mut owner.kernel,
+            crate::math::random,
+        );
+
         struct FailingInput;
         impl PlanetSideInput for FailingInput {
             fn poll(&mut self) -> Result<FrameInput, AdapterError> {
@@ -1148,7 +1290,7 @@ mod tests {
             ship: Ship::default(),
         };
         assert_eq!(
-            run_frame(&mut session, &mut adapters, 1),
+            run_frame(cx, &mut session, &mut adapters, 1),
             Err(RuntimeError::Adapter(AdapterError::new("poll_input")))
         );
     }
@@ -1188,7 +1330,17 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn spawn_shot_effect_registers_shot_in_collision_adapter() {
+        let mut owner = crate::engine::Game::new();
+        let mut battle = crate::engine::battle::Battle::new();
+        let cx = &mut crate::engine::battle::Cx::new(
+            &mut battle,
+            &mut owner.world,
+            &mut owner.kernel,
+            crate::math::random,
+        );
+
         let mut session = session();
         let mut adapters = RuntimeAdapters {
             input: Input(FrameInput {
@@ -1203,7 +1355,7 @@ mod tests {
         };
 
         assert_eq!(
-            run_frame(&mut session, &mut adapters, 1),
+            run_frame(cx, &mut session, &mut adapters, 1),
             Ok(RuntimeStep::Continue)
         );
         assert_eq!(
@@ -1218,7 +1370,17 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn world_step_advances_each_active_frame() {
+        let mut owner = crate::engine::Game::new();
+        let mut battle = crate::engine::battle::Battle::new();
+        let cx = &mut crate::engine::battle::Cx::new(
+            &mut battle,
+            &mut owner.world,
+            &mut owner.kernel,
+            crate::math::random,
+        );
+
         let mut session = session();
         let mut adapters = RuntimeAdapters {
             input: Input(FrameInput::default()),
@@ -1231,7 +1393,7 @@ mod tests {
 
         for _ in 0..3 {
             assert_eq!(
-                run_frame(&mut session, &mut adapters, 1),
+                run_frame(cx, &mut session, &mut adapters, 1),
                 Ok(RuntimeStep::Continue)
             );
         }
@@ -1244,7 +1406,17 @@ mod tests {
     // --- Focused tests for the units extracted from run_frame ---
 
     #[test]
+    #[serial_test::serial]
     fn begin_explosion_sets_the_phase_resets_the_animation_and_sounds_once() {
+        let mut owner = crate::engine::Game::new();
+        let mut battle = crate::engine::battle::Battle::new();
+        let cx = &mut crate::engine::battle::Cx::new(
+            &mut battle,
+            &mut owner.world,
+            &mut owner.kernel,
+            crate::math::random,
+        );
+
         let mut session = session();
         session.animation.advance(99);
         let mut adapters = RuntimeAdapters {
@@ -1256,7 +1428,7 @@ mod tests {
             ship: Ship::default(),
         };
 
-        begin_explosion(&mut session, &mut adapters).expect("explosion starts");
+        begin_explosion(cx, &mut session, &mut adapters).expect("explosion starts");
 
         assert_eq!(session.phase, SessionPhase::Explosion);
         assert_eq!(session.animation.frame(), 0, "animation restarts from zero");
@@ -1264,7 +1436,17 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn continue_after_lifecycle_renders_before_sleeping() {
+        let mut owner = crate::engine::Game::new();
+        let mut battle = crate::engine::battle::Battle::new();
+        let cx = &mut crate::engine::battle::Cx::new(
+            &mut battle,
+            &mut owner.world,
+            &mut owner.kernel,
+            crate::math::random,
+        );
+
         let mut session = session();
         session.phase = SessionPhase::Return;
         let mut adapters = RuntimeAdapters {
@@ -1276,7 +1458,7 @@ mod tests {
             ship: Ship::default(),
         };
 
-        let step = continue_after_lifecycle(&session, &mut adapters, Tick(7));
+        let step = continue_after_lifecycle(cx, &session, &mut adapters, Tick(7));
 
         assert_eq!(step, Ok(RuntimeStep::Continue));
         assert_eq!(adapters.graphics.0.len(), 1, "the frame is presented");
@@ -1288,7 +1470,17 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn step_surface_world_reports_no_early_exit_while_crew_survive() {
+        let mut owner = crate::engine::Game::new();
+        let mut battle = crate::engine::battle::Battle::new();
+        let cx = &mut crate::engine::battle::Cx::new(
+            &mut battle,
+            &mut owner.world,
+            &mut owner.kernel,
+            crate::math::random,
+        );
+
         let mut session = session();
         let mut adapters = RuntimeAdapters {
             input: Input(FrameInput::default()),
@@ -1299,14 +1491,25 @@ mod tests {
             ship: Ship::default(),
         };
 
-        let early = step_surface_world(&mut session, &mut adapters, Tick(1)).expect("world steps");
+        let early =
+            step_surface_world(cx, &mut session, &mut adapters, Tick(1)).expect("world steps");
 
         assert_eq!(early, None, "a survivable frame continues to contacts");
         assert_ne!(session.phase, SessionPhase::Explosion);
     }
 
     #[test]
+    #[serial_test::serial]
     fn run_lander_simulation_reports_an_abort_without_presenting_a_frame() {
+        let mut owner = crate::engine::Game::new();
+        let mut battle = crate::engine::battle::Battle::new();
+        let cx = &mut crate::engine::battle::Cx::new(
+            &mut battle,
+            &mut owner.world,
+            &mut owner.kernel,
+            crate::math::random,
+        );
+
         let mut session = session();
         let mut adapters = RuntimeAdapters {
             input: Input(FrameInput {
@@ -1320,8 +1523,8 @@ mod tests {
             ship: Ship::default(),
         };
 
-        let early =
-            run_lander_simulation(&mut session, &mut adapters, Tick(3)).expect("simulation ticks");
+        let early = run_lander_simulation(cx, &mut session, &mut adapters, Tick(3))
+            .expect("simulation ticks");
 
         assert_eq!(
             early,
