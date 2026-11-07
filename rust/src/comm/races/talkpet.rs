@@ -145,27 +145,13 @@ impl<A: TalkpetApi> Dialogue<'_, A> {
                 old
             };
             match res {
-                0 => {
-                    self.api.npc(GENERAL_INFO_ONBOARD_1);
-                }
-                1 => {
-                    self.api.npc(GENERAL_INFO_ONBOARD_2);
-                }
-                2 => {
-                    self.api.npc(GENERAL_INFO_ONBOARD_3);
-                }
-                3 => {
-                    self.api.npc(GENERAL_INFO_ONBOARD_4);
-                }
-                4 => {
-                    self.api.npc(GENERAL_INFO_ONBOARD_5);
-                }
-                5 => {
-                    self.api.npc(GENERAL_INFO_ONBOARD_6);
-                }
-                6 => {
-                    self.api.npc(GENERAL_INFO_ONBOARD_7);
-                }
+                0 => self.api.npc(GENERAL_INFO_ONBOARD_1),
+                1 => self.api.npc(GENERAL_INFO_ONBOARD_2),
+                2 => self.api.npc(GENERAL_INFO_ONBOARD_3),
+                3 => self.api.npc(GENERAL_INFO_ONBOARD_4),
+                4 => self.api.npc(GENERAL_INFO_ONBOARD_5),
+                5 => self.api.npc(GENERAL_INFO_ONBOARD_6),
+                6 => self.api.npc(GENERAL_INFO_ONBOARD_7),
                 7 => {
                     self.api.npc(GENERAL_INFO_ONBOARD_8);
                     {
@@ -185,27 +171,13 @@ impl<A: TalkpetApi> Dialogue<'_, A> {
                 old
             };
             match res {
-                0 => {
-                    self.api.npc(SUGGESTION_1);
-                }
-                1 => {
-                    self.api.npc(SUGGESTION_2);
-                }
-                2 => {
-                    self.api.npc(SUGGESTION_3);
-                }
-                3 => {
-                    self.api.npc(SUGGESTION_4);
-                }
-                4 => {
-                    self.api.npc(SUGGESTION_5);
-                }
-                5 => {
-                    self.api.npc(SUGGESTION_6);
-                }
-                6 => {
-                    self.api.npc(SUGGESTION_7);
-                }
+                0 => self.api.npc(SUGGESTION_1),
+                1 => self.api.npc(SUGGESTION_2),
+                2 => self.api.npc(SUGGESTION_3),
+                3 => self.api.npc(SUGGESTION_4),
+                4 => self.api.npc(SUGGESTION_5),
+                5 => self.api.npc(SUGGESTION_6),
+                6 => self.api.npc(SUGGESTION_7),
                 7 => {
                     self.api.npc(SUGGESTION_8);
                     {
@@ -473,27 +445,13 @@ impl<A: TalkpetApi> Dialogue<'_, A> {
                 old
             };
             match res {
-                0 => {
-                    self.api.npc(HELLO_AS_DEVICE_1);
-                }
-                1 => {
-                    self.api.npc(HELLO_AS_DEVICE_2);
-                }
-                2 => {
-                    self.api.npc(HELLO_AS_DEVICE_3);
-                }
-                3 => {
-                    self.api.npc(HELLO_AS_DEVICE_4);
-                }
-                4 => {
-                    self.api.npc(HELLO_AS_DEVICE_5);
-                }
-                5 => {
-                    self.api.npc(HELLO_AS_DEVICE_6);
-                }
-                6 => {
-                    self.api.npc(HELLO_AS_DEVICE_7);
-                }
+                0 => self.api.npc(HELLO_AS_DEVICE_1),
+                1 => self.api.npc(HELLO_AS_DEVICE_2),
+                2 => self.api.npc(HELLO_AS_DEVICE_3),
+                3 => self.api.npc(HELLO_AS_DEVICE_4),
+                4 => self.api.npc(HELLO_AS_DEVICE_5),
+                5 => self.api.npc(HELLO_AS_DEVICE_6),
+                6 => self.api.npc(HELLO_AS_DEVICE_7),
                 7 => {
                     self.api.npc(HELLO_AS_DEVICE_8);
                     {
@@ -517,15 +475,9 @@ impl<A: TalkpetApi> Dialogue<'_, A> {
                     self.api.set(StoryKey::UMGAH_VISITS, 0_u8);
                     self.api.npc(HELLO_AT_UMGAH);
                 }
-                1 => {
-                    self.api.npc(HYPNOTIZE_AGAIN_1);
-                }
-                2 => {
-                    self.api.npc(HYPNOTIZE_AGAIN_2);
-                }
-                3 => {
-                    self.api.npc(HYPNOTIZE_AGAIN_3);
-                }
+                1 => self.api.npc(HYPNOTIZE_AGAIN_1),
+                2 => self.api.npc(HYPNOTIZE_AGAIN_2),
+                3 => self.api.npc(HYPNOTIZE_AGAIN_3),
                 4 => {
                     self.api.npc(HYPNOTIZE_AGAIN_4);
                     {

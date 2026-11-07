@@ -488,7 +488,7 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
     }
     fn intro(&mut self) {
         let mut visits: u8;
-        if i32::from((self.api.activity()) as u8) == 5 {
+        if (self.api.activity() as u8) == 5 {
             self.api.npc(i32::from(OUT_TAKES));
             self.api.segue(0_u32);
             return;
@@ -728,9 +728,7 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
     }
     fn post_thradd_enc(&mut self) {}
     fn initialize(&mut self) {
-        if (self.api.get(StoryKey::THRADD_MANNER) != 0)
-            || (i32::from((self.api.activity()) as u8) == 5)
-        {
+        if (self.api.get(StoryKey::THRADD_MANNER) != 0) || ((self.api.activity() as u8) == 5) {
             self.api.segue(0_u32);
         } else {
             self.api.segue(1_u32);

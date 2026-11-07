@@ -12,6 +12,16 @@ use phrases::*;
 mod api;
 use api::SlyhomeApi;
 
+const HOME_TOPICS: [u32; 7] = [
+    WE_ARE_US0,
+    WHAT_OTHER_VISITORS,
+    ANY_OTHER_VISITORS,
+    WHAT_ABOUT_SENTIENT_MILIEU,
+    WHO_ELSE,
+    PRECURSORS_YOW,
+    MUST_KNOW_MORE,
+];
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Handler {
     Exit,
@@ -108,18 +118,10 @@ impl<A: SlyhomeApi> Dialogue<'_, A> {
             }
             _ => {}
         }
-        let first = [
-            WE_ARE_US0,
-            WHAT_OTHER_VISITORS,
-            ANY_OTHER_VISITORS,
-            WHAT_ABOUT_SENTIENT_MILIEU,
-            WHO_ELSE,
-            PRECURSORS_YOW,
-            MUST_KNOW_MORE,
-        ]
-        .get(self.api.get(StoryKey::SLYLANDRO_STACK1) as usize)
-        .copied()
-        .unwrap_or(0);
+        let first = HOME_TOPICS
+            .get(self.api.get(StoryKey::SLYLANDRO_STACK1) as usize)
+            .copied()
+            .unwrap_or(0);
         let second = match self.api.get(StoryKey::SLYLANDRO_STACK2) {
             0 => WHO_ARE_YOU,
             1 if self.api.enabled(LIKE_MORE_ABOUT_YOU as u16) => LIKE_MORE_ABOUT_YOU,

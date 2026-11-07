@@ -473,9 +473,7 @@ impl<A: DruugeApi> Dialogue<'_, A> {
                     old
                 };
                 match res {
-                    0 => {
-                        self.api.npc(i32::from(HSTL_TRADE_WORLD_HELLO_1));
-                    }
+                    0 => self.api.npc(i32::from(HSTL_TRADE_WORLD_HELLO_1)),
                     1 => {
                         self.api.npc(i32::from(HSTL_TRADE_WORLD_HELLO_2));
                         {
@@ -494,9 +492,7 @@ impl<A: DruugeApi> Dialogue<'_, A> {
                     old
                 };
                 match res {
-                    0 => {
-                        self.api.npc(i32::from(HOSTILE_SPACE_HELLO_1));
-                    }
+                    0 => self.api.npc(i32::from(HOSTILE_SPACE_HELLO_1)),
                     1 => {
                         self.api.npc(i32::from(HOSTILE_SPACE_HELLO_2));
                         {
@@ -518,18 +514,10 @@ impl<A: DruugeApi> Dialogue<'_, A> {
                     old
                 };
                 match res {
-                    0 => {
-                        self.api.npc(i32::from(INITIAL_TRADE_WORLD_HELLO));
-                    }
-                    1 => {
-                        self.api.npc(i32::from(SSQ_TRADE_WORLD_HELLO_1));
-                    }
-                    2 => {
-                        self.api.npc(i32::from(SSQ_TRADE_WORLD_HELLO_2));
-                    }
-                    3 => {
-                        self.api.npc(i32::from(SSQ_TRADE_WORLD_HELLO_3));
-                    }
+                    0 => self.api.npc(i32::from(INITIAL_TRADE_WORLD_HELLO)),
+                    1 => self.api.npc(i32::from(SSQ_TRADE_WORLD_HELLO_1)),
+                    2 => self.api.npc(i32::from(SSQ_TRADE_WORLD_HELLO_2)),
+                    3 => self.api.npc(i32::from(SSQ_TRADE_WORLD_HELLO_3)),
                     4 => {
                         self.api.npc(i32::from(SSQ_TRADE_WORLD_HELLO_4));
                         {
@@ -593,9 +581,7 @@ impl<A: DruugeApi> Dialogue<'_, A> {
                 old
             };
             match res {
-                0 => {
-                    self.api.npc(i32::from(HOSTILE_SPACE_HELLO_1));
-                }
+                0 => self.api.npc(i32::from(HOSTILE_SPACE_HELLO_1)),
                 1 => {
                     self.api.npc(i32::from(HOSTILE_SPACE_HELLO_2));
                     {
@@ -626,9 +612,7 @@ impl<A: DruugeApi> Dialogue<'_, A> {
                     old
                 };
                 match res {
-                    0 => {
-                        self.api.npc(i32::from(SALVAGE_YOUR_SHIP_1));
-                    }
+                    0 => self.api.npc(i32::from(SALVAGE_YOUR_SHIP_1)),
                     1 => {
                         self.api.npc(i32::from(SALVAGE_YOUR_SHIP_2));
                         {
@@ -649,9 +633,7 @@ impl<A: DruugeApi> Dialogue<'_, A> {
                     old
                 };
                 match res {
-                    0 => {
-                        self.api.npc(i32::from(INIT_SPACE_HELLO));
-                    }
+                    0 => self.api.npc(i32::from(INIT_SPACE_HELLO)),
                     1 => {
                         self.api.npc(i32::from(SUBSEQUENT_SPACE_HELLO));
                         {

@@ -1386,8 +1386,7 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
             } else if self.api.get(StoryKey::STARBASE_VISITED) != 0 {
                 self.check_bulletins(false);
             } else {
-                let mut p_str0: u16 = 0;
-                let mut p_str1: u16 = 0;
+                let (mut p_str0, mut p_str1) = (0_u16, 0_u16);
                 match (self.api.random() as u8) & 7 {
                     0 => {
                         p_str0 = NORMAL_HELLO_A0;
