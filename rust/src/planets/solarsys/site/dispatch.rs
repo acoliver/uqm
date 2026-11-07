@@ -22,12 +22,7 @@ impl Site<'_, '_, '_> {
         let star_type = {
             let game = self.game.borrow();
             // SAFETY: the retained world selects a live star in the current catalog.
-            unsafe {
-                (*game
-                    .world
-                    .star_pointer(crate::planets::starmap::current_catalog()))
-                .star_type
-            }
+            unsafe { (*game.world.star_pointer()).star_type }
         };
         let index = self.index;
         // SAFETY: the host retains the initialized, disjoint records until the callback returns.

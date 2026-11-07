@@ -62,7 +62,7 @@ impl andro::AndrosynthSite for Site<'_, '_, '_> {
 impl crate::planets::generate::host::PlanetSite for Site<'_, '_, '_> {
     fn rainbow_ordinal(&self) -> u8 {
         // SAFETY: the context owns the selected star in the live catalog.
-        let before = unsafe { c_api::star_indexes_before_current(self.game.borrow().world) };
+        let before = c_api::star_indexes_before_current(self.game.borrow().world);
         crate::planets::generate::rainbow::rainbow_ordinal(&before, before.len())
     }
     fn load_planet(&mut self, _system: &mut SolarSys<'_>) {

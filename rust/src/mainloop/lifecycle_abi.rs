@@ -23,10 +23,8 @@ fn on_battle_frame(
         },
     );
     let coordinates = if cx.world.activity() & (CHECK_ABORT | CHECK_LOAD) as u16 == 0 {
-        // SAFETY: the campaign retains its loaded star catalog throughout this frame.
-        let catalog = unsafe { crate::planets::starmap::current_catalog() }
-            .unwrap_or_else(|| panic!("hyperspace frame without a star catalog"));
-        crate::navigation::hyper_radar::seed_universe(cx, catalog)
+        let catalog = cx.world.retain_catalog();
+        crate::navigation::hyper_radar::seed_universe(cx, &catalog)
     } else {
         None
     };

@@ -2,7 +2,7 @@
 
 pub use super::observe_port::{
     CheckpointView, DeviceObservation, Injected, InputSetup, InputView, Observer, PeerSetup,
-    Presented, Unobserved,
+    Presented, StarMapView, Unobserved,
 };
 pub mod battle;
 use super::{Kernel, World};
@@ -19,6 +19,7 @@ pub struct CampaignView {
     pub flight_facing: Option<u8>,
     pub autopilot: (i16, i16),
     pub combat_flags: u8,
+    pub instant_move: bool,
     pub date: (u8, u8, u16),
     pub story: Option<super::world::story::StoryState>,
     pub current_star: Option<super::StarId>,
@@ -32,6 +33,7 @@ impl CampaignView {
     pub fn capture(world: &World, kernel: &Kernel) -> Self {
         let game = &world.data.game;
         let mut view = Self::from_world(world);
+        view.instant_move = kernel.instant_move;
         view.flight_facing =
             super::save::hyper_save::read_flagship_facing(&kernel.races[0], &kernel.elements)
                 .ok()
@@ -100,6 +102,7 @@ impl CampaignView {
             ),
             story: world.story.clone(),
             current_star: world.current_star,
+            instant_move: false,
             contact_race: None,
             escorts: Vec::new(),
             player_ships: Vec::new(),

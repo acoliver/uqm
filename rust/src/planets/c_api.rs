@@ -93,8 +93,6 @@ extern "C" {
     pub static mut FORMAT_CONV_SURF: *mut crate::graphics::ffi::SDL_Surface;
     #[link_name = "SDL_Screen"]
     pub static mut SDL_SCREEN: *mut crate::graphics::ffi::SDL_Surface;
-    #[link_name = "star_array"]
-    pub static mut STAR_ARRAY: *mut crate::savegame::runtime::star::CStarDesc;
 
 }
 
@@ -230,17 +228,10 @@ pub fn built_ship_count(world: &crate::engine::World) -> u16 {
     world.npc_built_ships_ref().count() as u16
 }
 
-/// The `star_index` byte of every catalog entry before `CurStarDescPtr`:
-/// `for (SDPtr = &star_array[0]; SDPtr != CurStarDescPtr; ++SDPtr)`.
-///
-/// # Safety
-/// `world` must select an entry of the retained `star_array` catalog.
-pub unsafe fn star_indexes_before_current(world: &WorldOwner) -> Vec<u8> {
-    let first = std::ptr::addr_of!(STAR_ARRAY).read();
-    let current = world.star_pointer(crate::planets::starmap::current_catalog());
-    let before = usize::try_from(current.offset_from(first))
-        .expect("current star is an entry of star_array");
-    std::slice::from_raw_parts(first, before)
+/// The generator index of every catalog entry before the selected star.
+pub fn star_indexes_before_current(world: &WorldOwner) -> Vec<u8> {
+    let before = world.current_star.expect("current star is selected").0;
+    world.catalog()[..before]
         .iter()
         .map(|star| star.index)
         .collect()
@@ -391,9 +382,7 @@ pub unsafe fn fade_to_black_for_two_seconds() {
 /// # Safety
 /// `CurStarDescPtr` must point at a valid star description.
 pub unsafe fn current_star_point() -> (i16, i16) {
-    let point = (*(**WorldOwner::current())
-        .star_pointer(crate::planets::starmap::current_catalog()))
-    .star_pt;
+    let point = (*(**WorldOwner::current()).star_pointer()).star_pt;
     (point.x, point.y)
 }
 

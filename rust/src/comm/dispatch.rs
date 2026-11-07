@@ -537,7 +537,7 @@ pub unsafe fn init_communication(cx: &mut Cx<'_>, io: &mut Io<'_>, which_comm: u
                 });
             } else if WorldData::current().read(|world| world.game.ip_planet) == 0 {
                 let star = &*(**World::current())
-                    .star_pointer(crate::planets::starmap::current_catalog())
+                    .star_pointer()
                     .cast::<crate::savegame::runtime::star::CStarDesc>();
                 ffi::DrawHyperCoords(CPoint {
                     x: star.star_pt.x,
@@ -582,9 +582,7 @@ fn run_encounter(cx: &mut Cx<'_>, io: &mut Io<'_>, which_comm: u32, ship_type: u
         HAIL
     } else {
         cx.with_legacy(|| io.observer.checkpoint(&CheckpointView::EncounterMenu(true)));
-        // SAFETY: the game thread retains the catalog throughout the modal encounter.
-        let catalog = unsafe { crate::planets::starmap::current_catalog() };
-        let status = crate::battle::encount_native::init_encounter(cx, io, catalog);
+        let status = crate::battle::encount_native::init_encounter(cx, io);
         cx.with_legacy(|| {
             io.observer
                 .checkpoint(&CheckpointView::EncounterMenu(false))
@@ -605,9 +603,7 @@ fn run_encounter(cx: &mut Cx<'_>, io: &mut Io<'_>, which_comm: u32, ship_type: u
     }
     let status = encounter::fight_if_selected(cx, io);
     let runtime = cx.kernel.input_runtime();
-    // SAFETY: the game thread retains the catalog through encounter teardown.
-    let catalog = unsafe { crate::planets::starmap::current_catalog() };
-    crate::battle::encount_native::engine::uninit_encounter(cx, io, runtime.input(), catalog);
+    crate::battle::encount_native::engine::uninit_encounter(cx, io, runtime.input());
     status
 }
 
@@ -696,22 +692,14 @@ pub(crate) unsafe fn prepare_samatra_dev_fixture(
 /// # Safety
 /// The star map must be initialized.
 #[cfg_attr(test, allow(dead_code))]
-pub unsafe fn place_flagship_at_star(
-    world: &mut World,
-    location: (i16, i16),
-) -> Result<(), &'static str> {
+pub fn place_flagship_at_star(world: &mut World, location: (i16, i16)) -> Result<(), &'static str> {
     let universe = CPoint {
         x: location.0,
         y: location.1,
     };
-    let star = crate::planets::starmap::find_star_in(world, None, universe, 1, 1);
-    if star.is_null() {
-        return Err("no star at the scene location");
-    }
-    world.select_star(
-        ((star).cast::<crate::engine::world::CStarDesc>()).as_ref(),
-        crate::planets::starmap::current_catalog(),
-    );
+    let star = crate::planets::starmap::find_star_id(world, world.catalog(), None, universe, 1, 1)
+        .ok_or("no star at the scene location")?;
+    world.current_star = Some(star);
     Ok(())
 }
 

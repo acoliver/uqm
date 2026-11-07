@@ -25,11 +25,12 @@ pub(crate) mod runtime {
     use save_load::pick_game;
 
     use super::{picker_action, picker_slot, PickerAction, MAX_SAVED_GAMES, SAVES_PER_PAGE};
-    use crate::engine::{battle::Cx, input::InputSession, observe::Io, Kernel, StoryKey, World};
+    use crate::engine::{battle::Cx, input::InputSession, observe::Io, Kernel, StoryKey, World, WorldData};
     use crate::navigation::abi::{
         MENU_SOUND_EFFECT_MENU_SOUND_FAILURE as MENU_FAILURE,
         MENU_SOUND_EFFECT_MENU_SOUND_SUCCESS as MENU_SUCCESS, *,
     };
+    use crate::planets::starmap::naming::name_near;
     use crate::ui::settings::play_menu_sound;
 
     use std::{mem, ptr};
@@ -508,17 +509,12 @@ pub(crate) mod runtime {
             };
             match (*p_sd).Activity as u32 {
                 IN_LAST_BATTLE | IN_INTERPLANETARY | IN_PLANET_ORBIT | IN_STARBASE => {
-                    let quasi_state = World::current()
-                        .read(|world| world.story_state(StoryKey::ARILOU_SPACE_SIDE));
-                    World::current()
-                        .write(|world| world.set_story_state(StoryKey::ARILOU_SPACE_SIDE, 0));
-                    let sdptr = FindStar(ptr::null_mut(), &mut star_pt, 1, 1);
-                    World::current().write(|world| {
-                        world.set_story_state(StoryKey::ARILOU_SPACE_SIDE, quasi_state)
+                    let named = World::current().read(|world| {
+                        Kernel::current().read(|kernel| name_near(kernel, world.catalog(), star_pt))
                     });
-                    if !sdptr.is_null() {
-                        GetClusterName(sdptr, buf.as_mut_ptr());
-                        star_pt = (*sdptr).star_pt;
+                    if let Some((name, point)) = named {
+                        utf8StringCopy(buf.as_mut_ptr().cast(), buf.len(), name.as_ptr().cast());
+                        star_pt = point;
                     } else {
                         buf[0] = 0;
                     }

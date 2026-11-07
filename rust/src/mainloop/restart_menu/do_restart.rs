@@ -553,7 +553,6 @@ mod tests {
             self.popup_called.set(true);
         }
         fn set_player_control(&self, _player: u8, _control: u16) {}
-        fn assign_global_arrays(&self) {}
     }
 
     // ---- Tests ------------------------------------------------------------

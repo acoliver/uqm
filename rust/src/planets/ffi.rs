@@ -69,10 +69,7 @@ pub(crate) fn blank_node() -> NodeInfo {
 /// `CurStarDescPtr` must point at a valid star description.
 pub(crate) unsafe fn current_star_type() -> u8 {
     // SAFETY: the caller retains a selected entry of the initialized catalog on the game thread.
-    unsafe {
-        (*(**WorldOwner::current()).star_pointer(crate::planets::starmap::current_catalog()))
-            .star_type
-    }
+    unsafe { (*(**WorldOwner::current()).star_pointer()).star_type }
 }
 
 /// The star and the orbit `DoPlanetaryAnalysis` reads for `desc`: the sun and

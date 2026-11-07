@@ -150,7 +150,6 @@ pub(crate) mod engine {
         (23, 0, 0),
     ];
 
-    use crate::engine::world::{CStarDesc, CATALOG_LEN};
     #[cfg(not(test))]
     use crate::planets::starmap::naming::cluster_name;
 

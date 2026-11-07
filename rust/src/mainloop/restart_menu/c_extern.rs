@@ -63,8 +63,6 @@ extern "C" {
     pub fn uqm_sleep_thread_until(time: u32);
     #[cfg(test)]
     pub fn uqm_sleep_thread(duration: u32);
-    #[cfg(test)]
-    pub fn uqm_assign_star_planet_globals();
 
     // --- Menu state lifecycle (rust_bridge_restart.c) ---
     #[cfg(test)]
@@ -130,13 +128,6 @@ pub unsafe fn uqm_sleep_thread_until(time: u32) {
 #[cfg(not(test))]
 pub unsafe fn uqm_sleep_thread(duration: u32) {
     crate::mainloop::restart_menu::menu_abi::uqm_sleep_thread(duration as _);
-}
-
-/// # Safety
-/// Called on the game thread with the live resources required by the Rust provider.
-#[cfg(not(test))]
-pub unsafe fn uqm_assign_star_planet_globals() {
-    crate::mainloop::restart_menu::menu_abi::uqm_assign_star_planet_globals();
 }
 
 /// # Safety

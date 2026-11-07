@@ -419,8 +419,7 @@ fn cleanup_after_star_base(world: &mut World) {
 
 unsafe fn prepare_starbase_visit(cx: &mut Cx<'_>, io: &mut Io<'_>) -> Option<u32> {
     if cx.world.story_state(StoryKey::CHMMR_BOMB_STATE) == 2 {
-        cx.world
-            .select_star(None, crate::planets::starmap::current_catalog());
+        cx.world.select_star(None);
         cx.world
             .set_story_state(StoryKey::GLOBAL_FLAGS_AND_DATA, BYTE::MAX as u32);
     }
@@ -523,6 +522,5 @@ pub unsafe fn install_bomb_at_earth(cx: &mut Cx<'_>) {
     cx.world.set_story_state(StoryKey::CHMMR_BOMB_STATE, 3);
     cx.world.set_activity(CHECK_LOAD as u16);
     cx.world.next_activity = IN_INTERPLANETARY as u16 | START_INTERPLANETARY as u16;
-    cx.world
-        .select_star(None, crate::planets::starmap::current_catalog());
+    cx.world.select_star(None);
 }

@@ -2457,8 +2457,6 @@ pub use crate::front_end::uqmdebug::density_string;
 #[cfg(all(not(test), feature = "debug-process"))]
 pub use crate::front_end::uqmdebug::deposit_quality_string;
 #[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::do_instant_move;
-#[cfg(all(not(test), feature = "debug-process"))]
 pub use crate::front_end::uqmdebug::dump_event;
 #[cfg(all(not(test), feature = "debug-process"))]
 pub use crate::front_end::uqmdebug::dump_events;
@@ -2527,11 +2525,7 @@ pub use crate::front_end::uqmdebug::world_gen_algo_string;
 #[cfg(all(not(test), feature = "debug-process"))]
 pub use crate::front_end::uqmdebug::world_size_string;
 #[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::DEBUG_HOOK;
-#[cfg(all(not(test), feature = "debug-process"))]
 pub use crate::front_end::uqmdebug::DISABLE_INTERACTIVITY;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::INSTANT_MOVE;
 
 #[cfg(not(test))]
 pub use crate::front_end::cnctdlg::melee_connect_dialog as MeleeConnectDialog;
@@ -2644,15 +2638,6 @@ extern "C" {
 extern "C" {
     pub static mut EncounterGroup: BYTE;
 }
-
-extern "C" {
-    pub static mut star_array: *mut crate::savegame::runtime::star::CStarDesc;
-}
-
-pub use crate::planets::starmap::FindStar;
-
-#[cfg(not(test))]
-pub use crate::planets::starmap::naming::GetClusterName;
 
 #[cfg(not(test))]
 pub use crate::ships::master_native::engine::find_master_ship;

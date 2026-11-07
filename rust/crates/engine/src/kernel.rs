@@ -36,6 +36,34 @@ impl SisHighlight {
     }
 }
 
+pub struct StarMapFlash {
+    color: u8,
+    delta: i32,
+    next_time: u32,
+}
+impl Default for StarMapFlash {
+    fn default() -> Self {
+        Self {
+            color: 0,
+            delta: -2,
+            next_time: 0,
+        }
+    }
+}
+impl StarMapFlash {
+    pub fn advance(&mut self, mut now: impl FnMut() -> u32) -> Option<u8> {
+        if now() < self.next_time {
+            return None;
+        }
+        self.next_time = now().wrapping_add(840 / 16);
+        if self.color == 0 || self.color == 0x1a {
+            self.delta = -self.delta;
+        }
+        self.color = self.color.wrapping_add(self.delta as u8);
+        Some(self.color)
+    }
+}
+
 pub struct Kernel {
     pub configuration: crate::configuration::Configuration,
     pub(super) input_runtime: Option<std::rc::Rc<dyn super::input::InputRuntime>>,
@@ -63,6 +91,8 @@ pub struct Kernel {
     pub activity_frame: crate::graphics::native_abi::FRAME,
     pub naming_callback: Option<fn(&Kernel, &crate::World, i32)>,
     pub status_message_mode: u32,
+    pub star_map_flash: StarMapFlash,
+    pub instant_move: bool,
     pub sis_highlight: std::rc::Rc<SisHighlight>,
     pub status_frame: crate::graphics::native_abi::FRAME,
     pub flag_stat_frame: crate::graphics::native_abi::FRAME,
@@ -249,6 +279,8 @@ impl Kernel {
             activity_frame: ptr::null_mut(),
             naming_callback: None,
             status_message_mode: 1,
+            star_map_flash: StarMapFlash::default(),
+            instant_move: false,
             sis_highlight: std::rc::Rc::new(SisHighlight::default()),
             status_frame: ptr::null_mut(),
             flag_stat_frame: ptr::null_mut(),
@@ -337,5 +369,39 @@ mod default_tests {
         assert_eq!(other.status_message_mode, 1);
         assert_eq!(kernel.set_status_message_mode(previous), 2);
         assert_eq!(kernel.status_message_mode, 1);
+    }
+}
+
+#[cfg(test)]
+mod map_flash_tests {
+    use super::StarMapFlash;
+
+    #[test]
+    fn phase_and_deadline_survive_visits_but_belong_to_one_kernel() {
+        let mut flash = StarMapFlash::default();
+        let mut samples = [10, 12].into_iter();
+        assert_eq!(
+            flash.advance(|| samples.next().expect("only two samples on advancement")),
+            Some(2)
+        );
+        assert_eq!(flash.next_time, 64);
+        let mut checks = 0;
+        assert_eq!(
+            flash.advance(|| {
+                checks += 1;
+                63
+            }),
+            None
+        );
+        assert_eq!(checks, 1);
+        assert_eq!(flash.advance(|| 64), Some(4));
+        assert_eq!(flash.next_time, 116);
+        for expected in (6..=26).step_by(2).chain((0..=24).rev().step_by(2)) {
+            let now = flash.next_time;
+            assert_eq!(flash.advance(|| now), Some(expected));
+        }
+        let now = flash.next_time;
+        assert_eq!(flash.advance(|| now), Some(2));
+        assert_eq!(StarMapFlash::default().advance(|| 0), Some(2));
     }
 }

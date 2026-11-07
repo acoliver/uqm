@@ -157,7 +157,6 @@ pub trait RestartMenuOps {
 
     // --- Player control ---
     fn set_player_control(&self, player: u8, control: u16);
-    fn assign_global_arrays(&self);
 }
 
 // ===========================================================================
@@ -697,11 +696,5 @@ impl RestartMenuOps for CffiOps<'_, '_, '_> {
 
     fn set_player_control(&self, player: u8, control: u16) {
         self.owned(|cx, _| super::menu_abi::uqm_set_player_control(cx.kernel, player, control))
-    }
-    fn assign_global_arrays(&self) {
-        self.legacy(|| {
-            // SAFETY: Assigns star/planet global array pointers.
-            unsafe { c_extern::uqm_assign_star_planet_globals() }
-        })
     }
 }

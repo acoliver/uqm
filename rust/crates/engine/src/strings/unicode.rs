@@ -175,40 +175,59 @@ pub fn split_utf8_prefix(bytes: &[u8], characters: usize) -> (&[u8], &[u8]) {
     bytes.split_at(utf8_prefix(bytes, characters).1)
 }
 
+/// Compare a bounded prefix using the engine's decoder and native case rules.
+pub fn case_prefix_matches(mut source: &[u8], mut destination: &[u8], count: usize) -> bool {
+    for _ in 0..count {
+        let Some((first, first_width)) = utf8_character(source) else {
+            return false;
+        };
+        let Some((second, second_width)) = utf8_character(destination) else {
+            return false;
+        };
+        if uni_char_to_upper(first) != uni_char_to_upper(second) {
+            return false;
+        }
+        source = &source[first_width..];
+        destination = &destination[second_width..];
+    }
+    true
+}
+
 fn utf8_prefix(bytes: &[u8], limit: usize) -> (usize, usize) {
     let mut cursor = 0;
     let mut count = 0;
     while count < limit {
-        let Some(&lead) = bytes.get(cursor) else {
+        let Some((_, width)) = utf8_character(&bytes[cursor..]) else {
             break;
         };
-        let (width, mut value, minimum) = match lead {
-            0 => break,
-            1..=0x7f => (1, u32::from(lead), 0),
-            0xc0..=0xdf => (2, u32::from(lead & 0x1f), 0x80),
-            0xe0..=0xef => (3, u32::from(lead & 0x0f), 0x800),
-            0xf0..=0xf7 => (4, u32::from(lead & 0x07), 0x10000),
-            _ => break,
-        };
-        let Some(encoded) = bytes.get(cursor..cursor + width) else {
-            break;
-        };
-        let mut valid = true;
-        for &byte in &encoded[1..] {
-            if byte & 0xc0 != 0x80 {
-                valid = false;
-                break;
-            }
-            value = (value << 6) | u32::from(byte & 0x3f);
-        }
-        if !valid || value < minimum {
-            log_message(LOG_WARNING, "Warning: Invalid UTF8 sequence.");
-            break;
-        }
         cursor += width;
         count += 1;
     }
     (count, cursor)
+}
+
+fn utf8_character(bytes: &[u8]) -> Option<(UniChar, usize)> {
+    let (width, mut value, minimum) = match *bytes.first()? {
+        1..=0x7f => (1, u32::from(bytes[0]), 0),
+        0xc0..=0xdf => (2, u32::from(bytes[0] & 0x1f), 0x80),
+        0xe0..=0xef => (3, u32::from(bytes[0] & 0x0f), 0x800),
+        0xf0..=0xf7 => (4, u32::from(bytes[0] & 0x07), 0x10000),
+        _ => return None,
+    };
+    let encoded = bytes.get(..width)?;
+    let mut valid = true;
+    for &byte in &encoded[1..] {
+        if byte & 0xc0 != 0x80 {
+            valid = false;
+            break;
+        }
+        value = (value << 6) | u32::from(byte & 0x3f);
+    }
+    if !valid || value < minimum {
+        log_message(LOG_WARNING, "Warning: Invalid UTF8 sequence.");
+        return None;
+    }
+    Some((value, width))
 }
 
 /// Character position of `ch` in the string, or -1.
@@ -661,5 +680,28 @@ mod bounded_count_tests {
         ] {
             assert_eq!(super::count_utf8_bytes(bytes), expected, "{bytes:?}");
         }
+    }
+}
+
+#[cfg(test)]
+mod bounded_prefix_tests {
+    use super::*;
+
+    #[test]
+    fn bounded_prefix_uses_native_case_and_rejects_missing_or_malformed_characters() {
+        assert!(case_prefix_matches(b"aLp", b"ALPHA", 3));
+        assert!(!case_prefix_matches(b"Alphaa", b"Alpha", 6));
+        assert!(!case_prefix_matches(b"", b"", 1));
+        assert!(!case_prefix_matches(&[0xc0, 0x80], &[0xc0, 0x80], 1));
+        assert!(!case_prefix_matches("β".as_bytes(), "Β".as_bytes(), 1));
+        assert_eq!(
+            case_prefix_matches("é".as_bytes(), "É".as_bytes(), 1),
+            uni_char_to_upper(0xe9) == uni_char_to_upper(0xc9)
+        );
+        assert!(case_prefix_matches(
+            "α Centauri".as_bytes(),
+            "α centauri".as_bytes(),
+            3
+        ));
     }
 }

@@ -485,6 +485,51 @@ impl ContextLease {
         result
     }
 
+    fn copy_screen_region(&self, mut rect: RECT, save: bool) {
+        self.select();
+        // SAFETY: the selected lease retains its context; the rectangle is local.
+        unsafe {
+            if save {
+                gfx::LoadIntoExtraScreen(&mut rect);
+            } else {
+                gfx::DrawFromExtraScreen(&mut rect);
+            }
+        }
+    }
+
+    pub fn save_screen_region(&self, rect: RECT) {
+        self.copy_screen_region(rect, true);
+    }
+
+    pub fn restore_screen_region(&self, rect: RECT) {
+        self.copy_screen_region(rect, false);
+    }
+
+    pub fn draw_line(&self, color: Color, first: POINT, second: POINT) {
+        self.select();
+        let mut line = LINE { first, second };
+        // SAFETY: this lease selects and retains its context on the drawing thread.
+        unsafe {
+            context_abi::SetContextForeGroundColor(color);
+            frame_abi::DrawLine(&mut line);
+        }
+    }
+
+    pub fn line_visible(&self, clip: RECT, first: POINT, second: POINT) -> bool {
+        self.assert_thread();
+        let mut line = super::geometry_ffi::BresenhamLine {
+            first,
+            second,
+            abs_delta_x: 0,
+            abs_delta_y: 0,
+            error_term: 0,
+            end_points_exchanged: 0,
+            intersect_code: 0,
+        };
+        // SAFETY: the clipping operation borrows only these initialized local values.
+        unsafe { super::geometry_ffi::_clip_line(&clip, &mut line) != 0 }
+    }
+
     pub fn draw_point(&self, color: Color, point: POINT) {
         self.apply(Operation::Point(color, point));
     }

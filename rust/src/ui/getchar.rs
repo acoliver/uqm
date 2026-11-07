@@ -1,5 +1,3 @@
-#![cfg(not(test))]
-
 use crate::engine::battle::Cx;
 use crate::engine::input::{frames::InputState, InputSession};
 use crate::engine::observe::Io;
@@ -113,6 +111,9 @@ unsafe fn switch_case(ch: &mut JoyChar, from: *const JoyChar, to: *const JoyChar
 ///
 /// # Safety
 /// text and its strings, callbacks, and input subsystem must remain valid for the duration of the call.
+// This legacy entry needs the application's published live input loop. The owned
+// editor and its frame implementation below compile unchanged in unit tests.
+#[cfg(not(test))]
 pub unsafe fn do_text_entry(text: *mut TEXTENTRY_STATE, input: &InputSession) -> BOOLEAN {
     if crate::engine::World::current().read(|world| world.activity()) & CHECK_ABORT as u16 != 0 {
         return 0;
@@ -195,7 +196,7 @@ unsafe fn text_entry_frame_impl(
     } else if let Some(callback) = (*text).FrameCallback {
         callback(text, cx, io, input)
     } else {
-        cx.with_legacy(|| SleepThread(ONE_SECOND / 30));
+        cx.kernel.input_runtime().sleep(cx, ONE_SECOND / 30);
         1
     }
 }

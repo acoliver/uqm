@@ -46,27 +46,19 @@ pub fn check(h: &mut Harness) {
         uqm_rust::engine::World::current().write(|world| c_api::init_group_info(world, 1));
         h.set_star(0, 0);
         h.state.SunDesc[0].num_planets = 9;
-        let saved_star = (**uqm_rust::engine::World::current())
-            .star_pointer(uqm_rust::planets::starmap::current_catalog());
-        let saved_catalog = std::ptr::addr_of!(c_api::STAR_ARRAY).read();
-        // The ordinary game restart installs this same Rust catalog.
-        std::ptr::addr_of_mut!(c_api::STAR_ARRAY).write(
-            std::ptr::addr_of!(uqm_rust::planets::tables::STARMAP_ARRAY)
-                .cast_mut()
-                .cast(),
-        );
-        let catalog = std::slice::from_raw_parts(
-            c_api::STAR_ARRAY,
-            uqm_rust::planets::tables::STAR_CATALOG_LEN,
-        );
-        let sol = catalog.iter().position(|star| star.index == 1).unwrap();
-        (**uqm_rust::engine::World::current()).select_star(
-            (c_api::STAR_ARRAY
-                .add(sol)
-                .cast::<uqm_rust::engine::world::CStarDesc>())
-            .as_ref(),
-            uqm_rust::planets::starmap::current_catalog(),
-        );
+        let (saved_catalog, saved_star) =
+            uqm_rust::engine::World::current().read(|world| (*world.catalog(), world.current_star));
+        uqm_rust::engine::World::current().write(|world| {
+            world.set_catalog(std::borrow::Cow::Borrowed(
+                &uqm_rust::planets::tables::STARMAP_ARRAY,
+            ));
+            let sol = world
+                .catalog()
+                .iter()
+                .position(|star| star.index == 1)
+                .unwrap();
+            world.current_star = Some(uqm_rust::engine::StarId(sol));
+        });
         uqm_rust::engine::World::current()
             .write(|world| world.set_word(StoryKey::URQUAN_PROBE_GRPOFFS0, 0));
         uqm_rust::engine::World::current().write(|world| {
@@ -219,11 +211,10 @@ pub fn check(h: &mut Harness) {
                 probe_ref
             );
         }
-        std::ptr::addr_of_mut!(c_api::STAR_ARRAY).write(saved_catalog);
-        (**uqm_rust::engine::World::current()).select_star(
-            (saved_star).as_ref(),
-            uqm_rust::planets::starmap::current_catalog(),
-        );
+        uqm_rust::engine::World::current().write(|world| {
+            world.set_catalog(std::borrow::Cow::Owned(saved_catalog));
+            world.current_star = saved_star;
+        });
         uqm_rust::engine::World::current().write(c_api::uninit_group_info);
         assert_ne!(
             uqm_rust::engine::World::current()

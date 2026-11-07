@@ -199,7 +199,7 @@ mod sounds_access {
 mod star_access {
     use crate::engine::StoryKey;
     use crate::navigation::hyper_transition::{element_universe, init_transition};
-    use crate::planets::starmap::{current_catalog, find_star_in};
+    use crate::planets::starmap::find_star_id;
     #[derive(Clone, Copy)]
     pub struct StarContact {
         pub(super) star: crate::engine::StarId,
@@ -231,15 +231,9 @@ mod star_access {
         }
         fn star_contact(&self, id: crate::engine::battle::ElementId) -> StarContact {
             let point = element_universe(self, id);
-            // SAFETY: lookup reads the checked element and loaded star catalog synchronously.
-            let (descriptor, catalog) = unsafe {
-                let star = find_star_in(self.world, None, point, 5, 5);
-                assert!(!star.is_null(), "star collision has no catalog entry");
-                (&*star.cast(), current_catalog())
-            };
-            let catalog = catalog.unwrap_or_else(|| panic!("star collision without a catalog"));
-            let star = self.world.identify_star(descriptor, catalog);
-            let position = descriptor.star_pt;
+            let star = find_star_id(self.world, self.world.catalog(), None, point, 5, 5)
+                .unwrap_or_else(|| panic!("star collision has no catalog entry"));
+            let position = self.world.catalog()[star.0].star_pt;
             StarContact {
                 star,
                 position,

@@ -35,6 +35,7 @@ fn assert_idle(owner: &AutomationObserver) {
     );
     assert_eq!(ui.ship_picker_observation(), (0, false));
     assert_eq!(ui.ship_picker_cursor(), crate::pickship::Cursor::START);
+    assert_eq!(ui.star_map(), None);
     assert_eq!(ui.ship_escape_generation(), 0);
     assert_eq!(*owner.ending.lock(), Ending::default());
     assert_eq!(owner.scene.lock().dispatch_observation(), (0, None, None));
@@ -353,4 +354,51 @@ fn report_visibility_belongs_to_the_supplied_observer_and_survives_trip_updates(
     first.checkpoint(&CheckpointView::PlanetSideReport(false));
     assert!(!*first.0.planet_side_report.lock());
     assert!(!*second.0.planet_side_report.lock());
+}
+
+#[test]
+fn map_observation_freezes_projection_and_cursor_per_observer_and_clears_on_exit() {
+    use crate::engine::observe_port::starmap::{Projection, StarMapView};
+    use crate::graphics::native_abi::POINT;
+    let (_first_output, mut first) = observer();
+    let (_second_output, second) = observer();
+    let mut view = StarMapView {
+        cursor: POINT { x: 1000, y: 2000 },
+        projection: Projection {
+            origin: POINT { x: 4999, y: 4999 },
+            zoom: 1,
+            width: 242,
+            height: 227,
+        },
+    };
+    let published = view;
+    first.checkpoint(&CheckpointView::StarMap(Some(view)));
+    view.cursor.x = 9000;
+    view.projection.zoom = 4;
+    assert_ne!(view, published);
+    assert_eq!(first.0.ui.star_map(), Some(published));
+    assert_eq!(second.0.ui.star_map(), None);
+    let mut world = crate::engine::World::new();
+    world.story = Some(crate::engine::world::story::StoryState::new());
+    let mut campaign = crate::engine::observe::CampaignView::from_world(&world);
+    campaign.instant_move = true;
+    let target = super::star_flight::StarTarget::resolve("Sol").unwrap();
+    let observation = super::input_ffi::star_flight_observation(&campaign, target, &first.0.ui);
+    assert_eq!(observation.cursor, Some((1000, 2000)));
+    let (x, y) = target.coordinates();
+    assert_eq!(
+        observation.cursor_delta,
+        (
+            published.projection.x(x.into()) - published.projection.x(1000),
+            published.projection.y(y.into()) - published.projection.y(2000),
+        )
+    );
+    assert!(observation.instant_move);
+    first.checkpoint(&CheckpointView::StarMap(None));
+    assert_eq!(first.0.ui.star_map(), None);
+    assert_eq!(
+        super::input_ffi::star_flight_observation(&campaign, target, &first.0.ui).cursor,
+        None
+    );
+    assert_idle(&second.0);
 }

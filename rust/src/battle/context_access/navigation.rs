@@ -54,7 +54,7 @@ pub(crate) fn interplanetary(
             world.data.flagship.log_x = geometry.log_x(x);
             world.data.flagship.log_y = geometry.log_y(y);
             world.set_story_state(StoryKey::ARILOU_SPACE_SIDE, 0);
-            world.select_star(None, None);
+            world.select_star(None);
         }
     }
 }
@@ -75,7 +75,7 @@ pub(crate) fn arilou(world: &mut crate::engine::World, geometry: Geometry) {
         world.set_story_state(StoryKey::PORTAL_COUNTER, 0);
     }
     world.set_story_state(StoryKey::ARILOU_SPACE_SIDE, if entering { 3 } else { 0 });
-    world.select_star(None, None);
+    world.select_star(None);
 }
 
 pub trait NavigationOps {
@@ -198,10 +198,8 @@ impl NavigationOps for Cx<'_> {
     fn leave_hyperspace(&mut self, kind: u8, point: POINT) {
         let geometry = Geometry::new(self.screen_dimensions());
         if kind == 1 {
-            // SAFETY: the retained campaign owns this catalog throughout the transition.
-            let catalog = unsafe { crate::planets::starmap::current_catalog() }
-                .unwrap_or_else(|| panic!("hyperspace transition without a catalog"));
-            interplanetary(self.world, point, geometry, catalog);
+            let catalog = self.world.retain_catalog();
+            interplanetary(self.world, point, geometry, &catalog);
         } else {
             arilou(self.world, geometry);
         }

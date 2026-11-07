@@ -353,27 +353,28 @@ fn message_labels_use_the_borrowed_catalog_and_hyperspace_story() {
     game.kernel
         .install_game_text(LoadedTextTable::fixture(strings));
     game.world.story = Some(uqm_rust::engine::world::story::StoryState::new());
+    game.world.set_catalog(std::borrow::Cow::Owned(catalog));
     game.world.current_star = Some(StarId(0));
     for activity in [IN_INTERPLANETARY, IN_LAST_BATTLE] {
         game.world.set_activity(activity as u16);
         assert_eq!(
-            default_message_text(&game.kernel, &game.world, Some(&catalog)),
+            default_message_text(&game.kernel, &game.world),
             c"Alpha Centauri".to_owned()
         );
     }
     game.world.set_activity(IN_HYPERSPACE as u16);
     assert_eq!(
-        default_message_text(&game.kernel, &game.world, None),
+        default_message_text(&game.kernel, &game.world),
         c"Hyperspace".to_owned()
     );
     game.world.set_story_state(StoryKey::ARILOU_SPACE_SIDE, 2);
     assert_eq!(
-        default_message_text(&game.kernel, &game.world, None),
+        default_message_text(&game.kernel, &game.world),
         c"Quasispace".to_owned()
     );
     game.world.set_activity(IN_ENCOUNTER as u16);
     assert_eq!(
-        default_message_text(&game.kernel, &game.world, None),
+        default_message_text(&game.kernel, &game.world),
         c"".to_owned()
     );
 }

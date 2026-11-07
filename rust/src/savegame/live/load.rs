@@ -3,7 +3,6 @@ use super::super::{legacy, SaveSlots};
 use crate::comm::dispatch::{IN_INTERPLANETARY, START_ENCOUNTER, START_INTERPLANETARY};
 use crate::engine::{battle::Cx, save::summary_record::SummaryDesc};
 use crate::mainloop::dir_prep::saveDir;
-use crate::planets::starmap::find_star_in;
 
 pub use load_game as LoadGame;
 
@@ -20,9 +19,8 @@ unsafe fn finish_load(cx: &mut Cx<'_>, star: &super::super::StarDesc, activity: 
         x: star.star_pt.x,
         y: star.star_pt.y,
     };
-    let selected =
-        find_star_in(cx.world, None, point, 0, 0).cast::<crate::engine::world::CStarDesc>();
-    super::super::runtime::live::select_live_star(cx.world, selected.as_ref());
+    cx.world.current_star =
+        crate::planets::starmap::find_star_id(cx.world, cx.world.catalog(), None, point, 0, 0);
     cx.world.next_activity = activity;
     if activity & START_ENCOUNTER == 0 && activity & 0xff == IN_INTERPLANETARY {
         cx.world.next_activity |= START_INTERPLANETARY;

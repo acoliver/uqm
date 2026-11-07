@@ -179,10 +179,7 @@ unsafe fn use_caster(next_activity: &mut u16) -> bool {
         return false;
     }
     if orbit_is(1)
-        && u32::from(
-            (*(**WorldOwner::current()).star_pointer(crate::planets::starmap::current_catalog()))
-                .index,
-        ) == CHMMR_DEFINED
+        && u32::from((*(**WorldOwner::current()).star_pointer()).index) == CHMMR_DEFINED
         && WorldOwner::current().read(|world| get(world, StoryKey::CHMMR_UNLEASHED)) == 0
     {
         *next_activity |= CHECK_LOAD;
@@ -193,9 +190,7 @@ unsafe fn use_caster(next_activity: &mut u16) -> bool {
         SaveSolarSysLocation();
         return true;
     }
-    let home = u32::from(
-        (*(**WorldOwner::current()).star_pointer(crate::planets::starmap::current_catalog())).index,
-    ) == ILWRATH_DEFINED;
+    let home = u32::from((*(**WorldOwner::current()).star_pointer()).index) == ILWRATH_DEFINED;
     let mut found = home
         && WorldOwner::current()
             .write(|world| start_sphere_tracking(world, u16::from(ship::ILWRATH_SHIP)))
@@ -239,8 +234,7 @@ unsafe fn invoke(cx: &mut Cx<'_>, id: u8, next_activity: &mut u16) -> u8 {
             crate::ui::settings::play_menu_sound(cx.kernel, cx.world, 3);
             cx.with_legacy(|| {
                 SleepThreadUntil(FadeScreen(250, 840).wrapping_add(1680));
-                let catalog = crate::planets::starmap::current_catalog();
-                let star = (**WorldOwner::current()).star_pointer(catalog);
+                let star = (**WorldOwner::current()).star_pointer();
                 if u32::from((*star).index) != CHMMR_DEFINED || !orbit_is(1) {
                     FadeScreen(253, 1680);
                 } else {
@@ -279,8 +273,7 @@ unsafe fn invoke(cx: &mut Cx<'_>, id: u8, next_activity: &mut u16) -> u8 {
                             .write(|world| set(world, StoryKey::SHIP_TO_COMPEL, 1));
                         reset_groups();
                     }
-                    let catalog = crate::planets::starmap::current_catalog();
-                    let star = (**WorldOwner::current()).star_pointer(catalog);
+                    let star = (**WorldOwner::current()).star_pointer();
                     if u32::from((*star).index) == SAMATRA_DEFINED {
                         WorldOwner::current()
                             .write(|world| set(world, StoryKey::READY_TO_CONFUSE_URQUAN, 1));

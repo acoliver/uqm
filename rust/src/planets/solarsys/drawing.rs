@@ -187,10 +187,7 @@ pub(super) unsafe fn draw_outer_system() {
     validate_orbits();
     let s = system();
     draw_system((*s).SunDesc[0].radius, false);
-    DrawHyperCoords(
-        (*(**WorldOwner::current()).star_pointer(crate::planets::starmap::current_catalog()))
-            .star_pt,
-    );
+    DrawHyperCoords((*(**WorldOwner::current()).star_pointer()).star_pt);
 }
 
 pub(super) unsafe fn draw_system_transition(cx: &mut Cx<'_>, inner: bool) {
@@ -259,11 +256,8 @@ pub(super) unsafe fn draw_system(radius: c::SIZE, inner: bool) {
                 .as_mut_ptr()
                 .offset(i32::from(index) as isize);
             if current == (*s).SunDesc.as_mut_ptr() {
-                let star_color = ((*(**WorldOwner::current())
-                    .star_pointer(crate::planets::starmap::current_catalog()))
-                .star_type
-                    & 0xe0)
-                    >> 5;
+                let star_color =
+                    ((*(**WorldOwner::current()).star_pointer()).star_type & 0xe0) >> 5;
                 SetColorMap(GetColorMapAddress(
                     (set_color_map_index(SUN_CMAP, u32::from(star_color))).cast(),
                 ));
@@ -299,9 +293,7 @@ pub(super) unsafe fn create_star_background() -> *mut c::FRAME_DESC {
     });
     ClearDrawable();
     (*SysGenRNG).reseed(GetRandomSeedForStar(
-        (**WorldOwner::current())
-            .star_pointer(crate::planets::starmap::current_catalog())
-            .cast(),
+        (**WorldOwner::current()).star_pointer().cast(),
     ));
     let (width, height) = sis_dimensions();
     let mut stamp = c::STAMP {

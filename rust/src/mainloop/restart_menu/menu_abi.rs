@@ -4,7 +4,6 @@ use crate::engine::StoryKey;
 use crate::engine::World;
 use crate::graphics::flash::FlashContext;
 use crate::ships::native::abi::*;
-use std::ptr;
 
 macro_rules! operation {
     ($name:ident($($arg:ident: $ty:ty),*) $(-> $ret:ty)? $body:block) => {
@@ -24,7 +23,6 @@ pub use crate::time::counter_abi::GetTimeCounter as uqm_get_time_counter;
 operation!(uqm_sleep_thread_until(time: u32) { crate::threading::pacing::linked::sleep_thread_until(time); });
 operation!(uqm_sleep_thread(time: u32) { crate::threading::pacing::linked::sleep_thread(time); });
 
-operation!(uqm_assign_star_planet_globals() { crate::planets::starmap::star_array = ptr::addr_of!(crate::planets::tables::STARMAP_ARRAY).cast_mut().cast(); });
 pub fn uqm_do_popup_window_msg(
     cx: &mut crate::engine::battle::Cx<'_>,
     io: &mut crate::engine::observe::Io<'_>,

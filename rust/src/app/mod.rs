@@ -14,9 +14,12 @@ pub struct Application {
 
 impl Application {
     pub fn new(
-        game: crate::engine::Game,
+        mut game: crate::engine::Game,
         observer: Option<Arc<crate::automation::AutomationObserver>>,
     ) -> Self {
+        game.world.set_catalog(std::borrow::Cow::Borrowed(
+            &crate::planets::tables::STARMAP_ARRAY,
+        ));
         Self { observer, game }
     }
 
@@ -41,5 +44,21 @@ impl Application {
 
     pub fn observer(&self) -> Option<&Arc<crate::automation::AutomationObserver>> {
         self.observer.as_ref()
+    }
+}
+
+#[cfg(test)]
+mod catalog_tests {
+    use super::*;
+
+    #[test]
+    fn application_retains_the_catalog_without_publishing_game() {
+        let app = Application::new(crate::engine::Game::new(), None);
+        assert!(std::ptr::eq(
+            app.game.world.catalog(),
+            &crate::planets::tables::STARMAP_ARRAY,
+        ));
+        assert!(app.game.world.selected_star().is_none());
+        assert!(app.game.world.star_pointer().is_null());
     }
 }

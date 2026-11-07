@@ -23,8 +23,8 @@ pub(super) fn draw_title(cx: &mut crate::engine::battle::Cx<'_>) {
 
 #[cfg(test)]
 mod tests {
-    use super::super::{CStarDesc, CATALOG_LEN};
     use crate::campaign_display_test as campaign_display;
+    use crate::engine::world::{CStarDesc, CATALOG_LEN};
     use crate::ui;
     use crate::{
         engine::{
