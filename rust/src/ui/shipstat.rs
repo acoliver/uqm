@@ -220,7 +220,7 @@ impl StatusGraphics {
                 ship.crew_level = 0;
                 ship.energy_level = 0;
                 update_statistics(
-                    context,
+                    Some(context),
                     true,
                     self.pc_menu,
                     self.crew_font.as_ref(),
@@ -258,6 +258,9 @@ pub fn draw_battle_status(
     id: crate::engine::battle::ShipId,
     clip: Option<RECT>,
 ) {
+    if cx.kernel.status_context.is_null() {
+        return;
+    }
     let graphics = StatusGraphics::new(cx.kernel, cx.kernel.battle_font());
     let selected = cx.pick_ship(id);
     let y = cx.kernel.status_offsets[selected.player as usize];
@@ -298,7 +301,7 @@ fn battle_title<'a>(
 }
 
 pub fn update_statistics(
-    context: &crate::graphics::context_abi::ContextLease,
+    context: Option<&crate::graphics::context_abi::ContextLease>,
     numeric_crew: bool,
     pc_menu: bool,
     font: Option<&crate::graphics::native_font::FontLease>,
@@ -306,28 +309,40 @@ pub fn update_statistics(
     y_offs: COORD,
     deltas: (SIZE, SIZE),
 ) {
+    let mut draw = |color, rect| {
+        if let Some(context) = context {
+            match rect {
+                Some(rect) => context.fill_rectangle(color, rect),
+                None => context.set_foreground(color),
+            }
+        }
+    };
     let (crew_delta, energy_delta) = deltas;
     if crew_delta != 0 {
-        draw_crew_delta(
-            context,
-            numeric_crew,
-            pc_menu,
-            font,
-            ship,
-            y_offs,
-            crew_delta,
-        );
+        draw_crew_delta(&mut draw, ship, y_offs, crew_delta);
+        if numeric_crew
+            && crate::battle::status_native::has_crew_counter(ship.max_crew, ship.ship_flags)
+        {
+            if let Some(context) = context {
+                draw_crew(
+                    context,
+                    font.unwrap_or_else(|| {
+                        panic!("numeric crew display requires the loaded battle font")
+                    }),
+                    ship.crew_level,
+                    y_offs,
+                    pc_menu,
+                );
+            }
+        }
     }
     if energy_delta != 0 {
-        draw_energy_delta(context, ship, y_offs, energy_delta);
+        draw_energy_delta(&mut draw, ship, y_offs, energy_delta);
     }
 }
 
 fn draw_crew_delta(
-    context: &crate::graphics::context_abi::ContextLease,
-    numeric_crew: bool,
-    pc_menu: bool,
-    font: Option<&crate::graphics::native_font::FontLease>,
+    draw: &mut impl FnMut(Color, Option<RECT>),
     ship: &mut SHIP_INFO,
     y_offs: COORD,
     crew_delta: SIZE,
@@ -350,18 +365,18 @@ fn draw_crew_delta(
         } else {
             rgb15(0, 0x14, 0)
         };
-        context.set_foreground(color);
+        draw(color, None);
         for i in old_blocks..new_blocks {
             r.corner.x = CREW_XOFFS + 1;
             if i & 1 == 0 {
                 r.corner.x += UNIT_WIDTH + 1;
                 r.corner.y -= UNIT_HEIGHT + 1;
             }
-            context.fill_rectangle(color, r);
+            draw(color, Some(r));
         }
     } else {
         let color = rgb15(0, 0, 0);
-        context.set_foreground(color);
+        draw(color, None);
         r.corner.y = (y + 1) - (((old_blocks + 2) >> 1) * (UNIT_HEIGHT + 1));
         let mut i = old_blocks;
         while i > new_blocks {
@@ -370,27 +385,16 @@ fn draw_crew_delta(
                 r.corner.x -= UNIT_WIDTH + 1;
                 r.corner.y += UNIT_HEIGHT + 1;
             }
-            context.fill_rectangle(color, r);
+            draw(color, Some(r));
             i -= 1;
         }
     }
-    draw_crew_marker(context, ship, new_level, y);
+    draw_crew_marker(draw, ship, new_level, y);
     ship.crew_level = new_level;
-    if numeric_crew
-        && crate::battle::status_native::has_crew_counter(ship.max_crew, ship.ship_flags)
-    {
-        draw_crew(
-            context,
-            font.unwrap_or_else(|| panic!("numeric crew display requires the loaded battle font")),
-            ship.crew_level,
-            y_offs,
-            pc_menu,
-        );
-    }
 }
 
 fn draw_energy_delta(
-    context: &crate::graphics::context_abi::ContextLease,
+    draw: &mut impl FnMut(Color, Option<RECT>),
     ship: &mut SHIP_INFO,
     y_offs: COORD,
     mut energy_delta: SIZE,
@@ -405,7 +409,7 @@ fn draw_energy_delta(
     };
     if energy_delta > 0 {
         let color = rgb15(0x14, 0, 0);
-        context.set_foreground(color);
+        draw(color, None);
         r.corner.y = (y + 1) - ((ship.energy_level as COORD + 1) >> 1) * (UNIT_HEIGHT + 1);
         while energy_delta > 0 {
             r.corner.x = ENERGY_XOFFS + 1;
@@ -413,13 +417,13 @@ fn draw_energy_delta(
                 r.corner.x += UNIT_WIDTH + 1;
                 r.corner.y -= UNIT_HEIGHT + 1;
             }
-            context.fill_rectangle(color, r);
+            draw(color, Some(r));
             ship.energy_level += 1;
             energy_delta -= 1;
         }
     } else {
         let color = rgb15(0, 0, 0);
-        context.set_foreground(color);
+        draw(color, None);
         r.corner.y = (y + 1) - ((ship.energy_level as COORD + 2) >> 1) * (UNIT_HEIGHT + 1);
         while energy_delta < 0 {
             r.corner.x = ENERGY_XOFFS + 1 + UNIT_WIDTH + 1;
@@ -427,7 +431,7 @@ fn draw_energy_delta(
                 r.corner.x -= UNIT_WIDTH + 1;
                 r.corner.y += UNIT_HEIGHT + 1;
             }
-            context.fill_rectangle(color, r);
+            draw(color, Some(r));
             ship.energy_level -= 1;
             energy_delta += 1;
         }
@@ -435,7 +439,7 @@ fn draw_energy_delta(
 }
 
 fn draw_crew_marker(
-    context: &crate::graphics::context_abi::ContextLease,
+    draw: &mut impl FnMut(Color, Option<RECT>),
     ship: &SHIP_INFO,
     new_level: COUNT,
     y: COORD,
@@ -460,7 +464,7 @@ fn draw_crew_marker(
                 height: UNIT_HEIGHT,
             },
         };
-        context.fill_rectangle(color, rect);
+        draw(color, Some(rect));
     }
 }
 

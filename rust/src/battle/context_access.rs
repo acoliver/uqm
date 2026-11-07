@@ -136,10 +136,11 @@ mod status_native_access {
     #[cfg(not(test))]
     impl StatusOps for Cx<'_> {
         fn draw_explosion_flash(&mut self, life: u16, y: i16) {
-            let context = crate::graphics::context_abi::ContextLease::retain(
-                std::ptr::NonNull::new(self.kernel.status_context)
-                    .unwrap_or_else(|| panic!("battle status context")),
-            );
+            let Some(context) = std::ptr::NonNull::new(self.kernel.status_context)
+                .map(crate::graphics::context_abi::ContextLease::retain)
+            else {
+                return;
+            };
             explosion_flash(life, y, |color, r, fill| {
                 if fill {
                     context.fill_rectangle(color, r);
@@ -149,12 +150,18 @@ mod status_native_access {
             });
         }
         fn draw_energy_label(&mut self, y: i16, change: i16) {
-            let graphics =
-                crate::ui::shipstat::StatusGraphics::new(self.kernel, self.kernel.battle_font());
+            let Some(context) = std::ptr::NonNull::new(self.kernel.status_context)
+                .map(crate::graphics::context_abi::ContextLease::retain)
+            else {
+                return;
+            };
+            let frames = crate::graphics::drawable_abi::retain_frame_allocations(&[self
+                .kernel
+                .status_frame]);
             crate::ui::shipstat::draw_crew_energy_labels(
-                &graphics.context,
-                &graphics.frames,
-                graphics.pc_menu,
+                &context,
+                &frames[0],
+                self.kernel.configuration.preferences().menu == OPT_PC as i32,
                 y,
                 change,
             );
@@ -649,14 +656,15 @@ impl ContextOps for Cx<'_> {
             return;
         }
         let y = self.status_offset(ship);
-        let context =
-            crate::ui::shipstat::StatusGraphics::new(self.kernel, self.kernel.battle_font());
+        let context = std::ptr::NonNull::new(self.kernel.status_context)
+            .map(crate::graphics::context_abi::ContextLease::retain);
+        let font = self.kernel.battle_font();
         let mut info = self.desc(ship).ship_info;
         crate::ui::shipstat::update_statistics(
-            &context.context,
+            context.as_ref(),
             true,
-            context.pc_menu,
-            context.crew_font.as_ref(),
+            self.kernel.configuration.preferences().menu == OPT_PC as i32,
+            font.as_ref(),
             &mut info,
             y,
             (crew, energy),

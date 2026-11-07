@@ -535,6 +535,102 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
                         assert_eq!((foreground.r, foreground.g, foreground.b), expected);
                     }
                 }
+                {
+                    use uqm_rust::battle::ContextOps;
+                    let portrait = LoadedDrawable::create(8, 1, 1, 1).unwrap();
+                    let icon = portrait.lease().frame(0).unwrap();
+                    let target = context_lease.target();
+                    context_lease.set_frame(portrait.lease().context_frame(0));
+                    context_lease.fill_rectangle(
+                        Color {
+                            r: 73,
+                            g: 91,
+                            b: 109,
+                            a: 255,
+                        },
+                        RECT {
+                            corner: POINT { x: 0, y: 0 },
+                            extent: EXTENT {
+                                width: 1,
+                                height: 1,
+                            },
+                        },
+                    );
+                    context_lease.set_frame(target);
+                    uqm_rust::app::bridge::enter(|cx| {
+                        let old = (
+                            cx.kernel.status_context,
+                            cx.kernel.status_frame,
+                            cx.kernel.tiny_font,
+                        );
+                        cx.kernel.status_context = context;
+                        cx.kernel.status_frame = frames.frame(0).unwrap();
+                        cx.kernel.tiny_font = font;
+                        cx.kernel.reset_ship_capacity(0, 1);
+                        let id = {
+                            let mut queue = cx.kernel.ships(0);
+                            let link = queue.alloc().unwrap();
+                            let record = &mut *queue
+                                .raw(link)
+                                .cast::<uqm_engine::battle::record::ShipRecord>();
+                            let mut descriptor: Box<uqm_engine::battle::record::RaceDescriptor> =
+                                Box::new(std::mem::zeroed());
+                            descriptor.ship_info.icons = icon;
+                            descriptor.ship_info.max_crew = 3;
+                            descriptor.ship_info.max_energy = 4;
+                            descriptor.ship_info.crew_level = 2;
+                            descriptor.ship_info.energy_level = 3;
+                            descriptor.ship_info.ship_cost = 7;
+                            record.descriptor = Some(descriptor);
+                            record.playerNr = 0;
+                            queue.ship_id(link)
+                        };
+                        SetContext(previous);
+                        uqm_rust::ui::shipstat::draw_battle_status(cx, id, None);
+                        let selected = uqm_rust::graphics::context_abi::_pCurContext;
+                        assert_eq!(selected, previous);
+                        let info = &cx.desc(id).ship_info;
+                        assert_eq!((info.crew_level, info.energy_level), (2, 3));
+                        assert_eq!(
+                            (info.icons, info.max_crew, info.max_energy, info.ship_cost),
+                            (icon, 3, 4, 7)
+                        );
+                        TFB_FlushGraphics();
+                        let pixel = GetFramePixel(frame, POINT { x: 32, y: 31 });
+                        assert_eq!((pixel.r, pixel.g, pixel.b), (73, 91, 109));
+                        cx.draw_statistics(id, 1, -1);
+                        let info = &cx.desc(id).ship_info;
+                        assert_eq!((info.crew_level, info.energy_level), (3, 2));
+                        assert_eq!(
+                            (info.icons, info.max_crew, info.max_energy, info.ship_cost),
+                            (icon, 3, 4, 7)
+                        );
+                        cx.draw_statistics(id, 0, 0);
+                        assert_eq!(
+                            (
+                                cx.desc(id).ship_info.crew_level,
+                                cx.desc(id).ship_info.energy_level
+                            ),
+                            (3, 2)
+                        );
+                        cx.kernel.status_context = ptr::null_mut();
+                        cx.draw_statistics(id, -1, 1);
+                        assert_eq!(
+                            (
+                                cx.desc(id).ship_info.crew_level,
+                                cx.desc(id).ship_info.energy_level
+                            ),
+                            (2, 3)
+                        );
+                        uqm_rust::ui::shipstat::draw_battle_status(cx, id, None);
+                        cx.kernel.reset_ship_capacity(0, 0);
+                        (
+                            cx.kernel.status_context,
+                            cx.kernel.status_frame,
+                            cx.kernel.tiny_font,
+                        ) = old;
+                    });
+                }
                 for clip_x in [None, Some(3), Some(500)] {
                     context_lease.fill_rectangle(
                         Color {
@@ -641,7 +737,7 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
             stats.ship_flags = 1 << 13;
             let update = |stats: &mut uqm_rust::navigation::abi::SHIP_INFO, crew, energy| {
                 uqm_rust::ui::shipstat::update_statistics(
-                    &context_lease,
+                    Some(&context_lease),
                     false,
                     false,
                     None,
