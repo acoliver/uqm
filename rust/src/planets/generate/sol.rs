@@ -2,6 +2,7 @@
 //!
 //! The live ABI adapter is in `sol_exports`.
 
+use crate::engine::world::planet::{NodeInfo, PlanetDesc, SystemInfo};
 #[cfg(test)]
 mod lifecycle_tests;
 pub mod orbital;
@@ -9,7 +10,7 @@ pub mod orbital;
 mod orbital_tests;
 pub use orbital::generate_orbital;
 
-use crate::c_bindings::global_state::{NODE_INFO, PLANET_DESC, PLANET_NUMBER_BASE, SYSTEM_INFO};
+use crate::c_bindings::global_state::PLANET_NUMBER_BASE;
 use crate::math::RandomContext;
 use crate::planets::generate::consts::{EARTH_RADIUS, MAP_HEIGHT, MAP_WIDTH, PLANET_SHIELDED};
 use crate::planets::generate::default::{self, PlanetNames};
@@ -79,7 +80,7 @@ pub fn reinit_npcs<H: FleetGroups + orbital::Queues + Story>(host: &mut H) -> bo
 
 /// `GenerateSol_generatePlanets`: Sol replaces the incoming RNG seed.
 /// Slots after Pluto and fields not written by C remain untouched.
-pub fn generate_planets(rng: &mut RandomContext, planets: &mut [PLANET_DESC; 16]) -> u8 {
+pub fn generate_planets(rng: &mut RandomContext, planets: &mut [PlanetDesc; 16]) -> u8 {
     rng.reseed(SOL_SEED);
     for (index, &(frame, percent, moons)) in PLANETS.iter().enumerate() {
         let desc = &mut planets[index];
@@ -92,7 +93,7 @@ pub fn generate_planets(rng: &mut RandomContext, planets: &mut [PLANET_DESC; 16]
         }
         desc.data_index = frame;
         desc.radius = (i32::from(EARTH_RADIUS) * percent / 100) as i16;
-        desc.NumPlanets = moons;
+        desc.num_planets = moons;
         special::place(desc, angle);
     }
     9
@@ -106,7 +107,7 @@ pub fn generate_moons(
     color: u8,
     planet: u8,
     count: u8,
-    moons: &mut [PLANET_DESC; 4],
+    moons: &mut [PlanetDesc; 4],
 ) {
     default::generate_moons(rng, size, color, count, &mut moons[..usize::from(count)]);
     match planet {
@@ -141,7 +142,7 @@ pub fn generate_name(host: &mut impl PlanetNames, planet: u16, frame: u8) -> boo
 
 /// `GenerateSol_generateEnergy`. C ignores `whichNode` and changes only the
 /// location, leaving the caller's density and type intact.
-pub fn generate_energy(body: Body, node: Option<&mut NODE_INFO>, story: &impl Story) -> u16 {
+pub fn generate_energy(body: Body, node: Option<&mut NodeInfo>, story: &impl Story) -> u16 {
     let location = if body == PLUTO && story.flag("FOUND_PLUTO_SPATHI") == 0 {
         Some((20, MAP_HEIGHT - 8))
     } else if body == LUNA && story.flag("MOONBASE_DESTROYED") == 0 {
@@ -164,10 +165,10 @@ pub fn generate_energy(body: Body, node: Option<&mut NODE_INFO>, story: &impl St
 /// after the base is destroyed (`NUM_CREATURE_TYPES + 1` in `lifeform.h`).
 pub fn generate_life(
     rng: &mut RandomContext,
-    info: &SYSTEM_INFO,
+    info: &SystemInfo,
     body: Body,
     which: u16,
-    node: &mut NODE_INFO,
+    node: &mut NodeInfo,
 ) -> u16 {
     if body == LUNA {
         surface::generate_random_nodes(rng, info, BIOLOGICAL_SCAN, 10, 24, which, node)

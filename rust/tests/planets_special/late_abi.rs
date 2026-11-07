@@ -79,7 +79,7 @@ pub fn check() {
     harness.set_star(0, 0);
     harness.seed(104729);
     let sun = std::ptr::addr_of_mut!(harness.state.SunDesc[0]);
-    harness.state.PlanetDesc[0].pPrevDesc = sun;
+    harness.state.PlanetDesc[0].prev_desc = sun;
     let world = std::ptr::addr_of_mut!(harness.state.PlanetDesc[0]);
     let pickup = GENERATE_SPATHI_FUNCTIONS.pickup_life.unwrap();
     for retrieved in 0..=32 {
@@ -92,7 +92,7 @@ pub fn check() {
         uqm_rust::engine::World::current().write(|world| {
             (world).set_story_state(uqm_rust::engine::StoryKey::SPATHI_CREATURES_EXAMINED, 0)
         });
-        harness.state.SysInfo.PlanetInfo.ScanRetrieveMask[BIOLOGICAL_SCAN] = if retrieved == 32 {
+        harness.state.SysInfo.planet_info.scan_retrieve_mask[BIOLOGICAL_SCAN] = if retrieved == 32 {
             u32::MAX
         } else {
             (1_u32 << retrieved) - 1
@@ -116,7 +116,7 @@ pub fn check() {
         assert_eq!(format!("{:?}", harness.state), before);
         assert_eq!(harness.rng_position(), 104729);
     }
-    harness.state.PlanetDesc[1].pPrevDesc = sun;
+    harness.state.PlanetDesc[1].prev_desc = sun;
     let other = std::ptr::addr_of_mut!(harness.state.PlanetDesc[1]);
     uqm_rust::engine::World::current().write(|world| {
         (world).set_story_state(uqm_rust::engine::StoryKey::SPATHI_CREATURES_EXAMINED, 0)

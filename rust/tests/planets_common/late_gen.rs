@@ -3,7 +3,7 @@
 use super::{fresh_node, scan_seeds};
 use std::fmt::Write as _;
 use uqm_rust::battle::gendef::{MAIDENS_DEFINED, VUX_BEAST_DEFINED, VUX_DEFINED};
-use uqm_rust::c_bindings::global_state::{PlanetFrame, NODE_INFO, PLANET_DESC, SYSTEM_INFO};
+use uqm_rust::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
 use uqm_rust::math::RandomContext;
 use uqm_rust::planets::generate::special::{Body, Story};
 use uqm_rust::planets::generate::{sam, spa, vux};
@@ -36,23 +36,23 @@ pub struct Scan {
     pub chance: i16,
 }
 pub trait Ops {
-    fn layout(&mut self, case: Layout, planets: &mut [PLANET_DESC]) -> (bool, u8, u32);
+    fn layout(&mut self, case: Layout, planets: &mut [PlanetDesc]) -> (bool, u8, u32);
     fn moons(
         &mut self,
         case: Layout,
         planet: u8,
         count: u8,
-        moons: &mut [PLANET_DESC],
+        moons: &mut [PlanetDesc],
     ) -> (bool, u32);
-    fn scan(&mut self, case: Scan, info: &SYSTEM_INFO, node: &mut NODE_INFO) -> (u16, u32);
+    fn scan(&mut self, case: Scan, info: &SystemInfo, node: &mut NodeInfo) -> (u16, u32);
 }
-pub fn descriptors(count: usize) -> Vec<PLANET_DESC> {
+pub fn descriptors(count: usize) -> Vec<PlanetDesc> {
     (0..count)
         .map(|i| {
-            let mut d: PLANET_DESC = unsafe { std::mem::zeroed() };
+            let mut d: PlanetDesc = unsafe { std::mem::zeroed() };
             d.rand_seed = 0xfeed0000 + i as u32;
             d.data_index = 0;
-            d.NumPlanets = 0x7f;
+            d.num_planets = 0x7f;
             d.radius = -17;
             d.location.x = -23;
             d.location.y = 29;
@@ -60,22 +60,22 @@ pub fn descriptors(count: usize) -> Vec<PLANET_DESC> {
             d.temp_color.g = 37;
             d.temp_color.b = 41;
             d.temp_color.a = 43;
-            d.NextIndex = 47 + i as u16;
+            d.next_index = 47 + i as u16;
             d.image.origin.x = -53;
             d.image.origin.y = 59;
             d
         })
         .collect()
 }
-pub fn scan_info(seed: u32, frame: &PlanetFrame, chance: i16) -> SYSTEM_INFO {
-    let mut info: SYSTEM_INFO = unsafe { std::mem::zeroed() };
-    info.PlanetInfo.ScanSeed = scan_seeds(seed);
-    info.PlanetInfo.ScanRetrieveMask = [0xa5a5a5a5, 0x55555555, 0xffffffff];
-    info.PlanetInfo.AtmoDensity = 50;
-    info.PlanetInfo.SurfaceTemperature = 28;
-    info.PlanetInfo.PlanDataPtr = frame;
-    info.PlanetInfo.LifeChance = chance;
-    info.PlanetInfo.PlanetRadius = 120;
+pub fn scan_info(seed: u32, frame: &PlanetFrame, chance: i16) -> SystemInfo {
+    let mut info: SystemInfo = unsafe { std::mem::zeroed() };
+    info.planet_info.scan_seed = scan_seeds(seed);
+    info.planet_info.scan_retrieve_mask = [0xa5a5a5a5, 0x55555555, 0xffffffff];
+    info.planet_info.atmo_density = 50;
+    info.planet_info.temperature = 28;
+    info.planet_info.plan_data_ptr = frame;
+    info.planet_info.life_chance = chance;
+    info.planet_info.planet_radius = 120;
     info
 }
 pub fn render(kind: Kind, frames: &[PlanetFrame], ops: &mut impl Ops) -> String {
@@ -186,7 +186,7 @@ pub fn render(kind: Kind, frames: &[PlanetFrame], ops: &mut impl Ops) -> String 
             }
         }
     }
-    out
+    super::record_labels::captured_labels(out)
 }
 pub struct Flags(pub bool);
 impl Story for Flags {
@@ -209,7 +209,7 @@ impl Story for Flags {
 }
 pub struct Rust<'a>(pub &'a [PlanetFrame]);
 impl Ops for Rust<'_> {
-    fn layout(&mut self, c: Layout, planets: &mut [PLANET_DESC]) -> (bool, u8, u32) {
+    fn layout(&mut self, c: Layout, planets: &mut [PlanetDesc]) -> (bool, u8, u32) {
         let mut rng = RandomContext::with_seed(c.seed);
         let count = match c.kind {
             Kind::Vux => vux::generate_planets(&mut rng, self.0, c.size, c.color, c.star, planets),
@@ -220,13 +220,7 @@ impl Ops for Rust<'_> {
         };
         (true, count, rng.seed())
     }
-    fn moons(
-        &mut self,
-        c: Layout,
-        planet: u8,
-        count: u8,
-        moons: &mut [PLANET_DESC],
-    ) -> (bool, u32) {
+    fn moons(&mut self, c: Layout, planet: u8, count: u8, moons: &mut [PlanetDesc]) -> (bool, u32) {
         let mut rng = RandomContext::with_seed(c.seed);
         match c.kind {
             Kind::Samatra => sam::generate_moons(&mut rng, c.size, c.color, planet, count, moons),
@@ -235,7 +229,7 @@ impl Ops for Rust<'_> {
         }
         (true, rng.seed())
     }
-    fn scan(&mut self, c: Scan, info: &SYSTEM_INFO, node: &mut NODE_INFO) -> (u16, u32) {
+    fn scan(&mut self, c: Scan, info: &SystemInfo, node: &mut NodeInfo) -> (u16, u32) {
         let mut rng = RandomContext::with_seed(c.seed);
         let count = match (c.kind, c.life) {
             (Kind::Vux, true) => vux::generate_life(

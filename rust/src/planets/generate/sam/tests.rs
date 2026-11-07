@@ -232,7 +232,7 @@ fn final_contact_all_story_survivor_abort_and_rebel_paths() {
                                     ));
                                 });
                                 assert_eq!(seed, 104729);
-                                assert_eq!(info.PlanetInfo.ScanSeed, [101, 202, 303]);
+                                assert_eq!(info.planet_info.scan_seed, [101, 202, 303]);
                                 let mut expected: Vec<String> =
                                     ["save", "clear-ip", "count"].map(String::from).to_vec();
                                 if messed == 0 {

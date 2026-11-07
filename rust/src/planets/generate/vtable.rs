@@ -2,9 +2,8 @@
 //! pickup step, selected per star system by `getGenerateFunctions`.
 
 use crate::c_bindings::assert_c_layout;
-use crate::c_bindings::global_state::{
-    GenerateFunctions as CGenerateFunctions, NODE_INFO, PLANET_DESC, SOLARSYS_STATE,
-};
+use crate::c_bindings::global_state::{GenerateFunctions as CGenerateFunctions, SOLARSYS_STATE};
+use crate::engine::world::planet::{NodeInfo, PlanetDesc};
 #[cfg(not(test))]
 use crate::planets::generate::exports;
 
@@ -14,19 +13,19 @@ pub type SystemHook = Option<unsafe extern "C" fn(*mut SOLARSYS_STATE) -> bool>;
 pub type NpcsHook = Option<unsafe fn(&mut crate::engine::World, *mut SOLARSYS_STATE) -> bool>;
 /// `bool (*)(SOLARSYS_STATE *, PLANET_DESC *)`: `generateMoons`,
 /// `generateOrbital`.
-pub type WorldHook = Option<unsafe extern "C" fn(*mut SOLARSYS_STATE, *mut PLANET_DESC) -> bool>;
+pub type WorldHook = Option<unsafe extern "C" fn(*mut SOLARSYS_STATE, *mut PlanetDesc) -> bool>;
 /// `bool (*)(const SOLARSYS_STATE *, const PLANET_DESC *)`: `generateName`.
 pub type OrbitalHook = Option<
-    unsafe fn(&mut crate::engine::battle::Cx<'_>, *mut SOLARSYS_STATE, *mut PLANET_DESC) -> bool,
+    unsafe fn(&mut crate::engine::battle::Cx<'_>, *mut SOLARSYS_STATE, *mut PlanetDesc) -> bool,
 >;
-pub type NameHook = Option<unsafe extern "C" fn(*const SOLARSYS_STATE, *const PLANET_DESC) -> bool>;
+pub type NameHook = Option<unsafe extern "C" fn(*const SOLARSYS_STATE, *const PlanetDesc) -> bool>;
 /// `COUNT (*)(const SOLARSYS_STATE *, const PLANET_DESC *, COUNT, NODE_INFO *)`.
 pub type NodeCountHook = Option<
-    unsafe extern "C" fn(*const SOLARSYS_STATE, *const PLANET_DESC, u16, *mut NODE_INFO) -> u16,
+    unsafe extern "C" fn(*const SOLARSYS_STATE, *const PlanetDesc, u16, *mut NodeInfo) -> u16,
 >;
 /// `bool (*)(SOLARSYS_STATE *, PLANET_DESC *, COUNT)`: the three pickups.
 pub type PickupHook =
-    Option<unsafe extern "C" fn(*mut SOLARSYS_STATE, *mut PLANET_DESC, u16) -> bool>;
+    Option<unsafe extern "C" fn(*mut SOLARSYS_STATE, *mut PlanetDesc, u16) -> bool>;
 
 /// C `GenerateFunctions`: thirteen hook pointers in this order.
 #[repr(C)]

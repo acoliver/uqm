@@ -5,7 +5,7 @@
 //! flags.
 
 use crate::battle::battle_types::{cosine, sine, QUADRANT};
-use crate::c_bindings::global_state::{PlanetFrame, PLANET_DESC};
+use crate::engine::world::planet::{PlanetDesc, PlanetFrame};
 use crate::math::RandomContext;
 use crate::planets::generate::consts::PLANET_SHIELDED;
 use crate::planets::generate::default;
@@ -19,11 +19,11 @@ pub fn generate_planets(
     plan_data: &[PlanetFrame],
     star_size: u8,
     star_color: u8,
-    planets: &mut [PLANET_DESC],
+    planets: &mut [PlanetDesc],
 ) -> u8 {
     special::planets_then(rng, plan_data, star_size, star_color, planets, |planets| {
         planets[0].data_index = WATER_WORLD | PLANET_SHIELDED;
-        planets[0].NumPlanets = 1;
+        planets[0].num_planets = 1;
     })
 }
 
@@ -34,7 +34,7 @@ pub fn generate_moons(
     star_size: u8,
     star_color: u8,
     planet_moons: u8,
-    moons: &mut [PLANET_DESC],
+    moons: &mut [PlanetDesc],
     body: Body,
 ) -> bool {
     default::generate_moons(
@@ -69,11 +69,11 @@ pub fn generate_orbital(
 ) -> bool {
     if body == Body::Planet(0) {
         orbit.default_orbital(load_planet);
-        let info = &mut orbit.sys_info.PlanetInfo;
-        info.SurfaceTemperature = 19;
-        info.Tectonics = 0;
-        info.Weather = 0;
-        info.AtmoDensity = (EARTH_ATMOSPHERE * 9 / 10) as _;
+        let info = &mut orbit.sys_info.planet_info;
+        info.temperature = 19;
+        info.tectonics = 0;
+        info.weather = 0;
+        info.atmo_density = (EARTH_ATMOSPHERE * 9 / 10) as _;
         return true;
     }
     if body == (Body::Moon { planet: 0, moon: 0 }) {

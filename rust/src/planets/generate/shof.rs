@@ -7,8 +7,8 @@
 //! `MAIDENS_ON_SHIP`, `SHOFIXTI_VISITS`, `SHOFIXTI_GRPOFFS0` (32-bit group
 //! reference).
 
-use crate::c_bindings::global_state::PLANET_DESC;
 use crate::comm::dispatch::ship::SHOFIXTI_SHIP;
+use crate::engine::world::planet::PlanetDesc;
 use crate::math::RandomContext;
 use crate::planets::generate::default::{self, FLEE, IGNORE_FLAGSHIP, REFORM_GROUP};
 use crate::planets::generate::orbits::{self, OrbitRequest};
@@ -89,14 +89,14 @@ pub fn generate_planets(
     rng: &mut RandomContext,
     star_size: u8,
     star_color: u8,
-    planets: &mut [PLANET_DESC],
+    planets: &mut [PlanetDesc],
 ) -> u8 {
     for (index, planet) in planets
         .iter_mut()
         .take(usize::from(NUM_PLANETS))
         .enumerate()
     {
-        planet.NumPlanets = 0;
+        planet.num_planets = 0;
         planet.data_index = if index < usize::from(NUM_PLANETS >> 1) {
             SELENIC_WORLD
         } else {

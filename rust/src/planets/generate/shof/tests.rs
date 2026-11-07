@@ -3,8 +3,9 @@
 use super::{
     generate_planets, init_npcs, reinit_npcs, uninit_npcs, ShofixtiSite, METAL_WORLD, NUM_PLANETS,
 };
-use crate::c_bindings::global_state::{IP_GROUP, PLANET_DESC};
+use crate::c_bindings::global_state::IP_GROUP;
 use crate::comm::dispatch::ship::{SHOFIXTI_SHIP, UMGAH_SHIP};
+use crate::engine::world::planet::PlanetDesc;
 use crate::math::RandomContext;
 use crate::planets::generate::default::{Npcs, FLEE, IGNORE_FLAGSHIP, REFORM_GROUP};
 use crate::planets::generate::home_contact::tests::FakeStory;
@@ -307,9 +308,9 @@ fn a_missing_group_means_a_shofixti_died() {
 #[test]
 fn three_selenic_and_three_metal_worlds_with_no_moons() {
     let mut rng = RandomContext::with_seed(3);
-    let mut planets: Vec<PLANET_DESC> = vec![unsafe { std::mem::zeroed() }; 16];
+    let mut planets: Vec<PlanetDesc> = vec![unsafe { std::mem::zeroed() }; 16];
     for planet in &mut planets {
-        planet.NumPlanets = 4;
+        planet.num_planets = 4;
     }
     let drawn = generate_planets(&mut rng, 0, 0, &mut planets);
     assert_eq!(drawn, NUM_PLANETS);
@@ -322,6 +323,6 @@ fn three_selenic_and_three_metal_worlds_with_no_moons() {
             .count()
     };
     assert_eq!((count(SELENIC_WORLD), count(METAL_WORLD)), (3, 3));
-    assert!(planets.iter().take(6).all(|p| p.NumPlanets == 0));
-    assert!(planets.iter().skip(6).all(|p| p.NumPlanets == 4));
+    assert!(planets.iter().take(6).all(|p| p.num_planets == 0));
+    assert!(planets.iter().skip(6).all(|p| p.num_planets == 4));
 }

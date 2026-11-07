@@ -1,7 +1,7 @@
 //! VUX home, Zex' maidens and Zex' beast, ported from `genvux.c`.
 
 use crate::battle::gendef::{MAIDENS_DEFINED, VUX_BEAST_DEFINED, VUX_DEFINED};
-use crate::c_bindings::global_state::{PlanetFrame, NODE_INFO, PLANET_DESC, SYSTEM_INFO};
+use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
 use crate::math::RandomContext;
 use crate::planet_side::report_adapter::DiscoveryReportPort;
 use crate::planets::generate::consts::EARTH_RADIUS;
@@ -40,7 +40,7 @@ pub fn generate_planets(
     star_size: u8,
     star_color: u8,
     star: u8,
-    planets: &mut [PLANET_DESC],
+    planets: &mut [PlanetDesc],
 ) -> u8 {
     let mut count = default::generate_planets(rng, table, star_size, star_color, planets);
     if star == MAIDENS_DEFINED {
@@ -51,7 +51,7 @@ pub fn generate_planets(
     } else {
         let angle = if star == VUX_DEFINED {
             planets[0].data_index = REDUX_WORLD;
-            planets[0].NumPlanets = 1;
+            planets[0].num_planets = 1;
             planets[0].radius = (i32::from(EARTH_RADIUS) * 42 / 100) as i16;
             HOME_ANGLE
         } else {
@@ -59,7 +59,7 @@ pub fn generate_planets(
             count += 1;
             planets[0].data_index = WATER_WORLD;
             planets[0].radius = (i32::from(EARTH_RADIUS) * 110 / 100) as i16;
-            planets[0].NumPlanets = 0;
+            planets[0].num_planets = 0;
             BEAST_ANGLE
         };
         special::place(&mut planets[0], angle);
@@ -83,8 +83,8 @@ pub fn generate_orbital(
     orbit.default_orbital(load_planet);
     if body == WORLD {
         // C changes these after LoadPlanet, not before it.
-        orbit.sys_info.PlanetInfo.Weather = 2;
-        orbit.sys_info.PlanetInfo.Tectonics = 0;
+        orbit.sys_info.planet_info.weather = 2;
+        orbit.sys_info.planet_info.tectonics = 0;
     }
     true
 }
@@ -135,11 +135,11 @@ pub(super) fn prepare_orbital(
 
 pub fn generate_energy(
     rng: &mut RandomContext,
-    info: &SYSTEM_INFO,
+    info: &SystemInfo,
     star: u8,
     body: Body,
     which: u16,
-    node: &mut NODE_INFO,
+    node: &mut NodeInfo,
     story: &impl Story,
 ) -> u16 {
     if body == WORLD {
@@ -160,12 +160,12 @@ pub fn generate_energy(
 
 pub fn generate_life(
     rng: &mut RandomContext,
-    info: &SYSTEM_INFO,
+    info: &SystemInfo,
     frame: &PlanetFrame,
     star: u8,
     body: Body,
     which: u16,
-    node: &mut NODE_INFO,
+    node: &mut NodeInfo,
 ) -> u16 {
     if body == WORLD {
         if star == MAIDENS_DEFINED {

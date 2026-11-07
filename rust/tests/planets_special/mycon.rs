@@ -2,7 +2,7 @@
 
 use super::{generateMyconFunctions, Harness};
 use crate::planets_common::mycon::{self, MyconOps, RustMycon, ScanCase};
-use uqm_rust::c_bindings::global_state::{PlanetFrame, NODE_INFO, PLANET_DESC};
+use uqm_rust::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame};
 use uqm_rust::planets::generate::special::Body;
 use uqm_rust::state::game_state_keys::set_game_state;
 
@@ -11,24 +11,24 @@ impl MyconOps for Harness {
         &mut self,
         star: u8,
         case: (u8, u8, u32),
-        planets: &mut [PLANET_DESC],
+        planets: &mut [PlanetDesc],
     ) -> (bool, u8, u32) {
         self.star_index = star;
         self.set_star(case.0, case.1);
         self.state.PlanetDesc.copy_from_slice(planets);
-        self.state.SunDesc[0].NumPlanets = 0;
+        self.state.SunDesc[0].num_planets = 0;
         self.seed(case.2);
         let hook = generateMyconFunctions.generate_planets.unwrap();
         let result = unsafe { hook(&mut *self.state) };
         planets.copy_from_slice(&self.state.PlanetDesc);
         (
             result,
-            self.state.SunDesc[0].NumPlanets,
+            self.state.SunDesc[0].num_planets,
             self.rng_position(),
         )
     }
 
-    fn scan(&mut self, case: ScanCase, node: &mut NODE_INFO) -> (u16, u32) {
+    fn scan(&mut self, case: ScanCase, node: &mut NodeInfo) -> (u16, u32) {
         self.star_index = case.star;
         self.set_star(0, 0);
         uqm_rust::engine::World::current().write(|world| {
@@ -41,16 +41,16 @@ impl MyconOps for Harness {
         self.state.PlanetDesc = unsafe { std::mem::zeroed() };
         self.state.MoonDesc = unsafe { std::mem::zeroed() };
         self.state.SysInfo = mycon::scan_info(case);
-        let sun: *mut PLANET_DESC = &mut self.state.SunDesc[0];
-        let world: *const PLANET_DESC = match case.body {
+        let sun: *mut PlanetDesc = &mut self.state.SunDesc[0];
+        let world: *const PlanetDesc = match case.body {
             Body::Planet(p) => {
-                self.state.PlanetDesc[usize::from(p)].pPrevDesc = sun;
+                self.state.PlanetDesc[usize::from(p)].prev_desc = sun;
                 &self.state.PlanetDesc[usize::from(p)]
             }
             Body::Moon { planet, moon } => {
-                self.state.PlanetDesc[usize::from(planet)].pPrevDesc = sun;
-                let parent: *mut PLANET_DESC = &mut self.state.PlanetDesc[usize::from(planet)];
-                self.state.MoonDesc[usize::from(moon)].pPrevDesc = parent;
+                self.state.PlanetDesc[usize::from(planet)].prev_desc = sun;
+                let parent: *mut PlanetDesc = &mut self.state.PlanetDesc[usize::from(planet)];
+                self.state.MoonDesc[usize::from(moon)].prev_desc = parent;
                 &self.state.MoonDesc[usize::from(moon)]
             }
         };

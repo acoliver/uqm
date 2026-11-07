@@ -39,7 +39,7 @@ struct Operations {
     set_clip: unsafe extern "C" fn(*mut c::RECT) -> c::BOOLEAN,
     colors: unsafe extern "C" fn(c::COLORMAP) -> *mut u8,
     batch: unsafe extern "C" fn(*mut c::PRIMITIVE, u32, u8),
-    table: *const c::PlanetFrame,
+    table: *const uqm_rust::engine::world::planet::PlanetFrame,
     system: *mut c::SOLARSYS_STATE,
 }
 
@@ -490,7 +490,7 @@ pub fn full_c_fixture_core_and_host_parity() {
             let mut xlat_entry = Entry::new(&mut translation);
             let mut color_entry = Entry::new(&mut colors);
             let mut system: c::SOLARSYS_STATE = std::mem::zeroed();
-            let mut desc: c::PLANET_DESC = std::mem::zeroed();
+            let mut desc: uqm_rust::engine::world::planet::PlanetDesc = std::mem::zeroed();
             desc.data_index = case.planet as u8 | if case.shielded { 0x80 } else { 0 };
             system.pOrbitalDesc = &mut desc;
             system.XlatRef = if case.missing {
@@ -530,7 +530,7 @@ pub fn full_c_fixture_core_and_host_parity() {
             let palette = (!case.missing).then_some(TopographyPalette {
                 translation: translation[6..].try_into().unwrap(),
                 colors: &colors,
-                planet_type: planet.Type,
+                planet_type: planet.type_,
                 base_elevation: planet.base_elevation,
             });
             ram.reset(mode, case.clip);
@@ -612,7 +612,7 @@ fn host_errors_preserve_real_context_and_pixels() {
         let mut xlat_entry = Entry::new(&mut xlat);
         let mut color_entry = Entry::new(&mut colors);
         let mut system: c::SOLARSYS_STATE = std::mem::zeroed();
-        let mut desc: c::PLANET_DESC = std::mem::zeroed();
+        let mut desc: uqm_rust::engine::world::planet::PlanetDesc = std::mem::zeroed();
         system.pOrbitalDesc = &mut desc;
         system.XlatRef = xlat_entry.handle();
         system.XlatPtr = xlat.as_ptr().cast();

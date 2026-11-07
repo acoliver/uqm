@@ -88,9 +88,9 @@ pub unsafe extern "C" fn planetOuterLocation(planet_i: c::COUNT) -> c::POINT {
 #[no_mangle]
 pub unsafe extern "C" fn worldIsPlanet(
     solar_sys: *const c::SOLARSYS_STATE,
-    world: *const c::PLANET_DESC,
+    world: *const crate::engine::world::planet::PlanetDesc,
 ) -> bool {
-    ptr::eq((*world).pPrevDesc, (*solar_sys).SunDesc.as_ptr())
+    ptr::eq((*world).prev_desc, (*solar_sys).SunDesc.as_ptr())
 }
 
 /// # Safety
@@ -99,7 +99,7 @@ pub unsafe extern "C" fn worldIsPlanet(
 #[no_mangle]
 pub unsafe extern "C" fn worldIsMoon(
     solar_sys: *const c::SOLARSYS_STATE,
-    world: *const c::PLANET_DESC,
+    world: *const crate::engine::world::planet::PlanetDesc,
 ) -> bool {
     !worldIsPlanet(solar_sys, world)
 }
@@ -110,12 +110,12 @@ pub unsafe extern "C" fn worldIsMoon(
 #[no_mangle]
 pub unsafe extern "C" fn planetIndex(
     solar_sys: *const c::SOLARSYS_STATE,
-    world: *const c::PLANET_DESC,
+    world: *const crate::engine::world::planet::PlanetDesc,
 ) -> c::COUNT {
     let planet = if worldIsPlanet(solar_sys, world) {
         world
     } else {
-        (*world).pPrevDesc
+        (*world).prev_desc
     };
     planet.offset_from((*solar_sys).PlanetDesc.as_ptr()) as c::COUNT
 }
@@ -126,7 +126,7 @@ pub unsafe extern "C" fn planetIndex(
 #[no_mangle]
 pub unsafe extern "C" fn moonIndex(
     solar_sys: *const c::SOLARSYS_STATE,
-    moon: *const c::PLANET_DESC,
+    moon: *const crate::engine::world::planet::PlanetDesc,
 ) -> c::COUNT {
     assert!(!worldIsPlanet(solar_sys, moon));
     moon.offset_from((*solar_sys).MoonDesc.as_ptr()) as c::COUNT
@@ -138,7 +138,7 @@ pub unsafe extern "C" fn moonIndex(
 #[no_mangle]
 pub unsafe extern "C" fn matchWorld(
     solar_sys: *const c::SOLARSYS_STATE,
-    world: *const c::PLANET_DESC,
+    world: *const crate::engine::world::planet::PlanetDesc,
     planet_i: c::BYTE,
     moon_i: c::BYTE,
 ) -> bool {

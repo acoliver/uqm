@@ -5,9 +5,9 @@
 //! `star_array`, `Elements` and `PlanData` using the generated `STAR_DESC` and
 //! `PlanetFrame` layouts, so the entries here use those same layouts.
 
+use crate::engine::world::planet::{ElementEntry, PlanetFrame};
 use std::ffi::{c_char, CStr};
 
-use crate::c_bindings::global_state::{PlanetFrame, ELEMENT_ENTRY};
 use crate::comm::dispatch::CPoint;
 use crate::savegame::runtime::star::{CStarDesc, CATALOG_LEN};
 
@@ -36,10 +36,10 @@ const fn star(x: i16, y: i16, star_type: u8, index: u8, prefix: u8, postfix: u8)
     }
 }
 
-const fn mineral(element: u8, density: u8) -> ELEMENT_ENTRY {
-    ELEMENT_ENTRY {
-        ElementType: element,
-        Density: density,
+const fn mineral(element: u8, density: u8) -> ElementEntry {
+    ElementEntry {
+        element_type: element,
+        density,
     }
 }
 
@@ -57,10 +57,10 @@ const fn frame(
     (num_blemishes, base_elevation): (u16, i16),
 ) -> PlanetFrame {
     PlanetFrame {
-        Type: kind,
-        BaseTectonics: tectonics,
-        AtmoAndDensity: atmosphere_and_density,
-        UsefulElements: [
+        type_: kind,
+        base_tectonics: tectonics,
+        atmo_and_density: atmosphere_and_density,
+        useful_elements: [
             mineral(minerals[0].0, minerals[0].1),
             mineral(minerals[1].0, minerals[1].1),
             mineral(minerals[2].0, minerals[2].1),
@@ -70,8 +70,8 @@ const fn frame(
             mineral(minerals[6].0, minerals[6].1),
             mineral(minerals[7].0, minerals[7].1),
         ],
-        CMapInstance: resource(color_map),
-        XlatTabInstance: resource(translate_table),
+        cmap_instance: resource(color_map),
+        xlat_tab_instance: resource(translate_table),
         num_faults,
         fault_depth,
         num_blemishes,

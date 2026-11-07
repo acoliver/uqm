@@ -6,7 +6,7 @@
 //! `ILWRATH_DECEIVED`.
 
 use crate::battle::battle_types::normalize_angle;
-use crate::c_bindings::global_state::{PlanetFrame, PLANET_DESC};
+use crate::engine::world::planet::{PlanetDesc, PlanetFrame};
 use crate::math::RandomContext;
 use crate::planets::generate::consts::PLANET_SHIELDED;
 use crate::planets::generate::default;
@@ -64,7 +64,7 @@ pub fn generate_planets(
     plan_data: &[PlanetFrame],
     star_size: u8,
     star_color: u8,
-    planets: &mut [PLANET_DESC],
+    planets: &mut [PlanetDesc],
     story: &impl Story,
 ) -> u8 {
     special::planets_then(rng, plan_data, star_size, star_color, planets, |planets| {
@@ -72,7 +72,7 @@ pub fn generate_planets(
         if story.flag("CHMMR_UNLEASHED") == 0 {
             planets[1].data_index |= PLANET_SHIELDED;
         }
-        planets[1].NumPlanets = 1;
+        planets[1].num_planets = 1;
     })
 }
 
@@ -83,7 +83,7 @@ pub fn generate_moons(
     star_size: u8,
     star_color: u8,
     planet_moons: u8,
-    moons: &mut [PLANET_DESC],
+    moons: &mut [PlanetDesc],
     body: Body,
 ) -> bool {
     default::generate_moons(

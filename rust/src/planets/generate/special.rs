@@ -3,7 +3,8 @@
 //! the ship-group bookkeeping of the systems with a fixed fleet.
 
 use crate::battle::battle_types::{arctan, cosine, sine};
-use crate::c_bindings::global_state::{PlanetFrame, IP_GROUP, PLANET_DESC, SYSTEM_INFO};
+use crate::c_bindings::global_state::IP_GROUP;
+use crate::engine::world::planet::{PlanetDesc, PlanetFrame, SystemInfo};
 use crate::engine::{StoryKey, World};
 use crate::math::RandomContext;
 use crate::planets::generate::calc::{AnalysisSite, StarDescription};
@@ -169,14 +170,14 @@ fn set_game_state_byte(start: u32, value: u8) {
 
 /// Re-place `planet` on a circle of `EARTH_RADIUS * percent / 100`, keeping
 /// the angle it was laid out at.
-pub fn reposition(planet: &mut PLANET_DESC, percent: i32) {
+pub fn reposition(planet: &mut PlanetDesc, percent: i32) {
     planet.radius = (i32::from(EARTH_RADIUS) * percent / 100) as i16;
     let angle = arctan(i32::from(planet.location.x), i32::from(planet.location.y));
     place(planet, angle);
 }
 
 /// Put `planet` at `angle` on its orbit.
-pub fn place(planet: &mut PLANET_DESC, angle: u16) {
+pub fn place(planet: &mut PlanetDesc, angle: u16) {
     planet.location.x = cosine(angle, i32::from(planet.radius)) as i16;
     planet.location.y = sine(angle, i32::from(planet.radius)) as i16;
 }
@@ -222,8 +223,8 @@ pub struct Orbit<'a> {
     pub plan_data: &'a [PlanetFrame],
     pub star: StarDescription,
     pub site: AnalysisSite,
-    pub sys_info: &'a mut SYSTEM_INFO,
-    pub world: &'a PLANET_DESC,
+    pub sys_info: &'a mut SystemInfo,
+    pub world: &'a PlanetDesc,
 }
 
 impl Orbit<'_> {
@@ -254,7 +255,7 @@ impl Orbit<'_> {
 }
 
 /// Moon table slice a planet's moons occupy.
-pub fn moon_slice(moons: &mut [PLANET_DESC], count: u8) -> &mut [PLANET_DESC] {
+pub fn moon_slice(moons: &mut [PlanetDesc], count: u8) -> &mut [PlanetDesc] {
     &mut moons[..usize::from(count)]
 }
 
@@ -265,8 +266,8 @@ pub fn planets_then(
     plan_data: &[PlanetFrame],
     star_size: u8,
     star_color: u8,
-    planets: &mut [PLANET_DESC],
-    adjust: impl FnOnce(&mut [PLANET_DESC]),
+    planets: &mut [PlanetDesc],
+    adjust: impl FnOnce(&mut [PlanetDesc]),
 ) -> u8 {
     let drawn = default::generate_planets(rng, plan_data, star_size, star_color, planets);
     adjust(planets);

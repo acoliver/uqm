@@ -184,7 +184,7 @@ pub fn deposit_quality_string(value: BYTE) -> *const c_char {
 }
 
 type SystemVisitor<T> = unsafe fn(*const STAR_DESC, *const SOLARSYS_STATE, &mut T);
-type WorldVisitor<T> = unsafe fn(*const PLANET_DESC, &mut T);
+type WorldVisitor<T> = unsafe fn(*const crate::engine::world::planet::PlanetDesc, &mut T);
 
 pub struct UniverseRecurseArg<'a, T> {
     pub system_func_pre: Option<SystemVisitor<T>>,
@@ -198,7 +198,7 @@ pub struct UniverseRecurseArg<'a, T> {
 #[cfg(not(test))]
 mod runtime {
     use super::*;
-    use crate::engine::World;
+    use crate::engine::{world::planet::*, World};
 
     use crate::planets::tables::{PLANET_ARRAY as planet_array, STARMAP_ARRAY as starmap_array};
     use libc::FILE;
@@ -220,10 +220,10 @@ mod runtime {
 
     unsafe fn call_generate_for_scan_type(
         system: *const SOLARSYS_STATE,
-        world: *const PLANET_DESC,
+        world: *const PlanetDesc,
         node: COUNT,
         scan_type: BYTE,
-        info: *mut NODE_INFO,
+        info: *mut NodeInfo,
     ) -> COUNT {
         crate::planets::scan::callGenerateForScanType(
             system.cast(),
@@ -496,7 +496,7 @@ mod runtime {
             &mut Cx<'_>,
             *mut STAR_DESC,
             *mut SOLARSYS_STATE,
-            *mut PLANET_DESC,
+            *mut PlanetDesc,
             &mut T,
         ),
         arg: &mut T,
@@ -507,7 +507,7 @@ mod runtime {
                 == star.cast()
         );
         assert!(pSolarSysState == system);
-        for i in 0..(*system).SunDesc[0].NumPlanets as usize {
+        for i in 0..(*system).SunDesc[0].num_planets as usize {
             callback(
                 cx,
                 star,
@@ -523,19 +523,19 @@ mod runtime {
         cx: &mut Cx<'_>,
         star: *mut STAR_DESC,
         system: *mut SOLARSYS_STATE,
-        planet: *mut PLANET_DESC,
+        planet: *mut PlanetDesc,
         callback: unsafe fn(
             &mut Cx<'_>,
             *mut STAR_DESC,
             *mut SOLARSYS_STATE,
-            *mut PLANET_DESC,
-            *mut PLANET_DESC,
+            *mut PlanetDesc,
+            *mut PlanetDesc,
             &mut T,
         ),
         arg: &mut T,
     ) {
         assert!(pSolarSysState == system);
-        for i in 0..(*planet).NumPlanets as usize {
+        for i in 0..(*planet).num_planets as usize {
             callback(
                 cx,
                 star,
@@ -581,7 +581,7 @@ mod runtime {
         );
         (*SysGenRNG).reseed(GetRandomSeedForStar(star));
         let mut system: SOLARSYS_STATE = mem::zeroed();
-        system.SunDesc[0].pPrevDesc = ptr::null_mut();
+        system.SunDesc[0].prev_desc = ptr::null_mut();
         system.SunDesc[0].rand_seed = (*SysGenRNG).next_random();
         system.SunDesc[0].data_index = (((*star).Type as u32
             & ((0xff << STAR_TYPE_SHIFT) & !(0xff << STAR_COLOR_SHIFT)))
@@ -612,7 +612,7 @@ mod runtime {
         cx: &mut Cx<'_>,
         star: *mut STAR_DESC,
         system: *mut SOLARSYS_STATE,
-        planet: *mut PLANET_DESC,
+        planet: *mut PlanetDesc,
         recurse: &mut UniverseRecurseArg<'_, T>,
     ) {
         assert!(
@@ -621,7 +621,7 @@ mod runtime {
                 == star.cast()
         );
         assert!(pSolarSysState == system);
-        (*planet).pPrevDesc = ptr::addr_of_mut!((*system).SunDesc[0]);
+        (*planet).prev_desc = ptr::addr_of_mut!((*system).SunDesc[0]);
         if let Some(cb) = recurse.planet_func_pre {
             (*system).pOrbitalDesc = planet;
             cx.with_legacy(|| DoPlanetaryAnalysis(ptr::addr_of_mut!((*system).SysInfo), planet));
@@ -644,8 +644,8 @@ mod runtime {
         cx: &mut Cx<'_>,
         star: *mut STAR_DESC,
         system: *mut SOLARSYS_STATE,
-        planet: *mut PLANET_DESC,
-        moon: *mut PLANET_DESC,
+        planet: *mut PlanetDesc,
+        moon: *mut PlanetDesc,
         recurse: &mut UniverseRecurseArg<'_, T>,
     ) {
         assert!(
@@ -654,7 +654,7 @@ mod runtime {
                 == star.cast()
         );
         assert!(pSolarSysState == system);
-        (*moon).pPrevDesc = planet;
+        (*moon).prev_desc = planet;
         if let Some(cb) = recurse.moon_func {
             (*system).pOrbitalDesc = moon;
             if (*moon).data_index != HIERARCHY_STARBASE as BYTE
@@ -756,12 +756,12 @@ mod runtime {
             star_presence_string((*star).Index),
         );
     }
-    unsafe fn dump_planet_callback(planet: *const PLANET_DESC, arg: &mut DumpUniverseArg) {
+    unsafe fn dump_planet_callback(planet: *const PlanetDesc, arg: &mut DumpUniverseArg) {
         dump_planet(arg.out, planet);
     }
     /// # Safety
     /// Planet must belong to the active system, and `out` be an open stream.
-    pub unsafe fn dump_planet(out: *mut FILE, planet: *const PLANET_DESC) {
+    pub unsafe fn dump_planet(out: *mut FILE, planet: *const PlanetDesc) {
         let world = WorldData::current();
         ((*(*pSolarSysState).genFuncs).generateName.unwrap())(pSolarSysState, planet);
         libc::fprintf(
@@ -772,12 +772,12 @@ mod runtime {
         );
         dump_world(out, planet);
     }
-    unsafe fn dump_moon_callback(moon: *const PLANET_DESC, arg: &mut DumpUniverseArg) {
+    unsafe fn dump_moon_callback(moon: *const PlanetDesc, arg: &mut DumpUniverseArg) {
         dump_moon(arg.out, moon);
     }
     /// # Safety
     /// Moon must belong to the active system, and `out` be an open stream.
-    pub unsafe fn dump_moon(out: *mut FILE, moon: *const PLANET_DESC) {
+    pub unsafe fn dump_moon(out: *mut FILE, moon: *const PlanetDesc) {
         let kind = if (*moon).data_index == HIERARCHY_STARBASE as BYTE {
             c"StarBase".as_ptr()
         } else if (*moon).data_index == SA_MATRA as BYTE {
@@ -793,68 +793,68 @@ mod runtime {
         );
         dump_world(out, moon);
     }
-    unsafe fn dump_world(out: *mut FILE, world: *const PLANET_DESC) {
+    unsafe fn dump_world(out: *mut FILE, world: *const PlanetDesc) {
         if (*world).data_index == HIERARCHY_STARBASE as BYTE {
             return;
         }
         if (*world).data_index == SA_MATRA as BYTE {
             return;
         }
-        let info = &(*pSolarSysState).SysInfo.PlanetInfo;
+        let info = &(*pSolarSysState).SysInfo.planet_info;
         libc::fprintf(
             out,
             c"          AxialTilt:  %d\n".as_ptr(),
-            info.AxialTilt as c_int,
+            info.axial_tilt as c_int,
         );
         libc::fprintf(
             out,
             c"          Tectonics:  %d\n".as_ptr(),
-            info.Tectonics as c_int,
+            info.tectonics as c_int,
         );
         libc::fprintf(
             out,
             c"          Weather:    %d\n".as_ptr(),
-            info.Weather as c_int,
+            info.weather as c_int,
         );
         libc::fprintf(
             out,
             c"          Density:    %d\n".as_ptr(),
-            info.PlanetDensity as c_int,
+            info.planet_density as c_int,
         );
         libc::fprintf(
             out,
             c"          Radius:     %d\n".as_ptr(),
-            info.PlanetRadius as c_int,
+            info.planet_radius as c_int,
         );
         libc::fprintf(
             out,
             c"          Gravity:    %d\n".as_ptr(),
-            info.SurfaceGravity as c_int,
+            info.gravity as c_int,
         );
         libc::fprintf(
             out,
             c"          Temp:       %d\n".as_ptr(),
-            info.SurfaceTemperature as c_int,
+            info.temperature as c_int,
         );
         libc::fprintf(
             out,
             c"          Day:        %d\n".as_ptr(),
-            info.RotationPeriod as c_int,
+            info.rotation_period as c_int,
         );
         libc::fprintf(
             out,
             c"          Atmosphere: %d\n".as_ptr(),
-            info.AtmoDensity as c_int,
+            info.atmo_density as c_int,
         );
         libc::fprintf(
             out,
             c"          LifeChance: %d\n".as_ptr(),
-            info.LifeChance as c_int,
+            info.life_chance as c_int,
         );
         libc::fprintf(
             out,
             c"          DistToSun:  %d\n".as_ptr(),
-            info.PlanetToSunDist as c_int,
+            info.planet_to_sun_dist as c_int,
         );
         if (*world).data_index & PLANET_SHIELDED as BYTE != 0 {
             return;
@@ -873,7 +873,7 @@ mod runtime {
     /// World must be the active orbital descriptor and its generation functions live.
     pub unsafe fn calculate_bio_value(
         system: *const SOLARSYS_STATE,
-        world: *const PLANET_DESC,
+        world: *const PlanetDesc,
     ) -> COUNT {
         assert_eq!((*system).pOrbitalDesc.cast_const(), world);
         let count = call_generate_for_scan_type(
@@ -885,7 +885,7 @@ mod runtime {
         );
         let mut result: COUNT = 0;
         for i in 0..count {
-            let mut info: NODE_INFO = mem::zeroed();
+            let mut info: NodeInfo = mem::zeroed();
             call_generate_for_scan_type(
                 system,
                 world,
@@ -905,7 +905,7 @@ mod runtime {
     /// World must be active, and `bio` writable for all creature-type counters.
     pub unsafe fn generate_bio_index(
         system: *const SOLARSYS_STATE,
-        world: *const PLANET_DESC,
+        world: *const PlanetDesc,
         bio: *mut COUNT,
     ) {
         assert_eq!((*system).pOrbitalDesc.cast_const(), world);
@@ -920,7 +920,7 @@ mod runtime {
             *bio.add(i) = 0;
         }
         for i in 0..count {
-            let mut info: NODE_INFO = mem::zeroed();
+            let mut info: NodeInfo = mem::zeroed();
             call_generate_for_scan_type(
                 system,
                 world,
@@ -939,7 +939,7 @@ mod runtime {
     /// World must be the active orbital descriptor and its generation functions live.
     pub unsafe fn calculate_mineral_value(
         system: *const SOLARSYS_STATE,
-        world: *const PLANET_DESC,
+        world: *const PlanetDesc,
     ) -> COUNT {
         assert_eq!((*system).pOrbitalDesc.cast_const(), world);
         let count = call_generate_for_scan_type(
@@ -951,7 +951,7 @@ mod runtime {
         );
         let mut result: COUNT = 0;
         for i in 0..count {
-            let mut info: NODE_INFO = mem::zeroed();
+            let mut info: NodeInfo = mem::zeroed();
             call_generate_for_scan_type(
                 system,
                 world,
@@ -972,7 +972,7 @@ mod runtime {
     /// World must be active, and `minerals` writable for all element-category counters.
     pub unsafe fn generate_mineral_index(
         system: *const SOLARSYS_STATE,
-        world: *const PLANET_DESC,
+        world: *const PlanetDesc,
         minerals: *mut COUNT,
     ) {
         assert_eq!((*system).pOrbitalDesc.cast_const(), world);
@@ -987,7 +987,7 @@ mod runtime {
             *minerals.add(i) = 0;
         }
         for i in 0..count {
-            let mut info: NODE_INFO = mem::zeroed();
+            let mut info: NodeInfo = mem::zeroed();
             call_generate_for_scan_type(
                 system,
                 world,
@@ -1056,13 +1056,13 @@ mod runtime {
             context.bio_count as c_int,
         );
     }
-    unsafe fn tally_planet_callback(world: *const PLANET_DESC, arg: &mut TallyResourcesArg) {
+    unsafe fn tally_planet_callback(world: *const PlanetDesc, arg: &mut TallyResourcesArg) {
         tally_resources_world(arg, world);
     }
-    unsafe fn tally_moon_callback(world: *const PLANET_DESC, arg: &mut TallyResourcesArg) {
+    unsafe fn tally_moon_callback(world: *const PlanetDesc, arg: &mut TallyResourcesArg) {
         tally_resources_world(arg, world);
     }
-    unsafe fn tally_resources_world(arg: &mut TallyResourcesArg, world: *const PLANET_DESC) {
+    unsafe fn tally_resources_world(arg: &mut TallyResourcesArg, world: *const PlanetDesc) {
         if (*world).data_index == HIERARCHY_STARBASE as BYTE {
             return;
         }
@@ -1117,24 +1117,24 @@ mod runtime {
     /// Planet type must be readable, game strings initialized, and stream open.
     pub unsafe fn dump_planet_type(out: *mut FILE, index: c_int, planet: *const PlanetFrame) {
         libc::fprintf(out,c"%s\n\tType: %s\n\tColor: %s\n\tSurface generation algoritm: %s\n\tTectonics: %s\n\tAtmosphere: %s\n\tDensity: %s\n\tElements:\n".as_ptr(),
-        planet_type_string(index),world_size_string((*planet).Type & PLAN_SIZE_MASK as BYTE),
-        body_color_string((*planet).Type >> 4),world_gen_algo_string((*planet).Type & PLAN_ALGO_MASK as BYTE),
-        tectonics_string((*planet).BaseTectonics),atmosphere_string((*planet).AtmoAndDensity >> 4),density_string((*planet).AtmoAndDensity & 15));
+        planet_type_string(index),world_size_string((*planet).type_ & PLAN_SIZE_MASK as BYTE),
+        body_color_string((*planet).type_ >> 4),world_gen_algo_string((*planet).type_ & PLAN_ALGO_MASK as BYTE),
+        tectonics_string((*planet).base_tectonics),atmosphere_string((*planet).atmo_and_density >> 4),density_string((*planet).atmo_and_density & 15));
         for i in 0..NUM_USEFUL_ELEMENTS as usize {
-            let entry = &(*planet).UsefulElements[i];
-            if entry.Density == 0 {
+            let entry = &(*planet).useful_elements[i];
+            if entry.density == 0 {
                 continue;
             }
-            let quality = entry.Density >> 4;
+            let quality = entry.density >> 4;
             libc::fprintf(
                 out,
                 c"\t\t0 to %d %s-quality (+%d) deposits of %s (%s)\n".as_ptr(),
-                (entry.Density & 15) as c_int,
+                (entry.density & 15) as c_int,
                 deposit_quality_string(quality),
                 quality as c_int * 5,
-                game_string(ELEMENTS_STRING_BASE as usize + entry.ElementType as usize),
+                game_string(ELEMENTS_STRING_BASE as usize + entry.element_type as usize),
                 game_string(
-                    CARGO_STRING_BASE as usize + 2 + element_category(entry.ElementType as usize),
+                    CARGO_STRING_BASE as usize + 2 + element_category(entry.element_type as usize),
                 ),
             );
         }
@@ -1560,7 +1560,7 @@ mod tests {
         fn system(_: *const STAR_DESC, _: *const SOLARSYS_STATE, events: &mut Vec<&str>) {
             events.push("system");
         }
-        fn world(_: *const PLANET_DESC, events: &mut Vec<&str>) {
+        fn world(_: *const crate::engine::world::planet::PlanetDesc, events: &mut Vec<&str>) {
             events.push("world");
         }
         let mut events = Vec::new();

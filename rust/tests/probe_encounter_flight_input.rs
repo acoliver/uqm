@@ -948,7 +948,7 @@ impl DerivedPreparation {
             &mut lunar_info,
             uqm_rust::planets::generate::special::Body::Moon { planet: 2, moon: 1 },
         );
-        let gravity = lunar_info.PlanetInfo.SurfaceGravity;
+        let gravity = lunar_info.planet_info.gravity;
         let landing_cost = u32::from(landing_fuel_needed(
             gravity,
             u16::try_from(FUEL_TANK_SCALE).expect("scale fits"),
@@ -959,7 +959,7 @@ impl DerivedPreparation {
             &mut mercury_info,
             uqm_rust::planets::generate::special::Body::Planet(0),
         );
-        let mercury_gravity = mercury_info.PlanetInfo.SurfaceGravity;
+        let mercury_gravity = mercury_info.planet_info.gravity;
         let mercury_landing_cost = u32::from(landing_fuel_needed(
             mercury_gravity,
             u16::try_from(FUEL_TANK_SCALE).expect("scale fits"),

@@ -1,8 +1,8 @@
 //! Orbital entry, with system borrows confined to host callbacks.
 
 use super::{PLUTO, STARBASE};
-use crate::c_bindings::global_state::{PLANET_INFO, SYSTEM_INFO};
 use crate::comm::dispatch::START_ENCOUNTER;
+use crate::engine::world::planet::{PlanetInfo, SystemInfo};
 use crate::planets::generate::calc;
 use crate::planets::generate::consts::EARTH_RADIUS;
 use crate::planets::generate::default;
@@ -51,7 +51,7 @@ pub trait Orbital: Queues {
     fn set_current_activity(&mut self, value: u16);
     fn set_global_flags_and_data(&mut self, value: u8);
     fn with_orbit(&mut self, run: impl FnOnce(&mut Orbit<'_>));
-    fn planet_info(&mut self) -> &mut PLANET_INFO;
+    fn planet_info(&mut self) -> &mut PlanetInfo;
     /// Load the standard lander font, capture the scene graphic into
     /// `PlanetSideFrame[1]`, then capture its discovery strings. These remain
     /// owned by the system until the existing planet/lander cleanup.
@@ -72,7 +72,7 @@ pub fn analyse_orbital(orbit: &mut Orbit<'_>, body: Body) {
         orbit.sys_info,
         orbit.world,
     );
-    orbit.sys_info.PlanetInfo.ScanSeed[MINERAL_SCAN] = orbit.rng.seed();
+    orbit.sys_info.planet_info.scan_seed[MINERAL_SCAN] = orbit.rng.seed();
     let mut spare = default::blank_node();
     surface::generate_mineral_deposits(
         orbit.rng,
@@ -84,23 +84,23 @@ pub fn analyse_orbital(orbit: &mut Orbit<'_>, body: Body) {
         &mut spare,
     );
     if let Body::Moon { planet, .. } = body {
-        let info = &mut orbit.sys_info.PlanetInfo;
-        info.AxialTilt = 0;
-        info.AtmoDensity = 0;
-        info.Weather = 0;
+        let info = &mut orbit.sys_info.planet_info;
+        info.axial_tilt = 0;
+        info.atmo_density = 0;
+        info.weather = 0;
         if planet == 2 {
-            info.ScanSeed[BIOLOGICAL_SCAN] = orbit.rng.seed();
+            info.scan_seed[BIOLOGICAL_SCAN] = orbit.rng.seed();
         }
     }
 }
 
 /// Physical values applied after the optional discovery scene, preserving
 /// every analysis field C leaves alone, including life chance and scan masks.
-pub fn physical_overrides(sys: &mut SYSTEM_INFO, body: Body) {
-    override_info(&mut sys.PlanetInfo, body);
+pub fn physical_overrides(sys: &mut SystemInfo, body: Body) {
+    override_info(&mut sys.planet_info, body);
 }
 
-fn override_info(info: &mut PLANET_INFO, body: Body) {
+fn override_info(info: &mut PlanetInfo, body: Body) {
     // atmo, density, radius, tilt, weather, tectonics, rotation, temperature.
     let planet = match body {
         Body::Planet(0) => Some((0, 98, 38, 3, 0, 2, 59 * 240, 165)),
@@ -115,14 +115,14 @@ fn override_info(info: &mut PLANET_INFO, body: Body) {
         _ => None,
     };
     if let Some((atmo, density, radius, tilt, weather, tectonics, rotation, temp)) = planet {
-        info.AtmoDensity = atmo;
-        info.PlanetDensity = density;
-        info.PlanetRadius = radius;
-        info.AxialTilt = tilt;
-        info.Weather = weather;
-        info.Tectonics = tectonics;
-        info.RotationPeriod = rotation;
-        info.SurfaceTemperature = temp;
+        info.atmo_density = atmo;
+        info.planet_density = density;
+        info.planet_radius = radius;
+        info.axial_tilt = tilt;
+        info.weather = weather;
+        info.tectonics = tectonics;
+        info.rotation_period = rotation;
+        info.temperature = temp;
     }
     if let Body::Moon { planet, moon } = body {
         let physical = match (planet, moon) {
@@ -132,23 +132,23 @@ fn override_info(info: &mut PLANET_INFO, body: Body) {
             (4, 2) => Some((35, 41, 0, 1728, -164)),
             (4, 3) => Some((35, 38, 1, 4008, -167)),
             (5, _) => {
-                info.AtmoDensity = 160;
-                info.Weather = 2;
+                info.atmo_density = 160;
+                info.weather = 2;
                 Some((34, 40, 1, 3816, -178))
             }
             (7, _) => {
-                info.AtmoDensity = 10;
-                info.Weather = 1;
+                info.atmo_density = 10;
+                info.weather = 1;
                 Some((95, 27, 0, 4300, -216))
             }
             _ => None,
         };
         if let Some((density, radius, tectonics, rotation, temp)) = physical {
-            info.PlanetDensity = density;
-            info.PlanetRadius = radius;
-            info.Tectonics = tectonics;
-            info.RotationPeriod = rotation;
-            info.SurfaceTemperature = temp;
+            info.planet_density = density;
+            info.planet_radius = radius;
+            info.tectonics = tectonics;
+            info.rotation_period = rotation;
+            info.temperature = temp;
         }
     }
     let parent = match body {
@@ -163,9 +163,9 @@ fn override_info(info: &mut PLANET_INFO, body: Body) {
         _ => None,
     };
     if let Some(percent) = percent {
-        info.PlanetToSunDist = (i32::from(EARTH_RADIUS) * percent / 100) as u16;
+        info.planet_to_sun_dist = (i32::from(EARTH_RADIUS) * percent / 100) as u16;
     }
-    info.SurfaceGravity = calc::calc_gravity(info);
+    info.gravity = calc::calc_gravity(info);
 }
 
 pub fn generate_orbital(body: Body, story: &impl Story, host: &mut impl Orbital) -> bool {

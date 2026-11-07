@@ -6,7 +6,7 @@
 //! `pickupEnergy`. Story flags: `ROSY_SPHERE`, `ROSY_SPHERE_ON_SHIP`.
 
 use crate::battle::battle_types::{HALF_CIRCLE, OCTANT};
-use crate::c_bindings::global_state::{PlanetFrame, NODE_INFO, PLANET_DESC, SYSTEM_INFO};
+use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
 use crate::math::RandomContext;
 use crate::planet_side::report_adapter::DiscoveryReportPort;
 use crate::planets::generate::consts::EARTH_RADIUS;
@@ -20,14 +20,14 @@ pub fn generate_planets(
     plan_data: &[PlanetFrame],
     star_size: u8,
     star_color: u8,
-    planets: &mut [PLANET_DESC],
+    planets: &mut [PlanetDesc],
 ) -> u8 {
     let drawn = default::generate_planets(rng, plan_data, star_size, star_color, planets);
     planets.copy_within(0..usize::from(drawn), 1);
     let home = &mut planets[0];
     home.data_index = DUST_WORLD;
     home.radius = (i32::from(EARTH_RADIUS) * 50 / 100) as i16;
-    home.NumPlanets = 0;
+    home.num_planets = 0;
     special::place(home, HALF_CIRCLE - OCTANT);
     home.rand_seed = (u32::from(home.location.y as u16) << 16) | u32::from(home.location.x as u16);
     drawn + 1
@@ -54,10 +54,10 @@ pub fn generate_orbital(
 /// `GenerateDruuge_generateEnergy`.
 pub fn generate_energy(
     rng: &mut RandomContext,
-    sys_info: &SYSTEM_INFO,
+    sys_info: &SystemInfo,
     body: Body,
     which_node: u16,
-    info: &mut NODE_INFO,
+    info: &mut NodeInfo,
 ) -> u16 {
     if body == Body::Planet(0) {
         default::generate_ruins(rng, sys_info, which_node, info)

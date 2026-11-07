@@ -5,7 +5,7 @@
 //! `RAINBOW_WORLD0` (8 bits), `RAINBOW_WORLD1` (2 bits).
 
 use crate::battle::battle_types::{FULL_CIRCLE, QUADRANT};
-use crate::c_bindings::global_state::{PlanetFrame, PLANET_DESC};
+use crate::engine::world::planet::{PlanetDesc, PlanetFrame};
 use crate::math::RandomContext;
 use crate::planets::generate::special::{self, Body, Orbit, Story, RAINBOW_WORLD};
 
@@ -18,12 +18,12 @@ pub fn generate_planets(
     plan_data: &[PlanetFrame],
     star_size: u8,
     star_color: u8,
-    planets: &mut [PLANET_DESC],
+    planets: &mut [PlanetDesc],
 ) -> u8 {
     special::planets_then(rng, plan_data, star_size, star_color, planets, |planets| {
         let planet = &mut planets[0];
         planet.data_index = RAINBOW_WORLD;
-        planet.NumPlanets = 0;
+        planet.num_planets = 0;
         planet.radius =
             (i32::from(crate::planets::generate::consts::EARTH_RADIUS) * 50 / 100) as i16;
         let mut angle = crate::battle::battle_types::arctan(

@@ -15,13 +15,14 @@
 //! The solar-system state is the real `SOLARSYS_STATE` layout wired as
 //! `ExploreSolarSys` wires it (see `solar_tests`).
 
+use crate::engine::world::planet::PlanetDesc;
 use crate::engine::World;
 use std::ops::{Deref, DerefMut};
 
 use super::location::{prepare_solar_location, LocationError};
 use super::solar::SolarError;
 use super::solar_tests::System;
-use crate::c_bindings::global_state::{EXTENT, FRAME_DESC, PLANET_DESC, POINT};
+use crate::c_bindings::global_state::{EXTENT, FRAME_DESC, POINT};
 use crate::comm::locdata::CGameState;
 use crate::engine::world::state_file::{StateFileError, STARINFO_FILE};
 use crate::state::ffi::{replace_game_state, rust_init_game_state, snapshot_game_state};
@@ -164,15 +165,15 @@ fn words(values: [u32; 3]) -> Vec<u8> {
 /// `planet`, as `ExploreSolarSys` leaves it after `FillOrbits`.
 fn three_planet_system(planet: usize) -> System {
     let mut system = System::inner(planet);
-    system.SunDesc[0].NumPlanets = 3;
+    system.SunDesc[0].num_planets = 3;
     for (world, moons) in [1u8, 2, 0].into_iter().enumerate() {
-        system.PlanetDesc[world].NumPlanets = moons;
+        system.PlanetDesc[world].num_planets = moons;
     }
     system
 }
 
 fn with_masks(mut system: System, masks: [u32; 3]) -> System {
-    system.SysInfo.PlanetInfo.ScanRetrieveMask = masks;
+    system.SysInfo.planet_info.scan_retrieve_mask = masks;
     system
 }
 
@@ -281,13 +282,13 @@ fn an_inner_system_without_an_orbital_world_is_refused_and_writes_nothing() {
 #[test]
 fn a_foreign_or_misaligned_orbital_world_is_refused_and_writes_nothing() {
     // SAFETY: all-zero is a valid `PLANET_DESC`.
-    let mut foreign: PLANET_DESC = unsafe { std::mem::zeroed() };
+    let mut foreign: PlanetDesc = unsafe { std::mem::zeroed() };
     let mut cases: Vec<System> = Vec::new();
     let mut outside = System::inner(1);
     outside.pOrbitalDesc = &mut foreign;
     cases.push(outside);
     let mut misaligned = System::inner(1);
-    misaligned.pOrbitalDesc = (misaligned.PlanetDesc.as_ptr() as usize + 1) as *mut PLANET_DESC;
+    misaligned.pOrbitalDesc = (misaligned.PlanetDesc.as_ptr() as usize + 1) as *mut PlanetDesc;
     cases.push(misaligned);
 
     for system in &cases {
@@ -511,7 +512,7 @@ fn a_system_with_more_planets_than_the_table_holds_is_refused() {
         fresh_starinfo(&mut game.world, 4);
         set_planetary_change(&mut game.world);
         let mut system = three_planet_system(1);
-        system.SunDesc[0].NumPlanets = 17;
+        system.SunDesc[0].num_planets = 17;
         system.InOrbit = 1;
 
         // SAFETY: the frame is NULL.

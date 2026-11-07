@@ -207,7 +207,7 @@ pub(crate) mod live {
                             cx.ip_group_mut(element).group_counter -= 1;
                         } else if task == EXPLORE as u8 {
                             let next = ((cx.random() as u16
-                                % cx.solar().SunDesc[0].NumPlanets as u16)
+                                % cx.solar().SunDesc[0].num_planets as u16)
                                 + 1) as u8;
                             if next != target {
                                 cx.element_mut(element).thrust = 0;

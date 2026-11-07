@@ -35,8 +35,9 @@
 //! assertion C has in `playerInInnerSystem`, and panics.
 
 use super::summary::{utf8_string_copy, SessionSummary, SA_MATRA_STRING};
-use crate::c_bindings::global_state::{PLANET_DESC, SOLARSYS_STATE};
+use crate::c_bindings::global_state::SOLARSYS_STATE;
 use crate::engine::save::summary as summary_values;
+use crate::engine::world::planet::PlanetDesc;
 use crate::savegame::types::SIS_NAME_SIZE;
 
 /// What the solar-system state and the game strings say about the game.
@@ -107,8 +108,8 @@ pub(super) enum World {
 
 /// The position of `world` in `table`, if it is exactly one of its elements.
 /// Only addresses are compared; nothing is dereferenced.
-pub(super) fn position_in(table: &[PLANET_DESC], world: *const PLANET_DESC) -> Option<usize> {
-    let size = std::mem::size_of::<PLANET_DESC>();
+pub(super) fn position_in(table: &[PlanetDesc], world: *const PlanetDesc) -> Option<usize> {
+    let size = std::mem::size_of::<PlanetDesc>();
     let offset = (world as usize).wrapping_sub(table.as_ptr() as usize);
     (offset < std::mem::size_of_val(table) && offset.is_multiple_of(size)).then_some(offset / size)
 }
@@ -160,14 +161,14 @@ impl<'a> SolarSystem<'a> {
         let sun = state.SunDesc.as_ptr();
         if let Some(planet) = position_in(&state.PlanetDesc, orbital) {
             // `worldIsPlanet`: the world orbits the sun.
-            if !std::ptr::eq(state.PlanetDesc[planet].pPrevDesc, sun) {
+            if !std::ptr::eq(state.PlanetDesc[planet].prev_desc, sun) {
                 return Err(SolarError::WorldDisagreesWithItsTable);
             }
             return Ok(World::Planet { planet });
         }
         if let Some(moon) = position_in(&state.MoonDesc, orbital) {
             // `planetIndex` of a moon is the planet it orbits.
-            let host = state.MoonDesc[moon].pPrevDesc.cast_const();
+            let host = state.MoonDesc[moon].prev_desc.cast_const();
             let planet = position_in(&state.PlanetDesc, host)
                 .ok_or(SolarError::WorldDisagreesWithItsTable)?;
             return Ok(World::Moon { planet, moon });

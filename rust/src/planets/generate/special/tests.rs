@@ -216,10 +216,10 @@ fn melnorme_posts_pick_their_own_group_reference() {
 
 #[test]
 fn syreen_moon_slot_is_the_starbase_only_for_planet_zero() {
-    use crate::c_bindings::global_state::PLANET_DESC;
+    use crate::engine::world::planet::PlanetDesc;
     use crate::math::RandomContext;
     for (body, starbase) in [(Body::Planet(0), true), (Body::Planet(1), false)] {
-        let mut moons: Vec<PLANET_DESC> = vec![unsafe { std::mem::zeroed() }; 16];
+        let mut moons: Vec<PlanetDesc> = vec![unsafe { std::mem::zeroed() }; 16];
         let mut rng = RandomContext::with_seed(7);
         syreen::generate_moons(&mut rng, 0, 0, 2, &mut moons, body);
         assert_eq!(moons[0].data_index == 127 | 0x80, starbase);

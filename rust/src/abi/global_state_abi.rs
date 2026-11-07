@@ -1,3 +1,4 @@
+use crate::engine::world::planet::{NodeInfo, PlanetDesc};
 // Shared engine records used by the Rust runtime.
 
 pub const MAX_ENCOUNTERS: u32 = 16;
@@ -171,9 +172,7 @@ pub use crate::ships::native::abi::FLEET_INFO;
 pub use crate::navigation::abi::IP_GROUP;
 pub type BRIEF_SHIP_INFO = brief_ship_info;
 pub type ENCOUNTER = encounter;
-pub type PLANET_DESC = planet_desc;
 pub type STAR_DESC = star_desc;
-pub type NODE_INFO = node_info;
 pub type PLANET_ORBIT = planet_orbit;
 pub type SOLARSYS_STATE = solarsys_state;
 pub type InitNpcsFunction =
@@ -185,56 +184,56 @@ pub type UninitNpcsFunction =
 pub type GeneratePlanetsFunction =
     ::std::option::Option<unsafe extern "C" fn(solarSys: *mut SOLARSYS_STATE) -> bool>;
 pub type GenerateMoonsFunction = ::std::option::Option<
-    unsafe extern "C" fn(solarSys: *mut SOLARSYS_STATE, planet: *mut PLANET_DESC) -> bool,
+    unsafe extern "C" fn(solarSys: *mut SOLARSYS_STATE, planet: *mut PlanetDesc) -> bool,
 >;
 pub type GenerateOrbitalFunction = ::std::option::Option<
-    unsafe extern "C" fn(solarSys: *mut SOLARSYS_STATE, world: *mut PLANET_DESC) -> bool,
+    unsafe extern "C" fn(solarSys: *mut SOLARSYS_STATE, world: *mut PlanetDesc) -> bool,
 >;
 pub type GenerateNameFunction = ::std::option::Option<
-    unsafe extern "C" fn(arg1: *const SOLARSYS_STATE, world: *const PLANET_DESC) -> bool,
+    unsafe extern "C" fn(arg1: *const SOLARSYS_STATE, world: *const PlanetDesc) -> bool,
 >;
 pub type GenerateMineralsFunction = ::std::option::Option<
     unsafe extern "C" fn(
         arg1: *const SOLARSYS_STATE,
-        world: *const PLANET_DESC,
+        world: *const PlanetDesc,
         whichNode: COUNT,
-        arg2: *mut NODE_INFO,
+        arg2: *mut NodeInfo,
     ) -> COUNT,
 >;
 pub type GenerateEnergyFunction = ::std::option::Option<
     unsafe extern "C" fn(
         arg1: *const SOLARSYS_STATE,
-        world: *const PLANET_DESC,
+        world: *const PlanetDesc,
         whichNode: COUNT,
-        arg2: *mut NODE_INFO,
+        arg2: *mut NodeInfo,
     ) -> COUNT,
 >;
 pub type GenerateLifeFunction = ::std::option::Option<
     unsafe extern "C" fn(
         arg1: *const SOLARSYS_STATE,
-        world: *const PLANET_DESC,
+        world: *const PlanetDesc,
         whichNode: COUNT,
-        arg2: *mut NODE_INFO,
+        arg2: *mut NodeInfo,
     ) -> COUNT,
 >;
 pub type PickupMineralsFunction = ::std::option::Option<
     unsafe extern "C" fn(
         solarSys: *mut SOLARSYS_STATE,
-        world: *mut PLANET_DESC,
+        world: *mut PlanetDesc,
         whichNode: COUNT,
     ) -> bool,
 >;
 pub type PickupEnergyFunction = ::std::option::Option<
     unsafe extern "C" fn(
         solarSys: *mut SOLARSYS_STATE,
-        world: *mut PLANET_DESC,
+        world: *mut PlanetDesc,
         whichNode: COUNT,
     ) -> bool,
 >;
 pub type PickupLifeFunction = ::std::option::Option<
     unsafe extern "C" fn(
         solarSys: *mut SOLARSYS_STATE,
-        world: *mut PLANET_DESC,
+        world: *mut PlanetDesc,
         whichNode: COUNT,
     ) -> bool,
 >;
@@ -249,14 +248,8 @@ pub use crate::planets::render::c_api::{
 };
 #[cfg(not(test))]
 pub use crate::planets::solarsys::{planetOuterLocation, XFormIPLoc};
-pub use crate::ships::native::abi::node_info;
-pub use crate::ships::native::abi::planet_desc;
 pub use crate::ships::native::abi::planet_orbit;
 pub use crate::ships::native::abi::solarsys_state;
-pub use crate::ships::native::abi::PlanetFrame;
-pub use crate::ships::native::abi::ELEMENT_ENTRY;
-pub use crate::ships::native::abi::PLANET_INFO;
-pub use crate::ships::native::abi::SYSTEM_INFO;
 #[cfg(test)]
 #[cfg(not(test))]
 pub use crate::planets::render::c_api::draw_filled_oval as DrawFilledOval;

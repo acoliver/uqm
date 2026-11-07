@@ -79,7 +79,7 @@ fn orbit_target(state: &SOLARSYS_STATE) -> Result<OrbitTarget, LocationError> {
     }
     let world = SolarSystem::orbital_world(state)?;
     // `pBaseDesc` is `MoonDesc` here, so its `pPrevDesc` is the system's planet.
-    let host = position_in(&state.PlanetDesc, state.MoonDesc[0].pPrevDesc.cast_const())
+    let host = position_in(&state.PlanetDesc, state.MoonDesc[0].prev_desc.cast_const())
         .ok_or(SolarError::WorldDisagreesWithItsTable)?;
     let (planet, in_orbit, scan_moon) = match world {
         World::Planet { planet } => (planet, 1, 0),
@@ -115,9 +115,9 @@ pub unsafe fn prepare_solar_location(
         star_index,
         planet: target.planet,
         moon: target.scan_moon,
-        scan: ScanRetrieveMask::from_array(&state.SysInfo.PlanetInfo.ScanRetrieveMask),
-        planet_count: state.SunDesc[0].NumPlanets,
-        moon_counts: state.PlanetDesc.each_ref().map(|planet| planet.NumPlanets),
+        scan: ScanRetrieveMask::from_array(&state.SysInfo.planet_info.scan_retrieve_mask),
+        planet_count: state.SunDesc[0].num_planets,
+        moon_counts: state.PlanetDesc.each_ref().map(|planet| planet.num_planets),
     }))
 }
 

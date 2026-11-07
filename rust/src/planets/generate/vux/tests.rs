@@ -1,4 +1,5 @@
 use super::*;
+use crate::engine::world::planet::{PlanetDesc, PlanetFrame, SystemInfo};
 use crate::planet_side::report_adapter::ReportDisposition;
 use crate::planet_side::runtime::AdapterError;
 use crate::planets::generate::calc::{AnalysisSite, StarDescription};
@@ -141,16 +142,16 @@ impl LanderTakeoff for Pickup {
     }
 }
 
-pub(crate) fn with_orbit(run: impl FnOnce(&mut Orbit<'_>)) -> (SYSTEM_INFO, u32) {
+pub(crate) fn with_orbit(run: impl FnOnce(&mut Orbit<'_>)) -> (SystemInfo, u32) {
     let mut rng = RandomContext::with_seed(104729);
     // The returned SYSTEM_INFO retains PlanDataPtr after this helper returns.
     static TABLE: crate::planets::tables::SharedTable<[PlanetFrame; 59]> =
         crate::planets::tables::SharedTable([unsafe { std::mem::zeroed() }; 59]);
-    let mut world: PLANET_DESC = unsafe { std::mem::zeroed() };
+    let mut world: PlanetDesc = unsafe { std::mem::zeroed() };
     world.rand_seed = 7919;
     world.radius = 512;
-    let mut info: SYSTEM_INFO = unsafe { std::mem::zeroed() };
-    info.PlanetInfo.ScanSeed = [101, 202, 303];
+    let mut info: SystemInfo = unsafe { std::mem::zeroed() };
+    info.planet_info.scan_seed = [101, 202, 303];
     run(&mut Orbit {
         rng: &mut rng,
         plan_data: &TABLE.0,
@@ -252,7 +253,7 @@ fn contact_scene_and_abort_matrix() {
                                 );
                                 if lands && body == WORLD {
                                     assert_eq!(
-                                        (info.PlanetInfo.Weather, info.PlanetInfo.Tectonics),
+                                        (info.planet_info.weather, info.planet_info.tectonics),
                                         (2, 0)
                                     );
                                 }
@@ -385,9 +386,9 @@ fn pickup_and_queue_invariants_fail_before_side_effects() {
 fn beast_insertion_and_maidens_second_layout_preserve_whole_descriptors() {
     let table = vec![unsafe { std::mem::zeroed() }; 59];
     for seed in [1, 7919, 190056, u32::MAX] {
-        let mut base: Vec<PLANET_DESC> = vec![unsafe { std::mem::zeroed() }; 16];
+        let mut base: Vec<PlanetDesc> = vec![unsafe { std::mem::zeroed() }; 16];
         for (i, desc) in base.iter_mut().enumerate() {
-            desc.NextIndex = i as u16 + 37;
+            desc.next_index = i as u16 + 37;
             desc.image.origin.x = -53;
         }
         let initial = base.clone();

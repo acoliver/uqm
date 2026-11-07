@@ -5,7 +5,7 @@
 //! `pickupEnergy`. Story flags: none; the conversation sequence is a host
 //! effect.
 
-use crate::c_bindings::global_state::{PlanetFrame, NODE_INFO, PLANET_DESC, SYSTEM_INFO};
+use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
 use crate::math::RandomContext;
 use crate::planet_side::report_adapter::DiscoveryReportPort;
 use crate::planets::generate::default;
@@ -18,7 +18,7 @@ pub fn generate_planets(
     plan_data: &[PlanetFrame],
     star_size: u8,
     star_color: u8,
-    planets: &mut [PLANET_DESC],
+    planets: &mut [PlanetDesc],
 ) -> u8 {
     special::planets_then(rng, plan_data, star_size, star_color, planets, |planets| {
         planets[0].data_index = PRIMORDIAL_WORLD;
@@ -45,20 +45,20 @@ pub fn generate_orbital(
 }
 
 /// The weather and tectonics the home world has after the default orbital.
-fn set_home_climate(body: Body, sys_info: &mut SYSTEM_INFO) {
+fn set_home_climate(body: Body, sys_info: &mut SystemInfo) {
     if body == Body::Planet(0) {
-        sys_info.PlanetInfo.Weather = 2;
-        sys_info.PlanetInfo.Tectonics = 3;
+        sys_info.planet_info.weather = 2;
+        sys_info.planet_info.tectonics = 3;
     }
 }
 
 /// `GenerateIlwrath_generateEnergy`.
 pub fn generate_energy(
     rng: &mut RandomContext,
-    sys_info: &SYSTEM_INFO,
+    sys_info: &SystemInfo,
     body: Body,
     which_node: u16,
-    info: &mut NODE_INFO,
+    info: &mut NodeInfo,
 ) -> u16 {
     if body == Body::Planet(0) {
         default::generate_ruins(rng, sys_info, which_node, info)

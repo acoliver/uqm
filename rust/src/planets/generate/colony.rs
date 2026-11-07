@@ -4,7 +4,7 @@
 //! Overridden: `initNpcs`, `generatePlanets`, `generateOrbital`. Story flags:
 //! `COLONY_GRPOFFS0` (32-bit group reference).
 
-use crate::c_bindings::global_state::PLANET_DESC;
+use crate::engine::world::planet::PlanetDesc;
 use crate::math::RandomContext;
 use crate::planets::generate::consts::PLANET_SHIELDED;
 use crate::planets::generate::default;
@@ -36,7 +36,7 @@ pub fn generate_planets(
     rng: &mut RandomContext,
     star_size: u8,
     star_color: u8,
-    planets: &mut [PLANET_DESC],
+    planets: &mut [PlanetDesc],
 ) -> u8 {
     let request = OrbitRequest {
         star_size,
@@ -65,11 +65,11 @@ pub fn generate_orbital(orbit: &mut Orbit<'_>, body: Body, load_planet: impl FnO
         orbit.sys_info,
         orbit.world,
     );
-    let info = &mut orbit.sys_info.PlanetInfo;
-    info.AtmoDensity = (EARTH_ATMOSPHERE * 98 / 100) as _;
-    info.Weather = 0;
-    info.Tectonics = 0;
-    info.SurfaceTemperature = 28;
+    let info = &mut orbit.sys_info.planet_info;
+    info.atmo_density = (EARTH_ATMOSPHERE * 98 / 100) as _;
+    info.weather = 0;
+    info.tectonics = 0;
+    info.temperature = 28;
     load_planet();
     true
 }

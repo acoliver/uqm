@@ -3,13 +3,13 @@
 
 use super::{Harness, ScreenWidth};
 use crate::planets_common::sol_orbital::{self, Case, Ops};
-use uqm_rust::c_bindings::global_state::{PlanetFrame, SYSTEM_INFO};
+use uqm_rust::engine::world::planet::{PlanetFrame, SystemInfo};
 use uqm_rust::planets::c_api::DISABLE_INTERACTIVITY;
 use uqm_rust::planets::generate::special::Body;
 use uqm_rust::state::game_state_keys::get_game_state;
 
 impl Ops for Harness {
-    fn orbital(&mut self, case: Case) -> (bool, SYSTEM_INFO, u32) {
+    fn orbital(&mut self, case: Case) -> (bool, SystemInfo, u32) {
         self.set_star(case.layout.size, case.layout.color);
         self.state.SysInfo = sol_orbital::initial_info(case.layout.seed);
         self.state.PlanetDesc = unsafe { std::mem::zeroed() };
@@ -24,16 +24,16 @@ impl Ops for Harness {
                 Body::Planet(p) => {
                     let world = &raw mut (*system).PlanetDesc[usize::from(p)];
                     world.write(desc);
-                    (*world).pPrevDesc = sun;
+                    (*world).prev_desc = sun;
                     world
                 }
                 Body::Moon { planet, moon } => {
                     let p = &raw mut (*system).PlanetDesc[usize::from(planet)];
                     p.write(parent.unwrap());
-                    (*p).pPrevDesc = sun;
+                    (*p).prev_desc = sun;
                     let world = &raw mut (*system).MoonDesc[usize::from(moon)];
                     world.write(desc);
-                    (*world).pPrevDesc = p;
+                    (*world).prev_desc = p;
                     world
                 }
             }

@@ -5,16 +5,16 @@
 //! so a mismatch names the exact input and field.
 
 use std::fmt::Write as _;
+use uqm_rust::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
 
 pub mod default_gen;
 pub mod late_gen;
 pub mod mycon;
+mod record_labels;
 pub mod sol;
 pub mod sol_orbital;
 pub mod special_gen;
 pub mod topography;
-
-use uqm_rust::c_bindings::global_state::{PlanetFrame, NODE_INFO, PLANET_DESC, SYSTEM_INFO};
 
 pub const NODE_SENTINEL_DENSITY: u16 = 0xBEEF;
 pub const NODE_SENTINEL_TYPE: u16 = 0xCAFE;
@@ -90,20 +90,20 @@ impl OrbitMode {
 /// The world-generation entry points, implemented by the Rust port and by the
 /// linked C archive.
 pub trait Generators {
-    fn analyze(&mut self, case: &WorldCase) -> SYSTEM_INFO;
-    fn minerals(&mut self, info: &SYSTEM_INFO, which: u16, node: &mut NODE_INFO) -> u16;
-    fn life(&mut self, info: &SYSTEM_INFO, which: u16, node: &mut NODE_INFO) -> u16;
-    fn preset_life(&mut self, info: &SYSTEM_INFO, which: u16, node: &mut NODE_INFO) -> u16;
-    fn random_nodes(&mut self, info: &SYSTEM_INFO, which: u16, node: &mut NODE_INFO) -> u16;
-    fn fill_orbits(&mut self, case: &OrbitCase, descs: &mut [PLANET_DESC]) -> Option<u8>;
+    fn analyze(&mut self, case: &WorldCase) -> SystemInfo;
+    fn minerals(&mut self, info: &SystemInfo, which: u16, node: &mut NodeInfo) -> u16;
+    fn life(&mut self, info: &SystemInfo, which: u16, node: &mut NodeInfo) -> u16;
+    fn preset_life(&mut self, info: &SystemInfo, which: u16, node: &mut NodeInfo) -> u16;
+    fn random_nodes(&mut self, info: &SystemInfo, which: u16, node: &mut NodeInfo) -> u16;
+    fn fill_orbits(&mut self, case: &OrbitCase, descs: &mut [PlanetDesc]) -> Option<u8>;
 }
 
 pub fn star_type_byte(case: &WorldCase) -> u8 {
     (case.star_color << 5) | (case.star_size << 3) | 0b101
 }
 
-pub fn fresh_node() -> NODE_INFO {
-    let mut node: NODE_INFO = unsafe { std::mem::zeroed() };
+pub fn fresh_node() -> NodeInfo {
+    let mut node: NodeInfo = unsafe { std::mem::zeroed() };
     node.loc_pt.x = -7;
     node.loc_pt.y = -7;
     node.density = NODE_SENTINEL_DENSITY;
@@ -119,7 +119,7 @@ pub fn scan_seeds(rand_seed: u32) -> [u32; 3] {
     ]
 }
 
-pub fn write_node(out: &mut String, ret: u16, node: &NODE_INFO) {
+pub fn write_node(out: &mut String, ret: u16, node: &NodeInfo) {
     let _ = write!(
         out,
         "{ret}:{},{},{},{};",
@@ -134,11 +134,11 @@ pub fn world_line<G: Generators>(
     table_base: usize,
 ) -> String {
     let mut info = generators.analyze(case);
-    info.PlanetInfo.ScanSeed = scan_seeds(case.rand_seed);
+    info.planet_info.scan_seed = scan_seeds(case.rand_seed);
 
-    let planet = &info.PlanetInfo;
-    let frame_index =
-        (planet.PlanDataPtr as usize).wrapping_sub(table_base) / std::mem::size_of::<PlanetFrame>();
+    let planet = &info.planet_info;
+    let frame_index = (planet.plan_data_ptr as usize).wrapping_sub(table_base)
+        / std::mem::size_of::<PlanetFrame>();
     let mut out = format!(
         "w c{} s{} t{} seed{} r{} p{:?} o{} | {} {} {} | {} {} {} {} {} {} {} {} {} {} {} f{} |",
         case.star_color,
@@ -148,20 +148,20 @@ pub fn world_line<G: Generators>(
         case.desc_radius,
         case.parent_radius,
         u8::from(case.is_orbit_entry),
-        info.StarSize,
-        info.StarIntensity,
-        info.StarEnergy,
-        planet.AxialTilt,
-        planet.Tectonics,
-        planet.Weather,
-        planet.PlanetDensity,
-        planet.PlanetRadius,
-        planet.SurfaceGravity,
-        planet.SurfaceTemperature,
-        planet.RotationPeriod,
-        planet.AtmoDensity,
-        planet.LifeChance,
-        planet.PlanetToSunDist,
+        info.star_size,
+        info.star_intensity,
+        info.star_energy,
+        planet.axial_tilt,
+        planet.tectonics,
+        planet.weather,
+        planet.planet_density,
+        planet.planet_radius,
+        planet.gravity,
+        planet.temperature,
+        planet.rotation_period,
+        planet.atmo_density,
+        planet.life_chance,
+        planet.planet_to_sun_dist,
         frame_index,
     );
 
@@ -198,17 +198,17 @@ pub fn world_line<G: Generators>(
     out
 }
 
-pub fn initial_descs(mode: OrbitMode) -> Vec<PLANET_DESC> {
+pub fn initial_descs(mode: OrbitMode) -> Vec<PlanetDesc> {
     (0..mode.slots())
         .map(|slot| {
-            let mut desc: PLANET_DESC = unsafe { std::mem::zeroed() };
+            let mut desc: PlanetDesc = unsafe { std::mem::zeroed() };
             desc.rand_seed = 0x1111_0000 + slot as u32;
             desc.data_index = if mode.types_defined() {
                 [5, 50, 54, 58][slot % 4]
             } else {
                 0xEE
             };
-            desc.NumPlanets = 0xAA;
+            desc.num_planets = 0xAA;
             desc.radius = -1;
             desc.location.x = -2;
             desc.location.y = -3;
@@ -216,7 +216,7 @@ pub fn initial_descs(mode: OrbitMode) -> Vec<PLANET_DESC> {
             desc.temp_color.g = 2;
             desc.temp_color.b = 3;
             desc.temp_color.a = 4;
-            desc.NextIndex = 0x7777;
+            desc.next_index = 0x7777;
             desc.image.origin.x = 5;
             desc.image.origin.y = 6;
             desc
@@ -231,12 +231,12 @@ fn fnv(hash: &mut u64, text: &str) {
     }
 }
 
-fn describe_desc(desc: &PLANET_DESC) -> String {
+fn describe_desc(desc: &PlanetDesc) -> String {
     format!(
         "{},{},{},{},{},{},{},{},{},{},{},{},{}",
         desc.rand_seed,
         desc.data_index,
-        desc.NumPlanets,
+        desc.num_planets,
         desc.radius,
         desc.location.x,
         desc.location.y,
@@ -244,7 +244,7 @@ fn describe_desc(desc: &PLANET_DESC) -> String {
         desc.temp_color.g,
         desc.temp_color.b,
         desc.temp_color.a,
-        desc.NextIndex,
+        desc.next_index,
         desc.image.origin.x,
         desc.image.origin.y
     )

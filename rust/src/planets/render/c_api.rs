@@ -270,7 +270,7 @@ pub unsafe fn render_system_topography(
         Some(TopographyPalette {
             translation,
             colors,
-            planet_type: planet.Type,
+            planet_type: planet.type_,
             base_elevation: planet.base_elevation,
         }),
     )

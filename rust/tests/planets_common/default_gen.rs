@@ -2,9 +2,9 @@
 //! (`GenerateDefault_*`), shared by the Rust port and the linked C original.
 
 use std::fmt::Write as _;
+use uqm_rust::engine::world::planet::{NodeInfo, PlanetDesc, SystemInfo};
 
 use super::{fresh_node, scan_seeds, write_node, WorldCase};
-use uqm_rust::c_bindings::global_state::{NODE_INFO, PLANET_DESC, SYSTEM_INFO};
 
 /// Node-producing hooks of the default generator.
 #[derive(Clone, Copy, Debug)]
@@ -44,18 +44,18 @@ pub trait DefaultOps {
     fn nodes(
         &mut self,
         kind: NodeKind,
-        info: &SYSTEM_INFO,
+        info: &SystemInfo,
         which: u16,
-        node: &mut NODE_INFO,
+        node: &mut NodeInfo,
     ) -> (u16, u32);
 }
 
-pub fn world_of(desc: &PLANET_DESC) -> World {
+pub fn world_of(desc: &PlanetDesc) -> World {
     (
         desc.data_index,
         desc.radius,
         desc.rand_seed,
-        desc.NumPlanets,
+        desc.num_planets,
     )
 }
 
@@ -106,8 +106,8 @@ pub fn moons_line<O: DefaultOps>(ops: &mut O, case: &(u8, u8, u32, u8)) -> Strin
 }
 
 /// Every node hook over one analysed world: the count call, then each node.
-pub fn nodes_line<O: DefaultOps>(ops: &mut O, case: &WorldCase, mut info: SYSTEM_INFO) -> String {
-    info.PlanetInfo.ScanSeed = scan_seeds(case.rand_seed);
+pub fn nodes_line<O: DefaultOps>(ops: &mut O, case: &WorldCase, mut info: SystemInfo) -> String {
+    info.planet_info.scan_seed = scan_seeds(case.rand_seed);
     let mut out = format!(
         "N c{} s{} t{} seed{} r{} p{:?} o{}",
         case.star_color,

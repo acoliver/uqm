@@ -7,9 +7,10 @@
 //! state to the plain Rust port. The race homes share one live contact site,
 //! [`RaceHome`]; it reaches the C engine through [`crate::planets::c_api`].
 
+use crate::engine::world::planet::{NodeInfo, PlanetDesc};
 use std::ffi::CStr;
 
-use crate::c_bindings::global_state::{NODE_INFO, PLANET_DESC, SOLARSYS_STATE};
+use crate::c_bindings::global_state::SOLARSYS_STATE;
 use crate::comm::dispatch::{conv, ship};
 use crate::planets::c_api::{
     begin_urquan_encounter, built_ship_count, built_ship_queue_has_ships, clear_sis_message,
@@ -352,9 +353,9 @@ macro_rules! energy_hook {
     ($name:ident, $generate:path) => {
         unsafe extern "C" fn $name(
             system: *const SOLARSYS_STATE,
-            world: *const PLANET_DESC,
+            world: *const PlanetDesc,
             which_node: u16,
-            info: *mut NODE_INFO,
+            info: *mut NodeInfo,
         ) -> u16 {
             let mut spare = blank_node();
             $generate(
@@ -382,7 +383,7 @@ unsafe extern "C" fn ilw_planets(system: *mut SOLARSYS_STATE) -> bool {
 unsafe fn ilw_orbital(
     cx: &mut crate::engine::battle::Cx<'_>,
     system: *mut SOLARSYS_STATE,
-    world: *mut PLANET_DESC,
+    world: *mut PlanetDesc,
 ) -> bool {
     let owner = std::cell::RefCell::new(cx);
     let owner = &owner;
@@ -398,7 +399,7 @@ unsafe fn ilw_orbital(
 
 unsafe extern "C" fn ilw_pickup(
     system: *mut SOLARSYS_STATE,
-    world: *mut PLANET_DESC,
+    world: *mut PlanetDesc,
     _which_node: u16,
 ) -> bool {
     ilw::pickup_energy(body_of(system, world), &mut discovery_report(system))
@@ -411,7 +412,7 @@ unsafe extern "C" fn pet_planets(system: *mut SOLARSYS_STATE) -> bool {
 unsafe fn pet_orbital(
     cx: &mut crate::engine::battle::Cx<'_>,
     system: *mut SOLARSYS_STATE,
-    world: *mut PLANET_DESC,
+    world: *mut PlanetDesc,
 ) -> bool {
     let owner = std::cell::RefCell::new(cx);
     let owner = &owner;
@@ -428,7 +429,7 @@ unsafe fn pet_orbital(
 
 unsafe extern "C" fn pet_pickup(
     system: *mut SOLARSYS_STATE,
-    world: *mut PLANET_DESC,
+    world: *mut PlanetDesc,
     _which_node: u16,
 ) -> bool {
     pet::pickup_energy(body_of(system, world), &mut discovery_report(system))
@@ -441,7 +442,7 @@ unsafe extern "C" fn pku_planets(system: *mut SOLARSYS_STATE) -> bool {
 unsafe fn pku_orbital(
     cx: &mut crate::engine::battle::Cx<'_>,
     system: *mut SOLARSYS_STATE,
-    world: *mut PLANET_DESC,
+    world: *mut PlanetDesc,
 ) -> bool {
     let owner = std::cell::RefCell::new(cx);
     let owner = &owner;
@@ -458,7 +459,7 @@ unsafe fn pku_orbital(
 
 unsafe extern "C" fn pku_pickup(
     system: *mut SOLARSYS_STATE,
-    world: *mut PLANET_DESC,
+    world: *mut PlanetDesc,
     _which_node: u16,
 ) -> bool {
     pku::pickup_energy(
@@ -476,7 +477,7 @@ unsafe extern "C" fn sup_planets(system: *mut SOLARSYS_STATE) -> bool {
 unsafe fn sup_orbital(
     cx: &mut crate::engine::battle::Cx<'_>,
     system: *mut SOLARSYS_STATE,
-    world: *mut PLANET_DESC,
+    world: *mut PlanetDesc,
 ) -> bool {
     let owner = std::cell::RefCell::new(cx);
     let owner = &owner;
@@ -493,7 +494,7 @@ unsafe fn sup_orbital(
 
 unsafe extern "C" fn sup_pickup(
     system: *mut SOLARSYS_STATE,
-    world: *mut PLANET_DESC,
+    world: *mut PlanetDesc,
     _which_node: u16,
 ) -> bool {
     sup::pickup_energy(
@@ -511,7 +512,7 @@ unsafe extern "C" fn dru_planets(system: *mut SOLARSYS_STATE) -> bool {
 unsafe fn dru_orbital(
     cx: &mut crate::engine::battle::Cx<'_>,
     system: *mut SOLARSYS_STATE,
-    world: *mut PLANET_DESC,
+    world: *mut PlanetDesc,
 ) -> bool {
     let owner = std::cell::RefCell::new(cx);
     let owner = &owner;
@@ -528,7 +529,7 @@ unsafe fn dru_orbital(
 
 unsafe extern "C" fn dru_pickup(
     system: *mut SOLARSYS_STATE,
-    world: *mut PLANET_DESC,
+    world: *mut PlanetDesc,
     _which_node: u16,
 ) -> bool {
     dru::pickup_energy(
@@ -543,8 +544,8 @@ unsafe extern "C" fn burv_planets(system: *mut SOLARSYS_STATE) -> bool {
     lay_out_planets(system, burv::generate_planets)
 }
 
-unsafe extern "C" fn burv_moons(system: *mut SOLARSYS_STATE, planet: *mut PLANET_DESC) -> bool {
-    let planet_moons = (*planet).NumPlanets;
+unsafe extern "C" fn burv_moons(system: *mut SOLARSYS_STATE, planet: *mut PlanetDesc) -> bool {
+    let planet_moons = (*planet).num_planets;
     let moons = &mut *std::ptr::addr_of_mut!((*system).MoonDesc);
     burv::generate_moons(
         sys_gen_rng(),
@@ -559,7 +560,7 @@ unsafe extern "C" fn burv_moons(system: *mut SOLARSYS_STATE, planet: *mut PLANET
 unsafe fn burv_orbital(
     cx: &mut crate::engine::battle::Cx<'_>,
     system: *mut SOLARSYS_STATE,
-    world: *mut PLANET_DESC,
+    world: *mut PlanetDesc,
 ) -> bool {
     let owner = std::cell::RefCell::new(cx);
     let owner = &owner;
@@ -576,9 +577,9 @@ unsafe fn burv_orbital(
 
 unsafe extern "C" fn burv_energy(
     system: *const SOLARSYS_STATE,
-    world: *const PLANET_DESC,
+    world: *const PlanetDesc,
     which_node: u16,
-    info: *mut NODE_INFO,
+    info: *mut NodeInfo,
 ) -> u16 {
     let mut spare = blank_node();
     burv::generate_energy(
@@ -593,7 +594,7 @@ unsafe extern "C" fn burv_energy(
 
 unsafe extern "C" fn burv_pickup(
     system: *mut SOLARSYS_STATE,
-    world: *mut PLANET_DESC,
+    world: *mut PlanetDesc,
     which_node: u16,
 ) -> bool {
     burv::pickup_energy(
@@ -614,7 +615,7 @@ unsafe extern "C" fn thrad_planets(system: *mut SOLARSYS_STATE) -> bool {
 unsafe fn thrad_orbital(
     cx: &mut crate::engine::battle::Cx<'_>,
     system: *mut SOLARSYS_STATE,
-    world: *mut PLANET_DESC,
+    world: *mut PlanetDesc,
 ) -> bool {
     let owner = std::cell::RefCell::new(cx);
     let owner = &owner;
@@ -644,9 +645,9 @@ unsafe fn thrad_orbital(
 
 unsafe extern "C" fn thrad_energy(
     system: *const SOLARSYS_STATE,
-    world: *const PLANET_DESC,
+    world: *const PlanetDesc,
     which_node: u16,
-    info: *mut NODE_INFO,
+    info: *mut NodeInfo,
 ) -> u16 {
     let mut spare = blank_node();
     thrad::generate_energy(
@@ -662,7 +663,7 @@ unsafe extern "C" fn thrad_energy(
 
 unsafe extern "C" fn thrad_pickup(
     system: *mut SOLARSYS_STATE,
-    world: *mut PLANET_DESC,
+    world: *mut PlanetDesc,
     which_node: u16,
 ) -> bool {
     thrad::pickup_energy(
@@ -684,7 +685,7 @@ unsafe extern "C" fn orz_planets(system: *mut SOLARSYS_STATE) -> bool {
 unsafe fn orz_orbital(
     cx: &mut crate::engine::battle::Cx<'_>,
     system: *mut SOLARSYS_STATE,
-    world: *mut PLANET_DESC,
+    world: *mut PlanetDesc,
 ) -> bool {
     let owner = std::cell::RefCell::new(cx);
     let owner = &owner;
@@ -714,9 +715,9 @@ unsafe fn orz_orbital(
 
 unsafe extern "C" fn orz_energy(
     system: *const SOLARSYS_STATE,
-    world: *const PLANET_DESC,
+    world: *const PlanetDesc,
     which_node: u16,
-    info: *mut NODE_INFO,
+    info: *mut NodeInfo,
 ) -> u16 {
     let mut spare = blank_node();
     orz::generate_energy(
@@ -732,7 +733,7 @@ unsafe extern "C" fn orz_energy(
 
 unsafe extern "C" fn orz_pickup(
     system: *mut SOLARSYS_STATE,
-    world: *mut PLANET_DESC,
+    world: *mut PlanetDesc,
     which_node: u16,
 ) -> bool {
     orz::pickup_energy(
@@ -756,7 +757,7 @@ unsafe extern "C" fn zoq_planets(system: *mut SOLARSYS_STATE) -> bool {
 unsafe fn zoq_orbital(
     cx: &mut crate::engine::battle::Cx<'_>,
     system: *mut SOLARSYS_STATE,
-    world: *mut PLANET_DESC,
+    world: *mut PlanetDesc,
 ) -> bool {
     let owner = std::cell::RefCell::new(cx);
     let owner = &owner;
@@ -773,7 +774,7 @@ unsafe fn zoq_orbital(
 
 unsafe extern "C" fn zoq_pickup(
     system: *mut SOLARSYS_STATE,
-    world: *mut PLANET_DESC,
+    world: *mut PlanetDesc,
     _which_node: u16,
 ) -> bool {
     zoq::pickup_energy(body_of(system, world), &mut discovery_report(system))

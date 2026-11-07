@@ -5,7 +5,7 @@
 //! Overridden: `generatePlanets`, `generateOrbital`, `generateEnergy`,
 //! `pickupEnergy`. Story flags: `CLEAR_SPINDLE`, `CLEAR_SPINDLE_ON_SHIP`.
 
-use crate::c_bindings::global_state::{PlanetFrame, NODE_INFO, PLANET_DESC, SYSTEM_INFO};
+use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
 use crate::math::RandomContext;
 use crate::planet_side::report_adapter::DiscoveryReportPort;
 use crate::planets::generate::default;
@@ -18,11 +18,11 @@ pub fn generate_planets(
     plan_data: &[PlanetFrame],
     star_size: u8,
     star_color: u8,
-    planets: &mut [PLANET_DESC],
+    planets: &mut [PlanetDesc],
 ) -> u8 {
     special::planets_then(rng, plan_data, star_size, star_color, planets, |planets| {
         planets[0].data_index = WATER_WORLD;
-        planets[0].NumPlanets = 1;
+        planets[0].num_planets = 1;
         special::reposition(&mut planets[0], 104);
     })
 }
@@ -49,10 +49,10 @@ pub fn generate_orbital(
 /// `GeneratePkunk_generateEnergy`.
 pub fn generate_energy(
     rng: &mut RandomContext,
-    sys_info: &SYSTEM_INFO,
+    sys_info: &SystemInfo,
     body: Body,
     which_node: u16,
-    info: &mut NODE_INFO,
+    info: &mut NodeInfo,
 ) -> u16 {
     if body == Body::Planet(0) {
         default::generate_ruins(rng, sys_info, which_node, info)

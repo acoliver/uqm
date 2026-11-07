@@ -277,10 +277,10 @@ pub(crate) mod live {
                 let context = GetScanContext(&mut own_context);
                 let old_context = SetContext((context).cast());
                 let saved = SaveContextFrame(std::ptr::null_mut());
-                let info = std::ptr::addr_of!((*system).SysInfo.PlanetInfo);
-                let old_font = SetContextFont((*info).LanderFont.cast());
+                let info = std::ptr::addr_of!((*system).SysInfo.planet_info);
+                let old_font = SetContextFont((*info).lander_font.cast());
                 let old_effect = SetContextFontEffect(if input.preferences().fonts == 2 {
-                    (*info).LanderFontEff.cast()
+                    (*info).lander_font_eff.cast()
                 } else {
                     std::ptr::null_mut()
                 });
@@ -290,8 +290,8 @@ pub(crate) mod live {
                     saved,
                     old_font,
                     old_effect,
-                    GetStringAddress((*info).DiscoveryString.cast()).cast(),
-                    GetStringLength((*info).DiscoveryString.cast()),
+                    GetStringAddress((*info).discovery_string.cast()).cast(),
+                    GetStringLength((*info).discovery_string.cast()),
                 )
             });
         make_report(input, cx, io, sound, text, length);

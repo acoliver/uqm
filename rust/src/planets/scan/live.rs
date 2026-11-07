@@ -233,7 +233,7 @@ pub unsafe extern "C" fn RedrawSurfaceScan(location: *const CPoint) {
 }
 
 unsafe fn fuel() -> u16 {
-    landing_fuel((*solar_system::current()).SysInfo.PlanetInfo.SurfaceGravity)
+    landing_fuel((*solar_system::current()).SysInfo.planet_info.gravity)
 }
 
 unsafe fn spawn_fwiffo() {
@@ -288,7 +288,7 @@ unsafe fn dispatch_lander(cx: &mut Cx<'_>, io: &mut Io<'_>) -> bool {
         );
         cx.world.set_activity(cx.world.activity() | CHECK_ABORT);
     } else {
-        (*system).SysInfo.PlanetInfo.ScanRetrieveMask = context.retrieval_masks;
+        (*system).SysInfo.planet_info.scan_retrieve_mask = context.retrieval_masks;
         if reply.detail == 4 {
             crate::logging::log_add(
                 crate::logging::LogLevel::Error,
@@ -341,12 +341,12 @@ unsafe fn prepare_lander(
         landing_x: i32::from(PLANET_LOCATION.x),
         landing_y: i32::from(PLANET_LOCATION.y),
         facing: crate::math::random() as u8,
-        retrieval_masks: (*system).SysInfo.PlanetInfo.ScanRetrieveMask,
+        retrieval_masks: (*system).SysInfo.planet_info.scan_retrieve_mask,
         tick_period: 840 / 35,
         frame_budget: u32::MAX,
-        tectonics_rating: (*system).SysInfo.PlanetInfo.Tectonics as u8,
-        weather_rating: (*system).SysInfo.PlanetInfo.Weather as u8,
-        temperature: i32::from((*system).SysInfo.PlanetInfo.SurfaceTemperature),
+        tectonics_rating: (*system).SysInfo.planet_info.tectonics as u8,
+        weather_rating: (*system).SysInfo.planet_info.weather as u8,
+        temperature: i32::from((*system).SysInfo.planet_info.temperature),
         ..PlanetSideRunContext::default()
     }
 }
@@ -456,7 +456,7 @@ unsafe fn scanned_stuff(cx: &mut crate::engine::battle::Cx<'_>, y: u16, scan: u1
                 || dy < 0
                 || crate::planet_side::orbit_scan::node_retrieved(
                     cx.element(element).life,
-                    &(*solar_system::current()).SysInfo.PlanetInfo,
+                    &(*solar_system::current()).SysInfo.planet_info,
                 )
             {
                 continue;
@@ -586,7 +586,7 @@ unsafe fn scan_planet(input: &InputSession, cx: &mut Cx<'_>, io: &mut Io<'_>, sc
 unsafe fn unavailable() -> bool {
     let system = solar_system::current();
     (*(*system).pOrbitalDesc).data_index & 0x80 != 0
-        || (*system).SysInfo.PlanetInfo.AtmoDensity == u16::MAX
+        || (*system).SysInfo.planet_info.atmo_density == u16::MAX
 }
 
 unsafe fn scan_input(cx: &mut Cx<'_>, io: &mut Io<'_>, menu: &mut MENU_STATE) -> u32 {

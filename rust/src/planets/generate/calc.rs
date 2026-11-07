@@ -4,7 +4,7 @@
 //! Every RNG draw happens in the same order and count as the C original, so
 //! the generated universe is unchanged.
 
-use crate::engine::world::planet::{PlanetFrame, PLANET_DESC, PLANET_INFO, SYSTEM_INFO};
+use crate::engine::world::planet::{PlanetDesc, PlanetFrame, PlanetInfo, SystemInfo};
 use crate::math::RandomContext;
 use crate::planets::generate::consts::{
     atmosphere_range, density_class, planet_size, star_color, star_type, EARTH_RADIUS,
@@ -49,16 +49,16 @@ fn calc_half_base_variance(rng: &mut RandomContext, base: u16) -> u16 {
     calc_from_base(rng, base, (base >> 1) + 1)
 }
 
-fn calc_sys_info(info: &mut SYSTEM_INFO, star: StarDescription) {
-    info.StarSize = star.size;
+fn calc_sys_info(info: &mut SystemInfo, star: StarDescription) {
+    info.star_size = star.size;
     // Colour values with no case leave the field untouched, as in C.
     match star_color(star.star_type) {
-        0 => info.StarIntensity = BLUE_SUN_INTENSITY,
-        1 => info.StarIntensity = GREEN_SUN_INTENSITY,
-        2 => info.StarIntensity = ORANGE_SUN_INTENSITY,
-        3 => info.StarIntensity = RED_SUN_INTENSITY,
-        4 => info.StarIntensity = WHITE_SUN_INTENSITY,
-        5 => info.StarIntensity = YELLOW_SUN_INTENSITY,
+        0 => info.star_intensity = BLUE_SUN_INTENSITY,
+        1 => info.star_intensity = GREEN_SUN_INTENSITY,
+        2 => info.star_intensity = ORANGE_SUN_INTENSITY,
+        3 => info.star_intensity = RED_SUN_INTENSITY,
+        4 => info.star_intensity = WHITE_SUN_INTENSITY,
+        5 => info.star_intensity = YELLOW_SUN_INTENSITY,
         _ => {}
     }
 
@@ -69,25 +69,25 @@ fn calc_sys_info(info: &mut SYSTEM_INFO, star: StarDescription) {
         _ => None,
     };
     if let Some(energy) = energy_per_intensity {
-        info.StarEnergy = (u16::from(info.StarIntensity) + 1) * energy;
+        info.star_energy = (u16::from(info.star_intensity) + 1) * energy;
     }
 }
 
 fn generate_planet_composition(
     rng: &mut RandomContext,
-    info: &mut PLANET_INFO,
+    info: &mut PlanetInfo,
     plan_data: &PlanetFrame,
     surface_temp: i16,
     radius: i16,
 ) -> u16 {
-    if planet_size(plan_data.Type) == 2 {
-        info.Weather = 7 << 5;
+    if planet_size(plan_data.type_) == 2 {
+        info.weather = 7 << 5;
         return 0xFFFF;
     }
 
-    info.Weather = 0;
+    info.weather = 0;
     let mut atmo: u16 = 0;
-    let mut range = atmosphere_range(plan_data.AtmoAndDensity);
+    let mut range = atmosphere_range(plan_data.atmo_and_density);
     if range <= 2 {
         if surface_temp < -40 {
             range = range.wrapping_sub(1);
@@ -99,27 +99,27 @@ fn generate_planet_composition(
             match range {
                 0 => {
                     atmo = 10;
-                    info.Weather = 1 << 5;
+                    info.weather = 1 << 5;
                 }
                 1 => {
                     atmo = 75;
-                    info.Weather = 2 << 5;
+                    info.weather = 2 << 5;
                 }
                 2 => {
                     atmo = 200;
-                    info.Weather = 4 << 5;
+                    info.weather = 4 << 5;
                 }
                 _ => {
                     atmo = 2500;
-                    info.Weather = 6 << 5;
+                    info.weather = 6 << 5;
                 }
             }
 
             let earth_radii = radius / EARTH_RADIUS;
             if earth_radii < 2 {
-                info.Weather = info.Weather.wrapping_add(1 << 5);
+                info.weather = info.weather.wrapping_add(1 << 5);
             } else if earth_radii > 10 {
-                info.Weather = info.Weather.wrapping_sub(1 << 5);
+                info.weather = info.weather.wrapping_sub(1 << 5);
             }
             atmo = calc_half_base_variance(rng, atmo);
         }
@@ -129,7 +129,7 @@ fn generate_planet_composition(
 
 fn calc_temp(
     rng: &mut RandomContext,
-    sys_info: &SYSTEM_INFO,
+    sys_info: &SystemInfo,
     plan_data: &PlanetFrame,
     radius: i16,
     is_orbit_entry: bool,
@@ -141,7 +141,7 @@ fn calc_temp(
     let alb = 100 - GENERIC_ALBEDO;
     let root = i64::from(crate::math::square_root(alb * 100 * 10000));
     let root = i64::from(crate::math::square_root(root as u32));
-    let alb = (root * PLANET_TEMP_CONSTANT * i64::from(sys_info.StarEnergy)
+    let alb = (root * PLANET_TEMP_CONSTANT * i64::from(sys_info.star_energy)
         / i64::from(YELLOW_SUN_INTENSITY + 1)) as u32; // DWARF_ENERGY is 1
 
     let scaled = (i64::from(radius) * 10000 / i64::from(EARTH_RADIUS)) as u32;
@@ -149,7 +149,7 @@ fn calc_temp(
         - ADJUST_FOR_KELVIN) as i16;
 
     let mut bonus: i16 = 0;
-    let atmosphere = atmosphere_range(plan_data.AtmoAndDensity);
+    let atmosphere = atmosphere_range(plan_data.atmo_and_density);
     if is_orbit_entry && atmosphere <= 2 {
         const COLD_BONUS: i16 = 20;
         const HOT_BONUS: i16 = 200;
@@ -166,7 +166,7 @@ fn calc_temp(
 }
 
 fn calc_rotation(rng: &mut RandomContext, plan_data: &PlanetFrame) -> u16 {
-    if planet_size(plan_data.Type) == 2 {
+    if planet_size(plan_data.type_) == 2 {
         calc_from_base(rng, 80, 80)
     } else if (rng.next_random() as u8).is_multiple_of(10) {
         calc_from_base(rng, 50 * 240, 200 * 240)
@@ -186,20 +186,20 @@ fn calc_tilt(rng: &mut RandomContext) -> i16 {
 }
 
 /// `CalcGravity`: density times radius over 100.
-pub fn calc_gravity(info: &PLANET_INFO) -> u16 {
-    (u32::from(info.PlanetDensity) * u32::from(info.PlanetRadius) / 100) as u16
+pub fn calc_gravity(info: &PlanetInfo) -> u16 {
+    (u32::from(info.planet_density) * u32::from(info.planet_radius) / 100) as u16
 }
 
 fn calc_tectonics(rng: &mut RandomContext, base: u16) -> u16 {
     calc_from_base(rng, base, 3 << 5)
 }
 
-fn calc_life_chance(info: &PLANET_INFO, plan_data: &PlanetFrame) -> i32 {
-    if planet_size(plan_data.Type) == 2 {
+fn calc_life_chance(info: &PlanetInfo, plan_data: &PlanetFrame) -> i32 {
+    if planet_size(plan_data.type_) == 2 {
         return -1;
     }
 
-    let temperature = info.SurfaceTemperature;
+    let temperature = info.temperature;
     let mut life_var: i32 = if temperature < -151 {
         -300
     } else if temperature < -51 {
@@ -218,7 +218,7 @@ fn calc_life_chance(info: &PLANET_INFO, plan_data: &PlanetFrame) -> i32 {
         -800
     };
 
-    let atmosphere = info.AtmoDensity;
+    let atmosphere = info.atmo_density;
     life_var += if atmosphere == 0 {
         -1000
     } else if atmosphere < 15 {
@@ -259,47 +259,45 @@ pub fn do_planetary_analysis(
     plan_data: &[PlanetFrame],
     star: StarDescription,
     site: AnalysisSite,
-    sys_info: &mut SYSTEM_INFO,
-    desc: &PLANET_DESC,
+    sys_info: &mut SystemInfo,
+    desc: &PlanetDesc,
 ) {
     rng.reseed(desc.rand_seed);
     calc_sys_info(sys_info, star);
 
     let frame = &plan_data[usize::from(desc.data_index & !PLANET_SHIELDED)];
-    sys_info.PlanetInfo.PlanDataPtr = frame;
+    sys_info.planet_info.plan_data_ptr = frame;
 
     let radius = site.parent_radius.unwrap_or(desc.radius);
-    sys_info.PlanetInfo.PlanetToSunDist = radius as u16;
+    sys_info.planet_info.planet_to_sun_dist = radius as u16;
 
-    sys_info.PlanetInfo.SurfaceTemperature =
-        calc_temp(rng, sys_info, frame, radius, site.is_orbit_entry);
+    sys_info.planet_info.temperature = calc_temp(rng, sys_info, frame, radius, site.is_orbit_entry);
 
-    let info = &mut sys_info.PlanetInfo;
-    if let Some(density) = base_density(density_class(frame.AtmoAndDensity)) {
-        info.PlanetDensity = density;
+    let info = &mut sys_info.planet_info;
+    if let Some(density) = base_density(density_class(frame.atmo_and_density)) {
+        info.planet_density = density;
     }
-    let density = i32::from(info.PlanetDensity);
-    info.PlanetDensity = (density + density / 20
-        - i32::from((rng.next_random() as u16) % (info.PlanetDensity / 10)))
+    let density = i32::from(info.planet_density);
+    info.planet_density = (density + density / 20
+        - i32::from((rng.next_random() as u16) % (info.planet_density / 10)))
         as u16;
 
-    match planet_size(frame.Type) {
-        0 => info.PlanetRadius = calc_half_base_variance(rng, 25),
-        1 => info.PlanetRadius = calc_half_base_variance(rng, 75),
-        2 => info.PlanetRadius = calc_from_base(rng, 300, 1500 - 300),
+    match planet_size(frame.type_) {
+        0 => info.planet_radius = calc_half_base_variance(rng, 25),
+        1 => info.planet_radius = calc_half_base_variance(rng, 75),
+        2 => info.planet_radius = calc_from_base(rng, 300, 1500 - 300),
         _ => {}
     }
 
-    info.RotationPeriod = calc_rotation(rng, frame);
-    info.SurfaceGravity = calc_gravity(info);
-    info.AxialTilt = calc_tilt(rng);
-    info.Tectonics = calc_tectonics(rng, u16::from(frame.BaseTectonics)).min(MAX_TECTONICS);
+    info.rotation_period = calc_rotation(rng, frame);
+    info.gravity = calc_gravity(info);
+    info.axial_tilt = calc_tilt(rng);
+    info.tectonics = calc_tectonics(rng, u16::from(frame.base_tectonics)).min(MAX_TECTONICS);
 
-    info.AtmoDensity =
-        generate_planet_composition(rng, info, frame, info.SurfaceTemperature, radius);
+    info.atmo_density = generate_planet_composition(rng, info, frame, info.temperature, radius);
 
-    info.Tectonics >>= 5;
-    info.Weather >>= 5;
+    info.tectonics >>= 5;
+    info.weather >>= 5;
 
-    info.LifeChance = calc_life_chance(info, frame) as i16;
+    info.life_chance = calc_life_chance(info, frame) as i16;
 }

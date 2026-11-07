@@ -8,8 +8,8 @@
 //! `TAALO_UNPROTECTED`.
 
 use crate::battle::gendef::{ORZ_DEFINED, TAALO_PROTECTOR_DEFINED};
-use crate::c_bindings::global_state::{PlanetFrame, NODE_INFO, PLANET_DESC, SYSTEM_INFO};
 use crate::comm::dispatch::{CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY};
+use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
 use crate::math::RandomContext;
 use crate::planet_side::report_adapter::DiscoveryReportPort;
 use crate::planets::generate::default;
@@ -45,14 +45,14 @@ pub fn generate_planets(
     plan_data: &[PlanetFrame],
     star_size: u8,
     star_color: u8,
-    planets: &mut [PLANET_DESC],
+    planets: &mut [PlanetDesc],
     star_index: u8,
 ) -> u8 {
     special::planets_then(rng, plan_data, star_size, star_color, planets, |planets| {
         if star_index == ORZ_DEFINED {
             let world = &mut planets[0];
             world.data_index = WATER_WORLD;
-            world.NumPlanets = 0;
+            world.num_planets = 0;
             special::reposition(world, 156);
         }
     })
@@ -138,11 +138,11 @@ fn meet_orz(star_index: u8, story: &impl Story, site: &mut impl OrzSite) -> bool
 /// the Orz home.
 pub fn generate_energy(
     rng: &mut RandomContext,
-    sys_info: &SYSTEM_INFO,
+    sys_info: &SystemInfo,
     star_index: u8,
     body: Body,
     which_node: u16,
-    info: &mut NODE_INFO,
+    info: &mut NodeInfo,
     story: &impl Story,
 ) -> u16 {
     if star_index == TAALO_PROTECTOR_DEFINED && body == DEVICE_MOON {

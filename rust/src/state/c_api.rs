@@ -117,10 +117,10 @@ pub(crate) mod planets {
             .unwrap_or_else(|| panic!("planet info requires a selected star"))
             .0 as u16;
         let planet = (*(*system).pBaseDesc)
-            .pPrevDesc
+            .prev_desc
             .offset_from((*system).PlanetDesc.as_ptr()) as u16;
         let orbital = (*system).pOrbitalDesc;
-        let moon = if (*orbital).pPrevDesc == (*system).SunDesc.as_mut_ptr() {
+        let moon = if (*orbital).prev_desc == (*system).SunDesc.as_mut_ptr() {
             0
         } else {
             (orbital.offset_from((*system).MoonDesc.as_ptr()) + 1) as u16
@@ -130,9 +130,9 @@ pub(crate) mod planets {
 
     unsafe fn moons(system: *mut SOLARSYS_STATE) -> ([u8; 16], c_int) {
         let mut moons = [0; 16];
-        let count = (*system).SunDesc[0].NumPlanets as usize;
+        let count = (*system).SunDesc[0].num_planets as usize;
         for (i, moon) in moons[..count].iter_mut().enumerate() {
-            *moon = (*system).PlanetDesc[i].NumPlanets;
+            *moon = (*system).PlanetDesc[i].num_planets;
         }
         (moons, count as c_int)
     }
@@ -147,7 +147,7 @@ pub(crate) mod planets {
     /// A live solar system and current orbital descriptor must be selected.
     pub unsafe fn get_planet_info(world: &mut crate::engine::World) {
         let system = solar_system::current();
-        (*system).SysInfo.PlanetInfo.ScanRetrieveMask = [0; 3];
+        (*system).SysInfo.planet_info.scan_retrieve_mask = [0; 3];
         let (star, planet, moon) = location(world, system);
         let (moons, count) = moons(system);
         let mut mask = [0; 3];
@@ -163,7 +163,7 @@ pub(crate) mod planets {
             )
         } != 0
         {
-            (*system).SysInfo.PlanetInfo.ScanRetrieveMask = mask;
+            (*system).SysInfo.planet_info.scan_retrieve_mask = mask;
         }
     }
 
@@ -180,7 +180,7 @@ pub(crate) mod planets {
             moon,
             moons.as_ptr(),
             count,
-            (*system).SysInfo.PlanetInfo.ScanRetrieveMask.as_ptr(),
+            (*system).SysInfo.planet_info.scan_retrieve_mask.as_ptr(),
         );
     }
 }

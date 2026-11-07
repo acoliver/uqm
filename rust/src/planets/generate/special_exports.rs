@@ -7,9 +7,10 @@
 //! C-owned state and hands both to the plain Rust port. Slots a system does
 //! not override stay the default hooks. All of it runs on the game thread.
 
+use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame};
 use std::ffi::CStr;
 
-use crate::c_bindings::global_state::{PlanetFrame, NODE_INFO, PLANET_DESC, SOLARSYS_STATE};
+use crate::c_bindings::global_state::SOLARSYS_STATE;
 use crate::math::RandomContext;
 use crate::planets::c_api::{
     built_ship_count, clone_infinite_ship_into_built_queue, init_communication, load_lander_scene,
@@ -33,13 +34,13 @@ use crate::planets::generate::{
 ///
 /// # Safety
 /// `world` must be a planet of `system` or a moon whose `pPrevDesc` is one.
-pub(super) unsafe fn body_of(system: *const SOLARSYS_STATE, world: *const PLANET_DESC) -> Body {
+pub(super) unsafe fn body_of(system: *const SOLARSYS_STATE, world: *const PlanetDesc) -> Body {
     let planet = u8::try_from(planet_index(system, world)).expect("planet index fits a byte");
-    let sun = std::ptr::addr_of!((*system).SunDesc).cast::<PLANET_DESC>();
-    if (*world).pPrevDesc.cast_const() == sun {
+    let sun = std::ptr::addr_of!((*system).SunDesc).cast::<PlanetDesc>();
+    if (*world).prev_desc.cast_const() == sun {
         return Body::Planet(planet);
     }
-    let first = std::ptr::addr_of!((*system).MoonDesc).cast::<PLANET_DESC>();
+    let first = std::ptr::addr_of!((*system).MoonDesc).cast::<PlanetDesc>();
     let moon = u8::try_from(world.offset_from(first)).expect("moon index fits a byte");
     Body::Moon { planet, moon }
 }
@@ -51,7 +52,7 @@ pub(super) unsafe fn body_of(system: *const SOLARSYS_STATE, world: *const PLANET
 /// As [`super::exports::generate_planets_c`].
 pub(super) unsafe fn lay_out_planets(
     system: *mut SOLARSYS_STATE,
-    generate: impl FnOnce(&mut RandomContext, &[PlanetFrame], u8, u8, &mut [PLANET_DESC]) -> u8,
+    generate: impl FnOnce(&mut RandomContext, &[PlanetFrame], u8, u8, &mut [PlanetDesc]) -> u8,
 ) -> bool {
     let drawn = generate(
         sys_gen_rng(),
@@ -60,7 +61,7 @@ pub(super) unsafe fn lay_out_planets(
         star_color(current_star_type()),
         &mut (*system).PlanetDesc,
     );
-    (*system).SunDesc[0].NumPlanets = drawn;
+    (*system).SunDesc[0].num_planets = drawn;
     true
 }
 
@@ -72,7 +73,7 @@ pub(super) unsafe fn lay_out_planets(
 pub(super) unsafe fn orbit_world(
     owner: &std::cell::RefCell<&mut crate::engine::battle::Cx<'_>>,
     system: *mut SOLARSYS_STATE,
-    world: *mut PLANET_DESC,
+    world: *mut PlanetDesc,
     generate: impl FnOnce(&mut Orbit<'_>, Body) -> bool,
 ) -> bool {
     let body = body_of(system, world);
@@ -240,7 +241,7 @@ fn wreck_scene(system: *mut SOLARSYS_STATE) -> LanderScene {
 unsafe fn vault_orbital(
     cx: &mut crate::engine::battle::Cx<'_>,
     system: *mut SOLARSYS_STATE,
-    world: *mut PLANET_DESC,
+    world: *mut PlanetDesc,
 ) -> bool {
     let owner = std::cell::RefCell::new(cx);
     let owner = &owner;
@@ -257,9 +258,9 @@ unsafe fn vault_orbital(
 
 unsafe extern "C" fn vault_energy(
     system: *const SOLARSYS_STATE,
-    world: *const PLANET_DESC,
+    world: *const PlanetDesc,
     which_node: u16,
-    info: *mut NODE_INFO,
+    info: *mut NodeInfo,
 ) -> u16 {
     let mut spare = blank_node();
     vault::generate_energy(
@@ -273,7 +274,7 @@ unsafe extern "C" fn vault_energy(
 
 unsafe extern "C" fn vault_pickup(
     system: *mut SOLARSYS_STATE,
-    world: *mut PLANET_DESC,
+    world: *mut PlanetDesc,
     which_node: u16,
 ) -> bool {
     vault::pickup_energy(
@@ -288,7 +289,7 @@ unsafe extern "C" fn vault_pickup(
 unsafe fn wreck_orbital(
     cx: &mut crate::engine::battle::Cx<'_>,
     system: *mut SOLARSYS_STATE,
-    world: *mut PLANET_DESC,
+    world: *mut PlanetDesc,
 ) -> bool {
     let owner = std::cell::RefCell::new(cx);
     let owner = &owner;
@@ -305,9 +306,9 @@ unsafe fn wreck_orbital(
 
 unsafe extern "C" fn wreck_energy(
     system: *const SOLARSYS_STATE,
-    world: *const PLANET_DESC,
+    world: *const PlanetDesc,
     which_node: u16,
-    info: *mut NODE_INFO,
+    info: *mut NodeInfo,
 ) -> u16 {
     let mut spare = blank_node();
     wreck::generate_energy(
@@ -321,7 +322,7 @@ unsafe extern "C" fn wreck_energy(
 
 unsafe extern "C" fn wreck_pickup(
     system: *mut SOLARSYS_STATE,
-    world: *mut PLANET_DESC,
+    world: *mut PlanetDesc,
     which_node: u16,
 ) -> bool {
     wreck::pickup_energy(
@@ -340,7 +341,7 @@ unsafe extern "C" fn yehat_planets(system: *mut SOLARSYS_STATE) -> bool {
 unsafe fn yehat_orbital(
     cx: &mut crate::engine::battle::Cx<'_>,
     system: *mut SOLARSYS_STATE,
-    world: *mut PLANET_DESC,
+    world: *mut PlanetDesc,
 ) -> bool {
     let owner = std::cell::RefCell::new(cx);
     let owner = &owner;
@@ -360,9 +361,9 @@ unsafe fn yehat_orbital(
 
 unsafe extern "C" fn yehat_energy(
     system: *const SOLARSYS_STATE,
-    world: *const PLANET_DESC,
+    world: *const PlanetDesc,
     which_node: u16,
-    info: *mut NODE_INFO,
+    info: *mut NodeInfo,
 ) -> u16 {
     let mut spare = blank_node();
     yehat::generate_energy(
@@ -376,7 +377,7 @@ unsafe extern "C" fn yehat_energy(
 
 unsafe extern "C" fn yehat_pickup(
     system: *mut SOLARSYS_STATE,
-    world: *mut PLANET_DESC,
+    world: *mut PlanetDesc,
     _which_node: u16,
 ) -> bool {
     yehat::pickup_energy(body_of(system, world), &mut discovery_report(system))
@@ -395,7 +396,7 @@ unsafe extern "C" fn colony_planets(system: *mut SOLARSYS_STATE) -> bool {
 unsafe fn colony_orbital(
     cx: &mut crate::engine::battle::Cx<'_>,
     system: *mut SOLARSYS_STATE,
-    world: *mut PLANET_DESC,
+    world: *mut PlanetDesc,
 ) -> bool {
     let owner = std::cell::RefCell::new(cx);
     let owner = &owner;
@@ -425,7 +426,7 @@ unsafe extern "C" fn rainbow_planets(system: *mut SOLARSYS_STATE) -> bool {
 unsafe fn rainbow_orbital(
     cx: &mut crate::engine::battle::Cx<'_>,
     system: *mut SOLARSYS_STATE,
-    world: *mut PLANET_DESC,
+    world: *mut PlanetDesc,
 ) -> bool {
     let owner = std::cell::RefCell::new(cx);
     let owner = &owner;
@@ -450,8 +451,8 @@ unsafe extern "C" fn syreen_planets(system: *mut SOLARSYS_STATE) -> bool {
     lay_out_planets(system, syreen::generate_planets)
 }
 
-unsafe extern "C" fn syreen_moons(system: *mut SOLARSYS_STATE, planet: *mut PLANET_DESC) -> bool {
-    let planet_moons = (*planet).NumPlanets;
+unsafe extern "C" fn syreen_moons(system: *mut SOLARSYS_STATE, planet: *mut PlanetDesc) -> bool {
+    let planet_moons = (*planet).num_planets;
     let moons = &mut *std::ptr::addr_of_mut!((*system).MoonDesc);
     syreen::generate_moons(
         sys_gen_rng(),
@@ -466,7 +467,7 @@ unsafe extern "C" fn syreen_moons(system: *mut SOLARSYS_STATE, planet: *mut PLAN
 unsafe fn syreen_orbital(
     cx: &mut crate::engine::battle::Cx<'_>,
     system: *mut SOLARSYS_STATE,
-    world: *mut PLANET_DESC,
+    world: *mut PlanetDesc,
 ) -> bool {
     let owner = std::cell::RefCell::new(cx);
     let owner = &owner;
@@ -501,7 +502,7 @@ unsafe extern "C" fn trap_planets(system: *mut SOLARSYS_STATE) -> bool {
 unsafe fn trap_orbital(
     cx: &mut crate::engine::battle::Cx<'_>,
     system: *mut SOLARSYS_STATE,
-    world: *mut PLANET_DESC,
+    world: *mut PlanetDesc,
 ) -> bool {
     let owner = std::cell::RefCell::new(cx);
     let owner = &owner;
@@ -522,7 +523,7 @@ unsafe extern "C" fn slylandro_planets(system: *mut SOLARSYS_STATE) -> bool {
 unsafe fn slylandro_orbital(
     cx: &mut crate::engine::battle::Cx<'_>,
     system: *mut SOLARSYS_STATE,
-    world: *mut PLANET_DESC,
+    world: *mut PlanetDesc,
 ) -> bool {
     let owner = std::cell::RefCell::new(cx);
     let owner = &owner;

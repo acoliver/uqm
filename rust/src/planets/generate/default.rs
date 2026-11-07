@@ -8,7 +8,7 @@
 //! fakes.
 
 use crate::c_bindings::global_state::{IP_GROUP, PLANET_NUMBER_BASE};
-use crate::engine::world::planet::{PlanetFrame, NODE_INFO, PLANET_DESC, SYSTEM_INFO};
+use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
 use crate::math::RandomContext;
 use crate::planet_side::report_adapter::{DiscoveryReportPort, ReportDisposition};
 use crate::planets::generate::calc::{self, AnalysisSite, StarDescription};
@@ -117,7 +117,7 @@ pub fn generate_planets(
     plan_data: &[PlanetFrame],
     star_size: u8,
     star_color: u8,
-    planets: &mut [PLANET_DESC],
+    planets: &mut [PlanetDesc],
 ) -> u8 {
     let request = OrbitRequest {
         star_size,
@@ -131,7 +131,7 @@ pub fn generate_planets(
     for planet in planets.iter_mut().take(usize::from(drawn)) {
         let byte_val = rng.next_random() as u8;
         let frame = &plan_data[usize::from(planet.data_index & !PLANET_SHIELDED)];
-        planet.NumPlanets = moon_count(frame.Type, byte_val);
+        planet.num_planets = moon_count(frame.type_, byte_val);
     }
     drawn
 }
@@ -142,7 +142,7 @@ pub fn generate_moons(
     star_size: u8,
     star_color: u8,
     planet_moons: u8,
-    moons: &mut [PLANET_DESC],
+    moons: &mut [PlanetDesc],
 ) {
     let request = OrbitRequest {
         star_size,
@@ -179,8 +179,8 @@ pub fn generate_orbital(
     plan_data: &[PlanetFrame],
     star: StarDescription,
     site: AnalysisSite,
-    sys_info: &mut SYSTEM_INFO,
-    world: &PLANET_DESC,
+    sys_info: &mut SystemInfo,
+    world: &PlanetDesc,
     load_planet: impl FnOnce(),
 ) -> bool {
     analyse_orbital(rng, plan_data, star, site, sys_info, world);
@@ -195,35 +195,35 @@ pub fn analyse_orbital(
     plan_data: &[PlanetFrame],
     star: StarDescription,
     site: AnalysisSite,
-    sys_info: &mut SYSTEM_INFO,
-    world: &PLANET_DESC,
+    sys_info: &mut SystemInfo,
+    world: &PlanetDesc,
 ) {
     calc::do_planetary_analysis(rng, plan_data, star, site, sys_info, world);
     let mut spare = blank_node();
 
     let frame = &plan_data[usize::from(world.data_index & !PLANET_SHIELDED)];
     let after_analysis = rng.seed();
-    sys_info.PlanetInfo.ScanSeed[BIOLOGICAL_SCAN] = after_analysis;
+    sys_info.planet_info.scan_seed[BIOLOGICAL_SCAN] = after_analysis;
     surface::generate_life_forms(rng, sys_info, frame, GENERATE_ALL, &mut spare);
     let after_life = rng.seed();
 
-    sys_info.PlanetInfo.ScanSeed[MINERAL_SCAN] = after_life;
+    sys_info.planet_info.scan_seed[MINERAL_SCAN] = after_life;
     surface::generate_mineral_deposits(rng, sys_info, frame, GENERATE_ALL, &mut spare);
 
-    sys_info.PlanetInfo.ScanSeed[ENERGY_SCAN] = after_life;
+    sys_info.planet_info.scan_seed[ENERGY_SCAN] = after_life;
 }
 
-pub(super) fn blank_node() -> NODE_INFO {
-    NODE_INFO::default()
+pub(super) fn blank_node() -> NodeInfo {
+    NodeInfo::default()
 }
 
 /// `GenerateDefault_generateMinerals`.
 pub fn generate_minerals(
     rng: &mut RandomContext,
-    sys_info: &SYSTEM_INFO,
+    sys_info: &SystemInfo,
     frame: &PlanetFrame,
     which_node: u16,
-    info: &mut NODE_INFO,
+    info: &mut NodeInfo,
 ) -> u16 {
     surface::generate_mineral_deposits(rng, sys_info, frame, which_node, info)
 }
@@ -236,10 +236,10 @@ pub fn generate_energy() -> u16 {
 /// `GenerateDefault_generateLife`.
 pub fn generate_life(
     rng: &mut RandomContext,
-    sys_info: &SYSTEM_INFO,
+    sys_info: &SystemInfo,
     frame: &PlanetFrame,
     which_node: u16,
-    info: &mut NODE_INFO,
+    info: &mut NodeInfo,
 ) -> u16 {
     surface::generate_life_forms(rng, sys_info, frame, which_node, info)
 }
@@ -263,9 +263,9 @@ pub fn pickup_life() -> bool {
 /// `GenerateDefault_generateArtifact`: one energy node at a random location.
 pub fn generate_artifact(
     rng: &mut RandomContext,
-    sys_info: &SYSTEM_INFO,
+    sys_info: &SystemInfo,
     which_node: u16,
-    info: &mut NODE_INFO,
+    info: &mut NodeInfo,
 ) -> u16 {
     surface::generate_random_nodes(rng, sys_info, ENERGY_SCAN, 1, 0, which_node, info)
 }
@@ -273,9 +273,9 @@ pub fn generate_artifact(
 /// `GenerateDefault_generateRuins`: the standard spread of city ruins.
 pub fn generate_ruins(
     rng: &mut RandomContext,
-    sys_info: &SYSTEM_INFO,
+    sys_info: &SystemInfo,
     which_node: u16,
-    info: &mut NODE_INFO,
+    info: &mut NodeInfo,
 ) -> u16 {
     surface::generate_random_nodes(
         rng,

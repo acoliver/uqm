@@ -3,7 +3,7 @@
 use super::{
     generate_energy, generate_orbital, generate_planets, pickup_energy, AndrosynthSite, WORLD,
 };
-use crate::c_bindings::global_state::{PlanetFrame, NODE_INFO, PLANET_DESC, SYSTEM_INFO};
+use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
 use crate::math::RandomContext;
 use crate::planet_side::report_adapter::{DiscoveryReportPort, ReportDisposition};
 use crate::planet_side::runtime::AdapterError;
@@ -40,12 +40,12 @@ const OTHER_BODIES: [Body; 3] = [
     Body::Moon { planet: 0, moon: 0 },
 ];
 
-fn orbital(body: Body, energy_mask: u32) -> (Site, SYSTEM_INFO) {
+fn orbital(body: Body, energy_mask: u32) -> (Site, SystemInfo) {
     let mut site = Site::default();
     let mut rng = RandomContext::with_seed(11);
-    let mut sys_info: SYSTEM_INFO = unsafe { std::mem::zeroed() };
-    sys_info.PlanetInfo.ScanRetrieveMask[ENERGY_SCAN] = energy_mask;
-    let mut world: PLANET_DESC = unsafe { std::mem::zeroed() };
+    let mut sys_info: SystemInfo = unsafe { std::mem::zeroed() };
+    sys_info.planet_info.scan_retrieve_mask[ENERGY_SCAN] = energy_mask;
+    let mut world: PlanetDesc = unsafe { std::mem::zeroed() };
     world.radius = 400;
     let plan_data: Vec<PlanetFrame> = vec![unsafe { std::mem::zeroed() }; 128];
     let mut loaded = 0;
@@ -92,18 +92,18 @@ fn the_story_resumes_after_the_ruins_already_visited() {
 #[test]
 fn the_world_has_a_fixed_climate_and_other_bodies_are_left_alone() {
     let (_, info) = orbital(WORLD, 0);
-    let planet = &info.PlanetInfo;
-    assert_eq!(planet.AtmoDensity, 72);
+    let planet = &info.planet_info;
+    assert_eq!(planet.atmo_density, 72);
     assert_eq!(
-        (planet.SurfaceTemperature, planet.Weather, planet.Tectonics),
+        (planet.temperature, planet.weather, planet.tectonics),
         (28, 1, 1)
     );
     for body in OTHER_BODIES {
         let (site, info) = orbital(body, 0);
         assert!(site.stories.is_empty(), "{body:?}");
-        let planet = &info.PlanetInfo;
+        let planet = &info.planet_info;
         assert_ne!(
-            (planet.SurfaceTemperature, planet.Weather, planet.Tectonics),
+            (planet.temperature, planet.weather, planet.tectonics),
             (28, 1, 1),
             "{body:?}"
         );
@@ -114,7 +114,7 @@ fn the_world_has_a_fixed_climate_and_other_bodies_are_left_alone() {
 fn planet_one_is_the_telluric_world() {
     let mut rng = RandomContext::with_seed(5);
     let plan_data: Vec<PlanetFrame> = vec![unsafe { std::mem::zeroed() }; 128];
-    let mut planets: Vec<PLANET_DESC> = vec![unsafe { std::mem::zeroed() }; 16];
+    let mut planets: Vec<PlanetDesc> = vec![unsafe { std::mem::zeroed() }; 16];
     // A frame table of zeros has the C layout drawn from the same RNG.
     let drawn = generate_planets(&mut rng, &plan_data, 0, 2, &mut planets);
     assert!(drawn >= 2, "the layout always has a planet 1 to place");
@@ -127,11 +127,11 @@ fn planet_one_is_the_telluric_world() {
 
 #[test]
 fn only_planet_one_has_ruins() {
-    let mut info: SYSTEM_INFO = unsafe { std::mem::zeroed() };
-    info.PlanetInfo.ScanSeed = [1, 2, 3];
+    let mut info: SystemInfo = unsafe { std::mem::zeroed() };
+    info.planet_info.scan_seed = [1, 2, 3];
     let count = |body| {
         let mut rng = RandomContext::with_seed(7);
-        let mut node: NODE_INFO = unsafe { std::mem::zeroed() };
+        let mut node: NodeInfo = unsafe { std::mem::zeroed() };
         generate_energy(&mut rng, &info, body, !0, &mut node)
     };
     assert_eq!(count(WORLD), 16);
@@ -142,37 +142,37 @@ fn only_planet_one_has_ruins() {
 
 #[test]
 fn a_new_ruin_is_marked_and_reported_and_a_visited_one_is_not() {
-    let mut info = unsafe { std::mem::zeroed::<SYSTEM_INFO>() }.PlanetInfo;
+    let mut info = unsafe { std::mem::zeroed::<SystemInfo>() }.planet_info;
     let mut story = FakeStory::default();
     let mut report = FakeReport::default();
 
     assert!(!pickup_energy(WORLD, 3, &mut info, &mut story, &mut report));
-    assert_eq!(info.ScanRetrieveMask[ENERGY_SCAN], 1 << 19);
+    assert_eq!(info.scan_retrieve_mask[ENERGY_SCAN], 1 << 19);
     assert_eq!(story.flag("PLANETARY_CHANGE"), 1);
     assert_eq!(report.0, [ReportDisposition::Cycle]);
 
     // The same ruin again changes nothing.
     story.set_flag("PLANETARY_CHANGE", 0);
     assert!(!pickup_energy(WORLD, 3, &mut info, &mut story, &mut report));
-    assert_eq!(info.ScanRetrieveMask[ENERGY_SCAN], 1 << 19);
+    assert_eq!(info.scan_retrieve_mask[ENERGY_SCAN], 1 << 19);
     assert_eq!(story.flag("PLANETARY_CHANGE"), 0);
     assert_eq!(report.0.len(), 1);
 
     // The map bit of the node is not the visited bit.
-    info.ScanRetrieveMask[ENERGY_SCAN] = 1 << 3;
+    info.scan_retrieve_mask[ENERGY_SCAN] = 1 << 3;
     assert!(!pickup_energy(WORLD, 3, &mut info, &mut story, &mut report));
-    assert_eq!(info.ScanRetrieveMask[ENERGY_SCAN], (1 << 3) | (1 << 19));
+    assert_eq!(info.scan_retrieve_mask[ENERGY_SCAN], (1 << 3) | (1 << 19));
     assert_eq!(report.0.len(), 2);
 }
 
 #[test]
 fn other_bodies_report_nothing() {
     for body in OTHER_BODIES {
-        let mut info = unsafe { std::mem::zeroed::<SYSTEM_INFO>() }.PlanetInfo;
+        let mut info = unsafe { std::mem::zeroed::<SystemInfo>() }.planet_info;
         let mut story = FakeStory::default();
         let mut report = FakeReport::default();
         assert!(!pickup_energy(body, 0, &mut info, &mut story, &mut report));
-        assert_eq!(info.ScanRetrieveMask[ENERGY_SCAN], 0);
+        assert_eq!(info.scan_retrieve_mask[ENERGY_SCAN], 0);
         assert!(report.0.is_empty());
         assert_eq!(story.flag("PLANETARY_CHANGE"), 0);
     }
@@ -181,7 +181,7 @@ fn other_bodies_report_nothing() {
 #[test]
 #[should_panic(expected = "has no visited bit")]
 fn a_ruin_past_the_sixteenth_is_a_broken_invariant() {
-    let mut info = unsafe { std::mem::zeroed::<SYSTEM_INFO>() }.PlanetInfo;
+    let mut info = unsafe { std::mem::zeroed::<SystemInfo>() }.planet_info;
     let mut story = FakeStory::default();
     let mut report = FakeReport::default();
     pickup_energy(WORLD, 16, &mut info, &mut story, &mut report);

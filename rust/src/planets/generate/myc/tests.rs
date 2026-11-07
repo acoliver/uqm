@@ -1,6 +1,7 @@
 //! The Mycon systems' story gating, guard conversations and pickups against
 //! recording fakes.
 
+use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -11,7 +12,6 @@ use super::{
 use crate::battle::gendef::{
     EGG_CASE0_DEFINED, EGG_CASE1_DEFINED, EGG_CASE2_DEFINED, MYCON_DEFINED, SUN_DEVICE_DEFINED,
 };
-use crate::c_bindings::global_state::{PlanetFrame, NODE_INFO, PLANET_DESC, SYSTEM_INFO};
 use crate::comm::dispatch::{CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY};
 use crate::math::RandomContext;
 use crate::planet_side::report_adapter::{DiscoveryReportPort, ReportDisposition};
@@ -157,13 +157,13 @@ impl MyconSite for Site {
 }
 
 fn nodes(star_index: u8, body: Body, story: &FakeStory, strings_loaded: bool) -> u16 {
-    let mut info: SYSTEM_INFO = unsafe { std::mem::zeroed() };
-    info.PlanetInfo.ScanSeed = [1, 2, 3];
+    let mut info: SystemInfo = unsafe { std::mem::zeroed() };
+    info.planet_info.scan_seed = [1, 2, 3];
     if strings_loaded {
-        info.PlanetInfo.DiscoveryString = std::ptr::NonNull::dangling().as_ptr();
+        info.planet_info.discovery_string = std::ptr::NonNull::dangling().as_ptr();
     }
     let mut rng = RandomContext::with_seed(7);
-    let mut node: NODE_INFO = unsafe { std::mem::zeroed() };
+    let mut node: NodeInfo = unsafe { std::mem::zeroed() };
     generate_energy(&mut rng, &info, star_index, body, !0, &mut node, story)
 }
 
@@ -371,11 +371,11 @@ fn visit(
     configure(&mut site);
 
     let mut rng = RandomContext::with_seed(11);
-    let mut sys_info: SYSTEM_INFO = unsafe { std::mem::zeroed() };
+    let mut sys_info: SystemInfo = unsafe { std::mem::zeroed() };
     if energy_retrieved {
-        sys_info.PlanetInfo.ScanRetrieveMask[ENERGY_SCAN] = 1;
+        sys_info.planet_info.scan_retrieve_mask[ENERGY_SCAN] = 1;
     }
-    let mut world: PLANET_DESC = unsafe { std::mem::zeroed() };
+    let mut world: PlanetDesc = unsafe { std::mem::zeroed() };
     world.radius = 400;
     let plan_data: Vec<PlanetFrame> = vec![unsafe { std::mem::zeroed() }; 128];
     let mut orbit = Orbit {
@@ -581,14 +581,14 @@ fn other_worlds_go_straight_to_the_default_orbital() {
 fn planet_zero_is_a_shattered_world_with_at_most_two_moons() {
     let mut rng = RandomContext::with_seed(5);
     let plan_data: Vec<PlanetFrame> = vec![unsafe { std::mem::zeroed() }; 128];
-    let mut planets: Vec<PLANET_DESC> = vec![unsafe { std::mem::zeroed() }; 16];
+    let mut planets: Vec<PlanetDesc> = vec![unsafe { std::mem::zeroed() }; 16];
     generate_planets(&mut rng, &plan_data, 0, 2, &mut planets);
     assert_eq!(planets[0].data_index, SHATTERED_WORLD);
     assert_eq!(
         i32::from(planets[0].radius),
         i32::from(EARTH_RADIUS) * 80 / 100
     );
-    assert!(planets[0].NumPlanets <= 2);
+    assert!(planets[0].num_planets <= 2);
 }
 
 #[test]

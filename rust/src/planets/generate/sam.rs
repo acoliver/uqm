@@ -1,7 +1,8 @@
 //! Sa-Matra's guards, moon and final encounter, ported from `gensam.c`.
 
 use crate::battle::battle_types::{arctan, cosine, sine};
-use crate::c_bindings::global_state::{PlanetFrame, IP_GROUP, PLANET_DESC, POINT};
+use crate::c_bindings::global_state::{IP_GROUP, POINT};
+use crate::engine::world::planet::{PlanetDesc, PlanetFrame};
 use crate::math::RandomContext;
 use crate::planets::generate::default::{self, FLEE, IGNORE_FLAGSHIP, REFORM_GROUP};
 use crate::planets::generate::home_contact::HomeContactSite;
@@ -148,10 +149,10 @@ pub fn generate_planets(
     table: &[PlanetFrame],
     size: u8,
     color: u8,
-    planets: &mut [PLANET_DESC],
+    planets: &mut [PlanetDesc],
 ) -> u8 {
     special::planets_then(rng, table, size, color, planets, |planets| {
-        planets[4].NumPlanets = 1
+        planets[4].num_planets = 1
     })
 }
 
@@ -161,7 +162,7 @@ pub fn generate_moons(
     color: u8,
     planet: u8,
     count: u8,
-    moons: &mut [PLANET_DESC],
+    moons: &mut [PlanetDesc],
 ) {
     default::generate_moons(rng, size, color, count, moons);
     if planet == 4 {

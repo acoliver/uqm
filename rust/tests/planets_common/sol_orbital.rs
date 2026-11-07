@@ -4,7 +4,7 @@
 
 use super::sol::{self, Layout};
 use std::fmt::Write as _;
-use uqm_rust::c_bindings::global_state::{PlanetFrame, PLANET_DESC, SYSTEM_INFO};
+use uqm_rust::engine::world::planet::{PlanetDesc, PlanetFrame, SystemInfo};
 use uqm_rust::math::RandomContext;
 use uqm_rust::planets::generate::calc::{AnalysisSite, StarDescription};
 use uqm_rust::planets::generate::sol::orbital;
@@ -17,10 +17,10 @@ pub struct Case {
 }
 
 pub trait Ops {
-    fn orbital(&mut self, case: Case) -> (bool, SYSTEM_INFO, u32);
+    fn orbital(&mut self, case: Case) -> (bool, SystemInfo, u32);
 }
 
-pub fn input(case: Case) -> (PLANET_DESC, Option<PLANET_DESC>) {
+pub fn input(case: Case) -> (PlanetDesc, Option<PlanetDesc>) {
     let mut planets = unsafe { std::mem::zeroed() };
     uqm_rust::planets::generate::sol::generate_planets(
         &mut RandomContext::with_seed(91),
@@ -45,15 +45,15 @@ pub fn input(case: Case) -> (PLANET_DESC, Option<PLANET_DESC>) {
     (world, parent)
 }
 
-pub fn initial_info(seed: u32) -> SYSTEM_INFO {
+pub fn initial_info(seed: u32) -> SystemInfo {
     let mut info = sol::scan_info(seed);
-    info.StarSize = 83;
-    info.StarIntensity = 89;
-    info.StarEnergy = 97;
-    info.PlanetInfo.Tectonics = 101;
-    info.PlanetInfo.Weather = 103;
-    info.PlanetInfo.LifeChance = -107;
-    info.PlanetInfo.PlanetToSunDist = 109;
+    info.star_size = 83;
+    info.star_intensity = 89;
+    info.star_energy = 97;
+    info.planet_info.tectonics = 101;
+    info.planet_info.weather = 103;
+    info.planet_info.life_chance = -107;
+    info.planet_info.planet_to_sun_dist = 109;
     info
 }
 
@@ -76,11 +76,11 @@ pub fn render(ops: &mut impl Ops, table: &[PlanetFrame]) -> String {
                         let (result, mut info, rng) = ops.orbital(case);
                         let index = table
                             .iter()
-                            .position(|frame| std::ptr::eq(frame, info.PlanetInfo.PlanDataPtr))
+                            .position(|frame| std::ptr::eq(frame, info.planet_info.plan_data_ptr))
                             .expect("analysis frame belongs to the live table");
                         // Only the address varies by process; all other fields,
                         // including all handles, masks and seeds, are retained.
-                        info.PlanetInfo.PlanDataPtr = std::ptr::null();
+                        info.planet_info.plan_data_ptr = std::ptr::null();
                         let (desc, parent) = input(case);
                         writeln!(out, "{case:?} input={desc:?} parent={parent:?} => {result} frame={index} rng={rng} {info:?}").unwrap();
                     }
@@ -88,13 +88,13 @@ pub fn render(ops: &mut impl Ops, table: &[PlanetFrame]) -> String {
             }
         }
     }
-    out
+    super::record_labels::captured_labels(out)
 }
 
 pub struct Rust<'a>(pub &'a [PlanetFrame]);
 
 impl Ops for Rust<'_> {
-    fn orbital(&mut self, case: Case) -> (bool, SYSTEM_INFO, u32) {
+    fn orbital(&mut self, case: Case) -> (bool, SystemInfo, u32) {
         let (world, parent) = input(case);
         let mut info = initial_info(case.layout.seed);
         let mut rng = RandomContext::with_seed(0xabcdef01);

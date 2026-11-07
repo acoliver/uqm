@@ -4,8 +4,9 @@
 //! borrows end before LoadPlanet, which can reenter the generators and RNG.
 
 use crate::battle::gendef::UTWIG_DEFINED;
-use crate::c_bindings::global_state::{NODE_INFO, PLANET_DESC, SOLARSYS_STATE};
+use crate::c_bindings::global_state::SOLARSYS_STATE;
 use crate::comm::dispatch::{conv, ship};
+use crate::engine::world::planet::{NodeInfo, PlanetDesc};
 use crate::planets::c_api;
 use crate::planets::ffi::{blank_node, current_star_type, node_or, sys_gen_rng};
 use crate::planets::generate::consts::star_color;
@@ -196,12 +197,12 @@ unsafe extern "C" fn spa_planets(system: *mut SOLARSYS_STATE) -> bool {
 
 macro_rules! moons_hook {
     ($name:ident, $generate:path) => {
-        unsafe extern "C" fn $name(system: *mut SOLARSYS_STATE, planet: *mut PLANET_DESC) -> bool {
+        unsafe extern "C" fn $name(system: *mut SOLARSYS_STATE, planet: *mut PlanetDesc) -> bool {
             let body = body_of(system, planet);
             let Body::Planet(index) = body else {
                 unreachable!("generateMoons receives a planet");
             };
-            let count = (*planet).NumPlanets;
+            let count = (*planet).num_planets;
             let size = (*system).SunDesc[0].data_index;
             $generate(
                 sys_gen_rng(),
@@ -223,7 +224,7 @@ moons_hook!(spa_moons, spa::generate_moons);
 unsafe fn analyse_default(
     owner: &std::cell::RefCell<&mut crate::engine::battle::Cx<'_>>,
     system: *mut SOLARSYS_STATE,
-    world: *mut PLANET_DESC,
+    world: *mut PlanetDesc,
 ) {
     orbit_world(owner, system, world, |orbit, _| {
         orbit.analyse();
@@ -233,7 +234,7 @@ unsafe fn analyse_default(
 unsafe fn utw_orbital(
     cx: &mut crate::engine::battle::Cx<'_>,
     system: *mut SOLARSYS_STATE,
-    world: *mut PLANET_DESC,
+    world: *mut PlanetDesc,
 ) -> bool {
     let owner = std::cell::RefCell::new(cx);
     let owner = &owner;
@@ -259,15 +260,15 @@ unsafe fn utw_orbital(
         .borrow_mut()
         .with_legacy(|| c_api::load_planet_default_surface());
     if star == UTWIG_DEFINED && body == Body::Planet(0) {
-        (*system).SysInfo.PlanetInfo.Weather = 1;
-        (*system).SysInfo.PlanetInfo.Tectonics = 1;
+        (*system).SysInfo.planet_info.weather = 1;
+        (*system).SysInfo.planet_info.tectonics = 1;
     }
     true
 }
 unsafe fn myc_orbital(
     cx: &mut crate::engine::battle::Cx<'_>,
     system: *mut SOLARSYS_STATE,
-    world: *mut PLANET_DESC,
+    world: *mut PlanetDesc,
 ) -> bool {
     let owner = std::cell::RefCell::new(cx);
     let owner = &owner;
@@ -285,7 +286,7 @@ unsafe fn myc_orbital(
         star,
         &mut story,
         &mut home(owner, system, ship::MYCON_SHIP, conv::MYCON),
-        || (*system).SysInfo.PlanetInfo.ScanRetrieveMask[ENERGY_SCAN] & 1 != 0,
+        || (*system).SysInfo.planet_info.scan_retrieve_mask[ENERGY_SCAN] & 1 != 0,
     ) {
         return true;
     }
@@ -298,7 +299,7 @@ unsafe fn myc_orbital(
 unsafe fn vux_orbital(
     cx: &mut crate::engine::battle::Cx<'_>,
     system: *mut SOLARSYS_STATE,
-    world: *mut PLANET_DESC,
+    world: *mut PlanetDesc,
 ) -> bool {
     let owner = std::cell::RefCell::new(cx);
     let owner = &owner;
@@ -324,15 +325,15 @@ unsafe fn vux_orbital(
         .borrow_mut()
         .with_legacy(|| c_api::load_planet_default_surface());
     if body == Body::Planet(0) {
-        (*system).SysInfo.PlanetInfo.Weather = 2;
-        (*system).SysInfo.PlanetInfo.Tectonics = 0;
+        (*system).SysInfo.planet_info.weather = 2;
+        (*system).SysInfo.planet_info.tectonics = 0;
     }
     true
 }
 unsafe fn sam_orbital(
     cx: &mut crate::engine::battle::Cx<'_>,
     system: *mut SOLARSYS_STATE,
-    world: *mut PLANET_DESC,
+    world: *mut PlanetDesc,
 ) -> bool {
     let owner = std::cell::RefCell::new(cx);
     let owner = &owner;
@@ -353,7 +354,7 @@ unsafe fn sam_orbital(
 unsafe fn spa_orbital(
     cx: &mut crate::engine::battle::Cx<'_>,
     system: *mut SOLARSYS_STATE,
-    world: *mut PLANET_DESC,
+    world: *mut PlanetDesc,
 ) -> bool {
     let owner = std::cell::RefCell::new(cx);
     let owner = &owner;
@@ -384,9 +385,9 @@ macro_rules! story_energy {
     ($name:ident, $generate:path) => {
         unsafe extern "C" fn $name(
             system: *const SOLARSYS_STATE,
-            world: *const PLANET_DESC,
+            world: *const PlanetDesc,
             which: u16,
-            info: *mut NODE_INFO,
+            info: *mut NodeInfo,
         ) -> u16 {
             let mut spare = blank_node();
             $generate(
@@ -406,9 +407,9 @@ story_energy!(myc_energy, myc::generate_energy);
 story_energy!(vux_energy, vux::generate_energy);
 unsafe extern "C" fn spa_energy(
     system: *const SOLARSYS_STATE,
-    world: *const PLANET_DESC,
+    world: *const PlanetDesc,
     which: u16,
-    info: *mut NODE_INFO,
+    info: *mut NodeInfo,
 ) -> u16 {
     let mut spare = blank_node();
     spa::generate_energy(
@@ -422,24 +423,24 @@ unsafe extern "C" fn spa_energy(
 }
 unsafe extern "C" fn myc_life(
     _system: *const SOLARSYS_STATE,
-    _world: *const PLANET_DESC,
+    _world: *const PlanetDesc,
     _which: u16,
-    _info: *mut NODE_INFO,
+    _info: *mut NodeInfo,
 ) -> u16 {
     myc::generate_life()
 }
 unsafe extern "C" fn vux_life(
     system: *const SOLARSYS_STATE,
-    world: *const PLANET_DESC,
+    world: *const PlanetDesc,
     which: u16,
-    info: *mut NODE_INFO,
+    info: *mut NodeInfo,
 ) -> u16 {
     let mut spare = blank_node();
     vux::generate_life(
         sys_gen_rng(),
         &(*system).SysInfo,
         // SAFETY: the caller supplies an analysed system whose frame table remains live.
-        unsafe { &*(*system).SysInfo.PlanetInfo.PlanDataPtr },
+        unsafe { &*(*system).SysInfo.planet_info.plan_data_ptr },
         c_api::current_star_index(),
         body_of(system, world),
         which,
@@ -448,9 +449,9 @@ unsafe extern "C" fn vux_life(
 }
 unsafe extern "C" fn spa_life(
     system: *const SOLARSYS_STATE,
-    world: *const PLANET_DESC,
+    world: *const PlanetDesc,
     which: u16,
-    info: *mut NODE_INFO,
+    info: *mut NodeInfo,
 ) -> u16 {
     let mut spare = blank_node();
     spa::generate_life(
@@ -465,7 +466,7 @@ macro_rules! story_pickup {
     ($name:ident, $generate:path) => {
         unsafe extern "C" fn $name(
             system: *mut SOLARSYS_STATE,
-            world: *mut PLANET_DESC,
+            world: *mut PlanetDesc,
             which: u16,
         ) -> bool {
             $generate(
@@ -485,7 +486,7 @@ story_pickup!(vux_pickup, vux::pickup_energy);
 story_pickup!(vux_pickup_life, vux::pickup_life);
 unsafe extern "C" fn spa_pickup(
     system: *mut SOLARSYS_STATE,
-    world: *mut PLANET_DESC,
+    world: *mut PlanetDesc,
     which: u16,
 ) -> bool {
     spa::pickup_energy(
@@ -498,12 +499,12 @@ unsafe extern "C" fn spa_pickup(
 }
 unsafe extern "C" fn spa_pickup_life(
     system: *mut SOLARSYS_STATE,
-    world: *mut PLANET_DESC,
+    world: *mut PlanetDesc,
     _which: u16,
 ) -> bool {
     spa::pickup_life(
         body_of(system, world),
-        (*system).SysInfo.PlanetInfo.ScanRetrieveMask[BIOLOGICAL_SCAN],
+        (*system).SysInfo.planet_info.scan_retrieve_mask[BIOLOGICAL_SCAN],
         &mut LiveStory,
     )
 }

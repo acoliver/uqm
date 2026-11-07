@@ -63,7 +63,7 @@ pub fn check(h: &mut Harness) {
         );
         let system = &raw mut *h.state;
         let world = &raw mut (*system).PlanetDesc[2];
-        (*world).pPrevDesc = &raw mut (*system).SunDesc[0];
+        (*world).prev_desc = &raw mut (*system).SunDesc[0];
         (*world).data_index = 42 | 128;
         (*world).rand_seed = 104729;
         (*world).location.x = 100;
@@ -147,7 +147,7 @@ unsafe fn names(h: &mut Harness) {
     let system = &raw mut *h.state;
     for (index, expected) in [(0, "Mercury"), (2, "Earth"), (8, "Pluto")] {
         let parent = &raw mut (*system).PlanetDesc[index];
-        (*parent).pPrevDesc = &raw mut (*system).SunDesc[0];
+        (*parent).prev_desc = &raw mut (*system).SunDesc[0];
         (*parent).data_index = index as u8 + 128;
         assert!(GENERATE_SOL_FUNCTIONS.generate_name.unwrap()(
             system, parent
@@ -165,7 +165,7 @@ unsafe fn names(h: &mut Harness) {
             index as u32 + 128
         );
         let moon = &raw mut (*system).MoonDesc[1];
-        (*moon).pPrevDesc = parent;
+        (*moon).prev_desc = parent;
         (*moon).data_index = 27;
         assert!(GENERATE_SOL_FUNCTIONS.generate_name.unwrap()(system, moon));
         let name = uqm_rust::engine::WorldData::current().read(|world| world.flagship.planet_name);
@@ -188,7 +188,7 @@ unsafe fn names(h: &mut Harness) {
     uqm_rust::engine::Kernel::current().write(|kernel| kernel.game_strings = saved);
     // Reuse the production discovery-table cleanup boundary for this captured
     // table after restoring the global that borrowed it.
-    (*system).SysInfo.PlanetInfo.DiscoveryString = strings.cast();
+    (*system).SysInfo.planet_info.discovery_string = strings.cast();
     c_api::FreePlanet();
     c_api::TFB_FlushGraphicsEx(1);
     println!("Sol name ABI: real game strings, parent names and parent battle frames for planets and moons");
@@ -204,14 +204,14 @@ unsafe fn scenes(h: &mut Harness) {
         h.set_star(0, 0);
         let system = &raw mut *h.state;
         let planet = &raw mut (*system).PlanetDesc[if pluto { 8 } else { 2 }];
-        (*planet).pPrevDesc = &raw mut (*system).SunDesc[0];
+        (*planet).prev_desc = &raw mut (*system).SunDesc[0];
         (*planet).radius = 100;
         (*planet).data_index = if pluto { 22 } else { 42 | 128 };
         let world = if pluto {
             planet
         } else {
             let moon = &raw mut (*system).MoonDesc[1];
-            (*moon).pPrevDesc = planet;
+            (*moon).prev_desc = planet;
             (*moon).radius = 35;
             (*moon).data_index = 27;
             moon
@@ -230,19 +230,19 @@ unsafe fn scenes(h: &mut Harness) {
                 GENERATE_SOL_FUNCTIONS.generate_orbital.unwrap()(cx, system, world)
             })
         });
-        let info = &(*system).SysInfo.PlanetInfo;
-        assert!(!info.LanderFont.is_null());
-        assert!(!info.LanderFontEff.is_null());
-        assert!(!info.DiscoveryString.is_null());
+        let info = &(*system).SysInfo.planet_info;
+        assert!(!info.lander_font.is_null());
+        assert!(!info.lander_font_eff.is_null());
+        assert!(!info.discovery_string.is_null());
         assert!(!(*system).PlanetSideFrame[1].is_null());
-        assert_eq!(info.PlanetDensity, if pluto { 33 } else { 60 });
+        assert_eq!(info.planet_density, if pluto { 33 } else { 60 });
         c_api::FreePlanet();
         c_api::TFB_FlushGraphicsEx(1);
-        let info = &(*system).SysInfo.PlanetInfo;
+        let info = &(*system).SysInfo.planet_info;
         assert!(
-            info.LanderFont.is_null()
-                && info.LanderFontEff.is_null()
-                && info.DiscoveryString.is_null()
+            info.lander_font.is_null()
+                && info.lander_font_eff.is_null()
+                && info.discovery_string.is_null()
         );
         assert!((*system)
             .PlanetSideFrame

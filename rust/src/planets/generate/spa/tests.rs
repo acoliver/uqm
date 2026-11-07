@@ -55,7 +55,7 @@ fn moon_contact_shield_broadcaster_and_abort_matrix() {
                                 );
                             }
                             assert_eq!(rng, 104729);
-                            assert_eq!(info.PlanetInfo.ScanSeed, [101, 202, 303]);
+                            assert_eq!(info.planet_info.scan_seed, [101, 202, 303]);
                         } else {
                             if body == MOON && taken == 0 {
                                 expected.push(format!("broadcasters:{}", shielded == 0));
@@ -63,21 +63,21 @@ fn moon_contact_shield_broadcaster_and_abort_matrix() {
                             expected.push("planet".into());
                             if body == WORLD || body == MOON {
                                 assert_eq!(
-                                    (info.PlanetInfo.Weather, info.PlanetInfo.Tectonics),
+                                    (info.planet_info.weather, info.planet_info.tectonics),
                                     (0, 0)
                                 );
                                 assert_eq!(
-                                    info.PlanetInfo.SurfaceTemperature,
+                                    info.planet_info.temperature,
                                     if body == WORLD { 31 } else { 28 }
                                 );
                             }
                             if body == WORLD {
-                                assert_eq!(info.PlanetInfo.PlanetRadius, 120);
+                                assert_eq!(info.planet_info.planet_radius, 120);
                                 assert_eq!(
-                                    info.PlanetInfo.SurfaceGravity,
-                                    calc::calc_gravity(&info.PlanetInfo)
+                                    info.planet_info.gravity,
+                                    calc::calc_gravity(&info.planet_info)
                                 );
-                                assert_eq!(info.PlanetInfo.ScanSeed[1], 202);
+                                assert_eq!(info.planet_info.scan_seed[1], 202);
                             }
                         }
                         assert_eq!(*calls.borrow(), expected);
@@ -99,7 +99,7 @@ fn world_scan_order_preserves_energy_and_matches_direct_analysis() {
             orbit.sys_info,
             orbit.world,
         );
-        orbit.sys_info.PlanetInfo.ScanSeed[MINERAL_SCAN] = orbit.rng.seed();
+        orbit.sys_info.planet_info.scan_seed[MINERAL_SCAN] = orbit.rng.seed();
         let mut node = unsafe { std::mem::zeroed() };
         surface::generate_mineral_deposits(
             orbit.rng,
@@ -110,12 +110,12 @@ fn world_scan_order_preserves_energy_and_matches_direct_analysis() {
             !0,
             &mut node,
         );
-        orbit.sys_info.PlanetInfo.ScanSeed[BIOLOGICAL_SCAN] = orbit.rng.seed();
-        orbit.sys_info.PlanetInfo.PlanetRadius = 120;
-        orbit.sys_info.PlanetInfo.SurfaceGravity = calc::calc_gravity(&orbit.sys_info.PlanetInfo);
-        orbit.sys_info.PlanetInfo.SurfaceTemperature = 31;
-        orbit.sys_info.PlanetInfo.Weather = 0;
-        orbit.sys_info.PlanetInfo.Tectonics = 0;
+        orbit.sys_info.planet_info.scan_seed[BIOLOGICAL_SCAN] = orbit.rng.seed();
+        orbit.sys_info.planet_info.planet_radius = 120;
+        orbit.sys_info.planet_info.gravity = calc::calc_gravity(&orbit.sys_info.planet_info);
+        orbit.sys_info.planet_info.temperature = 31;
+        orbit.sys_info.planet_info.weather = 0;
+        orbit.sys_info.planet_info.tectonics = 0;
     });
     let (actual, actual_seed) = with_orbit(|orbit| {
         generate_orbital(

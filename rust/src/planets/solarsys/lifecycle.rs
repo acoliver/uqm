@@ -3,6 +3,7 @@
 use super::drawing::*;
 use super::flight::*;
 use super::*;
+use crate::engine::world::planet::{PlanetDesc, SystemInfo};
 use crate::engine::{battle::Cx, observe::Io, Kernel, StoryKey, World, WorldData};
 
 use crate::battle::gendef::getGenerateFunctions;
@@ -151,7 +152,7 @@ fn saved_point(point: c::POINT) -> CPoint {
     }
 }
 
-pub(super) unsafe fn generate_moons(system: *mut c::SOLARSYS_STATE, planet: *mut c::PLANET_DESC) {
+pub(super) unsafe fn generate_moons(system: *mut c::SOLARSYS_STATE, planet: *mut PlanetDesc) {
     (*SysGenRNG).reseed((*planet).rand_seed);
     ((*(*system).genFuncs).generateName.unwrap())(system, planet);
     ((*(*system).genFuncs).generateMoons.unwrap())(system, planet);
@@ -160,8 +161,8 @@ pub(super) unsafe fn generate_moons(system: *mut c::SOLARSYS_STATE, planet: *mut
     let _facing = (((u32::from(angle) + 2) >> 2) & 15) as c::COUNT;
     for i in 0..(*system).MoonDesc.len() {
         let moon = (*system).MoonDesc.as_mut_ptr().add(i);
-        (*moon).pPrevDesc = planet;
-        if i >= usize::from((*planet).NumPlanets) {
+        (*moon).prev_desc = planet;
+        if i >= usize::from((*planet).num_planets) {
             continue;
         }
         (*moon).temp_color = (*planet).temp_color;
@@ -185,7 +186,7 @@ pub(super) unsafe fn init_solar_sys_sis_characteristics() {
     }
 }
 
-pub(super) unsafe fn load_solar_sys() -> *mut c::PLANET_DESC {
+pub(super) unsafe fn load_solar_sys() -> *mut PlanetDesc {
     const TEMP_COLORS: [c::Color; 5] = [
         rgb15(0x00, 0x00, 0x0e),
         rgb15(0x00, 0x06, 0x08),
@@ -203,7 +204,7 @@ pub(super) unsafe fn load_solar_sys() -> *mut c::PLANET_DESC {
     SUN_FRAME = SetAbsFrameIndex(SUN_FRAME.cast(), u16::from(sun_type)).cast();
 
     let sun = (*state).SunDesc.as_mut_ptr();
-    (*sun).pPrevDesc = ptr::null_mut();
+    (*sun).prev_desc = ptr::null_mut();
     (*sun).rand_seed = (*SysGenRNG).next_random();
     (*sun).data_index = sun_type;
     (*sun).location = c::POINT { x: 0, y: 0 };
@@ -218,15 +219,15 @@ pub(super) unsafe fn load_solar_sys() -> *mut c::PLANET_DESC {
 
     for i in 0..(*state).PlanetDesc.len() {
         let planet = (*state).PlanetDesc.as_mut_ptr().add(i);
-        (*planet).pPrevDesc = sun;
+        (*planet).prev_desc = sun;
         (*planet).image.origin = (*planet).location;
-        if i >= usize::from((*sun).NumPlanets) {
+        if i >= usize::from((*sun).num_planets) {
             (*planet).image.frame = ptr::null_mut();
         } else {
             // The Rust analysis implementation borrows the whole SYSTEM_INFO.
-            let mut info: c::SYSTEM_INFO = std::mem::zeroed();
+            let mut info: SystemInfo = std::mem::zeroed();
             do_planetary_analysis_c(ptr::addr_of_mut!(info), planet);
-            let temperature = info.PlanetInfo.SurfaceTemperature;
+            let temperature = info.planet_info.temperature;
             let mut index = ((i32::from(temperature) + 250) / 100) as c::COUNT;
             if usize::from(index) >= TEMP_COLORS.len() {
                 index = (TEMP_COLORS.len() - 1) as c::COUNT;
@@ -256,7 +257,7 @@ pub(super) unsafe fn load_solar_sys() -> *mut c::PLANET_DESC {
     if glob().read(|owner| owner.game.in_orbit) != 0 {
         let i = usize::from(glob().read(|owner| owner.game.in_orbit) - 1);
         orbital = if i == 0 {
-            (*(*state).pBaseDesc).pPrevDesc
+            (*(*state).pBaseDesc).prev_desc
         } else {
             (*state).MoonDesc.as_mut_ptr().add(i - 1)
         };
@@ -494,10 +495,10 @@ pub(super) unsafe fn end_interplanetary() {
     });
 }
 
-pub(super) unsafe fn closest_planet_interplanetary(point: *const c::POINT) -> *mut c::PLANET_DESC {
+pub(super) unsafe fn closest_planet_interplanetary(point: *const c::POINT) -> *mut PlanetDesc {
     let state = system();
     assert!(!state.is_null());
-    let num_planets = (*state).SunDesc[0].NumPlanets;
+    let num_planets = (*state).SunDesc[0].num_planets;
     let mut best_distance_squared = u32::MAX;
     let mut best_planet = ptr::null_mut();
     for i in 0..usize::from(num_planets) {

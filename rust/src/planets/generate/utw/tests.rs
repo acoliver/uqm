@@ -1,6 +1,7 @@
 //! The Utwig systems' story gating, guard conversations and pickup against
 //! recording fakes.
 
+use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -9,7 +10,7 @@ use super::{
     BOMB_MOON, BOMB_TALK_FLAGS, HOME, HOME_TALK_FLAGS,
 };
 use crate::battle::gendef::{BOMB_DEFINED, UTWIG_DEFINED};
-use crate::c_bindings::global_state::{PlanetFrame, IP_GROUP, NODE_INFO, PLANET_DESC, SYSTEM_INFO};
+use crate::c_bindings::global_state::IP_GROUP;
 use crate::comm::dispatch::{CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY};
 use crate::math::RandomContext;
 use crate::planet_side::report_adapter::{DiscoveryReportPort, ReportDisposition};
@@ -218,10 +219,10 @@ impl Npcs for Site {
 }
 
 fn nodes(star_index: u8, body: Body, story: &FakeStory) -> u16 {
-    let mut info: SYSTEM_INFO = unsafe { std::mem::zeroed() };
-    info.PlanetInfo.ScanSeed = [1, 2, 3];
+    let mut info: SystemInfo = unsafe { std::mem::zeroed() };
+    info.planet_info.scan_seed = [1, 2, 3];
     let mut rng = RandomContext::with_seed(7);
-    let mut node: NODE_INFO = unsafe { std::mem::zeroed() };
+    let mut node: NodeInfo = unsafe { std::mem::zeroed() };
     generate_energy(&mut rng, &info, star_index, body, !0, &mut node, story)
 }
 
@@ -449,8 +450,8 @@ fn visit(
     configure(&mut site);
 
     let mut rng = RandomContext::with_seed(11);
-    let mut sys_info: SYSTEM_INFO = unsafe { std::mem::zeroed() };
-    let mut world: PLANET_DESC = unsafe { std::mem::zeroed() };
+    let mut sys_info: SystemInfo = unsafe { std::mem::zeroed() };
+    let mut world: PlanetDesc = unsafe { std::mem::zeroed() };
     world.radius = 400;
     let plan_data: Vec<PlanetFrame> = vec![unsafe { std::mem::zeroed() }; 128];
     let mut orbit = Orbit {
@@ -477,8 +478,8 @@ fn visit(
         || loaded.borrow_mut().push(Call::LoadPlanet)
     ));
     let climate = (
-        orbit.sys_info.PlanetInfo.Weather,
-        orbit.sys_info.PlanetInfo.Tectonics,
+        orbit.sys_info.planet_info.weather,
+        orbit.sys_info.planet_info.tectonics,
     );
     (calls.take(), story, climate)
 }
@@ -666,10 +667,10 @@ fn other_worlds_go_straight_to_the_default_orbital() {
     }
 }
 
-fn layout(star_index: u8) -> Vec<PLANET_DESC> {
+fn layout(star_index: u8) -> Vec<PlanetDesc> {
     let mut rng = RandomContext::with_seed(5);
     let plan_data: Vec<PlanetFrame> = vec![unsafe { std::mem::zeroed() }; 128];
-    let mut planets: Vec<PLANET_DESC> = vec![unsafe { std::mem::zeroed() }; 16];
+    let mut planets: Vec<PlanetDesc> = vec![unsafe { std::mem::zeroed() }; 16];
     generate_planets(&mut rng, &plan_data, 0, 2, &mut planets, star_index);
     planets
 }
@@ -678,7 +679,7 @@ fn layout(star_index: u8) -> Vec<PLANET_DESC> {
 fn the_utwig_home_is_a_water_world_and_the_bomb_system_is_untouched() {
     let home = layout(UTWIG_DEFINED);
     assert_eq!(home[0].data_index, WATER_WORLD);
-    assert_eq!(home[0].NumPlanets, 1);
+    assert_eq!(home[0].num_planets, 1);
     assert_eq!(
         i32::from(home[0].radius),
         i32::from(EARTH_RADIUS) * 174 / 100
@@ -688,8 +689,8 @@ fn the_utwig_home_is_a_water_world_and_the_bomb_system_is_untouched() {
     let other = layout(0);
     for (a, b) in bomb.iter().zip(&other) {
         assert_eq!(
-            (a.data_index, a.radius, a.rand_seed, a.NumPlanets),
-            (b.data_index, b.radius, b.rand_seed, b.NumPlanets)
+            (a.data_index, a.radius, a.rand_seed, a.num_planets),
+            (b.data_index, b.radius, b.rand_seed, b.num_planets)
         );
         assert_eq!((a.location.x, a.location.y), (b.location.x, b.location.y));
     }

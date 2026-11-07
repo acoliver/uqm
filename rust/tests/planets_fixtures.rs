@@ -5,6 +5,9 @@
 //! permanent parity proof. `planets_parity` replays them through the exported
 //! C symbols.
 
+use uqm_rust::engine::world::planet::{
+    ElementEntry, NodeInfo, PlanetDesc, PlanetFrame, SystemInfo,
+};
 mod planets_common;
 
 use planets_common::default_gen::{
@@ -15,9 +18,6 @@ use planets_common::topography::{TopoCase, Topography};
 use planets_common::{
     collect, orbit_cases, orbit_line, render_fixture, star_type_byte, world_cases, world_line,
     Generators, OrbitCase, Records, WorldCase, PRESET_LIFE,
-};
-use uqm_rust::c_bindings::global_state::{
-    PlanetFrame, ELEMENT_ENTRY, NODE_INFO, PLANET_DESC, SYSTEM_INFO,
 };
 use uqm_rust::math::RandomContext;
 use uqm_rust::planets::topography::delta_topography;
@@ -35,24 +35,24 @@ fn parse_plan_data(text: &str) -> Vec<PlanetFrame> {
     text.lines()
         .map(|line| {
             let fields: Vec<&str> = line.split(' ').collect();
-            let mut elements = [ELEMENT_ENTRY {
-                ElementType: 0,
-                Density: 0,
+            let mut elements = [ElementEntry {
+                element_type: 0,
+                density: 0,
             }; 8];
             for (slot, pair) in fields[3..11].iter().enumerate() {
                 let (kind, density) = pair.split_once(':').expect("element pair");
-                elements[slot] = ELEMENT_ENTRY {
-                    ElementType: kind.parse().expect("element type"),
-                    Density: density.parse().expect("element density"),
+                elements[slot] = ElementEntry {
+                    element_type: kind.parse().expect("element type"),
+                    density: density.parse().expect("element density"),
                 };
             }
             PlanetFrame {
-                Type: fields[0].parse().expect("type"),
-                BaseTectonics: fields[1].parse().expect("tectonics"),
-                AtmoAndDensity: fields[2].parse().expect("atmo"),
-                UsefulElements: elements,
-                CMapInstance: std::ptr::null(),
-                XlatTabInstance: std::ptr::null(),
+                type_: fields[0].parse().expect("type"),
+                base_tectonics: fields[1].parse().expect("tectonics"),
+                atmo_and_density: fields[2].parse().expect("atmo"),
+                useful_elements: elements,
+                cmap_instance: std::ptr::null(),
+                xlat_tab_instance: std::ptr::null(),
                 num_faults: fields[11].parse().expect("faults"),
                 fault_depth: fields[12].parse().expect("depth"),
                 num_blemishes: fields[13].parse().expect("blemishes"),
@@ -170,7 +170,7 @@ impl<'a> RustDefault<'a> {
         }
     }
 
-    fn blank_descs(count: usize) -> Vec<PLANET_DESC> {
+    fn blank_descs(count: usize) -> Vec<PlanetDesc> {
         (0..count).map(|_| unsafe { std::mem::zeroed() }).collect()
     }
 }
@@ -208,9 +208,9 @@ impl DefaultOps for RustDefault<'_> {
     fn nodes(
         &mut self,
         kind: NodeKind,
-        info: &SYSTEM_INFO,
+        info: &SystemInfo,
         which: u16,
-        node: &mut NODE_INFO,
+        node: &mut NodeInfo,
     ) -> (u16, u32) {
         use uqm_rust::planets::generate::default as gen;
 
@@ -253,13 +253,13 @@ impl<'a> RustGenerators<'a> {
 }
 
 impl Generators for RustGenerators<'_> {
-    fn analyze(&mut self, case: &WorldCase) -> SYSTEM_INFO {
+    fn analyze(&mut self, case: &WorldCase) -> SystemInfo {
         use uqm_rust::planets::generate::calc::{
             do_planetary_analysis, AnalysisSite, StarDescription,
         };
 
-        let mut info: SYSTEM_INFO = unsafe { std::mem::zeroed() };
-        let mut desc: PLANET_DESC = unsafe { std::mem::zeroed() };
+        let mut info: SystemInfo = unsafe { std::mem::zeroed() };
+        let mut desc: PlanetDesc = unsafe { std::mem::zeroed() };
         desc.rand_seed = case.rand_seed;
         desc.data_index = case.data_index;
         desc.radius = case.desc_radius;
@@ -280,7 +280,7 @@ impl Generators for RustGenerators<'_> {
         info
     }
 
-    fn minerals(&mut self, info: &SYSTEM_INFO, which: u16, node: &mut NODE_INFO) -> u16 {
+    fn minerals(&mut self, info: &SystemInfo, which: u16, node: &mut NodeInfo) -> u16 {
         uqm_rust::planets::generate::surface::generate_mineral_deposits(
             &mut self.rng,
             info,
@@ -290,7 +290,7 @@ impl Generators for RustGenerators<'_> {
         )
     }
 
-    fn life(&mut self, info: &SYSTEM_INFO, which: u16, node: &mut NODE_INFO) -> u16 {
+    fn life(&mut self, info: &SystemInfo, which: u16, node: &mut NodeInfo) -> u16 {
         uqm_rust::planets::generate::surface::generate_life_forms(
             &mut self.rng,
             info,
@@ -300,7 +300,7 @@ impl Generators for RustGenerators<'_> {
         )
     }
 
-    fn preset_life(&mut self, info: &SYSTEM_INFO, which: u16, node: &mut NODE_INFO) -> u16 {
+    fn preset_life(&mut self, info: &SystemInfo, which: u16, node: &mut NodeInfo) -> u16 {
         let types = &PRESET_LIFE[..PRESET_LIFE.len() - 1];
         uqm_rust::planets::generate::surface::generate_preset_life(
             &mut self.rng,
@@ -311,7 +311,7 @@ impl Generators for RustGenerators<'_> {
         )
     }
 
-    fn random_nodes(&mut self, info: &SYSTEM_INFO, which: u16, node: &mut NODE_INFO) -> u16 {
+    fn random_nodes(&mut self, info: &SystemInfo, which: u16, node: &mut NodeInfo) -> u16 {
         uqm_rust::planets::generate::surface::generate_random_nodes(
             &mut self.rng,
             info,
@@ -323,7 +323,7 @@ impl Generators for RustGenerators<'_> {
         )
     }
 
-    fn fill_orbits(&mut self, case: &OrbitCase, descs: &mut [PLANET_DESC]) -> Option<u8> {
+    fn fill_orbits(&mut self, case: &OrbitCase, descs: &mut [PlanetDesc]) -> Option<u8> {
         use uqm_rust::planets::generate::orbits::{fill_orbits, OrbitRequest};
 
         self.rng.reseed(case.seed);
@@ -366,7 +366,7 @@ mod rust_special {
         AQUA_HELIX_DEFINED, BOMB_DEFINED, EGG_CASE0_DEFINED, MYCON_DEFINED, ORZ_DEFINED,
         SUN_DEVICE_DEFINED, TAALO_PROTECTOR_DEFINED, THRADD_DEFINED, UTWIG_DEFINED,
     };
-    use uqm_rust::c_bindings::global_state::{PlanetFrame, NODE_INFO, PLANET_DESC, SYSTEM_INFO};
+    use uqm_rust::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
     use uqm_rust::math::RandomContext;
     use uqm_rust::planets::generate::consts::star_color;
     use uqm_rust::planets::generate::special::{Body, Story};
@@ -402,7 +402,7 @@ mod rust_special {
     impl SpecialOps for RustSpecial<'_> {
         fn layout(&mut self, system: &str, case: (u8, u8, u32)) -> (Vec<Desc>, u8, u32) {
             let mut rng = RandomContext::with_seed(case.2);
-            let mut planets: Vec<PLANET_DESC> = vec![unsafe { std::mem::zeroed() }; 16];
+            let mut planets: Vec<PlanetDesc> = vec![unsafe { std::mem::zeroed() }; 16];
             let drawn = match system {
                 "colony" => colony::generate_planets(
                     &mut rng,
@@ -491,7 +491,7 @@ mod rust_special {
             case: (u8, u8, u32, u8),
         ) -> (Vec<Desc>, u32) {
             let mut rng = RandomContext::with_seed(case.2);
-            let mut moons: Vec<PLANET_DESC> = vec![unsafe { std::mem::zeroed() }; 4];
+            let mut moons: Vec<PlanetDesc> = vec![unsafe { std::mem::zeroed() }; 4];
             let hook = match system {
                 "syreen" => syreen::generate_moons,
                 "chmmr" => chmmr::generate_moons,
@@ -512,18 +512,18 @@ mod rust_special {
         fn energy(&mut self, system: &str, body: Body, seed: u32) -> String {
             let taken = OneFlag("BURVIXESE_BROADCASTERS", system == "burv1");
             let burv = |rng: &mut RandomContext,
-                        info: &SYSTEM_INFO,
+                        info: &SystemInfo,
                         body: Body,
                         which: u16,
-                        node: &mut NODE_INFO| {
+                        node: &mut NodeInfo| {
                 burv::generate_energy(rng, info, body, which, node, &taken)
             };
             let helix = OneFlag("AQUA_HELIX", system == "aqua1");
             let thraddash = |rng: &mut RandomContext,
-                             info: &SYSTEM_INFO,
+                             info: &SystemInfo,
                              body: Body,
                              which: u16,
-                             node: &mut NODE_INFO| {
+                             node: &mut NodeInfo| {
                 let star_index = if system.starts_with("aqua") {
                     AQUA_HELIX_DEFINED
                 } else {
@@ -533,10 +533,10 @@ mod rust_special {
             };
             let bomb = OneFlag("UTWIG_BOMB", system == "bomb1");
             let utwig = |rng: &mut RandomContext,
-                         info: &SYSTEM_INFO,
+                         info: &SystemInfo,
                          body: Body,
                          which: u16,
-                         node: &mut NODE_INFO| {
+                         node: &mut NodeInfo| {
                 let star_index = if system == "utw" {
                     UTWIG_DEFINED
                 } else {
@@ -546,10 +546,10 @@ mod rust_special {
             };
             let sun_device = OneFlag("SUN_DEVICE", system == "sun1");
             let mycon = |rng: &mut RandomContext,
-                         info: &SYSTEM_INFO,
+                         info: &SystemInfo,
                          body: Body,
                          which: u16,
-                         node: &mut NODE_INFO| {
+                         node: &mut NodeInfo| {
                 let star_index = match system {
                     "myc" => MYCON_DEFINED,
                     "egg" => EGG_CASE0_DEFINED,
@@ -559,10 +559,10 @@ mod rust_special {
             };
             let device = OneFlag("TAALO_PROTECTOR", system == "taalo1");
             let orz = |rng: &mut RandomContext,
-                       info: &SYSTEM_INFO,
+                       info: &SystemInfo,
                        body: Body,
                        which: u16,
-                       node: &mut NODE_INFO| {
+                       node: &mut NodeInfo| {
                 let star_index = if system == "orz" {
                     ORZ_DEFINED
                 } else {
@@ -570,7 +570,7 @@ mod rust_special {
                 };
                 orz::generate_energy(rng, info, star_index, body, which, node, &device)
             };
-            let hook: &dyn Fn(&mut RandomContext, &SYSTEM_INFO, Body, u16, &mut NODE_INFO) -> u16 =
+            let hook: &dyn Fn(&mut RandomContext, &SystemInfo, Body, u16, &mut NodeInfo) -> u16 =
                 match system {
                     "orz" | "taalo0" | "taalo1" => &orz,
                     "andro" => &andro::generate_energy,
@@ -591,8 +591,8 @@ mod rust_special {
                     "wreck" => &wreck::generate_energy,
                     other => panic!("no such system {other}"),
                 };
-            let mut info: SYSTEM_INFO = unsafe { std::mem::zeroed() };
-            info.PlanetInfo.ScanSeed = scan_seeds(seed);
+            let mut info: SystemInfo = unsafe { std::mem::zeroed() };
+            info.planet_info.scan_seed = scan_seeds(seed);
             let mut out = String::new();
             let mut rng = RandomContext::with_seed(seed);
             let mut node = fresh_node();
@@ -630,9 +630,9 @@ fn late_generators_full_fields_match_c_fixtures() {
 }
 
 /// Resolve an analysed fixture record against the table that owns its frame.
-pub fn frame_for<'a>(table: &'a [PlanetFrame], info: &SYSTEM_INFO) -> &'a PlanetFrame {
+pub fn frame_for<'a>(table: &'a [PlanetFrame], info: &SystemInfo) -> &'a PlanetFrame {
     table
         .iter()
-        .find(|frame| std::ptr::eq(*frame, info.PlanetInfo.PlanDataPtr))
+        .find(|frame| std::ptr::eq(*frame, info.planet_info.plan_data_ptr))
         .unwrap_or_else(|| panic!("analysis frame belongs to the fixture table"))
 }

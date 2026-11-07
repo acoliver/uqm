@@ -2,23 +2,23 @@
 
 use super::{Harness, SysGenRNG};
 use crate::planets_common::sol::{self, Layout, Ops, Scan};
-use uqm_rust::c_bindings::global_state::{NODE_INFO, PLANET_DESC, SYSTEM_INFO};
+use uqm_rust::engine::world::planet::{NodeInfo, PlanetDesc, SystemInfo};
 pub(super) use uqm_rust::planets::generate::sol_exports::GENERATE_SOL_FUNCTIONS as generateSolFunctions;
 use uqm_rust::planets::generate::special::Body;
 use uqm_rust::state::game_state_keys::get_game_state;
 
 impl Ops for Harness {
-    fn planets(&mut self, case: Layout, descs: &mut [PLANET_DESC; 16]) -> (bool, u8, u32) {
+    fn planets(&mut self, case: Layout, descs: &mut [PlanetDesc; 16]) -> (bool, u8, u32) {
         self.set_star(case.size, case.color);
         self.state.PlanetDesc = *descs;
-        self.state.SunDesc[0].NumPlanets = 0x7f;
+        self.state.SunDesc[0].num_planets = 0x7f;
         self.seed(case.seed);
         let mut expected = *self.state;
         let result =
             unsafe { generateSolFunctions.generate_planets.unwrap()(&raw mut *self.state) };
         *descs = self.state.PlanetDesc;
         expected.PlanetDesc = *descs;
-        expected.SunDesc[0].NumPlanets = self.state.SunDesc[0].NumPlanets;
+        expected.SunDesc[0].num_planets = self.state.SunDesc[0].num_planets;
         assert_eq!(
             format!("{:?}", self.state),
             format!("{expected:?}"),
@@ -26,7 +26,7 @@ impl Ops for Harness {
         );
         (
             result,
-            self.state.SunDesc[0].NumPlanets,
+            self.state.SunDesc[0].num_planets,
             self.rng_position(),
         )
     }
@@ -36,19 +36,19 @@ impl Ops for Harness {
         case: Layout,
         planet: u8,
         count: u8,
-        descs: &mut [PLANET_DESC; 4],
+        descs: &mut [PlanetDesc; 4],
     ) -> (bool, u32) {
         self.set_star(case.size, case.color);
         self.state.MoonDesc = *descs;
         self.state.PlanetDesc = unsafe { std::mem::zeroed() };
-        self.state.PlanetDesc[usize::from(planet)].NumPlanets = count;
+        self.state.PlanetDesc[usize::from(planet)].num_planets = count;
         self.seed(case.seed);
         // Derive both C arguments and the parent link from one raw root. No
         // covering Rust mutable reference is created while C uses the links.
         let system = &raw mut *self.state;
         let (mut expected, result) = unsafe {
             let parent = &raw mut (*system).PlanetDesc[usize::from(planet)];
-            (*parent).pPrevDesc = &raw mut (*system).SunDesc[0];
+            (*parent).prev_desc = &raw mut (*system).SunDesc[0];
             let expected = *system;
             (
                 expected,
@@ -65,7 +65,7 @@ impl Ops for Harness {
         (result, self.rng_position())
     }
 
-    fn scan(&mut self, case: Scan, info: &SYSTEM_INFO, node: &mut NODE_INFO) -> (u16, u32) {
+    fn scan(&mut self, case: Scan, info: &SystemInfo, node: &mut NodeInfo) -> (u16, u32) {
         self.set_star(0, 0);
         uqm_rust::engine::World::current().write(|world| {
             (world).set_story_state(
@@ -87,12 +87,12 @@ impl Ops for Harness {
             let sun = &raw mut (*system).SunDesc[0];
             match case.body {
                 Body::Planet(p) => {
-                    (*system).PlanetDesc[usize::from(p)].pPrevDesc = sun;
+                    (*system).PlanetDesc[usize::from(p)].prev_desc = sun;
                     &raw const (*system).PlanetDesc[usize::from(p)]
                 }
                 Body::Moon { planet, moon } => {
-                    (*system).PlanetDesc[usize::from(planet)].pPrevDesc = sun;
-                    (*system).MoonDesc[usize::from(moon)].pPrevDesc =
+                    (*system).PlanetDesc[usize::from(planet)].prev_desc = sun;
+                    (*system).MoonDesc[usize::from(moon)].prev_desc =
                         &raw mut (*system).PlanetDesc[usize::from(planet)];
                     &raw const (*system).MoonDesc[usize::from(moon)]
                 }
@@ -142,7 +142,7 @@ impl Ops for Harness {
     }
 }
 
-pub fn check(table: &[uqm_rust::c_bindings::global_state::PlanetFrame]) {
+pub fn check(table: &[uqm_rust::engine::world::planet::PlanetFrame]) {
     let mut c = Harness::new();
     let layout = sol::render_layout(&mut c);
     let scans = sol::render_scans(&mut c);

@@ -263,7 +263,7 @@ pub(crate) mod live {
     /// the graphics resources and generation context must be initialized on the game thread.
     pub unsafe fn generate_planet_surface(
         pulsing_shield: bool,
-        planet: *mut c::PLANET_DESC,
+        planet: *mut crate::engine::world::planet::PlanetDesc,
         mut definition: *mut c::FRAME_DESC,
     ) {
         let system = solar_system::current();
@@ -277,9 +277,9 @@ pub(crate) mod live {
         let previous_context = SetContext(context);
         init_orbit(width);
         let orbit = addr_of_mut!((*system).Orbit);
-        let info = addr_of_mut!((*system).SysInfo.PlanetInfo);
+        let info = addr_of_mut!((*system).SysInfo.planet_info);
         let data = crate::planets::tables::PLANET_ARRAY.0[usize::from((*planet).data_index & !128)];
-        let algo = data.Type & 12;
+        let algo = data.type_ & 12;
         if !definition.is_null() {
             definition = SetAbsFrameIndex(definition.cast(), 0).cast();
             let resized = i32::from((*definition).Bounds.width) != width as i32
@@ -361,12 +361,12 @@ pub(crate) mod live {
             }
             (*system).TopoFrame = frame(2, width, 75, 1);
             (*system).OrbitalCMap =
-                CaptureStringTable(LoadStringTableInstance(data.CMapInstance)).cast();
+                CaptureStringTable(LoadStringTableInstance(data.cmap_instance)).cast();
             (*system).XlatRef =
-                CaptureStringTable(LoadStringTableInstance(data.XlatTabInstance)).cast();
-            let index = if (*info).SurfaceTemperature > 100 {
+                CaptureStringTable(LoadStringTableInstance(data.xlat_tab_instance)).cast();
+            let index = if (*info).temperature > 100 {
                 2
-            } else if (*info).SurfaceTemperature > -40 {
+            } else if (*info).temperature > -40 {
                 1
             } else {
                 0
@@ -380,7 +380,7 @@ pub(crate) mod live {
             render_system_topography(system, (*system).TopoFrame, depth, width as i32, 75)
                 .expect("render planet topography");
         }
-        if !shielded && (*info).AtmoDensity != 65535 {
+        if !shielded && (*info).atmo_density != 65535 {
             let depth = std::slice::from_raw_parts((*orbit).lpTopoData, width * 75);
             let scaled = SCALER
                 .lock()
@@ -422,20 +422,20 @@ pub(crate) mod live {
             depth.fill(0);
         }
         let desc = (*system).pOrbitalDesc;
-        let loc = if (*desc).pPrevDesc == addr_of_mut!((*system).SunDesc[0]) {
+        let loc = if (*desc).prev_desc == addr_of_mut!((*system).SunDesc[0]) {
             (*desc).location
         } else {
-            (*(*desc).pPrevDesc).location
+            (*(*desc).prev_desc).location
         };
         sphere::generate_sphere_mask(Point::new(loc.x, loc.y), &mut *addr_of_mut!(LIGHT_DIFF));
         sphere::create_sphere_tilt_map(
-            i32::from((*info).AxialTilt),
+            i32::from((*info).axial_tilt),
             &mut *addr_of_mut!(MAP_ROTATE),
         );
         if shielded {
             (*orbit).ObjectFrame = create_shield();
         }
-        let direction = 1 - 2 * (i32::from((*info).AxialTilt) & 1);
+        let direction = 1 - 2 * (i32::from((*info).axial_tilt) & 1);
         init_sphere_rotation(pulsing_shield, direction, u32::from(shielded));
         if shielded {
             let old = SetContextFGFrame((*system).TopoFrame.cast());
