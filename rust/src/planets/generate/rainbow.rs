@@ -4,6 +4,7 @@
 //! Overridden: `generatePlanets`, `generateOrbital`. Story flags:
 //! `RAINBOW_WORLD0` (8 bits), `RAINBOW_WORLD1` (2 bits).
 
+use crate::engine::StoryKey;
 use crate::battle::battle_types::{FULL_CIRCLE, QUADRANT};
 use crate::engine::world::planet::{PlanetDesc, PlanetFrame};
 use crate::math::RandomContext;
@@ -56,10 +57,10 @@ pub fn generate_orbital(
     load_planet: impl FnOnce(),
 ) -> bool {
     if body == Body::Planet(0) {
-        let mask = (story.flag("RAINBOW_WORLD0") | story.flag("RAINBOW_WORLD1") << 8) as u16
+        let mask = (story.flag(StoryKey::RAINBOW_WORLD0) | story.flag(StoryKey::RAINBOW_WORLD1) << 8) as u16
             | 1 << which_rainbow;
-        story.set_flag("RAINBOW_WORLD0", u32::from(mask & 0xFF));
-        story.set_flag("RAINBOW_WORLD1", u32::from(mask >> 8));
+        story.set_flag(StoryKey::RAINBOW_WORLD0, u32::from(mask & 0xFF));
+        story.set_flag(StoryKey::RAINBOW_WORLD1, u32::from(mask >> 8));
     }
     orbit.default_orbital(load_planet)
 }

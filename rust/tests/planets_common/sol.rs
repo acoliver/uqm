@@ -1,5 +1,6 @@
 //! Complete descriptor buffers and guarded scans for the retained Sol C vtable.
 
+use uqm::engine::StoryKey;
 use std::fmt::Write as _;
 use uqm_rust::engine::world::planet::{NodeInfo, PlanetDesc, SystemInfo};
 
@@ -161,8 +162,8 @@ struct ScanStory(bool, bool);
 impl Story for ScanStory {
     fn flag(&self, key: &'static str) -> u32 {
         match key {
-            "FOUND_PLUTO_SPATHI" => u32::from(self.0),
-            "MOONBASE_DESTROYED" => u32::from(self.1),
+            StoryKey::FOUND_PLUTO_SPATHI => u32::from(self.0),
+            StoryKey::MOONBASE_DESTROYED => u32::from(self.1),
             _ => unreachable!("Sol scans read only their two flags"),
         }
     }

@@ -1,6 +1,7 @@
 //! Story gating and host effects of `GenerateChmmr_generateOrbital`, checked
 //! against a recording site and a fake game state, and unleashed or sealed.
 
+use crate::engine::StoryKey;
 use std::collections::HashMap;
 
 use super::{enter_orbit, ChmmrSite, CHMMR_CONTACT_FLAGS, ILWRATH_AMBUSH_FLAGS};
@@ -126,7 +127,7 @@ impl ChmmrSite for RecordingSite {
 #[test]
 fn unleashed_chmmr_talk_without_the_bomb_leaves_the_activity_alone() {
     for bomb in [0, 1, 3] {
-        let story = FakeStory::with(&[("CHMMR_UNLEASHED", 1), ("CHMMR_BOMB_STATE", bomb)]);
+        let story = FakeStory::with(&[(StoryKey::CHMMR_UNLEASHED, 1), (StoryKey::CHMMR_BOMB_STATE, bomb)]);
         let mut site = RecordingSite::new(true);
         assert!(enter_orbit(HOME, &story, &mut site));
         assert_eq!(
@@ -143,7 +144,7 @@ fn unleashed_chmmr_talk_without_the_bomb_leaves_the_activity_alone() {
 
 #[test]
 fn unleashed_chmmr_talk_with_the_bomb_delivered_ends_the_interplanetary_visit() {
-    let story = FakeStory::with(&[("CHMMR_UNLEASHED", 1), ("CHMMR_BOMB_STATE", 2)]);
+    let story = FakeStory::with(&[(StoryKey::CHMMR_UNLEASHED, 1), (StoryKey::CHMMR_BOMB_STATE, 2)]);
     let mut site = RecordingSite::new(true);
     assert!(enter_orbit(HOME, &story, &mut site));
     assert_eq!(
@@ -158,7 +159,7 @@ fn unleashed_chmmr_talk_with_the_bomb_delivered_ends_the_interplanetary_visit() 
 
 #[test]
 fn unleashed_chmmr_never_meet_the_ilwrath() {
-    let story = FakeStory::with(&[("CHMMR_UNLEASHED", 1), ("SUN_DEVICE_ON_SHIP", 1)]);
+    let story = FakeStory::with(&[(StoryKey::CHMMR_UNLEASHED, 1), (StoryKey::SUN_DEVICE_ON_SHIP, 1)]);
     let mut site = RecordingSite::new(true);
     assert!(enter_orbit(HOME, &story, &mut site));
     assert!(!site.calls.borrow().contains(&Call::StartSphereTracking));
@@ -179,7 +180,7 @@ fn ambush_prefix() -> Vec<Call> {
 }
 
 fn ambush_story() -> FakeStory {
-    FakeStory::with(&[("SUN_DEVICE_ON_SHIP", 1)])
+    FakeStory::with(&[(StoryKey::SUN_DEVICE_ON_SHIP, 1)])
 }
 
 #[test]
@@ -224,13 +225,13 @@ fn the_ambush_needs_the_sun_device_the_unfooled_ilwrath_and_a_trackable_sphere()
     let cases: [(Flags, bool, bool); 5] = [
         (&[], true, false),
         (
-            &[("SUN_DEVICE_ON_SHIP", 1), ("ILWRATH_DECEIVED", 1)],
+            &[(StoryKey::SUN_DEVICE_ON_SHIP, 1), (StoryKey::ILWRATH_DECEIVED, 1)],
             true,
             false,
         ),
-        (&[("ILWRATH_DECEIVED", 1)], true, false),
-        (&[("SUN_DEVICE_ON_SHIP", 1)], false, false),
-        (&[("SUN_DEVICE_ON_SHIP", 1)], true, true),
+        (&[(StoryKey::ILWRATH_DECEIVED, 1)], true, false),
+        (&[(StoryKey::SUN_DEVICE_ON_SHIP, 1)], false, false),
+        (&[(StoryKey::SUN_DEVICE_ON_SHIP, 1)], true, true),
     ];
     for (flags, tracking, ambushed) in cases {
         let mut site = RecordingSite::new(tracking);
@@ -241,7 +242,7 @@ fn the_ambush_needs_the_sun_device_the_unfooled_ilwrath_and_a_trackable_sphere()
         );
         let tracked = site.calls.borrow().contains(&Call::StartSphereTracking);
         let expect_tracked =
-            flags.contains(&("SUN_DEVICE_ON_SHIP", 1)) && !flags.contains(&("ILWRATH_DECEIVED", 1));
+            flags.contains(&(StoryKey::SUN_DEVICE_ON_SHIP, 1)) && !flags.contains(&(StoryKey::ILWRATH_DECEIVED, 1));
         assert_eq!(tracked, expect_tracked, "{flags:?} tracking {tracking}");
         if !ambushed {
             assert_eq!(site.activity, IN_INTERPLANETARY);
@@ -258,7 +259,7 @@ fn the_starbase_moon_is_a_report_and_nothing_else() {
 
 #[test]
 fn other_worlds_touch_nothing() {
-    let story = FakeStory::with(&[("CHMMR_UNLEASHED", 1), ("SUN_DEVICE_ON_SHIP", 1)]);
+    let story = FakeStory::with(&[(StoryKey::CHMMR_UNLEASHED, 1), (StoryKey::SUN_DEVICE_ON_SHIP, 1)]);
     for body in [
         Body::Planet(0),
         Body::Planet(2),

@@ -1,6 +1,7 @@
 //! The Orz systems' story gating and conversation flow against recording
 //! fakes.
 
+use crate::engine::StoryKey;
 use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -9,7 +10,7 @@ use std::rc::Rc;
 use super::{
     generate_energy, generate_orbital, pickup_energy, OrzSite, ORZ_TALK_FLAGS, TAALO_TALK_FLAGS,
 };
-use crate::battle::gendef::{ORZ_DEFINED, TAALO_PROTECTOR_DEFINED};
+use crate::planets::generate::identities::{ORZ_DEFINED, TAALO_PROTECTOR_DEFINED};
 use crate::comm::dispatch::{CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY};
 use crate::math::RandomContext;
 use crate::planet_side::report_adapter::{DiscoveryReportPort, ReportDisposition};
@@ -62,7 +63,7 @@ fn the_home_has_ruins_and_the_device_one_artifact_until_taken() {
     assert_eq!(nodes(ORZ_DEFINED, WORLD, &fresh), 16);
     assert_eq!(nodes(TAALO_PROTECTOR_DEFINED, DEVICE, &fresh), 1);
 
-    let taken = FakeStory::with(&[("TAALO_PROTECTOR", 1)]);
+    let taken = FakeStory::with(&[(StoryKey::TAALO_PROTECTOR, 1)]);
     assert_eq!(nodes(TAALO_PROTECTOR_DEFINED, DEVICE, &taken), 0);
     assert_eq!(nodes(ORZ_DEFINED, WORLD, &taken), 16);
 }
@@ -98,7 +99,7 @@ fn the_home_ruins_only_cycle_the_report() {
     ));
     assert_eq!(report.0, [ReportDisposition::Cycle]);
     assert_eq!(lander.0, 0);
-    assert_eq!(story.flag("TAALO_PROTECTOR"), 0);
+    assert_eq!(story.flag(StoryKey::TAALO_PROTECTOR), 0);
 }
 
 #[test]
@@ -115,14 +116,14 @@ fn the_device_is_taken_once() {
     ));
     assert_eq!(report.0, [ReportDisposition::Once]);
     assert_eq!(lander.0, 1);
-    assert_eq!(story.flag("TAALO_PROTECTOR"), 1);
-    assert_eq!(story.flag("TAALO_PROTECTOR_ON_SHIP"), 1);
+    assert_eq!(story.flag(StoryKey::TAALO_PROTECTOR), 1);
+    assert_eq!(story.flag(StoryKey::TAALO_PROTECTOR_ON_SHIP), 1);
 }
 
 #[test]
 fn the_device_cannot_be_taken_twice_or_from_another_node() {
     for (taken, node) in [(1, 0), (0, 1)] {
-        let mut story = FakeStory::with(&[("TAALO_PROTECTOR", taken)]);
+        let mut story = FakeStory::with(&[(StoryKey::TAALO_PROTECTOR, taken)]);
         let (mut report, mut lander) = (FakeReport::default(), FakeLander::default());
         let attempt = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             pickup_energy(
@@ -271,7 +272,7 @@ impl HomeContactSite for Site {
         }
         self.built = self.survivors_after_talk;
         if self.unprotect_on_talk {
-            self.story.set_flag("TAALO_UNPROTECTED", 1);
+            self.story.set_flag(StoryKey::TAALO_UNPROTECTED, 1);
         }
     }
     fn reinit_built_ship_q(&mut self) {
@@ -393,7 +394,7 @@ fn the_orz_home_talks_with_a_fleet_and_after_a_defeat_repairs_the_border_and_lan
         Call::LoadPlanet,
     ]);
     assert_eq!(calls, expected);
-    assert_eq!(story.flag("TAALO_UNPROTECTED"), 1);
+    assert_eq!(story.flag(StoryKey::TAALO_UNPROTECTED), 1);
 }
 
 #[test]
@@ -406,7 +407,7 @@ fn surviving_orz_at_their_home_end_the_visit() {
     let mut expected = track(contact(ORZ_DEFINED));
     expected.extend(world_restored());
     assert_eq!(calls, expected);
-    assert_eq!(story.flag("TAALO_UNPROTECTED"), 1);
+    assert_eq!(story.flag(StoryKey::TAALO_UNPROTECTED), 1);
 }
 
 #[test]
@@ -445,7 +446,7 @@ fn defended_taalo_fights_the_squadron_and_a_victory_unprotects_it() {
         Call::LoadPlanet,
     ]);
     assert_eq!(calls, expected);
-    assert_eq!(story.flag("TAALO_UNPROTECTED"), 1);
+    assert_eq!(story.flag(StoryKey::TAALO_UNPROTECTED), 1);
 }
 
 #[test]
@@ -457,7 +458,7 @@ fn a_surviving_taalo_squadron_ends_the_visit_and_leaves_taalo_protected() {
     let mut expected = track(contact(TAALO_PROTECTOR_DEFINED));
     expected.extend(world_restored());
     assert_eq!(calls, expected);
-    assert_eq!(story.flag("TAALO_UNPROTECTED"), 0);
+    assert_eq!(story.flag(StoryKey::TAALO_UNPROTECTED), 0);
 }
 
 #[test]
@@ -465,11 +466,11 @@ fn an_unprotected_taalo_is_not_talked_over() {
     let (calls, story) = visit(
         TAALO_PROTECTOR_DEFINED,
         DEVICE,
-        &[("TAALO_UNPROTECTED", 1)],
+        &[(StoryKey::TAALO_UNPROTECTED, 1)],
         |site| site.tracking = true,
     );
     assert_eq!(calls, [Call::LoadTaaloScene, Call::LoadPlanet]);
-    assert_eq!(story.flag("TAALO_UNPROTECTED"), 1);
+    assert_eq!(story.flag(StoryKey::TAALO_UNPROTECTED), 1);
 }
 
 #[test]
@@ -483,7 +484,7 @@ fn without_sphere_tracking_the_scene_is_loaded_before_the_default_orbital() {
             Call::LoadPlanet
         ]
     );
-    assert_eq!(story.flag("TAALO_UNPROTECTED"), 1);
+    assert_eq!(story.flag(StoryKey::TAALO_UNPROTECTED), 1);
 
     let (calls, story) = visit(TAALO_PROTECTOR_DEFINED, DEVICE, &[], |_| {});
     assert_eq!(
@@ -494,7 +495,7 @@ fn without_sphere_tracking_the_scene_is_loaded_before_the_default_orbital() {
             Call::LoadPlanet
         ]
     );
-    assert_eq!(story.flag("TAALO_UNPROTECTED"), 1);
+    assert_eq!(story.flag(StoryKey::TAALO_UNPROTECTED), 1);
 }
 
 #[test]
@@ -502,11 +503,11 @@ fn a_taken_device_loads_no_scene_and_changes_no_state() {
     let (calls, story) = visit(
         TAALO_PROTECTOR_DEFINED,
         DEVICE,
-        &[("TAALO_PROTECTOR", 1)],
+        &[(StoryKey::TAALO_PROTECTOR, 1)],
         |site| site.tracking = true,
     );
     assert_eq!(calls, [Call::LoadPlanet]);
-    assert_eq!(story.flag("TAALO_UNPROTECTED"), 0);
+    assert_eq!(story.flag(StoryKey::TAALO_UNPROTECTED), 0);
 }
 
 #[test]
@@ -518,6 +519,6 @@ fn other_worlds_and_systems_go_straight_to_the_default_orbital() {
     for (star_index, body) in cases {
         let (calls, story) = visit(star_index, body, &[], |site| site.tracking = true);
         assert_eq!(calls, [Call::LoadPlanet], "{star_index} {body:?}");
-        assert_eq!(story.flag("TAALO_UNPROTECTED"), 0);
+        assert_eq!(story.flag(StoryKey::TAALO_UNPROTECTED), 0);
     }
 }

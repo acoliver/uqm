@@ -7,7 +7,8 @@
 //! `pickupEnergy`. Story flags: `TAALO_PROTECTOR`, `TAALO_PROTECTOR_ON_SHIP`,
 //! `TAALO_UNPROTECTED`.
 
-use crate::battle::gendef::{ORZ_DEFINED, TAALO_PROTECTOR_DEFINED};
+use crate::engine::StoryKey;
+use crate::planets::generate::identities::{ORZ_DEFINED, TAALO_PROTECTOR_DEFINED};
 use crate::comm::dispatch::{CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY};
 use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
 use crate::math::RandomContext;
@@ -73,14 +74,14 @@ pub fn generate_orbital(
     let at_home = star_index == ORZ_DEFINED && body == WORLD;
     let at_device = star_index == TAALO_PROTECTOR_DEFINED
         && body == DEVICE_MOON
-        && story.flag("TAALO_PROTECTOR") == 0;
+        && story.flag(StoryKey::TAALO_PROTECTOR) == 0;
     if at_home || at_device {
-        let guarded = star_index == ORZ_DEFINED || story.flag("TAALO_UNPROTECTED") == 0;
+        let guarded = star_index == ORZ_DEFINED || story.flag(StoryKey::TAALO_UNPROTECTED) == 0;
         if guarded && site.start_sphere_tracking() && !meet_orz(star_index, story, site) {
             return true;
         }
 
-        story.set_flag("TAALO_UNPROTECTED", 1);
+        story.set_flag(StoryKey::TAALO_UNPROTECTED, 1);
         if star_index == TAALO_PROTECTOR_DEFINED {
             site.load_taalo_device_scene();
         } else {
@@ -123,7 +124,7 @@ fn meet_orz(star_index: u8, story: &impl Story, site: &mut impl OrzSite) -> bool
     }
 
     let survivors = site.built_ship_count() > 0
-        && (star_index == ORZ_DEFINED || story.flag("TAALO_UNPROTECTED") == 0);
+        && (star_index == ORZ_DEFINED || story.flag(StoryKey::TAALO_UNPROTECTED) == 0);
     site.set_current_activity(activity & !START_INTERPLANETARY);
     site.reinit_built_ship_q();
     site.load_ip_groups();
@@ -146,7 +147,7 @@ pub fn generate_energy(
     story: &impl Story,
 ) -> u16 {
     if star_index == TAALO_PROTECTOR_DEFINED && body == DEVICE_MOON {
-        if story.flag("TAALO_PROTECTOR") != 0 {
+        if story.flag(StoryKey::TAALO_PROTECTOR) != 0 {
             return 0;
         }
         return default::generate_artifact(rng, sys_info, which_node, info);
@@ -169,13 +170,13 @@ pub fn pickup_energy(
 ) -> bool {
     if star_index == TAALO_PROTECTOR_DEFINED && body == DEVICE_MOON {
         assert!(
-            story.flag("TAALO_PROTECTOR") == 0 && which_node == 0,
+            story.flag(StoryKey::TAALO_PROTECTOR) == 0 && which_node == 0,
             "the device is picked up once, from node 0"
         );
         default::lander_report(report);
         lander.lander_takeoff();
-        story.set_flag("TAALO_PROTECTOR", 1);
-        story.set_flag("TAALO_PROTECTOR_ON_SHIP", 1);
+        story.set_flag(StoryKey::TAALO_PROTECTOR, 1);
+        story.set_flag(StoryKey::TAALO_PROTECTOR_ON_SHIP, 1);
         return true;
     }
     if star_index == ORZ_DEFINED && body == WORLD {

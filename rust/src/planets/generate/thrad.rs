@@ -7,7 +7,8 @@
 //! `pickupEnergy`. Story flags: `HELIX_UNPROTECTED`, `THRADD_MISSION`,
 //! `AQUA_HELIX`, `AQUA_HELIX_ON_SHIP`, `HELIX_VISITS`.
 
-use crate::battle::gendef::{AQUA_HELIX_DEFINED, THRADD_DEFINED};
+use crate::engine::StoryKey;
+use crate::planets::generate::identities::{AQUA_HELIX_DEFINED, THRADD_DEFINED};
 use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
 use crate::math::RandomContext;
 use crate::planet_side::report_adapter::DiscoveryReportPort;
@@ -57,8 +58,8 @@ pub fn generate_planets(
 /// 3).
 fn thraddash_defend(star_index: u8, story: &impl Story) -> bool {
     star_index == THRADD_DEFINED
-        || (story.flag("HELIX_UNPROTECTED") == 0
-            && (story.flag("THRADD_MISSION").wrapping_sub(1) as u8) >= 3)
+        || (story.flag(StoryKey::HELIX_UNPROTECTED) == 0
+            && (story.flag(StoryKey::THRADD_MISSION).wrapping_sub(1) as u8) >= 3)
 }
 
 /// `GenerateThraddash_generateOrbital`: at planet 0, a defended system whose
@@ -90,7 +91,7 @@ pub fn generate_orbital(
             site.repair_sis_border();
         }
 
-        if star_index == AQUA_HELIX_DEFINED && story.flag("AQUA_HELIX") == 0 {
+        if star_index == AQUA_HELIX_DEFINED && story.flag(StoryKey::AQUA_HELIX) == 0 {
             site.load_aqua_scene();
         } else if star_index == THRADD_DEFINED {
             site.load_ruins_scene(false);
@@ -115,7 +116,7 @@ pub fn generate_energy(
         return default::generate_ruins(rng, sys_info, which_node, info);
     }
     if star_index == AQUA_HELIX_DEFINED && body == WORLD {
-        if story.flag("AQUA_HELIX") != 0 {
+        if story.flag(StoryKey::AQUA_HELIX) != 0 {
             return 0;
         }
         return default::generate_artifact(rng, sys_info, which_node, info);
@@ -139,15 +140,15 @@ pub fn pickup_energy(
     }
     if star_index == AQUA_HELIX_DEFINED && body == WORLD {
         assert!(
-            story.flag("AQUA_HELIX") == 0 && which_node == 0,
+            story.flag(StoryKey::AQUA_HELIX) == 0 && which_node == 0,
             "the helix is picked up once, from node 0"
         );
         default::lander_report(report);
         lander.lander_takeoff();
-        story.set_flag("HELIX_VISITS", 0);
-        story.set_flag("AQUA_HELIX", 1);
-        story.set_flag("AQUA_HELIX_ON_SHIP", 1);
-        story.set_flag("HELIX_UNPROTECTED", 1);
+        story.set_flag(StoryKey::HELIX_VISITS, 0);
+        story.set_flag(StoryKey::AQUA_HELIX, 1);
+        story.set_flag(StoryKey::AQUA_HELIX_ON_SHIP, 1);
+        story.set_flag(StoryKey::HELIX_UNPROTECTED, 1);
         return true;
     }
     false

@@ -1,5 +1,6 @@
 //! Orbital entry, with system borrows confined to host callbacks.
 
+use crate::engine::StoryKey;
 use super::{PLUTO, STARBASE};
 use crate::comm::dispatch::START_ENCOUNTER;
 use crate::engine::world::planet::{PlanetInfo, SystemInfo};
@@ -180,9 +181,9 @@ pub fn generate_orbital(body: Body, story: &impl Story, host: &mut impl Orbital)
     }
 
     host.with_orbit(|orbit| analyse_orbital(orbit, body));
-    if body == PLUTO && story.flag("FOUND_PLUTO_SPATHI") == 0 {
+    if body == PLUTO && story.flag(StoryKey::FOUND_PLUTO_SPATHI) == 0 {
         host.load_scene(Scene::Pluto);
-    } else if matches!(body, Body::Moon { planet: 2, .. }) && story.flag("MOONBASE_DESTROYED") == 0
+    } else if matches!(body, Body::Moon { planet: 2, .. }) && story.flag(StoryKey::MOONBASE_DESTROYED) == 0
     {
         host.load_scene(Scene::Moonbase);
     }

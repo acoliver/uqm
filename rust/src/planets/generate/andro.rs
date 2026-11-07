@@ -5,6 +5,7 @@
 //! Overridden: `generatePlanets`, `generateOrbital`, `generateEnergy`,
 //! `pickupEnergy`. Story flags: `PLANETARY_CHANGE` (set on pickup).
 
+use crate::engine::StoryKey;
 use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, PlanetInfo, SystemInfo};
 use crate::math::RandomContext;
 use crate::planet_side::report_adapter::DiscoveryReportPort;
@@ -111,7 +112,7 @@ pub fn pickup_energy(
             return false;
         }
         info.scan_retrieve_mask[ENERGY_SCAN] |= 1 << bit;
-        story.set_flag("PLANETARY_CHANGE", 1);
+        story.set_flag(StoryKey::PLANETARY_CHANGE, 1);
         default::lander_report_cycle(report);
     }
     false

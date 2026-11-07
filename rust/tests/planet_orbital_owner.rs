@@ -1,3 +1,4 @@
+use uqm::engine::StoryKey;
 use uqm_rust::engine::Game;
 use uqm_rust::planets::c_api::{built_ship_count, built_ship_queue_has_ships};
 use uqm_rust::planets::generate::special::Story;
@@ -12,10 +13,10 @@ fn orbital_story_and_queue_hosts_share_the_caller_owner() {
                 let owner = std::cell::RefCell::new(cx);
                 let host = &owner;
                 let mut story = &owner;
-                story.set_flag("YEHAT_CIVIL_WAR", 1);
-                assert_eq!(host.flag("YEHAT_CIVIL_WAR"), 1);
-                story.set_word("URQUAN_PROBE_GRPOFFS0", 0x12345678);
-                assert_eq!(host.word("URQUAN_PROBE_GRPOFFS0"), 0x12345678);
+                story.set_flag(StoryKey::YEHAT_CIVIL_WAR, 1);
+                assert_eq!(host.flag(StoryKey::YEHAT_CIVIL_WAR), 1);
+                story.set_word(StoryKey::URQUAN_PROBE_GRPOFFS0, 0x12345678);
+                assert_eq!(host.word(StoryKey::URQUAN_PROBE_GRPOFFS0), 0x12345678);
                 {
                     let mut cx = owner.borrow_mut();
                     let mut groups = cx.world.ip_groups();

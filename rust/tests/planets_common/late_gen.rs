@@ -1,5 +1,6 @@
 //! Full descriptor buffers and guarded node records for the retained C generators.
 
+use uqm::engine::StoryKey;
 use super::{fresh_node, scan_seeds};
 use std::fmt::Write as _;
 use uqm_rust::battle::gendef::{MAIDENS_DEFINED, VUX_BEAST_DEFINED, VUX_DEFINED};
@@ -193,7 +194,7 @@ impl Story for Flags {
     fn flag(&self, name: &'static str) -> u32 {
         assert!(matches!(
             name,
-            "SHOFIXTI_MAIDENS" | "UMGAH_BROADCASTERS" | "SPATHI_SHIELDED_SELVES"
+            StoryKey::SHOFIXTI_MAIDENS | StoryKey::UMGAH_BROADCASTERS | StoryKey::SPATHI_SHIELDED_SELVES
         ));
         u32::from(self.0)
     }

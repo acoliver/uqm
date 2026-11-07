@@ -1,5 +1,6 @@
 //! `genspa.c`: Spathiwa, its moon, the broadcasters and the Evil Ones.
 
+use crate::engine::StoryKey;
 use crate::engine::world::planet::{NodeInfo, PlanetDesc, SystemInfo};
 use crate::math::RandomContext;
 use crate::planet_side::report_adapter::DiscoveryReportPort;
@@ -44,7 +45,7 @@ pub fn generate_planets(
     );
     special::reposition(&mut planets[0], 1150);
     planets[0].data_index = WATER_WORLD;
-    if story.flag("SPATHI_SHIELDED_SELVES") != 0 {
+    if story.flag(StoryKey::SPATHI_SHIELDED_SELVES) != 0 {
         planets[0].data_index |= PLANET_SHIELDED;
     }
     planets[0].num_planets = 1;
@@ -79,8 +80,8 @@ pub fn generate_orbital(
         return true;
     }
     analyse_orbital(orbit, body);
-    if body == MOON && story.flag("UMGAH_BROADCASTERS") == 0 {
-        site.load_broadcasters_scene(story.flag("SPATHI_SHIELDED_SELVES") == 0);
+    if body == MOON && story.flag(StoryKey::UMGAH_BROADCASTERS) == 0 {
+        site.load_broadcasters_scene(story.flag(StoryKey::SPATHI_SHIELDED_SELVES) == 0);
     }
     load_planet();
     true
@@ -88,7 +89,7 @@ pub fn generate_orbital(
 
 /// The moon conversation, before any orbital state or RNG is borrowed.
 pub(super) fn contact(body: Body, story: &impl Story, site: &mut impl SpathiSite) -> bool {
-    if body == MOON && story.flag("SPATHI_SHIELDED_SELVES") == 0 && site.start_sphere_tracking() {
+    if body == MOON && story.flag(StoryKey::SPATHI_SHIELDED_SELVES) == 0 && site.start_sphere_tracking() {
         site.notify_others_all_clear();
         site.save_ip_groups();
         site.reinit_ip_group_q();
@@ -156,7 +157,7 @@ pub fn generate_energy(
     node: &mut NodeInfo,
     story: &impl Story,
 ) -> u16 {
-    if body == MOON && story.flag("UMGAH_BROADCASTERS") == 0 {
+    if body == MOON && story.flag(StoryKey::UMGAH_BROADCASTERS) == 0 {
         return default::generate_artifact(rng, info, which, node);
     }
     0
@@ -193,23 +194,23 @@ pub fn pickup_energy(
     if body != MOON {
         return false;
     }
-    assert!(story.flag("UMGAH_BROADCASTERS") == 0 && which == 0);
+    assert!(story.flag(StoryKey::UMGAH_BROADCASTERS) == 0 && which == 0);
     default::lander_report(report);
     lander.lander_takeoff();
-    story.set_flag("UMGAH_BROADCASTERS", 1);
-    story.set_flag("UMGAH_BROADCASTERS_ON_SHIP", 1);
+    story.set_flag(StoryKey::UMGAH_BROADCASTERS, 1);
+    story.set_flag(StoryKey::UMGAH_BROADCASTERS_ON_SHIP, 1);
     true
 }
 
 pub fn pickup_life(body: Body, retrieved: u32, story: &mut impl Story) -> bool {
     if body == WORLD {
         assert!(
-            story.flag("SPATHI_CREATURES_ELIMINATED") == 0
-                && story.flag("SPATHI_SHIELDED_SELVES") == 0
+            story.flag(StoryKey::SPATHI_CREATURES_ELIMINATED) == 0
+                && story.flag(StoryKey::SPATHI_SHIELDED_SELVES) == 0
         );
-        story.set_flag("SPATHI_CREATURES_EXAMINED", 1);
+        story.set_flag(StoryKey::SPATHI_CREATURES_EXAMINED, 1);
         if retrieved.count_ones() + 1 == u32::from(NUM_EVIL_ONES) {
-            story.set_flag("SPATHI_CREATURES_ELIMINATED", 1);
+            story.set_flag(StoryKey::SPATHI_CREATURES_ELIMINATED, 1);
         }
     }
     true

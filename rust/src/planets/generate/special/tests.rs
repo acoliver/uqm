@@ -1,6 +1,7 @@
 //! Story gating and side effects of the small per-system generators, with a
 //! fake game state, report and sites.
 
+use crate::engine::StoryKey;
 use std::collections::HashMap;
 
 use crate::c_bindings::global_state::IP_GROUP;
@@ -79,13 +80,13 @@ fn vault_pickup_before_the_shuttle_reports_once_and_learns_of_the_vault() {
         &mut report
     ));
     assert_eq!(report.0, [ReportDisposition::Once]);
-    assert_eq!(story.flag("KNOW_SYREEN_VAULT"), 1);
+    assert_eq!(story.flag(StoryKey::KNOW_SYREEN_VAULT), 1);
     assert_eq!(site.takeoffs, 0);
 }
 
 #[test]
 fn vault_pickup_with_the_shuttle_unlocks_the_vault() {
-    let mut story = FakeStory::with(&[("SYREEN_SHUTTLE_ON_SHIP", 1), ("SYREEN_HOME_VISITS", 5)]);
+    let mut story = FakeStory::with(&[(StoryKey::SYREEN_SHUTTLE_ON_SHIP, 1), (StoryKey::SYREEN_HOME_VISITS, 5)]);
     let (mut site, mut report) = (FakeSite::default(), FakeReport::default());
     assert!(!vault::pickup_energy(
         VAULT,
@@ -96,14 +97,14 @@ fn vault_pickup_with_the_shuttle_unlocks_the_vault() {
     ));
     assert_eq!(report.0, [ReportDisposition::Cycle]);
     assert_eq!(site.takeoffs, 1);
-    assert_eq!(story.flag("SHIP_VAULT_UNLOCKED"), 1);
-    assert_eq!(story.flag("SYREEN_SHUTTLE_ON_SHIP"), 0);
-    assert_eq!(story.flag("SYREEN_HOME_VISITS"), 0);
+    assert_eq!(story.flag(StoryKey::SHIP_VAULT_UNLOCKED), 1);
+    assert_eq!(story.flag(StoryKey::SYREEN_SHUTTLE_ON_SHIP), 0);
+    assert_eq!(story.flag(StoryKey::SYREEN_HOME_VISITS), 0);
 }
 
 #[test]
 fn vault_pickup_once_unlocked_only_cycles_the_report() {
-    let mut story = FakeStory::with(&[("SHIP_VAULT_UNLOCKED", 1), ("SYREEN_SHUTTLE_ON_SHIP", 1)]);
+    let mut story = FakeStory::with(&[(StoryKey::SHIP_VAULT_UNLOCKED, 1), (StoryKey::SYREEN_SHUTTLE_ON_SHIP, 1)]);
     let (mut site, mut report) = (FakeSite::default(), FakeReport::default());
     assert!(!vault::pickup_energy(
         VAULT,
@@ -114,7 +115,7 @@ fn vault_pickup_once_unlocked_only_cycles_the_report() {
     ));
     assert_eq!(report.0, [ReportDisposition::Cycle]);
     assert_eq!(site.takeoffs, 0);
-    assert_eq!(story.flag("SYREEN_SHUTTLE_ON_SHIP"), 1);
+    assert_eq!(story.flag(StoryKey::SYREEN_SHUTTLE_ON_SHIP), 1);
 }
 
 #[test]
@@ -145,12 +146,12 @@ fn wreck_pickup_hands_over_the_portal_key_once() {
         &mut report
     ));
     assert_eq!(
-        (story.flag("PORTAL_KEY"), story.flag("PORTAL_KEY_ON_SHIP")),
+        (story.flag(StoryKey::PORTAL_KEY), story.flag(StoryKey::PORTAL_KEY_ON_SHIP)),
         (1, 1)
     );
     assert_eq!(site.takeoffs, 1);
 
-    story.set_flag("PORTAL_KEY_ON_SHIP", 0);
+    story.set_flag(StoryKey::PORTAL_KEY_ON_SHIP, 0);
     assert!(!wreck::pickup_energy(
         wreck_body,
         0,
@@ -159,7 +160,7 @@ fn wreck_pickup_hands_over_the_portal_key_once() {
         &mut report
     ));
     assert_eq!(site.takeoffs, 1, "the key is only given the first time");
-    assert_eq!(story.flag("PORTAL_KEY_ON_SHIP"), 0);
+    assert_eq!(story.flag(StoryKey::PORTAL_KEY_ON_SHIP), 0);
     assert_eq!(
         report.0,
         [ReportDisposition::Cycle, ReportDisposition::Cycle]
@@ -187,13 +188,13 @@ fn yehat_pickup_cycles_the_ruins_report_and_never_takes_the_node() {
 
 #[test]
 fn rainbow_visits_set_one_bit_each_across_both_flag_bytes() {
-    let mut story = FakeStory::with(&[("RAINBOW_WORLD0", 0b0000_0001)]);
-    let mask = |story: &FakeStory| story.flag("RAINBOW_WORLD0") | story.flag("RAINBOW_WORLD1") << 8;
+    let mut story = FakeStory::with(&[(StoryKey::RAINBOW_WORLD0, 0b0000_0001)]);
+    let mask = |story: &FakeStory| story.flag(StoryKey::RAINBOW_WORLD0) | story.flag(StoryKey::RAINBOW_WORLD1) << 8;
     for (which, expected) in [(2u8, 0b101u32), (9, 0b10_0000_0101)] {
-        let (a, b) = (story.flag("RAINBOW_WORLD0"), story.flag("RAINBOW_WORLD1"));
+        let (a, b) = (story.flag(StoryKey::RAINBOW_WORLD0), story.flag(StoryKey::RAINBOW_WORLD1));
         let merged = (a | b << 8) as u16 | 1 << which;
-        story.set_flag("RAINBOW_WORLD0", u32::from(merged & 0xFF));
-        story.set_flag("RAINBOW_WORLD1", u32::from(merged >> 8));
+        story.set_flag(StoryKey::RAINBOW_WORLD0, u32::from(merged & 0xFF));
+        story.set_flag(StoryKey::RAINBOW_WORLD1, u32::from(merged >> 8));
         assert_eq!(mask(&story), expected);
     }
 }
@@ -208,8 +209,8 @@ fn rainbow_ordinal_counts_earlier_rainbow_stars() {
 #[test]
 fn melnorme_posts_pick_their_own_group_reference() {
     use crate::planets::generate::melnorme::{ref_var, MELNORME0_DEFINED};
-    assert_eq!(ref_var(MELNORME0_DEFINED), Some("MELNORME0_GRPOFFS0"));
-    assert_eq!(ref_var(MELNORME0_DEFINED + 8), Some("MELNORME8_GRPOFFS0"));
+    assert_eq!(ref_var(MELNORME0_DEFINED), Some(StoryKey::MELNORME0_GRPOFFS0));
+    assert_eq!(ref_var(MELNORME0_DEFINED + 8), Some(StoryKey::MELNORME8_GRPOFFS0));
     assert_eq!(ref_var(MELNORME0_DEFINED + 9), None);
     assert_eq!(ref_var(MELNORME0_DEFINED - 1), None);
 }
@@ -353,7 +354,7 @@ fn colony_builds_its_group_once_and_parks_it_in_orbit() {
     assert!(colony::init_npcs(&mut (&mut story, &mut host)));
     assert_eq!(host.built_clones, [URQUAN_SHIP]);
     assert_eq!(host.built_reinits, 1);
-    assert_eq!(story.word("COLONY_GRPOFFS0"), 41);
+    assert_eq!(story.word(StoryKey::COLONY_GRPOFFS0), 41);
     assert_eq!(host.group_ref, 41);
     let parked = &host.groups[0];
     assert_eq!(
@@ -366,7 +367,7 @@ fn colony_builds_its_group_once_and_parks_it_in_orbit() {
     );
 
     // A stored reference is reused, and the group is parked again.
-    let mut story = FakeStory::with(&[("COLONY_GRPOFFS0", 7)]);
+    let mut story = FakeStory::with(&[(StoryKey::COLONY_GRPOFFS0, 7)]);
     let mut host = fleet(0);
     host.groups[0].task = 3;
     assert!(colony::init_npcs(&mut (&mut story, &mut host)));
@@ -377,7 +378,7 @@ fn colony_builds_its_group_once_and_parks_it_in_orbit() {
 
 #[test]
 fn colony_without_a_group_in_the_queue_parks_nothing() {
-    let mut story = FakeStory::with(&[("COLONY_GRPOFFS0", 7)]);
+    let mut story = FakeStory::with(&[(StoryKey::COLONY_GRPOFFS0, 7)]);
     let mut host = fleet(0);
     host.groups.clear();
     assert!(colony::init_npcs(&mut (&mut story, &mut host)));
@@ -392,7 +393,7 @@ fn colony_without_a_group_in_the_queue_parks_nothing() {
 #[test]
 fn melnorme_known_post_reuses_or_stores_its_reference() {
     use crate::planets::generate::melnorme::{self, MELNORME0_DEFINED};
-    let mut story = FakeStory::with(&[("MELNORME2_GRPOFFS0", 12)]);
+    let mut story = FakeStory::with(&[(StoryKey::MELNORME2_GRPOFFS0, 12)]);
     let mut host = fleet(0);
     assert!(melnorme::init_npcs(
         MELNORME0_DEFINED + 2,
@@ -407,7 +408,7 @@ fn melnorme_known_post_reuses_or_stores_its_reference() {
         &mut (&mut story, &mut host)
     ));
     assert_eq!(host.built_clones, [MELNORME_SHIP]);
-    assert_eq!(story.word("MELNORME3_GRPOFFS0"), 41);
+    assert_eq!(story.word(StoryKey::MELNORME3_GRPOFFS0), 41);
     assert_eq!(host.group_ref, 41);
 }
 
@@ -436,16 +437,16 @@ fn zoqfotpik_scout_builds_its_group_only_before_the_meeting() {
     let mut host = fleet(0);
     assert!(zfpscout::init_npcs(&mut (&mut story, &mut host)));
     assert_eq!(host.built_clones, [ZOQFOTPIK_SHIP]);
-    assert_eq!(story.word("ZOQFOT_GRPOFFS0"), 41);
+    assert_eq!(story.word(StoryKey::ZOQFOT_GRPOFFS0), 41);
 
-    let mut story = FakeStory::with(&[("ZOQFOT_GRPOFFS0", 8)]);
+    let mut story = FakeStory::with(&[(StoryKey::ZOQFOT_GRPOFFS0, 8)]);
     let mut host = fleet(0);
     assert!(zfpscout::init_npcs(&mut (&mut story, &mut host)));
     assert!(host.built_clones.is_empty());
     assert_eq!(host.group_ref, 8);
 
     // After the meeting the reference is not read at all.
-    let mut story = FakeStory::with(&[("MET_ZOQFOT", 1), ("ZOQFOT_GRPOFFS0", 8)]);
+    let mut story = FakeStory::with(&[(StoryKey::MET_ZOQFOT, 1), (StoryKey::ZOQFOT_GRPOFFS0, 8)]);
     let mut host = fleet(55);
     assert!(zfpscout::init_npcs(&mut (&mut story, &mut host)));
     assert!(host.built_clones.is_empty());
@@ -478,12 +479,12 @@ fn zoqfotpik_scout_flees_only_after_colliding_with_the_flagship() {
 fn owned_story_implements_generator_flags_and_group_words_without_a_live_owner() {
     let mut first = crate::engine::world::story::StoryState::new();
     let second = crate::engine::world::story::StoryState::new();
-    first.set_flag("TAALO_UNPROTECTED", 1);
-    first.set_word("SAMATRA_GRPOFFS0", 0x89abcdef);
-    assert_eq!(first.flag("TAALO_UNPROTECTED"), 1);
-    assert_eq!(second.flag("TAALO_UNPROTECTED"), 0);
-    assert_eq!(first.word("SAMATRA_GRPOFFS0"), 0x89abcdef);
-    assert_eq!(second.word("SAMATRA_GRPOFFS0"), 0);
+    first.set_flag(StoryKey::TAALO_UNPROTECTED, 1);
+    first.set_word(StoryKey::SAMATRA_GRPOFFS0, 0x89abcdef);
+    assert_eq!(first.flag(StoryKey::TAALO_UNPROTECTED), 1);
+    assert_eq!(second.flag(StoryKey::TAALO_UNPROTECTED), 0);
+    assert_eq!(first.word(StoryKey::SAMATRA_GRPOFFS0), 0x89abcdef);
+    assert_eq!(second.word(StoryKey::SAMATRA_GRPOFFS0), 0);
     let start = crate::engine::StoryKey::SAMATRA_GRPOFFS0.start();
     for (byte, expected) in [0xef, 0xcd, 0xab, 0x89].into_iter().enumerate() {
         assert_eq!(

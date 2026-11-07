@@ -8,6 +8,7 @@
 //! `pickupEnergy`. Story flags: `UMGAH_ZOMBIE_BLOBBIES`, `TALKING_PET`,
 //! `PLAYER_HYPNOTIZED`.
 
+use crate::engine::StoryKey;
 use crate::comm::dispatch::{
     CHECK_ABORT, CHECK_LOAD, IN_HYPERSPACE, START_ENCOUNTER, START_INTERPLANETARY,
 };
@@ -99,8 +100,8 @@ pub fn generate_orbital(
     load_planet: impl FnOnce(),
 ) -> bool {
     if body == WORLD
-        && (story.flag("UMGAH_ZOMBIE_BLOBBIES") != 0
-            || story.flag("TALKING_PET") == 0
+        && (story.flag(StoryKey::UMGAH_ZOMBIE_BLOBBIES) != 0
+            || story.flag(StoryKey::TALKING_PET) == 0
             || site.start_sphere_tracking())
     {
         meet(story, site);
@@ -133,7 +134,7 @@ fn meet(story: &impl Story, site: &mut (impl TalkingPetSite + UrquanEncounterSit
         let activity = HomeContactSite::current_activity(site);
         HomeContactSite::set_current_activity(site, activity | START_INTERPLANETARY);
         site.set_global_flags_and_data(TALK_FLAGS);
-        if story.flag("UMGAH_ZOMBIE_BLOBBIES") == 0 {
+        if story.flag(StoryKey::UMGAH_ZOMBIE_BLOBBIES) == 0 {
             site.clone_fleet_into_built_queue();
             site.talk();
         } else {
@@ -152,9 +153,9 @@ fn meet(story: &impl Story, site: &mut (impl TalkingPetSite + UrquanEncounterSit
     let umgah_survivors = site.built_ship_survives();
     HomeContactSite::set_current_activity(site, activity & !START_INTERPLANETARY);
 
-    if story.flag("PLAYER_HYPNOTIZED") != 0 {
+    if story.flag(StoryKey::PLAYER_HYPNOTIZED) != 0 {
         zap_to_urquan_encounter(site);
-    } else if (story.flag("UMGAH_ZOMBIE_BLOBBIES") != 0 && !umgah_survivors)
+    } else if (story.flag(StoryKey::UMGAH_ZOMBIE_BLOBBIES) != 0 && !umgah_survivors)
         || !site.start_sphere_tracking()
     {
         // The zombie fleet was defeated, or the Kohr-Ah have destroyed the

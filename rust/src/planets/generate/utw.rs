@@ -9,7 +9,8 @@
 //! `UTWIG_HAVE_ULTRON`, `BOMB_UNPROTECTED`, `UTWIG_BOMB_ON_SHIP`,
 //! `DRUUGE_MANNER`, `DRUUGE_VISITS`, `DRUUGE_HOME_VISITS`.
 
-use crate::battle::gendef::{BOMB_DEFINED, UTWIG_DEFINED};
+use crate::engine::StoryKey;
+use crate::planets::generate::identities::{BOMB_DEFINED, UTWIG_DEFINED};
 use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
 use crate::math::RandomContext;
 use crate::planet_side::report_adapter::DiscoveryReportPort;
@@ -52,7 +53,7 @@ pub trait UtwigSite: HomeContactSite {
 
 /// The bomb moon is the object of the visit while the bomb is still there.
 fn at_bomb(star_index: u8, body: Body, story: &impl Story) -> bool {
-    star_index == BOMB_DEFINED && body == BOMB_MOON && story.flag("UTWIG_BOMB") == 0
+    star_index == BOMB_DEFINED && body == BOMB_MOON && story.flag(StoryKey::UTWIG_BOMB) == 0
 }
 
 /// `GenerateUtwig_initNpcs`: with the bomb still in place no ships roam the
@@ -61,7 +62,7 @@ pub fn init_npcs<H: Npcs + Story + crate::planets::generate::sol::orbital::Queue
     star_index: u8,
     host: &mut H,
 ) -> bool {
-    if star_index == BOMB_DEFINED && host.flag("UTWIG_BOMB") == 0 {
+    if star_index == BOMB_DEFINED && host.flag(StoryKey::UTWIG_BOMB) == 0 {
         Npcs::reinit_ip_group_q(host);
         assert_eq!(
             crate::planets::generate::sol::orbital::Queues::built_ship_count(host),
@@ -130,7 +131,7 @@ pub(super) fn prepare_orbital(
     let at_home = star_index == UTWIG_DEFINED && body == HOME;
     let bomb = at_bomb(star_index, body, story);
     if at_home || bomb {
-        if (star_index == UTWIG_DEFINED || story.flag("UTWIG_HAVE_ULTRON") == 0)
+        if (star_index == UTWIG_DEFINED || story.flag(StoryKey::UTWIG_HAVE_ULTRON) == 0)
             && site.start_sphere_tracking()
         {
             let flags = if star_index == UTWIG_DEFINED {
@@ -143,14 +144,14 @@ pub(super) fn prepare_orbital(
         }
 
         if star_index == BOMB_DEFINED
-            && story.flag("BOMB_UNPROTECTED") == 0
+            && story.flag(StoryKey::BOMB_UNPROTECTED) == 0
             && site.start_druuge_tracking()
         {
             if !druuge_guard_talk(site) {
                 return true;
             }
             site.repair_sis_border();
-            story.set_flag("BOMB_UNPROTECTED", 1);
+            story.set_flag(StoryKey::BOMB_UNPROTECTED, 1);
         }
 
         site.load_scene(star_index == BOMB_DEFINED);
@@ -203,7 +204,7 @@ pub fn generate_energy(
         return default::generate_ruins(rng, sys_info, which_node, info);
     }
     if star_index == BOMB_DEFINED && body == BOMB_MOON {
-        if story.flag("UTWIG_BOMB") != 0 {
+        if story.flag(StoryKey::UTWIG_BOMB) != 0 {
             return 0;
         }
         return default::generate_artifact(rng, sys_info, which_node, info);
@@ -228,16 +229,16 @@ pub fn pickup_energy(
     }
     if star_index == BOMB_DEFINED && body == BOMB_MOON {
         assert!(
-            story.flag("UTWIG_BOMB") == 0 && which_node == 0,
+            story.flag(StoryKey::UTWIG_BOMB) == 0 && which_node == 0,
             "the bomb is picked up once, from node 0"
         );
         default::lander_report(report);
         lander.lander_takeoff();
-        story.set_flag("UTWIG_BOMB", 1);
-        story.set_flag("UTWIG_BOMB_ON_SHIP", 1);
-        story.set_flag("DRUUGE_MANNER", 1);
-        story.set_flag("DRUUGE_VISITS", 0);
-        story.set_flag("DRUUGE_HOME_VISITS", 0);
+        story.set_flag(StoryKey::UTWIG_BOMB, 1);
+        story.set_flag(StoryKey::UTWIG_BOMB_ON_SHIP, 1);
+        story.set_flag(StoryKey::DRUUGE_MANNER, 1);
+        story.set_flag(StoryKey::DRUUGE_VISITS, 0);
+        story.set_flag(StoryKey::DRUUGE_HOME_VISITS, 0);
         return true;
     }
     false

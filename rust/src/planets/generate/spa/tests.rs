@@ -1,3 +1,4 @@
+use crate::engine::StoryKey;
 use super::*;
 use crate::planets::generate::home_contact::tests::FakeStory;
 use crate::planets::generate::vux::tests::{record, with_orbit, Calls, Pickup, Site};
@@ -16,8 +17,8 @@ fn moon_contact_shield_broadcaster_and_abort_matrix() {
                 for tracking in [false, true] {
                     for status in [0, CHECK_ABORT, CHECK_LOAD, CHECK_ABORT | CHECK_LOAD] {
                         let story = FakeStory::with(&[
-                            ("SPATHI_SHIELDED_SELVES", shielded),
-                            ("UMGAH_BROADCASTERS", taken),
+                            (StoryKey::SPATHI_SHIELDED_SELVES, shielded),
+                            (StoryKey::UMGAH_BROADCASTERS, taken),
                         ]);
                         let mut site = Site {
                             tracking,
@@ -142,16 +143,16 @@ fn last_creature_uses_retrieved_population_not_node_index() {
             let mut story = FakeStory::default();
             assert!(pickup_life(body, mask, &mut story));
             assert_eq!(
-                story.flag("SPATHI_CREATURES_EXAMINED"),
+                story.flag(StoryKey::SPATHI_CREATURES_EXAMINED),
                 u32::from(body == WORLD)
             );
             assert_eq!(
-                story.flag("SPATHI_CREATURES_ELIMINATED"),
+                story.flag(StoryKey::SPATHI_CREATURES_ELIMINATED),
                 u32::from(body == WORLD && count == 31)
             );
         }
     }
-    for flag in ["SPATHI_CREATURES_ELIMINATED", "SPATHI_SHIELDED_SELVES"] {
+    for flag in [StoryKey::SPATHI_CREATURES_ELIMINATED, StoryKey::SPATHI_SHIELDED_SELVES] {
         assert!(std::panic::catch_unwind(|| {
             pickup_life(WORLD, 0, &mut FakeStory::with(&[(flag, 1)]));
         })
@@ -180,8 +181,8 @@ fn broadcaster_pickup_and_invariants() {
                 vec![]
             }
         );
-        assert_eq!(story.flag("UMGAH_BROADCASTERS"), u32::from(result));
-        assert_eq!(story.flag("UMGAH_BROADCASTERS_ON_SHIP"), u32::from(result));
+        assert_eq!(story.flag(StoryKey::UMGAH_BROADCASTERS), u32::from(result));
+        assert_eq!(story.flag(StoryKey::UMGAH_BROADCASTERS_ON_SHIP), u32::from(result));
     }
     for (taken, which) in [(1, 0), (0, 1), (0, u16::MAX)] {
         let calls = Calls::default();
@@ -189,7 +190,7 @@ fn broadcaster_pickup_and_invariants() {
             pickup_energy(
                 MOON,
                 which,
-                &mut FakeStory::with(&[("UMGAH_BROADCASTERS", taken)]),
+                &mut FakeStory::with(&[(StoryKey::UMGAH_BROADCASTERS, taken)]),
                 &mut Pickup(Rc::clone(&calls)),
                 &mut Pickup(Rc::clone(&calls)),
             )

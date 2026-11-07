@@ -1,6 +1,7 @@
 //! The Thraddash systems' story gating, defence and conversation flow against
 //! recording fakes.
 
+use crate::engine::StoryKey;
 use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
@@ -10,7 +11,7 @@ use super::{
     generate_energy, generate_orbital, pickup_energy, thraddash_defend, ThraddashSite,
     HELIX_TALK_FLAGS, THRADD_TALK_FLAGS,
 };
-use crate::battle::gendef::{AQUA_HELIX_DEFINED, THRADD_DEFINED};
+use crate::planets::generate::identities::{AQUA_HELIX_DEFINED, THRADD_DEFINED};
 use crate::comm::dispatch::{CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY};
 use crate::math::RandomContext;
 use crate::planet_side::report_adapter::{DiscoveryReportPort, ReportDisposition};
@@ -56,7 +57,7 @@ fn the_home_has_ruins_and_aqua_helix_one_artifact_until_taken() {
     assert_eq!(nodes(THRADD_DEFINED, WORLD, &fresh), 16);
     assert_eq!(nodes(AQUA_HELIX_DEFINED, WORLD, &fresh), 1);
 
-    let taken = FakeStory::with(&[("AQUA_HELIX", 1)]);
+    let taken = FakeStory::with(&[(StoryKey::AQUA_HELIX, 1)]);
     assert_eq!(nodes(AQUA_HELIX_DEFINED, WORLD, &taken), 0);
     assert_eq!(nodes(THRADD_DEFINED, WORLD, &taken), 16);
 }
@@ -86,12 +87,12 @@ fn the_home_ruins_only_cycle_the_report() {
     ));
     assert_eq!(report.0, [ReportDisposition::Cycle]);
     assert_eq!(lander.0, 0);
-    assert_eq!(story.flag("AQUA_HELIX"), 0);
+    assert_eq!(story.flag(StoryKey::AQUA_HELIX), 0);
 }
 
 #[test]
 fn the_helix_is_taken_once_and_unprotects_the_system() {
-    let mut story = FakeStory::with(&[("HELIX_VISITS", 5)]);
+    let mut story = FakeStory::with(&[(StoryKey::HELIX_VISITS, 5)]);
     let (mut report, mut lander) = (FakeReport::default(), FakeLander::default());
     assert!(pickup_energy(
         AQUA_HELIX_DEFINED,
@@ -104,10 +105,10 @@ fn the_helix_is_taken_once_and_unprotects_the_system() {
     assert_eq!(report.0, [ReportDisposition::Once]);
     assert_eq!(lander.0, 1);
     for (flag, value) in [
-        ("HELIX_VISITS", 0),
-        ("AQUA_HELIX", 1),
-        ("AQUA_HELIX_ON_SHIP", 1),
-        ("HELIX_UNPROTECTED", 1),
+        (StoryKey::HELIX_VISITS, 0),
+        (StoryKey::AQUA_HELIX, 1),
+        (StoryKey::AQUA_HELIX_ON_SHIP, 1),
+        (StoryKey::HELIX_UNPROTECTED, 1),
     ] {
         assert_eq!(story.flag(flag), value, "{flag}");
     }
@@ -116,7 +117,7 @@ fn the_helix_is_taken_once_and_unprotects_the_system() {
 #[test]
 fn the_helix_cannot_be_taken_twice_or_from_another_node() {
     for (taken, node) in [(1, 0), (0, 1)] {
-        let mut story = FakeStory::with(&[("AQUA_HELIX", taken)]);
+        let mut story = FakeStory::with(&[(StoryKey::AQUA_HELIX, taken)]);
         let (mut report, mut lander) = (FakeReport::default(), FakeLander::default());
         let attempt = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             pickup_energy(
@@ -157,7 +158,7 @@ fn other_worlds_pick_up_nothing() {
 #[test]
 fn the_thraddash_defend_their_home_and_helix_until_unprotected_or_on_mission() {
     for mission in 0..8u32 {
-        let story = FakeStory::with(&[("THRADD_MISSION", mission)]);
+        let story = FakeStory::with(&[(StoryKey::THRADD_MISSION, mission)]);
         assert!(thraddash_defend(THRADD_DEFINED, &story));
         let under_way = (1..=3).contains(&mission);
         assert_eq!(
@@ -166,7 +167,7 @@ fn the_thraddash_defend_their_home_and_helix_until_unprotected_or_on_mission() {
             "mission {mission}"
         );
 
-        let unprotected = FakeStory::with(&[("THRADD_MISSION", mission), ("HELIX_UNPROTECTED", 1)]);
+        let unprotected = FakeStory::with(&[(StoryKey::THRADD_MISSION, mission), (StoryKey::HELIX_UNPROTECTED, 1)]);
         assert!(!thraddash_defend(AQUA_HELIX_DEFINED, &unprotected));
         assert!(thraddash_defend(THRADD_DEFINED, &unprotected));
     }
@@ -287,7 +288,7 @@ struct SharedStory {
 
 impl Story for SharedStory {
     fn flag(&self, name: &'static str) -> u32 {
-        if name == "HELIX_UNPROTECTED" {
+        if name == StoryKey::HELIX_UNPROTECTED {
             return u32::from(self.unprotected.get());
         }
         self.others.get(name).copied().unwrap_or(0)
@@ -419,7 +420,7 @@ fn a_conversation_that_unprotects_the_helix_repairs_the_border_and_lands() {
 
 #[test]
 fn an_undefended_helix_is_not_talked_over() {
-    let on_mission = [("THRADD_MISSION", 2)];
+    let on_mission = [(StoryKey::THRADD_MISSION, 2)];
     let calls = visit(AQUA_HELIX_DEFINED, WORLD, &on_mission, |site| {
         site.tracking = true;
     });
@@ -457,7 +458,7 @@ fn without_sphere_tracking_the_scene_is_loaded_before_the_default_orbital() {
 
 #[test]
 fn a_taken_helix_loads_no_scene() {
-    let calls = visit(AQUA_HELIX_DEFINED, WORLD, &[("AQUA_HELIX", 1)], |_| {});
+    let calls = visit(AQUA_HELIX_DEFINED, WORLD, &[(StoryKey::AQUA_HELIX, 1)], |_| {});
     assert_eq!(calls, [Call::StartSphereTracking, Call::LoadPlanet]);
 }
 

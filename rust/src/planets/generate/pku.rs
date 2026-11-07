@@ -5,6 +5,7 @@
 //! Overridden: `generatePlanets`, `generateOrbital`, `generateEnergy`,
 //! `pickupEnergy`. Story flags: `CLEAR_SPINDLE`, `CLEAR_SPINDLE_ON_SHIP`.
 
+use crate::engine::StoryKey;
 use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
 use crate::math::RandomContext;
 use crate::planet_side::report_adapter::DiscoveryReportPort;
@@ -38,7 +39,7 @@ pub fn generate_orbital(
     site: &mut impl HomeContactSite,
     load_planet: impl FnOnce(),
 ) -> bool {
-    if body == Body::Planet(0) && home_contact::enter_orbit(site, story.flag("CLEAR_SPINDLE") != 0)
+    if body == Body::Planet(0) && home_contact::enter_orbit(site, story.flag(StoryKey::CLEAR_SPINDLE) != 0)
     {
         return true;
     }
@@ -74,8 +75,8 @@ pub fn pickup_energy(
             story,
             report,
             lander,
-            "CLEAR_SPINDLE",
-            &["CLEAR_SPINDLE_ON_SHIP"],
+            StoryKey::CLEAR_SPINDLE,
+            &[StoryKey::CLEAR_SPINDLE_ON_SHIP],
         );
     }
     false

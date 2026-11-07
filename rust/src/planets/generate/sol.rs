@@ -2,6 +2,7 @@
 //!
 //! The live ABI adapter is in `sol_exports`.
 
+use crate::engine::StoryKey;
 use crate::engine::world::planet::{NodeInfo, PlanetDesc, SystemInfo};
 #[cfg(test)]
 mod lifecycle_tests;
@@ -39,8 +40,8 @@ const URQUAN_DRONE_SHIP: u8 = 23;
 
 /// Persist the single probe group even after its message has been delivered.
 pub fn init_npcs(host: &mut (impl FleetGroups + Story)) -> bool {
-    special::ensure_fleet(host, "URQUAN_PROBE_GRPOFFS0", URQUAN_DRONE_SHIP);
-    if host.flag("PROBE_MESSAGE_DELIVERED") == 0
+    special::ensure_fleet(host, StoryKey::URQUAN_PROBE_GRPOFFS0, URQUAN_DRONE_SHIP);
+    if host.flag(StoryKey::PROBE_MESSAGE_DELIVERED) == 0
         && host.init_ip_groups()
         && host.head_ip_group(&mut |group| {
             group.task = special::IN_ORBIT;
@@ -60,7 +61,7 @@ pub fn init_npcs(host: &mut (impl FleetGroups + Story)) -> bool {
 /// Restore the queue before checking the collision flag, except when the
 /// completed bomb empties Sol. Only the head probe may be changed.
 pub fn reinit_npcs<H: FleetGroups + orbital::Queues + Story>(host: &mut H) -> bool {
-    if host.flag("CHMMR_BOMB_STATE") == 3 {
+    if host.flag(StoryKey::CHMMR_BOMB_STATE) == 3 {
         host.clear_battle_group_ref();
         default::Npcs::reinit_ip_group_q(host);
         assert_eq!(host.built_ship_count(), 0);
@@ -143,9 +144,9 @@ pub fn generate_name(host: &mut impl PlanetNames, planet: u16, frame: u8) -> boo
 /// `GenerateSol_generateEnergy`. C ignores `whichNode` and changes only the
 /// location, leaving the caller's density and type intact.
 pub fn generate_energy(body: Body, node: Option<&mut NodeInfo>, story: &impl Story) -> u16 {
-    let location = if body == PLUTO && story.flag("FOUND_PLUTO_SPATHI") == 0 {
+    let location = if body == PLUTO && story.flag(StoryKey::FOUND_PLUTO_SPATHI) == 0 {
         Some((20, MAP_HEIGHT - 8))
-    } else if body == LUNA && story.flag("MOONBASE_DESTROYED") == 0 {
+    } else if body == LUNA && story.flag(StoryKey::MOONBASE_DESTROYED) == 0 {
         Some((MAP_WIDTH * 3 / 4, MAP_HEIGHT / 4))
     } else {
         None
@@ -190,23 +191,23 @@ pub trait Pickup: Story {
 
 pub fn pickup_energy(body: Body, which: u16, host: &mut impl Pickup) -> bool {
     if body == PLUTO {
-        assert!(host.flag("FOUND_PLUTO_SPATHI") == 0 && which == 0);
+        assert!(host.flag(StoryKey::FOUND_PLUTO_SPATHI) == 0 && which == 0);
         // `timelib.h`: ONE_SECOND is 840, not milliseconds.
         if !host.kill_lander_crew(8, 840 / 20) {
             return false;
         }
-        host.set_flag("FOUND_PLUTO_SPATHI", 1);
+        host.set_flag(StoryKey::FOUND_PLUTO_SPATHI, 1);
         host.lander_report();
         host.lander_takeoff();
         // Keep Fwiffo's node visible during takeoff; the flag hides it later.
         return false;
     }
     if body == LUNA {
-        assert!(host.flag("MOONBASE_DESTROYED") == 0 && which == 0);
+        assert!(host.flag(StoryKey::MOONBASE_DESTROYED) == 0 && which == 0);
         host.lander_report();
         host.lander_takeoff();
-        host.set_flag("MOONBASE_DESTROYED", 1);
-        host.set_flag("MOONBASE_ON_SHIP", 1);
+        host.set_flag(StoryKey::MOONBASE_DESTROYED, 1);
+        host.set_flag(StoryKey::MOONBASE_ON_SHIP, 1);
         return true;
     }
     false

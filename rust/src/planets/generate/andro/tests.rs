@@ -1,5 +1,6 @@
 //! The Androsynth ruins' report story and climate against fakes.
 
+use crate::engine::StoryKey;
 use super::{
     generate_energy, generate_orbital, generate_planets, pickup_energy, AndrosynthSite, WORLD,
 };
@@ -148,14 +149,14 @@ fn a_new_ruin_is_marked_and_reported_and_a_visited_one_is_not() {
 
     assert!(!pickup_energy(WORLD, 3, &mut info, &mut story, &mut report));
     assert_eq!(info.scan_retrieve_mask[ENERGY_SCAN], 1 << 19);
-    assert_eq!(story.flag("PLANETARY_CHANGE"), 1);
+    assert_eq!(story.flag(StoryKey::PLANETARY_CHANGE), 1);
     assert_eq!(report.0, [ReportDisposition::Cycle]);
 
     // The same ruin again changes nothing.
-    story.set_flag("PLANETARY_CHANGE", 0);
+    story.set_flag(StoryKey::PLANETARY_CHANGE, 0);
     assert!(!pickup_energy(WORLD, 3, &mut info, &mut story, &mut report));
     assert_eq!(info.scan_retrieve_mask[ENERGY_SCAN], 1 << 19);
-    assert_eq!(story.flag("PLANETARY_CHANGE"), 0);
+    assert_eq!(story.flag(StoryKey::PLANETARY_CHANGE), 0);
     assert_eq!(report.0.len(), 1);
 
     // The map bit of the node is not the visited bit.
@@ -174,7 +175,7 @@ fn other_bodies_report_nothing() {
         assert!(!pickup_energy(body, 0, &mut info, &mut story, &mut report));
         assert_eq!(info.scan_retrieve_mask[ENERGY_SCAN], 0);
         assert!(report.0.is_empty());
-        assert_eq!(story.flag("PLANETARY_CHANGE"), 0);
+        assert_eq!(story.flag(StoryKey::PLANETARY_CHANGE), 0);
     }
 }
 

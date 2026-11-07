@@ -5,6 +5,7 @@
 //! permanent parity proof. `planets_parity` replays them through the exported
 //! C symbols.
 
+use uqm::engine::StoryKey;
 use uqm_rust::engine::world::planet::{
     ElementEntry, NodeInfo, PlanetDesc, PlanetFrame, SystemInfo,
 };
@@ -416,7 +417,7 @@ mod rust_special {
                     case.0,
                     case.1,
                     &mut planets,
-                    &OneFlag("CHMMR_UNLEASHED", system == "chmmr1"),
+                    &OneFlag(StoryKey::CHMMR_UNLEASHED, system == "chmmr1"),
                 ),
                 "aqua" | "thrad" => thrad::generate_planets(
                     &mut rng,
@@ -510,7 +511,7 @@ mod rust_special {
         }
 
         fn energy(&mut self, system: &str, body: Body, seed: u32) -> String {
-            let taken = OneFlag("BURVIXESE_BROADCASTERS", system == "burv1");
+            let taken = OneFlag(StoryKey::BURVIXESE_BROADCASTERS, system == "burv1");
             let burv = |rng: &mut RandomContext,
                         info: &SystemInfo,
                         body: Body,
@@ -518,7 +519,7 @@ mod rust_special {
                         node: &mut NodeInfo| {
                 burv::generate_energy(rng, info, body, which, node, &taken)
             };
-            let helix = OneFlag("AQUA_HELIX", system == "aqua1");
+            let helix = OneFlag(StoryKey::AQUA_HELIX, system == "aqua1");
             let thraddash = |rng: &mut RandomContext,
                              info: &SystemInfo,
                              body: Body,
@@ -531,7 +532,7 @@ mod rust_special {
                 };
                 thrad::generate_energy(rng, info, star_index, body, which, node, &helix)
             };
-            let bomb = OneFlag("UTWIG_BOMB", system == "bomb1");
+            let bomb = OneFlag(StoryKey::UTWIG_BOMB, system == "bomb1");
             let utwig = |rng: &mut RandomContext,
                          info: &SystemInfo,
                          body: Body,
@@ -544,7 +545,7 @@ mod rust_special {
                 };
                 utw::generate_energy(rng, info, star_index, body, which, node, &bomb)
             };
-            let sun_device = OneFlag("SUN_DEVICE", system == "sun1");
+            let sun_device = OneFlag(StoryKey::SUN_DEVICE, system == "sun1");
             let mycon = |rng: &mut RandomContext,
                          info: &SystemInfo,
                          body: Body,
@@ -557,7 +558,7 @@ mod rust_special {
                 };
                 myc::generate_energy(rng, info, star_index, body, which, node, &sun_device)
             };
-            let device = OneFlag("TAALO_PROTECTOR", system == "taalo1");
+            let device = OneFlag(StoryKey::TAALO_PROTECTOR, system == "taalo1");
             let orz = |rng: &mut RandomContext,
                        info: &SystemInfo,
                        body: Body,

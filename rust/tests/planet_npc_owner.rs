@@ -1,3 +1,4 @@
+use uqm::engine::StoryKey;
 use uqm_rust::engine::World;
 use uqm_rust::planets::c_api::NpcWorld;
 use uqm_rust::planets::generate::default::Npcs;
@@ -16,7 +17,7 @@ fn npc_story_and_groups_use_the_supplied_world_without_a_published_context() {
     groups.put(second);
 
     let mut host = NpcWorld::new(&mut world);
-    host.set_flag("YEHAT_CIVIL_WAR", 1);
+    host.set_flag(StoryKey::YEHAT_CIVIL_WAR, 1);
     assert!(host.yehat_civil_war());
     let mut visited = Vec::new();
     host.for_each_ip_group(&mut |group| {
@@ -24,9 +25,9 @@ fn npc_story_and_groups_use_the_supplied_world_without_a_published_context() {
         group.sys_loc = 3;
     });
     assert_eq!(visited, [7, 8]);
-    assert_eq!(host.flag("YEHAT_CIVIL_WAR"), 1);
-    host.set_word("URQUAN_PROBE_GRPOFFS0", 0xdeca_fbad);
-    assert_eq!(host.word("URQUAN_PROBE_GRPOFFS0"), 0xdeca_fbad);
+    assert_eq!(host.flag(StoryKey::YEHAT_CIVIL_WAR), 1);
+    host.set_word(StoryKey::URQUAN_PROBE_GRPOFFS0, 0xdeca_fbad);
+    assert_eq!(host.word(StoryKey::URQUAN_PROBE_GRPOFFS0), 0xdeca_fbad);
     assert!(
         uqm_rust::planets::generate::special::FleetGroups::head_ip_group(&mut host, &mut |group| {
             group.group_counter = 17

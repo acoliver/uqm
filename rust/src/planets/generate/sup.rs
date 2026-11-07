@@ -5,6 +5,7 @@
 //! Overridden: `generatePlanets`, `generateOrbital`, `generateEnergy`,
 //! `pickupEnergy`. Story flags: `ULTRON_CONDITION`.
 
+use crate::engine::StoryKey;
 use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
 use crate::math::RandomContext;
 use crate::planet_side::report_adapter::DiscoveryReportPort;
@@ -39,7 +40,7 @@ pub fn generate_orbital(
     load_planet: impl FnOnce(),
 ) -> bool {
     if body == Body::Planet(0)
-        && home_contact::enter_orbit(site, story.flag("ULTRON_CONDITION") != 0)
+        && home_contact::enter_orbit(site, story.flag(StoryKey::ULTRON_CONDITION) != 0)
     {
         return true;
     }
@@ -71,7 +72,7 @@ pub fn pickup_energy(
     lander: &mut impl LanderTakeoff,
 ) -> bool {
     if body == Body::Planet(0) {
-        home_contact::pickup_artifact(story, report, lander, "ULTRON_CONDITION", &[]);
+        home_contact::pickup_artifact(story, report, lander, StoryKey::ULTRON_CONDITION, &[]);
     }
     false
 }

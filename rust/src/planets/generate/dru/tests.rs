@@ -1,6 +1,7 @@
 //! The story gating of the Druuge ruins, against a recording report and a
 //! fake game state.
 
+use crate::engine::StoryKey;
 use super::pickup_energy;
 use crate::planet_side::report_adapter::{DiscoveryReportPort, ReportDisposition};
 use crate::planet_side::runtime::AdapterError;
@@ -27,7 +28,7 @@ impl LanderTakeoff for FakeLander {
     }
 }
 
-const ALSO: [&str; 1] = ["ROSY_SPHERE_ON_SHIP"];
+const ALSO: [&str; 1] = [StoryKey::ROSY_SPHERE_ON_SHIP];
 
 #[test]
 fn the_first_ruin_gives_the_artifact_and_leaves_the_node() {
@@ -41,7 +42,7 @@ fn the_first_ruin_gives_the_artifact_and_leaves_the_node() {
     ));
     assert_eq!(report.0, [ReportDisposition::Cycle]);
     assert_eq!(lander.0, 1);
-    assert_eq!(story.flag("ROSY_SPHERE"), 1);
+    assert_eq!(story.flag(StoryKey::ROSY_SPHERE), 1);
     for flag in ALSO {
         assert_eq!(story.flag(flag), 1);
     }
@@ -49,7 +50,7 @@ fn the_first_ruin_gives_the_artifact_and_leaves_the_node() {
 
 #[test]
 fn later_ruins_only_cycle_the_report() {
-    let mut story = FakeStory::with(&[("ROSY_SPHERE", 1)]);
+    let mut story = FakeStory::with(&[(StoryKey::ROSY_SPHERE, 1)]);
     let (mut report, mut lander) = (FakeReport::default(), FakeLander::default());
     assert!(!pickup_energy(
         Body::Planet(0),
@@ -72,6 +73,6 @@ fn other_worlds_pick_up_nothing() {
         assert!(!pickup_energy(body, &mut story, &mut report, &mut lander));
         assert!(report.0.is_empty());
         assert_eq!(lander.0, 0);
-        assert_eq!(story.flag("ROSY_SPHERE"), 0);
+        assert_eq!(story.flag(StoryKey::ROSY_SPHERE), 0);
     }
 }

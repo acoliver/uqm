@@ -1,5 +1,6 @@
 //! Sol's actual ABI against real table queues and in-memory group files.
 
+use uqm::engine::StoryKey;
 use super::Harness;
 use uqm_rust::comm::dispatch::{CHECK_ABORT, CHECK_LOAD, START_ENCOUNTER};
 use uqm_rust::planets::c_api;
@@ -15,7 +16,7 @@ pub fn check(h: &mut Harness) {
     ];
     let story =
         keys.map(|key| uqm_rust::engine::World::current().read(|world| (world).story_state(key)));
-    let word = LiveStory.word("URQUAN_PROBE_GRPOFFS0");
+    let word = LiveStory.word(StoryKey::URQUAN_PROBE_GRPOFFS0);
     let activity = uqm_rust::engine::World::current().read(|world| world.activity());
     unsafe {
         let saved = uqm_rust::engine::World::current().write(|world| {
@@ -65,7 +66,7 @@ pub fn check(h: &mut Harness) {
             .as_ref(),
             uqm_rust::planets::starmap::current_catalog(),
         );
-        LiveStory.set_word("URQUAN_PROBE_GRPOFFS0", 0);
+        LiveStory.set_word(StoryKey::URQUAN_PROBE_GRPOFFS0, 0);
         uqm_rust::engine::World::current().write(|world| {
             (world).set_story_state(uqm_rust::engine::StoryKey::CHMMR_BOMB_STATE, 0)
         });
@@ -82,7 +83,7 @@ pub fn check(h: &mut Harness) {
         let probe_ref =
             uqm_rust::engine::WorldData::current().read(|world| world.game.battle_group_ref);
         assert_ne!(probe_ref, 0);
-        assert_eq!(LiveStory.word("URQUAN_PROBE_GRPOFFS0"), probe_ref);
+        assert_eq!(LiveStory.word(StoryKey::URQUAN_PROBE_GRPOFFS0), probe_ref);
         assert!(uqm_rust::engine::World::current()
             .read(|world| world.npc_built_ships_ref().head().is_none()));
         let group = uqm_rust::engine::World::current().read(|world| {
@@ -151,7 +152,7 @@ pub fn check(h: &mut Harness) {
             uqm_rust::engine::WorldData::current().read(|world| world.game.battle_group_ref),
             probe_ref
         );
-        assert_eq!(LiveStory.word("URQUAN_PROBE_GRPOFFS0"), probe_ref);
+        assert_eq!(LiveStory.word(StoryKey::URQUAN_PROBE_GRPOFFS0), probe_ref);
         let probe = uqm_rust::engine::World::current().read(|world| {
             let groups = world.ip_groups_ref();
             *groups.get(
@@ -215,7 +216,7 @@ pub fn check(h: &mut Harness) {
                     && uqm_rust::engine::World::current()
                         .read(|world| world.npc_built_ships_ref().head().is_none())
             );
-            assert_eq!(LiveStory.word("URQUAN_PROBE_GRPOFFS0"), probe_ref);
+            assert_eq!(LiveStory.word(StoryKey::URQUAN_PROBE_GRPOFFS0), probe_ref);
         }
         std::ptr::addr_of_mut!(c_api::STAR_ARRAY).write(saved_catalog);
         (**uqm_rust::engine::World::current()).select_star(
@@ -236,7 +237,7 @@ pub fn check(h: &mut Harness) {
     for (key, value) in keys.into_iter().zip(story) {
         uqm_rust::engine::World::current().write(|world| (world).set_story_state(key, value));
     }
-    LiveStory.set_word("URQUAN_PROBE_GRPOFFS0", word);
+    LiveStory.set_word(StoryKey::URQUAN_PROBE_GRPOFFS0, word);
     uqm_rust::engine::World::current().write(|world| world.set_activity(activity));
     println!("Sol NPC ABI: real probe file creation/reload/persistence, queue init/uninit/reinit, starbase save/reset, abort/load bits retained");
 }

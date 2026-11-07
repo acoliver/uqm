@@ -1,6 +1,7 @@
 //! The Zoq-Fot-Pik home's story gating and conversation flow against
 //! recording fakes.
 
+use crate::engine::StoryKey;
 use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -103,7 +104,7 @@ impl Npcs for FakeNpcs {
 #[test]
 fn the_default_groups_are_made_unless_the_zoq_fot_pik_are_in_distress_value_one() {
     for distress in 0..4u32 {
-        let mut story = FakeStory::with(&[("ZOQFOT_DISTRESS", distress)]);
+        let mut story = FakeStory::with(&[(StoryKey::ZOQFOT_DISTRESS, distress)]);
         let mut host = FakeNpcs::default();
         assert!(init_npcs(&mut (&mut story, &mut host)));
         let expected: &[&str] = if distress == 1 {
@@ -217,7 +218,7 @@ impl ZoqFotPikSite for Site {
 
 fn visit(body: Body, distress: u32, configure: impl FnOnce(&mut Site)) -> Vec<Call> {
     let calls = Rc::new(RefCell::new(Vec::new()));
-    let story = FakeStory::with(&[("ZOQFOT_DISTRESS", distress)]);
+    let story = FakeStory::with(&[(StoryKey::ZOQFOT_DISTRESS, distress)]);
     let mut site = Site {
         tracking: false,
         activity: IN_INTERPLANETARY,

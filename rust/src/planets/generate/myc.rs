@@ -11,7 +11,8 @@
 //! `MYCON_VISITS`, `KNOW_ABOUT_SHATTERED`, `EGG_CASE0_ON_SHIP`,
 //! `EGG_CASE1_ON_SHIP`, `EGG_CASE2_ON_SHIP`.
 
-use crate::battle::gendef::{
+use crate::engine::StoryKey;
+use crate::planets::generate::identities::{
     EGG_CASE0_DEFINED, EGG_CASE1_DEFINED, EGG_CASE2_DEFINED, MYCON_DEFINED, SUN_DEVICE_DEFINED,
 };
 use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
@@ -117,7 +118,7 @@ pub(super) fn prepare_orbital(
     if body == WORLD {
         if (star_index == MYCON_DEFINED || star_index == SUN_DEVICE_DEFINED)
             && site.start_sphere_tracking()
-            && (star_index == MYCON_DEFINED || story.flag("SUN_DEVICE_UNGUARDED") == 0)
+            && (star_index == MYCON_DEFINED || story.flag(StoryKey::SUN_DEVICE_UNGUARDED) == 0)
             && !mycon_talk(star_index, story, site)
         {
             return true;
@@ -125,13 +126,13 @@ pub(super) fn prepare_orbital(
 
         match star_index {
             SUN_DEVICE_DEFINED => {
-                if story.flag("SUN_DEVICE") == 0 {
+                if story.flag(StoryKey::SUN_DEVICE) == 0 {
                     site.load_scene(Scene::SunDevice);
                 }
             }
             index if is_egg_case(index) => {
-                if story.flag("KNOW_ABOUT_SHATTERED") == 0 {
-                    story.set_flag("KNOW_ABOUT_SHATTERED", 1);
+                if story.flag(StoryKey::KNOW_ABOUT_SHATTERED) == 0 {
+                    story.set_flag(StoryKey::KNOW_ABOUT_SHATTERED, 1);
                 }
                 let retrieved = retrieved();
                 if !retrieved {
@@ -158,7 +159,7 @@ fn mycon_talk(star_index: u8, story: &mut impl Story, site: &mut impl MyconSite)
         "the built-ship queue must be empty before the Mycon are cloned into it"
     );
 
-    if star_index == MYCON_DEFINED || story.flag("MYCON_FELL_FOR_AMBUSH") == 0 {
+    if star_index == MYCON_DEFINED || story.flag(StoryKey::MYCON_FELL_FOR_AMBUSH) == 0 {
         site.clone_fleet_into_built_queue();
     } else {
         for _ in 0..AMBUSH_SHIPS {
@@ -186,7 +187,7 @@ fn mycon_talk(star_index: u8, story: &mut impl Story, site: &mut impl MyconSite)
     if survivors {
         return false;
     }
-    story.set_flag("SUN_DEVICE_UNGUARDED", 1);
+    story.set_flag(StoryKey::SUN_DEVICE_UNGUARDED, 1);
     site.repair_sis_border();
     true
 }
@@ -204,7 +205,7 @@ pub fn generate_energy(
     story: &impl Story,
 ) -> u16 {
     if star_index == SUN_DEVICE_DEFINED && body == WORLD {
-        if story.flag("SUN_DEVICE") != 0 {
+        if story.flag(StoryKey::SUN_DEVICE) != 0 {
             return 0;
         }
         return default::generate_artifact(rng, sys_info, which_node, info);
@@ -235,14 +236,14 @@ pub fn pickup_energy(
 ) -> bool {
     if star_index == SUN_DEVICE_DEFINED && body == WORLD {
         assert!(
-            story.flag("SUN_DEVICE") == 0 && which_node == 0,
+            story.flag(StoryKey::SUN_DEVICE) == 0 && which_node == 0,
             "the Sun Device is picked up once, from node 0"
         );
         default::lander_report(report);
         lander.lander_takeoff();
-        story.set_flag("SUN_DEVICE", 1);
-        story.set_flag("SUN_DEVICE_ON_SHIP", 1);
-        story.set_flag("MYCON_VISITS", 0);
+        story.set_flag(StoryKey::SUN_DEVICE, 1);
+        story.set_flag(StoryKey::SUN_DEVICE_ON_SHIP, 1);
+        story.set_flag(StoryKey::MYCON_VISITS, 0);
         return true;
     }
     if is_egg_case(star_index) && body == WORLD {
@@ -257,9 +258,9 @@ pub fn pickup_energy(
 
 fn egg_case_flag(star_index: u8) -> &'static str {
     match star_index {
-        EGG_CASE0_DEFINED => "EGG_CASE0_ON_SHIP",
-        EGG_CASE1_DEFINED => "EGG_CASE1_ON_SHIP",
-        EGG_CASE2_DEFINED => "EGG_CASE2_ON_SHIP",
+        EGG_CASE0_DEFINED => StoryKey::EGG_CASE0_ON_SHIP,
+        EGG_CASE1_DEFINED => StoryKey::EGG_CASE1_ON_SHIP,
+        EGG_CASE2_DEFINED => StoryKey::EGG_CASE2_ON_SHIP,
         other => unreachable!("star {other} has no egg case"),
     }
 }

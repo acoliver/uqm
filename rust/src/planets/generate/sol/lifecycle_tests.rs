@@ -1,3 +1,4 @@
+use crate::engine::StoryKey;
 use super::*;
 use crate::c_bindings::global_state::IP_GROUP;
 use crate::planets::generate::default::Npcs;
@@ -170,7 +171,7 @@ pub(super) fn pair() -> (State, QueueHost) {
 fn probe_creation_persists_reference_and_initial_orbit_changes_only_c_fields() {
     for saved in [0, 0xabcdef01] {
         let (mut story, mut host) = pair();
-        story.words.insert("URQUAN_PROBE_GRPOFFS0", saved);
+        story.words.insert(StoryKey::URQUAN_PROBE_GRPOFFS0, saved);
         story.words.insert("unrelated", 42);
         host.init.push_back(true);
         host.groups = vec![group(23, 0xff), group(11, 0xfe)];
@@ -185,7 +186,7 @@ fn probe_creation_persists_reference_and_initial_orbit_changes_only_c_fields() {
         assert_eq!(format!("{:?}", host.groups), format!("{expected:?}"));
         let reference = if saved == 0 { 0x12345678 } else { saved };
         assert_eq!(host.reference, reference);
-        assert_eq!(story.words["URQUAN_PROBE_GRPOFFS0"], reference);
+        assert_eq!(story.words[StoryKey::URQUAN_PROBE_GRPOFFS0], reference);
         assert_eq!(story.words["unrelated"], 42);
         assert_eq!(host.built, 0);
         let mut trace = vec![
@@ -220,8 +221,8 @@ fn probe_init_short_circuits_and_repeats_default_group_load_as_c_does() {
                         continue;
                     }
                     let (mut story, mut host) = pair();
-                    story.words.insert("URQUAN_PROBE_GRPOFFS0", 71);
-                    story.flags.insert("PROBE_MESSAGE_DELIVERED", delivered);
+                    story.words.insert(StoryKey::URQUAN_PROBE_GRPOFFS0, 71);
+                    story.flags.insert(StoryKey::PROBE_MESSAGE_DELIVERED, delivered);
                     if head {
                         host.groups.push(group(23, 0xfe));
                     }
@@ -234,7 +235,7 @@ fn probe_init_short_circuits_and_repeats_default_group_load_as_c_does() {
                     assert_eq!(format!("{:?}", host.groups), before);
                     assert!(host.init.is_empty());
                     assert_eq!(host.reference, if default_load { 71 } else { 0 });
-                    assert_eq!(story.words["URQUAN_PROBE_GRPOFFS0"], 71);
+                    assert_eq!(story.words[StoryKey::URQUAN_PROBE_GRPOFFS0], 71);
                     let mut trace = vec![
                         "read-word:URQUAN_PROBE_GRPOFFS0",
                         "ref:71",
@@ -265,7 +266,7 @@ fn probe_reinit_restores_first_and_changes_only_a_reforming_head_probe() {
             for race in [11, 23] {
                 for task in [0, 2, 4, 8, 0xff] {
                     let (mut story, mut host) = pair();
-                    story.flags.insert("CHMMR_BOMB_STATE", 2);
+                    story.flags.insert(StoryKey::CHMMR_BOMB_STATE, 2);
                     host.reference = reference;
                     let restored = if head {
                         vec![group(race, task), group(23, 8)]
@@ -323,8 +324,8 @@ fn bomb_state_three_resets_only_reference_and_ip_queue_and_asserts_built_empty()
     for bomb in [0, 1, 2, 3, 4] {
         for built in [0, 1] {
             let (mut story, mut host) = pair();
-            story.flags.insert("CHMMR_BOMB_STATE", bomb);
-            story.words.insert("URQUAN_PROBE_GRPOFFS0", 321);
+            story.flags.insert(StoryKey::CHMMR_BOMB_STATE, bomb);
+            story.words.insert(StoryKey::URQUAN_PROBE_GRPOFFS0, 321);
             host.reference = 99;
             host.built = built;
             host.groups = vec![group(23, 8)];
@@ -333,7 +334,7 @@ fn bomb_state_three_resets_only_reference_and_ip_queue_and_asserts_built_empty()
             }));
             assert_eq!(result.is_err(), bomb == 3 && built != 0);
             assert_eq!(host.built, built);
-            assert_eq!(story.words["URQUAN_PROBE_GRPOFFS0"], 321);
+            assert_eq!(story.words[StoryKey::URQUAN_PROBE_GRPOFFS0], 321);
             if bomb == 3 {
                 assert!(host.groups.is_empty());
                 assert_eq!(host.reference, 0);
@@ -357,13 +358,13 @@ fn bomb_state_three_resets_only_reference_and_ip_queue_and_asserts_built_empty()
 #[test]
 fn delivered_message_still_creates_and_persists_missing_probe_before_default_init() {
     let (mut story, mut host) = pair();
-    story.flags.insert("PROBE_MESSAGE_DELIVERED", 1);
+    story.flags.insert(StoryKey::PROBE_MESSAGE_DELIVERED, 1);
     host.init.push_back(true);
     host.groups.push(group(11, 0xfe));
     let before = format!("{:?}", host.groups);
     assert!(init_npcs(&mut (&mut story, &mut host)));
     assert_eq!(host.reference, 0x12345678);
-    assert_eq!(story.words["URQUAN_PROBE_GRPOFFS0"], 0x12345678);
+    assert_eq!(story.words[StoryKey::URQUAN_PROBE_GRPOFFS0], 0x12345678);
     assert_eq!(format!("{:?}", host.groups), before);
     assert!(host.init.is_empty());
     assert_eq!(
