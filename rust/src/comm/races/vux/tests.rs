@@ -1,6 +1,6 @@
 use super::*;
 use crate::comm::races::encounter::testing::{Effect, Fake};
-use crate::state::game_state_keys::bit_range;
+use crate::engine::StoryKey;
 
 fn run(api: &mut Fake<Handler>, action: impl FnOnce(&mut dialogue::Dialogue<'_, Fake<Handler>>)) {
     action(&mut dialogue::Dialogue { api });
@@ -27,11 +27,11 @@ fn initialization_sets_peace_for_menagerie_and_won_battle_only() {
     run(&mut api, |dialogue| dialogue.initialize());
     assert_eq!(api.segue, 1);
 
-    api.put("GLOBAL_FLAGS_AND_DATA", 1 << 6);
+    api.put(StoryKey::GLOBAL_FLAGS_AND_DATA, 1 << 6);
     run(&mut api, |dialogue| dialogue.initialize());
     assert_eq!(api.segue, 0);
 
-    api.put("GLOBAL_FLAGS_AND_DATA", 0);
+    api.put(StoryKey::GLOBAL_FLAGS_AND_DATA, 0);
     api.activity = crate::comm::dispatch::WON_LAST_BATTLE;
     run(&mut api, |dialogue| dialogue.initialize());
     assert_eq!(api.segue, 0);
@@ -41,7 +41,7 @@ fn initialization_sets_peace_for_menagerie_and_won_battle_only() {
 fn normal_intro_advances_space_visits_and_offers_progressive_topics() {
     let mut api = Fake::<Handler>::default();
     run(&mut api, |dialogue| dialogue.intro());
-    assert_eq!(api.state["VUX_VISITS"], 1);
+    assert_eq!(api.state[&StoryKey::VUX_VISITS], 1);
     assert_eq!(api.spoken(), [SPACE_HELLO_1 as i32]);
     assert_eq!(
         api.offers(),
@@ -54,7 +54,7 @@ fn normal_intro_advances_space_visits_and_offers_progressive_topics() {
     );
 
     api.effects.clear();
-    api.put("VUX_STACK_1", 3);
+    api.put(StoryKey::VUX_STACK_1, 3);
     run(&mut api, |dialogue| {
         dialogue.normal(WHATS_UP_HOSTILE as i32)
     });
@@ -66,15 +66,15 @@ fn normal_intro_advances_space_visits_and_offers_progressive_topics() {
 #[test]
 fn homeworld_and_menagerie_intro_follow_global_flags() {
     let mut api = Fake::<Handler>::default();
-    api.put("GLOBAL_FLAGS_AND_DATA", 1 << 7);
+    api.put(StoryKey::GLOBAL_FLAGS_AND_DATA, 1 << 7);
     run(&mut api, |dialogue| dialogue.intro());
-    assert_eq!(api.state["VUX_HOME_VISITS"], 1);
+    assert_eq!(api.state[&StoryKey::VUX_HOME_VISITS], 1);
     assert_eq!(api.spoken()[0], HOMEWORLD_HELLO_1 as i32);
 
     api.effects.clear();
-    api.put("GLOBAL_FLAGS_AND_DATA", 1 << 6);
+    api.put(StoryKey::GLOBAL_FLAGS_AND_DATA, 1 << 6);
     run(&mut api, |dialogue| dialogue.intro());
-    assert_eq!(api.state["ZEX_VISITS"], 1);
+    assert_eq!(api.state[&StoryKey::ZEX_VISITS], 1);
     assert_eq!(api.spoken()[0], ZEX_HELLO_1 as i32);
     assert!(api
         .offers()
@@ -91,7 +91,7 @@ fn menagerie_progression_orders_responses_and_disables_creature_repeats() {
         dialogue.menagerie(WHAT_YOU_DO_HERE as i32)
     });
     assert_eq!(api.spoken(), [MY_MENAGERIE as i32]);
-    assert_eq!(api.state["ZEX_STACK_1"], 1);
+    assert_eq!(api.state[&StoryKey::ZEX_STACK_1], 1);
     assert_eq!(
         api.offers()[0],
         (WHAT_ABOUT_MENAGERIE as u16, Handler::Menagerie)
@@ -101,12 +101,12 @@ fn menagerie_progression_orders_responses_and_disables_creature_repeats() {
     run(&mut api, |dialogue| {
         dialogue.menagerie(WHAT_ABOUT_MENAGERIE as i32)
     });
-    assert_eq!(api.state["ZEX_STACK_1"], 2);
+    assert_eq!(api.state[&StoryKey::ZEX_STACK_1], 2);
     api.effects.clear();
     run(&mut api, |dialogue| {
         dialogue.menagerie(WHAT_ABOUT_CREATURE as i32)
     });
-    assert_eq!(api.state["KNOW_ZEX_WANTS_MONSTER"], 1);
+    assert_eq!(api.state[&StoryKey::KNOW_ZEX_WANTS_MONSTER], 1);
     assert!(api.disabled.contains(&(WHAT_ABOUT_CREATURE as u16)));
     assert!(api
         .offers()
@@ -117,36 +117,36 @@ fn menagerie_progression_orders_responses_and_disables_creature_repeats() {
 #[test]
 fn combat_counter_branches_hold_final_lines_and_advance_refusal_state() {
     let mut api = Fake::<Handler>::default();
-    api.put("VUX_STACK_3", 3);
+    api.put(StoryKey::VUX_STACK_3, 3);
     run(&mut api, |dialogue| {
         dialogue.combat(CANT_WE_BE_FRIENDS_4 as i32)
     });
     assert_eq!(api.spoken(), [NEVER_UGLY_HUMANS_4 as i32]);
-    assert_eq!(api.state["VUX_STACK_3"], 3);
+    assert_eq!(api.state[&StoryKey::VUX_STACK_3], 3);
 
     api.effects.clear();
-    api.put("VUX_STACK_4", 2);
+    api.put(StoryKey::VUX_STACK_4, 2);
     run(&mut api, |dialogue| {
         dialogue.combat(BYE_HOSTILE_SPACE as i32)
     });
     assert_eq!(api.spoken(), [GOODBYE_AND_DIE_HOSTILE_SPACE_3 as i32]);
-    assert_eq!(api.state["VUX_STACK_4"], 3);
+    assert_eq!(api.state[&StoryKey::VUX_STACK_4], 3);
 
     api.effects.clear();
-    api.put("VUX_STACK_1", 13);
+    api.put(StoryKey::VUX_STACK_1, 13);
     run(&mut api, |dialogue| dialogue.combat(APOLOGY_10 as i32));
     assert_eq!(api.spoken(), [TRUTH as i32]);
-    assert_eq!(api.state["VUX_STACK_1"], 14);
+    assert_eq!(api.state[&StoryKey::VUX_STACK_1], 14);
 }
 
 #[test]
 fn accepting_beast_applies_palette_effects_and_peaceful_ending() {
     let mut api = Fake::<Handler>::default();
-    api.put("VUX_BEAST_ON_SHIP", 1);
+    api.put(StoryKey::VUX_BEAST_ON_SHIP, 1);
     run(&mut api, |dialogue| dialogue.combat(OK_TAKE_BEAST as i32));
     assert_eq!(api.spoken(), [FOOL_AIEE0 as i32, FOOL_AIEE1 as i32]);
-    assert_eq!(api.state["VUX_BEAST_ON_SHIP"], 0);
-    assert_eq!(api.state["ZEX_IS_DEAD"], 1);
+    assert_eq!(api.state[&StoryKey::VUX_BEAST_ON_SHIP], 0);
+    assert_eq!(api.state[&StoryKey::ZEX_IS_DEAD], 1);
     assert_eq!(api.segue, 0);
     assert!(api.effects.contains(&Effect::Talk(1)));
     assert!(api.effects.contains(&Effect::FadePalette(1, 210)));
@@ -171,6 +171,9 @@ fn required_vux_game_state_keys_are_present() {
         "ZEX_VISITS",
         "ZEX_IS_DEAD",
     ] {
-        assert!(bit_range(key).is_some(), "missing game state key: {key}");
+        assert!(
+            crate::engine::StoryKey::from_name(key).is_some(),
+            "missing game state key: {key}"
+        );
     }
 }

@@ -3,7 +3,7 @@ use super::alliance::AllianceApi;
 use super::script::{animation, as_comm_data};
 use crate::comm::locdata::{CColor, CLocData, CPoint};
 use crate::comm::types::CommData;
-use crate::engine::battle::Cx;
+use crate::engine::{battle::Cx, StoryKey};
 mod phrases;
 use phrases::*;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -39,10 +39,10 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
             self.api.npc(i32::from(NO_FIGHT));
         } else if r == BUG_EYED_FRUITCAKES {
             self.api.npc(i32::from(WE_NEVER_FRIENDS));
-            self.api.set("ARILOU_MANNER", 2_u8);
+            self.api.set(StoryKey::ARILOU_MANNER, 2_u8);
         } else if r == BEST_IF_I_KILLED_YOU {
             self.api.npc(i32::from(WICKED_HUMAN));
-            self.api.set("ARILOU_MANNER", 2_u8);
+            self.api.set(StoryKey::ARILOU_MANNER, 2_u8);
         }
     }
     fn arilou_home(&mut self, r: u16) {
@@ -59,20 +59,20 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
             self.api.npc(i32::from(NO_ALLY_BUT_MUCH_GIVE));
         } else if r == WHAT_ABOUT_WAR {
             self.api.npc(i32::from(ABOUT_WAR));
-            self.api.set("ARILOU_STACK_1", 1_u8);
+            self.api.set(StoryKey::ARILOU_STACK_1, 1_u8);
         } else if r == WHAT_ABOUT_URQUAN {
             self.api.npc(i32::from(ABOUT_URQUAN));
-            self.api.set("ARILOU_STACK_1", 2_u8);
+            self.api.set(StoryKey::ARILOU_STACK_1, 2_u8);
         } else if r == TELL_ARILOU_ABOUT_TPET {
             self.api.npc(i32::from(BAD_NEWS_ABOUT_TPET));
             last_stack = 1_u8;
-            self.api.set("ARILOU_STACK_2", 1_u8);
+            self.api.set(StoryKey::ARILOU_STACK_2, 1_u8);
         } else if r == WHAT_DO_ABOUT_TPET {
             self.api.npc(i32::from(DANGEROUS_BUT_USEFUL));
             last_stack = 1_u8;
-            self.api.set("ARILOU_STACK_2", 2_u8);
+            self.api.set(StoryKey::ARILOU_STACK_2, 2_u8);
         } else if r == LEARNED_ABOUT_UMGAH {
-            if i32::from(self.api.get("ARILOU_CHECKED_UMGAH")) != 2 {
+            if i32::from(self.api.get(StoryKey::ARILOU_CHECKED_UMGAH)) != 2 {
                 self.api.npc(i32::from(NO_NEWS_YET));
             } else {
                 self.api.npc(i32::from(UMGAH_UNDER_COMPULSION));
@@ -81,92 +81,78 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
             self.api.disable(LEARNED_ABOUT_UMGAH);
         } else if r == UMGAH_ACTING_WEIRD {
             self.api.npc(i32::from(WELL_GO_CHECK));
-            self.api.set("ARILOU_CHECKED_UMGAH", 1_u8);
+            self.api.set(StoryKey::ARILOU_CHECKED_UMGAH, 1_u8);
             self.api.event(1, 0_u16, 10_u16, 0_u16, 14_u8);
             self.api.disable(UMGAH_ACTING_WEIRD);
         } else if r == WHAT_DO_NOW {
             self.api.npc(i32::from(GO_FIND_OUT));
-            self.api.set("ARILOU_CHECKED_UMGAH", 3_u8);
+            self.api.set(StoryKey::ARILOU_CHECKED_UMGAH, 3_u8);
         } else if r == WHAT_DID_ON_EARTH {
             self.api.npc(i32::from(DID_THIS));
             last_stack = 2_u8;
-            self.api.set("ARILOU_STACK_3", 1_u8);
+            self.api.set(StoryKey::ARILOU_STACK_3, 1_u8);
         } else if r == WHY_DID_THIS {
             self.api.npc(i32::from(IDF_PARASITES));
             last_stack = 2_u8;
-            self.api.set("ARILOU_STACK_3", 2_u8);
+            self.api.set(StoryKey::ARILOU_STACK_3, 2_u8);
         } else if r == TELL_MORE {
             self.api.npc(i32::from(NOT_NOW));
             last_stack = 2_u8;
-            self.api.set("ARILOU_STACK_3", 3_u8);
+            self.api.set(StoryKey::ARILOU_STACK_3, 3_u8);
         } else if r == WHAT_GIVE_ME {
             self.api.npc(i32::from(ABOUT_PORTAL));
             last_stack = 3_u8;
-            self.api.set("KNOW_ARILOU_WANT_WRECK", 1_u8);
+            self.api.set(StoryKey::KNOW_ARILOU_WANT_WRECK, 1_u8);
             self.api.disable(WHAT_GIVE_ME);
         } else if r == WHAT_ABOUT_TPET {
             self.api.npc(i32::from(ABOUT_TPET));
-            self.api.set("ARILOU_STACK_4", 1_u8);
+            self.api.set(StoryKey::ARILOU_STACK_4, 1_u8);
         } else if r == ABOUT_PORTAL_AGAIN {
             self.api.npc(i32::from(PORTAL_AGAIN));
             self.api.disable(ABOUT_PORTAL_AGAIN);
         } else if r == GOT_IT {
-            if i32::from(self.api.get("ARILOU_HOME_VISITS")) == 1 {
+            if i32::from(self.api.get(StoryKey::ARILOU_HOME_VISITS)) == 1 {
                 self.api.npc(i32::from(CLEVER_HUMAN));
             }
             self.api.npc(i32::from(GIVE_PORTAL));
-            self.api.set("PORTAL_KEY_ON_SHIP", 0_u8);
-            self.api.set("PORTAL_SPAWNER", 1_u8);
-            self.api.set("PORTAL_SPAWNER_ON_SHIP", 1_u8);
+            self.api.set(StoryKey::PORTAL_KEY_ON_SHIP, 0_u8);
+            self.api.set(StoryKey::PORTAL_SPAWNER, 1_u8);
+            self.api.set(StoryKey::PORTAL_SPAWNER_ON_SHIP, 1_u8);
         }
-        match self.api.get("ARILOU_STACK_1") {
-            0 => {
-                p_str[0_usize] = WHAT_ABOUT_WAR;
-            }
-            1 => {
-                p_str[0_usize] = WHAT_ABOUT_URQUAN;
-            }
+        match self.api.get(StoryKey::ARILOU_STACK_1) {
+            0 => p_str[0_usize] = WHAT_ABOUT_WAR,
+            1 => p_str[0_usize] = WHAT_ABOUT_URQUAN,
             _ => {}
         }
-        if self.api.get("TALKING_PET") != 0 {
+        if self.api.get(StoryKey::TALKING_PET) != 0 {
         } else {
-            if self.api.get("TALKING_PET_VISITS") != 0 {
-                match self.api.get("ARILOU_STACK_2") {
-                    0 => {
-                        p_str[1_usize] = TELL_ARILOU_ABOUT_TPET;
-                    }
-                    1 => {
-                        p_str[1_usize] = WHAT_DO_ABOUT_TPET;
-                    }
+            if self.api.get(StoryKey::TALKING_PET_VISITS) != 0 {
+                match self.api.get(StoryKey::ARILOU_STACK_2) {
+                    0 => p_str[1_usize] = TELL_ARILOU_ABOUT_TPET,
+                    1 => p_str[1_usize] = WHAT_DO_ABOUT_TPET,
                     _ => {}
                 }
-            } else if self.api.get("KNOW_UMGAH_ZOMBIES") != 0 {
-                if !(self.api.get("ARILOU_CHECKED_UMGAH") != 0) {
+            } else if self.api.get(StoryKey::KNOW_UMGAH_ZOMBIES) != 0 {
+                if !(self.api.get(StoryKey::ARILOU_CHECKED_UMGAH) != 0) {
                     p_str[1_usize] = UMGAH_ACTING_WEIRD;
                 } else if self.api.enabled(LEARNED_ABOUT_UMGAH)
                     && self.api.enabled(UMGAH_ACTING_WEIRD)
                 {
                     p_str[1_usize] = LEARNED_ABOUT_UMGAH;
-                } else if i32::from(self.api.get("ARILOU_CHECKED_UMGAH")) == 2 {
+                } else if i32::from(self.api.get(StoryKey::ARILOU_CHECKED_UMGAH)) == 2 {
                     p_str[1_usize] = WHAT_DO_NOW;
                 }
             }
         }
-        match self.api.get("ARILOU_STACK_3") {
-            0 => {
-                p_str[2_usize] = WHAT_DID_ON_EARTH;
-            }
-            1 => {
-                p_str[2_usize] = WHY_DID_THIS;
-            }
-            2 => {
-                p_str[2_usize] = TELL_MORE;
-            }
+        match self.api.get(StoryKey::ARILOU_STACK_3) {
+            0 => p_str[2_usize] = WHAT_DID_ON_EARTH,
+            1 => p_str[2_usize] = WHY_DID_THIS,
+            2 => p_str[2_usize] = TELL_MORE,
             _ => {}
         }
-        if !(self.api.get("KNOW_ARILOU_WANT_WRECK") != 0) {
+        if !(self.api.get(StoryKey::KNOW_ARILOU_WANT_WRECK) != 0) {
             p_str[3_usize] = WHAT_GIVE_ME;
-        } else if !(self.api.get("ARILOU_STACK_4") != 0) {
+        } else if !(self.api.get(StoryKey::ARILOU_STACK_4) != 0) {
             p_str[3_usize] = WHAT_ABOUT_TPET;
         }
         if p_str[(last_stack) as usize] != 0 {
@@ -179,16 +165,17 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
                     .response(p_str[(i) as usize], Handler::ArilouHome, &[]);
             }
         }
-        if self.api.get("KNOW_ARILOU_WANT_WRECK") != 0 {
-            if self.api.get("PORTAL_KEY_ON_SHIP") != 0 {
+        if self.api.get(StoryKey::KNOW_ARILOU_WANT_WRECK) != 0 {
+            if self.api.get(StoryKey::PORTAL_KEY_ON_SHIP) != 0 {
                 self.api.response(GOT_IT, Handler::ArilouHome, &[]);
-            } else if self.api.enabled(ABOUT_PORTAL_AGAIN) && !(self.api.get("PORTAL_SPAWNER") != 0)
+            } else if self.api.enabled(ABOUT_PORTAL_AGAIN)
+                && !(self.api.get(StoryKey::PORTAL_SPAWNER) != 0)
             {
                 self.api
                     .response(ABOUT_PORTAL_AGAIN, Handler::ArilouHome, &[]);
             }
         }
-        if i32::from(self.api.get("ARILOU_MANNER")) != 3 {
+        if i32::from(self.api.get(StoryKey::ARILOU_MANNER)) != 3 {
             self.api
                 .response(BEST_IF_I_KILLED_YOU, Handler::ExitConversation, &[]);
         }
@@ -250,7 +237,7 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
         } else if r == MIFFED_BY_HELLO {
             self.api.npc(i32::from(MIFFED_RESPONSE));
         } else if (r == WHATS_UP_1) || (r == WHATS_UP_2) {
-            num_visits = self.api.get("ARILOU_INFO");
+            num_visits = self.api.get(StoryKey::ARILOU_INFO);
             let res = {
                 let old = num_visits;
                 num_visits = num_visits.wrapping_add(1);
@@ -275,19 +262,19 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
                 }
                 _ => {}
             }
-            self.api.set("ARILOU_INFO", num_visits);
+            self.api.set(StoryKey::ARILOU_INFO, num_visits);
             self.api.disable(WHATS_UP_2);
         } else if r == WHY_YOU_HERE {
             self.api.npc(i32::from(LEARN_THINGS));
-            self.api.set("ARILOU_STACK_5", 1_u8);
+            self.api.set(StoryKey::ARILOU_STACK_5, 1_u8);
         } else if r == WHAT_THINGS {
             self.api.npc(i32::from(THESE_THINGS));
-            self.api.set("ARILOU_STACK_5", 2_u8);
+            self.api.set(StoryKey::ARILOU_STACK_5, 2_u8);
         } else if r == WHY_DO_IT {
             self.api.npc(i32::from(DO_IT_BECAUSE));
-            self.api.set("ARILOU_STACK_5", 3_u8);
+            self.api.set(StoryKey::ARILOU_STACK_5, 3_u8);
         } else if (r == GIVE_ME_INFO_1) || (r == GIVE_ME_INFO_2) {
-            num_visits = self.api.get("ARILOU_HINTS");
+            num_visits = self.api.get(StoryKey::ARILOU_HINTS);
             let res = {
                 let old = num_visits;
                 num_visits = num_visits.wrapping_add(1);
@@ -299,14 +286,14 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
                 }
                 1 => {
                     self.api.npc(i32::from(ARILOU_HINTS_2));
-                    if i32::from(self.api.get("KNOW_ABOUT_SHATTERED")) < 2 {
-                        self.api.set("KNOW_ABOUT_SHATTERED", 2_u8);
+                    if i32::from(self.api.get(StoryKey::KNOW_ABOUT_SHATTERED)) < 2 {
+                        self.api.set(StoryKey::KNOW_ABOUT_SHATTERED, 2_u8);
                     }
                 }
                 2 => {
                     self.api.npc(i32::from(ARILOU_HINTS_3));
-                    self.api.set("KNOW_URQUAN_STORY", 1_u8);
-                    self.api.set("KNOW_KOHR_AH_STORY", 1_u8);
+                    self.api.set(StoryKey::KNOW_URQUAN_STORY, 1_u8);
+                    self.api.set(StoryKey::KNOW_KOHR_AH_STORY, 1_u8);
                 }
                 3 => {
                     self.api.npc(i32::from(ARILOU_HINTS_4));
@@ -317,10 +304,10 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
                 }
                 _ => {}
             }
-            self.api.set("ARILOU_HINTS", num_visits);
+            self.api.set(StoryKey::ARILOU_HINTS, num_visits);
             self.api.disable(GIVE_ME_INFO_2);
         }
-        match self.api.get("ARILOU_STACK_5") {
+        match self.api.get(StoryKey::ARILOU_STACK_5) {
             0 => {
                 self.api
                     .response(WHY_YOU_HERE, Handler::FriendlySpaceArilou, &[]);
@@ -336,7 +323,7 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
             _ => {}
         }
         if self.api.enabled(WHATS_UP_2) {
-            if i32::from(self.api.get("ARILOU_INFO")) == 0 {
+            if i32::from(self.api.get(StoryKey::ARILOU_INFO)) == 0 {
                 self.api
                     .response(WHATS_UP_1, Handler::FriendlySpaceArilou, &[]);
             } else {
@@ -345,7 +332,7 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
             }
         }
         if self.api.enabled(GIVE_ME_INFO_2) {
-            if i32::from(self.api.get("ARILOU_HINTS")) == 0 {
+            if i32::from(self.api.get(StoryKey::ARILOU_HINTS)) == 0 {
                 self.api
                     .response(GIVE_ME_INFO_1, Handler::FriendlySpaceArilou, &[]);
             } else {
@@ -362,25 +349,25 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
             self.api.npc(i32::from(OUT_TAKES));
             self.api.segue(0_u32);
             return;
-        } else if !(self.api.get("MET_ARILOU") != 0) {
+        } else if !(self.api.get(StoryKey::MET_ARILOU) != 0) {
             let resp_func: Handler;
-            if i32::from(self.api.get("ARILOU_SPACE_SIDE")) <= 1 {
+            if i32::from(self.api.get(StoryKey::ARILOU_SPACE_SIDE)) <= 1 {
                 self.api.npc(i32::from(INIT_HELLO));
                 resp_func = Handler::FriendlySpaceArilou;
             } else {
                 self.api.npc(i32::from(FRDLY_HOMEWORLD_HELLO_1));
                 resp_func = Handler::ArilouHome;
-                self.api.set("ARILOU_HOME_VISITS", 1_u8);
+                self.api.set(StoryKey::ARILOU_HOME_VISITS, 1_u8);
             }
             self.api.response(CONFUSED_BY_HELLO, resp_func, &[]);
             self.api.response(HAPPY_BY_HELLO, resp_func, &[]);
             self.api.response(MIFFED_BY_HELLO, resp_func, &[]);
-            self.api.set("MET_ARILOU", 1_u8);
+            self.api.set(StoryKey::MET_ARILOU, 1_u8);
             return;
         }
-        let manner: u8 = self.api.get("ARILOU_MANNER");
+        let manner: u8 = self.api.get(StoryKey::ARILOU_MANNER);
         if i32::from(manner) == 2 {
-            num_visits = self.api.get("ARILOU_VISITS");
+            num_visits = self.api.get(StoryKey::ARILOU_VISITS);
             let res = {
                 let old = num_visits;
                 num_visits = num_visits.wrapping_add(1);
@@ -405,15 +392,15 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
                 }
                 _ => {}
             }
-            self.api.set("ARILOU_VISITS", num_visits);
+            self.api.set(StoryKey::ARILOU_VISITS, num_visits);
             self.api.segue(0_u32);
         } else if i32::from(manner) == 1 {
-            if i32::from(self.api.get("ARILOU_SPACE_SIDE")) > 1 {
+            if i32::from(self.api.get(StoryKey::ARILOU_SPACE_SIDE)) > 1 {
                 self.api.npc(i32::from(INIT_ANGRY_HWLD_HELLO));
-                self.api.set("ARILOU_HOME_VISITS", 1_u8);
+                self.api.set(StoryKey::ARILOU_HOME_VISITS, 1_u8);
                 self.angry_home_arilou(0_u16);
             } else {
-                num_visits = self.api.get("ARILOU_VISITS");
+                num_visits = self.api.get(StoryKey::ARILOU_VISITS);
                 let res = {
                     let old = num_visits;
                     num_visits = num_visits.wrapping_add(1);
@@ -432,12 +419,12 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
                     }
                     _ => {}
                 }
-                self.api.set("ARILOU_VISITS", num_visits);
+                self.api.set(StoryKey::ARILOU_VISITS, num_visits);
                 self.angry_space_arilou(0_u16);
             }
         } else {
-            if i32::from(self.api.get("ARILOU_SPACE_SIDE")) <= 1 {
-                num_visits = self.api.get("ARILOU_VISITS");
+            if i32::from(self.api.get(StoryKey::ARILOU_SPACE_SIDE)) <= 1 {
+                num_visits = self.api.get(StoryKey::ARILOU_VISITS);
                 let res = {
                     let old = num_visits;
                     num_visits = num_visits.wrapping_add(1);
@@ -462,13 +449,13 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
                     }
                     _ => {}
                 }
-                self.api.set("ARILOU_VISITS", num_visits);
+                self.api.set(StoryKey::ARILOU_VISITS, num_visits);
                 self.friendly_space_arilou(0_u16);
             } else {
-                if !(self.api.get("PORTAL_SPAWNER") != 0)
-                    && (self.api.get("KNOW_ARILOU_WANT_WRECK") != 0)
+                if !(self.api.get(StoryKey::PORTAL_SPAWNER) != 0)
+                    && (self.api.get(StoryKey::KNOW_ARILOU_WANT_WRECK) != 0)
                 {
-                    num_visits = self.api.get("NO_PORTAL_VISITS");
+                    num_visits = self.api.get(StoryKey::NO_PORTAL_VISITS);
                     let res = {
                         let old = num_visits;
                         num_visits = num_visits.wrapping_add(1);
@@ -487,9 +474,9 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
                         }
                         _ => {}
                     }
-                    self.api.set("NO_PORTAL_VISITS", num_visits);
+                    self.api.set(StoryKey::NO_PORTAL_VISITS, num_visits);
                 } else {
-                    num_visits = self.api.get("ARILOU_HOME_VISITS");
+                    num_visits = self.api.get(StoryKey::ARILOU_HOME_VISITS);
                     let res = {
                         let old = num_visits;
                         num_visits = num_visits.wrapping_add(1);
@@ -514,7 +501,7 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
                         }
                         _ => {}
                     }
-                    self.api.set("ARILOU_HOME_VISITS", num_visits);
+                    self.api.set(StoryKey::ARILOU_HOME_VISITS, num_visits);
                 }
                 self.arilou_home(0_u16);
             }
@@ -524,30 +511,30 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
         let manner: u8;
         if ((self.api.get_segue()) as i32 == 1)
             && (i32::from({
-                manner = self.api.get("ARILOU_MANNER");
+                manner = self.api.get(StoryKey::ARILOU_MANNER);
                 manner
             }) != 2)
         {
-            self.api.set("ARILOU_MANNER", 1_u8);
+            self.api.set(StoryKey::ARILOU_MANNER, 1_u8);
             if i32::from(manner) != 1 {
-                self.api.set("ARILOU_VISITS", 0_u8);
-                self.api.set("ARILOU_HOME_VISITS", 0_u8);
+                self.api.set(StoryKey::ARILOU_VISITS, 0_u8);
+                self.api.set(StoryKey::ARILOU_HOME_VISITS, 0_u8);
             }
         }
-        if (i32::from(self.api.get("ARILOU_SPACE_SIDE")) > 1)
-            && (i32::from(self.api.get("ARILOU_HOME_VISITS")) <= 1)
+        if (i32::from(self.api.get(StoryKey::ARILOU_SPACE_SIDE)) > 1)
+            && (i32::from(self.api.get(StoryKey::ARILOU_HOME_VISITS)) <= 1)
         {
-            self.api.set("UMGAH_ZOMBIE_BLOBBIES", 1_u8);
-            self.api.set("UMGAH_VISITS", 0_u8);
-            self.api.set("UMGAH_HOME_VISITS", 0_u8);
-            if i32::from(self.api.get("ARILOU_MANNER")) < 2 {
-                self.api.set("ARILOU_MANNER", 3_u8);
+            self.api.set(StoryKey::UMGAH_ZOMBIE_BLOBBIES, 1_u8);
+            self.api.set(StoryKey::UMGAH_VISITS, 0_u8);
+            self.api.set(StoryKey::UMGAH_HOME_VISITS, 0_u8);
+            if i32::from(self.api.get(StoryKey::ARILOU_MANNER)) < 2 {
+                self.api.set(StoryKey::ARILOU_MANNER, 3_u8);
             }
         }
     }
     fn initialize(&mut self) {
-        if ((i32::from(self.api.get("ARILOU_SPACE_SIDE")) > 1)
-            || (i32::from(self.api.get("ARILOU_MANNER")) == 3))
+        if ((i32::from(self.api.get(StoryKey::ARILOU_SPACE_SIDE)) > 1)
+            || (i32::from(self.api.get(StoryKey::ARILOU_MANNER)) == 3))
             || (i32::from((self.api.activity()) as u8) == 5)
         {
             self.api.segue(0_u32);

@@ -149,7 +149,7 @@ impl<A: ScriptApi<Handler>> Commander<'_, A> {
             WELL_GO_GET_THEM_NOW => self.say(GLAD_WHEN_YOU_COME_BACK),
             WE_WILL_TAKE_CARE_OF_BASE => {
                 self.say(GOOD_LUCK_WITH_BASE);
-                self.0.set("WILL_DESTROY_BASE", 1);
+                self.0.set(StoryKey::WILL_DESTROY_BASE, 1);
             }
             TAKE_CARE_OF_BASE_AGAIN => self.say(GOOD_LUCK_AGAIN),
             BASE_WAS_ABANDONED
@@ -162,10 +162,10 @@ impl<A: ScriptApi<Handler>> Commander<'_, A> {
                     _ => IT_WAS_ABANDONED,
                 });
                 self.say(HERE_COMES_ILWRATH);
-                self.0.set("PROBE_ILWRATH_ENCOUNTER", 1);
+                self.0.set(StoryKey::PROBE_ILWRATH_ENCOUNTER, 1);
             }
             COOK_THEIR_BUTTS | OVERTHROW_EVIL_ALIENS | ANNIHILATE_THOSE_MONSTERS => {
-                self.0.set("PROBE_ILWRATH_ENCOUNTER", 0);
+                self.0.set(StoryKey::PROBE_ILWRATH_ENCOUNTER, 0);
                 self.say(match r {
                     COOK_THEIR_BUTTS => COOK_BUTTS,
                     OVERTHROW_EVIL_ALIENS => OVERTHROW_ALIENS,
@@ -180,7 +180,7 @@ impl<A: ScriptApi<Handler>> Commander<'_, A> {
                     Handler::ByeBye,
                     &[i32::from(NAME_40), GLOBAL_PLAYER_NAME, i32::from(NAME_41)],
                 );
-                self.0.set("STARBASE_AVAILABLE", 1);
+                self.0.set(StoryKey::STARBASE_AVAILABLE, 1);
             }
             _ => {
                 let name = match r {
@@ -203,7 +203,7 @@ impl<A: ScriptApi<Handler>> Commander<'_, A> {
                         3
                     }
                 };
-                self.0.set("NEW_ALLIANCE_NAME", name);
+                self.0.set(StoryKey::NEW_ALLIANCE_NAME, name);
                 self.say(STARBASE_WILL_BE_READY);
             }
         }
@@ -221,7 +221,7 @@ impl<A: ScriptApi<Handler>> Commander<'_, A> {
                 self.0.add_lander();
                 self.0.gauges(4, 0, 0);
                 if r == I_LOST_MY_LANDER {
-                    self.0.set("LANDERS_LOST", 1);
+                    self.0.set(StoryKey::LANDERS_LOST, 1);
                 }
             }
             NEED_FUEL_MERCURY | NEED_FUEL_LUNA | NEED_FUEL_AGAIN => {
@@ -232,7 +232,7 @@ impl<A: ScriptApi<Handler>> Commander<'_, A> {
                 });
                 self.0.gauges(0, (5 * FUEL_TANK_SCALE) as i16, 0);
                 if r != NEED_FUEL_AGAIN {
-                    self.0.set("GIVEN_FUEL_BEFORE", 1);
+                    self.0.set(StoryKey::GIVEN_FUEL_BEFORE, 1);
                 }
             }
             _ => return false,
@@ -242,9 +242,9 @@ impl<A: ScriptApi<Handler>> Commander<'_, A> {
 
     fn offer_rescue(&mut self, handler: Handler, first_fuel: u16) {
         let supplies = self.0.supplies();
-        if supplies.landers == 0 && self.0.get("CHMMR_BOMB_STATE") < 2 {
+        if supplies.landers == 0 && self.0.get(StoryKey::CHMMR_BOMB_STATE) < 2 {
             self.offer(
-                if self.0.get("LANDERS_LOST") != 0 {
+                if self.0.get(StoryKey::LANDERS_LOST) != 0 {
                     I_LOST_ANOTHER_LANDER
                 } else {
                     I_LOST_MY_LANDER
@@ -254,7 +254,7 @@ impl<A: ScriptApi<Handler>> Commander<'_, A> {
         }
         if supplies.fuel < 2 * FUEL_TANK_SCALE {
             self.offer(
-                if self.0.get("GIVEN_FUEL_BEFORE") != 0 {
+                if self.0.get(StoryKey::GIVEN_FUEL_BEFORE) != 0 {
                     NEED_FUEL_AGAIN
                 } else {
                     first_fuel
@@ -333,16 +333,16 @@ impl<A: ScriptApi<Handler>> Commander<'_, A> {
         } else if !self.rescue(r) {
             if r == WE_ARE_HERE_TO_HELP {
                 self.say(BASE_ON_MOON);
-            } else if self.0.get("STARBASE_YACK_STACK1") == 0 {
+            } else if self.0.get(StoryKey::STARBASE_YACK_STACK1) == 0 {
                 self.say(ABOUT_BASE);
-                self.0.set("STARBASE_YACK_STACK1", 1);
+                self.0.set(StoryKey::STARBASE_YACK_STACK1, 1);
             } else {
                 self.say(ABOUT_BASE_AGAIN);
             }
         }
         self.offer_rescue(Handler::TellMoonBase, NEED_FUEL_LUNA);
         self.offer(
-            if self.0.get("WILL_DESTROY_BASE") == 0 {
+            if self.0.get(StoryKey::WILL_DESTROY_BASE) == 0 {
                 WE_WILL_TAKE_CARE_OF_BASE
             } else {
                 TAKE_CARE_OF_BASE_AGAIN
@@ -350,7 +350,7 @@ impl<A: ScriptApi<Handler>> Commander<'_, A> {
             Handler::ByeBye,
         );
         self.offer(
-            if self.0.get("STARBASE_YACK_STACK1") == 0 {
+            if self.0.get(StoryKey::STARBASE_YACK_STACK1) == 0 {
                 TELL_ME_ABOUT_BASE
             } else {
                 TELL_ME_AGAIN
@@ -432,7 +432,7 @@ impl<A: ScriptApi<Handler>> Commander<'_, A> {
             } else {
                 self.offer(
                     WE_ARE_HERE_TO_HELP,
-                    if self.0.get("MOONBASE_DESTROYED") == 0 {
+                    if self.0.get(StoryKey::MOONBASE_DESTROYED) == 0 {
                         Handler::TellMoonBase
                     } else {
                         Handler::BaseDestroyed
@@ -444,7 +444,7 @@ impl<A: ScriptApi<Handler>> Commander<'_, A> {
 
     fn give_radios(&mut self, r: u16) {
         if r == WE_WILL_TRANSFER_NOW {
-            self.0.set("RADIOACTIVES_PROVIDED", 1);
+            self.0.set(StoryKey::RADIOACTIVES_PROVIDED, 1);
             self.say(FUEL_UP0);
             self.say(FUEL_UP1);
             self.0.talk_segue(1);
@@ -469,7 +469,7 @@ impl<A: ScriptApi<Handler>> Commander<'_, A> {
     }
 
     fn intro(&mut self) {
-        if self.0.get("PROBE_ILWRATH_ENCOUNTER") != 0 {
+        if self.0.get(StoryKey::PROBE_ILWRATH_ENCOUNTER) != 0 {
             self.say(VERY_IMPRESSIVE);
             for phrase in [
                 COOK_THEIR_BUTTS,
@@ -478,9 +478,9 @@ impl<A: ScriptApi<Handler>> Commander<'_, A> {
             ] {
                 self.offer(phrase, Handler::ByeBye);
             }
-        } else if self.0.get("STARBASE_VISITED") != 0 {
-            if self.0.get("RADIOACTIVES_PROVIDED") != 0 {
-                if self.0.get("MOONBASE_DESTROYED") == 0 {
+        } else if self.0.get(StoryKey::STARBASE_VISITED) != 0 {
+            if self.0.get(StoryKey::RADIOACTIVES_PROVIDED) != 0 {
+                if self.0.get(StoryKey::MOONBASE_DESTROYED) == 0 {
                     self.tell_moon_base(0);
                 } else {
                     self.base_destroyed(0);
@@ -496,7 +496,7 @@ impl<A: ScriptApi<Handler>> Commander<'_, A> {
             }
         } else {
             self.0.palette(1);
-            self.0.set("STARBASE_VISITED", 1);
+            self.0.set(StoryKey::STARBASE_VISITED, 1);
             self.say(ARE_YOU_SUPPLY_SHIP);
             self.0.response(
                 NO_BUT_WELL_HELP0,
@@ -621,9 +621,9 @@ pub(crate) mod live {
     pub unsafe fn init_commander_comm(cx: &mut Cx<'_>) -> *mut CLocData {
         static mut DESC: Option<CLocData> = None;
         let desc = (&mut *std::ptr::addr_of_mut!(DESC)).get_or_insert_with(descriptor);
-        configure(desc, api(cx).get("RADIOACTIVES_PROVIDED") != 0);
+        configure(desc, api(cx).get(StoryKey::RADIOACTIVES_PROVIDED) != 0);
         // setSegue(peace) also updates the legacy battle bit used by dispatch.
-        api(cx).set("BATTLE_SEGUE", 0);
+        api(cx).set(StoryKey::BATTLE_SEGUE, 0);
         crate::comm::ffi::rust_set_segue(0);
         desc
     }

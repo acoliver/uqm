@@ -2,7 +2,7 @@
 use super::script::{animation, as_comm_data};
 use crate::comm::locdata::{CColor, CLocData, CPoint};
 use crate::comm::types::CommData;
-use crate::engine::battle::Cx;
+use crate::engine::{battle::Cx, StoryKey};
 mod phrases;
 use phrases::*;
 mod api;
@@ -46,10 +46,10 @@ impl<A: ChmmrApi> Dialogue<'_, A> {
                 (crate::comm::dispatch::ship::CHMMR_SHIP as i32) as u16,
                 1 != 0,
             );
-            self.api.set("CHMMR_HOME_VISITS", 0_u8);
-            self.api.set("CHMMR_STACK", 0_u8);
-            self.api.set("CHMMR_BOMB_STATE", 2_u8);
-            self.api.set("UTWIG_BOMB_ON_SHIP", 0_u8);
+            self.api.set(StoryKey::CHMMR_HOME_VISITS, 0_u8);
+            self.api.set(StoryKey::CHMMR_STACK, 0_u8);
+            self.api.set(StoryKey::CHMMR_BOMB_STATE, 2_u8);
+            self.api.set(StoryKey::UTWIG_BOMB_ON_SHIP, 0_u8);
             self.api.refit();
         }
     }
@@ -84,13 +84,13 @@ impl<A: ChmmrApi> Dialogue<'_, A> {
                 .response((FURTHER_ASSISTANCE) as u16, Handler::NotReady, &[]);
         }
         if self.api.enabled((WHERE_WEAPON) as u16)
-            && !(i32::from(self.api.get("UTWIG_BOMB_ON_SHIP")) != 0)
+            && !(i32::from(self.api.get(StoryKey::UTWIG_BOMB_ON_SHIP)) != 0)
         {
             self.api
                 .response((WHERE_WEAPON) as u16, Handler::NotReady, &[]);
         }
         if self.api.enabled((WHERE_DISTRACTION) as u16)
-            && !(i32::from(self.api.get("TALKING_PET_ON_SHIP")) != 0)
+            && !(i32::from(self.api.get(StoryKey::TALKING_PET_ON_SHIP)) != 0)
         {
             self.api
                 .response((WHERE_DISTRACTION) as u16, Handler::NotReady, &[]);
@@ -142,7 +142,7 @@ impl<A: ChmmrApi> Dialogue<'_, A> {
         if (((r == 0) || (r == I_AM_CAPTAIN0)) || (r == I_AM_SAVIOR)) || (r == I_AM_SILLY) {
             self.api.npc(WHY_HAVE_YOU_FREED_US);
             self.api.talk_segue((!0_u16 as i32) as u16);
-            self.api.set("CHMMR_EMERGING", 0_u8);
+            self.api.set(StoryKey::CHMMR_EMERGING, 0_u8);
             self.api
                 .response((SERIOUS_1) as u16, Handler::ChmmrFree, &[]);
             self.api
@@ -150,24 +150,24 @@ impl<A: ChmmrApi> Dialogue<'_, A> {
             self.api.response((SILLY) as u16, Handler::ChmmrFree, &[]);
         } else {
             self.api.npc(WILL_HELP_ANALYZE_LOGS);
-            if i32::from(self.api.get("AWARE_OF_SAMATRA")) != 0 {
+            if i32::from(self.api.get(StoryKey::AWARE_OF_SAMATRA)) != 0 {
                 self.api.npc(YOU_KNOW_SAMATRA);
             } else {
                 self.api.npc(DONT_KNOW_ABOUT_SAMATRA);
-                self.api.set("AWARE_OF_SAMATRA", 1_u8);
+                self.api.set(StoryKey::AWARE_OF_SAMATRA, 1_u8);
             }
-            if i32::from(self.api.get("TALKING_PET_ON_SHIP")) != 0 {
+            if i32::from(self.api.get(StoryKey::TALKING_PET_ON_SHIP)) != 0 {
                 self.api.npc(HAVE_TALKING_PET);
             } else {
                 self.api.npc(NEED_DISTRACTION);
             }
-            if i32::from(self.api.get("UTWIG_BOMB_ON_SHIP")) != 0 {
+            if i32::from(self.api.get(StoryKey::UTWIG_BOMB_ON_SHIP)) != 0 {
                 self.api.npc(HAVE_BOMB);
             } else {
                 self.api.npc(NEED_WEAPON);
             }
-            if !(i32::from(self.api.get("TALKING_PET_ON_SHIP")) != 0)
-                || !(i32::from(self.api.get("UTWIG_BOMB_ON_SHIP")) != 0)
+            if !(i32::from(self.api.get(StoryKey::TALKING_PET_ON_SHIP)) != 0)
+                || !(i32::from(self.api.get(StoryKey::UTWIG_BOMB_ON_SHIP)) != 0)
             {
                 self.not_ready(0_u16 as i32);
             } else {
@@ -181,7 +181,7 @@ impl<A: ChmmrApi> Dialogue<'_, A> {
             self.api.npc(WHAT_ADVICE);
         } else if r == HOW_DEFEAT_URQUAN {
             self.api.npc(DEFEAT_LIKE_SO);
-            self.api.set("CHMMR_BOMB_STATE", 1_u8);
+            self.api.set(StoryKey::CHMMR_BOMB_STATE, 1_u8);
             self.api.disable((HOW_DEFEAT_URQUAN) as u16);
         } else if r == WHAT_ABOUT_TPET {
             self.api.npc(SCARY_BUT_USEFUL);
@@ -203,28 +203,28 @@ impl<A: ChmmrApi> Dialogue<'_, A> {
             advice_left = 1;
         }
         if self.api.enabled((WHAT_ABOUT_TPET) as u16)
-            && (i32::from(self.api.get("TALKING_PET_ON_SHIP")) != 0)
+            && (i32::from(self.api.get(StoryKey::TALKING_PET_ON_SHIP)) != 0)
         {
             self.api
                 .response((WHAT_ABOUT_TPET) as u16, Handler::ChmmrAdvice, &[]);
             advice_left = 1;
         }
         if self.api.enabled((WHAT_ABOUT_BOMB) as u16)
-            && (i32::from(self.api.get("UTWIG_BOMB_ON_SHIP")) != 0)
+            && (i32::from(self.api.get(StoryKey::UTWIG_BOMB_ON_SHIP)) != 0)
         {
             self.api
                 .response((WHAT_ABOUT_BOMB) as u16, Handler::ChmmrAdvice, &[]);
             advice_left = 1;
         }
         if self.api.enabled((WHAT_ABOUT_SUN_DEVICE) as u16)
-            && (i32::from(self.api.get("SUN_DEVICE_ON_SHIP")) != 0)
+            && (i32::from(self.api.get(StoryKey::SUN_DEVICE_ON_SHIP)) != 0)
         {
             self.api
                 .response((WHAT_ABOUT_SUN_DEVICE) as u16, Handler::ChmmrAdvice, &[]);
             advice_left = 1;
         }
         if self.api.enabled((WHAT_ABOUT_SAMATRA) as u16)
-            && (i32::from(self.api.get("AWARE_OF_SAMATRA")) != 0)
+            && (i32::from(self.api.get(StoryKey::AWARE_OF_SAMATRA)) != 0)
         {
             self.api
                 .response((WHAT_ABOUT_SAMATRA) as u16, Handler::ChmmrAdvice, &[]);
@@ -242,17 +242,17 @@ impl<A: ChmmrApi> Dialogue<'_, A> {
             self.api.disable((FIND_OUT_WHATS_UP) as u16);
         } else if r == NEED_HELP {
             self.api.npc(CANT_HELP);
-            self.api.set("CHMMR_STACK", 1_u8);
+            self.api.set(StoryKey::CHMMR_STACK, 1_u8);
         } else if r == WHY_NO_HELP {
             self.api.npc(LONG_TIME);
-            self.api.set("CHMMR_STACK", 2_u8);
+            self.api.set(StoryKey::CHMMR_STACK, 2_u8);
         } else if r == WHAT_IF_MORE_ENERGY {
             self.api.npc(DANGER_TO_US);
-            self.api.set("CHMMR_STACK", 3_u8);
+            self.api.set(StoryKey::CHMMR_STACK, 3_u8);
         } else if r == ENOUGH_ADVICE {
             self.api.npc(OK_ENOUGH_ADVICE);
         }
-        match i32::from(self.api.get("CHMMR_STACK")) {
+        match i32::from(self.api.get(StoryKey::CHMMR_STACK)) {
             0 => {
                 self.api
                     .response((NEED_HELP) as u16, Handler::ChmmrShielded, &[]);
@@ -280,11 +280,11 @@ impl<A: ChmmrApi> Dialogue<'_, A> {
     }
     fn after_bomb(&mut self, r: i32) {
         if r == WHATS_UP_AFTER_BOMB {
-            if i32::from(self.api.get("CHMMR_STACK")) != 0 {
+            if i32::from(self.api.get(StoryKey::CHMMR_STACK)) != 0 {
                 self.api.npc(GENERAL_INFO_AFTER_BOMB_2);
             } else {
                 self.api.npc(GENERAL_INFO_AFTER_BOMB_1);
-                self.api.set("CHMMR_STACK", 1_u8);
+                self.api.set(StoryKey::CHMMR_STACK, 1_u8);
             }
             self.api.disable((WHATS_UP_AFTER_BOMB) as u16);
         } else if r == WHAT_DO_AFTER_BOMB {
@@ -303,12 +303,12 @@ impl<A: ChmmrApi> Dialogue<'_, A> {
             .response((BYE_AFTER_BOMB) as u16, Handler::ExitConversation, &[]);
     }
     fn intro(&mut self) {
-        let mut num_visits: i32;
-        if i32::from(self.api.get("CHMMR_BOMB_STATE")) >= 2 {
-            num_visits = i32::from(self.api.get("CHMMR_HOME_VISITS"));
+        let mut visits: i32;
+        if i32::from(self.api.get(StoryKey::CHMMR_BOMB_STATE)) >= 2 {
+            visits = i32::from(self.api.get(StoryKey::CHMMR_HOME_VISITS));
             let res = {
-                let old = num_visits;
-                num_visits = (num_visits + 1) as u8 as i32;
+                let old = visits;
+                visits = (visits + 1) as u8 as i32;
                 old
             };
             match res {
@@ -318,17 +318,17 @@ impl<A: ChmmrApi> Dialogue<'_, A> {
                 1 => {
                     self.api.npc(HELLO_AFTER_BOMB_2);
                     {
-                        num_visits = (num_visits - 1) as u8 as i32;
-                        num_visits
+                        visits = (visits - 1) as u8 as i32;
+                        visits
                     };
                 }
                 _ => {}
             }
-            self.api.set("CHMMR_HOME_VISITS", (num_visits) as u8);
+            self.api.set(StoryKey::CHMMR_HOME_VISITS, visits as u8);
             self.after_bomb(0_u16 as i32);
-        } else if i32::from(self.api.get("CHMMR_UNLEASHED")) != 0 {
-            if !(i32::from(self.api.get("TALKING_PET_ON_SHIP")) != 0)
-                || !(i32::from(self.api.get("UTWIG_BOMB_ON_SHIP")) != 0)
+        } else if self.api.get(StoryKey::CHMMR_UNLEASHED) != 0 {
+            if !(self.api.get(StoryKey::TALKING_PET_ON_SHIP) != 0)
+                || !(self.api.get(StoryKey::UTWIG_BOMB_ON_SHIP) != 0)
             {
                 self.not_ready(0_u16 as i32);
             } else {
@@ -336,12 +336,12 @@ impl<A: ChmmrApi> Dialogue<'_, A> {
                 self.improve_bomb(0_u16 as i32);
             }
         } else {
-            num_visits = i32::from(self.api.get("CHMMR_HOME_VISITS"));
-            if !(i32::from(self.api.get("CHMMR_EMERGING")) != 0) {
+            visits = i32::from(self.api.get(StoryKey::CHMMR_HOME_VISITS));
+            if !(self.api.get(StoryKey::CHMMR_EMERGING) != 0) {
                 self.api.palette(1);
                 let res = {
-                    let old = num_visits;
-                    num_visits = (num_visits + 1) as u8 as i32;
+                    let old = visits;
+                    visits = (visits + 1) as u8 as i32;
                     old
                 };
                 match res {
@@ -357,8 +357,8 @@ impl<A: ChmmrApi> Dialogue<'_, A> {
                     3 => {
                         self.api.npc(WHY_YOU_HERE_4);
                         {
-                            num_visits = (num_visits - 1) as u8 as i32;
-                            num_visits
+                            visits = (visits - 1) as u8 as i32;
+                            visits
                         };
                     }
                     _ => {}
@@ -367,9 +367,9 @@ impl<A: ChmmrApi> Dialogue<'_, A> {
             } else {
                 self.api.intro_mode(3, 840 * 2);
                 self.api.npc(WE_ARE_FREE);
-                if num_visits != 0 {
+                if visits != 0 {
                     self.chmmr_free(0_u16 as i32);
-                    num_visits = 0;
+                    visits = 0;
                 } else {
                     self.api.npc(WHO_ARE_YOU);
 
@@ -389,9 +389,9 @@ impl<A: ChmmrApi> Dialogue<'_, A> {
                     self.api
                         .response((I_AM_SILLY) as u16, Handler::ChmmrFree, &[]);
                 }
-                self.api.set("CHMMR_UNLEASHED", 1_u8);
+                self.api.set(StoryKey::CHMMR_UNLEASHED, 1_u8);
             }
-            self.api.set("CHMMR_HOME_VISITS", (num_visits) as u8);
+            self.api.set(StoryKey::CHMMR_HOME_VISITS, visits as u8);
         }
     }
     fn post_chmmr_enc(&mut self) {}

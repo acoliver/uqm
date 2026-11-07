@@ -1,5 +1,6 @@
 use super::Handler;
 use crate::comm::races::alliance::AllianceApi;
+use crate::engine::StoryKey;
 use crate::planets::universe_units::{universe_to_logx, universe_to_logy};
 use crate::starbase::sis_modules::{ModuleType, EMPTY_MODULE_SLOT, FUEL_RESERVE};
 
@@ -80,7 +81,7 @@ fn refit(glob: &mut crate::engine::WorldData, starbase: bool) {
 impl ChmmrApi for super::super::script::live::LiveScript<'_, '_, Handler> {
     fn refit(&mut self) {
         use crate::comm::races::script::ScriptApi;
-        let starbase = self.get("STARBASE_AVAILABLE") != 0;
+        let starbase = self.get(StoryKey::STARBASE_AVAILABLE) != 0;
 
         {
             refit(&mut self.cx.borrow_mut().world.data, starbase);
@@ -113,7 +114,7 @@ impl Default for World {
 impl ChmmrApi for super::super::encounter::testing::Fake<Handler, World> {
     fn refit(&mut self) {
         use crate::comm::races::script::ScriptApi;
-        let starbase = self.get("STARBASE_AVAILABLE") != 0;
+        let starbase = self.get(StoryKey::STARBASE_AVAILABLE) != 0;
         self.world.refits += 1;
         refit(&mut self.world.glob, starbase);
     }

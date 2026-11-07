@@ -2,6 +2,7 @@ use super::dialogue::Dialogue;
 use super::*;
 use crate::comm::races::encounter::testing::{Effect, Fake};
 use crate::comm::races::script::ScriptApi;
+use crate::engine::StoryKey;
 
 type Api = Fake<Handler>;
 
@@ -20,7 +21,7 @@ fn offers(api: &Api) -> Vec<u32> {
 fn every_combat_counter_preserves_byte_switch_and_final_repeat() {
     for (key, response, lines) in [
         (
-            "VUX_STACK_3",
+            StoryKey::VUX_STACK_3,
             CANT_WE_BE_FRIENDS_1,
             [
                 NEVER_UGLY_HUMANS_1,
@@ -30,7 +31,7 @@ fn every_combat_counter_preserves_byte_switch_and_final_repeat() {
             ],
         ),
         (
-            "VUX_STACK_4",
+            StoryKey::VUX_STACK_4,
             BYE_HOSTILE_SPACE,
             [
                 GOODBYE_AND_DIE_HOSTILE_SPACE_1,
@@ -80,11 +81,11 @@ fn every_combat_counter_preserves_byte_switch_and_final_repeat() {
     ] {
         for visits in 0..=u8::MAX {
             let mut api = Api::default();
-            api.put("VUX_STACK_2", visits);
+            api.put(StoryKey::VUX_STACK_2, visits);
             handle(&mut api, Handler::Combat, response);
             let next = visits.wrapping_add(1);
             assert_eq!(
-                api.get("VUX_STACK_2"),
+                api.get(StoryKey::VUX_STACK_2),
                 if next <= 3 { next } else { visits }
             );
             assert_eq!(api.spoken(), [WE_FIGHT as i32]);
@@ -104,7 +105,7 @@ fn every_combat_counter_preserves_byte_switch_and_final_repeat() {
     ];
     for visits in 0..=u8::MAX {
         let mut api = Api::default();
-        api.put("VUX_STACK_1", visits);
+        api.put(StoryKey::VUX_STACK_1, visits);
         handle(&mut api, Handler::Combat, APOLOGY_1);
         let expected = if (4..=13).contains(&visits) {
             vec![rejections[(visits - 4) as usize] as i32]
@@ -112,7 +113,7 @@ fn every_combat_counter_preserves_byte_switch_and_final_repeat() {
             vec![]
         };
         assert_eq!(api.spoken(), expected);
-        assert_eq!(api.get("VUX_STACK_1"), visits.wrapping_add(1));
+        assert_eq!(api.get(StoryKey::VUX_STACK_1), visits.wrapping_add(1));
     }
 }
 
@@ -144,7 +145,7 @@ fn normal_topics_and_each_menu_stack_match_c() {
         let mut api = Api::default();
         handle(&mut api, Handler::Normal, response);
         assert_eq!(api.spoken(), [phrase as i32]);
-        assert_eq!(api.get("VUX_STACK_1"), state);
+        assert_eq!(api.get(StoryKey::VUX_STACK_1), state);
         assert_eq!(api.offers()[0], (option as u16, handler));
     }
     let topics = [
@@ -165,9 +166,9 @@ fn normal_topics_and_each_menu_stack_match_c() {
     ];
     for stack in 0..=u8::MAX {
         let mut api = Api::default();
-        api.put("VUX_STACK_1", stack);
-        api.put("VUX_STACK_2", stack);
-        api.put("VUX_STACK_3", stack);
+        api.put(StoryKey::VUX_STACK_1, stack);
+        api.put(StoryKey::VUX_STACK_2, stack);
+        api.put(StoryKey::VUX_STACK_3, stack);
         handle(&mut api, Handler::Normal, 0);
         let mut expected = vec![];
         if let Some(p) = topics.get(stack as usize) {
@@ -196,8 +197,8 @@ fn normal_topics_and_each_menu_stack_match_c() {
     .enumerate()
     {
         let mut api = Api::default();
-        api.put("VUX_STACK_1", 14);
-        api.put("VUX_STACK_3", stack as u8);
+        api.put(StoryKey::VUX_STACK_1, 14);
+        api.put(StoryKey::VUX_STACK_3, stack as u8);
         handle(&mut api, Handler::Normal, 0);
         assert_eq!(
             offers(&api),
@@ -211,7 +212,7 @@ fn normal_topics_and_each_menu_stack_match_c() {
     }
     for visits in 0..=u8::MAX {
         let mut api = Api::default();
-        api.put("VUX_INFO", visits);
+        api.put(StoryKey::VUX_INFO, visits);
         handle(&mut api, Handler::Normal, WHATS_UP_HOSTILE);
         let lines = [
             GENERAL_INFO_HOSTILE_1,
@@ -228,7 +229,7 @@ fn normal_topics_and_each_menu_stack_match_c() {
                 .collect::<Vec<_>>()
         );
         assert_eq!(
-            api.get("VUX_INFO"),
+            api.get(StoryKey::VUX_INFO),
             if visits == 3 {
                 3
             } else {
@@ -245,7 +246,7 @@ fn zex_topics_prioritize_selected_stack_and_apply_exact_transitions() {
         (
             WHAT_YOU_DO_HERE,
             MY_MENAGERIE,
-            "ZEX_STACK_1",
+            StoryKey::ZEX_STACK_1,
             1,
             vec![
                 WHAT_ABOUT_MENAGERIE,
@@ -257,7 +258,7 @@ fn zex_topics_prioritize_selected_stack_and_apply_exact_transitions() {
         (
             WHAT_ABOUT_MENAGERIE,
             NEED_NEW_CREATURE,
-            "ZEX_STACK_1",
+            StoryKey::ZEX_STACK_1,
             2,
             vec![
                 WHAT_ABOUT_CREATURE,
@@ -269,7 +270,7 @@ fn zex_topics_prioritize_selected_stack_and_apply_exact_transitions() {
         (
             WHAT_ABOUT_CREATURE,
             ABOUT_CREATURE,
-            "ZEX_STACK_1",
+            StoryKey::ZEX_STACK_1,
             3,
             vec![
                 ABOUT_CREATURE_AGAIN,
@@ -281,56 +282,56 @@ fn zex_topics_prioritize_selected_stack_and_apply_exact_transitions() {
         (
             ABOUT_CREATURE_AGAIN,
             CREATURE_AGAIN,
-            "ZEX_STACK_1",
+            StoryKey::ZEX_STACK_1,
             3,
             vec![WHY_DONT_YOU_ATTACK, TAKE_BY_FORCE, BYE_ZEX],
         ),
         (
             WHY_DONT_YOU_ATTACK,
             LIKE_YOU,
-            "ZEX_STACK_2",
+            StoryKey::ZEX_STACK_2,
             1,
             vec![WHY_LIKE_ME, WHAT_YOU_DO_HERE, TAKE_BY_FORCE, BYE_ZEX],
         ),
         (
             WHY_LIKE_ME,
             LIKE_BECAUSE,
-            "ZEX_STACK_2",
+            StoryKey::ZEX_STACK_2,
             2,
             vec![ARE_YOU_A_PERVERT, WHAT_YOU_DO_HERE, TAKE_BY_FORCE, BYE_ZEX],
         ),
         (
             ARE_YOU_A_PERVERT,
             CALL_ME_WHAT_YOU_WISH,
-            "ZEX_STACK_2",
+            StoryKey::ZEX_STACK_2,
             3,
             vec![WHAT_YOU_DO_HERE, TAKE_BY_FORCE, BYE_ZEX],
         ),
         (
             TAKE_BY_FORCE,
             PRECURSOR_DEVICE,
-            "ZEX_STACK_3",
+            StoryKey::ZEX_STACK_3,
             1,
             vec![REGARDLESS, WHAT_YOU_DO_HERE, WHY_DONT_YOU_ATTACK, BYE_ZEX],
         ),
         (
             YOU_LIED,
             YUP_LIED,
-            "ZEX_STACK_3",
+            StoryKey::ZEX_STACK_3,
             3,
             vec![KILL_YOU, WHAT_YOU_DO_HERE, WHY_DONT_YOU_ATTACK, BYE_ZEX],
         ),
     ] {
         let mut api = Api::default();
         if response == ABOUT_CREATURE_AGAIN {
-            api.put("ZEX_STACK_1", 3);
+            api.put(StoryKey::ZEX_STACK_1, 3);
         }
         handle(&mut api, Handler::Menagerie, response);
         assert_eq!(api.spoken(), [phrase as i32]);
         assert_eq!(api.get(key), state);
         assert_eq!(offers(&api), expected);
         if response == WHAT_ABOUT_CREATURE {
-            assert_eq!(api.get("KNOW_ZEX_WANTS_MONSTER"), 1);
+            assert_eq!(api.get(StoryKey::KNOW_ZEX_WANTS_MONSTER), 1);
             assert!(api.disabled.contains(&(WHAT_ABOUT_CREATURE as u16)));
             assert!(!api.disabled.contains(&(ABOUT_CREATURE_AGAIN as u16)));
         }
@@ -338,8 +339,8 @@ fn zex_topics_prioritize_selected_stack_and_apply_exact_transitions() {
     for knows in [0, 1] {
         for beast in [0, 1] {
             let mut api = Api::default();
-            api.put("KNOW_ZEX_WANTS_MONSTER", knows);
-            api.put("VUX_BEAST_ON_SHIP", beast);
+            api.put(StoryKey::KNOW_ZEX_WANTS_MONSTER, knows);
+            api.put(StoryKey::VUX_BEAST_ON_SHIP, beast);
             handle(&mut api, Handler::Menagerie, 0);
             assert_eq!(
                 offers(&api)[0],
@@ -352,7 +353,11 @@ fn zex_topics_prioritize_selected_stack_and_apply_exact_transitions() {
         }
     }
     let mut api = Api::default();
-    for key in ["ZEX_STACK_1", "ZEX_STACK_2", "ZEX_STACK_3"] {
+    for key in [
+        StoryKey::ZEX_STACK_1,
+        StoryKey::ZEX_STACK_2,
+        StoryKey::ZEX_STACK_3,
+    ] {
         api.put(key, 255);
     }
     handle(&mut api, Handler::Menagerie, 0);
@@ -377,14 +382,14 @@ fn zex_trust_sequence_and_terminal_branches_preserve_effect_order() {
     }
     for (response, phrase) in [(KILL_YOU, FIGHT_AGAIN), (REGARDLESS, THEN_FIGHT)] {
         let mut api = Api::default();
-        api.put("ZEX_VISITS", 3);
+        api.put(StoryKey::ZEX_VISITS, 3);
         handle(&mut api, Handler::Menagerie, response);
         assert_eq!(api.spoken(), [phrase as i32]);
         assert_eq!(api.segue, 1);
         assert!(api.offers().is_empty());
         if response == REGARDLESS {
-            assert_eq!(api.get("ZEX_STACK_3"), 2);
-            assert_eq!(api.get("ZEX_VISITS"), 0);
+            assert_eq!(api.get(StoryKey::ZEX_STACK_3), 2);
+            assert_eq!(api.get(StoryKey::ZEX_VISITS), 0);
         }
     }
     let mut api = Api::default();
@@ -398,15 +403,15 @@ fn zex_trust_sequence_and_terminal_branches_preserve_effect_order() {
             Effect::Talk(1),
             Effect::FadePalette(1, 210),
             Effect::Talk(u16::MAX),
-            Effect::Set("VUX_BEAST_ON_SHIP".into(), 0),
-            Effect::Set("ZEX_IS_DEAD".into(), 1),
+            Effect::Set(StoryKey::VUX_BEAST_ON_SHIP, 0),
+            Effect::Set(StoryKey::ZEX_IS_DEAD, 1),
             Effect::Segue(0),
         ]
     );
     api.effects.clear();
     handle(&mut api, Handler::Combat, TRY_ANY_WAY);
     assert_eq!(api.spoken(), [NOPE as i32]);
-    assert_eq!(api.get("VUX_STACK_1"), 4);
+    assert_eq!(api.get(StoryKey::VUX_STACK_1), 4);
     api.effects.clear();
     handle(&mut api, Handler::Combat, BYE_ZEX);
     assert_eq!(api.spoken(), [GOODBYE_ZEX as i32]);
@@ -419,13 +424,13 @@ fn all_greeting_paths_hold_last_case_and_increment_unmatched_byte_values() {
         (
             0,
             0,
-            "VUX_VISITS",
+            StoryKey::VUX_VISITS,
             vec![SPACE_HELLO_1, SPACE_HELLO_2, SPACE_HELLO_3, SPACE_HELLO_4],
         ),
         (
             128,
             0,
-            "VUX_HOME_VISITS",
+            StoryKey::VUX_HOME_VISITS,
             vec![
                 HOMEWORLD_HELLO_1,
                 HOMEWORLD_HELLO_2,
@@ -436,20 +441,20 @@ fn all_greeting_paths_hold_last_case_and_increment_unmatched_byte_values() {
         (
             192,
             0,
-            "ZEX_VISITS",
+            StoryKey::ZEX_VISITS,
             vec![ZEX_HELLO_1, ZEX_HELLO_2, ZEX_HELLO_3, ZEX_HELLO_4],
         ),
         (
             64,
             2,
-            "ZEX_VISITS",
+            StoryKey::ZEX_VISITS,
             vec![FIGHT_OR_TRADE_1, FIGHT_OR_TRADE_2],
         ),
     ] {
         for visits in 0..=u8::MAX {
             let mut api = Api::default();
-            api.put("GLOBAL_FLAGS_AND_DATA", flags);
-            api.put("ZEX_STACK_3", hostile_zex);
+            api.put(StoryKey::GLOBAL_FLAGS_AND_DATA, flags);
+            api.put(StoryKey::ZEX_STACK_3, hostile_zex);
             api.put(key, visits);
             Dialogue { api: &mut api }.intro();
             assert_eq!(
@@ -474,7 +479,7 @@ fn all_greeting_paths_hold_last_case_and_increment_unmatched_byte_values() {
         activity: 0x100 | crate::comm::dispatch::WON_LAST_BATTLE,
         ..Api::default()
     };
-    api.put("GLOBAL_FLAGS_AND_DATA", 192);
+    api.put(StoryKey::GLOBAL_FLAGS_AND_DATA, 192);
     Dialogue { api: &mut api }.intro();
     assert_eq!(
         api.effects,

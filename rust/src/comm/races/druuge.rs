@@ -2,7 +2,7 @@
 use super::script::{animation, as_comm_data};
 use crate::comm::locdata::{CColor, CLocData, CPoint};
 use crate::comm::types::CommData;
-use crate::engine::battle::Cx;
+use crate::engine::{battle::Cx, StoryKey};
 mod phrases;
 use phrases::*;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -44,10 +44,11 @@ impl<A: DruugeApi> Dialogue<'_, A> {
     fn exit_conversation(&mut self, r: u16) {
         if r == BYE {
             self.api.segue(0_u32);
-            if (i32::from(self.api.get("GLOBAL_FLAGS_AND_DATA")) & (1 << 7)) != 0 {
+            if (i32::from(self.api.get(StoryKey::GLOBAL_FLAGS_AND_DATA)) & (1 << 7)) != 0 {
                 if self.session.slavery_count != 0 {
-                    let previous_slaves: u16 = u16::from(self.api.get("CREW_SOLD_TO_DRUUGE0"))
-                        | (u16::from(self.api.get("CREW_SOLD_TO_DRUUGE1")) << 8);
+                    let previous_slaves: u16 =
+                        u16::from(self.api.get(StoryKey::CREW_SOLD_TO_DRUUGE0))
+                            | (u16::from(self.api.get(StoryKey::CREW_SOLD_TO_DRUUGE1)) << 8);
                     self.session.slavery_count =
                         self.session.slavery_count.wrapping_add(previous_slaves);
                     if (i32::from(self.session.slavery_count) > 250)
@@ -66,14 +67,16 @@ impl<A: DruugeApi> Dialogue<'_, A> {
                         self.api
                             .set_crew_cost(self.api.crew_cost().wrapping_add(7_u8));
                     }
-                    self.api
-                        .set("CREW_SOLD_TO_DRUUGE0", (self.session.slavery_count) as u8);
                     self.api.set(
-                        "CREW_SOLD_TO_DRUUGE1",
+                        StoryKey::CREW_SOLD_TO_DRUUGE0,
+                        (self.session.slavery_count) as u8,
+                    );
+                    self.api.set(
+                        StoryKey::CREW_SOLD_TO_DRUUGE1,
                         (self.session.slavery_count >> 8) as u8,
                     );
                 }
-                match self.api.get("DRUUGE_HOME_VISITS") {
+                match self.api.get(StoryKey::DRUUGE_HOME_VISITS) {
                     1 => {
                         self.api.npc(i32::from(BYE_FROM_TRADE_WORLD_1));
                     }
@@ -81,7 +84,7 @@ impl<A: DruugeApi> Dialogue<'_, A> {
                         self.api.npc(i32::from(BYE_FROM_TRADE_WORLD_2));
                     }
                 }
-            } else if (i32::from(self.api.get("GLOBAL_FLAGS_AND_DATA")) & (1 << 6)) != 0 {
+            } else if (i32::from(self.api.get(StoryKey::GLOBAL_FLAGS_AND_DATA)) & (1 << 6)) != 0 {
                 self.api.npc(i32::from(GOODBYE_FROM_BOMB_PLANET));
             } else {
                 self.api.npc(i32::from(GOODBYE_FROM_SPACE));
@@ -94,17 +97,17 @@ impl<A: DruugeApi> Dialogue<'_, A> {
     fn buy(&mut self, r: u16) {
         if (r == WANT_TO_BUY) || (r == IM_READY_TO_BUY) {
             self.api.npc(i32::from(READY_TO_SELL));
-            if !(self.api.get("ROSY_SPHERE") != 0) {
+            if !(self.api.get(StoryKey::ROSY_SPHERE) != 0) {
                 self.api.npc(i32::from(HAVE_SPHERE));
             }
-            if !(self.api.get("ARTIFACT_2_ON_SHIP") != 0) {
+            if !(self.api.get(StoryKey::ARTIFACT_2_ON_SHIP) != 0) {
                 self.api.npc(i32::from(HAVE_ART_1));
             }
-            if !(self.api.get("ARTIFACT_3_ON_SHIP") != 0) {
+            if !(self.api.get(StoryKey::ARTIFACT_3_ON_SHIP) != 0) {
                 self.api.npc(i32::from(HAVE_ART_2));
             }
             self.api.npc(i32::from(SHIPS_AND_FUEL));
-            self.api.set("KNOW_DRUUGE_SLAVERS", 3_u8);
+            self.api.set(StoryKey::KNOW_DRUUGE_SLAVERS, 3_u8);
         } else if r == BUY_DRUUGE_SHIP {
             if i32::from(self.api.ship().crew_enlisted) < 100 {
                 self.api.npc(i32::from(NOT_ENOUGH_CREW));
@@ -127,8 +130,8 @@ impl<A: DruugeApi> Dialogue<'_, A> {
             } else {
                 self.api.gauges(-100_i16, 0_i16, 0);
                 self.session.slavery_count = self.session.slavery_count.wrapping_add(100_u16);
-                self.api.set("ROSY_SPHERE_ON_SHIP", 1_u8);
-                self.api.set("ROSY_SPHERE", 1_u8);
+                self.api.set(StoryKey::ROSY_SPHERE_ON_SHIP, 1_u8);
+                self.api.set(StoryKey::ROSY_SPHERE, 1_u8);
                 self.api.npc(i32::from(BOUGHT_SPHERE));
             }
         } else if r == BUY_ART_1 {
@@ -137,7 +140,7 @@ impl<A: DruugeApi> Dialogue<'_, A> {
             } else {
                 self.api.gauges(-100_i16, 0_i16, 0);
                 self.session.slavery_count = self.session.slavery_count.wrapping_add(100_u16);
-                self.api.set("ARTIFACT_2_ON_SHIP", 1_u8);
+                self.api.set(StoryKey::ARTIFACT_2_ON_SHIP, 1_u8);
                 self.api.npc(i32::from(BOUGHT_ART_1));
             }
         } else if r == BUY_ART_2 {
@@ -146,7 +149,7 @@ impl<A: DruugeApi> Dialogue<'_, A> {
             } else {
                 self.api.gauges(-100_i16, 0_i16, 0);
                 self.session.slavery_count = self.session.slavery_count.wrapping_add(100_u16);
-                self.api.set("ARTIFACT_3_ON_SHIP", 1_u8);
+                self.api.set(StoryKey::ARTIFACT_3_ON_SHIP, 1_u8);
                 self.api.npc(i32::from(BOUGHT_ART_2));
             }
         } else if r == BUY_FUEL {
@@ -159,13 +162,13 @@ impl<A: DruugeApi> Dialogue<'_, A> {
             }
         }
         self.api.response(BUY_DRUUGE_SHIP, Handler::Buy, &[]);
-        if !(self.api.get("ROSY_SPHERE") != 0) {
+        if !(self.api.get(StoryKey::ROSY_SPHERE) != 0) {
             self.api.response(BUY_ROSY_SPHERE, Handler::Buy, &[]);
         }
-        if !(self.api.get("ARTIFACT_2_ON_SHIP") != 0) {
+        if !(self.api.get(StoryKey::ARTIFACT_2_ON_SHIP) != 0) {
             self.api.response(BUY_ART_1, Handler::Buy, &[]);
         }
-        if !(self.api.get("ARTIFACT_3_ON_SHIP") != 0) {
+        if !(self.api.get(StoryKey::ARTIFACT_3_ON_SHIP) != 0) {
             self.api.response(BUY_ART_2, Handler::Buy, &[]);
         }
         self.api.response(BUY_FUEL, Handler::Buy, &[]);
@@ -188,27 +191,25 @@ impl<A: DruugeApi> Dialogue<'_, A> {
     }
     fn do_transaction(&mut self, r: u16) {
         if r == SELL_MAIDENS {
-            self.api.set("MAIDENS_ON_SHIP", 0);
+            self.api.set(StoryKey::MAIDENS_ON_SHIP, 0);
         } else if r == SELL_FRAGMENTS {
-            for key in [
-                "EGG_CASE0_ON_SHIP",
-                "EGG_CASE1_ON_SHIP",
-                "EGG_CASE2_ON_SHIP",
-            ] {
+            for key in api::EGG_CASES {
                 if self.api.get(key) != 0 {
                     self.api.set(key, 0);
                     break;
                 }
             }
-            let num_frags = self.api.get("FRAGMENTS_BOUGHT").wrapping_add(1);
-            self.api.set("FRAGMENTS_BOUGHT", num_frags);
+            let num_frags = self.api.get(StoryKey::FRAGMENTS_BOUGHT).wrapping_add(1);
+            self.api.set(StoryKey::FRAGMENTS_BOUGHT, num_frags);
         } else if r == SELL_CASTER {
-            self.api.set("BURV_BROADCASTERS_ON_SHIP", 0);
+            self.api.set(StoryKey::BURV_BROADCASTERS_ON_SHIP, 0);
         } else if r == SELL_SPAWNER {
-            self.api.set("PORTAL_SPAWNER_ON_SHIP", 0);
+            self.api.set(StoryKey::PORTAL_SPAWNER_ON_SHIP, 0);
         }
-        if self.api.get("ROSY_SPHERE") == 0 && self.api.get("ROSY_SPHERE_ON_SHIP") != 0 {
-            self.api.set("ROSY_SPHERE", 1);
+        if self.api.get(StoryKey::ROSY_SPHERE) == 0
+            && self.api.get(StoryKey::ROSY_SPHERE_ON_SHIP) != 0
+        {
+            self.api.set(StoryKey::ROSY_SPHERE, 1);
         } else {
             let mut trade_gas = false;
             let mut ships_to_trade = 0;
@@ -288,7 +289,7 @@ impl<A: DruugeApi> Dialogue<'_, A> {
                 self.api.npc(i32::from(OK_REGULAR_DEAL));
             } else {
                 self.api.npc(i32::from(OK_HERES_SPHERE));
-                self.api.set("ROSY_SPHERE_ON_SHIP", 1_u8);
+                self.api.set(StoryKey::ROSY_SPHERE_ON_SHIP, 1_u8);
             }
             self.do_transaction(self.session.last_response);
         } else if (((r == SELL_MAIDENS) || (r == SELL_FRAGMENTS)) || (r == SELL_CASTER))
@@ -296,24 +297,25 @@ impl<A: DruugeApi> Dialogue<'_, A> {
         {
             self.do_transaction(r);
         }
-        let resp_func: Handler = if !(self.api.get("ROSY_SPHERE") != 0) {
+        let resp_func: Handler = if !(self.api.get(StoryKey::ROSY_SPHERE) != 0) {
             Handler::Trade
         } else {
             Handler::Sell
         };
-        if self.api.get("MAIDENS_ON_SHIP") != 0 {
+        if self.api.get(StoryKey::MAIDENS_ON_SHIP) != 0 {
             self.api.response(SELL_MAIDENS, resp_func, &[]);
         }
-        if (((self.api.get("EGG_CASE0_ON_SHIP") != 0) || (self.api.get("EGG_CASE1_ON_SHIP") != 0))
-            || (self.api.get("EGG_CASE2_ON_SHIP") != 0))
-            && (i32::from(self.api.get("FRAGMENTS_BOUGHT")) < 2)
+        if (((self.api.get(StoryKey::EGG_CASE0_ON_SHIP) != 0)
+            || (self.api.get(StoryKey::EGG_CASE1_ON_SHIP) != 0))
+            || (self.api.get(StoryKey::EGG_CASE2_ON_SHIP) != 0))
+            && (i32::from(self.api.get(StoryKey::FRAGMENTS_BOUGHT)) < 2)
         {
             self.api.response(SELL_FRAGMENTS, resp_func, &[]);
         }
-        if self.api.get("BURV_BROADCASTERS_ON_SHIP") != 0 {
+        if self.api.get(StoryKey::BURV_BROADCASTERS_ON_SHIP) != 0 {
             self.api.response(SELL_CASTER, resp_func, &[]);
         }
-        if self.api.get("PORTAL_SPAWNER_ON_SHIP") != 0 {
+        if self.api.get(StoryKey::PORTAL_SPAWNER_ON_SHIP) != 0 {
             self.api.response(SELL_SPAWNER, resp_func, &[]);
         }
         self.api.response(DONE_SELLING, Handler::TradeWorld, &[]);
@@ -323,12 +325,12 @@ impl<A: DruugeApi> Dialogue<'_, A> {
             self.api.npc(i32::from(WE_SELL_FOR_CREW));
         } else if r == ISNT_THIS_SLAVE_TRADING {
             self.api.npc(i32::from(NO_SLAVE_TRADE));
-            self.api.set("KNOW_DRUUGE_SLAVERS", 1_u8);
+            self.api.set(StoryKey::KNOW_DRUUGE_SLAVERS, 1_u8);
         } else if r == WHAT_DO_WITH_CREW {
             self.api.npc(i32::from(HAVE_FUN));
-            self.api.set("KNOW_DRUUGE_SLAVERS", 2_u8);
+            self.api.set(StoryKey::KNOW_DRUUGE_SLAVERS, 2_u8);
         }
-        match self.api.get("KNOW_DRUUGE_SLAVERS") {
+        match self.api.get(StoryKey::KNOW_DRUUGE_SLAVERS) {
             0 => {
                 self.api
                     .response(ISNT_THIS_SLAVE_TRADING, Handler::ExplainSlaveTrade, &[]);
@@ -346,7 +348,7 @@ impl<A: DruugeApi> Dialogue<'_, A> {
     fn trade_world(&mut self, r: u16) {
         if r == WHATS_UP_AT_TRADE_WORLD {
             let mut num_visits: u8;
-            num_visits = self.api.get("DRUUGE_HOME_INFO");
+            num_visits = self.api.get(StoryKey::DRUUGE_HOME_INFO);
             let res = {
                 let old = num_visits;
                 num_visits = num_visits.wrapping_add(1);
@@ -361,8 +363,8 @@ impl<A: DruugeApi> Dialogue<'_, A> {
                 }
                 2 => {
                     self.api.npc(i32::from(GEN_INFO_AT_TRADE_WORLD_3));
-                    if i32::from(self.api.get("KNOW_ABOUT_SHATTERED")) < 2 {
-                        self.api.set("KNOW_ABOUT_SHATTERED", 2_u8);
+                    if i32::from(self.api.get(StoryKey::KNOW_ABOUT_SHATTERED)) < 2 {
+                        self.api.set(StoryKey::KNOW_ABOUT_SHATTERED, 2_u8);
                     }
                 }
                 3 => {
@@ -374,7 +376,7 @@ impl<A: DruugeApi> Dialogue<'_, A> {
                 }
                 _ => {}
             }
-            self.api.set("DRUUGE_HOME_INFO", num_visits);
+            self.api.set(StoryKey::DRUUGE_HOME_INFO, num_visits);
             self.api.disable(WHATS_UP_AT_TRADE_WORLD);
         } else if r == DONE_SELLING {
             self.api.npc(i32::from(OK_DONE_SELLING));
@@ -388,7 +390,7 @@ impl<A: DruugeApi> Dialogue<'_, A> {
                 .response(WHATS_UP_AT_TRADE_WORLD, Handler::TradeWorld, &[]);
         }
         self.api.response(WANT_TO_SELL, Handler::Sell, &[]);
-        if i32::from(self.api.get("KNOW_DRUUGE_SLAVERS")) == 3 {
+        if i32::from(self.api.get(StoryKey::KNOW_DRUUGE_SLAVERS)) == 3 {
             self.api.response(WANT_TO_BUY, Handler::Buy, &[]);
         } else {
             self.api
@@ -399,12 +401,12 @@ impl<A: DruugeApi> Dialogue<'_, A> {
     fn bomb_ambush(&mut self, r: u16) {
         if r == WHATS_UP_AT_BOMB_PLANET {
             self.api.npc(i32::from(GEN_INFO_AT_BOMB_PLANET));
-            self.api.set("BOMB_VISITS", 2_u8);
+            self.api.set(StoryKey::BOMB_VISITS, 2_u8);
         } else if r == WE_GET_BOMB {
             self.api.npc(i32::from(NOT_GET_BOMB));
-            self.api.set("BOMB_VISITS", 3_u8);
+            self.api.set(StoryKey::BOMB_VISITS, 3_u8);
         }
-        match self.api.get("BOMB_VISITS") {
+        match self.api.get(StoryKey::BOMB_VISITS) {
             1 => {
                 self.api
                     .response(WHATS_UP_AT_BOMB_PLANET, Handler::BombAmbush, &[]);
@@ -422,7 +424,7 @@ impl<A: DruugeApi> Dialogue<'_, A> {
     fn space(&mut self, r: u16) {
         if r == WHATS_UP_IN_SPACE {
             let mut num_visits: u8;
-            num_visits = self.api.get("DRUUGE_SPACE_INFO");
+            num_visits = self.api.get(StoryKey::DRUUGE_SPACE_INFO);
             let res = {
                 let old = num_visits;
                 num_visits = num_visits.wrapping_add(1);
@@ -447,7 +449,7 @@ impl<A: DruugeApi> Dialogue<'_, A> {
                 }
                 _ => {}
             }
-            self.api.set("DRUUGE_SPACE_INFO", num_visits);
+            self.api.set(StoryKey::DRUUGE_SPACE_INFO, num_visits);
             self.api.disable(WHATS_UP_IN_SPACE);
         }
         if self.api.enabled(WHATS_UP_IN_SPACE) {
@@ -456,224 +458,210 @@ impl<A: DruugeApi> Dialogue<'_, A> {
         self.api.response(BYE, Handler::ExitConversation, &[]);
     }
     fn intro(&mut self) {
-        let mut num_visits: u8;
+        let mut visits: u8;
         if i32::from((self.api.activity()) as u8) == 5 {
             self.api.npc(i32::from(OUT_TAKES));
             self.api.segue(0_u32);
             return;
         }
-        if self.api.get("DRUUGE_MANNER") != 0 {
-            if (i32::from(self.api.get("GLOBAL_FLAGS_AND_DATA")) & (1 << 7)) != 0 {
-                num_visits = self.api.get("DRUUGE_HOME_VISITS");
+        if self.api.get(StoryKey::DRUUGE_MANNER) != 0 {
+            if (i32::from(self.api.get(StoryKey::GLOBAL_FLAGS_AND_DATA)) & (1 << 7)) != 0 {
+                visits = self.api.get(StoryKey::DRUUGE_HOME_VISITS);
                 let res = {
-                    let old = num_visits;
-                    num_visits = num_visits.wrapping_add(1);
+                    let old = visits;
+                    visits = visits.wrapping_add(1);
                     old
                 };
                 match res {
-                    0 => {
-                        self.api.npc(i32::from(HSTL_TRADE_WORLD_HELLO_1));
-                    }
+                    0 => self.api.npc(i32::from(HSTL_TRADE_WORLD_HELLO_1)),
                     1 => {
                         self.api.npc(i32::from(HSTL_TRADE_WORLD_HELLO_2));
                         {
-                            num_visits = num_visits.wrapping_sub(1);
-                            num_visits
+                            visits = visits.wrapping_sub(1);
+                            visits
                         };
                     }
                     _ => {}
                 }
-                self.api.set("DRUUGE_HOME_VISITS", num_visits);
+                self.api.set(StoryKey::DRUUGE_HOME_VISITS, visits);
             } else {
-                num_visits = self.api.get("DRUUGE_VISITS");
+                visits = self.api.get(StoryKey::DRUUGE_VISITS);
                 let res = {
-                    let old = num_visits;
-                    num_visits = num_visits.wrapping_add(1);
+                    let old = visits;
+                    visits = visits.wrapping_add(1);
                     old
                 };
                 match res {
-                    0 => {
-                        self.api.npc(i32::from(HOSTILE_SPACE_HELLO_1));
-                    }
+                    0 => self.api.npc(i32::from(HOSTILE_SPACE_HELLO_1)),
                     1 => {
                         self.api.npc(i32::from(HOSTILE_SPACE_HELLO_2));
                         {
-                            num_visits = num_visits.wrapping_sub(1);
-                            num_visits
+                            visits = visits.wrapping_sub(1);
+                            visits
                         };
                     }
                     _ => {}
                 }
-                self.api.set("DRUUGE_VISITS", num_visits);
+                self.api.set(StoryKey::DRUUGE_VISITS, visits);
             }
             self.api.segue(1_u32);
-        } else if (i32::from(self.api.get("GLOBAL_FLAGS_AND_DATA")) & (1 << 7)) != 0 {
+        } else if (i32::from(self.api.get(StoryKey::GLOBAL_FLAGS_AND_DATA)) & (1 << 7)) != 0 {
             {
-                num_visits = self.api.get("DRUUGE_HOME_VISITS");
+                visits = self.api.get(StoryKey::DRUUGE_HOME_VISITS);
                 let res = {
-                    let old = num_visits;
-                    num_visits = num_visits.wrapping_add(1);
+                    let old = visits;
+                    visits = visits.wrapping_add(1);
                     old
                 };
                 match res {
-                    0 => {
-                        self.api.npc(i32::from(INITIAL_TRADE_WORLD_HELLO));
-                    }
-                    1 => {
-                        self.api.npc(i32::from(SSQ_TRADE_WORLD_HELLO_1));
-                    }
-                    2 => {
-                        self.api.npc(i32::from(SSQ_TRADE_WORLD_HELLO_2));
-                    }
-                    3 => {
-                        self.api.npc(i32::from(SSQ_TRADE_WORLD_HELLO_3));
-                    }
+                    0 => self.api.npc(i32::from(INITIAL_TRADE_WORLD_HELLO)),
+                    1 => self.api.npc(i32::from(SSQ_TRADE_WORLD_HELLO_1)),
+                    2 => self.api.npc(i32::from(SSQ_TRADE_WORLD_HELLO_2)),
+                    3 => self.api.npc(i32::from(SSQ_TRADE_WORLD_HELLO_3)),
                     4 => {
                         self.api.npc(i32::from(SSQ_TRADE_WORLD_HELLO_4));
                         {
-                            num_visits = num_visits.wrapping_sub(1);
-                            num_visits
+                            visits = visits.wrapping_sub(1);
+                            visits
                         };
                     }
                     _ => {}
                 }
-                self.api.set("DRUUGE_HOME_VISITS", num_visits);
+                self.api.set(StoryKey::DRUUGE_HOME_VISITS, visits);
             }
-            if (self.api.get("ATTACKED_DRUUGE") != 0) && !(self.api.get("DRUUGE_DISCLAIMER") != 0) {
-                self.api.set("DRUUGE_DISCLAIMER", 1_u8);
-            }
-            if (self.api.get("MAIDENS_ON_SHIP") != 0) && !(self.api.get("SCANNED_MAIDENS") != 0) {
-                self.api.npc(i32::from(SCAN_MAIDENS));
-                self.api.set("SCANNED_MAIDENS", 1_u8);
-            }
-            if (((self.api.get("EGG_CASE0_ON_SHIP") != 0)
-                || (self.api.get("EGG_CASE1_ON_SHIP") != 0))
-                || (self.api.get("EGG_CASE2_ON_SHIP") != 0))
-                && !(self.api.get("SCANNED_FRAGMENTS") != 0)
+            if (self.api.get(StoryKey::ATTACKED_DRUUGE) != 0)
+                && !(self.api.get(StoryKey::DRUUGE_DISCLAIMER) != 0)
             {
-                if i32::from(self.api.get("FRAGMENTS_BOUGHT")) < 2 {
+                self.api.set(StoryKey::DRUUGE_DISCLAIMER, 1_u8);
+            }
+            if (self.api.get(StoryKey::MAIDENS_ON_SHIP) != 0)
+                && !(self.api.get(StoryKey::SCANNED_MAIDENS) != 0)
+            {
+                self.api.npc(i32::from(SCAN_MAIDENS));
+                self.api.set(StoryKey::SCANNED_MAIDENS, 1_u8);
+            }
+            if (((self.api.get(StoryKey::EGG_CASE0_ON_SHIP) != 0)
+                || (self.api.get(StoryKey::EGG_CASE1_ON_SHIP) != 0))
+                || (self.api.get(StoryKey::EGG_CASE2_ON_SHIP) != 0))
+                && !(self.api.get(StoryKey::SCANNED_FRAGMENTS) != 0)
+            {
+                if i32::from(self.api.get(StoryKey::FRAGMENTS_BOUGHT)) < 2 {
                     self.api.npc(i32::from(SCAN_FRAGMENTS));
                 } else {
                     self.api.npc(i32::from(ENOUGH_FRAGMENTS));
                 }
-                self.api.set("SCANNED_FRAGMENTS", 1_u8);
+                self.api.set(StoryKey::SCANNED_FRAGMENTS, 1_u8);
             }
-            if (self.api.get("BURV_BROADCASTERS_ON_SHIP") != 0)
-                && !(self.api.get("SCANNED_CASTER") != 0)
+            if (self.api.get(StoryKey::BURV_BROADCASTERS_ON_SHIP) != 0)
+                && !(self.api.get(StoryKey::SCANNED_CASTER) != 0)
             {
                 self.api.npc(i32::from(SCAN_DRUUGE_CASTER));
-                self.api.set("SCANNED_CASTER", 1_u8);
+                self.api.set(StoryKey::SCANNED_CASTER, 1_u8);
             }
-            if (self.api.get("PORTAL_SPAWNER_ON_SHIP") != 0)
-                && !(self.api.get("SCANNED_SPAWNER") != 0)
+            if (self.api.get(StoryKey::PORTAL_SPAWNER_ON_SHIP) != 0)
+                && !(self.api.get(StoryKey::SCANNED_SPAWNER) != 0)
             {
                 self.api.npc(i32::from(SCAN_ARILOU_SPAWNER));
-                self.api.set("SCANNED_SPAWNER", 1_u8);
+                self.api.set(StoryKey::SCANNED_SPAWNER, 1_u8);
             }
             self.trade_world(0_u16);
-        } else if (i32::from(self.api.get("GLOBAL_FLAGS_AND_DATA")) & (1 << 6)) != 0 {
-            if self.api.get("BOMB_VISITS") != 0 {
+        } else if (i32::from(self.api.get(StoryKey::GLOBAL_FLAGS_AND_DATA)) & (1 << 6)) != 0 {
+            if self.api.get(StoryKey::BOMB_VISITS) != 0 {
                 self.api.npc(i32::from(SUBSEQ_BOMB_WORLD_HELLO));
             } else {
                 self.api.npc(i32::from(INIT_BOMB_WORLD_HELLO));
-                self.api.set("BOMB_VISITS", 1_u8);
+                self.api.set(StoryKey::BOMB_VISITS, 1_u8);
             }
             self.bomb_ambush(0_u16);
-        } else if self.api.get("ATTACKED_DRUUGE") != 0 {
-            num_visits = self.api.get("DRUUGE_VISITS");
+        } else if self.api.get(StoryKey::ATTACKED_DRUUGE) != 0 {
+            visits = self.api.get(StoryKey::DRUUGE_VISITS);
             let res = {
-                let old = num_visits;
-                num_visits = num_visits.wrapping_add(1);
+                let old = visits;
+                visits = visits.wrapping_add(1);
                 old
             };
             match res {
-                0 => {
-                    self.api.npc(i32::from(HOSTILE_SPACE_HELLO_1));
-                }
+                0 => self.api.npc(i32::from(HOSTILE_SPACE_HELLO_1)),
                 1 => {
                     self.api.npc(i32::from(HOSTILE_SPACE_HELLO_2));
                     {
-                        num_visits = num_visits.wrapping_sub(1);
-                        num_visits
+                        visits = visits.wrapping_sub(1);
+                        visits
                     };
                 }
                 _ => {}
             }
-            self.api.set("DRUUGE_VISITS", num_visits);
+            self.api.set(StoryKey::DRUUGE_VISITS, visits);
             self.api.segue(1_u32);
         } else {
-            num_visits = 0_u8;
+            visits = 0_u8;
             if !self.api.has_escorts() {
-                num_visits = 16;
+                visits = 16;
                 for module in self.api.ship().module_slots {
                     if (9..=11).contains(&module) {
-                        num_visits = 0;
+                        visits = 0;
                         break;
                     }
                 }
             }
-            if num_visits != 0 {
-                num_visits = self.api.get("DRUUGE_SALVAGE");
+            if visits != 0 {
+                visits = self.api.get(StoryKey::DRUUGE_SALVAGE);
                 let res = {
-                    let old = num_visits;
-                    num_visits = num_visits.wrapping_add(1);
+                    let old = visits;
+                    visits = visits.wrapping_add(1);
                     old
                 };
                 match res {
-                    0 => {
-                        self.api.npc(i32::from(SALVAGE_YOUR_SHIP_1));
-                    }
+                    0 => self.api.npc(i32::from(SALVAGE_YOUR_SHIP_1)),
                     1 => {
                         self.api.npc(i32::from(SALVAGE_YOUR_SHIP_2));
                         {
-                            num_visits = num_visits.wrapping_sub(1);
-                            num_visits
+                            visits = visits.wrapping_sub(1);
+                            visits
                         };
                     }
                     _ => {}
                 }
-                self.api.set("DRUUGE_SALVAGE", num_visits);
+                self.api.set(StoryKey::DRUUGE_SALVAGE, visits);
                 self.api.segue(1_u32);
                 self.session.attempted_salvage = true;
             } else {
-                num_visits = self.api.get("DRUUGE_VISITS");
+                visits = self.api.get(StoryKey::DRUUGE_VISITS);
                 let res = {
-                    let old = num_visits;
-                    num_visits = num_visits.wrapping_add(1);
+                    let old = visits;
+                    visits = visits.wrapping_add(1);
                     old
                 };
                 match res {
-                    0 => {
-                        self.api.npc(i32::from(INIT_SPACE_HELLO));
-                    }
+                    0 => self.api.npc(i32::from(INIT_SPACE_HELLO)),
                     1 => {
                         self.api.npc(i32::from(SUBSEQUENT_SPACE_HELLO));
                         {
-                            num_visits = num_visits.wrapping_sub(1);
-                            num_visits
+                            visits = visits.wrapping_sub(1);
+                            visits
                         };
                     }
                     _ => {}
                 }
-                self.api.set("DRUUGE_VISITS", num_visits);
+                self.api.set(StoryKey::DRUUGE_VISITS, visits);
                 self.space(0_u16);
             }
         }
     }
     fn post_druuge_enc(&mut self) {
         if (((self.api.get_segue()) as i32 == 1) && !self.session.attempted_salvage)
-            && !(self.api.get("DRUUGE_MANNER") != 0)
-            && !(self.api.get("ATTACKED_DRUUGE") != 0)
+            && !(self.api.get(StoryKey::DRUUGE_MANNER) != 0)
+            && !(self.api.get(StoryKey::ATTACKED_DRUUGE) != 0)
         {
-            self.api.set("ATTACKED_DRUUGE", 1_u8);
-            self.api.set("DRUUGE_VISITS", 0_u8);
+            self.api.set(StoryKey::ATTACKED_DRUUGE, 1_u8);
+            self.api.set(StoryKey::DRUUGE_VISITS, 0_u8);
         }
     }
     fn initialize(&mut self) {
         self.session.slavery_count = 0;
         self.session.attempted_salvage = false;
-        if ((i32::from(self.api.get("DRUUGE_MANNER")) == 0)
-            && ((i32::from(self.api.get("GLOBAL_FLAGS_AND_DATA")) & (1 << 7)) != 0))
+        if ((i32::from(self.api.get(StoryKey::DRUUGE_MANNER)) == 0)
+            && ((i32::from(self.api.get(StoryKey::GLOBAL_FLAGS_AND_DATA)) & (1 << 7)) != 0))
             || (i32::from((self.api.activity()) as u8) == 5)
         {
             self.api.segue(0_u32);

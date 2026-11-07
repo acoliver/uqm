@@ -3,7 +3,7 @@ use super::alliance::AllianceApi;
 use super::script::{animation, as_comm_data, GLOBAL_SHIP_NAME};
 use crate::comm::locdata::{CColor, CLocData, CPoint};
 use crate::comm::types::CommData;
-use crate::engine::battle::Cx;
+use crate::engine::{battle::Cx, StoryKey};
 mod phrases;
 use phrases::*;
 mod api;
@@ -73,22 +73,22 @@ impl<A: ZoqApi> Dialogue<'_, A> {
             self.api.begin_talk(!0u16);
             self.api.set_allied(ZOQFOTPIK_SHIP, 1 != 0);
             self.api.event(1, 3, 0, 0, 6);
-            self.api.set("ZOQFOT_HOME_VISITS", 0_u8);
+            self.api.set(StoryKey::ZOQFOT_HOME_VISITS, 0_u8);
         } else if r == ALL_VERY_INTERESTING {
             self.api.speak(SEE_TOLD_YOU0, Speaker::Zoq);
             self.api.speak(SEE_TOLD_YOU1, Speaker::Pik);
             self.api.speak(SEE_TOLD_YOU2, Speaker::Zoq);
             self.api.speak(SEE_TOLD_YOU3, Speaker::Pik);
             self.api.begin_talk(!0u16);
-            self.api.set("ZOQFOT_HOSTILE", 1_u8);
-            self.api.set("ZOQFOT_HOME_VISITS", 0_u8);
+            self.api.set(StoryKey::ZOQFOT_HOSTILE, 1_u8);
+            self.api.set(StoryKey::ZOQFOT_HOME_VISITS, 0_u8);
             self.api.segue(1);
         } else if r == NEVER {
             self.api.speak(WE_ENEMIES0, Speaker::Zoq);
             self.api.speak(WE_ENEMIES1, Speaker::Pik);
             self.api.begin_talk(!0u16);
-            self.api.set("ZOQFOT_HOME_VISITS", 0_u8);
-            self.api.set("ZOQFOT_HOSTILE", 1_u8);
+            self.api.set(StoryKey::ZOQFOT_HOME_VISITS, 0_u8);
+            self.api.set(StoryKey::ZOQFOT_HOSTILE, 1_u8);
             self.api.segue(1);
         }
     }
@@ -195,7 +195,7 @@ impl<A: ZoqApi> Dialogue<'_, A> {
             }
             self.api
                 .response(ALL_VERY_INTERESTING, Handler::ExitConversation, &[]);
-            if (self.api.get("GLOBAL_FLAGS_AND_DATA") & (1 << 7)) != 0 {
+            if (self.api.get(StoryKey::GLOBAL_FLAGS_AND_DATA) & (1 << 7)) != 0 {
                 self.api
                     .response(HOW_CAN_I_HELP, Handler::FormAlliance, &[]);
             } else {
@@ -352,7 +352,7 @@ impl<A: ZoqApi> Dialogue<'_, A> {
     fn zoq_fot_home(&mut self, r: u16) {
         let mut num_visits: u8;
         if r == WHATS_UP_HOMEWORLD {
-            num_visits = self.api.get("ZOQFOT_INFO");
+            num_visits = self.api.get(StoryKey::ZOQFOT_INFO);
             let res = {
                 let old = num_visits;
                 num_visits += 1;
@@ -404,13 +404,13 @@ impl<A: ZoqApi> Dialogue<'_, A> {
                 }
                 _ => {}
             }
-            self.api.set("ZOQFOT_INFO", num_visits);
+            self.api.set(StoryKey::ZOQFOT_INFO, num_visits);
             self.api.disable(WHATS_UP_HOMEWORLD);
         } else if r == ANY_WAR_NEWS {
             let mut know_mask: u8;
-            num_visits = self.api.get("UTWIG_SUPOX_MISSION");
-            know_mask = self.api.get("ZOQFOT_KNOW_MASK");
-            if !((know_mask & 8) != 0) && self.api.get("KOHR_AH_FRENZY") != 0 {
+            num_visits = self.api.get(StoryKey::UTWIG_SUPOX_MISSION);
+            know_mask = self.api.get(StoryKey::ZOQFOT_KNOW_MASK);
+            if !((know_mask & 8) != 0) && self.api.get(StoryKey::KOHR_AH_FRENZY) != 0 {
                 self.api.speak(KOHRAH_FRENZY0, Speaker::Zoq);
                 self.api.speak(KOHRAH_FRENZY1, Speaker::Pik);
                 self.api.speak(KOHRAH_FRENZY2, Speaker::Zoq);
@@ -484,7 +484,7 @@ impl<A: ZoqApi> Dialogue<'_, A> {
                     self.api.begin_talk(!0u16);
                 }
             }
-            self.api.set("ZOQFOT_KNOW_MASK", know_mask);
+            self.api.set(StoryKey::ZOQFOT_KNOW_MASK, know_mask);
             self.api.disable(ANY_WAR_NEWS);
         } else if r == I_WANT_ALLIANCE {
             self.api.speak(GOOD0, Speaker::Zoq);
@@ -541,8 +541,8 @@ impl<A: ZoqApi> Dialogue<'_, A> {
             self.api.segue(0);
             return;
         }
-        if self.api.get("ZOQFOT_HOSTILE") != 0 {
-            num_visits = self.api.get("ZOQFOT_HOME_VISITS");
+        if self.api.get(StoryKey::ZOQFOT_HOSTILE) != 0 {
+            num_visits = self.api.get(StoryKey::ZOQFOT_HOME_VISITS);
             let res = {
                 let old = num_visits;
                 num_visits += 1;
@@ -576,10 +576,10 @@ impl<A: ZoqApi> Dialogue<'_, A> {
                 }
                 _ => {}
             }
-            self.api.set("ZOQFOT_HOME_VISITS", num_visits);
+            self.api.set(StoryKey::ZOQFOT_HOME_VISITS, num_visits);
             self.api.segue(1);
-        } else if !(self.api.get("MET_ZOQFOT") != 0) {
-            self.api.set("MET_ZOQFOT", 1_u8);
+        } else if !(self.api.get(StoryKey::MET_ZOQFOT) != 0) {
+            self.api.set(StoryKey::MET_ZOQFOT, 1_u8);
             self.api.speak(WE_ARE0, Speaker::Zoq);
             self.api.speak(WE_ARE1, Speaker::Pik);
             self.api.speak(WE_ARE2, Speaker::Zoq);
@@ -588,7 +588,7 @@ impl<A: ZoqApi> Dialogue<'_, A> {
             self.api.speak(WE_ARE5, Speaker::Pik);
             self.api.speak(WE_ARE6, Speaker::Zoq);
             self.api.speak(WE_ARE7, Speaker::Pik);
-            if (self.api.get("GLOBAL_FLAGS_AND_DATA") & (1 << 7)) != 0 {
+            if (self.api.get(StoryKey::GLOBAL_FLAGS_AND_DATA) & (1 << 7)) != 0 {
                 self.api.speak(INIT_HOME_HELLO0, Speaker::Zoq);
                 self.api.speak(INIT_HOME_HELLO1, Speaker::Pik);
                 self.api.speak(INIT_HOME_HELLO2, Speaker::Zoq);
@@ -602,7 +602,7 @@ impl<A: ZoqApi> Dialogue<'_, A> {
             self.api.begin_talk(!0u16);
             self.aquaint_zoq_fot(0);
         } else {
-            if self.api.get("ZOQFOT_DISTRESS") != 0 {
+            if self.api.get(StoryKey::ZOQFOT_DISTRESS) != 0 {
                 self.api.speak(THANKS_FOR_RESCUE0, Speaker::Zoq);
                 self.api.speak(THANKS_FOR_RESCUE1, Speaker::Pik);
                 self.api.speak(THANKS_FOR_RESCUE2, Speaker::Zoq);
@@ -616,10 +616,10 @@ impl<A: ZoqApi> Dialogue<'_, A> {
                 self.api.speak(THANKS_FOR_RESCUE10, Speaker::Zoq);
                 self.api.speak(THANKS_FOR_RESCUE11, Speaker::Pik);
                 self.api.begin_talk(!0u16);
-                self.api.set("ZOQFOT_DISTRESS", 0_u8);
+                self.api.set(StoryKey::ZOQFOT_DISTRESS, 0_u8);
                 self.api.add_escorts(ZOQFOTPIK_SHIP, 4);
             } else {
-                num_visits = self.api.get("ZOQFOT_HOME_VISITS");
+                num_visits = self.api.get(StoryKey::ZOQFOT_HOME_VISITS);
                 if self.api.alliance(ZOQFOTPIK_SHIP) != 1 {
                     let res = {
                         let old = num_visits;
@@ -682,7 +682,7 @@ impl<A: ZoqApi> Dialogue<'_, A> {
                         _ => {}
                     }
                 }
-                self.api.set("ZOQFOT_HOME_VISITS", num_visits);
+                self.api.set(StoryKey::ZOQFOT_HOME_VISITS, num_visits);
             }
             self.zoq_fot_home(0);
         }

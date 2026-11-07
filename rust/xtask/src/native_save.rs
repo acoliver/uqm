@@ -356,15 +356,11 @@ fn saved_campaign_state(
         decode_save,
         runtime::star::{resolve_star, LoadedStar, CATALOG_LEN},
     };
-    use uqm_rust::state::{game_state::get_state_bits_raw, game_state_keys::bit_range};
+    use uqm_rust::state::{game_state::get_state_bits_raw, game_state_keys::StoryKey};
     let save = decode_save(bytes).map_err(|error| format!("decode produced save: {error}"))?;
     let story = |name: &str| {
-        let (start, end) = bit_range(name).expect("known story key");
-        u32::from(get_state_bits_raw(
-            &save.game_state,
-            start as usize,
-            end as usize,
-        ))
+        let key = StoryKey::from_name(name).expect("known story key");
+        u32::from(get_state_bits_raw(&save.game_state, key.start(), key.end()))
     };
     // The catalog is immutable game data; this process never runs the game.
     let catalog = unsafe {

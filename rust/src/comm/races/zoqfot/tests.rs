@@ -1,6 +1,7 @@
 use super::*;
 use crate::comm::races::encounter::testing::{Effect, Fake};
 use crate::comm::races::script::{ScriptApi, GLOBAL_PLAYER_NAME};
+use crate::engine::StoryKey;
 type Api = Fake<Handler, api::Clock>;
 fn run(f: &mut Api, h: Handler, r: u16) {
     f.effects.clear();
@@ -28,7 +29,7 @@ fn alternating(first: u16, count: u16) -> Vec<(u16, bool)> {
 fn first_meeting_names_questions_and_home_alliance_routing() {
     let mut f = Api::default();
     Dialogue { api: &mut f }.intro();
-    assert_eq!(f.get("MET_ZOQFOT"), 1);
+    assert_eq!(f.get(StoryKey::MET_ZOQFOT), 1);
     let mut want = alternating(WE_ARE0, 8);
     want.extend(alternating(SCOUT_HELLO0, 4));
     assert_eq!(speech(&f), want);
@@ -43,7 +44,7 @@ fn first_meeting_names_questions_and_home_alliance_routing() {
         ]
     );
     for alliance in 0..4 {
-        f.put("NEW_ALLIANCE_NAME", alliance);
+        f.put(StoryKey::NEW_ALLIANCE_NAME, alliance);
         run(&mut f, Handler::AquaintZoqFot, 0);
         let mut fragments = vec![
             i32::from(WE_ARE_VINDICATOR0),
@@ -93,7 +94,7 @@ fn first_meeting_names_questions_and_home_alliance_routing() {
         f.offers().iter().find(|(p, _)| *p == HOW_CAN_I_HELP),
         Some(&(HOW_CAN_I_HELP, Handler::ExitConversation))
     );
-    f.put("GLOBAL_FLAGS_AND_DATA", 128);
+    f.put(StoryKey::GLOBAL_FLAGS_AND_DATA, 128);
     run(&mut f, Handler::ZoqFotIntro, 0);
     assert_eq!(
         f.offers().iter().find(|(p, _)| *p == HOW_CAN_I_HELP),
@@ -113,7 +114,7 @@ fn alliance_and_hostile_exits_have_exact_effects() {
         &[
             Effect::Allied(19, true),
             Effect::Event(1, 3, 0, 0, 6),
-            Effect::Set("ZOQFOT_HOME_VISITS".into(), 0)
+            Effect::Set(StoryKey::ZOQFOT_HOME_VISITS, 0)
         ]
     );
     assert_eq!(f.segue, 0);
@@ -121,13 +122,13 @@ fn alliance_and_hostile_exits_have_exact_effects() {
         (ALL_VERY_INTERESTING, SEE_TOLD_YOU0, 4),
         (NEVER, WE_ENEMIES0, 2),
     ] {
-        f.put("ZOQFOT_HOME_VISITS", 3);
+        f.put(StoryKey::ZOQFOT_HOME_VISITS, 3);
         run(&mut f, Handler::ExitConversation, r);
         assert_eq!(speech(&f), alternating(first, count));
         assert_eq!(
             (
-                f.get("ZOQFOT_HOSTILE"),
-                f.get("ZOQFOT_HOME_VISITS"),
+                f.get(StoryKey::ZOQFOT_HOSTILE),
+                f.get(StoryKey::ZOQFOT_HOME_VISITS),
                 f.segue
             ),
             (1, 0, 1)
@@ -181,14 +182,14 @@ fn war_news_priority_clock_boundaries_and_masks() {
         (0, 2160, 3, 1, 15, NO_WAR_NEWS0, 2, 15),
     ] {
         let mut f = Api::default();
-        f.put("UTWIG_SUPOX_MISSION", mission);
-        f.put("KOHR_AH_FRENZY", frenzy);
-        f.put("ZOQFOT_KNOW_MASK", mask);
+        f.put(StoryKey::UTWIG_SUPOX_MISSION, mission);
+        f.put(StoryKey::KOHR_AH_FRENZY, frenzy);
+        f.put(StoryKey::ZOQFOT_KNOW_MASK, mask);
         f.world.year = year;
         f.world.month = month;
         run(&mut f, Handler::ZoqFotHome, ANY_WAR_NEWS);
         assert_eq!(speech(&f), alternating(first, count));
-        assert_eq!(f.get("ZOQFOT_KNOW_MASK"), next);
+        assert_eq!(f.get(StoryKey::ZOQFOT_KNOW_MASK), next);
         assert!(!f.enabled(ANY_WAR_NEWS));
     }
 }
@@ -196,32 +197,32 @@ fn war_news_priority_clock_boundaries_and_masks() {
 fn visits_rescue_outtakes_and_descriptor() {
     for allied in [false, true] {
         let mut f = Api::default();
-        f.put("MET_ZOQFOT", 1);
+        f.put(StoryKey::MET_ZOQFOT, 1);
         f.alliances[19] = if allied { 1 } else { 2 };
         let cap = if allied { 3 } else { 1 };
         for n in 0..6 {
             f.effects.clear();
             Dialogue { api: &mut f }.intro();
-            assert_eq!(f.get("ZOQFOT_HOME_VISITS"), (n + 1).min(cap));
+            assert_eq!(f.get(StoryKey::ZOQFOT_HOME_VISITS), (n + 1).min(cap));
             assert!(!speech(&f).is_empty());
         }
     }
     let mut f = Api::default();
-    f.put("ZOQFOT_HOSTILE", 1);
+    f.put(StoryKey::ZOQFOT_HOSTILE, 1);
     for _ in 0..6 {
         f.effects.clear();
         Dialogue { api: &mut f }.intro();
         assert!(f.offers().is_empty());
         assert_eq!(f.segue, 1);
     }
-    assert_eq!(f.get("ZOQFOT_HOME_VISITS"), 3);
-    f.put("ZOQFOT_HOSTILE", 0);
-    f.put("MET_ZOQFOT", 1);
-    f.put("ZOQFOT_DISTRESS", 1);
+    assert_eq!(f.get(StoryKey::ZOQFOT_HOME_VISITS), 3);
+    f.put(StoryKey::ZOQFOT_HOSTILE, 0);
+    f.put(StoryKey::MET_ZOQFOT, 1);
+    f.put(StoryKey::ZOQFOT_DISTRESS, 1);
     f.effects.clear();
     Dialogue { api: &mut f }.intro();
     assert_eq!(speech(&f), alternating(THANKS_FOR_RESCUE0, 12));
-    assert_eq!(f.get("ZOQFOT_DISTRESS"), 0);
+    assert_eq!(f.get(StoryKey::ZOQFOT_DISTRESS), 0);
     assert!(f.effects.contains(&Effect::AddEscorts(19, 4)));
     f.activity = 5;
     f.effects.clear();

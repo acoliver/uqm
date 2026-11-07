@@ -1,4 +1,5 @@
 use super::*;
+use crate::engine::StoryKey;
 
 impl<A: SlylandApi> Dialogue<'_, A> {
     pub(super) fn initialize(&mut self) {
@@ -27,7 +28,7 @@ impl<A: SlylandApi> Dialogue<'_, A> {
     pub(super) fn combat(&mut self, response: i32) {
         let topics = [
             (
-                "SLYLANDRO_PROBE_THREAT",
+                StoryKey::SLYLANDRO_PROBE_THREAT,
                 [THREAT_1, THREAT_2, THREAT_3, THREAT_4],
                 [
                     PROGRAMMED_TO_DEFEND_1,
@@ -37,7 +38,7 @@ impl<A: SlylandApi> Dialogue<'_, A> {
                 ],
             ),
             (
-                "SLYLANDRO_PROBE_WRONG",
+                StoryKey::SLYLANDRO_PROBE_WRONG,
                 [
                     SOMETHING_WRONG_1,
                     SOMETHING_WRONG_2,
@@ -52,7 +53,7 @@ impl<A: SlylandApi> Dialogue<'_, A> {
                 ],
             ),
             (
-                "SLYLANDRO_PROBE_ID",
+                StoryKey::SLYLANDRO_PROBE_ID,
                 [WE_ARE_US_1, WE_ARE_US_2, WE_ARE_US_3, WE_ARE_US_4],
                 [
                     THIS_IS_PROBE_1,
@@ -62,7 +63,7 @@ impl<A: SlylandApi> Dialogue<'_, A> {
                 ],
             ),
             (
-                "SLYLANDRO_PROBE_INFO",
+                StoryKey::SLYLANDRO_PROBE_INFO,
                 [WHY_ATTACK_1, WHY_ATTACK_2, WHY_ATTACK_3, WHY_ATTACK_4],
                 [
                     PEACEFUL_MISSION_1,
@@ -72,19 +73,19 @@ impl<A: SlylandApi> Dialogue<'_, A> {
                 ],
             ),
             (
-                "SLYLANDRO_PROBE_EXIT",
+                StoryKey::SLYLANDRO_PROBE_EXIT,
                 [BYE_1, BYE_2, BYE_3, BYE_4],
                 [GOODBYE_1, GOODBYE_2, GOODBYE_3, GOODBYE_4],
             ),
         ];
         if response == 0 {
-            if self.api.get("DESTRUCT_CODE_ON_SHIP") != 0 {
+            if self.api.get(StoryKey::DESTRUCT_CODE_ON_SHIP) != 0 {
                 self.api
                     .response(DESTRUCT_CODE as u16, Handler::Combat, &[]);
             }
             let mut choices = [0; 5];
             for (i, (key, phrases, _)) in topics.iter().enumerate() {
-                let n = self.api.get(key);
+                let n = self.api.get(*key);
                 choices[i] = phrases[usize::from(n.min(3))] as u16;
                 self.api.response(choices[i], Handler::Combat, &[]);
             }
@@ -118,12 +119,12 @@ impl<A: SlylandApi> Dialogue<'_, A> {
                 .set(key, if n == 3 { n } else { n.wrapping_add(1) });
         }
         self.api.npc(HOSTILE as i32);
-        self.api.set("PROBE_EXHIBITED_BUG", 1);
+        self.api.set(StoryKey::PROBE_EXHIBITED_BUG, 1);
         self.api.segue(1);
     }
 
     pub(super) fn intro(&mut self) {
-        let n = self.api.get("SLYLANDRO_PROBE_VISITS");
+        let n = self.api.get(StoryKey::SLYLANDRO_PROBE_VISITS);
         if let Some(&p) = [
             WE_COME_IN_PEACE_1,
             WE_COME_IN_PEACE_2,
@@ -139,7 +140,7 @@ impl<A: SlylandApi> Dialogue<'_, A> {
             self.api.npc(p as i32);
         }
         self.api.set(
-            "SLYLANDRO_PROBE_VISITS",
+            StoryKey::SLYLANDRO_PROBE_VISITS,
             if n == 7 { n } else { n.wrapping_add(1) },
         );
         self.combat(0);

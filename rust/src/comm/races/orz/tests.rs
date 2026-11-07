@@ -1,6 +1,7 @@
 use super::*;
 use crate::comm::races::encounter::testing::{Effect, Fake};
 use crate::comm::races::script::ScriptApi;
+use crate::engine::StoryKey;
 type Api = Fake<Handler>;
 fn choices(f: &Api) -> Vec<u16> {
     f.offers().iter().map(|x| x.0).collect()
@@ -14,7 +15,7 @@ fn taalo_permission_requires_alliance_and_polite_request() {
     for manner in [0, 1, 3] {
         for allied in [1, 2] {
             let mut f = Api::default();
-            f.put("ORZ_MANNER", manner);
+            f.put(StoryKey::ORZ_MANNER, manner);
             f.alliances[3] = allied;
             run(&mut f, Handler::TaaloWorld, 0);
             assert_eq!(
@@ -36,13 +37,13 @@ fn taalo_permission_requires_alliance_and_polite_request() {
                 }
             );
             run(&mut f, Handler::TaaloWorld, MAY_WE_LAND);
-            assert_eq!(f.get("TAALO_UNPROTECTED"), 0);
+            assert_eq!(f.get(StoryKey::TAALO_UNPROTECTED), 0);
             assert_eq!(choices(&f)[0], MAKE_ALLIANCE);
         }
     }
     let mut f = Api::default();
     run(&mut f, Handler::ExitConversation, MAY_WE_LAND);
-    assert_eq!(f.get("TAALO_UNPROTECTED"), 1);
+    assert_eq!(f.get(StoryKey::TAALO_UNPROTECTED), 1);
     assert_eq!(f.segue, 0);
     run(&mut f, Handler::ExitConversation, DEMAND_TO_LAND);
     assert_eq!(f.segue, 1);
@@ -51,15 +52,15 @@ fn taalo_permission_requires_alliance_and_polite_request() {
 fn alliance_apology_and_androsynth_rupture_effects() {
     for response in [YES_ALLIANCE, WERE_SORRY] {
         let mut f = Api::default();
-        f.put("ORZ_ANDRO_STATE", 2);
-        f.put("ORZ_PERSONAL_INFO", 7);
+        f.put(StoryKey::ORZ_ANDRO_STATE, 2);
+        f.put(StoryKey::ORZ_PERSONAL_INFO, 7);
         run(&mut f, Handler::ExitConversation, response);
         assert_eq!(
             (
-                f.get("ORZ_MANNER"),
-                f.get("ORZ_ANDRO_STATE"),
-                f.get("ORZ_GENERAL_INFO"),
-                f.get("ORZ_PERSONAL_INFO")
+                f.get(StoryKey::ORZ_MANNER),
+                f.get(StoryKey::ORZ_ANDRO_STATE),
+                f.get(StoryKey::ORZ_GENERAL_INFO),
+                f.get(StoryKey::ORZ_PERSONAL_INFO)
             ),
             (3, 0, 0, 0)
         );
@@ -68,7 +69,7 @@ fn alliance_apology_and_androsynth_rupture_effects() {
     for response in [ABOUT_ANDRO_3, MUST_KNOW_ABOUT_ANDROSYN] {
         let mut f = Api::default();
         run(&mut f, Handler::ExitConversation, response);
-        assert_eq!(f.get("ORZ_MANNER"), 2);
+        assert_eq!(f.get(StoryKey::ORZ_MANNER), 2);
         assert_eq!(f.segue, 1);
         assert_eq!(
             f.effects.contains(&Effect::RemoveEscorts(3)),
@@ -110,20 +111,20 @@ fn names_stack_order_and_computer_report() {
             Effect::Talking(true)
         ]
     );
-    assert_eq!(f.get("MET_ORZ_BEFORE"), 1);
+    assert_eq!(f.get(StoryKey::MET_ORZ_BEFORE), 1);
 }
 #[test]
 fn insult_and_allied_information_counters_saturate() {
     let mut f = Api::default();
     for visit in 0..10 {
         run(&mut f, Handler::ExitConversation, INSULT_1);
-        assert_eq!(f.get("ORZ_PERSONAL_INFO"), (visit + 1).min(7));
+        assert_eq!(f.get(StoryKey::ORZ_PERSONAL_INFO), (visit + 1).min(7));
         assert_eq!(f.segue, u32::from(visit >= 2));
     }
     for (question, key, phrases) in [
         (
             WHATS_UP_ALLY,
-            "ORZ_GENERAL_INFO",
+            StoryKey::ORZ_GENERAL_INFO,
             [
                 GENERAL_INFO_ALLY_1,
                 GENERAL_INFO_ALLY_2,
@@ -133,7 +134,7 @@ fn insult_and_allied_information_counters_saturate() {
         ),
         (
             MORE_ABOUT_YOU,
-            "ORZ_PERSONAL_INFO",
+            StoryKey::ORZ_PERSONAL_INFO,
             [ABOUT_US_1, ABOUT_US_2, ABOUT_US_3, ABOUT_US_4],
         ),
     ] {
@@ -150,8 +151,8 @@ fn greeting_routes_post_battle_and_outtakes() {
     for manner in [0, 1, 2, 3] {
         for flags in [0, 64, 128] {
             let mut f = Api::default();
-            f.put("ORZ_MANNER", manner);
-            f.put("GLOBAL_FLAGS_AND_DATA", flags);
+            f.put(StoryKey::ORZ_MANNER, manner);
+            f.put(StoryKey::GLOBAL_FLAGS_AND_DATA, flags);
             f.alliances[3] = 1;
             Dialogue { api: &mut f }.initialize();
             assert_eq!(f.segue, u32::from(manner != 3));
@@ -166,9 +167,12 @@ fn greeting_routes_post_battle_and_outtakes() {
         segue: 1,
         ..Api::default()
     };
-    f.put("TAALO_VISITS", 1);
+    f.put(StoryKey::TAALO_VISITS, 1);
     Dialogue { api: &mut f }.post_orz_enc();
-    assert_eq!((f.get("ORZ_MANNER"), f.get("TAALO_VISITS")), (1, 0));
+    assert_eq!(
+        (f.get(StoryKey::ORZ_MANNER), f.get(StoryKey::TAALO_VISITS)),
+        (1, 0)
+    );
     f.activity = 5;
     f.effects.clear();
     Dialogue { api: &mut f }.intro();

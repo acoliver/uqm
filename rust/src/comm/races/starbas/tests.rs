@@ -1,6 +1,7 @@
 use super::*;
 use crate::comm::races::encounter::testing::{Effect, Fake};
 use crate::comm::races::script::ScriptApi;
+use crate::engine::StoryKey;
 use std::collections::VecDeque;
 
 struct World {
@@ -99,8 +100,8 @@ impl StarbaseApi for Api {
 }
 fn ready() -> Api {
     let mut f = Api::default();
-    f.put("STARBASE_MONTH", 2);
-    f.put("STARBASE_DAY", 17);
+    f.put(StoryKey::STARBASE_MONTH, 2);
+    f.put(StoryKey::STARBASE_DAY, 17);
     f
 }
 fn run(f: &mut Api, s: &mut Session, h: Handler, r: u16) {
@@ -110,9 +111,37 @@ fn run(f: &mut Api, s: &mut Session, h: Handler, r: u16) {
 fn choices(f: &Api) -> Vec<u16> {
     f.offers().iter().map(|(p, _)| *p).collect()
 }
-fn state32(f: &Api, key: &str) -> u32 {
-    let prefix = key.strip_suffix('0').unwrap();
-    u32::from_le_bytes(std::array::from_fn(|i| f.get(&format!("{prefix}{i}"))))
+fn state32(f: &Api, keys: [StoryKey; 4]) -> u32 {
+    u32::from_le_bytes(keys.map(|key| f.get(key)))
+}
+
+#[test]
+fn typed_word_keys_preserve_little_endian_bytes_and_separate_fields() {
+    let mut f = ready();
+    let mut s = Session::default();
+    f.put(StoryKey::STARBASE_BULLETS0, 0x78);
+    f.put(StoryKey::STARBASE_BULLETS1, 0x56);
+    f.put(StoryKey::STARBASE_BULLETS2, 0x34);
+    f.put(StoryKey::STARBASE_BULLETS3, 0x12);
+    f.put(StoryKey::ZOQFOT_GRPOFFS0, 0xef);
+    f.put(StoryKey::ZOQFOT_GRPOFFS1, 0xcd);
+    f.put(StoryKey::ZOQFOT_GRPOFFS2, 0xab);
+    f.put(StoryKey::ZOQFOT_GRPOFFS3, 0x89);
+    let mut dialogue = Dialogue {
+        api: &mut f,
+        session: &mut s,
+    };
+    assert_eq!(dialogue.get32(STARBASE_BULLETS), 0x12345678);
+    assert_eq!(dialogue.get32(ZOQFOT_GRPOFFS), 0x89abcdef);
+    dialogue.set32(STARBASE_BULLETS, 0xfedcba98);
+    assert_eq!(dialogue.api.get(StoryKey::STARBASE_BULLETS0), 0x98);
+    assert_eq!(dialogue.api.get(StoryKey::STARBASE_BULLETS1), 0xba);
+    assert_eq!(dialogue.api.get(StoryKey::STARBASE_BULLETS2), 0xdc);
+    assert_eq!(dialogue.api.get(StoryKey::STARBASE_BULLETS3), 0xfe);
+    assert_eq!(dialogue.get32(ZOQFOT_GRPOFFS), 0x89abcdef);
+    dialogue.set32(ZOQFOT_GRPOFFS, 0);
+    assert_eq!(dialogue.get32(ZOQFOT_GRPOFFS), 0);
+    assert_eq!(dialogue.get32(STARBASE_BULLETS), 0xfedcba98);
 }
 
 #[test]
@@ -151,15 +180,18 @@ fn descriptor_initialization_and_post_encounter() {
         c"comm.starbase.dialogue"
     );
     for bomb in [0, 1, 2, 3] {
-        f.put("MOONBASE_ON_SHIP", 1);
-        f.put("CHMMR_BOMB_STATE", bomb);
+        f.put(StoryKey::MOONBASE_ON_SHIP, 1);
+        f.put(StoryKey::CHMMR_BOMB_STATE, bomb);
         Dialogue {
             api: &mut f,
             session: &mut s,
         }
         .post_starbase_enc();
-        assert_eq!(f.get("MOONBASE_ON_SHIP"), 0);
-        assert_eq!(f.get("CHMMR_BOMB_STATE"), if bomb == 2 { 3 } else { bomb });
+        assert_eq!(f.get(StoryKey::MOONBASE_ON_SHIP), 0);
+        assert_eq!(
+            f.get(StoryKey::CHMMR_BOMB_STATE),
+            if bomb == 2 { 3 } else { bomb }
+        );
     }
 }
 #[test]
@@ -182,7 +214,7 @@ fn random_greetings_and_farewells_keep_name_and_rng_byte_truncation() {
             expected.push(9 + 2 * i as i32);
             assert_eq!(f.spoken(), expected);
             assert_eq!(f.world.random_calls, 1);
-            assert_eq!(f.get("STARBASE_VISITED"), 1);
+            assert_eq!(f.get(StoryKey::STARBASE_VISITED), 1);
             assert_eq!(choices(&f), vec![237, 235]);
             f.world.random.push_back(i);
             run(&mut f, &mut s, Handler::ByeBye, GOODBYE_COMMANDER);
@@ -202,10 +234,21 @@ fn completed_bomb_farewell_commits_current_bulletins_without_rng() {
         bulletins: 0x12345678,
         ..Session::default()
     };
-    f.put("STARBASE_BULLETS0", 1);
-    f.put("CHMMR_BOMB_STATE", 2);
+    f.put(StoryKey::STARBASE_BULLETS0, 1);
+    f.put(StoryKey::CHMMR_BOMB_STATE, 2);
     run(&mut f, &mut s, Handler::ByeBye, GOODBYE_COMMANDER);
-    assert_eq!(state32(&f, "STARBASE_BULLETS0"), 0x12345679);
+    assert_eq!(
+        state32(
+            &f,
+            [
+                StoryKey::STARBASE_BULLETS0,
+                StoryKey::STARBASE_BULLETS1,
+                StoryKey::STARBASE_BULLETS2,
+                StoryKey::STARBASE_BULLETS3
+            ]
+        ),
+        0x12345679
+    );
     assert_eq!(f.spoken(), vec![215]);
     assert_eq!(f.world.random_calls, 0);
 }
@@ -220,7 +263,7 @@ fn moonbase_welcome_sets_supplies_and_start_date_with_speech_variants() {
             month: 4,
             day: 3,
         };
-        f.put("MOONBASE_ON_SHIP", 1);
+        f.put(StoryKey::MOONBASE_ON_SHIP, 1);
         Dialogue {
             api: &mut f,
             session: &mut s,
@@ -235,9 +278,9 @@ fn moonbase_welcome_sets_supplies_and_start_date_with_speech_variants() {
             }
         );
         assert!(f.effects.contains(&Effect::Gauges(0, 0, 2500)));
-        assert_eq!(f.get("STARBASE_MONTH"), 4);
-        assert_eq!(f.get("STARBASE_DAY"), 3);
-        assert_eq!(f.get("STARBASE_VISITED"), 1);
+        assert_eq!(f.get(StoryKey::STARBASE_MONTH), 4);
+        assert_eq!(f.get(StoryKey::STARBASE_DAY), 3);
+        assert_eq!(f.get(StoryKey::STARBASE_VISITED), 1);
     }
 }
 #[test]
@@ -427,8 +470,8 @@ fn timing_is_strict_and_uses_original_non_leap_calendar() {
     ] {
         let mut f = ready();
         let mut s = Session::default();
-        f.put("STARBASE_MONTH", start_month);
-        f.put("STARBASE_DAY", start_day);
+        f.put(StoryKey::STARBASE_MONTH, start_month);
+        f.put(StoryKey::STARBASE_DAY, start_day);
         f.world.date = target;
         assert!(!Dialogue {
             api: &mut f,
@@ -447,59 +490,83 @@ fn timing_is_strict_and_uses_original_non_leap_calendar() {
 fn every_device_discussion_and_discovery_effect() {
     let cases = [
         (
-            "PORTAL_SPAWNER_ON_SHIP",
-            "DISCUSSED_PORTAL_SPAWNER",
+            StoryKey::PORTAL_SPAWNER_ON_SHIP,
+            StoryKey::DISCUSSED_PORTAL_SPAWNER,
             ABOUT_PORTAL,
         ),
         (
-            "TALKING_PET_ON_SHIP",
-            "DISCUSSED_TALKING_PET",
+            StoryKey::TALKING_PET_ON_SHIP,
+            StoryKey::DISCUSSED_TALKING_PET,
             ABOUT_TALKPET,
         ),
-        ("UTWIG_BOMB_ON_SHIP", "DISCUSSED_UTWIG_BOMB", ABOUT_BOMB),
-        ("SUN_DEVICE_ON_SHIP", "DISCUSSED_SUN_EFFICIENCY", ABOUT_SUN),
-        ("ROSY_SPHERE_ON_SHIP", "DISCUSSED_ROSY_SPHERE", ABOUT_SPHERE),
-        ("AQUA_HELIX_ON_SHIP", "DISCUSSED_AQUA_HELIX", ABOUT_HELIX),
         (
-            "CLEAR_SPINDLE_ON_SHIP",
-            "DISCUSSED_CLEAR_SPINDLE",
+            StoryKey::UTWIG_BOMB_ON_SHIP,
+            StoryKey::DISCUSSED_UTWIG_BOMB,
+            ABOUT_BOMB,
+        ),
+        (
+            StoryKey::SUN_DEVICE_ON_SHIP,
+            StoryKey::DISCUSSED_SUN_EFFICIENCY,
+            ABOUT_SUN,
+        ),
+        (
+            StoryKey::ROSY_SPHERE_ON_SHIP,
+            StoryKey::DISCUSSED_ROSY_SPHERE,
+            ABOUT_SPHERE,
+        ),
+        (
+            StoryKey::AQUA_HELIX_ON_SHIP,
+            StoryKey::DISCUSSED_AQUA_HELIX,
+            ABOUT_HELIX,
+        ),
+        (
+            StoryKey::CLEAR_SPINDLE_ON_SHIP,
+            StoryKey::DISCUSSED_CLEAR_SPINDLE,
             ABOUT_SPINDLE,
         ),
-        ("MAIDENS_ON_SHIP", "DISCUSSED_MAIDENS", ABOUT_MAIDENS),
         (
-            "UMGAH_BROADCASTERS_ON_SHIP",
-            "DISCUSSED_UMGAH_HYPERWAVE",
+            StoryKey::MAIDENS_ON_SHIP,
+            StoryKey::DISCUSSED_MAIDENS,
+            ABOUT_MAIDENS,
+        ),
+        (
+            StoryKey::UMGAH_BROADCASTERS_ON_SHIP,
+            StoryKey::DISCUSSED_UMGAH_HYPERWAVE,
             ABOUT_UCASTER,
         ),
         (
-            "BURV_BROADCASTERS_ON_SHIP",
-            "DISCUSSED_BURVIX_HYPERWAVE",
+            StoryKey::BURV_BROADCASTERS_ON_SHIP,
+            StoryKey::DISCUSSED_BURVIX_HYPERWAVE,
             ABOUT_BCASTER,
         ),
         (
-            "TAALO_PROTECTOR_ON_SHIP",
-            "DISCUSSED_TAALO_PROTECTOR",
+            StoryKey::TAALO_PROTECTOR_ON_SHIP,
+            StoryKey::DISCUSSED_TAALO_PROTECTOR,
             ABOUT_SHIELD,
         ),
         (
-            "SYREEN_SHUTTLE_ON_SHIP",
-            "DISCUSSED_SYREEN_SHUTTLE",
+            StoryKey::SYREEN_SHUTTLE_ON_SHIP,
+            StoryKey::DISCUSSED_SYREEN_SHUTTLE,
             ABOUT_SHUTTLE,
         ),
         (
-            "DESTRUCT_CODE_ON_SHIP",
-            "DISCUSSED_DESTRUCT_CODE",
+            StoryKey::DESTRUCT_CODE_ON_SHIP,
+            StoryKey::DISCUSSED_DESTRUCT_CODE,
             ABOUT_DESTRUCT,
         ),
-        ("PORTAL_KEY_ON_SHIP", "DISCUSSED_URQUAN_WARP", ABOUT_WARPPOD),
         (
-            "ARTIFACT_2_ON_SHIP",
-            "DISCUSSED_ARTIFACT_2",
+            StoryKey::PORTAL_KEY_ON_SHIP,
+            StoryKey::DISCUSSED_URQUAN_WARP,
+            ABOUT_WARPPOD,
+        ),
+        (
+            StoryKey::ARTIFACT_2_ON_SHIP,
+            StoryKey::DISCUSSED_ARTIFACT_2,
             ABOUT_ARTIFACT_2,
         ),
         (
-            "ARTIFACT_3_ON_SHIP",
-            "DISCUSSED_ARTIFACT_3",
+            StoryKey::ARTIFACT_3_ON_SHIP,
+            StoryKey::DISCUSSED_ARTIFACT_3,
             ABOUT_ARTIFACT_3,
         ),
     ];
@@ -538,7 +605,7 @@ fn every_device_discussion_and_discovery_effect() {
     for condition in 1..=4 {
         let mut f = ready();
         let mut s = Session::default();
-        f.put("ULTRON_CONDITION", condition);
+        f.put(StoryKey::ULTRON_CONDITION, condition);
         assert!(Dialogue {
             api: &mut f,
             session: &mut s
@@ -555,10 +622,10 @@ fn eggs_share_discussion_flags_and_vux_report_preserves_track_sequence() {
     let mut f = ready();
     let mut s = Session::default();
     for key in [
-        "EGG_CASE0_ON_SHIP",
-        "EGG_CASE1_ON_SHIP",
-        "EGG_CASE2_ON_SHIP",
-        "VUX_BEAST_ON_SHIP",
+        StoryKey::EGG_CASE0_ON_SHIP,
+        StoryKey::EGG_CASE1_ON_SHIP,
+        StoryKey::EGG_CASE2_ON_SHIP,
+        StoryKey::VUX_BEAST_ON_SHIP,
     ] {
         f.put(key, 1);
     }
@@ -579,9 +646,9 @@ fn eggs_share_discussion_flags_and_vux_report_preserves_track_sequence() {
         ]
     );
     for key in [
-        "DISCUSSED_EGG_CASING0",
-        "DISCUSSED_EGG_CASING1",
-        "DISCUSSED_EGG_CASING2",
+        StoryKey::DISCUSSED_EGG_CASING0,
+        StoryKey::DISCUSSED_EGG_CASING1,
+        StoryKey::DISCUSSED_EGG_CASING2,
     ] {
         assert_eq!(f.get(key), 1);
     }
@@ -603,12 +670,12 @@ fn bulletins_preserve_bit_positions_order_and_repeat_without_gifts_or_rng() {
     for race in [6, 19, 7, 9, 3, 1, 5] {
         f.alliances[race] = 1;
     }
-    f.put("PORTAL_SPAWNER", 1);
-    f.put("ZOQFOT_DISTRESS", 1);
-    f.put("SPATHI_SHIELDED_SELVES", 1);
-    f.put("PKUNK_MISSION", 1);
-    f.put("YEHAT_ABSORBED_PKUNK", 1);
-    f.put("CHMMR_BOMB_STATE", 2);
+    f.put(StoryKey::PORTAL_SPAWNER, 1);
+    f.put(StoryKey::ZOQFOT_DISTRESS, 1);
+    f.put(StoryKey::SPATHI_SHIELDED_SELVES, 1);
+    f.put(StoryKey::PKUNK_MISSION, 1);
+    f.put(StoryKey::YEHAT_ABSORBED_PKUNK, 1);
+    f.put(StoryKey::CHMMR_BOMB_STATE, 2);
     f.world.random.push_back(0x106);
     Dialogue {
         api: &mut f,
@@ -638,10 +705,10 @@ fn crew_bulletins_visit_later_bits_and_retire_obsolete_thresholds() {
     for sold in [0u16, 1, 100, 101, 250, 251] {
         let mut f = ready();
         let mut s = Session::default();
-        f.put("CREW_SOLD_TO_DRUUGE0", sold as u8);
-        f.put("CREW_SOLD_TO_DRUUGE1", (sold >> 8) as u8);
-        f.put("CREW_PURCHASED0", 232);
-        f.put("CREW_PURCHASED1", 3);
+        f.put(StoryKey::CREW_SOLD_TO_DRUUGE0, sold as u8);
+        f.put(StoryKey::CREW_SOLD_TO_DRUUGE1, (sold >> 8) as u8);
+        f.put(StoryKey::CREW_PURCHASED0, 232);
+        f.put(StoryKey::CREW_PURCHASED1, 3);
         f.world.random.push_back(0);
         Dialogue {
             api: &mut f,
@@ -690,11 +757,11 @@ fn timed_bulletins_and_suppression_flags() {
         month: 1,
         day: 1,
     };
-    f.put("MET_MELNORME", 1);
-    f.put("FOUND_PLUTO_SPATHI", 1);
-    f.put("ZOQFOT_GRPOFFS3", 1);
-    f.put("DESTRUCT_CODE_ON_SHIP", 1);
-    f.put("ARILOU_MANNER", 2);
+    f.put(StoryKey::MET_MELNORME, 1);
+    f.put(StoryKey::FOUND_PLUTO_SPATHI, 1);
+    f.put(StoryKey::ZOQFOT_GRPOFFS3, 1);
+    f.put(StoryKey::DESTRUCT_CODE_ON_SHIP, 1);
+    f.put(StoryKey::ARILOU_MANNER, 2);
     Dialogue {
         api: &mut f,
         session: &mut s,
@@ -702,7 +769,15 @@ fn timed_bulletins_and_suppression_flags() {
     .check_bulletins(false);
     assert_eq!(s.bulletins, 0);
     assert_eq!(
-        state32(&f, "STARBASE_BULLETS0"),
+        state32(
+            &f,
+            [
+                StoryKey::STARBASE_BULLETS0,
+                StoryKey::STARBASE_BULLETS1,
+                StoryKey::STARBASE_BULLETS2,
+                StoryKey::STARBASE_BULLETS3
+            ]
+        ),
         (1 << 5) | (1 << 7) | (1 << 8) | (1 << 9) | (1 << 11) | (1 << 15)
     );
 }
@@ -762,8 +837,8 @@ fn analysis_reports_minimum_maximum_fleet_bomb_and_pet_branches() {
         (20000, 2, 1, GO_DESTROY_SAMATRA),
     ] {
         f.world.fleet = fleet;
-        f.put("CHMMR_BOMB_STATE", bomb);
-        f.put("TALKING_PET_ON_SHIP", pet);
+        f.put(StoryKey::CHMMR_BOMB_STATE, bomb);
+        f.put(StoryKey::TALKING_PET_ON_SHIP, pet);
         f.effects.clear();
         Dialogue {
             api: &mut f,
@@ -796,7 +871,7 @@ fn mineral_sale_animation_and_skip_transfer_identical_quantities() {
             })
             .sum();
         assert_eq!(paid, 5);
-        assert_eq!(f.get("LIGHT_MINERAL_LOAD"), 1);
+        assert_eq!(f.get(StoryKey::LIGHT_MINERAL_LOAD), 1);
         assert_eq!(f.spoken(), vec![42, 300, GLOBAL_PLAYER_NAME, 43]);
         assert_eq!(
             &f.effects[..4],
@@ -828,11 +903,11 @@ fn mineral_sale_animation_and_skip_transfer_identical_quantities() {
 #[test]
 fn mineral_load_thresholds_counter_saturation_and_u16_total_wrap() {
     for (amount, worth, key, first, last) in [
-        (999, 1, "LIGHT_MINERAL_LOAD", 42, 54),
-        (1000, 1, "MEDIUM_MINERAL_LOAD", 56, 68),
-        (2499, 1, "MEDIUM_MINERAL_LOAD", 56, 68),
-        (2500, 1, "HEAVY_MINERAL_LOAD", 70, 82),
-        (33000, 2, "LIGHT_MINERAL_LOAD", 42, 54),
+        (999, 1, StoryKey::LIGHT_MINERAL_LOAD, 42, 54),
+        (1000, 1, StoryKey::MEDIUM_MINERAL_LOAD, 56, 68),
+        (2499, 1, StoryKey::MEDIUM_MINERAL_LOAD, 56, 68),
+        (2500, 1, StoryKey::HEAVY_MINERAL_LOAD, 70, 82),
+        (33000, 2, StoryKey::LIGHT_MINERAL_LOAD, 42, 54),
     ] {
         for visit in 0..=6 {
             let mut f = ready();

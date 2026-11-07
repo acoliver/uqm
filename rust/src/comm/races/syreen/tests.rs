@@ -1,6 +1,7 @@
 use super::*;
 use crate::comm::races::encounter::testing::{Effect, Fake};
 use crate::comm::races::script::ScriptApi;
+use crate::engine::StoryKey;
 type Api = Fake<Handler, api::World>;
 fn run(f: &mut Api, h: Handler, r: i32) {
     f.effects.clear();
@@ -12,22 +13,22 @@ fn choices(f: &Api) -> Vec<i32> {
 #[test]
 fn talana_requires_shattered_world_knowledge_and_egg_proof_before_shuttle() {
     let mut f = Api::default();
-    f.put("KNOW_ABOUT_SHATTERED", 2);
-    f.put("KNOW_SYREEN_WORLD_SHATTERED", 1);
+    f.put(StoryKey::KNOW_ABOUT_SHATTERED, 2);
+    f.put(StoryKey::KNOW_SYREEN_WORLD_SHATTERED, 1);
     run(&mut f, Handler::NormalSyreen, 0);
     assert_eq!(choices(&f)[0], KNOW_ABOUT_DEEP_CHILDREN);
     run(&mut f, Handler::NormalSyreen, KNOW_ABOUT_DEEP_CHILDREN);
     assert_eq!(choices(&f)[0], MYCONS_INVOLVED);
     run(&mut f, Handler::NormalSyreen, MYCONS_INVOLVED);
-    assert_eq!(f.get("KNOW_ABOUT_SHATTERED"), 3);
+    assert_eq!(f.get(StoryKey::KNOW_ABOUT_SHATTERED), 3);
     assert_eq!(choices(&f)[0], HAVE_NO_PROOF);
     run(&mut f, Handler::NormalSyreen, HAVE_NO_PROOF);
-    assert_eq!(f.get("SYREEN_WANT_PROOF"), 1);
+    assert_eq!(f.get(StoryKey::SYREEN_WANT_PROOF), 1);
     assert!(!choices(&f).contains(&HAVE_NO_PROOF));
     for key in [
-        "EGG_CASE0_ON_SHIP",
-        "EGG_CASE1_ON_SHIP",
-        "EGG_CASE2_ON_SHIP",
+        StoryKey::EGG_CASE0_ON_SHIP,
+        StoryKey::EGG_CASE1_ON_SHIP,
+        StoryKey::EGG_CASE2_ON_SHIP,
     ] {
         f.put(key, 1);
         f.disabled.clear();
@@ -39,8 +40,8 @@ fn talana_requires_shattered_world_knowledge_and_egg_proof_before_shuttle() {
     }
     run(&mut f, Handler::NormalSyreen, LOOK_AT_EGG_SACKS);
     assert_eq!(f.spoken(), [HORRIBLE_TRUTH]);
-    assert_eq!(f.get("SYREEN_KNOW_ABOUT_MYCON"), 1);
-    assert_eq!(f.get("SYREEN_HOME_VISITS"), 0);
+    assert_eq!(f.get(StoryKey::SYREEN_KNOW_ABOUT_MYCON), 1);
+    assert_eq!(f.get(StoryKey::SYREEN_HOME_VISITS), 0);
     assert_eq!(
         choices(&f),
         [WHATS_NEXT_STEP, WHAT_DO_I_GET_FOR_THIS, NOT_SURE]
@@ -50,13 +51,16 @@ fn talana_requires_shattered_world_knowledge_and_egg_proof_before_shuttle() {
 fn shuttle_vault_and_ambush_handoffs_keep_flags_and_choices() {
     for (known, r, phrase) in [(0, WHERE_IS_IT, DONT_KNOW_WHERE), (1, BEEN_THERE, GREAT)] {
         let mut f = Api::default();
-        f.put("KNOW_SYREEN_VAULT", known);
+        f.put(StoryKey::KNOW_SYREEN_VAULT, known);
         run(&mut f, Handler::SyreenShuttle, WHATS_NEXT_STEP);
         assert_eq!(choices(&f)[0], r);
         run(&mut f, Handler::SyreenShuttle, r);
         assert_eq!(f.spoken(), [phrase, GIVE_SHUTTLE]);
         assert_eq!(
-            (f.get("SYREEN_SHUTTLE"), f.get("SYREEN_SHUTTLE_ON_SHIP")),
+            (
+                f.get(StoryKey::SYREEN_SHUTTLE),
+                f.get(StoryKey::SYREEN_SHUTTLE_ON_SHIP)
+            ),
             (1, 1)
         );
         assert_eq!(
@@ -69,20 +73,20 @@ fn shuttle_vault_and_ambush_handoffs_keep_flags_and_choices() {
                 NOT_SURE
             ]
         );
-        f.put("SYREEN_KNOW_ABOUT_MYCON", 1);
-        f.put("SHIP_VAULT_UNLOCKED", 1);
-        f.put("SYREEN_HOME_VISITS", 1);
+        f.put(StoryKey::SYREEN_KNOW_ABOUT_MYCON, 1);
+        f.put(StoryKey::SHIP_VAULT_UNLOCKED, 1);
+        f.put(StoryKey::SYREEN_HOME_VISITS, 1);
         f.effects.clear();
         Dialogue { api: &mut f }.intro();
         assert_eq!(f.spoken(), [OK_FOUND_VAULT]);
-        assert_eq!(f.get("MYCON_AMBUSH"), 1);
-        assert_eq!(f.get("SYREEN_HOME_VISITS"), 0);
+        assert_eq!(f.get(StoryKey::MYCON_AMBUSH), 1);
+        assert_eq!(f.get(StoryKey::SYREEN_HOME_VISITS), 0);
         assert_eq!(choices(&f), [WHATS_MY_REWARD, BYE_AFTER_VAULT]);
         f.effects.clear();
         Dialogue { api: &mut f }.intro();
         assert_eq!(f.spoken(), [READY_FOR_AMBUSH]);
-        assert_eq!(f.get("SYREEN_HOME_VISITS"), 0);
-        f.put("MYCON_KNOW_AMBUSH", 1);
+        assert_eq!(f.get(StoryKey::SYREEN_HOME_VISITS), 0);
+        f.put(StoryKey::MYCON_KNOW_AMBUSH, 1);
         f.effects.clear();
         Dialogue { api: &mut f }.intro();
         assert_eq!(f.spoken(), [HELLO_AFTER_AMBUSH_1]);
@@ -154,13 +158,16 @@ fn palette_talk_order_and_sex_flags_and_outtakes() {
             Effect::Talk(1),
             Effect::FadePalette(1, 840),
             Effect::Talk(u16::MAX),
-            Effect::Set("PLAYER_HAVING_SEX".into(), 1)
+            Effect::Set(StoryKey::PLAYER_HAVING_SEX, 1)
         ]
     );
     run(&mut f, Handler::FriendlyExit, HANDS_OFF);
     assert_eq!(f.spoken(), [OK_WONT_USE_HANDS, LATER, SEX_GOODBYE]);
     assert_eq!(
-        (f.get("PLAYER_HAD_SEX"), f.get("PLAYER_HAVING_SEX")),
+        (
+            f.get(StoryKey::PLAYER_HAD_SEX),
+            f.get(StoryKey::PLAYER_HAVING_SEX)
+        ),
         (1, 0)
     );
     assert!(f.effects.contains(&Effect::FadePalette(0, 420)));

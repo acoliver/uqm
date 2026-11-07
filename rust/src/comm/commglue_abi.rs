@@ -2,9 +2,9 @@
 
 use crate::c_bindings::global_state::NUMBER_SPEECH_DESC;
 #[cfg(not(test))]
-use crate::engine::World;
+use crate::engine::Kernel;
 #[cfg(not(test))]
-use crate::engine::{Kernel, WorldData};
+use crate::engine::World;
 
 /// Collect one-based phrase indices in the same recursive order as NPCNumberPhrase.
 unsafe fn number_phrases(
@@ -59,6 +59,7 @@ unsafe fn number_phrases(
 pub(crate) mod runtime {
     use super::*;
     use crate::comm::locdata::COMM_DATA;
+    use crate::engine::StoryKey;
     use std::ffi::c_char;
     use std::ptr::null_mut;
 
@@ -72,25 +73,6 @@ pub(crate) mod runtime {
     use crate::strings::string_table::SetAbsStringTableIndex;
 
     use crate::strings::string_table::SetRelStringTableIndex;
-
-    fn get(key: &str) -> u8 {
-        let (first, last) =
-            crate::state::game_state_keys::bit_range(key).expect("known comm state");
-        {
-            World::current().read(|world| {
-                crate::state::ffi::rust_get_game_state_bits(world, first as i32, last as i32)
-            })
-        }
-    }
-    fn set(key: &str, value: u8) {
-        let (first, last) =
-            crate::state::game_state_keys::bit_range(key).expect("known comm state");
-        {
-            World::current().write(|world| {
-                crate::state::ffi::rust_set_game_state_bits(world, first as i32, last as i32, value)
-            })
-        }
-    }
 
     /// # Safety
     /// Called from the game thread with a valid printf integer format or null.
@@ -128,18 +110,19 @@ pub(crate) mod runtime {
     /// Buffer must hold the complete alliance name, including commander and suffix.
     #[no_mangle]
     pub unsafe extern "C" fn GetAllianceName(buffer: *mut c_char, first: u16) {
-        let world = WorldData::current();
-        let variant = get("NEW_ALLIANCE_NAME");
+        let (variant, commander_name) = World::current().read(|world| {
+            (
+                world.story_state(StoryKey::NEW_ALLIANCE_NAME) as u8,
+                world.data.flagship.commander_name,
+            )
+        });
         let entry = SetAbsStringTableIndex(
             (COMM_DATA.conversation_phrases).cast(),
             first.wrapping_sub(1).wrapping_add(variant.into()),
         );
         libc::strcpy(buffer, GetStringAddress(entry));
         if variant == 3 {
-            libc::strcat(
-                buffer,
-                (&raw const (**world).flagship.commander_name).cast(),
-            );
+            libc::strcat(buffer, commander_name.as_ptr().cast());
             libc::strcat(buffer, GetStringAddress(SetRelStringTableIndex(entry, 1)));
         }
     }
@@ -148,18 +131,20 @@ pub(crate) mod runtime {
     /// Called on the game thread with a valid Segue enum value.
     #[no_mangle]
     pub unsafe extern "C" fn setSegue(segue: i32) {
+        let world = World::current();
         match segue {
-            0 => set("BATTLE_SEGUE", 0),
-            1 => set("BATTLE_SEGUE", 1),
+            0 => world.write(|world| world.set_story_state(StoryKey::BATTLE_SEGUE, 0)),
+            1 => world.write(|world| world.set_story_state(StoryKey::BATTLE_SEGUE, 1)),
             2 => {
                 (**Kernel::current()).instant_victory = 1;
-                set("BATTLE_SEGUE", 1);
+                world.write(|world| world.set_story_state(StoryKey::BATTLE_SEGUE, 1));
             }
             3 => {
-                set("BATTLE_SEGUE", 0);
-                (**WorldData::current()).flagship.crew_enlisted = u16::MAX;
-                crate::engine::World::current()
-                    .write(|world| world.set_activity(world.activity() | 0x2000));
+                world.write(|world| {
+                    world.set_story_state(StoryKey::BATTLE_SEGUE, 0);
+                    world.data.flagship.crew_enlisted = u16::MAX;
+                    world.set_activity(world.activity() | 0x2000);
+                });
             }
             _ => unreachable!("invalid Segue"),
         }
@@ -169,19 +154,19 @@ pub(crate) mod runtime {
     /// Called on the game thread with initialized game state.
     #[no_mangle]
     pub unsafe extern "C" fn getSegue() -> i32 {
-        if get("BATTLE_SEGUE") == 0 {
-            if WorldData::current().read(|owner| owner.flagship.crew_enlisted) == u16::MAX
-                && crate::engine::World::current().read(|world| world.activity()) & 0x2000 != 0
-            {
-                3
+        World::current().read(|world| {
+            if world.story_state(StoryKey::BATTLE_SEGUE) == 0 {
+                if world.data.flagship.crew_enlisted == u16::MAX && world.activity() & 0x2000 != 0 {
+                    3
+                } else {
+                    0
+                }
+            } else if Kernel::current().read(|owner| owner.instant_victory) != 0 {
+                2
             } else {
-                0
+                1
             }
-        } else if Kernel::current().read(|owner| owner.instant_victory) != 0 {
-            2
-        } else {
-            1
-        }
+        })
     }
 }
 

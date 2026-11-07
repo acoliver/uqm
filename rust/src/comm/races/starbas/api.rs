@@ -1,3 +1,17 @@
+use crate::engine::StoryKey;
+pub(super) const STARBASE_BULLETS: [StoryKey; 4] = [
+    StoryKey::STARBASE_BULLETS0,
+    StoryKey::STARBASE_BULLETS1,
+    StoryKey::STARBASE_BULLETS2,
+    StoryKey::STARBASE_BULLETS3,
+];
+pub(super) const ZOQFOT_GRPOFFS: [StoryKey; 4] = [
+    StoryKey::ZOQFOT_GRPOFFS0,
+    StoryKey::ZOQFOT_GRPOFFS1,
+    StoryKey::ZOQFOT_GRPOFFS2,
+    StoryKey::ZOQFOT_GRPOFFS3,
+];
+
 use super::{EncounterApi, Handler};
 #[cfg(not(test))]
 use crate::engine::{Kernel, WorldData};

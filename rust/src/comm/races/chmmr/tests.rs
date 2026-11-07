@@ -1,6 +1,7 @@
 use super::*;
 use crate::comm::races::encounter::testing::{Effect, Fake};
 use crate::comm::races::script::ScriptApi;
+use crate::engine::StoryKey;
 type Api = Fake<Handler, api::World>;
 fn run(f: &mut Api, h: Handler, r: i32) {
     f.effects.clear();
@@ -14,8 +15,8 @@ fn freed_chmmr_analyze_pet_and_bomb_before_offering_refit() {
     for pet in [0, 1] {
         for bomb in [0, 1] {
             let mut f = Api::default();
-            f.put("TALKING_PET_ON_SHIP", pet);
-            f.put("UTWIG_BOMB_ON_SHIP", bomb);
+            f.put(StoryKey::TALKING_PET_ON_SHIP, pet);
+            f.put(StoryKey::UTWIG_BOMB_ON_SHIP, bomb);
             run(&mut f, Handler::ChmmrFree, SERIOUS_1);
             assert_eq!(
                 f.spoken(),
@@ -35,7 +36,7 @@ fn freed_chmmr_analyze_pet_and_bomb_before_offering_refit() {
                     }
                 ]
             );
-            assert_eq!(f.get("AWARE_OF_SAMATRA"), 1);
+            assert_eq!(f.get(StoryKey::AWARE_OF_SAMATRA), 1);
             assert_eq!(choices(&f).contains(&PROCEED), pet == 1 && bomb == 1);
             assert_eq!(f.world.refits, 0);
         }
@@ -52,19 +53,19 @@ fn shielded_advice_and_emergence_keep_state_and_animation_order() {
         [NEED_HELP, FIND_OUT_WHATS_UP, NEED_ADVICE, BYE_SHIELDED]
     );
     run(&mut f, Handler::ChmmrAdvice, HOW_DEFEAT_URQUAN);
-    assert_eq!(f.get("CHMMR_BOMB_STATE"), 1);
+    assert_eq!(f.get(StoryKey::CHMMR_BOMB_STATE), 1);
     assert!(f.disabled.contains(&(NEED_ADVICE as u16)));
-    f.put("CHMMR_EMERGING", 1);
+    f.put(StoryKey::CHMMR_EMERGING, 1);
     f.effects.clear();
     Dialogue { api: &mut f }.intro();
     assert_eq!(f.spoken(), [WE_ARE_FREE, WHY_HAVE_YOU_FREED_US]);
-    assert_eq!(f.get("CHMMR_UNLEASHED"), 1);
-    assert_eq!(f.get("CHMMR_EMERGING"), 0);
-    assert_eq!(f.get("CHMMR_HOME_VISITS"), 0);
+    assert_eq!(f.get(StoryKey::CHMMR_UNLEASHED), 1);
+    assert_eq!(f.get(StoryKey::CHMMR_EMERGING), 0);
+    assert_eq!(f.get(StoryKey::CHMMR_HOME_VISITS), 0);
     assert_eq!(f.world.intros, [(3, 1680)]);
     assert_eq!(choices(&f), [SERIOUS_1, SERIOUS_2, SILLY]);
     let mut f = Api::default();
-    f.put("CHMMR_EMERGING", 1);
+    f.put(StoryKey::CHMMR_EMERGING, 1);
     Dialogue { api: &mut f }.intro();
     assert_eq!(f.spoken(), [WE_ARE_FREE, WHO_ARE_YOU]);
     assert_eq!(choices(&f), [I_AM_CAPTAIN0, I_AM_SAVIOR, I_AM_SILLY]);
@@ -83,10 +84,10 @@ fn shielded_advice_and_emergence_keep_state_and_animation_order() {
 #[test]
 fn proceed_refits_and_transports_to_starbase_without_marking_bomb_processed() {
     let mut f = Api::default();
-    f.put("STARBASE_AVAILABLE", 1);
-    f.put("UTWIG_BOMB_ON_SHIP", 1);
-    f.put("CHMMR_HOME_VISITS", 3);
-    f.put("CHMMR_STACK", 3);
+    f.put(StoryKey::STARBASE_AVAILABLE, 1);
+    f.put(StoryKey::UTWIG_BOMB_ON_SHIP, 1);
+    f.put(StoryKey::CHMMR_HOME_VISITS, 3);
+    f.put(StoryKey::CHMMR_STACK, 3);
     let ship = &mut f.world.glob.flagship;
     ship.module_slots.fill(9);
     ship.drive_slots.fill(20);
@@ -100,10 +101,10 @@ fn proceed_refits_and_transports_to_starbase_without_marking_bomb_processed() {
     run(&mut f, Handler::ExitConversation, PROCEED);
     assert_eq!(f.spoken(), [TAKE_2_WEEKS]);
     assert_eq!(f.world.refits, 1);
-    assert_eq!(f.get("CHMMR_BOMB_STATE"), 2);
-    assert_eq!(f.get("UTWIG_BOMB_ON_SHIP"), 0);
-    assert_eq!(f.get("CHMMR_HOME_VISITS"), 0);
-    assert_eq!(f.get("CHMMR_STACK"), 0);
+    assert_eq!(f.get(StoryKey::CHMMR_BOMB_STATE), 2);
+    assert_eq!(f.get(StoryKey::UTWIG_BOMB_ON_SHIP), 0);
+    assert_eq!(f.get(StoryKey::CHMMR_HOME_VISITS), 0);
+    assert_eq!(f.get(StoryKey::CHMMR_STACK), 0);
     assert!(f.effects.contains(&Effect::Allied(
         crate::comm::dispatch::ship::CHMMR_SHIP as u16,
         true
@@ -182,7 +183,7 @@ fn no_starbase_refit_preserves_supplies_and_packs_modules_in_original_reverse_or
 fn completed_bomb_states_use_post_bomb_dialogue_and_lifecycle_is_peaceful() {
     for bomb in [2, 3] {
         let mut f = Api::default();
-        f.put("CHMMR_BOMB_STATE", bomb);
+        f.put(StoryKey::CHMMR_BOMB_STATE, bomb);
         Dialogue { api: &mut f }.initialize();
         Dialogue { api: &mut f }.intro();
         Dialogue { api: &mut f }.post_chmmr_enc();
@@ -191,7 +192,7 @@ fn completed_bomb_states_use_post_bomb_dialogue_and_lifecycle_is_peaceful() {
             choices(&f),
             [WHATS_UP_AFTER_BOMB, WHAT_DO_AFTER_BOMB, BYE_AFTER_BOMB]
         );
-        assert_eq!(f.get("CHMMR_BOMB_STATE"), bomb);
+        assert_eq!(f.get(StoryKey::CHMMR_BOMB_STATE), bomb);
         assert_eq!(f.segue, 0);
     }
     let d = descriptor();

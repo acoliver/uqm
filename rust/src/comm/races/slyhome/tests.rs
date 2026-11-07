@@ -1,11 +1,12 @@
 use super::super::encounter::testing::{Effect, Fake};
 use super::super::script::{GLOBAL_PLAYER_NAME, GLOBAL_SHIP_NAME};
 use super::*;
+use crate::engine::StoryKey;
 
 #[test]
 fn offered_callbacks_reach_the_recall_code_from_a_new_game() {
     let mut api = Fake::<Handler>::default();
-    api.put("PROBE_EXHIBITED_BUG", 1);
+    api.put(StoryKey::PROBE_EXHIBITED_BUG, 1);
     Dialogue { api: &mut api }.intro();
     for phrase in [
         WHO_ARE_YOU,
@@ -45,8 +46,8 @@ fn offered_callbacks_reach_the_recall_code_from_a_new_game() {
         api.effects.clear();
         Dialogue { api: &mut api }.handle(handler, phrase as i32);
     }
-    assert_eq!(api.state["DESTRUCT_CODE_ON_SHIP"], 1);
-    assert_eq!(api.state["SLYLANDRO_KNOW_BROKEN"], 1);
+    assert_eq!(api.state[&StoryKey::DESTRUCT_CODE_ON_SHIP], 1);
+    assert_eq!(api.state[&StoryKey::SLYLANDRO_KNOW_BROKEN], 1);
     assert_eq!(api.segue, 0);
 }
 
@@ -56,11 +57,11 @@ fn probe_function_menu_covers_all_knowledge_and_stack_gates() {
         for stack9 in 0..=4 {
             for mask in 0..32 {
                 let mut api = Fake::<Handler>::default();
-                api.put("SLYLANDRO_STACK8", stack8);
-                api.put("SLYLANDRO_STACK9", stack9);
-                api.put("PLAYER_KNOWS_PROGRAM", u8::from(mask & 1 != 0));
-                api.put("PLAYER_KNOWS_PRIORITY", u8::from(mask & 2 != 0));
-                api.put("PLAYER_KNOWS_EFFECTS", u8::from(mask & 4 != 0));
+                api.put(StoryKey::SLYLANDRO_STACK8, stack8);
+                api.put(StoryKey::SLYLANDRO_STACK9, stack9);
+                api.put(StoryKey::PLAYER_KNOWS_PROGRAM, u8::from(mask & 1 != 0));
+                api.put(StoryKey::PLAYER_KNOWS_PRIORITY, u8::from(mask & 2 != 0));
+                api.put(StoryKey::PLAYER_KNOWS_EFFECTS, u8::from(mask & 4 != 0));
                 if mask & 8 != 0 {
                     api.disabled.insert(WHAT_SET_PRIORITY as u16);
                 }
@@ -114,11 +115,11 @@ fn probe_attack_gate_requires_an_observed_bug_and_unknown_solution() {
         for observed in 0..=1 {
             for stack6 in 0..=2 {
                 let mut api = Fake::<Handler>::default();
-                api.put("SLYLANDRO_KNOW_BROKEN", broken);
-                api.put("PROBE_EXHIBITED_BUG", observed);
-                api.put("SLYLANDRO_STACK6", stack6);
-                api.put("SLYLANDRO_STACK7", 3);
-                api.put("SLYLANDRO_STACK8", 2);
+                api.put(StoryKey::SLYLANDRO_KNOW_BROKEN, broken);
+                api.put(StoryKey::PROBE_EXHIBITED_BUG, observed);
+                api.put(StoryKey::SLYLANDRO_STACK6, stack6);
+                api.put(StoryKey::SLYLANDRO_STACK7, 3);
+                api.put(StoryKey::SLYLANDRO_STACK8, 2);
                 Dialogue { api: &mut api }.probe(0);
                 let mut expected = Vec::new();
                 if broken == 0 && observed != 0 && stack6 < 2 {
@@ -145,7 +146,7 @@ fn choices(api: &Fake<Handler>) -> Vec<u32> {
 fn greetings_recall_and_goodbyes_preserve_byte_counters() {
     for n in 0..=u8::MAX {
         let mut api = Fake::<Handler>::default();
-        api.put("SLYLANDRO_HOME_VISITS", n);
+        api.put(StoryKey::SLYLANDRO_HOME_VISITS, n);
         Dialogue { api: &mut api }.initialize();
         Dialogue { api: &mut api }.intro();
         assert_eq!(
@@ -157,14 +158,14 @@ fn greetings_recall_and_goodbyes_preserve_byte_counters() {
             }
         );
         assert_eq!(
-            api.state["SLYLANDRO_HOME_VISITS"],
+            api.state[&StoryKey::SLYLANDRO_HOME_VISITS],
             if n == 3 { 3 } else { n.wrapping_add(1) }
         );
         api.effects.clear();
         Dialogue { api: &mut api }.handle(Handler::Exit, BYE as i32);
         assert_eq!(
             api.spoken(),
-            [if api.state["SLYLANDRO_HOME_VISITS"] == 1 {
+            [if api.state[&StoryKey::SLYLANDRO_HOME_VISITS] == 1 {
                 GOODBYE_1
             } else {
                 GOODBYE_2
@@ -173,11 +174,11 @@ fn greetings_recall_and_goodbyes_preserve_byte_counters() {
         assert_eq!(api.segue, 0);
     }
     let mut api = Fake::<Handler>::default();
-    api.put("SLYLANDRO_KNOW_BROKEN", 1);
+    api.put(StoryKey::SLYLANDRO_KNOW_BROKEN, 1);
     Dialogue { api: &mut api }.intro();
     assert_eq!(api.spoken(), [RECALL_PROGRAM_1 as i32]);
-    assert_eq!(api.state["RECALL_VISITS"], 1);
-    assert!(!api.state.contains_key("SLYLANDRO_HOME_VISITS"));
+    assert_eq!(api.state[&StoryKey::RECALL_VISITS], 1);
+    assert!(!api.state.contains_key(&StoryKey::SLYLANDRO_HOME_VISITS));
     api.effects.clear();
     Dialogue { api: &mut api }.intro();
     assert_eq!(api.spoken(), [HELLO_1 as i32]);
@@ -189,71 +190,77 @@ fn home_answers_set_stacks_and_prioritize_the_active_topic() {
         (
             WE_ARE_US0,
             TERRIBLY_EXCITING,
-            "SLYLANDRO_STACK1",
+            StoryKey::SLYLANDRO_STACK1,
             1,
             WHAT_OTHER_VISITORS,
         ),
         (
             WHAT_OTHER_VISITORS,
             VISITORS,
-            "SLYLANDRO_STACK1",
+            StoryKey::SLYLANDRO_STACK1,
             2,
             ANY_OTHER_VISITORS,
         ),
         (
             ANY_OTHER_VISITORS,
             LONG_AGO,
-            "SLYLANDRO_STACK1",
+            StoryKey::SLYLANDRO_STACK1,
             3,
             WHAT_ABOUT_SENTIENT_MILIEU,
         ),
         (
             WHAT_ABOUT_SENTIENT_MILIEU,
             MET_TAALO_THEY_ARE_FROM,
-            "SLYLANDRO_STACK1",
+            StoryKey::SLYLANDRO_STACK1,
             4,
             WHO_ELSE,
         ),
-        (WHO_ELSE, PRECURSORS, "SLYLANDRO_STACK1", 5, PRECURSORS_YOW),
+        (
+            WHO_ELSE,
+            PRECURSORS,
+            StoryKey::SLYLANDRO_STACK1,
+            5,
+            PRECURSORS_YOW,
+        ),
         (
             PRECURSORS_YOW,
             ABOUT_PRECURSORS,
-            "SLYLANDRO_STACK1",
+            StoryKey::SLYLANDRO_STACK1,
             6,
             MUST_KNOW_MORE,
         ),
         (
             MUST_KNOW_MORE,
             ALL_WE_KNOW,
-            "SLYLANDRO_STACK1",
+            StoryKey::SLYLANDRO_STACK1,
             7,
             WHO_ARE_YOU,
         ),
         (
             WHO_ARE_YOU,
             WE_ARE_SLY,
-            "SLYLANDRO_STACK2",
+            StoryKey::SLYLANDRO_STACK2,
             1,
             LIKE_MORE_ABOUT_YOU,
         ),
         (
             WHERE_ARE_YOU,
             DOWN_HERE,
-            "SLYLANDRO_STACK3",
+            StoryKey::SLYLANDRO_STACK3,
             1,
             THATS_IMPOSSIBLE_1,
         ),
         (
             THATS_IMPOSSIBLE_1,
             NO_ITS_NOT_1,
-            "SLYLANDRO_STACK3",
+            StoryKey::SLYLANDRO_STACK3,
             2,
             THATS_IMPOSSIBLE_2,
         ),
         (
             THATS_IMPOSSIBLE_2,
             NO_ITS_NOT_2,
-            "SLYLANDRO_STACK3",
+            StoryKey::SLYLANDRO_STACK3,
             3,
             WE_ARE_US0,
         ),
@@ -261,7 +268,7 @@ fn home_answers_set_stacks_and_prioritize_the_active_topic() {
         let mut api = Fake::<Handler>::default();
         Dialogue { api: &mut api }.handle(Handler::Home, r as i32);
         assert_eq!(api.spoken(), [line as i32]);
-        assert_eq!(api.state[key], value);
+        assert_eq!(api.state[&key], value);
         assert_eq!(choices(&api)[0], first, "response {r}");
         assert!(api
             .offers()
@@ -269,7 +276,7 @@ fn home_answers_set_stacks_and_prioritize_the_active_topic() {
             .filter(|(p, _)| [WHO_ARE_YOU as u16, LIKE_MORE_ABOUT_YOU as u16].contains(p))
             .all(|(_, h)| *h == Handler::Home));
         if r == WHAT_OTHER_VISITORS {
-            assert_eq!(api.state["PLAYER_KNOWS_PROBE"], 1);
+            assert_eq!(api.state[&StoryKey::PLAYER_KNOWS_PROBE], 1);
         }
         if r == WE_ARE_US0 {
             assert!(api.disabled.contains(&(WE_ARE_US0 as u16)));
@@ -313,12 +320,12 @@ fn home_menu_obeys_each_stack_and_constructs_the_introduction() {
             (2, None),
         ] {
             api.effects.clear();
-            api.put("SLYLANDRO_STACK1", 7);
-            api.put("SLYLANDRO_STACK2", 2);
-            api.put("SLYLANDRO_STACK3", 3);
-            api.put("SLYLANDRO_STACK4", s4);
-            api.put("SLYLANDRO_STACK5", s5);
-            api.put("PLAYER_KNOWS_PROBE", 1);
+            api.put(StoryKey::SLYLANDRO_STACK1, 7);
+            api.put(StoryKey::SLYLANDRO_STACK2, 2);
+            api.put(StoryKey::SLYLANDRO_STACK3, 3);
+            api.put(StoryKey::SLYLANDRO_STACK4, s4);
+            api.put(StoryKey::SLYLANDRO_STACK5, s5);
+            api.put(StoryKey::PLAYER_KNOWS_PROBE, 1);
             Dialogue { api: &mut api }.home(0);
             assert_eq!(
                 choices(&api),
@@ -332,7 +339,7 @@ fn home_menu_obeys_each_stack_and_constructs_the_introduction() {
     }
     api.effects.clear();
     api.disabled.insert(KNOW_MORE_PROBE as u16);
-    api.put("SLYLANDRO_STACK5", 1);
+    api.put(StoryKey::SLYLANDRO_STACK5, 1);
     Dialogue { api: &mut api }.home(0);
     assert_eq!(choices(&api), [BYE]);
 }
@@ -340,27 +347,37 @@ fn home_menu_obeys_each_stack_and_constructs_the_introduction() {
 #[test]
 fn human_information_branches_and_exhaustion() {
     for (r, line, key, value) in [
-        (HAPPY_TO_TELL_MORE, TELL_MORE, "SLYLANDRO_STACK4", 1),
-        (WE_COME_FROM_EARTH, OK_EARTH, "SLYLANDRO_KNOW_EARTH", 1),
-        (WE_EXPLORE, OK_EXPLORE, "SLYLANDRO_KNOW_EXPLORE", 1),
+        (HAPPY_TO_TELL_MORE, TELL_MORE, StoryKey::SLYLANDRO_STACK4, 1),
+        (
+            WE_COME_FROM_EARTH,
+            OK_EARTH,
+            StoryKey::SLYLANDRO_KNOW_EARTH,
+            1,
+        ),
+        (WE_EXPLORE, OK_EXPLORE, StoryKey::SLYLANDRO_KNOW_EXPLORE, 1),
         (
             WE_FIGHT_URQUAN,
             URQUAN_NICE_GUYS,
-            "SLYLANDRO_KNOW_URQUAN",
+            StoryKey::SLYLANDRO_KNOW_URQUAN,
             1,
         ),
         (
             NOT_SAME_URQUAN,
             PERSONALITY_CHANGE,
-            "SLYLANDRO_KNOW_URQUAN",
+            StoryKey::SLYLANDRO_KNOW_URQUAN,
             2,
         ),
-        (WE_GATHER, MAYBE_INTERESTED, "SLYLANDRO_KNOW_GATHER", 1),
+        (
+            WE_GATHER,
+            MAYBE_INTERESTED,
+            StoryKey::SLYLANDRO_KNOW_GATHER,
+            1,
+        ),
     ] {
         let mut api = Fake::<Handler>::default();
         Dialogue { api: &mut api }.handle(Handler::Human, r as i32);
         assert_eq!(api.spoken(), [line as i32]);
-        assert_eq!(api.state[key], value);
+        assert_eq!(api.state[&key], value);
         if r == WE_FIGHT_URQUAN {
             assert_eq!(choices(&api)[0], NOT_SAME_URQUAN);
         }
@@ -368,17 +385,17 @@ fn human_information_branches_and_exhaustion() {
     }
     let mut api = Fake::<Handler>::default();
     for key in [
-        "SLYLANDRO_KNOW_EARTH",
-        "SLYLANDRO_KNOW_EXPLORE",
-        "SLYLANDRO_KNOW_GATHER",
+        StoryKey::SLYLANDRO_KNOW_EARTH,
+        StoryKey::SLYLANDRO_KNOW_EXPLORE,
+        StoryKey::SLYLANDRO_KNOW_GATHER,
     ] {
         api.put(key, 1);
     }
-    api.put("SLYLANDRO_KNOW_URQUAN", 2);
+    api.put(StoryKey::SLYLANDRO_KNOW_URQUAN, 2);
     Dialogue { api: &mut api }.human(WOULD_YOU_LIKE_TO_KNOW_MORE as i32);
     assert_eq!(api.spoken(), [YES_TELL_MORE as i32]);
     assert_eq!(choices(&api), [ENOUGH_ABOUT_ME]);
-    assert_eq!(api.state["SLYLANDRO_STACK4"], 2);
+    assert_eq!(api.state[&StoryKey::SLYLANDRO_STACK4], 2);
 }
 
 #[test]
@@ -407,7 +424,7 @@ fn probe_topics_include_attack_in_c_stack_order() {
         (
             WHAT_ARE_PROBES,
             PROBES_ARE,
-            "SLYLANDRO_STACK5",
+            StoryKey::SLYLANDRO_STACK5,
             1,
             vec![
                 WHY_PROBE_ALWAYS_ATTACK,
@@ -418,7 +435,7 @@ fn probe_topics_include_attack_in_c_stack_order() {
         (
             WHY_PROBE_ALWAYS_ATTACK,
             ONLY_DEFEND,
-            "SLYLANDRO_STACK6",
+            StoryKey::SLYLANDRO_STACK6,
             1,
             vec![
                 TALK_MORE_PROBE_ATTACK,
@@ -429,44 +446,44 @@ fn probe_topics_include_attack_in_c_stack_order() {
         (
             WHERE_PROBES_FROM,
             PROBES_FROM_MELNORME,
-            "SLYLANDRO_STACK7",
+            StoryKey::SLYLANDRO_STACK7,
             1,
             vec![WHY_SELL, WHY_PROBE_ALWAYS_ATTACK, WHATS_PROBES_MISSION],
         ),
         (
             WHY_SELL,
             SELL_FOR_INFO,
-            "SLYLANDRO_STACK7",
+            StoryKey::SLYLANDRO_STACK7,
             2,
             vec![HOW_LONG_AGO, WHY_PROBE_ALWAYS_ATTACK, WHATS_PROBES_MISSION],
         ),
         (
             HOW_LONG_AGO,
             FIFTY_THOUSAND_ROTATIONS,
-            "SLYLANDRO_STACK7",
+            StoryKey::SLYLANDRO_STACK7,
             3,
             vec![WHY_PROBE_ALWAYS_ATTACK, WHATS_PROBES_MISSION],
         ),
         (
             WHATS_PROBES_MISSION,
             SEEK_OUT_NEW_LIFE,
-            "SLYLANDRO_STACK8",
+            StoryKey::SLYLANDRO_STACK8,
             1,
             vec![IF_ONLY_ONE, WHY_PROBE_ALWAYS_ATTACK, WHERE_PROBES_FROM],
         ),
         (
             IF_ONLY_ONE,
             THEY_REPLICATE,
-            "SLYLANDRO_STACK8",
+            StoryKey::SLYLANDRO_STACK8,
             2,
             vec![WHY_PROBE_ALWAYS_ATTACK, WHERE_PROBES_FROM],
         ),
     ] {
         let mut api = Fake::<Handler>::default();
-        api.put("PROBE_EXHIBITED_BUG", 1);
+        api.put(StoryKey::PROBE_EXHIBITED_BUG, 1);
         Dialogue { api: &mut api }.handle(Handler::Probe, r as i32);
         assert_eq!(api.spoken(), [line as i32]);
-        assert_eq!(api.state[key], value);
+        assert_eq!(api.state[&key], value);
         assert_eq!(
             choices(&api),
             expected
@@ -477,8 +494,8 @@ fn probe_topics_include_attack_in_c_stack_order() {
     }
     for r in [KNOW_MORE_PROBE, ENOUGH_PROBLEM] {
         let mut api = Fake::<Handler>::default();
-        api.put("SLYLANDRO_STACK7", 3);
-        api.put("SLYLANDRO_STACK8", 2);
+        api.put(StoryKey::SLYLANDRO_STACK7, 3);
+        api.put(StoryKey::SLYLANDRO_STACK8, 2);
         Dialogue { api: &mut api }.probe(r as i32);
         assert_eq!(
             api.spoken(),
@@ -496,7 +513,7 @@ fn probe_topics_include_attack_in_c_stack_order() {
 #[test]
 fn probe_function_exposes_both_progression_stacks_and_prioritizes_answers() {
     let mut api = Fake::<Handler>::default();
-    api.put("SLYLANDRO_STACK8", 2);
+    api.put(StoryKey::SLYLANDRO_STACK8, 2);
     Dialogue { api: &mut api }.probe(TALK_MORE_PROBE_ATTACK as i32);
     assert_eq!(api.spoken(), [NO_PROBLEM_BUT_SURE as i32]);
     assert_eq!(
@@ -524,14 +541,22 @@ fn probe_function_exposes_both_progression_stacks_and_prioritizes_answers() {
         assert_eq!(choices(&api)[0], first);
     }
     for (r, line, key) in [
-        (TELL_ME_ABOUT_BASICS, BASIC_COMMANDS, "PLAYER_KNOWS_PROGRAM"),
-        (WHAT_SET_PRIORITY, MAXIMUM, "PLAYER_KNOWS_PRIORITY"),
-        (WHAT_EFFECT, AFFECTS_BEHAVIOR, "PLAYER_KNOWS_EFFECTS"),
+        (
+            TELL_ME_ABOUT_BASICS,
+            BASIC_COMMANDS,
+            StoryKey::PLAYER_KNOWS_PROGRAM,
+        ),
+        (WHAT_SET_PRIORITY, MAXIMUM, StoryKey::PLAYER_KNOWS_PRIORITY),
+        (
+            WHAT_EFFECT,
+            AFFECTS_BEHAVIOR,
+            StoryKey::PLAYER_KNOWS_EFFECTS,
+        ),
     ] {
         api.effects.clear();
         Dialogue { api: &mut api }.function(r as i32);
         assert_eq!(api.spoken(), [line as i32]);
-        assert_eq!(api.state[key], 1);
+        assert_eq!(api.state[&key], 1);
     }
     assert_eq!(choices(&api), [PROBE_HAS_BUG, ENOUGH_PROBLEM]);
     api.effects.clear();
@@ -590,12 +615,12 @@ fn bug_conversation_requires_replication_answers_before_fixing() {
 #[test]
 fn self_destruct_preserves_byte_wrapping_and_event_selector() {
     let mut api = Fake::<Handler>::default();
-    api.put("SLYLANDRO_MULTIPLIER", 255);
+    api.put(StoryKey::SLYLANDRO_MULTIPLIER, 255);
     Dialogue { api: &mut api }.home(MEGA_SELF_DESTRUCT as i32);
     assert_eq!(api.spoken(), [WHY_YES_THERE_IS as i32]);
-    assert_eq!(api.state["DESTRUCT_CODE_ON_SHIP"], 1);
-    assert_eq!(api.state["SLYLANDRO_KNOW_BROKEN"], 1);
-    assert_eq!(api.state["SLYLANDRO_MULTIPLIER"], 0);
+    assert_eq!(api.state[&StoryKey::DESTRUCT_CODE_ON_SHIP], 1);
+    assert_eq!(api.state[&StoryKey::SLYLANDRO_KNOW_BROKEN], 1);
+    assert_eq!(api.state[&StoryKey::SLYLANDRO_MULTIPLIER], 0);
     assert!(api.effects.contains(&Effect::Event(1, 0, 0, 0, 17)));
 }
 

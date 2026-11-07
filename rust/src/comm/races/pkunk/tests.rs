@@ -1,6 +1,7 @@
 use super::*;
 use crate::comm::races::encounter::testing::{Effect, Fake};
 use crate::comm::races::script::ScriptApi;
+use crate::engine::StoryKey;
 type Api = Fake<Handler, api::World>;
 fn choices(f: &Api) -> Vec<u16> {
     f.offers().iter().map(|x| x.0).collect()
@@ -18,18 +19,18 @@ fn fury_gift_dates_capacity_and_due_boundary() {
         Dialogue { api: &mut f }.prepare_ship();
         assert_eq!(
             (
-                f.get("PKUNK_SHIP_YEAR"),
-                f.get("PKUNK_SHIP_MONTH"),
-                f.get("PKUNK_SHIP_DAY")
+                f.get(StoryKey::PKUNK_SHIP_YEAR),
+                f.get(StoryKey::PKUNK_SHIP_MONTH),
+                f.get(StoryKey::PKUNK_SHIP_DAY)
             ),
             if added != 0 { (1, 12, 28) } else { (0, 0, 0) }
         );
     }
     let mut f = Api::default();
-    f.put("PKUNK_MANNER", 3);
-    f.put("PKUNK_SHIP_YEAR", 1);
-    f.put("PKUNK_SHIP_MONTH", 6);
-    f.put("PKUNK_SHIP_DAY", 15);
+    f.put(StoryKey::PKUNK_MANNER, 3);
+    f.put(StoryKey::PKUNK_SHIP_YEAR, 1);
+    f.put(StoryKey::PKUNK_SHIP_MONTH, 6);
+    f.put(StoryKey::PKUNK_SHIP_DAY, 15);
     for (date, ready) in [
         ((2155, 12, 31), false),
         ((2156, 5, 31), false),
@@ -49,24 +50,30 @@ fn fury_gift_dates_capacity_and_due_boundary() {
         f.world.date = (2155, 2, 15);
         f.world.ships_added = 4;
         run(&mut f, Handler::ExitConversation, WE_NEED_HELP);
-        assert_eq!(f.get("PKUNK_MANNER"), 3);
+        assert_eq!(f.get(StoryKey::PKUNK_MANNER), 3);
         assert!(f.effects.contains(&Effect::Event(1, 6, 0, 0, 4)));
         assert_eq!(f.effects.contains(&Effect::Talk(65535)), room != 0);
-        assert_eq!(f.get("PKUNK_SHIP_MONTH"), if room == 0 { 0 } else { 2 });
+        assert_eq!(
+            f.get(StoryKey::PKUNK_SHIP_MONTH),
+            if room == 0 { 0 } else { 2 }
+        );
     }
 }
 #[test]
 fn spindle_gift_home_and_reconciliation() {
     for reconcile in [false, true] {
         let mut f = Api::default();
-        f.put("GLOBAL_FLAGS_AND_DATA", 128);
+        f.put(StoryKey::GLOBAL_FLAGS_AND_DATA, 128);
         if reconcile {
             run(&mut f, Handler::PkunkHome, TRY_TO_BE_NICER);
         } else {
             Dialogue { api: &mut f }.intro();
         }
         assert_eq!(
-            (f.get("CLEAR_SPINDLE"), f.get("CLEAR_SPINDLE_ON_SHIP")),
+            (
+                f.get(StoryKey::CLEAR_SPINDLE),
+                f.get(StoryKey::CLEAR_SPINDLE_ON_SHIP)
+            ),
             (1, 1)
         );
         assert!(f.spoken().contains(&i32::from(GIVE_SPINDLE)));
@@ -97,7 +104,7 @@ fn migration_reasons_and_response_order() {
     ] {
         run(&mut f, Handler::ExitConversation, question);
         assert_eq!(f.effects.contains(&Effect::Event(1, 0, 0, 0, 4)), event);
-        assert_ne!(f.get("PKUNK_REASONS") & mask, 0);
+        assert_ne!(f.get(StoryKey::PKUNK_REASONS) & mask, 0);
     }
     run(&mut f, Handler::PkunkMigrate, 0);
     assert_eq!(choices(&f), [SUIT_YOURSELF]);
@@ -123,13 +130,13 @@ fn home_name_response_and_war_information() {
     {
         run(&mut f, Handler::PkunkFriendlySpace, HOW_GOES_WAR);
         assert_eq!(f.spoken(), [i32::from(*phrase)]);
-        assert_eq!(f.get("PKUNK_WAR"), (visit + 1).min(3) as u8);
+        assert_eq!(f.get(StoryKey::PKUNK_WAR), (visit + 1).min(3) as u8);
     }
     assert_eq!(
         (
-            f.get("KNOW_URQUAN_STORY"),
-            f.get("KNOW_KOHR_AH_STORY"),
-            f.get("PKUNK_DONE_WAR")
+            f.get(StoryKey::KNOW_URQUAN_STORY),
+            f.get(StoryKey::KNOW_KOHR_AH_STORY),
+            f.get(StoryKey::PKUNK_DONE_WAR)
         ),
         (1, 1, 1)
     );
@@ -141,9 +148,9 @@ fn greeting_routes_hostility_and_outtakes() {
         for flags in [0, 128] {
             for mission in [0, 1, 2] {
                 let mut f = Api::default();
-                f.put("PKUNK_MANNER", manner);
-                f.put("GLOBAL_FLAGS_AND_DATA", flags);
-                f.put("PKUNK_MISSION", mission);
+                f.put(StoryKey::PKUNK_MANNER, manner);
+                f.put(StoryKey::GLOBAL_FLAGS_AND_DATA, flags);
+                f.put(StoryKey::PKUNK_MISSION, mission);
                 f.world.date = (2155, 1, 1);
                 Dialogue { api: &mut f }.initialize();
                 assert_eq!(f.segue, u32::from(manner != 3));
@@ -156,9 +163,15 @@ fn greeting_routes_hostility_and_outtakes() {
         segue: 1,
         ..Api::default()
     };
-    f.put("PKUNK_HOME_VISITS", 3);
+    f.put(StoryKey::PKUNK_HOME_VISITS, 3);
     Dialogue { api: &mut f }.post_pkunk_enc();
-    assert_eq!((f.get("PKUNK_MANNER"), f.get("PKUNK_HOME_VISITS")), (1, 0));
+    assert_eq!(
+        (
+            f.get(StoryKey::PKUNK_MANNER),
+            f.get(StoryKey::PKUNK_HOME_VISITS)
+        ),
+        (1, 0)
+    );
     f.effects.clear();
     f.activity = 5;
     Dialogue { api: &mut f }.intro();

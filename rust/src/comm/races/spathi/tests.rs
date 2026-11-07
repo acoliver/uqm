@@ -1,6 +1,7 @@
 use super::*;
 use crate::comm::races::encounter::testing::{Effect, Fake};
 use crate::comm::races::script::ScriptApi;
+use crate::engine::StoryKey;
 type Api = Fake<Handler>;
 fn run(f: &mut Api, s: &mut Session, h: Handler, r: u16) {
     f.effects.clear();
@@ -35,8 +36,8 @@ fn descriptor_and_initial_segue_music_on_reentry() {
         (0, 1, 0, 1),
     ] {
         let mut f = Api::default();
-        f.put("FOUND_PLUTO_SPATHI", pluto);
-        f.put("SPATHI_MANNER", manner);
+        f.put(StoryKey::FOUND_PLUTO_SPATHI, pluto);
+        f.put(StoryKey::SPATHI_MANNER, manner);
         f.activity = activity;
         Dialogue {
             api: &mut f,
@@ -57,17 +58,17 @@ fn descriptor_and_initial_segue_music_on_reentry() {
 fn pluto_intro_resets_password_refusals_and_prioritizes_encounter() {
     let mut f = Api::default();
     let mut s = Session { refusals: 2 };
-    f.put("FOUND_PLUTO_SPATHI", 1);
-    f.put("SPATHI_HOME_VISITS", 7);
-    f.put("SPATHI_MANNER", 2);
+    f.put(StoryKey::FOUND_PLUTO_SPATHI, 1);
+    f.put(StoryKey::SPATHI_HOME_VISITS, 7);
+    f.put(StoryKey::SPATHI_MANNER, 2);
     Dialogue {
         api: &mut f,
         session: &mut s,
     }
     .intro();
     assert_eq!(s.refusals, 0);
-    assert_eq!(f.get("SPATHI_HOME_VISITS"), 0);
-    assert_eq!(f.get("KNOW_SPATHI_PASSWORD"), 0);
+    assert_eq!(f.get(StoryKey::SPATHI_HOME_VISITS), 0);
+    assert_eq!(f.get(StoryKey::KNOW_SPATHI_PASSWORD), 0);
     assert_eq!(f.spoken(), vec![1]);
     assert_eq!(choices(&f), vec![2, 4, 6, 7]);
 }
@@ -239,8 +240,8 @@ fn all_intro_modes_and_visit_saturation() {
     ] {
         let mut f = Api::default();
         let mut s = Session::default();
-        f.put("SPATHI_MANNER", manner);
-        f.put("SPATHI_QUEST", quest);
+        f.put(StoryKey::SPATHI_MANNER, manner);
+        f.put(StoryKey::SPATHI_QUEST, quest);
         if allied {
             f.alliances[6] = 1;
         }
@@ -254,7 +255,7 @@ fn all_intro_modes_and_visit_saturation() {
             assert_eq!(f.spoken(), vec![p]);
             assert_eq!(f.offers().len(), offers);
         }
-        assert_eq!(f.get("SPATHI_VISITS"), u8::from(manner != 2));
+        assert_eq!(f.get(StoryKey::SPATHI_VISITS), u8::from(manner != 2));
     }
 }
 #[test]
@@ -279,13 +280,13 @@ fn friendly_allied_and_antagonistic_questions() {
         assert!(!choices(&f).contains(&r));
     }
     run(&mut f, &mut s, Handler::SpathiAntagonize, PREPARE_TO_DIE);
-    assert_eq!(f.get("SPATHI_STACK2"), 1);
+    assert_eq!(f.get(StoryKey::SPATHI_STACK2), 1);
     assert_eq!(f.spoken(), vec![95]);
     run(&mut f, &mut s, Handler::SpathiNeutral, LOOK_WEIRD);
-    assert_eq!(f.get("SPATHI_STACK0"), 1);
+    assert_eq!(f.get(StoryKey::SPATHI_STACK0), 1);
     assert_eq!(choices(&f)[0], 90);
     run(&mut f, &mut s, Handler::SpathiNeutral, NO_LOOK_REALLY_WEIRD);
-    assert_eq!(f.get("SPATHI_STACK0"), 2);
+    assert_eq!(f.get(StoryKey::SPATHI_STACK0), 2);
     assert_eq!(choices(&f), vec![92, 122, 112]);
 }
 #[test]
@@ -304,7 +305,7 @@ fn befriending_rotates_stacks_and_returns_to_neutral_only_when_exhausted() {
         assert_eq!(f.spoken(), vec![p]);
         assert_eq!(choices(&f), offers);
     }
-    assert_eq!(f.get("SPATHI_STACK1"), 1);
+    assert_eq!(f.get(StoryKey::SPATHI_STACK1), 1);
 }
 #[test]
 fn post_encounter_handles_pluto_and_hostility_without_resetting_password_hint() {
@@ -318,19 +319,22 @@ fn post_encounter_handles_pluto_and_hostility_without_resetting_password_hint() 
     ] {
         let mut f = Api::default();
         let mut s = Session::default();
-        f.put("FOUND_PLUTO_SPATHI", pluto);
-        f.put("SPATHI_MANNER", manner);
-        f.put("SPATHI_HOME_VISITS", home);
-        f.put("SPATHI_VISITS", 3);
+        f.put(StoryKey::FOUND_PLUTO_SPATHI, pluto);
+        f.put(StoryKey::SPATHI_MANNER, manner);
+        f.put(StoryKey::SPATHI_HOME_VISITS, home);
+        f.put(StoryKey::SPATHI_VISITS, 3);
         f.segue = segue;
         Dialogue {
             api: &mut f,
             session: &mut s,
         }
         .post_spathi_enc();
-        assert_eq!(f.get("FOUND_PLUTO_SPATHI"), if pluto == 1 { 2 } else { 0 });
-        assert_eq!(f.get("SPATHI_MANNER"), want_manner);
-        assert_eq!(f.get("SPATHI_VISITS"), want_visits);
-        assert_eq!(f.get("SPATHI_HOME_VISITS"), want_home);
+        assert_eq!(
+            f.get(StoryKey::FOUND_PLUTO_SPATHI),
+            if pluto == 1 { 2 } else { 0 }
+        );
+        assert_eq!(f.get(StoryKey::SPATHI_MANNER), want_manner);
+        assert_eq!(f.get(StoryKey::SPATHI_VISITS), want_visits);
+        assert_eq!(f.get(StoryKey::SPATHI_HOME_VISITS), want_home);
     }
 }

@@ -1,6 +1,7 @@
 use super::*;
 use crate::comm::races::encounter::testing::{Effect, Fake};
 use crate::comm::races::script::ScriptApi;
+use crate::engine::StoryKey;
 type Api = Fake<Handler>;
 fn run(f: &mut Api, h: Handler, r: u16) {
     f.effects.clear();
@@ -18,8 +19,8 @@ fn init_segue_and_descriptor() {
         (0, 0, 0x105, 0),
     ] {
         let mut f = Api::default();
-        f.put("PROBE_ILWRATH_ENCOUNTER", probe);
-        f.put("GLOBAL_FLAGS_AND_DATA", flags);
+        f.put(StoryKey::PROBE_ILWRATH_ENCOUNTER, probe);
+        f.put(StoryKey::GLOBAL_FLAGS_AND_DATA, flags);
         f.activity = activity;
         let mut d = descriptor();
         Dialogue { api: &mut f }.initialize(&mut d);
@@ -45,7 +46,7 @@ fn init_segue_and_descriptor() {
 #[test]
 fn probe_intro_and_every_combat_exit() {
     let mut f = Api::default();
-    f.put("PROBE_ILWRATH_ENCOUNTER", 1);
+    f.put(StoryKey::PROBE_ILWRATH_ENCOUNTER, 1);
     Dialogue { api: &mut f }.intro();
     assert_eq!(f.spoken(), vec![23]);
     assert_eq!(
@@ -94,9 +95,9 @@ fn intro_routing_priority_and_broadcaster() {
         (128 | 64 | 32 | 16, 0, 0, 51, 5),
     ] {
         let mut f = Api::default();
-        f.put("GLOBAL_FLAGS_AND_DATA", flags);
-        f.put("ILWRATH_FIGHT_THRADDASH", fight);
-        f.put("ILWRATH_DECEIVED", deceived);
+        f.put(StoryKey::GLOBAL_FLAGS_AND_DATA, flags);
+        f.put(StoryKey::ILWRATH_FIGHT_THRADDASH, fight);
+        f.put(StoryKey::ILWRATH_DECEIVED, deceived);
         Dialogue { api: &mut f }.intro();
         assert_eq!(f.spoken(), vec![spoken]);
         assert_eq!(f.offers().len(), offers);
@@ -109,11 +110,11 @@ fn intro_routing_priority_and_broadcaster() {
 fn visit_and_information_counters_saturate_with_exact_phrases() {
     for visit in 0..=4 {
         let mut f = Api::default();
-        f.put("ILWRATH_VISITS", visit);
-        f.put("ILWRATH_INFO", visit);
+        f.put(StoryKey::ILWRATH_VISITS, visit);
+        f.put(StoryKey::ILWRATH_INFO, visit);
         Dialogue { api: &mut f }.ilwrath_space(0);
         assert_eq!(f.spoken(), vec![37 + i32::from(visit)]);
-        assert_eq!(f.get("ILWRATH_VISITS"), (visit + 1).min(4));
+        assert_eq!(f.get(StoryKey::ILWRATH_VISITS), (visit + 1).min(4));
         assert_eq!(
             f.offers(),
             [87 + u16::from(visit), 92, 93, 94, 95].map(|r| (r, Handler::CombatIsInevitable))
@@ -124,17 +125,17 @@ fn visit_and_information_counters_saturate_with_exact_phrases() {
             WHATS_UP_SPACE_1 + u16::from(visit),
         );
         assert_eq!(f.spoken(), vec![42 + i32::from(visit)]);
-        assert_eq!(f.get("ILWRATH_INFO"), (visit + 1).min(4));
+        assert_eq!(f.get(StoryKey::ILWRATH_INFO), (visit + 1).min(4));
     }
     for (key, flags, last, phrases) in [
-        ("ILWRATH_HOME_VISITS", 128, 1, vec![51, 28]),
-        ("ILWRATH_CHMMR_VISITS", 64, 1, vec![20, 19]),
-        ("ILWRATH_GODS_SPOKEN", 16, 3, vec![34, 10, 11, 12]),
+        (StoryKey::ILWRATH_HOME_VISITS, 128, 1, vec![51, 28]),
+        (StoryKey::ILWRATH_CHMMR_VISITS, 64, 1, vec![20, 19]),
+        (StoryKey::ILWRATH_GODS_SPOKEN, 16, 3, vec![34, 10, 11, 12]),
     ] {
         for visit in 0..=last {
             let mut f = Api::default();
             f.put(key, visit);
-            f.put("GLOBAL_FLAGS_AND_DATA", flags);
+            f.put(StoryKey::GLOBAL_FLAGS_AND_DATA, flags);
             Dialogue { api: &mut f }.intro();
             assert_eq!(f.spoken(), vec![phrases[usize::from(visit)]]);
             assert_eq!(f.get(key), (visit + 1).min(last));
@@ -197,16 +198,16 @@ fn gods_orders_worship_and_mission_effect_order() {
         &f.effects[..3],
         &[
             Effect::Npc(35),
-            Effect::Set("ILWRATH_DECEIVED".into(), 1),
+            Effect::Set(StoryKey::ILWRATH_DECEIVED, 1),
             Effect::AdvanceIlwrath
         ]
     );
     assert!(!f.offers().iter().any(|(p, _)| *p == 86));
     for visit in 0..=2 {
-        f.put("ILWRATH_WORSHIP", visit);
+        f.put(StoryKey::ILWRATH_WORSHIP, visit);
         run(&mut f, Handler::GodsSpeak, WORSHIP_US);
         assert_eq!(f.spoken(), vec![16 + i32::from(visit)]);
-        assert_eq!(f.get("ILWRATH_WORSHIP"), (visit + 1).min(2));
+        assert_eq!(f.get(StoryKey::ILWRATH_WORSHIP), (visit + 1).min(2));
         assert!(!f.enabled(WORSHIP_US));
     }
     for (r, p) in [

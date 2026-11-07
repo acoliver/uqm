@@ -1,6 +1,7 @@
 use super::*;
 use crate::comm::races::encounter::testing::{Effect, Fake};
 use crate::comm::races::script::ScriptApi;
+use crate::engine::StoryKey;
 
 type Api = Fake<Handler, (u32, u32)>;
 fn choices(f: &Api) -> Vec<i32> {
@@ -12,8 +13,8 @@ fn pet_warning_is_emitted_once_only_when_the_pet_is_aboard() {
     for pet in [0, 1] {
         for sensed in [0, 1] {
             let mut f = Api::default();
-            f.put("TALKING_PET_ON_SHIP", pet);
-            f.put("KOHR_AH_SENSES_EVIL", sensed);
+            f.put(StoryKey::TALKING_PET_ON_SHIP, pet);
+            f.put(StoryKey::KOHR_AH_SENSES_EVIL, sensed);
             Dialogue { api: &mut f }.intro();
             let mut expected = Vec::new();
             if pet != 0 && sensed == 0 {
@@ -21,7 +22,7 @@ fn pet_warning_is_emitted_once_only_when_the_pet_is_aboard() {
             }
             expected.push(HELLO_AND_DIE_1);
             assert_eq!(f.spoken(), expected);
-            assert_eq!(f.get("KOHR_AH_SENSES_EVIL"), pet | sensed);
+            assert_eq!(f.get(StoryKey::KOHR_AH_SENSES_EVIL), pet | sensed);
         }
     }
     let mut f = Api::default();
@@ -35,13 +36,13 @@ fn every_combat_sequence_preserves_byte_postincrement_and_pleading_fallthrough()
     for (responses, key, phrases, cap) in [
         (
             vec![THREAT_1, THREAT_2, THREAT_3, THREAT_4],
-            "KOHR_AH_REASONS",
+            StoryKey::KOHR_AH_REASONS,
             vec![40, 42, 44, 46],
             3,
         ),
         (
             vec![PLEAD_1, PLEAD_2, PLEAD_3, PLEAD_4],
-            "KOHR_AH_PLEAD",
+            StoryKey::KOHR_AH_PLEAD,
             vec![66, 68, 72, 72],
             2,
         ),
@@ -52,7 +53,7 @@ fn every_combat_sequence_preserves_byte_postincrement_and_pleading_fallthrough()
                 WHY_KILL_ALL_3,
                 WHY_KILL_ALL_4,
             ],
-            "KOHR_AH_REASONS",
+            StoryKey::KOHR_AH_REASONS,
             vec![19, 20, 21, 22],
             3,
         ),
@@ -63,13 +64,13 @@ fn every_combat_sequence_preserves_byte_postincrement_and_pleading_fallthrough()
                 PLEASE_DONT_KILL_3,
                 PLEASE_DONT_KILL_4,
             ],
-            "KOHR_AH_PLEAD",
+            StoryKey::KOHR_AH_PLEAD,
             vec![24, 26, 28, 30],
             3,
         ),
         (
             vec![BYE_FRENZY_1, BYE_FRENZY_2, BYE_FRENZY_3, BYE_FRENZY_4],
-            "KOHR_AH_INFO",
+            StoryKey::KOHR_AH_INFO,
             vec![35, 36, 37, 38],
             3,
         ),
@@ -109,17 +110,17 @@ fn combat_information_goodbyes_and_unknown_response() {
         let mut f = Api::default();
         Dialogue { api: &mut f }.combat(r);
         assert_eq!(f.spoken(), [p]);
-        assert_eq!(f.get("KOHR_AH_INFO"), info.unwrap_or(0));
+        assert_eq!(f.get(StoryKey::KOHR_AH_INFO), info.unwrap_or(0));
     }
     for n in [0, 1, 255] {
         let mut f = Api::default();
-        f.put("KOHR_AH_BYES", n);
+        f.put(StoryKey::KOHR_AH_BYES, n);
         Dialogue { api: &mut f }.combat(BYE);
         assert_eq!(
             f.spoken(),
             [if n == 0 { GOODBYE_AND_DIE } else { DIE_HUMAN }]
         );
-        assert_eq!(f.get("KOHR_AH_BYES"), 1);
+        assert_eq!(f.get(StoryKey::KOHR_AH_BYES), 1);
     }
     let mut f = Api::default();
     Dialogue { api: &mut f }.combat(0);
@@ -130,10 +131,14 @@ fn combat_information_goodbyes_and_unknown_response() {
 fn hostile_and_frenzy_choices_preserve_order_and_callbacks() {
     for n in 0..=u8::MAX {
         let mut f = Api::default();
-        for k in ["KOHR_AH_REASONS", "KOHR_AH_PLEAD", "KOHR_AH_INFO"] {
+        for k in [
+            StoryKey::KOHR_AH_REASONS,
+            StoryKey::KOHR_AH_PLEAD,
+            StoryKey::KOHR_AH_INFO,
+        ] {
             f.put(k, n);
         }
-        f.put("KNOW_KOHR_AH_STORY", 1);
+        f.put(StoryKey::KNOW_KOHR_AH_STORY, 1);
         Dialogue { api: &mut f }.die_human(0);
         let mut expected = Vec::new();
         if n < 4 {
@@ -172,7 +177,7 @@ fn hostile_and_frenzy_choices_preserve_order_and_callbacks() {
     }
     for known in [0, 2, 255] {
         let mut f = Api::default();
-        f.put("KNOW_KOHR_AH_STORY", known);
+        f.put(StoryKey::KNOW_KOHR_AH_STORY, known);
         Dialogue { api: &mut f }.die_human(0);
         assert!(!choices(&f).contains(&KEY_PHRASE));
     }
@@ -183,7 +188,7 @@ fn story_questions_disable_individually_and_exhaust_in_order() {
     let mut f = Api::default();
     Dialogue { api: &mut f }.handle(Handler::Story, KEY_PHRASE);
     assert_eq!(f.spoken(), [RESPONSE_TO_KEY_PHRASE]);
-    assert_eq!(f.get("KNOW_KOHR_AH_STORY"), 2);
+    assert_eq!(f.get(StoryKey::KNOW_KOHR_AH_STORY), 2);
     let questions = [
         WHY_DO_YOU_DESTROY,
         RELATIONSHIP_WITH_URQUAN,
@@ -219,8 +224,8 @@ fn intro_priorities_activity_low_byte_and_samatra_group_match() {
             activity,
             ..Api::default()
         };
-        f.put("KOHR_AH_KILLED_ALL", killed);
-        f.put("TALKING_PET_ON_SHIP", 1);
+        f.put(StoryKey::KOHR_AH_KILLED_ALL, killed);
+        f.put(StoryKey::TALKING_PET_ON_SHIP, 1);
         Dialogue { api: &mut f }.initialize();
         assert_eq!(f.segue, 0);
         f.effects.clear();
@@ -243,7 +248,7 @@ fn intro_priorities_activity_low_byte_and_samatra_group_match() {
             world: (group, samatra),
             ..Api::default()
         };
-        f.put("TALKING_PET_ON_SHIP", 1);
+        f.put(StoryKey::TALKING_PET_ON_SHIP, 1);
         Dialogue { api: &mut f }.initialize();
         assert_eq!(f.segue, 1);
         f.effects.clear();
@@ -259,9 +264,9 @@ fn intro_priorities_activity_low_byte_and_samatra_group_match() {
                 }
             ]
         );
-        assert_eq!(f.get("KOHR_AH_SENSES_EVIL"), 1);
-        assert_eq!(f.get("AWARE_OF_SAMATRA"), u8::from(matches));
-        assert_eq!(f.get("KOHR_AH_VISITS"), u8::from(!matches));
+        assert_eq!(f.get(StoryKey::KOHR_AH_SENSES_EVIL), 1);
+        assert_eq!(f.get(StoryKey::AWARE_OF_SAMATRA), u8::from(matches));
+        assert_eq!(f.get(StoryKey::KOHR_AH_VISITS), u8::from(!matches));
         if matches {
             assert!(f.offers().is_empty());
         }
@@ -273,10 +278,10 @@ fn all_greeting_counter_values_and_pet_repeat() {
     for frenzy in [0, 1] {
         for n in 0..=u8::MAX {
             let mut f = Api::default();
-            f.put("KOHR_AH_VISITS", n);
-            f.put("KOHR_AH_FRENZY", frenzy);
-            f.put("TALKING_PET_ON_SHIP", 1);
-            f.put("KOHR_AH_SENSES_EVIL", 1);
+            f.put(StoryKey::KOHR_AH_VISITS, n);
+            f.put(StoryKey::KOHR_AH_FRENZY, frenzy);
+            f.put(StoryKey::TALKING_PET_ON_SHIP, 1);
+            f.put(StoryKey::KOHR_AH_SENSES_EVIL, 1);
             Dialogue { api: &mut f }.intro();
             assert_eq!(
                 f.spoken(),
@@ -289,7 +294,7 @@ fn all_greeting_counter_values_and_pet_repeat() {
             let next = if n == 3 { 3 } else { n.wrapping_add(1) };
             assert_eq!(
                 f.effects.last(),
-                Some(&Effect::Set("KOHR_AH_VISITS".into(), next))
+                Some(&Effect::Set(StoryKey::KOHR_AH_VISITS, next))
             );
         }
     }

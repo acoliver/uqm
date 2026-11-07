@@ -5,6 +5,7 @@
 use super::script::as_comm_data;
 use crate::comm::types::CommData;
 use crate::engine::battle::Cx;
+use crate::engine::StoryKey;
 
 mod phrases;
 use phrases::*;
@@ -30,20 +31,21 @@ struct Dialogue<'a, A> {
 }
 impl<A: SpahomeApi> Dialogue<'_, A> {
     fn initialize(&mut self) {
-        self.api.segue(if self.api.get("SPATHI_MANNER") == 3 {
-            0
-        } else {
-            1
-        });
+        self.api
+            .segue(if self.api.get(StoryKey::SPATHI_MANNER) == 3 {
+                0
+            } else {
+                1
+            });
     }
     fn post(&mut self) {
         if self.api.get_segue() == 1 {
-            let manner = self.api.get("SPATHI_MANNER");
+            let manner = self.api.get(StoryKey::SPATHI_MANNER);
             if manner != 2 {
-                self.api.set("SPATHI_MANNER", 1);
+                self.api.set(StoryKey::SPATHI_MANNER, 1);
                 if manner != 1 {
-                    self.api.set("SPATHI_VISITS", 0);
-                    self.api.set("SPATHI_HOME_VISITS", 0);
+                    self.api.set(StoryKey::SPATHI_VISITS, 0);
+                    self.api.set(StoryKey::SPATHI_HOME_VISITS, 0);
                 }
             }
         }
@@ -92,26 +94,26 @@ impl<A: SpahomeApi> Dialogue<'_, A> {
             BYE_ALLY => self.api.npc(GOODBYE_ALLY as i32),
             ALREADY_GOT_THEM => {
                 self.api.npc(EARLY_BIRD_CHECK as i32);
-                self.api.set("SPATHI_HOME_VISITS", 0);
-                self.api.set("SPATHI_VISITS", 0);
-                self.api.set("SPATHI_PARTY", 1);
-                self.api.set("SPATHI_MANNER", 3)
+                self.api.set(StoryKey::SPATHI_HOME_VISITS, 0);
+                self.api.set(StoryKey::SPATHI_VISITS, 0);
+                self.api.set(StoryKey::SPATHI_PARTY, 1);
+                self.api.set(StoryKey::SPATHI_MANNER, 3)
             }
             TOO_DANGEROUS => self.api.npc(WE_AGREE as i32),
             THINK_MORE => self.api.npc(COWARD as i32),
             I_ACCEPT => {
                 self.api.npc(AWAIT_RETURN as i32);
-                self.api.set("SPATHI_QUEST", 1);
-                self.api.set("SPATHI_MANNER", 3);
-                self.api.set("SPATHI_VISITS", 0)
+                self.api.set(StoryKey::SPATHI_QUEST, 1);
+                self.api.set(StoryKey::SPATHI_MANNER, 3);
+                self.api.set(StoryKey::SPATHI_VISITS, 0)
             }
             DO_AS_WE_SAY => {
                 self.api.npc(DEPART_FOR_EARTH as i32);
                 self.api
                     .set_allied(crate::comm::dispatch::ship::SPATHI_SHIP as u16, true);
                 self.api.event(1, 6, 0, 0, 11);
-                self.api.set("SPATHI_HOME_VISITS", 0);
-                self.api.set("SPATHI_VISITS", 0)
+                self.api.set(StoryKey::SPATHI_HOME_VISITS, 0);
+                self.api.set(StoryKey::SPATHI_VISITS, 0)
             }
             KILLED_THEM_ALL_1 | KILLED_THEM_ALL_2 => {
                 self.api.npc(if r as u32 == KILLED_THEM_ALL_1 {
@@ -119,9 +121,9 @@ impl<A: SpahomeApi> Dialogue<'_, A> {
                 } else {
                     WILL_CHECK_2 as i32
                 });
-                if self.api.get("SPATHI_CREATURES_ELIMINATED") == 0 {
+                if self.api.get(StoryKey::SPATHI_CREATURES_ELIMINATED) == 0 {
                     self.api.set(
-                        "LIED_ABOUT_CREATURES",
+                        StoryKey::LIED_ABOUT_CREATURES,
                         if r as u32 == KILLED_THEM_ALL_1 { 1 } else { 2 },
                     );
                 } else {
@@ -136,26 +138,28 @@ impl<A: SpahomeApi> Dialogue<'_, A> {
         }
     }
     fn party_joined(&mut self) {
-        self.api.set("SPATHI_HOME_VISITS", 0);
-        self.api.set("SPATHI_VISITS", 0);
-        self.api.set("SPATHI_PARTY", 1);
-        self.api.set("SPATHI_MANNER", 3);
+        self.api.set(StoryKey::SPATHI_HOME_VISITS, 0);
+        self.api.set(StoryKey::SPATHI_VISITS, 0);
+        self.api.set(StoryKey::SPATHI_PARTY, 1);
+        self.api.set(StoryKey::SPATHI_MANNER, 3);
     }
     fn password(&mut self, r: i32) {
         if r == 0 {
-            let n = self.api.get("SPATHI_HOME_VISITS");
+            let n = self.api.get(StoryKey::SPATHI_HOME_VISITS);
             if n == 1 {
                 self.api.npc(WHAT_IS_PASSWORD_AGAIN as i32);
-                self.api.set("SPATHI_HOME_VISITS", 1)
+                self.api.set(StoryKey::SPATHI_HOME_VISITS, 1)
             } else {
                 self.api.npc(WHAT_IS_PASSWORD as i32);
-                self.api.set("SPATHI_HOME_VISITS", 1)
+                self.api.set(StoryKey::SPATHI_HOME_VISITS, 1)
             }
         } else if r as u32 == WHAT_DO_I_GET {
             self.api.npc(YOU_GET_TO_LIVE as i32);
             self.api.disable(WHAT_DO_I_GET as u16);
         }
-        if self.api.get("FOUND_PLUTO_SPATHI") != 0 || self.api.get("KNOW_SPATHI_PASSWORD") != 0 {
+        if self.api.get(StoryKey::FOUND_PLUTO_SPATHI) != 0
+            || self.api.get(StoryKey::KNOW_SPATHI_PASSWORD) != 0
+        {
             self.offer(GOOD_PASSWORD, Handler::Council);
             if self.api.enabled(WHAT_DO_I_GET as u16) {
                 self.offer(WHAT_DO_I_GET, Handler::Password)
@@ -199,8 +203,8 @@ impl<A: SpahomeApi> Dialogue<'_, A> {
             MISUNDERSTANDING => {
                 self.api.npc(JUST_MISUNDERSTANDING as i32);
                 self.api.fade_palette(1, 210);
-                self.api.set("SPATHI_MANNER", 3);
-                self.api.set("SPATHI_VISITS", 0);
+                self.api.set(StoryKey::SPATHI_MANNER, 3);
+                self.api.set(StoryKey::SPATHI_VISITS, 0);
                 (0, false)
             }
             WE_COME_IN_PEACE => (OF_COURSE, false),
@@ -240,7 +244,7 @@ impl<A: SpahomeApi> Dialogue<'_, A> {
             0 => {
                 self.api.npc(QUEST_AGAIN as i32);
                 self.api.disable(WHAT_TEST as u16);
-                if self.api.get("KNOW_SPATHI_EVIL") != 0 {
+                if self.api.get(StoryKey::KNOW_SPATHI_EVIL) != 0 {
                     self.api.disable(TELL_EVIL as u16);
                 }
                 0
@@ -248,13 +252,13 @@ impl<A: SpahomeApi> Dialogue<'_, A> {
             HOW_PROVE => BETTER_IDEA,
             WHAT_TEST => {
                 self.api.npc(WIPE_EVIL as i32);
-                self.api.set("KNOW_SPATHI_QUEST", 1);
+                self.api.set(StoryKey::KNOW_SPATHI_QUEST, 1);
                 self.api.disable(WHAT_TEST as u16);
                 0
             }
             TELL_EVIL => {
                 self.api.npc(BEFORE_ACCEPT as i32);
-                self.api.set("KNOW_SPATHI_EVIL", 1);
+                self.api.set(StoryKey::KNOW_SPATHI_EVIL, 1);
                 self.api.disable(TELL_EVIL as u16);
                 self.api.disable(PROVE_STRENGTH as u16);
                 0
@@ -276,7 +280,7 @@ impl<A: SpahomeApi> Dialogue<'_, A> {
         }
         if self.api.enabled(WHAT_TEST as u16) {
             self.offer(WHAT_TEST, Handler::Learn)
-        } else if self.api.get("SPATHI_CREATURES_ELIMINATED") != 0 {
+        } else if self.api.get(StoryKey::SPATHI_CREATURES_ELIMINATED) != 0 {
             self.offer(ALREADY_GOT_THEM, Handler::Exit)
         } else if self.api.enabled(TELL_EVIL as u16) {
             self.offer(TOO_DANGEROUS, Handler::Exit);
@@ -286,7 +290,8 @@ impl<A: SpahomeApi> Dialogue<'_, A> {
                 self.offer(p, Handler::Exit)
             }
         }
-        if self.api.enabled(PROVE_STRENGTH as u16) && self.api.get("KNOW_SPATHI_QUEST") == 0 {
+        if self.api.enabled(PROVE_STRENGTH as u16) && self.api.get(StoryKey::KNOW_SPATHI_QUEST) == 0
+        {
             self.offer(PROVE_STRENGTH, Handler::Learn)
         }
         if self.api.enabled(WHY_DONT_YOU_DO_IT as u16) {
@@ -295,11 +300,12 @@ impl<A: SpahomeApi> Dialogue<'_, A> {
     }
     fn quest(&mut self, r: i32) {
         if r == 0 {
-            self.api.npc(if self.api.get("LIED_ABOUT_CREATURES") == 0 {
-                HOW_GO_EFFORTS as i32
-            } else {
-                YOU_LIED_1 as i32
-            })
+            self.api
+                .npc(if self.api.get(StoryKey::LIED_ABOUT_CREATURES) == 0 {
+                    HOW_GO_EFFORTS as i32
+                } else {
+                    YOU_LIED_1 as i32
+                })
         } else {
             let (line, p) = match r as u32 {
                 LITTLE_MISTAKE => (BIG_MISTAKE, LITTLE_MISTAKE),
@@ -312,7 +318,7 @@ impl<A: SpahomeApi> Dialogue<'_, A> {
                 self.api.disable(p as u16)
             }
         }
-        if self.api.get("LIED_ABOUT_CREATURES") == 0 {
+        if self.api.get(StoryKey::LIED_ABOUT_CREATURES) == 0 {
             self.offer(KILLED_THEM_ALL_1, Handler::Exit)
         } else {
             if self.api.enabled(LITTLE_MISTAKE as u16) {
@@ -320,12 +326,12 @@ impl<A: SpahomeApi> Dialogue<'_, A> {
             }
             self.offer(KILLED_THEM_ALL_2, Handler::Exit)
         }
-        if self.api.get("SPATHI_CREATURES_ELIMINATED") == 0 {
+        if self.api.get(StoryKey::SPATHI_CREATURES_ELIMINATED) == 0 {
             if self.api.enabled(TALK_TEST as u16) {
                 self.offer(TALK_TEST, Handler::Quest)
             }
             if self.api.enabled(ZAPPED_A_FEW as u16)
-                && self.api.get("SPATHI_CREATURES_EXAMINED") != 0
+                && self.api.get(StoryKey::SPATHI_CREATURES_EXAMINED) != 0
             {
                 self.offer(ZAPPED_A_FEW, Handler::Quest)
             }
@@ -338,8 +344,8 @@ impl<A: SpahomeApi> Dialogue<'_, A> {
             GOOD_PASSWORD => {
                 self.api.npc(YES_GOOD_PASSWORD as i32);
                 self.api.fade_palette(1, 210);
-                self.api.set("KNOW_SPATHI_PASSWORD", 1);
-                self.api.set("SPATHI_HOME_VISITS", 0);
+                self.api.set(StoryKey::KNOW_SPATHI_PASSWORD, 1);
+                self.api.set(StoryKey::SPATHI_HOME_VISITS, 0);
                 0
             }
             WE_COME_IN_PEACE => {
@@ -354,13 +360,13 @@ impl<A: SpahomeApi> Dialogue<'_, A> {
             }
             HOSTAGE => {
                 self.api.npc(GUN_TO_HEAD as i32);
-                self.api.set("FOUND_PLUTO_SPATHI", 3);
+                self.api.set(StoryKey::FOUND_PLUTO_SPATHI, 3);
                 self.api.disable(HOSTAGE as u16);
                 0
             }
             KILLED_FWIFFO => {
                 self.api.npc(POOR_FWIFFO as i32);
-                self.api.set("FOUND_PLUTO_SPATHI", 3);
+                self.api.set(StoryKey::FOUND_PLUTO_SPATHI, 3);
                 self.api.disable(KILLED_FWIFFO as u16);
                 0
             }
@@ -379,14 +385,14 @@ impl<A: SpahomeApi> Dialogue<'_, A> {
         if line != 0 {
             self.api.npc(line as i32)
         }
-        if self.api.get("SPATHI_MANNER") == 0 {
+        if self.api.get(StoryKey::SPATHI_MANNER) == 0 {
             self.offer(WE_COME_IN_PEACE, Handler::Alliance)
         } else if self.api.enabled(WE_COME_IN_PEACE as u16) {
             self.offer(WE_COME_IN_PEACE, Handler::Council)
         } else {
             self.offer(MISUNDERSTANDING, Handler::Alliance)
         }
-        let found = self.api.get("FOUND_PLUTO_SPATHI");
+        let found = self.api.get(StoryKey::FOUND_PLUTO_SPATHI);
         if found != 0 && found < 3 {
             if self.api.enabled(SPATHI_ON_PLUTO as u16) {
                 self.offer(SPATHI_ON_PLUTO, Handler::Council);
@@ -410,12 +416,12 @@ impl<A: SpahomeApi> Dialogue<'_, A> {
     }
     fn party(&mut self, r: i32) {
         if r == 0 {
-            let n = self.api.get("SPATHI_HOME_VISITS");
+            let n = self.api.get(StoryKey::SPATHI_HOME_VISITS);
             if let Some(&p) = [MUST_PARTY_1, MUST_PARTY_2, MUST_PARTY_3].get(usize::from(n)) {
                 self.api.npc(p as i32);
             }
             self.api.set(
-                "SPATHI_HOME_VISITS",
+                StoryKey::SPATHI_HOME_VISITS,
                 if n == 2 { n } else { n.wrapping_add(1) },
             );
         } else {
@@ -447,7 +453,7 @@ impl<A: SpahomeApi> Dialogue<'_, A> {
             self.offer(DO_AS_WE_SAY, Handler::Exit);
             return;
         }
-        let goodbye = match self.api.get("SPATHI_HOME_VISITS") {
+        let goodbye = match self.api.get(StoryKey::SPATHI_HOME_VISITS) {
             1 => BYE_FROM_PARTY_1,
             2 => BYE_FROM_PARTY_2,
             _ => BYE_FROM_PARTY_3,
@@ -456,16 +462,16 @@ impl<A: SpahomeApi> Dialogue<'_, A> {
     }
     fn allies(&mut self, r: i32) {
         if r == 0 {
-            let n = self.api.get("SPATHI_HOME_VISITS");
+            let n = self.api.get(StoryKey::SPATHI_HOME_VISITS);
             if let Some(&p) = [HELLO_ALLIES_1, HELLO_ALLIES_2, HELLO_ALLIES_3].get(usize::from(n)) {
                 self.api.npc(p as i32);
             }
             self.api.set(
-                "SPATHI_HOME_VISITS",
+                StoryKey::SPATHI_HOME_VISITS,
                 if n == 2 { n } else { n.wrapping_add(1) },
             );
         } else if r as u32 == WHATS_UP {
-            let n = self.api.get("SPATHI_INFO");
+            let n = self.api.get(StoryKey::SPATHI_INFO);
             if let Some(&p) = [
                 GENERAL_INFO_1,
                 GENERAL_INFO_2,
@@ -479,11 +485,11 @@ impl<A: SpahomeApi> Dialogue<'_, A> {
                 self.api.npc(p as i32);
             }
             if n == 2 {
-                self.api.set("KNOW_URQUAN_STORY", 1);
-                self.api.set("KNOW_KOHR_AH_STORY", 1)
+                self.api.set(StoryKey::KNOW_URQUAN_STORY, 1);
+                self.api.set(StoryKey::KNOW_KOHR_AH_STORY, 1)
             }
             self.api.set(
-                "SPATHI_INFO",
+                StoryKey::SPATHI_INFO,
                 if n == 4 || n == 5 {
                     n
                 } else {
@@ -496,11 +502,11 @@ impl<A: SpahomeApi> Dialogue<'_, A> {
             self.api.disable(RESOURCES_PLEASE as u16)
         } else if r as u32 == SOMETHING_FISHY {
             self.api.npc(NOTHING_FISHY as i32);
-            self.api.set("SPATHI_INFO", 5)
+            self.api.set(StoryKey::SPATHI_INFO, 5)
         } else if r as u32 == ENOUGH_INFO {
             self.api.npc(OK_ENOUGH_INFO as i32);
         }
-        if self.api.get("SPATHI_INFO") == 4 {
+        if self.api.get(StoryKey::SPATHI_INFO) == 4 {
             self.offer(SOMETHING_FISHY, Handler::Allies);
         }
         for p in [WHATS_UP, RESOURCES_PLEASE, LIKE_SOME_INFO] {
@@ -569,12 +575,13 @@ impl<A: SpahomeApi> Dialogue<'_, A> {
         }
     }
     fn intro(&mut self) {
-        if self.api.get("SPATHI_MANNER") == 2 {
+        if self.api.get(StoryKey::SPATHI_MANNER) == 2 {
             self.api.npc(HATE_YOU_FOREVER as i32);
             self.api.segue(1)
-        } else if self.api.get("SPATHI_MANNER") == 1
-            && self.api.get("KNOW_SPATHI_PASSWORD") != 0
-            && (self.api.get("FOUND_PLUTO_SPATHI") != 0 || self.api.get("SPATHI_HOME_VISITS") != 7)
+        } else if self.api.get(StoryKey::SPATHI_MANNER) == 1
+            && self.api.get(StoryKey::KNOW_SPATHI_PASSWORD) != 0
+            && (self.api.get(StoryKey::FOUND_PLUTO_SPATHI) != 0
+                || self.api.get(StoryKey::SPATHI_HOME_VISITS) != 7)
         {
             self.angry(0)
         } else if self
@@ -584,23 +591,24 @@ impl<A: SpahomeApi> Dialogue<'_, A> {
         {
             self.api.palette(1);
             self.allies(0)
-        } else if self.api.get("SPATHI_PARTY") != 0 {
+        } else if self.api.get(StoryKey::SPATHI_PARTY) != 0 {
             self.api.palette(1);
             self.party(0)
-        } else if self.api.get("SPATHI_QUEST") != 0 {
-            if self.api.get("LIED_ABOUT_CREATURES") < 2 {
+        } else if self.api.get(StoryKey::SPATHI_QUEST) != 0 {
+            if self.api.get(StoryKey::LIED_ABOUT_CREATURES) < 2 {
                 self.api.palette(1);
                 self.quest(0)
             } else {
                 self.api.npc(YOU_LIED_2 as i32);
-                self.api.set("SPATHI_MANNER", 2);
+                self.api.set(StoryKey::SPATHI_MANNER, 2);
                 self.api.segue(1)
             }
-        } else if self.api.get("KNOW_SPATHI_QUEST") != 0 {
+        } else if self.api.get(StoryKey::KNOW_SPATHI_QUEST) != 0 {
             self.api.palette(1);
             self.learn(0)
-        } else if self.api.get("KNOW_SPATHI_PASSWORD") != 0
-            && (self.api.get("FOUND_PLUTO_SPATHI") != 0 || self.api.get("SPATHI_HOME_VISITS") != 7)
+        } else if self.api.get(StoryKey::KNOW_SPATHI_PASSWORD) != 0
+            && (self.api.get(StoryKey::FOUND_PLUTO_SPATHI) != 0
+                || self.api.get(StoryKey::SPATHI_HOME_VISITS) != 7)
         {
             self.api.palette(1);
             self.council(0)
@@ -746,23 +754,23 @@ mod tests {
     #[test]
     fn test_game_state_keys_exist() {
         assert!(
-            crate::state::game_state_keys::bit_range("FOUND_PLUTO_SPATHI").is_some(),
+            crate::engine::StoryKey::from_name("FOUND_PLUTO_SPATHI").is_some(),
             "missing game state key: FOUND_PLUTO_SPATHI"
         );
         assert!(
-            crate::state::game_state_keys::bit_range("KNOW_KOHR_AH_STORY").is_some(),
+            crate::engine::StoryKey::from_name("KNOW_KOHR_AH_STORY").is_some(),
             "missing game state key: KNOW_KOHR_AH_STORY"
         );
         assert!(
-            crate::state::game_state_keys::bit_range("KNOW_SPATHI_EVIL").is_some(),
+            crate::engine::StoryKey::from_name("KNOW_SPATHI_EVIL").is_some(),
             "missing game state key: KNOW_SPATHI_EVIL"
         );
         assert!(
-            crate::state::game_state_keys::bit_range("KNOW_SPATHI_PASSWORD").is_some(),
+            crate::engine::StoryKey::from_name("KNOW_SPATHI_PASSWORD").is_some(),
             "missing game state key: KNOW_SPATHI_PASSWORD"
         );
         assert!(
-            crate::state::game_state_keys::bit_range("KNOW_SPATHI_QUEST").is_some(),
+            crate::engine::StoryKey::from_name("KNOW_SPATHI_QUEST").is_some(),
             "missing game state key: KNOW_SPATHI_QUEST"
         );
     }

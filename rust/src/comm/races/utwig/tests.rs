@@ -1,6 +1,7 @@
 use super::*;
 use crate::comm::races::encounter::testing::{Effect, Fake};
 use crate::comm::races::script::ScriptApi;
+use crate::engine::StoryKey;
 type Api = Fake<Handler>;
 fn run(f: &mut Api, h: Handler, r: u16) {
     f.effects.clear();
@@ -13,20 +14,20 @@ fn choices(f: &Api) -> Vec<u16> {
 fn repaired_ultron_allies_both_races_and_advances_only_before_frenzy() {
     for frenzy in [0, 1] {
         let mut f = Api::default();
-        f.put("ULTRON_CONDITION", 4);
-        f.put("KOHR_AH_FRENZY", frenzy);
+        f.put(StoryKey::ULTRON_CONDITION, 4);
+        f.put(StoryKey::KOHR_AH_FRENZY, frenzy);
         let reset = [
-            "UTWIG_VISITS",
-            "SUPOX_VISITS",
-            "UTWIG_HOME_VISITS",
-            "SUPOX_HOME_VISITS",
-            "BOMB_VISITS",
-            "SUPOX_INFO",
-            "UTWIG_INFO",
-            "SUPOX_WAR_NEWS",
-            "UTWIG_WAR_NEWS",
-            "SUPOX_HOSTILE",
-            "UTWIG_HOSTILE",
+            StoryKey::UTWIG_VISITS,
+            StoryKey::SUPOX_VISITS,
+            StoryKey::UTWIG_HOME_VISITS,
+            StoryKey::SUPOX_HOME_VISITS,
+            StoryKey::BOMB_VISITS,
+            StoryKey::SUPOX_INFO,
+            StoryKey::UTWIG_INFO,
+            StoryKey::SUPOX_WAR_NEWS,
+            StoryKey::UTWIG_WAR_NEWS,
+            StoryKey::SUPOX_HOSTILE,
+            StoryKey::UTWIG_HOSTILE,
         ];
         for key in reset {
             f.put(key, 1);
@@ -49,11 +50,14 @@ fn repaired_ultron_allies_both_races_and_advances_only_before_frenzy() {
             frenzy == 0
         );
         assert_eq!(
-            (f.get("UTWIG_HAVE_ULTRON"), f.get("ULTRON_CONDITION")),
+            (
+                f.get(StoryKey::UTWIG_HAVE_ULTRON),
+                f.get(StoryKey::ULTRON_CONDITION)
+            ),
             (1, 5)
         );
         for key in reset {
-            assert_eq!(f.get(key), 0, "{key}");
+            assert_eq!(f.get(key), 0, "{key:?}");
         }
         assert_eq!(
             &f.effects[f.effects.len() - 2..],
@@ -68,8 +72,8 @@ fn incomplete_ultron_and_bomb_refusal() {
         for info in [0, 1] {
             for condition in [1, 2, 3] {
                 let mut f = Api::default();
-                f.put("ULTRON_CONDITION", condition);
-                f.put("UTWIG_INFO", info);
+                f.put(StoryKey::ULTRON_CONDITION, condition);
+                f.put(StoryKey::UTWIG_INFO, info);
                 run(&mut f, Handler::ExitConversation, response);
                 let expected = if response == GOT_ULTRON {
                     if info == 0 {
@@ -94,17 +98,17 @@ fn incomplete_ultron_and_bomb_refusal() {
                     ]
                 );
                 assert_eq!(f.segue, u32::from(response == HEY_WAIT_GOT_ULTRON));
-                assert_eq!(f.get("UTWIG_INFO"), 1);
+                assert_eq!(f.get(StoryKey::UTWIG_INFO), 1);
             }
         }
     }
     let mut f = Api::default();
-    f.put("GLOBAL_FLAGS_AND_DATA", 64);
-    f.put("ULTRON_CONDITION", 4);
+    f.put(StoryKey::GLOBAL_FLAGS_AND_DATA, 64);
+    f.put(StoryKey::ULTRON_CONDITION, 4);
     run(&mut f, Handler::ExitConversation, GOT_ULTRON);
     assert_eq!(f.spoken(), [i32::from(NO_ULTRON_AT_BOMB)]);
-    assert_eq!(f.get("REFUSED_ULTRON_AT_BOMB"), 1);
-    assert_eq!(f.get("ULTRON_CONDITION"), 4);
+    assert_eq!(f.get(StoryKey::REFUSED_ULTRON_AT_BOMB), 1);
+    assert_eq!(f.get(StoryKey::ULTRON_CONDITION), 4);
     assert_eq!(f.alliances[9], 2);
 }
 #[test]
@@ -137,23 +141,23 @@ fn bomb_negotiation_and_combat_resets() {
     run(&mut f, Handler::BombWorld, GIVE_US_BOMB_OR_DIE);
     assert_eq!(choices(&f)[0], DEMAND_BOMB);
     for key in [
-        "UTWIG_INFO",
-        "UTWIG_HOME_VISITS",
-        "UTWIG_VISITS",
-        "BOMB_VISITS",
+        StoryKey::UTWIG_INFO,
+        StoryKey::UTWIG_HOME_VISITS,
+        StoryKey::UTWIG_VISITS,
+        StoryKey::BOMB_VISITS,
     ] {
         f.put(key, 1);
     }
     run(&mut f, Handler::BombWorld, DEMAND_BOMB);
     assert_eq!(f.spoken(), [i32::from(GUARDS_FIGHT)]);
     assert_eq!(f.segue, 1);
-    assert_eq!(f.get("UTWIG_HOSTILE"), 1);
+    assert_eq!(f.get(StoryKey::UTWIG_HOSTILE), 1);
     assert!(f.offers().is_empty());
     for key in [
-        "UTWIG_INFO",
-        "UTWIG_HOME_VISITS",
-        "UTWIG_VISITS",
-        "BOMB_VISITS",
+        StoryKey::UTWIG_INFO,
+        StoryKey::UTWIG_HOME_VISITS,
+        StoryKey::UTWIG_VISITS,
+        StoryKey::BOMB_VISITS,
     ] {
         assert_eq!(f.get(key), 0);
     }
@@ -162,7 +166,7 @@ fn bomb_negotiation_and_combat_resets() {
 fn neutral_introduction_names_priority_and_insult() {
     for alliance in 0..4 {
         let mut f = Api::default();
-        f.put("NEW_ALLIANCE_NAME", alliance);
+        f.put(StoryKey::NEW_ALLIANCE_NAME, alliance);
         run(&mut f, Handler::NeutralUtwig, 0);
         let mut fragments = vec![
             i32::from(WE_ARE_VINDICATOR0),
@@ -186,30 +190,34 @@ fn neutral_introduction_names_priority_and_insult() {
     }
     let mut f = Api::default();
     run(&mut f, Handler::NeutralUtwig, WE_ARE_VINDICATOR0);
-    assert_eq!(f.get("UTWIG_STACK1"), 1);
+    assert_eq!(f.get(StoryKey::UTWIG_STACK1), 1);
     run(&mut f, Handler::NeutralUtwig, WHY_SAD);
-    assert_eq!(f.get("UTWIG_STACK1"), 2);
+    assert_eq!(f.get(StoryKey::UTWIG_STACK1), 2);
     run(&mut f, Handler::NeutralUtwig, WHAT_ULTRON);
-    assert_eq!(f.get("UTWIG_STACK1"), 3);
+    assert_eq!(f.get(StoryKey::UTWIG_STACK1), 3);
     assert_eq!(choices(&f)[..2], [DONT_BE_BABIES, REAL_SORRY_ABOUT_ULTRON]);
-    f.put("UTWIG_VISITS", 1);
-    f.put("UTWIG_HOME_VISITS", 1);
-    f.put("UTWIG_INFO", 1);
+    f.put(StoryKey::UTWIG_VISITS, 1);
+    f.put(StoryKey::UTWIG_HOME_VISITS, 1);
+    f.put(StoryKey::UTWIG_INFO, 1);
     run(&mut f, Handler::NeutralUtwig, DONT_BE_BABIES);
-    assert_eq!(f.get("UTWIG_HOSTILE"), 1);
+    assert_eq!(f.get(StoryKey::UTWIG_HOSTILE), 1);
     assert_eq!(f.segue, 1);
     assert!(f.offers().is_empty());
-    for key in ["UTWIG_VISITS", "UTWIG_HOME_VISITS", "UTWIG_INFO"] {
+    for key in [
+        StoryKey::UTWIG_VISITS,
+        StoryKey::UTWIG_HOME_VISITS,
+        StoryKey::UTWIG_INFO,
+    ] {
         assert_eq!(f.get(key), 0);
     }
 }
 #[test]
 fn mission_news_escort_and_introduction_dispatch() {
     let mut f = Api::default();
-    f.put("UTWIG_SUPOX_MISSION", 1);
+    f.put(StoryKey::UTWIG_SUPOX_MISSION, 1);
     run(&mut f, Handler::AlliedHome, HOW_GOES_WAR);
     assert_eq!(f.spoken(), [i32::from(FLEET_ON_WAY)]);
-    assert_eq!(f.get("UTWIG_WAR_NEWS"), 0);
+    assert_eq!(f.get(StoryKey::UTWIG_WAR_NEWS), 0);
     for feasibility in [0, 1] {
         let mut f = Api {
             feasibility,
@@ -229,9 +237,9 @@ fn mission_news_escort_and_introduction_dispatch() {
         for flags in [0, 64, 128] {
             for condition in [0, 1] {
                 let mut f = Api::default();
-                f.put("UTWIG_HOSTILE", hostile);
-                f.put("GLOBAL_FLAGS_AND_DATA", flags);
-                f.put("ULTRON_CONDITION", condition);
+                f.put(StoryKey::UTWIG_HOSTILE, hostile);
+                f.put(StoryKey::GLOBAL_FLAGS_AND_DATA, flags);
+                f.put(StoryKey::ULTRON_CONDITION, condition);
                 for _ in 0..6 {
                     f.effects.clear();
                     Dialogue { api: &mut f }.intro();
@@ -253,7 +261,7 @@ fn mission_news_escort_and_introduction_dispatch() {
     for mission in [1, 2, 4, 5] {
         let mut f = Api::default();
         f.alliances[9] = 1;
-        f.put("UTWIG_SUPOX_MISSION", mission);
+        f.put(StoryKey::UTWIG_SUPOX_MISSION, mission);
         Dialogue { api: &mut f }.intro();
         assert_eq!(f.offers().is_empty(), (2..5).contains(&mission));
     }
@@ -261,7 +269,7 @@ fn mission_news_escort_and_introduction_dispatch() {
     let mut d = descriptor();
     Dialogue { api: &mut f }.initialize(&mut d);
     assert_eq!(f.segue, 1);
-    f.put("UTWIG_HAVE_ULTRON", 1);
+    f.put(StoryKey::UTWIG_HAVE_ULTRON, 1);
     Dialogue { api: &mut f }.initialize(&mut d);
     assert_eq!(f.segue, 0);
     assert_eq!(d.alien_song_flags & 1, 1);
@@ -269,7 +277,7 @@ fn mission_news_escort_and_introduction_dispatch() {
         unsafe { std::ffi::CStr::from_ptr(d.alien_alt_song_res) },
         c"comm.utwig.ultron.music"
     );
-    f.put("UTWIG_HAVE_ULTRON", 0);
+    f.put(StoryKey::UTWIG_HAVE_ULTRON, 0);
     Dialogue { api: &mut f }.initialize(&mut d);
     assert_eq!(d.alien_song_flags & 1, 0);
     f.activity = 5;
@@ -312,13 +320,13 @@ fn before_and_after_war_information_saturates_and_disables_each_question() {
     ] {
         for visit in [0, 1] {
             let mut f = Api::default();
-            f.put("UTWIG_INFO", visit);
+            f.put(StoryKey::UTWIG_INFO, visit);
             run(&mut f, handler, question);
             assert_eq!(
                 f.spoken(),
                 [i32::from(if visit == 0 { first } else { second })]
             );
-            assert_eq!(f.get("UTWIG_INFO"), 1);
+            assert_eq!(f.get(StoryKey::UTWIG_INFO), 1);
             assert!(!f.enabled(question));
             assert_eq!(choices(&f), [now, bye]);
             run(&mut f, handler, now);
@@ -332,20 +340,20 @@ fn before_and_after_war_information_saturates_and_disables_each_question() {
 fn war_news_sequence_and_after_war_information() {
     for (news, phrase, next) in [(0, BATTLE_HAPPENS_1, 1), (1, BATTLE_HAPPENS_2, 2)] {
         let mut f = Api::default();
-        f.put("UTWIG_SUPOX_MISSION", 3);
-        f.put("UTWIG_WAR_NEWS", news);
+        f.put(StoryKey::UTWIG_SUPOX_MISSION, 3);
+        f.put(StoryKey::UTWIG_WAR_NEWS, news);
         run(&mut f, Handler::AlliedHome, HOW_GOES_WAR);
         assert_eq!(f.spoken(), [i32::from(phrase)]);
-        assert_eq!(f.get("UTWIG_WAR_NEWS"), next);
+        assert_eq!(f.get(StoryKey::UTWIG_WAR_NEWS), next);
     }
     let mut f = Api::default();
-    f.put("UTWIG_SUPOX_MISSION", 5);
+    f.put(StoryKey::UTWIG_SUPOX_MISSION, 5);
     run(&mut f, Handler::AlliedHome, HOW_WENT_WAR);
     assert_eq!(f.spoken(), [i32::from(ABOUT_BATTLE)]);
-    assert_eq!(f.get("UTWIG_WAR_NEWS"), 1);
+    assert_eq!(f.get(StoryKey::UTWIG_WAR_NEWS), 1);
     run(&mut f, Handler::AlliedHome, LEARN_NEW_INFO);
     assert_eq!(f.spoken(), [i32::from(SAMATRA)]);
-    assert_eq!(f.get("UTWIG_WAR_NEWS"), 3);
+    assert_eq!(f.get(StoryKey::UTWIG_WAR_NEWS), 3);
     run(&mut f, Handler::AlliedHome, WHAT_NOW_HOMEWORLD);
     assert_eq!(f.spoken(), [i32::from(HOPE_KILL_EACH_OTHER)]);
     run(&mut f, Handler::AlliedHome, HOW_IS_ULTRON);

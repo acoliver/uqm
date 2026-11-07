@@ -3,6 +3,7 @@ use super::script::{animation, as_comm_data, GLOBAL_PLAYER_NAME, GLOBAL_SHIP_NAM
 use crate::comm::locdata::{CColor, CLocData, CPoint};
 use crate::comm::types::CommData;
 use crate::engine::battle::Cx;
+use crate::engine::StoryKey;
 mod phrases;
 use phrases::*;
 mod api;
@@ -43,36 +44,36 @@ impl<A: ShofixtApi> Dialogue<'_, A> {
             self.api.segue(0)
         } else if [FEMALES, NUBILES, RAT_BABES].contains(&r) {
             self.api.npc(LEAPING_HAPPINESS);
-            self.api.set("SHOFIXTI_RECRUITED", 1);
-            self.api.set("MAIDENS_ON_SHIP", 0);
+            self.api.set(StoryKey::SHOFIXTI_RECRUITED, 1);
+            self.api.set(StoryKey::MAIDENS_ON_SHIP, 0);
             self.api.segue(0);
             self.api.schedule_return()
         } else if r == DONT_ATTACK {
             self.api.npc(TYPICAL_PLOY);
-            self.api.set("SHOFIXTI_STACK1", 1)
+            self.api.set(StoryKey::SHOFIXTI_STACK1, 1)
         } else if r == HEY_STOP {
             self.api.npc(ONLY_STOP);
-            self.api.set("SHOFIXTI_STACK1", 2)
+            self.api.set(StoryKey::SHOFIXTI_STACK1, 2)
         } else if r == LOOK_YOU_ARE {
             self.api.npc(TOO_BAD);
-            self.api.set("SHOFIXTI_STACK1", 3)
+            self.api.set(StoryKey::SHOFIXTI_STACK1, 3)
         } else if r == NO_ONE_INSULTS {
             self.api.npc(YOU_LIMP);
-            self.api.set("SHOFIXTI_STACK2", 1)
+            self.api.set(StoryKey::SHOFIXTI_STACK2, 1)
         } else if r == MIGHTY_WORDS {
             self.api.npc(HANG_YOUR);
-            self.api.set("SHOFIXTI_STACK2", 2)
+            self.api.set(StoryKey::SHOFIXTI_STACK2, 2)
         } else if r == DONT_KNOW {
             self.api.npc(NEVER);
-            self.api.set("SHOFIXTI_STACK3", 1)
+            self.api.set(StoryKey::SHOFIXTI_STACK3, 1)
         } else if r == LOOK0 {
             self.api.npc(FOR_YOU);
-            self.api.set("SHOFIXTI_STACK3", 2)
+            self.api.set(StoryKey::SHOFIXTI_STACK3, 2)
         } else if r == NO_BLOODSHED {
             self.api.npc(YES_BLOODSHED);
-            self.api.set("SHOFIXTI_STACK3", 3)
+            self.api.set(StoryKey::SHOFIXTI_STACK3, 3)
         } else if r == DONT_WANT_TO_FIGHT {
-            let n = self.api.get("SHOFIXTI_STACK4");
+            let n = self.api.get(StoryKey::SHOFIXTI_STACK4);
             if let Some(&phrase) = [
                 MUST_FIGHT_YOU_URQUAN_1,
                 MUST_FIGHT_YOU_URQUAN_2,
@@ -84,7 +85,7 @@ impl<A: ShofixtApi> Dialogue<'_, A> {
                 self.api.npc(phrase);
             }
             self.api.set(
-                "SHOFIXTI_STACK4",
+                StoryKey::SHOFIXTI_STACK4,
                 if n == 3 { n } else { n.wrapping_add(1) },
             );
         }
@@ -109,7 +110,7 @@ impl<A: ShofixtApi> Dialogue<'_, A> {
         } else {
             self.api.npc(VERY_SAD_KILL_SELF)
         }
-        if self.api.get("MAIDENS_ON_SHIP") != 0 {
+        if self.api.get(StoryKey::MAIDENS_ON_SHIP) != 0 {
             self.api
                 .response(IMPORTANT_DUTY as u16, Handler::GiveMaidens, &[])
         }
@@ -135,9 +136,9 @@ impl<A: ShofixtApi> Dialogue<'_, A> {
     }
     fn realize(&mut self) {
         self.api.npc(DGRUNTI);
-        self.api.set("SHOFIXTI_STACK1", 0);
-        self.api.set("SHOFIXTI_STACK3", 0);
-        self.api.set("SHOFIXTI_STACK2", 3);
+        self.api.set(StoryKey::SHOFIXTI_STACK1, 0);
+        self.api.set(StoryKey::SHOFIXTI_STACK3, 0);
+        self.api.set(StoryKey::SHOFIXTI_STACK2, 3);
         let mut fragments = vec![I_AM_CAPTAIN0, GLOBAL_PLAYER_NAME, I_AM_CAPTAIN1];
         fragments.extend(self.api.alliance_fragments(NAME_1 as u16));
         fragments.extend([I_AM_CAPTAIN2, GLOBAL_SHIP_NAME, I_AM_CAPTAIN3]);
@@ -148,13 +149,13 @@ impl<A: ShofixtApi> Dialogue<'_, A> {
         }
     }
     fn hostile(&mut self) {
-        match self.api.get("SHOFIXTI_STACK1") {
+        match self.api.get(StoryKey::SHOFIXTI_STACK1) {
             0 => self.api.response(DONT_ATTACK as u16, Handler::Exit, &[]),
             1 => self.api.response(HEY_STOP as u16, Handler::Exit, &[]),
             2 => self.api.response(LOOK_YOU_ARE as u16, Handler::Exit, &[]),
             _ => {}
         }
-        match self.api.get("SHOFIXTI_STACK2") {
+        match self.api.get(StoryKey::SHOFIXTI_STACK2) {
             0 => self.api.response(NO_ONE_INSULTS as u16, Handler::Exit, &[]),
             1 => self.api.response(MIGHTY_WORDS as u16, Handler::Exit, &[]),
             2 => self
@@ -162,7 +163,7 @@ impl<A: ShofixtApi> Dialogue<'_, A> {
                 .response(DONKEY_BREATH as u16, Handler::Realize, &[]),
             _ => {}
         }
-        match self.api.get("SHOFIXTI_STACK3") {
+        match self.api.get(StoryKey::SHOFIXTI_STACK3) {
             0 => self.api.response(DONT_KNOW as u16, Handler::Exit, &[]),
             1 => self.api.response(
                 LOOK0 as u16,
@@ -184,26 +185,26 @@ impl<A: ShofixtApi> Dialogue<'_, A> {
         } else if r == WHY_HERE0 {
             self.api.npc(I_GUARD);
             last = 1;
-            self.api.set("SHOFIXTI_STACK1", 1)
+            self.api.set(StoryKey::SHOFIXTI_STACK1, 1)
         } else if r == WHAT_HAPPENED {
             self.api.npc(MET_VUX);
             last = 1;
-            self.api.set("SHOFIXTI_STACK1", 2)
+            self.api.set(StoryKey::SHOFIXTI_STACK1, 2)
         } else if r == GLORY_DEVICE {
             self.api.npc(SWITCH_BROKE);
-            self.api.set("SHOFIXTI_STACK1", 3)
+            self.api.set(StoryKey::SHOFIXTI_STACK1, 3)
         } else if r == WHERE_WORLD {
             self.api.npc(BLEW_IT_UP);
             last = 2;
-            self.api.set("SHOFIXTI_STACK3", 1)
+            self.api.set(StoryKey::SHOFIXTI_STACK3, 1)
         } else if r == HOW_SURVIVE {
             self.api.npc(NOT_HERE);
-            self.api.set("SHOFIXTI_STACK3", 2)
+            self.api.set(StoryKey::SHOFIXTI_STACK3, 2)
         }
         if self.api.enabled(REPORT0 as u16) {
             responses[0] = Some((REPORT0, vec![REPORT0, self.api.shofixti_name(), REPORT1]))
         }
-        responses[1] = match self.api.get("SHOFIXTI_STACK1") {
+        responses[1] = match self.api.get(StoryKey::SHOFIXTI_STACK1) {
             0 => Some((
                 WHY_HERE0,
                 vec![WHY_HERE0, self.api.shofixti_name(), WHY_HERE1],
@@ -212,7 +213,7 @@ impl<A: ShofixtApi> Dialogue<'_, A> {
             2 => Some((GLORY_DEVICE, vec![])),
             _ => None,
         };
-        responses[2] = match self.api.get("SHOFIXTI_STACK3") {
+        responses[2] = match self.api.get(StoryKey::SHOFIXTI_STACK3) {
             0 => Some((WHERE_WORLD, vec![])),
             1 => Some((HOW_SURVIVE, vec![])),
             _ => None,
@@ -222,7 +223,7 @@ impl<A: ShofixtApi> Dialogue<'_, A> {
                 self.api.response(*p as u16, Handler::Friendly, fr)
             }
         }
-        if self.api.get("MAIDENS_ON_SHIP") != 0 {
+        if self.api.get(StoryKey::MAIDENS_ON_SHIP) != 0 {
             self.api
                 .response(IMPORTANT_DUTY as u16, Handler::GiveMaidens, &[])
         }
@@ -239,11 +240,11 @@ impl<A: ShofixtApi> Dialogue<'_, A> {
             return;
         }
         let name = self.api.shofixti_name();
-        if self.api.get("SHOFIXTI_STACK2") > 2 {
+        if self.api.get(StoryKey::SHOFIXTI_STACK2) > 2 {
             self.api.npc(FRIENDLY_HELLO);
             self.friendly(0)
         } else {
-            let n = self.api.get("SHOFIXTI_VISITS");
+            let n = self.api.get(StoryKey::SHOFIXTI_VISITS);
             let greetings: &[i32] = if name == KATANA {
                 &[
                     HOSTILE_KATANA_1,
@@ -267,7 +268,7 @@ impl<A: ShofixtApi> Dialogue<'_, A> {
                 self.api.npc(phrase);
             }
             self.api.set(
-                "SHOFIXTI_VISITS",
+                StoryKey::SHOFIXTI_VISITS,
                 if usize::from(n) + 1 == greetings.len() {
                     n
                 } else {

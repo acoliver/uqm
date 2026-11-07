@@ -1,4 +1,5 @@
 use super::*;
+use crate::engine::StoryKey;
 use crate::math::RandomContext;
 
 fn position(s: &CSisState) -> (i16, i16) {
@@ -50,7 +51,7 @@ impl<A: MelnormApi> Dialogue<'_, A> {
                 .sum::<u32>()
     }
     pub(super) fn strip_ship(&mut self, mut fuel: u16) -> bool {
-        self.api.set("MELNORME_RESCUE_REFUSED", 0);
+        self.api.set(StoryKey::MELNORME_RESCUE_REFUSED, 0);
         let mut ship = self.api.ship();
         let mut pods = -(ship.crew_enlisted.div_ceil(50) as i8);
         if fuel == 0 {

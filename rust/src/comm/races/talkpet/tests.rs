@@ -1,6 +1,7 @@
 use super::*;
 use crate::comm::races::encounter::testing::{Effect, Fake};
 use crate::comm::races::script::ScriptApi;
+use crate::engine::StoryKey;
 type Api = Fake<Handler, api::World>;
 fn run(f: &mut Api, h: Handler, r: i32) {
     f.effects.clear();
@@ -13,11 +14,11 @@ fn choices(f: &Api) -> Vec<i32> {
 fn taalo_protector_blocks_hypnosis_on_first_and_repeat_visits() {
     for protector in [0, 1] {
         let mut f = Api::default();
-        f.put("TAALO_PROTECTOR_ON_SHIP", protector);
-        f.put("UMGAH_VISITS", 3);
+        f.put(StoryKey::TAALO_PROTECTOR_ON_SHIP, protector);
+        f.put(StoryKey::UMGAH_VISITS, 3);
         run(&mut f, Handler::CompelPlayer, BYE_AT_UMGAH);
-        assert_eq!(f.get("KNOW_UMGAH_ZOMBIES"), 1);
-        assert_eq!(f.get("PLAYER_HYPNOTIZED"), 1 - protector);
+        assert_eq!(f.get(StoryKey::KNOW_UMGAH_ZOMBIES), 1);
+        assert_eq!(f.get(StoryKey::PLAYER_HYPNOTIZED), 1 - protector);
         assert_eq!(
             f.spoken(),
             if protector == 0 {
@@ -29,7 +30,7 @@ fn taalo_protector_blocks_hypnosis_on_first_and_repeat_visits() {
         if protector != 0 {
             assert_eq!(f.segue, 1);
         }
-        f.put("TALKING_PET_HOME_VISITS", 1);
+        f.put(StoryKey::TALKING_PET_HOME_VISITS, 1);
         f.world.npc_ships = true;
         f.effects.clear();
         Dialogue { api: &mut f }.intro();
@@ -49,11 +50,11 @@ fn acquisition_resets_umgah_and_arilou_state_for_all_acceptance_branches() {
     for r in [OK_LETS_DO_IT, WANT_KILL_1, WANT_KILL_2, WANT_KILL_3] {
         let mut f = Api::default();
         for k in [
-            "UMGAH_ZOMBIE_BLOBBIES",
-            "UMGAH_VISITS",
-            "UMGAH_HOME_VISITS",
-            "ARILOU_STACK_2",
-            "SHIP_TO_COMPEL",
+            StoryKey::UMGAH_ZOMBIE_BLOBBIES,
+            StoryKey::UMGAH_VISITS,
+            StoryKey::UMGAH_HOME_VISITS,
+            StoryKey::ARILOU_STACK_2,
+            StoryKey::SHIP_TO_COMPEL,
         ] {
             f.put(k, 1);
         }
@@ -66,13 +67,19 @@ fn acquisition_resets_umgah_and_arilou_state_for_all_acceptance_branches() {
                 GLAD_YOU_WONT_KILL
             }]
         );
-        assert_eq!((f.get("TALKING_PET"), f.get("TALKING_PET_ON_SHIP")), (1, 1));
+        assert_eq!(
+            (
+                f.get(StoryKey::TALKING_PET),
+                f.get(StoryKey::TALKING_PET_ON_SHIP)
+            ),
+            (1, 1)
+        );
         for k in [
-            "UMGAH_ZOMBIE_BLOBBIES",
-            "UMGAH_VISITS",
-            "UMGAH_HOME_VISITS",
-            "ARILOU_STACK_2",
-            "SHIP_TO_COMPEL",
+            StoryKey::UMGAH_ZOMBIE_BLOBBIES,
+            StoryKey::UMGAH_VISITS,
+            StoryKey::UMGAH_HOME_VISITS,
+            StoryKey::ARILOU_STACK_2,
+            StoryKey::SHIP_TO_COMPEL,
         ] {
             assert_eq!(f.get(k), 0);
         }
@@ -83,26 +90,26 @@ fn acquisition_resets_umgah_and_arilou_state_for_all_acceptance_branches() {
 fn samatra_requires_completed_bomb_and_pet_compulsion_is_persistent() {
     for (bomb, on_ship, phrase) in [(0, 0, NEED_BOMB), (2, 1, SOUP_UP_BOMB)] {
         let mut f = Api::default();
-        f.put("READY_TO_CONFUSE_URQUAN", 1);
-        f.put("SHIP_TO_COMPEL", 1);
-        f.put("CHMMR_BOMB_STATE", bomb);
-        f.put("UTWIG_BOMB_ON_SHIP", on_ship);
+        f.put(StoryKey::READY_TO_CONFUSE_URQUAN, 1);
+        f.put(StoryKey::SHIP_TO_COMPEL, 1);
+        f.put(StoryKey::CHMMR_BOMB_STATE, bomb);
+        f.put(StoryKey::UTWIG_BOMB_ON_SHIP, on_ship);
         Dialogue { api: &mut f }.intro();
         assert_eq!(f.spoken(), [HAVENT_GOT_EVERYTHING, phrase]);
-        assert_eq!(f.get("READY_TO_CONFUSE_URQUAN"), 0);
-        assert_eq!(f.get("SHIP_TO_COMPEL"), 0);
-        assert_eq!(f.get("AWARE_OF_SAMATRA"), 1);
+        assert_eq!(f.get(StoryKey::READY_TO_CONFUSE_URQUAN), 0);
+        assert_eq!(f.get(StoryKey::SHIP_TO_COMPEL), 0);
+        assert_eq!(f.get(StoryKey::AWARE_OF_SAMATRA), 1);
         assert_eq!(f.segue, 0);
     }
     let mut f = Api::default();
-    f.put("READY_TO_CONFUSE_URQUAN", 1);
-    f.put("CHMMR_BOMB_STATE", 3);
+    f.put(StoryKey::READY_TO_CONFUSE_URQUAN, 1);
+    f.put(StoryKey::CHMMR_BOMB_STATE, 3);
     Dialogue { api: &mut f }.intro();
     assert_eq!(f.spoken(), [I_SENSE_MY_SLAVES]);
     assert_eq!(choices(&f), [WHAT_NOW, IM_SCARED, COMPEL_URQUAN]);
     run(&mut f, Handler::ExitConversation, COMPEL_URQUAN);
-    assert_eq!(f.get("URQUAN_MESSED_UP"), 1);
-    f.put("READY_TO_CONFUSE_URQUAN", 1);
+    assert_eq!(f.get(StoryKey::URQUAN_MESSED_UP), 1);
+    f.put(StoryKey::READY_TO_CONFUSE_URQUAN, 1);
     f.effects.clear();
     Dialogue { api: &mut f }.intro();
     assert_eq!(f.spoken(), [HELLO_AFTER_COMPEL_URQUAN]);
@@ -111,7 +118,7 @@ fn samatra_requires_completed_bomb_and_pet_compulsion_is_persistent() {
 fn dnyarri_lie_and_deal_choices_follow_learned_history_and_umgah_survival() {
     for learned in [0, 1] {
         let mut f = Api::default();
-        f.put("LEARNED_TALKING_PET", learned);
+        f.put(StoryKey::LEARNED_TALKING_PET, learned);
         run(&mut f, Handler::PetDeal, WHAT_ARE_YOU_REALLY);
         assert!(choices(&f).contains(&if learned == 0 {
             HARD_TO_BELIEVE
@@ -121,19 +128,19 @@ fn dnyarri_lie_and_deal_choices_follow_learned_history_and_umgah_survival() {
     }
     let mut f = Api::default();
     run(&mut f, Handler::PetDeal, HARD_TO_BELIEVE);
-    assert_eq!(f.get("DNYARRI_LIED"), 1);
-    f.put("LEARNED_TALKING_PET", 1);
+    assert_eq!(f.get(StoryKey::DNYARRI_LIED), 1);
+    f.put(StoryKey::LEARNED_TALKING_PET, 1);
     run(&mut f, Handler::PetDevice, 0);
     assert!(choices(&f).contains(&YOU_LIED));
     run(&mut f, Handler::PetDevice, YOU_LIED);
-    assert_eq!(f.get("DNYARRI_LIED"), 0);
+    assert_eq!(f.get(StoryKey::DNYARRI_LIED), 0);
     for alive in [false, true] {
         for visits in [0, 1] {
             for shield in [0, 1] {
                 let mut f = Api::default();
                 f.world.umgah_alive = alive;
-                f.put("TALKING_PET_HOME_VISITS", visits);
-                f.put("TAALO_PROTECTOR_ON_SHIP", shield);
+                f.put(StoryKey::TALKING_PET_HOME_VISITS, visits);
+                f.put(StoryKey::TAALO_PROTECTOR_ON_SHIP, shield);
                 Dialogue { api: &mut f }.intro();
                 assert_eq!(
                     f.spoken(),
@@ -156,8 +163,8 @@ fn dnyarri_lie_and_deal_choices_follow_learned_history_and_umgah_survival() {
 fn onboard_greeting_skips_shield_complaint_and_strobe_preserves_response_handler() {
     for shield in [0, 1] {
         let mut f = Api::default();
-        f.put("TALKING_PET_ON_SHIP", 1);
-        f.put("TAALO_PROTECTOR_ON_SHIP", shield);
+        f.put(StoryKey::TALKING_PET_ON_SHIP, 1);
+        f.put(StoryKey::TAALO_PROTECTOR_ON_SHIP, shield);
         Dialogue { api: &mut f }.intro();
         assert_eq!(
             f.spoken(),
@@ -167,7 +174,10 @@ fn onboard_greeting_skips_shield_complaint_and_strobe_preserves_response_handler
                 HELLO_AS_DEVICE_1
             }]
         );
-        assert_eq!(f.get("TALKING_PET_VISITS"), if shield == 0 { 2 } else { 1 });
+        assert_eq!(
+            f.get(StoryKey::TALKING_PET_VISITS),
+            if shield == 0 { 2 } else { 1 }
+        );
     }
     let mut f = Api::default();
     run(&mut f, Handler::MindControl, WHAT_ABOUT_POWERS);

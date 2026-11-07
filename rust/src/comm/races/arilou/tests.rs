@@ -1,6 +1,7 @@
 use super::*;
 use crate::comm::races::encounter::testing::{Effect, Fake};
 use crate::comm::races::script::ScriptApi;
+use crate::engine::StoryKey;
 type Api = Fake<Handler>;
 fn choices(f: &Api) -> Vec<u16> {
     f.offers().iter().map(|x| x.0).collect()
@@ -14,7 +15,7 @@ fn run(f: &mut Api, h: Handler, r: u16) {
 fn first_contact_and_quasispace_routing() {
     for side in 0..4 {
         let mut f = Api::default();
-        f.put("ARILOU_SPACE_SIDE", side);
+        f.put(StoryKey::ARILOU_SPACE_SIDE, side);
         Dialogue { api: &mut f }.initialize();
         assert_eq!(f.segue, u32::from(side <= 1));
         Dialogue { api: &mut f }.intro();
@@ -36,8 +37,8 @@ fn first_contact_and_quasispace_routing() {
             } else {
                 Handler::ArilouHome
             }));
-        assert_eq!(f.get("MET_ARILOU"), 1);
-        assert_eq!(f.get("ARILOU_HOME_VISITS"), u8::from(side > 1));
+        assert_eq!(f.get(StoryKey::MET_ARILOU), 1);
+        assert_eq!(f.get(StoryKey::ARILOU_HOME_VISITS), u8::from(side > 1));
     }
 }
 #[test]
@@ -45,11 +46,11 @@ fn portal_exchange_and_response_stack_order() {
     let mut f = Api::default();
     run(&mut f, Handler::ArilouHome, WHAT_GIVE_ME);
     assert_eq!(f.spoken(), [i32::from(ABOUT_PORTAL)]);
-    assert_eq!(f.get("KNOW_ARILOU_WANT_WRECK"), 1);
+    assert_eq!(f.get(StoryKey::KNOW_ARILOU_WANT_WRECK), 1);
     assert_eq!(choices(&f)[0], WHAT_ABOUT_TPET);
     assert!(f.enabled(ABOUT_PORTAL_AGAIN));
-    f.put("PORTAL_KEY_ON_SHIP", 1);
-    f.put("ARILOU_HOME_VISITS", 1);
+    f.put(StoryKey::PORTAL_KEY_ON_SHIP, 1);
+    f.put(StoryKey::ARILOU_HOME_VISITS, 1);
     run(&mut f, Handler::ArilouHome, GOT_IT);
     assert_eq!(
         f.spoken(),
@@ -57,9 +58,9 @@ fn portal_exchange_and_response_stack_order() {
     );
     assert_eq!(
         (
-            f.get("PORTAL_KEY_ON_SHIP"),
-            f.get("PORTAL_SPAWNER"),
-            f.get("PORTAL_SPAWNER_ON_SHIP")
+            f.get(StoryKey::PORTAL_KEY_ON_SHIP),
+            f.get(StoryKey::PORTAL_SPAWNER),
+            f.get(StoryKey::PORTAL_SPAWNER_ON_SHIP)
         ),
         (0, 1, 1)
     );
@@ -70,19 +71,19 @@ fn portal_exchange_and_response_stack_order() {
 #[test]
 fn umgah_inquiry_and_talking_pet_branches() {
     let mut f = Api::default();
-    f.put("KNOW_UMGAH_ZOMBIES", 1);
+    f.put(StoryKey::KNOW_UMGAH_ZOMBIES, 1);
     run(&mut f, Handler::ArilouHome, UMGAH_ACTING_WEIRD);
     assert!(f.effects.contains(&Effect::Event(1, 0, 10, 0, 14)));
-    assert_eq!(f.get("ARILOU_CHECKED_UMGAH"), 1);
+    assert_eq!(f.get(StoryKey::ARILOU_CHECKED_UMGAH), 1);
     assert!(!choices(&f).contains(&LEARNED_ABOUT_UMGAH));
     f.disabled.clear();
-    f.put("ARILOU_CHECKED_UMGAH", 2);
+    f.put(StoryKey::ARILOU_CHECKED_UMGAH, 2);
     run(&mut f, Handler::ArilouHome, LEARNED_ABOUT_UMGAH);
     assert_eq!(f.spoken(), [i32::from(UMGAH_UNDER_COMPULSION)]);
     assert_eq!(choices(&f)[0], WHAT_DO_NOW);
     run(&mut f, Handler::ArilouHome, WHAT_DO_NOW);
-    assert_eq!(f.get("ARILOU_CHECKED_UMGAH"), 3);
-    f.put("TALKING_PET_VISITS", 1);
+    assert_eq!(f.get(StoryKey::ARILOU_CHECKED_UMGAH), 3);
+    f.put(StoryKey::TALKING_PET_VISITS, 1);
     run(&mut f, Handler::ArilouHome, TELL_ARILOU_ABOUT_TPET);
     assert_eq!(choices(&f)[0], WHAT_DO_ABOUT_TPET);
 }
@@ -91,7 +92,7 @@ fn hint_counters_saturate_and_preserve_story_flags() {
     for (question, key, phrases) in [
         (
             WHATS_UP_1,
-            "ARILOU_INFO",
+            StoryKey::ARILOU_INFO,
             [
                 GENERAL_INFO_1,
                 GENERAL_INFO_2,
@@ -101,7 +102,7 @@ fn hint_counters_saturate_and_preserve_story_flags() {
         ),
         (
             GIVE_ME_INFO_1,
-            "ARILOU_HINTS",
+            StoryKey::ARILOU_HINTS,
             [
                 ARILOU_HINTS_1,
                 ARILOU_HINTS_2,
@@ -116,12 +117,12 @@ fn hint_counters_saturate_and_preserve_story_flags() {
             assert_eq!(f.spoken(), [i32::from(phrases[visit.min(3)])]);
             assert_eq!(f.get(key), (visit + 1).min(3) as u8);
         }
-        if key == "ARILOU_HINTS" {
+        if key == StoryKey::ARILOU_HINTS {
             assert_eq!(
                 (
-                    f.get("KNOW_ABOUT_SHATTERED"),
-                    f.get("KNOW_URQUAN_STORY"),
-                    f.get("KNOW_KOHR_AH_STORY")
+                    f.get(StoryKey::KNOW_ABOUT_SHATTERED),
+                    f.get(StoryKey::KNOW_URQUAN_STORY),
+                    f.get(StoryKey::KNOW_KOHR_AH_STORY)
                 ),
                 (2, 1, 1)
             );
@@ -134,17 +135,26 @@ fn post_encounter_manner_and_first_home_visit() {
         segue: 1,
         ..Api::default()
     };
-    f.put("ARILOU_VISITS", 3);
-    Dialogue { api: &mut f }.post_arilou_enc();
-    assert_eq!((f.get("ARILOU_MANNER"), f.get("ARILOU_VISITS")), (1, 0));
-    f.put("ARILOU_SPACE_SIDE", 2);
+    f.put(StoryKey::ARILOU_VISITS, 3);
     Dialogue { api: &mut f }.post_arilou_enc();
     assert_eq!(
-        (f.get("ARILOU_MANNER"), f.get("UMGAH_ZOMBIE_BLOBBIES")),
+        (
+            f.get(StoryKey::ARILOU_MANNER),
+            f.get(StoryKey::ARILOU_VISITS)
+        ),
+        (1, 0)
+    );
+    f.put(StoryKey::ARILOU_SPACE_SIDE, 2);
+    Dialogue { api: &mut f }.post_arilou_enc();
+    assert_eq!(
+        (
+            f.get(StoryKey::ARILOU_MANNER),
+            f.get(StoryKey::UMGAH_ZOMBIE_BLOBBIES)
+        ),
         (3, 1)
     );
     run(&mut f, Handler::ExitConversation, BUG_EYED_FRUITCAKES);
-    assert_eq!(f.get("ARILOU_MANNER"), 2);
+    assert_eq!(f.get(StoryKey::ARILOU_MANNER), 2);
     f.activity = 5;
     f.effects.clear();
     Dialogue { api: &mut f }.intro();

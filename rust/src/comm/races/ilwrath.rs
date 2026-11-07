@@ -5,6 +5,7 @@ use super::script::{animation, as_comm_data};
 use crate::comm::locdata::{CColor, CLocData, CPoint};
 use crate::comm::types::CommData;
 use crate::engine::battle::Cx;
+use crate::engine::StoryKey;
 mod phrases;
 use phrases::*;
 
@@ -32,8 +33,8 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
         }
     }
     fn initialize(&mut self, _desc: &mut CLocData) {
-        let peaceful = self.api.get("PROBE_ILWRATH_ENCOUNTER") != 0
-            || self.api.get("GLOBAL_FLAGS_AND_DATA") & ((1 << 4) | (1 << 5)) != 0
+        let peaceful = self.api.get(StoryKey::PROBE_ILWRATH_ENCOUNTER) != 0
+            || self.api.get(StoryKey::GLOBAL_FLAGS_AND_DATA) & ((1 << 4) | (1 << 5)) != 0
             || self.api.activity() as u8 == 5;
         self.api.segue(u32::from(!peaceful));
     }
@@ -68,7 +69,7 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
             || (r == WHATS_UP_SPACE_5)
         {
             let mut num_visits: u8;
-            num_visits = self.api.get("ILWRATH_INFO");
+            num_visits = self.api.get(StoryKey::ILWRATH_INFO);
             let res = {
                 let old = num_visits;
                 num_visits += 1;
@@ -93,7 +94,7 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
                 }
                 _ => {}
             }
-            self.api.set("ILWRATH_INFO", num_visits);
+            self.api.set(StoryKey::ILWRATH_INFO, num_visits);
         } else {
             if r == BYE {
                 self.api.npc(i32::from(GOODBYE_AND_DIE));
@@ -197,7 +198,7 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
     fn ilwrath_home(&mut self, r: u16) {
         if r == 0 {
             let mut num_visits: u8;
-            num_visits = self.api.get("ILWRATH_HOME_VISITS");
+            num_visits = self.api.get(StoryKey::ILWRATH_HOME_VISITS);
             let res = {
                 let old = num_visits;
                 num_visits += 1;
@@ -213,7 +214,7 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
                 }
                 _ => {}
             }
-            self.api.set("ILWRATH_HOME_VISITS", num_visits);
+            self.api.set(StoryKey::ILWRATH_HOME_VISITS, num_visits);
         } else if r == ENOUGH_GODS {
             self.api.npc(i32::from(OK_ENOUGH_GODS));
         } else if r == ENOUGH_ILWRATH {
@@ -276,12 +277,12 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
     fn gods_speak(&mut self, r: u16) {
         let mut num_visits: u8;
         if r == 0 {
-            if self.api.get("ILWRATH_FIGHT_THRADDASH") != 0 {
+            if self.api.get(StoryKey::ILWRATH_FIGHT_THRADDASH) != 0 {
                 self.api.npc(i32::from(GLORIOUS_WORSHIP));
-            } else if self.api.get("ILWRATH_DECEIVED") != 0 {
+            } else if self.api.get(StoryKey::ILWRATH_DECEIVED) != 0 {
                 self.api.npc(i32::from(ON_WAY));
             } else {
-                num_visits = self.api.get("ILWRATH_GODS_SPOKEN");
+                num_visits = self.api.get(StoryKey::ILWRATH_GODS_SPOKEN);
                 let res = {
                     let old = num_visits;
                     num_visits += 1;
@@ -303,14 +304,14 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
                     }
                     _ => {}
                 }
-                self.api.set("ILWRATH_GODS_SPOKEN", num_visits);
+                self.api.set(StoryKey::ILWRATH_GODS_SPOKEN, num_visits);
             }
         } else if r == GO_KILL_THRADDASH {
             self.api.npc(i32::from(OK_KILL_THRADDASH));
-            self.api.set("ILWRATH_DECEIVED", 1_u8);
+            self.api.set(StoryKey::ILWRATH_DECEIVED, 1_u8);
             self.api.advance_ilwrath();
         } else if r == WORSHIP_US {
-            num_visits = self.api.get("ILWRATH_WORSHIP");
+            num_visits = self.api.get(StoryKey::ILWRATH_WORSHIP);
             let res = {
                 let old = num_visits;
                 num_visits += 1;
@@ -329,12 +330,12 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
                 }
                 _ => {}
             }
-            self.api.set("ILWRATH_WORSHIP", num_visits);
+            self.api.set(StoryKey::ILWRATH_WORSHIP, num_visits);
             self.api.disable(WORSHIP_US);
         } else if r == ENOUGH_ORDERS {
             self.api.npc(i32::from(NEVER_ENOUGH));
         }
-        if !(self.api.get("ILWRATH_DECEIVED") != 0) {
+        if !(self.api.get(StoryKey::ILWRATH_DECEIVED) != 0) {
             self.api
                 .response(GO_KILL_THRADDASH, Handler::GodsSpeak, &[]);
         }
@@ -351,7 +352,7 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
     fn ilwrath_space(&mut self, r: u16) {
         let mut num_visits: u8;
         if r == 0 {
-            num_visits = self.api.get("ILWRATH_VISITS");
+            num_visits = self.api.get(StoryKey::ILWRATH_VISITS);
             let res = {
                 let old = num_visits;
                 num_visits += 1;
@@ -376,9 +377,9 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
                 }
                 _ => {}
             }
-            self.api.set("ILWRATH_VISITS", num_visits);
+            self.api.set(StoryKey::ILWRATH_VISITS, num_visits);
         }
-        num_visits = self.api.get("ILWRATH_INFO");
+        num_visits = self.api.get(StoryKey::ILWRATH_INFO);
         match num_visits {
             0 => {
                 self.api
@@ -412,7 +413,7 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
     }
     fn intro(&mut self) {
         let mut num_visits: u8;
-        if self.api.get("PROBE_ILWRATH_ENCOUNTER") != 0 {
+        if self.api.get(StoryKey::PROBE_ILWRATH_ENCOUNTER) != 0 {
             self.api.npc(i32::from(SEND_MESSAGE));
             self.api
                 .response(WHERE_YOU_COME_FROM, Handler::CombatIsInevitable, &[]);
@@ -422,10 +423,10 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
                 .response(SURRENDER, Handler::CombatIsInevitable, &[]);
             self.api
                 .response(BE_REASONABLE, Handler::CombatIsInevitable, &[]);
-        } else if (self.api.get("GLOBAL_FLAGS_AND_DATA") & (1 << 7)) != 0 {
+        } else if (self.api.get(StoryKey::GLOBAL_FLAGS_AND_DATA) & (1 << 7)) != 0 {
             self.ilwrath_home(0_u16);
-        } else if (self.api.get("GLOBAL_FLAGS_AND_DATA") & (1 << 6)) != 0 {
-            num_visits = self.api.get("ILWRATH_CHMMR_VISITS");
+        } else if (self.api.get(StoryKey::GLOBAL_FLAGS_AND_DATA) & (1 << 6)) != 0 {
+            num_visits = self.api.get(StoryKey::ILWRATH_CHMMR_VISITS);
             let res = {
                 let old = num_visits;
                 num_visits += 1;
@@ -441,26 +442,26 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
                 }
                 _ => {}
             }
-            self.api.set("ILWRATH_CHMMR_VISITS", num_visits);
+            self.api.set(StoryKey::ILWRATH_CHMMR_VISITS, num_visits);
             self.api
                 .response(WHATS_UP, Handler::CombatIsInevitable, &[]);
             self.api.response(BYE, Handler::CombatIsInevitable, &[]);
-        } else if (self.api.get("GLOBAL_FLAGS_AND_DATA") & (1 << 5)) != 0 {
-            if self.api.get("ILWRATH_FIGHT_THRADDASH") != 0 {
+        } else if (self.api.get(StoryKey::GLOBAL_FLAGS_AND_DATA) & (1 << 5)) != 0 {
+            if self.api.get(StoryKey::ILWRATH_FIGHT_THRADDASH) != 0 {
                 self.api.npc(i32::from(BIG_FUN));
-            } else if self.api.get("ILWRATH_DECEIVED") != 0 {
+            } else if self.api.get(StoryKey::ILWRATH_DECEIVED) != 0 {
                 self.api.npc(i32::from(FAST_AS_CAN));
             } else {
                 self.api.npc(i32::from(JUST_GRUNTS));
             }
             self.api.segue(0);
-        } else if (self.api.get("GLOBAL_FLAGS_AND_DATA") & (1 << 4)) != 0 {
+        } else if (self.api.get(StoryKey::GLOBAL_FLAGS_AND_DATA) & (1 << 4)) != 0 {
             self.gods_speak(0_u16);
         } else {
             self.api.segue(0);
-            if self.api.get("ILWRATH_FIGHT_THRADDASH") != 0 {
+            if self.api.get(StoryKey::ILWRATH_FIGHT_THRADDASH) != 0 {
                 self.api.npc(i32::from(HAPPY_FIGHTING_THRADDASH));
-            } else if self.api.get("ILWRATH_DECEIVED") != 0 {
+            } else if self.api.get(StoryKey::ILWRATH_DECEIVED) != 0 {
                 self.api.npc(i32::from(ON_WAY_TO_THRADDASH));
             } else {
                 self.ilwrath_space(0_u16);

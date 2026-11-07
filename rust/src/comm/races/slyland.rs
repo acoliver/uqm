@@ -210,23 +210,23 @@ mod tests {
     #[test]
     fn test_game_state_keys_exist() {
         assert!(
-            crate::state::game_state_keys::bit_range("DESTRUCT_CODE_ON_SHIP").is_some(),
+            crate::engine::StoryKey::from_name("DESTRUCT_CODE_ON_SHIP").is_some(),
             "missing game state key: DESTRUCT_CODE_ON_SHIP"
         );
         assert!(
-            crate::state::game_state_keys::bit_range("PROBE_EXHIBITED_BUG").is_some(),
+            crate::engine::StoryKey::from_name("PROBE_EXHIBITED_BUG").is_some(),
             "missing game state key: PROBE_EXHIBITED_BUG"
         );
         assert!(
-            crate::state::game_state_keys::bit_range("SLYLANDRO_PROBE_EXIT").is_some(),
+            crate::engine::StoryKey::from_name("SLYLANDRO_PROBE_EXIT").is_some(),
             "missing game state key: SLYLANDRO_PROBE_EXIT"
         );
         assert!(
-            crate::state::game_state_keys::bit_range("SLYLANDRO_PROBE_ID").is_some(),
+            crate::engine::StoryKey::from_name("SLYLANDRO_PROBE_ID").is_some(),
             "missing game state key: SLYLANDRO_PROBE_ID"
         );
         assert!(
-            crate::state::game_state_keys::bit_range("SLYLANDRO_PROBE_INFO").is_some(),
+            crate::engine::StoryKey::from_name("SLYLANDRO_PROBE_INFO").is_some(),
             "missing game state key: SLYLANDRO_PROBE_INFO"
         );
     }

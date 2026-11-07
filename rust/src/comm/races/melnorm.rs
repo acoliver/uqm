@@ -4,7 +4,7 @@ use super::encounter::EncounterApi;
 use super::script::{animation, as_comm_data};
 use crate::comm::locdata::{CColor, CLocData, CPoint, CSisState};
 use crate::comm::types::CommData;
-use crate::engine::battle::Cx;
+use crate::engine::{battle::Cx, StoryKey};
 mod api;
 mod numbers;
 mod phrases;
@@ -73,16 +73,16 @@ struct Dialogue<'a, A> {
 enum Tech {
     Module(usize, u8),
     Shield(u8),
-    State(&'static str),
+    State(StoryKey),
 }
 const TECHS: [Tech; 13] = [
     Tech::Module(10, 80),
-    Tech::State("IMPROVED_LANDER_SPEED"),
+    Tech::State(StoryKey::IMPROVED_LANDER_SPEED),
     Tech::Module(13, 80),
     Tech::Shield(0),
-    Tech::State("IMPROVED_LANDER_CARGO"),
+    Tech::State(StoryKey::IMPROVED_LANDER_CARGO),
     Tech::Module(6, 20),
-    Tech::State("IMPROVED_LANDER_SHOT"),
+    Tech::State(StoryKey::IMPROVED_LANDER_SHOT),
     Tech::Shield(1),
     Tech::Module(12, 100),
     Tech::Shield(2),
@@ -114,7 +114,7 @@ impl<A: MelnormApi> Dialogue<'_, A> {
     fn has_tech(&self, i: usize) -> bool {
         match TECHS[i] {
             Tech::Module(id, _) => self.api.module_cost(id) != 0,
-            Tech::Shield(bit) => self.api.get("LANDER_SHIELDS") & (1 << bit) != 0,
+            Tech::Shield(bit) => self.api.get(StoryKey::LANDER_SHIELDS) & (1 << bit) != 0,
             Tech::State(key) => self.api.get(key) != 0,
         }
     }
@@ -122,8 +122,8 @@ impl<A: MelnormApi> Dialogue<'_, A> {
         match TECHS[i] {
             Tech::Module(id, cost) => self.api.set_module_cost(id, cost),
             Tech::Shield(bit) => self.api.set(
-                "LANDER_SHIELDS",
-                self.api.get("LANDER_SHIELDS") | (1 << bit),
+                StoryKey::LANDER_SHIELDS,
+                self.api.get(StoryKey::LANDER_SHIELDS) | (1 << bit),
             ),
             Tech::State(key) => self.api.set(key, 1),
         }
@@ -133,14 +133,14 @@ impl<A: MelnormApi> Dialogue<'_, A> {
     }
     fn credits(&self) -> u16 {
         u16::from_le_bytes([
-            self.api.get("MELNORME_CREDIT0"),
-            self.api.get("MELNORME_CREDIT1"),
+            self.api.get(StoryKey::MELNORME_CREDIT0),
+            self.api.get(StoryKey::MELNORME_CREDIT1),
         ])
     }
     fn set_credits(&mut self, credits: u16) {
         let [lo, hi] = credits.to_le_bytes();
-        self.api.set("MELNORME_CREDIT0", lo);
-        self.api.set("MELNORME_CREDIT1", hi);
+        self.api.set(StoryKey::MELNORME_CREDIT0, lo);
+        self.api.set(StoryKey::MELNORME_CREDIT1, hi);
     }
     fn delta_credit(&mut self, delta: i16) -> bool {
         let credit = self.credits();
@@ -156,29 +156,29 @@ impl<A: MelnormApi> Dialogue<'_, A> {
         }
     }
     fn any_info(&self) -> bool {
-        self.api.get("MELNORME_EVENTS_INFO_STACK") < 8
-            || self.api.get("MELNORME_ALIEN_INFO_STACK") < 16
-            || self.api.get("MELNORME_HISTORY_INFO_STACK") < 9
+        self.api.get(StoryKey::MELNORME_EVENTS_INFO_STACK) < 8
+            || self.api.get(StoryKey::MELNORME_ALIEN_INFO_STACK) < 16
+            || self.api.get(StoryKey::MELNORME_HISTORY_INFO_STACK) < 9
     }
     fn info(&mut self, r: u16) {
         let (key, first, count) = match r {
-            BUY_CURRENT_EVENTS => ("MELNORME_EVENTS_INFO_STACK", OK_BUY_EVENT_1, 8),
-            BUY_ALIEN_RACES => ("MELNORME_ALIEN_INFO_STACK", OK_BUY_ALIEN_RACE_1, 16),
-            BUY_HISTORY => ("MELNORME_HISTORY_INFO_STACK", OK_BUY_HISTORY_1, 9),
+            BUY_CURRENT_EVENTS => (StoryKey::MELNORME_EVENTS_INFO_STACK, OK_BUY_EVENT_1, 8),
+            BUY_ALIEN_RACES => (StoryKey::MELNORME_ALIEN_INFO_STACK, OK_BUY_ALIEN_RACE_1, 16),
+            BUY_HISTORY => (StoryKey::MELNORME_HISTORY_INFO_STACK, OK_BUY_HISTORY_1, 9),
             _ => unreachable!(),
         };
         let stack = self.api.get(key);
         let phrase = first + u16::from(stack.min(count - 1));
         if r == BUY_ALIEN_RACES {
-            if phrase == OK_BUY_ALIEN_RACE_14 && self.api.get("FOUND_PLUTO_SPATHI") == 0 {
-                self.api.set("KNOW_SPATHI_PASSWORD", 1);
-                self.api.set("SPATHI_HOME_VISITS", 7);
+            if phrase == OK_BUY_ALIEN_RACE_14 && self.api.get(StoryKey::FOUND_PLUTO_SPATHI) == 0 {
+                self.api.set(StoryKey::KNOW_SPATHI_PASSWORD, 1);
+                self.api.set(StoryKey::SPATHI_HOME_VISITS, 7);
             }
             if phrase == OK_BUY_ALIEN_RACE_15 {
-                if self.api.get("KNOW_ABOUT_SHATTERED") < 2 {
-                    self.api.set("KNOW_ABOUT_SHATTERED", 2);
+                if self.api.get(StoryKey::KNOW_ABOUT_SHATTERED) < 2 {
+                    self.api.set(StoryKey::KNOW_ABOUT_SHATTERED, 2);
                 }
-                self.api.set("KNOW_SYREEN_WORLD_SHATTERED", 1);
+                self.api.set(StoryKey::KNOW_SYREEN_WORLD_SHATTERED, 1);
             }
         }
         self.api.npc(i32::from(phrase));
@@ -239,9 +239,9 @@ impl<A: MelnormApi> Dialogue<'_, A> {
             };
             let mut no_room = false;
             if needed == 0 {
-                if self.api.get("MELNORME_FUEL_PROCEDURE") == 0 {
+                if self.api.get(StoryKey::MELNORME_FUEL_PROCEDURE) == 0 {
                     self.api.npc(i32::from(BUY_FUEL_INTRO));
-                    self.api.set("MELNORME_FUEL_PROCEDURE", 1);
+                    self.api.set(StoryKey::MELNORME_FUEL_PROCEDURE, 1);
                 }
             } else if self.api.ship().fuel_on_board / 100 + needed as u32 > capacity / 100 {
                 self.api.npc(i32::from(NO_ROOM_FOR_FUEL));
@@ -274,9 +274,9 @@ impl<A: MelnormApi> Dialogue<'_, A> {
                 self.api.response(p, Handler::DoBuy, &[]);
             }
         } else if r == BUY_TECHNOLOGY || r == BUY_NEW_TECH {
-            if self.api.get("MELNORME_TECH_PROCEDURE") == 0 {
+            if self.api.get(StoryKey::MELNORME_TECH_PROCEDURE) == 0 {
                 self.api.npc(i32::from(BUY_NEW_TECH_INTRO));
-                self.api.set("MELNORME_TECH_PROCEDURE", 1);
+                self.api.set(StoryKey::MELNORME_TECH_PROCEDURE, 1);
             }
             if r == BUY_NEW_TECH {
                 let Some(i) = self.next_tech() else {
@@ -299,9 +299,9 @@ impl<A: MelnormApi> Dialogue<'_, A> {
             self.api.response(BUY_NEW_TECH, Handler::DoBuy, &[]);
             self.api.response(NO_BUY_NEW_TECH, Handler::DoBuy, &[]);
         } else if [BUY_INFO, BUY_CURRENT_EVENTS, BUY_ALIEN_RACES, BUY_HISTORY].contains(&r) {
-            if self.api.get("MELNORME_INFO_PROCEDURE") == 0 {
+            if self.api.get(StoryKey::MELNORME_INFO_PROCEDURE) == 0 {
                 self.api.npc(i32::from(BUY_INFO_INTRO));
-                self.api.set("MELNORME_INFO_PROCEDURE", 1);
+                self.api.set(StoryKey::MELNORME_INFO_PROCEDURE, 1);
             } else if r == BUY_INFO {
                 self.api.npc(i32::from(OK_BUY_INFO));
             } else {
@@ -317,9 +317,9 @@ impl<A: MelnormApi> Dialogue<'_, A> {
                 return;
             }
             for (key, n, p) in [
-                ("MELNORME_EVENTS_INFO_STACK", 8, BUY_CURRENT_EVENTS),
-                ("MELNORME_ALIEN_INFO_STACK", 16, BUY_ALIEN_RACES),
-                ("MELNORME_HISTORY_INFO_STACK", 9, BUY_HISTORY),
+                (StoryKey::MELNORME_EVENTS_INFO_STACK, 8, BUY_CURRENT_EVENTS),
+                (StoryKey::MELNORME_ALIEN_INFO_STACK, 16, BUY_ALIEN_RACES),
+                (StoryKey::MELNORME_HISTORY_INFO_STACK, 9, BUY_HISTORY),
             ] {
                 if self.api.get(key) < n {
                     self.api.response(p, Handler::DoBuy, &[]);
@@ -338,10 +338,10 @@ impl<A: MelnormApi> Dialogue<'_, A> {
     }
     fn new_rainbows(&self) -> u8 {
         let mask = u16::from_le_bytes([
-            self.api.get("RAINBOW_WORLD0"),
-            self.api.get("RAINBOW_WORLD1"),
+            self.api.get(StoryKey::RAINBOW_WORLD0),
+            self.api.get(StoryKey::RAINBOW_WORLD1),
         ]);
-        (mask.count_ones() as u8).wrapping_sub(self.api.get("MELNORME_RAINBOW_COUNT"))
+        (mask.count_ones() as u8).wrapping_sub(self.api.get(StoryKey::MELNORME_RAINBOW_COUNT))
     }
     fn do_sell(&mut self, r: u16) {
         let mut rainbows = self.new_rainbows();
@@ -391,8 +391,8 @@ impl<A: MelnormApi> Dialogue<'_, A> {
                 self.api.number(i32::from(added));
                 self.api.npc(i32::from(SOLD_RAINBOW_LOCATIONS3));
                 self.api.set(
-                    "MELNORME_RAINBOW_COUNT",
-                    rainbows.wrapping_add(self.api.get("MELNORME_RAINBOW_COUNT")),
+                    StoryKey::MELNORME_RAINBOW_COUNT,
+                    rainbows.wrapping_add(self.api.get(StoryKey::MELNORME_RAINBOW_COUNT)),
                 );
                 rainbows = 0;
                 self.delta_credit(added);
@@ -422,18 +422,18 @@ impl<A: MelnormApi> Dialogue<'_, A> {
     }
     fn nature_of_conversation(&mut self, mut r: u16) {
         if r == GET_ON_WITH_BUSINESS {
-            self.api.set("MELNORME_YACK_STACK2", 5);
+            self.api.set(StoryKey::MELNORME_YACK_STACK2, 5);
             r = 0;
         }
         self.delta_credit(0);
         let credit = self.credits();
         if r == 0 {
-            let stack = self.api.get("MELNORME_YACK_STACK2").wrapping_sub(5);
+            let stack = self.api.get(StoryKey::MELNORME_YACK_STACK2).wrapping_sub(5);
             self.api.npc(i32::from(
                 HELLO_AND_DOWN_TO_BUSINESS_1 + u16::from(stack.min(9)),
             ));
             self.api.set(
-                "MELNORME_YACK_STACK2",
+                StoryKey::MELNORME_YACK_STACK2,
                 if stack < 9 {
                     stack + 6
                 } else {
@@ -446,8 +446,8 @@ impl<A: MelnormApi> Dialogue<'_, A> {
             || credit != 0
             || self.new_rainbows() != 0
         {
-            if self.api.get("TRADED_WITH_MELNORME") == 0 {
-                self.api.set("TRADED_WITH_MELNORME", 1);
+            if self.api.get(StoryKey::TRADED_WITH_MELNORME) == 0 {
+                self.api.set(StoryKey::TRADED_WITH_MELNORME, 1);
                 self.api.npc(i32::from(TRADING_INFO));
             }
             if r == 0 {
@@ -456,14 +456,14 @@ impl<A: MelnormApi> Dialogue<'_, A> {
                 self.api.fade_palette(1, 420);
                 self.api.talk_segue(u16::MAX);
             } else if r == WHY_TURNED_PURPLE {
-                self.api.set("WHY_MELNORME_PURPLE", 1);
+                self.api.set(StoryKey::WHY_MELNORME_PURPLE, 1);
                 self.api.npc(i32::from(TURNED_PURPLE_BECAUSE));
             } else if r == DONE_SELLING {
                 self.api.npc(i32::from(OK_DONE_SELLING));
             } else if r == DONE_BUYING {
                 self.api.npc(i32::from(OK_DONE_BUYING));
             }
-            if self.api.get("WHY_MELNORME_PURPLE") == 0 {
+            if self.api.get(StoryKey::WHY_MELNORME_PURPLE) == 0 {
                 self.api
                     .response(WHY_TURNED_PURPLE, Handler::NatureOfConversation, &[]);
             }
@@ -474,17 +474,17 @@ impl<A: MelnormApi> Dialogue<'_, A> {
                 self.api.response(SELL, Handler::DoSell, &[]);
             }
             self.api.response(GOODBYE, Handler::ExitConversation, &[]);
-        } else if self.api.get("MELNORME_RESCUE_REFUSED") != 0 {
+        } else if self.api.get(StoryKey::MELNORME_RESCUE_REFUSED) != 0 {
             self.api.npc(i32::from(CHANGED_MIND));
             self.api.response(YES_CHANGED_MIND, Handler::DoRescue, &[]);
             self.api
                 .response(NO_CHANGED_MIND, Handler::ExitConversation, &[]);
         } else {
-            let n = self.api.get("MELNORME_RESCUE_COUNT");
+            let n = self.api.get(StoryKey::MELNORME_RESCUE_COUNT);
             self.api
                 .npc(i32::from(RESCUE_EXPLANATION + u16::from(n.min(5))));
             if n < 5 {
-                self.api.set("MELNORME_RESCUE_COUNT", n + 1);
+                self.api.set(StoryKey::MELNORME_RESCUE_COUNT, n + 1);
             }
             self.api.npc(i32::from(SHOULD_WE_HELP_YOU));
             self.api.response(YES_HELP, Handler::DoRescue, &[]);
@@ -492,7 +492,7 @@ impl<A: MelnormApi> Dialogue<'_, A> {
         }
     }
     fn yack0_respond(&mut self) {
-        match self.api.get("MELNORME_YACK_STACK0") {
+        match self.api.get(StoryKey::MELNORME_YACK_STACK0) {
             0 => {
                 let mut fragments = vec![i32::from(WE_ARE_FROM_ALLIANCE0)];
                 fragments.extend(self.api.alliance_fragments(NAME_1));
@@ -506,7 +506,7 @@ impl<A: MelnormApi> Dialogue<'_, A> {
     fn do_first_meeting(&mut self, r: u16) {
         let mut last_stack = 0;
         if r == 0 {
-            let mut n = self.api.get("MELNORME_BUSINESS_COUNT");
+            let mut n = self.api.get(StoryKey::MELNORME_BUSINESS_COUNT);
             match n {
                 0..=1 => {
                     self.api.npc(1 + i32::from(n));
@@ -517,38 +517,38 @@ impl<A: MelnormApi> Dialogue<'_, A> {
                     n = n.wrapping_add(1);
                 }
             }
-            self.api.set("MELNORME_BUSINESS_COUNT", n);
+            self.api.set(StoryKey::MELNORME_BUSINESS_COUNT, n);
         } else if r == WE_ARE_FROM_ALLIANCE0 {
-            self.api.set("MELNORME_YACK_STACK0", 1);
+            self.api.set(StoryKey::MELNORME_YACK_STACK0, 1);
             self.api.npc(i32::from(KNOW_OF_YOU));
         } else if r == HOW_KNOW {
-            self.api.set("MELNORME_YACK_STACK0", 2);
+            self.api.set(StoryKey::MELNORME_YACK_STACK0, 2);
             self.api.npc(i32::from(KNOW_BECAUSE));
         } else if r == WHAT_ABOUT_YOURSELVES {
             last_stack = 1;
-            self.api.set("MELNORME_YACK_STACK1", 1);
+            self.api.set(StoryKey::MELNORME_YACK_STACK1, 1);
             self.api.npc(i32::from(NO_TALK_ABOUT_OURSELVES));
         } else if r == WHAT_FACTORS {
             last_stack = 1;
-            self.api.set("MELNORME_YACK_STACK1", 2);
+            self.api.set(StoryKey::MELNORME_YACK_STACK1, 2);
             self.api.npc(i32::from(FACTORS_ARE));
         } else if r == WHAT_ABOUT_UNIVERSE {
             last_stack = 2;
-            self.api.set("MELNORME_YACK_STACK2", 1);
+            self.api.set(StoryKey::MELNORME_YACK_STACK2, 1);
             self.api.npc(i32::from(NO_FREE_LUNCH));
         } else if r == GIVING_IS_GOOD_1 {
             last_stack = 2;
-            self.api.set("MELNORME_YACK_STACK2", 2);
+            self.api.set(StoryKey::MELNORME_YACK_STACK2, 2);
             self.api.npc(i32::from(GIVING_IS_BAD_1));
         } else if r == GIVING_IS_GOOD_2 {
             last_stack = 2;
-            self.api.set("MELNORME_YACK_STACK2", 3);
+            self.api.set(StoryKey::MELNORME_YACK_STACK2, 3);
             self.api.npc(i32::from(GIVING_IS_BAD_2));
         } else if r == YES_REALLY_TESTING {
             self.api.fade_palette(0, 420);
             self.api.npc(i32::from(TEST_RESULTS));
         } else if r == WE_APOLOGIZE {
-            self.api.set("MELNORME_ANGER", 0);
+            self.api.set(StoryKey::MELNORME_ANGER, 0);
             self.api.fade_palette(0, 420);
             self.api.npc(i32::from(APOLOGY_ACCEPTED));
         }
@@ -620,11 +620,11 @@ impl<A: MelnormApi> Dialogue<'_, A> {
             self.api.npc(i32::from(OK_NO_TRADE_NOW_BYE));
         } else if r == YOURE_ON {
             self.api.npc(i32::from(YOU_GIVE_US_NO_CHOICE));
-            self.api.set("MELNORME_ANGER", 1_u8);
+            self.api.set(StoryKey::MELNORME_ANGER, 1_u8);
             self.api.segue(1);
         } else if r == SO_WE_CAN_ATTACK {
             self.api.npc(i32::from(DECEITFUL_HUMAN));
-            self.api.set("MELNORME_ANGER", 2_u8);
+            self.api.set(StoryKey::MELNORME_ANGER, 2_u8);
             self.api.segue(1);
         } else if r == BYE_MELNORME_SLIGHTLY_ANGRY {
             self.api.npc(i32::from(MELNORME_SLIGHTLY_ANGRY_GOODBYE));
@@ -632,13 +632,13 @@ impl<A: MelnormApi> Dialogue<'_, A> {
             if self.ship_worth() < 80 {
                 self.api.npc(i32::from(NOT_WORTH_STRIPPING));
             } else {
-                self.api.set("MELNORME_ANGER", 0_u8);
+                self.api.set(StoryKey::MELNORME_ANGER, 0_u8);
                 self.strip_ship(65535);
                 self.api.npc(i32::from(FAIR_JUSTICE));
             }
         } else if r == FIGHT_SOME_MORE {
             self.api.npc(i32::from(OK_FIGHT_SOME_MORE));
-            self.api.set("MELNORME_ANGER", 3_u8);
+            self.api.set(StoryKey::MELNORME_ANGER, 3_u8);
             self.api.segue(1);
         } else if r == BYE_MELNORME_PISSED_OFF {
             self.api.npc(i32::from(MELNORME_PISSED_OFF_GOODBYE));
@@ -651,10 +651,10 @@ impl<A: MelnormApi> Dialogue<'_, A> {
             self.strip_ship(0);
             self.api.npc(i32::from(HAPPY_TO_HAVE_RESCUED));
         } else if r == LEAVE_IT {
-            self.api.set("MELNORME_RESCUE_REFUSED", 1_u8);
+            self.api.set(StoryKey::MELNORME_RESCUE_REFUSED, 1_u8);
             self.api.npc(i32::from(MAYBE_SEE_YOU_LATER));
         } else if r == NO_HELP {
-            self.api.set("MELNORME_RESCUE_REFUSED", 1_u8);
+            self.api.set(StoryKey::MELNORME_RESCUE_REFUSED, 1_u8);
             self.api.npc(i32::from(GOODBYE_AND_GOODLUCK));
         } else if r == NO_CHANGED_MIND {
             self.api.npc(i32::from(GOODBYE_AND_GOODLUCK_AGAIN));
@@ -665,10 +665,10 @@ impl<A: MelnormApi> Dialogue<'_, A> {
     fn do_bluster(&mut self, r: u16) {
         if r == TRADE_IS_FOR_THE_WEAK {
             self.api.fade_palette(2, 420);
-            self.api.set("MELNORME_YACK_STACK2", 4_u8);
+            self.api.set(StoryKey::MELNORME_YACK_STACK2, 4_u8);
             self.api.npc(i32::from(WERE_NOT_AFRAID));
         } else if r == WHY_BLUE_LIGHT {
-            self.api.set("WHY_MELNORME_BLUE", 1_u8);
+            self.api.set(StoryKey::WHY_MELNORME_BLUE, 1_u8);
             self.api.npc(i32::from(BLUE_IS_MAD));
         } else if r == WE_STRONG_1 {
             self.session.local_stack0 = 1;
@@ -683,7 +683,7 @@ impl<A: MelnormApi> Dialogue<'_, A> {
             self.session.local_stack1 = 1;
             self.api.npc(i32::from(REALLY_TESTING));
         }
-        if !(self.api.get("WHY_MELNORME_BLUE") != 0) {
+        if !(self.api.get(StoryKey::WHY_MELNORME_BLUE) != 0) {
             self.api.response(WHY_BLUE_LIGHT, Handler::DoBluster, &[]);
         }
         match self.session.local_stack0 {
@@ -711,7 +711,7 @@ impl<A: MelnormApi> Dialogue<'_, A> {
         self.api.response(YOURE_ON, Handler::ExitConversation, &[]);
     }
     fn yack1_respond(&mut self) {
-        match self.api.get("MELNORME_YACK_STACK1") {
+        match self.api.get(StoryKey::MELNORME_YACK_STACK1) {
             0 => {
                 self.api
                     .response(WHAT_ABOUT_YOURSELVES, Handler::DoFirstMeeting, &[]);
@@ -730,7 +730,7 @@ impl<A: MelnormApi> Dialogue<'_, A> {
         }
     }
     fn yack2_respond(&mut self) {
-        match self.api.get("MELNORME_YACK_STACK2") {
+        match self.api.get(StoryKey::MELNORME_YACK_STACK2) {
             0 => {
                 self.api
                     .response(WHAT_ABOUT_UNIVERSE, Handler::DoFirstMeeting, &[]);
@@ -753,7 +753,7 @@ impl<A: MelnormApi> Dialogue<'_, A> {
     fn do_melnorme_miffed(&mut self, r: u16) {
         if r == 0 {
             let mut miffed_count: u8;
-            miffed_count = self.api.get("MELNORME_MIFFED_COUNT");
+            miffed_count = self.api.get(StoryKey::MELNORME_MIFFED_COUNT);
             let res = {
                 let old = miffed_count;
                 miffed_count += 1;
@@ -771,22 +771,22 @@ impl<A: MelnormApi> Dialogue<'_, A> {
                     self.api.npc(i32::from(HELLO_SLIGHTLY_ANGRY_3));
                 }
             }
-            self.api.set("MELNORME_MIFFED_COUNT", miffed_count);
+            self.api.set(StoryKey::MELNORME_MIFFED_COUNT, miffed_count);
             self.api.fade_palette(2, 420);
         } else if r == EXPLORE_RELATIONSHIP {
-            self.api.set("MELNORME_YACK_STACK3", 1_u8);
+            self.api.set(StoryKey::MELNORME_YACK_STACK3, 1_u8);
             self.api.npc(i32::from(EXAMPLE_OF_RELATIONSHIP));
         } else if r == EXCUSE_1 {
-            self.api.set("MELNORME_YACK_STACK3", 2_u8);
+            self.api.set(StoryKey::MELNORME_YACK_STACK3, 2_u8);
             self.api.npc(i32::from(NO_EXCUSE_1));
         } else if r == EXCUSE_2 {
-            self.api.set("MELNORME_YACK_STACK3", 3_u8);
+            self.api.set(StoryKey::MELNORME_YACK_STACK3, 3_u8);
             self.api.npc(i32::from(NO_EXCUSE_2));
         } else if r == EXCUSE_3 {
-            self.api.set("MELNORME_YACK_STACK3", 4_u8);
+            self.api.set(StoryKey::MELNORME_YACK_STACK3, 4_u8);
             self.api.npc(i32::from(NO_EXCUSE_3));
         }
-        match self.api.get("MELNORME_YACK_STACK3") {
+        match self.api.get(StoryKey::MELNORME_YACK_STACK3) {
             0 => {
                 self.api
                     .response(EXPLORE_RELATIONSHIP, Handler::DoMelnormeMiffed, &[]);
@@ -812,7 +812,7 @@ impl<A: MelnormApi> Dialogue<'_, A> {
     fn do_melnorme_pissed(&mut self, r: u16) {
         if r == 0 {
             let mut pissed_count: u8;
-            pissed_count = self.api.get("MELNORME_PISSED_COUNT");
+            pissed_count = self.api.get(StoryKey::MELNORME_PISSED_COUNT);
             let res = {
                 let old = pissed_count;
                 pissed_count += 1;
@@ -830,16 +830,16 @@ impl<A: MelnormApi> Dialogue<'_, A> {
                     self.api.npc(i32::from(HELLO_PISSED_OFF_3));
                 }
             }
-            self.api.set("MELNORME_PISSED_COUNT", pissed_count);
+            self.api.set(StoryKey::MELNORME_PISSED_COUNT, pissed_count);
             self.api.fade_palette(2, 420);
         } else if r == BEG_FORGIVENESS {
-            self.api.set("MELNORME_YACK_STACK4", 1_u8);
+            self.api.set(StoryKey::MELNORME_YACK_STACK4, 1_u8);
             self.api.npc(i32::from(LOTS_TO_MAKE_UP_FOR));
         } else if r == YOU_ARE_SO_RIGHT {
-            self.api.set("MELNORME_YACK_STACK4", 2_u8);
+            self.api.set(StoryKey::MELNORME_YACK_STACK4, 2_u8);
             self.api.npc(i32::from(ONE_LAST_CHANCE));
         }
-        match self.api.get("MELNORME_YACK_STACK4") {
+        match self.api.get(StoryKey::MELNORME_YACK_STACK4) {
             0 => {
                 self.api
                     .response(BEG_FORGIVENESS, Handler::DoMelnormePissed, &[]);
@@ -862,7 +862,7 @@ impl<A: MelnormApi> Dialogue<'_, A> {
     fn do_melnorme_hate(&mut self, r: u16) {
         let mut hate_count: u8;
         let _ = r;
-        hate_count = self.api.get("MELNORME_HATE_COUNT");
+        hate_count = self.api.get(StoryKey::MELNORME_HATE_COUNT);
         let res = {
             let old = hate_count;
             hate_count += 1;
@@ -880,7 +880,7 @@ impl<A: MelnormApi> Dialogue<'_, A> {
                 self.api.npc(i32::from(HELLO_HATE_YOU_3));
             }
         }
-        self.api.set("MELNORME_HATE_COUNT", hate_count);
+        self.api.set(StoryKey::MELNORME_HATE_COUNT, hate_count);
         self.api.fade_palette(2, 420);
         self.api.response(
             WELL_IF_THATS_THE_WAY_YOU_FEEL,
@@ -892,13 +892,13 @@ impl<A: MelnormApi> Dialogue<'_, A> {
     }
     fn intro(&mut self) {
         self.session.prev_msg_mode = self.api.status_mode(3);
-        if self.api.get("MET_MELNORME") == 0 {
-            self.api.set("MET_MELNORME", 1_u8);
+        if self.api.get(StoryKey::MET_MELNORME) == 0 {
+            self.api.set(StoryKey::MET_MELNORME, 1_u8);
             self.do_first_meeting(0);
         } else {
-            match self.api.get("MELNORME_ANGER") {
+            match self.api.get(StoryKey::MELNORME_ANGER) {
                 0 => {
-                    if self.api.get("MELNORME_YACK_STACK2") <= 5 {
+                    if self.api.get(StoryKey::MELNORME_YACK_STACK2) <= 5 {
                         self.do_first_meeting(0);
                     } else {
                         self.nature_of_conversation(0);

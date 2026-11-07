@@ -1,6 +1,7 @@
 use super::api::UrquanApi;
 use super::phrases::{general_info, visit_phrase};
 use super::*;
+use crate::engine::StoryKey;
 
 pub(super) struct Dialogue<'a, A> {
     pub(super) api: &'a mut A,
@@ -24,11 +25,11 @@ impl<A: UrquanApi> Dialogue<'_, A> {
         match response as u32 {
             YOU_MUST_SURRENDER => self.api.npc(NOPE as i32),
             WHATS_UP_1 | WHATS_UP_2 | WHATS_UP_3 | WHATS_UP_4 => {
-                let (phrase, next) = general_info(self.api.get("URQUAN_INFO"));
+                let (phrase, next) = general_info(self.api.get(StoryKey::URQUAN_INFO));
                 if let Some(phrase) = phrase {
                     self.api.npc(phrase as i32);
                 }
-                self.api.set("URQUAN_INFO", next);
+                self.api.set(StoryKey::URQUAN_INFO, next);
             }
             I_WONT_SURRENDER => self.api.npc(BAD_CHOICE as i32),
             I_WILL_SURRENDER => {
@@ -43,17 +44,17 @@ impl<A: UrquanApi> Dialogue<'_, A> {
             BYE_SUB_HYPNO => self.api.npc(GOODBYE_AND_DIE_SUB_HYPNO as i32),
             BYE_INIT_HYPNO => {
                 self.api.npc(GOODBYE_AND_DIE_INIT_HYPNO as i32);
-                self.api.set("URQUAN_HYPNO_VISITS", 1);
+                self.api.set(StoryKey::URQUAN_HYPNO_VISITS, 1);
             }
             TERRAN_AMPHIBIAN | TALKING_PET_ON_STEROIDS => {
                 self.api.npc(BAD_NEWS as i32);
                 self.api.segue(0);
-                self.api.set("URQUAN_HYPNO_VISITS", 1);
+                self.api.set(StoryKey::URQUAN_HYPNO_VISITS, 1);
             }
             FALLING_ASLEEP | SOMEONE_ELSE_CONTROLLED => {
                 self.api.npc(SOUNDS_FAMILIAR as i32);
                 self.api.segue(0);
-                self.api.set("URQUAN_HYPNO_VISITS", 1);
+                self.api.set(StoryKey::URQUAN_HYPNO_VISITS, 1);
             }
             _ => {}
         }
@@ -70,14 +71,14 @@ impl<A: UrquanApi> Dialogue<'_, A> {
         }
         if response == KEY_PHRASE as i32 {
             self.api.npc(URQUAN_STORY as i32);
-            self.api.set("KNOW_URQUAN_STORY", 2);
+            self.api.set(StoryKey::KNOW_URQUAN_STORY, 2);
         }
         self.api
             .response(YOU_MUST_SURRENDER as u16, Handler::Combat, &[]);
-        if self.api.get("KNOW_URQUAN_STORY") == 1 {
+        if self.api.get(StoryKey::KNOW_URQUAN_STORY) == 1 {
             self.api.response(KEY_PHRASE as u16, Handler::Normal, &[]);
         }
-        let info = self.api.get("URQUAN_INFO");
+        let info = self.api.get(StoryKey::URQUAN_INFO);
         if info < 4 {
             self.api.response(
                 (WHATS_UP_1 + u32::from(info) * 2) as u16,
@@ -93,7 +94,7 @@ impl<A: UrquanApi> Dialogue<'_, A> {
     fn mention_compulsion(&mut self, response: i32) {
         if response == COMPULSION as i32 {
             self.api.npc(WHAT_COMPULSION as i32);
-            self.api.set("MENTIONED_PET_COMPULSION", 1);
+            self.api.set(StoryKey::MENTIONED_PET_COMPULSION, 1);
         } else if response == POSSESSED_BY_DEVIL as i32 {
             self.api.npc(STUPID_DEVIL as i32);
             self.api.disable(POSSESSED_BY_DEVIL as u16);
@@ -148,7 +149,7 @@ impl<A: UrquanApi> Dialogue<'_, A> {
     }
 
     fn hypno(&mut self, response: i32) {
-        let subsequent = self.api.get("URQUAN_HYPNO_VISITS") != 0;
+        let subsequent = self.api.get(StoryKey::URQUAN_HYPNO_VISITS) != 0;
         if !subsequent {
             if response == 0 {
                 self.api.npc(INIT_URQUAN_WAKE_UP as i32);
@@ -186,7 +187,7 @@ impl<A: UrquanApi> Dialogue<'_, A> {
                     self.api.response(phrase as u16, Handler::Hypno, &[]);
                 }
             }
-            if self.api.get("MENTIONED_PET_COMPULSION") == 0 {
+            if self.api.get(StoryKey::MENTIONED_PET_COMPULSION) == 0 {
                 self.api
                     .response(COMPULSION as u16, Handler::MentionCompulsion, &[]);
             }
@@ -217,15 +218,15 @@ impl<A: UrquanApi> Dialogue<'_, A> {
 
     pub(super) fn initialize(&mut self) {
         let activity = self.api.activity() as u8;
-        let peaceful = self.api.get("PLAYER_HYPNOTIZED") != 0
+        let peaceful = self.api.get(StoryKey::PLAYER_HYPNOTIZED) != 0
             || activity == crate::comm::dispatch::WON_LAST_BATTLE as u8
             || (activity == crate::comm::dispatch::IN_INTERPLANETARY as u8
-                && self.api.group_battle("URQUAN_PROBE_GRPOFFS0"));
+                && self.api.group_battle(StoryKey::URQUAN_PROBE_GRPOFFS0));
         self.api.segue(if peaceful { 0 } else { 1 });
     }
 
     pub(super) fn post(&mut self) {
-        self.api.set("PLAYER_HYPNOTIZED", 0);
+        self.api.set(StoryKey::PLAYER_HYPNOTIZED, 0);
     }
 
     pub(super) fn intro(&mut self) {
@@ -236,38 +237,40 @@ impl<A: UrquanApi> Dialogue<'_, A> {
             return;
         }
         if activity == crate::comm::dispatch::IN_INTERPLANETARY as u8
-            && self.api.group_battle("URQUAN_PROBE_GRPOFFS0")
+            && self.api.group_battle(StoryKey::URQUAN_PROBE_GRPOFFS0)
         {
             self.api.npc(SEND_MESSAGE as i32);
-            self.api.set("PROBE_MESSAGE_DELIVERED", 1);
+            self.api.set(StoryKey::PROBE_MESSAGE_DELIVERED, 1);
             return;
         }
-        if self.api.get("PLAYER_HYPNOTIZED") != 0 {
+        if self.api.get(StoryKey::PLAYER_HYPNOTIZED) != 0 {
             self.api.intro_mode(3, 840 * 5);
             self.hypno(0);
             return;
         }
-        if self.api.get("URQUAN_SENSES_EVIL") == 0 && self.api.get("TALKING_PET_ON_SHIP") != 0 {
+        if self.api.get(StoryKey::URQUAN_SENSES_EVIL) == 0
+            && self.api.get(StoryKey::TALKING_PET_ON_SHIP) != 0
+        {
             self.api.npc(SENSE_EVIL as i32);
-            self.api.set("URQUAN_SENSES_EVIL", 1);
+            self.api.set(StoryKey::URQUAN_SENSES_EVIL, 1);
         }
         if activity == crate::comm::dispatch::IN_INTERPLANETARY as u8
-            && self.api.group_battle("COLONY_GRPOFFS0")
+            && self.api.group_battle(StoryKey::COLONY_GRPOFFS0)
         {
             self.api.npc(CAUGHT_YA as i32);
             self.api.segue(1);
             return;
         }
         if activity == crate::comm::dispatch::IN_INTERPLANETARY as u8
-            && self.api.group_battle("SAMATRA_GRPOFFS0")
+            && self.api.group_battle(StoryKey::SAMATRA_GRPOFFS0)
         {
             self.api.npc(HELLO_SAMATRA as i32);
-            self.api.set("AWARE_OF_SAMATRA", 1);
+            self.api.set(StoryKey::AWARE_OF_SAMATRA, 1);
             self.api.segue(1);
             return;
         }
-        let visits = self.api.get("URQUAN_VISITS");
-        if self.api.get("KOHR_AH_FRENZY") == 0 {
+        let visits = self.api.get(StoryKey::URQUAN_VISITS);
+        if self.api.get(StoryKey::KOHR_AH_FRENZY) == 0 {
             let (phrase, next) = visit_phrase(visits, 4);
             if let Some(index) = phrase {
                 self.api.npc(
@@ -281,7 +284,7 @@ impl<A: UrquanApi> Dialogue<'_, A> {
                 );
             }
             self.normal(0);
-            self.api.set("URQUAN_VISITS", next);
+            self.api.set(StoryKey::URQUAN_VISITS, next);
         } else {
             let (_, next) = visit_phrase(visits, 1);
             match visits {
@@ -295,7 +298,7 @@ impl<A: UrquanApi> Dialogue<'_, A> {
                 }
                 _ => {}
             }
-            self.api.set("URQUAN_VISITS", next);
+            self.api.set(StoryKey::URQUAN_VISITS, next);
         }
     }
 }
@@ -316,7 +319,7 @@ mod tests {
     #[test]
     fn normal_greeting_offers_surrender_story_and_visit_specific_information() {
         let mut api = Api::default();
-        api.put("KNOW_URQUAN_STORY", 1);
+        api.put(StoryKey::KNOW_URQUAN_STORY, 1);
         Dialogue { api: &mut api }.normal(0);
         assert_eq!(
             offered(&api),
@@ -341,7 +344,7 @@ mod tests {
         ] {
             Dialogue { api: &mut api }.combat(WHATS_UP_1 as i32);
             assert_eq!(api.spoken().last(), Some(&(expected as i32)));
-            assert_eq!(api.get("URQUAN_INFO"), count);
+            assert_eq!(api.get(StoryKey::URQUAN_INFO), count);
         }
     }
 
@@ -368,28 +371,28 @@ mod tests {
         };
         api.world
             .group_battles
-            .insert("URQUAN_PROBE_GRPOFFS0".into());
+            .insert(StoryKey::URQUAN_PROBE_GRPOFFS0);
         Dialogue { api: &mut api }.intro();
         assert_eq!(api.spoken(), [SEND_MESSAGE as i32]);
-        assert_eq!(api.get("PROBE_MESSAGE_DELIVERED"), 1);
+        assert_eq!(api.get(StoryKey::PROBE_MESSAGE_DELIVERED), 1);
         assert!(offered(&api).is_empty());
     }
 
     #[test]
     fn first_normal_intro_senses_pet_and_updates_visits() {
         let mut api = Api::default();
-        api.put("TALKING_PET_ON_SHIP", 1);
+        api.put(StoryKey::TALKING_PET_ON_SHIP, 1);
         Dialogue { api: &mut api }.intro();
         assert_eq!(api.spoken(), [SENSE_EVIL as i32, INIT_HELLO as i32]);
-        assert_eq!(api.get("URQUAN_SENSES_EVIL"), 1);
-        assert_eq!(api.get("URQUAN_VISITS"), 1);
+        assert_eq!(api.get(StoryKey::URQUAN_SENSES_EVIL), 1);
+        assert_eq!(api.get(StoryKey::URQUAN_VISITS), 1);
         assert!(offered(&api).contains(&(YOU_MUST_SURRENDER as u16)));
     }
 
     #[test]
     fn hypnotized_intro_fades_in_then_offers_initial_questions() {
         let mut api = Api::default();
-        api.put("PLAYER_HYPNOTIZED", 1);
+        api.put(StoryKey::PLAYER_HYPNOTIZED, 1);
         Dialogue { api: &mut api }.intro();
         assert_eq!(api.world.intro_modes, [(3, 840 * 5)]);
         assert_eq!(api.spoken(), [INIT_URQUAN_WAKE_UP as i32]);
@@ -410,7 +413,7 @@ mod tests {
         let mut api = Api::default();
         Dialogue { api: &mut api }.mention_compulsion(COMPULSION as i32);
         assert_eq!(api.spoken(), [WHAT_COMPULSION as i32]);
-        assert_eq!(api.get("MENTIONED_PET_COMPULSION"), 1);
+        assert_eq!(api.get(StoryKey::MENTIONED_PET_COMPULSION), 1);
         assert_eq!(
             offered(&api),
             [
@@ -440,11 +443,11 @@ mod tests {
             activity: crate::comm::dispatch::IN_INTERPLANETARY,
             ..Api::default()
         };
-        api.world.group_battles.insert("COLONY_GRPOFFS0".into());
+        api.world.group_battles.insert(StoryKey::COLONY_GRPOFFS0);
         Dialogue { api: &mut api }.intro();
         assert_eq!(api.spoken(), [CAUGHT_YA as i32]);
         assert_eq!(api.segue, 1);
-        assert_eq!(api.get("AWARE_OF_SAMATRA"), 0);
+        assert_eq!(api.get(StoryKey::AWARE_OF_SAMATRA), 0);
     }
 
     #[test]
@@ -453,20 +456,20 @@ mod tests {
             activity: crate::comm::dispatch::IN_INTERPLANETARY,
             ..Api::default()
         };
-        api.world.group_battles.insert("SAMATRA_GRPOFFS0".into());
+        api.world.group_battles.insert(StoryKey::SAMATRA_GRPOFFS0);
         Dialogue { api: &mut api }.intro();
         assert_eq!(api.spoken(), [HELLO_SAMATRA as i32]);
-        assert_eq!(api.get("AWARE_OF_SAMATRA"), 1);
+        assert_eq!(api.get(StoryKey::AWARE_OF_SAMATRA), 1);
         assert_eq!(api.segue, 1);
     }
 
     #[test]
     fn first_frenzy_visit_offers_enabled_loser_questions_and_advances_byte_counter() {
         let mut api = Api::default();
-        api.put("KOHR_AH_FRENZY", 1);
+        api.put(StoryKey::KOHR_AH_FRENZY, 1);
         Dialogue { api: &mut api }.intro();
         assert_eq!(api.spoken(), [INIT_FLEE_HUMAN as i32]);
-        assert_eq!(api.get("URQUAN_VISITS"), 1);
+        assert_eq!(api.get(StoryKey::URQUAN_VISITS), 1);
         assert_eq!(
             offered(&api),
             [
@@ -486,7 +489,7 @@ mod tests {
         };
         api.world
             .group_battles
-            .insert("URQUAN_PROBE_GRPOFFS0".into());
+            .insert(StoryKey::URQUAN_PROBE_GRPOFFS0);
         Dialogue { api: &mut api }.initialize();
         assert_eq!(api.segue, 0);
 
@@ -498,18 +501,18 @@ mod tests {
     #[test]
     fn post_encounter_clears_hypnotized_state() {
         let mut api = Api::default();
-        api.put("PLAYER_HYPNOTIZED", 1);
+        api.put(StoryKey::PLAYER_HYPNOTIZED, 1);
         Dialogue { api: &mut api }.post();
-        assert_eq!(api.get("PLAYER_HYPNOTIZED"), 0);
+        assert_eq!(api.get(StoryKey::PLAYER_HYPNOTIZED), 0);
     }
     #[test]
     fn later_frenzy_visits_increment_without_repeating_the_second_greeting() {
         let mut api = Api::default();
-        api.put("KOHR_AH_FRENZY", 1);
-        api.put("URQUAN_VISITS", 2);
+        api.put(StoryKey::KOHR_AH_FRENZY, 1);
+        api.put(StoryKey::URQUAN_VISITS, 2);
         Dialogue { api: &mut api }.intro();
         assert!(api.spoken().is_empty());
         assert!(offered(&api).is_empty());
-        assert_eq!(api.get("URQUAN_VISITS"), 3);
+        assert_eq!(api.get(StoryKey::URQUAN_VISITS), 3);
     }
 }

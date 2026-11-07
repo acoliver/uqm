@@ -2,7 +2,7 @@
 use super::script::{animation, as_comm_data, GLOBAL_PLAYER_NAME, GLOBAL_SHIP_NAME};
 use crate::comm::locdata::{CColor, CLocData, CPoint};
 use crate::comm::types::CommData;
-use crate::engine::battle::Cx;
+use crate::engine::{battle::Cx, StoryKey};
 mod phrases;
 use phrases::*;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -40,21 +40,21 @@ impl<A: PkunkApi> Dialogue<'_, A> {
     }
     fn ships_ready(&mut self) -> bool {
         let (year, month, day) = self.api.date();
-        self.api.get("PKUNK_MANNER") == 3
+        self.api.get(StoryKey::PKUNK_MANNER) == 3
             && (i32::from(year) - 2155, month, day)
                 >= (
-                    i32::from(self.api.get("PKUNK_SHIP_YEAR")),
-                    u16::from(self.api.get("PKUNK_SHIP_MONTH")),
-                    u16::from(self.api.get("PKUNK_SHIP_DAY")),
+                    i32::from(self.api.get(StoryKey::PKUNK_SHIP_YEAR)),
+                    u16::from(self.api.get(StoryKey::PKUNK_SHIP_MONTH)),
+                    u16::from(self.api.get(StoryKey::PKUNK_SHIP_DAY)),
                 )
     }
     fn prepare_ship(&mut self) {
         if self.api.gift_ships() != 0 {
             let (year, month, day) = self.api.date();
-            self.api.set("PKUNK_SHIP_MONTH", month as u8);
-            self.api.set("PKUNK_SHIP_DAY", day.min(28) as u8);
+            self.api.set(StoryKey::PKUNK_SHIP_MONTH, month as u8);
+            self.api.set(StoryKey::PKUNK_SHIP_DAY, day.min(28) as u8);
             self.api.set(
-                "PKUNK_SHIP_YEAR",
+                StoryKey::PKUNK_SHIP_YEAR,
                 (year.wrapping_sub(2155) as u8).wrapping_add(1),
             );
         }
@@ -76,10 +76,10 @@ impl<A: PkunkApi> Dialogue<'_, A> {
                 self.api.npc(i32::from(GIVE_HELP));
             }
             self.api.npc(i32::from(ALMOST_ALLIANCE));
-            self.api.set("PKUNK_MANNER", 3_u8);
-            self.api.set("PKUNK_VISITS", 0_u8);
-            self.api.set("PKUNK_HOME_VISITS", 0_u8);
-            self.api.set("PKUNK_INFO", 0_u8);
+            self.api.set(StoryKey::PKUNK_MANNER, 3_u8);
+            self.api.set(StoryKey::PKUNK_VISITS, 0_u8);
+            self.api.set(StoryKey::PKUNK_HOME_VISITS, 0_u8);
+            self.api.set(StoryKey::PKUNK_INFO, 0_u8);
             self.api.event(1, 6_u16, 0_u16, 0_u16, 4_u8);
             if i32::from(
                 self.api
@@ -95,16 +95,16 @@ impl<A: PkunkApi> Dialogue<'_, A> {
         } else if r == TRY_TO_BE_NICER {
             self.api.npc(i32::from(CANT_ASK_FOR_MORE));
             self.api.npc(i32::from(VISIT_OUR_HOMEWORLD));
-            self.api.set("PKUNK_MANNER", 3_u8);
-            self.api.set("PKUNK_VISITS", 0_u8);
-            self.api.set("PKUNK_HOME_VISITS", 0_u8);
-            self.api.set("PKUNK_INFO", 0_u8);
+            self.api.set(StoryKey::PKUNK_MANNER, 3_u8);
+            self.api.set(StoryKey::PKUNK_VISITS, 0_u8);
+            self.api.set(StoryKey::PKUNK_HOME_VISITS, 0_u8);
+            self.api.set(StoryKey::PKUNK_INFO, 0_u8);
         } else if (r == MUST_CONQUER) || (r == OBEY) {
             if r == OBEY {
                 self.api.npc(i32::from(NO_OBEY));
             } else {
                 self.api.npc(i32::from(BAD_IDEA));
-                self.api.set("PKUNK_MANNER", 2_u8);
+                self.api.set(StoryKey::PKUNK_MANNER, 2_u8);
             }
             self.api.segue(1_u32);
         } else if r == DIE_IDIOT_FOOLS {
@@ -114,7 +114,7 @@ impl<A: PkunkApi> Dialogue<'_, A> {
             self.api.npc(i32::from(GOODBYE_MIGRATION));
         } else {
             let mut reason_mask: u8;
-            reason_mask = self.api.get("PKUNK_REASONS");
+            reason_mask = self.api.get(StoryKey::PKUNK_REASONS);
             if r == GOOD_REASON_1 {
                 self.api.npc(i32::from(WE_GO_HOME_1));
                 reason_mask |= (1 << 0) as u8;
@@ -130,7 +130,7 @@ impl<A: PkunkApi> Dialogue<'_, A> {
                 self.api.npc(i32::from(NO_GO_HOME_2));
                 reason_mask |= (1 << 3) as u8;
             }
-            self.api.set("PKUNK_REASONS", reason_mask);
+            self.api.set(StoryKey::PKUNK_REASONS, reason_mask);
         }
     }
     fn pkunk_angry(&mut self, r: u16) {
@@ -148,7 +148,7 @@ impl<A: PkunkApi> Dialogue<'_, A> {
             self.api
                 .response(SHOULD_BE_FRIENDS, Handler::PkunkAngry, &[]);
         } else {
-            if (i32::from(self.api.get("GLOBAL_FLAGS_AND_DATA")) & (1 << 7)) != 0 {
+            if (i32::from(self.api.get(StoryKey::GLOBAL_FLAGS_AND_DATA)) & (1 << 7)) != 0 {
                 self.api.response(TRY_TO_BE_NICER, Handler::PkunkHome, &[]);
             } else {
                 self.api
@@ -312,9 +312,9 @@ impl<A: PkunkApi> Dialogue<'_, A> {
         } else if r == ENOUGH_ABOUT_YOU {
             self.api.npc(i32::from(OK_ENOUGH_ABOUT_US));
         } else if ((r == WHERE_FLEET_1) || (r == WHERE_FLEET_2)) || (r == WHERE_FLEET_3) {
-            self.api.set("PKUNK_SWITCH", 1_u8);
-            if !((i32::from(self.api.get("PKUNK_MISSION")) & 1) != 0) {
-                num_visits = self.api.get("PKUNK_RETURN");
+            self.api.set(StoryKey::PKUNK_SWITCH, 1_u8);
+            if !((i32::from(self.api.get(StoryKey::PKUNK_MISSION)) & 1) != 0) {
+                num_visits = self.api.get(StoryKey::PKUNK_RETURN);
                 let res = {
                     let old = num_visits;
                     num_visits = num_visits.wrapping_add(1);
@@ -333,9 +333,9 @@ impl<A: PkunkApi> Dialogue<'_, A> {
                     }
                     _ => {}
                 }
-                self.api.set("PKUNK_RETURN", num_visits);
+                self.api.set(StoryKey::PKUNK_RETURN, num_visits);
             } else {
-                num_visits = self.api.get("PKUNK_MIGRATE");
+                num_visits = self.api.get(StoryKey::PKUNK_MIGRATE);
                 let res = {
                     let old = num_visits;
                     num_visits = num_visits.wrapping_add(1);
@@ -357,13 +357,13 @@ impl<A: PkunkApi> Dialogue<'_, A> {
                     }
                     _ => {}
                 }
-                self.api.set("PKUNK_MIGRATE", num_visits);
+                self.api.set(StoryKey::PKUNK_MIGRATE, num_visits);
             }
-            num_visits = (i32::from(self.api.get("PKUNK_FLEET")) + 1) as u8;
-            self.api.set("PKUNK_FLEET", num_visits);
+            num_visits = (i32::from(self.api.get(StoryKey::PKUNK_FLEET)) + 1) as u8;
+            self.api.set(StoryKey::PKUNK_FLEET, num_visits);
             self.api.disable(WHERE_FLEET_1);
         } else if ((r == AM_WORRIED_1) || (r == AM_WORRIED_2)) || (r == AM_WORRIED_3) {
-            num_visits = self.api.get("PKUNK_WORRY");
+            num_visits = self.api.get(StoryKey::PKUNK_WORRY);
             let res = {
                 let old = num_visits;
                 num_visits = num_visits.wrapping_add(1);
@@ -385,29 +385,29 @@ impl<A: PkunkApi> Dialogue<'_, A> {
                 }
                 _ => {}
             }
-            self.api.set("PKUNK_WORRY", num_visits);
+            self.api.set(StoryKey::PKUNK_WORRY, num_visits);
             self.api.disable(AM_WORRIED_1);
         } else if r == TRY_TO_BE_NICER {
             self.api.npc(i32::from(CANT_ASK_FOR_MORE));
-            if !(self.api.get("CLEAR_SPINDLE") != 0) {
+            if !(self.api.get(StoryKey::CLEAR_SPINDLE) != 0) {
                 self.api.npc(i32::from(GIVE_SPINDLE));
-                self.api.set("CLEAR_SPINDLE", 1_u8);
-                self.api.set("CLEAR_SPINDLE_ON_SHIP", 1_u8);
+                self.api.set(StoryKey::CLEAR_SPINDLE, 1_u8);
+                self.api.set(StoryKey::CLEAR_SPINDLE_ON_SHIP, 1_u8);
             }
             self.api.npc(i32::from(CAN_BE_FRIENDS));
-            self.api.set("PKUNK_MANNER", 3_u8);
-            self.api.set("PKUNK_VISITS", 0_u8);
-            self.api.set("PKUNK_HOME_VISITS", 0_u8);
+            self.api.set(StoryKey::PKUNK_MANNER, 3_u8);
+            self.api.set(StoryKey::PKUNK_VISITS, 0_u8);
+            self.api.set(StoryKey::PKUNK_HOME_VISITS, 0_u8);
         } else if r == WHAT_ABOUT_ILWRATH {
             self.api.npc(i32::from(ABOUT_ILWRATH));
             self.api.disable(WHAT_ABOUT_ILWRATH);
         }
-        if self.api.enabled(WE_CONQUER) && (i32::from(self.api.get("PKUNK_MANNER")) == 0) {
+        if self.api.enabled(WE_CONQUER) && (i32::from(self.api.get(StoryKey::PKUNK_MANNER)) == 0) {
             self.api.response(WE_CONQUER, Handler::DiscussConquer, &[]);
         }
-        if self.api.get("PKUNK_ON_THE_MOVE") != 0 {
-            if self.api.enabled(WHERE_FLEET_1) && !(self.api.get("PKUNK_SWITCH") != 0) {
-                match self.api.get("PKUNK_FLEET") {
+        if self.api.get(StoryKey::PKUNK_ON_THE_MOVE) != 0 {
+            if self.api.enabled(WHERE_FLEET_1) && !(self.api.get(StoryKey::PKUNK_SWITCH) != 0) {
+                match self.api.get(StoryKey::PKUNK_FLEET) {
                     0 => {
                         self.api.response(WHERE_FLEET_1, Handler::PkunkHome, &[]);
                     }
@@ -420,9 +420,9 @@ impl<A: PkunkApi> Dialogue<'_, A> {
                     _ => {}
                 }
             } else if (!self.api.enabled(WHERE_FLEET_1) && self.api.enabled(AM_WORRIED_1))
-                && ((i32::from(self.api.get("PKUNK_MISSION")) & 1) != 0)
+                && ((i32::from(self.api.get(StoryKey::PKUNK_MISSION)) & 1) != 0)
             {
-                match self.api.get("PKUNK_WORRY") {
+                match self.api.get(StoryKey::PKUNK_WORRY) {
                     0 => {
                         self.api.response(AM_WORRIED_1, Handler::PkunkHome, &[]);
                     }
@@ -436,7 +436,7 @@ impl<A: PkunkApi> Dialogue<'_, A> {
                 }
             }
         }
-        if !(self.api.get("PKUNK_SHIP_MONTH") != 0) {
+        if !(self.api.get(StoryKey::PKUNK_SHIP_MONTH) != 0) {
             fragments = vec![
                 i32::from(WE_ARE_VINDICATOR0),
                 GLOBAL_PLAYER_NAME,
@@ -451,7 +451,7 @@ impl<A: PkunkApi> Dialogue<'_, A> {
             self.api.response(WHAT_ABOUT_YOU, Handler::AboutPkunk, &[]);
         }
         if self.api.enabled(WHAT_ABOUT_ILWRATH) {
-            if !(self.api.get("ILWRATH_DECEIVED") != 0) {
+            if !(self.api.get(StoryKey::ILWRATH_DECEIVED) != 0) {
                 self.api
                     .response(WHAT_ABOUT_ILWRATH, Handler::AboutIlwrath, &[]);
             } else {
@@ -468,7 +468,7 @@ impl<A: PkunkApi> Dialogue<'_, A> {
             if self.ships_ready() {
                 self.api.npc(i32::from(SHIPS_AT_HOME));
             } else {
-                num_visits = self.api.get("PKUNK_INFO");
+                num_visits = self.api.get(StoryKey::PKUNK_INFO);
                 let res = {
                     let old = num_visits;
                     num_visits = num_visits.wrapping_add(1);
@@ -505,11 +505,11 @@ impl<A: PkunkApi> Dialogue<'_, A> {
                     }
                     _ => {}
                 }
-                self.api.set("PKUNK_INFO", num_visits);
+                self.api.set(StoryKey::PKUNK_INFO, num_visits);
             }
             self.api.disable(WHATS_UP_SPACE);
         } else if r == HOW_GOES_WAR {
-            num_visits = self.api.get("PKUNK_WAR");
+            num_visits = self.api.get(StoryKey::PKUNK_WAR);
             let res = {
                 let old = num_visits;
                 num_visits = num_visits.wrapping_add(1);
@@ -518,8 +518,8 @@ impl<A: PkunkApi> Dialogue<'_, A> {
             match res {
                 0 => {
                     self.api.npc(i32::from(WAR_GOES_1));
-                    self.api.set("KNOW_URQUAN_STORY", 1_u8);
-                    self.api.set("KNOW_KOHR_AH_STORY", 1_u8);
+                    self.api.set(StoryKey::KNOW_URQUAN_STORY, 1_u8);
+                    self.api.set(StoryKey::KNOW_KOHR_AH_STORY, 1_u8);
                 }
                 1 => {
                     self.api.npc(i32::from(WAR_GOES_2));
@@ -529,7 +529,7 @@ impl<A: PkunkApi> Dialogue<'_, A> {
                 }
                 3 => {
                     self.api.npc(i32::from(WAR_GOES_4));
-                    self.api.set("PKUNK_DONE_WAR", 1_u8);
+                    self.api.set(StoryKey::PKUNK_DONE_WAR, 1_u8);
                     {
                         num_visits = num_visits.wrapping_sub(1);
                         num_visits
@@ -537,10 +537,10 @@ impl<A: PkunkApi> Dialogue<'_, A> {
                 }
                 _ => {}
             }
-            self.api.set("PKUNK_WAR", num_visits);
+            self.api.set(StoryKey::PKUNK_WAR, num_visits);
             self.api.disable(HOW_GOES_WAR);
         } else if r == TELL_MY_FORTUNE {
-            num_visits = self.api.get("PKUNK_FORTUNE");
+            num_visits = self.api.get(StoryKey::PKUNK_FORTUNE);
             let res = {
                 let old = num_visits;
                 num_visits = num_visits.wrapping_add(1);
@@ -577,14 +577,14 @@ impl<A: PkunkApi> Dialogue<'_, A> {
                 }
                 _ => {}
             }
-            self.api.set("PKUNK_FORTUNE", num_visits);
+            self.api.set(StoryKey::PKUNK_FORTUNE, num_visits);
             self.api.disable(TELL_MY_FORTUNE);
         }
         if self.api.enabled(WHATS_UP_SPACE) {
             self.api
                 .response(WHATS_UP_SPACE, Handler::PkunkFriendlySpace, &[]);
         }
-        if !(self.api.get("PKUNK_DONE_WAR") != 0) && self.api.enabled(HOW_GOES_WAR) {
+        if !(self.api.get(StoryKey::PKUNK_DONE_WAR) != 0) && self.api.enabled(HOW_GOES_WAR) {
             self.api
                 .response(HOW_GOES_WAR, Handler::PkunkFriendlySpace, &[]);
         }
@@ -607,7 +607,7 @@ impl<A: PkunkApi> Dialogue<'_, A> {
             self.api.npc(i32::from(DONT_BE_HOSTILE));
             self.api.disable(HOSTILE_GREETING);
         } else if r == WHATS_UP_NEUTRAL {
-            num_visits = self.api.get("PKUNK_INFO");
+            num_visits = self.api.get(StoryKey::PKUNK_INFO);
             let res = {
                 let old = num_visits;
                 num_visits = num_visits.wrapping_add(1);
@@ -632,7 +632,7 @@ impl<A: PkunkApi> Dialogue<'_, A> {
                 }
                 _ => {}
             }
-            self.api.set("PKUNK_INFO", num_visits);
+            self.api.set(StoryKey::PKUNK_INFO, num_visits);
             self.api.disable(WHATS_UP_NEUTRAL);
         }
         if self.api.enabled(FORM_ALLIANCE) {
@@ -656,7 +656,7 @@ impl<A: PkunkApi> Dialogue<'_, A> {
             .response(NEUTRAL_BYE_SPACE, Handler::ExitConversation, &[]);
     }
     fn pkunk_migrate(&mut self, _r: u16) {
-        let reason_mask: u8 = self.api.get("PKUNK_REASONS");
+        let reason_mask: u8 = self.api.get(StoryKey::PKUNK_REASONS);
         if !((i32::from(reason_mask) & (1 << 0)) != 0) {
             self.api
                 .response(GOOD_REASON_1, Handler::ExitConversation, &[]);
@@ -683,9 +683,9 @@ impl<A: PkunkApi> Dialogue<'_, A> {
             self.api.segue(0_u32);
             return;
         }
-        let manner: u8 = self.api.get("PKUNK_MANNER");
+        let manner: u8 = self.api.get(StoryKey::PKUNK_MANNER);
         if i32::from(manner) == 2 {
-            num_visits = self.api.get("PKUNK_VISITS");
+            num_visits = self.api.get(StoryKey::PKUNK_VISITS);
             let res = {
                 let old = num_visits;
                 num_visits = num_visits.wrapping_add(1);
@@ -710,10 +710,10 @@ impl<A: PkunkApi> Dialogue<'_, A> {
                 }
                 _ => {}
             }
-            self.api.set("PKUNK_VISITS", num_visits);
+            self.api.set(StoryKey::PKUNK_VISITS, num_visits);
             self.api.segue(1_u32);
         } else if i32::from(manner) == 1 {
-            num_visits = self.api.get("PKUNK_VISITS");
+            num_visits = self.api.get(StoryKey::PKUNK_VISITS);
             let res = {
                 let old = num_visits;
                 num_visits = num_visits.wrapping_add(1);
@@ -738,21 +738,21 @@ impl<A: PkunkApi> Dialogue<'_, A> {
                 }
                 _ => {}
             }
-            self.api.set("PKUNK_VISITS", num_visits);
+            self.api.set(StoryKey::PKUNK_VISITS, num_visits);
             self.pkunk_angry(0_u16);
-        } else if (i32::from(self.api.get("GLOBAL_FLAGS_AND_DATA")) & (1 << 7)) != 0 {
-            if !(self.api.get("CLEAR_SPINDLE") != 0) {
+        } else if (i32::from(self.api.get(StoryKey::GLOBAL_FLAGS_AND_DATA)) & (1 << 7)) != 0 {
+            if !(self.api.get(StoryKey::CLEAR_SPINDLE) != 0) {
                 self.api.npc(i32::from(GIVE_SPINDLE));
-                self.api.set("CLEAR_SPINDLE", 1_u8);
-                self.api.set("CLEAR_SPINDLE_ON_SHIP", 1_u8);
-            } else if (!(self.api.get("PKUNK_SENSE_VICTOR") != 0)
+                self.api.set(StoryKey::CLEAR_SPINDLE, 1_u8);
+                self.api.set(StoryKey::CLEAR_SPINDLE_ON_SHIP, 1_u8);
+            } else if (!(self.api.get(StoryKey::PKUNK_SENSE_VICTOR) != 0)
                 && (i32::from(self.api.date().0) > 2155))
-                && !(self.api.get("KOHR_AH_FRENZY") != 0)
+                && !(self.api.get(StoryKey::KOHR_AH_FRENZY) != 0)
             {
                 self.api.npc(i32::from(SENSE_KOHRAH_VICTORY));
-                self.api.set("PKUNK_SENSE_VICTOR", 1_u8);
+                self.api.set(StoryKey::PKUNK_SENSE_VICTOR, 1_u8);
             }
-            num_visits = self.api.get("PKUNK_HOME_VISITS");
+            num_visits = self.api.get(StoryKey::PKUNK_HOME_VISITS);
             if i32::from(manner) == 0 {
                 let res = {
                     let old = num_visits;
@@ -829,15 +829,15 @@ impl<A: PkunkApi> Dialogue<'_, A> {
                     }
                 }
             }
-            self.api.set("PKUNK_HOME_VISITS", num_visits);
+            self.api.set(StoryKey::PKUNK_HOME_VISITS, num_visits);
             self.pkunk_home(0_u16);
         } else if (i32::from({
-            num_visits = self.api.get("PKUNK_MISSION");
+            num_visits = self.api.get(StoryKey::PKUNK_MISSION);
             num_visits
         }) == 0)
             || !((i32::from(num_visits) & 1) != 0)
         {
-            num_visits = self.api.get("PKUNK_VISITS");
+            num_visits = self.api.get(StoryKey::PKUNK_VISITS);
             if i32::from(manner) == 3 {
                 let res = {
                     let old = num_visits;
@@ -903,9 +903,9 @@ impl<A: PkunkApi> Dialogue<'_, A> {
                 }
                 self.pkunk_neutral_space(0_u16);
             }
-            self.api.set("PKUNK_VISITS", num_visits);
+            self.api.set(StoryKey::PKUNK_VISITS, num_visits);
         } else {
-            num_visits = self.api.get("PKUNK_MIGRATE_VISITS");
+            num_visits = self.api.get(StoryKey::PKUNK_MIGRATE_VISITS);
             let res = {
                 let old = num_visits;
                 num_visits = num_visits.wrapping_add(1);
@@ -942,7 +942,7 @@ impl<A: PkunkApi> Dialogue<'_, A> {
                 }
                 _ => {}
             }
-            self.api.set("PKUNK_MIGRATE_VISITS", num_visits);
+            self.api.set(StoryKey::PKUNK_MIGRATE_VISITS, num_visits);
             self.pkunk_migrate(0_u16);
         }
     }
@@ -950,19 +950,19 @@ impl<A: PkunkApi> Dialogue<'_, A> {
         let manner: u8;
         if ((self.api.get_segue()) as i32 == 1)
             && (i32::from({
-                manner = self.api.get("PKUNK_MANNER");
+                manner = self.api.get(StoryKey::PKUNK_MANNER);
                 manner
             }) != 2)
         {
-            self.api.set("PKUNK_MANNER", 1_u8);
+            self.api.set(StoryKey::PKUNK_MANNER, 1_u8);
             if i32::from(manner) != 1 {
-                self.api.set("PKUNK_VISITS", 0_u8);
-                self.api.set("PKUNK_HOME_VISITS", 0_u8);
+                self.api.set(StoryKey::PKUNK_VISITS, 0_u8);
+                self.api.set(StoryKey::PKUNK_HOME_VISITS, 0_u8);
             }
         }
     }
     fn initialize(&mut self) {
-        if (i32::from(self.api.get("PKUNK_MANNER")) == 3)
+        if (i32::from(self.api.get(StoryKey::PKUNK_MANNER)) == 3)
             || (i32::from((self.api.activity()) as u8) == 5)
         {
             self.api.segue(0_u32);

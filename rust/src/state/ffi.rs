@@ -17,36 +17,6 @@ pub fn rust_init_game_state(world: &mut crate::engine::World) {
     world.files.canned_nodes.clear();
 }
 
-///
-/// # Safety
-///
-/// Caller must ensure pointer arguments are valid and properly aligned.
-pub unsafe fn rust_get_game_state(world: &crate::engine::World, key: *const c_char) -> c_uchar {
-    let Some((start_bit, end_bit)) = decode_state_key(key) else {
-        return 0;
-    };
-
-    read_story(world, |state| state.get_state(start_bit, end_bit))
-}
-
-///
-/// # Safety
-///
-/// Caller must ensure pointer arguments are valid and properly aligned.
-pub unsafe fn rust_set_game_state(
-    world: &mut crate::engine::World,
-    key: *const c_char,
-    value: c_uchar,
-) {
-    let Some((start_bit, end_bit)) = decode_state_key(key) else {
-        return;
-    };
-
-    write_story(world, |state| {
-        state.set_state(start_bit, end_bit, value);
-    });
-}
-
 pub fn rust_get_game_state_bits(
     world: &crate::engine::World,
     start_bit: c_int,
@@ -522,16 +492,6 @@ pub unsafe fn rust_put_planet_info(
     }
 }
 
-unsafe fn decode_state_key(key: *const c_char) -> Option<(usize, usize)> {
-    if key.is_null() {
-        return None;
-    }
-
-    let c_str = CStr::from_ptr(key);
-    let key_str = c_str.to_str().ok()?;
-    StoryState::lookup_bits(key_str)
-}
-
 fn normalize_bit_range(start_bit: c_int, end_bit: c_int) -> Option<(usize, usize)> {
     if start_bit < 0 || end_bit < 0 || end_bit < start_bit {
         return None;
@@ -601,16 +561,6 @@ unsafe fn normalize_state_bytes_mut<'a>(bytes: *mut u8, bit_count: usize) -> Opt
     Some(std::slice::from_raw_parts_mut(bytes, byte_count))
 }
 
-/// The value of a named story bit, or `None` when the game state has not been
-/// created or the name is not in the key table.
-///
-/// Unlike `rust_get_game_state`, an uninitialized state is not read as zero.
-#[must_use]
-pub fn named_state_value(world: &crate::engine::World, name: &str) -> Option<u8> {
-    let key = super::game_state_keys::StoryKey::from_name(name)?;
-    world.story_value(key)
-}
-
 fn read_story<R: Default>(world: &crate::engine::World, f: impl FnOnce(&StoryState) -> R) -> R {
     world.story.as_ref().map_or_else(R::default, f)
 }
@@ -639,6 +589,7 @@ fn files_result<R, E>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::engine::StoryKey;
     use serial_test::serial;
 
     #[test]
@@ -669,39 +620,27 @@ mod tests {
                 // already done.
                 {
                     World::current().write(rust_init_game_state);
-                    World::current().write(|world| {
-                        rust_set_game_state(
-                            world,
-                            c"MOONBASE_DESTROYED".as_ptr() as *const c_char,
-                            1,
-                        )
-                    });
-                    World::current().write(|world| {
-                        rust_set_game_state(world, c"MOONBASE_ON_SHIP".as_ptr() as *const c_char, 1)
-                    });
+                    World::current()
+                        .write(|world| world.set_story_state(StoryKey::MOONBASE_DESTROYED, 1));
+                    World::current()
+                        .write(|world| world.set_story_state(StoryKey::MOONBASE_ON_SHIP, 1));
                     assert_eq!(
-                        World::current().read(|world| rust_get_game_state(
-                            world,
-                            c"MOONBASE_DESTROYED".as_ptr() as *const c_char
-                        )),
+                        World::current()
+                            .read(|world| world.story_state(StoryKey::MOONBASE_DESTROYED)),
                         1
                     );
 
                     World::current().write(rust_init_game_state);
 
                     assert_eq!(
-                        World::current().read(|world| rust_get_game_state(
-                            world,
-                            c"MOONBASE_DESTROYED".as_ptr() as *const c_char
-                        )),
+                        World::current()
+                            .read(|world| world.story_state(StoryKey::MOONBASE_DESTROYED)),
                         0,
                         "a new game must start with the moon base intact"
                     );
                     assert_eq!(
-                        World::current().read(|world| rust_get_game_state(
-                            world,
-                            c"MOONBASE_ON_SHIP".as_ptr() as *const c_char
-                        )),
+                        World::current()
+                            .read(|world| world.story_state(StoryKey::MOONBASE_ON_SHIP)),
                         0
                     );
                 }
@@ -771,7 +710,7 @@ mod tests {
 
     #[test]
     #[serial]
-    fn test_named_state_lookup_uses_generated_ranges() {
+    fn test_typed_state_keys_use_generated_ranges() {
         let mut game = crate::engine::Game::new();
         // SAFETY: serial tests own the published lifecycle until this call returns.
         unsafe {
@@ -779,48 +718,27 @@ mod tests {
                 World::current().write(rust_init_game_state);
 
                 {
-                    World::current().write(|world| {
-                        rust_set_game_state(world, c"SHOFIXTI_VISITS".as_ptr() as *const c_char, 5)
-                    });
-                    World::current().write(|world| {
-                        rust_set_game_state(
-                            world,
-                            c"SHOFIXTI_RECRUITED".as_ptr() as *const c_char,
-                            1,
-                        )
-                    });
-                    World::current().write(|world| {
-                        rust_set_game_state(world, c"SPATHI_VISITS".as_ptr() as *const c_char, 3)
-                    });
+                    World::current()
+                        .write(|world| world.set_story_state(StoryKey::SHOFIXTI_VISITS, 5));
+                    World::current()
+                        .write(|world| world.set_story_state(StoryKey::SHOFIXTI_RECRUITED, 1));
+                    World::current()
+                        .write(|world| world.set_story_state(StoryKey::SPATHI_VISITS, 3));
 
                     assert_eq!(
-                        World::current().read(|world| rust_get_game_state(
-                            world,
-                            c"SHOFIXTI_VISITS".as_ptr() as *const c_char
-                        )),
+                        World::current().read(|world| world.story_state(StoryKey::SHOFIXTI_VISITS)),
                         5
                     );
                     assert_eq!(
-                        World::current().read(|world| rust_get_game_state(
-                            world,
-                            c"SHOFIXTI_RECRUITED".as_ptr() as *const c_char
-                        )),
+                        World::current()
+                            .read(|world| world.story_state(StoryKey::SHOFIXTI_RECRUITED)),
                         1
                     );
                     assert_eq!(
-                        World::current().read(|world| rust_get_game_state(
-                            world,
-                            c"SPATHI_VISITS".as_ptr() as *const c_char
-                        )),
+                        World::current().read(|world| world.story_state(StoryKey::SPATHI_VISITS)),
                         3
                     );
-                    assert_eq!(
-                        World::current().read(|world| rust_get_game_state(
-                            world,
-                            c"NOT_A_REAL_STATE".as_ptr() as *const c_char
-                        )),
-                        0
-                    );
+                    assert!(StoryKey::from_name("NOT_A_REAL_STATE").is_none());
                 }
             })
         }
