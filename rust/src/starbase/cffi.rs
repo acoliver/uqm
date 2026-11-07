@@ -20,19 +20,6 @@ const SFR_MENU_3DO: usize = usize::MAX;
 /// `SFR_MENU_ANY` is `(RECT*)~1L`.
 const SFR_MENU_ANY: usize = usize::MAX - 1;
 
-#[cfg(not(test))]
-use crate::ui::sis::post_update_flash_rect;
-#[cfg(test)]
-extern "C" {
-    fn post_update_flash_rect();
-}
-#[cfg(not(test))]
-use crate::ui::sis::pre_update_flash_rect;
-#[cfg(test)]
-extern "C" {
-    fn pre_update_flash_rect();
-}
-
 use crate::graphics::context_abi::SetContextForeGroundColor;
 
 use crate::graphics::font_abi::SetContextFont;
@@ -122,17 +109,16 @@ fn c_string(text: &str) -> CString {
 pub struct CffiPlatform;
 
 impl CffiPlatform {
-    fn context_ptr(ctx: ContextId) -> *mut c_void {
-        // SAFETY: the context globals are set once at startup, before any
-        // screen runs, and only read afterwards.
-        unsafe {
-            let kernel = Kernel::current();
-            match ctx {
-                ContextId::Screen => (std::ptr::addr_of!((**kernel).screen_context).read()).cast(),
-                ContextId::Status => (std::ptr::addr_of!((**kernel).status_context).read()).cast(),
-                ContextId::Space => std::ptr::addr_of!((**kernel).space_context).read().cast(),
-            }
-        }
+    fn with_kernel<R>(operation: impl FnOnce(&Kernel) -> R) -> R {
+        Kernel::current().read(operation)
+    }
+
+    fn context(ctx: ContextId) -> *mut c_void {
+        Self::with_kernel(|kernel| match ctx {
+            ContextId::Screen => kernel.screen_context.cast(),
+            ContextId::Status => kernel.status_context.cast(),
+            ContextId::Space => kernel.space_context.cast(),
+        })
     }
 
     fn font_ptr(font: FontId) -> *mut c_void {
@@ -161,7 +147,7 @@ impl Gfx for CffiPlatform {
 
     fn set_context(&self, ctx: ContextId) -> ContextHandle {
         // SAFETY: the pointer is one of the game's context objects.
-        ContextHandle(unsafe { base::SetContext((Self::context_ptr(ctx)).cast()) } as usize)
+        ContextHandle(unsafe { base::SetContext((Self::context(ctx)).cast()) } as usize)
     }
 
     fn restore_context(&self, previous: ContextHandle) {
@@ -390,13 +376,11 @@ impl Gfx for CffiPlatform {
     }
 
     fn pre_update_flash(&self) {
-        // SAFETY: balanced with `post_update_flash` by the callers.
-        unsafe { pre_update_flash_rect() };
+        Self::with_kernel(|kernel| kernel.sis_highlight.pre_update_flash_rect());
     }
 
     fn post_update_flash(&self) {
-        // SAFETY: balanced with `pre_update_flash` by the callers.
-        unsafe { post_update_flash_rect() };
+        Self::with_kernel(|kernel| kernel.sis_highlight.post_update_flash_rect());
     }
 
     fn game_string(&self, index: i32) -> String {
