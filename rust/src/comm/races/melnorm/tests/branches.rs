@@ -1,3 +1,4 @@
+use crate::engine::StoryKey;
 use super::*;
 use crate::comm::races::encounter::testing::Effect;
 use crate::comm::races::script::GLOBAL_PLAYER_NAME;
@@ -87,13 +88,13 @@ fn fuel_prices_capacity_shortfall_and_large_fill() {
 #[test]
 fn information_prices_exhaustion_and_knowledge_effects() {
     for (r, key, count, first) in [
-        (152, "MELNORME_EVENTS_INFO_STACK", 8, 161),
-        (153, "MELNORME_ALIEN_INFO_STACK", 16, 169),
-        (154, "MELNORME_HISTORY_INFO_STACK", 9, 185),
+        (152, StoryKey::MELNORME_EVENTS_INFO_STACK, 8, 161),
+        (153, StoryKey::MELNORME_ALIEN_INFO_STACK, 16, 169),
+        (154, StoryKey::MELNORME_HISTORY_INFO_STACK, 9, 185),
     ] {
         let mut f = Api::default();
         let mut s = Session::new();
-        f.put("MELNORME_INFO_PROCEDURE", 1);
+        f.put(StoryKey::MELNORME_INFO_PROCEDURE, 1);
         for i in 0..count {
             Dialogue {
                 api: &mut f,
@@ -113,18 +114,18 @@ fn information_prices_exhaustion_and_knowledge_effects() {
             );
         }
         if r == 153 {
-            assert_eq!(f.get("KNOW_SPATHI_PASSWORD"), 1);
-            assert_eq!(f.get("SPATHI_HOME_VISITS"), 7);
-            assert_eq!(f.get("KNOW_ABOUT_SHATTERED"), 2);
-            assert_eq!(f.get("KNOW_SYREEN_WORLD_SHATTERED"), 1);
+            assert_eq!(f.get(StoryKey::KNOW_SPATHI_PASSWORD), 1);
+            assert_eq!(f.get(StoryKey::SPATHI_HOME_VISITS), 7);
+            assert_eq!(f.get(StoryKey::KNOW_ABOUT_SHATTERED), 2);
+            assert_eq!(f.get(StoryKey::KNOW_SYREEN_WORLD_SHATTERED), 1);
         }
     }
     let mut f = Api::default();
     let mut s = Session::new();
-    f.put("MELNORME_INFO_PROCEDURE", 1);
-    f.put("MELNORME_EVENTS_INFO_STACK", 7);
-    f.put("MELNORME_ALIEN_INFO_STACK", 16);
-    f.put("MELNORME_HISTORY_INFO_STACK", 9);
+    f.put(StoryKey::MELNORME_INFO_PROCEDURE, 1);
+    f.put(StoryKey::MELNORME_EVENTS_INFO_STACK, 7);
+    f.put(StoryKey::MELNORME_ALIEN_INFO_STACK, 16);
+    f.put(StoryKey::MELNORME_HISTORY_INFO_STACK, 9);
     Dialogue {
         api: &mut f,
         session: &mut s,
@@ -142,7 +143,7 @@ fn biomass_sale_skip_and_incremental_paths_preserve_queue_order() {
         f.world.skip = skip;
         f.world.ship.total_bio_mass = 3;
         f.world.ship.fuel_on_board = 1;
-        f.put("RAINBOW_WORLD0", 1);
+        f.put(StoryKey::RAINBOW_WORLD0, 1);
         s.asked_to_buy = true;
         run(&mut f, &mut s, Handler::DoSell, 117);
         assert_eq!(f.world.ship.total_bio_mass, 0);
@@ -189,7 +190,7 @@ fn first_meeting_order_names_business_and_status_restore() {
     }
     .intro();
     assert_eq!(f.spoken(), [1]);
-    assert_eq!(f.get("MET_MELNORME"), 1);
+    assert_eq!(f.get(StoryKey::MET_MELNORME), 1);
     assert_eq!(
         f.offers(),
         [
@@ -200,7 +201,7 @@ fn first_meeting_order_names_business_and_status_restore() {
         ]
     );
     for i in 0..4 {
-        f.put("NEW_ALLIANCE_NAME", i);
+        f.put(StoryKey::NEW_ALLIANCE_NAME, i);
         f.effects.clear();
         Dialogue {
             api: &mut f,
@@ -218,13 +219,13 @@ fn first_meeting_order_names_business_and_status_restore() {
         );
     }
     for (r, p, key, value, offers) in [
-        (233, 4, "MELNORME_YACK_STACK0", 1, vec![5, 7, 11, 20]),
-        (5, 6, "MELNORME_YACK_STACK0", 2, vec![7, 11, 20]),
-        (7, 8, "MELNORME_YACK_STACK1", 1, vec![9, 17, 11, 20]),
-        (9, 10, "MELNORME_YACK_STACK1", 2, vec![17, 11, 20]),
-        (11, 12, "MELNORME_YACK_STACK2", 1, vec![13, 17, 20]),
-        (13, 14, "MELNORME_YACK_STACK2", 2, vec![15, 17, 20]),
-        (15, 16, "MELNORME_YACK_STACK2", 3, vec![18, 17, 20]),
+        (233, 4, StoryKey::MELNORME_YACK_STACK0, 1, vec![5, 7, 11, 20]),
+        (5, 6, StoryKey::MELNORME_YACK_STACK0, 2, vec![7, 11, 20]),
+        (7, 8, StoryKey::MELNORME_YACK_STACK1, 1, vec![9, 17, 11, 20]),
+        (9, 10, StoryKey::MELNORME_YACK_STACK1, 2, vec![17, 11, 20]),
+        (11, 12, StoryKey::MELNORME_YACK_STACK2, 1, vec![13, 17, 20]),
+        (13, 14, StoryKey::MELNORME_YACK_STACK2, 2, vec![15, 17, 20]),
+        (15, 16, StoryKey::MELNORME_YACK_STACK2, 3, vec![18, 17, 20]),
     ] {
         run(&mut f, &mut s, Handler::DoFirstMeeting, r);
         assert_eq!(f.spoken(), [p]);
@@ -237,7 +238,7 @@ fn first_meeting_order_names_business_and_status_restore() {
     f.world.ship.fuel_on_board = 1;
     run(&mut f, &mut s, Handler::NatureOfConversation, 17);
     assert_eq!(f.spoken(), [22, 107, 108]);
-    assert_eq!(f.get("MELNORME_YACK_STACK2"), 6);
+    assert_eq!(f.get(StoryKey::MELNORME_YACK_STACK2), 6);
     Dialogue {
         api: &mut f,
         session: &mut s,
@@ -257,14 +258,14 @@ fn first_meeting_order_names_business_and_status_restore() {
 #[test]
 fn anger_routes_bluster_apology_and_exits() {
     for (anger, first, key) in [
-        (1, 33, "MELNORME_MIFFED_COUNT"),
-        (2, 78, "MELNORME_PISSED_COUNT"),
-        (3, 50, "MELNORME_HATE_COUNT"),
+        (1, 33, StoryKey::MELNORME_MIFFED_COUNT),
+        (2, 78, StoryKey::MELNORME_PISSED_COUNT),
+        (3, 50, StoryKey::MELNORME_HATE_COUNT),
     ] {
         let mut f = Api::default();
         let mut s = Session::new();
-        f.put("MET_MELNORME", 1);
-        f.put("MELNORME_ANGER", anger);
+        f.put(StoryKey::MET_MELNORME, 1);
+        f.put(StoryKey::MELNORME_ANGER, anger);
         for n in 0..4 {
             f.effects.clear();
             Dialogue {
@@ -287,7 +288,7 @@ fn anger_routes_bluster_apology_and_exits() {
     assert_eq!(s.local_stack1, 1);
     assert!(f.offers().contains(&(103, Handler::DoFirstMeeting)));
     run(&mut f, &mut s, Handler::DoBluster, 93);
-    assert_eq!(f.get("WHY_MELNORME_BLUE"), 1);
+    assert_eq!(f.get(StoryKey::WHY_MELNORME_BLUE), 1);
     for (h, r, p) in [
         (Handler::DoMelnormeMiffed, 36, 37),
         (Handler::DoMelnormeMiffed, 38, 39),
@@ -304,7 +305,7 @@ fn anger_routes_bluster_apology_and_exits() {
     for (r, p, anger) in [(105, 106, 1), (46, 47, 2), (91, 92, 3)] {
         run(&mut f, &mut s, Handler::ExitConversation, r);
         assert_eq!(f.spoken(), [p]);
-        assert_eq!(f.get("MELNORME_ANGER"), anger);
+        assert_eq!(f.get(StoryKey::MELNORME_ANGER), anger);
         assert_eq!(f.segue, 1);
     }
     for (r, p) in [
@@ -362,11 +363,11 @@ fn rescue_offer_repeatability_protects_crew_and_cargo() {
     assert!(s.sis_copy.module_slots.iter().filter(|&&m| m == 4).count() >= 2);
     assert_eq!(s.sis_copy.module_slots[4..6], [5, 6]);
     run(&mut f, &mut s, Handler::ExitConversation, 73);
-    assert_eq!(f.get("MELNORME_RESCUE_REFUSED"), 1);
+    assert_eq!(f.get(StoryKey::MELNORME_RESCUE_REFUSED), 1);
     run(&mut f, &mut s, Handler::ExitConversation, 72);
     assert_eq!(f.world.ship.module_slots, modules);
     assert_eq!(f.world.ship.fuel_on_board, 900);
-    assert_eq!(f.get("MELNORME_RESCUE_REFUSED"), 0);
+    assert_eq!(f.get(StoryKey::MELNORME_RESCUE_REFUSED), 0);
     run(&mut f, &mut s, Handler::ExitConversation, 85);
     assert_eq!(f.spoken(), [88]);
     assert_eq!(f.world.ship.drive_slots, [20; 11]);
@@ -387,8 +388,8 @@ fn rescue_offer_repeatability_protects_crew_and_cargo() {
 fn charity_refusal_and_saturated_counters() {
     let mut f = Api::default();
     let mut s = Session::new();
-    f.put("MET_MELNORME", 1);
-    f.put("MELNORME_YACK_STACK2", 6);
+    f.put(StoryKey::MET_MELNORME, 1);
+    f.put(StoryKey::MELNORME_YACK_STACK2, 6);
     for n in 0..7 {
         f.world.ship.fuel_on_board = 0;
         f.effects.clear();
@@ -398,7 +399,7 @@ fn charity_refusal_and_saturated_counters() {
         }
         .intro();
         assert_eq!(f.spoken()[1..], [57 + n.min(5), 66]);
-        assert_eq!(f.get("MELNORME_RESCUE_COUNT"), (n + 1).min(5) as u8);
+        assert_eq!(f.get(StoryKey::MELNORME_RESCUE_COUNT), (n + 1).min(5) as u8);
     }
     run(&mut f, &mut s, Handler::ExitConversation, 68);
     run(&mut f, &mut s, Handler::NatureOfConversation, 0);
@@ -410,9 +411,9 @@ fn charity_refusal_and_saturated_counters() {
     run(&mut f, &mut s, Handler::ExitConversation, 85);
     assert_eq!(f.spoken(), [87]);
     for n in 0..12 {
-        f.put("MELNORME_YACK_STACK2", 5 + n.min(9));
+        f.put(StoryKey::MELNORME_YACK_STACK2, 5 + n.min(9));
         run(&mut f, &mut s, Handler::NatureOfConversation, 0);
         assert_eq!(f.spoken()[0], 22 + i32::from(n.min(9)));
-        assert_eq!(f.get("MELNORME_YACK_STACK2"), 5 + (n + 1).min(9));
+        assert_eq!(f.get(StoryKey::MELNORME_YACK_STACK2), 5 + (n + 1).min(9));
     }
 }

@@ -1,3 +1,4 @@
+use crate::engine::StoryKey;
 mod branches;
 use super::*;
 use crate::comm::races::encounter::testing::Fake;
@@ -217,20 +218,20 @@ fn technology_catalogue_order_prices_and_grants() {
     assert_eq!(f.world.costs[12], 100);
     assert_eq!(f.world.costs[11], 120);
     assert_eq!(f.world.costs[8], 80);
-    assert_eq!(f.get("LANDER_SHIELDS"), 15);
+    assert_eq!(f.get(StoryKey::LANDER_SHIELDS), 15);
 }
 #[test]
 fn rainbow_sale_credits_each_new_world_once() {
     let mut f = Api::default();
     let mut s = Session::new();
-    f.put("RAINBOW_WORLD0", 0b1011);
-    f.put("RAINBOW_WORLD1", 1);
-    f.put("MELNORME_RAINBOW_COUNT", 1);
+    f.put(StoryKey::RAINBOW_WORLD0, 0b1011);
+    f.put(StoryKey::RAINBOW_WORLD1, 1);
+    f.put(StoryKey::MELNORME_RAINBOW_COUNT, 1);
     f.world.ship.fuel_on_board = 1;
     run(&mut f, &mut s, Handler::DoSell, SELL_RAINBOW_LOCATIONS);
     assert_eq!(&f.spoken()[..3], [122, 123, 124]);
     assert_eq!(f.world.numbers, [3, 1500]);
-    assert_eq!(f.get("MELNORME_RAINBOW_COUNT"), 4);
+    assert_eq!(f.get(StoryKey::MELNORME_RAINBOW_COUNT), 4);
     assert_eq!(
         Dialogue {
             api: &mut f,

@@ -1,4 +1,5 @@
 //! Kohr-Ah dialogue, ported from blackurq.c.
+use crate::engine::StoryKey;
 use super::script::{animation, as_comm_data};
 use crate::comm::locdata::{CColor, CLocData, CPoint};
 use crate::comm::types::CommData;
@@ -42,28 +43,28 @@ impl<A: BlackurApi> Dialogue<'_, A> {
         self.api.segue(1);
         match r {
             x if x == BYE => {
-                self.api.npc(if self.api.get("KOHR_AH_BYES") == 0 {
+                self.api.npc(if self.api.get(StoryKey::KOHR_AH_BYES) == 0 {
                     GOODBYE_AND_DIE
                 } else {
                     DIE_HUMAN
                 });
-                self.api.set("KOHR_AH_BYES", 1);
+                self.api.set(StoryKey::KOHR_AH_BYES, 1);
             }
             x if x == GUESS_THATS_ALL => self.api.npc(THEN_DIE),
             x if x == WHAT_ARE_YOU_HOVERING_OVER => {
                 self.api.npc(BONE_PILE);
-                self.api.set("KOHR_AH_INFO", 1);
+                self.api.set(StoryKey::KOHR_AH_INFO, 1);
             }
             x if x == YOU_SURE_ARE_CREEPY => {
                 self.api.npc(YES_CREEPY);
-                self.api.set("KOHR_AH_INFO", 2);
+                self.api.set(StoryKey::KOHR_AH_INFO, 2);
             }
             x if x == STOP_THAT_GROSS_BLINKING => {
                 self.api.npc(DIE_HUMAN);
-                self.api.set("KOHR_AH_INFO", 3);
+                self.api.set(StoryKey::KOHR_AH_INFO, 3);
             }
             x if [THREAT_1, THREAT_2, THREAT_3, THREAT_4].contains(&x) => self.advance_sequence(
-                "KOHR_AH_REASONS",
+                StoryKey::KOHR_AH_REASONS,
                 &[
                     RESISTANCE_IS_USELESS_1,
                     RESISTANCE_IS_USELESS_2,
@@ -72,7 +73,7 @@ impl<A: BlackurApi> Dialogue<'_, A> {
                 ],
             ),
             x if [PLEAD_1, PLEAD_2, PLEAD_3, PLEAD_4].contains(&x) => {
-                let n = self.api.get("KOHR_AH_PLEAD");
+                let n = self.api.get(StoryKey::KOHR_AH_PLEAD);
                 match n {
                     0 => self.api.npc(PLEADING_IS_USELESS_1),
                     1 => self.api.npc(PLEADING_IS_USELESS_2),
@@ -80,7 +81,7 @@ impl<A: BlackurApi> Dialogue<'_, A> {
                     _ => {}
                 }
                 self.api.set(
-                    "KOHR_AH_PLEAD",
+                    StoryKey::KOHR_AH_PLEAD,
                     if matches!(n, 2 | 3) {
                         n
                     } else {
@@ -97,7 +98,7 @@ impl<A: BlackurApi> Dialogue<'_, A> {
             .contains(&x) =>
             {
                 self.advance_sequence(
-                    "KOHR_AH_REASONS",
+                    StoryKey::KOHR_AH_REASONS,
                     &[
                         KILL_BECAUSE_1,
                         KILL_BECAUSE_2,
@@ -115,13 +116,13 @@ impl<A: BlackurApi> Dialogue<'_, A> {
             .contains(&x) =>
             {
                 self.advance_sequence(
-                    "KOHR_AH_PLEAD",
+                    StoryKey::KOHR_AH_PLEAD,
                     &[WILL_KILL_1, WILL_KILL_2, WILL_KILL_3, WILL_KILL_4],
                 )
             }
             x if [BYE_FRENZY_1, BYE_FRENZY_2, BYE_FRENZY_3, BYE_FRENZY_4].contains(&x) => self
                 .advance_sequence(
-                    "KOHR_AH_INFO",
+                    StoryKey::KOHR_AH_INFO,
                     &[
                         GOODBYE_AND_DIE_FRENZY_1,
                         GOODBYE_AND_DIE_FRENZY_2,
@@ -133,12 +134,12 @@ impl<A: BlackurApi> Dialogue<'_, A> {
         }
     }
     fn frenzy(&mut self, _: i32) {
-        let n = self.api.get("KOHR_AH_REASONS") as usize;
+        let n = self.api.get(StoryKey::KOHR_AH_REASONS) as usize;
         if n < 4 {
             self.api
                 .response((WHY_KILL_ALL_1 + n as i32) as u16, Handler::Combat, &[]);
         }
-        let n = self.api.get("KOHR_AH_PLEAD") as usize;
+        let n = self.api.get(StoryKey::KOHR_AH_PLEAD) as usize;
         if n < 4 {
             self.api.response(
                 (PLEASE_DONT_KILL_1 + n as i32 * 2) as u16,
@@ -146,7 +147,7 @@ impl<A: BlackurApi> Dialogue<'_, A> {
                 &[],
             );
         }
-        let n = self.api.get("KOHR_AH_INFO") as usize;
+        let n = self.api.get(StoryKey::KOHR_AH_INFO) as usize;
         if n < 4 {
             self.api
                 .response((BYE_FRENZY_1 + n as i32) as u16, Handler::Combat, &[]);
@@ -156,7 +157,7 @@ impl<A: BlackurApi> Dialogue<'_, A> {
         match r {
             x if x == KEY_PHRASE => {
                 self.api.npc(RESPONSE_TO_KEY_PHRASE);
-                self.api.set("KNOW_KOHR_AH_STORY", 2);
+                self.api.set(StoryKey::KNOW_KOHR_AH_STORY, 2);
             }
             x if x == WHY_DO_YOU_DESTROY => {
                 self.api.npc(WE_WERE_SLAVES);
@@ -190,15 +191,15 @@ impl<A: BlackurApi> Dialogue<'_, A> {
             .response(GUESS_THATS_ALL as u16, Handler::Combat, &[]);
     }
     fn die_human(&mut self, _: i32) {
-        let n = self.api.get("KOHR_AH_REASONS") as usize;
+        let n = self.api.get(StoryKey::KOHR_AH_REASONS) as usize;
         if n < 4 {
             self.api
                 .response((THREAT_1 + n as i32 * 2) as u16, Handler::Combat, &[]);
         }
-        if self.api.get("KNOW_KOHR_AH_STORY") == 1 {
+        if self.api.get(StoryKey::KNOW_KOHR_AH_STORY) == 1 {
             self.api.response(KEY_PHRASE as u16, Handler::Story, &[]);
         }
-        match self.api.get("KOHR_AH_INFO") {
+        match self.api.get(StoryKey::KOHR_AH_INFO) {
             0 => self
                 .api
                 .response(WHAT_ARE_YOU_HOVERING_OVER as u16, Handler::Combat, &[]),
@@ -210,7 +211,7 @@ impl<A: BlackurApi> Dialogue<'_, A> {
                 .response(STOP_THAT_GROSS_BLINKING as u16, Handler::Combat, &[]),
             _ => {}
         }
-        match self.api.get("KOHR_AH_PLEAD") {
+        match self.api.get(StoryKey::KOHR_AH_PLEAD) {
             0 => self.api.response(PLEAD_1 as u16, Handler::Combat, &[]),
             1 => self.api.response(PLEAD_2 as u16, Handler::Combat, &[]),
             2 | 3 => self.api.response(PLEAD_4 as u16, Handler::Combat, &[]),
@@ -225,33 +226,33 @@ impl<A: BlackurApi> Dialogue<'_, A> {
             self.api.segue(0);
             return;
         }
-        if self.api.get("KOHR_AH_KILLED_ALL") != 0 {
+        if self.api.get(StoryKey::KOHR_AH_KILLED_ALL) != 0 {
             self.api.npc(GAME_OVER_DUDE);
             self.api.segue(0);
             return;
         }
-        if self.api.get("KOHR_AH_SENSES_EVIL") == 0 && self.api.get("TALKING_PET_ON_SHIP") != 0 {
+        if self.api.get(StoryKey::KOHR_AH_SENSES_EVIL) == 0 && self.api.get(StoryKey::TALKING_PET_ON_SHIP) != 0 {
             self.api.npc(SENSE_EVIL);
-            self.api.set("KOHR_AH_SENSES_EVIL", 1);
+            self.api.set(StoryKey::KOHR_AH_SENSES_EVIL, 1);
         }
         if activity == crate::comm::dispatch::IN_INTERPLANETARY as u8
             && self.api.in_samatra_battle()
         {
             self.api.npc(HELLO_SAMATRA);
-            self.api.set("AWARE_OF_SAMATRA", 1);
+            self.api.set(StoryKey::AWARE_OF_SAMATRA, 1);
             self.api.segue(1);
             return;
         }
-        if self.api.get("KOHR_AH_FRENZY") != 0 {
+        if self.api.get(StoryKey::KOHR_AH_FRENZY) != 0 {
             let next = self.sequence(
-                "KOHR_AH_VISITS",
+                StoryKey::KOHR_AH_VISITS,
                 &[WE_KILL_ALL_1, WE_KILL_ALL_2, WE_KILL_ALL_3, WE_KILL_ALL_4],
             );
             self.frenzy(0);
-            self.api.set("KOHR_AH_VISITS", next);
+            self.api.set(StoryKey::KOHR_AH_VISITS, next);
         } else {
             let next = self.sequence(
-                "KOHR_AH_VISITS",
+                StoryKey::KOHR_AH_VISITS,
                 &[
                     HELLO_AND_DIE_1,
                     HELLO_AND_DIE_2,
@@ -260,12 +261,12 @@ impl<A: BlackurApi> Dialogue<'_, A> {
                 ],
             );
             self.die_human(0);
-            self.api.set("KOHR_AH_VISITS", next);
+            self.api.set(StoryKey::KOHR_AH_VISITS, next);
         }
     }
     fn initialize(&mut self) {
         self.api.segue(
-            if self.api.get("KOHR_AH_KILLED_ALL") == 0
+            if self.api.get(StoryKey::KOHR_AH_KILLED_ALL) == 0
                 && self.api.activity() as u8 != crate::comm::dispatch::WON_LAST_BATTLE as u8
             {
                 1

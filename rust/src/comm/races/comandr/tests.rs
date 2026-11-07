@@ -1,3 +1,4 @@
+use crate::engine::StoryKey;
 use super::*;
 use crate::comm::races::script::Supplies;
 use std::collections::{HashMap, HashSet};
@@ -215,7 +216,7 @@ fn first_visit_constructs_ship_name_and_preserves_choice_order() {
         f.effects,
         vec![
             Effect::Palette(1),
-            Effect::Set("STARBASE_VISITED".into(), 1),
+            Effect::Set(StoryKey::STARBASE_VISITED.into(), 1),
             Effect::Npc(4),
             Effect::Offer(58, Handler::NoRadioactives, vec![58, GLOBAL_SHIP_NAME, 59]),
             Effect::Offer(60, Handler::NoRadioactives, vec![]),
@@ -234,9 +235,9 @@ fn returning_intro_routes_all_game_state_branches() {
     ] {
         let mut f = Fake::ready();
         f.state.extend([
-            ("STARBASE_VISITED".into(), 1),
-            ("RADIOACTIVES_PROVIDED".into(), provided),
-            ("MOONBASE_DESTROYED".into(), moon),
+            (StoryKey::STARBASE_VISITED.into(), 1),
+            (StoryKey::RADIOACTIVES_PROVIDED.into(), provided),
+            (StoryKey::MOONBASE_DESTROYED.into(), moon),
         ]);
         f.supplies.radioactives = radios;
         Commander(&mut f).intro();
@@ -248,7 +249,7 @@ fn returning_intro_routes_all_game_state_branches() {
         assert_eq!(f.effects.contains(&Effect::Palette(1)), provided == 0);
     }
     let mut f = Fake::ready();
-    f.state.insert("PROBE_ILWRATH_ENCOUNTER".into(), 1);
+    f.state.insert(StoryKey::PROBE_ILWRATH_ENCOUNTER.into(), 1);
     Commander(&mut f).intro();
     assert_eq!(f.spoken(), vec![35]);
     assert_eq!(
@@ -324,10 +325,10 @@ fn rescue_effects_and_offers_match_all_three_menus() {
         Handler::TellMoonBase,
     ] {
         for (input, output, state) in [
-            (I_LOST_MY_LANDER, 11, Some("LANDERS_LOST")),
+            (I_LOST_MY_LANDER, 11, Some(StoryKey::LANDERS_LOST)),
             (I_LOST_ANOTHER_LANDER, 6, None),
-            (NEED_FUEL_MERCURY, 2, Some("GIVEN_FUEL_BEFORE")),
-            (NEED_FUEL_LUNA, 2, Some("GIVEN_FUEL_BEFORE")),
+            (NEED_FUEL_MERCURY, 2, Some(StoryKey::GIVEN_FUEL_BEFORE)),
+            (NEED_FUEL_LUNA, 2, Some(StoryKey::GIVEN_FUEL_BEFORE)),
             (NEED_FUEL_AGAIN, 3, None),
         ] {
             let mut f = Fake::ready();
@@ -358,9 +359,9 @@ fn rescue_effects_and_offers_match_all_three_menus() {
                         radioactives: 0,
                     };
                     f.state.extend([
-                        ("CHMMR_BOMB_STATE".into(), bomb),
-                        ("LANDERS_LOST".into(), repeat),
-                        ("GIVEN_FUEL_BEFORE".into(), repeat),
+                        (StoryKey::CHMMR_BOMB_STATE.into(), bomb),
+                        (StoryKey::LANDERS_LOST.into(), repeat),
+                        (StoryKey::GIVEN_FUEL_BEFORE.into(), repeat),
                     ]);
                     f.run(handler, 0);
                     let offers = f.offers();
@@ -419,7 +420,7 @@ fn moonbase_information_stack_and_destroy_promise() {
         );
     }
     f.run(Handler::ByeBye, WE_WILL_TAKE_CARE_OF_BASE);
-    assert_eq!(f.get("WILL_DESTROY_BASE"), 1);
+    assert_eq!(f.get(StoryKey::WILL_DESTROY_BASE), 1);
     f.run(Handler::TellMoonBase, 0);
     assert_eq!(f.offers()[0], (98, Handler::ByeBye));
 }
@@ -453,7 +454,7 @@ fn destroyed_base_and_ilwrath_responses() {
     ] {
         f.run(Handler::ByeBye, r);
         assert_eq!(f.spoken(), vec![output, 34]);
-        assert_eq!(f.get("PROBE_ILWRATH_ENCOUNTER"), 1);
+        assert_eq!(f.get(StoryKey::PROBE_ILWRATH_ENCOUNTER), 1);
         assert!(f.offers().is_empty());
     }
 }
@@ -468,8 +469,8 @@ fn alliance_selection_and_custom_commander_name() {
         let mut f = Fake::ready();
         f.run(Handler::ByeBye, r);
         assert_eq!(f.spoken(), vec![reply, 12]);
-        assert_eq!(f.get("PROBE_ILWRATH_ENCOUNTER"), 0);
-        assert_eq!(f.get("STARBASE_AVAILABLE"), 1);
+        assert_eq!(f.get(StoryKey::PROBE_ILWRATH_ENCOUNTER), 0);
+        assert_eq!(f.get(StoryKey::STARBASE_AVAILABLE), 1);
         assert_eq!(
             f.offers(),
             vec![
@@ -493,7 +494,7 @@ fn alliance_selection_and_custom_commander_name() {
     ] {
         let mut f = Fake::ready();
         f.run(Handler::ByeBye, name);
-        assert_eq!(f.get("NEW_ALLIANCE_NAME"), value);
+        assert_eq!(f.get(StoryKey::NEW_ALLIANCE_NAME), value);
         let mut expected = reply;
         expected.push(49);
         assert_eq!(f.spoken(), expected);
@@ -550,7 +551,7 @@ fn reveal_self_rotates_stacks_and_reaches_each_destination() {
     );
     assert!(!f.enabled(WHAT_WAS_RED_THING));
     for moon in [0, 1] {
-        f.state.insert("MOONBASE_DESTROYED".into(), moon);
+        f.state.insert(StoryKey::MOONBASE_DESTROYED.into(), moon);
         for (r, reply) in [(IT_WENT_AWAY, 41), (WE_DESTROYED_IT, 42), (WHAT_PROBE, 43)] {
             f.run(Handler::RevealSelf, r);
             assert_eq!(f.spoken(), vec![reply]);
@@ -592,7 +593,7 @@ fn radio_transfer_preserves_segue_palette_and_dialogue_order() {
     assert_eq!(
         &f.effects[..7],
         &[
-            Effect::Set("RADIOACTIVES_PROVIDED".into(), 1),
+            Effect::Set(StoryKey::RADIOACTIVES_PROVIDED.into(), 1),
             Effect::Npc(18),
             Effect::Npc(19),
             Effect::Talk(1),

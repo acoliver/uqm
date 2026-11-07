@@ -1,4 +1,5 @@
 //! Mycon dialogue, ported from myconc.c.
+use crate::engine::StoryKey;
 use super::script::{animation, as_comm_data};
 use crate::comm::locdata::{CColor, CLocData, CPoint};
 use crate::comm::types::CommData;
@@ -33,7 +34,7 @@ impl<A: MyconApi> Dialogue<'_, A> {
     }
     fn do_ramble(&mut self, r: i32) {
         let mut counter: i32;
-        counter = i32::from(self.api.get("MYCON_RAMBLE"));
+        counter = i32::from(self.api.get(StoryKey::MYCON_RAMBLE));
         let res = {
             let old = counter;
             counter = (counter + 1) as u8 as i32;
@@ -114,8 +115,8 @@ impl<A: MyconApi> Dialogue<'_, A> {
             }
             24 => {
                 self.api.npc(RAMBLE_25);
-                if i32::from(self.api.get("KNOW_ABOUT_SHATTERED")) < 2 {
-                    self.api.set("KNOW_ABOUT_SHATTERED", 2_u8);
+                if i32::from(self.api.get(StoryKey::KNOW_ABOUT_SHATTERED)) < 2 {
+                    self.api.set(StoryKey::KNOW_ABOUT_SHATTERED, 2_u8);
                 }
             }
             25 => {
@@ -142,16 +143,16 @@ impl<A: MyconApi> Dialogue<'_, A> {
             }
             _ => {}
         }
-        self.api.set("MYCON_RAMBLE", (counter) as u8);
-        if !((i32::from(self.api.get("GLOBAL_FLAGS_AND_DATA")) & (1 << 7)) != 0) {
+        self.api.set(StoryKey::MYCON_RAMBLE, (counter) as u8);
+        if !((i32::from(self.api.get(StoryKey::GLOBAL_FLAGS_AND_DATA)) & (1 << 7)) != 0) {
             if !(r == COME_IN_PEACE) && !(r == GONNA_DIE) {
-                counter = (i32::from(self.api.get("MYCON_INSULTS")) + 1) & 7;
-                self.api.set("MYCON_INSULTS", (counter) as u8);
+                counter = (i32::from(self.api.get(StoryKey::MYCON_INSULTS)) + 1) & 7;
+                self.api.set(StoryKey::MYCON_INSULTS, (counter) as u8);
                 self.session.made_choice = 1;
             }
         } else if (!(r == LETS_BE_FRIENDS) && !(r == CAME_TO_HOMEWORLD)) && !(r == SUBMIT_TO_US) {
-            counter = (i32::from(self.api.get("MYCON_INFO")) + 1) & 15;
-            self.api.set("MYCON_INFO", (counter) as u8);
+            counter = (i32::from(self.api.get(StoryKey::MYCON_INFO)) + 1) & 15;
+            self.api.set(StoryKey::MYCON_INFO, (counter) as u8);
             self.session.made_choice = 1;
         }
     }
@@ -168,7 +169,7 @@ impl<A: MyconApi> Dialogue<'_, A> {
             self.api.segue(0);
         } else {
             self.do_ramble(r);
-            if !((i32::from(self.api.get("GLOBAL_FLAGS_AND_DATA")) & (1 << 7)) != 0) {
+            if !((i32::from(self.api.get(StoryKey::GLOBAL_FLAGS_AND_DATA)) & (1 << 7)) != 0) {
                 self.api.npc(BYE_AND_DIE_SPACE);
             } else {
                 self.api.npc(BYE_AND_DIE_HOMEWORLD);
@@ -185,23 +186,23 @@ impl<A: MyconApi> Dialogue<'_, A> {
             self.api.disable((HOW_GOES_IMPLANTING) as u16);
         } else if r == I_HAVE_A_CUNNING_PLAN {
             self.api.npc(WONT_FALL_FOR_TRICK);
-            self.api.set("NO_TRICK_AT_SUN", 1_u8);
+            self.api.set(StoryKey::NO_TRICK_AT_SUN, 1_u8);
         }
         if self.api.enabled((WHATS_UP_SUN_DEVICE) as u16) {
             self.api
                 .response((WHATS_UP_SUN_DEVICE) as u16, Handler::SunDevice, &[]);
         }
-        if i32::from(self.api.get("MYCON_FELL_FOR_AMBUSH")) != 0 {
+        if i32::from(self.api.get(StoryKey::MYCON_FELL_FOR_AMBUSH)) != 0 {
             if self.api.enabled((HOW_GOES_IMPLANTING) as u16)
-                && (i32::from(self.api.get("MYCON_FELL_FOR_AMBUSH")) != 0)
+                && (i32::from(self.api.get(StoryKey::MYCON_FELL_FOR_AMBUSH)) != 0)
             {
                 self.api
                     .response((HOW_GOES_IMPLANTING) as u16, Handler::SunDevice, &[]);
             }
             self.api
                 .response((LIKE_TO_LAND) as u16, Handler::CombatIsInevitable, &[]);
-        } else if (i32::from(self.api.get("MYCON_AMBUSH")) != 0)
-            && !(i32::from(self.api.get("NO_TRICK_AT_SUN")) != 0)
+        } else if (i32::from(self.api.get(StoryKey::MYCON_AMBUSH)) != 0)
+            && !(i32::from(self.api.get(StoryKey::NO_TRICK_AT_SUN)) != 0)
         {
             self.api
                 .response((I_HAVE_A_CUNNING_PLAN) as u16, Handler::SunDevice, &[]);
@@ -228,7 +229,7 @@ impl<A: MyconApi> Dialogue<'_, A> {
         {
             self.api.npc(WE_GO_TO_IMPLANT);
             self.api.segue(0);
-            self.api.set("MYCON_FELL_FOR_AMBUSH", 1_u8);
+            self.api.set(StoryKey::MYCON_FELL_FOR_AMBUSH, 1_u8);
             self.api.event(1, 0, 0, 0, 13);
         } else {
             self.api.npc(AMBUSH_TAIL);
@@ -246,7 +247,7 @@ impl<A: MyconApi> Dialogue<'_, A> {
     fn normal_mycon(&mut self, r: i32) {
         if r == WHAT_ABOUT_SHATTERED {
             self.api.npc(ABOUT_SHATTERED);
-            self.api.set("KNOW_ABOUT_SHATTERED", 2_u8);
+            self.api.set(StoryKey::KNOW_ABOUT_SHATTERED, 2_u8);
         } else if r != 0 {
             self.do_ramble(r);
             self.api.npc(RAMBLE_TAIL);
@@ -257,7 +258,7 @@ impl<A: MyconApi> Dialogue<'_, A> {
         } else {
             Handler::NormalMycon
         };
-        if !((i32::from(self.api.get("GLOBAL_FLAGS_AND_DATA")) & (1 << 7)) != 0) {
+        if !((i32::from(self.api.get(StoryKey::GLOBAL_FLAGS_AND_DATA)) & (1 << 7)) != 0) {
             if self.api.enabled((COME_IN_PEACE) as u16) {
                 self.api.response((COME_IN_PEACE) as u16, resp_func, &[]);
             }
@@ -265,7 +266,7 @@ impl<A: MyconApi> Dialogue<'_, A> {
                 self.api.response((GONNA_DIE) as u16, resp_func, &[]);
             }
             if !(self.session.made_choice != 0) {
-                match i32::from(self.api.get("MYCON_INSULTS")) {
+                match i32::from(self.api.get(StoryKey::MYCON_INSULTS)) {
                     0 => {
                         self.api.response((INSULT_1) as u16, resp_func, &[]);
                     }
@@ -297,7 +298,7 @@ impl<A: MyconApi> Dialogue<'_, A> {
                 .response((BYE_SPACE) as u16, Handler::CombatIsInevitable, &[]);
         } else {
             if !(self.session.made_choice != 0) {
-                match i32::from(self.api.get("MYCON_INFO")) {
+                match i32::from(self.api.get(StoryKey::MYCON_INFO)) {
                     0 => {
                         self.api.response((QUESTION_1) as u16, resp_func, &[]);
                     }
@@ -359,12 +360,12 @@ impl<A: MyconApi> Dialogue<'_, A> {
             if self.api.enabled((SUBMIT_TO_US) as u16) {
                 self.api.response((SUBMIT_TO_US) as u16, resp_func, &[]);
             }
-            if !(i32::from(self.api.get("MYCON_FELL_FOR_AMBUSH")) != 0) {
-                if i32::from(self.api.get("KNOW_ABOUT_SHATTERED")) == 1 {
+            if !(i32::from(self.api.get(StoryKey::MYCON_FELL_FOR_AMBUSH)) != 0) {
+                if i32::from(self.api.get(StoryKey::KNOW_ABOUT_SHATTERED)) == 1 {
                     self.api
                         .response((WHAT_ABOUT_SHATTERED) as u16, Handler::NormalMycon, &[]);
                 }
-                if i32::from(self.api.get("MYCON_AMBUSH")) != 0 {
+                if i32::from(self.api.get(StoryKey::MYCON_AMBUSH)) != 0 {
                     self.api
                         .response((I_HAVE_A_CUNNING_PLAN) as u16, Handler::TrickMycon, &[]);
                 }
@@ -375,8 +376,8 @@ impl<A: MyconApi> Dialogue<'_, A> {
     }
     fn intro(&mut self) {
         let mut num_visits: i32;
-        if i32::from(self.api.get("SUN_DEVICE")) != 0 {
-            num_visits = i32::from(self.api.get("MYCON_VISITS"));
+        if i32::from(self.api.get(StoryKey::SUN_DEVICE)) != 0 {
+            num_visits = i32::from(self.api.get(StoryKey::MYCON_VISITS));
             let res = {
                 let old = num_visits;
                 num_visits = (num_visits + 1) as u8 as i32;
@@ -395,13 +396,13 @@ impl<A: MyconApi> Dialogue<'_, A> {
                 }
                 _ => {}
             }
-            self.api.set("MYCON_VISITS", (num_visits) as u8);
+            self.api.set(StoryKey::MYCON_VISITS, (num_visits) as u8);
             self.api.segue(1);
-        } else if i32::from(self.api.get("MYCON_KNOW_AMBUSH")) != 0 {
+        } else if i32::from(self.api.get(StoryKey::MYCON_KNOW_AMBUSH)) != 0 {
             self.api.npc(DIE_LIAR);
             self.api.segue(1);
-        } else if (i32::from(self.api.get("GLOBAL_FLAGS_AND_DATA")) & (1 << 6)) != 0 {
-            num_visits = i32::from(self.api.get("MYCON_SUN_VISITS"));
+        } else if (i32::from(self.api.get(StoryKey::GLOBAL_FLAGS_AND_DATA)) & (1 << 6)) != 0 {
+            num_visits = i32::from(self.api.get(StoryKey::MYCON_SUN_VISITS));
             let res = {
                 let old = num_visits;
                 num_visits = (num_visits + 1) as u8 as i32;
@@ -420,10 +421,10 @@ impl<A: MyconApi> Dialogue<'_, A> {
                 }
                 _ => {}
             }
-            self.api.set("MYCON_SUN_VISITS", (num_visits) as u8);
+            self.api.set(StoryKey::MYCON_SUN_VISITS, (num_visits) as u8);
             self.sun_device(0_u16 as i32);
-        } else if (i32::from(self.api.get("GLOBAL_FLAGS_AND_DATA")) & (1 << 7)) != 0 {
-            num_visits = i32::from(self.api.get("MYCON_HOME_VISITS"));
+        } else if (i32::from(self.api.get(StoryKey::GLOBAL_FLAGS_AND_DATA)) & (1 << 7)) != 0 {
+            num_visits = i32::from(self.api.get(StoryKey::MYCON_HOME_VISITS));
             let res = {
                 let old = num_visits;
                 num_visits = (num_visits + 1) as u8 as i32;
@@ -460,10 +461,10 @@ impl<A: MyconApi> Dialogue<'_, A> {
                 }
                 _ => {}
             }
-            self.api.set("MYCON_HOME_VISITS", (num_visits) as u8);
+            self.api.set(StoryKey::MYCON_HOME_VISITS, (num_visits) as u8);
             self.normal_mycon(0_u16 as i32);
         } else {
-            num_visits = i32::from(self.api.get("MYCON_VISITS"));
+            num_visits = i32::from(self.api.get(StoryKey::MYCON_VISITS));
             let res = {
                 let old = num_visits;
                 num_visits = (num_visits + 1) as u8 as i32;
@@ -500,7 +501,7 @@ impl<A: MyconApi> Dialogue<'_, A> {
                 }
                 _ => {}
             }
-            self.api.set("MYCON_VISITS", (num_visits) as u8);
+            self.api.set(StoryKey::MYCON_VISITS, (num_visits) as u8);
             self.normal_mycon(0_u16 as i32);
         }
     }
