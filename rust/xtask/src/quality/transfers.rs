@@ -3,6 +3,19 @@ use std::collections::{BTreeMap, BTreeSet};
 use super::layers::prefix;
 use super::metrics::{Finding, Measurement};
 
+// The archived base already reflects identical landed moves. Only new or
+// changed entries can relocate its identities or spend its transfer credit.
+pub fn pending(
+    moves: &BTreeMap<String, String>,
+    base_moves: Option<&BTreeMap<String, String>>,
+) -> BTreeMap<String, String> {
+    moves
+        .iter()
+        .filter(|(source, target)| base_moves.and_then(|m| m.get(*source)) != Some(*target))
+        .map(|(source, target)| (source.clone(), target.clone()))
+        .collect()
+}
+
 pub fn matching<'a>(
     moves: &'a BTreeMap<String, String>,
     identity: &str,
@@ -139,6 +152,7 @@ fn root_layer_reference(finding: &Finding) -> bool {
 }
 
 pub fn validate(
+    entries: &BTreeMap<String, u64>,
     current: &Measurement,
     base: &Measurement,
     moves: &BTreeMap<String, String>,
@@ -189,15 +203,7 @@ pub fn validate(
             }
         }
     }
-    let mut base_entries = BTreeMap::new();
-    for finding in identities(base) {
-        let unbudgeted_file_loc = finding.counter == "loc"
-            && finding.metric == "loc"
-            && finding.value <= super::metrics::limit("loc", "loc");
-        *base_entries
-            .entry(finding.identity.as_str())
-            .or_insert(true) &= unbudgeted_file_loc;
-    }
+    let base_entries = unbudgeted_file_loc(base);
     for (target, source) in &targets {
         if base_entries
             .get(target.as_str())
@@ -208,14 +214,31 @@ pub fn validate(
             return Err(format!("move would merge debt into {target}"));
         }
     }
-    for old in moves.keys() {
-        if identities(current).any(|finding| {
-            prefix(&finding.identity, old) && !targets.contains_key(&finding.identity)
+    let recorded_ids: BTreeSet<_> = entries
+        .keys()
+        .filter_map(|key| key.splitn(3, '|').nth(2))
+        .collect();
+    for (old, sources) in &sources_by_move {
+        if sources.iter().any(|source| {
+            current_ids.contains(source)
+                && !targets.contains_key(*source)
+                && !(base_entries[source] && !recorded_ids.contains(source))
         }) {
             return Err(format!("move source {old} still exists"));
         }
     }
     Ok(())
+}
+
+fn unbudgeted_file_loc(base: &Measurement) -> BTreeMap<&str, bool> {
+    let mut entries = BTreeMap::new();
+    for finding in identities(base) {
+        let unbudgeted = finding.counter == "loc"
+            && finding.metric == "loc"
+            && finding.value <= super::metrics::limit("loc", "loc");
+        *entries.entry(finding.identity.as_str()).or_insert(true) &= unbudgeted;
+    }
+    entries
 }
 
 pub fn retire(moves: &mut BTreeMap<String, String>, base: &Measurement) {
@@ -231,7 +254,7 @@ pub fn limits(
     moves: &BTreeMap<String, String>,
     budgets: &BTreeMap<String, super::budgets::Budget>,
 ) -> Result<BTreeMap<String, u64>, String> {
-    validate(current, base, moves)?;
+    validate(entries, current, base, moves)?;
     if moves.is_empty() {
         return Ok(entries.clone());
     }
@@ -450,14 +473,14 @@ mod tests {
             ..Default::default()
         };
         let moves = [(old.into(), new.into())].into();
-        validate(&current, &base, &moves).unwrap();
+        validate(&base.baseline(), &current, &base, &moves).unwrap();
         let transferred =
             limits(&base.baseline(), &current, &base, &moves, &BTreeMap::new()).unwrap();
         assert!(!transferred
             .keys()
             .any(|key| key.contains("planned_engine_core")));
         current.declarations.clear();
-        assert!(validate(&current, &base, &moves).is_err());
+        assert!(validate(&base.baseline(), &current, &base, &moves).is_err());
     }
 
     #[test]
@@ -491,10 +514,10 @@ mod tests {
             ..Default::default()
         };
         let moves = [("uqm::graphics".into(), "uqm-engine::graphics".into())].into();
-        validate(&current, &base, &moves).unwrap();
+        validate(&base.baseline(), &current, &base, &moves).unwrap();
         let limits = limits(&base.baseline(), &current, &base, &moves, &BTreeMap::new()).unwrap();
         assert!(!limits.keys().any(|key| key.contains("module_edges")));
-        assert!(validate(&Measurement::default(), &base, &moves).is_err());
+        assert!(validate(&base.baseline(), &Measurement::default(), &base, &moves).is_err());
     }
 }
 
@@ -521,6 +544,333 @@ mod nested_tests {
     }
 
     #[test]
+    fn reused_prefix_accepts_new_declarations_without_crediting_them() -> Result<(), String> {
+        let base = input_debt(&[("uqm-engine::input::poll", 3)]);
+        let current = input_debt(&[
+            ("uqm-engine::input_port::poll", 3),
+            ("uqm-engine::input::Runtime", 2),
+        ]);
+        let moves = [("uqm-engine::input".into(), "uqm-engine::input_port".into())].into();
+        validate(&base.baseline(), &current, &base, &moves)?;
+        let transferred = limits(&base.baseline(), &current, &base, &moves, &BTreeMap::new())?;
+        assert_eq!(transferred.values().sum::<u64>(), 3);
+        assert_eq!(current.baseline().values().sum::<u64>(), 5);
+        assert_eq!(
+            transferred,
+            input_debt(&[("uqm-engine::input_port::poll", 3)]).baseline()
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn reused_prefix_still_rejects_a_retained_base_source() {
+        let base = measured(&["uqm-engine::input::poll"]);
+        let current = measured(&[
+            "uqm-engine::input_port::poll",
+            "uqm-engine::input::Runtime",
+            "uqm-engine::input::poll",
+        ]);
+        let moves = [("uqm-engine::input".into(), "uqm-engine::input_port".into())].into();
+        assert_eq!(
+            validate(&base.baseline(), &current, &base, &moves),
+            Err("move source uqm-engine::input still exists".into())
+        );
+    }
+
+    #[test]
+    fn reused_prefix_cannot_double_claim_credit_at_an_old_identity() {
+        let base = input_debt(&[("uqm-engine::input::poll", 3)]);
+        let mut current = input_debt(&[
+            ("uqm-engine::input_port::poll", 3),
+            ("uqm-engine::input::poll", 2),
+        ]);
+        // Even a different declaration kind at the old name retains the base identity.
+        current.declarations[1].metric = "struct".into();
+        let moves = [("uqm-engine::input".into(), "uqm-engine::input_port".into())].into();
+        assert_eq!(
+            limits(&base.baseline(), &current, &base, &moves, &BTreeMap::new()),
+            Err("move source uqm-engine::input still exists".into())
+        );
+    }
+
+    #[test]
+    fn reused_file_with_only_unbudgeted_loc_is_measured_fresh() -> Result<(), String> {
+        let base = file_loc(
+            "uqm-engine::input",
+            super::super::metrics::limit("loc", "loc"),
+        );
+        let mut current = file_loc("uqm-engine::input_port", 41);
+        current
+            .findings
+            .extend(file_loc("uqm-engine::input", 801).findings);
+        let moves = [("uqm-engine::input".into(), "uqm-engine::input_port".into())].into();
+        let transferred = limits(&base.baseline(), &current, &base, &moves, &BTreeMap::new())?;
+        assert!(transferred.is_empty());
+        assert_eq!(current.baseline()["loc|loc|uqm-engine::input::@file"], 801);
+        Ok(())
+    }
+
+    #[test]
+    fn reused_file_rejects_over_limit_or_any_baseline_entry() {
+        let mut base = file_loc(
+            "uqm-engine::input",
+            super::super::metrics::limit("loc", "loc") + 1,
+        );
+        let mut current = file_loc("uqm-engine::input_port", 41);
+        current
+            .findings
+            .extend(file_loc("uqm-engine::input", 42).findings);
+        let moves = [("uqm-engine::input".into(), "uqm-engine::input_port".into())].into();
+        let rejected = Err("move source uqm-engine::input still exists".into());
+        assert_eq!(
+            limits(&base.baseline(), &current, &base, &moves, &BTreeMap::new()),
+            rejected
+        );
+        base.findings[0].value = 41;
+        for counter in [
+            "loc|loc",
+            "allows|unused",
+            "layers|module_edges",
+            "complexity|loc",
+        ] {
+            for value in [0, 1] {
+                let entries = [(format!("{counter}|uqm-engine::input::@file"), value)].into();
+                assert_eq!(
+                    limits(&entries, &current, &base, &moves, &BTreeMap::new()),
+                    rejected
+                );
+            }
+        }
+        for (counter, metric) in [("allows", "unused"), ("layers", "module_edges")] {
+            let mut budgeted = base.clone();
+            budgeted.findings.push(Finding {
+                counter: counter.into(),
+                metric: metric.into(),
+                value: 1,
+                ..base.findings[0].clone()
+            });
+            assert_eq!(
+                limits(
+                    &budgeted.baseline(),
+                    &current,
+                    &budgeted,
+                    &moves,
+                    &BTreeMap::new()
+                ),
+                rejected
+            );
+        }
+    }
+
+    #[test]
+    fn reused_file_move_sequence_preserves_total_debt() -> Result<(), String> {
+        let old = "uqm-engine::input";
+        let new = "uqm-engine::input_port";
+        let base = input_with_file_debt(old, "poll");
+        let mut intermediate = input_with_file_debt(new, "poll");
+        intermediate.findings.extend(file_loc(old, 42).findings);
+        let mut current = input_with_file_debt(new, "read");
+        current.findings.extend(file_loc(old, 42).findings);
+        let mut baseline = super::super::baseline::Baseline {
+            entries: base.baseline(),
+            ..Default::default()
+        };
+        let debt = baseline.entries.values().sum::<u64>();
+        baseline.add_move(old, new, &intermediate, &base)?;
+        assert_eq!(baseline.entries, intermediate.baseline());
+        assert_eq!(baseline.entries.values().sum::<u64>(), debt);
+        baseline.add_move(
+            &format!("{new}::poll"),
+            &format!("{new}::read"),
+            &current,
+            &base,
+        )?;
+        assert_eq!(baseline.entries, current.baseline());
+        assert_eq!(baseline.entries.values().sum::<u64>(), debt);
+        assert!(!baseline.entries.keys().any(|key| key.ends_with("::@file")));
+        Ok(())
+    }
+
+    #[test]
+    fn historical_post_merge_reused_prefix_and_unrelated_rename_conserve_debt() -> Result<(), String>
+    {
+        let base = input_debt(&[
+            ("uqm-engine::input", 2),
+            ("uqm-engine::input_port::poll", 3),
+            ("uqm-engine::story::get", 4),
+        ]);
+        let current = input_debt(&[
+            ("uqm-engine::input", 2),
+            ("uqm-engine::input_port::poll", 3),
+            ("uqm-engine::story::read", 4),
+        ]);
+        let historical: BTreeMap<String, String> = [
+            ("uqm-engine::input".into(), "uqm-engine::input_port".into()),
+            ("uqm::input".into(), "uqm-engine::input_port".into()),
+        ]
+        .into();
+        let mut moves = historical.clone();
+        moves.insert(
+            "uqm-engine::story::get".into(),
+            "uqm-engine::story::read".into(),
+        );
+        let active = pending(&moves, Some(&historical));
+        let transferred = limits(&base.baseline(), &current, &base, &active, &BTreeMap::new())?;
+        assert_eq!(transferred, current.baseline());
+        assert_eq!(
+            transferred.values().sum::<u64>(),
+            base.baseline().values().sum::<u64>()
+        );
+        let mut baseline = super::super::baseline::Baseline {
+            entries: base.baseline(),
+            moved: historical.clone(),
+            ..Default::default()
+        };
+        baseline.add_moves(
+            &[("uqm-engine::story::get", "uqm-engine::story::read")],
+            &current,
+            &base,
+            &historical,
+        )?;
+        assert_eq!(baseline.entries, transferred);
+        assert_eq!(baseline.moved, moves);
+        Ok(())
+    }
+
+    #[test]
+    fn historical_move_missing_from_base_still_validates_targets_and_sources() -> Result<(), String>
+    {
+        let base = input_debt(&[("uqm-engine::input::poll", 3)]);
+        let moves = [("uqm-engine::input".into(), "uqm-engine::input_port".into())].into();
+        let historical = pending(&moves, Some(&moves));
+        let active = pending(&moves, None);
+        let retained = input_debt(&[
+            ("uqm-engine::input::poll", 3),
+            ("uqm-engine::input_port::poll", 0),
+        ]);
+        for (current, error) in [
+            (&base, "move target uqm-engine::input_port::poll is absent; function transfers cannot split"),
+            (&retained, "move source uqm-engine::input still exists"),
+        ] {
+            validate(&base.baseline(), current, &base, &historical)?;
+            assert_eq!(validate(&base.baseline(), current, &base, &active), Err(error.into()));
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn historical_move_with_changed_target_is_new_and_fully_validated() -> Result<(), String> {
+        let base = input_debt(&[("uqm-engine::input::poll", 3)]);
+        let historical = [("uqm-engine::input".into(), "uqm-engine::input_port".into())].into();
+        validate(
+            &base.baseline(),
+            &base,
+            &base,
+            &pending(&historical, Some(&historical)),
+        )?;
+        let changed = [("uqm-engine::input".into(), "uqm-engine::other_input".into())].into();
+        assert_eq!(
+            validate(&base.baseline(), &base, &base, &pending(&changed, Some(&historical))),
+            Err("move target uqm-engine::other_input::poll is absent; function transfers cannot split".into())
+        );
+        let retained = input_debt(&[
+            ("uqm-engine::input::poll", 3),
+            ("uqm-engine::other_input::poll", 0),
+        ]);
+        assert_eq!(
+            validate(
+                &base.baseline(),
+                &retained,
+                &base,
+                &pending(&changed, Some(&historical))
+            ),
+            Err("move source uqm-engine::input still exists".into())
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn historical_target_chained_move_conserves_credit() -> Result<(), String> {
+        let base = input_debt(&[
+            ("uqm-engine::input", 2),
+            ("uqm-engine::input_port::poll", 3),
+        ]);
+        let current = input_debt(&[("uqm-engine::input", 2), ("uqm-engine::new_port::poll", 3)]);
+        let historical = [("uqm-engine::input".into(), "uqm-engine::input_port".into())].into();
+        let moves = compose(
+            &pending(&historical, Some(&historical)),
+            "uqm-engine::input_port",
+            "uqm-engine::new_port",
+            &base,
+        )?;
+        let transferred = limits(&base.baseline(), &current, &base, &moves, &BTreeMap::new())?;
+        assert_eq!(transferred, current.baseline());
+        assert_eq!(transferred.values().sum::<u64>(), 5);
+        let mut baseline = super::super::baseline::Baseline {
+            entries: base.baseline(),
+            moved: historical.clone(),
+            ..Default::default()
+        };
+        baseline.add_moves(
+            &[("uqm-engine::input_port", "uqm-engine::new_port")],
+            &current,
+            &base,
+            &historical,
+        )?;
+        assert_eq!(baseline.entries, transferred);
+        assert_eq!(
+            baseline.moved["uqm-engine::input"],
+            "uqm-engine::input_port"
+        );
+        assert_eq!(
+            baseline.moved["uqm-engine::input_port"],
+            "uqm-engine::new_port"
+        );
+        Ok(())
+    }
+
+    fn file_loc(module: &str, value: u64) -> Measurement {
+        Measurement {
+            findings: vec![Finding {
+                counter: "loc".into(),
+                metric: "loc".into(),
+                identity: format!("{module}::@file"),
+                file: "src/input.rs".into(),
+                package: "uqm-engine".into(),
+                subsystem: "uqm-engine".into(),
+                value,
+            }],
+            ..Default::default()
+        }
+    }
+
+    fn input_with_file_debt(module: &str, function: &str) -> Measurement {
+        let mut measured = input_debt(&[(&format!("{module}::{function}"), 3)]);
+        measured.findings.push(Finding {
+            counter: "complexity".into(),
+            metric: "loc".into(),
+            value: 100,
+            ..measured.declarations[0].clone()
+        });
+        measured.findings.extend(file_loc(module, 41).findings);
+        measured
+    }
+
+    fn input_debt(entries: &[(&str, u64)]) -> Measurement {
+        let mut result = measured(&entries.iter().map(|(id, _)| *id).collect::<Vec<_>>());
+        for (declaration, (_, value)) in result.declarations.iter_mut().zip(entries) {
+            declaration.subsystem = "uqm-engine".into();
+            result.findings.push(Finding {
+                counter: "unsafe".into(),
+                metric: "unsafe_lines".into(),
+                value: *value,
+                ..declaration.clone()
+            });
+        }
+        result
+    }
+
+    #[test]
     fn deleted_historical_moves_retire_without_crediting_unknown_new_sources() -> Result<(), String>
     {
         let base = measured(&["uqm::old::Record"]);
@@ -541,7 +891,7 @@ mod nested_tests {
             .is_err());
         let mut pending = [("uqm::old".into(), "uqm::new".into())].into();
         retire(&mut pending, &base);
-        assert!(validate(&Measurement::default(), &base, &pending).is_err());
+        assert!(validate(&base.baseline(), &Measurement::default(), &base, &pending).is_err());
         Ok(())
     }
 
@@ -653,7 +1003,7 @@ mod nested_tests {
         ]);
         let missing = measured(&["uqm::battle::draw"]);
         assert!(
-            matches!(validate(&missing, &base, &moves), Err(error) if error.contains("absent"))
+            matches!(validate(&base.baseline(), &missing, &base, &moves), Err(error) if error.contains("absent"))
         );
         let retained = measured(&[
             "uqm-engine::Record",
@@ -661,7 +1011,7 @@ mod nested_tests {
             "uqm::engine::Record",
         ]);
         assert!(
-            matches!(validate(&retained, &base, &moves), Err(error) if error.contains("still exists"))
+            matches!(validate(&base.baseline(), &retained, &base, &moves), Err(error) if error.contains("still exists"))
         );
         let mut duplicate = moves;
         assert!(register(&mut duplicate, "uqm::engine", "other-engine").is_err());
@@ -678,10 +1028,12 @@ mod nested_tests {
                 "uqm-engine::graphics::Record".into(),
             ),
         ]);
-        validate(&current, &base, &moves).unwrap();
+        validate(&base.baseline(), &current, &base, &moves).unwrap();
         let collision = measured(&["uqm::graphics::Record", "uqm::battle::Record"]);
-        assert!(validate(&current, &collision, &moves)
-            .unwrap_err()
-            .contains("same target"));
+        assert!(
+            validate(&collision.baseline(), &current, &collision, &moves)
+                .unwrap_err()
+                .contains("same target")
+        );
     }
 }

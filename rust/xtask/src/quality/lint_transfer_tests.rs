@@ -150,7 +150,7 @@ fn enclosing_move_composes_a_prior_declaration_rename() {
         baseline.moved["uqm-engine::observe::Io"],
         "uqm-engine::observe_port::ObservationIo"
     );
-    super::transfers::validate(&current, &base, &baseline.moved).unwrap();
+    super::transfers::validate(&baseline.entries, &current, &base, &baseline.moved).unwrap();
 }
 
 #[test]
