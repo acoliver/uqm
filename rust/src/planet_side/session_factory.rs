@@ -44,7 +44,7 @@ pub fn create_session(init: SessionInit) -> (PlanetSideSession, super::session::
 /// Capture flagship status and installed lander upgrades, then debit dispatched
 /// crew through the same typed ship-state writeback port used at settlement.
 pub fn create_production_session(
-    ship: &mut CffiShipStatus,
+    ship: &mut CffiShipStatus<'_, '_>,
     landing: SurfacePoint,
     facing: u8,
 ) -> Result<PlanetSideSession, AdapterError> {
@@ -58,7 +58,7 @@ pub fn create_production_session(
         storage_capacity: ship.storage_capacity(),
         ship_crew: status.crew_enlisted,
         current_ship_mass: status.total_element_mass,
-        upgrades: production_upgrades(),
+        upgrades: production_upgrades(ship.game.borrow().world),
     };
     let (session, debit) = create_session(init);
     if session.lander.crew.get() == 0 {
@@ -68,23 +68,14 @@ pub fn create_production_session(
     Ok(session)
 }
 
-fn production_upgrades() -> LanderUpgrades {
+fn production_upgrades(world: &WorldOwner) -> LanderUpgrades {
     use crate::state::game_state_keys::get_game_state;
 
     LanderUpgrades {
-        improved_speed: WorldOwner::current()
-            .read(|world| get_game_state(world, StoryKey::IMPROVED_LANDER_SPEED))
-            != 0,
-        improved_cargo: WorldOwner::current()
-            .read(|world| get_game_state(world, StoryKey::IMPROVED_LANDER_CARGO))
-            != 0,
-        improved_shot: WorldOwner::current()
-            .read(|world| get_game_state(world, StoryKey::IMPROVED_LANDER_SHOT))
-            != 0,
-        shields: ShieldSet::from_bits(
-            WorldOwner::current().read(|world| get_game_state(world, StoryKey::LANDER_SHIELDS))
-                as u8,
-        ),
+        improved_speed: get_game_state(world, StoryKey::IMPROVED_LANDER_SPEED) != 0,
+        improved_cargo: get_game_state(world, StoryKey::IMPROVED_LANDER_CARGO) != 0,
+        improved_shot: get_game_state(world, StoryKey::IMPROVED_LANDER_SHOT) != 0,
+        shields: ShieldSet::from_bits(get_game_state(world, StoryKey::LANDER_SHIELDS) as u8),
     }
 }
 
