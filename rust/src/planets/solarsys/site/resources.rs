@@ -34,7 +34,7 @@ impl spa::SpathiSite for Site<'_, '_, '_> {
 
 impl vault::VaultSite for Site<'_, '_, '_> {
     fn load_vault_scene(&mut self, _system: &mut SolarSys<'_>, first_report: u16) {
-        self.load_scene(c"graphics.vault", c"text.vault", first_report);
+        self.load_scene(c"graphics.syreenvault", c"text.syreenvault", first_report);
     }
     fn lander_takeoff(&mut self) {
         crate::planet_side::special_effects::set_lander_takeoff();
