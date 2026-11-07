@@ -1,5 +1,8 @@
 //! Retained ownership of native contexts on the serialized graphics thread.
-use super::{context_abi, drawable_abi, ffi, frame_abi, native_abi::*, native_drawables};
+use super::{
+    context_abi, drawable_abi, ffi, frame_abi, gfx_common_abi as gfx, native_abi::*,
+    native_drawables,
+};
 use std::{cell::RefCell, ptr::NonNull, rc::Rc};
 
 pub(super) struct Allocation {
@@ -35,6 +38,29 @@ impl ContextFrame {
         }
     }
 
+    pub fn wrapped_frame(&self, index: u16) -> Self {
+        let allocation = self
+            ._allocations
+            .first()
+            .unwrap_or_else(|| panic!("absent frame has no allocation"));
+        Self {
+            frame: allocation.wrapped_frame(usize::from(index)),
+            _allocations: self._allocations.clone(),
+        }
+    }
+
+    pub fn indexed_frame(&self, index: usize) -> Self {
+        let allocation = self
+            ._allocations
+            .first()
+            .unwrap_or_else(|| panic!("absent frame has no allocation"));
+        allocation.assert_thread();
+        let frame = allocation
+            .frame(index)
+            .unwrap_or_else(|| panic!("drawable frame index {index}"));
+        Self::retain(NonNull::new(frame))
+    }
+
     pub fn rect(&self) -> RECT {
         assert!(!self.frame.is_null(), "absent frame has no bounds");
         for allocation in &self._allocations {
@@ -63,6 +89,11 @@ enum Operation {
     BeginBatch,
     EndBatch,
     Flush,
+    Fade(u32, i16),
+    FinishTransforms,
+    TransitionSource(Option<RECT>),
+    Transition(Option<RECT>),
+    ScaleMode(i32),
     Background(Color),
     Foreground(Color),
     Frame(FRAME),
@@ -77,6 +108,28 @@ enum Operation {
     Text(super::native_font::FontLease, TEXT, Color),
 }
 
+impl Operation {
+    fn changes_selection(&self) -> bool {
+        !matches!(
+            self,
+            Self::BeginBatch
+                | Self::EndBatch
+                | Self::Fade(..)
+                | Self::FinishTransforms
+                | Self::TransitionSource(..)
+                | Self::Transition(..)
+                | Self::ScaleMode(..)
+        )
+    }
+
+    fn rect(&self) -> Option<RECT> {
+        match self {
+            Self::Clip(rect) | Self::TransitionSource(rect) | Self::Transition(rect) => *rect,
+            _ => None,
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct ContextLease(Rc<Allocation>);
 
@@ -84,6 +137,13 @@ pub struct BatchPause(ContextLease);
 impl Drop for BatchPause {
     fn drop(&mut self) {
         self.0.apply(Operation::BeginBatch);
+    }
+}
+
+struct BatchDepth(ContextLease);
+impl Drop for BatchDepth {
+    fn drop(&mut self) {
+        self.0.apply(Operation::EndBatch);
     }
 }
 
@@ -142,16 +202,28 @@ impl Drop for ContextTextState {
 }
 
 impl ContextLease {
+    pub fn require(context: CONTEXT) -> Self {
+        Self::retain(NonNull::new(context).unwrap_or_else(|| panic!("required context is absent")))
+    }
+
     pub fn fade_screen(&self, kind: u32, interval: i16) -> u32 {
-        self.0.owned.assert_thread();
-        // SAFETY: this retained context admits the serialized graphics lifecycle.
-        unsafe { super::cmap_abi::FadeScreen(kind, interval) }
+        self.apply(Operation::Fade(kind, interval)).2
     }
 
     pub fn finish_color_transforms(&self) {
-        self.0.owned.assert_thread();
-        // SAFETY: transform completion runs on the retained context's graphics thread.
-        unsafe { super::cmap_abi::FlushColorXForms() }
+        self.apply(Operation::FinishTransforms);
+    }
+
+    pub fn transition_source(&self, rect: Option<RECT>) {
+        self.apply(Operation::TransitionSource(rect));
+    }
+
+    pub fn transition(&self, rect: Option<RECT>) {
+        self.apply(Operation::Transition(rect));
+    }
+
+    pub fn scale_mode(&self, mode: i32) {
+        self.apply(Operation::ScaleMode(mode));
     }
 
     /// Retain a registered context without dereferencing the supplied address.
@@ -178,26 +250,41 @@ impl ContextLease {
         super::native_highlight::Highlight::new(self.clone(), self.0.context, rect)
     }
 
-    fn apply(&self, operation: Operation) -> (FRAME, CONTEXT) {
+    fn apply(&self, operation: Operation) -> (FRAME, CONTEXT, u32) {
         self.assert_thread();
         let selected = if matches!(&operation, Operation::Deselect) {
             std::ptr::null_mut()
         } else {
             self.0.context.as_ptr()
         };
+        let mut rectangle = operation.rect();
+        let rectangle = rectangle
+            .as_mut()
+            .map_or(std::ptr::null_mut(), |rect| rect as *mut RECT);
         // SAFETY: the lease owns the selected context on this graphics thread.
         // Set-frame retains its new allocation; clipping and drawing retain the
         // selected target before entering this native operation boundary.
         unsafe {
-            let previous = match operation {
-                Operation::BeginBatch | Operation::EndBatch => context_abi::_pCurContext,
-                _ => context_abi::SetContext(selected),
+            let previous = if operation.changes_selection() {
+                context_abi::SetContext(selected)
+            } else {
+                context_abi::_pCurContext
             };
+            let mut deadline = 0;
             match operation {
                 Operation::Select | Operation::Deselect => (),
-                Operation::BeginBatch => super::gfx_common_abi::batch_graphics(),
-                Operation::EndBatch => super::gfx_common_abi::unbatch_graphics(),
-                Operation::Flush => super::gfx_common_abi::flush_graphics(),
+                Operation::BeginBatch => gfx::batch_graphics(),
+                Operation::EndBatch => gfx::unbatch_graphics(),
+                Operation::Flush => gfx::flush_graphics(),
+                Operation::Fade(kind, interval) => {
+                    deadline = super::cmap_abi::FadeScreen(kind, interval)
+                }
+                Operation::FinishTransforms => super::cmap_abi::FlushColorXForms(),
+                Operation::TransitionSource(_) => gfx::SetTransitionSource(rectangle),
+                Operation::Transition(_) => gfx::ScreenTransition(3, rectangle),
+                Operation::ScaleMode(mode) => {
+                    gfx::set_graphic_scale_mode(mode);
+                }
                 Operation::Background(color) => {
                     context_abi::SetContextBackGroundColor(color);
                 }
@@ -207,10 +294,8 @@ impl ContextLease {
                 Operation::Frame(frame) => {
                     drawable_abi::SetContextFGFrame(frame);
                 }
-                Operation::Clip(mut rect) => {
-                    context_abi::SetContextClipRect(
-                        rect.as_mut().map_or(std::ptr::null_mut(), |rect| rect),
-                    );
+                Operation::Clip(_) => {
+                    context_abi::SetContextClipRect(rectangle);
                 }
                 Operation::Clear => frame_abi::ClearDrawable(),
                 Operation::Fill(color, mut rect) => {
@@ -244,7 +329,7 @@ impl ContextLease {
                     super::font_abi::font_DrawText(&mut text);
                 }
             }
-            (self.0.context.as_ref().ForeGroundFrame, previous)
+            (self.0.context.as_ref().ForeGroundFrame, previous, deadline)
         }
     }
 
@@ -263,6 +348,14 @@ impl ContextLease {
     pub fn with_selected<R>(&self, draw: impl FnOnce() -> R) -> R {
         let _selection = self.selection();
         draw()
+    }
+
+    pub fn with_batch<R>(&self, draw: impl FnOnce() -> R) -> R {
+        self.apply(Operation::BeginBatch);
+        let depth = BatchDepth(self.clone());
+        let result = draw();
+        drop(depth);
+        result
     }
 
     pub fn draw_batch<R>(&self, draw: impl FnOnce() -> R) -> R {
@@ -406,6 +499,12 @@ impl ContextLease {
         self.apply(Operation::Flush);
     }
 
+    pub fn foreground(&self) -> Color {
+        self.assert_thread();
+        // SAFETY: this lease retains the descriptor on its owning graphics thread.
+        unsafe { self.0.context.as_ref().ForeGroundColor }
+    }
+
     pub fn set_foreground(&self, color: Color) {
         self.apply(Operation::Foreground(color));
     }
@@ -471,9 +570,9 @@ impl ContextLease {
         // batch owns bounded links and retains all registered stamp sources;
         // it cannot contain text pointers into caller storage.
         unsafe {
-            super::gfx_common_abi::SetGraphicScale(scale);
+            gfx::SetGraphicScale(scale);
             super::frame_abi::DrawBatch(batch.primitives.as_mut_ptr(), u32::from(head), 0);
-            super::gfx_common_abi::SetGraphicScale(0);
+            gfx::SetGraphicScale(0);
         }
     }
 

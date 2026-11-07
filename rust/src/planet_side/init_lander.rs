@@ -18,17 +18,17 @@ use crate::comm::locdata::{CColor, CPoint, CRect, CStamp};
 /// Loaded by `load_lander_data`, freed by `free_lander_data`.
 struct LanderFrameState {
     frames: [*mut c_void; 8],
-    sounds: *mut c_void,
+    sounds: Option<crate::sound::owned_bank::LoadedSoundBank>,
     loaded: bool,
 }
 
-// The game kernel serialises all access on the game thread; the Mutex
-// exists only to satisfy static-initialisation requirements.
+// SAFETY: the state stays in its static slot. Loading, borrowing and release
+// check the registered graphics thread before cloning or dropping its sound Rc.
 unsafe impl Send for LanderFrameState {}
 
 static LANDER_FRAMES: Mutex<LanderFrameState> = Mutex::new(LanderFrameState {
     frames: [std::ptr::null_mut(); 8],
-    sounds: std::ptr::null_mut(),
+    sounds: None,
     loaded: false,
 });
 
@@ -73,8 +73,6 @@ const BLACK_COLOR: CColor = CColor {
     a: 0xff,
 };
 
-#[cfg(not(test))]
-use crate::game_init::macro_abi::ReleaseSound;
 #[cfg(not(test))]
 use crate::graphics::context_abi::SetContext;
 #[cfg(not(test))]
@@ -137,8 +135,8 @@ pub fn load_lander_frames() {
             }
         }
 
-        let sounds = match port.load("sounds.lander") {
-            Ok(handle) if !handle.is_null() => handle,
+        let sounds = match crate::sound::owned_bank::LoadedSoundBank::load(c"sounds.lander") {
+            Some(bank) => bank,
             _ => {
                 for (key, _) in loaded.iter().rev() {
                     port.free(key);
@@ -149,7 +147,7 @@ pub fn load_lander_frames() {
         for (i, (_, handle)) in loaded.iter().enumerate() {
             state.frames[i] = *handle;
         }
-        state.sounds = sounds;
+        state.sounds = Some(sounds);
         state.loaded = true;
     }
 }
@@ -171,11 +169,8 @@ pub fn free_lander_frames() {
                     *frame = std::ptr::null_mut();
                 }
             }
-            if !state.sounds.is_null() {
-                crate::sound::heart_ffi::DestroySound((ReleaseSound((state.sounds).cast())).cast());
-                state.sounds = std::ptr::null_mut();
-            }
         }
+        state.sounds = None;
         state.loaded = false;
     }
 }
@@ -186,14 +181,23 @@ pub fn borrowed_assets(
     let state = LANDER_FRAMES
         .lock()
         .map_err(|_| super::runtime::AdapterError::new("lander_assets_lock"))?;
-    if !state.loaded || state.frames.iter().any(|frame| frame.is_null()) || state.sounds.is_null() {
+    if !state.loaded || state.frames.iter().any(|frame| frame.is_null()) || state.sounds.is_none() {
         return Err(super::runtime::AdapterError::new(
             "lander_assets_not_loaded",
         ));
     }
+    let _graphics_owner = crate::graphics::context_abi::ContextFrame::retain(
+        std::ptr::NonNull::new(state.frames[0].cast()),
+    );
     Ok(super::resources::BorrowedPlanetSideAssets {
         graphics: state.frames,
-        sounds: state.sounds,
+        sounds: super::assets::LanderSoundTable::from_bank(
+            state
+                .sounds
+                .as_ref()
+                .unwrap_or_else(|| panic!("loaded lander has no sound owner"))
+                .clone(),
+        ),
     })
 }
 /// Read `GLOBAL_SIS(NumLanders)` from the global SIS state.

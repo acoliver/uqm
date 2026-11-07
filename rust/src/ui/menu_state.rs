@@ -1,5 +1,12 @@
 //! Menu cursor stepping, including the grouped settings entries.
 
+mod navigation;
+#[cfg(not(test))]
+pub(crate) use navigation::alternate;
+#[cfg(test)]
+use navigation::MenuStep;
+pub(crate) use navigation::{navigate, MenuKeys};
+
 pub const PM_SCAN: u8 = 0;
 pub const PM_STARMAP: u8 = 1;
 pub const PM_DEVICES: u8 = 2;
@@ -148,6 +155,107 @@ mod tests {
         assert_eq!(next_state(PM_STARMAP, 6, 0), 1);
         assert_eq!(previous_state(PM_STARMAP, 1, 0), 6);
     }
+    #[test]
+    fn navigation_preserves_direction_priority_and_encounter_wrap() {
+        let keys = MenuKeys {
+            previous: true,
+            next: true,
+            ..MenuKeys::default()
+        };
+        assert_eq!(
+            navigate(PM_CONVERSE, 0, false, 0, keys),
+            Some(MenuStep {
+                display: (PM_CONVERSE, 2),
+                state: 2,
+                paced: true,
+            })
+        );
+        assert_eq!(
+            navigate(
+                PM_CONVERSE,
+                2,
+                true,
+                0,
+                MenuKeys {
+                    next: true,
+                    ..MenuKeys::default()
+                }
+            ),
+            Some(MenuStep {
+                display: (PM_CONVERSE, 0),
+                state: 0,
+                paced: true,
+            })
+        );
+        assert_eq!(
+            navigate(
+                PM_CONVERSE,
+                1,
+                true,
+                0,
+                MenuKeys {
+                    select: true,
+                    ..MenuKeys::default()
+                }
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn manifest_entry_exit_and_cancel_draw_before_committing_the_original_offset() {
+        let select = MenuKeys {
+            select: true,
+            ..MenuKeys::default()
+        };
+        assert_eq!(
+            navigate(PM_SCAN, ALT_MANIFEST, true, 0, select),
+            Some(MenuStep {
+                display: (PM_ALT_CARGO, 0),
+                state: PM_CARGO - PM_SCAN,
+                paced: false,
+            })
+        );
+        for (base, display) in [
+            (PM_SCAN, (PM_ALT_SCAN, 2)),
+            (PM_STARMAP, (PM_ALT_STARMAP, 1)),
+        ] {
+            let expected = Some(MenuStep {
+                display,
+                state: ALT_MANIFEST,
+                paced: false,
+            });
+            assert_eq!(navigate(base, ALT_EXIT_MANIFEST, true, 0, select), expected);
+            assert_eq!(
+                navigate(
+                    base,
+                    PM_CARGO,
+                    true,
+                    0,
+                    MenuKeys {
+                        cancel: true,
+                        ..MenuKeys::default()
+                    }
+                ),
+                expected
+            );
+        }
+        assert_eq!(
+            navigate(
+                PM_SCAN,
+                PM_CARGO,
+                true,
+                0,
+                MenuKeys {
+                    select: true,
+                    cancel: true,
+                    ..MenuKeys::default()
+                }
+            ),
+            None
+        );
+    }
+
     #[test]
     fn settings_skip_toggle_variants_but_reflect_current_flags() {
         assert_eq!(next_state(PM_SOUND_ON, 0, 0), PM_MUSIC_ON - PM_SOUND_ON);

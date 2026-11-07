@@ -23,6 +23,9 @@ impl InputRuntime for Runtime {
         Box::new(Unobserved)
     }
 
+    fn yield_poll(&self, _: &mut uqm_engine::battle::Cx<'_>) {
+        panic!("unexpected unthrottled pacing");
+    }
     fn sleep(&self, _: &mut uqm_engine::battle::Cx<'_>, _: u32) {
         panic!("unexpected pacing");
     }

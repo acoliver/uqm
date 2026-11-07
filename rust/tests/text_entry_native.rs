@@ -163,6 +163,9 @@ impl uqm_rust::engine::input::InputRuntime for OneFrame {
     fn sleep_until(&self, _: &mut uqm_engine::battle::Cx<'_>, _: u32) {
         panic!("unexpected pacing");
     }
+    fn yield_poll(&self, _: &mut Cx<'_>) {
+        panic!("unexpected yield");
+    }
     fn flush(&self) {
         self.input().clear_menu_state();
     }

@@ -240,6 +240,10 @@ impl DrawableLease {
             .iter()
             .position(|owned| *owned == frame)
     }
+    pub(super) fn wrapped_frame(&self, index: usize) -> FRAME {
+        self.assert_thread();
+        self._allocation.frames[index % self._allocation.frames.len()]
+    }
     pub fn frame(&self, index: usize) -> Option<FRAME> {
         self._allocation.frames.get(index).copied()
     }
@@ -298,6 +302,8 @@ mod tests {
         };
         lease.set_hotspot(1, super::super::native_abi::HOT_SPOT { x: -12, y: 7 });
         drop(owner);
+        let first = lease.context_frame(1).indexed_frame(0).rect();
+        assert_eq!((first.extent.width, first.extent.height), (0, 0));
         let rect = lease.frame_rect(1);
         assert_eq!((rect.corner.x, rect.corner.y), (12, -7));
         assert_eq!((rect.extent.width, rect.extent.height), (149, 55));

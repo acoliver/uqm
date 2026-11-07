@@ -129,6 +129,22 @@ pub(crate) mod engine {
         result
     }
 
+    pub fn picker_resources(
+        kernel: &Kernel,
+        species: u32,
+    ) -> crate::engine::battle::link_queue::ShipPickerResources {
+        let queue = &kernel.master_queue;
+        let mut next = queue.head();
+        while let Some(id) = next {
+            let entry = queue.get(id);
+            if entry.species == species {
+                return entry.descriptor.picker_resources();
+            }
+            next = queue.succ(id);
+        }
+        panic!("master species {species}");
+    }
+
     pub fn find_master_ship(kernel: &Kernel, species: u32) -> Option<MasterShip> {
         let queue = &kernel.master_queue;
         let mut next = queue.head();

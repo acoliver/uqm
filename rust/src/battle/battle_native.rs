@@ -114,7 +114,6 @@ pub(crate) mod engine {
     use super::*;
     use crate::battle::tactrans_native::{flee_preprocess, reset_winner, stop_ditty};
     use abi::*;
-    use std::mem;
 
     const BATTLE_ESCAPE: u8 = 1 << 5;
 
@@ -136,16 +135,6 @@ pub(crate) mod engine {
             b: (b << 3) | (b >> 2),
             a: 255,
         }
-    }
-    /// # Safety
-    /// Screen dimensions must be initialized and accessed on the game thread.
-    pub unsafe fn sis_width() -> i32 {
-        ScreenWidth - 64 - 14
-    }
-    /// # Safety
-    /// Screen dimensions must be initialized and accessed on the game thread.
-    pub unsafe fn sis_height() -> i32 {
-        ScreenHeight - 13
     }
 
     fn run_away(
@@ -273,7 +262,7 @@ pub(crate) mod engine {
         next_time: u32,
     }
 
-    unsafe fn do_battle(
+    fn do_battle(
         cx: &mut crate::engine::battle::Cx<'_>,
         io: &mut Io<'_>,
         session: &mut BattleSession,
@@ -283,7 +272,7 @@ pub(crate) mod engine {
         SetMenuSounds(cx.kernel.input_controls(), 0, 0);
         let frame = net.frame();
         if net.peer_count() > 0 && frame.is_multiple_of(NETPLAY_CHECKSUM_INTERVAL) {
-            let mut state = mem::zeroed();
+            let mut state = crc_State::new();
             crc_init(&mut state);
             crate::supermelee::netplay::checksum::crc_process_game_state(cx, &mut state);
             crate::supermelee::native::protocol::with_battle_driver(cx, io, |driver| {
@@ -310,36 +299,42 @@ pub(crate) mod engine {
                 });
             }
         }
-        let mut rect: RECT = mem::zeroed();
+        let context = crate::graphics::context_abi::ContextLease::require(cx.kernel.space_context);
+        let (width, height) = cx.screen_dimensions();
+        let rect = RECT {
+            corner: POINT {
+                x: SIS_ORG_X as i16,
+                y: SIS_ORG_Y as i16,
+            },
+            extent: EXTENT {
+                width: (width - 78) as i16,
+                height: (height - 13) as i16,
+            },
+        };
         if session.first_time {
-            rect.corner.x = SIS_ORG_X as i16;
-            rect.corner.y = SIS_ORG_Y as i16;
-            rect.extent.width = sis_width() as _;
-            rect.extent.height = sis_height() as _;
-            SetTransitionSource(&rect);
+            context.transition_source(Some(rect));
         }
-        BatchGraphics();
-        if let Some(callback) = callback {
-            callback(cx, io);
-        }
-        redraw_queue(cx, true);
-        if session.first_time {
-            session.first_time = false;
-            ScreenTransition(3, &rect);
-        }
-        UnbatchGraphics();
+        context.with_batch(|| {
+            if let Some(callback) = callback {
+                callback(cx, io);
+            }
+            redraw_queue(cx, true);
+            if session.first_time {
+                session.first_time = false;
+                cx.with_legacy(|| context.transition(Some(rect)));
+            }
+        });
         if cx.world.activity() & IN_BATTLE as u16 == 0
             || cx.world.activity() & (CHECK_ABORT | CHECK_LOAD) as u16 != 0
         {
             return false;
         }
         match frame_interval(ONE_SECOND, (cx.b.nth_frame >> 8) as u8) {
-            None => cx.with_legacy(|| {
-                Async_process();
-                TaskSwitch();
-            }),
+            None => cx.kernel.input_runtime().yield_poll(cx),
             Some(interval) => {
-                cx.with_legacy(|| SleepThreadUntil(session.next_time.wrapping_add(interval)));
+                cx.kernel
+                    .input_runtime()
+                    .sleep_until(cx, session.next_time.wrapping_add(interval));
                 session.next_time = GetTimeCounter();
             }
         }
@@ -351,7 +346,7 @@ pub(crate) mod engine {
         true
     }
 
-    unsafe fn select_all_ships(cx: &mut crate::engine::battle::Cx<'_>, count: SIZE) -> BOOLEAN {
+    fn select_all_ships(cx: &mut crate::engine::battle::Cx<'_>, count: SIZE) -> BOOLEAN {
         let controls = cx.kernel.player_control;
         if count == 1 {
             return crate::battle::ship_native::engine::next_star_ship(cx, None, 0);
@@ -387,9 +382,7 @@ pub(crate) mod engine {
         }
     }
 
-    /// # Safety
-    /// The game thread must retain initialized native audio and display resources.
-    pub unsafe fn battle(
+    pub fn battle(
         cx: &mut crate::engine::battle::Cx<'_>,
         io: &mut Io<'_>,
         callback: Option<fn(&mut crate::engine::battle::Cx<'_>, &mut Io<'_>)>,
@@ -412,7 +405,8 @@ pub(crate) mod engine {
             cx.b.counters = std::array::from_fn(|side| cx.kernel.ships(side).count() as u8);
             cx.with_legacy(|| reset_observation(io));
             if cx.kernel.configuration.preferences().melee_scale != SCALE_STEP {
-                SetGraphicScaleMode(cx.kernel.configuration.preferences().melee_scale);
+                crate::graphics::context_abi::ContextLease::require(cx.kernel.space_context)
+                    .scale_mode(cx.kernel.configuration.preferences().melee_scale);
             }
             let mut session = BattleSession {
                 first_time: false,

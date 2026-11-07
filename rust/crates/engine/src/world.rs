@@ -60,9 +60,29 @@ pub struct World {
     pub files: StateFileManager,
     pub current_star: Option<StarId>,
     pub encounter_race: i16,
+    fleet_resources:
+        std::collections::BTreeMap<u32, crate::battle::link_queue::ShipPickerResources>,
 }
 
 impl World {
+    pub fn retain_fleet_resources(
+        &mut self,
+        species: u32,
+        resources: crate::battle::link_queue::ShipPickerResources,
+    ) {
+        self.fleet_resources.insert(species, resources);
+    }
+
+    pub fn fleet_resources(&self, species: u32) -> crate::battle::link_queue::ShipPickerResources {
+        self.fleet_resources
+            .get(&species)
+            .unwrap_or_else(|| panic!("species {species} has no retained fleet resources"))
+            .clone()
+    }
+
+    pub fn clear_fleet_resources(&mut self) {
+        self.fleet_resources.clear();
+    }
     #[cfg(not(test))]
     pub fn play_sound_effect(
         &self,
@@ -85,6 +105,7 @@ impl World {
     pub fn new() -> Self {
         Self {
             activity: activity::ActivityState::new(0),
+            fleet_resources: std::collections::BTreeMap::new(),
             data: WorldData::new(),
             next_activity: 0,
             #[cfg(not(test))]

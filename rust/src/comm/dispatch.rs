@@ -565,10 +565,7 @@ fn run_encounter(cx: &mut Cx<'_>, io: &mut Io<'_>, which_comm: u32, ship_type: u
                     || lobyte(cx.world.activity()) == IN_LAST_BATTLE))
             || (which_comm != conv::CHMMR && which_comm != conv::SYREEN);
         if build {
-            // SAFETY: the current mode owns the campaign's NPC fleet.
-            unsafe {
-                crate::battle::encount_native::build_battle(cx.world, cx.kernel, NPC_PLAYER_NUM)
-            };
+            crate::battle::encount_native::build_battle(cx.world, cx.kernel, NPC_PLAYER_NUM);
         }
     }
     let comm_id = if ship_type != u16::from(ship::YEHAT_REBEL_SHIP) {
@@ -586,7 +583,13 @@ fn run_encounter(cx: &mut Cx<'_>, io: &mut Io<'_>, which_comm: u32, ship_type: u
     } else {
         cx.with_legacy(|| io.observer.checkpoint(&CheckpointView::EncounterMenu(true)));
         // SAFETY: the encounter borrows this mode's initialized resources and input runtime.
-        let status = unsafe { crate::battle::encount_native::init_encounter(cx, io) };
+        let status = unsafe {
+            crate::battle::encount_native::init_encounter(
+                cx,
+                io,
+                crate::planets::starmap::current_catalog(),
+            )
+        };
         cx.with_legacy(|| {
             io.observer
                 .checkpoint(&CheckpointView::EncounterMenu(false))
@@ -607,8 +610,14 @@ fn run_encounter(cx: &mut Cx<'_>, io: &mut Io<'_>, which_comm: u32, ship_type: u
     }
     let status = encounter::fight_if_selected(cx, io);
     let runtime = cx.kernel.input_runtime();
-    // SAFETY: encounter teardown retains its legacy implementation for U2-10a.
-    unsafe { crate::battle::encount_native::engine::uninit_encounter(cx, runtime.input()) };
+    // SAFETY: the game-thread catalog and encounter resources remain live through teardown.
+    unsafe {
+        crate::battle::encount_native::engine::uninit_encounter(
+            cx,
+            runtime.input(),
+            crate::planets::starmap::current_catalog(),
+        )
+    };
     status
 }
 
@@ -669,7 +678,7 @@ pub(crate) unsafe fn prepare_samatra_dev_fixture(
     cx.world.built_ships().reinit();
     let added = crate::engine::world::fleet::add_escort_ships(cx.world, 4, 12, pick_captain_name);
     if added.is_some() {
-        cx.with_legacy(|| crate::battle::build_native::refresh_escorts());
+        cx.with_legacy(|| crate::ui::sis::DeltaSISGauges(32767, 32767, 32767));
     }
     if added != Some(12) {
         return Err("boss fixture could not allocate Pkunk escorts");

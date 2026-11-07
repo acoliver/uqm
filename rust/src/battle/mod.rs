@@ -6,7 +6,6 @@ pub mod ai;
 pub mod ai_entry;
 pub mod battle_native;
 pub use crate::math::battle_types;
-pub mod build_native;
 pub mod c_bridge;
 pub(crate) mod context_access;
 #[cfg(not(test))]

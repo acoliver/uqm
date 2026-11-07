@@ -1,32 +1,57 @@
-#![cfg(not(test))]
-
-use crate::engine::{Kernel, StoryKey, World, WorldData};
-use crate::graphics::context_abi::{ContextLease, ScheduledHighlight};
+#[cfg(not(test))]
+use crate::engine::World;
+use crate::engine::{Kernel, WorldData};
+use crate::graphics::context_abi::ContextLease;
+#[cfg(not(test))]
 use crate::planets::starmap::current_catalog;
-use crate::ui::{palette::pilot_color, rgb15};
+#[cfg(not(test))]
+use crate::ui::palette::pilot_color;
+use crate::ui::rgb15;
 
 use crate::navigation::abi::*;
 
+#[cfg(not(test))]
 use std::{mem, ptr};
 
+mod message_display;
+pub use message_display::{draw_message, set_menu_flash};
+
+mod message;
+pub use message::default_message_text;
+
+mod status;
+pub use status::{draw_status_message, format_date, status_message_text};
+
+mod title;
+pub use title::{draw_hyper_coords, draw_title};
+
 pub(crate) mod capacity;
+#[cfg(not(test))]
 use capacity::{GetCrewPodCapacity, GetFuelTankCapacity};
 
-static mut CUR_MSG_MODE: StatMsgMode = StatMsgMode_SMM_DEFAULT;
+#[cfg(not(test))]
 static mut LAST_PILOT: BOOLEAN = 0;
+#[cfg(not(test))]
 static mut NEXT_PILOT_TIME: TimeCount = 0;
+#[cfg(not(test))]
 static mut PILOT_CYCLE_INDEX: DWORD = 0;
-static mut FLASH_CONTEXT: Option<ScheduledHighlight> = None;
 
+#[cfg(not(test))]
 const UNDEFINED_DELTA_LOCAL: SIZE = 0x7fff;
+#[cfg(not(test))]
 const SFR_MENU_3DO: usize = usize::MAX;
+#[cfg(not(test))]
 const SFR_MENU_ANY: usize = usize::MAX - 1;
+#[cfg(not(test))]
 const BATTLE_FRAME_RATE: u32 = ONE_SECOND / 24;
+#[cfg(not(test))]
 const EMPTY_SLOT: BYTE = NUM_MODULES as BYTE;
 const OPT_PC: i32 = crate::navigation::abi::OPT_PC as i32;
 const SIS_MESSAGE_HEIGHT: SIZE = crate::navigation::abi::SIS_MESSAGE_HEIGHT as SIZE;
+#[cfg(not(test))]
 const STORAGE_BAY_CAPACITY: COUNT = crate::navigation::abi::STORAGE_BAY_CAPACITY as COUNT;
 
+#[cfg(not(test))]
 pub(super) unsafe fn game_string(index: u32) -> *mut UNICODE {
     GetStringAddress(SetAbsStringTableIndex(
         Kernel::current().read(|owner| owner.game_strings),
@@ -35,12 +60,9 @@ pub(super) unsafe fn game_string(index: u32) -> *mut UNICODE {
     .cast()
 }
 
-fn game_state(key: StoryKey) -> u8 {
-    World::current().read(|world| world.story_state(key) as u8)
-}
-
 const SIS_ORG_X: SIZE = 7;
 const SIS_ORG_Y: SIZE = 10;
+#[cfg(not(test))]
 const STATUS_WIDTH: SIZE = 64;
 const SIS_TITLE_BOX_WIDTH: SIZE = 57;
 const SIS_TITLE_WIDTH: SIZE = 55;
@@ -48,30 +70,34 @@ const SIS_TITLE_HEIGHT: SIZE = 8;
 const SIS_SPACER_BOX_WIDTH: SIZE = 12;
 const STATUS_MESSAGE_WIDTH: SIZE = 60;
 const STATUS_MESSAGE_HEIGHT: SIZE = 7;
+#[cfg(not(test))]
 const SHIP_NAME_WIDTH: SIZE = 60;
+#[cfg(not(test))]
 const SHIP_NAME_HEIGHT: SIZE = 7;
 const RADAR_WIDTH: SIZE = 56;
 const RADAR_HEIGHT: SIZE = 53;
+#[cfg(not(test))]
 const CLEAR_SIS_RADAR: BYTE = 1 << 2;
+#[cfg(not(test))]
 const DRAW_SIS_DISPLAY: BYTE = 1 << 3;
 
 #[inline]
+#[cfg(not(test))]
 unsafe fn sis_screen_width() -> i32 {
     ScreenWidth - 78
 }
 #[inline]
+#[cfg(not(test))]
 unsafe fn sis_screen_height() -> i32 {
     ScreenHeight - 13
 }
 #[inline]
-unsafe fn sis_message_width() -> i32 {
-    sis_screen_width() - i32::from(SIS_TITLE_BOX_WIDTH) - i32::from(SIS_SPACER_BOX_WIDTH) - 2
-}
-#[inline]
+#[cfg(not(test))]
 unsafe fn radar_x() -> i32 {
     ScreenWidth - 60
 }
 #[inline]
+#[cfg(not(test))]
 unsafe fn radar_y() -> i32 {
     ScreenHeight - 56
 }
@@ -83,12 +109,14 @@ fn sis() -> crate::engine::Projection<SIS_STATE> {
     unsafe { WorldData::current().map(|world| &raw mut (*world).flagship) }
 }
 #[inline]
+#[cfg(not(test))]
 unsafe fn set_color(color: Color) {
     SetContextForeGroundColor(color);
 }
 
 /// # Safety
 /// The graphics system and screen contexts must be initialized on the game thread.
+#[cfg(not(test))]
 pub unsafe fn repair_sisborder() {
     let old = SetContext(Kernel::current().read(|owner| owner.screen_context));
     BatchGraphics();
@@ -114,6 +142,7 @@ pub unsafe fn repair_sisborder() {
 /// # Safety
 /// The SIS status context and graphics system must be active.
 #[no_mangle]
+#[cfg(not(test))]
 pub unsafe extern "C" fn ClearSISRect(clear_flags: BYTE) {
     let old = SetContext(Kernel::current().read(|owner| owner.status_context));
     let old_color = SetContextForeGroundColor(rgb15(0x0a, 0x0a, 0x0a));
@@ -136,53 +165,26 @@ pub unsafe extern "C" fn ClearSISRect(clear_flags: BYTE) {
 /// # Safety
 /// pStr must be a valid NUL-terminated UTF-8 string and graphics state initialized.
 #[no_mangle]
+#[cfg(not(test))]
 pub unsafe extern "C" fn DrawSISTitle(p_str: *const UNICODE) {
-    let mut t: TEXT = mem::zeroed();
-    t.baseline.x = SIS_TITLE_WIDTH >> 1;
-    t.baseline.y = SIS_TITLE_HEIGHT - 2;
-    t.align = TEXT_ALIGN_ALIGN_CENTER;
-    t.pStr = p_str;
-    t.CharCount = !0;
-    let old = SetContext(Kernel::current().read(|owner| owner.off_screen_context));
-    let mut r: RECT = mem::zeroed();
-    r.corner.x =
-        (i32::from(SIS_ORG_X) + sis_screen_width() - i32::from(SIS_TITLE_BOX_WIDTH) + 1) as SIZE;
-    r.corner.y = SIS_ORG_Y - SIS_TITLE_HEIGHT;
-    r.extent.width = SIS_TITLE_WIDTH;
-    r.extent.height = SIS_TITLE_HEIGHT - 1;
-    SetContextFGFrame(Kernel::current().read(|owner| owner.screen));
-    SetContextClipRect(&mut r);
-    SetContextFont(Kernel::current().read(|owner| owner.tiny_font));
-    BatchGraphics();
-    SetContextBackGroundColor(rgb15(0, 0, 0x14));
-    ClearDrawable();
-    SetContextForeGroundColor(rgb15(0x1b, 0, 0x1b));
-    font_DrawText(&mut t);
-    UnbatchGraphics();
-    SetContextClipRect(ptr::null_mut());
-    SetContext(old);
+    let text = std::ffi::CStr::from_ptr(p_str.cast());
+    let width = ScreenWidth;
+    Kernel::current().read(|kernel| draw_title(kernel, width, text));
 }
 
 /// # Safety
 /// Graphics state must be initialized on the game thread.
 #[no_mangle]
+#[cfg(not(test))]
 pub unsafe extern "C" fn DrawHyperCoords(universe: POINT) {
-    let mut b = [0u8; 100];
-    libc::snprintf(
-        b.as_mut_ptr().cast(),
-        b.len(),
-        c"%03u.%01u : %03u.%01u".as_ptr(),
-        i32::from(universe.x) / 10,
-        i32::from(universe.x) % 10,
-        i32::from(universe.y) / 10,
-        i32::from(universe.y) % 10,
-    );
-    DrawSISTitle(b.as_mut_ptr().cast());
+    let text = title::hyper_coord_text(universe);
+    DrawSISTitle(text.as_ptr().cast());
 }
 
 /// # Safety
 /// pStr must be null or a valid NUL-terminated string; UI graphics state must be initialized.
 #[no_mangle]
+#[cfg(not(test))]
 pub unsafe extern "C" fn DrawSISMessage(p_str: *const UNICODE) {
     DrawSISMessageEx(p_str, -1, -1, DSME_NONE as COUNT);
 }
@@ -190,122 +192,33 @@ pub unsafe extern "C" fn DrawSISMessage(p_str: *const UNICODE) {
 /// # Safety
 /// pStr must be null or valid UTF-8 and graphics state must be initialized on the game thread.
 #[no_mangle]
+#[cfg(not(test))]
 pub unsafe extern "C" fn DrawSISMessageEx(
     p_str: *const UNICODE,
     cur_pos: SIZE,
     ex_pos: SIZE,
     flags: COUNT,
 ) -> BOOLEAN {
-    let old = SetContext(Kernel::current().read(|owner| owner.off_screen_context));
-    let mut r: RECT = mem::zeroed();
-    r.corner.x = SIS_ORG_X + 1;
-    r.corner.y = SIS_ORG_Y - SIS_MESSAGE_HEIGHT;
-    r.extent.width = sis_message_width() as SIZE;
-    r.extent.height = SIS_MESSAGE_HEIGHT - 1;
-    SetContextFGFrame(Kernel::current().read(|owner| owner.screen));
-    SetContextClipRect(&mut r);
-    BatchGraphics();
-    SetContextBackGroundColor(rgb15(0, 0, 0x14));
-    let mut buf = [0u8; 256];
-    let mut text = p_str;
-    if text.is_null() {
-        let activity = crate::engine::World::current().read(|world| world.activity()) as BYTE;
-        text = match u32::from(activity) {
-            IN_LAST_BATTLE | IN_INTERPLANETARY => {
-                let star = World::current().read(|world| world.star_pointer(current_catalog()));
-                GetClusterName(star.cast(), buf.as_mut_ptr().cast());
-                buf.as_ptr().cast()
-            }
-            IN_HYPERSPACE => game_string(if World::current().read(in_hyper_space) != 0 {
-                NAVIGATION_STRING_BASE
-            } else {
-                NAVIGATION_STRING_BASE + 1
-            }),
-            _ => c"".as_ptr().cast(),
-        };
-    }
-    if flags & DSME_MYCOLOR as COUNT == 0 {
-        SetContextForeGroundColor(rgb15(0x1b, 0, 0x1b));
-    }
-    let mut t: TEXT = mem::zeroed();
-    t.baseline.y = SIS_MESSAGE_HEIGHT - 2;
-    t.pStr = text as *mut UNICODE;
-    t.CharCount = !0;
-    SetContextFont(Kernel::current().read(|owner| owner.tiny_font));
-    if flags & DSME_CLEARFR as COUNT != 0 {
-        SetFlashRect(ptr::null());
-    }
-    if cur_pos < 0 && ex_pos < 0 {
-        ClearDrawable();
-        t.baseline.x = (sis_message_width() >> 1) as SIZE;
-        t.align = TEXT_ALIGN_ALIGN_CENTER;
-        font_DrawText(&mut t);
-    } else {
-        let mut text_r: RECT = mem::zeroed();
-        let mut deltas = [0u8; 128];
-        t.baseline.x = 3;
-        t.align = TEXT_ALIGN_ALIGN_LEFT;
-        TextRect(&mut t, &mut text_r, deltas.as_mut_ptr());
-        if i32::from(text_r.extent.width) + i32::from(t.baseline.x) + 2 >= i32::from(r.extent.width)
-        {
-            UnbatchGraphics();
-            SetContextClipRect(ptr::null_mut());
-            SetContext(old);
-            return 0;
-        }
-        ClearDrawable();
-        if cur_pos >= 0 && i32::from(cur_pos) <= i32::from(t.CharCount) {
-            let mut cr = text_r;
-            for d in &deltas[..cur_pos as usize] {
-                cr.corner.x = (i32::from(cr.corner.x) + i32::from(*d)) as SIZE;
-            }
-            if i32::from(cur_pos) < i32::from(t.CharCount) {
-                cr.corner.x = (i32::from(cr.corner.x) - 1) as SIZE;
-            }
-            if flags & DSME_BLOCKCUR as COUNT != 0 && i32::from(cur_pos) < i32::from(t.CharCount) {
-                cr.extent.width = deltas[cur_pos as usize] as SIZE
-                    + if i32::from(cur_pos) + 1 == i32::from(t.CharCount) {
-                        2
-                    } else {
-                        1
-                    };
-            } else {
-                cr.extent.width = 1;
-            }
-            cr.corner.y = 0;
-            cr.extent.height = r.extent.height;
-            SetContextForeGroundColor(rgb15(0, 0, 0));
-            DrawFilledRectangle(&mut cr);
-        }
-        SetContextForeGroundColor(rgb15(0x1b, 0, 0x1b));
-        if ex_pos >= 0 && i32::from(ex_pos) < i32::from(t.CharCount) {
-            t.CharCount = ex_pos as COUNT;
-            font_DrawText(&mut t);
-            SetContextForeGroundColor(rgb15(0x12, 0, 0x12));
-            for d in &deltas[..ex_pos as usize] {
-                t.baseline.x = (i32::from(t.baseline.x) + i32::from(*d)) as SIZE;
-            }
-            t.pStr = (skipUTF8Chars((t.pStr).cast(), ex_pos as usize)).cast();
-            t.CharCount = !0;
-            font_DrawText(&mut t);
-        } else {
-            font_DrawText(&mut t);
-        }
-    }
-    if flags & DSME_SETFR as COUNT != 0 {
-        r.corner.x = 0;
-        r.corner.y = 0;
-        SetFlashRect(&r);
-    }
-    UnbatchGraphics();
-    SetContextClipRect(ptr::null_mut());
-    SetContext(old);
-    1
+    let text = (!p_str.is_null()).then(|| std::ffi::CStr::from_ptr(p_str.cast()));
+    let width = ScreenWidth;
+    let catalog = current_catalog();
+    Kernel::current().read(|kernel| {
+        let text = text.map_or_else(
+            || {
+                std::borrow::Cow::Owned(
+                    World::current().read(|world| default_message_text(kernel, world, catalog)),
+                )
+            },
+            std::borrow::Cow::Borrowed,
+        );
+        u32::from(draw_message(kernel, width, &text, cur_pos, ex_pos, flags))
+    })
 }
 
 /// # Safety
 /// buf must have bufLen writable bytes.
 #[no_mangle]
+#[cfg(not(test))]
 pub unsafe extern "C" fn DateToString(
     buf: *mut std::ffi::c_char,
     buf_len: usize,
@@ -313,37 +226,23 @@ pub unsafe extern "C" fn DateToString(
     day_index: BYTE,
     year_index: COUNT,
 ) {
-    libc::snprintf(
-        buf,
-        buf_len,
-        c"%s %02d·%04d".as_ptr(),
-        game_string(MONTHS_STRING_BASE + month_index as u32 - 1),
-        day_index as i32,
-        year_index as i32,
-    );
+    let month =
+        std::ffi::CStr::from_ptr(game_string(MONTHS_STRING_BASE + month_index as u32 - 1).cast());
+    let text = format_date(month, day_index, year_index);
+    libc::snprintf(buf, buf_len, c"%s".as_ptr(), text.as_ptr());
 }
 
 /// # Safety
 /// r must point to writable RECT storage.
 #[no_mangle]
+#[cfg(not(test))]
 pub unsafe extern "C" fn GetStatusMessageRect(r: *mut RECT) {
-    (*r).corner.x = 2;
-    (*r).corner.y = 130;
-    (*r).extent.width = STATUS_MESSAGE_WIDTH;
-    (*r).extent.height = STATUS_MESSAGE_HEIGHT;
-}
-
-/// # Safety
-/// Called on the game thread.
-#[no_mangle]
-pub unsafe extern "C" fn SetStatusMessageMode(new_mode: StatMsgMode) -> StatMsgMode {
-    let old = CUR_MSG_MODE;
-    CUR_MSG_MODE = new_mode;
-    old
+    *r = status::message_rect();
 }
 
 /// # Safety
 /// Status graphics and SIS state must be initialized.
+#[cfg(not(test))]
 pub unsafe fn draw_captains_name() {
     let old = SetContext(Kernel::current().read(|owner| owner.status_context));
     let old_font = SetContextFont(Kernel::current().read(|owner| owner.tiny_font));
@@ -369,6 +268,7 @@ pub unsafe fn draw_captains_name() {
 
 /// # Safety
 /// Graphics, fonts, game strings and SIS inventory must be initialized.
+#[cfg(not(test))]
 pub unsafe fn draw_flagship_stats() {
     let s = sis().read(|state| *state);
     let super::flagship_stats::Stats {
@@ -478,6 +378,7 @@ pub unsafe fn draw_flagship_stats() {
     SetContext(old);
 }
 
+#[cfg(not(test))]
 unsafe fn weapon_name(module: BYTE, out: *mut u8) {
     let n = match u32::from(module) {
         GUN_WEAPON => 8,
@@ -496,6 +397,7 @@ unsafe fn weapon_name(module: BYTE, out: *mut u8) {
 
 /// # Safety
 /// Status graphics and flagship frame must be initialized.
+#[cfg(not(test))]
 pub unsafe fn draw_landers() {
     let old = SetContext(Kernel::current().read(|owner| owner.status_context));
     let mut stamp: STAMP = mem::zeroed();
@@ -527,6 +429,7 @@ pub unsafe fn draw_landers() {
 /// # Safety
 /// Status graphics and SIS inventory must be initialized.
 #[no_mangle]
+#[cfg(not(test))]
 pub unsafe extern "C" fn DrawStorageBays(refresh: BOOLEAN) {
     let old = SetContext(Kernel::current().read(|owner| owner.status_context));
     let mut r: RECT = mem::zeroed();
@@ -579,6 +482,7 @@ pub unsafe extern "C" fn DrawStorageBays(refresh: BOOLEAN) {
 /// # Safety
 /// pRect must point to writable RECT storage.
 #[no_mangle]
+#[cfg(not(test))]
 pub unsafe extern "C" fn GetGaugeRect(p_rect: *mut RECT, is_crew_rect: BOOLEAN) {
     (*p_rect).extent.width = 24;
     (*p_rect).corner.x = (STATUS_WIDTH >> 1) - 12;
@@ -586,6 +490,7 @@ pub unsafe extern "C" fn GetGaugeRect(p_rect: *mut RECT, is_crew_rect: BOOLEAN) 
     (*p_rect).corner.y = if is_crew_rect != 0 { 117 } else { 38 };
 }
 
+#[cfg(not(test))]
 unsafe fn draw_pc_sis() {
     let mut r: RECT = mem::zeroed();
     GetGaugeRect(&mut r, 0);
@@ -627,6 +532,7 @@ unsafe fn draw_pc_sis() {
     t.pStr = game_string(STATUS_STRING_BASE + 5) as *mut UNICODE;
     font_DrawText(&mut t);
 }
+#[cfg(not(test))]
 unsafe fn draw_slots(slots: *const BYTE, len: usize, y: SIZE, mode: u32) {
     let mut stamp: STAMP = mem::zeroed();
     stamp.origin.x = 1;
@@ -647,6 +553,7 @@ unsafe fn draw_slots(slots: *const BYTE, len: usize, y: SIZE, mode: u32) {
         stamp.origin.y = (i32::from(stamp.origin.y) - 3) as SIZE;
     }
 }
+#[cfg(not(test))]
 unsafe fn draw_support_ships() {
     let points = [
         (3, 62),
@@ -677,6 +584,7 @@ unsafe fn draw_support_ships() {
     }
 }
 
+#[cfg(not(test))]
 unsafe fn delta_crew(delta: SIZE) {
     if delta == 0 {
         return;
@@ -710,6 +618,7 @@ unsafe fn delta_crew(delta: SIZE) {
     SetContextForeGroundColor(rgb15(0, 0x0e, 0));
     font_DrawText(&mut t);
 }
+#[cfg(not(test))]
 unsafe fn delta_fuel(delta: SIZE) {
     if delta == 0 {
         return;
@@ -754,7 +663,8 @@ unsafe fn delta_fuel(delta: SIZE) {
         font_DrawText(&mut t);
     }
 }
-unsafe fn delta_res(delta: SIZE) {
+#[cfg(not(test))]
+unsafe fn delta_res(delta: SIZE, mode: StatMsgMode) {
     if delta == 0 {
         return;
     }
@@ -765,7 +675,7 @@ unsafe fn delta_res(delta: SIZE) {
         } else {
             (**s).res_units = (**s).res_units.wrapping_add(i32::from(delta) as DWORD);
         }
-        assert!(CUR_MSG_MODE == StatMsgMode_SMM_RES_UNITS);
+        assert!(mode == StatMsgMode_SMM_RES_UNITS);
     } else {
         let mut r: RECT = mem::zeroed();
         r.corner.x = 2;
@@ -781,9 +691,15 @@ unsafe fn delta_res(delta: SIZE) {
 /// # Safety
 /// SIS graphics, game state and asset resources must be initialized on the game thread.
 #[no_mangle]
+#[cfg(not(test))]
 pub unsafe extern "C" fn DeltaSISGauges(crew_delta: SIZE, fuel_delta: SIZE, resunit_delta: i32) {
-    let (retained_status_context, preferences) =
-        Kernel::current().read(|owner| (owner.status_context, owner.configuration.preferences()));
+    let (retained_status_context, preferences, mode) = Kernel::current().read(|owner| {
+        (
+            owner.status_context,
+            owner.configuration.preferences(),
+            owner.status_message_mode,
+        )
+    });
     if crew_delta == 0 && fuel_delta == 0 && resunit_delta == 0 {
         return;
     }
@@ -811,7 +727,7 @@ pub unsafe extern "C" fn DeltaSISGauges(crew_delta: SIZE, fuel_delta: SIZE, resu
         draw_landers();
         DrawStorageBays(0);
     }
-    delta_res(resunit_delta as SIZE);
+    delta_res(resunit_delta as SIZE, mode);
     UnbatchGraphics();
     SetContext(old);
 }
@@ -819,6 +735,7 @@ pub unsafe extern "C" fn DeltaSISGauges(crew_delta: SIZE, fuel_delta: SIZE, resu
 /// # Safety
 /// Game state, fonts and graphics must be initialized.
 #[no_mangle]
+#[cfg(not(test))]
 pub unsafe extern "C" fn DrawAutoPilotMessage(reset: BOOLEAN) {
     if reset != 0 {
         LAST_PILOT = 0;
@@ -860,11 +777,15 @@ pub unsafe extern "C" fn DrawAutoPilotMessage(reset: BOOLEAN) {
     }
 }
 
-pub fn set_flash_rect(screen: &ContextLease, clip: RECT, rect: Option<RECT>) {
+pub fn set_flash_rect(
+    highlight: &crate::engine::kernel::SisHighlight,
+    screen: &ContextLease,
+    clip: RECT,
+    rect: Option<RECT>,
+) {
     screen.with_selected(|| {
-        // SAFETY: selection checks the graphics thread before borrowing this existing
-        // shared UI slot. Its retained context pins that thread until cancellation.
-        let current = unsafe { &mut *ptr::addr_of_mut!(FLASH_CONTEXT) };
+        let mut slot = highlight.context.borrow_mut();
+        let current = &mut *slot;
         if let Some(mut rect) = rect.filter(|rect| rect.extent.width != 0) {
             rect.corner.x = (i32::from(rect.corner.x) + i32::from(clip.corner.x)) as SIZE;
             rect.corner.y = (i32::from(rect.corner.y) + i32::from(clip.corner.y)) as SIZE;
@@ -886,9 +807,17 @@ pub fn set_flash_rect(screen: &ContextLease, clip: RECT, rect: Option<RECT>) {
 /// # Safety
 /// pRect must be null, a valid RECT, or one of the SIS menu sentinel pointers; flash and graphics systems must be initialized.
 #[no_mangle]
+#[cfg(not(test))]
 pub unsafe extern "C" fn SetFlashRect(p_rect: *const RECT) {
-    let (retained_status_context, preferences) =
-        Kernel::current().read(|owner| (owner.status_context, owner.configuration.preferences()));
+    let (retained_status_context, screen, preferences, highlight) =
+        Kernel::current().read(|kernel| {
+            (
+                kernel.status_context,
+                kernel.screen_context,
+                kernel.configuration.preferences(),
+                kernel.sis_highlight.clone(),
+            )
+        });
     let mut clip: RECT = mem::zeroed();
     let mut temp: RECT = mem::zeroed();
     let mut rect = p_rect;
@@ -908,120 +837,29 @@ pub unsafe extern "C" fn SetFlashRect(p_rect: *const RECT) {
     }
     if !rect.is_null() && (*rect).extent.width != 0 {
         let screen = ContextLease::retain(
-            std::ptr::NonNull::new(Kernel::current().read(|owner| owner.screen_context))
+            std::ptr::NonNull::new(screen)
                 .unwrap_or_else(|| panic!("flash screen context not admitted")),
         );
-        set_flash_rect(&screen, clip, Some(*rect));
+        set_flash_rect(&highlight, &screen, clip, Some(*rect));
     } else {
-        *ptr::addr_of_mut!(FLASH_CONTEXT) = None;
+        *highlight.context.borrow_mut() = None;
     }
 }
-/// # Safety
-/// Flash alarm and context state must be accessed on the game thread.
-pub unsafe fn pre_update_flash_rect() {
-    if let Some(current) = &mut *ptr::addr_of_mut!(FLASH_CONTEXT) {
-        current.pre_update();
-    }
-}
-/// # Safety
-/// Flash alarm and context state must be accessed on the game thread.
-pub unsafe fn post_update_flash_rect() {
-    if let Some(current) = &mut *ptr::addr_of_mut!(FLASH_CONTEXT) {
-        current.post_update();
-    }
-}
-/// # Safety
-/// Flash alarm system must be initialized on the game thread.
-pub unsafe fn pause_flash() {
-    if let Some(current) = &mut *ptr::addr_of_mut!(FLASH_CONTEXT) {
-        current.pause();
-    }
-}
-/// # Safety
-/// Flash alarm system must be initialized on the game thread.
-pub unsafe fn continue_flash() {
-    if let Some(current) = &mut *ptr::addr_of_mut!(FLASH_CONTEXT) {
-        current.resume();
-    }
-}
-
 /// # Safety
 /// pStr must be null or a valid NUL-terminated string; status graphics must be initialized.
 #[no_mangle]
+#[cfg(not(test))]
 pub unsafe extern "C" fn DrawStatusMessage(p_str: *const UNICODE) {
-    let (retained_status_context, preferences) =
-        Kernel::current().read(|owner| (owner.status_context, owner.configuration.preferences()));
-    let old = SetContext(retained_status_context);
-    let mut ctx: RECT = mem::zeroed();
-    GetContextClipRect(&mut ctx);
-    SetContext(Kernel::current().read(|owner| owner.off_screen_context));
-    SetContextFGFrame(Kernel::current().read(|owner| owner.screen));
-    let mut r: RECT = mem::zeroed();
-    GetStatusMessageRect(&mut r);
-    r.corner.x = (i32::from(r.corner.x) + i32::from(ctx.corner.x)) as SIZE;
-    r.corner.y = (i32::from(r.corner.y) + i32::from(ctx.corner.y)) as SIZE;
-    SetContextClipRect(&mut r);
-    BatchGraphics();
-    SetContextBackGroundColor(rgb15(0, 8, 0));
-    ClearDrawable();
-    let mut buf = [0u8; 128];
-    let mut text = p_str;
-    if text.is_null() {
-        if CUR_MSG_MODE == StatMsgMode_SMM_CREDITS {
-            let credits = u16::from(game_state(StoryKey::MELNORME_CREDIT0))
-                | (u16::from(game_state(StoryKey::MELNORME_CREDIT1)) << 8);
-            libc::snprintf(
-                buf.as_mut_ptr().cast(),
-                buf.len(),
-                c"%u %s".as_ptr(),
-                credits as u32,
-                game_string(STATUS_STRING_BASE),
-            );
-        } else if CUR_MSG_MODE == StatMsgMode_SMM_RES_UNITS {
-            if game_state(StoryKey::CHMMR_BOMB_STATE) < 2 {
-                libc::snprintf(
-                    buf.as_mut_ptr().cast(),
-                    buf.len(),
-                    c"%u %s".as_ptr(),
-                    sis().read(|owner| owner.res_units),
-                    game_string(STATUS_STRING_BASE + 1),
-                );
-            } else {
-                libc::snprintf(
-                    buf.as_mut_ptr().cast(),
-                    buf.len(),
-                    c"%s %s".as_ptr(),
-                    if preferences.menu == OPT_PC {
-                        game_string(STATUS_STRING_BASE + 2)
-                    } else {
-                        c"∞".as_ptr().cast()
-                    },
-                    game_string(STATUS_STRING_BASE + 1),
-                );
-            }
-        } else {
-            let (month, day, year) = WorldData::current().read(WorldData::calendar_date);
-            DateToString(buf.as_mut_ptr().cast(), buf.len(), month, day, year);
-        }
-        text = buf.as_ptr().cast();
-    }
-    let mut t: TEXT = mem::zeroed();
-    t.baseline.x = STATUS_MESSAGE_WIDTH >> 1;
-    t.baseline.y = STATUS_MESSAGE_HEIGHT - 1;
-    t.align = TEXT_ALIGN_ALIGN_CENTER;
-    t.pStr = text as *mut UNICODE;
-    t.CharCount = !0;
-    SetContextFont(Kernel::current().read(|owner| owner.tiny_font));
-    SetContextForeGroundColor(rgb15(0, 0x10, 0));
-    font_DrawText(&mut t);
-    UnbatchGraphics();
-    SetContextClipRect(ptr::null_mut());
-    SetContext(old);
+    let text = (!p_str.is_null()).then(|| std::ffi::CStr::from_ptr(p_str.cast()));
+    Kernel::current().read(|kernel| {
+        World::current().read(|world| draw_status_message(kernel, world, text));
+    });
 }
 
 /// # Safety
 /// Graphics, fonts and SIS strings must be initialized.
 #[no_mangle]
+#[cfg(not(test))]
 pub unsafe extern "C" fn DrawFlagshipName(in_status_area: BOOLEAN) {
     let (retained_status_context, preferences) =
         Kernel::current().read(|owner| (owner.status_context, owner.configuration.preferences()));

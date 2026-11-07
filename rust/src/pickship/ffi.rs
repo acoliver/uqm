@@ -206,8 +206,9 @@ fn change_selection(cx: &mut Cx<'_>, state: &mut PickerState, io: &mut Io<'_>) {
         );
     }
     let clip = context.clip_rect();
-    crate::ui::sis::set_flash_rect(&state.screen, clip, None);
-    crate::ui::sis::set_flash_rect(&state.screen, clip, Some(rectangle(area)));
+    let highlight = &kernel.sis_highlight;
+    crate::ui::sis::set_flash_rect(highlight, &state.screen, clip, None);
+    crate::ui::sis::set_flash_rect(highlight, &state.screen, clip, Some(rectangle(area)));
 }
 
 /// `DoPickBattleShip`: one input frame of the picker.
@@ -299,7 +300,12 @@ fn get_armada_star_ship(
         });
         io.observer
             .checkpoint(&crate::engine::observe::CheckpointView::ShipPicker(false));
-        crate::ui::sis::set_flash_rect(&state.screen, context.clip_rect(), None);
+        crate::ui::sis::set_flash_rect(
+            &cx.kernel.sis_highlight,
+            &state.screen,
+            context.clip_rect(),
+            None,
+        );
         if let Some(chosen) = state.chosen {
             if Some(chosen) == links::last_ship(cx.kernel, RPG_PLAYER_NUM) {
                 cx.b.counters[RPG_PLAYER_NUM] = 1;

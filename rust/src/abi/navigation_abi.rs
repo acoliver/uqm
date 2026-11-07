@@ -1579,10 +1579,6 @@ extern "C" {
 }
 #[cfg(not(test))]
 pub use crate::ui::border::init_siscontexts;
-#[cfg(test)]
-extern "C" {
-    pub fn init_siscontexts();
-}
 #[cfg(not(test))]
 pub use crate::ui::border::draw_sisframe;
 #[cfg(test)]
@@ -1594,31 +1590,7 @@ extern "C" {
 pub use crate::ui::sis::ClearSISRect;
 
 #[cfg(not(test))]
-pub use crate::ui::sis::pre_update_flash_rect;
-#[cfg(not(test))]
 pub use crate::ui::sis::SetFlashRect;
-#[cfg(test)]
-extern "C" {
-    pub fn pre_update_flash_rect();
-}
-#[cfg(not(test))]
-pub use crate::ui::sis::post_update_flash_rect;
-#[cfg(test)]
-extern "C" {
-    pub fn post_update_flash_rect();
-}
-#[cfg(not(test))]
-pub use crate::ui::sis::pause_flash;
-#[cfg(test)]
-extern "C" {
-    pub fn pause_flash();
-}
-#[cfg(not(test))]
-pub use crate::ui::sis::continue_flash;
-#[cfg(test)]
-extern "C" {
-    pub fn continue_flash();
-}
 
 #[cfg(not(test))]
 pub use crate::ui::sis::DrawHyperCoords;
@@ -1650,7 +1622,6 @@ pub type StatMsgMode = ::std::os::raw::c_uint;
 #[cfg(not(test))]
 pub use crate::ui::sis::draw_landers;
 #[cfg(not(test))]
-pub use crate::ui::sis::SetStatusMessageMode;
 #[cfg(test)]
 extern "C" {
     pub fn draw_landers();
@@ -2777,7 +2748,7 @@ extern "C" {
 #[cfg(not(test))]
 pub use crate::navigation::hyper_data::free_hyper_data;
 #[cfg(not(test))]
-pub use crate::navigation::hyperspace::live::MoveSIS;
+pub use crate::navigation::hyperspace::live::move_sis;
 #[cfg(test)]
 extern "C" {
     pub fn free_hyper_data();

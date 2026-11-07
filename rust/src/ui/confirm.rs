@@ -78,10 +78,11 @@ pub unsafe fn do_confirm_exit(
     cx: &mut crate::engine::battle::Cx<'_>,
     input: &InputSession,
 ) -> BOOLEAN {
+    let highlight = cx.kernel.sis_highlight.clone();
     if PlayingTrack() != 0 {
         PauseTrack();
     }
-    pause_flash();
+    highlight.pause_flash();
     let mut rect: RECT = mem::zeroed();
     let mut context_rect: RECT = mem::zeroed();
     let mut old_rect: RECT = mem::zeroed();
@@ -145,7 +146,7 @@ pub unsafe fn do_confirm_exit(
     FlushInput(input);
     SetContextClipRect(&mut old_rect);
     SetContext(old_context);
-    continue_flash();
+    highlight.continue_flash();
     if PlayingTrack() != 0 {
         ResumeTrack();
     }
@@ -157,6 +158,7 @@ pub fn do_popup_window(
     io: &mut crate::engine::observe::Io<'_>,
     message: &std::ffi::CStr,
 ) {
+    let highlight = cx.kernel.sis_highlight.clone();
     use crate::graphics::{context_abi::ContextLease, native_font::FontLease};
     use std::ptr::NonNull;
     let runtime = cx.kernel.input_runtime();
@@ -196,7 +198,7 @@ pub fn do_popup_window(
             bank,
         );
         label.lines = lines.as_mut_ptr();
-        pause_flash();
+        highlight.pause_flash();
         let old_context = SetContext(screen);
         let mut old_rect: RECT = mem::zeroed();
         GetContextClipRect(&mut old_rect);
@@ -233,7 +235,7 @@ pub fn do_popup_window(
         DestroyDrawable(ReleaseDrawable(saved.frame));
         SetContextClipRect(&mut old_rect);
         SetContext(old_context);
-        continue_flash();
+        highlight.continue_flash();
         input.set_menu_sounds(sounds.0, sounds.1);
         StringBank_Free(bank);
     });

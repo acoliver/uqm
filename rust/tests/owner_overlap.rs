@@ -1,4 +1,6 @@
 //! Legacy callers may borrow disjoint fields without reacquiring their owner.
+#[path = "support/campaign_display.rs"]
+mod campaign_display;
 #[test]
 #[serial_test::serial]
 fn battle_ditty_stop_uses_the_already_borrowed_kernel() {
@@ -78,12 +80,13 @@ fn empty_npc_phrase_does_not_acquire_an_owner() {
 #[serial_test::serial]
 fn sis_slot_snapshot_releases_world_before_support_ship_drawing() {
     let mut game = Game::new();
+    let display = campaign_display::CampaignDisplay::install(&mut game).unwrap();
+    game.world.story = Some(uqm_rust::state::game_state::StoryState::new());
     game.world.data.flagship.module_slots.fill(255);
     game.world.data.flagship.drive_slots.fill(255);
     game.world.data.flagship.jet_slots.fill(255);
     game.world.data.flagship.crew_enlisted = 12;
-    // SAFETY: the serialized fixture owns the lifecycle; absent render handles
-    // are valid for the inactive graphics backend used by this test.
+    // SAFETY: the serialized fixture owns the game and its display resources.
     unsafe {
         bridge::with_game(&mut game, || {
             uqm_rust::ui::sis::DeltaSISGauges(i16::MAX, i16::MAX, i32::from(i16::MAX));
@@ -91,6 +94,7 @@ fn sis_slot_snapshot_releases_world_before_support_ship_drawing() {
     }
     assert_eq!(game.world.data.flagship.crew_enlisted, 12);
     assert_eq!(game.world.data.flagship.module_slots, [255; 16]);
+    display.finish(game);
 }
 
 #[test]
@@ -259,14 +263,11 @@ fn encounter_construction_uses_retained_owners_without_publication() {
     let mut game = Game::new();
     game.world.story = Some(uqm_rust::state::game_state::StoryState::new());
     game.world.set_story_state(StoryKey::BATTLE_SEGUE, 1);
-    // SAFETY: this serialized fixture owns empty ship resources and the encounter lifecycle.
-    unsafe {
-        uqm_rust::battle::encount_native::build_battle(
-            &mut game.world,
-            &mut game.kernel,
-            RPG_PLAYER_NUM as u16,
-        );
-    }
+    uqm_rust::battle::encount_native::build_battle(
+        &mut game.world,
+        &mut game.kernel,
+        RPG_PLAYER_NUM as u16,
+    );
     assert_eq!(game.world.story_state(StoryKey::BATTLE_SEGUE), 0);
     assert!(game.kernel.ships(0).head().is_none());
 }
@@ -275,6 +276,13 @@ fn encounter_construction_uses_retained_owners_without_publication() {
 #[serial_test::serial]
 fn encounter_construction_keeps_fragment_order_infinite_crew_and_flagship_last() {
     let mut game = Game::new();
+    game.world.retain_fleet_resources(
+        SPECIES_ID_VUX_ID,
+        uqm_rust::engine::battle::link_queue::ShipPickerResources::new(
+            None,
+            uqm_rust::engine::battle::frames::FrameSelection::ABSENT,
+        ),
+    );
     game.kernel.reset_ship_capacity(0, 32);
     game.world.story = Some(uqm_rust::state::game_state::StoryState::new());
     let mut npc = game.world.npc_built_ships();
@@ -286,20 +294,19 @@ fn encounter_construction_keeps_fragment_order_infinite_crew_and_flagship_last()
         let fragment = fragments.get_mut(id);
         fragment.race_id = SAMATRA_SHIP as u8;
         fragment.species_id = SPECIES_ID_VUX_ID;
+        fragment.race_strings = std::ptr::dangling_mut();
+        fragment.icons = std::ptr::dangling_mut();
         fragment.index = index;
         fragment.crew_level = crew;
         fragment.max_crew = 19;
         fragment.captains_name_index = 3;
         fragments.put(id);
     }
-    // SAFETY: the fixture owns the fleet, absent picker assets, and empty descriptor slots.
-    unsafe {
-        uqm_rust::battle::encount_native::build_battle(
-            &mut game.world,
-            &mut game.kernel,
-            RPG_PLAYER_NUM as u16,
-        );
-    }
+    uqm_rust::battle::encount_native::build_battle(
+        &mut game.world,
+        &mut game.kernel,
+        RPG_PLAYER_NUM as u16,
+    );
     let ships = game.kernel.ships(0);
     let first = ships.head().unwrap();
     let second = ships.succ(first).unwrap();
@@ -308,6 +315,8 @@ fn encounter_construction_keeps_fragment_order_infinite_crew_and_flagship_last()
     assert_eq!((ships.get(first).index, ships.get(first).crew), (7, 5));
     assert_eq!((ships.get(second).index, ships.get(second).crew), (11, 19));
     for id in [first, second] {
+        assert!(ships.resources(id).icon().is_absent());
+        assert_eq!(ships.resources(id).label(0), (c"", 0));
         let ship = ships.get(id);
         assert_eq!(ship.species, SPECIES_ID_SA_MATRA_ID);
         assert_eq!(
@@ -338,7 +347,7 @@ fn encounter_teardown_uses_retained_owners_without_reacquisition() {
         bridge::with_game(&mut game, || {
             bridge::enter(|cx| {
                 assert_eq!(
-                    uqm_rust::battle::encount_native::uninit_encounter(cx, &input),
+                    uqm_rust::battle::encount_native::uninit_encounter(cx, &input, None),
                     0
                 );
             });
@@ -430,17 +439,26 @@ fn hyperspace_movement_releases_world_before_fuel_queries() {
     game.world.data.flagship.log_x = 1000;
     game.world.data.flagship.log_y = 1000;
     game.world.data.flagship.fuel_on_board = 100;
-    let (mut dx, mut dy) = (0, 0);
-    // SAFETY: the fixture owns the lifecycle, output deltas and unclipped flagship position.
-    unsafe {
-        let old_size = (ScreenWidth, ScreenHeight);
-        (ScreenWidth, ScreenHeight) = (320, 240);
-        bridge::with_game(&mut game, || {
-            uqm_rust::navigation::abi::MoveSIS(&mut dx, &mut dy);
-        });
-        (ScreenWidth, ScreenHeight) = old_size;
-    }
-    assert_eq!((dx, dy), (0, 0));
+    let (mut dx, mut dy) = (-4, -8);
+    let mut battle = uqm_rust::engine::battle::Battle::new();
+    let mut cx = uqm_rust::engine::battle::Cx::new(
+        &mut battle,
+        &mut game.world,
+        &mut game.kernel,
+        uqm_rust::math::random,
+    );
+    uqm_rust::navigation::hyperspace::move_sis(
+        &mut cx,
+        &mut dx,
+        &mut dy,
+        uqm_rust::navigation::hyper_units::Geometry::new((320, 240)),
+        |_, _| panic!("small displacement must not debit fuel"),
+    );
+    assert_eq!((dx, dy), (-4, -8));
+    assert_eq!(
+        (cx.world.data.flagship.log_x, cx.world.data.flagship.log_y),
+        (1004, 1008),
+    );
     assert_eq!(game.world.data.flagship.fuel_on_board, 100);
 }
 
@@ -456,6 +474,7 @@ fn campaign_events_schedule_and_dispatch_using_the_existing_world() {
         fn GameClockTick();
     }
     let mut game = Game::new();
+    let display = campaign_display::CampaignDisplay::install(&mut game).unwrap();
     game.world.story = Some(uqm_rust::state::game_state::StoryState::new());
     let clock = &mut game.world.data.game.game_clock;
     clock.year_index = 2155;
@@ -497,6 +516,7 @@ fn campaign_events_schedule_and_dispatch_using_the_existing_world() {
         });
         game.world.clock.uninit();
     }
+    display.finish(game);
 }
 
 #[test]

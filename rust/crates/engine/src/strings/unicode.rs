@@ -157,12 +157,58 @@ pub unsafe fn utf8_string_count(start: *const u8) -> usize {
 /// # Safety
 /// `start..end` must be readable.
 pub unsafe fn utf8_string_count_n(start: *const u8, end: *const u8) -> usize {
-    let mut p = start;
+    if start == end {
+        return 0;
+    }
+    // SAFETY: the caller supplies readable bounds within the same allocation.
+    let bytes = unsafe { std::slice::from_raw_parts(start, end.offset_from(start) as usize) };
+    count_utf8_bytes(bytes)
+}
+
+/// Counts the valid prefix using the engine decoder's accepted code points.
+pub fn count_utf8_bytes(bytes: &[u8]) -> usize {
+    utf8_prefix(bytes, usize::MAX).0
+}
+
+/// Splits at a bounded character prefix accepted by the engine decoder.
+pub fn split_utf8_prefix(bytes: &[u8], characters: usize) -> (&[u8], &[u8]) {
+    bytes.split_at(utf8_prefix(bytes, characters).1)
+}
+
+fn utf8_prefix(bytes: &[u8], limit: usize) -> (usize, usize) {
+    let mut cursor = 0;
     let mut count = 0;
-    while get_char_from_string_n(&mut p, end) != 0 {
+    while count < limit {
+        let Some(&lead) = bytes.get(cursor) else {
+            break;
+        };
+        let (width, mut value, minimum) = match lead {
+            0 => break,
+            1..=0x7f => (1, u32::from(lead), 0),
+            0xc0..=0xdf => (2, u32::from(lead & 0x1f), 0x80),
+            0xe0..=0xef => (3, u32::from(lead & 0x0f), 0x800),
+            0xf0..=0xf7 => (4, u32::from(lead & 0x07), 0x10000),
+            _ => break,
+        };
+        let Some(encoded) = bytes.get(cursor..cursor + width) else {
+            break;
+        };
+        let mut valid = true;
+        for &byte in &encoded[1..] {
+            if byte & 0xc0 != 0x80 {
+                valid = false;
+                break;
+            }
+            value = (value << 6) | u32::from(byte & 0x3f);
+        }
+        if !valid || value < minimum {
+            log_message(LOG_WARNING, "Warning: Invalid UTF8 sequence.");
+            break;
+        }
+        cursor += width;
         count += 1;
     }
-    count
+    (count, cursor)
 }
 
 /// Character position of `ch` in the string, or -1.
@@ -574,5 +620,46 @@ mod tests {
         assert_eq!(uni_char_to_upper(u32::from(b'a')), u32::from(b'A'));
         assert_eq!(uni_char_to_lower(u32::from(b'Q')), u32::from(b'q'));
         assert_eq!(uni_char_to_upper(0x20ac), 0x20ac);
+    }
+}
+
+#[cfg(test)]
+mod bounded_count_tests {
+    #[test]
+    fn splits_bounded_prefixes_with_the_same_legacy_code_point_rules() {
+        let text = b"A\xc3\xa9\xed\xa0\x80\xf7\xbf\xbf\xbfZ\xe9";
+        assert_eq!(super::split_utf8_prefix(text, 0), (&b""[..], &text[..]));
+        assert_eq!(
+            super::split_utf8_prefix(text, 4),
+            (&text[..10], &text[10..])
+        );
+        assert_eq!(
+            super::split_utf8_prefix(text, 99),
+            (&text[..11], &text[11..])
+        );
+        assert_eq!(
+            super::split_utf8_prefix(b"a\0b", 99),
+            (&b"a"[..], &b"\0b"[..])
+        );
+        assert_eq!(
+            super::split_utf8_prefix(b"\xe2\x82", 1),
+            (&b""[..], &b"\xe2\x82"[..])
+        );
+    }
+
+    #[test]
+    fn counts_preserve_legacy_prefix_and_code_point_rules() {
+        for (bytes, expected) in [
+            (&b"ab\0cd\0"[..], 2),
+            (c"éclair".to_bytes_with_nul(), 6),
+            (&b"a\xe2\x28\xa1\0"[..], 1),
+            (&b"a\xc0\x80\0"[..], 1),
+            (&b"\xed\xa0\x80\0"[..], 1),
+            (&b"\xf7\xbf\xbf\xbf\0"[..], 1),
+            (&b"\xe2\x82"[..], 0),
+            (&b""[..], 0),
+        ] {
+            assert_eq!(super::count_utf8_bytes(bytes), expected, "{bytes:?}");
+        }
     }
 }

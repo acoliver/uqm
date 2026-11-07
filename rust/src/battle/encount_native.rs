@@ -43,6 +43,9 @@ pub const fn combat_speed(flags: u8) -> u8 {
     }
 }
 
+mod formation;
+use formation::encounter_icon_origin;
+
 struct EncounterSelection {
     initialized: bool,
     choice: u8,
@@ -115,19 +118,22 @@ fn apply_thraddash_body_count(world: &mut crate::engine::World, killed: u16) -> 
     killed
 }
 
-#[cfg(not(test))]
 pub(crate) mod engine {
+    mod display;
     use super::*;
+    #[cfg(not(test))]
     use crate::battle::battle_native::battle;
+    #[cfg(not(test))]
     use crate::battle::battle_native::engine::{
-        rgb15, sis_height, sis_width, AWESOME_RATING, CYBORG_CONTROL, HUMAN_CONTROL,
-        STANDARD_RATING,
+        rgb15, AWESOME_RATING, CYBORG_CONTROL, HUMAN_CONTROL, STANDARD_RATING,
     };
     use crate::engine::battle::link_queue;
+    #[cfg(not(test))]
     use crate::engine::StoryKey;
+    #[cfg(not(test))]
     use crate::pickship::ffi::draw_armada_pick_ship_in as draw_armada;
     use crate::ships::native::abi::*;
-    use crate::ships::native::{cosine, sine};
+    #[cfg(not(test))]
     use std::{mem, ptr};
 
     const TEXT_FADE: [u8; 7] = [10, 9, 8, 6, 5, 4, 3];
@@ -144,22 +150,25 @@ pub(crate) mod engine {
         (23, 0, 0),
     ];
 
-    use crate::graphics::resgfx::LoadGraphicInstance;
+    use crate::engine::world::{CStarDesc, CATALOG_LEN};
+    #[cfg(not(test))]
+    use crate::planets::starmap::naming::cluster_name;
 
-    use crate::planets::starmap::{current_catalog, naming::cluster_name};
-
+    #[cfg(not(test))]
     use crate::mainloop::input_abi::live::AnyButtonPress;
 
-    unsafe fn escape_pressed(input: &crate::engine::input::InputSession) -> bool {
+    fn escape_pressed(input: &crate::engine::input::InputSession) -> bool {
         let template = input.player_controls()[0] as usize;
         input.current().key[template][KEY_ESCAPE as usize] != 0
     }
+    #[cfg(not(test))]
     enum SalvageText {
         Caption,
         Amount,
         Total,
     }
 
+    #[cfg(not(test))]
     fn draw_salvage_line(
         kernel: &crate::engine::Kernel,
         string: &std::ffi::CStr,
@@ -191,6 +200,7 @@ pub(crate) mod engine {
         context.draw_text(&font, string, baseline, align, color);
     }
 
+    #[cfg(not(test))]
     fn draw_salvage_captions(kernel: &crate::engine::Kernel, name: &[UNICODE; 80], rect: &RECT) {
         let baseline = POINT {
             x: rect.corner.x.wrapping_add(100),
@@ -211,6 +221,7 @@ pub(crate) mod engine {
         );
     }
 
+    #[cfg(not(test))]
     unsafe fn do_select_action(
         cx: &mut crate::engine::battle::Cx<'_>,
         menu: &mut EncounterSelection,
@@ -238,10 +249,7 @@ pub(crate) mod engine {
             }
             SelectionAction::Continue => {}
         }
-        let flags = cx.world.data.game.glob_flags;
-        cx.with_legacy(|| {
-            crate::ui::menu::choose_menu_state(input, &mut menu.choice, PM_CONVERSE as u8, flags);
-        });
+        crate::ui::menu::choose_menu_state(cx, input, &mut menu.choice, PM_CONVERSE as u8);
         true
     }
 
@@ -295,9 +303,8 @@ pub(crate) mod engine {
         queue.free(id);
     }
 
-    /// # Safety
-    /// `player` must be a valid side; fleet, ship queues, and encounter resources must be initialized on the game thread.
-    pub unsafe fn build_battle(
+    #[cfg(not(test))]
+    pub fn build_battle(
         world: &mut crate::engine::World,
         kernel: &mut crate::engine::Kernel,
         player: COUNT,
@@ -340,7 +347,7 @@ pub(crate) mod engine {
                     frag.max_crew
                 };
                 ship.max_crew = frag.max_crew;
-                ships.set_picker_resources(id, frag.race_strings, frag.icons);
+                ships.set_picker_resources(id, world.fleet_resources(frag.species_id));
                 ship.index = frag.index as u16;
                 ship.cost = 0;
                 ships.set(id, ship);
@@ -379,8 +386,10 @@ pub(crate) mod engine {
         }
     }
 
+    #[cfg(not(test))]
     pub(crate) use crate::battle::context_access::reader_legacy::update_ship_frag_crew;
 
+    #[cfg(not(test))]
     fn draw_encounter_location(
         cx: &mut crate::engine::battle::Cx<'_>,
         cluster: Option<&std::ffi::CStr>,
@@ -420,86 +429,97 @@ pub(crate) mod engine {
         }
     }
 
+    fn draw_encounter_fleet(
+        world: &crate::engine::World,
+        context: &crate::graphics::context_abi::ContextLease,
+        dimensions: (i32, i32),
+    ) {
+        if world.activity() as u8 == IN_LAST_BATTLE as u8 {
+            return;
+        }
+        let fragments = fragment_snapshot(world, false);
+        let mut index = 0;
+        let mut i = 0;
+        while index < fragments.len() && i < 60 {
+            let frag = &fragments[index].1;
+            if frag.crew_level != COUNT::MAX {
+                index += 1;
+            }
+            let resources = world.fleet_resources(frag.species_id);
+            if let Some(icon) = super::formation::encounter_icon(resources.icon()) {
+                context.draw_stamp(
+                    &icon,
+                    encounter_icon_origin(i, icon.rect().extent, dimensions),
+                );
+            }
+            i += 1;
+        }
+    }
+
     /// # Safety
-    /// The game thread must own initialized encounter, display, input, resource, and audio state.
-    unsafe fn prepare_encounter(cx: &mut crate::engine::battle::Cx<'_>) {
-        SetContext(cx.kernel.space_context);
-        SetContextFont(cx.kernel.tiny_font);
+    /// The game thread must own initialized encounter message and audio state.
+    #[cfg(not(test))]
+    unsafe fn prepare_encounter(
+        cx: &mut crate::engine::battle::Cx<'_>,
+        catalog: Option<&[CStarDesc; CATALOG_LEN]>,
+    ) {
+        let context = crate::graphics::context_abi::ContextLease::require(cx.kernel.space_context);
+        let font = cx
+            .kernel
+            .tiny_font_lease()
+            .unwrap_or_else(|| panic!("encounter requires the tiny font"));
+        context.select();
+        context.set_font(&font);
         let music = crate::sound::resource_types::LoadedMusic::load(c"music.redalert");
         crate::ui::settings::play_loaded_music(cx.world, music.as_ref(), 0, 1);
-        let segue = CaptureDrawable(LoadGraphicInstance(SEGUE_PMAP_ANIM.as_ptr().cast()).cast());
+        let segue = crate::graphics::drawable_abi::LoadedDrawable::load(c"graphics.segue")
+            .unwrap_or_else(|| panic!("encounter requires the red alert backdrop"));
         cx.with_legacy(|| WaitForSoundEnd(COUNT::MAX));
         stop_music();
         drop(music);
-        let mut stamp = STAMP {
-            origin: POINT { x: 0, y: 0 },
-            frame: segue,
-        };
-        SetTransitionSource(ptr::null());
-        BatchGraphics();
-        SetContextBackGroundColor(rgb15(0, 0, 0));
-        ClearDrawable();
-        DrawStamp(&mut stamp);
-        let cluster = if in_hqspace(cx.world) == 0 {
-            let star = cx
-                .world
-                .selected_star(current_catalog())
-                .unwrap_or_else(|| panic!("encounter requires a selected star"));
-            Some(cluster_name(cx.kernel, star, STAR_NUMBER_BASE as usize))
-        } else {
-            None
-        };
-        draw_encounter_location(cx, cluster.as_deref());
-        cx.with_legacy(|| DrawSISMessage(ptr::null()));
-        stamp.origin = POINT {
-            x: (sis_width() >> 1) as i16,
-            y: (sis_height() >> 1) as i16,
-        };
-        stamp.frame = cx.kernel.planet[0];
-        DrawStamp(&mut stamp);
-        if cx.world.activity() as u8 != IN_LAST_BATTLE as u8 {
-            let fragments = fragment_snapshot(cx.world, false);
-            let mut index = 0;
-            let mut i = 0usize;
-            while index < fragments.len() && i < 60 {
-                let frag = &fragments[index].1;
-                if frag.crew_level != COUNT::MAX {
-                    index += 1;
-                }
-                let (x, y) = ENCOUNTER_DISPLAY_POINTS[i % ENCOUNTER_DISPLAY_POINTS.len()];
-                stamp.origin = POINT { x, y };
-                if i >= ENCOUNTER_DISPLAY_POINTS.len() {
-                    let radius = (square_root((x as i64 * x as i64 + y as i64 * y as i64) as u32)
-                        as usize
-                        + (i / ENCOUNTER_DISPLAY_POINTS.len()) * 18)
-                        as COUNT;
-                    let angle = ARCTAN(x, y);
-                    stamp.origin.x = cosine(angle as i32, radius as i32);
-                    stamp.origin.y = sine(angle as i32, radius as i32);
-                }
-                stamp.frame = SetAbsFrameIndex(frag.icons, 0);
-                let mut rect: RECT = mem::zeroed();
-                GetFrameRect(stamp.frame, &mut rect);
-                stamp.origin.x = (stamp.origin.x as i32 + (sis_width() >> 1)
-                    - (rect.extent.width as i32 >> 1)) as i16;
-                stamp.origin.y = (stamp.origin.y as i32 + (sis_height() >> 1)
-                    - (rect.extent.height as i32 >> 1)) as i16;
-                DrawStamp(&mut stamp);
-                i += 1;
-            }
-        }
-        UnbatchGraphics();
-        DestroyDrawable(ReleaseDrawable(segue));
-        cx.with_legacy(|| ScreenTransition(3, ptr::null()));
+        let (width, height) = cx.screen_dimensions();
+        let dimensions = (width - 78, height - 13);
+        context.transition_source(None);
+        context.with_batch(|| {
+            context.set_background(rgb15(0, 0, 0));
+            context.clear();
+            context.draw_stamp(&segue.lease().context_frame(0), POINT { x: 0, y: 0 });
+            let cluster = if in_hqspace(cx.world) == 0 {
+                let star = cx
+                    .world
+                    .selected_star(catalog)
+                    .unwrap_or_else(|| panic!("encounter requires a selected star"));
+                Some(cluster_name(cx.kernel, star, STAR_NUMBER_BASE as usize))
+            } else {
+                None
+            };
+            draw_encounter_location(cx, cluster.as_deref());
+            cx.with_legacy(|| DrawSISMessage(ptr::null()));
+            let planet = crate::graphics::context_abi::ContextFrame::retain(
+                std::ptr::NonNull::new(cx.kernel.planet[0]),
+            );
+            context.draw_stamp(
+                &planet,
+                POINT {
+                    x: (dimensions.0 >> 1) as i16,
+                    y: (dimensions.1 >> 1) as i16,
+                },
+            );
+            draw_encounter_fleet(cx.world, &context, dimensions);
+        });
+        drop(segue);
+        cx.with_legacy(|| context.transition(None));
     }
 
     /// # Safety
     /// Native encounter resources and input are initialized on the game thread.
+    #[cfg(not(test))]
     pub unsafe fn init_encounter(
         cx: &mut crate::engine::battle::Cx<'_>,
         io: &mut crate::engine::observe::Io<'_>,
+        catalog: Option<&[CStarDesc; CATALOG_LEN]>,
     ) -> COUNT {
-        prepare_encounter(cx);
+        prepare_encounter(cx, catalog);
         let mut menu = EncounterSelection::new();
         cx.with_legacy(|| {
             DrawMenuStateStrings(PM_CONVERSE as u8, menu.choice as i16);
@@ -510,7 +530,8 @@ pub(crate) mod engine {
         COUNT::from(menu.choice)
     }
 
-    unsafe fn draw_fade_text(
+    #[cfg(not(test))]
+    fn draw_fade_text(
         cx: &mut crate::engine::battle::Cx<'_>,
         input: &crate::engine::input::InputSession,
         str1: &std::ffi::CStr,
@@ -543,29 +564,32 @@ pub(crate) mod engine {
                 color,
             );
         };
-        FlushInput(input);
+        let runtime = cx.kernel.input_runtime();
+        runtime.flush();
         let mut time = GetTimeCounter();
         if fade_in != 0 {
             let mut i = 0usize;
             while i < TEXT_FADE.len() {
-                if AnyButtonPress(cx, input, 1) != 0 {
+                runtime.update(cx);
+                if input.current().any_button_pressed() {
                     i = TEXT_FADE.len() - 1;
                 }
                 let v = TEXT_FADE[i];
                 render(rgb15(v, v, v));
-                cx.with_legacy(|| SleepThreadUntil(time.wrapping_add(ONE_SECOND / 20)));
+                runtime.sleep_until(cx, time.wrapping_add(ONE_SECOND / 20));
                 time = GetTimeCounter();
                 i += 1;
             }
         } else {
             let mut i = TEXT_FADE.len() as i16 - 1;
             while i >= 0 {
-                if AnyButtonPress(cx, input, 1) != 0 {
+                runtime.update(cx);
+                if input.current().any_button_pressed() {
                     i = 0;
                 }
                 let v = TEXT_FADE[i as usize];
                 render(rgb15(v, v, v));
-                cx.with_legacy(|| SleepThreadUntil(time.wrapping_add(ONE_SECOND / 20)));
+                runtime.sleep_until(cx, time.wrapping_add(ONE_SECOND / 20));
                 time = GetTimeCounter();
                 i -= 1;
             }
@@ -575,9 +599,11 @@ pub(crate) mod engine {
 
     /// # Safety
     /// The game thread must own initialized encounter fleet queues, game state, display, and salvage resources.
+    #[cfg(not(test))]
     pub unsafe fn uninit_encounter(
         cx: &mut crate::engine::battle::Cx<'_>,
         input: &crate::engine::input::InputSession,
+        catalog: Option<&[CStarDesc; CATALOG_LEN]>,
     ) -> COUNT {
         let mut killed = 0u16;
         free_gravity_well(cx.kernel);
@@ -608,9 +634,10 @@ pub(crate) mod engine {
         let race_index = cx.world.encounter_race as usize;
         if cx.world.avail_races_ref().at(race_index).is_none() {
             victory = -1;
-            init_siscontexts(cx.kernel);
+            let dimensions = cx.screen_dimensions();
+            init_siscontexts(cx.kernel, dimensions);
         }
-        let previous_mode = SetStatusMessageMode(StatMsgMode_SMM_RES_UNITS);
+        let previous_mode = cx.kernel.set_status_message_mode(StatMsgMode_SMM_RES_UNITS);
         let mut sleepy = true;
         for side in 0..NUM_SIDES as usize {
             if side != 0 {
@@ -621,16 +648,7 @@ pub(crate) mod engine {
                         draw_sisframe();
                         DrawSISMessage(ptr::null());
                     });
-                    if in_hqspace(cx.world) != 0 {
-                        let point = cx.world.data.game.ship_stamp.origin;
-                        cx.with_legacy(|| DrawHyperCoords(point));
-                    } else if cx.world.data.game.ip_planet == 0 {
-                        let point = (*cx.world.star_pointer(current_catalog())).star_pt;
-                        cx.with_legacy(|| DrawHyperCoords(point));
-                    } else {
-                        let name = cx.world.data.flagship.planet_name.as_mut_ptr().cast();
-                        cx.with_legacy(|| DrawSISTitle(name));
-                    }
+                    display::draw_title(cx, catalog);
                     SetContext(cx.kernel.space_context);
                     if victory != 0 {
                         draw_armada(cx.kernel, cx.world, 1, &mut *(&raw mut salvage_rect).cast());
@@ -650,7 +668,7 @@ pub(crate) mod engine {
                         if victory != 0 {
                             if killed == 1 {
                                 recycle = 0;
-                                cx.with_legacy(|| DrawStatusMessage(ptr::null()));
+                                crate::ui::sis::draw_status_message(cx.kernel, cx.world, None);
                                 let kernel = &*cx.kernel;
                                 stamp.origin.x = salvage_rect.corner.x.wrapping_add(32);
                                 stamp.origin.y = salvage_rect.corner.y.wrapping_add(56);
@@ -734,7 +752,7 @@ pub(crate) mod engine {
                 }
             }
         }
-        SetStatusMessageMode(previous_mode);
+        cx.kernel.set_status_message_mode(previous_mode);
         if victory != 0 {
             cx.with_legacy(|| WaitForAnyButton(1, ONE_SECOND * 3, 0));
             if !escape_pressed(input) {
@@ -777,15 +795,14 @@ pub(crate) mod engine {
                     }
                 }
             }
-            cx.with_legacy(|| DrawStatusMessage(ptr::null()));
+            crate::ui::sis::draw_status_message(cx.kernel, cx.world, None);
         }
         killed = apply_thraddash_body_count(cx.world, killed);
         killed
     }
 
-    /// # Safety
-    /// The game thread must retain initialized native encounter audio resources.
-    pub unsafe fn encounter_battle(
+    #[cfg(not(test))]
+    pub fn encounter_battle(
         cx: &mut crate::engine::battle::Cx<'_>,
         io: &mut crate::engine::observe::Io<'_>,
     ) {
@@ -818,6 +835,69 @@ pub(crate) mod engine {
         }
         cx.world.set_activity(old);
     }
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn fragment_snapshots_keep_order_and_removal_selects_the_supplied_fleet() {
+            let mut world = crate::engine::World::new();
+            let npc = {
+                let mut queue = world.npc_built_ships();
+                let id = queue
+                    .alloc()
+                    .unwrap_or_else(|| panic!("fragment fixture queue is full"));
+                queue.get_mut(id).race_id = 9;
+                queue.get_mut(id).crew_level = COUNT::MAX;
+                queue.put(id);
+                id
+            };
+            let escort = {
+                let mut queue = world.built_ships();
+                let id = queue
+                    .alloc()
+                    .unwrap_or_else(|| panic!("fragment fixture queue is full"));
+                queue.get_mut(id).race_id = 4;
+                queue.get_mut(id).crew_level = 3;
+                queue.put(id);
+                id
+            };
+            assert_eq!(npc_race(&world), 9);
+            assert_eq!(fragment_snapshot(&world, false)[0].0, npc);
+            assert_eq!(fragment_snapshot(&world, true)[0].0, escort);
+            assert_eq!(fragment_snapshot(&world, true)[0].1.crew_level, 3);
+            assert_ne!(fleet_is_infinite(&world, 1), 0);
+            assert_eq!(fleet_is_infinite(&world, RPG_PLAYER_NUM as COUNT), 0);
+            assert!(fragment_is_removed(0, false, false));
+            remove_campaign_fragment(&mut world, false, npc);
+            assert!(fragment_snapshot(&world, false).is_empty());
+            assert_eq!(fragment_snapshot(&world, true)[0].0, escort);
+            assert_eq!(fleet_is_infinite(&world, 1), 0);
+            remove_campaign_fragment(&mut world, true, escort);
+            assert!(fragment_snapshot(&world, true).is_empty());
+        }
+
+        #[test]
+        fn encounter_escape_reads_the_selected_player_template() {
+            let input = crate::engine::input::InputSession::default();
+            input.set_player_control(0, 2);
+            assert!(!escape_pressed(&input));
+            input.set_player_key(0, KEY_ESCAPE as usize, true);
+            input.advance(input.immediate(), input.immediate(), 1);
+            assert!(escape_pressed(&input));
+            input.set_player_control(0, 0);
+            assert!(!escape_pressed(&input));
+        }
+
+        #[test]
+        fn salvage_fades_keep_their_authored_envelopes() {
+            assert_eq!(TEXT_FADE, [10, 9, 8, 6, 5, 4, 3]);
+            assert_eq!(SHIP_FADE.len(), 10);
+            assert_eq!(SHIP_FADE[0], (7, 0, 0));
+            assert_eq!(SHIP_FADE[5], (31, 31, 31));
+            assert_eq!(SHIP_FADE[9], (23, 0, 0));
+        }
+    }
 }
 
 #[cfg(not(test))]
@@ -826,6 +906,7 @@ pub use engine::*;
 #[cfg(test)]
 mod tests {
     use super::*;
+
     #[test]
     fn encounter_selection_ignores_initial_select_then_preserves_hail_attack_and_options() {
         for choice in 0..=2 {

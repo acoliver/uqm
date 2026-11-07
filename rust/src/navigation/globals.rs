@@ -1,14 +1,15 @@
 //! Ownership and lifecycle of the live navigation world, ported from globdata.c.
 
 use super::abi::*;
-use crate::engine::{
-    world::new_game::{FleetRoster, FleetTemplate, NewGameInputs},
-    StoryKey,
-};
+#[cfg(not(test))]
+use crate::engine::world::new_game::{FleetRoster, FleetTemplate, NewGameInputs};
+use crate::engine::StoryKey;
 #[cfg(not(test))]
 use crate::ships::DescriptorLoader;
+#[cfg(not(test))]
 use std::{mem, ptr};
 
+#[cfg(not(test))]
 unsafe fn create_radar(kernel: &mut crate::engine::Kernel) {
     if kernel.radar_context.is_null() {
         #[cfg(feature = "debug-process")]
@@ -38,6 +39,7 @@ unsafe fn create_radar(kernel: &mut crate::engine::Kernel) {
 
 /// # Safety
 /// Resource system and screen contexts must be initialized on the game thread.
+#[cfg(not(test))]
 pub unsafe fn load_sc2_data(cx: &mut crate::engine::battle::Cx<'_>) -> BOOLEAN {
     let kernel = &mut *cx.kernel;
     if kernel.flag_stat_frame.is_null() {
@@ -62,6 +64,7 @@ pub unsafe fn load_sc2_data(cx: &mut crate::engine::battle::Cx<'_>) -> BOOLEAN {
     1
 }
 
+#[cfg(not(test))]
 fn fleet_template(info: &SHIP_INFO, fleet: &FLEET_STUFF) -> FleetTemplate {
     FleetTemplate {
         crew_level: info.crew_level,
@@ -75,6 +78,7 @@ fn fleet_template(info: &SHIP_INFO, fleet: &FLEET_STUFF) -> FleetTemplate {
     }
 }
 
+#[cfg(not(test))]
 fn initialize_races(cx: &mut crate::engine::battle::Cx<'_>) {
     let kernel = &mut *cx.kernel;
     cx.world.initialize_fleets(
@@ -89,6 +93,7 @@ fn initialize_races(cx: &mut crate::engine::battle::Cx<'_>) {
             if species == SPECIES_ID_UR_QUAN_PROBE_ID {
                 if let Some(desc) = crate::engine::battle::RaceDesc::load(world, species, false) {
                     let template = fleet_template(desc.info(), desc.fleet());
+                    world.retain_fleet_resources(species, desc.picker_resources());
                     desc.unload(world, false, false);
                     template
                 } else {
@@ -97,6 +102,10 @@ fn initialize_races(cx: &mut crate::engine::battle::Cx<'_>) {
             } else {
                 let master = find_master_ship(kernel, species)
                     .unwrap_or_else(|| panic!("master species {species}"));
+                world.retain_fleet_resources(
+                    species,
+                    crate::ships::master_native::engine::picker_resources(kernel, species),
+                );
                 fleet_template(&master.info, &master.fleet)
             }
         },
@@ -105,6 +114,7 @@ fn initialize_races(cx: &mut crate::engine::battle::Cx<'_>) {
 
 /// # Safety
 /// Game-thread initialization, before any world queues have been allocated.
+#[cfg(not(test))]
 pub unsafe fn init_game_structures(cx: &mut crate::engine::battle::Cx<'_>) -> BOOLEAN {
     let battle = &mut *cx.b;
     let kernel = &mut *cx.kernel;
@@ -115,7 +125,8 @@ pub unsafe fn init_game_structures(cx: &mut crate::engine::battle::Cx<'_>) -> BO
             cx.kernel.play_frame =
                 CaptureDrawable(LoadGraphicInstance(c"graphics.playmenu".as_ptr()).cast());
             initialize_races(&mut cx);
-            init_siscontexts(cx.kernel);
+            let dimensions = cx.screen_dimensions();
+            init_siscontexts(cx.kernel, dimensions);
             load_sc2_data(&mut cx);
             let catalog = crate::planets::starmap::current_catalog()
                 .unwrap_or_else(|| panic!("planet state initialization requires the star catalog"));
@@ -163,6 +174,7 @@ pub unsafe fn init_game_structures(cx: &mut crate::engine::battle::Cx<'_>) -> BO
 
 /// # Safety
 /// No renderer may be using these contexts or resources.
+#[cfg(not(test))]
 pub unsafe fn free_sc2_data(kernel: &mut crate::engine::Kernel) {
     DestroyContext(kernel.radar_context);
     kernel.radar_context = ptr::null_mut();
@@ -176,6 +188,7 @@ pub unsafe fn free_sc2_data(kernel: &mut crate::engine::Kernel) {
 
 /// # Safety
 /// The initialized game structures must no longer be in use.
+#[cfg(not(test))]
 pub unsafe fn uninit_game_structures(cx: &mut crate::engine::battle::Cx<'_>) {
     cx.world.encounters().reinit();
     cx.world.ip_groups().reinit();
@@ -190,12 +203,14 @@ pub unsafe fn uninit_game_structures(cx: &mut crate::engine::battle::Cx<'_>) {
         DestroyStringTable(ReleaseStringTable(probe.race_strings));
     }
     cx.world.avail_races().reinit();
+    cx.world.clear_fleet_resources();
     DestroyDrawable(ReleaseDrawable(cx.kernel.play_frame));
     cx.kernel.play_frame = ptr::null_mut();
 }
 
 /// Reset campaign values, retaining the caller’s global flags. Queue/resource
 /// teardown is a separate lifecycle step; this does not release those handles.
+#[cfg(not(test))]
 pub fn init_glob_data(world: &mut crate::engine::World) {
     world.reset_game_data();
 }
@@ -208,6 +223,7 @@ pub fn in_hyper_space(world: &crate::engine::World) -> BOOLEAN {
     u32::from(in_hqspace(world) != 0 && world.story_state(StoryKey::ARILOU_SPACE_SIDE) <= 1)
 }
 
+#[cfg(not(test))]
 pub fn in_quasi_space(world: &crate::engine::World) -> BOOLEAN {
     u32::from(in_hqspace(world) != 0 && world.story_state(StoryKey::ARILOU_SPACE_SIDE) > 1)
 }

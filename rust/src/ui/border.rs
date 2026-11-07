@@ -1,6 +1,7 @@
 //! Flagship screen border, ported from uqm/border.c.
 use super::util::live::DrawStarConBox;
 use crate::engine::Kernel;
+use crate::graphics::context_abi::{ContextFrame, ContextLease};
 use crate::navigation::abi::*;
 fn color(r: u8, g: u8, b: u8) -> Color {
     Color {
@@ -10,21 +11,20 @@ fn color(r: u8, g: u8, b: u8) -> Color {
         a: 255,
     }
 }
-/// # Safety
-/// Initialized graphics and SIS contexts must be accessed on the game thread.
-pub unsafe fn init_siscontexts(kernel: &mut crate::engine::Kernel) {
-    let mut r: RECT = std::mem::zeroed();
-
-    SetContext(kernel.status_context);
-
-    SetContext(kernel.space_context);
-    SetContextFGFrame(kernel.screen);
-
-    r.corner.x = 7;
-    r.corner.y = 10;
-    r.extent.width = (ScreenWidth - 78) as i16;
-    r.extent.height = (ScreenHeight - 13) as i16;
-    SetContextClipRect(&mut r);
+pub fn init_siscontexts(kernel: &Kernel, dimensions: (i32, i32)) {
+    let status = ContextLease::require(kernel.status_context);
+    let space = ContextLease::require(kernel.space_context);
+    let screen = ContextFrame::retain(std::ptr::NonNull::new(kernel.screen));
+    status.select();
+    space.select();
+    space.set_frame(screen);
+    space.set_clip(RECT {
+        corner: POINT { x: 7, y: 10 },
+        extent: EXTENT {
+            width: (dimensions.0 - 78) as i16,
+            height: (dimensions.1 - 13) as i16,
+        },
+    });
 }
 
 /// # Safety
@@ -185,7 +185,7 @@ pub unsafe fn draw_sisframe() {
         DrawFilledRectangle(&mut r);
     }
 
-    Kernel::current().write(|kernel| init_siscontexts(kernel));
+    Kernel::current().read(|kernel| init_siscontexts(kernel, (ScreenWidth, ScreenHeight)));
     ClearSISRect(DRAW_SIS_DISPLAY as u8);
 
     UnbatchGraphics();

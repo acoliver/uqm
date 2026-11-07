@@ -51,7 +51,7 @@ mod live {
                 unsafe {
                     self.cx
                         .borrow_mut()
-                        .with_legacy(|| crate::battle::build_native::refresh_escorts())
+                        .with_legacy(|| crate::ui::sis::DeltaSISGauges(32767, 32767, 32767))
                 };
             }
         }

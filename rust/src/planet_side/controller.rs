@@ -49,8 +49,11 @@ where
         }
     }
 
-    pub fn run(&mut self) -> Result<SessionOutcome, ControllerError> {
-        self.run_with_frame(run_frame)
+    pub fn run(
+        &mut self,
+        cx: &mut crate::engine::battle::Cx<'_>,
+    ) -> Result<SessionOutcome, ControllerError> {
+        self.run_with_frame(|session, adapters, period| run_frame(cx, session, adapters, period))
     }
 
     pub(crate) fn run_with_frame(
@@ -109,7 +112,11 @@ mod tests {
     }
     struct Audio;
     impl PlanetSideAudio for Audio {
-        fn play(&mut self, _cue: super::super::hazards::SoundCue) -> Result<(), AdapterError> {
+        fn play(
+            &mut self,
+            _world: &crate::engine::World,
+            _cue: super::super::hazards::SoundCue,
+        ) -> Result<(), AdapterError> {
             Ok(())
         }
     }
@@ -159,7 +166,17 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn controller_runs_until_one_terminal_outcome() {
+        let mut owner = crate::engine::Game::new();
+        let mut battle = crate::engine::battle::Battle::new();
+        let cx = &mut crate::engine::battle::Cx::new(
+            &mut battle,
+            &mut owner.world,
+            &mut owner.kernel,
+            crate::math::random,
+        );
+
         // Takeoff now runs through TakingOff + Return animation phases before
         // settling, so the budget must cover those extra frames.
         let takeoff_total = super::super::lifecycle::LifecycleAnimation::takeoff_total();
@@ -168,25 +185,50 @@ mod tests {
         input.resize(budget as usize, FrameInput::default());
         input[1].takeoff = true;
         let mut controller = PlanetSideController::new(session(), adapters(input), 1, budget);
-        assert!(matches!(controller.run(), Ok(SessionOutcome::Returned(_))));
+        assert!(matches!(
+            controller.run(cx),
+            Ok(SessionOutcome::Returned(_))
+        ));
         assert_eq!(controller.adapters.ship.0.len(), 1);
     }
 
     #[test]
+    #[serial_test::serial]
     fn controller_has_a_hard_frame_budget() {
+        let mut owner = crate::engine::Game::new();
+        let mut battle = crate::engine::battle::Battle::new();
+        let cx = &mut crate::engine::battle::Cx::new(
+            &mut battle,
+            &mut owner.world,
+            &mut owner.kernel,
+            crate::math::random,
+        );
+
         let mut controller =
             PlanetSideController::new(session(), adapters(vec![FrameInput::default()]), 1, 1);
-        assert_eq!(controller.run(), Err(ControllerError::FrameBudgetExceeded));
+        assert_eq!(
+            controller.run(cx),
+            Err(ControllerError::FrameBudgetExceeded)
+        );
     }
 
     #[test]
+    #[serial_test::serial]
     fn prepared_input_preserves_simulation_frames_and_terminal_settlement() {
+        let mut owner = crate::engine::Game::new();
+        let mut battle = crate::engine::battle::Battle::new();
+        let cx = &mut crate::engine::battle::Cx::new(
+            &mut battle,
+            &mut owner.world,
+            &mut owner.kernel,
+            crate::math::random,
+        );
         let budget = 3 + u32::from(super::super::lifecycle::LifecycleAnimation::takeoff_total());
         let mut input = vec![FrameInput::default(); budget as usize];
         input[1].takeoff = true;
         let mut direct = PlanetSideController::new(session(), adapters(input.clone()), 24, budget);
         let mut prepared = PlanetSideController::new(session(), adapters(input), 24, budget);
-        let expected = direct.run();
+        let expected = direct.run(cx);
         let mut active_frames = 0;
         let actual = prepared.run_with_frame(|session, adapters, period| {
             let deadline = Tick(adapters.clock.now().0.wrapping_add(period));
@@ -196,7 +238,7 @@ mod tests {
             } else {
                 None
             };
-            super::super::runtime::run_frame_at(session, adapters, deadline, input)
+            super::super::runtime::run_frame_at(cx, session, adapters, deadline, input)
         });
         assert_eq!(actual, expected);
         assert!(matches!(actual, Ok(SessionOutcome::Returned(_))));
