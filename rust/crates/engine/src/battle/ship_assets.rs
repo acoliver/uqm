@@ -1,61 +1,48 @@
 //! Resource ownership follows a descriptor through attachment and detachment.
 use crate::battle::{frames::FrameArray, record::*, RaceDesc};
-use crate::graphics::native_abi::{FRAME, STRING};
+use crate::graphics::native_abi::FRAME;
 #[cfg(not(test))]
 use crate::graphics::{drawable_abi::DestroyDrawable, pixmap_abi::ReleaseDrawable};
-#[cfg(not(test))]
-use crate::strings::{
-    sresins::LoadStringTableInstance,
-    string_table::{
-        CaptureStringTable, DestroyStringTable, GetStringAddress, ReleaseStringTable,
-        SetAbsStringTableIndex,
-    },
-};
+use crate::strings::owned_table::LoadedTextTable;
 
 #[derive(Debug)]
 pub struct ShipAssets {
     icons: FRAME,
     melee_icon: FRAME,
-    strings: STRING,
-    name: Option<Vec<u8>>,
+    strings: Option<LoadedTextTable>,
     captain: FRAME,
     victory: Option<crate::sound::resource_types::LoadedMusic>,
     sounds: Option<crate::sound::owned_bank::LoadedSoundBank>,
     animations: [FrameArray; 3],
 }
 
-pub(super) unsafe fn borrowed_label<'a>(strings: STRING, index: u16) -> (&'a std::ffi::CStr, u16) {
-    use crate::strings::string_table::{GetStringLength, SetAbsStringTableIndex};
-    // SAFETY: the caller retains the owning descriptor or admitted picker resources for 'a.
-    unsafe {
-        let entry = SetAbsStringTableIndex(strings.cast(), index);
-        let count = GetStringLength(entry);
-        if count == 0 {
-            return (c"", 0);
-        }
-        let bytes = std::slice::from_raw_parts((*entry).data.cast(), (*entry).length as usize);
-        let text = std::ffi::CStr::from_bytes_until_nul(bytes)
-            .unwrap_or_else(|error| panic!("ship label terminator: {error}"));
-        (text, count)
-    }
-}
-
 impl RaceDesc {
     pub fn label(&self, index: u16) -> (&std::ffi::CStr, u16) {
         self.raw.label(index)
+    }
+
+    pub fn picker_resources(&self) -> crate::battle::link_queue::ShipPickerResources {
+        let assets = self
+            .raw
+            .assets
+            .as_ref()
+            .unwrap_or_else(|| panic!("picker resources require loaded assets"));
+        crate::battle::link_queue::ShipPickerResources::new(
+            assets.strings.as_ref().and_then(|table| table.entry(0)),
+            crate::battle::frames::FrameSelection::retain(assets.icons),
+        )
     }
 }
 
 impl RaceDescriptor {
     pub fn label(&self, index: u16) -> (&std::ffi::CStr, u16) {
-        let assets = self
-            .assets
+        self.assets
             .as_ref()
-            .unwrap_or_else(|| panic!("ship labels require loaded assets"));
-        // SAFETY: assets owns this captured table until release, after this descriptor borrow ends.
-        unsafe { borrowed_label(assets.strings, index) }
+            .unwrap_or_else(|| panic!("ship labels require loaded assets"))
+            .strings
+            .as_ref()
+            .map_or((c"", 0), |table| table.label(index))
     }
-
     #[cfg(not(test))]
     pub fn sound_bank(&self) -> Option<&crate::sound::owned_bank::LoadedSoundBank> {
         self.assets
@@ -80,18 +67,6 @@ impl RaceDescriptor {
 }
 
 #[cfg(not(test))]
-fn load_names(key: &std::ffi::CStr) -> (STRING, Option<Vec<u8>>) {
-    // SAFETY: the key is borrowed through loading. Any returned name points into
-    // this newly captured table, which stays owned while its bytes are copied.
-    unsafe {
-        let strings = CaptureStringTable(LoadStringTableInstance(key.as_ptr()));
-        let name = GetStringAddress(SetAbsStringTableIndex(strings, 2));
-        let name = (!name.is_null()).then(|| std::ffi::CStr::from_ptr(name).to_bytes().to_vec());
-        (strings.cast(), name)
-    }
-}
-
-#[cfg(not(test))]
 fn load_animation_set(keys: [Option<&'static std::ffi::CStr>; 3]) -> Option<FrameArray> {
     let mut raw = [std::ptr::null_mut(); 3];
     if load_animation(&mut raw, keys, "animation") == 0 {
@@ -106,15 +81,14 @@ fn load_animation_set(keys: [Option<&'static std::ffi::CStr>; 3]) -> Option<Fram
 #[cfg(not(test))]
 impl RaceDesc {
     pub fn initialize_assets(&mut self, battle: bool) -> bool {
-        let name = self.initialize_icons();
+        let strings = self.initialize_icons();
         let loaded = !battle || self.initialize_battle_assets();
         let data = &self.raw.ship_data;
         let info = self.info();
         self.raw.assets = Some(Box::new(ShipAssets {
             icons: info.icons,
             melee_icon: info.melee_icon,
-            strings: info.race_strings,
-            name,
+            strings,
             captain: data.captain_control.background,
             victory: self.raw.loaded_victory.take(),
             sounds: self.raw.loaded_sounds.take(),
@@ -123,7 +97,7 @@ impl RaceDesc {
         loaded
     }
 
-    fn initialize_icons(&mut self) -> Option<Vec<u8>> {
+    fn initialize_icons(&mut self) -> Option<LoadedTextTable> {
         let info = &mut self.raw.ship_info;
         if let Some(key) = self.raw.resources.icons {
             info.icons = crate::battle::frames::load_graphic(key);
@@ -131,13 +105,11 @@ impl RaceDesc {
         if let Some(key) = self.raw.resources.melee_icon {
             info.melee_icon = crate::battle::frames::load_graphic(key);
         }
-        if let Some(key) = self.raw.resources.strings {
-            let (strings, name) = load_names(key);
-            info.race_strings = strings;
-            name
-        } else {
-            None
-        }
+        let strings = self.raw.resources.strings.and_then(LoadedTextTable::load);
+        info.race_strings = strings
+            .as_ref()
+            .map_or(std::ptr::null_mut(), |table| table.as_raw().cast());
+        strings
     }
 
     fn initialize_battle_assets(&mut self) -> bool {
@@ -213,14 +185,12 @@ impl RaceDesc {
             .assets
             .as_ref()
             .unwrap_or_else(|| panic!("catalog descriptor has no loaded assets"));
-        assert!(
-            !assets.strings.is_null(),
-            "catalog string table was not loaded"
-        );
         assets
-            .name
-            .as_deref()
+            .strings
+            .as_ref()
+            .and_then(|table| table.text(2))
             .unwrap_or_else(|| panic!("catalog string table has no ship name"))
+            .to_bytes()
     }
 }
 
@@ -245,8 +215,10 @@ impl ShipAssets {
             unsafe {
                 DestroyDrawable(ReleaseDrawable(self.melee_icon.cast()));
                 DestroyDrawable(ReleaseDrawable(self.icons.cast()));
-                DestroyStringTable(ReleaseStringTable(self.strings.cast()));
             }
+        } else if let Some(strings) = self.strings {
+            // The legacy campaign teardown retains the probe's native release authority.
+            strings.into_raw();
         }
     }
 }
@@ -260,34 +232,24 @@ mod tests {
 
     #[test]
     fn descriptor_labels_borrow_the_owned_table_and_keep_character_bounds() {
-        use crate::strings::string_table::*;
         let mut descriptor = RaceDesc::empty();
-        // SAFETY: this fixture exclusively owns the captured table until the final release.
-        unsafe {
-            let table = AllocStringTable(2, 0);
-            let entry = CaptureStringTable(table);
-            let bytes = b"Z\xc3\xb6q\0extra\0";
-            (*entry).data = crate::memory::rust_hmalloc(bytes.len()).cast();
-            std::ptr::copy_nonoverlapping(bytes.as_ptr(), (*entry).data.cast(), bytes.len());
-            (*entry).length = bytes.len() as i32;
-            descriptor.raw.assets = Some(Box::new(ShipAssets {
-                icons: std::ptr::null_mut(),
-                melee_icon: std::ptr::null_mut(),
-                strings: entry.cast(),
-                name: None,
-                captain: std::ptr::null_mut(),
-                victory: None,
-                sounds: None,
-                animations: std::array::from_fn(|_| FrameArray::EMPTY),
-            }));
-            let (text, count) = descriptor.raw.label(0);
-            assert_eq!(text.to_bytes(), "Zöq".as_bytes());
-            assert_eq!(count, 3);
-            assert_eq!(text.as_ptr(), (*entry).data);
-            assert_eq!(descriptor.raw.label(2), (text, count));
-            assert_eq!(descriptor.raw.label(1), (c"", 0));
-            DestroyStringTable(ReleaseStringTable(entry));
-        }
+        let table = LoadedTextTable::fixture(vec![b"Z\xc3\xb6q\0extra\0".to_vec(), vec![0]]);
+        let pointer = table.text(0).unwrap().as_ptr();
+        descriptor.raw.assets = Some(Box::new(ShipAssets {
+            icons: std::ptr::null_mut(),
+            melee_icon: std::ptr::null_mut(),
+            strings: Some(table),
+            captain: std::ptr::null_mut(),
+            victory: None,
+            sounds: None,
+            animations: std::array::from_fn(|_| FrameArray::EMPTY),
+        }));
+        let (text, count) = descriptor.raw.label(0);
+        assert_eq!(text.to_bytes(), "Zöq".as_bytes());
+        assert_eq!(count, 3);
+        assert_eq!(text.as_ptr(), pointer);
+        assert_eq!(descriptor.raw.label(2), (text, count));
+        assert_eq!(descriptor.raw.label(1), (c"", 0));
     }
 
     #[test]
@@ -297,8 +259,7 @@ mod tests {
         descriptor.raw.assets = Some(Box::new(ShipAssets {
             icons: std::ptr::null_mut(),
             melee_icon: std::ptr::null_mut(),
-            strings: std::ptr::null_mut(),
-            name: None,
+            strings: None,
             captain,
             victory: None,
             sounds: None,
@@ -316,8 +277,7 @@ mod tests {
         assert!(assets.captain.is_null());
         assert!(assets.icons.is_null());
         assert!(assets.melee_icon.is_null());
-        assert!(assets.strings.is_null());
-        assert!(assets.name.is_none());
+        assert!(assets.strings.is_none());
         assert!(assets.victory.is_none());
         assert!(assets.sounds.is_none());
         assert!(assets.animations.iter().all(FrameArray::is_absent));

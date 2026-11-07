@@ -791,46 +791,40 @@ pub(crate) mod engine {
         }
     }
 
-    /// # Safety
-    /// Engine contexts, element/display pools and sound system are initialized on the game thread.
-    pub(crate) unsafe fn redraw_queue(cx: &mut Cx<'_>, clear: bool) {
-        SetContext(cx.kernel.status_context);
+    pub(crate) fn redraw_queue(cx: &mut Cx<'_>, clear: bool) {
+        use crate::graphics::context_abi::ContextLease;
+        let status = ContextLease::require(cx.kernel.status_context);
+        status.select();
         let scale = cx.kernel.configuration.preferences().melee_scale;
         let (bounds, minimum) = preprocess_queue(cx, scale);
         let (w, h) = view_dimensions(cx);
         let (mut sx, mut sy) = view_scroll(bounds.origin, bounds.ships_alive, w, h);
         if (sx != 0 || sy != 0) && in_hqspace(cx.world) != 0 {
-            crate::app::bridge::publish(cx, || MoveSIS(&mut sx, &mut sy));
+            move_sis(cx, &mut sx, &mut sy);
         }
         let state = calc_view_engine(cx, minimum, (sx, sy), bounds.ships_alive, scale);
         postprocess_queue(cx, state, sx, sy, scale);
         if cx.kernel.configuration.preferences().stereo_sfx != 0 {
             crate::battle::sounds::engine::update_positions(cx);
         }
-        SetContext(cx.kernel.space_context);
+        let space = ContextLease::require(cx.kernel.space_context);
+        space.select();
         let activity = cx.world.activity();
         if activity as u8 == SUPER_MELEE as u8
             || activity & (CHECK_ABORT | CHECK_LOAD) as UWORD == 0
         {
             if draw_frame(&mut cx.b.nth_frame) {
                 if clear {
-                    ClearDrawable();
+                    space.clear();
                 }
-                let scale = if cx.kernel.configuration.preferences().melee_scale != SCALE_STEP {
-                    i32::from(calc_zoom_stuff(cx.b.zoom_out).1)
-                } else {
-                    0
-                };
-                if let Some(context) = std::ptr::NonNull::new(cx.kernel.space_context) {
-                    let context = crate::graphics::context_abi::ContextLease::retain(context);
-                    context.draw_primitives(&mut cx.display_batch(), scale);
-                }
+                let mode = cx.kernel.configuration.preferences().melee_scale;
+                let scale = queue_view::render_scale(mode, cx.b.zoom_out);
+                space.draw_primitives(&mut cx.display_batch(), scale);
             }
-            crate::battle::sounds::engine::flush_sounds(cx);
         } else {
             cx.kernel.sounds.silence();
-            crate::battle::sounds::engine::flush_sounds(cx);
         }
+        crate::battle::sounds::engine::flush_sounds(cx);
         cx.clear_display_order();
     }
 }
@@ -887,6 +881,11 @@ mod tests {
             (1024, (2, 256)),
         ] {
             assert_eq!(calc_zoom_stuff(zoom), expected);
+            assert_eq!(queue_view::render_scale(SCALE_STEP, zoom), 0);
+            assert_eq!(
+                queue_view::render_scale(SCALE_TRILINEAR, zoom),
+                i32::from(expected.1)
+            );
         }
     }
 

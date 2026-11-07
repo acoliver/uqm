@@ -25,13 +25,16 @@ impl RacePool {
 }
 
 /// Record mapping shared by the battle and campaign queue views.
-pub mod queue_record {
+pub(crate) mod queue_record {
     pub trait Sealed {}
     impl Sealed for super::Starship {}
 }
 pub trait QueueRecord: queue_record::Sealed + Eq {
     type Record;
 }
+/// Campaign records allow whole-record mutation; battle ships use projections.
+pub trait MutableQueueRecord: QueueRecord {}
+
 impl QueueRecord for Starship {
     type Record = super::super::super::battle::record::ShipRecord;
 }
@@ -156,13 +159,7 @@ impl<'a, T: QueueRecord, const N: usize> LinkQueue<'a, T, N> {
             QueueBorrow::Exclusive(queue) => queue.get(key),
         }
     }
-    pub fn into_record_mut(self, id: LinkId<T>) -> &'a mut T::Record {
-        let key = self.key(id);
-        match self.queue {
-            QueueBorrow::Exclusive(queue) => queue.get_mut(key),
-            QueueBorrow::Shared(_) => panic!("cannot mutate a read-only queue view"),
-        }
-    }
+
     pub fn head(&self) -> Option<LinkId<T>> {
         self.queue.head().map(|id| self.identify(id))
     }
@@ -423,9 +420,7 @@ impl<'a, T: QueueRecord, const N: usize> LinkQueue<'a, T, N> {
         let key = self.queue.alloc(T::Record::default())?;
         Some(self.identify(key))
     }
-    pub fn get_mut(&mut self, id: LinkId<T>) -> &mut T::Record {
-        self.record_mut(id)
-    }
+
     pub fn insert_before(&mut self, id: LinkId<T>, before: Option<LinkId<T>>) {
         let key = self.key(id);
         let before = before.map(|id| self.key(id));
@@ -460,27 +455,59 @@ impl LinkQueue<'_, Starship> {
     }
 }
 
-/// Read-only resource projection borrowed from its owning ship queue.
-pub struct PickerResources<'a> {
-    owner: &'a super::super::super::battle::record::ShipRecord,
-    icon: super::super::super::battle::frames::FrameSelection,
+/// Picker resources retained independently of campaign fragment pointer fields.
+#[derive(Clone, Debug)]
+pub struct ShipPickerResources {
+    pub(super) strings: Option<crate::strings::owned_table::TextEntry>,
+    icon: crate::battle::frames::FrameSelection,
 }
-impl PickerResources<'_> {
-    pub fn label(&self, index: u16) -> (&std::ffi::CStr, u16) {
-        // SAFETY: picker admission retains the descriptor's strings until the ship is cleared.
-        unsafe { super::ship_assets::borrowed_label(self.owner.race_strings, index) }
+impl ShipPickerResources {
+    pub fn new(
+        strings: Option<crate::strings::owned_table::TextEntry>,
+        icon: crate::battle::frames::FrameSelection,
+    ) -> Self {
+        Self { strings, icon }
     }
-    pub fn icon(&self) -> super::super::super::battle::views::FrameRef<'_> {
+    pub fn label(&self, index: u16) -> (&std::ffi::CStr, u16) {
+        self.strings
+            .as_ref()
+            .map_or((c"", 0), |table| table.label(index))
+    }
+    pub fn icon(&self) -> crate::battle::views::FrameRef<'_> {
         self.icon.view()
     }
 }
+
+/// Read-only resource projection borrowed from its owning ship queue.
+pub struct PickerResources<'a> {
+    owner: &'a ShipPickerResources,
+}
+impl PickerResources<'_> {
+    pub fn strings(&self) -> crate::graphics::native_abi::STRING {
+        self.owner
+            .strings
+            .as_ref()
+            .map_or(std::ptr::null_mut(), |table| table.as_raw().cast())
+    }
+    pub fn label(&self, index: u16) -> (&std::ffi::CStr, u16) {
+        self.owner.label(index)
+    }
+    pub fn icon(&self) -> crate::battle::views::FrameRef<'_> {
+        self.owner.icon()
+    }
+}
 impl LinkQueue<'_, Starship> {
+    pub fn set_picker_resources(&mut self, id: LinkId<Starship>, resources: ShipPickerResources) {
+        let ship = self.record_mut(id);
+        ship.picker_resources = Some(resources);
+    }
     pub fn resources(&self, id: LinkId<Starship>) -> PickerResources<'_> {
         PickerResources {
-            owner: self.record(id),
-            icon: super::super::super::battle::frames::FrameSelection::retain(
-                self.record(id).icons,
-            ),
+            owner: self
+                .record(id)
+                .picker_resources
+                .as_ref()
+                .unwrap_or_else(|| panic!("ship has no admitted picker resources")),
         }
     }
 }
@@ -496,6 +523,62 @@ impl RacePool {
         &self,
     ) -> &OrderedPool<super::super::super::battle::record::ShipRecord, 32> {
         &self.pool
+    }
+}
+
+#[cfg(test)]
+mod picker_owner_tests {
+    use super::*;
+
+    #[test]
+    #[serial_test::serial]
+    fn picker_labels_and_icons_remain_owned_after_the_admitting_view_drops() {
+        use crate::battle::frames::FrameSelection;
+        use crate::graphics::{
+            context_abi::ContextFrame,
+            drawable_abi::{AllocDrawable, DestroyDrawable},
+            pixmap_abi::CaptureDrawable,
+        };
+        // SAFETY: this serialized fixture owns the registered allocation and initializes its frame.
+        let (drawable, icon) = unsafe {
+            let drawable = AllocDrawable(1);
+            let icon = CaptureDrawable(drawable);
+            (*icon).Bounds = crate::graphics::native_abi::EXTENT {
+                width: 2,
+                height: 3,
+            };
+            (drawable, icon)
+        };
+        let resources = ShipPickerResources::new(
+            crate::strings::owned_table::LoadedTextTable::fixture(vec![
+                c"captain".to_bytes_with_nul().to_vec(),
+                Vec::new(),
+            ])
+            .entry(0),
+            FrameSelection::retain(icon),
+        );
+        let mut world = crate::World::default();
+        world.retain_fleet_resources(1, resources);
+        let fragment = world.npc_built_ships().alloc().unwrap();
+        world.npc_built_ships().get_mut(fragment).icons = std::ptr::dangling_mut();
+        world.npc_built_ships().get_mut(fragment).race_strings = std::ptr::dangling_mut();
+        let mut pool = RacePool::with_capacity(0, 1);
+        let mut ships = LinkQueue::<Starship>::new(&mut pool);
+        let id = ships.build(1).unwrap();
+        ships.set_picker_resources(id, world.fleet_resources(1));
+        world.clear_fleet_resources();
+        // SAFETY: the fixture consumes its native release authority; the picker retains the allocation.
+        unsafe { DestroyDrawable(drawable) };
+        assert_eq!(ships.resources(id).label(2), (c"captain", 7));
+        assert_eq!(ships.resources(id).label(1), (c"", 0));
+        assert_eq!(ships.resources(id).icon().raw(), icon);
+        let frame = ContextFrame::retain(std::ptr::NonNull::new(icon));
+        assert_eq!(frame.rect().extent.width, 2);
+        assert_eq!(frame.rect().extent.height, 3);
+        drop(frame);
+        ships.remove(id);
+        ships.free(id);
+        assert!(std::panic::catch_unwind(|| FrameSelection::retain(icon)).is_err());
     }
 }
 
@@ -531,6 +614,7 @@ mod pool_view_tests {
     #[derive(Debug, PartialEq, Eq)]
     enum Value {}
     impl queue_record::Sealed for Value {}
+    impl MutableQueueRecord for Value {}
     impl QueueRecord for Value {
         type Record = u32;
     }
@@ -646,5 +730,18 @@ impl<'a> LinkQueue<'a, Starship> {
             queue: QueueBorrow::Shared(&queue.pool),
             marker: PhantomData,
         }
+    }
+}
+
+impl<'a, T: MutableQueueRecord, const N: usize> LinkQueue<'a, T, N> {
+    pub fn into_record_mut(self, id: LinkId<T>) -> &'a mut T::Record {
+        let key = self.key(id);
+        match self.queue {
+            QueueBorrow::Exclusive(queue) => queue.get_mut(key),
+            QueueBorrow::Shared(_) => panic!("cannot mutate a read-only queue view"),
+        }
+    }
+    pub fn get_mut(&mut self, id: LinkId<T>) -> &mut T::Record {
+        self.record_mut(id)
     }
 }

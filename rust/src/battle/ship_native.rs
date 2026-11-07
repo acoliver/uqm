@@ -418,13 +418,7 @@ pub(crate) mod engine {
         1
     }
 
-    /// # Safety
-    /// The game thread retains the initialized battle context and all resources used by this call.
-    pub unsafe fn next_star_ship(
-        cx: &mut Cx<'_>,
-        mut last: Option<ShipId>,
-        side: COUNT,
-    ) -> BOOLEAN {
+    pub fn next_star_ship(cx: &mut Cx<'_>, mut last: Option<ShipId>, side: COUNT) -> BOOLEAN {
         let activity = cx.world.activity_control();
         let runtime = cx.kernel.input_runtime();
         let selected = crate::battle::context_access::reader_legacy::get_encounter_star_ship(
@@ -452,9 +446,7 @@ pub(crate) mod engine {
         selected.is_some() as BOOLEAN
     }
 
-    /// # Safety
-    /// Player queues and encounter/melee selection state must be initialized.
-    pub unsafe fn initial_star_ships(cx: &mut Cx<'_>) -> BOOLEAN {
+    pub fn initial_star_ships(cx: &mut Cx<'_>) -> BOOLEAN {
         if cx.world.activity() as BYTE == SUPER_MELEE as BYTE {
             let runtime = cx.kernel.input_runtime();
             let Some(ships) = get_initial_melee_star_ships(cx, runtime.input()) else {

@@ -102,7 +102,7 @@ impl RaceOps for Cx<'_> {
         source: ElementId,
         priority: u8,
     ) {
-        use crate::battle::sounds::engine::{play_clip, position};
+        use crate::battle::sounds::engine::{play_sound, position};
         let sound = match bank {
             crate::engine::battle::views::BattleSoundBank::Ship(ship) => {
                 self.desc(ship).sound_bank().map(|bank| bank.clip(index))
@@ -115,7 +115,7 @@ impl RaceOps for Cx<'_> {
         };
         if let Some(sound) = sound {
             let pos = position(self, Some(source));
-            play_clip(
+            play_sound(
                 self.world,
                 &mut self.kernel.channels.borrow_mut(),
                 &sound,

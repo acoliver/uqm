@@ -45,6 +45,16 @@ pub struct InputState {
     pub menu: [i32; MENU_KEYS],
 }
 
+impl InputState {
+    pub fn any_button_pressed(&self) -> bool {
+        self.key
+            .iter()
+            .flatten()
+            .chain(&self.menu)
+            .any(|&key| key != 0)
+    }
+}
+
 const EMPTY: InputState = InputState {
     key: [[0; FLIGHT_KEYS]; TEMPLATES],
     menu: [0; MENU_KEYS],
@@ -201,6 +211,27 @@ impl InputFrames {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn button_query_covers_every_template_and_menu_key_without_mutation() {
+        assert!(!InputState::default().any_button_pressed());
+        for value in [-1, 1] {
+            for template in 0..TEMPLATES {
+                for key in 0..FLIGHT_KEYS {
+                    let mut state = InputState::default();
+                    state.key[template][key] = value;
+                    let before = state;
+                    assert!(state.any_button_pressed());
+                    assert_eq!(state, before);
+                }
+            }
+            for key in 0..MENU_KEYS {
+                let mut state = InputState::default();
+                state.menu[key] = value;
+                assert!(state.any_button_pressed());
+            }
+        }
+    }
 
     #[test]
     fn pulse_has_initial_delay_then_accelerates_and_resets_after_release() {

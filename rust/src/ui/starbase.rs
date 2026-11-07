@@ -453,7 +453,7 @@ unsafe fn prepare_starbase_visit(cx: &mut Cx<'_>, io: &mut Io<'_>) -> Option<u32
         cx.world
             .set_story_state(StoryKey::GLOBAL_FLAGS_AND_DATA, BYTE::MAX as u32);
     }
-    let previous = cx.with_legacy(|| SetStatusMessageMode(StatMsgMode_SMM_RES_UNITS));
+    let previous = cx.kernel.set_status_message_mode(StatMsgMode_SMM_RES_UNITS);
     if cx.world.story_state(StoryKey::MOONBASE_ON_SHIP) != 0
         || cx.world.story_state(StoryKey::CHMMR_BOMB_STATE) == 2
     {
@@ -500,8 +500,8 @@ pub unsafe fn run_starbase_visit(cx: &mut Cx<'_>, io: &mut Io<'_>) {
     io.observer.checkpoint(&CheckpointView::StarbaseMenu(false));
     cx.with_legacy(|| {
         SetContext(old);
-        SetStatusMessageMode(previous);
     });
+    cx.kernel.set_status_message_mode(previous);
     cleanup_after_star_base(cx.world);
 }
 

@@ -1,5 +1,6 @@
 //! Game options, naming, and save/load selection, ported from `uqm/gameopt.c`.
 
+mod naming;
 mod preview;
 
 mod picker;
@@ -106,27 +107,26 @@ pub(crate) mod runtime {
                 / log_units_y) as COORD
     }
 
+    use super::naming;
+
     unsafe fn draw_name_string(
         name_captain: bool,
         str: *mut UNICODE,
         cursor_pos: COUNT,
         state: COUNT,
     ) -> BOOLEAN {
-        let (font, mut r, back_ground, fore_ground) = if name_captain {
+        let (font, status, highlight) = Kernel::current().read(|kernel| {
             (
-                Kernel::current().read(|owner| owner.tiny_font),
-                CAPTAIN_NAME_RECT,
-                rgb15(0x0a, 0x0a, 0x1f),
-                rgb15(0x0a, 0x1f, 0x1f),
+                if name_captain {
+                    kernel.tiny_font
+                } else {
+                    kernel.star_con_font
+                },
+                kernel.status_context,
+                kernel.sis_highlight.clone(),
             )
-        } else {
-            (
-                Kernel::current().read(|owner| owner.star_con_font),
-                SHIP_NAME_RECT,
-                rgb15(0x0f, 0, 0),
-                rgb15(0x1f, 0x0a, 0),
-            )
-        };
+        });
+        let (mut r, back_ground, fore_ground) = layout::name_style(name_captain);
         let mut lf = TEXT {
             baseline: POINT {
                 x: r.corner.x + (r.extent.width >> 1) - i16::from(name_captain),
@@ -136,7 +136,7 @@ pub(crate) mod runtime {
             pStr: str,
             CharCount: COUNT::MAX,
         };
-        SetContext(Kernel::current().read(|owner| owner.status_context));
+        SetContext(status);
         SetContextFont(font);
         if state & DDSHS_EDIT == 0 {
             if name_captain {
@@ -151,7 +151,7 @@ pub(crate) mod runtime {
             if i32::from(text_r.extent.width) + 2 >= i32::from(r.extent.width) {
                 return 0;
             }
-            pre_update_flash_rect();
+            highlight.pre_update_flash_rect();
             SetContextForeGroundColor(back_ground);
             DrawFilledRectangle(&mut r);
             let mut pchar_deltas = char_deltas.as_ptr();
@@ -179,9 +179,98 @@ pub(crate) mod runtime {
             DrawFilledRectangle(&mut text_r);
             SetContextForeGroundColor(fore_ground);
             font_DrawText(&mut lf);
-            post_update_flash_rect();
+            highlight.post_update_flash_rect();
         }
         1
+    }
+
+    unsafe fn draw_save_name_string(
+        str: *mut UNICODE,
+        cursor_pos: COUNT,
+        state: COUNT,
+        game_index: COUNT,
+    ) -> BOOLEAN {
+        Kernel::current().read(|kernel| {
+            let (month, day, year) = WorldData::current().read(WorldData::calendar_date);
+            let date = crate::ui::sis::format_date(
+                kernel.game_text((MONTHS_STRING_BASE + u32::from(month) - 1) as usize),
+                day,
+                year,
+            );
+            let label = naming::save_label(&date, std::ffi::CStr::from_ptr(str));
+            SetContextForeGroundColor(rgb15(0x1b, 0, 0x1b));
+            let mut r = RECT {
+                corner: POINT {
+                    x: 8,
+                    y: (160 + ((game_index % SAVES_PER_PAGE) * 13)) as COORD,
+                },
+                extent: EXTENT {
+                    width: 15 + if MAX_SAVED_GAMES > 99 { 5 } else { 0 },
+                    height: 11,
+                },
+            };
+            DrawRectangle(&mut r);
+            r.extent.width = (204 - SAFE_X) as COORD;
+            r.corner.x = (30 + SAFE_X) as COORD;
+            DrawRectangle(&mut r);
+            let mut lf = TEXT {
+                baseline: POINT {
+                    x: r.corner.x + 3,
+                    y: r.corner.y + 8,
+                },
+                align: TEXT_ALIGN_ALIGN_LEFT,
+                pStr: label.text.as_ptr(),
+                CharCount: COUNT::MAX,
+            };
+            let back_ground = rgb15(0x1b, 0, 0x1b);
+            let fore_ground = rgb15(0, 0, 0x14);
+            SetContextFont(kernel.tiny_font);
+            if state & DDSHS_EDIT == 0 {
+                SetContextForeGroundColor(BLACK_COLOR);
+                DrawFilledRectangle(&mut r);
+                // The C local `t` is unused: it draws `lf`, including the date.
+                SetContextForeGroundColor(CAPTAIN_NAME_TEXT_COLOR);
+                font_DrawText(&mut lf);
+            } else {
+                let mut text_r: RECT = mem::zeroed();
+                let mut char_deltas = [0u8; 256];
+                TextRect(&mut lf, &mut text_r, char_deltas.as_mut_ptr());
+                if i32::from(text_r.extent.width) + 2 >= i32::from(r.extent.width) {
+                    return 0;
+                }
+                kernel.sis_highlight.pre_update_flash_rect();
+                SetContextForeGroundColor(back_ground);
+                DrawFilledRectangle(&mut r);
+                let mut pchar_deltas = char_deltas.as_ptr();
+                let full_cursor_pos = (cursor_pos as usize + label.cursor_prefix) as COUNT;
+                for _ in 0..full_cursor_pos {
+                    text_r.corner.x = text_r.corner.x.wrapping_add(*pchar_deltas as i16);
+                    pchar_deltas = pchar_deltas.add(1);
+                }
+                if full_cursor_pos < lf.CharCount {
+                    text_r.corner.x -= 1;
+                }
+                if state & DDSHS_BLOCKCUR != 0 {
+                    if full_cursor_pos == lf.CharCount {
+                        text_r.extent.width = 1;
+                    } else if i32::from(full_cursor_pos) + 1 == i32::from(lf.CharCount) {
+                        text_r.extent.width = *pchar_deltas as SIZE + 2;
+                    } else {
+                        text_r.extent.width = *pchar_deltas as SIZE + 1;
+                    }
+                } else {
+                    text_r.extent.width = 1;
+                }
+                text_r.corner.y = r.corner.y;
+                text_r.extent.height = r.extent.height;
+                SetContextForeGroundColor(BLACK_COLOR);
+                DrawFilledRectangle(&mut text_r);
+                SetContextForeGroundColor(fore_ground);
+                font_DrawText(&mut lf);
+                kernel.sis_highlight.post_update_flash_rect();
+            }
+            1
+        })
     }
 
     unsafe fn on_name_change(
@@ -241,103 +330,6 @@ pub(crate) mod runtime {
         if let Some(callback) = NAMING_CB {
             callback();
         }
-    }
-
-    unsafe fn draw_save_name_string(
-        str: *mut UNICODE,
-        cursor_pos: COUNT,
-        state: COUNT,
-        game_index: COUNT,
-    ) -> BOOLEAN {
-        let mut full_str: [UNICODE; 256] = [0; 256];
-        let mut date_str: [UNICODE; 80] = [0; 80];
-        let (month, day, year) = WorldData::current().read(WorldData::calendar_date);
-        DateToString(date_str.as_mut_ptr(), date_str.len(), month, day, year);
-        libc::strncat(
-            date_str.as_mut_ptr(),
-            c": ".as_ptr(),
-            date_str.len() - libc::strlen(date_str.as_ptr()) - 1,
-        );
-        libc::snprintf(
-            full_str.as_mut_ptr(),
-            full_str.len(),
-            c"%s%s".as_ptr(),
-            date_str.as_ptr(),
-            str,
-        );
-        SetContextForeGroundColor(rgb15(0x1b, 0, 0x1b));
-        let mut r = RECT {
-            corner: POINT {
-                x: 8,
-                y: (160 + ((game_index % SAVES_PER_PAGE) * 13)) as COORD,
-            },
-            extent: EXTENT {
-                width: 15 + if MAX_SAVED_GAMES > 99 { 5 } else { 0 },
-                height: 11,
-            },
-        };
-        DrawRectangle(&mut r);
-        r.extent.width = (204 - SAFE_X) as COORD;
-        r.corner.x = (30 + SAFE_X) as COORD;
-        DrawRectangle(&mut r);
-        let mut lf = TEXT {
-            baseline: POINT {
-                x: r.corner.x + 3,
-                y: r.corner.y + 8,
-            },
-            align: TEXT_ALIGN_ALIGN_LEFT,
-            pStr: full_str.as_ptr(),
-            CharCount: COUNT::MAX,
-        };
-        let back_ground = rgb15(0x1b, 0, 0x1b);
-        let fore_ground = rgb15(0, 0, 0x14);
-        SetContextFont(Kernel::current().read(|owner| owner.tiny_font));
-        if state & DDSHS_EDIT == 0 {
-            SetContextForeGroundColor(BLACK_COLOR);
-            DrawFilledRectangle(&mut r);
-            // The C local `t` is unused: it draws `lf`, including the date.
-            SetContextForeGroundColor(CAPTAIN_NAME_TEXT_COLOR);
-            font_DrawText(&mut lf);
-        } else {
-            let mut text_r: RECT = mem::zeroed();
-            let mut char_deltas = [0u8; 256];
-            TextRect(&mut lf, &mut text_r, char_deltas.as_mut_ptr());
-            if i32::from(text_r.extent.width) + 2 >= i32::from(r.extent.width) {
-                return 0;
-            }
-            pre_update_flash_rect();
-            SetContextForeGroundColor(back_ground);
-            DrawFilledRectangle(&mut r);
-            let mut pchar_deltas = char_deltas.as_ptr();
-            let full_cursor_pos =
-                (cursor_pos as usize + libc::strlen(date_str.as_ptr()) - 1) as COUNT;
-            for _ in 0..full_cursor_pos {
-                text_r.corner.x = text_r.corner.x.wrapping_add(*pchar_deltas as i16);
-                pchar_deltas = pchar_deltas.add(1);
-            }
-            if full_cursor_pos < lf.CharCount {
-                text_r.corner.x -= 1;
-            }
-            if state & DDSHS_BLOCKCUR != 0 {
-                if full_cursor_pos == lf.CharCount {
-                    text_r.extent.width = 1;
-                } else if i32::from(full_cursor_pos) + 1 == i32::from(lf.CharCount) {
-                    text_r.extent.width = *pchar_deltas as SIZE + 2;
-                } else {
-                    text_r.extent.width = *pchar_deltas as SIZE + 1;
-                }
-            } else {
-                text_r.extent.width = 1;
-            }
-            text_r.corner.y = r.corner.y;
-            text_r.extent.height = r.extent.height;
-            SetContextForeGroundColor(BLACK_COLOR);
-            DrawFilledRectangle(&mut text_r);
-            SetContextForeGroundColor(fore_ground);
-            font_DrawText(&mut lf);
-            post_update_flash_rect();
-        }
-        1
     }
 
     unsafe fn on_save_name_change(

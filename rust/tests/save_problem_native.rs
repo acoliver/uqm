@@ -56,6 +56,9 @@ impl InputRuntime for Runtime {
     fn observer(&self) -> Box<dyn Observer<Option<CampaignView>>> {
         Box::new(self.0.clone())
     }
+    fn yield_poll(&self, _: &mut uqm_engine::battle::Cx<'_>) {
+        panic!("unexpected unthrottled pacing");
+    }
     fn sleep(&self, _: &mut uqm_engine::battle::Cx<'_>, _: u32) {
         panic!("unexpected pacing");
     }
@@ -257,19 +260,32 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
                         height: 100,
                     },
                 };
+                let flash_kernel = uqm_rust::engine::Kernel::new();
+                let other_kernel = uqm_rust::engine::Kernel::new();
                 let mut reference = configure(30);
                 reference.start();
-                uqm_rust::ui::sis::set_flash_rect(&context_lease, clip, Some(region(1)));
+                uqm_rust::ui::sis::set_flash_rect(
+                    &flash_kernel.sis_highlight,
+                    &context_lease,
+                    clip,
+                    Some(region(1)),
+                );
+                uqm_rust::ui::sis::set_flash_rect(
+                    &other_kernel.sis_highlight,
+                    &context_lease,
+                    clip,
+                    None,
+                );
                 TFB_FlushGraphics();
                 let translated = GetFramePixel(frame, POINT { x: 22, y: 12 });
                 assert_eq!((translated.r, translated.g, translated.b), (9, 17, 25));
                 assert_eq!(alarms::Alarm_timeBeforeNextMs(), 0);
                 assert!(alarms::Alarm_processOne());
                 reference.process();
-                uqm_rust::ui::sis::pause_flash();
+                flash_kernel.sis_highlight.pause_flash();
                 source::advance_to(1_052);
                 assert!(!alarms::Alarm_processOne());
-                uqm_rust::ui::sis::continue_flash();
+                flash_kernel.sis_highlight.continue_flash();
                 assert!(alarms::Alarm_processOne());
                 reference.process();
                 TFB_FlushGraphics();
@@ -280,7 +296,12 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
                     (translated.r, translated.g, translated.b),
                     (original.r, original.g, original.b)
                 );
-                uqm_rust::ui::sis::set_flash_rect(&context_lease, clip, None);
+                uqm_rust::ui::sis::set_flash_rect(
+                    &flash_kernel.sis_highlight,
+                    &context_lease,
+                    clip,
+                    None,
+                );
                 drop(reference);
                 source::advance_to(2_000);
                 assert!(!alarms::Alarm_processOne());
