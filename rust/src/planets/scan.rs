@@ -1,6 +1,6 @@
 //! Planet scanning, scan-node callbacks, and lander dispatch from `scan.c`.
 
-use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetInfo};
+use crate::engine::world::planet::{NodeInfo, PlanetInfo};
 fn scan_value(value: i64, suffix: &str) -> String {
     if value >= 1000 {
         format!("{}.{}{}", value / 100, (value / 10) % 10, suffix)
@@ -43,44 +43,40 @@ fn move_cursor(position: (i16, i16), dx: i16, dy: i16, width: i16) -> (i16, i16)
     (x, y)
 }
 
-use crate::c_bindings::global_state::SOLARSYS_STATE;
+use crate::engine::world::generation::{Body, SolarSys};
+use crate::planets::generate::{SiteHost, SystemGenerator};
 
-#[no_mangle]
-pub(crate) unsafe extern "C" fn callGenerateForScanType(
-    system: *const SOLARSYS_STATE,
-    world: *const PlanetDesc,
+pub fn generate(
+    generator: &dyn SystemGenerator,
+    system: &mut SolarSys<'_>,
+    body: Body,
     node: u16,
     scan: u8,
-    info: *mut NodeInfo,
+    info: &mut NodeInfo,
+    host: &dyn SiteHost,
 ) -> u16 {
-    let functions = &*(*system).genFuncs;
-    let callback = match scan {
-        0 => functions.generateMinerals,
-        1 => functions.generateEnergy,
-        2 => functions.generateLife,
+    match scan {
+        0 => generator.generate_minerals(system, body, node, info, host),
+        1 => generator.generate_energy(system, body, node, info, host),
+        2 => generator.generate_life(system, body, node, info, host),
         _ => panic!("invalid scan type {scan}"),
-    };
-    callback.expect("scan generator")(system, world, node, info)
+    }
 }
 
-#[no_mangle]
-/// # Safety
-/// System and world must be live, exclusively accessible generator records.
-/// Scan must be 0, 1 or 2, and node must identify a node generated for that scan.
-pub unsafe extern "C" fn callPickupForScanType(
-    system: *mut SOLARSYS_STATE,
-    world: *mut PlanetDesc,
+pub fn pickup(
+    generator: &dyn SystemGenerator,
+    system: &mut SolarSys<'_>,
+    body: Body,
     node: u16,
     scan: u8,
+    host: &mut dyn SiteHost,
 ) -> bool {
-    let functions = &*(*system).genFuncs;
-    let callback = match scan {
-        0 => functions.pickupMinerals,
-        1 => functions.pickupEnergy,
-        2 => functions.pickupLife,
+    match scan {
+        0 => generator.pickup_minerals(system, body, node, host),
+        1 => generator.pickup_energy(system, body, node, host),
+        2 => generator.pickup_life(system, body, node, host),
         _ => panic!("invalid scan type {scan}"),
-    };
-    callback.expect("scan pickup")(system, world, node)
+    }
 }
 
 pub(crate) unsafe fn is_node_retrieved(info: *const PlanetInfo, scan: u8, node: u8) -> bool {
@@ -128,78 +124,103 @@ mod tests {
 
     #[test]
     fn scan_generation_and_pickup_dispatch_preserve_callback_arguments() {
-        use crate::c_bindings::global_state::GenerateFunctions;
-        unsafe extern "C" fn mineral(
-            _: *const SOLARSYS_STATE,
-            world: *const PlanetDesc,
-            node: u16,
-            _: *mut NodeInfo,
-        ) -> u16 {
-            node + u16::from((*world).data_index)
-        }
-        unsafe extern "C" fn energy(
-            _: *const SOLARSYS_STATE,
-            world: *const PlanetDesc,
-            node: u16,
-            _: *mut NodeInfo,
-        ) -> u16 {
-            mineral(std::ptr::null(), world, node, std::ptr::null_mut()) + 100
-        }
-        unsafe extern "C" fn life(
-            _: *const SOLARSYS_STATE,
-            world: *const PlanetDesc,
-            node: u16,
-            _: *mut NodeInfo,
-        ) -> u16 {
-            mineral(std::ptr::null(), world, node, std::ptr::null_mut()) + 200
-        }
-        unsafe extern "C" fn pickup_mineral(
-            _: *mut SOLARSYS_STATE,
-            world: *mut PlanetDesc,
-            node: u16,
-        ) -> bool {
-            node == u16::from((*world).data_index)
-        }
-        unsafe extern "C" fn pickup_energy(
-            _: *mut SOLARSYS_STATE,
-            world: *mut PlanetDesc,
-            node: u16,
-        ) -> bool {
-            node == u16::from((*world).data_index) + 1
-        }
-        unsafe extern "C" fn pickup_life(
-            _: *mut SOLARSYS_STATE,
-            world: *mut PlanetDesc,
-            node: u16,
-        ) -> bool {
-            node == u16::from((*world).data_index) + 2
-        }
-        unsafe {
-            let mut functions: GenerateFunctions = std::mem::zeroed();
-            functions.generateMinerals = Some(mineral);
-            functions.generateEnergy = Some(energy);
-            functions.generateLife = Some(life);
-            functions.pickupMinerals = Some(pickup_mineral);
-            functions.pickupEnergy = Some(pickup_energy);
-            functions.pickupLife = Some(pickup_life);
-            let mut system: SOLARSYS_STATE = std::mem::zeroed();
-            let mut world: PlanetDesc = std::mem::zeroed();
-            system.genFuncs = &functions;
-            world.data_index = 17;
-            for scan in 0..3 {
-                assert_eq!(
-                    callGenerateForScanType(&system, &world, 5, scan, std::ptr::null_mut()),
-                    22 + u16::from(scan) * 100
-                );
-                assert!(callPickupForScanType(
-                    &mut system,
-                    &mut world,
-                    17 + u16::from(scan),
-                    scan
-                ));
-                assert!(!callPickupForScanType(&mut system, &mut world, 30, scan));
+        struct Generator;
+        impl SystemGenerator for Generator {
+            fn generate_minerals(
+                &self,
+                system: &mut SolarSys<'_>,
+                body: Body,
+                node: u16,
+                _: &mut NodeInfo,
+                _: &dyn SiteHost,
+            ) -> u16 {
+                node + u16::from(system.body_data_index(body))
+            }
+            fn generate_energy(
+                &self,
+                system: &mut SolarSys<'_>,
+                body: Body,
+                node: u16,
+                info: &mut NodeInfo,
+                host: &dyn SiteHost,
+            ) -> u16 {
+                self.generate_minerals(system, body, node, info, host) + 100
+            }
+            fn generate_life(
+                &self,
+                system: &mut SolarSys<'_>,
+                body: Body,
+                node: u16,
+                info: &mut NodeInfo,
+                host: &dyn SiteHost,
+            ) -> u16 {
+                self.generate_minerals(system, body, node, info, host) + 200
+            }
+            fn pickup_minerals(
+                &self,
+                system: &mut SolarSys<'_>,
+                body: Body,
+                node: u16,
+                _: &mut dyn SiteHost,
+            ) -> bool {
+                node == u16::from(system.body_data_index(body))
+            }
+            fn pickup_energy(
+                &self,
+                system: &mut SolarSys<'_>,
+                body: Body,
+                node: u16,
+                _: &mut dyn SiteHost,
+            ) -> bool {
+                node == u16::from(system.body_data_index(body)) + 1
+            }
+            fn pickup_life(
+                &self,
+                system: &mut SolarSys<'_>,
+                body: Body,
+                node: u16,
+                _: &mut dyn SiteHost,
+            ) -> bool {
+                node == u16::from(system.body_data_index(body)) + 2
             }
         }
+        crate::planets::generate::testing::with_empty(|system| {
+            system.layout(|_, _, _, _, planets| {
+                planets[0].data_index = 17;
+                1
+            });
+            let mut host = crate::planets::generate::testing::NoEffects;
+            for scan in 0..3 {
+                assert_eq!(
+                    generate(
+                        &Generator,
+                        system,
+                        Body::Planet(0),
+                        5,
+                        scan,
+                        &mut NodeInfo::default(),
+                        &host
+                    ),
+                    22 + u16::from(scan) * 100
+                );
+                assert!(pickup(
+                    &Generator,
+                    system,
+                    Body::Planet(0),
+                    17 + u16::from(scan),
+                    scan,
+                    &mut host
+                ));
+                assert!(!pickup(
+                    &Generator,
+                    system,
+                    Body::Planet(0),
+                    30,
+                    scan,
+                    &mut host
+                ));
+            }
+        });
     }
 
     #[test]

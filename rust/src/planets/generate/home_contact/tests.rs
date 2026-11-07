@@ -1,6 +1,7 @@
 //! The control flow shared by the ruined homeworlds, checked against a
 //! recording site, report and game state.
 
+use crate::engine::StoryKey;
 use std::collections::HashMap;
 
 use super::{enter_orbit, pickup_artifact, HomeContactSite, LanderTakeoff, HOME_CONTACT_FLAGS};
@@ -96,7 +97,11 @@ impl HomeContactSite for RecordingSite {
     fn load_ip_groups(&mut self) {
         self.record(Call::LoadIpGroups);
     }
-    fn load_ruins_scene(&mut self, artifact_taken: bool) {
+    fn load_ruins_scene(
+        &mut self,
+        _system: &mut crate::engine::world::generation::SolarSys<'_>,
+        artifact_taken: bool,
+    ) {
         self.record(Call::LoadRuinsScene(artifact_taken));
     }
 }
@@ -119,7 +124,19 @@ fn contact_prefix() -> Vec<Call> {
 fn contact_runs_the_conversation_and_puts_the_world_back() {
     for taken in [false, true] {
         let mut site = RecordingSite::new(true);
-        assert!(enter_orbit(&mut site, taken));
+        assert!(crate::planets::generate::testing::with_empty(|system| {
+            enter_orbit(
+                system,
+                &mut crate::planets::generate::testing::Effects {
+                    story: (),
+                    site: &mut site,
+                    report: (),
+                    lander: (),
+                    load: Some(|| {}),
+                },
+                taken,
+            )
+        }));
 
         let mut expected = contact_prefix();
         expected.extend([
@@ -138,7 +155,19 @@ fn contact_keeps_the_conversation_state_when_the_game_aborts_or_loads() {
         let mut site = RecordingSite::new(true);
         let during = IN_INTERPLANETARY | START_INTERPLANETARY | flag;
         site.activity_after_talk = Some(during);
-        assert!(enter_orbit(&mut site, false));
+        assert!(crate::planets::generate::testing::with_empty(|system| {
+            enter_orbit(
+                system,
+                &mut crate::planets::generate::testing::Effects {
+                    story: (),
+                    site: &mut site,
+                    report: (),
+                    lander: (),
+                    load: Some(|| {}),
+                },
+                false,
+            )
+        }));
 
         assert_eq!(*site.calls.borrow(), contact_prefix(), "flag {flag:#x}");
         assert_eq!(site.activity, during);
@@ -149,7 +178,19 @@ fn contact_keeps_the_conversation_state_when_the_game_aborts_or_loads() {
 fn contact_clears_only_start_interplanetary_afterwards() {
     let mut site = RecordingSite::new(true);
     site.activity_after_talk = Some(IN_INTERPLANETARY | START_INTERPLANETARY | 0x0100);
-    assert!(enter_orbit(&mut site, false));
+    assert!(crate::planets::generate::testing::with_empty(|system| {
+        enter_orbit(
+            system,
+            &mut crate::planets::generate::testing::Effects {
+                story: (),
+                site: &mut site,
+                report: (),
+                lander: (),
+                load: Some(|| {}),
+            },
+            false,
+        )
+    }));
     assert_eq!(site.activity, IN_INTERPLANETARY | 0x0100);
 }
 
@@ -158,7 +199,19 @@ fn contact_needs_the_built_ship_queue_to_be_empty() {
     let mut site = RecordingSite::new(true);
     site.built_ships = 1;
     let visit = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        enter_orbit(&mut site, false)
+        crate::planets::generate::testing::with_empty(|system| {
+            enter_orbit(
+                system,
+                &mut crate::planets::generate::testing::Effects {
+                    story: (),
+                    site: &mut site,
+                    report: (),
+                    lander: (),
+                    load: Some(|| {}),
+                },
+                false,
+            )
+        })
     }));
     assert!(visit.is_err());
 }
@@ -167,7 +220,19 @@ fn contact_needs_the_built_ship_queue_to_be_empty() {
 fn no_sphere_tracking_loads_the_ruins_and_leaves_the_orbital_to_the_default() {
     for taken in [false, true] {
         let mut site = RecordingSite::new(false);
-        assert!(!enter_orbit(&mut site, taken));
+        assert!(!crate::planets::generate::testing::with_empty(|system| {
+            enter_orbit(
+                system,
+                &mut crate::planets::generate::testing::Effects {
+                    story: (),
+                    site: &mut site,
+                    report: (),
+                    lander: (),
+                    load: Some(|| {}),
+                },
+                taken,
+            )
+        }));
         assert_eq!(
             *site.calls.borrow(),
             [Call::StartSphereTracking, Call::LoadRuinsScene(taken)]
@@ -177,25 +242,25 @@ fn no_sphere_tracking_loads_the_ruins_and_leaves_the_orbital_to_the_default() {
 }
 
 #[derive(Default)]
-pub(crate) struct FakeStory(HashMap<&'static str, u32>);
+pub(crate) struct FakeStory(HashMap<StoryKey, u32>);
 
 impl FakeStory {
-    pub(crate) fn with(flags: &[(&'static str, u32)]) -> Self {
+    pub(crate) fn with(flags: &[(StoryKey, u32)]) -> Self {
         Self(flags.iter().copied().collect())
     }
 }
 
 impl Story for FakeStory {
-    fn flag(&self, name: &'static str) -> u32 {
-        self.0.get(name).copied().unwrap_or(0)
+    fn flag(&self, name: StoryKey) -> u32 {
+        self.0.get(&name).copied().unwrap_or(0)
     }
-    fn set_flag(&mut self, name: &'static str, value: u32) {
+    fn set_flag(&mut self, name: StoryKey, value: u32) {
         self.0.insert(name, value);
     }
-    fn word(&self, name: &'static str) -> u32 {
+    fn word(&self, name: StoryKey) -> u32 {
         self.flag(name)
     }
-    fn set_word(&mut self, name: &'static str, value: u32) {
+    fn set_word(&mut self, name: StoryKey, value: u32) {
         self.set_flag(name, value);
     }
 }
@@ -223,33 +288,54 @@ impl LanderTakeoff for FakeLander {
 fn the_first_pickup_takes_the_artifact_and_launches_the_lander() {
     let mut story = FakeStory::default();
     let (mut report, mut lander) = (FakeReport::default(), FakeLander::default());
-    assert!(!pickup_artifact(
-        &mut story,
-        &mut report,
-        &mut lander,
-        "A",
-        &["B", "C"]
-    ));
+    assert!(!crate::planets::generate::testing::with_empty(|system| {
+        pickup_artifact(
+            system,
+            &mut crate::planets::generate::testing::Effects {
+                story: &mut story,
+                site: &mut (),
+                report: &mut report,
+                lander: &mut lander,
+                load: Some(|| {}),
+            },
+            StoryKey::TAALO_PROTECTOR,
+            &[
+                StoryKey::TAALO_PROTECTOR_ON_SHIP,
+                StoryKey::PLANETARY_CHANGE,
+            ],
+        )
+    }));
     assert_eq!(report.0, [ReportDisposition::Cycle]);
     assert_eq!(lander.0, 1);
     assert_eq!(
-        (story.flag("A"), story.flag("B"), story.flag("C")),
+        (
+            story.flag(StoryKey::TAALO_PROTECTOR),
+            story.flag(StoryKey::TAALO_PROTECTOR_ON_SHIP),
+            story.flag(StoryKey::PLANETARY_CHANGE)
+        ),
         (1, 1, 1)
     );
 }
 
 #[test]
 fn later_pickups_only_cycle_the_report() {
-    let mut story = FakeStory::with(&[("A", 1)]);
+    let mut story = FakeStory::with(&[(StoryKey::TAALO_PROTECTOR, 1)]);
     let (mut report, mut lander) = (FakeReport::default(), FakeLander::default());
-    assert!(!pickup_artifact(
-        &mut story,
-        &mut report,
-        &mut lander,
-        "A",
-        &["B"]
-    ));
+    assert!(!crate::planets::generate::testing::with_empty(|system| {
+        pickup_artifact(
+            system,
+            &mut crate::planets::generate::testing::Effects {
+                story: &mut story,
+                site: &mut (),
+                report: &mut report,
+                lander: &mut lander,
+                load: Some(|| {}),
+            },
+            StoryKey::TAALO_PROTECTOR,
+            &[StoryKey::TAALO_PROTECTOR_ON_SHIP],
+        )
+    }));
     assert_eq!(report.0, [ReportDisposition::Cycle]);
     assert_eq!(lander.0, 0);
-    assert_eq!(story.flag("B"), 0);
+    assert_eq!(story.flag(StoryKey::TAALO_PROTECTOR_ON_SHIP), 0);
 }

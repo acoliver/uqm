@@ -1,11 +1,11 @@
 //! Sol's actual ABI against real table queues and in-memory group files.
 
-use uqm::engine::StoryKey;
 use super::Harness;
 use uqm_rust::comm::dispatch::{CHECK_ABORT, CHECK_LOAD, START_ENCOUNTER};
+use uqm_rust::engine::StoryKey;
 use uqm_rust::planets::c_api;
-use uqm_rust::planets::generate::sol_exports::GENERATE_SOL_FUNCTIONS;
-use uqm_rust::planets::generate::special::{LiveStory, Story};
+use uqm_rust::planets::generate::sol::Generator as GENERATE_SOL_FUNCTIONS;
+use uqm_rust::planets::generate::special::Story;
 use uqm_rust::state::game_state_keys::get_game_state;
 
 pub fn check(h: &mut Harness) {
@@ -16,7 +16,8 @@ pub fn check(h: &mut Harness) {
     ];
     let story =
         keys.map(|key| uqm_rust::engine::World::current().read(|world| (world).story_state(key)));
-    let word = LiveStory.word(StoryKey::URQUAN_PROBE_GRPOFFS0);
+    let word = uqm_rust::engine::World::current()
+        .read(|world| world.word(StoryKey::URQUAN_PROBE_GRPOFFS0));
     let activity = uqm_rust::engine::World::current().read(|world| world.activity());
     unsafe {
         let saved = uqm_rust::engine::World::current().write(|world| {
@@ -66,24 +67,26 @@ pub fn check(h: &mut Harness) {
             .as_ref(),
             uqm_rust::planets::starmap::current_catalog(),
         );
-        LiveStory.set_word(StoryKey::URQUAN_PROBE_GRPOFFS0, 0);
+        uqm_rust::engine::World::current()
+            .write(|world| world.set_word(StoryKey::URQUAN_PROBE_GRPOFFS0, 0));
         uqm_rust::engine::World::current().write(|world| {
             (world).set_story_state(uqm_rust::engine::StoryKey::CHMMR_BOMB_STATE, 0)
         });
         uqm_rust::engine::World::current().write(|world| {
             (world).set_story_state(uqm_rust::engine::StoryKey::PROBE_MESSAGE_DELIVERED, 0)
         });
-        assert!(
-            uqm_rust::engine::World::current().write(|world| GENERATE_SOL_FUNCTIONS
-                .init_npcs
-                .unwrap()(
-                world, &raw mut *h.state
-            ))
-        );
+        assert!(crate::invoke_generation(
+            &raw mut *h.state,
+            |system, host| GENERATE_SOL_FUNCTIONS.init_npcs(system, host)
+        ));
         let probe_ref =
             uqm_rust::engine::WorldData::current().read(|world| world.game.battle_group_ref);
         assert_ne!(probe_ref, 0);
-        assert_eq!(LiveStory.word(StoryKey::URQUAN_PROBE_GRPOFFS0), probe_ref);
+        assert_eq!(
+            uqm_rust::engine::World::current()
+                .read(|world| world.word(StoryKey::URQUAN_PROBE_GRPOFFS0)),
+            probe_ref
+        );
         assert!(uqm_rust::engine::World::current()
             .read(|world| world.npc_built_ships_ref().head().is_none()));
         let group = uqm_rust::engine::World::current().read(|world| {
@@ -113,13 +116,10 @@ pub fn check(h: &mut Harness) {
         let saved_file = file();
         assert!(saved_file.len() > probe_ref as usize);
         // Loading the saved reference does not create a second group record.
-        assert!(
-            uqm_rust::engine::World::current().write(|world| GENERATE_SOL_FUNCTIONS
-                .init_npcs
-                .unwrap()(
-                world, &raw mut *h.state
-            ))
-        );
+        assert!(crate::invoke_generation(
+            &raw mut *h.state,
+            |system, host| GENERATE_SOL_FUNCTIONS.init_npcs(system, host)
+        ));
         assert_eq!(
             uqm_rust::engine::WorldData::current().read(|world| world.game.battle_group_ref),
             probe_ref
@@ -132,27 +132,25 @@ pub fn check(h: &mut Harness) {
                 .unwrap_or_else(|| panic!("fixture group missing"));
             groups.get_mut(head).task = uqm_rust::planets::generate::default::REFORM_GROUP;
         });
-        assert!(
-            uqm_rust::engine::World::current().write(|world| GENERATE_SOL_FUNCTIONS
-                .uninit_npcs
-                .unwrap()(
-                world, &raw mut *h.state
-            ))
-        );
+        assert!(crate::invoke_generation(
+            &raw mut *h.state,
+            |system, host| GENERATE_SOL_FUNCTIONS.uninit_npcs(system, host)
+        ));
         assert!(uqm_rust::engine::World::current()
             .read(|world| world.npc_built_ships_ref().head().is_none()));
-        assert!(
-            uqm_rust::engine::World::current().write(|world| GENERATE_SOL_FUNCTIONS
-                .reinit_npcs
-                .unwrap()(
-                world, &raw mut *h.state
-            ))
-        );
+        assert!(crate::invoke_generation(
+            &raw mut *h.state,
+            |system, host| GENERATE_SOL_FUNCTIONS.reinit_npcs(system, host)
+        ));
         assert_eq!(
             uqm_rust::engine::WorldData::current().read(|world| world.game.battle_group_ref),
             probe_ref
         );
-        assert_eq!(LiveStory.word(StoryKey::URQUAN_PROBE_GRPOFFS0), probe_ref);
+        assert_eq!(
+            uqm_rust::engine::World::current()
+                .read(|world| world.word(StoryKey::URQUAN_PROBE_GRPOFFS0)),
+            probe_ref
+        );
         let probe = uqm_rust::engine::World::current().read(|world| {
             let groups = world.ip_groups_ref();
             *groups.get(
@@ -170,13 +168,10 @@ pub fn check(h: &mut Harness) {
         uqm_rust::engine::World::current().write(|world| {
             (world).set_story_state(uqm_rust::engine::StoryKey::PROBE_MESSAGE_DELIVERED, 1)
         });
-        assert!(
-            uqm_rust::engine::World::current().write(|world| GENERATE_SOL_FUNCTIONS
-                .init_npcs
-                .unwrap()(
-                world, &raw mut *h.state
-            ))
-        );
+        assert!(crate::invoke_generation(
+            &raw mut *h.state,
+            |system, host| GENERATE_SOL_FUNCTIONS.init_npcs(system, host)
+        ));
         assert_eq!(
             uqm_rust::engine::WorldData::current().read(|world| world.game.battle_group_ref),
             probe_ref
@@ -194,11 +189,13 @@ pub fn check(h: &mut Harness) {
             uqm_rust::engine::World::current().write(|world| {
                 (world).set_story_state(uqm_rust::engine::StoryKey::GLOBAL_FLAGS_AND_DATA, 0)
             });
-            assert!(uqm_rust::app::bridge::enter(|cx| GENERATE_SOL_FUNCTIONS
-                .generate_orbital
-                .unwrap()(
-                cx, system, starbase
-            )));
+            assert!(crate::invoke_generation(system, |view, host| {
+                GENERATE_SOL_FUNCTIONS.generate_orbital(
+                    view,
+                    uqm_rust::planets::solarsys::site::dispatch::body(system, starbase),
+                    host,
+                )
+            }));
             assert_eq!(
                 uqm_rust::engine::World::current().read(|world| world.activity()),
                 activity | START_ENCOUNTER
@@ -216,7 +213,11 @@ pub fn check(h: &mut Harness) {
                     && uqm_rust::engine::World::current()
                         .read(|world| world.npc_built_ships_ref().head().is_none())
             );
-            assert_eq!(LiveStory.word(StoryKey::URQUAN_PROBE_GRPOFFS0), probe_ref);
+            assert_eq!(
+                uqm_rust::engine::World::current()
+                    .read(|world| world.word(StoryKey::URQUAN_PROBE_GRPOFFS0)),
+                probe_ref
+            );
         }
         std::ptr::addr_of_mut!(c_api::STAR_ARRAY).write(saved_catalog);
         (**uqm_rust::engine::World::current()).select_star(
@@ -237,7 +238,10 @@ pub fn check(h: &mut Harness) {
     for (key, value) in keys.into_iter().zip(story) {
         uqm_rust::engine::World::current().write(|world| (world).set_story_state(key, value));
     }
-    LiveStory.set_word(StoryKey::URQUAN_PROBE_GRPOFFS0, word);
+    uqm_rust::engine::World::current()
+        .write(|world| world.set_word(StoryKey::URQUAN_PROBE_GRPOFFS0, word));
     uqm_rust::engine::World::current().write(|world| world.set_activity(activity));
     println!("Sol NPC ABI: real probe file creation/reload/persistence, queue init/uninit/reinit, starbase save/reset, abort/load bits retained");
 }
+
+use uqm_rust::planets::generate::SystemGenerator;

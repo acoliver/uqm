@@ -1,63 +1,81 @@
 //! Headless calls through Sol's actual exported table and drawable ABI.
 
 use super::Harness;
-use uqm_rust::battle::gendef::{getGenerateFunctions, SOL_DEFINED};
+use uqm_rust::battle::gendef::SOL_DEFINED;
 
 use uqm_rust::planets::c_api::{self, CapturedSurface};
 use uqm_rust::planets::generate::consts::{MAP_HEIGHT, MAP_WIDTH};
-use uqm_rust::planets::generate::sol_exports::GENERATE_SOL_FUNCTIONS;
-use uqm_rust::planets::generate::vtable::DEFAULT_HOOKS;
+use uqm_rust::planets::generate::sol::Generator as GENERATE_SOL_FUNCTIONS;
+use uqm_rust::planets::generate::{generator, SystemGenerator};
 
 pub fn check() {
-    let table = &super::sol::generateSolFunctions;
-    assert!(std::ptr::eq(table, &GENERATE_SOL_FUNCTIONS));
-    assert_eq!(
-        getGenerateFunctions(SOL_DEFINED),
-        std::ptr::from_ref(table).cast()
-    );
-    assert!(table.init_npcs.is_some());
-    assert!(table.reinit_npcs.is_some());
-    assert!(table.generate_planets.is_some());
-    assert!(table.generate_moons.is_some());
-    assert!(table.generate_name.is_some());
-    assert!(table.generate_orbital.is_some());
-    assert!(table.generate_energy.is_some());
-    assert!(table.generate_life.is_some());
-    assert!(table.pickup_energy.is_some());
-    assert_eq!(
-        table.uninit_npcs.unwrap() as usize,
-        DEFAULT_HOOKS.uninit_npcs.unwrap() as usize
-    );
-    assert_eq!(
-        table.generate_minerals.unwrap() as usize,
-        DEFAULT_HOOKS.generate_minerals.unwrap() as usize
-    );
-    assert_eq!(
-        table.pickup_minerals.unwrap() as usize,
-        DEFAULT_HOOKS.pickup_minerals.unwrap() as usize
-    );
-    assert_eq!(
-        table.pickup_life.unwrap() as usize,
-        DEFAULT_HOOKS.pickup_life.unwrap() as usize
-    );
-
+    let table = generator(SOL_DEFINED);
     let mut h = Harness::new();
     h.set_star(0, 0);
+    check_initialized_identity(&mut h);
     h.seed(104729);
     let system = &raw mut *h.state;
     unsafe {
         let world = &raw mut (*system).PlanetDesc[0];
         (*world).prev_desc = &raw mut (*system).SunDesc[0];
-        assert!(!table.pickup_energy.unwrap()(system, world, u16::MAX));
-        assert!(table.pickup_minerals.unwrap()(system, world, u16::MAX));
-        assert!(table.pickup_life.unwrap()(system, world, u16::MAX));
+        assert!(!crate::invoke_generation(system, |view, host| table
+            .pickup_energy(
+                view,
+                uqm_rust::planets::generate::special::Body::Planet(0),
+                u16::MAX,
+                host
+            )));
+        assert!(crate::invoke_generation(system, |view, host| table
+            .pickup_minerals(
+                view,
+                uqm_rust::planets::generate::special::Body::Planet(0),
+                u16::MAX,
+                host
+            )));
+        assert!(crate::invoke_generation(system, |view, host| table
+            .pickup_life(
+                view,
+                uqm_rust::planets::generate::special::Body::Planet(0),
+                u16::MAX,
+                host
+            )));
         // No resource/report infrastructure is needed for the no-scene pickup.
         assert_eq!(h.rng_position(), 104729);
     }
     check_bomb_queue(&mut h);
     super::sol_npcs::check(&mut h);
     check_drawable_ownership(&mut h);
-    println!("Sol ABI: exact exported table/dispatch, 13 populated slots, 4 inherited Rust defaults, callable pickups and bomb queue reset");
+    println!("Sol traits: initialized dispatch identity, inherited defaults, callable pickups and bomb queue reset");
+}
+
+fn check_initialized_identity(h: &mut Harness) {
+    h.state.generator_index = SOL_DEFINED;
+    h.star[0].index = uqm_rust::battle::gendef::SHOFIXTI_DEFINED;
+    // SAFETY: the serialized harness retains its catalog, RNG and solar records;
+    // the callback releases all generated references before returning.
+    let generated = unsafe {
+        uqm_rust::app::bridge::enter(|cx| {
+            let mut observer = uqm_rust::engine::observe::Unobserved;
+            let mut io = uqm_rust::engine::observe::Io {
+                observer: &mut observer,
+            };
+            uqm_rust::planets::solarsys::site::dispatch::with_system(
+                cx,
+                &mut io,
+                &raw mut *h.state,
+                |generator, system, host| {
+                    assert_eq!(system.star_index(), SOL_DEFINED);
+                    generator.generate_planets(system, host)
+                },
+            )
+        })
+    };
+    assert!(generated);
+    assert_eq!(
+        h.state.SunDesc[0].num_planets, 9,
+        "the initialized Sol generator must survive a later star-index change"
+    );
+    h.set_star(0, 0);
 }
 
 fn check_bomb_queue(h: &mut Harness) {
@@ -80,13 +98,10 @@ fn check_bomb_queue(h: &mut Harness) {
             world.data.game.battle_group_ref = 0x12345678;
             saved
         });
-        assert!(
-            uqm_rust::engine::World::current().write(|world| GENERATE_SOL_FUNCTIONS
-                .reinit_npcs
-                .unwrap()(
-                world, &raw mut *h.state
-            ))
-        );
+        assert!(crate::invoke_generation(
+            &raw mut *h.state,
+            |system, host| GENERATE_SOL_FUNCTIONS.reinit_npcs(system, host)
+        ));
         uqm_rust::engine::World::current().write(|world| {
             assert_eq!(world.data.game.battle_group_ref, 0);
             assert!(world.ip_groups_ref().head().is_none());
@@ -202,11 +217,22 @@ fn check_drawable_ownership(h: &mut Harness) {
     let saved_debug = unsafe { c_api::DISABLE_INTERACTIVITY };
     unsafe {
         c_api::DISABLE_INTERACTIVITY = 1;
-        c_api::load_planet_surface(Some(CapturedSurface::pixmap(
-            map_width / 2,
-            map_height / 2,
-            2,
-        )));
+        uqm_rust::app::bridge::enter(|cx| {
+            let mut observer = uqm_rust::engine::observe::Unobserved;
+            let game = std::cell::RefCell::new(uqm_rust::engine::battle::Cx {
+                b: cx.b,
+                world: cx.world,
+                kernel: cx.kernel,
+                rng: cx.rng,
+            });
+            let io = std::cell::RefCell::new(uqm_rust::engine::observe::Io {
+                observer: &mut observer,
+            });
+            let definition = game
+                .borrow_mut()
+                .with_legacy(|| CapturedSurface::pixmap(map_width / 2, map_height / 2, 2));
+            c_api::load_planet_surface(&game, &io, Some(definition));
+        });
         c_api::TFB_FlushGraphicsEx(1);
         c_api::DISABLE_INTERACTIVITY = saved_debug;
     }

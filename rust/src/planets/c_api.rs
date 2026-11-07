@@ -2,24 +2,17 @@
 //! one place. Each goes away when its owner is ported.
 
 use crate::engine::World as WorldOwner;
-mod npcs;
-pub use npcs::NpcWorld;
 mod surface;
 pub use surface::{load_planet_surface, CapturedSurface};
 
 use std::ffi::c_void;
 
-use crate::c_bindings::global_state::{
-    planetOuterLocation, EncounterGroup as ENCOUNTER_GROUP, XFormIPLoc, IP_GROUP,
-};
+use crate::c_bindings::global_state::EncounterGroup as ENCOUNTER_GROUP;
 use crate::comm::dispatch::{ship, CPoint, ONE_SECOND};
 use crate::mainloop::restart_menu::c_extern::{
     uqm_sleep_thread_until, FadeScreen, FADE_ALL_TO_BLACK,
 };
-use crate::planets::generate::default::{Npcs, PlanetNames};
-use crate::planets::generate::special::FleetGroups;
 use crate::planets::universe_units::{universe_to_logx, universe_to_logy};
-use crate::state::ffi::rust_set_game_state_bits;
 
 #[cfg(not(test))]
 use crate::ui::sis::repair_sisborder;
@@ -29,21 +22,12 @@ extern "C" {
 }
 #[cfg(all(not(test), feature = "debug-process"))]
 pub use crate::front_end::uqmdebug::DISABLE_INTERACTIVITY;
-use crate::strings::unicode::utf8_string_copy as utf8StringCopy;
 
 pub use crate::log_abi::log_init;
-
-use crate::navigation::groups::live::get_group_info;
-
-use crate::navigation::groups::live as group_storage;
 
 pub use crate::navigation::groups::live::init_group_info;
 
 pub use crate::navigation::groups::live::uninit_group_info;
-
-use crate::navigation::groups::live::build_groups;
-
-use crate::planets::orbit::live::LoadPlanet;
 
 pub use crate::planets::orbit::live::FreePlanet;
 
@@ -115,10 +99,10 @@ extern "C" {
 }
 
 /// `GROUP_INIT_IP`, `GROUP_SAVE_IP` (`state.h`): `(BYTE)~0`.
-const GROUP_INIT_IP: u8 = !0;
-const GROUP_SAVE_IP: u8 = !0;
+pub(super) const GROUP_INIT_IP: u8 = !0;
+pub(super) const GROUP_SAVE_IP: u8 = !0;
 /// `GROUP_LOAD_IP` is `GROUP_LIST` (`state.h`).
-const GROUP_LOAD_IP: u8 = 0;
+pub(super) const GROUP_LOAD_IP: u8 = 0;
 
 /// Clear the guard encounter so the interplanetary groups do not chase.
 ///
@@ -162,44 +146,13 @@ pub unsafe fn load_beast_scene(system: *mut crate::c_bindings::global_state::SOL
 }
 
 /// `GROUPS_RANDOM`.
-const GROUPS_RANDOM: u32 = 0;
-
-/// `LoadPlanet (NULL)`.
-///
-/// # Safety
-/// Game thread, inside a planet orbit.
-pub unsafe fn load_planet_default_surface() {
-    LoadPlanet(std::ptr::null_mut());
-}
-
-/// `CurStarDescPtr->Index`.
-///
-/// # Safety
-/// `CurStarDescPtr` must point at a valid star description.
-pub unsafe fn current_star_index() -> u8 {
-    // SAFETY: the caller retains a selected entry of the initialized catalog on the game thread.
-    unsafe {
-        (*(**WorldOwner::current()).star_pointer(crate::planets::starmap::current_catalog())).index
-    }
-}
+pub(super) const GROUPS_RANDOM: u32 = 0;
 
 /// `GROUPS_ADD_NEW` (`state.h`).
-const GROUPS_ADD_NEW: u32 = !0;
+pub(super) const GROUPS_ADD_NEW: u32 = !0;
 /// `SYREEN_CONVERSATION` and `SLYLANDRO_HOME_CONVERSATION` (`commglue.h`).
 pub const SYREEN_CONVERSATION: u32 = 20;
 pub const SLYLANDRO_HOME_CONVERSATION: u32 = 23;
-
-/// `InitCommunication (which_comm)`.
-///
-/// # Safety
-/// Game thread, inside a planet orbit.
-pub unsafe fn init_communication(cx: &mut crate::engine::battle::Cx<'_>, which_comm: u32) {
-    let mut observer = cx.kernel.input_runtime().observer();
-    let mut io = crate::engine::observe::Io {
-        observer: &mut *observer,
-    };
-    crate::comm::dispatch::init_communication(cx, &mut io, which_comm);
-}
 
 /// `YEHAT_CONVERSATION` (`commglue.h`) and `YEHAT_SHIP` (`races.h`).
 pub const YEHAT_CONVERSATION: u32 = 11;
@@ -444,14 +397,6 @@ pub unsafe fn current_star_point() -> (i16, i16) {
     (point.x, point.y)
 }
 
-/// `GLOBAL_SIS (FuelOnBoard)`.
-///
-/// # Safety
-/// Game thread; `GlobData` is initialised.
-pub fn fuel_on_board() -> u32 {
-    glob().read(|owner| owner.data.flagship.fuel_on_board)
-}
-
 /// `DeltaSISGauges (0, delta, 0)`.
 ///
 /// # Safety
@@ -474,69 +419,4 @@ pub unsafe fn clear_sis_message() {
 /// Game thread.
 pub unsafe fn draw_hyper_coords(loc: (i16, i16)) {
     DrawHyperCoords(CPoint { x: loc.0, y: loc.1 });
-}
-
-/// The live game, through `GlobData` and the C group functions.
-pub struct LiveNames;
-
-fn glob() -> crate::engine::Projection<crate::engine::World> {
-    {
-        WorldOwner::current()
-    }
-}
-
-/// `BATTLE_PLANET` start and end bit.
-const BATTLE_PLANET: (i32, i32) = (751, 758);
-
-impl PlanetNames for LiveNames {
-    fn set_planet_name(&mut self, string_index: u16) {
-        // SAFETY: `PlanetName` is the 16-byte name field of the SIS state;
-        // `GAME_STRING` text is NUL terminated.
-        unsafe {
-            let text = crate::comm::hail::game_string(i32::from(string_index));
-            let name = &mut (**glob()).data.flagship.planet_name;
-            utf8StringCopy(name.as_mut_ptr().cast(), name.len(), (text).cast());
-        }
-    }
-    fn set_battle_planet(&mut self, value: u8) {
-        // SAFETY: writes the Rust-owned game state.
-        WorldOwner::current().write(|world| {
-            rust_set_game_state_bits(world, BATTLE_PLANET.0, BATTLE_PLANET.1, value)
-        });
-    }
-}
-
-pub struct LiveGame<'a, 'b, 'c> {
-    pub(crate) cx: &'a std::cell::RefCell<&'b mut crate::engine::battle::Cx<'c>>,
-}
-
-impl<'a, 'b, 'c> LiveGame<'a, 'b, 'c> {
-    pub fn new(cx: &'a std::cell::RefCell<&'b mut crate::engine::battle::Cx<'c>>) -> Self {
-        Self { cx }
-    }
-
-    pub(crate) fn load_ip_groups(&mut self) {
-        // SAFETY: this orbital entry temporarily takes the published context; no borrow escapes.
-        unsafe {
-            get_group_info(self.cx.borrow_mut().world, GROUPS_RANDOM, GROUP_LOAD_IP);
-        }
-    }
-    pub(crate) fn save_ip_groups(&mut self) {
-        // SAFETY: this orbital entry temporarily takes the published context; no borrow escapes.
-        unsafe {
-            group_storage::put_group_info(self.cx.borrow_mut().world, GROUPS_RANDOM, GROUP_SAVE_IP);
-        }
-    }
-    pub(crate) fn reinit_npc_built_ship_q(&mut self) {
-        self.cx.borrow_mut().world.npc_built_ships().reinit();
-    }
-    pub(crate) fn reinit_ip_group_q(&mut self) {
-        self.cx.borrow_mut().world.ip_groups().reinit();
-    }
-    pub(crate) fn clone_ship_into_built_queue(&mut self, ship: u8) {
-        // SAFETY: the orbital entry owns the initialized NPC fragment queue on the game thread.
-        unsafe {
-            clone_npc_ship(self.cx.borrow_mut().world, ship, 0, None);
-        }
-    }
 }

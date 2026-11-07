@@ -243,39 +243,47 @@ pub(crate) mod live {
         draw_display(FULL);
     }
 
-    #[no_mangle]
-    pub unsafe extern "C" fn LoadPlanet(surface: *mut crate::c_bindings::global_state::FRAME_DESC) {
+    pub unsafe fn load_planet(
+        game: &std::cell::RefCell<crate::engine::battle::Cx<'_>>,
+        io: &std::cell::RefCell<crate::engine::observe::Io<'_>>,
+        surface: *mut crate::engine::graphics::native_abi::FRAME_DESC,
+    ) {
         #[cfg(feature = "debug-process")]
         if crate::front_end::uqmdebug::DISABLE_INTERACTIVITY != 0 {
             return;
         }
-        let system = solar_system::current();
-        let (last_activity, pulsing_shield) = KernelOwner::current().read(|owner| {
-            (
-                owner.last_activity,
-                owner.configuration.preferences().shield == 1,
-            )
+        let wait = game.borrow_mut().with_legacy(|| {
+            let system = solar_system::current();
+            let (last_activity, pulsing_shield) = KernelOwner::current().read(|owner| {
+                (
+                    owner.last_activity,
+                    owner.configuration.preferences().shield == 1,
+                )
+            });
+            let wait = last_activity & CHECK_LOAD == 0;
+            assert!((*system).InOrbit != 0 && (*system).TopoFrame.is_null());
+            create_context();
+            if wait {
+                draw_display(WAIT);
+            }
+            base::stop_music();
+            let planet = (*system).pOrbitalDesc;
+            generate_planet_surface(pulsing_shield, planet, surface);
+            orbit_music::set_planet_music((*planet).data_index & !0x80);
+            wait
         });
-        let wait = last_activity & CHECK_LOAD == 0;
-        assert!((*system).InOrbit != 0 && (*system).TopoFrame.is_null());
-        create_context();
-        if wait {
-            draw_display(WAIT);
-        }
-        base::stop_music();
-        let planet = (*system).pOrbitalDesc;
-        generate_planet_surface(pulsing_shield, planet, surface);
-        orbit_music::set_planet_music((*planet).data_index & !0x80);
-        orbit_scan::generate_planet_side();
-        if PLRPlaying(usize::MAX as *mut c_void) == 0 {
-            base::PlayMusic((orbit_music::LANDER_MUSIC).cast(), 1, 1);
-        }
-        if wait {
-            ZoomInPlanetSphere();
-            draw_display(UPDATE);
-        } else {
-            draw_display(FULL);
-        }
+        orbit_scan::generate_planet_side(game, io);
+        game.borrow_mut().with_legacy(|| {
+            if PLRPlaying(usize::MAX as *mut c_void) == 0 {
+                base::PlayMusic((orbit_music::LANDER_MUSIC).cast(), 1, 1);
+            }
+            if wait {
+                ZoomInPlanetSphere();
+                draw_display(UPDATE);
+            } else {
+                draw_display(FULL);
+            }
+        });
     }
 
     #[no_mangle]

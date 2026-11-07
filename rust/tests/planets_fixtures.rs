@@ -5,7 +5,6 @@
 //! permanent parity proof. `planets_parity` replays them through the exported
 //! C symbols.
 
-use uqm::engine::StoryKey;
 use uqm_rust::engine::world::planet::{
     ElementEntry, NodeInfo, PlanetDesc, PlanetFrame, SystemInfo,
 };
@@ -360,6 +359,7 @@ fn orbit_records() -> Records {
 
 mod rust_special {
     use std::fmt::Write as _;
+    use uqm_rust::engine::StoryKey;
 
     use crate::planets_common::special_gen::{desc_of, Desc, SpecialOps};
     use crate::planets_common::{fresh_node, scan_seeds, write_node};
@@ -377,21 +377,21 @@ mod rust_special {
     };
 
     /// A game state whose only flag is `name`.
-    struct OneFlag(&'static str, bool);
+    struct OneFlag(StoryKey, bool);
 
     impl Story for OneFlag {
-        fn flag(&self, name: &'static str) -> u32 {
+        fn flag(&self, name: StoryKey) -> u32 {
             assert_eq!(name, self.0);
             u32::from(self.1)
         }
-        fn set_flag(&mut self, name: &'static str, _value: u32) {
-            panic!("unexpected write of {name}");
+        fn set_flag(&mut self, name: StoryKey, _value: u32) {
+            panic!("unexpected write of {name:?}");
         }
-        fn word(&self, name: &'static str) -> u32 {
-            panic!("unexpected read of {name}");
+        fn word(&self, name: StoryKey) -> u32 {
+            panic!("unexpected read of {name:?}");
         }
-        fn set_word(&mut self, name: &'static str, _value: u32) {
-            panic!("unexpected write of {name}");
+        fn set_word(&mut self, name: StoryKey, _value: u32) {
+            panic!("unexpected write of {name:?}");
         }
     }
 
@@ -625,8 +625,8 @@ fn late_generators_full_fields_match_c_fixtures() {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("tests/fixtures/planets")
             .join(name);
-        assert_eq!(text.lines().count(), count, "{name}");
-        assert_eq!(text, std::fs::read_to_string(path).unwrap(), "{name}");
+        assert_eq!(text.lines().count(), count, "{name:?}");
+        assert_eq!(text, std::fs::read_to_string(path).unwrap(), "{name:?}");
     }
 }
 

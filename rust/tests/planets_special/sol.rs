@@ -3,7 +3,7 @@
 use super::{Harness, SysGenRNG};
 use crate::planets_common::sol::{self, Layout, Ops, Scan};
 use uqm_rust::engine::world::planet::{NodeInfo, PlanetDesc, SystemInfo};
-pub(super) use uqm_rust::planets::generate::sol_exports::GENERATE_SOL_FUNCTIONS as generateSolFunctions;
+pub(super) use uqm_rust::planets::generate::sol::Generator as generateSolFunctions;
 use uqm_rust::planets::generate::special::Body;
 use uqm_rust::state::game_state_keys::get_game_state;
 
@@ -14,8 +14,11 @@ impl Ops for Harness {
         self.state.SunDesc[0].num_planets = 0x7f;
         self.seed(case.seed);
         let mut expected = *self.state;
-        let result =
-            unsafe { generateSolFunctions.generate_planets.unwrap()(&raw mut *self.state) };
+        let result = unsafe {
+            crate::invoke_generation(&raw mut *self.state, |system, host| {
+                generateSolFunctions.generate_planets(system, host)
+            })
+        };
         *descs = self.state.PlanetDesc;
         expected.PlanetDesc = *descs;
         expected.SunDesc[0].num_planets = self.state.SunDesc[0].num_planets;
@@ -52,7 +55,9 @@ impl Ops for Harness {
             let expected = *system;
             (
                 expected,
-                generateSolFunctions.generate_moons.unwrap()(system, parent),
+                crate::invoke_generation(system, |system, host| {
+                    generateSolFunctions.generate_moons(system, planet, host)
+                }),
             )
         };
         *descs = self.state.MoonDesc;
@@ -83,7 +88,7 @@ impl Ops for Harness {
         self.state.PlanetDesc = unsafe { std::mem::zeroed() };
         self.state.MoonDesc = unsafe { std::mem::zeroed() };
         let system = &raw mut *self.state;
-        let world = unsafe {
+        let _world = unsafe {
             let sun = &raw mut (*system).SunDesc[0];
             match case.body {
                 Body::Planet(p) => {
@@ -98,20 +103,27 @@ impl Ops for Harness {
                 }
             }
         };
-        let hook = {
-            if case.life {
-                generateSolFunctions.generate_life
-            } else {
-                generateSolFunctions.generate_energy
-            }
-        }
-        .unwrap();
+        let generate =
+            |view: &mut uqm_rust::engine::world::generation::SolarSys<'_>,
+             info: &mut NodeInfo,
+             host: &mut dyn uqm_rust::planets::generate::SiteHost| {
+                if case.life {
+                    generateSolFunctions.generate_life(view, case.body, case.which, info, host)
+                } else {
+                    generateSolFunctions.generate_energy(view, case.body, case.which, info, host)
+                }
+            };
         let before = format!("{:?}", self.state);
         self.seed(case.seed);
-        let count = unsafe { hook(system, world, case.which, node) };
+        let count =
+            unsafe { crate::invoke_generation(system, |view, host| generate(view, node, host)) };
         let rng = self.rng_position();
         self.seed(case.seed);
-        let count_only = unsafe { hook(system, world, case.which, std::ptr::null_mut()) };
+        let count_only = unsafe {
+            crate::invoke_generation(system, |view, host| {
+                generate(view, &mut crate::planets_common::fresh_node(), host)
+            })
+        };
         assert_eq!(
             (count_only, self.rng_position()),
             (count, rng),
@@ -157,3 +169,5 @@ pub fn check(table: &[uqm_rust::engine::world::planet::PlanetFrame]) {
         scans.lines().count()
     );
 }
+
+use uqm_rust::planets::generate::SystemGenerator;

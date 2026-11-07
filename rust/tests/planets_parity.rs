@@ -27,15 +27,6 @@ use std::ffi::c_void;
 use std::fmt::Write as _;
 use std::path::PathBuf;
 use uqm_rust::planets::ffi::fill_orbits_c as FillOrbits;
-use uqm_rust::planets::generate::exports::generate_artifact_c as GenerateDefault_generateArtifact;
-use uqm_rust::planets::generate::exports::generate_energy_c as GenerateDefault_generateEnergy;
-use uqm_rust::planets::generate::exports::generate_life_c as GenerateDefault_generateLife;
-use uqm_rust::planets::generate::exports::generate_minerals_c as GenerateDefault_generateMinerals;
-use uqm_rust::planets::generate::exports::generate_moons_c as GenerateDefault_generateMoons;
-use uqm_rust::planets::generate::exports::generate_planets_c as GenerateDefault_generatePlanets;
-use uqm_rust::planets::generate::exports::generate_ruins_c as GenerateDefault_generateRuins;
-use uqm_rust::planets::generate::exports::pickup_life_c as GenerateDefault_pickupLife;
-use uqm_rust::planets::generate::exports::pickup_minerals_c as GenerateDefault_pickupMinerals;
 use uqm_rust::planets::solarsys::P_SOLAR_SYS_STATE as pSolarSysState;
 
 use planets_common::default_gen::{
@@ -265,7 +256,11 @@ impl DefaultOps for ExportedGenerators {
         self.state.SunDesc[0].num_planets = 0;
         let rng = unsafe {
             reseed_c(SysGenRNG, seed);
-            assert!(GenerateDefault_generatePlanets(&mut *self.state));
+            assert!(crate::invoke_generation(
+                &raw mut *self.state,
+                |system, host| uqm_rust::planets::generate::generator(0)
+                    .generate_planets(system, host)
+            ));
             (*SysGenRNG).seed()
         };
         let drawn = self.state.SunDesc[0].num_planets;
@@ -282,11 +277,14 @@ impl DefaultOps for ExportedGenerators {
     fn moons(&mut self, star_size: u8, star_color: u8, seed: u32, count: u8) -> Layout {
         self.set_star(star_size, (star_color << 5) | 0b101);
         self.state.MoonDesc = unsafe { std::mem::zeroed() };
-        let mut planet: PlanetDesc = unsafe { std::mem::zeroed() };
-        planet.num_planets = count;
+        self.state.PlanetDesc[0].num_planets = count;
         let rng = unsafe {
             reseed_c(SysGenRNG, seed);
-            assert!(GenerateDefault_generateMoons(&mut *self.state, &mut planet));
+            assert!(crate::invoke_generation(
+                &raw mut *self.state,
+                |system, host| uqm_rust::planets::generate::generator(0)
+                    .generate_moons(system, 0, host)
+            ));
             (*SysGenRNG).seed()
         };
         Layout {
@@ -307,16 +305,34 @@ impl DefaultOps for ExportedGenerators {
         node: &mut NodeInfo,
     ) -> (u16, u32) {
         self.state.SysInfo = *info;
-        let system: *const SOLARSYS_STATE = &*self.state;
-        let world: *const PlanetDesc = std::ptr::null();
+        let frame = unsafe {
+            info.planet_info
+                .plan_data_ptr
+                .offset_from(planet_array.as_slice().as_ptr())
+        };
+        self.state.PlanetDesc[0].data_index =
+            u8::try_from(frame).unwrap_or_else(|error| panic!("fixture frame index: {error:?}"));
+        let record = &raw mut *self.state;
         unsafe {
-            let count = match kind {
-                NodeKind::Minerals => GenerateDefault_generateMinerals(system, world, which, node),
-                NodeKind::Energy => GenerateDefault_generateEnergy(system, world, which, node),
-                NodeKind::Life => GenerateDefault_generateLife(system, world, which, node),
-                NodeKind::Artifact => GenerateDefault_generateArtifact(system, which, node),
-                NodeKind::Ruins => GenerateDefault_generateRuins(system, which, node),
-            };
+            let count = crate::invoke_generation(record, |system, host| {
+                use uqm_rust::planets::generate::{default, generator};
+                let body = uqm_rust::planets::generate::special::Body::Planet(0);
+                match kind {
+                    NodeKind::Minerals => {
+                        generator(0).generate_minerals(system, body, which, node, host)
+                    }
+                    NodeKind::Energy => {
+                        generator(0).generate_energy(system, body, which, node, host)
+                    }
+                    NodeKind::Life => generator(0).generate_life(system, body, which, node, host),
+                    NodeKind::Artifact => system.scan(body, |rng, info, _| {
+                        default::generate_artifact(rng, info, which, node)
+                    }),
+                    NodeKind::Ruins => system.scan(body, |rng, info, _| {
+                        default::generate_ruins(rng, info, which, node)
+                    }),
+                }
+            });
             (count, (*SysGenRNG).seed())
         }
     }
@@ -411,8 +427,12 @@ fn exported_symbols_reproduce_the_c_fixtures() {
         topography_parity::full_c_fixture_core_and_host_parity();
         sphere_geometry_parity::original_c_and_rust_match_fixture_without_rng_effects();
         assert!(unsafe {
-            GenerateDefault_pickupMinerals(&mut *exports.state, std::ptr::null_mut(), 0)
-                && GenerateDefault_pickupLife(&mut *exports.state, std::ptr::null_mut(), 0)
+            crate::invoke_generation(&raw mut *exports.state, |system, host| {
+                let generator = uqm_rust::planets::generate::generator(0);
+                let body = uqm_rust::planets::generate::special::Body::Planet(0);
+                generator.pickup_minerals(system, body, 0, host)
+                    && generator.pickup_life(system, body, 0, host)
+            })
         });
     });
 }
@@ -516,5 +536,29 @@ impl Drop for ExportedGenerators {
             uqm_rust::planets::starmap::star_array = self.previous_catalog;
             (**uqm_rust::engine::World::current()).current_star = self.previous_star;
         }
+    }
+}
+
+unsafe fn invoke_generation<R>(
+    record: *mut SOLARSYS_STATE,
+    run: impl FnOnce(
+        &mut uqm_rust::engine::world::generation::SolarSys<'_>,
+        &mut dyn uqm_rust::planets::generate::SiteHost,
+    ) -> R,
+) -> R {
+    // SAFETY: the serialized fixture owns the published context and initialized record during the callback.
+    unsafe {
+        uqm_rust::app::bridge::enter(|cx| {
+            let mut observer = uqm_rust::engine::observe::Unobserved;
+            let mut io = uqm_rust::engine::observe::Io {
+                observer: &mut observer,
+            };
+            uqm_rust::planets::solarsys::site::dispatch::with_system(
+                cx,
+                &mut io,
+                record,
+                |_, system, host| run(system, host),
+            )
+        })
     }
 }

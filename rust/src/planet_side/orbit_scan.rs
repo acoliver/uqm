@@ -52,7 +52,10 @@ mod production {
     const PS_NON_PLAYER: i16 = 1;
     use crate::graphics::pixmap_abi::SetAbsFrameIndex;
 
-    pub unsafe fn generate(game: &std::cell::RefCell<Cx<'_>>) {
+    pub unsafe fn generate(
+        game: &std::cell::RefCell<Cx<'_>>,
+        io: &std::cell::RefCell<crate::engine::observe::Io<'_>>,
+    ) {
         let solar = solar_system::current();
         if solar.is_null()
             || (*solar).pOrbitalDesc.is_null()
@@ -65,9 +68,12 @@ mod production {
         // Orbit-scan rendering only builds the display list; the returned
         // biological initial frame is a deterministic placeholder that the scan never
         // reads, so it must not consume the gameplay random stream.
-        let Ok(mut generator) =
-            CffiSurfaceGenerator::for_orbit_scan(game, solar.cast(), (*solar).pOrbitalDesc.cast())
-        else {
+        let Ok(mut generator) = CffiSurfaceGenerator::for_orbit_scan(
+            game,
+            io,
+            solar.cast(),
+            (*solar).pOrbitalDesc.cast(),
+        ) else {
             return;
         };
 
@@ -238,23 +244,22 @@ mod production {
 }
 
 /// Populate the current orbit's scan display list from Rust-owned generation.
-pub extern "C" fn generate_planet_side() {
-    #[cfg(not(test))]
-    unsafe {
-        crate::app::bridge::enter(|cx| {
-            crate::battle::process_native::init_display_list(
-                cx,
-                cx.kernel.configuration.preferences().melee_scale == 0,
-            );
-            let game = std::cell::RefCell::new(crate::engine::battle::Cx {
-                b: cx.b,
-                world: cx.world,
-                kernel: cx.kernel,
-                rng: cx.rng,
-            });
-            production::generate(&game);
-        });
+///
+/// # Safety
+/// The current solar record, orbit descriptor and system RNG must be live and
+/// exclusively available on the game thread during display-list generation.
+#[cfg(not(test))]
+pub unsafe fn generate_planet_side(
+    game: &std::cell::RefCell<crate::engine::battle::Cx<'_>>,
+    io: &std::cell::RefCell<crate::engine::observe::Io<'_>>,
+) {
+    {
+        let mut cx = game.borrow_mut();
+        let unscaled = cx.kernel.configuration.preferences().melee_scale == 0;
+        crate::battle::process_native::init_display_list(&mut cx, unscaled);
     }
+    // SAFETY: the caller retains the current system and display-list resources.
+    unsafe { production::generate(game, io) };
 }
 
 #[cfg(test)]
