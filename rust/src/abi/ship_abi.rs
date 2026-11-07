@@ -1183,7 +1183,7 @@ pub const CONTROL_TEMPLATE_CONTROL_TEMPLATE_JOY_2: CONTROL_TEMPLATE = 4;
 pub const CONTROL_TEMPLATE_CONTROL_TEMPLATE_JOY_3: CONTROL_TEMPLATE = 5;
 pub const CONTROL_TEMPLATE_NUM_TEMPLATES: CONTROL_TEMPLATE = 6;
 pub type CONTROL_TEMPLATE = ::std::os::raw::c_uint;
-pub type _controller_input_state = uqm_engine::input::frames::InputState;
+pub type _controller_input_state = uqm_engine::input_port::frames::InputState;
 pub type CONTROLLER_INPUT_STATE = _controller_input_state;
 pub type BATTLE_INPUT_STATE = UBYTE;
 

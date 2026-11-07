@@ -18,7 +18,7 @@ pub const HANDLERS: &[(&str, &str)] = &[
     ("src/planets/generate/late_exports.rs", "story_pickup"),
     ("src/front_end/setupmenu.rs", "menu_handler"),
     ("src/comm/races/comandr.rs", "callbacks"),
-    ("src/engine/world/story/schema.rs", "game_state_fields"),
+    ("src/world/story/schema.rs", "game_state_fields"),
     ("src/c_bindings.rs", "assert_c_layout"),
 ];
 

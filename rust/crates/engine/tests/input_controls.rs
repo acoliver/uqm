@@ -1,4 +1,4 @@
-use uqm_engine::input::controls::InputControls;
+use uqm_engine::input_port::controls::InputControls;
 
 #[test]
 fn provider_buffer_keeps_its_address_when_the_input_owner_moves() {

@@ -1125,7 +1125,7 @@ Phase 2 · semantic · lane `readers` · about 5,300 changed lines · depends on
 - S (check bundle)
 - P (all melee-cyborg-* entries, melee-input, campaign-battle)
 - `cd rust && cargo test --locked --test netplay_packets`
-- `cd rust && cargo test --locked engine::battle::access::link_queue`
+- `cd rust && cargo test -p uqm-engine --locked battle::access::link_queue`
 - `cd rust && for s in battle/cyborg_native.rs battle/ai.rs battle/ai_entry.rs battle/sounds.rs battle/build_native.rs battle/encount_native.rs pickship supermelee ui; do cargo xtask quality report raw_records:$s --expect 0 || exit 1; done`
 - `cd rust && cargo xtask quality report unsafe:battle/cyborg_native.rs --expect 0`
 - V2 (check bundle)
