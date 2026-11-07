@@ -508,7 +508,7 @@ pub(crate) mod engine {
         COUNT::from(menu.choice)
     }
 
-    unsafe fn draw_fade_text(
+    fn draw_fade_text(
         cx: &mut crate::engine::battle::Cx<'_>,
         input: &crate::engine::input::InputSession,
         str1: &std::ffi::CStr,
@@ -541,29 +541,32 @@ pub(crate) mod engine {
                 color,
             );
         };
-        FlushInput(input);
+        let runtime = cx.kernel.input_runtime();
+        runtime.flush();
         let mut time = GetTimeCounter();
         if fade_in != 0 {
             let mut i = 0usize;
             while i < TEXT_FADE.len() {
-                if AnyButtonPress(cx, input, 1) != 0 {
+                runtime.update(cx);
+                if input.current().any_button_pressed() {
                     i = TEXT_FADE.len() - 1;
                 }
                 let v = TEXT_FADE[i];
                 render(rgb15(v, v, v));
-                cx.with_legacy(|| SleepThreadUntil(time.wrapping_add(ONE_SECOND / 20)));
+                runtime.sleep_until(cx, time.wrapping_add(ONE_SECOND / 20));
                 time = GetTimeCounter();
                 i += 1;
             }
         } else {
             let mut i = TEXT_FADE.len() as i16 - 1;
             while i >= 0 {
-                if AnyButtonPress(cx, input, 1) != 0 {
+                runtime.update(cx);
+                if input.current().any_button_pressed() {
                     i = 0;
                 }
                 let v = TEXT_FADE[i as usize];
                 render(rgb15(v, v, v));
-                cx.with_legacy(|| SleepThreadUntil(time.wrapping_add(ONE_SECOND / 20)));
+                runtime.sleep_until(cx, time.wrapping_add(ONE_SECOND / 20));
                 time = GetTimeCounter();
                 i -= 1;
             }
