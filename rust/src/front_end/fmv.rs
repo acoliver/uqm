@@ -41,7 +41,9 @@ pub(crate) mod runtime {
             if !music.is_null() {
                 stop_music();
             }
-            free_hyper_data();
+        });
+        crate::navigation::hyper_data::free_hyper_data(cx.kernel);
+        cx.with_legacy(|| {
             libc::sprintf(
                 name.as_mut_ptr(),
                 c"slides.spins.%02u".as_ptr(),

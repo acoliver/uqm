@@ -1,11 +1,12 @@
 //! Scoped navigation projections into the retained game-thread authorities.
-#![cfg(not(test))]
-use crate::engine::battle::{Cx, ElementId, Parent};
+use crate::engine::battle::Cx;
+#[cfg(not(test))]
+use crate::engine::battle::{ElementId, Parent};
 use crate::engine::StoryKey;
 use crate::navigation::abi::*;
 
-use crate::navigation::hyperspace::live::{logx, logy};
-use crate::planets::starmap::find_star_in;
+use crate::navigation::hyper_units::Geometry;
+use crate::planets::starmap::find_star_id;
 
 const PORTALS: [(i16, i16); 15] = [
     (4091, 7748),
@@ -24,44 +25,38 @@ const PORTALS: [(i16, i16); 15] = [
     (9735, 3153),
     (5850, 6213),
 ];
-pub(crate) unsafe fn interplanetary(world: &mut crate::engine::World, point: POINT) {
+pub(crate) fn interplanetary(
+    world: &mut crate::engine::World,
+    point: POINT,
+    geometry: Geometry,
+    catalog: &[crate::engine::world::CStarDesc; crate::engine::world::CATALOG_LEN],
+) {
     world.data.game.ip_planet = 0;
     world.data.game.in_orbit = 0;
     world.data.game.ship_facing = 0;
     world.set_story_state(StoryKey::USED_BROADCASTER, 0);
-    // SAFETY: the caller holds exclusive game-thread navigation state and its loaded catalog.
-    unsafe {
-        if world.story_state(StoryKey::ARILOU_SPACE_SIDE) <= 1 {
-            world.set_activity(world.activity() | START_INTERPLANETARY as u16);
-            world.set_story_state(StoryKey::ESCAPE_COUNTER, 0);
+    if world.story_state(StoryKey::ARILOU_SPACE_SIDE) <= 1 {
+        world.set_activity(world.activity() | START_INTERPLANETARY as u16);
+        world.set_story_state(StoryKey::ESCAPE_COUNTER, 0);
+    } else {
+        world.data.game.autopilot = POINT { x: -1, y: -1 };
+        let star = find_star_id(world, catalog, None, point, 5, 5)
+            .unwrap_or_else(|| panic!("quasispace transition without a selected star"));
+        world.current_star = Some(star);
+        if catalog[star.0].star_pt.x == ARILOU_HOME_X as i16
+            && catalog[star.0].star_pt.y == ARILOU_HOME_Y as i16
+        {
+            world.set_activity(world.activity() | START_ENCOUNTER as u16);
         } else {
-            world.data.game.autopilot = POINT { x: -1, y: -1 };
-            let star = find_star_in(world, None, point, 5, 5);
-            world.select_star(
-                (star.cast::<crate::engine::world::CStarDesc>()).as_ref(),
-                crate::planets::starmap::current_catalog(),
-            );
-            if (*star).star_pt.x == ARILOU_HOME_X as i16
-                && (*star).star_pt.y == ARILOU_HOME_Y as i16
-            {
-                world.set_activity(world.activity() | START_ENCOUNTER as u16);
-            } else {
-                let Some(portal) = world.current_star else {
-                    panic!("portal transition without a selected star");
-                };
-                let index = portal.0 - 503;
-                let (x, y) = PORTALS[index];
-                world.data.flagship.log_x = logx(x);
-                world.data.flagship.log_y = logy(y);
-                world.set_story_state(StoryKey::ARILOU_SPACE_SIDE, 0);
-                // The source portal is not a star at the HyperSpace destination.
-                // Keeping it makes a save name a descriptor from the wrong catalog.
-                world.select_star(None, None);
-            }
+            let (x, y) = PORTALS[star.0 - 503];
+            world.data.flagship.log_x = geometry.log_x(x);
+            world.data.flagship.log_y = geometry.log_y(y);
+            world.set_story_state(StoryKey::ARILOU_SPACE_SIDE, 0);
+            world.select_star(None, None);
         }
     }
 }
-pub(crate) unsafe fn arilou(world: &mut crate::engine::World) {
+pub(crate) fn arilou(world: &mut crate::engine::World, geometry: Geometry) {
     world.data.game.ship_facing = 0;
     world.set_story_state(StoryKey::USED_BROADCASTER, 0);
     world.data.game.autopilot = POINT { x: -1, y: -1 };
@@ -71,8 +66,7 @@ pub(crate) unsafe fn arilou(world: &mut crate::engine::World) {
     } else {
         (ARILOU_SPACE_X as i16, ARILOU_SPACE_Y as i16)
     };
-    // SAFETY: the navigation caller owns the game thread and initialized screen geometry.
-    let (x, y) = unsafe { (logx(x), logy(y)) };
+    let (x, y) = (geometry.log_x(x), geometry.log_y(y));
     world.data.flagship.log_x = x;
     world.data.flagship.log_y = y;
     if entering && world.story_state(StoryKey::PORTAL_COUNTER) != 0 {
@@ -82,51 +76,69 @@ pub(crate) unsafe fn arilou(world: &mut crate::engine::World) {
     world.select_star(None, None);
 }
 
-#[cfg(not(test))]
 pub trait NavigationOps {
+    #[cfg(not(test))]
     fn navigation(&self) -> &crate::engine::WorldData;
+    #[cfg(not(test))]
     fn navigation_mut(&mut self) -> &mut crate::engine::WorldData;
+    #[cfg(not(test))]
     fn solar(&self) -> &SOLARSYS_STATE;
+    #[cfg(not(test))]
     fn ip_group_id(
         &self,
         element: ElementId,
     ) -> crate::engine::battle::link_queue::LinkId<crate::engine::world::queues::Group>;
+    #[cfg(not(test))]
     fn ip_group(&self, element: ElementId) -> &IP_GROUP;
+    #[cfg(not(test))]
     fn ip_group_mut(&mut self, element: ElementId) -> &mut IP_GROUP;
+    #[cfg(not(test))]
     fn previous_activity(&self) -> u16;
+    #[cfg(not(test))]
     fn set_previous_activity(&mut self, activity: u16);
+    #[cfg(not(test))]
     fn planet_outer_location(&self, planet: u16) -> POINT;
     fn leave_hyperspace(&mut self, kind: u8, point: POINT);
+    #[cfg(not(test))]
     fn flagship_location(&self) -> u8;
+    #[cfg(not(test))]
     fn group_record(
         &self,
         id: crate::engine::battle::link_queue::LinkId<crate::engine::world::queues::Group>,
     ) -> &IP_GROUP;
+    #[cfg(not(test))]
     fn set_encounter_group(&mut self, group: u8);
+    #[cfg(not(test))]
     fn navigation_stars(&self) -> crate::engine::battle::views::FrameSelection;
+    #[cfg(not(test))]
     fn group_icon(
         &self,
         group: crate::engine::battle::link_queue::LinkId<crate::engine::world::queues::Group>,
     ) -> crate::engine::battle::views::FrameSelection;
+    #[cfg(not(test))]
     fn set_group_image(
         &mut self,
         id: ElementId,
         group: crate::engine::battle::link_queue::LinkId<crate::engine::world::queues::Group>,
     );
+    #[cfg(not(test))]
     fn flagship_stamp_frame(&self) -> crate::engine::battle::views::FrameSelection;
+    #[cfg(not(test))]
     fn set_flagship_image(&mut self, id: ElementId);
 }
 
-#[cfg(not(test))]
 impl NavigationOps for Cx<'_> {
+    #[cfg(not(test))]
     fn navigation(&self) -> &crate::engine::WorldData {
         &self.world.data
     }
 
+    #[cfg(not(test))]
     fn navigation_mut(&mut self) -> &mut crate::engine::WorldData {
         &mut self.world.data
     }
 
+    #[cfg(not(test))]
     fn solar(&self) -> &SOLARSYS_STATE {
         // SAFETY: the navigation mode retains its current system for this context borrow.
         unsafe {
@@ -136,6 +148,7 @@ impl NavigationOps for Cx<'_> {
         }
     }
 
+    #[cfg(not(test))]
     fn ip_group_id(
         &self,
         element: ElementId,
@@ -146,27 +159,32 @@ impl NavigationOps for Cx<'_> {
         id
     }
 
+    #[cfg(not(test))]
     fn ip_group(&self, element: ElementId) -> &IP_GROUP {
         self.world
             .ip_groups_ref()
             .into_record(self.ip_group_id(element))
     }
 
+    #[cfg(not(test))]
     fn ip_group_mut(&mut self, element: ElementId) -> &mut IP_GROUP {
         let id = self.ip_group_id(element);
         self.world.ip_groups().into_record_mut(id)
     }
 
+    #[cfg(not(test))]
     fn previous_activity(&self) -> u16 {
         // SAFETY: the owning game thread serializes navigation activity.
         self.kernel.last_activity
     }
 
+    #[cfg(not(test))]
     fn set_previous_activity(&mut self, activity: u16) {
         // SAFETY: this exclusive context owns navigation activity mutations.
         self.kernel.last_activity = activity;
     }
 
+    #[cfg(not(test))]
     fn planet_outer_location(&self, planet: u16) -> POINT {
         let solar = self.solar();
         displayToLocation(
@@ -176,16 +194,18 @@ impl NavigationOps for Cx<'_> {
     }
 
     fn leave_hyperspace(&mut self, kind: u8, point: POINT) {
-        // SAFETY: Cx retains exclusive game-thread access and no projection crosses this call.
-        unsafe {
-            if kind == 1 {
-                interplanetary(self.world, point);
-            } else {
-                arilou(self.world);
-            }
+        let geometry = Geometry::new(self.screen_dimensions());
+        if kind == 1 {
+            // SAFETY: the retained campaign owns this catalog throughout the transition.
+            let catalog = unsafe { crate::planets::starmap::current_catalog() }
+                .unwrap_or_else(|| panic!("hyperspace transition without a catalog"));
+            interplanetary(self.world, point, geometry, catalog);
+        } else {
+            arilou(self.world, geometry);
         }
     }
 
+    #[cfg(not(test))]
     fn flagship_location(&self) -> u8 {
         let solar = self.solar();
         if solar.pBaseDesc == solar.PlanetDesc.as_ptr().cast_mut() {
@@ -210,24 +230,28 @@ impl NavigationOps for Cx<'_> {
         assert!(offset.is_multiple_of(std::mem::size_of::<PLANET_DESC>()));
         (1 + offset / std::mem::size_of::<PLANET_DESC>()) as u8
     }
+    #[cfg(not(test))]
     fn group_record(
         &self,
         id: crate::engine::battle::link_queue::LinkId<crate::engine::world::queues::Group>,
     ) -> &IP_GROUP {
         self.world.ip_groups_ref().into_record(id)
     }
+    #[cfg(not(test))]
     fn set_encounter_group(&mut self, group: u8) {
         // SAFETY: encounter selection is owned by this exclusive navigation context.
         unsafe {
             EncounterGroup = group;
         }
     }
+    #[cfg(not(test))]
     fn navigation_stars(&self) -> crate::engine::battle::views::FrameSelection {
         // SAFETY: the loaded navigation resource is retained throughout the context borrow.
         {
             crate::engine::battle::views::FrameSelection::retain(self.kernel.stars_in_space)
         }
     }
+    #[cfg(not(test))]
     fn group_icon(
         &self,
         group: crate::engine::battle::link_queue::LinkId<crate::engine::world::queues::Group>,
@@ -235,6 +259,7 @@ impl NavigationOps for Cx<'_> {
         let icon = self.group_record(group).melee_icon;
         crate::engine::battle::views::FrameSelection::retain(icon)
     }
+    #[cfg(not(test))]
     fn set_group_image(
         &mut self,
         id: ElementId,
@@ -251,10 +276,12 @@ impl NavigationOps for Cx<'_> {
         );
         self.set_single_frames(id, frames, frame);
     }
+    #[cfg(not(test))]
     fn flagship_stamp_frame(&self) -> crate::engine::battle::views::FrameSelection {
         let frame = self.navigation().game.ship_stamp.frame;
         crate::engine::battle::views::FrameSelection::retain(frame)
     }
+    #[cfg(not(test))]
     fn set_flagship_image(&mut self, id: ElementId) {
         let frame = self.flagship_stamp_frame();
         let role = crate::engine::battle::views::SharedFrames::Flagship;

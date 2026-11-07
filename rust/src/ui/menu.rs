@@ -369,3 +369,5 @@ unsafe fn game_string(index: u32) -> *mut UNICODE {
     ))
     .cast()
 }
+
+pub(crate) mod hyperspace;

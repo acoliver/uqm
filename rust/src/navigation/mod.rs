@@ -27,17 +27,15 @@ pub mod hyperspace;
 pub mod interplanetary;
 mod portal;
 
-#[cfg(not(test))]
 pub(crate) fn get(world: &crate::engine::World, key: crate::engine::StoryKey) -> u8 {
     world.story_state(key) as u8
 }
 
-#[cfg(not(test))]
 pub(crate) fn set(world: &mut crate::engine::World, key: crate::engine::StoryKey, value: u8) {
     world.set_story_state(key, u32::from(value));
 }
 
-fn color(r: u8, g: u8, b: u8) -> crate::graphics::native_abi::Color {
+pub(crate) fn color(r: u8, g: u8, b: u8) -> crate::graphics::native_abi::Color {
     crate::graphics::native_abi::Color {
         r: (r << 3) | (r >> 2),
         g: (g << 3) | (g >> 2),

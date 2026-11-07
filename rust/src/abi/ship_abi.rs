@@ -1830,12 +1830,6 @@ unsafe extern "C" {
 
 #[cfg(not(test))]
 pub use crate::navigation::hyperspace::live::MoveSIS;
-#[cfg(not(test))]
-pub use crate::navigation::hyper_menu::hyperspace_menu;
-#[cfg(test)]
-extern "C" {
-    pub fn hyperspace_menu();
-}
 
 #[cfg(not(test))]
 pub use crate::battle::tactrans_native::engine::ship_transition;
