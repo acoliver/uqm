@@ -292,4 +292,22 @@ fn lander_fixture_requests_belong_to_each_observer() {
         Some(FixtureLayout::CollisionParity)
     );
     assert!(first.0.planet_side_fixtures.lock().take().is_none());
+    first
+        .0
+        .planet_side_fixtures
+        .lock()
+        .queue(FixtureLayout::CollisionParity)
+        .unwrap();
+    second
+        .0
+        .planet_side_fixtures
+        .lock()
+        .queue(FixtureLayout::MineralGallery)
+        .unwrap();
+    first.0.finalize(0).unwrap();
+    assert!(first.0.planet_side_fixtures.lock().take().is_none());
+    assert_eq!(
+        second.0.planet_side_fixtures.lock().take(),
+        Some(FixtureLayout::MineralGallery)
+    );
 }
