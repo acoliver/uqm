@@ -146,6 +146,37 @@ pub struct SurfaceCollisionAdapter<R, G, V> {
     pub lava_frame_count: u16,
 }
 
+impl<R, G: SurfaceGenerator, V> SurfaceCollisionAdapter<R, G, V> {
+    fn commit_retrieved_nodes(
+        &mut self,
+        retrieved: &[SurfaceEntityId],
+    ) -> Result<(), AdapterError> {
+        // A stun bolt on a value-0 creature skips `shotCreature` and runs the
+        // node pickup: persist the retrieved node, then drop the entity. A node
+        // the callback declines stays on the surface, as in C.
+        for entity_id in retrieved {
+            let mapping = {
+                let surface = self.surface.borrow();
+                surface
+                    .generated
+                    .iter()
+                    .find(|entry| entry.entity == *entity_id)
+                    .copied()
+            };
+            let should_remove = match mapping {
+                Some(mapping) => {
+                    persist_pickup(&mut self.generator, &mut self.persistence, mapping)?
+                }
+                None => true,
+            };
+            if should_remove {
+                remove_surface_entity(&mut self.surface.borrow_mut(), *entity_id)?;
+            }
+        }
+        Ok(())
+    }
+}
+
 impl<R, G, V> PlanetSideCollision for SurfaceCollisionAdapter<R, G, V>
 where
     R: GameplayRandom,
@@ -313,6 +344,7 @@ where
 
     fn apply_world_step(
         &mut self,
+        cx: &mut crate::engine::battle::Cx<'_>,
         result: &WorldStepResult,
         audio: &mut impl super::runtime::PlanetSideAudio,
     ) -> Result<(), AdapterError> {
@@ -324,130 +356,113 @@ where
         // when two bolts pass in the same frame.  Count each non-full verdict
         // once; the sound is played per cue as the C control does.
         for cue in &result.effects.sounds {
-            audio.play(*cue)?;
+            audio.play(cx.world, *cue)?;
         }
-        for _ in &result.effects.landed_shot {
-            super::telemetry::creature_hit();
-        }
+        cx.with_legacy(|| -> Result<(), AdapterError> {
+            for _ in &result.effects.landed_shot {
+                super::telemetry::creature_hit();
+            }
 
-        // Apply living animation before the hit's canister transition.
-        for (entity_id, kind, animation_frame) in &result.effects.creature_frames {
-            advance_creature_animation_frame(
-                &mut self.surface.borrow_mut(),
-                *entity_id,
-                *kind,
-                *animation_frame,
-                &mut self.world_visuals,
-            )?;
-        }
-        // Persist dead-but-flashing nodes too, so takeoff cannot revive them.
-        let pending: Vec<_> = {
-            let surface = self.surface.borrow();
-            surface
-                .generated
-                .iter()
-                .filter_map(|entry| {
-                    let entity = surface
-                        .world
-                        .get(entry.entity)
-                        .expect("generated surface entity");
-                    match entity.kind {
-                        SurfaceEntityKind::LiveCreature {
-                            kind,
-                            hit_points: 0,
-                            ..
-                        } => Some((
-                            entry.node,
-                            entity.position,
-                            u16::from(CreatureCatalog::stats(kind).value),
-                        )),
-                        _ => None,
-                    }
-                })
-                .collect()
-        };
-        for (node, position, value) in pending {
-            self.generator.can_node(node, position, value)?;
-        }
-        for (entity_id, animation_frame) in &result.effects.canister_frames {
-            let visual = self
-                .world_visuals
-                .canned_creature_visual(*animation_frame)?;
-            let mut surface = self.surface.borrow_mut();
-            surface.frames.insert(*entity_id, visual.frame);
-            surface.masks.insert_entity(*entity_id, visual.mask);
-        }
-        for (entity_id, value) in &result.effects.canned {
-            let pending = {
+            // Apply living animation before the hit's canister transition.
+            for (entity_id, kind, animation_frame) in &result.effects.creature_frames {
+                advance_creature_animation_frame(
+                    &mut self.surface.borrow_mut(),
+                    *entity_id,
+                    *kind,
+                    *animation_frame,
+                    &mut self.world_visuals,
+                )?;
+            }
+            // Persist dead-but-flashing nodes too, so takeoff cannot revive them.
+            let pending: Vec<_> = {
                 let surface = self.surface.borrow();
                 surface
                     .generated
                     .iter()
-                    .find(|entry| entry.entity == *entity_id)
-                    .map(|entry| {
-                        (
-                            entry.node,
-                            surface
-                                .world
-                                .get(*entity_id)
-                                .expect("canned surface entity")
-                                .position,
-                        )
+                    .filter_map(|entry| {
+                        let entity = surface
+                            .world
+                            .get(entry.entity)
+                            .expect("generated surface entity");
+                        match entity.kind {
+                            SurfaceEntityKind::LiveCreature {
+                                kind,
+                                hit_points: 0,
+                                ..
+                            } => Some((
+                                entry.node,
+                                entity.position,
+                                u16::from(CreatureCatalog::stats(kind).value),
+                            )),
+                            _ => None,
+                        }
                     })
+                    .collect()
             };
-            if let Some((node, position)) = pending {
-                self.generator.can_node(node, position, *value)?;
+            for (node, position, value) in pending {
+                self.generator.can_node(node, position, value)?;
             }
-            let visual = self.world_visuals.canned_creature_visual(0)?;
-            transform_creature_to_canned(
-                &mut self.surface.borrow_mut(),
-                *entity_id,
-                *value,
-                visual,
-            )?;
-        }
-
-        // A stun bolt on a value-0 creature skips `shotCreature` and runs the
-        // node pickup: persist the retrieved node, then drop the entity. A node
-        // the callback declines stays on the surface, as in C.
-        for entity_id in &result.effects.retrieved {
-            let mapping = {
-                let surface = self.surface.borrow();
-                surface
-                    .generated
-                    .iter()
-                    .find(|entry| entry.entity == *entity_id)
-                    .copied()
-            };
-            let should_remove = match mapping {
-                Some(mapping) => {
-                    persist_pickup(&mut self.generator, &mut self.persistence, mapping)?
+            for (entity_id, animation_frame) in &result.effects.canister_frames {
+                let visual = self
+                    .world_visuals
+                    .canned_creature_visual(*animation_frame)?;
+                let mut surface = self.surface.borrow_mut();
+                surface.frames.insert(*entity_id, visual.frame);
+                surface.masks.insert_entity(*entity_id, visual.mask);
+            }
+            for (entity_id, value) in &result.effects.canned {
+                let pending = {
+                    let surface = self.surface.borrow();
+                    surface
+                        .generated
+                        .iter()
+                        .find(|entry| entry.entity == *entity_id)
+                        .map(|entry| {
+                            (
+                                entry.node,
+                                surface
+                                    .world
+                                    .get(*entity_id)
+                                    .expect("canned surface entity")
+                                    .position,
+                            )
+                        })
+                };
+                if let Some((node, position)) = pending {
+                    self.generator.can_node(node, position, *value)?;
                 }
-                None => true,
-            };
-            if should_remove {
-                remove_surface_entity(&mut self.surface.borrow_mut(), *entity_id)?;
+                let visual = self.world_visuals.canned_creature_visual(0)?;
+                transform_creature_to_canned(
+                    &mut self.surface.borrow_mut(),
+                    *entity_id,
+                    *value,
+                    visual,
+                )?;
             }
-        }
 
-        {
-            let mut surface = self.surface.borrow_mut();
-            let SurfaceAssembly { world, frames, .. } = &mut *surface;
-            frames.advance_hazard_frames(world);
-        }
+            self.commit_retrieved_nodes(&result.effects.retrieved)?;
+
+            {
+                let mut surface = self.surface.borrow_mut();
+                let SurfaceAssembly { world, frames, .. } = &mut *surface;
+                frames.advance_hazard_frames(world);
+            }
+
+            Ok(())
+        })?;
 
         // Insert hazard spawns with synchronized visuals.
         for spawn in &result.hazard_spawns {
-            let visual = self.world_visuals.hazard_visual(spawn.kind)?;
+            let visual = cx.with_legacy(|| self.world_visuals.hazard_visual(spawn.kind))?;
             let entity = SurfaceEntity {
                 kind: SurfaceEntityKind::Hazard(spawn.kind),
                 position: spawn.position,
                 finite_life: Some(spawn.life_span),
             };
             match spawn.kind {
-                HazardKind::Earthquake => audio.play(SoundCue::Earthquake)?,
-                HazardKind::Lightning => audio.play(SoundCue::Lightning)?,
-                HazardKind::Lava => audio.play(SoundCue::Lava)?,
+                HazardKind::Earthquake => audio.play(cx.world, SoundCue::Earthquake)?,
+                HazardKind::Lightning => audio.play(cx.world, SoundCue::Lightning)?,
+                HazardKind::Lava => audio.play(cx.world, SoundCue::Lava)?,
                 HazardKind::Biological => {}
             }
             insert_surface_entity(&mut self.surface.borrow_mut(), entity, visual);
@@ -724,7 +739,17 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn stunned_creature_keeps_canister_visual_and_yields_bio_on_pickup() {
+        let mut owner = crate::engine::Game::new();
+        let mut battle = crate::engine::battle::Battle::new();
+        let cx = &mut crate::engine::battle::Cx::new(
+            &mut battle,
+            &mut owner.world,
+            &mut owner.kernel,
+            crate::math::random,
+        );
+
         let _guard = telemetry_guard();
         let mut creature = brainbox_entity(1);
         if let SurfaceEntityKind::LiveCreature {
@@ -751,7 +776,7 @@ mod tests {
                 .step_world(&lander(), HazardChances::default())
                 .unwrap();
             adapter
-                .apply_world_step(&result, &mut RecordingAudio)
+                .apply_world_step(cx, &result, &mut RecordingAudio)
                 .unwrap();
             assert_eq!(
                 surface.borrow().frames.get(id).unwrap().base,
@@ -764,7 +789,7 @@ mod tests {
             .step_world(&lander(), HazardChances::default())
             .unwrap();
         adapter
-            .apply_world_step(&result, &mut RecordingAudio)
+            .apply_world_step(cx, &result, &mut RecordingAudio)
             .unwrap();
         assert_eq!(surface.borrow().world.get(id).unwrap().position, start);
         let contact = adapter
@@ -860,7 +885,17 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn lethal_shot_survives_relanding_save_load_and_collection_retires_node() {
+        let mut owner = crate::engine::Game::new();
+        let mut battle = crate::engine::battle::Battle::new();
+        let cx = &mut crate::engine::battle::Cx::new(
+            &mut battle,
+            &mut owner.world,
+            &mut owner.kernel,
+            crate::math::random,
+        );
+
         use super::super::generation::*;
         use crate::engine::world::state_file::StateFileManager;
         let _guard = telemetry_guard();
@@ -905,7 +940,7 @@ mod tests {
             .step_world(&lander(), HazardChances::default())
             .unwrap();
         adapter
-            .apply_world_step(&result, &mut RecordingAudio)
+            .apply_world_step(cx, &result, &mut RecordingAudio)
             .unwrap();
         // Departure during the damage flash must already be persistent.
         let canned = files.borrow().canned_node((1, 2, 1, 0)).unwrap();
@@ -960,7 +995,7 @@ mod tests {
                 .step_world(&lander(), HazardChances::default())
                 .unwrap();
             adapter
-                .apply_world_step(&result, &mut RecordingAudio)
+                .apply_world_step(cx, &result, &mut RecordingAudio)
                 .unwrap();
             assert_eq!(surface.borrow().world.get(id).unwrap().position, position);
         }
@@ -1068,7 +1103,11 @@ mod tests {
     struct RecordingAudio;
 
     impl super::super::runtime::PlanetSideAudio for RecordingAudio {
-        fn play(&mut self, _cue: SoundCue) -> Result<(), AdapterError> {
+        fn play(
+            &mut self,
+            _world: &crate::engine::World,
+            _cue: SoundCue,
+        ) -> Result<(), AdapterError> {
             Ok(())
         }
     }
@@ -1116,7 +1155,17 @@ mod tests {
     /// skips `shotCreature`, so the first bolt retires the node through
     /// `callPickupForScanType`/`set_node_retrieved` whatever its hit points were.
     #[test]
+    #[serial_test::serial]
     fn first_stun_bolt_retires_a_multi_hit_point_brainbox_node() {
+        let mut owner = crate::engine::Game::new();
+        let mut battle = crate::engine::battle::Battle::new();
+        let cx = &mut crate::engine::battle::Cx::new(
+            &mut battle,
+            &mut owner.world,
+            &mut owner.kernel,
+            crate::math::random,
+        );
+
         use super::super::generation::{GeneratedEntity, ScanNodeId, ScanType};
 
         let _telemetry = telemetry_guard();
@@ -1152,7 +1201,7 @@ mod tests {
             .step_world(&lander(), super::super::world::HazardChances::default())
             .unwrap();
         adapter
-            .apply_world_step(&result, &mut RecordingAudio)
+            .apply_world_step(cx, &result, &mut RecordingAudio)
             .unwrap();
 
         assert!(

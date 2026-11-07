@@ -49,7 +49,7 @@ pub trait PlanetSideAssetAccess {
 /// `load_lander_data` and released by `free_lander_data`.
 pub struct BorrowedPlanetSideAssets {
     pub(crate) graphics: [*mut c_void; 8],
-    pub(crate) sounds: *mut c_void,
+    pub(crate) sounds: LanderSoundTable,
 }
 
 impl PlanetSideAssetAccess for BorrowedPlanetSideAssets {
@@ -58,14 +58,17 @@ impl PlanetSideAssetAccess for BorrowedPlanetSideAssets {
     }
 
     fn sounds(&self) -> LanderSoundTable {
-        LanderSoundTable::from_raw(self.sounds)
+        self.sounds.clone()
     }
 }
 
 #[cfg(test)]
 impl BorrowedPlanetSideAssets {
     pub(crate) fn for_test(graphics: [*mut c_void; 8], sounds: *mut c_void) -> Self {
-        Self { graphics, sounds }
+        Self {
+            graphics,
+            sounds: LanderSoundTable::from_raw(sounds),
+        }
     }
 }
 /// Complete loaded PlanetSide asset set. Drop releases every successful load.

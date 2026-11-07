@@ -578,7 +578,11 @@ mod tests {
         played: Vec<SoundCue>,
     }
     impl PlanetSideAudio for Audio {
-        fn play(&mut self, cue: SoundCue) -> Result<(), AdapterError> {
+        fn play(
+            &mut self,
+            _world: &crate::engine::World,
+            cue: SoundCue,
+        ) -> Result<(), AdapterError> {
             self.played.push(cue);
             Ok(())
         }
@@ -1075,7 +1079,17 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn subsequent_production_shot_step_lands_creature_hit_on_registered_frame_mask() {
+        let mut owner = crate::engine::Game::new();
+        let mut battle = crate::engine::battle::Battle::new();
+        let cx = &mut crate::engine::battle::Cx::new(
+            &mut battle,
+            &mut owner.world,
+            &mut owner.kernel,
+            crate::math::random,
+        );
+
         let anchor = SurfacePoint { x: 50, y: 80 };
         let session = session_at(anchor);
         let surface = share_empty();
@@ -1106,7 +1120,7 @@ mod tests {
         // C plays LANDER_HITS inside shotCreature, which a Brainbox never reaches.
         assert!(!result.effects.sounds.contains(&SoundCue::LanderHits));
         assert_eq!(result.effects.retrieved.len(), 1);
-        port.apply_world_step(&result, &mut Audio { played: Vec::new() })
+        port.apply_world_step(cx, &result, &mut Audio { played: Vec::new() })
             .unwrap();
         assert_eq!(
             crate::planet_side::telemetry::observation().creature_hits,
@@ -1115,7 +1129,17 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn brainbox_frame_and_registered_mask_advance_together_after_world_step() {
+        let mut owner = crate::engine::Game::new();
+        let mut battle = crate::engine::battle::Battle::new();
+        let cx = &mut crate::engine::battle::Cx::new(
+            &mut battle,
+            &mut owner.world,
+            &mut owner.kernel,
+            crate::math::random,
+        );
+
         let anchor = SurfacePoint { x: 50, y: 80 };
         let session = session_at(anchor);
         let surface = share_empty();
@@ -1150,7 +1174,7 @@ mod tests {
         let result = port
             .step_world(&session.lander, HazardChances::default())
             .unwrap();
-        port.apply_world_step(&result, &mut Audio { played: Vec::new() })
+        port.apply_world_step(cx, &result, &mut Audio { played: Vec::new() })
             .unwrap();
 
         let assembly = surface.borrow();
