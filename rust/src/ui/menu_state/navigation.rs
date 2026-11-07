@@ -142,3 +142,97 @@ fn convert_alternate(base: u8, state: u8) -> u8 {
         _ => state,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn alternate_groups_keep_every_original_selection_offset() {
+        for (base, state, group, offset, original) in [
+            (PM_SCAN, 0, PM_ALT_SCAN, 0, 0),
+            (PM_STARMAP, 1, PM_ALT_STARMAP, 0, 1),
+            (
+                PM_SCAN,
+                PM_DEVICES,
+                PM_ALT_CARGO,
+                PM_ALT_DEVICES - PM_ALT_CARGO,
+                PM_DEVICES,
+            ),
+            (PM_SCAN, PM_CARGO, PM_ALT_CARGO, 0, PM_CARGO),
+            (
+                PM_SCAN,
+                PM_ROSTER,
+                PM_ALT_CARGO,
+                PM_ALT_ROSTER - PM_ALT_CARGO,
+                PM_ROSTER,
+            ),
+            (
+                PM_SCAN,
+                PM_GAME_MENU,
+                PM_ALT_SCAN,
+                PM_ALT_GAME_MENU - PM_ALT_SCAN,
+                PM_GAME_MENU,
+            ),
+            (
+                PM_SCAN,
+                PM_NAVIGATE,
+                PM_ALT_SCAN,
+                PM_ALT_NAVIGATE - PM_ALT_SCAN,
+                PM_NAVIGATE,
+            ),
+            (PM_MIN_SCAN, 0, PM_ALT_MSCAN, 0, 0),
+            (
+                PM_MIN_SCAN,
+                PM_ENE_SCAN - PM_MIN_SCAN,
+                PM_ALT_MSCAN,
+                PM_ALT_ESCAN - PM_ALT_MSCAN,
+                PM_ENE_SCAN - PM_MIN_SCAN,
+            ),
+            (
+                PM_MIN_SCAN,
+                PM_BIO_SCAN - PM_MIN_SCAN,
+                PM_ALT_MSCAN,
+                PM_ALT_BSCAN - PM_ALT_MSCAN,
+                PM_BIO_SCAN - PM_MIN_SCAN,
+            ),
+            (
+                PM_MIN_SCAN,
+                PM_EXIT_SCAN - PM_MIN_SCAN,
+                PM_ALT_MSCAN,
+                PM_ALT_EXIT_SCAN - PM_ALT_MSCAN,
+                PM_EXIT_SCAN - PM_MIN_SCAN,
+            ),
+            (
+                PM_MIN_SCAN,
+                PM_AUTO_SCAN - PM_MIN_SCAN,
+                PM_ALT_MSCAN,
+                PM_ALT_ASCAN - PM_ALT_MSCAN,
+                PM_AUTO_SCAN - PM_MIN_SCAN,
+            ),
+            (
+                PM_MIN_SCAN,
+                PM_LAUNCH_LANDER - PM_MIN_SCAN,
+                PM_ALT_MSCAN,
+                PM_ALT_DISPATCH - PM_ALT_MSCAN,
+                PM_LAUNCH_LANDER - PM_MIN_SCAN,
+            ),
+        ] {
+            let (mut actual_base, mut actual_state) = (base, state);
+            assert!(alternate(&mut actual_base, &mut actual_state));
+            assert_eq!((actual_base, actual_state), (group, offset));
+            assert_eq!(convert_alternate(actual_base, actual_state), original);
+        }
+    }
+
+    #[test]
+    fn unrelated_and_unknown_states_do_not_enter_alternate_groups() {
+        for state in [0, u8::MAX] {
+            let (mut base, mut state) = (PM_CONVERSE, state);
+            let before = (base, state);
+            assert!(!alternate(&mut base, &mut state));
+            assert_eq!((base, state), before);
+        }
+        assert_eq!(convert_alternate(u8::MAX, 0), 0);
+    }
+}

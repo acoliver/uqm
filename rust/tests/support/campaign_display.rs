@@ -24,8 +24,10 @@ impl CampaignDisplay {
         std::fs::create_dir_all(&root)?;
         let directory = tempfile::tempdir_in(root.canonicalize()?)?;
         std::fs::create_dir(directory.path().join("font"))?;
-        image::RgbaImage::from_pixel(1, 1, image::Rgba([255, 255, 255, 255]))
-            .save(directory.path().join("font/0041.png"))?;
+        for (code, width) in [(0x41, 1), (0x31, 1), (0x32, 2), (0x2e, 1), (0x3a, 1)] {
+            image::RgbaImage::from_pixel(width, 1, image::Rgba([255, 255, 255, 255]))
+                .save(directory.path().join(format!("font/{code:04x}.png")))?;
+        }
         std::fs::write(
             directory.path().join("fixture.rmp"),
             "fixture.tiny = FONTRES:font\n",
