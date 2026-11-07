@@ -2777,7 +2777,7 @@ extern "C" {
 #[cfg(not(test))]
 pub use crate::navigation::hyper_data::free_hyper_data;
 #[cfg(not(test))]
-pub use crate::navigation::hyperspace::live::move_sis as MoveSIS;
+pub use crate::navigation::hyperspace::live::move_sis;
 #[cfg(test)]
 extern "C" {
     pub fn free_hyper_data();
