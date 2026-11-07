@@ -51,7 +51,7 @@ where
 
     pub fn run(
         &mut self,
-        cx: &mut crate::engine::battle::Cx<'_>,
+        cx: &std::cell::RefCell<crate::engine::battle::Cx<'_>>,
     ) -> Result<SessionOutcome, ControllerError> {
         self.run_with_frame(|session, adapters, period| run_frame(cx, session, adapters, period))
     }
@@ -170,12 +170,12 @@ mod tests {
     fn controller_runs_until_one_terminal_outcome() {
         let mut owner = crate::engine::Game::new();
         let mut battle = crate::engine::battle::Battle::new();
-        let cx = &mut crate::engine::battle::Cx::new(
+        let cx = &std::cell::RefCell::new(crate::engine::battle::Cx::new(
             &mut battle,
             &mut owner.world,
             &mut owner.kernel,
             crate::math::random,
-        );
+        ));
 
         // Takeoff now runs through TakingOff + Return animation phases before
         // settling, so the budget must cover those extra frames.
@@ -197,12 +197,12 @@ mod tests {
     fn controller_has_a_hard_frame_budget() {
         let mut owner = crate::engine::Game::new();
         let mut battle = crate::engine::battle::Battle::new();
-        let cx = &mut crate::engine::battle::Cx::new(
+        let cx = &std::cell::RefCell::new(crate::engine::battle::Cx::new(
             &mut battle,
             &mut owner.world,
             &mut owner.kernel,
             crate::math::random,
-        );
+        ));
 
         let mut controller =
             PlanetSideController::new(session(), adapters(vec![FrameInput::default()]), 1, 1);
@@ -217,12 +217,12 @@ mod tests {
     fn prepared_input_preserves_simulation_frames_and_terminal_settlement() {
         let mut owner = crate::engine::Game::new();
         let mut battle = crate::engine::battle::Battle::new();
-        let cx = &mut crate::engine::battle::Cx::new(
+        let cx = &std::cell::RefCell::new(crate::engine::battle::Cx::new(
             &mut battle,
             &mut owner.world,
             &mut owner.kernel,
             crate::math::random,
-        );
+        ));
         let budget = 3 + u32::from(super::super::lifecycle::LifecycleAnimation::takeoff_total());
         let mut input = vec![FrameInput::default(); budget as usize];
         input[1].takeoff = true;
