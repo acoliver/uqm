@@ -1,4 +1,3 @@
-use crate::engine::world::planet::{NodeInfo, PlanetDesc};
 use crate::engine::{battle::Cx, input::InputSession, observe::Io};
 use crate::graphics::flash::{FlashState, FlashType};
 pub use crate::engine::battle::{CollisionHook, ElementHook};
@@ -2040,69 +2039,6 @@ pub type _bindgen_ty_12 = ::std::os::raw::c_uint;
 pub type STAR_DESC = star_desc;
 pub type PLANET_ORBIT = planet_orbit;
 pub type SOLARSYS_STATE = solarsys_state;
-pub type InitNpcsFunction =
-    Option<unsafe fn(&mut crate::engine::World, *mut SOLARSYS_STATE) -> bool>;
-pub type ReinitNpcsFunction =
-    Option<unsafe fn(&mut crate::engine::World, *mut SOLARSYS_STATE) -> bool>;
-pub type UninitNpcsFunction =
-    Option<unsafe fn(&mut crate::engine::World, *mut SOLARSYS_STATE) -> bool>;
-pub type GeneratePlanetsFunction =
-    ::std::option::Option<unsafe extern "C" fn(solarSys: *mut SOLARSYS_STATE) -> bool>;
-pub type GenerateMoonsFunction = ::std::option::Option<
-    unsafe extern "C" fn(solarSys: *mut SOLARSYS_STATE, planet: *mut PlanetDesc) -> bool,
->;
-pub type GenerateOrbitalFunction = ::std::option::Option<
-    unsafe extern "C" fn(solarSys: *mut SOLARSYS_STATE, world: *mut PlanetDesc) -> bool,
->;
-pub type GenerateNameFunction = ::std::option::Option<
-    unsafe extern "C" fn(arg1: *const SOLARSYS_STATE, world: *const PlanetDesc) -> bool,
->;
-pub type GenerateMineralsFunction = ::std::option::Option<
-    unsafe extern "C" fn(
-        arg1: *const SOLARSYS_STATE,
-        world: *const PlanetDesc,
-        whichNode: COUNT,
-        arg2: *mut NodeInfo,
-    ) -> COUNT,
->;
-pub type GenerateEnergyFunction = ::std::option::Option<
-    unsafe extern "C" fn(
-        arg1: *const SOLARSYS_STATE,
-        world: *const PlanetDesc,
-        whichNode: COUNT,
-        arg2: *mut NodeInfo,
-    ) -> COUNT,
->;
-pub type GenerateLifeFunction = ::std::option::Option<
-    unsafe extern "C" fn(
-        arg1: *const SOLARSYS_STATE,
-        world: *const PlanetDesc,
-        whichNode: COUNT,
-        arg2: *mut NodeInfo,
-    ) -> COUNT,
->;
-pub type PickupMineralsFunction = ::std::option::Option<
-    unsafe extern "C" fn(
-        solarSys: *mut SOLARSYS_STATE,
-        world: *mut PlanetDesc,
-        whichNode: COUNT,
-    ) -> bool,
->;
-pub type PickupEnergyFunction = ::std::option::Option<
-    unsafe extern "C" fn(
-        solarSys: *mut SOLARSYS_STATE,
-        world: *mut PlanetDesc,
-        whichNode: COUNT,
-    ) -> bool,
->;
-pub type PickupLifeFunction = ::std::option::Option<
-    unsafe extern "C" fn(
-        solarSys: *mut SOLARSYS_STATE,
-        world: *mut PlanetDesc,
-        whichNode: COUNT,
-    ) -> bool,
->;
-pub use crate::ships::native::abi::GenerateFunctions;
 pub const FlashState_FlashState_fadeIn: FlashState = 0;
 pub const FlashState_FlashState_on: FlashState = 1;
 pub const FlashState_FlashState_fadeOut: FlashState = 2;
@@ -2909,8 +2845,6 @@ pub use crate::navigation::events::live::schedule_initial_events;
 #[cfg(not(test))]
 pub use crate::navigation::events::live::set_race_destination;
 
-#[cfg(not(test))]
-pub use crate::battle::gendef::getGenerateFunctions;
 pub const SOL_DEFINED: _bindgen_ty_27 = 1;
 pub const SHOFIXTI_DEFINED: _bindgen_ty_27 = 2;
 pub const MAIDENS_DEFINED: _bindgen_ty_27 = 3;
