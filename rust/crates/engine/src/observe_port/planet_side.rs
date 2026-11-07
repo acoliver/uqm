@@ -49,6 +49,22 @@ pub struct PlanetSideObservation {
     pub seam_hits: u64,
 }
 
+/// Copied by the observer so nested input never borrows the running trip.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct PlanetSideSnapshot {
+    pub observation: PlanetSideObservation,
+    pub deposits: Option<Vec<MineralDeposit>>,
+    pub energy_nodes: Vec<(u8, i32, i32)>,
+    pub energy_retrieved: u32,
+    pub report_active: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FixtureLayout {
+    CollisionParity,
+    MineralGallery,
+}
+
 /// Human-readable name for an observed phase code.
 #[must_use]
 pub const fn phase_name(code: u32) -> &'static str {

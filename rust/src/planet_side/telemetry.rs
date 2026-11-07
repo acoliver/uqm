@@ -24,6 +24,118 @@ use super::world::WORLD_WIDTH;
 /// kept, so the closest deposit of every category is always published.
 pub const DEPOSITS_PER_CATEGORY: usize = 64;
 
+/// Observations owned by one synchronous lander trip.
+#[derive(Debug)]
+pub struct TripTelemetry {
+    snapshot: crate::engine::observe_port::planet_side::PlanetSideSnapshot,
+}
+
+impl TripTelemetry {
+    pub fn new(generation: u64, session: &PlanetSideSession) -> Self {
+        Self {
+            snapshot: crate::engine::observe_port::planet_side::PlanetSideSnapshot {
+                observation: PlanetSideObservation {
+                    generation,
+                    active: true,
+                    start_x: session.lander.position.x,
+                    start_y: session.lander.position.y,
+                    current_x: session.lander.position.x,
+                    current_y: session.lander.position.y,
+                    start_crew: session.lander.crew.get(),
+                    current_crew: session.lander.crew.get(),
+                    facing: session.lander.facing,
+                    mineral_units: *session.minerals.categories(),
+                    phase: phase_code(session.phase),
+                    ..PlanetSideObservation::default()
+                },
+                ..Default::default()
+            },
+        }
+    }
+
+    pub fn snapshot(&self) -> &crate::engine::observe_port::planet_side::PlanetSideSnapshot {
+        &self.snapshot
+    }
+
+    pub fn frame(&mut self, session: &PlanetSideSession) {
+        let observed = &mut self.snapshot.observation;
+        observed.frames += 1;
+        observed.phase = phase_code(session.phase);
+        observed.current_x = session.lander.position.x;
+        observed.current_y = session.lander.position.y;
+        observed.current_crew = session.lander.crew.get();
+        observed.facing = session.lander.facing;
+        observed.mineral_units = *session.minerals.categories();
+    }
+
+    pub fn publish_deposits(
+        &mut self,
+        deposits: impl IntoIterator<Item = MineralDeposit>,
+        near: SurfacePoint,
+    ) {
+        self.snapshot.deposits = Some(ordered_deposits(deposits, near));
+    }
+
+    pub fn publish_energy(&mut self, nodes: Vec<(u8, i32, i32)>) {
+        self.snapshot.energy_nodes = nodes;
+    }
+
+    pub fn energy_retrieved(&mut self, node: u8) {
+        self.snapshot.energy_retrieved |= 1 << node;
+    }
+
+    pub fn sound(&mut self, cue: SoundCue) {
+        self.snapshot.observation.sound_count += 1;
+        self.snapshot.observation.last_sound = sound_code(cue);
+    }
+
+    pub fn mineral_pickup(&mut self) {
+        self.snapshot.observation.mineral_pickups += 1;
+    }
+
+    pub fn creature_hit(&mut self) {
+        self.snapshot.observation.creature_hits += 1;
+    }
+
+    pub fn seam_hit(&mut self) {
+        self.snapshot.observation.seam_hits += 1;
+    }
+
+    pub fn batch_depth_corrected(&mut self, levels: i32) {
+        self.snapshot.observation.batch_depth_corrections += u64::from(levels.unsigned_abs());
+    }
+
+    pub fn report_active(&mut self, active: bool) {
+        self.snapshot.report_active = active;
+    }
+
+    pub fn finish(&mut self, outcome: &SessionOutcome) {
+        let observed = &mut self.snapshot.observation;
+        match outcome {
+            SessionOutcome::Returned(delta) => {
+                observed.terminal = terminal::RETURNED;
+                observed.returned_crew = delta.crew;
+                observed.returned_minerals = delta.element_mass;
+            }
+            SessionOutcome::LanderDestroyed(_) => observed.terminal = terminal::DESTROYED,
+            SessionOutcome::Aborted => observed.terminal = terminal::ABORTED,
+        }
+        observed.active = false;
+        self.snapshot.deposits = None;
+    }
+
+    pub fn adapter_failure(&mut self, operation: &'static str) {
+        self.snapshot.observation.terminal = terminal::ADAPTER_FAILURE;
+        self.snapshot.observation.last_sound = super::ffi::adapter_error_code(operation);
+        self.snapshot.observation.active = false;
+    }
+
+    pub fn frame_budget_failure(&mut self) {
+        self.snapshot.observation.terminal = terminal::FRAME_BUDGET;
+        self.snapshot.observation.active = false;
+    }
+}
+
 static ENERGY_NODES: Mutex<Vec<(u8, i32, i32)>> = Mutex::new(Vec::new());
 static ENERGY_RETRIEVED: AtomicU32 = AtomicU32::new(0);
 
@@ -131,6 +243,13 @@ fn wrapped_distance_squared(a: SurfacePoint, b: SurfacePoint) -> i64 {
 /// Publish the deposits still on the surface, nearest to `near` first within
 /// each category and bounded per category by [`DEPOSITS_PER_CATEGORY`].
 pub fn publish_deposits(deposits: impl IntoIterator<Item = MineralDeposit>, near: SurfacePoint) {
+    *lock_deposits() = Some(ordered_deposits(deposits, near));
+}
+
+fn ordered_deposits(
+    deposits: impl IntoIterator<Item = MineralDeposit>,
+    near: SurfacePoint,
+) -> Vec<MineralDeposit> {
     let mut kept: Vec<MineralDeposit> = deposits.into_iter().collect();
     kept.sort_by_key(|deposit| {
         (
@@ -154,7 +273,7 @@ pub fn publish_deposits(deposits: impl IntoIterator<Item = MineralDeposit>, near
         in_category += 1;
         in_category <= DEPOSITS_PER_CATEGORY
     });
-    *lock_deposits() = Some(kept);
+    kept
 }
 
 /// The published deposits, nearest first within each category, or `None` when
@@ -323,6 +442,104 @@ pub(crate) mod tests {
         );
         session.phase = phase;
         session
+    }
+
+    #[test]
+    fn owned_trip_observations_do_not_share_counters_or_deposits() {
+        let mut first = TripTelemetry::new(7, &session(SessionPhase::Active));
+        let second = TripTelemetry::new(8, &session(SessionPhase::Warmup));
+        first.publish_deposits([deposit(3, 4, 6)], SurfacePoint::default());
+        first.publish_energy(vec![(31, 3, 4)]);
+        first.energy_retrieved(31);
+        first.sound(SoundCue::Pickup);
+        first.mineral_pickup();
+        first.creature_hit();
+        first.seam_hit();
+        first.batch_depth_corrected(-2);
+        first.frame(&session(SessionPhase::Active));
+        let observed = first.snapshot();
+        assert_eq!(observed.observation.generation, 7);
+        assert_eq!(observed.observation.frames, 1);
+        assert_eq!(observed.observation.sound_count, 1);
+        assert_eq!(observed.observation.mineral_pickups, 1);
+        assert_eq!(observed.observation.creature_hits, 1);
+        assert_eq!(observed.observation.seam_hits, 1);
+        assert_eq!(observed.observation.batch_depth_corrections, 2);
+        assert_eq!(observed.energy_nodes, [(31, 3, 4)]);
+        assert_eq!(observed.energy_retrieved, 1 << 31);
+        assert_eq!(observed.deposits, Some(vec![deposit(3, 4, 6)]));
+        let fresh = second.snapshot();
+        assert_eq!(fresh.observation.generation, 8);
+        assert_eq!(fresh.observation.frames, 0);
+        assert_eq!(fresh.observation.sound_count, 0);
+        assert_eq!(fresh.observation.mineral_pickups, 0);
+        assert_eq!(fresh.observation.phase, 1);
+        assert!(fresh.deposits.is_none());
+        assert!(fresh.energy_nodes.is_empty());
+        assert_eq!(fresh.energy_retrieved, 0);
+        first.finish(&SessionOutcome::Aborted);
+        assert!(!first.snapshot().observation.active);
+        assert!(second.snapshot().observation.active);
+    }
+
+    #[test]
+    fn owned_snapshots_keep_report_and_terminal_values_after_the_trip_changes() {
+        let mut trip = TripTelemetry::new(3, &session(SessionPhase::Active));
+        trip.report_active(true);
+        let during_report = trip.snapshot().clone();
+        trip.report_active(false);
+        trip.finish(&SessionOutcome::Returned(
+            super::super::session::ShipDelta {
+                crew: 4,
+                element_mass: 9,
+                ..Default::default()
+            },
+        ));
+        assert!(during_report.report_active);
+        assert!(during_report.observation.active);
+        assert_eq!(during_report.observation.terminal, terminal::RUNNING);
+        assert!(!trip.snapshot().report_active);
+        assert!(!trip.snapshot().observation.active);
+        assert_eq!(trip.snapshot().observation.terminal, terminal::RETURNED);
+        assert_eq!(trip.snapshot().observation.returned_crew, 4);
+        assert_eq!(trip.snapshot().observation.returned_minerals, 9);
+    }
+
+    #[test]
+    fn owned_trip_failure_outcomes_do_not_change_other_observers() {
+        let mut destroyed = TripTelemetry::new(1, &session(SessionPhase::Explosion));
+        destroyed.finish(&SessionOutcome::LanderDestroyed(Default::default()));
+        assert_eq!(
+            destroyed.snapshot().observation.terminal,
+            terminal::DESTROYED
+        );
+        assert!(!destroyed.snapshot().observation.active);
+        let mut failed = TripTelemetry::new(2, &session(SessionPhase::Active));
+        failed.adapter_failure("render");
+        assert_eq!(
+            failed.snapshot().observation.terminal,
+            terminal::ADAPTER_FAILURE
+        );
+        assert_eq!(
+            failed.snapshot().observation.last_sound,
+            super::super::ffi::adapter_error_code("render")
+        );
+        assert!(!failed.snapshot().observation.active);
+        let mut budget = TripTelemetry::new(3, &session(SessionPhase::Active));
+        budget.frame_budget_failure();
+        assert_eq!(
+            budget.snapshot().observation.terminal,
+            terminal::FRAME_BUDGET
+        );
+        assert!(!budget.snapshot().observation.active);
+        assert_eq!(
+            destroyed.snapshot().observation.terminal,
+            terminal::DESTROYED
+        );
+        assert_eq!(
+            failed.snapshot().observation.terminal,
+            terminal::ADAPTER_FAILURE
+        );
     }
 
     #[test]

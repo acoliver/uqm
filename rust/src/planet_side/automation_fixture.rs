@@ -115,6 +115,37 @@ pub const fn automation_gate(active: bool) -> AutomationGate {
     }
 }
 
+/// One pending request owned by the automation coordinator.
+#[derive(Debug, Default)]
+pub struct FixtureRequests {
+    pending: Option<crate::engine::observe_port::planet_side::FixtureLayout>,
+}
+
+impl FixtureRequests {
+    pub fn queue(
+        &mut self,
+        layout: crate::engine::observe_port::planet_side::FixtureLayout,
+    ) -> Result<(), AdapterError> {
+        if self.pending.is_some() {
+            return Err(AdapterError::new("fixture_request_already_pending"));
+        }
+        self.pending = Some(layout);
+        Ok(())
+    }
+
+    pub fn take(&mut self, position: SurfacePoint) -> Option<PlanetSideFixture> {
+        use crate::engine::observe_port::planet_side::FixtureLayout;
+        self.pending.take().map(|layout| match layout {
+            FixtureLayout::CollisionParity => PlanetSideFixture::for_collision_parity(position),
+            FixtureLayout::MineralGallery => PlanetSideFixture::mineral_gallery(position),
+        })
+    }
+
+    pub fn clear(&mut self) {
+        self.pending = None;
+    }
+}
+
 static FIXTURE_REQUESTED: AtomicU8 = AtomicU8::new(0);
 
 /// Make the script action the sole authority for the fixture.
@@ -352,6 +383,34 @@ impl PlanetSideFixture {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn owned_requests_are_isolated_and_consumed_once() {
+        use crate::engine::observe_port::planet_side::FixtureLayout;
+        let anchor = SurfacePoint { x: 100, y: 50 };
+        let mut first = FixtureRequests::default();
+        let mut second = FixtureRequests::default();
+        first.queue(FixtureLayout::CollisionParity).unwrap();
+        assert_eq!(
+            first.queue(FixtureLayout::MineralGallery),
+            Err(AdapterError::new("fixture_request_already_pending"))
+        );
+        assert!(second.take(anchor).is_none());
+        assert_eq!(
+            first.take(anchor),
+            Some(PlanetSideFixture::for_collision_parity(anchor))
+        );
+        assert!(first.take(anchor).is_none());
+        second.queue(FixtureLayout::MineralGallery).unwrap();
+        assert_eq!(
+            second.take(anchor),
+            Some(PlanetSideFixture::mineral_gallery(anchor))
+        );
+        first.queue(FixtureLayout::CollisionParity).unwrap();
+        first.clear();
+        assert!(first.take(anchor).is_none());
+        assert!(second.take(anchor).is_none());
+    }
     use crate::planet_side::assembly::{share_surface, SurfaceAssembly, WorldVisualPort};
     use crate::planet_side::cargo::{BioCargo, MineralCargo};
     use crate::planet_side::collision::{
