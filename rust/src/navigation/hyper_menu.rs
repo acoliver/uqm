@@ -117,6 +117,18 @@ mod tests {
             Box::new(Unobserved)
         }
         fn update(&self, _: &mut Cx<'_>) {}
+        fn sleep(&self, _: &mut Cx<'_>, _: u32) {
+            panic!("unexpected menu sleep")
+        }
+        fn sleep_until(&self, _: &mut Cx<'_>, _: u32) {
+            panic!("unexpected menu deadline sleep")
+        }
+        fn flush(&self) {
+            panic!("unexpected menu flush")
+        }
+        fn confirm_exit(&self, _: &mut Cx<'_>) -> bool {
+            panic!("unexpected menu exit confirmation")
+        }
         fn battle_input(&self, _: &InputContext) -> u8 {
             0
         }
