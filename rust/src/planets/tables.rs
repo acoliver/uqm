@@ -81,7 +81,7 @@ const fn frame(
 
 /// `starmap_array`: every star of the universe, then the end sentinel.
 #[export_name = "starmap_array"]
-pub static mut STARMAP_ARRAY: [CStarDesc; STAR_CATALOG_LEN] = [
+pub static STARMAP_ARRAY: [CStarDesc; STAR_CATALOG_LEN] = [
     star(5007, 35, 0x27, 0, 6, 74),
     star(708, 41, 0x87, 0, 7, 91),
     star(4714, 78, 0x27, 0, 7, 74),

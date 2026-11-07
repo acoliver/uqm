@@ -319,14 +319,14 @@ mod runtime {
     pub unsafe fn for_all_stars<T>(
         cx: &mut Cx<'_>,
         io: &mut Io<'_>,
-        callback: unsafe fn(&mut Cx<'_>, &mut Io<'_>, *mut STAR_DESC, &mut T),
+        callback: unsafe fn(&mut Cx<'_>, &mut Io<'_>, *const STAR_DESC, &mut T),
         arg: &mut T,
     ) {
         for i in 0..NUM_SOLAR_SYSTEMS as usize {
             callback(
                 cx,
                 io,
-                ptr::addr_of_mut!(starmap_array).cast::<STAR_DESC>().add(i),
+                ptr::addr_of!(starmap_array).cast::<STAR_DESC>().add(i),
                 arg,
             );
         }
@@ -336,23 +336,23 @@ mod runtime {
     pub unsafe fn for_all_planets<T>(
         cx: &mut Cx<'_>,
         io: &mut Io<'_>,
-        star: *mut STAR_DESC,
+        star: *const STAR_DESC,
         system: *mut SOLARSYS_STATE,
         callback: unsafe fn(
             &mut Cx<'_>,
             &mut Io<'_>,
-            *mut STAR_DESC,
+            *const STAR_DESC,
             *mut SOLARSYS_STATE,
             *mut PlanetDesc,
             &mut T,
         ),
         arg: &mut T,
     ) {
-        assert!(
+        assert!(ptr::eq(
             cx.world
-                .star_pointer(crate::planets::starmap::current_catalog())
-                == star.cast()
-        );
+                .star_pointer(crate::planets::starmap::current_catalog()),
+            star.cast()
+        ));
         assert!(pSolarSysState == system);
         for i in 0..(*system).SunDesc[0].num_planets as usize {
             callback(
@@ -370,13 +370,13 @@ mod runtime {
     pub unsafe fn for_all_moons<T>(
         cx: &mut Cx<'_>,
         io: &mut Io<'_>,
-        star: *mut STAR_DESC,
+        star: *const STAR_DESC,
         system: *mut SOLARSYS_STATE,
         planet: *mut PlanetDesc,
         callback: unsafe fn(
             &mut Cx<'_>,
             &mut Io<'_>,
-            *mut STAR_DESC,
+            *const STAR_DESC,
             *mut SOLARSYS_STATE,
             *mut PlanetDesc,
             *mut PlanetDesc,
@@ -424,7 +424,7 @@ mod runtime {
     unsafe fn star_recurse<T>(
         cx: &mut Cx<'_>,
         io: &mut Io<'_>,
-        star: *mut STAR_DESC,
+        star: *const STAR_DESC,
         recurse: &mut UniverseRecurseArg<'_, T>,
     ) {
         let old_system = pSolarSysState;
@@ -469,16 +469,16 @@ mod runtime {
     unsafe fn planet_recurse<T>(
         cx: &mut Cx<'_>,
         io: &mut Io<'_>,
-        star: *mut STAR_DESC,
+        star: *const STAR_DESC,
         system: *mut SOLARSYS_STATE,
         planet: *mut PlanetDesc,
         recurse: &mut UniverseRecurseArg<'_, T>,
     ) {
-        assert!(
+        assert!(ptr::eq(
             cx.world
-                .star_pointer(crate::planets::starmap::current_catalog())
-                == star.cast()
-        );
+                .star_pointer(crate::planets::starmap::current_catalog()),
+            star.cast()
+        ));
         assert!(pSolarSysState == system);
         (*planet).prev_desc = ptr::addr_of_mut!((*system).SunDesc[0]);
         if let Some(cb) = recurse.planet_func_pre {
@@ -511,17 +511,17 @@ mod runtime {
     unsafe fn moon_recurse<T>(
         cx: &mut Cx<'_>,
         io: &mut Io<'_>,
-        star: *mut STAR_DESC,
+        star: *const STAR_DESC,
         system: *mut SOLARSYS_STATE,
         planet: *mut PlanetDesc,
         moon: *mut PlanetDesc,
         recurse: &mut UniverseRecurseArg<'_, T>,
     ) {
-        assert!(
+        assert!(ptr::eq(
             cx.world
-                .star_pointer(crate::planets::starmap::current_catalog())
-                == star.cast()
-        );
+                .star_pointer(crate::planets::starmap::current_catalog()),
+            star.cast()
+        ));
         assert!(pSolarSysState == system);
         (*moon).prev_desc = planet;
         if let Some(cb) = recurse.moon_func {

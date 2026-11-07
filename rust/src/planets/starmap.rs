@@ -178,6 +178,13 @@ pub(crate) mod naming {
 mod tests {
     use super::*;
 
+    #[test]
+    fn universe_catalog_is_one_immutable_complete_table() {
+        let stars: &'static [CStarDesc; crate::engine::world::CATALOG_LEN] =
+            &crate::planets::tables::STARMAP_ARRAY;
+        assert_eq!(catalog_star_count(stars), NUM_SOLAR_SYSTEMS);
+    }
+
     fn star(x: i16, y: i16) -> CStarDesc {
         CStarDesc {
             star_pt: CPoint { x, y },
