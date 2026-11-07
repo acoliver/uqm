@@ -105,10 +105,6 @@ impl TripTelemetry {
         self.snapshot.observation.batch_depth_corrections += u64::from(levels.unsigned_abs());
     }
 
-    pub fn report_active(&mut self, active: bool) {
-        self.snapshot.report_active = active;
-    }
-
     pub fn finish(&mut self, outcome: &SessionOutcome) {
         let observed = &mut self.snapshot.observation;
         match outcome {
@@ -483,11 +479,9 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn owned_snapshots_keep_report_and_terminal_values_after_the_trip_changes() {
+    fn owned_snapshots_keep_terminal_values_after_the_trip_changes() {
         let mut trip = TripTelemetry::new(3, &session(SessionPhase::Active));
-        trip.report_active(true);
-        let during_report = trip.snapshot().clone();
-        trip.report_active(false);
+        let before_return = trip.snapshot().clone();
         trip.finish(&SessionOutcome::Returned(
             super::super::session::ShipDelta {
                 crew: 4,
@@ -495,10 +489,8 @@ pub(crate) mod tests {
                 ..Default::default()
             },
         ));
-        assert!(during_report.report_active);
-        assert!(during_report.observation.active);
-        assert_eq!(during_report.observation.terminal, terminal::RUNNING);
-        assert!(!trip.snapshot().report_active);
+        assert!(before_return.observation.active);
+        assert_eq!(before_return.observation.terminal, terminal::RUNNING);
         assert!(!trip.snapshot().observation.active);
         assert_eq!(trip.snapshot().observation.terminal, terminal::RETURNED);
         assert_eq!(trip.snapshot().observation.returned_crew, 4);

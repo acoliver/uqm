@@ -305,6 +305,8 @@ pub struct AutomationObserver {
     pub(crate) ending: Mutex<super::ending::Ending>,
     pub(crate) planet_side: Mutex<crate::engine::observe_port::planet_side::PlanetSideSnapshot>,
     pub(crate) planet_side_fixtures: Mutex<crate::planet_side::automation_fixture::FixtureRequests>,
+    pub(crate) planet_side_sequence: Mutex<u64>,
+    pub(crate) planet_side_report: Mutex<bool>,
     #[cfg(feature = "debug-process")]
     pub(crate) pending_native_presentation:
         Mutex<Option<super::native_window::NativeWindowChildState>>,
@@ -436,6 +438,8 @@ impl AutomationObserver {
             ending: Default::default(),
             planet_side: Default::default(),
             planet_side_fixtures: Default::default(),
+            planet_side_sequence: Default::default(),
+            planet_side_report: Default::default(),
             #[cfg(feature = "debug-process")]
             pending_native_presentation: Default::default(),
             activity,
@@ -1221,7 +1225,7 @@ impl AutomationObserver {
             return event;
         };
         let observation = EnergyObservation {
-            report_active: crate::planet_side::report_adapter::report_active(),
+            report_active: *self.planet_side_report.lock(),
             lander: planet_minerals::PlanetSnapshot::live(),
             nodes,
             retrieved,

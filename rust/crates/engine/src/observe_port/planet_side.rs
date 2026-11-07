@@ -56,7 +56,6 @@ pub struct PlanetSideSnapshot {
     pub deposits: Option<Vec<MineralDeposit>>,
     pub energy_nodes: Vec<(u8, i32, i32)>,
     pub energy_retrieved: u32,
-    pub report_active: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -80,4 +79,10 @@ pub const fn phase_name(code: u32) -> &'static str {
         9 => "Aborted",
         _ => "None",
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TripAdmission {
+    pub generation: u64,
+    pub fixture: Option<FixtureLayout>,
 }

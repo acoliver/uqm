@@ -33,6 +33,20 @@ impl Observer<Option<super::campaign_state::CampaignView>> for Handle {
                 input_ffi::after_input_update(&self.0, activity) != 0
             }
             InputView::Active => true,
+            InputView::PlanetSideBegin => {
+                let generation = {
+                    let mut sequence = self.0.planet_side_sequence.lock();
+                    *sequence = sequence.wrapping_add(1);
+                    *sequence
+                };
+                return Injected {
+                    planet_side: Some(crate::engine::observe_port::planet_side::TripAdmission {
+                        generation,
+                        fixture: self.0.planet_side_fixtures.lock().take(),
+                    }),
+                    ..Default::default()
+                };
+            }
             InputView::MainMenuReady => self.0.process_main_menu_ready(),
             InputView::MenuTransition { from, to } => self.0.process_menu_transition(from, to),
             InputView::QuitSelected => {
@@ -44,6 +58,7 @@ impl Observer<Option<super::campaign_state::CampaignView>> for Handle {
                 return Injected {
                     stop: false,
                     seed: Some(self.0.seed_value(domain, fallback)),
+                    planet_side: None,
                 }
             }
             InputView::PendingSpeech => self
@@ -57,7 +72,11 @@ impl Observer<Option<super::campaign_state::CampaignView>> for Handle {
                 .0
                 .service_communication_completion_boundary(&mut capture),
         };
-        Injected { stop, seed: None }
+        Injected {
+            stop,
+            seed: None,
+            planet_side: None,
+        }
     }
 
     fn input_admitted_with_setup(
@@ -81,7 +100,11 @@ impl Observer<Option<super::campaign_state::CampaignView>> for Handle {
                 setup,
                 self,
             ) != 0;
-            Injected { stop, seed: None }
+            Injected {
+                stop,
+                seed: None,
+                planet_side: None,
+            }
         } else {
             input_admission::legacy(setup, || self.input_admitted(view, world))
         }
@@ -92,6 +115,9 @@ impl Observer<Option<super::campaign_state::CampaignView>> for Handle {
             CheckpointView::Simulation(boundary) => self.0.parity_checkpoint(boundary),
             CheckpointView::PlanetSide(snapshot) => {
                 self.0.planet_side.lock().clone_from(snapshot);
+            }
+            CheckpointView::PlanetSideReport(active) => {
+                *self.0.planet_side_report.lock() = active;
             }
             CheckpointView::BattleReset => {}
             CheckpointView::BattleAdvanced => {

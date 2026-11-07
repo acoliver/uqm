@@ -10,6 +10,7 @@ pub enum InputView {
     Nested,
     AfterUpdate(u16),
     Active,
+    PlanetSideBegin,
     MainMenuReady,
     MenuTransition { from: u8, to: u8 },
     QuitSelected,
@@ -25,6 +26,7 @@ pub enum InputView {
 pub enum CheckpointView<'a> {
     Simulation(&'a str),
     PlanetSide(&'a planet_side::PlanetSideSnapshot),
+    PlanetSideReport(bool),
     BattleReset,
     BattleAdvanced,
     InputSampled(u16),
@@ -56,6 +58,7 @@ pub enum CheckpointView<'a> {
 pub struct Injected {
     pub stop: bool,
     pub seed: Option<u32>,
+    pub planet_side: Option<planet_side::TripAdmission>,
 }
 
 pub struct Presented {
@@ -170,6 +173,7 @@ mod tests {
                 Injected {
                     stop: false,
                     seed: Some(self.nested as u32),
+                    planet_side: None,
                 }
             }
             fn checkpoint(&mut self, _: &CheckpointView<'_>) {}
@@ -225,7 +229,8 @@ mod tests {
             result,
             Injected {
                 stop: false,
-                seed: Some(1)
+                seed: Some(1),
+                planet_side: None,
             }
         );
         assert_eq!(observer.nested, 1);

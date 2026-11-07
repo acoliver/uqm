@@ -40,6 +40,7 @@ impl Observer<Option<CampaignView>> for Recording {
         Injected {
             stop: self.stop,
             seed: None,
+            planet_side: None,
         }
     }
 

@@ -274,6 +274,7 @@ mod tests {
                 Injected {
                     stop: Some(*view) == self.stop,
                     seed: None,
+                    planet_side: None,
                 }
             }
             fn checkpoint(&mut self, _: &CheckpointView<'_>) {}

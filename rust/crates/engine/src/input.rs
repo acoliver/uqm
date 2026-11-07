@@ -290,6 +290,7 @@ mod tests {
             crate::observe::Injected {
                 stop: self.stop,
                 seed: None,
+                planet_side: None,
             }
         }
 
