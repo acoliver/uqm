@@ -69,14 +69,10 @@ impl<'a, 'game, 'observer> Site<'a, 'game, 'observer> {
     }
 
     fn communicate(&mut self, conversation: u32) {
-        // SAFETY: this host owns the supplied campaign context for the synchronous encounter.
-        unsafe {
-            crate::comm::dispatch::init_communication(
-                &mut self.game.borrow_mut(),
-                &mut self.io.borrow_mut(),
-                conversation,
-            );
-        }
+        let mut game = self.game.borrow_mut();
+        let mut io = self.io.borrow_mut();
+        // SAFETY: this host retains both supplied owners for the synchronous encounter.
+        unsafe { crate::comm::dispatch::init_communication(&mut game, &mut io, conversation) };
     }
 
     fn load_scene(&self, graphics: &CStr, strings: &CStr, report: u16) {

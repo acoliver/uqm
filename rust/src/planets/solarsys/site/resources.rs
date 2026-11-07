@@ -71,17 +71,14 @@ impl crate::planets::generate::host::PlanetSite for Site<'_, '_, '_> {
     }
     fn load_earth_planet(&mut self, _system: &mut SolarSys<'_>) {
         let surface = self.game.borrow_mut().with_legacy(|| {
-            // SAFETY: the detached definition is normalized before its ownership is transferred.
-            unsafe {
-                CapturedSurface::load(c"graphics.earthmask")
-                    .into_definition(
-                        crate::planets::generate::consts::MAP_WIDTH as i16,
-                        crate::planets::generate::consts::MAP_HEIGHT as i16,
-                    )
-                    .unwrap_or_else(|error| {
-                        panic!("Earth surface definition could not be rescaled: {error:?}")
-                    })
-            }
+            // SAFETY: the initialized graphics backend owns the detached resource on this thread.
+            let surface = unsafe { CapturedSurface::load(c"graphics.earthmask") };
+            let width = crate::planets::generate::consts::MAP_WIDTH as i16;
+            let height = crate::planets::generate::consts::MAP_HEIGHT as i16;
+            // SAFETY: the detached definition is exclusive until transferred to planet loading.
+            unsafe { surface.into_definition(width, height) }.unwrap_or_else(|error| {
+                panic!("Earth surface definition could not be rescaled: {error:?}")
+            })
         });
         // SAFETY: no record or RNG reference is retained across planet loading.
         unsafe { c_api::load_planet_surface(self.game, self.io, Some(surface)) };
@@ -157,20 +154,16 @@ impl crate::planets::generate::sol::Pickup for Site<'_, '_, '_> {
 impl PlanetNames for Site<'_, '_, '_> {
     fn set_planet_name(&mut self, index: u16) {
         let mut game = self.game.borrow_mut();
-        // SAFETY: the retained kernel owns the string table and the world's fixed name buffer.
-        unsafe {
-            use crate::strings::string_table::{GetStringAddress, SetAbsStringTableIndex};
-            let text = GetStringAddress(SetAbsStringTableIndex(
-                game.kernel.game_strings.cast(),
-                index,
-            ));
-            let name = &mut game.world.data.flagship.planet_name;
-            crate::strings::unicode::utf8_string_copy(
-                name.as_mut_ptr().cast(),
-                name.len(),
-                text.cast(),
-            );
-        }
+        use crate::strings::string_table::{GetStringAddress, SetAbsStringTableIndex};
+        let strings = game.kernel.game_strings.cast();
+        // SAFETY: the retained kernel owns the initialized string table and its selected text.
+        let text = unsafe { GetStringAddress(SetAbsStringTableIndex(strings, index)) };
+        let name = &mut game.world.data.flagship.planet_name;
+        let destination = name.as_mut_ptr().cast();
+        let capacity = name.len();
+        let source = text.cast();
+        // SAFETY: the retained world owns the entire destination buffer; text stays live in the kernel.
+        unsafe { crate::strings::unicode::utf8_string_copy(destination, capacity, source) };
     }
     fn set_battle_planet(&mut self, value: u8) {
         self.game

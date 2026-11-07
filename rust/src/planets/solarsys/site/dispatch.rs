@@ -18,33 +18,41 @@ impl Site<'_, '_, '_> {
         &mut self,
         run: impl FnOnce(&dyn SystemGenerator, &mut SolarSys<'_>, &mut dyn SiteHost) -> R,
     ) -> R {
-        // SAFETY: the host retains the initialized, disjoint records and RNG until this callback returns.
-        unsafe {
-            let record = self.record.as_ptr();
-            let star_type = {
-                let game = self.game.borrow();
+        let record = self.record.as_ptr();
+        let star_type = {
+            let game = self.game.borrow();
+            // SAFETY: the retained world selects a live star in the current catalog.
+            unsafe {
                 (*game
                     .world
                     .star_pointer(crate::planets::starmap::current_catalog()))
                 .star_type
-            };
-            let index = self.index;
-            let mut system = SolarSys::from_records(
-                crate::engine::world::generation::GenerationRecords {
-                    sun: NonNull::from(&mut (*record).SunDesc[0]),
-                    planets: NonNull::from(&mut (*record).PlanetDesc),
-                    moons: NonNull::from(&mut (*record).MoonDesc),
-                    info: NonNull::from(&mut (*record).SysInfo),
-                    scene: NonNull::from(&mut (*record).PlanetSideFrame[1]),
-                },
-                NonNull::new(super::super::SysGenRNG)
-                    .unwrap_or_else(|| panic!("system random stream")),
+            }
+        };
+        let index = self.index;
+        // SAFETY: the host retains the initialized, disjoint records until the callback returns.
+        let records = unsafe {
+            crate::engine::world::generation::GenerationRecords {
+                sun: NonNull::from(&mut (*record).SunDesc[0]),
+                planets: NonNull::from(&mut (*record).PlanetDesc),
+                moons: NonNull::from(&mut (*record).MoonDesc),
+                info: NonNull::from(&mut (*record).SysInfo),
+                scene: NonNull::from(&mut (*record).PlanetSideFrame[1]),
+            }
+        };
+        // SAFETY: the caller retains exclusive records and RNG, and the definitions stay live.
+        let mut system = unsafe {
+            let rng = NonNull::new(super::super::SysGenRNG)
+                .unwrap_or_else(|| panic!("system random stream"));
+            SolarSys::from_records(
+                records,
+                rng,
                 crate::planets::ffi::plan_data(),
                 star_type,
                 index,
-            );
-            run(generator(index), &mut system, self)
-        }
+            )
+        };
+        run(generator(index), &mut system, self)
     }
 }
 
@@ -73,23 +81,29 @@ pub unsafe fn with_system<R>(
 /// The descriptor belongs to this system's planet or moon array, with its
 /// parent link already initialized.
 pub unsafe fn body(record: *const SOLARSYS_STATE, world: *const PlanetDesc) -> Body {
-    // SAFETY: the descriptor and parent belong to the initialized arrays required by the caller.
-    unsafe {
-        let sun = std::ptr::addr_of!((*record).SunDesc[0]);
-        let first = std::ptr::addr_of!((*record).PlanetDesc).cast::<PlanetDesc>();
-        if (*world).prev_desc.cast_const() == sun {
-            Body::Planet(
-                u8::try_from(world.offset_from(first))
-                    .unwrap_or_else(|error| panic!("planet index: {error:?}")),
-            )
-        } else {
-            let moons = std::ptr::addr_of!((*record).MoonDesc).cast::<PlanetDesc>();
-            Body::Moon {
-                planet: u8::try_from((*world).prev_desc.cast_const().offset_from(first))
-                    .unwrap_or_else(|error| panic!("parent index: {error:?}")),
-                moon: u8::try_from(world.offset_from(moons))
-                    .unwrap_or_else(|error| panic!("moon index: {error:?}")),
-            }
+    // SAFETY: the caller retains the initialized arrays and the descriptor's parent link.
+    let (sun, first, parent) = unsafe {
+        (
+            std::ptr::addr_of!((*record).SunDesc[0]),
+            std::ptr::addr_of!((*record).PlanetDesc).cast::<PlanetDesc>(),
+            (*world).prev_desc.cast_const(),
+        )
+    };
+    if parent == sun {
+        // SAFETY: world belongs to the caller's planet array.
+        let planet = unsafe { world.offset_from(first) };
+        Body::Planet(u8::try_from(planet).unwrap_or_else(|error| panic!("planet index: {error:?}")))
+    } else {
+        // SAFETY: the caller retains the initialized moon array.
+        let moons = unsafe { std::ptr::addr_of!((*record).MoonDesc) }.cast::<PlanetDesc>();
+        // SAFETY: the moon's parent belongs to the caller's planet array.
+        let planet = unsafe { (*world).prev_desc.cast_const().offset_from(first) };
+        let planet = u8::try_from(planet).unwrap_or_else(|error| panic!("parent index: {error:?}"));
+        // SAFETY: world belongs to the caller's moon array.
+        let moon = unsafe { world.offset_from(moons) };
+        Body::Moon {
+            planet,
+            moon: u8::try_from(moon).unwrap_or_else(|error| panic!("moon index: {error:?}")),
         }
     }
 }
