@@ -55,6 +55,35 @@ pub struct PlanetSideReply {
 use crate::graphics::pixmap_abi::GetFrameCount;
 
 #[cfg(not(test))]
+use super::adapters::{CffiPlanetSideClock, CffiPlanetSideInput, CffiShipStatus};
+#[cfg(not(test))]
+use super::assembly::{assemble_surface, share_surface};
+#[cfg(not(test))]
+use super::assets::CffiPlanetSideAudio;
+#[cfg(not(test))]
+use super::collision_adapter::{CffiGameplayRandom, SurfaceCollisionAdapter};
+#[cfg(not(test))]
+use super::controller::PlanetSideController;
+#[cfg(not(test))]
+use super::generation::ScanPersistence;
+#[cfg(not(test))]
+use super::generation_adapter::CffiSurfaceGenerator;
+#[cfg(not(test))]
+use super::graphics_adapter::CffiPlanetSideGraphics;
+#[cfg(not(test))]
+use super::mask_adapter::extract_lander_masks;
+#[cfg(not(test))]
+use super::model::SurfacePoint;
+#[cfg(not(test))]
+use super::resources::{LanderGraphic, PlanetSideAssetAccess};
+#[cfg(not(test))]
+use super::runtime::{PlanetSideClock, RuntimeAdapters, Tick};
+#[cfg(not(test))]
+use super::session_factory::create_production_session;
+#[cfg(not(test))]
+use super::visual_adapter::CffiSurfaceVisuals;
+
+#[cfg(not(test))]
 const fn failure(status: i32) -> PlanetSideReply {
     PlanetSideReply {
         status,
@@ -74,165 +103,203 @@ pub unsafe fn run_session(
     io: &mut crate::engine::observe::Io<'_>,
     context: &mut PlanetSideRunContext,
 ) -> PlanetSideReply {
-    use super::adapters::{CffiPlanetSideClock, CffiPlanetSideInput, CffiShipStatus};
-    use super::assembly::{assemble_surface, share_surface};
-    use super::assets::CffiPlanetSideAudio;
-    use super::collision_adapter::{CffiGameplayRandom, SurfaceCollisionAdapter};
-    use super::controller::PlanetSideController;
-    use super::generation::ScanPersistence;
-    use super::generation_adapter::CffiSurfaceGenerator;
-    use super::graphics_adapter::CffiPlanetSideGraphics;
-    use super::mask_adapter::extract_lander_masks;
-    use super::model::SurfacePoint;
-    use super::resources::{LanderGraphic, PlanetSideAssetAccess};
-    use super::runtime::{AdapterError, PlanetSideClock, RuntimeAdapters, ShipStatusPort, Tick};
-    use super::session_factory::create_production_session;
-    use super::visual_adapter::CffiSurfaceVisuals;
-
     if !valid_context(context) {
         return failure(STATUS_INVALID_ARGUMENT);
     }
 
-    let result = (|| {
-        let assets = cx.with_legacy(super::init_lander::borrowed_assets)?;
-        let (generator, mut visuals, persistence, surface, ship, session) =
-            cx.with_legacy(|| {
-                let mut generator =
-                    CffiSurfaceGenerator::for_planet_side(context.solar_system, context.world)?;
-                let mut visuals = CffiSurfaceVisuals::new(
-                    context.misc_data_frame,
-                    context.energy_frame,
-                    context.life_frames,
-                )?;
-                let persistence = ScanPersistence::from_masks(context.retrieval_masks);
-                let lander_masks =
-                    unsafe { extract_lander_masks(assets.graphic(LanderGraphic::Lander))? };
-                let assembly =
-                    assemble_surface(&mut generator, persistence, &mut visuals, lander_masks)?;
-                let surface = share_surface(assembly);
-                let mut ship = CffiShipStatus;
-                let mut session = create_production_session(
-                    &mut ship,
-                    SurfacePoint {
-                        x: context.landing_x,
-                        y: context.landing_y,
-                    },
-                    context.facing,
-                )?;
-                session.set_hazard_chances(super::world::hazard_chances(
-                    context.tectonics_rating,
-                    context.weather_rating,
-                    context.temperature,
-                ));
-                Ok::<_, AdapterError>((generator, visuals, persistence, surface, ship, session))
-            })?;
-        let mut world_visuals = super::visual_adapter::CffiWorldVisuals::new(&assets, &mut visuals);
-        let automation_active = io.observer.input_admitted(&InputView::Active, &None).stop;
-        let channels = cx.kernel.channels.clone();
-        let (mut controller, _menu_silence) = cx.with_legacy(|| {
-            // The issue #162 fixture is optional and explicitly requested.  Only the
-            // `setup_planet_side_collision_fixture` script action queues the
-            // request (the coordinator invokes
-            // [`super::automation_fixture::coordinator_queues_fixture_request`]
-            // when that action executes), so active automation with no such action runs
-            // the normal generated PlanetSide session unchanged.  The request is
-            // delivered exactly once per run_session, and install fails fast unless
-            // this session is under an active automation coordinator.  The gate and
-            // the install error are the sole outside-session protection; there is no
-            // polling fallback.
-            //
-            // `AutomationObserver::is_active()` is sampled exactly once, before tapping.
-            // That single observation decides both whether the request is consumed and
-            // which [`AutomationGate`] the install receives, so a request cannot be
-            // consumed under one observation and installed under another.  Ordinary
-            // gameplay never consumes or fails from a stale queue: a request left
-            // pending because no active owner tapped it stays queued.
-
-            let fixture_request = if automation_active {
-                super::automation_fixture::tap_planet_side_fixture_request(session.lander.position)
-            } else {
-                None
-            };
-            if let Some(fixture) = fixture_request {
-                fixture.install(
-                    super::automation_fixture::automation_gate(automation_active),
-                    &session,
-                    &surface,
-                    &mut world_visuals,
-                )?;
-            }
-            let collision = SurfaceCollisionAdapter {
-                surface: surface.clone(),
-                random: CffiGameplayRandom,
-                generator,
-                persistence,
-                world_visuals,
-                earthquake_frame_count: unsafe {
-                    GetFrameCount((assets.graphic(LanderGraphic::Earthquake)).cast())
-                },
-                lava_frame_count: unsafe {
-                    GetFrameCount((assets.graphic(LanderGraphic::Lava)).cast())
-                },
-            };
-            // The orbit/scan menu underneath stays resident, so silence its
-            // navigation sounds for the trip. Restored on every exit path by Drop.
-            let menu_silence = super::menu_sounds::MenuSoundSilence::acquire(controls);
-            super::telemetry::begin(&session);
-            let adapters = RuntimeAdapters {
-                input: CffiPlanetSideInput::new(controls.controls().clone(), activity),
-                collision,
-                graphics: CffiPlanetSideGraphics {
-                    surface: surface.clone(),
-                    assets: &assets,
-                    last_scan_position: None,
-                },
-                audio: CffiPlanetSideAudio::new(assets.sounds(), channels),
-                clock: CffiPlanetSideClock,
-                ship,
-            };
-            let controller = PlanetSideController::new(
-                session,
-                adapters,
-                context.tick_period,
-                context.frame_budget,
-            );
-            Ok::<_, AdapterError>((controller, menu_silence))
-        })?;
-        let outcome = controller.run_with_frame(|session, adapters, tick_period| {
-            let deadline = Tick(adapters.clock.now().0.wrapping_add(tick_period));
-            let input = if session.phase == super::session::SessionPhase::Active {
-                Some(adapters.input.poll_observed(cx, io)?)
-            } else {
-                None
-            };
-            super::runtime::run_frame_at(cx, session, adapters, deadline, input)
-        });
-        cx.with_legacy(|| {
-            if outcome.is_ok() {
-                // Pickup callbacks can also change other scan categories. Read the
-                // live planet rather than replacing it with the trip's initial copy.
-                context.retrieval_masks = unsafe {
-                    (*context
-                        .solar_system
-                        .cast::<crate::c_bindings::global_state::SOLARSYS_STATE>())
-                    .SysInfo
-                    .planet_info
-                    .scan_retrieve_mask
-                };
-            } else {
-                let crew = controller.session.lander.crew.get();
-                controller.adapters.ship.apply(&super::session::ShipDelta {
-                    crew: i16::from(crew),
-                    landers: if crew == 0 { -1 } else { 0 },
-                    ..super::session::ShipDelta::default()
-                })?;
-            }
-            drop(controller);
-            Ok::<_, AdapterError>(outcome)
-        })
-    })();
-
+    let game = std::cell::RefCell::new(crate::engine::battle::Cx {
+        b: cx.b,
+        world: cx.world,
+        kernel: cx.kernel,
+        rng: cx.rng,
+    });
+    let observe = std::cell::RefCell::new(crate::engine::observe::Io {
+        observer: &mut *io.observer,
+    });
+    let result = run_retained_session(controls, activity, &game, &observe, context);
+    if matches!(result, Ok(Ok(_))) {
+        // SAFETY: the outer ABI contract keeps the current solar record live through return.
+        context.retrieval_masks = unsafe {
+            (*context
+                .solar_system
+                .cast::<crate::c_bindings::global_state::SOLARSYS_STATE>())
+            .SysInfo
+            .planet_info
+            .scan_retrieve_mask
+        };
+    }
     session_reply(result)
+}
+
+#[cfg(not(test))]
+fn run_retained_session(
+    controls: &crate::engine::input::InputSession,
+    activity: crate::engine::world::activity::ActivityControl,
+    game: &std::cell::RefCell<crate::engine::battle::Cx<'_>>,
+    observe: &std::cell::RefCell<crate::engine::observe::Io<'_>>,
+    context: &mut PlanetSideRunContext,
+) -> Result<
+    Result<super::session::SessionOutcome, super::controller::ControllerError>,
+    super::runtime::AdapterError,
+> {
+    let assets = game
+        .borrow_mut()
+        .with_legacy(super::init_lander::borrowed_assets)?;
+    let mut generator =
+        CffiSurfaceGenerator::for_planet_side(game, context.solar_system, context.world)?;
+    let mut visuals = CffiSurfaceVisuals::new(
+        context.misc_data_frame,
+        context.energy_frame,
+        context.life_frames,
+    )?;
+    let persistence = ScanPersistence::from_masks(context.retrieval_masks);
+    let lander_masks = unsafe { extract_lander_masks(assets.graphic(LanderGraphic::Lander))? };
+    let assembly = assemble_surface(&mut generator, persistence, &mut visuals, lander_masks)?;
+    let surface = share_surface(assembly);
+    let mut ship = CffiShipStatus { game };
+    let session = create_trip_session(&mut ship, context)?;
+    let mut world_visuals = super::visual_adapter::CffiWorldVisuals::new(&assets, &mut visuals);
+    let automation_active = observe
+        .borrow_mut()
+        .observer
+        .input_admitted(&InputView::Active, &None)
+        .stop;
+    let channels = game.borrow().kernel.channels.clone();
+    install_fixture(automation_active, &session, &surface, &mut world_visuals)?;
+    // SAFETY: both frames are owned by the live lander asset set for this trip.
+    let (earthquake_frame_count, lava_frame_count) = unsafe {
+        (
+            GetFrameCount(assets.graphic(LanderGraphic::Earthquake).cast()),
+            GetFrameCount(assets.graphic(LanderGraphic::Lava).cast()),
+        )
+    };
+    let collision = SurfaceCollisionAdapter {
+        surface: surface.clone(),
+        random: CffiGameplayRandom,
+        generator,
+        persistence,
+        world_visuals,
+        earthquake_frame_count,
+        lava_frame_count,
+    };
+    // The orbit/scan menu underneath stays resident, so silence its
+    // navigation sounds for the trip. Restored on every exit path by Drop.
+    let _menu_silence = super::menu_sounds::MenuSoundSilence::acquire(controls);
+    super::telemetry::begin(&session);
+    let adapters = RuntimeAdapters {
+        input: CffiPlanetSideInput::new(controls.controls().clone(), activity),
+        collision,
+        graphics: CffiPlanetSideGraphics {
+            game,
+            surface: surface.clone(),
+            assets: &assets,
+            last_scan_position: None,
+        },
+        audio: CffiPlanetSideAudio::new(assets.sounds(), channels),
+        clock: CffiPlanetSideClock,
+        ship,
+    };
+    let mut controller =
+        PlanetSideController::new(session, adapters, context.tick_period, context.frame_budget);
+    let outcome = controller.run_with_frame(|session, adapters, tick_period| {
+        let deadline = Tick(adapters.clock.now().0.wrapping_add(tick_period));
+        let input = if session.phase == super::session::SessionPhase::Active {
+            Some(
+                adapters
+                    .input
+                    .poll_observed(&mut game.borrow_mut(), &mut observe.borrow_mut())?,
+            )
+        } else {
+            None
+        };
+        super::runtime::run_frame_at(game, session, adapters, deadline, input)
+    });
+    settle_session(
+        &controller.session,
+        &mut controller.adapters.ship,
+        outcome.is_ok(),
+    )?;
+    drop(controller);
+    Ok(outcome)
+}
+
+#[cfg(not(test))]
+fn create_trip_session(
+    ship: &mut CffiShipStatus<'_, '_>,
+    context: &PlanetSideRunContext,
+) -> Result<super::session::PlanetSideSession, super::runtime::AdapterError> {
+    let mut session = create_production_session(
+        ship,
+        SurfacePoint {
+            x: context.landing_x,
+            y: context.landing_y,
+        },
+        context.facing,
+    )?;
+    session.set_hazard_chances(super::world::hazard_chances(
+        context.tectonics_rating,
+        context.weather_rating,
+        context.temperature,
+    ));
+    Ok(session)
+}
+
+#[cfg(not(test))]
+fn install_fixture(
+    automation_active: bool,
+    session: &super::session::PlanetSideSession,
+    surface: &super::assembly::SharedSurface,
+    world_visuals: &mut impl super::automation_fixture::FixtureVisualPort,
+) -> Result<(), super::runtime::AdapterError> {
+    // The issue #162 fixture is optional and explicitly requested.  Only the
+    // `setup_planet_side_collision_fixture` script action queues the
+    // request (the coordinator invokes
+    // [`super::automation_fixture::coordinator_queues_fixture_request`]
+    // when that action executes), so active automation with no such action runs
+    // the normal generated PlanetSide session unchanged.  The request is
+    // delivered exactly once per run_session, and install fails fast unless
+    // this session is under an active automation coordinator.  The gate and
+    // the install error are the sole outside-session protection; there is no
+    // polling fallback.
+    //
+    // `AutomationObserver::is_active()` is sampled exactly once, before tapping.
+    // That single observation decides both whether the request is consumed and
+    // which [`AutomationGate`] the install receives, so a request cannot be
+    // consumed under one observation and installed under another.  Ordinary
+    // gameplay never consumes or fails from a stale queue: a request left
+    // pending because no active owner tapped it stays queued.
+
+    let fixture_request = if automation_active {
+        super::automation_fixture::tap_planet_side_fixture_request(session.lander.position)
+    } else {
+        None
+    };
+    if let Some(fixture) = fixture_request {
+        fixture.install(
+            super::automation_fixture::automation_gate(automation_active),
+            session,
+            surface,
+            world_visuals,
+        )?;
+    }
+    Ok(())
+}
+
+#[cfg(not(test))]
+fn settle_session(
+    session: &super::session::PlanetSideSession,
+    ship: &mut impl super::runtime::ShipStatusPort,
+    succeeded: bool,
+) -> Result<(), super::runtime::AdapterError> {
+    if !succeeded {
+        let crew = session.lander.crew.get();
+        ship.apply(&super::session::ShipDelta {
+            crew: i16::from(crew),
+            landers: if crew == 0 { -1 } else { 0 },
+            ..super::session::ShipDelta::default()
+        })?;
+    }
+    Ok(())
 }
 
 #[cfg(not(test))]

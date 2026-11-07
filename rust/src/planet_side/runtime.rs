@@ -10,6 +10,7 @@ use super::simulation::{self, FrameInput, LanderState, Shot, SimulationEffect, T
 use super::special_effects::SpecialPickupEffects;
 use super::world::{HazardChances, HazardSpawn, WorldStepEffects};
 use crate::engine::battle::Cx;
+use std::cell::RefCell;
 
 /// Canonical planet-side simulation cadence.
 pub const PLANET_SIDE_HZ: u32 = 35;
@@ -123,7 +124,7 @@ pub trait PlanetSideCollision {
     /// creatures, and play hazard sounds.
     fn apply_world_step(
         &mut self,
-        _cx: &mut Cx<'_>,
+        _cx: &RefCell<Cx<'_>>,
         _result: &WorldStepResult,
         _audio: &mut impl PlanetSideAudio,
     ) -> Result<(), AdapterError> {
@@ -183,7 +184,7 @@ pub struct RuntimeAdapters<I, C, G, A, K, S> {
 
 /// Drive one canonical frame and execute its typed effects in source order.
 pub fn run_frame<I, C, G, A, K, S>(
-    cx: &mut Cx<'_>,
+    cx: &RefCell<Cx<'_>>,
     session: &mut PlanetSideSession,
     adapters: &mut RuntimeAdapters<I, C, G, A, K, S>,
     tick_period: u32,
@@ -198,7 +199,7 @@ where
 {
     let deadline = Tick(adapters.clock.now().0.wrapping_add(tick_period));
     let input = if session.phase == SessionPhase::Active {
-        Some(cx.with_legacy(|| adapters.input.poll())?)
+        Some(adapters.input.poll()?)
     } else {
         None
     };
@@ -206,7 +207,7 @@ where
 }
 
 pub(crate) fn run_frame_at<I, C, G, A, K, S>(
-    cx: &mut Cx<'_>,
+    cx: &RefCell<Cx<'_>>,
     session: &mut PlanetSideSession,
     adapters: &mut RuntimeAdapters<I, C, G, A, K, S>,
     deadline: Tick,
@@ -232,8 +233,8 @@ where
     }
 
     match session.phase {
-        SessionPhase::Return => return run_return_frame(cx, session, adapters, deadline),
-        SessionPhase::Explosion => return run_explosion_frame(cx, session, adapters, deadline),
+        SessionPhase::Return => return run_return_frame(session, adapters, deadline),
+        SessionPhase::Explosion => return run_explosion_frame(session, adapters, deadline),
         SessionPhase::Active | SessionPhase::Complete | SessionPhase::Aborted => {}
         SessionPhase::Warmup
         | SessionPhase::Launch
@@ -265,7 +266,7 @@ where
         return Ok(step);
     }
 
-    render_active_frame(cx, session, adapters, deadline)
+    render_active_frame(session, adapters, deadline)
 }
 
 /// Present the lifecycle graphic and wait out the frame.
@@ -273,7 +274,6 @@ where
 /// Every path that keeps the session alive without settling ends this way, so
 /// the ordering of render before sleep lives in one place.
 fn continue_after_lifecycle<I, C, G, A, K, S>(
-    cx: &mut Cx<'_>,
     session: &PlanetSideSession,
     adapters: &mut RuntimeAdapters<I, C, G, A, K, S>,
     deadline: Tick,
@@ -282,14 +282,14 @@ where
     G: PlanetSideGraphics,
     K: PlanetSideClock,
 {
-    render_lifecycle(cx, session, adapters)?;
-    cx.with_legacy(|| adapters.clock.sleep_until(deadline))?;
+    render_lifecycle(session, adapters)?;
+    adapters.clock.sleep_until(deadline)?;
     Ok(RuntimeStep::Continue)
 }
 
 /// Begin the destruction sequence once the last crew member dies.
 fn begin_explosion<I, C, G, A, K, S>(
-    cx: &mut Cx<'_>,
+    cx: &RefCell<Cx<'_>>,
     session: &mut PlanetSideSession,
     adapters: &mut RuntimeAdapters<I, C, G, A, K, S>,
 ) -> Result<(), RuntimeError>
@@ -298,13 +298,14 @@ where
 {
     session.phase = SessionPhase::Explosion;
     session.animation.reset();
-    adapters.audio.play(cx.world, SoundCue::Destroyed)?;
+    adapters
+        .audio
+        .play(cx.borrow().world, SoundCue::Destroyed)?;
     Ok(())
 }
 
 /// Advance the return ascent, settling the trip once the animation completes.
 fn run_return_frame<I, C, G, A, K, S>(
-    cx: &mut Cx<'_>,
     session: &mut PlanetSideSession,
     adapters: &mut RuntimeAdapters<I, C, G, A, K, S>,
     deadline: Tick,
@@ -315,20 +316,19 @@ where
     S: ShipStatusPort,
 {
     if !session.advance_return() {
-        return continue_after_lifecycle(cx, session, adapters, deadline);
+        return continue_after_lifecycle(session, adapters, deadline);
     }
 
     let outcome = session.settle();
     if let SessionOutcome::Returned(delta) | SessionOutcome::LanderDestroyed(delta) = &outcome {
-        cx.with_legacy(|| adapters.ship.apply(delta))?;
+        adapters.ship.apply(delta)?;
     }
-    cx.with_legacy(|| adapters.clock.sleep_until(deadline))?;
+    adapters.clock.sleep_until(deadline)?;
     Ok(RuntimeStep::Complete(outcome))
 }
 
 /// Advance the destruction animation, settling once it completes.
 fn run_explosion_frame<I, C, G, A, K, S>(
-    cx: &mut Cx<'_>,
     session: &mut PlanetSideSession,
     adapters: &mut RuntimeAdapters<I, C, G, A, K, S>,
     deadline: Tick,
@@ -339,15 +339,15 @@ where
     S: ShipStatusPort,
 {
     if !session.advance_explosion() {
-        return continue_after_lifecycle(cx, session, adapters, deadline);
+        return continue_after_lifecycle(session, adapters, deadline);
     }
 
     let outcome = session.settle();
     if let SessionOutcome::LanderDestroyed(delta) = &outcome {
-        cx.with_legacy(|| adapters.ship.apply(delta))?;
+        adapters.ship.apply(delta)?;
     }
-    render_lifecycle(cx, session, adapters)?;
-    cx.with_legacy(|| adapters.clock.sleep_until(deadline))?;
+    render_lifecycle(session, adapters)?;
+    adapters.clock.sleep_until(deadline)?;
     Ok(RuntimeStep::Complete(outcome))
 }
 
@@ -357,7 +357,7 @@ where
 /// by entering the takeoff animation.
 #[cfg(test)]
 fn run_lander_simulation<I, C, G, A, K, S>(
-    cx: &mut Cx<'_>,
+    cx: &RefCell<Cx<'_>>,
     session: &mut PlanetSideSession,
     adapters: &mut RuntimeAdapters<I, C, G, A, K, S>,
     deadline: Tick,
@@ -369,12 +369,12 @@ where
     A: PlanetSideAudio,
     K: PlanetSideClock,
 {
-    let input = cx.with_legacy(|| adapters.input.poll())?;
+    let input = adapters.input.poll()?;
     apply_lander_input(cx, session, adapters, deadline, input)
 }
 
 fn apply_lander_input<I, C, G, A, K, S>(
-    cx: &mut Cx<'_>,
+    cx: &RefCell<Cx<'_>>,
     session: &mut PlanetSideSession,
     adapters: &mut RuntimeAdapters<I, C, G, A, K, S>,
     deadline: Tick,
@@ -395,7 +395,7 @@ where
             // Enter the takeoff animation without settling. Settlement happens
             // only after the TakingOff → Return sequence completes.
             session.request_takeoff();
-            continue_after_lifecycle(cx, session, adapters, deadline).map(Some)
+            continue_after_lifecycle(session, adapters, deadline).map(Some)
         }
         TickResult::Continue(effects) => {
             execute_simulation_effects(cx, &mut adapters.collision, &mut adapters.audio, effects)?;
@@ -408,7 +408,7 @@ where
 ///
 /// Returns `Some` when the casualties destroy the lander and end the frame.
 fn step_surface_world<I, C, G, A, K, S>(
-    cx: &mut Cx<'_>,
+    cx: &RefCell<Cx<'_>>,
     session: &mut PlanetSideSession,
     adapters: &mut RuntimeAdapters<I, C, G, A, K, S>,
     deadline: Tick,
@@ -419,11 +419,9 @@ where
     A: PlanetSideAudio,
     K: PlanetSideClock,
 {
-    let world_result = cx.with_legacy(|| {
-        adapters
-            .collision
-            .step_world(&session.lander, session.hazard_chances)
-    })?;
+    let world_result = adapters
+        .collision
+        .step_world(&session.lander, session.hazard_chances)?;
     adapters
         .collision
         .apply_world_step(cx, &world_result, &mut adapters.audio)?;
@@ -438,7 +436,7 @@ where
     }
 
     begin_explosion(cx, session, adapters)?;
-    continue_after_lifecycle(cx, session, adapters, deadline).map(Some)
+    continue_after_lifecycle(session, adapters, deadline).map(Some)
 }
 
 /// Resolve every contact the lander made this frame.
@@ -446,7 +444,7 @@ where
 /// Returns `Some` when a contact ends the frame, either by requesting takeoff
 /// (a special pickup) or by destroying the lander.
 fn resolve_lander_contacts<I, C, G, A, K, S>(
-    cx: &mut Cx<'_>,
+    cx: &RefCell<Cx<'_>>,
     session: &mut PlanetSideSession,
     adapters: &mut RuntimeAdapters<I, C, G, A, K, S>,
     deadline: Tick,
@@ -457,7 +455,7 @@ where
     A: PlanetSideAudio,
     K: PlanetSideClock,
 {
-    for contact in cx.with_legacy(|| adapters.collision.contacts(&session.lander))? {
+    for contact in adapters.collision.contacts(&session.lander)? {
         let outcome = resolve_lander_collision(
             &mut CollisionState {
                 crew: &mut session.lander.crew,
@@ -469,20 +467,18 @@ where
             contact.rolls,
         );
         execute_collision_effects(cx, &mut adapters.audio, &outcome)?;
-        let effects = cx.with_legacy(|| {
-            adapters
-                .collision
-                .commit(contact, &outcome, session.lander.crew.get())
-        })?;
+        let effects = adapters
+            .collision
+            .commit(contact, &outcome, session.lander.crew.get())?;
         session.lander.crew.lose(effects.crew_killed);
 
         if effects.takeoff_requested {
             session.request_takeoff();
-            return continue_after_lifecycle(cx, session, adapters, deadline).map(Some);
+            return continue_after_lifecycle(session, adapters, deadline).map(Some);
         }
         if session.lander.crew.get() == 0 {
             begin_explosion(cx, session, adapters)?;
-            return continue_after_lifecycle(cx, session, adapters, deadline).map(Some);
+            return continue_after_lifecycle(session, adapters, deadline).map(Some);
         }
     }
     Ok(None)
@@ -493,7 +489,6 @@ where
 /// The cargo meters are rendered from current levels so the life meter visibly
 /// fills on every pickup.
 fn render_active_frame<I, C, G, A, K, S>(
-    cx: &mut Cx<'_>,
     session: &PlanetSideSession,
     adapters: &mut RuntimeAdapters<I, C, G, A, K, S>,
     deadline: Tick,
@@ -502,22 +497,20 @@ where
     G: PlanetSideGraphics,
     K: PlanetSideClock,
 {
-    cx.with_legacy(|| {
-        adapters.graphics.render(&RenderSnapshot {
-            phase: session.phase,
-            lander: session.lander.clone(),
-            mineral_level: session.minerals.level(),
-            biological_level: session.biological.level(),
-            animation_frame: 0,
-            lifecycle_offset: 0,
-        })
+    adapters.graphics.render(&RenderSnapshot {
+        phase: session.phase,
+        lander: session.lander.clone(),
+        mineral_level: session.minerals.level(),
+        biological_level: session.biological.level(),
+        animation_frame: 0,
+        lifecycle_offset: 0,
     })?;
-    cx.with_legacy(|| adapters.clock.sleep_until(deadline))?;
+    adapters.clock.sleep_until(deadline)?;
     Ok(RuntimeStep::Continue)
 }
 
 fn run_transition_frame<I, C, G, A, K, S>(
-    cx: &mut Cx<'_>,
+    cx: &RefCell<Cx<'_>>,
     session: &mut PlanetSideSession,
     adapters: &mut RuntimeAdapters<I, C, G, A, K, S>,
     deadline: Tick,
@@ -531,7 +524,7 @@ where
         SessionPhase::Warmup => {
             session.phase = SessionPhase::Launch;
             session.animation.reset();
-            adapters.audio.play(cx.world, SoundCue::Departs)?;
+            adapters.audio.play(cx.borrow().world, SoundCue::Departs)?;
         }
         SessionPhase::Launch => {
             if session.advance_launch() {
@@ -550,20 +543,19 @@ where
             if session.advance_takeoff() {
                 session.phase = SessionPhase::Return;
                 session.animation.reset();
-                adapters.audio.play(cx.world, SoundCue::Returns)?;
+                adapters.audio.play(cx.borrow().world, SoundCue::Returns)?;
             }
         }
         _ => unreachable!("run_transition_frame requires a transition phase"),
     }
-    render_lifecycle(cx, session, adapters)?;
-    cx.with_legacy(|| adapters.clock.sleep_until(deadline))?;
+    render_lifecycle(session, adapters)?;
+    adapters.clock.sleep_until(deadline)?;
     Ok(())
 }
 
 /// Render one lifecycle animation frame (Launch, Landing, TakingOff, Return,
 /// Explosion).
 fn render_lifecycle<I, C, G, A, K, S>(
-    cx: &mut Cx<'_>,
     session: &PlanetSideSession,
     adapters: &mut RuntimeAdapters<I, C, G, A, K, S>,
 ) -> Result<(), RuntimeError>
@@ -575,44 +567,40 @@ where
         SessionPhase::TakingOff => session.animation.takeoff_offset(),
         _ => 0,
     };
-    cx.with_legacy(|| {
-        adapters.graphics.render(&RenderSnapshot {
-            phase: session.phase,
-            lander: session.lander.clone(),
-            mineral_level: session.minerals.level(),
-            biological_level: session.biological.level(),
-            animation_frame: session.animation.frame(),
-            lifecycle_offset: offset,
-        })
+    adapters.graphics.render(&RenderSnapshot {
+        phase: session.phase,
+        lander: session.lander.clone(),
+        mineral_level: session.minerals.level(),
+        biological_level: session.biological.level(),
+        animation_frame: session.animation.frame(),
+        lifecycle_offset: offset,
     })?;
     Ok(())
 }
 
 fn execute_simulation_effects<C: PlanetSideCollision, A: PlanetSideAudio>(
-    cx: &mut Cx<'_>,
+    cx: &RefCell<Cx<'_>>,
     collision: &mut C,
     audio: &mut A,
     effects: Vec<SimulationEffect>,
 ) -> Result<(), AdapterError> {
     for effect in effects {
         match effect {
-            SimulationEffect::Play(cue) => audio.play(cx.world, cue)?,
-            SimulationEffect::SpawnShot(shot) => {
-                cx.with_legacy(|| collision.register_shot(shot))?
-            }
+            SimulationEffect::Play(cue) => audio.play(cx.borrow().world, cue)?,
+            SimulationEffect::SpawnShot(shot) => collision.register_shot(shot)?,
         }
     }
     Ok(())
 }
 
 fn execute_collision_effects<A: PlanetSideAudio>(
-    cx: &mut Cx<'_>,
+    cx: &RefCell<Cx<'_>>,
     audio: &mut A,
     outcome: &CollisionOutcome,
 ) -> Result<(), AdapterError> {
     if let CollisionOutcome::CrewDamage(damage) = outcome {
         for cue in &damage.sounds {
-            audio.play(cx.world, *cue)?;
+            audio.play(cx.borrow().world, *cue)?;
         }
     } else if let CollisionOutcome::Cargo { pickup, .. } = outcome {
         let cue = if matches!(pickup, super::cargo::CargoPickup::Full) {
@@ -620,7 +608,7 @@ fn execute_collision_effects<A: PlanetSideAudio>(
         } else {
             SoundCue::Pickup
         };
-        audio.play(cx.world, cue)?;
+        audio.play(cx.borrow().world, cue)?;
     }
     Ok(())
 }
@@ -743,15 +731,80 @@ mod tests {
 
     #[test]
     #[serial_test::serial]
-    fn warmup_transitions_to_launch_and_plays_departs_sound() {
+    fn frame_releases_retained_context_between_audio_and_provider_calls() {
+        struct RetainedGraphics<'a, 'game> {
+            game: &'a std::cell::RefCell<Cx<'game>>,
+            events: &'a std::cell::RefCell<Vec<&'static str>>,
+        }
+        impl PlanetSideGraphics for RetainedGraphics<'_, '_> {
+            fn render(&mut self, _: &RenderSnapshot) -> Result<(), AdapterError> {
+                let game = self.game.borrow_mut();
+                assert_eq!(game.world.data.game.glob_flags, 0);
+                self.events.borrow_mut().push("graphics");
+                Ok(())
+            }
+        }
+        struct RetainedAudio<'a> {
+            world: usize,
+            events: &'a std::cell::RefCell<Vec<&'static str>>,
+        }
+        impl PlanetSideAudio for RetainedAudio<'_> {
+            fn play(
+                &mut self,
+                world: &crate::engine::World,
+                cue: SoundCue,
+            ) -> Result<(), AdapterError> {
+                assert_eq!(std::ptr::from_ref(world) as usize, self.world);
+                assert_eq!(cue, SoundCue::Departs);
+                self.events.borrow_mut().push("audio");
+                Ok(())
+            }
+        }
         let mut owner = crate::engine::Game::new();
         let mut battle = crate::engine::battle::Battle::new();
-        let cx = &mut crate::engine::battle::Cx::new(
+        let game = std::cell::RefCell::new(Cx::new(
             &mut battle,
             &mut owner.world,
             &mut owner.kernel,
             crate::math::random,
+        ));
+        let events = std::cell::RefCell::new(Vec::new());
+        let mut session = session();
+        session.phase = SessionPhase::Warmup;
+        let mut adapters = RuntimeAdapters {
+            input: Input(FrameInput::default()),
+            collision: Collisions(Vec::new()),
+            graphics: RetainedGraphics {
+                game: &game,
+                events: &events,
+            },
+            audio: RetainedAudio {
+                world: std::ptr::from_ref(&*game.borrow().world) as usize,
+                events: &events,
+            },
+            clock: Clock::default(),
+            ship: Ship::default(),
+        };
+        assert_eq!(
+            run_frame(&game, &mut session, &mut adapters, 1),
+            Ok(RuntimeStep::Continue)
         );
+        assert_eq!(*events.borrow(), ["audio", "graphics"]);
+        assert_eq!(session.phase, SessionPhase::Launch);
+        assert_eq!(adapters.clock.slept, [Tick(1)]);
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn warmup_transitions_to_launch_and_plays_departs_sound() {
+        let mut owner = crate::engine::Game::new();
+        let mut battle = crate::engine::battle::Battle::new();
+        let cx = &std::cell::RefCell::new(crate::engine::battle::Cx::new(
+            &mut battle,
+            &mut owner.world,
+            &mut owner.kernel,
+            crate::math::random,
+        ));
 
         let mut session = PlanetSideSession::new(
             LanderState::new(
@@ -791,12 +844,12 @@ mod tests {
     fn frame_routes_dangerous_collision_damage_and_sounds_before_render() {
         let mut owner = crate::engine::Game::new();
         let mut battle = crate::engine::battle::Battle::new();
-        let cx = &mut crate::engine::battle::Cx::new(
+        let cx = &std::cell::RefCell::new(crate::engine::battle::Cx::new(
             &mut battle,
             &mut owner.world,
             &mut owner.kernel,
             crate::math::random,
-        );
+        ));
 
         let mut session = session();
         let mut adapters = RuntimeAdapters {
@@ -835,12 +888,12 @@ mod tests {
     fn takeoff_enters_takingoff_phase_before_return_sound() {
         let mut owner = crate::engine::Game::new();
         let mut battle = crate::engine::battle::Battle::new();
-        let cx = &mut crate::engine::battle::Cx::new(
+        let cx = &std::cell::RefCell::new(crate::engine::battle::Cx::new(
             &mut battle,
             &mut owner.world,
             &mut owner.kernel,
             crate::math::random,
-        );
+        ));
 
         let mut session = session();
         session.minerals.collect(2, 4);
@@ -875,12 +928,12 @@ mod tests {
     fn abort_never_applies_ship_writeback() {
         let mut owner = crate::engine::Game::new();
         let mut battle = crate::engine::battle::Battle::new();
-        let cx = &mut crate::engine::battle::Cx::new(
+        let cx = &std::cell::RefCell::new(crate::engine::battle::Cx::new(
             &mut battle,
             &mut owner.world,
             &mut owner.kernel,
             crate::math::random,
-        );
+        ));
 
         let mut session = session();
         let mut adapters = RuntimeAdapters {
@@ -907,12 +960,12 @@ mod tests {
     fn fatal_collision_enters_explosion_phase_and_delays_settlement() {
         let mut owner = crate::engine::Game::new();
         let mut battle = crate::engine::battle::Battle::new();
-        let cx = &mut crate::engine::battle::Cx::new(
+        let cx = &std::cell::RefCell::new(crate::engine::battle::Cx::new(
             &mut battle,
             &mut owner.world,
             &mut owner.kernel,
             crate::math::random,
-        );
+        ));
 
         let mut session = session();
         session.lander.crew = CrewCount::new(1);
@@ -972,12 +1025,12 @@ mod tests {
     fn special_pickup_effects_update_crew_and_request_takeoff() {
         let mut owner = crate::engine::Game::new();
         let mut battle = crate::engine::battle::Battle::new();
-        let cx = &mut crate::engine::battle::Cx::new(
+        let cx = &std::cell::RefCell::new(crate::engine::battle::Cx::new(
             &mut battle,
             &mut owner.world,
             &mut owner.kernel,
             crate::math::random,
-        );
+        ));
 
         let mut session = session();
         let mut adapters = RuntimeAdapters {
@@ -1008,12 +1061,12 @@ mod tests {
     fn special_pickup_auto_takeoff_completes_without_input() {
         let mut owner = crate::engine::Game::new();
         let mut battle = crate::engine::battle::Battle::new();
-        let cx = &mut crate::engine::battle::Cx::new(
+        let cx = &std::cell::RefCell::new(crate::engine::battle::Cx::new(
             &mut battle,
             &mut owner.world,
             &mut owner.kernel,
             crate::math::random,
-        );
+        ));
 
         let mut session = session();
         let mut adapters = RuntimeAdapters {
@@ -1059,12 +1112,12 @@ mod tests {
     fn full_phase_progression_warmup_to_complete_via_takeoff() {
         let mut owner = crate::engine::Game::new();
         let mut battle = crate::engine::battle::Battle::new();
-        let cx = &mut crate::engine::battle::Cx::new(
+        let cx = &std::cell::RefCell::new(crate::engine::battle::Cx::new(
             &mut battle,
             &mut owner.world,
             &mut owner.kernel,
             crate::math::random,
-        );
+        ));
 
         let mut session = PlanetSideSession::new(
             LanderState::new(
@@ -1175,12 +1228,12 @@ mod tests {
     fn cargo_meters_update_every_active_frame() {
         let mut owner = crate::engine::Game::new();
         let mut battle = crate::engine::battle::Battle::new();
-        let cx = &mut crate::engine::battle::Cx::new(
+        let cx = &std::cell::RefCell::new(crate::engine::battle::Cx::new(
             &mut battle,
             &mut owner.world,
             &mut owner.kernel,
             crate::math::random,
-        );
+        ));
 
         let mut session = session();
         session.minerals.collect(0, 3);
@@ -1208,12 +1261,12 @@ mod tests {
     fn lifecycle_phases_render_with_animation_frame_and_offset() {
         let mut owner = crate::engine::Game::new();
         let mut battle = crate::engine::battle::Battle::new();
-        let cx = &mut crate::engine::battle::Cx::new(
+        let cx = &std::cell::RefCell::new(crate::engine::battle::Cx::new(
             &mut battle,
             &mut owner.world,
             &mut owner.kernel,
             crate::math::random,
-        );
+        ));
 
         let mut session = PlanetSideSession::new(
             LanderState::new(
@@ -1266,12 +1319,12 @@ mod tests {
     fn adapter_failure_stops_the_frame_as_a_typed_error() {
         let mut owner = crate::engine::Game::new();
         let mut battle = crate::engine::battle::Battle::new();
-        let cx = &mut crate::engine::battle::Cx::new(
+        let cx = &std::cell::RefCell::new(crate::engine::battle::Cx::new(
             &mut battle,
             &mut owner.world,
             &mut owner.kernel,
             crate::math::random,
-        );
+        ));
 
         struct FailingInput;
         impl PlanetSideInput for FailingInput {
@@ -1334,12 +1387,12 @@ mod tests {
     fn spawn_shot_effect_registers_shot_in_collision_adapter() {
         let mut owner = crate::engine::Game::new();
         let mut battle = crate::engine::battle::Battle::new();
-        let cx = &mut crate::engine::battle::Cx::new(
+        let cx = &std::cell::RefCell::new(crate::engine::battle::Cx::new(
             &mut battle,
             &mut owner.world,
             &mut owner.kernel,
             crate::math::random,
-        );
+        ));
 
         let mut session = session();
         let mut adapters = RuntimeAdapters {
@@ -1374,12 +1427,12 @@ mod tests {
     fn world_step_advances_each_active_frame() {
         let mut owner = crate::engine::Game::new();
         let mut battle = crate::engine::battle::Battle::new();
-        let cx = &mut crate::engine::battle::Cx::new(
+        let cx = &std::cell::RefCell::new(crate::engine::battle::Cx::new(
             &mut battle,
             &mut owner.world,
             &mut owner.kernel,
             crate::math::random,
-        );
+        ));
 
         let mut session = session();
         let mut adapters = RuntimeAdapters {
@@ -1410,12 +1463,12 @@ mod tests {
     fn begin_explosion_sets_the_phase_resets_the_animation_and_sounds_once() {
         let mut owner = crate::engine::Game::new();
         let mut battle = crate::engine::battle::Battle::new();
-        let cx = &mut crate::engine::battle::Cx::new(
+        let cx = &std::cell::RefCell::new(crate::engine::battle::Cx::new(
             &mut battle,
             &mut owner.world,
             &mut owner.kernel,
             crate::math::random,
-        );
+        ));
 
         let mut session = session();
         session.animation.advance(99);
@@ -1438,15 +1491,6 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn continue_after_lifecycle_renders_before_sleeping() {
-        let mut owner = crate::engine::Game::new();
-        let mut battle = crate::engine::battle::Battle::new();
-        let cx = &mut crate::engine::battle::Cx::new(
-            &mut battle,
-            &mut owner.world,
-            &mut owner.kernel,
-            crate::math::random,
-        );
-
         let mut session = session();
         session.phase = SessionPhase::Return;
         let mut adapters = RuntimeAdapters {
@@ -1458,7 +1502,7 @@ mod tests {
             ship: Ship::default(),
         };
 
-        let step = continue_after_lifecycle(cx, &session, &mut adapters, Tick(7));
+        let step = continue_after_lifecycle(&session, &mut adapters, Tick(7));
 
         assert_eq!(step, Ok(RuntimeStep::Continue));
         assert_eq!(adapters.graphics.0.len(), 1, "the frame is presented");
@@ -1474,12 +1518,12 @@ mod tests {
     fn step_surface_world_reports_no_early_exit_while_crew_survive() {
         let mut owner = crate::engine::Game::new();
         let mut battle = crate::engine::battle::Battle::new();
-        let cx = &mut crate::engine::battle::Cx::new(
+        let cx = &std::cell::RefCell::new(crate::engine::battle::Cx::new(
             &mut battle,
             &mut owner.world,
             &mut owner.kernel,
             crate::math::random,
-        );
+        ));
 
         let mut session = session();
         let mut adapters = RuntimeAdapters {
@@ -1503,12 +1547,12 @@ mod tests {
     fn run_lander_simulation_reports_an_abort_without_presenting_a_frame() {
         let mut owner = crate::engine::Game::new();
         let mut battle = crate::engine::battle::Battle::new();
-        let cx = &mut crate::engine::battle::Cx::new(
+        let cx = &std::cell::RefCell::new(crate::engine::battle::Cx::new(
             &mut battle,
             &mut owner.world,
             &mut owner.kernel,
             crate::math::random,
-        );
+        ));
 
         let mut session = session();
         let mut adapters = RuntimeAdapters {

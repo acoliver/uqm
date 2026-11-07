@@ -1083,12 +1083,12 @@ mod tests {
     fn subsequent_production_shot_step_lands_creature_hit_on_registered_frame_mask() {
         let mut owner = crate::engine::Game::new();
         let mut battle = crate::engine::battle::Battle::new();
-        let cx = &mut crate::engine::battle::Cx::new(
+        let cx = &std::cell::RefCell::new(crate::engine::battle::Cx::new(
             &mut battle,
             &mut owner.world,
             &mut owner.kernel,
             crate::math::random,
-        );
+        ));
 
         let anchor = SurfacePoint { x: 50, y: 80 };
         let session = session_at(anchor);
@@ -1133,12 +1133,12 @@ mod tests {
     fn brainbox_frame_and_registered_mask_advance_together_after_world_step() {
         let mut owner = crate::engine::Game::new();
         let mut battle = crate::engine::battle::Battle::new();
-        let cx = &mut crate::engine::battle::Cx::new(
+        let cx = &std::cell::RefCell::new(crate::engine::battle::Cx::new(
             &mut battle,
             &mut owner.world,
             &mut owner.kernel,
             crate::math::random,
-        );
+        ));
 
         let anchor = SurfacePoint { x: 50, y: 80 };
         let session = session_at(anchor);
