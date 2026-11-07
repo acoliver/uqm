@@ -78,6 +78,12 @@ impl CampaignDisplay {
             game.kernel.install_tiny_font(
                 LoadedFont::load(c"fixture.tiny").ok_or("tiny-font fixture did not load")?,
             );
+            game.kernel.install_micro_font(
+                LoadedFont::load(c"fixture.tiny").ok_or("micro-font fixture did not load")?,
+            );
+            game.kernel.install_battle_font(
+                LoadedFont::load(c"fixture.tiny").ok_or("battle-font fixture did not load")?,
+            );
             uqm_rust::mainloop::dir_prep::contentDir = previous_content;
             uio::uio_closeDir(content);
             uio::uio_closeRepository(repository);
