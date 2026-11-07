@@ -1,5 +1,7 @@
 //! Ordered observation boundaries shared by modes and their host.
 
+pub mod planet_side;
+
 use crate::graphics::presented_frame::PresentedFrame;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

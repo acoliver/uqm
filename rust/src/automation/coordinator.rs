@@ -129,7 +129,7 @@ struct PendingAcceptedPlayerInput {
 /// being observed, it must have settled, and its terminal code must match.
 fn planet_side_wait_satisfied(
     awaited: Option<u64>,
-    observation: &crate::planet_side::telemetry::PlanetSideObservation,
+    observation: &crate::engine::observe_port::planet_side::PlanetSideObservation,
     outcome: crate::automation::script::PlanetSideOutcomeName,
 ) -> bool {
     awaited == Some(observation.generation)
@@ -141,7 +141,7 @@ fn planet_side_wait_satisfied(
 /// it exhausted its ticks.
 fn planet_side_wait_mismatch_label(
     awaited: Option<u64>,
-    observation: &crate::planet_side::telemetry::PlanetSideObservation,
+    observation: &crate::engine::observe_port::planet_side::PlanetSideObservation,
     outcome: crate::automation::script::PlanetSideOutcomeName,
 ) -> String {
     format!(
@@ -151,7 +151,7 @@ fn planet_side_wait_mismatch_label(
         observation.generation,
         observation.active,
         observation.terminal,
-        crate::planet_side::telemetry::phase_name(observation.phase),
+        crate::engine::observe_port::planet_side::phase_name(observation.phase),
         observation.current_crew
     )
 }
@@ -2777,7 +2777,7 @@ impl AutomationObserver {
             result.labels.push(format!(
                 "planet_side_phase:generation={}:phase={}",
                 observation.generation,
-                crate::planet_side::telemetry::phase_name(observation.phase)
+                crate::engine::observe_port::planet_side::phase_name(observation.phase)
             ));
         }
 
@@ -4454,8 +4454,8 @@ mod tests {
     fn settled(
         generation: u64,
         terminal: u32,
-    ) -> crate::planet_side::telemetry::PlanetSideObservation {
-        crate::planet_side::telemetry::PlanetSideObservation {
+    ) -> crate::engine::observe_port::planet_side::PlanetSideObservation {
+        crate::engine::observe_port::planet_side::PlanetSideObservation {
             generation,
             active: false,
             terminal,
@@ -4477,7 +4477,10 @@ mod tests {
     #[test]
     fn exhausted_planet_side_wait_names_the_state_it_last_observed() {
         let outcome = crate::automation::script::PlanetSideOutcomeName::Returned;
-        let mut observation = settled(1, crate::planet_side::telemetry::terminal::DESTROYED);
+        let mut observation = settled(
+            1,
+            crate::engine::observe_port::planet_side::terminal::DESTROYED,
+        );
         observation.active = true;
         observation.phase = 8;
         observation.current_crew = 0;

@@ -108,7 +108,7 @@ fn publish_deposits(surface: &SurfaceAssembly, near: SurfacePoint) {
         let SurfaceEntityKind::MineralNode { category, .. } = &entity.kind else {
             return None;
         };
-        Some(super::telemetry::MineralDeposit {
+        Some(crate::engine::observe_port::planet_side::MineralDeposit {
             x: entity.position.x,
             y: entity.position.y,
             category: u8::try_from(*category).ok()?,

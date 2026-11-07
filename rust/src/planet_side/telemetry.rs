@@ -5,16 +5,9 @@
 //! [`observation`] is a plain field-by-field read rather than a coherent
 //! snapshot. Reading it from another thread is not supported.
 
-/// Terminal codes published by [`finish`]. These are the sole definition; the
-/// automation script layer maps its outcome names onto them.
-pub mod terminal {
-    pub const RUNNING: u32 = 0;
-    pub const RETURNED: u32 = 1;
-    pub const DESTROYED: u32 = 2;
-    pub const ABORTED: u32 = 3;
-    pub const ADAPTER_FAILURE: u32 = 4;
-    pub const FRAME_BUDGET: u32 = 5;
-}
+#[cfg(test)]
+use crate::engine::observe_port::planet_side::phase_name;
+use crate::engine::observe_port::planet_side::{terminal, MineralDeposit, PlanetSideObservation};
 
 use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Mutex, MutexGuard};
@@ -30,14 +23,6 @@ use super::world::WORLD_WIDTH;
 /// Deposits kept per element category. The nearest ones to the lander are
 /// kept, so the closest deposit of every category is always published.
 pub const DEPOSITS_PER_CATEGORY: usize = 64;
-
-/// A mineral deposit that is still on the surface.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct MineralDeposit {
-    pub x: i32,
-    pub y: i32,
-    pub category: u8,
-}
 
 static ENERGY_NODES: Mutex<Vec<(u8, i32, i32)>> = Mutex::new(Vec::new());
 static ENERGY_RETRIEVED: AtomicU32 = AtomicU32::new(0);
@@ -86,40 +71,6 @@ static MINERAL_PICKUPS: AtomicU64 = AtomicU64::new(0);
 static CREATURE_HITS: AtomicU64 = AtomicU64::new(0);
 /// Collisions that only connected across the wrapped horizontal seam.
 static SEAM_HITS: AtomicU64 = AtomicU64::new(0);
-
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub struct PlanetSideObservation {
-    pub generation: u64,
-    pub active: bool,
-    pub frames: u64,
-    pub start_x: i32,
-    pub start_y: i32,
-    pub current_x: i32,
-    pub current_y: i32,
-    pub start_crew: u8,
-    pub current_crew: u8,
-    /// Lander facing, one of the sixteen.
-    pub facing: u8,
-    /// Mineral units in the lander hold, per element category.
-    pub mineral_units: [u16; NUM_ELEMENT_CATEGORIES],
-    pub sound_count: u64,
-    pub last_sound: u32,
-    pub terminal: u32,
-    pub returned_crew: i16,
-    pub returned_minerals: u16,
-    /// Live `SessionPhase` code, so a stalled trip can be told apart from one
-    /// that never requested takeoff at all. See [`phase_name`].
-    pub phase: u32,
-    /// Graphics batch levels Rust had to restore after a native callback during
-    /// this trip. Any non-zero value is a defect in the callback.
-    pub batch_depth_corrections: u64,
-    /// Mineral deposits collected while surface frames were presented.
-    pub mineral_pickups: u64,
-    /// Stun-bolt impacts on live creatures while surface frames were presented.
-    pub creature_hits: u64,
-    /// Collisions that connected only across the wrapped horizontal seam.
-    pub seam_hits: u64,
-}
 
 pub fn begin(session: &PlanetSideSession) {
     ENERGY_NODES.lock().unwrap().clear();
@@ -284,23 +235,6 @@ const fn phase_code(phase: super::session::SessionPhase) -> u32 {
         SessionPhase::Return => 7,
         SessionPhase::Complete => 8,
         SessionPhase::Aborted => 9,
-    }
-}
-
-/// Human-readable name for an observed phase code.
-#[must_use]
-pub const fn phase_name(code: u32) -> &'static str {
-    match code {
-        1 => "Warmup",
-        2 => "Launch",
-        3 => "Landing",
-        4 => "Active",
-        5 => "TakingOff",
-        6 => "Explosion",
-        7 => "Return",
-        8 => "Complete",
-        9 => "Aborted",
-        _ => "None",
     }
 }
 
