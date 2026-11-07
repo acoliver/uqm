@@ -153,6 +153,16 @@ fn owned_entry_keeps_display_order_resource_swap_and_quasispace_state() {
 #[test]
 #[serial_test::serial]
 fn entry_animation_restores_the_real_flagship_hooks_and_saved_facing() {
+    flagship_entry(false);
+}
+
+#[test]
+#[serial_test::serial]
+fn loaded_flagship_keeps_its_hooks_and_skips_the_entry_animation() {
+    flagship_entry(true);
+}
+
+fn flagship_entry(loading: bool) {
     use uqm_rust::{
         engine::battle::{
             views::{FrameSelection, Frames, SharedFrames},
@@ -169,9 +179,16 @@ fn entry_animation_restores_the_real_flagship_hooks_and_saved_facing() {
     };
     let mut game = Game::new();
     game.world.data.game.ship_facing = 1;
+    if loading {
+        game.kernel.last_activity = CHECK_LOAD as u16 | IN_HYPERSPACE as u16;
+    }
     game.kernel.reset_element_capacity(1);
     game.kernel.reset_ship_capacity(0, 1);
-    let ship = game.kernel.ships(0).build(SPECIES_ID_SIS_SHIP_ID).unwrap();
+    let ship = game
+        .kernel
+        .ships(0)
+        .build(SPECIES_ID_SIS_SHIP_ID)
+        .unwrap_or_else(|| panic!("flagship fixture ship capacity exhausted"));
     let ship = game.kernel.ships(0).ship_id(ship);
     // SAFETY: the serialized fixture owns all animation frame records and their drawable.
     let drawable = unsafe {
@@ -188,7 +205,9 @@ fn entry_animation_restores_the_real_flagship_hooks_and_saved_facing() {
     let mut cx = Cx::new(&mut battle, &mut game.world, &mut game.kernel, || {
         panic!("transition RNG")
     });
-    let element = cx.alloc_element().unwrap();
+    let element = cx
+        .alloc_element()
+        .unwrap_or_else(|| panic!("flagship fixture element capacity exhausted"));
     cx.set_parent(element, Some(ship));
     cx.set_ship_element(ship, Some(element));
     cx.set_single_frames(
@@ -202,19 +221,32 @@ fn entry_animation_restores_the_real_flagship_hooks_and_saved_facing() {
     cx.element_mut(element).pre = Some(pre);
     cx.element_mut(element).post = Some(post);
     cx.element_mut(element).flags = (APPEARING | PLAYER_SHIP) as u16;
-    assert!(hyper_transition(&mut cx, element));
-    assert!(cx.element(element).post.is_none());
-    assert_eq!(
-        cx.frame_number(cx.element(element).next.image.frame.view()),
-        31
-    );
-    cx.element_mut(element).flags &= !(APPEARING as u16);
-    for _ in 0..16 {
-        cx.copy_next_to_current(element);
-        assert!(hyper_transition(&mut cx, element));
+    cx.copy_current_to_next(element);
+    assert_eq!(hyper_transition(&mut cx, element), !loading);
+    if loading {
+        assert_eq!(cx.kernel.last_activity, IN_HYPERSPACE as u16);
+        assert!(cx.kernel.hyperspace_ship_hooks.0.is_none());
+        assert!(cx.kernel.hyperspace_ship_hooks.1.is_none());
+    } else {
+        assert!(cx.element(element).post.is_none());
+        assert_eq!(
+            cx.frame_number(cx.element(element).next.image.frame.view()),
+            31
+        );
+        cx.element_mut(element).flags &= !(APPEARING as u16);
+        for _ in 0..16 {
+            cx.copy_next_to_current(element);
+            assert!(hyper_transition(&mut cx, element));
+        }
     }
-    assert_eq!(cx.element(element).pre.unwrap().address(), pre.address());
-    assert_eq!(cx.element(element).post.unwrap().address(), post.address());
+    assert_eq!(
+        cx.element(element).pre.map(ElementHook::address),
+        Some(pre.address())
+    );
+    assert_eq!(
+        cx.element(element).post.map(ElementHook::address),
+        Some(post.address())
+    );
     assert_eq!(cx.element(element).flags & NONSOLID as u16, 0);
     save_sis_hyper_state(&mut cx);
     assert_eq!(cx.world.data.game.ship_facing, 1);
