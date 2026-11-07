@@ -86,6 +86,15 @@ fn next(reader: &mut impl BufRead) -> Result<Option<Value>, String> {
         {
             return Err("invalid native_battle schema or counters".into());
         }
+        let evidence = &record["native_battle"];
+        if evidence["frame"].as_u64().is_none()
+            || evidence["picker_active"].as_bool().is_none()
+            || evidence["picker_generation"].as_u64().is_none()
+            || !(evidence["delta_ms"].is_null() || evidence["delta_ms"].as_u64().is_some())
+            || evidence["tick"].is_object() == evidence["gate"].is_object()
+        {
+            return Err("incomplete native battle evidence".into());
+        }
         return Ok(Some(record));
     }
 }
@@ -172,13 +181,11 @@ fn compare(left: &Path, right: &Path) -> Result<String, String> {
                         }
                     }
                 }
-                (a, b) => {
-                    let tick = a.as_ref().or(b.as_ref()).unwrap()["input_seen"].clone();
-                    return Ok(format!(
-                        "first difference: scenario {name:?}, tick {tick}, record: {} != {}",
-                        if a.is_some() { "present" } else { "missing" },
-                        if b.is_some() { "present" } else { "missing" }
-                    ));
+                (Some(record), None) => {
+                    return Ok(missing_record(name, &record, "present != missing"))
+                }
+                (None, Some(record)) => {
+                    return Ok(missing_record(name, &record, "missing != present"))
                 }
             }
         }
@@ -191,6 +198,13 @@ fn compare(left: &Path, right: &Path) -> Result<String, String> {
     Ok(format!("no difference ({samples} native battle records)"))
 }
 
+fn missing_record(name: &str, record: &Value, difference: &str) -> String {
+    format!(
+        "first difference: scenario {name:?}, tick {}, record: {difference}",
+        record["input_seen"]
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -199,7 +213,7 @@ mod tests {
         std::fs::create_dir_all(root.join("automation")).unwrap();
         let record = serde_json::json!({
             "schema":3,"kind":"native_battle","input_seen":839,"present_seen":1673,"elapsed_ms":42000,
-            "native_battle":{"tick":{"keys":[[0,0],[0,input]],"rng":123},"picker_active":false,"picker_generation":2,"delta_ms":42}
+            "native_battle":{"frame":838,"tick":{"keys":[[0,0],[0,input]],"rng":123},"picker_active":false,"picker_generation":2,"delta_ms":42}
         });
         std::fs::write(root.join("automation/trace.jsonl"), format!("{record}\n")).unwrap();
     }
@@ -263,14 +277,15 @@ mod tests {
     #[test]
     fn absent_diagnostics_truncated_invalid_and_oversize_records_fail() {
         for bytes in [
-            b"{\"kind\":\"input_tick\"}\n".to_vec(),
             b"{\"kind\":\"native_battle\"}\n".to_vec(),
             b"{}".to_vec(),
             vec![b'x'; MAX_RECORD as usize + 1],
         ] {
             let mut reader = std::io::Cursor::new(bytes);
-            assert!(next(&mut reader).is_err() || next(&mut reader).unwrap().is_none());
+            assert!(next(&mut reader).is_err());
         }
+        let mut ordinary = std::io::Cursor::new(b"{\"kind\":\"input_tick\"}\n");
+        assert!(next(&mut ordinary).unwrap().is_none());
         let root = tempfile::tempdir().unwrap();
         std::fs::write(root.path().join("trace.jsonl"), "{}\n").unwrap();
         assert!(compare(root.path(), root.path())
