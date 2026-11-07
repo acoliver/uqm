@@ -63,54 +63,59 @@ fn check_scene(
     with_site(game, index, |host, system| {
         load(host, system);
         system.scene(|info, frame| {
-            // SAFETY: this fixture owns every loaded native handle until the cleanup below.
+            assert!(!info.lander_font.is_null());
+            assert!(!info.lander_font_eff.is_null());
+            if let Some(mask) = mask {
+                assert!(!frame.is_null(), "missing mask {mask}");
+                // SAFETY: the fixture owns this loaded mask until cleanup below.
+                let pixel = unsafe { GetFramePixel(*frame, POINT { x: 0, y: 0 }) };
+                let palette_index = GRAPHICS
+                    .iter()
+                    .position(|key| *key == mask)
+                    .unwrap_or_else(|| panic!("unknown scene fixture mask {mask}"));
+                let expected = u8::try_from(palette_index)
+                    .unwrap_or_else(|error| panic!("mask fixture palette index: {error}"))
+                    + 1;
+                assert_eq!(
+                    (pixel.r, pixel.g, pixel.b),
+                    (expected, 19, 39),
+                    "mask {mask}"
+                );
+            } else {
+                assert!(frame.is_null());
+            }
+            use uqm_rust::strings::string_table::*;
+            if let Some(first) = first {
+                let table = info.discovery_string.cast();
+                assert!(!info.discovery_string.is_null(), "missing report {report}");
+                // SAFETY: the fixture retains the loaded report and its selected index.
+                assert_eq!(unsafe { GetStringTableIndex(table) }, first);
+                // SAFETY: the loaded report owns this terminated string until cleanup.
+                let text = unsafe { CStr::from_ptr(GetStringAddress(table)) }
+                    .to_str()
+                    .unwrap_or_else(|error| panic!("report {report} is not UTF-8: {error}"));
+                assert_eq!(text.trim_end_matches('\n'), format!("{report}-{first}"));
+            } else {
+                assert!(info.discovery_string.is_null());
+            }
+            // SAFETY: both font allocations belong exclusively to this fixture.
             unsafe {
-                assert!(!info.lander_font.is_null());
-                assert!(!info.lander_font_eff.is_null());
-                if let Some(mask) = mask {
-                    assert!(!frame.is_null(), "missing mask {mask}");
-                    let pixel = GetFramePixel(*frame, POINT { x: 0, y: 0 });
-                    let palette_index = GRAPHICS
-                        .iter()
-                        .position(|key| *key == mask)
-                        .unwrap_or_else(|| panic!("unknown scene fixture mask {mask}"));
-                    let expected = u8::try_from(palette_index)
-                        .unwrap_or_else(|error| panic!("mask fixture palette index: {error}"))
-                        + 1;
-                    assert_eq!(
-                        (pixel.r, pixel.g, pixel.b),
-                        (expected, 19, 39),
-                        "mask {mask}"
-                    );
-                } else {
-                    assert!(frame.is_null());
-                }
-                use uqm_rust::strings::string_table::*;
-                if let Some(first) = first {
-                    let table = info.discovery_string.cast();
-                    assert!(!info.discovery_string.is_null(), "missing report {report}");
-                    assert_eq!(GetStringTableIndex(table), first);
-                    let text = CStr::from_ptr(GetStringAddress(table))
-                        .to_str()
-                        .unwrap_or_else(|error| panic!("report {report} is not UTF-8: {error}"));
-                    assert_eq!(text.trim_end_matches('\n'), format!("{report}-{first}"));
-                } else {
-                    assert!(info.discovery_string.is_null());
-                }
                 uqm_rust::graphics::font_abi::DestroyFont(info.lander_font.cast());
-                info.lander_font = ptr::null_mut();
                 DestroyDrawable(uqm_rust::graphics::pixmap_abi::ReleaseDrawable(
                     info.lander_font_eff.cast(),
                 ));
-                info.lander_font_eff = ptr::null_mut();
-                if !frame.is_null() {
-                    DestroyDrawable(uqm_rust::graphics::pixmap_abi::ReleaseDrawable(*frame));
-                    *frame = ptr::null_mut();
-                }
-                if !info.discovery_string.is_null() {
-                    DestroyStringTable(ReleaseStringTable(info.discovery_string.cast()));
-                    info.discovery_string = ptr::null_mut();
-                }
+            }
+            info.lander_font = ptr::null_mut();
+            info.lander_font_eff = ptr::null_mut();
+            if !frame.is_null() {
+                // SAFETY: this is the mask allocation checked above, released exactly once.
+                unsafe { DestroyDrawable(uqm_rust::graphics::pixmap_abi::ReleaseDrawable(*frame)) };
+                *frame = ptr::null_mut();
+            }
+            if !info.discovery_string.is_null() {
+                // SAFETY: the fixture owns the loaded report table, released exactly once.
+                unsafe { DestroyStringTable(ReleaseStringTable(info.discovery_string.cast())) };
+                info.discovery_string = ptr::null_mut();
             }
         });
     });
