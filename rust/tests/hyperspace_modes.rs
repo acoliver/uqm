@@ -53,6 +53,32 @@ fn encounter_generation_keeps_forced_melnorme_draws_and_one_shot_suppression() {
         draws, 2,
         "duplicate suppression does not skip the original random draw"
     );
+    {
+        let mut queue = game.world.encounters();
+        let first = queue.head().unwrap();
+        queue.get_mut(first).race_id = 0;
+        while let Some(id) = queue.alloc() {
+            queue.get_mut(id).race_id = 0;
+            queue.put(id);
+        }
+    }
+    game.world.set_story_state(StoryKey::USED_BROADCASTER, 1);
+    game.world
+        .set_story_state(StoryKey::BROADCASTER_RESPONSE, 0);
+    let mut full_pool_draws = 0;
+    check_hyperspace_encounter(&mut game.world, geometry, &mut || {
+        full_pool_draws += 1;
+        99
+    });
+    assert_eq!(full_pool_draws, 1, "pool exhaustion follows the RNG draw");
+    assert_eq!(game.world.encounters_ref().count(), 16);
+    assert!(game
+        .world
+        .encounters_ref()
+        .find(|encounter| encounter.race_id != 0)
+        .is_none());
+    assert_eq!(game.world.story_state(StoryKey::USED_BROADCASTER), 0);
+    assert_eq!(game.world.story_state(StoryKey::BROADCASTER_RESPONSE), 1);
 }
 
 #[test]
