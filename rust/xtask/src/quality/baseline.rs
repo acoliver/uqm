@@ -188,7 +188,7 @@ impl Baseline {
         for &(old, new) in steps {
             moves = super::transfers::compose(&moves, old, new, base)?;
         }
-        super::transfers::validate(current, base, &moves)?;
+        super::transfers::validate(&self.entries, current, base, &moves)?;
         let mut declaration_moves = previous;
         super::transfers::retire(&mut declaration_moves, base);
         let reverse = declaration_moves
@@ -390,11 +390,12 @@ pub fn check_limits(
 }
 
 pub fn validate_transfers(
+    entries: &BTreeMap<String, u64>,
     current: &Measurement,
     base: &Measurement,
     moves: &BTreeMap<String, String>,
 ) -> Result<(), String> {
-    super::transfers::validate(current, base, moves)
+    super::transfers::validate(entries, current, base, moves)
 }
 
 pub fn baseline_at_ref(root: &Path, reference: &str) -> Result<Option<Baseline>, String> {
@@ -572,7 +573,13 @@ mod tests {
         assert!(baseline.add_move(old, new, &current, &base).is_err());
         let mut duplicate = current;
         duplicate.findings.extend(base.findings.clone());
-        assert!(super::super::transfers::validate(&duplicate, &base, &baseline.moved).is_err());
+        assert!(super::super::transfers::validate(
+            &baseline.entries,
+            &duplicate,
+            &base,
+            &baseline.moved
+        )
+        .is_err());
     }
 
     #[test]
@@ -652,9 +659,9 @@ mod tests {
             ..Measurement::default()
         };
         let moves = [("uqm::old".into(), "uqm::new".into())].into();
-        assert!(validate_transfers(&current, &base, &moves).is_err());
+        assert!(validate_transfers(&base.baseline(), &current, &base, &moves).is_err());
         current.findings.pop();
-        assert!(validate_transfers(&current, &base, &moves).is_ok());
+        assert!(validate_transfers(&base.baseline(), &current, &base, &moves).is_ok());
     }
     #[test]
     fn legacy_baselines_are_linux_only_and_host_values_are_validated() {

@@ -446,7 +446,7 @@ fn compare_base(
         println!("initial baseline: comparing game debt; recording new xtask tooling");
     }
     if !options.allow_growth {
-        baseline::validate_transfers(measurement, &base, &baseline.moved)?;
+        baseline::validate_transfers(&baseline.entries, measurement, &base, &baseline.moved)?;
         let transferred =
             transfers::limits(&before, measurement, &base, &baseline.moved, &base_budgets)?;
         baseline::check_limits(

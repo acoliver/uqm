@@ -379,11 +379,14 @@ fn record_field_transfer_survives_disappearing_raw_record_debt() {
         None,
         false,
     );
-    assert!(
-        super::super::transfers::validate(&retained, &base, &baseline.moved)
-            .unwrap_err()
-            .contains("still exists")
-    );
+    assert!(super::super::transfers::validate(
+        &baseline.entries,
+        &retained,
+        &base,
+        &baseline.moved
+    )
+    .unwrap_err()
+    .contains("still exists"));
 }
 
 #[test]
@@ -441,7 +444,8 @@ fn declaration_move_keeps_the_source_subsystem_live() {
     baseline
         .add_move("uqm::battle::MOVED", "uqm::engine::MOVED", &current, &base)
         .unwrap();
-    super::super::baseline::validate_transfers(&current, &base, &baseline.moved).unwrap();
+    super::super::baseline::validate_transfers(&baseline.entries, &current, &base, &baseline.moved)
+        .unwrap();
 }
 
 #[test]
