@@ -498,11 +498,8 @@ mod tests {
     use crate::native_config::scenarios;
 
     fn repository_root() -> &'static Path {
-        Path::new(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .unwrap()
-            .parent()
-            .unwrap()
+        static ROOT: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+        ROOT.get_or_init(|| crate::cli::repository_root().unwrap())
     }
 
     /// Every script that starts from a save must have that save present.

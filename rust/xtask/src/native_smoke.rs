@@ -159,12 +159,8 @@ fn cell(text: &str) -> String {
 }
 
 fn git_output(root: &Path, arguments: &[&str]) -> Result<String, String> {
-    let output = Command::new("git")
-        .arg("-C")
-        .arg(root)
-        .args(arguments)
-        .output()
-        .map_err(|error| format!("run git {}: {error}", arguments.join(" ")))?;
+    let output =
+        crate::quality::tool::output(Command::new("git").arg("-C").arg(root).args(arguments))?;
     if !output.status.success() {
         return Err(format!("git {} failed", arguments.join(" ")));
     }
@@ -172,10 +168,8 @@ fn git_output(root: &Path, arguments: &[&str]) -> Result<String, String> {
 }
 
 fn utc_date() -> Result<String, String> {
-    let output = Command::new("date")
-        .args(["-u", "+%Y-%m-%dT%H:%M:%SZ"])
-        .output()
-        .map_err(|error| format!("run date: {error}"))?;
+    let output =
+        crate::quality::tool::output(Command::new("date").args(["-u", "+%Y-%m-%dT%H:%M:%SZ"]))?;
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
 }
 
@@ -351,7 +345,7 @@ mod tests {
     use super::*;
 
     fn repo_root() -> PathBuf {
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
+        crate::cli::repository_root().unwrap()
     }
 
     #[test]

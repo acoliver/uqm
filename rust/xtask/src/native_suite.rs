@@ -2650,11 +2650,8 @@ mod tests {
 
     #[test]
     fn every_script_is_admitted_without_rewriting_actions() {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .unwrap()
-            .parent()
-            .unwrap();
+        let repository = crate::cli::repository_root().unwrap();
+        let root = repository.as_path();
         let scenarios = crate::native_config::scenarios(root).unwrap();
         let admitted = preflight(root, &scenarios).unwrap();
         assert_eq!(admitted.len(), scenarios.len());
@@ -2689,11 +2686,8 @@ mod tests {
 
     #[test]
     fn preflight_reports_every_bad_script_and_never_accepts_an_empty_selection() {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .unwrap()
-            .parent()
-            .unwrap();
+        let repository = crate::cli::repository_root().unwrap();
+        let root = repository.as_path();
         let scripts: Vec<Scenario> = (0..2)
             .map(|index| Scenario {
                 path: format!("rust/scripts/missing-{index}.json"),

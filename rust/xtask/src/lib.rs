@@ -848,9 +848,8 @@ fn git_text(root: &Path, arguments: &[&str], label: &str) -> Result<String, Stri
 /// Run a command with its output going straight to this terminal.
 #[cfg(feature = "native")]
 fn run_command(command: &mut Command, label: &str) -> Result<(), String> {
-    let status = command
-        .status()
-        .map_err(|error| format!("{label} did not launch: {error}"))?;
+    let status =
+        quality::tool::exit_status(command).map_err(|error| format!("{label}: {error}"))?;
     if status.success() {
         Ok(())
     } else {

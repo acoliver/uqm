@@ -542,11 +542,11 @@ fn report(value: u64, findings: &[Finding], options: &Options) -> Result<(), Str
 }
 
 fn native_files(root: &Path) -> Result<u64, String> {
-    let output = Command::new("git")
-        .current_dir(root)
-        .args(["ls-files", "-z"])
-        .output()
-        .map_err(|e| e.to_string())?;
+    let output = crate::quality::tool::output(
+        Command::new("git")
+            .current_dir(root)
+            .args(["ls-files", "-z"]),
+    )?;
     if !output.status.success() {
         return Err(format!(
             "git ls-files failed: {}",

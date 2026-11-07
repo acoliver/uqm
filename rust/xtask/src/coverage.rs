@@ -86,20 +86,16 @@ fn added_production_files(
     let Some(base) = base else {
         return Ok(BTreeSet::new());
     };
-    let output = Command::new("git")
-        .current_dir(root)
-        .args([
-            "diff",
-            "--name-only",
-            "--no-renames",
-            "--diff-filter=A",
-            "-z",
-            base,
-            "--",
-            "rust",
-        ])
-        .output()
-        .map_err(|e| e.to_string())?;
+    let output = crate::quality::tool::output(Command::new("git").current_dir(root).args([
+        "diff",
+        "--name-only",
+        "--no-renames",
+        "--diff-filter=A",
+        "-z",
+        base,
+        "--",
+        "rust",
+    ]))?;
     if !output.status.success() {
         return Err(format!(
             "git diff: {}",
@@ -182,10 +178,8 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
 }
 
 fn measure(root: &Path, added: &BTreeSet<String>, cargo: &std::ffi::OsStr) -> Result<(), String> {
-    let version = tool::command(cargo)
-        .args(["llvm-cov", "--version"])
-        .output()
-        .map_err(|e| format!("cargo-llvm-cov: {e}"))?;
+    let version =
+        crate::quality::tool::output(tool::command(cargo).args(["llvm-cov", "--version"]))?;
     if !version.status.success()
         || String::from_utf8_lossy(&version.stdout).trim() != "cargo-llvm-cov 0.8.5"
     {

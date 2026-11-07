@@ -10,10 +10,9 @@ fn run_with_cargo(root: &Path, args: &[String], cargo: &std::ffi::OsStr) -> Resu
     if !args.is_empty() {
         return Err("usage: cargo xtask deny".into());
     }
-    let version = crate::quality::tool::command(cargo)
-        .args(["deny", "--version"])
-        .output()
-        .map_err(|e| format!("cargo-deny: {e}"))?;
+    let version = crate::quality::tool::output(
+        crate::quality::tool::command(cargo).args(["deny", "--version"]),
+    )?;
     let actual = String::from_utf8_lossy(&version.stdout);
     if !version.status.success() || actual.trim() != format!("cargo-deny {VERSION}") {
         return Err(format!(

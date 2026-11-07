@@ -998,7 +998,7 @@ mod tests {
 
     #[test]
     fn every_scenario_resolves_to_a_scenario_name() {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let root = crate::cli::repository_root().unwrap();
         for pinned in &crate::native_config::scenarios(&root).unwrap() {
             assert!(!scenario_stem(&pinned.path).unwrap().is_empty());
         }

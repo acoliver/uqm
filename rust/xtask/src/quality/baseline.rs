@@ -404,11 +404,13 @@ pub fn validate_transfers(
 
 pub fn baseline_at_ref(root: &Path, reference: &str) -> Result<Option<Baseline>, String> {
     let path = "rust/xtask/quality-baseline.toml";
-    let listed = Command::new("git")
-        .current_dir(root)
-        .args(["ls-tree", "--name-only", reference, "--", path])
-        .output()
-        .map_err(|e| e.to_string())?;
+    let listed = crate::quality::tool::output(Command::new("git").current_dir(root).args([
+        "ls-tree",
+        "--name-only",
+        reference,
+        "--",
+        path,
+    ]))?;
     if !listed.status.success() {
         return Err(format!(
             "git ls-tree {reference}: {}",
@@ -418,11 +420,11 @@ pub fn baseline_at_ref(root: &Path, reference: &str) -> Result<Option<Baseline>,
     if listed.stdout.is_empty() {
         return Ok(None);
     }
-    let output = Command::new("git")
-        .current_dir(root)
-        .args(["show", &format!("{reference}:{path}")])
-        .output()
-        .map_err(|e| e.to_string())?;
+    let output = crate::quality::tool::output(
+        Command::new("git")
+            .current_dir(root)
+            .args(["show", &format!("{reference}:{path}")]),
+    )?;
     if !output.status.success() {
         return Err(format!(
             "git show baseline: {}",
@@ -439,19 +441,19 @@ pub fn archived_measurement(
     let directory = root.join("rust/target/xtask-base");
     fs::create_dir_all(&directory).map_err(|e| e.to_string())?;
     let archive = tempfile::tempdir_in(directory).map_err(|e| e.to_string())?;
-    let mut git = Command::new("git")
-        .current_dir(root)
-        .args(["archive", reference])
-        .stdout(Stdio::piped())
-        .spawn()
-        .map_err(|e| e.to_string())?;
-    let status = Command::new("tar")
-        .arg("-x")
-        .arg("-C")
-        .arg(archive.path())
-        .stdin(git.stdout.take().ok_or("git archive stdout missing")?)
-        .status()
-        .map_err(|e| e.to_string())?;
+    let mut git = crate::quality::tool::spawn(
+        Command::new("git")
+            .current_dir(root)
+            .args(["archive", reference])
+            .stdout(Stdio::piped()),
+    )?;
+    let status = crate::quality::tool::exit_status(
+        Command::new("tar")
+            .arg("-x")
+            .arg("-C")
+            .arg(archive.path())
+            .stdin(git.stdout.take().ok_or("git archive stdout missing")?),
+    )?;
     let git_status = git.wait().map_err(|e| e.to_string())?;
     if !status.success() || !git_status.success() {
         return Err(format!(

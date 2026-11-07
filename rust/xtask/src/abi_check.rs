@@ -875,11 +875,7 @@ struct BuildCfg {
 impl BuildCfg {
     fn from_rustc(debug_process: bool) -> Result<Self, String> {
         let rustc = std::env::var("RUSTC").unwrap_or_else(|_| "rustc".into());
-        let output = Command::new(&rustc)
-            .arg("--print")
-            .arg("cfg")
-            .output()
-            .map_err(|error| format!("run {rustc} --print cfg: {error}"))?;
+        let output = crate::quality::tool::output(Command::new(&rustc).arg("--print").arg("cfg"))?;
         if !output.status.success() {
             return Err(format!(
                 "{rustc} --print cfg failed: {}",
@@ -1233,18 +1229,18 @@ struct WorkspaceDependency {
 }
 
 fn workspace_metadata(root: &Path) -> Result<WorkspaceMetadata, String> {
-    let output = Command::new("cargo")
-        .args([
-            "metadata",
-            "--locked",
-            "--no-deps",
-            "--format-version",
-            "1",
-            "--manifest-path",
-        ])
-        .arg(root.join("rust/Cargo.toml"))
-        .output()
-        .map_err(|error| format!("cargo metadata: {error}"))?;
+    let output = crate::quality::tool::output(
+        Command::new("cargo")
+            .args([
+                "metadata",
+                "--locked",
+                "--no-deps",
+                "--format-version",
+                "1",
+                "--manifest-path",
+            ])
+            .arg(root.join("rust/Cargo.toml")),
+    )?;
     if !output.status.success() {
         return Err(format!(
             "cargo metadata: {}",
@@ -1971,7 +1967,7 @@ mod tests {
 
     #[test]
     fn out_of_line_modules_and_includes_keep_inherited_cfg() {
-        let temporary = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tmp");
+        let temporary = crate::cli::repository_root().unwrap().join("tmp");
         fs::create_dir_all(&temporary).unwrap();
         let root = tempfile::tempdir_in(temporary).unwrap();
         let lib = root.path().join("lib.rs");

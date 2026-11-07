@@ -157,8 +157,9 @@ fn gpu_logs_are_retained_and_indexed_without_rewriting_the_child_bundle() {
 }
 
 fn temporary() -> tempfile::TempDir {
-    let root =
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tmp/verify/native-gpu-tests");
+    let root = crate::cli::repository_root()
+        .unwrap()
+        .join("tmp/verify/native-gpu-tests");
     std::fs::create_dir_all(&root).unwrap();
     tempfile::tempdir_in(root).unwrap()
 }

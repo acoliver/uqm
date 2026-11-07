@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::Command;
 
 const CLOCK_HZ: u64 = 840;
@@ -87,7 +87,7 @@ fn timing(text: &str, load: &impl Fn(&str) -> String) -> Timing {
 }
 
 fn root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
+    crate::cli::repository_root().unwrap()
 }
 
 fn packaged_script(name: &str) -> String {

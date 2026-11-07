@@ -110,19 +110,15 @@ fn validate(
 }
 
 fn moved_files(root: &Path, base: &str) -> Result<BTreeSet<String>, String> {
-    let output = Command::new("git")
-        .current_dir(root)
-        .args([
-            "diff",
-            "--name-status",
-            "--find-renames=50%",
-            "-z",
-            base,
-            "--",
-            "rust",
-        ])
-        .output()
-        .map_err(|e| e.to_string())?;
+    let output = crate::quality::tool::output(Command::new("git").current_dir(root).args([
+        "diff",
+        "--name-status",
+        "--find-renames=50%",
+        "-z",
+        base,
+        "--",
+        "rust",
+    ]))?;
     if !output.status.success() {
         return Err(format!(
             "git diff: {}",

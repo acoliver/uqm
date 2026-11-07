@@ -117,9 +117,9 @@ pub(crate) fn run_bounded(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .process_group(0);
-    let mut child = match command.spawn() {
+    let mut child = match crate::quality::tool::spawn(command) {
         Ok(child) => child,
-        Err(error) => return Captured::not_launched(error.to_string()),
+        Err(error) => return Captured::not_launched(error),
     };
     let group = child.id() as libc::pid_t;
     let stdout = child.stdout.take().map(|pipe| drain(pipe, limit));
@@ -166,5 +166,22 @@ pub(crate) fn run_bounded(
         pipe_cleanup: "complete",
         descendant_survivors: survivors
             .then(|| format!("process group {group} still had members after the child exited")),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_command_that_cannot_start_names_its_program_and_directory() {
+        let directory = tempfile::tempdir().unwrap();
+        let program = "uqm-xtask-no-such-program";
+        let expected = directory.path().display().to_string();
+
+        let captured = run(Command::new(program).current_dir(directory.path()), None);
+        let launch_error = captured.launch_error.expect("the command must not launch");
+        assert!(launch_error.contains(program), "{launch_error}");
+        assert!(launch_error.contains(&expected), "{launch_error}");
     }
 }
