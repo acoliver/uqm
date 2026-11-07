@@ -1,9 +1,9 @@
 //! The story gating of the Burvixese ruins and broadcasters, and the home
 //! system's orbital, against recording fakes.
 
-use crate::engine::StoryKey;
 use super::{generate_energy, generate_orbital, pickup_energy, BurvScenes};
 use crate::engine::world::planet::{NodeInfo, PlanetFrame, SystemInfo};
+use crate::engine::StoryKey;
 use crate::math::RandomContext;
 use crate::planet_side::report_adapter::{DiscoveryReportPort, ReportDisposition};
 use crate::planet_side::runtime::AdapterError;
@@ -40,10 +40,13 @@ struct FakeScenes {
 }
 
 impl BurvScenes for FakeScenes {
-    fn load_ruins_scene(&mut self) {
+    fn load_ruins_scene(&mut self, _system: &mut crate::engine::world::generation::SolarSys<'_>) {
         self.ruins += 1;
     }
-    fn load_broadcasters_scene(&mut self) {
+    fn load_broadcasters_scene(
+        &mut self,
+        _system: &mut crate::engine::world::generation::SolarSys<'_>,
+    ) {
         self.broadcasters += 1;
     }
 }
@@ -86,13 +89,20 @@ fn other_worlds_have_no_nodes() {
 fn ruins_only_cycle_the_report() {
     let mut story = FakeStory::default();
     let (mut report, mut lander) = (FakeReport::default(), FakeLander::default());
-    assert!(!pickup_energy(
-        HOME,
-        3,
-        &mut story,
-        &mut report,
-        &mut lander
-    ));
+    assert!(!crate::planets::generate::testing::with_empty(|system| {
+        pickup_energy(
+            system,
+            HOME,
+            3,
+            &mut crate::planets::generate::testing::Effects {
+                story: &mut story,
+                site: &mut (),
+                report: &mut report,
+                lander: &mut lander,
+                load: Some(|| {}),
+            },
+        )
+    }));
     assert_eq!(report.0, [ReportDisposition::Cycle]);
     assert_eq!(lander.0, 0);
     assert_eq!(story.flag(StoryKey::BURVIXESE_BROADCASTERS), 0);
@@ -102,7 +112,20 @@ fn ruins_only_cycle_the_report() {
 fn the_broadcasters_are_taken_once_with_a_single_report() {
     let mut story = FakeStory::default();
     let (mut report, mut lander) = (FakeReport::default(), FakeLander::default());
-    assert!(pickup_energy(MOON, 0, &mut story, &mut report, &mut lander));
+    assert!(crate::planets::generate::testing::with_empty(|system| {
+        pickup_energy(
+            system,
+            MOON,
+            0,
+            &mut crate::planets::generate::testing::Effects {
+                story: &mut story,
+                site: &mut (),
+                report: &mut report,
+                lander: &mut lander,
+                load: Some(|| {}),
+            },
+        )
+    }));
     assert_eq!(report.0, [ReportDisposition::Once]);
     assert_eq!(lander.0, 1);
     assert_eq!(story.flag(StoryKey::BURVIXESE_BROADCASTERS), 1);
@@ -114,7 +137,20 @@ fn the_broadcasters_cannot_be_taken_twice() {
     let mut story = FakeStory::with(&[(StoryKey::BURVIXESE_BROADCASTERS, 1)]);
     let (mut report, mut lander) = (FakeReport::default(), FakeLander::default());
     let again = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        pickup_energy(MOON, 0, &mut story, &mut report, &mut lander)
+        crate::planets::generate::testing::with_empty(|system| {
+            pickup_energy(
+                system,
+                MOON,
+                0,
+                &mut crate::planets::generate::testing::Effects {
+                    story: &mut story,
+                    site: &mut (),
+                    report: &mut report,
+                    lander: &mut lander,
+                    load: Some(|| {}),
+                },
+            )
+        })
     }));
     assert!(again.is_err());
     assert!(report.0.is_empty());
@@ -125,7 +161,20 @@ fn the_broadcasters_come_from_node_zero_only() {
     let mut story = FakeStory::default();
     let (mut report, mut lander) = (FakeReport::default(), FakeLander::default());
     let wrong = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        pickup_energy(MOON, 1, &mut story, &mut report, &mut lander)
+        crate::planets::generate::testing::with_empty(|system| {
+            pickup_energy(
+                system,
+                MOON,
+                1,
+                &mut crate::planets::generate::testing::Effects {
+                    story: &mut story,
+                    site: &mut (),
+                    report: &mut report,
+                    lander: &mut lander,
+                    load: Some(|| {}),
+                },
+            )
+        })
     }));
     assert!(wrong.is_err());
 }
@@ -139,13 +188,20 @@ fn other_worlds_pick_up_nothing() {
     ] {
         let mut story = FakeStory::default();
         let (mut report, mut lander) = (FakeReport::default(), FakeLander::default());
-        assert!(!pickup_energy(
-            body,
-            0,
-            &mut story,
-            &mut report,
-            &mut lander
-        ));
+        assert!(!crate::planets::generate::testing::with_empty(|system| {
+            pickup_energy(
+                system,
+                body,
+                0,
+                &mut crate::planets::generate::testing::Effects {
+                    story: &mut story,
+                    site: &mut (),
+                    report: &mut report,
+                    lander: &mut lander,
+                    load: Some(|| {}),
+                },
+            )
+        }));
         assert!(report.0.is_empty());
         assert_eq!(lander.0, 0);
         assert_eq!(story.flag(StoryKey::BURVIXESE_BROADCASTERS), 0);
@@ -177,14 +233,22 @@ fn orbit_scenes(body: Body, story: &FakeStory) -> (u32, u32, (u8, u8), u32) {
     };
     let mut scenes = FakeScenes::default();
     let mut loaded = 0;
-    assert!(generate_orbital(
+    assert!(crate::planets::generate::testing::with_orbit(
         &mut orbit,
         body,
-        story,
-        &mut scenes,
-        || {
-            loaded += 1;
-        }
+        |system| generate_orbital(
+            system,
+            body,
+            &mut crate::planets::generate::testing::Effects {
+                story,
+                site: &mut scenes,
+                report: (),
+                lander: (),
+                load: Some(|| {
+                    loaded += 1;
+                })
+            }
+        )
     ));
     let weather = (
         sys_info.planet_info.weather as u8,

@@ -1,8 +1,8 @@
 //! The talking pet system's conversation flow, the Ur-Quan abduction and the
 //! ruins against recording fakes.
 
-use crate::engine::StoryKey;
 use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
+use crate::engine::StoryKey;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -155,7 +155,11 @@ impl HomeContactSite for Site {
     fn load_ip_groups(&mut self) {
         self.record(Call::LoadIpGroups);
     }
-    fn load_ruins_scene(&mut self, artifact_taken: bool) {
+    fn load_ruins_scene(
+        &mut self,
+        _system: &mut crate::engine::world::generation::SolarSys<'_>,
+        artifact_taken: bool,
+    ) {
         self.record(Call::LoadRuinsScene(artifact_taken));
     }
 }
@@ -215,7 +219,7 @@ impl UrquanEncounterSite for Site {
 /// was loaded, and the weather left in the orbital information.
 fn visit(
     body: Body,
-    flags: &[(&'static str, u32)],
+    flags: &[(StoryKey, u32)],
     configure: impl FnOnce(&mut Site),
 ) -> (Vec<Call>, u32, u16) {
     let calls = Rc::new(RefCell::new(Vec::new()));
@@ -245,12 +249,20 @@ fn visit(
             sys_info: &mut sys_info,
             world: &world,
         };
-        assert!(generate_orbital(
+        assert!(crate::planets::generate::testing::with_orbit(
             &mut orbit,
             body,
-            &mut story,
-            &mut site,
-            || loaded += 1
+            |system| generate_orbital(
+                system,
+                body,
+                &mut crate::planets::generate::testing::Effects {
+                    story: &mut story,
+                    site: &mut site,
+                    report: (),
+                    lander: (),
+                    load: Some(|| loaded += 1)
+                }
+            )
         ));
     }
     let seen = calls.borrow().clone();
@@ -305,7 +317,10 @@ fn other_bodies_only_get_the_default_orbital() {
 fn each_condition_alone_starts_the_visit_in_the_conversation_flow() {
     for (flags, tracking) in [
         (
-            &[(StoryKey::UMGAH_ZOMBIE_BLOBBIES, 1), (StoryKey::TALKING_PET, 1)][..],
+            &[
+                (StoryKey::UMGAH_ZOMBIE_BLOBBIES, 1),
+                (StoryKey::TALKING_PET, 1),
+            ][..],
             false,
         ),
         (&[][..], false),
@@ -370,7 +385,10 @@ fn the_zombie_fleet_is_ten_ships_and_the_pet_talks_after_it_is_beaten() {
     for (survivors, pet_talks_after) in [(false, true), (true, false)] {
         let (calls, _, _) = visit(
             WORLD,
-            &[(StoryKey::UMGAH_ZOMBIE_BLOBBIES, 1), (StoryKey::TALKING_PET, 1)],
+            &[
+                (StoryKey::UMGAH_ZOMBIE_BLOBBIES, 1),
+                (StoryKey::TALKING_PET, 1),
+            ],
             |site| {
                 site.tracking = true;
                 site.tracking_after = true;
@@ -525,11 +543,35 @@ fn the_world_is_telluric_and_only_it_has_ruins() {
 #[test]
 fn the_ruins_cycle_the_report_and_other_worlds_report_nothing() {
     let mut report = FakeReport::default();
-    assert!(!pickup_energy(WORLD, &mut report));
+    assert!(!crate::planets::generate::testing::with_empty(|system| {
+        pickup_energy(
+            system,
+            WORLD,
+            &mut crate::planets::generate::testing::Effects {
+                story: (),
+                site: &mut (),
+                report: &mut report,
+                lander: (),
+                load: Some(|| {}),
+            },
+        )
+    }));
     assert_eq!(report.0, [ReportDisposition::Cycle]);
     for body in OTHER_BODIES {
         let mut report = FakeReport::default();
-        assert!(!pickup_energy(body, &mut report));
+        assert!(!crate::planets::generate::testing::with_empty(|system| {
+            pickup_energy(
+                system,
+                body,
+                &mut crate::planets::generate::testing::Effects {
+                    story: (),
+                    site: &mut (),
+                    report: &mut report,
+                    lander: (),
+                    load: Some(|| {}),
+                },
+            )
+        }));
         assert!(report.0.is_empty());
     }
 }

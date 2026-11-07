@@ -37,7 +37,19 @@ impl DiscoveryReportPort for FakeReport {
 #[test]
 fn pickup_on_the_home_world_cycles_the_ruins_report_and_takes_nothing() {
     let mut report = FakeReport::default();
-    assert!(!pickup_energy(Body::Planet(0), &mut report));
+    assert!(!crate::planets::generate::testing::with_empty(|system| {
+        pickup_energy(
+            system,
+            Body::Planet(0),
+            &mut crate::planets::generate::testing::Effects {
+                story: (),
+                site: &mut (),
+                report: &mut report,
+                lander: (),
+                load: Some(|| {}),
+            },
+        )
+    }));
     assert_eq!(report.0, [ReportDisposition::Cycle]);
 }
 
@@ -45,7 +57,19 @@ fn pickup_on_the_home_world_cycles_the_ruins_report_and_takes_nothing() {
 fn pickup_elsewhere_reports_nothing() {
     for body in [Body::Planet(1), Body::Moon { planet: 0, moon: 0 }] {
         let mut report = FakeReport::default();
-        assert!(!pickup_energy(body, &mut report));
+        assert!(!crate::planets::generate::testing::with_empty(|system| {
+            pickup_energy(
+                system,
+                body,
+                &mut crate::planets::generate::testing::Effects {
+                    story: (),
+                    site: &mut (),
+                    report: &mut report,
+                    lander: (),
+                    load: Some(|| {}),
+                },
+            )
+        }));
         assert!(report.0.is_empty());
     }
 }
