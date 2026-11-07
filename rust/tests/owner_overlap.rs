@@ -77,7 +77,7 @@ fn empty_npc_phrase_does_not_acquire_an_owner() {
 fn sis_slot_snapshot_releases_world_before_support_ship_drawing() {
     let mut game = Game::new();
     let display = campaign_display::CampaignDisplay::install(&mut game).unwrap();
-    game.world.story = Some(uqm_rust::state::game_state::GameState::new());
+    game.world.story = Some(uqm_rust::state::game_state::StoryState::new());
     game.world.data.flagship.module_slots.fill(255);
     game.world.data.flagship.drive_slots.fill(255);
     game.world.data.flagship.jet_slots.fill(255);
