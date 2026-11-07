@@ -2,6 +2,7 @@
 
 use std::fmt::Write as _;
 use uqm_rust::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
+use uqm_rust::engine::StoryKey;
 
 use super::{fresh_node, scan_seeds};
 use uqm_rust::battle::gendef::{
@@ -132,17 +133,17 @@ pub fn render(ops: &mut impl MyconOps) -> String {
 struct SunDevice(bool);
 
 impl Story for SunDevice {
-    fn flag(&self, name: &'static str) -> u32 {
-        assert_eq!(name, "SUN_DEVICE");
+    fn flag(&self, name: StoryKey) -> u32 {
+        assert_eq!(name, StoryKey::SUN_DEVICE);
         u32::from(self.0)
     }
-    fn set_flag(&mut self, _name: &'static str, _value: u32) {
+    fn set_flag(&mut self, _name: StoryKey, _value: u32) {
         panic!("scan hooks do not write story flags");
     }
-    fn word(&self, _name: &'static str) -> u32 {
+    fn word(&self, _name: StoryKey) -> u32 {
         panic!("scan hooks do not read group references");
     }
-    fn set_word(&mut self, _name: &'static str, _value: u32) {
+    fn set_word(&mut self, _name: StoryKey, _value: u32) {
         panic!("scan hooks do not write group references");
     }
 }

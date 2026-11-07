@@ -5,15 +5,15 @@
 //! `generateEnergy`, `pickupEnergy`. Story flags: `BURVIXESE_BROADCASTERS`,
 //! `BURV_BROADCASTERS_ON_SHIP`.
 
-use crate::battle::battle_types::normalize_angle;
+use crate::engine::math::battle_types::normalize_angle;
 use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
+use crate::engine::StoryKey;
 use crate::math::RandomContext;
-use crate::planet_side::report_adapter::DiscoveryReportPort;
 use crate::planets::generate::default;
 use crate::planets::generate::home_contact::LanderTakeoff;
 use crate::planets::generate::orbits::{MAX_MOONS, MOON_DELTA};
 use crate::planets::generate::special::{
-    self, Body, Orbit, Story, MIN_MOON_RADIUS, REDUX_WORLD, SELENIC_WORLD,
+    self, Body, Story, MIN_MOON_RADIUS, REDUX_WORLD, SELENIC_WORLD,
 };
 
 const HOME: Body = Body::Planet(0);
@@ -22,9 +22,12 @@ const BROADCASTERS_MOON: Body = Body::Moon { planet: 0, moon: 0 };
 /// The two scenes `generateOrbital` can load before the planet display.
 pub trait BurvScenes {
     /// `LoadStdLanderFont`, the ruins mask and the Burvixese ruins strings.
-    fn load_ruins_scene(&mut self);
+    fn load_ruins_scene(&mut self, _system: &mut crate::engine::world::generation::SolarSys<'_>);
     /// `LoadStdLanderFont`, the broadcasters mask and report strings.
-    fn load_broadcasters_scene(&mut self);
+    fn load_broadcasters_scene(
+        &mut self,
+        _system: &mut crate::engine::world::generation::SolarSys<'_>,
+    );
 }
 
 /// `GenerateBurvixese_generatePlanets`.
@@ -75,21 +78,19 @@ pub fn generate_moons(
 /// world's ruins scene and fixed weather, or the broadcasters moon's scene
 /// until the broadcasters are taken, then the planet display.
 pub fn generate_orbital(
-    orbit: &mut Orbit<'_>,
+    system: &mut SolarSys<'_>,
     body: Body,
-    story: &impl Story,
-    scenes: &mut impl BurvScenes,
-    load_planet: impl FnOnce(),
+    scenes: &mut (impl BurvScenes + Story + super::host::PlanetSite + ?Sized),
 ) -> bool {
-    orbit.analyse();
+    super::special::with_orbit(system, body, |orbit| orbit.analyse());
     if body == HOME {
-        scenes.load_ruins_scene();
-        orbit.sys_info.planet_info.weather = 0;
-        orbit.sys_info.planet_info.tectonics = 0;
-    } else if body == BROADCASTERS_MOON && story.flag("BURVIXESE_BROADCASTERS") == 0 {
-        scenes.load_broadcasters_scene();
+        scenes.load_ruins_scene(system);
+        system.planet_info().weather = 0;
+        system.planet_info().tectonics = 0;
+    } else if body == BROADCASTERS_MOON && scenes.flag(StoryKey::BURVIXESE_BROADCASTERS) == 0 {
+        scenes.load_broadcasters_scene(system);
     }
-    load_planet();
+    super::host::PlanetSite::load_planet(scenes, system);
     true
 }
 
@@ -101,12 +102,12 @@ pub fn generate_energy(
     body: Body,
     which_node: u16,
     info: &mut NodeInfo,
-    story: &impl Story,
+    story: &(impl Story + ?Sized),
 ) -> u16 {
     if body == HOME {
         return default::generate_ruins(rng, sys_info, which_node, info);
     }
-    if body == BROADCASTERS_MOON && story.flag("BURVIXESE_BROADCASTERS") == 0 {
+    if body == BROADCASTERS_MOON && story.flag(StoryKey::BURVIXESE_BROADCASTERS) == 0 {
         return default::generate_artifact(rng, sys_info, which_node, info);
     }
     0
@@ -115,28 +116,95 @@ pub fn generate_energy(
 /// `GenerateBurvixese_pickupEnergy`: the ruins give the standard cycled
 /// report; the broadcasters are taken, once.
 pub fn pickup_energy(
+    system: &mut SolarSys<'_>,
     body: Body,
     which_node: u16,
-    story: &mut impl Story,
-    report: &mut impl DiscoveryReportPort,
-    lander: &mut impl LanderTakeoff,
+    lander: &mut (impl LanderTakeoff + Story + super::host::ReportSite + ?Sized),
 ) -> bool {
     if body == HOME {
-        default::lander_report_cycle(report);
+        lander.report(
+            system,
+            crate::engine::world::generation::ReportDisposition::Cycle,
+        );
         return false;
     }
     if body == BROADCASTERS_MOON {
         assert!(
-            story.flag("BURVIXESE_BROADCASTERS") == 0 && which_node == 0,
+            lander.flag(StoryKey::BURVIXESE_BROADCASTERS) == 0 && which_node == 0,
             "the broadcasters are picked up once, from node 0"
         );
-        default::lander_report(report);
+        lander.report(
+            system,
+            crate::engine::world::generation::ReportDisposition::Once,
+        );
         lander.lander_takeoff();
-        story.set_flag("BURVIXESE_BROADCASTERS", 1);
-        story.set_flag("BURV_BROADCASTERS_ON_SHIP", 1);
+        lander.set_flag(StoryKey::BURVIXESE_BROADCASTERS, 1);
+        lander.set_flag(StoryKey::BURV_BROADCASTERS_ON_SHIP, 1);
         return true;
     }
     false
+}
+
+use super::generator::SystemGenerator;
+use super::host::SiteHost;
+use crate::engine::world::generation::SolarSys;
+
+pub struct Generator;
+
+impl SystemGenerator for Generator {
+    fn generate_planets(&self, system: &mut SolarSys<'_>, _host: &mut dyn SiteHost) -> bool {
+        system.layout(|rng, table, size, color, planets| {
+            generate_planets(rng, table, size, color, planets)
+        });
+        true
+    }
+    fn generate_moons(
+        &self,
+        system: &mut SolarSys<'_>,
+        planet: u8,
+        _host: &mut dyn SiteHost,
+    ) -> bool {
+        system.layout_moons(planet, |rng, size, color, parent, moons| {
+            generate_moons(
+                rng,
+                size,
+                color,
+                parent.num_planets,
+                moons,
+                Body::Planet(planet),
+            )
+        })
+    }
+    fn generate_energy(
+        &self,
+        system: &mut SolarSys<'_>,
+        body: Body,
+        node: u16,
+        info: &mut NodeInfo,
+        host: &dyn SiteHost,
+    ) -> u16 {
+        system.scan(body, |rng, sys, _frame| {
+            generate_energy(rng, sys, body, node, info, host)
+        })
+    }
+
+    fn generate_orbital(
+        &self,
+        system: &mut SolarSys<'_>,
+        body: Body,
+        host: &mut dyn SiteHost,
+    ) -> bool {
+        generate_orbital(system, body, host)
+    }
+    fn pickup_energy(
+        &self,
+        system: &mut SolarSys<'_>,
+        body: Body,
+        node: u16,
+        host: &mut dyn SiteHost,
+    ) -> bool {
+        pickup_energy(system, body, node, host)
+    }
 }
 
 #[cfg(test)]

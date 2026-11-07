@@ -1,8 +1,8 @@
 //! `genspa.c`: Spathiwa, its moon, the broadcasters and the Evil Ones.
 
 use crate::engine::world::planet::{NodeInfo, PlanetDesc, SystemInfo};
+use crate::engine::StoryKey;
 use crate::math::RandomContext;
-use crate::planet_side::report_adapter::DiscoveryReportPort;
 use crate::planets::generate::calc;
 use crate::planets::generate::consts::PLANET_SHIELDED;
 use crate::planets::generate::default;
@@ -21,7 +21,11 @@ const NUM_EVIL_ONES: u16 = 32;
 
 pub trait SpathiSite: HomeContactSite {
     /// Load font, UMGAH_BCS mask and strings; select entry 1 if unshielded.
-    fn load_broadcasters_scene(&mut self, unshielded: bool);
+    fn load_broadcasters_scene(
+        &mut self,
+        _system: &mut crate::engine::world::generation::SolarSys<'_>,
+        unshielded: bool,
+    );
 }
 
 pub fn generate_planets(
@@ -29,7 +33,7 @@ pub fn generate_planets(
     size: u8,
     color: u8,
     planets: &mut [PlanetDesc],
-    story: &impl Story,
+    story: &(impl Story + ?Sized),
 ) -> u8 {
     orbits::fill_orbits(
         rng,
@@ -44,7 +48,7 @@ pub fn generate_planets(
     );
     special::reposition(&mut planets[0], 1150);
     planets[0].data_index = WATER_WORLD;
-    if story.flag("SPATHI_SHIELDED_SELVES") != 0 {
+    if story.flag(StoryKey::SPATHI_SHIELDED_SELVES) != 0 {
         planets[0].data_index |= PLANET_SHIELDED;
     }
     planets[0].num_planets = 1;
@@ -69,26 +73,27 @@ pub fn generate_moons(
 }
 
 pub fn generate_orbital(
-    orbit: &mut Orbit<'_>,
+    system: &mut SolarSys<'_>,
     body: Body,
-    story: &impl Story,
-    site: &mut impl SpathiSite,
-    load_planet: impl FnOnce(),
+    site: &mut (impl SpathiSite + Story + super::host::PlanetSite + ?Sized),
 ) -> bool {
-    if contact(body, story, site) {
+    if contact(body, site) {
         return true;
     }
-    analyse_orbital(orbit, body);
-    if body == MOON && story.flag("UMGAH_BROADCASTERS") == 0 {
-        site.load_broadcasters_scene(story.flag("SPATHI_SHIELDED_SELVES") == 0);
+    super::special::with_orbit(system, body, |orbit| analyse_orbital(orbit, body));
+    if body == MOON && site.flag(StoryKey::UMGAH_BROADCASTERS) == 0 {
+        site.load_broadcasters_scene(system, site.flag(StoryKey::SPATHI_SHIELDED_SELVES) == 0);
     }
-    load_planet();
+    super::host::PlanetSite::load_planet(site, system);
     true
 }
 
 /// The moon conversation, before any orbital state or RNG is borrowed.
-pub(super) fn contact(body: Body, story: &impl Story, site: &mut impl SpathiSite) -> bool {
-    if body == MOON && story.flag("SPATHI_SHIELDED_SELVES") == 0 && site.start_sphere_tracking() {
+pub(super) fn contact(body: Body, site: &mut (impl SpathiSite + Story + ?Sized)) -> bool {
+    if body == MOON
+        && site.flag(StoryKey::SPATHI_SHIELDED_SELVES) == 0
+        && site.start_sphere_tracking()
+    {
         site.notify_others_all_clear();
         site.save_ip_groups();
         site.reinit_ip_group_q();
@@ -154,9 +159,9 @@ pub fn generate_energy(
     body: Body,
     which: u16,
     node: &mut NodeInfo,
-    story: &impl Story,
+    story: &(impl Story + ?Sized),
 ) -> u16 {
-    if body == MOON && story.flag("UMGAH_BROADCASTERS") == 0 {
+    if body == MOON && story.flag(StoryKey::UMGAH_BROADCASTERS) == 0 {
         return default::generate_artifact(rng, info, which, node);
     }
     0
@@ -184,35 +189,114 @@ pub fn generate_life(
 }
 
 pub fn pickup_energy(
+    system: &mut SolarSys<'_>,
     body: Body,
     which: u16,
-    story: &mut impl Story,
-    report: &mut impl DiscoveryReportPort,
-    lander: &mut impl LanderTakeoff,
+    lander: &mut (impl LanderTakeoff + Story + super::host::ReportSite + ?Sized),
 ) -> bool {
     if body != MOON {
         return false;
     }
-    assert!(story.flag("UMGAH_BROADCASTERS") == 0 && which == 0);
-    default::lander_report(report);
+    assert!(lander.flag(StoryKey::UMGAH_BROADCASTERS) == 0 && which == 0);
+    lander.report(
+        system,
+        crate::engine::world::generation::ReportDisposition::Once,
+    );
     lander.lander_takeoff();
-    story.set_flag("UMGAH_BROADCASTERS", 1);
-    story.set_flag("UMGAH_BROADCASTERS_ON_SHIP", 1);
+    lander.set_flag(StoryKey::UMGAH_BROADCASTERS, 1);
+    lander.set_flag(StoryKey::UMGAH_BROADCASTERS_ON_SHIP, 1);
     true
 }
 
-pub fn pickup_life(body: Body, retrieved: u32, story: &mut impl Story) -> bool {
+pub fn pickup_life(body: Body, retrieved: u32, story: &mut (impl Story + ?Sized)) -> bool {
     if body == WORLD {
         assert!(
-            story.flag("SPATHI_CREATURES_ELIMINATED") == 0
-                && story.flag("SPATHI_SHIELDED_SELVES") == 0
+            story.flag(StoryKey::SPATHI_CREATURES_ELIMINATED) == 0
+                && story.flag(StoryKey::SPATHI_SHIELDED_SELVES) == 0
         );
-        story.set_flag("SPATHI_CREATURES_EXAMINED", 1);
+        story.set_flag(StoryKey::SPATHI_CREATURES_EXAMINED, 1);
         if retrieved.count_ones() + 1 == u32::from(NUM_EVIL_ONES) {
-            story.set_flag("SPATHI_CREATURES_ELIMINATED", 1);
+            story.set_flag(StoryKey::SPATHI_CREATURES_ELIMINATED, 1);
         }
     }
     true
+}
+
+use super::generator::SystemGenerator;
+use super::host::SiteHost;
+use crate::engine::world::generation::SolarSys;
+
+pub struct Generator;
+
+impl SystemGenerator for Generator {
+    fn generate_planets(&self, system: &mut SolarSys<'_>, host: &mut dyn SiteHost) -> bool {
+        system.layout(|rng, _table, size, color, planets| {
+            generate_planets(rng, size, color, planets, host)
+        });
+        true
+    }
+    fn generate_moons(
+        &self,
+        system: &mut SolarSys<'_>,
+        planet: u8,
+        _host: &mut dyn SiteHost,
+    ) -> bool {
+        system.layout_moons(planet, |rng, size, color, parent, moons| {
+            generate_moons(rng, size, color, planet, parent.num_planets, moons)
+        });
+        true
+    }
+    fn generate_energy(
+        &self,
+        system: &mut SolarSys<'_>,
+        body: Body,
+        node: u16,
+        info: &mut NodeInfo,
+        host: &dyn SiteHost,
+    ) -> u16 {
+        system.scan(body, |rng, sys, _frame| {
+            generate_energy(rng, sys, body, node, info, host)
+        })
+    }
+    fn generate_life(
+        &self,
+        system: &mut SolarSys<'_>,
+        body: Body,
+        node: u16,
+        info: &mut NodeInfo,
+        _host: &dyn SiteHost,
+    ) -> u16 {
+        system.scan(body, |rng, sys, _frame| {
+            generate_life(rng, sys, body, node, info)
+        })
+    }
+
+    fn generate_orbital(
+        &self,
+        system: &mut SolarSys<'_>,
+        body: Body,
+        host: &mut dyn SiteHost,
+    ) -> bool {
+        generate_orbital(system, body, host)
+    }
+    fn pickup_energy(
+        &self,
+        system: &mut SolarSys<'_>,
+        body: Body,
+        node: u16,
+        host: &mut dyn SiteHost,
+    ) -> bool {
+        pickup_energy(system, body, node, host)
+    }
+    fn pickup_life(
+        &self,
+        system: &mut SolarSys<'_>,
+        body: Body,
+        _node: u16,
+        host: &mut dyn SiteHost,
+    ) -> bool {
+        pickup_life(body, system.planet_info().scan_retrieve_mask[2], host)
+    }
 }
 
 #[cfg(test)]

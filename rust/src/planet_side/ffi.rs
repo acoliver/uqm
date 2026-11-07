@@ -146,7 +146,7 @@ fn run_retained_session(
         .borrow_mut()
         .with_legacy(super::init_lander::borrowed_assets)?;
     let mut generator =
-        CffiSurfaceGenerator::for_planet_side(game, context.solar_system, context.world)?;
+        CffiSurfaceGenerator::for_planet_side(game, observe, context.solar_system, context.world)?;
     let mut visuals = CffiSurfaceVisuals::new(
         context.misc_data_frame,
         context.energy_frame,

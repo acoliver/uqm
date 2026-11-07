@@ -1,9 +1,11 @@
 use super::*;
 use crate::engine::world::planet::{PlanetDesc, PlanetFrame, SystemInfo};
+use crate::engine::StoryKey;
 use crate::planet_side::report_adapter::ReportDisposition;
 use crate::planet_side::runtime::AdapterError;
 use crate::planets::generate::calc::{AnalysisSite, StarDescription};
 use crate::planets::generate::home_contact::tests::FakeStory;
+use crate::planets::generate::special::Orbit;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -82,7 +84,11 @@ impl HomeContactSite for Site {
     fn load_ip_groups(&mut self) {
         record(&self.calls, "load-ip");
     }
-    fn load_ruins_scene(&mut self, _: bool) {
+    fn load_ruins_scene(
+        &mut self,
+        _system: &mut crate::engine::world::generation::SolarSys<'_>,
+        _: bool,
+    ) {
         panic!("special scene required");
     }
 }
@@ -93,12 +99,20 @@ impl VuxSite for Site {
     fn repair_sis_border(&mut self) {
         record(&self.calls, "repair");
     }
-    fn load_scene(&mut self, scene: Scene) {
+    fn load_scene(
+        &mut self,
+        _system: &mut crate::engine::world::generation::SolarSys<'_>,
+        scene: Scene,
+    ) {
         record(&self.calls, format!("scene:{scene:?}"));
     }
 }
 impl crate::planets::generate::spa::SpathiSite for Site {
-    fn load_broadcasters_scene(&mut self, unshielded: bool) {
+    fn load_broadcasters_scene(
+        &mut self,
+        _system: &mut crate::engine::world::generation::SolarSys<'_>,
+        unshielded: bool,
+    ) {
         record(&self.calls, format!("broadcasters:{unshielded}"));
     }
 }
@@ -186,18 +200,26 @@ fn contact_scene_and_abort_matrix() {
                                     ..Site::default()
                                 };
                                 let story = FakeStory::with(&[
-                                    ("SHOFIXTI_MAIDENS", taken),
-                                    ("VUX_BEAST", taken),
+                                    (StoryKey::SHOFIXTI_MAIDENS, taken),
+                                    (StoryKey::VUX_BEAST, taken),
                                 ]);
                                 let calls = Rc::clone(&site.calls);
                                 let (info, _) = with_orbit(|orbit| {
-                                    assert!(generate_orbital(
+                                    assert!(crate::planets::generate::testing::with_orbit(
                                         orbit,
                                         body,
-                                        star,
-                                        &story,
-                                        &mut site,
-                                        || record(&calls, "planet")
+                                        |system| generate_orbital(
+                                            system,
+                                            body,
+                                            star,
+                                            &mut crate::planets::generate::testing::Effects {
+                                                story: &story,
+                                                site: &mut site,
+                                                report: (),
+                                                lander: (),
+                                                load: Some(|| record(&calls, "planet"))
+                                            }
+                                        )
                                     ));
                                 });
                                 let mut expected: Vec<String> = Vec::new();
@@ -275,25 +297,39 @@ fn pickup_effects_and_nonartifact_nodes() {
                     let calls = Calls::default();
                     let mut story = FakeStory::default();
                     let result = if life {
-                        pickup_life(
-                            star,
-                            body,
-                            which,
-                            &mut story,
-                            &mut Pickup(Rc::clone(&calls)),
-                            &mut Pickup(Rc::clone(&calls)),
-                        )
+                        crate::planets::generate::testing::with_empty(|system| {
+                            pickup_life(
+                                system,
+                                star,
+                                body,
+                                which,
+                                &mut crate::planets::generate::testing::Effects {
+                                    story: &mut story,
+                                    site: &mut (),
+                                    report: &mut Pickup(Rc::clone(&calls)),
+                                    lander: &mut Pickup(Rc::clone(&calls)),
+                                    load: Some(|| {}),
+                                },
+                            )
+                        })
                     } else if star == MAIDENS_DEFINED && body == WORLD && which != 0 {
                         continue;
                     } else {
-                        pickup_energy(
-                            star,
-                            body,
-                            which,
-                            &mut story,
-                            &mut Pickup(Rc::clone(&calls)),
-                            &mut Pickup(Rc::clone(&calls)),
-                        )
+                        crate::planets::generate::testing::with_empty(|system| {
+                            pickup_energy(
+                                system,
+                                star,
+                                body,
+                                which,
+                                &mut crate::planets::generate::testing::Effects {
+                                    story: &mut story,
+                                    site: &mut (),
+                                    report: &mut Pickup(Rc::clone(&calls)),
+                                    lander: &mut Pickup(Rc::clone(&calls)),
+                                    load: Some(|| {}),
+                                },
+                            )
+                        })
                     };
                     let artifact = body == WORLD
                         && which == 0
@@ -311,10 +347,19 @@ fn pickup_effects_and_nonartifact_nodes() {
                             vec![]
                         }
                     );
-                    assert_eq!(story.flag("SHOFIXTI_MAIDENS"), u32::from(artifact && !life));
-                    assert_eq!(story.flag("MAIDENS_ON_SHIP"), u32::from(artifact && !life));
-                    assert_eq!(story.flag("VUX_BEAST"), u32::from(artifact && life));
-                    assert_eq!(story.flag("VUX_BEAST_ON_SHIP"), u32::from(artifact && life));
+                    assert_eq!(
+                        story.flag(StoryKey::SHOFIXTI_MAIDENS),
+                        u32::from(artifact && !life)
+                    );
+                    assert_eq!(
+                        story.flag(StoryKey::MAIDENS_ON_SHIP),
+                        u32::from(artifact && !life)
+                    );
+                    assert_eq!(story.flag(StoryKey::VUX_BEAST), u32::from(artifact && life));
+                    assert_eq!(
+                        story.flag(StoryKey::VUX_BEAST_ON_SHIP),
+                        u32::from(artifact && life)
+                    );
                 }
             }
         }
@@ -331,31 +376,45 @@ fn pickup_and_queue_invariants_fail_before_side_effects() {
             let calls = Calls::default();
             let mut story = FakeStory::with(&[(
                 if life {
-                    "VUX_BEAST"
+                    StoryKey::VUX_BEAST
                 } else {
-                    "SHOFIXTI_MAIDENS"
+                    StoryKey::SHOFIXTI_MAIDENS
                 },
                 taken,
             )]);
             let failed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 if life {
-                    pickup_life(
-                        VUX_BEAST_DEFINED,
-                        WORLD,
-                        which,
-                        &mut story,
-                        &mut Pickup(Rc::clone(&calls)),
-                        &mut Pickup(Rc::clone(&calls)),
-                    )
+                    crate::planets::generate::testing::with_empty(|system| {
+                        pickup_life(
+                            system,
+                            VUX_BEAST_DEFINED,
+                            WORLD,
+                            which,
+                            &mut crate::planets::generate::testing::Effects {
+                                story: &mut story,
+                                site: &mut (),
+                                report: &mut Pickup(Rc::clone(&calls)),
+                                lander: &mut Pickup(Rc::clone(&calls)),
+                                load: Some(|| {}),
+                            },
+                        )
+                    })
                 } else {
-                    pickup_energy(
-                        MAIDENS_DEFINED,
-                        WORLD,
-                        which,
-                        &mut story,
-                        &mut Pickup(Rc::clone(&calls)),
-                        &mut Pickup(Rc::clone(&calls)),
-                    )
+                    crate::planets::generate::testing::with_empty(|system| {
+                        pickup_energy(
+                            system,
+                            MAIDENS_DEFINED,
+                            WORLD,
+                            which,
+                            &mut crate::planets::generate::testing::Effects {
+                                story: &mut story,
+                                site: &mut (),
+                                report: &mut Pickup(Rc::clone(&calls)),
+                                lander: &mut Pickup(Rc::clone(&calls)),
+                                load: Some(|| {}),
+                            },
+                        )
+                    })
                 }
             }));
             assert!(failed.is_err());
@@ -369,14 +428,20 @@ fn pickup_and_queue_invariants_fail_before_side_effects() {
             ..Site::default()
         };
         with_orbit(|orbit| {
-            generate_orbital(
-                orbit,
-                WORLD,
-                VUX_DEFINED,
-                &FakeStory::default(),
-                &mut site,
-                || panic!("must not load"),
-            );
+            crate::planets::generate::testing::with_orbit(orbit, WORLD, |system| {
+                generate_orbital(
+                    system,
+                    WORLD,
+                    VUX_DEFINED,
+                    &mut crate::planets::generate::testing::Effects {
+                        story: &FakeStory::default(),
+                        site: &mut site,
+                        report: (),
+                        lander: (),
+                        load: Some(|| panic!("must not load")),
+                    },
+                )
+            });
         });
     });
     assert!(failed.is_err());
@@ -432,18 +497,30 @@ pub(crate) struct OrderedStory {
     pub calls: Calls,
 }
 impl Story for OrderedStory {
-    fn flag(&self, name: &'static str) -> u32 {
+    fn flag(&self, name: StoryKey) -> u32 {
         self.inner.flag(name)
     }
-    fn set_flag(&mut self, name: &'static str, value: u32) {
-        record(&self.calls, format!("set:{name}:{value}"));
+    fn set_flag(&mut self, name: StoryKey, value: u32) {
+        record(
+            &self.calls,
+            format!(
+                "set:{}:{value}",
+                crate::planets::generate::testing::story_label(name)
+            ),
+        );
         self.inner.set_flag(name, value);
     }
-    fn word(&self, name: &'static str) -> u32 {
+    fn word(&self, name: StoryKey) -> u32 {
         self.inner.word(name)
     }
-    fn set_word(&mut self, name: &'static str, value: u32) {
-        record(&self.calls, format!("word:{name}:{value}"));
+    fn set_word(&mut self, name: StoryKey, value: u32) {
+        record(
+            &self.calls,
+            format!(
+                "word:{}:{value}",
+                crate::planets::generate::testing::story_label(name)
+            ),
+        );
         self.inner.set_word(name, value);
     }
 }
@@ -457,36 +534,56 @@ fn pickup_reports_takeoff_and_flag_writes_have_c_order() {
             calls: Rc::clone(&calls),
         };
         if life {
-            pickup_life(
-                VUX_BEAST_DEFINED,
-                WORLD,
-                0,
-                &mut story,
-                &mut Pickup(Rc::clone(&calls)),
-                &mut Pickup(Rc::clone(&calls)),
-            );
+            crate::planets::generate::testing::with_empty(|system| {
+                pickup_life(
+                    system,
+                    VUX_BEAST_DEFINED,
+                    WORLD,
+                    0,
+                    &mut crate::planets::generate::testing::Effects {
+                        story: &mut story,
+                        site: &mut (),
+                        report: &mut Pickup(Rc::clone(&calls)),
+                        lander: &mut Pickup(Rc::clone(&calls)),
+                        load: Some(|| {}),
+                    },
+                )
+            });
         } else {
-            pickup_energy(
-                MAIDENS_DEFINED,
-                WORLD,
-                0,
-                &mut story,
-                &mut Pickup(Rc::clone(&calls)),
-                &mut Pickup(Rc::clone(&calls)),
-            );
+            crate::planets::generate::testing::with_empty(|system| {
+                pickup_energy(
+                    system,
+                    MAIDENS_DEFINED,
+                    WORLD,
+                    0,
+                    &mut crate::planets::generate::testing::Effects {
+                        story: &mut story,
+                        site: &mut (),
+                        report: &mut Pickup(Rc::clone(&calls)),
+                        lander: &mut Pickup(Rc::clone(&calls)),
+                        load: Some(|| {}),
+                    },
+                )
+            });
         }
         let flags = if life {
-            ["VUX_BEAST", "VUX_BEAST_ON_SHIP"]
+            [StoryKey::VUX_BEAST, StoryKey::VUX_BEAST_ON_SHIP]
         } else {
-            ["SHOFIXTI_MAIDENS", "MAIDENS_ON_SHIP"]
+            [StoryKey::SHOFIXTI_MAIDENS, StoryKey::MAIDENS_ON_SHIP]
         };
         assert_eq!(
             *calls.borrow(),
             vec![
                 "report:Once".into(),
                 "takeoff".into(),
-                format!("set:{}:1", flags[0]),
-                format!("set:{}:1", flags[1])
+                format!(
+                    "set:{}:1",
+                    crate::planets::generate::testing::story_label(flags[0])
+                ),
+                format!(
+                    "set:{}:1",
+                    crate::planets::generate::testing::story_label(flags[1])
+                )
             ]
         );
     }

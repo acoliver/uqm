@@ -143,7 +143,7 @@ impl GeneratedNode {
     }
 }
 
-/// Special-system generation and pickup hooks selected by `GenerateFunctions`.
+/// Special-system generation and pickup hooks selected by the system generator.
 pub trait SurfaceGenerator {
     fn node_count(&mut self, scan: ScanType) -> Result<u8, AdapterError>;
     fn generate(&mut self, scan: ScanType, node: ScanNodeId)

@@ -7,14 +7,14 @@
 //! `pickupEnergy`. Story flags: `TAALO_PROTECTOR`, `TAALO_PROTECTOR_ON_SHIP`,
 //! `TAALO_UNPROTECTED`.
 
-use crate::battle::gendef::{ORZ_DEFINED, TAALO_PROTECTOR_DEFINED};
 use crate::comm::dispatch::{CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY};
 use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
+use crate::engine::StoryKey;
 use crate::math::RandomContext;
-use crate::planet_side::report_adapter::DiscoveryReportPort;
 use crate::planets::generate::default;
 use crate::planets::generate::home_contact::{HomeContactSite, LanderTakeoff};
-use crate::planets::generate::special::{self, Body, Orbit, Story, WATER_WORLD};
+use crate::planets::generate::identities::{ORZ_DEFINED, TAALO_PROTECTOR_DEFINED};
+use crate::planets::generate::special::{self, Body, Story, WATER_WORLD};
 
 const WORLD: Body = Body::Planet(0);
 /// `matchWorld (solarSys, world, 1, 2)`: the moon the device lies on.
@@ -36,7 +36,10 @@ pub trait OrzSite: HomeContactSite {
     /// `RepairSISBorder ()`.
     fn repair_sis_border(&mut self);
     /// `LoadStdLanderFont`, the Taalo device mask and report strings.
-    fn load_taalo_device_scene(&mut self);
+    fn load_taalo_device_scene(
+        &mut self,
+        _system: &mut crate::engine::world::generation::SolarSys<'_>,
+    );
 }
 
 /// `GenerateOrz_generatePlanets` for the system at `star_index`.
@@ -63,38 +66,36 @@ pub fn generate_planets(
 /// conversation was aborted, loaded over, or left Orz survivors the visit
 /// goes on and Taalo is unprotected for good.
 pub fn generate_orbital(
-    orbit: &mut Orbit<'_>,
+    system: &mut SolarSys<'_>,
     body: Body,
     star_index: u8,
-    story: &mut impl Story,
-    site: &mut impl OrzSite,
-    load_planet: impl FnOnce(),
+    site: &mut (impl OrzSite + Story + super::host::PlanetSite + ?Sized),
 ) -> bool {
     let at_home = star_index == ORZ_DEFINED && body == WORLD;
     let at_device = star_index == TAALO_PROTECTOR_DEFINED
         && body == DEVICE_MOON
-        && story.flag("TAALO_PROTECTOR") == 0;
+        && site.flag(StoryKey::TAALO_PROTECTOR) == 0;
     if at_home || at_device {
-        let guarded = star_index == ORZ_DEFINED || story.flag("TAALO_UNPROTECTED") == 0;
-        if guarded && site.start_sphere_tracking() && !meet_orz(star_index, story, site) {
+        let guarded = star_index == ORZ_DEFINED || site.flag(StoryKey::TAALO_UNPROTECTED) == 0;
+        if guarded && site.start_sphere_tracking() && !meet_orz(star_index, site) {
             return true;
         }
 
-        story.set_flag("TAALO_UNPROTECTED", 1);
+        site.set_flag(StoryKey::TAALO_UNPROTECTED, 1);
         if star_index == TAALO_PROTECTOR_DEFINED {
-            site.load_taalo_device_scene();
+            site.load_taalo_device_scene(system);
         } else {
-            site.load_ruins_scene(false);
+            site.load_ruins_scene(system, false);
         }
     }
-    orbit.default_orbital(load_planet);
+    super::special::default_orbital(system, body, site);
     true
 }
 
 /// The conversation with the Orz: false when the visit is over, either
 /// because the conversation aborted or loaded a game or because Orz ships
 /// survived it.
-fn meet_orz(star_index: u8, story: &impl Story, site: &mut impl OrzSite) -> bool {
+fn meet_orz(star_index: u8, site: &mut (impl OrzSite + Story + ?Sized)) -> bool {
     site.notify_others_all_clear();
     site.save_ip_groups();
     site.reinit_ip_group_q();
@@ -123,7 +124,7 @@ fn meet_orz(star_index: u8, story: &impl Story, site: &mut impl OrzSite) -> bool
     }
 
     let survivors = site.built_ship_count() > 0
-        && (star_index == ORZ_DEFINED || story.flag("TAALO_UNPROTECTED") == 0);
+        && (star_index == ORZ_DEFINED || site.flag(StoryKey::TAALO_UNPROTECTED) == 0);
     site.set_current_activity(activity & !START_INTERPLANETARY);
     site.reinit_built_ship_q();
     site.load_ip_groups();
@@ -143,10 +144,10 @@ pub fn generate_energy(
     body: Body,
     which_node: u16,
     info: &mut NodeInfo,
-    story: &impl Story,
+    story: &(impl Story + ?Sized),
 ) -> u16 {
     if star_index == TAALO_PROTECTOR_DEFINED && body == DEVICE_MOON {
-        if story.flag("TAALO_PROTECTOR") != 0 {
+        if story.flag(StoryKey::TAALO_PROTECTOR) != 0 {
             return 0;
         }
         return default::generate_artifact(rng, sys_info, which_node, info);
@@ -160,29 +161,81 @@ pub fn generate_energy(
 /// `GenerateOrz_pickupEnergy`: the device is taken once, from node 0; the
 /// home ruins give the standard cycled report.
 pub fn pickup_energy(
+    system: &mut SolarSys<'_>,
     star_index: u8,
     body: Body,
     which_node: u16,
-    story: &mut impl Story,
-    report: &mut impl DiscoveryReportPort,
-    lander: &mut impl LanderTakeoff,
+    lander: &mut (impl LanderTakeoff + Story + super::host::ReportSite + ?Sized),
 ) -> bool {
     if star_index == TAALO_PROTECTOR_DEFINED && body == DEVICE_MOON {
         assert!(
-            story.flag("TAALO_PROTECTOR") == 0 && which_node == 0,
+            lander.flag(StoryKey::TAALO_PROTECTOR) == 0 && which_node == 0,
             "the device is picked up once, from node 0"
         );
-        default::lander_report(report);
+        lander.report(
+            system,
+            crate::engine::world::generation::ReportDisposition::Once,
+        );
         lander.lander_takeoff();
-        story.set_flag("TAALO_PROTECTOR", 1);
-        story.set_flag("TAALO_PROTECTOR_ON_SHIP", 1);
+        lander.set_flag(StoryKey::TAALO_PROTECTOR, 1);
+        lander.set_flag(StoryKey::TAALO_PROTECTOR_ON_SHIP, 1);
         return true;
     }
     if star_index == ORZ_DEFINED && body == WORLD {
-        default::lander_report_cycle(report);
+        lander.report(
+            system,
+            crate::engine::world::generation::ReportDisposition::Cycle,
+        );
         return false;
     }
     false
+}
+
+use super::generator::SystemGenerator;
+use super::host::SiteHost;
+use crate::engine::world::generation::SolarSys;
+
+pub struct Generator;
+
+impl SystemGenerator for Generator {
+    fn generate_planets(&self, system: &mut SolarSys<'_>, _host: &mut dyn SiteHost) -> bool {
+        let star = system.star_index();
+        system.layout(|rng, table, size, color, planets| {
+            generate_planets(rng, table, size, color, planets, star)
+        });
+        true
+    }
+    fn generate_energy(
+        &self,
+        system: &mut SolarSys<'_>,
+        body: Body,
+        node: u16,
+        info: &mut NodeInfo,
+        host: &dyn SiteHost,
+    ) -> u16 {
+        let star = system.star_index();
+        system.scan(body, |rng, sys, _frame| {
+            generate_energy(rng, sys, star, body, node, info, host)
+        })
+    }
+
+    fn generate_orbital(
+        &self,
+        system: &mut SolarSys<'_>,
+        body: Body,
+        host: &mut dyn SiteHost,
+    ) -> bool {
+        generate_orbital(system, body, system.star_index(), host)
+    }
+    fn pickup_energy(
+        &self,
+        system: &mut SolarSys<'_>,
+        body: Body,
+        node: u16,
+        host: &mut dyn SiteHost,
+    ) -> bool {
+        pickup_energy(system, system.star_index(), body, node, host)
+    }
 }
 
 #[cfg(test)]

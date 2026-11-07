@@ -6,11 +6,11 @@
 
 use crate::comm::dispatch::{CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY};
 use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
+use crate::engine::StoryKey;
 use crate::math::RandomContext;
-use crate::planet_side::report_adapter::DiscoveryReportPort;
 use crate::planets::generate::default::{self, Npcs};
 use crate::planets::generate::home_contact::HomeContactSite;
-use crate::planets::generate::special::{self, Body, Orbit, Story, REDUX_WORLD};
+use crate::planets::generate::special::{self, Body, Story, REDUX_WORLD};
 
 const WORLD: Body = Body::Planet(0);
 
@@ -28,8 +28,8 @@ pub trait ZoqFotPikSite: HomeContactSite {
 
 /// `GenerateZoqFotPik_initNpcs`: nobody is in orbit while the Zoq-Fot-Pik are
 /// in distress (value 1).
-pub fn init_npcs(host: &mut (impl Npcs + Story)) -> bool {
-    if host.flag("ZOQFOT_DISTRESS") != 1 {
+pub fn init_npcs(host: &mut (impl Npcs + Story + ?Sized)) -> bool {
+    if host.flag(StoryKey::ZOQFOT_DISTRESS) != 1 {
         default::init_npcs(host);
     }
     true
@@ -57,41 +57,39 @@ pub fn generate_planets(
 /// talk. Without tracking the ruins scene is loaded before the default
 /// orbital.
 pub fn generate_orbital(
-    orbit: &mut Orbit<'_>,
+    system: &mut SolarSys<'_>,
     body: Body,
-    story: &impl Story,
-    site: &mut impl ZoqFotPikSite,
-    load_planet: impl FnOnce(),
+    site: &mut (impl ZoqFotPikSite + Story + super::host::PlanetSite + ?Sized),
 ) -> bool {
     if body == WORLD {
         if site.start_sphere_tracking() {
-            meet(story, site);
+            meet(site);
             return true;
         }
-        site.load_ruins_scene(false);
+        site.load_ruins_scene(system, false);
     }
-    orbit.default_orbital(load_planet);
+    super::special::default_orbital(system, body, site);
     true
 }
 
-fn conversation_ended_the_game(site: &impl ZoqFotPikSite) -> bool {
+fn conversation_ended_the_game(site: &(impl ZoqFotPikSite + ?Sized)) -> bool {
     site.current_activity() & (CHECK_ABORT | CHECK_LOAD) != 0
 }
 
-fn begin_talk(site: &mut impl ZoqFotPikSite) {
+fn begin_talk(site: &mut (impl ZoqFotPikSite + ?Sized)) {
     let activity = site.current_activity();
     site.set_current_activity(activity | START_INTERPLANETARY);
     site.set_global_flags_and_data(TALK_FLAGS);
 }
 
-fn restore_world(site: &mut impl ZoqFotPikSite) {
+fn restore_world(site: &mut (impl ZoqFotPikSite + ?Sized)) {
     let activity = site.current_activity();
     site.set_current_activity(activity & !START_INTERPLANETARY);
     site.reinit_built_ship_q();
     site.load_ip_groups();
 }
 
-fn meet(story: &impl Story, site: &mut impl ZoqFotPikSite) {
+fn meet(site: &mut (impl ZoqFotPikSite + Story + ?Sized)) {
     site.save_ip_groups();
     site.reinit_ip_group_q();
     assert_eq!(
@@ -100,7 +98,7 @@ fn meet(story: &impl Story, site: &mut impl ZoqFotPikSite) {
         "the built-ship queue must be empty before the fleet is cloned into it"
     );
 
-    if story.flag("ZOQFOT_DISTRESS") != 0 {
+    if site.flag(StoryKey::ZOQFOT_DISTRESS) != 0 {
         site.clone_black_urquan_into_built_queue();
         begin_talk(site);
         site.talk_black_urquan();
@@ -136,11 +134,66 @@ pub fn generate_energy(
 }
 
 /// `GenerateZoqFotPik_pickupEnergy`: the standard cycled ruins report.
-pub fn pickup_energy(body: Body, report: &mut impl DiscoveryReportPort) -> bool {
+pub fn pickup_energy(
+    system: &mut SolarSys<'_>,
+    body: Body,
+    site: &mut (impl super::host::ReportSite + ?Sized),
+) -> bool {
     if body == WORLD {
-        default::lander_report_cycle(report);
+        site.report(
+            system,
+            crate::engine::world::generation::ReportDisposition::Cycle,
+        );
     }
     false
+}
+
+use super::generator::SystemGenerator;
+use super::host::SiteHost;
+use crate::engine::world::generation::SolarSys;
+
+pub struct Generator;
+
+impl SystemGenerator for Generator {
+    fn init_npcs(&self, _system: &mut SolarSys<'_>, host: &mut dyn SiteHost) -> bool {
+        init_npcs(host)
+    }
+    fn generate_planets(&self, system: &mut SolarSys<'_>, _host: &mut dyn SiteHost) -> bool {
+        system.layout(|rng, table, size, color, planets| {
+            generate_planets(rng, table, size, color, planets)
+        });
+        true
+    }
+    fn generate_energy(
+        &self,
+        system: &mut SolarSys<'_>,
+        body: Body,
+        node: u16,
+        info: &mut NodeInfo,
+        _host: &dyn SiteHost,
+    ) -> u16 {
+        system.scan(body, |rng, sys, _frame| {
+            generate_energy(rng, sys, body, node, info)
+        })
+    }
+
+    fn generate_orbital(
+        &self,
+        system: &mut SolarSys<'_>,
+        body: Body,
+        host: &mut dyn SiteHost,
+    ) -> bool {
+        generate_orbital(system, body, host)
+    }
+    fn pickup_energy(
+        &self,
+        system: &mut SolarSys<'_>,
+        body: Body,
+        _node: u16,
+        host: &mut dyn SiteHost,
+    ) -> bool {
+        pickup_energy(system, body, host)
+    }
 }
 
 #[cfg(test)]

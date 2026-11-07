@@ -177,15 +177,25 @@ impl Drop for CapturedSurface {
 ///
 /// # Safety
 /// Game thread, in a live orbit, with no outstanding system/RNG references.
-pub unsafe fn load_planet_surface(surface: Option<CapturedSurface>) {
+pub unsafe fn load_planet_surface(
+    game: &std::cell::RefCell<crate::engine::battle::Cx<'_>>,
+    io: &std::cell::RefCell<crate::engine::observe::Io<'_>>,
+    surface: Option<CapturedSurface>,
+) {
     #[cfg(feature = "debug-process")]
     if std::ptr::addr_of!(super::DISABLE_INTERACTIVITY).read() != 0 {
-        super::LoadPlanet(
+        crate::planets::orbit::live::load_planet(
+            game,
+            io,
             surface
                 .as_ref()
                 .map_or(std::ptr::null_mut(), |s| s.as_frame().cast()),
         );
         return;
     }
-    super::LoadPlanet(surface.map_or(std::ptr::null_mut(), |s| s.into_frame().cast()));
+    crate::planets::orbit::live::load_planet(
+        game,
+        io,
+        surface.map_or(std::ptr::null_mut(), |s| s.into_frame().cast()),
+    );
 }

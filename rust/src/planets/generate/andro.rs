@@ -6,12 +6,10 @@
 //! `pickupEnergy`. Story flags: `PLANETARY_CHANGE` (set on pickup).
 
 use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, PlanetInfo, SystemInfo};
+use crate::engine::StoryKey;
 use crate::math::RandomContext;
-use crate::planet_side::report_adapter::DiscoveryReportPort;
 use crate::planets::generate::default;
-use crate::planets::generate::special::{
-    self, Body, Orbit, Story, EARTH_ATMOSPHERE, TELLURIC_WORLD,
-};
+use crate::planets::generate::special::{self, Body, Story, EARTH_ATMOSPHERE, TELLURIC_WORLD};
 use crate::planets::generate::surface::ENERGY_SCAN;
 
 const WORLD: Body = Body::Planet(1);
@@ -25,8 +23,12 @@ pub trait AndrosynthSite {
     /// `LoadStdLanderFont`, the ruins mask and the Androsynth ruins report
     /// table, started at the first report not yet given: after `visits`
     /// reports. When every report was already given (`visits` reaches the
-    /// table's count) the table is released and `DiscoveryString` is cleared.
-    fn load_ruins_story(&mut self, visits: u32);
+    /// table's count) the table is released and `discovery_string` is cleared.
+    fn load_ruins_story(
+        &mut self,
+        _system: &mut crate::engine::world::generation::SolarSys<'_>,
+        visits: u32,
+    );
 }
 
 /// `GenerateAndrosynth_generatePlanets`.
@@ -55,19 +57,19 @@ fn ruins_visited(info: &PlanetInfo) -> u32 {
 /// `GenerateAndrosynth_generateOrbital`: planet 1 starts its report story
 /// where the player left off and has a fixed climate.
 pub fn generate_orbital(
-    orbit: &mut Orbit<'_>,
+    system: &mut SolarSys<'_>,
     body: Body,
-    site: &mut impl AndrosynthSite,
-    load_planet: impl FnOnce(),
+    site: &mut (impl AndrosynthSite + super::host::PlanetSite + ?Sized),
 ) -> bool {
     if body == WORLD {
-        site.load_ruins_story(ruins_visited(&orbit.sys_info.planet_info));
+        let visits = ruins_visited(system.planet_info());
+        site.load_ruins_story(system, visits);
     }
 
-    orbit.default_orbital(load_planet);
+    super::special::default_orbital(system, body, site);
 
     if body == WORLD {
-        let info = &mut orbit.sys_info.planet_info;
+        let info = system.planet_info();
         info.atmo_density = (EARTH_ATMOSPHERE * 144 / 100) as _;
         info.temperature = 28;
         info.weather = 1;
@@ -95,11 +97,10 @@ pub fn generate_energy(
 /// visited (and tells the solar system state so) and gives the next report
 /// of the story. The node is never removed.
 pub fn pickup_energy(
+    system: &mut SolarSys<'_>,
     body: Body,
     which_node: u16,
-    info: &mut PlanetInfo,
-    story: &mut impl Story,
-    report: &mut impl DiscoveryReportPort,
+    site: &mut (impl Story + super::host::ReportSite + ?Sized),
 ) -> bool {
     if body == WORLD {
         let bit = u32::from(which_node) + VISITED_BITS.start;
@@ -107,14 +108,62 @@ pub fn pickup_energy(
             VISITED_BITS.contains(&bit),
             "ruin {which_node} has no visited bit"
         );
-        if info.scan_retrieve_mask[ENERGY_SCAN] & (1 << bit) != 0 {
+        if system.planet_info().scan_retrieve_mask[ENERGY_SCAN] & (1 << bit) != 0 {
             return false;
         }
-        info.scan_retrieve_mask[ENERGY_SCAN] |= 1 << bit;
-        story.set_flag("PLANETARY_CHANGE", 1);
-        default::lander_report_cycle(report);
+        system.planet_info().scan_retrieve_mask[ENERGY_SCAN] |= 1 << bit;
+        site.set_flag(StoryKey::PLANETARY_CHANGE, 1);
+        site.report(
+            system,
+            crate::engine::world::generation::ReportDisposition::Cycle,
+        );
     }
     false
+}
+
+use super::generator::SystemGenerator;
+use super::host::SiteHost;
+use crate::engine::world::generation::SolarSys;
+
+pub struct Generator;
+
+impl SystemGenerator for Generator {
+    fn generate_planets(&self, system: &mut SolarSys<'_>, _host: &mut dyn SiteHost) -> bool {
+        system.layout(|rng, table, size, color, planets| {
+            generate_planets(rng, table, size, color, planets)
+        });
+        true
+    }
+    fn generate_energy(
+        &self,
+        system: &mut SolarSys<'_>,
+        body: Body,
+        node: u16,
+        info: &mut NodeInfo,
+        _host: &dyn SiteHost,
+    ) -> u16 {
+        system.scan(body, |rng, sys, _frame| {
+            generate_energy(rng, sys, body, node, info)
+        })
+    }
+
+    fn generate_orbital(
+        &self,
+        system: &mut SolarSys<'_>,
+        body: Body,
+        host: &mut dyn SiteHost,
+    ) -> bool {
+        generate_orbital(system, body, host)
+    }
+    fn pickup_energy(
+        &self,
+        system: &mut SolarSys<'_>,
+        body: Body,
+        node: u16,
+        host: &mut dyn SiteHost,
+    ) -> bool {
+        pickup_energy(system, body, node, host)
+    }
 }
 
 #[cfg(test)]

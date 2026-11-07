@@ -1,13 +1,15 @@
 //! Sa-Matra's guards, moon and final encounter, ported from `gensam.c`.
 
-use crate::battle::battle_types::{arctan, cosine, sine};
-use crate::c_bindings::global_state::{IP_GROUP, POINT};
+use crate::engine::graphics::native_abi::POINT;
+use crate::engine::math::battle_types::{arctan, cosine, sine};
 use crate::engine::world::planet::{PlanetDesc, PlanetFrame};
+use crate::engine::world::queues::IpGroup as IP_GROUP;
+use crate::engine::StoryKey;
 use crate::math::RandomContext;
 use crate::planets::generate::default::{self, FLEE, IGNORE_FLAGSHIP, REFORM_GROUP};
 use crate::planets::generate::home_contact::HomeContactSite;
 use crate::planets::generate::orbits::MOON_DELTA;
-use crate::planets::generate::special::{self, Body, Orbit, Story, MIN_MOON_RADIUS, URQUAN_SHIP};
+use crate::planets::generate::special::{self, Body, Story, MIN_MOON_RADIUS, URQUAN_SHIP};
 use crate::planets::generate::yehat::{CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY};
 
 // `races.h`, `grpinfo.h`, `plandata.h`, `units.h` and `globdata.h`.
@@ -50,8 +52,8 @@ pub trait SamatraSite: HomeContactSite {
     fn talk_rebels(&mut self);
 }
 
-pub fn init_npcs(site: &mut (impl GuardSite + Story)) -> bool {
-    if site.flag("URQUAN_MESSED_UP") == 0 {
+pub fn init_npcs(site: &mut (impl GuardSite + Story + ?Sized)) -> bool {
+    if site.flag(StoryKey::URQUAN_MESSED_UP) == 0 {
         build_guard(site);
     } else {
         site.save_ip_groups();
@@ -59,9 +61,9 @@ pub fn init_npcs(site: &mut (impl GuardSite + Story)) -> bool {
     true
 }
 
-fn build_guard(site: &mut (impl GuardSite + Story)) {
-    site.set_battle_group_ref(site.word("SAMATRA_GRPOFFS0"));
-    let (ship1, ship2) = if site.flag("KOHR_AH_FRENZY") == 0 {
+fn build_guard(site: &mut (impl GuardSite + Story + ?Sized)) {
+    site.set_battle_group_ref(site.word(StoryKey::SAMATRA_GRPOFFS0));
+    let (ship1, ship2) = if site.flag(StoryKey::KOHR_AH_FRENZY) == 0 {
         (URQUAN_SHIP, BLACK_URQUAN_SHIP)
     } else {
         (BLACK_URQUAN_SHIP, URQUAN_SHIP)
@@ -73,7 +75,7 @@ fn build_guard(site: &mut (impl GuardSite + Story)) {
     if site.battle_group_ref() == 0 {
         let reference = site.add_new_group();
         site.set_battle_group_ref(reference);
-        site.set_word("SAMATRA_GRPOFFS0", reference);
+        site.set_word(StoryKey::SAMATRA_GRPOFFS0, reference);
     }
     for group in 1..=12 {
         site.store_group(site.battle_group_ref(), group);
@@ -113,11 +115,11 @@ fn build_guard(site: &mut (impl GuardSite + Story)) {
     assert_eq!(index, GUARDS);
 }
 
-pub fn reinit_npcs(site: &mut (impl GuardSite + Story)) -> bool {
+pub fn reinit_npcs(site: &mut (impl GuardSite + Story + ?Sized)) -> bool {
     site.load_ip_groups();
     site.reset_encounter();
     let mut engaged = false;
-    let messed_up = site.flag("URQUAN_MESSED_UP") != 0;
+    let messed_up = site.flag(StoryKey::URQUAN_MESSED_UP) != 0;
     site.for_each_ip_group(&mut |group| {
         if messed_up {
             group.task &= REFORM_GROUP;
@@ -174,25 +176,23 @@ pub fn generate_moons(
 }
 
 pub fn generate_orbital(
-    orbit: &mut Orbit<'_>,
+    system: &mut SolarSys<'_>,
     body: Body,
-    story: &mut impl Story,
-    site: &mut impl SamatraSite,
-    load_planet: impl FnOnce(),
+    site: &mut (impl SamatraSite + Story + super::host::PlanetSite + ?Sized),
 ) -> bool {
     if body != WORLD {
-        return orbit.default_orbital(load_planet);
+        return super::special::default_orbital(system, body, site);
     }
-    encounter(story, site)
+    encounter(site)
 }
 
 /// The Sa-Matra encounter, with no live system borrow during communication.
-pub(super) fn encounter(story: &mut impl Story, site: &mut impl SamatraSite) -> bool {
+pub(super) fn encounter(site: &mut (impl SamatraSite + Story + ?Sized)) -> bool {
     site.save_ip_groups();
     site.reinit_ip_group_q();
     assert_eq!(site.built_ship_count(), 0);
-    if story.flag("URQUAN_MESSED_UP") == 0 {
-        site.clone_guard_fleet(story.flag("KOHR_AH_FRENZY") != 0);
+    if site.flag(StoryKey::URQUAN_MESSED_UP) == 0 {
+        site.clone_guard_fleet(site.flag(StoryKey::KOHR_AH_FRENZY) != 0);
     } else {
         for _ in 0..3 {
             site.clone_remnant(false);
@@ -201,7 +201,7 @@ pub(super) fn encounter(story: &mut impl Story, site: &mut impl SamatraSite) -> 
     }
     site.set_current_activity(site.current_activity() | START_INTERPLANETARY);
     site.set_global_flags_and_data(1 << 7);
-    story.set_flag("URQUAN_PROTECTING_SAMATRA", 1);
+    site.set_flag(StoryKey::URQUAN_PROTECTING_SAMATRA, 1);
     site.talk();
     let activity = site.current_activity();
     if activity & (CHECK_ABORT | CHECK_LOAD) == 0 {
@@ -210,11 +210,11 @@ pub(super) fn encounter(story: &mut impl Story, site: &mut impl SamatraSite) -> 
         site.reinit_built_ship_q();
         site.load_ip_groups();
         if survivors {
-            story.set_flag("URQUAN_PROTECTING_SAMATRA", 0);
+            site.set_flag(StoryKey::URQUAN_PROTECTING_SAMATRA, 0);
         } else {
             site.reset_encounter();
             site.set_current_activity(LAST_BATTLE);
-            if story.flag("YEHAT_CIVIL_WAR") != 0
+            if site.flag(StoryKey::YEHAT_CIVIL_WAR) != 0
                 && site.track_yehat()
                 && site.rebel_escort_feasible()
             {
@@ -223,6 +223,47 @@ pub(super) fn encounter(story: &mut impl Story, site: &mut impl SamatraSite) -> 
         }
     }
     true
+}
+
+use super::generator::SystemGenerator;
+use super::host::SiteHost;
+use crate::engine::world::generation::SolarSys;
+
+pub struct Generator;
+
+impl SystemGenerator for Generator {
+    fn init_npcs(&self, _system: &mut SolarSys<'_>, host: &mut dyn SiteHost) -> bool {
+        init_npcs(host)
+    }
+    fn reinit_npcs(&self, _system: &mut SolarSys<'_>, host: &mut dyn SiteHost) -> bool {
+        reinit_npcs(host)
+    }
+    fn generate_planets(&self, system: &mut SolarSys<'_>, _host: &mut dyn SiteHost) -> bool {
+        system.layout(|rng, table, size, color, planets| {
+            generate_planets(rng, table, size, color, planets)
+        });
+        true
+    }
+    fn generate_moons(
+        &self,
+        system: &mut SolarSys<'_>,
+        planet: u8,
+        _host: &mut dyn SiteHost,
+    ) -> bool {
+        system.layout_moons(planet, |rng, size, color, parent, moons| {
+            generate_moons(rng, size, color, planet, parent.num_planets, moons)
+        });
+        true
+    }
+
+    fn generate_orbital(
+        &self,
+        system: &mut SolarSys<'_>,
+        body: Body,
+        host: &mut dyn SiteHost,
+    ) -> bool {
+        generate_orbital(system, body, host)
+    }
 }
 
 #[cfg(test)]

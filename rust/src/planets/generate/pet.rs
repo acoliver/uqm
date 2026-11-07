@@ -12,11 +12,11 @@ use crate::comm::dispatch::{
     CHECK_ABORT, CHECK_LOAD, IN_HYPERSPACE, START_ENCOUNTER, START_INTERPLANETARY,
 };
 use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
+use crate::engine::StoryKey;
 use crate::math::{square_root, RandomContext};
-use crate::planet_side::report_adapter::DiscoveryReportPort;
 use crate::planets::generate::default;
 use crate::planets::generate::home_contact::HomeContactSite;
-use crate::planets::generate::special::{self, Body, Orbit, Story, TELLURIC_WORLD};
+use crate::planets::generate::special::{self, Body, Story, TELLURIC_WORLD};
 use crate::starbase::sis_modules::FUEL_TANK_SCALE;
 
 const WORLD: Body = Body::Planet(0);
@@ -92,34 +92,32 @@ pub fn generate_planets(
 /// ruins scene is loaded before the default orbital, which is then given calm
 /// weather.
 pub fn generate_orbital(
-    orbit: &mut Orbit<'_>,
+    system: &mut SolarSys<'_>,
     body: Body,
-    story: &mut impl Story,
-    site: &mut (impl TalkingPetSite + UrquanEncounterSite),
-    load_planet: impl FnOnce(),
+    site: &mut (impl TalkingPetSite + UrquanEncounterSite + Story + super::host::PlanetSite + ?Sized),
 ) -> bool {
     if body == WORLD
-        && (story.flag("UMGAH_ZOMBIE_BLOBBIES") != 0
-            || story.flag("TALKING_PET") == 0
+        && (site.flag(StoryKey::UMGAH_ZOMBIE_BLOBBIES) != 0
+            || site.flag(StoryKey::TALKING_PET) == 0
             || site.start_sphere_tracking())
     {
-        meet(story, site);
+        meet(site);
         return true;
     }
 
     if body == WORLD {
-        site.load_ruins_scene(false);
+        site.load_ruins_scene(system, false);
     }
 
-    orbit.default_orbital(load_planet);
+    super::special::default_orbital(system, body, site);
 
     if body == WORLD {
-        orbit.sys_info.planet_info.weather = 0;
+        system.planet_info().weather = 0;
     }
     true
 }
 
-fn meet(story: &impl Story, site: &mut (impl TalkingPetSite + UrquanEncounterSite)) {
+fn meet(site: &mut (impl TalkingPetSite + UrquanEncounterSite + Story + ?Sized)) {
     site.notify_others_all_clear();
     site.save_ip_groups();
     site.reinit_ip_group_q();
@@ -133,7 +131,7 @@ fn meet(story: &impl Story, site: &mut (impl TalkingPetSite + UrquanEncounterSit
         let activity = HomeContactSite::current_activity(site);
         HomeContactSite::set_current_activity(site, activity | START_INTERPLANETARY);
         site.set_global_flags_and_data(TALK_FLAGS);
-        if story.flag("UMGAH_ZOMBIE_BLOBBIES") == 0 {
+        if site.flag(StoryKey::UMGAH_ZOMBIE_BLOBBIES) == 0 {
             site.clone_fleet_into_built_queue();
             site.talk();
         } else {
@@ -152,9 +150,9 @@ fn meet(story: &impl Story, site: &mut (impl TalkingPetSite + UrquanEncounterSit
     let umgah_survivors = site.built_ship_survives();
     HomeContactSite::set_current_activity(site, activity & !START_INTERPLANETARY);
 
-    if story.flag("PLAYER_HYPNOTIZED") != 0 {
+    if site.flag(StoryKey::PLAYER_HYPNOTIZED) != 0 {
         zap_to_urquan_encounter(site);
-    } else if (story.flag("UMGAH_ZOMBIE_BLOBBIES") != 0 && !umgah_survivors)
+    } else if (site.flag(StoryKey::UMGAH_ZOMBIE_BLOBBIES) != 0 && !umgah_survivors)
         || !site.start_sphere_tracking()
     {
         // The zombie fleet was defeated, or the Kohr-Ah have destroyed the
@@ -168,7 +166,7 @@ fn meet(story: &impl Story, site: &mut (impl TalkingPetSite + UrquanEncounterSit
 
 /// `ZapToUrquanEncounter`: the hypnotised player wakes up in hyperspace at
 /// an Ur-Quan ship, fifteen days later and short of fuel.
-fn zap_to_urquan_encounter(site: &mut (impl HomeContactSite + UrquanEncounterSite)) {
+fn zap_to_urquan_encounter(site: &mut (impl HomeContactSite + UrquanEncounterSite + ?Sized)) {
     if !site.begin_urquan_encounter(URQUAN_LOC) {
         return;
     }
@@ -213,11 +211,63 @@ pub fn generate_energy(
 }
 
 /// `GenerateTalkingPet_pickupEnergy`: the standard cycled ruins report.
-pub fn pickup_energy(body: Body, report: &mut impl DiscoveryReportPort) -> bool {
+pub fn pickup_energy(
+    system: &mut SolarSys<'_>,
+    body: Body,
+    site: &mut (impl super::host::ReportSite + ?Sized),
+) -> bool {
     if body == WORLD {
-        default::lander_report_cycle(report);
+        site.report(
+            system,
+            crate::engine::world::generation::ReportDisposition::Cycle,
+        );
     }
     false
+}
+
+use super::generator::SystemGenerator;
+use super::host::SiteHost;
+use crate::engine::world::generation::SolarSys;
+
+pub struct Generator;
+
+impl SystemGenerator for Generator {
+    fn generate_planets(&self, system: &mut SolarSys<'_>, _host: &mut dyn SiteHost) -> bool {
+        system.layout(|rng, table, size, color, planets| {
+            generate_planets(rng, table, size, color, planets)
+        });
+        true
+    }
+    fn generate_energy(
+        &self,
+        system: &mut SolarSys<'_>,
+        body: Body,
+        node: u16,
+        info: &mut NodeInfo,
+        _host: &dyn SiteHost,
+    ) -> u16 {
+        system.scan(body, |rng, sys, _frame| {
+            generate_energy(rng, sys, body, node, info)
+        })
+    }
+
+    fn generate_orbital(
+        &self,
+        system: &mut SolarSys<'_>,
+        body: Body,
+        host: &mut dyn SiteHost,
+    ) -> bool {
+        generate_orbital(system, body, host)
+    }
+    fn pickup_energy(
+        &self,
+        system: &mut SolarSys<'_>,
+        body: Body,
+        _node: u16,
+        host: &mut dyn SiteHost,
+    ) -> bool {
+        pickup_energy(system, body, host)
+    }
 }
 
 #[cfg(test)]

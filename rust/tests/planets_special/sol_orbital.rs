@@ -4,6 +4,7 @@
 use super::{Harness, ScreenWidth};
 use crate::planets_common::sol_orbital::{self, Case, Ops};
 use uqm_rust::engine::world::planet::{PlanetFrame, SystemInfo};
+
 use uqm_rust::planets::c_api::DISABLE_INTERACTIVITY;
 use uqm_rust::planets::generate::special::Body;
 use uqm_rust::state::game_state_keys::get_game_state;
@@ -41,8 +42,12 @@ impl Ops for Harness {
         let mut expected = *self.state;
         self.seed(0xabcdef01);
         let result = unsafe {
-            uqm_rust::app::bridge::enter(|cx| {
-                super::sol::generateSolFunctions.generate_orbital.unwrap()(cx, system, world)
+            crate::invoke_generation(system, |view, host| {
+                super::sol::generateSolFunctions.generate_orbital(
+                    view,
+                    uqm_rust::planets::solarsys::site::dispatch::body(system, world),
+                    host,
+                )
             })
         };
         let info = self.state.SysInfo;
@@ -120,3 +125,5 @@ pub fn check(c: &mut Harness, table: &[PlanetFrame]) {
     );
     println!("Sol orbital: 3168 complete SYSTEM_INFO/RNG records: Rust ABI == immutable C fixture == Rust core; LoadPlanet exits via existing DEBUG traversal seam");
 }
+
+use uqm_rust::planets::generate::SystemGenerator;

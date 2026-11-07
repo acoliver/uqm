@@ -1,8 +1,9 @@
 //! Orbital entry, with system borrows confined to host callbacks.
 
 use super::{PLUTO, STARBASE};
-use crate::comm::dispatch::START_ENCOUNTER;
+use crate::engine::save::START_ENCOUNTER;
 use crate::engine::world::planet::{PlanetInfo, SystemInfo};
+use crate::engine::StoryKey;
 use crate::planets::generate::calc;
 use crate::planets::generate::consts::EARTH_RADIUS;
 use crate::planets::generate::default;
@@ -41,24 +42,18 @@ impl Scene {
 /// Effects of `generateOrbital`. The host releases all system/RNG borrows
 /// before returning from `with_orbit`, and before resource or display calls.
 pub trait Orbital: Queues {
-    /// Owned surface definition transferred to `LoadPlanet`, never a forged
-    /// Rust handle. Its owner must retain or destroy it as surface generation
-    /// requires (including rescaling), and free the retained surface on exit.
-    type EarthSurface;
-
     fn set_encounter_group(&mut self, value: u8);
     fn current_activity(&self) -> u16;
     fn set_current_activity(&mut self, value: u16);
     fn set_global_flags_and_data(&mut self, value: u8);
-    fn with_orbit(&mut self, run: impl FnOnce(&mut Orbit<'_>));
-    fn planet_info(&mut self) -> &mut PlanetInfo;
     /// Load the standard lander font, capture the scene graphic into
     /// `PlanetSideFrame[1]`, then capture its discovery strings. These remain
     /// owned by the system until the existing planet/lander cleanup.
-    fn load_scene(&mut self, scene: Scene);
-    /// Capture `graphics.earthmask`; the result is consumed by `load_planet`.
-    fn load_earth_surface(&mut self) -> Self::EarthSurface;
-    fn load_planet(&mut self, surface: Option<Self::EarthSurface>);
+    fn load_scene(
+        &mut self,
+        _system: &mut crate::engine::world::generation::SolarSys<'_>,
+        scene: Scene,
+    );
 }
 
 /// `DoPlanetaryAnalysis`, mineral seed and counting, followed by Luna's bio
@@ -168,7 +163,11 @@ fn override_info(info: &mut PlanetInfo, body: Body) {
     info.gravity = calc::calc_gravity(info);
 }
 
-pub fn generate_orbital(body: Body, story: &impl Story, host: &mut impl Orbital) -> bool {
+pub fn generate_orbital(
+    system: &mut crate::engine::world::generation::SolarSys<'_>,
+    body: Body,
+    host: &mut (impl Orbital + Story + super::super::host::PlanetSite + ?Sized),
+) -> bool {
     if body == STARBASE {
         host.save_ip_groups();
         host.reinit_ip_group_q();
@@ -178,20 +177,21 @@ pub fn generate_orbital(body: Body, story: &impl Story, host: &mut impl Orbital)
         host.set_global_flags_and_data(u8::MAX);
         return true;
     }
-
-    host.with_orbit(|orbit| analyse_orbital(orbit, body));
-    if body == PLUTO && story.flag("FOUND_PLUTO_SPATHI") == 0 {
-        host.load_scene(Scene::Pluto);
-    } else if matches!(body, Body::Moon { planet: 2, .. }) && story.flag("MOONBASE_DESTROYED") == 0
+    crate::planets::generate::special::with_orbit(system, body, |orbit| {
+        analyse_orbital(orbit, body)
+    });
+    if body == PLUTO && host.flag(StoryKey::FOUND_PLUTO_SPATHI) == 0 {
+        host.load_scene(system, Scene::Pluto);
+    } else if matches!(body, Body::Moon { planet: 2, .. })
+        && host.flag(StoryKey::MOONBASE_DESTROYED) == 0
     {
-        host.load_scene(Scene::Moonbase);
+        host.load_scene(system, Scene::Moonbase);
     }
-    override_info(host.planet_info(), body);
-    let surface = if body == Body::Planet(2) {
-        Some(host.load_earth_surface())
+    override_info(system.planet_info(), body);
+    if body == Body::Planet(2) {
+        host.load_earth_planet(system);
     } else {
-        None
-    };
-    host.load_planet(surface);
+        host.load_planet(system);
+    }
     true
 }

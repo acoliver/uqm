@@ -6,37 +6,14 @@ use crate::battle::context_access::ContextOps;
 #[cfg(not(test))]
 use crate::engine::{battle::Cx, input::InputSession, Kernel, StoryKey};
 use crate::navigation::abi::*;
-use std::ffi::{c_char, c_int};
+use std::ffi::c_char;
 
+mod colors;
 mod equipment;
+use colors::hsva_to_rgba;
 mod labels;
 pub use labels::*;
 
-fn hsva_to_rgba(hue: f64, sat: f64, val: f64, alpha: BYTE) -> Color {
-    let hi = (hue / 60.0) as c_int as u32;
-    let f = hue / 60.0 - (hue / 60.0) as c_int as f64;
-    let p = val * (1.0 - sat);
-    let q = val * (1.0 - f * sat);
-    let t = val * (1.0 - (1.0 - f * sat));
-    let pb = (p * 255.0 + 0.5) as BYTE;
-    let qb = (q * 255.0 + 0.5) as BYTE;
-    let tb = (t * 255.0 + 0.5) as BYTE;
-    let vb = (val * 255.0 + 0.5) as BYTE;
-    assert!((0.0..360.0).contains(&hue));
-    assert!((0.0..=1.0).contains(&sat));
-    assert!((0.0..=1.0).contains(&val));
-    assert!(hi < 6);
-    let (r, g, b) = match hi {
-        0 => (vb, tb, pb),
-        1 => (qb, vb, pb),
-        2 => (pb, vb, tb),
-        3 => (pb, qb, vb),
-        4 => (tb, pb, vb),
-        5 => (vb, pb, qb),
-        _ => (0, 0, 0),
-    };
-    Color { r, g, b, a: alpha }
-}
 type SystemVisitor<T> = unsafe fn(*const STAR_DESC, *const SOLARSYS_STATE, &mut T);
 type WorldVisitor<T> = unsafe fn(
     &mut crate::engine::battle::Cx<'_>,
@@ -57,12 +34,12 @@ pub struct UniverseRecurseArg<'a, T> {
 #[cfg(not(test))]
 mod runtime {
     use super::*;
-    use crate::battle::gendef::getGenerateFunctions;
     use crate::engine::{observe::Io, world::planet::*, World};
+    use crate::planets::solarsys::site::dispatch::{body, with_system};
 
     use crate::planets::tables::{PLANET_ARRAY as planet_array, STARMAP_ARRAY as starmap_array};
     use libc::FILE;
-    use std::{mem, ptr};
+    use std::{ffi::c_int, mem, ptr};
     extern "C" {
         #[cfg(target_os = "macos")]
         #[link_name = "__stderrp"]
@@ -80,15 +57,23 @@ mod runtime {
 
     unsafe fn call_generate_for_scan_type(
         cx: &mut Cx<'_>,
-        _io: &mut Io<'_>,
+        io: &mut Io<'_>,
         system: *const SOLARSYS_STATE,
         world: *const PlanetDesc,
         node: COUNT,
         scan_type: BYTE,
         info: *mut NodeInfo,
     ) -> COUNT {
-        cx.with_legacy(|| {
-            crate::planets::scan::callGenerateForScanType(system, world, node, scan_type, info)
+        let record = system.cast_mut();
+        let target = body(record, world);
+        let mut spare = NodeInfo::default();
+        let info = if info.is_null() {
+            &mut spare
+        } else {
+            &mut *info
+        };
+        with_system(cx, io, record, |generator, system, host| {
+            crate::planets::scan::generate(generator, system, target, node, scan_type, info, host)
         })
     }
 
@@ -458,9 +443,11 @@ mod runtime {
             & ((0xff << STAR_TYPE_SHIFT) & !(0xff << STAR_COLOR_SHIFT)))
             >> STAR_TYPE_SHIFT) as BYTE;
         system.SunDesc[0].location = POINT { x: 0, y: 0 };
-        system.genFuncs = getGenerateFunctions((*star).Index).cast();
+        system.generator_index = (*star).Index;
         pSolarSysState = &mut system;
-        cx.with_legacy(|| ((*system.genFuncs).generatePlanets.unwrap())(&mut system));
+        with_system(cx, io, &mut system, |generator, system, host| {
+            generator.generate_planets(system, host)
+        });
         if let Some(cb) = recurse.system_func_pre {
             cx.with_legacy(|| cb(star, &system, recurse.arg));
         }
@@ -497,18 +484,27 @@ mod runtime {
         if let Some(cb) = recurse.planet_func_pre {
             (*system).pOrbitalDesc = planet;
             cx.with_legacy(|| DoPlanetaryAnalysis(ptr::addr_of_mut!((*system).SysInfo), planet));
-            ((*(*system).genFuncs).generateOrbital.unwrap())(cx, system, planet);
+            let target = body(system, planet);
+            with_system(cx, io, system, |generator, system, host| {
+                generator.generate_orbital(system, target, host)
+            });
             cb(cx, io, planet, recurse.arg);
         }
         if recurse.moon_func.is_some() {
             (*SysGenRNG).reseed((*planet).rand_seed);
-            cx.with_legacy(|| ((*(*system).genFuncs).generateMoons.unwrap())(system, planet));
+            let target = body(system, planet);
+            with_system(cx, io, system, |generator, system, host| {
+                generator.generate_moons(system, target.planet() as u8, host)
+            });
             for_all_moons(cx, io, star, system, planet, moon_recurse, recurse);
         }
         if let Some(cb) = recurse.planet_func_post {
             (*system).pOrbitalDesc = planet;
             cx.with_legacy(|| DoPlanetaryAnalysis(ptr::addr_of_mut!((*system).SysInfo), planet));
-            ((*(*system).genFuncs).generateOrbital.unwrap())(cx, system, planet);
+            let target = body(system, planet);
+            with_system(cx, io, system, |generator, system, host| {
+                generator.generate_orbital(system, target, host)
+            });
             cb(cx, io, planet, recurse.arg);
         }
     }
@@ -535,7 +531,10 @@ mod runtime {
             {
                 cx.with_legacy(|| DoPlanetaryAnalysis(ptr::addr_of_mut!((*system).SysInfo), moon));
             }
-            ((*(*system).genFuncs).generateOrbital.unwrap())(cx, system, moon);
+            let target = body(system, moon);
+            with_system(cx, io, system, |generator, system, host| {
+                generator.generate_orbital(system, target, host)
+            });
             cb(cx, io, moon, recurse.arg);
         }
     }
@@ -645,8 +644,9 @@ mod runtime {
         out: *mut FILE,
         planet: *const PlanetDesc,
     ) {
-        cx.with_legacy(|| {
-            ((*(*pSolarSysState).genFuncs).generateName.unwrap())(pSolarSysState, planet)
+        let target = body(pSolarSysState, planet);
+        with_system(cx, io, pSolarSysState, |generator, system, host| {
+            generator.generate_name(system, target, host)
         });
         libc::fprintf(
             out,

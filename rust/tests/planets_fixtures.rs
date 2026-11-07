@@ -359,6 +359,7 @@ fn orbit_records() -> Records {
 
 mod rust_special {
     use std::fmt::Write as _;
+    use uqm_rust::engine::StoryKey;
 
     use crate::planets_common::special_gen::{desc_of, Desc, SpecialOps};
     use crate::planets_common::{fresh_node, scan_seeds, write_node};
@@ -376,21 +377,21 @@ mod rust_special {
     };
 
     /// A game state whose only flag is `name`.
-    struct OneFlag(&'static str, bool);
+    struct OneFlag(StoryKey, bool);
 
     impl Story for OneFlag {
-        fn flag(&self, name: &'static str) -> u32 {
+        fn flag(&self, name: StoryKey) -> u32 {
             assert_eq!(name, self.0);
             u32::from(self.1)
         }
-        fn set_flag(&mut self, name: &'static str, _value: u32) {
-            panic!("unexpected write of {name}");
+        fn set_flag(&mut self, name: StoryKey, _value: u32) {
+            panic!("unexpected write of {name:?}");
         }
-        fn word(&self, name: &'static str) -> u32 {
-            panic!("unexpected read of {name}");
+        fn word(&self, name: StoryKey) -> u32 {
+            panic!("unexpected read of {name:?}");
         }
-        fn set_word(&mut self, name: &'static str, _value: u32) {
-            panic!("unexpected write of {name}");
+        fn set_word(&mut self, name: StoryKey, _value: u32) {
+            panic!("unexpected write of {name:?}");
         }
     }
 
@@ -416,7 +417,7 @@ mod rust_special {
                     case.0,
                     case.1,
                     &mut planets,
-                    &OneFlag("CHMMR_UNLEASHED", system == "chmmr1"),
+                    &OneFlag(StoryKey::CHMMR_UNLEASHED, system == "chmmr1"),
                 ),
                 "aqua" | "thrad" => thrad::generate_planets(
                     &mut rng,
@@ -510,7 +511,7 @@ mod rust_special {
         }
 
         fn energy(&mut self, system: &str, body: Body, seed: u32) -> String {
-            let taken = OneFlag("BURVIXESE_BROADCASTERS", system == "burv1");
+            let taken = OneFlag(StoryKey::BURVIXESE_BROADCASTERS, system == "burv1");
             let burv = |rng: &mut RandomContext,
                         info: &SystemInfo,
                         body: Body,
@@ -518,7 +519,7 @@ mod rust_special {
                         node: &mut NodeInfo| {
                 burv::generate_energy(rng, info, body, which, node, &taken)
             };
-            let helix = OneFlag("AQUA_HELIX", system == "aqua1");
+            let helix = OneFlag(StoryKey::AQUA_HELIX, system == "aqua1");
             let thraddash = |rng: &mut RandomContext,
                              info: &SystemInfo,
                              body: Body,
@@ -531,7 +532,7 @@ mod rust_special {
                 };
                 thrad::generate_energy(rng, info, star_index, body, which, node, &helix)
             };
-            let bomb = OneFlag("UTWIG_BOMB", system == "bomb1");
+            let bomb = OneFlag(StoryKey::UTWIG_BOMB, system == "bomb1");
             let utwig = |rng: &mut RandomContext,
                          info: &SystemInfo,
                          body: Body,
@@ -544,7 +545,7 @@ mod rust_special {
                 };
                 utw::generate_energy(rng, info, star_index, body, which, node, &bomb)
             };
-            let sun_device = OneFlag("SUN_DEVICE", system == "sun1");
+            let sun_device = OneFlag(StoryKey::SUN_DEVICE, system == "sun1");
             let mycon = |rng: &mut RandomContext,
                          info: &SystemInfo,
                          body: Body,
@@ -557,7 +558,7 @@ mod rust_special {
                 };
                 myc::generate_energy(rng, info, star_index, body, which, node, &sun_device)
             };
-            let device = OneFlag("TAALO_PROTECTOR", system == "taalo1");
+            let device = OneFlag(StoryKey::TAALO_PROTECTOR, system == "taalo1");
             let orz = |rng: &mut RandomContext,
                        info: &SystemInfo,
                        body: Body,
@@ -624,8 +625,8 @@ fn late_generators_full_fields_match_c_fixtures() {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("tests/fixtures/planets")
             .join(name);
-        assert_eq!(text.lines().count(), count, "{name}");
-        assert_eq!(text, std::fs::read_to_string(path).unwrap(), "{name}");
+        assert_eq!(text.lines().count(), count, "{name:?}");
+        assert_eq!(text, std::fs::read_to_string(path).unwrap(), "{name:?}");
     }
 }
 

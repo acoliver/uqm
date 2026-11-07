@@ -4,13 +4,13 @@
 //! Overridden: `generatePlanets`, `generateMoons`, `generateOrbital`. No story
 //! flags.
 
-use crate::battle::battle_types::{cosine, sine, QUADRANT};
+use crate::engine::math::battle_types::{cosine, sine, QUADRANT};
 use crate::engine::world::planet::{PlanetDesc, PlanetFrame};
 use crate::math::RandomContext;
 use crate::planets::generate::consts::PLANET_SHIELDED;
 use crate::planets::generate::default;
 use crate::planets::generate::special::{
-    self, Body, Orbit, EARTH_ATMOSPHERE, HIERARCHY_STARBASE, MIN_MOON_RADIUS, WATER_WORLD,
+    self, Body, EARTH_ATMOSPHERE, HIERARCHY_STARBASE, MIN_MOON_RADIUS, WATER_WORLD,
 };
 
 /// `GenerateSyreen_generatePlanets`.
@@ -62,14 +62,13 @@ pub trait StarbaseSite {
 
 /// `GenerateSyreen_generateOrbital`.
 pub fn generate_orbital(
-    orbit: &mut Orbit<'_>,
+    system: &mut SolarSys<'_>,
     body: Body,
-    site: &mut impl StarbaseSite,
-    load_planet: impl FnOnce(),
+    site: &mut (impl StarbaseSite + super::host::PlanetSite + ?Sized),
 ) -> bool {
     if body == Body::Planet(0) {
-        orbit.default_orbital(load_planet);
-        let info = &mut orbit.sys_info.planet_info;
+        super::special::default_orbital(system, body, site);
+        let info = system.planet_info();
         info.temperature = 19;
         info.tectonics = 0;
         info.weather = 0;
@@ -80,5 +79,46 @@ pub fn generate_orbital(
         site.talk_to_syreen();
         return true;
     }
-    orbit.default_orbital(load_planet)
+    super::special::default_orbital(system, body, site)
+}
+
+use super::generator::SystemGenerator;
+use super::host::SiteHost;
+use crate::engine::world::generation::SolarSys;
+
+pub struct Generator;
+
+impl SystemGenerator for Generator {
+    fn generate_planets(&self, system: &mut SolarSys<'_>, _host: &mut dyn SiteHost) -> bool {
+        system.layout(|rng, table, size, color, planets| {
+            generate_planets(rng, table, size, color, planets)
+        });
+        true
+    }
+    fn generate_moons(
+        &self,
+        system: &mut SolarSys<'_>,
+        planet: u8,
+        _host: &mut dyn SiteHost,
+    ) -> bool {
+        system.layout_moons(planet, |rng, size, color, parent, moons| {
+            generate_moons(
+                rng,
+                size,
+                color,
+                parent.num_planets,
+                moons,
+                Body::Planet(planet),
+            )
+        })
+    }
+
+    fn generate_orbital(
+        &self,
+        system: &mut SolarSys<'_>,
+        body: Body,
+        host: &mut dyn SiteHost,
+    ) -> bool {
+        generate_orbital(system, body, host)
+    }
 }

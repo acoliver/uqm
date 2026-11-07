@@ -238,3 +238,5 @@ mod tests {
         assert_eq!(unsafe { GetRandomSeedForStar(&star) }, 0x1234_fffe);
     }
 }
+
+pub mod site;

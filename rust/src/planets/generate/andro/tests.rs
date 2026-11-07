@@ -4,6 +4,7 @@ use super::{
     generate_energy, generate_orbital, generate_planets, pickup_energy, AndrosynthSite, WORLD,
 };
 use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
+use crate::engine::StoryKey;
 use crate::math::RandomContext;
 use crate::planet_side::report_adapter::{DiscoveryReportPort, ReportDisposition};
 use crate::planet_side::runtime::AdapterError;
@@ -29,7 +30,11 @@ struct Site {
 }
 
 impl AndrosynthSite for Site {
-    fn load_ruins_story(&mut self, visits: u32) {
+    fn load_ruins_story(
+        &mut self,
+        _system: &mut crate::engine::world::generation::SolarSys<'_>,
+        visits: u32,
+    ) {
         self.stories.push(visits);
     }
 }
@@ -64,7 +69,21 @@ fn orbital(body: Body, energy_mask: u32) -> (Site, SystemInfo) {
             sys_info: &mut sys_info,
             world: &world,
         };
-        assert!(generate_orbital(&mut orbit, body, &mut site, || loaded += 1));
+        assert!(crate::planets::generate::testing::with_orbit(
+            &mut orbit,
+            body,
+            |system| generate_orbital(
+                system,
+                body,
+                &mut crate::planets::generate::testing::Effects {
+                    story: (),
+                    site: &mut site,
+                    report: (),
+                    lander: (),
+                    load: Some(|| loaded += 1)
+                }
+            )
+        ));
     }
     assert_eq!(
         loaded, 1,
@@ -146,21 +165,63 @@ fn a_new_ruin_is_marked_and_reported_and_a_visited_one_is_not() {
     let mut story = FakeStory::default();
     let mut report = FakeReport::default();
 
-    assert!(!pickup_energy(WORLD, 3, &mut info, &mut story, &mut report));
+    assert!(!crate::planets::generate::testing::with_info(
+        &mut info,
+        |system| pickup_energy(
+            system,
+            WORLD,
+            3,
+            &mut crate::planets::generate::testing::Effects {
+                story: &mut story,
+                site: &mut (),
+                report: &mut report,
+                lander: (),
+                load: Some(|| {})
+            }
+        )
+    ));
     assert_eq!(info.scan_retrieve_mask[ENERGY_SCAN], 1 << 19);
-    assert_eq!(story.flag("PLANETARY_CHANGE"), 1);
+    assert_eq!(story.flag(StoryKey::PLANETARY_CHANGE), 1);
     assert_eq!(report.0, [ReportDisposition::Cycle]);
 
     // The same ruin again changes nothing.
-    story.set_flag("PLANETARY_CHANGE", 0);
-    assert!(!pickup_energy(WORLD, 3, &mut info, &mut story, &mut report));
+    story.set_flag(StoryKey::PLANETARY_CHANGE, 0);
+    assert!(!crate::planets::generate::testing::with_info(
+        &mut info,
+        |system| pickup_energy(
+            system,
+            WORLD,
+            3,
+            &mut crate::planets::generate::testing::Effects {
+                story: &mut story,
+                site: &mut (),
+                report: &mut report,
+                lander: (),
+                load: Some(|| {})
+            }
+        )
+    ));
     assert_eq!(info.scan_retrieve_mask[ENERGY_SCAN], 1 << 19);
-    assert_eq!(story.flag("PLANETARY_CHANGE"), 0);
+    assert_eq!(story.flag(StoryKey::PLANETARY_CHANGE), 0);
     assert_eq!(report.0.len(), 1);
 
     // The map bit of the node is not the visited bit.
     info.scan_retrieve_mask[ENERGY_SCAN] = 1 << 3;
-    assert!(!pickup_energy(WORLD, 3, &mut info, &mut story, &mut report));
+    assert!(!crate::planets::generate::testing::with_info(
+        &mut info,
+        |system| pickup_energy(
+            system,
+            WORLD,
+            3,
+            &mut crate::planets::generate::testing::Effects {
+                story: &mut story,
+                site: &mut (),
+                report: &mut report,
+                lander: (),
+                load: Some(|| {})
+            }
+        )
+    ));
     assert_eq!(info.scan_retrieve_mask[ENERGY_SCAN], (1 << 3) | (1 << 19));
     assert_eq!(report.0.len(), 2);
 }
@@ -171,10 +232,24 @@ fn other_bodies_report_nothing() {
         let mut info = unsafe { std::mem::zeroed::<SystemInfo>() }.planet_info;
         let mut story = FakeStory::default();
         let mut report = FakeReport::default();
-        assert!(!pickup_energy(body, 0, &mut info, &mut story, &mut report));
+        assert!(!crate::planets::generate::testing::with_info(
+            &mut info,
+            |system| pickup_energy(
+                system,
+                body,
+                0,
+                &mut crate::planets::generate::testing::Effects {
+                    story: &mut story,
+                    site: &mut (),
+                    report: &mut report,
+                    lander: (),
+                    load: Some(|| {})
+                }
+            )
+        ));
         assert_eq!(info.scan_retrieve_mask[ENERGY_SCAN], 0);
         assert!(report.0.is_empty());
-        assert_eq!(story.flag("PLANETARY_CHANGE"), 0);
+        assert_eq!(story.flag(StoryKey::PLANETARY_CHANGE), 0);
     }
 }
 
@@ -184,5 +259,18 @@ fn a_ruin_past_the_sixteenth_is_a_broken_invariant() {
     let mut info = unsafe { std::mem::zeroed::<SystemInfo>() }.planet_info;
     let mut story = FakeStory::default();
     let mut report = FakeReport::default();
-    pickup_energy(WORLD, 16, &mut info, &mut story, &mut report);
+    crate::planets::generate::testing::with_info(&mut info, |system| {
+        pickup_energy(
+            system,
+            WORLD,
+            16,
+            &mut crate::planets::generate::testing::Effects {
+                story: &mut story,
+                site: &mut (),
+                report: &mut report,
+                lander: (),
+                load: Some(|| {}),
+            },
+        )
+    });
 }

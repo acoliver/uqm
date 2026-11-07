@@ -11,12 +11,7 @@ pub fn report_active() -> bool {
 
 use super::runtime::AdapterError;
 
-/// How a report string table is consumed after presentation.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ReportDisposition {
-    Once,
-    Cycle,
-}
+pub use crate::engine::world::generation::ReportDisposition;
 
 /// Typed report boundary used by special-system pickup handling.
 pub trait DiscoveryReportPort {

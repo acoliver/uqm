@@ -7,13 +7,13 @@
 //! `pickupEnergy`. Story flags: `HELIX_UNPROTECTED`, `THRADD_MISSION`,
 //! `AQUA_HELIX`, `AQUA_HELIX_ON_SHIP`, `HELIX_VISITS`.
 
-use crate::battle::gendef::{AQUA_HELIX_DEFINED, THRADD_DEFINED};
 use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
+use crate::engine::StoryKey;
 use crate::math::RandomContext;
-use crate::planet_side::report_adapter::DiscoveryReportPort;
 use crate::planets::generate::default;
 use crate::planets::generate::home_contact::{self, HomeContactSite, LanderTakeoff};
-use crate::planets::generate::special::{self, Body, Orbit, Story, PRIMORDIAL_WORLD, WATER_WORLD};
+use crate::planets::generate::identities::{AQUA_HELIX_DEFINED, THRADD_DEFINED};
+use crate::planets::generate::special::{self, Body, Story, PRIMORDIAL_WORLD, WATER_WORLD};
 
 const WORLD: Body = Body::Planet(0);
 
@@ -27,7 +27,7 @@ pub trait ThraddashSite: HomeContactSite {
     /// `RepairSISBorder ()`.
     fn repair_sis_border(&mut self);
     /// `LoadStdLanderFont`, the Aqua Helix mask and report strings.
-    fn load_aqua_scene(&mut self);
+    fn load_aqua_scene(&mut self, _system: &mut crate::engine::world::generation::SolarSys<'_>);
 }
 
 /// `GenerateThraddash_generatePlanets` for the system at `star_index`.
@@ -55,10 +55,10 @@ pub fn generate_planets(
 /// The Thraddash defend the system: always at their home, at Aqua Helix until
 /// the helix is unprotected or the Thraddash mission is under way (values 1 to
 /// 3).
-fn thraddash_defend(star_index: u8, story: &impl Story) -> bool {
+fn thraddash_defend(star_index: u8, story: &(impl Story + ?Sized)) -> bool {
     star_index == THRADD_DEFINED
-        || (story.flag("HELIX_UNPROTECTED") == 0
-            && (story.flag("THRADD_MISSION").wrapping_sub(1) as u8) >= 3)
+        || (story.flag(StoryKey::HELIX_UNPROTECTED) == 0
+            && (story.flag(StoryKey::THRADD_MISSION).wrapping_sub(1) as u8) >= 3)
 }
 
 /// `GenerateThraddash_generateOrbital`: at planet 0, a defended system whose
@@ -67,15 +67,13 @@ fn thraddash_defend(star_index: u8, story: &impl Story) -> bool {
 /// Thraddash no longer defend it; then the ruins or helix scene is loaded
 /// before the default orbital.
 pub fn generate_orbital(
-    orbit: &mut Orbit<'_>,
+    system: &mut SolarSys<'_>,
     body: Body,
     star_index: u8,
-    story: &impl Story,
-    site: &mut impl ThraddashSite,
-    load_planet: impl FnOnce(),
+    site: &mut (impl ThraddashSite + Story + super::host::PlanetSite + ?Sized),
 ) -> bool {
     if body == WORLD {
-        if site.start_sphere_tracking() && thraddash_defend(star_index, story) {
+        if site.start_sphere_tracking() && thraddash_defend(star_index, site) {
             let flags = if star_index == THRADD_DEFINED {
                 THRADD_TALK_FLAGS
             } else {
@@ -84,19 +82,19 @@ pub fn generate_orbital(
             if !home_contact::meet(site, flags) {
                 return true;
             }
-            if thraddash_defend(star_index, story) {
+            if thraddash_defend(star_index, site) {
                 return true;
             }
             site.repair_sis_border();
         }
 
-        if star_index == AQUA_HELIX_DEFINED && story.flag("AQUA_HELIX") == 0 {
-            site.load_aqua_scene();
+        if star_index == AQUA_HELIX_DEFINED && site.flag(StoryKey::AQUA_HELIX) == 0 {
+            site.load_aqua_scene(system);
         } else if star_index == THRADD_DEFINED {
-            site.load_ruins_scene(false);
+            site.load_ruins_scene(system, false);
         }
     }
-    orbit.default_orbital(load_planet);
+    super::special::default_orbital(system, body, site);
     true
 }
 
@@ -109,13 +107,13 @@ pub fn generate_energy(
     body: Body,
     which_node: u16,
     info: &mut NodeInfo,
-    story: &impl Story,
+    story: &(impl Story + ?Sized),
 ) -> u16 {
     if star_index == THRADD_DEFINED && body == WORLD {
         return default::generate_ruins(rng, sys_info, which_node, info);
     }
     if star_index == AQUA_HELIX_DEFINED && body == WORLD {
-        if story.flag("AQUA_HELIX") != 0 {
+        if story.flag(StoryKey::AQUA_HELIX) != 0 {
             return 0;
         }
         return default::generate_artifact(rng, sys_info, which_node, info);
@@ -126,31 +124,83 @@ pub fn generate_energy(
 /// `GenerateThraddash_pickupEnergy`: the home ruins give the standard cycled
 /// report; the helix is taken once, from node 0.
 pub fn pickup_energy(
+    system: &mut SolarSys<'_>,
     star_index: u8,
     body: Body,
     which_node: u16,
-    story: &mut impl Story,
-    report: &mut impl DiscoveryReportPort,
-    lander: &mut impl LanderTakeoff,
+    lander: &mut (impl LanderTakeoff + Story + super::host::ReportSite + ?Sized),
 ) -> bool {
     if star_index == THRADD_DEFINED && body == WORLD {
-        default::lander_report_cycle(report);
+        lander.report(
+            system,
+            crate::engine::world::generation::ReportDisposition::Cycle,
+        );
         return false;
     }
     if star_index == AQUA_HELIX_DEFINED && body == WORLD {
         assert!(
-            story.flag("AQUA_HELIX") == 0 && which_node == 0,
+            lander.flag(StoryKey::AQUA_HELIX) == 0 && which_node == 0,
             "the helix is picked up once, from node 0"
         );
-        default::lander_report(report);
+        lander.report(
+            system,
+            crate::engine::world::generation::ReportDisposition::Once,
+        );
         lander.lander_takeoff();
-        story.set_flag("HELIX_VISITS", 0);
-        story.set_flag("AQUA_HELIX", 1);
-        story.set_flag("AQUA_HELIX_ON_SHIP", 1);
-        story.set_flag("HELIX_UNPROTECTED", 1);
+        lander.set_flag(StoryKey::HELIX_VISITS, 0);
+        lander.set_flag(StoryKey::AQUA_HELIX, 1);
+        lander.set_flag(StoryKey::AQUA_HELIX_ON_SHIP, 1);
+        lander.set_flag(StoryKey::HELIX_UNPROTECTED, 1);
         return true;
     }
     false
+}
+
+use super::generator::SystemGenerator;
+use super::host::SiteHost;
+use crate::engine::world::generation::SolarSys;
+
+pub struct Generator;
+
+impl SystemGenerator for Generator {
+    fn generate_planets(&self, system: &mut SolarSys<'_>, _host: &mut dyn SiteHost) -> bool {
+        let star = system.star_index();
+        system.layout(|rng, table, size, color, planets| {
+            generate_planets(rng, table, size, color, planets, star)
+        });
+        true
+    }
+    fn generate_energy(
+        &self,
+        system: &mut SolarSys<'_>,
+        body: Body,
+        node: u16,
+        info: &mut NodeInfo,
+        host: &dyn SiteHost,
+    ) -> u16 {
+        let star = system.star_index();
+        system.scan(body, |rng, sys, _frame| {
+            generate_energy(rng, sys, star, body, node, info, host)
+        })
+    }
+
+    fn generate_orbital(
+        &self,
+        system: &mut SolarSys<'_>,
+        body: Body,
+        host: &mut dyn SiteHost,
+    ) -> bool {
+        generate_orbital(system, body, system.star_index(), host)
+    }
+    fn pickup_energy(
+        &self,
+        system: &mut SolarSys<'_>,
+        body: Body,
+        node: u16,
+        host: &mut dyn SiteHost,
+    ) -> bool {
+        pickup_energy(system, system.star_index(), body, node, host)
+    }
 }
 
 #[cfg(test)]
