@@ -324,6 +324,11 @@ pub(crate) mod engine {
                 cx.with_legacy(|| context.transition(Some(rect)));
             }
         });
+        crate::engine::observe::battle::observe_tick(
+            cx,
+            io,
+            crate::engine::observe::battle::BattlePhase::Advanced,
+        );
         if cx.world.activity() & IN_BATTLE as u16 == 0
             || cx.world.activity() & (CHECK_ABORT | CHECK_LOAD) as u16 != 0
         {

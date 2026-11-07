@@ -340,6 +340,7 @@ pub fn present_trace_record(
         command_acknowledgement: None,
         checkpoint: None,
         failure: None,
+        native_battle: None,
     }
 }
 
@@ -373,6 +374,7 @@ pub fn capture_trace_record(
         command_acknowledgement: None,
         checkpoint: None,
         failure: None,
+        native_battle: None,
     }
 }
 

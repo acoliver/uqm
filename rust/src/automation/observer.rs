@@ -110,6 +110,18 @@ impl Observer<Option<super::campaign_state::CampaignView>> for Handle {
         }
     }
 
+    fn battle_diagnostics(&self) -> bool {
+        self.0.native_battle_diagnostics()
+    }
+
+    fn battle_tick(&mut self, tick: &crate::engine::observe::battle::BattleTick) {
+        self.0.trace_battle_tick(tick);
+    }
+
+    fn replacement_gate(&mut self, gate: &crate::engine::observe::battle::ReplacementGate) {
+        self.0.trace_replacement_gate(gate);
+    }
+
     fn checkpoint(&mut self, view: &CheckpointView<'_>) {
         match *view {
             CheckpointView::Simulation(boundary) => self.0.parity_checkpoint(boundary),

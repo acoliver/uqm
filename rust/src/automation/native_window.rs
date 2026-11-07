@@ -4153,6 +4153,7 @@ mod tests {
             command_acknowledgement: None,
             checkpoint: None,
             failure: None,
+            native_battle: None,
         }
     }
 

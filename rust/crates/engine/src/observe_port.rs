@@ -98,6 +98,11 @@ pub trait Observer<W = ()> {
     ) -> Injected {
         self.input_admitted(view, world)
     }
+    fn battle_diagnostics(&self) -> bool {
+        false
+    }
+    fn battle_tick(&mut self, _tick: &crate::observe::battle::BattleTick) {}
+    fn replacement_gate(&mut self, _gate: &crate::observe::battle::ReplacementGate) {}
     fn checkpoint(&mut self, view: &CheckpointView<'_>);
     fn presented(&mut self, presented: &mut Presented);
 }

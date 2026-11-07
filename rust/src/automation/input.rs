@@ -252,6 +252,7 @@ pub fn input_trace_record(
         command_acknowledgement: None,
         checkpoint: None,
         failure: None,
+        native_battle: None,
     }
 }
 
@@ -293,6 +294,7 @@ pub fn semantic_trace_record(
         command_acknowledgement: None,
         checkpoint: None,
         failure: None,
+        native_battle: None,
     }
 }
 

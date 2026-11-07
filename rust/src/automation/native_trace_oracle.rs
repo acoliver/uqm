@@ -156,7 +156,12 @@ pub(super) fn committed<'a>(
 ) -> Result<Vec<&'a NativeCheckpoint>, String> {
     if records.iter().enumerate().any(|(index, record)| {
         record.sequence != index as u64
-            || record.schema != TraceRecord::SCHEMA
+            || record.schema
+                != if record.kind == RecordKind::NativeBattle {
+                    TraceRecord::BATTLE_SCHEMA
+                } else {
+                    TraceRecord::SCHEMA
+                }
             || records.first().is_some_and(|first| first.run != record.run)
     }) {
         return Err("native trace sequence, schema or run identity differs".into());

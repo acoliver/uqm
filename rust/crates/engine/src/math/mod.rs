@@ -110,6 +110,11 @@ fn coerce_seed(new_seed: u32) -> u32 {
     }
 }
 
+/// Read the global stream without advancing or temporarily replacing it.
+pub fn random_state() -> u32 {
+    SEED.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 /// C: `DWORD seed_random(DWORD new_seed)`
 pub fn seed_random(new_seed: u32) -> u32 {
     SEED.swap(coerce_seed(new_seed), std::sync::atomic::Ordering::Relaxed)

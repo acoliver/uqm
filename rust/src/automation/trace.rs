@@ -30,6 +30,7 @@ pub enum RecordKind {
     RunStart,
     RunEnd,
     InputTick,
+    NativeBattle,
     Presentation,
     Capture,
     MenuTransition,
@@ -156,6 +157,20 @@ pub struct FailureEvidence {
     pub detail: String,
 }
 
+/// Compact native-only input/frame samples and exact replacement-gate reads.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct NativeBattleEvidence {
+    pub frame: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tick: Option<crate::engine::observe::battle::BattleTick>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gate: Option<crate::engine::observe::battle::ReplacementGate>,
+    pub picker_active: bool,
+    pub picker_generation: u64,
+    pub delta_ms: Option<u64>,
+}
+
 /// A typed JSONL trace record. Each record is independently serializable as
 /// one JSON object on one line.
 ///
@@ -193,12 +208,16 @@ pub struct TraceRecord {
     pub checkpoint: Option<CheckpointEvidence>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub failure: Option<FailureEvidence>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub native_battle: Option<NativeBattleEvidence>,
 }
 
 impl TraceRecord {
     /// Current schema version. Version 2 added the readiness, command
     /// acknowledgement, checkpoint, and failure records to the version 1 set.
     pub const SCHEMA: u16 = 2;
+    /// Schema 3 adds native_battle records only; replay records remain schema 2.
+    pub const BATTLE_SCHEMA: u16 = 3;
 
     /// Serialize this record as one JSON line followed by a newline.
     ///
@@ -502,6 +521,7 @@ mod tests {
             command_acknowledgement: None,
             checkpoint: None,
             failure: None,
+            native_battle: None,
         };
         let jsonl = rec.to_jsonl().unwrap();
         assert!(jsonl.ends_with('\n'));
@@ -530,6 +550,7 @@ mod tests {
             command_acknowledgement: None,
             checkpoint: None,
             failure: None,
+            native_battle: None,
         };
         let jsonl = rec.to_jsonl().unwrap();
         assert!(jsonl.contains("NewGame"));
@@ -562,6 +583,7 @@ mod tests {
                 command_acknowledgement: None,
                 checkpoint: None,
                 failure: None,
+                native_battle: None,
             },
             TraceRecord {
                 schema: TraceRecord::SCHEMA,
@@ -587,6 +609,7 @@ mod tests {
                 command_acknowledgement: None,
                 checkpoint: None,
                 failure: None,
+                native_battle: None,
             },
             TraceRecord {
                 schema: TraceRecord::SCHEMA,
@@ -612,6 +635,7 @@ mod tests {
                 command_acknowledgement: None,
                 checkpoint: None,
                 failure: None,
+                native_battle: None,
             },
         ];
 
@@ -664,6 +688,7 @@ mod tests {
                 command_acknowledgement: None,
                 checkpoint: None,
                 failure: None,
+                native_battle: None,
             })
             .collect();
         let lines: Vec<_> = recs.iter().map(|r| r.to_jsonl().unwrap()).collect();
@@ -715,6 +740,7 @@ mod tests {
                 command_acknowledgement: None,
                 checkpoint: None,
                 failure: None,
+                native_battle: None,
             },
             TraceRecord {
                 schema: TraceRecord::SCHEMA,
@@ -737,6 +763,7 @@ mod tests {
                     id: "after_main_menu".into(),
                 }),
                 failure: None,
+                native_battle: None,
             },
             TraceRecord {
                 schema: TraceRecord::SCHEMA,
@@ -760,6 +787,7 @@ mod tests {
                     classification: "capture_encode".into(),
                     detail: "PNG encoder rejected a zero-size frame".into(),
                 }),
+                native_battle: None,
             },
         ];
 
@@ -810,6 +838,7 @@ mod tests {
                 }),
                 checkpoint: None,
                 failure: None,
+                native_battle: None,
             };
             let parsed = TraceRecord::from_jsonl(&record.to_jsonl().unwrap()).unwrap();
             assert_eq!(parsed, record);

@@ -42,6 +42,7 @@ fn run_arguments(arguments: impl IntoIterator<Item = String>) -> Result<(), Stri
         "coverage" => coverage::run(&root, &extra),
         "deny" => deny::run(&root, &extra),
         "parity" => parity::run(&root, &extra),
+        "native-battle-diff" => native_battle_diff::run(&extra),
         #[cfg(feature = "native")]
         "native" => native_cli::run(&root, &extra),
         _ if !extra.is_empty() => Err(format!(
@@ -60,7 +61,7 @@ fn run_arguments(arguments: impl IntoIterator<Item = String>) -> Result<(), Stri
 }
 
 fn usage() -> String {
-    "usage: cargo xtask <quality|clippy|coverage|deny|abi-check|parity> or cargo xtask-native <debug|release|test|native>".into()
+    "usage: cargo xtask <quality|clippy|coverage|deny|abi-check|parity|native-battle-diff> or cargo xtask-native <debug|release|test|native>".into()
 }
 
 /// The checkout that contains the current directory. Resolved at run time: a

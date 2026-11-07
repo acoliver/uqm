@@ -35,7 +35,11 @@ pub fn admit_observer(
     let campaign = super::observe::CampaignView::for_input(view, || {
         super::observe::CampaignView::capture(cx.world, cx.kernel)
     });
-    cx.with_legacy(|| io.observer.input_admitted(&view, &campaign))
+    let admitted = cx.with_legacy(|| io.observer.input_admitted(&view, &campaign));
+    if matches!(view, super::observe::InputView::AfterUpdate(_)) {
+        super::observe::battle::observe_tick(cx, io, super::observe::battle::BattlePhase::Input);
+    }
+    admitted
 }
 
 pub trait InputRuntime {
@@ -108,6 +112,7 @@ impl Cx<'_> {
             io.observer
                 .checkpoint(&CheckpointView::InputSampled(activity))
         });
+        super::observe::battle::observe_tick(self, io, super::observe::battle::BattlePhase::Input);
         Some(result)
     }
 

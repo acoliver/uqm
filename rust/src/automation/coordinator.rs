@@ -21,6 +21,7 @@ mod initialization;
 mod input;
 mod lander;
 use input::discard_held_repeat;
+mod native_battle;
 mod navigation;
 mod parity;
 mod save_capture;
@@ -235,6 +236,7 @@ struct CoordInner {
     /// Menu key a scripted tap held down this update after its press.
     held_repeat_key: Option<crate::automation::script::MenuKey>,
     verified_battle_frames: u64,
+    native_battle_previous_ms: [Option<u64>; 3],
     /// Hyperspace position snapshot awaiting its displacement assertion.
     flight_position: FlightPositionTracker,
     /// Fleet sizes at the start of the battle a ship-loss wait is watching.
@@ -2321,6 +2323,7 @@ impl AutomationObserver {
             command_acknowledgement: None,
             checkpoint: None,
             failure: None,
+            native_battle: None,
         };
         match record.to_jsonl() {
             Ok(jsonl) => reservation.commit_record(jsonl),
@@ -2907,6 +2910,7 @@ impl AutomationObserver {
             command_acknowledgement: None,
             checkpoint: None,
             failure: None,
+            native_battle: None,
         };
 
         if let Ok(jsonl) = record.to_jsonl() {
@@ -2941,6 +2945,7 @@ impl AutomationObserver {
             command_acknowledgement: None,
             checkpoint: None,
             failure: None,
+            native_battle: None,
         };
         if let Ok(jsonl) = record.to_jsonl() {
             reservation.commit_record(jsonl);
@@ -2971,6 +2976,7 @@ impl AutomationObserver {
             command_acknowledgement: None,
             checkpoint: None,
             failure: None,
+            native_battle: None,
         };
 
         if let Ok(jsonl) = record.to_jsonl() {
@@ -3006,6 +3012,7 @@ impl AutomationObserver {
             command_acknowledgement: None,
             checkpoint: None,
             failure: None,
+            native_battle: None,
         };
 
         if let Ok(jsonl) = record.to_jsonl() {
@@ -3040,6 +3047,7 @@ impl AutomationObserver {
             command_acknowledgement: None,
             checkpoint: None,
             failure: None,
+            native_battle: None,
         };
         match record.to_jsonl() {
             Ok(jsonl) => {
@@ -3163,6 +3171,7 @@ impl AutomationObserver {
             command_acknowledgement: None,
             checkpoint: None,
             failure: None,
+            native_battle: None,
         };
         match record.to_jsonl() {
             Ok(jsonl) => reservation.commit_record(jsonl),
