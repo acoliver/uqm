@@ -23,6 +23,19 @@ impl InputRuntime for Runtime {
         Box::new(Unobserved)
     }
 
+    fn sleep(&self, _: &mut uqm_engine::battle::Cx<'_>, _: u32) {
+        panic!("unexpected pacing");
+    }
+    fn sleep_until(&self, _: &mut uqm_engine::battle::Cx<'_>, _: u32) {
+        panic!("unexpected pacing");
+    }
+    fn flush(&self) {
+        self.input().clear_menu_state();
+    }
+    fn confirm_exit(&self, _: &mut uqm_engine::battle::Cx<'_>) -> bool {
+        panic!("unexpected confirmation");
+    }
+
     fn update(&self, _: &mut Cx<'_>) {}
 
     fn run(&self, cx: &mut Cx<'_>, io: &mut Io<'_>, reset: bool, frame: &mut dyn Frame) {

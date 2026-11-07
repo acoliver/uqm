@@ -56,6 +56,19 @@ impl InputRuntime for Runtime {
     fn observer(&self) -> Box<dyn Observer<Option<CampaignView>>> {
         Box::new(self.0.clone())
     }
+    fn sleep(&self, _: &mut uqm_engine::battle::Cx<'_>, _: u32) {
+        panic!("unexpected pacing");
+    }
+    fn sleep_until(&self, _: &mut uqm_engine::battle::Cx<'_>, _: u32) {
+        panic!("unexpected pacing");
+    }
+    fn flush(&self) {
+        self.input().clear_menu_state();
+    }
+    fn confirm_exit(&self, _: &mut uqm_engine::battle::Cx<'_>) -> bool {
+        panic!("unexpected confirmation");
+    }
+
     fn update(&self, _cx: &mut Cx<'_>) {
         panic!("the observer must stop the wait before sampling input");
     }

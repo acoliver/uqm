@@ -41,6 +41,10 @@ pub fn admit_observer(
 pub trait InputRuntime {
     fn input(&self) -> &InputSession;
     fn observer(&self) -> Box<dyn crate::observe::Observer<Option<crate::observe::CampaignView>>>;
+    fn sleep(&self, cx: &mut Cx<'_>, ticks: u32);
+    fn sleep_until(&self, cx: &mut Cx<'_>, deadline: u32);
+    fn flush(&self);
+    fn confirm_exit(&self, cx: &mut Cx<'_>) -> bool;
     fn update(&self, cx: &mut Cx<'_>);
     fn run(&self, cx: &mut Cx<'_>, io: &mut Io<'_>, reset: bool, frame: &mut dyn Frame);
     fn battle_input(&self, input: &InputContext) -> u8;
@@ -138,6 +142,21 @@ mod tests {
             Box::new(Unobserved)
         }
 
+        fn sleep(&self, _: &mut Cx<'_>, ticks: u32) {
+            assert_eq!(ticks, 28);
+            self.0.borrow_mut().push(false);
+        }
+        fn sleep_until(&self, _: &mut Cx<'_>, deadline: u32) {
+            assert_eq!(deadline, 56);
+            self.0.borrow_mut().push(true);
+        }
+        fn flush(&self) {
+            self.0.borrow_mut().push(false);
+        }
+        fn confirm_exit(&self, _: &mut Cx<'_>) -> bool {
+            self.0.borrow_mut().push(true);
+            false
+        }
         fn update(&self, _cx: &mut Cx<'_>) {}
 
         fn run(&self, cx: &mut Cx<'_>, io: &mut Io<'_>, reset: bool, frame: &mut dyn Frame) {
@@ -183,6 +202,24 @@ mod tests {
                 .battle_input(&InputContext::new(1, 1)),
             8
         );
+    }
+
+    #[test]
+    fn retained_runtime_supplies_modal_and_pacing_operations() {
+        let driver = Driver(Rc::default(), InputSession::default());
+        let mut game = Game::new();
+        let mut battle = Battle::new();
+        let mut cx = Cx::new(
+            &mut battle,
+            &mut game.world,
+            &mut game.kernel,
+            crate::math::random,
+        );
+        driver.sleep(&mut cx, 28);
+        driver.sleep_until(&mut cx, 56);
+        driver.flush();
+        assert!(!driver.confirm_exit(&mut cx));
+        assert_eq!(*driver.0.borrow(), [false, true, false, true]);
     }
 
     #[test]
