@@ -283,3 +283,61 @@ fn flagship_entry(loading: bool) {
         DestroyDrawable(drawable.cast());
     }
 }
+
+#[test]
+#[serial_test::serial]
+fn owned_palette_selection_uses_the_supplied_tables_and_status_context() {
+    use std::ptr;
+    use uqm_rust::{
+        engine::battle::hyperspace as resources,
+        graphics::{cmap_abi::*, context_abi::*, native_abi::Color},
+        strings::string_table::{AllocStringTable, CaptureStringTable},
+    };
+    let mut game = Game::new();
+    // SAFETY: the fixture owns the two tables, context and all acquired palette references.
+    unsafe {
+        InitColorMaps();
+        for (side, channel) in [12u8, 90].into_iter().enumerate() {
+            let table = CaptureStringTable(AllocStringTable(1, 0));
+            let mut palette = vec![17, 17];
+            palette.extend(std::iter::repeat_n(channel, 768));
+            let bytes = uqm_rust::memory::rust_hmalloc(palette.len()).cast::<u8>();
+            ptr::copy_nonoverlapping(palette.as_ptr(), bytes, palette.len());
+            (*table).data = bytes.cast();
+            (*table).length = palette.len() as i32;
+            game.kernel.cmaps[side] = table;
+            resources::select_palette(&game.kernel, side != 0);
+            let selected = TFB_GetColorMap(17);
+            assert!((0..256).all(|index| {
+                let color = uqm_rust::graphics::sdl::palette::GetNativePaletteColor(
+                    (*selected).palette,
+                    index,
+                );
+                (color.r, color.g, color.b) == (channel, channel, channel)
+            }));
+            TFB_ReturnColorMap(selected);
+        }
+        #[cfg(feature = "debug-process")]
+        let context = CreateContextAux(c"hyperspace status fixture".as_ptr());
+        #[cfg(not(feature = "debug-process"))]
+        let context = CreateContextAux();
+        game.kernel.status_context = context;
+        let retained = resources::status_context(&game.kernel);
+        retained.select();
+        retained.set_background(Color {
+            r: 12,
+            g: 34,
+            b: 56,
+            a: 255,
+        });
+        let selected = SetContextBackGroundColor(Color::default());
+        assert_eq!((selected.r, selected.g, selected.b), (12, 34, 56));
+        drop(retained);
+        SetContext(std::ptr::null_mut());
+        DestroyContext(context);
+        game.kernel.status_context = std::ptr::null_mut();
+        resources::free_hyper_data(&mut game.kernel);
+        assert!(game.kernel.cmaps.iter().all(|map| map.is_null()));
+        UninitColorMaps();
+    }
+}
