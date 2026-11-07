@@ -191,7 +191,7 @@ pub(super) unsafe fn init_solar_sys_sis_characteristics() {
     }
 }
 
-pub(super) unsafe fn load_solar_sys(cx: &mut Cx<'_>, io: &mut Io<'_>) -> *mut PlanetDesc {
+fn temperature_color(temperature: i16) -> c::Color {
     const TEMP_COLORS: [c::Color; 5] = [
         rgb15(0x00, 0x00, 0x0e),
         rgb15(0x00, 0x06, 0x08),
@@ -199,7 +199,14 @@ pub(super) unsafe fn load_solar_sys(cx: &mut Cx<'_>, io: &mut Io<'_>) -> *mut Pl
         rgb15(0x0f, 0x00, 0x00),
         rgb15(0x0f, 0x08, 0x00),
     ];
+    let mut index = ((i32::from(temperature) + 250) / 100) as c::COUNT;
+    if usize::from(index) >= TEMP_COLORS.len() {
+        index = (TEMP_COLORS.len() - 1) as c::COUNT;
+    }
+    TEMP_COLORS[usize::from(index)]
+}
 
+pub(super) unsafe fn load_solar_sys(cx: &mut Cx<'_>, io: &mut Io<'_>) -> *mut PlanetDesc {
     let state = system();
     let mut orbital = ptr::null_mut();
     let star = *cx
@@ -233,12 +240,7 @@ pub(super) unsafe fn load_solar_sys(cx: &mut Cx<'_>, io: &mut Io<'_>) -> *mut Pl
             // The Rust analysis implementation borrows the whole SystemInfo.
             let mut info: SystemInfo = std::mem::zeroed();
             cx.with_legacy(|| do_planetary_analysis_c(ptr::addr_of_mut!(info), planet));
-            let temperature = info.planet_info.temperature;
-            let mut index = ((i32::from(temperature) + 250) / 100) as c::COUNT;
-            if usize::from(index) >= TEMP_COLORS.len() {
-                index = (TEMP_COLORS.len() - 1) as c::COUNT;
-            }
-            (*planet).temp_color = TEMP_COLORS[usize::from(index)];
+            (*planet).temp_color = temperature_color(info.planet_info.temperature);
         }
     }
     cx.with_legacy(|| sort_planet_positions());
