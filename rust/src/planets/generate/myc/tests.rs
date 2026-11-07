@@ -1,17 +1,14 @@
 //! The Mycon systems' story gating, guard conversations and pickups against
 //! recording fakes.
 
-use crate::engine::StoryKey;
 use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
+use crate::engine::StoryKey;
 use std::cell::RefCell;
 use std::rc::Rc;
 
 use super::{
     generate_energy, generate_life, generate_orbital, generate_planets, pickup_energy, MyconSite,
     Scene, AMBUSH_SHIPS, HOME_TALK_FLAGS, SUN_DEVICE_TALK_FLAGS, WORLD,
-};
-use crate::planets::generate::identities::{
-    EGG_CASE0_DEFINED, EGG_CASE1_DEFINED, EGG_CASE2_DEFINED, MYCON_DEFINED, SUN_DEVICE_DEFINED,
 };
 use crate::comm::dispatch::{CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY};
 use crate::math::RandomContext;
@@ -21,6 +18,9 @@ use crate::planets::generate::calc::{AnalysisSite, StarDescription};
 use crate::planets::generate::consts::EARTH_RADIUS;
 use crate::planets::generate::home_contact::tests::FakeStory;
 use crate::planets::generate::home_contact::{HomeContactSite, LanderTakeoff};
+use crate::planets::generate::identities::{
+    EGG_CASE0_DEFINED, EGG_CASE1_DEFINED, EGG_CASE2_DEFINED, MYCON_DEFINED, SUN_DEVICE_DEFINED,
+};
 use crate::planets::generate::special::{Body, Orbit, Story, SHATTERED_WORLD};
 use crate::planets::generate::surface::ENERGY_SCAN;
 
@@ -65,7 +65,7 @@ enum Call {
     LoadPlanet,
     Report(ReportDisposition),
     Takeoff,
-    SetFlag(&'static str, u32),
+    SetFlag(StoryKey, u32),
 }
 
 /// A site recording every host call.
@@ -137,7 +137,11 @@ impl HomeContactSite for Site {
     fn load_ip_groups(&mut self) {
         self.record(Call::LoadIpGroups);
     }
-    fn load_ruins_scene(&mut self, _artifact_taken: bool) {
+    fn load_ruins_scene(
+        &mut self,
+        _system: &mut crate::engine::world::generation::SolarSys<'_>,
+        _artifact_taken: bool,
+    ) {
         panic!("the Mycon systems load their own scenes");
     }
 }
@@ -152,7 +156,11 @@ impl MyconSite for Site {
     fn repair_sis_border(&mut self) {
         self.record(Call::RepairSisBorder);
     }
-    fn load_scene(&mut self, scene: Scene) {
+    fn load_scene(
+        &mut self,
+        _system: &mut crate::engine::world::generation::SolarSys<'_>,
+        scene: Scene,
+    ) {
         self.record(Call::LoadScene(scene));
     }
 }
@@ -213,14 +221,21 @@ fn there_is_no_life_in_mycon_systems() {
 fn the_sun_device_is_taken_once_from_node_zero() {
     let mut story = FakeStory::with(&[(StoryKey::MYCON_VISITS, 4)]);
     let (mut report, mut lander) = (FakeReport::default(), FakeLander::default());
-    assert!(pickup_energy(
-        SUN_DEVICE_DEFINED,
-        WORLD,
-        0,
-        &mut story,
-        &mut report,
-        &mut lander
-    ));
+    assert!(crate::planets::generate::testing::with_empty(|system| {
+        pickup_energy(
+            system,
+            SUN_DEVICE_DEFINED,
+            WORLD,
+            0,
+            &mut crate::planets::generate::testing::Effects {
+                story: &mut story,
+                site: &mut (),
+                report: &mut report,
+                lander: &mut lander,
+                load: Some(|| {}),
+            },
+        )
+    }));
     assert_eq!(report.0, [ReportDisposition::Once]);
     assert_eq!(lander.0, 1);
     for (flag, value) in [
@@ -228,7 +243,7 @@ fn the_sun_device_is_taken_once_from_node_zero() {
         (StoryKey::SUN_DEVICE_ON_SHIP, 1),
         (StoryKey::MYCON_VISITS, 0),
     ] {
-        assert_eq!(story.flag(flag), value, "{flag}");
+        assert_eq!(story.flag(flag), value, "{flag:?}");
     }
 }
 
@@ -238,14 +253,21 @@ fn the_sun_device_cannot_be_taken_twice_or_from_another_node() {
         let mut story = FakeStory::with(&[(StoryKey::SUN_DEVICE, taken)]);
         let (mut report, mut lander) = (FakeReport::default(), FakeLander::default());
         let attempt = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            pickup_energy(
-                SUN_DEVICE_DEFINED,
-                WORLD,
-                node,
-                &mut story,
-                &mut report,
-                &mut lander,
-            )
+            crate::planets::generate::testing::with_empty(|system| {
+                pickup_energy(
+                    system,
+                    SUN_DEVICE_DEFINED,
+                    WORLD,
+                    node,
+                    &mut crate::planets::generate::testing::Effects {
+                        story: &mut story,
+                        site: &mut (),
+                        report: &mut report,
+                        lander: &mut lander,
+                        load: Some(|| {}),
+                    },
+                )
+            })
         }));
         assert!(attempt.is_err());
         assert!(report.0.is_empty());
@@ -263,21 +285,28 @@ fn each_egg_case_system_marks_its_own_egg_case() {
     for (taken, star_index) in EGG_CASES.into_iter().enumerate() {
         let mut story = FakeStory::default();
         let (mut report, mut lander) = (FakeReport::default(), FakeLander::default());
-        assert!(pickup_energy(
-            star_index,
-            WORLD,
-            0,
-            &mut story,
-            &mut report,
-            &mut lander
-        ));
+        assert!(crate::planets::generate::testing::with_empty(|system| {
+            pickup_energy(
+                system,
+                star_index,
+                WORLD,
+                0,
+                &mut crate::planets::generate::testing::Effects {
+                    story: &mut story,
+                    site: &mut (),
+                    report: &mut report,
+                    lander: &mut lander,
+                    load: Some(|| {}),
+                },
+            )
+        }));
         assert_eq!(report.0, [ReportDisposition::Once]);
         assert_eq!(lander.0, 1);
         for (index, flag) in flags.iter().enumerate() {
             assert_eq!(
-                story.flag(flag),
+                story.flag(*flag),
                 u32::from(index == taken),
-                "{star_index} {flag}"
+                "{star_index} {flag:?}"
             );
         }
         assert_eq!(story.flag(StoryKey::SUN_DEVICE), 0);
@@ -289,14 +318,21 @@ fn an_egg_case_cannot_be_taken_from_another_node() {
     let mut story = FakeStory::default();
     let (mut report, mut lander) = (FakeReport::default(), FakeLander::default());
     let attempt = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        pickup_energy(
-            EGG_CASE1_DEFINED,
-            WORLD,
-            3,
-            &mut story,
-            &mut report,
-            &mut lander,
-        )
+        crate::planets::generate::testing::with_empty(|system| {
+            pickup_energy(
+                system,
+                EGG_CASE1_DEFINED,
+                WORLD,
+                3,
+                &mut crate::planets::generate::testing::Effects {
+                    story: &mut story,
+                    site: &mut (),
+                    report: &mut report,
+                    lander: &mut lander,
+                    load: Some(|| {}),
+                },
+            )
+        })
     }));
     assert!(attempt.is_err());
     assert_eq!(lander.0, 0);
@@ -314,14 +350,21 @@ fn other_worlds_pick_up_nothing() {
     ] {
         let mut story = FakeStory::default();
         let (mut report, mut lander) = (FakeReport::default(), FakeLander::default());
-        assert!(!pickup_energy(
-            star_index,
-            body,
-            0,
-            &mut story,
-            &mut report,
-            &mut lander
-        ));
+        assert!(!crate::planets::generate::testing::with_empty(|system| {
+            pickup_energy(
+                system,
+                star_index,
+                body,
+                0,
+                &mut crate::planets::generate::testing::Effects {
+                    story: &mut story,
+                    site: &mut (),
+                    report: &mut report,
+                    lander: &mut lander,
+                    load: Some(|| {}),
+                },
+            )
+        }));
         assert!(report.0.is_empty());
         assert_eq!(lander.0, 0);
     }
@@ -362,7 +405,7 @@ fn world_restored() -> Vec<Call> {
 fn visit(
     star_index: u8,
     body: Body,
-    flags: &[(&'static str, u32)],
+    flags: &[(StoryKey, u32)],
     energy_retrieved: bool,
     configure: impl FnOnce(&mut Site),
 ) -> (Vec<Call>, FakeStory) {
@@ -394,13 +437,21 @@ fn visit(
         world: &world,
     };
     let loaded = Rc::clone(&calls);
-    assert!(generate_orbital(
+    assert!(crate::planets::generate::testing::with_orbit(
         &mut orbit,
         body,
-        star_index,
-        &mut story,
-        &mut site,
-        || loaded.borrow_mut().push(Call::LoadPlanet)
+        |system| generate_orbital(
+            system,
+            body,
+            star_index,
+            &mut crate::planets::generate::testing::Effects {
+                story: &mut story,
+                site: &mut site,
+                report: (),
+                lander: (),
+                load: Some(|| loaded.borrow_mut().push(Call::LoadPlanet))
+            }
+        )
     ));
     (calls.take(), story)
 }
@@ -530,7 +581,10 @@ fn a_taken_sun_device_loads_no_scene() {
     let (calls, _) = visit(
         SUN_DEVICE_DEFINED,
         WORLD,
-        &[(StoryKey::SUN_DEVICE, 1), (StoryKey::SUN_DEVICE_UNGUARDED, 1)],
+        &[
+            (StoryKey::SUN_DEVICE, 1),
+            (StoryKey::SUN_DEVICE_UNGUARDED, 1),
+        ],
         false,
         |site| site.tracking = true,
     );
@@ -683,7 +737,10 @@ fn guard_story_and_conversation_outcomes_have_exact_host_effects() {
                                 expected.push(Call::LoadPlanet);
                             }
                             assert_eq!(calls, expected, "star={star} tracking={tracking} flags={flags:?} survivors={survivors} status={status:#x}");
-                            assert_eq!(story.flag(StoryKey::SUN_DEVICE_UNGUARDED), resulting_unguarded);
+                            assert_eq!(
+                                story.flag(StoryKey::SUN_DEVICE_UNGUARDED),
+                                resulting_unguarded
+                            );
                             assert_eq!(story.flag(StoryKey::MYCON_FELL_FOR_AMBUSH), ambush);
                         }
                     }
@@ -699,17 +756,17 @@ struct OrderedStory {
 }
 
 impl Story for OrderedStory {
-    fn flag(&self, name: &'static str) -> u32 {
+    fn flag(&self, name: StoryKey) -> u32 {
         self.inner.flag(name)
     }
-    fn set_flag(&mut self, name: &'static str, value: u32) {
+    fn set_flag(&mut self, name: StoryKey, value: u32) {
         self.calls.borrow_mut().push(Call::SetFlag(name, value));
         self.inner.set_flag(name, value);
     }
-    fn word(&self, _name: &'static str) -> u32 {
+    fn word(&self, _name: StoryKey) -> u32 {
         panic!("Mycon hooks do not read group references");
     }
-    fn set_word(&mut self, _name: &'static str, _value: u32) {
+    fn set_word(&mut self, _name: StoryKey, _value: u32) {
         panic!("Mycon hooks do not write group references");
     }
 }
@@ -744,14 +801,21 @@ fn pickups_report_then_launch_then_write_only_their_story_flags() {
             inner: FakeStory::with(&[(StoryKey::MYCON_VISITS, 7)]),
             calls: Rc::clone(&calls),
         };
-        assert!(pickup_energy(
-            star,
-            WORLD,
-            0,
-            &mut story,
-            &mut OrderedReport(Rc::clone(&calls)),
-            &mut OrderedLander(Rc::clone(&calls))
-        ));
+        assert!(crate::planets::generate::testing::with_empty(|system| {
+            pickup_energy(
+                system,
+                star,
+                WORLD,
+                0,
+                &mut crate::planets::generate::testing::Effects {
+                    story: &mut story,
+                    site: &mut (),
+                    report: &mut OrderedReport(Rc::clone(&calls)),
+                    lander: &mut OrderedLander(Rc::clone(&calls)),
+                    load: Some(|| {}),
+                },
+            )
+        }));
         let mut expected = vec![
             Call::Report(ReportDisposition::Once),
             Call::Takeoff,
@@ -776,7 +840,16 @@ fn winning_clears_only_the_activity_bit_then_restores_groups_before_unguarding()
         inner: FakeStory::default(),
         calls: Rc::clone(&calls),
     };
-    assert!(super::mycon_talk(MYCON_DEFINED, &mut story, &mut site));
+    assert!(super::mycon_talk(
+        MYCON_DEFINED,
+        &mut crate::planets::generate::testing::Effects {
+            story: &mut story,
+            site: &mut site,
+            report: (),
+            lander: (),
+            load: Some(|| {})
+        }
+    ));
     let mut expected = mycon_contact(HOME_TALK_FLAGS, false);
     expected.remove(0); // The caller already performed sphere tracking.
     expected.extend([

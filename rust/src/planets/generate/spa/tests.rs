@@ -1,5 +1,5 @@
-use crate::engine::StoryKey;
 use super::*;
+use crate::engine::StoryKey;
 use crate::planets::generate::home_contact::tests::FakeStory;
 use crate::planets::generate::vux::tests::{record, with_orbit, Calls, Pickup, Site};
 use std::rc::Rc;
@@ -27,9 +27,21 @@ fn moon_contact_shield_broadcaster_and_abort_matrix() {
                         };
                         let calls = Rc::clone(&site.calls);
                         let (info, rng) = with_orbit(|orbit| {
-                            assert!(generate_orbital(orbit, body, &story, &mut site, || record(
-                                &calls, "planet"
-                            )));
+                            assert!(crate::planets::generate::testing::with_orbit(
+                                orbit,
+                                body,
+                                |system| generate_orbital(
+                                    system,
+                                    body,
+                                    &mut crate::planets::generate::testing::Effects {
+                                        story: &story,
+                                        site: &mut site,
+                                        report: (),
+                                        lander: (),
+                                        load: Some(|| record(&calls, "planet"))
+                                    }
+                                )
+                            ));
                         });
                         let mut expected: Vec<String> = Vec::new();
                         let talk = body == MOON && shielded == 0 && tracking;
@@ -119,13 +131,19 @@ fn world_scan_order_preserves_energy_and_matches_direct_analysis() {
         orbit.sys_info.planet_info.tectonics = 0;
     });
     let (actual, actual_seed) = with_orbit(|orbit| {
-        generate_orbital(
-            orbit,
-            WORLD,
-            &FakeStory::default(),
-            &mut Site::default(),
-            || {},
-        );
+        crate::planets::generate::testing::with_orbit(orbit, WORLD, |system| {
+            generate_orbital(
+                system,
+                WORLD,
+                &mut crate::planets::generate::testing::Effects {
+                    story: &FakeStory::default(),
+                    site: &mut Site::default(),
+                    report: (),
+                    lander: (),
+                    load: Some(|| {}),
+                },
+            )
+        });
     });
     assert_eq!(format!("{actual:?}"), format!("{expected:?}"));
     assert_eq!(actual_seed, seed);
@@ -152,7 +170,10 @@ fn last_creature_uses_retrieved_population_not_node_index() {
             );
         }
     }
-    for flag in [StoryKey::SPATHI_CREATURES_ELIMINATED, StoryKey::SPATHI_SHIELDED_SELVES] {
+    for flag in [
+        StoryKey::SPATHI_CREATURES_ELIMINATED,
+        StoryKey::SPATHI_SHIELDED_SELVES,
+    ] {
         assert!(std::panic::catch_unwind(|| {
             pickup_life(WORLD, 0, &mut FakeStory::with(&[(flag, 1)]));
         })
@@ -165,13 +186,20 @@ fn broadcaster_pickup_and_invariants() {
     for body in [WORLD, MOON, Body::Planet(1)] {
         let calls = Calls::default();
         let mut story = FakeStory::default();
-        let result = pickup_energy(
-            body,
-            0,
-            &mut story,
-            &mut Pickup(Rc::clone(&calls)),
-            &mut Pickup(Rc::clone(&calls)),
-        );
+        let result = crate::planets::generate::testing::with_empty(|system| {
+            pickup_energy(
+                system,
+                body,
+                0,
+                &mut crate::planets::generate::testing::Effects {
+                    story: &mut story,
+                    site: &mut (),
+                    report: &mut Pickup(Rc::clone(&calls)),
+                    lander: &mut Pickup(Rc::clone(&calls)),
+                    load: Some(|| {}),
+                },
+            )
+        });
         assert_eq!(result, body == MOON);
         assert_eq!(
             *calls.borrow(),
@@ -182,18 +210,28 @@ fn broadcaster_pickup_and_invariants() {
             }
         );
         assert_eq!(story.flag(StoryKey::UMGAH_BROADCASTERS), u32::from(result));
-        assert_eq!(story.flag(StoryKey::UMGAH_BROADCASTERS_ON_SHIP), u32::from(result));
+        assert_eq!(
+            story.flag(StoryKey::UMGAH_BROADCASTERS_ON_SHIP),
+            u32::from(result)
+        );
     }
     for (taken, which) in [(1, 0), (0, 1), (0, u16::MAX)] {
         let calls = Calls::default();
         assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            pickup_energy(
-                MOON,
-                which,
-                &mut FakeStory::with(&[(StoryKey::UMGAH_BROADCASTERS, taken)]),
-                &mut Pickup(Rc::clone(&calls)),
-                &mut Pickup(Rc::clone(&calls)),
-            )
+            crate::planets::generate::testing::with_empty(|system| {
+                pickup_energy(
+                    system,
+                    MOON,
+                    which,
+                    &mut crate::planets::generate::testing::Effects {
+                        story: &mut FakeStory::with(&[(StoryKey::UMGAH_BROADCASTERS, taken)]),
+                        site: &mut (),
+                        report: &mut Pickup(Rc::clone(&calls)),
+                        lander: &mut Pickup(Rc::clone(&calls)),
+                        load: Some(|| {}),
+                    },
+                )
+            })
         }))
         .is_err());
         assert!(calls.borrow().is_empty());
@@ -204,17 +242,23 @@ fn broadcaster_pickup_and_invariants() {
 fn moon_queue_must_be_empty() {
     assert!(std::panic::catch_unwind(|| {
         with_orbit(|orbit| {
-            generate_orbital(
-                orbit,
-                MOON,
-                &FakeStory::default(),
-                &mut Site {
-                    tracking: true,
-                    built: 1,
-                    ..Site::default()
-                },
-                || panic!("must not load"),
-            );
+            crate::planets::generate::testing::with_orbit(orbit, MOON, |system| {
+                generate_orbital(
+                    system,
+                    MOON,
+                    &mut crate::planets::generate::testing::Effects {
+                        story: &FakeStory::default(),
+                        site: &mut Site {
+                            tracking: true,
+                            built: 1,
+                            ..Site::default()
+                        },
+                        report: (),
+                        lander: (),
+                        load: Some(|| panic!("must not load")),
+                    },
+                )
+            });
         });
     })
     .is_err());
@@ -228,13 +272,20 @@ fn broadcaster_and_last_creature_flag_write_order() {
         inner: FakeStory::default(),
         calls: Rc::clone(&calls),
     };
-    pickup_energy(
-        MOON,
-        0,
-        &mut story,
-        &mut Pickup(Rc::clone(&calls)),
-        &mut Pickup(Rc::clone(&calls)),
-    );
+    crate::planets::generate::testing::with_empty(|system| {
+        pickup_energy(
+            system,
+            MOON,
+            0,
+            &mut crate::planets::generate::testing::Effects {
+                story: &mut story,
+                site: &mut (),
+                report: &mut Pickup(Rc::clone(&calls)),
+                lander: &mut Pickup(Rc::clone(&calls)),
+                load: Some(|| {}),
+            },
+        )
+    });
     assert_eq!(
         *calls.borrow(),
         [
