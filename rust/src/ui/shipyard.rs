@@ -732,7 +732,6 @@ pub unsafe fn do_shipyard(cx: &mut Cx<'_>, menu: &mut MENU_STATE, input: &InputS
             draw_blue_print(input, menu);
             menu.CurState = SHIPYARD_CREW;
             DrawMenuStateStrings(PM_CREW as BYTE, menu.CurState as i16);
-            SetContext(Kernel::current().read(|owner| owner.space_context));
             let mut stamp = STAMP {
                 origin: POINT { x: 0, y: 0 },
                 frame: SetAbsFrameIndex(menu.ModuleFrame, 0),

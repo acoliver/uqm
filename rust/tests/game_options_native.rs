@@ -12,7 +12,7 @@ use uqm_rust::{
         observe::{CampaignView, Io, Observer, Unobserved},
         Game,
     },
-    navigation::abi::{KEY_MENU_CANCEL, KEY_MENU_RIGHT, KEY_MENU_SELECT},
+    navigation::abi::{KEY_MENU_CANCEL, KEY_MENU_EDIT_CANCEL, KEY_MENU_RIGHT, KEY_MENU_SELECT},
 };
 
 struct ScriptedInput {
