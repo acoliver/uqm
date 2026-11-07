@@ -1650,7 +1650,6 @@ pub type StatMsgMode = ::std::os::raw::c_uint;
 #[cfg(not(test))]
 pub use crate::ui::sis::draw_landers;
 #[cfg(not(test))]
-pub use crate::ui::sis::SetStatusMessageMode;
 #[cfg(test)]
 extern "C" {
     pub fn draw_landers();

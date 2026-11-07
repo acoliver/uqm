@@ -31,6 +31,7 @@ pub struct Kernel {
     game_text: Option<crate::strings::owned_table::LoadedTextTable>,
     pub tiny_font: crate::graphics::native_abi::FONT,
     pub activity_frame: crate::graphics::native_abi::FRAME,
+    pub status_message_mode: u32,
     pub status_frame: crate::graphics::native_abi::FRAME,
     pub flag_stat_frame: crate::graphics::native_abi::FRAME,
     pub misc_data_frame: crate::graphics::native_abi::FRAME,
@@ -210,6 +211,7 @@ impl Kernel {
             game_text: None,
             tiny_font: ptr::null_mut(),
             activity_frame: ptr::null_mut(),
+            status_message_mode: 1,
             status_frame: ptr::null_mut(),
             flag_stat_frame: ptr::null_mut(),
             misc_data_frame: ptr::null_mut(),
@@ -261,6 +263,12 @@ impl super::battle::Cx<'_> {
     }
 }
 
+impl Kernel {
+    pub fn set_status_message_mode(&mut self, mode: u32) -> u32 {
+        std::mem::replace(&mut self.status_message_mode, mode)
+    }
+}
+
 impl Default for Kernel {
     fn default() -> Self {
         Self::new()
@@ -278,5 +286,17 @@ mod default_tests {
         assert!(kernel.player_input.iter().all(Option::is_none));
         assert!(kernel.display.order().is_empty());
         assert_eq!(kernel.display.alloc(), Some(0));
+    }
+
+    #[test]
+    fn status_mode_is_local_to_the_retained_kernel_and_can_be_restored() {
+        let mut kernel = Kernel::new();
+        let other = Kernel::new();
+        assert_eq!(kernel.status_message_mode, 1);
+        let previous = kernel.set_status_message_mode(2);
+        assert_eq!(previous, 1);
+        assert_eq!(other.status_message_mode, 1);
+        assert_eq!(kernel.set_status_message_mode(previous), 2);
+        assert_eq!(kernel.status_message_mode, 1);
     }
 }

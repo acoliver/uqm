@@ -9,10 +9,15 @@ use crate::navigation::abi::*;
 
 use std::{mem, ptr};
 
+mod status;
+pub use status::{draw_status_message, format_date, status_message_text};
+
+mod title;
+pub use title::{draw_hyper_coords, draw_title};
+
 pub(crate) mod capacity;
 use capacity::{GetCrewPodCapacity, GetFuelTankCapacity};
 
-static mut CUR_MSG_MODE: StatMsgMode = StatMsgMode_SMM_DEFAULT;
 static mut LAST_PILOT: BOOLEAN = 0;
 static mut NEXT_PILOT_TIME: TimeCount = 0;
 static mut PILOT_CYCLE_INDEX: DWORD = 0;
@@ -33,10 +38,6 @@ pub(super) unsafe fn game_string(index: u32) -> *mut UNICODE {
         index as u16,
     ))
     .cast()
-}
-
-fn game_state(key: StoryKey) -> u8 {
-    World::current().read(|world| world.story_state(key) as u8)
 }
 
 const SIS_ORG_X: SIZE = 7;
@@ -137,47 +138,17 @@ pub unsafe extern "C" fn ClearSISRect(clear_flags: BYTE) {
 /// pStr must be a valid NUL-terminated UTF-8 string and graphics state initialized.
 #[no_mangle]
 pub unsafe extern "C" fn DrawSISTitle(p_str: *const UNICODE) {
-    let mut t: TEXT = mem::zeroed();
-    t.baseline.x = SIS_TITLE_WIDTH >> 1;
-    t.baseline.y = SIS_TITLE_HEIGHT - 2;
-    t.align = TEXT_ALIGN_ALIGN_CENTER;
-    t.pStr = p_str;
-    t.CharCount = !0;
-    let old = SetContext(Kernel::current().read(|owner| owner.off_screen_context));
-    let mut r: RECT = mem::zeroed();
-    r.corner.x =
-        (i32::from(SIS_ORG_X) + sis_screen_width() - i32::from(SIS_TITLE_BOX_WIDTH) + 1) as SIZE;
-    r.corner.y = SIS_ORG_Y - SIS_TITLE_HEIGHT;
-    r.extent.width = SIS_TITLE_WIDTH;
-    r.extent.height = SIS_TITLE_HEIGHT - 1;
-    SetContextFGFrame(Kernel::current().read(|owner| owner.screen));
-    SetContextClipRect(&mut r);
-    SetContextFont(Kernel::current().read(|owner| owner.tiny_font));
-    BatchGraphics();
-    SetContextBackGroundColor(rgb15(0, 0, 0x14));
-    ClearDrawable();
-    SetContextForeGroundColor(rgb15(0x1b, 0, 0x1b));
-    font_DrawText(&mut t);
-    UnbatchGraphics();
-    SetContextClipRect(ptr::null_mut());
-    SetContext(old);
+    let text = std::ffi::CStr::from_ptr(p_str.cast());
+    let width = ScreenWidth;
+    Kernel::current().read(|kernel| draw_title(kernel, width, text));
 }
 
 /// # Safety
 /// Graphics state must be initialized on the game thread.
 #[no_mangle]
 pub unsafe extern "C" fn DrawHyperCoords(universe: POINT) {
-    let mut b = [0u8; 100];
-    libc::snprintf(
-        b.as_mut_ptr().cast(),
-        b.len(),
-        c"%03u.%01u : %03u.%01u".as_ptr(),
-        i32::from(universe.x) / 10,
-        i32::from(universe.x) % 10,
-        i32::from(universe.y) / 10,
-        i32::from(universe.y) % 10,
-    );
-    DrawSISTitle(b.as_mut_ptr().cast());
+    let text = title::hyper_coord_text(universe);
+    DrawSISTitle(text.as_ptr().cast());
 }
 
 /// # Safety
@@ -313,14 +284,10 @@ pub unsafe extern "C" fn DateToString(
     day_index: BYTE,
     year_index: COUNT,
 ) {
-    libc::snprintf(
-        buf,
-        buf_len,
-        c"%s %02d·%04d".as_ptr(),
-        game_string(MONTHS_STRING_BASE + month_index as u32 - 1),
-        day_index as i32,
-        year_index as i32,
-    );
+    let month =
+        std::ffi::CStr::from_ptr(game_string(MONTHS_STRING_BASE + month_index as u32 - 1).cast());
+    let text = format_date(month, day_index, year_index);
+    libc::snprintf(buf, buf_len, c"%s".as_ptr(), text.as_ptr());
 }
 
 /// # Safety
@@ -331,15 +298,6 @@ pub unsafe extern "C" fn GetStatusMessageRect(r: *mut RECT) {
     (*r).corner.y = 130;
     (*r).extent.width = STATUS_MESSAGE_WIDTH;
     (*r).extent.height = STATUS_MESSAGE_HEIGHT;
-}
-
-/// # Safety
-/// Called on the game thread.
-#[no_mangle]
-pub unsafe extern "C" fn SetStatusMessageMode(new_mode: StatMsgMode) -> StatMsgMode {
-    let old = CUR_MSG_MODE;
-    CUR_MSG_MODE = new_mode;
-    old
 }
 
 /// # Safety
@@ -754,7 +712,7 @@ unsafe fn delta_fuel(delta: SIZE) {
         font_DrawText(&mut t);
     }
 }
-unsafe fn delta_res(delta: SIZE) {
+unsafe fn delta_res(delta: SIZE, mode: StatMsgMode) {
     if delta == 0 {
         return;
     }
@@ -765,7 +723,7 @@ unsafe fn delta_res(delta: SIZE) {
         } else {
             (**s).res_units = (**s).res_units.wrapping_add(i32::from(delta) as DWORD);
         }
-        assert!(CUR_MSG_MODE == StatMsgMode_SMM_RES_UNITS);
+        assert!(mode == StatMsgMode_SMM_RES_UNITS);
     } else {
         let mut r: RECT = mem::zeroed();
         r.corner.x = 2;
@@ -782,8 +740,13 @@ unsafe fn delta_res(delta: SIZE) {
 /// SIS graphics, game state and asset resources must be initialized on the game thread.
 #[no_mangle]
 pub unsafe extern "C" fn DeltaSISGauges(crew_delta: SIZE, fuel_delta: SIZE, resunit_delta: i32) {
-    let (retained_status_context, preferences) =
-        Kernel::current().read(|owner| (owner.status_context, owner.configuration.preferences()));
+    let (retained_status_context, preferences, mode) = Kernel::current().read(|owner| {
+        (
+            owner.status_context,
+            owner.configuration.preferences(),
+            owner.status_message_mode,
+        )
+    });
     if crew_delta == 0 && fuel_delta == 0 && resunit_delta == 0 {
         return;
     }
@@ -811,7 +774,7 @@ pub unsafe extern "C" fn DeltaSISGauges(crew_delta: SIZE, fuel_delta: SIZE, resu
         draw_landers();
         DrawStorageBays(0);
     }
-    delta_res(resunit_delta as SIZE);
+    delta_res(resunit_delta as SIZE, mode);
     UnbatchGraphics();
     SetContext(old);
 }
@@ -949,74 +912,10 @@ pub unsafe fn continue_flash() {
 /// pStr must be null or a valid NUL-terminated string; status graphics must be initialized.
 #[no_mangle]
 pub unsafe extern "C" fn DrawStatusMessage(p_str: *const UNICODE) {
-    let (retained_status_context, preferences) =
-        Kernel::current().read(|owner| (owner.status_context, owner.configuration.preferences()));
-    let old = SetContext(retained_status_context);
-    let mut ctx: RECT = mem::zeroed();
-    GetContextClipRect(&mut ctx);
-    SetContext(Kernel::current().read(|owner| owner.off_screen_context));
-    SetContextFGFrame(Kernel::current().read(|owner| owner.screen));
-    let mut r: RECT = mem::zeroed();
-    GetStatusMessageRect(&mut r);
-    r.corner.x = (i32::from(r.corner.x) + i32::from(ctx.corner.x)) as SIZE;
-    r.corner.y = (i32::from(r.corner.y) + i32::from(ctx.corner.y)) as SIZE;
-    SetContextClipRect(&mut r);
-    BatchGraphics();
-    SetContextBackGroundColor(rgb15(0, 8, 0));
-    ClearDrawable();
-    let mut buf = [0u8; 128];
-    let mut text = p_str;
-    if text.is_null() {
-        if CUR_MSG_MODE == StatMsgMode_SMM_CREDITS {
-            let credits = u16::from(game_state(StoryKey::MELNORME_CREDIT0))
-                | (u16::from(game_state(StoryKey::MELNORME_CREDIT1)) << 8);
-            libc::snprintf(
-                buf.as_mut_ptr().cast(),
-                buf.len(),
-                c"%u %s".as_ptr(),
-                credits as u32,
-                game_string(STATUS_STRING_BASE),
-            );
-        } else if CUR_MSG_MODE == StatMsgMode_SMM_RES_UNITS {
-            if game_state(StoryKey::CHMMR_BOMB_STATE) < 2 {
-                libc::snprintf(
-                    buf.as_mut_ptr().cast(),
-                    buf.len(),
-                    c"%u %s".as_ptr(),
-                    sis().read(|owner| owner.res_units),
-                    game_string(STATUS_STRING_BASE + 1),
-                );
-            } else {
-                libc::snprintf(
-                    buf.as_mut_ptr().cast(),
-                    buf.len(),
-                    c"%s %s".as_ptr(),
-                    if preferences.menu == OPT_PC {
-                        game_string(STATUS_STRING_BASE + 2)
-                    } else {
-                        c"∞".as_ptr().cast()
-                    },
-                    game_string(STATUS_STRING_BASE + 1),
-                );
-            }
-        } else {
-            let (month, day, year) = WorldData::current().read(WorldData::calendar_date);
-            DateToString(buf.as_mut_ptr().cast(), buf.len(), month, day, year);
-        }
-        text = buf.as_ptr().cast();
-    }
-    let mut t: TEXT = mem::zeroed();
-    t.baseline.x = STATUS_MESSAGE_WIDTH >> 1;
-    t.baseline.y = STATUS_MESSAGE_HEIGHT - 1;
-    t.align = TEXT_ALIGN_ALIGN_CENTER;
-    t.pStr = text as *mut UNICODE;
-    t.CharCount = !0;
-    SetContextFont(Kernel::current().read(|owner| owner.tiny_font));
-    SetContextForeGroundColor(rgb15(0, 0x10, 0));
-    font_DrawText(&mut t);
-    UnbatchGraphics();
-    SetContextClipRect(ptr::null_mut());
-    SetContext(old);
+    let text = (!p_str.is_null()).then(|| std::ffi::CStr::from_ptr(p_str.cast()));
+    Kernel::current().read(|kernel| {
+        World::current().read(|world| draw_status_message(kernel, world, text));
+    });
 }
 
 /// # Safety

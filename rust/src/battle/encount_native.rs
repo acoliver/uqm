@@ -121,6 +121,7 @@ fn apply_thraddash_body_count(world: &mut crate::engine::World, killed: u16) -> 
 
 #[cfg(not(test))]
 pub(crate) mod engine {
+    mod display;
     use super::*;
     use crate::battle::battle_native::battle;
     use crate::battle::battle_native::engine::{
@@ -618,7 +619,7 @@ pub(crate) mod engine {
             victory = -1;
             init_siscontexts(cx.kernel);
         }
-        let previous_mode = SetStatusMessageMode(StatMsgMode_SMM_RES_UNITS);
+        let previous_mode = cx.kernel.set_status_message_mode(StatMsgMode_SMM_RES_UNITS);
         let mut sleepy = true;
         for side in 0..NUM_SIDES as usize {
             if side != 0 {
@@ -629,16 +630,7 @@ pub(crate) mod engine {
                         draw_sisframe();
                         DrawSISMessage(ptr::null());
                     });
-                    if in_hqspace(cx.world) != 0 {
-                        let point = cx.world.data.game.ship_stamp.origin;
-                        cx.with_legacy(|| DrawHyperCoords(point));
-                    } else if cx.world.data.game.ip_planet == 0 {
-                        let point = (*cx.world.star_pointer(current_catalog())).star_pt;
-                        cx.with_legacy(|| DrawHyperCoords(point));
-                    } else {
-                        let name = cx.world.data.flagship.planet_name.as_mut_ptr().cast();
-                        cx.with_legacy(|| DrawSISTitle(name));
-                    }
+                    display::draw_title(cx, current_catalog());
                     SetContext(cx.kernel.space_context);
                     if victory != 0 {
                         draw_armada(cx.kernel, cx.world, 1, &mut *(&raw mut salvage_rect).cast());
@@ -658,7 +650,7 @@ pub(crate) mod engine {
                         if victory != 0 {
                             if killed == 1 {
                                 recycle = 0;
-                                cx.with_legacy(|| DrawStatusMessage(ptr::null()));
+                                crate::ui::sis::draw_status_message(cx.kernel, cx.world, None);
                                 let kernel = &*cx.kernel;
                                 stamp.origin.x = salvage_rect.corner.x.wrapping_add(32);
                                 stamp.origin.y = salvage_rect.corner.y.wrapping_add(56);
@@ -742,7 +734,7 @@ pub(crate) mod engine {
                 }
             }
         }
-        SetStatusMessageMode(previous_mode);
+        cx.kernel.set_status_message_mode(previous_mode);
         if victory != 0 {
             cx.with_legacy(|| WaitForAnyButton(1, ONE_SECOND * 3, 0));
             if !escape_pressed(input) {
@@ -785,7 +777,7 @@ pub(crate) mod engine {
                     }
                 }
             }
-            cx.with_legacy(|| DrawStatusMessage(ptr::null()));
+            crate::ui::sis::draw_status_message(cx.kernel, cx.world, None);
         }
         killed = apply_thraddash_body_count(cx.world, killed);
         killed
