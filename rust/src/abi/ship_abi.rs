@@ -1825,9 +1825,6 @@ unsafe extern "C" {
 }
 
 #[cfg(not(test))]
-pub use crate::navigation::hyperspace::live::move_sis;
-
-#[cfg(not(test))]
 pub use crate::battle::tactrans_native::engine::ship_transition;
 
 #[cfg(not(test))]

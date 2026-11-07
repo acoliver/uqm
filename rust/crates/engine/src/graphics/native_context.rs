@@ -110,6 +110,14 @@ enum Operation {
 }
 
 impl Operation {
+    fn selected_context(&self, context: CONTEXT) -> CONTEXT {
+        if matches!(self, Self::Deselect) {
+            std::ptr::null_mut()
+        } else {
+            context
+        }
+    }
+
     fn changes_selection(&self) -> bool {
         !matches!(
             self,
@@ -253,11 +261,7 @@ impl ContextLease {
 
     fn apply(&self, operation: Operation) -> (FRAME, CONTEXT, u32) {
         self.assert_thread();
-        let selected = if matches!(&operation, Operation::Deselect) {
-            std::ptr::null_mut()
-        } else {
-            self.0.context.as_ptr()
-        };
+        let selected = operation.selected_context(self.0.context.as_ptr());
         let mut rectangle = operation.rect();
         let rectangle = rectangle
             .as_mut()

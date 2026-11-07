@@ -252,7 +252,7 @@ mod tests {
     #[test]
     fn portal_death_keeps_the_contacted_side_until_the_entrance_closes() {
         let mut game = Game::new();
-        game.world.story = Some(crate::engine::world::story::GameState::new());
+        game.world.story = Some(crate::engine::world::story::StoryState::new());
         game.kernel.reset_element_capacity(1);
         let mut battle = Battle::new();
         let mut cx = Cx::new(&mut battle, &mut game.world, &mut game.kernel, || 0);

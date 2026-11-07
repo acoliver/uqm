@@ -2671,9 +2671,6 @@ pub use crate::game_init::kernel_abi::uninitIO;
 pub use crate::game_init::kernel_abi::UninitPlayerInput;
 
 
-#[cfg(not(test))]
-pub use crate::navigation::hyperspace::live::move_sis;
-
 pub use crate::navigation::hyperspace::check_hyperspace_encounter;
 
 pub use crate::navigation::hyper_transition::hyper_transition;

@@ -13,11 +13,11 @@ fn resource_teardown_uses_only_the_supplied_kernel() {
 #[test]
 fn encounter_generation_keeps_forced_melnorme_draws_and_one_shot_suppression() {
     use uqm_rust::{
-        engine::{world::story::GameState, StoryKey},
+        engine::{world::story::StoryState, StoryKey},
         navigation::{abi::*, hyper_units::Geometry, hyperspace::check_hyperspace_encounter},
     };
     let mut game = Game::new();
-    game.world.story = Some(GameState::new());
+    game.world.story = Some(StoryState::new());
     game.world.set_activity(IN_BATTLE as u16);
     let geometry = Geometry::new((320, 240));
     game.world.data.flagship.log_x = geometry.log_x(1752);
@@ -87,7 +87,7 @@ fn owned_entry_keeps_display_order_resource_swap_and_quasispace_state() {
     use uqm_rust::{
         engine::{
             battle::{Battle, Cx},
-            world::story::GameState,
+            world::story::StoryState,
             StoryKey,
         },
         graphics::{
@@ -103,7 +103,7 @@ fn owned_entry_keeps_display_order_resource_swap_and_quasispace_state() {
     for activity in [0, CHECK_LOAD as u16, CHECK_LOAD as u16 | 3] {
         for side in [0, 3] {
             let mut game = Game::new();
-            game.world.story = Some(GameState::new());
+            game.world.story = Some(StoryState::new());
             game.world
                 .set_story_state(StoryKey::ARILOU_SPACE_SIDE, side);
             game.world.set_story_state(StoryKey::USED_BROADCASTER, 1);

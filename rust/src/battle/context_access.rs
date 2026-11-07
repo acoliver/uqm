@@ -330,6 +330,7 @@ pub trait ContextOps {
     fn init_ship_status(&mut self, ship: ShipId, clip: Option<RECT>);
     fn start_battle_song_if_ready(&mut self, ship: ShipId);
     fn hyper_transition(&mut self, id: ElementId) -> bool;
+    fn move_hyperspace(&mut self, dx: &mut i16, dy: &mut i16);
     fn object_cloaked(&mut self, id: ElementId) -> bool;
     fn preprocess_status(&mut self, id: ElementId);
     fn game_sound(&mut self, index: u16, source: ElementId);
@@ -525,6 +526,17 @@ impl ContextOps for Cx<'_> {
 
     fn hyper_transition(&mut self, id: ElementId) -> bool {
         crate::navigation::hyper_transition::hyper_transition(self, id)
+    }
+
+    fn move_hyperspace(&mut self, dx: &mut i16, dy: &mut i16) {
+        let geometry = crate::navigation::hyper_units::Geometry::new(self.screen_dimensions());
+        crate::navigation::hyperspace::move_sis(
+            self,
+            dx,
+            dy,
+            geometry,
+            crate::navigation::hyperspace::live::debit_sis_fuel,
+        );
     }
 
     fn object_cloaked(&mut self, id: ElementId) -> bool {

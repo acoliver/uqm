@@ -14,9 +14,7 @@ unsafe fn input_frame(
     match event {
         HyperspaceInput::Choose(state) => {
             let runtime = cx.kernel.input_runtime();
-            let flags = cx.world.data.game.glob_flags;
-            // SAFETY: the existing renderer borrows the published display and retained input.
-            cx.with_legacy(|| choose_menu_state(runtime.input(), state, PM_STARMAP, flags) != 0)
+            choose_menu_state(cx, runtime.input(), state, PM_STARMAP) != 0
         }
         // SAFETY: the later-owned submenu receives the retained context and observer.
         HyperspaceInput::Submenu(io, selection) => match selection {

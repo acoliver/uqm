@@ -800,7 +800,7 @@ pub(crate) mod engine {
         let (w, h) = view_dimensions(cx);
         let (mut sx, mut sy) = view_scroll(bounds.origin, bounds.ships_alive, w, h);
         if (sx != 0 || sy != 0) && in_hqspace(cx.world) != 0 {
-            move_sis(cx, &mut sx, &mut sy);
+            cx.move_hyperspace(&mut sx, &mut sy);
         }
         let state = calc_view_engine(cx, minimum, (sx, sy), bounds.ships_alive, scale);
         postprocess_queue(cx, state, sx, sy, scale);

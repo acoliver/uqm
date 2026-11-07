@@ -417,7 +417,7 @@ mod tests {
     #[test]
     fn reforming_one_shots_and_quasispace_do_not_allocate_or_draw_rng() {
         let mut game = Game::new();
-        game.world.story = Some(crate::engine::world::story::GameState::new());
+        game.world.story = Some(crate::engine::world::story::StoryState::new());
         let mut battle = Battle::new();
         let mut cx = Cx::new(&mut battle, &mut game.world, &mut game.kernel, || {
             panic!("unexpected RNG draw")

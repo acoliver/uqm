@@ -29,6 +29,9 @@ impl InputRuntime for MenuDriver {
     fn observer(&self) -> Box<dyn Observer<Option<CampaignView>>> {
         Box::new(Unobserved)
     }
+    fn yield_poll(&self, _: &mut Cx<'_>) {
+        panic!("unexpected menu yield")
+    }
     fn sleep(&self, _: &mut Cx<'_>, _: u32) {}
     fn sleep_until(&self, _: &mut Cx<'_>, _: u32) {}
     fn flush(&self) {
@@ -118,7 +121,7 @@ fn native_menu_navigates_empty_devices_and_restores_the_retained_display() {
         ContextLease::retain(ptr::NonNull::new(space).unwrap()).set_background(background);
         SetContext(status);
         let mut game = Game::new();
-        game.world.story = Some(uqm_rust::engine::world::story::GameState::new());
+        game.world.story = Some(uqm_rust::engine::world::story::StoryState::new());
         game.world.set_activity(IN_BATTLE as u16);
         game.kernel
             .configuration

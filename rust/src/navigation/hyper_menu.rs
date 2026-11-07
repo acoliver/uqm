@@ -117,6 +117,9 @@ mod tests {
             Box::new(Unobserved)
         }
         fn update(&self, _: &mut Cx<'_>) {}
+        fn yield_poll(&self, _: &mut Cx<'_>) {
+            panic!("unexpected menu yield")
+        }
         fn sleep(&self, _: &mut Cx<'_>, _: u32) {
             panic!("unexpected menu sleep")
         }
@@ -139,7 +142,7 @@ mod tests {
     }
     fn fixture(test: impl FnOnce(&mut Cx<'_>, &mut Io<'_>)) {
         let mut game = Game::new();
-        game.world.story = Some(crate::engine::world::story::GameState::new());
+        game.world.story = Some(crate::engine::world::story::StoryState::new());
         let controls = InputControls::default();
         let mut pressed = InputState::default();
         pressed.menu[KEY_MENU_SELECT as usize] = 1;
