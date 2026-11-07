@@ -270,7 +270,7 @@ fn status_labels_read_the_supplied_story_preferences_date_and_resource_units() {
     let mut game = Game::new();
     game.kernel
         .install_game_text(LoadedTextTable::fixture(strings.clone()));
-    game.world.story = Some(uqm_rust::engine::world::story::GameState::new());
+    game.world.story = Some(uqm_rust::engine::world::story::StoryState::new());
     game.kernel.set_status_message_mode(2);
     game.world.data.flagship.res_units = 42;
     assert_eq!(
@@ -352,7 +352,7 @@ fn message_labels_use_the_borrowed_catalog_and_hyperspace_story() {
     let mut game = Game::new();
     game.kernel
         .install_game_text(LoadedTextTable::fixture(strings));
-    game.world.story = Some(uqm_rust::engine::world::story::GameState::new());
+    game.world.story = Some(uqm_rust::engine::world::story::StoryState::new());
     game.world.current_star = Some(StarId(0));
     for activity in [IN_INTERPLANETARY, IN_LAST_BATTLE] {
         game.world.set_activity(activity as u16);
