@@ -179,6 +179,103 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
             uqm_rust::engine::input::InputSession::default(),
         )));
         uqm_rust::app::bridge::with_game(&mut game, || {
+            {
+                use uqm_rust::{callback::ffi as alarms, time::source};
+                source::install(true);
+                alarms::Alarm_init();
+                let region = |x| RECT {
+                    corner: POINT { x, y: 1 },
+                    extent: EXTENT {
+                        width: 4,
+                        height: 4,
+                    },
+                };
+                let configure = |x| {
+                    let mut highlight = context_lease.highlight(region(x));
+                    highlight.set_merge_factors(3, 2, 2);
+                    highlight.set_speed(0, 840 / 16, 0, 840 / 16);
+                    highlight.set_frame_time(840 / 16);
+                    highlight
+                };
+                let mut manual = configure(10);
+                manual.start();
+                let mut scheduled = configure(1).schedule();
+                assert_eq!(alarms::Alarm_timeBeforeNextMs(), 61);
+                source::advance_to(51);
+                assert!(!alarms::Alarm_processOne());
+                source::advance_to(52);
+                assert!(alarms::Alarm_processOne());
+                assert!(!alarms::Alarm_processOne());
+                manual.process();
+                TFB_FlushGraphics();
+                let pixel = |x| {
+                    let p = GetFramePixel(frame, POINT { x, y: 2 });
+                    (p.r, p.g, p.b, p.a)
+                };
+                assert_eq!(pixel(2), pixel(11));
+                assert_eq!(alarms::Alarm_timeBeforeNextMs(), 62);
+                scheduled.pause();
+                source::advance_to(104);
+                assert!(!alarms::Alarm_processOne());
+                scheduled.resume();
+                assert!(alarms::Alarm_processOne());
+                manual.process();
+                TFB_FlushGraphics();
+                assert_eq!(pixel(2), pixel(11));
+                scheduled.pre_update();
+                manual.pre_update();
+                TFB_FlushGraphics();
+                assert_eq!(pixel(2), (9, 17, 25, 255));
+                assert_eq!(pixel(2), pixel(11));
+                scheduled.post_update();
+                manual.post_update();
+                TFB_FlushGraphics();
+                assert_eq!(pixel(2), pixel(11));
+                drop(scheduled);
+                drop(manual);
+                source::advance_to(1_000);
+                assert!(!alarms::Alarm_processOne());
+                TFB_FlushGraphics();
+                assert_eq!(pixel(2), (9, 17, 25, 255));
+                let clip = RECT {
+                    corner: POINT { x: 20, y: 10 },
+                    extent: EXTENT {
+                        width: 100,
+                        height: 100,
+                    },
+                };
+                let mut reference = configure(30);
+                reference.start();
+                uqm_rust::ui::sis::set_flash_rect(&context_lease, clip, Some(region(1)));
+                TFB_FlushGraphics();
+                let translated = GetFramePixel(frame, POINT { x: 22, y: 12 });
+                assert_eq!((translated.r, translated.g, translated.b), (9, 17, 25));
+                assert_eq!(alarms::Alarm_timeBeforeNextMs(), 0);
+                assert!(alarms::Alarm_processOne());
+                reference.process();
+                uqm_rust::ui::sis::pause_flash();
+                source::advance_to(1_052);
+                assert!(!alarms::Alarm_processOne());
+                uqm_rust::ui::sis::continue_flash();
+                assert!(alarms::Alarm_processOne());
+                reference.process();
+                TFB_FlushGraphics();
+                let translated = GetFramePixel(frame, POINT { x: 22, y: 12 });
+                let original = GetFramePixel(frame, POINT { x: 31, y: 2 });
+                assert_eq!((translated.r, translated.g, translated.b), (13, 25, 37));
+                assert_eq!(
+                    (translated.r, translated.g, translated.b),
+                    (original.r, original.g, original.b)
+                );
+                uqm_rust::ui::sis::set_flash_rect(&context_lease, clip, None);
+                drop(reference);
+                source::advance_to(2_000);
+                assert!(!alarms::Alarm_processOne());
+                TFB_FlushGraphics();
+                let restored = GetFramePixel(frame, POINT { x: 22, y: 12 });
+                assert_eq!((restored.r, restored.g, restored.b), (9, 17, 25));
+                alarms::Alarm_uninit();
+            }
             uqm_rust::ui::shipstat::outline_ship_status(&context_lease, 0);
             uqm_rust::ui::shipstat::clear_ship_status(&context_lease, 0);
             TFB_FlushGraphics();

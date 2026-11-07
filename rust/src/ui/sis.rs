@@ -1,7 +1,7 @@
 #![cfg(not(test))]
 
-use crate::callback::ffi::{AlarmId, Alarm_addAbsoluteMs, Alarm_remove};
 use crate::engine::{Kernel, StoryKey, World, WorldData};
+use crate::graphics::context_abi::{ContextLease, ScheduledHighlight};
 use crate::planets::starmap::current_catalog;
 use crate::ui::{palette::pilot_color, rgb15};
 
@@ -16,11 +16,7 @@ static mut CUR_MSG_MODE: StatMsgMode = StatMsgMode_SMM_DEFAULT;
 static mut LAST_PILOT: BOOLEAN = 0;
 static mut NEXT_PILOT_TIME: TimeCount = 0;
 static mut PILOT_CYCLE_INDEX: DWORD = 0;
-static mut FLASH_CONTEXT: *mut crate::graphics::flash::FlashContext = ptr::null_mut();
-static mut FLASH_RECT: RECT = unsafe { mem::zeroed() };
-static mut FLASH_ALARM: Option<AlarmId> = None;
-static mut FLASH_PAUSED: BOOLEAN = 0;
-pub static mut UPDATE_FLASH_RECT_RECURSION: COUNT = 0;
+static mut FLASH_CONTEXT: Option<ScheduledHighlight> = None;
 
 const UNDEFINED_DELTA_LOCAL: SIZE = 0x7fff;
 const SFR_MENU_3DO: usize = usize::MAX;
@@ -864,22 +860,29 @@ pub unsafe extern "C" fn DrawAutoPilotMessage(reset: BOOLEAN) {
     }
 }
 
-fn update_flash_rect(_arg: ()) {
-    unsafe {
-        if FLASH_CONTEXT.is_null() {
-            return;
+pub fn set_flash_rect(screen: &ContextLease, clip: RECT, rect: Option<RECT>) {
+    screen.with_selected(|| {
+        // SAFETY: selection checks the graphics thread before borrowing this existing
+        // shared UI slot. Its retained context pins that thread until cancellation.
+        let current = unsafe { &mut *ptr::addr_of_mut!(FLASH_CONTEXT) };
+        if let Some(mut rect) = rect.filter(|rect| rect.extent.width != 0) {
+            rect.corner.x = (i32::from(rect.corner.x) + i32::from(clip.corner.x)) as SIZE;
+            rect.corner.y = (i32::from(rect.corner.y) + i32::from(clip.corner.y)) as SIZE;
+            if let Some(current) = current {
+                current.set_rect(rect);
+            } else {
+                let mut highlight = screen.highlight(rect);
+                highlight.set_merge_factors(3, 2, 2);
+                highlight.set_speed(0, ONE_SECOND / 16, 0, ONE_SECOND / 16);
+                highlight.set_frame_time(ONE_SECOND / 16);
+                *current = Some(highlight.schedule());
+            }
+        } else {
+            *current = None;
         }
-        Flash_process(FLASH_CONTEXT);
-        schedule_flash_alarm();
-    }
+    });
 }
-unsafe fn schedule_flash_alarm() {
-    let next = Flash_nextTime(FLASH_CONTEXT);
-    let ms = (next / ONE_SECOND)
-        .wrapping_mul(1000)
-        .wrapping_add((next % ONE_SECOND) * 1000 / ONE_SECOND);
-    FLASH_ALARM = Alarm_addAbsoluteMs(ms, update_flash_rect, ());
-}
+
 /// # Safety
 /// pRect must be null, a valid RECT, or one of the SIS menu sentinel pointers; flash and graphics systems must be initialized.
 #[no_mangle]
@@ -904,68 +907,41 @@ pub unsafe extern "C" fn SetFlashRect(p_rect: *const RECT) {
         rect = &temp;
     }
     if !rect.is_null() && (*rect).extent.width != 0 {
-        FLASH_RECT = *rect;
-        FLASH_RECT.corner.x = (i32::from(FLASH_RECT.corner.x) + i32::from(clip.corner.x)) as SIZE;
-        FLASH_RECT.corner.y = (i32::from(FLASH_RECT.corner.y) + i32::from(clip.corner.y)) as SIZE;
-        if FLASH_CONTEXT.is_null() {
-            FLASH_CONTEXT = Flash_createHighlight(
-                Kernel::current().read(|owner| owner.screen_context),
-                ptr::addr_of!(FLASH_RECT),
-            );
-            Flash_setMergeFactors(FLASH_CONTEXT, 3, 2, 2);
-            Flash_setSpeed(FLASH_CONTEXT, 0, ONE_SECOND / 16, 0, ONE_SECOND / 16);
-            Flash_setFrameTime(FLASH_CONTEXT, ONE_SECOND / 16);
-            Flash_start(FLASH_CONTEXT);
-            schedule_flash_alarm();
-        } else {
-            Flash_setRect(FLASH_CONTEXT, ptr::addr_of!(FLASH_RECT));
-        }
-    } else if !FLASH_CONTEXT.is_null() {
-        Alarm_remove(FLASH_ALARM);
-        FLASH_ALARM = None;
-        Flash_terminate(FLASH_CONTEXT);
-        FLASH_CONTEXT = ptr::null_mut();
+        let screen = ContextLease::retain(
+            std::ptr::NonNull::new(Kernel::current().read(|owner| owner.screen_context))
+                .unwrap_or_else(|| panic!("flash screen context not admitted")),
+        );
+        set_flash_rect(&screen, clip, Some(*rect));
+    } else {
+        *ptr::addr_of_mut!(FLASH_CONTEXT) = None;
     }
 }
 /// # Safety
 /// Flash alarm and context state must be accessed on the game thread.
 pub unsafe fn pre_update_flash_rect() {
-    let alarm = FLASH_ALARM;
-    if alarm.is_some() {
-        UPDATE_FLASH_RECT_RECURSION = UPDATE_FLASH_RECT_RECURSION.wrapping_add(1);
-        if UPDATE_FLASH_RECT_RECURSION > 1 {
-            return;
-        }
-        Flash_preUpdate(FLASH_CONTEXT);
+    if let Some(current) = &mut *ptr::addr_of_mut!(FLASH_CONTEXT) {
+        current.pre_update();
     }
 }
 /// # Safety
 /// Flash alarm and context state must be accessed on the game thread.
 pub unsafe fn post_update_flash_rect() {
-    let alarm = FLASH_ALARM;
-    if alarm.is_some() {
-        UPDATE_FLASH_RECT_RECURSION = UPDATE_FLASH_RECT_RECURSION.wrapping_sub(1);
-        if UPDATE_FLASH_RECT_RECURSION > 0 {
-            return;
-        }
-        Flash_postUpdate(FLASH_CONTEXT);
+    if let Some(current) = &mut *ptr::addr_of_mut!(FLASH_CONTEXT) {
+        current.post_update();
     }
 }
 /// # Safety
 /// Flash alarm system must be initialized on the game thread.
 pub unsafe fn pause_flash() {
-    if !FLASH_CONTEXT.is_null() {
-        Alarm_remove(FLASH_ALARM);
-        FLASH_ALARM = None;
-        FLASH_PAUSED = 1;
+    if let Some(current) = &mut *ptr::addr_of_mut!(FLASH_CONTEXT) {
+        current.pause();
     }
 }
 /// # Safety
 /// Flash alarm system must be initialized on the game thread.
 pub unsafe fn continue_flash() {
-    if FLASH_PAUSED != 0 {
-        schedule_flash_alarm();
-        FLASH_PAUSED = 0;
+    if let Some(current) = &mut *ptr::addr_of_mut!(FLASH_CONTEXT) {
+        current.resume();
     }
 }
 

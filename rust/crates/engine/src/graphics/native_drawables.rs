@@ -14,6 +14,11 @@ pub(super) struct Allocations {
     frames: BTreeMap<usize, Weak<Allocation>>,
     pub(super) contexts: BTreeMap<usize, Rc<super::native_context::Allocation>>,
     pub(super) fonts: BTreeMap<usize, Rc<super::native_font::Allocation>>,
+    pub(super) next_highlight_id: u64,
+    pub(super) highlights: BTreeMap<
+        super::native_highlight::HighlightId,
+        Weak<std::cell::RefCell<super::native_highlight::ScheduledState>>,
+    >,
 }
 impl Allocations {
     pub const fn new() -> Self {
@@ -23,6 +28,8 @@ impl Allocations {
             frames: BTreeMap::new(),
             contexts: BTreeMap::new(),
             fonts: BTreeMap::new(),
+            next_highlight_id: 0,
+            highlights: BTreeMap::new(),
         }
     }
     pub fn assert_thread(&mut self) {
