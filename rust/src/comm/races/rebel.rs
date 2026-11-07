@@ -1,4 +1,5 @@
 //! Yehat Rebel dialogue, ported from rebel.c.
+use crate::engine::StoryKey;
 use super::script::{animation, as_comm_data};
 use crate::comm::locdata::{CColor, CLocData, CPoint};
 use crate::comm::types::CommData;
@@ -67,7 +68,7 @@ impl<A: RebelApi> Dialogue<'_, A> {
     }
     fn rebels(&mut self, r: i32) {
         if r == HOW_GOES_REVOLUTION {
-            let n = self.api.get("YEHAT_REBEL_INFO");
+            let n = self.api.get(StoryKey::YEHAT_REBEL_INFO);
             if let Some(&phrase) = [
                 REBEL_REVOLUTION_1,
                 REBEL_REVOLUTION_2,
@@ -79,12 +80,12 @@ impl<A: RebelApi> Dialogue<'_, A> {
                 self.api.npc(phrase);
             }
             self.api.set(
-                "YEHAT_REBEL_INFO",
+                StoryKey::YEHAT_REBEL_INFO,
                 if n == 3 { n } else { n.wrapping_add(1) },
             );
             self.api.disable(r as u16)
         } else if r == ANY_SHIPS {
-            if self.api.get("YEHAT_SHIP_MONTH") != 0 && self.api.ship_not_ready() {
+            if self.api.get(StoryKey::YEHAT_SHIP_MONTH) != 0 && self.api.ship_not_ready() {
                 self.api.npc(NO_SHIPS_YET)
             } else {
                 let n = self
@@ -108,12 +109,12 @@ impl<A: RebelApi> Dialogue<'_, A> {
             }
             self.api.disable(r as u16)
         } else if r == WHAT_ABOUT_PKUNK_REBEL {
-            self.api.npc(if self.api.get("YEHAT_ABSORBED_PKUNK") != 0 {
+            self.api.npc(if self.api.get(StoryKey::YEHAT_ABSORBED_PKUNK) != 0 {
                 PKUNK_ABSORBED_REBEL
             } else {
                 HATE_PKUNK_REBEL
             });
-            self.api.set("YEHAT_REBEL_TOLD_PKUNK", 1)
+            self.api.set(StoryKey::YEHAT_REBEL_TOLD_PKUNK, 1)
         } else if r == ENOUGH_INFO {
             self.api.npc(OK_ENOUGH_INFO)
         }
@@ -121,9 +122,9 @@ impl<A: RebelApi> Dialogue<'_, A> {
             self.api
                 .response(HOW_GOES_REVOLUTION as u16, Handler::Rebels, &[])
         }
-        if self.api.get("YEHAT_REBEL_TOLD_PKUNK") == 0
-            && self.api.get("PKUNK_VISITS") != 0
-            && self.api.get("PKUNK_HOME_VISITS") != 0
+        if self.api.get(StoryKey::YEHAT_REBEL_TOLD_PKUNK) == 0
+            && self.api.get(StoryKey::PKUNK_VISITS) != 0
+            && self.api.get(StoryKey::PKUNK_HOME_VISITS) != 0
         {
             self.api
                 .response(WHAT_ABOUT_PKUNK_REBEL as u16, Handler::Rebels, &[])
@@ -156,14 +157,14 @@ impl<A: RebelApi> Dialogue<'_, A> {
                 (n >> 1) as i16,
             )
         } else {
-            let n = self.api.get("YEHAT_REBEL_VISITS");
+            let n = self.api.get(StoryKey::YEHAT_REBEL_VISITS);
             if let Some(&phrase) =
                 [REBEL_HELLO_1, REBEL_HELLO_2, REBEL_HELLO_3, REBEL_HELLO_4].get(usize::from(n))
             {
                 self.api.npc(phrase);
             }
             self.api.set(
-                "YEHAT_REBEL_VISITS",
+                StoryKey::YEHAT_REBEL_VISITS,
                 if n == 3 { n } else { n.wrapping_add(1) },
             );
             self.rebels(0)

@@ -1,3 +1,4 @@
+use crate::engine::StoryKey;
 use super::Handler;
 use crate::comm::races::encounter::EncounterApi;
 
@@ -26,22 +27,22 @@ pub(super) trait RebelApi: EncounterApi<Handler> {
         let date = self.date();
         // C assigns the differences to SBYTE before comparing them.
         let year_delta =
-            (i32::from(date.year) - 2155 - i32::from(self.get("YEHAT_SHIP_YEAR"))) as i8;
+            (i32::from(date.year) - 2155 - i32::from(self.get(StoryKey::YEHAT_SHIP_YEAR))) as i8;
         year_delta < 0
             || (year_delta == 0 && {
                 let month_delta =
-                    (i32::from(date.month) - i32::from(self.get("YEHAT_SHIP_MONTH"))) as i8;
-                month_delta < 0 || (month_delta == 0 && date.day < self.get("YEHAT_SHIP_DAY"))
+                    (i32::from(date.month) - i32::from(self.get(StoryKey::YEHAT_SHIP_MONTH))) as i8;
+                month_delta < 0 || (month_delta == 0 && date.day < self.get(StoryKey::YEHAT_SHIP_DAY))
             })
     }
 
     fn prepare_ship(&mut self) {
         let date = self.date();
         let month = date.month % 12 + 1;
-        self.set("YEHAT_SHIP_MONTH", month);
-        self.set("YEHAT_SHIP_DAY", date.day.min(28));
+        self.set(StoryKey::YEHAT_SHIP_MONTH, month);
+        self.set(StoryKey::YEHAT_SHIP_DAY, date.day.min(28));
         let year = (i32::from(date.year) - 2155) as u8;
-        self.set("YEHAT_SHIP_YEAR", year.wrapping_add(u8::from(month == 1)));
+        self.set(StoryKey::YEHAT_SHIP_YEAR, year.wrapping_add(u8::from(month == 1)));
     }
 }
 #[cfg(not(test))]

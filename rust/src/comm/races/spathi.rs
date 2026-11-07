@@ -1,5 +1,6 @@
 //! Spathi dialogue, ported from the original C script.
 
+use crate::engine::StoryKey;
 use super::encounter::EncounterApi;
 use super::script::{animation, as_comm_data};
 use crate::comm::locdata::{CColor, CLocData, CPoint};
@@ -43,14 +44,14 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
         }
     }
     fn initialize(&mut self, desc: &mut CLocData) {
-        if self.api.get("FOUND_PLUTO_SPATHI") == 1 {
+        if self.api.get(StoryKey::FOUND_PLUTO_SPATHI) == 1 {
             desc.alien_alt_song_res = c"comm.fwiffo.music".as_ptr();
             desc.alien_song_flags |= 1;
         } else {
             desc.alien_song_flags &= !1;
         }
-        let peaceful = self.api.get("FOUND_PLUTO_SPATHI") == 1
-            || self.api.get("SPATHI_MANNER") == 3
+        let peaceful = self.api.get(StoryKey::FOUND_PLUTO_SPATHI) == 1
+            || self.api.get(StoryKey::SPATHI_MANNER) == 3
             || self.api.activity() as u8 == 5;
         self.api.segue(u32::from(!peaceful));
     }
@@ -263,7 +264,7 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
     fn spathi_allies(&mut self, r: u16) {
         if r == 0 {
             let mut num_visits: u8;
-            num_visits = self.api.get("SPATHI_VISITS");
+            num_visits = self.api.get(StoryKey::SPATHI_VISITS);
             let res = {
                 let old = num_visits;
                 num_visits += 1;
@@ -279,7 +280,7 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
                 }
                 _ => {}
             }
-            self.api.set("SPATHI_VISITS", num_visits);
+            self.api.set(StoryKey::SPATHI_VISITS, num_visits);
         } else if r == WHATS_UP_SPACE_2 {
             self.api.npc(i32::from(GENERAL_INFO_SPACE_2));
             self.api.disable(WHATS_UP_SPACE_2);
@@ -315,7 +316,7 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
     fn spathi_friendly(&mut self, r: u16) {
         if r == 0 {
             let mut num_visits: u8;
-            num_visits = self.api.get("SPATHI_VISITS");
+            num_visits = self.api.get(StoryKey::SPATHI_VISITS);
             let res = {
                 let old = num_visits;
                 num_visits += 1;
@@ -331,7 +332,7 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
                 }
                 _ => {}
             }
-            self.api.set("SPATHI_VISITS", num_visits);
+            self.api.set(StoryKey::SPATHI_VISITS, num_visits);
         } else if r == SINCE_FRIENDLY_GIVE_STUFF {
             self.api.npc(i32::from(GIVE_ADVICE));
             self.api.disable(SINCE_FRIENDLY_GIVE_STUFF);
@@ -404,14 +405,14 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
                 .response(HOW_ABOUT_ALLIANCE, Handler::SpathiBefriend, &[]);
         }
         if !(info_left) {
-            self.api.set("SPATHI_STACK1", 1_u8);
+            self.api.set(StoryKey::SPATHI_STACK1, 1_u8);
             self.spathi_neutral(r);
         }
     }
     fn spathi_antagonize(&mut self, r: u16) {
         if r == PREPARE_TO_DIE {
             self.api.npc(i32::from(ALWAYS_PREPARED));
-            self.api.set("SPATHI_STACK2", 1_u8);
+            self.api.set(StoryKey::SPATHI_STACK2, 1_u8);
         } else if r == HEARD_YOURE_COWARDS {
             self.api.npc(i32::from(DARN_TOOTIN));
             self.api.disable(HEARD_YOURE_COWARDS);
@@ -445,7 +446,7 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
     fn spathi_neutral(&mut self, r: u16) {
         if r == 0 {
             let mut num_visits: u8;
-            num_visits = self.api.get("SPATHI_VISITS");
+            num_visits = self.api.get(StoryKey::SPATHI_VISITS);
             let res = {
                 let old = num_visits;
                 num_visits += 1;
@@ -461,15 +462,15 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
                 }
                 _ => {}
             }
-            self.api.set("SPATHI_VISITS", num_visits);
+            self.api.set(StoryKey::SPATHI_VISITS, num_visits);
         } else if r == LOOK_WEIRD {
             self.api.npc(i32::from(YOU_LOOK_WEIRD));
-            self.api.set("SPATHI_STACK0", 1_u8);
+            self.api.set(StoryKey::SPATHI_STACK0, 1_u8);
         } else if r == NO_LOOK_REALLY_WEIRD {
             self.api.npc(i32::from(NO_YOU_LOOK_REALLY_WEIRD));
-            self.api.set("SPATHI_STACK0", 2_u8);
+            self.api.set(StoryKey::SPATHI_STACK0, 2_u8);
         }
-        match self.api.get("SPATHI_STACK0") {
+        match self.api.get(StoryKey::SPATHI_STACK0) {
             0 => {
                 self.api.response(LOOK_WEIRD, Handler::SpathiNeutral, &[]);
             }
@@ -479,11 +480,11 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
             }
             _ => {}
         }
-        if self.api.get("SPATHI_STACK1") == 0 {
+        if self.api.get(StoryKey::SPATHI_STACK1) == 0 {
             self.api
                 .response(COME_IN_PEACE, Handler::SpathiBefriend, &[]);
         }
-        if self.api.get("SPATHI_STACK2") == 0 {
+        if self.api.get(StoryKey::SPATHI_STACK2) == 0 {
             self.api
                 .response(PREPARE_TO_DIE, Handler::SpathiAntagonize, &[]);
         } else {
@@ -494,13 +495,13 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
             .response(PART_IN_PEACE, Handler::ExitConversation, &[]);
     }
     fn intro(&mut self) {
-        let manner: u8 = self.api.get("SPATHI_MANNER");
-        if self.api.get("FOUND_PLUTO_SPATHI") == 1 {
+        let manner: u8 = self.api.get(StoryKey::SPATHI_MANNER);
+        if self.api.get(StoryKey::FOUND_PLUTO_SPATHI) == 1 {
             self.session.refusals = 0;
             self.api.npc(i32::from(SORRY_ABOUT_THAT));
-            if self.api.get("SPATHI_HOME_VISITS") == 7 {
-                self.api.set("KNOW_SPATHI_PASSWORD", 0_u8);
-                self.api.set("SPATHI_HOME_VISITS", 0_u8);
+            if self.api.get(StoryKey::SPATHI_HOME_VISITS) == 7 {
+                self.api.set(StoryKey::KNOW_SPATHI_PASSWORD, 0_u8);
+                self.api.set(StoryKey::SPATHI_HOME_VISITS, 0_u8);
             }
             self.api.response(IDENTIFY, Handler::SpathiMustGrovel, &[]);
             self.api.response(HI_THERE, Handler::SpathiOnPluto, &[]);
@@ -512,7 +513,7 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
             self.api.segue(1);
         } else if manner == 1 {
             let mut num_visits: u8;
-            num_visits = self.api.get("SPATHI_VISITS");
+            num_visits = self.api.get(StoryKey::SPATHI_VISITS);
             let res = {
                 let old = num_visits;
                 num_visits += 1;
@@ -528,7 +529,7 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
                 }
                 _ => {}
             }
-            self.api.set("SPATHI_VISITS", num_visits);
+            self.api.set(StoryKey::SPATHI_VISITS, num_visits);
             self.api
                 .response(GIVE_INFO_SPACE, Handler::ExitConversation, &[]);
             self.api
@@ -539,23 +540,23 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
                 .response(BYE_ANGRY_SPACE, Handler::ExitConversation, &[]);
         } else if self.api.alliance(SPATHI_SHIP) == GOOD_GUY {
             self.spathi_allies(0_u16);
-        } else if self.api.get("SPATHI_QUEST") != 0 {
+        } else if self.api.get(StoryKey::SPATHI_QUEST) != 0 {
             self.spathi_friendly(0_u16);
         } else {
             self.spathi_neutral(0_u16);
         }
     }
     fn post_spathi_enc(&mut self) {
-        if self.api.get("FOUND_PLUTO_SPATHI") == 1 {
-            self.api.set("FOUND_PLUTO_SPATHI", 2);
+        if self.api.get(StoryKey::FOUND_PLUTO_SPATHI) == 1 {
+            self.api.set(StoryKey::FOUND_PLUTO_SPATHI, 2);
         } else if self.api.get_segue() == 1 {
-            let manner = self.api.get("SPATHI_MANNER");
+            let manner = self.api.get(StoryKey::SPATHI_MANNER);
             if manner != 2 {
-                self.api.set("SPATHI_MANNER", 1);
+                self.api.set(StoryKey::SPATHI_MANNER, 1);
                 if manner != 1 {
-                    self.api.set("SPATHI_VISITS", 0);
-                    if self.api.get("SPATHI_HOME_VISITS") != 7 {
-                        self.api.set("SPATHI_HOME_VISITS", 0);
+                    self.api.set(StoryKey::SPATHI_VISITS, 0);
+                    if self.api.get(StoryKey::SPATHI_HOME_VISITS) != 7 {
+                        self.api.set(StoryKey::SPATHI_HOME_VISITS, 0);
                     }
                 }
             }

@@ -1,4 +1,5 @@
 //! Supox dialogue, ported from the original C script.
+use crate::engine::StoryKey;
 use super::alliance::AllianceApi;
 use super::script::{animation, as_comm_data, GLOBAL_PLAYER_NAME, GLOBAL_SHIP_NAME};
 use crate::comm::locdata::{CColor, CLocData, CPoint};
@@ -30,7 +31,7 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
     }
     fn initialize(&mut self, _desc: &mut CLocData) {
         self.api.segue(u32::from(
-            self.api.get("SUPOX_HOSTILE") != 0 && self.api.activity() as u8 != 5,
+            self.api.get(StoryKey::SUPOX_HOSTILE) != 0 && self.api.activity() as u8 != 5,
         ));
     }
     fn exit_conversation(&mut self, r: u16) {
@@ -41,9 +42,9 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
             self.api.npc(i32::from(FIX_IT));
         } else if r == THANKS_NOW_WE_EAT_YOU {
             self.api.npc(i32::from(HIDEOUS_MONSTERS));
-            self.api.set("SUPOX_HOSTILE", 1_u8);
-            self.api.set("SUPOX_HOME_VISITS", 0_u8);
-            self.api.set("SUPOX_VISITS", 0_u8);
+            self.api.set(StoryKey::SUPOX_HOSTILE, 1_u8);
+            self.api.set(StoryKey::SUPOX_HOME_VISITS, 0_u8);
+            self.api.set(StoryKey::SUPOX_VISITS, 0_u8);
         } else if r == BYE_AFTER_SPACE {
             self.api.npc(i32::from(GOODBYE_AFTER_SPACE));
         } else if r == BYE_BEFORE_SPACE {
@@ -63,17 +64,17 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
     }
     fn allied_home(&mut self, r: u16) {
         let mut news: u8;
-        news = self.api.get("SUPOX_WAR_NEWS");
-        let num_visits: u8 = self.api.get("UTWIG_SUPOX_MISSION");
+        news = self.api.get(StoryKey::SUPOX_WAR_NEWS);
+        let num_visits: u8 = self.api.get(StoryKey::UTWIG_SUPOX_MISSION);
         if r == HOW_WENT_WAR {
             self.api.npc(i32::from(ABOUT_BATTLE));
             news |= 1 << 0;
         } else if r == HOW_GOES_WAR {
             if num_visits == 1 {
                 self.api.npc(i32::from(FLEET_ON_WAY));
-                self.api.set("SUPOX_WAR_NEWS", 1_u8);
+                self.api.set(StoryKey::SUPOX_WAR_NEWS, 1_u8);
             } else {
-                match self.api.get("SUPOX_WAR_NEWS") {
+                match self.api.get(StoryKey::SUPOX_WAR_NEWS) {
                     0 => {
                         self.api.npc(i32::from(BATTLE_HAPPENS_1));
                         news = 1;
@@ -105,7 +106,7 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
             self.api.npc(i32::from(ULTRON_IS_GREAT));
             self.api.disable(HOW_IS_ULTRON);
         }
-        self.api.set("SUPOX_WAR_NEWS", news);
+        self.api.set(StoryKey::SUPOX_WAR_NEWS, news);
         if num_visits >= 5 {
             if !((news & (1 << 0)) != 0) {
                 self.api.response(HOW_WENT_WAR, Handler::AlliedHome, &[]);
@@ -135,7 +136,7 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
     fn before_kohr_ah(&mut self, r: u16) {
         let mut num_visits: u8;
         if r == WHATS_UP_BEFORE_SPACE {
-            num_visits = self.api.get("SUPOX_INFO");
+            num_visits = self.api.get(StoryKey::SUPOX_INFO);
             let res = {
                 let old = num_visits;
                 num_visits += 1;
@@ -151,7 +152,7 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
                 }
                 _ => {}
             }
-            self.api.set("SUPOX_INFO", num_visits);
+            self.api.set(StoryKey::SUPOX_INFO, num_visits);
             self.api.disable(WHATS_UP_BEFORE_SPACE);
         } else if r == WHAT_NOW_BEFORE_SPACE {
             self.api.npc(i32::from(DO_THIS_BEFORE_SPACE));
@@ -171,7 +172,7 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
     fn after_kohr_ah(&mut self, r: u16) {
         let mut num_visits: u8;
         if r == WHATS_UP_AFTER_SPACE {
-            num_visits = self.api.get("SUPOX_INFO");
+            num_visits = self.api.get(StoryKey::SUPOX_INFO);
             let res = {
                 let old = num_visits;
                 num_visits += 1;
@@ -187,7 +188,7 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
                 }
                 _ => {}
             }
-            self.api.set("SUPOX_INFO", num_visits);
+            self.api.set(StoryKey::SUPOX_INFO, num_visits);
             self.api.disable(WHATS_UP_AFTER_SPACE);
         } else if r == WHAT_NOW_AFTER_SPACE {
             self.api.npc(i32::from(DO_THIS_AFTER_SPACE));
@@ -216,46 +217,46 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
         p_str[0_usize] = p_str[1_usize];
         if r == I_AM0 {
             self.api.npc(i32::from(WE_ARE_SUPOX));
-            self.api.set("SUPOX_STACK1", 1_u8);
+            self.api.set(StoryKey::SUPOX_STACK1, 1_u8);
             self.api.disable(I_AM0);
         } else if r == MY_SHIP0 {
             self.api.npc(i32::from(OUR_SHIP));
-            self.api.set("SUPOX_STACK1", 2_u8);
+            self.api.set(StoryKey::SUPOX_STACK1, 2_u8);
             self.api.disable(MY_SHIP0);
         } else if r == FROM_ALLIANCE0 {
             self.api.npc(i32::from(FROM_SUPOX));
-            self.api.set("SUPOX_STACK1", 3_u8);
+            self.api.set(StoryKey::SUPOX_STACK1, 3_u8);
             self.api.disable(FROM_ALLIANCE0);
         } else if r == ARE_YOU_COPYING {
             self.api.npc(i32::from(YEAH_SORRY));
-            self.api.set("SUPOX_STACK1", 4_u8);
+            self.api.set(StoryKey::SUPOX_STACK1, 4_u8);
         } else if r == WHY_COPY {
             self.api.npc(i32::from(SYMBIOTS));
-            self.api.set("SUPOX_STACK1", 5_u8);
+            self.api.set(StoryKey::SUPOX_STACK1, 5_u8);
         } else if r == TELL_US_OF_YOUR_SPECIES {
             self.api.npc(i32::from(OUR_SPECIES));
             last_stack = 1;
-            self.api.set("SUPOX_STACK2", 1_u8);
+            self.api.set(StoryKey::SUPOX_STACK2, 1_u8);
         } else if r == PLANTS_ARENT_INTELLIGENT {
             self.api.npc(i32::from(PROVES_WERE_SPECIAL));
-            self.api.set("SUPOX_STACK2", 2_u8);
+            self.api.set(StoryKey::SUPOX_STACK2, 2_u8);
         } else if r == ANYONE_AROUND_HERE {
             self.api.npc(i32::from(UTWIG_NEARBY));
             last_stack = 2;
-            self.api.set("SUPOX_WAR_NEWS", 1_u8);
+            self.api.set(StoryKey::SUPOX_WAR_NEWS, 1_u8);
             self.api.track(UTWIG_SHIP);
         } else if r == WHAT_RELATION_TO_UTWIG {
             self.api.npc(i32::from(UTWIG_ALLIES));
             last_stack = 2;
-            self.api.set("SUPOX_WAR_NEWS", 1_u8);
+            self.api.set(StoryKey::SUPOX_WAR_NEWS, 1_u8);
         } else if r == WHATS_WRONG_WITH_UTWIG {
             self.api.npc(i32::from(BROKE_ULTRON));
             last_stack = 2;
-            self.api.set("SUPOX_WAR_NEWS", 2_u8);
+            self.api.set(StoryKey::SUPOX_WAR_NEWS, 2_u8);
         } else if r == WHATS_ULTRON {
             self.api.npc(i32::from(TAKE_ULTRON));
-            self.api.set("SUPOX_WAR_NEWS", 0_u8);
-            self.api.set("ULTRON_CONDITION", 1_u8);
+            self.api.set(StoryKey::SUPOX_WAR_NEWS, 0_u8);
+            self.api.set(StoryKey::ULTRON_CONDITION, 1_u8);
             self.api
                 .response(WHAT_DO_I_DO_NOW, Handler::ExitConversation, &[]);
             self.api
@@ -263,18 +264,18 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
             return;
         } else if r == GOT_FIXED_ULTRON {
             self.api.npc(i32::from(GOOD_GIVE_TO_UTWIG));
-            self.api.set("SUPOX_ULTRON_HELP", 1_u8);
+            self.api.set(StoryKey::SUPOX_ULTRON_HELP, 1_u8);
         } else if r == LOOK_I_REPAIRED_LOTS {
             self.api.npc(i32::from(ALMOST_THERE));
-            self.api.set("SUPOX_ULTRON_HELP", 1_u8);
+            self.api.set(StoryKey::SUPOX_ULTRON_HELP, 1_u8);
         } else if r == LOOK_I_SLIGHTLY_REPAIRED {
             self.api.npc(i32::from(GREAT_DO_MORE));
-            self.api.set("SUPOX_ULTRON_HELP", 1_u8);
+            self.api.set(StoryKey::SUPOX_ULTRON_HELP, 1_u8);
         } else if r == WHERE_GET_REPAIRS {
             self.api.npc(i32::from(ANCIENT_RHYME));
-            self.api.set("SUPOX_ULTRON_HELP", 1_u8);
+            self.api.set(StoryKey::SUPOX_ULTRON_HELP, 1_u8);
         }
-        match self.api.get("SUPOX_STACK2") {
+        match self.api.get(StoryKey::SUPOX_STACK2) {
             0 => {
                 p_str[1_usize] = TELL_US_OF_YOUR_SPECIES;
             }
@@ -283,7 +284,7 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
             }
             _ => {}
         }
-        match self.api.get("SUPOX_STACK1") {
+        match self.api.get(StoryKey::SUPOX_STACK1) {
             0 => {
                 fragments.clear();
                 fragments.push(I_AM0 as i32);
@@ -320,12 +321,12 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
             }
             _ => {}
         }
-        let num_visits: u8 = self.api.get("ULTRON_CONDITION");
+        let num_visits: u8 = self.api.get(StoryKey::ULTRON_CONDITION);
         if num_visits == 0 {
-            match self.api.get("SUPOX_WAR_NEWS") {
+            match self.api.get(StoryKey::SUPOX_WAR_NEWS) {
                 0 => {
-                    if (self.api.get("UTWIG_VISITS") != 0 || self.api.get("UTWIG_HOME_VISITS") != 0)
-                        || self.api.get("BOMB_VISITS") != 0
+                    if (self.api.get(StoryKey::UTWIG_VISITS) != 0 || self.api.get(StoryKey::UTWIG_HOME_VISITS) != 0)
+                        || self.api.get(StoryKey::BOMB_VISITS) != 0
                     {
                         p_str[2_usize] = WHAT_RELATION_TO_UTWIG;
                     } else {
@@ -342,7 +343,7 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
             }
         }
         if p_str[last_stack as usize] != 0 {
-            if (last_stack != 0) || (self.api.get("SUPOX_STACK1") > 2) {
+            if (last_stack != 0) || (self.api.get(StoryKey::SUPOX_STACK1) > 2) {
                 self.api
                     .response(p_str[last_stack as usize], Handler::NeutralSupox, &[]);
             } else {
@@ -355,7 +356,7 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
         }
         for i in 0..3 {
             if (i != last_stack) && p_str[i as usize] != 0 {
-                if (i != 0) || (self.api.get("SUPOX_STACK1") > 2) {
+                if (i != 0) || (self.api.get(StoryKey::SUPOX_STACK1) > 2) {
                     self.api
                         .response(p_str[i as usize], Handler::NeutralSupox, &[]);
                 } else {
@@ -364,7 +365,7 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
                 }
             }
         }
-        if !(self.api.get("SUPOX_ULTRON_HELP") != 0) {
+        if !(self.api.get(StoryKey::SUPOX_ULTRON_HELP) != 0) {
             match num_visits {
                 1 => {
                     self.api
@@ -395,8 +396,8 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
             self.api.segue(0);
             return;
         }
-        if self.api.get("SUPOX_HOSTILE") != 0 {
-            num_visits = self.api.get("SUPOX_VISITS");
+        if self.api.get(StoryKey::SUPOX_HOSTILE) != 0 {
+            num_visits = self.api.get(StoryKey::SUPOX_VISITS);
             let res = {
                 let old = num_visits;
                 num_visits += 1;
@@ -412,11 +413,11 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
                 }
                 _ => {}
             }
-            self.api.set("SUPOX_VISITS", num_visits);
+            self.api.set(StoryKey::SUPOX_VISITS, num_visits);
             self.api.segue(0);
         } else if self.api.alliance(SUPOX_SHIP) == 1 {
-            if (self.api.get("GLOBAL_FLAGS_AND_DATA") & (1 << 7)) != 0 {
-                num_visits = self.api.get("SUPOX_HOME_VISITS");
+            if (self.api.get(StoryKey::GLOBAL_FLAGS_AND_DATA) & (1 << 7)) != 0 {
+                num_visits = self.api.get(StoryKey::SUPOX_HOME_VISITS);
                 let res = {
                     let old = num_visits;
                     num_visits += 1;
@@ -438,12 +439,12 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
                     }
                     _ => {}
                 }
-                self.api.set("SUPOX_HOME_VISITS", num_visits);
+                self.api.set(StoryKey::SUPOX_HOME_VISITS, num_visits);
                 self.allied_home(0_u16);
             } else {
-                num_visits = self.api.get("UTWIG_SUPOX_MISSION");
+                num_visits = self.api.get(StoryKey::UTWIG_SUPOX_MISSION);
                 if num_visits == 1 {
-                    num_visits = self.api.get("SUPOX_VISITS");
+                    num_visits = self.api.get(StoryKey::SUPOX_VISITS);
                     let res = {
                         let old = num_visits;
                         num_visits += 1;
@@ -459,10 +460,10 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
                         }
                         _ => {}
                     }
-                    self.api.set("SUPOX_VISITS", num_visits);
+                    self.api.set(StoryKey::SUPOX_VISITS, num_visits);
                     self.before_kohr_ah(0_u16);
                 } else if num_visits < 5 {
-                    num_visits = self.api.get("SUPOX_VISITS");
+                    num_visits = self.api.get(StoryKey::SUPOX_VISITS);
                     let res = {
                         let old = num_visits;
                         num_visits += 1;
@@ -478,9 +479,9 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
                         }
                         _ => {}
                     }
-                    self.api.set("SUPOX_VISITS", num_visits);
+                    self.api.set(StoryKey::SUPOX_VISITS, num_visits);
                 } else {
-                    num_visits = self.api.get("SUPOX_VISITS");
+                    num_visits = self.api.get(StoryKey::SUPOX_VISITS);
                     let res = {
                         let old = num_visits;
                         num_visits += 1;
@@ -496,13 +497,13 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
                         }
                         _ => {}
                     }
-                    self.api.set("SUPOX_VISITS", num_visits);
+                    self.api.set(StoryKey::SUPOX_VISITS, num_visits);
                     self.after_kohr_ah(0_u16);
                 }
             }
         } else {
-            if (self.api.get("GLOBAL_FLAGS_AND_DATA") & (1 << 7)) != 0 {
-                num_visits = self.api.get("SUPOX_HOME_VISITS");
+            if (self.api.get(StoryKey::GLOBAL_FLAGS_AND_DATA) & (1 << 7)) != 0 {
+                num_visits = self.api.get(StoryKey::SUPOX_HOME_VISITS);
                 let res = {
                     let old = num_visits;
                     num_visits += 1;
@@ -518,9 +519,9 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
                     }
                     _ => {}
                 }
-                self.api.set("SUPOX_HOME_VISITS", num_visits);
+                self.api.set(StoryKey::SUPOX_HOME_VISITS, num_visits);
             } else {
-                num_visits = self.api.get("SUPOX_VISITS");
+                num_visits = self.api.get(StoryKey::SUPOX_VISITS);
                 let res = {
                     let old = num_visits;
                     num_visits += 1;
@@ -536,7 +537,7 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
                     }
                     _ => {}
                 }
-                self.api.set("SUPOX_VISITS", num_visits);
+                self.api.set(StoryKey::SUPOX_VISITS, num_visits);
             }
             self.neutral_supox(0_u16);
         }

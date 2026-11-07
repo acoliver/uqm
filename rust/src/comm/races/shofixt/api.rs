@@ -1,8 +1,9 @@
+use crate::engine::StoryKey;
 use super::Handler;
 use crate::comm::races::encounter::EncounterApi;
 pub(super) trait ShofixtApi: EncounterApi<Handler> {
     fn shofixti_name(&self) -> i32 {
-        if self.get("SHOFIXTI_KIA") != 0 {
+        if self.get(StoryKey::SHOFIXTI_KIA) != 0 {
             super::phrases::KATANA
         } else {
             super::phrases::TANAKA

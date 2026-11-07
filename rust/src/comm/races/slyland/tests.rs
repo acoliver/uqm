@@ -1,3 +1,4 @@
+use crate::engine::StoryKey;
 use super::super::encounter::testing::{Effect, Fake as BaseFake};
 use super::*;
 use api::{Speech, World};
@@ -7,7 +8,7 @@ type Fake = BaseFake<Handler, World>;
 fn every_greeting_value_preserves_c_postincrement() {
     for n in 0..=255u8 {
         let mut api = Fake::default();
-        api.put("SLYLANDRO_PROBE_VISITS", n);
+        api.put(StoryKey::SLYLANDRO_PROBE_VISITS, n);
         Dialogue { api: &mut api }.initialize();
         api.effects.clear();
         Dialogue { api: &mut api }.intro();
@@ -20,7 +21,7 @@ fn every_greeting_value_preserves_c_postincrement() {
             }
         );
         assert_eq!(
-            api.state["SLYLANDRO_PROBE_VISITS"],
+            api.state[StoryKey::SLYLANDRO_PROBE_VISITS],
             if n == 7 { n } else { n.wrapping_add(1) }
         );
         assert_eq!(
@@ -33,7 +34,7 @@ fn every_greeting_value_preserves_c_postincrement() {
                 (BYE_1 as u16, Handler::Combat)
             ]
         );
-        assert!(!api.state.contains_key("PROBE_EXHIBITED_BUG"));
+        assert!(!api.state.contains_key(StoryKey::PROBE_EXHIBITED_BUG));
     }
 }
 
@@ -42,19 +43,19 @@ fn every_response_counter_and_switch_default_matches_c() {
     for (topic, key, first, answer) in [
         (
             0,
-            "SLYLANDRO_PROBE_THREAT",
+            StoryKey::SLYLANDRO_PROBE_THREAT,
             THREAT_1,
             PROGRAMMED_TO_DEFEND_1,
         ),
         (
             1,
-            "SLYLANDRO_PROBE_WRONG",
+            StoryKey::SLYLANDRO_PROBE_WRONG,
             SOMETHING_WRONG_1,
             NOMINAL_FUNCTION_1,
         ),
-        (2, "SLYLANDRO_PROBE_ID", WE_ARE_US_1, THIS_IS_PROBE_1),
-        (3, "SLYLANDRO_PROBE_INFO", WHY_ATTACK_1, PEACEFUL_MISSION_1),
-        (4, "SLYLANDRO_PROBE_EXIT", BYE_1, GOODBYE_1),
+        (2, StoryKey::SLYLANDRO_PROBE_ID, WE_ARE_US_1, THIS_IS_PROBE_1),
+        (3, StoryKey::SLYLANDRO_PROBE_INFO, WHY_ATTACK_1, PEACEFUL_MISSION_1),
+        (4, StoryKey::SLYLANDRO_PROBE_EXIT, BYE_1, GOODBYE_1),
     ] {
         for n in 0..=255u8 {
             let mut api = Fake::default();
@@ -76,7 +77,7 @@ fn every_response_counter_and_switch_default_matches_c() {
             };
             assert_eq!(api.spoken(), expected, "{key}={n}");
             assert_eq!(api.state[key], if n == 3 { 3 } else { n.wrapping_add(1) });
-            assert_eq!(api.state["PROBE_EXHIBITED_BUG"], 1);
+            assert_eq!(api.state[StoryKey::PROBE_EXHIBITED_BUG], 1);
             assert_eq!(api.segue, 1);
             assert!(api.offers().is_empty());
         }
@@ -87,18 +88,18 @@ fn every_response_counter_and_switch_default_matches_c() {
 fn only_the_remembered_response_reference_selects_a_topic() {
     let mut api = Fake::default();
     Dialogue { api: &mut api }.combat(0);
-    api.put("SLYLANDRO_PROBE_THREAT", 1);
+    api.put(StoryKey::SLYLANDRO_PROBE_THREAT, 1);
     api.effects.clear();
     Dialogue { api: &mut api }.combat(THREAT_2 as i32);
     assert_eq!(api.spoken(), [HOSTILE as i32]);
-    assert_eq!(api.state["SLYLANDRO_PROBE_THREAT"], 1);
+    assert_eq!(api.state[StoryKey::SLYLANDRO_PROBE_THREAT], 1);
     api.effects.clear();
     Dialogue { api: &mut api }.combat(THREAT_1 as i32);
     assert_eq!(
         api.spoken(),
         [PROGRAMMED_TO_DEFEND_2 as i32, HOSTILE as i32]
     );
-    assert_eq!(api.state["SLYLANDRO_PROBE_THREAT"], 2);
+    assert_eq!(api.state[StoryKey::SLYLANDRO_PROBE_THREAT], 2);
 }
 
 #[test]
@@ -118,7 +119,7 @@ fn coordinate_id_splices_signed_padded_y_then_x_and_trailing_phrase() {
     ] {
         let mut api = Fake::default();
         api.world.position = position;
-        api.put("SLYLANDRO_PROBE_ID", 3);
+        api.put(StoryKey::SLYLANDRO_PROBE_ID, 3);
         Dialogue { api: &mut api }.combat(0);
         api.effects.clear();
         Dialogue { api: &mut api }.combat(WE_ARE_US_4 as i32);
@@ -144,7 +145,7 @@ fn coordinate_id_splices_signed_padded_y_then_x_and_trailing_phrase() {
                 (1, Speech::Number(x_fraction, false)),
             ]
         );
-        assert_eq!(api.state["SLYLANDRO_PROBE_ID"], 3);
+        assert_eq!(api.state[StoryKey::SLYLANDRO_PROBE_ID], 3);
     }
 }
 
@@ -166,7 +167,7 @@ fn say_coord_handles_negative_size_limit_without_overflow() {
 #[test]
 fn destruct_code_is_first_and_victory_does_not_exhibit_a_bug() {
     let mut api = Fake::default();
-    api.put("DESTRUCT_CODE_ON_SHIP", 1);
+    api.put(StoryKey::DESTRUCT_CODE_ON_SHIP, 1);
     Dialogue { api: &mut api }.combat(0);
     assert_eq!(api.offers()[0], (DESTRUCT_CODE as u16, Handler::Combat));
     api.effects.clear();
@@ -175,7 +176,7 @@ fn destruct_code_is_first_and_victory_does_not_exhibit_a_bug() {
         api.effects,
         [Effect::Npc(DESTRUCT_SEQUENCE as i32), Effect::Segue(2)]
     );
-    assert!(!api.state.contains_key("PROBE_EXHIBITED_BUG"));
+    assert!(!api.state.contains_key(StoryKey::PROBE_EXHIBITED_BUG));
 }
 
 #[test]

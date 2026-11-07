@@ -1,3 +1,4 @@
+use crate::engine::StoryKey;
 use super::api::Date;
 use super::*;
 use crate::comm::races::encounter::testing::{Effect, Fake};
@@ -56,9 +57,9 @@ fn rebel_questions_and_pkunk_visit_gates_keep_response_order() {
         for home in [0, 1] {
             for told in [0, 1] {
                 let mut f = Api::default();
-                f.put("PKUNK_VISITS", visits);
-                f.put("PKUNK_HOME_VISITS", home);
-                f.put("YEHAT_REBEL_TOLD_PKUNK", told);
+                f.put(StoryKey::PKUNK_VISITS, visits);
+                f.put(StoryKey::PKUNK_HOME_VISITS, home);
+                f.put(StoryKey::YEHAT_REBEL_TOLD_PKUNK, told);
                 Dialogue { api: &mut f }.rebels(0);
                 let mut expected = vec![HOW_GOES_REVOLUTION];
                 if visits != 0 && home != 0 && told == 0 {
@@ -72,7 +73,7 @@ fn rebel_questions_and_pkunk_visit_gates_keep_response_order() {
     }
     for absorbed in [0, 1] {
         let mut f = Api::default();
-        f.put("YEHAT_ABSORBED_PKUNK", absorbed);
+        f.put(StoryKey::YEHAT_ABSORBED_PKUNK, absorbed);
         Dialogue { api: &mut f }.rebels(WHAT_ABOUT_PKUNK_REBEL);
         assert_eq!(
             f.spoken(),
@@ -82,7 +83,7 @@ fn rebel_questions_and_pkunk_visit_gates_keep_response_order() {
                 PKUNK_ABSORBED_REBEL
             }]
         );
-        assert_eq!(f.get("YEHAT_REBEL_TOLD_PKUNK"), 1);
+        assert_eq!(f.get(StoryKey::YEHAT_REBEL_TOLD_PKUNK), 1);
     }
     let mut f = Api::default();
     Dialogue { api: &mut f }.handle(Handler::Exit, BYE_REBEL);
@@ -96,7 +97,7 @@ fn rebel_questions_and_pkunk_visit_gates_keep_response_order() {
 fn all_visit_and_revolution_counters_preserve_postincrement_without_zero_phrases() {
     for n in 0..=u8::MAX {
         let mut f = Api::default();
-        f.put("YEHAT_REBEL_VISITS", n);
+        f.put(StoryKey::YEHAT_REBEL_VISITS, n);
         Dialogue { api: &mut f }.intro();
         assert_eq!(
             f.spoken(),
@@ -107,12 +108,12 @@ fn all_visit_and_revolution_counters_preserve_postincrement_without_zero_phrases
             }
         );
         assert_eq!(
-            f.get("YEHAT_REBEL_VISITS"),
+            f.get(StoryKey::YEHAT_REBEL_VISITS),
             if n == 3 { n } else { n.wrapping_add(1) }
         );
         assert_eq!(f.effects.first(), Some(&Effect::Segue(0)));
         f.effects.clear();
-        f.put("YEHAT_REBEL_INFO", n);
+        f.put(StoryKey::YEHAT_REBEL_INFO, n);
         Dialogue { api: &mut f }.rebels(HOW_GOES_REVOLUTION);
         assert_eq!(
             f.spoken(),
@@ -123,7 +124,7 @@ fn all_visit_and_revolution_counters_preserve_postincrement_without_zero_phrases
             }
         );
         assert_eq!(
-            f.get("YEHAT_REBEL_INFO"),
+            f.get(StoryKey::YEHAT_REBEL_INFO),
             if n == 3 { n } else { n.wrapping_add(1) }
         );
         assert!(!f.enabled(HOW_GOES_REVOLUTION as u16));
@@ -219,9 +220,9 @@ fn ships_use_the_current_month_and_signed_byte_date_differences() {
             world: date,
             ..Api::default()
         };
-        f.put("YEHAT_SHIP_YEAR", 1);
-        f.put("YEHAT_SHIP_MONTH", 4);
-        f.put("YEHAT_SHIP_DAY", 28);
+        f.put(StoryKey::YEHAT_SHIP_YEAR, 1);
+        f.put(StoryKey::YEHAT_SHIP_MONTH, 4);
+        f.put(StoryKey::YEHAT_SHIP_DAY, 28);
         assert_eq!(
             f.ship_not_ready(),
             !ready,
@@ -251,9 +252,9 @@ fn ships_use_the_current_month_and_signed_byte_date_differences() {
         },
         ..Api::default()
     };
-    f.put("YEHAT_SHIP_YEAR", 1);
-    f.put("YEHAT_SHIP_MONTH", 255);
-    f.put("YEHAT_SHIP_DAY", 28);
+    f.put(StoryKey::YEHAT_SHIP_YEAR, 1);
+    f.put(StoryKey::YEHAT_SHIP_MONTH, 255);
+    f.put(StoryKey::YEHAT_SHIP_DAY, 28);
     assert!(!f.ship_not_ready()); // 1 - 255 becomes +2 in SBYTE.
 }
 
@@ -317,9 +318,9 @@ fn prepare_ship_preserves_month_rollover_day_cap_and_byte_year_conversion() {
         assert_eq!(
             f.effects,
             [
-                Effect::Set("YEHAT_SHIP_MONTH".into(), expected.0),
-                Effect::Set("YEHAT_SHIP_DAY".into(), expected.1),
-                Effect::Set("YEHAT_SHIP_YEAR".into(), expected.2),
+                Effect::Set(StoryKey::YEHAT_SHIP_MONTH.into(), expected.0),
+                Effect::Set(StoryKey::YEHAT_SHIP_DAY.into(), expected.1),
+                Effect::Set(StoryKey::YEHAT_SHIP_YEAR.into(), expected.2),
             ]
         );
     }
@@ -351,9 +352,9 @@ fn ship_capacity_signed_conversion_and_grant_effect_order() {
                     Effect::Npc(phrase),
                     Effect::Talk(u16::MAX),
                     Effect::AddEscorts(crate::comm::dispatch::ship::YEHAT_SHIP as u16, count),
-                    Effect::Set("YEHAT_SHIP_MONTH".into(), 2),
-                    Effect::Set("YEHAT_SHIP_DAY".into(), 1),
-                    Effect::Set("YEHAT_SHIP_YEAR".into(), 0),
+                    Effect::Set(StoryKey::YEHAT_SHIP_MONTH.into(), 2),
+                    Effect::Set(StoryKey::YEHAT_SHIP_DAY.into(), 1),
+                    Effect::Set(StoryKey::YEHAT_SHIP_YEAR.into(), 0),
                 ]
             );
         } else {
@@ -395,7 +396,7 @@ fn final_battle_cavalry_splits_every_capacity_after_byte_conversion() {
                 ),
             ]
         );
-        assert_eq!(f.get("YEHAT_REBEL_VISITS"), 0);
+        assert_eq!(f.get(StoryKey::YEHAT_REBEL_VISITS), 0);
     }
 }
 

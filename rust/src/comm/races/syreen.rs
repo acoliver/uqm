@@ -1,4 +1,5 @@
 //! Syreen dialogue, ported from syreenc.c.
+use crate::engine::StoryKey;
 use super::script::{animation, as_comm_data};
 use crate::comm::locdata::{CColor, CLocData, CPoint};
 use crate::comm::types::CommData;
@@ -61,8 +62,8 @@ impl<A: SyreenApi> Dialogue<'_, A> {
             self.api.talk_segue(2_u16);
             self.api.fade_palette(0_u16, (840 / 2) as i16);
             self.api.talk_segue((!0_u16 as i32) as u16);
-            self.api.set("PLAYER_HAD_SEX", 1_u8);
-            self.api.set("PLAYER_HAVING_SEX", 0_u8);
+            self.api.set(StoryKey::PLAYER_HAD_SEX, 1_u8);
+            self.api.set(StoryKey::PLAYER_HAVING_SEX, 0_u8);
         }
     }
     fn sex(&mut self, r: i32) {
@@ -114,7 +115,7 @@ impl<A: SyreenApi> Dialogue<'_, A> {
             self.api.talk_segue(1_u16);
             self.api.fade_palette(1_u16, 840_i16);
             self.api.talk_segue((!0_u16 as i32) as u16);
-            self.api.set("PLAYER_HAVING_SEX", 1_u8);
+            self.api.set(StoryKey::PLAYER_HAVING_SEX, 1_u8);
         } else if r == WHY_LIGHTS_OFF {
             self.api.npc(LIGHTS_OFF_BECAUSE);
             self.api.disable((WHY_LIGHTS_OFF) as u16);
@@ -145,7 +146,7 @@ impl<A: SyreenApi> Dialogue<'_, A> {
             self.api.disable((WHAT_ABOUT_YOU) as u16);
         } else if r == WHATS_UP_AFTER_AMBUSH {
             let mut num_visits: i32;
-            num_visits = i32::from(self.api.get("SYREEN_INFO"));
+            num_visits = i32::from(self.api.get(StoryKey::SYREEN_INFO));
             let res = {
                 let old = num_visits;
                 num_visits = (num_visits + 1) as u8 as i32;
@@ -170,13 +171,13 @@ impl<A: SyreenApi> Dialogue<'_, A> {
                 }
                 _ => {}
             }
-            self.api.set("SYREEN_INFO", (num_visits) as u8);
+            self.api.set(StoryKey::SYREEN_INFO, (num_visits) as u8);
             self.api.disable((WHATS_UP_AFTER_AMBUSH) as u16);
         }
         if self.api.enabled((WHAT_ABOUT_YOU) as u16) {
             self.api
                 .response((WHAT_ABOUT_YOU) as u16, Handler::AfterAmbush, &[]);
-        } else if !(i32::from(self.api.get("PLAYER_HAD_SEX")) != 0) {
+        } else if !(i32::from(self.api.get(StoryKey::PLAYER_HAD_SEX)) != 0) {
             self.api
                 .response((WHAT_ABOUT_US) as u16, Handler::Foreplay, &[]);
         }
@@ -216,21 +217,21 @@ impl<A: SyreenApi> Dialogue<'_, A> {
         } else if r == WHERE_IS_IT {
             self.api.npc(DONT_KNOW_WHERE);
             self.api.npc(GIVE_SHUTTLE);
-            self.api.set("SYREEN_SHUTTLE", 1_u8);
-            self.api.set("SYREEN_SHUTTLE_ON_SHIP", 1_u8);
+            self.api.set(StoryKey::SYREEN_SHUTTLE, 1_u8);
+            self.api.set(StoryKey::SYREEN_SHUTTLE_ON_SHIP, 1_u8);
             self.api.disable((WHERE_IS_IT) as u16);
         } else if r == BEEN_THERE {
             self.api.npc(GREAT);
             self.api.npc(GIVE_SHUTTLE);
-            self.api.set("SYREEN_SHUTTLE", 1_u8);
-            self.api.set("SYREEN_SHUTTLE_ON_SHIP", 1_u8);
+            self.api.set(StoryKey::SYREEN_SHUTTLE, 1_u8);
+            self.api.set(StoryKey::SYREEN_SHUTTLE_ON_SHIP, 1_u8);
             self.api.disable((BEEN_THERE) as u16);
         }
         if self.api.enabled((WHATS_NEXT_STEP) as u16) {
             self.api
                 .response((WHATS_NEXT_STEP) as u16, Handler::SyreenShuttle, &[]);
         } else {
-            if !(i32::from(self.api.get("KNOW_SYREEN_VAULT")) != 0) {
+            if !(i32::from(self.api.get(StoryKey::KNOW_SYREEN_VAULT)) != 0) {
                 if self.api.enabled((WHERE_IS_IT) as u16) {
                     self.api
                         .response((WHERE_IS_IT) as u16, Handler::SyreenShuttle, &[]);
@@ -278,58 +279,58 @@ impl<A: SyreenApi> Dialogue<'_, A> {
             self.api.disable((KNOW_ABOUT_DEEP_CHILDREN) as u16);
         } else if r == MYCONS_INVOLVED {
             self.api.npc(WHAT_PROOF);
-            self.api.set("KNOW_ABOUT_SHATTERED", 3_u8);
+            self.api.set(StoryKey::KNOW_ABOUT_SHATTERED, 3_u8);
         } else if r == HAVE_NO_PROOF {
             self.api.npc(NEED_PROOF);
-            self.api.set("SYREEN_WANT_PROOF", 1_u8);
+            self.api.set(StoryKey::SYREEN_WANT_PROOF, 1_u8);
         } else if r == HAVE_PROOF {
             self.api.npc(SEE_PROOF);
             self.api.disable((HAVE_PROOF) as u16);
         } else if r == WHAT_DOING_HERE {
             self.api.npc(OUR_NEW_WORLD);
-            self.api.set("SYREEN_STACK0", 1_u8);
+            self.api.set(StoryKey::SYREEN_STACK0, 1_u8);
             last_stack = 1;
         } else if r == WHAT_ABOUT_WAR {
             self.api.npc(ABOUT_WAR);
-            self.api.set("SYREEN_STACK0", 2_u8);
+            self.api.set(StoryKey::SYREEN_STACK0, 2_u8);
             last_stack = 1;
         } else if r == HELP_US {
             self.api.npc(WONT_HELP);
-            self.api.set("SYREEN_STACK0", 3_u8);
+            self.api.set(StoryKey::SYREEN_STACK0, 3_u8);
         } else if r == WHAT_ABOUT_HISTORY {
             self.api.npc(BEFORE_WAR);
-            self.api.set("SYREEN_STACK1", 1_u8);
+            self.api.set(StoryKey::SYREEN_STACK1, 1_u8);
             last_stack = 2;
         } else if r == WHAT_ABOUT_HOMEWORLD {
             self.api.npc(ABOUT_HOMEWORLD);
-            self.api.set("SYREEN_STACK1", 2_u8);
+            self.api.set(StoryKey::SYREEN_STACK1, 2_u8);
             last_stack = 2;
         } else if r == WHAT_HAPPENED {
             self.api.npc(DONT_KNOW_HOW);
-            self.api.set("KNOW_SYREEN_WORLD_SHATTERED", 1_u8);
-            self.api.set("SYREEN_STACK1", 3_u8);
+            self.api.set(StoryKey::KNOW_SYREEN_WORLD_SHATTERED, 1_u8);
+            self.api.set(StoryKey::SYREEN_STACK1, 3_u8);
         } else if r == WHAT_ABOUT_OUTFIT {
             self.api.npc(HOPE_YOU_LIKE_IT);
-            self.api.set("SYREEN_STACK2", 1_u8);
+            self.api.set(StoryKey::SYREEN_STACK2, 1_u8);
             last_stack = 3;
         } else if r == WHERE_MATES {
             self.api.npc(MATES_KILLED);
-            self.api.set("SYREEN_STACK2", 2_u8);
+            self.api.set(StoryKey::SYREEN_STACK2, 2_u8);
             last_stack = 3;
         } else if r == GET_LONELY {
             self.api.npc(MAKE_OUT_ALL_RIGHT);
-            self.api.set("SYREEN_STACK2", 3_u8);
+            self.api.set(StoryKey::SYREEN_STACK2, 3_u8);
         } else if r == LOOK_AT_EGG_SACKS {
             self.api.npc(HORRIBLE_TRUTH);
             self.api.segue(0);
-            self.api.set("SYREEN_HOME_VISITS", 0_u8);
-            self.api.set("SYREEN_KNOW_ABOUT_MYCON", 1_u8);
+            self.api.set(StoryKey::SYREEN_HOME_VISITS, 0_u8);
+            self.api.set(StoryKey::SYREEN_KNOW_ABOUT_MYCON, 1_u8);
             self.syreen_shuttle(0_u16 as i32);
             return;
         }
-        if i32::from(self.api.get("KNOW_ABOUT_SHATTERED")) < 3 {
-            if (i32::from(self.api.get("KNOW_ABOUT_SHATTERED")) == 2)
-                && (i32::from(self.api.get("KNOW_SYREEN_WORLD_SHATTERED")) != 0)
+        if i32::from(self.api.get(StoryKey::KNOW_ABOUT_SHATTERED)) < 3 {
+            if (i32::from(self.api.get(StoryKey::KNOW_ABOUT_SHATTERED)) == 2)
+                && (i32::from(self.api.get(StoryKey::KNOW_SYREEN_WORLD_SHATTERED)) != 0)
             {
                 if self.api.enabled((KNOW_ABOUT_DEEP_CHILDREN) as u16) {
                     p_str[0_usize] = KNOW_ABOUT_DEEP_CHILDREN;
@@ -338,20 +339,20 @@ impl<A: SyreenApi> Dialogue<'_, A> {
                 }
             }
         } else {
-            if ((i32::from(self.api.get("EGG_CASE0_ON_SHIP")) != 0)
-                || (i32::from(self.api.get("EGG_CASE1_ON_SHIP")) != 0))
-                || (i32::from(self.api.get("EGG_CASE2_ON_SHIP")) != 0)
+            if ((i32::from(self.api.get(StoryKey::EGG_CASE0_ON_SHIP)) != 0)
+                || (i32::from(self.api.get(StoryKey::EGG_CASE1_ON_SHIP)) != 0))
+                || (i32::from(self.api.get(StoryKey::EGG_CASE2_ON_SHIP)) != 0)
             {
                 if self.api.enabled((HAVE_PROOF) as u16) {
                     p_str[0_usize] = HAVE_PROOF;
                 } else {
                     p_str[0_usize] = LOOK_AT_EGG_SACKS;
                 }
-            } else if !(i32::from(self.api.get("SYREEN_WANT_PROOF")) != 0) {
+            } else if !(i32::from(self.api.get(StoryKey::SYREEN_WANT_PROOF)) != 0) {
                 p_str[0_usize] = HAVE_NO_PROOF;
             }
         }
-        match i32::from(self.api.get("SYREEN_STACK0")) {
+        match i32::from(self.api.get(StoryKey::SYREEN_STACK0)) {
             0 => {
                 p_str[1_usize] = WHAT_DOING_HERE;
             }
@@ -363,7 +364,7 @@ impl<A: SyreenApi> Dialogue<'_, A> {
             }
             _ => {}
         }
-        match i32::from(self.api.get("SYREEN_STACK1")) {
+        match i32::from(self.api.get(StoryKey::SYREEN_STACK1)) {
             0 => {
                 p_str[2_usize] = WHAT_ABOUT_HISTORY;
             }
@@ -375,7 +376,7 @@ impl<A: SyreenApi> Dialogue<'_, A> {
             }
             _ => {}
         }
-        match i32::from(self.api.get("SYREEN_STACK2")) {
+        match i32::from(self.api.get(StoryKey::SYREEN_STACK2)) {
             0 => {
                 p_str[3_usize] = WHAT_ABOUT_OUTFIT;
             }
@@ -454,8 +455,8 @@ impl<A: SyreenApi> Dialogue<'_, A> {
     }
     fn plan_ambush(&mut self, _r: i32) {
         self.api.npc(OK_FOUND_VAULT);
-        self.api.set("MYCON_AMBUSH", 1_u8);
-        self.api.set("SYREEN_HOME_VISITS", 0_u8);
+        self.api.set(StoryKey::MYCON_AMBUSH, 1_u8);
+        self.api.set(StoryKey::SYREEN_HOME_VISITS, 0_u8);
         self.api
             .response((WHATS_MY_REWARD) as u16, Handler::Foreplay, &[]);
         self.api
@@ -480,8 +481,8 @@ impl<A: SyreenApi> Dialogue<'_, A> {
             self.api.segue(0);
             return;
         }
-        num_visits = i32::from(self.api.get("SYREEN_HOME_VISITS"));
-        if i32::from(self.api.get("MYCON_KNOW_AMBUSH")) != 0 {
+        num_visits = i32::from(self.api.get(StoryKey::SYREEN_HOME_VISITS));
+        if i32::from(self.api.get(StoryKey::MYCON_KNOW_AMBUSH)) != 0 {
             let res = {
                 let old = num_visits;
                 num_visits = (num_visits + 1) as u8 as i32;
@@ -511,7 +512,7 @@ impl<A: SyreenApi> Dialogue<'_, A> {
                 _ => {}
             }
             self.after_ambush(0_u16 as i32);
-        } else if i32::from(self.api.get("MYCON_AMBUSH")) != 0 {
+        } else if i32::from(self.api.get(StoryKey::MYCON_AMBUSH)) != 0 {
             if {
                 let old = num_visits;
                 num_visits = (num_visits + 1) as u8 as i32;
@@ -525,7 +526,7 @@ impl<A: SyreenApi> Dialogue<'_, A> {
                 };
             }
             self.ambush_ready(0_u16 as i32);
-        } else if !(i32::from(self.api.get("SYREEN_KNOW_ABOUT_MYCON")) != 0) {
+        } else if !(i32::from(self.api.get(StoryKey::SYREEN_KNOW_ABOUT_MYCON)) != 0) {
             let res = {
                 let old = num_visits;
                 num_visits = (num_visits + 1) as u8 as i32;
@@ -574,7 +575,7 @@ impl<A: SyreenApi> Dialogue<'_, A> {
                 self.api
                     .response((WE_ARE_IMPRESSED) as u16, Handler::InitialSyreen, &[]);
             }
-        } else if i32::from(self.api.get("SHIP_VAULT_UNLOCKED")) != 0 {
+        } else if i32::from(self.api.get(StoryKey::SHIP_VAULT_UNLOCKED)) != 0 {
             self.plan_ambush(0_u16 as i32);
             num_visits = 0;
         } else {
@@ -598,7 +599,7 @@ impl<A: SyreenApi> Dialogue<'_, A> {
             }
             self.syreen_vault(0_u16 as i32);
         }
-        self.api.set("SYREEN_HOME_VISITS", (num_visits) as u8);
+        self.api.set(StoryKey::SYREEN_HOME_VISITS, (num_visits) as u8);
     }
     fn post_syreen_enc(&mut self) {}
     fn initialize(&mut self) {

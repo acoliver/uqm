@@ -1,4 +1,5 @@
 //! Orz dialogue, ported from orzc.c.
+use crate::engine::StoryKey;
 use super::script::{animation, as_comm_data, GLOBAL_PLAYER_NAME, GLOBAL_SHIP_NAME};
 use crate::comm::locdata::{CColor, CLocData, CPoint};
 use crate::comm::types::CommData;
@@ -39,7 +40,7 @@ impl<A: OrzApi> Dialogue<'_, A> {
         } else if r == BYE_ANGRY {
             self.api.npc(i32::from(GOODBYE_ANGRY));
         } else if r == BYE_TAALO {
-            if i32::from(self.api.get("ORZ_MANNER")) == 1 {
+            if i32::from(self.api.get(StoryKey::ORZ_MANNER)) == 1 {
                 self.api.npc(i32::from(ANGRY_TAALO_GOODBYE));
             } else {
                 self.api.npc(i32::from(FRIENDLY_TAALO_GOODBYE));
@@ -49,17 +50,17 @@ impl<A: OrzApi> Dialogue<'_, A> {
             self.api.segue(1_u32);
         } else if r == MAY_WE_LAND {
             self.api.npc(i32::from(SURE_LAND));
-            self.api.set("TAALO_UNPROTECTED", 1_u8);
+            self.api.set(StoryKey::TAALO_UNPROTECTED, 1_u8);
         } else if (r == YES_ALLIANCE) || (r == WERE_SORRY) {
             if r == YES_ALLIANCE {
                 self.api.npc(i32::from(GREAT));
             } else {
                 self.api.npc(i32::from(APOLOGY_ACCEPTED));
             }
-            self.api.set("ORZ_ANDRO_STATE", 0_u8);
-            self.api.set("ORZ_GENERAL_INFO", 0_u8);
-            self.api.set("ORZ_PERSONAL_INFO", 0_u8);
-            self.api.set("ORZ_MANNER", 3_u8);
+            self.api.set(StoryKey::ORZ_ANDRO_STATE, 0_u8);
+            self.api.set(StoryKey::ORZ_GENERAL_INFO, 0_u8);
+            self.api.set(StoryKey::ORZ_PERSONAL_INFO, 0_u8);
+            self.api.set(StoryKey::ORZ_MANNER, 3_u8);
             self.api
                 .set_allied((crate::comm::dispatch::ship::ORZ_SHIP) as u16, true);
         } else if r == DEMAND_TO_LAND {
@@ -71,8 +72,8 @@ impl<A: OrzApi> Dialogue<'_, A> {
             } else {
                 self.api.npc(i32::from(KNOW_TOO_MUCH));
             }
-            self.api.set("ORZ_VISITS", 0_u8);
-            self.api.set("ORZ_MANNER", 2_u8);
+            self.api.set(StoryKey::ORZ_VISITS, 0_u8);
+            self.api.set(StoryKey::ORZ_MANNER, 2_u8);
             self.api.segue(1_u32);
             if r == ABOUT_ANDRO_3 {
                 self.api
@@ -83,7 +84,7 @@ impl<A: OrzApi> Dialogue<'_, A> {
             self.api.fade_palette(1, 420);
         } else {
             let mut num_visits: u8;
-            num_visits = self.api.get("ORZ_PERSONAL_INFO");
+            num_visits = self.api.get(StoryKey::ORZ_PERSONAL_INFO);
             let res = {
                 let old = num_visits;
                 num_visits = num_visits.wrapping_add(1);
@@ -113,11 +114,11 @@ impl<A: OrzApi> Dialogue<'_, A> {
                     self.api.segue(1_u32);
                 }
             }
-            self.api.set("ORZ_PERSONAL_INFO", num_visits);
+            self.api.set(StoryKey::ORZ_PERSONAL_INFO, num_visits);
         }
     }
     fn taalo_world(&mut self, r: u16) {
-        let manner: u8 = self.api.get("ORZ_MANNER");
+        let manner: u8 = self.api.get(StoryKey::ORZ_MANNER);
         if r == DEMAND_TO_LAND {
             self.api.npc(i32::from(ASK_NICELY));
             self.api.disable(DEMAND_TO_LAND);
@@ -182,7 +183,7 @@ impl<A: OrzApi> Dialogue<'_, A> {
     fn orz_allied(&mut self, r: u16) {
         let mut num_visits: u8;
         if r == WHATS_UP_ALLY {
-            num_visits = self.api.get("ORZ_GENERAL_INFO");
+            num_visits = self.api.get(StoryKey::ORZ_GENERAL_INFO);
             let res = {
                 let old = num_visits;
                 num_visits = num_visits.wrapping_add(1);
@@ -207,10 +208,10 @@ impl<A: OrzApi> Dialogue<'_, A> {
                 }
                 _ => {}
             }
-            self.api.set("ORZ_GENERAL_INFO", num_visits);
+            self.api.set(StoryKey::ORZ_GENERAL_INFO, num_visits);
             self.api.disable(WHATS_UP_ALLY);
         } else if r == MORE_ABOUT_YOU {
-            num_visits = self.api.get("ORZ_PERSONAL_INFO");
+            num_visits = self.api.get(StoryKey::ORZ_PERSONAL_INFO);
             let res = {
                 let old = num_visits;
                 num_visits = num_visits.wrapping_add(1);
@@ -235,18 +236,18 @@ impl<A: OrzApi> Dialogue<'_, A> {
                 }
                 _ => {}
             }
-            self.api.set("ORZ_PERSONAL_INFO", num_visits);
+            self.api.set(StoryKey::ORZ_PERSONAL_INFO, num_visits);
             self.api.disable(MORE_ABOUT_YOU);
         } else if r == ABOUT_ANDRO_1 {
             self.api.npc(i32::from(FORGET_ANDRO_1));
-            self.api.set("ORZ_ANDRO_STATE", 1_u8);
+            self.api.set(StoryKey::ORZ_ANDRO_STATE, 1_u8);
         } else if r == ABOUT_ANDRO_2 {
             self.api.npc(i32::from(FORGET_ANDRO_2));
-            self.api.set("ORZ_ANDRO_STATE", 2_u8);
+            self.api.set(StoryKey::ORZ_ANDRO_STATE, 2_u8);
         }
-        if i32::from(self.api.get("ORZ_ANDRO_STATE")) == 0 {
+        if i32::from(self.api.get(StoryKey::ORZ_ANDRO_STATE)) == 0 {
             self.api.response(ABOUT_ANDRO_1, Handler::OrzAllied, &[]);
-        } else if i32::from(self.api.get("ORZ_ANDRO_STATE")) == 1 {
+        } else if i32::from(self.api.get(StoryKey::ORZ_ANDRO_STATE)) == 1 {
             self.api.response(ABOUT_ANDRO_2, Handler::OrzAllied, &[]);
         } else {
             self.api
@@ -275,11 +276,11 @@ impl<A: OrzApi> Dialogue<'_, A> {
             self.api.npc(i32::from(OK_TALK_ALLIANCE));
         } else if r == WHY_SO_TRUSTING {
             self.api.npc(i32::from(TRUSTING_BECAUSE));
-            self.api.set("ORZ_STACK1", 1_u8);
+            self.api.set(StoryKey::ORZ_STACK1, 1_u8);
         }
         self.api.response(NO_ALLIANCE, Handler::OrzNeutral, &[]);
         self.api.response(DECIDE_LATER, Handler::OrzNeutral, &[]);
-        if i32::from(self.api.get("ORZ_STACK1")) == 0 {
+        if i32::from(self.api.get(StoryKey::ORZ_STACK1)) == 0 {
             self.api
                 .response(WHY_SO_TRUSTING, Handler::OfferAlliance, &[]);
         }
@@ -297,22 +298,22 @@ impl<A: OrzApi> Dialogue<'_, A> {
             last_stack = 2_u8;
         } else if r == WE_ARE_VINDICATOR0 {
             self.api.npc(i32::from(NICE_TO_MEET_YOU));
-            self.api.set("ORZ_STACK0", 1_u8);
+            self.api.set(StoryKey::ORZ_STACK0, 1_u8);
             last_stack = 1_u8;
         } else if r == WHO_YOU {
             self.api.npc(i32::from(WE_ARE_ORZ));
-            self.api.set("ORZ_ANDRO_STATE", 1_u8);
+            self.api.set(StoryKey::ORZ_ANDRO_STATE, 1_u8);
         } else if r == WHY_HERE {
             self.api.npc(i32::from(HERE_BECAUSE));
-            self.api.set("ORZ_ANDRO_STATE", 2_u8);
+            self.api.set(StoryKey::ORZ_ANDRO_STATE, 2_u8);
         } else if r == NO_ALLIANCE {
             self.api.npc(i32::from(MAYBE_LATER));
             self.api.disable(TALK_ABOUT_ALLIANCE);
-            self.api.set("REFUSED_ORZ_ALLIANCE", 1_u8);
+            self.api.set(StoryKey::REFUSED_ORZ_ALLIANCE, 1_u8);
         } else if r == DECIDE_LATER {
             self.api.npc(i32::from(OK_LATER));
             self.api.disable(TALK_ABOUT_ALLIANCE);
-            self.api.set("REFUSED_ORZ_ALLIANCE", 1_u8);
+            self.api.set(StoryKey::REFUSED_ORZ_ALLIANCE, 1_u8);
         } else if r == DONT_REALLY_CARE {
             self.api.npc(i32::from(YOU_ARE_OUR_FRIENDS));
         } else if r == WHERE_ANDROSYN {
@@ -325,20 +326,20 @@ impl<A: OrzApi> Dialogue<'_, A> {
             self.exit_conversation(r);
             return;
         }
-        if i32::from(self.api.get("ORZ_ANDRO_STATE")) == 0 {
+        if i32::from(self.api.get(StoryKey::ORZ_ANDRO_STATE)) == 0 {
             p_str[0_usize] = WHO_YOU;
-        } else if i32::from(self.api.get("ORZ_ANDRO_STATE")) == 1 {
+        } else if i32::from(self.api.get(StoryKey::ORZ_ANDRO_STATE)) == 1 {
             p_str[0_usize] = WHY_HERE;
         } else if self.api.enabled(WHERE_ANDROSYN)
-            && (i32::from(self.api.get("ORZ_ANDRO_STATE")) == 2)
+            && (i32::from(self.api.get(StoryKey::ORZ_ANDRO_STATE)) == 2)
         {
             p_str[0_usize] = WHERE_ANDROSYN;
         }
-        if self.api.get("REFUSED_ORZ_ALLIANCE") != 0 {
+        if self.api.get(StoryKey::REFUSED_ORZ_ALLIANCE) != 0 {
             if self.api.enabled(TALK_ABOUT_ALLIANCE) {
                 p_str[1_usize] = TALK_ABOUT_ALLIANCE;
             }
-        } else if i32::from(self.api.get("ORZ_STACK0")) == 0 {
+        } else if i32::from(self.api.get(StoryKey::ORZ_STACK0)) == 0 {
             fragments = vec![
                 i32::from(WE_ARE_VINDICATOR0),
                 GLOBAL_PLAYER_NAME,
@@ -384,7 +385,7 @@ impl<A: OrzApi> Dialogue<'_, A> {
     fn orz_angry(&mut self, r: u16) {
         if r == WHATS_UP_ANGRY {
             let mut num_visits: u8;
-            num_visits = self.api.get("ORZ_GENERAL_INFO");
+            num_visits = self.api.get(StoryKey::ORZ_GENERAL_INFO);
             let res = {
                 let old = num_visits;
                 num_visits = num_visits.wrapping_add(1);
@@ -403,7 +404,7 @@ impl<A: OrzApi> Dialogue<'_, A> {
                 }
                 _ => {}
             }
-            self.api.set("ORZ_GENERAL_INFO", num_visits);
+            self.api.set(StoryKey::ORZ_GENERAL_INFO, num_visits);
             self.api.disable(WHATS_UP_ANGRY);
         }
         if self.api.enabled(WHATS_UP_ANGRY) {
@@ -411,7 +412,7 @@ impl<A: OrzApi> Dialogue<'_, A> {
         }
         self.api
             .response(WERE_SORRY, Handler::ExitConversation, &[]);
-        match self.api.get("ORZ_PERSONAL_INFO") {
+        match self.api.get(StoryKey::ORZ_PERSONAL_INFO) {
             0 => {
                 self.api.response(INSULT_1, Handler::ExitConversation, &[]);
             }
@@ -447,13 +448,13 @@ impl<A: OrzApi> Dialogue<'_, A> {
             self.api.segue(0_u32);
             return;
         }
-        if !(self.api.get("MET_ORZ_BEFORE") != 0) {
+        if !(self.api.get(StoryKey::MET_ORZ_BEFORE) != 0) {
             self.api.npc(i32::from(INIT_HELLO));
         }
-        let manner: u8 = self.api.get("ORZ_MANNER");
+        let manner: u8 = self.api.get(StoryKey::ORZ_MANNER);
         if i32::from(manner) == 2 {
             self.api.palette(1);
-            num_visits = self.api.get("ORZ_VISITS");
+            num_visits = self.api.get(StoryKey::ORZ_VISITS);
             let res = {
                 let old = num_visits;
                 num_visits = num_visits.wrapping_add(1);
@@ -472,10 +473,10 @@ impl<A: OrzApi> Dialogue<'_, A> {
                 }
                 _ => {}
             }
-            self.api.set("ORZ_VISITS", num_visits);
+            self.api.set(StoryKey::ORZ_VISITS, num_visits);
             self.api.segue(1_u32);
-        } else if (i32::from(self.api.get("GLOBAL_FLAGS_AND_DATA")) & (1 << 6)) != 0 {
-            num_visits = self.api.get("TAALO_VISITS");
+        } else if (i32::from(self.api.get(StoryKey::GLOBAL_FLAGS_AND_DATA)) & (1 << 6)) != 0 {
+            num_visits = self.api.get(StoryKey::TAALO_VISITS);
             if i32::from(manner) != 1 {
                 let res = {
                     let old = num_visits;
@@ -515,7 +516,7 @@ impl<A: OrzApi> Dialogue<'_, A> {
                     _ => {}
                 }
             }
-            self.api.set("TAALO_VISITS", num_visits);
+            self.api.set(StoryKey::TAALO_VISITS, num_visits);
             self.taalo_world(0_u16);
         } else if (i32::from(manner) == 3)
             && (i32::from(
@@ -523,8 +524,8 @@ impl<A: OrzApi> Dialogue<'_, A> {
                     .alliance((crate::comm::dispatch::ship::ORZ_SHIP) as u16),
             ) == 1)
         {
-            if (i32::from(self.api.get("GLOBAL_FLAGS_AND_DATA")) & (1 << 7)) != 0 {
-                num_visits = self.api.get("ORZ_HOME_VISITS");
+            if (i32::from(self.api.get(StoryKey::GLOBAL_FLAGS_AND_DATA)) & (1 << 7)) != 0 {
+                num_visits = self.api.get(StoryKey::ORZ_HOME_VISITS);
                 let res = {
                     let old = num_visits;
                     num_visits = num_visits.wrapping_add(1);
@@ -549,9 +550,9 @@ impl<A: OrzApi> Dialogue<'_, A> {
                     }
                     _ => {}
                 }
-                self.api.set("ORZ_HOME_VISITS", num_visits);
+                self.api.set(StoryKey::ORZ_HOME_VISITS, num_visits);
             } else {
-                num_visits = self.api.get("ORZ_VISITS");
+                num_visits = self.api.get(StoryKey::ORZ_VISITS);
                 let res = {
                     let old = num_visits;
                     num_visits = num_visits.wrapping_add(1);
@@ -576,12 +577,12 @@ impl<A: OrzApi> Dialogue<'_, A> {
                     }
                     _ => {}
                 }
-                self.api.set("ORZ_VISITS", num_visits);
+                self.api.set(StoryKey::ORZ_VISITS, num_visits);
             }
             self.orz_allied(0_u16);
         } else if i32::from(manner) != 1 {
-            if (i32::from(self.api.get("GLOBAL_FLAGS_AND_DATA")) & (1 << 7)) != 0 {
-                num_visits = self.api.get("ORZ_HOME_VISITS");
+            if (i32::from(self.api.get(StoryKey::GLOBAL_FLAGS_AND_DATA)) & (1 << 7)) != 0 {
+                num_visits = self.api.get(StoryKey::ORZ_HOME_VISITS);
                 let res = {
                     let old = num_visits;
                     num_visits = num_visits.wrapping_add(1);
@@ -606,9 +607,9 @@ impl<A: OrzApi> Dialogue<'_, A> {
                     }
                     _ => {}
                 }
-                self.api.set("ORZ_HOME_VISITS", num_visits);
+                self.api.set(StoryKey::ORZ_HOME_VISITS, num_visits);
             } else {
-                num_visits = self.api.get("ORZ_VISITS");
+                num_visits = self.api.get(StoryKey::ORZ_VISITS);
                 let res = {
                     let old = num_visits;
                     num_visits = num_visits.wrapping_add(1);
@@ -633,12 +634,12 @@ impl<A: OrzApi> Dialogue<'_, A> {
                     }
                     _ => {}
                 }
-                self.api.set("ORZ_VISITS", num_visits);
+                self.api.set(StoryKey::ORZ_VISITS, num_visits);
             }
             self.orz_neutral(0_u16);
         } else {
-            if (i32::from(self.api.get("GLOBAL_FLAGS_AND_DATA")) & (1 << 7)) != 0 {
-                num_visits = self.api.get("ORZ_HOME_VISITS");
+            if (i32::from(self.api.get(StoryKey::GLOBAL_FLAGS_AND_DATA)) & (1 << 7)) != 0 {
+                num_visits = self.api.get(StoryKey::ORZ_HOME_VISITS);
                 let res = {
                     let old = num_visits;
                     num_visits = num_visits.wrapping_add(1);
@@ -657,9 +658,9 @@ impl<A: OrzApi> Dialogue<'_, A> {
                     }
                     _ => {}
                 }
-                self.api.set("ORZ_HOME_VISITS", num_visits);
+                self.api.set(StoryKey::ORZ_HOME_VISITS, num_visits);
             } else {
-                num_visits = self.api.get("ORZ_VISITS");
+                num_visits = self.api.get(StoryKey::ORZ_VISITS);
                 let res = {
                     let old = num_visits;
                     num_visits = num_visits.wrapping_add(1);
@@ -678,12 +679,12 @@ impl<A: OrzApi> Dialogue<'_, A> {
                     }
                     _ => {}
                 }
-                self.api.set("ORZ_VISITS", num_visits);
+                self.api.set(StoryKey::ORZ_VISITS, num_visits);
             }
             self.orz_angry(0_u16);
         }
-        if !(self.api.get("MET_ORZ_BEFORE") != 0) {
-            self.api.set("MET_ORZ_BEFORE", 1_u8);
+        if !(self.api.get(StoryKey::MET_ORZ_BEFORE) != 0) {
+            self.api.set(StoryKey::MET_ORZ_BEFORE, 1_u8);
             self.api.talking(false);
             self.api.talk_segue(1_u16);
             self.api.talking(true);
@@ -693,20 +694,20 @@ impl<A: OrzApi> Dialogue<'_, A> {
         let manner: u8;
         if ((self.api.get_segue()) as i32 == 1)
             && (i32::from({
-                manner = self.api.get("ORZ_MANNER");
+                manner = self.api.get(StoryKey::ORZ_MANNER);
                 manner
             }) != 2)
         {
-            self.api.set("ORZ_MANNER", 1_u8);
+            self.api.set(StoryKey::ORZ_MANNER, 1_u8);
             if i32::from(manner) != 1 {
-                self.api.set("ORZ_VISITS", 0_u8);
-                self.api.set("ORZ_HOME_VISITS", 0_u8);
-                self.api.set("TAALO_VISITS", 0_u8);
+                self.api.set(StoryKey::ORZ_VISITS, 0_u8);
+                self.api.set(StoryKey::ORZ_HOME_VISITS, 0_u8);
+                self.api.set(StoryKey::TAALO_VISITS, 0_u8);
             }
         }
     }
     fn initialize(&mut self) {
-        if (i32::from(self.api.get("ORZ_MANNER")) == 3)
+        if (i32::from(self.api.get(StoryKey::ORZ_MANNER)) == 3)
             || (i32::from((self.api.activity()) as u8) == 5)
         {
             self.api.segue(0_u32);

@@ -1,3 +1,4 @@
+use crate::engine::StoryKey;
 use super::*;
 use crate::comm::races::encounter::testing::{Effect, Fake};
 use crate::comm::races::script::{ScriptApi, GLOBAL_PLAYER_NAME, GLOBAL_SHIP_NAME};
@@ -22,7 +23,7 @@ fn neutral_names_and_stack_order() {
     )));
     run(&mut f, Handler::NeutralSupox, I_AM0);
     assert_eq!(f.spoken(), [i32::from(WE_ARE_SUPOX)]);
-    assert_eq!(f.get("SUPOX_STACK1"), 1);
+    assert_eq!(f.get(StoryKey::SUPOX_STACK1), 1);
     assert!(!f.enabled(I_AM0));
     assert!(f.effects.contains(&Effect::Offer(
         MY_SHIP0,
@@ -30,7 +31,7 @@ fn neutral_names_and_stack_order() {
         vec![i32::from(MY_SHIP0), GLOBAL_SHIP_NAME, i32::from(MY_SHIP1)]
     )));
     for alliance in 0..4 {
-        f.put("NEW_ALLIANCE_NAME", alliance);
+        f.put(StoryKey::NEW_ALLIANCE_NAME, alliance);
         run(&mut f, Handler::NeutralSupox, MY_SHIP0);
         let mut want = vec![
             i32::from(FROM_ALLIANCE0),
@@ -51,7 +52,7 @@ fn neutral_names_and_stack_order() {
     ] {
         run(&mut f, Handler::NeutralSupox, r);
         assert_eq!(f.spoken(), [i32::from(p)]);
-        assert_eq!(f.get("SUPOX_STACK1"), stack);
+        assert_eq!(f.get(StoryKey::SUPOX_STACK1), stack);
     }
     assert_eq!(
         choices(&f),
@@ -60,7 +61,7 @@ fn neutral_names_and_stack_order() {
     run(&mut f, Handler::NeutralSupox, TELL_US_OF_YOUR_SPECIES);
     assert_eq!(choices(&f)[0], PLANTS_ARENT_INTELLIGENT);
     run(&mut f, Handler::NeutralSupox, PLANTS_ARENT_INTELLIGENT);
-    assert_eq!(f.get("SUPOX_STACK2"), 2);
+    assert_eq!(f.get(StoryKey::SUPOX_STACK2), 2);
     run(&mut f, Handler::NeutralSupox, ANYONE_AROUND_HERE);
     assert_eq!(choices(&f)[0], WHATS_WRONG_WITH_UTWIG);
     assert!(f.effects.contains(&Effect::Track(9)));
@@ -68,7 +69,7 @@ fn neutral_names_and_stack_order() {
     assert_eq!(choices(&f)[0], WHATS_ULTRON);
     run(&mut f, Handler::NeutralSupox, WHATS_ULTRON);
     assert_eq!(f.spoken(), [i32::from(TAKE_ULTRON)]);
-    assert_eq!(f.get("ULTRON_CONDITION"), 1);
+    assert_eq!(f.get(StoryKey::ULTRON_CONDITION), 1);
     assert_eq!(choices(&f), [WHAT_DO_I_DO_NOW, THANKS_NOW_WE_EAT_YOU]);
 }
 #[test]
@@ -80,15 +81,15 @@ fn ultron_repair_help_and_existing_utwig_contact() {
         (4, GOT_FIXED_ULTRON, GOOD_GIVE_TO_UTWIG),
     ] {
         let mut f = Api::default();
-        f.put("ULTRON_CONDITION", condition);
+        f.put(StoryKey::ULTRON_CONDITION, condition);
         run(&mut f, Handler::NeutralSupox, 0);
         assert!(choices(&f).contains(&response));
         run(&mut f, Handler::NeutralSupox, response);
         assert_eq!(f.spoken(), [i32::from(phrase)]);
-        assert_eq!(f.get("SUPOX_ULTRON_HELP"), 1);
+        assert_eq!(f.get(StoryKey::SUPOX_ULTRON_HELP), 1);
         assert!(!choices(&f).contains(&response));
     }
-    for key in ["UTWIG_VISITS", "UTWIG_HOME_VISITS", "BOMB_VISITS"] {
+    for key in [StoryKey::UTWIG_VISITS, StoryKey::UTWIG_HOME_VISITS, StoryKey::BOMB_VISITS] {
         let mut f = Api::default();
         f.put(key, 1);
         run(&mut f, Handler::NeutralSupox, 0);
@@ -98,29 +99,29 @@ fn ultron_repair_help_and_existing_utwig_contact() {
 #[test]
 fn war_news_preserves_write_order_and_mission_branches() {
     let mut f = Api::default();
-    f.put("UTWIG_SUPOX_MISSION", 1);
+    f.put(StoryKey::UTWIG_SUPOX_MISSION, 1);
     run(&mut f, Handler::AlliedHome, HOW_GOES_WAR);
     assert_eq!(f.spoken(), [i32::from(FLEET_ON_WAY)]);
-    assert_eq!(f.get("SUPOX_WAR_NEWS"), 0);
+    assert_eq!(f.get(StoryKey::SUPOX_WAR_NEWS), 0);
     assert_eq!(
         &f.effects[..4],
         &[
             Effect::Npc(i32::from(FLEET_ON_WAY)),
-            Effect::Set("SUPOX_WAR_NEWS".into(), 1),
+            Effect::Set(StoryKey::SUPOX_WAR_NEWS.into(), 1),
             Effect::Disable(HOW_GOES_WAR),
-            Effect::Set("SUPOX_WAR_NEWS".into(), 0)
+            Effect::Set(StoryKey::SUPOX_WAR_NEWS.into(), 0)
         ]
     );
     for (news, phrase, next) in [(0, BATTLE_HAPPENS_1, 1), (1, BATTLE_HAPPENS_2, 2)] {
-        f.put("UTWIG_SUPOX_MISSION", 3);
-        f.put("SUPOX_WAR_NEWS", news);
+        f.put(StoryKey::UTWIG_SUPOX_MISSION, 3);
+        f.put(StoryKey::SUPOX_WAR_NEWS, news);
         run(&mut f, Handler::AlliedHome, HOW_GOES_WAR);
         assert_eq!(f.spoken(), [i32::from(phrase)]);
-        assert_eq!(f.get("SUPOX_WAR_NEWS"), next);
+        assert_eq!(f.get(StoryKey::SUPOX_WAR_NEWS), next);
     }
     for mission in [0, 1, 4, 5] {
         let mut f = Api::default();
-        f.put("UTWIG_SUPOX_MISSION", mission);
+        f.put(StoryKey::UTWIG_SUPOX_MISSION, mission);
         run(&mut f, Handler::AlliedHome, LEARN_NEW_INFO);
         assert_eq!(
             f.spoken(),
@@ -177,14 +178,14 @@ fn exits_escort_effects_and_insult() {
         assert_eq!(f.segue, 0);
     }
     let mut f = Api::default();
-    f.put("SUPOX_VISITS", 3);
-    f.put("SUPOX_HOME_VISITS", 3);
+    f.put(StoryKey::SUPOX_VISITS, 3);
+    f.put(StoryKey::SUPOX_HOME_VISITS, 3);
     run(&mut f, Handler::ExitConversation, THANKS_NOW_WE_EAT_YOU);
     assert_eq!(
         (
-            f.get("SUPOX_HOSTILE"),
-            f.get("SUPOX_VISITS"),
-            f.get("SUPOX_HOME_VISITS")
+            f.get(StoryKey::SUPOX_HOSTILE),
+            f.get(StoryKey::SUPOX_VISITS),
+            f.get(StoryKey::SUPOX_HOME_VISITS)
         ),
         (1, 0, 0)
     );
@@ -197,12 +198,12 @@ fn encounter_routing_and_saturated_greetings() {
             for mission in [0, 1, 2, 4, 5] {
                 let mut f = Api::default();
                 f.alliances[7] = if allied { 1 } else { 2 };
-                f.put("GLOBAL_FLAGS_AND_DATA", flags);
-                f.put("UTWIG_SUPOX_MISSION", mission);
+                f.put(StoryKey::GLOBAL_FLAGS_AND_DATA, flags);
+                f.put(StoryKey::UTWIG_SUPOX_MISSION, mission);
                 let key = if flags == 128 {
-                    "SUPOX_HOME_VISITS"
+                    StoryKey::SUPOX_HOME_VISITS
                 } else {
-                    "SUPOX_VISITS"
+                    StoryKey::SUPOX_VISITS
                 };
                 for visit in 0..6 {
                     f.effects.clear();
@@ -218,7 +219,7 @@ fn encounter_routing_and_saturated_greetings() {
         }
     }
     let mut f = Api::default();
-    f.put("SUPOX_HOSTILE", 1);
+    f.put(StoryKey::SUPOX_HOSTILE, 1);
     let mut d = descriptor();
     Dialogue { api: &mut f }.initialize(&mut d);
     assert_eq!(f.segue, 1);
@@ -267,13 +268,13 @@ fn before_and_after_war_information_saturates_and_disables_each_question() {
     ] {
         for visit in [0, 1] {
             let mut f = Api::default();
-            f.put("SUPOX_INFO", visit);
+            f.put(StoryKey::SUPOX_INFO, visit);
             run(&mut f, handler, question);
             assert_eq!(
                 f.spoken(),
                 [i32::from(if visit == 0 { first } else { second })]
             );
-            assert_eq!(f.get("SUPOX_INFO"), 1);
+            assert_eq!(f.get(StoryKey::SUPOX_INFO), 1);
             assert!(!f.enabled(question));
             assert_eq!(choices(&f), [now, bye]);
             run(&mut f, handler, now);

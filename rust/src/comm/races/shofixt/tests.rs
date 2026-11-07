@@ -1,3 +1,4 @@
+use crate::engine::StoryKey;
 use super::*;
 use crate::comm::races::encounter::testing::{Effect, Fake};
 use crate::comm::races::script::ScriptApi;
@@ -10,14 +11,14 @@ fn choices(f: &Api) -> Vec<i32> {
 #[test]
 fn all_exit_branches_preserve_speech_state_and_segue_order() {
     for (r, p, state) in [
-        (DONT_ATTACK, TYPICAL_PLOY, ("SHOFIXTI_STACK1", 1)),
-        (HEY_STOP, ONLY_STOP, ("SHOFIXTI_STACK1", 2)),
-        (LOOK_YOU_ARE, TOO_BAD, ("SHOFIXTI_STACK1", 3)),
-        (NO_ONE_INSULTS, YOU_LIMP, ("SHOFIXTI_STACK2", 1)),
-        (MIGHTY_WORDS, HANG_YOUR, ("SHOFIXTI_STACK2", 2)),
-        (DONT_KNOW, NEVER, ("SHOFIXTI_STACK3", 1)),
-        (LOOK0, FOR_YOU, ("SHOFIXTI_STACK3", 2)),
-        (NO_BLOODSHED, YES_BLOODSHED, ("SHOFIXTI_STACK3", 3)),
+        (DONT_ATTACK, TYPICAL_PLOY, (StoryKey::SHOFIXTI_STACK1, 1)),
+        (HEY_STOP, ONLY_STOP, (StoryKey::SHOFIXTI_STACK1, 2)),
+        (LOOK_YOU_ARE, TOO_BAD, (StoryKey::SHOFIXTI_STACK1, 3)),
+        (NO_ONE_INSULTS, YOU_LIMP, (StoryKey::SHOFIXTI_STACK2, 1)),
+        (MIGHTY_WORDS, HANG_YOUR, (StoryKey::SHOFIXTI_STACK2, 2)),
+        (DONT_KNOW, NEVER, (StoryKey::SHOFIXTI_STACK3, 1)),
+        (LOOK0, FOR_YOU, (StoryKey::SHOFIXTI_STACK3, 2)),
+        (NO_BLOODSHED, YES_BLOODSHED, (StoryKey::SHOFIXTI_STACK3, 3)),
     ] {
         let mut f = Api::default();
         Dialogue { api: &mut f }.handle(Handler::Exit, r);
@@ -44,15 +45,15 @@ fn all_exit_branches_preserve_speech_state_and_segue_order() {
     }
     for r in [FEMALES, NUBILES, RAT_BABES] {
         let mut f = Api::default();
-        f.put("MAIDENS_ON_SHIP", 1);
+        f.put(StoryKey::MAIDENS_ON_SHIP, 1);
         Dialogue { api: &mut f }.exit(r);
         assert_eq!(
             f.effects,
             [
                 Effect::Segue(1),
                 Effect::Npc(LEAPING_HAPPINESS),
-                Effect::Set("SHOFIXTI_RECRUITED".into(), 1),
-                Effect::Set("MAIDENS_ON_SHIP".into(), 0),
+                Effect::Set(StoryKey::SHOFIXTI_RECRUITED.into(), 1),
+                Effect::Set(StoryKey::MAIDENS_ON_SHIP.into(), 0),
                 Effect::Segue(0),
                 Effect::Event(1, 2, 0, 0, 8)
             ]
@@ -67,7 +68,7 @@ fn all_exit_branches_preserve_speech_state_and_segue_order() {
 fn refusal_counter_postincrements_for_unhandled_values_and_caps_only_case_three() {
     for n in 0..=u8::MAX {
         let mut f = Api::default();
-        f.put("SHOFIXTI_STACK4", n);
+        f.put(StoryKey::SHOFIXTI_STACK4, n);
         Dialogue { api: &mut f }.exit(DONT_WANT_TO_FIGHT);
         assert_eq!(
             f.spoken(),
@@ -78,7 +79,7 @@ fn refusal_counter_postincrements_for_unhandled_values_and_caps_only_case_three(
             }
         );
         assert_eq!(
-            f.get("SHOFIXTI_STACK4"),
+            f.get(StoryKey::SHOFIXTI_STACK4),
             if n == 3 { n } else { n.wrapping_add(1) }
         );
     }
@@ -121,7 +122,7 @@ fn maidens_explanation_and_console_branch_choices_keep_callbacks_and_order() {
     for maidens in [0, 1] {
         for r in [YES_AND_NO, CLOBBERED, BUTT_BLASTED, DONT_DO_IT, 0] {
             let mut f = Api::default();
-            f.put("MAIDENS_ON_SHIP", maidens);
+            f.put(StoryKey::MAIDENS_ON_SHIP, maidens);
             Dialogue { api: &mut f }.handle(Handler::Console, r);
             assert_eq!(
                 f.spoken(),
@@ -154,9 +155,9 @@ fn reconciliation_constructs_every_alliance_name_including_commander_and_ship_fr
         (3, vec![4, GLOBAL_PLAYER_NAME, 5]),
     ] {
         let mut f = Api::default();
-        f.put("NEW_ALLIANCE_NAME", name);
-        f.put("SHOFIXTI_STACK1", 3);
-        f.put("SHOFIXTI_STACK3", 3);
+        f.put(StoryKey::NEW_ALLIANCE_NAME, name);
+        f.put(StoryKey::SHOFIXTI_STACK1, 3);
+        f.put(StoryKey::SHOFIXTI_STACK3, 3);
         Dialogue { api: &mut f }.handle(Handler::Realize, DONKEY_BREATH);
         let mut fragments = vec![44, GLOBAL_PLAYER_NAME, 45];
         fragments.extend(alliance);
@@ -165,9 +166,9 @@ fn reconciliation_constructs_every_alliance_name_including_commander_and_ship_fr
             f.effects,
             [
                 Effect::Npc(DGRUNTI),
-                Effect::Set("SHOFIXTI_STACK1".into(), 0),
-                Effect::Set("SHOFIXTI_STACK3".into(), 0),
-                Effect::Set("SHOFIXTI_STACK2".into(), 3),
+                Effect::Set(StoryKey::SHOFIXTI_STACK1.into(), 0),
+                Effect::Set(StoryKey::SHOFIXTI_STACK3.into(), 0),
+                Effect::Set(StoryKey::SHOFIXTI_STACK2.into(), 3),
                 Effect::Offer(I_AM_CAPTAIN0 as u16, Handler::Explain, fragments),
                 Effect::Offer(I_AM_NICE as u16, Handler::Explain, vec![]),
                 Effect::Offer(I_AM_GUY as u16, Handler::Explain, vec![])
@@ -183,10 +184,10 @@ fn hostile_stack_choices_keep_the_original_duplicate_look_response_and_name_frag
             for b in 0..=3 {
                 for c in 0..=3 {
                     let mut f = Api::default();
-                    f.put("SHOFIXTI_KIA", kia);
-                    f.put("SHOFIXTI_STACK1", a);
-                    f.put("SHOFIXTI_STACK2", b);
-                    f.put("SHOFIXTI_STACK3", c);
+                    f.put(StoryKey::SHOFIXTI_KIA, kia);
+                    f.put(StoryKey::SHOFIXTI_STACK1, a);
+                    f.put(StoryKey::SHOFIXTI_STACK2, b);
+                    f.put(StoryKey::SHOFIXTI_STACK3, c);
                     Dialogue { api: &mut f }.hostile();
                     let mut expected = Vec::new();
                     if a < 3 {
@@ -271,12 +272,12 @@ fn friendly_prioritizes_the_last_stack_then_offers_other_stacks_and_goodbye() {
         for kia in [0, 1] {
             for maidens in [0, 1] {
                 let mut f = Api::default();
-                f.put("SHOFIXTI_KIA", kia);
-                f.put("MAIDENS_ON_SHIP", maidens);
+                f.put(StoryKey::SHOFIXTI_KIA, kia);
+                f.put(StoryKey::MAIDENS_ON_SHIP, maidens);
                 Dialogue { api: &mut f }.handle(Handler::Friendly, r);
                 assert_eq!(f.spoken(), spoken.into_iter().collect::<Vec<_>>());
-                assert_eq!(f.get("SHOFIXTI_STACK1"), stack1);
-                assert_eq!(f.get("SHOFIXTI_STACK3"), stack3);
+                assert_eq!(f.get(StoryKey::SHOFIXTI_STACK1), stack1);
+                assert_eq!(f.get(StoryKey::SHOFIXTI_STACK3), stack3);
                 let mut expected = order.clone();
                 if maidens != 0 {
                     expected.push(IMPORTANT_DUTY);
@@ -316,8 +317,8 @@ fn exhausted_friendly_stacks_and_disabled_report_are_omitted() {
     for stack1 in [0, 1, 2, 3, 255] {
         for stack3 in [0, 1, 2, 255] {
             let mut f = Api::default();
-            f.put("SHOFIXTI_STACK1", stack1);
-            f.put("SHOFIXTI_STACK3", stack3);
+            f.put(StoryKey::SHOFIXTI_STACK1, stack1);
+            f.put(StoryKey::SHOFIXTI_STACK3, stack3);
             f.disabled.insert(REPORT0 as u16);
             Dialogue { api: &mut f }.friendly(0);
             let mut expected = Vec::new();
@@ -338,8 +339,8 @@ fn all_hostile_greeting_counter_values_and_identities_preserve_byte_postincremen
     for kia in [0, 1] {
         for n in 0..=u8::MAX {
             let mut f = Api::default();
-            f.put("SHOFIXTI_KIA", kia);
-            f.put("SHOFIXTI_VISITS", n);
+            f.put(StoryKey::SHOFIXTI_KIA, kia);
+            f.put(StoryKey::SHOFIXTI_VISITS, n);
             Dialogue { api: &mut f }.initialize();
             assert_eq!(f.effects, [Effect::Segue(0)]);
             f.effects.clear();
@@ -354,7 +355,7 @@ fn all_hostile_greeting_counter_values_and_identities_preserve_byte_postincremen
                 }
             );
             assert_eq!(
-                f.get("SHOFIXTI_VISITS"),
+                f.get(StoryKey::SHOFIXTI_VISITS),
                 if n == cap { n } else { n.wrapping_add(1) }
             );
             assert_eq!(
@@ -371,18 +372,18 @@ fn intro_outtakes_short_circuits_and_friendly_hello_does_not_advance_visits() {
         activity: crate::comm::dispatch::WON_LAST_BATTLE | 0x100,
         ..Api::default()
     };
-    f.put("SHOFIXTI_STACK2", 3);
+    f.put(StoryKey::SHOFIXTI_STACK2, 3);
     Dialogue { api: &mut f }.intro();
     assert_eq!(f.effects, [Effect::Npc(OUT_TAKES), Effect::Segue(0)]);
     for kia in [0, 1] {
         for stack2 in [3, 255] {
             let mut f = Api::default();
-            f.put("SHOFIXTI_KIA", kia);
-            f.put("SHOFIXTI_STACK2", stack2);
-            f.put("SHOFIXTI_VISITS", 6);
+            f.put(StoryKey::SHOFIXTI_KIA, kia);
+            f.put(StoryKey::SHOFIXTI_STACK2, stack2);
+            f.put(StoryKey::SHOFIXTI_VISITS, 6);
             Dialogue { api: &mut f }.intro();
             assert_eq!(f.spoken(), [FRIENDLY_HELLO]);
-            assert_eq!(f.get("SHOFIXTI_VISITS"), 6);
+            assert_eq!(f.get(StoryKey::SHOFIXTI_VISITS), 6);
             assert_eq!(choices(&f), [REPORT0, WHY_HERE0, WHERE_WORLD, BYE0]);
         }
     }
