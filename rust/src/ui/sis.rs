@@ -13,7 +13,7 @@ use crate::navigation::abi::*;
 #[cfg(not(test))]
 use std::{mem, ptr};
 
-mod gauges;
+pub(crate) mod gauges;
 pub use gauges::delta_sis_gauges;
 mod message_display;
 pub use message_display::{draw_message, set_menu_flash};

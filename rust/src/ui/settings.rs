@@ -3,98 +3,78 @@
 use crate::engine::WorldData;
 use crate::navigation::abi::*;
 
-static mut LAST_MUSIC_REF: MUSIC_REF = std::ptr::null_mut();
-static mut LAST_CONTINUOUS: BOOLEAN = 0;
-static mut LAST_PRIORITY: BYTE = 0;
-
-/// # Safety
-/// The game settings and music player must be initialized on the game thread.
-pub unsafe fn toggle_music() {
-    (**WorldData::current()).game.glob_flags ^= MUSIC_DISABLED as u8;
-    if LAST_PRIORITY <= 1 {
-        if WorldData::current().read(|owner| owner.game.glob_flags) & (MUSIC_DISABLED as u8) != 0 {
-            PLRStop((LAST_MUSIC_REF).cast());
-        } else if !LAST_MUSIC_REF.is_null() {
-            PLRPlaySong(
-                LAST_MUSIC_REF.cast(),
-                LAST_CONTINUOUS as i32,
-                LAST_PRIORITY.into(),
-            );
-        }
-    }
+pub fn toggle_music(world: &mut crate::engine::World) {
+    world.data.game.glob_flags ^= MUSIC_DISABLED as u8;
+    crate::sound::music::set_requested_enabled(
+        world.data.game.glob_flags & MUSIC_DISABLED as u8 == 0,
+    );
 }
 
 /// # Safety
-/// The music reference and player must be valid on the game thread.
+/// The reference identifies a live native music resource on the game thread.
 #[no_mangle]
 pub unsafe extern "C" fn PlayMusic(music_ref: MUSIC_REF, continuous: BOOLEAN, priority: BYTE) {
     crate::engine::World::current()
-        .read(|world| play_music_for_world(world, music_ref, continuous, priority));
+        .read(|world| unsafe { play_music_for_world(world, music_ref, continuous, priority) });
 }
 
 /// # Safety
-/// The music reference is retained by its owner for this game-thread playback.
+/// The reference is live during synchronous admission into the audio owner's cache.
 pub(crate) unsafe fn play_music_for_world(
     world: &crate::engine::World,
-    music_ref: MUSIC_REF,
+    raw: MUSIC_REF,
     continuous: BOOLEAN,
     priority: BYTE,
 ) {
-    LAST_MUSIC_REF = music_ref;
-    LAST_CONTINUOUS = continuous;
-    LAST_PRIORITY = priority;
-    if world.data.game.glob_flags & (MUSIC_DISABLED as u8) == 0 {
-        PLRPlaySong(music_ref.cast(), continuous as i32, priority.into());
-    }
+    use crate::sound::music::MusicRequest;
+    let request = if raw.is_null() {
+        MusicRequest::Absent
+    } else if raw as usize == usize::MAX {
+        MusicRequest::Current
+    } else {
+        // SAFETY: the caller retains the live native resource until its sample is cloned.
+        MusicRequest::Track(unsafe { crate::sound::heart_ffi::music_ref_borrow(raw.cast()) })
+    };
+    crate::sound::music::remember_music(
+        request,
+        continuous != 0,
+        priority,
+        world.data.game.glob_flags & MUSIC_DISABLED as u8 == 0,
+    );
 }
-
 pub(crate) fn play_loaded_music(
     world: &crate::engine::World,
     music: Option<&crate::sound::resource_types::LoadedMusic>,
     continuous: BOOLEAN,
     priority: BYTE,
 ) {
-    let raw = music.map_or(std::ptr::null_mut(), |music| music.as_raw().cast());
-    // SAFETY: the borrow retains the resource; a missing resource preserves null playback.
-    unsafe { play_music_for_world(world, raw, continuous, priority) };
+    let request = music.map_or(crate::sound::music::MusicRequest::Absent, |music| {
+        crate::sound::music::MusicRequest::Track(music.playback())
+    });
+    crate::sound::music::remember_music(
+        request,
+        continuous != 0,
+        priority,
+        world.data.game.glob_flags & MUSIC_DISABLED as u8 == 0,
+    );
 }
-/// # Safety
-/// The music player must be initialized on the game thread.
-pub unsafe fn stop_music() {
-    // SAFETY: the caller retains the initialized game-thread music lifecycle.
-    unsafe { stop_music_ref(LAST_MUSIC_REF) };
+pub fn stop_music() {
+    crate::sound::music::stop_requested_music();
 }
-
-unsafe fn stop_music_ref(music: MUSIC_REF) {
-    // SAFETY: the caller retains this music reference during playback removal.
-    unsafe {
-        PLRStop(music.cast());
-        LAST_MUSIC_REF = std::ptr::null_mut();
-    }
-}
-
 pub(crate) fn stop_loaded_music(music: Option<&crate::sound::resource_types::LoadedMusic>) {
-    let raw = music.map_or(std::ptr::null_mut(), |music| music.as_raw().cast());
-    // SAFETY: this borrow retains the music allocation during synchronous playback removal.
-    unsafe { stop_music_ref(raw) }
+    let request = music.map_or(crate::sound::music::MusicRequest::Absent, |music| {
+        crate::sound::music::MusicRequest::Track(music.playback())
+    });
+    crate::sound::music::stop_music_request(&request);
 }
-
-/// # Safety
-/// The music player must be initialized on the game thread.
-pub unsafe fn resume_music() {
-    PLRResume((LAST_MUSIC_REF).cast());
+pub fn resume_music() {
+    crate::sound::music::resume_requested_music();
 }
-
-/// # Safety
-/// The music player must be initialized on the game thread.
-pub unsafe fn pause_music() {
-    PLRPause((LAST_MUSIC_REF).cast());
+pub fn pause_music() {
+    crate::sound::music::pause_requested_music();
 }
-
-/// # Safety
-/// Game settings must be accessed on the game thread.
-pub unsafe fn toggle_sound_effect() {
-    (**WorldData::current()).game.glob_flags ^= SOUND_DISABLED as u8;
+pub fn toggle_sound_effect(world: &mut crate::engine::World) {
+    world.data.game.glob_flags ^= SOUND_DISABLED as u8;
 }
 
 /// # Safety
@@ -164,6 +144,5 @@ pub(crate) fn play_loaded_sound(
 }
 
 pub(crate) fn stop_battle_music() {
-    // SAFETY: the player retains its current music reference on the game thread.
-    unsafe { stop_music() }
+    stop_music()
 }

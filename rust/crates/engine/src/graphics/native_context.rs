@@ -310,9 +310,7 @@ impl ContextLease {
                 Operation::Foreground(color) => {
                     context_abi::SetContextForeGroundColor(color);
                 }
-                Operation::Frame(frame, setter) => {
-                    effect = Some(setter(frame));
-                }
+                Operation::Frame(frame, setter) => effect = Some(setter(frame)),
                 Operation::Clip(_) => {
                     context_abi::SetContextClipRect(rectangle);
                 }
@@ -352,11 +350,8 @@ impl ContextLease {
                     super::font_abi::font_DrawText(&mut text);
                 }
             }
-            (
-                effect.unwrap_or(self.0.context.as_ref().ForeGroundFrame),
-                previous,
-                deadline,
-            )
+            let frame = effect.unwrap_or(self.0.context.as_ref().ForeGroundFrame);
+            (frame, previous, deadline)
         }
     }
 

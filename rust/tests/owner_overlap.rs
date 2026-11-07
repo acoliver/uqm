@@ -347,7 +347,14 @@ fn encounter_teardown_uses_retained_owners_without_reacquisition() {
         bridge::with_game(&mut game, || {
             bridge::enter(|cx| {
                 assert_eq!(
-                    uqm_rust::battle::encount_native::uninit_encounter(cx, &input, None),
+                    uqm_rust::battle::encount_native::uninit_encounter(
+                        cx,
+                        &mut uqm_rust::engine::observe::Io {
+                            observer: &mut uqm_rust::engine::observe::Unobserved
+                        },
+                        &input,
+                        None
+                    ),
                     0
                 );
             });

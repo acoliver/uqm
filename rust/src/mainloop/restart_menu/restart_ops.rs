@@ -538,7 +538,7 @@ impl RestartMenuOps for CffiOps<'_, '_, '_> {
     fn stop_music(&self) {
         self.legacy(|| {
             // SAFETY: StopMusic is safe to call any time.
-            unsafe { c_extern::stop_music() }
+            c_extern::stop_music()
         })
     }
     fn destroy_music(&self, handle: usize) {

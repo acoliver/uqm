@@ -120,21 +120,20 @@ fn apply_thraddash_body_count(world: &mut crate::engine::World, killed: u16) -> 
 
 pub(crate) mod engine {
     mod display;
+    mod salvage;
     use super::*;
     #[cfg(not(test))]
     use crate::battle::battle_native::battle;
     #[cfg(not(test))]
     use crate::battle::battle_native::engine::{
-        rgb15, AWESOME_RATING, CYBORG_CONTROL, HUMAN_CONTROL, STANDARD_RATING,
+        AWESOME_RATING, CYBORG_CONTROL, HUMAN_CONTROL, STANDARD_RATING,
     };
     use crate::engine::battle::link_queue;
-    #[cfg(not(test))]
     use crate::engine::StoryKey;
     #[cfg(not(test))]
     use crate::pickship::ffi::draw_armada_pick_ship_in as draw_armada;
     use crate::ships::native::abi::*;
-    #[cfg(not(test))]
-    use std::{mem, ptr};
+    use crate::ui::rgb15;
 
     const TEXT_FADE: [u8; 7] = [10, 9, 8, 6, 5, 4, 3];
     const SHIP_FADE: [(u8, u8, u8); 10] = [
@@ -154,14 +153,10 @@ pub(crate) mod engine {
     #[cfg(not(test))]
     use crate::planets::starmap::naming::cluster_name;
 
-    #[cfg(not(test))]
-    use crate::mainloop::input_abi::live::AnyButtonPress;
-
     fn escape_pressed(input: &crate::engine::input::InputSession) -> bool {
         let template = input.player_controls()[0] as usize;
         input.current().key[template][KEY_ESCAPE as usize] != 0
     }
-    #[cfg(not(test))]
     enum SalvageText {
         Caption,
         Amount,
@@ -169,61 +164,9 @@ pub(crate) mod engine {
     }
 
     #[cfg(not(test))]
-    fn draw_salvage_line(
-        kernel: &crate::engine::Kernel,
-        string: &std::ffi::CStr,
-        baseline: POINT,
-        style: SalvageText,
-    ) {
-        let context = crate::graphics::context_abi::ContextLease::retain(
-            std::ptr::NonNull::new(kernel.space_context)
-                .unwrap_or_else(|| panic!("salvage requires a space context")),
-        );
-        let (font, align, color) = match style {
-            SalvageText::Caption => (
-                kernel.tiny_font_lease(),
-                TEXT_ALIGN_ALIGN_CENTER,
-                rgb15(8, 8, 8),
-            ),
-            SalvageText::Amount => (
-                kernel.micro_font_lease(),
-                TEXT_ALIGN_ALIGN_RIGHT,
-                rgb15(0, 0, 24),
-            ),
-            SalvageText::Total => (
-                kernel.micro_font_lease(),
-                TEXT_ALIGN_ALIGN_CENTER,
-                rgb15(0, 0, 24),
-            ),
-        };
-        let font = font.unwrap_or_else(|| panic!("salvage requires its retained text font"));
-        context.draw_text(&font, string, baseline, align, color);
-    }
-
-    #[cfg(not(test))]
-    fn draw_salvage_captions(kernel: &crate::engine::Kernel, name: &[UNICODE; 80], rect: &RECT) {
-        let baseline = POINT {
-            x: rect.corner.x.wrapping_add(100),
-            y: rect.corner.y.wrapping_add(68),
-        };
-        let bytes = name.map(|byte| byte as u8);
-        let name = std::ffi::CStr::from_bytes_until_nul(&bytes)
-            .unwrap_or_else(|error| panic!("unterminated salvage name: {error}"));
-        draw_salvage_line(kernel, name, baseline, SalvageText::Caption);
-        draw_salvage_line(
-            kernel,
-            kernel.game_text((ENCOUNTER_STRING_BASE + 3) as usize),
-            POINT {
-                y: baseline.y.wrapping_add(6),
-                ..baseline
-            },
-            SalvageText::Caption,
-        );
-    }
-
-    #[cfg(not(test))]
-    unsafe fn do_select_action(
+    fn do_select_action(
         cx: &mut crate::engine::battle::Cx<'_>,
+        io: &mut crate::engine::observe::Io<'_>,
         menu: &mut EncounterSelection,
     ) -> bool {
         let runtime = cx.kernel.input_runtime();
@@ -236,16 +179,20 @@ pub(crate) mod engine {
         ) {
             SelectionAction::Finish => return false,
             SelectionAction::Options => {
-                if cx.with_legacy(|| GameOptions()) == 0 {
+                if crate::front_end::gameopt::game_options(cx, io) == 0 {
                     return false;
                 }
-                cx.with_legacy(|| {
-                    DrawMenuStateStrings(PM_CONVERSE as u8, menu.choice as i16);
-                    SetFlashRect(usize::MAX as *const RECT);
-                });
+                crate::ui::menu::draw_menu_state(
+                    cx.kernel,
+                    cx.world,
+                    cx.screen_dimensions(),
+                    PM_CONVERSE as u8,
+                    menu.choice as i16,
+                );
+                crate::ui::sis::set_menu_flash(cx.kernel, cx.screen_dimensions(), false);
             }
             SelectionAction::Unknown(choice) => {
-                printf(c"Unknown option: %d\n".as_ptr(), i32::from(choice));
+                println!("Unknown option: {choice}");
             }
             SelectionAction::Continue => {}
         }
@@ -456,10 +403,8 @@ pub(crate) mod engine {
         }
     }
 
-    /// # Safety
-    /// The game thread must own initialized encounter message and audio state.
     #[cfg(not(test))]
-    unsafe fn prepare_encounter(
+    fn prepare_encounter(
         cx: &mut crate::engine::battle::Cx<'_>,
         catalog: Option<&[CStarDesc; CATALOG_LEN]>,
     ) {
@@ -474,8 +419,8 @@ pub(crate) mod engine {
         crate::ui::settings::play_loaded_music(cx.world, music.as_ref(), 0, 1);
         let segue = crate::graphics::drawable_abi::LoadedDrawable::load(c"graphics.segue")
             .unwrap_or_else(|| panic!("encounter requires the red alert backdrop"));
-        cx.with_legacy(|| WaitForSoundEnd(COUNT::MAX));
-        stop_music();
+        crate::sound::heart_ffi::wait_for_sound_end(COUNT::MAX);
+        crate::ui::settings::stop_loaded_music(music.as_ref());
         drop(music);
         let (width, height) = cx.screen_dimensions();
         let dimensions = (width - 78, height - 13);
@@ -494,7 +439,8 @@ pub(crate) mod engine {
                 None
             };
             draw_encounter_location(cx, cluster.as_deref());
-            cx.with_legacy(|| DrawSISMessage(ptr::null()));
+            let message = crate::ui::sis::default_message_text(cx.kernel, cx.world, catalog);
+            crate::ui::sis::draw_message(cx.kernel, width, &message, -1, -1, DSME_NONE as u16);
             let planet = crate::graphics::context_abi::ContextFrame::retain(
                 std::ptr::NonNull::new(cx.kernel.planet[0]),
             );
@@ -511,241 +457,85 @@ pub(crate) mod engine {
         cx.with_legacy(|| context.transition(None));
     }
 
-    /// # Safety
-    /// Native encounter resources and input are initialized on the game thread.
     #[cfg(not(test))]
-    pub unsafe fn init_encounter(
+    pub fn init_encounter(
         cx: &mut crate::engine::battle::Cx<'_>,
         io: &mut crate::engine::observe::Io<'_>,
         catalog: Option<&[CStarDesc; CATALOG_LEN]>,
     ) -> COUNT {
         prepare_encounter(cx, catalog);
         let mut menu = EncounterSelection::new();
-        cx.with_legacy(|| {
-            DrawMenuStateStrings(PM_CONVERSE as u8, menu.choice as i16);
-            SetFlashRect(usize::MAX as *const RECT);
-        });
-        cx.run_input(io, true, |cx, _| do_select_action(cx, &mut menu));
-        cx.with_legacy(|| SetFlashRect(ptr::null()));
+        crate::ui::menu::draw_menu_state(
+            cx.kernel,
+            cx.world,
+            cx.screen_dimensions(),
+            PM_CONVERSE as u8,
+            menu.choice as i16,
+        );
+        crate::ui::sis::set_menu_flash(cx.kernel, cx.screen_dimensions(), false);
+        cx.run_input(io, true, |cx, io| do_select_action(cx, io, &mut menu));
+        cx.kernel.sis_highlight.context.borrow_mut().take();
         COUNT::from(menu.choice)
     }
 
     #[cfg(not(test))]
-    fn draw_fade_text(
+    pub fn uninit_encounter(
         cx: &mut crate::engine::battle::Cx<'_>,
-        input: &crate::engine::input::InputSession,
-        str1: &std::ffi::CStr,
-        str2: &std::ffi::CStr,
-        fade_in: BOOLEAN,
-        rect: &RECT,
-    ) {
-        let context = crate::graphics::context_abi::ContextLease::retain(
-            std::ptr::NonNull::new(cx.kernel.space_context)
-                .unwrap_or_else(|| panic!("salvage requires a space context")),
-        );
-        let font = cx
-            .kernel
-            .micro_font_lease()
-            .unwrap_or_else(|| panic!("salvage requires the micro font"));
-        let baseline = POINT {
-            x: rect.corner.x.wrapping_add(100),
-            y: rect.corner.y.wrapping_add(45),
-        };
-        let render = |color| {
-            context.draw_text(&font, str1, baseline, TEXT_ALIGN_ALIGN_CENTER, color);
-            context.draw_text(
-                &font,
-                str2,
-                POINT {
-                    y: baseline.y.wrapping_add(11),
-                    ..baseline
-                },
-                TEXT_ALIGN_ALIGN_CENTER,
-                color,
-            );
-        };
-        let runtime = cx.kernel.input_runtime();
-        runtime.flush();
-        let mut time = GetTimeCounter();
-        if fade_in != 0 {
-            let mut i = 0usize;
-            while i < TEXT_FADE.len() {
-                runtime.update(cx);
-                if input.current().any_button_pressed() {
-                    i = TEXT_FADE.len() - 1;
-                }
-                let v = TEXT_FADE[i];
-                render(rgb15(v, v, v));
-                runtime.sleep_until(cx, time.wrapping_add(ONE_SECOND / 20));
-                time = GetTimeCounter();
-                i += 1;
-            }
-        } else {
-            let mut i = TEXT_FADE.len() as i16 - 1;
-            while i >= 0 {
-                runtime.update(cx);
-                if input.current().any_button_pressed() {
-                    i = 0;
-                }
-                let v = TEXT_FADE[i as usize];
-                render(rgb15(v, v, v));
-                runtime.sleep_until(cx, time.wrapping_add(ONE_SECOND / 20));
-                time = GetTimeCounter();
-                i -= 1;
-            }
-            render(rgb15(10, 10, 10));
-        }
-    }
-
-    /// # Safety
-    /// The game thread must own initialized encounter fleet queues, game state, display, and salvage resources.
-    #[cfg(not(test))]
-    pub unsafe fn uninit_encounter(
-        cx: &mut crate::engine::battle::Cx<'_>,
+        io: &mut crate::engine::observe::Io<'_>,
         input: &crate::engine::input::InputSession,
         catalog: Option<&[CStarDesc; CATALOG_LEN]>,
     ) -> COUNT {
-        let mut killed = 0u16;
         free_gravity_well(cx.kernel);
         if encounter_has_no_salvage(cx.world) {
-            return killed;
+            return 0;
         }
         if cx.world.story_state(StoryKey::BATTLE_SEGUE) == 0 {
             cx.kernel.ships(0).reinit();
             cx.kernel.ships(1).reinit();
-            return killed;
+            return 0;
         }
-        let mut recycle = 0u16;
-        let mut rect: RECT = mem::zeroed();
-        let mut salvage_rect: RECT = mem::zeroed();
-        let mut stamp: STAMP = mem::zeroed();
-        let mut str1 = std::ffi::CString::default();
-        let mut str2 = std::ffi::CString::default();
-        let mut buf = [0 as UNICODE; 80];
         cx.world.set_story_state(StoryKey::BATTLE_SEGUE, 0);
         cx.world.set_story_state(StoryKey::BOMB_CARRIER, 0);
-        let counters = cx.b.counters;
         let mut victory = victory_state(
-            counters[1],
-            counters[0],
+            cx.b.counters[1],
+            cx.b.counters[0],
             cx.world.story_state(StoryKey::URQUAN_PROTECTING_SAMATRA) != 0,
         );
         cx.world.encounter_race = npc_race(cx.world);
-        let race_index = cx.world.encounter_race as usize;
-        if cx.world.avail_races_ref().at(race_index).is_none() {
+        if cx
+            .world
+            .avail_races_ref()
+            .at(cx.world.encounter_race as usize)
+            .is_none()
+        {
             victory = -1;
-            let dimensions = cx.screen_dimensions();
-            init_siscontexts(cx.kernel, dimensions);
+            init_siscontexts(cx.kernel, cx.screen_dimensions());
         }
+        let mut salvage = salvage::Salvage::new(cx.kernel, victory);
         let previous_mode = cx.kernel.set_status_message_mode(StatMsgMode_SMM_RES_UNITS);
-        let mut sleepy = true;
+        let mut killed = 0u16;
         for side in 0..NUM_SIDES as usize {
             if side != 0 {
-                if victory < 0 {
-                    victory = 0;
+                if salvage.victory < 0 {
+                    salvage.victory = 0;
                 } else {
-                    cx.with_legacy(|| {
-                        draw_sisframe();
-                        DrawSISMessage(ptr::null());
-                    });
-                    display::draw_title(cx, catalog);
-                    SetContext(cx.kernel.space_context);
-                    if victory != 0 {
-                        draw_armada(cx.kernel, cx.world, 1, &mut *(&raw mut salvage_rect).cast());
-                    }
+                    salvage.panel(cx, catalog, draw_armada);
                 }
             }
             cx.kernel.ships(NUM_SIDES as usize - 1 - side).reinit();
-            let fragments = fragment_snapshot(cx.world, side == 0);
-            for (id, frag) in fragments {
+            for (id, frag) in fragment_snapshot(cx.world, side == 0) {
                 if fragment_is_removed(
                     frag.crew_level,
-                    victory != 0,
+                    salvage.victory != 0,
                     side == NUM_SIDES as usize - 1,
                 ) {
                     if side == NUM_SIDES as usize - 1 {
                         killed = killed.wrapping_add(1);
-                        if victory != 0 {
+                        if salvage.victory != 0 {
                             if killed == 1 {
-                                recycle = 0;
-                                crate::ui::sis::draw_status_message(cx.kernel, cx.world, None);
-                                let kernel = &*cx.kernel;
-                                stamp.origin.x = salvage_rect.corner.x.wrapping_add(32);
-                                stamp.origin.y = salvage_rect.corner.y.wrapping_add(56);
-                                stamp.frame = IncFrameIndex(frag.icons);
-                                DrawStamp(&mut stamp);
-                                SetContextForeGroundColor(rgb15(8, 8, 8));
-                                SetContextFont(kernel.tiny_font);
-                                let name = std::ffi::CStr::from_ptr(
-                                    GetStringAddress(frag.race_strings).cast(),
-                                );
-                                crate::ships::native::copy_display_name(&mut buf, name.to_bytes());
-                                strupr(buf.as_mut_ptr());
-                                draw_salvage_captions(kernel, &buf, &salvage_rect);
-
-                                stamp.frame = frag.icons;
-                                SetContextFont(kernel.micro_font);
-                                str1 = kernel
-                                    .game_text((ENCOUNTER_STRING_BASE + 4) as usize)
-                                    .to_owned();
-                                str2 = kernel
-                                    .game_text((ENCOUNTER_STRING_BASE + 5) as usize)
-                                    .to_owned();
-                                draw_fade_text(cx, input, &str1, &str2, 1, &salvage_rect);
+                                salvage.start(cx, input, &frag);
                             }
-                            rect.corner.y = salvage_rect.corner.y.wrapping_add(9);
-                            rect.extent.height = 22;
-                            SetContextForeGroundColor(rgb15(0, 0, 0));
-                            rect.extent.width = 34;
-                            rect.corner.x = (salvage_rect.corner.x as i32
-                                + salvage_rect.extent.width as i32
-                                - (10 + rect.extent.width as i32))
-                                as i16;
-                            DrawFilledRectangle(&mut rect);
-                            let bounty = RACE_BOUNTY[cx.world.encounter_race as usize] >> 3;
-                            recycle = recycle.wrapping_add(bounty);
-                            let amount = std::ffi::CString::new(recycle.to_string())
-                                .unwrap_or_else(|error| panic!("invalid salvage amount: {error}"));
-                            SetContextForeGroundColor(rgb15(0, 0, 24));
-                            draw_salvage_line(
-                                cx.kernel,
-                                &amount,
-                                POINT {
-                                    x: (rect.corner.x as i32 + rect.extent.width as i32 - 1) as i16,
-                                    y: rect.corner.y.wrapping_add(14),
-                                },
-                                SalvageText::Amount,
-                            );
-                            cx.with_legacy(|| DeltaSISGauges(0, 0, bounty as i32));
-                            let before = victory;
-                            victory = victory.wrapping_add(1);
-                            if (before - 1) % 5 != 0 {
-                                stamp.origin.x = stamp.origin.x.wrapping_add(17);
-                            } else {
-                                SetContextForeGroundColor(rgb15(0, 0, 0));
-                                rect.corner.x = salvage_rect.corner.x.wrapping_add(10);
-                                rect.extent.width = 104;
-                                DrawFilledRectangle(&mut rect);
-                                stamp.origin.x = rect.corner.x.wrapping_add(2);
-                                stamp.origin.y = salvage_rect.corner.y.wrapping_add(12);
-                            }
-                            if sleepy {
-                                let mut time = GetTimeCounter();
-                                for (r, g, b) in SHIP_FADE {
-                                    sleepy = AnyButtonPress(cx, input, 1) == 0
-                                        && cx.world.activity() & CHECK_ABORT as u16 == 0;
-                                    if !sleepy {
-                                        break;
-                                    }
-                                    SetContextForeGroundColor(rgb15(r, g, b));
-                                    DrawFilledStamp(&mut stamp);
-                                    cx.with_legacy(|| {
-                                        SleepThreadUntil(time.wrapping_add(ONE_SECOND / 15))
-                                    });
-                                    time = GetTimeCounter();
-                                }
-                            }
-                            DrawStamp(&mut stamp);
+                            salvage.reward(cx, input);
                         }
                     }
                     remove_campaign_fragment(cx.world, side == 0, id);
@@ -753,52 +543,10 @@ pub(crate) mod engine {
             }
         }
         cx.kernel.set_status_message_mode(previous_mode);
-        if victory != 0 {
-            cx.with_legacy(|| WaitForAnyButton(1, ONE_SECOND * 3, 0));
-            if !escape_pressed(input) {
-                draw_fade_text(cx, input, &str1, &str2, 0, &salvage_rect);
-                if !escape_pressed(input) {
-                    SetContextForeGroundColor(rgb15(0, 0, 0));
-                    rect.corner.x = salvage_rect.corner.x.wrapping_add(10);
-                    rect.extent.width = 132;
-                    DrawFilledRectangle(&mut rect);
-                    let mut total = format!("{recycle} ").into_bytes();
-                    total.extend_from_slice(
-                        cx.kernel
-                            .game_text((STATUS_STRING_BASE + 1) as usize)
-                            .to_bytes(),
-                    );
-                    let total = std::ffi::CString::new(total)
-                        .unwrap_or_else(|error| panic!("invalid salvage total: {error}"));
-                    SetContextForeGroundColor(rgb15(0, 0, 24));
-                    draw_salvage_line(
-                        cx.kernel,
-                        &total,
-                        POINT {
-                            x: (rect.corner.x as i32 + (rect.extent.width as i32 >> 1)) as i16,
-                            y: rect.corner.y.wrapping_add(14),
-                        },
-                        SalvageText::Total,
-                    );
-                    str1 = cx
-                        .kernel
-                        .game_text((ENCOUNTER_STRING_BASE + 6) as usize)
-                        .to_owned();
-                    str2 = cx
-                        .kernel
-                        .game_text((ENCOUNTER_STRING_BASE + 7) as usize)
-                        .to_owned();
-                    draw_fade_text(cx, input, &str1, &str2, 1, &salvage_rect);
-                    cx.with_legacy(|| WaitForAnyButton(1, ONE_SECOND * 2, 0));
-                    if !escape_pressed(input) {
-                        draw_fade_text(cx, input, &str1, &str2, 0, &salvage_rect);
-                    }
-                }
-            }
-            crate::ui::sis::draw_status_message(cx.kernel, cx.world, None);
-        }
-        killed = apply_thraddash_body_count(cx.world, killed);
-        killed
+        salvage.finish(cx, io, input, |cx, io, duration| {
+            crate::ui::util::live::wait_for_any_button(cx, io, 1, duration, 0);
+        });
+        apply_thraddash_body_count(cx.world, killed)
     }
 
     #[cfg(not(test))]

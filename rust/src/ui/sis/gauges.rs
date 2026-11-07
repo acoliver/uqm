@@ -406,6 +406,7 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn owned_gauges_and_border_draw_without_publishing_campaign_state() {
+        if !crate::native_test_process::own_graphics_process("ui::sis::gauges::tests::owned_gauges_and_border_draw_without_publishing_campaign_state") { return; }
         use crate::{
             campaign_display_test::CampaignDisplay,
             engine::Game,

@@ -28,6 +28,7 @@ struct MusicState {
     music_volume: i32,
     /// Music volume scale factor (0.0..1.0).
     music_volume_scale: f32,
+    requested: (MusicRequest, bool, u8),
 }
 
 impl MusicState {
@@ -37,12 +38,74 @@ impl MusicState {
             cur_speech_ref: None,
             music_volume: MAX_VOLUME,
             music_volume_scale: 1.0,
+            requested: (MusicRequest::Absent, false, 0),
         }
     }
 }
 
 static MUSIC_STATE: std::sync::LazyLock<Mutex<MusicState>> =
     std::sync::LazyLock::new(|| Mutex::new(MusicState::new()));
+
+#[derive(Clone)]
+pub enum MusicRequest {
+    Absent,
+    Current,
+    Track(MusicRef),
+}
+
+pub fn remember_music(request: MusicRequest, continuous: bool, priority: u8, enabled: bool) {
+    MUSIC_STATE.lock().requested = (request.clone(), continuous, priority);
+    if enabled {
+        play_requested(&request, continuous, priority);
+    }
+}
+
+fn play_requested(request: &MusicRequest, continuous: bool, priority: u8) {
+    if let MusicRequest::Track(track) = request {
+        if let Err(error) = plr_play_song(track, continuous, i32::from(priority)) {
+            eprintln!("[audio_heart] PLRPlaySong: error: {error:?}");
+        }
+    }
+}
+fn stop_request(request: &MusicRequest) {
+    match request {
+        MusicRequest::Absent => {}
+        MusicRequest::Current => {
+            let _ = plr_stop_current();
+        }
+        MusicRequest::Track(track) => {
+            let _ = plr_stop(track);
+        }
+    }
+}
+pub fn set_requested_enabled(enabled: bool) {
+    let (request, continuous, priority) = MUSIC_STATE.lock().requested.clone();
+    if priority <= 1 {
+        if enabled {
+            play_requested(&request, continuous, priority);
+        } else {
+            stop_request(&request);
+        }
+    }
+}
+pub fn stop_requested_music() {
+    let request = std::mem::replace(&mut MUSIC_STATE.lock().requested.0, MusicRequest::Absent);
+    stop_request(&request);
+}
+pub fn stop_music_request(request: &MusicRequest) {
+    MUSIC_STATE.lock().requested.0 = MusicRequest::Absent;
+    stop_request(request);
+}
+pub fn pause_requested_music() {
+    if !matches!(MUSIC_STATE.lock().requested.0, MusicRequest::Absent) {
+        let _ = plr_pause();
+    }
+}
+pub fn resume_requested_music() {
+    if !matches!(MUSIC_STATE.lock().requested.0, MusicRequest::Absent) {
+        let _ = plr_resume();
+    }
+}
 
 // =============================================================================
 // Music Playback (spec §3.3)
@@ -271,6 +334,33 @@ pub fn fade_music(how_long: u32, end_volume: i32) -> bool {
 mod tests {
     use super::*;
     use crate::sound::test_support::ENGINE_TEST_LOCK;
+
+    #[test]
+    fn remembered_music_retains_its_sample_until_the_request_is_stopped() {
+        let _serial = ENGINE_TEST_LOCK.lock();
+        let track = MusicRef(Arc::new(
+            Mutex::new(crate::sound::types::SoundSample::new()),
+        ));
+        let sample = Arc::downgrade(&track.0);
+        remember_music(MusicRequest::Track(track), true, 2, false);
+        assert!(sample.upgrade().is_some());
+        set_requested_enabled(false);
+        assert!(sample.upgrade().is_some());
+        stop_requested_music();
+        assert!(sample.upgrade().is_none());
+        assert!(matches!(
+            MUSIC_STATE.lock().requested.0,
+            MusicRequest::Absent
+        ));
+        remember_music(MusicRequest::Current, false, 0, false);
+        stop_music_request(&MusicRequest::Absent);
+        assert!(matches!(
+            MUSIC_STATE.lock().requested.0,
+            MusicRequest::Absent
+        ));
+        pause_requested_music();
+        resume_requested_music();
+    }
 
     // --- P13 TDD ---
 

@@ -764,19 +764,20 @@ pub unsafe fn do_shipyard(cx: &mut Cx<'_>, menu: &mut MENU_STATE, input: &InputS
         });
     } else if cancel || (select && menu.CurState == SHIPYARD_EXIT) {
         return cx.with_legacy(|| exit_shipyard(input, menu));
+    } else if select && menu.CurState != SHIPYARD_SAVELOAD {
+        menu.Initialized = 0;
+        do_modify_ships(cx, menu, input);
     } else if select {
-        if menu.CurState != SHIPYARD_SAVELOAD {
-            menu.Initialized = 0;
-            do_modify_ships(cx, menu, input);
-        } else {
-            if cx.with_legacy(|| GameOptions()) == 0 {
-                return cx.with_legacy(|| exit_shipyard(input, menu));
-            }
-            cx.with_legacy(|| {
-                DrawMenuStateStrings(PM_CREW as BYTE, menu.CurState as i16);
-                SetFlashRect(MENU_3DO);
-            });
+        let mut io = crate::engine::observe::Io {
+            observer: &mut *cx.kernel.input_runtime().observer(),
+        };
+        if crate::front_end::gameopt::game_options(cx, &mut io) == 0 {
+            return cx.with_legacy(|| exit_shipyard(input, menu));
         }
+        cx.with_legacy(|| {
+            DrawMenuStateStrings(PM_CREW as BYTE, menu.CurState as i16);
+            SetFlashRect(MENU_3DO);
+        });
     } else {
         cx.with_legacy(|| do_menu_chooser(input, menu, PM_CREW as BYTE));
     }

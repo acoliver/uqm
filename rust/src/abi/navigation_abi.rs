@@ -3111,12 +3111,7 @@ pub use crate::battle::ship_native::engine::ship_postprocess;
 pub use crate::battle::ship_native::engine::collision;
 
 
-#[cfg(not(test))]
-pub use crate::front_end::gameopt::runtime::GameOptions;
-pub type NamingCallback = ::std::option::Option<unsafe extern "C" fn()>;
 
-#[cfg(not(test))]
-pub use crate::front_end::gameopt::runtime::SetNamingCallback;
 
 
 
@@ -3137,7 +3132,6 @@ pub use crate::ui::settings::toggle_music;
 pub use crate::ui::util::live::SaveContextFrame;
 #[cfg(test)]
 extern "C" {
-    pub fn toggle_music();
 }
 #[cfg(not(test))]
 pub use crate::ui::settings::stop_music;
@@ -3161,7 +3155,6 @@ extern "C" {
 pub use crate::ui::settings::toggle_sound_effect;
 #[cfg(test)]
 extern "C" {
-    pub fn toggle_sound_effect();
 }
 
 #[cfg(not(test))]

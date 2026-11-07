@@ -14,6 +14,11 @@ impl LoadedMusic {
         crate::resource::ffi_bridge::detach_resource_of_type(resource, "MUSICRES").map(Self)
     }
 
+    pub fn playback(&self) -> super::types::MusicRef {
+        // SAFETY: this owner keeps the detached Arc handle alive while it is cloned.
+        unsafe { super::heart_ffi::music_ref_borrow(self.0.as_ptr()) }
+    }
+
     pub fn as_raw(&self) -> *mut c_void {
         self.0.as_ptr()
     }
@@ -85,7 +90,12 @@ mod tests {
         };
         assert_eq!(Arc::strong_count(&sample), 2);
         assert!(!music.as_raw().is_null());
+        let playback = music.playback();
+        assert_eq!(Arc::strong_count(&sample), 3);
         drop(music);
+        assert_eq!(Arc::strong_count(&sample), 2);
+        assert!(Arc::ptr_eq(&playback.0, &sample));
+        drop(playback);
         assert_eq!(Arc::strong_count(&sample), 1);
     }
 }

@@ -27,6 +27,16 @@ impl FontLease {
         align: super::native_abi::TEXT_ALIGN,
         characters: u16,
     ) -> TextMeasurement {
+        self.measure_bounded::<100>(string, baseline, align, characters)
+    }
+
+    pub fn measure_bounded<const N: usize>(
+        &self,
+        string: &CStr,
+        baseline: super::native_abi::POINT,
+        align: super::native_abi::TEXT_ALIGN,
+        characters: u16,
+    ) -> TextMeasurement<N> {
         let mut measured = TextMeasurement {
             rect: super::native_abi::RECT {
                 corner: baseline,
@@ -35,8 +45,8 @@ impl FontLease {
                     height: 0,
                 },
             },
-            characters: characters.min(100),
-            deltas: [0; 100],
+            characters: characters.min(N.min(u16::MAX as usize) as u16),
+            deltas: [0; N],
             leading: 0,
             visible: false,
         };
@@ -68,10 +78,10 @@ impl FontLease {
     }
 }
 
-pub struct TextMeasurement {
+pub struct TextMeasurement<const N: usize = 100> {
     pub rect: super::native_abi::RECT,
     pub characters: u16,
-    pub deltas: [u8; 100],
+    pub deltas: [u8; N],
     pub leading: i16,
     pub visible: bool,
 }

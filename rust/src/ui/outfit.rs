@@ -502,16 +502,16 @@ unsafe fn change_fuel_quantity(
     });
 }
 
-unsafe extern "C" fn on_naming_done() {
-    DrawFlagshipName(0);
+fn on_naming_done(kernel: &crate::engine::Kernel, world: &crate::engine::World, width: i32) {
+    crate::ui::sis::gauges::draw_flagship_name(kernel, world, width, false);
 }
 
-unsafe fn exit_outfit(menu: &mut MENU_STATE) -> BOOLEAN {
+unsafe fn exit_outfit(kernel: &mut crate::engine::Kernel, menu: &mut MENU_STATE) -> BOOLEAN {
     DestroyDrawable(ReleaseDrawable(menu.CurFrame));
     menu.CurFrame = ptr::null_mut();
     DestroyDrawable(ReleaseDrawable(menu.ModuleFrame));
     menu.ModuleFrame = ptr::null_mut();
-    SetNamingCallback(None);
+    kernel.naming_callback = None;
     0
 }
 
@@ -527,7 +527,7 @@ unsafe fn initialize_outfit(
 ) {
     menu.InputFunc = Some(do_outfit);
     menu.Initialized = 1;
-    SetNamingCallback(Some(on_naming_done));
+    cx.kernel.naming_callback = Some(on_naming_done);
     menu.CurFrame = CaptureDrawable(LoadGraphicInstance(c"graphics.modulesmenu".as_ptr()).cast());
     menu.hMusic = (LoadMusicInstance(c"music.outfit".as_ptr())).cast();
     menu.CurState = OUTFIT_FUEL;
@@ -609,7 +609,7 @@ pub unsafe fn do_outfit(
     input: &crate::engine::input::InputSession,
 ) -> BOOLEAN {
     if cx.world.activity() & CHECK_ABORT as u16 != 0 {
-        return cx.with_legacy(|| exit_outfit(menu));
+        return exit_outfit(cx.kernel, menu);
     }
     if menu.Initialized == 0 {
         initialize_outfit(cx, menu, input);
@@ -620,7 +620,7 @@ pub unsafe fn do_outfit(
             menu.CurState = OUTFIT_FUEL;
             cx.with_legacy(|| SetFlashRect(MENU_3DO));
         } else {
-            return cx.with_legacy(|| exit_outfit(menu));
+            return exit_outfit(cx.kernel, menu);
         }
     } else if input.pulsed().menu[KEY_MENU_SELECT as usize] != 0 {
         match menu.CurState {
@@ -650,8 +650,15 @@ pub unsafe fn do_outfit(
                 do_install_module(cx, menu, input);
             }
             OUTFIT_SAVELOAD => {
-                if cx.with_legacy(|| GameOptions()) == 0 {
-                    return cx.with_legacy(|| exit_outfit(menu));
+                if {
+                    let mut observer = cx.kernel.input_runtime().observer();
+                    let mut io = crate::engine::observe::Io {
+                        observer: &mut *observer,
+                    };
+                    crate::front_end::gameopt::game_options(cx, &mut io)
+                } == 0
+                {
+                    return exit_outfit(cx.kernel, menu);
                 }
                 cx.with_legacy(|| {
                     DrawMenuStateStrings(PM_FUEL as BYTE, menu.CurState as i16);
