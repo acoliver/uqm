@@ -5,13 +5,12 @@
 //! Overridden: `generatePlanets`, `generateOrbital`, `generateEnergy`,
 //! `pickupEnergy`. Story flags: `CLEAR_SPINDLE`, `CLEAR_SPINDLE_ON_SHIP`.
 
-use crate::engine::StoryKey;
 use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
+use crate::engine::StoryKey;
 use crate::math::RandomContext;
-use crate::planet_side::report_adapter::DiscoveryReportPort;
 use crate::planets::generate::default;
 use crate::planets::generate::home_contact::{self, HomeContactSite, LanderTakeoff};
-use crate::planets::generate::special::{self, Body, Orbit, Story, WATER_WORLD};
+use crate::planets::generate::special::{self, Body, Story, WATER_WORLD};
 
 /// `GeneratePkunk_generatePlanets`.
 pub fn generate_planets(
@@ -33,17 +32,16 @@ pub fn generate_planets(
 /// else; otherwise the ruins scene is loaded (its report skipped past the
 /// first entry once the artifact is taken) before the default orbital.
 pub fn generate_orbital(
-    orbit: &mut Orbit<'_>,
+    system: &mut SolarSys<'_>,
     body: Body,
-    story: &impl Story,
-    site: &mut impl HomeContactSite,
-    load_planet: impl FnOnce(),
+    site: &mut (impl HomeContactSite + Story + super::host::PlanetSite + ?Sized),
 ) -> bool {
-    if body == Body::Planet(0) && home_contact::enter_orbit(site, story.flag(StoryKey::CLEAR_SPINDLE) != 0)
+    if body == Body::Planet(0)
+        && home_contact::enter_orbit(system, site, site.flag(StoryKey::CLEAR_SPINDLE) != 0)
     {
         return true;
     }
-    orbit.default_orbital(load_planet);
+    super::special::default_orbital(system, body, site);
     true
 }
 
@@ -65,21 +63,64 @@ pub fn generate_energy(
 /// `GeneratePkunk_pickupEnergy`: the ruins give the standard cycled report and the
 /// first one visited hands over the artifact. The node is never removed.
 pub fn pickup_energy(
+    system: &mut SolarSys<'_>,
     body: Body,
-    story: &mut impl Story,
-    report: &mut impl DiscoveryReportPort,
-    lander: &mut impl LanderTakeoff,
+    lander: &mut (impl LanderTakeoff + Story + super::host::ReportSite + ?Sized),
 ) -> bool {
     if body == Body::Planet(0) {
         home_contact::pickup_artifact(
-            story,
-            report,
+            system,
             lander,
             StoryKey::CLEAR_SPINDLE,
             &[StoryKey::CLEAR_SPINDLE_ON_SHIP],
         );
     }
     false
+}
+
+use super::generator::SystemGenerator;
+use super::host::SiteHost;
+use crate::engine::world::generation::SolarSys;
+
+pub struct Generator;
+
+impl SystemGenerator for Generator {
+    fn generate_planets(&self, system: &mut SolarSys<'_>, _host: &mut dyn SiteHost) -> bool {
+        system.layout(|rng, table, size, color, planets| {
+            generate_planets(rng, table, size, color, planets)
+        });
+        true
+    }
+    fn generate_energy(
+        &self,
+        system: &mut SolarSys<'_>,
+        body: Body,
+        node: u16,
+        info: &mut NodeInfo,
+        _host: &dyn SiteHost,
+    ) -> u16 {
+        system.scan(body, |rng, sys, _frame| {
+            generate_energy(rng, sys, body, node, info)
+        })
+    }
+
+    fn generate_orbital(
+        &self,
+        system: &mut SolarSys<'_>,
+        body: Body,
+        host: &mut dyn SiteHost,
+    ) -> bool {
+        generate_orbital(system, body, host)
+    }
+    fn pickup_energy(
+        &self,
+        system: &mut SolarSys<'_>,
+        body: Body,
+        _node: u16,
+        host: &mut dyn SiteHost,
+    ) -> bool {
+        pickup_energy(system, body, host)
+    }
 }
 
 #[cfg(test)]

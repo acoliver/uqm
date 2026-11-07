@@ -1,8 +1,8 @@
 //! The Zoq-Fot-Pik home's story gating and conversation flow against
 //! recording fakes.
 
-use crate::engine::StoryKey;
 use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
+use crate::engine::StoryKey;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -55,11 +55,35 @@ fn the_world_has_ruins_and_nothing_else_has_nodes() {
 #[test]
 fn the_ruins_cycle_the_report_and_other_worlds_report_nothing() {
     let mut report = FakeReport::default();
-    assert!(!pickup_energy(WORLD, &mut report));
+    assert!(!crate::planets::generate::testing::with_empty(|system| {
+        pickup_energy(
+            system,
+            WORLD,
+            &mut crate::planets::generate::testing::Effects {
+                story: (),
+                site: &mut (),
+                report: &mut report,
+                lander: (),
+                load: Some(|| {}),
+            },
+        )
+    }));
     assert_eq!(report.0, [ReportDisposition::Cycle]);
     for body in OTHER_BODIES {
         let mut report = FakeReport::default();
-        assert!(!pickup_energy(body, &mut report));
+        assert!(!crate::planets::generate::testing::with_empty(|system| {
+            pickup_energy(
+                system,
+                body,
+                &mut crate::planets::generate::testing::Effects {
+                    story: (),
+                    site: &mut (),
+                    report: &mut report,
+                    lander: (),
+                    load: Some(|| {}),
+                },
+            )
+        }));
         assert!(report.0.is_empty());
     }
 }
@@ -195,7 +219,11 @@ impl HomeContactSite for Site {
     fn load_ip_groups(&mut self) {
         self.record(Call::LoadIpGroups);
     }
-    fn load_ruins_scene(&mut self, artifact_taken: bool) {
+    fn load_ruins_scene(
+        &mut self,
+        _system: &mut crate::engine::world::generation::SolarSys<'_>,
+        artifact_taken: bool,
+    ) {
         self.record(Call::LoadRuinsScene(artifact_taken));
     }
 }
@@ -250,12 +278,20 @@ fn visit(body: Body, distress: u32, configure: impl FnOnce(&mut Site)) -> Vec<Ca
         world: &world,
     };
     let loaded = Rc::clone(&calls);
-    assert!(generate_orbital(
+    assert!(crate::planets::generate::testing::with_orbit(
         &mut orbit,
         body,
-        &story,
-        &mut site,
-        || { loaded.borrow_mut().push(Call::LoadPlanet) }
+        |system| generate_orbital(
+            system,
+            body,
+            &mut crate::planets::generate::testing::Effects {
+                story: &story,
+                site: &mut site,
+                report: (),
+                lander: (),
+                load: Some(|| { loaded.borrow_mut().push(Call::LoadPlanet) })
+            }
+        )
     ));
     calls.take()
 }

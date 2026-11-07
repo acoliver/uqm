@@ -7,10 +7,9 @@
 
 use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
 use crate::math::RandomContext;
-use crate::planet_side::report_adapter::DiscoveryReportPort;
 use crate::planets::generate::default;
 use crate::planets::generate::home_contact::{self, HomeContactSite};
-use crate::planets::generate::special::{self, Body, Orbit, PRIMORDIAL_WORLD};
+use crate::planets::generate::special::{self, Body, PRIMORDIAL_WORLD};
 
 /// `GenerateIlwrath_generatePlanets`.
 pub fn generate_planets(
@@ -31,16 +30,15 @@ pub fn generate_planets(
 /// conversation and nothing else; otherwise the ruins scene is loaded before
 /// the default orbital, and the home world gets its fixed weather.
 pub fn generate_orbital(
-    orbit: &mut Orbit<'_>,
+    system: &mut SolarSys<'_>,
     body: Body,
-    site: &mut impl HomeContactSite,
-    load_planet: impl FnOnce(),
+    site: &mut (impl HomeContactSite + super::host::PlanetSite + ?Sized),
 ) -> bool {
-    if body == Body::Planet(0) && home_contact::enter_orbit(site, false) {
+    if body == Body::Planet(0) && home_contact::enter_orbit(system, site, false) {
         return true;
     }
-    orbit.default_orbital(load_planet);
-    set_home_climate(body, orbit.sys_info);
+    super::special::default_orbital(system, body, site);
+    set_home_climate(body, system.system_info());
     true
 }
 
@@ -69,11 +67,63 @@ pub fn generate_energy(
 
 /// `GenerateIlwrath_pickupEnergy`: the ruins give the standard cycled report
 /// and are never taken.
-pub fn pickup_energy(body: Body, report: &mut impl DiscoveryReportPort) -> bool {
+pub fn pickup_energy(
+    system: &mut SolarSys<'_>,
+    body: Body,
+    site: &mut (impl super::host::ReportSite + ?Sized),
+) -> bool {
     if body == Body::Planet(0) {
-        default::lander_report_cycle(report);
+        site.report(
+            system,
+            crate::engine::world::generation::ReportDisposition::Cycle,
+        );
     }
     false
+}
+
+use super::generator::SystemGenerator;
+use super::host::SiteHost;
+use crate::engine::world::generation::SolarSys;
+
+pub struct Generator;
+
+impl SystemGenerator for Generator {
+    fn generate_planets(&self, system: &mut SolarSys<'_>, _host: &mut dyn SiteHost) -> bool {
+        system.layout(|rng, table, size, color, planets| {
+            generate_planets(rng, table, size, color, planets)
+        });
+        true
+    }
+    fn generate_energy(
+        &self,
+        system: &mut SolarSys<'_>,
+        body: Body,
+        node: u16,
+        info: &mut NodeInfo,
+        _host: &dyn SiteHost,
+    ) -> u16 {
+        system.scan(body, |rng, sys, _frame| {
+            generate_energy(rng, sys, body, node, info)
+        })
+    }
+
+    fn generate_orbital(
+        &self,
+        system: &mut SolarSys<'_>,
+        body: Body,
+        host: &mut dyn SiteHost,
+    ) -> bool {
+        generate_orbital(system, body, host)
+    }
+    fn pickup_energy(
+        &self,
+        system: &mut SolarSys<'_>,
+        body: Body,
+        _node: u16,
+        host: &mut dyn SiteHost,
+    ) -> bool {
+        pickup_energy(system, body, host)
+    }
 }
 
 #[cfg(test)]
