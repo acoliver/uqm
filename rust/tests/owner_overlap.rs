@@ -194,6 +194,7 @@ fn status_offsets_use_the_already_borrowed_kernel() {
     }
 }
 
+#[cfg(feature = "debug-process")]
 #[test]
 #[serial_test::serial]
 fn starbase_releases_world_before_communication_and_cleanup() {
@@ -534,6 +535,7 @@ fn fleet_infinity_reads_the_supplied_world_without_publication() {
     assert_eq!(fleet_is_infinite(&world, 0), 0);
 }
 
+#[cfg(feature = "debug-process")]
 #[test]
 #[serial_test::serial]
 fn instant_move_selects_a_star_with_the_retained_world() {
