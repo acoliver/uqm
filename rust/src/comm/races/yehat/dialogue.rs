@@ -1,7 +1,7 @@
-use crate::engine::StoryKey;
 use super::api::YehatApi;
 use super::phrases::{space_info, visit_phrase};
 use super::*;
+use crate::engine::StoryKey;
 
 pub(super) struct Dialogue<'a, A> {
     pub(super) api: &'a mut A,
@@ -22,7 +22,7 @@ impl<A: YehatApi> Dialogue<'_, A> {
         self.api.response(phrase as u16, handler, &[]);
     }
 
-    fn counter(&mut self, key: &str, phrases: &[u32], final_case: u8) {
+    fn counter(&mut self, key: StoryKey, phrases: &[u32], final_case: u8) {
         let visits = self.api.get(key);
         let (case, next) = visit_phrase(visits, final_case);
         if let Some(case) = case {
@@ -69,7 +69,8 @@ impl<A: YehatApi> Dialogue<'_, A> {
                     StoryKey::YEHAT_REBEL_TOLD_PKUNK,
                     StoryKey::NO_YEHAT_INFO,
                 ] {
-                    self.api.set(key, u8::from(key == StoryKey::YEHAT_CIVIL_WAR));
+                    self.api
+                        .set(key, u8::from(key == StoryKey::YEHAT_CIVIL_WAR));
                 }
                 self.api.schedule_rebel_event();
             }

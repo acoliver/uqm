@@ -1,12 +1,13 @@
 use super::*;
 use crate::comm::races::script::Supplies;
+use crate::engine::StoryKey;
 use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, PartialEq, Eq)]
 pub(in crate::comm::races) enum Effect<H> {
     Npc(i32),
     Offer(u16, H, Vec<i32>),
-    Set(String, u8),
+    Set(StoryKey, u8),
     Disable(u16),
     Segue(u32),
     Allied(u16, bool),
@@ -34,7 +35,7 @@ pub(in crate::comm::races) enum Effect<H> {
 }
 
 pub(in crate::comm::races) struct Fake<H, E = ()> {
-    pub state: HashMap<String, u8>,
+    pub state: HashMap<StoryKey, u8>,
     pub disabled: HashSet<u16>,
     pub effects: Vec<Effect<H>>,
     pub segue: u32,
@@ -82,25 +83,17 @@ impl<H: Copy, E> Fake<H, E> {
             })
             .collect()
     }
-    pub fn put(&mut self, key: &str, value: u8) {
-        self.state.insert(key.into(), value);
+    pub fn put(&mut self, key: StoryKey, value: u8) {
+        self.state.insert(key, value);
     }
 }
 impl<H: Copy, E> ScriptApi<H> for Fake<H, E> {
-    fn get(&self, key: &str) -> u8 {
-        assert!(
-            crate::state::game_state_keys::bit_range(key).is_some(),
-            "unknown state {key}"
-        );
-        *self.state.get(key).unwrap_or(&0)
+    fn get(&self, key: StoryKey) -> u8 {
+        *self.state.get(&key).unwrap_or(&0)
     }
-    fn set(&mut self, key: &str, value: u8) {
-        assert!(
-            crate::state::game_state_keys::bit_range(key).is_some(),
-            "unknown state {key}"
-        );
+    fn set(&mut self, key: StoryKey, value: u8) {
         self.put(key, value);
-        self.effects.push(Effect::Set(key.into(), value));
+        self.effects.push(Effect::Set(key, value));
     }
     fn npc(&mut self, phrase: i32) {
         self.effects.push(Effect::Npc(phrase));

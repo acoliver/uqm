@@ -1,8 +1,8 @@
-use crate::engine::StoryKey;
 use super::api::Date;
 use super::*;
 use crate::comm::races::encounter::testing::{Effect, Fake};
 use crate::comm::races::script::ScriptApi;
+use crate::engine::StoryKey;
 
 type Api = Fake<Handler, Date>;
 fn choices(f: &Api) -> Vec<i32> {
@@ -318,9 +318,9 @@ fn prepare_ship_preserves_month_rollover_day_cap_and_byte_year_conversion() {
         assert_eq!(
             f.effects,
             [
-                Effect::Set(StoryKey::YEHAT_SHIP_MONTH.into(), expected.0),
-                Effect::Set(StoryKey::YEHAT_SHIP_DAY.into(), expected.1),
-                Effect::Set(StoryKey::YEHAT_SHIP_YEAR.into(), expected.2),
+                Effect::Set(StoryKey::YEHAT_SHIP_MONTH, expected.0),
+                Effect::Set(StoryKey::YEHAT_SHIP_DAY, expected.1),
+                Effect::Set(StoryKey::YEHAT_SHIP_YEAR, expected.2),
             ]
         );
     }
@@ -352,9 +352,9 @@ fn ship_capacity_signed_conversion_and_grant_effect_order() {
                     Effect::Npc(phrase),
                     Effect::Talk(u16::MAX),
                     Effect::AddEscorts(crate::comm::dispatch::ship::YEHAT_SHIP as u16, count),
-                    Effect::Set(StoryKey::YEHAT_SHIP_MONTH.into(), 2),
-                    Effect::Set(StoryKey::YEHAT_SHIP_DAY.into(), 1),
-                    Effect::Set(StoryKey::YEHAT_SHIP_YEAR.into(), 0),
+                    Effect::Set(StoryKey::YEHAT_SHIP_MONTH, 2),
+                    Effect::Set(StoryKey::YEHAT_SHIP_DAY, 1),
+                    Effect::Set(StoryKey::YEHAT_SHIP_YEAR, 0),
                 ]
             );
         } else {

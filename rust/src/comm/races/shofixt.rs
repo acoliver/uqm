@@ -1,9 +1,9 @@
 //! Shofixti dialogue, ported from shofixt.c.
-use crate::engine::StoryKey;
 use super::script::{animation, as_comm_data, GLOBAL_PLAYER_NAME, GLOBAL_SHIP_NAME};
 use crate::comm::locdata::{CColor, CLocData, CPoint};
 use crate::comm::types::CommData;
 use crate::engine::battle::Cx;
+use crate::engine::StoryKey;
 mod phrases;
 use phrases::*;
 mod api;

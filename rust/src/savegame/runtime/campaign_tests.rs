@@ -34,16 +34,16 @@ fn final_fleet_has_eleven_crewed_avatars_and_the_restored_jugger() {
 
 #[test]
 fn utwig_handover_checkpoint_preserves_both_alliances_and_the_mission() {
+    use crate::engine::StoryKey;
     use crate::state::game_state::get_state_bits_raw;
-    use crate::state::game_state_keys::bit_range;
 
     let path =
         std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts/saves/utwig-alliance.sav");
     let saved = decode_save(&std::fs::read(path).unwrap()).unwrap();
     for name in ["UTWIG_HAVE_ULTRON", "UTWIG_SUPOX_MISSION"] {
-        let (start, end) = bit_range(name).unwrap();
+        let key = StoryKey::from_name(name).unwrap();
         assert_eq!(
-            get_state_bits_raw(&saved.game_state, start as usize, end as usize),
+            get_state_bits_raw(&saved.game_state, key.start(), key.end()),
             1,
             "{name}"
         );

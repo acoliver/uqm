@@ -1,9 +1,9 @@
-use crate::engine::StoryKey;
 use super::api::World;
 use super::dialogue::Dialogue;
 use super::*;
 use crate::comm::races::encounter::testing::{Effect, Fake};
 use crate::comm::races::script::ScriptApi;
+use crate::engine::StoryKey;
 
 type Api = Fake<Handler, World>;
 
@@ -257,7 +257,7 @@ fn greeting_counters_preserve_final_case_decrement_and_unmatched_postincrement()
             }
             if frenzy == 0 {
                 assert!(
-                    matches!(api.effects.last(), Some(Effect::Set(key, _)) if key == StoryKey::URQUAN_VISITS)
+                    matches!(api.effects.last(), Some(Effect::Set(key, _)) if *key == StoryKey::URQUAN_VISITS)
                 );
             }
         }
@@ -278,14 +278,11 @@ fn intro_priority_and_initialization_use_activity_low_byte() {
             };
             api.put(StoryKey::PLAYER_HYPNOTIZED, hypno);
             api.put(StoryKey::TALKING_PET_ON_SHIP, 1);
-            api.world.group_battles.extend(
-                [
-                    StoryKey::URQUAN_PROBE_GRPOFFS0,
-                    StoryKey::COLONY_GRPOFFS0,
-                    StoryKey::SAMATRA_GRPOFFS0,
-                ]
-                .map(String::from),
-            );
+            api.world.group_battles.extend([
+                StoryKey::URQUAN_PROBE_GRPOFFS0,
+                StoryKey::COLONY_GRPOFFS0,
+                StoryKey::SAMATRA_GRPOFFS0,
+            ]);
             Dialogue { api: &mut api }.initialize();
             let low = activity as u8;
             assert_eq!(
@@ -317,7 +314,7 @@ fn intro_priority_and_initialization_use_activity_low_byte() {
     api.put(StoryKey::TALKING_PET_ON_SHIP, 1);
     api.world
         .group_battles
-        .extend([StoryKey::COLONY_GRPOFFS0, StoryKey::SAMATRA_GRPOFFS0].map(String::from));
+        .extend([StoryKey::COLONY_GRPOFFS0, StoryKey::SAMATRA_GRPOFFS0]);
     Dialogue { api: &mut api }.intro();
     assert_eq!(api.spoken(), [SENSE_EVIL as i32, CAUGHT_YA as i32]);
     assert_eq!(api.get(StoryKey::URQUAN_VISITS), 0);

@@ -21,10 +21,10 @@ impl std::ops::DerefMut for Api {
     }
 }
 impl ScriptApi<Handler> for Api {
-    fn get(&self, k: &str) -> u8 {
+    fn get(&self, k: StoryKey) -> u8 {
         self.base.get(k)
     }
-    fn set(&mut self, k: &str, v: u8) {
+    fn set(&mut self, k: StoryKey, v: u8) {
         self.base.set(k, v);
     }
     fn npc(&mut self, p: i32) {

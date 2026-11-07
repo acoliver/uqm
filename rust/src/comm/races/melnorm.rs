@@ -1,11 +1,11 @@
 //! Melnorme dialogue and trading, ported from melnorm.c.
 
-use crate::engine::StoryKey;
 use super::encounter::EncounterApi;
 use super::script::{animation, as_comm_data};
 use crate::comm::locdata::{CColor, CLocData, CPoint, CSisState};
 use crate::comm::types::CommData;
 use crate::engine::battle::Cx;
+use crate::engine::StoryKey;
 mod api;
 mod numbers;
 mod phrases;
@@ -74,7 +74,7 @@ struct Dialogue<'a, A> {
 enum Tech {
     Module(usize, u8),
     Shield(u8),
-    State(&'static str),
+    State(StoryKey),
 }
 const TECHS: [Tech; 13] = [
     Tech::Module(10, 80),

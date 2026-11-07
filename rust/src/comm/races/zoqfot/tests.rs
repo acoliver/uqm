@@ -1,7 +1,7 @@
-use crate::engine::StoryKey;
 use super::*;
 use crate::comm::races::encounter::testing::{Effect, Fake};
 use crate::comm::races::script::{ScriptApi, GLOBAL_PLAYER_NAME};
+use crate::engine::StoryKey;
 type Api = Fake<Handler, api::Clock>;
 fn run(f: &mut Api, h: Handler, r: u16) {
     f.effects.clear();
@@ -114,7 +114,7 @@ fn alliance_and_hostile_exits_have_exact_effects() {
         &[
             Effect::Allied(19, true),
             Effect::Event(1, 3, 0, 0, 6),
-            Effect::Set(StoryKey::ZOQFOT_HOME_VISITS.into(), 0)
+            Effect::Set(StoryKey::ZOQFOT_HOME_VISITS, 0)
         ]
     );
     assert_eq!(f.segue, 0);

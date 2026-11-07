@@ -1,7 +1,6 @@
-use crate::engine::StoryKey;
 use super::*;
 use crate::comm::races::encounter::testing::{Effect, Fake};
-use crate::state::game_state_keys::bit_range;
+use crate::engine::StoryKey;
 
 fn run(
     api: &mut Fake<Handler, api::World>,
@@ -29,7 +28,7 @@ fn ordinary_space_intro_advances_greeting_and_offers_space_topics() {
     let mut api = Fake::<Handler, api::World>::default();
     run(&mut api, |dialogue| dialogue.intro());
     assert_eq!(api.spoken(), [SPACE_HELLO_1 as i32]);
-    assert_eq!(api.state[StoryKey::YEHAT_VISITS], 1);
+    assert_eq!(api.state[&StoryKey::YEHAT_VISITS], 1);
     assert_eq!(
         api.offers(),
         [
@@ -47,7 +46,7 @@ fn space_information_counter_disables_followup_and_caps_final_phrase() {
     api.put(StoryKey::YEHAT_REBEL_INFO, 3);
     run(&mut api, |dialogue| dialogue.space(WHATS_UP_SPACE_1 as i32));
     assert_eq!(api.spoken(), [GENERAL_INFO_SPACE_4 as i32]);
-    assert_eq!(api.state[StoryKey::YEHAT_REBEL_INFO], 3);
+    assert_eq!(api.state[&StoryKey::YEHAT_REBEL_INFO], 3);
     assert!(api.disabled.contains(&(WHATS_UP_SPACE_1 as u16)));
     assert!(!api
         .offers()
@@ -69,7 +68,7 @@ fn homeworld_topics_respect_one_time_info_help_and_alliance_states() {
     api.effects.clear();
     run(&mut api, |dialogue| dialogue.home(GIVE_INFO as i32));
     assert_eq!(api.spoken(), [NO_INFO_FOR_ENEMY as i32]);
-    assert_eq!(api.state[StoryKey::NO_YEHAT_INFO], 1);
+    assert_eq!(api.state[&StoryKey::NO_YEHAT_INFO], 1);
     assert!(!api
         .offers()
         .iter()
@@ -80,7 +79,7 @@ fn homeworld_topics_respect_one_time_info_help_and_alliance_states() {
         dialogue.exit(I_DEMAND_YOU_ALLY_HOMEWORLD0 as i32)
     });
     assert_eq!(api.spoken(), [ENEMY_MUST_DIE as i32]);
-    assert_eq!(api.state[StoryKey::NO_YEHAT_ALLY_HOME], 1);
+    assert_eq!(api.state[&StoryKey::NO_YEHAT_ALLY_HOME], 1);
 }
 
 #[test]
@@ -98,7 +97,7 @@ fn rebellion_offer_and_confirmation_reset_states_and_schedule_event() {
         dialogue.start_revolt(SHOFIXTI_ALIVE_1 as i32)
     });
     assert_eq!(api.spoken(), [SEND_HIM_OVER_1 as i32]);
-    assert_eq!(api.state[StoryKey::YEHAT_REBEL_TOLD_PKUNK], 1);
+    assert_eq!(api.state[&StoryKey::YEHAT_REBEL_TOLD_PKUNK], 1);
     assert!(api
         .offers()
         .iter()
@@ -107,9 +106,9 @@ fn rebellion_offer_and_confirmation_reset_states_and_schedule_event() {
     api.effects.clear();
     run(&mut api, |dialogue| dialogue.exit(OK_SEND as i32));
     assert_eq!(api.spoken(), [WE_REVOLT as i32]);
-    assert_eq!(api.state[StoryKey::YEHAT_CIVIL_WAR], 1);
-    assert_eq!(api.state[StoryKey::YEHAT_VISITS], 0);
-    assert_eq!(api.state[StoryKey::YEHAT_REBEL_INFO], 0);
+    assert_eq!(api.state[&StoryKey::YEHAT_CIVIL_WAR], 1);
+    assert_eq!(api.state[&StoryKey::YEHAT_VISITS], 0);
+    assert_eq!(api.state[&StoryKey::YEHAT_REBEL_INFO], 0);
     assert!(api.effects.contains(&Effect::Event(1, 0, 0, 0, 15)));
 }
 
@@ -130,7 +129,7 @@ fn space_exit_uses_random_choice_and_obligation_finishes_peacefully() {
     api.effects.clear();
     run(&mut api, |dialogue| dialogue.space(OBLIGATION as i32));
     assert_eq!(api.spoken(), [WE_CANNOT_2 as i32]);
-    assert_eq!(api.state[StoryKey::NO_YEHAT_ALLY_SPACE], 2);
+    assert_eq!(api.state[&StoryKey::NO_YEHAT_ALLY_SPACE], 2);
     assert_eq!(api.segue, 0);
 }
 
@@ -140,7 +139,7 @@ fn civil_war_intro_selects_royalist_greeting_and_question() {
     api.put(StoryKey::YEHAT_CIVIL_WAR, 1);
     run(&mut api, |dialogue| dialogue.intro());
     assert_eq!(api.spoken(), [ROYALIST_SPACE_HELLO_1 as i32]);
-    assert_eq!(api.state[StoryKey::YEHAT_VISITS], 1);
+    assert_eq!(api.state[&StoryKey::YEHAT_VISITS], 1);
     assert!(api
         .offers()
         .iter()
@@ -176,6 +175,9 @@ fn required_yehat_game_state_keys_are_present() {
         "PKUNK_VISITS",
         "PKUNK_HOME_VISITS",
     ] {
-        assert!(bit_range(key).is_some(), "missing game state key: {key}");
+        assert!(
+            crate::engine::StoryKey::from_name(key).is_some(),
+            "missing game state key: {key}"
+        );
     }
 }

@@ -1,7 +1,7 @@
-use crate::engine::StoryKey;
 use super::*;
 use crate::comm::races::encounter::testing::{Effect, Fake};
 use crate::comm::races::script::ScriptApi;
+use crate::engine::StoryKey;
 type Api = Fake<Handler>;
 fn choices(f: &Api) -> Vec<u16> {
     f.offers().iter().map(|x| x.0).collect()
@@ -137,11 +137,20 @@ fn post_encounter_manner_and_first_home_visit() {
     };
     f.put(StoryKey::ARILOU_VISITS, 3);
     Dialogue { api: &mut f }.post_arilou_enc();
-    assert_eq!((f.get(StoryKey::ARILOU_MANNER), f.get(StoryKey::ARILOU_VISITS)), (1, 0));
+    assert_eq!(
+        (
+            f.get(StoryKey::ARILOU_MANNER),
+            f.get(StoryKey::ARILOU_VISITS)
+        ),
+        (1, 0)
+    );
     f.put(StoryKey::ARILOU_SPACE_SIDE, 2);
     Dialogue { api: &mut f }.post_arilou_enc();
     assert_eq!(
-        (f.get(StoryKey::ARILOU_MANNER), f.get(StoryKey::UMGAH_ZOMBIE_BLOBBIES)),
+        (
+            f.get(StoryKey::ARILOU_MANNER),
+            f.get(StoryKey::UMGAH_ZOMBIE_BLOBBIES)
+        ),
         (3, 1)
     );
     run(&mut f, Handler::ExitConversation, BUG_EYED_FRUITCAKES);

@@ -1,9 +1,9 @@
 //! Talkpet dialogue, ported from talkpet.c.
-use crate::engine::StoryKey;
 use super::script::{animation, as_comm_data};
 use crate::comm::locdata::{CColor, CLocData, CPoint};
 use crate::comm::types::CommData;
 use crate::engine::battle::Cx;
+use crate::engine::StoryKey;
 mod phrases;
 use phrases::*;
 mod api;
@@ -216,7 +216,8 @@ impl<A: TalkpetApi> Dialogue<'_, A> {
                 }
                 _ => {}
             }
-            self.api.set(StoryKey::TALKING_PET_SUGGESTIONS, (num_visits) as u8);
+            self.api
+                .set(StoryKey::TALKING_PET_SUGGESTIONS, (num_visits) as u8);
             self.api.disable((ANY_SUGGESTIONS) as u16);
         } else if r == ENOUGH_INFO {
             self.api.npc(OK_ENOUGH_INFO);
@@ -461,7 +462,9 @@ impl<A: TalkpetApi> Dialogue<'_, A> {
             }
         } else if i32::from(self.api.get(StoryKey::TALKING_PET_ON_SHIP)) != 0 {
             num_visits = i32::from(self.api.get(StoryKey::TALKING_PET_VISITS));
-            if !(i32::from(self.api.get(StoryKey::TAALO_PROTECTOR_ON_SHIP)) != 0) && (num_visits == 0) {
+            if !(i32::from(self.api.get(StoryKey::TAALO_PROTECTOR_ON_SHIP)) != 0)
+                && (num_visits == 0)
+            {
                 {
                     num_visits = (num_visits + 1) as u8 as i32;
                     num_visits
@@ -503,7 +506,8 @@ impl<A: TalkpetApi> Dialogue<'_, A> {
                 }
                 _ => {}
             }
-            self.api.set(StoryKey::TALKING_PET_VISITS, (num_visits) as u8);
+            self.api
+                .set(StoryKey::TALKING_PET_VISITS, (num_visits) as u8);
             self.pet_device(0_u16 as i32);
         } else if self.api.npc_ships() {
             num_visits = i32::from(self.api.get(StoryKey::TALKING_PET_HOME_VISITS));
@@ -535,7 +539,8 @@ impl<A: TalkpetApi> Dialogue<'_, A> {
                 }
                 _ => {}
             }
-            self.api.set(StoryKey::TALKING_PET_HOME_VISITS, (num_visits) as u8);
+            self.api
+                .set(StoryKey::TALKING_PET_HOME_VISITS, (num_visits) as u8);
             if num_visits == 1 {
                 self.compel_player(0_u16 as i32);
             } else if !(i32::from(self.api.get(StoryKey::TAALO_PROTECTOR_ON_SHIP)) != 0) {

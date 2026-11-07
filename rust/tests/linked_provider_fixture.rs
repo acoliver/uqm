@@ -13,42 +13,38 @@ fn debug_consumer_observes_the_rust_creature_catalog() {
     }
 }
 
-use uqm_rust::state::ffi::rust_get_game_state;
-use uqm_rust::state::ffi::rust_set_game_state;
+use uqm_rust::engine::StoryKey;
 
 /// Starting another game must not inherit the previous game's story flags.
 ///
 /// Exercise the World reset used by the live new-game and melee paths, including
-/// the state API's named flag mapping. A second game must find Luna's moon base
+/// the state API's typed flag mapping. A second game must find Luna's moon base
 /// intact and must not start with it already aboard.
 #[test]
 fn a_second_new_game_starts_from_zero_state() {
-    let moonbase = c"MOONBASE_DESTROYED";
-    let on_ship = c"MOONBASE_ON_SHIP";
+    let moonbase = StoryKey::MOONBASE_DESTROYED;
+    let on_ship = StoryKey::MOONBASE_ON_SHIP;
 
     let mut world = uqm_rust::engine::World::new();
     world.reset_game_data();
-    // SAFETY: the keys are static NUL-terminated strings, and this fixture owns World.
-    unsafe {
-        rust_set_game_state(&mut world, moonbase.as_ptr(), 1);
-        rust_set_game_state(&mut world, on_ship.as_ptr(), 1);
-        assert_eq!(
-            rust_get_game_state(&world, moonbase.as_ptr()),
-            1,
-            "precondition: the first game recorded the moon base as taken"
-        );
+    world.set_story_state(moonbase, 1);
+    world.set_story_state(on_ship, 1);
+    assert_eq!(
+        world.story_state(moonbase),
+        1,
+        "precondition: the first game recorded the moon base as taken"
+    );
 
-        world.reset_game_data();
+    world.reset_game_data();
 
-        assert_eq!(
-            rust_get_game_state(&world, moonbase.as_ptr()),
-            0,
-            "a new game must find Luna's moon base intact"
-        );
-        assert_eq!(
-            rust_get_game_state(&world, on_ship.as_ptr()),
-            0,
-            "a new game must not start with the moon base already aboard"
-        );
-    }
+    assert_eq!(
+        world.story_state(moonbase),
+        0,
+        "a new game must find Luna's moon base intact"
+    );
+    assert_eq!(
+        world.story_state(on_ship),
+        0,
+        "a new game must not start with the moon base already aboard"
+    );
 }

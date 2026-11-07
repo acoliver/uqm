@@ -587,9 +587,8 @@ fn campaign_fields(observer: &AutomationObserver, directory: &Path) {
         (**uqm_rust::engine::WorldData::current())
             .game
             .battle_group_ref = 123;
-        uqm_rust::engine::World::current().write(|world| {
-            uqm_rust::state::ffi::rust_set_game_state(world, c"BOMB_CARRIER".as_ptr(), 1)
-        });
+        uqm_rust::engine::World::current()
+            .write(|world| world.set_story_state(uqm_rust::engine::StoryKey::BOMB_CARRIER, 1));
     }
     let (after, _) = snapshot(observer, directory);
     assert_eq!(after["mode.clock.day"], "7");

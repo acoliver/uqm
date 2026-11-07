@@ -1,7 +1,7 @@
-use crate::engine::StoryKey;
 use super::*;
 use crate::comm::races::encounter::testing::{Effect, Fake};
 use crate::comm::races::script::ScriptApi;
+use crate::engine::StoryKey;
 type Api = Fake<Handler, api::World>;
 fn run(f: &mut Api, h: Handler, r: i32) {
     f.effects.clear();

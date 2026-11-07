@@ -146,11 +146,6 @@ impl StoryState {
         }
     }
 
-    /// Look up the bit range for a named state entry.
-    pub fn lookup_bits(name: &str) -> Option<(usize, usize)> {
-        StoryKey::from_name(name).map(|key| (key.start(), key.end()))
-    }
-
     /// Get a game state value from bit range [start_bit, end_bit] inclusive.
     pub fn get_state(&self, start_bit: usize, end_bit: usize) -> u8 {
         get_state_bits_raw(&self.bytes, start_bit, end_bit)
@@ -254,12 +249,18 @@ mod tests {
     fn test_generated_layout_matches_c_header() {
         assert_eq!(NUM_GAME_STATE_BITS, 1238);
         assert_eq!(NUM_GAME_STATE_BYTES, 155);
-        assert_eq!(StoryState::lookup_bits("SHOFIXTI_VISITS"), Some((0, 2)));
         assert_eq!(
-            StoryState::lookup_bits("SHOFIXTI_RECRUITED"),
+            StoryKey::from_name("SHOFIXTI_VISITS").map(|key| (key.start(), key.end())),
+            Some((0, 2))
+        );
+        assert_eq!(
+            StoryKey::from_name("SHOFIXTI_RECRUITED").map(|key| (key.start(), key.end())),
             Some((12, 12))
         );
-        assert_eq!(StoryState::lookup_bits("SPATHI_VISITS"), Some((18, 20)));
+        assert_eq!(
+            StoryKey::from_name("SPATHI_VISITS").map(|key| (key.start(), key.end())),
+            Some((18, 20))
+        );
     }
 
     #[test]

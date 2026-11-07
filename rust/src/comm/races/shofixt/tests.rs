@@ -1,7 +1,7 @@
-use crate::engine::StoryKey;
 use super::*;
 use crate::comm::races::encounter::testing::{Effect, Fake};
 use crate::comm::races::script::ScriptApi;
+use crate::engine::StoryKey;
 
 type Api = Fake<Handler, ()>;
 fn choices(f: &Api) -> Vec<i32> {
@@ -27,7 +27,7 @@ fn all_exit_branches_preserve_speech_state_and_segue_order() {
             [
                 Effect::Segue(1),
                 Effect::Npc(p),
-                Effect::Set(state.0.into(), state.1)
+                Effect::Set(state.0, state.1)
             ]
         );
     }
@@ -52,8 +52,8 @@ fn all_exit_branches_preserve_speech_state_and_segue_order() {
             [
                 Effect::Segue(1),
                 Effect::Npc(LEAPING_HAPPINESS),
-                Effect::Set(StoryKey::SHOFIXTI_RECRUITED.into(), 1),
-                Effect::Set(StoryKey::MAIDENS_ON_SHIP.into(), 0),
+                Effect::Set(StoryKey::SHOFIXTI_RECRUITED, 1),
+                Effect::Set(StoryKey::MAIDENS_ON_SHIP, 0),
                 Effect::Segue(0),
                 Effect::Event(1, 2, 0, 0, 8)
             ]
@@ -166,9 +166,9 @@ fn reconciliation_constructs_every_alliance_name_including_commander_and_ship_fr
             f.effects,
             [
                 Effect::Npc(DGRUNTI),
-                Effect::Set(StoryKey::SHOFIXTI_STACK1.into(), 0),
-                Effect::Set(StoryKey::SHOFIXTI_STACK3.into(), 0),
-                Effect::Set(StoryKey::SHOFIXTI_STACK2.into(), 3),
+                Effect::Set(StoryKey::SHOFIXTI_STACK1, 0),
+                Effect::Set(StoryKey::SHOFIXTI_STACK3, 0),
+                Effect::Set(StoryKey::SHOFIXTI_STACK2, 3),
                 Effect::Offer(I_AM_CAPTAIN0 as u16, Handler::Explain, fragments),
                 Effect::Offer(I_AM_NICE as u16, Handler::Explain, vec![]),
                 Effect::Offer(I_AM_GUY as u16, Handler::Explain, vec![])

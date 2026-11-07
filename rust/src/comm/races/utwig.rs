@@ -1,10 +1,10 @@
 //! Utwig dialogue, ported from the original C script.
-use crate::engine::StoryKey;
 use super::alliance::AllianceApi;
 use super::script::{animation, as_comm_data, GLOBAL_PLAYER_NAME};
 use crate::comm::locdata::{CColor, CLocData, CPoint};
 use crate::comm::types::CommData;
 use crate::engine::battle::Cx;
+use crate::engine::StoryKey;
 mod phrases;
 use super::alliance::{SUPOX_SHIP, UTWIG_SHIP};
 use phrases::*;
@@ -473,7 +473,9 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
         if self.api.enabled(WHATS_UP_BOMB) && (self.api.get(StoryKey::BOMB_STACK1) > 1) {
             self.api.response(WHATS_UP_BOMB, Handler::BombWorld, &[]);
         }
-        if self.api.get(StoryKey::ULTRON_CONDITION) != 0 && !(self.api.get(StoryKey::REFUSED_ULTRON_AT_BOMB) != 0) {
+        if self.api.get(StoryKey::ULTRON_CONDITION) != 0
+            && !(self.api.get(StoryKey::REFUSED_ULTRON_AT_BOMB) != 0)
+        {
             self.api
                 .response(GOT_ULTRON, Handler::ExitConversation, &[]);
         }

@@ -1,7 +1,7 @@
-use crate::engine::StoryKey;
 use super::super::encounter::testing::{Effect, Fake as BaseFake};
 use super::super::script::{GLOBAL_PLAYER_NAME, GLOBAL_SHIP_NAME};
 use super::*;
+use crate::engine::StoryKey;
 use api::World;
 type Fake = BaseFake<Handler, World>;
 
@@ -35,7 +35,7 @@ fn offered_callbacks_complete_the_quest_party_and_alliance() {
     ] {
         select(&mut api, phrase);
     }
-    assert_eq!(api.state[StoryKey::SPATHI_QUEST], 1);
+    assert_eq!(api.state[&StoryKey::SPATHI_QUEST], 1);
     Dialogue { api: &mut api }.post();
     api.effects.clear();
     Dialogue { api: &mut api }.intro();
@@ -127,13 +127,16 @@ fn initialization_and_post_encounter_use_the_live_logic_for_all_manners() {
             api.put(StoryKey::SPATHI_VISITS, 4);
             Dialogue { api: &mut api }.post();
             let changed = segue == 1 && manner != 2;
-            assert_eq!(api.state[StoryKey::SPATHI_MANNER], if changed { 1 } else { manner });
             assert_eq!(
-                api.state[StoryKey::SPATHI_HOME_VISITS],
+                api.state[&StoryKey::SPATHI_MANNER],
+                if changed { 1 } else { manner }
+            );
+            assert_eq!(
+                api.state[&StoryKey::SPATHI_HOME_VISITS],
                 if changed && manner != 1 { 0 } else { 5 }
             );
             assert_eq!(
-                api.state[StoryKey::SPATHI_VISITS],
+                api.state[&StoryKey::SPATHI_VISITS],
                 if changed && manner != 1 { 0 } else { 4 }
             );
             if !changed {
@@ -178,9 +181,9 @@ fn every_exit_speaks_the_correct_phrase_and_selects_the_correct_segue() {
         match r {
             ALREADY_GOT_THEM => assert_party(&api),
             I_ACCEPT => {
-                assert_eq!(api.state[StoryKey::SPATHI_QUEST], 1);
-                assert_eq!(api.state[StoryKey::SPATHI_MANNER], 3);
-                assert_eq!(api.state[StoryKey::SPATHI_VISITS], 0);
+                assert_eq!(api.state[&StoryKey::SPATHI_QUEST], 1);
+                assert_eq!(api.state[&StoryKey::SPATHI_MANNER], 3);
+                assert_eq!(api.state[&StoryKey::SPATHI_VISITS], 0);
             }
             DO_AS_WE_SAY => {
                 assert!(api.effects.contains(&Effect::Allied(
@@ -188,11 +191,11 @@ fn every_exit_speaks_the_correct_phrase_and_selects_the_correct_segue() {
                     true
                 )));
                 assert!(api.effects.contains(&Effect::Event(1, 6, 0, 0, 11)));
-                assert_eq!(api.state[StoryKey::SPATHI_HOME_VISITS], 0);
-                assert_eq!(api.state[StoryKey::SPATHI_VISITS], 0);
+                assert_eq!(api.state[&StoryKey::SPATHI_HOME_VISITS], 0);
+                assert_eq!(api.state[&StoryKey::SPATHI_VISITS], 0);
             }
-            KILLED_THEM_ALL_1 => assert_eq!(api.state[StoryKey::LIED_ABOUT_CREATURES], 1),
-            KILLED_THEM_ALL_2 => assert_eq!(api.state[StoryKey::LIED_ABOUT_CREATURES], 2),
+            KILLED_THEM_ALL_1 => assert_eq!(api.state[&StoryKey::LIED_ABOUT_CREATURES], 1),
+            KILLED_THEM_ALL_2 => assert_eq!(api.state[&StoryKey::LIED_ABOUT_CREATURES], 2),
             _ => {}
         }
     }
@@ -201,14 +204,14 @@ fn every_exit_speaks_the_correct_phrase_and_selects_the_correct_segue() {
         api.put(StoryKey::SPATHI_CREATURES_ELIMINATED, 1);
         Dialogue { api: &mut api }.exit(r as i32);
         assert_party(&api);
-        assert!(!api.state.contains_key(StoryKey::LIED_ABOUT_CREATURES));
+        assert!(!api.state.contains_key(&StoryKey::LIED_ABOUT_CREATURES));
     }
 }
 fn assert_party(api: &Fake) {
-    assert_eq!(api.state[StoryKey::SPATHI_HOME_VISITS], 0);
-    assert_eq!(api.state[StoryKey::SPATHI_VISITS], 0);
-    assert_eq!(api.state[StoryKey::SPATHI_PARTY], 1);
-    assert_eq!(api.state[StoryKey::SPATHI_MANNER], 3);
+    assert_eq!(api.state[&StoryKey::SPATHI_HOME_VISITS], 0);
+    assert_eq!(api.state[&StoryKey::SPATHI_VISITS], 0);
+    assert_eq!(api.state[&StoryKey::SPATHI_PARTY], 1);
+    assert_eq!(api.state[&StoryKey::SPATHI_MANNER], 3);
 }
 
 #[test]
@@ -225,7 +228,7 @@ fn password_visits_constructed_fragments_and_known_password_branches() {
                 WHAT_IS_PASSWORD
             } as i32]
         );
-        assert_eq!(api.state[StoryKey::SPATHI_HOME_VISITS], 1);
+        assert_eq!(api.state[&StoryKey::SPATHI_HOME_VISITS], 1);
         assert_eq!(
             choices(&api),
             [
@@ -288,8 +291,8 @@ fn angry_and_alliance_conversations_preserve_choices_and_palette_fade() {
     Dialogue { api: &mut api }.handle(Handler::Alliance, MISUNDERSTANDING as i32);
     assert_eq!(api.spoken(), [JUST_MISUNDERSTANDING as i32]);
     assert!(api.effects.contains(&Effect::FadePalette(1, 210)));
-    assert_eq!(api.state[StoryKey::SPATHI_MANNER], 3);
-    assert_eq!(api.state[StoryKey::SPATHI_VISITS], 0);
+    assert_eq!(api.state[&StoryKey::SPATHI_MANNER], 3);
+    assert_eq!(api.state[&StoryKey::SPATHI_VISITS], 0);
     assert_eq!(
         choices(&api),
         [HAND_IN_FRIENDSHIP, SHARE_INFO, GIVE_US_RESOURCES]
@@ -347,8 +350,8 @@ fn learn_quest_restores_known_topics_and_handles_all_answers() {
             assert!(api.disabled.contains(&(r as u16)));
         }
     }
-    assert_eq!(api.state[StoryKey::KNOW_SPATHI_QUEST], 1);
-    assert_eq!(api.state[StoryKey::KNOW_SPATHI_EVIL], 1);
+    assert_eq!(api.state[&StoryKey::KNOW_SPATHI_QUEST], 1);
+    assert_eq!(api.state[&StoryKey::KNOW_SPATHI_EVIL], 1);
     assert_eq!(choices(&api), [TOO_DANGEROUS, THINK_MORE, I_ACCEPT]);
     api.effects.clear();
     api.put(StoryKey::SPATHI_CREATURES_ELIMINATED, 1);
@@ -419,16 +422,16 @@ fn council_answers_and_escort_dependent_fwiffo_choices() {
         assert_eq!(api.spoken(), [line as i32]);
         if r == GOOD_PASSWORD {
             assert!(api.effects.contains(&Effect::FadePalette(1, 210)));
-            assert_eq!(api.state[StoryKey::KNOW_SPATHI_PASSWORD], 1);
-            assert_eq!(api.state[StoryKey::SPATHI_HOME_VISITS], 0);
+            assert_eq!(api.state[&StoryKey::KNOW_SPATHI_PASSWORD], 1);
+            assert_eq!(api.state[&StoryKey::SPATHI_HOME_VISITS], 0);
         } else {
             assert!(api.disabled.contains(&(r as u16)));
         }
         if r == HOSTAGE || r == KILLED_FWIFFO {
-            assert_eq!(api.state[StoryKey::FOUND_PLUTO_SPATHI], 3);
+            assert_eq!(api.state[&StoryKey::FOUND_PLUTO_SPATHI], 3);
         }
         if r == FWIFFO_FINE {
-            assert_eq!(api.state[StoryKey::FOUND_PLUTO_SPATHI], 1);
+            assert_eq!(api.state[&StoryKey::FOUND_PLUTO_SPATHI], 1);
             assert!(!api.disabled.contains(&(KILLED_FWIFFO as u16)));
         }
     }
@@ -484,7 +487,7 @@ fn party_visits_and_final_parallel_responses_match_c() {
             }
         );
         let next = if n == 2 { n } else { n.wrapping_add(1) };
-        assert_eq!(api.state[StoryKey::SPATHI_HOME_VISITS], next);
+        assert_eq!(api.state[&StoryKey::SPATHI_HOME_VISITS], next);
         assert_eq!(
             choices(&api),
             [
@@ -533,7 +536,7 @@ fn allied_counters_information_story_flags_and_fishy_followup() {
             }
         );
         assert_eq!(
-            api.state[StoryKey::SPATHI_HOME_VISITS],
+            api.state[&StoryKey::SPATHI_HOME_VISITS],
             if n == 2 { n } else { n.wrapping_add(1) }
         );
         api.effects.clear();
@@ -548,7 +551,7 @@ fn allied_counters_information_story_flags_and_fishy_followup() {
             }
         );
         assert_eq!(
-            api.state[StoryKey::SPATHI_INFO],
+            api.state[&StoryKey::SPATHI_INFO],
             if n == 4 || n == 5 {
                 n
             } else {
@@ -556,17 +559,17 @@ fn allied_counters_information_story_flags_and_fishy_followup() {
             }
         );
         assert_eq!(
-            api.state.get(StoryKey::KNOW_URQUAN_STORY),
+            api.state.get(&StoryKey::KNOW_URQUAN_STORY),
             if n == 2 { Some(&1) } else { None }
         );
         assert_eq!(
-            api.state.get(StoryKey::KNOW_KOHR_AH_STORY),
+            api.state.get(&StoryKey::KNOW_KOHR_AH_STORY),
             if n == 2 { Some(&1) } else { None }
         );
         assert!(api.disabled.contains(&(WHATS_UP as u16)));
         assert_eq!(
             choices(&api).contains(&SOMETHING_FISHY),
-            api.state[StoryKey::SPATHI_INFO] == 4
+            api.state[&StoryKey::SPATHI_INFO] == 4
         );
     }
     let mut api = Fake::default();
@@ -579,7 +582,7 @@ fn allied_counters_information_story_flags_and_fishy_followup() {
         Dialogue { api: &mut api }.allies(r as i32);
         assert_eq!(api.spoken(), [line as i32]);
     }
-    assert_eq!(api.state[StoryKey::SPATHI_INFO], 5);
+    assert_eq!(api.state[&StoryKey::SPATHI_INFO], 5);
     assert!(api.disabled.contains(&(RESOURCES_PLEASE as u16)));
 }
 
@@ -608,9 +611,17 @@ fn information_exhaustion_disables_the_parent_topic() {
 fn intro_dispatches_every_gate_in_c_priority_order() {
     let ship = crate::comm::dispatch::ship::SPATHI_SHIP as usize;
     for (states, allied, line, palette) in [
-        (vec![(StoryKey::SPATHI_MANNER, 2)], true, HATE_YOU_FOREVER, false),
         (
-            vec![(StoryKey::SPATHI_MANNER, 1), (StoryKey::KNOW_SPATHI_PASSWORD, 1)],
+            vec![(StoryKey::SPATHI_MANNER, 2)],
+            true,
+            HATE_YOU_FOREVER,
+            false,
+        ),
+        (
+            vec![
+                (StoryKey::SPATHI_MANNER, 1),
+                (StoryKey::KNOW_SPATHI_PASSWORD, 1),
+            ],
             true,
             MEAN_GUYS_RETURN,
             false,
@@ -622,23 +633,47 @@ fn intro_dispatches_every_gate_in_c_priority_order() {
             MUST_PARTY_1,
             true,
         ),
-        (vec![(StoryKey::SPATHI_QUEST, 1)], false, HOW_GO_EFFORTS, true),
         (
-            vec![(StoryKey::SPATHI_QUEST, 1), (StoryKey::LIED_ABOUT_CREATURES, 1)],
+            vec![(StoryKey::SPATHI_QUEST, 1)],
+            false,
+            HOW_GO_EFFORTS,
+            true,
+        ),
+        (
+            vec![
+                (StoryKey::SPATHI_QUEST, 1),
+                (StoryKey::LIED_ABOUT_CREATURES, 1),
+            ],
             false,
             YOU_LIED_1,
             true,
         ),
         (
-            vec![(StoryKey::SPATHI_QUEST, 1), (StoryKey::LIED_ABOUT_CREATURES, 2)],
+            vec![
+                (StoryKey::SPATHI_QUEST, 1),
+                (StoryKey::LIED_ABOUT_CREATURES, 2),
+            ],
             false,
             YOU_LIED_2,
             false,
         ),
-        (vec![(StoryKey::KNOW_SPATHI_QUEST, 1)], false, QUEST_AGAIN, true),
-        (vec![(StoryKey::KNOW_SPATHI_PASSWORD, 1)], false, HELLO_AGAIN, true),
         (
-            vec![(StoryKey::KNOW_SPATHI_PASSWORD, 1), (StoryKey::SPATHI_HOME_VISITS, 7)],
+            vec![(StoryKey::KNOW_SPATHI_QUEST, 1)],
+            false,
+            QUEST_AGAIN,
+            true,
+        ),
+        (
+            vec![(StoryKey::KNOW_SPATHI_PASSWORD, 1)],
+            false,
+            HELLO_AGAIN,
+            true,
+        ),
+        (
+            vec![
+                (StoryKey::KNOW_SPATHI_PASSWORD, 1),
+                (StoryKey::SPATHI_HOME_VISITS, 7),
+            ],
             false,
             WHAT_IS_PASSWORD,
             false,
@@ -680,7 +715,7 @@ fn intro_dispatches_every_gate_in_c_priority_order() {
             assert!(api.offers().is_empty());
         }
         if line == YOU_LIED_2 {
-            assert_eq!(api.state[StoryKey::SPATHI_MANNER], 2);
+            assert_eq!(api.state[&StoryKey::SPATHI_MANNER], 2);
         }
     }
 }

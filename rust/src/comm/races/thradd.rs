@@ -1,10 +1,10 @@
 //! Thradd dialogue, ported from thraddc.c.
-use crate::engine::StoryKey;
 use super::alliance::AllianceApi;
 use super::script::{animation, as_comm_data, GLOBAL_PLAYER_NAME};
 use crate::comm::locdata::{CColor, CLocData, CPoint};
 use crate::comm::types::CommData;
 use crate::engine::battle::Cx;
+use crate::engine::StoryKey;
 mod phrases;
 use phrases::*;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -627,7 +627,8 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
             self.thradd_worship(0_u16);
         } else {
             num_visits = self.api.get(StoryKey::THRADDASH_BODY_COUNT);
-            if (i32::from(num_visits) >= 16) && (i32::from(self.api.get(StoryKey::THRADD_BODY_LEVEL)) == 1)
+            if (i32::from(num_visits) >= 16)
+                && (i32::from(self.api.get(StoryKey::THRADD_BODY_LEVEL)) == 1)
             {
                 self.api.set(StoryKey::THRADD_BODY_LEVEL, 2_u8);
                 self.api.npc(i32::from(IMPRESSIVE_PERFORMANCE));
@@ -730,7 +731,9 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
     }
     fn post_thradd_enc(&mut self) {}
     fn initialize(&mut self) {
-        if (self.api.get(StoryKey::THRADD_MANNER) != 0) || (i32::from((self.api.activity()) as u8) == 5) {
+        if (self.api.get(StoryKey::THRADD_MANNER) != 0)
+            || (i32::from((self.api.activity()) as u8) == 5)
+        {
             self.api.segue(0_u32);
         } else {
             self.api.segue(1_u32);

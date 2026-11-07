@@ -1,6 +1,6 @@
-use crate::engine::StoryKey;
 use super::super::encounter::testing::{Effect, Fake as BaseFake};
 use super::*;
+use crate::engine::StoryKey;
 use api::{Speech, World};
 type Fake = BaseFake<Handler, World>;
 
@@ -21,7 +21,7 @@ fn every_greeting_value_preserves_c_postincrement() {
             }
         );
         assert_eq!(
-            api.state[StoryKey::SLYLANDRO_PROBE_VISITS],
+            api.state[&StoryKey::SLYLANDRO_PROBE_VISITS],
             if n == 7 { n } else { n.wrapping_add(1) }
         );
         assert_eq!(
@@ -34,7 +34,7 @@ fn every_greeting_value_preserves_c_postincrement() {
                 (BYE_1 as u16, Handler::Combat)
             ]
         );
-        assert!(!api.state.contains_key(StoryKey::PROBE_EXHIBITED_BUG));
+        assert!(!api.state.contains_key(&StoryKey::PROBE_EXHIBITED_BUG));
     }
 }
 
@@ -53,8 +53,18 @@ fn every_response_counter_and_switch_default_matches_c() {
             SOMETHING_WRONG_1,
             NOMINAL_FUNCTION_1,
         ),
-        (2, StoryKey::SLYLANDRO_PROBE_ID, WE_ARE_US_1, THIS_IS_PROBE_1),
-        (3, StoryKey::SLYLANDRO_PROBE_INFO, WHY_ATTACK_1, PEACEFUL_MISSION_1),
+        (
+            2,
+            StoryKey::SLYLANDRO_PROBE_ID,
+            WE_ARE_US_1,
+            THIS_IS_PROBE_1,
+        ),
+        (
+            3,
+            StoryKey::SLYLANDRO_PROBE_INFO,
+            WHY_ATTACK_1,
+            PEACEFUL_MISSION_1,
+        ),
         (4, StoryKey::SLYLANDRO_PROBE_EXIT, BYE_1, GOODBYE_1),
     ] {
         for n in 0..=255u8 {
@@ -75,9 +85,9 @@ fn every_response_counter_and_switch_default_matches_c() {
             } else {
                 vec![HOSTILE as i32]
             };
-            assert_eq!(api.spoken(), expected, "{key}={n}");
-            assert_eq!(api.state[key], if n == 3 { 3 } else { n.wrapping_add(1) });
-            assert_eq!(api.state[StoryKey::PROBE_EXHIBITED_BUG], 1);
+            assert_eq!(api.spoken(), expected, "{key:?}={n}");
+            assert_eq!(api.state[&key], if n == 3 { 3 } else { n.wrapping_add(1) });
+            assert_eq!(api.state[&StoryKey::PROBE_EXHIBITED_BUG], 1);
             assert_eq!(api.segue, 1);
             assert!(api.offers().is_empty());
         }
@@ -92,14 +102,14 @@ fn only_the_remembered_response_reference_selects_a_topic() {
     api.effects.clear();
     Dialogue { api: &mut api }.combat(THREAT_2 as i32);
     assert_eq!(api.spoken(), [HOSTILE as i32]);
-    assert_eq!(api.state[StoryKey::SLYLANDRO_PROBE_THREAT], 1);
+    assert_eq!(api.state[&StoryKey::SLYLANDRO_PROBE_THREAT], 1);
     api.effects.clear();
     Dialogue { api: &mut api }.combat(THREAT_1 as i32);
     assert_eq!(
         api.spoken(),
         [PROGRAMMED_TO_DEFEND_2 as i32, HOSTILE as i32]
     );
-    assert_eq!(api.state[StoryKey::SLYLANDRO_PROBE_THREAT], 2);
+    assert_eq!(api.state[&StoryKey::SLYLANDRO_PROBE_THREAT], 2);
 }
 
 #[test]
@@ -145,7 +155,7 @@ fn coordinate_id_splices_signed_padded_y_then_x_and_trailing_phrase() {
                 (1, Speech::Number(x_fraction, false)),
             ]
         );
-        assert_eq!(api.state[StoryKey::SLYLANDRO_PROBE_ID], 3);
+        assert_eq!(api.state[&StoryKey::SLYLANDRO_PROBE_ID], 3);
     }
 }
 
@@ -176,7 +186,7 @@ fn destruct_code_is_first_and_victory_does_not_exhibit_a_bug() {
         api.effects,
         [Effect::Npc(DESTRUCT_SEQUENCE as i32), Effect::Segue(2)]
     );
-    assert!(!api.state.contains_key(StoryKey::PROBE_EXHIBITED_BUG));
+    assert!(!api.state.contains_key(&StoryKey::PROBE_EXHIBITED_BUG));
 }
 
 #[test]

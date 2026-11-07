@@ -280,8 +280,6 @@ impl super::RaceDialogue for UrquanDialogue {
 mod tests {
     use super::*;
 
-    use crate::state::game_state_keys::bit_range;
-
     #[test]
     fn descriptor_matches_c_resource_and_animation_configuration() {
         let desc = descriptor(320);
@@ -311,7 +309,10 @@ mod tests {
             "URQUAN_PROBE_GRPOFFS0",
             "PROBE_MESSAGE_DELIVERED",
         ] {
-            assert!(bit_range(key).is_some(), "missing game state key: {key}");
+            assert!(
+                crate::engine::StoryKey::from_name(key).is_some(),
+                "missing game state key: {key}"
+            );
         }
     }
 }

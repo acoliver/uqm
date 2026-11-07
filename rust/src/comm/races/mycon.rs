@@ -1,9 +1,9 @@
 //! Mycon dialogue, ported from myconc.c.
-use crate::engine::StoryKey;
 use super::script::{animation, as_comm_data};
 use crate::comm::locdata::{CColor, CLocData, CPoint};
 use crate::comm::types::CommData;
 use crate::engine::battle::Cx;
+use crate::engine::StoryKey;
 mod phrases;
 use phrases::*;
 mod api;
@@ -461,7 +461,8 @@ impl<A: MyconApi> Dialogue<'_, A> {
                 }
                 _ => {}
             }
-            self.api.set(StoryKey::MYCON_HOME_VISITS, (num_visits) as u8);
+            self.api
+                .set(StoryKey::MYCON_HOME_VISITS, (num_visits) as u8);
             self.normal_mycon(0_u16 as i32);
         } else {
             num_visits = i32::from(self.api.get(StoryKey::MYCON_VISITS));

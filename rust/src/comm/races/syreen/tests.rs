@@ -1,7 +1,7 @@
-use crate::engine::StoryKey;
 use super::*;
 use crate::comm::races::encounter::testing::{Effect, Fake};
 use crate::comm::races::script::ScriptApi;
+use crate::engine::StoryKey;
 type Api = Fake<Handler, api::World>;
 fn run(f: &mut Api, h: Handler, r: i32) {
     f.effects.clear();
@@ -57,7 +57,10 @@ fn shuttle_vault_and_ambush_handoffs_keep_flags_and_choices() {
         run(&mut f, Handler::SyreenShuttle, r);
         assert_eq!(f.spoken(), [phrase, GIVE_SHUTTLE]);
         assert_eq!(
-            (f.get(StoryKey::SYREEN_SHUTTLE), f.get(StoryKey::SYREEN_SHUTTLE_ON_SHIP)),
+            (
+                f.get(StoryKey::SYREEN_SHUTTLE),
+                f.get(StoryKey::SYREEN_SHUTTLE_ON_SHIP)
+            ),
             (1, 1)
         );
         assert_eq!(
@@ -155,13 +158,16 @@ fn palette_talk_order_and_sex_flags_and_outtakes() {
             Effect::Talk(1),
             Effect::FadePalette(1, 840),
             Effect::Talk(u16::MAX),
-            Effect::Set(StoryKey::PLAYER_HAVING_SEX.into(), 1)
+            Effect::Set(StoryKey::PLAYER_HAVING_SEX, 1)
         ]
     );
     run(&mut f, Handler::FriendlyExit, HANDS_OFF);
     assert_eq!(f.spoken(), [OK_WONT_USE_HANDS, LATER, SEX_GOODBYE]);
     assert_eq!(
-        (f.get(StoryKey::PLAYER_HAD_SEX), f.get(StoryKey::PLAYER_HAVING_SEX)),
+        (
+            f.get(StoryKey::PLAYER_HAD_SEX),
+            f.get(StoryKey::PLAYER_HAVING_SEX)
+        ),
         (1, 0)
     );
     assert!(f.effects.contains(&Effect::FadePalette(0, 420)));

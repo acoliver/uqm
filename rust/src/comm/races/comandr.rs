@@ -1,6 +1,5 @@
 //! Earth Commander dialogue, ported from comm/comandr/comandr.c.
 
-use crate::engine::StoryKey;
 use super::script::{
     animation, as_comm_data, ScriptApi, ANIM_DISABLED, FUEL_TANK_SCALE, GLOBAL_PLAYER_NAME,
     GLOBAL_SHIP_NAME, ONE_SECOND,

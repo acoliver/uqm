@@ -2,10 +2,10 @@
 //!
 //! @plan PLAN-20260724-MAINLOOP-AND-COMM.P13-15
 
-use crate::engine::StoryKey;
 use super::script::as_comm_data;
 use crate::comm::types::CommData;
 use crate::engine::battle::Cx;
+use crate::engine::StoryKey;
 
 mod phrases;
 use phrases::*;
@@ -31,11 +31,12 @@ struct Dialogue<'a, A> {
 }
 impl<A: SpahomeApi> Dialogue<'_, A> {
     fn initialize(&mut self) {
-        self.api.segue(if self.api.get(StoryKey::SPATHI_MANNER) == 3 {
-            0
-        } else {
-            1
-        });
+        self.api
+            .segue(if self.api.get(StoryKey::SPATHI_MANNER) == 3 {
+                0
+            } else {
+                1
+            });
     }
     fn post(&mut self) {
         if self.api.get_segue() == 1 {
@@ -156,7 +157,9 @@ impl<A: SpahomeApi> Dialogue<'_, A> {
             self.api.npc(YOU_GET_TO_LIVE as i32);
             self.api.disable(WHAT_DO_I_GET as u16);
         }
-        if self.api.get(StoryKey::FOUND_PLUTO_SPATHI) != 0 || self.api.get(StoryKey::KNOW_SPATHI_PASSWORD) != 0 {
+        if self.api.get(StoryKey::FOUND_PLUTO_SPATHI) != 0
+            || self.api.get(StoryKey::KNOW_SPATHI_PASSWORD) != 0
+        {
             self.offer(GOOD_PASSWORD, Handler::Council);
             if self.api.enabled(WHAT_DO_I_GET as u16) {
                 self.offer(WHAT_DO_I_GET, Handler::Password)
@@ -287,7 +290,8 @@ impl<A: SpahomeApi> Dialogue<'_, A> {
                 self.offer(p, Handler::Exit)
             }
         }
-        if self.api.enabled(PROVE_STRENGTH as u16) && self.api.get(StoryKey::KNOW_SPATHI_QUEST) == 0 {
+        if self.api.enabled(PROVE_STRENGTH as u16) && self.api.get(StoryKey::KNOW_SPATHI_QUEST) == 0
+        {
             self.offer(PROVE_STRENGTH, Handler::Learn)
         }
         if self.api.enabled(WHY_DONT_YOU_DO_IT as u16) {
@@ -296,11 +300,12 @@ impl<A: SpahomeApi> Dialogue<'_, A> {
     }
     fn quest(&mut self, r: i32) {
         if r == 0 {
-            self.api.npc(if self.api.get(StoryKey::LIED_ABOUT_CREATURES) == 0 {
-                HOW_GO_EFFORTS as i32
-            } else {
-                YOU_LIED_1 as i32
-            })
+            self.api
+                .npc(if self.api.get(StoryKey::LIED_ABOUT_CREATURES) == 0 {
+                    HOW_GO_EFFORTS as i32
+                } else {
+                    YOU_LIED_1 as i32
+                })
         } else {
             let (line, p) = match r as u32 {
                 LITTLE_MISTAKE => (BIG_MISTAKE, LITTLE_MISTAKE),
@@ -575,7 +580,8 @@ impl<A: SpahomeApi> Dialogue<'_, A> {
             self.api.segue(1)
         } else if self.api.get(StoryKey::SPATHI_MANNER) == 1
             && self.api.get(StoryKey::KNOW_SPATHI_PASSWORD) != 0
-            && (self.api.get(StoryKey::FOUND_PLUTO_SPATHI) != 0 || self.api.get(StoryKey::SPATHI_HOME_VISITS) != 7)
+            && (self.api.get(StoryKey::FOUND_PLUTO_SPATHI) != 0
+                || self.api.get(StoryKey::SPATHI_HOME_VISITS) != 7)
         {
             self.angry(0)
         } else if self
@@ -601,7 +607,8 @@ impl<A: SpahomeApi> Dialogue<'_, A> {
             self.api.palette(1);
             self.learn(0)
         } else if self.api.get(StoryKey::KNOW_SPATHI_PASSWORD) != 0
-            && (self.api.get(StoryKey::FOUND_PLUTO_SPATHI) != 0 || self.api.get(StoryKey::SPATHI_HOME_VISITS) != 7)
+            && (self.api.get(StoryKey::FOUND_PLUTO_SPATHI) != 0
+                || self.api.get(StoryKey::SPATHI_HOME_VISITS) != 7)
         {
             self.api.palette(1);
             self.council(0)
@@ -747,23 +754,23 @@ mod tests {
     #[test]
     fn test_game_state_keys_exist() {
         assert!(
-            crate::state::game_state_keys::bit_range("FOUND_PLUTO_SPATHI").is_some(),
+            crate::engine::StoryKey::from_name("FOUND_PLUTO_SPATHI").is_some(),
             "missing game state key: FOUND_PLUTO_SPATHI"
         );
         assert!(
-            crate::state::game_state_keys::bit_range("KNOW_KOHR_AH_STORY").is_some(),
+            crate::engine::StoryKey::from_name("KNOW_KOHR_AH_STORY").is_some(),
             "missing game state key: KNOW_KOHR_AH_STORY"
         );
         assert!(
-            crate::state::game_state_keys::bit_range("KNOW_SPATHI_EVIL").is_some(),
+            crate::engine::StoryKey::from_name("KNOW_SPATHI_EVIL").is_some(),
             "missing game state key: KNOW_SPATHI_EVIL"
         );
         assert!(
-            crate::state::game_state_keys::bit_range("KNOW_SPATHI_PASSWORD").is_some(),
+            crate::engine::StoryKey::from_name("KNOW_SPATHI_PASSWORD").is_some(),
             "missing game state key: KNOW_SPATHI_PASSWORD"
         );
         assert!(
-            crate::state::game_state_keys::bit_range("KNOW_SPATHI_QUEST").is_some(),
+            crate::engine::StoryKey::from_name("KNOW_SPATHI_QUEST").is_some(),
             "missing game state key: KNOW_SPATHI_QUEST"
         );
     }

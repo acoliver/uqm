@@ -1,9 +1,9 @@
 //! Druuge dialogue, ported from druugec.c.
-use crate::engine::StoryKey;
 use super::script::{animation, as_comm_data};
 use crate::comm::locdata::{CColor, CLocData, CPoint};
 use crate::comm::types::CommData;
 use crate::engine::battle::Cx;
+use crate::engine::StoryKey;
 mod phrases;
 use phrases::*;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -47,8 +47,9 @@ impl<A: DruugeApi> Dialogue<'_, A> {
             self.api.segue(0_u32);
             if (i32::from(self.api.get(StoryKey::GLOBAL_FLAGS_AND_DATA)) & (1 << 7)) != 0 {
                 if self.session.slavery_count != 0 {
-                    let previous_slaves: u16 = u16::from(self.api.get(StoryKey::CREW_SOLD_TO_DRUUGE0))
-                        | (u16::from(self.api.get(StoryKey::CREW_SOLD_TO_DRUUGE1)) << 8);
+                    let previous_slaves: u16 =
+                        u16::from(self.api.get(StoryKey::CREW_SOLD_TO_DRUUGE0))
+                            | (u16::from(self.api.get(StoryKey::CREW_SOLD_TO_DRUUGE1)) << 8);
                     self.session.slavery_count =
                         self.session.slavery_count.wrapping_add(previous_slaves);
                     if (i32::from(self.session.slavery_count) > 250)
@@ -67,8 +68,10 @@ impl<A: DruugeApi> Dialogue<'_, A> {
                         self.api
                             .set_crew_cost(self.api.crew_cost().wrapping_add(7_u8));
                     }
-                    self.api
-                        .set(StoryKey::CREW_SOLD_TO_DRUUGE0, (self.session.slavery_count) as u8);
+                    self.api.set(
+                        StoryKey::CREW_SOLD_TO_DRUUGE0,
+                        (self.session.slavery_count) as u8,
+                    );
                     self.api.set(
                         StoryKey::CREW_SOLD_TO_DRUUGE1,
                         (self.session.slavery_count >> 8) as u8,
@@ -208,7 +211,9 @@ impl<A: DruugeApi> Dialogue<'_, A> {
         } else if r == SELL_SPAWNER {
             self.api.set(StoryKey::PORTAL_SPAWNER_ON_SHIP, 0);
         }
-        if self.api.get(StoryKey::ROSY_SPHERE) == 0 && self.api.get(StoryKey::ROSY_SPHERE_ON_SHIP) != 0 {
+        if self.api.get(StoryKey::ROSY_SPHERE) == 0
+            && self.api.get(StoryKey::ROSY_SPHERE_ON_SHIP) != 0
+        {
             self.api.set(StoryKey::ROSY_SPHERE, 1);
         } else {
             let mut trade_gas = false;
@@ -305,7 +310,8 @@ impl<A: DruugeApi> Dialogue<'_, A> {
         if self.api.get(StoryKey::MAIDENS_ON_SHIP) != 0 {
             self.api.response(SELL_MAIDENS, resp_func, &[]);
         }
-        if (((self.api.get(StoryKey::EGG_CASE0_ON_SHIP) != 0) || (self.api.get(StoryKey::EGG_CASE1_ON_SHIP) != 0))
+        if (((self.api.get(StoryKey::EGG_CASE0_ON_SHIP) != 0)
+            || (self.api.get(StoryKey::EGG_CASE1_ON_SHIP) != 0))
             || (self.api.get(StoryKey::EGG_CASE2_ON_SHIP) != 0))
             && (i32::from(self.api.get(StoryKey::FRAGMENTS_BOUGHT)) < 2)
         {
@@ -540,10 +546,14 @@ impl<A: DruugeApi> Dialogue<'_, A> {
                 }
                 self.api.set(StoryKey::DRUUGE_HOME_VISITS, num_visits);
             }
-            if (self.api.get(StoryKey::ATTACKED_DRUUGE) != 0) && !(self.api.get(StoryKey::DRUUGE_DISCLAIMER) != 0) {
+            if (self.api.get(StoryKey::ATTACKED_DRUUGE) != 0)
+                && !(self.api.get(StoryKey::DRUUGE_DISCLAIMER) != 0)
+            {
                 self.api.set(StoryKey::DRUUGE_DISCLAIMER, 1_u8);
             }
-            if (self.api.get(StoryKey::MAIDENS_ON_SHIP) != 0) && !(self.api.get(StoryKey::SCANNED_MAIDENS) != 0) {
+            if (self.api.get(StoryKey::MAIDENS_ON_SHIP) != 0)
+                && !(self.api.get(StoryKey::SCANNED_MAIDENS) != 0)
+            {
                 self.api.npc(i32::from(SCAN_MAIDENS));
                 self.api.set(StoryKey::SCANNED_MAIDENS, 1_u8);
             }

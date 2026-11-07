@@ -1,8 +1,8 @@
-use crate::engine::StoryKey;
 use super::dialogue::Dialogue;
 use super::*;
 use crate::comm::races::encounter::testing::{Effect, Fake};
 use crate::comm::races::script::ScriptApi;
+use crate::engine::StoryKey;
 
 type Api = Fake<Handler>;
 
@@ -353,7 +353,11 @@ fn zex_topics_prioritize_selected_stack_and_apply_exact_transitions() {
         }
     }
     let mut api = Api::default();
-    for key in [StoryKey::ZEX_STACK_1, StoryKey::ZEX_STACK_2, StoryKey::ZEX_STACK_3] {
+    for key in [
+        StoryKey::ZEX_STACK_1,
+        StoryKey::ZEX_STACK_2,
+        StoryKey::ZEX_STACK_3,
+    ] {
         api.put(key, 255);
     }
     handle(&mut api, Handler::Menagerie, 0);
@@ -399,8 +403,8 @@ fn zex_trust_sequence_and_terminal_branches_preserve_effect_order() {
             Effect::Talk(1),
             Effect::FadePalette(1, 210),
             Effect::Talk(u16::MAX),
-            Effect::Set(StoryKey::VUX_BEAST_ON_SHIP.into(), 0),
-            Effect::Set(StoryKey::ZEX_IS_DEAD.into(), 1),
+            Effect::Set(StoryKey::VUX_BEAST_ON_SHIP, 0),
+            Effect::Set(StoryKey::ZEX_IS_DEAD, 1),
             Effect::Segue(0),
         ]
     );

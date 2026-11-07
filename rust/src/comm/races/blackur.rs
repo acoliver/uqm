@@ -1,9 +1,9 @@
 //! Kohr-Ah dialogue, ported from blackurq.c.
-use crate::engine::StoryKey;
 use super::script::{animation, as_comm_data};
 use crate::comm::locdata::{CColor, CLocData, CPoint};
 use crate::comm::types::CommData;
 use crate::engine::battle::Cx;
+use crate::engine::StoryKey;
 mod phrases;
 use phrases::*;
 mod api;
@@ -24,7 +24,7 @@ impl<A: BlackurApi> Dialogue<'_, A> {
             Handler::Story => self.story(r),
         }
     }
-    fn sequence(&mut self, key: &str, phrases: &[i32]) -> u8 {
+    fn sequence(&mut self, key: StoryKey, phrases: &[i32]) -> u8 {
         let n = self.api.get(key);
         if let Some(&p) = phrases.get(usize::from(n)) {
             self.api.npc(p);
@@ -35,7 +35,7 @@ impl<A: BlackurApi> Dialogue<'_, A> {
             n.wrapping_add(1)
         }
     }
-    fn advance_sequence(&mut self, key: &str, phrases: &[i32]) {
+    fn advance_sequence(&mut self, key: StoryKey, phrases: &[i32]) {
         let next = self.sequence(key, phrases);
         self.api.set(key, next);
     }
@@ -231,7 +231,9 @@ impl<A: BlackurApi> Dialogue<'_, A> {
             self.api.segue(0);
             return;
         }
-        if self.api.get(StoryKey::KOHR_AH_SENSES_EVIL) == 0 && self.api.get(StoryKey::TALKING_PET_ON_SHIP) != 0 {
+        if self.api.get(StoryKey::KOHR_AH_SENSES_EVIL) == 0
+            && self.api.get(StoryKey::TALKING_PET_ON_SHIP) != 0
+        {
             self.api.npc(SENSE_EVIL);
             self.api.set(StoryKey::KOHR_AH_SENSES_EVIL, 1);
         }

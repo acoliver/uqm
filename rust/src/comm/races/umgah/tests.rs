@@ -1,7 +1,7 @@
-use crate::engine::StoryKey;
 use super::*;
 use crate::comm::races::encounter::testing::{Effect, Fake};
 use crate::comm::races::script::ScriptApi;
+use crate::engine::StoryKey;
 type Api = Fake<Handler, api::World>;
 fn run(f: &mut Api, h: Handler, r: i32) {
     f.effects.clear();
@@ -77,7 +77,7 @@ fn zombie_revelation_and_reward_exit_keep_combat_and_escort_effects() {
             Effect::Npc(FUNNY_IDEA),
             Effect::Talk(u16::MAX),
             Effect::AddEscorts(crate::comm::dispatch::ship::UMGAH_SHIP as u16, 4),
-            Effect::Set(StoryKey::UMGAH_HOSTILE.into(), 1)
+            Effect::Set(StoryKey::UMGAH_HOSTILE, 1)
         ]
     );
 }
@@ -86,12 +86,18 @@ fn introductions_follow_hostility_zombie_pet_and_home_priority() {
     for (keys, phrase, hostile) in [
         (vec![(StoryKey::UMGAH_HOSTILE, 1)], HOSTILE_HELLO_1, true),
         (
-            vec![(StoryKey::UMGAH_ZOMBIE_BLOBBIES, 1), (StoryKey::TALKING_PET_VISITS, 1)],
+            vec![
+                (StoryKey::UMGAH_ZOMBIE_BLOBBIES, 1),
+                (StoryKey::TALKING_PET_VISITS, 1),
+            ],
             DESTROY_INTERFERER_1,
             true,
         ),
         (
-            vec![(StoryKey::UMGAH_ZOMBIE_BLOBBIES, 1), (StoryKey::KNOW_UMGAH_ZOMBIES, 1)],
+            vec![
+                (StoryKey::UMGAH_ZOMBIE_BLOBBIES, 1),
+                (StoryKey::KNOW_UMGAH_ZOMBIES, 1),
+            ],
             REVEALED_ZOMBIE_HELLO_1,
             true,
         ),
@@ -107,11 +113,18 @@ fn introductions_follow_hostility_zombie_pet_and_home_priority() {
         ),
         (vec![], SPACE_PRE_ZOMBIE_HELLO_1, false),
         (
-            vec![(StoryKey::TALKING_PET, 1), (StoryKey::GLOBAL_FLAGS_AND_DATA, 128)],
+            vec![
+                (StoryKey::TALKING_PET, 1),
+                (StoryKey::GLOBAL_FLAGS_AND_DATA, 128),
+            ],
             POST_ZOMBIE_HWLD_HELLO,
             false,
         ),
-        (vec![(StoryKey::TALKING_PET, 1)], REWARD_AT_HOMEWORLD_1, false),
+        (
+            vec![(StoryKey::TALKING_PET, 1)],
+            REWARD_AT_HOMEWORLD_1,
+            false,
+        ),
     ] {
         let mut f = Api::default();
         for (k, v) in keys {

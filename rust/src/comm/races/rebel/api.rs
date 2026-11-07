@@ -1,6 +1,6 @@
-use crate::engine::StoryKey;
 use super::Handler;
 use crate::comm::races::encounter::EncounterApi;
+use crate::engine::StoryKey;
 
 #[derive(Clone, Copy)]
 pub(super) struct Date {
@@ -32,7 +32,8 @@ pub(super) trait RebelApi: EncounterApi<Handler> {
             || (year_delta == 0 && {
                 let month_delta =
                     (i32::from(date.month) - i32::from(self.get(StoryKey::YEHAT_SHIP_MONTH))) as i8;
-                month_delta < 0 || (month_delta == 0 && date.day < self.get(StoryKey::YEHAT_SHIP_DAY))
+                month_delta < 0
+                    || (month_delta == 0 && date.day < self.get(StoryKey::YEHAT_SHIP_DAY))
             })
     }
 
@@ -42,7 +43,10 @@ pub(super) trait RebelApi: EncounterApi<Handler> {
         self.set(StoryKey::YEHAT_SHIP_MONTH, month);
         self.set(StoryKey::YEHAT_SHIP_DAY, date.day.min(28));
         let year = (i32::from(date.year) - 2155) as u8;
-        self.set(StoryKey::YEHAT_SHIP_YEAR, year.wrapping_add(u8::from(month == 1)));
+        self.set(
+            StoryKey::YEHAT_SHIP_YEAR,
+            year.wrapping_add(u8::from(month == 1)),
+        );
     }
 }
 #[cfg(not(test))]

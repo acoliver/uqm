@@ -1,5 +1,5 @@
-use crate::engine::StoryKey;
 use super::*;
+use crate::engine::StoryKey;
 use crate::math::RandomContext;
 
 fn position(s: &CSisState) -> (i16, i16) {

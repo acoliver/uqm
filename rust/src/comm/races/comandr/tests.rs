@@ -1,13 +1,13 @@
-use crate::engine::StoryKey;
 use super::*;
 use crate::comm::races::script::Supplies;
+use crate::engine::StoryKey;
 use std::collections::{HashMap, HashSet};
 use std::ffi::CStr;
 
 #[derive(Debug, PartialEq, Eq)]
 enum Effect {
     Npc(i32),
-    Set(String, u8),
+    Set(StoryKey, u8),
     Offer(u16, Handler, Vec<i32>),
     Disable(u16),
     Lander,
@@ -20,7 +20,7 @@ enum Effect {
 
 #[derive(Default)]
 struct Fake {
-    state: HashMap<String, u8>,
+    state: HashMap<StoryKey, u8>,
     disabled: HashSet<u16>,
     supplies: Supplies,
     effects: Vec<Effect>,
@@ -62,16 +62,12 @@ impl Fake {
 }
 
 impl ScriptApi<Handler> for Fake {
-    fn get(&self, key: &str) -> u8 {
-        *self.state.get(key).unwrap_or(&0)
+    fn get(&self, key: StoryKey) -> u8 {
+        *self.state.get(&key).unwrap_or(&0)
     }
-    fn set(&mut self, key: &str, value: u8) {
-        assert!(
-            crate::state::game_state_keys::bit_range(key).is_some(),
-            "unknown key {key}"
-        );
-        self.state.insert(key.into(), value);
-        self.effects.push(Effect::Set(key.into(), value));
+    fn set(&mut self, key: StoryKey, value: u8) {
+        self.state.insert(key, value);
+        self.effects.push(Effect::Set(key, value));
     }
     fn npc(&mut self, phrase: i32) {
         self.effects.push(Effect::Npc(phrase));
@@ -216,7 +212,7 @@ fn first_visit_constructs_ship_name_and_preserves_choice_order() {
         f.effects,
         vec![
             Effect::Palette(1),
-            Effect::Set(StoryKey::STARBASE_VISITED.into(), 1),
+            Effect::Set(StoryKey::STARBASE_VISITED, 1),
             Effect::Npc(4),
             Effect::Offer(58, Handler::NoRadioactives, vec![58, GLOBAL_SHIP_NAME, 59]),
             Effect::Offer(60, Handler::NoRadioactives, vec![]),
@@ -235,9 +231,9 @@ fn returning_intro_routes_all_game_state_branches() {
     ] {
         let mut f = Fake::ready();
         f.state.extend([
-            (StoryKey::STARBASE_VISITED.into(), 1),
-            (StoryKey::RADIOACTIVES_PROVIDED.into(), provided),
-            (StoryKey::MOONBASE_DESTROYED.into(), moon),
+            (StoryKey::STARBASE_VISITED, 1),
+            (StoryKey::RADIOACTIVES_PROVIDED, provided),
+            (StoryKey::MOONBASE_DESTROYED, moon),
         ]);
         f.supplies.radioactives = radios;
         Commander(&mut f).intro();
@@ -249,7 +245,7 @@ fn returning_intro_routes_all_game_state_branches() {
         assert_eq!(f.effects.contains(&Effect::Palette(1)), provided == 0);
     }
     let mut f = Fake::ready();
-    f.state.insert(StoryKey::PROBE_ILWRATH_ENCOUNTER.into(), 1);
+    f.state.insert(StoryKey::PROBE_ILWRATH_ENCOUNTER, 1);
     Commander(&mut f).intro();
     assert_eq!(f.spoken(), vec![35]);
     assert_eq!(
@@ -345,7 +341,7 @@ fn rescue_effects_and_offers_match_all_three_menus() {
                 Effect::Gauges(0, 500, 0)
             });
             if let Some(key) = state {
-                expected.push(Effect::Set(key.into(), 1));
+                expected.push(Effect::Set(key, 1));
             }
             assert_eq!(&f.effects[..expected.len()], &expected);
         }
@@ -359,9 +355,9 @@ fn rescue_effects_and_offers_match_all_three_menus() {
                         radioactives: 0,
                     };
                     f.state.extend([
-                        (StoryKey::CHMMR_BOMB_STATE.into(), bomb),
-                        (StoryKey::LANDERS_LOST.into(), repeat),
-                        (StoryKey::GIVEN_FUEL_BEFORE.into(), repeat),
+                        (StoryKey::CHMMR_BOMB_STATE, bomb),
+                        (StoryKey::LANDERS_LOST, repeat),
+                        (StoryKey::GIVEN_FUEL_BEFORE, repeat),
                     ]);
                     f.run(handler, 0);
                     let offers = f.offers();
@@ -551,7 +547,7 @@ fn reveal_self_rotates_stacks_and_reaches_each_destination() {
     );
     assert!(!f.enabled(WHAT_WAS_RED_THING));
     for moon in [0, 1] {
-        f.state.insert(StoryKey::MOONBASE_DESTROYED.into(), moon);
+        f.state.insert(StoryKey::MOONBASE_DESTROYED, moon);
         for (r, reply) in [(IT_WENT_AWAY, 41), (WE_DESTROYED_IT, 42), (WHAT_PROBE, 43)] {
             f.run(Handler::RevealSelf, r);
             assert_eq!(f.spoken(), vec![reply]);
@@ -593,7 +589,7 @@ fn radio_transfer_preserves_segue_palette_and_dialogue_order() {
     assert_eq!(
         &f.effects[..7],
         &[
-            Effect::Set(StoryKey::RADIOACTIVES_PROVIDED.into(), 1),
+            Effect::Set(StoryKey::RADIOACTIVES_PROVIDED, 1),
             Effect::Npc(18),
             Effect::Npc(19),
             Effect::Talk(1),

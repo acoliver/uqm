@@ -1,7 +1,7 @@
-use crate::engine::StoryKey;
 use super::*;
 use crate::comm::races::encounter::testing::{Effect, Fake};
 use crate::comm::races::script::ScriptApi;
+use crate::engine::StoryKey;
 type Api = Fake<Handler>;
 fn run(f: &mut Api, s: &mut Session, h: Handler, r: u16) {
     f.effects.clear();
@@ -329,7 +329,10 @@ fn post_encounter_handles_pluto_and_hostility_without_resetting_password_hint() 
             session: &mut s,
         }
         .post_spathi_enc();
-        assert_eq!(f.get(StoryKey::FOUND_PLUTO_SPATHI), if pluto == 1 { 2 } else { 0 });
+        assert_eq!(
+            f.get(StoryKey::FOUND_PLUTO_SPATHI),
+            if pluto == 1 { 2 } else { 0 }
+        );
         assert_eq!(f.get(StoryKey::SPATHI_MANNER), want_manner);
         assert_eq!(f.get(StoryKey::SPATHI_VISITS), want_visits);
         assert_eq!(f.get(StoryKey::SPATHI_HOME_VISITS), want_home);

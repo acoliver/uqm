@@ -718,27 +718,23 @@ fn intelligence_skips_cloaking_during_the_probe_encounter() {
             let ship = avenger(&mut fleet);
             paint(ship, gfx_object_STAMP_PRIM, WHITE);
             let mut concerns = concerns_with(ptr::null_mut(), 0);
-            let probe = c"PROBE_ILWRATH_ENCOUNTER".as_ptr();
+            let probe = uqm_rust::engine::StoryKey::PROBE_ILWRATH_ENCOUNTER;
 
             // LOBYTE (CurrentActivity): CHECK_PAUSE sits in the high byte.
             let encounter = (IN_ENCOUNTER | CHECK_PAUSE) as u16;
             uqm_rust::engine::World::current().write(|world| world.set_activity(encounter));
-            uqm_rust::engine::World::current()
-                .write(|world| uqm_rust::state::ffi::rust_set_game_state(world, probe, 1));
+            uqm_rust::engine::World::current().write(|world| world.set_story_state(probe, 1));
             assert_eq!(think(&mut fleet, ship, &mut concerns, 0), 0);
 
-            uqm_rust::engine::World::current()
-                .write(|world| uqm_rust::state::ffi::rust_set_game_state(world, probe, 0));
+            uqm_rust::engine::World::current().write(|world| world.set_story_state(probe, 0));
             assert_eq!(think(&mut fleet, ship, &mut concerns, 0), SPECIAL as u8);
 
             // Outside an encounter the probe flag is irrelevant.
-            uqm_rust::engine::World::current()
-                .write(|world| uqm_rust::state::ffi::rust_set_game_state(world, probe, 1));
+            uqm_rust::engine::World::current().write(|world| world.set_story_state(probe, 1));
             uqm_rust::engine::World::current()
                 .write(|world| world.set_activity((IN_HYPERSPACE | CHECK_PAUSE) as u16));
             assert_eq!(think(&mut fleet, ship, &mut concerns, 0), SPECIAL as u8);
-            uqm_rust::engine::World::current()
-                .write(|world| uqm_rust::state::ffi::rust_set_game_state(world, probe, 0));
+            uqm_rust::engine::World::current().write(|world| world.set_story_state(probe, 0));
         }
     })
 }

@@ -1,7 +1,7 @@
-use crate::engine::StoryKey;
 use super::*;
 use crate::comm::races::encounter::testing::{Effect, Fake};
 use crate::comm::races::script::{ScriptApi, GLOBAL_PLAYER_NAME, GLOBAL_SHIP_NAME};
+use crate::engine::StoryKey;
 type Api = Fake<Handler>;
 fn run(f: &mut Api, h: Handler, r: u16) {
     f.effects.clear();
@@ -89,7 +89,11 @@ fn ultron_repair_help_and_existing_utwig_contact() {
         assert_eq!(f.get(StoryKey::SUPOX_ULTRON_HELP), 1);
         assert!(!choices(&f).contains(&response));
     }
-    for key in [StoryKey::UTWIG_VISITS, StoryKey::UTWIG_HOME_VISITS, StoryKey::BOMB_VISITS] {
+    for key in [
+        StoryKey::UTWIG_VISITS,
+        StoryKey::UTWIG_HOME_VISITS,
+        StoryKey::BOMB_VISITS,
+    ] {
         let mut f = Api::default();
         f.put(key, 1);
         run(&mut f, Handler::NeutralSupox, 0);
@@ -107,9 +111,9 @@ fn war_news_preserves_write_order_and_mission_branches() {
         &f.effects[..4],
         &[
             Effect::Npc(i32::from(FLEET_ON_WAY)),
-            Effect::Set(StoryKey::SUPOX_WAR_NEWS.into(), 1),
+            Effect::Set(StoryKey::SUPOX_WAR_NEWS, 1),
             Effect::Disable(HOW_GOES_WAR),
-            Effect::Set(StoryKey::SUPOX_WAR_NEWS.into(), 0)
+            Effect::Set(StoryKey::SUPOX_WAR_NEWS, 0)
         ]
     );
     for (news, phrase, next) in [(0, BATTLE_HAPPENS_1, 1), (1, BATTLE_HAPPENS_2, 2)] {

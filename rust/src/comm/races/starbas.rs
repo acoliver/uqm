@@ -1,6 +1,18 @@
 //! Starbase and Hayes dialogue, ported from the original C script.
 
 use crate::engine::StoryKey;
+const STARBASE_BULLETS: [StoryKey; 4] = [
+    StoryKey::STARBASE_BULLETS0,
+    StoryKey::STARBASE_BULLETS1,
+    StoryKey::STARBASE_BULLETS2,
+    StoryKey::STARBASE_BULLETS3,
+];
+const ZOQFOT_GRPOFFS: [StoryKey; 4] = [
+    StoryKey::ZOQFOT_GRPOFFS0,
+    StoryKey::ZOQFOT_GRPOFFS1,
+    StoryKey::ZOQFOT_GRPOFFS2,
+    StoryKey::ZOQFOT_GRPOFFS3,
+];
 use super::encounter::EncounterApi;
 use super::script::{animation, as_comm_data};
 use crate::comm::locdata::{CColor, CLocData, CPoint};
@@ -66,21 +78,13 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
             Handler::SellMinerals => self.sell_minerals(r),
         }
     }
-    fn get32(&self, first: &str) -> u32 {
-        let prefix = first
-            .strip_suffix('0')
-            .expect("32-bit game-state key must end in 0");
-        u32::from_le_bytes(std::array::from_fn(|i| {
-            self.api.get(&format!("{prefix}{i}"))
-        }))
+    fn get32(&self, keys: [StoryKey; 4]) -> u32 {
+        u32::from_le_bytes(keys.map(|key| self.api.get(key)))
     }
 
-    fn set32(&mut self, first: &str, value: u32) {
-        let prefix = first
-            .strip_suffix('0')
-            .expect("32-bit game-state key must end in 0");
-        for (i, byte) in value.to_le_bytes().into_iter().enumerate() {
-            self.api.set(&format!("{prefix}{i}"), byte);
+    fn set32(&mut self, keys: [StoryKey; 4], value: u32) {
+        for (key, byte) in keys.into_iter().zip(value.to_le_bytes()) {
+            self.api.set(key, byte);
         }
     }
 
@@ -301,8 +305,8 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
         self.api.segue(0);
     }
     fn bye_bye(&mut self, _r: u16) {
-        self.session.bulletins |= self.get32(StoryKey::STARBASE_BULLETS0);
-        self.set32(StoryKey::STARBASE_BULLETS0, self.session.bulletins);
+        self.session.bulletins |= self.get32(STARBASE_BULLETS);
+        self.set32(STARBASE_BULLETS, self.session.bulletins);
         if self.api.get(StoryKey::CHMMR_BOMB_STATE) >= 2 {
             self.api.npc(i32::from(GOOD_LUCK_AGAIN));
         } else {
@@ -911,7 +915,8 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
                         && !(self.api.get(StoryKey::DISCUSSED_ROSY_SPHERE) != 0)
                     {
                         p_str = ABOUT_SPHERE;
-                        self.api.set(StoryKey::DISCUSSED_ROSY_SPHERE, (talk_about) as u8);
+                        self.api
+                            .set(StoryKey::DISCUSSED_ROSY_SPHERE, (talk_about) as u8);
                     }
                 }
                 ARTIFACT_2_DEVICE => {
@@ -919,7 +924,8 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
                         && !(self.api.get(StoryKey::DISCUSSED_ARTIFACT_2) != 0)
                     {
                         p_str = ABOUT_ARTIFACT_2;
-                        self.api.set(StoryKey::DISCUSSED_ARTIFACT_2, (talk_about) as u8);
+                        self.api
+                            .set(StoryKey::DISCUSSED_ARTIFACT_2, (talk_about) as u8);
                     }
                 }
                 ARTIFACT_3_DEVICE => {
@@ -927,7 +933,8 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
                         && !(self.api.get(StoryKey::DISCUSSED_ARTIFACT_3) != 0)
                     {
                         p_str = ABOUT_ARTIFACT_3;
-                        self.api.set(StoryKey::DISCUSSED_ARTIFACT_3, (talk_about) as u8);
+                        self.api
+                            .set(StoryKey::DISCUSSED_ARTIFACT_3, (talk_about) as u8);
                     }
                 }
                 SUN_EFFICIENCY_DEVICE => {
@@ -935,7 +942,8 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
                         && !(self.api.get(StoryKey::DISCUSSED_SUN_EFFICIENCY) != 0)
                     {
                         p_str = ABOUT_SUN;
-                        self.api.set(StoryKey::DISCUSSED_SUN_EFFICIENCY, (talk_about) as u8);
+                        self.api
+                            .set(StoryKey::DISCUSSED_SUN_EFFICIENCY, (talk_about) as u8);
                     }
                 }
                 UTWIG_BOMB_DEVICE => {
@@ -943,7 +951,8 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
                         && !(self.api.get(StoryKey::DISCUSSED_UTWIG_BOMB) != 0)
                     {
                         p_str = ABOUT_BOMB;
-                        self.api.set(StoryKey::DISCUSSED_UTWIG_BOMB, (talk_about) as u8);
+                        self.api
+                            .set(StoryKey::DISCUSSED_UTWIG_BOMB, (talk_about) as u8);
                     }
                 }
                 ULTRON_0_DEVICE => {
@@ -983,7 +992,8 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
                         && !(self.api.get(StoryKey::DISCUSSED_MAIDENS) != 0)
                     {
                         p_str = ABOUT_MAIDENS;
-                        self.api.set(StoryKey::DISCUSSED_MAIDENS, (talk_about) as u8);
+                        self.api
+                            .set(StoryKey::DISCUSSED_MAIDENS, (talk_about) as u8);
                     }
                 }
                 TALKING_PET_DEVICE => {
@@ -991,7 +1001,8 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
                         && !(self.api.get(StoryKey::DISCUSSED_TALKING_PET) != 0)
                     {
                         p_str = ABOUT_TALKPET;
-                        self.api.set(StoryKey::DISCUSSED_TALKING_PET, (talk_about) as u8);
+                        self.api
+                            .set(StoryKey::DISCUSSED_TALKING_PET, (talk_about) as u8);
                     }
                 }
                 AQUA_HELIX_DEVICE => {
@@ -999,7 +1010,8 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
                         && !(self.api.get(StoryKey::DISCUSSED_AQUA_HELIX) != 0)
                     {
                         p_str = ABOUT_HELIX;
-                        self.api.set(StoryKey::DISCUSSED_AQUA_HELIX, (talk_about) as u8);
+                        self.api
+                            .set(StoryKey::DISCUSSED_AQUA_HELIX, (talk_about) as u8);
                     }
                 }
                 CLEAR_SPINDLE_DEVICE => {
@@ -1007,7 +1019,8 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
                         && !(self.api.get(StoryKey::DISCUSSED_CLEAR_SPINDLE) != 0)
                     {
                         p_str = ABOUT_SPINDLE;
-                        self.api.set(StoryKey::DISCUSSED_CLEAR_SPINDLE, (talk_about) as u8);
+                        self.api
+                            .set(StoryKey::DISCUSSED_CLEAR_SPINDLE, (talk_about) as u8);
                     }
                 }
                 UMGAH_HYPERWAVE_DEVICE => {
@@ -1033,9 +1046,12 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
                         && !(self.api.get(StoryKey::DISCUSSED_EGG_CASING0) != 0)
                     {
                         p_str = ABOUT_EGGCASE_0;
-                        self.api.set(StoryKey::DISCUSSED_EGG_CASING0, (talk_about) as u8);
-                        self.api.set(StoryKey::DISCUSSED_EGG_CASING1, (talk_about) as u8);
-                        self.api.set(StoryKey::DISCUSSED_EGG_CASING2, (talk_about) as u8);
+                        self.api
+                            .set(StoryKey::DISCUSSED_EGG_CASING0, (talk_about) as u8);
+                        self.api
+                            .set(StoryKey::DISCUSSED_EGG_CASING1, (talk_about) as u8);
+                        self.api
+                            .set(StoryKey::DISCUSSED_EGG_CASING2, (talk_about) as u8);
                     }
                 }
                 EGG_CASING1_DEVICE => {
@@ -1043,9 +1059,12 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
                         && !(self.api.get(StoryKey::DISCUSSED_EGG_CASING1) != 0)
                     {
                         p_str = ABOUT_EGGCASE_0;
-                        self.api.set(StoryKey::DISCUSSED_EGG_CASING0, (talk_about) as u8);
-                        self.api.set(StoryKey::DISCUSSED_EGG_CASING1, (talk_about) as u8);
-                        self.api.set(StoryKey::DISCUSSED_EGG_CASING2, (talk_about) as u8);
+                        self.api
+                            .set(StoryKey::DISCUSSED_EGG_CASING0, (talk_about) as u8);
+                        self.api
+                            .set(StoryKey::DISCUSSED_EGG_CASING1, (talk_about) as u8);
+                        self.api
+                            .set(StoryKey::DISCUSSED_EGG_CASING2, (talk_about) as u8);
                     }
                 }
                 EGG_CASING2_DEVICE => {
@@ -1053,9 +1072,12 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
                         && !(self.api.get(StoryKey::DISCUSSED_EGG_CASING2) != 0)
                     {
                         p_str = ABOUT_EGGCASE_0;
-                        self.api.set(StoryKey::DISCUSSED_EGG_CASING0, (talk_about) as u8);
-                        self.api.set(StoryKey::DISCUSSED_EGG_CASING1, (talk_about) as u8);
-                        self.api.set(StoryKey::DISCUSSED_EGG_CASING2, (talk_about) as u8);
+                        self.api
+                            .set(StoryKey::DISCUSSED_EGG_CASING0, (talk_about) as u8);
+                        self.api
+                            .set(StoryKey::DISCUSSED_EGG_CASING1, (talk_about) as u8);
+                        self.api
+                            .set(StoryKey::DISCUSSED_EGG_CASING2, (talk_about) as u8);
                     }
                 }
                 SYREEN_SHUTTLE_DEVICE => {
@@ -1063,7 +1085,8 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
                         && !(self.api.get(StoryKey::DISCUSSED_SYREEN_SHUTTLE) != 0)
                     {
                         p_str = ABOUT_SHUTTLE;
-                        self.api.set(StoryKey::DISCUSSED_SYREEN_SHUTTLE, (talk_about) as u8);
+                        self.api
+                            .set(StoryKey::DISCUSSED_SYREEN_SHUTTLE, (talk_about) as u8);
                     }
                 }
                 VUX_BEAST_DEVICE => {
@@ -1071,7 +1094,8 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
                         && !(self.api.get(StoryKey::DISCUSSED_VUX_BEAST) != 0)
                     {
                         p_str = ABOUT_VUXBEAST0;
-                        self.api.set(StoryKey::DISCUSSED_VUX_BEAST, (talk_about) as u8);
+                        self.api
+                            .set(StoryKey::DISCUSSED_VUX_BEAST, (talk_about) as u8);
                     }
                 }
                 DESTRUCT_CODE_DEVICE => {
@@ -1079,7 +1103,8 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
                         && !(self.api.get(StoryKey::DISCUSSED_DESTRUCT_CODE) != 0)
                     {
                         p_str = ABOUT_DESTRUCT;
-                        self.api.set(StoryKey::DISCUSSED_DESTRUCT_CODE, (talk_about) as u8);
+                        self.api
+                            .set(StoryKey::DISCUSSED_DESTRUCT_CODE, (talk_about) as u8);
                     }
                 }
                 PORTAL_SPAWNER_DEVICE => {
@@ -1087,7 +1112,8 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
                         && !(self.api.get(StoryKey::DISCUSSED_PORTAL_SPAWNER) != 0)
                     {
                         p_str = ABOUT_PORTAL;
-                        self.api.set(StoryKey::DISCUSSED_PORTAL_SPAWNER, (talk_about) as u8);
+                        self.api
+                            .set(StoryKey::DISCUSSED_PORTAL_SPAWNER, (talk_about) as u8);
                     }
                 }
                 URQUAN_WARP_DEVICE => {
@@ -1095,7 +1121,8 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
                         && !(self.api.get(StoryKey::DISCUSSED_URQUAN_WARP) != 0)
                     {
                         p_str = ABOUT_WARPPOD;
-                        self.api.set(StoryKey::DISCUSSED_URQUAN_WARP, (talk_about) as u8);
+                        self.api
+                            .set(StoryKey::DISCUSSED_URQUAN_WARP, (talk_about) as u8);
                     }
                 }
                 BURVIX_HYPERWAVE_DEVICE
@@ -1145,7 +1172,7 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
         if repeat {
             bulletin_mask = self.session.bulletins ^ 0xFFFFFFFF;
         } else {
-            bulletin_mask = self.get32(StoryKey::STARBASE_BULLETS0);
+            bulletin_mask = self.get32(STARBASE_BULLETS);
         }
         p_intro = 0;
         {
@@ -1227,7 +1254,7 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
                     }
                     11 => {
                         if (self.api.get(StoryKey::ZOQFOT_HOME_VISITS) != 0)
-                            || (self.get32(StoryKey::ZOQFOT_GRPOFFS0) != 0)
+                            || (self.get32(ZOQFOT_GRPOFFS) != 0)
                         {
                             bulletin_mask |= 1 << b0;
                         } else if self.check_timing(0, 42) {
@@ -1362,7 +1389,7 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
         if (p_intro == 0) && (self.api.get(StoryKey::STARBASE_VISITED) != 0) {
             self.api.npc(i32::from(RETURN_HELLO));
         } else if !(repeat) {
-            self.set32(StoryKey::STARBASE_BULLETS0, bulletin_mask);
+            self.set32(STARBASE_BULLETS, bulletin_mask);
         }
     }
     fn normal_starbase(&mut self, r: u16) {
@@ -1389,7 +1416,8 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
                 }
                 self.api.npc(i32::from(STARBASE_IS_READY_C));
                 self.api.gauges(0, 0, i32::from(STARBASE_READY_REWARD));
-                self.api.set(StoryKey::STARBASE_MONTH, self.api.date().month);
+                self.api
+                    .set(StoryKey::STARBASE_MONTH, self.api.date().month);
                 self.api.set(StoryKey::STARBASE_DAY, self.api.date().day);
             } else if self.api.get(StoryKey::STARBASE_VISITED) != 0 {
                 self.check_bulletins(false);

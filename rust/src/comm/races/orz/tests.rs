@@ -1,7 +1,7 @@
-use crate::engine::StoryKey;
 use super::*;
 use crate::comm::races::encounter::testing::{Effect, Fake};
 use crate::comm::races::script::ScriptApi;
+use crate::engine::StoryKey;
 type Api = Fake<Handler>;
 fn choices(f: &Api) -> Vec<u16> {
     f.offers().iter().map(|x| x.0).collect()
@@ -169,7 +169,10 @@ fn greeting_routes_post_battle_and_outtakes() {
     };
     f.put(StoryKey::TAALO_VISITS, 1);
     Dialogue { api: &mut f }.post_orz_enc();
-    assert_eq!((f.get(StoryKey::ORZ_MANNER), f.get(StoryKey::TAALO_VISITS)), (1, 0));
+    assert_eq!(
+        (f.get(StoryKey::ORZ_MANNER), f.get(StoryKey::TAALO_VISITS)),
+        (1, 0)
+    );
     f.activity = 5;
     f.effects.clear();
     Dialogue { api: &mut f }.intro();

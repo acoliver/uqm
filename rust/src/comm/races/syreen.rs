@@ -1,9 +1,9 @@
 //! Syreen dialogue, ported from syreenc.c.
-use crate::engine::StoryKey;
 use super::script::{animation, as_comm_data};
 use crate::comm::locdata::{CColor, CLocData, CPoint};
 use crate::comm::types::CommData;
 use crate::engine::battle::Cx;
+use crate::engine::StoryKey;
 mod phrases;
 use phrases::*;
 mod api;
@@ -599,7 +599,8 @@ impl<A: SyreenApi> Dialogue<'_, A> {
             }
             self.syreen_vault(0_u16 as i32);
         }
-        self.api.set(StoryKey::SYREEN_HOME_VISITS, (num_visits) as u8);
+        self.api
+            .set(StoryKey::SYREEN_HOME_VISITS, (num_visits) as u8);
     }
     fn post_syreen_enc(&mut self) {}
     fn initialize(&mut self) {

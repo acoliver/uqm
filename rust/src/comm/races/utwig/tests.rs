@@ -1,7 +1,7 @@
-use crate::engine::StoryKey;
 use super::*;
 use crate::comm::races::encounter::testing::{Effect, Fake};
 use crate::comm::races::script::ScriptApi;
+use crate::engine::StoryKey;
 type Api = Fake<Handler>;
 fn run(f: &mut Api, h: Handler, r: u16) {
     f.effects.clear();
@@ -50,11 +50,14 @@ fn repaired_ultron_allies_both_races_and_advances_only_before_frenzy() {
             frenzy == 0
         );
         assert_eq!(
-            (f.get(StoryKey::UTWIG_HAVE_ULTRON), f.get(StoryKey::ULTRON_CONDITION)),
+            (
+                f.get(StoryKey::UTWIG_HAVE_ULTRON),
+                f.get(StoryKey::ULTRON_CONDITION)
+            ),
             (1, 5)
         );
         for key in reset {
-            assert_eq!(f.get(key), 0, "{key}");
+            assert_eq!(f.get(key), 0, "{key:?}");
         }
         assert_eq!(
             &f.effects[f.effects.len() - 2..],
@@ -200,7 +203,11 @@ fn neutral_introduction_names_priority_and_insult() {
     assert_eq!(f.get(StoryKey::UTWIG_HOSTILE), 1);
     assert_eq!(f.segue, 1);
     assert!(f.offers().is_empty());
-    for key in [StoryKey::UTWIG_VISITS, StoryKey::UTWIG_HOME_VISITS, StoryKey::UTWIG_INFO] {
+    for key in [
+        StoryKey::UTWIG_VISITS,
+        StoryKey::UTWIG_HOME_VISITS,
+        StoryKey::UTWIG_INFO,
+    ] {
         assert_eq!(f.get(key), 0);
     }
 }

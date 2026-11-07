@@ -1,7 +1,7 @@
-use crate::engine::StoryKey;
 use super::*;
 use crate::comm::races::encounter::testing::{Effect, Fake};
 use crate::comm::races::script::ScriptApi;
+use crate::engine::StoryKey;
 type Api = Fake<Handler, api::World>;
 fn choices(f: &Api) -> Vec<u16> {
     f.offers().iter().map(|x| x.0).collect()
@@ -53,7 +53,10 @@ fn fury_gift_dates_capacity_and_due_boundary() {
         assert_eq!(f.get(StoryKey::PKUNK_MANNER), 3);
         assert!(f.effects.contains(&Effect::Event(1, 6, 0, 0, 4)));
         assert_eq!(f.effects.contains(&Effect::Talk(65535)), room != 0);
-        assert_eq!(f.get(StoryKey::PKUNK_SHIP_MONTH), if room == 0 { 0 } else { 2 });
+        assert_eq!(
+            f.get(StoryKey::PKUNK_SHIP_MONTH),
+            if room == 0 { 0 } else { 2 }
+        );
     }
 }
 #[test]
@@ -67,7 +70,10 @@ fn spindle_gift_home_and_reconciliation() {
             Dialogue { api: &mut f }.intro();
         }
         assert_eq!(
-            (f.get(StoryKey::CLEAR_SPINDLE), f.get(StoryKey::CLEAR_SPINDLE_ON_SHIP)),
+            (
+                f.get(StoryKey::CLEAR_SPINDLE),
+                f.get(StoryKey::CLEAR_SPINDLE_ON_SHIP)
+            ),
             (1, 1)
         );
         assert!(f.spoken().contains(&i32::from(GIVE_SPINDLE)));
@@ -159,7 +165,13 @@ fn greeting_routes_hostility_and_outtakes() {
     };
     f.put(StoryKey::PKUNK_HOME_VISITS, 3);
     Dialogue { api: &mut f }.post_pkunk_enc();
-    assert_eq!((f.get(StoryKey::PKUNK_MANNER), f.get(StoryKey::PKUNK_HOME_VISITS)), (1, 0));
+    assert_eq!(
+        (
+            f.get(StoryKey::PKUNK_MANNER),
+            f.get(StoryKey::PKUNK_HOME_VISITS)
+        ),
+        (1, 0)
+    );
     f.effects.clear();
     f.activity = 5;
     Dialogue { api: &mut f }.intro();

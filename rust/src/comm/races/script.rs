@@ -1,6 +1,7 @@
 //! Shared boundary for dialogue scripts while the surrounding engine still uses C.
 
 use crate::comm::locdata::{CAnimationDesc, CLocData};
+use crate::engine::StoryKey;
 #[cfg(not(test))]
 use crate::engine::WorldData;
 
@@ -18,14 +19,14 @@ pub(super) struct Supplies {
 }
 
 pub(super) trait ScriptApi<H> {
-    fn get(&self, key: &str) -> u8;
-    fn set(&mut self, key: &str, value: u8);
+    fn get(&self, key: StoryKey) -> u8;
+    fn set(&mut self, key: StoryKey, value: u8);
     fn npc(&mut self, phrase: i32);
     fn response(&mut self, phrase: u16, handler: H, fragments: &[i32]);
     fn enabled(&self, phrase: u16) -> bool;
     fn disable(&mut self, phrase: u16);
     fn alliance_fragments(&self, first: u16) -> Vec<i32> {
-        let name = i32::from(self.get("NEW_ALLIANCE_NAME"));
+        let name = i32::from(self.get(StoryKey::NEW_ALLIANCE_NAME));
         let first = i32::from(first);
         let mut fragments = vec![first + name];
         if name == 3 {
@@ -105,25 +106,15 @@ pub(super) mod live {
     }
 
     impl<H> ScriptApi<H> for LiveScript<'_, '_, H> {
-        fn get(&self, key: &str) -> u8 {
-            let (start, end) =
-                crate::state::game_state_keys::bit_range(key).expect("unknown dialogue state key");
-            crate::state::ffi::rust_get_game_state_bits(
-                self.cx.borrow().world,
-                start as i32,
-                end as i32,
-            )
+        fn get(&self, key: StoryKey) -> u8 {
+            self.cx.borrow().world.story_state(key) as u8
         }
 
-        fn set(&mut self, key: &str, value: u8) {
-            let (start, end) =
-                crate::state::game_state_keys::bit_range(key).expect("unknown dialogue state key");
-            crate::state::ffi::rust_set_game_state_bits(
-                self.cx.borrow_mut().world,
-                start as i32,
-                end as i32,
-                value,
-            );
+        fn set(&mut self, key: StoryKey, value: u8) {
+            self.cx
+                .borrow_mut()
+                .world
+                .set_story_state(key, u32::from(value));
         }
 
         fn npc(&mut self, phrase: i32) {

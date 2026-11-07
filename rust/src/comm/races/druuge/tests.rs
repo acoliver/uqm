@@ -1,7 +1,7 @@
-use crate::engine::StoryKey;
 use super::*;
 use crate::comm::races::encounter::testing::{Effect, Fake};
 use crate::comm::races::script::ScriptApi;
+use crate::engine::StoryKey;
 type Api = Fake<Handler, api::World>;
 fn run(f: &mut Api, s: &mut Session, h: Handler, r: u16) {
     f.effects.clear();
@@ -14,9 +14,24 @@ fn choices(f: &Api) -> Vec<u16> {
 fn purchases_enforce_crew_and_escort_capacity() {
     for (r, cost, phrase, key) in [
         (BUY_DRUUGE_SHIP, 100, BOUGHT_SHIP, None),
-        (BUY_ROSY_SPHERE, 100, BOUGHT_SPHERE, Some(StoryKey::ROSY_SPHERE)),
-        (BUY_ART_1, 100, BOUGHT_ART_1, Some(StoryKey::ARTIFACT_2_ON_SHIP)),
-        (BUY_ART_2, 100, BOUGHT_ART_2, Some(StoryKey::ARTIFACT_3_ON_SHIP)),
+        (
+            BUY_ROSY_SPHERE,
+            100,
+            BOUGHT_SPHERE,
+            Some(StoryKey::ROSY_SPHERE),
+        ),
+        (
+            BUY_ART_1,
+            100,
+            BOUGHT_ART_1,
+            Some(StoryKey::ARTIFACT_2_ON_SHIP),
+        ),
+        (
+            BUY_ART_2,
+            100,
+            BOUGHT_ART_2,
+            Some(StoryKey::ARTIFACT_3_ON_SHIP),
+        ),
         (BUY_FUEL, 10, BOUGHT_FUEL, None),
     ] {
         for crew in [cost - 1, cost] {
@@ -102,7 +117,13 @@ fn sphere_trade_remembers_original_artifact_and_withholds_regular_reward() {
         assert_eq!(choices(&f), [NO_WAY, WAY]);
         run(&mut f, &mut s, Handler::Sell, WAY);
         assert_eq!(f.get(key), 0);
-        assert_eq!((f.get(StoryKey::ROSY_SPHERE), f.get(StoryKey::ROSY_SPHERE_ON_SHIP)), (1, 1));
+        assert_eq!(
+            (
+                f.get(StoryKey::ROSY_SPHERE),
+                f.get(StoryKey::ROSY_SPHERE_ON_SHIP)
+            ),
+            (1, 1)
+        );
         assert_eq!(f.spoken(), [i32::from(OK_HERES_SPHERE)]);
         assert!(!f
             .effects

@@ -1,9 +1,9 @@
 //! Yehat Rebel dialogue, ported from rebel.c.
-use crate::engine::StoryKey;
 use super::script::{animation, as_comm_data};
 use crate::comm::locdata::{CColor, CLocData, CPoint};
 use crate::comm::types::CommData;
 use crate::engine::battle::Cx;
+use crate::engine::StoryKey;
 mod phrases;
 use phrases::*;
 mod api;
@@ -109,11 +109,12 @@ impl<A: RebelApi> Dialogue<'_, A> {
             }
             self.api.disable(r as u16)
         } else if r == WHAT_ABOUT_PKUNK_REBEL {
-            self.api.npc(if self.api.get(StoryKey::YEHAT_ABSORBED_PKUNK) != 0 {
-                PKUNK_ABSORBED_REBEL
-            } else {
-                HATE_PKUNK_REBEL
-            });
+            self.api
+                .npc(if self.api.get(StoryKey::YEHAT_ABSORBED_PKUNK) != 0 {
+                    PKUNK_ABSORBED_REBEL
+                } else {
+                    HATE_PKUNK_REBEL
+                });
             self.api.set(StoryKey::YEHAT_REBEL_TOLD_PKUNK, 1)
         } else if r == ENOUGH_INFO {
             self.api.npc(OK_ENOUGH_INFO)

@@ -1,7 +1,7 @@
-use crate::engine::StoryKey;
 use super::*;
 use crate::comm::races::encounter::testing::{Effect, Fake};
 use crate::comm::races::script::ScriptApi;
+use crate::engine::StoryKey;
 type Api = Fake<Handler, api::World>;
 fn run(f: &mut Api, s: &mut Session, h: Handler, r: i32) {
     f.effects.clear();
@@ -83,7 +83,14 @@ fn rng_low_byte_boundary_and_choice_suppression_match_space_and_home() {
                 if home { QUESTION_1 } else { INSULT_1 },
             );
             assert_eq!(s.made_choice, 1);
-            assert_eq!(f.get(if home { StoryKey::MYCON_INFO } else { StoryKey::MYCON_INSULTS }), 1);
+            assert_eq!(
+                f.get(if home {
+                    StoryKey::MYCON_INFO
+                } else {
+                    StoryKey::MYCON_INSULTS
+                }),
+                1
+            );
             assert!(!choices(&f).contains(&if home { QUESTION_2 } else { INSULT_2 }));
         }
     }
@@ -109,7 +116,10 @@ fn ramble_wrap_and_shattered_knowledge_and_intro_priority() {
     .do_ramble(COME_IN_PEACE);
     assert_eq!(f.spoken(), [RAMBLE_32]);
     assert_eq!(f.get(StoryKey::MYCON_RAMBLE), 0);
-    for (key, phrase) in [(StoryKey::SUN_DEVICE, DIE_THIEF), (StoryKey::MYCON_KNOW_AMBUSH, DIE_LIAR)] {
+    for (key, phrase) in [
+        (StoryKey::SUN_DEVICE, DIE_THIEF),
+        (StoryKey::MYCON_KNOW_AMBUSH, DIE_LIAR),
+    ] {
         f.state.clear();
         f.put(key, 1);
         f.effects.clear();

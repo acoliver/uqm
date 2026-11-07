@@ -1,7 +1,7 @@
-use crate::engine::StoryKey;
 use super::*;
 use crate::comm::races::encounter::testing::{Effect, Fake};
 use crate::comm::races::script::ScriptApi;
+use crate::engine::StoryKey;
 type Api = Fake<Handler, api::World>;
 fn run(f: &mut Api, h: Handler, r: i32) {
     f.effects.clear();
@@ -67,7 +67,13 @@ fn acquisition_resets_umgah_and_arilou_state_for_all_acceptance_branches() {
                 GLAD_YOU_WONT_KILL
             }]
         );
-        assert_eq!((f.get(StoryKey::TALKING_PET), f.get(StoryKey::TALKING_PET_ON_SHIP)), (1, 1));
+        assert_eq!(
+            (
+                f.get(StoryKey::TALKING_PET),
+                f.get(StoryKey::TALKING_PET_ON_SHIP)
+            ),
+            (1, 1)
+        );
         for k in [
             StoryKey::UMGAH_ZOMBIE_BLOBBIES,
             StoryKey::UMGAH_VISITS,
@@ -168,7 +174,10 @@ fn onboard_greeting_skips_shield_complaint_and_strobe_preserves_response_handler
                 HELLO_AS_DEVICE_1
             }]
         );
-        assert_eq!(f.get(StoryKey::TALKING_PET_VISITS), if shield == 0 { 2 } else { 1 });
+        assert_eq!(
+            f.get(StoryKey::TALKING_PET_VISITS),
+            if shield == 0 { 2 } else { 1 }
+        );
     }
     let mut f = Api::default();
     run(&mut f, Handler::MindControl, WHAT_ABOUT_POWERS);

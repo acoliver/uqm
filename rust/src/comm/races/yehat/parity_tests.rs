@@ -1,8 +1,8 @@
-use crate::engine::StoryKey;
 use super::dialogue::Dialogue;
 use super::*;
 use crate::comm::races::encounter::testing::{Effect, Fake};
 use crate::comm::races::script::{ScriptApi, GLOBAL_PLAYER_NAME, GLOBAL_SHIP_NAME};
+use crate::engine::StoryKey;
 
 type Api = Fake<Handler, api::World>;
 
@@ -254,7 +254,11 @@ fn home_and_royalist_topics_remove_only_their_own_options() {
         assert!(!offers(&api).contains(&removed));
     }
     let mut api = Api::default();
-    for key in [StoryKey::NO_YEHAT_INFO, StoryKey::NO_YEHAT_HELP_HOME, StoryKey::NO_YEHAT_ALLY_HOME] {
+    for key in [
+        StoryKey::NO_YEHAT_INFO,
+        StoryKey::NO_YEHAT_HELP_HOME,
+        StoryKey::NO_YEHAT_ALLY_HOME,
+    ] {
         api.put(key, 1);
     }
     api.disabled.insert(WHATS_UP_HOMEWORLD as u16);
@@ -300,7 +304,13 @@ fn space_stack_order_and_early_return_match_each_topic() {
             2,
             vec![WHATS_UP_SPACE_1, I_DEMAND_YOU_ALLY_SPACE0, BYE_SPACE],
         ),
-        (OBLIGATION, WE_CANNOT_2, StoryKey::NO_YEHAT_ALLY_SPACE, 2, vec![]),
+        (
+            OBLIGATION,
+            WE_CANNOT_2,
+            StoryKey::NO_YEHAT_ALLY_SPACE,
+            2,
+            vec![],
+        ),
     ] {
         let mut api = Api::default();
         handle(&mut api, Handler::Space, response);
@@ -314,7 +324,7 @@ fn space_stack_order_and_early_return_match_each_topic() {
                 [
                     Effect::Npc(WE_CANNOT_2 as i32),
                     Effect::Segue(0),
-                    Effect::Set(StoryKey::NO_YEHAT_ALLY_SPACE.into(), 2)
+                    Effect::Set(StoryKey::NO_YEHAT_ALLY_SPACE, 2)
                 ]
             );
         }
@@ -459,13 +469,13 @@ fn exit_endings_rng_and_revolt_effects_are_exact() {
             Effect::Segue(1),
             Effect::Npc(WE_REVOLT as i32),
             Effect::Segue(0),
-            Effect::Set(StoryKey::YEHAT_CIVIL_WAR.into(), 1),
-            Effect::Set(StoryKey::YEHAT_VISITS.into(), 0),
-            Effect::Set(StoryKey::YEHAT_HOME_VISITS.into(), 0),
-            Effect::Set(StoryKey::YEHAT_REBEL_VISITS.into(), 0),
-            Effect::Set(StoryKey::YEHAT_REBEL_INFO.into(), 0),
-            Effect::Set(StoryKey::YEHAT_REBEL_TOLD_PKUNK.into(), 0),
-            Effect::Set(StoryKey::NO_YEHAT_INFO.into(), 0),
+            Effect::Set(StoryKey::YEHAT_CIVIL_WAR, 1),
+            Effect::Set(StoryKey::YEHAT_VISITS, 0),
+            Effect::Set(StoryKey::YEHAT_HOME_VISITS, 0),
+            Effect::Set(StoryKey::YEHAT_REBEL_VISITS, 0),
+            Effect::Set(StoryKey::YEHAT_REBEL_INFO, 0),
+            Effect::Set(StoryKey::YEHAT_REBEL_TOLD_PKUNK, 0),
+            Effect::Set(StoryKey::NO_YEHAT_INFO, 0),
             Effect::Event(1, 0, 0, 0, 15),
         ]
     );

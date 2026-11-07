@@ -22,7 +22,7 @@ mod live {
 
     impl<H> EncounterApi<H> for LiveScript<'_, '_, H> {
         fn segue(&mut self, segue: u32) {
-            self.set("BATTLE_SEGUE", u8::from(segue == 1));
+            self.set(crate::engine::StoryKey::BATTLE_SEGUE, u8::from(segue == 1));
             crate::comm::ffi::rust_set_segue(segue)
         }
         fn get_segue(&self) -> u32 {

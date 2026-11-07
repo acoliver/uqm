@@ -1,5 +1,5 @@
-use crate::engine::StoryKey;
 use super::*;
+use crate::engine::StoryKey;
 
 impl<A: SlylandApi> Dialogue<'_, A> {
     pub(super) fn initialize(&mut self) {
@@ -85,7 +85,7 @@ impl<A: SlylandApi> Dialogue<'_, A> {
             }
             let mut choices = [0; 5];
             for (i, (key, phrases, _)) in topics.iter().enumerate() {
-                let n = self.api.get(key);
+                let n = self.api.get(*key);
                 choices[i] = phrases[usize::from(n.min(3))] as u16;
                 self.api.response(choices[i], Handler::Combat, &[]);
             }

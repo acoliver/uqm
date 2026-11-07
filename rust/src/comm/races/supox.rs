@@ -1,10 +1,10 @@
 //! Supox dialogue, ported from the original C script.
-use crate::engine::StoryKey;
 use super::alliance::AllianceApi;
 use super::script::{animation, as_comm_data, GLOBAL_PLAYER_NAME, GLOBAL_SHIP_NAME};
 use crate::comm::locdata::{CColor, CLocData, CPoint};
 use crate::comm::types::CommData;
 use crate::engine::battle::Cx;
+use crate::engine::StoryKey;
 mod phrases;
 use super::alliance::{SUPOX_SHIP, UTWIG_SHIP};
 use phrases::*;
@@ -325,7 +325,8 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
         if num_visits == 0 {
             match self.api.get(StoryKey::SUPOX_WAR_NEWS) {
                 0 => {
-                    if (self.api.get(StoryKey::UTWIG_VISITS) != 0 || self.api.get(StoryKey::UTWIG_HOME_VISITS) != 0)
+                    if (self.api.get(StoryKey::UTWIG_VISITS) != 0
+                        || self.api.get(StoryKey::UTWIG_HOME_VISITS) != 0)
                         || self.api.get(StoryKey::BOMB_VISITS) != 0
                     {
                         p_str[2_usize] = WHAT_RELATION_TO_UTWIG;

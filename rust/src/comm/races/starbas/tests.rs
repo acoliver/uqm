@@ -1,7 +1,7 @@
-use crate::engine::StoryKey;
 use super::*;
 use crate::comm::races::encounter::testing::{Effect, Fake};
 use crate::comm::races::script::ScriptApi;
+use crate::engine::StoryKey;
 use std::collections::VecDeque;
 
 struct World {
@@ -111,9 +111,8 @@ fn run(f: &mut Api, s: &mut Session, h: Handler, r: u16) {
 fn choices(f: &Api) -> Vec<u16> {
     f.offers().iter().map(|(p, _)| *p).collect()
 }
-fn state32(f: &Api, key: &str) -> u32 {
-    let prefix = key.strip_suffix('0').unwrap();
-    u32::from_le_bytes(std::array::from_fn(|i| f.get(&format!("{prefix}{i}"))))
+fn state32(f: &Api, keys: [StoryKey; 4]) -> u32 {
+    u32::from_le_bytes(keys.map(|key| f.get(key)))
 }
 
 #[test]
@@ -160,7 +159,10 @@ fn descriptor_initialization_and_post_encounter() {
         }
         .post_starbase_enc();
         assert_eq!(f.get(StoryKey::MOONBASE_ON_SHIP), 0);
-        assert_eq!(f.get(StoryKey::CHMMR_BOMB_STATE), if bomb == 2 { 3 } else { bomb });
+        assert_eq!(
+            f.get(StoryKey::CHMMR_BOMB_STATE),
+            if bomb == 2 { 3 } else { bomb }
+        );
     }
 }
 #[test]
@@ -206,7 +208,18 @@ fn completed_bomb_farewell_commits_current_bulletins_without_rng() {
     f.put(StoryKey::STARBASE_BULLETS0, 1);
     f.put(StoryKey::CHMMR_BOMB_STATE, 2);
     run(&mut f, &mut s, Handler::ByeBye, GOODBYE_COMMANDER);
-    assert_eq!(state32(&f, StoryKey::STARBASE_BULLETS0), 0x12345679);
+    assert_eq!(
+        state32(
+            &f,
+            [
+                StoryKey::STARBASE_BULLETS0,
+                StoryKey::STARBASE_BULLETS1,
+                StoryKey::STARBASE_BULLETS2,
+                StoryKey::STARBASE_BULLETS3
+            ]
+        ),
+        0x12345679
+    );
     assert_eq!(f.spoken(), vec![215]);
     assert_eq!(f.world.random_calls, 0);
 }
@@ -457,16 +470,36 @@ fn every_device_discussion_and_discovery_effect() {
             StoryKey::DISCUSSED_TALKING_PET,
             ABOUT_TALKPET,
         ),
-        (StoryKey::UTWIG_BOMB_ON_SHIP, StoryKey::DISCUSSED_UTWIG_BOMB, ABOUT_BOMB),
-        (StoryKey::SUN_DEVICE_ON_SHIP, StoryKey::DISCUSSED_SUN_EFFICIENCY, ABOUT_SUN),
-        (StoryKey::ROSY_SPHERE_ON_SHIP, StoryKey::DISCUSSED_ROSY_SPHERE, ABOUT_SPHERE),
-        (StoryKey::AQUA_HELIX_ON_SHIP, StoryKey::DISCUSSED_AQUA_HELIX, ABOUT_HELIX),
+        (
+            StoryKey::UTWIG_BOMB_ON_SHIP,
+            StoryKey::DISCUSSED_UTWIG_BOMB,
+            ABOUT_BOMB,
+        ),
+        (
+            StoryKey::SUN_DEVICE_ON_SHIP,
+            StoryKey::DISCUSSED_SUN_EFFICIENCY,
+            ABOUT_SUN,
+        ),
+        (
+            StoryKey::ROSY_SPHERE_ON_SHIP,
+            StoryKey::DISCUSSED_ROSY_SPHERE,
+            ABOUT_SPHERE,
+        ),
+        (
+            StoryKey::AQUA_HELIX_ON_SHIP,
+            StoryKey::DISCUSSED_AQUA_HELIX,
+            ABOUT_HELIX,
+        ),
         (
             StoryKey::CLEAR_SPINDLE_ON_SHIP,
             StoryKey::DISCUSSED_CLEAR_SPINDLE,
             ABOUT_SPINDLE,
         ),
-        (StoryKey::MAIDENS_ON_SHIP, StoryKey::DISCUSSED_MAIDENS, ABOUT_MAIDENS),
+        (
+            StoryKey::MAIDENS_ON_SHIP,
+            StoryKey::DISCUSSED_MAIDENS,
+            ABOUT_MAIDENS,
+        ),
         (
             StoryKey::UMGAH_BROADCASTERS_ON_SHIP,
             StoryKey::DISCUSSED_UMGAH_HYPERWAVE,
@@ -492,7 +525,11 @@ fn every_device_discussion_and_discovery_effect() {
             StoryKey::DISCUSSED_DESTRUCT_CODE,
             ABOUT_DESTRUCT,
         ),
-        (StoryKey::PORTAL_KEY_ON_SHIP, StoryKey::DISCUSSED_URQUAN_WARP, ABOUT_WARPPOD),
+        (
+            StoryKey::PORTAL_KEY_ON_SHIP,
+            StoryKey::DISCUSSED_URQUAN_WARP,
+            ABOUT_WARPPOD,
+        ),
         (
             StoryKey::ARTIFACT_2_ON_SHIP,
             StoryKey::DISCUSSED_ARTIFACT_2,
@@ -703,7 +740,15 @@ fn timed_bulletins_and_suppression_flags() {
     .check_bulletins(false);
     assert_eq!(s.bulletins, 0);
     assert_eq!(
-        state32(&f, StoryKey::STARBASE_BULLETS0),
+        state32(
+            &f,
+            [
+                StoryKey::STARBASE_BULLETS0,
+                StoryKey::STARBASE_BULLETS1,
+                StoryKey::STARBASE_BULLETS2,
+                StoryKey::STARBASE_BULLETS3
+            ]
+        ),
         (1 << 5) | (1 << 7) | (1 << 8) | (1 << 9) | (1 << 11) | (1 << 15)
     );
 }

@@ -1,7 +1,7 @@
-use crate::engine::StoryKey;
 use super::phrases::{hostile_info, visit_phrase};
 use super::*;
 use crate::comm::races::encounter::EncounterApi;
+use crate::engine::StoryKey;
 
 pub(super) struct Dialogue<'a, A> {
     pub(super) api: &'a mut A,
@@ -20,7 +20,7 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
         self.api.response(phrase as u16, handler, &[]);
     }
 
-    fn counter(&mut self, key: &str, responses: &[u32], final_case: u8) {
+    fn counter(&mut self, key: StoryKey, responses: &[u32], final_case: u8) {
         let (case, next) = visit_phrase(self.api.get(key), final_case);
         if let Some(case) = case {
             self.api.npc(responses[case as usize] as i32);
@@ -146,7 +146,11 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
         let mut phrases = [None; 3];
         if response == NULL_PHRASE {
             if self.api.get(StoryKey::ZEX_STACK_3) >= 2 {
-                self.counter(StoryKey::ZEX_VISITS, &[FIGHT_OR_TRADE_1, FIGHT_OR_TRADE_2], 1);
+                self.counter(
+                    StoryKey::ZEX_VISITS,
+                    &[FIGHT_OR_TRADE_1, FIGHT_OR_TRADE_2],
+                    1,
+                );
             } else {
                 self.counter(
                     StoryKey::ZEX_VISITS,
@@ -189,7 +193,9 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
             self.api.set(StoryKey::ZEX_STACK_3, 3);
         }
 
-        if self.api.get(StoryKey::KNOW_ZEX_WANTS_MONSTER) != 0 && self.api.get(StoryKey::VUX_BEAST_ON_SHIP) != 0 {
+        if self.api.get(StoryKey::KNOW_ZEX_WANTS_MONSTER) != 0
+            && self.api.get(StoryKey::VUX_BEAST_ON_SHIP) != 0
+        {
             phrases[0] = Some(I_HAVE_BEAST);
         } else {
             phrases[0] = match self.api.get(StoryKey::ZEX_STACK_1) {

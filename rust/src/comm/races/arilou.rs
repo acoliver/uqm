@@ -1,10 +1,10 @@
 //! Arilou dialogue, ported from arilouc.c.
-use crate::engine::StoryKey;
 use super::alliance::AllianceApi;
 use super::script::{animation, as_comm_data};
 use crate::comm::locdata::{CColor, CLocData, CPoint};
 use crate::comm::types::CommData;
 use crate::engine::battle::Cx;
+use crate::engine::StoryKey;
 mod phrases;
 use phrases::*;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -183,7 +183,8 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
         if self.api.get(StoryKey::KNOW_ARILOU_WANT_WRECK) != 0 {
             if self.api.get(StoryKey::PORTAL_KEY_ON_SHIP) != 0 {
                 self.api.response(GOT_IT, Handler::ArilouHome, &[]);
-            } else if self.api.enabled(ABOUT_PORTAL_AGAIN) && !(self.api.get(StoryKey::PORTAL_SPAWNER) != 0)
+            } else if self.api.enabled(ABOUT_PORTAL_AGAIN)
+                && !(self.api.get(StoryKey::PORTAL_SPAWNER) != 0)
             {
                 self.api
                     .response(ABOUT_PORTAL_AGAIN, Handler::ArilouHome, &[]);

@@ -1,11 +1,11 @@
 //! Spathi dialogue, ported from the original C script.
 
-use crate::engine::StoryKey;
 use super::encounter::EncounterApi;
 use super::script::{animation, as_comm_data};
 use crate::comm::locdata::{CColor, CLocData, CPoint};
 use crate::comm::types::CommData;
 use crate::engine::battle::Cx;
+use crate::engine::StoryKey;
 mod phrases;
 use phrases::*;
 const SPATHI_SHIP: u16 = 6;

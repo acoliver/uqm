@@ -1,7 +1,7 @@
-use crate::engine::StoryKey;
 use super::*;
 use crate::comm::races::encounter::testing::{Effect, Fake};
 use crate::comm::races::script::ScriptApi;
+use crate::engine::StoryKey;
 type Api = Fake<Handler>;
 fn run(f: &mut Api, h: Handler, r: u16) {
     f.effects.clear();
@@ -198,7 +198,7 @@ fn gods_orders_worship_and_mission_effect_order() {
         &f.effects[..3],
         &[
             Effect::Npc(35),
-            Effect::Set(StoryKey::ILWRATH_DECEIVED.into(), 1),
+            Effect::Set(StoryKey::ILWRATH_DECEIVED, 1),
             Effect::AdvanceIlwrath
         ]
     );

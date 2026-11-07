@@ -1,9 +1,9 @@
 //! Chmmr dialogue, ported from chmmrc.c.
-use crate::engine::StoryKey;
 use super::script::{animation, as_comm_data};
 use crate::comm::locdata::{CColor, CLocData, CPoint};
 use crate::comm::types::CommData;
 use crate::engine::battle::Cx;
+use crate::engine::StoryKey;
 mod phrases;
 use phrases::*;
 mod api;
@@ -325,7 +325,8 @@ impl<A: ChmmrApi> Dialogue<'_, A> {
                 }
                 _ => {}
             }
-            self.api.set(StoryKey::CHMMR_HOME_VISITS, (num_visits) as u8);
+            self.api
+                .set(StoryKey::CHMMR_HOME_VISITS, (num_visits) as u8);
             self.after_bomb(0_u16 as i32);
         } else if i32::from(self.api.get(StoryKey::CHMMR_UNLEASHED)) != 0 {
             if !(i32::from(self.api.get(StoryKey::TALKING_PET_ON_SHIP)) != 0)
@@ -392,7 +393,8 @@ impl<A: ChmmrApi> Dialogue<'_, A> {
                 }
                 self.api.set(StoryKey::CHMMR_UNLEASHED, 1_u8);
             }
-            self.api.set(StoryKey::CHMMR_HOME_VISITS, (num_visits) as u8);
+            self.api
+                .set(StoryKey::CHMMR_HOME_VISITS, (num_visits) as u8);
         }
     }
     fn post_chmmr_enc(&mut self) {}

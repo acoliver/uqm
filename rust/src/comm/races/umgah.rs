@@ -1,9 +1,9 @@
 //! Umgah dialogue, ported from umgahc.c.
-use crate::engine::StoryKey;
 use super::script::{animation, as_comm_data};
 use crate::comm::locdata::{CColor, CLocData, CPoint};
 use crate::comm::types::CommData;
 use crate::engine::battle::Cx;
+use crate::engine::StoryKey;
 mod phrases;
 use phrases::*;
 mod api;
@@ -456,7 +456,8 @@ impl<A: UmgahApi> Dialogue<'_, A> {
                     }
                     _ => {}
                 }
-                self.api.set(StoryKey::UMGAH_HOME_VISITS, (num_visits) as u8);
+                self.api
+                    .set(StoryKey::UMGAH_HOME_VISITS, (num_visits) as u8);
             } else {
                 num_visits = i32::from(self.api.get(StoryKey::UMGAH_VISITS));
                 let res = {

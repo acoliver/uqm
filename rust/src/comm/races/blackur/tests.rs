@@ -1,7 +1,7 @@
-use crate::engine::StoryKey;
 use super::*;
 use crate::comm::races::encounter::testing::{Effect, Fake};
 use crate::comm::races::script::ScriptApi;
+use crate::engine::StoryKey;
 
 type Api = Fake<Handler, (u32, u32)>;
 fn choices(f: &Api) -> Vec<i32> {
@@ -131,7 +131,11 @@ fn combat_information_goodbyes_and_unknown_response() {
 fn hostile_and_frenzy_choices_preserve_order_and_callbacks() {
     for n in 0..=u8::MAX {
         let mut f = Api::default();
-        for k in [StoryKey::KOHR_AH_REASONS, StoryKey::KOHR_AH_PLEAD, StoryKey::KOHR_AH_INFO] {
+        for k in [
+            StoryKey::KOHR_AH_REASONS,
+            StoryKey::KOHR_AH_PLEAD,
+            StoryKey::KOHR_AH_INFO,
+        ] {
             f.put(k, n);
         }
         f.put(StoryKey::KNOW_KOHR_AH_STORY, 1);
@@ -290,7 +294,7 @@ fn all_greeting_counter_values_and_pet_repeat() {
             let next = if n == 3 { 3 } else { n.wrapping_add(1) };
             assert_eq!(
                 f.effects.last(),
-                Some(&Effect::Set(StoryKey::KOHR_AH_VISITS.into(), next))
+                Some(&Effect::Set(StoryKey::KOHR_AH_VISITS, next))
             );
         }
     }

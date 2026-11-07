@@ -1,7 +1,7 @@
-use crate::engine::StoryKey;
 use super::*;
 use crate::comm::races::encounter::testing::Effect;
 use crate::comm::races::script::GLOBAL_PLAYER_NAME;
+use crate::engine::StoryKey;
 #[test]
 fn fuel_prices_capacity_shortfall_and_large_fill() {
     for (r, units) in [(137, 1), (139, 5), (140, 10), (141, 25)] {
@@ -219,7 +219,13 @@ fn first_meeting_order_names_business_and_status_restore() {
         );
     }
     for (r, p, key, value, offers) in [
-        (233, 4, StoryKey::MELNORME_YACK_STACK0, 1, vec![5, 7, 11, 20]),
+        (
+            233,
+            4,
+            StoryKey::MELNORME_YACK_STACK0,
+            1,
+            vec![5, 7, 11, 20],
+        ),
         (5, 6, StoryKey::MELNORME_YACK_STACK0, 2, vec![7, 11, 20]),
         (7, 8, StoryKey::MELNORME_YACK_STACK1, 1, vec![9, 17, 11, 20]),
         (9, 10, StoryKey::MELNORME_YACK_STACK1, 2, vec![17, 11, 20]),

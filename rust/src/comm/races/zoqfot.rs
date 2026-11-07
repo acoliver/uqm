@@ -1,10 +1,10 @@
 //! Zoqfot dialogue, ported from the original C script.
-use crate::engine::StoryKey;
 use super::alliance::AllianceApi;
 use super::script::{animation, as_comm_data, GLOBAL_SHIP_NAME};
 use crate::comm::locdata::{CColor, CLocData, CPoint};
 use crate::comm::types::CommData;
 use crate::engine::battle::Cx;
+use crate::engine::StoryKey;
 mod phrases;
 use phrases::*;
 mod api;

@@ -2,10 +2,10 @@
 //!
 //! @plan PLAN-20260724-MAINLOOP-AND-COMM.P13-15
 
-use crate::engine::StoryKey;
 use super::script::as_comm_data;
 use crate::comm::types::CommData;
 use crate::engine::battle::Cx;
+use crate::engine::StoryKey;
 
 mod phrases;
 use phrases::*;
@@ -161,7 +161,9 @@ impl<A: SlyhomeApi> Dialogue<'_, A> {
                 _ => {}
             }
         }
-        if self.api.get(StoryKey::PLAYER_KNOWS_PROBE) != 0 && self.api.get(StoryKey::SLYLANDRO_KNOW_BROKEN) == 0 {
+        if self.api.get(StoryKey::PLAYER_KNOWS_PROBE) != 0
+            && self.api.get(StoryKey::SLYLANDRO_KNOW_BROKEN) == 0
+        {
             match self.api.get(StoryKey::SLYLANDRO_STACK5) {
                 0 => self.offer(WHAT_ARE_PROBES, Handler::Probe),
                 1 if self.api.enabled(KNOW_MORE_PROBE as u16) => {
@@ -174,19 +176,19 @@ impl<A: SlyhomeApi> Dialogue<'_, A> {
     }
     fn human(&mut self, r: i32) {
         let (line, key, value) = match r as u32 {
-            HAPPY_TO_TELL_MORE => (TELL_MORE, StoryKey::SLYLANDRO_STACK4, 1),
-            WOULD_YOU_LIKE_TO_KNOW_MORE => (YES_TELL_MORE, "", 0),
-            WE_COME_FROM_EARTH => (OK_EARTH, StoryKey::SLYLANDRO_KNOW_EARTH, 1),
-            WE_EXPLORE => (OK_EXPLORE, StoryKey::SLYLANDRO_KNOW_EXPLORE, 1),
-            WE_FIGHT_URQUAN => (URQUAN_NICE_GUYS, StoryKey::SLYLANDRO_KNOW_URQUAN, 1),
-            NOT_SAME_URQUAN => (PERSONALITY_CHANGE, StoryKey::SLYLANDRO_KNOW_URQUAN, 2),
-            WE_GATHER => (MAYBE_INTERESTED, StoryKey::SLYLANDRO_KNOW_GATHER, 1),
-            _ => (0, "", 0),
+            HAPPY_TO_TELL_MORE => (TELL_MORE, Some(StoryKey::SLYLANDRO_STACK4), 1),
+            WOULD_YOU_LIKE_TO_KNOW_MORE => (YES_TELL_MORE, None, 0),
+            WE_COME_FROM_EARTH => (OK_EARTH, Some(StoryKey::SLYLANDRO_KNOW_EARTH), 1),
+            WE_EXPLORE => (OK_EXPLORE, Some(StoryKey::SLYLANDRO_KNOW_EXPLORE), 1),
+            WE_FIGHT_URQUAN => (URQUAN_NICE_GUYS, Some(StoryKey::SLYLANDRO_KNOW_URQUAN), 1),
+            NOT_SAME_URQUAN => (PERSONALITY_CHANGE, Some(StoryKey::SLYLANDRO_KNOW_URQUAN), 2),
+            WE_GATHER => (MAYBE_INTERESTED, Some(StoryKey::SLYLANDRO_KNOW_GATHER), 1),
+            _ => (0, None, 0),
         };
         if line != 0 {
             self.api.npc(line as i32);
         }
-        if !key.is_empty() {
+        if let Some(key) = key {
             self.api.set(key, value);
         }
         if self.api.get(StoryKey::SLYLANDRO_KNOW_URQUAN) == 1 {
@@ -473,14 +475,17 @@ impl<A: SlyhomeApi> Dialogue<'_, A> {
     }
     fn exit(&mut self, _r: i32) {
         self.api.segue(0);
-        self.api.npc(if self.api.get(StoryKey::SLYLANDRO_HOME_VISITS) == 1 {
-            GOODBYE_1 as i32
-        } else {
-            GOODBYE_2 as i32
-        });
+        self.api
+            .npc(if self.api.get(StoryKey::SLYLANDRO_HOME_VISITS) == 1 {
+                GOODBYE_1 as i32
+            } else {
+                GOODBYE_2 as i32
+            });
     }
     fn intro(&mut self) {
-        if self.api.get(StoryKey::SLYLANDRO_KNOW_BROKEN) != 0 && self.api.get(StoryKey::RECALL_VISITS) == 0 {
+        if self.api.get(StoryKey::SLYLANDRO_KNOW_BROKEN) != 0
+            && self.api.get(StoryKey::RECALL_VISITS) == 0
+        {
             self.api.npc(RECALL_PROGRAM_1 as i32);
             self.api.set(StoryKey::RECALL_VISITS, 1);
         } else {
@@ -620,23 +625,23 @@ mod tests {
     #[test]
     fn test_game_state_keys_exist() {
         assert!(
-            crate::state::game_state_keys::bit_range("DESTRUCT_CODE_ON_SHIP").is_some(),
+            crate::engine::StoryKey::from_name("DESTRUCT_CODE_ON_SHIP").is_some(),
             "missing game state key: DESTRUCT_CODE_ON_SHIP"
         );
         assert!(
-            crate::state::game_state_keys::bit_range("PLAYER_KNOWS_EFFECTS").is_some(),
+            crate::engine::StoryKey::from_name("PLAYER_KNOWS_EFFECTS").is_some(),
             "missing game state key: PLAYER_KNOWS_EFFECTS"
         );
         assert!(
-            crate::state::game_state_keys::bit_range("PLAYER_KNOWS_PRIORITY").is_some(),
+            crate::engine::StoryKey::from_name("PLAYER_KNOWS_PRIORITY").is_some(),
             "missing game state key: PLAYER_KNOWS_PRIORITY"
         );
         assert!(
-            crate::state::game_state_keys::bit_range("PLAYER_KNOWS_PROBE").is_some(),
+            crate::engine::StoryKey::from_name("PLAYER_KNOWS_PROBE").is_some(),
             "missing game state key: PLAYER_KNOWS_PROBE"
         );
         assert!(
-            crate::state::game_state_keys::bit_range("PLAYER_KNOWS_PROGRAM").is_some(),
+            crate::engine::StoryKey::from_name("PLAYER_KNOWS_PROGRAM").is_some(),
             "missing game state key: PLAYER_KNOWS_PROGRAM"
         );
     }

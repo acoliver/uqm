@@ -1,7 +1,7 @@
-use crate::engine::StoryKey;
 use super::api::UrquanApi;
 use super::phrases::{general_info, visit_phrase};
 use super::*;
+use crate::engine::StoryKey;
 
 pub(super) struct Dialogue<'a, A> {
     pub(super) api: &'a mut A,
@@ -248,7 +248,9 @@ impl<A: UrquanApi> Dialogue<'_, A> {
             self.hypno(0);
             return;
         }
-        if self.api.get(StoryKey::URQUAN_SENSES_EVIL) == 0 && self.api.get(StoryKey::TALKING_PET_ON_SHIP) != 0 {
+        if self.api.get(StoryKey::URQUAN_SENSES_EVIL) == 0
+            && self.api.get(StoryKey::TALKING_PET_ON_SHIP) != 0
+        {
             self.api.npc(SENSE_EVIL as i32);
             self.api.set(StoryKey::URQUAN_SENSES_EVIL, 1);
         }
@@ -369,7 +371,7 @@ mod tests {
         };
         api.world
             .group_battles
-            .insert(StoryKey::URQUAN_PROBE_GRPOFFS0.into());
+            .insert(StoryKey::URQUAN_PROBE_GRPOFFS0);
         Dialogue { api: &mut api }.intro();
         assert_eq!(api.spoken(), [SEND_MESSAGE as i32]);
         assert_eq!(api.get(StoryKey::PROBE_MESSAGE_DELIVERED), 1);
@@ -441,7 +443,7 @@ mod tests {
             activity: crate::comm::dispatch::IN_INTERPLANETARY,
             ..Api::default()
         };
-        api.world.group_battles.insert(StoryKey::COLONY_GRPOFFS0.into());
+        api.world.group_battles.insert(StoryKey::COLONY_GRPOFFS0);
         Dialogue { api: &mut api }.intro();
         assert_eq!(api.spoken(), [CAUGHT_YA as i32]);
         assert_eq!(api.segue, 1);
@@ -454,7 +456,7 @@ mod tests {
             activity: crate::comm::dispatch::IN_INTERPLANETARY,
             ..Api::default()
         };
-        api.world.group_battles.insert(StoryKey::SAMATRA_GRPOFFS0.into());
+        api.world.group_battles.insert(StoryKey::SAMATRA_GRPOFFS0);
         Dialogue { api: &mut api }.intro();
         assert_eq!(api.spoken(), [HELLO_SAMATRA as i32]);
         assert_eq!(api.get(StoryKey::AWARE_OF_SAMATRA), 1);
@@ -487,7 +489,7 @@ mod tests {
         };
         api.world
             .group_battles
-            .insert(StoryKey::URQUAN_PROBE_GRPOFFS0.into());
+            .insert(StoryKey::URQUAN_PROBE_GRPOFFS0);
         Dialogue { api: &mut api }.initialize();
         assert_eq!(api.segue, 0);
 

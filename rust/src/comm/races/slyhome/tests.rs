@@ -1,7 +1,7 @@
-use crate::engine::StoryKey;
 use super::super::encounter::testing::{Effect, Fake};
 use super::super::script::{GLOBAL_PLAYER_NAME, GLOBAL_SHIP_NAME};
 use super::*;
+use crate::engine::StoryKey;
 
 #[test]
 fn offered_callbacks_reach_the_recall_code_from_a_new_game() {
@@ -46,8 +46,8 @@ fn offered_callbacks_reach_the_recall_code_from_a_new_game() {
         api.effects.clear();
         Dialogue { api: &mut api }.handle(handler, phrase as i32);
     }
-    assert_eq!(api.state[StoryKey::DESTRUCT_CODE_ON_SHIP], 1);
-    assert_eq!(api.state[StoryKey::SLYLANDRO_KNOW_BROKEN], 1);
+    assert_eq!(api.state[&StoryKey::DESTRUCT_CODE_ON_SHIP], 1);
+    assert_eq!(api.state[&StoryKey::SLYLANDRO_KNOW_BROKEN], 1);
     assert_eq!(api.segue, 0);
 }
 
@@ -158,14 +158,14 @@ fn greetings_recall_and_goodbyes_preserve_byte_counters() {
             }
         );
         assert_eq!(
-            api.state[StoryKey::SLYLANDRO_HOME_VISITS],
+            api.state[&StoryKey::SLYLANDRO_HOME_VISITS],
             if n == 3 { 3 } else { n.wrapping_add(1) }
         );
         api.effects.clear();
         Dialogue { api: &mut api }.handle(Handler::Exit, BYE as i32);
         assert_eq!(
             api.spoken(),
-            [if api.state[StoryKey::SLYLANDRO_HOME_VISITS] == 1 {
+            [if api.state[&StoryKey::SLYLANDRO_HOME_VISITS] == 1 {
                 GOODBYE_1
             } else {
                 GOODBYE_2
@@ -177,8 +177,8 @@ fn greetings_recall_and_goodbyes_preserve_byte_counters() {
     api.put(StoryKey::SLYLANDRO_KNOW_BROKEN, 1);
     Dialogue { api: &mut api }.intro();
     assert_eq!(api.spoken(), [RECALL_PROGRAM_1 as i32]);
-    assert_eq!(api.state[StoryKey::RECALL_VISITS], 1);
-    assert!(!api.state.contains_key(StoryKey::SLYLANDRO_HOME_VISITS));
+    assert_eq!(api.state[&StoryKey::RECALL_VISITS], 1);
+    assert!(!api.state.contains_key(&StoryKey::SLYLANDRO_HOME_VISITS));
     api.effects.clear();
     Dialogue { api: &mut api }.intro();
     assert_eq!(api.spoken(), [HELLO_1 as i32]);
@@ -215,7 +215,13 @@ fn home_answers_set_stacks_and_prioritize_the_active_topic() {
             4,
             WHO_ELSE,
         ),
-        (WHO_ELSE, PRECURSORS, StoryKey::SLYLANDRO_STACK1, 5, PRECURSORS_YOW),
+        (
+            WHO_ELSE,
+            PRECURSORS,
+            StoryKey::SLYLANDRO_STACK1,
+            5,
+            PRECURSORS_YOW,
+        ),
         (
             PRECURSORS_YOW,
             ABOUT_PRECURSORS,
@@ -262,7 +268,7 @@ fn home_answers_set_stacks_and_prioritize_the_active_topic() {
         let mut api = Fake::<Handler>::default();
         Dialogue { api: &mut api }.handle(Handler::Home, r as i32);
         assert_eq!(api.spoken(), [line as i32]);
-        assert_eq!(api.state[key], value);
+        assert_eq!(api.state[&key], value);
         assert_eq!(choices(&api)[0], first, "response {r}");
         assert!(api
             .offers()
@@ -270,7 +276,7 @@ fn home_answers_set_stacks_and_prioritize_the_active_topic() {
             .filter(|(p, _)| [WHO_ARE_YOU as u16, LIKE_MORE_ABOUT_YOU as u16].contains(p))
             .all(|(_, h)| *h == Handler::Home));
         if r == WHAT_OTHER_VISITORS {
-            assert_eq!(api.state[StoryKey::PLAYER_KNOWS_PROBE], 1);
+            assert_eq!(api.state[&StoryKey::PLAYER_KNOWS_PROBE], 1);
         }
         if r == WE_ARE_US0 {
             assert!(api.disabled.contains(&(WE_ARE_US0 as u16)));
@@ -342,7 +348,12 @@ fn home_menu_obeys_each_stack_and_constructs_the_introduction() {
 fn human_information_branches_and_exhaustion() {
     for (r, line, key, value) in [
         (HAPPY_TO_TELL_MORE, TELL_MORE, StoryKey::SLYLANDRO_STACK4, 1),
-        (WE_COME_FROM_EARTH, OK_EARTH, StoryKey::SLYLANDRO_KNOW_EARTH, 1),
+        (
+            WE_COME_FROM_EARTH,
+            OK_EARTH,
+            StoryKey::SLYLANDRO_KNOW_EARTH,
+            1,
+        ),
         (WE_EXPLORE, OK_EXPLORE, StoryKey::SLYLANDRO_KNOW_EXPLORE, 1),
         (
             WE_FIGHT_URQUAN,
@@ -356,12 +367,17 @@ fn human_information_branches_and_exhaustion() {
             StoryKey::SLYLANDRO_KNOW_URQUAN,
             2,
         ),
-        (WE_GATHER, MAYBE_INTERESTED, StoryKey::SLYLANDRO_KNOW_GATHER, 1),
+        (
+            WE_GATHER,
+            MAYBE_INTERESTED,
+            StoryKey::SLYLANDRO_KNOW_GATHER,
+            1,
+        ),
     ] {
         let mut api = Fake::<Handler>::default();
         Dialogue { api: &mut api }.handle(Handler::Human, r as i32);
         assert_eq!(api.spoken(), [line as i32]);
-        assert_eq!(api.state[key], value);
+        assert_eq!(api.state[&key], value);
         if r == WE_FIGHT_URQUAN {
             assert_eq!(choices(&api)[0], NOT_SAME_URQUAN);
         }
@@ -379,7 +395,7 @@ fn human_information_branches_and_exhaustion() {
     Dialogue { api: &mut api }.human(WOULD_YOU_LIKE_TO_KNOW_MORE as i32);
     assert_eq!(api.spoken(), [YES_TELL_MORE as i32]);
     assert_eq!(choices(&api), [ENOUGH_ABOUT_ME]);
-    assert_eq!(api.state[StoryKey::SLYLANDRO_STACK4], 2);
+    assert_eq!(api.state[&StoryKey::SLYLANDRO_STACK4], 2);
 }
 
 #[test]
@@ -467,7 +483,7 @@ fn probe_topics_include_attack_in_c_stack_order() {
         api.put(StoryKey::PROBE_EXHIBITED_BUG, 1);
         Dialogue { api: &mut api }.handle(Handler::Probe, r as i32);
         assert_eq!(api.spoken(), [line as i32]);
-        assert_eq!(api.state[key], value);
+        assert_eq!(api.state[&key], value);
         assert_eq!(
             choices(&api),
             expected
@@ -525,14 +541,22 @@ fn probe_function_exposes_both_progression_stacks_and_prioritizes_answers() {
         assert_eq!(choices(&api)[0], first);
     }
     for (r, line, key) in [
-        (TELL_ME_ABOUT_BASICS, BASIC_COMMANDS, StoryKey::PLAYER_KNOWS_PROGRAM),
+        (
+            TELL_ME_ABOUT_BASICS,
+            BASIC_COMMANDS,
+            StoryKey::PLAYER_KNOWS_PROGRAM,
+        ),
         (WHAT_SET_PRIORITY, MAXIMUM, StoryKey::PLAYER_KNOWS_PRIORITY),
-        (WHAT_EFFECT, AFFECTS_BEHAVIOR, StoryKey::PLAYER_KNOWS_EFFECTS),
+        (
+            WHAT_EFFECT,
+            AFFECTS_BEHAVIOR,
+            StoryKey::PLAYER_KNOWS_EFFECTS,
+        ),
     ] {
         api.effects.clear();
         Dialogue { api: &mut api }.function(r as i32);
         assert_eq!(api.spoken(), [line as i32]);
-        assert_eq!(api.state[key], 1);
+        assert_eq!(api.state[&key], 1);
     }
     assert_eq!(choices(&api), [PROBE_HAS_BUG, ENOUGH_PROBLEM]);
     api.effects.clear();
@@ -594,9 +618,9 @@ fn self_destruct_preserves_byte_wrapping_and_event_selector() {
     api.put(StoryKey::SLYLANDRO_MULTIPLIER, 255);
     Dialogue { api: &mut api }.home(MEGA_SELF_DESTRUCT as i32);
     assert_eq!(api.spoken(), [WHY_YES_THERE_IS as i32]);
-    assert_eq!(api.state[StoryKey::DESTRUCT_CODE_ON_SHIP], 1);
-    assert_eq!(api.state[StoryKey::SLYLANDRO_KNOW_BROKEN], 1);
-    assert_eq!(api.state[StoryKey::SLYLANDRO_MULTIPLIER], 0);
+    assert_eq!(api.state[&StoryKey::DESTRUCT_CODE_ON_SHIP], 1);
+    assert_eq!(api.state[&StoryKey::SLYLANDRO_KNOW_BROKEN], 1);
+    assert_eq!(api.state[&StoryKey::SLYLANDRO_MULTIPLIER], 0);
     assert!(api.effects.contains(&Effect::Event(1, 0, 0, 0, 17)));
 }
 
