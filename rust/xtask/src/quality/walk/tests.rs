@@ -206,7 +206,7 @@ fn stale_macro_registry_is_an_error() {
 
 #[test]
 fn macro_handlers_expand_every_registered_definition() {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+    let root = crate::cli::repository_root().unwrap().join("rust");
     struct Macros(Vec<syn::ItemMacro>);
     impl<'a> Visit<'a> for Macros {
         fn visit_item_macro(&mut self, m: &'a syn::ItemMacro) {

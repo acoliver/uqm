@@ -41,17 +41,17 @@ pub struct Target {
 }
 
 pub fn metadata(root: &Path) -> Result<Metadata, String> {
-    let output = Command::new(super::cargo())
-        .current_dir(root.join("rust"))
-        .args([
-            "metadata",
-            "--locked",
-            "--all-features",
-            "--format-version",
-            "1",
-        ])
-        .output()
-        .map_err(|e| e.to_string())?;
+    let output = crate::quality::tool::output(
+        Command::new(super::cargo())
+            .current_dir(root.join("rust"))
+            .args([
+                "metadata",
+                "--locked",
+                "--all-features",
+                "--format-version",
+                "1",
+            ]),
+    )?;
     if !output.status.success() {
         return Err(format!(
             "cargo metadata: {}",
@@ -176,11 +176,11 @@ pub fn check(root: &Path) -> Result<(), String> {
             forbidden_tables(&document(&path)?)?;
         }
     }
-    let output = Command::new("git")
-        .current_dir(root)
-        .args(["ls-files", "-z"])
-        .output()
-        .map_err(|e| e.to_string())?;
+    let output = crate::quality::tool::output(
+        Command::new("git")
+            .current_dir(root)
+            .args(["ls-files", "-z"]),
+    )?;
     if !output.status.success() {
         return Err("git ls-files failed".into());
     }

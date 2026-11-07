@@ -225,11 +225,7 @@ mod tests {
     use super::*;
 
     fn root() -> std::path::PathBuf {
-        Path::new(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .and_then(Path::parent)
-            .expect("xtask lives two levels below the repository root")
-            .to_path_buf()
+        crate::cli::repository_root().unwrap()
     }
 
     #[test]

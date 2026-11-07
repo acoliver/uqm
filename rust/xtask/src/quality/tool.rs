@@ -1,7 +1,9 @@
 //! Shared baseline handling for external tools. All policy stays in Rust.
 use std::collections::BTreeMap;
+use std::env;
+use std::io;
 use std::path::Path;
-use std::process::Command;
+use std::process::{Child, Command, ExitStatus, Output};
 
 use super::baseline::{self, Baseline};
 
@@ -46,8 +48,42 @@ pub(crate) fn command(program: impl AsRef<std::ffi::OsStr>) -> Command {
     Command::new(program)
 }
 
+/// Says which program failed to start and from which directory, so a launch
+/// failure can be traced without rerunning the command by hand.
+fn launch_error(command: &Command, error: &io::Error) -> String {
+    let directory = match command.get_current_dir() {
+        Some(directory) => directory.display().to_string(),
+        None => match env::current_dir() {
+            Ok(directory) => directory.display().to_string(),
+            Err(error) => format!("<unreadable current directory: {error}>"),
+        },
+    };
+    format!(
+        "failed to start '{}' in {directory}: {error}",
+        command.get_program().to_string_lossy()
+    )
+}
+
+pub(crate) fn output(command: &mut Command) -> Result<Output, String> {
+    command
+        .output()
+        .map_err(|error| launch_error(command, &error))
+}
+
+pub(crate) fn exit_status(command: &mut Command) -> Result<ExitStatus, String> {
+    command
+        .status()
+        .map_err(|error| launch_error(command, &error))
+}
+
+pub(crate) fn spawn(command: &mut Command) -> Result<Child, String> {
+    command
+        .spawn()
+        .map_err(|error| launch_error(command, &error))
+}
+
 pub fn status(command: &mut Command) -> Result<(), String> {
-    let status = command.status().map_err(|e| format!("{command:?}: {e}"))?;
+    let status = exit_status(command)?;
     if status.success() {
         Ok(())
     } else {
@@ -332,18 +368,18 @@ fn require_unchanged_game_sources(root: &Path, reference: &str) -> Result<(), St
         "rust/examples",
         "rust/build.rs",
     ];
-    let unchanged = Command::new("git")
-        .current_dir(root)
-        .args(["diff", "--quiet", reference, "--"])
-        .args(paths)
-        .status()
-        .map_err(|e| e.to_string())?;
-    let untracked = Command::new("git")
-        .current_dir(root)
-        .args(["ls-files", "--others", "--exclude-standard", "--"])
-        .args(paths)
-        .output()
-        .map_err(|e| e.to_string())?;
+    let unchanged = exit_status(
+        Command::new("git")
+            .current_dir(root)
+            .args(["diff", "--quiet", reference, "--"])
+            .args(paths),
+    )?;
+    let untracked = output(
+        Command::new("git")
+            .current_dir(root)
+            .args(["ls-files", "--others", "--exclude-standard", "--"])
+            .args(paths),
+    )?;
     if !unchanged.success() || !untracked.status.success() || !untracked.stdout.is_empty() {
         return Err("initial lint baseline requires unchanged game sources".into());
     }
@@ -351,11 +387,11 @@ fn require_unchanged_game_sources(root: &Path, reference: &str) -> Result<(), St
 }
 
 fn git_file(root: &Path, reference: &str, path: &str) -> Result<String, String> {
-    let output = Command::new("git")
-        .current_dir(root)
-        .args(["show", &format!("{reference}:{path}")])
-        .output()
-        .map_err(|e| e.to_string())?;
+    let output = output(
+        Command::new("git")
+            .current_dir(root)
+            .args(["show", &format!("{reference}:{path}")]),
+    )?;
     if !output.status.success() {
         return Err(format!(
             "read {reference}:{path}: {}",
@@ -380,7 +416,9 @@ pub(crate) fn fixture_program(root: &Path, body: &str) -> std::path::PathBuf {
 
 #[cfg(test)]
 pub(crate) fn fixture_directory() -> tempfile::TempDir {
-    let directory = Path::new(env!("CARGO_MANIFEST_DIR")).join("../target/quality-fixtures");
+    let directory = crate::cli::repository_root()
+        .unwrap()
+        .join("rust/target/quality-fixtures");
     std::fs::create_dir_all(&directory).unwrap();
     tempfile::tempdir_in(directory.canonicalize().unwrap()).unwrap()
 }
@@ -646,5 +684,22 @@ mod tests {
         both.extend(before.clone());
         assert!(compare(&both, &before, &moves).is_err());
         assert!(compare(&after, &before, &BTreeMap::new()).is_err());
+    }
+}
+
+#[cfg(test)]
+mod launch_tests {
+    use super::*;
+
+    #[test]
+    fn a_command_that_cannot_start_names_its_program_and_directory() {
+        let directory = tempfile::tempdir().unwrap();
+        let program = "uqm-xtask-no-such-program";
+        let error = output(Command::new(program).current_dir(directory.path())).unwrap_err();
+        assert!(error.contains(program), "{error}");
+        assert!(
+            error.contains(&directory.path().display().to_string()),
+            "{error}"
+        );
     }
 }

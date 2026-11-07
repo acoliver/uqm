@@ -21,10 +21,10 @@ impl Configuration {
             "x86_64-pc-windows-msvc",
             "aarch64-pc-windows-msvc",
         ] {
-            let output = Command::new(std::env::var("RUSTC").unwrap_or_else(|_| "rustc".into()))
-                .args(["--print", "cfg", "--target", target])
-                .output()
-                .map_err(|e| e.to_string())?;
+            let output = crate::quality::tool::output(
+                Command::new(std::env::var("RUSTC").unwrap_or_else(|_| "rustc".into()))
+                    .args(["--print", "cfg", "--target", target]),
+            )?;
             if !output.status.success() {
                 return Err(format!(
                     "rustc cfg for {target}: {}",

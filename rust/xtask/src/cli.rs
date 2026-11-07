@@ -63,12 +63,28 @@ fn usage() -> String {
     "usage: cargo xtask <quality|clippy|coverage|deny|abi-check|parity> or cargo xtask-native <debug|release|test|native>".into()
 }
 
+/// The checkout that contains the current directory. Resolved at run time: a
+/// shared target can hold an xtask binary built from some other, removed
+/// checkout, and its compile-time manifest path would point at that checkout.
 pub(super) fn repository_root() -> Result<PathBuf, String> {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .and_then(Path::parent)
+    let start = env::current_dir()
+        .map_err(|error| format!("cannot read the current directory: {error}"))?;
+    repository_root_from(&start)
+}
+
+const XTASK_MANIFEST: &str = "rust/xtask/Cargo.toml";
+
+fn repository_root_from(start: &Path) -> Result<PathBuf, String> {
+    start
+        .ancestors()
+        .find(|directory| directory.join(XTASK_MANIFEST).is_file())
         .map(Path::to_path_buf)
-        .ok_or_else(|| "xtask is not inside the repository".to_string())
+        .ok_or_else(|| {
+            format!(
+                "xtask is not inside a uqm checkout: no {XTASK_MANIFEST} in {} or any parent directory",
+                start.display()
+            )
+        })
 }
 
 #[cfg(test)]
@@ -94,6 +110,26 @@ mod tests {
             .unwrap()
             .join("rust/xtask/Cargo.toml")
             .is_file());
+    }
+
+    #[test]
+    fn repository_root_is_found_from_a_nested_working_directory() {
+        let checkout = tempfile::tempdir().unwrap();
+        let nested = checkout.path().join("rust/xtask/src");
+        std::fs::create_dir_all(&nested).unwrap();
+        std::fs::write(checkout.path().join(XTASK_MANIFEST), "").unwrap();
+        assert_eq!(repository_root_from(&nested).unwrap(), checkout.path());
+    }
+
+    #[test]
+    fn repository_root_outside_a_checkout_names_the_path_it_searched() {
+        let outside = tempfile::tempdir().unwrap();
+        let error = repository_root_from(outside.path()).unwrap_err();
+        assert!(error.contains("not inside a uqm checkout"), "{error}");
+        assert!(
+            error.contains(&outside.path().display().to_string()),
+            "{error}"
+        );
     }
 
     #[cfg(feature = "native")]

@@ -101,11 +101,14 @@ pub fn measure(
     defs_only: bool,
 ) -> Result<Measurement, String> {
     let rust = root.join("rust");
-    let output = Command::new(super::cargo())
-        .current_dir(&rust)
-        .args(["metadata", "--no-deps", "--locked", "--format-version", "1"])
-        .output()
-        .map_err(|e| e.to_string())?;
+    let output =
+        crate::quality::tool::output(Command::new(super::cargo()).current_dir(&rust).args([
+            "metadata",
+            "--no-deps",
+            "--locked",
+            "--format-version",
+            "1",
+        ]))?;
     if !output.status.success() {
         return Err(format!(
             "cargo metadata: {}",

@@ -140,11 +140,8 @@ pub(super) fn protect(
 }
 
 fn git(root: &Path, arguments: &[&str]) -> Result<Vec<u8>> {
-    let output = Command::new("git")
-        .current_dir(root)
-        .args(arguments)
-        .output()
-        .map_err(|error| error.to_string())?;
+    let output =
+        crate::quality::tool::output(Command::new("git").current_dir(root).args(arguments))?;
     if !output.status.success() {
         return Err(format!(
             "git {arguments:?}: {}",

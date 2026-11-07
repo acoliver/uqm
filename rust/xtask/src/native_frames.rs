@@ -308,7 +308,7 @@ mod tests {
     fn fixture(
         steps: &[(usize, serde_json::Value, Option<&str>, [u8; 3])],
     ) -> TestResult<(tempfile::TempDir, NativeCheckpointPlan)> {
-        let artifacts = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tmp");
+        let artifacts = crate::cli::repository_root().unwrap().join("tmp");
         std::fs::create_dir_all(&artifacts)?;
         let directory = tempfile::tempdir_in(artifacts)?;
         std::fs::create_dir_all(directory.path().join("automation/captures"))?;

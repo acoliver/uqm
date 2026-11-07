@@ -21,9 +21,7 @@ pub(super) fn run(command: &mut Command, budget: Duration, logs: &Path) -> Resul
         command.process_group(0);
     }
     let started = Instant::now();
-    let mut child = command
-        .spawn()
-        .map_err(|error| format!("launch {command:?}: {error}"))?;
+    let mut child = crate::quality::tool::spawn(command)?;
     let result = supervise(&mut child, budget);
     eprintln!(
         "parity process {}: {:.3}s",

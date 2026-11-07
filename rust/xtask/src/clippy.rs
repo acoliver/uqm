@@ -96,10 +96,7 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
     for lint in DEBT {
         command.args(["--force-warn", lint]);
     }
-    let mut child = command
-        .stdout(Stdio::piped())
-        .spawn()
-        .map_err(|e| format!("launch clippy: {e}"))?;
+    let mut child = crate::quality::tool::spawn(command.stdout(Stdio::piped()))?;
     let stdout = child.stdout.take().ok_or("clippy stdout missing")?;
     let mut diagnostics = Diagnostics::default();
     let parsed = (|| {
@@ -218,7 +215,9 @@ mod tests {
 
     #[test]
     fn force_warn_exposes_debt_under_a_broad_source_allow() {
-        let target = Path::new(env!("CARGO_MANIFEST_DIR")).join("../target/clippy-fixtures");
+        let target = crate::cli::repository_root()
+            .unwrap()
+            .join("rust/target/clippy-fixtures");
         std::fs::create_dir_all(&target).unwrap();
         let fixture = tempfile::tempdir_in(target).unwrap();
         std::fs::create_dir(fixture.path().join("src")).unwrap();
