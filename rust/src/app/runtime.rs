@@ -155,10 +155,7 @@ fn run_campaign(
     initialize_campaign(cx);
     activate_start_scene(cx, observer);
     loop {
-        cx.with_legacy(|| {
-            // SAFETY: the campaign display is initialized on this thread.
-            unsafe { crate::ui::sis::SetStatusMessageMode(1) };
-        });
+        cx.kernel.set_status_message_mode(1);
         let decision = lifecycle::prepare_dispatch(cx.world);
         dispatch(cx, io, decision);
         lifecycle::complete_encounter(cx.world, decision);

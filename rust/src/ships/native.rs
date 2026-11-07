@@ -41,8 +41,7 @@ pub mod abi {
         release_string_table as ReleaseStringTable, screen_transition as ScreenTransition,
         set_context as SetContext, set_context_font as SetContextFont,
         set_flash_rect as SetFlashRect, set_mipmap as TFB_DrawScreen_SetMipmap,
-        set_status_mode as SetStatusMessageMode, set_transition_source as SetTransitionSource,
-        string_address as GetStringAddress,
+        set_transition_source as SetTransitionSource, string_address as GetStringAddress,
     };
 
     // Bindgen does not translate these cast-expression macros from controls.h
@@ -96,8 +95,6 @@ mod engine {
     use crate::ui::sis::SetFlashRect;
 
     use crate::ui::sis::DrawSISTitle;
-
-    use crate::ui::sis::SetStatusMessageMode;
 
     use crate::graphics::gfx_common_abi::SetTransitionSource;
 
@@ -265,12 +262,6 @@ mod engine {
     /// `title` must be null or a NUL-terminated string valid through the draw call.
     pub unsafe fn draw_sis_title(title: *mut std::ffi::c_char) {
         DrawSISTitle(title);
-    }
-
-    /// # Safety
-    /// The game thread must own initialized status-message state.
-    pub unsafe fn set_status_mode(mode: abi::StatMsgMode) -> abi::StatMsgMode {
-        SetStatusMessageMode((mode as i32) as u32) as abi::StatMsgMode
     }
 
     /// # Safety

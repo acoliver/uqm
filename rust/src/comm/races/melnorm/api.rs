@@ -23,8 +23,6 @@ mod live {
 
     use crate::comm::commglue_abi::runtime::NPCNumber;
 
-    use crate::ui::sis::SetStatusMessageMode;
-
     use crate::ui::sis::DrawStatusMessage;
 
     use crate::planets::cargo::live::DrawCargoStrings;
@@ -71,7 +69,8 @@ mod live {
         fn status_mode(&mut self, mode: i32) -> i32 {
             self.cx
                 .borrow_mut()
-                .with_legacy(|| unsafe { SetStatusMessageMode(mode as u32) as i32 })
+                .kernel
+                .set_status_message_mode(mode as u32) as i32
         }
         fn draw_status(&mut self) {
             self.cx.borrow_mut().with_legacy(|| unsafe {
