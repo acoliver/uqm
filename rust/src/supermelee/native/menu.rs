@@ -9,7 +9,7 @@ pub(crate) mod live {
     use crate::graphics::{context_abi::ContextLease, drawable_abi::LoadedDrawable};
     use std::ptr::NonNull;
 
-    use crate::mainloop::restart_menu::c_extern::{FadeMusic, SeedRandomNumbers};
+    use crate::mainloop::restart_menu::c_extern::FadeMusic;
     use crate::navigation::abi::{init_space, uninit_space};
 
     use crate::ships::native::abi::*;
@@ -20,7 +20,7 @@ pub(crate) mod live {
     const FADE_ALL_TO_COLOR: u32 = 253;
     const FADE_ALL_TO_BLACK: u32 = 252;
     use crate::supermelee::native::load_teams::live::*;
-    use std::{ffi::CString, ptr};
+    use std::ffi::CString;
     mod battle;
     pub(crate) mod changes;
     pub(crate) mod drawing;
@@ -33,6 +33,17 @@ pub(crate) mod live {
         status_player, worth,
     };
     use editing::*;
+    pub(crate) fn screen_context(kernel: &KernelOwner) -> ContextLease {
+        ContextLease::retain(NonNull::new(kernel.screen_context).expect("melee screen context"))
+    }
+
+    pub(crate) fn fade(cx: &mut crate::engine::battle::Cx<'_>, kind: u32) {
+        let context = screen_context(cx.kernel);
+        let deadline = context.fade_screen(kind, 840 / 2).wrapping_add(840 / 60);
+        cx.kernel.input_runtime().sleep_until(cx, deadline);
+        context.finish_color_transforms();
+    }
+
     fn load_menu_graphics(state: &mut MeleeSession, offscreen: ContextLease) {
         state.menu_graphic = Some(
             LoadedDrawable::load(
@@ -55,7 +66,7 @@ pub(crate) mod live {
         );
     }
 
-    unsafe fn load_setup(state: &mut MeleeSession, cx: &mut crate::engine::battle::Cx<'_>) {
+    fn load_setup(state: &mut MeleeSession, cx: &mut crate::engine::battle::Cx<'_>) {
         if !state.load_config(&mut cx.kernel.player_control) {
             cx.kernel.player_control[0] = HUMAN_CONTROL | 16;
             let team = state.load.builtins[0].clone();
@@ -66,11 +77,7 @@ pub(crate) mod live {
         }
     }
 
-    unsafe fn change_option(
-        state: &mut MeleeSession,
-        cx: &mut crate::engine::battle::Cx<'_>,
-        next: u8,
-    ) {
+    fn change_option(state: &mut MeleeSession, cx: &mut crate::engine::battle::Cx<'_>, next: u8) {
         if state.melee_option == 1 || state.melee_option == 7 {
             status_player(cx, state, -1);
         }
@@ -84,7 +91,7 @@ pub(crate) mod live {
         }
     }
 
-    unsafe fn run_menu_frame(
+    fn run_menu_frame(
         state: &mut MeleeSession,
         cx: &mut crate::engine::battle::Cx<'_>,
         io: &mut crate::engine::observe::Io<'_>,
@@ -103,7 +110,7 @@ pub(crate) mod live {
     pub(super) fn key(input: &crate::engine::input::InputSession, key: u32) -> bool {
         input.pulsed().menu[key as usize] != 0
     }
-    unsafe fn select_option(
+    fn select_option(
         input: &crate::engine::input::InputSession,
         state: &mut MeleeSession,
         cx: &mut crate::engine::battle::Cx<'_>,
@@ -150,9 +157,8 @@ pub(crate) mod live {
             _ => {}
         }
     }
-    /// # Safety
     /// State and its graphics remain live through this synchronous menu frame.
-    pub unsafe fn do_melee(
+    pub fn do_melee(
         state: &mut MeleeSession,
         cx: &mut crate::engine::battle::Cx<'_>,
         io: &mut crate::engine::observe::Io<'_>,
@@ -166,7 +172,7 @@ pub(crate) mod live {
         input.set_menu_sounds(15, 16);
         if state.initialized == 0 {
             if state.h_music.is_some() {
-                cx.with_legacy(|| stop_music());
+                crate::ui::settings::stop_loaded_music(state.h_music.as_ref());
                 drop(state.h_music.take());
             }
             let music_name = std::ffi::CStr::from_bytes_with_nul(MELEE_MUSIC)
@@ -177,7 +183,7 @@ pub(crate) mod live {
             crate::ui::settings::play_loaded_music(cx.world, state.h_music.as_ref(), 1, 1);
             {
                 init_screen(cx, state);
-                FadeScreen(FADE_ALL_TO_COLOR, 840 / 2);
+                screen_context(cx.kernel).fade_screen(FADE_ALL_TO_COLOR, 840 / 2);
             };
             state.last_input_time = GetTimeCounter();
             return 1;
@@ -228,7 +234,9 @@ pub(crate) mod live {
         disconnects(state, cx);
         {
             flash_selection(cx, state);
-            cx.with_legacy(|| SleepThreadUntil(time.wrapping_add(840 / 30)));
+            cx.kernel
+                .input_runtime()
+                .sleep_until(cx, time.wrapping_add(840 / 30));
         };
         1
     }
@@ -249,9 +257,8 @@ pub(crate) mod live {
         ));
         offscreen
     }
-    /// # Safety
     /// Run on the initialized game thread with exclusive access to native menu resources.
-    pub unsafe fn melee(
+    pub fn melee(
         cx: &mut crate::engine::battle::Cx<'_>,
         io: &mut crate::engine::observe::Io<'_>,
         config: uqm_engine::io::uio_owned::Directory,
@@ -298,14 +305,16 @@ pub(crate) mod live {
                  cx: &mut crate::engine::battle::Cx<'_>,
                  io: &mut crate::engine::observe::Io<'_>| {
                     // SAFETY: the frame exclusively lends its menu to each synchronous step.
-                    unsafe { run_menu_frame(state, cx, io, input) }
+                    {
+                        run_menu_frame(state, cx, io, input)
+                    }
                 },
             );
             cx.run_input_frame(io, true, &mut frame);
         }
         // SAFETY: the input session has stopped and no callback retains these resources.
         cx.with_legacy(|| {
-            stop_music();
+            crate::ui::settings::stop_loaded_music(state.h_music.as_ref());
             WaitForSoundEnd(u16::MAX);
         });
         state.save_config(cx.kernel.player_control);
@@ -321,9 +330,8 @@ pub(crate) mod live {
             drop(state.menu_graphic.take());
             drop(state.build_picker.take());
             state.netplay.setup_input_delay(0);
-
-            FlushInput(input);
         });
+        runtime.flush();
     }
 }
 

@@ -40,7 +40,7 @@ pub(crate) mod live {
     use crate::ships::native::abi::*;
     use crate::supermelee::native::menu::live::drawing::{draw_ship_strings, flash_selection};
     use crate::supermelee::session::MeleeSession;
-    use std::{ptr, ptr::NonNull};
+    use std::ptr::NonNull;
 
     pub(crate) struct BuildPicker {
         drawable: LoadedDrawable,
@@ -132,14 +132,13 @@ pub(crate) mod live {
         BuildPicker { drawable, screen }
     }
 
-    /// # Safety
     /// State must be the active fleet editor on the game thread.
-    pub unsafe fn draw_pick_frame(cx: &mut crate::engine::battle::Cx<'_>, state: &MeleeSession) {
+    pub fn draw_pick_frame(cx: &mut crate::engine::battle::Cx<'_>, state: &MeleeSession) {
         state.build_picker().draw_frame(state.side);
         draw_ship_strings(cx, state, state.current_ship);
     }
 
-    unsafe fn pick(
+    fn pick(
         state: &mut MeleeSession,
         cx: &mut crate::engine::battle::Cx<'_>,
         io: &mut crate::engine::observe::Io<'_>,
@@ -159,12 +158,7 @@ pub(crate) mod live {
         }
         let current_ship = state.current_ship;
         if keys[KEY_MENU_SPECIAL as usize] != 0 && current_ship != 255 {
-            crate::front_end::fmv::runtime::do_ship_spin(
-                cx,
-                io,
-                current_ship as u16,
-                ptr::null_mut(),
-            );
+            crate::front_end::fmv::runtime::do_ship_spin(cx, io, current_ship as u16);
             return 1;
         }
         let selected = navigate(
@@ -182,19 +176,20 @@ pub(crate) mod live {
         }
         {
             flash_selection(cx, state);
-            cx.with_legacy(|| SleepThreadUntil(time.wrapping_add(840 / 30)));
+            cx.kernel
+                .input_runtime()
+                .sleep_until(cx, time.wrapping_add(840 / 30));
         };
         1
     }
-    /// # Safety
     /// State must be the active fleet editor on the game thread.
-    pub unsafe fn build_pick_ship(
+    pub fn build_pick_ship(
         cx: &mut crate::engine::battle::Cx<'_>,
         io: &mut crate::engine::observe::Io<'_>,
         input: &crate::engine::input::InputSession,
         state: &mut MeleeSession,
     ) -> bool {
-        cx.with_legacy(|| FlushInput(input));
+        cx.kernel.input_runtime().flush();
         if state.current_ship == 255 {
             state.current_ship = 0;
         }

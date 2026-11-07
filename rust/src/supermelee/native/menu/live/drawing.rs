@@ -88,7 +88,7 @@ pub(super) fn controls(
     };
     draw_melee_icon(state, icon);
 }
-pub(super) unsafe fn teams(cx: &mut crate::engine::battle::Cx<'_>, state: &MeleeSession) {
+pub(super) fn teams(cx: &mut crate::engine::battle::Cx<'_>, state: &MeleeSession) {
     for side in [0usize, 1] {
         controls(cx, state, side, false);
         for index in 0..14 {
@@ -104,14 +104,9 @@ pub(super) unsafe fn teams(cx: &mut crate::engine::battle::Cx<'_>, state: &Melee
         worth(cx, state, side as u16, 0);
     }
 }
-/// # Safety
 /// Call on the graphics thread with loaded melee resources. Pointer arguments
 /// must be valid for the call, and player, row, column and ship indices must be in range.
-pub unsafe fn repair_frame(
-    cx: &mut crate::engine::battle::Cx<'_>,
-    state: &MeleeSession,
-    rect: &RECT,
-) {
+pub fn repair_frame(cx: &mut crate::engine::battle::Cx<'_>, state: &MeleeSession, rect: &RECT) {
     let mut r = *rect;
     r.corner.x += SAFE_X as i16;
     r.corner.y += SAFE_Y as i16;
@@ -144,7 +139,7 @@ pub unsafe fn repair_frame(
         )
     });
 }
-pub(super) unsafe fn redraw(cx: &mut crate::engine::battle::Cx<'_>, state: &MeleeSession) {
+pub(super) fn redraw(cx: &mut crate::engine::battle::Cx<'_>, state: &MeleeSession) {
     let extent = state
         .menu_target
         .as_ref()
@@ -172,7 +167,7 @@ pub(super) fn name_rect(side: u16) -> RECT {
         },
     }
 }
-pub(super) unsafe fn worth(
+pub(super) fn worth(
     cx: &mut crate::engine::battle::Cx<'_>,
     state: &MeleeSession,
     side: u16,
@@ -216,7 +211,7 @@ pub(super) unsafe fn worth(
         },
     );
 }
-pub(super) unsafe fn name(
+pub(super) fn name(
     cx: &mut crate::engine::battle::Cx<'_>,
     state: &MeleeSession,
     side: u16,
@@ -289,7 +284,7 @@ pub(super) unsafe fn name(
         1
     })
 }
-pub(super) unsafe fn status(
+pub(super) fn status(
     cx: &mut crate::engine::battle::Cx<'_>,
     state: &MeleeSession,
     message: &std::ffi::CStr,
@@ -352,7 +347,7 @@ pub(super) unsafe fn status(
         });
     });
 }
-pub(super) unsafe fn status_game(
+pub(super) fn status_game(
     cx: &mut crate::engine::battle::Cx<'_>,
     state: &MeleeSession,
     index: usize,
@@ -407,7 +402,7 @@ pub(super) fn connection_box(state: &MeleeSession, kernel: &crate::engine::Kerne
     });
 }
 
-pub(super) unsafe fn status_player(
+pub(super) fn status_player(
     cx: &mut crate::engine::battle::Cx<'_>,
     state: &MeleeSession,
     player: isize,
@@ -438,7 +433,7 @@ pub(super) unsafe fn status_player(
         status_game(cx, state, NETMELEE_STRING_BASE as usize + index as usize);
     }
 }
-pub(super) unsafe fn highlight(
+pub(super) fn highlight(
     cx: &mut crate::engine::battle::Cx<'_>,
     state: &MeleeSession,
     option: u8,
@@ -487,10 +482,9 @@ pub(super) unsafe fn highlight(
         _ => {}
     }
 }
-/// # Safety
 /// Call on the graphics thread with loaded melee resources. Pointer arguments
 /// must be valid for the call, and player, row, column and ship indices must be in range.
-pub unsafe fn flash_selection(cx: &mut crate::engine::battle::Cx<'_>, state: &mut MeleeSession) {
+pub fn flash_selection(cx: &mut crate::engine::battle::Cx<'_>, state: &mut MeleeSession) {
     let now = GetTimeCounter();
     if let Some(selected) = state.selection_flash(now) {
         let context = state
@@ -500,7 +494,7 @@ pub unsafe fn flash_selection(cx: &mut crate::engine::battle::Cx<'_>, state: &mu
         context.with_selected(|| highlight(cx, state, state.melee_option, selected));
     }
 }
-pub(super) unsafe fn init_screen(cx: &mut crate::engine::battle::Cx<'_>, state: &MeleeSession) {
+pub(super) fn init_screen(cx: &mut crate::engine::battle::Cx<'_>, state: &MeleeSession) {
     let context = state
         .menu_context
         .as_ref()
@@ -531,19 +525,13 @@ pub(super) unsafe fn init_screen(cx: &mut crate::engine::battle::Cx<'_>, state: 
     });
     redraw(cx, state);
 }
-/// # Safety
 /// Call on the graphics thread with loaded melee resources. Pointer arguments
 /// must be valid for the call, and player, row, column and ship indices must be in range.
-pub unsafe fn draw_ship_strings(
-    cx: &mut crate::engine::battle::Cx<'_>,
-    state: &MeleeSession,
-    ship: u32,
-) {
+pub fn draw_ship_strings(cx: &mut crate::engine::battle::Cx<'_>, state: &MeleeSession, ship: u32) {
     let context = ContextLease::retain(
         NonNull::new(cx.kernel.status_context.cast())
             .unwrap_or_else(|| panic!("melee status context not admitted")),
     );
-    let master = crate::ships::master_native::master_in(cx.kernel, ship as u16);
     let font = cx.kernel.battle_font();
     context.with_selected(|| {
         let mut rect = context.clip_rect();
@@ -582,21 +570,34 @@ pub unsafe fn draw_ship_strings(
                         );
                     }
                 } else {
-                    let mut master = master.unwrap_or_else(|| panic!("melee master ship {ship}"));
-                    cx.with_legacy(|| {
-                        crate::ui::shipstat::init_ship_status(
-                            font.as_ref(),
-                            &mut master.info,
-                            None,
-                            ptr::null_mut(),
-                        )
-                    });
+                    let descriptor =
+                        crate::ships::master_native::descriptor_in(cx.kernel, ship as u16)
+                            .unwrap_or_else(|| panic!("melee master ship {ship}"));
+                    let mut info = *descriptor.info();
+                    let graphics =
+                        crate::ui::shipstat::StatusGraphics::new(cx.kernel, font.clone());
+                    let portrait =
+                        crate::graphics::drawable_abi::retain_frame_allocations(&[info.icons])[0]
+                            .context_frame(1);
+                    let (name, name_count) = descriptor.label(1);
+                    let cost = std::ffi::CString::new(info.ship_cost.to_string()).unwrap();
+                    graphics.draw(
+                        &mut info,
+                        &portrait,
+                        0,
+                        None,
+                        Some(crate::ui::shipstat::StatusTitle {
+                            name,
+                            name_count,
+                            caption: Some((&cost, u16::MAX)),
+                        }),
+                    );
                 }
             });
         });
     });
 }
-pub(super) unsafe fn current(cx: &mut crate::engine::battle::Cx<'_>, state: &mut MeleeSession) {
+pub(super) fn current(cx: &mut crate::engine::battle::Cx<'_>, state: &mut MeleeSession) {
     state.current_ship = if state.row == 2 {
         255
     } else {

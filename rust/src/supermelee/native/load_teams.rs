@@ -49,7 +49,7 @@ pub(crate) mod live {
         browser::write_team,
         team::{ship_cost, MeleeTeam as OwnedTeam},
     };
-    use std::{ffi::CString, mem, ptr::NonNull};
+    use std::{ffi::CString, ptr::NonNull};
 
     fn draw_entry(
         context: &ContextLease,
@@ -187,9 +187,8 @@ pub(crate) mod live {
             select(state, state.load.highlighted);
         }
     }
-    /// # Safety
     /// State and its load view must be live on the game thread.
-    pub unsafe fn do_load_team(
+    pub fn do_load_team(
         state: &mut MeleeSession,
         cx: &mut crate::engine::battle::Cx<'_>,
         input: &crate::engine::input::InputSession,
@@ -256,8 +255,10 @@ pub(crate) mod live {
         }
         cx.with_legacy(|| {
             flash(state);
-            SleepThreadUntil(time.wrapping_add(840 / 30));
         });
+        cx.kernel
+            .input_runtime()
+            .sleep_until(cx, time.wrapping_add(840 / 30));
         1
     }
     pub fn load_team_list(state: &mut MeleeSession) {
@@ -267,9 +268,8 @@ pub(crate) mod live {
             .unwrap_or_else(|| panic!("melee file resources are not admitted"));
         state.load.refresh(&files.teams);
     }
-    /// # Safety
     /// State must own the team being saved on the game thread.
-    pub unsafe fn do_save_team(
+    pub fn do_save_team(
         state: &mut MeleeSession,
         screen: &ContextLease,
         cx: &mut crate::engine::battle::Cx<'_>,
@@ -283,14 +283,13 @@ pub(crate) mod live {
         filename.truncate(254);
         let filename = CString::new(filename).unwrap();
         let ok = screen.with_selected(|| {
-            let mut saved = mem::zeroed();
-            cx.with_legacy(|| ConfirmSaveLoad(&mut saved));
+            let saved = crate::ui::save_problem::save_confirmation(cx.kernel, screen, true)
+                .expect("save confirmation background");
             let team = &state.melee_setup.teams[state.side as usize];
             let ok = write_team(&state.files().teams, &filename, team).is_ok();
             state.load.top = 0;
             state.load.current = 0;
-            DrawStamp(&mut saved);
-            DestroyDrawable(ReleaseDrawable(saved.frame));
+            saved.restore();
             ok
         });
         if !ok {

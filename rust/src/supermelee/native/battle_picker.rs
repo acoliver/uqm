@@ -149,7 +149,12 @@ pub mod live {
         use crate::engine::battle::input::InputSource;
         let player = context.player();
         match context.source() {
-            InputSource::Human => process(cx, state, usize::from(player), PulsedInputToBattleInput(input, player)),
+            InputSource::Human => process(
+                cx,
+                state,
+                usize::from(player),
+                PulsedInputToBattleInput(input, player),
+            ),
             InputSource::Computer => {
                 if GetTimeCounter()
                     < state.player[usize::from(player)]

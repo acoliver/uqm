@@ -12,7 +12,7 @@ impl crate::ui::getchar::TextEntryCallbacks for NameCallbacks<'_> {
         self.0.cur_index =
             u16::try_from(entry.cursor).unwrap_or_else(|error| panic!("team name cursor: {error}"));
         // SAFETY: the menu owns its retained drawing resources and entry text is borrowed.
-        unsafe {
+        {
             name(
                 cx,
                 self.0,
@@ -37,7 +37,7 @@ impl crate::ui::getchar::TextEntryCallbacks for NameCallbacks<'_> {
 fn advance(state: &mut MeleeSession) {
     (state.row, state.col) = super::super::rules::advance_cursor(state.row, state.col);
 }
-unsafe fn edit_name(
+fn edit_name(
     state: &mut MeleeSession,
     side: u16,
     cx: &mut crate::engine::battle::Cx<'_>,
@@ -61,7 +61,7 @@ unsafe fn edit_name(
         view_name(cx, state, side);
     }
 }
-pub(super) unsafe fn edit(
+pub(super) fn edit(
     state: &mut MeleeSession,
     cx: &mut crate::engine::battle::Cx<'_>,
     io: &mut crate::engine::observe::Io<'_>,
@@ -139,9 +139,9 @@ pub(super) unsafe fn edit(
         }
     }
     flush_menu(state, cx, io);
-    {
-        flash_selection(cx, state);
-        cx.with_legacy(|| SleepThreadUntil(time.wrapping_add(840 / 30)));
-    };
+    flash_selection(cx, state);
+    cx.kernel
+        .input_runtime()
+        .sleep_until(cx, time.wrapping_add(840 / 30));
     1
 }

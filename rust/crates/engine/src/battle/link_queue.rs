@@ -466,8 +466,9 @@ pub struct PickerResources<'a> {
     icon: super::super::super::battle::frames::FrameSelection,
 }
 impl PickerResources<'_> {
-    pub fn strings(&self) -> crate::graphics::native_abi::STRING {
-        self.owner.race_strings
+    pub fn label(&self, index: u16) -> (&std::ffi::CStr, u16) {
+        // SAFETY: picker admission retains the descriptor's strings until the ship is cleared.
+        unsafe { super::ship_assets::borrowed_label(self.owner.race_strings, index) }
     }
     pub fn icon(&self) -> super::super::super::battle::views::FrameRef<'_> {
         self.icon.view()

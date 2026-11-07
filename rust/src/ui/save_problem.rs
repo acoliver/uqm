@@ -103,6 +103,22 @@ impl SaveBackground {
     }
 }
 
+pub fn save_confirmation(
+    kernel: &crate::engine::Kernel,
+    context: &ContextLease,
+    saving: bool,
+) -> Option<SaveBackground> {
+    let font = FontLease::retain(
+        std::ptr::NonNull::new(kernel.star_con_font.cast()).expect("save confirmation font"),
+    );
+    render_save_confirmation(
+        context,
+        &font,
+        kernel.game_text(454 + usize::from(!saving)),
+        saving,
+    )
+}
+
 pub fn render_save_confirmation(
     context: &ContextLease,
     font: &FontLease,

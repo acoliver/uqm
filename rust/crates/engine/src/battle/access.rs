@@ -628,9 +628,6 @@ impl Cx<'_> {
     pub fn captain_controls_mut(&mut self, ship: ShipId) -> &mut super::record::CAPTAIN_STUFF {
         &mut self.desc_mut(ship).ship_data.captain_control
     }
-    pub fn ship_info_pointer(&mut self, ship: ShipId) -> *mut super::record::SHIP_INFO {
-        &raw mut self.desc_mut(ship).ship_info
-    }
 }
 impl Cx<'_> {
     pub fn refresh_intersect_frame(&mut self, id: ElementId) {

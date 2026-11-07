@@ -478,28 +478,48 @@ unsafe fn do_melee_connect_dialog(
     )
 }
 
-/// # Safety
-/// Must run on the game thread with graphics, input, strings and netplay options
-/// initialized. `side` must index one of the two netplay peer records.
-pub unsafe fn melee_connect_dialog(
+/// Run the connection dialog against the caller's retained session.
+pub fn melee_connect_dialog(
     cx: &mut crate::engine::battle::Cx<'_>,
     io: &mut crate::engine::observe::Io<'_>,
     session: &mut crate::supermelee::netplay::NetplaySession,
     side: c_int,
 ) -> BOOLEAN {
-    PLAYER_FONT_HANDLE =
-        LoadGraphicInstance(crate::navigation::abi::PLAYER_FONT.as_ptr().cast()).cast();
-    let mut state: ConnectDialogState = mem::zeroed();
-    state.initialized = 0;
-    state.which_side = side;
-    state.session = session;
-    state.confirmed = 1;
-    CURRENT_STATE = &mut state;
-    cx.run_input(io, true, |cx, _| {
-        let runtime = cx.kernel.input_runtime();
-        cx.with_legacy(|| do_melee_connect_dialog(&mut state, runtime.input()) != 0)
-    });
-    CURRENT_STATE = ptr::null_mut();
-    DestroyFont(PLAYER_FONT_HANDLE);
-    state.confirmed as BOOLEAN
+    assert!((0..2).contains(&side), "connection side must index a peer");
+    let _graphics = crate::graphics::context_abi::ContextLease::retain(
+        std::ptr::NonNull::new(cx.kernel.screen_context).expect("connection dialog screen"),
+    );
+    struct ActiveDialog;
+    impl Drop for ActiveDialog {
+        fn drop(&mut self) {
+            // SAFETY: this guard exclusively owns the registered synchronous dialog and font.
+            unsafe {
+                CURRENT_STATE = ptr::null_mut();
+                DestroyFont(PLAYER_FONT_HANDLE);
+                PLAYER_FONT_HANDLE = ptr::null_mut();
+            }
+        }
+    }
+    // SAFETY: the synchronous modal driver retains Cx, the dialog state and its borrowed session.
+    unsafe {
+        assert!(
+            CURRENT_STATE.is_null(),
+            "connection dialog cannot be reentered"
+        );
+        PLAYER_FONT_HANDLE =
+            LoadGraphicInstance(crate::navigation::abi::PLAYER_FONT.as_ptr().cast()).cast();
+        let mut state: ConnectDialogState = mem::zeroed();
+        state.initialized = 0;
+        state.which_side = side;
+        state.session = session;
+        state.confirmed = 1;
+        CURRENT_STATE = &mut state;
+        let active = ActiveDialog;
+        cx.run_input(io, true, |cx, _| {
+            let runtime = cx.kernel.input_runtime();
+            cx.with_legacy(|| do_melee_connect_dialog(&mut state, runtime.input()) != 0)
+        });
+        drop(active);
+        state.confirmed as BOOLEAN
+    }
 }

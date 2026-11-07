@@ -2,7 +2,7 @@
 use super::*;
 use crate::supermelee::types::MeleeShip as SetupShip;
 
-pub(super) unsafe fn view_name(
+pub(super) fn view_name(
     cx: &mut crate::engine::battle::Cx<'_>,
     state: &mut MeleeSession,
     side: u16,
@@ -11,7 +11,7 @@ pub(super) unsafe fn view_name(
         name(cx, state, side, 4, None);
     }
 }
-unsafe fn change_ship(
+fn change_ship(
     cx: &mut crate::engine::battle::Cx<'_>,
     state: &mut MeleeSession,
     side: u16,
@@ -47,7 +47,7 @@ unsafe fn change_ship(
     }
     true
 }
-unsafe fn change_name(
+fn change_name(
     cx: &mut crate::engine::battle::Cx<'_>,
     state: &mut MeleeSession,
     side: u16,
@@ -61,9 +61,8 @@ unsafe fn change_name(
     }
     true
 }
-/// # Safety
 /// The menu and its graphics must be live on the game thread.
-pub unsafe fn local_change_ship(
+pub fn local_change_ship(
     cx: &mut crate::engine::battle::Cx<'_>,
     state: &mut MeleeSession,
     side: u16,
@@ -80,9 +79,8 @@ pub unsafe fn local_change_ship(
     }
     true
 }
-/// # Safety
 /// The menu and its graphics must be live on the game thread.
-pub unsafe fn local_change_team_name(
+pub fn local_change_team_name(
     cx: &mut crate::engine::battle::Cx<'_>,
     state: &mut MeleeSession,
     side: u16,
@@ -97,9 +95,8 @@ pub unsafe fn local_change_team_name(
     }
     true
 }
-/// # Safety
 /// The menu and its graphics must be live on the game thread.
-pub unsafe fn local_change_team(
+pub fn local_change_team(
     cx: &mut crate::engine::battle::Cx<'_>,
     state: &mut MeleeSession,
     side: usize,
@@ -123,9 +120,8 @@ pub(super) fn bootstrap_sync_team(state: &mut MeleeSession, side: usize) {
     let setup = &mut state.melee_setup;
     setup.sent[side].set_name(Some(setup.teams[side].c_name()));
 }
-/// # Safety
 /// The menu and its graphics must be live on the game thread.
-pub(super) unsafe fn remote_ship(
+pub(super) fn remote_ship(
     cx: &mut crate::engine::battle::Cx<'_>,
     state: &mut MeleeSession,
     remote: usize,
@@ -150,9 +146,8 @@ pub(super) unsafe fn remote_ship(
             SetupShip::from_u8(ship as u8).unwrap_or_else(|| panic!("validated remote ship"));
     }
 }
-/// # Safety
 /// The menu and its graphics must be live on the game thread.
-pub(super) unsafe fn remote_name(
+pub(super) fn remote_name(
     cx: &mut crate::engine::battle::Cx<'_>,
     state: &mut MeleeSession,
     remote: usize,
@@ -177,7 +172,7 @@ pub(super) unsafe fn remote_name(
         state.melee_setup.sent[side as usize].set_name(None);
     }
 }
-pub(super) unsafe fn confirmation_cancelled(
+pub(super) fn confirmation_cancelled(
     cx: &mut crate::engine::battle::Cx<'_>,
     state: &mut MeleeSession,
     side: u16,
@@ -201,8 +196,7 @@ pub(super) fn with_protocol_driver<R>(
                        io: &mut crate::engine::observe::Io<'_>,
                        notice| {
         crate::supermelee::native::protocol::feedback(cx, io, notice, |cx, message| {
-            // SAFETY: feedback lends terminated text while the menu owns its drawing resources.
-            unsafe { status(cx, state, message) };
+            status(cx, state, message);
         });
     };
     action(&mut crate::supermelee::native::protocol::Driver::new(
@@ -226,20 +220,17 @@ pub(crate) fn apply_protocol_event(
             flush_menu(state, cx, io);
         }
         Effect::ConfirmationCancelled => {
-            // SAFETY: the live menu retains its graphics through this synchronous draw.
-            unsafe { confirmation_cancelled(cx, state, event.player as u16) };
+            confirmation_cancelled(cx, state, event.player as u16);
         }
         Effect::Ship { side, index, ship } => {
-            // SAFETY: validated fleet slots use this menu's retained catalog and frame.
-            unsafe { remote_ship(cx, state, event.player, side, index, ship) };
+            remote_ship(cx, state, event.player, side, index, ship);
         }
         Effect::TeamName { side, name } => {
             let mut terminated = name;
             terminated.push(0);
             let name = std::ffi::CStr::from_bytes_until_nul(&terminated)
                 .unwrap_or_else(|error| panic!("terminated remote name: {error}"));
-            // SAFETY: the terminated name and menu resources stay borrowed through rendering.
-            unsafe { remote_name(cx, state, event.player, side, name) };
+            remote_name(cx, state, event.player, side, name);
         }
         Effect::Seed(seed) => {
             crate::math::seed_random(seed);
