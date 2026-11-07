@@ -208,10 +208,11 @@ pub fn validate(
             return Err(format!("move would merge debt into {target}"));
         }
     }
-    for old in moves.keys() {
-        if identities(current).any(|finding| {
-            prefix(&finding.identity, old) && !targets.contains_key(&finding.identity)
-        }) {
+    for (old, sources) in &sources_by_move {
+        if sources
+            .iter()
+            .any(|source| current_ids.contains(source) && !targets.contains_key(*source))
+        {
             return Err(format!("move source {old} still exists"));
         }
     }
@@ -518,6 +519,70 @@ mod nested_tests {
                 .collect(),
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn reused_prefix_accepts_new_declarations_without_crediting_them() -> Result<(), String> {
+        let base = input_debt(&[("uqm-engine::input::poll", 3)]);
+        let current = input_debt(&[
+            ("uqm-engine::input_port::poll", 3),
+            ("uqm-engine::input::Runtime", 2),
+        ]);
+        let moves = [("uqm-engine::input".into(), "uqm-engine::input_port".into())].into();
+        validate(&current, &base, &moves)?;
+        let transferred = limits(&base.baseline(), &current, &base, &moves, &BTreeMap::new())?;
+        assert_eq!(transferred.values().sum::<u64>(), 3);
+        assert_eq!(current.baseline().values().sum::<u64>(), 5);
+        assert_eq!(
+            transferred,
+            input_debt(&[("uqm-engine::input_port::poll", 3)]).baseline()
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn reused_prefix_still_rejects_a_retained_base_source() {
+        let base = measured(&["uqm-engine::input::poll"]);
+        let current = measured(&[
+            "uqm-engine::input_port::poll",
+            "uqm-engine::input::Runtime",
+            "uqm-engine::input::poll",
+        ]);
+        let moves = [("uqm-engine::input".into(), "uqm-engine::input_port".into())].into();
+        assert_eq!(
+            validate(&current, &base, &moves),
+            Err("move source uqm-engine::input still exists".into())
+        );
+    }
+
+    #[test]
+    fn reused_prefix_cannot_double_claim_credit_at_an_old_identity() {
+        let base = input_debt(&[("uqm-engine::input::poll", 3)]);
+        let mut current = input_debt(&[
+            ("uqm-engine::input_port::poll", 3),
+            ("uqm-engine::input::poll", 2),
+        ]);
+        // Even a different declaration kind at the old name retains the base identity.
+        current.declarations[1].metric = "struct".into();
+        let moves = [("uqm-engine::input".into(), "uqm-engine::input_port".into())].into();
+        assert_eq!(
+            limits(&base.baseline(), &current, &base, &moves, &BTreeMap::new()),
+            Err("move source uqm-engine::input still exists".into())
+        );
+    }
+
+    fn input_debt(entries: &[(&str, u64)]) -> Measurement {
+        let mut result = measured(&entries.iter().map(|(id, _)| *id).collect::<Vec<_>>());
+        for (declaration, (_, value)) in result.declarations.iter_mut().zip(entries) {
+            declaration.subsystem = "uqm-engine".into();
+            result.findings.push(Finding {
+                counter: "unsafe".into(),
+                metric: "unsafe_lines".into(),
+                value: *value,
+                ..declaration.clone()
+            });
+        }
+        result
     }
 
     #[test]
