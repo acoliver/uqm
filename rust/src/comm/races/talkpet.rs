@@ -1,4 +1,5 @@
 //! Talkpet dialogue, ported from talkpet.c.
+use crate::engine::StoryKey;
 use super::script::{animation, as_comm_data};
 use crate::comm::locdata::{CColor, CLocData, CPoint};
 use crate::comm::types::CommData;
@@ -36,10 +37,10 @@ impl<A: TalkpetApi> Dialogue<'_, A> {
     }
     fn exit_conversation(&mut self, r: i32) {
         self.api.segue(0);
-        self.api.set("SHIP_TO_COMPEL", 0_u8);
+        self.api.set(StoryKey::SHIP_TO_COMPEL, 0_u8);
         if r == COMPEL_URQUAN {
             self.api.npc(HERE_WE_GO);
-            self.api.set("URQUAN_MESSED_UP", 1_u8);
+            self.api.set(StoryKey::URQUAN_MESSED_UP, 1_u8);
         } else if r == WISH_TO_GO_NOW {
             self.api.npc(EXCELLENT_IDEA);
         } else if r == BYE_ONBOARD {
@@ -54,12 +55,12 @@ impl<A: TalkpetApi> Dialogue<'_, A> {
             } else {
                 self.api.npc(GLAD_YOU_WONT_KILL);
             }
-            self.api.set("TALKING_PET", 1_u8);
-            self.api.set("TALKING_PET_ON_SHIP", 1_u8);
-            self.api.set("UMGAH_ZOMBIE_BLOBBIES", 0_u8);
-            self.api.set("UMGAH_VISITS", 0_u8);
-            self.api.set("UMGAH_HOME_VISITS", 0_u8);
-            self.api.set("ARILOU_STACK_2", 0_u8);
+            self.api.set(StoryKey::TALKING_PET, 1_u8);
+            self.api.set(StoryKey::TALKING_PET_ON_SHIP, 1_u8);
+            self.api.set(StoryKey::UMGAH_ZOMBIE_BLOBBIES, 0_u8);
+            self.api.set(StoryKey::UMGAH_VISITS, 0_u8);
+            self.api.set(StoryKey::UMGAH_HOME_VISITS, 0_u8);
+            self.api.set(StoryKey::ARILOU_STACK_2, 0_u8);
         }
     }
     fn mind_fuck_urquan(&mut self, r: i32) {
@@ -138,7 +139,7 @@ impl<A: TalkpetApi> Dialogue<'_, A> {
     fn pet_device(&mut self, r: i32) {
         let mut num_visits: i32;
         if r == WHATS_UP_ONBOARD {
-            num_visits = i32::from(self.api.get("TALKING_PET_INFO"));
+            num_visits = i32::from(self.api.get(StoryKey::TALKING_PET_INFO));
             let res = {
                 let old = num_visits;
                 num_visits = (num_visits + 1) as u8 as i32;
@@ -175,10 +176,10 @@ impl<A: TalkpetApi> Dialogue<'_, A> {
                 }
                 _ => {}
             }
-            self.api.set("TALKING_PET_INFO", (num_visits) as u8);
+            self.api.set(StoryKey::TALKING_PET_INFO, (num_visits) as u8);
             self.api.disable((WHATS_UP_ONBOARD) as u16);
         } else if r == ANY_SUGGESTIONS {
-            num_visits = i32::from(self.api.get("TALKING_PET_SUGGESTIONS"));
+            num_visits = i32::from(self.api.get(StoryKey::TALKING_PET_SUGGESTIONS));
             let res = {
                 let old = num_visits;
                 num_visits = (num_visits + 1) as u8 as i32;
@@ -215,15 +216,15 @@ impl<A: TalkpetApi> Dialogue<'_, A> {
                 }
                 _ => {}
             }
-            self.api.set("TALKING_PET_SUGGESTIONS", (num_visits) as u8);
+            self.api.set(StoryKey::TALKING_PET_SUGGESTIONS, (num_visits) as u8);
             self.api.disable((ANY_SUGGESTIONS) as u16);
         } else if r == ENOUGH_INFO {
             self.api.npc(OK_ENOUGH_INFO);
         } else if r == YOU_LIED {
             self.api.npc(SO_WHAT);
-            self.api.set("DNYARRI_LIED", 0_u8);
+            self.api.set(StoryKey::DNYARRI_LIED, 0_u8);
         }
-        if i32::from(self.api.get("SHIP_TO_COMPEL")) != 0 {
+        if i32::from(self.api.get(StoryKey::SHIP_TO_COMPEL)) != 0 {
             self.api
                 .response((COMPEL_THAT_SHIP) as u16, Handler::ExitConversation, &[]);
         }
@@ -237,8 +238,8 @@ impl<A: TalkpetApi> Dialogue<'_, A> {
         }
         self.api
             .response((ABOUT_YOUR_RACE) as u16, Handler::PetInfo, &[]);
-        if (i32::from(self.api.get("DNYARRI_LIED")) != 0)
-            && (i32::from(self.api.get("LEARNED_TALKING_PET")) != 0)
+        if (i32::from(self.api.get(StoryKey::DNYARRI_LIED)) != 0)
+            && (i32::from(self.api.get(StoryKey::LEARNED_TALKING_PET)) != 0)
         {
             self.api
                 .response((YOU_LIED) as u16, Handler::PetDevice, &[]);
@@ -275,9 +276,9 @@ impl<A: TalkpetApi> Dialogue<'_, A> {
             } else if r == TALKING_PETS_DUMB {
                 self.api.npc(OH_NO_YOU_DONT);
             }
-            self.api.set("KNOW_UMGAH_ZOMBIES", 1_u8);
-            if !(i32::from(self.api.get("TAALO_PROTECTOR_ON_SHIP")) != 0) {
-                self.api.set("PLAYER_HYPNOTIZED", 1_u8);
+            self.api.set(StoryKey::KNOW_UMGAH_ZOMBIES, 1_u8);
+            if !(i32::from(self.api.get(StoryKey::TAALO_PROTECTOR_ON_SHIP)) != 0) {
+                self.api.set(StoryKey::PLAYER_HYPNOTIZED, 1_u8);
             } else {
                 self.api.npc(CANT_COMPEL);
                 self.api.segue(1);
@@ -289,7 +290,7 @@ impl<A: TalkpetApi> Dialogue<'_, A> {
         } else {
             p_str[0_usize] = TALKING_PETS_DUMB;
         }
-        if i32::from(self.api.get("KNOW_UMGAH_ZOMBIES")) != 0 {
+        if i32::from(self.api.get(StoryKey::KNOW_UMGAH_ZOMBIES)) != 0 {
             if self.api.enabled((WHAT_DO_TO_UMGAH) as u16) {
                 p_str[1_usize] = WHAT_DO_TO_UMGAH;
             } else {
@@ -381,7 +382,7 @@ impl<A: TalkpetApi> Dialogue<'_, A> {
             self.api.disable((WHAT_ARE_YOU_REALLY) as u16);
         } else if r == HARD_TO_BELIEVE {
             self.api.npc(ITS_TRUE);
-            self.api.set("DNYARRI_LIED", 1_u8);
+            self.api.set(StoryKey::DNYARRI_LIED, 1_u8);
             self.api.disable((HARD_TO_BELIEVE) as u16);
         } else if r == BULLSHIT {
             self.api.npc(WORTH_A_TRY);
@@ -408,12 +409,12 @@ impl<A: TalkpetApi> Dialogue<'_, A> {
                 .response((WHAT_ARE_YOU_REALLY) as u16, Handler::PetDeal, &[]);
         } else {
             if self.api.enabled((HARD_TO_BELIEVE) as u16)
-                && !(i32::from(self.api.get("LEARNED_TALKING_PET")) != 0)
+                && !(i32::from(self.api.get(StoryKey::LEARNED_TALKING_PET)) != 0)
             {
                 self.api
                     .response((HARD_TO_BELIEVE) as u16, Handler::PetDeal, &[]);
             } else if self.api.enabled((BULLSHIT) as u16)
-                && (i32::from(self.api.get("LEARNED_TALKING_PET")) != 0)
+                && (i32::from(self.api.get(StoryKey::LEARNED_TALKING_PET)) != 0)
             {
                 self.api.response((BULLSHIT) as u16, Handler::PetDeal, &[]);
             }
@@ -432,35 +433,35 @@ impl<A: TalkpetApi> Dialogue<'_, A> {
             return;
         }
         if (i32::from(self.api.activity()) as u8 as i32) == 1 {
-            self.api.set("SHIP_TO_COMPEL", 0_u8);
+            self.api.set(StoryKey::SHIP_TO_COMPEL, 0_u8);
             self.api.segue(1);
             if !((i32::from(self.api.flags()) & 32) != 0) {
                 self.api.npc(HUMAN_PEP_TALK);
             } else {
                 self.api.npc(CYBORG_PEP_TALK);
             }
-        } else if i32::from(self.api.get("READY_TO_CONFUSE_URQUAN")) != 0 {
-            self.api.set("SHIP_TO_COMPEL", 0_u8);
-            self.api.set("READY_TO_CONFUSE_URQUAN", 0_u8);
-            self.api.set("AWARE_OF_SAMATRA", 1_u8);
-            if i32::from(self.api.get("CHMMR_BOMB_STATE")) != 3 {
+        } else if i32::from(self.api.get(StoryKey::READY_TO_CONFUSE_URQUAN)) != 0 {
+            self.api.set(StoryKey::SHIP_TO_COMPEL, 0_u8);
+            self.api.set(StoryKey::READY_TO_CONFUSE_URQUAN, 0_u8);
+            self.api.set(StoryKey::AWARE_OF_SAMATRA, 1_u8);
+            if i32::from(self.api.get(StoryKey::CHMMR_BOMB_STATE)) != 3 {
                 self.api.npc(HAVENT_GOT_EVERYTHING);
-                if !(i32::from(self.api.get("UTWIG_BOMB_ON_SHIP")) != 0) {
+                if !(i32::from(self.api.get(StoryKey::UTWIG_BOMB_ON_SHIP)) != 0) {
                     self.api.npc(NEED_BOMB);
                 } else {
                     self.api.npc(SOUP_UP_BOMB);
                 }
                 self.api.segue(0);
-            } else if i32::from(self.api.get("URQUAN_MESSED_UP")) != 0 {
+            } else if i32::from(self.api.get(StoryKey::URQUAN_MESSED_UP)) != 0 {
                 self.api.npc(HELLO_AFTER_COMPEL_URQUAN);
                 self.api.segue(0);
             } else {
                 self.api.npc(I_SENSE_MY_SLAVES);
                 self.mind_fuck_urquan(0_u16 as i32);
             }
-        } else if i32::from(self.api.get("TALKING_PET_ON_SHIP")) != 0 {
-            num_visits = i32::from(self.api.get("TALKING_PET_VISITS"));
-            if !(i32::from(self.api.get("TAALO_PROTECTOR_ON_SHIP")) != 0) && (num_visits == 0) {
+        } else if i32::from(self.api.get(StoryKey::TALKING_PET_ON_SHIP)) != 0 {
+            num_visits = i32::from(self.api.get(StoryKey::TALKING_PET_VISITS));
+            if !(i32::from(self.api.get(StoryKey::TAALO_PROTECTOR_ON_SHIP)) != 0) && (num_visits == 0) {
                 {
                     num_visits = (num_visits + 1) as u8 as i32;
                     num_visits
@@ -502,10 +503,10 @@ impl<A: TalkpetApi> Dialogue<'_, A> {
                 }
                 _ => {}
             }
-            self.api.set("TALKING_PET_VISITS", (num_visits) as u8);
+            self.api.set(StoryKey::TALKING_PET_VISITS, (num_visits) as u8);
             self.pet_device(0_u16 as i32);
         } else if self.api.npc_ships() {
-            num_visits = i32::from(self.api.get("TALKING_PET_HOME_VISITS"));
+            num_visits = i32::from(self.api.get(StoryKey::TALKING_PET_HOME_VISITS));
             let res = {
                 let old = num_visits;
                 num_visits = (num_visits + 1) as u8 as i32;
@@ -513,7 +514,7 @@ impl<A: TalkpetApi> Dialogue<'_, A> {
             };
             match res {
                 0 => {
-                    self.api.set("UMGAH_VISITS", 0_u8);
+                    self.api.set(StoryKey::UMGAH_VISITS, 0_u8);
                     self.api.npc(HELLO_AT_UMGAH);
                 }
                 1 => {
@@ -534,11 +535,11 @@ impl<A: TalkpetApi> Dialogue<'_, A> {
                 }
                 _ => {}
             }
-            self.api.set("TALKING_PET_HOME_VISITS", (num_visits) as u8);
+            self.api.set(StoryKey::TALKING_PET_HOME_VISITS, (num_visits) as u8);
             if num_visits == 1 {
                 self.compel_player(0_u16 as i32);
-            } else if !(i32::from(self.api.get("TAALO_PROTECTOR_ON_SHIP")) != 0) {
-                self.api.set("PLAYER_HYPNOTIZED", 1_u8);
+            } else if !(i32::from(self.api.get(StoryKey::TAALO_PROTECTOR_ON_SHIP)) != 0) {
+                self.api.set(StoryKey::PLAYER_HYPNOTIZED, 1_u8);
                 self.api.segue(0);
             } else {
                 self.api.npc(CANT_COMPEL);
@@ -549,8 +550,8 @@ impl<A: TalkpetApi> Dialogue<'_, A> {
                 self.api.npc(LETS_MAKE_A_DEAL);
             } else {
                 self.api.npc(UMGAH_ALL_GONE);
-                if (i32::from(self.api.get("TALKING_PET_HOME_VISITS")) == 0)
-                    || !(i32::from(self.api.get("TAALO_PROTECTOR_ON_SHIP")) != 0)
+                if (i32::from(self.api.get(StoryKey::TALKING_PET_HOME_VISITS)) == 0)
+                    || !(i32::from(self.api.get(StoryKey::TAALO_PROTECTOR_ON_SHIP)) != 0)
                 {
                     self.api.disable((HOW_TRUST) as u16);
                 }

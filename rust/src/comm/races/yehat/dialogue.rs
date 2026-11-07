@@ -1,3 +1,4 @@
+use crate::engine::StoryKey;
 use super::api::YehatApi;
 use super::phrases::{space_info, visit_phrase};
 use super::*;
@@ -37,7 +38,7 @@ impl<A: YehatApi> Dialogue<'_, A> {
             BYE_ROYALIST => self.api.npc(GOODBYE_AND_DIE_ROYALIST as i32),
             I_DEMAND_YOU_ALLY_HOMEWORLD0 => {
                 self.api.npc(ENEMY_MUST_DIE as i32);
-                self.api.set("NO_YEHAT_ALLY_HOME", 1);
+                self.api.set(StoryKey::NO_YEHAT_ALLY_HOME, 1);
             }
             BYE_SPACE => {
                 if self.api.random_bit() != 0 {
@@ -48,27 +49,27 @@ impl<A: YehatApi> Dialogue<'_, A> {
                 }
             }
             NOT_HERE | NOT_SEND => {
-                let visits = self.api.get("YEHAT_REBEL_VISITS");
+                let visits = self.api.get(StoryKey::YEHAT_REBEL_VISITS);
                 if visits == 0 {
                     self.api.npc(JUST_A_TRICK_1 as i32);
                 } else if visits == 1 {
                     self.api.npc(JUST_A_TRICK_2 as i32);
                 }
-                self.api.set("YEHAT_REBEL_VISITS", 1);
+                self.api.set(StoryKey::YEHAT_REBEL_VISITS, 1);
             }
             OK_SEND => {
                 self.api.npc(WE_REVOLT as i32);
                 self.api.segue(0);
                 for key in [
-                    "YEHAT_CIVIL_WAR",
-                    "YEHAT_VISITS",
-                    "YEHAT_HOME_VISITS",
-                    "YEHAT_REBEL_VISITS",
-                    "YEHAT_REBEL_INFO",
-                    "YEHAT_REBEL_TOLD_PKUNK",
-                    "NO_YEHAT_INFO",
+                    StoryKey::YEHAT_CIVIL_WAR,
+                    StoryKey::YEHAT_VISITS,
+                    StoryKey::YEHAT_HOME_VISITS,
+                    StoryKey::YEHAT_REBEL_VISITS,
+                    StoryKey::YEHAT_REBEL_INFO,
+                    StoryKey::YEHAT_REBEL_TOLD_PKUNK,
+                    StoryKey::NO_YEHAT_INFO,
                 ] {
-                    self.api.set(key, u8::from(key == "YEHAT_CIVIL_WAR"));
+                    self.api.set(key, u8::from(key == StoryKey::YEHAT_CIVIL_WAR));
                 }
                 self.api.schedule_rebel_event();
             }
@@ -80,7 +81,7 @@ impl<A: YehatApi> Dialogue<'_, A> {
         match response as u32 {
             HOW_IS_REBELLION => {
                 self.counter(
-                    "YEHAT_ROYALIST_INFO",
+                    StoryKey::YEHAT_ROYALIST_INFO,
                     &[ROYALIST_REBELLION_1, ROYALIST_REBELLION_2],
                     1,
                 );
@@ -88,11 +89,11 @@ impl<A: YehatApi> Dialogue<'_, A> {
             }
             WHAT_ABOUT_PKUNK_ROYALIST => {
                 self.pkunk_response();
-                self.api.set("YEHAT_ROYALIST_TOLD_PKUNK", 1);
+                self.api.set(StoryKey::YEHAT_ROYALIST_TOLD_PKUNK, 1);
             }
             SORRY_ABOUT_REVOLUTION => {
                 self.api.npc(ALL_YOUR_FAULT as i32);
-                self.api.set("NO_YEHAT_INFO", 1);
+                self.api.set(StoryKey::NO_YEHAT_INFO, 1);
             }
             _ => {}
         }
@@ -100,7 +101,7 @@ impl<A: YehatApi> Dialogue<'_, A> {
             self.offer(HOW_IS_REBELLION, Handler::Royalists);
         }
         self.offer_pkunk(Handler::Royalists);
-        if self.api.get("NO_YEHAT_INFO") == 0 {
+        if self.api.get(StoryKey::NO_YEHAT_INFO) == 0 {
             self.offer(SORRY_ABOUT_REVOLUTION, Handler::Royalists);
         }
         self.offer(BYE_ROYALIST, Handler::Exit);
@@ -110,7 +111,7 @@ impl<A: YehatApi> Dialogue<'_, A> {
         match response as u32 {
             SHOFIXTI_ALIVE_1 => {
                 self.api.npc(SEND_HIM_OVER_1 as i32);
-                self.api.set("YEHAT_REBEL_TOLD_PKUNK", 1);
+                self.api.set(StoryKey::YEHAT_REBEL_TOLD_PKUNK, 1);
             }
             SHOFIXTI_ALIVE_2 => self.api.npc(SEND_HIM_OVER_2 as i32),
             _ => {}
@@ -127,7 +128,7 @@ impl<A: YehatApi> Dialogue<'_, A> {
         match response as u32 {
             WHATS_UP_HOMEWORLD => {
                 self.counter(
-                    "YEHAT_ROYALIST_INFO",
+                    StoryKey::YEHAT_ROYALIST_INFO,
                     &[GENERAL_INFO_HOMEWORLD_1, GENERAL_INFO_HOMEWORLD_2],
                     1,
                 );
@@ -135,15 +136,15 @@ impl<A: YehatApi> Dialogue<'_, A> {
             }
             AT_LEAST_HELP_US_HOMEWORLD => {
                 self.api.npc(NO_HELP_ENEMY as i32);
-                self.api.set("NO_YEHAT_HELP_HOME", 1);
+                self.api.set(StoryKey::NO_YEHAT_HELP_HOME, 1);
             }
             GIVE_INFO => {
                 self.api.npc(NO_INFO_FOR_ENEMY as i32);
-                self.api.set("NO_YEHAT_INFO", 1);
+                self.api.set(StoryKey::NO_YEHAT_INFO, 1);
             }
             WHAT_ABOUT_PKUNK_ROYALIST => {
                 self.pkunk_response();
-                self.api.set("YEHAT_ROYALIST_TOLD_PKUNK", 1);
+                self.api.set(StoryKey::YEHAT_ROYALIST_TOLD_PKUNK, 1);
             }
             _ => {}
         }
@@ -151,13 +152,13 @@ impl<A: YehatApi> Dialogue<'_, A> {
             self.offer(WHATS_UP_HOMEWORLD, Handler::Home);
         }
         self.offer_pkunk(Handler::Home);
-        if self.api.get("NO_YEHAT_HELP_HOME") == 0 {
+        if self.api.get(StoryKey::NO_YEHAT_HELP_HOME) == 0 {
             self.offer(AT_LEAST_HELP_US_HOMEWORLD, Handler::Home);
         }
-        if self.api.get("NO_YEHAT_INFO") == 0 {
+        if self.api.get(StoryKey::NO_YEHAT_INFO) == 0 {
             self.offer(GIVE_INFO, Handler::Home);
         }
-        if self.api.get("NO_YEHAT_ALLY_HOME") == 0 {
+        if self.api.get(StoryKey::NO_YEHAT_ALLY_HOME) == 0 {
             let mut fragments = vec![
                 I_DEMAND_YOU_ALLY_HOMEWORLD0 as i32,
                 crate::comm::races::script::GLOBAL_PLAYER_NAME,
@@ -183,42 +184,42 @@ impl<A: YehatApi> Dialogue<'_, A> {
         let mut options = [None; 3];
         match response as u32 {
             WHATS_UP_SPACE_1 | WHATS_UP_SPACE_2 | WHATS_UP_SPACE_3 | WHATS_UP_SPACE_4 => {
-                let (phrase, next) = space_info(self.api.get("YEHAT_REBEL_INFO"));
+                let (phrase, next) = space_info(self.api.get(StoryKey::YEHAT_REBEL_INFO));
                 if let Some(phrase) = phrase {
                     self.api.npc(phrase as i32);
                 }
-                self.api.set("YEHAT_REBEL_INFO", next);
+                self.api.set(StoryKey::YEHAT_REBEL_INFO, next);
                 self.api.disable(WHATS_UP_SPACE_1 as u16);
             }
             I_DEMAND_YOU_ALLY_SPACE0 => {
                 self.api.npc(WE_CANNOT_1 as i32);
                 last_stack = 2;
-                self.api.set("NO_YEHAT_ALLY_SPACE", 1);
+                self.api.set(StoryKey::NO_YEHAT_ALLY_SPACE, 1);
             }
             OBLIGATION => {
                 self.api.npc(WE_CANNOT_2 as i32);
                 self.api.segue(0);
-                self.api.set("NO_YEHAT_ALLY_SPACE", 2);
+                self.api.set(StoryKey::NO_YEHAT_ALLY_SPACE, 2);
                 return;
             }
             AT_LEAST_HELP_US_SPACE => {
                 self.api.npc(SORRY_CANNOT as i32);
                 last_stack = 1;
-                self.api.set("NO_YEHAT_HELP_SPACE", 1);
+                self.api.set(StoryKey::NO_YEHAT_HELP_SPACE, 1);
             }
             DISHONOR => {
                 self.api.npc(HERES_A_HINT as i32);
-                self.api.set("NO_YEHAT_HELP_SPACE", 2);
+                self.api.set(StoryKey::NO_YEHAT_HELP_SPACE, 2);
             }
             WHAT_ABOUT_PKUNK_ROYALIST => {
                 self.pkunk_response();
-                self.api.set("YEHAT_ROYALIST_TOLD_PKUNK", 1);
+                self.api.set(StoryKey::YEHAT_ROYALIST_TOLD_PKUNK, 1);
             }
             _ => {}
         }
 
         if self.api.enabled(WHATS_UP_SPACE_1 as u16) {
-            options[0] = match self.api.get("YEHAT_REBEL_INFO") {
+            options[0] = match self.api.get(StoryKey::YEHAT_REBEL_INFO) {
                 0 => Some(WHATS_UP_SPACE_1),
                 1 => Some(WHATS_UP_SPACE_2),
                 2 => Some(WHATS_UP_SPACE_3),
@@ -226,12 +227,12 @@ impl<A: YehatApi> Dialogue<'_, A> {
                 _ => None,
             };
         }
-        options[1] = match self.api.get("NO_YEHAT_HELP_SPACE") {
+        options[1] = match self.api.get(StoryKey::NO_YEHAT_HELP_SPACE) {
             0 => Some(AT_LEAST_HELP_US_SPACE),
             1 => Some(DISHONOR),
             _ => None,
         };
-        options[2] = match self.api.get("NO_YEHAT_ALLY_SPACE") {
+        options[2] = match self.api.get(StoryKey::NO_YEHAT_ALLY_SPACE) {
             0 => Some(I_DEMAND_YOU_ALLY_SPACE0),
             1 => Some(OBLIGATION),
             _ => None,
@@ -243,8 +244,8 @@ impl<A: YehatApi> Dialogue<'_, A> {
             }
         }
         self.offer_pkunk(Handler::Space);
-        if self.api.get("SHOFIXTI_VISITS") != 0 {
-            match self.api.get("YEHAT_REBEL_TOLD_PKUNK") {
+        if self.api.get(StoryKey::SHOFIXTI_VISITS) != 0 {
+            match self.api.get(StoryKey::YEHAT_REBEL_TOLD_PKUNK) {
                 0 => self.offer(SHOFIXTI_ALIVE_1, Handler::StartRevolt),
                 1 => self.offer(SHOFIXTI_ALIVE_2, Handler::StartRevolt),
                 _ => {}
@@ -273,16 +274,16 @@ impl<A: YehatApi> Dialogue<'_, A> {
     }
 
     fn offer_pkunk(&mut self, handler: Handler) {
-        if self.api.get("YEHAT_ROYALIST_TOLD_PKUNK") == 0
-            && self.api.get("PKUNK_VISITS") != 0
-            && self.api.get("PKUNK_HOME_VISITS") != 0
+        if self.api.get(StoryKey::YEHAT_ROYALIST_TOLD_PKUNK) == 0
+            && self.api.get(StoryKey::PKUNK_VISITS) != 0
+            && self.api.get(StoryKey::PKUNK_HOME_VISITS) != 0
         {
             self.offer(WHAT_ABOUT_PKUNK_ROYALIST, handler);
         }
     }
 
     fn pkunk_response(&mut self) {
-        let phrase = if self.api.get("YEHAT_ABSORBED_PKUNK") != 0 {
+        let phrase = if self.api.get(StoryKey::YEHAT_ABSORBED_PKUNK) != 0 {
             PKUNK_ABSORBED_ROYALIST
         } else {
             HATE_PKUNK_ROYALIST
@@ -305,17 +306,17 @@ impl<A: YehatApi> Dialogue<'_, A> {
             self.api.segue(0);
             return;
         }
-        let homeworld = self.api.get("GLOBAL_FLAGS_AND_DATA") & (1 << 7) != 0;
-        if self.api.get("YEHAT_CIVIL_WAR") != 0 {
+        let homeworld = self.api.get(StoryKey::GLOBAL_FLAGS_AND_DATA) & (1 << 7) != 0;
+        if self.api.get(StoryKey::YEHAT_CIVIL_WAR) != 0 {
             if homeworld {
                 self.counter(
-                    "YEHAT_HOME_VISITS",
+                    StoryKey::YEHAT_HOME_VISITS,
                     &[ROYALIST_HOMEWORLD_HELLO_1, ROYALIST_HOMEWORLD_HELLO_2],
                     1,
                 );
             } else {
                 self.counter(
-                    "YEHAT_VISITS",
+                    StoryKey::YEHAT_VISITS,
                     &[ROYALIST_SPACE_HELLO_1, ROYALIST_SPACE_HELLO_2],
                     1,
                 );
@@ -323,14 +324,14 @@ impl<A: YehatApi> Dialogue<'_, A> {
             self.royalists(NULL_PHRASE as i32);
         } else if homeworld {
             self.counter(
-                "YEHAT_HOME_VISITS",
+                StoryKey::YEHAT_HOME_VISITS,
                 &[HOMEWORLD_HELLO_1, HOMEWORLD_HELLO_2],
                 1,
             );
             self.home(NULL_PHRASE as i32);
         } else {
             self.counter(
-                "YEHAT_VISITS",
+                StoryKey::YEHAT_VISITS,
                 &[SPACE_HELLO_1, SPACE_HELLO_2, SPACE_HELLO_3, SPACE_HELLO_4],
                 3,
             );

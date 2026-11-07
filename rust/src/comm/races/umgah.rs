@@ -1,4 +1,5 @@
 //! Umgah dialogue, ported from umgahc.c.
+use crate::engine::StoryKey;
 use super::script::{animation, as_comm_data};
 use crate::comm::locdata::{CColor, CLocData, CPoint};
 use crate::comm::types::CommData;
@@ -35,18 +36,18 @@ impl<A: UmgahApi> Dialogue<'_, A> {
             self.api.npc(GOODBYE_PRE_ZOMBIE);
         } else if r == CAN_WE_BE_FRIENDS {
             self.api.npc(SURE_FRIENDS);
-            self.api.set("UMGAH_MENTIONED_TRICKS", 1_u8);
+            self.api.set(StoryKey::UMGAH_MENTIONED_TRICKS, 1_u8);
         } else if r == EVIL_BLOBBIES_GIVE_UP {
             self.api.npc(NOT_EVIL_BLOBBIES);
-            self.api.set("UMGAH_EVIL_BLOBBIES", 1_u8);
+            self.api.set(StoryKey::UMGAH_EVIL_BLOBBIES, 1_u8);
         } else if r == EVIL_BLOBBIES_MUST_DIE {
             self.api.npc(OH_NO_WE_WONT);
         } else if r == THREAT {
             self.api.npc(NO_THREAT);
         } else if r == DONT_BELIEVE {
             self.api.npc(THEN_DIE);
-            self.api.set("KNOW_UMGAH_ZOMBIES", 1_u8);
-            self.api.set("UMGAH_VISITS", 0_u8);
+            self.api.set(StoryKey::KNOW_UMGAH_ZOMBIES, 1_u8);
+            self.api.set(StoryKey::UMGAH_VISITS, 0_u8);
         } else if r == BYE_UNKNOWN {
             self.api.npc(GOODBYE_UNKNOWN);
             self.api.segue(0);
@@ -57,11 +58,11 @@ impl<A: UmgahApi> Dialogue<'_, A> {
                 (crate::comm::dispatch::ship::UMGAH_SHIP as i32) as u16,
                 4_i16,
             );
-            self.api.set("UMGAH_HOSTILE", 1_u8);
+            self.api.set(StoryKey::UMGAH_HOSTILE, 1_u8);
         }
     }
     fn zombies(&mut self, r: i32) {
-        if i32::from(self.api.get("MET_NORMAL_UMGAH")) != 0 {
+        if i32::from(self.api.get(StoryKey::MET_NORMAL_UMGAH)) != 0 {
             if r == WHATS_UP_ZOMBIES {
                 self.api.npc(GENERAL_INFO_ZOMBIE);
                 self.api.disable((WHATS_UP_ZOMBIES) as u16);
@@ -142,8 +143,8 @@ impl<A: UmgahApi> Dialogue<'_, A> {
             } else if r == ARILOU_TOLD_US {
                 self.api.npc(THEN_DIE);
                 self.api.segue(1);
-                self.api.set("KNOW_UMGAH_ZOMBIES", 1_u8);
-                self.api.set("UMGAH_VISITS", 0_u8);
+                self.api.set(StoryKey::KNOW_UMGAH_ZOMBIES, 1_u8);
+                self.api.set(StoryKey::UMGAH_VISITS, 0_u8);
                 return;
             }
             if self.api.enabled((EVIL_BLOBBIES) as u16) {
@@ -230,7 +231,7 @@ impl<A: UmgahApi> Dialogue<'_, A> {
             self.api.npc(FINE_BY_US);
             self.api.disable((WANT_TO_DEFEAT_URQUAN) as u16);
         }
-        if !(i32::from(self.api.get("UMGAH_EVIL_BLOBBIES")) != 0) {
+        if !(i32::from(self.api.get(StoryKey::UMGAH_EVIL_BLOBBIES)) != 0) {
             self.api.response(
                 (EVIL_BLOBBIES_GIVE_UP) as u16,
                 Handler::CombatIsInevitable,
@@ -251,7 +252,7 @@ impl<A: UmgahApi> Dialogue<'_, A> {
             self.api
                 .response((WANT_TO_DEFEAT_URQUAN) as u16, Handler::NormalUmgah, &[]);
         }
-        if i32::from(self.api.get("UMGAH_MENTIONED_TRICKS")) == 0 {
+        if i32::from(self.api.get(StoryKey::UMGAH_MENTIONED_TRICKS)) == 0 {
             self.api
                 .response((CAN_WE_BE_FRIENDS) as u16, Handler::CombatIsInevitable, &[]);
         }
@@ -285,7 +286,7 @@ impl<A: UmgahApi> Dialogue<'_, A> {
             self.api.npc(DO_THIS_NOW);
             self.api.disable((SO_WHAT_FOR_NOW) as u16);
         }
-        if !(i32::from(self.api.get("MET_NORMAL_UMGAH")) != 0) {
+        if !(i32::from(self.api.get(StoryKey::MET_NORMAL_UMGAH)) != 0) {
             if self.api.enabled((WHAT_BEFORE_TPET) as u16) {
                 self.api
                     .response((WHAT_BEFORE_TPET) as u16, Handler::UmgahReward, &[]);
@@ -304,7 +305,7 @@ impl<A: UmgahApi> Dialogue<'_, A> {
             self.api
                 .response((WHAT_DO_WITH_TPET) as u16, Handler::UmgahReward, &[]);
         } else if self.api.enabled((ANY_JOKES) as u16)
-            && (i32::from(self.api.get("UMGAH_MENTIONED_TRICKS")) < 2)
+            && (i32::from(self.api.get(StoryKey::UMGAH_MENTIONED_TRICKS)) < 2)
         {
             self.api
                 .response((ANY_JOKES) as u16, Handler::UmgahReward, &[]);
@@ -318,8 +319,8 @@ impl<A: UmgahApi> Dialogue<'_, A> {
     }
     fn intro(&mut self) {
         let mut num_visits: i32;
-        if i32::from(self.api.get("UMGAH_HOSTILE")) != 0 {
-            num_visits = i32::from(self.api.get("UMGAH_VISITS"));
+        if i32::from(self.api.get(StoryKey::UMGAH_HOSTILE)) != 0 {
+            num_visits = i32::from(self.api.get(StoryKey::UMGAH_VISITS));
             let res = {
                 let old = num_visits;
                 num_visits = (num_visits + 1) as u8 as i32;
@@ -344,11 +345,11 @@ impl<A: UmgahApi> Dialogue<'_, A> {
                 }
                 _ => {}
             }
-            self.api.set("UMGAH_VISITS", (num_visits) as u8);
+            self.api.set(StoryKey::UMGAH_VISITS, (num_visits) as u8);
             self.api.segue(1);
-        } else if i32::from(self.api.get("UMGAH_ZOMBIE_BLOBBIES")) != 0 {
-            num_visits = i32::from(self.api.get("UMGAH_VISITS"));
-            if i32::from(self.api.get("TALKING_PET_VISITS")) != 0 {
+        } else if i32::from(self.api.get(StoryKey::UMGAH_ZOMBIE_BLOBBIES)) != 0 {
+            num_visits = i32::from(self.api.get(StoryKey::UMGAH_VISITS));
+            if i32::from(self.api.get(StoryKey::TALKING_PET_VISITS)) != 0 {
                 let res = {
                     let old = num_visits;
                     num_visits = (num_visits + 1) as u8 as i32;
@@ -374,7 +375,7 @@ impl<A: UmgahApi> Dialogue<'_, A> {
                     _ => {}
                 }
                 self.api.segue(1);
-            } else if i32::from(self.api.get("KNOW_UMGAH_ZOMBIES")) != 0 {
+            } else if i32::from(self.api.get(StoryKey::KNOW_UMGAH_ZOMBIES)) != 0 {
                 let res = {
                     let old = num_visits;
                     num_visits = (num_visits + 1) as u8 as i32;
@@ -427,10 +428,10 @@ impl<A: UmgahApi> Dialogue<'_, A> {
                 }
                 self.zombies(0_u16 as i32);
             }
-            self.api.set("UMGAH_VISITS", (num_visits) as u8);
-        } else if !(i32::from(self.api.get("TALKING_PET")) != 0) {
-            if (i32::from(self.api.get("GLOBAL_FLAGS_AND_DATA")) & (1 << 7)) != 0 {
-                num_visits = i32::from(self.api.get("UMGAH_HOME_VISITS"));
+            self.api.set(StoryKey::UMGAH_VISITS, (num_visits) as u8);
+        } else if !(i32::from(self.api.get(StoryKey::TALKING_PET)) != 0) {
+            if (i32::from(self.api.get(StoryKey::GLOBAL_FLAGS_AND_DATA)) & (1 << 7)) != 0 {
+                num_visits = i32::from(self.api.get(StoryKey::UMGAH_HOME_VISITS));
                 let res = {
                     let old = num_visits;
                     num_visits = (num_visits + 1) as u8 as i32;
@@ -455,9 +456,9 @@ impl<A: UmgahApi> Dialogue<'_, A> {
                     }
                     _ => {}
                 }
-                self.api.set("UMGAH_HOME_VISITS", (num_visits) as u8);
+                self.api.set(StoryKey::UMGAH_HOME_VISITS, (num_visits) as u8);
             } else {
-                num_visits = i32::from(self.api.get("UMGAH_VISITS"));
+                num_visits = i32::from(self.api.get(StoryKey::UMGAH_VISITS));
                 let res = {
                     let old = num_visits;
                     num_visits = (num_visits + 1) as u8 as i32;
@@ -482,15 +483,15 @@ impl<A: UmgahApi> Dialogue<'_, A> {
                     }
                     _ => {}
                 }
-                self.api.set("UMGAH_VISITS", (num_visits) as u8);
+                self.api.set(StoryKey::UMGAH_VISITS, (num_visits) as u8);
             }
             self.normal_umgah(0_u16 as i32);
         } else {
-            if (i32::from(self.api.get("GLOBAL_FLAGS_AND_DATA")) & (1 << 7)) != 0 {
+            if (i32::from(self.api.get(StoryKey::GLOBAL_FLAGS_AND_DATA)) & (1 << 7)) != 0 {
                 self.api.npc(POST_ZOMBIE_HWLD_HELLO);
                 self.umgah_reward(0_u16 as i32);
             } else {
-                num_visits = i32::from(self.api.get("UMGAH_VISITS"));
+                num_visits = i32::from(self.api.get(StoryKey::UMGAH_VISITS));
                 let res = {
                     let old = num_visits;
                     num_visits = (num_visits + 1) as u8 as i32;
@@ -509,19 +510,19 @@ impl<A: UmgahApi> Dialogue<'_, A> {
                     }
                     _ => {}
                 }
-                self.api.set("UMGAH_VISITS", (num_visits) as u8);
+                self.api.set(StoryKey::UMGAH_VISITS, (num_visits) as u8);
                 self.api.segue(0);
             }
         }
     }
     fn post_umgah_enc(&mut self) {
-        if !(i32::from(self.api.get("UMGAH_ZOMBIE_BLOBBIES")) != 0) {
-            self.api.set("MET_NORMAL_UMGAH", 1_u8);
+        if !(i32::from(self.api.get(StoryKey::UMGAH_ZOMBIE_BLOBBIES)) != 0) {
+            self.api.set(StoryKey::MET_NORMAL_UMGAH, 1_u8);
         }
     }
     fn initialize(&mut self) {
-        if ((i32::from(self.api.get("TALKING_PET")) != 0)
-            && !(i32::from(self.api.get("UMGAH_HOSTILE")) != 0))
+        if ((i32::from(self.api.get(StoryKey::TALKING_PET)) != 0)
+            && !(i32::from(self.api.get(StoryKey::UMGAH_HOSTILE)) != 0))
             || ((i32::from(self.api.activity()) as u8 as i32) == 5)
         {
             self.api.segue(0);

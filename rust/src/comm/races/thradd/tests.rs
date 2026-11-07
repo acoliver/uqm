@@ -1,3 +1,4 @@
+use crate::engine::StoryKey;
 use super::*;
 use crate::comm::races::encounter::testing::{Effect, Fake};
 use crate::comm::races::script::ScriptApi;
@@ -38,7 +39,7 @@ fn choices(f: &Api) -> Vec<u16> {
 #[test]
 fn helix_permission_and_thief_hostility() {
     let mut f = Api::default();
-    f.put("GLOBAL_FLAGS_AND_DATA", 64);
+    f.put(StoryKey::GLOBAL_FLAGS_AND_DATA, 64);
     run(&mut f, Handler::ThraddAllies, WHY_YOU_HERE_ALLY);
     assert_eq!(
         choices(&f),
@@ -51,10 +52,10 @@ fn helix_permission_and_thief_hostility() {
         ]
     );
     run(&mut f, Handler::ExitConversation, MAY_I_LAND);
-    assert_eq!(f.get("HELIX_UNPROTECTED"), 1);
+    assert_eq!(f.get(StoryKey::HELIX_UNPROTECTED), 1);
     assert_eq!(f.segue, 0);
-    f.put("AQUA_HELIX", 1);
-    f.put("THRADD_MANNER", 1);
+    f.put(StoryKey::AQUA_HELIX, 1);
+    f.put(StoryKey::THRADD_MANNER, 1);
     for phrase in [DIE_THIEF_1, DIE_THIEF_2, DIE_THIEF_2] {
         f.effects.clear();
         Dialogue { api: &mut f }.intro();
@@ -67,7 +68,7 @@ fn helix_permission_and_thief_hostility() {
 fn culture_name_and_demeanor_sequence() {
     let mut f = Api::default();
     Dialogue { api: &mut f }.thradd_worship(0);
-    assert_eq!(f.get("THRADD_MANNER"), 1);
+    assert_eq!(f.get(StoryKey::THRADD_MANNER), 1);
     assert!(f.effects.contains(&Effect::Allied(8, true)));
     assert_eq!(
         choices(&f),
@@ -80,7 +81,7 @@ fn culture_name_and_demeanor_sequence() {
         (JUST_THE_WAY_WE_DO, 3),
     ] {
         run(&mut f, Handler::ThraddCulture, r);
-        assert_eq!(f.get("THRADD_INTRO"), intro);
+        assert_eq!(f.get(StoryKey::THRADD_INTRO), intro);
         assert_eq!(choices(&f), [YOU_DECIDE, FAT, THE_SLAVE_EMPIRE0]);
         assert!(f.effects.contains(&Effect::Offer(
             THE_SLAVE_EMPIRE0,
@@ -98,7 +99,7 @@ fn culture_name_and_demeanor_sequence() {
         (THE_SLAVE_EMPIRE0, 3, SLAVE_EMPIRE),
     ] {
         run(&mut f, Handler::ThraddDemeanor, r);
-        assert_eq!(f.get("THRADD_CULTURE"), culture);
+        assert_eq!(f.get(StoryKey::THRADD_CULTURE), culture);
         assert_eq!(Dialogue { api: &mut f }.get_culture_name(), i32::from(name));
     }
     for (r, value) in [
@@ -108,10 +109,10 @@ fn culture_name_and_demeanor_sequence() {
         (JUST_LIKE_US, 3),
     ] {
         run(&mut f, Handler::ExitConversation, r);
-        assert_eq!(f.get("THRADD_DEMEANOR"), value);
+        assert_eq!(f.get(StoryKey::THRADD_DEMEANOR), value);
         assert_eq!(f.segue, 0);
         run(&mut f, Handler::ThraddAllies, HOW_GOES_CULTURE);
-        assert_eq!(f.get("THRADD_DEMEANOR"), value | 4);
+        assert_eq!(f.get(StoryKey::THRADD_DEMEANOR), value | 4);
     }
 }
 #[test]
@@ -119,11 +120,11 @@ fn mission_departure_and_reports() {
     let mut f = Api::default();
     run(&mut f, Handler::ExitConversation, GOT_IDEA);
     assert!(f.effects.contains(&Effect::Event(1, 0, 0, 0, 5)));
-    assert_eq!(f.get("THRADD_STACK_1"), 5);
+    assert_eq!(f.get(StoryKey::THRADD_STACK_1), 5);
     assert_eq!(f.segue, 0);
     for mission in [1, 2, 3] {
         let mut f = Api::default();
-        f.put("THRADD_MISSION", mission);
+        f.put(StoryKey::THRADD_MISSION, mission);
         for phrase in match mission {
             1 => [WE_GO_TO_IMPRESS_URQUAN_1, WE_GO_TO_IMPRESS_URQUAN_2],
             2 => [WE_IMPRESSING_URQUAN_1, WE_IMPRESSING_URQUAN_2],
@@ -134,14 +135,14 @@ fn mission_departure_and_reports() {
             f.effects.clear();
             Dialogue { api: &mut f }.intro();
             assert_eq!(f.spoken(), [i32::from(*phrase)]);
-            assert_eq!(f.get("THRADD_MISSION_VISITS"), 1);
+            assert_eq!(f.get(StoryKey::THRADD_MISSION_VISITS), 1);
         }
     }
-    f.put("THRADD_MISSION", 4);
+    f.put(StoryKey::THRADD_MISSION, 4);
     run(&mut f, Handler::ThraddHostile, HOW_IMPRESSED_URQUAN_1);
     assert!(choices(&f).contains(&HOW_IMPRESSED_URQUAN_2));
     run(&mut f, Handler::ThraddHostile, HOW_IMPRESSED_URQUAN_2);
-    assert_eq!(f.get("THRADD_MISSION"), 5);
+    assert_eq!(f.get(StoryKey::THRADD_MISSION), 5);
 }
 #[test]
 fn body_count_threshold_and_frenzy() {
@@ -151,18 +152,18 @@ fn body_count_threshold_and_frenzy() {
         (25, 0, AMAZING_PERFORMANCE, 0),
     ] {
         let mut f = Api::default();
-        f.put("THRADDASH_BODY_COUNT", count);
-        f.put("THRADD_BODY_LEVEL", level);
+        f.put(StoryKey::THRADDASH_BODY_COUNT, count);
+        f.put(StoryKey::THRADD_BODY_LEVEL, level);
         Dialogue { api: &mut f }.intro();
         assert_eq!(f.spoken()[0], i32::from(phrase));
-        assert_eq!(f.get("THRADD_BODY_LEVEL"), next);
-        assert_eq!(f.get("THRADD_MANNER"), u8::from(count == 25));
+        assert_eq!(f.get(StoryKey::THRADD_BODY_LEVEL), next);
+        assert_eq!(f.get(StoryKey::THRADD_MANNER), u8::from(count == 25));
     }
     let mut f = Api::default();
-    f.put("THRADD_STACK_1", 4);
-    f.put("KOHR_AH_FRENZY", 1);
+    f.put(StoryKey::THRADD_STACK_1, 4);
+    f.put(StoryKey::KOHR_AH_FRENZY, 1);
     run(&mut f, Handler::ThraddHostile, 0);
-    assert_eq!(f.get("THRADD_STACK_1"), 5);
+    assert_eq!(f.get(StoryKey::THRADD_STACK_1), 5);
     assert!(!choices(&f).contains(&GOT_IDEA));
     run(&mut f, Handler::HelixWorld, WHY_YOU_HERE_HOSTILE);
     assert!(choices(&f).contains(&DEMAND_TO_LAND));
@@ -181,10 +182,10 @@ fn allied_greetings_names_and_outtakes() {
             (128, WELCOME_HOMEWORLD0, WELCOME_HOMEWORLD1),
         ] {
             let mut f = Api::default();
-            f.put("THRADD_MANNER", 1);
-            f.put("THRADD_CULTURE", 1);
-            f.put("THRADD_INTRO", intro);
-            f.put("GLOBAL_FLAGS_AND_DATA", flags);
+            f.put(StoryKey::THRADD_MANNER, 1);
+            f.put(StoryKey::THRADD_CULTURE, 1);
+            f.put(StoryKey::THRADD_INTRO, intro);
+            f.put(StoryKey::GLOBAL_FLAGS_AND_DATA, flags);
             Dialogue { api: &mut f }.initialize();
             assert_eq!(f.segue, 0);
             Dialogue { api: &mut f }.intro();

@@ -1,3 +1,4 @@
+use crate::engine::StoryKey;
 use super::phrases::{hostile_info, visit_phrase};
 use super::*;
 use crate::comm::races::encounter::EncounterApi;
@@ -36,24 +37,24 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
                 self.api.talk_segue(1);
                 self.api.fade_palette(1, 840 / 4);
                 self.api.talk_segue(u16::MAX);
-                self.api.set("VUX_BEAST_ON_SHIP", 0);
-                self.api.set("ZEX_IS_DEAD", 1);
+                self.api.set(StoryKey::VUX_BEAST_ON_SHIP, 0);
+                self.api.set(StoryKey::ZEX_IS_DEAD, 1);
                 self.api.segue(0);
             }
             TRY_ANY_WAY => {
                 self.api.npc(NOPE as i32);
-                self.api.set("VUX_STACK_1", 4);
+                self.api.set(StoryKey::VUX_STACK_1, 4);
             }
             KILL_YOU_SQUIDS_1..=KILL_YOU_SQUIDS_4 => {
                 self.api.npc(WE_FIGHT as i32);
-                let next = self.api.get("VUX_STACK_2").wrapping_add(1);
+                let next = self.api.get(StoryKey::VUX_STACK_2).wrapping_add(1);
                 if next <= 3 {
-                    self.api.set("VUX_STACK_2", next);
+                    self.api.set(StoryKey::VUX_STACK_2, next);
                 }
             }
             CANT_WE_BE_FRIENDS_1 | CANT_WE_BE_FRIENDS_2 | CANT_WE_BE_FRIENDS_3
             | CANT_WE_BE_FRIENDS_4 => self.counter(
-                "VUX_STACK_3",
+                StoryKey::VUX_STACK_3,
                 &[
                     NEVER_UGLY_HUMANS_1,
                     NEVER_UGLY_HUMANS_2,
@@ -63,7 +64,7 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
                 3,
             ),
             BYE_HOSTILE_SPACE => self.counter(
-                "VUX_STACK_4",
+                StoryKey::VUX_STACK_4,
                 &[
                     GOODBYE_AND_DIE_HOSTILE_SPACE_1,
                     GOODBYE_AND_DIE_HOSTILE_SPACE_2,
@@ -77,7 +78,7 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
                 self.api.segue(0);
             }
             _ => {
-                let visits = self.api.get("VUX_STACK_1");
+                let visits = self.api.get(StoryKey::VUX_STACK_1);
                 let response = match visits {
                     4 => Some(NOT_ACCEPTED_1),
                     5 => Some(NOT_ACCEPTED_2),
@@ -94,7 +95,7 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
                 if let Some(phrase) = response {
                     self.api.npc(phrase as i32);
                 }
-                self.api.set("VUX_STACK_1", visits.wrapping_add(1));
+                self.api.set(StoryKey::VUX_STACK_1, visits.wrapping_add(1));
             }
         }
     }
@@ -136,33 +137,33 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
         if response == REGARDLESS {
             self.api.npc(THEN_FIGHT as i32);
             self.api.segue(1);
-            self.api.set("ZEX_STACK_3", 2);
-            self.api.set("ZEX_VISITS", 0);
+            self.api.set(StoryKey::ZEX_STACK_3, 2);
+            self.api.set(StoryKey::ZEX_VISITS, 0);
             return;
         }
 
         let mut last_stack = 0;
         let mut phrases = [None; 3];
         if response == NULL_PHRASE {
-            if self.api.get("ZEX_STACK_3") >= 2 {
-                self.counter("ZEX_VISITS", &[FIGHT_OR_TRADE_1, FIGHT_OR_TRADE_2], 1);
+            if self.api.get(StoryKey::ZEX_STACK_3) >= 2 {
+                self.counter(StoryKey::ZEX_VISITS, &[FIGHT_OR_TRADE_1, FIGHT_OR_TRADE_2], 1);
             } else {
                 self.counter(
-                    "ZEX_VISITS",
+                    StoryKey::ZEX_VISITS,
                     &[ZEX_HELLO_1, ZEX_HELLO_2, ZEX_HELLO_3, ZEX_HELLO_4],
                     3,
                 );
             }
         } else if response == WHAT_YOU_DO_HERE {
             self.api.npc(MY_MENAGERIE as i32);
-            self.api.set("ZEX_STACK_1", 1);
+            self.api.set(StoryKey::ZEX_STACK_1, 1);
         } else if response == WHAT_ABOUT_MENAGERIE {
             self.api.npc(NEED_NEW_CREATURE as i32);
-            self.api.set("ZEX_STACK_1", 2);
+            self.api.set(StoryKey::ZEX_STACK_1, 2);
         } else if response == WHAT_ABOUT_CREATURE {
             self.api.npc(ABOUT_CREATURE as i32);
-            self.api.set("KNOW_ZEX_WANTS_MONSTER", 1);
-            self.api.set("ZEX_STACK_1", 3);
+            self.api.set(StoryKey::KNOW_ZEX_WANTS_MONSTER, 1);
+            self.api.set(StoryKey::ZEX_STACK_1, 3);
             self.api.disable(WHAT_ABOUT_CREATURE as u16);
         } else if response == ABOUT_CREATURE_AGAIN {
             self.api.npc(CREATURE_AGAIN as i32);
@@ -170,28 +171,28 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
         } else if response == WHY_DONT_YOU_ATTACK {
             self.api.npc(LIKE_YOU as i32);
             last_stack = 1;
-            self.api.set("ZEX_STACK_2", 1);
+            self.api.set(StoryKey::ZEX_STACK_2, 1);
         } else if response == WHY_LIKE_ME {
             self.api.npc(LIKE_BECAUSE as i32);
             last_stack = 1;
-            self.api.set("ZEX_STACK_2", 2);
+            self.api.set(StoryKey::ZEX_STACK_2, 2);
         } else if response == ARE_YOU_A_PERVERT {
             self.api.npc(CALL_ME_WHAT_YOU_WISH as i32);
-            self.api.set("ZEX_STACK_2", 3);
+            self.api.set(StoryKey::ZEX_STACK_2, 3);
         } else if response == TAKE_BY_FORCE {
             self.api.npc(PRECURSOR_DEVICE as i32);
             last_stack = 2;
-            self.api.set("ZEX_STACK_3", 1);
+            self.api.set(StoryKey::ZEX_STACK_3, 1);
         } else if response == YOU_LIED {
             self.api.npc(YUP_LIED as i32);
             last_stack = 2;
-            self.api.set("ZEX_STACK_3", 3);
+            self.api.set(StoryKey::ZEX_STACK_3, 3);
         }
 
-        if self.api.get("KNOW_ZEX_WANTS_MONSTER") != 0 && self.api.get("VUX_BEAST_ON_SHIP") != 0 {
+        if self.api.get(StoryKey::KNOW_ZEX_WANTS_MONSTER) != 0 && self.api.get(StoryKey::VUX_BEAST_ON_SHIP) != 0 {
             phrases[0] = Some(I_HAVE_BEAST);
         } else {
-            phrases[0] = match self.api.get("ZEX_STACK_1") {
+            phrases[0] = match self.api.get(StoryKey::ZEX_STACK_1) {
                 0 => Some(WHAT_YOU_DO_HERE),
                 1 => Some(WHAT_ABOUT_MENAGERIE),
                 2 => Some(WHAT_ABOUT_CREATURE),
@@ -199,13 +200,13 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
                 _ => None,
             };
         }
-        phrases[1] = match self.api.get("ZEX_STACK_2") {
+        phrases[1] = match self.api.get(StoryKey::ZEX_STACK_2) {
             0 => Some(WHY_DONT_YOU_ATTACK),
             1 => Some(WHY_LIKE_ME),
             2 => Some(ARE_YOU_A_PERVERT),
             _ => None,
         };
-        phrases[2] = match self.api.get("ZEX_STACK_3") {
+        phrases[2] = match self.api.get(StoryKey::ZEX_STACK_3) {
             0 => Some(TAKE_BY_FORCE),
             1 => Some(REGARDLESS),
             2 => Some(YOU_LIED),
@@ -229,28 +230,28 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
         match response as u32 {
             WHY_SO_MEAN => {
                 self.api.npc(URQUAN_SLAVES as i32);
-                self.api.set("VUX_STACK_1", 1);
+                self.api.set(StoryKey::VUX_STACK_1, 1);
             }
             DEEPER_REASON => {
                 self.api.npc(OLD_INSULT as i32);
-                self.api.set("VUX_STACK_1", 2);
+                self.api.set(StoryKey::VUX_STACK_1, 2);
             }
             IF_WE_APOLOGIZE => {
                 self.api.npc(PROBABLY_NOT as i32);
-                self.api.set("VUX_STACK_1", 3);
+                self.api.set(StoryKey::VUX_STACK_1, 3);
             }
             WHATS_UP_HOSTILE => {
-                let (phrase, next) = hostile_info(self.api.get("VUX_INFO"));
+                let (phrase, next) = hostile_info(self.api.get(StoryKey::VUX_INFO));
                 if let Some(phrase) = phrase {
                     self.api.npc(phrase as i32);
                 }
-                self.api.set("VUX_INFO", next);
+                self.api.set(StoryKey::VUX_INFO, next);
                 self.api.disable(WHATS_UP_HOSTILE as u16);
             }
             _ => {}
         }
 
-        let topic = match self.api.get("VUX_STACK_1") {
+        let topic = match self.api.get(StoryKey::VUX_STACK_1) {
             0 => Some(WHY_SO_MEAN),
             1 => Some(DEEPER_REASON),
             2 => Some(IF_WE_APOLOGIZE),
@@ -279,20 +280,20 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
             KILL_YOU_SQUIDS_3,
             KILL_YOU_SQUIDS_4,
         ];
-        if let Some(phrase) = threats.get(self.api.get("VUX_STACK_2") as usize) {
+        if let Some(phrase) = threats.get(self.api.get(StoryKey::VUX_STACK_2) as usize) {
             self.offer(*phrase, Handler::Combat);
         }
         if self.api.enabled(WHATS_UP_HOSTILE as u16) {
             self.offer(WHATS_UP_HOSTILE, Handler::Normal);
         }
-        if self.api.get("VUX_STACK_1") > 13 {
+        if self.api.get(StoryKey::VUX_STACK_1) > 13 {
             let friends = [
                 CANT_WE_BE_FRIENDS_1,
                 CANT_WE_BE_FRIENDS_2,
                 CANT_WE_BE_FRIENDS_3,
                 CANT_WE_BE_FRIENDS_4,
             ];
-            if let Some(phrase) = friends.get(self.api.get("VUX_STACK_3") as usize) {
+            if let Some(phrase) = friends.get(self.api.get(StoryKey::VUX_STACK_3) as usize) {
                 self.offer(*phrase, Handler::Combat);
             }
         }
@@ -300,7 +301,7 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
     }
 
     pub(super) fn initialize(&mut self) {
-        let peaceful = (self.api.get("GLOBAL_FLAGS_AND_DATA") & (1 << 6)) != 0
+        let peaceful = (self.api.get(StoryKey::GLOBAL_FLAGS_AND_DATA) & (1 << 6)) != 0
             || self.api.activity() as u8 == crate::comm::dispatch::WON_LAST_BATTLE as u8;
         self.api.segue(if peaceful { 0 } else { 1 });
     }
@@ -311,13 +312,13 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
             self.api.segue(0);
             return;
         }
-        if (self.api.get("GLOBAL_FLAGS_AND_DATA") & (1 << 6)) != 0 {
+        if (self.api.get(StoryKey::GLOBAL_FLAGS_AND_DATA) & (1 << 6)) != 0 {
             self.menagerie(NULL_PHRASE as i32);
             return;
         }
-        if (self.api.get("GLOBAL_FLAGS_AND_DATA") & (1 << 7)) != 0 {
+        if (self.api.get(StoryKey::GLOBAL_FLAGS_AND_DATA) & (1 << 7)) != 0 {
             self.counter(
-                "VUX_HOME_VISITS",
+                StoryKey::VUX_HOME_VISITS,
                 &[
                     HOMEWORLD_HELLO_1,
                     HOMEWORLD_HELLO_2,
@@ -328,7 +329,7 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
             );
         } else {
             self.counter(
-                "VUX_VISITS",
+                StoryKey::VUX_VISITS,
                 &[SPACE_HELLO_1, SPACE_HELLO_2, SPACE_HELLO_3, SPACE_HELLO_4],
                 3,
             );

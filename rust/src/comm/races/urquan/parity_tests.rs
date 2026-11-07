@@ -1,3 +1,4 @@
+use crate::engine::StoryKey;
 use super::api::World;
 use super::dialogue::Dialogue;
 use super::*;
@@ -36,7 +37,7 @@ fn combat_endings_and_hypnosis_updates_match_each_response() {
         handle(&mut api, Handler::Combat, response);
         assert_eq!(api.spoken(), [phrase as i32]);
         assert_eq!(api.segue, segue);
-        assert_eq!(api.get("URQUAN_HYPNO_VISITS"), hypno);
+        assert_eq!(api.get(StoryKey::URQUAN_HYPNO_VISITS), hypno);
         assert!(api.offers().is_empty());
         assert_eq!(api.effects[0], Effect::Segue(1));
     }
@@ -47,7 +48,7 @@ fn information_switch_and_normal_menu_cover_every_byte_value() {
     for visits in 0..=u8::MAX {
         for response in [WHATS_UP_1, WHATS_UP_2, WHATS_UP_3, WHATS_UP_4] {
             let mut api = Api::default();
-            api.put("URQUAN_INFO", visits);
+            api.put(StoryKey::URQUAN_INFO, visits);
             handle(&mut api, Handler::Combat, response);
             let lines = [
                 GENERAL_INFO_1,
@@ -62,7 +63,7 @@ fn information_switch_and_normal_menu_cover_every_byte_value() {
                 .collect();
             assert_eq!(api.spoken(), expected);
             assert_eq!(
-                api.get("URQUAN_INFO"),
+                api.get(StoryKey::URQUAN_INFO),
                 if visits == 3 {
                     3
                 } else {
@@ -71,7 +72,7 @@ fn information_switch_and_normal_menu_cover_every_byte_value() {
             );
         }
         let mut api = Api::default();
-        api.put("URQUAN_INFO", visits);
+        api.put(StoryKey::URQUAN_INFO, visits);
         handle(&mut api, Handler::Normal, 0);
         let mut expected = vec![YOU_MUST_SURRENDER];
         if let Some(p) = [WHATS_UP_1, WHATS_UP_2, WHATS_UP_3, WHATS_UP_4].get(visits as usize) {
@@ -81,10 +82,10 @@ fn information_switch_and_normal_menu_cover_every_byte_value() {
         assert_eq!(offers(&api), expected);
     }
     let mut api = Api::default();
-    api.put("KNOW_URQUAN_STORY", 1);
+    api.put(StoryKey::KNOW_URQUAN_STORY, 1);
     handle(&mut api, Handler::Normal, KEY_PHRASE);
     assert_eq!(api.spoken(), [URQUAN_STORY as i32]);
-    assert_eq!(api.get("KNOW_URQUAN_STORY"), 2);
+    assert_eq!(api.get(StoryKey::KNOW_URQUAN_STORY), 2);
     assert!(!offers(&api).contains(&KEY_PHRASE));
 }
 
@@ -196,7 +197,7 @@ fn hypnosis_questions_cover_initial_and_subsequent_encounters() {
         ),
     ] {
         let mut api = Api::default();
-        api.put("URQUAN_HYPNO_VISITS", visits);
+        api.put(StoryKey::URQUAN_HYPNO_VISITS, visits);
         for (&response, &phrase) in questions.iter().zip(&phrases) {
             api.effects.clear();
             handle(&mut api, Handler::Hypno, response);
@@ -211,8 +212,8 @@ fn hypnosis_questions_cover_initial_and_subsequent_encounters() {
         }
     }
     let mut api = Api::default();
-    api.put("URQUAN_HYPNO_VISITS", 1);
-    api.put("MENTIONED_PET_COMPULSION", 1);
+    api.put(StoryKey::URQUAN_HYPNO_VISITS, 1);
+    api.put(StoryKey::MENTIONED_PET_COMPULSION, 1);
     handle(&mut api, Handler::Hypno, 0);
     assert_eq!(api.spoken(), [SUBSEQUENT_URQUAN_WAKE_UP as i32]);
     assert_eq!(offers(&api), [UH_OH, STOP_MEETING, BYE_SUB_HYPNO]);
@@ -223,8 +224,8 @@ fn greeting_counters_preserve_final_case_decrement_and_unmatched_postincrement()
     for frenzy in [0, 1] {
         for visits in 0..=u8::MAX {
             let mut api = Api::default();
-            api.put("KOHR_AH_FRENZY", frenzy);
-            api.put("URQUAN_VISITS", visits);
+            api.put(StoryKey::KOHR_AH_FRENZY, frenzy);
+            api.put(StoryKey::URQUAN_VISITS, visits);
             Dialogue { api: &mut api }.intro();
             let lines: &[u32] = if frenzy == 0 {
                 &[
@@ -244,7 +245,7 @@ fn greeting_counters_preserve_final_case_decrement_and_unmatched_postincrement()
                 .collect();
             assert_eq!(api.spoken(), expected);
             assert_eq!(
-                api.get("URQUAN_VISITS"),
+                api.get(StoryKey::URQUAN_VISITS),
                 if visits as usize == lines.len() - 1 {
                     visits
                 } else {
@@ -256,7 +257,7 @@ fn greeting_counters_preserve_final_case_decrement_and_unmatched_postincrement()
             }
             if frenzy == 0 {
                 assert!(
-                    matches!(api.effects.last(), Some(Effect::Set(key, _)) if key == "URQUAN_VISITS")
+                    matches!(api.effects.last(), Some(Effect::Set(key, _)) if key == StoryKey::URQUAN_VISITS)
                 );
             }
         }
@@ -275,13 +276,13 @@ fn intro_priority_and_initialization_use_activity_low_byte() {
                 activity,
                 ..Api::default()
             };
-            api.put("PLAYER_HYPNOTIZED", hypno);
-            api.put("TALKING_PET_ON_SHIP", 1);
+            api.put(StoryKey::PLAYER_HYPNOTIZED, hypno);
+            api.put(StoryKey::TALKING_PET_ON_SHIP, 1);
             api.world.group_battles.extend(
                 [
-                    "URQUAN_PROBE_GRPOFFS0",
-                    "COLONY_GRPOFFS0",
-                    "SAMATRA_GRPOFFS0",
+                    StoryKey::URQUAN_PROBE_GRPOFFS0,
+                    StoryKey::COLONY_GRPOFFS0,
+                    StoryKey::SAMATRA_GRPOFFS0,
                 ]
                 .map(String::from),
             );
@@ -313,14 +314,14 @@ fn intro_priority_and_initialization_use_activity_low_byte() {
         activity: crate::comm::dispatch::IN_INTERPLANETARY,
         ..Api::default()
     };
-    api.put("TALKING_PET_ON_SHIP", 1);
+    api.put(StoryKey::TALKING_PET_ON_SHIP, 1);
     api.world
         .group_battles
-        .extend(["COLONY_GRPOFFS0", "SAMATRA_GRPOFFS0"].map(String::from));
+        .extend([StoryKey::COLONY_GRPOFFS0, StoryKey::SAMATRA_GRPOFFS0].map(String::from));
     Dialogue { api: &mut api }.intro();
     assert_eq!(api.spoken(), [SENSE_EVIL as i32, CAUGHT_YA as i32]);
-    assert_eq!(api.get("URQUAN_VISITS"), 0);
-    assert_eq!(api.get("AWARE_OF_SAMATRA"), 0);
+    assert_eq!(api.get(StoryKey::URQUAN_VISITS), 0);
+    assert_eq!(api.get(StoryKey::AWARE_OF_SAMATRA), 0);
 }
 
 #[test]

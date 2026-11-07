@@ -1,3 +1,4 @@
+use crate::engine::StoryKey;
 use super::dialogue::Dialogue;
 use super::*;
 use crate::comm::races::encounter::testing::{Effect, Fake};
@@ -26,7 +27,7 @@ fn alliance_demands_construct_every_fragment_in_c_order_for_all_names() {
     ] {
         for handler in [Handler::Home, Handler::Space] {
             let mut api = Api::default();
-            api.put("NEW_ALLIANCE_NAME", name);
+            api.put(StoryKey::NEW_ALLIANCE_NAME, name);
             handle(&mut api, handler, 0);
             let (phrase, callback, expected) = if handler == Handler::Home {
                 let mut expected = vec![6, GLOBAL_PLAYER_NAME, 7];
@@ -52,36 +53,36 @@ fn all_greeting_switches_keep_c_byte_postincrement_and_final_decrement() {
         (
             0,
             0,
-            "YEHAT_VISITS",
+            StoryKey::YEHAT_VISITS,
             vec![SPACE_HELLO_1, SPACE_HELLO_2, SPACE_HELLO_3, SPACE_HELLO_4],
             Handler::Space,
         ),
         (
             0,
             128,
-            "YEHAT_HOME_VISITS",
+            StoryKey::YEHAT_HOME_VISITS,
             vec![HOMEWORLD_HELLO_1, HOMEWORLD_HELLO_2],
             Handler::Home,
         ),
         (
             1,
             0,
-            "YEHAT_VISITS",
+            StoryKey::YEHAT_VISITS,
             vec![ROYALIST_SPACE_HELLO_1, ROYALIST_SPACE_HELLO_2],
             Handler::Royalists,
         ),
         (
             1,
             128,
-            "YEHAT_HOME_VISITS",
+            StoryKey::YEHAT_HOME_VISITS,
             vec![ROYALIST_HOMEWORLD_HELLO_1, ROYALIST_HOMEWORLD_HELLO_2],
             Handler::Royalists,
         ),
     ] {
         for visits in 0..=u8::MAX {
             let mut api = Api::default();
-            api.put("YEHAT_CIVIL_WAR", civil_war);
-            api.put("GLOBAL_FLAGS_AND_DATA", homeworld);
+            api.put(StoryKey::YEHAT_CIVIL_WAR, civil_war);
+            api.put(StoryKey::GLOBAL_FLAGS_AND_DATA, homeworld);
             api.put(key, visits);
             Dialogue { api: &mut api }.intro();
             assert_eq!(
@@ -107,8 +108,8 @@ fn all_greeting_switches_keep_c_byte_postincrement_and_final_decrement() {
         activity: 0x100 | crate::comm::dispatch::WON_LAST_BATTLE,
         ..Api::default()
     };
-    api.put("YEHAT_CIVIL_WAR", 1);
-    api.put("GLOBAL_FLAGS_AND_DATA", 128);
+    api.put(StoryKey::YEHAT_CIVIL_WAR, 1);
+    api.put(StoryKey::GLOBAL_FLAGS_AND_DATA, 128);
     Dialogue { api: &mut api }.initialize();
     assert_eq!(api.segue, 0);
     api.effects.clear();
@@ -128,21 +129,21 @@ fn royalist_home_and_space_information_switches_cover_every_byte() {
         (
             Handler::Royalists,
             HOW_IS_REBELLION,
-            "YEHAT_ROYALIST_INFO",
+            StoryKey::YEHAT_ROYALIST_INFO,
             vec![ROYALIST_REBELLION_1, ROYALIST_REBELLION_2],
             HOW_IS_REBELLION,
         ),
         (
             Handler::Home,
             WHATS_UP_HOMEWORLD,
-            "YEHAT_ROYALIST_INFO",
+            StoryKey::YEHAT_ROYALIST_INFO,
             vec![GENERAL_INFO_HOMEWORLD_1, GENERAL_INFO_HOMEWORLD_2],
             WHATS_UP_HOMEWORLD,
         ),
         (
             Handler::Space,
             WHATS_UP_SPACE_1,
-            "YEHAT_REBEL_INFO",
+            StoryKey::YEHAT_REBEL_INFO,
             vec![
                 GENERAL_INFO_SPACE_1,
                 GENERAL_INFO_SPACE_2,
@@ -192,9 +193,9 @@ fn pkunk_offers_require_both_visits_and_use_royalist_phrases_in_all_contexts() {
             for home in [0, 1] {
                 for told in [0, 1] {
                     let mut api = Api::default();
-                    api.put("PKUNK_VISITS", visits);
-                    api.put("PKUNK_HOME_VISITS", home);
-                    api.put("YEHAT_ROYALIST_TOLD_PKUNK", told);
+                    api.put(StoryKey::PKUNK_VISITS, visits);
+                    api.put(StoryKey::PKUNK_HOME_VISITS, home);
+                    api.put(StoryKey::YEHAT_ROYALIST_TOLD_PKUNK, told);
                     handle(&mut api, handler, 0);
                     assert_eq!(
                         offers(&api).contains(&WHAT_ABOUT_PKUNK_ROYALIST),
@@ -205,7 +206,7 @@ fn pkunk_offers_require_both_visits_and_use_royalist_phrases_in_all_contexts() {
         }
         for absorbed in [0, 1] {
             let mut api = Api::default();
-            api.put("YEHAT_ABSORBED_PKUNK", absorbed);
+            api.put(StoryKey::YEHAT_ABSORBED_PKUNK, absorbed);
             handle(&mut api, handler, WHAT_ABOUT_PKUNK_ROYALIST);
             assert_eq!(
                 api.spoken(),
@@ -215,7 +216,7 @@ fn pkunk_offers_require_both_visits_and_use_royalist_phrases_in_all_contexts() {
                     HATE_PKUNK_ROYALIST
                 } as i32]
             );
-            assert_eq!(api.get("YEHAT_ROYALIST_TOLD_PKUNK"), 1);
+            assert_eq!(api.get(StoryKey::YEHAT_ROYALIST_TOLD_PKUNK), 1);
             assert!(!offers(&api).contains(&WHAT_ABOUT_PKUNK_ROYALIST));
         }
     }
@@ -228,21 +229,21 @@ fn home_and_royalist_topics_remove_only_their_own_options() {
             Handler::Royalists,
             SORRY_ABOUT_REVOLUTION,
             ALL_YOUR_FAULT,
-            "NO_YEHAT_INFO",
+            StoryKey::NO_YEHAT_INFO,
             SORRY_ABOUT_REVOLUTION,
         ),
         (
             Handler::Home,
             GIVE_INFO,
             NO_INFO_FOR_ENEMY,
-            "NO_YEHAT_INFO",
+            StoryKey::NO_YEHAT_INFO,
             GIVE_INFO,
         ),
         (
             Handler::Home,
             AT_LEAST_HELP_US_HOMEWORLD,
             NO_HELP_ENEMY,
-            "NO_YEHAT_HELP_HOME",
+            StoryKey::NO_YEHAT_HELP_HOME,
             AT_LEAST_HELP_US_HOMEWORLD,
         ),
     ] {
@@ -253,7 +254,7 @@ fn home_and_royalist_topics_remove_only_their_own_options() {
         assert!(!offers(&api).contains(&removed));
     }
     let mut api = Api::default();
-    for key in ["NO_YEHAT_INFO", "NO_YEHAT_HELP_HOME", "NO_YEHAT_ALLY_HOME"] {
+    for key in [StoryKey::NO_YEHAT_INFO, StoryKey::NO_YEHAT_HELP_HOME, StoryKey::NO_YEHAT_ALLY_HOME] {
         api.put(key, 1);
     }
     api.disabled.insert(WHATS_UP_HOMEWORLD as u16);
@@ -271,7 +272,7 @@ fn space_stack_order_and_early_return_match_each_topic() {
         (
             I_DEMAND_YOU_ALLY_SPACE0,
             WE_CANNOT_1,
-            "NO_YEHAT_ALLY_SPACE",
+            StoryKey::NO_YEHAT_ALLY_SPACE,
             1,
             vec![
                 OBLIGATION,
@@ -283,7 +284,7 @@ fn space_stack_order_and_early_return_match_each_topic() {
         (
             AT_LEAST_HELP_US_SPACE,
             SORRY_CANNOT,
-            "NO_YEHAT_HELP_SPACE",
+            StoryKey::NO_YEHAT_HELP_SPACE,
             1,
             vec![
                 DISHONOR,
@@ -295,11 +296,11 @@ fn space_stack_order_and_early_return_match_each_topic() {
         (
             DISHONOR,
             HERES_A_HINT,
-            "NO_YEHAT_HELP_SPACE",
+            StoryKey::NO_YEHAT_HELP_SPACE,
             2,
             vec![WHATS_UP_SPACE_1, I_DEMAND_YOU_ALLY_SPACE0, BYE_SPACE],
         ),
-        (OBLIGATION, WE_CANNOT_2, "NO_YEHAT_ALLY_SPACE", 2, vec![]),
+        (OBLIGATION, WE_CANNOT_2, StoryKey::NO_YEHAT_ALLY_SPACE, 2, vec![]),
     ] {
         let mut api = Api::default();
         handle(&mut api, Handler::Space, response);
@@ -313,16 +314,16 @@ fn space_stack_order_and_early_return_match_each_topic() {
                 [
                     Effect::Npc(WE_CANNOT_2 as i32),
                     Effect::Segue(0),
-                    Effect::Set("NO_YEHAT_ALLY_SPACE".into(), 2)
+                    Effect::Set(StoryKey::NO_YEHAT_ALLY_SPACE.into(), 2)
                 ]
             );
         }
     }
     for info in 0..=u8::MAX {
         let mut api = Api::default();
-        api.put("YEHAT_REBEL_INFO", info);
-        api.put("NO_YEHAT_ALLY_SPACE", 2);
-        api.put("NO_YEHAT_HELP_SPACE", 2);
+        api.put(StoryKey::YEHAT_REBEL_INFO, info);
+        api.put(StoryKey::NO_YEHAT_ALLY_SPACE, 2);
+        api.put(StoryKey::NO_YEHAT_HELP_SPACE, 2);
         handle(&mut api, Handler::Space, 0);
         let mut expected: Vec<_> = [
             WHATS_UP_SPACE_1,
@@ -344,8 +345,8 @@ fn shofixti_offers_and_proof_choices_follow_state_and_actual_escort() {
     for visited in [0, 1] {
         for told in [0, 1, 2] {
             let mut api = Api::default();
-            api.put("SHOFIXTI_VISITS", visited);
-            api.put("YEHAT_REBEL_TOLD_PKUNK", told);
+            api.put(StoryKey::SHOFIXTI_VISITS, visited);
+            api.put(StoryKey::YEHAT_REBEL_TOLD_PKUNK, told);
             handle(&mut api, Handler::Space, 0);
             assert_eq!(
                 offers(&api).contains(&SHOFIXTI_ALIVE_1),
@@ -371,7 +372,7 @@ fn shofixti_offers_and_proof_choices_follow_state_and_actual_escort() {
                 } as i32]
             );
             assert_eq!(
-                api.get("YEHAT_REBEL_TOLD_PKUNK"),
+                api.get(StoryKey::YEHAT_REBEL_TOLD_PKUNK),
                 u8::from(response == SHOFIXTI_ALIVE_1)
             );
             assert_eq!(
@@ -401,7 +402,7 @@ fn exit_endings_rng_and_revolt_effects_are_exact() {
         assert_eq!(api.segue, 1);
         assert_eq!(api.world.random_calls, 0);
         assert_eq!(
-            api.get("NO_YEHAT_ALLY_HOME"),
+            api.get(StoryKey::NO_YEHAT_ALLY_HOME),
             u8::from(response == I_DEMAND_YOU_ALLY_HOMEWORLD0)
         );
     }
@@ -423,7 +424,7 @@ fn exit_endings_rng_and_revolt_effects_are_exact() {
     for response in [NOT_HERE, NOT_SEND] {
         for visits in 0..=u8::MAX {
             let mut api = Api::default();
-            api.put("YEHAT_REBEL_VISITS", visits);
+            api.put(StoryKey::YEHAT_REBEL_VISITS, visits);
             handle(&mut api, Handler::Exit, response);
             assert_eq!(
                 api.spoken(),
@@ -433,21 +434,21 @@ fn exit_endings_rng_and_revolt_effects_are_exact() {
                     .into_iter()
                     .collect::<Vec<_>>()
             );
-            assert_eq!(api.get("YEHAT_REBEL_VISITS"), 1);
+            assert_eq!(api.get(StoryKey::YEHAT_REBEL_VISITS), 1);
             assert_eq!(api.segue, 1);
             assert_eq!(api.world.random_calls, 0);
         }
     }
     let mut api = Api::default();
     for key in [
-        "YEHAT_VISITS",
-        "YEHAT_HOME_VISITS",
-        "YEHAT_REBEL_VISITS",
-        "YEHAT_REBEL_INFO",
-        "YEHAT_REBEL_TOLD_PKUNK",
-        "NO_YEHAT_INFO",
-        "YEHAT_ROYALIST_INFO",
-        "NO_YEHAT_HELP_SPACE",
+        StoryKey::YEHAT_VISITS,
+        StoryKey::YEHAT_HOME_VISITS,
+        StoryKey::YEHAT_REBEL_VISITS,
+        StoryKey::YEHAT_REBEL_INFO,
+        StoryKey::YEHAT_REBEL_TOLD_PKUNK,
+        StoryKey::NO_YEHAT_INFO,
+        StoryKey::YEHAT_ROYALIST_INFO,
+        StoryKey::NO_YEHAT_HELP_SPACE,
     ] {
         api.put(key, 1);
     }
@@ -458,18 +459,18 @@ fn exit_endings_rng_and_revolt_effects_are_exact() {
             Effect::Segue(1),
             Effect::Npc(WE_REVOLT as i32),
             Effect::Segue(0),
-            Effect::Set("YEHAT_CIVIL_WAR".into(), 1),
-            Effect::Set("YEHAT_VISITS".into(), 0),
-            Effect::Set("YEHAT_HOME_VISITS".into(), 0),
-            Effect::Set("YEHAT_REBEL_VISITS".into(), 0),
-            Effect::Set("YEHAT_REBEL_INFO".into(), 0),
-            Effect::Set("YEHAT_REBEL_TOLD_PKUNK".into(), 0),
-            Effect::Set("NO_YEHAT_INFO".into(), 0),
+            Effect::Set(StoryKey::YEHAT_CIVIL_WAR.into(), 1),
+            Effect::Set(StoryKey::YEHAT_VISITS.into(), 0),
+            Effect::Set(StoryKey::YEHAT_HOME_VISITS.into(), 0),
+            Effect::Set(StoryKey::YEHAT_REBEL_VISITS.into(), 0),
+            Effect::Set(StoryKey::YEHAT_REBEL_INFO.into(), 0),
+            Effect::Set(StoryKey::YEHAT_REBEL_TOLD_PKUNK.into(), 0),
+            Effect::Set(StoryKey::NO_YEHAT_INFO.into(), 0),
             Effect::Event(1, 0, 0, 0, 15),
         ]
     );
-    assert_eq!(api.get("YEHAT_ROYALIST_INFO"), 1);
-    assert_eq!(api.get("NO_YEHAT_HELP_SPACE"), 1);
+    assert_eq!(api.get(StoryKey::YEHAT_ROYALIST_INFO), 1);
+    assert_eq!(api.get(StoryKey::NO_YEHAT_HELP_SPACE), 1);
     assert_eq!(api.world.random_calls, 0);
 }
 
