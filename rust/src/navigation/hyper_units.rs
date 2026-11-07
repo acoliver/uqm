@@ -15,6 +15,39 @@ pub(super) fn universe_y(log: i32, space_height: i32) -> i16 {
     (9999 - (log * 625 + factor / 2) / factor) as i16
 }
 
+#[derive(Clone, Copy)]
+pub struct Geometry {
+    pub space_width: i32,
+    pub space_height: i32,
+}
+
+impl Geometry {
+    pub fn new((width, height): (i32, i32)) -> Self {
+        Self {
+            space_width: width - 64,
+            space_height: height,
+        }
+    }
+    pub fn width(self) -> i32 {
+        self.space_width << 5
+    }
+    pub fn height(self) -> i32 {
+        self.space_height << 5
+    }
+    pub fn log_x(self, value: i16) -> i32 {
+        log_x(value, self.space_width)
+    }
+    pub fn log_y(self, value: i16) -> i32 {
+        log_y(value, self.space_height)
+    }
+    pub fn universe_x(self, value: i32) -> i16 {
+        universe_x(value, self.space_width)
+    }
+    pub fn universe_y(self, value: i32) -> i16 {
+        universe_y(value, self.space_height)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
