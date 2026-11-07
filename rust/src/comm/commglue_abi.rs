@@ -131,7 +131,7 @@ pub(crate) mod runtime {
     /// Called on the game thread with a valid Segue enum value.
     #[no_mangle]
     pub unsafe extern "C" fn setSegue(segue: i32) {
-        let mut world = World::current();
+        let world = World::current();
         match segue {
             0 => world.write(|world| world.set_story_state(StoryKey::BATTLE_SEGUE, 0)),
             1 => world.write(|world| world.set_story_state(StoryKey::BATTLE_SEGUE, 1)),
@@ -140,8 +140,8 @@ pub(crate) mod runtime {
                 world.write(|world| world.set_story_state(StoryKey::BATTLE_SEGUE, 1));
             }
             3 => {
-                world.write(|world| world.set_story_state(StoryKey::BATTLE_SEGUE, 0));
                 world.write(|world| {
+                    world.set_story_state(StoryKey::BATTLE_SEGUE, 0);
                     world.data.flagship.crew_enlisted = u16::MAX;
                     world.set_activity(world.activity() | 0x2000);
                 });
@@ -154,20 +154,19 @@ pub(crate) mod runtime {
     /// Called on the game thread with initialized game state.
     #[no_mangle]
     pub unsafe extern "C" fn getSegue() -> i32 {
-        let world = World::current();
-        if world.read(|world| world.story_state(StoryKey::BATTLE_SEGUE)) == 0 {
-            if world.read(|world| world.data.flagship.crew_enlisted) == u16::MAX
-                && world.read(|world| world.activity()) & 0x2000 != 0
-            {
-                3
+        World::current().read(|world| {
+            if world.story_state(StoryKey::BATTLE_SEGUE) == 0 {
+                if world.data.flagship.crew_enlisted == u16::MAX && world.activity() & 0x2000 != 0 {
+                    3
+                } else {
+                    0
+                }
+            } else if Kernel::current().read(|owner| owner.instant_victory) != 0 {
+                2
             } else {
-                0
+                1
             }
-        } else if Kernel::current().read(|owner| owner.instant_victory) != 0 {
-            2
-        } else {
-            1
-        }
+        })
     }
 }
 
