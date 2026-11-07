@@ -90,6 +90,9 @@ impl Observer<Option<super::campaign_state::CampaignView>> for Handle {
     fn checkpoint(&mut self, view: &CheckpointView<'_>) {
         match *view {
             CheckpointView::Simulation(boundary) => self.0.parity_checkpoint(boundary),
+            CheckpointView::PlanetSide(snapshot) => {
+                self.0.planet_side.lock().clone_from(snapshot);
+            }
             CheckpointView::BattleReset => {}
             CheckpointView::BattleAdvanced => {
                 self.0

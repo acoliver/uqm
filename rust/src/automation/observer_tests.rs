@@ -227,3 +227,69 @@ fn starting_another_scene_resets_dispatch_and_requires_new_observations() {
         )
     );
 }
+
+#[test]
+fn lander_checkpoints_are_copied_into_the_supplied_observer() {
+    use crate::engine::observe_port::planet_side::{MineralDeposit, PlanetSideSnapshot};
+    let (_first_output, mut first) = observer();
+    let (_second_output, second) = observer();
+    let mut trip = PlanetSideSnapshot::default();
+    trip.observation.generation = 4;
+    trip.observation.active = true;
+    trip.observation.phase = 4;
+    trip.observation.current_x = 30;
+    trip.observation.current_y = 60;
+    trip.observation.facing = 7;
+    trip.observation.mineral_units[6] = 5;
+    trip.deposits = Some(vec![MineralDeposit {
+        x: 35,
+        y: 65,
+        category: 6,
+    }]);
+    trip.energy_nodes = vec![(31, 80, 90)];
+    trip.energy_retrieved = 1 << 31;
+    trip.report_active = true;
+    first.checkpoint(&CheckpointView::PlanetSide(&trip));
+    let copied = first.0.planet_side.lock().clone();
+    assert_eq!(copied, trip);
+    trip.energy_nodes.clear();
+    trip.deposits = None;
+    trip.report_active = false;
+    assert_eq!(*first.0.planet_side.lock(), copied);
+    assert_eq!(*second.0.planet_side.lock(), PlanetSideSnapshot::default());
+    let mineral = super::planet_minerals::PlanetSnapshot::from_observation(
+        copied.observation,
+        copied.deposits.clone(),
+    );
+    assert_eq!(mineral.generation, 4);
+    assert_eq!(
+        mineral.position,
+        crate::planet_side::model::SurfacePoint { x: 30, y: 60 }
+    );
+    assert_eq!(mineral.facing, 7);
+    assert_eq!(mineral.units[6], 5);
+    assert_eq!(mineral.deposits, copied.deposits);
+    assert!(mineral.active);
+    first.checkpoint(&CheckpointView::PlanetSide(&trip));
+    assert_eq!(*first.0.planet_side.lock(), trip);
+    assert_eq!(*second.0.planet_side.lock(), PlanetSideSnapshot::default());
+}
+
+#[test]
+fn lander_fixture_requests_belong_to_each_observer() {
+    use crate::engine::observe_port::planet_side::FixtureLayout;
+    let (_first_output, first) = observer();
+    let (_second_output, second) = observer();
+    first
+        .0
+        .planet_side_fixtures
+        .lock()
+        .queue(FixtureLayout::CollisionParity)
+        .unwrap();
+    assert!(second.0.planet_side_fixtures.lock().take().is_none());
+    assert_eq!(
+        first.0.planet_side_fixtures.lock().take(),
+        Some(FixtureLayout::CollisionParity)
+    );
+    assert!(first.0.planet_side_fixtures.lock().take().is_none());
+}

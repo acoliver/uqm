@@ -302,6 +302,8 @@ pub struct AutomationObserver {
     pub(crate) ui: super::ui_observation::UiObservation,
     pub(crate) scene: Mutex<scenario::SceneObservation>,
     pub(crate) ending: Mutex<super::ending::Ending>,
+    pub(crate) planet_side: Mutex<crate::engine::observe_port::planet_side::PlanetSideSnapshot>,
+    pub(crate) planet_side_fixtures: Mutex<crate::planet_side::automation_fixture::FixtureRequests>,
     #[cfg(feature = "debug-process")]
     pub(crate) pending_native_presentation:
         Mutex<Option<super::native_window::NativeWindowChildState>>,
@@ -431,6 +433,8 @@ impl AutomationObserver {
             ui: Default::default(),
             scene: Default::default(),
             ending: Default::default(),
+            planet_side: Default::default(),
+            planet_side_fixtures: Default::default(),
             #[cfg(feature = "debug-process")]
             pending_native_presentation: Default::default(),
             activity,

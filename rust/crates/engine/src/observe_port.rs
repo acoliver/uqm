@@ -24,6 +24,7 @@ pub enum InputView {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CheckpointView<'a> {
     Simulation(&'a str),
+    PlanetSide(&'a planet_side::PlanetSideSnapshot),
     BattleReset,
     BattleAdvanced,
     InputSampled(u16),

@@ -133,12 +133,8 @@ impl FixtureRequests {
         Ok(())
     }
 
-    pub fn take(&mut self, position: SurfacePoint) -> Option<PlanetSideFixture> {
-        use crate::engine::observe_port::planet_side::FixtureLayout;
-        self.pending.take().map(|layout| match layout {
-            FixtureLayout::CollisionParity => PlanetSideFixture::for_collision_parity(position),
-            FixtureLayout::MineralGallery => PlanetSideFixture::mineral_gallery(position),
-        })
+    pub fn take(&mut self) -> Option<crate::engine::observe_port::planet_side::FixtureLayout> {
+        self.pending.take()
     }
 
     pub fn clear(&mut self) {
@@ -384,33 +380,6 @@ impl PlanetSideFixture {
 mod tests {
     use super::*;
 
-    #[test]
-    fn owned_requests_are_isolated_and_consumed_once() {
-        use crate::engine::observe_port::planet_side::FixtureLayout;
-        let anchor = SurfacePoint { x: 100, y: 50 };
-        let mut first = FixtureRequests::default();
-        let mut second = FixtureRequests::default();
-        first.queue(FixtureLayout::CollisionParity).unwrap();
-        assert_eq!(
-            first.queue(FixtureLayout::MineralGallery),
-            Err(AdapterError::new("fixture_request_already_pending"))
-        );
-        assert!(second.take(anchor).is_none());
-        assert_eq!(
-            first.take(anchor),
-            Some(PlanetSideFixture::for_collision_parity(anchor))
-        );
-        assert!(first.take(anchor).is_none());
-        second.queue(FixtureLayout::MineralGallery).unwrap();
-        assert_eq!(
-            second.take(anchor),
-            Some(PlanetSideFixture::mineral_gallery(anchor))
-        );
-        first.queue(FixtureLayout::CollisionParity).unwrap();
-        first.clear();
-        assert!(first.take(anchor).is_none());
-        assert!(second.take(anchor).is_none());
-    }
     use crate::planet_side::assembly::{share_surface, SurfaceAssembly, WorldVisualPort};
     use crate::planet_side::cargo::{BioCargo, MineralCargo};
     use crate::planet_side::collision::{
@@ -1254,5 +1223,26 @@ mod tests {
             Some(1 + *frame_index),
             "registered mask follows the same animation frame"
         );
+    }
+
+    #[test]
+    fn owned_requests_are_isolated_and_consumed_once() {
+        use crate::engine::observe_port::planet_side::FixtureLayout;
+        let mut first = FixtureRequests::default();
+        let mut second = FixtureRequests::default();
+        first.queue(FixtureLayout::CollisionParity).unwrap();
+        assert_eq!(
+            first.queue(FixtureLayout::MineralGallery),
+            Err(AdapterError::new("fixture_request_already_pending"))
+        );
+        assert!(second.take().is_none());
+        assert_eq!(first.take(), Some(FixtureLayout::CollisionParity));
+        assert!(first.take().is_none());
+        second.queue(FixtureLayout::MineralGallery).unwrap();
+        assert_eq!(second.take(), Some(FixtureLayout::MineralGallery));
+        first.queue(FixtureLayout::CollisionParity).unwrap();
+        first.clear();
+        assert!(first.take().is_none());
+        assert!(second.take().is_none());
     }
 }
