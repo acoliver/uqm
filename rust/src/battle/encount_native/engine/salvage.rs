@@ -159,7 +159,6 @@ impl Salvage {
     pub(super) fn panel(
         &mut self,
         cx: &mut Cx<'_>,
-        catalog: Option<&[CStarDesc; CATALOG_LEN]>,
         draw_armada: impl FnOnce(
             &crate::engine::Kernel,
             &crate::engine::World,
@@ -168,7 +167,7 @@ impl Salvage {
         ),
     ) {
         crate::ui::border::draw_sis_frame(cx.kernel, cx.world, cx.screen_dimensions());
-        let message = crate::ui::sis::default_message_text(cx.kernel, cx.world, catalog);
+        let message = crate::ui::sis::default_message_text(cx.kernel, cx.world);
         crate::ui::sis::draw_message(
             cx.kernel,
             cx.screen_dimensions().0,
@@ -177,7 +176,7 @@ impl Salvage {
             -1,
             DSME_NONE as u16,
         );
-        display::draw_title(cx, catalog);
+        display::draw_title(cx);
         crate::graphics::context_abi::ContextLease::require(cx.kernel.space_context).select();
         if self.victory != 0 {
             let mut panel = crate::comm::locdata::CRect {

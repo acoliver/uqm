@@ -3,24 +3,17 @@ use super::{
     IN_HYPERSPACE, IN_INTERPLANETARY, IN_LAST_BATTLE, NAVIGATION_STRING_BASE, STAR_NUMBER_BASE,
 };
 use crate::{
-    engine::{
-        world::{CStarDesc, CATALOG_LEN},
-        Kernel, World,
-    },
+    engine::{Kernel, World},
     navigation::globals::in_hyper_space,
     planets::starmap::naming::cluster_name,
 };
 use std::ffi::CString;
 
-pub fn default_message_text(
-    kernel: &Kernel,
-    world: &World,
-    catalog: Option<&[CStarDesc; CATALOG_LEN]>,
-) -> CString {
+pub fn default_message_text(kernel: &Kernel, world: &World) -> CString {
     match u32::from(world.activity() as u8) {
         IN_LAST_BATTLE | IN_INTERPLANETARY => {
             let star = world
-                .selected_star(catalog)
+                .selected_star()
                 .unwrap_or_else(|| panic!("campaign message requires a selected star"));
             cluster_name(kernel, star, STAR_NUMBER_BASE as usize)
         }
