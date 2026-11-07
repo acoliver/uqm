@@ -264,7 +264,8 @@ pub fn draw_battle_status(
     let descriptor = cx.desc(id);
     let mut info = descriptor.ship_info;
     let portrait =
-        crate::graphics::drawable_abi::retain_frame_allocations(&[info.icons])[0].context_frame(1);
+        crate::graphics::context_abi::ContextFrame::retain(std::ptr::NonNull::new(info.icons))
+            .next_frame();
     let title = battle_title(descriptor, selected, &cx.world.data.flagship.ship_name);
     graphics.draw(&mut info, &portrait, y, clip, title);
     let mut stats = cx.race_stats_mut(id);

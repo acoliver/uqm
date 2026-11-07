@@ -487,7 +487,8 @@ pub fn melee_connect_dialog(
 ) -> BOOLEAN {
     assert!((0..2).contains(&side), "connection side must index a peer");
     let _graphics = crate::graphics::context_abi::ContextLease::retain(
-        std::ptr::NonNull::new(cx.kernel.screen_context).expect("connection dialog screen"),
+        std::ptr::NonNull::new(cx.kernel.screen_context)
+            .unwrap_or_else(|| panic!("connection dialog screen")),
     );
     struct ActiveDialog;
     impl Drop for ActiveDialog {

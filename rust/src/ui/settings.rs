@@ -61,12 +61,16 @@ pub(crate) fn play_loaded_music(
 /// # Safety
 /// The music player must be initialized on the game thread.
 pub unsafe fn stop_music() {
-    stop_music_ref(LAST_MUSIC_REF);
+    // SAFETY: the caller retains the initialized game-thread music lifecycle.
+    unsafe { stop_music_ref(LAST_MUSIC_REF) };
 }
 
 unsafe fn stop_music_ref(music: MUSIC_REF) {
-    PLRStop(music.cast());
-    LAST_MUSIC_REF = std::ptr::null_mut();
+    // SAFETY: the caller retains this music reference during playback removal.
+    unsafe {
+        PLRStop(music.cast());
+        LAST_MUSIC_REF = std::ptr::null_mut();
+    }
 }
 
 pub(crate) fn stop_loaded_music(music: Option<&crate::sound::resource_types::LoadedMusic>) {

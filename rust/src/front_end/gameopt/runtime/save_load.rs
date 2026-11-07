@@ -11,7 +11,8 @@ pub(super) unsafe fn save_load_game(
     let desc = &mut pick_state.summary[game_index as usize];
     let mut name_buf: [UNICODE; 256] = [0; 256];
     let context = crate::graphics::context_abi::ContextLease::retain(
-        std::ptr::NonNull::new(cx.kernel.space_context).expect("save/load context"),
+        std::ptr::NonNull::new(cx.kernel.space_context)
+            .unwrap_or_else(|| panic!("save/load context")),
     );
     let mut background = None;
     let success;

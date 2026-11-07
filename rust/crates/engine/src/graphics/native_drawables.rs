@@ -258,6 +258,31 @@ mod tests {
 
     #[test]
     #[serial_test::serial]
+    fn retained_next_frame_wraps_single_and_multi_frame_portraits() {
+        for count in [1, 3] {
+            // SAFETY: the fixture transfers the registered allocation to its unique owner.
+            let raw = unsafe {
+                let raw = super::super::drawable_abi::AllocDrawable(count);
+                (*raw).MaxIndex = count - 1;
+                for index in 0..count {
+                    (*(*raw).Frame.add(usize::from(index))).Index = index;
+                }
+                raw
+            };
+            let owner = LoadedDrawable::retain_loaded(NonNull::new(raw).unwrap());
+            let lease = owner.lease();
+            for index in 0..usize::from(count) {
+                let next = lease.context_frame(index).next_frame();
+                assert_eq!(
+                    next.frame,
+                    lease.frame((index + 1) % usize::from(count)).unwrap()
+                );
+            }
+        }
+    }
+
+    #[test]
+    #[serial_test::serial]
     fn drawable_owner_release_keeps_its_leased_frames_and_bounds_alive() {
         // SAFETY: the fixture transfers this newly registered allocation to its owner.
         let drawable = unsafe { super::super::drawable_abi::AllocDrawable(2) };

@@ -576,11 +576,13 @@ pub fn draw_ship_strings(cx: &mut crate::engine::battle::Cx<'_>, state: &MeleeSe
                     let mut info = *descriptor.info();
                     let graphics =
                         crate::ui::shipstat::StatusGraphics::new(cx.kernel, font.clone());
-                    let portrait =
-                        crate::graphics::drawable_abi::retain_frame_allocations(&[info.icons])[0]
-                            .context_frame(1);
+                    let portrait = crate::graphics::context_abi::ContextFrame::retain(
+                        std::ptr::NonNull::new(info.icons),
+                    )
+                    .next_frame();
                     let (name, name_count) = descriptor.label(1);
-                    let cost = std::ffi::CString::new(info.ship_cost.to_string()).unwrap();
+                    let cost = std::ffi::CString::new(info.ship_cost.to_string())
+                        .unwrap_or_else(|error| panic!("ship cost caption: {error}"));
                     graphics.draw(
                         &mut info,
                         &portrait,

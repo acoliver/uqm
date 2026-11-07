@@ -34,7 +34,9 @@ pub(crate) mod live {
     };
     use editing::*;
     pub(crate) fn screen_context(kernel: &KernelOwner) -> ContextLease {
-        ContextLease::retain(NonNull::new(kernel.screen_context).expect("melee screen context"))
+        ContextLease::retain(
+            NonNull::new(kernel.screen_context).unwrap_or_else(|| panic!("melee screen context")),
+        )
     }
 
     pub(crate) fn fade(cx: &mut crate::engine::battle::Cx<'_>, kind: u32) {

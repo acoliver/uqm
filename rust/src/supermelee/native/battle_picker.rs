@@ -670,7 +670,8 @@ pub mod live {
             draw(cx, player);
         }
         let screen = ContextLease::retain(
-            std::ptr::NonNull::new(cx.kernel.screen_context).expect("melee selection screen"),
+            std::ptr::NonNull::new(cx.kernel.screen_context)
+                .unwrap_or_else(|| panic!("melee selection screen")),
         );
         let deadline = screen
             .fade_screen(FADE_ALL_TO_COLOR, 840 / 2)

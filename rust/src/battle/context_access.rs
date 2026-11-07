@@ -137,7 +137,8 @@ mod status_native_access {
     impl StatusOps for Cx<'_> {
         fn draw_explosion_flash(&mut self, life: u16, y: i16) {
             let context = crate::graphics::context_abi::ContextLease::retain(
-                std::ptr::NonNull::new(self.kernel.status_context).expect("battle status context"),
+                std::ptr::NonNull::new(self.kernel.status_context)
+                    .unwrap_or_else(|| panic!("battle status context")),
             );
             explosion_flash(life, y, |color, r, fill| {
                 if fill {

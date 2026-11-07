@@ -284,7 +284,7 @@ pub(crate) mod live {
         let filename = CString::new(filename).unwrap();
         let ok = screen.with_selected(|| {
             let saved = crate::ui::save_problem::save_confirmation(cx.kernel, screen, true)
-                .expect("save confirmation background");
+                .unwrap_or_else(|| panic!("save confirmation background"));
             let team = &state.melee_setup.teams[state.side as usize];
             let ok = write_team(&state.files().teams, &filename, team).is_ok();
             state.load.top = 0;

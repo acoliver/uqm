@@ -257,8 +257,9 @@ fn get_armada_star_ship(
     if cx.b.counters[1] == 0 {
         return None;
     }
-    let context =
-        ContextLease::retain(NonNull::new(cx.kernel.space_context).expect("picker context"));
+    let context = ContextLease::retain(
+        NonNull::new(cx.kernel.space_context).unwrap_or_else(|| panic!("picker context")),
+    );
     context.with_selected(|| {
         let mut pick = CRect::default();
         draw_armada_pick_ship_in(cx.kernel, cx.world, 0, &mut pick);
@@ -270,9 +271,12 @@ fn get_armada_star_ship(
             frame: (pick.corner.x, pick.corner.y),
             context: context.clone(),
             screen: ContextLease::retain(
-                NonNull::new(cx.kernel.screen_context).expect("picker screen"),
+                NonNull::new(cx.kernel.screen_context).unwrap_or_else(|| panic!("picker screen")),
             ),
-            font: cx.kernel.tiny_font_lease().expect("picker font"),
+            font: cx
+                .kernel
+                .tiny_font_lease()
+                .unwrap_or_else(|| panic!("picker font")),
         };
         base::SetMenuSounds(input, MENU_SOUND_ARROWS, MENU_SOUND_SELECT);
         let runtime = cx.kernel.input_runtime();

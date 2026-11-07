@@ -23,6 +23,18 @@ impl ContextFrame {
         }
     }
 
+    pub fn next_frame(&self) -> Self {
+        for allocation in &self._allocations {
+            allocation.assert_thread();
+        }
+        // SAFETY: these leases retain this optional frame and its complete drawable allocation.
+        let frame = unsafe { super::pixmap_abi::IncFrameIndex(self.frame) };
+        Self {
+            frame,
+            _allocations: self._allocations.clone(),
+        }
+    }
+
     pub fn rect(&self) -> RECT {
         assert!(!self.frame.is_null(), "absent frame has no bounds");
         for allocation in &self._allocations {
