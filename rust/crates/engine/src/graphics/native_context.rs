@@ -1,5 +1,8 @@
 //! Retained ownership of native contexts on the serialized graphics thread.
-use super::{context_abi, drawable_abi, ffi, frame_abi, native_abi::*, native_drawables};
+use super::{
+    context_abi, drawable_abi, ffi, frame_abi, gfx_common_abi as gfx, native_abi::*,
+    native_drawables,
+};
 use std::{cell::RefCell, ptr::NonNull, rc::Rc};
 
 pub(super) struct Allocation {
@@ -259,19 +262,17 @@ impl ContextLease {
             let mut deadline = 0;
             match operation {
                 Operation::Select | Operation::Deselect => (),
-                Operation::BeginBatch => super::gfx_common_abi::batch_graphics(),
-                Operation::EndBatch => super::gfx_common_abi::unbatch_graphics(),
-                Operation::Flush => super::gfx_common_abi::flush_graphics(),
+                Operation::BeginBatch => gfx::batch_graphics(),
+                Operation::EndBatch => gfx::unbatch_graphics(),
+                Operation::Flush => gfx::flush_graphics(),
                 Operation::Fade(kind, interval) => {
                     deadline = super::cmap_abi::FadeScreen(kind, interval)
                 }
                 Operation::FinishTransforms => super::cmap_abi::FlushColorXForms(),
-                Operation::TransitionSource(_) => {
-                    super::gfx_common_abi::SetTransitionSource(rectangle)
-                }
-                Operation::Transition(_) => super::gfx_common_abi::ScreenTransition(3, rectangle),
+                Operation::TransitionSource(_) => gfx::SetTransitionSource(rectangle),
+                Operation::Transition(_) => gfx::ScreenTransition(3, rectangle),
                 Operation::ScaleMode(mode) => {
-                    super::gfx_common_abi::set_graphic_scale_mode(mode);
+                    gfx::set_graphic_scale_mode(mode);
                 }
                 Operation::Background(color) => {
                     context_abi::SetContextBackGroundColor(color);
@@ -552,9 +553,9 @@ impl ContextLease {
         // batch owns bounded links and retains all registered stamp sources;
         // it cannot contain text pointers into caller storage.
         unsafe {
-            super::gfx_common_abi::SetGraphicScale(scale);
+            gfx::SetGraphicScale(scale);
             super::frame_abi::DrawBatch(batch.primitives.as_mut_ptr(), u32::from(head), 0);
-            super::gfx_common_abi::SetGraphicScale(0);
+            gfx::SetGraphicScale(0);
         }
     }
 

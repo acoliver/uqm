@@ -138,10 +138,7 @@ pub(super) fn start(
         load_gravity_well(cx.kernel, selector);
         assert!(cx.b.net.is_none(), "melee battle already owns a session");
         cx.b.net = Some(state.netplay.battle_net());
-        // SAFETY: the retained battle and fleets satisfy the existing battle contract.
-        unsafe {
-            crate::battle::battle_native::battle(cx, io, None);
-        }
+        crate::battle::battle_native::battle(cx, io, None);
         cx.b.net = None;
         cx.b.selection_frames = None;
         free_gravity_well(cx.kernel);

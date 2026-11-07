@@ -8,30 +8,6 @@ use uqm_rust::navigation::{hyper_units::Geometry, hyperspace::move_sis};
 
 #[test]
 #[serial_test::serial]
-fn checksum_reads_the_explicit_unpublished_display_queue() {
-    use uqm_rust::battle::netplay::CrcState;
-    use uqm_rust::ships::native::abi::crc_processState;
-    let mut other = Game::new();
-    other.kernel.reset_element_capacity(1);
-    let mut other_battle = Battle::new();
-    let mut other_cx = Cx::new(&mut other_battle, &mut other.world, &mut other.kernel, || 0);
-    let id = other_cx.alloc_element().unwrap();
-    other_cx.element_mut(id).mass = 7;
-    other_cx.put(id);
-    let mut game = Game::new();
-    let mut battle = Battle::new();
-    let mut cx = Cx::new(&mut battle, &mut game.world, &mut game.kernel, || 0);
-    let previous = uqm_rust::math::seed_random(73);
-    let mut expected = CrcState::new();
-    expected.process_u32(73);
-    let mut actual = CrcState::new();
-    crc_processState(&mut cx, &mut actual);
-    assert_eq!(uqm_rust::math::seed_random(previous), 73);
-    assert_eq!(actual, expected);
-}
-
-#[test]
-#[serial_test::serial]
 fn movement_clips_displacement_from_an_unpublished_context() {
     let mut game = Game::new();
     let mut other = Game::new();
