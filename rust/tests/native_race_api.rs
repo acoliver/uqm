@@ -307,6 +307,8 @@ fn native_races_cannot_escape_the_real_accessor_boundary() -> Result<(), Box<dyn
         ("picker_icons", "fn probe(b: &mut crate::engine::Kernel) { let mut q = b.ships(0); let id=q.build(1).unwrap(); let mut v=q.get(id); v.icons=1; q.set(id,v); }", "E0609"),
         ("picker_strings", "fn probe(b: &mut crate::engine::Kernel) { let mut q = b.ships(0); let id=q.build(1).unwrap(); let mut v=q.get(id); v.strings=1; q.set(id,v); }", "E0609"),
         ("picker_backing", "fn probe(b: &mut crate::engine::Kernel) { let mut q=b.ships(0); let _=&mut q.queue; }", "E0616"),
+        ("picker_get_mut", "fn probe(b: &mut crate::engine::Kernel) { let mut q=b.ships(0); let id=q.build(1).unwrap(); q.get_mut(id).icons=std::ptr::NonNull::dangling().as_ptr(); }", "E0599"),
+        ("picker_into_record_mut", "fn probe(b: &mut crate::engine::Kernel) { let mut q=b.ships(0); let id=q.build(1).unwrap(); q.into_record_mut(id).race_strings=std::ptr::NonNull::dangling().as_ptr(); }", "E0599"),
         ("mutable_table", "fn probe(t: &mut crate::engine::battle::ElementTable, id: ElementId) { t[id].current.image.frame=crate::engine::battle::frames::FrameSelection::ABSENT; }", "E0594"),
         ("raw_subject", "fn probe(r: &crate::engine::battle::record::ElementRecord) { let _=crate::engine::battle::Subject::from(r); }", "E0308"),
         ("lease_free_array", "fn probe(f: crate::engine::battle::views::FrameRef) { let _=crate::engine::battle::frames::FrameArray::retain([f;3], ()); }", "E0061"),

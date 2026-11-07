@@ -25,13 +25,16 @@ impl RacePool {
 }
 
 /// Record mapping shared by the battle and campaign queue views.
-pub mod queue_record {
+pub(crate) mod queue_record {
     pub trait Sealed {}
     impl Sealed for super::Starship {}
 }
 pub trait QueueRecord: queue_record::Sealed + Eq {
     type Record;
 }
+/// Campaign records allow whole-record mutation; battle ships use projections.
+pub trait MutableQueueRecord: QueueRecord {}
+
 impl QueueRecord for Starship {
     type Record = super::super::super::battle::record::ShipRecord;
 }
@@ -156,13 +159,7 @@ impl<'a, T: QueueRecord, const N: usize> LinkQueue<'a, T, N> {
             QueueBorrow::Exclusive(queue) => queue.get(key),
         }
     }
-    pub fn into_record_mut(self, id: LinkId<T>) -> &'a mut T::Record {
-        let key = self.key(id);
-        match self.queue {
-            QueueBorrow::Exclusive(queue) => queue.get_mut(key),
-            QueueBorrow::Shared(_) => panic!("cannot mutate a read-only queue view"),
-        }
-    }
+
     pub fn head(&self) -> Option<LinkId<T>> {
         self.queue.head().map(|id| self.identify(id))
     }
@@ -423,9 +420,7 @@ impl<'a, T: QueueRecord, const N: usize> LinkQueue<'a, T, N> {
         let key = self.queue.alloc(T::Record::default())?;
         Some(self.identify(key))
     }
-    pub fn get_mut(&mut self, id: LinkId<T>) -> &mut T::Record {
-        self.record_mut(id)
-    }
+
     pub fn insert_before(&mut self, id: LinkId<T>, before: Option<LinkId<T>>) {
         let key = self.key(id);
         let before = before.map(|id| self.key(id));
@@ -531,6 +526,7 @@ mod pool_view_tests {
     #[derive(Debug, PartialEq, Eq)]
     enum Value {}
     impl queue_record::Sealed for Value {}
+    impl MutableQueueRecord for Value {}
     impl QueueRecord for Value {
         type Record = u32;
     }
@@ -646,5 +642,18 @@ impl<'a> LinkQueue<'a, Starship> {
             queue: QueueBorrow::Shared(&queue.pool),
             marker: PhantomData,
         }
+    }
+}
+
+impl<'a, T: MutableQueueRecord, const N: usize> LinkQueue<'a, T, N> {
+    pub fn into_record_mut(self, id: LinkId<T>) -> &'a mut T::Record {
+        let key = self.key(id);
+        match self.queue {
+            QueueBorrow::Exclusive(queue) => queue.get_mut(key),
+            QueueBorrow::Shared(_) => panic!("cannot mutate a read-only queue view"),
+        }
+    }
+    pub fn get_mut(&mut self, id: LinkId<T>) -> &mut T::Record {
+        self.record_mut(id)
     }
 }

@@ -15,6 +15,7 @@ pub struct CEvent {
 #[derive(Debug, PartialEq, Eq)]
 pub enum ScheduledEvent {}
 impl queue_record::Sealed for ScheduledEvent {}
+impl super::battle::link_queue::MutableQueueRecord for ScheduledEvent {}
 impl QueueRecord for ScheduledEvent {
     type Record = CEvent;
 }
