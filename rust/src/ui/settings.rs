@@ -14,8 +14,10 @@ pub fn toggle_music(world: &mut crate::engine::World) {
 /// The reference identifies a live native music resource on the game thread.
 #[no_mangle]
 pub unsafe extern "C" fn PlayMusic(music_ref: MUSIC_REF, continuous: BOOLEAN, priority: BYTE) {
-    crate::engine::World::current()
-        .read(|world| unsafe { play_music_for_world(world, music_ref, continuous, priority) });
+    crate::engine::World::current().read(|world| {
+        // SAFETY: the caller retains the native reference throughout synchronous admission.
+        unsafe { play_music_for_world(world, music_ref, continuous, priority) }
+    });
 }
 
 /// # Safety
