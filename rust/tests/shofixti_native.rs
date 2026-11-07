@@ -1,4 +1,5 @@
 //! Exercise Shofixti's live callbacks against the linked engine.
+use uqm_rust::battle::ContextOps;
 use uqm_rust::engine::battle::schema::GETMELEE_STATE;
 use uqm_rust::ships::races::{intruder_preprocess, marine_collision};
 #[path = "support/battle_context.rs"]

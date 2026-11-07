@@ -125,6 +125,7 @@ pub(crate) mod engine {
     };
     use crate::engine::battle::link_queue;
     use crate::engine::StoryKey;
+    use crate::pickship::ffi::draw_armada_pick_ship_in as draw_armada;
     use crate::ships::native::abi::*;
     use crate::ships::native::{cosine, sine};
     use std::{mem, ptr};
@@ -632,7 +633,7 @@ pub(crate) mod engine {
                     }
                     SetContext(cx.kernel.space_context);
                     if victory != 0 {
-                        cx.with_legacy(|| DrawArmadaPickShip(1, &mut salvage_rect));
+                        draw_armada(cx.kernel, cx.world, 1, &mut *(&raw mut salvage_rect).cast());
                     }
                 }
             }

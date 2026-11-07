@@ -10,6 +10,7 @@
 //! read is reported as unavailable and never compares as zero, so
 //! `story:X eq 0` cannot pass before the game state exists.
 
+#[cfg(test)]
 use crate::engine::World;
 use std::fmt;
 
@@ -357,39 +358,6 @@ pub struct LiveCampaign<'a> {
 
 pub use crate::engine::observe::CampaignView;
 
-impl CampaignView {
-    pub(crate) fn capture(world: &World) -> Self {
-        let game = &world.data.game;
-        let mut view = Self::from_world(world);
-        if !game.ship_stamp.frame.is_null() {
-            // SAFETY: the supplied world retains this game-thread graphics frame.
-            view.ship_facing = i32::from(unsafe {
-                crate::graphics::pixmap_abi::GetFrameIndex(game.ship_stamp.frame.cast())
-            });
-        }
-        let npcs = world.npc_built_ships_ref();
-        view.contact_race = npcs.head().map(|id| npcs.get(id).race_id);
-        let ships = world.built_ships_ref();
-        let mut next = ships.head();
-        while let Some(id) = next {
-            let ship = ships.get(id);
-            view.escorts.push((ship.race_id, ship.crew_level));
-            next = ships.succ(id);
-        }
-        let groups = world.ip_groups_ref();
-        let mut next = groups.head();
-        while let Some(id) = next {
-            let group = groups.get(id);
-            if group.in_system != 0 {
-                view.groups
-                    .push((group.race_id, group.sys_loc, (group.loc.x, group.loc.y)));
-            }
-            next = groups.succ(id);
-        }
-        view
-    }
-}
-
 fn read_star_state(world: &CampaignView, key: StateKey) -> Option<u32> {
     use crate::automation::input_ffi;
 
@@ -490,12 +458,17 @@ impl StateSource for LiveCampaign<'_> {
 }
 
 #[cfg(test)]
+pub(crate) fn empty_view() -> CampaignView {
+    CampaignView::from_world(&World::new())
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn campaign_equipment_and_date_come_from_the_supplied_typed_view() {
-        let mut world = CampaignView::empty();
+        let mut world = empty_view();
         world.flagship.drive_slots[10] = 19;
         world.flagship.jet_slots[7] = 23;
         world.flagship.module_slots[15] = 31;
@@ -520,7 +493,7 @@ mod tests {
 
     #[test]
     fn terminal_observation_comes_from_the_supplied_owner() {
-        let world = CampaignView::empty();
+        let world = empty_view();
         let running = LiveCampaign {
             world: &world,
             flagship_destroyed: false,
@@ -789,7 +762,7 @@ mod tests {
         assert!(evaluate(&stopped, &fake(&[("sis:fuel", 0), ("hyper:stopped", 1)])).held);
         assert_eq!(
             LiveCampaign {
-                world: &CampaignView::empty(),
+                world: &empty_view(),
                 flagship_destroyed: false,
             }
             .read(StateKey::HyperStopped),

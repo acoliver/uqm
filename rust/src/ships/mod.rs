@@ -7,6 +7,8 @@ pub(crate) mod code_resources;
 pub mod lifecycle;
 pub mod loader;
 pub(crate) mod loader_native;
+#[cfg(not(test))]
+pub use loader_native::DescriptorLoader;
 pub mod master_native;
 pub mod native;
 pub mod queue;

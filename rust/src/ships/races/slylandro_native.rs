@@ -1,6 +1,10 @@
 //! Slylandro live callbacks translated from `sc2/src/uqm/ships/slylandr/slylandr.c`.
 #[cfg(not(test))]
 pub(crate) mod engine {
+    #[cfg(not(test))]
+    use crate::battle::context_access::race_access::RaceOps;
+    #[cfg(not(test))]
+    use crate::battle::context_access::ContextOps;
     use crate::ships::native::{
         abi::*, angle_to_facing, cosine, facing_to_angle, normalize_facing, sine,
     };

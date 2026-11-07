@@ -1,8 +1,6 @@
 //! Pre-UMS save layout, including its 32-bit pointer padding and packed groups.
 use super::format::*;
 use super::{decode_save, decode_summary_from, SaveFile, Summary, GAME_STATE_BYTES};
-#[cfg(not(test))]
-use crate::engine::World;
 use crate::state::game_state::{copy_state_bits_raw, get_state_32_raw, set_state_32_raw};
 use std::io::{self, Read};
 
@@ -204,9 +202,7 @@ pub fn decode_legacy_payload<R: Read>(
 #[cfg(not(test))]
 mod live {
     use super::*;
-    use crate::mainloop::dir_prep::saveDir;
 
-    use crate::savegame::abi::SummaryDesc;
     use crate::savegame::lzh::{cclose, cfilelength, copen, cread, CodeDesc};
     use crate::savegame::slots::SaveSlots;
 
@@ -225,14 +221,10 @@ mod live {
         }
     }
 
-    /// # Safety
-    /// Game thread; summary is null for loading or a writable SUMMARY_DESC.
-    pub unsafe fn load_legacy_game(
-        world: &mut World,
+    fn open_legacy_slot(
+        slots: &SaveSlots,
         slot: u16,
-        summary: *mut SummaryDesc,
-    ) -> anyhow::Result<Option<(super::super::StarDesc, u16)>> {
-        let slots = SaveSlots::new(saveDir.cast())?;
+    ) -> anyhow::Result<(crate::savegame::slots::Stream, Summary)> {
         let mut stream = slots
             .open(&format!("starcon2.{slot:02}"), c"rb")
             .ok_or_else(|| anyhow::anyhow!("no legacy save in slot {slot}"))?;
@@ -241,12 +233,19 @@ mod live {
         }
         let mut header = [0; 164];
         (&mut stream).read_exact(&mut header)?;
-        let saved_summary = decode_legacy_summary(&header)?;
-        if !summary.is_null() {
-            summary.write(SummaryDesc::from(&saved_summary));
-            return Ok(None);
-        }
-        if !(2155..2186).contains(&saved_summary.year_index) {
+        let summary = decode_legacy_summary(&header)?;
+        Ok((stream, summary))
+    }
+
+    pub fn read_legacy_summary(slots: &SaveSlots, slot: u16) -> anyhow::Result<Summary> {
+        open_legacy_slot(slots, slot).map(|(_, summary)| summary)
+    }
+
+    /// # Safety
+    /// Game thread; the resource system and its compressed-stream decoder are initialized.
+    pub unsafe fn read_legacy_game(slots: &SaveSlots, slot: u16) -> anyhow::Result<LegacySave> {
+        let (stream, summary) = open_legacy_slot(slots, slot)?;
+        if !(2155..2186).contains(&summary.year_index) {
             anyhow::bail!("legacy save is corrupt or from an incompatible platform");
         }
         let decoder = Compressed(copen(stream.fp, 0, 0));
@@ -255,45 +254,8 @@ mod live {
         }
         let mut len = 0;
         cfilelength(decoder.0, &mut len);
-        let legacy = decode_legacy_payload(&saved_summary, decoder, len)?;
-        let game = &mut world.data.game;
-        let save = legacy.save;
-        super::super::runtime::restore_runtime(
-            game,
-            &mut world.story,
-            &save.global,
-            &save.game_state,
-            &save.events,
-            &mut world.clock,
-        )?;
-        super::super::runtime::queues::restore_queues(
-            world,
-            &super::super::runtime::queues::QueueSections {
-                race_queue: save.race_queue,
-                npc_ship_queue: save.npc_ship_queue,
-                ship_queue: save.ship_queue,
-            },
-        )?;
-        super::super::runtime::groups::restore_loaded_groups(
-            world,
-            &super::super::runtime::groups::GroupSections {
-                ip_group_queue: save.ip_group_queue,
-                encounters: save.encounters,
-            },
-        )?;
-        world.files.canned_nodes.clear();
-        for (index, image) in [0, 2, 1].into_iter().zip(&legacy.state_files) {
-            world
-                .files
-                .replace_contents(index, image)
-                .expect("three state files exist");
-        }
-        world.data.game.battle_group_ref = legacy.battle_group_ref;
-        std::ptr::addr_of_mut!(world.data.flagship)
-            .cast::<crate::comm::locdata::CSisState>()
-            .write((&save.summary.sis).into());
-        Ok(Some((save.star, save.global.current_activity)))
+        decode_legacy_payload(&summary, decoder, len)
     }
 }
 #[cfg(not(test))]
-pub use live::load_legacy_game;
+pub use live::{read_legacy_game, read_legacy_summary};

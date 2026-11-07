@@ -1,6 +1,8 @@
 //! Live element, collision traversal, camera and display-list processing.
 //! Integer narrowing follows `uqm/process.c` and its header macros.
 
+#[cfg(not(test))]
+use crate::battle::context_access::ContextOps;
 use crate::math::wrap_delta;
 use crate::ships::native::abi::*;
 

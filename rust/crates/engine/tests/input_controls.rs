@@ -1,4 +1,4 @@
-use uqm_engine::input::controls::InputControls;
+use uqm_engine::input_port::controls::InputControls;
 
 #[test]
 fn provider_buffer_keeps_its_address_when_the_input_owner_moves() {
@@ -71,7 +71,7 @@ fn moving_a_handle_to_another_thread_does_not_admit_provider_access() {
 
 #[test]
 fn retained_handles_share_callback_installation_and_restoration() {
-    fn hook(_: &mut dyn FnMut(uqm_engine::observe::CheckpointView<'_>), _: &InputControls) {}
+    fn hook(_: &mut dyn FnMut(uqm_engine::observe_port::CheckpointView<'_>), _: &InputControls) {}
     let input = InputControls::default();
     let retained = input.clone();
     let other = InputControls::default();

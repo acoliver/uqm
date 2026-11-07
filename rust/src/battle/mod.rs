@@ -5,10 +5,19 @@
 pub mod ai;
 pub mod ai_entry;
 pub mod battle_native;
-pub mod battle_types;
+pub use crate::math::battle_types;
 pub mod build_native;
 pub mod c_bridge;
 pub(crate) mod context_access;
+#[cfg(not(test))]
+pub use context_access::ai_legacy::AiOps;
+#[cfg(not(test))]
+pub use context_access::navigation::NavigationOps;
+#[cfg(not(test))]
+pub use context_access::race_access::RaceOps;
+#[cfg(not(test))]
+pub use context_access::{ContextOps, StarContact, StarOps, StatusOps, TransitionOps};
+
 pub mod cyborg_native;
 pub mod element;
 pub mod encount_native;
@@ -16,6 +25,8 @@ pub mod ffi;
 pub mod galaxy;
 pub mod gendef;
 pub mod gravity;
+#[cfg(test)]
+mod gravity_tests;
 mod integration_tests_p14;
 pub mod lifecycle;
 pub mod netplay;
@@ -24,7 +35,7 @@ pub mod ship_native;
 pub mod sounds;
 pub mod status_native;
 pub mod tactrans_native;
-pub mod velocity;
+pub use crate::math::velocity;
 pub mod weapon_native;
 pub mod world_elements;
 

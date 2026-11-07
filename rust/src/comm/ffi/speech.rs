@@ -38,7 +38,7 @@ pub(super) fn run_pending(
             .checkpoint(&CheckpointView::ResponsesReady(false));
 
         let response_count = COMM_STATE.read().responses().count();
-        let campaign = CampaignView::capture(cx.world);
+        let campaign = CampaignView::capture(cx.world, cx.kernel);
         let semantic_skip = cx.with_legacy(|| {
             io.observer
                 .input_admitted(&InputView::PendingSpeech, &Some(campaign.clone()))

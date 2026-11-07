@@ -34,52 +34,57 @@
 //! sits in, is a [`SolarError`]. `pBaseDesc` being neither array is the
 //! assertion C has in `playerInInnerSystem`, and panics.
 
-use std::fmt;
-
-use super::summary::{utf8_string_copy, SolarSystemOwner, SA_MATRA_STRING};
-use crate::c_bindings::global_state::{self, PLANET_DESC, SOLARSYS_STATE};
+use super::summary::{utf8_string_copy, SessionSummary, SA_MATRA_STRING};
+use crate::c_bindings::global_state::{PLANET_DESC, SOLARSYS_STATE};
+use crate::engine::save::summary as summary_values;
 use crate::savegame::types::SIS_NAME_SIZE;
 
+/// What the solar-system state and the game strings say about the game.
+///
+/// Each method is one question `PrepareSummary` asks. An implementation reads
+/// the live state; it does not invent an answer when the state has none.
+pub trait SolarSystemOwner {
+    /// `GetPlanetOrMoonName` into a `PlanetName`-sized buffer.
+    fn planet_or_moon_name(&self) -> Result<[u8; SIS_NAME_SIZE], SolarError>;
+    /// `playerInPlanetOrbit ()`.
+    fn player_in_planet_orbit(&self) -> bool;
+    /// `GAME_STRING (PLANET_NUMBER_BASE + 32)` copied into a `PlanetName`
+    /// buffer.
+    fn last_battle_planet_name(&self) -> [u8; SIS_NAME_SIZE];
+    fn prepare_summary(&self, activity: u16, starbase: bool) -> Result<SessionSummary, SolarError> {
+        match activity & 0xff {
+            4 => Ok(SessionSummary::Planet {
+                name: self.planet_or_moon_name()?,
+                in_orbit: !starbase && self.player_in_planet_orbit(),
+            }),
+            1 => Ok(SessionSummary::FinalBattle {
+                name: self.last_battle_planet_name(),
+            }),
+            _ => Ok(SessionSummary::None),
+        }
+    }
+}
+
 /// `PLANET_NUMBER_BASE` (gamestr.h): the first planet name in `GameStrings`.
-const PLANET_NUMBER_BASE: u16 = global_state::PLANET_NUMBER_BASE as u16;
+const PLANET_NUMBER_BASE: u16 = summary_values::PLANET_NUMBER_BASE as u16;
 /// `STARBASE_STRING_BASE` (gamestr.h).
-const STARBASE_STRING_BASE: u16 = global_state::STARBASE_STRING_BASE as u16;
+const STARBASE_STRING_BASE: u16 = summary_values::STARBASE_STRING_BASE as u16;
 /// `SOL_DEFINED`, `SPATHI_DEFINED` and `SAMATRA_DEFINED` (gendef.h): the
 /// `STAR_DESC.Index` of the systems with named bodies.
-const SOL_DEFINED: u8 = global_state::SOL_DEFINED as u8;
-const SAMATRA_DEFINED: u8 = global_state::SAMATRA_DEFINED as u8;
+const SOL_DEFINED: u8 = summary_values::SOL_DEFINED as u8;
+const SAMATRA_DEFINED: u8 = summary_values::SAMATRA_DEFINED as u8;
 
 const _: () = {
     // `GAME_STRING (PLANET_NUMBER_BASE + 32)` is Sa-Matra.
     assert!(SA_MATRA_STRING == PLANET_NUMBER_BASE + 32);
     // `u16`/`u8` hold every one of these.
-    assert!(global_state::PLANET_NUMBER_BASE as u64 <= u16::MAX as u64);
-    assert!(global_state::STARBASE_STRING_BASE as u64 <= u16::MAX as u64);
-    assert!(global_state::SOL_DEFINED as u64 <= u8::MAX as u64);
-    assert!(global_state::SAMATRA_DEFINED as u64 <= u8::MAX as u64);
+    assert!(summary_values::PLANET_NUMBER_BASE as u64 <= u16::MAX as u64);
+    assert!(summary_values::STARBASE_STRING_BASE as u64 <= u16::MAX as u64);
+    assert!(summary_values::SOL_DEFINED as u64 <= u8::MAX as u64);
+    assert!(summary_values::SAMATRA_DEFINED as u64 <= u8::MAX as u64);
 };
 
-/// Why a solar-system question could not be answered.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SolarError {
-    /// The flagship is in an inner system but `pOrbitalDesc` is NULL, which
-    /// C asserts against.
-    OrbitalWorldMissing,
-    /// `pOrbitalDesc` is not an element of `PlanetDesc` or `MoonDesc`, or
-    /// does not sit on an element boundary.
-    WorldNotInSystem,
-    /// An entry of `PlanetDesc` does not orbit the sun, or an entry of
-    /// `MoonDesc` orbits the sun or something that is not in `PlanetDesc`.
-    WorldDisagreesWithItsTable,
-}
-
-impl fmt::Display for SolarError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{self:?}")
-    }
-}
-
-impl std::error::Error for SolarError {}
+pub use super::summary::SolarError;
 
 /// Where `GAME_STRING (index)` text comes from.
 ///

@@ -4,6 +4,7 @@ use uqm_rust::graphics::flash::FlashContext;
 mod battle_context;
 use std::{ffi::CString, ptr};
 use uqm_rust::{
+    engine::save::summary_record::SummaryDesc as SUMMARY_DESC,
     front_end::gameopt::{load_game_descriptions, picker_action, PickerAction},
     graphics::dcqueue_abi::{Init_DrawCommandQueue, Uninit_DrawCommandQueue},
     input::ffi::*,
@@ -16,7 +17,6 @@ use uqm_rust::{
             restart_ops::CffiOps,
         },
     },
-    navigation::abi::SUMMARY_DESC,
     savegame::{decode_save, SaveSlots},
 };
 
@@ -171,7 +171,7 @@ fn first_load_entry_flushes_held_keys_and_enumeration_cannot_exit_the_picker() {
             let mut summaries: [SUMMARY_DESC; 50] = std::mem::zeroed();
             saveDir = ptr::null_mut();
             assert!(!profile.path().join("save").exists());
-            load_game_descriptions(summaries.as_mut_ptr());
+            load_game_descriptions(&mut summaries);
             assert!(summaries.iter().all(|summary| summary.year_index == 0));
             open_from_restart_while_select_is_held(input, false);
 
@@ -194,7 +194,7 @@ fn first_load_entry_flushes_held_keys_and_enumeration_cannot_exit_the_picker() {
             .is_null());
             let dir = uio::uio_openDir(repo, c"/".as_ptr(), 0);
             saveDir = dir.cast();
-            load_game_descriptions(summaries.as_mut_ptr());
+            load_game_descriptions(&mut summaries);
             assert!(summaries.iter().all(|summary| summary.year_index == 0));
             let slots = SaveSlots::new(saveDir.cast()).unwrap();
             let save = decode_save(include_bytes!("fixtures/savegame/legacy-save.00")).unwrap();
@@ -217,7 +217,7 @@ fn first_load_entry_flushes_held_keys_and_enumeration_cannot_exit_the_picker() {
             std::fs::write(saves.join("starcon2.47"), b"bad").unwrap();
             for _ in 0..10 {
                 uqm_rust::engine::World::current().write(|world| world.set_activity(4));
-                load_game_descriptions(summaries.as_mut_ptr());
+                load_game_descriptions(&mut summaries);
                 assert_eq!(
                     uqm_rust::engine::World::current().read(|world| world.activity()),
                     4,

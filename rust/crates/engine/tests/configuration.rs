@@ -1,5 +1,5 @@
 use uqm_engine::configuration::{Configuration, Preferences};
-use uqm_engine::input::{controls::InputControls, session::InputSession};
+use uqm_engine::input_port::{controls::InputControls, session::InputSession};
 
 #[test]
 fn session_and_application_share_preferences_without_sharing_other_owners() {

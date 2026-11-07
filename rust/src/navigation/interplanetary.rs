@@ -1,6 +1,10 @@
 //! Interplanetary group display, pursuit, collision and flagship movement.
 
 #[cfg(not(test))]
+use crate::battle::context_access::navigation::NavigationOps;
+#[cfg(not(test))]
+use crate::battle::context_access::ContextOps;
+#[cfg(not(test))]
 use crate::engine::StoryKey;
 const MAX_ZOOM: i16 = 128 << 6;
 const MIN_ZOOM: i16 = MAX_ZOOM >> 3;

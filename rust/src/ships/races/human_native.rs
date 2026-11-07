@@ -22,6 +22,10 @@ fn use_defense(cooldown: u8, weapon_turn: Option<u16>, enemy_turn: Option<u16>) 
 #[cfg(not(test))]
 pub(crate) mod engine {
     use super::{in_defense_range, nuke_speed, use_defense, MISSILE_LIFE};
+    #[cfg(not(test))]
+    use crate::battle::context_access::race_access::RaceOps;
+    #[cfg(not(test))]
+    use crate::battle::context_access::ContextOps;
     use crate::engine::battle::{Concerns, Cx, ElementId, ShipId, WeaponOrigin, WeaponSpawn};
     use crate::ships::native::abi::*;
 

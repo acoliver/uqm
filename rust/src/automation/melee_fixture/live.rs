@@ -1,6 +1,8 @@
 //! Scoped live records and fixture phases. No record borrow crosses an engine call.
 
 use super::*;
+#[cfg(not(test))]
+use crate::battle::context_access::fixture::FixtureOps;
 use crate::battle::context_access::fixture::{Element, Phoenix, Ship};
 use crate::battle::element::ElementFlags;
 use crate::engine::battle::views::{FrameSelection, Frames};

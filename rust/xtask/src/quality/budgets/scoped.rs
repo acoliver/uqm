@@ -45,29 +45,7 @@ pub(super) fn validate(
     let mut sum = 0u64;
     for (key, value) in scopes {
         let fields: Vec<_> = key.split('|').collect();
-        let valid = fields.len() == 3
-            && !fields[2].contains('*')
-            && match name {
-                "stage_b_raw" => {
-                    fields[0] == "ffi"
-                        && ["raw_records", "raw_pointer_parameters"].contains(&fields[1])
-                        && fields[2].contains("::")
-                }
-                name if super::projection::ends(name).is_some() => {
-                    super::projection::identity(name, fields[2])
-                        && ((fields[0] == "ffi" && fields[1] == "owner_projections")
-                            || (matches!(
-                                name,
-                                "u4_04_world_projection" | "u5_01_world_projection"
-                            ) && fields[0] == "layers"
-                                && ["module_edges", "planned.uqm-content"].contains(&fields[1])))
-                }
-                _ => {
-                    fields[0] == "unsafe"
-                        && ["unsafe_blocks", "unsafe_block_lines"].contains(&fields[1])
-                        && accessor_identity(name, fields[2])
-                }
-            };
+        let valid = fields.len() == 3 && !fields[2].contains('*') && identity(name, &fields);
         if !valid {
             return Err(format!("invalid {name} identity: {key}"));
         }
@@ -79,6 +57,34 @@ pub(super) fn validate(
         ));
     }
     Ok(())
+}
+
+fn identity(name: &str, fields: &[&str]) -> bool {
+    match name {
+        "stage_b_raw" => {
+            fields[0] == "ffi"
+                && ["raw_records", "raw_pointer_parameters"].contains(&fields[1])
+                && fields[2].contains("::")
+        }
+        "u6_04_content_edges" => {
+            super::projection::identity(name, fields[2])
+                && fields[0] == "layers"
+                && ["module_edges", "planned.uqm-content"].contains(&fields[1])
+                && fields[2].ends_with("::@file")
+        }
+        name if super::projection::ends(name).is_some() => {
+            super::projection::identity(name, fields[2])
+                && ((fields[0] == "ffi" && fields[1] == "owner_projections")
+                    || (matches!(name, "u4_04_world_projection" | "u5_01_world_projection")
+                        && fields[0] == "layers"
+                        && ["module_edges", "planned.uqm-content"].contains(&fields[1])))
+        }
+        _ => {
+            fields[0] == "unsafe"
+                && ["unsafe_blocks", "unsafe_block_lines"].contains(&fields[1])
+                && accessor_identity(name, fields[2])
+        }
+    }
 }
 
 pub(super) fn write(scopes: &BTreeMap<String, u64>) -> Result<toml_edit::Value, String> {

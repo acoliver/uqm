@@ -1,5 +1,7 @@
 use super::special::Story;
 use super::{default, sam, shof, sol, special};
+#[cfg(not(test))]
+use crate::battle::context_access::navigation::NavigationOps;
 
 impl<S: Story, H> Story for (&mut S, &mut H) {
     fn flag(&self, name: &'static str) -> u32 {

@@ -1,4 +1,6 @@
 use super::{groups, queues, statefiles, *};
+#[cfg(not(test))]
+use crate::battle::context_access::race_access::RaceOps;
 use crate::engine::World;
 use crate::savegame::{decode_save, encode_save};
 use crate::state::ffi::{rust_init_game_state, with_state_owners};

@@ -1,4 +1,4 @@
-use uqm_engine::input::frames::{InputFrames, InputState};
+use uqm_engine::input_port::frames::{InputFrames, InputState};
 
 fn held_menu(index: usize) -> InputState {
     let mut state = InputState::default();

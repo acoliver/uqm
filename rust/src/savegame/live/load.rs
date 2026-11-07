@@ -1,105 +1,89 @@
-//! The LoadGame ABI and installation of a decoded save.
-use super::super::abi::SummaryDesc;
-use super::super::runtime::{self, groups, queues, statefiles};
-use super::super::{SaveFile, SaveSlots};
+//! Save-slot reads and installation through explicit campaign and battle owners.
+use super::super::{legacy, SaveSlots};
 use crate::comm::dispatch::{IN_INTERPLANETARY, START_ENCOUNTER, START_INTERPLANETARY};
-use crate::engine::{Kernel, World};
+use crate::engine::{battle::Cx, save::summary_record::SummaryDesc};
 use crate::mainloop::dir_prep::saveDir;
+use crate::planets::starmap::find_star_in;
 
-use crate::planets::starmap::FindStar;
+pub use load_game as LoadGame;
 
-pub(in crate::savegame) unsafe fn finish_load(star: &super::super::StarDesc, activity: u16) {
-    // Loading can run inside a ship callback's menu. Unlink the old roster now,
-    // but keep its records alive through callbacks and terminal-outcome capture.
-    (**Kernel::current()).request_ship_reset();
-    let mut point = crate::comm::dispatch::CPoint {
+pub enum LoadRequest<'a, 'game> {
+    Summary(&'a mut SummaryDesc),
+    Restore(&'a mut Cx<'game>),
+}
+
+unsafe fn finish_load(cx: &mut Cx<'_>, star: &super::super::StarDesc, activity: u16) {
+    crate::planets::c_api::reset_encounter(cx.world);
+    // A load can run inside a ship callback. Retire the roster after its leases return.
+    cx.kernel.request_ship_reset();
+    let point = crate::comm::dispatch::CPoint {
         x: star.star_pt.x,
         y: star.star_pt.y,
     };
     let selected =
-        FindStar(std::ptr::null_mut(), &mut point, 0, 0).cast::<crate::engine::world::CStarDesc>();
-    World::current().write(|world| {
-        crate::planets::c_api::reset_encounter(world);
-        runtime::live::select_live_star(world, selected.as_ref());
-        world.next_activity = activity;
-        if activity & START_ENCOUNTER == 0 && activity & 0xff == IN_INTERPLANETARY {
-            world.next_activity |= START_INTERPLANETARY;
-        }
-    });
-}
-
-unsafe fn install(save: SaveFile) -> anyhow::Result<()> {
-    let next_activity = World::current().write(|world| -> anyhow::Result<u16> {
-        let game = &mut world.data.game;
-        let restored = runtime::restore_runtime(
-            game,
-            &mut world.story,
-            &save.global,
-            &save.game_state,
-            &save.events,
-            &mut world.clock,
-        )?;
-        queues::restore_queues(
-            world,
-            &queues::QueueSections {
-                race_queue: save.race_queue,
-                npc_ship_queue: save.npc_ship_queue,
-                ship_queue: save.ship_queue,
-            },
-        )?;
-        groups::restore_loaded_groups(
-            world,
-            &groups::GroupSections {
-                ip_group_queue: save.ip_group_queue,
-                encounters: save.encounters,
-            },
-        )?;
-        statefiles::restore_state_files(
-            &mut world.data.game,
-            &mut world.story,
-            &mut world.files,
-            &statefiles::StateFileSections {
-                scan: save.scan,
-                canned_nodes: save.canned_nodes,
-                group_list: save.group_list,
-                battle_groups: save.battle_groups,
-            },
-        )?;
-        std::ptr::addr_of_mut!(world.data.flagship)
-            .cast::<crate::comm::locdata::CSisState>()
-            .write((&save.summary.sis).into());
-        Ok(restored.next_activity)
-    })?;
-    finish_load(&save.star, next_activity);
-    Ok(())
+        find_star_in(cx.world, None, point, 0, 0).cast::<crate::engine::world::CStarDesc>();
+    super::super::runtime::live::select_live_star(cx.world, selected.as_ref());
+    cx.world.next_activity = activity;
+    if activity & START_ENCOUNTER == 0 && activity & 0xff == IN_INTERPLANETARY {
+        cx.world.next_activity |= START_INTERPLANETARY;
+    }
 }
 
 /// # Safety
-/// Game thread; summary is null for loading, otherwise a writable SUMMARY_DESC.
-#[no_mangle]
-pub unsafe extern "C" fn LoadGame(slot: u16, summary: *mut SummaryDesc) -> u32 {
+/// Game thread; restore retains initialized game structures and the star catalog.
+pub unsafe fn load_game(slot: u16, request: LoadRequest<'_, '_>) -> u32 {
+    let loading = matches!(&request, LoadRequest::Restore(_));
     let result = (|| -> anyhow::Result<()> {
         let slots = SaveSlots::new(saveDir.cast())?;
-        // C tries the old filename when opening or decoding the summary fails.
-        let Ok(saved_summary) = slots.read_summary(usize::from(slot)) else {
-            let loaded = World::current().write(|world| {
-                // SAFETY: this game-thread callback owns World; summary is null or caller-writable.
-                unsafe { super::super::legacy::load_legacy_game(world, slot, summary) }
-            })?;
-            if let Some((star, activity)) = loaded {
-                finish_load(&star, activity);
+        let cx = match request {
+            LoadRequest::Summary(summary) => {
+                let decoded = match slots.read_summary(usize::from(slot)) {
+                    Ok(summary) => summary,
+                    Err(_) => legacy::read_legacy_summary(&slots, slot)?,
+                };
+                *summary = SummaryDesc::from(&decoded);
+                return Ok(());
             }
-            return Ok(());
+            LoadRequest::Restore(cx) => cx,
         };
-        if !summary.is_null() {
-            summary.write(SummaryDesc::from(&saved_summary));
-            return Ok(());
-        }
-        install(slots.read(usize::from(slot))?)
+        let (star, activity) = if slots.read_summary(usize::from(slot)).is_ok() {
+            let save = slots.read(usize::from(slot))?;
+            (save.star, crate::engine::save::apply(save, cx.world)?)
+        } else {
+            let decoded = legacy::read_legacy_game(&slots, slot)?;
+            let star = decoded.save.star;
+            let activity = crate::engine::save::apply_legacy(
+                decoded.save,
+                cx.world,
+                decoded.state_files,
+                decoded.battle_group_ref,
+            )?;
+            (star, activity)
+        };
+        finish_load(cx, &star, activity);
+        Ok(())
     })();
-    super::complete(
-        result,
-        "LoadGame",
-        summary.is_null().then_some((slot, true)),
-    )
+    super::complete(result, "LoadGame", loading.then_some((slot, true)))
+}
+
+/// Enumerate the original 50-slot picker list synchronously.
+///
+/// # Safety
+/// Game-thread caller supplies 50 writable summaries and owns the save directory.
+pub unsafe fn load_game_descriptions(
+    summaries: &mut [SummaryDesc; super::super::types::MAX_SAVED_GAMES],
+) {
+    for (i, summary) in (0..super::super::types::MAX_SAVED_GAMES as u16).zip(summaries) {
+        if LoadGame(i, LoadRequest::Summary(summary)) == 0 {
+            summary.year_index = 0;
+        }
+        log::info!(
+            "RUST_PICKER: enumerated slot={i} state={}",
+            if summary.year_index == 0 {
+                "unavailable"
+            } else {
+                "occupied"
+            },
+        );
+    }
 }

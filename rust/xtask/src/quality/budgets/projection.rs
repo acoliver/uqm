@@ -14,7 +14,7 @@ pub(super) fn ends(name: &str) -> Option<&'static str> {
         "u6_01_world_projection" => Some("U6-01"),
         "u6_02_world_projection" => Some("U6-02"),
         "u6_03_world_projection" => Some("U6-03"),
-        "u6_04_world_projection" => Some("U6-04"),
+        "u6_04_world_projection" | "u6_04_content_edges" => Some("U6-04"),
         _ => None,
     }
 }
@@ -55,6 +55,7 @@ pub(super) fn identity(name: &str, identity: &str) -> bool {
         "u6_01_world_projection" => &["comm::"],
         "u6_02_world_projection" => &["comm::races::"],
         "u6_03_world_projection" => &["starbase::", "ui::"],
+        "u6_04_content_edges" => &["battle::", "ships::races::"],
         "u6_04_world_projection" => &[
             "front_end::",
             "mainloop::restart_menu::",

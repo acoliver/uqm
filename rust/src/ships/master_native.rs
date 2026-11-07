@@ -1,5 +1,7 @@
 //! Master metadata owns its descriptors in the game lifecycle's typed ship queue.
 use crate::engine::battle::kernel::MasterCatalog;
+#[cfg(not(test))]
+use crate::ships::DescriptorLoader;
 
 #[derive(Clone, Debug)]
 pub(crate) struct ShipChoice {

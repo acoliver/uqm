@@ -14,18 +14,16 @@
 //!
 //! All of them must run on the game thread.
 
-use crate::engine::{World, WorldData};
+use crate::engine::{Kernel, World};
+use crate::strings::string_table::{GetStringAddress, SetAbsStringTableIndex};
 use std::fmt;
 
-use super::hyper_save::{self, HyperFlagship, HyperSaveError};
 use super::location::{self, LocationError};
-use super::solar::{GameStrings, SolarSystem};
+use super::solar::{GameStrings, SolarSystem, SolarSystemOwner};
 use super::star::{self, CStarDesc, StarError, CATALOG_LEN};
-use super::summary::{self, SummaryError};
-use crate::c_bindings::global_state::RPG_PLAYER_NUM;
 use crate::c_bindings::solar_system;
-use crate::engine::battle::access::live_queues;
-use crate::savegame::types::{StarDesc, Summary};
+use crate::engine::save::{snapshot, SessionView};
+use crate::savegame::types::{SaveFile, StarDesc};
 
 extern "C" {
 
@@ -34,50 +32,58 @@ extern "C" {
 }
 
 /// `GAME_STRING (index)` over the loaded `GameStrings` table.
-struct LiveGameStrings;
+struct LiveGameStrings<'a>(&'a Kernel);
 
-impl GameStrings for LiveGameStrings {
+impl GameStrings for LiveGameStrings<'_> {
     fn game_string(&self, index: u16) -> Vec<u8> {
         // SAFETY: `GameStrings` is loaded for the whole game and every string
         // of it is NUL-terminated; game thread only.
         unsafe {
-            let text = crate::comm::hail::game_string(i32::from(index));
+            let entry = SetAbsStringTableIndex(self.0.game_strings.cast(), index);
+            let text = GetStringAddress(entry);
             assert!(!text.is_null(), "GAME_STRING ({index}) has no text");
             std::ffi::CStr::from_ptr(text).to_bytes().to_vec()
         }
     }
 }
 
-/// `PrepareSummary` over the live `GlobData`, `pSolarSysState` and
-/// `CurStarDescPtr`.
-///
-/// The solar-system state is borrowed once, for this call only.
+/// Supply the active solar session to the owned engine snapshot.
 ///
 /// # Safety
-/// Game thread only; `GlobData` must be initialised, `pSolarSysState` must be
-/// NULL or point at the live solar-system state, and `CurStarDescPtr` must be
-/// NULL or point at a catalog entry.
-pub unsafe fn capture_live_summary(name: &[u8]) -> Result<Summary, SummaryError> {
+/// Game thread only; the solar-system pointer and star catalog must remain
+/// valid for this synchronous capture.
+pub unsafe fn capture_prepared(
+    world: &mut World,
+    kernel: &Kernel,
+    star: StarDesc,
+    ip_location: crate::graphics::native_abi::POINT,
+    name: &[u8],
+) -> anyhow::Result<SaveFile> {
     let state = solar_system::current();
-    World::current().read(|world| {
-        let current = world.star_pointer(Some(live_catalog()));
-        let solar = SolarSystem::new(
-            state.as_ref(),
-            current.as_ref().map(|star| star.index),
-            world.data.flagship.planet_name,
-            &LiveGameStrings,
-        );
-        // SAFETY: the flagship codec mirror asserts every field offset against SisState.
-        summary::capture_summary(
-            world.activity(),
-            &*std::ptr::addr_of!(world.data.flagship).cast::<crate::comm::locdata::CSisState>(),
-            &world.data.game,
-            world.built_ships_ref(),
-            &world.story,
-            &solar,
-            name,
-        )
-    })
+    let current = world.star_pointer(Some(live_catalog()));
+    let strings = LiveGameStrings(kernel);
+    let solar = SolarSystem::new(
+        state.as_ref(),
+        current.as_ref().map(|star| star.index),
+        world.data.flagship.planet_name,
+        &strings,
+    );
+    if world.story.is_none() {
+        return Err(crate::engine::world::story::GameStateOwnerError::NotInitialized.into());
+    }
+    let solar = solar.prepare_summary(
+        world.activity(),
+        world.story_state(crate::engine::StoryKey::GLOBAL_FLAGS_AND_DATA) == u32::from(u8::MAX),
+    )?;
+    snapshot(
+        world,
+        SessionView {
+            solar,
+            star,
+            ip_location,
+        },
+        name,
+    )
 }
 
 /// The live star catalog.
@@ -102,10 +108,10 @@ pub unsafe fn select_live_star(world: &mut World, star: Option<&CStarDesc>) {
 ///
 /// # Safety
 /// Game thread only; the star map must be initialised.
-pub unsafe fn capture_live_star() -> Result<StarDesc, StarError> {
+pub unsafe fn capture_live_star(world: &World) -> Result<StarDesc, StarError> {
     // SAFETY: this game-thread operation retains the initialized star catalog.
     let catalog = unsafe { Some(live_catalog()) };
-    let current = (**World::current()).star_pointer(catalog);
+    let current = world.star_pointer(catalog);
     star::capture_star(live_catalog(), current)
 }
 
@@ -155,60 +161,17 @@ impl std::error::Error for LiveLocationError {}
 /// NULL or point at the live solar-system state, `CurStarDescPtr` must point at
 /// a catalog entry and `GlobData.game.ship_stamp.frame` must be NULL or a
 /// live frame.
-pub unsafe fn prepare_live_solar_location() -> Result<(), LiveLocationError> {
+pub unsafe fn prepare_live_solar_location(world: &mut World) -> Result<(), LiveLocationError> {
     let state = solar_system::current();
     assert!(!state.is_null(), "not in a solar system");
     // SAFETY: this game-thread operation retains the initialized star catalog.
     let catalog = unsafe { Some(live_catalog()) };
-    let current = (**World::current()).star_pointer(catalog);
+    let current = world.star_pointer(catalog);
     let star_index =
         star::catalog_index(live_catalog(), current).map_err(LiveLocationError::Star)?;
-    let mut game = WorldData::current().read(|world| world.game);
-    location::save_solar_location(
-        &mut *std::ptr::addr_of_mut!(game).cast::<crate::comm::locdata::CGameState>(),
-        &*state,
-        star_index,
-    )
-    .map_err(LiveLocationError::Location)?;
-    WorldData::current().write(|world| {
-        world.game.in_orbit = game.in_orbit;
-        world.game.ship_facing = game.ship_facing;
-        world.game.ip_planet = game.ip_planet;
-        world.game.ip_location = game.ip_location;
-    });
+    let location = location::prepare_solar_location(&world.data.game, &*state, star_index)
+        .map_err(LiveLocationError::Location)?;
+    crate::engine::save::location::apply_solar_location(world, location)
+        .map_err(LiveLocationError::Location)?;
     Ok(())
-}
-
-/// `SaveSisHyperState ()` over the live `GlobData`, `race_q[RPG_PLAYER_NUM]`
-/// and `disp_q`: the step of a save made in hyperspace that records which way
-/// the flagship faces.
-///
-/// Both queues are borrowed once, for this call only.
-///
-/// # Safety
-/// Game thread only; `GlobData` must be initialised and `race_q` and `disp_q`
-/// must have been set up by `InitQueue` (`InitKernel` and `InitSpace`).
-pub unsafe fn prepare_live_hyper_state() -> Result<HyperFlagship, HyperSaveError> {
-    let player_ships = &*live_queues::player_ships(RPG_PLAYER_NUM as usize);
-    // SAFETY: the save operation retains the published game-thread Kernel.
-    let display_list = unsafe { &*live_queues::display_list() };
-    let glob = &mut **WorldData::current();
-    hyper_save::save_hyper_facing(
-        &mut *std::ptr::addr_of_mut!(glob.game).cast::<crate::comm::locdata::CGameState>(),
-        player_ships,
-        display_list,
-    )
-}
-
-/// The live flagship's own `ShipFacing` (0..16), read from `race_q[RPG_PLAYER_NUM]`
-/// and `disp_q` the way `SaveSisHyperState` finds it. Nothing is written.
-///
-/// # Safety
-/// Game thread only; `race_q` and `disp_q` must have been set up by
-/// `InitQueue` (`InitKernel` and `InitSpace`).
-pub unsafe fn live_flagship_facing() -> Result<Option<u16>, HyperSaveError> {
-    let player_ships = &*live_queues::player_ships(RPG_PLAYER_NUM as usize);
-    // SAFETY: the save operation retains the published game-thread Kernel.
-    let display_list = unsafe { &*live_queues::display_list() };
-    hyper_save::read_flagship_facing(player_ships, display_list)
 }

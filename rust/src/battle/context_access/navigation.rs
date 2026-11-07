@@ -6,63 +6,7 @@ use crate::navigation::abi::*;
 
 use crate::navigation::hyperspace::live::{logx, logy};
 use crate::planets::starmap::find_star_in;
-impl Cx<'_> {
-    pub(crate) fn navigation(&self) -> &crate::engine::WorldData {
-        &self.world.data
-    }
 
-    pub(crate) fn navigation_mut(&mut self) -> &mut crate::engine::WorldData {
-        &mut self.world.data
-    }
-
-    pub(crate) fn solar(&self) -> &SOLARSYS_STATE {
-        // SAFETY: the navigation mode retains its current system for this context borrow.
-        unsafe {
-            pSolarSysState
-                .as_ref()
-                .unwrap_or_else(|| panic!("active solar system"))
-        }
-    }
-
-    fn ip_group_id(
-        &self,
-        element: ElementId,
-    ) -> crate::engine::battle::link_queue::LinkId<crate::engine::world::queues::Group> {
-        let Parent::IpGroup(id) = self.parent(element) else {
-            panic!("navigation element has no IP-group parent");
-        };
-        id
-    }
-
-    pub(crate) fn ip_group(&self, element: ElementId) -> &IP_GROUP {
-        self.world
-            .ip_groups_ref()
-            .into_record(self.ip_group_id(element))
-    }
-
-    pub(crate) fn ip_group_mut(&mut self, element: ElementId) -> &mut IP_GROUP {
-        let id = self.ip_group_id(element);
-        self.world.ip_groups().into_record_mut(id)
-    }
-
-    pub(crate) fn previous_activity(&self) -> u16 {
-        // SAFETY: the owning game thread serializes navigation activity.
-        self.kernel.last_activity
-    }
-
-    pub(crate) fn set_previous_activity(&mut self, activity: u16) {
-        // SAFETY: this exclusive context owns navigation activity mutations.
-        self.kernel.last_activity = activity;
-    }
-
-    pub(crate) fn planet_outer_location(&self, planet: u16) -> POINT {
-        let solar = self.solar();
-        displayToLocation(
-            solar.PlanetDesc[usize::from(planet)].image.origin,
-            solar.SunDesc[0].radius,
-        )
-    }
-}
 const PORTALS: [(i16, i16); 15] = [
     (4091, 7748),
     (3184, 4906),
@@ -138,8 +82,100 @@ pub(crate) unsafe fn arilou(world: &mut crate::engine::World) {
     world.select_star(None, None);
 }
 
-impl Cx<'_> {
-    pub(crate) fn leave_hyperspace(&mut self, kind: u8, point: POINT) {
+#[cfg(not(test))]
+pub trait NavigationOps {
+    fn navigation(&self) -> &crate::engine::WorldData;
+    fn navigation_mut(&mut self) -> &mut crate::engine::WorldData;
+    fn solar(&self) -> &SOLARSYS_STATE;
+    fn ip_group_id(
+        &self,
+        element: ElementId,
+    ) -> crate::engine::battle::link_queue::LinkId<crate::engine::world::queues::Group>;
+    fn ip_group(&self, element: ElementId) -> &IP_GROUP;
+    fn ip_group_mut(&mut self, element: ElementId) -> &mut IP_GROUP;
+    fn previous_activity(&self) -> u16;
+    fn set_previous_activity(&mut self, activity: u16);
+    fn planet_outer_location(&self, planet: u16) -> POINT;
+    fn leave_hyperspace(&mut self, kind: u8, point: POINT);
+    fn flagship_location(&self) -> u8;
+    fn group_record(
+        &self,
+        id: crate::engine::battle::link_queue::LinkId<crate::engine::world::queues::Group>,
+    ) -> &IP_GROUP;
+    fn set_encounter_group(&mut self, group: u8);
+    fn navigation_stars(&self) -> crate::engine::battle::views::FrameSelection;
+    fn group_icon(
+        &self,
+        group: crate::engine::battle::link_queue::LinkId<crate::engine::world::queues::Group>,
+    ) -> crate::engine::battle::views::FrameSelection;
+    fn set_group_image(
+        &mut self,
+        id: ElementId,
+        group: crate::engine::battle::link_queue::LinkId<crate::engine::world::queues::Group>,
+    );
+    fn flagship_stamp_frame(&self) -> crate::engine::battle::views::FrameSelection;
+    fn set_flagship_image(&mut self, id: ElementId);
+}
+
+#[cfg(not(test))]
+impl NavigationOps for Cx<'_> {
+    fn navigation(&self) -> &crate::engine::WorldData {
+        &self.world.data
+    }
+
+    fn navigation_mut(&mut self) -> &mut crate::engine::WorldData {
+        &mut self.world.data
+    }
+
+    fn solar(&self) -> &SOLARSYS_STATE {
+        // SAFETY: the navigation mode retains its current system for this context borrow.
+        unsafe {
+            pSolarSysState
+                .as_ref()
+                .unwrap_or_else(|| panic!("active solar system"))
+        }
+    }
+
+    fn ip_group_id(
+        &self,
+        element: ElementId,
+    ) -> crate::engine::battle::link_queue::LinkId<crate::engine::world::queues::Group> {
+        let Parent::IpGroup(id) = self.parent(element) else {
+            panic!("navigation element has no IP-group parent");
+        };
+        id
+    }
+
+    fn ip_group(&self, element: ElementId) -> &IP_GROUP {
+        self.world
+            .ip_groups_ref()
+            .into_record(self.ip_group_id(element))
+    }
+
+    fn ip_group_mut(&mut self, element: ElementId) -> &mut IP_GROUP {
+        let id = self.ip_group_id(element);
+        self.world.ip_groups().into_record_mut(id)
+    }
+
+    fn previous_activity(&self) -> u16 {
+        // SAFETY: the owning game thread serializes navigation activity.
+        self.kernel.last_activity
+    }
+
+    fn set_previous_activity(&mut self, activity: u16) {
+        // SAFETY: this exclusive context owns navigation activity mutations.
+        self.kernel.last_activity = activity;
+    }
+
+    fn planet_outer_location(&self, planet: u16) -> POINT {
+        let solar = self.solar();
+        displayToLocation(
+            solar.PlanetDesc[usize::from(planet)].image.origin,
+            solar.SunDesc[0].radius,
+        )
+    }
+
+    fn leave_hyperspace(&mut self, kind: u8, point: POINT) {
         // SAFETY: Cx retains exclusive game-thread access and no projection crosses this call.
         unsafe {
             if kind == 1 {
@@ -149,10 +185,8 @@ impl Cx<'_> {
             }
         }
     }
-}
 
-impl Cx<'_> {
-    pub(crate) fn flagship_location(&self) -> u8 {
+    fn flagship_location(&self) -> u8 {
         let solar = self.solar();
         if solar.pBaseDesc == solar.PlanetDesc.as_ptr().cast_mut() {
             return 0;
@@ -176,32 +210,32 @@ impl Cx<'_> {
         assert!(offset.is_multiple_of(std::mem::size_of::<PLANET_DESC>()));
         (1 + offset / std::mem::size_of::<PLANET_DESC>()) as u8
     }
-    pub(crate) fn group_record(
+    fn group_record(
         &self,
         id: crate::engine::battle::link_queue::LinkId<crate::engine::world::queues::Group>,
     ) -> &IP_GROUP {
         self.world.ip_groups_ref().into_record(id)
     }
-    pub(crate) fn set_encounter_group(&mut self, group: u8) {
+    fn set_encounter_group(&mut self, group: u8) {
         // SAFETY: encounter selection is owned by this exclusive navigation context.
         unsafe {
             EncounterGroup = group;
         }
     }
-    pub(crate) fn navigation_stars(&self) -> crate::engine::battle::views::FrameSelection {
+    fn navigation_stars(&self) -> crate::engine::battle::views::FrameSelection {
         // SAFETY: the loaded navigation resource is retained throughout the context borrow.
         {
             crate::engine::battle::views::FrameSelection::retain(self.kernel.stars_in_space)
         }
     }
-    pub(crate) fn group_icon(
+    fn group_icon(
         &self,
         group: crate::engine::battle::link_queue::LinkId<crate::engine::world::queues::Group>,
     ) -> crate::engine::battle::views::FrameSelection {
         let icon = self.group_record(group).melee_icon;
         crate::engine::battle::views::FrameSelection::retain(icon)
     }
-    pub(crate) fn set_group_image(
+    fn set_group_image(
         &mut self,
         id: ElementId,
         group: crate::engine::battle::link_queue::LinkId<crate::engine::world::queues::Group>,
@@ -217,11 +251,11 @@ impl Cx<'_> {
         );
         self.set_single_frames(id, frames, frame);
     }
-    pub(crate) fn flagship_stamp_frame(&self) -> crate::engine::battle::views::FrameSelection {
+    fn flagship_stamp_frame(&self) -> crate::engine::battle::views::FrameSelection {
         let frame = self.navigation().game.ship_stamp.frame;
         crate::engine::battle::views::FrameSelection::retain(frame)
     }
-    pub(crate) fn set_flagship_image(&mut self, id: ElementId) {
+    fn set_flagship_image(&mut self, id: ElementId) {
         let frame = self.flagship_stamp_frame();
         let role = crate::engine::battle::views::SharedFrames::Flagship;
         let frames = crate::engine::battle::views::Frames::retain_shared(

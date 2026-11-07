@@ -1,5 +1,9 @@
 //! Native ship motion and collision callbacks ported from ship.c.
 
+#[cfg(not(test))]
+use crate::battle::context_access::ContextOps;
+#[cfg(not(test))]
+use crate::battle::context_access::TransitionOps;
 use crate::ships::native::abi::*;
 
 fn velocity_squared(dx: i16, dy: i16) -> u32 {

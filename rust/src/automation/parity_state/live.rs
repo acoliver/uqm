@@ -28,7 +28,9 @@ fn checkpoint_with_context(
     let (queues, elements) = unsafe {
         (
             std::array::from_fn::<_, 2, _>(|side| Ship::queue(cx.race_pool(side), cx.elements())),
-            display_elements(cx.elements(), Some(&cx.groups())),
+            crate::battle::context_access::observe::elements(cx.elements(), |id| {
+                cx.element_parent_address(id) as usize
+            }),
         )
     };
     crate::automation::parity_mode::capture(&mut fields, cx.world, journal);
@@ -103,17 +105,6 @@ pub(in crate::automation) fn fighters(
     }
 }
 
-/// # Safety
-/// The pool remains live and immutable throughout observation.
-unsafe fn display_elements(
-    elements: &crate::engine::battle::ElementTable,
-    groups: Option<
-        &crate::engine::battle::link_queue::LinkQueue<'_, crate::engine::world::queues::Group, 32>,
-    >,
-) -> Vec<ElementObservation> {
-    crate::battle::context_access::observe::elements(elements, groups)
-}
-
 fn visuals(fields: &mut Fields, prefix: &str, element: &ElementObservation, journal: &mut Journal) {
     let identity = journal.identity(element.address);
     for (name, pointer) in [
@@ -175,8 +166,7 @@ mod tests {
     }
 
     fn visuals(fields: &mut Fields, prefix: &str, element: &Element, journal: &mut Journal) {
-        // SAFETY: the test owns the source record and retained fixture frame views.
-        let observation = unsafe { ElementObservation::decode(element, None, 0) };
+        let observation = ElementObservation::decode(element, 0, 0);
         super::visuals(fields, prefix, &observation, journal);
     }
 
@@ -335,8 +325,7 @@ mod tests {
         for id in ids {
             elements.put(id);
         }
-        // SAFETY: the local owned pool stays live and immutable throughout the observation.
-        let addresses: Vec<_> = unsafe { display_elements(&elements, None) }
+        let addresses: Vec<_> = crate::battle::context_access::observe::elements(&elements, |_| 0)
             .into_iter()
             .map(|e| e.address)
             .collect();

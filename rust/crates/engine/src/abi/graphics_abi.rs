@@ -690,7 +690,7 @@ pub const WIDGET_TYPE_WIDGET_TYPE_TEXTENTRY: WIDGET_TYPE = 5;
 pub const WIDGET_TYPE_WIDGET_TYPE_CONTROLENTRY: WIDGET_TYPE = 6;
 pub const WIDGET_TYPE_NUM_WIDGET_TYPES: WIDGET_TYPE = 7;
 pub type WIDGET_TYPE = ::std::os::raw::c_uint;
-pub type WidgetEvent = unsafe fn(*mut _widget, ::std::os::raw::c_int, &crate::input::session::InputSession) -> ::std::os::raw::c_int;
+pub type WidgetEvent = unsafe fn(*mut _widget, ::std::os::raw::c_int, &crate::input_port::session::InputSession) -> ::std::os::raw::c_int;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct _widget {
@@ -907,7 +907,7 @@ pub struct _widget_textentry {
     pub width:
         ::std::option::Option<unsafe extern "C" fn(self_: *mut _widget) -> ::std::os::raw::c_int>,
     pub handleEventSelect: ::std::option::Option<
-        unsafe fn(self_: *mut _widget_textentry, input: &crate::input::session::InputSession) -> ::std::os::raw::c_int,
+        unsafe fn(self_: *mut _widget_textentry, input: &crate::input_port::session::InputSession) -> ::std::os::raw::c_int,
     >,
     pub onChange: ::std::option::Option<unsafe extern "C" fn(self_: *mut _widget_textentry)>,
     pub category: *const ::std::os::raw::c_char,
@@ -940,8 +940,8 @@ pub struct _widget_controlentry {
         ::std::option::Option<unsafe extern "C" fn(self_: *mut _widget) -> ::std::os::raw::c_int>,
     pub width:
         ::std::option::Option<unsafe extern "C" fn(self_: *mut _widget) -> ::std::os::raw::c_int>,
-    pub onChange: ::std::option::Option<unsafe fn(self_: *mut _widget_controlentry, input: &crate::input::session::InputSession)>,
-    pub onDelete: ::std::option::Option<unsafe fn(self_: *mut _widget_controlentry, input: &crate::input::session::InputSession)>,
+    pub onChange: ::std::option::Option<unsafe fn(self_: *mut _widget_controlentry, input: &crate::input_port::session::InputSession)>,
+    pub onDelete: ::std::option::Option<unsafe fn(self_: *mut _widget_controlentry, input: &crate::input_port::session::InputSession)>,
     pub category: *const ::std::os::raw::c_char,
     pub controlindex: ::std::os::raw::c_int,
     pub highlighted: ::std::os::raw::c_int,

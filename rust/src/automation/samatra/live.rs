@@ -3,6 +3,8 @@
 #[cfg(not(test))]
 use super::{Events, Snapshot};
 #[cfg(not(test))]
+use crate::battle::context_access::race_access::RaceOps;
+#[cfg(not(test))]
 use crate::{
     engine::battle::{Cx, ElementId, RaceState, ShipId},
     ships::{

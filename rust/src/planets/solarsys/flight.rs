@@ -4,7 +4,7 @@ use super::drawing::{draw_outer_system, draw_system_transition, find_radius, poi
 use super::*;
 use crate::comm::locdata::CPoint;
 use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
-use uqm_engine::input::frames as input;
+use uqm_engine::input_port::frames as input;
 
 const MIN_MOON_RADIUS: i32 = 35;
 const MAX_MOONS: i32 = 4;

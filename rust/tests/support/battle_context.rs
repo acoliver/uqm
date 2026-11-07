@@ -1,4 +1,5 @@
 use std::sync::Mutex;
+use uqm_rust::battle::ContextOps;
 
 static CONTEXT: Mutex<()> = Mutex::new(());
 

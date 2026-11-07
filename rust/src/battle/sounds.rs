@@ -4,66 +4,9 @@
 use crate::engine::battle::Cx;
 use crate::engine::battle::ElementId;
 
-use crate::engine::battle::record::{Channels, SoundQueue};
-
-impl SoundQueue {
-    pub(crate) const fn new() -> Self {
-        Self {
-            count: 0,
-            sounds: [const { None }; 8],
-            objects: [None; 8],
-        }
-    }
-
-    pub(crate) fn push(
-        &mut self,
-        sound: Option<crate::sound::owned_bank::SoundClip>,
-        object: Option<ElementId>,
-    ) {
-        if self.count < 8 {
-            self.sounds[self.count] = sound;
-            self.objects[self.count] = object;
-            self.count += 1;
-        }
-    }
-
-    pub(crate) fn silence(&mut self) {
-        self.sounds.fill(None);
-        self.objects.fill(None);
-        self.count = 8;
-    }
-
-    pub(crate) fn remove_object(&mut self, object: Option<ElementId>) {
-        for entry in &mut self.objects[..self.count] {
-            if *entry == object {
-                *entry = None;
-            }
-        }
-    }
-}
-impl Channels {
-    pub(crate) const fn new() -> Self {
-        Self {
-            lru: [0, 1, 2, 3],
-            sounds: [0; 4],
-        }
-    }
-
-    pub(crate) fn select(&mut self, sound: usize, mut playing: impl FnMut(usize) -> bool) -> usize {
-        let channel = self
-            .sounds
-            .iter()
-            .position(|s| *s == sound)
-            .or_else(|| (0..4).find(|&i| !playing(i)))
-            .unwrap_or(self.lru[0]);
-        self.sounds[channel] = sound;
-        if let Some(i) = self.lru[..3].iter().position(|&c| c == channel) {
-            self.lru.copy_within(i + 1..4, i);
-        }
-        self.lru[3] = channel;
-        channel
-    }
-}
+use crate::engine::battle::kernel::Channels;
+#[cfg(test)]
+use crate::engine::battle::kernel::SoundQueue;
 
 #[cfg(not(test))]
 use crate::sound::heart_ffi::{

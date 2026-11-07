@@ -4,6 +4,7 @@
 )]
 use std::{ptr, rc::Rc};
 use uqm_rust::battle::process_native::init_display_list;
+use uqm_rust::battle::{AiOps, ContextOps};
 
 use uqm_rust::{
     engine::battle::{ElementId, RaceState, ShipId},

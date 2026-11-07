@@ -1,6 +1,8 @@
 //! Live computer-input routing, preserving intel.c's battle and selection rules.
 
 #[cfg(not(test))]
+use crate::battle::context_access::ai_legacy::AiOps;
+#[cfg(not(test))]
 use crate::engine::battle::{Cx, ShipId};
 use crate::ships::native::abi::{IN_LAST_BATTLE, RPG_PLAYER_NUM, SUPER_MELEE};
 

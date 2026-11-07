@@ -8,6 +8,8 @@
 //! (`C_WRITTEN_SAVE`, read with a separate script) and from `races.h`, not
 //! from the encoder.
 
+#[cfg(not(test))]
+use crate::battle::context_access::race_access::RaceOps;
 use std::ops::{Deref, DerefMut};
 
 use super::queues::*;

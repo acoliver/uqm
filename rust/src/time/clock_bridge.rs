@@ -23,26 +23,9 @@ pub(crate) fn log_clock_bridge(message: &str) {
     rust_bridge_log_msg(message);
 }
 
-// Helper: Check if year is leap year
-fn is_leap_year(year: u16) -> bool {
-    (year.is_multiple_of(4) && !year.is_multiple_of(100)) || year.is_multiple_of(400)
-}
-
-// Helper: Get days in month
-pub(crate) fn days_in_month(month: u8, year: u16) -> u8 {
-    match month {
-        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
-        4 | 6 | 9 | 11 => 30,
-        2 => {
-            if is_leap_year(year) {
-                29
-            } else {
-                28
-            }
-        }
-        _ => 30, // Should never happen
-    }
-}
+pub(crate) use crate::engine::clock::days_in_month;
+#[cfg(test)]
+use crate::engine::clock::is_leap_year;
 
 // Helper: Advance to next day (internal version that takes &mut ClockState)
 pub(crate) fn next_clock_day_internal(clock: &mut ClockState) {

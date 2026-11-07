@@ -24,8 +24,9 @@ impl CffiPlanetSideInput {
         io: &mut crate::engine::observe::Io<'_>,
     ) -> Result<FrameInput, AdapterError> {
         use crate::engine::observe::{CampaignView, InputView};
-        let campaign =
-            CampaignView::for_input(InputView::BeforeUpdate, || CampaignView::capture(cx.world));
+        let campaign = CampaignView::for_input(InputView::BeforeUpdate, || {
+            CampaignView::capture(cx.world, cx.kernel)
+        });
         if cx
             .with_legacy(|| {
                 io.observer
@@ -80,7 +81,7 @@ use crate::ui::sis::DeltaSISGauges;
 use crate::ui::sis::DrawStorageBays;
 
 fn read_player_one_input(input: &InputControls, activity: &ActivityControl) -> FrameInput {
-    use uqm_engine::input::frames::{
+    use uqm_engine::input_port::frames::{
         KEY_ESCAPE, KEY_LEFT, KEY_RIGHT, KEY_SPECIAL, KEY_UP, KEY_WEAPON,
     };
     let snapshot = input.current();

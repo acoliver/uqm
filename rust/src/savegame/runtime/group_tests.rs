@@ -12,6 +12,8 @@ use super::queue_tests::{
     free_slots, handle, records, FixturePool, LiveGame, C_WRITTEN_SAVE, RACES,
 };
 use super::queues::QueueKind;
+#[cfg(not(test))]
+use crate::battle::context_access::race_access::RaceOps;
 
 use crate::comm::dispatch::{
     CPoint, IN_ENCOUNTER, IN_HYPERSPACE, IN_INTERPLANETARY, START_ENCOUNTER, START_INTERPLANETARY,

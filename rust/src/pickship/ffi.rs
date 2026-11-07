@@ -2,15 +2,13 @@
 //! `DrawArmadaPickShip`, with the drawing and input calls of `pickship.c` in
 //! the order the C made them. The rules they apply are in the parent module.
 
+use crate::battle::context_access::links;
 use crate::comm::dispatch::production_captain_name;
 use crate::engine::{
-    battle::{
-        link_queue::{LinkQueue, Starship},
-        Cx, ShipId,
-    },
+    battle::{Cx, ShipId},
     observe::Io,
     world::activity::ActivityControl,
-    Kernel as KernelOwner, WorldData as WorldFields,
+    Kernel as KernelOwner,
 };
 
 use std::ffi::{c_char, c_int};
@@ -113,23 +111,15 @@ struct PickerState {
     flash: CRect,
 }
 
-#[cfg(not(test))]
-pub(crate) fn live_escort_indices() -> Vec<u16> {
-    escort_links()
-        .into_iter()
-        .filter_map(|(_, escort)| escort.alive.then_some(escort.index))
-        .collect()
-}
-
 /// Every `STARSHIP` of the player's queue before the flagship, which is the
 /// tail.
-fn escort_links() -> Vec<(ShipId, Escort)> {
-    let tail = LinkQueue::<Starship>::last_ship(RPG_PLAYER_NUM);
-    LinkQueue::<Starship>::all_links()
+fn escort_links(kernel: &KernelOwner) -> Vec<(ShipId, Escort)> {
+    let tail = links::last_ship(kernel, RPG_PLAYER_NUM);
+    links::all_links(kernel)
         .into_iter()
         .filter(|id| Some(*id) != tail)
         .map(|id| {
-            let ship = LinkQueue::<Starship>::ship_value(id);
+            let ship = links::ship_value(kernel, id);
             (
                 id,
                 Escort {
@@ -161,7 +151,8 @@ fn pulsed_directions(input: &crate::engine::input::InputSession) -> (Direction, 
 ///
 /// # Safety
 /// `state` is the picker's state, which `DoInput` is running.
-unsafe fn change_selection(state: &mut PickerState) {
+unsafe fn change_selection(cx: &mut Cx<'_>, state: &mut PickerState) {
+    let kernel = &*cx.kernel;
     crate::automation::ui_observation::observe_ship_picker_cursor(state.cursor);
     let area = highlight(state.frame, state.cursor);
     state.flash = CRect {
@@ -174,9 +165,9 @@ unsafe fn change_selection(state: &mut PickerState) {
     };
 
     state.chosen = match slot(state.cursor) {
-        Slot::Flagship => LinkQueue::<Starship>::last_ship(RPG_PLAYER_NUM),
+        Slot::Flagship => links::last_ship(kernel, RPG_PLAYER_NUM),
         Slot::Escort(ship_index) => {
-            let links = escort_links();
+            let links = escort_links(kernel);
             let escorts: Vec<Escort> = links.iter().map(|(_, escort)| *escort).collect();
             find_escort(&escorts, ship_index).map(|at| links[at].0)
         }
@@ -188,25 +179,25 @@ unsafe fn change_selection(state: &mut PickerState) {
 
     let (crew, max_crew) = if let Some(chosen) = state.chosen {
         // SAFETY: font globals are set at startup.
-        unsafe { SetContextFont((KernelOwner::current().read(|kernel| kernel.tiny_font)).cast()) };
+        unsafe { SetContextFont((kernel.tiny_font).cast()) };
         let baseline_x = name.x + (name.width >> 1);
         let baseline_y = name.y + (name.height - 1);
         // SAFETY: `chosen` is a link of `race_q`.
-        let ship = LinkQueue::<Starship>::ship_value(chosen);
+        let ship = links::ship_value(kernel, chosen);
         let (text, length, crew, max_crew) = if ship.captain == 0 {
             // The legacy picker left the flagship captain strip empty: its name
             // pointer escaped a temporary SIS copy. Preserve that presentation
             // without keeping the dangling pointer; crew still comes from World.
             // SAFETY: the published lifecycle owns the flagship on this thread.
-            let crew = WorldFields::current().read(|world| world.flagship.crew_enlisted);
+            let crew = cx.world.data.flagship.crew_enlisted;
             // SAFETY: plain call.
-            let capacity = GetCrewPodCapacity();
+            let capacity = cx.with_legacy(|| GetCrewPodCapacity());
             (c"".as_ptr(), 0, crew, capacity)
         } else {
             // SAFETY: `race_strings` is the ship's name table.
             let entry = unsafe {
                 SetAbsStringTableIndex(
-                    LinkQueue::with_ship_resources(chosen, |r| r.strings()).cast(),
+                    links::with_ship_resources(kernel, chosen, |r| r.strings()).cast(),
                     u16::from(ship.captain),
                 )
             };
@@ -238,10 +229,10 @@ unsafe fn change_selection(state: &mut PickerState) {
 
     // SAFETY: `state.flash` outlives the flash: the picker clears it after
     // `DoInput` returns.
-    unsafe {
+    cx.with_legacy(|| unsafe {
         SetFlashRect(std::ptr::null());
         SetFlashRect(std::ptr::addr_of!(state.flash).cast());
-    }
+    });
 }
 
 /// `DoPickBattleShip`: one input frame of the picker.
@@ -264,7 +255,7 @@ unsafe fn do_pick_battle_ship(
         // injected after this observation confirms a real choice.
         crate::automation::ui_observation::observe_ship_picker(true);
         // SAFETY: `state` is the running picker.
-        cx.with_legacy(|| unsafe { change_selection(state) });
+        unsafe { change_selection(cx, state) };
     } else {
         let (keys, select) = pulsed_directions(input);
         if select {
@@ -276,7 +267,7 @@ unsafe fn do_pick_battle_ship(
             crate::ui::settings::play_menu_sound(cx.kernel, cx.world, MENU_SOUND_MOVE);
             state.cursor = cursor;
             // SAFETY: `state` is the running picker.
-            cx.with_legacy(|| unsafe { change_selection(state) });
+            unsafe { change_selection(cx, state) };
         }
     }
 
@@ -294,21 +285,21 @@ fn base_activity_aborted(activity: &ActivityControl) -> bool {
 /// # Safety
 /// Game thread, inside a full-game battle.
 unsafe fn get_armada_star_ship(
+    cx: &mut Cx<'_>,
     input: &crate::engine::input::InputSession,
     activity: ActivityControl,
 ) -> Option<ShipId> {
     // SAFETY: `battle_counter` has a slot for each side.
-    if unsafe { crate::app::bridge::battle(|b| b.counters[1]) } == 0 {
+    if cx.b.counters[1] == 0 {
         // No opponents left.
         return None;
     }
 
     // SAFETY: the context global is set at startup.
-    let old_context =
-        unsafe { base::SetContext(KernelOwner::current().read(|kernel| kernel.space_context)) };
+    let old_context = unsafe { base::SetContext(cx.kernel.space_context) };
     let mut pick = CRect::default();
     // SAFETY: `pick` is valid for the call.
-    unsafe { draw_armada_pick_ship(0, &mut pick) };
+    unsafe { draw_armada_pick_ship_in(cx.kernel, cx.world, 0, &mut pick) };
 
     let mut state = PickerState {
         initialized: false,
@@ -321,20 +312,25 @@ unsafe fn get_armada_star_ship(
     // SAFETY: the synchronous frame retains its private picker state and input resources.
     unsafe {
         base::SetMenuSounds(input, MENU_SOUND_ARROWS, MENU_SOUND_SELECT);
-        base::DoInput(0, &mut |cx: &mut Cx<'_>, _: &mut Io<'_>| {
+        let runtime = cx.kernel.input_runtime();
+        let mut observer = runtime.observer();
+        let mut io = Io {
+            observer: &mut *observer,
+        };
+        cx.run_input(&mut io, false, |cx, _| {
             do_pick_battle_ship(cx, &mut state, input) != 0
         });
     }
     crate::automation::ui_observation::observe_ship_picker(false);
     // SAFETY: plain call.
-    unsafe { SetFlashRect(std::ptr::null()) };
+    cx.with_legacy(|| unsafe { SetFlashRect(std::ptr::null()) });
 
     let chosen = state.chosen;
     if chosen.is_some() {
-        if chosen == LinkQueue::<Starship>::last_ship(RPG_PLAYER_NUM) {
+        if chosen == links::last_ship(cx.kernel, RPG_PLAYER_NUM) {
             // Player chose SIS. There will be no more choices.
             // SAFETY: `battle_counter` has a slot for each side.
-            unsafe { crate::app::bridge::battle(|b| b.counters[RPG_PLAYER_NUM] = 1) };
+            cx.b.counters[RPG_PLAYER_NUM] = 1;
         }
         // SAFETY: plain call.
         WaitForSoundEnd(0);
@@ -379,7 +375,7 @@ pub(crate) fn encounter_ship(
         }
         if ships_left != 0 {
             // SAFETY: the campaign renderer remains on its existing bounded provider path.
-            return cx.with_legacy(|| unsafe { get_armada_star_ship(input, activity) });
+            return unsafe { get_armada_star_ship(cx, input, activity) };
         }
         if let Some(last) = last {
             let crew = cx.pick_ship(last).crew;
@@ -413,19 +409,35 @@ pub(crate) fn encounter_ship(
         .map(|id| queue.ship_id(id))
 }
 
+/// # Safety
+/// The caller retains the game-thread lifecycle and writable output rectangle.
+#[export_name = "DrawArmadaPickShip"]
+pub unsafe extern "C" fn draw_armada_pick_ship(draw_salvage_frame: c_int, pick_rect: *mut CRect) {
+    KernelOwner::current().read(|kernel| {
+        crate::engine::World::current().read(|world| {
+            // SAFETY: the original ABI retains the supplied game-thread owners and output.
+            unsafe { draw_armada_pick_ship_in(kernel, world, draw_salvage_frame, &mut *pick_rect) }
+        })
+    });
+}
+
 /// `DrawArmadaPickShip`: draw the picker frame, the SIS name and the escorts'
 /// icons; `pick_rect` receives the frame (and, with the salvage frame, the
 /// rectangle of that).
 ///
 /// # Safety
 /// `pick_rect` is valid for writing; game thread only.
-#[export_name = "DrawArmadaPickShip"]
-pub unsafe extern "C" fn draw_armada_pick_ship(draw_salvage_frame: c_int, pick_rect: *mut CRect) {
+pub(crate) unsafe fn draw_armada_pick_ship_in(
+    kernel: &KernelOwner,
+    world: &crate::engine::World,
+    draw_salvage_frame: c_int,
+    pick_rect: &mut CRect,
+) {
     use crate::graphics::{
         context_abi::ContextLease, drawable_abi::LoadedDrawable, native_font::FontLease,
     };
     use std::{ffi::CStr, ptr::NonNull};
-    let (context, font, status_frame) = KernelOwner::current().read(|kernel| {
+    let (context, font, status_frame) = {
         (
             ContextLease::retain(
                 NonNull::new(kernel.space_context.cast())
@@ -439,7 +451,7 @@ pub unsafe extern "C" fn draw_armada_pick_ship(draw_salvage_frame: c_int, pick_r
                 [0]
             .context_frame(3),
         )
-    });
+    };
     let owner = LoadedDrawable::load(c"graphics.pickship")
         .unwrap_or_else(|| panic!("missing picker graphic"));
     let frames = owner.lease();
@@ -470,7 +482,7 @@ pub unsafe extern "C" fn draw_armada_pick_ship(draw_salvage_frame: c_int, pick_r
             salvage
         };
         context.draw_stamp(&frame, pick.corner);
-        let ship_name = WorldFields::current().read(|world| world.flagship.ship_name);
+        let ship_name = world.data.flagship.ship_name;
         let ship_name = CStr::from_bytes_until_nul(&ship_name)
             .unwrap_or_else(|error| panic!("unterminated flagship name: {error}"));
         context.draw_text(
@@ -483,25 +495,23 @@ pub unsafe extern "C" fn draw_armada_pick_ship(draw_salvage_frame: c_int, pick_r
             1,
             color(Rgba::rgb15(0x12, 0x12, 0x12)),
         );
-        for id in LinkQueue::<Starship>::all_links() {
-            draw_escort_icon(&context, &status_frame, id, pick);
+        for id in links::all_links(kernel) {
+            draw_escort_icon(kernel, &context, &status_frame, id, pick);
         }
         result
     });
-    // SAFETY: the legacy caller supplies its output; resources stay retained through the batch.
-    unsafe {
-        *pick_rect = CRect {
-            corner: CPoint {
-                x: result.corner.x,
-                y: result.corner.y,
-            },
-            width: result.extent.width,
-            height: result.extent.height,
-        };
-    }
+    *pick_rect = CRect {
+        corner: CPoint {
+            x: result.corner.x,
+            y: result.corner.y,
+        },
+        width: result.extent.width,
+        height: result.extent.height,
+    };
 }
 
 fn draw_escort_icon(
+    kernel: &KernelOwner,
     context: &crate::graphics::context_abi::ContextLease,
     status: &crate::graphics::context_abi::ContextFrame,
     id: ShipId,
@@ -511,12 +521,12 @@ fn draw_escort_icon(
         context_abi::ContextFrame,
         native_abi::{EXTENT, POINT, RECT},
     };
-    let ship = LinkQueue::<Starship>::ship_value(id);
+    let ship = links::ship_value(kernel, id);
     if ship.captain == 0 {
         return;
     }
     let (x, y) = icon_origin((pick.corner.x, pick.corner.y), ship.index);
-    let icon = LinkQueue::with_ship_resources(id, |resources| {
+    let icon = links::with_ship_resources(kernel, id, |resources| {
         ContextFrame::retain(std::ptr::NonNull::new(resources.icon().raw().cast()))
     });
     context.fill_rectangle(

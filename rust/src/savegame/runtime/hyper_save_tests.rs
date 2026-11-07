@@ -121,9 +121,7 @@ impl Queues {
     }
 
     fn save(&self, game: &mut CGameState) -> Result<HyperFlagship, HyperSaveError> {
-        // SAFETY: both queues are pools made by `InitQueue` for these records
-        // and nothing else touches them.
-        unsafe { save_hyper_facing(game, &self.ships, &self.display) }
+        save_hyper_facing(game, &self.ships, &self.display)
     }
 }
 
@@ -404,8 +402,7 @@ fn a_disabled_ship_pool_has_no_flagship_and_writes_nothing() {
     let queues = Queues::new();
     let mut game = game();
     let disabled = RacePool::with_capacity(0, 0);
-    // SAFETY: both owned pools remain immutable for this read.
-    let saved = unsafe { save_hyper_facing(&mut game, &disabled, &queues.display) };
+    let saved = save_hyper_facing(&mut game, &disabled, &queues.display);
     assert_eq!(saved, Ok(HyperFlagship::Absent));
     assert_eq!(game.ship_facing, SENTINEL_FACING);
 }
@@ -442,23 +439,20 @@ fn a_reset_element_pool_does_not_retain_the_flagship() {
 #[test]
 fn reading_the_flagship_facing_returns_the_owner_facing_and_writes_nothing() {
     let queues = Queues::flight(9);
-    // SAFETY: both queues are pools made by `InitQueue` for these records.
-    let facing = unsafe { read_flagship_facing(&queues.ships, &queues.display) };
+    let facing = read_flagship_facing(&queues.ships, &queues.display);
     assert_eq!(
         facing,
         Ok(Some(9)),
         "the raw facing, not the saved plus one"
     );
-    // SAFETY: as above.
-    let again = unsafe { read_flagship_facing(&queues.ships, &queues.display) };
+    let again = read_flagship_facing(&queues.ships, &queues.display);
     assert_eq!(again, Ok(Some(9)));
 }
 
 #[test]
 fn reading_the_facing_of_a_flight_without_a_flagship_is_none() {
     let queues = Queues::new();
-    // SAFETY: both queues are pools made by `InitQueue` for these records.
-    let facing = unsafe { read_flagship_facing(&queues.ships, &queues.display) };
+    let facing = read_flagship_facing(&queues.ships, &queues.display);
     assert_eq!(facing, Ok(None));
 }
 

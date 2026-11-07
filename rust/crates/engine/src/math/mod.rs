@@ -3,17 +3,23 @@
 //! Park-Miller minimal standard RNG (CACM 1988) + integer square root.
 //! The game uses these providers directly through Rust imports.
 
+pub mod battle_types;
+pub mod velocity;
+
 /// Native fixed-point SINE: normalize to the 64-entry table, multiply in i64,
 /// then retain the original signed SIZE truncation.
+#[inline]
 pub fn sine(angle: i32, magnitude: i32) -> i16 {
     ((i64::from(sinetab[(angle & 63) as usize]) * i64::from(magnitude)) >> 14) as i16
 }
 
+#[inline]
 pub fn cosine(angle: i32, magnitude: i32) -> i16 {
     sine(angle + 16, magnitude)
 }
 
 /// Signed shortest displacement after assignment to the native i16 coordinate.
+#[inline]
 pub const fn wrap_delta(delta: i16, extent: i32) -> i16 {
     if (delta as i32).abs() <= extent >> 1 {
         delta
@@ -25,21 +31,25 @@ pub const fn wrap_delta(delta: i16, extent: i32) -> i16 {
 }
 
 /// C `ANGLE_TO_FACING`, before the caller applies facing normalization.
+#[inline]
 pub const fn angle_to_facing(angle: i32) -> i32 {
     (angle + (1 << (CIRCLE_SHIFT - FACING_SHIFT - 1))) >> (CIRCLE_SHIFT - FACING_SHIFT)
 }
 
 /// C `FACING_TO_ANGLE`.
+#[inline]
 pub const fn facing_to_angle(facing: i32) -> i32 {
     facing << (CIRCLE_SHIFT - FACING_SHIFT)
 }
 
 /// C `NORMALIZE_ANGLE`.
+#[inline]
 pub const fn normalize_angle(angle: i32) -> i32 {
     angle & (FULL_CIRCLE as i32 - 1)
 }
 
 /// C `NORMALIZE_FACING`.
+#[inline]
 pub const fn normalize_facing(facing: i32) -> u16 {
     (facing & ((1 << FACING_SHIFT) - 1)) as u16
 }

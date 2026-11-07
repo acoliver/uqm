@@ -549,7 +549,7 @@ pub unsafe fn hail_alien(cx: &mut Cx<'_>, io: &mut Io<'_>) {
         // ----------------------------------------------------------------
 
         resources.finish(cx);
-        let campaign = crate::engine::observe::CampaignView::capture(cx.world);
+        let campaign = crate::engine::observe::CampaignView::capture(cx.world, cx.kernel);
         cx.with_legacy(|| {
             io.observer
                 .input_admitted(&InputView::CommunicationCompleted, &Some(campaign))

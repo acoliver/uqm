@@ -1,5 +1,9 @@
 //! Live planet, asteroid, rubble, damage and floating-crew callbacks.
 
+#[cfg(not(test))]
+use crate::battle::context_access::ai_legacy::AiOps;
+#[cfg(not(test))]
+use crate::battle::context_access::ContextOps;
 use crate::ships::native::abi::*;
 
 fn damage_object(mass: u8, hp: &mut u16, life: &mut u16, flags: &mut u16, damage: i16) {
@@ -196,8 +200,12 @@ pub(crate) mod engine {
         cx.put(e);
     }
 
-    impl Cx<'_> {
-        pub fn damage(&mut self, e: ElementId, damage: i16) {
+    pub trait ElementDamage {
+        fn damage(&mut self, e: ElementId, damage: i16);
+    }
+
+    impl ElementDamage for Cx<'_> {
+        fn damage(&mut self, e: ElementId, damage: i16) {
             if self.element(e).flags & PLAYER_SHIP as u16 != 0 {
                 if !self.delta_crew(e, damage.wrapping_neg()) {
                     self.element_mut(e).set_life_span(0);

@@ -1,5 +1,5 @@
-//! `SaveSolarSysLocation` and `saveNonOrbitalLocation` (solarsys.c) in Rust:
-//! the part of a save that records where in a solar system the flagship is.
+//! Prepare `SaveSolarSysLocation` and `saveNonOrbitalLocation` inputs from the
+//! live solar tables. `engine::save::location` applies them to the supplied World.
 //!
 //! The record is three fields of `GAME_STATE` (`ShipFacing`, `ip_planet`,
 //! `in_orbit`) plus `ip_location`, written for `SaveGameState` to pick up. It
@@ -24,7 +24,7 @@
 //! (`solar`); the star index is the position of `CurStarDescPtr` in the
 //! catalog (`star::catalog_index`), the file offsets come from the world's
 //! position in `PlanetDesc`/`MoonDesc` and the state files and the game-state
-//! bits are the Rust singletons, locked together for the whole write.
+//! bits are borrowed from the supplied campaign for the whole write.
 //!
 //! Where this differs from the C code on purpose:
 //!
@@ -43,16 +43,13 @@
 //! written, and `ip_location` only takes the sun's location, which is where
 //! the inner system puts the ship's saved position.
 
-use crate::engine::World as GameWorld;
-use std::fmt;
-
 use super::solar::{position_in, SolarError, SolarSystem, World};
-use crate::c_bindings::global_state::{FRAME_DESC, MAX_PLANETS, SOLARSYS_STATE};
-use crate::comm::locdata::{CGameState, CPoint};
-use crate::engine::world::planet_info::{PlanetInfoManager, ScanRetrieveMask};
-use crate::engine::world::state_file::StateFileError;
-use crate::state::ffi::{with_state_owners, GameStateOwnerError};
-use crate::state::game_state::GameState;
+use crate::c_bindings::global_state::{FRAME_DESC, SOLARSYS_STATE};
+use crate::engine::battle::schema::GAME_STATE as CGameState;
+pub use crate::engine::save::location::LocationError;
+use crate::engine::save::location::{OrbitLocation, SolarLocation};
+use crate::engine::world::planet_info::ScanRetrieveMask;
+use crate::graphics::native_abi::POINT as CPoint;
 
 /// `GetFrameIndex (frame)`: 0 for NULL, else the frame's `Index`.
 ///
@@ -63,40 +60,6 @@ unsafe fn frame_index(frame: *const FRAME_DESC) -> u16 {
         return 0;
     }
     (*frame).Index
-}
-
-/// Why the location could not be prepared.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum LocationError {
-    /// The solar-system tables are not the ones C wires up.
-    Solar(SolarError),
-    /// The frame index is 65535, so `ShipFacing` would wrap to 0.
-    FrameIndexOverflow,
-    /// `in_orbit` is set but `pBaseDesc` is not `MoonDesc`: C only enters
-    /// orbit from an inner system.
-    OrbitOutsideInnerSystem,
-    /// Stage two ran before stage one: `ip_planet` is still 0.
-    IpPlanetNotSet,
-    /// `SunDesc[0].NumPlanets` is more than `MAX_PLANETS`.
-    PlanetCountOutOfRange { found: u8 },
-    /// The game-state singleton or the state files could not be reached.
-    Owners(GameStateOwnerError),
-    /// `STARINFO` rejected the scan record.
-    PlanetInfo(StateFileError),
-}
-
-impl fmt::Display for LocationError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{self:?}")
-    }
-}
-
-impl std::error::Error for LocationError {}
-
-impl From<SolarError> for LocationError {
-    fn from(error: SolarError) -> Self {
-        Self::Solar(error)
-    }
 }
 
 /// What the orbit stage stores in `in_orbit`, and which world's scan record
@@ -134,77 +97,38 @@ fn orbit_target(state: &SOLARSYS_STATE) -> Result<OrbitTarget, LocationError> {
     })
 }
 
-/// `fill_planet_num_moons`: the moon count of each planet of the system.
-fn moons_per_planet(state: &SOLARSYS_STATE) -> Result<Vec<u8>, LocationError> {
-    let planets = state.SunDesc[0].NumPlanets;
-    if u32::from(planets) > MAX_PLANETS {
-        return Err(LocationError::PlanetCountOutOfRange { found: planets });
-    }
-    Ok(state.PlanetDesc[..usize::from(planets)]
-        .iter()
-        .map(|planet| planet.NumPlanets)
-        .collect())
-}
-
-/// `PutPlanetInfo` and `SET_GAME_STATE (PLANETARY_CHANGE, 0)`, under one lock
-/// of the game-state singleton and the state files.
-fn persist_planet_change(
-    star_index: usize,
-    target: &OrbitTarget,
-    state: &SOLARSYS_STATE,
-) -> Result<(), LocationError> {
-    let mask = ScanRetrieveMask::from_array(&state.SysInfo.PlanetInfo.ScanRetrieveMask);
-    let (start, end) =
-        GameState::lookup_bits("PLANETARY_CHANGE").expect("PLANETARY_CHANGE is a game-state key");
-    GameWorld::current()
-        .write(|world| {
-            with_state_owners(world, |bits, files| {
-                if bits.get_state(start, end) == 0 {
-                    return Ok(());
-                }
-                // Every input is built before the first write.
-                let moons = moons_per_planet(state)?;
-                PlanetInfoManager::new(files)
-                    .put_planet_info(star_index, target.planet, target.scan_moon, &mask, &moons)
-                    .map_err(LocationError::PlanetInfo)?;
-                bits.set_state(start, end, 0);
-                Ok(())
-            })
-        })
-        .map_err(LocationError::Owners)?
-}
-
-/// `SaveSolarSysLocation ()` for a flagship that is in a solar system.
-///
-/// `star_index` is the position of `CurStarDescPtr` in the star catalog.
+/// Prepare the save location from the active solar session.
 ///
 /// # Safety
-/// `game.ship_stamp.frame` must be NULL or point at a live `FRAME_DESC`.
-pub unsafe fn save_solar_location(
-    game: &mut CGameState,
+/// The supplied game record's frame must be null or remain live for this read.
+pub unsafe fn prepare_solar_location(
+    game: &CGameState,
     state: &SOLARSYS_STATE,
     star_index: usize,
-) -> Result<(), LocationError> {
+) -> Result<SolarLocation, LocationError> {
     if state.InOrbit == 0 {
-        return save_non_orbital_location(game, state);
+        return prepare_non_orbital_location(game, state);
     }
     let target = orbit_target(state)?;
-    if game.ip_planet == 0 {
-        return Err(LocationError::IpPlanetNotSet);
-    }
-    persist_planet_change(star_index, &target, state)?;
-    game.in_orbit = target.in_orbit;
-    Ok(())
+    Ok(SolarLocation::Orbit(OrbitLocation {
+        in_orbit: target.in_orbit,
+        star_index,
+        planet: target.planet,
+        moon: target.scan_moon,
+        scan: ScanRetrieveMask::from_array(&state.SysInfo.PlanetInfo.ScanRetrieveMask),
+        planet_count: state.SunDesc[0].NumPlanets,
+        moon_counts: state.PlanetDesc.each_ref().map(|planet| planet.NumPlanets),
+    }))
 }
 
 /// `saveNonOrbitalLocation ()`.
 ///
 /// # Safety
-/// As [`save_solar_location`].
-unsafe fn save_non_orbital_location(
-    game: &mut CGameState,
+/// As [`prepare_solar_location`].
+unsafe fn prepare_non_orbital_location(
+    game: &CGameState,
     state: &SOLARSYS_STATE,
-) -> Result<(), LocationError> {
+) -> Result<SolarLocation, LocationError> {
     let ship_facing = frame_index(game.ship_stamp.frame.cast::<FRAME_DESC>())
         .checked_add(1)
         .ok_or(LocationError::FrameIndexOverflow)?;
@@ -219,16 +143,7 @@ unsafe fn save_non_orbital_location(
         None
     };
 
-    game.ship_facing = ship_facing;
-    game.in_orbit = 0;
-    match inner {
-        None => game.ip_planet = 0,
-        Some((ip_planet, location)) => {
-            game.ip_planet = ip_planet;
-            game.ip_location = location;
-        }
-    }
-    Ok(())
+    Ok(SolarLocation::NonOrbital { ship_facing, inner })
 }
 
 /// `planetIndex (pSolarSysState, world)`: the planet itself, or the planet a

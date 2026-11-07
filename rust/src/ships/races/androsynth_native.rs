@@ -1,6 +1,8 @@
 //! Androsynth behavior, retaining the original integer widths and RNG order.
 #[cfg(not(test))]
 pub(crate) mod engine {
+    #[cfg(not(test))]
+    use crate::battle::context_access::ContextOps;
     use crate::engine::battle::{
         Concerns, Cx, ElementId, Race, RaceState, ShipId, WeaponOrigin, WeaponSpawn,
     };

@@ -146,7 +146,7 @@ impl AutomationObserver {
         if self.admit_boundary(inner, CallbackKind::Input) {
             return std::ops::ControlFlow::Break(true);
         }
-        if self.save_input(inner, button_wait) {
+        if self.save_input(inner, button_wait, capture) {
             return std::ops::ControlFlow::Break(true);
         }
 
@@ -445,7 +445,7 @@ mod tests {
             effects: vec![],
             ready: false,
         };
-        let world = Some(CampaignView::empty());
+        let world = Some(campaign_state::empty_view());
         assert!(
             !handle
                 .input_admitted_with_setup(&InputView::BeforeUpdate, &world, &mut setup)
@@ -522,7 +522,7 @@ mod tests {
         if case == "watchdog" {
             let mut stopped = false;
             for _ in 0..11 {
-                if coord.process_input_at_boundary(&mut campaign_state::CampaignView::empty, true) {
+                if coord.process_input_at_boundary(&mut campaign_state::empty_view, true) {
                     stopped = true;
                     break;
                 }
@@ -534,10 +534,10 @@ mod tests {
             assert_eq!(coord.inner.lock().sched_state, SchedulerState::initial());
         } else {
             if case != "melee" {
-                assert!(!coord.process_input_inner(&mut campaign_state::CampaignView::empty));
+                assert!(!coord.process_input_inner(&mut campaign_state::empty_view));
                 assert_eq!(coord.inner.lock().sched_state.step_index, 1);
             }
-            assert!(coord.process_input_inner(&mut campaign_state::CampaignView::empty));
+            assert!(coord.process_input_inner(&mut campaign_state::empty_view));
             assert_eq!(
                 coord.inner.lock().terminal_class,
                 Some(TerminalClass::SemanticMismatch)

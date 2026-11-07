@@ -1,5 +1,6 @@
 //! Exercise Slylandro's live callbacks, target selection, and RNG order.
 
+use uqm_rust::battle::RaceOps;
 #[path = "support/battle.rs"]
 mod battle;
 #[path = "support/battle_context.rs"]

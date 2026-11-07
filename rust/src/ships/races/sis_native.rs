@@ -1,6 +1,12 @@
 //! Live flagship callbacks translated from ships/sis_ship/sis_ship.c.
 #[cfg(not(test))]
 pub(crate) mod engine {
+    #[cfg(not(test))]
+    use crate::battle::context_access::race_access::RaceOps;
+    #[cfg(not(test))]
+    use crate::battle::context_access::ContextOps;
+    #[cfg(not(test))]
+    use crate::battle::context_access::StarOps;
     use crate::engine::battle::race::{FlagshipWeapon, SisState};
     use crate::engine::battle::views::{Laser, Missile};
     use crate::engine::battle::{
