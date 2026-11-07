@@ -190,6 +190,59 @@ mod tests {
     }
 
     #[test]
+    fn capture_reads_live_fighters_for_both_sides_and_ignores_projectiles() {
+        let mut world = crate::World::new();
+        let mut kernel = crate::Kernel::new();
+        let mut battle = crate::battle::Battle::new();
+        kernel.reset_element_capacity(3);
+        for side in 0..2 {
+            kernel.reset_ship_capacity(side, 1);
+            let element = kernel.elements.alloc().unwrap();
+            let mut ships = kernel.ships(side);
+            let link = ships.alloc().unwrap();
+            let owner = ships.ship_id(link);
+            ships.put(link);
+            let pool = kernel.races[side].fixture_pool();
+            let key = pool.id_at(usize::from(owner.slot())).unwrap();
+            let ship = pool.get_mut(key);
+            let mut descriptor = crate::battle::record::RaceDescriptor::EMPTY;
+            descriptor.ship_info.crew_level = 8 + side as u16;
+            descriptor.ship_info.energy_level = 12 + side as u8;
+            ship.descriptor = Some(Box::new(descriptor));
+            ship.hShip = Some(element);
+            ship.ship_facing = 3 + side as u16;
+            ship.ship_input_state = 1 << side;
+            ship.cur_status_flags = 17;
+            let record = kernel.elements.fixture_record_mut(element);
+            record.state_flags = 1 << 2;
+            record.parent = crate::battle::Parent::Ship(owner);
+            record.current.location.x = 100 + side as i16;
+            record.current.location.y = -50;
+            record.velocity.set_components(256, -512);
+            kernel.elements.put(element);
+        }
+        let projectile = kernel.elements.alloc().unwrap();
+        kernel.elements.fixture_record_mut(projectile).state_flags = 0;
+        kernel.elements.put(projectile);
+        let cx = crate::battle::Cx::new(&mut battle, &mut world, &mut kernel, crate::math::random);
+        let tick = capture(&cx, &Default::default(), BattlePhase::Advanced);
+        for (side, ship) in tick.ships.iter().enumerate() {
+            assert_eq!(
+                *ship,
+                Some(BattleShip {
+                    position: [100 + side as i16, -50],
+                    velocity: [256, -512],
+                    facing: 3 + side as u16,
+                    crew: 8 + side as u16,
+                    energy: 12 + side as u8,
+                    input: 1 << side,
+                    status: 17,
+                })
+            );
+        }
+    }
+
+    #[test]
     fn replacement_records_the_single_consumed_audio_result_and_short_circuit() {
         let mut observer = Recorded::default();
         let mut ditty = 0;
