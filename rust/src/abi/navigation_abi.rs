@@ -1579,10 +1579,6 @@ extern "C" {
 }
 #[cfg(not(test))]
 pub use crate::ui::border::init_siscontexts;
-#[cfg(test)]
-extern "C" {
-    pub fn init_siscontexts();
-}
 #[cfg(not(test))]
 pub use crate::ui::border::draw_sisframe;
 #[cfg(test)]

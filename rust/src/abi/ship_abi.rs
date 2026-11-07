@@ -1608,10 +1608,6 @@ pub type _bindgen_ty_10 = ::std::os::raw::c_uint;
 pub use crate::engine::world::SisState as SIS_STATE;
 #[cfg(not(test))]
 pub use crate::ui::border::init_siscontexts;
-#[cfg(test)]
-extern "C" {
-    pub fn init_siscontexts();
-}
 #[cfg(not(test))]
 pub use crate::ui::border::draw_sisframe;
 #[cfg(test)]
