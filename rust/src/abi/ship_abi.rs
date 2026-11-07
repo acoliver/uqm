@@ -1829,7 +1829,7 @@ unsafe extern "C" {
 }
 
 #[cfg(not(test))]
-pub use crate::navigation::hyperspace::live::MoveSIS;
+pub use crate::navigation::hyperspace::live::move_sis as MoveSIS;
 #[cfg(not(test))]
 pub use crate::navigation::hyper_menu::hyperspace_menu;
 #[cfg(test)]
