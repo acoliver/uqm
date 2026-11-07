@@ -101,7 +101,15 @@ fn world_scan_order_preserves_energy_and_matches_direct_analysis() {
         );
         orbit.sys_info.PlanetInfo.ScanSeed[MINERAL_SCAN] = orbit.rng.seed();
         let mut node = unsafe { std::mem::zeroed() };
-        surface::generate_mineral_deposits(orbit.rng, orbit.sys_info, !0, &mut node);
+        surface::generate_mineral_deposits(
+            orbit.rng,
+            orbit.sys_info,
+            &orbit.plan_data[usize::from(
+                orbit.world.data_index & !crate::planets::generate::consts::PLANET_SHIELDED,
+            )],
+            !0,
+            &mut node,
+        );
         orbit.sys_info.PlanetInfo.ScanSeed[BIOLOGICAL_SCAN] = orbit.rng.seed();
         orbit.sys_info.PlanetInfo.PlanetRadius = 120;
         orbit.sys_info.PlanetInfo.SurfaceGravity = calc::calc_gravity(&orbit.sys_info.PlanetInfo);

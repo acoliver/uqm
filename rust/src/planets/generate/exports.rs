@@ -182,6 +182,8 @@ pub unsafe extern "C" fn generate_minerals_c(
     default::generate_minerals(
         sys_gen_rng(),
         &(*system).SysInfo,
+        // SAFETY: the caller supplies an analysed system whose frame table remains live.
+        unsafe { &*(*system).SysInfo.PlanetInfo.PlanDataPtr },
         which_node,
         node_or(info, &mut spare),
     )
@@ -246,6 +248,8 @@ pub unsafe extern "C" fn generate_life_c(
     default::generate_life(
         sys_gen_rng(),
         &(*system).SysInfo,
+        // SAFETY: the caller supplies an analysed system whose frame table remains live.
+        unsafe { &*(*system).SysInfo.PlanetInfo.PlanDataPtr },
         which_node,
         node_or(info, &mut spare),
     )

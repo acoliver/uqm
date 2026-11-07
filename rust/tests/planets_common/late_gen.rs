@@ -238,7 +238,15 @@ impl Ops for Rust<'_> {
     fn scan(&mut self, c: Scan, info: &SYSTEM_INFO, node: &mut NODE_INFO) -> (u16, u32) {
         let mut rng = RandomContext::with_seed(c.seed);
         let count = match (c.kind, c.life) {
-            (Kind::Vux, true) => vux::generate_life(&mut rng, info, c.star, c.body, c.which, node),
+            (Kind::Vux, true) => vux::generate_life(
+                &mut rng,
+                info,
+                &self.0[usize::from(c.frame)],
+                c.star,
+                c.body,
+                c.which,
+                node,
+            ),
             (Kind::Vux, false) => vux::generate_energy(
                 &mut rng,
                 info,

@@ -216,9 +216,13 @@ impl DefaultOps for RustDefault<'_> {
 
         let rng = &mut self.rng;
         let count = match kind {
-            NodeKind::Minerals => gen::generate_minerals(rng, info, which, node),
+            NodeKind::Minerals => {
+                gen::generate_minerals(rng, info, frame_for(self.table, info), which, node)
+            }
             NodeKind::Energy => gen::generate_energy(),
-            NodeKind::Life => gen::generate_life(rng, info, which, node),
+            NodeKind::Life => {
+                gen::generate_life(rng, info, frame_for(self.table, info), which, node)
+            }
             NodeKind::Artifact => gen::generate_artifact(rng, info, which, node),
             NodeKind::Ruins => gen::generate_ruins(rng, info, which, node),
         };
@@ -280,13 +284,20 @@ impl Generators for RustGenerators<'_> {
         uqm_rust::planets::generate::surface::generate_mineral_deposits(
             &mut self.rng,
             info,
+            frame_for(self.table, info),
             which,
             node,
         )
     }
 
     fn life(&mut self, info: &SYSTEM_INFO, which: u16, node: &mut NODE_INFO) -> u16 {
-        uqm_rust::planets::generate::surface::generate_life_forms(&mut self.rng, info, which, node)
+        uqm_rust::planets::generate::surface::generate_life_forms(
+            &mut self.rng,
+            info,
+            frame_for(self.table, info),
+            which,
+            node,
+        )
     }
 
     fn preset_life(&mut self, info: &SYSTEM_INFO, which: u16, node: &mut NODE_INFO) -> u16 {
@@ -616,4 +627,12 @@ fn late_generators_full_fields_match_c_fixtures() {
         assert_eq!(text.lines().count(), count, "{name}");
         assert_eq!(text, std::fs::read_to_string(path).unwrap(), "{name}");
     }
+}
+
+/// Resolve an analysed fixture record against the table that owns its frame.
+pub fn frame_for<'a>(table: &'a [PlanetFrame], info: &SYSTEM_INFO) -> &'a PlanetFrame {
+    table
+        .iter()
+        .find(|frame| std::ptr::eq(*frame, info.PlanetInfo.PlanDataPtr))
+        .unwrap_or_else(|| panic!("analysis frame belongs to the fixture table"))
 }

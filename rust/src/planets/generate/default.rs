@@ -202,30 +202,35 @@ pub fn analyse_orbital(
     calc::do_planetary_analysis(rng, plan_data, star, site, sys_info, world);
     let mut spare = blank_node();
 
+    let frame = &plan_data[usize::from(world.data_index & !PLANET_SHIELDED)];
     let after_analysis = rng.seed();
     sys_info.PlanetInfo.ScanSeed[BIOLOGICAL_SCAN] = after_analysis;
-    surface::generate_life_forms(rng, sys_info, GENERATE_ALL, &mut spare);
+    surface::generate_life_forms(rng, sys_info, frame, GENERATE_ALL, &mut spare);
     let after_life = rng.seed();
 
     sys_info.PlanetInfo.ScanSeed[MINERAL_SCAN] = after_life;
-    surface::generate_mineral_deposits(rng, sys_info, GENERATE_ALL, &mut spare);
+    surface::generate_mineral_deposits(rng, sys_info, frame, GENERATE_ALL, &mut spare);
 
     sys_info.PlanetInfo.ScanSeed[ENERGY_SCAN] = after_life;
 }
 
-fn blank_node() -> NODE_INFO {
-    // SAFETY: `NODE_INFO` is plain integers.
-    unsafe { std::mem::zeroed() }
+pub(super) fn blank_node() -> NODE_INFO {
+    NODE_INFO {
+        loc_pt: crate::engine::graphics::native_abi::POINT { x: 0, y: 0 },
+        density: 0,
+        type_: 0,
+    }
 }
 
 /// `GenerateDefault_generateMinerals`.
 pub fn generate_minerals(
     rng: &mut RandomContext,
     sys_info: &SYSTEM_INFO,
+    frame: &PlanetFrame,
     which_node: u16,
     info: &mut NODE_INFO,
 ) -> u16 {
-    surface::generate_mineral_deposits(rng, sys_info, which_node, info)
+    surface::generate_mineral_deposits(rng, sys_info, frame, which_node, info)
 }
 
 /// `GenerateDefault_generateEnergy`: a default system has no energy nodes.
@@ -237,10 +242,11 @@ pub fn generate_energy() -> u16 {
 pub fn generate_life(
     rng: &mut RandomContext,
     sys_info: &SYSTEM_INFO,
+    frame: &PlanetFrame,
     which_node: u16,
     info: &mut NODE_INFO,
 ) -> u16 {
-    surface::generate_life_forms(rng, sys_info, which_node, info)
+    surface::generate_life_forms(rng, sys_info, frame, which_node, info)
 }
 
 /// `GenerateDefault_pickupMinerals`: minerals need no extra handling.

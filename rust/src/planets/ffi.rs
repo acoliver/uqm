@@ -61,8 +61,11 @@ pub(crate) unsafe fn node_or(info: *mut NODE_INFO, spare: &mut NODE_INFO) -> &mu
 }
 
 pub(crate) fn blank_node() -> NODE_INFO {
-    // SAFETY: `NODE_INFO` is plain integers.
-    unsafe { std::mem::zeroed() }
+    NODE_INFO {
+        loc_pt: POINT { x: 0, y: 0 },
+        density: 0,
+        type_: 0,
+    }
 }
 
 /// `*CurStarDescPtr`'s `Type` byte.
@@ -154,6 +157,8 @@ pub unsafe extern "C" fn generate_mineral_deposits_c(
     surface::generate_mineral_deposits(
         sys_gen_rng(),
         &*sys_info,
+        // SAFETY: the caller supplies an analysed system whose frame table remains live.
+        unsafe { &*(*sys_info).PlanetInfo.PlanDataPtr },
         which_deposit,
         node_or(info, &mut spare),
     )
@@ -173,6 +178,8 @@ pub unsafe extern "C" fn generate_life_forms_c(
     surface::generate_life_forms(
         sys_gen_rng(),
         &*sys_info,
+        // SAFETY: the caller supplies an analysed system whose frame table remains live.
+        unsafe { &*(*sys_info).PlanetInfo.PlanDataPtr },
         which_life,
         node_or(info, &mut spare),
     )

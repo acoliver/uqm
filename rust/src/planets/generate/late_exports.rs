@@ -438,6 +438,8 @@ unsafe extern "C" fn vux_life(
     vux::generate_life(
         sys_gen_rng(),
         &(*system).SysInfo,
+        // SAFETY: the caller supplies an analysed system whose frame table remains live.
+        unsafe { &*(*system).SysInfo.PlanetInfo.PlanDataPtr },
         c_api::current_star_index(),
         body_of(system, world),
         which,

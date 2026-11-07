@@ -161,6 +161,7 @@ pub fn generate_energy(
 pub fn generate_life(
     rng: &mut RandomContext,
     info: &SYSTEM_INFO,
+    frame: &PlanetFrame,
     star: u8,
     body: Body,
     which: u16,
@@ -174,7 +175,7 @@ pub fn generate_life(
             return surface::generate_preset_life(rng, info, &BEAST_LIFE, which, node);
         }
     }
-    default::generate_life(rng, info, which, node)
+    default::generate_life(rng, info, frame, which, node)
 }
 
 pub fn pickup_energy(

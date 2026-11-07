@@ -73,10 +73,13 @@ pub fn analyse_orbital(orbit: &mut Orbit<'_>, body: Body) {
         orbit.world,
     );
     orbit.sys_info.PlanetInfo.ScanSeed[MINERAL_SCAN] = orbit.rng.seed();
-    let mut spare = unsafe { std::mem::zeroed() };
+    let mut spare = default::blank_node();
     surface::generate_mineral_deposits(
         orbit.rng,
         orbit.sys_info,
+        &orbit.plan_data[usize::from(
+            orbit.world.data_index & !crate::planets::generate::consts::PLANET_SHIELDED,
+        )],
         default::GENERATE_ALL,
         &mut spare,
     );

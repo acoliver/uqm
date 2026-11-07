@@ -5,7 +5,7 @@
 //! saved against them) stay stable.
 
 use crate::engine::graphics::native_abi::POINT;
-use crate::engine::world::planet::{NODE_INFO, SYSTEM_INFO};
+use crate::engine::world::planet::{PlanetFrame, NODE_INFO, SYSTEM_INFO};
 use crate::math::RandomContext;
 use crate::planets::generate::consts::{MAP_HEIGHT, MAP_WIDTH};
 
@@ -35,15 +35,13 @@ pub fn generate_random_location(rng: &mut RandomContext, loc: &mut POINT) {
 fn calc_mineral_deposits(
     rng: &mut RandomContext,
     sys_info: &SYSTEM_INFO,
+    frame: &PlanetFrame,
     which_deposit: u16,
     info: &mut NODE_INFO,
 ) -> u16 {
     const MEDIUM_DEPOSIT_THRESHOLD: u16 = 150;
     const LARGE_DEPOSIT_THRESHOLD: u16 = 225;
 
-    // SAFETY: `PlanDataPtr` is set by the planetary analysis to a row of the
-    // planet-frame table, which lives for the whole program.
-    let frame = unsafe { &*sys_info.PlanetInfo.PlanDataPtr };
     let mut num_deposits: u16 = 0;
     for element in &frame.UsefulElements {
         let quantity = element.Density & 0x0F;
@@ -80,24 +78,24 @@ fn calc_mineral_deposits(
 pub fn generate_mineral_deposits(
     rng: &mut RandomContext,
     sys_info: &SYSTEM_INFO,
+    frame: &PlanetFrame,
     which_deposit: u16,
     info: &mut NODE_INFO,
 ) -> u16 {
     rng.reseed(sys_info.PlanetInfo.ScanSeed[MINERAL_SCAN]);
-    calc_mineral_deposits(rng, sys_info, which_deposit, info)
+    calc_mineral_deposits(rng, sys_info, frame, which_deposit, info)
 }
 
 fn calc_life_forms(
     rng: &mut RandomContext,
     sys_info: &SYSTEM_INFO,
+    frame: &PlanetFrame,
     which_life: u16,
     info: &mut NODE_INFO,
 ) -> u16 {
     const MIN_LIFE_CHANCE: i16 = 10;
 
     let mut num_life_forms: u16 = 0;
-    // SAFETY: see `calc_mineral_deposits`.
-    let frame = unsafe { &*sys_info.PlanetInfo.PlanDataPtr };
     if crate::planets::generate::consts::planet_size(frame.Type) == 2 {
         return num_life_forms;
     }
@@ -140,11 +138,12 @@ fn calc_life_forms(
 pub fn generate_life_forms(
     rng: &mut RandomContext,
     sys_info: &SYSTEM_INFO,
+    frame: &PlanetFrame,
     which_life: u16,
     info: &mut NODE_INFO,
 ) -> u16 {
     rng.reseed(sys_info.PlanetInfo.ScanSeed[BIOLOGICAL_SCAN]);
-    calc_life_forms(rng, sys_info, which_life, info)
+    calc_life_forms(rng, sys_info, frame, which_life, info)
 }
 
 /// `GeneratePresetLife`: `life_types` is the list before the `-1` terminator.
@@ -195,4 +194,87 @@ pub fn generate_random_nodes(
         i += 1;
     }
     i
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::engine::world::planet::PLANET_INFO;
+
+    fn info() -> SYSTEM_INFO {
+        SYSTEM_INFO {
+            StarSize: 0,
+            StarIntensity: 0,
+            StarEnergy: 0,
+            PlanetInfo: PLANET_INFO {
+                AxialTilt: 0,
+                Tectonics: 0,
+                Weather: 0,
+                PlanetDensity: 0,
+                PlanetRadius: 0,
+                SurfaceGravity: 0,
+                SurfaceTemperature: 0,
+                RotationPeriod: 0,
+                AtmoDensity: 0,
+                LifeChance: i16::MAX,
+                PlanetToSunDist: 0,
+                PlanDataPtr: std::ptr::null(),
+                ScanSeed: [104729, 7, 65537],
+                ScanRetrieveMask: [0; 3],
+                DiscoveryString: std::ptr::null_mut(),
+                LanderFont: std::ptr::null_mut(),
+                LanderFontEff: std::ptr::null_mut(),
+            },
+        }
+    }
+
+    fn node() -> NODE_INFO {
+        NODE_INFO {
+            loc_pt: POINT { x: 13, y: 17 },
+            density: 0xBEEF,
+            type_: 0xCAFE,
+        }
+    }
+
+    #[test]
+    fn minerals_use_the_explicit_frame_without_reading_the_legacy_pointer() {
+        let info = info();
+        let mut frame = crate::planets::tables::PLANET_ARRAY.0[0];
+        for element in &mut frame.UsefulElements {
+            element.Density = 0;
+        }
+        let mut rng = RandomContext::with_seed(1);
+        let mut node = node();
+        assert_eq!(
+            generate_mineral_deposits(&mut rng, &info, &frame, !0, &mut node),
+            0
+        );
+        let mut expected = RandomContext::with_seed(info.PlanetInfo.ScanSeed[MINERAL_SCAN]);
+        for _ in &frame.UsefulElements {
+            expected.next_random();
+        }
+        assert_eq!(rng.seed(), expected.seed());
+        assert_eq!(
+            (node.loc_pt.x, node.loc_pt.y, node.density, node.type_),
+            (13, 17, 0xBEEF, 0xCAFE)
+        );
+    }
+
+    #[test]
+    fn a_gas_frame_has_no_life_and_only_reseeds_the_stream() {
+        let info = info();
+        let mut frame = crate::planets::tables::PLANET_ARRAY.0[0];
+        frame.Type = 2;
+        let mut rng = RandomContext::with_seed(1);
+        let mut node = node();
+        assert_eq!(
+            generate_life_forms(&mut rng, &info, &frame, !0, &mut node),
+            0
+        );
+        assert_eq!(rng.seed(), info.PlanetInfo.ScanSeed[BIOLOGICAL_SCAN]);
+        assert_eq!(
+            (node.loc_pt.x, node.loc_pt.y, node.density, node.type_),
+            (13, 17, 0xBEEF, 0xCAFE)
+        );
+    }
 }
