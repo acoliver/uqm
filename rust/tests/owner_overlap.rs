@@ -259,14 +259,11 @@ fn encounter_construction_uses_retained_owners_without_publication() {
     let mut game = Game::new();
     game.world.story = Some(uqm_rust::state::game_state::StoryState::new());
     game.world.set_story_state(StoryKey::BATTLE_SEGUE, 1);
-    // SAFETY: this serialized fixture owns empty ship resources and the encounter lifecycle.
-    unsafe {
-        uqm_rust::battle::encount_native::build_battle(
-            &mut game.world,
-            &mut game.kernel,
-            RPG_PLAYER_NUM as u16,
-        );
-    }
+    uqm_rust::battle::encount_native::build_battle(
+        &mut game.world,
+        &mut game.kernel,
+        RPG_PLAYER_NUM as u16,
+    );
     assert_eq!(game.world.story_state(StoryKey::BATTLE_SEGUE), 0);
     assert!(game.kernel.ships(0).head().is_none());
 }
@@ -275,6 +272,13 @@ fn encounter_construction_uses_retained_owners_without_publication() {
 #[serial_test::serial]
 fn encounter_construction_keeps_fragment_order_infinite_crew_and_flagship_last() {
     let mut game = Game::new();
+    game.world.retain_fleet_resources(
+        SPECIES_ID_VUX_ID,
+        uqm_rust::engine::battle::link_queue::ShipPickerResources::new(
+            None,
+            uqm_rust::engine::battle::frames::FrameSelection::ABSENT,
+        ),
+    );
     game.kernel.reset_ship_capacity(0, 32);
     game.world.story = Some(uqm_rust::state::game_state::StoryState::new());
     let mut npc = game.world.npc_built_ships();
@@ -286,20 +290,19 @@ fn encounter_construction_keeps_fragment_order_infinite_crew_and_flagship_last()
         let fragment = fragments.get_mut(id);
         fragment.race_id = SAMATRA_SHIP as u8;
         fragment.species_id = SPECIES_ID_VUX_ID;
+        fragment.race_strings = std::ptr::dangling_mut();
+        fragment.icons = std::ptr::dangling_mut();
         fragment.index = index;
         fragment.crew_level = crew;
         fragment.max_crew = 19;
         fragment.captains_name_index = 3;
         fragments.put(id);
     }
-    // SAFETY: the fixture owns the fleet, absent picker assets, and empty descriptor slots.
-    unsafe {
-        uqm_rust::battle::encount_native::build_battle(
-            &mut game.world,
-            &mut game.kernel,
-            RPG_PLAYER_NUM as u16,
-        );
-    }
+    uqm_rust::battle::encount_native::build_battle(
+        &mut game.world,
+        &mut game.kernel,
+        RPG_PLAYER_NUM as u16,
+    );
     let ships = game.kernel.ships(0);
     let first = ships.head().unwrap();
     let second = ships.succ(first).unwrap();
@@ -308,6 +311,8 @@ fn encounter_construction_keeps_fragment_order_infinite_crew_and_flagship_last()
     assert_eq!((ships.get(first).index, ships.get(first).crew), (7, 5));
     assert_eq!((ships.get(second).index, ships.get(second).crew), (11, 19));
     for id in [first, second] {
+        assert!(ships.resources(id).icon().is_absent());
+        assert_eq!(ships.resources(id).label(0), (c"", 0));
         let ship = ships.get(id);
         assert_eq!(ship.species, SPECIES_ID_SA_MATRA_ID);
         assert_eq!(

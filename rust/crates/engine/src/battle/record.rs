@@ -60,7 +60,7 @@ mod abi {
     }
 
     #[repr(C)]
-    #[derive(Debug)]
+    #[derive(Debug, Default)]
     pub struct ShipRecord {
         pub SpeciesID: SPECIES_ID,
         pub captains_name_index: BYTE,
@@ -69,8 +69,8 @@ mod abi {
         pub max_crew: COUNT,
         pub ship_cost: BYTE,
         pub index: COUNT,
-        pub race_strings: STRING,
-        pub icons: FRAME,
+        pub(in crate::battle) picker_resources:
+            Option<crate::battle::link_queue::ShipPickerResources>,
         pub weapon_counter: BYTE,
         pub special_counter: BYTE,
         pub energy_counter: BYTE,
@@ -226,32 +226,6 @@ impl Default for ElementRecord {
             parent: Parent::None,
             target: None,
             intersect_frame: FrameSelection::ABSENT,
-        }
-    }
-}
-
-impl Default for ShipRecord {
-    fn default() -> Self {
-        Self {
-            SpeciesID: 0,
-            captains_name_index: 0,
-            descriptor: None,
-            crew_level: 0,
-            max_crew: 0,
-            ship_cost: 0,
-            index: 0,
-            race_strings: std::ptr::null_mut(),
-            icons: std::ptr::null_mut(),
-            weapon_counter: 0,
-            special_counter: 0,
-            energy_counter: 0,
-            ship_input_state: 0,
-            cur_status_flags: 0,
-            old_status_flags: 0,
-            hShip: None,
-            ship_facing: 0,
-            playerNr: 0,
-            control: 0,
         }
     }
 }

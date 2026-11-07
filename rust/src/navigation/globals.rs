@@ -89,6 +89,7 @@ fn initialize_races(cx: &mut crate::engine::battle::Cx<'_>) {
             if species == SPECIES_ID_UR_QUAN_PROBE_ID {
                 if let Some(desc) = crate::engine::battle::RaceDesc::load(world, species, false) {
                     let template = fleet_template(desc.info(), desc.fleet());
+                    world.retain_fleet_resources(species, desc.picker_resources());
                     desc.unload(world, false, false);
                     template
                 } else {
@@ -97,6 +98,10 @@ fn initialize_races(cx: &mut crate::engine::battle::Cx<'_>) {
             } else {
                 let master = find_master_ship(kernel, species)
                     .unwrap_or_else(|| panic!("master species {species}"));
+                world.retain_fleet_resources(
+                    species,
+                    crate::ships::master_native::engine::picker_resources(kernel, species),
+                );
                 fleet_template(&master.info, &master.fleet)
             }
         },
@@ -190,6 +195,7 @@ pub unsafe fn uninit_game_structures(cx: &mut crate::engine::battle::Cx<'_>) {
         DestroyStringTable(ReleaseStringTable(probe.race_strings));
     }
     cx.world.avail_races().reinit();
+    cx.world.clear_fleet_resources();
     DestroyDrawable(ReleaseDrawable(cx.kernel.play_frame));
     cx.kernel.play_frame = ptr::null_mut();
 }
