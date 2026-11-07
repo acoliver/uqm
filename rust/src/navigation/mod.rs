@@ -14,7 +14,6 @@ pub mod abi {
 }
 
 pub mod events;
-#[cfg(not(test))]
 pub mod globals;
 pub mod groups;
 pub mod hyper_data;

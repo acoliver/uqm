@@ -2,6 +2,7 @@
 
 use super::*;
 
+#[cfg(not(test))]
 fn crew_color(i: usize) -> Color {
     const RGB: [(u8, u8, u8); 10] = [
         (10, 30, 9),
@@ -60,6 +61,7 @@ pub extern "C" fn GetCrewPodCapacity() -> COUNT {
 }
 /// # Safety
 /// ppt must be writable; SIS state and graphics context must be initialized.
+#[cfg(not(test))]
 pub unsafe fn get_c_pod_capacity(pc_fonts: bool, ppt: *mut POINT) -> COUNT {
     let crew = GetCrewCount();
     let modules = sis().read(|state| state.module_slots);

@@ -44,7 +44,6 @@ pub const fn combat_speed(flags: u8) -> u8 {
 }
 
 mod formation;
-#[cfg(not(test))]
 use formation::encounter_icon_origin;
 
 struct EncounterSelection {
@@ -119,18 +118,22 @@ fn apply_thraddash_body_count(world: &mut crate::engine::World, killed: u16) -> 
     killed
 }
 
-#[cfg(not(test))]
 pub(crate) mod engine {
     mod display;
     use super::*;
+    #[cfg(not(test))]
     use crate::battle::battle_native::battle;
+    #[cfg(not(test))]
     use crate::battle::battle_native::engine::{
         rgb15, AWESOME_RATING, CYBORG_CONTROL, HUMAN_CONTROL, STANDARD_RATING,
     };
     use crate::engine::battle::link_queue;
+    #[cfg(not(test))]
     use crate::engine::StoryKey;
+    #[cfg(not(test))]
     use crate::pickship::ffi::draw_armada_pick_ship_in as draw_armada;
     use crate::ships::native::abi::*;
+    #[cfg(not(test))]
     use std::{mem, ptr};
 
     const TEXT_FADE: [u8; 7] = [10, 9, 8, 6, 5, 4, 3];
@@ -148,20 +151,24 @@ pub(crate) mod engine {
     ];
 
     use crate::engine::world::{CStarDesc, CATALOG_LEN};
+    #[cfg(not(test))]
     use crate::planets::starmap::naming::cluster_name;
 
+    #[cfg(not(test))]
     use crate::mainloop::input_abi::live::AnyButtonPress;
 
     fn escape_pressed(input: &crate::engine::input::InputSession) -> bool {
         let template = input.player_controls()[0] as usize;
         input.current().key[template][KEY_ESCAPE as usize] != 0
     }
+    #[cfg(not(test))]
     enum SalvageText {
         Caption,
         Amount,
         Total,
     }
 
+    #[cfg(not(test))]
     fn draw_salvage_line(
         kernel: &crate::engine::Kernel,
         string: &std::ffi::CStr,
@@ -193,6 +200,7 @@ pub(crate) mod engine {
         context.draw_text(&font, string, baseline, align, color);
     }
 
+    #[cfg(not(test))]
     fn draw_salvage_captions(kernel: &crate::engine::Kernel, name: &[UNICODE; 80], rect: &RECT) {
         let baseline = POINT {
             x: rect.corner.x.wrapping_add(100),
@@ -213,6 +221,7 @@ pub(crate) mod engine {
         );
     }
 
+    #[cfg(not(test))]
     unsafe fn do_select_action(
         cx: &mut crate::engine::battle::Cx<'_>,
         menu: &mut EncounterSelection,
@@ -294,6 +303,7 @@ pub(crate) mod engine {
         queue.free(id);
     }
 
+    #[cfg(not(test))]
     pub fn build_battle(
         world: &mut crate::engine::World,
         kernel: &mut crate::engine::Kernel,
@@ -376,8 +386,10 @@ pub(crate) mod engine {
         }
     }
 
+    #[cfg(not(test))]
     pub(crate) use crate::battle::context_access::reader_legacy::update_ship_frag_crew;
 
+    #[cfg(not(test))]
     fn draw_encounter_location(
         cx: &mut crate::engine::battle::Cx<'_>,
         cluster: Option<&std::ffi::CStr>,
@@ -446,6 +458,7 @@ pub(crate) mod engine {
 
     /// # Safety
     /// The game thread must own initialized encounter message and audio state.
+    #[cfg(not(test))]
     unsafe fn prepare_encounter(
         cx: &mut crate::engine::battle::Cx<'_>,
         catalog: Option<&[CStarDesc; CATALOG_LEN]>,
@@ -500,6 +513,7 @@ pub(crate) mod engine {
 
     /// # Safety
     /// Native encounter resources and input are initialized on the game thread.
+    #[cfg(not(test))]
     pub unsafe fn init_encounter(
         cx: &mut crate::engine::battle::Cx<'_>,
         io: &mut crate::engine::observe::Io<'_>,
@@ -516,6 +530,7 @@ pub(crate) mod engine {
         COUNT::from(menu.choice)
     }
 
+    #[cfg(not(test))]
     fn draw_fade_text(
         cx: &mut crate::engine::battle::Cx<'_>,
         input: &crate::engine::input::InputSession,
@@ -584,6 +599,7 @@ pub(crate) mod engine {
 
     /// # Safety
     /// The game thread must own initialized encounter fleet queues, game state, display, and salvage resources.
+    #[cfg(not(test))]
     pub unsafe fn uninit_encounter(
         cx: &mut crate::engine::battle::Cx<'_>,
         input: &crate::engine::input::InputSession,
@@ -785,6 +801,7 @@ pub(crate) mod engine {
         killed
     }
 
+    #[cfg(not(test))]
     pub fn encounter_battle(
         cx: &mut crate::engine::battle::Cx<'_>,
         io: &mut crate::engine::observe::Io<'_>,
@@ -817,6 +834,69 @@ pub(crate) mod engine {
             cx.kernel.replace_player_input(0, saved);
         }
         cx.world.set_activity(old);
+    }
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn fragment_snapshots_keep_order_and_removal_selects_the_supplied_fleet() {
+            let mut world = crate::engine::World::new();
+            let npc = {
+                let mut queue = world.npc_built_ships();
+                let id = queue
+                    .alloc()
+                    .unwrap_or_else(|| panic!("fragment fixture queue is full"));
+                queue.get_mut(id).race_id = 9;
+                queue.get_mut(id).crew_level = COUNT::MAX;
+                queue.put(id);
+                id
+            };
+            let escort = {
+                let mut queue = world.built_ships();
+                let id = queue
+                    .alloc()
+                    .unwrap_or_else(|| panic!("fragment fixture queue is full"));
+                queue.get_mut(id).race_id = 4;
+                queue.get_mut(id).crew_level = 3;
+                queue.put(id);
+                id
+            };
+            assert_eq!(npc_race(&world), 9);
+            assert_eq!(fragment_snapshot(&world, false)[0].0, npc);
+            assert_eq!(fragment_snapshot(&world, true)[0].0, escort);
+            assert_eq!(fragment_snapshot(&world, true)[0].1.crew_level, 3);
+            assert_ne!(fleet_is_infinite(&world, 1), 0);
+            assert_eq!(fleet_is_infinite(&world, RPG_PLAYER_NUM as COUNT), 0);
+            assert!(fragment_is_removed(0, false, false));
+            remove_campaign_fragment(&mut world, false, npc);
+            assert!(fragment_snapshot(&world, false).is_empty());
+            assert_eq!(fragment_snapshot(&world, true)[0].0, escort);
+            assert_eq!(fleet_is_infinite(&world, 1), 0);
+            remove_campaign_fragment(&mut world, true, escort);
+            assert!(fragment_snapshot(&world, true).is_empty());
+        }
+
+        #[test]
+        fn encounter_escape_reads_the_selected_player_template() {
+            let input = crate::engine::input::InputSession::default();
+            input.set_player_control(0, 2);
+            assert!(!escape_pressed(&input));
+            input.set_player_key(0, KEY_ESCAPE as usize, true);
+            input.advance(input.immediate(), input.immediate(), 1);
+            assert!(escape_pressed(&input));
+            input.set_player_control(0, 0);
+            assert!(!escape_pressed(&input));
+        }
+
+        #[test]
+        fn salvage_fades_keep_their_authored_envelopes() {
+            assert_eq!(TEXT_FADE, [10, 9, 8, 6, 5, 4, 3]);
+            assert_eq!(SHIP_FADE.len(), 10);
+            assert_eq!(SHIP_FADE[0], (7, 0, 0));
+            assert_eq!(SHIP_FADE[5], (31, 31, 31));
+            assert_eq!(SHIP_FADE[9], (23, 0, 0));
+        }
     }
 }
 

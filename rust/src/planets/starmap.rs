@@ -1,7 +1,6 @@
 //! Star catalog lookup and cluster naming, ported from starmap.c.
 
 use crate::comm::dispatch::CPoint;
-#[cfg(not(test))]
 use crate::engine::Kernel as KernelOwner;
 use crate::engine::World as WorldOwner;
 use crate::savegame::runtime::star::{CStarDesc, NUM_HYPER_VORTICES, NUM_SOLAR_SYSTEMS};
@@ -127,7 +126,6 @@ pub unsafe fn find_star_in(
     unsafe { find_star(base, last, point, xb, yb, hi) }
 }
 
-#[cfg(not(test))]
 pub(crate) mod naming {
     use super::*;
     use std::ffi::c_char;

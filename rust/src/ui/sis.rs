@@ -1,12 +1,16 @@
-#![cfg(not(test))]
-
-use crate::engine::{Kernel, World, WorldData};
+#[cfg(not(test))]
+use crate::engine::World;
+use crate::engine::{Kernel, WorldData};
 use crate::graphics::context_abi::ContextLease;
+#[cfg(not(test))]
 use crate::planets::starmap::current_catalog;
-use crate::ui::{palette::pilot_color, rgb15};
+#[cfg(not(test))]
+use crate::ui::palette::pilot_color;
+use crate::ui::rgb15;
 
 use crate::navigation::abi::*;
 
+#[cfg(not(test))]
 use std::{mem, ptr};
 
 mod message_display;
@@ -22,21 +26,32 @@ mod title;
 pub use title::{draw_hyper_coords, draw_title};
 
 pub(crate) mod capacity;
+#[cfg(not(test))]
 use capacity::{GetCrewPodCapacity, GetFuelTankCapacity};
 
+#[cfg(not(test))]
 static mut LAST_PILOT: BOOLEAN = 0;
+#[cfg(not(test))]
 static mut NEXT_PILOT_TIME: TimeCount = 0;
+#[cfg(not(test))]
 static mut PILOT_CYCLE_INDEX: DWORD = 0;
 
+#[cfg(not(test))]
 const UNDEFINED_DELTA_LOCAL: SIZE = 0x7fff;
+#[cfg(not(test))]
 const SFR_MENU_3DO: usize = usize::MAX;
+#[cfg(not(test))]
 const SFR_MENU_ANY: usize = usize::MAX - 1;
+#[cfg(not(test))]
 const BATTLE_FRAME_RATE: u32 = ONE_SECOND / 24;
+#[cfg(not(test))]
 const EMPTY_SLOT: BYTE = NUM_MODULES as BYTE;
 const OPT_PC: i32 = crate::navigation::abi::OPT_PC as i32;
 const SIS_MESSAGE_HEIGHT: SIZE = crate::navigation::abi::SIS_MESSAGE_HEIGHT as SIZE;
+#[cfg(not(test))]
 const STORAGE_BAY_CAPACITY: COUNT = crate::navigation::abi::STORAGE_BAY_CAPACITY as COUNT;
 
+#[cfg(not(test))]
 pub(super) unsafe fn game_string(index: u32) -> *mut UNICODE {
     GetStringAddress(SetAbsStringTableIndex(
         Kernel::current().read(|owner| owner.game_strings),
@@ -47,6 +62,7 @@ pub(super) unsafe fn game_string(index: u32) -> *mut UNICODE {
 
 const SIS_ORG_X: SIZE = 7;
 const SIS_ORG_Y: SIZE = 10;
+#[cfg(not(test))]
 const STATUS_WIDTH: SIZE = 64;
 const SIS_TITLE_BOX_WIDTH: SIZE = 57;
 const SIS_TITLE_WIDTH: SIZE = 55;
@@ -54,26 +70,34 @@ const SIS_TITLE_HEIGHT: SIZE = 8;
 const SIS_SPACER_BOX_WIDTH: SIZE = 12;
 const STATUS_MESSAGE_WIDTH: SIZE = 60;
 const STATUS_MESSAGE_HEIGHT: SIZE = 7;
+#[cfg(not(test))]
 const SHIP_NAME_WIDTH: SIZE = 60;
+#[cfg(not(test))]
 const SHIP_NAME_HEIGHT: SIZE = 7;
 const RADAR_WIDTH: SIZE = 56;
 const RADAR_HEIGHT: SIZE = 53;
+#[cfg(not(test))]
 const CLEAR_SIS_RADAR: BYTE = 1 << 2;
+#[cfg(not(test))]
 const DRAW_SIS_DISPLAY: BYTE = 1 << 3;
 
 #[inline]
+#[cfg(not(test))]
 unsafe fn sis_screen_width() -> i32 {
     ScreenWidth - 78
 }
 #[inline]
+#[cfg(not(test))]
 unsafe fn sis_screen_height() -> i32 {
     ScreenHeight - 13
 }
 #[inline]
+#[cfg(not(test))]
 unsafe fn radar_x() -> i32 {
     ScreenWidth - 60
 }
 #[inline]
+#[cfg(not(test))]
 unsafe fn radar_y() -> i32 {
     ScreenHeight - 56
 }
@@ -85,12 +109,14 @@ fn sis() -> crate::engine::Projection<SIS_STATE> {
     unsafe { WorldData::current().map(|world| &raw mut (*world).flagship) }
 }
 #[inline]
+#[cfg(not(test))]
 unsafe fn set_color(color: Color) {
     SetContextForeGroundColor(color);
 }
 
 /// # Safety
 /// The graphics system and screen contexts must be initialized on the game thread.
+#[cfg(not(test))]
 pub unsafe fn repair_sisborder() {
     let old = SetContext(Kernel::current().read(|owner| owner.screen_context));
     BatchGraphics();
@@ -116,6 +142,7 @@ pub unsafe fn repair_sisborder() {
 /// # Safety
 /// The SIS status context and graphics system must be active.
 #[no_mangle]
+#[cfg(not(test))]
 pub unsafe extern "C" fn ClearSISRect(clear_flags: BYTE) {
     let old = SetContext(Kernel::current().read(|owner| owner.status_context));
     let old_color = SetContextForeGroundColor(rgb15(0x0a, 0x0a, 0x0a));
@@ -138,6 +165,7 @@ pub unsafe extern "C" fn ClearSISRect(clear_flags: BYTE) {
 /// # Safety
 /// pStr must be a valid NUL-terminated UTF-8 string and graphics state initialized.
 #[no_mangle]
+#[cfg(not(test))]
 pub unsafe extern "C" fn DrawSISTitle(p_str: *const UNICODE) {
     let text = std::ffi::CStr::from_ptr(p_str.cast());
     let width = ScreenWidth;
@@ -147,6 +175,7 @@ pub unsafe extern "C" fn DrawSISTitle(p_str: *const UNICODE) {
 /// # Safety
 /// Graphics state must be initialized on the game thread.
 #[no_mangle]
+#[cfg(not(test))]
 pub unsafe extern "C" fn DrawHyperCoords(universe: POINT) {
     let text = title::hyper_coord_text(universe);
     DrawSISTitle(text.as_ptr().cast());
@@ -155,6 +184,7 @@ pub unsafe extern "C" fn DrawHyperCoords(universe: POINT) {
 /// # Safety
 /// pStr must be null or a valid NUL-terminated string; UI graphics state must be initialized.
 #[no_mangle]
+#[cfg(not(test))]
 pub unsafe extern "C" fn DrawSISMessage(p_str: *const UNICODE) {
     DrawSISMessageEx(p_str, -1, -1, DSME_NONE as COUNT);
 }
@@ -162,6 +192,7 @@ pub unsafe extern "C" fn DrawSISMessage(p_str: *const UNICODE) {
 /// # Safety
 /// pStr must be null or valid UTF-8 and graphics state must be initialized on the game thread.
 #[no_mangle]
+#[cfg(not(test))]
 pub unsafe extern "C" fn DrawSISMessageEx(
     p_str: *const UNICODE,
     cur_pos: SIZE,
@@ -187,6 +218,7 @@ pub unsafe extern "C" fn DrawSISMessageEx(
 /// # Safety
 /// buf must have bufLen writable bytes.
 #[no_mangle]
+#[cfg(not(test))]
 pub unsafe extern "C" fn DateToString(
     buf: *mut std::ffi::c_char,
     buf_len: usize,
@@ -203,12 +235,14 @@ pub unsafe extern "C" fn DateToString(
 /// # Safety
 /// r must point to writable RECT storage.
 #[no_mangle]
+#[cfg(not(test))]
 pub unsafe extern "C" fn GetStatusMessageRect(r: *mut RECT) {
     *r = status::message_rect();
 }
 
 /// # Safety
 /// Status graphics and SIS state must be initialized.
+#[cfg(not(test))]
 pub unsafe fn draw_captains_name() {
     let old = SetContext(Kernel::current().read(|owner| owner.status_context));
     let old_font = SetContextFont(Kernel::current().read(|owner| owner.tiny_font));
@@ -234,6 +268,7 @@ pub unsafe fn draw_captains_name() {
 
 /// # Safety
 /// Graphics, fonts, game strings and SIS inventory must be initialized.
+#[cfg(not(test))]
 pub unsafe fn draw_flagship_stats() {
     let s = sis().read(|state| *state);
     let super::flagship_stats::Stats {
@@ -343,6 +378,7 @@ pub unsafe fn draw_flagship_stats() {
     SetContext(old);
 }
 
+#[cfg(not(test))]
 unsafe fn weapon_name(module: BYTE, out: *mut u8) {
     let n = match u32::from(module) {
         GUN_WEAPON => 8,
@@ -361,6 +397,7 @@ unsafe fn weapon_name(module: BYTE, out: *mut u8) {
 
 /// # Safety
 /// Status graphics and flagship frame must be initialized.
+#[cfg(not(test))]
 pub unsafe fn draw_landers() {
     let old = SetContext(Kernel::current().read(|owner| owner.status_context));
     let mut stamp: STAMP = mem::zeroed();
@@ -392,6 +429,7 @@ pub unsafe fn draw_landers() {
 /// # Safety
 /// Status graphics and SIS inventory must be initialized.
 #[no_mangle]
+#[cfg(not(test))]
 pub unsafe extern "C" fn DrawStorageBays(refresh: BOOLEAN) {
     let old = SetContext(Kernel::current().read(|owner| owner.status_context));
     let mut r: RECT = mem::zeroed();
@@ -444,6 +482,7 @@ pub unsafe extern "C" fn DrawStorageBays(refresh: BOOLEAN) {
 /// # Safety
 /// pRect must point to writable RECT storage.
 #[no_mangle]
+#[cfg(not(test))]
 pub unsafe extern "C" fn GetGaugeRect(p_rect: *mut RECT, is_crew_rect: BOOLEAN) {
     (*p_rect).extent.width = 24;
     (*p_rect).corner.x = (STATUS_WIDTH >> 1) - 12;
@@ -451,6 +490,7 @@ pub unsafe extern "C" fn GetGaugeRect(p_rect: *mut RECT, is_crew_rect: BOOLEAN) 
     (*p_rect).corner.y = if is_crew_rect != 0 { 117 } else { 38 };
 }
 
+#[cfg(not(test))]
 unsafe fn draw_pc_sis() {
     let mut r: RECT = mem::zeroed();
     GetGaugeRect(&mut r, 0);
@@ -492,6 +532,7 @@ unsafe fn draw_pc_sis() {
     t.pStr = game_string(STATUS_STRING_BASE + 5) as *mut UNICODE;
     font_DrawText(&mut t);
 }
+#[cfg(not(test))]
 unsafe fn draw_slots(slots: *const BYTE, len: usize, y: SIZE, mode: u32) {
     let mut stamp: STAMP = mem::zeroed();
     stamp.origin.x = 1;
@@ -512,6 +553,7 @@ unsafe fn draw_slots(slots: *const BYTE, len: usize, y: SIZE, mode: u32) {
         stamp.origin.y = (i32::from(stamp.origin.y) - 3) as SIZE;
     }
 }
+#[cfg(not(test))]
 unsafe fn draw_support_ships() {
     let points = [
         (3, 62),
@@ -542,6 +584,7 @@ unsafe fn draw_support_ships() {
     }
 }
 
+#[cfg(not(test))]
 unsafe fn delta_crew(delta: SIZE) {
     if delta == 0 {
         return;
@@ -575,6 +618,7 @@ unsafe fn delta_crew(delta: SIZE) {
     SetContextForeGroundColor(rgb15(0, 0x0e, 0));
     font_DrawText(&mut t);
 }
+#[cfg(not(test))]
 unsafe fn delta_fuel(delta: SIZE) {
     if delta == 0 {
         return;
@@ -619,6 +663,7 @@ unsafe fn delta_fuel(delta: SIZE) {
         font_DrawText(&mut t);
     }
 }
+#[cfg(not(test))]
 unsafe fn delta_res(delta: SIZE, mode: StatMsgMode) {
     if delta == 0 {
         return;
@@ -646,6 +691,7 @@ unsafe fn delta_res(delta: SIZE, mode: StatMsgMode) {
 /// # Safety
 /// SIS graphics, game state and asset resources must be initialized on the game thread.
 #[no_mangle]
+#[cfg(not(test))]
 pub unsafe extern "C" fn DeltaSISGauges(crew_delta: SIZE, fuel_delta: SIZE, resunit_delta: i32) {
     let (retained_status_context, preferences, mode) = Kernel::current().read(|owner| {
         (
@@ -689,6 +735,7 @@ pub unsafe extern "C" fn DeltaSISGauges(crew_delta: SIZE, fuel_delta: SIZE, resu
 /// # Safety
 /// Game state, fonts and graphics must be initialized.
 #[no_mangle]
+#[cfg(not(test))]
 pub unsafe extern "C" fn DrawAutoPilotMessage(reset: BOOLEAN) {
     if reset != 0 {
         LAST_PILOT = 0;
@@ -760,6 +807,7 @@ pub fn set_flash_rect(
 /// # Safety
 /// pRect must be null, a valid RECT, or one of the SIS menu sentinel pointers; flash and graphics systems must be initialized.
 #[no_mangle]
+#[cfg(not(test))]
 pub unsafe extern "C" fn SetFlashRect(p_rect: *const RECT) {
     let (retained_status_context, screen, preferences, highlight) =
         Kernel::current().read(|kernel| {
@@ -800,6 +848,7 @@ pub unsafe extern "C" fn SetFlashRect(p_rect: *const RECT) {
 /// # Safety
 /// pStr must be null or a valid NUL-terminated string; status graphics must be initialized.
 #[no_mangle]
+#[cfg(not(test))]
 pub unsafe extern "C" fn DrawStatusMessage(p_str: *const UNICODE) {
     let text = (!p_str.is_null()).then(|| std::ffi::CStr::from_ptr(p_str.cast()));
     Kernel::current().read(|kernel| {
@@ -810,6 +859,7 @@ pub unsafe extern "C" fn DrawStatusMessage(p_str: *const UNICODE) {
 /// # Safety
 /// Graphics, fonts and SIS strings must be initialized.
 #[no_mangle]
+#[cfg(not(test))]
 pub unsafe extern "C" fn DrawFlagshipName(in_status_area: BOOLEAN) {
     let (retained_status_context, preferences) =
         Kernel::current().read(|owner| (owner.status_context, owner.configuration.preferences()));

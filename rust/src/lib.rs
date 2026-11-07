@@ -59,3 +59,9 @@ pub mod ui;
 pub use uqm_engine::{log_debug, log_error, log_fatal, log_info, log_warning};
 
 pub mod app;
+
+#[cfg(test)]
+extern crate self as uqm_rust;
+#[cfg(test)]
+#[path = "../tests/support/campaign_display.rs"]
+mod campaign_display_test;
