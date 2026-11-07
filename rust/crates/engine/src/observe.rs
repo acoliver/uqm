@@ -119,7 +119,7 @@ mod tests {
 
     #[test]
     fn capture_reads_flagship_facing_from_its_unpublished_kernel() {
-        let world = World::new();
+        let mut world = World::new();
         let mut kernel = super::super::Kernel::new();
         kernel.reset_ship_capacity(0, 1);
         kernel.reset_element_capacity(1);
@@ -127,15 +127,22 @@ mod tests {
         let mut ships = kernel.ships(0);
         let link = ships.alloc().unwrap();
         let owner = ships.ship_id(link);
-        ships.get_mut(link).hShip = Some(element);
-        ships.get_mut(link).ship_facing = 9;
         ships.put(link);
+        let pool = kernel.races[0].fixture_pool();
+        let key = pool.id_at(usize::from(owner.slot())).unwrap();
+        pool.get_mut(key).hShip = Some(element);
+        let mut battle = crate::battle::Battle::new();
+        crate::battle::Cx::new(&mut battle, &mut world, &mut kernel, crate::math::random)
+            .ship_state_mut(owner)
+            .facing = 9;
         let record = kernel.elements.fixture_record_mut(element);
         record.state_flags = 1 << 2;
         record.parent = super::super::battle::Parent::Ship(owner);
         kernel.elements.put(element);
         let captured = CampaignView::capture(&world, &kernel);
-        kernel.ships(0).get_mut(link).ship_facing = 11;
+        crate::battle::Cx::new(&mut battle, &mut world, &mut kernel, crate::math::random)
+            .ship_state_mut(owner)
+            .facing = 11;
         assert_eq!(captured.flight_facing, Some(9));
         assert_eq!(
             CampaignView::capture(&world, &kernel).flight_facing,
@@ -151,15 +158,16 @@ mod tests {
         for (species, index, crew) in [(4, 7, 9), (0, 2, 0), (1, 0, 42)] {
             let mut ships = kernel.ships(0);
             let id = ships.alloc().unwrap();
-            let record = ships.get_mut(id);
-            record.SpeciesID = species;
-            record.index = index;
-            record.crew_level = crew;
+            ships.edit(id, |ship| {
+                ship.species = species;
+                ship.index = index;
+                ship.crew = crew;
+            });
             ships.put(id);
         }
         let captured = CampaignView::capture(&world, &kernel);
         let first = kernel.ships_ref(0).head().unwrap();
-        kernel.ships(0).get_mut(first).crew_level = 1;
+        kernel.ships(0).edit(first, |ship| ship.crew = 1);
         assert_eq!(
             captured
                 .player_ships

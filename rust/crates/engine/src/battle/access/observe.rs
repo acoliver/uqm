@@ -147,7 +147,7 @@ mod owner_tests {
         game.kernel.reset_ship_capacity(0, 1);
         let mut ships = game.kernel.ships(0);
         let link = ships.alloc().unwrap();
-        let record = ships.get_mut(link);
+        let record = ships.record_mut(link);
         record.ship_facing = 9;
         record.crew_level = 42;
         record.icons = std::ptr::without_provenance_mut(0x1234);
