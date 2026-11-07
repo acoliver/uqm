@@ -240,6 +240,10 @@ impl DrawableLease {
             .iter()
             .position(|owned| *owned == frame)
     }
+    pub(super) fn wrapped_frame(&self, index: usize) -> FRAME {
+        self.assert_thread();
+        self._allocation.frames[index % self._allocation.frames.len()]
+    }
     pub fn frame(&self, index: usize) -> Option<FRAME> {
         self._allocation.frames.get(index).copied()
     }

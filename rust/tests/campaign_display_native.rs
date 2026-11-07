@@ -157,6 +157,84 @@ fn retained_campaign_panels_clear_only_their_boxes_and_restore_selection_and_cli
         }
         assert_eq!(GetContextClipRect(&mut clip), 0);
         assert_eq!((clip.extent.width, clip.extent.height), (320, 240));
+        assert!(uqm_rust::ui::sis::draw_message(
+            &game.kernel,
+            320,
+            c"A",
+            -1,
+            -1,
+            0
+        ));
+        assert_eq!(SetContext(context), context);
+        TFB_FlushGraphics();
+        let pixel = GetFramePixel(screen, POINT { x: 8, y: 3 });
+        assert_eq!((pixel.r, pixel.g, pixel.b), (0, 0, 165));
+        let long_label = CString::new("A".repeat(100))
+            .unwrap_or_else(|error| panic!("invalid fixture label: {error}"));
+        assert!(!uqm_rust::ui::sis::draw_message(
+            &game.kernel,
+            320,
+            &long_label,
+            0,
+            -1,
+            0
+        ));
+        assert_eq!(SetContext(context), context);
+        assert_eq!(GetContextClipRect(&mut clip), 0);
+        let icons = uqm_rust::graphics::drawable_abi::LoadedDrawable::create(2, 1, 1, 8)
+            .unwrap_or_else(|| panic!("fixture icon allocation failed"));
+        let retained = icons.lease();
+        game.kernel.play_frame = retained
+            .frame(0)
+            .unwrap_or_else(|| panic!("fixture icon frame is absent"));
+        drop(icons);
+        assert_eq!(
+            retained
+                .context_frame(0)
+                .wrapped_frame(u16::MAX)
+                .rect()
+                .extent
+                .width,
+            1
+        );
+        status.set_clip(RECT {
+            corner: POINT { x: 256, y: 0 },
+            extent: EXTENT {
+                width: 64,
+                height: 240,
+            },
+        });
+        SetContext(context);
+        uqm_rust::ui::menu::draw_menu_state(
+            &game.kernel,
+            &game.world,
+            (320, 240),
+            uqm_rust::ui::menu_state::PM_CONVERSE,
+            0,
+        );
+        assert_eq!(SetContext(context), context);
+        TFB_FlushGraphics();
+        let pixel = GetFramePixel(screen, POINT { x: 259, y: 173 });
+        assert_eq!((pixel.r, pixel.g, pixel.b), (82, 82, 82));
+        game.kernel
+            .configuration
+            .update_preferences(|preferences| preferences.menu = 2);
+        let menu_text_count = uqm_rust::ships::native::abi::MAINMENU_STRING_BASE as usize
+            + usize::from(uqm_rust::ui::menu_state::PM_ENCOUNTER_GAME_MENU)
+            + 1;
+        game.kernel
+            .install_game_text(uqm_rust::strings::owned_table::LoadedTextTable::fixture(
+                vec![b"A\0".to_vec(); menu_text_count],
+            ));
+        game.kernel.star_con_font = game.kernel.tiny_font;
+        uqm_rust::ui::menu::draw_menu_state(
+            &game.kernel,
+            &game.world,
+            (320, 240),
+            uqm_rust::ui::menu_state::PM_CONVERSE,
+            -1,
+        );
+        assert_eq!(SetContext(context), context);
         game.kernel.space_context = context;
         SetContext(previous);
         uqm_rust::ui::border::init_siscontexts(&game.kernel, (320, 240));

@@ -38,6 +38,17 @@ impl ContextFrame {
         }
     }
 
+    pub fn wrapped_frame(&self, index: u16) -> Self {
+        let allocation = self
+            ._allocations
+            .first()
+            .unwrap_or_else(|| panic!("absent frame has no allocation"));
+        Self {
+            frame: allocation.wrapped_frame(usize::from(index)),
+            _allocations: self._allocations.clone(),
+        }
+    }
+
     pub fn indexed_frame(&self, index: usize) -> Self {
         let allocation = self
             ._allocations
@@ -486,6 +497,12 @@ impl ContextLease {
 
     pub fn flush(&self) {
         self.apply(Operation::Flush);
+    }
+
+    pub fn foreground(&self) -> Color {
+        self.assert_thread();
+        // SAFETY: this lease retains the descriptor on its owning graphics thread.
+        unsafe { self.0.context.as_ref().ForeGroundColor }
     }
 
     pub fn set_foreground(&self, color: Color) {

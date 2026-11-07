@@ -21,3 +21,15 @@ pub(super) const SHIP_NAME_RECT: RECT = RECT {
 pub(super) const CAPTAIN_NAME_TEXT_COLOR: Color = rgb15(0x16, 0x0b, 0x1f);
 
 pub(super) const BLACK_COLOR: Color = rgb15(0, 0, 0);
+
+pub(super) fn name_style(captain: bool) -> (RECT, Color, Color) {
+    if captain {
+        (
+            CAPTAIN_NAME_RECT,
+            rgb15(0x0a, 0x0a, 0x1f),
+            rgb15(0x0a, 0x1f, 0x1f),
+        )
+    } else {
+        (SHIP_NAME_RECT, rgb15(0x0f, 0, 0), rgb15(0x1f, 0x0a, 0))
+    }
+}

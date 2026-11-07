@@ -421,9 +421,9 @@ unsafe fn do_install_module(
         if state < EMPTY_SLOT {
             if item != menu.CurState as SIZE {
                 menu.CurState = item as BYTE;
-                cx.with_legacy(|| pre_update_flash_rect());
+                cx.kernel.sis_highlight.pre_update_flash_rect();
                 cx.with_legacy(|| draw_module_strings(menu, item as BYTE));
-                cx.with_legacy(|| post_update_flash_rect());
+                cx.kernel.sis_highlight.post_update_flash_rect();
             }
         } else if item != menu.delta_item || state != menu.CurState {
             let piece = slot_piece(cx.world, state, item);
@@ -450,6 +450,7 @@ unsafe fn change_fuel_quantity(
     cx: &mut crate::engine::battle::Cx<'_>,
     input: &crate::engine::input::InputSession,
 ) {
+    let highlight = cx.kernel.sis_highlight.clone();
     let mut incr: i32 = if input.pulsed().menu[KEY_MENU_UP as usize] != 0 {
         FUEL_TANK_SCALE as i32
     } else if input.pulsed().menu[KEY_MENU_DOWN as usize] != 0 {
@@ -485,9 +486,9 @@ unsafe fn change_fuel_quantity(
     } else {
         let cost = incr / FUEL_TANK_SCALE as i32 * cx.world.data.game.fuel_cost as i32;
         cx.with_legacy(|| {
-            pre_update_flash_rect();
+            highlight.pre_update_flash_rect();
             DeltaSISGauges(0, incr as SIZE, -cost);
-            post_update_flash_rect();
+            highlight.post_update_flash_rect();
             redistribute_fuel();
         });
     }

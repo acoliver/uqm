@@ -240,10 +240,7 @@ pub(crate) mod engine {
             }
             SelectionAction::Continue => {}
         }
-        let flags = cx.world.data.game.glob_flags;
-        cx.with_legacy(|| {
-            crate::ui::menu::choose_menu_state(input, &mut menu.choice, PM_CONVERSE as u8, flags);
-        });
+        crate::ui::menu::choose_menu_state(cx, input, &mut menu.choice, PM_CONVERSE as u8);
         true
     }
 
