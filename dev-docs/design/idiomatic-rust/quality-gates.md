@@ -185,6 +185,14 @@ functions only through `#[allow]`. Data tables (`hq_rules.rs::rules`,
   A crate split moves whole directories, so
   `cargo xtask quality move --prefix uqm::graphics uqm-engine::graphics` records one
   `[moved]` prefix line that transfers every counter and lint entry under it.
+  Several source/target pairs may follow `quality move` in one invocation. The
+  complete set is composed before validation and written atomically, using one
+  base-tree measurement and one working-tree measurement. This is needed when
+  several existing transfer destinations move together. Use narrower surviving
+  prefixes when a larger namespace also contains deleted declarations; deleted
+  declarations receive no move credit. A failed pair leaves the baseline unchanged.
+  Accessor budget scopes keep their exact counts and expiry when their existing
+  `uqm::engine::battle::access` module moves to `uqm-engine::battle::access`.
   An individual declaration uses its full identity without `--prefix`, for example
   `cargo xtask quality move uqm::game_init::kernel_abi::disp_q uqm::engine::battle::legacy::disp_q`.
   FFI counters remain subsystem totals; xtask reaggregates the base findings with

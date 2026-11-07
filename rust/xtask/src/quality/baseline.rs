@@ -163,6 +163,7 @@ impl Baseline {
         self.moved = self.remaining_moves(base);
     }
 
+    #[cfg(test)]
     pub fn add_move(
         &mut self,
         old: &str,
@@ -170,10 +171,25 @@ impl Baseline {
         current: &Measurement,
         base: &Measurement,
     ) -> Result<(), String> {
+        self.add_moves(&[(old, new)], current, base)
+    }
+
+    pub fn add_moves(
+        &mut self,
+        steps: &[(&str, &str)],
+        current: &Measurement,
+        base: &Measurement,
+    ) -> Result<(), String> {
+        if steps.is_empty() {
+            return Err("move needs at least one source and target".into());
+        }
         let previous = self.remaining_moves(base);
-        let moves = super::transfers::compose(&previous, old, new, base)?;
+        let mut moves = previous.clone();
+        for &(old, new) in steps {
+            moves = super::transfers::compose(&moves, old, new, base)?;
+        }
         super::transfers::validate(current, base, &moves)?;
-        let mut declaration_moves = previous.clone();
+        let mut declaration_moves = previous;
         super::transfers::retire(&mut declaration_moves, base);
         let reverse = declaration_moves
             .iter()
@@ -181,7 +197,11 @@ impl Baseline {
             .collect();
         let original_budgets = super::budgets::relocated(&self.budget, &reverse)?;
         let measured = super::budgets::scoped_entries(base, &original_budgets);
-        let intermediate = super::transfers::reverse_step(current, old, new, &declaration_moves)?;
+        let mut intermediate = current.clone();
+        for &(old, new) in steps.iter().rev() {
+            intermediate =
+                super::transfers::reverse_step(&intermediate, old, new, &declaration_moves)?;
+        }
         let before = super::transfers::limits(
             &measured,
             &intermediate,
@@ -190,13 +210,15 @@ impl Baseline {
             &original_budgets,
         )?;
         let after = super::transfers::limits(&measured, current, base, &moves, &original_budgets)?;
-        let budget = super::budgets::relocated(&self.budget, &[(old.into(), new.into())].into())?;
         let entries = super::transfers::adjust(&self.entries, &before, &after)?;
-        let lint = self
-            .lint
-            .iter()
-            .map(|(host, values)| Ok((host.clone(), move_entries(values, old, new, true)?)))
-            .collect::<Result<_, String>>()?;
+        let mut budget = self.budget.clone();
+        let mut lint = self.lint.clone();
+        for &(old, new) in steps {
+            budget = super::budgets::relocated(&budget, &[(old.into(), new.into())].into())?;
+            for values in lint.values_mut() {
+                *values = move_entries(values, old, new, true)?;
+            }
+        }
         self.entries = entries;
         self.budget = budget;
         self.lint = lint;

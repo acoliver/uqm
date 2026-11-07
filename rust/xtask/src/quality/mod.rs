@@ -1,5 +1,7 @@
 //! Shrink-only source counters and identifier checks. No game code is linked.
 mod approvals;
+#[cfg(test)]
+mod atomic_move_tests;
 pub(crate) mod baseline;
 mod budgets;
 mod cfg;
@@ -289,6 +291,33 @@ fn print_summary(
     Ok(())
 }
 
+fn move_baseline(root: &Path, path: &Path, options: &Options) -> Result<(), String> {
+    if options.positional.len() < 3 || options.positional.len().is_multiple_of(2) {
+        return Err("usage: quality move [--prefix] <old identity> <new identity> [<old identity> <new identity> ...]".into());
+    }
+    let mut baseline = Baseline::read(path)?;
+    let reference = options.base.as_deref().unwrap_or("origin/main");
+    let (base, _) = baseline::archived_measurement(root, reference)?;
+    let current = walk::measure(root, None, false)?;
+    let pairs: Vec<_> = options.positional[1..]
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|pair| (pair[0].as_str(), pair[1].as_str()))
+        .collect();
+    if !options.prefix
+        && pairs.iter().any(|(old, _)| {
+            base.declarations
+                .iter()
+                .all(|finding| finding.identity != *old)
+        })
+    {
+        return Err("move source is not a declaration; use --prefix for a module or crate".into());
+    }
+    baseline.add_moves(&pairs, &current, &base)?;
+    baseline.write(path)
+}
+
 fn edit_baseline(root: &Path, path: &Path, command: &str, options: &Options) -> Result<(), String> {
     if command == "rekey" {
         if options.positional.len() != 1 {
@@ -300,30 +329,7 @@ fn edit_baseline(root: &Path, path: &Path, command: &str, options: &Options) -> 
         return baseline.write(path);
     }
     if command == "move" {
-        if options.positional.len() != 3 {
-            return Err("usage: quality move [--prefix] <old identity> <new identity>".into());
-        }
-        let mut baseline = Baseline::read(path)?;
-        let reference = options.base.as_deref().unwrap_or("origin/main");
-        let (base, _) = baseline::archived_measurement(root, reference)?;
-        let current = walk::measure(root, None, false)?;
-        if !options.prefix
-            && base
-                .declarations
-                .iter()
-                .all(|f| f.identity != options.positional[1])
-        {
-            return Err(
-                "move source is not a declaration; use --prefix for a module or crate".into(),
-            );
-        }
-        baseline.add_move(
-            &options.positional[1],
-            &options.positional[2],
-            &current,
-            &base,
-        )?;
-        return baseline.write(path);
+        return move_baseline(root, path, options);
     }
     if command == "budget" {
         if options.positional.len() != 3 {
