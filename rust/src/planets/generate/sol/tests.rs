@@ -1,11 +1,14 @@
-use crate::engine::StoryKey;
 use super::*;
 use crate::engine::world::planet::NodeInfo;
+use crate::engine::StoryKey;
 use std::collections::BTreeMap;
 
 #[test]
 fn special_pickups_reject_retrieved_nodes_and_nonzero_indices_before_effects() {
-    for (body, flag) in [(PLUTO, StoryKey::FOUND_PLUTO_SPATHI), (LUNA, StoryKey::MOONBASE_DESTROYED)] {
+    for (body, flag) in [
+        (PLUTO, StoryKey::FOUND_PLUTO_SPATHI),
+        (LUNA, StoryKey::MOONBASE_DESTROYED),
+    ] {
         for (taken, which) in [(1, 0), (0, 1), (1, 1)] {
             let mut host = Host {
                 survive: true,
@@ -14,7 +17,9 @@ fn special_pickups_reject_retrieved_nodes_and_nonzero_indices_before_effects() {
             host.flags.insert(flag, taken);
             let before = host.flags.clone();
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                pickup_energy(body, which, &mut host)
+                crate::planets::generate::testing::with_empty(|system| {
+                    pickup_energy(system, body, which, &mut host)
+                })
             }));
             assert!(result.is_err());
             assert_eq!(host.flags, before);
@@ -26,25 +31,31 @@ fn special_pickups_reject_retrieved_nodes_and_nonzero_indices_before_effects() {
 
 #[derive(Default)]
 struct Host {
-    flags: BTreeMap<&'static str, u32>,
-    words: BTreeMap<&'static str, u32>,
+    flags: BTreeMap<StoryKey, u32>,
+    words: BTreeMap<StoryKey, u32>,
     survive: bool,
     calls: Vec<String>,
 }
 
 impl Story for Host {
-    fn flag(&self, key: &'static str) -> u32 {
-        self.flags.get(key).copied().unwrap_or(0)
+    fn flag(&self, key: StoryKey) -> u32 {
+        self.flags.get(&key).copied().unwrap_or(0)
     }
-    fn set_flag(&mut self, key: &'static str, value: u32) {
-        self.calls.push(format!("flag:{key}:{value}"));
+    fn set_flag(&mut self, key: StoryKey, value: u32) {
+        self.calls.push(format!(
+            "flag:{}:{value}",
+            crate::planets::generate::testing::story_label(key)
+        ));
         self.flags.insert(key, value);
     }
-    fn word(&self, key: &'static str) -> u32 {
-        self.words.get(key).copied().unwrap_or(0)
+    fn word(&self, key: StoryKey) -> u32 {
+        self.words.get(&key).copied().unwrap_or(0)
     }
-    fn set_word(&mut self, key: &'static str, value: u32) {
-        self.calls.push(format!("word:{key}:{value}"));
+    fn set_word(&mut self, key: StoryKey, value: u32) {
+        self.calls.push(format!(
+            "word:{}:{value}",
+            crate::planets::generate::testing::story_label(key)
+        ));
         self.words.insert(key, value);
     }
 }
@@ -54,7 +65,7 @@ impl Pickup for Host {
         self.calls.push(format!("crew:{count}:{interval_ticks}"));
         self.survive
     }
-    fn lander_report(&mut self) {
+    fn lander_report(&mut self, _: &mut SolarSys<'_>) {
         self.calls.push("report".into());
     }
     fn lander_takeoff(&mut self) {
@@ -95,8 +106,10 @@ fn pluto_pickup_stops_on_crew_failure_and_retains_the_node_on_success() {
             survive,
             ..Host::default()
         };
-        host.flags.insert("unrelated", 93);
-        assert!(!pickup_energy(PLUTO, 0, &mut host));
+        host.flags.insert(StoryKey::SHOFIXTI_VISITS, 93);
+        assert!(!crate::planets::generate::testing::with_empty(|system| {
+            pickup_energy(system, PLUTO, 0, &mut host)
+        }));
         let expected = if survive {
             vec![
                 "crew:8:42",
@@ -111,7 +124,7 @@ fn pluto_pickup_stops_on_crew_failure_and_retains_the_node_on_success() {
         assert_eq!(host.flag(StoryKey::FOUND_PLUTO_SPATHI), u32::from(survive));
         assert_eq!(host.flag(StoryKey::MOONBASE_DESTROYED), 0);
         assert_eq!(host.flag(StoryKey::MOONBASE_ON_SHIP), 0);
-        assert_eq!(host.flag("unrelated"), 93);
+        assert_eq!(host.flag(StoryKey::SHOFIXTI_VISITS), 93);
         assert!(host.words.is_empty());
         let mut node: NodeInfo = unsafe { std::mem::zeroed() };
         assert_eq!(
@@ -124,8 +137,10 @@ fn pluto_pickup_stops_on_crew_failure_and_retains_the_node_on_success() {
 #[test]
 fn luna_pickup_reports_then_takes_off_before_both_story_writes() {
     let mut host = Host::default();
-    host.flags.insert("unrelated", 93);
-    assert!(pickup_energy(LUNA, 0, &mut host));
+    host.flags.insert(StoryKey::SHOFIXTI_VISITS, 93);
+    assert!(crate::planets::generate::testing::with_empty(|system| {
+        pickup_energy(system, LUNA, 0, &mut host)
+    }));
     assert_eq!(
         host.calls,
         [
@@ -138,7 +153,7 @@ fn luna_pickup_reports_then_takes_off_before_both_story_writes() {
     assert_eq!(host.flag(StoryKey::MOONBASE_DESTROYED), 1);
     assert_eq!(host.flag(StoryKey::MOONBASE_ON_SHIP), 1);
     assert_eq!(host.flag(StoryKey::FOUND_PLUTO_SPATHI), 0);
-    assert_eq!(host.flag("unrelated"), 93);
+    assert_eq!(host.flag(StoryKey::SHOFIXTI_VISITS), 93);
     assert!(host.words.is_empty());
     assert_eq!(generate_energy(LUNA, None, &host), 0);
 }
@@ -156,7 +171,9 @@ fn other_energy_pickups_have_no_effect_even_for_nonzero_node_indices() {
             }
             for which in [0, 1, u16::MAX] {
                 let mut host = Host::default();
-                assert!(!pickup_energy(body, which, &mut host));
+                assert!(!crate::planets::generate::testing::with_empty(|system| {
+                    pickup_energy(system, body, which, &mut host)
+                }));
                 assert!(host.calls.is_empty());
                 assert!(host.flags.is_empty());
                 assert!(host.words.is_empty());

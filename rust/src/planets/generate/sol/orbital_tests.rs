@@ -1,9 +1,9 @@
-use crate::engine::StoryKey;
 use super::lifecycle_tests::{group, pair, QueueHost, Trace};
 use super::orbital::{Orbital, Queues, Scene};
 use super::*;
 use crate::comm::dispatch::{CHECK_ABORT, CHECK_LOAD, START_ENCOUNTER};
-use crate::engine::world::planet::{PlanetDesc, PlanetInfo, SystemInfo};
+use crate::engine::world::planet::{PlanetDesc, SystemInfo};
+use crate::engine::StoryKey;
 use crate::planets::generate::calc::{AnalysisSite, StarDescription};
 use crate::planets::generate::default::Npcs;
 use crate::planets::generate::special::Orbit;
@@ -90,7 +90,6 @@ impl Queues for Site {
 }
 
 impl Orbital for Site {
-    type EarthSurface = Surface;
     fn set_encounter_group(&mut self, value: u8) {
         self.queues.call(format!("encounter:{value}"));
         self.encounter = value;
@@ -107,37 +106,13 @@ impl Orbital for Site {
         self.queues.call(format!("flags:{value}"));
         self.flags = value;
     }
-    fn with_orbit(&mut self, run: impl FnOnce(&mut Orbit<'_>)) {
-        self.queues.call("analyse");
-        let parent_radius = match self.body {
-            Body::Planet(_) => None,
-            Body::Moon { planet, .. } => {
-                Some((i32::from(EARTH_RADIUS) * PLANETS[usize::from(planet)].1 / 100) as i16)
-            }
-        };
-        run(&mut Orbit {
-            rng: &mut self.rng,
-            plan_data: &PLANET_ARRAY.0,
-            star: StarDescription {
-                size: 0,
-                star_type: (5 << 5) | 5,
-            },
-            site: AnalysisSite {
-                parent_radius,
-                is_orbit_entry: true,
-            },
-            sys_info: &mut self.info,
-            world: &self.world,
-        });
-        self.analyzed = Some(self.info);
-    }
-    fn planet_info(&mut self) -> &mut PlanetInfo {
-        self.queues.call("overrides");
-        &mut self.info.planet_info
-    }
-    fn load_scene(&mut self, scene: Scene) {
+    fn load_scene(
+        &mut self,
+        system: &mut crate::engine::world::generation::SolarSys<'_>,
+        scene: Scene,
+    ) {
         assert_eq!(
-            format!("{:?}", self.info),
+            format!("{:?}", system.system_info()),
             format!("{:?}", self.analyzed.unwrap())
         );
         assert!(self.scene.replace(scene).is_none());
@@ -145,16 +120,67 @@ impl Orbital for Site {
         self.queues.call(scene.graphics().to_str().unwrap());
         self.queues.call(scene.strings().to_str().unwrap());
     }
-    fn load_earth_surface(&mut self) -> Surface {
-        self.queues.call("graphics.earthmask");
-        Surface(self.queues.trace.clone())
-    }
-    fn load_planet(&mut self, surface: Option<Surface>) {
-        assert_eq!(surface.is_some(), self.body == Body::Planet(2));
+}
+impl crate::planets::generate::host::PlanetSite for Site {
+    fn load_planet(&mut self, _: &mut SolarSys<'_>) {
+        assert_ne!(self.body, Body::Planet(2));
         assert!(self.surface.is_none());
-        self.surface = surface;
         self.queues.call("load-planet");
     }
+    fn load_earth_planet(&mut self, _: &mut SolarSys<'_>) {
+        assert_eq!(self.body, Body::Planet(2));
+        assert!(self.surface.is_none());
+        self.queues.call("graphics.earthmask");
+        self.surface = Some(Surface(self.queues.trace.clone()));
+        self.queues.call("load-planet");
+    }
+    fn rainbow_ordinal(&self) -> u8 {
+        panic!("not a rainbow host")
+    }
+}
+
+fn run_orbital(body: Body, story: &super::lifecycle_tests::State, host: &mut Site) -> bool {
+    let mut info = host.info;
+    let mut rng = host.rng.clone();
+    let world = host.world;
+    let parent_radius = match body {
+        Body::Planet(_) => None,
+        Body::Moon { planet, .. } => {
+            Some((i32::from(EARTH_RADIUS) * PLANETS[usize::from(planet)].1 / 100) as i16)
+        }
+    };
+    let mut expected_rng = rng.clone();
+    let mut expected_info = info;
+    let mut expected_orbit = Orbit {
+        rng: &mut expected_rng,
+        plan_data: &PLANET_ARRAY.0,
+        star: StarDescription {
+            size: 0,
+            star_type: (5 << 5) | 5,
+        },
+        site: AnalysisSite {
+            parent_radius,
+            is_orbit_entry: true,
+        },
+        sys_info: &mut expected_info,
+        world: &world,
+    };
+    if body != STARBASE {
+        super::orbital::analyse_orbital(&mut expected_orbit, body);
+        host.analyzed = Some(*expected_orbit.sys_info);
+    }
+    let mut orbit = Orbit {
+        rng: &mut rng,
+        sys_info: &mut info,
+        ..expected_orbit
+    };
+    let mut story_ref = story;
+    let result = crate::planets::generate::testing::with_orbit(&mut orbit, body, |system| {
+        generate_orbital(system, body, &mut (&mut story_ref, &mut *host))
+    });
+    host.info = info;
+    host.rng = rng;
+    result
 }
 
 #[test]
@@ -166,7 +192,7 @@ fn starbase_saves_then_clears_ip_and_enters_encounter_without_analysis_or_resour
         let mut host = Site::new(queue, STARBASE);
         host.activity = activity;
         let before = format!("{:?}", host.info);
-        assert!(generate_orbital(STARBASE, &story, &mut host));
+        assert!(run_orbital(STARBASE, &story, &mut host));
         assert_eq!(format!("{:?}", host.info), before);
         assert_eq!(host.rng.seed(), 101);
         assert!(host.analyzed.is_none());
@@ -196,7 +222,7 @@ fn starbase_built_queue_assertion_precedes_encounter_writes() {
     queue.built = 1;
     let mut host = Site::new(queue, STARBASE);
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        generate_orbital(STARBASE, &story, &mut host)
+        run_orbital(STARBASE, &story, &mut host)
     }));
     assert!(result.is_err());
     assert_eq!(*story.trace.borrow(), ["save", "reset-ip", "count-built"]);
@@ -220,8 +246,8 @@ fn orbital_effects_preserve_c_order_and_surface_ownership_on_every_body() {
                     story.flags.insert(StoryKey::MOONBASE_DESTROYED, destroyed);
                     let before_flags = story.flags.clone();
                     let mut host = Site::new(queue, body);
-                    assert!(generate_orbital(body, &story, &mut host));
-                    let mut expected = vec!["analyse"];
+                    assert!(run_orbital(body, &story, &mut host));
+                    let mut expected = vec![];
                     let scene = if body == PLUTO {
                         expected.push("read:FOUND_PLUTO_SPATHI");
                         (found == 0).then_some(Scene::Pluto)
@@ -238,7 +264,6 @@ fn orbital_effects_preserve_c_order_and_surface_ownership_on_every_body() {
                             scene.strings().to_str().unwrap(),
                         ]);
                     }
-                    expected.push("overrides");
                     if body == Body::Planet(2) {
                         expected.push("graphics.earthmask");
                     }
@@ -286,7 +311,7 @@ fn lunar_bio_seed_follows_minerals_and_other_scans_keep_incoming_seeds() {
         story.flags.insert(StoryKey::FOUND_PLUTO_SPATHI, 1);
         story.flags.insert(StoryKey::MOONBASE_DESTROYED, 1);
         let mut host = Site::new(queue, body);
-        assert!(generate_orbital(body, &story, &mut host));
+        assert!(run_orbital(body, &story, &mut host));
         assert_eq!(
             host.info.planet_info.scan_seed[1], 13,
             "energy seed is not written"

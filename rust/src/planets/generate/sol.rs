@@ -1,9 +1,92 @@
 //! Sol generation and probe lifecycle from `gensol.c`.
 //!
-//! The live ABI adapter is in `sol_exports`.
+//! Live effects are provided by the solar-system mode.
 
-use crate::engine::StoryKey;
 use crate::engine::world::planet::{NodeInfo, PlanetDesc, SystemInfo};
+use crate::engine::StoryKey;
+
+use super::generator::SystemGenerator;
+use super::host::SiteHost;
+use crate::engine::world::generation::SolarSys;
+
+pub struct Generator;
+
+impl SystemGenerator for Generator {
+    fn init_npcs(&self, _system: &mut SolarSys<'_>, host: &mut dyn SiteHost) -> bool {
+        init_npcs(host)
+    }
+    fn reinit_npcs(&self, _system: &mut SolarSys<'_>, host: &mut dyn SiteHost) -> bool {
+        reinit_npcs(host)
+    }
+    fn generate_planets(&self, system: &mut SolarSys<'_>, _host: &mut dyn SiteHost) -> bool {
+        system.layout(|rng, _table, _size, _color, planets| generate_planets(rng, planets));
+        true
+    }
+    fn generate_moons(
+        &self,
+        system: &mut SolarSys<'_>,
+        planet: u8,
+        _host: &mut dyn SiteHost,
+    ) -> bool {
+        system.layout_moons(planet, |rng, size, color, parent, moons| {
+            generate_moons(rng, size, color, planet, parent.num_planets, moons)
+        });
+        true
+    }
+    fn generate_energy(
+        &self,
+        _system: &mut SolarSys<'_>,
+        body: Body,
+        _node: u16,
+        info: &mut NodeInfo,
+        host: &dyn SiteHost,
+    ) -> u16 {
+        generate_energy(body, Some(info), host)
+    }
+    fn generate_life(
+        &self,
+        system: &mut SolarSys<'_>,
+        body: Body,
+        node: u16,
+        info: &mut NodeInfo,
+        _host: &dyn SiteHost,
+    ) -> u16 {
+        system.scan(body, |rng, sys, _frame| {
+            generate_life(rng, sys, body, node, info)
+        })
+    }
+
+    fn generate_orbital(
+        &self,
+        system: &mut SolarSys<'_>,
+        body: Body,
+        host: &mut dyn SiteHost,
+    ) -> bool {
+        orbital::generate_orbital(system, body, host)
+    }
+    fn pickup_energy(
+        &self,
+        system: &mut SolarSys<'_>,
+        body: Body,
+        node: u16,
+        host: &mut dyn SiteHost,
+    ) -> bool {
+        pickup_energy(system, body, node, host)
+    }
+    fn generate_name(
+        &self,
+        system: &mut SolarSys<'_>,
+        body: Body,
+        host: &mut dyn SiteHost,
+    ) -> bool {
+        generate_name(
+            host,
+            body.planet() as u16,
+            system.planet_data_index(body.planet()),
+        )
+    }
+}
+
 #[cfg(test)]
 mod lifecycle_tests;
 pub mod orbital;
@@ -11,7 +94,7 @@ pub mod orbital;
 mod orbital_tests;
 pub use orbital::generate_orbital;
 
-use crate::c_bindings::global_state::PLANET_NUMBER_BASE;
+use crate::engine::save::summary::PLANET_NUMBER_BASE;
 use crate::math::RandomContext;
 use crate::planets::generate::consts::{EARTH_RADIUS, MAP_HEIGHT, MAP_WIDTH, PLANET_SHIELDED};
 use crate::planets::generate::default::{self, PlanetNames};
@@ -39,7 +122,7 @@ const STARBASE: Body = Body::Moon { planet: 2, moon: 0 };
 const URQUAN_DRONE_SHIP: u8 = 23;
 
 /// Persist the single probe group even after its message has been delivered.
-pub fn init_npcs(host: &mut (impl FleetGroups + Story)) -> bool {
+pub fn init_npcs(host: &mut (impl FleetGroups + Story + ?Sized)) -> bool {
     special::ensure_fleet(host, StoryKey::URQUAN_PROBE_GRPOFFS0, URQUAN_DRONE_SHIP);
     if host.flag(StoryKey::PROBE_MESSAGE_DELIVERED) == 0
         && host.init_ip_groups()
@@ -60,7 +143,7 @@ pub fn init_npcs(host: &mut (impl FleetGroups + Story)) -> bool {
 
 /// Restore the queue before checking the collision flag, except when the
 /// completed bomb empties Sol. Only the head probe may be changed.
-pub fn reinit_npcs<H: FleetGroups + orbital::Queues + Story>(host: &mut H) -> bool {
+pub fn reinit_npcs<H: FleetGroups + orbital::Queues + Story + ?Sized>(host: &mut H) -> bool {
     if host.flag(StoryKey::CHMMR_BOMB_STATE) == 3 {
         host.clear_battle_group_ref();
         default::Npcs::reinit_ip_group_q(host);
@@ -135,7 +218,7 @@ pub fn generate_moons(
 
 /// `planet` is the parent planet for a moon; the frame is that planet's
 /// `data_index`, never the moon's. Sol's strings precede the default names.
-pub fn generate_name(host: &mut impl PlanetNames, planet: u16, frame: u8) -> bool {
+pub fn generate_name(host: &mut (impl PlanetNames + ?Sized), planet: u16, frame: u8) -> bool {
     host.set_planet_name(PLANET_NUMBER_BASE as u16 + planet);
     host.set_battle_planet(frame);
     true
@@ -143,7 +226,11 @@ pub fn generate_name(host: &mut impl PlanetNames, planet: u16, frame: u8) -> boo
 
 /// `GenerateSol_generateEnergy`. C ignores `whichNode` and changes only the
 /// location, leaving the caller's density and type intact.
-pub fn generate_energy(body: Body, node: Option<&mut NodeInfo>, story: &impl Story) -> u16 {
+pub fn generate_energy(
+    body: Body,
+    node: Option<&mut NodeInfo>,
+    story: &(impl Story + ?Sized),
+) -> u16 {
     let location = if body == PLUTO && story.flag(StoryKey::FOUND_PLUTO_SPATHI) == 0 {
         Some((20, MAP_HEIGHT - 8))
     } else if body == LUNA && story.flag(StoryKey::MOONBASE_DESTROYED) == 0 {
@@ -184,12 +271,17 @@ pub trait Pickup: Story {
     /// `kill_lander_crew_seq (8, ONE_SECOND / 20)`; false stops the pickup.
     fn kill_lander_crew(&mut self, count: u16, interval_ticks: u32) -> bool;
     /// `GenerateDefault_landerReport (solarSys)`.
-    fn lander_report(&mut self);
+    fn lander_report(&mut self, system: &mut SolarSys<'_>);
     /// `set_lander_takeoff ()`.
     fn lander_takeoff(&mut self);
 }
 
-pub fn pickup_energy(body: Body, which: u16, host: &mut impl Pickup) -> bool {
+pub fn pickup_energy(
+    system: &mut SolarSys<'_>,
+    body: Body,
+    which: u16,
+    host: &mut (impl Pickup + ?Sized),
+) -> bool {
     if body == PLUTO {
         assert!(host.flag(StoryKey::FOUND_PLUTO_SPATHI) == 0 && which == 0);
         // `timelib.h`: ONE_SECOND is 840, not milliseconds.
@@ -197,14 +289,14 @@ pub fn pickup_energy(body: Body, which: u16, host: &mut impl Pickup) -> bool {
             return false;
         }
         host.set_flag(StoryKey::FOUND_PLUTO_SPATHI, 1);
-        host.lander_report();
+        host.lander_report(system);
         host.lander_takeoff();
         // Keep Fwiffo's node visible during takeoff; the flag hides it later.
         return false;
     }
     if body == LUNA {
         assert!(host.flag(StoryKey::MOONBASE_DESTROYED) == 0 && which == 0);
-        host.lander_report();
+        host.lander_report(system);
         host.lander_takeoff();
         host.set_flag(StoryKey::MOONBASE_DESTROYED, 1);
         host.set_flag(StoryKey::MOONBASE_ON_SHIP, 1);
