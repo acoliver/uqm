@@ -11,6 +11,7 @@ pub struct BattleTick {
     pub keys: [[i32; crate::input_port::frames::FLIGHT_KEYS]; 2],
     pub pulsed: [[i32; crate::input_port::frames::FLIGHT_KEYS]; 2],
     pub menu: [i32; crate::input_port::frames::MENU_KEYS],
+    pub menu_pulsed: [i32; crate::input_port::frames::MENU_KEYS],
     pub rng: u32,
     pub ditty: u32,
     pub ships: [Option<BattleShip>; 2],
@@ -118,6 +119,7 @@ fn capture(
         keys: std::array::from_fn(|side| current.key[templates[side] as usize]),
         pulsed: std::array::from_fn(|side| pulsed.key[templates[side] as usize]),
         menu: current.menu,
+        menu_pulsed: pulsed.menu,
         rng: crate::math::random_state(),
         ditty: cx.kernel.ditty_playing,
         ships,
@@ -174,6 +176,7 @@ mod tests {
         assert_eq!(tick.keys[0][3], 1);
         assert_eq!(tick.keys[1][5], 1);
         assert_eq!(tick.menu[9], 1);
+        assert_eq!(tick.menu_pulsed[9], 1);
         assert_eq!(tick.pulsed[1][5], 1);
         assert_eq!(tick.counters, [3, 4]);
         assert_eq!(tick.ditty, 1);

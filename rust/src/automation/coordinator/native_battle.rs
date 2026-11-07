@@ -100,6 +100,7 @@ mod tests {
             keys: [[0; 7]; 2],
             pulsed: [[0; 7]; 2],
             menu: [0; 24],
+            menu_pulsed: [0; 24],
             rng: 12345,
             ditty: 1,
             ships: [None; 2],

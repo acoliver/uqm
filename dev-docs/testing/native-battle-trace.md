@@ -2,7 +2,7 @@
 
 Native automation writes `native_battle` records into `automation/trace.jsonl` using the existing ordered observer sink and its 64 MiB member reservation. These records use schema 3. Other records retain schema 2, and headless parity journals and traces remain unchanged.
 
-Each sampled combat input has both sides' current and pulsed seven-key arrays, mapped through the selected input templates, plus the current menu array used by the picker. An `advanced` sample captures the frame after simulation, including the actual ship input bitfields produced by human, computer or network control. Both samples contain RNG stream state, ditty state, ship position/velocity/facing/crew/energy/status and fleet counters. Samples are fixed-width and exclude non-combat flight and all non-battle menus.
+Each sampled combat input has both sides' current and pulsed seven-key arrays, mapped through the selected input templates, plus the current and pulsed menu arrays used by the picker. An `advanced` sample captures the frame after simulation, including the actual ship input bitfields produced by human, computer or network control. Both samples contain RNG stream state, ditty state, ship position/velocity/facing/crew/energy/status and fleet counters. Samples are fixed-width and exclude non-combat flight and all non-battle menus.
 
 Each replacement gate evaluation produces a record containing its original ditty value, the exact `plr_playing_current` result it consumed, the resulting ditty value and the blocking decision. `track_playing: null` means the original short circuit did not read the audio worker. Diagnostics never make a second audio query or advance/reseed the RNG.
 
