@@ -1,5 +1,5 @@
-use crate::engine::StoryKey;
 use super::*;
+use crate::engine::StoryKey;
 use crate::planets::generate::home_contact::tests::FakeStory;
 use crate::planets::generate::vux::tests::{record, with_orbit, Site};
 use std::rc::Rc;
@@ -127,7 +127,10 @@ fn guard_build_order_races_and_full_groups() {
 #[test]
 fn ghosts_are_saved_without_building_and_empty_queue_is_enforced() {
     let mut site = Guard::default();
-    init_npcs(&mut (&mut FakeStory::with(&[(StoryKey::URQUAN_MESSED_UP, 1)]), &mut site));
+    init_npcs(&mut (
+        &mut FakeStory::with(&[(StoryKey::URQUAN_MESSED_UP, 1)]),
+        &mut site,
+    ));
     assert_eq!(site.calls, ["save"]);
     assert!(std::panic::catch_unwind(|| {
         init_npcs(&mut (
@@ -224,12 +227,22 @@ fn final_contact_all_story_survivor_abort_and_rebel_paths() {
                                     ..Site::default()
                                 };
                                 let (info, seed) = with_orbit(|orbit| {
-                                    assert!(generate_orbital(
+                                    assert!(crate::planets::generate::testing::with_orbit(
                                         orbit,
                                         WORLD,
-                                        &mut story,
-                                        &mut site,
-                                        || panic!("final battle is not a landing")
+                                        |system| generate_orbital(
+                                            system,
+                                            WORLD,
+                                            &mut crate::planets::generate::testing::Effects {
+                                                story: &mut story,
+                                                site: &mut site,
+                                                report: (),
+                                                lander: (),
+                                                load: Some(|| panic!(
+                                                    "final battle is not a landing"
+                                                ))
+                                            }
+                                        )
                                     ));
                                 });
                                 assert_eq!(seed, 104729);
@@ -293,24 +306,40 @@ fn nonfinal_world_falls_through_and_final_queue_must_be_empty() {
         let mut site = Site::default();
         let calls = Rc::clone(&site.calls);
         with_orbit(|orbit| {
-            generate_orbital(orbit, body, &mut FakeStory::default(), &mut site, || {
-                record(&calls, "planet")
+            crate::planets::generate::testing::with_orbit(orbit, body, |system| {
+                generate_orbital(
+                    system,
+                    body,
+                    &mut crate::planets::generate::testing::Effects {
+                        story: &mut FakeStory::default(),
+                        site: &mut site,
+                        report: (),
+                        lander: (),
+                        load: Some(|| record(&calls, "planet")),
+                    },
+                )
             });
         });
         assert_eq!(*calls.borrow(), ["planet"]);
     }
     assert!(std::panic::catch_unwind(|| {
         with_orbit(|orbit| {
-            generate_orbital(
-                orbit,
-                WORLD,
-                &mut FakeStory::default(),
-                &mut Site {
-                    built: 1,
-                    ..Site::default()
-                },
-                || {},
-            );
+            crate::planets::generate::testing::with_orbit(orbit, WORLD, |system| {
+                generate_orbital(
+                    system,
+                    WORLD,
+                    &mut crate::planets::generate::testing::Effects {
+                        story: &mut FakeStory::default(),
+                        site: &mut Site {
+                            built: 1,
+                            ..Site::default()
+                        },
+                        report: (),
+                        lander: (),
+                        load: Some(|| {}),
+                    },
+                )
+            });
         });
     })
     .is_err());
@@ -328,7 +357,19 @@ fn protecting_flag_precedes_talk_and_survivors_clear_it_after_restoration() {
         calls: Rc::clone(&site.calls),
     };
     with_orbit(|orbit| {
-        generate_orbital(orbit, WORLD, &mut story, &mut site, || {});
+        crate::planets::generate::testing::with_orbit(orbit, WORLD, |system| {
+            generate_orbital(
+                system,
+                WORLD,
+                &mut crate::planets::generate::testing::Effects {
+                    story: &mut story,
+                    site: &mut site,
+                    report: (),
+                    lander: (),
+                    load: Some(|| {}),
+                },
+            )
+        });
     });
     assert_eq!(
         *site.calls.borrow(),

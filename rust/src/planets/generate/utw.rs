@@ -9,14 +9,13 @@
 //! `UTWIG_HAVE_ULTRON`, `BOMB_UNPROTECTED`, `UTWIG_BOMB_ON_SHIP`,
 //! `DRUUGE_MANNER`, `DRUUGE_VISITS`, `DRUUGE_HOME_VISITS`.
 
-use crate::engine::StoryKey;
-use crate::planets::generate::identities::{BOMB_DEFINED, UTWIG_DEFINED};
 use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
+use crate::engine::StoryKey;
 use crate::math::RandomContext;
-use crate::planet_side::report_adapter::DiscoveryReportPort;
 use crate::planets::generate::default::{self, Npcs};
 use crate::planets::generate::home_contact::{self, HomeContactSite, LanderTakeoff};
-use crate::planets::generate::special::{self, Body, Orbit, Story, WATER_WORLD};
+use crate::planets::generate::identities::{BOMB_DEFINED, UTWIG_DEFINED};
+use crate::planets::generate::special::{self, Body, Story, WATER_WORLD};
 use crate::planets::generate::yehat::{CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY};
 
 /// The Utwig home world.
@@ -48,17 +47,21 @@ pub trait UtwigSite: HomeContactSite {
     fn repair_sis_border(&mut self);
     /// `LoadStdLanderFont`, the mask and the report strings of the bomb
     /// (`bomb`) or the Utwig ruins.
-    fn load_scene(&mut self, bomb: bool);
+    fn load_scene(
+        &mut self,
+        _system: &mut crate::engine::world::generation::SolarSys<'_>,
+        bomb: bool,
+    );
 }
 
 /// The bomb moon is the object of the visit while the bomb is still there.
-fn at_bomb(star_index: u8, body: Body, story: &impl Story) -> bool {
+fn at_bomb(star_index: u8, body: Body, story: &(impl Story + ?Sized)) -> bool {
     star_index == BOMB_DEFINED && body == BOMB_MOON && story.flag(StoryKey::UTWIG_BOMB) == 0
 }
 
 /// `GenerateUtwig_initNpcs`: with the bomb still in place no ships roam the
 /// bomb system.
-pub fn init_npcs<H: Npcs + Story + crate::planets::generate::sol::orbital::Queues>(
+pub fn init_npcs<H: Npcs + Story + crate::planets::generate::sol::orbital::Queues + ?Sized>(
     star_index: u8,
     host: &mut H,
 ) -> bool {
@@ -100,21 +103,19 @@ pub fn generate_planets(
 /// player has the Ultron), then at the bomb the Druuge guard it until it is
 /// unprotected; the ruins or bomb scene is loaded before the default orbital.
 pub fn generate_orbital(
-    orbit: &mut Orbit<'_>,
+    system: &mut SolarSys<'_>,
     body: Body,
     star_index: u8,
-    story: &mut impl Story,
-    site: &mut impl UtwigSite,
-    load_planet: impl FnOnce(),
+    site: &mut (impl UtwigSite + Story + super::host::PlanetSite + ?Sized),
 ) -> bool {
-    if prepare_orbital(body, star_index, story, site) {
+    if prepare_orbital(system, body, star_index, site) {
         return true;
     }
 
-    orbit.default_orbital(load_planet);
+    super::special::default_orbital(system, body, site);
 
     if star_index == UTWIG_DEFINED && body == HOME {
-        let info = &mut orbit.sys_info.planet_info;
+        let info = system.planet_info();
         info.weather = 1;
         info.tectonics = 1;
     }
@@ -123,15 +124,15 @@ pub fn generate_orbital(
 
 /// Contact and scene work, with no system or RNG borrow across host calls.
 pub(super) fn prepare_orbital(
+    system: &mut SolarSys<'_>,
     body: Body,
     star_index: u8,
-    story: &mut impl Story,
-    site: &mut impl UtwigSite,
+    site: &mut (impl UtwigSite + Story + ?Sized),
 ) -> bool {
     let at_home = star_index == UTWIG_DEFINED && body == HOME;
-    let bomb = at_bomb(star_index, body, story);
+    let bomb = at_bomb(star_index, body, site);
     if at_home || bomb {
-        if (star_index == UTWIG_DEFINED || story.flag(StoryKey::UTWIG_HAVE_ULTRON) == 0)
+        if (star_index == UTWIG_DEFINED || site.flag(StoryKey::UTWIG_HAVE_ULTRON) == 0)
             && site.start_sphere_tracking()
         {
             let flags = if star_index == UTWIG_DEFINED {
@@ -144,17 +145,17 @@ pub(super) fn prepare_orbital(
         }
 
         if star_index == BOMB_DEFINED
-            && story.flag(StoryKey::BOMB_UNPROTECTED) == 0
+            && site.flag(StoryKey::BOMB_UNPROTECTED) == 0
             && site.start_druuge_tracking()
         {
             if !druuge_guard_talk(site) {
                 return true;
             }
             site.repair_sis_border();
-            story.set_flag(StoryKey::BOMB_UNPROTECTED, 1);
+            site.set_flag(StoryKey::BOMB_UNPROTECTED, 1);
         }
 
-        site.load_scene(star_index == BOMB_DEFINED);
+        site.load_scene(system, star_index == BOMB_DEFINED);
     }
 
     false
@@ -162,7 +163,7 @@ pub(super) fn prepare_orbital(
 
 /// The Druuge confront the player at the bomb: false when the talk aborted or
 /// loaded a game, or when Druuge ships survived it.
-fn druuge_guard_talk(site: &mut impl UtwigSite) -> bool {
+fn druuge_guard_talk(site: &mut (impl UtwigSite + ?Sized)) -> bool {
     site.save_ip_groups();
     site.reinit_ip_group_q();
     assert_eq!(
@@ -198,7 +199,7 @@ pub fn generate_energy(
     body: Body,
     which_node: u16,
     info: &mut NodeInfo,
-    story: &impl Story,
+    story: &(impl Story + ?Sized),
 ) -> u16 {
     if star_index == UTWIG_DEFINED && body == HOME {
         return default::generate_ruins(rng, sys_info, which_node, info);
@@ -216,32 +217,88 @@ pub fn generate_energy(
 /// report; the bomb is taken once, from node 0, and makes the Druuge
 /// interested.
 pub fn pickup_energy(
+    system: &mut SolarSys<'_>,
     star_index: u8,
     body: Body,
     which_node: u16,
-    story: &mut impl Story,
-    report: &mut impl DiscoveryReportPort,
-    lander: &mut impl LanderTakeoff,
+    lander: &mut (impl LanderTakeoff + Story + super::host::ReportSite + ?Sized),
 ) -> bool {
     if star_index == UTWIG_DEFINED && body == HOME {
-        default::lander_report_cycle(report);
+        lander.report(
+            system,
+            crate::engine::world::generation::ReportDisposition::Cycle,
+        );
         return false;
     }
     if star_index == BOMB_DEFINED && body == BOMB_MOON {
         assert!(
-            story.flag(StoryKey::UTWIG_BOMB) == 0 && which_node == 0,
+            lander.flag(StoryKey::UTWIG_BOMB) == 0 && which_node == 0,
             "the bomb is picked up once, from node 0"
         );
-        default::lander_report(report);
+        lander.report(
+            system,
+            crate::engine::world::generation::ReportDisposition::Once,
+        );
         lander.lander_takeoff();
-        story.set_flag(StoryKey::UTWIG_BOMB, 1);
-        story.set_flag(StoryKey::UTWIG_BOMB_ON_SHIP, 1);
-        story.set_flag(StoryKey::DRUUGE_MANNER, 1);
-        story.set_flag(StoryKey::DRUUGE_VISITS, 0);
-        story.set_flag(StoryKey::DRUUGE_HOME_VISITS, 0);
+        lander.set_flag(StoryKey::UTWIG_BOMB, 1);
+        lander.set_flag(StoryKey::UTWIG_BOMB_ON_SHIP, 1);
+        lander.set_flag(StoryKey::DRUUGE_MANNER, 1);
+        lander.set_flag(StoryKey::DRUUGE_VISITS, 0);
+        lander.set_flag(StoryKey::DRUUGE_HOME_VISITS, 0);
         return true;
     }
     false
+}
+
+use super::generator::SystemGenerator;
+use super::host::SiteHost;
+use crate::engine::world::generation::SolarSys;
+
+pub struct Generator;
+
+impl SystemGenerator for Generator {
+    fn init_npcs(&self, system: &mut SolarSys<'_>, host: &mut dyn SiteHost) -> bool {
+        let star = system.star_index();
+        init_npcs(star, host)
+    }
+    fn generate_planets(&self, system: &mut SolarSys<'_>, _host: &mut dyn SiteHost) -> bool {
+        let star = system.star_index();
+        system.layout(|rng, table, size, color, planets| {
+            generate_planets(rng, table, size, color, planets, star)
+        });
+        true
+    }
+    fn generate_energy(
+        &self,
+        system: &mut SolarSys<'_>,
+        body: Body,
+        node: u16,
+        info: &mut NodeInfo,
+        host: &dyn SiteHost,
+    ) -> u16 {
+        let star = system.star_index();
+        system.scan(body, |rng, sys, _frame| {
+            generate_energy(rng, sys, star, body, node, info, host)
+        })
+    }
+
+    fn generate_orbital(
+        &self,
+        system: &mut SolarSys<'_>,
+        body: Body,
+        host: &mut dyn SiteHost,
+    ) -> bool {
+        generate_orbital(system, body, system.star_index(), host)
+    }
+    fn pickup_energy(
+        &self,
+        system: &mut SolarSys<'_>,
+        body: Body,
+        node: u16,
+        host: &mut dyn SiteHost,
+    ) -> bool {
+        pickup_energy(system, system.star_index(), body, node, host)
+    }
 }
 
 #[cfg(test)]

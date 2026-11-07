@@ -11,16 +11,15 @@
 //! `MYCON_VISITS`, `KNOW_ABOUT_SHATTERED`, `EGG_CASE0_ON_SHIP`,
 //! `EGG_CASE1_ON_SHIP`, `EGG_CASE2_ON_SHIP`.
 
+use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
 use crate::engine::StoryKey;
+use crate::math::RandomContext;
+use crate::planets::generate::default;
+use crate::planets::generate::home_contact::{HomeContactSite, LanderTakeoff};
 use crate::planets::generate::identities::{
     EGG_CASE0_DEFINED, EGG_CASE1_DEFINED, EGG_CASE2_DEFINED, MYCON_DEFINED, SUN_DEVICE_DEFINED,
 };
-use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
-use crate::math::RandomContext;
-use crate::planet_side::report_adapter::DiscoveryReportPort;
-use crate::planets::generate::default;
-use crate::planets::generate::home_contact::{HomeContactSite, LanderTakeoff};
-use crate::planets::generate::special::{self, Body, Orbit, Story, SHATTERED_WORLD};
+use crate::planets::generate::special::{self, Body, Story, SHATTERED_WORLD};
 use crate::planets::generate::surface::ENERGY_SCAN;
 use crate::planets::generate::yehat::{CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY};
 
@@ -55,7 +54,11 @@ pub trait MyconSite: HomeContactSite {
     /// `RepairSISBorder ()`.
     fn repair_sis_border(&mut self);
     /// `LoadStdLanderFont`, the mask and the report strings of `scene`.
-    fn load_scene(&mut self, scene: Scene);
+    fn load_scene(
+        &mut self,
+        _system: &mut crate::engine::world::generation::SolarSys<'_>,
+        scene: Scene,
+    );
 }
 
 fn is_egg_case(star_index: u8) -> bool {
@@ -90,53 +93,48 @@ pub fn generate_planets(
 /// then the default orbital runs. A talk that was aborted, loaded a game or
 /// left Mycon ships alive ends the visit before the default orbital.
 pub fn generate_orbital(
-    orbit: &mut Orbit<'_>,
+    system: &mut SolarSys<'_>,
     body: Body,
     star_index: u8,
-    story: &mut impl Story,
-    site: &mut impl MyconSite,
-    load_planet: impl FnOnce(),
+    site: &mut (impl MyconSite + Story + super::host::PlanetSite + ?Sized),
 ) -> bool {
-    if prepare_orbital(body, star_index, story, site, || {
-        orbit.sys_info.planet_info.scan_retrieve_mask[ENERGY_SCAN] & 1 != 0
-    }) {
+    if prepare_orbital(system, body, star_index, site) {
         return true;
     }
 
-    orbit.default_orbital(load_planet);
+    super::special::default_orbital(system, body, site);
     true
 }
 
 /// Contact and scene work, reading the retrieval mask after the conversation.
 pub(super) fn prepare_orbital(
+    system: &mut SolarSys<'_>,
     body: Body,
     star_index: u8,
-    story: &mut impl Story,
-    site: &mut impl MyconSite,
-    retrieved: impl FnOnce() -> bool,
+    site: &mut (impl MyconSite + Story + ?Sized),
 ) -> bool {
     if body == WORLD {
         if (star_index == MYCON_DEFINED || star_index == SUN_DEVICE_DEFINED)
             && site.start_sphere_tracking()
-            && (star_index == MYCON_DEFINED || story.flag(StoryKey::SUN_DEVICE_UNGUARDED) == 0)
-            && !mycon_talk(star_index, story, site)
+            && (star_index == MYCON_DEFINED || site.flag(StoryKey::SUN_DEVICE_UNGUARDED) == 0)
+            && !mycon_talk(star_index, site)
         {
             return true;
         }
 
         match star_index {
             SUN_DEVICE_DEFINED => {
-                if story.flag(StoryKey::SUN_DEVICE) == 0 {
-                    site.load_scene(Scene::SunDevice);
+                if site.flag(StoryKey::SUN_DEVICE) == 0 {
+                    site.load_scene(system, Scene::SunDevice);
                 }
             }
             index if is_egg_case(index) => {
-                if story.flag(StoryKey::KNOW_ABOUT_SHATTERED) == 0 {
-                    story.set_flag(StoryKey::KNOW_ABOUT_SHATTERED, 1);
+                if site.flag(StoryKey::KNOW_ABOUT_SHATTERED) == 0 {
+                    site.set_flag(StoryKey::KNOW_ABOUT_SHATTERED, 1);
                 }
-                let retrieved = retrieved();
+                let retrieved = system.planet_info().scan_retrieve_mask[ENERGY_SCAN] & 1 != 0;
                 if !retrieved {
-                    site.load_scene(Scene::EggCase);
+                    site.load_scene(system, Scene::EggCase);
                 }
             }
             _ => {}
@@ -149,7 +147,7 @@ pub(super) fn prepare_orbital(
 /// The Mycon confront the player: false when the visit is over, because the
 /// talk aborted or loaded a game or because Mycon ships survived it. When the
 /// player wins, the Sun Device is unguarded and the border repaired.
-fn mycon_talk(star_index: u8, story: &mut impl Story, site: &mut impl MyconSite) -> bool {
+fn mycon_talk(star_index: u8, site: &mut (impl MyconSite + Story + ?Sized)) -> bool {
     site.notify_others_all_clear();
     site.save_ip_groups();
     site.reinit_ip_group_q();
@@ -159,7 +157,7 @@ fn mycon_talk(star_index: u8, story: &mut impl Story, site: &mut impl MyconSite)
         "the built-ship queue must be empty before the Mycon are cloned into it"
     );
 
-    if star_index == MYCON_DEFINED || story.flag(StoryKey::MYCON_FELL_FOR_AMBUSH) == 0 {
+    if star_index == MYCON_DEFINED || site.flag(StoryKey::MYCON_FELL_FOR_AMBUSH) == 0 {
         site.clone_fleet_into_built_queue();
     } else {
         for _ in 0..AMBUSH_SHIPS {
@@ -187,7 +185,7 @@ fn mycon_talk(star_index: u8, story: &mut impl Story, site: &mut impl MyconSite)
     if survivors {
         return false;
     }
-    story.set_flag(StoryKey::SUN_DEVICE_UNGUARDED, 1);
+    site.set_flag(StoryKey::SUN_DEVICE_UNGUARDED, 1);
     site.repair_sis_border();
     true
 }
@@ -202,7 +200,7 @@ pub fn generate_energy(
     body: Body,
     which_node: u16,
     info: &mut NodeInfo,
-    story: &impl Story,
+    story: &(impl Story + ?Sized),
 ) -> u16 {
     if star_index == SUN_DEVICE_DEFINED && body == WORLD {
         if story.flag(StoryKey::SUN_DEVICE) != 0 {
@@ -227,41 +225,102 @@ pub fn generate_life() -> u16 {
 /// `GenerateMycon_pickupEnergy`: the Sun Device or the egg case is taken from
 /// node 0, which launches the lander and records it on the ship.
 pub fn pickup_energy(
+    system: &mut SolarSys<'_>,
     star_index: u8,
     body: Body,
     which_node: u16,
-    story: &mut impl Story,
-    report: &mut impl DiscoveryReportPort,
-    lander: &mut impl LanderTakeoff,
+    lander: &mut (impl LanderTakeoff + Story + super::host::ReportSite + ?Sized),
 ) -> bool {
     if star_index == SUN_DEVICE_DEFINED && body == WORLD {
         assert!(
-            story.flag(StoryKey::SUN_DEVICE) == 0 && which_node == 0,
+            lander.flag(StoryKey::SUN_DEVICE) == 0 && which_node == 0,
             "the Sun Device is picked up once, from node 0"
         );
-        default::lander_report(report);
+        lander.report(
+            system,
+            crate::engine::world::generation::ReportDisposition::Once,
+        );
         lander.lander_takeoff();
-        story.set_flag(StoryKey::SUN_DEVICE, 1);
-        story.set_flag(StoryKey::SUN_DEVICE_ON_SHIP, 1);
-        story.set_flag(StoryKey::MYCON_VISITS, 0);
+        lander.set_flag(StoryKey::SUN_DEVICE, 1);
+        lander.set_flag(StoryKey::SUN_DEVICE_ON_SHIP, 1);
+        lander.set_flag(StoryKey::MYCON_VISITS, 0);
         return true;
     }
     if is_egg_case(star_index) && body == WORLD {
         assert_eq!(which_node, 0, "an egg case is picked up from node 0");
-        default::lander_report(report);
+        lander.report(
+            system,
+            crate::engine::world::generation::ReportDisposition::Once,
+        );
         lander.lander_takeoff();
-        story.set_flag(egg_case_flag(star_index), 1);
+        lander.set_flag(egg_case_flag(star_index), 1);
         return true;
     }
     false
 }
 
-fn egg_case_flag(star_index: u8) -> &'static str {
+fn egg_case_flag(star_index: u8) -> StoryKey {
     match star_index {
         EGG_CASE0_DEFINED => StoryKey::EGG_CASE0_ON_SHIP,
         EGG_CASE1_DEFINED => StoryKey::EGG_CASE1_ON_SHIP,
         EGG_CASE2_DEFINED => StoryKey::EGG_CASE2_ON_SHIP,
         other => unreachable!("star {other} has no egg case"),
+    }
+}
+
+use super::generator::SystemGenerator;
+use super::host::SiteHost;
+use crate::engine::world::generation::SolarSys;
+
+pub struct Generator;
+
+impl SystemGenerator for Generator {
+    fn generate_planets(&self, system: &mut SolarSys<'_>, _host: &mut dyn SiteHost) -> bool {
+        system.layout(|rng, table, size, color, planets| {
+            generate_planets(rng, table, size, color, planets)
+        });
+        true
+    }
+    fn generate_energy(
+        &self,
+        system: &mut SolarSys<'_>,
+        body: Body,
+        node: u16,
+        info: &mut NodeInfo,
+        host: &dyn SiteHost,
+    ) -> u16 {
+        let star = system.star_index();
+        system.scan(body, |rng, sys, _frame| {
+            generate_energy(rng, sys, star, body, node, info, host)
+        })
+    }
+    fn generate_life(
+        &self,
+        _system: &mut SolarSys<'_>,
+        _body: Body,
+        _node: u16,
+        _info: &mut NodeInfo,
+        _host: &dyn SiteHost,
+    ) -> u16 {
+        generate_life()
+    }
+
+    fn generate_orbital(
+        &self,
+        system: &mut SolarSys<'_>,
+        body: Body,
+        host: &mut dyn SiteHost,
+    ) -> bool {
+        generate_orbital(system, body, system.star_index(), host)
+    }
+    fn pickup_energy(
+        &self,
+        system: &mut SolarSys<'_>,
+        body: Body,
+        node: u16,
+        host: &mut dyn SiteHost,
+    ) -> bool {
+        pickup_energy(system, system.star_index(), body, node, host)
     }
 }
 

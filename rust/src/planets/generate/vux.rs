@@ -1,14 +1,15 @@
 //! VUX home, Zex' maidens and Zex' beast, ported from `genvux.c`.
 
-use crate::engine::StoryKey;
-use crate::planets::generate::identities::{MAIDENS_DEFINED, VUX_BEAST_DEFINED, VUX_DEFINED};
 use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
+use crate::engine::StoryKey;
 use crate::math::RandomContext;
+#[cfg(test)]
 use crate::planet_side::report_adapter::DiscoveryReportPort;
 use crate::planets::generate::consts::EARTH_RADIUS;
 use crate::planets::generate::default;
 use crate::planets::generate::home_contact::{HomeContactSite, LanderTakeoff};
-use crate::planets::generate::special::{self, Body, Orbit, Story, REDUX_WORLD, WATER_WORLD};
+use crate::planets::generate::identities::{MAIDENS_DEFINED, VUX_BEAST_DEFINED, VUX_DEFINED};
+use crate::planets::generate::special::{self, Body, Story, REDUX_WORLD, WATER_WORLD};
 use crate::planets::generate::surface;
 use crate::planets::generate::yehat::{CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY};
 
@@ -32,7 +33,11 @@ pub trait VuxSite: HomeContactSite {
     fn zex_is_dead(&self) -> bool;
     fn repair_sis_border(&mut self);
     /// Beast loads the font and strings and clears PlanetSideFrame[1].
-    fn load_scene(&mut self, scene: Scene);
+    fn load_scene(
+        &mut self,
+        _system: &mut crate::engine::world::generation::SolarSys<'_>,
+        scene: Scene,
+    );
 }
 
 pub fn generate_planets(
@@ -71,31 +76,29 @@ pub fn generate_planets(
 }
 
 pub fn generate_orbital(
-    orbit: &mut Orbit<'_>,
+    system: &mut SolarSys<'_>,
     body: Body,
     star: u8,
-    story: &impl Story,
-    site: &mut impl VuxSite,
-    load_planet: impl FnOnce(),
+    site: &mut (impl VuxSite + Story + super::host::PlanetSite + ?Sized),
 ) -> bool {
-    if prepare_orbital(body, star, story, site) {
+    if prepare_orbital(system, body, star, site) {
         return true;
     }
-    orbit.default_orbital(load_planet);
+    super::special::default_orbital(system, body, site);
     if body == WORLD {
         // C changes these after LoadPlanet, not before it.
-        orbit.sys_info.planet_info.weather = 2;
-        orbit.sys_info.planet_info.tectonics = 0;
+        system.planet_info().weather = 2;
+        system.planet_info().tectonics = 0;
     }
     true
 }
 
 /// Contact and scene work, without borrowing the live orbital state.
 pub(super) fn prepare_orbital(
+    system: &mut SolarSys<'_>,
     body: Body,
     star: u8,
-    story: &impl Story,
-    site: &mut impl VuxSite,
+    site: &mut (impl VuxSite + Story + ?Sized),
 ) -> bool {
     if body == WORLD
         && (star == VUX_DEFINED || (star == MAIDENS_DEFINED && !site.zex_is_dead()))
@@ -123,12 +126,14 @@ pub(super) fn prepare_orbital(
     }
     if body == WORLD {
         match star {
-            MAIDENS_DEFINED if story.flag(StoryKey::SHOFIXTI_MAIDENS) == 0 => {
-                site.load_scene(Scene::Maidens)
+            MAIDENS_DEFINED if site.flag(StoryKey::SHOFIXTI_MAIDENS) == 0 => {
+                site.load_scene(system, Scene::Maidens)
             }
-            VUX_BEAST_DEFINED if story.flag(StoryKey::VUX_BEAST) == 0 => site.load_scene(Scene::Beast),
+            VUX_BEAST_DEFINED if site.flag(StoryKey::VUX_BEAST) == 0 => {
+                site.load_scene(system, Scene::Beast)
+            }
             MAIDENS_DEFINED | VUX_BEAST_DEFINED => {}
-            _ => site.load_scene(Scene::Ruins),
+            _ => site.load_scene(system, Scene::Ruins),
         }
     }
     false
@@ -141,7 +146,7 @@ pub fn generate_energy(
     body: Body,
     which: u16,
     node: &mut NodeInfo,
-    story: &impl Story,
+    story: &(impl Story + ?Sized),
 ) -> u16 {
     if body == WORLD {
         if star == MAIDENS_DEFINED {
@@ -180,44 +185,120 @@ pub fn generate_life(
 }
 
 pub fn pickup_energy(
+    system: &mut SolarSys<'_>,
     star: u8,
     body: Body,
     which: u16,
-    story: &mut impl Story,
-    report: &mut impl DiscoveryReportPort,
-    lander: &mut impl LanderTakeoff,
+    lander: &mut (impl LanderTakeoff + Story + super::host::ReportSite + ?Sized),
 ) -> bool {
     if star == MAIDENS_DEFINED && body == WORLD {
-        assert!(story.flag(StoryKey::SHOFIXTI_MAIDENS) == 0 && which == 0);
-        default::lander_report(report);
+        assert!(lander.flag(StoryKey::SHOFIXTI_MAIDENS) == 0 && which == 0);
+        lander.report(
+            system,
+            crate::engine::world::generation::ReportDisposition::Once,
+        );
         lander.lander_takeoff();
-        story.set_flag(StoryKey::SHOFIXTI_MAIDENS, 1);
-        story.set_flag(StoryKey::MAIDENS_ON_SHIP, 1);
+        lander.set_flag(StoryKey::SHOFIXTI_MAIDENS, 1);
+        lander.set_flag(StoryKey::MAIDENS_ON_SHIP, 1);
         return true;
     }
     if star == VUX_DEFINED && body == WORLD {
-        default::lander_report_cycle(report);
+        lander.report(
+            system,
+            crate::engine::world::generation::ReportDisposition::Cycle,
+        );
     }
     false
 }
 
 pub fn pickup_life(
+    system: &mut SolarSys<'_>,
     star: u8,
     body: Body,
     which: u16,
-    story: &mut impl Story,
-    report: &mut impl DiscoveryReportPort,
-    lander: &mut impl LanderTakeoff,
+    lander: &mut (impl LanderTakeoff + Story + super::host::ReportSite + ?Sized),
 ) -> bool {
     if star == VUX_BEAST_DEFINED && body == WORLD && which == 0 {
-        assert_eq!(story.flag(StoryKey::VUX_BEAST), 0);
-        default::lander_report(report);
+        assert_eq!(lander.flag(StoryKey::VUX_BEAST), 0);
+        lander.report(
+            system,
+            crate::engine::world::generation::ReportDisposition::Once,
+        );
         lander.lander_takeoff();
-        story.set_flag(StoryKey::VUX_BEAST, 1);
-        story.set_flag(StoryKey::VUX_BEAST_ON_SHIP, 1);
+        lander.set_flag(StoryKey::VUX_BEAST, 1);
+        lander.set_flag(StoryKey::VUX_BEAST_ON_SHIP, 1);
     }
     true
 }
 
 #[cfg(test)]
 pub(crate) mod tests;
+
+use super::generator::SystemGenerator;
+use super::host::SiteHost;
+use crate::engine::world::generation::SolarSys;
+
+pub struct Generator;
+
+impl SystemGenerator for Generator {
+    fn generate_planets(&self, system: &mut SolarSys<'_>, _host: &mut dyn SiteHost) -> bool {
+        let star = system.star_index();
+        system.layout(|rng, table, size, color, planets| {
+            generate_planets(rng, table, size, color, star, planets)
+        });
+        true
+    }
+    fn generate_energy(
+        &self,
+        system: &mut SolarSys<'_>,
+        body: Body,
+        node: u16,
+        info: &mut NodeInfo,
+        host: &dyn SiteHost,
+    ) -> u16 {
+        let star = system.star_index();
+        system.scan(body, |rng, sys, _frame| {
+            generate_energy(rng, sys, star, body, node, info, host)
+        })
+    }
+    fn generate_life(
+        &self,
+        system: &mut SolarSys<'_>,
+        body: Body,
+        node: u16,
+        info: &mut NodeInfo,
+        _host: &dyn SiteHost,
+    ) -> u16 {
+        let star = system.star_index();
+        system.scan(body, |rng, sys, frame| {
+            generate_life(rng, sys, frame, star, body, node, info)
+        })
+    }
+
+    fn generate_orbital(
+        &self,
+        system: &mut SolarSys<'_>,
+        body: Body,
+        host: &mut dyn SiteHost,
+    ) -> bool {
+        generate_orbital(system, body, system.star_index(), host)
+    }
+    fn pickup_energy(
+        &self,
+        system: &mut SolarSys<'_>,
+        body: Body,
+        node: u16,
+        host: &mut dyn SiteHost,
+    ) -> bool {
+        pickup_energy(system, system.star_index(), body, node, host)
+    }
+    fn pickup_life(
+        &self,
+        system: &mut SolarSys<'_>,
+        body: Body,
+        node: u16,
+        host: &mut dyn SiteHost,
+    ) -> bool {
+        pickup_life(system, system.star_index(), body, node, host)
+    }
+}
