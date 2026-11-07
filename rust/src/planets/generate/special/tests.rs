@@ -14,25 +14,25 @@ use crate::planets::generate::special::{
 use crate::planets::generate::{colony, rainbow, syreen, vault, wreck, yehat, zfpscout};
 
 #[derive(Default)]
-struct FakeStory(HashMap<&'static str, u32>);
+struct FakeStory(HashMap<StoryKey, u32>);
 
 impl FakeStory {
-    fn with(flags: &[(&'static str, u32)]) -> Self {
+    fn with(flags: &[(StoryKey, u32)]) -> Self {
         Self(flags.iter().copied().collect())
     }
 }
 
 impl Story for FakeStory {
-    fn flag(&self, name: &'static str) -> u32 {
-        self.0.get(name).copied().unwrap_or(0)
+    fn flag(&self, name: StoryKey) -> u32 {
+        self.0.get(&name).copied().unwrap_or(0)
     }
-    fn set_flag(&mut self, name: &'static str, value: u32) {
+    fn set_flag(&mut self, name: StoryKey, value: u32) {
         self.0.insert(name, value);
     }
-    fn word(&self, name: &'static str) -> u32 {
+    fn word(&self, name: StoryKey) -> u32 {
         self.flag(name)
     }
-    fn set_word(&mut self, name: &'static str, value: u32) {
+    fn set_word(&mut self, name: StoryKey, value: u32) {
         self.set_flag(name, value);
     }
 }
@@ -53,14 +53,24 @@ struct FakeSite {
 }
 
 impl vault::VaultSite for FakeSite {
-    fn load_vault_scene(&mut self, _first_report: u16) {}
+    fn load_vault_scene(
+        &mut self,
+        _system: &mut crate::engine::world::generation::SolarSys<'_>,
+        _first_report: u16,
+    ) {
+    }
     fn lander_takeoff(&mut self) {
         self.takeoffs += 1;
     }
 }
 
 impl wreck::WreckSite for FakeSite {
-    fn load_wreck_scene(&mut self, _first_report: u16) {}
+    fn load_wreck_scene(
+        &mut self,
+        _system: &mut crate::engine::world::generation::SolarSys<'_>,
+        _first_report: u16,
+    ) {
+    }
     fn lander_takeoff(&mut self) {
         self.takeoffs += 1;
     }
@@ -72,13 +82,20 @@ const VAULT: Body = Body::Moon { planet: 0, moon: 0 };
 fn vault_pickup_before_the_shuttle_reports_once_and_learns_of_the_vault() {
     let mut story = FakeStory::default();
     let (mut site, mut report) = (FakeSite::default(), FakeReport::default());
-    assert!(!vault::pickup_energy(
-        VAULT,
-        0,
-        &mut story,
-        &mut site,
-        &mut report
-    ));
+    assert!(!crate::planets::generate::testing::with_empty(|system| {
+        vault::pickup_energy(
+            system,
+            VAULT,
+            0,
+            &mut crate::planets::generate::testing::Effects {
+                story: &mut story,
+                site: &mut site,
+                report: &mut report,
+                lander: (),
+                load: Some(|| {}),
+            },
+        )
+    }));
     assert_eq!(report.0, [ReportDisposition::Once]);
     assert_eq!(story.flag(StoryKey::KNOW_SYREEN_VAULT), 1);
     assert_eq!(site.takeoffs, 0);
@@ -86,15 +103,25 @@ fn vault_pickup_before_the_shuttle_reports_once_and_learns_of_the_vault() {
 
 #[test]
 fn vault_pickup_with_the_shuttle_unlocks_the_vault() {
-    let mut story = FakeStory::with(&[(StoryKey::SYREEN_SHUTTLE_ON_SHIP, 1), (StoryKey::SYREEN_HOME_VISITS, 5)]);
+    let mut story = FakeStory::with(&[
+        (StoryKey::SYREEN_SHUTTLE_ON_SHIP, 1),
+        (StoryKey::SYREEN_HOME_VISITS, 5),
+    ]);
     let (mut site, mut report) = (FakeSite::default(), FakeReport::default());
-    assert!(!vault::pickup_energy(
-        VAULT,
-        0,
-        &mut story,
-        &mut site,
-        &mut report
-    ));
+    assert!(!crate::planets::generate::testing::with_empty(|system| {
+        vault::pickup_energy(
+            system,
+            VAULT,
+            0,
+            &mut crate::planets::generate::testing::Effects {
+                story: &mut story,
+                site: &mut site,
+                report: &mut report,
+                lander: (),
+                load: Some(|| {}),
+            },
+        )
+    }));
     assert_eq!(report.0, [ReportDisposition::Cycle]);
     assert_eq!(site.takeoffs, 1);
     assert_eq!(story.flag(StoryKey::SHIP_VAULT_UNLOCKED), 1);
@@ -104,15 +131,25 @@ fn vault_pickup_with_the_shuttle_unlocks_the_vault() {
 
 #[test]
 fn vault_pickup_once_unlocked_only_cycles_the_report() {
-    let mut story = FakeStory::with(&[(StoryKey::SHIP_VAULT_UNLOCKED, 1), (StoryKey::SYREEN_SHUTTLE_ON_SHIP, 1)]);
+    let mut story = FakeStory::with(&[
+        (StoryKey::SHIP_VAULT_UNLOCKED, 1),
+        (StoryKey::SYREEN_SHUTTLE_ON_SHIP, 1),
+    ]);
     let (mut site, mut report) = (FakeSite::default(), FakeReport::default());
-    assert!(!vault::pickup_energy(
-        VAULT,
-        0,
-        &mut story,
-        &mut site,
-        &mut report
-    ));
+    assert!(!crate::planets::generate::testing::with_empty(|system| {
+        vault::pickup_energy(
+            system,
+            VAULT,
+            0,
+            &mut crate::planets::generate::testing::Effects {
+                story: &mut story,
+                site: &mut site,
+                report: &mut report,
+                lander: (),
+                load: Some(|| {}),
+            },
+        )
+    }));
     assert_eq!(report.0, [ReportDisposition::Cycle]);
     assert_eq!(site.takeoffs, 0);
     assert_eq!(story.flag(StoryKey::SYREEN_SHUTTLE_ON_SHIP), 1);
@@ -122,13 +159,20 @@ fn vault_pickup_once_unlocked_only_cycles_the_report() {
 fn vault_pickup_elsewhere_does_nothing() {
     let mut story = FakeStory::default();
     let (mut site, mut report) = (FakeSite::default(), FakeReport::default());
-    assert!(!vault::pickup_energy(
-        Body::Planet(0),
-        0,
-        &mut story,
-        &mut site,
-        &mut report
-    ));
+    assert!(!crate::planets::generate::testing::with_empty(|system| {
+        vault::pickup_energy(
+            system,
+            Body::Planet(0),
+            0,
+            &mut crate::planets::generate::testing::Effects {
+                story: &mut story,
+                site: &mut site,
+                report: &mut report,
+                lander: (),
+                load: Some(|| {}),
+            },
+        )
+    }));
     assert!(report.0.is_empty());
     assert_eq!(story.0.len(), 0);
 }
@@ -138,27 +182,44 @@ fn wreck_pickup_hands_over_the_portal_key_once() {
     let wreck_body = Body::Planet(6);
     let mut story = FakeStory::default();
     let (mut site, mut report) = (FakeSite::default(), FakeReport::default());
-    assert!(!wreck::pickup_energy(
-        wreck_body,
-        0,
-        &mut story,
-        &mut site,
-        &mut report
-    ));
+    assert!(!crate::planets::generate::testing::with_empty(|system| {
+        wreck::pickup_energy(
+            system,
+            wreck_body,
+            0,
+            &mut crate::planets::generate::testing::Effects {
+                story: &mut story,
+                site: &mut site,
+                report: &mut report,
+                lander: (),
+                load: Some(|| {}),
+            },
+        )
+    }));
     assert_eq!(
-        (story.flag(StoryKey::PORTAL_KEY), story.flag(StoryKey::PORTAL_KEY_ON_SHIP)),
+        (
+            story.flag(StoryKey::PORTAL_KEY),
+            story.flag(StoryKey::PORTAL_KEY_ON_SHIP)
+        ),
         (1, 1)
     );
     assert_eq!(site.takeoffs, 1);
 
     story.set_flag(StoryKey::PORTAL_KEY_ON_SHIP, 0);
-    assert!(!wreck::pickup_energy(
-        wreck_body,
-        0,
-        &mut story,
-        &mut site,
-        &mut report
-    ));
+    assert!(!crate::planets::generate::testing::with_empty(|system| {
+        wreck::pickup_energy(
+            system,
+            wreck_body,
+            0,
+            &mut crate::planets::generate::testing::Effects {
+                story: &mut story,
+                site: &mut site,
+                report: &mut report,
+                lander: (),
+                load: Some(|| {}),
+            },
+        )
+    }));
     assert_eq!(site.takeoffs, 1, "the key is only given the first time");
     assert_eq!(story.flag(StoryKey::PORTAL_KEY_ON_SHIP), 0);
     assert_eq!(
@@ -167,31 +228,67 @@ fn wreck_pickup_hands_over_the_portal_key_once() {
     );
 
     let mut elsewhere = FakeReport::default();
-    assert!(!wreck::pickup_energy(
-        Body::Planet(5),
-        0,
-        &mut story,
-        &mut site,
-        &mut elsewhere
-    ));
+    assert!(!crate::planets::generate::testing::with_empty(|system| {
+        wreck::pickup_energy(
+            system,
+            Body::Planet(5),
+            0,
+            &mut crate::planets::generate::testing::Effects {
+                story: &mut story,
+                site: &mut site,
+                report: &mut elsewhere,
+                lander: (),
+                load: Some(|| {}),
+            },
+        )
+    }));
     assert!(elsewhere.0.is_empty());
 }
 
 #[test]
 fn yehat_pickup_cycles_the_ruins_report_and_never_takes_the_node() {
     let mut report = FakeReport::default();
-    assert!(!yehat::pickup_energy(Body::Planet(0), &mut report));
+    assert!(!crate::planets::generate::testing::with_empty(|system| {
+        yehat::pickup_energy(
+            system,
+            Body::Planet(0),
+            &mut crate::planets::generate::testing::Effects {
+                story: (),
+                site: &mut (),
+                report: &mut report,
+                lander: (),
+                load: Some(|| {}),
+            },
+        )
+    }));
     assert_eq!(report.0, [ReportDisposition::Cycle]);
-    assert!(!yehat::pickup_energy(Body::Planet(1), &mut report));
+    assert!(!crate::planets::generate::testing::with_empty(|system| {
+        yehat::pickup_energy(
+            system,
+            Body::Planet(1),
+            &mut crate::planets::generate::testing::Effects {
+                story: (),
+                site: &mut (),
+                report: &mut report,
+                lander: (),
+                load: Some(|| {}),
+            },
+        )
+    }));
     assert_eq!(report.0.len(), 1);
 }
 
 #[test]
 fn rainbow_visits_set_one_bit_each_across_both_flag_bytes() {
     let mut story = FakeStory::with(&[(StoryKey::RAINBOW_WORLD0, 0b0000_0001)]);
-    let mask = |story: &FakeStory| story.flag(StoryKey::RAINBOW_WORLD0) | story.flag(StoryKey::RAINBOW_WORLD1) << 8;
+    let mask = |story: &FakeStory| {
+        story.flag(StoryKey::RAINBOW_WORLD0) | story.flag(StoryKey::RAINBOW_WORLD1) << 8
+    };
     for (which, expected) in [(2u8, 0b101u32), (9, 0b10_0000_0101)] {
-        let (a, b) = (story.flag(StoryKey::RAINBOW_WORLD0), story.flag(StoryKey::RAINBOW_WORLD1));
+        let (a, b) = (
+            story.flag(StoryKey::RAINBOW_WORLD0),
+            story.flag(StoryKey::RAINBOW_WORLD1),
+        );
         let merged = (a | b << 8) as u16 | 1 << which;
         story.set_flag(StoryKey::RAINBOW_WORLD0, u32::from(merged & 0xFF));
         story.set_flag(StoryKey::RAINBOW_WORLD1, u32::from(merged >> 8));
@@ -209,8 +306,14 @@ fn rainbow_ordinal_counts_earlier_rainbow_stars() {
 #[test]
 fn melnorme_posts_pick_their_own_group_reference() {
     use crate::planets::generate::melnorme::{ref_var, MELNORME0_DEFINED};
-    assert_eq!(ref_var(MELNORME0_DEFINED), Some(StoryKey::MELNORME0_GRPOFFS0));
-    assert_eq!(ref_var(MELNORME0_DEFINED + 8), Some(StoryKey::MELNORME8_GRPOFFS0));
+    assert_eq!(
+        ref_var(MELNORME0_DEFINED),
+        Some(StoryKey::MELNORME0_GRPOFFS0)
+    );
+    assert_eq!(
+        ref_var(MELNORME0_DEFINED + 8),
+        Some(StoryKey::MELNORME8_GRPOFFS0)
+    );
     assert_eq!(ref_var(MELNORME0_DEFINED + 9), None);
     assert_eq!(ref_var(MELNORME0_DEFINED - 1), None);
 }
@@ -228,31 +331,23 @@ fn syreen_moon_slot_is_the_starbase_only_for_planet_zero() {
 }
 
 /// A byte-addressed store of the game state bits, as `getGameState` sees it.
-#[derive(Default)]
-struct FakeBytes(HashMap<u32, u8>);
-
-impl FakeBytes {
-    fn read(&self, start: u32) -> u32 {
-        u32::from(self.0.get(&start).copied().unwrap_or(0))
-    }
-}
-
 #[test]
 fn story_words_are_stored_least_significant_byte_first() {
-    use super::{read_word, write_word};
-    let mut bytes = FakeBytes::default();
-    write_word(40, 0x1234_ABCD, |start, value| {
-        bytes.0.insert(start, value);
-    });
-    assert_eq!(bytes.0.len(), 4);
-    assert_eq!(bytes.read(40), 0xCD);
-    assert_eq!(bytes.read(48), 0xAB);
-    assert_eq!(bytes.read(56), 0x34);
-    assert_eq!(bytes.read(64), 0x12);
-    assert_eq!(read_word(40, |start| bytes.read(start)), 0x1234_ABCD);
+    let key = StoryKey::new(40, 47);
+    let mut state = crate::state::game_state::StoryState::new();
+    state.set_word(key, 0x1234_ABCD);
+    assert_eq!(
+        state.as_bytes().iter().filter(|&&byte| byte != 0).count(),
+        4
+    );
+    assert_eq!(state.get_state(40, 47), 0xCD);
+    assert_eq!(state.get_state(48, 55), 0xAB);
+    assert_eq!(state.get_state(56, 63), 0x34);
+    assert_eq!(state.get_state(64, 71), 0x12);
+    assert_eq!(state.word(key), 0x1234_ABCD);
     // Bytes the word does not cover are not read.
-    bytes.0.insert(72, 0xFF);
-    assert_eq!(read_word(40, |start| bytes.read(start)), 0x1234_ABCD);
+    state.set_state(72, 79, 0xFF);
+    assert_eq!(state.word(key), 0x1234_ABCD);
 }
 
 /// The ship groups, queues and group references one system keeps.

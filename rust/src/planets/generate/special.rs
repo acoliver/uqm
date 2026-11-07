@@ -2,10 +2,11 @@
 //! the story flags they read, the way several of them re-place planet 0, and
 //! the ship-group bookkeeping of the systems with a fixed fleet.
 
-use crate::battle::battle_types::{arctan, cosine, sine};
-use crate::c_bindings::global_state::IP_GROUP;
+use crate::engine::math::battle_types::{arctan, cosine, sine};
 use crate::engine::world::planet::{PlanetDesc, PlanetFrame, SystemInfo};
-use crate::engine::{StoryKey, World};
+use crate::engine::world::queues::IpGroup as IP_GROUP;
+use crate::engine::StoryKey;
+use crate::engine::World;
 use crate::math::RandomContext;
 use crate::planets::generate::calc::{AnalysisSite, StarDescription};
 use crate::planets::generate::consts::{EARTH_RADIUS, PLANET_SHIELDED};
@@ -35,137 +36,50 @@ pub const ZOQFOTPIK_SHIP: u8 = 19;
 /// The world a hook is asked about, as `matchWorld (system, world, planetI,
 /// moonI)` tests it: `matchWorld (.., p, MATCH_PLANET)` is `Planet(p)` and
 /// `matchWorld (.., p, m)` is `Moon { planet: p, moon: m }`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Body {
-    Planet(u8),
-    Moon { planet: u8, moon: u8 },
-}
+pub use crate::engine::world::generation::Body;
 
 /// The story flags and 32-bit group references in the game state.
 pub trait Story {
     /// `GET_GAME_STATE (name)`.
-    fn flag(&self, name: &'static str) -> u32;
+    fn flag(&self, name: StoryKey) -> u32;
     /// `SET_GAME_STATE (name, value)`.
-    fn set_flag(&mut self, name: &'static str, value: u32);
+    fn set_flag(&mut self, name: StoryKey, value: u32);
     /// `GET_GAME_STATE_32 (name)`.
-    fn word(&self, name: &'static str) -> u32;
+    fn word(&self, name: StoryKey) -> u32;
     /// `SET_GAME_STATE_32 (name, value)`.
-    fn set_word(&mut self, name: &'static str, value: u32);
-}
-
-impl Story for &std::cell::RefCell<&mut crate::engine::battle::Cx<'_>> {
-    fn flag(&self, name: &'static str) -> u32 {
-        self.borrow().world.flag(name)
-    }
-    fn set_flag(&mut self, name: &'static str, value: u32) {
-        self.borrow_mut().world.set_flag(name, value);
-    }
-    fn word(&self, name: &'static str) -> u32 {
-        self.borrow().world.word(name)
-    }
-    fn set_word(&mut self, name: &'static str, value: u32) {
-        self.borrow_mut().world.set_word(name, value);
-    }
+    fn set_word(&mut self, name: StoryKey, value: u32);
 }
 
 impl Story for crate::engine::world::story::StoryState {
-    fn flag(&self, name: &'static str) -> u32 {
-        StoryKey::from_name(name).map_or(0, |key| u32::from(self.get_state(key.start(), key.end())))
+    fn flag(&self, key: StoryKey) -> u32 {
+        u32::from(self.get_state(key.start(), key.end()))
     }
-    fn set_flag(&mut self, name: &'static str, value: u32) {
-        if let Some(key) = StoryKey::from_name(name) {
-            self.set_state(key.start(), key.end(), value as u8);
-        }
+    fn set_flag(&mut self, key: StoryKey, value: u32) {
+        self.set_state(key.start(), key.end(), value as u8);
     }
-    fn word(&self, name: &'static str) -> u32 {
-        self.get_state_32(word_start(name) as usize)
+    fn word(&self, key: StoryKey) -> u32 {
+        self.get_state_32(key.start())
     }
-    fn set_word(&mut self, name: &'static str, value: u32) {
-        self.set_state_32(word_start(name) as usize, value);
+    fn set_word(&mut self, key: StoryKey, value: u32) {
+        self.set_state_32(key.start(), value);
     }
 }
 
 impl Story for World {
-    fn flag(&self, name: &'static str) -> u32 {
-        self.story.as_ref().map_or(0, |story| story.flag(name))
+    fn flag(&self, key: StoryKey) -> u32 {
+        self.story_state(key)
     }
-    fn set_flag(&mut self, name: &'static str, value: u32) {
+    fn set_flag(&mut self, key: StoryKey, value: u32) {
+        self.set_story_state(key, value);
+    }
+    fn word(&self, key: StoryKey) -> u32 {
+        self.story.as_ref().map_or(0, |story| story.word(key))
+    }
+    fn set_word(&mut self, key: StoryKey, value: u32) {
         if let Some(story) = self.story.as_mut() {
-            story.set_flag(name, value);
+            story.set_word(key, value);
         }
     }
-    fn word(&self, name: &'static str) -> u32 {
-        let start = word_start(name) as usize;
-        self.story
-            .as_ref()
-            .map_or(0, |story| story.get_state_32(start))
-    }
-    fn set_word(&mut self, name: &'static str, value: u32) {
-        let start = word_start(name) as usize;
-        if let Some(story) = self.story.as_mut() {
-            story.set_state_32(start, value);
-        }
-    }
-}
-
-/// The live game state through the Rust game-state API.
-pub struct LiveStory;
-
-impl Story for LiveStory {
-    fn flag(&self, name: &'static str) -> u32 {
-        StoryKey::from_name(name).map_or(0, |key| {
-            World::current().read(|world| world.story_state(key))
-        })
-    }
-    fn set_flag(&mut self, name: &'static str, value: u32) {
-        if let Some(key) = StoryKey::from_name(name) {
-            World::current().write(|world| world.set_story_state(key, value));
-        }
-    }
-    fn word(&self, name: &'static str) -> u32 {
-        read_word(word_start(name), get_game_state_byte)
-    }
-    fn set_word(&mut self, name: &'static str, value: u32) {
-        write_word(word_start(name), value, set_game_state_byte);
-    }
-}
-
-fn word_start(name: &str) -> u32 {
-    crate::state::game_state_keys::bit_range(name)
-        .unwrap_or_else(|| panic!("unknown 32-bit game state key {name}"))
-        .0
-}
-
-/// `getGameState32`: four bytes from `start`, the first the least significant.
-fn read_word(start: u32, read_byte: impl Fn(u32) -> u32) -> u32 {
-    (0..4).fold(0, |word, byte| {
-        word | (read_byte(start + 8 * byte) << (8 * byte))
-    })
-}
-
-/// `setGameState32`: four bytes from `start`, least significant first.
-fn write_word(start: u32, value: u32, mut write_byte: impl FnMut(u32, u8)) {
-    for byte in 0..4 {
-        write_byte(start + 8 * byte, (value >> (8 * byte)) as u8);
-    }
-}
-
-use crate::state::ffi::{rust_get_game_state_bits, rust_set_game_state_bits};
-
-fn get_game_state_byte(start: u32) -> u32 {
-    // SAFETY: reads the Rust-owned game state.
-    {
-        u32::from(
-            World::current()
-                .read(|world| rust_get_game_state_bits(world, start as i32, start as i32 + 7)),
-        )
-    }
-}
-
-fn set_game_state_byte(start: u32, value: u8) {
-    // SAFETY: writes the Rust-owned game state.
-    World::current()
-        .write(|world| rust_set_game_state_bits(world, start as i32, start as i32 + 7, value));
 }
 
 /// Re-place `planet` on a circle of `EARTH_RADIUS * percent / 100`, keeping
@@ -200,7 +114,7 @@ pub trait FleetGroups: Npcs {
 /// The shared opening of the fixed-fleet `initNpcs` hooks: take the group
 /// reference stored under `word`, and build and store a new group when there
 /// is none yet.
-pub fn ensure_fleet(host: &mut (impl FleetGroups + Story), word: &'static str, ship: u8) {
+pub fn ensure_fleet(host: &mut (impl FleetGroups + Story + ?Sized), word: StoryKey, ship: u8) {
     host.set_battle_group_ref(host.word(word));
     if host.battle_group_ref() == 0 {
         host.clone_ship_into_built_queue(ship);
@@ -212,7 +126,7 @@ pub fn ensure_fleet(host: &mut (impl FleetGroups + Story), word: &'static str, s
 }
 
 /// `GenerateDefault_initNpcs` for hooks that extend it.
-pub fn default_init(host: &mut impl Npcs) {
+pub fn default_init(host: &mut (impl Npcs + ?Sized)) {
     default::init_npcs(host);
 }
 
@@ -276,3 +190,36 @@ pub fn planets_then(
 
 #[cfg(test)]
 mod tests;
+
+pub fn with_orbit<R>(
+    system: &mut crate::engine::world::generation::SolarSys<'_>,
+    body: Body,
+    run: impl FnOnce(&mut Orbit<'_>) -> R,
+) -> R {
+    system.orbital(body, |data| {
+        run(&mut Orbit {
+            rng: data.rng,
+            plan_data: data.plan_data,
+            star: StarDescription {
+                size: data.star_size,
+                star_type: data.star_type,
+            },
+            site: AnalysisSite {
+                parent_radius: data.parent_radius,
+                is_orbit_entry: true,
+            },
+            sys_info: data.info,
+            world: data.world,
+        })
+    })
+}
+
+pub fn default_orbital(
+    system: &mut crate::engine::world::generation::SolarSys<'_>,
+    body: Body,
+    site: &mut (impl super::host::PlanetSite + ?Sized),
+) -> bool {
+    with_orbit(system, body, |orbit| orbit.analyse());
+    site.load_planet(system);
+    true
+}

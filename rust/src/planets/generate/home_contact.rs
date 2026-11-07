@@ -5,8 +5,8 @@
 //!
 //! The callers check the body; everything here is about planet 0.
 
-use crate::planet_side::report_adapter::DiscoveryReportPort;
-use crate::planets::generate::default;
+use crate::engine::world::generation::SolarSys;
+use crate::engine::StoryKey;
 use crate::planets::generate::special::Story;
 use crate::planets::generate::yehat::{CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY};
 
@@ -43,17 +43,25 @@ pub trait HomeContactSite {
     fn load_ip_groups(&mut self);
     /// `LoadStdLanderFont`, the ruins mask and the ruins report strings, with
     /// the report skipped to its second entry when `artifact_taken`.
-    fn load_ruins_scene(&mut self, artifact_taken: bool);
+    fn load_ruins_scene(
+        &mut self,
+        _system: &mut crate::engine::world::generation::SolarSys<'_>,
+        artifact_taken: bool,
+    );
 }
 
 /// The part of `generateOrbital` before the default orbital: true when the
 /// conversation took the visit, so the default orbital is skipped.
-pub fn enter_orbit(site: &mut impl HomeContactSite, artifact_taken: bool) -> bool {
+pub fn enter_orbit(
+    system: &mut SolarSys<'_>,
+    site: &mut (impl HomeContactSite + ?Sized),
+    artifact_taken: bool,
+) -> bool {
     if site.start_sphere_tracking() {
         meet(site, HOME_CONTACT_FLAGS);
         true
     } else {
-        site.load_ruins_scene(artifact_taken);
+        site.load_ruins_scene(system, artifact_taken);
         false
     }
 }
@@ -63,7 +71,7 @@ pub fn enter_orbit(site: &mut impl HomeContactSite, artifact_taken: bool) -> boo
 /// unless the conversation aborted or loaded a game the world is put back.
 /// `flags_and_data` is what `GLOBAL_FLAGS_AND_DATA` holds during the talk; the
 /// result is false when the abort or load left the conversation state alone.
-pub fn meet(site: &mut impl HomeContactSite, flags_and_data: u8) -> bool {
+pub fn meet(site: &mut (impl HomeContactSite + ?Sized), flags_and_data: u8) -> bool {
     site.notify_others_all_clear();
     site.save_ip_groups();
     site.reinit_ip_group_q();
@@ -100,18 +108,20 @@ pub trait LanderTakeoff {
 /// the artifact is the player's the lander takes off and `artifact_flag` and
 /// the `also_set` flags are set. The ruin node is never removed.
 pub fn pickup_artifact(
-    story: &mut impl Story,
-    report: &mut impl DiscoveryReportPort,
-    lander: &mut impl LanderTakeoff,
-    artifact_flag: &'static str,
-    also_set: &[&'static str],
+    system: &mut SolarSys<'_>,
+    lander: &mut (impl LanderTakeoff + Story + super::host::ReportSite + ?Sized),
+    artifact_flag: StoryKey,
+    also_set: &[StoryKey],
 ) -> bool {
-    default::lander_report_cycle(report);
-    if story.flag(artifact_flag) == 0 {
+    lander.report(
+        system,
+        crate::engine::world::generation::ReportDisposition::Cycle,
+    );
+    if lander.flag(artifact_flag) == 0 {
         lander.lander_takeoff();
-        story.set_flag(artifact_flag, 1);
+        lander.set_flag(artifact_flag, 1);
         for flag in also_set {
-            story.set_flag(flag, 1);
+            lander.set_flag(*flag, 1);
         }
     }
     false

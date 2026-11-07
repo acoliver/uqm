@@ -1,6 +1,7 @@
 //! Map explicitly borrowed campaign owners to and from decoded save sections.
 
 mod activity;
+pub use activity::START_ENCOUNTER;
 pub mod events;
 pub mod global;
 pub mod groups;

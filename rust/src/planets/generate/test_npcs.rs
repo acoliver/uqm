@@ -2,18 +2,19 @@ use super::special::Story;
 use super::{default, sam, shof, sol, special};
 #[cfg(not(test))]
 use crate::battle::context_access::navigation::NavigationOps;
+use crate::engine::StoryKey;
 
 impl<S: Story, H> Story for (&mut S, &mut H) {
-    fn flag(&self, name: &'static str) -> u32 {
+    fn flag(&self, name: StoryKey) -> u32 {
         self.0.flag(name)
     }
-    fn set_flag(&mut self, name: &'static str, value: u32) {
+    fn set_flag(&mut self, name: StoryKey, value: u32) {
         self.0.set_flag(name, value);
     }
-    fn word(&self, name: &'static str) -> u32 {
+    fn word(&self, name: StoryKey) -> u32 {
         self.0.word(name)
     }
-    fn set_word(&mut self, name: &'static str, value: u32) {
+    fn set_word(&mut self, name: StoryKey, value: u32) {
         self.0.set_word(name, value);
     }
 }
@@ -138,7 +139,7 @@ impl<S: Story, H: sam::GuardSite> sam::GuardSite for (&mut S, &mut H) {
     }
 }
 
-impl<S: Story, H: sol::orbital::Queues> sol::orbital::Queues for (&mut S, &mut H) {
+impl<S: Story, H: sol::orbital::Queues + ?Sized> sol::orbital::Queues for (&mut S, &mut H) {
     fn save_ip_groups(&mut self) {
         sol::orbital::Queues::save_ip_groups(self.1);
     }
