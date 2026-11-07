@@ -4,11 +4,13 @@
 #[cfg(not(test))]
 use crate::battle::context_access::ContextOps;
 #[cfg(not(test))]
-use crate::engine::{battle::Cx, input::InputSession, Kernel, StoryKey, WorldData};
+use crate::engine::{battle::Cx, input::InputSession, Kernel, StoryKey};
 use crate::navigation::abi::*;
 use std::ffi::{c_char, c_int};
 
 mod equipment;
+mod labels;
+pub use labels::*;
 
 fn hsva_to_rgba(hue: f64, sat: f64, val: f64, alpha: BYTE) -> Color {
     let hi = (hue / 60.0) as c_int as u32;
@@ -35,156 +37,13 @@ fn hsva_to_rgba(hue: f64, sat: f64, val: f64, alpha: BYTE) -> Color {
     };
     Color { r, g, b, a: alpha }
 }
-pub fn event_name(value: BYTE) -> *const c_char {
-    match value as u32 {
-        ARILOU_ENTRANCE_EVENT => c"ARILOU_ENTRANCE_EVENT".as_ptr(),
-        ARILOU_EXIT_EVENT => c"ARILOU_EXIT_EVENT".as_ptr(),
-        HYPERSPACE_ENCOUNTER_EVENT => c"HYPERSPACE_ENCOUNTER_EVENT".as_ptr(),
-        KOHR_AH_VICTORIOUS_EVENT => c"KOHR_AH_VICTORIOUS_EVENT".as_ptr(),
-        ADVANCE_PKUNK_MISSION => c"ADVANCE_PKUNK_MISSION".as_ptr(),
-        ADVANCE_THRADD_MISSION => c"ADVANCE_THRADD_MISSION".as_ptr(),
-        ZOQFOT_DISTRESS_EVENT => c"ZOQFOT_DISTRESS".as_ptr(),
-        ZOQFOT_DEATH_EVENT => c"ZOQFOT_DEATH_EVENT".as_ptr(),
-        SHOFIXTI_RETURN_EVENT => c"SHOFIXTI_RETURN_EVENT".as_ptr(),
-        ADVANCE_UTWIG_SUPOX_MISSION => c"ADVANCE_UTWIG_SUPOX_MISSION".as_ptr(),
-        KOHR_AH_GENOCIDE_EVENT => c"KOHR_AH_GENOCIDE_EVENT".as_ptr(),
-        SPATHI_SHIELD_EVENT => c"SPATHI_SHIELD_EVENT".as_ptr(),
-        ADVANCE_ILWRATH_MISSION => c"ADVANCE_ILWRATH_MISSION".as_ptr(),
-        ADVANCE_MYCON_MISSION => c"ADVANCE_MYCON_MISSION".as_ptr(),
-        ARILOU_UMGAH_CHECK => c"ARILOU_UMGAH_CHECK".as_ptr(),
-        YEHAT_REBEL_EVENT => c"YEHAT_REBEL_EVENT".as_ptr(),
-        SLYLANDRO_RAMP_UP => c"SLYLANDRO_RAMP_UP".as_ptr(),
-        SLYLANDRO_RAMP_DOWN => c"SLYLANDRO_RAMP_DOWN".as_ptr(),
-        _ => c"???".as_ptr(),
-    }
-}
-
-pub fn body_color_string(value: BYTE) -> *const c_char {
-    match value as u32 {
-        BLUE_BODY => c"blue".as_ptr(),
-        GREEN_BODY => c"green".as_ptr(),
-        ORANGE_BODY => c"orange".as_ptr(),
-        RED_BODY => c"red".as_ptr(),
-        WHITE_BODY => c"white".as_ptr(),
-        YELLOW_BODY => c"yellow".as_ptr(),
-        CYAN_BODY => c"cyan".as_ptr(),
-        PURPLE_BODY => c"purple".as_ptr(),
-        VIOLET_BODY => c"violet".as_ptr(),
-        _ => c"???".as_ptr(),
-    }
-}
-
-pub fn star_type_string(value: BYTE) -> *const c_char {
-    match value as u32 {
-        DWARF_STAR => c"dwarf".as_ptr(),
-        GIANT_STAR => c"giant".as_ptr(),
-        SUPER_GIANT_STAR => c"super giant".as_ptr(),
-        _ => c"???".as_ptr(),
-    }
-}
-
-pub fn star_presence_string(value: BYTE) -> *const c_char {
-    match value as u32 {
-        0 => c"".as_ptr(),
-        SOL_DEFINED => c"Sol".as_ptr(),
-        SHOFIXTI_DEFINED => c"Shofixti male".as_ptr(),
-        MAIDENS_DEFINED => c"Shofixti maidens".as_ptr(),
-        START_COLONY_DEFINED => c"Starting colony".as_ptr(),
-        SPATHI_DEFINED => c"Spathi home".as_ptr(),
-        ZOQFOT_DEFINED => c"Zoq-Fot-Pik home".as_ptr(),
-        MELNORME0_DEFINED => c"Melnorme trader #0".as_ptr(),
-        MELNORME1_DEFINED => c"Melnorme trader #1".as_ptr(),
-        MELNORME2_DEFINED => c"Melnorme trader #2".as_ptr(),
-        MELNORME3_DEFINED => c"Melnorme trader #3".as_ptr(),
-        MELNORME4_DEFINED => c"Melnorme trader #4".as_ptr(),
-        MELNORME5_DEFINED => c"Melnorme trader #5".as_ptr(),
-        MELNORME6_DEFINED => c"Melnorme trader #6".as_ptr(),
-        MELNORME7_DEFINED => c"Melnorme trader #7".as_ptr(),
-        MELNORME8_DEFINED => c"Melnorme trader #8".as_ptr(),
-        TALKING_PET_DEFINED => c"Talking Pet".as_ptr(),
-        CHMMR_DEFINED => c"Chmmr home".as_ptr(),
-        SYREEN_DEFINED => c"Syreen home".as_ptr(),
-        BURVIXESE_DEFINED => c"Burvixese ruins".as_ptr(),
-        SLYLANDRO_DEFINED => c"Slylandro home".as_ptr(),
-        DRUUGE_DEFINED => c"Druuge home".as_ptr(),
-        BOMB_DEFINED => c"Precursor bomb".as_ptr(),
-        AQUA_HELIX_DEFINED => c"Aqua Helix".as_ptr(),
-        SUN_DEVICE_DEFINED => c"Sun Device".as_ptr(),
-        TAALO_PROTECTOR_DEFINED => c"Taalo Shield".as_ptr(),
-        SHIP_VAULT_DEFINED => c"Syreen ship vault".as_ptr(),
-        URQUAN_WRECK_DEFINED => c"Ur-Quan ship wreck".as_ptr(),
-        VUX_BEAST_DEFINED => c"Zex' beauty".as_ptr(),
-        SAMATRA_DEFINED => c"Sa-Matra".as_ptr(),
-        ZOQ_SCOUT_DEFINED => c"Zoq-Fot-Pik scout".as_ptr(),
-        MYCON_DEFINED => c"Mycon home".as_ptr(),
-        EGG_CASE0_DEFINED => c"Mycon egg shell #0".as_ptr(),
-        EGG_CASE1_DEFINED => c"Mycon egg shell #1".as_ptr(),
-        EGG_CASE2_DEFINED => c"Mycon egg shell #2".as_ptr(),
-        PKUNK_DEFINED => c"Pkunk home".as_ptr(),
-        UTWIG_DEFINED => c"Utwig home".as_ptr(),
-        SUPOX_DEFINED => c"Supox home".as_ptr(),
-        YEHAT_DEFINED => c"Yehat home".as_ptr(),
-        VUX_DEFINED => c"Vux home".as_ptr(),
-        ORZ_DEFINED => c"Orz home".as_ptr(),
-        THRADD_DEFINED => c"Thraddash home".as_ptr(),
-        RAINBOW_DEFINED => c"Rainbow world".as_ptr(),
-        ILWRATH_DEFINED => c"Ilwrath home".as_ptr(),
-        ANDROSYNTH_DEFINED => c"Androsynth ruins".as_ptr(),
-        MYCON_TRAP_DEFINED => c"Mycon trap".as_ptr(),
-        _ => c"???".as_ptr(),
-    }
-}
-
-pub fn world_size_string(value: BYTE) -> *const c_char {
-    match value as u32 {
-        SMALL_ROCKY_WORLD => c"small rocky world".as_ptr(),
-        LARGE_ROCKY_WORLD => c"large rocky world".as_ptr(),
-        GAS_GIANT => c"gas giant".as_ptr(),
-        _ => c"???".as_ptr(),
-    }
-}
-
-pub fn world_gen_algo_string(value: BYTE) -> *const c_char {
-    match value as u32 {
-        TOPO_ALGO => c"TOPO_ALGO".as_ptr(),
-        CRATERED_ALGO => c"CRATERED_ALGO".as_ptr(),
-        GAS_GIANT_ALGO => c"GAS_GIANT_ALGO".as_ptr(),
-        _ => c"???".as_ptr(),
-    }
-}
-
-pub fn atmosphere_string(value: BYTE) -> *const c_char {
-    match value as u32 {
-        LIGHT => c"thin".as_ptr(),
-        MEDIUM => c"normal".as_ptr(),
-        HEAVY => c"thick".as_ptr(),
-        _ => c"super thick".as_ptr(),
-    }
-}
-
-pub fn density_string(value: BYTE) -> *const c_char {
-    match value as u32 {
-        GAS_DENSITY => c"gaseous".as_ptr(),
-        LIGHT_DENSITY => c"light".as_ptr(),
-        LOW_DENSITY => c"low".as_ptr(),
-        NORMAL_DENSITY => c"normal".as_ptr(),
-        HIGH_DENSITY => c"high".as_ptr(),
-        SUPER_DENSITY => c"super high".as_ptr(),
-        _ => c"???".as_ptr(),
-    }
-}
-
-pub fn deposit_quality_string(value: BYTE) -> *const c_char {
-    match value as u32 {
-        LIGHT => c"low".as_ptr(),
-        MEDIUM => c"medium".as_ptr(),
-        HEAVY => c"high".as_ptr(),
-        _ => c"???".as_ptr(),
-    }
-}
-
 type SystemVisitor<T> = unsafe fn(*const STAR_DESC, *const SOLARSYS_STATE, &mut T);
-type WorldVisitor<T> = unsafe fn(*const crate::engine::world::planet::PlanetDesc, &mut T);
+type WorldVisitor<T> = unsafe fn(
+    &mut crate::engine::battle::Cx<'_>,
+    &mut crate::engine::observe::Io<'_>,
+    *const crate::engine::world::planet::PlanetDesc,
+    &mut T,
+);
 
 pub struct UniverseRecurseArg<'a, T> {
     pub system_func_pre: Option<SystemVisitor<T>>,
@@ -198,7 +57,8 @@ pub struct UniverseRecurseArg<'a, T> {
 #[cfg(not(test))]
 mod runtime {
     use super::*;
-    use crate::engine::{world::planet::*, World};
+    use crate::battle::gendef::getGenerateFunctions;
+    use crate::engine::{observe::Io, world::planet::*, World};
 
     use crate::planets::tables::{PLANET_ARRAY as planet_array, STARMAP_ARRAY as starmap_array};
     use libc::FILE;
@@ -219,19 +79,17 @@ mod runtime {
     }
 
     unsafe fn call_generate_for_scan_type(
+        cx: &mut Cx<'_>,
+        _io: &mut Io<'_>,
         system: *const SOLARSYS_STATE,
         world: *const PlanetDesc,
         node: COUNT,
         scan_type: BYTE,
         info: *mut NodeInfo,
     ) -> COUNT {
-        crate::planets::scan::callGenerateForScanType(
-            system.cast(),
-            world.cast(),
-            node,
-            scan_type,
-            info.cast(),
-        )
+        cx.with_legacy(|| {
+            crate::planets::scan::callGenerateForScanType(system, world, node, scan_type, info)
+        })
     }
 
     pub static mut INSTANT_MOVE: BOOLEAN = 0;
@@ -475,12 +333,14 @@ mod runtime {
     /// Must run on the game thread. The callback must accept every star and its context.
     pub unsafe fn for_all_stars<T>(
         cx: &mut Cx<'_>,
-        callback: unsafe fn(&mut Cx<'_>, *mut STAR_DESC, &mut T),
+        io: &mut Io<'_>,
+        callback: unsafe fn(&mut Cx<'_>, &mut Io<'_>, *mut STAR_DESC, &mut T),
         arg: &mut T,
     ) {
         for i in 0..NUM_SOLAR_SYSTEMS as usize {
             callback(
                 cx,
+                io,
                 ptr::addr_of_mut!(starmap_array).cast::<STAR_DESC>().add(i),
                 arg,
             );
@@ -490,10 +350,12 @@ mod runtime {
     /// `system` and `star` must be the active system. Callback and context must be valid.
     pub unsafe fn for_all_planets<T>(
         cx: &mut Cx<'_>,
+        io: &mut Io<'_>,
         star: *mut STAR_DESC,
         system: *mut SOLARSYS_STATE,
         callback: unsafe fn(
             &mut Cx<'_>,
+            &mut Io<'_>,
             *mut STAR_DESC,
             *mut SOLARSYS_STATE,
             *mut PlanetDesc,
@@ -510,6 +372,7 @@ mod runtime {
         for i in 0..(*system).SunDesc[0].num_planets as usize {
             callback(
                 cx,
+                io,
                 star,
                 system,
                 ptr::addr_of_mut!((*system).PlanetDesc[i]),
@@ -521,11 +384,13 @@ mod runtime {
     /// The planet and system must be active and their generated moon records valid.
     pub unsafe fn for_all_moons<T>(
         cx: &mut Cx<'_>,
+        io: &mut Io<'_>,
         star: *mut STAR_DESC,
         system: *mut SOLARSYS_STATE,
         planet: *mut PlanetDesc,
         callback: unsafe fn(
             &mut Cx<'_>,
+            &mut Io<'_>,
             *mut STAR_DESC,
             *mut SOLARSYS_STATE,
             *mut PlanetDesc,
@@ -538,6 +403,7 @@ mod runtime {
         for i in 0..(*planet).num_planets as usize {
             callback(
                 cx,
+                io,
                 star,
                 system,
                 planet,
@@ -549,7 +415,11 @@ mod runtime {
     /// # Safety
     /// Must run on the game thread. All supplied callbacks and their context must
     /// remain valid throughout universe generation, which can change game state.
-    pub unsafe fn universe_recurse<T>(cx: &mut Cx<'_>, arg: &mut UniverseRecurseArg<'_, T>) {
+    pub unsafe fn universe_recurse<T>(
+        cx: &mut Cx<'_>,
+        io: &mut Io<'_>,
+        arg: &mut UniverseRecurseArg<'_, T>,
+    ) {
         if arg.system_func_pre.is_none()
             && arg.system_func_post.is_none()
             && arg.planet_func_pre.is_none()
@@ -561,13 +431,14 @@ mod runtime {
         LockGameClock();
         let saved_activity = cx.world.activity();
         DISABLE_INTERACTIVITY = 1;
-        for_all_stars(cx, star_recurse, arg);
+        for_all_stars(cx, io, star_recurse, arg);
         DISABLE_INTERACTIVITY = 0;
         cx.world.set_activity(saved_activity);
         UnlockGameClock();
     }
     unsafe fn star_recurse<T>(
         cx: &mut Cx<'_>,
+        io: &mut Io<'_>,
         star: *mut STAR_DESC,
         recurse: &mut UniverseRecurseArg<'_, T>,
     ) {
@@ -587,7 +458,7 @@ mod runtime {
             & ((0xff << STAR_TYPE_SHIFT) & !(0xff << STAR_COLOR_SHIFT)))
             >> STAR_TYPE_SHIFT) as BYTE;
         system.SunDesc[0].location = POINT { x: 0, y: 0 };
-        system.genFuncs = (getGenerateFunctions((*star).Index)).cast();
+        system.genFuncs = getGenerateFunctions((*star).Index).cast();
         pSolarSysState = &mut system;
         cx.with_legacy(|| ((*system.genFuncs).generatePlanets.unwrap())(&mut system));
         if let Some(cb) = recurse.system_func_pre {
@@ -597,7 +468,7 @@ mod runtime {
             || recurse.planet_func_post.is_some()
             || recurse.moon_func.is_some()
         {
-            for_all_planets(cx, star, &mut system, planet_recurse, recurse);
+            for_all_planets(cx, io, star, &mut system, planet_recurse, recurse);
         }
         if let Some(cb) = recurse.system_func_post {
             cx.with_legacy(|| cb(star, &system, recurse.arg));
@@ -610,6 +481,7 @@ mod runtime {
     }
     unsafe fn planet_recurse<T>(
         cx: &mut Cx<'_>,
+        io: &mut Io<'_>,
         star: *mut STAR_DESC,
         system: *mut SOLARSYS_STATE,
         planet: *mut PlanetDesc,
@@ -626,22 +498,23 @@ mod runtime {
             (*system).pOrbitalDesc = planet;
             cx.with_legacy(|| DoPlanetaryAnalysis(ptr::addr_of_mut!((*system).SysInfo), planet));
             ((*(*system).genFuncs).generateOrbital.unwrap())(cx, system, planet);
-            cx.with_legacy(|| cb(planet, recurse.arg));
+            cb(cx, io, planet, recurse.arg);
         }
         if recurse.moon_func.is_some() {
             (*SysGenRNG).reseed((*planet).rand_seed);
             cx.with_legacy(|| ((*(*system).genFuncs).generateMoons.unwrap())(system, planet));
-            for_all_moons(cx, star, system, planet, moon_recurse, recurse);
+            for_all_moons(cx, io, star, system, planet, moon_recurse, recurse);
         }
         if let Some(cb) = recurse.planet_func_post {
             (*system).pOrbitalDesc = planet;
             cx.with_legacy(|| DoPlanetaryAnalysis(ptr::addr_of_mut!((*system).SysInfo), planet));
             ((*(*system).genFuncs).generateOrbital.unwrap())(cx, system, planet);
-            cx.with_legacy(|| cb(planet, recurse.arg));
+            cb(cx, io, planet, recurse.arg);
         }
     }
     unsafe fn moon_recurse<T>(
         cx: &mut Cx<'_>,
+        io: &mut Io<'_>,
         star: *mut STAR_DESC,
         system: *mut SOLARSYS_STATE,
         planet: *mut PlanetDesc,
@@ -663,7 +536,7 @@ mod runtime {
                 cx.with_legacy(|| DoPlanetaryAnalysis(ptr::addr_of_mut!((*system).SysInfo), moon));
             }
             ((*(*system).genFuncs).generateOrbital.unwrap())(cx, system, moon);
-            cx.with_legacy(|| cb(moon, recurse.arg));
+            cb(cx, io, moon, recurse.arg);
         }
     }
 
@@ -672,7 +545,7 @@ mod runtime {
     }
     /// # Safety
     /// Must run on the game thread with an open output stream.
-    pub unsafe fn dump_universe(cx: &mut Cx<'_>, out: *mut FILE) {
+    pub unsafe fn dump_universe(cx: &mut Cx<'_>, io: &mut Io<'_>, out: *mut FILE) {
         let mut context = DumpUniverseArg { out };
         let mut recurse = UniverseRecurseArg {
             system_func_pre: Some(dump_system_callback),
@@ -682,7 +555,7 @@ mod runtime {
             moon_func: Some(dump_moon_callback),
             arg: &mut context,
         };
-        universe_recurse(cx, &mut recurse);
+        universe_recurse(cx, io, &mut recurse);
     }
     unsafe fn write_generation_file(
         name: *const c_char,
@@ -706,10 +579,10 @@ mod runtime {
     }
     /// # Safety
     /// Must run on the game thread; generation can change game state.
-    pub unsafe fn dump_universe_to_file(cx: &mut Cx<'_>) {
+    pub unsafe fn dump_universe_to_file(cx: &mut Cx<'_>, io: &mut Io<'_>) {
         write_generation_file(
             c"PlanetInfo".as_ptr(),
-            |out| dump_universe(cx, out),
+            |out| dump_universe(cx, io, out),
             c"*** Star dump complete. The game may be in an undefined state.\n".as_ptr(),
         );
     }
@@ -756,28 +629,49 @@ mod runtime {
             star_presence_string((*star).Index),
         );
     }
-    unsafe fn dump_planet_callback(planet: *const PlanetDesc, arg: &mut DumpUniverseArg) {
-        dump_planet(arg.out, planet);
+    unsafe fn dump_planet_callback(
+        cx: &mut Cx<'_>,
+        io: &mut Io<'_>,
+        planet: *const PlanetDesc,
+        arg: &mut DumpUniverseArg,
+    ) {
+        dump_planet(cx, io, arg.out, planet);
     }
     /// # Safety
     /// Planet must belong to the active system, and `out` be an open stream.
-    pub unsafe fn dump_planet(out: *mut FILE, planet: *const PlanetDesc) {
-        let world = WorldData::current();
-        ((*(*pSolarSysState).genFuncs).generateName.unwrap())(pSolarSysState, planet);
+    pub unsafe fn dump_planet(
+        cx: &mut Cx<'_>,
+        io: &mut Io<'_>,
+        out: *mut FILE,
+        planet: *const PlanetDesc,
+    ) {
+        cx.with_legacy(|| {
+            ((*(*pSolarSysState).genFuncs).generateName.unwrap())(pSolarSysState, planet)
+        });
         libc::fprintf(
             out,
             c"- %-37s  %s\n".as_ptr(),
-            ptr::addr_of!((**world).flagship.planet_name).cast::<c_char>(),
+            cx.world.data.flagship.planet_name.as_ptr().cast::<c_char>(),
             planet_type_string(((*planet).data_index & !(PLANET_SHIELDED as BYTE)) as c_int),
         );
-        dump_world(out, planet);
+        dump_world(cx, io, out, planet);
     }
-    unsafe fn dump_moon_callback(moon: *const PlanetDesc, arg: &mut DumpUniverseArg) {
-        dump_moon(arg.out, moon);
+    unsafe fn dump_moon_callback(
+        cx: &mut Cx<'_>,
+        io: &mut Io<'_>,
+        moon: *const PlanetDesc,
+        arg: &mut DumpUniverseArg,
+    ) {
+        dump_moon(cx, io, arg.out, moon);
     }
     /// # Safety
     /// Moon must belong to the active system, and `out` be an open stream.
-    pub unsafe fn dump_moon(out: *mut FILE, moon: *const PlanetDesc) {
+    pub unsafe fn dump_moon(
+        cx: &mut Cx<'_>,
+        io: &mut Io<'_>,
+        out: *mut FILE,
+        moon: *const PlanetDesc,
+    ) {
         let kind = if (*moon).data_index == HIERARCHY_STARBASE as BYTE {
             c"StarBase".as_ptr()
         } else if (*moon).data_index == SA_MATRA as BYTE {
@@ -791,16 +685,21 @@ mod runtime {
             b'a' as c_int + moon.offset_from(ptr::addr_of!((*pSolarSysState).MoonDesc[0])) as c_int,
             kind,
         );
-        dump_world(out, moon);
+        dump_world(cx, io, out, moon);
     }
-    unsafe fn dump_world(out: *mut FILE, world: *const PlanetDesc) {
+    unsafe fn dump_world(
+        cx: &mut Cx<'_>,
+        io: &mut Io<'_>,
+        out: *mut FILE,
+        world: *const PlanetDesc,
+    ) {
         if (*world).data_index == HIERARCHY_STARBASE as BYTE {
             return;
         }
         if (*world).data_index == SA_MATRA as BYTE {
             return;
         }
-        let info = &(*pSolarSysState).SysInfo.planet_info;
+        let info = (*pSolarSysState).SysInfo.planet_info;
         libc::fprintf(
             out,
             c"          AxialTilt:  %d\n".as_ptr(),
@@ -862,8 +761,8 @@ mod runtime {
         libc::fprintf(
             out,
             c"          Bio: %4d    Min: %4d\n".as_ptr(),
-            calculate_bio_value(pSolarSysState, world) as c_int,
-            calculate_mineral_value(pSolarSysState, world) as c_int,
+            calculate_bio_value(cx, io, pSolarSysState, world) as c_int,
+            calculate_mineral_value(cx, io, pSolarSysState, world) as c_int,
         );
     }
     pub fn uqm_debug_creature_bio_value(kind: BYTE) -> c_int {
@@ -872,11 +771,15 @@ mod runtime {
     /// # Safety
     /// World must be the active orbital descriptor and its generation functions live.
     pub unsafe fn calculate_bio_value(
+        cx: &mut Cx<'_>,
+        io: &mut Io<'_>,
         system: *const SOLARSYS_STATE,
         world: *const PlanetDesc,
     ) -> COUNT {
         assert_eq!((*system).pOrbitalDesc.cast_const(), world);
         let count = call_generate_for_scan_type(
+            cx,
+            io,
             system,
             world,
             COUNT::MAX,
@@ -887,6 +790,8 @@ mod runtime {
         for i in 0..count {
             let mut info: NodeInfo = mem::zeroed();
             call_generate_for_scan_type(
+                cx,
+                io,
                 system,
                 world,
                 i,
@@ -904,12 +809,16 @@ mod runtime {
     /// # Safety
     /// World must be active, and `bio` writable for all creature-type counters.
     pub unsafe fn generate_bio_index(
+        cx: &mut Cx<'_>,
+        io: &mut Io<'_>,
         system: *const SOLARSYS_STATE,
         world: *const PlanetDesc,
         bio: *mut COUNT,
     ) {
         assert_eq!((*system).pOrbitalDesc.cast_const(), world);
         let count = call_generate_for_scan_type(
+            cx,
+            io,
             system,
             world,
             COUNT::MAX,
@@ -922,6 +831,8 @@ mod runtime {
         for i in 0..count {
             let mut info: NodeInfo = mem::zeroed();
             call_generate_for_scan_type(
+                cx,
+                io,
                 system,
                 world,
                 i,
@@ -938,11 +849,15 @@ mod runtime {
     /// # Safety
     /// World must be the active orbital descriptor and its generation functions live.
     pub unsafe fn calculate_mineral_value(
+        cx: &mut Cx<'_>,
+        io: &mut Io<'_>,
         system: *const SOLARSYS_STATE,
         world: *const PlanetDesc,
     ) -> COUNT {
         assert_eq!((*system).pOrbitalDesc.cast_const(), world);
         let count = call_generate_for_scan_type(
+            cx,
+            io,
             system,
             world,
             COUNT::MAX,
@@ -953,6 +868,8 @@ mod runtime {
         for i in 0..count {
             let mut info: NodeInfo = mem::zeroed();
             call_generate_for_scan_type(
+                cx,
+                io,
                 system,
                 world,
                 i,
@@ -961,9 +878,8 @@ mod runtime {
             );
             result = result.wrapping_add(
                 ((info.density >> 8) as u32
-                    * WorldData::current().read(|owner| {
-                        owner.game.element_worth[element_category(info.type_ as usize)]
-                    }) as u32) as COUNT,
+                    * cx.world.data.game.element_worth[element_category(info.type_ as usize)]
+                        as u32) as COUNT,
             );
         }
         result
@@ -971,12 +887,16 @@ mod runtime {
     /// # Safety
     /// World must be active, and `minerals` writable for all element-category counters.
     pub unsafe fn generate_mineral_index(
+        cx: &mut Cx<'_>,
+        io: &mut Io<'_>,
         system: *const SOLARSYS_STATE,
         world: *const PlanetDesc,
         minerals: *mut COUNT,
     ) {
         assert_eq!((*system).pOrbitalDesc.cast_const(), world);
         let count = call_generate_for_scan_type(
+            cx,
+            io,
             system,
             world,
             COUNT::MAX,
@@ -989,6 +909,8 @@ mod runtime {
         for i in 0..count {
             let mut info: NodeInfo = mem::zeroed();
             call_generate_for_scan_type(
+                cx,
+                io,
                 system,
                 world,
                 i,
@@ -1006,7 +928,7 @@ mod runtime {
     }
     /// # Safety
     /// Must run on the game thread with an open output stream.
-    pub unsafe fn tally_resources(cx: &mut Cx<'_>, out: *mut FILE) {
+    pub unsafe fn tally_resources(cx: &mut Cx<'_>, io: &mut Io<'_>, out: *mut FILE) {
         let mut context = TallyResourcesArg {
             out,
             mineral_count: 0,
@@ -1020,14 +942,14 @@ mod runtime {
             moon_func: Some(tally_moon_callback),
             arg: &mut context,
         };
-        universe_recurse(cx, &mut recurse);
+        universe_recurse(cx, io, &mut recurse);
     }
     /// # Safety
     /// Must run on the game thread; generation can change game state.
-    pub unsafe fn tally_resources_to_file(cx: &mut Cx<'_>) {
+    pub unsafe fn tally_resources_to_file(cx: &mut Cx<'_>, io: &mut Io<'_>) {
         write_generation_file(
             c"ResourceTally".as_ptr(),
-            |out| tally_resources(cx, out),
+            |out| tally_resources(cx, io, out),
             c"*** Resource tally complete. The game may be in an undefined state.\n".as_ptr(),
         );
     }
@@ -1056,25 +978,40 @@ mod runtime {
             context.bio_count as c_int,
         );
     }
-    unsafe fn tally_planet_callback(world: *const PlanetDesc, arg: &mut TallyResourcesArg) {
-        tally_resources_world(arg, world);
+    unsafe fn tally_planet_callback(
+        cx: &mut Cx<'_>,
+        io: &mut Io<'_>,
+        world: *const PlanetDesc,
+        arg: &mut TallyResourcesArg,
+    ) {
+        tally_resources_world(cx, io, arg, world);
     }
-    unsafe fn tally_moon_callback(world: *const PlanetDesc, arg: &mut TallyResourcesArg) {
-        tally_resources_world(arg, world);
+    unsafe fn tally_moon_callback(
+        cx: &mut Cx<'_>,
+        io: &mut Io<'_>,
+        world: *const PlanetDesc,
+        arg: &mut TallyResourcesArg,
+    ) {
+        tally_resources_world(cx, io, arg, world);
     }
-    unsafe fn tally_resources_world(arg: &mut TallyResourcesArg, world: *const PlanetDesc) {
+    unsafe fn tally_resources_world(
+        cx: &mut Cx<'_>,
+        io: &mut Io<'_>,
+        arg: &mut TallyResourcesArg,
+        world: *const PlanetDesc,
+    ) {
         if (*world).data_index == HIERARCHY_STARBASE as BYTE {
             return;
         }
         if (*world).data_index == SA_MATRA as BYTE {
             return;
         }
-        arg.bio_count = arg
-            .bio_count
-            .wrapping_add(calculate_bio_value(pSolarSysState, world));
-        arg.mineral_count = arg
-            .mineral_count
-            .wrapping_add(calculate_mineral_value(pSolarSysState, world));
+        arg.bio_count =
+            arg.bio_count
+                .wrapping_add(calculate_bio_value(cx, io, pSolarSysState, world));
+        arg.mineral_count =
+            arg.mineral_count
+                .wrapping_add(calculate_mineral_value(cx, io, pSolarSysState, world));
     }
 
     /// # Safety
@@ -1560,9 +1497,26 @@ mod tests {
         fn system(_: *const STAR_DESC, _: *const SOLARSYS_STATE, events: &mut Vec<&str>) {
             events.push("system");
         }
-        fn world(_: *const crate::engine::world::planet::PlanetDesc, events: &mut Vec<&str>) {
+        fn world(
+            _: &mut crate::engine::battle::Cx<'_>,
+            _: &mut crate::engine::observe::Io<'_>,
+            _: *const crate::engine::world::planet::PlanetDesc,
+            events: &mut Vec<&str>,
+        ) {
             events.push("world");
         }
+        let mut owners = crate::engine::Game::new();
+        let mut battle = crate::engine::battle::Battle::new();
+        let mut cx = crate::engine::battle::Cx::new(
+            &mut battle,
+            &mut owners.world,
+            &mut owners.kernel,
+            crate::math::random,
+        );
+        let mut observer = crate::engine::observe::Unobserved;
+        let mut io = crate::engine::observe::Io {
+            observer: &mut observer,
+        };
         let mut events = Vec::new();
         let visitor = UniverseRecurseArg {
             system_func_pre: Some(system),
@@ -1575,7 +1529,7 @@ mod tests {
         // These callbacks do not inspect the records; only their typed context.
         unsafe {
             visitor.system_func_pre.unwrap()(std::ptr::null(), std::ptr::null(), visitor.arg);
-            visitor.planet_func_pre.unwrap()(std::ptr::null(), visitor.arg);
+            visitor.planet_func_pre.unwrap()(&mut cx, &mut io, std::ptr::null(), visitor.arg);
         }
         assert_eq!(events, ["system", "world"]);
         let _: fn(u8) -> *const c_char = event_name;

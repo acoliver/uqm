@@ -6,7 +6,8 @@
 
 #[cfg(not(test))]
 use crate::engine::world::planet::NodeInfo;
-use crate::engine::{StoryKey, World};
+use crate::engine::{battle::Cx, StoryKey};
+use std::cell::RefCell;
 use std::ffi::c_void;
 
 #[cfg(not(test))]
@@ -70,7 +71,8 @@ fn select_initial_frame(role: GeneratorRole, draw: impl FnOnce() -> u32) -> u8 {
 const ORBIT_SCAN_INITIAL_FRAME: u8 = 0;
 
 /// Borrowed current-system pointers supplied only at the temporary ABI edge.
-pub struct CffiSurfaceGenerator {
+pub struct CffiSurfaceGenerator<'a, 'game> {
+    game: &'a RefCell<Cx<'game>>,
     #[cfg_attr(test, allow(dead_code))]
     solar_system: *mut c_void,
     #[cfg_attr(test, allow(dead_code))]
@@ -79,38 +81,43 @@ pub struct CffiSurfaceGenerator {
     role: GeneratorRole,
 }
 
-impl CffiSurfaceGenerator {
+impl<'a, 'game> CffiSurfaceGenerator<'a, 'game> {
     /// Adapter for a real PlanetSide lander session.  Biological node generation
     /// consumes exactly one gameplay random value per node for the typed 0..3 life
     /// frame, and mining/energy consume nothing.
     pub fn for_planet_side(
+        game: &'a RefCell<Cx<'game>>,
         solar_system: *mut c_void,
         world: *mut c_void,
     ) -> Result<Self, AdapterError> {
-        Self::with_role(solar_system, world, GeneratorRole::PlanetSide)
+        Self::with_role(game, solar_system, world, GeneratorRole::PlanetSide)
     }
 
     /// Adapter for orbit-scan map rendering.  Generation never touches the
     /// gameplay random stream; biological nodes carry a deterministic placeholder
     /// initial frame that the scan display list ignores.
     pub fn for_orbit_scan(
+        game: &'a RefCell<Cx<'game>>,
         solar_system: *mut c_void,
         world: *mut c_void,
     ) -> Result<Self, AdapterError> {
-        Self::with_role(solar_system, world, GeneratorRole::OrbitScan)
+        Self::with_role(game, solar_system, world, GeneratorRole::OrbitScan)
     }
 
     #[cfg(not(test))]
     fn node_key(&self, node: ScanNodeId) -> (u16, u8, u8, u8) {
         let (star, planet, moon) = unsafe {
-            World::current().read(|world| {
+            {
+                let game = self.game.borrow();
+                let world = &*game.world;
                 crate::state::c_api::planets::location(world, self.solar_system.cast())
-            })
+            }
         };
         (star as u16, planet as u8, moon as u8, node.get())
     }
 
     fn with_role(
+        game: &'a RefCell<Cx<'game>>,
         solar_system: *mut c_void,
         world: *mut c_void,
         role: GeneratorRole,
@@ -119,6 +126,7 @@ impl CffiSurfaceGenerator {
             Err(AdapterError::new("surface_generator_context"))
         } else {
             Ok(Self {
+                game,
                 solar_system,
                 world,
                 role,
@@ -127,17 +135,19 @@ impl CffiSurfaceGenerator {
     }
 }
 
-impl SurfaceGenerator for CffiSurfaceGenerator {
+impl SurfaceGenerator for CffiSurfaceGenerator<'_, '_> {
     fn node_count(&mut self, scan: ScanType) -> Result<u8, AdapterError> {
         #[cfg(not(test))]
         unsafe {
-            let count = callGenerateForScanType(
-                self.solar_system.cast(),
-                self.world.cast(),
-                GENERATE_ALL,
-                scan as u8,
-                std::ptr::null_mut(),
-            );
+            let count = self.game.borrow_mut().with_legacy(|| {
+                callGenerateForScanType(
+                    self.solar_system.cast(),
+                    self.world.cast(),
+                    GENERATE_ALL,
+                    scan as u8,
+                    std::ptr::null_mut(),
+                )
+            });
             u8::try_from(count).map_err(|_| AdapterError::new("surface_node_count"))
         }
         #[cfg(test)]
@@ -156,23 +166,26 @@ impl SurfaceGenerator for CffiSurfaceGenerator {
         unsafe {
             if scan == ScanType::Biological {
                 let key = self.node_key(node);
-                if let Some(canned) = World::current()
-                    .write(|world| {
-                        crate::state::ffi::with_state_files(world, |files| files.canned_node(key))
-                    })
-                    .map_err(|_| AdapterError::new("canned_node_state"))?
+                if let Some(canned) = {
+                    let mut game = self.game.borrow_mut();
+                    let world = &mut *game.world;
+                    crate::state::ffi::with_state_files(world, |files| files.canned_node(key))
+                }
+                .map_err(|_| AdapterError::new("canned_node_state"))?
                 {
                     return Ok(GeneratedNode::from_canister(canned));
                 }
             }
             let mut info: NodeInfo = std::mem::zeroed();
-            let _ = callGenerateForScanType(
-                self.solar_system.cast(),
-                self.world.cast(),
-                u16::from(node.get()),
-                scan as u8,
-                &mut info,
-            );
+            let _ = self.game.borrow_mut().with_legacy(|| {
+                callGenerateForScanType(
+                    self.solar_system.cast(),
+                    self.world.cast(),
+                    u16::from(node.get()),
+                    scan as u8,
+                    &mut info,
+                )
+            });
             let kind = match scan {
                 ScanType::Mineral => {
                     if Elements.is_null() {
@@ -233,11 +246,12 @@ impl SurfaceGenerator for CffiSurfaceGenerator {
             x: position.x as i16,
             y: position.y as i16,
         };
-        World::current()
-            .write(|world| {
-                crate::state::ffi::with_state_files(world, |files| files.can_node(canned))
-            })
-            .map_err(|_| AdapterError::new("canned_node_state"))
+        {
+            let mut game = self.game.borrow_mut();
+            let world = &mut *game.world;
+            crate::state::ffi::with_state_files(world, |files| files.can_node(canned))
+        }
+        .map_err(|_| AdapterError::new("canned_node_state"))
     }
 
     #[cfg(test)]
@@ -266,12 +280,14 @@ impl SurfaceGenerator for CffiSurfaceGenerator {
                     // and exclusively ours for the duration of the call; the
                     // callback runs synchronously on this thread.
                     unsafe {
-                        callPickupForScanType(
-                            solar_system.cast(),
-                            world.cast(),
-                            u16::from(node.get()),
-                            scan as u8,
-                        )
+                        self.game.borrow_mut().with_legacy(|| {
+                            callPickupForScanType(
+                                solar_system.cast(),
+                                world.cast(),
+                                u16::from(node.get()),
+                                scan as u8,
+                            )
+                        })
                     }
                 },
             )?;
@@ -288,16 +304,19 @@ impl SurfaceGenerator for CffiSurfaceGenerator {
                 #[cfg(not(test))]
                 if scan == ScanType::Biological {
                     let key = self.node_key(node);
-                    World::current()
-                        .write(|world| {
-                            crate::state::ffi::with_state_files(world, |files| {
-                                files.remove_canned_node(key)
-                            })
+                    {
+                        let mut game = self.game.borrow_mut();
+                        let world = &mut *game.world;
+                        crate::state::ffi::with_state_files(world, |files| {
+                            files.remove_canned_node(key)
                         })
-                        .map_err(|_| AdapterError::new("canned_node_state"))?;
+                    }
+                    .map_err(|_| AdapterError::new("canned_node_state"))?;
                 }
-                World::current()
-                    .write(|world| world.set_story_state(StoryKey::PLANETARY_CHANGE, 1));
+                self.game
+                    .borrow_mut()
+                    .world
+                    .set_story_state(StoryKey::PLANETARY_CHANGE, 1);
             }
             Ok(retrieved)
         }
@@ -308,13 +327,26 @@ impl SurfaceGenerator for CffiSurfaceGenerator {
 mod tests {
     use super::*;
 
+    fn with_owner(test: impl FnOnce(&RefCell<Cx<'_>>)) {
+        let mut owners = crate::engine::Game::new();
+        crate::state::ffi::rust_init_game_state(&mut owners.world);
+        owners.world.data.flagship.crew_enlisted = 23;
+        let mut battle = crate::engine::battle::Battle::new();
+        let game = RefCell::new(Cx::new(
+            &mut battle,
+            &mut owners.world,
+            &mut owners.kernel,
+            crate::math::random,
+        ));
+        test(&game);
+    }
+
     #[test]
     #[serial_test::serial]
     fn accepted_live_pickups_update_the_planet_mask_and_dirty_flag() {
-        let mut game_owner = crate::engine::Game::new();
         // SAFETY: the serialized fixture owns this published lifecycle.
         unsafe {
-            crate::app::bridge::with_game(&mut game_owner, || {
+            with_owner(|game| {
                 use crate::c_bindings::global_state::{GenerateFunctions, SOLARSYS_STATE};
                 use crate::state::game_state_keys::get_game_state;
                 unsafe extern "C" fn accept(
@@ -322,6 +354,11 @@ mod tests {
                     _: *mut crate::engine::world::planet::PlanetDesc,
                     _: u16,
                 ) -> bool {
+                    assert_eq!(
+                        crate::engine::World::current()
+                            .read(|world| world.data.flagship.crew_enlisted),
+                        23
+                    );
                     true
                 }
                 unsafe extern "C" fn reject(
@@ -331,9 +368,6 @@ mod tests {
                 ) -> bool {
                     false
                 }
-                {
-                    World::current().write(crate::state::ffi::rust_init_game_state);
-                }
                 let mut functions: Box<GenerateFunctions> = Box::new(std::mem::zeroed());
                 functions.pickupMinerals = Some(accept);
                 functions.pickupEnergy = Some(accept);
@@ -342,6 +376,7 @@ mod tests {
                 system.genFuncs = &*functions;
                 let world = std::ptr::addr_of_mut!(system.PlanetDesc[0]);
                 let mut generator = CffiSurfaceGenerator::for_planet_side(
+                    game,
                     std::ptr::from_mut(&mut *system).cast(),
                     world.cast(),
                 )
@@ -351,8 +386,9 @@ mod tests {
                     (ScanType::Energy, 0),
                     (ScanType::Biological, 9),
                 ] {
-                    World::current()
-                        .write(|world| world.set_story_state(StoryKey::PLANETARY_CHANGE, 0));
+                    game.borrow_mut()
+                        .world
+                        .set_story_state(StoryKey::PLANETARY_CHANGE, 0);
                     assert!(generator
                         .pickup(scan, ScanNodeId::new(index).unwrap())
                         .unwrap());
@@ -361,21 +397,20 @@ mod tests {
                         1 << index
                     );
                     assert_eq!(
-                        World::current()
-                            .read(|world| get_game_state(world, StoryKey::PLANETARY_CHANGE)),
+                        get_game_state(game.borrow().world, StoryKey::PLANETARY_CHANGE),
                         1
                     );
                 }
                 functions.pickupEnergy = Some(reject);
-                World::current()
-                    .write(|world| world.set_story_state(StoryKey::PLANETARY_CHANGE, 0));
+                game.borrow_mut()
+                    .world
+                    .set_story_state(StoryKey::PLANETARY_CHANGE, 0);
                 assert!(!generator
                     .pickup(ScanType::Energy, ScanNodeId::new(1).unwrap())
                     .unwrap());
                 assert_eq!(system.SysInfo.planet_info.scan_retrieve_mask[1], 1);
                 assert_eq!(
-                    World::current()
-                        .read(|world| get_game_state(world, StoryKey::PLANETARY_CHANGE)),
+                    get_game_state(game.borrow().world, StoryKey::PLANETARY_CHANGE),
                     0
                 );
             })
@@ -384,28 +419,41 @@ mod tests {
 
     #[test]
     fn null_generation_context_is_rejected() {
-        assert!(matches!(
-            CffiSurfaceGenerator::for_planet_side(std::ptr::null_mut(), std::ptr::null_mut()),
-            Err(AdapterError {
-                operation: "surface_generator_context"
-            })
-        ));
-        assert!(matches!(
-            CffiSurfaceGenerator::for_orbit_scan(std::ptr::null_mut(), std::ptr::null_mut()),
-            Err(AdapterError {
-                operation: "surface_generator_context"
-            })
-        ));
+        with_owner(|game| {
+            assert!(matches!(
+                CffiSurfaceGenerator::for_planet_side(
+                    game,
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut()
+                ),
+                Err(AdapterError {
+                    operation: "surface_generator_context"
+                })
+            ));
+            assert!(matches!(
+                CffiSurfaceGenerator::for_orbit_scan(
+                    game,
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut()
+                ),
+                Err(AdapterError {
+                    operation: "surface_generator_context"
+                })
+            ));
+        });
     }
 
     #[test]
     fn unlinked_generator_fails_without_fallback() {
-        let pointer = std::ptr::NonNull::<u8>::dangling().as_ptr().cast();
-        let mut generator = CffiSurfaceGenerator::for_planet_side(pointer, pointer).unwrap();
-        assert_eq!(
-            generator.node_count(ScanType::Mineral),
-            Err(AdapterError::new("surface_generator_unlinked"))
-        );
+        with_owner(|game| {
+            let pointer = std::ptr::NonNull::<u8>::dangling().as_ptr().cast();
+            let mut generator =
+                CffiSurfaceGenerator::for_planet_side(game, pointer, pointer).unwrap();
+            assert_eq!(
+                generator.node_count(ScanType::Mineral),
+                Err(AdapterError::new("surface_generator_unlinked"))
+            );
+        });
     }
 
     #[test]

@@ -344,7 +344,7 @@ where
 
     fn apply_world_step(
         &mut self,
-        cx: &mut crate::engine::battle::Cx<'_>,
+        cx: &std::cell::RefCell<crate::engine::battle::Cx<'_>>,
         result: &WorldStepResult,
         audio: &mut impl super::runtime::PlanetSideAudio,
     ) -> Result<(), AdapterError> {
@@ -356,9 +356,9 @@ where
         // when two bolts pass in the same frame.  Count each non-full verdict
         // once; the sound is played per cue as the C control does.
         for cue in &result.effects.sounds {
-            audio.play(cx.world, *cue)?;
+            audio.play(cx.borrow().world, *cue)?;
         }
-        cx.with_legacy(|| -> Result<(), AdapterError> {
+        {
             for _ in &result.effects.landed_shot {
                 super::telemetry::creature_hit();
             }
@@ -447,22 +447,20 @@ where
                 let SurfaceAssembly { world, frames, .. } = &mut *surface;
                 frames.advance_hazard_frames(world);
             }
-
-            Ok(())
-        })?;
+        };
 
         // Insert hazard spawns with synchronized visuals.
         for spawn in &result.hazard_spawns {
-            let visual = cx.with_legacy(|| self.world_visuals.hazard_visual(spawn.kind))?;
+            let visual = self.world_visuals.hazard_visual(spawn.kind)?;
             let entity = SurfaceEntity {
                 kind: SurfaceEntityKind::Hazard(spawn.kind),
                 position: spawn.position,
                 finite_life: Some(spawn.life_span),
             };
             match spawn.kind {
-                HazardKind::Earthquake => audio.play(cx.world, SoundCue::Earthquake)?,
-                HazardKind::Lightning => audio.play(cx.world, SoundCue::Lightning)?,
-                HazardKind::Lava => audio.play(cx.world, SoundCue::Lava)?,
+                HazardKind::Earthquake => audio.play(cx.borrow().world, SoundCue::Earthquake)?,
+                HazardKind::Lightning => audio.play(cx.borrow().world, SoundCue::Lightning)?,
+                HazardKind::Lava => audio.play(cx.borrow().world, SoundCue::Lava)?,
                 HazardKind::Biological => {}
             }
             insert_surface_entity(&mut self.surface.borrow_mut(), entity, visual);
@@ -743,12 +741,12 @@ mod tests {
     fn stunned_creature_keeps_canister_visual_and_yields_bio_on_pickup() {
         let mut owner = crate::engine::Game::new();
         let mut battle = crate::engine::battle::Battle::new();
-        let cx = &mut crate::engine::battle::Cx::new(
+        let cx = &std::cell::RefCell::new(crate::engine::battle::Cx::new(
             &mut battle,
             &mut owner.world,
             &mut owner.kernel,
             crate::math::random,
-        );
+        ));
 
         let _guard = telemetry_guard();
         let mut creature = brainbox_entity(1);
@@ -889,12 +887,12 @@ mod tests {
     fn lethal_shot_survives_relanding_save_load_and_collection_retires_node() {
         let mut owner = crate::engine::Game::new();
         let mut battle = crate::engine::battle::Battle::new();
-        let cx = &mut crate::engine::battle::Cx::new(
+        let cx = &std::cell::RefCell::new(crate::engine::battle::Cx::new(
             &mut battle,
             &mut owner.world,
             &mut owner.kernel,
             crate::math::random,
-        );
+        ));
 
         use super::super::generation::*;
         use crate::engine::world::state_file::StateFileManager;
@@ -1159,12 +1157,12 @@ mod tests {
     fn first_stun_bolt_retires_a_multi_hit_point_brainbox_node() {
         let mut owner = crate::engine::Game::new();
         let mut battle = crate::engine::battle::Battle::new();
-        let cx = &mut crate::engine::battle::Cx::new(
+        let cx = &std::cell::RefCell::new(crate::engine::battle::Cx::new(
             &mut battle,
             &mut owner.world,
             &mut owner.kernel,
             crate::math::random,
-        );
+        ));
 
         use super::super::generation::{GeneratedEntity, ScanNodeId, ScanType};
 

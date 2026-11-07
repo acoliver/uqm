@@ -77,7 +77,7 @@ fn empty_npc_phrase_does_not_acquire_an_owner() {
 fn sis_slot_snapshot_releases_world_before_support_ship_drawing() {
     let mut game = Game::new();
     let display = campaign_display::CampaignDisplay::install(&mut game).unwrap();
-    game.world.story = Some(uqm_rust::state::game_state::GameState::new());
+    game.world.story = Some(uqm_rust::state::game_state::StoryState::new());
     game.world.data.flagship.module_slots.fill(255);
     game.world.data.flagship.drive_slots.fill(255);
     game.world.data.flagship.jet_slots.fill(255);
@@ -385,17 +385,23 @@ fn lander_status_releases_world_before_gauge_and_lander_drawing() {
     game.world.data.flagship.module_slots[0] = CREW_POD as u8;
     game.world.data.flagship.crew_enlisted = 12;
     game.world.data.flagship.num_landers = 2;
-    // SAFETY: absent graphics handles use the inactive backend on this fixture thread.
-    unsafe {
-        bridge::with_game(&mut game, || {
-            CffiShipStatus
-                .apply(&ShipDelta {
-                    crew: -2,
-                    landers: -1,
-                    ..ShipDelta::default()
-                })
-                .unwrap();
-        });
+    let mut battle = uqm_rust::engine::battle::Battle::new();
+    {
+        let retained = std::cell::RefCell::new(uqm_rust::engine::battle::Cx::new(
+            &mut battle,
+            &mut game.world,
+            &mut game.kernel,
+            uqm_rust::math::random,
+        ));
+        let mut status = CffiShipStatus { game: &retained };
+        assert_eq!(status.snapshot().crew_enlisted, 12);
+        status
+            .apply(&ShipDelta {
+                crew: -2,
+                landers: -1,
+                ..ShipDelta::default()
+            })
+            .unwrap();
     }
     assert_eq!(game.world.data.flagship.crew_enlisted, 10);
     assert_eq!(game.world.data.flagship.num_landers, 1);
