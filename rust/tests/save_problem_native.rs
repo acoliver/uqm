@@ -276,6 +276,59 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
                 assert_eq!((restored.r, restored.g, restored.b), (9, 17, 25));
                 alarms::Alarm_uninit();
             }
+            for count in [0, 1, u16::MAX] {
+                for offset in [0, 10] {
+                    context_lease.fill_rectangle(
+                        Color {
+                            r: 9,
+                            g: 17,
+                            b: 25,
+                            a: 255,
+                        },
+                        RECT {
+                            corner: POINT { x: 0, y: 0 },
+                            extent: EXTENT {
+                                width: 65,
+                                height: 77,
+                            },
+                        },
+                    );
+                    uqm_rust::graphics::font_abi::SetContextFont(ptr::null_mut());
+                    uqm_rust::ui::shipstat::draw_ship_name_text(
+                        &context_lease,
+                        &font_lease,
+                        c"AA",
+                        count,
+                        offset,
+                    );
+                    assert!((*context).Font.is_null(), "title must restore its font");
+                    let foreground = (*context).ForeGroundColor;
+                    assert_eq!((foreground.r, foreground.g, foreground.b), (0, 0, 0));
+                    TFB_FlushGraphics();
+                    for y in 0..77 {
+                        for x in 0..65 {
+                            let ink = match count {
+                                0 => false,
+                                1 => x == 32,
+                                _ => x == 31 || x == 33,
+                            };
+                            let expected = if ink && y == offset + 9 {
+                                (0, 0, 0)
+                            } else if ink && y == offset + 10 {
+                                (132, 132, 132)
+                            } else {
+                                (9, 17, 25)
+                            };
+                            let pixel = GetFramePixel(frame, POINT { x, y });
+                            assert_eq!(
+                                (pixel.r, pixel.g, pixel.b),
+                                expected,
+                                "title count={count} offset={offset} ({x},{y})"
+                            );
+                        }
+                    }
+                }
+            }
             uqm_rust::ui::shipstat::outline_ship_status(&context_lease, 0);
             uqm_rust::ui::shipstat::clear_ship_status(&context_lease, 0);
             TFB_FlushGraphics();

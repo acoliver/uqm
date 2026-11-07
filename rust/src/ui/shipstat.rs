@@ -76,19 +76,51 @@ pub fn draw_crew_energy_labels(
 }
 
 unsafe fn draw_ship_name_string(p_str: *mut UNICODE, char_count: COUNT, y: COORD) {
-    let old_font = SetContextFont(Kernel::current().read(|owner| owner.star_con_font));
-    let mut text: TEXT = mem::zeroed();
-    text.pStr = p_str;
-    text.CharCount = char_count;
-    text.align = TEXT_ALIGN_ALIGN_CENTER;
-    text.baseline.y = STARCON_TEXT_HEIGHT + 3 + y;
-    text.baseline.x = STATUS_WIDTH >> 1;
-    SetContextForeGroundColor(rgb15(0x10, 0x10, 0x10));
-    font_DrawText(&mut text);
-    text.baseline.y -= 1;
-    SetContextForeGroundColor(rgb15(0, 0, 0));
-    font_DrawText(&mut text);
-    SetContextFont(old_font);
+    let context = crate::graphics::context_abi::ContextLease::retain(
+        std::ptr::NonNull::new(_pCurContext)
+            .unwrap_or_else(|| panic!("status title context not admitted")),
+    );
+    let font = Kernel::current().read(|owner| {
+        crate::graphics::native_font::FontLease::retain(
+            std::ptr::NonNull::new(owner.star_con_font.cast())
+                .unwrap_or_else(|| panic!("status title font not admitted")),
+        )
+    });
+    draw_ship_name_text(
+        &context,
+        &font,
+        std::ffi::CStr::from_ptr(p_str.cast()),
+        char_count,
+        y,
+    );
+}
+
+pub fn draw_ship_name_text(
+    context: &crate::graphics::context_abi::ContextLease,
+    font: &crate::graphics::native_font::FontLease,
+    text: &std::ffi::CStr,
+    char_count: COUNT,
+    y: COORD,
+) {
+    context.with_text_state(|| {
+        for (baseline_y, color) in [
+            (STARCON_TEXT_HEIGHT + 3 + y, rgb15(0x10, 0x10, 0x10)),
+            (STARCON_TEXT_HEIGHT + 2 + y, rgb15(0, 0, 0)),
+        ] {
+            context.draw_text_bounded(
+                font,
+                text,
+                POINT {
+                    x: STATUS_WIDTH >> 1,
+                    y: baseline_y,
+                },
+                TEXT_ALIGN_ALIGN_CENTER,
+                color,
+                char_count,
+            );
+        }
+    });
+    context.set_foreground(rgb15(0, 0, 0));
 }
 
 /// # Safety
