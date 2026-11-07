@@ -102,7 +102,7 @@ pub(crate) mod live {
         g.unbatch();
     }
 
-    use crate::battle::sounds::engine::play_clip;
+    use crate::battle::sounds::engine::play_sound;
 
     struct ReportPrinter {
         sound: Option<crate::sound::owned_bank::SoundClip>,
@@ -126,7 +126,7 @@ pub(crate) mod live {
                 cx.with_legacy(|| font_DrawText(std::ptr::from_mut(t).cast()));
                 if self.sleepy && cx.world.activity() & (1 << 14) == 0 {
                     if let Some(sound) = &self.sound {
-                        play_clip(
+                        play_sound(
                             cx.world,
                             &mut cx.kernel.channels.borrow_mut(),
                             sound,

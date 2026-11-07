@@ -205,7 +205,7 @@ pub unsafe fn run_session(
             } else {
                 None
             };
-            cx.with_legacy(|| super::runtime::run_frame_at(session, adapters, deadline, input))
+            super::runtime::run_frame_at(cx, session, adapters, deadline, input)
         });
         cx.with_legacy(|| {
             if outcome.is_ok() {
