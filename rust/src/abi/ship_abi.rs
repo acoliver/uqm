@@ -1882,8 +1882,7 @@ pub const LANDER_DEPARTS: _bindgen_ty_18 = 10;
 pub const LANDER_RETURNS: _bindgen_ty_18 = 11;
 pub const LANDER_DESTROYED: _bindgen_ty_18 = 12;
 pub type _bindgen_ty_18 = ::std::os::raw::c_uint;
-pub type PLANET_DESC = planet_desc;
-pub type NODE_INFO = node_info;
+pub use crate::engine::world::planet::{NODE_INFO, PLANET_DESC};
 pub type PLANET_ORBIT = planet_orbit;
 pub type SOLARSYS_STATE = solarsys_state;
 pub type InitNpcsFunction =

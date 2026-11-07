@@ -8,8 +8,9 @@
 //! touches this state.
 
 use crate::c_bindings::global_state::{
-    PlanetFrame, NODE_INFO, PLANET_DESC, PLANET_INFO, POINT, SOLARSYS_STATE, SYSTEM_INFO,
+    PlanetFrame, PLANET_DESC, PLANET_INFO, POINT, SOLARSYS_STATE, SYSTEM_INFO,
 };
+use crate::engine::world::planet::NODE_INFO;
 use crate::engine::World as WorldOwner;
 use crate::math::RandomContext;
 use crate::planets::generate::calc::{self, AnalysisSite, StarDescription};

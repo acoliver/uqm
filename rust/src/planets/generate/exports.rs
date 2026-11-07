@@ -45,32 +45,20 @@ pub(super) unsafe fn discovery_report(system: *mut SOLARSYS_STATE) -> CffiDiscov
 }
 
 /// C: `bool GenerateDefault_initNpcs (SOLARSYS_STATE *)`.
-///
-/// # Safety
-/// Game thread, with `GlobData` initialised.
-pub unsafe fn init_npcs_c(owner: &mut crate::engine::World, _system: *mut SOLARSYS_STATE) -> bool {
+/// The supplied owner owns all NPC/group state; the ABI record pointer is unused.
+pub fn init_npcs_c(owner: &mut crate::engine::World, _system: *mut SOLARSYS_STATE) -> bool {
     default::init_npcs(&mut crate::planets::c_api::NpcWorld::new(owner))
 }
 
 /// C: `bool GenerateDefault_reinitNpcs (SOLARSYS_STATE *)`.
-///
-/// # Safety
-/// Game thread, with `GlobData` initialised.
-pub unsafe fn reinit_npcs_c(
-    owner: &mut crate::engine::World,
-    _system: *mut SOLARSYS_STATE,
-) -> bool {
+/// The supplied owner owns all NPC/group state; the ABI record pointer is unused.
+pub fn reinit_npcs_c(owner: &mut crate::engine::World, _system: *mut SOLARSYS_STATE) -> bool {
     default::reinit_npcs(&mut crate::planets::c_api::NpcWorld::new(owner))
 }
 
 /// C: `bool GenerateDefault_uninitNpcs (SOLARSYS_STATE *)`.
-///
-/// # Safety
-/// Game thread, with `GlobData` initialised.
-pub unsafe fn uninit_npcs_c(
-    owner: &mut crate::engine::World,
-    _system: *mut SOLARSYS_STATE,
-) -> bool {
+/// The supplied owner owns all NPC/group state; the ABI record pointer is unused.
+pub fn uninit_npcs_c(owner: &mut crate::engine::World, _system: *mut SOLARSYS_STATE) -> bool {
     default::uninit_npcs(&mut crate::planets::c_api::NpcWorld::new(owner))
 }
 
