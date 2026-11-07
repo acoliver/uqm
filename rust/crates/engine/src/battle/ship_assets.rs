@@ -232,34 +232,24 @@ mod tests {
 
     #[test]
     fn descriptor_labels_borrow_the_owned_table_and_keep_character_bounds() {
-        use crate::strings::string_table::*;
         let mut descriptor = RaceDesc::empty();
-        // SAFETY: this fixture exclusively owns the captured table until the final release.
-        unsafe {
-            let table = AllocStringTable(2, 0);
-            let entry = CaptureStringTable(table);
-            let bytes = b"Z\xc3\xb6q\0extra\0";
-            (*entry).data = crate::memory::rust_hmalloc(bytes.len()).cast();
-            std::ptr::copy_nonoverlapping(bytes.as_ptr(), (*entry).data.cast(), bytes.len());
-            (*entry).length = bytes.len() as i32;
-            descriptor.raw.assets = Some(Box::new(ShipAssets {
-                icons: std::ptr::null_mut(),
-                melee_icon: std::ptr::null_mut(),
-                strings: entry.cast(),
-                name: None,
-                captain: std::ptr::null_mut(),
-                victory: None,
-                sounds: None,
-                animations: std::array::from_fn(|_| FrameArray::EMPTY),
-            }));
-            let (text, count) = descriptor.raw.label(0);
-            assert_eq!(text.to_bytes(), "Zöq".as_bytes());
-            assert_eq!(count, 3);
-            assert_eq!(text.as_ptr(), (*entry).data);
-            assert_eq!(descriptor.raw.label(2), (text, count));
-            assert_eq!(descriptor.raw.label(1), (c"", 0));
-            DestroyStringTable(ReleaseStringTable(entry));
-        }
+        let table = LoadedTextTable::fixture(vec![b"Z\xc3\xb6q\0extra\0".to_vec(), vec![0]]);
+        let pointer = table.text(0).unwrap().as_ptr();
+        descriptor.raw.assets = Some(Box::new(ShipAssets {
+            icons: std::ptr::null_mut(),
+            melee_icon: std::ptr::null_mut(),
+            strings: Some(table),
+            captain: std::ptr::null_mut(),
+            victory: None,
+            sounds: None,
+            animations: std::array::from_fn(|_| FrameArray::EMPTY),
+        }));
+        let (text, count) = descriptor.raw.label(0);
+        assert_eq!(text.to_bytes(), "Zöq".as_bytes());
+        assert_eq!(count, 3);
+        assert_eq!(text.as_ptr(), pointer);
+        assert_eq!(descriptor.raw.label(2), (text, count));
+        assert_eq!(descriptor.raw.label(1), (c"", 0));
     }
 
     #[test]

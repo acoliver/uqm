@@ -101,6 +101,18 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn game_checksum_uses_the_supplied_context_and_preserves_the_rng() {
+        let mut other = crate::engine::Game::new();
+        other.kernel.reset_element_capacity(1);
+        let mut other_battle = crate::engine::battle::Battle::new();
+        let mut other_cx = crate::engine::battle::Cx::new(
+            &mut other_battle,
+            &mut other.world,
+            &mut other.kernel,
+            || 0,
+        );
+        let id = other_cx.alloc_element().unwrap();
+        other_cx.element_mut(id).mass = 7;
+        other_cx.put(id);
         let mut game = crate::engine::Game::new();
         let mut battle = crate::engine::battle::Battle::new();
         let cx = crate::engine::battle::Cx::new(
