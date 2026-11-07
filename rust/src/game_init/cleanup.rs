@@ -61,8 +61,8 @@ pub unsafe fn free_game_data(cx: &mut crate::engine::battle::Cx<'_>) {
     crate::app::bridge::publish(cx, || {
         crate::planet_side::orbit_music::free_lander_data();
         FreeIPData();
-        crate::navigation::hyper_data::free_hyper_data();
     });
+    crate::navigation::hyper_data::free_hyper_data(cx.kernel);
 }
 
 /// # Safety

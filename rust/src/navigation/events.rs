@@ -106,7 +106,9 @@ fn advance_fleets(world: &mut World, mut on_arrival: impl FnMut(&mut World, u8))
 pub(crate) mod live {
 
     use super::*;
+    use crate::math::random;
     use crate::navigation::globals::in_hyper_space;
+    use crate::navigation::hyperspace::live::screen_geometry;
     use crate::navigation::{get, set};
 
     fn fleet(
@@ -175,7 +177,7 @@ pub(crate) mod live {
             HYPERSPACE_ENCOUNTER_EVENT => {
                 advance_fleets(world, |world, callback| dispatch_event(world, callback));
                 if in_hyper_space(world) != 0 {
-                    check_hyperspace_encounter(world);
+                    check_hyperspace_encounter(world, screen_geometry(), &mut random);
                 }
                 relative(world, 0, 1, 0, HYPERSPACE_ENCOUNTER_EVENT);
             }

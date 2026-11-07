@@ -308,6 +308,19 @@ impl Cx<'_> {
     pub fn shared_frame_set(&self, role: SharedFrames) -> Frames {
         Frames::retain_shared(role, self.kernel.shared_frame_source(role))
     }
+    #[cfg(not(test))]
+    pub fn setup_element(&mut self, id: ElementId) {
+        self.copy_current_to_next(id);
+        if self.element(id).flags & ((1 << 4) | (1 << 6)) == 0 {
+            self.init_intersect(id);
+            let frame = self.equivalent_frame(
+                self.element_frame_set_first(id, true),
+                self.element(id).next.image.frame.view(),
+            );
+            self.set_intersect_frame(id, frame);
+        }
+    }
+
     pub fn init_intersect(&mut self, id: ElementId) {
         self.init_intersect_start(id);
         self.init_intersect_end(id);

@@ -184,18 +184,7 @@ pub(crate) mod engine {
     const TARGET_DAMAGED_FOR_1_PT_NATIVE: i16 = 2;
     const TARGET_DAMAGED_FOR_6_PLUS_PT_NATIVE: i16 = 5;
 
-    pub fn animation_preprocess(cx: &mut Cx<'_>, e: ElementId) {
-        let wait = cx.element(e).turn_wait();
-        if wait > 0 {
-            cx.element_mut(e).set_turn_wait(wait - 1);
-        } else {
-            let frame = cx.advance_frame(cx.element(e).current.image.frame.view());
-            cx.set_frame(e, true, frame);
-            cx.element_mut(e).flags |= CHANGING as u16;
-            let wait = cx.element(e).thrust_wait();
-            cx.element_mut(e).set_turn_wait(wait);
-        }
-    }
+    pub use crate::engine::battle::hooks::animation_preprocess;
 
     pub fn inertial_thrust(cx: &mut Cx<'_>, e: ElementId) -> STATUS_FLAGS {
         let ship = cx.owner(e);

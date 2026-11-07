@@ -1,14 +1,17 @@
 //! Hyperspace movement and encounter spawning.
 
-#[cfg(not(test))]
 use super::abi::*;
-#[cfg(not(test))]
-#[cfg(not(test))]
-use crate::engine::world::FuelDistance;
-#[cfg(not(test))]
 use crate::engine::StoryKey;
 #[cfg(not(test))]
 use crate::engine::{World as WorldOwner, WorldData as WorldFields};
+
+pub(crate) fn sine(angle: u16, magnitude: i32) -> i16 {
+    ((crate::math::sinetab[(angle & 63) as usize] as i64 * magnitude as i64)
+        >> crate::navigation::abi::SIN_SHIFT) as i16
+}
+pub(crate) fn cosine(angle: u16, magnitude: i32) -> i16 {
+    sine(angle.wrapping_add(16), magnitude)
+}
 
 fn move_axis(position: &mut i32, delta: i16, maximum: i32) -> i16 {
     *position -= delta as i32;
@@ -32,9 +35,9 @@ pub(crate) mod live {
     use crate::navigation::get;
     use std::ptr;
 
-    const PERCENT: [u16; 24] = [
-        20, 0, 0, 20, 40, 0, 20, 40, 60, 40, 40, 60, 0, 30, 60, 40, 2, 30, 70, 0, 0, 70, 60, 0,
-    ];
+    pub(crate) unsafe fn screen_geometry() -> super::super::hyper_units::Geometry {
+        super::super::hyper_units::Geometry::new((ScreenWidth, ScreenHeight))
+    }
     pub(crate) unsafe fn width() -> i32 {
         (ScreenWidth - 64) << 5
     }
@@ -53,24 +56,6 @@ pub(crate) mod live {
     pub(crate) unsafe fn universe_y(value: i32) -> i16 {
         crate::navigation::hyper_units::universe_y(value, ScreenHeight)
     }
-    pub(crate) fn sine(angle: u16, magnitude: i32) -> i16 {
-        ((crate::math::sinetab[(angle & 63) as usize] as i64 * magnitude as i64) >> SIN_SHIFT)
-            as i16
-    }
-    pub(crate) fn cosine(angle: u16, magnitude: i32) -> i16 {
-        sine(angle.wrapping_add(16), magnitude)
-    }
-    /// # Safety
-    /// Called on the game thread when entering hyperspace.
-    pub unsafe extern "C" fn rust_reset_hyper_distance() {
-        (**WorldOwner::current()).hyper_distance = FuelDistance {
-            dx: 0,
-            dy: 0,
-            extra: 0,
-            ticks: 1,
-        };
-    }
-
     /// # Safety
     /// `dx` and `dy` are writable; the game world/display queue is exclusively accessible.
     #[no_mangle]
@@ -151,85 +136,89 @@ pub(crate) mod live {
     unsafe fn maximum_y() -> i32 {
         logy(-1) - (logy(9998) >> 1) - 1
     }
+}
 
-    /// # Safety
-    /// Game-thread access to initialized world fleet and encounter queues.
-    pub unsafe fn check_hyperspace_encounter(world: &mut crate::engine::World) {
-        let universe = POINT {
-            x: universe_x(world.data.flagship.log_x),
-            y: universe_y(world.data.flagship.log_y),
-        };
-        let mut handle = world.avail_races_ref().head();
-        let mut race = 0usize;
-        while let Some(id) = handle {
-            if world.activity() & IN_BATTLE as u16 == 0 {
-                break;
-            }
-            let fleets = world.avail_races_ref();
-            let fleet = *fleets.get(id);
-            handle = fleets.succ(id);
-            let mut radius = fleet.actual_strength;
-            if radius != 0 {
-                let mut flags = 0;
-                let mut percent = PERCENT[race];
-                if radius != u16::MAX {
-                    radius = ((radius as u32 * SPHERE_RADIUS_INCREMENT) >> 1) as u16;
-                } else {
-                    radius = 20000;
-                    if race == SLYLANDRO_SHIP as usize {
-                        flags = ONE_SHOT_ENCOUNTER as u8;
-                        percent = if (world.story_state(StoryKey::STARBASE_AVAILABLE) as u8) == 0 {
-                            100
-                        } else {
-                            percent
-                                * (world.story_state(StoryKey::SLYLANDRO_MULTIPLIER) as u8) as u16
-                        };
-                    } else if race == MELNORME_SHIP as usize
-                        && (world.data.flagship.fuel_on_board == 0
-                            || (world.story_state(StoryKey::USED_BROADCASTER) as u8) != 0)
-                        && (world.story_state(StoryKey::MELNORME_ANGER) as u8) < 3
-                    {
-                        percent = if (world.story_state(StoryKey::USED_BROADCASTER) as u8) == 0 {
-                            30
-                        } else {
-                            100
-                        };
-                        flags = ONE_SHOT_ENCOUNTER as u8;
-                    }
-                    if world
-                        .encounters_ref()
-                        .find(|encounter| usize::from(encounter.race_id) == race)
-                        .is_some()
-                    {
-                        percent = 0;
-                    }
-                    if percent == 100 && race == MELNORME_SHIP as usize {
-                        world.set_story_state(StoryKey::BROADCASTER_RESPONSE, 1);
-                    }
-                }
-                let dx = universe.x.wrapping_sub(fleet.loc.x).wrapping_abs() as u16;
-                let dy = universe.y.wrapping_sub(fleet.loc.y).wrapping_abs() as u16;
-                if dx < radius
-                    && dy < radius
-                    && dx as u32 * dx as u32 + dy as u32 * (dy as u32)
-                        < radius as u32 * radius as u32
-                    && (TFB_Random() as u16 % 100) < percent
-                {
-                    let mut encounters = world.encounters();
-                    if let Some(id) = encounters.alloc() {
-                        let current = encounters.get_mut(id);
-                        current.origin = fleet.loc;
-                        current.radius = radius;
-                        current.flags = flags;
-                        current.race_id = race as u8;
-                        encounters.put(id);
-                    }
-                }
-            }
-            race += 1;
+const PERCENT: [u16; 24] = [
+    20, 0, 0, 20, 40, 0, 20, 40, 60, 40, 40, 60, 0, 30, 60, 40, 2, 30, 70, 0, 0, 70, 60, 0,
+];
+
+pub fn check_hyperspace_encounter(
+    world: &mut crate::engine::World,
+    geometry: super::hyper_units::Geometry,
+    random: &mut impl FnMut() -> u32,
+) {
+    let universe = POINT {
+        x: geometry.universe_x(world.data.flagship.log_x),
+        y: geometry.universe_y(world.data.flagship.log_y),
+    };
+    let mut handle = world.avail_races_ref().head();
+    let mut race = 0usize;
+    while let Some(id) = handle {
+        if world.activity() & IN_BATTLE as u16 == 0 {
+            break;
         }
-        world.set_story_state(StoryKey::USED_BROADCASTER, 0);
+        let fleets = world.avail_races_ref();
+        let fleet = *fleets.get(id);
+        handle = fleets.succ(id);
+        let mut radius = fleet.actual_strength;
+        if radius != 0 {
+            let mut flags = 0;
+            let mut percent = PERCENT[race];
+            if radius != u16::MAX {
+                radius = ((radius as u32 * SPHERE_RADIUS_INCREMENT) >> 1) as u16;
+            } else {
+                radius = 20000;
+                if race == SLYLANDRO_SHIP as usize {
+                    flags = ONE_SHOT_ENCOUNTER as u8;
+                    percent = if (world.story_state(StoryKey::STARBASE_AVAILABLE) as u8) == 0 {
+                        100
+                    } else {
+                        percent * (world.story_state(StoryKey::SLYLANDRO_MULTIPLIER) as u8) as u16
+                    };
+                } else if race == MELNORME_SHIP as usize
+                    && (world.data.flagship.fuel_on_board == 0
+                        || (world.story_state(StoryKey::USED_BROADCASTER) as u8) != 0)
+                    && (world.story_state(StoryKey::MELNORME_ANGER) as u8) < 3
+                {
+                    percent = if (world.story_state(StoryKey::USED_BROADCASTER) as u8) == 0 {
+                        30
+                    } else {
+                        100
+                    };
+                    flags = ONE_SHOT_ENCOUNTER as u8;
+                }
+                if world
+                    .encounters_ref()
+                    .find(|encounter| usize::from(encounter.race_id) == race)
+                    .is_some()
+                {
+                    percent = 0;
+                }
+                if percent == 100 && race == MELNORME_SHIP as usize {
+                    world.set_story_state(StoryKey::BROADCASTER_RESPONSE, 1);
+                }
+            }
+            let dx = universe.x.wrapping_sub(fleet.loc.x).wrapping_abs() as u16;
+            let dy = universe.y.wrapping_sub(fleet.loc.y).wrapping_abs() as u16;
+            if dx < radius
+                && dy < radius
+                && dx as u32 * dx as u32 + dy as u32 * (dy as u32) < radius as u32 * radius as u32
+                && (random() as u16 % 100) < percent
+            {
+                let mut encounters = world.encounters();
+                if let Some(id) = encounters.alloc() {
+                    let current = encounters.get_mut(id);
+                    current.origin = fleet.loc;
+                    current.radius = radius;
+                    current.flags = flags;
+                    current.race_id = race as u8;
+                    encounters.put(id);
+                }
+            }
+        }
+        race += 1;
     }
+    world.set_story_state(StoryKey::USED_BROADCASTER, 0);
 }
 
 #[cfg(test)]

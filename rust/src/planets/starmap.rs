@@ -29,22 +29,18 @@ pub(crate) fn catalog_star_count(catalog: &[CStarDesc]) -> usize {
         .count()
 }
 
-unsafe fn find_star(
-    base: *mut CStarDesc,
-    last: *mut CStarDesc,
+fn find_star_index(
+    catalog: &[CStarDesc],
+    last: Option<usize>,
     point: CPoint,
     xb: i16,
     yb: i16,
-    mut hi: i16,
-) -> *mut CStarDesc {
-    let mut lo = if last.is_null() {
-        0
-    } else {
-        (last.offset_from(base) + 1) as i16
-    };
-    if !last.is_null() {
+    mut hi: usize,
+) -> Option<usize> {
+    let mut lo = last.map_or(0, |last| last + 1);
+    if last.is_some() {
         if lo > hi {
-            return ptr::null_mut();
+            return None;
         }
         hi = lo;
     }
@@ -55,32 +51,58 @@ unsafe fn find_star(
     };
     while lo < hi {
         let mid = (lo + hi) >> 1;
-        if (*base.offset(mid as isize)).star_pt.y >= min_y {
+        if catalog[mid].star_pt.y >= min_y {
+            // The original signed search can stop at -1 only when mid is zero.
+            if mid == 0 {
+                break;
+            }
             hi = mid - 1;
         } else {
             lo = mid + 1;
         }
     }
-    let mut at = base.offset(lo as isize);
-    if yb < 0 || (*at).star_pt.y <= max_y {
+    let mut at = lo;
+    if yb < 0 || catalog[at].star_pt.y <= max_y {
         let (min_x, max_x) = if xb <= 0 {
             (point.x, point.x)
         } else {
             (point.x.wrapping_sub(xb), point.x.wrapping_add(xb))
         };
         loop {
-            if (yb < 0 || (*at).star_pt.y >= min_y)
-                && (xb < 0 || ((*at).star_pt.x >= min_x && (*at).star_pt.x <= max_x))
+            let star = &catalog[at];
+            if (yb < 0 || star.star_pt.y >= min_y)
+                && (xb < 0 || (star.star_pt.x >= min_x && star.star_pt.x <= max_x))
             {
-                return at;
+                return Some(at);
             }
-            at = at.add(1);
-            if (*at).star_pt.y > max_y {
+            at += 1;
+            if catalog[at].star_pt.y > max_y {
                 break;
             }
         }
     }
-    ptr::null_mut()
+    None
+}
+
+pub fn find_star_id(
+    world: &crate::engine::World,
+    catalog: &[CStarDesc; crate::engine::world::CATALOG_LEN],
+    last: Option<crate::engine::StarId>,
+    point: CPoint,
+    xb: i16,
+    yb: i16,
+) -> Option<crate::engine::StarId> {
+    let (base, hi) = if world.story_state(crate::engine::StoryKey::ARILOU_SPACE_SIDE) <= 1 {
+        (0, NUM_SOLAR_SYSTEMS - 1)
+    } else {
+        (NUM_SOLAR_SYSTEMS + 1, NUM_HYPER_VORTICES)
+    };
+    let last = last.map(|id| {
+        id.0.checked_sub(base)
+            .unwrap_or_else(|| panic!("star search resumed outside its space"))
+    });
+    find_star_index(&catalog[base..], last, point, xb, yb, hi)
+        .map(|index| crate::engine::StarId(base + index))
 }
 
 /// # Safety
@@ -110,21 +132,10 @@ pub unsafe fn find_star_in(
     // SAFETY: the caller retains the initialized game-thread catalog.
     let catalog =
         unsafe { current_catalog() }.unwrap_or_else(|| panic!("star lookup without a catalog"));
-    let last = last.map_or(ptr::null_mut(), |star| {
-        let id = world.identify_star(star, catalog);
+    let last = last.map(|star| world.identify_star(star, catalog));
+    find_star_id(world, catalog, last, point, xb, yb).map_or(ptr::null_mut(), |id| {
         std::ptr::from_ref(&catalog[id.0]).cast_mut()
-    });
-    let (base, hi) = if world.story_state(crate::engine::StoryKey::ARILOU_SPACE_SIDE) <= 1 {
-        (star_array, NUM_SOLAR_SYSTEMS as i16 - 1)
-    } else {
-        (
-            // SAFETY: this is the retained catalog's quasispace segment.
-            unsafe { star_array.add(NUM_SOLAR_SYSTEMS + 1) },
-            NUM_HYPER_VORTICES as i16,
-        )
-    };
-    // SAFETY: last was validated against this catalog; all search bounds preserve the legacy segments.
-    unsafe { find_star(base, last, point, xb, yb, hi) }
+    })
 }
 
 #[cfg(not(test))]
@@ -194,19 +205,19 @@ mod tests {
 
     #[test]
     fn bounds_are_inclusive_and_iteration_resumes_after_last_match() {
-        let mut stars = [star(5, 10), star(8, 10), star(9, 20), star(9999, 32767)];
-        let base = stars.as_mut_ptr();
+        let stars = [star(5, 10), star(8, 10), star(9, 20), star(9999, 32767)];
         let point = CPoint { x: 7, y: 10 };
-        unsafe {
-            assert_eq!(find_star(base, ptr::null_mut(), point, 2, 0, 2), base);
-            assert_eq!(find_star(base, base, point, 2, 0, 2), base.add(1));
-            assert!(find_star(base, base.add(1), point, 2, 0, 2).is_null());
-            assert!(find_star(base, base.add(2), point, -1, -1, 2).is_null());
-            assert_eq!(
-                find_star(base, ptr::null_mut(), CPoint { x: 9, y: 20 }, 0, 0, 2),
-                base.add(2)
-            );
-            assert!(find_star(base, ptr::null_mut(), CPoint { x: 6, y: 10 }, 0, 0, 2).is_null());
-        }
+        assert_eq!(find_star_index(&stars, None, point, 2, 0, 2), Some(0));
+        assert_eq!(find_star_index(&stars, Some(0), point, 2, 0, 2), Some(1));
+        assert_eq!(find_star_index(&stars, Some(1), point, 2, 0, 2), None);
+        assert_eq!(find_star_index(&stars, Some(2), point, -1, -1, 2), None);
+        assert_eq!(
+            find_star_index(&stars, None, CPoint { x: 9, y: 20 }, 0, 0, 2),
+            Some(2)
+        );
+        assert_eq!(
+            find_star_index(&stars, None, CPoint { x: 6, y: 10 }, 0, 0, 2),
+            None
+        );
     }
 }
