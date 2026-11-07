@@ -71,79 +71,83 @@ pub(crate) mod live {
         };
     }
 
-    /// # Safety
-    /// `dx` and `dy` are writable; the game world/display queue is exclusively accessible.
-    #[no_mangle]
-    pub unsafe extern "C" fn MoveSIS(dx: *mut i16, dy: *mut i16) {
-        let world = WorldFields::current();
-        let mut x = move_axis(
-            &mut *ptr::addr_of_mut!((**world).flagship.log_x),
-            *dx,
-            maximum_x(),
-        );
-        let mut y = move_axis(
-            &mut *ptr::addr_of_mut!((**world).flagship.log_y),
-            *dy,
-            maximum_y(),
-        );
-        drop(world);
-        if x != *dx || y != *dy {
-            *dx = x;
-            *dy = y;
-            crate::app::bridge::enter(|cx| {
-                let mut handle = cx.elements().tail();
-                while let Some(element) = handle {
-                    if cx.element(element).flags & PLAYER_SHIP as u16 == 0 {
-                        handle = cx.elements().pred(element);
-                    } else {
-                        cx.element_mut(element).next.location = POINT {
-                            x: ((width() >> 1) - x as i32) as i16,
-                            y: ((height() >> 1) - y as i32) as i16,
-                        };
-                        break;
+    pub fn move_sis(cx: &mut crate::engine::battle::Cx<'_>, dx: &mut i16, dy: &mut i16) {
+        cx.with_legacy(|| {
+            // SAFETY: the explicit owner lends the unchanged movement and display operations.
+            unsafe {
+                let world = WorldFields::current();
+                let mut x = move_axis(
+                    &mut *ptr::addr_of_mut!((**world).flagship.log_x),
+                    *dx,
+                    maximum_x(),
+                );
+                let mut y = move_axis(
+                    &mut *ptr::addr_of_mut!((**world).flagship.log_y),
+                    *dy,
+                    maximum_y(),
+                );
+                drop(world);
+                if x != *dx || y != *dy {
+                    *dx = x;
+                    *dy = y;
+                    crate::app::bridge::enter(|cx| {
+                        let mut handle = cx.elements().tail();
+                        while let Some(element) = handle {
+                            if cx.element(element).flags & PLAYER_SHIP as u16 == 0 {
+                                handle = cx.elements().pred(element);
+                            } else {
+                                cx.element_mut(element).next.location = POINT {
+                                    x: ((width() >> 1) - x as i32) as i16,
+                                    y: ((height() >> 1) - y as i32) as i16,
+                                };
+                                break;
+                            }
+                        }
+                    });
+                }
+                if WorldFields::current().read(|world| world.flagship.fuel_on_board) != 0
+                    && WorldOwner::current().read(|world| get(world, StoryKey::ARILOU_SPACE_SIDE))
+                        <= 1
+                {
+                    x = x.wrapping_abs();
+                    y = y.wrapping_abs();
+                    WorldOwner::current().write(|world| {
+                        world.hyper_distance.dx = world.hyper_distance.dx.wrapping_add(x as u16);
+                        world.hyper_distance.dy = world.hyper_distance.dy.wrapping_add(y as u16);
+                    });
+                    let adjusted_x = universe_x(
+                        16 * WorldOwner::current().read(|owner| owner.hyper_distance.dx) as i32,
+                    ) as u32;
+                    let adjusted_y = (9999
+                        - universe_y(
+                            16 * WorldOwner::current().read(|owner| owner.hyper_distance.dy) as i32,
+                        ) as i32) as u32;
+                    let distance = square_root(
+                        adjusted_x
+                            .wrapping_mul(adjusted_x)
+                            .wrapping_add(adjusted_y.wrapping_mul(adjusted_y)),
+                    )
+                    .wrapping_add(WorldOwner::current().read(|owner| owner.hyper_distance.extra));
+                    let mut ticks = distance >> 4;
+                    if ticks > WorldOwner::current().read(|owner| owner.hyper_distance.ticks) as u16
+                    {
+                        DeltaSISGauges(
+                            0,
+                            WorldOwner::current().read(|owner| owner.hyper_distance.ticks) as i16
+                                - ticks as i16,
+                            0,
+                        );
+                        if ticks > 255 {
+                            (**WorldOwner::current()).hyper_distance.dx = 0;
+                            (**WorldOwner::current()).hyper_distance.dy = 0;
+                            (**WorldOwner::current()).hyper_distance.extra = distance & 15;
+                            ticks = 0;
+                        }
+                        (**WorldOwner::current()).hyper_distance.ticks = ticks as u8;
                     }
                 }
-            });
-        }
-        if WorldFields::current().read(|world| world.flagship.fuel_on_board) != 0
-            && WorldOwner::current().read(|world| get(world, StoryKey::ARILOU_SPACE_SIDE)) <= 1
-        {
-            x = x.wrapping_abs();
-            y = y.wrapping_abs();
-            WorldOwner::current().write(|world| {
-                world.hyper_distance.dx = world.hyper_distance.dx.wrapping_add(x as u16);
-                world.hyper_distance.dy = world.hyper_distance.dy.wrapping_add(y as u16);
-            });
-            let adjusted_x =
-                universe_x(16 * WorldOwner::current().read(|owner| owner.hyper_distance.dx) as i32)
-                    as u32;
-            let adjusted_y = (9999
-                - universe_y(
-                    16 * WorldOwner::current().read(|owner| owner.hyper_distance.dy) as i32,
-                ) as i32) as u32;
-            let distance = square_root(
-                adjusted_x
-                    .wrapping_mul(adjusted_x)
-                    .wrapping_add(adjusted_y.wrapping_mul(adjusted_y)),
-            )
-            .wrapping_add(WorldOwner::current().read(|owner| owner.hyper_distance.extra));
-            let mut ticks = distance >> 4;
-            if ticks > WorldOwner::current().read(|owner| owner.hyper_distance.ticks) as u16 {
-                DeltaSISGauges(
-                    0,
-                    WorldOwner::current().read(|owner| owner.hyper_distance.ticks) as i16
-                        - ticks as i16,
-                    0,
-                );
-                if ticks > 255 {
-                    (**WorldOwner::current()).hyper_distance.dx = 0;
-                    (**WorldOwner::current()).hyper_distance.dy = 0;
-                    (**WorldOwner::current()).hyper_distance.extra = distance & 15;
-                    ticks = 0;
-                }
-                (**WorldOwner::current()).hyper_distance.ticks = ticks as u8;
             }
-        }
+        });
     }
     unsafe fn maximum_x() -> i32 {
         logx(10000) - (logx(1) >> 1) - 1

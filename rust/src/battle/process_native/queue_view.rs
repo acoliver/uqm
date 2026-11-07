@@ -2,6 +2,14 @@
 
 use super::*;
 
+pub(super) fn render_scale(mode: i32, zoom: SIZE) -> i32 {
+    if mode == SCALE_STEP {
+        0
+    } else {
+        i32::from(calc_zoom_stuff(zoom).1)
+    }
+}
+
 pub(super) fn draw_frame(counter: &mut u16) -> bool {
     let skip = (*counter >> 8) as u8;
     if skip == u8::MAX {

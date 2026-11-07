@@ -334,10 +334,7 @@ pub(crate) mod engine {
             return false;
         }
         match frame_interval(ONE_SECOND, (cx.b.nth_frame >> 8) as u8) {
-            None => cx.with_legacy(|| {
-                Async_process();
-                TaskSwitch();
-            }),
+            None => cx.kernel.input_runtime().yield_poll(cx),
             Some(interval) => {
                 cx.with_legacy(|| SleepThreadUntil(session.next_time.wrapping_add(interval)));
                 session.next_time = GetTimeCounter();
