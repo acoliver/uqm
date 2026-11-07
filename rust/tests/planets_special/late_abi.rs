@@ -2,34 +2,20 @@
 
 use super::Harness;
 use uqm_rust::battle::gendef::*;
-use uqm_rust::planets::generate::late_exports::*;
+use uqm_rust::planets::generate::myc::Generator as GENERATE_MYCON_FUNCTIONS;
+use uqm_rust::planets::generate::sam::Generator as GENERATE_SAMATRA_FUNCTIONS;
+use uqm_rust::planets::generate::spa::Generator as GENERATE_SPATHI_FUNCTIONS;
 use uqm_rust::planets::generate::surface::BIOLOGICAL_SCAN;
-use uqm_rust::planets::generate::vtable::{GenerateFunctions, DEFAULT_HOOKS};
+use uqm_rust::planets::generate::utw::Generator as GENERATE_UTWIG_FUNCTIONS;
+use uqm_rust::planets::generate::vux::Generator as GENERATE_VUX_FUNCTIONS;
+use uqm_rust::planets::generate::{generator, SystemGenerator};
 use uqm_rust::state::game_state_keys::get_game_state;
 
-fn slots(table: &GenerateFunctions) -> [usize; 13] {
-    [
-        table.init_npcs.unwrap() as usize,
-        table.reinit_npcs.unwrap() as usize,
-        table.uninit_npcs.unwrap() as usize,
-        table.generate_planets.unwrap() as usize,
-        table.generate_moons.unwrap() as usize,
-        table.generate_name.unwrap() as usize,
-        table.generate_orbital.unwrap() as usize,
-        table.generate_minerals.unwrap() as usize,
-        table.generate_energy.unwrap() as usize,
-        table.generate_life.unwrap() as usize,
-        table.pickup_minerals.unwrap() as usize,
-        table.pickup_energy.unwrap() as usize,
-        table.pickup_life.unwrap() as usize,
-    ]
-}
-
 pub fn check() {
-    for (indexes, table, overrides) in [
+    for (indexes, table, _overrides) in [
         (
             &[UTWIG_DEFINED, BOMB_DEFINED][..],
-            &GENERATE_UTWIG_FUNCTIONS,
+            (&GENERATE_UTWIG_FUNCTIONS as &dyn SystemGenerator),
             &[0, 3, 6, 8, 11][..],
         ),
         (
@@ -40,36 +26,34 @@ pub fn check() {
                 EGG_CASE1_DEFINED,
                 EGG_CASE2_DEFINED,
             ][..],
-            &GENERATE_MYCON_FUNCTIONS,
+            (&GENERATE_MYCON_FUNCTIONS as &dyn SystemGenerator),
             &[3, 6, 8, 9, 11][..],
         ),
         (
             &[VUX_DEFINED, MAIDENS_DEFINED, VUX_BEAST_DEFINED][..],
-            &GENERATE_VUX_FUNCTIONS,
+            (&GENERATE_VUX_FUNCTIONS as &dyn SystemGenerator),
             &[3, 6, 8, 9, 11, 12][..],
         ),
         (
             &[SAMATRA_DEFINED][..],
-            &GENERATE_SAMATRA_FUNCTIONS,
+            (&GENERATE_SAMATRA_FUNCTIONS as &dyn SystemGenerator),
             &[0, 1, 3, 4, 6][..],
         ),
         (
             &[SPATHI_DEFINED][..],
-            &GENERATE_SPATHI_FUNCTIONS,
+            (&GENERATE_SPATHI_FUNCTIONS as &dyn SystemGenerator),
             &[3, 4, 6, 8, 9, 11, 12][..],
         ),
     ] {
-        let actual = slots(table);
-        let defaults = slots(&DEFAULT_HOOKS);
+        let mut routed = Harness::new();
         for &index in indexes {
-            assert_eq!(
-                getGenerateFunctions(index),
-                std::ptr::from_ref(table).cast()
-            );
-        }
-        for slot in 0..13 {
-            if !overrides.contains(&slot) {
-                assert_eq!(actual[slot], defaults[slot], "default slot {slot}");
+            routed.star_index = index;
+            for seed in [0, 1, 104729, u32::MAX] {
+                assert_eq!(
+                    routed.c_planets(generator(index), (0, 0, seed)),
+                    routed.c_planets(table, (0, 0, seed)),
+                    "selector index {index}"
+                );
             }
         }
     }
@@ -80,8 +64,8 @@ pub fn check() {
     harness.seed(104729);
     let sun = std::ptr::addr_of_mut!(harness.state.SunDesc[0]);
     harness.state.PlanetDesc[0].prev_desc = sun;
-    let world = std::ptr::addr_of_mut!(harness.state.PlanetDesc[0]);
-    let pickup = GENERATE_SPATHI_FUNCTIONS.pickup_life.unwrap();
+    let _world = std::ptr::addr_of_mut!(harness.state.PlanetDesc[0]);
+
     for retrieved in 0..=32 {
         uqm_rust::engine::World::current().write(|world| {
             (world).set_story_state(uqm_rust::engine::StoryKey::SPATHI_CREATURES_ELIMINATED, 0)
@@ -98,7 +82,16 @@ pub fn check() {
             (1_u32 << retrieved) - 1
         };
         let before = format!("{:?}", harness.state);
-        assert!(unsafe { pickup(&mut *harness.state, world, 0) });
+        assert!(unsafe {
+            crate::invoke_generation(&raw mut *harness.state, |view, host| {
+                GENERATE_SPATHI_FUNCTIONS.pickup_life(
+                    view,
+                    uqm_rust::planets::generate::special::Body::Planet(0),
+                    0,
+                    host,
+                )
+            })
+        });
         assert_eq!(
             uqm_rust::engine::World::current().read(|world| get_game_state(
                 world,
@@ -117,11 +110,20 @@ pub fn check() {
         assert_eq!(harness.rng_position(), 104729);
     }
     harness.state.PlanetDesc[1].prev_desc = sun;
-    let other = std::ptr::addr_of_mut!(harness.state.PlanetDesc[1]);
+    let _other = std::ptr::addr_of_mut!(harness.state.PlanetDesc[1]);
     uqm_rust::engine::World::current().write(|world| {
         (world).set_story_state(uqm_rust::engine::StoryKey::SPATHI_CREATURES_EXAMINED, 0)
     });
-    assert!(unsafe { pickup(&mut *harness.state, other, u16::MAX) });
+    assert!(unsafe {
+        crate::invoke_generation(&raw mut *harness.state, |view, host| {
+            GENERATE_SPATHI_FUNCTIONS.pickup_life(
+                view,
+                uqm_rust::planets::generate::special::Body::Planet(1),
+                u16::MAX,
+                host,
+            )
+        })
+    });
     assert_eq!(
         uqm_rust::engine::World::current().read(|world| get_game_state(
             world,
@@ -133,12 +135,15 @@ pub fn check() {
     // Mycon's life callback does not read any pointer or consume RNG.
     assert_eq!(
         unsafe {
-            GENERATE_MYCON_FUNCTIONS.generate_life.unwrap()(
-                std::ptr::null(),
-                std::ptr::null(),
-                u16::MAX,
-                std::ptr::null_mut(),
-            )
+            crate::invoke_generation(&raw mut *harness.state, |view, host| {
+                GENERATE_MYCON_FUNCTIONS.generate_life(
+                    view,
+                    uqm_rust::planets::generate::special::Body::Planet(0),
+                    u16::MAX,
+                    &mut crate::planets_common::fresh_node(),
+                    host,
+                )
+            })
         },
         0
     );
@@ -151,7 +156,6 @@ pub fn check() {
 
 fn check_live_queues(harness: &mut Harness) {
     use uqm_rust::engine::World;
-    use uqm_rust::planets::c_api::NpcWorld;
     use uqm_rust::planets::generate::sam::GuardSite;
     extern "C" {
         static mut ScreenHeight: i32;
@@ -172,27 +176,27 @@ fn check_live_queues(harness: &mut Harness) {
     });
     unsafe {
         let mut visited = Vec::new();
-        World::current().write(|world| {
-            GuardSite::for_each_ip_group(&mut NpcWorld::new(world), &mut |group| {
+        crate::invoke_generation(&raw mut *harness.state, |_, host| {
+            GuardSite::for_each_ip_group(host, &mut |group| {
                 visited.push(group.group_id);
                 group.task &= !8;
             });
-            assert!(ids
-                .iter()
-                .all(|id| world.ip_groups_ref().get(*id).task == 0));
         });
+        assert!(World::current().read(|world| ids.iter().all(|id| world
+            .ip_groups_ref()
+            .get(*id)
+            .task
+            == 0)));
         assert_eq!(visited, [1, 2, 3]);
         harness.star_index = BOMB_DEFINED;
         harness.set_star(0, 0);
         World::current()
             .write(|world| world.set_story_state(uqm_rust::engine::StoryKey::UTWIG_BOMB, 0));
         let before = format!("{:?}", harness.state);
-        assert!(
-            World::current().write(|world| GENERATE_UTWIG_FUNCTIONS.init_npcs.unwrap()(
-                world,
-                &mut *harness.state
-            ))
-        );
+        assert!(crate::invoke_generation(
+            &mut *harness.state,
+            |system, host| GENERATE_UTWIG_FUNCTIONS.init_npcs(system, host)
+        ));
         World::current().write(|world| {
             let mut groups = world.ip_groups();
             assert!(groups.head().is_none() && groups.tail().is_none());
@@ -218,7 +222,9 @@ fn check_live_queues(harness: &mut Harness) {
         let saved_group = std::ptr::addr_of!(EncounterGroup).read();
         World::current().write(|w| w.encounter_race = 18);
         std::ptr::addr_of_mut!(EncounterGroup).write(7);
-        World::current().write(|world| GuardSite::reset_encounter(&mut NpcWorld::new(world)));
+        crate::invoke_generation(&raw mut *harness.state, |_, host| {
+            GuardSite::reset_encounter(host)
+        });
         assert_eq!(World::current().read(|w| w.encounter_race), -1);
         assert_eq!(std::ptr::addr_of!(EncounterGroup).read(), 0);
         World::current().write(|w| w.encounter_race = saved_race);
@@ -245,14 +251,16 @@ fn check_live_queues(harness: &mut Harness) {
             x: (half_width + 12) as i16,
             y: (half_height - 9) as i16,
         };
-        let outer = World::current()
-            .write(|world| GuardSite::planet_outer_location(&NpcWorld::new(world), 4));
-        assert_eq!((outer.x, outer.y), (120, -90));
-        World::current().write(|world| {
-            GuardSite::set_and_transform_ip_location(&mut NpcWorld::new(world), outer)
+        let outer = crate::invoke_generation(&raw mut *harness.state, |_, host| {
+            GuardSite::planet_outer_location(host, 4)
         });
-        let location =
-            World::current().write(|world| GuardSite::ip_location(&NpcWorld::new(world)));
+        assert_eq!((outer.x, outer.y), (120, -90));
+        crate::invoke_generation(&raw mut *harness.state, |_, host| {
+            GuardSite::set_and_transform_ip_location(host, outer)
+        });
+        let location = crate::invoke_generation(&raw mut *harness.state, |_, host| {
+            GuardSite::ip_location(host)
+        });
         assert_eq!((location.x, location.y), (120, -90));
         let origin = std::ptr::addr_of!(
             (**uqm_rust::engine::WorldData::current())

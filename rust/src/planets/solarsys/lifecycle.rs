@@ -6,7 +6,7 @@ use super::*;
 use crate::engine::world::planet::{PlanetDesc, SystemInfo};
 use crate::engine::{battle::Cx, observe::Io, Kernel, StoryKey, World, WorldData};
 
-use crate::battle::gendef::getGenerateFunctions;
+use super::site::dispatch::{body, with_system};
 use crate::comm::locdata::CPoint;
 use crate::graphics::pixmap_abi::{GetFrameIndex, ReleaseDrawable, SetAbsFrameIndex};
 use crate::mainloop::restart_menu::c_extern::PlayMusic;
@@ -154,13 +154,16 @@ fn saved_point(point: c::POINT) -> CPoint {
 
 pub(super) unsafe fn generate_moons(
     cx: &mut Cx<'_>,
-    _io: &mut Io<'_>,
+    io: &mut Io<'_>,
     system: *mut c::SOLARSYS_STATE,
     planet: *mut PlanetDesc,
 ) {
     (*SysGenRNG).reseed((*planet).rand_seed);
-    cx.with_legacy(|| ((*(*system).genFuncs).generateName.unwrap())(system, planet));
-    cx.with_legacy(|| ((*(*system).genFuncs).generateMoons.unwrap())(system, planet));
+    let target = body(system, planet);
+    with_system(cx, io, system, |generator, system, host| {
+        generator.generate_name(system, target, host);
+        generator.generate_moons(system, target.planet() as u8, host);
+    });
 
     let angle = arctan((*planet).location.x, (*planet).location.y);
     let _facing = (((u32::from(angle) + 2) >> 2) & 15) as c::COUNT;
@@ -224,7 +227,9 @@ pub(super) unsafe fn load_solar_sys(cx: &mut Cx<'_>, io: &mut Io<'_>) -> *mut Pl
     (*sun).image.origin = (*sun).location;
     (*sun).image.frame = SUN_FRAME;
 
-    cx.with_legacy(|| ((*(*state).genFuncs).generatePlanets.unwrap())(state));
+    with_system(cx, io, state, |generator, system, host| {
+        generator.generate_planets(system, host)
+    });
     if cx.world.story_state(StoryKey::PLANETARY_CHANGE) != 0 {
         ffi::put_planet_info(cx.world);
         cx.world.set_story_state(StoryKey::PLANETARY_CHANGE, 0);
@@ -338,7 +343,7 @@ unsafe fn run_planet_orbit(cx: &mut Cx<'_>, io: &mut Io<'_>) {
     finish_planet_orbit(cx, io);
 }
 
-unsafe fn prepare_planet_orbit(cx: &mut Cx<'_>, _io: &mut Io<'_>) -> bool {
+unsafe fn prepare_planet_orbit(cx: &mut Cx<'_>, io: &mut Io<'_>) -> bool {
     let state = system();
     cx.with_legacy(|| {
         if (*state).InIpFlight != 0 {
@@ -355,7 +360,10 @@ unsafe fn prepare_planet_orbit(cx: &mut Cx<'_>, _io: &mut Io<'_>) -> bool {
 
         World::current().write(|world| ffi::get_planet_info(world));
     });
-    ((*(*state).genFuncs).generateOrbital.unwrap())(cx, state, (*state).pOrbitalDesc);
+    let target = body(state, (*state).pOrbitalDesc);
+    with_system(cx, io, state, |generator, system, host| {
+        generator.generate_orbital(system, target, host)
+    });
     cx.with_legacy(|| {
         (**Kernel::current()).last_activity &= !(CHECK_LOAD | CHECK_RESTART);
         if World::current().read(|world| world.activity())
@@ -469,14 +477,12 @@ unsafe fn prepare_solar_sys(
         world.ip_groups().reinit();
         world.npc_built_ships().reinit();
     }
-    cx.with_legacy(|| {
-        World::current().write(|world| {
-            if reentry {
-                ((*(*state).genFuncs).reinitNpcs.unwrap())(world, state);
-            } else {
-                ((*(*state).genFuncs).initNpcs.unwrap())(world, state);
-            }
-        })
+    with_system(cx, io, state, |generator, system, host| {
+        if reentry {
+            generator.reinit_npcs(system, host);
+        } else {
+            generator.init_npcs(system, host);
+        }
     });
     cx.with_legacy(|| {
         if !orbital.is_null() {
@@ -508,15 +514,12 @@ unsafe fn prepare_solar_sys(
     })
 }
 
-pub(super) unsafe fn end_interplanetary(cx: &mut Cx<'_>, _io: &mut Io<'_>) {
+pub(super) unsafe fn end_interplanetary(cx: &mut Cx<'_>, io: &mut Io<'_>) {
     cx.world
         .set_activity(cx.world.activity() & !END_INTERPLANETARY);
     if cx.world.activity() & (CHECK_ABORT | CHECK_LOAD) == 0 {
-        cx.with_legacy(|| {
-            World::current().write(|world| {
-                let state = system();
-                ((*(*state).genFuncs).uninitNpcs.unwrap())(world, state);
-            })
+        with_system(cx, io, system(), |generator, system, host| {
+            generator.uninit_npcs(system, host)
         });
         cx.world.set_story_state(StoryKey::USED_BROADCASTER, 0);
     }
@@ -565,7 +568,10 @@ pub(super) unsafe fn uninit_solar_sys(cx: &mut Cx<'_>, io: &mut Io<'_>) {
             let point = c_point(cx.world.data.game.ship_stamp.origin);
             let planet = cx.with_legacy(|| closest_planet_interplanetary(&point));
             let state = system();
-            cx.with_legacy(|| ((*(*state).genFuncs).generateName.unwrap())(state, planet));
+            let target = body(state, planet);
+            with_system(cx, io, state, |generator, system, host| {
+                generator.generate_name(system, target, host)
+            });
         }
     }
 }
@@ -634,7 +640,7 @@ unsafe fn prepare_explore_solar_sys(state: *mut c::SOLARSYS_STATE) {
     ptr::write_bytes(P_SOLAR_SYS_STATE, 0, 1);
     let index = World::current()
         .read(|world| (*world.star_pointer(crate::planets::starmap::current_catalog())).index);
-    (*P_SOLAR_SYS_STATE).genFuncs = getGenerateFunctions(index).cast();
+    (*P_SOLAR_SYS_STATE).generator_index = index;
 }
 
 pub(super) unsafe fn game_string(index: c::COUNT) -> *mut c_char {

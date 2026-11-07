@@ -1620,6 +1620,17 @@ Exit: planets, navigation and planet_side have no ffi or unsafe baseline entries
 
 Phase 5 · semantic · lane `planets` · about 5,300 changed lines · depends on U4-04 · **critical path**
 
+**Part 3 size exception (orchestrator, 2026-11-07, #687).** The closing migration
+measured 14,078 gross added/deleted source and test lines, with normalized
+comparisons leaving 8,903 to 11,405 unmatched lines; these are not an exhaustive
+semantic classification. Its 1,448 lines of shared test-host
+support count toward the total. The orchestrator approved an atomic exception to
+the 6,000-line boundary: all 29 generators, dispatcher consumers and fixtures must
+switch together, deleting the six export shims, table, aliases, macro handlers and
+LiveStory in the same PR. A smaller split would require an unlisted transitional
+adapter or unused code. Mechanical moves and renames remain separate commits;
+acceptance, quality ceilings and golden comparisons are unchanged.
+
 **Replaces** P5-01 (#638), P5-02 (#639).
 
 **Scope.** All generators convert in one PR, so the dispatcher calls the trait only and never chooses between a trait impl and the vtable.

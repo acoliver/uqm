@@ -5,7 +5,7 @@ use uqm_rust::io::uio_bridge;
 use uqm_rust::mainloop::dir_prep::contentDir;
 use uqm_rust::planets::c_api::{self, CapturedSurface};
 use uqm_rust::planets::generate::consts::{MAP_HEIGHT, MAP_WIDTH};
-use uqm_rust::planets::generate::sol_exports::GENERATE_SOL_FUNCTIONS;
+use uqm_rust::planets::generate::sol::Generator as GENERATE_SOL_FUNCTIONS;
 use uqm_rust::resource::ffi_bridge;
 use uqm_rust::state::game_state_keys::set_game_state;
 
@@ -139,59 +139,74 @@ unsafe fn frame_rgb(frame: *mut uqm_rust::c_bindings::global_state::FRAME_DESC) 
 }
 
 unsafe fn names(h: &mut Harness) {
-    let strings =
-        c_api::CaptureStringTable(c_api::LoadStringTableInstance(c"text.starcon".as_ptr()));
-    assert!(!strings.is_null());
-    let saved = uqm_rust::engine::Kernel::current()
-        .write(|kernel| std::mem::replace(&mut kernel.game_strings, strings.cast()));
-    let system = &raw mut *h.state;
-    for (index, expected) in [(0, "Mercury"), (2, "Earth"), (8, "Pluto")] {
-        let parent = &raw mut (*system).PlanetDesc[index];
-        (*parent).prev_desc = &raw mut (*system).SunDesc[0];
-        (*parent).data_index = index as u8 + 128;
-        assert!(GENERATE_SOL_FUNCTIONS.generate_name.unwrap()(
-            system, parent
-        ));
-        let name = uqm_rust::engine::WorldData::current().read(|world| world.flagship.planet_name);
-        let name = name.as_ptr().cast::<std::ffi::c_char>();
-        assert_eq!(std::ffi::CStr::from_ptr(name).to_str().unwrap(), expected);
-        assert_eq!(
-            uqm_rust::engine::World::current().read(|world| {
-                uqm_rust::state::game_state_keys::get_game_state(
-                    world,
-                    uqm_rust::engine::StoryKey::BATTLE_PLANET,
+    // SAFETY: the serialized harness retains its captured strings and initialized system through each name callback.
+    unsafe {
+        let strings =
+            c_api::CaptureStringTable(c_api::LoadStringTableInstance(c"text.starcon".as_ptr()));
+        assert!(!strings.is_null());
+        let saved = uqm_rust::engine::Kernel::current()
+            .write(|kernel| std::mem::replace(&mut kernel.game_strings, strings.cast()));
+        let system = &raw mut *h.state;
+        for (index, expected) in [(0, "Mercury"), (2, "Earth"), (8, "Pluto")] {
+            let parent = &raw mut (*system).PlanetDesc[index];
+            (*parent).prev_desc = &raw mut (*system).SunDesc[0];
+            (*parent).data_index = index as u8 + 128;
+            assert!(crate::invoke_generation(system, |view, host| {
+                GENERATE_SOL_FUNCTIONS.generate_name(
+                    view,
+                    uqm_rust::planets::solarsys::site::dispatch::body(system, parent),
+                    host,
                 )
-            }),
-            index as u32 + 128
-        );
-        let moon = &raw mut (*system).MoonDesc[1];
-        (*moon).prev_desc = parent;
-        (*moon).data_index = 27;
-        assert!(GENERATE_SOL_FUNCTIONS.generate_name.unwrap()(system, moon));
-        let name = uqm_rust::engine::WorldData::current().read(|world| world.flagship.planet_name);
-        assert_eq!(
-            std::ffi::CStr::from_ptr(name.as_ptr().cast())
-                .to_str()
-                .unwrap(),
-            expected
-        );
-        assert_eq!(
-            uqm_rust::engine::World::current().read(|world| {
-                uqm_rust::state::game_state_keys::get_game_state(
-                    world,
-                    uqm_rust::engine::StoryKey::BATTLE_PLANET,
+            }));
+            let name =
+                uqm_rust::engine::WorldData::current().read(|world| world.flagship.planet_name);
+            let name = name.as_ptr().cast::<std::ffi::c_char>();
+            assert_eq!(std::ffi::CStr::from_ptr(name).to_str().unwrap(), expected);
+            assert_eq!(
+                uqm_rust::engine::World::current().read(|world| {
+                    uqm_rust::state::game_state_keys::get_game_state(
+                        world,
+                        uqm_rust::engine::StoryKey::BATTLE_PLANET,
+                    )
+                }),
+                index as u32 + 128
+            );
+            let moon = &raw mut (*system).MoonDesc[1];
+            (*moon).prev_desc = parent;
+            (*moon).data_index = 27;
+            assert!(crate::invoke_generation(system, |view, host| {
+                GENERATE_SOL_FUNCTIONS.generate_name(
+                    view,
+                    uqm_rust::planets::solarsys::site::dispatch::body(system, moon),
+                    host,
                 )
-            }),
-            index as u32 + 128
-        );
+            }));
+            let name =
+                uqm_rust::engine::WorldData::current().read(|world| world.flagship.planet_name);
+            assert_eq!(
+                std::ffi::CStr::from_ptr(name.as_ptr().cast())
+                    .to_str()
+                    .unwrap(),
+                expected
+            );
+            assert_eq!(
+                uqm_rust::engine::World::current().read(|world| {
+                    uqm_rust::state::game_state_keys::get_game_state(
+                        world,
+                        uqm_rust::engine::StoryKey::BATTLE_PLANET,
+                    )
+                }),
+                index as u32 + 128
+            );
+        }
+        uqm_rust::engine::Kernel::current().write(|kernel| kernel.game_strings = saved);
+        // Reuse the production discovery-table cleanup boundary for this captured
+        // table after restoring the global that borrowed it.
+        (*system).SysInfo.planet_info.discovery_string = strings.cast();
+        c_api::FreePlanet();
+        c_api::TFB_FlushGraphicsEx(1);
+        println!("Sol name ABI: real game strings, parent names and parent battle frames for planets and moons");
     }
-    uqm_rust::engine::Kernel::current().write(|kernel| kernel.game_strings = saved);
-    // Reuse the production discovery-table cleanup boundary for this captured
-    // table after restoring the global that borrowed it.
-    (*system).SysInfo.planet_info.discovery_string = strings.cast();
-    c_api::FreePlanet();
-    c_api::TFB_FlushGraphicsEx(1);
-    println!("Sol name ABI: real game strings, parent names and parent battle frames for planets and moons");
 }
 
 unsafe fn scenes(h: &mut Harness) {
@@ -226,8 +241,12 @@ unsafe fn scenes(h: &mut Harness) {
         // SAFETY: Harness retains installed owners and live solar/planet
         // descriptors throughout this synchronous orbital callback.
         assert!(unsafe {
-            uqm_rust::app::bridge::enter(|cx| {
-                GENERATE_SOL_FUNCTIONS.generate_orbital.unwrap()(cx, system, world)
+            crate::invoke_generation(system, |view, host| {
+                GENERATE_SOL_FUNCTIONS.generate_orbital(
+                    view,
+                    uqm_rust::planets::solarsys::site::dispatch::body(system, world),
+                    host,
+                )
             })
         });
         let info = &(*system).SysInfo.planet_info;
@@ -296,3 +315,5 @@ unsafe fn indexed_rescale() {
     c_api::TFB_FlushGraphicsEx(1);
     println!("real Earth rescale: every indexed elevation pixel matches nearest-neighbor mapping and both frame owners released");
 }
+
+use uqm_rust::planets::generate::SystemGenerator;

@@ -113,6 +113,7 @@ impl<S, H, R, L: super::home_contact::LanderTakeoff, F> super::home_contact::Lan
 }
 
 pub fn with_empty<R>(run: impl FnOnce(&mut SolarSys<'_>) -> R) -> R {
+    // SAFETY: the ABI record contains only zero-valid scalar and pointer fields.
     let mut state: SOLARSYS_STATE = unsafe { std::mem::zeroed() };
     let mut rng = crate::math::RandomContext::with_seed(1);
     // SAFETY: this scope owns both records until the generation view is dropped.
@@ -148,6 +149,7 @@ pub fn with_orbit<R>(
     body: Body,
     run: impl FnOnce(&mut SolarSys<'_>) -> R,
 ) -> R {
+    // SAFETY: the ABI record contains only zero-valid scalar and pointer fields.
     let mut state: SOLARSYS_STATE = unsafe { std::mem::zeroed() };
     state.SysInfo = *orbit.sys_info;
     state.SunDesc[0].data_index = orbit.star.size;

@@ -3,6 +3,7 @@
 use super::{generateMyconFunctions, Harness};
 use crate::planets_common::mycon::{self, MyconOps, RustMycon, ScanCase};
 use uqm_rust::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame};
+
 use uqm_rust::planets::generate::special::Body;
 use uqm_rust::state::game_state_keys::set_game_state;
 
@@ -18,8 +19,12 @@ impl MyconOps for Harness {
         self.state.PlanetDesc.copy_from_slice(planets);
         self.state.SunDesc[0].num_planets = 0;
         self.seed(case.2);
-        let hook = generateMyconFunctions.generate_planets.unwrap();
-        let result = unsafe { hook(&mut *self.state) };
+
+        let result = unsafe {
+            crate::invoke_generation(&raw mut *self.state, |system, host| {
+                generateMyconFunctions.generate_planets(system, host)
+            })
+        };
         planets.copy_from_slice(&self.state.PlanetDesc);
         (
             result,
@@ -42,7 +47,7 @@ impl MyconOps for Harness {
         self.state.MoonDesc = unsafe { std::mem::zeroed() };
         self.state.SysInfo = mycon::scan_info(case);
         let sun: *mut PlanetDesc = &mut self.state.SunDesc[0];
-        let world: *const PlanetDesc = match case.body {
+        let _world: *const PlanetDesc = match case.body {
             Body::Planet(p) => {
                 self.state.PlanetDesc[usize::from(p)].prev_desc = sun;
                 &self.state.PlanetDesc[usize::from(p)]
@@ -54,20 +59,30 @@ impl MyconOps for Harness {
                 &self.state.MoonDesc[usize::from(moon)]
             }
         };
-        let hook = {
-            if case.life {
-                generateMyconFunctions.generate_life
-            } else {
-                generateMyconFunctions.generate_energy
-            }
-        }
-        .unwrap();
+        let generate =
+            |view: &mut uqm_rust::engine::world::generation::SolarSys<'_>,
+             info: &mut NodeInfo,
+             host: &mut dyn uqm_rust::planets::generate::SiteHost| {
+                if case.life {
+                    generateMyconFunctions.generate_life(view, case.body, case.which, info, host)
+                } else {
+                    generateMyconFunctions.generate_energy(view, case.body, case.which, info, host)
+                }
+            };
         self.seed(case.seed);
         let before = format!("{:?}", self.state);
-        let count = unsafe { hook(&*self.state, world, case.which, node) };
+        let count = unsafe {
+            crate::invoke_generation(&raw mut *self.state, |view, host| {
+                generate(view, node, host)
+            })
+        };
         let after_rng = self.rng_position();
         self.seed(case.seed);
-        let count_only = unsafe { hook(&*self.state, world, case.which, std::ptr::null_mut()) };
+        let count_only = unsafe {
+            crate::invoke_generation(&raw mut *self.state, |view, host| {
+                generate(view, &mut crate::planets_common::fresh_node(), host)
+            })
+        };
         assert_eq!(count_only, count, "NULL output count: {case:?}");
         assert_eq!(self.rng_position(), after_rng, "NULL output RNG: {case:?}");
         assert_eq!(
@@ -97,3 +112,5 @@ pub fn check(table: &[PlanetFrame]) {
         from_export.lines().count()
     );
 }
+
+use uqm_rust::planets::generate::SystemGenerator;

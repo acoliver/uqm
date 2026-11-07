@@ -5,28 +5,28 @@
 //! position captured from the C originals in the checked-in fixture.
 
 use uqm_rust::engine::world::planet::PlanetDesc;
-use uqm_rust::planets::generate::home_exports::GENERATE_BURVIXESE_FUNCTIONS as generateBurvixeseFunctions;
-use uqm_rust::planets::generate::home_exports::GENERATE_DRUUGE_FUNCTIONS as generateDruugeFunctions;
-use uqm_rust::planets::generate::home_exports::GENERATE_ILWRATH_FUNCTIONS as generateIlwrathFunctions;
-use uqm_rust::planets::generate::home_exports::GENERATE_ORZ_FUNCTIONS as generateOrzFunctions;
-use uqm_rust::planets::generate::home_exports::GENERATE_PKUNK_FUNCTIONS as generatePkunkFunctions;
-use uqm_rust::planets::generate::home_exports::GENERATE_SUPOX_FUNCTIONS as generateSupoxFunctions;
-use uqm_rust::planets::generate::home_exports::GENERATE_TALKING_PET_FUNCTIONS as generateTalkingPetFunctions;
-use uqm_rust::planets::generate::home_exports::GENERATE_THRADDASH_FUNCTIONS as generateThraddashFunctions;
-use uqm_rust::planets::generate::home_exports::GENERATE_ZOQ_FOT_PIK_FUNCTIONS as generateZoqFotPikFunctions;
-use uqm_rust::planets::generate::late_exports::GENERATE_MYCON_FUNCTIONS as generateMyconFunctions;
-use uqm_rust::planets::generate::late_exports::GENERATE_UTWIG_FUNCTIONS as generateUtwigFunctions;
-use uqm_rust::planets::generate::special_exports::GENERATE_COLONY_FUNCTIONS as generateColonyFunctions;
-use uqm_rust::planets::generate::special_exports::GENERATE_RAINBOW_WORLD_FUNCTIONS as generateRainbowWorldFunctions;
-use uqm_rust::planets::generate::special_exports::GENERATE_SLYLANDRO_FUNCTIONS as generateSlylandroFunctions;
-use uqm_rust::planets::generate::special_exports::GENERATE_SYREEN_FUNCTIONS as generateSyreenFunctions;
-use uqm_rust::planets::generate::special_exports::GENERATE_TRAP_FUNCTIONS as generateTrapFunctions;
-use uqm_rust::planets::generate::special_exports::GENERATE_VAULT_FUNCTIONS as generateVaultFunctions;
-use uqm_rust::planets::generate::special_exports::GENERATE_WRECK_FUNCTIONS as generateWreckFunctions;
-use uqm_rust::planets::generate::special_exports::GENERATE_YEHAT_FUNCTIONS as generateYehatFunctions;
-use uqm_rust::planets::generate::story_exports::GENERATE_ANDROSYNTH_FUNCTIONS as generateAndrosynthFunctions;
-use uqm_rust::planets::generate::story_exports::GENERATE_CHMMR_FUNCTIONS as generateChmmrFunctions;
-use uqm_rust::planets::generate::story_exports::GENERATE_SHOFIXTI_FUNCTIONS as generateShofixtiFunctions;
+use uqm_rust::planets::generate::andro::Generator as generateAndrosynthFunctions;
+use uqm_rust::planets::generate::burv::Generator as generateBurvixeseFunctions;
+use uqm_rust::planets::generate::chmmr::Generator as generateChmmrFunctions;
+use uqm_rust::planets::generate::colony::Generator as generateColonyFunctions;
+use uqm_rust::planets::generate::dru::Generator as generateDruugeFunctions;
+use uqm_rust::planets::generate::ilw::Generator as generateIlwrathFunctions;
+use uqm_rust::planets::generate::myc::Generator as generateMyconFunctions;
+use uqm_rust::planets::generate::orz::Generator as generateOrzFunctions;
+use uqm_rust::planets::generate::pet::Generator as generateTalkingPetFunctions;
+use uqm_rust::planets::generate::pku::Generator as generatePkunkFunctions;
+use uqm_rust::planets::generate::rainbow::Generator as generateRainbowWorldFunctions;
+use uqm_rust::planets::generate::shof::Generator as generateShofixtiFunctions;
+use uqm_rust::planets::generate::slylandro::Generator as generateSlylandroFunctions;
+use uqm_rust::planets::generate::sup::Generator as generateSupoxFunctions;
+use uqm_rust::planets::generate::syreen::Generator as generateSyreenFunctions;
+use uqm_rust::planets::generate::thrad::Generator as generateThraddashFunctions;
+use uqm_rust::planets::generate::trap::Generator as generateTrapFunctions;
+use uqm_rust::planets::generate::utw::Generator as generateUtwigFunctions;
+use uqm_rust::planets::generate::vault::Generator as generateVaultFunctions;
+use uqm_rust::planets::generate::wreck::Generator as generateWreckFunctions;
+use uqm_rust::planets::generate::yehat::Generator as generateYehatFunctions;
+use uqm_rust::planets::generate::zoq::Generator as generateZoqFotPikFunctions;
 use uqm_rust::planets::solarsys::P_SOLAR_SYS_STATE as pSolarSysState;
 mod late_abi;
 mod late_gen;
@@ -51,7 +51,7 @@ use uqm_rust::battle::gendef::{
 use uqm_rust::c_bindings::global_state::SOLARSYS_STATE;
 use uqm_rust::math::RandomContext;
 use uqm_rust::planets::generate::special::Body;
-use uqm_rust::planets::generate::vtable::GenerateFunctions;
+use uqm_rust::planets::generate::SystemGenerator;
 use uqm_rust::state::game_state_keys::set_game_state;
 
 use uqm_rust::state::ffi::rust_init_game_state;
@@ -99,6 +99,7 @@ impl Harness {
 
     fn set_star(&mut self, size: u8, color: u8) {
         self.state.SunDesc[0].data_index = size;
+        self.state.generator_index = self.star_index;
         self.star[0].star_type = (color << 5) | 0b101;
         self.star[0].index = self.star_index;
         unsafe {
@@ -125,15 +126,19 @@ impl Harness {
     /// The C `generatePlanets` slot: planet table, drawn count, RNG position.
     fn c_planets(
         &mut self,
-        table: &GenerateFunctions,
+        table: &dyn SystemGenerator,
         case: (u8, u8, u32),
     ) -> (Vec<Desc>, u8, u32) {
         self.set_star(case.0, case.1);
         self.state.PlanetDesc = unsafe { std::mem::zeroed() };
         self.state.SunDesc[0].num_planets = 0;
         self.seed(case.2);
-        let hook = table.generate_planets.expect("generatePlanets is set");
-        assert!(unsafe { hook(&mut *self.state) });
+
+        assert!(unsafe {
+            crate::invoke_generation(&raw mut *self.state, |system, host| {
+                table.generate_planets(system, host)
+            })
+        });
         (
             self.state.PlanetDesc.iter().map(desc_of).collect(),
             self.state.SunDesc[0].num_planets,
@@ -144,7 +149,7 @@ impl Harness {
     /// The C `generateMoons` slot for planet `planet_i`.
     fn c_moons(
         &mut self,
-        table: &GenerateFunctions,
+        table: &dyn SystemGenerator,
         case: (u8, u8, u32, u8),
         planet_i: usize,
     ) -> (Vec<Desc>, u32) {
@@ -155,9 +160,13 @@ impl Harness {
         self.state.PlanetDesc[planet_i].prev_desc = sun;
         self.state.PlanetDesc[planet_i].num_planets = case.3;
         self.seed(case.2);
-        let planet: *mut PlanetDesc = &mut self.state.PlanetDesc[planet_i];
-        let hook = table.generate_moons.expect("generateMoons is set");
-        assert!(unsafe { hook(&mut *self.state, planet) });
+        let _planet: *mut PlanetDesc = &mut self.state.PlanetDesc[planet_i];
+
+        assert!(unsafe {
+            crate::invoke_generation(&raw mut *self.state, |system, host| {
+                table.generate_moons(system, planet_i as u8, host)
+            })
+        });
         (
             self.state.MoonDesc.iter().map(desc_of).collect(),
             self.rng_position(),
@@ -165,13 +174,13 @@ impl Harness {
     }
 
     /// The C `generateEnergy` slot on `body`; the node list it produces.
-    fn c_energy(&mut self, table: &GenerateFunctions, body: Body, seed: u32) -> String {
+    fn c_energy(&mut self, table: &dyn SystemGenerator, body: Body, seed: u32) -> String {
         self.state.PlanetDesc = unsafe { std::mem::zeroed() };
         self.state.MoonDesc = unsafe { std::mem::zeroed() };
         self.state.SysInfo = unsafe { std::mem::zeroed() };
         self.state.SysInfo.planet_info.scan_seed = scan_seeds(seed);
         let sun: *mut PlanetDesc = &mut self.state.SunDesc[0];
-        let world: *mut PlanetDesc = match body {
+        let _world: *mut PlanetDesc = match body {
             Body::Planet(p) => {
                 self.state.PlanetDesc[usize::from(p)].prev_desc = sun;
                 &mut self.state.PlanetDesc[usize::from(p)]
@@ -183,17 +192,25 @@ impl Harness {
                 &mut self.state.MoonDesc[usize::from(moon)]
             }
         };
-        let hook = table.generate_energy.expect("generateEnergy is set");
-        let system: *const SOLARSYS_STATE = &*self.state;
+
+        let record = &raw mut *self.state;
         let mut out = String::new();
         self.seed(seed);
         let mut node = fresh_node();
-        let count = unsafe { hook(system, world, !0, &mut node) };
+        let count = unsafe {
+            crate::invoke_generation(record, |system, host| {
+                table.generate_energy(system, body, !0, &mut node, host)
+            })
+        };
         let _ = write!(out, "{count}@{}[", self.rng_position());
         for which in 0..count.min(32) {
             self.seed(seed);
             let mut node = fresh_node();
-            let ret = unsafe { hook(system, world, which, &mut node) };
+            let ret = unsafe {
+                crate::invoke_generation(record, |system, host| {
+                    table.generate_energy(system, body, which, &mut node, host)
+                })
+            };
             write_node(&mut out, ret, &node);
             let _ = write!(out, "@{};", self.rng_position());
         }
@@ -229,30 +246,30 @@ fn star_index_of(system: &str) -> u8 {
 }
 
 /// The C tables, looked up by system name.
-fn c_table(system: &str) -> &'static GenerateFunctions {
+fn c_table(system: &str) -> &'static dyn SystemGenerator {
     match system {
-        "yehat" => &generateYehatFunctions,
-        "ilw" => &generateIlwrathFunctions,
-        "burv" | "burv0" | "burv1" => &generateBurvixeseFunctions,
-        "aqua" | "aqua0" | "aqua1" | "thrad" => &generateThraddashFunctions,
-        "orz" | "taalo" | "taalo0" | "taalo1" => &generateOrzFunctions,
-        "zoq" => &generateZoqFotPikFunctions,
-        "shof" => &generateShofixtiFunctions,
-        "andro" => &generateAndrosynthFunctions,
-        "pet" => &generateTalkingPetFunctions,
-        "utw" | "bomb" | "bomb0" | "bomb1" => &generateUtwigFunctions,
-        "myc" | "sun0" | "sun1" | "egg" => &generateMyconFunctions,
-        "pku" => &generatePkunkFunctions,
-        "sup" => &generateSupoxFunctions,
-        "dru" => &generateDruugeFunctions,
-        "chmmr0" | "chmmr1" | "chmmr" => &generateChmmrFunctions,
-        "vault" => &generateVaultFunctions,
-        "colony" => &generateColonyFunctions,
-        "wreck" => &generateWreckFunctions,
-        "rainbow" => &generateRainbowWorldFunctions,
-        "syreen" => &generateSyreenFunctions,
-        "trap" => &generateTrapFunctions,
-        "sly" => &generateSlylandroFunctions,
+        "yehat" => &generateYehatFunctions as &dyn SystemGenerator,
+        "ilw" => &generateIlwrathFunctions as &dyn SystemGenerator,
+        "burv" | "burv0" | "burv1" => &generateBurvixeseFunctions as &dyn SystemGenerator,
+        "aqua" | "aqua0" | "aqua1" | "thrad" => &generateThraddashFunctions as &dyn SystemGenerator,
+        "orz" | "taalo" | "taalo0" | "taalo1" => &generateOrzFunctions as &dyn SystemGenerator,
+        "zoq" => &generateZoqFotPikFunctions as &dyn SystemGenerator,
+        "shof" => &generateShofixtiFunctions as &dyn SystemGenerator,
+        "andro" => &generateAndrosynthFunctions as &dyn SystemGenerator,
+        "pet" => &generateTalkingPetFunctions as &dyn SystemGenerator,
+        "utw" | "bomb" | "bomb0" | "bomb1" => &generateUtwigFunctions as &dyn SystemGenerator,
+        "myc" | "sun0" | "sun1" | "egg" => &generateMyconFunctions as &dyn SystemGenerator,
+        "pku" => &generatePkunkFunctions as &dyn SystemGenerator,
+        "sup" => &generateSupoxFunctions as &dyn SystemGenerator,
+        "dru" => &generateDruugeFunctions as &dyn SystemGenerator,
+        "chmmr0" | "chmmr1" | "chmmr" => &generateChmmrFunctions as &dyn SystemGenerator,
+        "vault" => &generateVaultFunctions as &dyn SystemGenerator,
+        "colony" => &generateColonyFunctions as &dyn SystemGenerator,
+        "wreck" => &generateWreckFunctions as &dyn SystemGenerator,
+        "rainbow" => &generateRainbowWorldFunctions as &dyn SystemGenerator,
+        "syreen" => &generateSyreenFunctions as &dyn SystemGenerator,
+        "trap" => &generateTrapFunctions as &dyn SystemGenerator,
+        "sly" => &generateSlylandroFunctions as &dyn SystemGenerator,
         other => panic!("no such system {other}"),
     }
 }

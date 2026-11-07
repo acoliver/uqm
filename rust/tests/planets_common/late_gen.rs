@@ -1,10 +1,10 @@
 //! Full descriptor buffers and guarded node records for the retained C generators.
 
-use uqm::engine::StoryKey;
 use super::{fresh_node, scan_seeds};
 use std::fmt::Write as _;
 use uqm_rust::battle::gendef::{MAIDENS_DEFINED, VUX_BEAST_DEFINED, VUX_DEFINED};
 use uqm_rust::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
+use uqm_rust::engine::StoryKey;
 use uqm_rust::math::RandomContext;
 use uqm_rust::planets::generate::special::{Body, Story};
 use uqm_rust::planets::generate::{sam, spa, vux};
@@ -191,20 +191,22 @@ pub fn render(kind: Kind, frames: &[PlanetFrame], ops: &mut impl Ops) -> String 
 }
 pub struct Flags(pub bool);
 impl Story for Flags {
-    fn flag(&self, name: &'static str) -> u32 {
+    fn flag(&self, name: StoryKey) -> u32 {
         assert!(matches!(
             name,
-            StoryKey::SHOFIXTI_MAIDENS | StoryKey::UMGAH_BROADCASTERS | StoryKey::SPATHI_SHIELDED_SELVES
+            StoryKey::SHOFIXTI_MAIDENS
+                | StoryKey::UMGAH_BROADCASTERS
+                | StoryKey::SPATHI_SHIELDED_SELVES
         ));
         u32::from(self.0)
     }
-    fn set_flag(&mut self, _: &'static str, _: u32) {
+    fn set_flag(&mut self, _: StoryKey, _: u32) {
         panic!("read only");
     }
-    fn word(&self, _: &'static str) -> u32 {
+    fn word(&self, _: StoryKey) -> u32 {
         panic!("no group references");
     }
-    fn set_word(&mut self, _: &'static str, _: u32) {
+    fn set_word(&mut self, _: StoryKey, _: u32) {
         panic!("read only");
     }
 }
