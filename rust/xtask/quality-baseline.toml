@@ -2410,7 +2410,7 @@ u6_04_world_projection = { limit = 118, ends = "U6-04", scopes = { "ffi|owner_pr
 "complexity|cyclomatic|uqm::front_end::intro::runtime::presentation_commands" = 71
 "complexity|cyclomatic|uqm::front_end::setupmenu::runtime::init_widgets" = 27
 "complexity|cyclomatic|uqm::front_end::setupmenu::runtime::set_global_options" = 31
-"complexity|cyclomatic|uqm::front_end::uqmdebug::star_presence_string" = 48
+"complexity|cyclomatic|uqm::front_end::uqmdebug::labels::star_presence_string" = 48
 "complexity|cyclomatic|uqm::mainloop::options::apply_boolean_config" = 28
 "complexity|cyclomatic|uqm::navigation::events::live::dispatch_event" = 27
 "complexity|cyclomatic|uqm::navigation::hyper_encounters::process" = 29
@@ -2619,7 +2619,6 @@ u6_04_world_projection = { limit = 118, ends = "U6-04", scopes = { "ffi|owner_pr
 "complexity|loc|uqm::navigation::hyper_radar::SeedUniverse" = 169
 "complexity|loc|uqm::navigation::interplanetary::live::group_preprocess" = 239
 "complexity|loc|uqm::planet_side::collision_adapter::<SurfaceCollisionAdapter<R,G,V> as PlanetSideCollision>::apply_world_step" = 125
-"complexity|loc|uqm::planet_side::ffi::run_session" = 136
 "complexity|loc|uqm::planet_side::orbit_scan::production::initialize_element" = 90
 "complexity|loc|uqm::planets::generate::orbits::fill_orbits" = 83
 "complexity|loc|uqm::planets::plangen::live::generate_planet_surface" = 192
@@ -2667,7 +2666,7 @@ u6_04_world_projection = { limit = 118, ends = "U6-04", scopes = { "ffi|owner_pr
 "ffi|bridge_calls|uqm::game_init" = 3
 "ffi|bridge_calls|uqm::mainloop" = 1
 "ffi|bridge_calls|uqm::navigation" = 4
-"ffi|bridge_calls|uqm::planet_side" = 2
+"ffi|bridge_calls|uqm::planet_side" = 1
 "ffi|bridge_calls|uqm::planets" = 3
 "ffi|bridge_calls|uqm::time" = 2
 "ffi|bridge_calls|uqm::ui" = 2
@@ -4594,6 +4593,15 @@ u6_04_world_projection = { limit = 118, ends = "U6-04", scopes = { "ffi|owner_pr
 "uqm-engine::input" = "uqm-engine::input_port"
 "uqm-engine::observe::@file" = "uqm-engine::observe_port::@file"
 "uqm-engine::observe::Io" = "uqm-engine::observe_port::ObservationIo"
+"uqm::front_end::uqmdebug::atmosphere_string" = "uqm::front_end::uqmdebug::labels::atmosphere_string"
+"uqm::front_end::uqmdebug::body_color_string" = "uqm::front_end::uqmdebug::labels::body_color_string"
+"uqm::front_end::uqmdebug::density_string" = "uqm::front_end::uqmdebug::labels::density_string"
+"uqm::front_end::uqmdebug::deposit_quality_string" = "uqm::front_end::uqmdebug::labels::deposit_quality_string"
+"uqm::front_end::uqmdebug::event_name" = "uqm::front_end::uqmdebug::labels::event_name"
+"uqm::front_end::uqmdebug::star_presence_string" = "uqm::front_end::uqmdebug::labels::star_presence_string"
+"uqm::front_end::uqmdebug::star_type_string" = "uqm::front_end::uqmdebug::labels::star_type_string"
+"uqm::front_end::uqmdebug::world_gen_algo_string" = "uqm::front_end::uqmdebug::labels::world_gen_algo_string"
+"uqm::front_end::uqmdebug::world_size_string" = "uqm::front_end::uqmdebug::labels::world_size_string"
 "uqm::graphics" = "uqm-engine::graphics"
 "uqm::input" = "uqm-engine::input_port"
 "uqm::io" = "uqm-engine::io"
