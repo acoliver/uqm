@@ -219,6 +219,15 @@ impl TraceRecord {
     /// Schema 3 adds native_battle records only; replay records remain schema 2.
     pub const BATTLE_SCHEMA: u16 = 3;
 
+    pub(crate) fn has_valid_schema(&self) -> bool {
+        self.schema
+            == if self.kind == RecordKind::NativeBattle {
+                Self::BATTLE_SCHEMA
+            } else {
+                Self::SCHEMA
+            }
+    }
+
     /// Serialize this record as one JSON line followed by a newline.
     ///
     /// @plan PLAN-20260723-RUNTIME-AUTOMATION.P03

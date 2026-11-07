@@ -3757,7 +3757,7 @@ fn trace_semantics(path: &Path, limit: u64) -> Result<(u64, u64), String> {
         .map(|(sequence, line)| {
             let record: TraceRecord = serde_json::from_str(line)
                 .map_err(|error| format!("parse trace record: {error}"))?;
-            if record.schema != TraceRecord::SCHEMA || record.sequence != sequence as u64 {
+            if !record.has_valid_schema() || record.sequence != sequence as u64 {
                 return Err("trace sequence/schema mismatch".to_string());
             }
             Ok(record)

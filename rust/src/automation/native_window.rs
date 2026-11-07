@@ -3448,9 +3448,7 @@ fn trace_recording_consistency(
     {
         let record: crate::automation::trace::TraceRecord =
             serde_json::from_slice(line).map_err(|_| NativeWindowProofError::Receipt)?;
-        if record.schema != crate::automation::trace::TraceRecord::SCHEMA
-            || record.sequence != records.len() as u64
-        {
+        if !record.has_valid_schema() || record.sequence != records.len() as u64 {
             return Err(NativeWindowProofError::Receipt);
         }
         records.push(record);
