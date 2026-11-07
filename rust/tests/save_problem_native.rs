@@ -522,6 +522,107 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
                         assert_eq!((foreground.r, foreground.g, foreground.b), expected);
                     }
                 }
+                for clip_x in [None, Some(3), Some(500)] {
+                    context_lease.fill_rectangle(
+                        Color {
+                            r: 9,
+                            g: 17,
+                            b: 25,
+                            a: 255,
+                        },
+                        RECT {
+                            corner: POINT { x: 0, y: 0 },
+                            extent: EXTENT {
+                                width: 65,
+                                height: 77,
+                            },
+                        },
+                    );
+                    let mut ship: uqm_rust::navigation::abi::SHIP_INFO = std::mem::zeroed();
+                    ship.max_crew = 2;
+                    ship.max_energy = 2;
+                    ship.crew_level = 2;
+                    ship.energy_level = 2;
+                    let clip = clip_x.map(|x| RECT {
+                        corner: POINT { x, y: 1 },
+                        extent: EXTENT {
+                            width: 55,
+                            height: 52,
+                        },
+                    });
+                    let original_clip = context_lease.clip_rect();
+                    let original_origin = (*frame).HotSpot;
+                    uqm_rust::graphics::font_abi::SetContextFont(ptr::null_mut());
+                    SetContext(previous);
+                    uqm_rust::ui::shipstat::StatusGraphics {
+                        context: context_lease.clone(),
+                        frames: frames.clone(),
+                        font: font_lease.clone(),
+                        tiny_font: font_lease.clone(),
+                        crew_font: Some(font_lease.clone()),
+                        pc_menu: false,
+                    }
+                    .draw(
+                        &mut ship,
+                        &frames.context_frame(2),
+                        0,
+                        clip,
+                        Some(uqm_rust::ui::shipstat::StatusTitle {
+                            name: c"A",
+                            name_count: 1,
+                            caption: Some((c"A", 1)),
+                        }),
+                    );
+                    let selected = uqm_rust::graphics::context_abi::_pCurContext;
+                    assert_eq!(selected, previous);
+                    assert!((*context).Font.is_null());
+                    assert_eq!((ship.crew_level, ship.energy_level), (2, 2));
+                    assert_eq!(
+                        ((*frame).HotSpot.x, (*frame).HotSpot.y),
+                        (original_origin.x, original_origin.y)
+                    );
+                    let restored = context_lease.clip_rect();
+                    assert_eq!(
+                        (
+                            restored.corner.x,
+                            restored.corner.y,
+                            restored.extent.width,
+                            restored.extent.height
+                        ),
+                        (
+                            original_clip.corner.x,
+                            original_clip.corner.y,
+                            original_clip.extent.width,
+                            original_clip.extent.height
+                        )
+                    );
+                    TFB_FlushGraphics();
+                    // Offscreen native primitives use the clip for origin and intersection,
+                    // not a per-pixel scissor; an entirely excluded region draws nothing.
+                    for (x, y, color) in [
+                        (32, 9, (0, 0, 0)),
+                        (32, 10, (132, 132, 132)),
+                        (32, 31, (32, 42, 52)),
+                        (0, 1, (66, 66, 66)),
+                        (32, 58, (0, 0, 0)),
+                        (13, 62, (30, 40, 50)),
+                        (50, 62, (31, 41, 51)),
+                        (8, 54, (0, 165, 0)),
+                        (56, 54, (165, 0, 0)),
+                    ] {
+                        let expected = if clip_x == Some(500) {
+                            (9, 17, 25)
+                        } else {
+                            color
+                        };
+                        let pixel = GetFramePixel(frame, POINT { x, y });
+                        assert_eq!(
+                            (pixel.r, pixel.g, pixel.b),
+                            expected,
+                            "panel clip_x={clip_x:?} ({x},{y})"
+                        );
+                    }
+                }
             }
             let mut stats: uqm_rust::navigation::abi::SHIP_INFO = std::mem::zeroed();
             stats.ship_flags = 1 << 13;

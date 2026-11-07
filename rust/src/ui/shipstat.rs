@@ -5,7 +5,6 @@ use crate::engine::battle::link_queue::PickShip;
 use crate::engine::{Kernel, WorldData};
 use crate::graphics::context_abi::_pCurContext;
 use crate::navigation::abi::*;
-use std::mem;
 
 const STATUS_WIDTH: COORD = 64;
 const SHIP_INFO_HEIGHT: COORD = 65;
@@ -73,26 +72,6 @@ pub fn draw_crew_energy_labels(
     } else {
         context.draw_filled_stamp(&energy, origin, rgb15(0x1f, 0x1f, 0x0a));
     }
-}
-
-unsafe fn draw_ship_name_string(p_str: *mut UNICODE, char_count: COUNT, y: COORD) {
-    let context = crate::graphics::context_abi::ContextLease::retain(
-        std::ptr::NonNull::new(_pCurContext)
-            .unwrap_or_else(|| panic!("status title context not admitted")),
-    );
-    let font = Kernel::current().read(|owner| {
-        crate::graphics::native_font::FontLease::retain(
-            std::ptr::NonNull::new(owner.star_con_font.cast())
-                .unwrap_or_else(|| panic!("status title font not admitted")),
-        )
-    });
-    draw_ship_name_text(
-        &context,
-        &font,
-        std::ffi::CStr::from_ptr(p_str.cast()),
-        char_count,
-        y,
-    );
 }
 
 pub fn draw_ship_name_text(
@@ -188,6 +167,127 @@ pub fn outline_ship_status(context: &crate::graphics::context_abi::ContextLease,
     context.fill_rectangle(rgb15(0, 0, 0), r);
 }
 
+pub struct StatusTitle<'a> {
+    pub name: &'a std::ffi::CStr,
+    pub name_count: COUNT,
+    pub caption: Option<(&'a std::ffi::CStr, COUNT)>,
+}
+
+pub struct StatusGraphics {
+    pub context: crate::graphics::context_abi::ContextLease,
+    pub frames: crate::graphics::drawable_abi::DrawableLease,
+    pub font: crate::graphics::native_font::FontLease,
+    pub tiny_font: crate::graphics::native_font::FontLease,
+    pub crew_font: Option<crate::graphics::native_font::FontLease>,
+    pub pc_menu: bool,
+}
+
+impl StatusGraphics {
+    pub fn new(
+        kernel: &Kernel,
+        crew_font: Option<crate::graphics::native_font::FontLease>,
+    ) -> Self {
+        use crate::graphics::{context_abi::ContextLease, native_font::FontLease};
+        use std::ptr::NonNull;
+        Self {
+            context: ContextLease::retain(
+                NonNull::new(kernel.status_context)
+                    .unwrap_or_else(|| panic!("status context not admitted")),
+            ),
+            frames: crate::graphics::drawable_abi::retain_frame_allocations(&[kernel.status_frame])
+                [0]
+            .clone(),
+            font: FontLease::retain(
+                NonNull::new(kernel.star_con_font.cast())
+                    .unwrap_or_else(|| panic!("status font not admitted")),
+            ),
+            tiny_font: FontLease::retain(
+                NonNull::new(kernel.tiny_font.cast())
+                    .unwrap_or_else(|| panic!("status tiny font not admitted")),
+            ),
+            crew_font,
+            pc_menu: kernel.configuration.preferences().menu == OPT_PC,
+        }
+    }
+
+    pub fn draw(
+        &self,
+        ship: &mut SHIP_INFO,
+        portrait: &crate::graphics::context_abi::ContextFrame,
+        y: COORD,
+        clip: Option<RECT>,
+        title: Option<StatusTitle<'_>>,
+    ) {
+        let context = &self.context;
+        let draw = || {
+            context.draw_batch(|| {
+                outline_ship_status(context, y);
+                clear_ship_status(context, y);
+                context.draw_stamp(
+                    portrait,
+                    POINT {
+                        x: STATUS_WIDTH >> 1,
+                        y: 31 + y,
+                    },
+                );
+                draw_gauge_frames(context, ship.max_crew, ship.max_energy, y);
+                if let Some(title) = title {
+                    draw_crew_energy_labels(context, &self.frames, self.pc_menu, y, 0);
+                    draw_ship_name_text(context, &self.font, title.name, title.name_count, y);
+                    if let Some((caption, characters)) = title.caption {
+                        context.with_text_state(|| {
+                            context.draw_text_bounded(
+                                &self.tiny_font,
+                                caption,
+                                POINT {
+                                    x: STATUS_WIDTH >> 1,
+                                    y: y + GAUGE_YOFFS + 3,
+                                },
+                                TEXT_ALIGN_ALIGN_CENTER,
+                                rgb15(0, 0, 0),
+                                characters,
+                            )
+                        });
+                        context.set_foreground(rgb15(0, 0, 0));
+                    }
+                }
+                let changes = (ship.crew_level as SIZE, ship.energy_level as SIZE);
+                ship.crew_level = 0;
+                ship.energy_level = 0;
+                update_statistics(
+                    context,
+                    true,
+                    self.pc_menu,
+                    self.crew_font.as_ref(),
+                    ship,
+                    y,
+                    changes,
+                );
+            })
+        };
+        context.with_selected(|| {
+            if let Some(clip) = clip {
+                let mut bounds = context.clip_rect();
+                bounds.corner.x += clip.corner.x;
+                bounds.corner.y += clip.corner.y & !1;
+                bounds.extent = clip.extent;
+                bounds.extent.height += clip.corner.y & 1;
+                context.with_clip(bounds, || {
+                    context.with_origin(
+                        POINT {
+                            x: -clip.corner.x,
+                            y: -(clip.corner.y & !1),
+                        },
+                        draw,
+                    )
+                });
+            } else {
+                draw();
+            }
+        });
+    }
+}
+
 /// # Safety
 /// SIPtr must point to writable ship info. Optional pointers must be null or point to valid game objects.
 pub(crate) unsafe fn init_ship_status(
@@ -196,105 +296,59 @@ pub(crate) unsafe fn init_ship_status(
     starship: Option<PickShip>,
     clip_rect: *mut RECT,
 ) {
-    let mut y: COORD = 0;
-    let mut stamp: STAMP = mem::zeroed();
-    let mut old_clip: RECT = mem::zeroed();
-    let mut old_origin = POINT { x: 0, y: 0 };
-    if let Some(ship) = starship {
-        assert!(ship.player >= 0);
-        y = Kernel::current().read(|owner| owner.status_offsets[ship.player as usize]);
-    }
-    let (context, pc_menu) = Kernel::current().read(|owner| {
-        (
-            owner.status_context,
-            owner.configuration.preferences().menu == OPT_PC,
+    use crate::graphics::context_abi::ContextFrame;
+    use std::{ffi::CStr, ptr::NonNull};
+    let (graphics, y) = Kernel::current().read(|owner| {        (
+            StatusGraphics::new(owner, font.cloned()),
+            starship.map_or(0, |ship| {
+                assert!(ship.player >= 0);
+                owner.status_offsets[ship.player as usize]
+            }),
         )
     });
-    let old_context = SetContext(context);
-    if !clip_rect.is_null() {
-        GetContextClipRect(&mut old_clip);
-        let mut r = old_clip;
-        r.corner.x += (*clip_rect).corner.x;
-        r.corner.y += (*clip_rect).corner.y & !1;
-        r.extent = (*clip_rect).extent;
-        r.extent.height += (*clip_rect).corner.y & 1;
-        SetContextClipRect(&mut r);
-        old_origin = SetContextOrigin(POINT {
-            x: -(*clip_rect).corner.x,
-            y: -((*clip_rect).corner.y & !1),
-        });
-    }
-    BatchGraphics();
-    OutlineShipStatus(y);
-    ClearShipStatus(y);
-    stamp.origin.x = STATUS_WIDTH >> 1;
-    stamp.origin.y = 31 + y;
-    stamp.frame = IncFrameIndex((*siptr).icons);
-    DrawStamp(&mut stamp);
-    let gauge_context = crate::graphics::context_abi::ContextLease::retain(
-        std::ptr::NonNull::new(context.cast())
-            .unwrap_or_else(|| panic!("status gauge context not admitted")),
-    );
-    draw_gauge_frames(&gauge_context, (*siptr).max_crew, (*siptr).max_energy, y);
-
-    draw_status_title(siptr, starship, y);
-    let crew_delta = (*siptr).crew_level as SIZE;
-    let energy_delta = (*siptr).energy_level as SIZE;
-    (*siptr).crew_level = 0;
-    (*siptr).energy_level = 0;
-    delta_statistics(pc_menu, font, siptr, y, crew_delta, energy_delta);
-    UnbatchGraphics();
-    if !clip_rect.is_null() {
-        SetContextOrigin(old_origin);
-        SetContextClipRect(&mut old_clip);
-    }
-    SetContext(old_context);
-}
-
-unsafe fn draw_status_title(
-    siptr: *mut SHIP_INFO,
-    starship: Option<crate::engine::battle::link_queue::PickShip>,
-    y: COORD,
-) {
-    let world = WorldData::current();
-    if starship.is_none_or(|ship| ship.captain != 0) {
-        DrawCrewFuelString(y, 0);
-        let loc = SetAbsStringTableIndex((*siptr).race_strings, 1);
-        draw_ship_name_string(GetStringAddress(loc).cast(), GetStringLength(loc), y);
-        let old_font = SetContextFont(Kernel::current().read(|owner| owner.tiny_font));
-        let mut buf = [0u8; 30];
-        let (name, count) = if let Some(ship) = starship {
-            let name = SetAbsStringTableIndex((*siptr).race_strings, ship.captain as COUNT);
-            (GetStringAddress(name).cast(), GetStringLength(name))
+    let ship = &mut *siptr;
+    let portrait = ContextFrame::retain(NonNull::new(IncFrameIndex(ship.icons)));
+    let flagship_name = WorldData::current().read(|world| world.flagship.ship_name);
+    let cost = std::ffi::CString::new(ship.ship_cost.to_string())
+        .unwrap_or_else(|error| panic!("ship cost: {error}"));
+    let title = if starship.is_none_or(|ship| ship.captain != 0) {
+        let entry = SetAbsStringTableIndex(ship.race_strings, 1);
+        let count = GetStringLength(entry);
+        let name = if count == 0 {
+            c""
         } else {
-            libc::sprintf(
-                buf.as_mut_ptr().cast(),
-                c"%d".as_ptr(),
-                (*siptr).ship_cost as libc::c_int,
-            );
-            (buf.as_mut_ptr().cast(), !0)
+            CStr::from_ptr(GetStringAddress(entry).cast())
         };
-        let mut text: TEXT = mem::zeroed();
-        text.pStr = name;
-        text.CharCount = count;
-        text.align = TEXT_ALIGN_ALIGN_CENTER;
-        text.baseline.x = STATUS_WIDTH >> 1;
-        text.baseline.y = y + GAUGE_YOFFS + 3;
-        SetContextForeGroundColor(rgb15(0, 0, 0));
-        font_DrawText(&mut text);
-        SetContextFont(old_font);
-    } else if starship
-        .unwrap_or_else(|| panic!("missing checked battle value"))
-        .player
-        == RPG_PLAYER_NUM
-    {
-        DrawCrewFuelString(y, 0);
-        draw_ship_name_string(
-            std::ptr::addr_of_mut!((**world).flagship.ship_name).cast(),
-            !0,
-            y,
-        );
-    }
+        let caption = if let Some(selected) = starship {
+            let entry = SetAbsStringTableIndex(ship.race_strings, selected.captain as COUNT);
+            let count = GetStringLength(entry);
+            (
+                if count == 0 {
+                    c""
+                } else {
+                    CStr::from_ptr(GetStringAddress(entry).cast())
+                },
+                count,
+            )
+        } else {
+            (cost.as_c_str(), COUNT::MAX)
+        };
+        Some(StatusTitle {
+            name,
+            name_count: count,
+            caption: Some(caption),
+        })
+    } else if starship.is_some_and(|ship| ship.player == RPG_PLAYER_NUM) {
+        Some(StatusTitle {
+            name: CStr::from_bytes_until_nul(&flagship_name)
+                .unwrap_or_else(|error| panic!("flagship name: {error}")),
+            name_count: COUNT::MAX,
+            caption: None,
+        })
+    } else {
+        None
+    };
+    graphics.draw(ship, &portrait, y, clip_rect.as_ref().copied(), title);
 }
 
 /// # Safety
