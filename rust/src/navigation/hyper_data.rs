@@ -5,7 +5,7 @@ use super::{
 };
 use crate::engine::{
     battle::{hyperspace as resources, Cx},
-    Kernel, StoryKey,
+    StoryKey,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -18,7 +18,7 @@ pub enum EntryDisplay {
     ClearRadar,
 }
 
-pub use crate::engine::battle::hyperspace::free as free_hyper_data;
+pub use crate::engine::battle::hyperspace::free_hyper_data;
 
 pub fn load_hyperspace(cx: &mut Cx<'_>, mut display: impl FnMut(&mut Cx<'_>, EntryDisplay)) {
     cx.world.hyper_distance = crate::engine::world::FuelDistance {
@@ -29,7 +29,7 @@ pub fn load_hyperspace(cx: &mut Cx<'_>, mut display: impl FnMut(&mut Cx<'_>, Ent
     };
     cx.world.data.game.ship_stamp.origin = POINT { x: -9999, y: -9999 };
     resources::load(cx.kernel);
-    free_hyperspace(cx.kernel);
+    resources::free_hyperspace(cx.kernel);
     if cx.kernel.last_activity & CHECK_LOAD as u16 == 0 {
         display(cx, EntryDisplay::RepairBorder);
     } else if cx.kernel.last_activity as u8 == 0 {
@@ -60,13 +60,6 @@ pub fn load_hyperspace(cx: &mut Cx<'_>, mut display: impl FnMut(&mut Cx<'_>, Ent
     display(cx, EntryDisplay::ClearRadar);
 }
 
-pub fn free_hyperspace(kernel: &mut Kernel) {
-    crate::collections::observation::swap_image_view(
-        &mut kernel.hyperstars[0],
-        &mut kernel.stars_in_space,
-    );
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -74,7 +67,7 @@ mod tests {
     fn empty_resource_lifecycle_needs_no_published_game() {
         let mut game = crate::engine::Game::new();
         free_hyper_data(&mut game.kernel);
-        free_hyperspace(&mut game.kernel);
+        resources::free_hyperspace(&mut game.kernel);
         assert!(game.kernel.hyperstars.iter().all(|frame| frame.is_null()));
         assert!(game.kernel.stars_in_space.is_null());
         assert!(game.kernel.cmaps.iter().all(|map| map.is_null()));

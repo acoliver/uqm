@@ -174,7 +174,7 @@ impl RaceOps for Cx<'_> {
             observer: &mut *observer,
         };
         // SAFETY: Cx retains the live campaign display throughout this synchronous menu.
-        unsafe { crate::ui::menu::hyperspace_menu(self, &mut io) };
+        unsafe { crate::ui::menu::hyperspace::hyperspace_menu(self, &mut io) };
     }
 
     fn hyperspace_cancel_pressed(&self) -> bool {
