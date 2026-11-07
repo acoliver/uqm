@@ -53,7 +53,9 @@ fn public_campaign_copy_does_not_traverse_live_records() {
             world: &view,
             flagship_destroyed: false
         }
-        .read(StateKey::Story("STARBASE_AVAILABLE")),
+        .read(StateKey::Story(
+            uqm_rust::engine::StoryKey::STARBASE_AVAILABLE
+        )),
         Some(0)
     );
 }

@@ -1588,7 +1588,8 @@ Phase 4 · semantic · lane `world` · about 2,500 semantic and 1,500 mechanical
 - S (check bundle)
 - P (identical across the move commit without re-recording)
 - V3 (check bundle)
-- `cd rust && cargo xtask quality ident GameLoopOps CffiOps InitGameStructures --expect 0`
+- `cd rust && cargo xtask quality ident GameLoopOps InitGameStructures --expect 0`
+- `test ! -e rust/src/mainloop/game_loop.rs`
 - `cd rust && test ! -e src/engine && cargo xtask quality report static_mut:mainloop --expect 0`
 - `cd rust && cargo test -p uqm-engine --locked`
 - `cd rust && cargo build --release --locked --timings   # attach before and after reports`
@@ -1977,6 +1978,7 @@ Phase 6 · semantic · lane `menus` · about 3,000 semantic and 2,000 mechanical
 - src/abi/navigation_abi.rs
 - app::bridge (src/app/bridge.rs: the NonNull<Cx> slot, bridge::enter and the counted accessors) and the bridge_calls budget (adapter A4)
 - the front_end and restart-menu extern "C" entry points and statics, and #![cfg(not(test))] in front_end/cnctdlg.rs
+- the restart-menu `CffiOps` adapter in `src/mainloop/restart_menu/restart_ops.rs`, including its callers in `src/app/runtime.rs` and `tests/load_picker_native.rs`
 - the planned.uqm-content and planned.uqm-modes entries and the root copies of the moved modules (git mv)
 
 **Out of scope.** code changes in the move commit.

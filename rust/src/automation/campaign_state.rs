@@ -16,7 +16,7 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-use crate::state::game_state_keys::{bit_range, STATE_KEYS};
+use crate::engine::StoryKey;
 
 /// A value a script can observe.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -66,7 +66,7 @@ pub enum StateKey {
     /// Ships left on side 1 (`battle_counter[1]`).
     BattleShipsP2,
     /// A named story bit from `STATE_KEYS`.
-    Story(&'static str),
+    Story(StoryKey),
 }
 
 impl StateKey {
@@ -77,10 +77,8 @@ impl StateKey {
     /// Returns a message naming the accepted forms when the key is unknown.
     pub fn parse(text: &str) -> Result<Self, String> {
         if let Some(name) = text.strip_prefix("story:") {
-            return STATE_KEYS
-                .iter()
-                .find(|(known, _, _)| *known == name)
-                .map(|(known, _, _)| Self::Story(known))
+            return StoryKey::from_name(name)
+                .map(Self::Story)
                 .ok_or_else(|| format!("unknown story bit '{name}'"));
         }
         for (prefix, slots, make) in [
@@ -177,10 +175,7 @@ impl StateKey {
             Self::CombatSpeed => 3,
             Self::EscortCount | Self::EscortSpecies(_) => 12,
             Self::BattleShipsP1 | Self::BattleShipsP2 => u32::from(u8::MAX),
-            Self::Story(name) => {
-                let (start, end) = bit_range(name).unwrap_or((0, 0));
-                (1u32 << (end - start + 1)) - 1
-            }
+            Self::Story(key) => (1u32 << (key.end() - key.start() + 1)) - 1,
         }
     }
 }
@@ -217,13 +212,43 @@ impl fmt::Display for StateOp {
     }
 }
 
-/// One comparison. `key` is validated by [`StatePredicate::validate`].
+/// One comparison, with its key resolved when the script loads.
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(deny_unknown_fields)]
+#[serde(try_from = "RawStateCondition")]
 pub struct StateCondition {
-    pub key: String,
+    key: String,
+    #[serde(skip)]
+    state_key: StateKey,
     pub op: StateOp,
     pub value: u32,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawStateCondition {
+    key: String,
+    op: StateOp,
+    value: u32,
+}
+
+impl TryFrom<RawStateCondition> for StateCondition {
+    type Error = String;
+
+    fn try_from(raw: RawStateCondition) -> Result<Self, Self::Error> {
+        Ok(Self {
+            state_key: StateKey::parse(&raw.key)?,
+            key: raw.key,
+            op: raw.op,
+            value: raw.value,
+        })
+    }
+}
+
+impl StateCondition {
+    /// The script spelling retained for trace labels and offline checks.
+    pub fn key(&self) -> &str {
+        &self.key
+    }
 }
 
 /// Every condition must hold.
@@ -244,7 +269,7 @@ impl StatePredicate {
             return Err("predicate needs at least one condition in 'all'".into());
         }
         for condition in &self.all {
-            let key = StateKey::parse(&condition.key)?;
+            let key = condition.state_key;
             if condition.value > key.max_value() {
                 return Err(format!(
                     "value {} exceeds the maximum {} for '{}'",
@@ -283,9 +308,7 @@ pub fn evaluate(predicate: &StatePredicate, source: &dyn StateSource) -> Evaluat
         .all
         .iter()
         .map(|condition| {
-            let value = StateKey::parse(&condition.key)
-                .ok()
-                .and_then(|key| source.read(key));
+            let value = source.read(condition.state_key);
             held &= value.is_some_and(|value| condition.op.holds(value, condition.value));
             (condition.key.clone(), value)
         })
@@ -411,7 +434,7 @@ impl StateSource for LiveCampaign<'_> {
                 input_ffi::hyperspace_position(world).and_then(|(_, y)| u32::try_from(y).ok())
             }
             StateKey::HyperStopped => input_ffi::hyperspace_stopped(world).map(u32::from),
-            StateKey::Story(name) => world.named_state_value(name).map(u32::from),
+            StateKey::Story(key) => world.story_value(key).map(u32::from),
             StateKey::Activity => Some(u32::from(world.activity)),
             StateKey::SisDrive(slot) => {
                 Some(u32::from(world.flagship.drive_slots[usize::from(slot)]))
@@ -518,9 +541,9 @@ mod tests {
         world.set_story_state(crate::engine::StoryKey::STARBASE_AVAILABLE, 0);
         let second = CampaignView::from_world(&world);
         assert_eq!(first.flagship.fuel_on_board, 100);
-        assert_eq!(first.named_state_value("STARBASE_AVAILABLE"), Some(1));
+        assert_eq!(first.story_value(StoryKey::STARBASE_AVAILABLE), Some(1));
         assert_eq!(second.flagship.fuel_on_board, 200);
-        assert_eq!(second.named_state_value("STARBASE_AVAILABLE"), Some(0));
+        assert_eq!(second.story_value(StoryKey::STARBASE_AVAILABLE), Some(0));
         assert!(first.escorts.is_empty() && first.groups.is_empty());
         assert_eq!(first.velocity, (0, 0));
         assert_eq!(first.ship_position, (0, 0));
@@ -531,7 +554,6 @@ mod tests {
         assert_eq!(first.current_star, None);
         assert_eq!(first.contact_race, None);
     }
-    use std::collections::HashMap;
 
     #[test]
     fn boss_and_ending_keys_validate_widths_and_keep_unavailable_distinct_from_zero() {
@@ -551,11 +573,12 @@ mod tests {
         ] {
             assert_eq!(StateKey::parse(key).unwrap().max_value(), maximum);
             let mut wanted = StatePredicate {
-                all: vec![StateCondition {
+                all: vec![StateCondition::try_from(RawStateCondition {
                     key: key.into(),
                     op: StateOp::Eq,
                     value: 0,
-                }],
+                })
+                .unwrap()],
             };
             assert!(wanted.validate().is_ok());
             assert!(!evaluate(&wanted, &fake(&[])).held);
@@ -586,11 +609,12 @@ mod tests {
             "combat:speed",
         ] {
             let predicate = StatePredicate {
-                all: vec![StateCondition {
+                all: vec![StateCondition::try_from(RawStateCondition {
                     key: key.into(),
                     op: StateOp::Eq,
                     value: 0,
-                }],
+                })
+                .unwrap()],
             };
             assert!(predicate.validate().is_ok());
             assert!(!evaluate(&predicate, &fake(&[])).held);
@@ -617,57 +641,25 @@ mod tests {
             assert!(StateKey::parse(key).is_err(), "{key}");
         }
         assert!(StatePredicate {
-            all: vec![StateCondition {
+            all: vec![StateCondition::try_from(RawStateCondition {
                 key: "sis:drive:0".into(),
                 op: StateOp::Eq,
                 value: 256
-            }]
+            })
+            .unwrap()]
         }
         .validate()
         .is_err());
     }
 
-    struct Fake(HashMap<&'static str, u32>);
+    struct Fake(Vec<(StateKey, u32)>);
 
     impl StateSource for Fake {
         fn read(&self, key: StateKey) -> Option<u32> {
-            let name = match key {
-                StateKey::Ending(_) => "ending:test",
-                StateKey::BossRemaining
-                | StateKey::BossDestroyed
-                | StateKey::BossGateOpen
-                | StateKey::BossGateEntered
-                | StateKey::BossBombCarrier
-                | StateKey::BossSelectedSpecies => "samatra:test",
-                StateKey::Activity => "activity",
-                StateKey::StarCurrent => "star:current",
-                StateKey::HyperX => "hyper:x",
-                StateKey::HyperY => "hyper:y",
-                StateKey::HyperStopped => "hyper:stopped",
-                StateKey::StarmapCursorX => "starmap:cursor_x",
-                StateKey::StarmapCursorY => "starmap:cursor_y",
-                StateKey::EscortCount => "escorts:count",
-                StateKey::EscortSpecies(_) => "escorts:species",
-                StateKey::CyborgEnabled => "combat:cyborg",
-                StateKey::CombatSpeed => "combat:speed",
-                StateKey::EncounterMenu => "encounter:menu",
-                StateKey::SisFuel => "sis:fuel",
-                StateKey::SisRu => "sis:ru",
-                StateKey::SisCrew => "sis:crew",
-                StateKey::SisDrive(_)
-                | StateKey::SisJet(_)
-                | StateKey::SisModule(_)
-                | StateKey::SisMineralMass => "test:fittings",
-                StateKey::SisLanders => "sis:landers",
-                StateKey::DateDay => "date:day",
-                StateKey::DateMonth => "date:month",
-                StateKey::DateYear => "date:year",
-                StateKey::FlagshipDestroyed => "game:flagship_destroyed",
-                StateKey::BattleShipsP1 => "battle:ships_p1",
-                StateKey::BattleShipsP2 => "battle:ships_p2",
-                StateKey::Story(name) => name,
-            };
-            self.0.get(name).copied()
+            self.0
+                .iter()
+                .find(|(known, _)| *known == key)
+                .map(|(_, value)| *value)
         }
     }
 
@@ -676,14 +668,41 @@ mod tests {
     }
 
     fn fake(values: &[(&'static str, u32)]) -> Fake {
-        Fake(values.iter().copied().collect())
+        Fake(
+            values
+                .iter()
+                .map(|(name, value)| {
+                    let key = StateKey::parse(name)
+                        .or_else(|_| {
+                            StoryKey::from_name(name)
+                                .map(StateKey::Story)
+                                .ok_or_else(|| name.to_string())
+                        })
+                        .unwrap();
+                    (key, *value)
+                })
+                .collect(),
+        )
+    }
+
+    #[test]
+    fn unknown_story_keys_are_rejected_when_conditions_load() {
+        let error = serde_json::from_str::<StatePredicate>(
+            r#"{"all":[{"key":"story:NO_SUCH_BIT","op":"eq","value":0}]}"#,
+        )
+        .expect_err("unknown story keys must fail script loading");
+        assert!(error.to_string().contains("NO_SUCH_BIT"));
+        let source = r#"{"all":[{"key":"story:STARBASE_AVAILABLE","op":"eq","value":1}]}"#;
+        let loaded: StatePredicate = serde_json::from_str(source).unwrap();
+        assert_eq!(serde_json::to_string(&loaded).unwrap(), source);
+        assert!(evaluate(&loaded, &fake(&[("STARBASE_AVAILABLE", 1)])).held);
     }
 
     #[test]
     fn known_keys_parse_and_unknown_keys_are_rejected() {
         assert_eq!(
             StateKey::parse("story:MOONBASE_DESTROYED"),
-            Ok(StateKey::Story("MOONBASE_DESTROYED"))
+            Ok(StateKey::Story(StoryKey::MOONBASE_DESTROYED))
         );
         assert_eq!(StateKey::parse("sis:fuel"), Ok(StateKey::SisFuel));
         assert!(StateKey::parse("story:NO_SUCH_BIT")
@@ -696,8 +715,10 @@ mod tests {
     #[test]
     fn validation_rejects_empty_unknown_and_oversized_conditions() {
         assert!(predicate(r#"{"all":[]}"#).validate().is_err());
-        let unknown = predicate(r#"{"all":[{"key":"story:NOPE","op":"eq","value":1}]}"#);
-        assert!(unknown.validate().is_err());
+        assert!(serde_json::from_str::<StatePredicate>(
+            r#"{"all":[{"key":"story:NOPE","op":"eq","value":1}]}"#
+        )
+        .is_err());
         let wide_bit =
             predicate(r#"{"all":[{"key":"story:MOONBASE_DESTROYED","op":"eq","value":2}]}"#);
         assert!(wide_bit.validate().unwrap_err().contains("maximum 1"));
@@ -731,20 +752,22 @@ mod tests {
         ] {
             assert_eq!(StateKey::parse(key).unwrap().max_value(), maximum);
             let wanted = StatePredicate {
-                all: vec![StateCondition {
+                all: vec![StateCondition::try_from(RawStateCondition {
                     key: key.into(),
                     op: StateOp::Eq,
                     value: 0,
-                }],
+                })
+                .unwrap()],
             };
             assert!(wanted.validate().is_ok());
             assert!(!evaluate(&wanted, &fake(&[])).held);
             let too_wide = StatePredicate {
-                all: vec![StateCondition {
+                all: vec![StateCondition::try_from(RawStateCondition {
                     key: key.into(),
                     op: StateOp::Eq,
                     value: maximum + 1,
-                }],
+                })
+                .unwrap()],
             };
             assert!(too_wide.validate().is_err());
         }

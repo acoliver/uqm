@@ -111,10 +111,6 @@ impl CampaignView {
             .as_ref()
             .map(|story| story.get_state(key.start(), key.end()))
     }
-
-    pub fn named_state_value(&self, name: &str) -> Option<u8> {
-        self.story_value(super::StoryKey::from_name(name)?)
-    }
 }
 
 #[cfg(test)]

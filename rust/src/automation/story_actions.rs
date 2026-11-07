@@ -1,5 +1,6 @@
 //! Input-only device invocation and surface artifact collection.
 
+use crate::engine::StoryKey;
 use serde::{Deserialize, Serialize};
 
 use super::navigation::NavigationControl;
@@ -142,19 +143,25 @@ impl DeviceTracker {
 }
 
 /// Only acquisition flags, excluding incidental visits and scan acknowledgements.
-pub const ARTIFACT_FLAGS: &[&str] = &[
-    "MOONBASE_ON_SHIP",
-    "AQUA_HELIX_ON_SHIP",
-    "TAALO_PROTECTOR_ON_SHIP",
-    "SUN_DEVICE_ON_SHIP",
-    "UTWIG_BOMB_ON_SHIP",
-    "BURV_BROADCASTERS_ON_SHIP",
-    "UMGAH_BROADCASTERS_ON_SHIP",
-    "EGG_CASE0_ON_SHIP",
-    "EGG_CASE1_ON_SHIP",
-    "EGG_CASE2_ON_SHIP",
-    "PORTAL_KEY_ON_SHIP",
-    "SYREEN_SHUTTLE_ON_SHIP",
+pub const ARTIFACT_FLAGS: &[(StoryKey, &str)] = &[
+    (StoryKey::MOONBASE_ON_SHIP, "MOONBASE_ON_SHIP"),
+    (StoryKey::AQUA_HELIX_ON_SHIP, "AQUA_HELIX_ON_SHIP"),
+    (StoryKey::TAALO_PROTECTOR_ON_SHIP, "TAALO_PROTECTOR_ON_SHIP"),
+    (StoryKey::SUN_DEVICE_ON_SHIP, "SUN_DEVICE_ON_SHIP"),
+    (StoryKey::UTWIG_BOMB_ON_SHIP, "UTWIG_BOMB_ON_SHIP"),
+    (
+        StoryKey::BURV_BROADCASTERS_ON_SHIP,
+        "BURV_BROADCASTERS_ON_SHIP",
+    ),
+    (
+        StoryKey::UMGAH_BROADCASTERS_ON_SHIP,
+        "UMGAH_BROADCASTERS_ON_SHIP",
+    ),
+    (StoryKey::EGG_CASE0_ON_SHIP, "EGG_CASE0_ON_SHIP"),
+    (StoryKey::EGG_CASE1_ON_SHIP, "EGG_CASE1_ON_SHIP"),
+    (StoryKey::EGG_CASE2_ON_SHIP, "EGG_CASE2_ON_SHIP"),
+    (StoryKey::PORTAL_KEY_ON_SHIP, "PORTAL_KEY_ON_SHIP"),
+    (StoryKey::SYREEN_SHUTTLE_ON_SHIP, "SYREEN_SHUTTLE_ON_SHIP"),
 ];
 
 #[derive(Debug, Clone)]
@@ -206,7 +213,7 @@ impl EnergyTracker {
             // instead of setting a scan retrieval bit.
             let shuttle = ARTIFACT_FLAGS
                 .iter()
-                .position(|flag| *flag == "SYREEN_SHUTTLE_ON_SHIP")
+                .position(|(key, _)| *key == StoryKey::SYREEN_SHUTTLE_ON_SHIP)
                 .expect("shuttle observation");
             if node == 0
                 && !self.vault_unlocked
@@ -229,7 +236,7 @@ impl EnergyTracker {
                 {
                     return EnergyProgress::Complete(format!(
                         "energy_node_collected:generation={}:node={node}:retrieved={}:flag={}:value={}",
-                        obs.lander.generation, obs.retrieved, ARTIFACT_FLAGS[index], obs.flags[index]
+                        obs.lander.generation, obs.retrieved, ARTIFACT_FLAGS[index].1, obs.flags[index]
                     ));
                 }
             }
@@ -395,7 +402,7 @@ mod tests {
         let step = CollectEnergyNodeStep { max_ticks: 100 };
         let shuttle = ARTIFACT_FLAGS
             .iter()
-            .position(|flag| *flag == "SYREEN_SHUTTLE_ON_SHIP")
+            .position(|(key, _)| *key == StoryKey::SYREEN_SHUTTLE_ON_SHIP)
             .unwrap();
         let mut obs = energy();
         obs.flags[shuttle] = 1;

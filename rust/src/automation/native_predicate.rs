@@ -371,7 +371,7 @@ fn wait_or_navigation_satisfied(action: &Action, label: &str) -> bool {
                     .is_some_and(|(node, retrieved)| node < 32 && retrieved & (1 << node) != 0)
                 && crate::automation::story_actions::ARTIFACT_FLAGS
                     .iter()
-                    .any(|flag| label.contains(&format!(":flag={flag}:")))
+                    .any(|(_, flag)| label.contains(&format!(":flag={flag}:")))
                 && number(label, "value=") == Some(1)
         }
         Action::FlyToStar(flight) => super::star_flight::arrival_satisfies(label, flight.target),

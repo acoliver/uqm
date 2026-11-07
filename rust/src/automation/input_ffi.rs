@@ -722,10 +722,10 @@ pub(crate) fn star_flight_observation(
             activity: world.activity,
             current_star,
             space_side: world
-                .named_state_value("ARILOU_SPACE_SIDE")
+                .story_value(crate::engine::StoryKey::ARILOU_SPACE_SIDE)
                 .expect("initialized state"),
             conversation_active: crate::automation::ui_observation::conversation_snapshot().active,
-            portal_open: world.named_state_value("ARILOU_SPACE") == Some(1),
+            portal_open: world.story_value(crate::engine::StoryKey::ARILOU_SPACE) == Some(1),
             solar_active: departure_snapshot(world).active != 0,
             cursor,
             cursor_delta,
@@ -768,7 +768,7 @@ pub(crate) fn cyborg_settings(_world: &CampaignView) -> Option<(bool, u8)> {
 
 #[cfg(not(test))]
 pub(crate) fn escort_roster(world: &CampaignView) -> Option<Vec<(u8, u16)>> {
-    world.named_state_value("STARBASE_AVAILABLE")?;
+    world.story_value(crate::engine::StoryKey::STARBASE_AVAILABLE)?;
     Some(world.escorts.clone())
 }
 

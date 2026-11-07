@@ -1208,7 +1208,7 @@ impl AutomationObserver {
         let (nodes, retrieved) = crate::planet_side::telemetry::energy_snapshot();
         let flags = ARTIFACT_FLAGS
             .iter()
-            .map(|key| world.named_state_value(key).map(u32::from))
+            .map(|(key, _)| world.story_value(*key).map(u32::from))
             .collect::<Option<Vec<_>>>();
         let Some(flags) = flags else {
             self.set_terminal(inner, TerminalClass::SemanticMismatch);
@@ -1219,7 +1219,7 @@ impl AutomationObserver {
             lander: planet_minerals::PlanetSnapshot::live(),
             nodes,
             retrieved,
-            vault_unlocked: world.named_state_value("SHIP_VAULT_UNLOCKED") == Some(1),
+            vault_unlocked: world.story_value(StoryKey::SHIP_VAULT_UNLOCKED) == Some(1),
             flags,
         };
         let progress = inner.energy.observe(step, &observation);
