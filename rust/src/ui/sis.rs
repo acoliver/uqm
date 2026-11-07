@@ -1,13 +1,16 @@
 #![cfg(not(test))]
 
 use crate::engine::{Kernel, World, WorldData};
-use crate::graphics::context_abi::{ContextLease, ScheduledHighlight};
+use crate::graphics::context_abi::ContextLease;
 use crate::planets::starmap::current_catalog;
 use crate::ui::{palette::pilot_color, rgb15};
 
 use crate::navigation::abi::*;
 
 use std::{mem, ptr};
+
+mod message_display;
+pub use message_display::{draw_message, set_menu_flash};
 
 mod message;
 pub use message::default_message_text;
@@ -24,7 +27,6 @@ use capacity::{GetCrewPodCapacity, GetFuelTankCapacity};
 static mut LAST_PILOT: BOOLEAN = 0;
 static mut NEXT_PILOT_TIME: TimeCount = 0;
 static mut PILOT_CYCLE_INDEX: DWORD = 0;
-static mut FLASH_CONTEXT: Option<ScheduledHighlight> = None;
 
 const UNDEFINED_DELTA_LOCAL: SIZE = 0x7fff;
 const SFR_MENU_3DO: usize = usize::MAX;
@@ -66,10 +68,6 @@ unsafe fn sis_screen_width() -> i32 {
 #[inline]
 unsafe fn sis_screen_height() -> i32 {
     ScreenHeight - 13
-}
-#[inline]
-unsafe fn sis_message_width() -> i32 {
-    sis_screen_width() - i32::from(SIS_TITLE_BOX_WIDTH) - i32::from(SIS_SPACER_BOX_WIDTH) - 2
 }
 #[inline]
 unsafe fn radar_x() -> i32 {
@@ -170,105 +168,20 @@ pub unsafe extern "C" fn DrawSISMessageEx(
     ex_pos: SIZE,
     flags: COUNT,
 ) -> BOOLEAN {
-    let old = SetContext(Kernel::current().read(|owner| owner.off_screen_context));
-    let mut r: RECT = mem::zeroed();
-    r.corner.x = SIS_ORG_X + 1;
-    r.corner.y = SIS_ORG_Y - SIS_MESSAGE_HEIGHT;
-    r.extent.width = sis_message_width() as SIZE;
-    r.extent.height = SIS_MESSAGE_HEIGHT - 1;
-    SetContextFGFrame(Kernel::current().read(|owner| owner.screen));
-    SetContextClipRect(&mut r);
-    BatchGraphics();
-    SetContextBackGroundColor(rgb15(0, 0, 0x14));
-    let default_text = p_str.is_null().then(|| {
-        let catalog = current_catalog();
-        World::current().read(|world| {
-            Kernel::current().read(|kernel| default_message_text(kernel, world, catalog))
-        })
-    });
-    let text = default_text
-        .as_ref()
-        .map_or(p_str, |text| text.as_ptr().cast());
-    if flags & DSME_MYCOLOR as COUNT == 0 {
-        SetContextForeGroundColor(rgb15(0x1b, 0, 0x1b));
-    }
-    let mut t: TEXT = mem::zeroed();
-    t.baseline.y = SIS_MESSAGE_HEIGHT - 2;
-    t.pStr = text as *mut UNICODE;
-    t.CharCount = !0;
-    SetContextFont(Kernel::current().read(|owner| owner.tiny_font));
-    if flags & DSME_CLEARFR as COUNT != 0 {
-        SetFlashRect(ptr::null());
-    }
-    if cur_pos < 0 && ex_pos < 0 {
-        ClearDrawable();
-        t.baseline.x = (sis_message_width() >> 1) as SIZE;
-        t.align = TEXT_ALIGN_ALIGN_CENTER;
-        font_DrawText(&mut t);
-    } else {
-        let mut text_r: RECT = mem::zeroed();
-        let mut deltas = [0u8; 128];
-        t.baseline.x = 3;
-        t.align = TEXT_ALIGN_ALIGN_LEFT;
-        TextRect(&mut t, &mut text_r, deltas.as_mut_ptr());
-        if i32::from(text_r.extent.width) + i32::from(t.baseline.x) + 2 >= i32::from(r.extent.width)
-        {
-            UnbatchGraphics();
-            SetContextClipRect(ptr::null_mut());
-            SetContext(old);
-            return 0;
-        }
-        ClearDrawable();
-        if cur_pos >= 0 && i32::from(cur_pos) <= i32::from(t.CharCount) {
-            let mut cr = text_r;
-            for d in &deltas[..cur_pos as usize] {
-                cr.corner.x = (i32::from(cr.corner.x) + i32::from(*d)) as SIZE;
-            }
-            if i32::from(cur_pos) < i32::from(t.CharCount) {
-                cr.corner.x = (i32::from(cr.corner.x) - 1) as SIZE;
-            }
-            if flags & DSME_BLOCKCUR as COUNT != 0 && i32::from(cur_pos) < i32::from(t.CharCount) {
-                cr.extent.width = deltas[cur_pos as usize] as SIZE
-                    + if i32::from(cur_pos) + 1 == i32::from(t.CharCount) {
-                        2
-                    } else {
-                        1
-                    };
-            } else {
-                cr.extent.width = 1;
-            }
-            cr.corner.y = 0;
-            cr.extent.height = r.extent.height;
-            SetContextForeGroundColor(rgb15(0, 0, 0));
-            DrawFilledRectangle(&mut cr);
-        }
-        SetContextForeGroundColor(rgb15(0x1b, 0, 0x1b));
-        if ex_pos >= 0 && i32::from(ex_pos) < i32::from(t.CharCount) {
-            t.CharCount = ex_pos as COUNT;
-            font_DrawText(&mut t);
-            SetContextForeGroundColor(rgb15(0x12, 0, 0x12));
-            for d in &deltas[..ex_pos as usize] {
-                t.baseline.x = (i32::from(t.baseline.x) + i32::from(*d)) as SIZE;
-            }
-            let string = std::ffi::CStr::from_ptr(t.pStr.cast());
-            let (prefix, _) =
-                crate::strings::unicode::split_utf8_prefix(string.to_bytes(), ex_pos as usize);
-            t.pStr = t.pStr.wrapping_add(prefix.len());
-            t.CharCount = !0;
-            font_DrawText(&mut t);
-        } else {
-            font_DrawText(&mut t);
-        }
-    }
-    if flags & DSME_SETFR as COUNT != 0 {
-        r.corner.x = 0;
-        r.corner.y = 0;
-        SetFlashRect(&r);
-    }
-    UnbatchGraphics();
-    SetContextClipRect(ptr::null_mut());
-    SetContext(old);
-    1
+    let text = (!p_str.is_null()).then(|| std::ffi::CStr::from_ptr(p_str.cast()));
+    let width = ScreenWidth;
+    let catalog = current_catalog();
+    Kernel::current().read(|kernel| {
+        let text = text.map_or_else(
+            || {
+                std::borrow::Cow::Owned(
+                    World::current().read(|world| default_message_text(kernel, world, catalog)),
+                )
+            },
+            std::borrow::Cow::Borrowed,
+        );
+        u32::from(draw_message(kernel, width, &text, cur_pos, ex_pos, flags))
+    })
 }
 
 /// # Safety
@@ -817,11 +730,15 @@ pub unsafe extern "C" fn DrawAutoPilotMessage(reset: BOOLEAN) {
     }
 }
 
-pub fn set_flash_rect(screen: &ContextLease, clip: RECT, rect: Option<RECT>) {
+pub fn set_flash_rect(
+    highlight: &crate::engine::kernel::SisHighlight,
+    screen: &ContextLease,
+    clip: RECT,
+    rect: Option<RECT>,
+) {
     screen.with_selected(|| {
-        // SAFETY: selection checks the graphics thread before borrowing this existing
-        // shared UI slot. Its retained context pins that thread until cancellation.
-        let current = unsafe { &mut *ptr::addr_of_mut!(FLASH_CONTEXT) };
+        let mut slot = highlight.context.borrow_mut();
+        let current = &mut *slot;
         if let Some(mut rect) = rect.filter(|rect| rect.extent.width != 0) {
             rect.corner.x = (i32::from(rect.corner.x) + i32::from(clip.corner.x)) as SIZE;
             rect.corner.y = (i32::from(rect.corner.y) + i32::from(clip.corner.y)) as SIZE;
@@ -844,8 +761,15 @@ pub fn set_flash_rect(screen: &ContextLease, clip: RECT, rect: Option<RECT>) {
 /// pRect must be null, a valid RECT, or one of the SIS menu sentinel pointers; flash and graphics systems must be initialized.
 #[no_mangle]
 pub unsafe extern "C" fn SetFlashRect(p_rect: *const RECT) {
-    let (retained_status_context, preferences) =
-        Kernel::current().read(|owner| (owner.status_context, owner.configuration.preferences()));
+    let (retained_status_context, screen, preferences, highlight) =
+        Kernel::current().read(|kernel| {
+            (
+                kernel.status_context,
+                kernel.screen_context,
+                kernel.configuration.preferences(),
+                kernel.sis_highlight.clone(),
+            )
+        });
     let mut clip: RECT = mem::zeroed();
     let mut temp: RECT = mem::zeroed();
     let mut rect = p_rect;
@@ -865,43 +789,14 @@ pub unsafe extern "C" fn SetFlashRect(p_rect: *const RECT) {
     }
     if !rect.is_null() && (*rect).extent.width != 0 {
         let screen = ContextLease::retain(
-            std::ptr::NonNull::new(Kernel::current().read(|owner| owner.screen_context))
+            std::ptr::NonNull::new(screen)
                 .unwrap_or_else(|| panic!("flash screen context not admitted")),
         );
-        set_flash_rect(&screen, clip, Some(*rect));
+        set_flash_rect(&highlight, &screen, clip, Some(*rect));
     } else {
-        *ptr::addr_of_mut!(FLASH_CONTEXT) = None;
+        *highlight.context.borrow_mut() = None;
     }
 }
-/// # Safety
-/// Flash alarm and context state must be accessed on the game thread.
-pub unsafe fn pre_update_flash_rect() {
-    if let Some(current) = &mut *ptr::addr_of_mut!(FLASH_CONTEXT) {
-        current.pre_update();
-    }
-}
-/// # Safety
-/// Flash alarm and context state must be accessed on the game thread.
-pub unsafe fn post_update_flash_rect() {
-    if let Some(current) = &mut *ptr::addr_of_mut!(FLASH_CONTEXT) {
-        current.post_update();
-    }
-}
-/// # Safety
-/// Flash alarm system must be initialized on the game thread.
-pub unsafe fn pause_flash() {
-    if let Some(current) = &mut *ptr::addr_of_mut!(FLASH_CONTEXT) {
-        current.pause();
-    }
-}
-/// # Safety
-/// Flash alarm system must be initialized on the game thread.
-pub unsafe fn continue_flash() {
-    if let Some(current) = &mut *ptr::addr_of_mut!(FLASH_CONTEXT) {
-        current.resume();
-    }
-}
-
 /// # Safety
 /// pStr must be null or a valid NUL-terminated string; status graphics must be initialized.
 #[no_mangle]

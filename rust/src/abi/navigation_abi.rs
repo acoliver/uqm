@@ -1590,31 +1590,7 @@ extern "C" {
 pub use crate::ui::sis::ClearSISRect;
 
 #[cfg(not(test))]
-pub use crate::ui::sis::pre_update_flash_rect;
-#[cfg(not(test))]
 pub use crate::ui::sis::SetFlashRect;
-#[cfg(test)]
-extern "C" {
-    pub fn pre_update_flash_rect();
-}
-#[cfg(not(test))]
-pub use crate::ui::sis::post_update_flash_rect;
-#[cfg(test)]
-extern "C" {
-    pub fn post_update_flash_rect();
-}
-#[cfg(not(test))]
-pub use crate::ui::sis::pause_flash;
-#[cfg(test)]
-extern "C" {
-    pub fn pause_flash();
-}
-#[cfg(not(test))]
-pub use crate::ui::sis::continue_flash;
-#[cfg(test)]
-extern "C" {
-    pub fn continue_flash();
-}
 
 #[cfg(not(test))]
 pub use crate::ui::sis::DrawHyperCoords;

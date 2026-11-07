@@ -416,6 +416,7 @@ unsafe fn dms_add_escort_ship(
     cancel: bool,
     movement: (SBYTE, SBYTE),
 ) {
+    let highlight = cx.kernel.sis_highlight.clone();
     let (dx, dy) = movement;
     assert!(menu.delta_item & MODIFY_CREW_FLAG != 0);
     if special {
@@ -455,9 +456,9 @@ unsafe fn dms_add_escort_ship(
                 }
             }
             if current != menu.delta_item as BYTE {
-                pre_update_flash_rect();
+                highlight.pre_update_flash_rect();
                 draw_race_strings(menu, current);
-                post_update_flash_rect();
+                highlight.post_update_flash_rect();
                 menu.delta_item = current as SIZE | MODIFY_CREW_FLAG;
             }
         });
@@ -833,11 +834,11 @@ unsafe fn dms_hire_escort_ship_crew(cx: &mut Cx<'_>, id: LinkId<Fragment>) -> SI
     };
     cx.with_legacy(|| DeltaSISGauges(0, 0, cost));
     cx.world.built_ships().get_mut(id).crew_level += 1;
-    cx.with_legacy(|| pre_update_flash_rect());
+    cx.kernel.sis_highlight.pre_update_flash_rect();
     let slot = cx.world.built_ships().get(id).index;
     let r = DMS_GetEscortShipRect(slot);
     show_ship_crew(cx.world, id, &r);
-    cx.with_legacy(|| post_update_flash_rect());
+    cx.kernel.sis_highlight.post_update_flash_rect();
     1
 }
 
@@ -866,11 +867,11 @@ unsafe fn dms_dismiss_escort_ship_crew(cx: &mut Cx<'_>, id: LinkId<Fragment>) ->
             MENU_SOUND_EFFECT_MENU_SOUND_FAILURE as u16,
         );
     }
-    cx.with_legacy(|| pre_update_flash_rect());
+    cx.kernel.sis_highlight.pre_update_flash_rect();
     let slot = cx.world.built_ships().get(id).index;
     let r = DMS_GetEscortShipRect(slot);
     show_ship_crew(cx.world, id, &r);
-    cx.with_legacy(|| post_update_flash_rect());
+    cx.kernel.sis_highlight.post_update_flash_rect();
     delta
 }
 
@@ -885,24 +886,21 @@ unsafe fn dms_hire_flag_ship_crew(cx: &mut Cx<'_>, input: &InputSession) -> SIZE
     if cx.world.data.flagship.res_units < cx.world.data.game.crew_cost as DWORD {
         return 0;
     }
-    cx.with_legacy(|| {
-        DrawPoint(&mut point);
-        pre_update_flash_rect();
-    });
+    cx.with_legacy(|| DrawPoint(&mut point));
+    cx.kernel.sis_highlight.pre_update_flash_rect();
     let cost = -(cx.world.data.game.crew_cost as i32);
-    cx.with_legacy(|| {
-        DeltaSISGauges(1, 0, cost);
-        post_update_flash_rect();
-    });
+    cx.with_legacy(|| DeltaSISGauges(1, 0, cost));
+    cx.kernel.sis_highlight.post_update_flash_rect();
     1
 }
 
 unsafe fn dms_dismiss_flag_ship_crew(cx: &mut Cx<'_>, input: &InputSession) -> SIZE {
+    let highlight = cx.kernel.sis_highlight.clone();
     if cx.with_legacy(|| GetCrewCount()) == 0 {
         return 0;
     }
     let bought = purchased_crew(cx.world);
-    cx.with_legacy(|| pre_update_flash_rect());
+    cx.with_legacy(|| highlight.pre_update_flash_rect());
     let cost = cx.world.data.game.crew_cost as i32
         - if bought == CREW_EXPENSE_THRESHOLD as SIZE {
             2
@@ -911,7 +909,7 @@ unsafe fn dms_dismiss_flag_ship_crew(cx: &mut Cx<'_>, input: &InputSession) -> S
         };
     cx.with_legacy(|| {
         DeltaSISGauges(-1, 0, cost);
-        post_update_flash_rect();
+        highlight.post_update_flash_rect();
         let mut point: POINT = mem::zeroed();
         get_c_pod_capacity(input.preferences().fonts == OPT_PC as i32, &mut point);
         SetContextForeGroundColor(BLACK);
