@@ -138,6 +138,7 @@ mod status_native_access {
         fn draw_explosion_flash(&mut self, life: u16, y: i16) {
             let Some(context) = std::ptr::NonNull::new(self.kernel.status_context)
                 .map(crate::graphics::context_abi::ContextLease::retain)
+                .and_then(|context| context.selected_context())
             else {
                 return;
             };
@@ -152,6 +153,7 @@ mod status_native_access {
         fn draw_energy_label(&mut self, y: i16, change: i16) {
             let Some(context) = std::ptr::NonNull::new(self.kernel.status_context)
                 .map(crate::graphics::context_abi::ContextLease::retain)
+                .and_then(|context| context.selected_context())
             else {
                 return;
             };
@@ -657,7 +659,8 @@ impl ContextOps for Cx<'_> {
         }
         let y = self.status_offset(ship);
         let context = std::ptr::NonNull::new(self.kernel.status_context)
-            .map(crate::graphics::context_abi::ContextLease::retain);
+            .map(crate::graphics::context_abi::ContextLease::retain)
+            .and_then(|context| context.selected_context());
         let font = self.kernel.battle_font();
         let mut info = self.desc(ship).ship_info;
         crate::ui::shipstat::update_statistics(

@@ -598,7 +598,28 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
                         TFB_FlushGraphics();
                         let pixel = GetFramePixel(frame, POINT { x: 32, y: 31 });
                         assert_eq!((pixel.r, pixel.g, pixel.b), (73, 91, 109));
+                        let active_canvas = LoadedDrawable::create(8, 65, 77, 1).unwrap();
+                        let active_frame = active_canvas.lease().frame(0).unwrap();
+                        let active_context =
+                            ContextLease::retain(std::ptr::NonNull::new(previous).unwrap());
+                        active_context.set_frame(active_canvas.lease().context_frame(0));
+                        let gauge_pixel = POINT { x: 8, y: 52 };
+                        let status_before = GetFramePixel(frame, gauge_pixel);
                         cx.draw_statistics(id, 1, -1);
+                        TFB_FlushGraphics();
+                        let active_pixel = GetFramePixel(active_frame, gauge_pixel);
+                        assert_eq!(
+                            (active_pixel.r, active_pixel.g, active_pixel.b),
+                            (0, 165, 0),
+                            "statistics must draw to the caller's selected context"
+                        );
+                        let status_after = GetFramePixel(frame, gauge_pixel);
+                        assert_eq!(
+                            (status_after.r, status_after.g, status_after.b),
+                            (status_before.r, status_before.g, status_before.b)
+                        );
+                        let selected = uqm_rust::graphics::context_abi::_pCurContext;
+                        assert_eq!(selected, previous);
                         let info = &cx.desc(id).ship_info;
                         assert_eq!((info.crew_level, info.energy_level), (3, 2));
                         assert_eq!(

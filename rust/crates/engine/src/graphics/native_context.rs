@@ -167,6 +167,12 @@ impl ContextLease {
         self.0.owned.assert_thread();
     }
 
+    pub fn selected_context(&self) -> Option<Self> {
+        self.assert_thread();
+        // SAFETY: this lease admits the serialized graphics thread that owns context selection.
+        NonNull::new(unsafe { context_abi::_pCurContext }).map(Self::retain)
+    }
+
     pub fn highlight(&self, rect: RECT) -> super::native_highlight::Highlight {
         self.assert_thread();
         super::native_highlight::Highlight::new(self.clone(), self.0.context, rect)
