@@ -207,11 +207,54 @@ mod tests {
         };
         let context =
             super::super::context_abi::ContextLease::retain(NonNull::new(raw_context).unwrap());
+        let original = super::super::native_abi::Color {
+            r: 17,
+            g: 31,
+            b: 47,
+            a: 255,
+        };
+        context.select();
+        // SAFETY: this fixture owns the selected context on the serialized graphics thread.
+        unsafe { super::super::context_abi::SetContextForeGroundColor(original) };
+        for unwind in [false, true] {
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                context.with_text_state(|| {
+                    context.set_font(&lease);
+                    context.fill_rectangle(
+                        super::super::native_abi::Color {
+                            r: 91,
+                            g: 73,
+                            b: 55,
+                            a: 255,
+                        },
+                        super::super::native_abi::RECT {
+                            corner: super::super::native_abi::POINT { x: 0, y: 0 },
+                            extent: super::super::native_abi::EXTENT {
+                                width: 1,
+                                height: 1,
+                            },
+                        },
+                    );
+                    if unwind {
+                        panic!("text fixture failure");
+                    }
+                });
+            }));
+            assert_eq!(result.is_err(), unwind);
+            // SAFETY: the fixture still owns this context after both normal and unwound scopes.
+            unsafe {
+                assert!((*raw_context).Font.is_null());
+                assert_eq!((*raw_context).ForeGroundColor.r, original.r);
+                assert_eq!((*raw_context).ForeGroundColor.g, original.g);
+                assert_eq!((*raw_context).ForeGroundColor.b, original.b);
+            }
+        }
         context.set_font(&lease);
         // SAFETY: the context owns the selected font after its original release.
         assert_eq!(unsafe { (*raw_context).Font }, font.as_ptr());
         drop(lease);
         assert!(allocation.upgrade().is_some());
+        context.with_text_state(|| ());
         // SAFETY: logical release cannot retire the retained context or its font.
         unsafe { super::super::context_abi::DestroyContext(raw_context) };
         assert!(allocation.upgrade().is_some());

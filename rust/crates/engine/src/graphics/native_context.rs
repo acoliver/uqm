@@ -23,6 +23,18 @@ impl ContextFrame {
         }
     }
 
+    pub fn next_frame(&self) -> Self {
+        for allocation in &self._allocations {
+            allocation.assert_thread();
+        }
+        // SAFETY: these leases retain this optional frame and its complete drawable allocation.
+        let frame = unsafe { super::pixmap_abi::IncFrameIndex(self.frame) };
+        Self {
+            frame,
+            _allocations: self._allocations.clone(),
+        }
+    }
+
     pub fn rect(&self) -> RECT {
         assert!(!self.frame.is_null(), "absent frame has no bounds");
         for allocation in &self._allocations {
@@ -50,15 +62,18 @@ enum Operation {
     Deselect,
     BeginBatch,
     EndBatch,
+    Flush,
     Background(Color),
+    Foreground(Color),
     Frame(FRAME),
     Clip(Option<RECT>),
     Clear,
     Fill(Color, RECT),
     Outline(Color, RECT),
+    ShadowedBox(RECT, Color, Color, Color),
     FilledStamp(Color, STAMP, bool),
     Stamp(STAMP),
-    Font(super::native_font::FontLease),
+    Font(Option<super::native_font::FontLease>),
     Text(super::native_font::FontLease, TEXT, Color),
 }
 
@@ -114,7 +129,31 @@ impl Drop for ContextOrigin {
     }
 }
 
+struct ContextTextState {
+    context: ContextLease,
+    font: Option<super::native_font::FontLease>,
+    color: Color,
+}
+impl Drop for ContextTextState {
+    fn drop(&mut self) {
+        self.context.replace_font(self.font.take());
+        self.context.apply(Operation::Foreground(self.color));
+    }
+}
+
 impl ContextLease {
+    pub fn fade_screen(&self, kind: u32, interval: i16) -> u32 {
+        self.0.owned.assert_thread();
+        // SAFETY: this retained context admits the serialized graphics lifecycle.
+        unsafe { super::cmap_abi::FadeScreen(kind, interval) }
+    }
+
+    pub fn finish_color_transforms(&self) {
+        self.0.owned.assert_thread();
+        // SAFETY: transform completion runs on the retained context's graphics thread.
+        unsafe { super::cmap_abi::FlushColorXForms() }
+    }
+
     /// Retain a registered context without dereferencing the supplied address.
     pub fn retain(context: NonNull<context_desc>) -> Self {
         let allocation = ffi::native_allocations()
@@ -126,6 +165,12 @@ impl ContextLease {
 
     pub(super) fn assert_thread(&self) {
         self.0.owned.assert_thread();
+    }
+
+    pub fn selected_context(&self) -> Option<Self> {
+        self.assert_thread();
+        // SAFETY: this lease admits the serialized graphics thread that owns context selection.
+        NonNull::new(unsafe { context_abi::_pCurContext }).map(Self::retain)
     }
 
     pub fn highlight(&self, rect: RECT) -> super::native_highlight::Highlight {
@@ -152,8 +197,12 @@ impl ContextLease {
                 Operation::Select | Operation::Deselect => (),
                 Operation::BeginBatch => super::gfx_common_abi::batch_graphics(),
                 Operation::EndBatch => super::gfx_common_abi::unbatch_graphics(),
+                Operation::Flush => super::gfx_common_abi::flush_graphics(),
                 Operation::Background(color) => {
                     context_abi::SetContextBackGroundColor(color);
+                }
+                Operation::Foreground(color) => {
+                    context_abi::SetContextForeGroundColor(color);
                 }
                 Operation::Frame(frame) => {
                     drawable_abi::SetContextFGFrame(frame);
@@ -172,6 +221,9 @@ impl ContextLease {
                     context_abi::SetContextForeGroundColor(color);
                     frame_abi::DrawRectangle(&mut rect);
                 }
+                Operation::ShadowedBox(mut rect, background, dark, medium) => {
+                    super::widgets_abi::DrawShadowedBox(&mut rect, background, dark, medium);
+                }
                 Operation::FilledStamp(color, mut stamp, restore) => {
                     let previous = context_abi::SetContextForeGroundColor(color);
                     frame_abi::DrawFilledStamp(&mut stamp);
@@ -181,7 +233,10 @@ impl ContextLease {
                 }
                 Operation::Stamp(mut stamp) => frame_abi::DrawStamp(&mut stamp),
                 Operation::Font(font) => {
-                    super::font_abi::SetContextFont(font.as_raw());
+                    super::font_abi::SetContextFont(
+                        font.as_ref()
+                            .map_or(std::ptr::null_mut(), |font| font.as_raw()),
+                    );
                 }
                 Operation::Text(font, mut text, color) => {
                     super::font_abi::SetContextFont(font.as_raw());
@@ -193,7 +248,7 @@ impl ContextLease {
         }
     }
 
-    fn retain_target(&self) -> ContextFrame {
+    pub fn target(&self) -> ContextFrame {
         ContextFrame::retain(NonNull::new(self.apply(Operation::Select).0))
     }
 
@@ -220,6 +275,30 @@ impl ContextLease {
         result
     }
 
+    pub fn with_text_state<R>(&self, draw: impl FnOnce() -> R) -> R {
+        self.with_selected(|| {
+            // SAFETY: the selected lease owns this descriptor on its graphics thread.
+            let descriptor = unsafe { self.0.context.as_ref() };
+            let font = NonNull::new(descriptor.Font).map(|raw| {
+                self.0
+                    .font
+                    .borrow()
+                    .as_ref()
+                    .filter(|font| font.as_raw() == raw.as_ptr())
+                    .cloned()
+                    .unwrap_or_else(|| super::native_font::FontLease::retain(raw))
+            });
+            let restore = ContextTextState {
+                context: self.clone(),
+                font,
+                color: descriptor.ForeGroundColor,
+            };
+            let result = draw();
+            drop(restore);
+            result
+        })
+    }
+
     pub fn pause_batch(&self) -> BatchPause {
         self.apply(Operation::EndBatch);
         BatchPause(self.clone())
@@ -240,12 +319,12 @@ impl ContextLease {
     }
 
     pub fn set_clip(&self, rect: RECT) {
-        let _target = self.retain_target();
+        let _target = self.target();
         self.apply(Operation::Clip(Some(rect)));
     }
 
     fn clip_snapshot(&self) -> (RECT, bool) {
-        let _target = self.retain_target();
+        let _target = self.target();
         let mut rect = RECT {
             corner: POINT { x: 0, y: 0 },
             extent: EXTENT {
@@ -263,7 +342,7 @@ impl ContextLease {
     }
 
     pub fn clear_clip(&self) {
-        let _target = self.retain_target();
+        let _target = self.target();
         self.apply(Operation::Clip(None));
     }
 
@@ -280,7 +359,7 @@ impl ContextLease {
     }
 
     pub fn with_origin<R>(&self, origin: POINT, draw: impl FnOnce() -> R) -> R {
-        let frame = self.retain_target();
+        let frame = self.target();
         let previous = frame.replace_hotspot(origin);
         let restore = ContextOrigin { frame, previous };
         let result = draw();
@@ -289,7 +368,7 @@ impl ContextLease {
     }
 
     pub fn draw_rectangle(&self, color: Color, rect: RECT) {
-        let _target = self.retain_target();
+        let _target = self.target();
         self.apply(Operation::Outline(color, rect));
     }
 
@@ -307,7 +386,7 @@ impl ContextLease {
     }
 
     fn filled_stamp(&self, source: &ContextFrame, origin: POINT, color: Color, restore: bool) {
-        let _target = self.retain_target();
+        let _target = self.target();
         self.apply(Operation::FilledStamp(
             color,
             STAMP {
@@ -319,22 +398,39 @@ impl ContextLease {
     }
 
     pub fn fill_rectangle(&self, color: Color, rect: RECT) {
-        let _target = self.retain_target();
+        let _target = self.target();
         self.apply(Operation::Fill(color, rect));
     }
 
+    pub fn flush(&self) {
+        self.apply(Operation::Flush);
+    }
+
+    pub fn set_foreground(&self, color: Color) {
+        self.apply(Operation::Foreground(color));
+    }
+
+    pub fn draw_shadowed_box(&self, rect: RECT, background: Color, dark: Color, medium: Color) {
+        let _target = self.target();
+        self.apply(Operation::ShadowedBox(rect, background, dark, medium));
+    }
+
     pub fn draw_stamp(&self, source: &ContextFrame, origin: POINT) {
-        let _target = self.retain_target();
+        let _target = self.target();
         self.apply(Operation::Stamp(STAMP {
             origin,
             frame: source.frame,
         }));
     }
 
-    pub fn set_font(&self, font: &super::native_font::FontLease) {
-        let previous = self.0.font.replace(Some(font.clone()));
-        self.apply(Operation::Font(font.clone()));
+    fn replace_font(&self, font: Option<super::native_font::FontLease>) {
+        let previous = self.0.font.replace(font.clone());
+        self.apply(Operation::Font(font));
         drop(previous);
+    }
+
+    pub fn set_font(&self, font: &super::native_font::FontLease) {
+        self.replace_font(Some(font.clone()));
     }
 
     pub fn draw_text(
@@ -345,19 +441,31 @@ impl ContextLease {
         align: TEXT_ALIGN,
         color: Color,
     ) {
-        let _target = self.retain_target();
+        self.draw_text_bounded(font, string, baseline, align, color, u16::MAX);
+    }
+
+    pub fn draw_text_bounded(
+        &self,
+        font: &super::native_font::FontLease,
+        string: &std::ffi::CStr,
+        baseline: POINT,
+        align: TEXT_ALIGN,
+        color: Color,
+        characters: u16,
+    ) {
+        let _target = self.target();
         *self.0.font.borrow_mut() = Some(font.clone());
         let text = TEXT {
             baseline,
             pStr: string.as_ptr().cast(),
             align,
-            CharCount: u16::MAX,
+            CharCount: characters,
         };
         self.apply(Operation::Text(font.clone(), text, color));
     }
 
     pub fn draw_primitives(&self, batch: &mut super::native_batch::NativeBatch, scale: i32) {
-        let _target = self.retain_target();
+        let _target = self.target();
         let head = if batch.is_empty() { u16::MAX } else { 0 };
         // SAFETY: this lease retains the graphics-thread context/target. The
         // batch owns bounded links and retains all registered stamp sources;
@@ -370,7 +478,7 @@ impl ContextLease {
     }
 
     pub fn clear(&self) {
-        let _target = self.retain_target();
+        let _target = self.target();
         self.apply(Operation::Clear);
     }
 }

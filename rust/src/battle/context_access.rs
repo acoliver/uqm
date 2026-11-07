@@ -136,23 +136,37 @@ mod status_native_access {
     #[cfg(not(test))]
     impl StatusOps for Cx<'_> {
         fn draw_explosion_flash(&mut self, life: u16, y: i16) {
-            explosion_flash(life, y, |color, mut r, fill| {
-                // SAFETY: the battle owns its active status drawing context.
-                unsafe {
-                    SetContextForeGroundColor(color);
-                    if fill {
-                        DrawFilledRectangle(&mut r);
-                    } else {
-                        DrawRectangle(&mut r);
-                    }
+            let Some(context) = std::ptr::NonNull::new(self.kernel.status_context)
+                .map(crate::graphics::context_abi::ContextLease::retain)
+                .and_then(|context| context.selected_context())
+            else {
+                return;
+            };
+            explosion_flash(life, y, |color, r, fill| {
+                if fill {
+                    context.fill_rectangle(color, r);
+                } else {
+                    context.draw_rectangle(color, r);
                 }
             });
         }
         fn draw_energy_label(&mut self, y: i16, change: i16) {
-            // SAFETY: the status drawing context and fonts are initialized.
-            unsafe {
-                self.with_legacy(|| DrawCrewFuelString(y, change));
-            }
+            let Some(context) = std::ptr::NonNull::new(self.kernel.status_context)
+                .map(crate::graphics::context_abi::ContextLease::retain)
+                .and_then(|context| context.selected_context())
+            else {
+                return;
+            };
+            let frames = crate::graphics::drawable_abi::retain_frame_allocations(&[self
+                .kernel
+                .status_frame]);
+            crate::ui::shipstat::draw_crew_energy_labels(
+                &context,
+                &frames[0],
+                self.kernel.configuration.preferences().menu == OPT_PC as i32,
+                y,
+                change,
+            );
         }
         fn draw_captain_controls(&mut self, ship: ShipId, y: i16, delta: u16, current: u16) {
             captains_window(self, ship, y, delta, current, 2);
@@ -492,24 +506,13 @@ impl ContextOps for Cx<'_> {
         }
     }
 
-    fn init_ship_status(&mut self, ship: ShipId, mut clip: Option<RECT>) {
-        use crate::ui::shipstat::init_ship_status as draw_status;
-        let clipped = clip.is_some();
-        let clip = clip
-            .as_mut()
-            .map_or(std::ptr::null_mut(), std::ptr::from_mut);
-        let info = self.ship_info_pointer(ship);
-        let font = self.kernel.battle_font();
-        let ship_value = self.pick_ship(ship);
-        // SAFETY: the descriptor retains its owned status data while graphics are drawn.
-        let pc_menu = unsafe {
-            self.with_legacy(|| draw_status(font.as_ref(), info, Some(ship_value), clip));
-            self.kernel.configuration.preferences().menu == OPT_PC as i32
-        };
-        if !clipped {
+    fn init_ship_status(&mut self, ship: ShipId, clip: Option<RECT>) {
+        crate::ui::shipstat::draw_battle_status(self, ship, clip);
+        if clip.is_none() {
             let context = std::ptr::NonNull::new(self.kernel.status_context)
                 .map(crate::graphics::context_abi::ContextLease::retain);
             let height = (self.screen_dimensions().1 >> 1) as SIZE;
+            let pc_menu = self.kernel.configuration.preferences().menu == OPT_PC as i32;
             crate::battle::status_native::draw_captains_window(
                 self,
                 ship,
@@ -651,15 +654,27 @@ impl ContextOps for Cx<'_> {
     }
 
     fn draw_statistics(&mut self, ship: ShipId, crew: i16, energy: i16) {
-        use crate::ui::shipstat::delta_statistics;
-        let y = self.status_offset(ship);
-        let info = self.ship_info_pointer(ship);
-        let font = self.kernel.battle_font();
-        let pc_menu = self.kernel.configuration.preferences().menu == OPT_PC as i32;
-        // SAFETY: the checked descriptor and status resources remain live during drawing.
-        unsafe {
-            self.with_legacy(|| delta_statistics(pc_menu, font.as_ref(), info, y, crew, energy));
+        if crew == 0 && energy == 0 {
+            return;
         }
+        let y = self.status_offset(ship);
+        let context = std::ptr::NonNull::new(self.kernel.status_context)
+            .map(crate::graphics::context_abi::ContextLease::retain)
+            .and_then(|context| context.selected_context());
+        let font = self.kernel.battle_font();
+        let mut info = self.desc(ship).ship_info;
+        crate::ui::shipstat::update_statistics(
+            context.as_ref(),
+            true,
+            self.kernel.configuration.preferences().menu == OPT_PC as i32,
+            font.as_ref(),
+            &mut info,
+            y,
+            (crew, energy),
+        );
+        let mut stats = self.race_stats_mut(ship);
+        stats.ship_info.crew_level = info.crew_level;
+        stats.ship_info.energy_level = info.energy_level;
     }
 
     fn draw_captain_controls_pass(

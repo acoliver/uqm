@@ -2657,9 +2657,6 @@ pub struct SUMMARY_DESC {
 pub use crate::savegame::live::load::LoadGame;
 
 #[cfg(not(test))]
-pub use crate::ui::save_problem::SaveProblem;
-
-#[cfg(not(test))]
 pub use crate::savegame::live::save::SaveGame;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -3230,14 +3227,8 @@ pub use crate::ui::shipyard::do_shipyard;
 #[cfg(not(test))]
 pub use crate::ui::starbase::DrawShipPiece;
 
-#[cfg(not(test))]
-pub use crate::ui::shipstat::DrawCrewFuelString;
 
-#[cfg(not(test))]
-pub use crate::ui::shipstat::ClearShipStatus;
 
-#[cfg(not(test))]
-pub use crate::ui::shipstat::OutlineShipStatus;
 
 
 
@@ -3253,8 +3244,6 @@ pub use crate::battle::ship_native::engine::ship_postprocess;
 #[cfg(not(test))]
 pub use crate::battle::ship_native::engine::collision;
 
-#[cfg(not(test))]
-pub use crate::front_end::gameopt::runtime::ConfirmSaveLoad;
 
 #[cfg(not(test))]
 pub use crate::front_end::gameopt::runtime::GameOptions;

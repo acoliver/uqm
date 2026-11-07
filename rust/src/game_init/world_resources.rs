@@ -86,25 +86,17 @@ pub(crate) mod live {
         ptr,
     };
 
-    /// # Safety
-    /// Called on the game thread with a valid planet selector and initialized resources.
-    pub unsafe fn load_gravity_well(kernel: &mut crate::engine::Kernel, selector: u8) {
-        {
-            let frames = std::slice::from_raw_parts_mut(ptr::addr_of_mut!(kernel.planet).cast(), 3);
-            for (frame, key) in frames.iter_mut().zip(gravity_keys(selector)) {
-                *frame = match key {
-                    Some(key) => CaptureDrawable(
-                        LoadGraphicInstance(CString::new(key).unwrap().as_ptr()).cast(),
-                    ),
-                    None => ptr::null_mut(),
-                };
-            }
-            crate::collections::observation::observe_views(
-                frames,
-                "engine-global:planet",
-                |frame| *frame as usize,
-            );
+    pub fn load_gravity_well(kernel: &mut crate::engine::Kernel, selector: u8) {
+        for (frame, key) in kernel.planet.iter_mut().zip(gravity_keys(selector)) {
+            *frame = key.map_or(ptr::null_mut(), |key| {
+                crate::engine::battle::frames::load_graphic(&CString::new(key).unwrap())
+            });
         }
+        crate::collections::observation::observe_views(
+            &kernel.planet,
+            "engine-global:planet",
+            |frame| *frame as usize,
+        );
     }
 
     pub fn free_gravity_well(kernel: &mut crate::engine::Kernel) {

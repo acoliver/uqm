@@ -33,7 +33,7 @@ pub(crate) mod shipyard_layout;
 pub mod starbase;
 
 #[cfg(not(test))]
-pub(crate) mod save_problem;
+pub mod save_problem;
 
 pub(crate) const fn rgb15(r: u8, g: u8, b: u8) -> crate::navigation::abi::Color {
     crate::navigation::abi::Color {

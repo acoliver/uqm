@@ -3,7 +3,7 @@ use super::drawable_abi::{CopyFrameRect, SetFrameHot};
 use super::loaddisp::LoadDisplayPixmap;
 use super::native_abi::*;
 pub use super::native_context::{ContextFrame, ContextLease};
-pub use super::native_highlight::Highlight;
+pub use super::native_highlight::{Highlight, ScheduledHighlight};
 use crate::memory::{rust_hcalloc, rust_hfree};
 #[cfg(feature = "debug-process")]
 use std::ffi::c_char;

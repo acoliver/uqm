@@ -122,6 +122,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn a_batch_retains_its_stamp_after_the_native_owner_is_released() {
         // SAFETY: the test exclusively owns the initialized native allocation.
         let drawable = unsafe { super::super::drawable_abi::AllocDrawable(1) };

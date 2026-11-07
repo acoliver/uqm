@@ -10,10 +10,11 @@ pub(super) unsafe fn save_load_game(
 ) -> BOOLEAN {
     let desc = &mut pick_state.summary[game_index as usize];
     let mut name_buf: [UNICODE; 256] = [0; 256];
-    let mut save_stamp = STAMP {
-        origin: POINT { x: 0, y: 0 },
-        frame: ptr::null_mut(),
-    };
+    let context = crate::graphics::context_abi::ContextLease::retain(
+        std::ptr::NonNull::new(cx.kernel.space_context)
+            .unwrap_or_else(|| panic!("save/load context")),
+    );
+    let mut background = None;
     let success;
     if pick_state.saving != 0 {
         // SAFETY: both fixed arrays contain SAVE_NAME_SIZE bytes; strncpy preserves NUL padding.
@@ -31,7 +32,7 @@ pub(super) unsafe fn save_load_game(
         {
             play_menu_sound(cx.kernel, cx.world, MENU_SUCCESS as u16);
             // SAFETY: the game-thread picker retains the stamp, selected summary and name buffer.
-            cx.with_legacy(|| unsafe { ConfirmSaveLoad(&mut save_stamp) });
+            background = crate::ui::save_problem::save_confirmation(cx.kernel, &context, true);
             let summary = ptr::from_mut(desc).cast();
             let name = name_buf.as_ptr();
             // SAFETY: the picker retains its writable summary and terminated name.
@@ -42,16 +43,13 @@ pub(super) unsafe fn save_load_game(
         }
     } else {
         // SAFETY: loading needs no saved stamp and uses the initialized game-thread loader.
-        cx.with_legacy(|| unsafe { ConfirmSaveLoad(ptr::null_mut()) });
+        crate::ui::save_problem::save_confirmation(cx.kernel, &context, false);
         // SAFETY: the picker retains the initialized World and Kernel through loading.
         success = unsafe { LoadGame(game_index, LoadRequest::Restore(cx)) };
     }
-    if pick_state.saving != 0 {
-        // SAFETY: ConfirmSaveLoad initializes the retained stamp before drawing it.
-        unsafe { DrawStamp(&mut save_stamp) };
+    if let Some(saved) = background {
+        saved.restore();
     }
-    // SAFETY: save_stamp holds the picker-owned drawable, or the supported null handle.
-    unsafe { DestroyDrawable(ReleaseDrawable(save_stamp.frame)) };
     success
 }
 
@@ -129,8 +127,7 @@ pub(super) fn pick_game(
         }
         log::info!("RUST_PICKER: operation_failed picker_remains_open");
         if saving != 0 && canceled_by_user == 0 {
-            // SAFETY: the picker retains the popup graphics resources.
-            unsafe { crate::ui::save_problem::save_problem(cx, io) };
+            crate::ui::save_problem::save_problem(cx, io);
         }
         // SAFETY: the synchronous picker owns these published native resources.
         cx.with_legacy(|| unsafe {

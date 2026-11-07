@@ -1079,14 +1079,6 @@ pub const VIEW_STATE_VIEW_CHANGE: VIEW_STATE = 2;
 pub type VIEW_STATE = ::std::os::raw::c_uint;
 pub type ELEMENT_FLAGS = UWORD;
 
-#[cfg(not(test))]
-
-#[cfg(not(test))]
-
-pub use crate::supermelee::netplay::checksum::crc_process_game_state as crc_processState;
-
-
-
 pub type MELEE_OPTIONS = BYTE;
 pub const MeleeShip_MELEE_ANDROSYNTH: MeleeShip = 0;
 pub const MeleeShip_MELEE_ARILOU: MeleeShip = 1;
@@ -1295,8 +1287,6 @@ pub type _bindgen_ty_5 = ::std::os::raw::c_uint;
 #[cfg(not(test))]
 pub use crate::battle::status_native::init_status_offsets;
 
-#[cfg(not(test))]
-pub use crate::ui::shipstat::DrawCrewFuelString;
 
 
 #[cfg(not(test))]
@@ -2300,26 +2290,7 @@ pub const GAMESTR_COUNT: _bindgen_ty_27 = 579;
 pub type _bindgen_ty_27 = ::std::os::raw::c_uint;
 
 #[cfg(not(test))]
-pub unsafe fn ConfirmSaveLoad(MsgStamp: *mut STAMP) {
-    crate::front_end::gameopt::ConfirmSaveLoad(MsgStamp.cast());
-}
-#[cfg(test)]
-#[cfg(not(test))]
-pub use crate::front_end::gameopt::runtime::ConfirmSaveLoad;
-
-#[cfg(not(test))]
 pub use crate::front_end::gameopt::runtime::GameOptions;
-#[cfg(not(test))]
-pub unsafe fn DrawArmadaPickShip(draw_salvage_frame: BOOLEAN, pPickRect: *mut RECT) {
-    crate::pickship::ffi::draw_armada_pick_ship(
-        draw_salvage_frame as ::std::os::raw::c_int,
-        pPickRect.cast(),
-    );
-}
-#[cfg(test)]
-#[cfg(not(test))]
-pub use crate::pickship::ffi::draw_armada_pick_ship as DrawArmadaPickShip;
-
 #[cfg(not(test))]
 pub use crate::game_init::world_resources::live::load_gravity_well;
 

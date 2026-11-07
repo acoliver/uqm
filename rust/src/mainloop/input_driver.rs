@@ -152,6 +152,28 @@ impl crate::engine::input::InputRuntime for NativeInputRuntime {
         }
     }
 
+    fn sleep(&self, cx: &mut crate::engine::battle::Cx<'_>, ticks: u32) {
+        // SAFETY: the retained runtime supplies the initialized game-thread lifecycle.
+        cx.with_legacy(|| unsafe { crate::threading::pacing::linked::sleep_thread(ticks) });
+    }
+
+    fn sleep_until(&self, cx: &mut crate::engine::battle::Cx<'_>, deadline: u32) {
+        // SAFETY: pacing runs callbacks and presentation inside the caller's bounded handoff.
+        cx.with_legacy(|| unsafe {
+            crate::threading::pacing::linked::sleep_thread_until(deadline)
+        });
+    }
+
+    fn flush(&self) {
+        // SAFETY: this runtime retains the initialized input buffers.
+        unsafe { FlushInput(&self.input) };
+    }
+
+    fn confirm_exit(&self, cx: &mut crate::engine::battle::Cx<'_>) -> bool {
+        // SAFETY: the modal driver retains its input session and borrows the active owner.
+        unsafe { ConfirmExit(cx, &self.input) != 0 }
+    }
+
     fn update(&self, cx: &mut crate::engine::battle::Cx<'_>) {
         // SAFETY: the retained context supplies initialized game-thread input resources.
         unsafe { UpdateInputState(cx, &self.input) };

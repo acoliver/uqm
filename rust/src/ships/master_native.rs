@@ -100,6 +100,15 @@ pub(crate) mod engine {
         }
     }
 
+    pub fn descriptor_in(kernel: &Kernel, index: u16) -> Option<&crate::engine::battle::RaceDesc> {
+        let queue = &kernel.master_queue;
+        let mut next = queue.head();
+        for _ in 0..index {
+            next = queue.succ(next?);
+        }
+        next.map(|id| &queue.get(id).descriptor)
+    }
+
     pub fn master_in(kernel: &Kernel, index: u16) -> Option<MasterShip> {
         let queue = &kernel.master_queue;
         let mut next = queue.head();
@@ -133,7 +142,7 @@ pub(crate) mod engine {
     }
 }
 #[cfg(not(test))]
-pub use engine::{find_master_ship, master_in};
+pub use engine::{descriptor_in, find_master_ship, master_in};
 
 #[cfg(test)]
 mod tests {

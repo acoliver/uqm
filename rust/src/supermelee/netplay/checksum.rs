@@ -41,34 +41,15 @@ pub fn crc_process_element(state: &mut CrcState, value: &ElementState) {
     crc_process_element_state(state, &value.next);
 }
 
-/// # Safety
-/// `state` must be writable; the display queue must not be mutated during traversal.
-#[cfg(not(test))]
-pub unsafe fn crc_process_display_queue(state: &mut CrcState) {
-    crate::app::bridge::enter(|cx| {
-        let mut link = cx.elements().head();
-        while let Some(id) = link {
-            crc_process_element(state, &cx.element(id));
-            link = cx.elements().succ(id);
-        }
-    });
-}
-
-/// # Safety
-/// `state` must be writable; called on the game thread owning the RNG.
-#[cfg(not(test))]
-pub unsafe fn crc_process_rng(state: &mut CrcState) {
+pub fn crc_process_game_state(cx: &crate::engine::battle::Cx<'_>, state: &mut CrcState) {
     let seed = crate::math::seed_random(0);
     crc_process_u32(state, seed);
     crate::math::seed_random(seed);
-}
-
-/// # Safety
-/// Called on the game thread with a writable CRC state and stable display queue.
-#[cfg(not(test))]
-pub unsafe fn crc_process_game_state(state: &mut CrcState) {
-    crc_process_rng(state);
-    crc_process_display_queue(state);
+    let mut link = cx.elements().head();
+    while let Some(id) = link {
+        crc_process_element(state, &cx.element(id));
+        link = cx.elements().succ(id);
+    }
 }
 
 impl super::session::SessionCore {
@@ -116,6 +97,28 @@ impl super::session::SessionCore {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[serial_test::serial]
+    fn game_checksum_uses_the_supplied_context_and_preserves_the_rng() {
+        let mut game = crate::engine::Game::new();
+        let mut battle = crate::engine::battle::Battle::new();
+        let cx = crate::engine::battle::Cx::new(
+            &mut battle,
+            &mut game.world,
+            &mut game.kernel,
+            crate::math::random,
+        );
+        let previous = crate::math::seed_random(1234);
+        let mut expected = CrcState::new();
+        crc_process_u32(&mut expected, 1234);
+        let mut actual = CrcState::new();
+        crc_process_game_state(&cx, &mut actual);
+        let seed_after = crate::math::seed_random(previous);
+        assert_eq!(seed_after, 1234);
+        assert_eq!(crc_finish(&actual), crc_finish(&expected));
+        assert!(cx.elements().head().is_none());
+    }
 
     #[test]
     fn c_element_checksum_vector_excludes_background_objects() {

@@ -11,7 +11,7 @@ use picker::{picker_slot, MAX_SAVED_GAMES};
 #[cfg(not(test))]
 pub use crate::savegame::live::load::load_game_descriptions;
 #[cfg(not(test))]
-pub use runtime::{game_options, ConfirmSaveLoad, GameOptions, SetNamingCallback};
+pub use runtime::{game_options, GameOptions, SetNamingCallback};
 
 #[cfg(not(test))]
 pub(crate) mod runtime {
@@ -104,44 +104,6 @@ pub(crate) mod runtime {
             - ly.wrapping_mul(UNIVERSE_UNITS_Y as i32)
                 .wrapping_add(log_units_y >> 1)
                 / log_units_y) as COORD
-    }
-
-    /// # Safety
-    /// Call on the game thread with a live graphics context. A non-null stamp
-    /// must be writable; its captured drawable belongs to the caller.
-    #[no_mangle]
-    pub unsafe extern "C" fn ConfirmSaveLoad(msg_stamp: *mut STAMP) {
-        let mut r: RECT = mem::zeroed();
-        let mut clip_r: RECT = mem::zeroed();
-        SetContextFont(Kernel::current().read(|owner| owner.star_con_font));
-        GetContextClipRect(&mut clip_r);
-        let mut t = TEXT {
-            baseline: POINT {
-                x: clip_r.extent.width >> 1,
-                y: (clip_r.extent.height >> 1) + 3,
-            },
-            align: TEXT_ALIGN_ALIGN_CENTER,
-            CharCount: COUNT::MAX,
-            pStr: game_string(SAVEGAME_STRING_BASE + u32::from(msg_stamp.is_null())),
-        };
-        TextRect(&mut t, &mut r, ptr::null_mut());
-        r.corner.x -= 4;
-        r.corner.y -= 4;
-        r.extent.width += 8;
-        r.extent.height += 8;
-        if !msg_stamp.is_null() {
-            msg_stamp.write(SaveContextFrame(&r));
-        }
-        DrawStarConBox(
-            &mut r,
-            2,
-            rgb15(0x10, 0x10, 0x10),
-            rgb15(0x08, 0x08, 0x08),
-            1,
-            rgb15(0x0a, 0x0a, 0x0a),
-        );
-        SetContextForeGroundColor(rgb15(0x14, 0x14, 0x14));
-        font_DrawText(&mut t);
     }
 
     unsafe fn draw_name_string(

@@ -38,8 +38,7 @@ impl InputSetup<Option<CampaignView>> for Setup<'_, '_, '_> {
         let cx = &mut *self.cx;
         let io = &mut Io { observer };
         if !session.open_player_network_connection(remote_player, &mut |event| {
-            // SAFETY: this admitted frame exclusively lends the menu for synchronous effects.
-            unsafe { super::changes::apply_protocol_event(state, cx, io, event) }
+            super::changes::apply_protocol_event(state, cx, io, event)
         }) {
             return Err("could not open netplay fixture endpoint".into());
         }
@@ -74,8 +73,7 @@ impl InputSetup<Option<CampaignView>> for Setup<'_, '_, '_> {
         let cx = &mut *self.cx;
         let io = &mut Io { observer };
         session.net_input_with(1, &mut |event| {
-            // SAFETY: each event completes under the frame's unique menu/context borrow.
-            unsafe { super::changes::apply_protocol_event(state, cx, io, event) }
+            super::changes::apply_protocol_event(state, cx, io, event)
         });
     }
 

@@ -4,7 +4,7 @@
 use crate::engine::Kernel;
 use crate::navigation::abi::{Color, RECT};
 
-fn box_rectangles(
+pub(crate) fn box_rectangles(
     rect: RECT,
     mut border: i16,
     top: Color,

@@ -40,7 +40,7 @@ pub(crate) mod live {
     use crate::ships::native::abi::*;
     use crate::supermelee::native::menu::live::drawing::{draw_ship_strings, flash_selection};
     use crate::supermelee::session::MeleeSession;
-    use std::{ptr, ptr::NonNull};
+    use std::ptr::NonNull;
 
     pub(crate) struct BuildPicker {
         drawable: LoadedDrawable,
@@ -132,15 +132,14 @@ pub(crate) mod live {
         BuildPicker { drawable, screen }
     }
 
-    /// # Safety
     /// State must be the active fleet editor on the game thread.
-    pub unsafe fn draw_pick_frame(state: &MeleeSession) {
+    pub fn draw_pick_frame(cx: &mut crate::engine::battle::Cx<'_>, state: &MeleeSession) {
         state.build_picker().draw_frame(state.side);
-        draw_ship_strings(state, state.current_ship);
+        draw_ship_strings(cx, state, state.current_ship);
     }
 
-    unsafe fn pick(
-        state: *mut MeleeSession,
+    fn pick(
+        state: &mut MeleeSession,
         cx: &mut crate::engine::battle::Cx<'_>,
         io: &mut crate::engine::observe::Io<'_>,
         input: &crate::engine::input::InputSession,
@@ -148,23 +147,18 @@ pub(crate) mod live {
         let time = GetTimeCounter();
         input.set_paused(false);
         if cx.world.activity() & CHECK_ABORT as u16 != 0 {
-            (*state).build_pick_confirmed = 0;
+            state.build_pick_confirmed = 0;
             return 0;
         }
         SetMenuSounds(input, 15, 16);
         let keys = input.pulsed().menu;
         if keys[KEY_MENU_SELECT as usize] != 0 || keys[KEY_MENU_CANCEL as usize] != 0 {
-            (*state).build_pick_confirmed = u32::from(keys[KEY_MENU_CANCEL as usize] == 0);
+            state.build_pick_confirmed = u32::from(keys[KEY_MENU_CANCEL as usize] == 0);
             return 0;
         }
-        let current_ship = (*state).current_ship;
+        let current_ship = state.current_ship;
         if keys[KEY_MENU_SPECIAL as usize] != 0 && current_ship != 255 {
-            crate::front_end::fmv::runtime::do_ship_spin(
-                cx,
-                io,
-                current_ship as u16,
-                ptr::null_mut(),
-            );
+            crate::front_end::fmv::runtime::do_ship_spin(cx, io, current_ship as u16);
             return 1;
         }
         let selected = navigate(
@@ -175,36 +169,35 @@ pub(crate) mod live {
             keys[KEY_MENU_DOWN as usize] != 0,
         );
         if selected != current_ship {
-            let catalog = &(*state).catalog;
-            (*state)
-                .build_picker()
-                .draw_icon(catalog, current_ship, true);
-            (*state).current_ship = selected;
-            cx.with_legacy(|| draw_ship_strings(&*state, selected));
+            let catalog = &state.catalog;
+            state.build_picker().draw_icon(catalog, current_ship, true);
+            state.current_ship = selected;
+            draw_ship_strings(cx, state, selected);
         }
-        cx.with_legacy(|| {
-            flash_selection(&mut *state);
-            SleepThreadUntil(time.wrapping_add(840 / 30));
-        });
+        {
+            flash_selection(cx, state);
+            cx.kernel
+                .input_runtime()
+                .sleep_until(cx, time.wrapping_add(840 / 30));
+        };
         1
     }
-    /// # Safety
     /// State must be the active fleet editor on the game thread.
-    pub unsafe fn build_pick_ship(
+    pub fn build_pick_ship(
         cx: &mut crate::engine::battle::Cx<'_>,
         io: &mut crate::engine::observe::Io<'_>,
         input: &crate::engine::input::InputSession,
-        state: *mut MeleeSession,
+        state: &mut MeleeSession,
     ) -> bool {
-        cx.with_legacy(|| FlushInput(input));
-        if (*state).current_ship == 255 {
-            (*state).current_ship = 0;
+        cx.kernel.input_runtime().flush();
+        if state.current_ship == 255 {
+            state.current_ship = 0;
         }
-        cx.with_legacy(|| draw_pick_frame(&*state));
-        (*state).phase = crate::supermelee::session::MenuPhase::Building;
+        draw_pick_frame(cx, state);
+        state.phase = crate::supermelee::session::MenuPhase::Building;
         {
             let mut frame = crate::supermelee::native::menu::live::admission::SessionFrame::new(
-                &mut *state,
+                state,
                 |state: &mut MeleeSession,
                  cx: &mut crate::engine::battle::Cx<'_>,
                  io: &mut crate::engine::observe::Io<'_>| {
@@ -213,7 +206,7 @@ pub(crate) mod live {
             );
             cx.run_input_frame(io, false, &mut frame);
         }
-        (*state).build_pick_confirmed != 0
+        state.build_pick_confirmed != 0
     }
 }
 

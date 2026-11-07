@@ -1,6 +1,10 @@
 //! Exclusive flashing-region ownership with its retained drawing context.
-use super::{flash, native_abi::*, native_context::ContextLease};
-use std::ptr::NonNull;
+use super::{ffi, flash, native_abi::*, native_context::ContextLease};
+use crate::{
+    callback::ffi::{AlarmId, Alarm_addAbsoluteMs, Alarm_remove},
+    time::counter_abi::ONE_SECOND,
+};
+use std::{cell::RefCell, ptr::NonNull, rc::Rc};
 
 pub struct Highlight {
     native: NonNull<flash::FlashContext>,
@@ -14,6 +18,9 @@ enum Operation {
     Speed(u32, u32, u32, u32),
     Start,
     Process,
+    NextTime,
+    PreUpdate,
+    PostUpdate,
     Terminate,
 }
 
@@ -31,7 +38,7 @@ impl Highlight {
         }
     }
 
-    fn apply(&mut self, operation: Operation) {
+    fn apply(&mut self, operation: Operation) -> u32 {
         self.context.assert_thread();
         let native = self.native.as_ptr();
         // SAFETY: this exclusive owner keeps both the flash state and drawing context live.
@@ -47,9 +54,13 @@ impl Highlight {
                 }
                 Operation::Start => flash::Flash_start(native),
                 Operation::Process => flash::Flash_process(native),
+                Operation::NextTime => return flash::Flash_nextTime(native),
+                Operation::PreUpdate => flash::Flash_preUpdate(native),
+                Operation::PostUpdate => flash::Flash_postUpdate(native),
                 Operation::Terminate => flash::Flash_terminate(native),
             }
         }
+        0
     }
 
     pub fn set_rect(&mut self, rect: RECT) {
@@ -73,6 +84,120 @@ impl Highlight {
     }
     pub fn process(&mut self) {
         self.apply(Operation::Process);
+    }
+    pub fn pre_update(&mut self) {
+        self.apply(Operation::PreUpdate);
+    }
+    pub fn post_update(&mut self) {
+        self.apply(Operation::PostUpdate);
+    }
+
+    pub fn schedule(mut self) -> ScheduledHighlight {
+        self.start();
+        let mut registry = ffi::native_allocations();
+        registry.next_highlight_id = registry
+            .next_highlight_id
+            .checked_add(1)
+            .unwrap_or_else(|| panic!("highlight registration ID exhausted"));
+        let id = HighlightId(registry.next_highlight_id);
+        let state = Rc::new(RefCell::new(ScheduledState {
+            id,
+            highlight: self,
+            alarm: None,
+            paused: false,
+            update_depth: 0,
+        }));
+        registry.highlights.insert(id, Rc::downgrade(&state));
+        drop(registry);
+        state.borrow_mut().schedule();
+        ScheduledHighlight(state)
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub(super) struct HighlightId(u64);
+
+pub(super) struct ScheduledState {
+    id: HighlightId,
+    highlight: Highlight,
+    alarm: Option<AlarmId>,
+    paused: bool,
+    update_depth: u16,
+}
+
+impl ScheduledState {
+    fn schedule(&mut self) {
+        let next = self.highlight.apply(Operation::NextTime);
+        let ms = (next / ONE_SECOND)
+            .wrapping_mul(1000)
+            .wrapping_add((next % ONE_SECOND) * 1000 / ONE_SECOND);
+        self.alarm = Some(
+            Alarm_addAbsoluteMs(ms, tick, self.id)
+                .unwrap_or_else(|| panic!("scheduled highlight requires initialized alarms")),
+        );
+    }
+}
+
+impl Drop for ScheduledState {
+    fn drop(&mut self) {
+        Alarm_remove(self.alarm.take());
+        ffi::native_allocations().highlights.remove(&self.id);
+    }
+}
+
+fn tick(id: HighlightId) {
+    // The alarm crosses only an identity. Registry access checks the graphics thread
+    // before upgrading its weak reference to the non-Send animation owner.
+    let state = ffi::native_allocations()
+        .highlights
+        .get(&id)
+        .and_then(std::rc::Weak::upgrade)
+        .unwrap_or_else(|| panic!("alarm fired for an unregistered highlight"));
+    let mut state = state.borrow_mut();
+    state.alarm = None;
+    state.highlight.process();
+    state.schedule();
+}
+
+pub struct ScheduledHighlight(Rc<RefCell<ScheduledState>>);
+
+impl ScheduledHighlight {
+    pub fn set_rect(&mut self, rect: RECT) {
+        self.0.borrow_mut().highlight.set_rect(rect);
+    }
+
+    pub fn pause(&mut self) {
+        let mut state = self.0.borrow_mut();
+        Alarm_remove(state.alarm.take());
+        state.paused = true;
+    }
+
+    pub fn resume(&mut self) {
+        let mut state = self.0.borrow_mut();
+        if state.paused {
+            state.schedule();
+            state.paused = false;
+        }
+    }
+
+    pub fn pre_update(&mut self) {
+        let mut state = self.0.borrow_mut();
+        if state.alarm.is_some() {
+            state.update_depth = state.update_depth.wrapping_add(1);
+            if state.update_depth <= 1 {
+                state.highlight.apply(Operation::PreUpdate);
+            }
+        }
+    }
+
+    pub fn post_update(&mut self) {
+        let mut state = self.0.borrow_mut();
+        if state.alarm.is_some() {
+            state.update_depth = state.update_depth.wrapping_sub(1);
+            if state.update_depth == 0 {
+                state.highlight.apply(Operation::PostUpdate);
+            }
+        }
     }
 }
 

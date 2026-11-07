@@ -3,12 +3,71 @@
 use crate::engine::battle::Cx;
 use crate::engine::input::{frames::InputState, InputSession};
 use crate::engine::observe::Io;
-use crate::memory::{rust_hfree as HFree, rust_hmalloc as HMalloc};
 use crate::navigation::abi::*;
 use crate::ui::settings::play_menu_sound;
 
 use libc::{strcmp, strlen};
 use std::{ffi::c_char, mem, ptr};
+
+pub struct TextEntryView<'a> {
+    pub text: &'a std::ffi::CStr,
+    pub cursor: usize,
+    pub joystick: bool,
+}
+
+impl TextEntryView<'_> {
+    unsafe fn capture(text: &TEXTENTRY_STATE) -> TextEntryView<'_> {
+        TextEntryView {
+            text: std::ffi::CStr::from_ptr(text.BaseStr),
+            cursor: usize::try_from(text.CursorPos)
+                .unwrap_or_else(|error| panic!("negative text cursor: {error}")),
+            joystick: text.JoystickMode != 0,
+        }
+    }
+}
+
+pub trait TextEntryCallbacks {
+    fn changed(&mut self, entry: TextEntryView<'_>, cx: &mut Cx<'_>, input: &InputSession) -> bool;
+    fn frame(
+        &mut self,
+        entry: TextEntryView<'_>,
+        cx: &mut Cx<'_>,
+        io: &mut Io<'_>,
+        input: &InputSession,
+    ) -> bool;
+}
+
+/// Lend one terminated buffer and its callbacks through a synchronous editor session.
+pub fn edit_text(
+    cx: &mut Cx<'_>,
+    io: &mut Io<'_>,
+    input: &InputSession,
+    buffer: &mut [u8],
+    cursor: usize,
+    callbacks: &mut dyn TextEntryCallbacks,
+) -> bool {
+    if cx.world.activity() & CHECK_ABORT as u16 != 0 {
+        return false;
+    }
+    std::ffi::CStr::from_bytes_until_nul(buffer)
+        .unwrap_or_else(|error| panic!("text editor buffer is not terminated: {error}"));
+    // SAFETY: every pointer starts absent, and the borrowed buffer is stable until
+    // this synchronous loop and all its callbacks finish. The core owns its cache.
+    unsafe {
+        let mut entry: TEXTENTRY_STATE = mem::zeroed();
+        entry.BaseStr = buffer.as_mut_ptr().cast();
+        entry.MaxSize = i32::try_from(buffer.len())
+            .unwrap_or_else(|error| panic!("text editor buffer too large: {error}"));
+        entry.CursorPos = i32::try_from(cursor)
+            .unwrap_or_else(|error| panic!("text editor cursor too large: {error}"));
+        let text = &raw mut entry;
+        begin_text_entry(text, || {
+            cx.run_input(io, true, |cx, io| {
+                text_entry_frame_impl(text, cx, io, input, Some(&mut *callbacks)) != 0
+            });
+        }) != 0
+    }
+}
 
 const FAILURE: u16 = MENU_SOUND_EFFECT_MENU_SOUND_FAILURE as u16;
 
@@ -66,24 +125,6 @@ pub unsafe fn do_text_entry(text: *mut TEXTENTRY_STATE, input: &InputSession) ->
 }
 
 /// # Safety
-/// The entry buffers and callbacks remain valid through this synchronous session.
-pub unsafe fn run_text_entry(
-    cx: &mut Cx<'_>,
-    io: &mut Io<'_>,
-    text: *mut TEXTENTRY_STATE,
-    input: &InputSession,
-) -> BOOLEAN {
-    if cx.world.activity() & CHECK_ABORT as u16 != 0 {
-        return 0;
-    }
-    begin_text_entry(text, || {
-        cx.run_input(io, true, |cx, io| {
-            text_entry_frame(text, cx, io, input) != 0
-        });
-    })
-}
-
-/// # Safety
 /// `BaseStr` and `CacheStr` are distinct writable buffers of at least `MaxSize` bytes.
 /// `BaseStr` is NUL-terminated; `InsPt` points to one of its UTF-8 character boundaries.
 /// Callbacks and their state remain valid and must not invalidate these buffers.
@@ -92,6 +133,16 @@ pub unsafe fn text_entry_frame(
     cx: &mut Cx<'_>,
     io: &mut Io<'_>,
     input: &InputSession,
+) -> BOOLEAN {
+    text_entry_frame_impl(text, cx, io, input, None)
+}
+
+unsafe fn text_entry_frame_impl(
+    text: *mut TEXTENTRY_STATE,
+    cx: &mut Cx<'_>,
+    io: &mut Io<'_>,
+    input: &InputSession,
+    mut callbacks: Option<&mut dyn TextEntryCallbacks>,
 ) -> BOOLEAN {
     if cx.world.activity() & CHECK_ABORT as u16 != 0 {
         return 0;
@@ -124,15 +175,24 @@ pub unsafe fn text_entry_frame(
         return 0;
     }
     (*text).InsPt = string;
-    if let Some(callback) = (*text).ChangeCallback.filter(|_| changed) {
-        if callback(text, cx, input) == 0 {
+    if changed {
+        let accepted = if let Some(callbacks) = callbacks.as_deref_mut() {
+            callbacks.changed(TextEntryView::capture(&*text), cx, input)
+        } else if let Some(callback) = (*text).ChangeCallback {
+            callback(text, cx, input) != 0
+        } else {
+            true
+        };
+        if !accepted {
             ptr::copy_nonoverlapping((*text).CacheStr, (*text).BaseStr, (*text).MaxSize as usize);
             (*text).InsPt = cached_ins;
             (*text).CursorPos = cached_cursor;
             play_menu_sound(cx.kernel, cx.world, FAILURE);
         }
     }
-    if let Some(callback) = (*text).FrameCallback {
+    if let Some(callbacks) = callbacks {
+        u32::from(callbacks.frame(TextEntryView::capture(&*text), cx, io, input))
+    } else if let Some(callback) = (*text).FrameCallback {
         callback(text, cx, io, input)
     } else {
         cx.with_legacy(|| SleepThread(ONE_SECOND / 30));
@@ -242,7 +302,6 @@ unsafe fn edit_cursor(
 }
 
 unsafe fn begin_text_entry(text: *mut TEXTENTRY_STATE, run: impl FnOnce()) -> BOOLEAN {
-    let mut lower_len = 0;
     (*text).Success = 0;
     (*text).Initialized = 1;
     (*text).JoystickMode = 0;
@@ -256,59 +315,52 @@ unsafe fn begin_text_entry(text: *mut TEXTENTRY_STATE, run: impl FnOnce()) -> BO
         JOYSTICK_ALPHA_STRTAB.as_ptr().cast(),
     ));
     let table = (*text).JoyAlphaString;
-    (*text).JoyAlpha = load_alpha(
-        SetAbsStringTableIndex(table, 0),
-        &mut (*text).JoyAlphaLength,
-    )
-    .cast();
-    (*text).JoyUpper =
-        load_alpha(SetAbsStringTableIndex(table, 1), &mut (*text).JoyRegLength).cast();
-    (*text).JoyLower = load_alpha(SetAbsStringTableIndex(table, 2), &mut lower_len).cast();
-    if lower_len != (*text).JoyRegLength {
-        if lower_len < (*text).JoyRegLength {
-            (*text).JoyRegLength = lower_len;
-        }
+    let mut alpha = load_alpha(SetAbsStringTableIndex(table, 0));
+    let mut upper = load_alpha(SetAbsStringTableIndex(table, 1));
+    let mut lower = load_alpha(SetAbsStringTableIndex(table, 2));
+    (*text).JoyAlphaLength = i32::try_from(alpha.len())
+        .unwrap_or_else(|error| panic!("joystick alphabet too large: {error}"));
+    (*text).JoyRegLength = i32::try_from(upper.len().min(lower.len()))
+        .unwrap_or_else(|error| panic!("joystick register too large: {error}"));
+    (*text).JoyAlpha = alpha
+        .first_mut()
+        .map_or(ptr::null_mut(), ptr::from_mut)
+        .cast();
+    (*text).JoyUpper = upper
+        .first_mut()
+        .map_or(ptr::null_mut(), ptr::from_mut)
+        .cast();
+    (*text).JoyLower = lower
+        .first_mut()
+        .map_or(ptr::null_mut(), ptr::from_mut)
+        .cast();
+    if lower.len() != upper.len() {
         crate::log_abi::log_message(log_Level_log_Warning as i32, &format!("Warning: Joystick upper-lower registers size mismatch; using the smallest subset ({})", (*text).JoyRegLength));
     }
-    (*text).CacheStr =
-        HMalloc(((*text).MaxSize as usize).wrapping_mul(mem::size_of::<UNICODE>())).cast();
+    let size = usize::try_from((*text).MaxSize)
+        .unwrap_or_else(|error| panic!("negative text buffer size: {error}"));
+    let mut cache = vec![0u8; size];
+    (*text).CacheStr = cache.as_mut_ptr().cast();
     EnterCharacterMode();
     run();
     ExitCharacterMode();
-    if !(*text).CacheStr.is_null() {
-        HFree((*text).CacheStr.cast());
-    }
-    if !(*text).JoyLower.is_null() {
-        HFree((*text).JoyLower.cast());
-    }
-    if !(*text).JoyUpper.is_null() {
-        HFree((*text).JoyUpper.cast());
-    }
-    if !(*text).JoyAlpha.is_null() {
-        HFree((*text).JoyAlpha.cast());
-    }
     DestroyStringTable(ReleaseStringTable((*text).JoyAlphaString));
     (*text).Success
 }
 
-unsafe fn load_alpha(string: STRING, count: *mut i32) -> *mut JoyChar {
-    *count = 0;
+unsafe fn load_alpha(string: STRING) -> Vec<JoyChar> {
     let source = GetStringAddress(string);
     if source.is_null() {
-        return ptr::null_mut();
+        return Vec::new();
     }
-    let total = utf8StringCount((source).cast()) as i32;
-    let chars = HMalloc(total as usize * mem::size_of::<JoyChar>()).cast::<JoyChar>();
-    if chars.is_null() {
-        return ptr::null_mut();
-    }
+    let total = utf8StringCount((source).cast());
+    let mut chars = Vec::with_capacity(total);
     let mut cursor = source;
-    for i in 0..total {
+    for _ in 0..total {
         let ch = char_from_utf8(cursor.cast());
-        *chars.add(i as usize) = ch;
+        chars.push(ch);
         cursor = cursor.add(ch.len as usize);
     }
-    *count = total;
     chars
 }
 

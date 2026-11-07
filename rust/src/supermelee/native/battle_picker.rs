@@ -32,8 +32,26 @@ pub mod live {
     #[cfg(not(test))]
     use crate::battle::context_access::ContextOps;
     use crate::battle::{NETWORK_CONTROL, PSYTRON_CONTROL};
-    use crate::engine::battle::schema::GETMELEE_STATE;
     use crate::graphics::{context_abi::ContextLease, native_abi as render};
+
+    #[derive(Default)]
+    pub struct FleetSelection {
+        initialized: bool,
+        pub player: [PlayerSelection; 2],
+        net: Option<std::rc::Rc<dyn crate::engine::battle::net::BattleNet>>,
+    }
+
+    #[derive(Default)]
+    pub struct PlayerSelection {
+        pub entered_at: u32,
+        pub ship: Option<crate::engine::battle::ShipId>,
+        pub row: u16,
+        pub col: u16,
+        random_index: u16,
+        pub selecting: bool,
+        pub done: bool,
+        highlight: Option<crate::graphics::context_abi::Highlight>,
+    }
 
     const FADE_ALL_TO_COLOR: u32 = 253;
 
@@ -48,7 +66,7 @@ pub mod live {
     ) -> Option<ShipId> {
         cx.kernel.ships(player).by_index(index, used)
     }
-    fn changed(state: &mut GETMELEE_STATE, player: usize) {
+    fn changed(state: &mut FleetSelection, player: usize) {
         let s = &mut state.player[player];
         let r = render::RECT {
             corner: render::POINT {
@@ -65,62 +83,58 @@ pub mod live {
             .unwrap_or_else(|| panic!("selecting player highlight"))
             .set_rect(r);
     }
-    /// # Safety
-    /// The selection and live ship queues belong to the game thread.
-    pub unsafe fn set_ship_selected(
+    pub fn set_ship_selected(
         cx: &mut crate::engine::battle::Cx<'_>,
-        state: *mut GETMELEE_STATE,
+        state: &mut FleetSelection,
         player: u16,
         choice: u16,
         network: bool,
     ) -> bool {
-        let s = &mut (*state).player[player as usize];
-        assert!(s.done == 0);
+        let s = &mut state.player[player as usize];
+        assert!(!s.done);
         let ship = if choice == u16::MAX {
-            by_index(cx, player as usize, s.randomIndex, true)
+            by_index(cx, player as usize, s.random_index, true)
         } else {
             by_index(cx, player as usize, choice, false)
         };
         let Some(ship) = ship else {
             return false;
         };
-        s.choice = choice;
-        s.hBattleShip = Some(ship);
+        s.ship = Some(ship);
         if network {
             crate::ui::settings::play_menu_sound(cx.kernel, cx.world, 1);
-            if let Some(net) = &(*state).net {
+            if let Some(net) = &state.net {
                 cx.with_legacy(|| net.ship_selected(choice));
             }
         }
-        s.done = 1;
+        s.done = true;
         true
     }
-    unsafe fn process(
+    fn process(
         cx: &mut crate::engine::battle::Cx<'_>,
-        input: &crate::engine::input::InputSession,
-        state: *mut GETMELEE_STATE,
+        state: &mut FleetSelection,
         player: usize,
         keys: u8,
     ) -> u32 {
         if keys & 8 != 0 {
-            let s = &(*state).player[player];
+            let s = &state.player[player];
             if s.col == 7 && s.row == 0 {
                 set_ship_selected(cx, state, player as u16, u16::MAX, true);
             } else if s.col == 7 && s.row == 1 {
-                if ConfirmExit(cx, input) != 0 {
+                if cx.kernel.input_runtime().confirm_exit(cx) {
                     return 0;
                 }
             } else {
                 set_ship_selected(cx, state, player as u16, s.row * 7 + s.col, true);
             }
         } else {
-            let s = &mut (*state).player[player];
+            let s = &mut state.player[player];
             let (row, col) = move_cursor(s.row, s.col, keys);
             if (row, col) != (s.row, s.col) {
                 s.row = row;
                 s.col = col;
                 crate::ui::settings::play_menu_sound(cx.kernel, cx.world, 0);
-                cx.with_legacy(|| changed(&mut *state, player));
+                cx.with_legacy(|| changed(state, player));
             }
         }
         1
@@ -130,33 +144,26 @@ pub mod live {
         io: &mut crate::engine::observe::Io<'_>,
         input: &crate::engine::input::InputSession,
         context: &crate::engine::battle::input::InputContext,
-        state: &mut GETMELEE_STATE,
+        state: &mut FleetSelection,
     ) -> u32 {
         use crate::engine::battle::input::InputSource;
         let player = context.player();
         match context.source() {
-            InputSource::Human => {
-                // SAFETY: the picker owns its selection state and reads game-thread input.
-                unsafe {
-                    process(
-                        cx,
-                        input,
-                        state,
-                        usize::from(player),
-                        PulsedInputToBattleInput(input, player),
-                    )
-                }
-            }
+            InputSource::Human => process(
+                cx,
+                state,
+                usize::from(player),
+                PulsedInputToBattleInput(input, player),
+            ),
             InputSource::Computer => {
                 if GetTimeCounter()
                     < state.player[usize::from(player)]
-                        .timeIn
+                        .entered_at
                         .wrapping_add(840 >> 1)
                 {
                     return 1;
                 }
-                // SAFETY: the picker owns the initialized fleet selection for this player.
-                unsafe { process(cx, input, state, usize::from(player), 8) }
+                process(cx, state, usize::from(player), 8)
             }
             InputSource::Network(_) => {
                 state
@@ -175,35 +182,34 @@ pub mod live {
                     .selected(usize::from(player))
                 {
                     // SAFETY: the protocol validated the retained fleet slot before recording it.
-                    assert!(unsafe { set_ship_selected(cx, state, player, choice, false) });
-                    state.player[usize::from(player)].remoteSelected = 1;
+                    assert!(set_ship_selected(cx, state, player, choice, false));
                 }
                 1
             }
         }
     }
-    unsafe fn choose(
+    fn choose(
         cx: &mut crate::engine::battle::Cx<'_>,
         io: &mut crate::engine::observe::Io<'_>,
         input: &crate::engine::input::InputSession,
-        state: *mut GETMELEE_STATE,
+        state: &mut FleetSelection,
         inputs: &[Option<crate::engine::battle::input::InputContext>; 2],
     ) -> u32 {
         SetMenuSounds(input, 0, 0);
-        if (*state).Initialized == 0 {
-            (*state).Initialized = 1;
+        if !state.initialized {
+            state.initialized = true;
             return 1;
         }
-        for p in &mut (*state).player {
-            if p.selecting != 0 && p.done == 0 {
+        for p in &mut state.player {
+            if p.selecting && !p.done {
                 p.highlight
                     .as_mut()
                     .unwrap_or_else(|| panic!("selecting player highlight"))
                     .process();
             }
         }
-        cx.with_legacy(|| SleepThread(840 / 120));
-        (*state)
+        cx.kernel.input_runtime().sleep(cx, 840 / 120);
+        state
             .net
             .as_ref()
             .unwrap_or_else(|| panic!("missing net"))
@@ -212,7 +218,7 @@ pub mod live {
                 io,
                 &mut crate::supermelee::native::protocol::battle_notice,
             ));
-        let mut abort = !(*state)
+        let mut abort = !state
             .net
             .as_ref()
             .unwrap_or_else(|| panic!("missing net"))
@@ -221,7 +227,7 @@ pub mod live {
         let mut done = true;
         if !abort {
             for (player, context) in inputs.iter().enumerate() {
-                if (*state).player[player].selecting == 0 || (*state).player[player].done != 0 {
+                if !state.player[player].selecting || state.player[player].done {
                     continue;
                 }
                 if select_ship(
@@ -231,21 +237,21 @@ pub mod live {
                     context
                         .as_ref()
                         .unwrap_or_else(|| panic!("missing player input")),
-                    &mut *state,
+                    state,
                 ) == 0
                 {
                     abort = true;
                     break;
                 }
-                let p = &mut (*state).player[player];
-                if p.done != 0 {
+                let p = &mut state.player[player];
+                if p.done {
                     p.highlight = None;
                 } else {
                     done = false;
                 }
             }
         }
-        (*state)
+        state
             .net
             .as_ref()
             .unwrap_or_else(|| panic!("missing net"))
@@ -255,10 +261,9 @@ pub mod live {
                 &mut crate::supermelee::native::protocol::battle_notice,
             ));
         if abort {
-            for p in &mut (*state).player {
-                if p.selecting != 0 {
-                    p.choice = 0;
-                    p.hBattleShip = None;
+            for p in &mut state.player {
+                if p.selecting {
+                    p.ship = None;
                 }
             }
             cx.world
@@ -495,10 +500,8 @@ pub mod live {
     }
 
     use crate::engine::observe::Io;
-    use crate::mainloop::input_abi::live::UpdateInputState;
-    /// # Safety
     /// Called at the end of a live melee battle on the game thread.
-    pub unsafe fn melee_game_over(
+    pub fn melee_game_over(
         cx: &mut crate::engine::battle::Cx<'_>,
         input: &crate::engine::input::InputSession,
         io: &mut Io<'_>,
@@ -514,7 +517,7 @@ pub mod live {
                 || input.pulsed().menu[KEY_MENU_CANCEL as usize] != 0;
             loop {
                 if cx
-                    .nested_input(io, |cx| UpdateInputState(cx, input))
+                    .nested_input(io, |cx| cx.kernel.input_runtime().update(cx))
                     .is_none()
                 {
                     break;
@@ -527,8 +530,8 @@ pub mod live {
                 }
                 cx.with_legacy(|| {
                     Async_process();
-                    SleepThread(840 / 40);
                 });
+                cx.kernel.input_runtime().sleep(cx, 840 / 40);
                 if cx.world.activity() & CHECK_ABORT as u16 != 0
                     || button
                     || (cx.kernel.player_control[0] & cx.kernel.player_control[1] & PSYTRON_CONTROL
@@ -540,9 +543,9 @@ pub mod live {
             }
         }
     }
-    unsafe fn initialize_selection(
+    fn initialize_selection(
         cx: &mut crate::engine::battle::Cx<'_>,
-        state: &mut GETMELEE_STATE,
+        state: &mut FleetSelection,
         counters: [u8; 2],
         mask: u16,
         screen_context: CONTEXT,
@@ -552,17 +555,15 @@ pub mod live {
         let now = GetTimeCounter();
         for player in order.map(usize::from) {
             let p = &mut state.player[player];
-            p.selecting = u32::from(mask & (1 << player) != 0);
-            p.ships_left = u16::from(counters[player]);
-            p.randomIndex = cx.random() as u16 % p.ships_left;
-            p.done = 0;
-            if p.selecting == 0 {
+            p.selecting = mask & (1 << player) != 0;
+            p.random_index = cx.random() as u16 % u16::from(counters[player]);
+            p.done = false;
+            if !p.selecting {
                 continue;
             }
-            p.timeIn = now;
+            p.entered_at = now;
             p.row = 0;
             p.col = 7;
-            p.remoteSelected = 0;
             let context = ContextLease::retain(
                 std::ptr::NonNull::new(screen_context.cast())
                     .unwrap_or_else(|| panic!("picker screen context")),
@@ -590,13 +591,13 @@ pub mod live {
                 .start();
         }
     }
-    unsafe fn get_ships(
+    fn get_ships(
         cx: &mut crate::engine::battle::Cx<'_>,
         input: &crate::engine::input::InputSession,
         mask: u16,
     ) -> Option<[Option<ShipId>; 2]> {
         {
-            let mut state = GETMELEE_STATE::default();
+            let mut state = FleetSelection::default();
             let counters = cx.b.counters;
             let net = cx.b.network();
             state.net = Some(net.clone());
@@ -635,11 +636,11 @@ pub mod live {
             cx.with_legacy(|| {
                 WaitForSoundEnd(0);
                 for (player, p) in state.player.iter_mut().enumerate() {
-                    if p.selecting == 0 {
+                    if !p.selecting {
                         continue;
                     }
-                    if p.done != 0 {
-                        ships[player] = p.hBattleShip;
+                    if p.done {
+                        ships[player] = p.ship;
                     } else {
                         p.highlight = None;
                         ok = false;
@@ -659,9 +660,8 @@ pub mod live {
             ok.then_some(ships)
         }
     }
-    /// # Safety
     /// Both battle fleets and their selection resources must be initialized.
-    pub unsafe fn get_initial_melee_star_ships(
+    pub fn get_initial_melee_star_ships(
         cx: &mut crate::engine::battle::Cx<'_>,
         input: &crate::engine::input::InputSession,
     ) -> Option<[Option<ShipId>; 2]> {
@@ -669,13 +669,19 @@ pub mod live {
             value(cx, &frame(cx, player), player);
             draw(cx, player);
         }
-        SleepThreadUntil(FadeScreen(FADE_ALL_TO_COLOR, 840 / 2).wrapping_add(840 / 60));
-        FlushColorXForms();
+        let screen = ContextLease::retain(
+            std::ptr::NonNull::new(cx.kernel.screen_context)
+                .unwrap_or_else(|| panic!("melee selection screen")),
+        );
+        let deadline = screen
+            .fade_screen(FADE_ALL_TO_COLOR, 840 / 2)
+            .wrapping_add(840 / 60);
+        cx.kernel.input_runtime().sleep_until(cx, deadline);
+        screen.finish_color_transforms();
         get_ships(cx, input, 3)
     }
-    /// # Safety
     /// The selected player's battle fleet and selection resources must be initialized.
-    pub unsafe fn get_next_melee_star_ship(
+    pub fn get_next_melee_star_ship(
         cx: &mut crate::engine::battle::Cx<'_>,
         input: &crate::engine::input::InputSession,
         player: u16,

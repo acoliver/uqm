@@ -22,14 +22,16 @@ pub(crate) mod runtime {
             let mut io = Io {
                 observer: &mut *observer,
             };
-            do_ship_spin(cx, &mut io, index, music);
+            ship_spin(cx, &mut io, index, music);
         });
     }
 
-    /// # Safety
-    /// Graphics, resource and input systems must be initialized on the game thread;
-    /// `music` must be null or a live music reference.
-    pub unsafe fn do_ship_spin(cx: &mut Cx<'_>, io: &mut Io<'_>, index: COUNT, music: MUSIC_REF) {
+    pub fn do_ship_spin(cx: &mut Cx<'_>, io: &mut Io<'_>, index: COUNT) {
+        // SAFETY: Cx retains the lifecycle; this entry supplies no borrowed raw music resource.
+        unsafe { ship_spin(cx, io, index, ptr::null_mut()) }
+    }
+
+    unsafe fn ship_spin(cx: &mut Cx<'_>, io: &mut Io<'_>, index: COUNT, music: MUSIC_REF) {
         if !WANT_SHIP_SPINS {
             return;
         }
