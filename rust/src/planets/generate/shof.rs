@@ -7,9 +7,9 @@
 //! `MAIDENS_ON_SHIP`, `SHOFIXTI_VISITS`, `SHOFIXTI_GRPOFFS0` (32-bit group
 //! reference).
 
-use crate::engine::StoryKey;
 use crate::comm::dispatch::ship::SHOFIXTI_SHIP;
 use crate::engine::world::planet::PlanetDesc;
+use crate::engine::StoryKey;
 use crate::math::RandomContext;
 use crate::planets::generate::default::{self, FLEE, IGNORE_FLAGSHIP, REFORM_GROUP};
 use crate::planets::generate::orbits::{self, OrbitRequest};
@@ -33,10 +33,11 @@ pub trait ShofixtiSite: FleetGroups {
 /// `GenerateShofixti_initNpcs`: while a Shofixti is still to be found (not
 /// recruited, and either alive or the brother is alive and the maidens are
 /// aboard) the stored group is resumed or, failing that, made anew.
-pub fn init_npcs(host: &mut (impl ShofixtiSite + Story)) -> bool {
+pub fn init_npcs(host: &mut (impl ShofixtiSite + Story + ?Sized)) -> bool {
     let a_shofixti_remains = host.flag(StoryKey::SHOFIXTI_RECRUITED) == 0
         && (host.flag(StoryKey::SHOFIXTI_KIA) == 0
-            || (host.flag(StoryKey::SHOFIXTI_BRO_KIA) == 0 && host.flag(StoryKey::MAIDENS_ON_SHIP) != 0));
+            || (host.flag(StoryKey::SHOFIXTI_BRO_KIA) == 0
+                && host.flag(StoryKey::MAIDENS_ON_SHIP) != 0));
     if a_shofixti_remains {
         host.set_battle_group_ref(host.word(StoryKey::SHOFIXTI_GRPOFFS0));
         if host.battle_group_ref() == 0 || !host.init_ip_groups() {
@@ -44,7 +45,8 @@ pub fn init_npcs(host: &mut (impl ShofixtiSite + Story)) -> bool {
                 host.set_battle_group_ref(!0);
             }
             // Tanaka, or Katana (+1) once Tanaka is dead.
-            let name = NAME_OFFSET + NUM_CAPTAINS_NAMES + (host.flag(StoryKey::SHOFIXTI_KIA) & 1) as u8;
+            let name =
+                NAME_OFFSET + NUM_CAPTAINS_NAMES + (host.flag(StoryKey::SHOFIXTI_KIA) & 1) as u8;
             host.clone_shofixti_named(name);
             let stored = host.put_group_info(host.battle_group_ref());
             host.set_battle_group_ref(stored);
@@ -60,7 +62,7 @@ pub fn init_npcs(host: &mut (impl ShofixtiSite + Story)) -> bool {
 }
 
 /// `GenerateShofixti_reinitNpcs`.
-pub fn reinit_npcs(host: &mut (impl FleetGroups + Story)) -> bool {
+pub fn reinit_npcs(host: &mut (impl FleetGroups + Story + ?Sized)) -> bool {
     default::reinit_npcs(host);
     check_old_shofixti(host);
     true
@@ -68,7 +70,7 @@ pub fn reinit_npcs(host: &mut (impl FleetGroups + Story)) -> bool {
 
 /// `GenerateShofixti_uninitNpcs`: a Shofixti group that is gone from the
 /// system when the player leaves was killed; the brother is the second one.
-pub fn uninit_npcs(host: &mut (impl FleetGroups + Story)) -> bool {
+pub fn uninit_npcs(host: &mut (impl FleetGroups + Story + ?Sized)) -> bool {
     if host.battle_group_ref() != 0
         && host.flag(StoryKey::SHOFIXTI_RECRUITED) == 0
         && !host.head_ip_group(&mut |_| {})
@@ -118,7 +120,7 @@ pub fn generate_planets(
 
 /// `check_old_shofixti`: a Shofixti the flagship collided with flees once he
 /// has been recruited.
-fn check_old_shofixti(host: &mut (impl FleetGroups + Story)) {
+fn check_old_shofixti(host: &mut (impl FleetGroups + Story + ?Sized)) {
     if host.battle_group_ref() == 0 {
         return;
     }
@@ -129,6 +131,30 @@ fn check_old_shofixti(host: &mut (impl FleetGroups + Story)) {
             group.dest_loc = 0;
         }
     });
+}
+
+use super::generator::SystemGenerator;
+use super::host::SiteHost;
+use crate::engine::world::generation::SolarSys;
+
+pub struct Generator;
+
+impl SystemGenerator for Generator {
+    fn init_npcs(&self, _system: &mut SolarSys<'_>, host: &mut dyn SiteHost) -> bool {
+        init_npcs(host)
+    }
+    fn reinit_npcs(&self, _system: &mut SolarSys<'_>, host: &mut dyn SiteHost) -> bool {
+        reinit_npcs(host)
+    }
+    fn uninit_npcs(&self, _system: &mut SolarSys<'_>, host: &mut dyn SiteHost) -> bool {
+        uninit_npcs(host)
+    }
+    fn generate_planets(&self, system: &mut SolarSys<'_>, _host: &mut dyn SiteHost) -> bool {
+        system.layout(|rng, _table, size, color, planets| {
+            generate_planets(rng, size, color, planets)
+        });
+        true
+    }
 }
 
 #[cfg(test)]

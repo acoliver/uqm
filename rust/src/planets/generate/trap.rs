@@ -4,7 +4,7 @@
 
 use crate::engine::world::planet::{PlanetDesc, PlanetFrame};
 use crate::math::RandomContext;
-use crate::planets::generate::special::{self, Body, Orbit, EARTH_ATMOSPHERE, TELLURIC_WORLD};
+use crate::planets::generate::special::{self, Body, EARTH_ATMOSPHERE, TELLURIC_WORLD};
 
 /// `GenerateTrap_generatePlanets`.
 pub fn generate_planets(
@@ -22,14 +22,42 @@ pub fn generate_planets(
 }
 
 /// `GenerateTrap_generateOrbital`: analyse as usual, then fix the conditions.
-pub fn generate_orbital(orbit: &mut Orbit<'_>, body: Body, load_planet: impl FnOnce()) -> bool {
-    orbit.default_orbital(load_planet);
+pub fn generate_orbital(
+    system: &mut SolarSys<'_>,
+    body: Body,
+    site: &mut (impl super::host::PlanetSite + ?Sized),
+) -> bool {
+    super::special::default_orbital(system, body, site);
     if body == Body::Planet(0) {
-        let info = &mut orbit.sys_info.planet_info;
+        let info = system.planet_info();
         info.atmo_density = (EARTH_ATMOSPHERE * 2) as _;
         info.temperature = 35;
         info.weather = 3;
         info.tectonics = 1;
     }
     true
+}
+
+use super::generator::SystemGenerator;
+use super::host::SiteHost;
+use crate::engine::world::generation::SolarSys;
+
+pub struct Generator;
+
+impl SystemGenerator for Generator {
+    fn generate_planets(&self, system: &mut SolarSys<'_>, _host: &mut dyn SiteHost) -> bool {
+        system.layout(|rng, table, size, color, planets| {
+            generate_planets(rng, table, size, color, planets)
+        });
+        true
+    }
+
+    fn generate_orbital(
+        &self,
+        system: &mut SolarSys<'_>,
+        body: Body,
+        host: &mut dyn SiteHost,
+    ) -> bool {
+        generate_orbital(system, body, host)
+    }
 }

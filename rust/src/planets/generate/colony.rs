@@ -4,18 +4,18 @@
 //! Overridden: `initNpcs`, `generatePlanets`, `generateOrbital`. Story flags:
 //! `COLONY_GRPOFFS0` (32-bit group reference).
 
-use crate::engine::StoryKey;
 use crate::engine::world::planet::PlanetDesc;
+use crate::engine::StoryKey;
 use crate::math::RandomContext;
 use crate::planets::generate::consts::PLANET_SHIELDED;
 use crate::planets::generate::default;
 use crate::planets::generate::orbits::{self, OrbitRequest};
 use crate::planets::generate::special::{
-    self, Body, FleetGroups, Orbit, Story, EARTH_ATMOSPHERE, IN_ORBIT, URQUAN_SHIP, WATER_WORLD,
+    self, Body, FleetGroups, Story, EARTH_ATMOSPHERE, IN_ORBIT, URQUAN_SHIP, WATER_WORLD,
 };
 
 /// `GenerateColony_initNpcs`.
-pub fn init_npcs(host: &mut (impl FleetGroups + Story)) -> bool {
+pub fn init_npcs(host: &mut (impl FleetGroups + Story + ?Sized)) -> bool {
     special::ensure_fleet(host, StoryKey::COLONY_GRPOFFS0, URQUAN_SHIP);
     default::init_npcs(host);
     if host.battle_group_ref() != 0 {
@@ -54,23 +54,56 @@ pub fn generate_planets(
 }
 
 /// `GenerateColony_generateOrbital`: the colony world has fixed conditions.
-pub fn generate_orbital(orbit: &mut Orbit<'_>, body: Body, load_planet: impl FnOnce()) -> bool {
+pub fn generate_orbital(
+    system: &mut SolarSys<'_>,
+    body: Body,
+    site: &mut (impl super::host::PlanetSite + ?Sized),
+) -> bool {
     if body != Body::Planet(0) {
-        return orbit.default_orbital(load_planet);
+        return super::special::default_orbital(system, body, site);
     }
-    crate::planets::generate::calc::do_planetary_analysis(
-        orbit.rng,
-        orbit.plan_data,
-        orbit.star,
-        orbit.site,
-        orbit.sys_info,
-        orbit.world,
-    );
-    let info = &mut orbit.sys_info.planet_info;
-    info.atmo_density = (EARTH_ATMOSPHERE * 98 / 100) as _;
-    info.weather = 0;
-    info.tectonics = 0;
-    info.temperature = 28;
-    load_planet();
+    super::special::with_orbit(system, body, |orbit| {
+        crate::planets::generate::calc::do_planetary_analysis(
+            orbit.rng,
+            orbit.plan_data,
+            orbit.star,
+            orbit.site,
+            orbit.sys_info,
+            orbit.world,
+        );
+        let info = &mut orbit.sys_info.planet_info;
+        info.atmo_density = (EARTH_ATMOSPHERE * 98 / 100) as _;
+        info.weather = 0;
+        info.tectonics = 0;
+        info.temperature = 28;
+    });
+    super::host::PlanetSite::load_planet(site, system);
     true
+}
+
+use super::generator::SystemGenerator;
+use super::host::SiteHost;
+use crate::engine::world::generation::SolarSys;
+
+pub struct Generator;
+
+impl SystemGenerator for Generator {
+    fn init_npcs(&self, _system: &mut SolarSys<'_>, host: &mut dyn SiteHost) -> bool {
+        init_npcs(host)
+    }
+    fn generate_planets(&self, system: &mut SolarSys<'_>, _host: &mut dyn SiteHost) -> bool {
+        system.layout(|rng, _table, size, color, planets| {
+            generate_planets(rng, size, color, planets)
+        });
+        true
+    }
+
+    fn generate_orbital(
+        &self,
+        system: &mut SolarSys<'_>,
+        body: Body,
+        host: &mut dyn SiteHost,
+    ) -> bool {
+        generate_orbital(system, body, host)
+    }
 }

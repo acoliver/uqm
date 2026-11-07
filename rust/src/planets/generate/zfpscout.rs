@@ -12,7 +12,7 @@ use crate::planets::generate::special::{self, FleetGroups, Story, ZOQFOTPIK_SHIP
 use crate::planets::generate::default::{FLEE, IGNORE_FLAGSHIP, REFORM_GROUP};
 
 /// `GenerateZoqFotPikScout_initNpcs`.
-pub fn init_npcs(host: &mut (impl FleetGroups + Story)) -> bool {
+pub fn init_npcs(host: &mut (impl FleetGroups + Story + ?Sized)) -> bool {
     if host.flag(StoryKey::MET_ZOQFOT) == 0 {
         special::ensure_fleet(host, StoryKey::ZOQFOT_GRPOFFS0, ZOQFOTPIK_SHIP);
     }
@@ -22,7 +22,7 @@ pub fn init_npcs(host: &mut (impl FleetGroups + Story)) -> bool {
 
 /// `GenerateZoqFotPikScout_reinitNpcs`: a scout the flagship collided with
 /// flees.
-pub fn reinit_npcs(host: &mut impl FleetGroups) -> bool {
+pub fn reinit_npcs(host: &mut (impl FleetGroups + ?Sized)) -> bool {
     default::reinit_npcs(host);
     if host.battle_group_ref() == 0 {
         return true;
@@ -34,4 +34,19 @@ pub fn reinit_npcs(host: &mut impl FleetGroups) -> bool {
         }
     });
     true
+}
+
+use super::generator::SystemGenerator;
+use super::host::SiteHost;
+use crate::engine::world::generation::SolarSys;
+
+pub struct Generator;
+
+impl SystemGenerator for Generator {
+    fn init_npcs(&self, _system: &mut SolarSys<'_>, host: &mut dyn SiteHost) -> bool {
+        init_npcs(host)
+    }
+    fn reinit_npcs(&self, _system: &mut SolarSys<'_>, host: &mut dyn SiteHost) -> bool {
+        reinit_npcs(host)
+    }
 }

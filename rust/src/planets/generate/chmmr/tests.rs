@@ -13,25 +13,25 @@ const HOME: Body = Body::Planet(1);
 const STARBASE: Body = Body::Moon { planet: 1, moon: 0 };
 
 #[derive(Default)]
-struct FakeStory(HashMap<&'static str, u32>);
+struct FakeStory(HashMap<StoryKey, u32>);
 
 impl FakeStory {
-    fn with(flags: &[(&'static str, u32)]) -> Self {
+    fn with(flags: &[(StoryKey, u32)]) -> Self {
         Self(flags.iter().copied().collect())
     }
 }
 
 impl Story for FakeStory {
-    fn flag(&self, name: &'static str) -> u32 {
-        self.0.get(name).copied().unwrap_or(0)
+    fn flag(&self, name: StoryKey) -> u32 {
+        self.0.get(&name).copied().unwrap_or(0)
     }
-    fn set_flag(&mut self, name: &'static str, value: u32) {
+    fn set_flag(&mut self, name: StoryKey, value: u32) {
         self.0.insert(name, value);
     }
-    fn word(&self, name: &'static str) -> u32 {
+    fn word(&self, name: StoryKey) -> u32 {
         self.flag(name)
     }
-    fn set_word(&mut self, name: &'static str, value: u32) {
+    fn set_word(&mut self, name: StoryKey, value: u32) {
         self.set_flag(name, value);
     }
 }
@@ -119,7 +119,7 @@ impl ChmmrSite for RecordingSite {
     fn load_ip_groups(&mut self) {
         self.record(Call::LoadIpGroups);
     }
-    fn visit_starbase(&mut self) {
+    fn visit_starbase(&mut self, _system: &mut crate::engine::world::generation::SolarSys<'_>) {
         self.record(Call::VisitStarbase);
     }
 }
@@ -127,9 +127,24 @@ impl ChmmrSite for RecordingSite {
 #[test]
 fn unleashed_chmmr_talk_without_the_bomb_leaves_the_activity_alone() {
     for bomb in [0, 1, 3] {
-        let story = FakeStory::with(&[(StoryKey::CHMMR_UNLEASHED, 1), (StoryKey::CHMMR_BOMB_STATE, bomb)]);
+        let story = FakeStory::with(&[
+            (StoryKey::CHMMR_UNLEASHED, 1),
+            (StoryKey::CHMMR_BOMB_STATE, bomb),
+        ]);
         let mut site = RecordingSite::new(true);
-        assert!(enter_orbit(HOME, &story, &mut site));
+        assert!(crate::planets::generate::testing::with_empty(|system| {
+            enter_orbit(
+                system,
+                HOME,
+                &mut crate::planets::generate::testing::Effects {
+                    story: &story,
+                    site: &mut site,
+                    report: (),
+                    lander: (),
+                    load: Some(|| {}),
+                },
+            )
+        }));
         assert_eq!(
             *site.calls.borrow(),
             [
@@ -144,9 +159,24 @@ fn unleashed_chmmr_talk_without_the_bomb_leaves_the_activity_alone() {
 
 #[test]
 fn unleashed_chmmr_talk_with_the_bomb_delivered_ends_the_interplanetary_visit() {
-    let story = FakeStory::with(&[(StoryKey::CHMMR_UNLEASHED, 1), (StoryKey::CHMMR_BOMB_STATE, 2)]);
+    let story = FakeStory::with(&[
+        (StoryKey::CHMMR_UNLEASHED, 1),
+        (StoryKey::CHMMR_BOMB_STATE, 2),
+    ]);
     let mut site = RecordingSite::new(true);
-    assert!(enter_orbit(HOME, &story, &mut site));
+    assert!(crate::planets::generate::testing::with_empty(|system| {
+        enter_orbit(
+            system,
+            HOME,
+            &mut crate::planets::generate::testing::Effects {
+                story: &story,
+                site: &mut site,
+                report: (),
+                lander: (),
+                load: Some(|| {}),
+            },
+        )
+    }));
     assert_eq!(
         *site.calls.borrow(),
         [
@@ -159,9 +189,24 @@ fn unleashed_chmmr_talk_with_the_bomb_delivered_ends_the_interplanetary_visit() 
 
 #[test]
 fn unleashed_chmmr_never_meet_the_ilwrath() {
-    let story = FakeStory::with(&[(StoryKey::CHMMR_UNLEASHED, 1), (StoryKey::SUN_DEVICE_ON_SHIP, 1)]);
+    let story = FakeStory::with(&[
+        (StoryKey::CHMMR_UNLEASHED, 1),
+        (StoryKey::SUN_DEVICE_ON_SHIP, 1),
+    ]);
     let mut site = RecordingSite::new(true);
-    assert!(enter_orbit(HOME, &story, &mut site));
+    assert!(crate::planets::generate::testing::with_empty(|system| {
+        enter_orbit(
+            system,
+            HOME,
+            &mut crate::planets::generate::testing::Effects {
+                story: &story,
+                site: &mut site,
+                report: (),
+                lander: (),
+                load: Some(|| {}),
+            },
+        )
+    }));
     assert!(!site.calls.borrow().contains(&Call::StartSphereTracking));
 }
 
@@ -186,7 +231,19 @@ fn ambush_story() -> FakeStory {
 #[test]
 fn the_ilwrath_ambush_that_ends_normally_puts_the_interplanetary_world_back() {
     let mut site = RecordingSite::new(true);
-    assert!(enter_orbit(HOME, &ambush_story(), &mut site));
+    assert!(crate::planets::generate::testing::with_empty(|system| {
+        enter_orbit(
+            system,
+            HOME,
+            &mut crate::planets::generate::testing::Effects {
+                story: &ambush_story(),
+                site: &mut site,
+                report: (),
+                lander: (),
+                load: Some(|| {}),
+            },
+        )
+    }));
 
     let mut expected = ambush_prefix();
     expected.extend([
@@ -203,7 +260,19 @@ fn the_ilwrath_ambush_keeps_the_conversation_state_when_the_game_aborts_or_loads
         let mut site = RecordingSite::new(true);
         let during = IN_INTERPLANETARY | START_INTERPLANETARY | flag;
         site.activity_after_talk = Some(during);
-        assert!(enter_orbit(HOME, &ambush_story(), &mut site));
+        assert!(crate::planets::generate::testing::with_empty(|system| {
+            enter_orbit(
+                system,
+                HOME,
+                &mut crate::planets::generate::testing::Effects {
+                    story: &ambush_story(),
+                    site: &mut site,
+                    report: (),
+                    lander: (),
+                    load: Some(|| {}),
+                },
+            )
+        }));
         assert_eq!(*site.calls.borrow(), ambush_prefix(), "flag {flag:#x}");
         assert_eq!(site.activity, during);
     }
@@ -214,18 +283,33 @@ fn the_ilwrath_ambush_needs_the_built_ship_queue_to_be_empty() {
     let mut site = RecordingSite::new(true);
     site.built_ships = 1;
     let visit = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        enter_orbit(HOME, &ambush_story(), &mut site)
+        crate::planets::generate::testing::with_empty(|system| {
+            enter_orbit(
+                system,
+                HOME,
+                &mut crate::planets::generate::testing::Effects {
+                    story: &ambush_story(),
+                    site: &mut site,
+                    report: (),
+                    lander: (),
+                    load: Some(|| {}),
+                },
+            )
+        })
     }));
     assert!(visit.is_err());
 }
 
 #[test]
 fn the_ambush_needs_the_sun_device_the_unfooled_ilwrath_and_a_trackable_sphere() {
-    type Flags = &'static [(&'static str, u32)];
+    type Flags = &'static [(StoryKey, u32)];
     let cases: [(Flags, bool, bool); 5] = [
         (&[], true, false),
         (
-            &[(StoryKey::SUN_DEVICE_ON_SHIP, 1), (StoryKey::ILWRATH_DECEIVED, 1)],
+            &[
+                (StoryKey::SUN_DEVICE_ON_SHIP, 1),
+                (StoryKey::ILWRATH_DECEIVED, 1),
+            ],
             true,
             false,
         ),
@@ -236,13 +320,23 @@ fn the_ambush_needs_the_sun_device_the_unfooled_ilwrath_and_a_trackable_sphere()
     for (flags, tracking, ambushed) in cases {
         let mut site = RecordingSite::new(tracking);
         assert_eq!(
-            enter_orbit(HOME, &FakeStory::with(flags), &mut site),
+            crate::planets::generate::testing::with_empty(|system| enter_orbit(
+                system,
+                HOME,
+                &mut crate::planets::generate::testing::Effects {
+                    story: &FakeStory::with(flags),
+                    site: &mut site,
+                    report: (),
+                    lander: (),
+                    load: Some(|| {})
+                }
+            )),
             ambushed,
             "{flags:?} tracking {tracking}"
         );
         let tracked = site.calls.borrow().contains(&Call::StartSphereTracking);
-        let expect_tracked =
-            flags.contains(&(StoryKey::SUN_DEVICE_ON_SHIP, 1)) && !flags.contains(&(StoryKey::ILWRATH_DECEIVED, 1));
+        let expect_tracked = flags.contains(&(StoryKey::SUN_DEVICE_ON_SHIP, 1))
+            && !flags.contains(&(StoryKey::ILWRATH_DECEIVED, 1));
         assert_eq!(tracked, expect_tracked, "{flags:?} tracking {tracking}");
         if !ambushed {
             assert_eq!(site.activity, IN_INTERPLANETARY);
@@ -253,13 +347,28 @@ fn the_ambush_needs_the_sun_device_the_unfooled_ilwrath_and_a_trackable_sphere()
 #[test]
 fn the_starbase_moon_is_a_report_and_nothing_else() {
     let mut site = RecordingSite::new(true);
-    assert!(enter_orbit(STARBASE, &ambush_story(), &mut site));
+    assert!(crate::planets::generate::testing::with_empty(|system| {
+        enter_orbit(
+            system,
+            STARBASE,
+            &mut crate::planets::generate::testing::Effects {
+                story: &ambush_story(),
+                site: &mut site,
+                report: (),
+                lander: (),
+                load: Some(|| {}),
+            },
+        )
+    }));
     assert_eq!(*site.calls.borrow(), [Call::VisitStarbase]);
 }
 
 #[test]
 fn other_worlds_touch_nothing() {
-    let story = FakeStory::with(&[(StoryKey::CHMMR_UNLEASHED, 1), (StoryKey::SUN_DEVICE_ON_SHIP, 1)]);
+    let story = FakeStory::with(&[
+        (StoryKey::CHMMR_UNLEASHED, 1),
+        (StoryKey::SUN_DEVICE_ON_SHIP, 1),
+    ]);
     for body in [
         Body::Planet(0),
         Body::Planet(2),
@@ -267,7 +376,20 @@ fn other_worlds_touch_nothing() {
         Body::Moon { planet: 0, moon: 0 },
     ] {
         let mut site = RecordingSite::new(true);
-        assert!(!enter_orbit(body, &story, &mut site), "{body:?}");
+        assert!(
+            !crate::planets::generate::testing::with_empty(|system| enter_orbit(
+                system,
+                body,
+                &mut crate::planets::generate::testing::Effects {
+                    story: &story,
+                    site: &mut site,
+                    report: (),
+                    lander: (),
+                    load: Some(|| {})
+                }
+            )),
+            "{body:?}"
+        );
         assert!(site.calls.borrow().is_empty());
     }
 }

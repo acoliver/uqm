@@ -5,7 +5,7 @@
 
 use crate::engine::world::planet::{PlanetDesc, PlanetFrame};
 use crate::math::RandomContext;
-use crate::planets::generate::special::{self, Body, Orbit, RED_GAS_GIANT};
+use crate::planets::generate::special::{self, Body, RED_GAS_GIANT};
 
 /// `GenerateSlylandro_generatePlanets`.
 pub fn generate_planets(
@@ -29,14 +29,37 @@ pub trait HomeSite {
 
 /// `GenerateSlylandro_generateOrbital`.
 pub fn generate_orbital(
-    orbit: &mut Orbit<'_>,
+    system: &mut SolarSys<'_>,
     body: Body,
-    site: &mut impl HomeSite,
-    load_planet: impl FnOnce(),
+    site: &mut (impl HomeSite + super::host::PlanetSite + ?Sized),
 ) -> bool {
     if body == Body::Planet(3) {
         site.talk_to_slylandro();
         return true;
     }
-    orbit.default_orbital(load_planet)
+    super::special::default_orbital(system, body, site)
+}
+
+use super::generator::SystemGenerator;
+use super::host::SiteHost;
+use crate::engine::world::generation::SolarSys;
+
+pub struct Generator;
+
+impl SystemGenerator for Generator {
+    fn generate_planets(&self, system: &mut SolarSys<'_>, _host: &mut dyn SiteHost) -> bool {
+        system.layout(|rng, table, size, color, planets| {
+            generate_planets(rng, table, size, color, planets)
+        });
+        true
+    }
+
+    fn generate_orbital(
+        &self,
+        system: &mut SolarSys<'_>,
+        body: Body,
+        host: &mut dyn SiteHost,
+    ) -> bool {
+        generate_orbital(system, body, host)
+    }
 }
