@@ -41,6 +41,7 @@ pub fn admit_observer(
 pub trait InputRuntime {
     fn input(&self) -> &InputSession;
     fn observer(&self) -> Box<dyn crate::observe::Observer<Option<crate::observe::CampaignView>>>;
+    fn yield_poll(&self, cx: &mut Cx<'_>);
     fn sleep(&self, cx: &mut Cx<'_>, ticks: u32);
     fn sleep_until(&self, cx: &mut Cx<'_>, deadline: u32);
     fn flush(&self);
@@ -142,6 +143,9 @@ mod tests {
             Box::new(Unobserved)
         }
 
+        fn yield_poll(&self, _: &mut Cx<'_>) {
+            self.0.borrow_mut().push(true);
+        }
         fn sleep(&self, _: &mut Cx<'_>, ticks: u32) {
             assert_eq!(ticks, 28);
             self.0.borrow_mut().push(false);
@@ -219,7 +223,8 @@ mod tests {
         driver.sleep_until(&mut cx, 56);
         driver.flush();
         assert!(!driver.confirm_exit(&mut cx));
-        assert_eq!(*driver.0.borrow(), [false, true, false, true]);
+        driver.yield_poll(&mut cx);
+        assert_eq!(*driver.0.borrow(), [false, true, false, true, true]);
     }
 
     #[test]

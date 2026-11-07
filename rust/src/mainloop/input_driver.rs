@@ -152,6 +152,14 @@ impl crate::engine::input::InputRuntime for NativeInputRuntime {
         }
     }
 
+    fn yield_poll(&self, cx: &mut crate::engine::battle::Cx<'_>) {
+        cx.with_legacy(|| {
+            crate::callback::ffi::Async_process();
+            // SAFETY: the retained runtime and handoff own game-thread event pumping.
+            unsafe { crate::threading::legacy_abi::TaskSwitch() };
+        });
+    }
+
     fn sleep(&self, cx: &mut crate::engine::battle::Cx<'_>, ticks: u32) {
         // SAFETY: the retained runtime supplies the initialized game-thread lifecycle.
         cx.with_legacy(|| unsafe { crate::threading::pacing::linked::sleep_thread(ticks) });

@@ -429,17 +429,26 @@ fn hyperspace_movement_releases_world_before_fuel_queries() {
     game.world.data.flagship.log_x = 1000;
     game.world.data.flagship.log_y = 1000;
     game.world.data.flagship.fuel_on_board = 100;
-    let (mut dx, mut dy) = (0, 0);
+    let (mut dx, mut dy) = (-4, -8);
+    let mut battle = uqm_rust::engine::battle::Battle::new();
+    let mut cx = uqm_rust::engine::battle::Cx::new(
+        &mut battle,
+        &mut game.world,
+        &mut game.kernel,
+        uqm_rust::math::random,
+    );
     // SAFETY: the fixture owns the lifecycle, output deltas and unclipped flagship position.
     unsafe {
         let old_size = (ScreenWidth, ScreenHeight);
         (ScreenWidth, ScreenHeight) = (320, 240);
-        bridge::with_game(&mut game, || {
-            uqm_rust::navigation::abi::MoveSIS(&mut dx, &mut dy);
-        });
+        uqm_rust::navigation::abi::MoveSIS(&mut cx, &mut dx, &mut dy);
         (ScreenWidth, ScreenHeight) = old_size;
     }
-    assert_eq!((dx, dy), (0, 0));
+    assert_eq!((dx, dy), (-4, -8));
+    assert_eq!(
+        (cx.world.data.flagship.log_x, cx.world.data.flagship.log_y),
+        (1004, 1008),
+    );
     assert_eq!(game.world.data.flagship.fuel_on_board, 100);
 }
 

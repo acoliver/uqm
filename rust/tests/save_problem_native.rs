@@ -56,6 +56,9 @@ impl InputRuntime for Runtime {
     fn observer(&self) -> Box<dyn Observer<Option<CampaignView>>> {
         Box::new(self.0.clone())
     }
+    fn yield_poll(&self, _: &mut uqm_engine::battle::Cx<'_>) {
+        panic!("unexpected unthrottled pacing");
+    }
     fn sleep(&self, _: &mut uqm_engine::battle::Cx<'_>, _: u32) {
         panic!("unexpected pacing");
     }
