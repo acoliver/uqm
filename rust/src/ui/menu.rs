@@ -5,13 +5,8 @@ use crate::engine::{Kernel, WorldData};
 use crate::navigation::abi::*;
 
 use super::menu_state::{
-    end_state, next_state, ALT_EXIT_MANIFEST, ALT_MANIFEST, PM_ALT_ASCAN, PM_ALT_BSCAN,
-    PM_ALT_CARGO, PM_ALT_DEVICES, PM_ALT_DISPATCH, PM_ALT_ESCAN, PM_ALT_EXIT_MANIFEST,
-    PM_ALT_EXIT_SCAN, PM_ALT_GAME_MENU, PM_ALT_MANIFEST, PM_ALT_MSCAN, PM_ALT_NAVIGATE,
-    PM_ALT_ROSTER, PM_ALT_SCAN, PM_ALT_STARMAP, PM_AUTO_SCAN, PM_BIO_SCAN, PM_CARGO,
-    PM_CHANGE_CAPTAIN, PM_CHANGE_SHIP, PM_CREW, PM_CYBORG_OFF, PM_CYBORG_SUPER, PM_DEVICES,
-    PM_ENE_SCAN, PM_EXIT_SCAN, PM_EXIT_SETTINGS, PM_FUEL, PM_GAME_MENU, PM_LAUNCH_LANDER,
-    PM_MIN_SCAN, PM_MUSIC_OFF, PM_MUSIC_ON, PM_NAVIGATE, PM_ROSTER, PM_SCAN, PM_SOUND_OFF,
+    alternate, end_state, PM_CHANGE_CAPTAIN, PM_CHANGE_SHIP, PM_CREW, PM_CYBORG_OFF,
+    PM_CYBORG_SUPER, PM_EXIT_SETTINGS, PM_FUEL, PM_MUSIC_OFF, PM_MUSIC_ON, PM_SOUND_OFF,
     PM_SOUND_ON, PM_STARMAP,
 };
 const OPT_PC: i32 = 2;
@@ -111,80 +106,6 @@ unsafe fn draw_pc_menu(begin: u8, end: u8, selected: u8, highlight: u8, rect: &m
     SetContextFont(old_font);
 }
 
-fn alternate(base: &mut u8, current: &mut u8) -> bool {
-    let adj = u8::from(*base == PM_STARMAP);
-    let adjusted_base = base.wrapping_sub(adj);
-    if *current & 0x80 != 0 {
-        match *current {
-            ALT_MANIFEST => {
-                *base = PM_ALT_SCAN + adj;
-                *current = PM_ALT_MANIFEST - PM_ALT_SCAN - adj;
-                true
-            }
-            ALT_EXIT_MANIFEST => {
-                *base = PM_ALT_CARGO;
-                *current = PM_ALT_EXIT_MANIFEST - PM_ALT_CARGO;
-                true
-            }
-            _ => {
-                crate::log_abi::log_message(
-                    log_Level_log_Error as i32,
-                    &format!(
-                        "Unknown state combination: {}, {}",
-                        *base as i32, *current as i32
-                    ),
-                );
-                false
-            }
-        }
-    } else {
-        let result = match adjusted_base.wrapping_add(*current) {
-            PM_SCAN => Some((PM_ALT_SCAN, 0)),
-            PM_STARMAP => Some((PM_ALT_SCAN + adj, PM_ALT_STARMAP - PM_ALT_SCAN - adj)),
-            PM_DEVICES => Some((PM_ALT_CARGO, PM_ALT_DEVICES - PM_ALT_CARGO)),
-            PM_CARGO => Some((PM_ALT_CARGO, 0)),
-            PM_ROSTER => Some((PM_ALT_CARGO, PM_ALT_ROSTER - PM_ALT_CARGO)),
-            PM_GAME_MENU => Some((PM_ALT_SCAN + adj, PM_ALT_GAME_MENU - PM_ALT_SCAN - adj)),
-            PM_NAVIGATE => Some((PM_ALT_SCAN + adj, PM_ALT_NAVIGATE - PM_ALT_SCAN - adj)),
-            PM_MIN_SCAN => Some((PM_ALT_MSCAN, 0)),
-            PM_ENE_SCAN => Some((PM_ALT_MSCAN, PM_ALT_ESCAN - PM_ALT_MSCAN)),
-            PM_BIO_SCAN => Some((PM_ALT_MSCAN, PM_ALT_BSCAN - PM_ALT_MSCAN)),
-            PM_EXIT_SCAN => Some((PM_ALT_MSCAN, PM_ALT_EXIT_SCAN - PM_ALT_MSCAN)),
-            PM_AUTO_SCAN => Some((PM_ALT_MSCAN, PM_ALT_ASCAN - PM_ALT_MSCAN)),
-            PM_LAUNCH_LANDER => Some((PM_ALT_MSCAN, PM_ALT_DISPATCH - PM_ALT_MSCAN)),
-            _ => None,
-        };
-        if let Some((new_base, new_offset)) = result {
-            *base = new_base;
-            *current = new_offset;
-            true
-        } else {
-            false
-        }
-    }
-}
-
-fn convert_alternate(base: u8, state: u8) -> u8 {
-    match base.wrapping_add(state) {
-        PM_ALT_SCAN => 0,
-        PM_ALT_STARMAP => PM_STARMAP - PM_SCAN,
-        PM_ALT_MANIFEST => ALT_MANIFEST,
-        PM_ALT_GAME_MENU => PM_GAME_MENU - PM_SCAN,
-        PM_ALT_NAVIGATE => PM_NAVIGATE - PM_SCAN,
-        PM_ALT_CARGO => PM_CARGO - PM_SCAN,
-        PM_ALT_DEVICES => PM_DEVICES - PM_SCAN,
-        PM_ALT_ROSTER => PM_ROSTER - PM_SCAN,
-        PM_ALT_EXIT_MANIFEST => ALT_EXIT_MANIFEST,
-        PM_ALT_MSCAN => 0,
-        PM_ALT_ESCAN => PM_ENE_SCAN - PM_MIN_SCAN,
-        PM_ALT_BSCAN => PM_BIO_SCAN - PM_MIN_SCAN,
-        PM_ALT_ASCAN => PM_AUTO_SCAN - PM_MIN_SCAN,
-        PM_ALT_DISPATCH => PM_LAUNCH_LANDER - PM_MIN_SCAN,
-        PM_ALT_EXIT_SCAN => PM_EXIT_SCAN - PM_MIN_SCAN,
-        _ => state,
-    }
-}
-
 /// # Safety
 /// Menu state and input globals must be initialized on the game thread.
 pub unsafe fn do_menu_chooser(
@@ -204,59 +125,29 @@ pub(crate) unsafe fn choose_menu_state(
     base_state: BYTE,
     flags: u8,
 ) -> BOOLEAN {
-    let mut new_state = *state;
-    let original_base = base_state;
-    let mut base = base_state;
-    let use_alt = if input.preferences().menu == OPT_PC {
-        alternate(&mut base, &mut new_state)
-    } else {
-        false
+    use super::menu_state::{navigate, MenuKeys};
+    let pulsed = input.pulsed();
+    let keys = MenuKeys {
+        previous: pulsed.menu[KEY_MENU_LEFT as usize] != 0
+            || pulsed.menu[KEY_MENU_UP as usize] != 0,
+        next: pulsed.menu[KEY_MENU_RIGHT as usize] != 0 || pulsed.menu[KEY_MENU_DOWN as usize] != 0,
+        select: pulsed.menu[KEY_MENU_SELECT as usize] != 0,
+        cancel: pulsed.menu[KEY_MENU_CANCEL as usize] != 0,
     };
-    if input.pulsed().menu[KEY_MENU_LEFT as usize] != 0
-        || input.pulsed().menu[KEY_MENU_UP as usize] != 0
-    {
-        new_state = super::menu_state::previous_state(base, new_state, flags);
-    } else if input.pulsed().menu[KEY_MENU_RIGHT as usize] != 0
-        || input.pulsed().menu[KEY_MENU_DOWN as usize] != 0
-    {
-        new_state = next_state(base, new_state, flags);
-    } else if use_alt && input.pulsed().menu[KEY_MENU_SELECT as usize] != 0 {
-        new_state = convert_alternate(base, new_state);
-        if new_state == ALT_MANIFEST {
-            DrawMenuStateStrings(PM_ALT_CARGO, 0);
-            *state = PM_CARGO - PM_SCAN;
-            return 1;
-        }
-        if new_state == ALT_EXIT_MANIFEST {
-            if original_base == PM_SCAN {
-                DrawMenuStateStrings(PM_ALT_SCAN, (PM_ALT_MANIFEST - PM_ALT_SCAN) as i16);
-            } else {
-                DrawMenuStateStrings(PM_ALT_STARMAP, (PM_ALT_MANIFEST - PM_ALT_STARMAP) as i16);
-            }
-            *state = ALT_MANIFEST;
-            return 1;
-        }
+    let Some(step) = navigate(
+        base_state,
+        *state,
+        input.preferences().menu == OPT_PC,
+        flags,
+        keys,
+    ) else {
         return 0;
-    } else if input.preferences().menu == OPT_PC
-        && input.pulsed().menu[KEY_MENU_CANCEL as usize] != 0
-        && base == PM_ALT_CARGO
-    {
-        if original_base == PM_SCAN {
-            DrawMenuStateStrings(PM_ALT_SCAN, (PM_ALT_MANIFEST - PM_ALT_SCAN) as i16);
-        } else {
-            DrawMenuStateStrings(PM_ALT_STARMAP, (PM_ALT_MANIFEST - PM_ALT_STARMAP) as i16);
-        }
-        *state = ALT_MANIFEST;
-        return 1;
-    } else {
-        return 0;
+    };
+    DrawMenuStateStrings(step.display.0, step.display.1);
+    *state = step.state;
+    if step.paced {
+        SleepThread(ONE_SECOND / 20);
     }
-    DrawMenuStateStrings(base, i16::from(new_state));
-    if use_alt {
-        new_state = convert_alternate(base, new_state);
-    }
-    *state = new_state;
-    SleepThread(ONE_SECOND / 20);
     1
 }
 
