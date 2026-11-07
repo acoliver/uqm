@@ -9,6 +9,9 @@ use crate::navigation::abi::*;
 
 use std::{mem, ptr};
 
+mod message;
+pub use message::default_message_text;
+
 mod status;
 pub use status::{draw_status_message, format_date, status_message_text};
 
@@ -177,24 +180,15 @@ pub unsafe extern "C" fn DrawSISMessageEx(
     SetContextClipRect(&mut r);
     BatchGraphics();
     SetContextBackGroundColor(rgb15(0, 0, 0x14));
-    let mut buf = [0u8; 256];
-    let mut text = p_str;
-    if text.is_null() {
-        let activity = crate::engine::World::current().read(|world| world.activity()) as BYTE;
-        text = match u32::from(activity) {
-            IN_LAST_BATTLE | IN_INTERPLANETARY => {
-                let star = World::current().read(|world| world.star_pointer(current_catalog()));
-                GetClusterName(star.cast(), buf.as_mut_ptr().cast());
-                buf.as_ptr().cast()
-            }
-            IN_HYPERSPACE => game_string(if World::current().read(in_hyper_space) != 0 {
-                NAVIGATION_STRING_BASE
-            } else {
-                NAVIGATION_STRING_BASE + 1
-            }),
-            _ => c"".as_ptr().cast(),
-        };
-    }
+    let default_text = p_str.is_null().then(|| {
+        let catalog = current_catalog();
+        World::current().read(|world| {
+            Kernel::current().read(|kernel| default_message_text(kernel, world, catalog))
+        })
+    });
+    let text = default_text
+        .as_ref()
+        .map_or(p_str, |text| text.as_ptr().cast());
     if flags & DSME_MYCOLOR as COUNT == 0 {
         SetContextForeGroundColor(rgb15(0x1b, 0, 0x1b));
     }
@@ -256,7 +250,10 @@ pub unsafe extern "C" fn DrawSISMessageEx(
             for d in &deltas[..ex_pos as usize] {
                 t.baseline.x = (i32::from(t.baseline.x) + i32::from(*d)) as SIZE;
             }
-            t.pStr = (skipUTF8Chars((t.pStr).cast(), ex_pos as usize)).cast();
+            let string = std::ffi::CStr::from_ptr(t.pStr.cast());
+            let (prefix, _) =
+                crate::strings::unicode::split_utf8_prefix(string.to_bytes(), ex_pos as usize);
+            t.pStr = t.pStr.wrapping_add(prefix.len());
             t.CharCount = !0;
             font_DrawText(&mut t);
         } else {

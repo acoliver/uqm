@@ -242,3 +242,60 @@ fn status_labels_read_the_supplied_story_preferences_date_and_resource_units() {
     assert!(bounded.as_bytes().starts_with(b"44031 "));
     assert!(bounded.as_bytes()[6..].iter().all(|&byte| byte == b'x'));
 }
+
+#[test]
+#[forbid(unsafe_code)]
+fn message_labels_use_the_borrowed_catalog_and_hyperspace_story() {
+    use uqm_rust::{
+        engine::{
+            world::{CStarDesc, StarId, CATALOG_LEN},
+            StoryKey,
+        },
+        ships::native::abi::{
+            IN_ENCOUNTER, IN_HYPERSPACE, IN_INTERPLANETARY, IN_LAST_BATTLE, NAVIGATION_STRING_BASE,
+            STAR_NUMBER_BASE,
+        },
+        strings::owned_table::LoadedTextTable,
+        ui::sis::default_message_text,
+    };
+    let mut strings =
+        vec![vec![0]; (NAVIGATION_STRING_BASE + 2).max(STAR_NUMBER_BASE + 1) as usize];
+    strings[NAVIGATION_STRING_BASE as usize] = b"Hyperspace\0".to_vec();
+    strings[(NAVIGATION_STRING_BASE + 1) as usize] = b"Quasispace\0".to_vec();
+    strings[STAR_NUMBER_BASE as usize] = b"Alpha\0".to_vec();
+    strings[2] = b"Centauri\0".to_vec();
+    let catalog = [CStarDesc {
+        star_pt: POINT { x: 0, y: 0 },
+        star_type: 0,
+        index: 0,
+        prefix: 1,
+        postfix: 2,
+    }; CATALOG_LEN];
+    let mut game = Game::new();
+    game.kernel
+        .install_game_text(LoadedTextTable::fixture(strings));
+    game.world.story = Some(uqm_rust::engine::world::story::GameState::new());
+    game.world.current_star = Some(StarId(0));
+    for activity in [IN_INTERPLANETARY, IN_LAST_BATTLE] {
+        game.world.set_activity(activity as u16);
+        assert_eq!(
+            default_message_text(&game.kernel, &game.world, Some(&catalog)),
+            c"Alpha Centauri".to_owned()
+        );
+    }
+    game.world.set_activity(IN_HYPERSPACE as u16);
+    assert_eq!(
+        default_message_text(&game.kernel, &game.world, None),
+        c"Hyperspace".to_owned()
+    );
+    game.world.set_story_state(StoryKey::ARILOU_SPACE_SIDE, 2);
+    assert_eq!(
+        default_message_text(&game.kernel, &game.world, None),
+        c"Quasispace".to_owned()
+    );
+    game.world.set_activity(IN_ENCOUNTER as u16);
+    assert_eq!(
+        default_message_text(&game.kernel, &game.world, None),
+        c"".to_owned()
+    );
+}
