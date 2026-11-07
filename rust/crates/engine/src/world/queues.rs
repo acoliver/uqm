@@ -1,6 +1,8 @@
 //! Campaign records live in fixed-capacity pools; links belong to the pool, not the records.
 
-use super::super::battle::link_queue::{queue_record, LinkId, LinkQueue, QueueRecord};
+use super::super::battle::link_queue::{
+    queue_record, LinkId, LinkQueue, MutableQueueRecord, QueueRecord,
+};
 use crate::collections::pool::OrderedPool;
 use crate::graphics::native_abi::{FRAME, POINT, STRING};
 
@@ -83,6 +85,7 @@ pub struct IpGroup {
 #[derive(Debug, PartialEq, Eq)]
 pub enum Fleet {}
 impl queue_record::Sealed for Fleet {}
+impl MutableQueueRecord for Fleet {}
 impl QueueRecord for Fleet {
     type Record = FleetInfo;
 }
@@ -95,6 +98,7 @@ impl<const N: usize> LinkQueue<'_, Fleet, N> {
 #[derive(Debug, PartialEq, Eq)]
 pub enum Fragment {}
 impl queue_record::Sealed for Fragment {}
+impl MutableQueueRecord for Fragment {}
 impl QueueRecord for Fragment {
     type Record = ShipFragment;
 }
@@ -107,6 +111,7 @@ impl<const N: usize> LinkQueue<'_, Fragment, N> {
 #[derive(Debug, PartialEq, Eq)]
 pub enum Group {}
 impl queue_record::Sealed for Group {}
+impl MutableQueueRecord for Group {}
 impl QueueRecord for Group {
     type Record = IpGroup;
 }
@@ -119,6 +124,7 @@ impl<const N: usize> LinkQueue<'_, Group, N> {
 #[derive(Debug, PartialEq, Eq)]
 pub enum Encounter {}
 impl queue_record::Sealed for Encounter {}
+impl MutableQueueRecord for Encounter {}
 impl QueueRecord for Encounter {
     type Record = EncounterRecord;
 }
