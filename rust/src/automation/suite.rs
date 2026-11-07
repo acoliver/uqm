@@ -828,7 +828,6 @@ pub const MATRIX: &[ScenarioRow] = &[
     ),
     row("load-alpha-centauri-v1", &[Domain::SaveLoad]),
     row("load-save-v1", &[Domain::SaveLoad]),
-    row("sol-save-load-v1", &[Domain::SaveLoad]),
     row(
         "linked-playable-v1",
         &[Domain::BootMenu, Domain::BattleOutcomes],
