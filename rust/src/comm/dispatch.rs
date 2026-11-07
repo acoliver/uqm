@@ -666,7 +666,7 @@ pub(crate) unsafe fn prepare_samatra_dev_fixture(
     cx.world.built_ships().reinit();
     let added = crate::engine::world::fleet::add_escort_ships(cx.world, 4, 12, pick_captain_name);
     if added.is_some() {
-        cx.with_legacy(|| crate::battle::build_native::refresh_escorts());
+        cx.with_legacy(|| crate::ui::sis::DeltaSISGauges(32767, 32767, 32767));
     }
     if added != Some(12) {
         return Err("boss fixture could not allocate Pkunk escorts");

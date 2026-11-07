@@ -35,6 +35,18 @@ impl ContextFrame {
         }
     }
 
+    pub fn indexed_frame(&self, index: usize) -> Self {
+        let allocation = self
+            ._allocations
+            .first()
+            .unwrap_or_else(|| panic!("absent frame has no allocation"));
+        allocation.assert_thread();
+        let frame = allocation
+            .frame(index)
+            .unwrap_or_else(|| panic!("drawable frame index {index}"));
+        Self::retain(NonNull::new(frame))
+    }
+
     pub fn rect(&self) -> RECT {
         assert!(!self.frame.is_null(), "absent frame has no bounds");
         for allocation in &self._allocations {
@@ -177,9 +189,7 @@ impl Drop for ContextTextState {
 
 impl ContextLease {
     pub fn require(context: CONTEXT) -> Self {
-        Self::retain(
-            NonNull::new(context).unwrap_or_else(|| panic!("required context is absent")),
-        )
+        Self::retain(NonNull::new(context).unwrap_or_else(|| panic!("required context is absent")))
     }
 
     pub fn fade_screen(&self, kind: u32, interval: i16) -> u32 {

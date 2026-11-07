@@ -267,7 +267,7 @@ mod runtime {
                 )
             });
             if added.is_some() {
-                crate::battle::build_native::refresh_escorts();
+                crate::ui::sis::DeltaSISGauges(32767, 32767, 32767);
             }
         }
         reset_crew_battle();
