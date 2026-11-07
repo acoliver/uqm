@@ -168,7 +168,7 @@ fn captain_and_ship_editors_keep_cancelled_names_and_accept_empty_names() {
     for accept in [false, true] {
         let next = KEY_MENU_RIGHT;
         let select = KEY_MENU_SELECT;
-        let finish = if accept { select } else { KEY_MENU_CANCEL };
+        let finish = if accept { select } else { KEY_MENU_EDIT_CANCEL };
         let (result, flags, captain, ship) = options(&[
             next,
             next,

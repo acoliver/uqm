@@ -126,10 +126,11 @@ pub(crate) mod runtime {
         fn frame(
             &mut self,
             _entry: crate::ui::getchar::TextEntryView<'_>,
-            _cx: &mut Cx<'_>,
+            cx: &mut Cx<'_>,
             _io: &mut Io<'_>,
             _input: &InputSession,
         ) -> bool {
+            cx.kernel.input_runtime().sleep(cx, ONE_SECOND / 30);
             true
         }
     }
@@ -209,10 +210,11 @@ pub(crate) mod runtime {
         fn frame(
             &mut self,
             _entry: crate::ui::getchar::TextEntryView<'_>,
-            _cx: &mut Cx<'_>,
+            cx: &mut Cx<'_>,
             _io: &mut Io<'_>,
             _input: &InputSession,
         ) -> bool {
+            cx.kernel.input_runtime().sleep(cx, ONE_SECOND / 30);
             true
         }
     }

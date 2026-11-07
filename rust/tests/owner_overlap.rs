@@ -81,6 +81,10 @@ fn empty_npc_phrase_does_not_acquire_an_owner() {
 fn sis_slot_snapshot_releases_world_before_support_ship_drawing() {
     let mut game = Game::new();
     let display = campaign_display::CampaignDisplay::install(&mut game).unwrap();
+    let frames = uqm_rust::graphics::drawable_abi::LoadedDrawable::create(8, 64, 140, 100).unwrap();
+    game.kernel.flag_stat_frame = frames.lease().frame(0).unwrap();
+    game.kernel.font_grad_frame = game.kernel.flag_stat_frame;
+    game.kernel.star_con_font = game.kernel.tiny_font;
     game.world.story = Some(uqm_rust::state::game_state::StoryState::new());
     game.world.data.flagship.module_slots.fill(255);
     game.world.data.flagship.drive_slots.fill(255);

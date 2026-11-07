@@ -129,6 +129,7 @@ pub(crate) mod engine {
         AWESOME_RATING, CYBORG_CONTROL, HUMAN_CONTROL, STANDARD_RATING,
     };
     use crate::engine::battle::link_queue;
+    #[cfg(not(test))]
     use crate::engine::StoryKey;
     #[cfg(not(test))]
     use crate::pickship::ffi::draw_armada_pick_ship_in as draw_armada;
