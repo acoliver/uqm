@@ -1079,7 +1079,7 @@ impl AutomationObserver {
 
         let progress = inner
             .planet_minerals
-            .observe(&planet_minerals::PlanetSnapshot::live(), &collect);
+            .observe(&self.planet_snapshot(), &collect);
         match progress {
             Ok(CollectProgress::Steering(control)) => {
                 if !self.set_navigation_controls(control) {
@@ -1215,7 +1215,8 @@ impl AutomationObserver {
         if inner.sched_state.phase == ActionPhase::WaitingForInput {
             inner.energy = EnergyTracker::default();
         }
-        let (nodes, retrieved) = crate::planet_side::telemetry::energy_snapshot();
+        let trip = self.planet_side.lock().clone();
+        let (nodes, retrieved) = (trip.energy_nodes, trip.energy_retrieved);
         let flags = ARTIFACT_FLAGS
             .iter()
             .map(|(key, _)| world.story_value(*key).map(u32::from))
@@ -1226,7 +1227,7 @@ impl AutomationObserver {
         };
         let observation = EnergyObservation {
             report_active: *self.planet_side_report.lock(),
-            lander: planet_minerals::PlanetSnapshot::live(),
+            lander: self.planet_snapshot(),
             nodes,
             retrieved,
             vault_unlocked: world.story_value(StoryKey::SHIP_VAULT_UNLOCKED) == Some(1),
@@ -1912,7 +1913,7 @@ impl AutomationObserver {
         };
         let label = planet_side_wait_mismatch_label(
             inner.awaited_planet_side_generation,
-            &crate::planet_side::telemetry::observation(),
+            &self.planet_side.lock().observation,
             wait.outcome,
         );
         self.write_trace_labeled(inner, RecordKind::SemanticAssertion, label);
@@ -2240,7 +2241,7 @@ impl AutomationObserver {
         if let Some(Action::AssertPlanetSideCollisions(assertion)) =
             self.actions.get(inner.sched_state.step_index)
         {
-            let observation = crate::planet_side::telemetry::observation();
+            let observation = self.planet_side.lock().observation;
             let actual = (
                 observation.mineral_pickups,
                 observation.creature_hits,
@@ -2661,7 +2662,6 @@ impl AutomationObserver {
         // Clear any pending fixture request before runtime finalization:
         // the single fixture is one-shot per script, so an unconsumed queue
         // must never leak into another script.
-        crate::planet_side::automation_fixture::clear_pending_fixture_request();
         self.planet_side_fixtures.lock().clear();
 
         let terminal = {

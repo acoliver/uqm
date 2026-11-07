@@ -430,13 +430,15 @@ mod tests {
             assert!(matches!(
                 mineral_visual_frame(category, 2),
                 Err(AdapterError {
-                    operation: "mineral_category"
+                    operation: "mineral_category",
+                    batch_depth_corrections: 0
                 })
             ));
             assert!(matches!(
                 mineral_visual_frame_from_mineral(mineral_entity(category, 2, 1).kind),
                 Err(AdapterError {
-                    operation: "mineral_category"
+                    operation: "mineral_category",
+                    batch_depth_corrections: 0
                 })
             ));
         }
@@ -447,7 +449,8 @@ mod tests {
         assert!(matches!(
             CffiSurfaceVisuals::new(std::ptr::null_mut(), pointer(2), [pointer(3); 3]),
             Err(AdapterError {
-                operation: "misc_data_frame"
+                operation: "misc_data_frame",
+                batch_depth_corrections: 0
             })
         ));
     }
@@ -520,7 +523,8 @@ mod tests {
         assert!(matches!(
             result,
             Err(AdapterError {
-                operation: "mineral_category"
+                operation: "mineral_category",
+                batch_depth_corrections: 0
             })
         ));
     }

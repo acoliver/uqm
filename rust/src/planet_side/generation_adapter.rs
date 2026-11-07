@@ -431,7 +431,8 @@ mod tests {
                     std::ptr::null_mut()
                 ),
                 Err(AdapterError {
-                    operation: "surface_generator_context"
+                    operation: "surface_generator_context",
+                    batch_depth_corrections: 0
                 })
             ));
             assert!(matches!(
@@ -442,7 +443,8 @@ mod tests {
                     std::ptr::null_mut()
                 ),
                 Err(AdapterError {
-                    operation: "surface_generator_context"
+                    operation: "surface_generator_context",
+                    batch_depth_corrections: 0
                 })
             ));
         });

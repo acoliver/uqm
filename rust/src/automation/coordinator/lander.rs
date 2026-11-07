@@ -3,6 +3,11 @@
 use super::*;
 
 impl AutomationObserver {
+    pub(super) fn planet_snapshot(&self) -> planet_minerals::PlanetSnapshot {
+        let trip = self.planet_side.lock();
+        planet_minerals::PlanetSnapshot::from_observation(trip.observation, trip.deposits.clone())
+    }
+
     /// Service whichever planet-side wait is the current action.
     ///
     /// Returns `None` when the current action is not a planet-side wait, so the
@@ -39,7 +44,7 @@ impl AutomationObserver {
 
     /// Latch the generation of a newly started planet-side trip.
     fn observe_planet_side_start(&self, inner: &mut CoordInner) -> PlanetSideWaitResult {
-        let observation = crate::planet_side::telemetry::observation();
+        let observation = self.planet_side.lock().observation;
         if !observation.active {
             return PlanetSideWaitResult::pending();
         }
@@ -69,7 +74,7 @@ impl AutomationObserver {
         inner: &mut CoordInner,
         outcome: crate::automation::script::PlanetSideOutcomeName,
     ) -> PlanetSideWaitResult {
-        let observation = crate::planet_side::telemetry::observation();
+        let observation = self.planet_side.lock().observation;
         let mut result = PlanetSideWaitResult::pending();
 
         let seen = (observation.generation, observation.phase);

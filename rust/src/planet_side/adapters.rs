@@ -123,6 +123,26 @@ impl PlanetSideClock for CffiPlanetSideClock {
     }
 }
 
+/// Publish copied values before the clock pumps native presentation callbacks.
+pub struct ObservedClock<'a, 'observer, K> {
+    pub clock: K,
+    pub telemetry: std::rc::Rc<RefCell<super::telemetry::TripTelemetry>>,
+    pub io: &'a RefCell<crate::engine::observe::Io<'observer>>,
+}
+
+impl<K: PlanetSideClock> PlanetSideClock for ObservedClock<'_, '_, K> {
+    fn now(&self) -> Tick {
+        self.clock.now()
+    }
+
+    fn sleep_until(&mut self, deadline: Tick) -> Result<(), AdapterError> {
+        self.io.borrow_mut().observer.checkpoint(
+            &crate::engine::observe::CheckpointView::PlanetSide(self.telemetry.borrow().snapshot()),
+        );
+        self.clock.sleep_until(deadline)
+    }
+}
+
 /// Production ship-state adapter over the current flagship status owner.
 pub struct CffiShipStatus<'a, 'game> {
     pub game: &'a RefCell<Cx<'game>>,
@@ -207,6 +227,58 @@ impl ShipStatusPort for CffiShipStatus<'_, '_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn copied_observation_is_published_before_the_clock_pumps_presentations() {
+        use crate::engine::observe::{
+            CampaignView, CheckpointView, Injected, InputView, Io, Observer, Presented,
+        };
+        use crate::engine::observe_port::planet_side::PlanetSideSnapshot;
+        use std::rc::Rc;
+
+        struct Recording(Rc<RefCell<Vec<PlanetSideSnapshot>>>);
+        impl Observer<Option<CampaignView>> for Recording {
+            fn input_admitted(&mut self, _: &InputView, _: &Option<CampaignView>) -> Injected {
+                Default::default()
+            }
+            fn checkpoint(&mut self, view: &CheckpointView<'_>) {
+                if let CheckpointView::PlanetSide(snapshot) = view {
+                    self.0.borrow_mut().push((*snapshot).clone());
+                }
+            }
+            fn presented(&mut self, _: &mut Presented) {}
+        }
+        struct Pump(Rc<RefCell<Vec<PlanetSideSnapshot>>>);
+        impl PlanetSideClock for Pump {
+            fn now(&self) -> Tick {
+                Tick(17)
+            }
+            fn sleep_until(&mut self, deadline: Tick) -> Result<(), AdapterError> {
+                assert_eq!(deadline, Tick(41));
+                let copied = self.0.borrow();
+                assert_eq!(copied.len(), 1);
+                assert_eq!(copied[0].observation.mineral_pickups, 1);
+                assert_eq!(copied[0].observation.frames, 0);
+                Ok(())
+            }
+        }
+        let copies = Rc::new(RefCell::new(Vec::new()));
+        let mut observer = Recording(copies.clone());
+        let io = RefCell::new(Io {
+            observer: &mut observer,
+        });
+        let trip = super::super::telemetry::tests::trip();
+        trip.borrow_mut().mineral_pickup();
+        let mut clock = ObservedClock {
+            clock: Pump(copies.clone()),
+            telemetry: trip.clone(),
+            io: &io,
+        };
+        assert_eq!(clock.now(), Tick(17));
+        clock.sleep_until(Tick(41)).unwrap();
+        trip.borrow_mut().mineral_pickup();
+        assert_eq!(copies.borrow()[0].observation.mineral_pickups, 1);
+    }
 
     #[test]
     fn non_linked_input_is_neutral() {

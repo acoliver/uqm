@@ -122,7 +122,8 @@ mod tests {
         assert!(matches!(
             CffiDiscoveryReport::new(std::ptr::null_mut(), &io, || {}),
             Err(AdapterError {
-                operation: "discovery_report_slot"
+                operation: "discovery_report_slot",
+                batch_depth_corrections: 0
             })
         ));
     }

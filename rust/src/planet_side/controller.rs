@@ -66,9 +66,8 @@ where
     ) -> Result<SessionOutcome, ControllerError> {
         for _ in 0..self.frame_budget {
             match frame(&mut self.session, &mut self.adapters, self.tick_period)? {
-                RuntimeStep::Continue => crate::planet_side::telemetry::frame(&self.session),
+                RuntimeStep::Continue => {}
                 RuntimeStep::Complete(outcome) => {
-                    crate::planet_side::telemetry::frame(&self.session);
                     return Ok(outcome);
                 }
             }

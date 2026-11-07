@@ -1,20 +1,14 @@
 //! Owner-supplied PlanetSide session boundary.
 
-#[cfg(not(test))]
 use crate::engine::observe::InputView;
 use std::ffi::c_void;
 
 pub const STATUS_OK: i32 = 0;
 pub const STATUS_INVALID_ARGUMENT: i32 = -4;
-#[cfg(not(test))]
 const DETAIL_RETURNED: u32 = 1;
-#[cfg(not(test))]
 const DETAIL_DESTROYED: u32 = 2;
-#[cfg(not(test))]
 const DETAIL_ABORTED: u32 = 3;
-#[cfg(not(test))]
 const DETAIL_ADAPTER_FAILURE: u32 = 4;
-#[cfg(not(test))]
 const DETAIL_FRAME_BUDGET: u32 = 5;
 
 /// Borrowed resources and trip parameters supplied by the orbit owner.
@@ -51,39 +45,25 @@ pub struct PlanetSideReply {
     pub value1: i64,
 }
 
-#[cfg(not(test))]
 use crate::graphics::pixmap_abi::GetFrameCount;
 
-#[cfg(not(test))]
-use super::adapters::{CffiPlanetSideClock, CffiPlanetSideInput, CffiShipStatus};
-#[cfg(not(test))]
+use super::adapters::{CffiPlanetSideClock, CffiPlanetSideInput, CffiShipStatus, ObservedClock};
 use super::assembly::{assemble_surface, share_surface};
-#[cfg(not(test))]
 use super::assets::CffiPlanetSideAudio;
-#[cfg(not(test))]
 use super::collision_adapter::{CffiGameplayRandom, SurfaceCollisionAdapter};
-#[cfg(not(test))]
 use super::controller::PlanetSideController;
-#[cfg(not(test))]
 use super::generation::ScanPersistence;
-#[cfg(not(test))]
 use super::generation_adapter::CffiSurfaceGenerator;
-#[cfg(not(test))]
 use super::graphics_adapter::CffiPlanetSideGraphics;
-#[cfg(not(test))]
 use super::mask_adapter::extract_lander_masks;
-#[cfg(not(test))]
 use super::model::SurfacePoint;
-#[cfg(not(test))]
 use super::resources::{LanderGraphic, PlanetSideAssetAccess};
-#[cfg(not(test))]
 use super::runtime::{PlanetSideClock, RuntimeAdapters, Tick};
-#[cfg(not(test))]
 use super::session_factory::create_production_session;
-#[cfg(not(test))]
+use super::telemetry::TripTelemetry;
 use super::visual_adapter::CffiSurfaceVisuals;
+use crate::engine::observe::CheckpointView;
 
-#[cfg(not(test))]
 const fn failure(status: i32) -> PlanetSideReply {
     PlanetSideReply {
         status,
@@ -95,7 +75,6 @@ const fn failure(status: i32) -> PlanetSideReply {
 
 /// # Safety
 /// Native handles in context must remain live throughout the synchronous lander session.
-#[cfg(not(test))]
 pub unsafe fn run_session(
     controls: &crate::engine::input::InputSession,
     activity: crate::engine::world::activity::ActivityControl,
@@ -116,7 +95,8 @@ pub unsafe fn run_session(
     let observe = std::cell::RefCell::new(crate::engine::observe::Io {
         observer: &mut *io.observer,
     });
-    let result = run_retained_session(controls, activity, &game, &observe, context);
+    let (trip, fixture) = admit_trip(&observe);
+    let result = run_retained_session(controls, activity, &game, &observe, context, &trip, fixture);
     if matches!(result, Ok(Ok(_))) {
         // SAFETY: the outer ABI contract keeps the current solar record live through return.
         context.retrieval_masks = unsafe {
@@ -128,16 +108,66 @@ pub unsafe fn run_session(
             .scan_retrieve_mask
         };
     }
-    session_reply(result)
+    let reply = session_reply(&result);
+    complete_trip(&trip, &observe, &result);
+    reply
 }
 
-#[cfg(not(test))]
+fn admit_trip(
+    observe: &std::cell::RefCell<crate::engine::observe::Io<'_>>,
+) -> (
+    std::rc::Rc<std::cell::RefCell<TripTelemetry>>,
+    Option<crate::engine::observe_port::planet_side::FixtureLayout>,
+) {
+    let admission = observe
+        .borrow_mut()
+        .observer
+        .input_admitted(&InputView::PlanetSideBegin, &None)
+        .planet_side;
+    let trip = std::rc::Rc::new(std::cell::RefCell::new(TripTelemetry::pending(
+        admission.map_or(0, |admission| admission.generation),
+    )));
+    (trip, admission.and_then(|admission| admission.fixture))
+}
+
+fn complete_trip(
+    trip: &std::cell::RefCell<TripTelemetry>,
+    observe: &std::cell::RefCell<crate::engine::observe::Io<'_>>,
+    result: &Result<
+        Result<super::session::SessionOutcome, super::controller::ControllerError>,
+        super::runtime::AdapterError,
+    >,
+) {
+    {
+        let mut trip = trip.borrow_mut();
+        match &result {
+            Ok(Ok(outcome)) => trip.finish(outcome),
+            Ok(Err(super::controller::ControllerError::FrameBudgetExceeded)) => {
+                trip.frame_budget_failure()
+            }
+            Ok(Err(super::controller::ControllerError::Runtime(
+                super::runtime::RuntimeError::Adapter(error),
+            )))
+            | Err(error) => {
+                trip.batch_depth_corrected(error.batch_depth_corrections);
+                trip.adapter_failure(error.operation);
+            }
+        }
+        observe
+            .borrow_mut()
+            .observer
+            .checkpoint(&CheckpointView::PlanetSide(trip.snapshot()));
+    }
+}
+
 fn run_retained_session(
     controls: &crate::engine::input::InputSession,
     activity: crate::engine::world::activity::ActivityControl,
     game: &std::cell::RefCell<crate::engine::battle::Cx<'_>>,
     observe: &std::cell::RefCell<crate::engine::observe::Io<'_>>,
     context: &mut PlanetSideRunContext,
+    telemetry: &std::rc::Rc<std::cell::RefCell<TripTelemetry>>,
+    fixture: Option<crate::engine::observe_port::planet_side::FixtureLayout>,
 ) -> Result<
     Result<super::session::SessionOutcome, super::controller::ControllerError>,
     super::runtime::AdapterError,
@@ -159,13 +189,8 @@ fn run_retained_session(
     let mut ship = CffiShipStatus { game };
     let session = create_trip_session(&mut ship, context)?;
     let mut world_visuals = super::visual_adapter::CffiWorldVisuals::new(&assets, &mut visuals);
-    let automation_active = observe
-        .borrow_mut()
-        .observer
-        .input_admitted(&InputView::Active, &None)
-        .stop;
     let channels = game.borrow().kernel.channels.clone();
-    install_fixture(automation_active, &session, &surface, &mut world_visuals)?;
+    install_fixture(fixture, &session, &surface, &mut world_visuals)?;
     // SAFETY: both frames are owned by the live lander asset set for this trip.
     let (earthquake_frame_count, lava_frame_count) = unsafe {
         (
@@ -173,7 +198,15 @@ fn run_retained_session(
             GetFrameCount(assets.graphic(LanderGraphic::Lava).cast()),
         )
     };
+    let publish = |trip: &TripTelemetry| {
+        observe
+            .borrow_mut()
+            .observer
+            .checkpoint(&CheckpointView::PlanetSide(trip.snapshot()))
+    };
     let collision = SurfaceCollisionAdapter {
+        telemetry: telemetry.clone(),
+        publish,
         surface: surface.clone(),
         random: CffiGameplayRandom,
         generator,
@@ -185,7 +218,8 @@ fn run_retained_session(
     // The orbit/scan menu underneath stays resident, so silence its
     // navigation sounds for the trip. Restored on every exit path by Drop.
     let _menu_silence = super::menu_sounds::MenuSoundSilence::acquire(controls);
-    super::telemetry::begin(&session);
+    telemetry.borrow_mut().begin(&session);
+    publish(&telemetry.borrow());
     let adapters = RuntimeAdapters {
         input: CffiPlanetSideInput::new(controls.controls().clone(), activity),
         collision,
@@ -195,24 +229,29 @@ fn run_retained_session(
             assets: &assets,
             last_scan_position: None,
         },
-        audio: CffiPlanetSideAudio::new(assets.sounds(), channels),
-        clock: CffiPlanetSideClock,
+        audio: CffiPlanetSideAudio::new(assets.sounds(), channels, telemetry.clone()),
+        clock: ObservedClock {
+            clock: CffiPlanetSideClock,
+            telemetry: telemetry.clone(),
+            io: observe,
+        },
         ship,
     };
     let mut controller =
         PlanetSideController::new(session, adapters, context.tick_period, context.frame_budget);
     let outcome = controller.run_with_frame(|session, adapters, tick_period| {
-        let deadline = Tick(adapters.clock.now().0.wrapping_add(tick_period));
-        let input = if session.phase == super::session::SessionPhase::Active {
-            Some(
-                adapters
-                    .input
-                    .poll_observed(&mut game.borrow_mut(), &mut observe.borrow_mut())?,
-            )
-        } else {
-            None
-        };
-        super::runtime::run_frame_at(game, session, adapters, deadline, input)
+        publish(&telemetry.borrow());
+        let (deadline, input) = prepare_frame(
+            game,
+            observe,
+            session,
+            &mut adapters.input,
+            &adapters.clock,
+            tick_period,
+        )?;
+        let step = super::runtime::run_frame_at(game, session, adapters, deadline, input)?;
+        telemetry.borrow_mut().frame(session);
+        Ok(step)
     });
     settle_session(
         &controller.session,
@@ -223,7 +262,23 @@ fn run_retained_session(
     Ok(outcome)
 }
 
-#[cfg(not(test))]
+fn prepare_frame(
+    game: &std::cell::RefCell<crate::engine::battle::Cx<'_>>,
+    observe: &std::cell::RefCell<crate::engine::observe::Io<'_>>,
+    session: &super::session::PlanetSideSession,
+    input: &mut CffiPlanetSideInput,
+    clock: &impl PlanetSideClock,
+    tick_period: u32,
+) -> Result<(Tick, Option<super::simulation::FrameInput>), super::runtime::AdapterError> {
+    let deadline = Tick(clock.now().0.wrapping_add(tick_period));
+    let input = if session.phase == super::session::SessionPhase::Active {
+        Some(input.poll_observed(&mut game.borrow_mut(), &mut observe.borrow_mut())?)
+    } else {
+        None
+    };
+    Ok((deadline, input))
+}
+
 fn create_trip_session(
     ship: &mut CffiShipStatus<'_, '_>,
     context: &PlanetSideRunContext,
@@ -244,39 +299,19 @@ fn create_trip_session(
     Ok(session)
 }
 
-#[cfg(not(test))]
 fn install_fixture(
-    automation_active: bool,
+    layout: Option<crate::engine::observe_port::planet_side::FixtureLayout>,
     session: &super::session::PlanetSideSession,
     surface: &super::assembly::SharedSurface,
     world_visuals: &mut impl super::automation_fixture::FixtureVisualPort,
 ) -> Result<(), super::runtime::AdapterError> {
-    // The issue #162 fixture is optional and explicitly requested.  Only the
-    // `setup_planet_side_collision_fixture` script action queues the
-    // request (the coordinator invokes
-    // [`super::automation_fixture::coordinator_queues_fixture_request`]
-    // when that action executes), so active automation with no such action runs
-    // the normal generated PlanetSide session unchanged.  The request is
-    // delivered exactly once per run_session, and install fails fast unless
-    // this session is under an active automation coordinator.  The gate and
-    // the install error are the sole outside-session protection; there is no
-    // polling fallback.
-    //
-    // `AutomationObserver::is_active()` is sampled exactly once, before tapping.
-    // That single observation decides both whether the request is consumed and
-    // which [`AutomationGate`] the install receives, so a request cannot be
-    // consumed under one observation and installed under another.  Ordinary
-    // gameplay never consumes or fails from a stale queue: a request left
-    // pending because no active owner tapped it stays queued.
-
-    let fixture_request = if automation_active {
-        super::automation_fixture::tap_planet_side_fixture_request(session.lander.position)
-    } else {
-        None
-    };
-    if let Some(fixture) = fixture_request {
+    if let Some(layout) = layout {
+        let fixture = super::automation_fixture::PlanetSideFixture::from_layout(
+            layout,
+            session.lander.position,
+        );
         fixture.install(
-            super::automation_fixture::automation_gate(automation_active),
+            super::automation_fixture::AutomationGate::Active,
             session,
             surface,
             world_visuals,
@@ -285,7 +320,6 @@ fn install_fixture(
     Ok(())
 }
 
-#[cfg(not(test))]
 fn settle_session(
     session: &super::session::PlanetSideSession,
     ship: &mut impl super::runtime::ShipStatusPort,
@@ -302,61 +336,44 @@ fn settle_session(
     Ok(())
 }
 
-#[cfg(not(test))]
 fn session_reply(
-    result: Result<
+    result: &Result<
         Result<super::session::SessionOutcome, super::controller::ControllerError>,
         super::runtime::AdapterError,
     >,
 ) -> PlanetSideReply {
     use super::session::SessionOutcome;
     match result {
-        Ok(Ok(SessionOutcome::Returned(delta))) => {
-            let outcome = SessionOutcome::Returned(delta.clone());
-            super::telemetry::finish(&outcome);
-            PlanetSideReply {
-                status: STATUS_OK,
-                detail: DETAIL_RETURNED,
-                value0: i64::from(delta.crew),
-                value1: i64::from(delta.element_mass),
-            }
-        }
-        Ok(Ok(SessionOutcome::LanderDestroyed(delta))) => {
-            super::telemetry::finish(&SessionOutcome::LanderDestroyed(delta));
-            PlanetSideReply {
-                status: STATUS_OK,
-                detail: DETAIL_DESTROYED,
-                ..PlanetSideReply::default()
-            }
-        }
-        Ok(Ok(SessionOutcome::Aborted)) => {
-            super::telemetry::finish(&SessionOutcome::Aborted);
-            PlanetSideReply {
-                status: STATUS_OK,
-                detail: DETAIL_ABORTED,
-                ..PlanetSideReply::default()
-            }
-        }
+        Ok(Ok(SessionOutcome::Returned(delta))) => PlanetSideReply {
+            status: STATUS_OK,
+            detail: DETAIL_RETURNED,
+            value0: i64::from(delta.crew),
+            value1: i64::from(delta.element_mass),
+        },
+        Ok(Ok(SessionOutcome::LanderDestroyed(_))) => PlanetSideReply {
+            status: STATUS_OK,
+            detail: DETAIL_DESTROYED,
+            ..PlanetSideReply::default()
+        },
+        Ok(Ok(SessionOutcome::Aborted)) => PlanetSideReply {
+            status: STATUS_OK,
+            detail: DETAIL_ABORTED,
+            ..PlanetSideReply::default()
+        },
         Ok(Err(super::controller::ControllerError::Runtime(
             super::runtime::RuntimeError::Adapter(error),
         )))
-        | Err(error) => {
-            super::telemetry::adapter_failure(error.operation);
-            PlanetSideReply {
-                status: STATUS_OK,
-                detail: DETAIL_ADAPTER_FAILURE,
-                value0: i64::from(adapter_error_code(error.operation)),
-                ..PlanetSideReply::default()
-            }
-        }
-        Ok(Err(super::controller::ControllerError::FrameBudgetExceeded)) => {
-            super::telemetry::frame_budget_failure();
-            PlanetSideReply {
-                status: STATUS_OK,
-                detail: DETAIL_FRAME_BUDGET,
-                ..PlanetSideReply::default()
-            }
-        }
+        | Err(error) => PlanetSideReply {
+            status: STATUS_OK,
+            detail: DETAIL_ADAPTER_FAILURE,
+            value0: i64::from(adapter_error_code(error.operation)),
+            ..PlanetSideReply::default()
+        },
+        Ok(Err(super::controller::ControllerError::FrameBudgetExceeded)) => PlanetSideReply {
+            status: STATUS_OK,
+            detail: DETAIL_FRAME_BUDGET,
+            ..PlanetSideReply::default()
+        },
     }
 }
 
@@ -420,6 +437,75 @@ mod tests {
         ] {
             assert!(!valid_context(&invalid));
         }
+    }
+
+    #[test]
+    fn finalization_publishes_each_outcome_as_a_copy_of_its_own_trip() {
+        use super::super::{
+            controller::ControllerError,
+            runtime::{AdapterError, RuntimeError},
+            session::SessionOutcome,
+        };
+        use crate::engine::observe::{CampaignView, Injected, Observer, Presented};
+        use crate::engine::observe_port::planet_side::{terminal, PlanetSideSnapshot};
+
+        #[derive(Default)]
+        struct Recording(Vec<PlanetSideSnapshot>);
+        impl Observer<Option<CampaignView>> for Recording {
+            fn input_admitted(&mut self, _: &InputView, _: &Option<CampaignView>) -> Injected {
+                Default::default()
+            }
+            fn checkpoint(&mut self, view: &CheckpointView<'_>) {
+                if let CheckpointView::PlanetSide(snapshot) = view {
+                    self.0.push((*snapshot).clone());
+                }
+            }
+            fn presented(&mut self, _: &mut Presented) {}
+        }
+        let mut observer = Recording::default();
+        let cases = [
+            (
+                Ok(Ok(SessionOutcome::Returned(Default::default()))),
+                terminal::RETURNED,
+            ),
+            (
+                Ok(Ok(SessionOutcome::LanderDestroyed(Default::default()))),
+                terminal::DESTROYED,
+            ),
+            (Ok(Ok(SessionOutcome::Aborted)), terminal::ABORTED),
+            (
+                Ok(Err(ControllerError::FrameBudgetExceeded)),
+                terminal::FRAME_BUDGET,
+            ),
+            (
+                Ok(Err(ControllerError::Runtime(RuntimeError::Adapter(
+                    AdapterError::new("render"),
+                )))),
+                terminal::ADAPTER_FAILURE,
+            ),
+            (
+                Err(AdapterError::new("lander_assets_not_loaded")),
+                terminal::ADAPTER_FAILURE,
+            ),
+        ];
+        for (index, (result, terminal)) in cases.into_iter().enumerate() {
+            let trip = std::cell::RefCell::new(TripTelemetry::pending(index as u64 + 1));
+            {
+                let io = std::cell::RefCell::new(crate::engine::observe::Io {
+                    observer: &mut observer,
+                });
+                complete_trip(&trip, &io, &result);
+            }
+            let copied = observer.0.last().unwrap();
+            assert_eq!(copied.observation.generation, index as u64 + 1);
+            assert_eq!(copied.observation.terminal, terminal);
+            assert!(!copied.observation.active);
+            assert_eq!(copied, trip.borrow().snapshot());
+            trip.borrow_mut().mineral_pickup();
+            assert_eq!(observer.0.last().unwrap().observation.mineral_pickups, 0);
+        }
+        assert_eq!(observer.0.len(), 6);
+        assert_eq!(observer.0[0].observation.terminal, terminal::RETURNED);
     }
 
     #[test]

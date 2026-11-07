@@ -103,7 +103,11 @@ impl world::MaskLookup for SurfaceMaskLookup<'_> {
 }
 
 /// Publish the mineral deposits still on the surface for read-only automation.
-fn publish_deposits(surface: &SurfaceAssembly, near: SurfacePoint) {
+fn publish_deposits(
+    trip: &mut super::telemetry::TripTelemetry,
+    surface: &SurfaceAssembly,
+    near: SurfacePoint,
+) {
     let deposits = surface.world.iter().filter_map(|(_, entity)| {
         let SurfaceEntityKind::MineralNode { category, .. } = &entity.kind else {
             return None;
@@ -114,8 +118,8 @@ fn publish_deposits(surface: &SurfaceAssembly, near: SurfacePoint) {
             category: u8::try_from(*category).ok()?,
         })
     });
-    super::telemetry::publish_deposits(deposits, near);
-    super::telemetry::publish_energy(
+    trip.publish_deposits(deposits, near);
+    trip.publish_energy(
         surface
             .world
             .iter()
@@ -132,7 +136,9 @@ fn publish_deposits(surface: &SurfaceAssembly, near: SurfacePoint) {
 
 /// Concrete Rust collision adapter. Geometry and classification are both
 /// independent of C `ELEMENT` and `IntersectControl` layouts.
-pub struct SurfaceCollisionAdapter<R, G, V> {
+pub struct SurfaceCollisionAdapter<R, G, V, P = fn(&super::telemetry::TripTelemetry)> {
+    pub telemetry: std::rc::Rc<std::cell::RefCell<super::telemetry::TripTelemetry>>,
+    pub publish: P,
     pub surface: SharedSurface,
     pub random: R,
     pub generator: G,
@@ -146,7 +152,7 @@ pub struct SurfaceCollisionAdapter<R, G, V> {
     pub lava_frame_count: u16,
 }
 
-impl<R, G: SurfaceGenerator, V> SurfaceCollisionAdapter<R, G, V> {
+impl<R, G: SurfaceGenerator, V, P> SurfaceCollisionAdapter<R, G, V, P> {
     fn commit_retrieved_nodes(
         &mut self,
         retrieved: &[SurfaceEntityId],
@@ -177,15 +183,100 @@ impl<R, G: SurfaceGenerator, V> SurfaceCollisionAdapter<R, G, V> {
     }
 }
 
-impl<R, G, V> PlanetSideCollision for SurfaceCollisionAdapter<R, G, V>
+impl<R, G: SurfaceGenerator, V: WorldVisualPort, P> SurfaceCollisionAdapter<R, G, V, P> {
+    fn update_creature_visuals(&mut self, result: &WorldStepResult) -> Result<(), AdapterError> {
+        // Apply living animation before the hit's canister transition.
+        for (entity_id, kind, animation_frame) in &result.effects.creature_frames {
+            advance_creature_animation_frame(
+                &mut self.surface.borrow_mut(),
+                *entity_id,
+                *kind,
+                *animation_frame,
+                &mut self.world_visuals,
+            )?;
+        }
+        // Persist dead-but-flashing nodes too, so takeoff cannot revive them.
+        let pending: Vec<_> = {
+            let surface = self.surface.borrow();
+            surface
+                .generated
+                .iter()
+                .filter_map(|entry| {
+                    let entity = surface
+                        .world
+                        .get(entry.entity)
+                        .expect("generated surface entity");
+                    match entity.kind {
+                        SurfaceEntityKind::LiveCreature {
+                            kind,
+                            hit_points: 0,
+                            ..
+                        } => Some((
+                            entry.node,
+                            entity.position,
+                            u16::from(CreatureCatalog::stats(kind).value),
+                        )),
+                        _ => None,
+                    }
+                })
+                .collect()
+        };
+        for (node, position, value) in pending {
+            self.generator.can_node(node, position, value)?;
+        }
+        for (entity_id, animation_frame) in &result.effects.canister_frames {
+            let visual = self
+                .world_visuals
+                .canned_creature_visual(*animation_frame)?;
+            let mut surface = self.surface.borrow_mut();
+            surface.frames.insert(*entity_id, visual.frame);
+            surface.masks.insert_entity(*entity_id, visual.mask);
+        }
+        for (entity_id, value) in &result.effects.canned {
+            let pending = {
+                let surface = self.surface.borrow();
+                surface
+                    .generated
+                    .iter()
+                    .find(|entry| entry.entity == *entity_id)
+                    .map(|entry| {
+                        (
+                            entry.node,
+                            surface
+                                .world
+                                .get(*entity_id)
+                                .expect("canned surface entity")
+                                .position,
+                        )
+                    })
+            };
+            if let Some((node, position)) = pending {
+                self.generator.can_node(node, position, *value)?;
+            }
+            let visual = self.world_visuals.canned_creature_visual(0)?;
+            transform_creature_to_canned(
+                &mut self.surface.borrow_mut(),
+                *entity_id,
+                *value,
+                visual,
+            )?;
+        }
+
+        self.commit_retrieved_nodes(&result.effects.retrieved)?;
+        Ok(())
+    }
+}
+
+impl<R, G, V, P> PlanetSideCollision for SurfaceCollisionAdapter<R, G, V, P>
 where
     R: GameplayRandom,
     G: SurfaceGenerator,
     V: WorldVisualPort,
+    P: FnMut(&super::telemetry::TripTelemetry),
 {
     fn contacts(&mut self, lander: &LanderState) -> Result<Vec<CollisionContact>, AdapterError> {
         let surface = self.surface.borrow();
-        publish_deposits(&surface, lander.position);
+        publish_deposits(&mut self.telemetry.borrow_mut(), &surface, lander.position);
         let lander_mask = &surface.masks.lander[usize::from(lander.facing) % 16];
         let mut contacts = Vec::new();
         for (id, entity) in surface.world.iter() {
@@ -206,7 +297,7 @@ where
                 continue;
             };
             if !masks_intersect(lander.position, lander_mask, entity.position, entity_mask) {
-                super::telemetry::seam_hit();
+                self.telemetry.borrow_mut().seam_hit();
             }
             let rolls = rolls_for(&mut self.random, collision);
             contacts.push(CollisionContact {
@@ -236,9 +327,10 @@ where
         } = outcome
         {
             if matches!(contact.collision, LanderCollision::Mineral { .. }) && *amount > 0 {
-                super::telemetry::mineral_pickup();
+                self.telemetry.borrow_mut().mineral_pickup();
             }
         }
+        (self.publish)(&self.telemetry.borrow());
         let generated = {
             let surface = self.surface.borrow();
             surface
@@ -268,7 +360,9 @@ where
                 effects = special_effects::finish();
                 let retrieved = result?;
                 if retrieved {
-                    super::telemetry::energy_retrieved(mapping.node.get());
+                    self.telemetry
+                        .borrow_mut()
+                        .energy_retrieved(mapping.node.get());
                 }
                 retrieved
             }
@@ -281,7 +375,16 @@ where
         if should_remove {
             let mut surface = self.surface.borrow_mut();
             remove_surface_entity(&mut surface, entity_id)?;
-            publish_deposits(&surface, super::telemetry::lander_position());
+            let mut trip = self.telemetry.borrow_mut();
+            let last = trip.snapshot().observation;
+            publish_deposits(
+                &mut trip,
+                &surface,
+                SurfacePoint {
+                    x: last.current_x,
+                    y: last.current_y,
+                },
+            );
         }
         Ok(effects)
     }
@@ -360,87 +463,10 @@ where
         }
         {
             for _ in &result.effects.landed_shot {
-                super::telemetry::creature_hit();
+                self.telemetry.borrow_mut().creature_hit();
             }
 
-            // Apply living animation before the hit's canister transition.
-            for (entity_id, kind, animation_frame) in &result.effects.creature_frames {
-                advance_creature_animation_frame(
-                    &mut self.surface.borrow_mut(),
-                    *entity_id,
-                    *kind,
-                    *animation_frame,
-                    &mut self.world_visuals,
-                )?;
-            }
-            // Persist dead-but-flashing nodes too, so takeoff cannot revive them.
-            let pending: Vec<_> = {
-                let surface = self.surface.borrow();
-                surface
-                    .generated
-                    .iter()
-                    .filter_map(|entry| {
-                        let entity = surface
-                            .world
-                            .get(entry.entity)
-                            .expect("generated surface entity");
-                        match entity.kind {
-                            SurfaceEntityKind::LiveCreature {
-                                kind,
-                                hit_points: 0,
-                                ..
-                            } => Some((
-                                entry.node,
-                                entity.position,
-                                u16::from(CreatureCatalog::stats(kind).value),
-                            )),
-                            _ => None,
-                        }
-                    })
-                    .collect()
-            };
-            for (node, position, value) in pending {
-                self.generator.can_node(node, position, value)?;
-            }
-            for (entity_id, animation_frame) in &result.effects.canister_frames {
-                let visual = self
-                    .world_visuals
-                    .canned_creature_visual(*animation_frame)?;
-                let mut surface = self.surface.borrow_mut();
-                surface.frames.insert(*entity_id, visual.frame);
-                surface.masks.insert_entity(*entity_id, visual.mask);
-            }
-            for (entity_id, value) in &result.effects.canned {
-                let pending = {
-                    let surface = self.surface.borrow();
-                    surface
-                        .generated
-                        .iter()
-                        .find(|entry| entry.entity == *entity_id)
-                        .map(|entry| {
-                            (
-                                entry.node,
-                                surface
-                                    .world
-                                    .get(*entity_id)
-                                    .expect("canned surface entity")
-                                    .position,
-                            )
-                        })
-                };
-                if let Some((node, position)) = pending {
-                    self.generator.can_node(node, position, *value)?;
-                }
-                let visual = self.world_visuals.canned_creature_visual(0)?;
-                transform_creature_to_canned(
-                    &mut self.surface.borrow_mut(),
-                    *entity_id,
-                    *value,
-                    visual,
-                )?;
-            }
-
-            self.commit_retrieved_nodes(&result.effects.retrieved)?;
+            self.update_creature_visuals(result)?;
 
             {
                 let mut surface = self.surface.borrow_mut();
@@ -650,11 +676,6 @@ mod tests {
     /// Test visual port that returns a solid 1×1 mask and dangling frame pointer.
     struct TestWorldVisuals;
 
-    /// The telemetry counters are process-global; each test takes the trip mutex.
-    fn telemetry_guard() -> std::sync::MutexGuard<'static, ()> {
-        super::super::telemetry::tests::exclusive()
-    }
-
     /// A shared surface with one entity registered in all its registries.
     fn shared_surface_with_entity(entity: SurfaceEntity) -> SharedSurface {
         let mut world = SurfaceWorld::new();
@@ -674,6 +695,8 @@ mod tests {
         surface: SharedSurface,
     ) -> SurfaceCollisionAdapter<Random, Generator, TestWorldVisuals> {
         SurfaceCollisionAdapter {
+            telemetry: super::super::telemetry::tests::trip(),
+            publish: |_: &super::super::telemetry::TripTelemetry| {},
             surface,
             random: Random {
                 values: Default::default(),
@@ -748,7 +771,6 @@ mod tests {
             crate::math::random,
         ));
 
-        let _guard = telemetry_guard();
         let mut creature = brainbox_entity(1);
         if let SurfaceEntityKind::LiveCreature {
             kind, frame_index, ..
@@ -896,7 +918,6 @@ mod tests {
 
         use super::super::generation::*;
         use crate::engine::world::state_file::StateFileManager;
-        let _guard = telemetry_guard();
         let files = std::rc::Rc::new(std::cell::RefCell::new(StateFileManager::new()));
         let mut generator = PersistentGenerator {
             files: files.clone(),
@@ -914,6 +935,8 @@ mod tests {
             frames: Default::default(),
         });
         let mut adapter = SurfaceCollisionAdapter {
+            telemetry: super::super::telemetry::tests::trip(),
+            publish: |_: &super::super::telemetry::TripTelemetry| {},
             surface: surface.clone(),
             generator,
             random: Random {
@@ -977,6 +1000,8 @@ mod tests {
             frames: Default::default(),
         });
         let mut adapter = SurfaceCollisionAdapter {
+            telemetry: super::super::telemetry::tests::trip(),
+            publish: |_: &super::super::telemetry::TripTelemetry| {},
             surface: surface.clone(),
             generator,
             random: Random {
@@ -1028,6 +1053,53 @@ mod tests {
     }
 
     #[test]
+    fn contact_observations_are_owned_by_the_collision_adapters_trip() {
+        let surface = shared_surface_with_entity(SurfaceEntity {
+            kind: SurfaceEntityKind::MineralNode {
+                category: 6,
+                size: 1,
+                quantity: 3,
+            },
+            position: SurfacePoint::default(),
+            finite_life: None,
+        });
+        let mut first = test_adapter(surface);
+        let second = test_adapter(shared_surface_with_entity(brainbox_entity(1)));
+        first.contacts(&lander()).unwrap();
+        assert_eq!(
+            first
+                .telemetry
+                .borrow()
+                .snapshot()
+                .deposits
+                .as_ref()
+                .unwrap()
+                .len(),
+            1
+        );
+        assert!(second.telemetry.borrow().snapshot().deposits.is_none());
+        first.telemetry.borrow_mut().mineral_pickup();
+        assert_eq!(
+            first
+                .telemetry
+                .borrow()
+                .snapshot()
+                .observation
+                .mineral_pickups,
+            1
+        );
+        assert_eq!(
+            second
+                .telemetry
+                .borrow()
+                .snapshot()
+                .observation
+                .mineral_pickups,
+            0
+        );
+    }
+
+    #[test]
     fn overlapping_creature_is_classified_from_catalog() {
         let mut world = SurfaceWorld::new();
         let id = world.insert(SurfaceEntity {
@@ -1054,6 +1126,8 @@ mod tests {
                 masks,
             });
         let mut adapter = SurfaceCollisionAdapter {
+            telemetry: super::super::telemetry::tests::trip(),
+            publish: |_: &super::super::telemetry::TripTelemetry| {},
             surface,
             random: Random {
                 values: [0, 99].into(),
@@ -1166,7 +1240,6 @@ mod tests {
 
         use super::super::generation::{GeneratedEntity, ScanNodeId, ScanType};
 
-        let _telemetry = telemetry_guard();
         let mut world = SurfaceWorld::new();
         let id = world.insert(brainbox_entity(3));
         let mut masks = SurfaceMasks::new((0..16).map(|_| solid()).collect()).unwrap();
@@ -1193,7 +1266,7 @@ mod tests {
                 life: 12,
             })
             .unwrap();
-        let before = super::super::telemetry::observation();
+        let before = adapter.telemetry.borrow().snapshot().observation;
 
         let result = adapter
             .step_world(&lander(), super::super::world::HazardChances::default())
@@ -1220,7 +1293,12 @@ mod tests {
             "shotCreature, which plays LANDER_HITS, is not reached for a value-0 creature"
         );
         assert_eq!(
-            super::super::telemetry::observation().creature_hits,
+            adapter
+                .telemetry
+                .borrow()
+                .snapshot()
+                .observation
+                .creature_hits,
             before.creature_hits + 1,
             "the bolt still counts as a creature hit"
         );
@@ -1244,6 +1322,8 @@ mod tests {
                 masks,
             });
         let mut adapter = SurfaceCollisionAdapter {
+            telemetry: super::super::telemetry::tests::trip(),
+            publish: |_: &super::super::telemetry::TripTelemetry| {},
             surface,
             random: Random {
                 values: [25, 77].into(),
@@ -1295,6 +1375,8 @@ mod tests {
                 masks,
             });
         let mut adapter = SurfaceCollisionAdapter {
+            telemetry: super::super::telemetry::tests::trip(),
+            publish: |_: &super::super::telemetry::TripTelemetry| {},
             surface,
             random: Random {
                 values: std::collections::VecDeque::new(),
@@ -1324,6 +1406,8 @@ mod tests {
                 masks,
             });
         let mut adapter = SurfaceCollisionAdapter {
+            telemetry: super::super::telemetry::tests::trip(),
+            publish: |_: &super::super::telemetry::TripTelemetry| {},
             surface: surface.clone(),
             random: Random {
                 values: std::collections::VecDeque::new(),
@@ -1392,6 +1476,8 @@ mod tests {
                 masks,
             });
         let mut adapter = SurfaceCollisionAdapter {
+            telemetry: super::super::telemetry::tests::trip(),
+            publish: |_: &super::super::telemetry::TripTelemetry| {},
             surface: surface.clone(),
             random: Random {
                 // Provide random values for hazard gate + creature AI.
@@ -1455,6 +1541,8 @@ mod tests {
                 masks,
             });
         let mut adapter = SurfaceCollisionAdapter {
+            telemetry: super::super::telemetry::tests::trip(),
+            publish: |_: &super::super::telemetry::TripTelemetry| {},
             surface,
             random: Random {
                 values: Default::default(),
@@ -1487,7 +1575,6 @@ mod tests {
 
     #[test]
     fn commit_counts_a_collected_mineral_pickup() {
-        let _guard = telemetry_guard();
         let surface = shared_surface_with_entity(SurfaceEntity {
             kind: SurfaceEntityKind::MineralNode {
                 category: 0,
@@ -1509,10 +1596,15 @@ mod tests {
             },
             remove_node: false,
         };
-        let before = crate::planet_side::telemetry::observation();
+        let before = adapter.telemetry.borrow().snapshot().observation;
         adapter.commit(*contact, &outcome, 12).unwrap();
         assert_eq!(
-            crate::planet_side::telemetry::observation().mineral_pickups,
+            adapter
+                .telemetry
+                .borrow()
+                .snapshot()
+                .observation
+                .mineral_pickups,
             before.mineral_pickups + 1,
             "a collected mineral increments the pickup counter"
         );
@@ -1520,7 +1612,6 @@ mod tests {
 
     #[test]
     fn commit_skips_full_or_zero_mineral_pickups() {
-        let _guard = telemetry_guard();
         let surface = shared_surface_with_entity(SurfaceEntity {
             kind: SurfaceEntityKind::MineralNode {
                 category: 0,
@@ -1548,10 +1639,15 @@ mod tests {
                 remove_node: false,
             },
         ] {
-            let before = crate::planet_side::telemetry::observation();
+            let before = adapter.telemetry.borrow().snapshot().observation;
             adapter.commit(*contact, &outcome, 12).unwrap();
             assert_eq!(
-                crate::planet_side::telemetry::observation().mineral_pickups,
+                adapter
+                    .telemetry
+                    .borrow()
+                    .snapshot()
+                    .observation
+                    .mineral_pickups,
                 before.mineral_pickups,
                 "a full or zero pickup is not a collected mineral"
             );
@@ -1560,7 +1656,6 @@ mod tests {
 
     #[test]
     fn commit_does_not_count_canned_biological_cargo() {
-        let _guard = telemetry_guard();
         let surface = shared_surface_with_entity(SurfaceEntity {
             kind: SurfaceEntityKind::CannedCreature {
                 value: 7,
@@ -1582,10 +1677,15 @@ mod tests {
             },
             remove_node: false,
         };
-        let before = crate::planet_side::telemetry::observation();
+        let before = adapter.telemetry.borrow().snapshot().observation;
         adapter.commit(*contact, &outcome, 12).unwrap();
         assert_eq!(
-            crate::planet_side::telemetry::observation().mineral_pickups,
+            adapter
+                .telemetry
+                .borrow()
+                .snapshot()
+                .observation
+                .mineral_pickups,
             before.mineral_pickups,
             "biological cargo is not a mineral pickup"
         );
@@ -1593,7 +1693,6 @@ mod tests {
 
     #[test]
     fn contacts_does_not_count_wrapped_overlap_of_an_unclassifiable_entity() {
-        let _guard = telemetry_guard();
         // A shot overlaps the lander only through a wrapped copy; because a
         // shot is unclassifiable it must not count as a seam hit.
         let surface = shared_surface_with_entity(SurfaceEntity {
@@ -1611,11 +1710,11 @@ mod tests {
             finite_life: Some(12),
         });
         let mut adapter = test_adapter(surface);
-        let before = crate::planet_side::telemetry::observation();
+        let before = adapter.telemetry.borrow().snapshot().observation;
         let contacts = adapter.contacts(&lander()).unwrap();
         assert!(contacts.is_empty(), "shots never produce a lander contact");
         assert_eq!(
-            crate::planet_side::telemetry::observation().seam_hits,
+            adapter.telemetry.borrow().snapshot().observation.seam_hits,
             before.seam_hits,
             "an unclassified wrapped overlap must not count as a seam hit"
         );
@@ -1623,7 +1722,6 @@ mod tests {
 
     #[test]
     fn contacts_counts_the_wrapped_overlap_of_a_classified_entity() {
-        let _guard = telemetry_guard();
         // The deposit's raw position touches only across the seam.
         let surface = shared_surface_with_entity(SurfaceEntity {
             kind: SurfaceEntityKind::MineralNode {
@@ -1638,11 +1736,11 @@ mod tests {
             finite_life: None,
         });
         let mut adapter = test_adapter(surface);
-        let before = crate::planet_side::telemetry::observation();
+        let before = adapter.telemetry.borrow().snapshot().observation;
         let contacts = adapter.contacts(&lander()).unwrap();
         assert_eq!(contacts.len(), 1, "the wrapped copy of a mineral connects");
         assert_eq!(
-            crate::planet_side::telemetry::observation().seam_hits,
+            adapter.telemetry.borrow().snapshot().observation.seam_hits,
             before.seam_hits + 1,
             "a classified wrapped-only contact counts as a seam hit"
         );
