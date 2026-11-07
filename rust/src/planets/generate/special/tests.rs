@@ -473,3 +473,22 @@ fn zoqfotpik_scout_flees_only_after_colliding_with_the_flagship() {
     host.groups.clear();
     assert!(zfpscout::reinit_npcs(&mut host));
 }
+
+#[test]
+fn owned_story_implements_generator_flags_and_group_words_without_a_live_owner() {
+    let mut first = crate::engine::world::story::StoryState::new();
+    let second = crate::engine::world::story::StoryState::new();
+    first.set_flag("TAALO_UNPROTECTED", 1);
+    first.set_word("SAMATRA_GRPOFFS0", 0x89abcdef);
+    assert_eq!(first.flag("TAALO_UNPROTECTED"), 1);
+    assert_eq!(second.flag("TAALO_UNPROTECTED"), 0);
+    assert_eq!(first.word("SAMATRA_GRPOFFS0"), 0x89abcdef);
+    assert_eq!(second.word("SAMATRA_GRPOFFS0"), 0);
+    let start = crate::engine::StoryKey::SAMATRA_GRPOFFS0.start();
+    for (byte, expected) in [0xef, 0xcd, 0xab, 0x89].into_iter().enumerate() {
+        assert_eq!(
+            first.get_state(start + 8 * byte, start + 8 * byte + 7),
+            expected
+        );
+    }
+}

@@ -76,7 +76,7 @@ pub struct planet_desc {
 }
 
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Default)]
 pub struct node_info {
     pub loc_pt: POINT,
     pub density: COUNT,

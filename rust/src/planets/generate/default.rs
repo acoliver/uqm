@@ -7,9 +7,8 @@
 //! `planets::c_api` implements over the C globals and tests implement with
 //! fakes.
 
-use crate::c_bindings::global_state::{
-    PlanetFrame, IP_GROUP, NODE_INFO, PLANET_DESC, PLANET_NUMBER_BASE, SYSTEM_INFO,
-};
+use crate::c_bindings::global_state::{IP_GROUP, PLANET_NUMBER_BASE};
+use crate::engine::world::planet::{PlanetFrame, NODE_INFO, PLANET_DESC, SYSTEM_INFO};
 use crate::math::RandomContext;
 use crate::planet_side::report_adapter::{DiscoveryReportPort, ReportDisposition};
 use crate::planets::generate::calc::{self, AnalysisSite, StarDescription};
@@ -215,11 +214,7 @@ pub fn analyse_orbital(
 }
 
 pub(super) fn blank_node() -> NODE_INFO {
-    NODE_INFO {
-        loc_pt: crate::engine::graphics::native_abi::POINT { x: 0, y: 0 },
-        density: 0,
-        type_: 0,
-    }
+    NODE_INFO::default()
 }
 
 /// `GenerateDefault_generateMinerals`.

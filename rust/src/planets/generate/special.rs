@@ -67,28 +67,43 @@ impl Story for &std::cell::RefCell<&mut crate::engine::battle::Cx<'_>> {
     }
 }
 
-impl Story for World {
+impl Story for crate::engine::world::story::StoryState {
     fn flag(&self, name: &'static str) -> u32 {
-        StoryKey::from_name(name).map_or(0, |key| self.story_state(key))
+        StoryKey::from_name(name).map_or(0, |key| u32::from(self.get_state(key.start(), key.end())))
     }
     fn set_flag(&mut self, name: &'static str, value: u32) {
         if let Some(key) = StoryKey::from_name(name) {
-            self.set_story_state(key, value);
+            self.set_state(key.start(), key.end(), value as u8);
         }
     }
     fn word(&self, name: &'static str) -> u32 {
-        read_word(word_start(name), |start| {
-            u32::from(rust_get_game_state_bits(
-                self,
-                start as i32,
-                start as i32 + 7,
-            ))
-        })
+        self.get_state_32(word_start(name) as usize)
     }
     fn set_word(&mut self, name: &'static str, value: u32) {
-        write_word(word_start(name), value, |start, byte| {
-            rust_set_game_state_bits(self, start as i32, start as i32 + 7, byte);
-        });
+        self.set_state_32(word_start(name) as usize, value);
+    }
+}
+
+impl Story for World {
+    fn flag(&self, name: &'static str) -> u32 {
+        self.story.as_ref().map_or(0, |story| story.flag(name))
+    }
+    fn set_flag(&mut self, name: &'static str, value: u32) {
+        if let Some(story) = self.story.as_mut() {
+            story.set_flag(name, value);
+        }
+    }
+    fn word(&self, name: &'static str) -> u32 {
+        let start = word_start(name) as usize;
+        self.story
+            .as_ref()
+            .map_or(0, |story| story.get_state_32(start))
+    }
+    fn set_word(&mut self, name: &'static str, value: u32) {
+        let start = word_start(name) as usize;
+        if let Some(story) = self.story.as_mut() {
+            story.set_state_32(start, value);
+        }
     }
 }
 

@@ -61,11 +61,7 @@ pub(crate) unsafe fn node_or(info: *mut NODE_INFO, spare: &mut NODE_INFO) -> &mu
 }
 
 pub(crate) fn blank_node() -> NODE_INFO {
-    NODE_INFO {
-        loc_pt: POINT { x: 0, y: 0 },
-        density: 0,
-        type_: 0,
-    }
+    NODE_INFO::default()
 }
 
 /// `*CurStarDescPtr`'s `Type` byte.
