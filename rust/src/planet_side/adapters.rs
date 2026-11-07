@@ -123,6 +123,17 @@ impl PlanetSideClock for CffiPlanetSideClock {
     }
 }
 
+pub(super) fn publish_trip(
+    io: &RefCell<crate::engine::observe::Io<'_>>,
+    trip: &super::telemetry::TripTelemetry,
+) {
+    io.borrow_mut()
+        .observer
+        .checkpoint(&crate::engine::observe::CheckpointView::PlanetSide(
+            trip.snapshot(),
+        ));
+}
+
 /// Publish copied values before the clock pumps native presentation callbacks.
 pub struct ObservedClock<'a, 'observer, K> {
     pub clock: K,
@@ -136,9 +147,7 @@ impl<K: PlanetSideClock> PlanetSideClock for ObservedClock<'_, '_, K> {
     }
 
     fn sleep_until(&mut self, deadline: Tick) -> Result<(), AdapterError> {
-        self.io.borrow_mut().observer.checkpoint(
-            &crate::engine::observe::CheckpointView::PlanetSide(self.telemetry.borrow().snapshot()),
-        );
+        publish_trip(self.io, &self.telemetry.borrow());
         self.clock.sleep_until(deadline)
     }
 }

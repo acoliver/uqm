@@ -153,10 +153,7 @@ fn complete_trip(
                 trip.adapter_failure(error.operation);
             }
         }
-        observe
-            .borrow_mut()
-            .observer
-            .checkpoint(&CheckpointView::PlanetSide(trip.snapshot()));
+        super::adapters::publish_trip(observe, &trip);
     }
 }
 
@@ -192,12 +189,7 @@ fn run_retained_session(
     let channels = game.borrow().kernel.channels.clone();
     install_fixture(fixture, &session, &surface, &mut world_visuals)?;
     let (earthquake_frame_count, lava_frame_count) = hazard_frame_counts(&assets);
-    let publish = |trip: &TripTelemetry| {
-        observe
-            .borrow_mut()
-            .observer
-            .checkpoint(&CheckpointView::PlanetSide(trip.snapshot()))
-    };
+    let publish = |trip: &TripTelemetry| super::adapters::publish_trip(observe, trip);
     let collision = SurfaceCollisionAdapter {
         telemetry: telemetry.clone(),
         publish,
