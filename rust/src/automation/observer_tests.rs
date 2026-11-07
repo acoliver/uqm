@@ -162,3 +162,68 @@ fn scene_dispatch_observations_do_not_cross_observer_runs() {
         .is_err());
     assert!(second.0.scene.lock().verify_dispatch(24, 18).is_err());
 }
+
+#[test]
+fn starting_another_scene_resets_dispatch_and_requires_new_observations() {
+    use super::scenario::{scene_plan, AutomationScene, SceneActivationBoundary, SceneError};
+    let (_output, mut handle) = observer();
+    handle
+        .0
+        .scene
+        .lock()
+        .begin(AutomationScene::SolProbeEncounter);
+    handle.checkpoint(&CheckpointView::EncounterDispatch(24));
+    handle.checkpoint(&CheckpointView::DialogueDispatch(18));
+    let scene = AutomationScene::StarbaseCommander;
+    handle.0.scene.lock().begin(scene);
+    assert_eq!(handle.0.scene.lock().active_scene(), Some(scene));
+    assert_eq!(
+        handle.0.scene.lock().dispatch_observation(),
+        (0, None, None)
+    );
+    assert_eq!(
+        handle.0.scene.lock().verify_dispatch(24, 18),
+        Err(SceneError::EncounterNotDispatched)
+    );
+    let plan = scene_plan(scene, SceneActivationBoundary::GameInitialized).unwrap();
+    handle.checkpoint(&CheckpointView::DialogueDispatch(
+        plan.expected_dialogue_conversation,
+    ));
+    assert_eq!(
+        handle.0.scene.lock().dispatch_observation(),
+        (0, None, Some(plan.expected_dialogue_conversation))
+    );
+    assert_eq!(
+        handle.0.scene.lock().verify(scene),
+        Err(SceneError::EncounterNotDispatched)
+    );
+    handle.checkpoint(&CheckpointView::EncounterDispatch(
+        plan.expected_encounter_conversation,
+    ));
+    assert_eq!(
+        handle.0.scene.lock().verify_dispatch(
+            plan.expected_encounter_conversation,
+            plan.expected_dialogue_conversation
+        ),
+        Err(SceneError::DialogueNotDispatched)
+    );
+    handle.checkpoint(&CheckpointView::DialogueDispatch(
+        plan.expected_dialogue_conversation,
+    ));
+    assert_eq!(handle.0.scene.lock().verify(scene), Ok(plan));
+    assert_eq!(
+        handle.0.scene.lock().verify_dispatch(
+            plan.expected_encounter_conversation,
+            plan.expected_dialogue_conversation
+        ),
+        Ok(())
+    );
+    assert_eq!(
+        handle.0.scene.lock().dispatch_observation(),
+        (
+            1,
+            Some(plan.expected_encounter_conversation),
+            Some(plan.expected_dialogue_conversation)
+        )
+    );
+}
