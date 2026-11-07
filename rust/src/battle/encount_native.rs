@@ -434,14 +434,12 @@ pub(crate) mod engine {
                 index += 1;
             }
             let resources = world.fleet_resources(frag.species_id);
-            let icon = crate::graphics::context_abi::ContextFrame::retain(std::ptr::NonNull::new(
-                resources.icon().raw(),
-            ))
-            .indexed_frame(0);
-            context.draw_stamp(
-                &icon,
-                encounter_icon_origin(i, icon.rect().extent, dimensions),
-            );
+            if let Some(icon) = super::formation::encounter_icon(resources.icon()) {
+                context.draw_stamp(
+                    &icon,
+                    encounter_icon_origin(i, icon.rect().extent, dimensions),
+                );
+            }
             i += 1;
         }
     }

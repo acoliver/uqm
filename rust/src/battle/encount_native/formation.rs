@@ -3,6 +3,14 @@ use super::ENCOUNTER_DISPLAY_POINTS;
 use crate::graphics::native_abi::{EXTENT, POINT};
 use crate::math::{arctan, cosine, sine, square_root};
 
+pub(super) fn encounter_icon(
+    icon: crate::engine::battle::views::FrameRef<'_>,
+) -> Option<crate::graphics::context_abi::ContextFrame> {
+    // The noncombat Ur-Quan drone deliberately has no encounter icon.
+    let frame = std::ptr::NonNull::new(icon.raw())?;
+    Some(crate::graphics::context_abi::ContextFrame::retain(Some(frame)).indexed_frame(0))
+}
+
 pub(super) fn encounter_icon_origin(index: usize, bounds: EXTENT, dimensions: (i32, i32)) -> POINT {
     let (mut x, mut y) = ENCOUNTER_DISPLAY_POINTS[index % ENCOUNTER_DISPLAY_POINTS.len()];
     if index >= ENCOUNTER_DISPLAY_POINTS.len() {
@@ -21,6 +29,12 @@ pub(super) fn encounter_icon_origin(index: usize, bounds: EXTENT, dimensions: (i
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn noncombat_drone_has_no_encounter_icon() {
+        let icon = crate::engine::battle::frames::FrameSelection::retain(std::ptr::null_mut());
+        assert!(encounter_icon(icon.view()).is_none());
+    }
 
     #[test]
     fn formation_centers_icons_without_changing_the_authored_first_ring() {
