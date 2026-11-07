@@ -193,7 +193,7 @@ impl<A: DruugeApi> Dialogue<'_, A> {
         if r == SELL_MAIDENS {
             self.api.set(StoryKey::MAIDENS_ON_SHIP, 0);
         } else if r == SELL_FRAGMENTS {
-            for key in EGG_CASES {
+            for key in api::EGG_CASES {
                 if self.api.get(key) != 0 {
                     self.api.set(key, 0);
                     break;
