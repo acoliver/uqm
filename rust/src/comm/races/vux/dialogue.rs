@@ -100,6 +100,22 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
         }
     }
 
+    fn zex_greeting(&mut self) {
+        if self.api.get(StoryKey::ZEX_STACK_3) >= 2 {
+            self.counter(
+                StoryKey::ZEX_VISITS,
+                &[FIGHT_OR_TRADE_1, FIGHT_OR_TRADE_2],
+                1,
+            );
+        } else {
+            self.counter(
+                StoryKey::ZEX_VISITS,
+                &[ZEX_HELLO_1, ZEX_HELLO_2, ZEX_HELLO_3, ZEX_HELLO_4],
+                3,
+            );
+        }
+    }
+
     pub(super) fn menagerie(&mut self, response: i32) {
         let response = response as u32;
         if response == I_HAVE_BEAST || [WHY_TRUST_1, WHY_TRUST_2, WHY_TRUST_3].contains(&response) {
@@ -142,22 +158,10 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
             return;
         }
 
-        let mut last_stack = 0;
+        let mut stack = 0;
         let mut phrases = [None; 3];
         if response == NULL_PHRASE {
-            if self.api.get(StoryKey::ZEX_STACK_3) >= 2 {
-                self.counter(
-                    StoryKey::ZEX_VISITS,
-                    &[FIGHT_OR_TRADE_1, FIGHT_OR_TRADE_2],
-                    1,
-                );
-            } else {
-                self.counter(
-                    StoryKey::ZEX_VISITS,
-                    &[ZEX_HELLO_1, ZEX_HELLO_2, ZEX_HELLO_3, ZEX_HELLO_4],
-                    3,
-                );
-            }
+            self.zex_greeting();
         } else if response == WHAT_YOU_DO_HERE {
             self.api.npc(MY_MENAGERIE as i32);
             self.api.set(StoryKey::ZEX_STACK_1, 1);
@@ -174,22 +178,22 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
             self.api.disable(ABOUT_CREATURE_AGAIN as u16);
         } else if response == WHY_DONT_YOU_ATTACK {
             self.api.npc(LIKE_YOU as i32);
-            last_stack = 1;
+            stack = 1;
             self.api.set(StoryKey::ZEX_STACK_2, 1);
         } else if response == WHY_LIKE_ME {
             self.api.npc(LIKE_BECAUSE as i32);
-            last_stack = 1;
+            stack = 1;
             self.api.set(StoryKey::ZEX_STACK_2, 2);
         } else if response == ARE_YOU_A_PERVERT {
             self.api.npc(CALL_ME_WHAT_YOU_WISH as i32);
             self.api.set(StoryKey::ZEX_STACK_2, 3);
         } else if response == TAKE_BY_FORCE {
             self.api.npc(PRECURSOR_DEVICE as i32);
-            last_stack = 2;
+            stack = 2;
             self.api.set(StoryKey::ZEX_STACK_3, 1);
         } else if response == YOU_LIED {
             self.api.npc(YUP_LIED as i32);
-            last_stack = 2;
+            stack = 2;
             self.api.set(StoryKey::ZEX_STACK_3, 3);
         }
 
@@ -219,11 +223,11 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
             3 => Some(KILL_YOU),
             _ => None,
         };
-        if let Some(phrase) = phrases[last_stack] {
+        if let Some(phrase) = phrases[stack] {
             self.offer(phrase, Handler::Menagerie);
         }
         for (index, phrase) in phrases.into_iter().enumerate() {
-            if index != last_stack {
+            if index != stack {
                 if let Some(phrase) = phrase {
                     self.offer(phrase, Handler::Menagerie);
                 }

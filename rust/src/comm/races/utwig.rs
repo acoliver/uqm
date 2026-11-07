@@ -3,8 +3,7 @@ use super::alliance::AllianceApi;
 use super::script::{animation, as_comm_data, GLOBAL_PLAYER_NAME};
 use crate::comm::locdata::{CColor, CLocData, CPoint};
 use crate::comm::types::CommData;
-use crate::engine::battle::Cx;
-use crate::engine::StoryKey;
+use crate::engine::{battle::Cx, StoryKey};
 mod phrases;
 use super::alliance::{SUPOX_SHIP, UTWIG_SHIP};
 use phrases::*;
@@ -436,12 +435,8 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
             self.api.disable(WHATS_UP_BOMB);
         }
         match self.api.get(StoryKey::BOMB_STACK2) {
-            0 => {
-                p_str[1_usize] = MAY_WE_HAVE_BOMB;
-            }
-            1 => {
-                p_str[1_usize] = PLEASE;
-            }
+            0 => p_str[1_usize] = MAY_WE_HAVE_BOMB,
+            1 => p_str[1_usize] = PLEASE,
             _ => {}
         }
         match self.api.get(StoryKey::BOMB_STACK1) {
@@ -453,12 +448,8 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
                 p_str[0_usize] = WHAT_ABOUT_BOMB;
                 p_str[1_usize] = 0;
             }
-            2 => {
-                p_str[0_usize] = GIVE_US_BOMB_OR_DIE;
-            }
-            3 => {
-                p_str[0_usize] = DEMAND_BOMB;
-            }
+            2 => p_str[0_usize] = GIVE_US_BOMB_OR_DIE,
+            3 => p_str[0_usize] = DEMAND_BOMB,
             _ => {}
         }
         if p_str[last_stack as usize] != 0 {

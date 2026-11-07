@@ -2,8 +2,7 @@
 use super::script::{animation, as_comm_data};
 use crate::comm::locdata::{CColor, CLocData, CPoint};
 use crate::comm::types::CommData;
-use crate::engine::battle::Cx;
-use crate::engine::StoryKey;
+use crate::engine::{battle::Cx, StoryKey};
 mod phrases;
 use phrases::*;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -194,11 +193,7 @@ impl<A: DruugeApi> Dialogue<'_, A> {
         if r == SELL_MAIDENS {
             self.api.set(StoryKey::MAIDENS_ON_SHIP, 0);
         } else if r == SELL_FRAGMENTS {
-            for key in [
-                StoryKey::EGG_CASE0_ON_SHIP,
-                StoryKey::EGG_CASE1_ON_SHIP,
-                StoryKey::EGG_CASE2_ON_SHIP,
-            ] {
+            for key in EGG_CASES {
                 if self.api.get(key) != 0 {
                     self.api.set(key, 0);
                     break;
@@ -463,7 +458,7 @@ impl<A: DruugeApi> Dialogue<'_, A> {
         self.api.response(BYE, Handler::ExitConversation, &[]);
     }
     fn intro(&mut self) {
-        let mut num_visits: u8;
+        let mut visits: u8;
         if i32::from((self.api.activity()) as u8) == 5 {
             self.api.npc(i32::from(OUT_TAKES));
             self.api.segue(0_u32);
@@ -471,10 +466,10 @@ impl<A: DruugeApi> Dialogue<'_, A> {
         }
         if self.api.get(StoryKey::DRUUGE_MANNER) != 0 {
             if (i32::from(self.api.get(StoryKey::GLOBAL_FLAGS_AND_DATA)) & (1 << 7)) != 0 {
-                num_visits = self.api.get(StoryKey::DRUUGE_HOME_VISITS);
+                visits = self.api.get(StoryKey::DRUUGE_HOME_VISITS);
                 let res = {
-                    let old = num_visits;
-                    num_visits = num_visits.wrapping_add(1);
+                    let old = visits;
+                    visits = visits.wrapping_add(1);
                     old
                 };
                 match res {
@@ -484,18 +479,18 @@ impl<A: DruugeApi> Dialogue<'_, A> {
                     1 => {
                         self.api.npc(i32::from(HSTL_TRADE_WORLD_HELLO_2));
                         {
-                            num_visits = num_visits.wrapping_sub(1);
-                            num_visits
+                            visits = visits.wrapping_sub(1);
+                            visits
                         };
                     }
                     _ => {}
                 }
-                self.api.set(StoryKey::DRUUGE_HOME_VISITS, num_visits);
+                self.api.set(StoryKey::DRUUGE_HOME_VISITS, visits);
             } else {
-                num_visits = self.api.get(StoryKey::DRUUGE_VISITS);
+                visits = self.api.get(StoryKey::DRUUGE_VISITS);
                 let res = {
-                    let old = num_visits;
-                    num_visits = num_visits.wrapping_add(1);
+                    let old = visits;
+                    visits = visits.wrapping_add(1);
                     old
                 };
                 match res {
@@ -505,21 +500,21 @@ impl<A: DruugeApi> Dialogue<'_, A> {
                     1 => {
                         self.api.npc(i32::from(HOSTILE_SPACE_HELLO_2));
                         {
-                            num_visits = num_visits.wrapping_sub(1);
-                            num_visits
+                            visits = visits.wrapping_sub(1);
+                            visits
                         };
                     }
                     _ => {}
                 }
-                self.api.set(StoryKey::DRUUGE_VISITS, num_visits);
+                self.api.set(StoryKey::DRUUGE_VISITS, visits);
             }
             self.api.segue(1_u32);
         } else if (i32::from(self.api.get(StoryKey::GLOBAL_FLAGS_AND_DATA)) & (1 << 7)) != 0 {
             {
-                num_visits = self.api.get(StoryKey::DRUUGE_HOME_VISITS);
+                visits = self.api.get(StoryKey::DRUUGE_HOME_VISITS);
                 let res = {
-                    let old = num_visits;
-                    num_visits = num_visits.wrapping_add(1);
+                    let old = visits;
+                    visits = visits.wrapping_add(1);
                     old
                 };
                 match res {
@@ -538,13 +533,13 @@ impl<A: DruugeApi> Dialogue<'_, A> {
                     4 => {
                         self.api.npc(i32::from(SSQ_TRADE_WORLD_HELLO_4));
                         {
-                            num_visits = num_visits.wrapping_sub(1);
-                            num_visits
+                            visits = visits.wrapping_sub(1);
+                            visits
                         };
                     }
                     _ => {}
                 }
-                self.api.set(StoryKey::DRUUGE_HOME_VISITS, num_visits);
+                self.api.set(StoryKey::DRUUGE_HOME_VISITS, visits);
             }
             if (self.api.get(StoryKey::ATTACKED_DRUUGE) != 0)
                 && !(self.api.get(StoryKey::DRUUGE_DISCLAIMER) != 0)
@@ -591,10 +586,10 @@ impl<A: DruugeApi> Dialogue<'_, A> {
             }
             self.bomb_ambush(0_u16);
         } else if self.api.get(StoryKey::ATTACKED_DRUUGE) != 0 {
-            num_visits = self.api.get(StoryKey::DRUUGE_VISITS);
+            visits = self.api.get(StoryKey::DRUUGE_VISITS);
             let res = {
-                let old = num_visits;
-                num_visits = num_visits.wrapping_add(1);
+                let old = visits;
+                visits = visits.wrapping_add(1);
                 old
             };
             match res {
@@ -604,30 +599,30 @@ impl<A: DruugeApi> Dialogue<'_, A> {
                 1 => {
                     self.api.npc(i32::from(HOSTILE_SPACE_HELLO_2));
                     {
-                        num_visits = num_visits.wrapping_sub(1);
-                        num_visits
+                        visits = visits.wrapping_sub(1);
+                        visits
                     };
                 }
                 _ => {}
             }
-            self.api.set(StoryKey::DRUUGE_VISITS, num_visits);
+            self.api.set(StoryKey::DRUUGE_VISITS, visits);
             self.api.segue(1_u32);
         } else {
-            num_visits = 0_u8;
+            visits = 0_u8;
             if !self.api.has_escorts() {
-                num_visits = 16;
+                visits = 16;
                 for module in self.api.ship().module_slots {
                     if (9..=11).contains(&module) {
-                        num_visits = 0;
+                        visits = 0;
                         break;
                     }
                 }
             }
-            if num_visits != 0 {
-                num_visits = self.api.get(StoryKey::DRUUGE_SALVAGE);
+            if visits != 0 {
+                visits = self.api.get(StoryKey::DRUUGE_SALVAGE);
                 let res = {
-                    let old = num_visits;
-                    num_visits = num_visits.wrapping_add(1);
+                    let old = visits;
+                    visits = visits.wrapping_add(1);
                     old
                 };
                 match res {
@@ -637,20 +632,20 @@ impl<A: DruugeApi> Dialogue<'_, A> {
                     1 => {
                         self.api.npc(i32::from(SALVAGE_YOUR_SHIP_2));
                         {
-                            num_visits = num_visits.wrapping_sub(1);
-                            num_visits
+                            visits = visits.wrapping_sub(1);
+                            visits
                         };
                     }
                     _ => {}
                 }
-                self.api.set(StoryKey::DRUUGE_SALVAGE, num_visits);
+                self.api.set(StoryKey::DRUUGE_SALVAGE, visits);
                 self.api.segue(1_u32);
                 self.session.attempted_salvage = true;
             } else {
-                num_visits = self.api.get(StoryKey::DRUUGE_VISITS);
+                visits = self.api.get(StoryKey::DRUUGE_VISITS);
                 let res = {
-                    let old = num_visits;
-                    num_visits = num_visits.wrapping_add(1);
+                    let old = visits;
+                    visits = visits.wrapping_add(1);
                     old
                 };
                 match res {
@@ -660,13 +655,13 @@ impl<A: DruugeApi> Dialogue<'_, A> {
                     1 => {
                         self.api.npc(i32::from(SUBSEQUENT_SPACE_HELLO));
                         {
-                            num_visits = num_visits.wrapping_sub(1);
-                            num_visits
+                            visits = visits.wrapping_sub(1);
+                            visits
                         };
                     }
                     _ => {}
                 }
-                self.api.set(StoryKey::DRUUGE_VISITS, num_visits);
+                self.api.set(StoryKey::DRUUGE_VISITS, visits);
                 self.space(0_u16);
             }
         }

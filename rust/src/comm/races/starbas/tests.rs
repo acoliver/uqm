@@ -116,6 +116,35 @@ fn state32(f: &Api, keys: [StoryKey; 4]) -> u32 {
 }
 
 #[test]
+fn typed_word_keys_preserve_little_endian_bytes_and_separate_fields() {
+    let mut f = ready();
+    let mut s = Session::default();
+    f.put(StoryKey::STARBASE_BULLETS0, 0x78);
+    f.put(StoryKey::STARBASE_BULLETS1, 0x56);
+    f.put(StoryKey::STARBASE_BULLETS2, 0x34);
+    f.put(StoryKey::STARBASE_BULLETS3, 0x12);
+    f.put(StoryKey::ZOQFOT_GRPOFFS0, 0xef);
+    f.put(StoryKey::ZOQFOT_GRPOFFS1, 0xcd);
+    f.put(StoryKey::ZOQFOT_GRPOFFS2, 0xab);
+    f.put(StoryKey::ZOQFOT_GRPOFFS3, 0x89);
+    let mut dialogue = Dialogue {
+        api: &mut f,
+        session: &mut s,
+    };
+    assert_eq!(dialogue.get32(STARBASE_BULLETS), 0x12345678);
+    assert_eq!(dialogue.get32(ZOQFOT_GRPOFFS), 0x89abcdef);
+    dialogue.set32(STARBASE_BULLETS, 0xfedcba98);
+    assert_eq!(dialogue.api.get(StoryKey::STARBASE_BULLETS0), 0x98);
+    assert_eq!(dialogue.api.get(StoryKey::STARBASE_BULLETS1), 0xba);
+    assert_eq!(dialogue.api.get(StoryKey::STARBASE_BULLETS2), 0xdc);
+    assert_eq!(dialogue.api.get(StoryKey::STARBASE_BULLETS3), 0xfe);
+    assert_eq!(dialogue.get32(ZOQFOT_GRPOFFS), 0x89abcdef);
+    dialogue.set32(ZOQFOT_GRPOFFS, 0);
+    assert_eq!(dialogue.get32(ZOQFOT_GRPOFFS), 0);
+    assert_eq!(dialogue.get32(STARBASE_BULLETS), 0xfedcba98);
+}
+
+#[test]
 fn descriptor_initialization_and_post_encounter() {
     let mut f = ready();
     let mut s = Session {

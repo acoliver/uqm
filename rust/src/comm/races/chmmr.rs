@@ -2,8 +2,7 @@
 use super::script::{animation, as_comm_data};
 use crate::comm::locdata::{CColor, CLocData, CPoint};
 use crate::comm::types::CommData;
-use crate::engine::battle::Cx;
-use crate::engine::StoryKey;
+use crate::engine::{battle::Cx, StoryKey};
 mod phrases;
 use phrases::*;
 mod api;
@@ -304,12 +303,12 @@ impl<A: ChmmrApi> Dialogue<'_, A> {
             .response((BYE_AFTER_BOMB) as u16, Handler::ExitConversation, &[]);
     }
     fn intro(&mut self) {
-        let mut num_visits: i32;
+        let mut visits: i32;
         if i32::from(self.api.get(StoryKey::CHMMR_BOMB_STATE)) >= 2 {
-            num_visits = i32::from(self.api.get(StoryKey::CHMMR_HOME_VISITS));
+            visits = i32::from(self.api.get(StoryKey::CHMMR_HOME_VISITS));
             let res = {
-                let old = num_visits;
-                num_visits = (num_visits + 1) as u8 as i32;
+                let old = visits;
+                visits = (visits + 1) as u8 as i32;
                 old
             };
             match res {
@@ -319,18 +318,17 @@ impl<A: ChmmrApi> Dialogue<'_, A> {
                 1 => {
                     self.api.npc(HELLO_AFTER_BOMB_2);
                     {
-                        num_visits = (num_visits - 1) as u8 as i32;
-                        num_visits
+                        visits = (visits - 1) as u8 as i32;
+                        visits
                     };
                 }
                 _ => {}
             }
-            self.api
-                .set(StoryKey::CHMMR_HOME_VISITS, (num_visits) as u8);
+            self.api.set(StoryKey::CHMMR_HOME_VISITS, visits as u8);
             self.after_bomb(0_u16 as i32);
-        } else if i32::from(self.api.get(StoryKey::CHMMR_UNLEASHED)) != 0 {
-            if !(i32::from(self.api.get(StoryKey::TALKING_PET_ON_SHIP)) != 0)
-                || !(i32::from(self.api.get(StoryKey::UTWIG_BOMB_ON_SHIP)) != 0)
+        } else if self.api.get(StoryKey::CHMMR_UNLEASHED) != 0 {
+            if !(self.api.get(StoryKey::TALKING_PET_ON_SHIP) != 0)
+                || !(self.api.get(StoryKey::UTWIG_BOMB_ON_SHIP) != 0)
             {
                 self.not_ready(0_u16 as i32);
             } else {
@@ -338,12 +336,12 @@ impl<A: ChmmrApi> Dialogue<'_, A> {
                 self.improve_bomb(0_u16 as i32);
             }
         } else {
-            num_visits = i32::from(self.api.get(StoryKey::CHMMR_HOME_VISITS));
-            if !(i32::from(self.api.get(StoryKey::CHMMR_EMERGING)) != 0) {
+            visits = i32::from(self.api.get(StoryKey::CHMMR_HOME_VISITS));
+            if !(self.api.get(StoryKey::CHMMR_EMERGING) != 0) {
                 self.api.palette(1);
                 let res = {
-                    let old = num_visits;
-                    num_visits = (num_visits + 1) as u8 as i32;
+                    let old = visits;
+                    visits = (visits + 1) as u8 as i32;
                     old
                 };
                 match res {
@@ -359,8 +357,8 @@ impl<A: ChmmrApi> Dialogue<'_, A> {
                     3 => {
                         self.api.npc(WHY_YOU_HERE_4);
                         {
-                            num_visits = (num_visits - 1) as u8 as i32;
-                            num_visits
+                            visits = (visits - 1) as u8 as i32;
+                            visits
                         };
                     }
                     _ => {}
@@ -369,9 +367,9 @@ impl<A: ChmmrApi> Dialogue<'_, A> {
             } else {
                 self.api.intro_mode(3, 840 * 2);
                 self.api.npc(WE_ARE_FREE);
-                if num_visits != 0 {
+                if visits != 0 {
                     self.chmmr_free(0_u16 as i32);
-                    num_visits = 0;
+                    visits = 0;
                 } else {
                     self.api.npc(WHO_ARE_YOU);
 
@@ -393,8 +391,7 @@ impl<A: ChmmrApi> Dialogue<'_, A> {
                 }
                 self.api.set(StoryKey::CHMMR_UNLEASHED, 1_u8);
             }
-            self.api
-                .set(StoryKey::CHMMR_HOME_VISITS, (num_visits) as u8);
+            self.api.set(StoryKey::CHMMR_HOME_VISITS, visits as u8);
         }
     }
     fn post_chmmr_enc(&mut self) {}

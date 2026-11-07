@@ -3,8 +3,7 @@ use super::alliance::AllianceApi;
 use super::script::{animation, as_comm_data, GLOBAL_PLAYER_NAME};
 use crate::comm::locdata::{CColor, CLocData, CPoint};
 use crate::comm::types::CommData;
-use crate::engine::battle::Cx;
-use crate::engine::StoryKey;
+use crate::engine::{battle::Cx, StoryKey};
 mod phrases;
 use phrases::*;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -488,17 +487,17 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
         }
     }
     fn intro(&mut self) {
-        let mut num_visits: u8;
+        let mut visits: u8;
         if i32::from((self.api.activity()) as u8) == 5 {
             self.api.npc(i32::from(OUT_TAKES));
             self.api.segue(0_u32);
             return;
         }
         if self.api.get(StoryKey::AQUA_HELIX) != 0 {
-            num_visits = self.api.get(StoryKey::HELIX_VISITS);
+            visits = self.api.get(StoryKey::HELIX_VISITS);
             let res = {
-                let old = num_visits;
-                num_visits = num_visits.wrapping_add(1);
+                let old = visits;
+                visits = visits.wrapping_add(1);
                 old
             };
             match res {
@@ -508,20 +507,20 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
                 1 => {
                     self.api.npc(i32::from(DIE_THIEF_2));
                     {
-                        num_visits = num_visits.wrapping_sub(1);
-                        num_visits
+                        visits = visits.wrapping_sub(1);
+                        visits
                     };
                 }
                 _ => {}
             }
-            self.api.set(StoryKey::HELIX_VISITS, num_visits);
+            self.api.set(StoryKey::HELIX_VISITS, visits);
             self.api.segue(1_u32);
         } else if self.api.get(StoryKey::ILWRATH_FIGHT_THRADDASH) != 0 {
-            num_visits = self.api.get(StoryKey::THRADD_VISITS);
+            visits = self.api.get(StoryKey::THRADD_VISITS);
             if self.api.get(StoryKey::THRADD_MANNER) != 0 {
                 let res = {
-                    let old = num_visits;
-                    num_visits = num_visits.wrapping_add(1);
+                    let old = visits;
+                    visits = visits.wrapping_add(1);
                     old
                 };
                 match res {
@@ -531,16 +530,16 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
                     1 => {
                         self.api.npc(i32::from(HAVING_FUN_WITH_ILWRATH_2));
                         {
-                            num_visits = num_visits.wrapping_sub(1);
-                            num_visits
+                            visits = visits.wrapping_sub(1);
+                            visits
                         };
                     }
                     _ => {}
                 }
             } else {
                 let res = {
-                    let old = num_visits;
-                    num_visits = num_visits.wrapping_add(1);
+                    let old = visits;
+                    visits = visits.wrapping_add(1);
                     old
                 };
                 match res {
@@ -550,40 +549,40 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
                     1 => {
                         self.api.npc(i32::from(GO_AWAY_FIGHTING_ILWRATH_2));
                         {
-                            num_visits = num_visits.wrapping_sub(1);
-                            num_visits
+                            visits = visits.wrapping_sub(1);
+                            visits
                         };
                     }
                     _ => {}
                 }
             }
-            self.api.set(StoryKey::THRADD_VISITS, num_visits);
+            self.api.set(StoryKey::THRADD_VISITS, visits);
             self.api.segue(0_u32);
         } else if self.api.get(StoryKey::THRADD_MANNER) != 0 {
             let p_str0: u16;
             let p_str1: u16;
-            num_visits = self.api.get(StoryKey::THRADD_VISITS);
+            visits = self.api.get(StoryKey::THRADD_VISITS);
             match self.api.get(StoryKey::THRADD_INTRO) {
                 0 => {
-                    self.polite_phrase(num_visits);
+                    self.polite_phrase(visits);
                 }
                 1 => {
-                    self.rhyme_phrase(num_visits);
+                    self.rhyme_phrase(visits);
                 }
                 2 => {
-                    self.pig_latin_phrase(num_visits);
+                    self.pig_latin_phrase(visits);
                 }
                 3 => {
-                    self.like_you_phrase(num_visits);
+                    self.like_you_phrase(visits);
                 }
                 _ => {}
             }
             if i32::from({
-                num_visits = num_visits.wrapping_add(1);
-                num_visits
+                visits = visits.wrapping_add(1);
+                visits
             }) < 4
             {
-                self.api.set(StoryKey::THRADD_VISITS, num_visits);
+                self.api.set(StoryKey::THRADD_VISITS, visits);
             }
             if (i32::from(self.api.get(StoryKey::GLOBAL_FLAGS_AND_DATA)) & (1 << 6)) != 0 {
                 p_str0 = WELCOME_HELIX0;
@@ -601,10 +600,10 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
             self.api.npc(i32::from(p_str1));
             self.thradd_allies(0_u16);
         } else if (i32::from(self.api.get(StoryKey::GLOBAL_FLAGS_AND_DATA)) & (1 << 6)) != 0 {
-            num_visits = self.api.get(StoryKey::HELIX_VISITS);
+            visits = self.api.get(StoryKey::HELIX_VISITS);
             let res = {
-                let old = num_visits;
-                num_visits = num_visits.wrapping_add(1);
+                let old = visits;
+                visits = visits.wrapping_add(1);
                 old
             };
             match res {
@@ -614,36 +613,34 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
                 1 => {
                     self.api.npc(i32::from(HOSTILE_HELIX_HELLO_2));
                     {
-                        num_visits = num_visits.wrapping_sub(1);
-                        num_visits
+                        visits = visits.wrapping_sub(1);
+                        visits
                     };
                 }
                 _ => {}
             }
-            self.api.set(StoryKey::HELIX_VISITS, num_visits);
+            self.api.set(StoryKey::HELIX_VISITS, visits);
             self.helix_world(0_u16);
         } else if i32::from(self.api.get(StoryKey::THRADDASH_BODY_COUNT)) >= 25 {
             self.api.npc(i32::from(AMAZING_PERFORMANCE));
             self.thradd_worship(0_u16);
         } else {
-            num_visits = self.api.get(StoryKey::THRADDASH_BODY_COUNT);
-            if (i32::from(num_visits) >= 16)
+            visits = self.api.get(StoryKey::THRADDASH_BODY_COUNT);
+            if (i32::from(visits) >= 16)
                 && (i32::from(self.api.get(StoryKey::THRADD_BODY_LEVEL)) == 1)
             {
                 self.api.set(StoryKey::THRADD_BODY_LEVEL, 2_u8);
                 self.api.npc(i32::from(IMPRESSIVE_PERFORMANCE));
-            } else if (i32::from(num_visits) >= 8)
-                && (i32::from(self.api.get(StoryKey::THRADD_BODY_LEVEL)) == 0)
-            {
+            } else if (i32::from(visits) >= 8) && (self.api.get(StoryKey::THRADD_BODY_LEVEL) == 0) {
                 self.api.set(StoryKey::THRADD_BODY_LEVEL, 1_u8);
                 self.api.npc(i32::from(ADEQUATE_PERFORMANCE));
             }
             {
                 if (i32::from(self.api.get(StoryKey::GLOBAL_FLAGS_AND_DATA)) & (1 << 7)) != 0 {
-                    num_visits = self.api.get(StoryKey::THRADD_HOME_VISITS);
+                    visits = self.api.get(StoryKey::THRADD_HOME_VISITS);
                     let res = {
-                        let old = num_visits;
-                        num_visits = num_visits.wrapping_add(1);
+                        let old = visits;
+                        visits = visits.wrapping_add(1);
                         old
                     };
                     match res {
@@ -659,23 +656,23 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
                         3 => {
                             self.api.npc(i32::from(HOSTILE_HOMEWORLD_HELLO_4));
                             {
-                                num_visits = num_visits.wrapping_sub(1);
-                                num_visits
+                                visits = visits.wrapping_sub(1);
+                                visits
                             };
                         }
                         _ => {}
                     }
-                    self.api.set(StoryKey::THRADD_HOME_VISITS, num_visits);
+                    self.api.set(StoryKey::THRADD_HOME_VISITS, visits);
                 } else if (i32::from({
-                    num_visits = self.api.get(StoryKey::THRADD_MISSION);
-                    num_visits
+                    visits = self.api.get(StoryKey::THRADD_MISSION);
+                    visits
                 }) == 0)
-                    || (i32::from(num_visits) > 3)
+                    || (i32::from(visits) > 3)
                 {
-                    num_visits = self.api.get(StoryKey::THRADD_VISITS);
+                    visits = self.api.get(StoryKey::THRADD_VISITS);
                     let res = {
-                        let old = num_visits;
-                        num_visits = num_visits.wrapping_add(1);
+                        let old = visits;
+                        visits = visits.wrapping_add(1);
                         old
                     };
                     match res {
@@ -691,31 +688,31 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
                         3 => {
                             self.api.npc(i32::from(HOSTILE_SPACE_HELLO_4));
                             {
-                                num_visits = num_visits.wrapping_sub(1);
-                                num_visits
+                                visits = visits.wrapping_sub(1);
+                                visits
                             };
                         }
                         _ => {}
                     }
-                    self.api.set(StoryKey::THRADD_VISITS, num_visits);
+                    self.api.set(StoryKey::THRADD_VISITS, visits);
                 } else {
-                    match num_visits {
+                    match visits {
                         1 => {
-                            if i32::from(self.api.get(StoryKey::THRADD_MISSION_VISITS)) == 0 {
+                            if self.api.get(StoryKey::THRADD_MISSION_VISITS) == 0 {
                                 self.api.npc(i32::from(WE_GO_TO_IMPRESS_URQUAN_1));
                             } else {
                                 self.api.npc(i32::from(WE_GO_TO_IMPRESS_URQUAN_2));
                             }
                         }
                         2 => {
-                            if i32::from(self.api.get(StoryKey::THRADD_MISSION_VISITS)) == 0 {
+                            if self.api.get(StoryKey::THRADD_MISSION_VISITS) == 0 {
                                 self.api.npc(i32::from(WE_IMPRESSING_URQUAN_1));
                             } else {
                                 self.api.npc(i32::from(WE_IMPRESSING_URQUAN_2));
                             }
                         }
                         3 => {
-                            if i32::from(self.api.get(StoryKey::THRADD_MISSION_VISITS)) == 0 {
+                            if self.api.get(StoryKey::THRADD_MISSION_VISITS) == 0 {
                                 self.api.npc(i32::from(WE_IMPRESSED_URQUAN_1));
                             } else {
                                 self.api.npc(i32::from(WE_IMPRESSED_URQUAN_2));

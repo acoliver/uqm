@@ -2,8 +2,7 @@
 use super::script::{animation, as_comm_data};
 use crate::comm::locdata::{CColor, CLocData, CPoint};
 use crate::comm::types::CommData;
-use crate::engine::battle::Cx;
-use crate::engine::StoryKey;
+use crate::engine::{battle::Cx, StoryKey};
 mod phrases;
 use phrases::*;
 mod api;
@@ -318,12 +317,12 @@ impl<A: UmgahApi> Dialogue<'_, A> {
             .response((BYE_POST_ZOMBIE) as u16, Handler::CombatIsInevitable, &[]);
     }
     fn intro(&mut self) {
-        let mut num_visits: i32;
-        if i32::from(self.api.get(StoryKey::UMGAH_HOSTILE)) != 0 {
-            num_visits = i32::from(self.api.get(StoryKey::UMGAH_VISITS));
+        let mut visits: i32;
+        if self.api.get(StoryKey::UMGAH_HOSTILE) != 0 {
+            visits = i32::from(self.api.get(StoryKey::UMGAH_VISITS));
             let res = {
-                let old = num_visits;
-                num_visits = (num_visits + 1) as u8 as i32;
+                let old = visits;
+                visits = (visits + 1) as u8 as i32;
                 old
             };
             match res {
@@ -339,20 +338,20 @@ impl<A: UmgahApi> Dialogue<'_, A> {
                 3 => {
                     self.api.npc(HOSTILE_HELLO_4);
                     {
-                        num_visits = (num_visits - 1) as u8 as i32;
-                        num_visits
+                        visits = (visits - 1) as u8 as i32;
+                        visits
                     };
                 }
                 _ => {}
             }
-            self.api.set(StoryKey::UMGAH_VISITS, (num_visits) as u8);
+            self.api.set(StoryKey::UMGAH_VISITS, visits as u8);
             self.api.segue(1);
-        } else if i32::from(self.api.get(StoryKey::UMGAH_ZOMBIE_BLOBBIES)) != 0 {
-            num_visits = i32::from(self.api.get(StoryKey::UMGAH_VISITS));
-            if i32::from(self.api.get(StoryKey::TALKING_PET_VISITS)) != 0 {
+        } else if self.api.get(StoryKey::UMGAH_ZOMBIE_BLOBBIES) != 0 {
+            visits = i32::from(self.api.get(StoryKey::UMGAH_VISITS));
+            if self.api.get(StoryKey::TALKING_PET_VISITS) != 0 {
                 let res = {
-                    let old = num_visits;
-                    num_visits = (num_visits + 1) as u8 as i32;
+                    let old = visits;
+                    visits = (visits + 1) as u8 as i32;
                     old
                 };
                 match res {
@@ -368,17 +367,17 @@ impl<A: UmgahApi> Dialogue<'_, A> {
                     3 => {
                         self.api.npc(DESTROY_INTERFERER_4);
                         {
-                            num_visits = (num_visits - 1) as u8 as i32;
-                            num_visits
+                            visits = (visits - 1) as u8 as i32;
+                            visits
                         };
                     }
                     _ => {}
                 }
                 self.api.segue(1);
-            } else if i32::from(self.api.get(StoryKey::KNOW_UMGAH_ZOMBIES)) != 0 {
+            } else if self.api.get(StoryKey::KNOW_UMGAH_ZOMBIES) != 0 {
                 let res = {
-                    let old = num_visits;
-                    num_visits = (num_visits + 1) as u8 as i32;
+                    let old = visits;
+                    visits = (visits + 1) as u8 as i32;
                     old
                 };
                 match res {
@@ -394,8 +393,8 @@ impl<A: UmgahApi> Dialogue<'_, A> {
                     3 => {
                         self.api.npc(REVEALED_ZOMBIE_HELLO_4);
                         {
-                            num_visits = (num_visits - 1) as u8 as i32;
-                            num_visits
+                            visits = (visits - 1) as u8 as i32;
+                            visits
                         };
                     }
                     _ => {}
@@ -403,8 +402,8 @@ impl<A: UmgahApi> Dialogue<'_, A> {
                 self.api.segue(1);
             } else {
                 let res = {
-                    let old = num_visits;
-                    num_visits = (num_visits + 1) as u8 as i32;
+                    let old = visits;
+                    visits = (visits + 1) as u8 as i32;
                     old
                 };
                 match res {
@@ -420,21 +419,21 @@ impl<A: UmgahApi> Dialogue<'_, A> {
                     3 => {
                         self.api.npc(UNKNOWN_ZOMBIE_HELLO_4);
                         {
-                            num_visits = (num_visits - 1) as u8 as i32;
-                            num_visits
+                            visits = (visits - 1) as u8 as i32;
+                            visits
                         };
                     }
                     _ => {}
                 }
                 self.zombies(0_u16 as i32);
             }
-            self.api.set(StoryKey::UMGAH_VISITS, (num_visits) as u8);
-        } else if !(i32::from(self.api.get(StoryKey::TALKING_PET)) != 0) {
+            self.api.set(StoryKey::UMGAH_VISITS, visits as u8);
+        } else if !(self.api.get(StoryKey::TALKING_PET) != 0) {
             if (i32::from(self.api.get(StoryKey::GLOBAL_FLAGS_AND_DATA)) & (1 << 7)) != 0 {
-                num_visits = i32::from(self.api.get(StoryKey::UMGAH_HOME_VISITS));
+                visits = i32::from(self.api.get(StoryKey::UMGAH_HOME_VISITS));
                 let res = {
-                    let old = num_visits;
-                    num_visits = (num_visits + 1) as u8 as i32;
+                    let old = visits;
+                    visits = (visits + 1) as u8 as i32;
                     old
                 };
                 match res {
@@ -450,19 +449,18 @@ impl<A: UmgahApi> Dialogue<'_, A> {
                     3 => {
                         self.api.npc(HWLD_PRE_ZOMBIE_HELLO_4);
                         {
-                            num_visits = (num_visits - 1) as u8 as i32;
-                            num_visits
+                            visits = (visits - 1) as u8 as i32;
+                            visits
                         };
                     }
                     _ => {}
                 }
-                self.api
-                    .set(StoryKey::UMGAH_HOME_VISITS, (num_visits) as u8);
+                self.api.set(StoryKey::UMGAH_HOME_VISITS, visits as u8);
             } else {
-                num_visits = i32::from(self.api.get(StoryKey::UMGAH_VISITS));
+                visits = i32::from(self.api.get(StoryKey::UMGAH_VISITS));
                 let res = {
-                    let old = num_visits;
-                    num_visits = (num_visits + 1) as u8 as i32;
+                    let old = visits;
+                    visits = (visits + 1) as u8 as i32;
                     old
                 };
                 match res {
@@ -478,13 +476,13 @@ impl<A: UmgahApi> Dialogue<'_, A> {
                     3 => {
                         self.api.npc(SPACE_PRE_ZOMBIE_HELLO_4);
                         {
-                            num_visits = (num_visits - 1) as u8 as i32;
-                            num_visits
+                            visits = (visits - 1) as u8 as i32;
+                            visits
                         };
                     }
                     _ => {}
                 }
-                self.api.set(StoryKey::UMGAH_VISITS, (num_visits) as u8);
+                self.api.set(StoryKey::UMGAH_VISITS, visits as u8);
             }
             self.normal_umgah(0_u16 as i32);
         } else {
@@ -492,10 +490,10 @@ impl<A: UmgahApi> Dialogue<'_, A> {
                 self.api.npc(POST_ZOMBIE_HWLD_HELLO);
                 self.umgah_reward(0_u16 as i32);
             } else {
-                num_visits = i32::from(self.api.get(StoryKey::UMGAH_VISITS));
+                visits = i32::from(self.api.get(StoryKey::UMGAH_VISITS));
                 let res = {
-                    let old = num_visits;
-                    num_visits = (num_visits + 1) as u8 as i32;
+                    let old = visits;
+                    visits = (visits + 1) as u8 as i32;
                     old
                 };
                 match res {
@@ -505,13 +503,13 @@ impl<A: UmgahApi> Dialogue<'_, A> {
                     1 => {
                         self.api.npc(REWARD_AT_HOMEWORLD_2);
                         {
-                            num_visits = (num_visits - 1) as u8 as i32;
-                            num_visits
+                            visits = (visits - 1) as u8 as i32;
+                            visits
                         };
                     }
                     _ => {}
                 }
-                self.api.set(StoryKey::UMGAH_VISITS, (num_visits) as u8);
+                self.api.set(StoryKey::UMGAH_VISITS, visits as u8);
                 self.api.segue(0);
             }
         }

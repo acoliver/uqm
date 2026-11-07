@@ -3,8 +3,7 @@ use super::alliance::AllianceApi;
 use super::script::{animation, as_comm_data, GLOBAL_PLAYER_NAME, GLOBAL_SHIP_NAME};
 use crate::comm::locdata::{CColor, CLocData, CPoint};
 use crate::comm::types::CommData;
-use crate::engine::battle::Cx;
-use crate::engine::StoryKey;
+use crate::engine::{battle::Cx, StoryKey};
 mod phrases;
 use super::alliance::{SUPOX_SHIP, UTWIG_SHIP};
 use phrases::*;
@@ -276,12 +275,8 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
             self.api.set(StoryKey::SUPOX_ULTRON_HELP, 1_u8);
         }
         match self.api.get(StoryKey::SUPOX_STACK2) {
-            0 => {
-                p_str[1_usize] = TELL_US_OF_YOUR_SPECIES;
-            }
-            1 => {
-                p_str[1_usize] = PLANTS_ARENT_INTELLIGENT;
-            }
+            0 => p_str[1_usize] = TELL_US_OF_YOUR_SPECIES,
+            1 => p_str[1_usize] = PLANTS_ARENT_INTELLIGENT,
             _ => {}
         }
         match self.api.get(StoryKey::SUPOX_STACK1) {
@@ -321,8 +316,8 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
             }
             _ => {}
         }
-        let num_visits: u8 = self.api.get(StoryKey::ULTRON_CONDITION);
-        if num_visits == 0 {
+        let visits: u8 = self.api.get(StoryKey::ULTRON_CONDITION);
+        if visits == 0 {
             match self.api.get(StoryKey::SUPOX_WAR_NEWS) {
                 0 => {
                     if (self.api.get(StoryKey::UTWIG_VISITS) != 0
@@ -334,12 +329,8 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
                         p_str[2_usize] = ANYONE_AROUND_HERE;
                     }
                 }
-                1 => {
-                    p_str[2_usize] = WHATS_WRONG_WITH_UTWIG;
-                }
-                2 => {
-                    p_str[2_usize] = WHATS_ULTRON;
-                }
+                1 => p_str[2_usize] = WHATS_WRONG_WITH_UTWIG,
+                2 => p_str[2_usize] = WHATS_ULTRON,
                 _ => {}
             }
         }
@@ -367,7 +358,7 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
             }
         }
         if !(self.api.get(StoryKey::SUPOX_ULTRON_HELP) != 0) {
-            match num_visits {
+            match visits {
                 1 => {
                     self.api
                         .response(WHERE_GET_REPAIRS, Handler::NeutralSupox, &[]);

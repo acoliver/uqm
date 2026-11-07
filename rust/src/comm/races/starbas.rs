@@ -1,23 +1,11 @@
 //! Starbase and Hayes dialogue, ported from the original C script.
 
-use crate::engine::StoryKey;
-const STARBASE_BULLETS: [StoryKey; 4] = [
-    StoryKey::STARBASE_BULLETS0,
-    StoryKey::STARBASE_BULLETS1,
-    StoryKey::STARBASE_BULLETS2,
-    StoryKey::STARBASE_BULLETS3,
-];
-const ZOQFOT_GRPOFFS: [StoryKey; 4] = [
-    StoryKey::ZOQFOT_GRPOFFS0,
-    StoryKey::ZOQFOT_GRPOFFS1,
-    StoryKey::ZOQFOT_GRPOFFS2,
-    StoryKey::ZOQFOT_GRPOFFS3,
-];
 use super::encounter::EncounterApi;
 use super::script::{animation, as_comm_data};
 use crate::comm::locdata::{CColor, CLocData, CPoint};
 use crate::comm::types::CommData;
 use crate::engine::battle::Cx;
+use crate::engine::StoryKey;
 mod phrases;
 use super::script::{GLOBAL_PLAYER_NAME, GLOBAL_SHIP_NAME};
 use phrases::*;
@@ -895,6 +883,7 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
             .response(NO_NEED_INFO, Handler::NormalStarbase, &[]);
     }
     fn discuss_devices(&mut self, talk_about: bool) -> bool {
+        let discussed = talk_about as u8;
         let mut i: u16;
         let mut vux_beast_index: u16;
         let mut phrase_index: u16;
@@ -915,8 +904,7 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
                         && !(self.api.get(StoryKey::DISCUSSED_ROSY_SPHERE) != 0)
                     {
                         p_str = ABOUT_SPHERE;
-                        self.api
-                            .set(StoryKey::DISCUSSED_ROSY_SPHERE, (talk_about) as u8);
+                        self.api.set(StoryKey::DISCUSSED_ROSY_SPHERE, discussed);
                     }
                 }
                 ARTIFACT_2_DEVICE => {
@@ -924,8 +912,7 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
                         && !(self.api.get(StoryKey::DISCUSSED_ARTIFACT_2) != 0)
                     {
                         p_str = ABOUT_ARTIFACT_2;
-                        self.api
-                            .set(StoryKey::DISCUSSED_ARTIFACT_2, (talk_about) as u8);
+                        self.api.set(StoryKey::DISCUSSED_ARTIFACT_2, discussed);
                     }
                 }
                 ARTIFACT_3_DEVICE => {
@@ -933,8 +920,7 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
                         && !(self.api.get(StoryKey::DISCUSSED_ARTIFACT_3) != 0)
                     {
                         p_str = ABOUT_ARTIFACT_3;
-                        self.api
-                            .set(StoryKey::DISCUSSED_ARTIFACT_3, (talk_about) as u8);
+                        self.api.set(StoryKey::DISCUSSED_ARTIFACT_3, discussed);
                     }
                 }
                 SUN_EFFICIENCY_DEVICE => {
@@ -942,8 +928,7 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
                         && !(self.api.get(StoryKey::DISCUSSED_SUN_EFFICIENCY) != 0)
                     {
                         p_str = ABOUT_SUN;
-                        self.api
-                            .set(StoryKey::DISCUSSED_SUN_EFFICIENCY, (talk_about) as u8);
+                        self.api.set(StoryKey::DISCUSSED_SUN_EFFICIENCY, discussed);
                     }
                 }
                 UTWIG_BOMB_DEVICE => {
@@ -951,8 +936,7 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
                         && !(self.api.get(StoryKey::DISCUSSED_UTWIG_BOMB) != 0)
                     {
                         p_str = ABOUT_BOMB;
-                        self.api
-                            .set(StoryKey::DISCUSSED_UTWIG_BOMB, (talk_about) as u8);
+                        self.api.set(StoryKey::DISCUSSED_UTWIG_BOMB, discussed);
                     }
                 }
                 ULTRON_0_DEVICE => {
@@ -960,7 +944,7 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
                         && !(self.api.get(StoryKey::DISCUSSED_ULTRON) != 0)
                     {
                         p_str = ABOUT_ULTRON_0;
-                        self.api.set(StoryKey::DISCUSSED_ULTRON, (talk_about) as u8);
+                        self.api.set(StoryKey::DISCUSSED_ULTRON, discussed);
                     }
                 }
                 ULTRON_1_DEVICE => {
@@ -968,7 +952,7 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
                         && !(self.api.get(StoryKey::DISCUSSED_ULTRON) != 0)
                     {
                         p_str = ABOUT_ULTRON_1;
-                        self.api.set(StoryKey::DISCUSSED_ULTRON, (talk_about) as u8);
+                        self.api.set(StoryKey::DISCUSSED_ULTRON, discussed);
                     }
                 }
                 ULTRON_2_DEVICE => {
@@ -976,7 +960,7 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
                         && !(self.api.get(StoryKey::DISCUSSED_ULTRON) != 0)
                     {
                         p_str = ABOUT_ULTRON_2;
-                        self.api.set(StoryKey::DISCUSSED_ULTRON, (talk_about) as u8);
+                        self.api.set(StoryKey::DISCUSSED_ULTRON, discussed);
                     }
                 }
                 ULTRON_3_DEVICE => {
@@ -984,7 +968,7 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
                         && !(self.api.get(StoryKey::DISCUSSED_ULTRON) != 0)
                     {
                         p_str = ABOUT_ULTRON_3;
-                        self.api.set(StoryKey::DISCUSSED_ULTRON, (talk_about) as u8);
+                        self.api.set(StoryKey::DISCUSSED_ULTRON, discussed);
                     }
                 }
                 MAIDENS_DEVICE => {
@@ -992,8 +976,7 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
                         && !(self.api.get(StoryKey::DISCUSSED_MAIDENS) != 0)
                     {
                         p_str = ABOUT_MAIDENS;
-                        self.api
-                            .set(StoryKey::DISCUSSED_MAIDENS, (talk_about) as u8);
+                        self.api.set(StoryKey::DISCUSSED_MAIDENS, discussed);
                     }
                 }
                 TALKING_PET_DEVICE => {
@@ -1001,8 +984,7 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
                         && !(self.api.get(StoryKey::DISCUSSED_TALKING_PET) != 0)
                     {
                         p_str = ABOUT_TALKPET;
-                        self.api
-                            .set(StoryKey::DISCUSSED_TALKING_PET, (talk_about) as u8);
+                        self.api.set(StoryKey::DISCUSSED_TALKING_PET, discussed);
                     }
                 }
                 AQUA_HELIX_DEVICE => {
@@ -1010,8 +992,7 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
                         && !(self.api.get(StoryKey::DISCUSSED_AQUA_HELIX) != 0)
                     {
                         p_str = ABOUT_HELIX;
-                        self.api
-                            .set(StoryKey::DISCUSSED_AQUA_HELIX, (talk_about) as u8);
+                        self.api.set(StoryKey::DISCUSSED_AQUA_HELIX, discussed);
                     }
                 }
                 CLEAR_SPINDLE_DEVICE => {
@@ -1019,8 +1000,7 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
                         && !(self.api.get(StoryKey::DISCUSSED_CLEAR_SPINDLE) != 0)
                     {
                         p_str = ABOUT_SPINDLE;
-                        self.api
-                            .set(StoryKey::DISCUSSED_CLEAR_SPINDLE, (talk_about) as u8);
+                        self.api.set(StoryKey::DISCUSSED_CLEAR_SPINDLE, discussed);
                     }
                 }
                 UMGAH_HYPERWAVE_DEVICE => {
@@ -1028,8 +1008,7 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
                         && !(self.api.get(StoryKey::DISCUSSED_UMGAH_HYPERWAVE) != 0)
                     {
                         p_str = ABOUT_UCASTER;
-                        self.api
-                            .set(StoryKey::DISCUSSED_UMGAH_HYPERWAVE, (talk_about) as u8);
+                        self.api.set(StoryKey::DISCUSSED_UMGAH_HYPERWAVE, discussed);
                     }
                 }
                 TAALO_PROTECTOR_DEVICE => {
@@ -1037,8 +1016,7 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
                         && !(self.api.get(StoryKey::DISCUSSED_TAALO_PROTECTOR) != 0)
                     {
                         p_str = ABOUT_SHIELD;
-                        self.api
-                            .set(StoryKey::DISCUSSED_TAALO_PROTECTOR, (talk_about) as u8);
+                        self.api.set(StoryKey::DISCUSSED_TAALO_PROTECTOR, discussed);
                     }
                 }
                 EGG_CASING0_DEVICE => {
@@ -1046,12 +1024,9 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
                         && !(self.api.get(StoryKey::DISCUSSED_EGG_CASING0) != 0)
                     {
                         p_str = ABOUT_EGGCASE_0;
-                        self.api
-                            .set(StoryKey::DISCUSSED_EGG_CASING0, (talk_about) as u8);
-                        self.api
-                            .set(StoryKey::DISCUSSED_EGG_CASING1, (talk_about) as u8);
-                        self.api
-                            .set(StoryKey::DISCUSSED_EGG_CASING2, (talk_about) as u8);
+                        self.api.set(StoryKey::DISCUSSED_EGG_CASING0, discussed);
+                        self.api.set(StoryKey::DISCUSSED_EGG_CASING1, discussed);
+                        self.api.set(StoryKey::DISCUSSED_EGG_CASING2, discussed);
                     }
                 }
                 EGG_CASING1_DEVICE => {
@@ -1059,12 +1034,9 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
                         && !(self.api.get(StoryKey::DISCUSSED_EGG_CASING1) != 0)
                     {
                         p_str = ABOUT_EGGCASE_0;
-                        self.api
-                            .set(StoryKey::DISCUSSED_EGG_CASING0, (talk_about) as u8);
-                        self.api
-                            .set(StoryKey::DISCUSSED_EGG_CASING1, (talk_about) as u8);
-                        self.api
-                            .set(StoryKey::DISCUSSED_EGG_CASING2, (talk_about) as u8);
+                        self.api.set(StoryKey::DISCUSSED_EGG_CASING0, discussed);
+                        self.api.set(StoryKey::DISCUSSED_EGG_CASING1, discussed);
+                        self.api.set(StoryKey::DISCUSSED_EGG_CASING2, discussed);
                     }
                 }
                 EGG_CASING2_DEVICE => {
@@ -1072,12 +1044,9 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
                         && !(self.api.get(StoryKey::DISCUSSED_EGG_CASING2) != 0)
                     {
                         p_str = ABOUT_EGGCASE_0;
-                        self.api
-                            .set(StoryKey::DISCUSSED_EGG_CASING0, (talk_about) as u8);
-                        self.api
-                            .set(StoryKey::DISCUSSED_EGG_CASING1, (talk_about) as u8);
-                        self.api
-                            .set(StoryKey::DISCUSSED_EGG_CASING2, (talk_about) as u8);
+                        self.api.set(StoryKey::DISCUSSED_EGG_CASING0, discussed);
+                        self.api.set(StoryKey::DISCUSSED_EGG_CASING1, discussed);
+                        self.api.set(StoryKey::DISCUSSED_EGG_CASING2, discussed);
                     }
                 }
                 SYREEN_SHUTTLE_DEVICE => {
@@ -1085,8 +1054,7 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
                         && !(self.api.get(StoryKey::DISCUSSED_SYREEN_SHUTTLE) != 0)
                     {
                         p_str = ABOUT_SHUTTLE;
-                        self.api
-                            .set(StoryKey::DISCUSSED_SYREEN_SHUTTLE, (talk_about) as u8);
+                        self.api.set(StoryKey::DISCUSSED_SYREEN_SHUTTLE, discussed);
                     }
                 }
                 VUX_BEAST_DEVICE => {
@@ -1094,8 +1062,7 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
                         && !(self.api.get(StoryKey::DISCUSSED_VUX_BEAST) != 0)
                     {
                         p_str = ABOUT_VUXBEAST0;
-                        self.api
-                            .set(StoryKey::DISCUSSED_VUX_BEAST, (talk_about) as u8);
+                        self.api.set(StoryKey::DISCUSSED_VUX_BEAST, discussed);
                     }
                 }
                 DESTRUCT_CODE_DEVICE => {
@@ -1103,8 +1070,7 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
                         && !(self.api.get(StoryKey::DISCUSSED_DESTRUCT_CODE) != 0)
                     {
                         p_str = ABOUT_DESTRUCT;
-                        self.api
-                            .set(StoryKey::DISCUSSED_DESTRUCT_CODE, (talk_about) as u8);
+                        self.api.set(StoryKey::DISCUSSED_DESTRUCT_CODE, discussed);
                     }
                 }
                 PORTAL_SPAWNER_DEVICE => {
@@ -1112,8 +1078,7 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
                         && !(self.api.get(StoryKey::DISCUSSED_PORTAL_SPAWNER) != 0)
                     {
                         p_str = ABOUT_PORTAL;
-                        self.api
-                            .set(StoryKey::DISCUSSED_PORTAL_SPAWNER, (talk_about) as u8);
+                        self.api.set(StoryKey::DISCUSSED_PORTAL_SPAWNER, discussed);
                     }
                 }
                 URQUAN_WARP_DEVICE => {
@@ -1121,8 +1086,7 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
                         && !(self.api.get(StoryKey::DISCUSSED_URQUAN_WARP) != 0)
                     {
                         p_str = ABOUT_WARPPOD;
-                        self.api
-                            .set(StoryKey::DISCUSSED_URQUAN_WARP, (talk_about) as u8);
+                        self.api.set(StoryKey::DISCUSSED_URQUAN_WARP, discussed);
                     }
                 }
                 BURVIX_HYPERWAVE_DEVICE
@@ -1131,7 +1095,7 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
                 {
                     p_str = ABOUT_BCASTER;
                     self.api
-                        .set(StoryKey::DISCUSSED_BURVIX_HYPERWAVE, (talk_about) as u8);
+                        .set(StoryKey::DISCUSSED_BURVIX_HYPERWAVE, discussed);
                 }
                 _ => {}
             }

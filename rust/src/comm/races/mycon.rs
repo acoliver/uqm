@@ -2,8 +2,7 @@
 use super::script::{animation, as_comm_data};
 use crate::comm::locdata::{CColor, CLocData, CPoint};
 use crate::comm::types::CommData;
-use crate::engine::battle::Cx;
-use crate::engine::StoryKey;
+use crate::engine::{battle::Cx, StoryKey};
 mod phrases;
 use phrases::*;
 mod api;
@@ -375,12 +374,12 @@ impl<A: MyconApi> Dialogue<'_, A> {
         }
     }
     fn intro(&mut self) {
-        let mut num_visits: i32;
-        if i32::from(self.api.get(StoryKey::SUN_DEVICE)) != 0 {
-            num_visits = i32::from(self.api.get(StoryKey::MYCON_VISITS));
+        let mut visits: i32;
+        if self.api.get(StoryKey::SUN_DEVICE) != 0 {
+            visits = i32::from(self.api.get(StoryKey::MYCON_VISITS));
             let res = {
-                let old = num_visits;
-                num_visits = (num_visits + 1) as u8 as i32;
+                let old = visits;
+                visits = (visits + 1) as u8 as i32;
                 old
             };
             match res {
@@ -390,22 +389,22 @@ impl<A: MyconApi> Dialogue<'_, A> {
                 1 => {
                     self.api.npc(DIE_THIEF_AGAIN);
                     {
-                        num_visits = (num_visits - 1) as u8 as i32;
-                        num_visits
+                        visits = (visits - 1) as u8 as i32;
+                        visits
                     };
                 }
                 _ => {}
             }
-            self.api.set(StoryKey::MYCON_VISITS, (num_visits) as u8);
+            self.api.set(StoryKey::MYCON_VISITS, visits as u8);
             self.api.segue(1);
-        } else if i32::from(self.api.get(StoryKey::MYCON_KNOW_AMBUSH)) != 0 {
+        } else if self.api.get(StoryKey::MYCON_KNOW_AMBUSH) != 0 {
             self.api.npc(DIE_LIAR);
             self.api.segue(1);
         } else if (i32::from(self.api.get(StoryKey::GLOBAL_FLAGS_AND_DATA)) & (1 << 6)) != 0 {
-            num_visits = i32::from(self.api.get(StoryKey::MYCON_SUN_VISITS));
+            visits = i32::from(self.api.get(StoryKey::MYCON_SUN_VISITS));
             let res = {
-                let old = num_visits;
-                num_visits = (num_visits + 1) as u8 as i32;
+                let old = visits;
+                visits = (visits + 1) as u8 as i32;
                 old
             };
             match res {
@@ -415,19 +414,19 @@ impl<A: MyconApi> Dialogue<'_, A> {
                 1 => {
                     self.api.npc(HELLO_SUN_DEVICE_WORLD_2);
                     {
-                        num_visits = (num_visits - 1) as u8 as i32;
-                        num_visits
+                        visits = (visits - 1) as u8 as i32;
+                        visits
                     };
                 }
                 _ => {}
             }
-            self.api.set(StoryKey::MYCON_SUN_VISITS, (num_visits) as u8);
+            self.api.set(StoryKey::MYCON_SUN_VISITS, visits as u8);
             self.sun_device(0_u16 as i32);
         } else if (i32::from(self.api.get(StoryKey::GLOBAL_FLAGS_AND_DATA)) & (1 << 7)) != 0 {
-            num_visits = i32::from(self.api.get(StoryKey::MYCON_HOME_VISITS));
+            visits = i32::from(self.api.get(StoryKey::MYCON_HOME_VISITS));
             let res = {
-                let old = num_visits;
-                num_visits = (num_visits + 1) as u8 as i32;
+                let old = visits;
+                visits = (visits + 1) as u8 as i32;
                 old
             };
             match res {
@@ -455,20 +454,19 @@ impl<A: MyconApi> Dialogue<'_, A> {
                 7 => {
                     self.api.npc(HELLO_HOMEWORLD_8);
                     {
-                        num_visits = (num_visits - 1) as u8 as i32;
-                        num_visits
+                        visits = (visits - 1) as u8 as i32;
+                        visits
                     };
                 }
                 _ => {}
             }
-            self.api
-                .set(StoryKey::MYCON_HOME_VISITS, (num_visits) as u8);
+            self.api.set(StoryKey::MYCON_HOME_VISITS, visits as u8);
             self.normal_mycon(0_u16 as i32);
         } else {
-            num_visits = i32::from(self.api.get(StoryKey::MYCON_VISITS));
+            visits = i32::from(self.api.get(StoryKey::MYCON_VISITS));
             let res = {
-                let old = num_visits;
-                num_visits = (num_visits + 1) as u8 as i32;
+                let old = visits;
+                visits = (visits + 1) as u8 as i32;
                 old
             };
             match res {
@@ -496,13 +494,13 @@ impl<A: MyconApi> Dialogue<'_, A> {
                 7 => {
                     self.api.npc(HELLO_SPACE_8);
                     {
-                        num_visits = (num_visits - 1) as u8 as i32;
-                        num_visits
+                        visits = (visits - 1) as u8 as i32;
+                        visits
                     };
                 }
                 _ => {}
             }
-            self.api.set(StoryKey::MYCON_VISITS, (num_visits) as u8);
+            self.api.set(StoryKey::MYCON_VISITS, visits as u8);
             self.normal_mycon(0_u16 as i32);
         }
     }

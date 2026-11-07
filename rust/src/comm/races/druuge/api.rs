@@ -1,3 +1,11 @@
+use crate::engine::StoryKey;
+
+pub(super) const EGG_CASES: [StoryKey; 3] = [
+    StoryKey::EGG_CASE0_ON_SHIP,
+    StoryKey::EGG_CASE1_ON_SHIP,
+    StoryKey::EGG_CASE2_ON_SHIP,
+];
+
 use super::Handler;
 use crate::comm::locdata::CSisState;
 use crate::comm::races::encounter::EncounterApi;

@@ -2,8 +2,7 @@
 use super::script::{animation, as_comm_data};
 use crate::comm::locdata::{CColor, CLocData, CPoint};
 use crate::comm::types::CommData;
-use crate::engine::battle::Cx;
-use crate::engine::StoryKey;
+use crate::engine::{battle::Cx, StoryKey};
 mod phrases;
 use phrases::*;
 mod api;
@@ -475,17 +474,17 @@ impl<A: SyreenApi> Dialogue<'_, A> {
             .response((BYE_BEFORE_VAULT) as u16, Handler::FriendlyExit, &[]);
     }
     fn intro(&mut self) {
-        let mut num_visits: i32;
+        let mut visits: i32;
         if (i32::from(self.api.activity()) as u8 as i32) == 5 {
             self.api.npc(OUT_TAKES);
             self.api.segue(0);
             return;
         }
-        num_visits = i32::from(self.api.get(StoryKey::SYREEN_HOME_VISITS));
-        if i32::from(self.api.get(StoryKey::MYCON_KNOW_AMBUSH)) != 0 {
+        visits = i32::from(self.api.get(StoryKey::SYREEN_HOME_VISITS));
+        if self.api.get(StoryKey::MYCON_KNOW_AMBUSH) != 0 {
             let res = {
-                let old = num_visits;
-                num_visits = (num_visits + 1) as u8 as i32;
+                let old = visits;
+                visits = (visits + 1) as u8 as i32;
                 old
             };
             match res {
@@ -505,31 +504,31 @@ impl<A: SyreenApi> Dialogue<'_, A> {
                 3 => {
                     self.api.npc(HELLO_AFTER_AMBUSH_3);
                     {
-                        num_visits = (num_visits - 1) as u8 as i32;
-                        num_visits
+                        visits = (visits - 1) as u8 as i32;
+                        visits
                     };
                 }
                 _ => {}
             }
             self.after_ambush(0_u16 as i32);
-        } else if i32::from(self.api.get(StoryKey::MYCON_AMBUSH)) != 0 {
+        } else if self.api.get(StoryKey::MYCON_AMBUSH) != 0 {
             if {
-                let old = num_visits;
-                num_visits = (num_visits + 1) as u8 as i32;
+                let old = visits;
+                visits = (visits + 1) as u8 as i32;
                 old
             } == 0
             {
                 self.api.npc(READY_FOR_AMBUSH);
                 {
-                    num_visits = (num_visits - 1) as u8 as i32;
-                    num_visits
+                    visits = (visits - 1) as u8 as i32;
+                    visits
                 };
             }
             self.ambush_ready(0_u16 as i32);
-        } else if !(i32::from(self.api.get(StoryKey::SYREEN_KNOW_ABOUT_MYCON)) != 0) {
+        } else if !(self.api.get(StoryKey::SYREEN_KNOW_ABOUT_MYCON) != 0) {
             let res = {
-                let old = num_visits;
-                num_visits = (num_visits + 1) as u8 as i32;
+                let old = visits;
+                visits = (visits + 1) as u8 as i32;
                 old
             };
             match res {
@@ -545,13 +544,13 @@ impl<A: SyreenApi> Dialogue<'_, A> {
                 3 => {
                     self.api.npc(HELLO_BEFORE_AMBUSH_4);
                     {
-                        num_visits = (num_visits - 1) as u8 as i32;
-                        num_visits
+                        visits = (visits - 1) as u8 as i32;
+                        visits
                     };
                 }
                 _ => {}
             }
-            if num_visits > 1 {
+            if visits > 1 {
                 self.normal_syreen(0_u16 as i32);
             } else {
                 self.api
@@ -575,13 +574,13 @@ impl<A: SyreenApi> Dialogue<'_, A> {
                 self.api
                     .response((WE_ARE_IMPRESSED) as u16, Handler::InitialSyreen, &[]);
             }
-        } else if i32::from(self.api.get(StoryKey::SHIP_VAULT_UNLOCKED)) != 0 {
+        } else if self.api.get(StoryKey::SHIP_VAULT_UNLOCKED) != 0 {
             self.plan_ambush(0_u16 as i32);
-            num_visits = 0;
+            visits = 0;
         } else {
             let res = {
-                let old = num_visits;
-                num_visits = (num_visits + 1) as u8 as i32;
+                let old = visits;
+                visits = (visits + 1) as u8 as i32;
                 old
             };
             match res {
@@ -591,16 +590,15 @@ impl<A: SyreenApi> Dialogue<'_, A> {
                 1 => {
                     self.api.npc(FOUND_VAULT_YET_2);
                     {
-                        num_visits = (num_visits - 1) as u8 as i32;
-                        num_visits
+                        visits = (visits - 1) as u8 as i32;
+                        visits
                     };
                 }
                 _ => {}
             }
             self.syreen_vault(0_u16 as i32);
         }
-        self.api
-            .set(StoryKey::SYREEN_HOME_VISITS, (num_visits) as u8);
+        self.api.set(StoryKey::SYREEN_HOME_VISITS, visits as u8);
     }
     fn post_syreen_enc(&mut self) {}
     fn initialize(&mut self) {

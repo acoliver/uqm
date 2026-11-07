@@ -4,8 +4,7 @@
 
 use super::script::as_comm_data;
 use crate::comm::types::CommData;
-use crate::engine::battle::Cx;
-use crate::engine::StoryKey;
+use crate::engine::{battle::Cx, StoryKey};
 
 mod phrases;
 use phrases::*;

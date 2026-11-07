@@ -3,8 +3,7 @@ use super::alliance::AllianceApi;
 use super::script::{animation, as_comm_data};
 use crate::comm::locdata::{CColor, CLocData, CPoint};
 use crate::comm::types::CommData;
-use crate::engine::battle::Cx;
-use crate::engine::StoryKey;
+use crate::engine::{battle::Cx, StoryKey};
 mod phrases;
 use phrases::*;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -121,24 +120,16 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
             self.api.set(StoryKey::PORTAL_SPAWNER_ON_SHIP, 1_u8);
         }
         match self.api.get(StoryKey::ARILOU_STACK_1) {
-            0 => {
-                p_str[0_usize] = WHAT_ABOUT_WAR;
-            }
-            1 => {
-                p_str[0_usize] = WHAT_ABOUT_URQUAN;
-            }
+            0 => p_str[0_usize] = WHAT_ABOUT_WAR,
+            1 => p_str[0_usize] = WHAT_ABOUT_URQUAN,
             _ => {}
         }
         if self.api.get(StoryKey::TALKING_PET) != 0 {
         } else {
             if self.api.get(StoryKey::TALKING_PET_VISITS) != 0 {
                 match self.api.get(StoryKey::ARILOU_STACK_2) {
-                    0 => {
-                        p_str[1_usize] = TELL_ARILOU_ABOUT_TPET;
-                    }
-                    1 => {
-                        p_str[1_usize] = WHAT_DO_ABOUT_TPET;
-                    }
+                    0 => p_str[1_usize] = TELL_ARILOU_ABOUT_TPET,
+                    1 => p_str[1_usize] = WHAT_DO_ABOUT_TPET,
                     _ => {}
                 }
             } else if self.api.get(StoryKey::KNOW_UMGAH_ZOMBIES) != 0 {
@@ -154,15 +145,9 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
             }
         }
         match self.api.get(StoryKey::ARILOU_STACK_3) {
-            0 => {
-                p_str[2_usize] = WHAT_DID_ON_EARTH;
-            }
-            1 => {
-                p_str[2_usize] = WHY_DID_THIS;
-            }
-            2 => {
-                p_str[2_usize] = TELL_MORE;
-            }
+            0 => p_str[2_usize] = WHAT_DID_ON_EARTH,
+            1 => p_str[2_usize] = WHY_DID_THIS,
+            2 => p_str[2_usize] = TELL_MORE,
             _ => {}
         }
         if !(self.api.get(StoryKey::KNOW_ARILOU_WANT_WRECK) != 0) {

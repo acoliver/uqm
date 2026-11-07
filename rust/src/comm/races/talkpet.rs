@@ -2,8 +2,7 @@
 use super::script::{animation, as_comm_data};
 use crate::comm::locdata::{CColor, CLocData, CPoint};
 use crate::comm::types::CommData;
-use crate::engine::battle::Cx;
-use crate::engine::StoryKey;
+use crate::engine::{battle::Cx, StoryKey};
 mod phrases;
 use phrases::*;
 mod api;
@@ -137,12 +136,12 @@ impl<A: TalkpetApi> Dialogue<'_, A> {
             .response((ENOUGH_INFO) as u16, Handler::PetDevice, &[]);
     }
     fn pet_device(&mut self, r: i32) {
-        let mut num_visits: i32;
+        let mut visits: i32;
         if r == WHATS_UP_ONBOARD {
-            num_visits = i32::from(self.api.get(StoryKey::TALKING_PET_INFO));
+            visits = i32::from(self.api.get(StoryKey::TALKING_PET_INFO));
             let res = {
-                let old = num_visits;
-                num_visits = (num_visits + 1) as u8 as i32;
+                let old = visits;
+                visits = (visits + 1) as u8 as i32;
                 old
             };
             match res {
@@ -170,19 +169,19 @@ impl<A: TalkpetApi> Dialogue<'_, A> {
                 7 => {
                     self.api.npc(GENERAL_INFO_ONBOARD_8);
                     {
-                        num_visits = (num_visits - 1) as u8 as i32;
-                        num_visits
+                        visits = (visits - 1) as u8 as i32;
+                        visits
                     };
                 }
                 _ => {}
             }
-            self.api.set(StoryKey::TALKING_PET_INFO, (num_visits) as u8);
+            self.api.set(StoryKey::TALKING_PET_INFO, visits as u8);
             self.api.disable((WHATS_UP_ONBOARD) as u16);
         } else if r == ANY_SUGGESTIONS {
-            num_visits = i32::from(self.api.get(StoryKey::TALKING_PET_SUGGESTIONS));
+            visits = i32::from(self.api.get(StoryKey::TALKING_PET_SUGGESTIONS));
             let res = {
-                let old = num_visits;
-                num_visits = (num_visits + 1) as u8 as i32;
+                let old = visits;
+                visits = (visits + 1) as u8 as i32;
                 old
             };
             match res {
@@ -210,14 +209,14 @@ impl<A: TalkpetApi> Dialogue<'_, A> {
                 7 => {
                     self.api.npc(SUGGESTION_8);
                     {
-                        num_visits = (num_visits - 1) as u8 as i32;
-                        num_visits
+                        visits = (visits - 1) as u8 as i32;
+                        visits
                     };
                 }
                 _ => {}
             }
             self.api
-                .set(StoryKey::TALKING_PET_SUGGESTIONS, (num_visits) as u8);
+                .set(StoryKey::TALKING_PET_SUGGESTIONS, visits as u8);
             self.api.disable((ANY_SUGGESTIONS) as u16);
         } else if r == ENOUGH_INFO {
             self.api.npc(OK_ENOUGH_INFO);
@@ -225,7 +224,7 @@ impl<A: TalkpetApi> Dialogue<'_, A> {
             self.api.npc(SO_WHAT);
             self.api.set(StoryKey::DNYARRI_LIED, 0_u8);
         }
-        if i32::from(self.api.get(StoryKey::SHIP_TO_COMPEL)) != 0 {
+        if self.api.get(StoryKey::SHIP_TO_COMPEL) != 0 {
             self.api
                 .response((COMPEL_THAT_SHIP) as u16, Handler::ExitConversation, &[]);
         }
@@ -239,8 +238,8 @@ impl<A: TalkpetApi> Dialogue<'_, A> {
         }
         self.api
             .response((ABOUT_YOUR_RACE) as u16, Handler::PetInfo, &[]);
-        if (i32::from(self.api.get(StoryKey::DNYARRI_LIED)) != 0)
-            && (i32::from(self.api.get(StoryKey::LEARNED_TALKING_PET)) != 0)
+        if (self.api.get(StoryKey::DNYARRI_LIED) != 0)
+            && (self.api.get(StoryKey::LEARNED_TALKING_PET) != 0)
         {
             self.api
                 .response((YOU_LIED) as u16, Handler::PetDevice, &[]);
@@ -427,7 +426,7 @@ impl<A: TalkpetApi> Dialogue<'_, A> {
         }
     }
     fn intro(&mut self) {
-        let mut num_visits: i32;
+        let mut visits: i32;
         if (i32::from(self.api.activity()) as u8 as i32) == 5 {
             self.api.npc(OUT_TAKES);
             self.api.segue(0);
@@ -441,38 +440,36 @@ impl<A: TalkpetApi> Dialogue<'_, A> {
             } else {
                 self.api.npc(CYBORG_PEP_TALK);
             }
-        } else if i32::from(self.api.get(StoryKey::READY_TO_CONFUSE_URQUAN)) != 0 {
+        } else if self.api.get(StoryKey::READY_TO_CONFUSE_URQUAN) != 0 {
             self.api.set(StoryKey::SHIP_TO_COMPEL, 0_u8);
             self.api.set(StoryKey::READY_TO_CONFUSE_URQUAN, 0_u8);
             self.api.set(StoryKey::AWARE_OF_SAMATRA, 1_u8);
             if i32::from(self.api.get(StoryKey::CHMMR_BOMB_STATE)) != 3 {
                 self.api.npc(HAVENT_GOT_EVERYTHING);
-                if !(i32::from(self.api.get(StoryKey::UTWIG_BOMB_ON_SHIP)) != 0) {
+                if !(self.api.get(StoryKey::UTWIG_BOMB_ON_SHIP) != 0) {
                     self.api.npc(NEED_BOMB);
                 } else {
                     self.api.npc(SOUP_UP_BOMB);
                 }
                 self.api.segue(0);
-            } else if i32::from(self.api.get(StoryKey::URQUAN_MESSED_UP)) != 0 {
+            } else if self.api.get(StoryKey::URQUAN_MESSED_UP) != 0 {
                 self.api.npc(HELLO_AFTER_COMPEL_URQUAN);
                 self.api.segue(0);
             } else {
                 self.api.npc(I_SENSE_MY_SLAVES);
                 self.mind_fuck_urquan(0_u16 as i32);
             }
-        } else if i32::from(self.api.get(StoryKey::TALKING_PET_ON_SHIP)) != 0 {
-            num_visits = i32::from(self.api.get(StoryKey::TALKING_PET_VISITS));
-            if !(i32::from(self.api.get(StoryKey::TAALO_PROTECTOR_ON_SHIP)) != 0)
-                && (num_visits == 0)
-            {
+        } else if self.api.get(StoryKey::TALKING_PET_ON_SHIP) != 0 {
+            visits = i32::from(self.api.get(StoryKey::TALKING_PET_VISITS));
+            if !(self.api.get(StoryKey::TAALO_PROTECTOR_ON_SHIP) != 0) && (visits == 0) {
                 {
-                    num_visits = (num_visits + 1) as u8 as i32;
-                    num_visits
+                    visits = (visits + 1) as u8 as i32;
+                    visits
                 };
             }
             let res = {
-                let old = num_visits;
-                num_visits = (num_visits + 1) as u8 as i32;
+                let old = visits;
+                visits = (visits + 1) as u8 as i32;
                 old
             };
             match res {
@@ -500,20 +497,19 @@ impl<A: TalkpetApi> Dialogue<'_, A> {
                 7 => {
                     self.api.npc(HELLO_AS_DEVICE_8);
                     {
-                        num_visits = (num_visits - 1) as u8 as i32;
-                        num_visits
+                        visits = (visits - 1) as u8 as i32;
+                        visits
                     };
                 }
                 _ => {}
             }
-            self.api
-                .set(StoryKey::TALKING_PET_VISITS, (num_visits) as u8);
+            self.api.set(StoryKey::TALKING_PET_VISITS, visits as u8);
             self.pet_device(0_u16 as i32);
         } else if self.api.npc_ships() {
-            num_visits = i32::from(self.api.get(StoryKey::TALKING_PET_HOME_VISITS));
+            visits = i32::from(self.api.get(StoryKey::TALKING_PET_HOME_VISITS));
             let res = {
-                let old = num_visits;
-                num_visits = (num_visits + 1) as u8 as i32;
+                let old = visits;
+                visits = (visits + 1) as u8 as i32;
                 old
             };
             match res {
@@ -533,17 +529,17 @@ impl<A: TalkpetApi> Dialogue<'_, A> {
                 4 => {
                     self.api.npc(HYPNOTIZE_AGAIN_4);
                     {
-                        num_visits = (num_visits - 1) as u8 as i32;
-                        num_visits
+                        visits = (visits - 1) as u8 as i32;
+                        visits
                     };
                 }
                 _ => {}
             }
             self.api
-                .set(StoryKey::TALKING_PET_HOME_VISITS, (num_visits) as u8);
-            if num_visits == 1 {
+                .set(StoryKey::TALKING_PET_HOME_VISITS, visits as u8);
+            if visits == 1 {
                 self.compel_player(0_u16 as i32);
-            } else if !(i32::from(self.api.get(StoryKey::TAALO_PROTECTOR_ON_SHIP)) != 0) {
+            } else if !(self.api.get(StoryKey::TAALO_PROTECTOR_ON_SHIP) != 0) {
                 self.api.set(StoryKey::PLAYER_HYPNOTIZED, 1_u8);
                 self.api.segue(0);
             } else {
@@ -555,8 +551,8 @@ impl<A: TalkpetApi> Dialogue<'_, A> {
                 self.api.npc(LETS_MAKE_A_DEAL);
             } else {
                 self.api.npc(UMGAH_ALL_GONE);
-                if (i32::from(self.api.get(StoryKey::TALKING_PET_HOME_VISITS)) == 0)
-                    || !(i32::from(self.api.get(StoryKey::TAALO_PROTECTOR_ON_SHIP)) != 0)
+                if (self.api.get(StoryKey::TALKING_PET_HOME_VISITS) == 0)
+                    || !(self.api.get(StoryKey::TAALO_PROTECTOR_ON_SHIP) != 0)
                 {
                     self.api.disable((HOW_TRUST) as u16);
                 }
