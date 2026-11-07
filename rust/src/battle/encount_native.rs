@@ -877,7 +877,7 @@ mod tests {
         world.set_activity(0);
         world.data.flagship.crew_enlisted = u16::MAX;
         assert!(encounter_has_no_salvage(&world));
-        world.story = Some(crate::engine::world::story::GameState::new());
+        world.story = Some(crate::engine::world::story::StoryState::new());
         world.encounter_race = THRADDASH_SHIP as i16;
         world.set_story_state(StoryKey::THRADDASH_BODY_COUNT, 23);
         assert_eq!(apply_thraddash_body_count(&mut world, 4), 25);

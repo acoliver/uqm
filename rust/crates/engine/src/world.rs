@@ -10,7 +10,7 @@ pub mod planet_info;
 pub mod queues;
 pub mod state_file;
 pub mod story;
-use self::{state_file::StateFileManager, story::GameState};
+use self::{state_file::StateFileManager, story::StoryState};
 use crate::battle::link_queue::LinkQueue;
 use queues::CampaignQueues;
 use queues::{Encounter, Fleet, Fragment, Group};
@@ -54,7 +54,7 @@ pub struct World {
     pub next_activity: u16,
     pub queues: CampaignQueues,
     pub clock: super::clock::GameClock,
-    pub story: Option<GameState>,
+    pub story: Option<StoryState>,
     pub files: StateFileManager,
     pub current_star: Option<StarId>,
     pub encounter_race: i16,
@@ -337,7 +337,7 @@ mod tests {
         let mut world = World::new();
         assert_eq!(world.story_value(StoryKey::GLOBAL_FLAGS_AND_DATA), None);
         assert_eq!(world.story_state(StoryKey::GLOBAL_FLAGS_AND_DATA), 0);
-        world.story = Some(GameState::new());
+        world.story = Some(StoryState::new());
         assert_eq!(world.story_value(StoryKey::GLOBAL_FLAGS_AND_DATA), Some(0));
         world.set_story_state(StoryKey::GLOBAL_FLAGS_AND_DATA, 3);
         assert_eq!(world.story_value(StoryKey::GLOBAL_FLAGS_AND_DATA), Some(3));

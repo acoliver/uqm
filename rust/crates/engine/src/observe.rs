@@ -19,7 +19,7 @@ pub struct CampaignView {
     pub autopilot: (i16, i16),
     pub combat_flags: u8,
     pub date: (u8, u8, u16),
-    pub story: Option<super::world::story::GameState>,
+    pub story: Option<super::world::story::StoryState>,
     pub current_star: Option<super::StarId>,
     pub contact_race: Option<u8>,
     pub escorts: Vec<(u8, u16)>,

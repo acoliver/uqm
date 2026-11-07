@@ -1,6 +1,6 @@
 //! Campaign initialization from retained resource metadata and prepared names.
 use super::super::battle::schema::GAME_STATE;
-use super::{queues::FleetInfo, story::GameState, SisState, World, WorldData};
+use super::{queues::FleetInfo, story::StoryState, SisState, World, WorldData};
 use crate::graphics::native_abi::{FRAME, POINT, STRING};
 
 #[derive(Clone, Copy)]
@@ -39,7 +39,7 @@ impl World {
         self.data = WorldData::new();
         self.set_activity(0);
         self.data.game.glob_flags = flags;
-        self.story = Some(GameState::new());
+        self.story = Some(StoryState::new());
         self.files.canned_nodes.clear();
     }
 

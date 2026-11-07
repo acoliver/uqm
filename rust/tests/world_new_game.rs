@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use uqm_rust::engine::{
     world::{
         new_game::{FleetRoster, FleetTemplate, NewGameInputs},
-        story::GameState,
+        story::StoryState,
     },
     StoryKey, World,
 };
@@ -22,7 +22,7 @@ fn new_game_prepares_resources_after_reset_and_installs_the_owned_campaign() {
     let mut world = World::new();
     world.data.game.glob_flags = 0xa4;
     world.data.flagship.crew_enlisted = 999;
-    world.story = Some(GameState::new());
+    world.story = Some(StoryState::new());
     world.set_story_state(StoryKey::STARBASE_AVAILABLE, 1);
     let old_ship = world.built_ships().alloc().unwrap();
     world.built_ships().put(old_ship);

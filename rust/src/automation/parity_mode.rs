@@ -80,7 +80,7 @@ fn velocity(fields: &mut Fields, state: &GlobalState) {
     }
 }
 
-pub(super) fn story(fields: &mut Fields, state: Option<&crate::state::game_state::GameState>) {
+pub(super) fn story(fields: &mut Fields, state: Option<&crate::state::game_state::StoryState>) {
     match state {
         Some(state) => {
             let bytes = state.as_bytes();

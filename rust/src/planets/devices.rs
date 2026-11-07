@@ -398,7 +398,7 @@ pub unsafe extern "C" fn InventoryDevices(map: *mut u8, size: u16) -> i16 {
     let state = WorldOwner::current()
         .read(crate::state::ffi::snapshot_game_state)
         .expect("initialized device inventory");
-    let state = crate::state::game_state::GameState::from_bytes(&state);
+    let state = crate::state::game_state::StoryState::from_bytes(&state);
     let list = crate::savegame::runtime::summary::inventory_devices(&state, usize::from(size));
     std::ptr::copy_nonoverlapping(list.as_ptr(), map, list.len());
     list.len() as i16

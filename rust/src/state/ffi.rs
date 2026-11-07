@@ -7,13 +7,13 @@ use std::os::raw::{c_char, c_int, c_uchar};
 
 use super::game_state::{
     copy_state_bits_raw, get_state_32_raw, get_state_bits_raw, set_state_32_raw,
-    set_state_bits_raw, GameState, NUM_GAME_STATE_BITS, NUM_GAME_STATE_BYTES,
+    set_state_bits_raw, StoryState, NUM_GAME_STATE_BITS, NUM_GAME_STATE_BYTES,
 };
 use crate::engine::world::planet_info::{PlanetInfoManager, ScanRetrieveMask, NUM_SCAN_TYPES};
 use crate::engine::world::state_file::{FileMode, StateFileManager};
 
 pub fn rust_init_game_state(world: &mut crate::engine::World) {
-    world.story = Some(GameState::new());
+    world.story = Some(StoryState::new());
     world.files.canned_nodes.clear();
 }
 
@@ -103,7 +103,7 @@ pub fn rust_copy_game_state(
     };
 
     write_story(world, |state| {
-        let snapshot = GameState::from_bytes(state.as_bytes());
+        let snapshot = StoryState::from_bytes(state.as_bytes());
         state.copy_state(dest_bit, &snapshot, src_start_bit, src_end_bit);
     });
 }
@@ -297,7 +297,7 @@ pub fn snapshot_game_state(
 /// Borrow the story and file fields together for a synchronous game-thread operation.
 pub fn with_state_owners<R>(
     world: &mut crate::engine::World,
-    f: impl FnOnce(&mut GameState, &mut StateFileManager) -> R,
+    f: impl FnOnce(&mut StoryState, &mut StateFileManager) -> R,
 ) -> Result<R, GameStateOwnerError> {
     let game = world
         .story
@@ -320,7 +320,7 @@ pub fn replace_game_state(
     world: &mut crate::engine::World,
     bytes: &[u8; NUM_GAME_STATE_BYTES],
 ) -> Result<(), GameStateOwnerError> {
-    world.story = Some(GameState::from_bytes(bytes));
+    world.story = Some(StoryState::from_bytes(bytes));
     Ok(())
 }
 
@@ -529,7 +529,7 @@ unsafe fn decode_state_key(key: *const c_char) -> Option<(usize, usize)> {
 
     let c_str = CStr::from_ptr(key);
     let key_str = c_str.to_str().ok()?;
-    GameState::lookup_bits(key_str)
+    StoryState::lookup_bits(key_str)
 }
 
 fn normalize_bit_range(start_bit: c_int, end_bit: c_int) -> Option<(usize, usize)> {
@@ -611,12 +611,12 @@ pub fn named_state_value(world: &crate::engine::World, name: &str) -> Option<u8>
     world.story_value(key)
 }
 
-fn read_story<R: Default>(world: &crate::engine::World, f: impl FnOnce(&GameState) -> R) -> R {
+fn read_story<R: Default>(world: &crate::engine::World, f: impl FnOnce(&StoryState) -> R) -> R {
     world.story.as_ref().map_or_else(R::default, f)
 }
 fn write_story<R: Default>(
     world: &mut crate::engine::World,
-    f: impl FnOnce(&mut GameState) -> R,
+    f: impl FnOnce(&mut StoryState) -> R,
 ) -> R {
     world.story.as_mut().map_or_else(R::default, f)
 }

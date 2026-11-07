@@ -134,14 +134,14 @@ pub fn copy_state_bits_raw(dest: &mut [u8], target: usize, src: &[u8], begin: us
 
 /// Game state container with C-compatible bitfield layout.
 #[repr(C)]
-pub struct GameState {
+pub struct StoryState {
     bytes: [u8; NUM_GAME_STATE_BYTES],
 }
 
-impl GameState {
+impl StoryState {
     /// Create a new, zero-initialized game state.
     pub fn new() -> Self {
-        GameState {
+        StoryState {
             bytes: [0u8; NUM_GAME_STATE_BYTES],
         }
     }
@@ -175,7 +175,7 @@ impl GameState {
     pub fn copy_state(
         &mut self,
         dest_bit: usize,
-        src: &GameState,
+        src: &StoryState,
         src_start_bit: usize,
         src_end_bit: usize,
     ) {
@@ -195,7 +195,7 @@ impl GameState {
 
     /// Restore state bytes from serialized storage.
     pub fn from_bytes(bytes: &[u8; NUM_GAME_STATE_BYTES]) -> Self {
-        GameState { bytes: *bytes }
+        StoryState { bytes: *bytes }
     }
 
     /// Reset all game state to zero.
@@ -204,21 +204,21 @@ impl GameState {
     }
 }
 
-impl Default for GameState {
+impl Default for StoryState {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl Clone for GameState {
+impl Clone for StoryState {
     fn clone(&self) -> Self {
-        GameState { bytes: self.bytes }
+        StoryState { bytes: self.bytes }
     }
 }
 
-impl fmt::Debug for GameState {
+impl fmt::Debug for StoryState {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("GameState")
+        f.debug_struct("StoryState")
             .field("num_bits", &NUM_GAME_STATE_BITS)
             .field("num_bytes", &NUM_GAME_STATE_BYTES)
             .field(
@@ -254,9 +254,12 @@ mod tests {
     fn test_generated_layout_matches_c_header() {
         assert_eq!(NUM_GAME_STATE_BITS, 1238);
         assert_eq!(NUM_GAME_STATE_BYTES, 155);
-        assert_eq!(GameState::lookup_bits("SHOFIXTI_VISITS"), Some((0, 2)));
-        assert_eq!(GameState::lookup_bits("SHOFIXTI_RECRUITED"), Some((12, 12)));
-        assert_eq!(GameState::lookup_bits("SPATHI_VISITS"), Some((18, 20)));
+        assert_eq!(StoryState::lookup_bits("SHOFIXTI_VISITS"), Some((0, 2)));
+        assert_eq!(
+            StoryState::lookup_bits("SHOFIXTI_RECRUITED"),
+            Some((12, 12))
+        );
+        assert_eq!(StoryState::lookup_bits("SPATHI_VISITS"), Some((18, 20)));
     }
 
     #[test]
@@ -290,14 +293,14 @@ mod tests {
 
     #[test]
     fn test_new_game_state() {
-        let state = GameState::new();
+        let state = StoryState::new();
         assert_eq!(state.bytes.len(), NUM_GAME_STATE_BYTES);
         assert_eq!(state.bytes.iter().filter(|&&b| b != 0).count(), 0);
     }
 
     #[test]
     fn test_get_set_state_single_bit() {
-        let mut state = GameState::new();
+        let mut state = StoryState::new();
 
         state.set_state(0, 0, 1);
         assert_eq!(state.get_state(0, 0), 1);
@@ -314,7 +317,7 @@ mod tests {
 
     #[test]
     fn test_get_set_state_multi_bits() {
-        let mut state = GameState::new();
+        let mut state = StoryState::new();
 
         state.set_state(0, 3, 0b1101);
         assert_eq!(state.get_state(0, 3), 0b1101);
@@ -327,7 +330,7 @@ mod tests {
 
     #[test]
     fn test_get_set_state_cross_byte() {
-        let mut state = GameState::new();
+        let mut state = StoryState::new();
 
         let value = 0b1101;
         state.set_state(6, 9, value);
@@ -339,7 +342,7 @@ mod tests {
 
     #[test]
     fn test_get_state_32() {
-        let mut state = GameState::new();
+        let mut state = StoryState::new();
 
         state.set_state_32(0, 0xDEADBEEF);
         assert_eq!(state.get_state_32(0), 0xDEADBEEF);
@@ -350,8 +353,8 @@ mod tests {
 
     #[test]
     fn test_copy_state() {
-        let mut src = GameState::new();
-        let mut dest = GameState::new();
+        let mut src = StoryState::new();
+        let mut dest = StoryState::new();
 
         src.set_state(0, 7, 0xAB);
         src.set_state(8, 15, 0xCD);
@@ -364,7 +367,7 @@ mod tests {
 
     #[test]
     fn test_reset() {
-        let mut state = GameState::new();
+        let mut state = StoryState::new();
         state.set_state(0, 7, 0xFF);
         state.set_state(100, 107, 0xFF);
 
@@ -375,13 +378,13 @@ mod tests {
 
     #[test]
     fn test_default() {
-        let state: GameState = Default::default();
+        let state: StoryState = Default::default();
         assert_eq!(state.bytes.len(), NUM_GAME_STATE_BYTES);
     }
 
     #[test]
     fn test_clone() {
-        let mut state1 = GameState::new();
+        let mut state1 = StoryState::new();
         state1.set_state(0, 7, 0xAB);
         state1.set_state(100, 103, 0x0D);
 
@@ -394,13 +397,13 @@ mod tests {
     #[test]
     #[should_panic(expected = "Value 15 exceeds bitfield width 3 bits")]
     fn test_set_state_value_too_large() {
-        let mut state = GameState::new();
+        let mut state = StoryState::new();
         state.set_state(0, 2, 0b1111);
     }
 
     #[test]
     fn test_multiple_non_overlapping_sets() {
-        let mut state = GameState::new();
+        let mut state = StoryState::new();
 
         state.set_state(0, 2, 0b101);
         state.set_state(3, 5, 0b110);

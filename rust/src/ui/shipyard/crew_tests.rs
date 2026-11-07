@@ -7,14 +7,14 @@ mod crew;
 
 use crate::engine::{
     battle::{Battle, Cx},
-    world::{queues::FleetInfo, story::GameState},
+    world::{queues::FleetInfo, story::StoryState},
     Game, StoryKey,
 };
 use crate::navigation::abi::{GOOD_GUY, SHOFIXTI_SHIP};
 
 fn transact(initial: u16, delta: i16, allied: bool) -> (u16, u8, Vec<(u16, u8)>) {
     let mut game = Game::new();
-    game.world.story = Some(GameState::new());
+    game.world.story = Some(StoryState::new());
     game.world
         .set_story_state(StoryKey::CREW_PURCHASED0, u32::from(initial as u8));
     game.world

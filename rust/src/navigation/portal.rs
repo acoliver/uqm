@@ -55,7 +55,7 @@ mod tests {
 
     fn world() -> World {
         let mut world = World::new();
-        world.story = Some(crate::engine::world::story::GameState::new());
+        world.story = Some(crate::engine::world::story::StoryState::new());
         world
     }
 

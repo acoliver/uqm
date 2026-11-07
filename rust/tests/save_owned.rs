@@ -4,7 +4,7 @@ use uqm_rust::engine::{save, world::queues::FleetInfo, World};
 fn snapshot_derives_summary_from_owned_story_clock_and_escort_order() {
     let saved = uqm_save::decode_save(include_bytes!("fixtures/savegame/legacy-save.00")).unwrap();
     let mut world = World::new();
-    world.story = Some(uqm_rust::engine::world::story::GameState::new());
+    world.story = Some(uqm_rust::engine::world::story::StoryState::new());
     world.set_activity(3);
     world.set_story_state(uqm_rust::engine::StoryKey::ARILOU_SPACE_SIDE, 2);
     world.data.game.game_clock.month_index = 11;
@@ -120,7 +120,7 @@ fn snapshot_preserves_saved_location_and_normalizes_only_live_location() {
         save_name: saved.summary.save_name,
     };
     let mut world = World::new();
-    world.story = Some(uqm_rust::engine::world::story::GameState::new());
+    world.story = Some(uqm_rust::engine::world::story::StoryState::new());
     world.data.flagship = (&summary.sis).into();
     world.data.game.ip_location.x = 21;
     world.data.game.ip_location.y = 31;
@@ -152,7 +152,7 @@ fn solar_scan_save_uses_unpublished_story_and_files_and_clears_the_flag_after_wr
         StoryKey,
     };
     let mut world = World::new();
-    world.story = Some(uqm_rust::engine::world::story::GameState::new());
+    world.story = Some(uqm_rust::engine::world::story::StoryState::new());
     world.data.game.ip_planet = 2;
     world.data.game.ship_facing = 9;
     world.set_story_state(StoryKey::PLANETARY_CHANGE, 1);

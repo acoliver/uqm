@@ -76,7 +76,7 @@ mod tests {
 
     fn world(condition: u32) -> World {
         let mut world = World::new();
-        world.story = Some(crate::engine::world::story::GameState::new());
+        world.story = Some(crate::engine::world::story::StoryState::new());
         world.set_story_state(StoryKey::ULTRON_CONDITION, condition);
         world.set_story_state(StoryKey::DISCUSSED_ULTRON, 1);
         world.set_story_state(StoryKey::SUPOX_ULTRON_HELP, 1);
