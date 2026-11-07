@@ -1,6 +1,6 @@
 //! Automation's implementation of the engine's ordered observation boundaries.
 
-use super::{coordinator::AutomationObserver, input_admission, input_ffi, ui_observation as ui};
+use super::{coordinator::AutomationObserver, input_admission, input_ffi};
 use crate::engine::observe::{CheckpointView, Injected, InputView, Observer, Presented};
 use std::sync::Arc;
 
@@ -103,31 +103,7 @@ impl Observer<Option<super::campaign_state::CampaignView>> for Handle {
                 .0
                 .flagship_destroyed
                 .store(true, std::sync::atomic::Ordering::SeqCst),
-            CheckpointView::ShipEscaped => ui::record_ship_escape(),
-            CheckpointView::EncounterDispatch(id) => {
-                super::scenario::observe_encounter_dispatch(id)
-            }
-            CheckpointView::DialogueDispatch(id) => super::scenario::observe_dialogue_dispatch(id),
-            CheckpointView::EncounterMenu(active) => ui::observe_encounter_menu(active),
-            CheckpointView::CommunicationResponses(count) => {
-                ui::observe_communication_responses(count)
-            }
-            CheckpointView::ResponsesReady(ready) => ui::set_communication_responses_ready(ready),
-            CheckpointView::CommunicationStarted => ui::begin_communication(),
-            CheckpointView::CommunicationEnded => ui::complete_communication(),
-            CheckpointView::CommunicationReplay(active) => ui::observe_communication_replay(active),
-            CheckpointView::GameOptions(active) => {
-                ui::rust_automation_observe_game_options(i32::from(active))
-            }
-            CheckpointView::PlanetMenu(phase) => ui::rust_automation_observe_planet_menu(phase),
-            CheckpointView::StarbaseMenu(active) => ui::observe_starbase_menu(active),
-            CheckpointView::Won => super::ending::won(),
-            CheckpointView::PresentationStarted => super::ending::presentation_started(),
-            CheckpointView::PresentationCancelled => super::ending::presentation_cancelled(),
-            CheckpointView::PresentationCompleted => super::ending::presentation_completed(),
-            CheckpointView::CreditsStarted => super::ending::credits_started(),
-            CheckpointView::CreditsReady => super::ending::credits_controls_ready(),
-            CheckpointView::CreditsCompleted => super::ending::credits_completed(),
+            view => self.0.observe_ui_checkpoint(view),
         }
     }
 

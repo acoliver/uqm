@@ -371,13 +371,14 @@ pub fn observe(observations: Observations) -> ModeObservation {
 /// rather than inferred from the activity word. A real visit is observed
 /// while the Starbase menu or the Outfit screen is the active input loop.
 #[must_use]
-pub fn live(world: &crate::engine::observe::CampaignView) -> Observations {
+pub fn live(
+    world: &crate::engine::observe::CampaignView,
+    ui: &super::ui_observation::UiObservation,
+) -> Observations {
     use crate::automation::scenario::{active_scene, AutomationScene};
-    use crate::automation::ui_observation::{
-        planet_menu_phase, starbase_menu_active, PlanetMenuPhase,
-    };
+    use crate::automation::ui_observation::PlanetMenuPhase;
 
-    let phase = planet_menu_phase();
+    let phase = ui.planet_menu_phase();
     Observations {
         activity: world.activity,
         surface: if phase == PlanetMenuPhase::LandingSite {
@@ -386,7 +387,7 @@ pub fn live(world: &crate::engine::observe::CampaignView) -> Observations {
             SurfacePresence::InOrbit
         },
         docked_at_starbase: active_scene() == Some(AutomationScene::StarbaseCommander)
-            || starbase_menu_active(),
+            || ui.starbase_menu_active(),
         in_planet_orbit: phase != PlanetMenuPhase::Inactive,
     }
 }
@@ -397,8 +398,11 @@ pub fn live(world: &crate::engine::observe::CampaignView) -> Observations {
 ///
 /// Returns the ambiguity description when the observation does not name
 /// exactly one mode.
-pub fn require_live(world: &crate::engine::observe::CampaignView) -> Result<GameMode, String> {
-    observe(live(world)).require()
+pub fn require_live(
+    world: &crate::engine::observe::CampaignView,
+    ui: &super::ui_observation::UiObservation,
+) -> Result<GameMode, String> {
+    observe(live(world, ui)).require()
 }
 
 /// One published row of the mode table.
@@ -438,13 +442,14 @@ mod tests {
 
     #[test]
     fn live_activity_comes_from_the_supplied_campaign_view() {
+        let ui = super::super::ui_observation::UiObservation::default();
         let mut world = crate::engine::World::new();
         let first = crate::engine::observe::CampaignView::from_world(&world);
         world.set_activity(0x4004);
         let second = crate::engine::observe::CampaignView::from_world(&world);
-        assert_eq!(live(&first).activity, 0);
-        assert_eq!(live(&second).activity, 0x4004);
-        assert_eq!(live(&first).activity, 0);
+        assert_eq!(live(&first, &ui).activity, 0);
+        assert_eq!(live(&second, &ui).activity, 0x4004);
+        assert_eq!(live(&first, &ui).activity, 0);
     }
 
     #[test]

@@ -376,16 +376,22 @@ pub fn label_satisfies(label: &str, prefix: &str, predicate: &StatePredicate) ->
 /// The running game, read on the game thread.
 pub struct LiveCampaign<'a> {
     pub world: &'a CampaignView,
+    pub ui: &'a super::ui_observation::UiObservation,
+    pub ending: super::ending::Ending,
     pub flagship_destroyed: bool,
 }
 
 pub use crate::engine::observe::CampaignView;
 
-fn read_star_state(world: &CampaignView, key: StateKey) -> Option<u32> {
+fn read_star_state(
+    world: &CampaignView,
+    ui: &super::ui_observation::UiObservation,
+    key: StateKey,
+) -> Option<u32> {
     use crate::automation::input_ffi;
 
     let target = super::star_flight::StarTarget::resolve("Sol").expect("Sol in catalog");
-    let observation = input_ffi::star_flight_observation(world, target);
+    let observation = input_ffi::star_flight_observation(world, target, ui);
     match key {
         StateKey::StarCurrent => observation.current_star.map(u32::from),
         StateKey::StarmapCursorX => observation.cursor.and_then(|(x, _)| u32::try_from(x).ok()),
@@ -400,7 +406,7 @@ impl StateSource for LiveCampaign<'_> {
         let world = self.world;
         match key {
             StateKey::Ending(index) => {
-                let e = super::ending::snapshot();
+                let e = self.ending;
                 Some(u32::from(
                     [
                         e.won,
@@ -425,7 +431,7 @@ impl StateSource for LiveCampaign<'_> {
                 _ => unreachable!(),
             }),
             StateKey::StarCurrent | StateKey::StarmapCursorX | StateKey::StarmapCursorY => {
-                read_star_state(world, key)
+                read_star_state(world, self.ui, key)
             }
             StateKey::HyperX => {
                 input_ffi::hyperspace_position(world).and_then(|(x, _)| u32::try_from(x).ok())
@@ -433,7 +439,7 @@ impl StateSource for LiveCampaign<'_> {
             StateKey::HyperY => {
                 input_ffi::hyperspace_position(world).and_then(|(_, y)| u32::try_from(y).ok())
             }
-            StateKey::HyperStopped => input_ffi::hyperspace_stopped(world).map(u32::from),
+            StateKey::HyperStopped => input_ffi::hyperspace_stopped(world, self.ui).map(u32::from),
             StateKey::Story(key) => world.story_value(key).map(u32::from),
             StateKey::Activity => Some(u32::from(world.activity)),
             StateKey::SisDrive(slot) => {
@@ -444,9 +450,7 @@ impl StateSource for LiveCampaign<'_> {
                 Some(u32::from(world.flagship.module_slots[usize::from(slot)]))
             }
             StateKey::SisMineralMass => Some(u32::from(world.flagship.total_element_mass)),
-            StateKey::EncounterMenu => {
-                Some(u32::from(super::ui_observation::encounter_menu_active()))
-            }
+            StateKey::EncounterMenu => Some(u32::from(self.ui.encounter_menu_active())),
             StateKey::EscortCount => {
                 input_ffi::escort_roster(world).map(|ships| ships.len() as u32)
             }
@@ -491,6 +495,7 @@ mod tests {
 
     #[test]
     fn campaign_equipment_and_date_come_from_the_supplied_typed_view() {
+        let ui = super::super::ui_observation::UiObservation::default();
         let mut world = empty_view();
         world.flagship.drive_slots[10] = 19;
         world.flagship.jet_slots[7] = 23;
@@ -498,6 +503,8 @@ mod tests {
         world.flagship.total_element_mass = 47;
         world.date = (17, 8, 2161);
         let campaign = LiveCampaign {
+            ui: &ui,
+            ending: Default::default(),
             world: &world,
             flagship_destroyed: false,
         };
@@ -516,12 +523,17 @@ mod tests {
 
     #[test]
     fn terminal_observation_comes_from_the_supplied_owner() {
+        let ui = super::super::ui_observation::UiObservation::default();
         let world = empty_view();
         let running = LiveCampaign {
+            ui: &ui,
+            ending: Default::default(),
             world: &world,
             flagship_destroyed: false,
         };
         let destroyed = LiveCampaign {
+            ui: &ui,
+            ending: Default::default(),
             world: &world,
             flagship_destroyed: true,
         };
@@ -775,6 +787,7 @@ mod tests {
 
     #[test]
     fn stopped_wait_requires_empty_tank_and_observed_zero_velocity() {
+        let ui = super::super::ui_observation::UiObservation::default();
         let stopped = predicate(
             r#"{"all":[{"key":"sis:fuel","op":"eq","value":0},{"key":"hyper:stopped","op":"eq","value":1}]}"#,
         );
@@ -785,6 +798,8 @@ mod tests {
         assert!(evaluate(&stopped, &fake(&[("sis:fuel", 0), ("hyper:stopped", 1)])).held);
         assert_eq!(
             LiveCampaign {
+                ui: &ui,
+                ending: Default::default(),
                 world: &empty_view(),
                 flagship_destroyed: false,
             }

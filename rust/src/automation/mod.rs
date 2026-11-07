@@ -75,6 +75,8 @@ pub mod native_window;
 pub mod navigation;
 mod netplay_fixture;
 pub(crate) mod observer;
+#[cfg(test)]
+mod observer_tests;
 pub mod outcome;
 pub mod parity;
 mod parity_hooks;

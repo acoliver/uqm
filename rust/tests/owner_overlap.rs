@@ -50,6 +50,8 @@ fn public_campaign_copy_does_not_traverse_live_records() {
     let view = CampaignView::from_world(&world);
     assert_eq!(
         LiveCampaign {
+            ui: &Default::default(),
+            ending: Default::default(),
             world: &view,
             flagship_destroyed: false
         }
@@ -357,6 +359,8 @@ fn campaign_star_observation_releases_world_between_field_reads() {
         bridge::with_game(&mut game, || {
             assert_eq!(
                 LiveCampaign {
+                    ui: &Default::default(),
+                    ending: Default::default(),
                     world: &view,
                     flagship_destroyed: false
                 }

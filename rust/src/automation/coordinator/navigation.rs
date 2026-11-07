@@ -26,7 +26,7 @@ impl AutomationObserver {
         use crate::automation::script::TurnDirection;
 
         let progress = inner.flagship_turn.observe(
-            mode::require_live(world),
+            mode::require_live(world, &self.ui),
             world.flight_facing,
             turn.direction,
             turn.facings,
@@ -193,8 +193,7 @@ impl AutomationObserver {
         let fresh_orbit = inner
             .orbit
             .observe(snapshot.in_ip_flight != 0, snapshot.in_orbit != 0);
-        let contact = navigation.stop_at_encounter
-            && crate::automation::ui_observation::encounter_menu_active();
+        let contact = navigation.stop_at_encounter && self.ui.encounter_menu_active();
         let reached = snapshot.active != 0
             && snapshot.in_orbit != 0
             && snapshot.inner_planet == i32::from(navigation.planet)

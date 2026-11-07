@@ -17,7 +17,7 @@
 //! @plan PLAN-20260723-RUNTIME-AUTOMATION.P06
 //! @requirement REQ-INJECT-001..007, REQ-FFI-001
 
-use super::campaign_state::CampaignView;
+use super::{campaign_state::CampaignView, ui_observation::UiObservation};
 use crate::automation::coordinator::AutomationObserver;
 #[cfg(not(test))]
 use crate::c_bindings::global_state::SOLARSYS_STATE;
@@ -230,10 +230,10 @@ pub(crate) fn hyperspace_position(_world: &CampaignView) -> Option<(i32, i32)> {
 /// The flight velocity published by `sis_hyper_postprocess` has stopped.
 /// Unavailable outside hyperspace flight or while a conversation is active.
 #[cfg(not(test))]
-pub(crate) fn hyperspace_stopped(world: &CampaignView) -> Option<bool> {
+pub(crate) fn hyperspace_stopped(world: &CampaignView, ui: &UiObservation) -> Option<bool> {
     if crate::mainloop::types::ActivityValue(world.activity).kind()
         != crate::mainloop::types::ActivityKind::InHyperspace
-        || super::ui_observation::conversation_snapshot().active
+        || ui.conversation_snapshot().active
     {
         return None;
     }
@@ -243,7 +243,7 @@ pub(crate) fn hyperspace_stopped(world: &CampaignView) -> Option<bool> {
 }
 
 #[cfg(test)]
-pub(crate) fn hyperspace_stopped(_world: &CampaignView) -> Option<bool> {
+pub(crate) fn hyperspace_stopped(_world: &CampaignView, _ui: &UiObservation) -> Option<bool> {
     None
 }
 
@@ -700,6 +700,7 @@ pub fn rust_automation_get_pulsed_menu_key(input: &InputControls, index: i32) ->
 pub(crate) fn star_flight_observation(
     world: &CampaignView,
     target: super::star_flight::StarTarget,
+    ui: &UiObservation,
 ) -> super::star_flight::Observation {
     extern "C" {
 
@@ -724,7 +725,7 @@ pub(crate) fn star_flight_observation(
             space_side: world
                 .story_value(crate::engine::StoryKey::ARILOU_SPACE_SIDE)
                 .expect("initialized state"),
-            conversation_active: crate::automation::ui_observation::conversation_snapshot().active,
+            conversation_active: ui.conversation_snapshot().active,
             portal_open: world.story_value(crate::engine::StoryKey::ARILOU_SPACE) == Some(1),
             solar_active: departure_snapshot(world).active != 0,
             cursor,
@@ -750,6 +751,7 @@ pub(crate) fn star_flight_observation(
 pub(crate) fn star_flight_observation(
     _world: &CampaignView,
     _target: super::star_flight::StarTarget,
+    _ui: &UiObservation,
 ) -> super::star_flight::Observation {
     super::star_flight::Observation::default()
 }
@@ -777,15 +779,18 @@ pub(crate) fn escort_roster(_world: &CampaignView) -> Option<Vec<(u8, u16)>> {
     None
 }
 
-pub(crate) fn fleet_fight_observation(world: &CampaignView) -> super::fleet_fight::Observation {
+pub(crate) fn fleet_fight_observation(
+    world: &CampaignView,
+    ui: &UiObservation,
+) -> super::fleet_fight::Observation {
     let (cyborg, speed) = cyborg_settings(world).unwrap_or((false, 0));
     let (player, enemy) = battle_fleets().unwrap_or((0, 0));
     #[cfg(not(test))]
     let picker = {
-        let (generation, active) = super::ui_observation::ship_picker_observation();
+        let (generation, active) = ui.ship_picker_observation();
         active.then(|| super::fleet_fight::Picker {
             generation,
-            cursor: super::ui_observation::ship_picker_cursor(),
+            cursor: ui.ship_picker_cursor(),
             escorts: world
                 .player_ships
                 .iter()
@@ -804,8 +809,8 @@ pub(crate) fn fleet_fight_observation(world: &CampaignView) -> super::fleet_figh
         counters: [player, enemy],
         flagship_crew: sis_crew_and_landers(world).map(|(crew, _)| crew),
         picker,
-        encounter_menu: super::ui_observation::encounter_menu_active(),
-        escape_generation: super::ui_observation::ship_escape_generation(),
+        encounter_menu: ui.encounter_menu_active(),
+        escape_generation: ui.ship_escape_generation(),
     }
 }
 
