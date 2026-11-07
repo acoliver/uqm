@@ -173,7 +173,7 @@ pub(crate) mod live {
             cx.reset_ships(0);
             cx.reset_ships(1);
             if in_hqspace(cx.world) != 0 {
-                crate::navigation::hyper_data::free_hyperspace(cx.kernel);
+                crate::engine::battle::hyperspace::free_hyperspace(cx.kernel);
             }
         }
         cx.complete_ship_reset();

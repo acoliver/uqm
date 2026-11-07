@@ -6,7 +6,7 @@ fn resource_teardown_uses_only_the_supplied_kernel() {
     hyper_data::free_hyper_data(&mut game.kernel);
     assert!(game.kernel.hyperstars.iter().all(|frame| frame.is_null()));
     assert!(game.kernel.cmaps.iter().all(|map| map.is_null()));
-    hyper_data::free_hyperspace(&mut game.kernel);
+    uqm_rust::engine::battle::hyperspace::free_hyperspace(&mut game.kernel);
     assert!(game.kernel.stars_in_space.is_null());
 }
 
@@ -163,7 +163,7 @@ fn owned_entry_keeps_display_order_resource_swap_and_quasispace_state() {
                 cx.world.story_state(StoryKey::BROADCASTER_RESPONSE),
                 u32::from(side == 0)
             );
-            hyper_data::free_hyperspace(cx.kernel);
+            uqm_rust::engine::battle::hyperspace::free_hyperspace(cx.kernel);
             assert_eq!(cx.kernel.stars_in_space, stars);
             hyper_data::free_hyper_data(cx.kernel);
             // SAFETY: entry leases have dropped; the fixture releases its remaining context/star owners.

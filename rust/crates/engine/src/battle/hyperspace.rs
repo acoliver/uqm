@@ -48,7 +48,7 @@ unsafe fn load_owned(kernel: &mut Kernel) {
     }
 }
 
-pub fn free(kernel: &mut Kernel) {
+pub fn free_hyper_data(kernel: &mut Kernel) {
     // SAFETY: the exclusive kernel releases its resources after their last hyperspace user.
     unsafe { free_owned(kernel) }
 }
@@ -73,4 +73,11 @@ unsafe fn free_owned(kernel: &mut Kernel) {
 pub unsafe fn select_palette(kernel: &Kernel, quasispace: bool) {
     use crate::graphics::cmap_abi::{GetColorMapAddress, SetColorMap};
     SetColorMap(GetColorMapAddress(kernel.cmaps[usize::from(quasispace)]));
+}
+
+pub fn free_hyperspace(kernel: &mut Kernel) {
+    crate::collections::observation::swap_image_view(
+        &mut kernel.hyperstars[0],
+        &mut kernel.stars_in_space,
+    );
 }
