@@ -278,6 +278,101 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
                     },
                 },
             );
+            {
+                let target = context_lease.target();
+                // Loaded status stencils have alpha or a color key; an opaque canvas cannot mask a fill.
+                let labels =
+                    uqm_rust::graphics::drawable_abi::LoadedDrawable::create(8, 1, 1, 6).unwrap();
+                let frames = labels.lease();
+                for index in 0..6 {
+                    context_lease.set_frame(frames.context_frame(index));
+                    context_lease.fill_rectangle(
+                        Color {
+                            r: 30 + index as u8,
+                            g: 40 + index as u8,
+                            b: 50 + index as u8,
+                            a: 255,
+                        },
+                        RECT {
+                            corner: POINT { x: 0, y: 0 },
+                            extent: EXTENT {
+                                width: 1,
+                                height: 1,
+                            },
+                        },
+                    );
+                }
+                context_lease.set_frame(target);
+                TFB_FlushGraphics();
+                for index in 0..6 {
+                    let pixel = GetFramePixel(frames.frame(index).unwrap(), POINT { x: 0, y: 0 });
+                    assert_eq!(
+                        (pixel.r, pixel.g, pixel.b, pixel.a),
+                        (30 + index as u8, 40 + index as u8, 50 + index as u8, 255),
+                        "label source {index}"
+                    );
+                }
+                for pc_menu in [false, true] {
+                    for change in [-1, 0, 1] {
+                        context_lease.fill_rectangle(
+                            Color {
+                                r: 9,
+                                g: 17,
+                                b: 25,
+                                a: 255,
+                            },
+                            RECT {
+                                corner: POINT { x: 0, y: 0 },
+                                extent: EXTENT {
+                                    width: 65,
+                                    height: 77,
+                                },
+                            },
+                        );
+                        uqm_rust::ui::shipstat::draw_crew_energy_labels(
+                            &context_lease,
+                            &frames,
+                            pc_menu,
+                            0,
+                            change,
+                        );
+                        TFB_FlushGraphics();
+                        let index = if pc_menu { 4 } else { 0 };
+                        for (x, expected) in [
+                            (
+                                13,
+                                if change == 0 {
+                                    (30 + index, 40 + index, 50 + index)
+                                } else {
+                                    (9, 17, 25)
+                                },
+                            ),
+                            (
+                                50,
+                                if change >= 0 {
+                                    (31 + index, 41 + index, 51 + index)
+                                } else {
+                                    (255, 255, 82)
+                                },
+                            ),
+                        ] {
+                            let pixel = GetFramePixel(frame, POINT { x, y: 62 });
+                            assert_eq!(
+                                (pixel.r, pixel.g, pixel.b),
+                                expected,
+                                "labels pc={pc_menu} change={change} x={x}"
+                            );
+                        }
+                        let foreground = (*context).ForeGroundColor;
+                        let expected = if change < 0 {
+                            (255, 255, 82)
+                        } else {
+                            (9, 17, 25)
+                        };
+                        assert_eq!((foreground.r, foreground.g, foreground.b), expected);
+                    }
+                }
+            }
             let mut stats: uqm_rust::navigation::abi::SHIP_INFO = std::mem::zeroed();
             stats.ship_flags = 1 << 13;
             let update = |stats: &mut uqm_rust::navigation::abi::SHIP_INFO, crew, energy| {

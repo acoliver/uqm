@@ -37,26 +37,41 @@ const fn rgb15(r: u8, g: u8, b: u8) -> Color {
 pub unsafe extern "C" fn DrawCrewFuelString(y: COORD, state: SIZE) {
     let (retained_status_frame, preferences) =
         Kernel::current().read(|owner| (owner.status_frame, owner.configuration.preferences()));
-    let mut stamp: STAMP = mem::zeroed();
-    stamp.origin.y = y + GAUGE_YOFFS + STARCON_TEXT_HEIGHT;
-    if state == 0 {
-        stamp.origin.x = CREW_XOFFS + (STAT_WIDTH >> 1) + 6;
-        stamp.frame = SetAbsFrameIndex(
-            retained_status_frame,
-            if preferences.menu == OPT_PC { 4 } else { 0 },
-        );
-        DrawStamp(&mut stamp);
-    }
-    stamp.origin.x = ENERGY_XOFFS + (STAT_WIDTH >> 1) - 5;
-    stamp.frame = SetAbsFrameIndex(
-        Kernel::current().read(|owner| owner.status_frame),
-        if preferences.menu == OPT_PC { 5 } else { 1 },
+    let context = crate::graphics::context_abi::ContextLease::retain(
+        std::ptr::NonNull::new(_pCurContext)
+            .unwrap_or_else(|| panic!("status label context not admitted")),
     );
+    let frames = crate::graphics::drawable_abi::retain_frame_allocations(&[retained_status_frame]);
+    draw_crew_energy_labels(&context, &frames[0], preferences.menu == OPT_PC, y, state);
+}
+
+pub fn draw_crew_energy_labels(
+    context: &crate::graphics::context_abi::ContextLease,
+    frames: &crate::graphics::drawable_abi::DrawableLease,
+    pc_menu: bool,
+    y: COORD,
+    state: SIZE,
+) {
+    let y = y + GAUGE_YOFFS + STARCON_TEXT_HEIGHT;
+    let index = if pc_menu { 4 } else { 0 };
+    if state == 0 {
+        context.draw_stamp(
+            &frames.context_frame(index),
+            POINT {
+                x: CREW_XOFFS + (STAT_WIDTH >> 1) + 6,
+                y,
+            },
+        );
+    }
+    let origin = POINT {
+        x: ENERGY_XOFFS + (STAT_WIDTH >> 1) - 5,
+        y,
+    };
+    let energy = frames.context_frame(index + 1);
     if state >= 0 {
-        DrawStamp(&mut stamp);
+        context.draw_stamp(&energy, origin);
     } else {
-        SetContextForeGroundColor(rgb15(0x1f, 0x1f, 0x0a));
-        DrawFilledStamp(&mut stamp);
+        context.draw_filled_stamp(&energy, origin, rgb15(0x1f, 0x1f, 0x0a));
     }
 }
 
