@@ -70,10 +70,13 @@ fn check_scene(
                 if let Some(mask) = mask {
                     assert!(!frame.is_null(), "missing mask {mask}");
                     let pixel = GetFramePixel(*frame, POINT { x: 0, y: 0 });
-                    let expected =
-                        u8::try_from(GRAPHICS.iter().position(|key| *key == mask).unwrap())
-                            .unwrap()
-                            + 1;
+                    let palette_index = GRAPHICS
+                        .iter()
+                        .position(|key| *key == mask)
+                        .unwrap_or_else(|| panic!("unknown scene fixture mask {mask}"));
+                    let expected = u8::try_from(palette_index)
+                        .unwrap_or_else(|error| panic!("mask fixture palette index: {error}"))
+                        + 1;
                     assert_eq!(
                         (pixel.r, pixel.g, pixel.b),
                         (expected, 19, 39),
@@ -87,7 +90,9 @@ fn check_scene(
                     let table = info.discovery_string.cast();
                     assert!(!info.discovery_string.is_null(), "missing report {report}");
                     assert_eq!(GetStringTableIndex(table), first);
-                    let text = CStr::from_ptr(GetStringAddress(table)).to_str().unwrap();
+                    let text = CStr::from_ptr(GetStringAddress(table))
+                        .to_str()
+                        .unwrap_or_else(|error| panic!("report {report} is not UTF-8: {error}"));
                     assert_eq!(text.trim_end_matches('\n'), format!("{report}-{first}"));
                 } else {
                     assert!(info.discovery_string.is_null());

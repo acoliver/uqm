@@ -30,17 +30,18 @@ use uqm_rust::{
 fn campaign() -> Game {
     let mut game = Game::new();
     uqm_rust::state::ffi::rust_init_game_state(&mut game.world);
-    let mut fleets = game.world.avail_races();
-    while let Some(id) = fleets.alloc() {
-        let fleet = fleets.get_mut(id);
-        fleet.actual_strength = 100;
-        fleet.crew_level = 12;
-        fleet.max_crew = 12;
-        fleet.loc.x = 123;
-        fleet.loc.y = 456;
-        fleets.put(id);
+    {
+        let mut fleets = game.world.avail_races();
+        while let Some(id) = fleets.alloc() {
+            let fleet = fleets.get_mut(id);
+            fleet.actual_strength = 100;
+            fleet.crew_level = 12;
+            fleet.max_crew = 12;
+            fleet.loc.x = 123;
+            fleet.loc.y = 456;
+            fleets.put(id);
+        }
     }
-    drop(fleets);
     game
 }
 
