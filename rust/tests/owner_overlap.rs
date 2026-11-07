@@ -79,6 +79,11 @@ fn empty_npc_phrase_does_not_acquire_an_owner() {
 #[test]
 #[serial_test::serial]
 fn sis_slot_snapshot_releases_world_before_support_ship_drawing() {
+    if !campaign_display::own_graphics_process(
+        "sis_slot_snapshot_releases_world_before_support_ship_drawing",
+    ) {
+        return;
+    }
     let mut game = Game::new();
     let display = campaign_display::CampaignDisplay::install(&mut game).unwrap();
     let frames = uqm_rust::graphics::drawable_abi::LoadedDrawable::create(8, 64, 140, 100).unwrap();
@@ -482,6 +487,11 @@ fn hyperspace_movement_releases_world_before_fuel_queries() {
 #[test]
 #[serial_test::serial]
 fn campaign_events_schedule_and_dispatch_using_the_existing_world() {
+    if !campaign_display::own_graphics_process(
+        "campaign_events_schedule_and_dispatch_using_the_existing_world",
+    ) {
+        return;
+    }
     use uqm_rust::engine::StoryKey;
     use uqm_rust::navigation::abi::add_event;
     use uqm_rust::navigation::abi::{
