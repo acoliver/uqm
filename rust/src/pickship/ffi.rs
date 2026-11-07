@@ -121,18 +121,26 @@ fn pulsed_directions(input: &crate::engine::input::InputSession) -> (Direction, 
     )
 }
 
-fn change_selection(cx: &mut Cx<'_>, state: &mut PickerState) {
-    let kernel = &*cx.kernel;
-    crate::automation::ui_observation::observe_ship_picker_cursor(state.cursor);
-    let area = highlight(state.frame, state.cursor);
-    state.chosen = match slot(state.cursor) {
+fn selected_ship(kernel: &KernelOwner, cursor: Cursor) -> Option<ShipId> {
+    match slot(cursor) {
         Slot::Flagship => links::last_ship(kernel, RPG_PLAYER_NUM),
         Slot::Escort(ship_index) => {
             let links = escort_links(kernel);
             let escorts: Vec<Escort> = links.iter().map(|(_, escort)| *escort).collect();
             find_escort(&escorts, ship_index).map(|at| links[at].0)
         }
-    };
+    }
+}
+
+fn change_selection(cx: &mut Cx<'_>, state: &mut PickerState, io: &mut Io<'_>) {
+    let kernel = &*cx.kernel;
+    io.observer
+        .checkpoint(&crate::engine::observe::CheckpointView::ShipPickerCursor {
+            x: state.cursor.x,
+            y: state.cursor.y,
+        });
+    let area = highlight(state.frame, state.cursor);
+    state.chosen = selected_ship(kernel, state.cursor);
     let context = &state.context;
     let name = name_strip(state.frame);
     context.fill_rectangle(color(Rgba::BLACK), rectangle(name));
@@ -207,6 +215,7 @@ fn do_pick_battle_ship(
     cx: &mut Cx<'_>,
     state: &mut PickerState,
     input: &crate::engine::input::InputSession,
+    io: &mut Io<'_>,
 ) -> c_int {
     if base_activity_aborted(&state.activity) {
         state.chosen = None;
@@ -220,9 +229,10 @@ fn do_pick_battle_ship(
         state.initialized = true;
         // The flagship selection below is made in this same call, so a Select
         // injected after this observation confirms a real choice.
-        crate::automation::ui_observation::observe_ship_picker(true);
+        io.observer
+            .checkpoint(&crate::engine::observe::CheckpointView::ShipPicker(true));
         // SAFETY: `state` is the running picker.
-        change_selection(cx, state);
+        change_selection(cx, state, io);
     } else {
         let (keys, select) = pulsed_directions(input);
         if select {
@@ -234,7 +244,7 @@ fn do_pick_battle_ship(
             crate::ui::settings::play_menu_sound(cx.kernel, cx.world, MENU_SOUND_MOVE);
             state.cursor = cursor;
             // SAFETY: `state` is the running picker.
-            change_selection(cx, state);
+            change_selection(cx, state, io);
         }
     }
 
@@ -284,10 +294,11 @@ fn get_armada_star_ship(
         let mut io = Io {
             observer: &mut *observer,
         };
-        cx.run_input(&mut io, false, |cx, _| {
-            do_pick_battle_ship(cx, &mut state, input) != 0
+        cx.run_input(&mut io, false, |cx, io| {
+            do_pick_battle_ship(cx, &mut state, input, io) != 0
         });
-        crate::automation::ui_observation::observe_ship_picker(false);
+        io.observer
+            .checkpoint(&crate::engine::observe::CheckpointView::ShipPicker(false));
         crate::ui::sis::set_flash_rect(&state.screen, context.clip_rect(), None);
         if let Some(chosen) = state.chosen {
             if Some(chosen) == links::last_ship(cx.kernel, RPG_PLAYER_NUM) {

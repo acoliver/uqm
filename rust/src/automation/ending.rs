@@ -1,7 +1,5 @@
 //! Sticky observations written by victory, presentation and credits owners.
 
-use parking_lot::Mutex;
-
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct Ending {
     pub won: bool,
@@ -14,68 +12,50 @@ pub struct Ending {
 }
 
 impl Ending {
-    fn start_presentation(&mut self) {
+    pub(crate) fn observe_checkpoint(&mut self, view: crate::engine::observe::CheckpointView<'_>) {
+        use crate::engine::observe::CheckpointView;
+        match view {
+            CheckpointView::Won => self.won(),
+            CheckpointView::PresentationStarted => self.presentation_started(),
+            CheckpointView::PresentationCancelled => self.presentation_cancelled(),
+            CheckpointView::PresentationCompleted => self.presentation_completed(),
+            CheckpointView::CreditsStarted => self.credits_started(),
+            CheckpointView::CreditsReady => self.credits_controls_ready(),
+            CheckpointView::CreditsCompleted => self.credits_completed(),
+            _ => unreachable!("non-ending checkpoint passed to ending observation"),
+        }
+    }
+
+    pub(crate) fn won(&mut self) {
+        self.won = true;
+    }
+
+    pub(crate) fn presentation_started(&mut self) {
         self.presentation_started |= self.won;
         self.presentation_cancelled = false;
     }
 
-    fn complete_presentation(&mut self) {
+    pub(crate) fn presentation_cancelled(&mut self) {
+        if self.presentation_started && !self.presentation_completed {
+            self.presentation_cancelled = true;
+        }
+    }
+
+    pub(crate) fn presentation_completed(&mut self) {
         self.presentation_completed |= self.presentation_started && !self.presentation_cancelled;
     }
 
-    fn start_credits(&mut self) {
+    pub(crate) fn credits_started(&mut self) {
         self.credits_started |= self.presentation_completed;
     }
 
-    fn complete_credits(&mut self) {
+    pub(crate) fn credits_controls_ready(&mut self) {
+        self.credits_controls_ready |= self.credits_started;
+    }
+
+    pub(crate) fn credits_completed(&mut self) {
         self.credits_completed |= self.credits_started;
     }
-}
-
-static ENDING: Mutex<Ending> = Mutex::new(Ending {
-    won: false,
-    presentation_started: false,
-    presentation_completed: false,
-    credits_started: false,
-    credits_completed: false,
-    credits_controls_ready: false,
-    presentation_cancelled: false,
-});
-
-pub fn snapshot() -> Ending {
-    *ENDING.lock()
-}
-
-pub(crate) fn won() {
-    ENDING.lock().won = true;
-}
-
-pub(crate) fn presentation_started() {
-    ENDING.lock().start_presentation();
-}
-
-pub(crate) fn presentation_cancelled() {
-    let mut ending = ENDING.lock();
-    if ending.presentation_started && !ending.presentation_completed {
-        ending.presentation_cancelled = true;
-    }
-}
-
-pub(crate) fn presentation_completed() {
-    ENDING.lock().complete_presentation();
-}
-
-pub(crate) fn credits_started() {
-    ENDING.lock().start_credits();
-}
-
-pub(crate) fn credits_controls_ready() {
-    let mut ending = ENDING.lock();
-    ending.credits_controls_ready |= ending.credits_started;
-}
-
-pub(crate) fn credits_completed() {
-    ENDING.lock().complete_credits();
 }
 
 #[cfg(test)]
@@ -84,24 +64,25 @@ mod tests {
 
     #[test]
     fn runtime_callbacks_retain_terminal_observations() {
-        won();
-        presentation_started();
-        presentation_completed();
-        credits_started();
-        credits_controls_ready();
-        assert!(snapshot().credits_controls_ready);
-        credits_completed();
-        presentation_cancelled();
-        assert!(snapshot().credits_completed);
+        let mut ending = Ending::default();
+        ending.won();
+        ending.presentation_started();
+        ending.presentation_completed();
+        ending.credits_started();
+        ending.credits_controls_ready();
+        assert!(ending.credits_controls_ready);
+        ending.credits_completed();
+        ending.presentation_cancelled();
+        assert!(ending.credits_completed);
     }
 
     #[test]
     fn title_credits_and_unrelated_presentations_cannot_prove_an_ending() {
         let mut ending = Ending::default();
-        ending.start_presentation();
-        ending.complete_presentation();
-        ending.start_credits();
-        ending.complete_credits();
+        ending.presentation_started();
+        ending.presentation_completed();
+        ending.credits_started();
+        ending.credits_completed();
         assert_eq!(ending, Ending::default());
     }
 
@@ -111,23 +92,23 @@ mod tests {
             won: true,
             ..Ending::default()
         };
-        ending.start_presentation();
-        ending.start_credits();
+        ending.presentation_started();
+        ending.credits_started();
         assert!(ending.won && ending.presentation_started);
         assert!(!ending.presentation_completed && !ending.credits_started);
         // Cancelling a nested CALL must also prevent the outer script from
         // claiming completion when it resumes after that child returns.
         ending.presentation_cancelled = true;
-        ending.complete_presentation();
+        ending.presentation_completed();
         assert!(!ending.presentation_completed);
-        ending.start_presentation();
-        ending.complete_presentation();
-        ending.start_credits();
-        ending.complete_credits();
+        ending.presentation_started();
+        ending.presentation_completed();
+        ending.credits_started();
+        ending.credits_completed();
         assert!(
             ending.presentation_completed && ending.credits_started && ending.credits_completed
         );
-        ending.start_presentation();
+        ending.presentation_started();
         assert!(
             ending.credits_completed,
             "observations survive later UI activity"
