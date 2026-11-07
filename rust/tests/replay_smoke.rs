@@ -73,8 +73,19 @@ fn run_replay(
     };
     assert!(
         status.success(),
-        "{run} failed: {}",
-        std::fs::read_to_string(directory.join("game.log"))?
+        "{run} failed: {}
+summary: {:?}
+trace tail: {:?}",
+        std::fs::read_to_string(directory.join("game.log"))?,
+        std::fs::read_to_string(&summary),
+        std::fs::read_to_string(directory.join("automation/trace.jsonl")).map(|trace| {
+            trace
+                .lines()
+                .rev()
+                .take(8)
+                .map(str::to_owned)
+                .collect::<Vec<_>>()
+        })
     );
     Ok(serde_json::from_slice(&std::fs::read(summary)?)?)
 }
@@ -104,6 +115,26 @@ fn super_melee_replays_complete_with_equal_nonempty_summaries() -> Result<(), Bo
     }
     assert_eq!(first, second);
     eprintln!("replay summaries match: {first}");
+    Ok(())
+}
+
+#[test]
+fn solar_system_save_load_restores_sol_after_a_hyperspace_exit() -> Result<(), Box<dyn Error>> {
+    let temporary = Path::new(env!("CARGO_MANIFEST_DIR")).join("../tmp");
+    std::fs::create_dir_all(&temporary)?;
+    let root = tempfile::Builder::new()
+        .prefix("replay-solar-save-")
+        .tempdir_in(temporary)?;
+    install_content(root.path())?;
+    let summary = run_replay(root.path(), "sol-save-load-v1", "roundtrip", false)?;
+    assert_eq!(summary["completed"], true, "{summary}");
+    assert_eq!(summary["final_activity"], 4, "{summary}");
+    assert!(
+        summary["inputs_admitted"]
+            .as_u64()
+            .ok_or("input counter is not unsigned")?
+            > 0
+    );
     Ok(())
 }
 
