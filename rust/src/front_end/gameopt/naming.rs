@@ -1,6 +1,35 @@
 //! Byte-bounded labels used by the save-name editor.
 use std::ffi::{CStr, CString};
 
+#[cfg(test)]
+#[test]
+fn save_name_copy_preserves_byte_bounds_and_nul_padding() {
+    let mut source = [b'X' as std::ffi::c_char; SAVE_NAME_SIZE as usize];
+    let full = save_name_buffer(&source);
+    assert_eq!(&full[..source.len()], &[b'X'; SAVE_NAME_SIZE as usize]);
+    assert!(full[source.len()..].iter().all(|&byte| byte == 0));
+    source[0] = 0xc3u8 as std::ffi::c_char;
+    source[1] = 0xa9u8 as std::ffi::c_char;
+    source[2] = 0;
+    let terminated = save_name_buffer(&source);
+    assert_eq!(&terminated[..2], "é".as_bytes());
+    assert!(terminated[2..].iter().all(|&byte| byte == 0));
+    source[0] = 0;
+    assert_eq!(save_name_buffer(&source), [0; 256]);
+}
+
+pub(super) fn save_name_buffer(source: &[std::ffi::c_char; SAVE_NAME_SIZE as usize]) -> [u8; 256] {
+    let mut buffer = [0; 256];
+    for (destination, &byte) in buffer
+        .iter_mut()
+        .zip(source)
+        .take_while(|(_, byte)| **byte != 0)
+    {
+        *destination = byte as u8;
+    }
+    buffer
+}
+
 pub(super) struct SaveLabel {
     pub text: CString,
     pub cursor_prefix: usize,
