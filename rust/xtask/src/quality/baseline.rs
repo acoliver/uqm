@@ -184,8 +184,9 @@ impl Baseline {
         if steps.is_empty() {
             return Err("move needs at least one source and target".into());
         }
-        let retained = self.remaining_moves(base);
-        let previous = super::transfers::pending(&retained, Some(base_moves));
+        let pending = super::transfers::pending(&self.moved, Some(base_moves));
+        let mut previous = self.remaining_moves(base);
+        previous.retain(|source, _| pending.contains_key(source));
         let mut moves = previous.clone();
         for &(old, new) in steps {
             moves = super::transfers::compose(&moves, old, new, base)?;
@@ -224,7 +225,7 @@ impl Baseline {
         self.entries = entries;
         self.budget = budget;
         self.lint = lint;
-        self.moved = retained;
+        self.moved.retain(|source, _| !pending.contains_key(source));
         self.moved.extend(moves);
         Ok(())
     }

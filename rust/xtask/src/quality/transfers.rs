@@ -704,8 +704,11 @@ mod nested_tests {
             ("uqm-engine::input_port::poll", 3),
             ("uqm-engine::story::read", 4),
         ]);
-        let historical: BTreeMap<String, String> =
-            [("uqm-engine::input".into(), "uqm-engine::input_port".into())].into();
+        let historical: BTreeMap<String, String> = [
+            ("uqm-engine::input".into(), "uqm-engine::input_port".into()),
+            ("uqm::input".into(), "uqm-engine::input_port".into()),
+        ]
+        .into();
         let mut moves = historical.clone();
         moves.insert(
             "uqm-engine::story::get".into(),
