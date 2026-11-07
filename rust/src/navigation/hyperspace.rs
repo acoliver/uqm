@@ -138,6 +138,64 @@ pub(crate) mod live {
     }
 }
 
+pub fn move_sis(
+    cx: &mut crate::engine::battle::Cx<'_>,
+    dx: &mut i16,
+    dy: &mut i16,
+    geometry: super::hyper_units::Geometry,
+    mut debit: impl FnMut(&mut crate::engine::battle::Cx<'_>, i16),
+) {
+    let maximum_x = geometry.log_x(10000) - (geometry.log_x(1) >> 1) - 1;
+    let maximum_y = geometry.log_y(-1) - (geometry.log_y(9998) >> 1) - 1;
+    let mut x = move_axis(&mut cx.world.data.flagship.log_x, *dx, maximum_x);
+    let mut y = move_axis(&mut cx.world.data.flagship.log_y, *dy, maximum_y);
+    if x != *dx || y != *dy {
+        *dx = x;
+        *dy = y;
+        let mut handle = cx.elements().tail();
+        while let Some(element) = handle {
+            if cx.element(element).flags & PLAYER_SHIP as u16 == 0 {
+                handle = cx.elements().pred(element);
+            } else {
+                cx.element_mut(element).next.location = POINT {
+                    x: ((geometry.width() >> 1) - i32::from(x)) as i16,
+                    y: ((geometry.height() >> 1) - i32::from(y)) as i16,
+                };
+                break;
+            }
+        }
+    }
+    if cx.world.data.flagship.fuel_on_board != 0
+        && cx.world.story_state(StoryKey::ARILOU_SPACE_SIDE) <= 1
+    {
+        x = x.wrapping_abs();
+        y = y.wrapping_abs();
+        cx.world.hyper_distance.dx = cx.world.hyper_distance.dx.wrapping_add(x as u16);
+        cx.world.hyper_distance.dy = cx.world.hyper_distance.dy.wrapping_add(y as u16);
+        let adjusted_x = geometry.universe_x(16 * i32::from(cx.world.hyper_distance.dx)) as u32;
+        let adjusted_y = (9999
+            - i32::from(geometry.universe_y(16 * i32::from(cx.world.hyper_distance.dy))))
+            as u32;
+        let distance = square_root(
+            adjusted_x
+                .wrapping_mul(adjusted_x)
+                .wrapping_add(adjusted_y.wrapping_mul(adjusted_y)),
+        )
+        .wrapping_add(cx.world.hyper_distance.extra);
+        let mut ticks = distance >> 4;
+        if ticks > u16::from(cx.world.hyper_distance.ticks) {
+            debit(cx, i16::from(cx.world.hyper_distance.ticks) - ticks as i16);
+            if ticks > 255 {
+                cx.world.hyper_distance.dx = 0;
+                cx.world.hyper_distance.dy = 0;
+                cx.world.hyper_distance.extra = distance & 15;
+                ticks = 0;
+            }
+            cx.world.hyper_distance.ticks = ticks as u8;
+        }
+    }
+}
+
 const PERCENT: [u16; 24] = [
     20, 0, 0, 20, 40, 0, 20, 40, 60, 40, 40, 60, 0, 30, 60, 40, 2, 30, 70, 0, 0, 70, 60, 0,
 ];
@@ -234,5 +292,158 @@ mod tests {
         assert_eq!(position, 100);
         assert_eq!(move_axis(&mut position, 7, 100), 7);
         assert_eq!(position, 93);
+    }
+
+    fn movement_game(fuel: u32, side: u32) -> crate::engine::Game {
+        let mut game = crate::engine::Game::new();
+        game.world.story = Some(crate::engine::world::story::GameState::new());
+        game.world
+            .set_story_state(StoryKey::ARILOU_SPACE_SIDE, side);
+        game.world.data.flagship.fuel_on_board = fuel;
+        game.world.data.flagship.log_x = 100000;
+        game.world.data.flagship.log_y = 100000;
+        game.world.hyper_distance.ticks = 1;
+        game
+    }
+
+    fn move_retained(
+        game: &mut crate::engine::Game,
+        mut dx: i16,
+        mut dy: i16,
+    ) -> Vec<(i16, u16, u16, u16, u8)> {
+        let mut battle = crate::engine::battle::Battle::new();
+        let mut cx =
+            crate::engine::battle::Cx::new(&mut battle, &mut game.world, &mut game.kernel, || {
+                panic!("movement RNG")
+            });
+        let mut debit = Vec::new();
+        move_sis(
+            &mut cx,
+            &mut dx,
+            &mut dy,
+            super::super::hyper_units::Geometry::new((320, 240)),
+            |cx, amount| {
+                let distance = &cx.world.hyper_distance;
+                debit.push((
+                    amount,
+                    distance.dx,
+                    distance.dy,
+                    distance.extra,
+                    distance.ticks,
+                ));
+                cx.world.data.flagship.fuel_on_board =
+                    (cx.world.data.flagship.fuel_on_board as i32 + i32::from(amount)) as u32;
+            },
+        );
+        debit
+    }
+
+    #[test]
+    fn retained_movement_keeps_initial_tick_and_skips_fuel_outside_hyperspace() {
+        let mut game = movement_game(1000, 0);
+        assert!(move_retained(&mut game, 1, -1).is_empty());
+        assert_eq!(
+            (
+                game.world.hyper_distance.dx,
+                game.world.hyper_distance.dy,
+                game.world.hyper_distance.ticks
+            ),
+            (1, 1, 1)
+        );
+        for (fuel, side) in [(0, 0), (1000, 2), (1000, 3)] {
+            let mut game = movement_game(fuel, side);
+            assert!(move_retained(&mut game, 2000, -1000).is_empty());
+            assert_eq!(
+                (
+                    game.world.data.flagship.log_x,
+                    game.world.data.flagship.log_y
+                ),
+                (98000, 101000)
+            );
+            assert_eq!(
+                (
+                    game.world.hyper_distance.dx,
+                    game.world.hyper_distance.dy,
+                    game.world.hyper_distance.ticks
+                ),
+                (0, 0, 1)
+            );
+        }
+    }
+
+    #[test]
+    fn fuel_debit_precedes_tick_commit_and_residual_rollover() {
+        let mut game = movement_game(1000, 0);
+        assert_eq!(
+            move_retained(&mut game, 2000, 0),
+            vec![(-124, 2000, 0, 0, 1)]
+        );
+        assert_eq!(
+            (
+                game.world.hyper_distance.ticks,
+                game.world.data.flagship.fuel_on_board
+            ),
+            (125, 876)
+        );
+        let mut game = movement_game(1000, 0);
+        assert_eq!(
+            move_retained(&mut game, 5001, 0),
+            vec![(-312, 5001, 0, 0, 1)]
+        );
+        assert_eq!(
+            (
+                game.world.hyper_distance.dx,
+                game.world.hyper_distance.dy,
+                game.world.hyper_distance.extra,
+                game.world.hyper_distance.ticks
+            ),
+            (0, 0, 1, 0)
+        );
+        assert_eq!(move_retained(&mut game, 20, 0), vec![(-1, 20, 0, 1, 0)]);
+    }
+
+    #[test]
+    fn clipped_movement_repositions_the_last_player_ship_with_actual_deltas() {
+        let mut game = movement_game(0, 0);
+        game.world.data.flagship.log_x = 2;
+        game.world.data.flagship.log_y = 3;
+        game.kernel.reset_element_capacity(2);
+        let mut battle = crate::engine::battle::Battle::new();
+        let mut cx =
+            crate::engine::battle::Cx::new(&mut battle, &mut game.world, &mut game.kernel, || {
+                panic!("movement RNG")
+            });
+        let ship = cx.alloc_element().unwrap();
+        cx.element_mut(ship).flags = PLAYER_SHIP as u16;
+        cx.put(ship);
+        let other = cx.alloc_element().unwrap();
+        cx.put(other);
+        let (mut dx, mut dy) = (5, 6);
+        move_sis(
+            &mut cx,
+            &mut dx,
+            &mut dy,
+            super::super::hyper_units::Geometry::new((320, 240)),
+            |_, _| panic!("zero-fuel debit"),
+        );
+        assert_eq!((dx, dy), (2, 3));
+        assert_eq!(
+            (cx.world.data.flagship.log_x, cx.world.data.flagship.log_y),
+            (0, 0)
+        );
+        assert_eq!(
+            (
+                cx.element(ship).next.location.x,
+                cx.element(ship).next.location.y
+            ),
+            (4094, 3837)
+        );
+        assert_eq!(
+            (
+                cx.element(other).next.location.x,
+                cx.element(other).next.location.y
+            ),
+            (0, 0)
+        );
     }
 }
