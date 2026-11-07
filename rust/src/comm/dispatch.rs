@@ -88,7 +88,7 @@ pub const CHECK_ABORT: u16 = 0x4000;
 /// C: `CHECK_LOAD`
 pub const CHECK_LOAD: u16 = 0x1000;
 /// C: `START_ENCOUNTER`
-pub const START_ENCOUNTER: u16 = 0x0400;
+pub use crate::engine::save::START_ENCOUNTER;
 /// C: `START_INTERPLANETARY`
 pub const START_INTERPLANETARY: u16 = 0x0800;
 

@@ -7,10 +7,11 @@
 //! `planets::c_api` implements over the C globals and tests implement with
 //! fakes.
 
-use crate::c_bindings::global_state::{IP_GROUP, PLANET_NUMBER_BASE};
+use crate::engine::save::summary::PLANET_NUMBER_BASE;
+use crate::engine::world::generation::ReportDisposition;
 use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
+use crate::engine::world::queues::IpGroup as IP_GROUP;
 use crate::math::RandomContext;
-use crate::planet_side::report_adapter::{DiscoveryReportPort, ReportDisposition};
 use crate::planets::generate::calc::{self, AnalysisSite, StarDescription};
 use crate::planets::generate::consts::{planet_size, PLANET_SHIELDED};
 use crate::planets::generate::orbits::{self, OrbitRequest};
@@ -56,7 +57,7 @@ pub trait Npcs {
 }
 
 /// `GenerateDefault_initNpcs`.
-pub fn init_npcs(host: &mut impl Npcs) -> bool {
+pub fn init_npcs(host: &mut (impl Npcs + ?Sized)) -> bool {
     if !host.init_ip_groups() {
         host.clear_battle_group_ref();
         host.build_groups();
@@ -65,7 +66,7 @@ pub fn init_npcs(host: &mut impl Npcs) -> bool {
 }
 
 /// `GenerateDefault_reinitNpcs`.
-pub fn reinit_npcs(host: &mut impl Npcs) -> bool {
+pub fn reinit_npcs(host: &mut (impl Npcs + ?Sized)) -> bool {
     host.load_ip_groups();
     // The Yehat rebellion can start in any system, so it is checked here.
     check_yehat_rebellion(host);
@@ -73,7 +74,7 @@ pub fn reinit_npcs(host: &mut impl Npcs) -> bool {
 }
 
 /// `GenerateDefault_uninitNpcs`.
-pub fn uninit_npcs(host: &mut impl Npcs) -> bool {
+pub fn uninit_npcs(host: &mut (impl Npcs + ?Sized)) -> bool {
     host.save_ip_groups();
     host.reinit_npc_built_ship_q();
     host.reinit_ip_group_q();
@@ -82,7 +83,7 @@ pub fn uninit_npcs(host: &mut impl Npcs) -> bool {
 
 /// `check_yehat_rebellion`: after the player talked to a Yehat ship (no
 /// battle followed), Yehat groups that were flagged by the collision flee.
-fn check_yehat_rebellion(host: &mut impl Npcs) {
+fn check_yehat_rebellion(host: &mut (impl Npcs + ?Sized)) {
     if !host.yehat_civil_war() || host.encounter_race() >= 0 {
         return;
     }
@@ -163,7 +164,11 @@ pub trait PlanetNames {
 }
 
 /// `GenerateDefault_generateName`: `planet_index` is `planetIndex (system, world)`.
-pub fn generate_name(host: &mut impl PlanetNames, planet_index: u16, data_index: u8) -> bool {
+pub fn generate_name(
+    host: &mut (impl PlanetNames + ?Sized),
+    planet_index: u16,
+    data_index: u8,
+) -> bool {
     host.set_planet_name(PLANET_NUMBER_BASE as u16 + (9 + 7) + planet_index);
     host.set_battle_planet(data_index);
     true
@@ -289,19 +294,35 @@ pub fn generate_ruins(
 }
 
 /// `GenerateDefault_landerReport`: a report that is not cycled is given once.
-pub fn lander_report(port: &mut impl DiscoveryReportPort) -> bool {
-    present(port, ReportDisposition::Once)
+pub fn lander_report(
+    system: &mut SolarSys<'_>,
+    site: &mut (impl super::host::ReportSite + ?Sized),
+) -> bool {
+    present(system, ReportDisposition::Once, site)
 }
 
 /// `GenerateDefault_landerReportCycle`: advance to the next report.
-pub fn lander_report_cycle(port: &mut impl DiscoveryReportPort) -> bool {
-    present(port, ReportDisposition::Cycle)
+pub fn lander_report_cycle(
+    system: &mut SolarSys<'_>,
+    site: &mut (impl super::host::ReportSite + ?Sized),
+) -> bool {
+    present(system, ReportDisposition::Cycle, site)
 }
 
-fn present(port: &mut impl DiscoveryReportPort, disposition: ReportDisposition) -> bool {
-    port.present(disposition)
-        .expect("the discovery report port is linked")
+fn present(
+    system: &mut SolarSys<'_>,
+    disposition: ReportDisposition,
+    site: &mut (impl super::host::ReportSite + ?Sized),
+) -> bool {
+    site.report(system, disposition)
 }
+
+use super::generator::SystemGenerator;
+use crate::engine::world::generation::SolarSys;
+
+pub struct Generator;
+
+impl SystemGenerator for Generator {}
 
 #[cfg(test)]
 mod tests {

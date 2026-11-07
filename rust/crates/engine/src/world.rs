@@ -1,5 +1,6 @@
 //! Campaign state owned by one game-thread lifecycle.
 
+pub mod generation;
 pub mod planet;
 
 use crate::battle::schema::GAME_STATE;
@@ -271,7 +272,7 @@ impl Default for Game {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct StoryKey {
     start: usize,
     end: usize,
