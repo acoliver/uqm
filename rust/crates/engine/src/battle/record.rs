@@ -666,6 +666,7 @@ mod projection_tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn pointer_free_values_roundtrip_record_scalars_and_subject_metadata() {
         let mut raw = ElementRecord {
             state_flags: 513,
