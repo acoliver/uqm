@@ -1,6 +1,6 @@
-use crate::engine::StoryKey;
 use super::*;
 use crate::c_bindings::global_state::IP_GROUP;
+use crate::engine::StoryKey;
 use crate::planets::generate::default::Npcs;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, VecDeque};
@@ -10,26 +10,38 @@ pub(super) type Trace = Rc<RefCell<Vec<String>>>;
 
 #[derive(Default)]
 pub(super) struct State {
-    pub flags: BTreeMap<&'static str, u32>,
-    pub words: BTreeMap<&'static str, u32>,
+    pub flags: BTreeMap<StoryKey, u32>,
+    pub words: BTreeMap<StoryKey, u32>,
     pub trace: Trace,
 }
 
 impl Story for State {
-    fn flag(&self, name: &'static str) -> u32 {
-        self.trace.borrow_mut().push(format!("read:{name}"));
-        self.flags.get(name).copied().unwrap_or(0)
+    fn flag(&self, name: StoryKey) -> u32 {
+        self.trace.borrow_mut().push(format!(
+            "read:{}",
+            crate::planets::generate::testing::story_label(name)
+        ));
+        self.flags.get(&name).copied().unwrap_or(0)
     }
-    fn set_flag(&mut self, name: &'static str, value: u32) {
-        self.trace.borrow_mut().push(format!("flag:{name}:{value}"));
+    fn set_flag(&mut self, name: StoryKey, value: u32) {
+        self.trace.borrow_mut().push(format!(
+            "flag:{}:{value}",
+            crate::planets::generate::testing::story_label(name)
+        ));
         self.flags.insert(name, value);
     }
-    fn word(&self, name: &'static str) -> u32 {
-        self.trace.borrow_mut().push(format!("read-word:{name}"));
-        self.words.get(name).copied().unwrap_or(0)
+    fn word(&self, name: StoryKey) -> u32 {
+        self.trace.borrow_mut().push(format!(
+            "read-word:{}",
+            crate::planets::generate::testing::story_label(name)
+        ));
+        self.words.get(&name).copied().unwrap_or(0)
     }
-    fn set_word(&mut self, name: &'static str, value: u32) {
-        self.trace.borrow_mut().push(format!("word:{name}:{value}"));
+    fn set_word(&mut self, name: StoryKey, value: u32) {
+        self.trace.borrow_mut().push(format!(
+            "word:{}:{value}",
+            crate::planets::generate::testing::story_label(name)
+        ));
         self.words.insert(name, value);
     }
 }
@@ -172,7 +184,7 @@ fn probe_creation_persists_reference_and_initial_orbit_changes_only_c_fields() {
     for saved in [0, 0xabcdef01] {
         let (mut story, mut host) = pair();
         story.words.insert(StoryKey::URQUAN_PROBE_GRPOFFS0, saved);
-        story.words.insert("unrelated", 42);
+        story.words.insert(StoryKey::MELNORME0_GRPOFFS0, 42);
         host.init.push_back(true);
         host.groups = vec![group(23, 0xff), group(11, 0xfe)];
         let mut expected = host.groups.clone();
@@ -186,8 +198,8 @@ fn probe_creation_persists_reference_and_initial_orbit_changes_only_c_fields() {
         assert_eq!(format!("{:?}", host.groups), format!("{expected:?}"));
         let reference = if saved == 0 { 0x12345678 } else { saved };
         assert_eq!(host.reference, reference);
-        assert_eq!(story.words[StoryKey::URQUAN_PROBE_GRPOFFS0], reference);
-        assert_eq!(story.words["unrelated"], 42);
+        assert_eq!(story.words[&StoryKey::URQUAN_PROBE_GRPOFFS0], reference);
+        assert_eq!(story.words[&StoryKey::MELNORME0_GRPOFFS0], 42);
         assert_eq!(host.built, 0);
         let mut trace = vec![
             "read-word:URQUAN_PROBE_GRPOFFS0".to_owned(),
@@ -222,7 +234,9 @@ fn probe_init_short_circuits_and_repeats_default_group_load_as_c_does() {
                     }
                     let (mut story, mut host) = pair();
                     story.words.insert(StoryKey::URQUAN_PROBE_GRPOFFS0, 71);
-                    story.flags.insert(StoryKey::PROBE_MESSAGE_DELIVERED, delivered);
+                    story
+                        .flags
+                        .insert(StoryKey::PROBE_MESSAGE_DELIVERED, delivered);
                     if head {
                         host.groups.push(group(23, 0xfe));
                     }
@@ -235,7 +249,7 @@ fn probe_init_short_circuits_and_repeats_default_group_load_as_c_does() {
                     assert_eq!(format!("{:?}", host.groups), before);
                     assert!(host.init.is_empty());
                     assert_eq!(host.reference, if default_load { 71 } else { 0 });
-                    assert_eq!(story.words[StoryKey::URQUAN_PROBE_GRPOFFS0], 71);
+                    assert_eq!(story.words[&StoryKey::URQUAN_PROBE_GRPOFFS0], 71);
                     let mut trace = vec![
                         "read-word:URQUAN_PROBE_GRPOFFS0",
                         "ref:71",
@@ -334,7 +348,7 @@ fn bomb_state_three_resets_only_reference_and_ip_queue_and_asserts_built_empty()
             }));
             assert_eq!(result.is_err(), bomb == 3 && built != 0);
             assert_eq!(host.built, built);
-            assert_eq!(story.words[StoryKey::URQUAN_PROBE_GRPOFFS0], 321);
+            assert_eq!(story.words[&StoryKey::URQUAN_PROBE_GRPOFFS0], 321);
             if bomb == 3 {
                 assert!(host.groups.is_empty());
                 assert_eq!(host.reference, 0);
@@ -364,7 +378,7 @@ fn delivered_message_still_creates_and_persists_missing_probe_before_default_ini
     let before = format!("{:?}", host.groups);
     assert!(init_npcs(&mut (&mut story, &mut host)));
     assert_eq!(host.reference, 0x12345678);
-    assert_eq!(story.words[StoryKey::URQUAN_PROBE_GRPOFFS0], 0x12345678);
+    assert_eq!(story.words[&StoryKey::URQUAN_PROBE_GRPOFFS0], 0x12345678);
     assert_eq!(format!("{:?}", host.groups), before);
     assert!(host.init.is_empty());
     assert_eq!(
