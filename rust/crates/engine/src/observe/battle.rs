@@ -69,16 +69,16 @@ pub fn replacement_gate(
 }
 
 pub fn observe_tick(cx: &Cx<'_>, io: &mut Io<'_>, phase: BattlePhase) {
-    // IN_BATTLE also covers flight. Only the three combat activities belong here.
-    let activity = cx.world.activity();
-    if !io.observer.battle_diagnostics()
-        || (phase == BattlePhase::Input && activity & (1 << 9) == 0)
-        || activity as u8 > 2
-    {
+    if !io.observer.battle_diagnostics() || !is_combat_sample(cx.world.activity(), phase) {
         return;
     }
     io.observer
         .battle_tick(&capture(cx, cx.kernel.input_controls(), phase));
+}
+
+fn is_combat_sample(activity: u16, phase: BattlePhase) -> bool {
+    // Hyperspace raises IN_BATTLE for travel; interplanetary combat also uses it.
+    (phase == BattlePhase::Advanced || activity & (1 << 9) != 0) && activity as u8 != 3
 }
 
 fn capture(
@@ -240,6 +240,22 @@ mod tests {
                 })
             );
         }
+    }
+
+    #[test]
+    fn input_scope_accepts_interplanetary_combat_but_not_hyperspace_flight() {
+        for activity in [512, 513, 514, 516] {
+            for phase in [BattlePhase::Input, BattlePhase::Advanced] {
+                assert!(
+                    is_combat_sample(activity, phase),
+                    "activity={activity}, phase={phase:?}"
+                );
+            }
+        }
+        assert!(!is_combat_sample(0, BattlePhase::Input));
+        assert!(!is_combat_sample(515, BattlePhase::Input));
+        assert!(!is_combat_sample(515, BattlePhase::Advanced));
+        assert!(is_combat_sample(0, BattlePhase::Advanced));
     }
 
     #[test]
