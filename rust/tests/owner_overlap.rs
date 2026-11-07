@@ -437,13 +437,13 @@ fn hyperspace_movement_releases_world_before_fuel_queries() {
         &mut game.kernel,
         uqm_rust::math::random,
     );
-    // SAFETY: the fixture owns the lifecycle, output deltas and unclipped flagship position.
-    unsafe {
-        let old_size = (ScreenWidth, ScreenHeight);
-        (ScreenWidth, ScreenHeight) = (320, 240);
-        uqm_rust::navigation::abi::MoveSIS(&mut cx, &mut dx, &mut dy);
-        (ScreenWidth, ScreenHeight) = old_size;
-    }
+    uqm_rust::navigation::hyperspace::move_sis(
+        &mut cx,
+        &mut dx,
+        &mut dy,
+        uqm_rust::navigation::hyper_units::Geometry::new((320, 240)),
+        |_, _| panic!("small displacement must not debit fuel"),
+    );
     assert_eq!((dx, dy), (-4, -8));
     assert_eq!(
         (cx.world.data.flagship.log_x, cx.world.data.flagship.log_y),
