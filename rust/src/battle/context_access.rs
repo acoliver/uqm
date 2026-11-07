@@ -85,8 +85,7 @@ mod tactrans_native_access {
 
         fn replace_dead_ship(&mut self, dead: ElementId) {
             new_ship_with_picker(self, dead, |cx, ship, side| {
-                // SAFETY: the native picker runs synchronously with these retained owners.
-                unsafe { crate::battle::ship_native::engine::next_star_ship(cx, Some(ship), side) }
+                crate::battle::ship_native::engine::next_star_ship(cx, Some(ship), side)
             });
         }
 

@@ -11,6 +11,16 @@ pub struct PoolShip {
     pub ship_id: uqm_rust::engine::battle::ShipId,
 }
 impl PoolShip {
+    pub fn set_picker_resources(
+        &mut self,
+        resources: uqm_rust::engine::battle::link_queue::ShipPickerResources,
+    ) {
+        uqm_rust::engine::Kernel::current().write(|kernel| {
+            kernel
+                .ships(self.side)
+                .set_picker_resources(self.link, resources);
+        });
+    }
     /// # Safety
     /// The caller exclusively retains the serialized fixture pools throughout this borrow.
     pub unsafe fn new(player: SIZE) -> Self {

@@ -49,6 +49,7 @@ impl World {
         mut load: impl FnMut(&mut Self, u32) -> FleetTemplate,
     ) {
         self.avail_races().reinit();
+        self.clear_fleet_resources();
         let count = (roster.last_species - roster.first_species + 3) as usize;
         for index in 0..count {
             let species = if index < count - 2 {

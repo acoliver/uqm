@@ -351,7 +351,7 @@ pub(crate) mod engine {
         true
     }
 
-    unsafe fn select_all_ships(cx: &mut crate::engine::battle::Cx<'_>, count: SIZE) -> BOOLEAN {
+    fn select_all_ships(cx: &mut crate::engine::battle::Cx<'_>, count: SIZE) -> BOOLEAN {
         let controls = cx.kernel.player_control;
         if count == 1 {
             return crate::battle::ship_native::engine::next_star_ship(cx, None, 0);

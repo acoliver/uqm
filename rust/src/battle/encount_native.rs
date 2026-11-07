@@ -295,9 +295,7 @@ pub(crate) mod engine {
         queue.free(id);
     }
 
-    /// # Safety
-    /// `player` must be a valid side; fleet, ship queues, and encounter resources must be initialized on the game thread.
-    pub unsafe fn build_battle(
+    pub fn build_battle(
         world: &mut crate::engine::World,
         kernel: &mut crate::engine::Kernel,
         player: COUNT,
@@ -340,7 +338,7 @@ pub(crate) mod engine {
                     frag.max_crew
                 };
                 ship.max_crew = frag.max_crew;
-                ships.set_picker_resources(id, frag.race_strings, frag.icons);
+                ships.set_picker_resources(id, world.fleet_resources(frag.species_id));
                 ship.index = frag.index as u16;
                 ship.cost = 0;
                 ships.set(id, ship);

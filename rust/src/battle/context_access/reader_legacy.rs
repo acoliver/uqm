@@ -4,29 +4,22 @@ use crate::engine::battle::ShipId;
 use crate::ships::native::abi::{COUNT, RPG_PLAYER_NUM};
 
 #[cfg(not(test))]
-/// # Safety
-/// The game thread retains the initialized battle context and all resources used by this call.
-pub unsafe fn get_encounter_star_ship(
+/// Selects an identity from the fleets borrowed by this context.
+pub fn get_encounter_star_ship(
     cx: &mut crate::engine::battle::Cx<'_>,
     input: &crate::engine::input::InputSession,
     activity: crate::engine::world::activity::ActivityControl,
     last: Option<ShipId>,
     player: u16,
 ) -> Option<ShipId> {
-    // SAFETY: the game-thread picker retains its selected ship through this synchronous handoff.
-    unsafe {
-        get_encounter_star_ship_with_picker(cx, input, activity, last, player, |cx, player| {
-            crate::supermelee::native::battle_picker::live::get_next_melee_star_ship(
-                cx, input, player,
-            )
-        })
-    }
+    get_encounter_star_ship_with_picker(cx, input, activity, last, player, |cx, player| {
+        crate::supermelee::native::battle_picker::live::get_next_melee_star_ship(cx, input, player)
+    })
 }
 
-/// # Safety
-/// Last and selected ship identities must belong to their live player fleets.
+/// Queue access validates last and selected identities against the live player fleets.
 #[cfg(not(test))]
-pub unsafe fn get_encounter_star_ship_with_picker(
+pub fn get_encounter_star_ship_with_picker(
     cx: &mut crate::engine::battle::Cx<'_>,
     input: &crate::engine::input::InputSession,
     activity: crate::engine::world::activity::ActivityControl,

@@ -654,8 +654,12 @@ fn descriptor_assets(observer: &AutomationObserver, directory: &Path) {
     descriptor.race = uqm_rust::ships::races::race(SPECIES_ID_EARTHLING_ID);
     ship.SpeciesID = SPECIES_ID_EARTHLING_ID;
     install_descriptor(&mut ship, descriptor);
-    ship.icons = frame_pointer;
-    ship.race_strings = &mut strings;
+    ship.set_picker_resources(
+        uqm_rust::engine::battle::link_queue::ShipPickerResources::new(
+            uqm_rust::strings::owned_table::LoadedTextTable::fixture(vec![Vec::new(); 4]).entry(3),
+            view.clone(),
+        ),
+    );
     // SAFETY: the full local resource graph stays live until the snapshot returns.
     unsafe {
         install_ship(&mut ship);
