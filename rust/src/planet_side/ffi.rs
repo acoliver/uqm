@@ -212,7 +212,7 @@ fn run_retained_session(
         } else {
             None
         };
-        super::runtime::run_frame_at(session, adapters, deadline, input)
+        super::runtime::run_frame_at(game, session, adapters, deadline, input)
     });
     settle_session(
         &controller.session,
