@@ -130,6 +130,18 @@ impl Drop for ContextTextState {
 }
 
 impl ContextLease {
+    pub fn fade_screen(&self, kind: u32, interval: i16) -> u32 {
+        self.0.owned.assert_thread();
+        // SAFETY: this retained context admits the serialized graphics lifecycle.
+        unsafe { super::cmap_abi::FadeScreen(kind, interval) }
+    }
+
+    pub fn finish_color_transforms(&self) {
+        self.0.owned.assert_thread();
+        // SAFETY: transform completion runs on the retained context's graphics thread.
+        unsafe { super::cmap_abi::FlushColorXForms() }
+    }
+
     /// Retain a registered context without dereferencing the supplied address.
     pub fn retain(context: NonNull<context_desc>) -> Self {
         let allocation = ffi::native_allocations()

@@ -110,9 +110,8 @@ pub mod live {
         s.done = true;
         true
     }
-    unsafe fn process(
+    fn process(
         cx: &mut crate::engine::battle::Cx<'_>,
-        input: &crate::engine::input::InputSession,
         state: &mut FleetSelection,
         player: usize,
         keys: u8,
@@ -122,7 +121,7 @@ pub mod live {
             if s.col == 7 && s.row == 0 {
                 set_ship_selected(cx, state, player as u16, u16::MAX, true);
             } else if s.col == 7 && s.row == 1 {
-                if ConfirmExit(cx, input) != 0 {
+                if cx.kernel.input_runtime().confirm_exit(cx) {
                     return 0;
                 }
             } else {
@@ -150,18 +149,7 @@ pub mod live {
         use crate::engine::battle::input::InputSource;
         let player = context.player();
         match context.source() {
-            InputSource::Human => {
-                // SAFETY: the picker owns its selection state and reads game-thread input.
-                unsafe {
-                    process(
-                        cx,
-                        input,
-                        state,
-                        usize::from(player),
-                        PulsedInputToBattleInput(input, player),
-                    )
-                }
-            }
+            InputSource::Human => process(cx, state, usize::from(player), PulsedInputToBattleInput(input, player)),
             InputSource::Computer => {
                 if GetTimeCounter()
                     < state.player[usize::from(player)]
@@ -170,8 +158,7 @@ pub mod live {
                 {
                     return 1;
                 }
-                // SAFETY: the picker owns the initialized fleet selection for this player.
-                unsafe { process(cx, input, state, usize::from(player), 8) }
+                process(cx, state, usize::from(player), 8)
             }
             InputSource::Network(_) => {
                 state
@@ -196,7 +183,7 @@ pub mod live {
             }
         }
     }
-    unsafe fn choose(
+    fn choose(
         cx: &mut crate::engine::battle::Cx<'_>,
         io: &mut crate::engine::observe::Io<'_>,
         input: &crate::engine::input::InputSession,
@@ -216,7 +203,7 @@ pub mod live {
                     .process();
             }
         }
-        cx.with_legacy(|| SleepThread(840 / 120));
+        cx.kernel.input_runtime().sleep(cx, 840 / 120);
         state
             .net
             .as_ref()
@@ -508,10 +495,8 @@ pub mod live {
     }
 
     use crate::engine::observe::Io;
-    use crate::mainloop::input_abi::live::UpdateInputState;
-    /// # Safety
     /// Called at the end of a live melee battle on the game thread.
-    pub unsafe fn melee_game_over(
+    pub fn melee_game_over(
         cx: &mut crate::engine::battle::Cx<'_>,
         input: &crate::engine::input::InputSession,
         io: &mut Io<'_>,
@@ -527,7 +512,7 @@ pub mod live {
                 || input.pulsed().menu[KEY_MENU_CANCEL as usize] != 0;
             loop {
                 if cx
-                    .nested_input(io, |cx| UpdateInputState(cx, input))
+                    .nested_input(io, |cx| cx.kernel.input_runtime().update(cx))
                     .is_none()
                 {
                     break;
@@ -540,8 +525,8 @@ pub mod live {
                 }
                 cx.with_legacy(|| {
                     Async_process();
-                    SleepThread(840 / 40);
                 });
+                cx.kernel.input_runtime().sleep(cx, 840 / 40);
                 if cx.world.activity() & CHECK_ABORT as u16 != 0
                     || button
                     || (cx.kernel.player_control[0] & cx.kernel.player_control[1] & PSYTRON_CONTROL
@@ -601,7 +586,7 @@ pub mod live {
                 .start();
         }
     }
-    unsafe fn get_ships(
+    fn get_ships(
         cx: &mut crate::engine::battle::Cx<'_>,
         input: &crate::engine::input::InputSession,
         mask: u16,
@@ -670,9 +655,8 @@ pub mod live {
             ok.then_some(ships)
         }
     }
-    /// # Safety
     /// Both battle fleets and their selection resources must be initialized.
-    pub unsafe fn get_initial_melee_star_ships(
+    pub fn get_initial_melee_star_ships(
         cx: &mut crate::engine::battle::Cx<'_>,
         input: &crate::engine::input::InputSession,
     ) -> Option<[Option<ShipId>; 2]> {
@@ -680,13 +664,18 @@ pub mod live {
             value(cx, &frame(cx, player), player);
             draw(cx, player);
         }
-        SleepThreadUntil(FadeScreen(FADE_ALL_TO_COLOR, 840 / 2).wrapping_add(840 / 60));
-        FlushColorXForms();
+        let screen = ContextLease::retain(
+            std::ptr::NonNull::new(cx.kernel.screen_context).expect("melee selection screen"),
+        );
+        let deadline = screen
+            .fade_screen(FADE_ALL_TO_COLOR, 840 / 2)
+            .wrapping_add(840 / 60);
+        cx.kernel.input_runtime().sleep_until(cx, deadline);
+        screen.finish_color_transforms();
         get_ships(cx, input, 3)
     }
-    /// # Safety
     /// The selected player's battle fleet and selection resources must be initialized.
-    pub unsafe fn get_next_melee_star_ship(
+    pub fn get_next_melee_star_ship(
         cx: &mut crate::engine::battle::Cx<'_>,
         input: &crate::engine::input::InputSession,
         player: u16,
