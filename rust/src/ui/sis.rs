@@ -294,10 +294,7 @@ pub unsafe extern "C" fn DateToString(
 /// r must point to writable RECT storage.
 #[no_mangle]
 pub unsafe extern "C" fn GetStatusMessageRect(r: *mut RECT) {
-    (*r).corner.x = 2;
-    (*r).corner.y = 130;
-    (*r).extent.width = STATUS_MESSAGE_WIDTH;
-    (*r).extent.height = STATUS_MESSAGE_HEIGHT;
+    *r = status::message_rect();
 }
 
 /// # Safety

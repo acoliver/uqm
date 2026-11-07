@@ -120,7 +120,8 @@ pub unsafe fn init_game_structures(cx: &mut crate::engine::battle::Cx<'_>) -> BO
             cx.kernel.play_frame =
                 CaptureDrawable(LoadGraphicInstance(c"graphics.playmenu".as_ptr()).cast());
             initialize_races(&mut cx);
-            init_siscontexts(cx.kernel);
+            let dimensions = cx.screen_dimensions();
+            init_siscontexts(cx.kernel, dimensions);
             load_sc2_data(&mut cx);
             let catalog = crate::planets::starmap::current_catalog()
                 .unwrap_or_else(|| panic!("planet state initialization requires the star catalog"));
