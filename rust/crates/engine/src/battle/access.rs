@@ -786,8 +786,6 @@ pub fn fixture_element_state(record: &super::record::ElementRecord) -> ElementSt
     observe_element_record(record)
 }
 
-pub(super) mod links;
-
 #[path = "access/processing.rs"]
 mod processing;
 

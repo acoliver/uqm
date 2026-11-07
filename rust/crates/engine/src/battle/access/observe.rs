@@ -115,6 +115,10 @@ pub unsafe fn ship_resources(
 ) -> ShipResourceObservation<'_> {
     let ships = LinkQueue::<Starship>::borrow(pool);
     let s = pool.pool.get(ships.key(id));
+    let icons = s
+        .picker_resources
+        .as_ref()
+        .map_or(std::ptr::null_mut(), |resources| resources.icon().raw());
     ShipResourceObservation {
         descriptor: s
             .descriptor
@@ -131,9 +135,12 @@ pub unsafe fn ship_resources(
                 state: &d.race_state,
             }),
         // SAFETY: the caller retains the loaded icon array for the observation lifetime.
-        icons: unsafe { s.icons.as_ref() },
-        // SAFETY: the caller retains this ship's loaded string table for the observation lifetime.
-        strings: unsafe { s.race_strings.as_ref() },
+        icons: unsafe { icons.as_ref() },
+        strings: s
+            .picker_resources
+            .as_ref()
+            .and_then(|resources| resources.strings.as_ref())
+            .map(crate::strings::owned_table::TextEntry::record),
     }
 }
 
@@ -150,8 +157,10 @@ mod owner_tests {
         let record = ships.record_mut(link);
         record.ship_facing = 9;
         record.crew_level = 42;
-        record.icons = std::ptr::without_provenance_mut(0x1234);
-        record.race_strings = std::ptr::without_provenance_mut(0x5678);
+        let mut descriptor = crate::battle::record::RaceDescriptor::EMPTY;
+        descriptor.ship_info.icons = std::ptr::without_provenance_mut(0x1234);
+        descriptor.ship_info.race_strings = std::ptr::without_provenance_mut(0x5678);
+        record.descriptor = Some(Box::new(descriptor));
         ships.put(link);
         let observed = super::ship_record(&game.kernel.races[0], link, &game.kernel.elements);
         assert_eq!(observed.state.facing, 9);

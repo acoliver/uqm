@@ -82,7 +82,7 @@ pub unsafe extern "C" fn FreeStringTable(table: *mut StringTable) {
     }
     let t = &*table;
     if t.owned_text {
-        drop(Box::from_raw(
+        drop(std::rc::Rc::from_raw(
             table.cast::<super::owned_table::TextAllocation>(),
         ));
         return;
