@@ -20,8 +20,8 @@ use crate::planet_side::report_adapter::DiscoveryReportPort;
 use crate::planets::generate::default;
 use crate::planets::generate::home_contact::{HomeContactSite, LanderTakeoff};
 use crate::planets::generate::special::{self, Body, Orbit, Story, SHATTERED_WORLD};
+use crate::planets::generate::surface::ENERGY_SCAN;
 use crate::planets::generate::yehat::{CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY};
-use crate::planets::surface::ENERGY_SCAN;
 
 /// Every hook looks at planet 0.
 const WORLD: Body = Body::Planet(0);

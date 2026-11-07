@@ -11,8 +11,8 @@ use crate::c_bindings::global_state::PLANET_DESC;
 use crate::comm::dispatch::ship::SHOFIXTI_SHIP;
 use crate::math::RandomContext;
 use crate::planets::generate::default::{self, FLEE, IGNORE_FLAGSHIP, REFORM_GROUP};
+use crate::planets::generate::orbits::{self, OrbitRequest};
 use crate::planets::generate::special::{FleetGroups, Story, SELENIC_WORLD};
-use crate::planets::orbits::{self, OrbitRequest};
 use crate::ships::queue::{NAME_OFFSET, NUM_CAPTAINS_NAMES};
 
 /// `METAL_WORLD` (`plandata.h`).

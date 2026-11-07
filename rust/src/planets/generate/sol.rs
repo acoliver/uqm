@@ -11,11 +11,11 @@ pub use orbital::generate_orbital;
 
 use crate::c_bindings::global_state::{NODE_INFO, PLANET_DESC, PLANET_NUMBER_BASE, SYSTEM_INFO};
 use crate::math::RandomContext;
-use crate::planets::consts::{EARTH_RADIUS, MAP_HEIGHT, MAP_WIDTH, PLANET_SHIELDED};
+use crate::planets::generate::consts::{EARTH_RADIUS, MAP_HEIGHT, MAP_WIDTH, PLANET_SHIELDED};
 use crate::planets::generate::default::{self, PlanetNames};
+use crate::planets::generate::orbits::{MAX_MOONS, MOON_DELTA};
 use crate::planets::generate::special::{self, Body, FleetGroups, Story};
-use crate::planets::orbits::{MAX_MOONS, MOON_DELTA};
-use crate::planets::surface::{self, BIOLOGICAL_SCAN};
+use crate::planets::generate::surface::{self, BIOLOGICAL_SCAN};
 
 const SOL_SEED: u32 = 334_241_042;
 const PLUTO: Body = Body::Planet(8);

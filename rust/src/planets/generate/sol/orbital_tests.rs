@@ -3,7 +3,7 @@ use super::orbital::{Orbital, Queues, Scene};
 use super::*;
 use crate::c_bindings::global_state::PLANET_INFO;
 use crate::comm::dispatch::{CHECK_ABORT, CHECK_LOAD, START_ENCOUNTER};
-use crate::planets::calc::{AnalysisSite, StarDescription};
+use crate::planets::generate::calc::{AnalysisSite, StarDescription};
 use crate::planets::generate::default::Npcs;
 use crate::planets::generate::special::Orbit;
 use crate::planets::tables::PLANET_ARRAY;

@@ -4,7 +4,7 @@ use super::Harness;
 use uqm_rust::io::uio_bridge;
 use uqm_rust::mainloop::dir_prep::contentDir;
 use uqm_rust::planets::c_api::{self, CapturedSurface};
-use uqm_rust::planets::consts::{MAP_HEIGHT, MAP_WIDTH};
+use uqm_rust::planets::generate::consts::{MAP_HEIGHT, MAP_WIDTH};
 use uqm_rust::planets::generate::sol_exports::GENERATE_SOL_FUNCTIONS;
 use uqm_rust::resource::ffi_bridge;
 use uqm_rust::state::game_state_keys::set_game_state;

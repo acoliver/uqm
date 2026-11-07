@@ -8,7 +8,7 @@
 use crate::battle::battle_types::normalize_angle;
 use crate::c_bindings::global_state::{PlanetFrame, PLANET_DESC};
 use crate::math::RandomContext;
-use crate::planets::consts::PLANET_SHIELDED;
+use crate::planets::generate::consts::PLANET_SHIELDED;
 use crate::planets::generate::default;
 use crate::planets::generate::special::{
     self, Body, Orbit, Story, HIERARCHY_STARBASE, MIN_MOON_RADIUS, SAPPHIRE_WORLD,

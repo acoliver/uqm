@@ -1,7 +1,7 @@
 use super::*;
 use crate::planet_side::report_adapter::ReportDisposition;
 use crate::planet_side::runtime::AdapterError;
-use crate::planets::calc::{AnalysisSite, StarDescription};
+use crate::planets::generate::calc::{AnalysisSite, StarDescription};
 use crate::planets::generate::home_contact::tests::FakeStory;
 use std::cell::RefCell;
 use std::rc::Rc;

@@ -4,7 +4,7 @@ use super::Harness;
 use uqm_rust::battle::gendef::{getGenerateFunctions, SOL_DEFINED};
 
 use uqm_rust::planets::c_api::{self, CapturedSurface};
-use uqm_rust::planets::consts::{MAP_HEIGHT, MAP_WIDTH};
+use uqm_rust::planets::generate::consts::{MAP_HEIGHT, MAP_WIDTH};
 use uqm_rust::planets::generate::sol_exports::GENERATE_SOL_FUNCTIONS;
 use uqm_rust::planets::generate::vtable::DEFAULT_HOOKS;
 

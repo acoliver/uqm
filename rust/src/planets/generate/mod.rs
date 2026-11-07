@@ -47,3 +47,9 @@ pub mod zoq;
 
 #[cfg(test)]
 mod test_npcs;
+
+pub mod calc;
+pub mod consts;
+pub mod orbit_tables;
+pub mod orbits;
+pub mod surface;

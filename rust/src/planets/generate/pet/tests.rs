@@ -16,8 +16,8 @@ use crate::comm::dispatch::{
 use crate::math::RandomContext;
 use crate::planet_side::report_adapter::{DiscoveryReportPort, ReportDisposition};
 use crate::planet_side::runtime::AdapterError;
-use crate::planets::calc::{AnalysisSite, StarDescription};
-use crate::planets::consts::EARTH_RADIUS;
+use crate::planets::generate::calc::{AnalysisSite, StarDescription};
+use crate::planets::generate::consts::EARTH_RADIUS;
 use crate::planets::generate::home_contact::tests::FakeStory;
 use crate::planets::generate::home_contact::HomeContactSite;
 use crate::planets::generate::special::{Body, Orbit, TELLURIC_WORLD};

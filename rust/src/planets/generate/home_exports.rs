@@ -549,7 +549,7 @@ unsafe extern "C" fn burv_moons(system: *mut SOLARSYS_STATE, planet: *mut PLANET
     burv::generate_moons(
         sys_gen_rng(),
         (*system).SunDesc[0].data_index,
-        crate::planets::consts::star_color(crate::planets::ffi::current_star_type()),
+        crate::planets::generate::consts::star_color(crate::planets::ffi::current_star_type()),
         planet_moons,
         moons,
         body_of(system, planet),

@@ -6,12 +6,12 @@
 
 use crate::c_bindings::global_state::PLANET_DESC;
 use crate::math::RandomContext;
-use crate::planets::consts::PLANET_SHIELDED;
+use crate::planets::generate::consts::PLANET_SHIELDED;
 use crate::planets::generate::default;
+use crate::planets::generate::orbits::{self, OrbitRequest};
 use crate::planets::generate::special::{
     self, Body, FleetGroups, Orbit, Story, EARTH_ATMOSPHERE, IN_ORBIT, URQUAN_SHIP, WATER_WORLD,
 };
-use crate::planets::orbits::{self, OrbitRequest};
 
 /// `GenerateColony_initNpcs`.
 pub fn init_npcs(host: &mut (impl FleetGroups + Story)) -> bool {
@@ -57,7 +57,7 @@ pub fn generate_orbital(orbit: &mut Orbit<'_>, body: Body, load_planet: impl FnO
     if body != Body::Planet(0) {
         return orbit.default_orbital(load_planet);
     }
-    crate::planets::calc::do_planetary_analysis(
+    crate::planets::generate::calc::do_planetary_analysis(
         orbit.rng,
         orbit.plan_data,
         orbit.star,

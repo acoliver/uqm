@@ -7,7 +7,7 @@
 use crate::battle::battle_types::{cosine, sine, QUADRANT};
 use crate::c_bindings::global_state::{PlanetFrame, PLANET_DESC};
 use crate::math::RandomContext;
-use crate::planets::consts::PLANET_SHIELDED;
+use crate::planets::generate::consts::PLANET_SHIELDED;
 use crate::planets::generate::default;
 use crate::planets::generate::special::{
     self, Body, Orbit, EARTH_ATMOSPHERE, HIERARCHY_STARBASE, MIN_MOON_RADIUS, WATER_WORLD,

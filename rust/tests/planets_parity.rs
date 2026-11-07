@@ -431,7 +431,7 @@ fn gravity_and_random_locations_agree() {
             let exported = unsafe { CalcGravity((&raw const info.PlanetInfo).cast()) };
             assert_eq!(
                 exported,
-                uqm_rust::planets::calc::calc_gravity(&info.PlanetInfo),
+                uqm_rust::planets::generate::calc::calc_gravity(&info.PlanetInfo),
                 "density {density} radius {radius}"
             );
         }
@@ -445,7 +445,7 @@ fn gravity_and_random_locations_agree() {
             GenerateRandomLocation(&mut exported_point);
         }
         rng.reseed(seed);
-        uqm_rust::planets::surface::generate_random_location(&mut rng, &mut direct_point);
+        uqm_rust::planets::generate::surface::generate_random_location(&mut rng, &mut direct_point);
         assert_eq!(
             (exported_point.x, exported_point.y),
             (direct_point.x, direct_point.y),

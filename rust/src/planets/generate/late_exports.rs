@@ -7,15 +7,15 @@ use crate::battle::gendef::UTWIG_DEFINED;
 use crate::c_bindings::global_state::{NODE_INFO, PLANET_DESC, SOLARSYS_STATE};
 use crate::comm::dispatch::{conv, ship};
 use crate::planets::c_api;
-use crate::planets::consts::star_color;
 use crate::planets::ffi::{blank_node, current_star_type, node_or, sys_gen_rng};
+use crate::planets::generate::consts::star_color;
 use crate::planets::generate::exports::discovery_report;
 use crate::planets::generate::home_exports::{RaceHome, Takeoff};
 use crate::planets::generate::special::{Body, LiveStory, Story};
 use crate::planets::generate::special_exports::{body_of, lay_out_planets, orbit_world};
+use crate::planets::generate::surface::{BIOLOGICAL_SCAN, ENERGY_SCAN};
 use crate::planets::generate::vtable::{GenerateFunctions, DEFAULT_HOOKS};
 use crate::planets::generate::{myc, sam, spa, utw, vux};
-use crate::planets::surface::{BIOLOGICAL_SCAN, ENERGY_SCAN};
 
 impl utw::UtwigSite for RaceHome<'_, '_, '_> {
     fn start_druuge_tracking(&mut self) -> bool {

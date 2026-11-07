@@ -4,9 +4,9 @@
 //! Every RNG draw happens in the same order and count as the C original, so
 //! the generated universe is unchanged.
 
-use crate::c_bindings::global_state::{PlanetFrame, PLANET_DESC, PLANET_INFO, SYSTEM_INFO};
+use crate::engine::world::planet::{PlanetFrame, PLANET_DESC, PLANET_INFO, SYSTEM_INFO};
 use crate::math::RandomContext;
-use crate::planets::consts::{
+use crate::planets::generate::consts::{
     atmosphere_range, density_class, planet_size, star_color, star_type, EARTH_RADIUS,
     PLANET_SHIELDED,
 };

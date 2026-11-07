@@ -250,7 +250,9 @@ impl<'a> RustGenerators<'a> {
 
 impl Generators for RustGenerators<'_> {
     fn analyze(&mut self, case: &WorldCase) -> SYSTEM_INFO {
-        use uqm_rust::planets::calc::{do_planetary_analysis, AnalysisSite, StarDescription};
+        use uqm_rust::planets::generate::calc::{
+            do_planetary_analysis, AnalysisSite, StarDescription,
+        };
 
         let mut info: SYSTEM_INFO = unsafe { std::mem::zeroed() };
         let mut desc: PLANET_DESC = unsafe { std::mem::zeroed() };
@@ -275,24 +277,43 @@ impl Generators for RustGenerators<'_> {
     }
 
     fn minerals(&mut self, info: &SYSTEM_INFO, which: u16, node: &mut NODE_INFO) -> u16 {
-        uqm_rust::planets::surface::generate_mineral_deposits(&mut self.rng, info, which, node)
+        uqm_rust::planets::generate::surface::generate_mineral_deposits(
+            &mut self.rng,
+            info,
+            which,
+            node,
+        )
     }
 
     fn life(&mut self, info: &SYSTEM_INFO, which: u16, node: &mut NODE_INFO) -> u16 {
-        uqm_rust::planets::surface::generate_life_forms(&mut self.rng, info, which, node)
+        uqm_rust::planets::generate::surface::generate_life_forms(&mut self.rng, info, which, node)
     }
 
     fn preset_life(&mut self, info: &SYSTEM_INFO, which: u16, node: &mut NODE_INFO) -> u16 {
         let types = &PRESET_LIFE[..PRESET_LIFE.len() - 1];
-        uqm_rust::planets::surface::generate_preset_life(&mut self.rng, info, types, which, node)
+        uqm_rust::planets::generate::surface::generate_preset_life(
+            &mut self.rng,
+            info,
+            types,
+            which,
+            node,
+        )
     }
 
     fn random_nodes(&mut self, info: &SYSTEM_INFO, which: u16, node: &mut NODE_INFO) -> u16 {
-        uqm_rust::planets::surface::generate_random_nodes(&mut self.rng, info, 1, 4, 9, which, node)
+        uqm_rust::planets::generate::surface::generate_random_nodes(
+            &mut self.rng,
+            info,
+            1,
+            4,
+            9,
+            which,
+            node,
+        )
     }
 
     fn fill_orbits(&mut self, case: &OrbitCase, descs: &mut [PLANET_DESC]) -> Option<u8> {
-        use uqm_rust::planets::orbits::{fill_orbits, OrbitRequest};
+        use uqm_rust::planets::generate::orbits::{fill_orbits, OrbitRequest};
 
         self.rng.reseed(case.seed);
         fill_orbits(
@@ -336,7 +357,7 @@ mod rust_special {
     };
     use uqm_rust::c_bindings::global_state::{PlanetFrame, NODE_INFO, PLANET_DESC, SYSTEM_INFO};
     use uqm_rust::math::RandomContext;
-    use uqm_rust::planets::consts::star_color;
+    use uqm_rust::planets::generate::consts::star_color;
     use uqm_rust::planets::generate::special::{Body, Story};
     use uqm_rust::planets::generate::{
         andro, burv, chmmr, colony, dru, ilw, myc, orz, pet, pku, rainbow, shof, slylandro, sup,

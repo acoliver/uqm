@@ -1,5 +1,7 @@
 //! Campaign state owned by one game-thread lifecycle.
 
+pub mod planet;
+
 use crate::battle::schema::GAME_STATE;
 pub const SOUND_DISABLED: u8 = 16;
 

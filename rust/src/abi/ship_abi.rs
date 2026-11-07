@@ -2140,47 +2140,9 @@ pub const PLANET_SHIELDED: _bindgen_ty_24 = 128;
 pub const HIERARCHY_STARBASE: _bindgen_ty_24 = 255;
 pub const SA_MATRA: _bindgen_ty_24 = 254;
 pub type _bindgen_ty_24 = ::std::os::raw::c_uint;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct ELEMENT_ENTRY {
-    pub ElementType: BYTE,
-    pub Density: BYTE,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct PlanetFrame {
-    pub Type: BYTE,
-    pub BaseTectonics: BYTE,
-    pub AtmoAndDensity: BYTE,
-    pub UsefulElements: [ELEMENT_ENTRY; 8usize],
-    pub CMapInstance: RESOURCE,
-    pub XlatTabInstance: RESOURCE,
-    pub num_faults: COUNT,
-    pub fault_depth: SIZE,
-    pub num_blemishes: COUNT,
-    pub base_elevation: SIZE,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct PLANET_INFO {
-    pub AxialTilt: SIZE,
-    pub Tectonics: UWORD,
-    pub Weather: UWORD,
-    pub PlanetDensity: UWORD,
-    pub PlanetRadius: UWORD,
-    pub SurfaceGravity: UWORD,
-    pub SurfaceTemperature: SIZE,
-    pub RotationPeriod: UWORD,
-    pub AtmoDensity: UWORD,
-    pub LifeChance: SIZE,
-    pub PlanetToSunDist: UWORD,
-    pub PlanDataPtr: *const PlanetFrame,
-    pub ScanSeed: [DWORD; 3usize],
-    pub ScanRetrieveMask: [DWORD; 3usize],
-    pub DiscoveryString: STRING,
-    pub LanderFont: FONT,
-    pub LanderFontEff: FRAME,
-}
+pub use crate::engine::world::planet::ELEMENT_ENTRY;
+pub use crate::engine::world::planet::PlanetFrame;
+pub use crate::engine::world::planet::PLANET_INFO;
 pub const GAS_DENSITY: _bindgen_ty_25 = 0;
 pub const LIGHT_DENSITY: _bindgen_ty_25 = 1;
 pub const LOW_DENSITY: _bindgen_ty_25 = 2;
@@ -2188,34 +2150,9 @@ pub const NORMAL_DENSITY: _bindgen_ty_25 = 3;
 pub const HIGH_DENSITY: _bindgen_ty_25 = 4;
 pub const SUPER_DENSITY: _bindgen_ty_25 = 5;
 pub type _bindgen_ty_25 = ::std::os::raw::c_uint;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct SYSTEM_INFO {
-    pub StarSize: BYTE,
-    pub StarIntensity: BYTE,
-    pub StarEnergy: UWORD,
-    pub PlanetInfo: PLANET_INFO,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct planet_desc {
-    pub rand_seed: DWORD,
-    pub data_index: BYTE,
-    pub NumPlanets: BYTE,
-    pub radius: SIZE,
-    pub location: POINT,
-    pub temp_color: Color,
-    pub NextIndex: COUNT,
-    pub image: STAMP,
-    pub pPrevDesc: *mut PLANET_DESC,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct node_info {
-    pub loc_pt: POINT,
-    pub density: COUNT,
-    pub type_: COUNT,
-}
+pub use crate::engine::world::planet::SYSTEM_INFO;
+pub use crate::engine::world::planet::planet_desc;
+pub use crate::engine::world::planet::node_info;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct planet_orbit {

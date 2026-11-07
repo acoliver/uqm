@@ -4,9 +4,10 @@
 //! the same order and count as C so node lists (and the scan-retrieved masks
 //! saved against them) stay stable.
 
-use crate::c_bindings::global_state::{NODE_INFO, POINT, SYSTEM_INFO};
+use crate::engine::graphics::native_abi::POINT;
+use crate::engine::world::planet::{NODE_INFO, SYSTEM_INFO};
 use crate::math::RandomContext;
-use crate::planets::consts::{MAP_HEIGHT, MAP_WIDTH};
+use crate::planets::generate::consts::{MAP_HEIGHT, MAP_WIDTH};
 
 /// `PlanetScanTypes`.
 pub const MINERAL_SCAN: usize = 0;
@@ -97,7 +98,7 @@ fn calc_life_forms(
     let mut num_life_forms: u16 = 0;
     // SAFETY: see `calc_mineral_deposits`.
     let frame = unsafe { &*sys_info.PlanetInfo.PlanDataPtr };
-    if crate::planets::consts::planet_size(frame.Type) == 2 {
+    if crate::planets::generate::consts::planet_size(frame.Type) == 2 {
         return num_life_forms;
     }
 

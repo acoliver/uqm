@@ -1,6 +1,6 @@
 use super::*;
 use crate::engine::{Kernel as KernelOwner, World as WorldOwner, WorldData as WorldFields};
-use crate::planets::orbit_tables::NUMBER_OF_PLANET_TYPES;
+use crate::planets::generate::orbit_tables::NUMBER_OF_PLANET_TYPES;
 
 use crate::graphics::context_abi::SetContext;
 

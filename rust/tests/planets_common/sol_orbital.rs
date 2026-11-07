@@ -6,7 +6,7 @@ use super::sol::{self, Layout};
 use std::fmt::Write as _;
 use uqm_rust::c_bindings::global_state::{PlanetFrame, PLANET_DESC, SYSTEM_INFO};
 use uqm_rust::math::RandomContext;
-use uqm_rust::planets::calc::{AnalysisSite, StarDescription};
+use uqm_rust::planets::generate::calc::{AnalysisSite, StarDescription};
 use uqm_rust::planets::generate::sol::orbital;
 use uqm_rust::planets::generate::special::{Body, Orbit};
 

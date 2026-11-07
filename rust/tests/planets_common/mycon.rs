@@ -10,7 +10,7 @@ use uqm_rust::c_bindings::global_state::{PlanetFrame, NODE_INFO, PLANET_DESC, SY
 use uqm_rust::math::RandomContext;
 use uqm_rust::planets::generate::myc;
 use uqm_rust::planets::generate::special::{Body, Story};
-use uqm_rust::planets::surface::ENERGY_SCAN;
+use uqm_rust::planets::generate::surface::ENERGY_SCAN;
 
 const STARS: [u8; 5] = [
     MYCON_DEFINED,

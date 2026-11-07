@@ -5,9 +5,9 @@ use crate::c_bindings::global_state::{PlanetFrame, IP_GROUP, PLANET_DESC, POINT}
 use crate::math::RandomContext;
 use crate::planets::generate::default::{self, FLEE, IGNORE_FLAGSHIP, REFORM_GROUP};
 use crate::planets::generate::home_contact::HomeContactSite;
+use crate::planets::generate::orbits::MOON_DELTA;
 use crate::planets::generate::special::{self, Body, Orbit, Story, MIN_MOON_RADIUS, URQUAN_SHIP};
 use crate::planets::generate::yehat::{CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY};
-use crate::planets::orbits::MOON_DELTA;
 
 // `races.h`, `grpinfo.h`, `plandata.h`, `units.h` and `globdata.h`.
 const BLACK_URQUAN_SHIP: u8 = 21;

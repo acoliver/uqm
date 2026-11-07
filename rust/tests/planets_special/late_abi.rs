@@ -3,8 +3,8 @@
 use super::Harness;
 use uqm_rust::battle::gendef::*;
 use uqm_rust::planets::generate::late_exports::*;
+use uqm_rust::planets::generate::surface::BIOLOGICAL_SCAN;
 use uqm_rust::planets::generate::vtable::{GenerateFunctions, DEFAULT_HOOKS};
-use uqm_rust::planets::surface::BIOLOGICAL_SCAN;
 use uqm_rust::state::game_state_keys::get_game_state;
 
 fn slots(table: &GenerateFunctions) -> [usize; 13] {
@@ -237,7 +237,7 @@ fn check_live_queues(harness: &mut Harness) {
         let saved_planet = harness.state.PlanetDesc[4];
         // units.h and solarsys.c: SIS height = screen height - 13;
         // DISPLAY_TO_LOC = ((SIS width >> 1) - 8) >> 1.
-        let half_width = i32::from(uqm_rust::planets::consts::MAP_WIDTH) >> 1;
+        let half_width = i32::from(uqm_rust::planets::generate::consts::MAP_WIDTH) >> 1;
         let half_height = (ScreenHeight - 13) >> 1;
         let display_to_loc = (half_width - 8) >> 1;
         harness.state.SunDesc[0].radius = (display_to_loc * 10) as i16;

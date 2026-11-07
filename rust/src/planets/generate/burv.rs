@@ -11,10 +11,10 @@ use crate::math::RandomContext;
 use crate::planet_side::report_adapter::DiscoveryReportPort;
 use crate::planets::generate::default;
 use crate::planets::generate::home_contact::LanderTakeoff;
+use crate::planets::generate::orbits::{MAX_MOONS, MOON_DELTA};
 use crate::planets::generate::special::{
     self, Body, Orbit, Story, MIN_MOON_RADIUS, REDUX_WORLD, SELENIC_WORLD,
 };
-use crate::planets::orbits::{MAX_MOONS, MOON_DELTA};
 
 const HOME: Body = Body::Planet(0);
 const BROADCASTERS_MOON: Body = Body::Moon { planet: 0, moon: 0 };

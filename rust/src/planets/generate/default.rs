@@ -12,10 +12,10 @@ use crate::c_bindings::global_state::{
 };
 use crate::math::RandomContext;
 use crate::planet_side::report_adapter::{DiscoveryReportPort, ReportDisposition};
-use crate::planets::calc::{self, AnalysisSite, StarDescription};
-use crate::planets::consts::{planet_size, PLANET_SHIELDED};
-use crate::planets::orbits::{self, OrbitRequest};
-use crate::planets::surface::{self, BIOLOGICAL_SCAN, ENERGY_SCAN, MINERAL_SCAN};
+use crate::planets::generate::calc::{self, AnalysisSite, StarDescription};
+use crate::planets::generate::consts::{planet_size, PLANET_SHIELDED};
+use crate::planets::generate::orbits::{self, OrbitRequest};
+use crate::planets::generate::surface::{self, BIOLOGICAL_SCAN, ENERGY_SCAN, MINERAL_SCAN};
 
 /// `GENERATE_ALL`: count every node instead of fetching one.
 pub const GENERATE_ALL: u16 = !0;

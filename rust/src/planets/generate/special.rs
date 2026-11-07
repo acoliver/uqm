@@ -6,8 +6,8 @@ use crate::battle::battle_types::{arctan, cosine, sine};
 use crate::c_bindings::global_state::{PlanetFrame, IP_GROUP, PLANET_DESC, SYSTEM_INFO};
 use crate::engine::{StoryKey, World};
 use crate::math::RandomContext;
-use crate::planets::calc::{AnalysisSite, StarDescription};
-use crate::planets::consts::{EARTH_RADIUS, PLANET_SHIELDED};
+use crate::planets::generate::calc::{AnalysisSite, StarDescription};
+use crate::planets::generate::consts::{EARTH_RADIUS, PLANET_SHIELDED};
 use crate::planets::generate::default::{self, Npcs};
 
 /// `planets.h`/`plandata.h` values the generators use.

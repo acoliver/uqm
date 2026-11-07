@@ -152,7 +152,7 @@ fn other_worlds_pick_up_nothing() {
 }
 
 fn orbit_scenes(body: Body, story: &FakeStory) -> (u32, u32, (u8, u8), u32) {
-    use crate::planets::calc::{AnalysisSite, StarDescription};
+    use crate::planets::generate::calc::{AnalysisSite, StarDescription};
     let mut rng = RandomContext::with_seed(11);
     let mut sys_info: SYSTEM_INFO = unsafe { std::mem::zeroed() };
     sys_info.PlanetInfo.Weather = 9;

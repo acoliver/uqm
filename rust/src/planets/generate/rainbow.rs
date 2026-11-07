@@ -24,7 +24,8 @@ pub fn generate_planets(
         let planet = &mut planets[0];
         planet.data_index = RAINBOW_WORLD;
         planet.NumPlanets = 0;
-        planet.radius = (i32::from(crate::planets::consts::EARTH_RADIUS) * 50 / 100) as i16;
+        planet.radius =
+            (i32::from(crate::planets::generate::consts::EARTH_RADIUS) * 50 / 100) as i16;
         let mut angle = crate::battle::battle_types::arctan(
             i32::from(planet.location.x),
             i32::from(planet.location.y),

@@ -16,12 +16,12 @@ use crate::comm::dispatch::{CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY};
 use crate::math::RandomContext;
 use crate::planet_side::report_adapter::{DiscoveryReportPort, ReportDisposition};
 use crate::planet_side::runtime::AdapterError;
-use crate::planets::calc::{AnalysisSite, StarDescription};
-use crate::planets::consts::EARTH_RADIUS;
+use crate::planets::generate::calc::{AnalysisSite, StarDescription};
+use crate::planets::generate::consts::EARTH_RADIUS;
 use crate::planets::generate::home_contact::tests::FakeStory;
 use crate::planets::generate::home_contact::{HomeContactSite, LanderTakeoff};
 use crate::planets::generate::special::{Body, Orbit, Story, SHATTERED_WORLD};
-use crate::planets::surface::ENERGY_SCAN;
+use crate::planets::generate::surface::ENERGY_SCAN;
 
 const MOON: Body = Body::Moon { planet: 0, moon: 0 };
 const IN_INTERPLANETARY: u16 = 4;

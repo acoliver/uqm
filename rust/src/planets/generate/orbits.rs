@@ -1,9 +1,9 @@
 //! Planet and moon orbit layout, ported from `planets/orbits.c`.
 
-use crate::battle::battle_types::{cosine, sine};
-use crate::c_bindings::global_state::PLANET_DESC;
+use crate::engine::math::battle_types::{cosine, sine};
+use crate::engine::world::planet::PLANET_DESC;
 use crate::math::RandomContext;
-use crate::planets::orbit_tables::{
+use crate::planets::generate::orbit_tables::{
     BLUE, GREEN, NUMBER_OF_PLANET_TYPES, ORANGE, RED, WHITE, YELLOW,
 };
 

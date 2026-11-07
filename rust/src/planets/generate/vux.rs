@@ -4,12 +4,12 @@ use crate::battle::gendef::{MAIDENS_DEFINED, VUX_BEAST_DEFINED, VUX_DEFINED};
 use crate::c_bindings::global_state::{PlanetFrame, NODE_INFO, PLANET_DESC, SYSTEM_INFO};
 use crate::math::RandomContext;
 use crate::planet_side::report_adapter::DiscoveryReportPort;
-use crate::planets::consts::EARTH_RADIUS;
+use crate::planets::generate::consts::EARTH_RADIUS;
 use crate::planets::generate::default;
 use crate::planets::generate::home_contact::{HomeContactSite, LanderTakeoff};
 use crate::planets::generate::special::{self, Body, Orbit, Story, REDUX_WORLD, WATER_WORLD};
+use crate::planets::generate::surface;
 use crate::planets::generate::yehat::{CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY};
-use crate::planets::surface;
 
 const WORLD: Body = Body::Planet(0);
 // `units.h`: FULL_CIRCLE=64, HALF_CIRCLE=32, OCTANT=8.
@@ -147,8 +147,8 @@ pub fn generate_energy(
             if story.flag("SHOFIXTI_MAIDENS") != 0 {
                 return 0;
             }
-            node.loc_pt.x = (crate::planets::consts::MAP_WIDTH / 3) as i16;
-            node.loc_pt.y = (crate::planets::consts::MAP_HEIGHT * 5 / 8) as i16;
+            node.loc_pt.x = (crate::planets::generate::consts::MAP_WIDTH / 3) as i16;
+            node.loc_pt.y = (crate::planets::generate::consts::MAP_HEIGHT * 5 / 8) as i16;
             return 1;
         }
         if star == VUX_DEFINED {

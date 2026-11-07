@@ -12,10 +12,10 @@ use std::ffi::c_void;
 use crate::c_bindings::global_state::{NODE_INFO, PLANET_DESC, SOLARSYS_STATE};
 use crate::planet_side::report_adapter::CffiDiscoveryReport;
 use crate::planets::c_api::{load_planet_default_surface, LiveNames};
-use crate::planets::consts::star_color;
 use crate::planets::ffi::{
     analysis_context, blank_node, current_star_type, node_or, plan_data, sys_gen_rng,
 };
+use crate::planets::generate::consts::star_color;
 use crate::planets::generate::default;
 
 /// `planetIndex (system, world)`: the planet itself, or the planet a moon

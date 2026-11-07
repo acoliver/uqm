@@ -3,8 +3,8 @@
 
 use crate::c_bindings::global_state::{NODE_INFO, PLANET_DESC, PLANET_INFO, SOLARSYS_STATE};
 use crate::planets::c_api::{self, CapturedSurface, LiveNames};
-use crate::planets::consts::star_color;
 use crate::planets::ffi::{blank_node, current_star_type, node_or, sys_gen_rng};
+use crate::planets::generate::consts::star_color;
 use crate::planets::generate::default;
 use crate::planets::generate::exports::{discovery_report, planet_index};
 use crate::planets::generate::sol::{self, orbital};
@@ -80,8 +80,8 @@ impl orbital::Orbital for SolOrbit<'_, '_, '_> {
             unsafe {
                 CapturedSurface::load(c"graphics.earthmask")
                     .into_definition(
-                        crate::planets::consts::MAP_WIDTH as i16,
-                        crate::planets::consts::MAP_HEIGHT as i16,
+                        crate::planets::generate::consts::MAP_WIDTH as i16,
+                        crate::planets::generate::consts::MAP_HEIGHT as i16,
                     )
                     .expect("Earth surface definition could not be rescaled")
             }

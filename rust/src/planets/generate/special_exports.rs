@@ -17,10 +17,10 @@ use crate::planets::c_api::{
     start_sphere_tracking, LiveGame, SLYLANDRO_HOME_CONVERSATION, SYREEN_CONVERSATION,
     YEHAT_CONVERSATION, YEHAT_SHIP,
 };
-use crate::planets::consts::star_color;
 use crate::planets::ffi::{
     analysis_context, blank_node, current_star_type, node_or, plan_data, sys_gen_rng,
 };
+use crate::planets::generate::consts::star_color;
 use crate::planets::generate::exports::{discovery_report, planet_index};
 use crate::planets::generate::special::{Body, LiveStory, Orbit, Story};
 use crate::planets::generate::vtable::{GenerateFunctions, DEFAULT_HOOKS};

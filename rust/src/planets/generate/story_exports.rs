@@ -14,10 +14,10 @@ use crate::planets::c_api::{
     load_planet_default_surface, load_ruins_story, load_starbase_report, start_sphere_tracking,
     LiveGame,
 };
-use crate::planets::consts::star_color;
 use crate::planets::ffi::{blank_node, node_or, sys_gen_rng};
 use crate::planets::generate::andro;
 use crate::planets::generate::chmmr::{self, ChmmrSite};
+use crate::planets::generate::consts::star_color;
 use crate::planets::generate::exports::discovery_report;
 use crate::planets::generate::shof;
 use crate::planets::generate::special::{LiveStory, Story};

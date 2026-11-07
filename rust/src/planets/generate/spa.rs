@@ -3,14 +3,14 @@
 use crate::c_bindings::global_state::{NODE_INFO, PLANET_DESC, SYSTEM_INFO};
 use crate::math::RandomContext;
 use crate::planet_side::report_adapter::DiscoveryReportPort;
-use crate::planets::calc;
-use crate::planets::consts::PLANET_SHIELDED;
+use crate::planets::generate::calc;
+use crate::planets::generate::consts::PLANET_SHIELDED;
 use crate::planets::generate::default;
 use crate::planets::generate::home_contact::{HomeContactSite, LanderTakeoff};
+use crate::planets::generate::orbits::{self, OrbitRequest, MOON_DELTA};
 use crate::planets::generate::special::{self, Body, Orbit, Story, MIN_MOON_RADIUS, WATER_WORLD};
+use crate::planets::generate::surface::{self, BIOLOGICAL_SCAN, MINERAL_SCAN};
 use crate::planets::generate::yehat::{CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY};
-use crate::planets::orbits::{self, OrbitRequest, MOON_DELTA};
-use crate::planets::surface::{self, BIOLOGICAL_SCAN, MINERAL_SCAN};
 
 const WORLD: Body = Body::Planet(0);
 const MOON: Body = Body::Moon { planet: 0, moon: 0 };

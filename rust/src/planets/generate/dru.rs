@@ -9,7 +9,7 @@ use crate::battle::battle_types::{HALF_CIRCLE, OCTANT};
 use crate::c_bindings::global_state::{PlanetFrame, NODE_INFO, PLANET_DESC, SYSTEM_INFO};
 use crate::math::RandomContext;
 use crate::planet_side::report_adapter::DiscoveryReportPort;
-use crate::planets::consts::EARTH_RADIUS;
+use crate::planets::generate::consts::EARTH_RADIUS;
 use crate::planets::generate::default;
 use crate::planets::generate::home_contact::{self, HomeContactSite, LanderTakeoff};
 use crate::planets::generate::special::{self, Body, Orbit, Story, DUST_WORLD};

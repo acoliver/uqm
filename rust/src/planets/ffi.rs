@@ -12,10 +12,10 @@ use crate::c_bindings::global_state::{
 };
 use crate::engine::World as WorldOwner;
 use crate::math::RandomContext;
-use crate::planets::calc::{self, AnalysisSite, StarDescription};
-use crate::planets::orbit_tables::NUMBER_OF_PLANET_TYPES;
-use crate::planets::orbits::{self, OrbitRequest};
-use crate::planets::surface;
+use crate::planets::generate::calc::{self, AnalysisSite, StarDescription};
+use crate::planets::generate::orbit_tables::NUMBER_OF_PLANET_TYPES;
+use crate::planets::generate::orbits::{self, OrbitRequest};
+use crate::planets::generate::surface;
 use crate::planets::tables::{ELEMENT_ARRAY, PLANET_ARRAY};
 use crate::planets::topography;
 
@@ -304,7 +304,7 @@ pub unsafe extern "C" fn fill_orbits_c(
     };
     let request = OrbitRequest {
         star_size: (*system).SunDesc[0].data_index,
-        star_color: crate::planets::consts::star_color(current_star_type()),
+        star_color: crate::planets::generate::consts::star_color(current_star_type()),
         num_planets,
         generating_moons: base == (*system).MoonDesc.as_mut_ptr(),
         types_defined: types_defined != 0,

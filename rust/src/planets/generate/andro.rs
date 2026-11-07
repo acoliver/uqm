@@ -14,7 +14,7 @@ use crate::planets::generate::default;
 use crate::planets::generate::special::{
     self, Body, Orbit, Story, EARTH_ATMOSPHERE, TELLURIC_WORLD,
 };
-use crate::planets::surface::ENERGY_SCAN;
+use crate::planets::generate::surface::ENERGY_SCAN;
 
 const WORLD: Body = Body::Planet(1);
 
