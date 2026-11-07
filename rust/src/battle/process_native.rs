@@ -792,27 +792,22 @@ pub(crate) mod engine {
     }
 
     pub(crate) fn redraw_queue(cx: &mut Cx<'_>, clear: bool) {
-        let retain = |raw| {
-            crate::graphics::context_abi::ContextLease::retain(
-                std::ptr::NonNull::new(raw)
-                    .unwrap_or_else(|| panic!("battle redraw requires initialized contexts")),
-            )
-        };
-        let status = retain(cx.kernel.status_context);
+        use crate::graphics::context_abi::ContextLease;
+        let status = ContextLease::require(cx.kernel.status_context);
         status.select();
         let scale = cx.kernel.configuration.preferences().melee_scale;
         let (bounds, minimum) = preprocess_queue(cx, scale);
         let (w, h) = view_dimensions(cx);
         let (mut sx, mut sy) = view_scroll(bounds.origin, bounds.ships_alive, w, h);
         if (sx != 0 || sy != 0) && in_hqspace(cx.world) != 0 {
-            MoveSIS(cx, &mut sx, &mut sy);
+            move_sis(cx, &mut sx, &mut sy);
         }
         let state = calc_view_engine(cx, minimum, (sx, sy), bounds.ships_alive, scale);
         postprocess_queue(cx, state, sx, sy, scale);
         if cx.kernel.configuration.preferences().stereo_sfx != 0 {
             crate::battle::sounds::engine::update_positions(cx);
         }
-        let space = retain(cx.kernel.space_context);
+        let space = ContextLease::require(cx.kernel.space_context);
         space.select();
         let activity = cx.world.activity();
         if activity as u8 == SUPER_MELEE as u8
