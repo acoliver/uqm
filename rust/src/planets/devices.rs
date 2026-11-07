@@ -1,6 +1,6 @@
 //! Devices menu, ported from `planets/devices.c`.
 
-use super::device_effects::{repair_ultron, ULTRON_COMPONENTS};
+use super::device_effects::{effect_state, repair_ultron, ULTRON_COMPONENTS};
 use crate::battle::c_bridge::SleepThread;
 use crate::engine::{battle::Cx, observe::Io};
 use crate::engine::{Kernel as KernelOwner, StoryKey, World as WorldOwner};
@@ -303,22 +303,6 @@ unsafe fn invoke(cx: &mut Cx<'_>, id: u8, next_activity: &mut u16) -> u8 {
         }
         _ => 0,
     }
-}
-
-fn effect_state(world: &crate::engine::World) -> std::collections::BTreeMap<String, u32> {
-    let mut state: std::collections::BTreeMap<_, _> = super::device_effects::DEVICE_STORY_KEYS
-        .iter()
-        .copied()
-        .map(|key| {
-            (
-                key.to_owned(),
-                StoryKey::from_name(key).map_or(0, |key| get(world, key)),
-            )
-        })
-        .collect();
-    state.insert("activity".into(), u32::from(world.activity()));
-    state.insert("fuel".into(), world.data.flagship.fuel_on_board);
-    state
 }
 
 unsafe fn frame(

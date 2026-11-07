@@ -24,18 +24,28 @@ pub(super) fn repair_ultron(world: &mut World, component: StoryKey) -> u8 {
     1
 }
 
-pub const DEVICE_STORY_KEYS: &[&str] = &[
-    "ULTRON_CONDITION",
-    "ROSY_SPHERE_ON_SHIP",
-    "AQUA_HELIX_ON_SHIP",
-    "CLEAR_SPINDLE_ON_SHIP",
-    "USED_BROADCASTER",
-    "GLOBAL_FLAGS_AND_DATA",
-    "CHMMR_EMERGING",
-    "READY_TO_CONFUSE_URQUAN",
-    "SHIP_TO_COMPEL",
-    "PORTAL_COUNTER",
+pub const DEVICE_STORY_KEYS: &[(StoryKey, &str)] = &[
+    (StoryKey::ULTRON_CONDITION, "ULTRON_CONDITION"),
+    (StoryKey::ROSY_SPHERE_ON_SHIP, "ROSY_SPHERE_ON_SHIP"),
+    (StoryKey::AQUA_HELIX_ON_SHIP, "AQUA_HELIX_ON_SHIP"),
+    (StoryKey::CLEAR_SPINDLE_ON_SHIP, "CLEAR_SPINDLE_ON_SHIP"),
+    (StoryKey::USED_BROADCASTER, "USED_BROADCASTER"),
+    (StoryKey::GLOBAL_FLAGS_AND_DATA, "GLOBAL_FLAGS_AND_DATA"),
+    (StoryKey::CHMMR_EMERGING, "CHMMR_EMERGING"),
+    (StoryKey::READY_TO_CONFUSE_URQUAN, "READY_TO_CONFUSE_URQUAN"),
+    (StoryKey::SHIP_TO_COMPEL, "SHIP_TO_COMPEL"),
+    (StoryKey::PORTAL_COUNTER, "PORTAL_COUNTER"),
 ];
+
+pub(crate) fn effect_state(world: &World) -> std::collections::BTreeMap<String, u32> {
+    let mut state: std::collections::BTreeMap<_, _> = DEVICE_STORY_KEYS
+        .iter()
+        .map(|&(key, name)| (name.to_owned(), world.story_state(key)))
+        .collect();
+    state.insert("activity".into(), u32::from(world.activity()));
+    state.insert("fuel".into(), world.data.flagship.fuel_on_board);
+    state
+}
 
 pub fn device_effect_holds(
     id: u8,
@@ -73,6 +83,37 @@ pub fn device_effect_holds(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn observed_device_story_keys_are_typed_and_preserve_trace_names() {
+        let mut world = World::new();
+        world.story = Some(crate::engine::world::story::StoryState::new());
+        let expected = [
+            (StoryKey::ULTRON_CONDITION, "ULTRON_CONDITION"),
+            (StoryKey::ROSY_SPHERE_ON_SHIP, "ROSY_SPHERE_ON_SHIP"),
+            (StoryKey::AQUA_HELIX_ON_SHIP, "AQUA_HELIX_ON_SHIP"),
+            (StoryKey::CLEAR_SPINDLE_ON_SHIP, "CLEAR_SPINDLE_ON_SHIP"),
+            (StoryKey::USED_BROADCASTER, "USED_BROADCASTER"),
+            (StoryKey::GLOBAL_FLAGS_AND_DATA, "GLOBAL_FLAGS_AND_DATA"),
+            (StoryKey::CHMMR_EMERGING, "CHMMR_EMERGING"),
+            (StoryKey::READY_TO_CONFUSE_URQUAN, "READY_TO_CONFUSE_URQUAN"),
+            (StoryKey::SHIP_TO_COMPEL, "SHIP_TO_COMPEL"),
+            (StoryKey::PORTAL_COUNTER, "PORTAL_COUNTER"),
+        ];
+        assert_eq!(DEVICE_STORY_KEYS, expected);
+        for (index, &(key, _)) in expected.iter().enumerate() {
+            world.set_story_state(key, index as u32 % 2);
+        }
+        world.set_activity(0x0404);
+        world.data.flagship.fuel_on_board = 1234;
+        let captured = effect_state(&world);
+        assert_eq!(captured.len(), expected.len() + 2);
+        for (key, name) in expected {
+            assert_eq!(captured[name], world.story_state(key));
+        }
+        assert_eq!(captured["activity"], 0x0404);
+        assert_eq!(captured["fuel"], 1234);
+    }
 
     fn world(condition: u32) -> World {
         let mut world = World::new();
