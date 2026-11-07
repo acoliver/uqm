@@ -1,4 +1,3 @@
-use crate::engine::world::planet::{NodeInfo, PlanetDesc};
 // Shared engine records used by the Rust runtime.
 
 pub const MAX_ENCOUNTERS: u32 = 16;
@@ -175,71 +174,7 @@ pub type ENCOUNTER = encounter;
 pub type STAR_DESC = star_desc;
 pub type PLANET_ORBIT = planet_orbit;
 pub type SOLARSYS_STATE = solarsys_state;
-pub type InitNpcsFunction =
-    Option<unsafe fn(&mut crate::engine::World, *mut SOLARSYS_STATE) -> bool>;
-pub type ReinitNpcsFunction =
-    Option<unsafe fn(&mut crate::engine::World, *mut SOLARSYS_STATE) -> bool>;
-pub type UninitNpcsFunction =
-    Option<unsafe fn(&mut crate::engine::World, *mut SOLARSYS_STATE) -> bool>;
-pub type GeneratePlanetsFunction =
-    ::std::option::Option<unsafe extern "C" fn(solarSys: *mut SOLARSYS_STATE) -> bool>;
-pub type GenerateMoonsFunction = ::std::option::Option<
-    unsafe extern "C" fn(solarSys: *mut SOLARSYS_STATE, planet: *mut PlanetDesc) -> bool,
->;
-pub type GenerateOrbitalFunction = ::std::option::Option<
-    unsafe extern "C" fn(solarSys: *mut SOLARSYS_STATE, world: *mut PlanetDesc) -> bool,
->;
-pub type GenerateNameFunction = ::std::option::Option<
-    unsafe extern "C" fn(arg1: *const SOLARSYS_STATE, world: *const PlanetDesc) -> bool,
->;
-pub type GenerateMineralsFunction = ::std::option::Option<
-    unsafe extern "C" fn(
-        arg1: *const SOLARSYS_STATE,
-        world: *const PlanetDesc,
-        whichNode: COUNT,
-        arg2: *mut NodeInfo,
-    ) -> COUNT,
->;
-pub type GenerateEnergyFunction = ::std::option::Option<
-    unsafe extern "C" fn(
-        arg1: *const SOLARSYS_STATE,
-        world: *const PlanetDesc,
-        whichNode: COUNT,
-        arg2: *mut NodeInfo,
-    ) -> COUNT,
->;
-pub type GenerateLifeFunction = ::std::option::Option<
-    unsafe extern "C" fn(
-        arg1: *const SOLARSYS_STATE,
-        world: *const PlanetDesc,
-        whichNode: COUNT,
-        arg2: *mut NodeInfo,
-    ) -> COUNT,
->;
-pub type PickupMineralsFunction = ::std::option::Option<
-    unsafe extern "C" fn(
-        solarSys: *mut SOLARSYS_STATE,
-        world: *mut PlanetDesc,
-        whichNode: COUNT,
-    ) -> bool,
->;
-pub type PickupEnergyFunction = ::std::option::Option<
-    unsafe extern "C" fn(
-        solarSys: *mut SOLARSYS_STATE,
-        world: *mut PlanetDesc,
-        whichNode: COUNT,
-    ) -> bool,
->;
-pub type PickupLifeFunction = ::std::option::Option<
-    unsafe extern "C" fn(
-        solarSys: *mut SOLARSYS_STATE,
-        world: *mut PlanetDesc,
-        whichNode: COUNT,
-    ) -> bool,
->;
-
 pub use crate::ships::native::abi::menu_state;
-pub use crate::ships::native::abi::GenerateFunctions;
 pub type MENU_STATE = menu_state;
 pub use crate::navigation::abi::star_desc;
 #[cfg(not(test))]

@@ -1880,83 +1880,6 @@ pub const LANDER_DESTROYED: _bindgen_ty_18 = 12;
 pub type _bindgen_ty_18 = ::std::os::raw::c_uint;
 pub type PLANET_ORBIT = planet_orbit;
 pub type SOLARSYS_STATE = solarsys_state;
-pub type InitNpcsFunction =
-    Option<unsafe fn(&mut crate::engine::World, *mut SOLARSYS_STATE) -> bool>;
-pub type ReinitNpcsFunction =
-    Option<unsafe fn(&mut crate::engine::World, *mut SOLARSYS_STATE) -> bool>;
-pub type UninitNpcsFunction =
-    Option<unsafe fn(&mut crate::engine::World, *mut SOLARSYS_STATE) -> bool>;
-pub type GeneratePlanetsFunction =
-    ::std::option::Option<unsafe extern "C" fn(solarSys: *mut SOLARSYS_STATE) -> bool>;
-pub type GenerateMoonsFunction = ::std::option::Option<
-    unsafe extern "C" fn(solarSys: *mut SOLARSYS_STATE, planet: *mut crate::engine::world::planet::PlanetDesc) -> bool,
->;
-pub type GenerateOrbitalFunction = Option<unsafe fn(&mut crate::engine::battle::Cx<'_>, *mut SOLARSYS_STATE, *mut crate::engine::world::planet::PlanetDesc) -> bool>;
-pub type GenerateNameFunction = ::std::option::Option<
-    unsafe extern "C" fn(arg1: *const SOLARSYS_STATE, world: *const crate::engine::world::planet::PlanetDesc) -> bool,
->;
-pub type GenerateMineralsFunction = ::std::option::Option<
-    unsafe extern "C" fn(
-        arg1: *const SOLARSYS_STATE,
-        world: *const crate::engine::world::planet::PlanetDesc,
-        whichNode: COUNT,
-        arg2: *mut crate::engine::world::planet::NodeInfo,
-    ) -> COUNT,
->;
-pub type GenerateEnergyFunction = ::std::option::Option<
-    unsafe extern "C" fn(
-        arg1: *const SOLARSYS_STATE,
-        world: *const crate::engine::world::planet::PlanetDesc,
-        whichNode: COUNT,
-        arg2: *mut crate::engine::world::planet::NodeInfo,
-    ) -> COUNT,
->;
-pub type GenerateLifeFunction = ::std::option::Option<
-    unsafe extern "C" fn(
-        arg1: *const SOLARSYS_STATE,
-        world: *const crate::engine::world::planet::PlanetDesc,
-        whichNode: COUNT,
-        arg2: *mut crate::engine::world::planet::NodeInfo,
-    ) -> COUNT,
->;
-pub type PickupMineralsFunction = ::std::option::Option<
-    unsafe extern "C" fn(
-        solarSys: *mut SOLARSYS_STATE,
-        world: *mut crate::engine::world::planet::PlanetDesc,
-        whichNode: COUNT,
-    ) -> bool,
->;
-pub type PickupEnergyFunction = ::std::option::Option<
-    unsafe extern "C" fn(
-        solarSys: *mut SOLARSYS_STATE,
-        world: *mut crate::engine::world::planet::PlanetDesc,
-        whichNode: COUNT,
-    ) -> bool,
->;
-pub type PickupLifeFunction = ::std::option::Option<
-    unsafe extern "C" fn(
-        solarSys: *mut SOLARSYS_STATE,
-        world: *mut crate::engine::world::planet::PlanetDesc,
-        whichNode: COUNT,
-    ) -> bool,
->;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct GenerateFunctions {
-    pub initNpcs: InitNpcsFunction,
-    pub reinitNpcs: ReinitNpcsFunction,
-    pub uninitNpcs: UninitNpcsFunction,
-    pub generatePlanets: GeneratePlanetsFunction,
-    pub generateMoons: GenerateMoonsFunction,
-    pub generateName: GenerateNameFunction,
-    pub generateOrbital: GenerateOrbitalFunction,
-    pub generateMinerals: GenerateMineralsFunction,
-    pub generateEnergy: GenerateEnergyFunction,
-    pub generateLife: GenerateLifeFunction,
-    pub pickupMinerals: PickupMineralsFunction,
-    pub pickupEnergy: PickupEnergyFunction,
-    pub pickupLife: PickupLifeFunction,
-}
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct menu_state {
@@ -2176,12 +2099,14 @@ pub struct solarsys_state {
     pub XlatPtr: *const ::std::os::raw::c_void,
     pub OrbitalCMap: COLORMAP,
     pub SysInfo: crate::engine::world::planet::SystemInfo,
-    pub genFuncs: *const GenerateFunctions,
+    pub generator_index: u8,
     pub PlanetSideFrame: [FRAME; 6usize],
     pub TopoFrame: FRAME,
     pub Orbit: PLANET_ORBIT,
     pub InOrbit: BOOLEAN,
 }
+
+
 pub const HAIL: _bindgen_ty_26 = 0;
 pub const ATTACK: _bindgen_ty_26 = 1;
 pub type _bindgen_ty_26 = ::std::os::raw::c_uint;
