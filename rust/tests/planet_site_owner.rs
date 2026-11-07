@@ -260,3 +260,6 @@ fn special_contacts_share_queues_but_preserve_race_and_story_choices() {
     assert_eq!(encounter.race_id, ship::URQUAN_SHIP);
     assert_eq!(encounter.num_ships, 1);
 }
+
+#[path = "planet_site_owner/scenes.rs"]
+mod scenes;
