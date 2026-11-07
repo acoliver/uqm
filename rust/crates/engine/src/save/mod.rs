@@ -15,8 +15,8 @@ pub mod summary_record;
 use std::fmt;
 
 use super::battle::schema::GAME_STATE as CGameState;
-use super::world::story::GameState;
 use super::world::story::GameStateOwnerError;
+use super::world::story::StoryState;
 use uqm_save::{EventEntry, GlobalState, GAME_STATE_BYTES};
 
 pub use events::EventError;
@@ -91,7 +91,7 @@ impl From<GameStateOwnerError> for RuntimeError {
 pub fn capture_runtime(
     game: &CGameState,
     activity: u16,
-    story: &Option<GameState>,
+    story: &Option<StoryState>,
     clock: &super::clock::GameClock,
 ) -> Result<RuntimeSections, RuntimeError> {
     Ok(RuntimeSections {
@@ -111,14 +111,14 @@ pub fn capture_runtime(
 /// before the first write to `game`. The singleton owns all story-state bits.
 pub fn restore_runtime(
     game: &mut CGameState,
-    story: &mut Option<GameState>,
+    story: &mut Option<StoryState>,
     global: &GlobalState,
     game_state: &[u8; GAME_STATE_BYTES],
     events: &[EventEntry],
     clock: &mut super::clock::GameClock,
 ) -> Result<Restored, RuntimeError> {
     events::validate_restore(events)?;
-    *story = Some(GameState::from_bytes(game_state));
+    *story = Some(StoryState::from_bytes(game_state));
 
     events::install_events(clock, events);
     Ok(Restored {

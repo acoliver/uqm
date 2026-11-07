@@ -6,18 +6,19 @@
 //! state to the plain Rust port; the live sites reach the C engine through
 //! [`crate::planets::c_api`]. All of it runs on the game thread.
 
-use crate::c_bindings::global_state::{NODE_INFO, PLANET_DESC, SOLARSYS_STATE};
+use crate::c_bindings::global_state::SOLARSYS_STATE;
 use crate::comm::dispatch::{conv, ship};
+use crate::engine::world::planet::{NodeInfo, PlanetDesc};
 use crate::planet_side::report_adapter::{DiscoveryReportPort, ReportDisposition};
 use crate::planets::c_api::{
     built_ship_count, clone_infinite_ship_into_built_queue, free_lander_font, init_communication,
     load_planet_default_surface, load_ruins_story, load_starbase_report, start_sphere_tracking,
     LiveGame,
 };
-use crate::planets::consts::star_color;
 use crate::planets::ffi::{blank_node, node_or, sys_gen_rng};
 use crate::planets::generate::andro;
 use crate::planets::generate::chmmr::{self, ChmmrSite};
+use crate::planets::generate::consts::star_color;
 use crate::planets::generate::exports::discovery_report;
 use crate::planets::generate::shof;
 use crate::planets::generate::special::{LiveStory, Story};
@@ -45,7 +46,7 @@ unsafe extern "C" fn andro_planets(system: *mut SOLARSYS_STATE) -> bool {
 unsafe fn andro_orbital(
     cx: &mut crate::engine::battle::Cx<'_>,
     system: *mut SOLARSYS_STATE,
-    world: *mut PLANET_DESC,
+    world: *mut PlanetDesc,
 ) -> bool {
     let owner = std::cell::RefCell::new(cx);
     let owner = &owner;
@@ -61,9 +62,9 @@ unsafe fn andro_orbital(
 
 unsafe extern "C" fn andro_energy(
     system: *const SOLARSYS_STATE,
-    world: *const PLANET_DESC,
+    world: *const PlanetDesc,
     which_node: u16,
-    info: *mut NODE_INFO,
+    info: *mut NodeInfo,
 ) -> u16 {
     let mut spare = blank_node();
     andro::generate_energy(
@@ -77,13 +78,13 @@ unsafe extern "C" fn andro_energy(
 
 unsafe extern "C" fn andro_pickup(
     system: *mut SOLARSYS_STATE,
-    world: *mut PLANET_DESC,
+    world: *mut PlanetDesc,
     which_node: u16,
 ) -> bool {
     andro::pickup_energy(
         body_of(system, world),
         which_node,
-        &mut (*system).SysInfo.PlanetInfo,
+        &mut (*system).SysInfo.planet_info,
         &mut LiveStory,
         &mut discovery_report(system),
     )
@@ -183,8 +184,8 @@ unsafe extern "C" fn chmmr_planets(system: *mut SOLARSYS_STATE) -> bool {
     })
 }
 
-unsafe extern "C" fn chmmr_moons(system: *mut SOLARSYS_STATE, planet: *mut PLANET_DESC) -> bool {
-    let planet_moons = (*planet).NumPlanets;
+unsafe extern "C" fn chmmr_moons(system: *mut SOLARSYS_STATE, planet: *mut PlanetDesc) -> bool {
+    let planet_moons = (*planet).num_planets;
     let moons = &mut *std::ptr::addr_of_mut!((*system).MoonDesc);
     chmmr::generate_moons(
         sys_gen_rng(),
@@ -199,7 +200,7 @@ unsafe extern "C" fn chmmr_moons(system: *mut SOLARSYS_STATE, planet: *mut PLANE
 unsafe fn chmmr_orbital(
     cx: &mut crate::engine::battle::Cx<'_>,
     system: *mut SOLARSYS_STATE,
-    world: *mut PLANET_DESC,
+    world: *mut PlanetDesc,
 ) -> bool {
     let owner = std::cell::RefCell::new(cx);
     let owner = &owner;

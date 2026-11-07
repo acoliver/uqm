@@ -1,16 +1,16 @@
 //! Full-field Mycon layout and scan records, shared by pure and linked tests.
 
 use std::fmt::Write as _;
+use uqm_rust::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
 
 use super::{fresh_node, scan_seeds};
 use uqm_rust::battle::gendef::{
     EGG_CASE0_DEFINED, EGG_CASE1_DEFINED, EGG_CASE2_DEFINED, MYCON_DEFINED, SUN_DEVICE_DEFINED,
 };
-use uqm_rust::c_bindings::global_state::{PlanetFrame, NODE_INFO, PLANET_DESC, SYSTEM_INFO};
 use uqm_rust::math::RandomContext;
 use uqm_rust::planets::generate::myc;
 use uqm_rust::planets::generate::special::{Body, Story};
-use uqm_rust::planets::surface::ENERGY_SCAN;
+use uqm_rust::planets::generate::surface::ENERGY_SCAN;
 
 const STARS: [u8; 5] = [
     MYCON_DEFINED,
@@ -44,18 +44,18 @@ pub trait MyconOps {
         &mut self,
         star: u8,
         case: (u8, u8, u32),
-        planets: &mut [PLANET_DESC],
+        planets: &mut [PlanetDesc],
     ) -> (bool, u8, u32);
-    fn scan(&mut self, case: ScanCase, node: &mut NODE_INFO) -> (u16, u32);
+    fn scan(&mut self, case: ScanCase, node: &mut NodeInfo) -> (u16, u32);
 }
 
-pub fn scan_info(case: ScanCase) -> SYSTEM_INFO {
-    let mut info: SYSTEM_INFO = unsafe { std::mem::zeroed() };
-    info.PlanetInfo.ScanSeed = scan_seeds(case.seed);
-    info.PlanetInfo.ScanRetrieveMask[ENERGY_SCAN] = u32::from(case.retrieved);
+pub fn scan_info(case: ScanCase) -> SystemInfo {
+    let mut info: SystemInfo = unsafe { std::mem::zeroed() };
+    info.planet_info.scan_seed = scan_seeds(case.seed);
+    info.planet_info.scan_retrieve_mask[ENERGY_SCAN] = u32::from(case.retrieved);
     if case.strings {
         // Neither scan hook dereferences this handle.
-        info.PlanetInfo.DiscoveryString = std::ptr::NonNull::dangling().as_ptr();
+        info.planet_info.discovery_string = std::ptr::NonNull::dangling().as_ptr();
     }
     info
 }
@@ -66,10 +66,10 @@ pub fn render(ops: &mut impl MyconOps) -> String {
         for size in 0..3 {
             for color in 0..6 {
                 for seed in [7_919, 15_838, 23_757, 190_056] {
-                    let mut planets: Vec<PLANET_DESC> = vec![unsafe { std::mem::zeroed() }; 16];
+                    let mut planets: Vec<PlanetDesc> = vec![unsafe { std::mem::zeroed() }; 16];
                     for (i, desc) in planets.iter_mut().enumerate() {
                         desc.rand_seed = 0xfeed_0000 + i as u32;
-                        desc.NumPlanets = 0x7f;
+                        desc.num_planets = 0x7f;
                         desc.radius = -17;
                         desc.location.x = -23;
                         desc.location.y = 29;
@@ -77,7 +77,7 @@ pub fn render(ops: &mut impl MyconOps) -> String {
                         desc.temp_color.g = 37;
                         desc.temp_color.b = 41;
                         desc.temp_color.a = 43;
-                        desc.NextIndex = 47;
+                        desc.next_index = 47;
                         desc.image.origin.x = -53;
                         desc.image.origin.y = 59;
                     }
@@ -126,7 +126,7 @@ pub fn render(ops: &mut impl MyconOps) -> String {
             }
         }
     }
-    out
+    super::record_labels::captured_labels(out)
 }
 
 struct SunDevice(bool);
@@ -154,14 +154,14 @@ impl MyconOps for RustMycon<'_> {
         &mut self,
         _star: u8,
         case: (u8, u8, u32),
-        planets: &mut [PLANET_DESC],
+        planets: &mut [PlanetDesc],
     ) -> (bool, u8, u32) {
         let mut rng = RandomContext::with_seed(case.2);
         let drawn = myc::generate_planets(&mut rng, self.0, case.0, case.1, planets);
         (true, drawn, rng.seed())
     }
 
-    fn scan(&mut self, case: ScanCase, node: &mut NODE_INFO) -> (u16, u32) {
+    fn scan(&mut self, case: ScanCase, node: &mut NodeInfo) -> (u16, u32) {
         let mut rng = RandomContext::with_seed(case.seed);
         let count = if case.life {
             myc::generate_life()

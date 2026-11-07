@@ -3,7 +3,7 @@
 use super::super::battle::schema::GAME_STATE as CGameState;
 use super::super::world::state_file::StateFileManager;
 use super::super::world::story::GameStateOwnerError;
-use super::super::world::story::{get_state_32_raw, GameState, NUM_GAME_STATE_BITS};
+use super::super::world::story::{get_state_32_raw, StoryState, NUM_GAME_STATE_BITS};
 use super::super::StoryKey;
 use super::super::World;
 use super::RuntimeError;
@@ -58,7 +58,7 @@ impl From<StateSectionError> for RuntimeError {
 /// current group from `game`.
 pub fn capture_state_files(
     game: &CGameState,
-    story: &Option<GameState>,
+    story: &Option<StoryState>,
     files: &StateFileManager,
 ) -> Result<StateFileSections, RuntimeError> {
     let state = story.as_ref().ok_or(GameStateOwnerError::NotInitialized)?;
@@ -80,7 +80,7 @@ pub fn capture_state_files(
 }
 
 /// Install `plan`. Both owners are held by the caller; nothing here fails.
-fn commit(plan: &RestorePlan, state: &mut GameState, files: &mut StateFileManager) {
+fn commit(plan: &RestorePlan, state: &mut StoryState, files: &mut StateFileManager) {
     let mut install = |index: usize, image: &[u8]| {
         files
             .replace_contents(index, image)
@@ -106,7 +106,7 @@ fn commit(plan: &RestorePlan, state: &mut GameState, files: &mut StateFileManage
 /// `BattleGroupRef` follows in the live game record.
 pub fn restore_state_files(
     game: &mut CGameState,
-    story: &mut Option<GameState>,
+    story: &mut Option<StoryState>,
     files: &mut StateFileManager,
     sections: &StateFileSections,
 ) -> Result<(), RuntimeError> {

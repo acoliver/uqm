@@ -2,20 +2,26 @@
 //! a recording report. The contact flow is `home_contact`'s and tested there.
 
 use super::{pickup_energy, set_home_climate};
-use crate::c_bindings::global_state::SYSTEM_INFO;
+use crate::engine::world::planet::SystemInfo;
 use crate::planet_side::report_adapter::{DiscoveryReportPort, ReportDisposition};
 use crate::planet_side::runtime::AdapterError;
 use crate::planets::generate::special::Body;
 
 #[test]
 fn the_home_world_alone_gets_the_fixed_climate() {
-    let mut info: SYSTEM_INFO = unsafe { std::mem::zeroed() };
+    let mut info: SystemInfo = unsafe { std::mem::zeroed() };
     set_home_climate(Body::Planet(1), &mut info);
     set_home_climate(Body::Moon { planet: 0, moon: 0 }, &mut info);
-    assert_eq!((info.PlanetInfo.Weather, info.PlanetInfo.Tectonics), (0, 0));
+    assert_eq!(
+        (info.planet_info.weather, info.planet_info.tectonics),
+        (0, 0)
+    );
 
     set_home_climate(Body::Planet(0), &mut info);
-    assert_eq!((info.PlanetInfo.Weather, info.PlanetInfo.Tectonics), (2, 3));
+    assert_eq!(
+        (info.planet_info.weather, info.planet_info.tectonics),
+        (2, 3)
+    );
 }
 
 #[derive(Default)]

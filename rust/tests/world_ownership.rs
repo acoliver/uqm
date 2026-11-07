@@ -4,7 +4,7 @@ use uqm_rust::engine::{Game, StoryKey};
 #[test]
 fn separate_games_own_story_state_files_and_kernel_resources() {
     let mut first = Game::new();
-    first.world.story = Some(uqm_rust::state::game_state::GameState::new());
+    first.world.story = Some(uqm_rust::state::game_state::StoryState::new());
     let second = Game::new();
     first.world.set_story_state(StoryKey::ARILOU_SPACE_SIDE, 2);
     first.world.data.flagship.crew_enlisted = 17;
@@ -27,7 +27,7 @@ fn separate_games_own_story_state_files_and_kernel_resources() {
 #[test]
 fn typed_keys_keep_the_existing_serialized_bit_ranges() {
     let mut game = Game::new();
-    game.world.story = Some(uqm_rust::state::game_state::GameState::new());
+    game.world.story = Some(uqm_rust::state::game_state::StoryState::new());
     game.world.set_story_state(StoryKey::SHOFIXTI_RECRUITED, 1);
     game.world.set_story_state(StoryKey::ARILOU_SPACE_SIDE, 3);
     game.world.set_story_state(StoryKey::SAMATRA_GRPOFFS3, 0xab);
@@ -42,7 +42,7 @@ fn typed_keys_keep_the_existing_serialized_bit_ranges() {
 #[test]
 fn generated_story_keys_cover_the_existing_table_without_changing_bits() {
     let mut game = Game::new();
-    game.world.story = Some(uqm_rust::state::game_state::GameState::new());
+    game.world.story = Some(uqm_rust::state::game_state::StoryState::new());
     for &(name, start, width) in uqm_rust::state::game_state::STATE_KEYS {
         let key = StoryKey::from_name(name).unwrap();
         assert_eq!(key.start(), start as usize, "{name}");

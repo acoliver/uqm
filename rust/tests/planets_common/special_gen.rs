@@ -4,9 +4,9 @@
 //! originals' captured output must equal both.
 
 use std::fmt::Write as _;
+use uqm_rust::engine::world::planet::PlanetDesc;
 
 use super::default_gen::{layout_cases, moon_cases};
-use uqm_rust::c_bindings::global_state::PLANET_DESC;
 use uqm_rust::planets::generate::special::Body;
 
 /// `STAR_COLOR` of an orange star.
@@ -14,12 +14,12 @@ const ORANGE_STAR: u8 = 2;
 
 pub type Desc = (u8, i16, u32, u8, i16, i16);
 
-pub fn desc_of(d: &PLANET_DESC) -> Desc {
+pub fn desc_of(d: &PlanetDesc) -> Desc {
     (
         d.data_index,
         d.radius,
         d.rand_seed,
-        d.NumPlanets,
+        d.num_planets,
         d.location.x,
         d.location.y,
     )

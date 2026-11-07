@@ -5,16 +5,14 @@
 //! Overridden: `generatePlanets`, `generateOrbital`, `generateEnergy`,
 //! `pickupEnergy`. Story flags: `PLANETARY_CHANGE` (set on pickup).
 
-use crate::c_bindings::global_state::{
-    PlanetFrame, NODE_INFO, PLANET_DESC, PLANET_INFO, SYSTEM_INFO,
-};
+use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, PlanetInfo, SystemInfo};
 use crate::math::RandomContext;
 use crate::planet_side::report_adapter::DiscoveryReportPort;
 use crate::planets::generate::default;
 use crate::planets::generate::special::{
     self, Body, Orbit, Story, EARTH_ATMOSPHERE, TELLURIC_WORLD,
 };
-use crate::planets::surface::ENERGY_SCAN;
+use crate::planets::generate::surface::ENERGY_SCAN;
 
 const WORLD: Body = Body::Planet(1);
 
@@ -37,7 +35,7 @@ pub fn generate_planets(
     plan_data: &[PlanetFrame],
     star_size: u8,
     star_color: u8,
-    planets: &mut [PLANET_DESC],
+    planets: &mut [PlanetDesc],
 ) -> u8 {
     special::planets_then(rng, plan_data, star_size, star_color, planets, |planets| {
         let world = &mut planets[1];
@@ -48,9 +46,9 @@ pub fn generate_planets(
 
 /// The number of ruins already visited (`is_node_retrieved (.., ENERGY_SCAN, i)`
 /// for `i` in 16 to 31).
-fn ruins_visited(info: &PLANET_INFO) -> u32 {
+fn ruins_visited(info: &PlanetInfo) -> u32 {
     VISITED_BITS
-        .filter(|&bit| info.ScanRetrieveMask[ENERGY_SCAN] & (1 << bit) != 0)
+        .filter(|&bit| info.scan_retrieve_mask[ENERGY_SCAN] & (1 << bit) != 0)
         .count() as u32
 }
 
@@ -63,17 +61,17 @@ pub fn generate_orbital(
     load_planet: impl FnOnce(),
 ) -> bool {
     if body == WORLD {
-        site.load_ruins_story(ruins_visited(&orbit.sys_info.PlanetInfo));
+        site.load_ruins_story(ruins_visited(&orbit.sys_info.planet_info));
     }
 
     orbit.default_orbital(load_planet);
 
     if body == WORLD {
-        let info = &mut orbit.sys_info.PlanetInfo;
-        info.AtmoDensity = (EARTH_ATMOSPHERE * 144 / 100) as _;
-        info.SurfaceTemperature = 28;
-        info.Weather = 1;
-        info.Tectonics = 1;
+        let info = &mut orbit.sys_info.planet_info;
+        info.atmo_density = (EARTH_ATMOSPHERE * 144 / 100) as _;
+        info.temperature = 28;
+        info.weather = 1;
+        info.tectonics = 1;
     }
     true
 }
@@ -81,10 +79,10 @@ pub fn generate_orbital(
 /// `GenerateAndrosynth_generateEnergy`.
 pub fn generate_energy(
     rng: &mut RandomContext,
-    sys_info: &SYSTEM_INFO,
+    sys_info: &SystemInfo,
     body: Body,
     which_node: u16,
-    info: &mut NODE_INFO,
+    info: &mut NodeInfo,
 ) -> u16 {
     if body == WORLD {
         default::generate_ruins(rng, sys_info, which_node, info)
@@ -99,7 +97,7 @@ pub fn generate_energy(
 pub fn pickup_energy(
     body: Body,
     which_node: u16,
-    info: &mut PLANET_INFO,
+    info: &mut PlanetInfo,
     story: &mut impl Story,
     report: &mut impl DiscoveryReportPort,
 ) -> bool {
@@ -109,10 +107,10 @@ pub fn pickup_energy(
             VISITED_BITS.contains(&bit),
             "ruin {which_node} has no visited bit"
         );
-        if info.ScanRetrieveMask[ENERGY_SCAN] & (1 << bit) != 0 {
+        if info.scan_retrieve_mask[ENERGY_SCAN] & (1 << bit) != 0 {
             return false;
         }
-        info.ScanRetrieveMask[ENERGY_SCAN] |= 1 << bit;
+        info.scan_retrieve_mask[ENERGY_SCAN] |= 1 << bit;
         story.set_flag("PLANETARY_CHANGE", 1);
         default::lander_report_cycle(report);
     }

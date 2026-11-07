@@ -1,19 +1,19 @@
 //! The Zoq-Fot-Pik home's story gating and conversation flow against
 //! recording fakes.
 
+use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
 use std::cell::RefCell;
 use std::rc::Rc;
 
 use super::{
     generate_energy, generate_orbital, init_npcs, pickup_energy, ZoqFotPikSite, TALK_FLAGS,
 };
-use crate::c_bindings::global_state::PlanetFrame;
-use crate::c_bindings::global_state::{IP_GROUP, NODE_INFO, PLANET_DESC, SYSTEM_INFO};
+use crate::c_bindings::global_state::IP_GROUP;
 use crate::comm::dispatch::{CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY};
 use crate::math::RandomContext;
 use crate::planet_side::report_adapter::{DiscoveryReportPort, ReportDisposition};
 use crate::planet_side::runtime::AdapterError;
-use crate::planets::calc::{AnalysisSite, StarDescription};
+use crate::planets::generate::calc::{AnalysisSite, StarDescription};
 use crate::planets::generate::default::Npcs;
 use crate::planets::generate::home_contact::tests::FakeStory;
 use crate::planets::generate::home_contact::HomeContactSite;
@@ -38,11 +38,11 @@ impl DiscoveryReportPort for FakeReport {
 
 #[test]
 fn the_world_has_ruins_and_nothing_else_has_nodes() {
-    let mut info: SYSTEM_INFO = unsafe { std::mem::zeroed() };
-    info.PlanetInfo.ScanSeed = [1, 2, 3];
+    let mut info: SystemInfo = unsafe { std::mem::zeroed() };
+    info.planet_info.scan_seed = [1, 2, 3];
     let count = |body| {
         let mut rng = RandomContext::with_seed(7);
-        let mut node: NODE_INFO = unsafe { std::mem::zeroed() };
+        let mut node: NodeInfo = unsafe { std::mem::zeroed() };
         generate_energy(&mut rng, &info, body, !0, &mut node)
     };
     assert_eq!(count(WORLD), 16);
@@ -230,8 +230,8 @@ fn visit(body: Body, distress: u32, configure: impl FnOnce(&mut Site)) -> Vec<Ca
     configure(&mut site);
 
     let mut rng = RandomContext::with_seed(11);
-    let mut sys_info: SYSTEM_INFO = unsafe { std::mem::zeroed() };
-    let mut world: PLANET_DESC = unsafe { std::mem::zeroed() };
+    let mut sys_info: SystemInfo = unsafe { std::mem::zeroed() };
+    let mut world: PlanetDesc = unsafe { std::mem::zeroed() };
     world.radius = 400;
     let plan_data: Vec<PlanetFrame> = vec![unsafe { std::mem::zeroed() }; 128];
     let mut orbit = Orbit {

@@ -8,10 +8,10 @@
 //! `pickupEnergy`. Story flags: `UMGAH_ZOMBIE_BLOBBIES`, `TALKING_PET`,
 //! `PLAYER_HYPNOTIZED`.
 
-use crate::c_bindings::global_state::{PlanetFrame, NODE_INFO, PLANET_DESC, SYSTEM_INFO};
 use crate::comm::dispatch::{
     CHECK_ABORT, CHECK_LOAD, IN_HYPERSPACE, START_ENCOUNTER, START_INTERPLANETARY,
 };
+use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
 use crate::math::{square_root, RandomContext};
 use crate::planet_side::report_adapter::DiscoveryReportPort;
 use crate::planets::generate::default;
@@ -77,7 +77,7 @@ pub fn generate_planets(
     plan_data: &[PlanetFrame],
     star_size: u8,
     star_color: u8,
-    planets: &mut [PLANET_DESC],
+    planets: &mut [PlanetDesc],
 ) -> u8 {
     special::planets_then(rng, plan_data, star_size, star_color, planets, |planets| {
         let world = &mut planets[0];
@@ -114,7 +114,7 @@ pub fn generate_orbital(
     orbit.default_orbital(load_planet);
 
     if body == WORLD {
-        orbit.sys_info.PlanetInfo.Weather = 0;
+        orbit.sys_info.planet_info.weather = 0;
     }
     true
 }
@@ -200,10 +200,10 @@ fn zap_to_urquan_encounter(site: &mut (impl HomeContactSite + UrquanEncounterSit
 /// `GenerateTalkingPet_generateEnergy`: the ruins of planet 0.
 pub fn generate_energy(
     rng: &mut RandomContext,
-    sys_info: &SYSTEM_INFO,
+    sys_info: &SystemInfo,
     body: Body,
     which_node: u16,
-    info: &mut NODE_INFO,
+    info: &mut NodeInfo,
 ) -> u16 {
     if body == WORLD {
         default::generate_ruins(rng, sys_info, which_node, info)

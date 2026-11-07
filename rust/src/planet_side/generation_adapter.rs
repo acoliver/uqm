@@ -4,6 +4,8 @@
 //! system generator is ported, this adapter calls only the selected generator
 //! hook and immediately converts its output into typed Rust data.
 
+#[cfg(not(test))]
+use crate::engine::world::planet::NodeInfo;
 use crate::engine::{StoryKey, World};
 use std::ffi::c_void;
 
@@ -20,8 +22,6 @@ use super::runtime::AdapterError;
 const GENERATE_ALL: u16 = u16::MAX;
 
 #[cfg(not(test))]
-use crate::navigation::abi::NODE_INFO;
-
 #[cfg(not(test))]
 use crate::planets::scan::callGenerateForScanType;
 use crate::planets::scan::callPickupForScanType;
@@ -165,7 +165,7 @@ impl SurfaceGenerator for CffiSurfaceGenerator {
                     return Ok(GeneratedNode::from_canister(canned));
                 }
             }
-            let mut info: NODE_INFO = std::mem::zeroed();
+            let mut info: NodeInfo = std::mem::zeroed();
             let _ = callGenerateForScanType(
                 self.solar_system.cast(),
                 self.world.cast(),
@@ -280,7 +280,7 @@ impl SurfaceGenerator for CffiSurfaceGenerator {
                     let system = &mut *solar_system
                         .cast::<crate::c_bindings::global_state::SOLARSYS_STATE>();
                     crate::planets::scan::set_node_retrieved(
-                        &mut system.SysInfo.PlanetInfo,
+                        &mut system.SysInfo.planet_info,
                         scan as u8,
                         node.get(),
                     );
@@ -319,14 +319,14 @@ mod tests {
                 use crate::state::game_state_keys::get_game_state;
                 unsafe extern "C" fn accept(
                     _: *mut SOLARSYS_STATE,
-                    _: *mut crate::c_bindings::global_state::PLANET_DESC,
+                    _: *mut crate::engine::world::planet::PlanetDesc,
                     _: u16,
                 ) -> bool {
                     true
                 }
                 unsafe extern "C" fn reject(
                     _: *mut SOLARSYS_STATE,
-                    _: *mut crate::c_bindings::global_state::PLANET_DESC,
+                    _: *mut crate::engine::world::planet::PlanetDesc,
                     _: u16,
                 ) -> bool {
                     false
@@ -357,7 +357,7 @@ mod tests {
                         .pickup(scan, ScanNodeId::new(index).unwrap())
                         .unwrap());
                     assert_eq!(
-                        system.SysInfo.PlanetInfo.ScanRetrieveMask[scan as usize],
+                        system.SysInfo.planet_info.scan_retrieve_mask[scan as usize],
                         1 << index
                     );
                     assert_eq!(
@@ -372,7 +372,7 @@ mod tests {
                 assert!(!generator
                     .pickup(ScanType::Energy, ScanNodeId::new(1).unwrap())
                     .unwrap());
-                assert_eq!(system.SysInfo.PlanetInfo.ScanRetrieveMask[1], 1);
+                assert_eq!(system.SysInfo.planet_info.scan_retrieve_mask[1], 1);
                 assert_eq!(
                     World::current()
                         .read(|world| get_game_state(world, StoryKey::PLANETARY_CHANGE)),

@@ -6,15 +6,15 @@
 //! `BURV_BROADCASTERS_ON_SHIP`.
 
 use crate::battle::battle_types::normalize_angle;
-use crate::c_bindings::global_state::{PlanetFrame, NODE_INFO, PLANET_DESC, SYSTEM_INFO};
+use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
 use crate::math::RandomContext;
 use crate::planet_side::report_adapter::DiscoveryReportPort;
 use crate::planets::generate::default;
 use crate::planets::generate::home_contact::LanderTakeoff;
+use crate::planets::generate::orbits::{MAX_MOONS, MOON_DELTA};
 use crate::planets::generate::special::{
     self, Body, Orbit, Story, MIN_MOON_RADIUS, REDUX_WORLD, SELENIC_WORLD,
 };
-use crate::planets::orbits::{MAX_MOONS, MOON_DELTA};
 
 const HOME: Body = Body::Planet(0);
 const BROADCASTERS_MOON: Body = Body::Moon { planet: 0, moon: 0 };
@@ -33,11 +33,11 @@ pub fn generate_planets(
     plan_data: &[PlanetFrame],
     star_size: u8,
     star_color: u8,
-    planets: &mut [PLANET_DESC],
+    planets: &mut [PlanetDesc],
 ) -> u8 {
     special::planets_then(rng, plan_data, star_size, star_color, planets, |planets| {
         planets[0].data_index = REDUX_WORLD;
-        planets[0].NumPlanets = 1;
+        planets[0].num_planets = 1;
         special::reposition(&mut planets[0], 39);
     })
 }
@@ -51,7 +51,7 @@ pub fn generate_moons(
     star_size: u8,
     star_color: u8,
     planet_moons: u8,
-    moons: &mut [PLANET_DESC],
+    moons: &mut [PlanetDesc],
     body: Body,
 ) -> bool {
     default::generate_moons(
@@ -84,8 +84,8 @@ pub fn generate_orbital(
     orbit.analyse();
     if body == HOME {
         scenes.load_ruins_scene();
-        orbit.sys_info.PlanetInfo.Weather = 0;
-        orbit.sys_info.PlanetInfo.Tectonics = 0;
+        orbit.sys_info.planet_info.weather = 0;
+        orbit.sys_info.planet_info.tectonics = 0;
     } else if body == BROADCASTERS_MOON && story.flag("BURVIXESE_BROADCASTERS") == 0 {
         scenes.load_broadcasters_scene();
     }
@@ -97,10 +97,10 @@ pub fn generate_orbital(
 /// they are taken, the broadcasters on its first moon.
 pub fn generate_energy(
     rng: &mut RandomContext,
-    sys_info: &SYSTEM_INFO,
+    sys_info: &SystemInfo,
     body: Body,
     which_node: u16,
-    info: &mut NODE_INFO,
+    info: &mut NodeInfo,
     story: &impl Story,
 ) -> u16 {
     if body == HOME {

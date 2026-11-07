@@ -7,15 +7,14 @@
 //! caller's pointers. All of it runs on the game thread, the only thread that
 //! touches this state.
 
-use crate::c_bindings::global_state::{
-    PlanetFrame, NODE_INFO, PLANET_DESC, PLANET_INFO, POINT, SOLARSYS_STATE, SYSTEM_INFO,
-};
+use crate::c_bindings::global_state::{POINT, SOLARSYS_STATE};
+use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, PlanetInfo, SystemInfo};
 use crate::engine::World as WorldOwner;
 use crate::math::RandomContext;
-use crate::planets::calc::{self, AnalysisSite, StarDescription};
-use crate::planets::orbit_tables::NUMBER_OF_PLANET_TYPES;
-use crate::planets::orbits::{self, OrbitRequest};
-use crate::planets::surface;
+use crate::planets::generate::calc::{self, AnalysisSite, StarDescription};
+use crate::planets::generate::orbit_tables::NUMBER_OF_PLANET_TYPES;
+use crate::planets::generate::orbits::{self, OrbitRequest};
+use crate::planets::generate::surface;
 use crate::planets::tables::{ELEMENT_ARRAY, PLANET_ARRAY};
 use crate::planets::topography;
 
@@ -52,7 +51,7 @@ pub(crate) unsafe fn plan_data<'a>() -> &'a [PlanetFrame] {
 
 /// A caller that does not want the node still gets the draws, so the stream
 /// stays in step: C wrote into a local in that case.
-pub(crate) unsafe fn node_or(info: *mut NODE_INFO, spare: &mut NODE_INFO) -> &mut NODE_INFO {
+pub(crate) unsafe fn node_or(info: *mut NodeInfo, spare: &mut NodeInfo) -> &mut NodeInfo {
     if info.is_null() {
         spare
     } else {
@@ -60,9 +59,8 @@ pub(crate) unsafe fn node_or(info: *mut NODE_INFO, spare: &mut NODE_INFO) -> &mu
     }
 }
 
-pub(crate) fn blank_node() -> NODE_INFO {
-    // SAFETY: `NODE_INFO` is plain integers.
-    unsafe { std::mem::zeroed() }
+pub(crate) fn blank_node() -> NodeInfo {
+    NodeInfo::default()
 }
 
 /// `*CurStarDescPtr`'s `Type` byte.
@@ -84,12 +82,12 @@ pub(crate) unsafe fn current_star_type() -> u8 {
 /// # Safety
 /// As [`do_planetary_analysis_c`].
 pub(crate) unsafe fn analysis_context(
-    sys_info: *mut SYSTEM_INFO,
-    desc: *const PLANET_DESC,
+    sys_info: *mut SystemInfo,
+    desc: *const PlanetDesc,
 ) -> (StarDescription, AnalysisSite) {
     let state = crate::c_bindings::solar_system::current();
     let sun = std::ptr::addr_of_mut!((*state).SunDesc[0]);
-    let parent = (*desc).pPrevDesc;
+    let parent = (*desc).prev_desc;
     let parent_radius = if parent == sun {
         None
     } else {
@@ -111,7 +109,7 @@ pub(crate) unsafe fn analysis_context(
 /// # Safety
 /// `info` must point at a valid `PLANET_INFO`.
 #[export_name = "CalcGravity"]
-pub unsafe extern "C" fn calc_gravity_c(info: *const PLANET_INFO) -> u16 {
+pub unsafe extern "C" fn calc_gravity_c(info: *const PlanetInfo) -> u16 {
     calc::calc_gravity(&*info)
 }
 
@@ -125,10 +123,7 @@ pub unsafe extern "C" fn calc_gravity_c(info: *const PLANET_INFO) -> u16 {
 /// `PlanData` must be valid, and `desc.pPrevDesc` must point at either
 /// `pSolarSysState->SunDesc[0]` or a valid description.
 #[export_name = "DoPlanetaryAnalysis"]
-pub unsafe extern "C" fn do_planetary_analysis_c(
-    sys_info: *mut SYSTEM_INFO,
-    desc: *mut PLANET_DESC,
-) {
+pub unsafe extern "C" fn do_planetary_analysis_c(sys_info: *mut SystemInfo, desc: *mut PlanetDesc) {
     let (star, site) = analysis_context(sys_info, desc);
     calc::do_planetary_analysis(
         sys_gen_rng(),
@@ -146,14 +141,16 @@ pub unsafe extern "C" fn do_planetary_analysis_c(
 /// `sys_info` must be a valid analysed `SYSTEM_INFO`; `info` may be NULL.
 #[export_name = "GenerateMineralDeposits"]
 pub unsafe extern "C" fn generate_mineral_deposits_c(
-    sys_info: *const SYSTEM_INFO,
+    sys_info: *const SystemInfo,
     which_deposit: u16,
-    info: *mut NODE_INFO,
+    info: *mut NodeInfo,
 ) -> u16 {
     let mut spare = blank_node();
     surface::generate_mineral_deposits(
         sys_gen_rng(),
         &*sys_info,
+        // SAFETY: the caller supplies an analysed system whose frame table remains live.
+        unsafe { &*(*sys_info).planet_info.plan_data_ptr },
         which_deposit,
         node_or(info, &mut spare),
     )
@@ -165,14 +162,16 @@ pub unsafe extern "C" fn generate_mineral_deposits_c(
 /// `sys_info` must be a valid analysed `SYSTEM_INFO`; `info` may be NULL.
 #[export_name = "GenerateLifeForms"]
 pub unsafe extern "C" fn generate_life_forms_c(
-    sys_info: *const SYSTEM_INFO,
+    sys_info: *const SystemInfo,
     which_life: u16,
-    info: *mut NODE_INFO,
+    info: *mut NodeInfo,
 ) -> u16 {
     let mut spare = blank_node();
     surface::generate_life_forms(
         sys_gen_rng(),
         &*sys_info,
+        // SAFETY: the caller supplies an analysed system whose frame table remains live.
+        unsafe { &*(*sys_info).planet_info.plan_data_ptr },
         which_life,
         node_or(info, &mut spare),
     )
@@ -185,10 +184,10 @@ pub unsafe extern "C" fn generate_life_forms_c(
 /// `life_types` must be a `-1` terminated array; `info` may be NULL.
 #[export_name = "GeneratePresetLife"]
 pub unsafe extern "C" fn generate_preset_life_c(
-    sys_info: *const SYSTEM_INFO,
+    sys_info: *const SystemInfo,
     life_types: *const i8,
     which_life: u16,
-    info: *mut NODE_INFO,
+    info: *mut NodeInfo,
 ) -> u16 {
     let mut len = 0;
     while *life_types.add(len) >= 0 {
@@ -212,12 +211,12 @@ pub unsafe extern "C" fn generate_preset_life_c(
 /// `sys_info` must be a valid analysed `SYSTEM_INFO`; `info` may be NULL.
 #[export_name = "GenerateRandomNodes"]
 pub unsafe extern "C" fn generate_random_nodes_c(
-    sys_info: *const SYSTEM_INFO,
+    sys_info: *const SystemInfo,
     scan: u16,
     num_nodes: u16,
     node_type: u16,
     which_node: u16,
-    info: *mut NODE_INFO,
+    info: *mut NodeInfo,
 ) -> u16 {
     let mut spare = blank_node();
     surface::generate_random_nodes(
@@ -294,7 +293,7 @@ const MAX_GENERATED_PLANETS: usize = 9;
 pub unsafe extern "C" fn fill_orbits_c(
     system: *mut SOLARSYS_STATE,
     num_planets: u8,
-    base: *mut PLANET_DESC,
+    base: *mut PlanetDesc,
     types_defined: u32,
 ) {
     let slots = if num_planets == !0 {
@@ -304,13 +303,13 @@ pub unsafe extern "C" fn fill_orbits_c(
     };
     let request = OrbitRequest {
         star_size: (*system).SunDesc[0].data_index,
-        star_color: crate::planets::consts::star_color(current_star_type()),
+        star_color: crate::planets::generate::consts::star_color(current_star_type()),
         num_planets,
         generating_moons: base == (*system).MoonDesc.as_mut_ptr(),
         types_defined: types_defined != 0,
     };
     let descs = std::slice::from_raw_parts_mut(base, slots);
     if let Some(drawn) = orbits::fill_orbits(sys_gen_rng(), request, descs) {
-        (*system).SunDesc[0].NumPlanets = drawn;
+        (*system).SunDesc[0].num_planets = drawn;
     }
 }

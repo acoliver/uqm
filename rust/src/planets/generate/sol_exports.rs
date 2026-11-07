@@ -1,10 +1,11 @@
 //! Sol's live ABI provider. System and RNG borrows end before resource,
 //! report and surface calls can reenter the generator.
 
-use crate::c_bindings::global_state::{NODE_INFO, PLANET_DESC, PLANET_INFO, SOLARSYS_STATE};
+use crate::c_bindings::global_state::SOLARSYS_STATE;
+use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetInfo};
 use crate::planets::c_api::{self, CapturedSurface, LiveNames};
-use crate::planets::consts::star_color;
 use crate::planets::ffi::{blank_node, current_star_type, node_or, sys_gen_rng};
+use crate::planets::generate::consts::star_color;
 use crate::planets::generate::default;
 use crate::planets::generate::exports::{discovery_report, planet_index};
 use crate::planets::generate::sol::{self, orbital};
@@ -15,7 +16,7 @@ use crate::planets::generate::vtable::{GenerateFunctions, DEFAULT_HOOKS};
 struct SolOrbit<'a, 'b, 'c> {
     game: crate::planets::c_api::LiveGame<'a, 'b, 'c>,
     system: *mut SOLARSYS_STATE,
-    world: *mut PLANET_DESC,
+    world: *mut PlanetDesc,
 }
 
 impl orbital::Queues for SolOrbit<'_, '_, '_> {
@@ -62,10 +63,10 @@ impl orbital::Orbital for SolOrbit<'_, '_, '_> {
             });
         }
     }
-    fn planet_info(&mut self) -> &mut PLANET_INFO {
+    fn planet_info(&mut self) -> &mut PlanetInfo {
         self.game.cx.borrow_mut().with_legacy(|| {
             // SAFETY: this borrow ends before any host resource call.
-            unsafe { &mut (*self.system).SysInfo.PlanetInfo }
+            unsafe { &mut (*self.system).SysInfo.planet_info }
         })
     }
     fn load_scene(&mut self, scene: orbital::Scene) {
@@ -80,8 +81,8 @@ impl orbital::Orbital for SolOrbit<'_, '_, '_> {
             unsafe {
                 CapturedSurface::load(c"graphics.earthmask")
                     .into_definition(
-                        crate::planets::consts::MAP_WIDTH as i16,
-                        crate::planets::consts::MAP_HEIGHT as i16,
+                        crate::planets::generate::consts::MAP_WIDTH as i16,
+                        crate::planets::generate::consts::MAP_HEIGHT as i16,
                     )
                     .expect("Earth surface definition could not be rescaled")
             }
@@ -137,12 +138,12 @@ unsafe fn reinit(owner: &mut crate::engine::World, _system: *mut SOLARSYS_STATE)
 }
 unsafe extern "C" fn planets(system: *mut SOLARSYS_STATE) -> bool {
     let count = sol::generate_planets(sys_gen_rng(), &mut (*system).PlanetDesc);
-    (*system).SunDesc[0].NumPlanets = count;
+    (*system).SunDesc[0].num_planets = count;
     true
 }
-unsafe extern "C" fn moons(system: *mut SOLARSYS_STATE, planet: *mut PLANET_DESC) -> bool {
+unsafe extern "C" fn moons(system: *mut SOLARSYS_STATE, planet: *mut PlanetDesc) -> bool {
     let index = u8::try_from(planet_index(system, planet)).expect("planet index fits a byte");
-    let count = (*planet).NumPlanets;
+    let count = (*planet).num_planets;
     let size = (*system).SunDesc[0].data_index;
     sol::generate_moons(
         sys_gen_rng(),
@@ -154,7 +155,7 @@ unsafe extern "C" fn moons(system: *mut SOLARSYS_STATE, planet: *mut PLANET_DESC
     );
     true
 }
-unsafe extern "C" fn name(system: *const SOLARSYS_STATE, world: *const PLANET_DESC) -> bool {
+unsafe extern "C" fn name(system: *const SOLARSYS_STATE, world: *const PlanetDesc) -> bool {
     let index = planet_index(system, world);
     sol::generate_name(
         &mut LiveNames,
@@ -165,7 +166,7 @@ unsafe extern "C" fn name(system: *const SOLARSYS_STATE, world: *const PLANET_DE
 unsafe fn orbital(
     cx: &mut crate::engine::battle::Cx<'_>,
     system: *mut SOLARSYS_STATE,
-    world: *mut PLANET_DESC,
+    world: *mut PlanetDesc,
 ) -> bool {
     let owner = std::cell::RefCell::new(cx);
     let owner = &owner;
@@ -183,17 +184,17 @@ unsafe fn orbital(
 }
 unsafe extern "C" fn energy(
     system: *const SOLARSYS_STATE,
-    world: *const PLANET_DESC,
+    world: *const PlanetDesc,
     _which: u16,
-    info: *mut NODE_INFO,
+    info: *mut NodeInfo,
 ) -> u16 {
     sol::generate_energy(body_of(system, world), info.as_mut(), &LiveStory)
 }
 unsafe extern "C" fn life(
     system: *const SOLARSYS_STATE,
-    world: *const PLANET_DESC,
+    world: *const PlanetDesc,
     which: u16,
-    info: *mut NODE_INFO,
+    info: *mut NodeInfo,
 ) -> u16 {
     let mut spare = blank_node();
     sol::generate_life(
@@ -206,7 +207,7 @@ unsafe extern "C" fn life(
 }
 unsafe extern "C" fn pickup(
     system: *mut SOLARSYS_STATE,
-    world: *mut PLANET_DESC,
+    world: *mut PlanetDesc,
     which: u16,
 ) -> bool {
     sol::pickup_energy(body_of(system, world), which, &mut SolPickup { system })

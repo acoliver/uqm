@@ -39,7 +39,7 @@ use uqm_rust::{
 fn public_campaign_copy_does_not_traverse_live_records() {
     use uqm_rust::automation::campaign_state::{CampaignView, LiveCampaign, StateKey, StateSource};
     let mut world = World::new();
-    world.story = Some(uqm_rust::state::game_state::GameState::new());
+    world.story = Some(uqm_rust::state::game_state::StoryState::new());
     world.data.game.ship_stamp.frame = std::ptr::dangling_mut();
     let id = world.npc_built_ships().alloc().unwrap();
     world.npc_built_ships().put(id);
@@ -126,7 +126,7 @@ fn restored_star_lookup_finishes_before_selecting_the_owned_star() {
         StoryKey,
     };
     let mut game = Game::new();
-    game.world.story = Some(uqm_rust::state::game_state::GameState::new());
+    game.world.story = Some(uqm_rust::state::game_state::StoryState::new());
     game.world.set_story_state(StoryKey::ARILOU_SPACE_SIDE, 0);
     // SAFETY: zero is valid for catalog descriptors, and the fixture keeps the table live.
     let mut catalog: Box<[CStarDesc; CATALOG_LEN]> = Box::new(unsafe { mem::zeroed() });
@@ -166,7 +166,7 @@ fn restored_star_lookup_finishes_before_selecting_the_owned_star() {
 fn space_queries_use_the_world_of_the_entered_context() {
     let mut game = Game::new();
     game.world.set_activity(IN_HYPERSPACE as u16);
-    game.world.story = Some(uqm_rust::state::game_state::GameState::new());
+    game.world.story = Some(uqm_rust::state::game_state::StoryState::new());
     // SAFETY: the serialized fixture suspends publication while Cx is borrowed.
     unsafe {
         bridge::with_game(&mut game, || {
@@ -219,7 +219,7 @@ fn starbase_releases_world_before_communication_and_cleanup() {
             game.kernel.configuration.clone(),
         ),
     ));
-    game.world.story = Some(uqm_rust::state::game_state::GameState::new());
+    game.world.story = Some(uqm_rust::state::game_state::StoryState::new());
     game.world.set_activity(CHECK_ABORT as u16);
     let mut observer = Recording(Vec::new());
     // SAFETY: this serialized fixture restores the developer flag and owns the lifecycle.
@@ -253,7 +253,7 @@ fn starbase_releases_world_before_communication_and_cleanup() {
 fn encounter_construction_uses_retained_owners_without_publication() {
     use uqm_rust::engine::StoryKey;
     let mut game = Game::new();
-    game.world.story = Some(uqm_rust::state::game_state::GameState::new());
+    game.world.story = Some(uqm_rust::state::game_state::StoryState::new());
     game.world.set_story_state(StoryKey::BATTLE_SEGUE, 1);
     // SAFETY: this serialized fixture owns empty ship resources and the encounter lifecycle.
     unsafe {
@@ -272,7 +272,7 @@ fn encounter_construction_uses_retained_owners_without_publication() {
 fn encounter_construction_keeps_fragment_order_infinite_crew_and_flagship_last() {
     let mut game = Game::new();
     game.kernel.reset_ship_capacity(0, 32);
-    game.world.story = Some(uqm_rust::state::game_state::GameState::new());
+    game.world.story = Some(uqm_rust::state::game_state::StoryState::new());
     let mut npc = game.world.npc_built_ships();
     let id = npc.alloc().unwrap();
     npc.put(id);
@@ -348,7 +348,7 @@ fn encounter_teardown_uses_retained_owners_without_reacquisition() {
 fn campaign_star_observation_releases_world_between_field_reads() {
     use uqm_rust::automation::campaign_state::{CampaignView, LiveCampaign, StateKey, StateSource};
     let mut game = Game::new();
-    game.world.story = Some(uqm_rust::state::game_state::GameState::new());
+    game.world.story = Some(uqm_rust::state::game_state::StoryState::new());
     let view = CampaignView::from_world(&game.world);
     // SAFETY: the serialized fixture owns the lifecycle and has no selected star.
     unsafe {
@@ -396,7 +396,7 @@ fn lander_status_releases_world_before_gauge_and_lander_drawing() {
 #[serial_test::serial]
 fn hyperspace_encounter_updates_story_in_the_borrowed_world() {
     let mut game = Game::new();
-    game.world.story = Some(uqm_rust::state::game_state::GameState::new());
+    game.world.story = Some(uqm_rust::state::game_state::StoryState::new());
     game.world
         .set_story_state(uqm_rust::engine::StoryKey::USED_BROADCASTER, 1);
     // SAFETY: this serialized fixture has empty fleet and encounter queues.
@@ -420,7 +420,7 @@ fn hyperspace_encounter_updates_story_in_the_borrowed_world() {
 #[serial_test::serial]
 fn hyperspace_movement_releases_world_before_fuel_queries() {
     let mut game = Game::new();
-    game.world.story = Some(uqm_rust::state::game_state::GameState::new());
+    game.world.story = Some(uqm_rust::state::game_state::StoryState::new());
     game.world.data.flagship.log_x = 1000;
     game.world.data.flagship.log_y = 1000;
     game.world.data.flagship.fuel_on_board = 100;
@@ -450,7 +450,7 @@ fn campaign_events_schedule_and_dispatch_using_the_existing_world() {
         fn GameClockTick();
     }
     let mut game = Game::new();
-    game.world.story = Some(uqm_rust::state::game_state::GameState::new());
+    game.world.story = Some(uqm_rust::state::game_state::StoryState::new());
     let clock = &mut game.world.data.game.game_clock;
     clock.year_index = 2155;
     clock.month_index = 1;
@@ -544,7 +544,7 @@ fn instant_move_selects_a_star_with_the_retained_world() {
         StoryKey,
     };
     let mut game = Game::new();
-    game.world.story = Some(uqm_rust::state::game_state::GameState::new());
+    game.world.story = Some(uqm_rust::state::game_state::StoryState::new());
     game.world.set_story_state(StoryKey::ARILOU_SPACE_SIDE, 0);
     game.world.set_story_state(StoryKey::USED_BROADCASTER, 1);
     game.world.set_activity((IN_HYPERSPACE | IN_BATTLE) as u16);

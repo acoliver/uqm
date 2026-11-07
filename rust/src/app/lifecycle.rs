@@ -47,13 +47,13 @@ pub(super) fn finish_dispatch(world: &World, kernel: &mut Kernel) -> BreakAction
 #[cfg(test)]
 mod tests {
     use super::{complete_encounter, finish_dispatch, prepare_dispatch};
-    use crate::engine::{world::story::GameState, Kernel, StoryKey, World};
+    use crate::engine::{world::story::StoryState, Kernel, StoryKey, World};
     use crate::mainloop::state_machine::{ActivityDecision, BreakAction};
     use crate::mainloop::types::activity_flags::*;
 
     fn world(activity: u16) -> World {
         let mut world = World::new();
-        world.story = Some(GameState::new());
+        world.story = Some(StoryState::new());
         world.set_activity(activity);
         world
     }

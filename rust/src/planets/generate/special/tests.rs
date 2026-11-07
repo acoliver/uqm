@@ -216,10 +216,10 @@ fn melnorme_posts_pick_their_own_group_reference() {
 
 #[test]
 fn syreen_moon_slot_is_the_starbase_only_for_planet_zero() {
-    use crate::c_bindings::global_state::PLANET_DESC;
+    use crate::engine::world::planet::PlanetDesc;
     use crate::math::RandomContext;
     for (body, starbase) in [(Body::Planet(0), true), (Body::Planet(1), false)] {
-        let mut moons: Vec<PLANET_DESC> = vec![unsafe { std::mem::zeroed() }; 16];
+        let mut moons: Vec<PlanetDesc> = vec![unsafe { std::mem::zeroed() }; 16];
         let mut rng = RandomContext::with_seed(7);
         syreen::generate_moons(&mut rng, 0, 0, 2, &mut moons, body);
         assert_eq!(moons[0].data_index == 127 | 0x80, starbase);
@@ -472,4 +472,23 @@ fn zoqfotpik_scout_flees_only_after_colliding_with_the_flagship() {
     let mut host = fleet(3);
     host.groups.clear();
     assert!(zfpscout::reinit_npcs(&mut host));
+}
+
+#[test]
+fn owned_story_implements_generator_flags_and_group_words_without_a_live_owner() {
+    let mut first = crate::engine::world::story::StoryState::new();
+    let second = crate::engine::world::story::StoryState::new();
+    first.set_flag("TAALO_UNPROTECTED", 1);
+    first.set_word("SAMATRA_GRPOFFS0", 0x89abcdef);
+    assert_eq!(first.flag("TAALO_UNPROTECTED"), 1);
+    assert_eq!(second.flag("TAALO_UNPROTECTED"), 0);
+    assert_eq!(first.word("SAMATRA_GRPOFFS0"), 0x89abcdef);
+    assert_eq!(second.word("SAMATRA_GRPOFFS0"), 0);
+    let start = crate::engine::StoryKey::SAMATRA_GRPOFFS0.start();
+    for (byte, expected) in [0xef, 0xcd, 0xab, 0x89].into_iter().enumerate() {
+        assert_eq!(
+            first.get_state(start + 8 * byte, start + 8 * byte + 7),
+            expected
+        );
+    }
 }

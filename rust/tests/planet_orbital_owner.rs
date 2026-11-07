@@ -4,7 +4,7 @@ use uqm_rust::planets::generate::special::Story;
 #[test]
 fn orbital_story_and_queue_hosts_share_the_caller_owner() {
     let mut game = Game::new();
-    game.world.story = Some(uqm_rust::state::game_state::GameState::new());
+    game.world.story = Some(uqm_rust::state::game_state::StoryState::new());
     // SAFETY: the serialized fixture retains its game and uses only synchronous owner handoffs.
     unsafe {
         uqm_rust::app::bridge::with_game(&mut game, || {

@@ -154,10 +154,10 @@ pub fn rebel_escort_feasible(world: &crate::engine::World) -> bool {
 /// `system` is the live system, with no outstanding references into it.
 pub unsafe fn load_beast_scene(system: *mut crate::c_bindings::global_state::SOLARSYS_STATE) {
     LoadStdLanderFont(
-        (std::ptr::addr_of_mut!((*system).SysInfo.PlanetInfo).cast::<c_void>()).cast(),
+        (std::ptr::addr_of_mut!((*system).SysInfo.planet_info).cast::<c_void>()).cast(),
     );
     (*system).PlanetSideFrame[1] = std::ptr::null_mut();
-    (*system).SysInfo.PlanetInfo.DiscoveryString =
+    (*system).SysInfo.planet_info.discovery_string =
         CaptureStringTable(LoadStringTableInstance(c"text.vuxbeast".as_ptr())).cast();
 }
 
@@ -307,12 +307,12 @@ pub unsafe fn load_lander_scene(
     first_report: u16,
 ) {
     LoadStdLanderFont(
-        (std::ptr::addr_of_mut!((*system).SysInfo.PlanetInfo).cast::<c_void>()).cast(),
+        (std::ptr::addr_of_mut!((*system).SysInfo.planet_info).cast::<c_void>()).cast(),
     );
     (*system).PlanetSideFrame[1] =
         CaptureDrawable((LoadGraphicInstance(graphics.as_ptr())).cast()).cast();
     let table = CaptureStringTable(LoadStringTableInstance(strtab.as_ptr()));
-    (*system).SysInfo.PlanetInfo.DiscoveryString = if first_report == 0 {
+    (*system).SysInfo.planet_info.discovery_string = if first_report == 0 {
         table.cast()
     } else {
         SetAbsStringTableIndex(table, first_report).cast()
@@ -330,18 +330,19 @@ pub unsafe fn load_ruins_story(
     visits: u32,
 ) {
     LoadStdLanderFont(
-        (std::ptr::addr_of_mut!((*system).SysInfo.PlanetInfo).cast::<c_void>()).cast(),
+        (std::ptr::addr_of_mut!((*system).SysInfo.planet_info).cast::<c_void>()).cast(),
     );
     (*system).PlanetSideFrame[1] =
         CaptureDrawable((LoadGraphicInstance(c"graphics.ruins".as_ptr())).cast()).cast();
     let table = CaptureStringTable(LoadStringTableInstance(c"text.androsynthruins".as_ptr()));
-    (*system).SysInfo.PlanetInfo.DiscoveryString = table.cast();
+    (*system).SysInfo.planet_info.discovery_string = table.cast();
     if visits >= u32::from(GetStringTableCount(table)) {
         DestroyStringTable(ReleaseStringTable(table));
-        (*system).SysInfo.PlanetInfo.DiscoveryString = std::ptr::null_mut();
+        (*system).SysInfo.planet_info.discovery_string = std::ptr::null_mut();
     } else {
         let offset = i16::try_from(visits).expect("a visit count is at most sixteen");
-        (*system).SysInfo.PlanetInfo.DiscoveryString = SetRelStringTableIndex(table, offset).cast();
+        (*system).SysInfo.planet_info.discovery_string =
+            SetRelStringTableIndex(table, offset).cast();
     }
 }
 
@@ -352,9 +353,9 @@ pub unsafe fn load_ruins_story(
 /// `system` must be the live solar system state, on the game thread.
 pub unsafe fn load_starbase_report(system: *mut crate::c_bindings::global_state::SOLARSYS_STATE) {
     LoadStdLanderFont(
-        (std::ptr::addr_of_mut!((*system).SysInfo.PlanetInfo).cast::<c_void>()).cast(),
+        (std::ptr::addr_of_mut!((*system).SysInfo.planet_info).cast::<c_void>()).cast(),
     );
-    (*system).SysInfo.PlanetInfo.DiscoveryString =
+    (*system).SysInfo.planet_info.discovery_string =
         CaptureStringTable(LoadStringTableInstance(c"text.chmmrbase".as_ptr())).cast();
 }
 
@@ -363,7 +364,7 @@ pub unsafe fn load_starbase_report(system: *mut crate::c_bindings::global_state:
 /// # Safety
 /// `system` must be the live solar system state, on the game thread.
 pub unsafe fn free_lander_font(system: *mut crate::c_bindings::global_state::SOLARSYS_STATE) {
-    FreeLanderFont((std::ptr::addr_of_mut!((*system).SysInfo.PlanetInfo).cast::<c_void>()).cast());
+    FreeLanderFont((std::ptr::addr_of_mut!((*system).SysInfo.planet_info).cast::<c_void>()).cast());
 }
 
 /// `GetHeadLink (&GLOBAL (npc_built_ship_q)) != 0`.

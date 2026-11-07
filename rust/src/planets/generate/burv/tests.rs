@@ -2,7 +2,7 @@
 //! system's orbital, against recording fakes.
 
 use super::{generate_energy, generate_orbital, pickup_energy, BurvScenes};
-use crate::c_bindings::global_state::{PlanetFrame, NODE_INFO, SYSTEM_INFO};
+use crate::engine::world::planet::{NodeInfo, PlanetFrame, SystemInfo};
 use crate::math::RandomContext;
 use crate::planet_side::report_adapter::{DiscoveryReportPort, ReportDisposition};
 use crate::planet_side::runtime::AdapterError;
@@ -48,10 +48,10 @@ impl BurvScenes for FakeScenes {
 }
 
 fn node_count(body: Body, story: &FakeStory) -> u16 {
-    let mut info: SYSTEM_INFO = unsafe { std::mem::zeroed() };
-    info.PlanetInfo.ScanSeed = [1, 2, 3];
+    let mut info: SystemInfo = unsafe { std::mem::zeroed() };
+    info.planet_info.scan_seed = [1, 2, 3];
     let mut rng = RandomContext::with_seed(7);
-    let mut node: NODE_INFO = unsafe { std::mem::zeroed() };
+    let mut node: NodeInfo = unsafe { std::mem::zeroed() };
     generate_energy(&mut rng, &info, body, !0, &mut node, story)
 }
 
@@ -152,12 +152,12 @@ fn other_worlds_pick_up_nothing() {
 }
 
 fn orbit_scenes(body: Body, story: &FakeStory) -> (u32, u32, (u8, u8), u32) {
-    use crate::planets::calc::{AnalysisSite, StarDescription};
+    use crate::planets::generate::calc::{AnalysisSite, StarDescription};
     let mut rng = RandomContext::with_seed(11);
-    let mut sys_info: SYSTEM_INFO = unsafe { std::mem::zeroed() };
-    sys_info.PlanetInfo.Weather = 9;
-    sys_info.PlanetInfo.Tectonics = 9;
-    let mut world: crate::c_bindings::global_state::PLANET_DESC = unsafe { std::mem::zeroed() };
+    let mut sys_info: SystemInfo = unsafe { std::mem::zeroed() };
+    sys_info.planet_info.weather = 9;
+    sys_info.planet_info.tectonics = 9;
+    let mut world: crate::engine::world::planet::PlanetDesc = unsafe { std::mem::zeroed() };
     world.radius = 400;
     let plan_data: Vec<PlanetFrame> = vec![unsafe { std::mem::zeroed() }; 128];
     let mut orbit = Orbit {
@@ -186,8 +186,8 @@ fn orbit_scenes(body: Body, story: &FakeStory) -> (u32, u32, (u8, u8), u32) {
         }
     ));
     let weather = (
-        sys_info.PlanetInfo.Weather as u8,
-        sys_info.PlanetInfo.Tectonics as u8,
+        sys_info.planet_info.weather as u8,
+        sys_info.planet_info.tectonics as u8,
     );
     (scenes.ruins, scenes.broadcasters, weather, loaded)
 }

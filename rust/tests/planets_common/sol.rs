@@ -1,10 +1,10 @@
 //! Complete descriptor buffers and guarded scans for the retained Sol C vtable.
 
 use std::fmt::Write as _;
+use uqm_rust::engine::world::planet::{NodeInfo, PlanetDesc, SystemInfo};
 
 use super::late_gen::descriptors;
 use super::{fresh_node, scan_seeds};
-use uqm_rust::c_bindings::global_state::{NODE_INFO, PLANET_DESC, SYSTEM_INFO};
 use uqm_rust::math::RandomContext;
 use uqm_rust::planets::generate::sol;
 use uqm_rust::planets::generate::special::{Body, Story};
@@ -27,15 +27,15 @@ pub struct Scan {
 }
 
 pub trait Ops {
-    fn planets(&mut self, case: Layout, descs: &mut [PLANET_DESC; 16]) -> (bool, u8, u32);
+    fn planets(&mut self, case: Layout, descs: &mut [PlanetDesc; 16]) -> (bool, u8, u32);
     fn moons(
         &mut self,
         case: Layout,
         planet: u8,
         count: u8,
-        descs: &mut [PLANET_DESC; 4],
+        descs: &mut [PlanetDesc; 4],
     ) -> (bool, u32);
-    fn scan(&mut self, case: Scan, info: &SYSTEM_INFO, node: &mut NODE_INFO) -> (u16, u32);
+    fn scan(&mut self, case: Scan, info: &SystemInfo, node: &mut NodeInfo) -> (u16, u32);
 }
 
 pub fn render_layout(ops: &mut impl Ops) -> String {
@@ -44,14 +44,14 @@ pub fn render_layout(ops: &mut impl Ops) -> String {
         for color in 0..6 {
             for seed in [0, 1, 104_729, u32::MAX] {
                 let case = Layout { size, color, seed };
-                let mut planets: [PLANET_DESC; 16] = descriptors(16).try_into().unwrap();
+                let mut planets: [PlanetDesc; 16] = descriptors(16).try_into().unwrap();
                 let result = ops.planets(case, &mut planets);
                 writeln!(out, "planets {case:?} {result:?} {planets:?}").unwrap();
                 for planet in 0..9 {
                     // Also test counts outside the usual Sol layout: overrides
                     // are unconditional, including writes to inactive slots.
                     for count in 0..=4 {
-                        let mut moons: [PLANET_DESC; 4] = descriptors(4).try_into().unwrap();
+                        let mut moons: [PlanetDesc; 4] = descriptors(4).try_into().unwrap();
                         let result = ops.moons(case, planet, count, &mut moons);
                         writeln!(out, "moons {case:?} {planet} {count} {result:?} {moons:?}")
                             .unwrap();
@@ -60,20 +60,20 @@ pub fn render_layout(ops: &mut impl Ops) -> String {
             }
         }
     }
-    out
+    super::record_labels::captured_labels(out)
 }
 
-pub fn scan_info(seed: u32) -> SYSTEM_INFO {
-    let mut info: SYSTEM_INFO = unsafe { std::mem::zeroed() };
-    info.PlanetInfo.ScanSeed = scan_seeds(seed);
-    info.PlanetInfo.ScanRetrieveMask = [0x55555555, 0xa5a5a5a5, u32::MAX];
-    info.PlanetInfo.AtmoDensity = 53;
-    info.PlanetInfo.PlanetDensity = 59;
-    info.PlanetInfo.PlanetRadius = 61;
-    info.PlanetInfo.SurfaceTemperature = -67;
-    info.PlanetInfo.AxialTilt = 71;
-    info.PlanetInfo.RotationPeriod = 73;
-    info.PlanetInfo.SurfaceGravity = 79;
+pub fn scan_info(seed: u32) -> SystemInfo {
+    let mut info: SystemInfo = unsafe { std::mem::zeroed() };
+    info.planet_info.scan_seed = scan_seeds(seed);
+    info.planet_info.scan_retrieve_mask = [0x55555555, 0xa5a5a5a5, u32::MAX];
+    info.planet_info.atmo_density = 53;
+    info.planet_info.planet_density = 59;
+    info.planet_info.planet_radius = 61;
+    info.planet_info.temperature = -67;
+    info.planet_info.axial_tilt = 71;
+    info.planet_info.rotation_period = 73;
+    info.planet_info.gravity = 79;
     info
 }
 
@@ -119,13 +119,13 @@ pub fn render_scans(ops: &mut impl Ops) -> String {
             }
         }
     }
-    out
+    super::record_labels::captured_labels(out)
 }
 
 pub struct RustSol;
 
 impl Ops for RustSol {
-    fn planets(&mut self, case: Layout, descs: &mut [PLANET_DESC; 16]) -> (bool, u8, u32) {
+    fn planets(&mut self, case: Layout, descs: &mut [PlanetDesc; 16]) -> (bool, u8, u32) {
         let mut rng = RandomContext::with_seed(case.seed);
         let count = sol::generate_planets(&mut rng, descs);
         (true, count, rng.seed())
@@ -135,13 +135,13 @@ impl Ops for RustSol {
         case: Layout,
         planet: u8,
         count: u8,
-        descs: &mut [PLANET_DESC; 4],
+        descs: &mut [PlanetDesc; 4],
     ) -> (bool, u32) {
         let mut rng = RandomContext::with_seed(case.seed);
         sol::generate_moons(&mut rng, case.size, case.color, planet, count, descs);
         (true, rng.seed())
     }
-    fn scan(&mut self, case: Scan, info: &SYSTEM_INFO, node: &mut NODE_INFO) -> (u16, u32) {
+    fn scan(&mut self, case: Scan, info: &SystemInfo, node: &mut NodeInfo) -> (u16, u32) {
         let mut rng = RandomContext::with_seed(case.seed);
         let story = ScanStory(case.pluto, case.destroyed);
         let count = if case.life {

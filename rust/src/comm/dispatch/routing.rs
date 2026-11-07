@@ -40,7 +40,7 @@ mod tests {
     #[test]
     fn restored_conversation_preserves_pluto_and_global_flag_precedence() {
         let mut world = World::new();
-        world.story = Some(crate::engine::world::story::GameState::new());
+        world.story = Some(crate::engine::world::story::StoryState::new());
         for (pluto, flags, expected) in [
             (1, 0, conv::SPATHI),
             (1, 0x30, conv::SPATHI),

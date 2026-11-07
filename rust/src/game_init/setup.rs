@@ -1,7 +1,7 @@
 // Game Setup Functions
 // Handles game initialization and context setup
 
-use crate::state::GameState;
+use crate::state::StoryState;
 use crate::time::GameClock;
 use std::sync::Mutex;
 
@@ -11,7 +11,7 @@ static GLOBAL_GAME_KERNEL: Mutex<Option<GameKernel>> = Mutex::new(None);
 /// Game kernel containing core game structures
 #[derive(Debug)]
 pub struct GameKernel {
-    pub game_state: Option<GameState>,
+    pub game_state: Option<StoryState>,
     pub game_clock: Option<GameClock>,
     pub initialized: bool,
 }
@@ -27,7 +27,7 @@ impl GameKernel {
 
     pub fn initialize(&mut self) -> Result<(), SetupError> {
         // Initialize game state
-        self.game_state = Some(GameState::new());
+        self.game_state = Some(StoryState::new());
 
         // Initialize game clock
         self.game_clock = Some(GameClock::new());

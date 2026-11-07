@@ -1,6 +1,7 @@
 //! Scoped navigation projections into the retained game-thread authorities.
 #![cfg(not(test))]
 use crate::engine::battle::{Cx, ElementId, Parent};
+use crate::engine::world::planet::PlanetDesc;
 use crate::engine::StoryKey;
 use crate::navigation::abi::*;
 
@@ -199,16 +200,16 @@ impl NavigationOps for Cx<'_> {
                 .as_ref()
                 .unwrap_or_else(|| panic!("orbital descriptor"))
         };
-        let planet = if orbital.pPrevDesc == solar.SunDesc.as_ptr().cast_mut() {
+        let planet = if orbital.prev_desc == solar.SunDesc.as_ptr().cast_mut() {
             solar.pOrbitalDesc
         } else {
-            orbital.pPrevDesc
+            orbital.prev_desc
         };
         let offset = (planet as usize)
             .checked_sub(solar.PlanetDesc.as_ptr() as usize)
             .unwrap_or_else(|| panic!("planet belongs to system"));
-        assert!(offset.is_multiple_of(std::mem::size_of::<PLANET_DESC>()));
-        (1 + offset / std::mem::size_of::<PLANET_DESC>()) as u8
+        assert!(offset.is_multiple_of(std::mem::size_of::<PlanetDesc>()));
+        (1 + offset / std::mem::size_of::<PlanetDesc>()) as u8
     }
     fn group_record(
         &self,

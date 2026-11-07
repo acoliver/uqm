@@ -27,8 +27,8 @@ use super::super::world::queues::Fragment;
 use std::fmt;
 
 use super::super::battle::schema::GAME_STATE as CGameState;
-use super::super::world::story::GameState;
 use super::super::world::story::GameStateOwnerError;
+use super::super::world::story::StoryState;
 use super::super::world::SisState as CSisState;
 use super::super::StoryKey;
 use super::activity::{IN_HYPERSPACE, IN_INTERPLANETARY, IN_LAST_BATTLE};
@@ -162,12 +162,12 @@ impl From<SolarError> for SummaryError {
     }
 }
 
-fn state_value(state: &GameState, key: StoryKey) -> u8 {
+fn state_value(state: &StoryState, key: StoryKey) -> u8 {
     state.get_state(key.start(), key.end())
 }
 
 /// `InventoryDevices (list, MAX_EXCLUSIVE_DEVICES)`.
-pub fn inventory_devices(state: &GameState, limit: usize) -> Vec<u8> {
+pub fn inventory_devices(state: &StoryState, limit: usize) -> Vec<u8> {
     let mut devices = Vec::new();
     for (id, on_board) in DEVICES.iter().enumerate() {
         if devices.len() == limit {
@@ -239,7 +239,7 @@ pub fn capture_summary(
     sis: &CSisState,
     game: &CGameState,
     escorts: LinkQueue<'_, Fragment, 12>,
-    story: &Option<GameState>,
+    story: &Option<StoryState>,
     solar: SessionSummary,
     name: &[u8],
 ) -> Result<Summary, SummaryError> {

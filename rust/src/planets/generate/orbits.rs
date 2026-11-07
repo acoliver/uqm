@@ -1,9 +1,9 @@
 //! Planet and moon orbit layout, ported from `planets/orbits.c`.
 
-use crate::battle::battle_types::{cosine, sine};
-use crate::c_bindings::global_state::PLANET_DESC;
+use crate::engine::math::battle_types::{cosine, sine};
+use crate::engine::world::planet::PlanetDesc;
 use crate::math::RandomContext;
-use crate::planets::orbit_tables::{
+use crate::planets::generate::orbit_tables::{
     BLUE, GREEN, NUMBER_OF_PLANET_TYPES, ORANGE, RED, WHITE, YELLOW,
 };
 
@@ -39,7 +39,7 @@ fn distribution(star_color: u8) -> Option<&'static [u8; NUMBER_OF_PLANET_TYPES]>
 
 const ORBIT_BUCKET: u16 = 5 << 6;
 
-fn has_available_orbit(prior: &[PLANET_DESC], minimum: u16) -> bool {
+fn has_available_orbit(prior: &[PlanetDesc], minimum: u16) -> bool {
     (minimum / ORBIT_BUCKET..=(MAX_PLANET_RADIUS - 1) / ORBIT_BUCKET).any(|bucket| {
         prior
             .iter()
@@ -47,7 +47,7 @@ fn has_available_orbit(prior: &[PLANET_DESC], minimum: u16) -> bool {
     })
 }
 
-fn position_orbit(planet: &mut PLANET_DESC, angle: u16) {
+fn position_orbit(planet: &mut PlanetDesc, angle: u16) {
     let radius = i32::from(planet.radius);
     let x = cosine(angle, radius) as i16;
     let y = sine(angle, radius) as i16;
@@ -56,8 +56,8 @@ fn position_orbit(planet: &mut PLANET_DESC, angle: u16) {
     planet.rand_seed = (u32::from(y as u16) << 16) | u32::from(x as u16);
 }
 
-fn pack_orbits(planets: &mut [PLANET_DESC], angles: &[u16], sun: (u16, u16)) {
-    let minimum = |planet: &PLANET_DESC| {
+fn pack_orbits(planets: &mut [PlanetDesc], angles: &[u16], sun: (u16, u16)) {
+    let minimum = |planet: &PlanetDesc| {
         if planet.data_index < FIRST_GAS_GIANT {
             sun.0
         } else {
@@ -103,7 +103,7 @@ pub struct OrbitRequest {
 pub fn fill_orbits(
     rng: &mut RandomContext,
     request: OrbitRequest,
-    descs: &mut [PLANET_DESC],
+    descs: &mut [PlanetDesc],
 ) -> Option<u8> {
     let sun = SUN_MIN_DISTANCES[usize::from(request.star_size)];
     let mut num_planets = request.num_planets;
@@ -169,7 +169,7 @@ pub fn fill_orbits(
                 if descs[..index].iter().any(|prior| prior.radius == radius) {
                     continue;
                 }
-                descs[index].NumPlanets = 0;
+                descs[index].num_planets = 0;
             } else {
                 let radius = ((rand_val % (MAX_PLANET_RADIUS - min_radius)) + min_radius) as i16;
                 descs[index].radius = radius;
@@ -213,7 +213,7 @@ mod tests {
                 for seed in 0..60 {
                     let seed = seed * 7919 + 1;
                     let mut rng = RandomContext::with_seed(seed);
-                    let mut planets: [PLANET_DESC; 9] = unsafe { std::mem::zeroed() };
+                    let mut planets: [PlanetDesc; 9] = unsafe { std::mem::zeroed() };
                     let count = fill_orbits(
                         &mut rng,
                         OrbitRequest {

@@ -3,7 +3,7 @@
 //!
 //! Overridden: `generatePlanets`, `generateOrbital`. No story flags.
 
-use crate::c_bindings::global_state::{PlanetFrame, PLANET_DESC};
+use crate::engine::world::planet::{PlanetDesc, PlanetFrame};
 use crate::math::RandomContext;
 use crate::planets::generate::special::{self, Body, Orbit, RED_GAS_GIANT};
 
@@ -13,11 +13,11 @@ pub fn generate_planets(
     plan_data: &[PlanetFrame],
     star_size: u8,
     star_color: u8,
-    planets: &mut [PLANET_DESC],
+    planets: &mut [PlanetDesc],
 ) -> u8 {
     special::planets_then(rng, plan_data, star_size, star_color, planets, |planets| {
         planets[3].data_index = RED_GAS_GIANT;
-        planets[3].NumPlanets = 1;
+        planets[3].num_planets = 1;
     })
 }
 

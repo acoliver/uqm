@@ -1,3 +1,4 @@
+use crate::engine::world::planet::{NodeInfo, PlanetDesc};
 use crate::engine::{battle::Cx, input::InputSession, observe::Io};
 use crate::graphics::flash::{FlashState, FlashType};
 pub use crate::engine::battle::{CollisionHook, ElementHook};
@@ -2065,9 +2066,7 @@ pub const LANDER_DEPARTS: _bindgen_ty_12 = 10;
 pub const LANDER_RETURNS: _bindgen_ty_12 = 11;
 pub const LANDER_DESTROYED: _bindgen_ty_12 = 12;
 pub type _bindgen_ty_12 = ::std::os::raw::c_uint;
-pub type PLANET_DESC = planet_desc;
 pub type STAR_DESC = star_desc;
-pub type NODE_INFO = node_info;
 pub type PLANET_ORBIT = planet_orbit;
 pub type SOLARSYS_STATE = solarsys_state;
 pub type InitNpcsFunction =
@@ -2079,56 +2078,56 @@ pub type UninitNpcsFunction =
 pub type GeneratePlanetsFunction =
     ::std::option::Option<unsafe extern "C" fn(solarSys: *mut SOLARSYS_STATE) -> bool>;
 pub type GenerateMoonsFunction = ::std::option::Option<
-    unsafe extern "C" fn(solarSys: *mut SOLARSYS_STATE, planet: *mut PLANET_DESC) -> bool,
+    unsafe extern "C" fn(solarSys: *mut SOLARSYS_STATE, planet: *mut PlanetDesc) -> bool,
 >;
 pub type GenerateOrbitalFunction = ::std::option::Option<
-    unsafe extern "C" fn(solarSys: *mut SOLARSYS_STATE, world: *mut PLANET_DESC) -> bool,
+    unsafe extern "C" fn(solarSys: *mut SOLARSYS_STATE, world: *mut PlanetDesc) -> bool,
 >;
 pub type GenerateNameFunction = ::std::option::Option<
-    unsafe extern "C" fn(arg1: *const SOLARSYS_STATE, world: *const PLANET_DESC) -> bool,
+    unsafe extern "C" fn(arg1: *const SOLARSYS_STATE, world: *const PlanetDesc) -> bool,
 >;
 pub type GenerateMineralsFunction = ::std::option::Option<
     unsafe extern "C" fn(
         arg1: *const SOLARSYS_STATE,
-        world: *const PLANET_DESC,
+        world: *const PlanetDesc,
         whichNode: COUNT,
-        arg2: *mut NODE_INFO,
+        arg2: *mut NodeInfo,
     ) -> COUNT,
 >;
 pub type GenerateEnergyFunction = ::std::option::Option<
     unsafe extern "C" fn(
         arg1: *const SOLARSYS_STATE,
-        world: *const PLANET_DESC,
+        world: *const PlanetDesc,
         whichNode: COUNT,
-        arg2: *mut NODE_INFO,
+        arg2: *mut NodeInfo,
     ) -> COUNT,
 >;
 pub type GenerateLifeFunction = ::std::option::Option<
     unsafe extern "C" fn(
         arg1: *const SOLARSYS_STATE,
-        world: *const PLANET_DESC,
+        world: *const PlanetDesc,
         whichNode: COUNT,
-        arg2: *mut NODE_INFO,
+        arg2: *mut NodeInfo,
     ) -> COUNT,
 >;
 pub type PickupMineralsFunction = ::std::option::Option<
     unsafe extern "C" fn(
         solarSys: *mut SOLARSYS_STATE,
-        world: *mut PLANET_DESC,
+        world: *mut PlanetDesc,
         whichNode: COUNT,
     ) -> bool,
 >;
 pub type PickupEnergyFunction = ::std::option::Option<
     unsafe extern "C" fn(
         solarSys: *mut SOLARSYS_STATE,
-        world: *mut PLANET_DESC,
+        world: *mut PlanetDesc,
         whichNode: COUNT,
     ) -> bool,
 >;
 pub type PickupLifeFunction = ::std::option::Option<
     unsafe extern "C" fn(
         solarSys: *mut SOLARSYS_STATE,
-        world: *mut PLANET_DESC,
+        world: *mut PlanetDesc,
         whichNode: COUNT,
     ) -> bool,
 >;
@@ -2372,9 +2371,6 @@ pub struct XLAT_DESC {
     pub level_tab: [SIZE; 3usize],
     pub xlat_tab: [BYTE; 256usize],
 }
-pub use crate::ships::native::abi::PlanetFrame;
-pub use crate::ships::native::abi::ELEMENT_ENTRY;
-pub use crate::ships::native::abi::PLANET_INFO;
 pub const GAS_DENSITY: _bindgen_ty_19 = 0;
 pub const LIGHT_DENSITY: _bindgen_ty_19 = 1;
 pub const LOW_DENSITY: _bindgen_ty_19 = 2;
@@ -2382,11 +2378,9 @@ pub const NORMAL_DENSITY: _bindgen_ty_19 = 3;
 pub const HIGH_DENSITY: _bindgen_ty_19 = 4;
 pub const SUPER_DENSITY: _bindgen_ty_19 = 5;
 pub type _bindgen_ty_19 = ::std::os::raw::c_uint;
-pub use crate::ships::native::abi::SYSTEM_INFO;
 
 #[cfg(not(test))]
 pub use crate::planets::ffi::do_planetary_analysis_c as DoPlanetaryAnalysis;
-pub use crate::ships::native::abi::planet_desc;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct star_desc {
@@ -2396,7 +2390,6 @@ pub struct star_desc {
     pub Prefix: BYTE,
     pub Postfix: BYTE,
 }
-pub use crate::ships::native::abi::node_info;
 pub use crate::ships::native::abi::planet_orbit;
 pub use crate::ships::native::abi::solarsys_state;
 extern "C" {

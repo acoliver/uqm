@@ -2,7 +2,7 @@
 
 use crate::comm::locdata::{CPoint, CRect};
 use crate::graphics::cmap::Color;
-use crate::planets::consts::{GAS_GIANT_ALGO, PLAN_ALGO_MASK};
+use crate::planets::generate::consts::{GAS_GIANT_ALGO, PLAN_ALGO_MASK};
 
 pub const NUM_BATCH_POINTS: usize = 64;
 

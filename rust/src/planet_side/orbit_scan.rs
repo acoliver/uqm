@@ -1,9 +1,9 @@
 //! Scan-node generation, visibility and display-list synchronization.
 
 use crate::battle::element::ElementFlags;
-use crate::c_bindings::global_state::PLANET_INFO;
+use crate::engine::world::planet::PlanetInfo;
 
-pub(crate) fn node_retrieved(life: u16, info: &PLANET_INFO) -> bool {
+pub(crate) fn node_retrieved(life: u16, info: &PlanetInfo) -> bool {
     let scan = life as u8;
     let node = (life >> 8) as u8;
     assert!(
@@ -13,7 +13,7 @@ pub(crate) fn node_retrieved(life: u16, info: &PLANET_INFO) -> bool {
     unsafe { crate::planets::scan::is_node_retrieved(std::ptr::from_ref(info), scan, node - 1) }
 }
 
-pub(crate) fn node_visible(flags: u16, life: u16, info: &PLANET_INFO) -> bool {
+pub(crate) fn node_visible(flags: u16, life: u16, info: &PlanetInfo) -> bool {
     flags & ElementFlags::APPEARING.bits() != 0 && !node_retrieved(life, info)
 }
 
@@ -58,7 +58,8 @@ mod production {
         {
             return;
         }
-        let persistence = ScanPersistence::from_masks((*solar).SysInfo.PlanetInfo.ScanRetrieveMask);
+        let persistence =
+            ScanPersistence::from_masks((*solar).SysInfo.planet_info.scan_retrieve_mask);
         // Orbit-scan rendering only builds the display list; the returned
         // biological initial frame is a deterministic placeholder that the scan never
         // reads, so it must not consume the gameplay random stream.
@@ -362,7 +363,7 @@ mod retrieval_tests {
 
     #[test]
     fn retrieved_blips_stay_hidden_on_redraw_and_rescan_for_every_category() {
-        let mut info: PLANET_INFO = unsafe { std::mem::zeroed() };
+        let mut info: PlanetInfo = unsafe { std::mem::zeroed() };
         for scan in 0..3 {
             let mut element = Element::new();
             element.life_span = (32 << 8) | scan;

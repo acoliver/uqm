@@ -20,7 +20,7 @@
 use super::campaign_state::CampaignView;
 use crate::automation::coordinator::AutomationObserver;
 #[cfg(not(test))]
-use crate::c_bindings::global_state::{PLANET_DESC, SOLARSYS_STATE};
+use crate::c_bindings::global_state::SOLARSYS_STATE;
 use crate::engine::input::InputControls;
 
 // ===========================================================================
@@ -192,7 +192,7 @@ unsafe fn read_flight_state(
         snapshot.orbital_data_index = i32::from((*solar_system.pOrbitalDesc).data_index);
         let planet_start = solar_system.PlanetDesc.as_ptr() as usize;
         let moon_start = solar_system.MoonDesc.as_ptr() as usize;
-        let desc_size = std::mem::size_of::<PLANET_DESC>();
+        let desc_size = std::mem::size_of::<crate::engine::world::planet::PlanetDesc>();
         let orbital_address = solar_system.pOrbitalDesc as usize;
         if orbital_address >= moon_start
             && orbital_address < moon_start + solar_system.MoonDesc.len() * desc_size
@@ -201,10 +201,10 @@ unsafe fn read_flight_state(
         }
         let sun = solar_system.SunDesc.as_ptr();
         let orbital_planet =
-            if std::ptr::eq((*solar_system.pOrbitalDesc).pPrevDesc.cast_const(), sun) {
+            if std::ptr::eq((*solar_system.pOrbitalDesc).prev_desc.cast_const(), sun) {
                 solar_system.pOrbitalDesc
             } else {
-                (*solar_system.pOrbitalDesc).pPrevDesc
+                (*solar_system.pOrbitalDesc).prev_desc
             } as usize;
         if orbital_planet >= planet_start {
             snapshot.inner_planet = ((orbital_planet - planet_start) / desc_size) as i32;
@@ -455,7 +455,7 @@ pub(crate) fn navigation_snapshot(
     let Some(solar_system) = solar else {
         return snapshot;
     };
-    if target_planet < 0 || target_planet >= i32::from(solar_system.SunDesc[0].NumPlanets) {
+    if target_planet < 0 || target_planet >= i32::from(solar_system.SunDesc[0].num_planets) {
         return snapshot;
     }
     // SAFETY: the live synchronous solar borrow also keeps its global flight state live.
@@ -464,10 +464,10 @@ pub(crate) fn navigation_snapshot(
     if let Some(moon) = target_moon {
         if snapshot.inner_planet == target_planet
             && moon >= 0
-            && moon < i32::from(solar_system.PlanetDesc[target_planet as usize].NumPlanets)
+            && moon < i32::from(solar_system.PlanetDesc[target_planet as usize].num_planets)
         {
             for (index, body) in solar_system.MoonDesc
-                [..usize::from(solar_system.PlanetDesc[target_planet as usize].NumPlanets)]
+                [..usize::from(solar_system.PlanetDesc[target_planet as usize].num_planets)]
                 .iter()
                 .enumerate()
             {

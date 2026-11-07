@@ -241,7 +241,8 @@ pub unsafe fn render_system_topography(
     if (*system).XlatRef.is_null() {
         return render_topography(&mut gfx, destination, depth, width, height, None);
     }
-    let index = (*(*system).pOrbitalDesc).data_index & !crate::planets::consts::PLANET_SHIELDED;
+    let index =
+        (*(*system).pOrbitalDesc).data_index & !crate::planets::generate::consts::PLANET_SHIELDED;
     let planet = crate::planets::tables::PLANET_ARRAY
         .0
         .get(usize::from(index))
@@ -269,7 +270,7 @@ pub unsafe fn render_system_topography(
         Some(TopographyPalette {
             translation,
             colors,
-            planet_type: planet.Type,
+            planet_type: planet.type_,
             base_elevation: planet.base_elevation,
         }),
     )

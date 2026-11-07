@@ -409,7 +409,7 @@ pub(crate) mod live {
             task = ON_STATION as u8;
         }
         group.orbit_pos = (random >> 16) as u8 & 15;
-        let mut location = (*pSolarSysState).SunDesc[0].NumPlanets;
+        let mut location = (*pSolarSysState).SunDesc[0].num_planets;
         if location == 1 && task == EXPLORE as u8 {
             task = IN_ORBIT as u8;
         } else {

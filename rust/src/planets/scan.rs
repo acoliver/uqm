@@ -1,5 +1,6 @@
 //! Planet scanning, scan-node callbacks, and lander dispatch from `scan.c`.
 
+use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetInfo};
 fn scan_value(value: i64, suffix: &str) -> String {
     if value >= 1000 {
         format!("{}.{}{}", value / 100, (value / 10) % 10, suffix)
@@ -42,16 +43,15 @@ fn move_cursor(position: (i16, i16), dx: i16, dy: i16, width: i16) -> (i16, i16)
     (x, y)
 }
 
-use crate::c_bindings::global_state::PLANET_INFO;
-use crate::c_bindings::global_state::{NODE_INFO, PLANET_DESC, SOLARSYS_STATE};
+use crate::c_bindings::global_state::SOLARSYS_STATE;
 
 #[no_mangle]
 pub(crate) unsafe extern "C" fn callGenerateForScanType(
     system: *const SOLARSYS_STATE,
-    world: *const PLANET_DESC,
+    world: *const PlanetDesc,
     node: u16,
     scan: u8,
-    info: *mut NODE_INFO,
+    info: *mut NodeInfo,
 ) -> u16 {
     let functions = &*(*system).genFuncs;
     let callback = match scan {
@@ -69,7 +69,7 @@ pub(crate) unsafe extern "C" fn callGenerateForScanType(
 /// Scan must be 0, 1 or 2, and node must identify a node generated for that scan.
 pub unsafe extern "C" fn callPickupForScanType(
     system: *mut SOLARSYS_STATE,
-    world: *mut PLANET_DESC,
+    world: *mut PlanetDesc,
     node: u16,
     scan: u8,
 ) -> bool {
@@ -83,19 +83,19 @@ pub unsafe extern "C" fn callPickupForScanType(
     callback.expect("scan pickup")(system, world, node)
 }
 
-pub(crate) unsafe fn is_node_retrieved(info: *const PLANET_INFO, scan: u8, node: u8) -> bool {
-    (*info).ScanRetrieveMask[usize::from(scan)] & (1_u32 << node) != 0
+pub(crate) unsafe fn is_node_retrieved(info: *const PlanetInfo, scan: u8, node: u8) -> bool {
+    (*info).scan_retrieve_mask[usize::from(scan)] & (1_u32 << node) != 0
 }
 #[cfg(test)]
-unsafe fn count_nodes_retrieved(info: *mut PLANET_INFO, scan: u8) -> u16 {
-    (*info).ScanRetrieveMask[usize::from(scan)].count_ones() as u16
+unsafe fn count_nodes_retrieved(info: *mut PlanetInfo, scan: u8) -> u16 {
+    (*info).scan_retrieve_mask[usize::from(scan)].count_ones() as u16
 }
-pub(crate) unsafe fn set_node_retrieved(info: *mut PLANET_INFO, scan: u8, node: u8) {
-    (*info).ScanRetrieveMask[usize::from(scan)] |= 1_u32 << node;
+pub(crate) unsafe fn set_node_retrieved(info: *mut PlanetInfo, scan: u8, node: u8) {
+    (*info).scan_retrieve_mask[usize::from(scan)] |= 1_u32 << node;
 }
 #[cfg(test)]
-unsafe fn set_node_not_retrieved(info: *mut PLANET_INFO, scan: u8, node: u8) {
-    (*info).ScanRetrieveMask[usize::from(scan)] &= !(1_u32 << node);
+unsafe fn set_node_not_retrieved(info: *mut PlanetInfo, scan: u8, node: u8) {
+    (*info).scan_retrieve_mask[usize::from(scan)] &= !(1_u32 << node);
 }
 
 #[cfg(not(test))]
@@ -107,7 +107,7 @@ mod tests {
 
     #[test]
     fn retrieval_masks_keep_scan_types_and_all_32_nodes_independent() {
-        let mut info: PLANET_INFO = unsafe { std::mem::zeroed() };
+        let mut info: PlanetInfo = unsafe { std::mem::zeroed() };
         unsafe {
             for scan in 0..3 {
                 for node in 0..32 {
@@ -121,7 +121,7 @@ mod tests {
                 set_node_not_retrieved(&mut info, scan, 31);
                 set_node_not_retrieved(&mut info, scan, 0);
                 assert_eq!(count_nodes_retrieved(&mut info, scan), 30);
-                assert_eq!(info.ScanRetrieveMask[usize::from(scan)], 0x7fff_fffe);
+                assert_eq!(info.scan_retrieve_mask[usize::from(scan)], 0x7fff_fffe);
             }
         }
     }
@@ -131,45 +131,45 @@ mod tests {
         use crate::c_bindings::global_state::GenerateFunctions;
         unsafe extern "C" fn mineral(
             _: *const SOLARSYS_STATE,
-            world: *const PLANET_DESC,
+            world: *const PlanetDesc,
             node: u16,
-            _: *mut NODE_INFO,
+            _: *mut NodeInfo,
         ) -> u16 {
             node + u16::from((*world).data_index)
         }
         unsafe extern "C" fn energy(
             _: *const SOLARSYS_STATE,
-            world: *const PLANET_DESC,
+            world: *const PlanetDesc,
             node: u16,
-            _: *mut NODE_INFO,
+            _: *mut NodeInfo,
         ) -> u16 {
             mineral(std::ptr::null(), world, node, std::ptr::null_mut()) + 100
         }
         unsafe extern "C" fn life(
             _: *const SOLARSYS_STATE,
-            world: *const PLANET_DESC,
+            world: *const PlanetDesc,
             node: u16,
-            _: *mut NODE_INFO,
+            _: *mut NodeInfo,
         ) -> u16 {
             mineral(std::ptr::null(), world, node, std::ptr::null_mut()) + 200
         }
         unsafe extern "C" fn pickup_mineral(
             _: *mut SOLARSYS_STATE,
-            world: *mut PLANET_DESC,
+            world: *mut PlanetDesc,
             node: u16,
         ) -> bool {
             node == u16::from((*world).data_index)
         }
         unsafe extern "C" fn pickup_energy(
             _: *mut SOLARSYS_STATE,
-            world: *mut PLANET_DESC,
+            world: *mut PlanetDesc,
             node: u16,
         ) -> bool {
             node == u16::from((*world).data_index) + 1
         }
         unsafe extern "C" fn pickup_life(
             _: *mut SOLARSYS_STATE,
-            world: *mut PLANET_DESC,
+            world: *mut PlanetDesc,
             node: u16,
         ) -> bool {
             node == u16::from((*world).data_index) + 2
@@ -183,7 +183,7 @@ mod tests {
             functions.pickupEnergy = Some(pickup_energy);
             functions.pickupLife = Some(pickup_life);
             let mut system: SOLARSYS_STATE = std::mem::zeroed();
-            let mut world: PLANET_DESC = std::mem::zeroed();
+            let mut world: PlanetDesc = std::mem::zeroed();
             system.genFuncs = &functions;
             world.data_index = 17;
             for scan in 0..3 {

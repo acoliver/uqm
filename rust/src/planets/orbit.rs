@@ -11,11 +11,9 @@ fn submenu_selection(current: u8, selected: bool, pc_menu: bool) -> u8 {
 #[cfg(not(test))]
 pub(crate) mod live {
     use super::submenu_selection;
-    use crate::c_bindings::{
-        global_state::{MENU_STATE, PLANET_INFO},
-        solar_system,
-    };
+    use crate::c_bindings::{global_state::MENU_STATE, solar_system};
     use crate::comm::locdata::CRect;
+    use crate::engine::world::planet::PlanetInfo;
     use crate::engine::{
         battle::Cx,
         observe::{CheckpointView, Io},
@@ -133,7 +131,7 @@ pub(crate) mod live {
                 if crate::planet_side::orbit_scan::node_visible(
                     state.flags,
                     state.life,
-                    &(*solar_system::current()).SysInfo.PlanetInfo,
+                    &(*solar_system::current()).SysInfo.planet_info,
                 ) {
                     CffiPlatform.draw_stamp(Stamp {
                         origin: Point {
@@ -322,10 +320,10 @@ pub(crate) mod live {
         rust_hfree((*orbit).ScratchArray.cast());
         (*orbit).ScratchArray = std::ptr::null_mut();
         DestroyStringTable(ReleaseStringTable(
-            (*system).SysInfo.PlanetInfo.DiscoveryString.cast(),
+            (*system).SysInfo.planet_info.discovery_string.cast(),
         ));
-        (*system).SysInfo.PlanetInfo.DiscoveryString = std::ptr::null_mut();
-        FreeLanderFont(std::ptr::addr_of_mut!((*system).SysInfo.PlanetInfo));
+        (*system).SysInfo.planet_info.discovery_string = std::ptr::null_mut();
+        FreeLanderFont(std::ptr::addr_of_mut!((*system).SysInfo.planet_info));
         SetContext(KernelOwner::current().read(|owner| owner.space_context));
         if !PlanetContext.is_null() {
             DestroyContext(PlanetContext);
@@ -335,20 +333,20 @@ pub(crate) mod live {
     }
 
     #[no_mangle]
-    pub unsafe extern "C" fn LoadStdLanderFont(info: *mut PLANET_INFO) {
-        (*info).LanderFont = base::LoadGraphicInstance(c"font.lander".as_ptr()).cast();
-        (*info).LanderFontEff = base::CaptureDrawable(
+    pub unsafe extern "C" fn LoadStdLanderFont(info: *mut PlanetInfo) {
+        (*info).lander_font = base::LoadGraphicInstance(c"font.lander".as_ptr()).cast();
+        (*info).lander_font_eff = base::CaptureDrawable(
             (base::LoadGraphicInstance(c"graphics.landerfonteffect".as_ptr())).cast(),
         )
         .cast();
     }
 
     #[no_mangle]
-    pub unsafe extern "C" fn FreeLanderFont(info: *mut PLANET_INFO) {
-        DestroyFont((*info).LanderFont.cast());
-        (*info).LanderFont = std::ptr::null_mut();
-        base::DestroyDrawable(base::ReleaseDrawable((*info).LanderFontEff.cast()));
-        (*info).LanderFontEff = std::ptr::null_mut();
+    pub unsafe extern "C" fn FreeLanderFont(info: *mut PlanetInfo) {
+        DestroyFont((*info).lander_font.cast());
+        (*info).lander_font = std::ptr::null_mut();
+        base::DestroyDrawable(base::ReleaseDrawable((*info).lander_font_eff.cast()));
+        (*info).lander_font_eff = std::ptr::null_mut();
     }
 
     unsafe fn do_orbit(cx: &mut Cx<'_>, io: &mut Io<'_>, menu: &mut MENU_STATE) -> u32 {

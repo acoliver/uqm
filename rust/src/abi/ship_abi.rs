@@ -1882,8 +1882,6 @@ pub const LANDER_DEPARTS: _bindgen_ty_18 = 10;
 pub const LANDER_RETURNS: _bindgen_ty_18 = 11;
 pub const LANDER_DESTROYED: _bindgen_ty_18 = 12;
 pub type _bindgen_ty_18 = ::std::os::raw::c_uint;
-pub type PLANET_DESC = planet_desc;
-pub type NODE_INFO = node_info;
 pub type PLANET_ORBIT = planet_orbit;
 pub type SOLARSYS_STATE = solarsys_state;
 pub type InitNpcsFunction =
@@ -1895,54 +1893,54 @@ pub type UninitNpcsFunction =
 pub type GeneratePlanetsFunction =
     ::std::option::Option<unsafe extern "C" fn(solarSys: *mut SOLARSYS_STATE) -> bool>;
 pub type GenerateMoonsFunction = ::std::option::Option<
-    unsafe extern "C" fn(solarSys: *mut SOLARSYS_STATE, planet: *mut PLANET_DESC) -> bool,
+    unsafe extern "C" fn(solarSys: *mut SOLARSYS_STATE, planet: *mut crate::engine::world::planet::PlanetDesc) -> bool,
 >;
-pub type GenerateOrbitalFunction = Option<unsafe fn(&mut crate::engine::battle::Cx<'_>, *mut SOLARSYS_STATE, *mut PLANET_DESC) -> bool>;
+pub type GenerateOrbitalFunction = Option<unsafe fn(&mut crate::engine::battle::Cx<'_>, *mut SOLARSYS_STATE, *mut crate::engine::world::planet::PlanetDesc) -> bool>;
 pub type GenerateNameFunction = ::std::option::Option<
-    unsafe extern "C" fn(arg1: *const SOLARSYS_STATE, world: *const PLANET_DESC) -> bool,
+    unsafe extern "C" fn(arg1: *const SOLARSYS_STATE, world: *const crate::engine::world::planet::PlanetDesc) -> bool,
 >;
 pub type GenerateMineralsFunction = ::std::option::Option<
     unsafe extern "C" fn(
         arg1: *const SOLARSYS_STATE,
-        world: *const PLANET_DESC,
+        world: *const crate::engine::world::planet::PlanetDesc,
         whichNode: COUNT,
-        arg2: *mut NODE_INFO,
+        arg2: *mut crate::engine::world::planet::NodeInfo,
     ) -> COUNT,
 >;
 pub type GenerateEnergyFunction = ::std::option::Option<
     unsafe extern "C" fn(
         arg1: *const SOLARSYS_STATE,
-        world: *const PLANET_DESC,
+        world: *const crate::engine::world::planet::PlanetDesc,
         whichNode: COUNT,
-        arg2: *mut NODE_INFO,
+        arg2: *mut crate::engine::world::planet::NodeInfo,
     ) -> COUNT,
 >;
 pub type GenerateLifeFunction = ::std::option::Option<
     unsafe extern "C" fn(
         arg1: *const SOLARSYS_STATE,
-        world: *const PLANET_DESC,
+        world: *const crate::engine::world::planet::PlanetDesc,
         whichNode: COUNT,
-        arg2: *mut NODE_INFO,
+        arg2: *mut crate::engine::world::planet::NodeInfo,
     ) -> COUNT,
 >;
 pub type PickupMineralsFunction = ::std::option::Option<
     unsafe extern "C" fn(
         solarSys: *mut SOLARSYS_STATE,
-        world: *mut PLANET_DESC,
+        world: *mut crate::engine::world::planet::PlanetDesc,
         whichNode: COUNT,
     ) -> bool,
 >;
 pub type PickupEnergyFunction = ::std::option::Option<
     unsafe extern "C" fn(
         solarSys: *mut SOLARSYS_STATE,
-        world: *mut PLANET_DESC,
+        world: *mut crate::engine::world::planet::PlanetDesc,
         whichNode: COUNT,
     ) -> bool,
 >;
 pub type PickupLifeFunction = ::std::option::Option<
     unsafe extern "C" fn(
         solarSys: *mut SOLARSYS_STATE,
-        world: *mut PLANET_DESC,
+        world: *mut crate::engine::world::planet::PlanetDesc,
         whichNode: COUNT,
     ) -> bool,
 >;
@@ -2140,47 +2138,6 @@ pub const PLANET_SHIELDED: _bindgen_ty_24 = 128;
 pub const HIERARCHY_STARBASE: _bindgen_ty_24 = 255;
 pub const SA_MATRA: _bindgen_ty_24 = 254;
 pub type _bindgen_ty_24 = ::std::os::raw::c_uint;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct ELEMENT_ENTRY {
-    pub ElementType: BYTE,
-    pub Density: BYTE,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct PlanetFrame {
-    pub Type: BYTE,
-    pub BaseTectonics: BYTE,
-    pub AtmoAndDensity: BYTE,
-    pub UsefulElements: [ELEMENT_ENTRY; 8usize],
-    pub CMapInstance: RESOURCE,
-    pub XlatTabInstance: RESOURCE,
-    pub num_faults: COUNT,
-    pub fault_depth: SIZE,
-    pub num_blemishes: COUNT,
-    pub base_elevation: SIZE,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct PLANET_INFO {
-    pub AxialTilt: SIZE,
-    pub Tectonics: UWORD,
-    pub Weather: UWORD,
-    pub PlanetDensity: UWORD,
-    pub PlanetRadius: UWORD,
-    pub SurfaceGravity: UWORD,
-    pub SurfaceTemperature: SIZE,
-    pub RotationPeriod: UWORD,
-    pub AtmoDensity: UWORD,
-    pub LifeChance: SIZE,
-    pub PlanetToSunDist: UWORD,
-    pub PlanDataPtr: *const PlanetFrame,
-    pub ScanSeed: [DWORD; 3usize],
-    pub ScanRetrieveMask: [DWORD; 3usize],
-    pub DiscoveryString: STRING,
-    pub LanderFont: FONT,
-    pub LanderFontEff: FRAME,
-}
 pub const GAS_DENSITY: _bindgen_ty_25 = 0;
 pub const LIGHT_DENSITY: _bindgen_ty_25 = 1;
 pub const LOW_DENSITY: _bindgen_ty_25 = 2;
@@ -2188,34 +2145,6 @@ pub const NORMAL_DENSITY: _bindgen_ty_25 = 3;
 pub const HIGH_DENSITY: _bindgen_ty_25 = 4;
 pub const SUPER_DENSITY: _bindgen_ty_25 = 5;
 pub type _bindgen_ty_25 = ::std::os::raw::c_uint;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct SYSTEM_INFO {
-    pub StarSize: BYTE,
-    pub StarIntensity: BYTE,
-    pub StarEnergy: UWORD,
-    pub PlanetInfo: PLANET_INFO,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct planet_desc {
-    pub rand_seed: DWORD,
-    pub data_index: BYTE,
-    pub NumPlanets: BYTE,
-    pub radius: SIZE,
-    pub location: POINT,
-    pub temp_color: Color,
-    pub NextIndex: COUNT,
-    pub image: STAMP,
-    pub pPrevDesc: *mut PLANET_DESC,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct node_info {
-    pub loc_pt: POINT,
-    pub density: COUNT,
-    pub type_: COUNT,
-}
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct planet_orbit {
@@ -2236,11 +2165,11 @@ pub struct solarsys_state {
         ::std::option::Option<unsafe extern "C" fn(arg1: *mut solarsys_state) -> BOOLEAN>,
     pub InIpFlight: BOOLEAN,
     pub WaitIntersect: COUNT,
-    pub SunDesc: [PLANET_DESC; 1usize],
-    pub PlanetDesc: [PLANET_DESC; 16usize],
-    pub MoonDesc: [PLANET_DESC; 4usize],
-    pub pBaseDesc: *mut PLANET_DESC,
-    pub pOrbitalDesc: *mut PLANET_DESC,
+    pub SunDesc: [crate::engine::world::planet::PlanetDesc; 1usize],
+    pub PlanetDesc: [crate::engine::world::planet::PlanetDesc; 16usize],
+    pub MoonDesc: [crate::engine::world::planet::PlanetDesc; 4usize],
+    pub pBaseDesc: *mut crate::engine::world::planet::PlanetDesc,
+    pub pOrbitalDesc: *mut crate::engine::world::planet::PlanetDesc,
     pub FirstPlanetIndex: SIZE,
     pub LastPlanetIndex: SIZE,
     pub turn_counter: BYTE,
@@ -2250,7 +2179,7 @@ pub struct solarsys_state {
     pub XlatRef: STRING,
     pub XlatPtr: *const ::std::os::raw::c_void,
     pub OrbitalCMap: COLORMAP,
-    pub SysInfo: SYSTEM_INFO,
+    pub SysInfo: crate::engine::world::planet::SystemInfo,
     pub genFuncs: *const GenerateFunctions,
     pub PlanetSideFrame: [FRAME; 6usize],
     pub TopoFrame: FRAME,

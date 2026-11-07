@@ -3,11 +3,12 @@
 //! the ship-group bookkeeping of the systems with a fixed fleet.
 
 use crate::battle::battle_types::{arctan, cosine, sine};
-use crate::c_bindings::global_state::{PlanetFrame, IP_GROUP, PLANET_DESC, SYSTEM_INFO};
+use crate::c_bindings::global_state::IP_GROUP;
+use crate::engine::world::planet::{PlanetDesc, PlanetFrame, SystemInfo};
 use crate::engine::{StoryKey, World};
 use crate::math::RandomContext;
-use crate::planets::calc::{AnalysisSite, StarDescription};
-use crate::planets::consts::{EARTH_RADIUS, PLANET_SHIELDED};
+use crate::planets::generate::calc::{AnalysisSite, StarDescription};
+use crate::planets::generate::consts::{EARTH_RADIUS, PLANET_SHIELDED};
 use crate::planets::generate::default::{self, Npcs};
 
 /// `planets.h`/`plandata.h` values the generators use.
@@ -67,28 +68,43 @@ impl Story for &std::cell::RefCell<&mut crate::engine::battle::Cx<'_>> {
     }
 }
 
-impl Story for World {
+impl Story for crate::engine::world::story::StoryState {
     fn flag(&self, name: &'static str) -> u32 {
-        StoryKey::from_name(name).map_or(0, |key| self.story_state(key))
+        StoryKey::from_name(name).map_or(0, |key| u32::from(self.get_state(key.start(), key.end())))
     }
     fn set_flag(&mut self, name: &'static str, value: u32) {
         if let Some(key) = StoryKey::from_name(name) {
-            self.set_story_state(key, value);
+            self.set_state(key.start(), key.end(), value as u8);
         }
     }
     fn word(&self, name: &'static str) -> u32 {
-        read_word(word_start(name), |start| {
-            u32::from(rust_get_game_state_bits(
-                self,
-                start as i32,
-                start as i32 + 7,
-            ))
-        })
+        self.get_state_32(word_start(name) as usize)
     }
     fn set_word(&mut self, name: &'static str, value: u32) {
-        write_word(word_start(name), value, |start, byte| {
-            rust_set_game_state_bits(self, start as i32, start as i32 + 7, byte);
-        });
+        self.set_state_32(word_start(name) as usize, value);
+    }
+}
+
+impl Story for World {
+    fn flag(&self, name: &'static str) -> u32 {
+        self.story.as_ref().map_or(0, |story| story.flag(name))
+    }
+    fn set_flag(&mut self, name: &'static str, value: u32) {
+        if let Some(story) = self.story.as_mut() {
+            story.set_flag(name, value);
+        }
+    }
+    fn word(&self, name: &'static str) -> u32 {
+        let start = word_start(name) as usize;
+        self.story
+            .as_ref()
+            .map_or(0, |story| story.get_state_32(start))
+    }
+    fn set_word(&mut self, name: &'static str, value: u32) {
+        let start = word_start(name) as usize;
+        if let Some(story) = self.story.as_mut() {
+            story.set_state_32(start, value);
+        }
     }
 }
 
@@ -154,14 +170,14 @@ fn set_game_state_byte(start: u32, value: u8) {
 
 /// Re-place `planet` on a circle of `EARTH_RADIUS * percent / 100`, keeping
 /// the angle it was laid out at.
-pub fn reposition(planet: &mut PLANET_DESC, percent: i32) {
+pub fn reposition(planet: &mut PlanetDesc, percent: i32) {
     planet.radius = (i32::from(EARTH_RADIUS) * percent / 100) as i16;
     let angle = arctan(i32::from(planet.location.x), i32::from(planet.location.y));
     place(planet, angle);
 }
 
 /// Put `planet` at `angle` on its orbit.
-pub fn place(planet: &mut PLANET_DESC, angle: u16) {
+pub fn place(planet: &mut PlanetDesc, angle: u16) {
     planet.location.x = cosine(angle, i32::from(planet.radius)) as i16;
     planet.location.y = sine(angle, i32::from(planet.radius)) as i16;
 }
@@ -207,8 +223,8 @@ pub struct Orbit<'a> {
     pub plan_data: &'a [PlanetFrame],
     pub star: StarDescription,
     pub site: AnalysisSite,
-    pub sys_info: &'a mut SYSTEM_INFO,
-    pub world: &'a PLANET_DESC,
+    pub sys_info: &'a mut SystemInfo,
+    pub world: &'a PlanetDesc,
 }
 
 impl Orbit<'_> {
@@ -239,7 +255,7 @@ impl Orbit<'_> {
 }
 
 /// Moon table slice a planet's moons occupy.
-pub fn moon_slice(moons: &mut [PLANET_DESC], count: u8) -> &mut [PLANET_DESC] {
+pub fn moon_slice(moons: &mut [PlanetDesc], count: u8) -> &mut [PlanetDesc] {
     &mut moons[..usize::from(count)]
 }
 
@@ -250,8 +266,8 @@ pub fn planets_then(
     plan_data: &[PlanetFrame],
     star_size: u8,
     star_color: u8,
-    planets: &mut [PLANET_DESC],
-    adjust: impl FnOnce(&mut [PLANET_DESC]),
+    planets: &mut [PlanetDesc],
+    adjust: impl FnOnce(&mut [PlanetDesc]),
 ) -> u8 {
     let drawn = default::generate_planets(rng, plan_data, star_size, star_color, planets);
     adjust(planets);

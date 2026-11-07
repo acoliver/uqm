@@ -151,10 +151,10 @@ fn interplanetary_group_preserves_parent_and_updates_its_own_record() {
             use uqm_rust::navigation::abi as nav;
             let mut solar: Box<nav::SOLARSYS_STATE> = Box::new(std::mem::zeroed());
             solar.SunDesc[0].radius = 128 << 6;
-            solar.SunDesc[0].NumPlanets = 1;
+            solar.SunDesc[0].num_planets = 1;
             solar.PlanetDesc[0].image.origin = POINT { x: 80, y: 60 };
-            solar.PlanetDesc[0].pPrevDesc = solar.SunDesc.as_mut_ptr();
-            solar.MoonDesc[0].pPrevDesc = solar.PlanetDesc.as_mut_ptr();
+            solar.PlanetDesc[0].prev_desc = solar.SunDesc.as_mut_ptr();
+            solar.MoonDesc[0].prev_desc = solar.PlanetDesc.as_mut_ptr();
             solar.pBaseDesc = solar.MoonDesc.as_mut_ptr();
             solar.pOrbitalDesc = solar.MoonDesc.as_mut_ptr();
             let old_solar = nav::pSolarSysState;

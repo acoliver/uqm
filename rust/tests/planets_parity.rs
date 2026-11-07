@@ -9,6 +9,7 @@
 //! `tests/fixtures/planets/*`, so it proves the adapters wire that state the
 //! way the C did.
 
+use uqm_rust::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
 #[path = "planets_render/oval.rs"]
 mod oval_parity;
 mod planets_common;
@@ -46,9 +47,7 @@ use planets_common::{
     collect, orbit_cases, orbit_line, render_fixture, star_type_byte, world_cases, world_line,
     Generators, OrbitCase, WorldCase, PRESET_LIFE,
 };
-use uqm_rust::c_bindings::global_state::{
-    PlanetFrame, NODE_INFO, PLANET_DESC, POINT, SOLARSYS_STATE, SYSTEM_INFO,
-};
+use uqm_rust::c_bindings::global_state::{POINT, SOLARSYS_STATE};
 use uqm_rust::math::RandomContext;
 use uqm_rust::savegame::runtime::star::{CStarDesc, CATALOG_LEN};
 
@@ -61,27 +60,24 @@ unsafe extern "C" {
     static mut starmap_array: [CStarDesc; CATALOG_LEN];
 
     fn DeltaTopography(num_iterations: u16, depth: *mut i8, rect: *const Rect, depth_delta: i16);
-    fn DoPlanetaryAnalysis(sys_info: *mut SYSTEM_INFO, desc: *mut PLANET_DESC);
+    fn DoPlanetaryAnalysis(sys_info: *mut SystemInfo, desc: *mut PlanetDesc);
     fn CalcGravity(info: *const c_void) -> u16;
-    fn GenerateMineralDeposits(
-        sys_info: *const SYSTEM_INFO,
-        which: u16,
-        info: *mut NODE_INFO,
-    ) -> u16;
-    fn GenerateLifeForms(sys_info: *const SYSTEM_INFO, which: u16, info: *mut NODE_INFO) -> u16;
+    fn GenerateMineralDeposits(sys_info: *const SystemInfo, which: u16, info: *mut NodeInfo)
+        -> u16;
+    fn GenerateLifeForms(sys_info: *const SystemInfo, which: u16, info: *mut NodeInfo) -> u16;
     fn GeneratePresetLife(
-        sys_info: *const SYSTEM_INFO,
+        sys_info: *const SystemInfo,
         types: *const i8,
         which: u16,
-        info: *mut NODE_INFO,
+        info: *mut NodeInfo,
     ) -> u16;
     fn GenerateRandomNodes(
-        sys_info: *const SYSTEM_INFO,
+        sys_info: *const SystemInfo,
         scan: u16,
         num_nodes: u16,
         node_type: u16,
         which: u16,
-        info: *mut NODE_INFO,
+        info: *mut NodeInfo,
     ) -> u16;
     fn GenerateRandomLocation(loc: *mut POINT);
 }
@@ -185,15 +181,15 @@ impl ExportedGenerators {
 }
 
 impl Generators for ExportedGenerators {
-    fn analyze(&mut self, case: &WorldCase) -> SYSTEM_INFO {
+    fn analyze(&mut self, case: &WorldCase) -> SystemInfo {
         self.set_star(case.star_size, star_type_byte(case));
 
-        let mut parent: PLANET_DESC = unsafe { std::mem::zeroed() };
-        let mut desc: PLANET_DESC = unsafe { std::mem::zeroed() };
+        let mut parent: PlanetDesc = unsafe { std::mem::zeroed() };
+        let mut desc: PlanetDesc = unsafe { std::mem::zeroed() };
         desc.rand_seed = case.rand_seed;
         desc.data_index = case.data_index;
         desc.radius = case.desc_radius;
-        desc.pPrevDesc = match case.parent_radius {
+        desc.prev_desc = match case.parent_radius {
             None => &mut self.state.SunDesc[0],
             Some(radius) => {
                 parent.radius = radius;
@@ -201,9 +197,9 @@ impl Generators for ExportedGenerators {
             }
         };
 
-        let mut detached: SYSTEM_INFO = unsafe { std::mem::zeroed() };
+        let mut detached: SystemInfo = unsafe { std::mem::zeroed() };
         self.state.SysInfo = unsafe { std::mem::zeroed() };
-        let target: *mut SYSTEM_INFO = if case.is_orbit_entry {
+        let target: *mut SystemInfo = if case.is_orbit_entry {
             &mut self.state.SysInfo
         } else {
             &mut detached
@@ -214,29 +210,29 @@ impl Generators for ExportedGenerators {
         }
     }
 
-    fn minerals(&mut self, info: &SYSTEM_INFO, which: u16, node: &mut NODE_INFO) -> u16 {
+    fn minerals(&mut self, info: &SystemInfo, which: u16, node: &mut NodeInfo) -> u16 {
         unsafe { GenerateMineralDeposits(info, which, node) }
     }
 
-    fn life(&mut self, info: &SYSTEM_INFO, which: u16, node: &mut NODE_INFO) -> u16 {
+    fn life(&mut self, info: &SystemInfo, which: u16, node: &mut NodeInfo) -> u16 {
         unsafe { GenerateLifeForms(info, which, node) }
     }
 
-    fn preset_life(&mut self, info: &SYSTEM_INFO, which: u16, node: &mut NODE_INFO) -> u16 {
+    fn preset_life(&mut self, info: &SystemInfo, which: u16, node: &mut NodeInfo) -> u16 {
         unsafe { GeneratePresetLife(info, PRESET_LIFE.as_ptr(), which, node) }
     }
 
-    fn random_nodes(&mut self, info: &SYSTEM_INFO, which: u16, node: &mut NODE_INFO) -> u16 {
+    fn random_nodes(&mut self, info: &SystemInfo, which: u16, node: &mut NodeInfo) -> u16 {
         unsafe { GenerateRandomNodes(info, 1, 4, 9, which, node) }
     }
 
-    fn fill_orbits(&mut self, case: &OrbitCase, descs: &mut [PLANET_DESC]) -> Option<u8> {
+    fn fill_orbits(&mut self, case: &OrbitCase, descs: &mut [PlanetDesc]) -> Option<u8> {
         self.set_star(case.star_size, (case.star_color << 5) | 0b101);
-        self.state.SunDesc[0].NumPlanets = 0;
+        self.state.SunDesc[0].num_planets = 0;
         // C decides "moons" by comparing the base pointer with `MoonDesc`, so
         // the descriptors must live in the solar system state.
         let moons = case.mode.generating_moons();
-        let base: *mut PLANET_DESC = if moons {
+        let base: *mut PlanetDesc = if moons {
             self.state.MoonDesc.as_mut_ptr()
         } else {
             self.state.PlanetDesc.as_mut_ptr()
@@ -256,7 +252,7 @@ impl Generators for ExportedGenerators {
                 *desc = *base.add(slot);
             }
         }
-        let drawn = self.state.SunDesc[0].NumPlanets;
+        let drawn = self.state.SunDesc[0].num_planets;
         (case.mode.num_planets() == !0).then_some(drawn)
     }
 }
@@ -266,13 +262,13 @@ impl DefaultOps for ExportedGenerators {
     fn planets(&mut self, star_size: u8, star_color: u8, seed: u32) -> Layout {
         self.set_star(star_size, (star_color << 5) | 0b101);
         self.state.PlanetDesc = unsafe { std::mem::zeroed() };
-        self.state.SunDesc[0].NumPlanets = 0;
+        self.state.SunDesc[0].num_planets = 0;
         let rng = unsafe {
             reseed_c(SysGenRNG, seed);
             assert!(GenerateDefault_generatePlanets(&mut *self.state));
             (*SysGenRNG).seed()
         };
-        let drawn = self.state.SunDesc[0].NumPlanets;
+        let drawn = self.state.SunDesc[0].num_planets;
         Layout {
             worlds: self.state.PlanetDesc[..usize::from(drawn)]
                 .iter()
@@ -286,8 +282,8 @@ impl DefaultOps for ExportedGenerators {
     fn moons(&mut self, star_size: u8, star_color: u8, seed: u32, count: u8) -> Layout {
         self.set_star(star_size, (star_color << 5) | 0b101);
         self.state.MoonDesc = unsafe { std::mem::zeroed() };
-        let mut planet: PLANET_DESC = unsafe { std::mem::zeroed() };
-        planet.NumPlanets = count;
+        let mut planet: PlanetDesc = unsafe { std::mem::zeroed() };
+        planet.num_planets = count;
         let rng = unsafe {
             reseed_c(SysGenRNG, seed);
             assert!(GenerateDefault_generateMoons(&mut *self.state, &mut planet));
@@ -306,13 +302,13 @@ impl DefaultOps for ExportedGenerators {
     fn nodes(
         &mut self,
         kind: NodeKind,
-        info: &SYSTEM_INFO,
+        info: &SystemInfo,
         which: u16,
-        node: &mut NODE_INFO,
+        node: &mut NodeInfo,
     ) -> (u16, u32) {
         self.state.SysInfo = *info;
         let system: *const SOLARSYS_STATE = &*self.state;
-        let world: *const PLANET_DESC = std::ptr::null();
+        let world: *const PlanetDesc = std::ptr::null();
         unsafe {
             let count = match kind {
                 NodeKind::Minerals => GenerateDefault_generateMinerals(system, world, which, node),
@@ -354,10 +350,10 @@ fn render_plan_data(table: &[PlanetFrame]) -> String {
         let _ = write!(
             text,
             "{} {} {}",
-            frame.Type, frame.BaseTectonics, frame.AtmoAndDensity
+            frame.type_, frame.base_tectonics, frame.atmo_and_density
         );
-        for element in &frame.UsefulElements {
-            let _ = write!(text, " {}:{}", element.ElementType, element.Density);
+        for element in &frame.useful_elements {
+            let _ = write!(text, " {}:{}", element.element_type, element.density);
         }
         let _ = writeln!(
             text,
@@ -425,13 +421,13 @@ fn gravity_and_random_locations_agree() {
     let mut rng = RandomContext::with_seed(99);
     for density in [0u16, 1, 20, 33, 100, 200, 65535] {
         for radius in [0u16, 1, 25, 75, 300, 1500, 65535] {
-            let mut info: SYSTEM_INFO = unsafe { std::mem::zeroed() };
-            info.PlanetInfo.PlanetDensity = density;
-            info.PlanetInfo.PlanetRadius = radius;
-            let exported = unsafe { CalcGravity((&raw const info.PlanetInfo).cast()) };
+            let mut info: SystemInfo = unsafe { std::mem::zeroed() };
+            info.planet_info.planet_density = density;
+            info.planet_info.planet_radius = radius;
+            let exported = unsafe { CalcGravity((&raw const info.planet_info).cast()) };
             assert_eq!(
                 exported,
-                uqm_rust::planets::calc::calc_gravity(&info.PlanetInfo),
+                uqm_rust::planets::generate::calc::calc_gravity(&info.planet_info),
                 "density {density} radius {radius}"
             );
         }
@@ -445,7 +441,7 @@ fn gravity_and_random_locations_agree() {
             GenerateRandomLocation(&mut exported_point);
         }
         rng.reseed(seed);
-        uqm_rust::planets::surface::generate_random_location(&mut rng, &mut direct_point);
+        uqm_rust::planets::generate::surface::generate_random_location(&mut rng, &mut direct_point);
         assert_eq!(
             (exported_point.x, exported_point.y),
             (direct_point.x, direct_point.y),
@@ -485,8 +481,8 @@ fn render_plan_resources(table: &[PlanetFrame]) -> String {
         .map(|frame| {
             format!(
                 "{} {}\n",
-                name(frame.CMapInstance),
-                name(frame.XlatTabInstance)
+                name(frame.cmap_instance),
+                name(frame.xlat_tab_instance)
             )
         })
         .collect()

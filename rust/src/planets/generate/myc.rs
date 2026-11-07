@@ -14,14 +14,14 @@
 use crate::battle::gendef::{
     EGG_CASE0_DEFINED, EGG_CASE1_DEFINED, EGG_CASE2_DEFINED, MYCON_DEFINED, SUN_DEVICE_DEFINED,
 };
-use crate::c_bindings::global_state::{PlanetFrame, NODE_INFO, PLANET_DESC, SYSTEM_INFO};
+use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
 use crate::math::RandomContext;
 use crate::planet_side::report_adapter::DiscoveryReportPort;
 use crate::planets::generate::default;
 use crate::planets::generate::home_contact::{HomeContactSite, LanderTakeoff};
 use crate::planets::generate::special::{self, Body, Orbit, Story, SHATTERED_WORLD};
+use crate::planets::generate::surface::ENERGY_SCAN;
 use crate::planets::generate::yehat::{CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY};
-use crate::planets::surface::ENERGY_SCAN;
 
 /// Every hook looks at planet 0.
 const WORLD: Body = Body::Planet(0);
@@ -71,13 +71,13 @@ pub fn generate_planets(
     plan_data: &[PlanetFrame],
     star_size: u8,
     star_color: u8,
-    planets: &mut [PLANET_DESC],
+    planets: &mut [PlanetDesc],
 ) -> u8 {
     special::planets_then(rng, plan_data, star_size, star_color, planets, |planets| {
         let world = &mut planets[0];
         world.data_index = SHATTERED_WORLD;
-        if world.NumPlanets > MAX_MOONS {
-            world.NumPlanets = MAX_MOONS;
+        if world.num_planets > MAX_MOONS {
+            world.num_planets = MAX_MOONS;
         }
         special::reposition(world, WORLD_ORBIT_PERCENT);
     })
@@ -97,7 +97,7 @@ pub fn generate_orbital(
     load_planet: impl FnOnce(),
 ) -> bool {
     if prepare_orbital(body, star_index, story, site, || {
-        orbit.sys_info.PlanetInfo.ScanRetrieveMask[ENERGY_SCAN] & 1 != 0
+        orbit.sys_info.planet_info.scan_retrieve_mask[ENERGY_SCAN] & 1 != 0
     }) {
         return true;
     }
@@ -196,11 +196,11 @@ fn mycon_talk(star_index: u8, story: &mut impl Story, site: &mut impl MyconSite)
 /// orbital left its report strings loaded (they are not once it is taken).
 pub fn generate_energy(
     rng: &mut RandomContext,
-    sys_info: &SYSTEM_INFO,
+    sys_info: &SystemInfo,
     star_index: u8,
     body: Body,
     which_node: u16,
-    info: &mut NODE_INFO,
+    info: &mut NodeInfo,
     story: &impl Story,
 ) -> u16 {
     if star_index == SUN_DEVICE_DEFINED && body == WORLD {
@@ -210,7 +210,7 @@ pub fn generate_energy(
         return default::generate_artifact(rng, sys_info, which_node, info);
     }
     if is_egg_case(star_index) && body == WORLD {
-        if sys_info.PlanetInfo.DiscoveryString.is_null() {
+        if sys_info.planet_info.discovery_string.is_null() {
             return 0;
         }
         return default::generate_artifact(rng, sys_info, which_node, info);

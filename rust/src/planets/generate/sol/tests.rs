@@ -1,4 +1,5 @@
 use super::*;
+use crate::engine::world::planet::NodeInfo;
 use std::collections::BTreeMap;
 
 #[test]
@@ -111,7 +112,7 @@ fn pluto_pickup_stops_on_crew_failure_and_retains_the_node_on_success() {
         assert_eq!(host.flag("MOONBASE_ON_SHIP"), 0);
         assert_eq!(host.flag("unrelated"), 93);
         assert!(host.words.is_empty());
-        let mut node: NODE_INFO = unsafe { std::mem::zeroed() };
+        let mut node: NodeInfo = unsafe { std::mem::zeroed() };
         assert_eq!(
             generate_energy(PLUTO, Some(&mut node), &host),
             u16::from(!survive)

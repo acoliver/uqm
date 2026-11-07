@@ -4,9 +4,9 @@
 //! and the RNG state left behind, so a mismatch names the exact input.
 
 use std::fmt::Write as _;
+use uqm_rust::engine::world::planet::PlanetFrame;
 
-use uqm_rust::c_bindings::global_state::PlanetFrame;
-use uqm_rust::planets::consts::{MAP_HEIGHT, MAP_WIDTH};
+use uqm_rust::planets::generate::consts::{MAP_HEIGHT, MAP_WIDTH};
 
 /// Rows of the narrow band `MakeGasGiant` perturbs, and its iteration count.
 const BAND_HEIGHT: i16 = 5;

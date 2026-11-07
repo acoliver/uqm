@@ -4,7 +4,7 @@
 //! flags: `SHIP_VAULT_UNLOCKED`, `SYREEN_SHUTTLE_ON_SHIP`, `SYREEN_HOME_VISITS`,
 //! `KNOW_SYREEN_VAULT`.
 
-use crate::c_bindings::global_state::{NODE_INFO, SYSTEM_INFO};
+use crate::engine::world::planet::{NodeInfo, SystemInfo};
 use crate::math::RandomContext;
 use crate::planet_side::report_adapter::DiscoveryReportPort;
 use crate::planets::generate::default;
@@ -46,10 +46,10 @@ pub fn generate_orbital(
 /// `GenerateVault_generateEnergy`: the vault is one artifact node.
 pub fn generate_energy(
     rng: &mut RandomContext,
-    sys_info: &SYSTEM_INFO,
+    sys_info: &SystemInfo,
     body: Body,
     which_node: u16,
-    info: &mut NODE_INFO,
+    info: &mut NodeInfo,
 ) -> u16 {
     if body == VAULT {
         default::generate_artifact(rng, sys_info, which_node, info)

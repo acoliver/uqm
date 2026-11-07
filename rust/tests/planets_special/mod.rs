@@ -4,6 +4,7 @@
 //! inputs and must leave the descriptions, node outputs and `SysGenRNG`
 //! position captured from the C originals in the checked-in fixture.
 
+use uqm_rust::engine::world::planet::PlanetDesc;
 use uqm_rust::planets::generate::home_exports::GENERATE_BURVIXESE_FUNCTIONS as generateBurvixeseFunctions;
 use uqm_rust::planets::generate::home_exports::GENERATE_DRUUGE_FUNCTIONS as generateDruugeFunctions;
 use uqm_rust::planets::generate::home_exports::GENERATE_ILWRATH_FUNCTIONS as generateIlwrathFunctions;
@@ -47,7 +48,7 @@ use uqm_rust::battle::gendef::{
     AQUA_HELIX_DEFINED, BOMB_DEFINED, EGG_CASE0_DEFINED, MYCON_DEFINED, ORZ_DEFINED,
     SUN_DEVICE_DEFINED, TAALO_PROTECTOR_DEFINED, THRADD_DEFINED, UTWIG_DEFINED,
 };
-use uqm_rust::c_bindings::global_state::{PLANET_DESC, SOLARSYS_STATE};
+use uqm_rust::c_bindings::global_state::SOLARSYS_STATE;
 use uqm_rust::math::RandomContext;
 use uqm_rust::planets::generate::special::Body;
 use uqm_rust::planets::generate::vtable::GenerateFunctions;
@@ -129,13 +130,13 @@ impl Harness {
     ) -> (Vec<Desc>, u8, u32) {
         self.set_star(case.0, case.1);
         self.state.PlanetDesc = unsafe { std::mem::zeroed() };
-        self.state.SunDesc[0].NumPlanets = 0;
+        self.state.SunDesc[0].num_planets = 0;
         self.seed(case.2);
         let hook = table.generate_planets.expect("generatePlanets is set");
         assert!(unsafe { hook(&mut *self.state) });
         (
             self.state.PlanetDesc.iter().map(desc_of).collect(),
-            self.state.SunDesc[0].NumPlanets,
+            self.state.SunDesc[0].num_planets,
             self.rng_position(),
         )
     }
@@ -150,11 +151,11 @@ impl Harness {
         self.set_star(case.0, case.1);
         self.state.MoonDesc = unsafe { std::mem::zeroed() };
         self.state.PlanetDesc = unsafe { std::mem::zeroed() };
-        let sun: *mut PLANET_DESC = &mut self.state.SunDesc[0];
-        self.state.PlanetDesc[planet_i].pPrevDesc = sun;
-        self.state.PlanetDesc[planet_i].NumPlanets = case.3;
+        let sun: *mut PlanetDesc = &mut self.state.SunDesc[0];
+        self.state.PlanetDesc[planet_i].prev_desc = sun;
+        self.state.PlanetDesc[planet_i].num_planets = case.3;
         self.seed(case.2);
-        let planet: *mut PLANET_DESC = &mut self.state.PlanetDesc[planet_i];
+        let planet: *mut PlanetDesc = &mut self.state.PlanetDesc[planet_i];
         let hook = table.generate_moons.expect("generateMoons is set");
         assert!(unsafe { hook(&mut *self.state, planet) });
         (
@@ -168,17 +169,17 @@ impl Harness {
         self.state.PlanetDesc = unsafe { std::mem::zeroed() };
         self.state.MoonDesc = unsafe { std::mem::zeroed() };
         self.state.SysInfo = unsafe { std::mem::zeroed() };
-        self.state.SysInfo.PlanetInfo.ScanSeed = scan_seeds(seed);
-        let sun: *mut PLANET_DESC = &mut self.state.SunDesc[0];
-        let world: *mut PLANET_DESC = match body {
+        self.state.SysInfo.planet_info.scan_seed = scan_seeds(seed);
+        let sun: *mut PlanetDesc = &mut self.state.SunDesc[0];
+        let world: *mut PlanetDesc = match body {
             Body::Planet(p) => {
-                self.state.PlanetDesc[usize::from(p)].pPrevDesc = sun;
+                self.state.PlanetDesc[usize::from(p)].prev_desc = sun;
                 &mut self.state.PlanetDesc[usize::from(p)]
             }
             Body::Moon { planet, moon } => {
-                let parent: *mut PLANET_DESC = &mut self.state.PlanetDesc[usize::from(planet)];
-                self.state.PlanetDesc[usize::from(planet)].pPrevDesc = sun;
-                self.state.MoonDesc[usize::from(moon)].pPrevDesc = parent;
+                let parent: *mut PlanetDesc = &mut self.state.PlanetDesc[usize::from(planet)];
+                self.state.PlanetDesc[usize::from(planet)].prev_desc = sun;
+                self.state.MoonDesc[usize::from(moon)].prev_desc = parent;
                 &mut self.state.MoonDesc[usize::from(moon)]
             }
         };
@@ -343,16 +344,16 @@ pub fn special_generators_match_the_c_originals() {
     );
 }
 
-pub fn mycon_matches_the_c_original(table: &[uqm_rust::c_bindings::global_state::PlanetFrame]) {
+pub fn mycon_matches_the_c_original(table: &[uqm_rust::engine::world::planet::PlanetFrame]) {
     mycon::check(table);
 }
 
-pub fn late_generators_match(frames: &[uqm_rust::c_bindings::global_state::PlanetFrame]) {
+pub fn late_generators_match(frames: &[uqm_rust::engine::world::planet::PlanetFrame]) {
     late_gen::check(frames);
     late_abi::check();
 }
 
-pub fn sol_matches_the_c_original(table: &[uqm_rust::c_bindings::global_state::PlanetFrame]) {
+pub fn sol_matches_the_c_original(table: &[uqm_rust::engine::world::planet::PlanetFrame]) {
     sol::check(table);
     sol_abi::check();
 }

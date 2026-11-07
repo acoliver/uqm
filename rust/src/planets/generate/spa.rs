@@ -1,16 +1,16 @@
 //! `genspa.c`: Spathiwa, its moon, the broadcasters and the Evil Ones.
 
-use crate::c_bindings::global_state::{NODE_INFO, PLANET_DESC, SYSTEM_INFO};
+use crate::engine::world::planet::{NodeInfo, PlanetDesc, SystemInfo};
 use crate::math::RandomContext;
 use crate::planet_side::report_adapter::DiscoveryReportPort;
-use crate::planets::calc;
-use crate::planets::consts::PLANET_SHIELDED;
+use crate::planets::generate::calc;
+use crate::planets::generate::consts::PLANET_SHIELDED;
 use crate::planets::generate::default;
 use crate::planets::generate::home_contact::{HomeContactSite, LanderTakeoff};
+use crate::planets::generate::orbits::{self, OrbitRequest, MOON_DELTA};
 use crate::planets::generate::special::{self, Body, Orbit, Story, MIN_MOON_RADIUS, WATER_WORLD};
+use crate::planets::generate::surface::{self, BIOLOGICAL_SCAN, MINERAL_SCAN};
 use crate::planets::generate::yehat::{CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY};
-use crate::planets::orbits::{self, OrbitRequest, MOON_DELTA};
-use crate::planets::surface::{self, BIOLOGICAL_SCAN, MINERAL_SCAN};
 
 const WORLD: Body = Body::Planet(0);
 const MOON: Body = Body::Moon { planet: 0, moon: 0 };
@@ -28,7 +28,7 @@ pub fn generate_planets(
     rng: &mut RandomContext,
     size: u8,
     color: u8,
-    planets: &mut [PLANET_DESC],
+    planets: &mut [PlanetDesc],
     story: &impl Story,
 ) -> u8 {
     orbits::fill_orbits(
@@ -47,7 +47,7 @@ pub fn generate_planets(
     if story.flag("SPATHI_SHIELDED_SELVES") != 0 {
         planets[0].data_index |= PLANET_SHIELDED;
     }
-    planets[0].NumPlanets = 1;
+    planets[0].num_planets = 1;
     1
 }
 
@@ -57,7 +57,7 @@ pub fn generate_moons(
     color: u8,
     planet: u8,
     count: u8,
-    moons: &mut [PLANET_DESC],
+    moons: &mut [PlanetDesc],
 ) {
     default::generate_moons(rng, size, color, count, moons);
     if planet == 0 {
@@ -112,9 +112,9 @@ pub(super) fn contact(body: Body, story: &impl Story, site: &mut impl SpathiSite
 pub(super) fn analyse_orbital(orbit: &mut Orbit<'_>, body: Body) {
     if body == MOON {
         orbit.analyse();
-        orbit.sys_info.PlanetInfo.Weather = 0;
-        orbit.sys_info.PlanetInfo.Tectonics = 0;
-        orbit.sys_info.PlanetInfo.SurfaceTemperature = 28;
+        orbit.sys_info.planet_info.weather = 0;
+        orbit.sys_info.planet_info.tectonics = 0;
+        orbit.sys_info.planet_info.temperature = 28;
         return;
     }
     if body == WORLD {
@@ -126,20 +126,23 @@ pub(super) fn analyse_orbital(orbit: &mut Orbit<'_>, body: Body) {
             orbit.sys_info,
             orbit.world,
         );
-        orbit.sys_info.PlanetInfo.ScanSeed[MINERAL_SCAN] = orbit.rng.seed();
-        let mut spare: NODE_INFO = unsafe { std::mem::zeroed() };
+        orbit.sys_info.planet_info.scan_seed[MINERAL_SCAN] = orbit.rng.seed();
+        let mut spare = default::blank_node();
         surface::generate_mineral_deposits(
             orbit.rng,
             orbit.sys_info,
+            &orbit.plan_data[usize::from(
+                orbit.world.data_index & !crate::planets::generate::consts::PLANET_SHIELDED,
+            )],
             default::GENERATE_ALL,
             &mut spare,
         );
-        orbit.sys_info.PlanetInfo.ScanSeed[BIOLOGICAL_SCAN] = orbit.rng.seed();
-        orbit.sys_info.PlanetInfo.PlanetRadius = 120;
-        orbit.sys_info.PlanetInfo.SurfaceGravity = calc::calc_gravity(&orbit.sys_info.PlanetInfo);
-        orbit.sys_info.PlanetInfo.Weather = 0;
-        orbit.sys_info.PlanetInfo.Tectonics = 0;
-        orbit.sys_info.PlanetInfo.SurfaceTemperature = 31;
+        orbit.sys_info.planet_info.scan_seed[BIOLOGICAL_SCAN] = orbit.rng.seed();
+        orbit.sys_info.planet_info.planet_radius = 120;
+        orbit.sys_info.planet_info.gravity = calc::calc_gravity(&orbit.sys_info.planet_info);
+        orbit.sys_info.planet_info.weather = 0;
+        orbit.sys_info.planet_info.tectonics = 0;
+        orbit.sys_info.planet_info.temperature = 31;
         return;
     }
     orbit.analyse();
@@ -147,10 +150,10 @@ pub(super) fn analyse_orbital(orbit: &mut Orbit<'_>, body: Body) {
 
 pub fn generate_energy(
     rng: &mut RandomContext,
-    info: &SYSTEM_INFO,
+    info: &SystemInfo,
     body: Body,
     which: u16,
-    node: &mut NODE_INFO,
+    node: &mut NodeInfo,
     story: &impl Story,
 ) -> u16 {
     if body == MOON && story.flag("UMGAH_BROADCASTERS") == 0 {
@@ -161,10 +164,10 @@ pub fn generate_energy(
 
 pub fn generate_life(
     rng: &mut RandomContext,
-    info: &SYSTEM_INFO,
+    info: &SystemInfo,
     body: Body,
     which: u16,
-    node: &mut NODE_INFO,
+    node: &mut NodeInfo,
 ) -> u16 {
     if body == WORLD {
         return surface::generate_random_nodes(

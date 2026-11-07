@@ -1,7 +1,7 @@
 //! Invoke the production Rust ABI tables against retained C fixtures.
 use super::Harness;
 use crate::planets_common::late_gen::{self, Kind, Layout, Ops, Scan};
-use uqm_rust::c_bindings::global_state::{PlanetFrame, NODE_INFO, PLANET_DESC, SYSTEM_INFO};
+use uqm_rust::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
 use uqm_rust::planets::generate::late_exports::GENERATE_SAMATRA_FUNCTIONS as generateSaMatraFunctions;
 use uqm_rust::planets::generate::late_exports::GENERATE_SPATHI_FUNCTIONS as generateSpathiFunctions;
 use uqm_rust::planets::generate::late_exports::GENERATE_VUX_FUNCTIONS as generateVuxFunctions;
@@ -17,11 +17,11 @@ fn table(kind: Kind) -> &'static GenerateFunctions {
     }
 }
 impl Ops for Harness {
-    fn layout(&mut self, case: Layout, planets: &mut [PLANET_DESC]) -> (bool, u8, u32) {
+    fn layout(&mut self, case: Layout, planets: &mut [PlanetDesc]) -> (bool, u8, u32) {
         self.star_index = case.star;
         self.set_star(case.size, case.color);
         self.state.PlanetDesc.copy_from_slice(planets);
-        self.state.SunDesc[0].NumPlanets = 0;
+        self.state.SunDesc[0].num_planets = 0;
         uqm_rust::engine::World::current().write(|world| {
             (world).set_story_state(
                 uqm_rust::engine::StoryKey::SPATHI_SHIELDED_SELVES,
@@ -33,12 +33,12 @@ impl Ops for Harness {
         let mut expected = *self.state;
         let result = unsafe { hook(&mut *self.state) };
         expected.PlanetDesc = self.state.PlanetDesc;
-        expected.SunDesc[0].NumPlanets = self.state.SunDesc[0].NumPlanets;
+        expected.SunDesc[0].num_planets = self.state.SunDesc[0].num_planets;
         assert_eq!(format!("{:?}", self.state), format!("{expected:?}"));
         planets.copy_from_slice(&self.state.PlanetDesc);
         (
             result,
-            self.state.SunDesc[0].NumPlanets,
+            self.state.SunDesc[0].num_planets,
             self.rng_position(),
         )
     }
@@ -47,16 +47,16 @@ impl Ops for Harness {
         case: Layout,
         planet: u8,
         count: u8,
-        moons: &mut [PLANET_DESC],
+        moons: &mut [PlanetDesc],
     ) -> (bool, u32) {
         self.star_index = case.star;
         self.set_star(case.size, case.color);
         self.state.MoonDesc.copy_from_slice(moons);
         self.state.PlanetDesc = unsafe { std::mem::zeroed() };
-        let sun: *mut PLANET_DESC = &mut self.state.SunDesc[0];
-        self.state.PlanetDesc[usize::from(planet)].pPrevDesc = sun;
-        self.state.PlanetDesc[usize::from(planet)].NumPlanets = count;
-        let parent: *mut PLANET_DESC = &mut self.state.PlanetDesc[usize::from(planet)];
+        let sun: *mut PlanetDesc = &mut self.state.SunDesc[0];
+        self.state.PlanetDesc[usize::from(planet)].prev_desc = sun;
+        self.state.PlanetDesc[usize::from(planet)].num_planets = count;
+        let parent: *mut PlanetDesc = &mut self.state.PlanetDesc[usize::from(planet)];
         self.seed(case.seed);
         let hook = table(case.kind).generate_moons.unwrap();
         let mut expected = *self.state;
@@ -66,7 +66,7 @@ impl Ops for Harness {
         moons.copy_from_slice(&self.state.MoonDesc);
         (result, self.rng_position())
     }
-    fn scan(&mut self, case: Scan, info: &SYSTEM_INFO, node: &mut NODE_INFO) -> (u16, u32) {
+    fn scan(&mut self, case: Scan, info: &SystemInfo, node: &mut NodeInfo) -> (u16, u32) {
         self.star_index = case.star;
         self.set_star(0, 0);
         for key in [
@@ -79,16 +79,16 @@ impl Ops for Harness {
         self.state.PlanetDesc = unsafe { std::mem::zeroed() };
         self.state.MoonDesc = unsafe { std::mem::zeroed() };
         self.state.SysInfo = *info;
-        let sun: *mut PLANET_DESC = &mut self.state.SunDesc[0];
-        let world: *const PLANET_DESC = match case.body {
+        let sun: *mut PlanetDesc = &mut self.state.SunDesc[0];
+        let world: *const PlanetDesc = match case.body {
             Body::Planet(p) => {
-                self.state.PlanetDesc[usize::from(p)].pPrevDesc = sun;
+                self.state.PlanetDesc[usize::from(p)].prev_desc = sun;
                 &self.state.PlanetDesc[usize::from(p)]
             }
             Body::Moon { planet, moon } => {
-                self.state.PlanetDesc[usize::from(planet)].pPrevDesc = sun;
-                let parent: *mut PLANET_DESC = &mut self.state.PlanetDesc[usize::from(planet)];
-                self.state.MoonDesc[usize::from(moon)].pPrevDesc = parent;
+                self.state.PlanetDesc[usize::from(planet)].prev_desc = sun;
+                let parent: *mut PlanetDesc = &mut self.state.PlanetDesc[usize::from(planet)];
+                self.state.MoonDesc[usize::from(moon)].prev_desc = parent;
                 &self.state.MoonDesc[usize::from(moon)]
             }
         };

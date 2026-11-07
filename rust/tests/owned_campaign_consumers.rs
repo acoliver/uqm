@@ -125,7 +125,7 @@ fn clock_helpers_work_with_an_unpublished_world() {
 fn scene_star_lookup_uses_the_unpublished_world() {
     use uqm_rust::engine::world::{CStarDesc, CATALOG_LEN};
     let mut world = World::new();
-    world.story = Some(uqm_rust::state::game_state::GameState::new());
+    world.story = Some(uqm_rust::state::game_state::StoryState::new());
     // SAFETY: descriptors contain only integer fields; this fixture retains every catalog entry.
     let mut catalog: Box<[CStarDesc; CATALOG_LEN]> = Box::new(unsafe { std::mem::zeroed() });
     for star in catalog.iter_mut() {

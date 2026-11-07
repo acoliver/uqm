@@ -1,7 +1,7 @@
 use super::*;
 use crate::comm::locdata::{CPoint, CRect};
 use crate::graphics::cmap::Color;
-use crate::planets::consts::GAS_GIANT_ALGO;
+use crate::planets::generate::consts::GAS_GIANT_ALGO;
 
 // This fake proves dependency calls only, not rendering or resource effects.
 // Real RAM frames and context effects are checked in linked parity.

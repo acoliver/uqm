@@ -102,7 +102,7 @@ fn game_point(point: c::POINT) -> CPoint {
 }
 
 pub(super) unsafe fn get_collision_frame(
-    planet: *mut c::PLANET_DESC,
+    planet: *mut crate::engine::world::planet::PlanetDesc,
     wait_planet: c::COUNT,
 ) -> c::FRAME {
     let state = system();
@@ -113,10 +113,10 @@ pub(super) unsafe fn get_collision_frame(
     }
 }
 
-pub(super) unsafe fn check_intersect() -> *mut c::PLANET_DESC {
+pub(super) unsafe fn check_intersect() -> *mut crate::engine::world::planet::PlanetDesc {
     let state = system();
     let game = ptr::addr_of!((**glob()).game);
-    let mut current = (*(*state).pBaseDesc).pPrevDesc;
+    let mut current = (*(*state).pBaseDesc).prev_desc;
     let mut planet_offset = current
         .offset_from((*state).PlanetDesc.as_ptr())
         .wrapping_add(1) as c::BYTE;
@@ -150,14 +150,14 @@ pub(super) unsafe fn check_intersect() -> *mut c::PLANET_DESC {
         }
     }
 
-    let mut remaining = c::COUNT::from((*current).NumPlanets);
+    let mut remaining = c::COUNT::from((*current).num_planets);
     current = (*state).pBaseDesc;
     while remaining != 0 {
         planet.IntersectStamp.origin = (*current).image.origin;
         planet.EndPoint = planet.IntersectStamp.origin;
         if playerInInnerSystem() {
             planet_offset = (*current)
-                .pPrevDesc
+                .prev_desc
                 .offset_from((*state).PlanetDesc.as_ptr()) as c::BYTE;
             moon_offset = current
                 .offset_from((*state).MoonDesc.as_ptr())
@@ -306,7 +306,7 @@ pub(super) unsafe fn process_ship_controls(input: &crate::engine::input::InputSe
     }
 }
 
-pub(super) unsafe fn enter_inner_system(planet: *mut c::PLANET_DESC) {
+pub(super) unsafe fn enter_inner_system(planet: *mut crate::engine::world::planet::PlanetDesc) {
     let state = system();
     let lease = glob();
     let game = ptr::addr_of_mut!((**lease).game);
@@ -335,7 +335,7 @@ pub(super) unsafe fn enter_inner_system(planet: *mut c::PLANET_DESC) {
     (*state).pOrbitalDesc = planet;
 }
 
-pub(super) unsafe fn leave_inner_system(planet: *mut c::PLANET_DESC) {
+pub(super) unsafe fn leave_inner_system(planet: *mut crate::engine::world::planet::PlanetDesc) {
     let state = system();
     let lease = glob();
     let game = ptr::addr_of_mut!((**lease).game);
@@ -364,7 +364,7 @@ pub(super) unsafe fn leave_inner_system(planet: *mut c::PLANET_DESC) {
     }
 }
 
-pub(super) unsafe fn enter_orbital(planet: *mut c::PLANET_DESC) {
+pub(super) unsafe fn enter_orbital(planet: *mut crate::engine::world::planet::PlanetDesc) {
     (**glob()).game.velocity.zero();
     let state = system();
     (*state).pOrbitalDesc = planet;

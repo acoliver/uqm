@@ -597,7 +597,7 @@ mod tests {
     fn retreat_permission_uses_the_supplied_world_and_low_activity_byte() {
         use crate::engine::{StoryKey, World};
         let mut world = World::new();
-        world.story = Some(crate::state::game_state::GameState::new());
+        world.story = Some(crate::state::game_state::StoryState::new());
         for activity in 0..=4 {
             for flags in [0, abi::IN_BATTLE as u16, abi::CHECK_ABORT as u16] {
                 world.set_activity(activity | flags);

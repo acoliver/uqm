@@ -4,8 +4,8 @@
 //! Overridden: `initNpcs`, `generatePlanets`, `generateOrbital`,
 //! `generateEnergy`, `pickupEnergy`. Story flags: `ZOQFOT_DISTRESS`.
 
-use crate::c_bindings::global_state::{PlanetFrame, NODE_INFO, PLANET_DESC, SYSTEM_INFO};
 use crate::comm::dispatch::{CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY};
+use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
 use crate::math::RandomContext;
 use crate::planet_side::report_adapter::DiscoveryReportPort;
 use crate::planets::generate::default::{self, Npcs};
@@ -41,12 +41,12 @@ pub fn generate_planets(
     plan_data: &[PlanetFrame],
     star_size: u8,
     star_color: u8,
-    planets: &mut [PLANET_DESC],
+    planets: &mut [PlanetDesc],
 ) -> u8 {
     special::planets_then(rng, plan_data, star_size, star_color, planets, |planets| {
         let world = &mut planets[0];
         world.data_index = REDUX_WORLD;
-        world.NumPlanets = 1;
+        world.num_planets = 1;
         special::reposition(world, 138);
     })
 }
@@ -124,10 +124,10 @@ fn meet(story: &impl Story, site: &mut impl ZoqFotPikSite) {
 /// `GenerateZoqFotPik_generateEnergy`: the ruins of planet 0.
 pub fn generate_energy(
     rng: &mut RandomContext,
-    sys_info: &SYSTEM_INFO,
+    sys_info: &SystemInfo,
     body: Body,
     which_node: u16,
-    info: &mut NODE_INFO,
+    info: &mut NodeInfo,
 ) -> u16 {
     if body == WORLD {
         return default::generate_ruins(rng, sys_info, which_node, info);

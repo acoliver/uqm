@@ -510,7 +510,7 @@ mod tests {
     #[test]
     fn each_boundary_copies_current_typed_campaign_values() {
         let mut world = World::new();
-        world.story = Some(crate::engine::world::story::GameState::new());
+        world.story = Some(crate::engine::world::story::StoryState::new());
         world.data.flagship.fuel_on_board = 100;
         world.set_story_state(crate::engine::StoryKey::STARBASE_AVAILABLE, 1);
         let first = CampaignView::from_world(&world);

@@ -7,15 +7,16 @@
 //! the `generateDefaultFunctions` table in [`super::vtable`] points at them.
 //! All of it runs on the game thread.
 
+use crate::engine::world::planet::{NodeInfo, PlanetDesc};
 use std::ffi::c_void;
 
-use crate::c_bindings::global_state::{NODE_INFO, PLANET_DESC, SOLARSYS_STATE};
+use crate::c_bindings::global_state::SOLARSYS_STATE;
 use crate::planet_side::report_adapter::CffiDiscoveryReport;
 use crate::planets::c_api::{load_planet_default_surface, LiveNames};
-use crate::planets::consts::star_color;
 use crate::planets::ffi::{
     analysis_context, blank_node, current_star_type, node_or, plan_data, sys_gen_rng,
 };
+use crate::planets::generate::consts::star_color;
 use crate::planets::generate::default;
 
 /// `planetIndex (system, world)`: the planet itself, or the planet a moon
@@ -23,14 +24,14 @@ use crate::planets::generate::default;
 ///
 /// # Safety
 /// `world` must be a planet of `system` or a moon whose `pPrevDesc` is one.
-pub(super) unsafe fn planet_index(system: *const SOLARSYS_STATE, world: *const PLANET_DESC) -> u16 {
-    let sun = std::ptr::addr_of!((*system).SunDesc).cast::<PLANET_DESC>();
-    let planet = if (*world).pPrevDesc.cast_const() == sun {
+pub(super) unsafe fn planet_index(system: *const SOLARSYS_STATE, world: *const PlanetDesc) -> u16 {
+    let sun = std::ptr::addr_of!((*system).SunDesc).cast::<PlanetDesc>();
+    let planet = if (*world).prev_desc.cast_const() == sun {
         world
     } else {
-        (*world).pPrevDesc.cast_const()
+        (*world).prev_desc.cast_const()
     };
-    let first = std::ptr::addr_of!((*system).PlanetDesc).cast::<PLANET_DESC>();
+    let first = std::ptr::addr_of!((*system).PlanetDesc).cast::<PlanetDesc>();
     u16::try_from(planet.offset_from(first)).expect("world is not in the system's planet table")
 }
 
@@ -39,38 +40,26 @@ pub(super) unsafe fn planet_index(system: *const SOLARSYS_STATE, world: *const P
 /// # Safety
 /// `system` must be valid.
 pub(super) unsafe fn discovery_report(system: *mut SOLARSYS_STATE) -> CffiDiscoveryReport {
-    let slot = std::ptr::addr_of_mut!((*system).SysInfo.PlanetInfo.DiscoveryString);
+    let slot = std::ptr::addr_of_mut!((*system).SysInfo.planet_info.discovery_string);
     CffiDiscoveryReport::new(slot.cast::<*mut c_void>(), system)
         .expect("the discovery string slot is part of the system state")
 }
 
 /// C: `bool GenerateDefault_initNpcs (SOLARSYS_STATE *)`.
-///
-/// # Safety
-/// Game thread, with `GlobData` initialised.
-pub unsafe fn init_npcs_c(owner: &mut crate::engine::World, _system: *mut SOLARSYS_STATE) -> bool {
+/// The supplied owner owns all NPC/group state; the ABI record pointer is unused.
+pub fn init_npcs_c(owner: &mut crate::engine::World, _system: *mut SOLARSYS_STATE) -> bool {
     default::init_npcs(&mut crate::planets::c_api::NpcWorld::new(owner))
 }
 
 /// C: `bool GenerateDefault_reinitNpcs (SOLARSYS_STATE *)`.
-///
-/// # Safety
-/// Game thread, with `GlobData` initialised.
-pub unsafe fn reinit_npcs_c(
-    owner: &mut crate::engine::World,
-    _system: *mut SOLARSYS_STATE,
-) -> bool {
+/// The supplied owner owns all NPC/group state; the ABI record pointer is unused.
+pub fn reinit_npcs_c(owner: &mut crate::engine::World, _system: *mut SOLARSYS_STATE) -> bool {
     default::reinit_npcs(&mut crate::planets::c_api::NpcWorld::new(owner))
 }
 
 /// C: `bool GenerateDefault_uninitNpcs (SOLARSYS_STATE *)`.
-///
-/// # Safety
-/// Game thread, with `GlobData` initialised.
-pub unsafe fn uninit_npcs_c(
-    owner: &mut crate::engine::World,
-    _system: *mut SOLARSYS_STATE,
-) -> bool {
+/// The supplied owner owns all NPC/group state; the ABI record pointer is unused.
+pub fn uninit_npcs_c(owner: &mut crate::engine::World, _system: *mut SOLARSYS_STATE) -> bool {
     default::uninit_npcs(&mut crate::planets::c_api::NpcWorld::new(owner))
 }
 
@@ -90,7 +79,7 @@ pub unsafe extern "C" fn generate_planets_c(system: *mut SOLARSYS_STATE) -> bool
         star_color(current_star_type()),
         &mut (*system).PlanetDesc,
     );
-    (*system).SunDesc[0].NumPlanets = drawn;
+    (*system).SunDesc[0].num_planets = drawn;
     true
 }
 
@@ -102,9 +91,9 @@ pub unsafe extern "C" fn generate_planets_c(system: *mut SOLARSYS_STATE) -> bool
 #[export_name = "GenerateDefault_generateMoons"]
 pub unsafe extern "C" fn generate_moons_c(
     system: *mut SOLARSYS_STATE,
-    planet: *mut PLANET_DESC,
+    planet: *mut PlanetDesc,
 ) -> bool {
-    let moons = (*planet).NumPlanets;
+    let moons = (*planet).num_planets;
     let moon_table = &mut *std::ptr::addr_of_mut!((*system).MoonDesc);
     default::generate_moons(
         sys_gen_rng(),
@@ -123,7 +112,7 @@ pub unsafe extern "C" fn generate_moons_c(
 #[export_name = "GenerateDefault_generateName"]
 pub unsafe extern "C" fn generate_name_c(
     system: *const SOLARSYS_STATE,
-    world: *const PLANET_DESC,
+    world: *const PlanetDesc,
 ) -> bool {
     default::generate_name(
         &mut LiveNames,
@@ -142,7 +131,7 @@ pub unsafe extern "C" fn generate_name_c(
 pub unsafe fn generate_orbital_c(
     cx: &mut crate::engine::battle::Cx<'_>,
     system: *mut SOLARSYS_STATE,
-    world: *mut PLANET_DESC,
+    world: *mut PlanetDesc,
 ) -> bool {
     let owner = std::cell::RefCell::new(cx);
     let owner = &owner;
@@ -174,14 +163,16 @@ pub unsafe fn generate_orbital_c(
 #[export_name = "GenerateDefault_generateMinerals"]
 pub unsafe extern "C" fn generate_minerals_c(
     system: *const SOLARSYS_STATE,
-    _world: *const PLANET_DESC,
+    _world: *const PlanetDesc,
     which_node: u16,
-    info: *mut NODE_INFO,
+    info: *mut NodeInfo,
 ) -> u16 {
     let mut spare = blank_node();
     default::generate_minerals(
         sys_gen_rng(),
         &(*system).SysInfo,
+        // SAFETY: the caller supplies an analysed system whose frame table remains live.
+        unsafe { &*(*system).SysInfo.planet_info.plan_data_ptr },
         which_node,
         node_or(info, &mut spare),
     )
@@ -194,7 +185,7 @@ pub unsafe extern "C" fn generate_minerals_c(
 #[export_name = "GenerateDefault_pickupMinerals"]
 pub unsafe extern "C" fn pickup_minerals_c(
     _system: *mut SOLARSYS_STATE,
-    _world: *mut PLANET_DESC,
+    _world: *mut PlanetDesc,
     _which_node: u16,
 ) -> bool {
     default::pickup_minerals()
@@ -208,9 +199,9 @@ pub unsafe extern "C" fn pickup_minerals_c(
 #[export_name = "GenerateDefault_generateEnergy"]
 pub unsafe extern "C" fn generate_energy_c(
     _system: *const SOLARSYS_STATE,
-    _world: *const PLANET_DESC,
+    _world: *const PlanetDesc,
     _which_node: u16,
-    _info: *mut NODE_INFO,
+    _info: *mut NodeInfo,
 ) -> u16 {
     default::generate_energy()
 }
@@ -224,7 +215,7 @@ pub unsafe extern "C" fn generate_energy_c(
 #[export_name = "GenerateDefault_pickupEnergy"]
 pub unsafe extern "C" fn pickup_energy_c(
     _system: *mut SOLARSYS_STATE,
-    _world: *mut PLANET_DESC,
+    _world: *mut PlanetDesc,
     _which_node: u16,
 ) -> bool {
     default::pickup_energy()
@@ -238,14 +229,16 @@ pub unsafe extern "C" fn pickup_energy_c(
 #[export_name = "GenerateDefault_generateLife"]
 pub unsafe extern "C" fn generate_life_c(
     system: *const SOLARSYS_STATE,
-    _world: *const PLANET_DESC,
+    _world: *const PlanetDesc,
     which_node: u16,
-    info: *mut NODE_INFO,
+    info: *mut NodeInfo,
 ) -> u16 {
     let mut spare = blank_node();
     default::generate_life(
         sys_gen_rng(),
         &(*system).SysInfo,
+        // SAFETY: the caller supplies an analysed system whose frame table remains live.
+        unsafe { &*(*system).SysInfo.planet_info.plan_data_ptr },
         which_node,
         node_or(info, &mut spare),
     )
@@ -258,7 +251,7 @@ pub unsafe extern "C" fn generate_life_c(
 #[export_name = "GenerateDefault_pickupLife"]
 pub unsafe extern "C" fn pickup_life_c(
     _system: *mut SOLARSYS_STATE,
-    _world: *mut PLANET_DESC,
+    _world: *mut PlanetDesc,
     _which_node: u16,
 ) -> bool {
     default::pickup_life()
@@ -273,7 +266,7 @@ pub unsafe extern "C" fn pickup_life_c(
 pub unsafe extern "C" fn generate_artifact_c(
     system: *const SOLARSYS_STATE,
     which_node: u16,
-    info: *mut NODE_INFO,
+    info: *mut NodeInfo,
 ) -> u16 {
     let mut spare = blank_node();
     default::generate_artifact(
@@ -293,7 +286,7 @@ pub unsafe extern "C" fn generate_artifact_c(
 pub unsafe extern "C" fn generate_ruins_c(
     system: *const SOLARSYS_STATE,
     which_node: u16,
-    info: *mut NODE_INFO,
+    info: *mut NodeInfo,
 ) -> u16 {
     let mut spare = blank_node();
     default::generate_ruins(

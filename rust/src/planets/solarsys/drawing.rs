@@ -1,6 +1,7 @@
 use super::*;
+use crate::engine::world::planet::PlanetDesc;
 use crate::engine::{Kernel as KernelOwner, World as WorldOwner, WorldData as WorldFields};
-use crate::planets::orbit_tables::NUMBER_OF_PLANET_TYPES;
+use crate::planets::generate::orbit_tables::NUMBER_OF_PLANET_TYPES;
 
 use crate::graphics::context_abi::SetContext;
 
@@ -66,7 +67,7 @@ pub(super) unsafe fn orbit_rect(
 
 pub(super) unsafe fn planet_orbit_rect(
     rect: *mut c::RECT,
-    planet: *mut c::PLANET_DESC,
+    planet: *mut PlanetDesc,
     xn: i32,
     yn: i32,
     den: i32,
@@ -80,7 +81,7 @@ pub(super) unsafe fn planet_orbit_rect(
     orbit_rect(rect, dx, dy, i32::from((*planet).radius), xn, yn, den);
 }
 
-pub(super) unsafe fn validate_orbit(planet: *mut c::PLANET_DESC, xn: i32, yn: i32, den: i32) {
+pub(super) unsafe fn validate_orbit(planet: *mut PlanetDesc, xn: i32, yn: i32, den: i32) {
     if xn <= display_factor() {
         let mut rect: c::RECT = std::mem::zeroed();
         planet_orbit_rect(&mut rect, planet, xn, yn, den);
@@ -96,11 +97,11 @@ pub(super) unsafe fn validate_orbit(planet: *mut c::PLANET_DESC, xn: i32, yn: i3
     }
     let index = (*planet).data_index & !WORLD_TYPE_SPECIAL;
     if usize::from(index) < NUMBER_OF_PLANET_TYPES {
-        let typ = crate::planets::ffi::plan_data()[usize::from(index)].Type;
+        let typ = crate::planets::ffi::plan_data()[usize::from(index)].type_;
         let mut size = u32::from(typ & PLANETS_SIZE_MASK as u8);
         if xn > display_factor() {
             size += 3;
-        } else if (*planet).pPrevDesc != (*system()).SunDesc.as_mut_ptr() {
+        } else if (*planet).prev_desc != (*system()).SunDesc.as_mut_ptr() {
             size += 2;
         } else if den <= (MAX_ZOOM_RADIUS >> 2) {
             size += 1;
@@ -108,10 +109,10 @@ pub(super) unsafe fn validate_orbit(planet: *mut c::PLANET_DESC, xn: i32, yn: i3
                 size += 1;
             }
         }
-        let origin = if (*planet).pPrevDesc == (*system()).SunDesc.as_mut_ptr() {
+        let origin = if (*planet).prev_desc == (*system()).SunDesc.as_mut_ptr() {
             (*planet).location
         } else {
-            (*(*planet).pPrevDesc).location
+            (*(*planet).prev_desc).location
         };
         let angle = crate::math::arctan(origin.x, origin.y);
         (*planet).image.frame = set_frame_index(
@@ -125,7 +126,7 @@ pub(super) unsafe fn validate_orbit(planet: *mut c::PLANET_DESC, xn: i32, yn: i3
     }
 }
 
-pub(super) unsafe fn draw_orbit(planet: *mut c::PLANET_DESC, xn: i32, yn: i32, den: i32) {
+pub(super) unsafe fn draw_orbit(planet: *mut PlanetDesc, xn: i32, yn: i32, den: i32) {
     let mut rect: c::RECT = std::mem::zeroed();
     planet_orbit_rect(&mut rect, planet, xn, yn, den);
     set_foreground((*planet).temp_color);
@@ -161,7 +162,7 @@ pub(super) unsafe fn find_radius(mut from_radius: i32, ship_loc: c::POINT) -> i3
 
 pub(super) unsafe fn validate_orbits() {
     let s = system();
-    let count = (*s).SunDesc[0].NumPlanets;
+    let count = (*s).SunDesc[0].num_planets;
     for i in 0..usize::from(count) {
         validate_orbit(
             (*s).PlanetDesc.as_mut_ptr().add(i),
@@ -234,7 +235,7 @@ pub(super) unsafe fn draw_system(radius: c::SIZE, inner: bool) {
             i32::from(radius),
         );
     }
-    for i in 0..usize::from((*(*base).pPrevDesc).NumPlanets) {
+    for i in 0..usize::from((*(*base).prev_desc).num_planets) {
         let current = base.add(i);
         if inner {
             draw_orbit(current, 2, 1, 2);
@@ -273,7 +274,7 @@ pub(super) unsafe fn draw_system(radius: c::SIZE, inner: bool) {
             if index == (*s).LastPlanetIndex {
                 break;
             }
-            index = (*current).NextIndex as i16;
+            index = (*current).next_index as i16;
         }
     }
     SetContext(old);
@@ -324,7 +325,7 @@ pub(super) unsafe fn create_star_background() -> *mut c::FRAME_DESC {
 
 pub(super) unsafe fn sort_planet_positions() {
     let s = system();
-    let count = usize::from((*s).SunDesc[0].NumPlanets);
+    let count = usize::from((*s).SunDesc[0].num_planets);
     let mut order = [0_i16; 17];
     for (i, slot) in order.iter_mut().enumerate().take(count + 1) {
         *slot = i as i16 - 1;
@@ -350,7 +351,7 @@ pub(super) unsafe fn sort_planet_positions() {
     (*s).LastPlanetIndex = order[count] as _;
     for i in 0..=count {
         let next = if i < count { order[i + 1] } else { 0 };
-        (*(*s).PlanetDesc.as_mut_ptr().offset(isize::from(order[i]))).NextIndex = next as _;
+        (*(*s).PlanetDesc.as_mut_ptr().offset(isize::from(order[i]))).next_index = next as _;
     }
 }
 
@@ -365,16 +366,16 @@ unsafe fn set_color_map_index(map: *mut c_void, index: u32) -> *mut c_void {
     crate::strings::string_table::SetAbsStringTableIndex(map.cast(), index as u16).cast()
 }
 
-unsafe fn set_planet_color_map(planet: *mut c::PLANET_DESC) {
+unsafe fn set_planet_color_map(planet: *mut PlanetDesc) {
     let index = usize::from((*planet).data_index & !WORLD_TYPE_SPECIAL);
     assert!(index < NUMBER_OF_PLANET_TYPES);
-    let color = crate::planets::ffi::plan_data()[index].Type >> 4;
+    let color = crate::planets::ffi::plan_data()[index].type_ >> 4;
     SetColorMap(GetColorMapAddress(
         (set_color_map_index(ORBITAL_CMAP, u32::from(color))).cast(),
     ));
 }
 
-unsafe fn calc_sun_size(sun: *mut c::PLANET_DESC, radius: c::SIZE) {
+unsafe fn calc_sun_size(sun: *mut PlanetDesc, radius: c::SIZE) {
     let mut index = 0;
     if i32::from(radius) <= MAX_ZOOM_RADIUS >> 1 {
         index += 1;
@@ -391,7 +392,7 @@ unsafe fn calc_sun_size(sun: *mut c::PLANET_DESC, radius: c::SIZE) {
         crate::graphics::pixmap_abi::SetRelFrameIndex(SUN_FRAME.cast(), index).cast();
 }
 
-unsafe fn draw_inner_planets(planet: *mut c::PLANET_DESC) {
+unsafe fn draw_inner_planets(planet: *mut PlanetDesc) {
     set_planet_color_map(planet);
     let (width, height) = sis_dimensions();
     let mut stamp = c::STAMP {
@@ -407,7 +408,7 @@ unsafe fn draw_inner_planets(planet: *mut c::PLANET_DESC) {
     }
     draw_stamp(&mut stamp);
     let system = system();
-    for i in 0..usize::from((*planet).NumPlanets) {
+    for i in 0..usize::from((*planet).num_planets) {
         let moon = (*system).MoonDesc.as_mut_ptr().add(i);
         if (*moon).data_index & WORLD_TYPE_SPECIAL == 0 {
             set_planet_color_map(moon);
@@ -435,7 +436,7 @@ pub(super) unsafe fn validate_inner_orbits() {
         display_factor(),
         i32::from((*planet).radius),
     );
-    for i in 0..usize::from((*planet).NumPlanets) {
+    for i in 0..usize::from((*planet).num_planets) {
         validate_orbit((*s).MoonDesc.as_mut_ptr().add(i), 2, 1, 2);
     }
 }

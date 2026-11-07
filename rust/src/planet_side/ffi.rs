@@ -216,8 +216,8 @@ pub unsafe fn run_session(
                         .solar_system
                         .cast::<crate::c_bindings::global_state::SOLARSYS_STATE>())
                     .SysInfo
-                    .PlanetInfo
-                    .ScanRetrieveMask
+                    .planet_info
+                    .scan_retrieve_mask
                 };
             } else {
                 let crew = controller.session.lander.crew.get();

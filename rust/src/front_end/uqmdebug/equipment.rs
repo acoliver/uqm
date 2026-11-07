@@ -133,7 +133,7 @@ mod equipment_tests {
     use crate::engine::{StoryKey, World};
     fn world() -> World {
         let mut world = World::new();
-        world.story = Some(crate::engine::world::story::GameState::new());
+        world.story = Some(crate::engine::world::story::StoryState::new());
         world.set_activity(IN_INTERPLANETARY as u16);
         world
     }

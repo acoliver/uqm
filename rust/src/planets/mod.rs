@@ -5,17 +5,12 @@
 
 #[cfg(not(test))]
 pub mod c_api;
-pub mod calc;
-pub mod consts;
 pub(crate) mod device_effects;
 #[cfg(not(test))]
 pub mod ffi;
 pub mod generate;
-pub mod orbit_tables;
-pub mod orbits;
 pub mod render;
 pub mod starmap;
-pub mod surface;
 pub mod tables;
 pub mod topography;
 pub mod universe_units;

@@ -4,7 +4,7 @@ use super::Harness;
 use uqm_rust::battle::gendef::{getGenerateFunctions, SOL_DEFINED};
 
 use uqm_rust::planets::c_api::{self, CapturedSurface};
-use uqm_rust::planets::consts::{MAP_HEIGHT, MAP_WIDTH};
+use uqm_rust::planets::generate::consts::{MAP_HEIGHT, MAP_WIDTH};
 use uqm_rust::planets::generate::sol_exports::GENERATE_SOL_FUNCTIONS;
 use uqm_rust::planets::generate::vtable::DEFAULT_HOOKS;
 
@@ -47,7 +47,7 @@ pub fn check() {
     let system = &raw mut *h.state;
     unsafe {
         let world = &raw mut (*system).PlanetDesc[0];
-        (*world).pPrevDesc = &raw mut (*system).SunDesc[0];
+        (*world).prev_desc = &raw mut (*system).SunDesc[0];
         assert!(!table.pickup_energy.unwrap()(system, world, u16::MAX));
         assert!(table.pickup_minerals.unwrap()(system, world, u16::MAX));
         assert!(table.pickup_life.unwrap()(system, world, u16::MAX));

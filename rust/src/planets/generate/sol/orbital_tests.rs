@@ -1,9 +1,9 @@
 use super::lifecycle_tests::{group, pair, QueueHost, Trace};
 use super::orbital::{Orbital, Queues, Scene};
 use super::*;
-use crate::c_bindings::global_state::PLANET_INFO;
 use crate::comm::dispatch::{CHECK_ABORT, CHECK_LOAD, START_ENCOUNTER};
-use crate::planets::calc::{AnalysisSite, StarDescription};
+use crate::engine::world::planet::{PlanetDesc, PlanetInfo, SystemInfo};
+use crate::planets::generate::calc::{AnalysisSite, StarDescription};
 use crate::planets::generate::default::Npcs;
 use crate::planets::generate::special::Orbit;
 use crate::planets::tables::PLANET_ARRAY;
@@ -18,9 +18,9 @@ impl Drop for Surface {
 
 struct Site {
     queues: QueueHost,
-    info: SYSTEM_INFO,
-    analyzed: Option<SYSTEM_INFO>,
-    world: PLANET_DESC,
+    info: SystemInfo,
+    analyzed: Option<SystemInfo>,
+    world: PlanetDesc,
     rng: RandomContext,
     body: Body,
     activity: u16,
@@ -49,9 +49,9 @@ impl Site {
                 moons[usize::from(moon)]
             }
         };
-        let mut info: SYSTEM_INFO = unsafe { std::mem::zeroed() };
-        info.PlanetInfo.ScanSeed = [11, 13, 17];
-        info.PlanetInfo.ScanRetrieveMask = [19, 23, 29];
+        let mut info: SystemInfo = unsafe { std::mem::zeroed() };
+        info.planet_info.scan_seed = [11, 13, 17];
+        info.planet_info.scan_retrieve_mask = [19, 23, 29];
         Self {
             queues,
             info,
@@ -130,9 +130,9 @@ impl Orbital for Site {
         });
         self.analyzed = Some(self.info);
     }
-    fn planet_info(&mut self) -> &mut PLANET_INFO {
+    fn planet_info(&mut self) -> &mut PlanetInfo {
         self.queues.call("overrides");
-        &mut self.info.PlanetInfo
+        &mut self.info.planet_info
     }
     fn load_scene(&mut self, scene: Scene) {
         assert_eq!(
@@ -249,7 +249,7 @@ fn orbital_effects_preserve_c_order_and_surface_ownership_on_every_body() {
                     );
                     assert_eq!(story.flags, before_flags);
                     assert!(story.words.is_empty());
-                    assert_eq!(host.info.PlanetInfo.ScanRetrieveMask, [19, 23, 29]);
+                    assert_eq!(host.info.planet_info.scan_retrieve_mask, [19, 23, 29]);
                     // No owned object was dropped during orbital loading.
                     assert_eq!(host.scene, scene);
                     assert_eq!(host.surface.is_some(), body == Body::Planet(2));
@@ -287,29 +287,29 @@ fn lunar_bio_seed_follows_minerals_and_other_scans_keep_incoming_seeds() {
         let mut host = Site::new(queue, body);
         assert!(generate_orbital(body, &story, &mut host));
         assert_eq!(
-            host.info.PlanetInfo.ScanSeed[1], 13,
+            host.info.planet_info.scan_seed[1], 13,
             "energy seed is not written"
         );
         if body == LUNA {
-            assert_eq!(host.info.PlanetInfo.ScanSeed[2], host.rng.seed());
-            assert_eq!(host.info.PlanetInfo.SurfaceTemperature, -18);
-            assert_eq!(host.info.PlanetInfo.SurfaceGravity, 15);
+            assert_eq!(host.info.planet_info.scan_seed[2], host.rng.seed());
+            assert_eq!(host.info.planet_info.temperature, -18);
+            assert_eq!(host.info.planet_info.gravity, 15);
         } else {
-            assert_eq!(host.info.PlanetInfo.ScanSeed[2], 17);
+            assert_eq!(host.info.planet_info.scan_seed[2], 17);
         }
         if body == Body::Planet(2) {
-            let info = host.info.PlanetInfo;
+            let info = host.info.planet_info;
             assert_eq!(
                 (
-                    info.AtmoDensity,
-                    info.PlanetDensity,
-                    info.PlanetRadius,
-                    info.AxialTilt,
-                    info.Weather,
-                    info.Tectonics,
-                    info.RotationPeriod,
-                    info.SurfaceTemperature,
-                    info.SurfaceGravity
+                    info.atmo_density,
+                    info.planet_density,
+                    info.planet_radius,
+                    info.axial_tilt,
+                    info.weather,
+                    info.tectonics,
+                    info.rotation_period,
+                    info.temperature,
+                    info.gravity
                 ),
                 (50, 100, 100, 23, 1, 1, 240, 22, 100)
             );
