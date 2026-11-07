@@ -2671,42 +2671,10 @@ pub use crate::game_init::kernel_abi::uninitIO;
 pub use crate::game_init::kernel_abi::UninitPlayerInput;
 
 
-#[cfg(not(test))]
-pub use crate::navigation::hyper_data::LoadHyperspace;
+pub use crate::navigation::hyperspace::check_hyperspace_encounter;
 
-#[cfg(not(test))]
-pub use crate::navigation::hyper_radar::SeedUniverse;
-#[cfg(test)]
-extern "C" {
-    pub fn SeedUniverse();
-}
-
-#[cfg(not(test))]
-pub use crate::navigation::hyper_data::free_hyper_data;
-#[cfg(not(test))]
-pub use crate::navigation::hyperspace::live::move_sis;
-#[cfg(test)]
-extern "C" {
-    pub fn free_hyper_data();
-}
-
-#[cfg(not(test))]
-pub use crate::navigation::hyperspace::live::check_hyperspace_encounter;
-
-#[cfg(not(test))]
-pub use crate::navigation::hyper_menu::hyperspace_menu;
-#[cfg(not(test))]
 pub use crate::navigation::hyper_transition::hyper_transition;
-#[cfg(test)]
-extern "C" {
-    pub fn hyperspace_menu();
-}
-#[cfg(not(test))]
 pub use crate::navigation::hyper_transition::save_sis_hyper_state;
-#[cfg(test)]
-extern "C" {
-    pub fn save_sis_hyper_state();
-}
 
 
 

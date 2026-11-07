@@ -84,6 +84,7 @@ impl ContextFrame {
 }
 
 enum Operation {
+    Point(Color, POINT),
     Select,
     Deselect,
     BeginBatch,
@@ -109,6 +110,14 @@ enum Operation {
 }
 
 impl Operation {
+    fn selected_context(&self, context: CONTEXT) -> CONTEXT {
+        if matches!(self, Self::Deselect) {
+            std::ptr::null_mut()
+        } else {
+            context
+        }
+    }
+
     fn changes_selection(&self) -> bool {
         !matches!(
             self,
@@ -252,11 +261,7 @@ impl ContextLease {
 
     fn apply(&self, operation: Operation) -> (FRAME, CONTEXT, u32) {
         self.assert_thread();
-        let selected = if matches!(&operation, Operation::Deselect) {
-            std::ptr::null_mut()
-        } else {
-            self.0.context.as_ptr()
-        };
+        let selected = operation.selected_context(self.0.context.as_ptr());
         let mut rectangle = operation.rect();
         let rectangle = rectangle
             .as_mut()
@@ -298,6 +303,10 @@ impl ContextLease {
                     context_abi::SetContextClipRect(rectangle);
                 }
                 Operation::Clear => frame_abi::ClearDrawable(),
+                Operation::Point(color, mut point) => {
+                    context_abi::SetContextForeGroundColor(color);
+                    frame_abi::DrawPoint(&mut point);
+                }
                 Operation::Fill(color, mut rect) => {
                     context_abi::SetContextForeGroundColor(color);
                     frame_abi::DrawFilledRectangle(&mut rect);
@@ -458,6 +467,10 @@ impl ContextLease {
         let result = draw();
         drop(restore);
         result
+    }
+
+    pub fn draw_point(&self, color: Color, point: POINT) {
+        self.apply(Operation::Point(color, point));
     }
 
     pub fn draw_rectangle(&self, color: Color, rect: RECT) {

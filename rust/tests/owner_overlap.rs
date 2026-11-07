@@ -420,16 +420,11 @@ fn hyperspace_encounter_updates_story_in_the_borrowed_world() {
     game.world.story = Some(uqm_rust::state::game_state::StoryState::new());
     game.world
         .set_story_state(uqm_rust::engine::StoryKey::USED_BROADCASTER, 1);
-    // SAFETY: this serialized fixture has empty fleet and encounter queues.
-    unsafe {
-        let old_size = (ScreenWidth, ScreenHeight);
-        (ScreenWidth, ScreenHeight) = (320, 240);
-        bridge::with_game(&mut game, || {
-            uqm_rust::engine::World::current()
-                .write(|world| uqm_rust::navigation::abi::check_hyperspace_encounter(world));
-        });
-        (ScreenWidth, ScreenHeight) = old_size;
-    }
+    uqm_rust::navigation::hyperspace::check_hyperspace_encounter(
+        &mut game.world,
+        uqm_rust::navigation::hyper_units::Geometry::new((320, 240)),
+        &mut || panic!("empty fleets drew RNG"),
+    );
     assert_eq!(
         game.world
             .story_state(uqm_rust::engine::StoryKey::USED_BROADCASTER),

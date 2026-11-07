@@ -1,13 +1,12 @@
 //! Hyperspace encounter elements, transition animation, tracking and radar.
-#![cfg(not(test))]
 use super::abi::*;
 use super::get;
-#[cfg(not(test))]
-use crate::battle::context_access::ContextOps;
 use crate::engine::StoryKey;
 
 use super::hyper_transition::{init_transition, sis_element};
-use super::hyperspace::live::{cosine, height, logx, logy, sine, universe_x, universe_y, width};
+use super::hyper_units::Geometry;
+use super::hyperspace::{cosine, sine};
+use crate::engine::battle::hooks::animation_preprocess;
 use crate::engine::battle::views::{FrameSelection as Frame, Frames};
 use crate::engine::battle::{Cx, ElementId};
 use std::ptr;
@@ -22,17 +21,18 @@ const SPEED: [i16; 23] = [
 pub(super) const XOFFS: i16 = (63 * 12 + 63 * 4) / 2;
 pub(super) const YOFFS: i16 = (50 * 12 + 50 * 4) / 2;
 
-pub(super) unsafe fn allocate(cx: &mut Cx<'_>, point: POINT) -> Option<ElementId> {
+pub(super) fn allocate(cx: &mut Cx<'_>, point: POINT) -> Option<ElementId> {
+    let geometry = Geometry::new(cx.screen_dimensions());
     let element = cx.alloc_element()?;
     cx.element_mut(element).player = NEUTRAL_PLAYER_NUM as i16;
     cx.element_mut(element).flags = (CHANGING | FINITE_LIFE) as u16;
     cx.element_mut(element).life = 1;
     cx.element_mut(element).mass = 1;
-    let lx = logx(point.x) + (width() >> 1) - cx.world.data.flagship.log_x;
-    let ly = logy(point.y) + (height() >> 1) - cx.world.data.flagship.log_y;
+    let lx = geometry.log_x(point.x) + (geometry.width() >> 1) - cx.world.data.flagship.log_x;
+    let ly = geometry.log_y(point.y) + (geometry.height() >> 1) - cx.world.data.flagship.log_y;
     cx.element_mut(element).current.location = POINT {
-        x: wrap(lx, width()),
-        y: wrap(ly, height()),
+        x: wrap(lx, geometry.width()),
+        y: wrap(ly, geometry.height()),
     };
     cx.primitive_style_mut(element).kind = gfx_object_STAMP_PRIM as u8;
     let side = get(cx.world, StoryKey::ARILOU_SPACE_SIDE) >> 1;
@@ -55,7 +55,8 @@ fn wrap(value: i32, limit: i32) -> i16 {
     }
 }
 
-pub(super) unsafe fn ambient(cx: &mut Cx<'_>) {
+pub(super) fn ambient(cx: &mut Cx<'_>) {
+    let geometry = Geometry::new(cx.screen_dimensions());
     let Some(element) = cx.alloc_element() else {
         return;
     };
@@ -63,12 +64,12 @@ pub(super) unsafe fn ambient(cx: &mut Cx<'_>) {
     cx.element_mut(element).flags = (APPEARING | FINITE_LIFE | NONSOLID) as u16;
     cx.primitive_style_mut(element).kind = gfx_object_STAMP_PRIM as u8;
     cx.element_mut(element).pre = Some(ElementHook::Native(animation_preprocess));
-    let random = TFB_Random();
-    let dx = (random as u8 as i32 % (ScreenWidth - 64)) - ((ScreenWidth - 64) >> 1);
-    let dy = ((random >> 8) as u8 as i32 % ScreenHeight) - (ScreenHeight >> 1);
+    let random = cx.random();
+    let dx = (random as u8 as i32 % geometry.space_width) - (geometry.space_width >> 1);
+    let dy = ((random >> 8) as u8 as i32 % geometry.space_height) - (geometry.space_height >> 1);
     cx.element_mut(element).current.location = POINT {
-        x: ((width() >> 1) + (dx << 2)) as i16,
-        y: ((height() >> 1) + (dy << 2)) as i16,
+        x: ((geometry.width() >> 1) + (dx << 2)) as i16,
+        y: ((geometry.height() >> 1) + (dy << 2)) as i16,
     };
     let stars = cx.kernel.stars_in_space;
     let frames = Frames::retain_shared(
@@ -81,7 +82,11 @@ pub(super) unsafe fn ambient(cx: &mut Cx<'_>) {
         cx.set_frame(element, false, Frame::retain(stars));
     } else {
         cx.element_mut(element).life = 12;
-        cx.set_frame(element, false, Frame::retain(SetAbsFrameIndex(stars, 14)));
+        cx.set_frame(
+            element,
+            false,
+            cx.absolute_frame(Frame::retain(stars).view(), 14),
+        );
     }
     let head = cx.elements().head();
     cx.insert_before(element, head);
@@ -139,18 +144,18 @@ pub(crate) fn collision(
     cx.set_target(source, target);
     cx.element_mut(source).velocity.zero();
 }
-unsafe fn populate_ships(world: &crate::engine::World, encounter: &mut ENCOUNTER) {
+fn populate_ships(cx: &mut Cx<'_>, encounter: &mut ENCOUNTER) {
     let race = encounter.race_id as usize;
     let makeup = MAKEUP[race];
     let mut ships = makeup & 15;
     for _ in 0..((makeup >> 4) - ships) {
-        if TFB_Random() as u16 % 100 < 50 {
+        if cx.random() as u16 % 100 < 50 {
             ships += 1;
         }
     }
     ships = ships.min(MAX_HYPER_SHIPS as u8);
     encounter.num_ships = ships;
-    let fleets = world.avail_races_ref();
+    let fleets = cx.world.avail_races_ref();
     let id = fleets
         .at(race)
         .unwrap_or_else(|| panic!("hyperspace encounter fleet"));
@@ -163,7 +168,8 @@ unsafe fn populate_ships(world: &crate::engine::World, encounter: &mut ENCOUNTER
         brief.max_energy = fleet.max_energy;
     }
 }
-unsafe fn add(cx: &mut Cx<'_>, encounter: &mut ENCOUNTER, universe: POINT) -> Option<ElementId> {
+fn add(cx: &mut Cx<'_>, encounter: &mut ENCOUNTER, universe: POINT) -> Option<ElementId> {
+    let geometry = Geometry::new(cx.screen_dimensions());
     if get(cx.world, StoryKey::ARILOU_SPACE_SIDE) >= 2 {
         return None;
     }
@@ -177,9 +183,9 @@ unsafe fn add(cx: &mut Cx<'_>, encounter: &mut ENCOUNTER, universe: POINT) -> Op
     let new = encounter.num_ships == 0;
     let mut point = encounter.loc_pt;
     if new {
-        populate_ships(cx.world, encounter);
+        populate_ships(cx, encounter);
         loop {
-            let random = TFB_Random();
+            let random = cx.random();
             point = POINT {
                 x: (universe.x as i32 + (random as u16 % (XOFFS as u16 * 2)) as i32 - XOFFS as i32)
                     .clamp(0, 9999) as i16,
@@ -193,8 +199,8 @@ unsafe fn add(cx: &mut Cx<'_>, encounter: &mut ENCOUNTER, universe: POINT) -> Op
             }
         }
         encounter.loc_pt = point;
-        encounter.log_x = logx(point.x);
-        encounter.log_y = logy(point.y);
+        encounter.log_x = geometry.log_x(point.x);
+        encounter.log_y = geometry.log_y(point.y);
     }
     let handle = allocate(cx, point);
     if let Some(element) = handle {
@@ -210,19 +216,14 @@ unsafe fn add(cx: &mut Cx<'_>, encounter: &mut ENCOUNTER, universe: POINT) -> Op
             cx.set_frame(
                 element,
                 false,
-                Frame::retain(SetRelFrameIndex(
-                    cx.element_frame_set_first(element, false).raw(),
-                    -i,
-                )),
+                cx.relative_frame(cx.element_frame_set_first(element, false), -i),
             );
             cx.element_mut(element).death = Some(ElementHook::Native(transition));
         } else {
             cx.set_frame(
                 element,
                 false,
-                Frame::retain(DecFrameIndex(
-                    cx.element_frame_set_first(element, false).raw(),
-                )),
+                cx.retreat_frame(cx.element_frame_set_first(element, false)),
             );
         }
         cx.element_mut(element).turn = 1;
@@ -232,7 +233,7 @@ unsafe fn add(cx: &mut Cx<'_>, encounter: &mut ENCOUNTER, universe: POINT) -> Op
         cx.setup_element(element);
         cx.set_intersect_frame(
             element,
-            Frame::retain(DecFrameIndex(cx.kernel.stars_in_space)),
+            cx.retreat_frame(Frame::retain(cx.kernel.stars_in_space).view()),
         );
         cx.primitive_style_mut(element).kind = gfx_object_NUM_PRIMS as u8;
         cx.element_mut(element).flags |= (NONSOLID | IGNORE_VELOCITY) as u16;
@@ -242,14 +243,15 @@ unsafe fn add(cx: &mut Cx<'_>, encounter: &mut ENCOUNTER, universe: POINT) -> Op
     encounter.h_element = handle.map_or(ptr::null_mut(), |id| cx.elements().raw(id));
     handle
 }
-unsafe fn process(
+fn process(
     cx: &mut Cx<'_>,
     encounter: &mut ENCOUNTER,
     universe: POINT,
     ox: i16,
     oy: i16,
-    stamp: *mut STAMP,
+    stamp: &mut POINT,
 ) -> bool {
+    let geometry = Geometry::new(cx.screen_dimensions());
     if encounter.h_element.is_null() && add(cx, encounter, universe).is_none() {
         return false;
     }
@@ -311,8 +313,8 @@ unsafe fn process(
         encounter.log_x += dx as i32;
         encounter.log_y -= dy as i32;
         encounter.loc_pt = POINT {
-            x: universe_x(encounter.log_x),
-            y: universe_y(encounter.log_y),
+            x: geometry.universe_x(encounter.log_x),
+            y: geometry.universe_y(encounter.log_y),
         };
         let radius = encounter.radius.wrapping_add(100);
         let dx = encounter
@@ -346,10 +348,10 @@ unsafe fn process(
     let dy = point.y as i32 - universe.y as i32;
     if (-63..=63).contains(&dx) && (-50..=50).contains(&dy) {
         cx.element_mut(element).next.location = POINT {
-            x: ((encounter.log_x - cx.world.data.flagship.log_x) as i16 as i32 + (width() >> 1))
-                as i16,
-            y: ((encounter.log_y - cx.world.data.flagship.log_y) as i16 as i32 + (height() >> 1))
-                as i16,
+            x: ((encounter.log_x - cx.world.data.flagship.log_x) as i16 as i32
+                + (geometry.width() >> 1)) as i16,
+            y: ((encounter.log_y - cx.world.data.flagship.log_y) as i16 as i32
+                + (geometry.height() >> 1)) as i16,
         };
         if cx.element_mut(element).flags & NONSOLID as u16 != 0 && encounter.transition_state == 0 {
             let next = cx.element(element).next.location;
@@ -369,28 +371,70 @@ unsafe fn process(
         }
         cx.primitive_style_mut(element).kind = gfx_object_NUM_PRIMS as u8;
     }
-    (*stamp).origin = POINT {
+    *stamp = POINT {
         x: ((point.x as i32 * 56 / (63 * 12)) as i16).wrapping_sub(ox),
         y: (((9999 - point.y as i32) * 53 / (50 * 12)) as i16).wrapping_sub(oy),
     };
-    DrawStamp(stamp);
     true
 }
-pub(super) unsafe fn process_all(cx: &mut Cx<'_>, universe: POINT, ox: i16, oy: i16) {
-    let mut stamp = STAMP {
-        origin: POINT { x: 0, y: 0 },
-        frame: SetAbsFrameIndex(cx.kernel.stars_in_space, 91),
-    };
+pub(super) fn process_all(cx: &mut Cx<'_>, universe: POINT, ox: i16, oy: i16) {
+    let frame = cx.absolute_frame(Frame::retain(cx.kernel.stars_in_space).view(), 91);
+    let radar = crate::engine::battle::hyperspace::radar_context(cx.kernel);
+    let mut stamp = POINT { x: 0, y: 0 };
     let mut next = cx.world.encounters_ref().head();
     while let Some(id) = next {
         let encounters = cx.world.encounters_ref();
         let mut encounter = *encounters.get(id);
         next = encounters.succ(id);
         if process(cx, &mut encounter, universe, ox, oy, &mut stamp) {
+            radar.draw_stamp(
+                &crate::graphics::context_abi::ContextFrame::retain(std::ptr::NonNull::new(
+                    frame.raw(),
+                )),
+                stamp,
+            );
             *cx.world.encounters().get_mut(id) = encounter;
         } else {
             cx.world.encounters().remove(id);
             cx.world.encounters().free(id);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::engine::{battle::Battle, Game};
+
+    #[test]
+    fn wrapping_keeps_both_edges_and_single_screen_displacement() {
+        assert_eq!(wrap(-1, 8192), 8191);
+        assert_eq!(wrap(8192, 8192), 0);
+        assert_eq!(wrap(0, 8192), 0);
+        assert_eq!(wrap(8191, 8192), 8191);
+    }
+
+    #[test]
+    fn reforming_one_shots_and_quasispace_do_not_allocate_or_draw_rng() {
+        let mut game = Game::new();
+        game.world.story = Some(crate::engine::world::story::StoryState::new());
+        let mut battle = Battle::new();
+        let mut cx = Cx::new(&mut battle, &mut game.world, &mut game.kernel, || {
+            panic!("unexpected RNG draw")
+        });
+        let mut encounter = crate::engine::world::queues::EncounterRecord {
+            flags: (ENCOUNTER_REFORMING | ONE_SHOT_ENCOUNTER) as u8,
+            num_ships: 1,
+            ..Default::default()
+        };
+        assert!(add(&mut cx, &mut encounter, POINT { x: 100, y: 100 }).is_none());
+        assert_eq!(encounter.transition_state, 100);
+        assert_eq!(encounter.flags, ONE_SHOT_ENCOUNTER as u8);
+        cx.world.set_story_state(StoryKey::ARILOU_SPACE_SIDE, 3);
+        encounter.flags = ENCOUNTER_REFORMING as u8;
+        encounter.transition_state = 9;
+        assert!(add(&mut cx, &mut encounter, POINT { x: 100, y: 100 }).is_none());
+        assert_eq!(encounter.transition_state, 9);
+        assert_eq!(encounter.flags, ENCOUNTER_REFORMING as u8);
     }
 }

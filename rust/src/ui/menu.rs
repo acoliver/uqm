@@ -83,3 +83,5 @@ pub unsafe extern "C" fn DrawMenuStateStrings(begin: BYTE, state: SWORD) {
             .read(|world| draw_menu_state(kernel, world, dimensions, begin, state));
     });
 }
+
+pub(crate) mod hyperspace;

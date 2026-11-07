@@ -1,14 +1,7 @@
 //! Hyperspace collision and transition callbacks.
-#![cfg(not(test))]
 use super::abi::*;
 use super::{get, set};
-#[cfg(not(test))]
 use crate::battle::context_access::navigation::NavigationOps;
-#[cfg(not(test))]
-use crate::battle::context_access::race_access::RaceOps;
-#[cfg(not(test))]
-use crate::battle::context_access::ContextOps;
-#[cfg(not(test))]
 use crate::battle::context_access::StarOps;
 use crate::engine::StoryKey;
 use std::ptr;
@@ -18,11 +11,11 @@ pub(crate) fn element_universe(cx: &Cx<'_>, element: ElementId) -> POINT {
     let (width, height) = cx.screen_dimensions();
     POINT {
         x: crate::navigation::hyper_units::universe_x(
-            cx.navigation().flagship.log_x + i32::from(point.x) - (((width - 64) << 5) >> 1),
+            cx.world.data.flagship.log_x + i32::from(point.x) - (((width - 64) << 5) >> 1),
             width - 64,
         ),
         y: crate::navigation::hyper_units::universe_y(
-            cx.navigation().flagship.log_y + i32::from(point.y) - ((height << 5) >> 1),
+            cx.world.data.flagship.log_y + i32::from(point.y) - ((height << 5) >> 1),
             height,
         ),
     }
@@ -57,11 +50,13 @@ pub(crate) fn unhyper(cx: &mut Cx<'_>, element: ElementId) {
         index += 1;
         if index == cx.frame_count(current.view()) {
             cleanup(cx);
-            cx.set_activity(cx.world.activity() & !(IN_BATTLE as u16));
+            cx.world
+                .set_activity(cx.world.activity() & !(IN_BATTLE as u16));
             match cx.element(element).turn {
                 0 => {
                     save_sis_facing(cx);
-                    cx.set_activity(cx.world.activity() | START_ENCOUNTER as u16);
+                    cx.world
+                        .set_activity(cx.world.activity() | START_ENCOUNTER as u16);
                 }
                 kind @ (1 | 2) => {
                     let point = element_universe(cx, element);
@@ -107,14 +102,15 @@ pub fn hyper_transition(
     element: crate::engine::battle::ElementId,
 ) -> bool {
     if cx.element(element).flags & APPEARING as u16 != 0 {
-        let last = cx.previous_activity();
+        let last = cx.kernel.last_activity;
         if last & CHECK_LOAD as u16 != 0 {
-            cx.set_previous_activity(last & !(CHECK_LOAD as u16));
+            cx.kernel.last_activity = last & !(CHECK_LOAD as u16);
             cx.copy_next_to_current(element);
             cx.setup_element(element);
             cx.element_mut(element).flags |= DEFY_PHYSICS as u16;
             return false;
         } else {
+            cx.kernel.hyperspace_ship_hooks = (cx.element(element).pre, cx.element(element).post);
             cx.element_mut(element).pre = Some(ElementHook::Native(hyper_preprocess));
             cx.element_mut(element).post = None;
             cx.element_mut(element).flags |= NONSOLID as u16;
@@ -133,8 +129,8 @@ pub fn hyper_transition(
                 index &= 15;
             }
             if index == cx.ship_state(cx.owner(element)).facing {
-                cx.element_mut(element).pre = Some(ElementHook::Native(ship_preprocess));
-                cx.element_mut(element).post = Some(ElementHook::Native(ship_postprocess));
+                cx.element_mut(element).pre = cx.kernel.hyperspace_ship_hooks.0;
+                cx.element_mut(element).post = cx.kernel.hyperspace_ship_hooks.1;
                 cx.element_mut(element).flags &= !(NONSOLID as u16);
             }
         }
@@ -238,7 +234,7 @@ pub(super) fn sis_element(cx: &Cx<'_>) -> Option<ElementId> {
 }
 fn save_sis_facing(cx: &mut Cx<'_>) {
     if let Some(element) = sis_element(cx) {
-        cx.navigation_mut().game.ship_facing = cx.ship_state(cx.owner(element)).facing + 1;
+        cx.world.data.game.ship_facing = cx.ship_state(cx.owner(element)).facing + 1;
     }
 }
 /// Retain the flagship facing while the navigation context owns the live queues.
@@ -247,3 +243,61 @@ pub fn save_sis_hyper_state(cx: &mut Cx<'_>) {
 }
 
 use crate::engine::battle::{Cx, ElementId};
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::engine::{battle::Battle, Game};
+
+    #[test]
+    fn portal_death_keeps_the_contacted_side_until_the_entrance_closes() {
+        let mut game = Game::new();
+        game.world.story = Some(crate::engine::world::story::StoryState::new());
+        game.kernel.reset_element_capacity(1);
+        let mut battle = Battle::new();
+        let mut cx = Cx::new(&mut battle, &mut game.world, &mut game.kernel, || 0);
+        let element = cx.alloc_element().unwrap();
+        for side in 0..4 {
+            cx.world.set_story_state(StoryKey::ARILOU_SPACE_SIDE, side);
+            cx.world.set_story_state(StoryKey::ARILOU_SPACE_COUNTER, 1);
+            cx.element_mut(element).flags = DEFY_PHYSICS as u16;
+            portal_death(&mut cx, element);
+            assert_eq!(cx.world.story_state(StoryKey::ARILOU_SPACE_SIDE), side);
+            cx.world.set_story_state(StoryKey::ARILOU_SPACE_COUNTER, 0);
+            portal_death(&mut cx, element);
+            assert_eq!(
+                cx.world.story_state(StoryKey::ARILOU_SPACE_SIDE),
+                if side <= 1 { 0 } else { 3 }
+            );
+        }
+        cx.dispose(element);
+    }
+
+    #[test]
+    fn cleanup_promotes_targeted_encounters_and_clears_all_element_links() {
+        let mut game = Game::new();
+        game.kernel.reset_element_capacity(2);
+        let mut battle = Battle::new();
+        let mut cx = Cx::new(&mut battle, &mut game.world, &mut game.kernel, || 0);
+        let first = cx.alloc_element().unwrap();
+        let second = cx.alloc_element().unwrap();
+        cx.set_target(second, Some(first));
+        let first_raw = cx.elements().raw(first);
+        let second_raw = cx.elements().raw(second);
+        let mut queue = cx.world.encounters();
+        let a = queue.alloc().unwrap();
+        queue.put(a);
+        let b = queue.alloc().unwrap();
+        queue.put(b);
+        queue.get_mut(a).h_element = first_raw;
+        queue.get_mut(b).h_element = second_raw;
+        cleanup(&mut cx);
+        let queue = cx.world.encounters_ref();
+        assert_eq!(queue.head(), Some(b));
+        assert_eq!(queue.succ(b), Some(a));
+        assert!(queue.get(a).h_element.is_null());
+        assert!(queue.get(b).h_element.is_null());
+        cx.dispose(second);
+        cx.dispose(first);
+    }
+}

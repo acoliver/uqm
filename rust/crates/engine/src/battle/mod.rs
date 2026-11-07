@@ -34,3 +34,5 @@ pub use template::{RaceResources, RaceTemplate};
 pub use access::schema;
 
 mod descriptor;
+
+pub mod hyperspace;
