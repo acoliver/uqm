@@ -1860,10 +1860,6 @@ pub fn active_native_window_config() -> Option<&'static ActiveNativeWindowConfig
 }
 
 #[cfg(feature = "debug-process")]
-static PENDING_NATIVE_PRESENTATION: parking_lot::Mutex<Option<NativeWindowChildState>> =
-    parking_lot::Mutex::new(None);
-
-#[cfg(feature = "debug-process")]
 pub(crate) fn record_native_window_presentation(
     observer: &crate::automation::AutomationObserver,
     committed_presentation: u64,
@@ -1909,18 +1905,20 @@ pub(crate) fn record_native_window_presentation(
     };
     if boundary {
         publish_native_window_state(&state)?;
-        *PENDING_NATIVE_PRESENTATION.lock() = None;
+        *observer.pending_native_presentation.lock() = None;
     } else {
-        *PENDING_NATIVE_PRESENTATION.lock() = Some(state);
+        *observer.pending_native_presentation.lock() = Some(state);
     }
     Ok(())
 }
 
 #[cfg(feature = "debug-process")]
-pub(crate) fn publish_final_native_window_presentation() -> Result<(), String> {
+pub(crate) fn publish_final_native_window_presentation(
+    observer: &crate::automation::AutomationObserver,
+) -> Result<(), String> {
     // Graphics teardown has already happened. Publish the exact last recorded
     // frame, rather than querying a destroyed window or inventing a new frame.
-    if let Some(state) = PENDING_NATIVE_PRESENTATION.lock().take() {
+    if let Some(state) = observer.pending_native_presentation.lock().take() {
         publish_native_window_state(&state)?;
     }
     Ok(())

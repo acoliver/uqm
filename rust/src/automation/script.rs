@@ -4477,7 +4477,7 @@ mod tests {
             panic!("expected assert_state");
         };
         assert_eq!(predicate.all.len(), 2);
-        assert_eq!(predicate.all[1].key, "sis:fuel");
+        assert_eq!(predicate.all[1].key(), "sis:fuel");
     }
 
     #[test]

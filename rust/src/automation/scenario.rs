@@ -8,7 +8,6 @@
 use crate::engine::StoryKey;
 use serde::Deserialize;
 use std::fmt;
-use std::sync::OnceLock;
 
 /// Closed registry of deterministic automation scenes.
 #[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq, Hash)]
@@ -227,7 +226,7 @@ impl PendingStartScene {
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-struct SceneObservation {
+pub(crate) struct SceneObservation {
     active: Option<AutomationScene>,
     encounter_conversation: Option<u32>,
     dialogue_conversation: Option<u32>,
@@ -235,7 +234,7 @@ struct SceneObservation {
 }
 
 impl SceneObservation {
-    fn begin(&mut self, scene: AutomationScene) {
+    pub(crate) fn begin(&mut self, scene: AutomationScene) {
         *self = Self {
             active: Some(scene),
             encounter_conversation: None,
@@ -244,19 +243,19 @@ impl SceneObservation {
         };
     }
 
-    fn observe_encounter(&mut self, conversation: u32) {
+    pub(crate) fn observe_encounter(&mut self, conversation: u32) {
         self.encounter_conversation = Some(conversation);
         self.dialogue_conversation = None;
     }
 
-    fn observe_dialogue(&mut self, conversation: u32) {
+    pub(crate) fn observe_dialogue(&mut self, conversation: u32) {
         self.dialogue_conversation = Some(conversation);
         if self.encounter_conversation.is_some() {
             self.dispatch_generation = self.dispatch_generation.saturating_add(1);
         }
     }
 
-    fn verify_dispatch(&self, encounter: u32, dialogue: u32) -> Result<(), SceneError> {
+    pub(crate) fn verify_dispatch(&self, encounter: u32, dialogue: u32) -> Result<(), SceneError> {
         let actual_encounter = self
             .encounter_conversation
             .ok_or(SceneError::EncounterNotDispatched)?;
@@ -278,7 +277,7 @@ impl SceneObservation {
         Ok(())
     }
 
-    fn verify(&self, scene: AutomationScene) -> Result<ScenePlan, SceneError> {
+    pub(crate) fn verify(&self, scene: AutomationScene) -> Result<ScenePlan, SceneError> {
         let plan = scene_plan(scene, SceneActivationBoundary::GameInitialized)?;
         let actual_scene = self.active.ok_or(SceneError::NoActiveScene)?;
         if actual_scene != scene {
@@ -307,11 +306,6 @@ impl SceneObservation {
         }
         Ok(plan)
     }
-}
-
-fn observation() -> &'static parking_lot::Mutex<SceneObservation> {
-    static OBSERVATION: OnceLock<parking_lot::Mutex<SceneObservation>> = OnceLock::new();
-    OBSERVATION.get_or_init(|| parking_lot::Mutex::new(SceneObservation::default()))
 }
 
 /// Effects a scene has when it takes over from the new game's first
@@ -383,86 +377,66 @@ impl SceneEntryOps for LinkedSceneEntry<'_> {
 ///
 /// This prepares the real NPC queue and sets `START_ENCOUNTER`; the normal
 /// main-loop state machine subsequently calls `rust_race_communication`.
-pub fn activate(
-    cx: &mut crate::engine::battle::Cx<'_>,
-    scene: AutomationScene,
-    boundary: SceneActivationBoundary,
-    enter: impl FnOnce(&ScenePlan),
-) -> Result<ScenePlan, SceneError> {
-    let plan = scene_plan(scene, boundary)?;
-    observation().lock().begin(scene);
+impl super::coordinator::AutomationObserver {
+    pub(crate) fn activate_scene(
+        &self,
+        cx: &mut crate::engine::battle::Cx<'_>,
+        scene: AutomationScene,
+        boundary: SceneActivationBoundary,
+        enter: impl FnOnce(&ScenePlan),
+    ) -> Result<ScenePlan, SceneError> {
+        let plan = scene_plan(scene, boundary)?;
+        self.scene.lock().begin(scene);
 
-    #[cfg(not(test))]
-    unsafe {
-        if scene == AutomationScene::SamatraDevFixture {
-            crate::comm::dispatch::prepare_samatra_dev_fixture(cx)
-                .map_err(SceneError::SetupFailed)?;
-        }
-        if scene == AutomationScene::SolProbeEncounter {
+        #[cfg(not(test))]
+        unsafe {
+            if scene == AutomationScene::SamatraDevFixture {
+                crate::comm::dispatch::prepare_samatra_dev_fixture(cx)
+                    .map_err(SceneError::SetupFailed)?;
+            }
+            if scene == AutomationScene::SolProbeEncounter {
+                if let Err(reason) =
+                    crate::comm::dispatch::prepare_automation_sol_probe_encounter(cx.world)
+                {
+                    *self.scene.lock() = SceneObservation::default();
+                    return Err(SceneError::SetupFailed(reason));
+                }
+            }
             if let Err(reason) =
-                crate::comm::dispatch::prepare_automation_sol_probe_encounter(cx.world)
+                crate::comm::dispatch::place_flagship_at_star(cx.world, plan.star_location)
             {
-                *observation().lock() = SceneObservation::default();
+                *self.scene.lock() = SceneObservation::default();
                 return Err(SceneError::SetupFailed(reason));
             }
+            enter(&plan);
         }
-        if let Err(reason) =
-            crate::comm::dispatch::place_flagship_at_star(cx.world, plan.star_location)
+
+        #[cfg(test)]
         {
-            *observation().lock() = SceneObservation::default();
-            return Err(SceneError::SetupFailed(reason));
+            let _ = (cx, plan, enter);
+            *self.scene.lock() = SceneObservation::default();
+            return Err(SceneError::SetupFailed(
+                "runtime scene activation is unavailable in isolated unit tests",
+            ));
         }
-        enter(&plan);
+
+        #[allow(unreachable_code)]
+        Ok(plan)
+    }
+}
+
+impl SceneObservation {
+    pub(crate) fn active_scene(&self) -> Option<AutomationScene> {
+        self.active
     }
 
-    #[cfg(test)]
-    {
-        let _ = (cx, plan, enter);
-        *observation().lock() = SceneObservation::default();
-        return Err(SceneError::SetupFailed(
-            "runtime scene activation is unavailable in isolated unit tests",
-        ));
+    pub(crate) fn dispatch_observation(&self) -> (u64, Option<u32>, Option<u32>) {
+        (
+            self.dispatch_generation,
+            self.encounter_conversation,
+            self.dialogue_conversation,
+        )
     }
-
-    #[allow(unreachable_code)]
-    Ok(plan)
-}
-
-/// Record the normal RaceCommunication mapping selected from the NPC queue.
-pub fn observe_encounter_dispatch(conversation: u32) {
-    observation().lock().observe_encounter(conversation);
-}
-
-/// Record the race dialogue selected by `rust_init_race_dispatch`.
-pub fn observe_dialogue_dispatch(conversation: u32) {
-    observation().lock().observe_dialogue(conversation);
-}
-
-/// Return the scene currently active in this process, if any.
-#[must_use]
-pub fn active_scene() -> Option<AutomationScene> {
-    observation().lock().active
-}
-
-/// Verify that a scene reached its expected encounter and dialogue dispatches.
-pub fn verify(scene: AutomationScene) -> Result<ScenePlan, SceneError> {
-    observation().lock().verify(scene)
-}
-
-/// Verify the most recently observed normal encounter/dialogue dispatch IDs.
-pub fn verify_dispatch(encounter: u32, dialogue: u32) -> Result<(), SceneError> {
-    observation().lock().verify_dispatch(encounter, dialogue)
-}
-
-/// Return the latest complete dispatch generation and IDs.
-#[must_use]
-pub fn dispatch_observation() -> (u64, Option<u32>, Option<u32>) {
-    let observed = observation().lock();
-    (
-        observed.dispatch_generation,
-        observed.encounter_conversation,
-        observed.dialogue_conversation,
-    )
 }
 
 #[cfg(test)]

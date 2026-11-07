@@ -38,6 +38,8 @@ pub enum CheckpointView<'a> {
     GameOptions(bool),
     PlanetMenu(usize),
     StarbaseMenu(bool),
+    ShipPicker(bool),
+    ShipPickerCursor { x: i16, y: i16 },
     Won,
     PresentationStarted,
     PresentationCancelled,

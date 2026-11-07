@@ -288,7 +288,7 @@ pub fn extract_save(
             _ => None,
         })
         .flat_map(|predicate| &predicate.all)
-        .filter_map(|condition| condition.key.strip_prefix("story:"))
+        .filter_map(|condition| condition.key().strip_prefix("story:"))
         .collect();
     let campaign_state = saved_campaign_state(&save_bytes, &story_keys)?;
     let commit = producing_commit(&run)?;
@@ -919,16 +919,16 @@ mod tests {
                 condition.op,
                 uqm_rust::automation::campaign_state::StateOp::Eq
             );
-            assert_eq!(condition.value, provenance.campaign_state[&condition.key]);
+            assert_eq!(condition.value, provenance.campaign_state[condition.key()]);
         }
         assert!(wanted
             .all
             .iter()
-            .any(|condition| condition.key == "star:current"));
+            .any(|condition| condition.key() == "star:current"));
         assert!(wanted
             .all
             .iter()
-            .any(|condition| condition.key == "sis:fuel"));
+            .any(|condition| condition.key() == "sis:fuel"));
     }
 
     #[test]
@@ -982,7 +982,12 @@ mod tests {
                         condition.op,
                         uqm_rust::automation::campaign_state::StateOp::Eq
                     );
-                    assert_eq!(condition.value, actual[&condition.key], "{}", condition.key);
+                    assert_eq!(
+                        condition.value,
+                        actual[condition.key()],
+                        "{}",
+                        condition.key()
+                    );
                 }
             }
         }
@@ -1030,7 +1035,7 @@ mod tests {
                 condition.op,
                 uqm_rust::automation::campaign_state::StateOp::Eq
             );
-            assert_eq!(condition.value, provenance.campaign_state[&condition.key]);
+            assert_eq!(condition.value, provenance.campaign_state[condition.key()]);
         }
         for (key, value) in [
             ("story:CLEAR_SPINDLE_ON_SHIP", 1),

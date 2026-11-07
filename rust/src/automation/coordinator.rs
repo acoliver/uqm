@@ -23,6 +23,7 @@ use input::discard_held_repeat;
 mod navigation;
 mod parity;
 mod save_capture;
+mod scene;
 mod terminal;
 
 use crate::automation::{
@@ -298,6 +299,12 @@ struct CoordInner {
 /// The automation coordinator, holding all live state needed to drive
 /// the scheduler/watchdog during the game loop.
 pub struct AutomationObserver {
+    pub(crate) ui: super::ui_observation::UiObservation,
+    pub(crate) scene: Mutex<scenario::SceneObservation>,
+    pub(crate) ending: Mutex<super::ending::Ending>,
+    #[cfg(feature = "debug-process")]
+    pub(crate) pending_native_presentation:
+        Mutex<Option<super::native_window::NativeWindowChildState>>,
     pub(crate) activity: crate::engine::world::activity::ActivityControl,
     pub(crate) input: crate::engine::input::InputControls,
     _configuration: uqm_engine::configuration::Configuration,
@@ -417,13 +424,15 @@ impl AutomationObserver {
 
         let runtime = Self::activate_input_runtime();
 
-        let (_, consumed_communication_completions) =
-            crate::automation::ui_observation::communication_lifecycle();
-
         let parity = Self::create_parity(&output_root);
         let parity_failed = Self::trace_initialization_failed(&parity, "parity");
         let native_trace_failed = Self::trace_initialization_failed(&native_trace, "native");
         let coord = AutomationObserver {
+            ui: Default::default(),
+            scene: Default::default(),
+            ending: Default::default(),
+            #[cfg(feature = "debug-process")]
+            pending_native_presentation: Default::default(),
             activity,
             input,
             _configuration: configuration,
@@ -441,11 +450,7 @@ impl AutomationObserver {
             runtime,
             orbit_exit_phase: AtomicU64::new(0),
             flagship_destroyed: Default::default(),
-            inner: Mutex::new(CoordInner::new(
-                now,
-                PendingStartScene::new(start_scene),
-                consumed_communication_completions,
-            )),
+            inner: Mutex::new(CoordInner::new(now, PendingStartScene::new(start_scene), 0)),
         };
 
         coord.record_start(
@@ -540,7 +545,7 @@ impl AutomationObserver {
 
         let scene = scene?;
 
-        match scenario::activate(cx, scene, SceneActivationBoundary::GameInitialized, |_| {}) {
+        match self.activate_scene(cx, scene, SceneActivationBoundary::GameInitialized, |_| {}) {
             Ok(plan) => Some(plan),
             Err(error) => {
                 let mut inner = self.inner.lock();
@@ -655,8 +660,7 @@ impl AutomationObserver {
             Some(Action::SelectResponse(_)) => 0,
             _ => return false,
         };
-        let (generation, count, ready) =
-            crate::automation::ui_observation::communication_responses();
+        let (generation, count, ready) = self.ui.communication_responses();
         generation > inner.consumed_response_generation && count > index && !ready
     }
 
@@ -742,11 +746,13 @@ impl AutomationObserver {
     }
 
     fn campaign_source<'a>(
-        &self,
+        &'a self,
         world: &'a campaign_state::CampaignView,
     ) -> campaign_state::LiveCampaign<'a> {
         campaign_state::LiveCampaign {
             world,
+            ui: &self.ui,
+            ending: *self.ending.lock(),
             flagship_destroyed: self.flagship_destroyed.load(Ordering::SeqCst),
         }
     }
@@ -766,8 +772,7 @@ impl AutomationObserver {
         if let Some(Action::WaitForCommunicationEnd(wait)) =
             self.actions.get(inner.sched_state.step_index)
         {
-            let (active, completions) =
-                crate::automation::ui_observation::communication_lifecycle();
+            let (active, completions) = self.ui.communication_lifecycle();
             let target = inner
                 .consumed_communication_completions
                 .saturating_add(wait.minimum_completions);
@@ -787,8 +792,7 @@ impl AutomationObserver {
             self.actions.get(inner.sched_state.step_index),
             Some(Action::WaitForCommunicationReplay(_))
         ) {
-            let (generation, _) =
-                crate::automation::ui_observation::communication_replay_observation();
+            let (generation, _) = self.ui.communication_replay_observation();
             if consume_new_generation(&mut inner.consumed_replay_generation, generation) {
                 scheduler_event = SchedulerEvent::ConditionReached;
                 self.write_trace_labeled(
@@ -803,13 +807,12 @@ impl AutomationObserver {
             // Hail through the encounter preview when waiting for dialogue.
             // The first preview callback initializes its menu and ignores input.
             let select = crate::automation::script::MenuKey::Select.index();
-            let hail = crate::automation::ui_observation::encounter_menu_active()
-                && inner.input_seen % 4 == 3;
+            let hail = self.ui.encounter_menu_active() && inner.input_seen % 4 == 3;
             if !self.inject_menu_key(i32::from(select), i32::from(hail)) {
                 self.reject_input(inner, "menu", i32::from(select), i32::from(hail));
                 return scheduler_event;
             }
-            let snapshot = crate::automation::ui_observation::conversation_snapshot();
+            let snapshot = self.ui.conversation_snapshot();
             if snapshot.has_fresh_responses(
                 wait.minimum,
                 inner.consumed_communication_completions,
@@ -845,8 +848,7 @@ impl AutomationObserver {
         } else if let Some(Action::SelectResponse(select)) =
             self.actions.get(inner.sched_state.step_index)
         {
-            let (generation, count, ready) =
-                crate::automation::ui_observation::communication_responses();
+            let (generation, count, ready) = self.ui.communication_responses();
             if !released_semantic_select
                 && generation > inner.consumed_response_generation
                 && count > 0
@@ -881,8 +883,7 @@ impl AutomationObserver {
         } else if let Some(Action::SelectCommunicationResponse(select)) =
             self.actions.get(inner.sched_state.step_index)
         {
-            let (generation, count, ready) =
-                crate::automation::ui_observation::communication_responses();
+            let (generation, count, ready) = self.ui.communication_responses();
             if !released_semantic_select
                 && generation > inner.consumed_response_generation
                 && count > select.index
@@ -920,7 +921,7 @@ impl AutomationObserver {
                 PlanetMenuPhaseName::Dispatch => PlanetMenuPhase::Dispatch,
                 PlanetMenuPhaseName::LandingSite => PlanetMenuPhase::LandingSite,
             };
-            let (generation, phase) = crate::automation::ui_observation::planet_menu_observation();
+            let (generation, phase) = self.ui.planet_menu_observation();
             if !released_semantic_select
                 && !orbit_transition_pending
                 && generation > inner.consumed_planet_menu_generation
@@ -947,7 +948,7 @@ impl AutomationObserver {
             self.actions.get(inner.sched_state.step_index),
             Some(Action::PickBattleShip(_))
         ) {
-            let (generation, active) = crate::automation::ui_observation::ship_picker_observation();
+            let (generation, active) = self.ui.ship_picker_observation();
             if !released_semantic_select
                 && active
                 && generation > inner.consumed_ship_picker_generation
@@ -988,7 +989,7 @@ impl AutomationObserver {
             self.actions.get(inner.sched_state.step_index)
         {
             match inner.battle_loss.observe(
-                mode::require_live(world),
+                mode::require_live(world, &self.ui, self.scene.lock().active_scene()),
                 crate::automation::battle_observer::current_frame(),
                 battle_outcome::live_fleets(),
                 wait.minimum_ships,
@@ -1037,7 +1038,7 @@ impl AutomationObserver {
         } else if let Some(Action::WaitForDispatch(wait)) =
             self.actions.get(inner.sched_state.step_index)
         {
-            let (generation, encounter, dialogue) = scenario::dispatch_observation();
+            let (generation, encounter, dialogue) = self.scene.lock().dispatch_observation();
             if generation > inner.consumed_dispatch_generation
                 && encounter == Some(wait.encounter)
                 && dialogue == Some(wait.dialogue)
@@ -1208,7 +1209,7 @@ impl AutomationObserver {
         let (nodes, retrieved) = crate::planet_side::telemetry::energy_snapshot();
         let flags = ARTIFACT_FLAGS
             .iter()
-            .map(|key| world.named_state_value(key).map(u32::from))
+            .map(|(key, _)| world.story_value(*key).map(u32::from))
             .collect::<Option<Vec<_>>>();
         let Some(flags) = flags else {
             self.set_terminal(inner, TerminalClass::SemanticMismatch);
@@ -1219,7 +1220,7 @@ impl AutomationObserver {
             lander: planet_minerals::PlanetSnapshot::live(),
             nodes,
             retrieved,
-            vault_unlocked: world.named_state_value("SHIP_VAULT_UNLOCKED") == Some(1),
+            vault_unlocked: world.story_value(StoryKey::SHIP_VAULT_UNLOCKED) == Some(1),
             flags,
         };
         let progress = inner.energy.observe(step, &observation);
@@ -1265,7 +1266,7 @@ impl AutomationObserver {
         use crate::automation::samatra::{Controls, Progress};
         use crate::automation::script::{MenuKey, PlayerKey};
         let (events, snapshot) = crate::automation::samatra::observe();
-        let observation = crate::automation::input_ffi::fleet_fight_observation(world);
+        let observation = crate::automation::input_ffi::fleet_fight_observation(world, &self.ui);
         if inner.input_seen % 60 == 1 || inner.sched_state.phase == ActionPhase::WaitingForInput {
             self.write_trace_labeled(
                 inner,
@@ -1343,7 +1344,7 @@ impl AutomationObserver {
         use crate::automation::fleet_fight::Progress;
         let progress = inner.fleet_fight.observe(
             max_ticks,
-            crate::automation::input_ffi::fleet_fight_observation(world),
+            crate::automation::input_ffi::fleet_fight_observation(world, &self.ui),
         );
         let key = match &progress {
             Progress::Input(key) => *key,
@@ -1384,10 +1385,11 @@ impl AutomationObserver {
         event: SchedulerEvent,
     ) -> SchedulerEvent {
         use crate::automation::fleet_fight::RetreatProgress;
-        let progress = inner
-            .fleet_retreat
-            .observe(max_ticks, input_ffi::fleet_fight_observation(world));
-        let (talking, _) = crate::automation::ui_observation::communication_lifecycle();
+        let progress = inner.fleet_retreat.observe(
+            max_ticks,
+            input_ffi::fleet_fight_observation(world, &self.ui),
+        );
+        let (talking, _) = self.ui.communication_lifecycle();
         if talking && matches!(progress, RetreatProgress::Input { .. }) {
             for phrase in ["like_to_leave", "bye"] {
                 if crate::comm::ffi::offered_response_index(phrase).is_ok() {
@@ -1454,11 +1456,9 @@ impl AutomationObserver {
                 return event;
             }
         }
-        if crate::automation::ui_observation::encounter_menu_active()
-            && !flight.target.is_arilou_home()
-        {
+        if self.ui.encounter_menu_active() && !flight.target.is_arilou_home() {
             if !inner.star_encounter_active {
-                let observation = input_ffi::fleet_fight_observation(world);
+                let observation = input_ffi::fleet_fight_observation(world, &self.ui);
                 self.write_trace_labeled(
                     inner,
                     RecordKind::SemanticAssertion,
@@ -1467,7 +1467,7 @@ impl AutomationObserver {
                         observation.flagship_crew,
                         observation.activity,
                         observation.escape_generation,
-                        input_ffi::star_flight_observation(world, flight.target).position
+                        input_ffi::star_flight_observation(world, flight.target, &self.ui).position
                     ),
                 );
             }
@@ -1486,7 +1486,7 @@ impl AutomationObserver {
             // A fleet win resumes the interrupted flight, not the next action.
             return event;
         }
-        let observation = input_ffi::star_flight_observation(world, flight.target);
+        let observation = input_ffi::star_flight_observation(world, flight.target, &self.ui);
         let progress = inner.star_flight.observe(flight, observation);
         let input = match &progress {
             Progress::Input(key) => *key,
@@ -1537,7 +1537,7 @@ impl AutomationObserver {
         phrase: &str,
     ) -> bool {
         use crate::automation::script::MenuKey;
-        let (active, completions) = crate::automation::ui_observation::communication_lifecycle();
+        let (active, completions) = self.ui.communication_lifecycle();
         if inner.patrol_response_pending && !active {
             inner.consumed_communication_completions = completions;
             inner.patrol_response_pending = false;
@@ -1551,7 +1551,7 @@ impl AutomationObserver {
         if world.story_value(StoryKey::GLOBAL_FLAGS_AND_DATA) == Some(128) {
             return false;
         }
-        let preview = crate::automation::ui_observation::encounter_menu_active();
+        let preview = self.ui.encounter_menu_active();
         if !preview && !active {
             return false;
         }
@@ -1559,8 +1559,7 @@ impl AutomationObserver {
             self.reject_input(inner, "patrol_navigation", -1, -1);
             return true;
         }
-        let (generation, count, ready) =
-            crate::automation::ui_observation::communication_responses();
+        let (generation, count, ready) = self.ui.communication_responses();
         let mut select = preview && inner.input_seen % 4 == 3;
         if active && count > 0 && generation > inner.consumed_response_generation {
             match crate::comm::ffi::offered_response_index(phrase) {
@@ -1611,7 +1610,7 @@ impl AutomationObserver {
             if inner.sched_state.phase == ActionPhase::WaitingForInput {
                 inner.star_encounter_active = false;
             }
-            if crate::automation::ui_observation::encounter_menu_active() {
+            if self.ui.encounter_menu_active() {
                 inner.star_encounter_active = true;
             }
             if inner.star_encounter_active {
@@ -1638,8 +1637,8 @@ impl AutomationObserver {
         if let Some(Action::NavigateToContact(step)) =
             self.actions.get(inner.sched_state.step_index)
         {
-            let preview = crate::automation::ui_observation::encounter_menu_active();
-            let conversation = crate::automation::ui_observation::conversation_snapshot().active;
+            let preview = self.ui.encounter_menu_active();
+            let conversation = self.ui.conversation_snapshot().active;
             let contact = preview || conversation;
             let snapshot = crate::automation::input_ffi::contact_snapshot(world, step.race);
             let control = if contact {
@@ -1917,34 +1916,17 @@ impl AutomationObserver {
     ) -> bool {
         // Runtime semantic assertions are checked before allowing the pure
         // scheduler to advance their action.
-        if let Some(Action::AssertScene(assertion)) = self.actions.get(inner.sched_state.step_index)
-        {
-            match scenario::verify(assertion.scene) {
-                Ok(plan) => self.write_trace_labeled(
-                    inner,
-                    RecordKind::SemanticAssertion,
-                    format!(
-                        "scene_verified:{}:encounter={}:dialogue={}",
-                        plan.scene.name(),
-                        plan.expected_encounter_conversation,
-                        plan.expected_dialogue_conversation
-                    ),
-                ),
-                Err(error) => {
-                    self.write_trace_labeled(
-                        inner,
-                        RecordKind::SemanticAssertion,
-                        error.to_string(),
-                    );
-                    self.set_terminal(inner, TerminalClass::SemanticMismatch);
-                    return true;
-                }
-            }
+        if self.verify_scene_assertion(inner) {
+            return true;
         }
 
         if let Some(Action::AssertMode(assertion)) = self.actions.get(inner.sched_state.step_index)
         {
-            match crate::automation::mode::require_live(world) {
+            match crate::automation::mode::require_live(
+                world,
+                &self.ui,
+                self.scene.lock().active_scene(),
+            ) {
                 Ok(observed) if observed == assertion.mode => self.write_trace_labeled(
                     inner,
                     RecordKind::SemanticAssertion,
@@ -1980,7 +1962,11 @@ impl AutomationObserver {
         if let Some(Action::AssertDispatch(assertion)) =
             self.actions.get(inner.sched_state.step_index)
         {
-            match scenario::verify_dispatch(assertion.encounter, assertion.dialogue) {
+            match self
+                .scene
+                .lock()
+                .verify_dispatch(assertion.encounter, assertion.dialogue)
+            {
                 Ok(()) => self.write_trace_labeled(
                     inner,
                     RecordKind::SemanticAssertion,
@@ -2005,7 +1991,7 @@ impl AutomationObserver {
             self.actions.get(inner.sched_state.step_index),
             Some(Action::AssertGameOptions(_))
         ) {
-            match crate::automation::ui_observation::verify_game_options_active() {
+            match self.ui.verify_game_options_active() {
                 Ok(()) => self.write_trace_labeled(
                     inner,
                     RecordKind::SemanticAssertion,
@@ -2026,9 +2012,7 @@ impl AutomationObserver {
         if let Some(Action::AssertCommunicationResponses(assertion)) =
             self.actions.get(inner.sched_state.step_index)
         {
-            match crate::automation::ui_observation::verify_communication_responses(
-                assertion.minimum,
-            ) {
+            match self.ui.verify_communication_responses(assertion.minimum) {
                 Ok(actual) => self.write_trace_labeled(
                     inner,
                     RecordKind::SemanticAssertion,
@@ -2064,7 +2048,7 @@ impl AutomationObserver {
             self.actions.get(inner.sched_state.step_index)
         {
             match inner.flight_position.record(
-                mode::require_live(world),
+                mode::require_live(world, &self.ui, self.scene.lock().active_scene()),
                 flight_position::live_position(world),
             ) {
                 Ok(position) => self.write_trace_labeled(
@@ -2087,7 +2071,7 @@ impl AutomationObserver {
             self.actions.get(inner.sched_state.step_index)
         {
             match inner.flight_position.assert_displacement(
-                mode::require_live(world),
+                mode::require_live(world, &self.ui, self.scene.lock().active_scene()),
                 flight_position::live_position(world),
                 assertion.minimum_logical_units,
             ) {
@@ -2111,7 +2095,7 @@ impl AutomationObserver {
             self.actions.get(inner.sched_state.step_index)
         {
             match inner.flight_position.assert_stationary(
-                mode::require_live(world),
+                mode::require_live(world, &self.ui, self.scene.lock().active_scene()),
                 flight_position::live_position(world),
                 assertion.maximum_logical_units,
             ) {
@@ -2135,7 +2119,7 @@ impl AutomationObserver {
             self.actions.get(inner.sched_state.step_index)
         {
             match inner.flight_position.record_saved(
-                mode::require_live(world),
+                mode::require_live(world, &self.ui, self.scene.lock().active_scene()),
                 flight_position::live_position(world),
             ) {
                 Ok(position) => self.write_trace_labeled(
@@ -2158,7 +2142,7 @@ impl AutomationObserver {
             self.actions.get(inner.sched_state.step_index)
         {
             match inner.flight_position.assert_restored(
-                mode::require_live(world),
+                mode::require_live(world, &self.ui, self.scene.lock().active_scene()),
                 flight_position::live_position(world),
             ) {
                 Ok((saved, observed)) => self.write_trace_labeled(
@@ -2181,7 +2165,7 @@ impl AutomationObserver {
             self.actions.get(inner.sched_state.step_index)
         {
             match ship_resources::assert_ship_resources(
-                mode::require_live(world),
+                mode::require_live(world, &self.ui, self.scene.lock().active_scene()),
                 ship_resources::live_resources(world),
                 *assertion,
             ) {
@@ -2224,7 +2208,7 @@ impl AutomationObserver {
             self.actions.get(inner.sched_state.step_index)
         {
             match ship_element::assert_ship_element(
-                mode::require_live(world),
+                mode::require_live(world, &self.ui, self.scene.lock().active_scene()),
                 ship_element::live_amounts(world),
                 *assertion,
             ) {
@@ -2691,7 +2675,7 @@ impl AutomationObserver {
             self.flush_native_trace()
                 .map_err(|error| format!("cannot finalize native trace: {error}"))?;
             #[cfg(feature = "debug-process")]
-            super::native_window::publish_final_native_window_presentation()?;
+            super::native_window::publish_final_native_window_presentation(self)?;
         } else {
             let mut trace = Vec::new();
             self.runtime
@@ -3696,10 +3680,8 @@ mod tests {
             );
             assert_eq!(inner.sched_state, SchedulerState::initial());
         }
-        use crate::automation::ui_observation::{
-            rust_automation_observe_planet_menu, PlanetMenuPhase,
-        };
-        rust_automation_observe_planet_menu(PlanetMenuPhase::Dispatch as usize);
+        use crate::automation::ui_observation::PlanetMenuPhase;
+        coord.observe_planet_menu(PlanetMenuPhase::Dispatch as usize);
         assert!(!coord.process_input_inner(&mut campaign_state::empty_view));
         assert_eq!(coord.inner.lock().sched_state.step_index, 1);
         assert!(coord.process_input_inner(&mut campaign_state::empty_view));
