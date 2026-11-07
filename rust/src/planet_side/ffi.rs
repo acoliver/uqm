@@ -191,13 +191,7 @@ fn run_retained_session(
     let mut world_visuals = super::visual_adapter::CffiWorldVisuals::new(&assets, &mut visuals);
     let channels = game.borrow().kernel.channels.clone();
     install_fixture(fixture, &session, &surface, &mut world_visuals)?;
-    // SAFETY: both frames are owned by the live lander asset set for this trip.
-    let (earthquake_frame_count, lava_frame_count) = unsafe {
-        (
-            GetFrameCount(assets.graphic(LanderGraphic::Earthquake).cast()),
-            GetFrameCount(assets.graphic(LanderGraphic::Lava).cast()),
-        )
-    };
+    let (earthquake_frame_count, lava_frame_count) = hazard_frame_counts(&assets);
     let publish = |trip: &TripTelemetry| {
         observe
             .borrow_mut()
@@ -258,8 +252,17 @@ fn run_retained_session(
         &mut controller.adapters.ship,
         outcome.is_ok(),
     )?;
-    drop(controller);
     Ok(outcome)
+}
+
+fn hazard_frame_counts(assets: &impl PlanetSideAssetAccess) -> (u16, u16) {
+    // SAFETY: the trip retains both hazard frames throughout this metadata read.
+    unsafe {
+        (
+            GetFrameCount(assets.graphic(LanderGraphic::Earthquake).cast()),
+            GetFrameCount(assets.graphic(LanderGraphic::Lava).cast()),
+        )
+    }
 }
 
 fn prepare_frame(
