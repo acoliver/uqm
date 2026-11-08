@@ -5,11 +5,9 @@
 use crate::ui::{rgb15, settings::play_menu_sound};
 mod catalog;
 mod crew;
-mod drawing;
-use super::{shipyard_frame as frame, shipyard_hangar as hangar, sis};
+use super::{shipyard_frame as frame, shipyard_hangar as hangar};
 use catalog::{get_available_race_count, get_available_race_from_index};
 use crew::{crew_transaction, purchased_crew};
-use drawing::draw_blue_print;
 
 use crate::engine::battle::{link_queue::LinkId, Cx};
 use crate::engine::world::queues::{FleetInfo, Fragment};
@@ -48,11 +46,11 @@ enum ModifyMode {
 }
 
 const BLACK: Color = rgb15(0, 0, 0);
-const SOUND_UP: MENU_SOUND_FLAGS = 1 << 0;
-const SOUND_DOWN: MENU_SOUND_FLAGS = 1 << 1;
-const SOUND_ARROWS: MENU_SOUND_FLAGS = 0x0f;
-const SOUND_SELECT: MENU_SOUND_FLAGS = 1 << 4;
-const SOUND_CANCEL: MENU_SOUND_FLAGS = 1 << 5;
+const SOUND_UP: u16 = 1 << 0;
+const SOUND_DOWN: u16 = 1 << 1;
+const SOUND_ARROWS: u16 = 0x0f;
+const SOUND_SELECT: u16 = 1 << 4;
+const SOUND_CANCEL: u16 = 1 << 5;
 
 static mut POWER_STAMP: STAMP = STAMP {
     origin: POINT { x: 0, y: 0 },
@@ -219,29 +217,32 @@ unsafe fn show_combat_ship(
     }
 }
 
-unsafe fn dms_flash_flag_ship(cx: &mut crate::engine::battle::Cx<'_>) {
+fn dms_flash_flag_ship(cx: &mut crate::engine::battle::Cx<'_>) {
     let r = RECT {
         corner: POINT { x: 0, y: 0 },
         extent: EXTENT {
-            width: (ScreenWidth - STATUS_WIDTH as i32 - SAFE_X as i32 * 2 - 14) as i16,
+            width: (cx.screen_dimensions().0
+                - crate::engine::math::battle_types::STATUS_WIDTH
+                - i32::from(crate::starbase::ids::SAFE_X) * 2
+                - 14) as i16,
             height: 61,
         },
     };
     highlight_rect(cx.kernel, r);
 }
 
-unsafe fn dms_flash_escort_ship(cx: &mut crate::engine::battle::Cx<'_>, slot: BYTE) {
+fn dms_flash_escort_ship(cx: &mut crate::engine::battle::Cx<'_>, slot: BYTE) {
     highlight_rect(cx.kernel, DMS_GetEscortShipRect(slot));
 }
 
-unsafe fn dms_flash_flag_ship_crew_count(cx: &mut crate::engine::battle::Cx<'_>) {
-    SetContext(cx.kernel.status_context);
+fn dms_flash_flag_ship_crew_count(cx: &mut crate::engine::battle::Cx<'_>) {
+    crate::graphics::context_abi::ContextLease::require(cx.kernel.status_context).select();
     let r = crate::ui::sis::gauges::gauge_rect(true);
     highlight_rect(cx.kernel, r);
-    SetContext(cx.kernel.space_context);
+    crate::graphics::context_abi::ContextLease::require(cx.kernel.space_context).select();
 }
 
-unsafe fn dms_flash_escort_ship_crew_count(cx: &mut crate::engine::battle::Cx<'_>, slot: BYTE) {
+fn dms_flash_escort_ship_crew_count(cx: &mut crate::engine::battle::Cx<'_>, slot: BYTE) {
     let row = slot / HANGAR_SHIPS_ROW;
     let col = slot % HANGAR_SHIPS_ROW;
     let r = RECT {
@@ -254,43 +255,43 @@ unsafe fn dms_flash_escort_ship_crew_count(cx: &mut crate::engine::battle::Cx<'_
             height: 5,
         },
     };
-    SetContext(cx.kernel.space_context);
+    crate::graphics::context_abi::ContextLease::require(cx.kernel.space_context).select();
     highlight_rect(cx.kernel, r);
 }
 
-unsafe fn dms_flash_active_ship(cx: &mut crate::engine::battle::Cx<'_>, menu: &mut MENU_STATE) {
-    if menu.CurState >> 4 != 0 {
+fn dms_flash_active_ship(cx: &mut crate::engine::battle::Cx<'_>, state: BYTE) {
+    if state >> 4 != 0 {
         dms_flash_flag_ship(cx);
     } else {
-        dms_flash_escort_ship(cx, menu.CurState);
+        dms_flash_escort_ship(cx, state);
     }
 }
 
-unsafe fn dms_set_mode(
+fn dms_set_mode(
     cx: &mut crate::engine::battle::Cx<'_>,
     input: &InputSession,
-    menu: &mut MENU_STATE,
+    state: BYTE,
     mode: ModifyMode,
 ) {
     match mode {
         ModifyMode::Navigate => {
-            SetMenuSounds(input, SOUND_ARROWS, SOUND_SELECT);
-            dms_flash_active_ship(cx, menu);
+            input.set_menu_sounds(SOUND_ARROWS, SOUND_SELECT);
+            dms_flash_active_ship(cx, state);
         }
         ModifyMode::AddEscort => {
-            SetMenuSounds(input, SOUND_ARROWS, SOUND_SELECT);
+            input.set_menu_sounds(SOUND_ARROWS, SOUND_SELECT);
             set_menu_flash(cx.kernel, cx.screen_dimensions(), true);
         }
         ModifyMode::EditCrew => {
-            SetMenuSounds(input, SOUND_UP | SOUND_DOWN, SOUND_SELECT | SOUND_CANCEL);
-            if menu.CurState >> 4 != 0 {
+            input.set_menu_sounds(SOUND_UP | SOUND_DOWN, SOUND_SELECT | SOUND_CANCEL);
+            if state >> 4 != 0 {
                 dms_flash_flag_ship_crew_count(cx);
             } else {
-                dms_flash_escort_ship_crew_count(cx, menu.CurState);
+                dms_flash_escort_ship_crew_count(cx, state);
             }
         }
         ModifyMode::Exit => {
-            SetMenuSounds(input, SOUND_ARROWS, SOUND_SELECT);
+            input.set_menu_sounds(SOUND_ARROWS, SOUND_SELECT);
             set_menu_flash(cx.kernel, cx.screen_dimensions(), false);
         }
     }
@@ -417,7 +418,7 @@ unsafe fn dms_try_add_escort_ship(cx: &mut Cx<'_>, input: &InputSession, menu: &
                 UNDEFINED_DELTA as SIZE,
                 -(SHIP_COST[index as usize] as i32),
             );
-            dms_set_mode(cx, input, menu, ModifyMode::EditCrew);
+            dms_set_mode(cx, input, menu.CurState, ModifyMode::EditCrew);
         };
     } else {
         play_menu_sound(
@@ -448,7 +449,7 @@ unsafe fn dms_add_escort_ship(
                 })
             });
             if dms_spin_ship(cx, menu, ship) {
-                dms_set_mode(cx, input, menu, ModifyMode::AddEscort);
+                dms_set_mode(cx, input, menu.CurState, ModifyMode::AddEscort);
             }
         };
         return;
@@ -458,7 +459,7 @@ unsafe fn dms_add_escort_ship(
             menu.delta_item &= !MODIFY_CREW_FLAG;
             clear_flash(cx.kernel);
             draw_campaign_menu(cx, PM_CREW as BYTE, SHIPYARD_CREW as i16);
-            dms_set_mode(cx, input, menu, ModifyMode::Navigate);
+            dms_set_mode(cx, input, menu.CurState, ModifyMode::Navigate);
         };
     } else if select {
         dms_try_add_escort_ship(cx, input, menu);
@@ -511,7 +512,7 @@ unsafe fn dms_scrap_escort_ship(
             UNDEFINED_DELTA as i32,
         );
         SetContext(cx.kernel.space_context);
-        dms_set_mode(cx, input, menu, ModifyMode::Navigate);
+        dms_set_mode(cx, input, menu.CurState, ModifyMode::Navigate);
     };
 }
 
@@ -532,7 +533,7 @@ unsafe fn dms_edit_crew_mode(
             }
         }
         menu.delta_item &= !MODIFY_CREW_FLAG;
-        dms_set_mode(cx, input, menu, ModifyMode::Navigate);
+        dms_set_mode(cx, input, menu.CurState, ModifyMode::Navigate);
     } else if dy != 0 {
         dms_modify_crew(cx, input, menu, ship, dy);
     }
@@ -557,27 +558,27 @@ unsafe fn dms_navigate_ship_slots(
         let new_state = DMS_MoveCursor(menu.CurState, dx, dy);
         if new_state != menu.CurState {
             menu.CurState = new_state;
-            dms_flash_active_ship(cx, menu);
+            dms_flash_active_ship(cx, menu.CurState);
         }
     }
     if special {
         if dms_spin_ship(cx, menu, ship) {
-            dms_set_mode(cx, input, menu, ModifyMode::Navigate);
+            dms_set_mode(cx, input, menu.CurState, ModifyMode::Navigate);
         }
     } else if select {
         if ship.is_none() && menu.CurState >> 4 == 0 {
             menu.delta_item = MODIFY_CREW_FLAG;
             draw_race_strings(cx, menu, 0);
-            dms_set_mode(cx, input, menu, ModifyMode::AddEscort);
+            dms_set_mode(cx, input, menu.CurState, ModifyMode::AddEscort);
         } else {
             menu.delta_item |= MODIFY_CREW_FLAG;
-            dms_set_mode(cx, input, menu, ModifyMode::EditCrew);
+            dms_set_mode(cx, input, menu.CurState, ModifyMode::EditCrew);
         }
     } else if cancel {
         menu.InputFunc = Some(do_shipyard);
         menu.CurState = SHIPYARD_CREW;
         draw_campaign_menu(cx, PM_CREW as BYTE, menu.CurState as i16);
-        dms_set_mode(cx, input, menu, ModifyMode::Exit);
+        dms_set_mode(cx, input, menu.CurState, ModifyMode::Exit);
     }
 }
 
@@ -593,7 +594,7 @@ unsafe fn do_modify_ships(cx: &mut Cx<'_>, menu: &mut MENU_STATE, input: &InputS
             menu.CurState = 0xf0;
             menu.delta_item = 0;
             SetContext(cx.kernel.space_context);
-            dms_set_mode(cx, input, menu, ModifyMode::Navigate);
+            dms_set_mode(cx, input, menu.CurState, ModifyMode::Navigate);
         };
     } else {
         let special = input.pulsed().menu[KEY_MENU_SPECIAL as usize] != 0;
@@ -630,6 +631,49 @@ unsafe fn do_modify_ships(cx: &mut Cx<'_>, menu: &mut MENU_STATE, input: &InputS
     }
     cx.with_legacy(|| SleepThread(ONE_SECOND / 30));
     1
+}
+
+unsafe fn draw_blue_print(
+    cx: &mut Cx<'_>,
+    input: &InputSession,
+    menu: &mut MENU_STATE,
+    flagship: &crate::engine::world::SisState,
+    context: &crate::graphics::context_abi::ContextLease,
+) {
+    let frame = CaptureDrawable(LoadGraphicInstance(c"graphics.blueprints".as_ptr()).cast());
+    let mut stamp = STAMP {
+        origin: POINT { x: 0, y: 0 },
+        frame: DecFrameIndex(frame),
+    };
+    SetContextForeGroundColor(rgb15(0, 0, 0x16));
+    DrawFilledStamp(&mut stamp);
+    for slot in 0..NUM_DRIVE_SLOTS {
+        let piece = flagship.drive_slots[slot as usize];
+        cx.with_legacy(|| DrawShipPiece(frame, piece as COUNT, slot as COUNT, 1));
+    }
+    for slot in 0..NUM_JET_SLOTS {
+        let piece = flagship.jet_slots[slot as usize];
+        cx.with_legacy(|| DrawShipPiece(frame, piece as COUNT, slot as COUNT, 1));
+    }
+    for slot in 0..NUM_MODULE_SLOTS {
+        let piece = flagship.module_slots[slot as usize];
+        if !(menu.CurState as u32 == SHIPYARD && piece as u32 == CREW_POD) {
+            cx.with_legacy(|| DrawShipPiece(frame, piece as COUNT, slot as COUNT, 1));
+        }
+    }
+    SetContextForeGroundColor(rgb15(0x0a, 0x0a, 0x1f));
+    for slot in 0..NUM_MODULE_SLOTS {
+        let piece = flagship.module_slots[slot as usize];
+        if menu.CurState as u32 == SHIPYARD && piece as u32 == CREW_POD {
+            cx.with_legacy(|| DrawShipPiece(frame, piece as COUNT, slot as COUNT, 1));
+        }
+    }
+    super::sis::capacity::draw_blueprint_cells(
+        context,
+        flagship,
+        input.preferences().fonts == OPT_PC as i32,
+    );
+    DestroyDrawable(ReleaseDrawable(frame));
 }
 
 unsafe fn exit_shipyard(input: &InputSession, menu: &mut MENU_STATE) -> BOOLEAN {
@@ -697,7 +741,7 @@ pub unsafe fn do_shipyard(cx: &mut Cx<'_>, menu: &mut MENU_STATE, input: &InputS
             SetContextFont(cx.kernel.tiny_font);
             ScreenTransition(3, ptr::null());
             UnbatchGraphics();
-            PlayMusic(menu.hMusic, 1, 1);
+            crate::ui::settings::play_music_for_world(cx.world, menu.hMusic, 1, 1);
         };
         show_combat_ship(cx, input, menu, COUNT::MAX, None);
         frame::install(input, context, || {

@@ -549,7 +549,7 @@ unsafe fn initialize_outfit(cx: &mut Cx<'_>, menu: &mut MENU_STATE, input: &Inpu
     }
     {
         ScreenTransition(3, ptr::null());
-        PlayMusic(menu.hMusic, 1, 1);
+        crate::ui::settings::play_music_for_world(cx.world, menu.hMusic, 1, 1);
         UnbatchGraphics();
         set_menu_flash(cx.kernel, size, false);
     };

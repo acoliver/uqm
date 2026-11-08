@@ -21,7 +21,6 @@ pub(crate) mod live {
         battle::Cx,
         observe::{CheckpointView, Io},
     };
-    use crate::engine::Kernel as KernelOwner;
     use crate::mainloop::restart_menu::c_extern::{self as base, SetContext};
     use crate::mainloop::types::activity_flags::{CHECK_ABORT, CHECK_LOAD, START_ENCOUNTER};
     use crate::planet_side::orbit_scan;
@@ -233,7 +232,7 @@ pub(crate) mod live {
         let context = presentation.context();
         let sphere = presentation.sphere();
         let animation = game.borrow().kernel.planet_animation.clone();
-        let (wait, planet_type) = game.borrow_mut().with_legacy(|| {
+        let (wait, pulsing_shield, planet) = game.borrow_mut().with_legacy(|| {
             let system = solar_system::current();
             let (last_activity, pulsing_shield) = KernelOwner::current().read(|owner| {
                 (
@@ -251,7 +250,7 @@ pub(crate) mod live {
         if wait {
             draw_display(&mut game.borrow_mut(), &context, presentation.scan(), WAIT);
         }
-        game.borrow_mut().with_legacy(|| {
+        let planet_type = game.borrow_mut().with_legacy(|| {
             base::stop_music();
             generate_planet_surface(
                 &mut sphere.borrow_mut(),
@@ -261,7 +260,7 @@ pub(crate) mod live {
                 surface,
             );
 
-            (wait, (*planet).data_index & !0x80)
+            (*planet).data_index & !0x80
         });
         orbit_scan::generate_planet_side(game, io, presentation.scan().report_context());
         {
