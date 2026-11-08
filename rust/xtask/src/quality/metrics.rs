@@ -22,7 +22,10 @@ impl Finding {
         self.package == scope
             || self.subsystem == scope
             || self.file == scope
-            || self.file.strip_prefix("src/").is_some_and(|f| f == scope)
+            || self
+                .file
+                .strip_prefix("src/")
+                .is_some_and(|file| file == scope || file.starts_with(&format!("{scope}/")))
             || self.identity == scope
             || self.identity.starts_with(&format!("{scope}::"))
             || self.file.starts_with(&format!("{scope}/"))

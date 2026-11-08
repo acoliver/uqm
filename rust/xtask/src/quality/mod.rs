@@ -506,11 +506,11 @@ fn compare_base(
 
 fn report(value: u64, findings: &[Finding], options: &Options) -> Result<(), String> {
     println!("{value}");
+    let scope = options
+        .positional
+        .get(1)
+        .and_then(|spec| spec.split_once(':').map(|(_, scope)| scope));
     if options.details {
-        let scope = options
-            .positional
-            .get(1)
-            .and_then(|spec| spec.split_once(':').map(|(_, scope)| scope));
         let mut totals = BTreeMap::<String, u64>::new();
         for finding in findings
             .iter()
@@ -529,6 +529,7 @@ fn report(value: u64, findings: &[Finding], options: &Options) -> Result<(), Str
     }
     let outside: u64 = findings
         .iter()
+        .filter(|finding| scope.is_none_or(|scope| finding.in_scope(scope)))
         .filter(|f| !options.only.iter().any(|s| f.in_scope(s)))
         .map(|f| f.value)
         .sum();
@@ -699,6 +700,40 @@ mod tests {
             assert!(!is_native(p));
         }
     }
+    #[test]
+    fn expect_only_checks_only_the_requested_report_scope() {
+        let finding = |file: &str, subsystem: &str| Finding {
+            counter: "ffi".into(),
+            metric: "static_mut".into(),
+            identity: format!("uqm::{subsystem}::STATE"),
+            file: file.into(),
+            package: "uqm".into(),
+            subsystem: subsystem.into(),
+            value: 1,
+        };
+        let allowed = finding("src/comm/races/example.rs", "comm");
+        let unrelated = finding("src/mainloop/example.rs", "mainloop");
+        let prohibited = finding("src/comm/runtime.rs", "comm");
+        let options = Options {
+            positional: vec!["report".into(), "static_mut:comm".into()],
+            only: vec!["comm/races".into()],
+            ..Options::default()
+        };
+        assert!(report(1, &[allowed.clone(), unrelated.clone()], &options).is_ok());
+        assert!(report(2, &[allowed, unrelated, prohibited], &options).is_err());
+        let options = Options {
+            positional: vec!["report".into(), "static_mut".into()],
+            only: vec!["comm/races".into()],
+            ..Options::default()
+        };
+        assert!(report(
+            1,
+            &[finding("src/mainloop/example.rs", "mainloop")],
+            &options
+        )
+        .is_err());
+    }
+
     #[test]
     fn reports_enforce_exact_values_and_scopes() {
         let finding = Finding {
