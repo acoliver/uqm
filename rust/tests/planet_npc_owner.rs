@@ -23,7 +23,7 @@ fn with_host(game: &mut Game, run: impl FnOnce(&mut Site<'_, '_, '_>)) {
     // SAFETY: the fixture retains the solar record and does not request generation-record access.
     let mut system = unsafe { std::mem::zeroed() };
     // SAFETY: all retained owners and the solar record remain live until the callback returns.
-    let mut host = unsafe { Site::new(&owner, &io, &mut system) };
+    let mut host = unsafe { Site::new(&owner, &io, &mut system, None) };
     run(&mut host);
 }
 

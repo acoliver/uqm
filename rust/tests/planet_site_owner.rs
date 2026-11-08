@@ -82,7 +82,7 @@ fn with_site(
         )
     };
     // SAFETY: the fixture retains the initialized record and releases component borrows before effects.
-    let mut host = unsafe { Site::new(&owner, &io, &mut record) };
+    let mut host = unsafe { Site::new(&owner, &io, &mut record, None) };
     run(&mut host, &mut system);
 }
 

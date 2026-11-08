@@ -6,6 +6,7 @@ use crate::planets::c_api::{self, *};
 use crate::planets::generate::default::PlanetNames;
 use crate::planets::generate::home_contact::LanderTakeoff;
 use crate::planets::generate::{andro, burv, spa, vault, wreck};
+use crate::planets::report::live::discovery_report;
 
 impl LanderTakeoff for Site<'_, '_, '_> {
     fn lander_takeoff(&mut self) {
@@ -96,6 +97,11 @@ impl<'a, 'game, 'observer> Site<'a, 'game, 'observer> {
         &self,
     ) -> crate::planet_side::report_adapter::CffiDiscoveryReport<'a, 'observer, impl FnMut()> {
         let system = self.record.as_ptr();
+        let scan_context = self.scan_context.clone().or_else(|| {
+            self.presentation
+                .as_ref()
+                .map(|presentation| presentation.scan().context())
+        });
         // SAFETY: this site retains the initialized system and its report slot.
         let slot =
             unsafe { std::ptr::addr_of_mut!((*system).SysInfo.planet_info.discovery_string) };
@@ -104,7 +110,7 @@ impl<'a, 'game, 'observer> Site<'a, 'game, 'observer> {
             self.io,
             move || {
                 // SAFETY: the site presents synchronously while its published record remains live.
-                unsafe { crate::planets::report::live::discovery_report(system) };
+                unsafe { discovery_report(system, scan_context.as_ref()) };
             },
         )
         .unwrap_or_else(|error| {

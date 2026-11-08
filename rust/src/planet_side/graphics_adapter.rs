@@ -106,10 +106,15 @@ impl SurfaceFrameRegistry {
         }
     }
 }
+pub struct SurfaceDrawing<'a> {
+    pub planet: crate::engine::graphics::context_abi::ContextLease,
+    pub scan: &'a crate::planets::scan::state::ScanState,
+}
+
 /// Concrete graphics adapter. It renders the Rust world in insertion order and
 /// draws the lander at the center of the orbit viewport.
 pub struct CffiPlanetSideGraphics<'a, 'game, A: PlanetSideAssetAccess> {
-    pub planet_context: crate::engine::graphics::context_abi::ContextLease,
+    pub drawing: SurfaceDrawing<'a>,
     pub game: &'a std::cell::RefCell<crate::engine::battle::Cx<'game>>,
     pub surface: SharedSurface,
     pub assets: &'a A,
@@ -140,7 +145,7 @@ use crate::graphics::pixmap_abi::SetAbsFrameIndex;
 #[cfg(not(test))]
 use crate::graphics::sdl::lifecycle_abi::TFB_SwapBuffers;
 #[cfg(not(test))]
-use crate::planets::scan::live::RedrawSurfaceScan;
+use crate::planets::scan::live::redraw_surface_scan;
 
 impl<A: PlanetSideAssetAccess> PlanetSideGraphics for CffiPlanetSideGraphics<'_, '_, A> {
     fn render(&mut self, snapshot: &RenderSnapshot) -> Result<(), AdapterError> {
@@ -149,17 +154,15 @@ impl<A: PlanetSideAssetAccess> PlanetSideGraphics for CffiPlanetSideGraphics<'_,
             super::orbit_scan::sync_positions(&mut self.game.borrow_mut(), &self.surface.borrow());
             let radar_context = self.game.borrow().kernel.radar_context;
             let game = self.game;
+            let scan_position = crate::comm::locdata::CPoint {
+                x: snapshot.lander.position.x as i16,
+                y: snapshot.lander.position.y as i16,
+            };
             return game.borrow_mut().with_legacy(|| unsafe {
-                {
-                    let scan_position = CPoint {
-                        x: snapshot.lander.position.x as i16,
-                        y: snapshot.lander.position.y as i16,
-                    };
-                    RedrawSurfaceScan(std::ptr::from_ref(&scan_position).cast());
-                    self.last_scan_position = Some(snapshot.lander.position);
-                }
+                redraw_surface_scan(self.drawing.scan, Some(scan_position));
+                self.last_scan_position = Some(snapshot.lander.position);
 
-                self.planet_context.with_selected(|| {
+                self.drawing.planet.with_selected(|| {
                     BatchGraphics();
 
                     let topo_frame = surface_topography_frame()?;

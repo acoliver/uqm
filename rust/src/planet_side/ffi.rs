@@ -54,7 +54,7 @@ use super::collision_adapter::{CffiGameplayRandom, SurfaceCollisionAdapter};
 use super::controller::PlanetSideController;
 use super::generation::ScanPersistence;
 use super::generation_adapter::CffiSurfaceGenerator;
-use super::graphics_adapter::CffiPlanetSideGraphics;
+use super::graphics_adapter::{CffiPlanetSideGraphics, SurfaceDrawing};
 use super::mask_adapter::extract_lander_masks;
 use super::model::SurfacePoint;
 use super::resources::{LanderGraphic, PlanetSideAssetAccess};
@@ -75,7 +75,7 @@ const fn failure(status: i32) -> PlanetSideReply {
 /// # Safety
 /// Native handles in context must remain live throughout the synchronous lander session.
 pub unsafe fn run_session(
-    planet_context: crate::engine::graphics::context_abi::ContextLease,
+    drawing: SurfaceDrawing<'_>,
     controls: &crate::engine::input::InputSession,
     activity: crate::engine::world::activity::ActivityControl,
     cx: &mut crate::engine::battle::Cx<'_>,
@@ -97,13 +97,7 @@ pub unsafe fn run_session(
     });
     let admission = admit_trip(&observe);
     let result = run_retained_session(
-        planet_context,
-        controls,
-        activity,
-        &game,
-        &observe,
-        context,
-        &admission,
+        drawing, controls, activity, &game, &observe, context, &admission,
     );
     if matches!(result, Ok(Ok(_))) {
         // SAFETY: the outer ABI contract keeps the current solar record live through return.
@@ -166,7 +160,7 @@ fn complete_trip(
 }
 
 fn run_retained_session(
-    planet_context: crate::engine::graphics::context_abi::ContextLease,
+    drawing: SurfaceDrawing<'_>,
     controls: &crate::engine::input::InputSession,
     activity: crate::engine::world::activity::ActivityControl,
     game: &std::cell::RefCell<crate::engine::battle::Cx<'_>>,
@@ -182,7 +176,7 @@ fn run_retained_session(
         .borrow_mut()
         .with_legacy(super::init_lander::borrowed_assets)?;
     let mut generator =
-        CffiSurfaceGenerator::for_planet_side(game, observe, context.solar_system, context.world)?;
+        CffiSurfaceGenerator::for_planet_side(game, observe, context, drawing.scan.context())?;
     let mut visuals = CffiSurfaceVisuals::new(
         context.misc_data_frame,
         context.energy_frame,
@@ -219,7 +213,7 @@ fn run_retained_session(
         input: CffiPlanetSideInput::new(controls.controls().clone(), activity),
         collision,
         graphics: CffiPlanetSideGraphics {
-            planet_context,
+            drawing,
             game,
             surface: surface.clone(),
             assets: &assets,

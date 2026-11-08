@@ -1,5 +1,7 @@
 //! Planet scanning, scan-node callbacks, and lander dispatch from `scan.c`.
 
+pub mod state;
+
 use crate::engine::world::planet::{NodeInfo, PlanetInfo};
 fn scan_value(value: i64, suffix: &str) -> String {
     if value >= 1000 {

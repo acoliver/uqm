@@ -32,9 +32,7 @@ pub(crate) mod live {
     use crate::ui::border::draw_sisframe;
     use crate::ui::sis::repair_sisborder;
 
-    use crate::planets::scan::live::GetScanContext;
-
-    use crate::planets::scan::live::DestroyScanContext;
+    use crate::planets::scan::state::ScanState;
 
     use crate::planets::solarsys::drawing::DrawStarBackGround;
 
@@ -170,7 +168,7 @@ pub(crate) mod live {
     const WAIT: u8 = 1;
     const UPDATE: u8 = 2;
 
-    unsafe fn draw_display(planet: &ContextLease, mode: u8) {
+    unsafe fn draw_display(planet: &ContextLease, scan: &ScanState, mode: u8) {
         let planet_name = WorldFields::current().read(|world| world.flagship.planet_name);
         let g = CffiPlatform;
         g.set_context(ContextId::Space);
@@ -193,7 +191,7 @@ pub(crate) mod live {
             DrawPlanetSurfaceBorder();
         }
         if mode == WAIT {
-            SetContext((GetScanContext(std::ptr::null_mut())).cast());
+            scan.context().select();
             let frame = base::CaptureDrawable(
                 (base::LoadGraphicInstance(c"graphics.orbitenter".as_ptr())).cast(),
             );
@@ -206,7 +204,7 @@ pub(crate) mod live {
             draw_default_planet_sphere(planet);
         }
         if mode != WAIT {
-            SetContext((GetScanContext(std::ptr::null_mut())).cast());
+            scan.context().select();
             DrawPlanet(0, black());
         }
         if mode != UPDATE {
@@ -216,8 +214,8 @@ pub(crate) mod live {
         LoadIntoExtraScreen(std::ptr::from_mut(&mut r).cast());
     }
 
-    pub unsafe fn redraw_planet_orbit_display(planet: &ContextLease) {
-        draw_display(planet, FULL);
+    pub unsafe fn redraw_planet_orbit_display(planet: &ContextLease, scan: &ScanState) {
+        draw_display(planet, scan, FULL);
     }
 
     pub unsafe fn load_planet(
@@ -229,7 +227,10 @@ pub(crate) mod live {
         if crate::front_end::uqmdebug::DISABLE_INTERACTIVITY != 0 {
             return None;
         }
-        let presentation = OrbitPresentation::new(game.borrow().kernel);
+        let presentation = OrbitPresentation::new(
+            game.borrow().kernel,
+            CffiPlatform.screen_size().0 as i16 - 78,
+        );
         let context = presentation.context();
         let sphere = presentation.sphere();
         let animation = game.borrow().kernel.planet_animation.clone();
@@ -244,7 +245,7 @@ pub(crate) mod live {
             let wait = last_activity & CHECK_LOAD == 0;
             assert!((*system).InOrbit != 0 && (*system).TopoFrame.is_null());
             if wait {
-                draw_display(&context, WAIT);
+                draw_display(&context, presentation.scan(), WAIT);
             }
             base::stop_music();
             let planet = (*system).pOrbitalDesc;
@@ -265,9 +266,9 @@ pub(crate) mod live {
             }
             if wait {
                 zoom_in_planet_sphere(&context, &sphere);
-                draw_display(&context, UPDATE);
+                draw_display(&context, presentation.scan(), UPDATE);
             } else {
-                draw_display(&context, FULL);
+                draw_display(&context, presentation.scan(), FULL);
             }
         });
         Some(presentation)
@@ -314,7 +315,6 @@ pub(crate) mod live {
         (*system).SysInfo.planet_info.discovery_string = std::ptr::null_mut();
         FreeLanderFont(std::ptr::addr_of_mut!((*system).SysInfo.planet_info));
         SetContext(KernelOwner::current().read(|owner| owner.space_context));
-        DestroyScanContext();
     }
 
     #[no_mangle]
@@ -338,6 +338,7 @@ pub(crate) mod live {
         cx: &mut Cx<'_>,
         io: &mut Io<'_>,
         planet: &ContextLease,
+        scan: &ScanState,
         menu: &mut MENU_STATE,
     ) -> u32 {
         let runtime = cx.kernel.input_runtime();
@@ -355,7 +356,7 @@ pub(crate) mod live {
         cx.with_legacy(|| CffiPlatform.set_flash(FlashTarget::Off));
         match menu.CurState {
             0 => {
-                scan_system(planet, cx, io);
+                scan_system(scan, planet, cx, io);
                 if cx.world.activity() & START_ENCOUNTER != 0 {
                     return 0;
                 }
@@ -385,7 +386,7 @@ pub(crate) mod live {
                 }
                 cx.with_legacy(|| SetInputCallback(runtime.input(), old));
                 if autopilot == 0 {
-                    cx.with_legacy(|| draw_display(planet, FULL));
+                    cx.with_legacy(|| draw_display(planet, scan, FULL));
                 } else {
                     return 0;
                 }
@@ -436,7 +437,9 @@ pub(crate) mod live {
             SetInputCallback(runtime.input(), Some(hook))
         });
         io.observer.checkpoint(&CheckpointView::PlanetMenu(1));
-        cx.run_input(io, true, |cx, io| do_orbit(cx, io, &planet, &mut menu) != 0);
+        cx.run_input(io, true, |cx, io| {
+            do_orbit(cx, io, &planet, presentation.scan(), &mut menu) != 0
+        });
         io.observer.checkpoint(&CheckpointView::PlanetMenu(0));
         cx.with_legacy(|| {
             SetInputCallback(runtime.input(), old);

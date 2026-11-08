@@ -8,11 +8,12 @@ use std::{cell::RefCell, ptr::NonNull, rc::Rc};
 
 pub struct OrbitPresentation {
     planet: LoadedContext,
+    scan: crate::planets::scan::state::ScanState,
     sphere: Rc<RefCell<crate::planets::sphere::SphereState>>,
 }
 
 impl OrbitPresentation {
-    pub fn new(kernel: &Kernel) -> Self {
+    pub fn new(kernel: &Kernel, width: i16) -> Self {
         let space = ContextLease::require(kernel.space_context);
         let planet = space.with_selected(|| {
             let mut clip = space.clip_rect();
@@ -25,12 +26,17 @@ impl OrbitPresentation {
         });
         Self {
             planet,
+            scan: crate::planets::scan::state::ScanState::new(kernel, width),
             sphere: Rc::new(RefCell::new(crate::planets::sphere::SphereState::default())),
         }
     }
 
     pub fn context(&self) -> ContextLease {
         self.planet.lease()
+    }
+
+    pub fn scan(&self) -> &crate::planets::scan::state::ScanState {
+        &self.scan
     }
 
     pub fn sphere(&self) -> Rc<RefCell<crate::planets::sphere::SphereState>> {

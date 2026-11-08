@@ -26,8 +26,8 @@ fn orbital_story_and_queue_hosts_share_the_caller_owner() {
     // SAFETY: record and caller owners remain live; no generation component borrow overlaps a call.
     let (host, mut story) = unsafe {
         (
-            Site::new(&owner, &io, &mut system),
-            Site::new(&owner, &io, &mut system),
+            Site::new(&owner, &io, &mut system, None),
+            Site::new(&owner, &io, &mut system, None),
         )
     };
     story.set_flag(StoryKey::YEHAT_CIVIL_WAR, 1);

@@ -24,6 +24,7 @@ pub struct Site<'a, 'game, 'observer> {
     index: u8,
     record: NonNull<SOLARSYS_STATE>,
     presentation: Option<crate::planets::orbit::presentation::OrbitPresentation>,
+    scan_context: Option<crate::engine::graphics::context_abi::ContextLease>,
 }
 
 impl<'a, 'game, 'observer> Site<'a, 'game, 'observer> {
@@ -34,6 +35,7 @@ impl<'a, 'game, 'observer> Site<'a, 'game, 'observer> {
         game: &'a RefCell<Cx<'game>>,
         io: &'a RefCell<Io<'observer>>,
         record: *mut SOLARSYS_STATE,
+        scan_context: Option<crate::engine::graphics::context_abi::ContextLease>,
     ) -> Self {
         let record = NonNull::new(record).unwrap_or_else(|| panic!("live solar system"));
         // SAFETY: the caller retains the initialized record for the host's lifetime.
@@ -44,6 +46,7 @@ impl<'a, 'game, 'observer> Site<'a, 'game, 'observer> {
             index,
             record,
             presentation: None,
+            scan_context,
         }
     }
 
