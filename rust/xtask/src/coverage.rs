@@ -274,7 +274,7 @@ fn collect(root: &Path, cargo: &std::ffi::OsStr) -> Result<Measured, String> {
     )?;
     let exported = lcov::parse(&fs::read_to_string(lcov_path).map_err(|e| e.to_string())?)?;
     let mut hits = BTreeMap::new();
-    for (path, lines) in exported {
+    for (path, record) in exported {
         let relative = Path::new(&path)
             .strip_prefix(root.join("rust"))
             .unwrap_or(Path::new(&path));
@@ -282,17 +282,16 @@ fn collect(root: &Path, cargo: &std::ffi::OsStr) -> Result<Measured, String> {
             .to_str()
             .ok_or("LCOV path is not UTF-8")?
             .replace('\\', "/");
-        if files.contains_key(&file) {
-            hits.insert(file, lines);
+        if let Some(lines) = files.get(&file) {
+            if record.summary.count != lines.count || record.summary.covered != lines.covered {
+                return Err(format!("LLVM JSON and LCOV totals disagree: {file}"));
+            }
+            hits.insert(file, record.lines);
         }
     }
-    for (file, lines) in &files {
-        let actual = moves::counts(
-            hits.get(file)
-                .ok_or_else(|| format!("LCOV missing workspace file {file}"))?,
-        );
-        if actual.count != lines.count || actual.covered != lines.covered {
-            return Err(format!("LLVM JSON and LCOV totals disagree: {file}"));
+    for file in files.keys() {
+        if !hits.contains_key(file) {
+            return Err(format!("LCOV missing workspace file {file}"));
         }
     }
     Ok(Measured { files, hits })
@@ -407,6 +406,37 @@ mod tests {
             .is_empty());
         assert!(added_production_files(root.path(), Some("missing-ref"), &identities).is_err());
     }
+    #[cfg(unix)]
+    #[test]
+    fn collector_reconciles_aggregate_summaries_without_inventing_physical_hits() {
+        let root = tool::fixture_directory();
+        fs::create_dir_all(root.path().join("rust")).unwrap();
+        let script = r#"
+if [ "$*" = 'llvm-cov --version' ]; then echo 'cargo-llvm-cov 0.8.5'; exit 0; fi
+if [ "$1 $2" = 'llvm-cov report' ]; then
+  printf 'SF:src/lib.rs\nDA:1,1\nDA:2,1\nDA:3,1\nDA:4,1\nLF:5\nLH:5\nend_of_record\n' > target/quality-coverage.lcov
+else
+  printf '%s' '{"data":[{"files":[{"filename":"src/lib.rs","summary":{"lines":{"count":COUNT,"covered":5}}}]}]}' > target/quality-coverage.json
+fi
+"#;
+        for count in [5, 6] {
+            let cargo =
+                tool::fixture_program(root.path(), &script.replace("COUNT", &count.to_string()));
+            let result = collect(root.path(), cargo.as_os_str());
+            if count == 5 {
+                let measured = result.unwrap();
+                assert_eq!(measured.files["src/lib.rs"].count, 5);
+                assert_eq!(measured.files["src/lib.rs"].covered, 5);
+                assert_eq!(measured.hits["src/lib.rs"].len(), 4);
+                assert!(measured.hits["src/lib.rs"].values().all(|covered| *covered));
+            } else {
+                assert!(result
+                    .unwrap_err()
+                    .contains("JSON and LCOV totals disagree"));
+            }
+        }
+    }
+
     #[cfg(unix)]
     #[test]
     fn runner_checks_tool_version_command_and_generated_report() {

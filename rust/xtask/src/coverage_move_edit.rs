@@ -8,7 +8,7 @@ pub(crate) fn report(root: &Path) -> Result<BTreeMap<String, lcov::LineHits>, St
             .map_err(|e| e.to_string())?,
     )?;
     let mut hits = BTreeMap::new();
-    for (file, lines) in parsed {
+    for (file, record) in parsed {
         let path = Path::new(&file);
         let relative = if path.is_absolute() {
             let Ok(relative) = path.strip_prefix(root.join("rust")) else {
@@ -23,7 +23,7 @@ pub(crate) fn report(root: &Path) -> Result<BTreeMap<String, lcov::LineHits>, St
                 .to_str()
                 .ok_or("LCOV path is not UTF-8")?
                 .replace('\\', "/"),
-            lines,
+            record.lines,
         );
     }
     Ok(hits)

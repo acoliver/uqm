@@ -419,7 +419,9 @@ Rules enforced by xtask:
 
    Request source capture with `cargo xtask coverage sources request <prefix>`.
    The next coverage run emits committed-source `coverage-proof` records from its
-   LLVM LCOV export. Import each host's log before moving declarations with
+   LLVM LCOV export. Its LF/LH summaries must equal JSON's aggregate totals;
+   DA records retain physical-line hits. Closures can contribute an extra aggregate
+   line without adding a physical line. Import each host's log before moving declarations with
    `cargo xtask coverage sources import <log> <prefix>...`. Batch only the
    declarations planned to move; overlapping prefixes import each function once.
    The source text must match the measured commit. After registering the moves, record

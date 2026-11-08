@@ -2,6 +2,11 @@ use std::collections::BTreeMap;
 
 pub(crate) type LineHits = BTreeMap<usize, bool>;
 
+pub(super) struct File {
+    pub lines: LineHits,
+    pub summary: super::Lines,
+}
+
 #[derive(Default)]
 struct Record {
     file: String,
@@ -36,19 +41,25 @@ impl Record {
         Ok(())
     }
 
-    fn finish(self) -> Result<(String, LineHits), String> {
-        let covered = self.lines.values().filter(|covered| **covered).count() as u64;
-        if self.found != Some(self.lines.len() as u64) || self.hit != Some(covered) {
-            return Err(format!(
-                "LCOV line totals do not match DA entries: {}",
-                self.file
-            ));
+    fn finish(self) -> Result<(String, File), String> {
+        let summary = super::Lines {
+            count: self.found.ok_or("LCOV record is missing LF")?,
+            covered: self.hit.ok_or("LCOV record is missing LH")?,
+        };
+        if summary.covered > summary.count {
+            return Err(format!("invalid LCOV line totals: {}", self.file));
         }
-        Ok((self.file, self.lines))
+        Ok((
+            self.file,
+            File {
+                lines: self.lines,
+                summary,
+            },
+        ))
     }
 }
 
-pub(crate) fn parse(text: &str) -> Result<BTreeMap<String, LineHits>, String> {
+pub(super) fn parse(text: &str) -> Result<BTreeMap<String, File>, String> {
     let mut result = BTreeMap::new();
     let mut record: Option<Record> = None;
     for line in text.lines().filter(|line| !line.is_empty()) {
@@ -96,11 +107,22 @@ mod tests {
     use super::*;
 
     #[test]
+    fn nested_closure_summary_can_count_one_physical_line_twice() -> Result<(), String> {
+        let report = parse("SF:closure.rs\nFN:2,closure\nFN:1,main\nFNDA:1,closure\nFNDA:1,main\nFNF:2\nFNH:2\nDA:1,1\nDA:2,1\nDA:3,1\nDA:4,1\nLF:5\nLH:5\nend_of_record\n")?;
+        let file = &report["closure.rs"];
+        assert_eq!(file.lines.len(), 4);
+        assert!(file.lines.values().all(|covered| *covered));
+        assert_eq!(file.summary.count, 5);
+        assert_eq!(file.summary.covered, 5);
+        Ok(())
+    }
+
+    #[test]
     fn sparse_execution_lines_preserve_covered_and_uncovered_rows() -> Result<(), String> {
         let text = "TN:\nSF:/repo/rust/src/a.rs\nFN:2,8,callback\nFNDA:1,callback\nFNF:1\nFNH:1\nDA:2,1\nDA:5,0\nDA:8,99,checksum\nBRDA:5,0,0,-\nBRF:1\nBRH:0\nLF:3\nLH:2\nend_of_record\n";
         let report = parse(text)?;
         assert_eq!(
-            report["/repo/rust/src/a.rs"],
+            report["/repo/rust/src/a.rs"].lines,
             [(2, true), (5, false), (8, true)].into()
         );
         Ok(())
@@ -109,7 +131,7 @@ mod tests {
     #[test]
     fn empty_files_do_not_fabricate_executable_lines() -> Result<(), String> {
         let report = parse("SF:empty.rs\nLF:0\nLH:0\nend_of_record\n")?;
-        assert!(report["empty.rs"].is_empty());
+        assert!(report["empty.rs"].lines.is_empty());
         Ok(())
     }
 
@@ -120,8 +142,9 @@ mod tests {
             "DA:1,1\n",
             "SF:\nLF:0\nLH:0\nend_of_record\n",
             "SF:a.rs\nDA:1,1\nLF:1\nLH:1\n",
-            "SF:a.rs\nDA:1,1\nLF:1\nLH:0\nend_of_record\n",
-            "SF:a.rs\nDA:1,1\nLF:2\nLH:1\nend_of_record\n",
+            "SF:a.rs\nDA:1,1\nLF:1\nLH:2\nend_of_record\n",
+            "SF:a.rs\nDA:1,1\nLF:2\nend_of_record\n",
+            "SF:a.rs\nDA:1,1\nLH:1\nend_of_record\n",
             "SF:a.rs\nDA:0,1\nLF:1\nLH:1\nend_of_record\n",
             "SF:a.rs\nDA:1,-1\nLF:1\nLH:0\nend_of_record\n",
             "SF:a.rs\nDA:1,1\nDA:1,0\nLF:1\nLH:1\nend_of_record\n",
