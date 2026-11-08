@@ -50,6 +50,7 @@ pub(crate) mod live {
         throb: false,
     };
 
+    use crate::engine::graphics::context_abi::ContextLease;
     use crate::engine::time::counter_abi::GetTimeCounter;
 
     use crate::graphics::pixmap_abi::SetAbsFrameIndex;
@@ -73,7 +74,6 @@ pub(crate) mod live {
     use crate::graphics::context_abi::SetContextDrawMode;
 
     extern "C" {
-        static mut PlanetContext: *mut crate::graphics::native_abi::context_desc;
 
         static mut ScreenWidth: i32;
         static mut ScreenHeight: i32;
@@ -104,11 +104,10 @@ pub(crate) mod live {
         CffiPlatform.unbatch();
     }
 
-    #[no_mangle]
-    pub unsafe extern "C" fn DrawDefaultPlanetSphere() {
-        let old = SetContext(PlanetContext);
-        DrawPlanetSphere((ScreenWidth - 78) / 2, (ScreenHeight - 13 - 75 - 5 - 9) / 2);
-        SetContext(old);
+    pub unsafe fn draw_default_planet_sphere(planet: &ContextLease) {
+        planet.with_selected(|| {
+            DrawPlanetSphere((ScreenWidth - 78) / 2, (ScreenHeight - 13 - 75 - 5 - 9) / 2);
+        });
     }
 
     #[no_mangle]
@@ -164,8 +163,7 @@ pub(crate) mod live {
         }
     }
 
-    #[no_mangle]
-    pub unsafe extern "C" fn ZoomInPlanetSphere() {
+    pub unsafe fn zoom_in_planet_sphere(planet: &ContextLease) {
         let orbit = std::ptr::addr_of!((*solar_system::current()).Orbit);
         let width = ScreenWidth - 78;
         let scan_height = ScreenHeight - 13 - 75 - 5;
@@ -186,7 +184,7 @@ pub(crate) mod live {
                 + (f64::from(dx) * (1.0 - scale) * f64::from(width * 6 / 10) + 0.5) as i32;
             let y = (scan_height - 9) / 2
                 + (f64::from(dy) * (1.0 - scale) * f64::from(scan_height * 6 / 10) + 0.5) as i32;
-            SetContext(PlanetContext);
+            planet.select();
             CffiPlatform.batch();
             if i > 0 {
                 RepairBackRect(&mut repair);
@@ -205,6 +203,7 @@ pub(crate) mod live {
     }
 
     pub unsafe fn rotate_planet_sphere(
+        planet: &ContextLease,
         animation: &crate::engine::kernel::planet_animation::PlanetAnimation,
         keep_rate: bool,
     ) {
@@ -212,7 +211,7 @@ pub(crate) mod live {
         if !animation.rotation_due(now, keep_rate, ScreenWidth - 78) {
             return;
         }
-        DrawDefaultPlanetSphere();
+        draw_default_planet_sphere(planet);
         PrepareNextRotationFrame();
     }
 

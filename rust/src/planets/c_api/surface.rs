@@ -181,21 +181,20 @@ pub unsafe fn load_planet_surface(
     game: &std::cell::RefCell<crate::engine::battle::Cx<'_>>,
     io: &std::cell::RefCell<crate::engine::observe::Io<'_>>,
     surface: Option<CapturedSurface>,
-) {
+) -> Option<crate::planets::orbit::presentation::OrbitPresentation> {
     #[cfg(feature = "debug-process")]
     if std::ptr::addr_of!(super::DISABLE_INTERACTIVITY).read() != 0 {
-        crate::planets::orbit::live::load_planet(
+        return crate::planets::orbit::live::load_planet(
             game,
             io,
             surface
                 .as_ref()
                 .map_or(std::ptr::null_mut(), |s| s.as_frame().cast()),
         );
-        return;
     }
     crate::planets::orbit::live::load_planet(
         game,
         io,
         surface.map_or(std::ptr::null_mut(), |s| s.into_frame().cast()),
-    );
+    )
 }

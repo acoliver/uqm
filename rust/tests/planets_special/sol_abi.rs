@@ -68,6 +68,7 @@ fn check_initialized_identity(h: &mut Harness) {
                     generator.generate_planets(system, host)
                 },
             )
+            .0
         })
     };
     assert!(generated);
@@ -231,7 +232,7 @@ fn check_drawable_ownership(h: &mut Harness) {
             let definition = game
                 .borrow_mut()
                 .with_legacy(|| CapturedSurface::pixmap(map_width / 2, map_height / 2, 2));
-            c_api::load_planet_surface(&game, &io, Some(definition));
+            assert!(c_api::load_planet_surface(&game, &io, Some(definition)).is_none());
         });
         c_api::TFB_FlushGraphicsEx(1);
         c_api::DISABLE_INTERACTIVITY = saved_debug;

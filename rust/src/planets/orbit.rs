@@ -1,5 +1,7 @@
 //! Orbit display, planet resource ownership, and menu from `planets.c`.
 
+pub mod presentation;
+
 fn submenu_selection(current: u8, selected: bool, pc_menu: bool) -> u8 {
     if selected && !pc_menu {
         6
@@ -10,16 +12,16 @@ fn submenu_selection(current: u8, selected: bool, pc_menu: bool) -> u8 {
 
 #[cfg(not(test))]
 pub(crate) mod live {
-    use super::submenu_selection;
+    use super::{presentation::OrbitPresentation, submenu_selection};
     use crate::c_bindings::{global_state::MENU_STATE, solar_system};
     use crate::comm::locdata::CRect;
+    use crate::engine::graphics::context_abi::ContextLease;
     use crate::engine::world::planet::PlanetInfo;
     use crate::engine::{
         battle::Cx,
         observe::{CheckpointView, Io},
     };
     use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
-    use crate::graphics::drawable_abi::SetContextFGFrame;
     use crate::mainloop::restart_menu::c_extern::{self as base, SetContext};
     use crate::mainloop::types::activity_flags::{CHECK_ABORT, CHECK_LOAD, START_ENCOUNTER};
     use crate::memory::rust_hfree;
@@ -28,19 +30,8 @@ pub(crate) mod live {
     use crate::starbase::gfx::{ContextId, FlashTarget, Gfx, Point, Rect, Rgba, Stamp};
     use std::ffi::c_void;
 
-    #[no_mangle]
-    static mut PlanetContext: *mut crate::graphics::native_abi::context_desc = std::ptr::null_mut();
-
     use crate::ui::border::draw_sisframe;
     use crate::ui::sis::repair_sisborder;
-
-    #[cfg(feature = "debug-process")]
-    use crate::graphics::context_abi::CreateContextAux;
-
-    #[cfg(not(feature = "debug-process"))]
-    use crate::graphics::context_abi::CreateContextAux;
-
-    use crate::graphics::context_abi::DestroyContext;
 
     use crate::planets::scan::live::GetScanContext;
 
@@ -54,11 +45,11 @@ pub(crate) mod live {
 
     use crate::graphics::gfx_common_abi::LoadIntoExtraScreen;
 
-    use crate::planets::sphere::live::DrawDefaultPlanetSphere;
+    use crate::planets::sphere::live::draw_default_planet_sphere;
 
     use crate::planets::sphere::live::DrawPlanet;
 
-    use crate::planets::sphere::live::ZoomInPlanetSphere;
+    use crate::planets::sphere::live::zoom_in_planet_sphere;
 
     use crate::planets::sphere::live::UninitSphereRotation;
 
@@ -99,18 +90,6 @@ pub(crate) mod live {
             b: 0,
             a: 255,
         }
-    }
-
-    unsafe fn create_context() {
-        assert!(PlanetContext.is_null());
-        let old = SetContext(KernelOwner::current().read(|owner| owner.space_context));
-        let mut r = CffiPlatform.context_clip_rect();
-        PlanetContext = (new_context(c"PlanetContext".as_ptr())).cast();
-        SetContext(PlanetContext);
-        SetContextFGFrame(KernelOwner::current().read(|owner| owner.screen).cast());
-        r.height -= 75 + 5;
-        CffiPlatform.set_context_clip_rect(r);
-        SetContext(old);
     }
 
     #[no_mangle]
@@ -192,7 +171,7 @@ pub(crate) mod live {
     const WAIT: u8 = 1;
     const UPDATE: u8 = 2;
 
-    unsafe fn draw_display(mode: u8) {
+    unsafe fn draw_display(planet: &ContextLease, mode: u8) {
         let planet_name = WorldFields::current().read(|world| world.flagship.planet_name);
         let g = CffiPlatform;
         g.set_context(ContextId::Space);
@@ -225,7 +204,7 @@ pub(crate) mod live {
             });
             base::DestroyDrawable(base::ReleaseDrawable(frame));
         } else if mode == FULL {
-            DrawDefaultPlanetSphere();
+            draw_default_planet_sphere(planet);
         }
         if mode != WAIT {
             SetContext((GetScanContext(std::ptr::null_mut())).cast());
@@ -238,20 +217,21 @@ pub(crate) mod live {
         LoadIntoExtraScreen(std::ptr::from_mut(&mut r).cast());
     }
 
-    #[no_mangle]
-    pub unsafe extern "C" fn RedrawPlanetOrbitDisplay() {
-        draw_display(FULL);
+    pub unsafe fn redraw_planet_orbit_display(planet: &ContextLease) {
+        draw_display(planet, FULL);
     }
 
     pub unsafe fn load_planet(
         game: &std::cell::RefCell<crate::engine::battle::Cx<'_>>,
         io: &std::cell::RefCell<crate::engine::observe::Io<'_>>,
         surface: *mut crate::engine::graphics::native_abi::FRAME_DESC,
-    ) {
+    ) -> Option<OrbitPresentation> {
         #[cfg(feature = "debug-process")]
         if crate::front_end::uqmdebug::DISABLE_INTERACTIVITY != 0 {
-            return;
+            return None;
         }
+        let presentation = OrbitPresentation::new(game.borrow().kernel);
+        let context = presentation.context();
         let animation = game.borrow().kernel.planet_animation.clone();
         let wait = game.borrow_mut().with_legacy(|| {
             let system = solar_system::current();
@@ -263,9 +243,8 @@ pub(crate) mod live {
             });
             let wait = last_activity & CHECK_LOAD == 0;
             assert!((*system).InOrbit != 0 && (*system).TopoFrame.is_null());
-            create_context();
             if wait {
-                draw_display(WAIT);
+                draw_display(&context, WAIT);
             }
             base::stop_music();
             let planet = (*system).pOrbitalDesc;
@@ -279,12 +258,13 @@ pub(crate) mod live {
                 base::PlayMusic((orbit_music::LANDER_MUSIC).cast(), 1, 1);
             }
             if wait {
-                ZoomInPlanetSphere();
-                draw_display(UPDATE);
+                zoom_in_planet_sphere(&context);
+                draw_display(&context, UPDATE);
             } else {
-                draw_display(FULL);
+                draw_display(&context, FULL);
             }
         });
+        Some(presentation)
     }
 
     #[no_mangle]
@@ -334,10 +314,6 @@ pub(crate) mod live {
         (*system).SysInfo.planet_info.discovery_string = std::ptr::null_mut();
         FreeLanderFont(std::ptr::addr_of_mut!((*system).SysInfo.planet_info));
         SetContext(KernelOwner::current().read(|owner| owner.space_context));
-        if !PlanetContext.is_null() {
-            DestroyContext(PlanetContext);
-            PlanetContext = std::ptr::null_mut();
-        }
         DestroyScanContext();
     }
 
@@ -358,7 +334,12 @@ pub(crate) mod live {
         (*info).lander_font_eff = std::ptr::null_mut();
     }
 
-    unsafe fn do_orbit(cx: &mut Cx<'_>, io: &mut Io<'_>, menu: &mut MENU_STATE) -> u32 {
+    unsafe fn do_orbit(
+        cx: &mut Cx<'_>,
+        io: &mut Io<'_>,
+        planet: &ContextLease,
+        menu: &mut MENU_STATE,
+    ) -> u32 {
         let runtime = cx.kernel.input_runtime();
         let input = runtime.input();
         use crate::c_bindings::controller_input::KEY_MENU_SELECT;
@@ -374,7 +355,7 @@ pub(crate) mod live {
         cx.with_legacy(|| CffiPlatform.set_flash(FlashTarget::Off));
         match menu.CurState {
             0 => {
-                scan_system(cx, io);
+                scan_system(planet, cx, io);
                 if cx.world.activity() & START_ENCOUNTER != 0 {
                     return 0;
                 }
@@ -404,7 +385,7 @@ pub(crate) mod live {
                 }
                 cx.with_legacy(|| SetInputCallback(runtime.input(), old));
                 if autopilot == 0 {
-                    cx.with_legacy(|| draw_display(FULL));
+                    cx.with_legacy(|| draw_display(planet, FULL));
                 } else {
                     return 0;
                 }
@@ -424,19 +405,25 @@ pub(crate) mod live {
     }
 
     fn orbit_frame_hook(
+        planet: ContextLease,
         animation: std::rc::Rc<crate::engine::kernel::planet_animation::PlanetAnimation>,
     ) -> crate::engine::input::InputFrameHook {
         // SAFETY: The orbit menu removes this hook before freeing its drawing resources.
         crate::engine::input::InputFrameHook::new(move |_, _| unsafe {
-            rotate_planet_sphere(&animation, true);
+            rotate_planet_sphere(&planet, &animation, true);
         })
     }
 
-    pub unsafe fn planet_orbit_menu(cx: &mut Cx<'_>, io: &mut Io<'_>) {
+    pub unsafe fn planet_orbit_menu(
+        cx: &mut Cx<'_>,
+        io: &mut Io<'_>,
+        presentation: &OrbitPresentation,
+    ) {
         let runtime = cx.kernel.input_runtime();
         let input = runtime.input();
         let mut menu: MENU_STATE = std::mem::zeroed();
-        let hook = orbit_frame_hook(cx.kernel.planet_animation.clone());
+        let planet = presentation.context();
+        let hook = orbit_frame_hook(planet.clone(), cx.kernel.planet_animation.clone());
         let old = cx.with_legacy(|| {
             DrawMenuStateStrings(0, 0);
             CffiPlatform.set_flash(FlashTarget::Menu3do);
@@ -444,25 +431,13 @@ pub(crate) mod live {
             SetInputCallback(runtime.input(), Some(hook))
         });
         io.observer.checkpoint(&CheckpointView::PlanetMenu(1));
-        cx.run_input(io, true, |cx, io| do_orbit(cx, io, &mut menu) != 0);
+        cx.run_input(io, true, |cx, io| do_orbit(cx, io, &planet, &mut menu) != 0);
         io.observer.checkpoint(&CheckpointView::PlanetMenu(0));
         cx.with_legacy(|| {
             SetInputCallback(runtime.input(), old);
             CffiPlatform.set_flash(FlashTarget::Off);
             DrawMenuStateStrings(1, -6);
         });
-    }
-    #[cfg(not(test))]
-    unsafe fn new_context(name: *const std::ffi::c_char) -> *mut std::ffi::c_void {
-        #[cfg(feature = "debug-process")]
-        {
-            (CreateContextAux(name)).cast()
-        }
-        #[cfg(not(feature = "debug-process"))]
-        {
-            let _ = name;
-            CreateContextAux().cast()
-        }
     }
 }
 

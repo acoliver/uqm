@@ -23,6 +23,7 @@ pub struct Site<'a, 'game, 'observer> {
     io: &'a RefCell<Io<'observer>>,
     index: u8,
     record: NonNull<SOLARSYS_STATE>,
+    presentation: Option<crate::planets::orbit::presentation::OrbitPresentation>,
 }
 
 impl<'a, 'game, 'observer> Site<'a, 'game, 'observer> {
@@ -42,6 +43,7 @@ impl<'a, 'game, 'observer> Site<'a, 'game, 'observer> {
             io,
             index,
             record,
+            presentation: None,
         }
     }
 

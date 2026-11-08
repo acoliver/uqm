@@ -550,6 +550,7 @@ unsafe fn invoke_generation<R>(
                 record,
                 |_, system, host| run(system, host),
             )
+            .0
         })
     }
 }

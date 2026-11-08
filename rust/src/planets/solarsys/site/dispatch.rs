@@ -58,7 +58,10 @@ pub unsafe fn with_system<R>(
     io: &mut Io<'_>,
     record: *mut SOLARSYS_STATE,
     run: impl FnOnce(&dyn SystemGenerator, &mut SolarSys<'_>, &mut dyn SiteHost) -> R,
-) -> R {
+) -> (
+    R,
+    Option<crate::planets::orbit::presentation::OrbitPresentation>,
+) {
     let game = RefCell::new(Cx {
         b: game.b,
         world: game.world,
@@ -68,8 +71,11 @@ pub unsafe fn with_system<R>(
     let io = RefCell::new(Io {
         observer: &mut *io.observer,
     });
-    // SAFETY: the caller provides the exclusive live record for this temporary host.
-    unsafe { Site::new(&game, &io, record).with_system(run) }
+    // SAFETY: the caller provides exclusive initialized records and RNG through this host.
+    unsafe {
+        let mut site = Site::new(&game, &io, record);
+        (site.with_system(run), site.presentation.take())
+    }
 }
 
 /// # Safety

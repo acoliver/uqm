@@ -329,18 +329,23 @@ pub(super) unsafe fn reset_solar_sys(next_activity: u16) {
     }
 }
 
+enum OrbitAdmission {
+    Interrupted,
+    Ready(Option<crate::planets::orbit::presentation::OrbitPresentation>),
+}
+
 unsafe fn run_planet_orbit(cx: &mut Cx<'_>, io: &mut Io<'_>) {
-    if !prepare_planet_orbit(cx, io) {
+    let OrbitAdmission::Ready(presentation) = prepare_planet_orbit(cx, io) else {
         return;
-    }
-    if !(*system()).TopoFrame.is_null() {
-        ffi::planet_orbit_menu(cx, io);
+    };
+    if let Some(presentation) = presentation {
+        ffi::planet_orbit_menu(cx, io, &presentation);
         cx.with_legacy(|| ffi::FreePlanet());
     }
     finish_planet_orbit(cx, io);
 }
 
-unsafe fn prepare_planet_orbit(cx: &mut Cx<'_>, io: &mut Io<'_>) -> bool {
+unsafe fn prepare_planet_orbit(cx: &mut Cx<'_>, io: &mut Io<'_>) -> OrbitAdmission {
     let state = system();
     cx.with_legacy(|| {
         if (*state).InIpFlight != 0 {
@@ -358,7 +363,7 @@ unsafe fn prepare_planet_orbit(cx: &mut Cx<'_>, io: &mut Io<'_>) -> bool {
         World::current().write(|world| ffi::get_planet_info(world));
     });
     let target = body(state, (*state).pOrbitalDesc);
-    with_system(cx, io, state, |generator, system, host| {
+    let (_, presentation) = with_system(cx, io, state, |generator, system, host| {
         generator.generate_orbital(system, target, host)
     });
     cx.with_legacy(|| {
@@ -369,9 +374,9 @@ unsafe fn prepare_planet_orbit(cx: &mut Cx<'_>, io: &mut Io<'_>) -> bool {
             || glob().read(|owner| owner.flagship.crew_enlisted) == c::COUNT::MAX
             || World::current().read(|world| world.story_state(StoryKey::CHMMR_BOMB_STATE)) == 2
         {
-            return false;
+            return OrbitAdmission::Interrupted;
         }
-        true
+        OrbitAdmission::Ready(presentation)
     })
 }
 

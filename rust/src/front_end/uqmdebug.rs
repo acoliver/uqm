@@ -65,17 +65,17 @@ mod runtime {
         scan_type: BYTE,
         info: *mut NodeInfo,
     ) -> COUNT {
-        let record = system.cast_mut();
-        let target = body(record, world);
+        let target = body(system, world);
         let mut spare = NodeInfo::default();
         let info = if info.is_null() {
             &mut spare
         } else {
             &mut *info
         };
-        with_system(cx, io, record, |generator, system, host| {
+        with_system(cx, io, system.cast_mut(), |generator, system, host| {
             crate::planets::scan::generate(generator, system, target, node, scan_type, info, host)
         })
+        .0
     }
 
     pub static mut DISABLE_INTERACTIVITY: BOOLEAN = 0;
