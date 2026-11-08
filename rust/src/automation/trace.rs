@@ -31,6 +31,7 @@ pub enum RecordKind {
     RunEnd,
     InputTick,
     NativeBattle,
+    NativeGraphics,
     Presentation,
     Capture,
     MenuTransition,
@@ -223,7 +224,10 @@ impl TraceRecord {
     #[must_use]
     pub fn has_valid_schema(&self) -> bool {
         self.schema
-            == if self.kind == RecordKind::NativeBattle {
+            == if matches!(
+                self.kind,
+                RecordKind::NativeBattle | RecordKind::NativeGraphics
+            ) {
                 Self::BATTLE_SCHEMA
             } else {
                 Self::SCHEMA

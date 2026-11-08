@@ -29,7 +29,7 @@ pub struct TfbGraphicsBackend {
     screen: unsafe extern "C" fn(c_int, u8, *const SDL_Rect),
     color: unsafe extern "C" fn(u8, u8, u8, u8, *const SDL_Rect),
     present_hook: Option<std::rc::Rc<dyn Fn(bool) -> i32>>,
-    pub(crate) readback_hook: Option<std::rc::Rc<dyn Fn() -> Option<u64>>>,
+    pub(crate) readback_hook: Option<crate::graphics::presentation_diagnostics::ReadbackHook>,
 }
 pub(crate) static mut RUST_BACKEND: TfbGraphicsBackend = TfbGraphicsBackend {
     preprocess: ffi::rust_gfx_preprocess,
@@ -51,7 +51,7 @@ pub struct GraphicsOptions {
     pub renderer: Option<std::ffi::CString>,
     pub native_position: Option<(i32, i32)>,
     pub present_hook: Option<std::rc::Rc<dyn Fn(bool) -> i32>>,
-    pub readback_hook: Option<std::rc::Rc<dyn Fn() -> Option<u64>>>,
+    pub readback_hook: Option<crate::graphics::presentation_diagnostics::ReadbackHook>,
 }
 
 use crate::graphics::cmap_abi::GetFadeAmount;

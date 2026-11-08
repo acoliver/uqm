@@ -22,6 +22,7 @@ mod input;
 mod lander;
 use input::discard_held_repeat;
 mod native_battle;
+mod native_graphics;
 mod navigation;
 mod parity;
 mod save_capture;
@@ -2377,56 +2378,6 @@ impl AutomationObserver {
             }
         }
         boundary
-    }
-
-    fn native_checkpoint_pending(&self, inner: &CoordInner) -> bool {
-        self.native_checkpoint_plan.as_ref().is_some_and(|plan| {
-            plan.checkpoints_between(inner.checkpoint_step..inner.sched_state.step_index)
-                .next()
-                .is_some()
-        })
-    }
-
-    fn commit_native_checkpoints(&self, inner: &mut CoordInner, frame: &PresentedFrame) -> bool {
-        let Some(plan) = &self.native_checkpoint_plan else {
-            return false;
-        };
-        for checkpoint in
-            plan.checkpoints_between(inner.checkpoint_step..inner.sched_state.step_index)
-        {
-            if matches!(checkpoint.action, Action::NavigateToHyperspace(_))
-                && inner.departure.native_frame_pending
-            {
-                return false;
-            }
-            let id = checkpoint.id.clone();
-            let reservation = self.runtime.commit.reserve();
-            let mut record = super::capture::capture_trace_record(
-                reservation.sequence(),
-                self.elapsed_ms(),
-                CaptureGeneration(frame.generation),
-                &id,
-            );
-            record.run = 1;
-            record.kind = RecordKind::Checkpoint;
-            record.input_seen = inner.input_seen;
-            record.present_seen = inner.present_seen;
-            record.presentation = Some(crate::automation::capture::presentation_evidence(frame));
-            record.checkpoint = Some(super::trace::CheckpointEvidence { id });
-            match record.to_jsonl() {
-                Ok(line) => {
-                    reservation.commit_record(line);
-                    inner.native_publication_pending = true;
-                }
-                Err(error) => {
-                    reservation.cancel();
-                    self.capture_failure(inner, error);
-                    return true;
-                }
-            }
-        }
-        inner.checkpoint_step = inner.sched_state.step_index;
-        false
     }
 
     /// Process a committed present callback. Returns true if the game loop

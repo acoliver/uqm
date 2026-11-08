@@ -118,3 +118,5 @@ mod native_context;
 mod native_drawables;
 pub mod native_font;
 mod native_highlight;
+
+pub mod presentation_diagnostics;
