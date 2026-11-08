@@ -319,3 +319,18 @@ fn record_and_tighten_use_real_line_hits_and_preserve_other_counters() {
     assert!(move_edit::edit(root, &removal).is_err());
     assert!(move_check::analyze(root, "HEAD", &removed, &f.current, &f.hits, true).is_err());
 }
+
+#[test]
+fn source_correspondence_includes_visibility_and_attributes() {
+    let mut f = fixture();
+    let root = f.directory.path();
+    let old = f.baseline.coverage_moves.sources[std::env::consts::OS][SOURCE].clone();
+    for prefix in ["pub ", "#[inline] "] {
+        write(root, "rust/src/host.rs", &format!("{prefix}{NEW}"));
+        f.current = measure(root);
+        let function = source::unique(&f.current.coverage_functions, TARGET).unwrap();
+        let proof = function.proof(root, &f.hits).unwrap();
+        assert!(proof.text.starts_with(prefix));
+        assert!(!moves::attribute(&old, &proof).unwrap().moved.contains(&1));
+    }
+}

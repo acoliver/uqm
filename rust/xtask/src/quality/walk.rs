@@ -578,14 +578,14 @@ impl Walker {
         }
     }
 
-    fn function(&mut self, signature: &syn::Signature, block: &syn::Block) {
+    fn function(&mut self, signature: &syn::Signature, block: &syn::Block, declaration: Span) {
         self.definition(&signature.ident);
         self.context.hooks.clear();
         if self.names.is_some() {
             return;
         }
         if !self.generated {
-            let start = signature.span().start();
+            let start = declaration.start();
             let end = block.span().end();
             self.measurement
                 .coverage_functions

@@ -248,7 +248,7 @@ impl<'a> Visit<'a> for Walker {
             }
         }
         visit::visit_item_fn(self, item);
-        self.function(&item.sig, &item.block);
+        self.function(&item.sig, &item.block, item.span());
     }
     fn visit_impl_item(&mut self, item: &'a syn::ImplItem) {
         let saved = self.context.clone();
@@ -274,7 +274,7 @@ impl<'a> Visit<'a> for Walker {
             }
             self.attrs(attrs, item.to_token_stream());
             match item {
-                syn::ImplItem::Fn(i) => self.function(&i.sig, &i.block),
+                syn::ImplItem::Fn(i) => self.function(&i.sig, &i.block, i.span()),
                 syn::ImplItem::Const(i) => self.definition(&i.ident),
                 syn::ImplItem::Type(i) => self.definition(&i.ident),
                 _ => {}
@@ -301,7 +301,7 @@ impl<'a> Visit<'a> for Walker {
                 syn::TraitItem::Fn(i) => {
                     self.context.module.push_str(&format!("::{}", i.sig.ident));
                     if let Some(block) = &i.default {
-                        self.function(&i.sig, block);
+                        self.function(&i.sig, block, i.span());
                     }
                 }
                 syn::TraitItem::Const(i) if i.default.is_some() => self.definition(&i.ident),
