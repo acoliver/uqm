@@ -1543,9 +1543,6 @@ pub const LIGHT: _bindgen_ty_4 = 0;
 pub const MEDIUM: _bindgen_ty_4 = 1;
 pub const HEAVY: _bindgen_ty_4 = 2;
 pub type _bindgen_ty_4 = ::std::os::raw::c_uint;
-extern "C" {
-    pub static mut Elements: *const BYTE;
-}
 pub const PLANET_LANDER: _bindgen_ty_5 = 0;
 pub const FUSION_THRUSTER: _bindgen_ty_5 = 1;
 pub const TURNING_JETS: _bindgen_ty_5 = 2;
