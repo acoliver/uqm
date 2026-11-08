@@ -73,7 +73,8 @@ pub unsafe fn with_system<R>(
     });
     // SAFETY: the caller provides exclusive initialized records and RNG through this host.
     unsafe {
-        let mut site = Site::new(&game, &io, record, None);
+        let mut pickup = crate::planet_side::special_effects::PickupContext::NoLander;
+        let mut site = Site::new(&game, &io, record, &mut pickup, None);
         (site.with_system(run), site.presentation.take())
     }
 }
