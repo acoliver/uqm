@@ -10,7 +10,7 @@ use crate::planets::report::live::discovery_report;
 
 impl LanderTakeoff for Site<'_, '_, '_> {
     fn lander_takeoff(&mut self) {
-        crate::planet_side::special_effects::set_lander_takeoff();
+        self.pickup.request_takeoff();
     }
 }
 
@@ -38,7 +38,7 @@ impl vault::VaultSite for Site<'_, '_, '_> {
         self.load_scene(c"graphics.syreenvault", c"text.syreenvault", first_report);
     }
     fn lander_takeoff(&mut self) {
-        crate::planet_side::special_effects::set_lander_takeoff();
+        self.pickup.request_takeoff();
     }
 }
 
@@ -47,7 +47,7 @@ impl wreck::WreckSite for Site<'_, '_, '_> {
         self.load_scene(c"graphics.urquanwreck", c"text.urquanwreck", first_report);
     }
     fn lander_takeoff(&mut self) {
-        crate::planet_side::special_effects::set_lander_takeoff();
+        self.pickup.request_takeoff();
     }
 }
 
@@ -171,15 +171,13 @@ impl crate::planets::generate::sol::orbital::Orbital for Site<'_, '_, '_> {
 
 impl crate::planets::generate::sol::Pickup for Site<'_, '_, '_> {
     fn kill_lander_crew(&mut self, count: u16, interval_ticks: u32) -> bool {
-        self.game.borrow_mut().with_legacy(|| {
-            crate::planet_side::special_effects::kill_lander_crew_seq(count, interval_ticks)
-        })
+        self.pickup.kill_crew(count, interval_ticks)
     }
     fn lander_report(&mut self, system: &mut SolarSys<'_>) {
         crate::planets::generate::default::lander_report(system, self);
     }
     fn lander_takeoff(&mut self) {
-        crate::planet_side::special_effects::set_lander_takeoff();
+        self.pickup.request_takeoff();
     }
 }
 
