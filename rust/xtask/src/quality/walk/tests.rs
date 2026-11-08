@@ -883,3 +883,36 @@ fn moved_record_can_narrow_an_inherited_allow_to_its_legacy_field() {
         .unwrap_err()
         .contains("narrowed allow exceeds moved coverage"));
 }
+
+#[test]
+fn module_move_checks_deleted_children_by_actual_declaration_kind() {
+    use super::super::baseline::Baseline;
+    let base = fixture(
+        &[(
+            "src/lib.rs",
+            "mod before { fn init() { static mut DESC: u8 = 0; } }",
+        )],
+        None,
+        false,
+    );
+    for (source, permitted) in [
+        ("mod after { fn init() {} }", true),
+        ("mod after { fn init() { static mut DESC: u8 = 0; } }", true),
+        (
+            "mod after { fn init() {} } mod other { static mut DESC: u8 = 0; }",
+            false,
+        ),
+        (
+            "mod after { fn init() {} } mod other { fn DESC() {} }",
+            true,
+        ),
+    ] {
+        let current = fixture(&[("src/lib.rs", source)], None, false);
+        let mut baseline = Baseline {
+            entries: base.baseline(),
+            ..Default::default()
+        };
+        let result = baseline.add_move("uqm::before", "uqm::after", &current, &base);
+        assert_eq!(result.is_ok(), permitted, "{source}: {result:?}");
+    }
+}
