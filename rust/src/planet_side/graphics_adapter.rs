@@ -158,6 +158,11 @@ impl<A: PlanetSideAssetAccess> PlanetSideGraphics for CffiPlanetSideGraphics<'_,
                 x: snapshot.lander.position.x as i16,
                 y: snapshot.lander.position.y as i16,
             };
+            let topography = self.drawing.scan.sphere.borrow().zoomed_topography();
+            let topo_frame = topography
+                .frame(0)
+                .unwrap_or_else(|| panic!("orbit topography frame is not registered"))
+                .cast();
             return game.borrow_mut().with_legacy(|| unsafe {
                 redraw_surface_scan(self.drawing.scan, Some(scan_position));
                 self.last_scan_position = Some(snapshot.lander.position);
@@ -165,7 +170,6 @@ impl<A: PlanetSideAssetAccess> PlanetSideGraphics for CffiPlanetSideGraphics<'_,
                 self.drawing.planet.with_selected(|| {
                     BatchGraphics();
 
-                    let topo_frame = surface_topography_frame()?;
                     draw_surface_tiles(topo_frame, snapshot.lander.position);
 
                     draw_surface_entities(&self.surface.borrow(), snapshot.lander.position);
@@ -445,22 +449,6 @@ unsafe fn draw_cargo_meters(lander_base: *mut c_void, snapshot: &RenderSnapshot)
             frame: (SetAbsFrameIndex((lander_base).cast(), frame_idx)).cast(),
         };
         DrawStamp(std::ptr::from_mut(&mut stamp).cast());
-    }
-}
-
-#[cfg(not(test))]
-unsafe fn surface_topography_frame() -> Result<*mut c_void, AdapterError> {
-    let state = crate::c_bindings::solar_system::current();
-    if state.is_null() {
-        return Err(AdapterError::new("solar_system_not_initialized"));
-    }
-    let frame = std::ptr::addr_of!((*state).Orbit.TopoZoomFrame)
-        .read()
-        .cast::<c_void>();
-    if frame.is_null() {
-        Err(AdapterError::new("surface_topography_not_loaded"))
-    } else {
-        Ok(frame)
     }
 }
 

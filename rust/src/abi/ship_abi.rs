@@ -1869,7 +1869,6 @@ pub const LANDER_DEPARTS: _bindgen_ty_18 = 10;
 pub const LANDER_RETURNS: _bindgen_ty_18 = 11;
 pub const LANDER_DESTROYED: _bindgen_ty_18 = 12;
 pub type _bindgen_ty_18 = ::std::os::raw::c_uint;
-pub type PLANET_ORBIT = planet_orbit;
 pub type SOLARSYS_STATE = solarsys_state;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -2057,16 +2056,6 @@ pub const SUPER_DENSITY: _bindgen_ty_25 = 5;
 pub type _bindgen_ty_25 = ::std::os::raw::c_uint;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
-pub struct planet_orbit {
-    pub TopoZoomFrame: FRAME,
-    pub SphereFrame: FRAME,
-    pub ObjectFrame: FRAME,
-    pub TintFrame: FRAME,
-    pub TintColor: Color,
-    pub WorkFrame: FRAME,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
 pub struct solarsys_state {
     pub InputFunc:
         ::std::option::Option<unsafe extern "C" fn(arg1: *mut solarsys_state) -> BOOLEAN>,
@@ -2089,8 +2078,6 @@ pub struct solarsys_state {
     pub SysInfo: crate::engine::world::planet::SystemInfo,
     pub generator_index: u8,
     pub PlanetSideFrame: [FRAME; 6usize],
-    pub TopoFrame: FRAME,
-    pub Orbit: PLANET_ORBIT,
     pub InOrbit: BOOLEAN,
 }
 

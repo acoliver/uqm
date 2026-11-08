@@ -28,6 +28,7 @@ impl ScanCursor {
 }
 
 pub struct ScanState {
+    pub(crate) sphere: std::rc::Rc<RefCell<crate::planets::sphere::SphereState>>,
     context: LoadedContext,
     pub(crate) cursor: RefCell<ScanCursor>,
 }
@@ -49,8 +50,13 @@ pub(crate) fn create_context(kernel: &Kernel, width: i16) -> LoadedContext {
 }
 
 impl ScanState {
-    pub(crate) fn new(kernel: &Kernel, width: i16) -> Self {
+    pub(crate) fn new(
+        kernel: &Kernel,
+        width: i16,
+        sphere: std::rc::Rc<RefCell<crate::planets::sphere::SphereState>>,
+    ) -> Self {
         Self {
+            sphere,
             context: create_context(kernel, width),
             cursor: RefCell::new(ScanCursor::default()),
         }
@@ -81,8 +87,8 @@ mod tests {
             },
         });
         space.select();
-        let first = ScanState::new(&game.kernel, 242);
-        let second = ScanState::new(&game.kernel, 242);
+        let first = ScanState::new(&game.kernel, 242, Default::default());
+        let second = ScanState::new(&game.kernel, 242, Default::default());
         let retained = first.context();
         let expected = retained.clip_rect();
         assert_eq!((expected.corner.x, expected.corner.y), (7, 165));

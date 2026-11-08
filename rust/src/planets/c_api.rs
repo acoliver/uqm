@@ -14,14 +14,14 @@ use crate::mainloop::restart_menu::c_extern::{
 };
 use crate::planets::universe_units::{universe_to_logx, universe_to_logy};
 
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::DISABLE_INTERACTIVITY;
 #[cfg(not(test))]
 use crate::ui::sis::repair_sisborder;
 #[cfg(test)]
 extern "C" {
     fn repair_sisborder();
 }
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::DISABLE_INTERACTIVITY;
 
 pub use crate::log_abi::log_init;
 
@@ -51,12 +51,6 @@ pub use crate::strings::sresins::LoadStringTableInstance;
 
 use crate::graphics::pixmap_abi::CaptureDrawable;
 
-use crate::graphics::pixmap_abi::ReleaseDrawable;
-
-use crate::graphics::drawable_abi::DestroyDrawable;
-
-use crate::graphics::drawable_abi::RescaleFrame;
-
 use crate::graphics::tfb_draw_abi::TFB_DrawImage_New;
 
 use crate::graphics::native_canvas::scaling::TFB_DrawCanvas_Rescale_Nearest;
@@ -66,8 +60,6 @@ pub use crate::graphics::drawable_abi::ReadFramePixelIndexes;
 use crate::graphics::pixmap_abi::GetFrameCount;
 
 use crate::graphics::pixmap_abi::SetAbsFrameIndex;
-
-use crate::graphics::drawable_abi::CreateDrawable;
 
 pub use crate::graphics::dcqueue_abi::Init_DrawCommandQueue;
 

@@ -44,11 +44,9 @@ pub(crate) mod live {
 
     use crate::planets::sphere::live::draw_default_planet_sphere;
 
-    use crate::planets::sphere::live::DrawPlanet;
+    use crate::planets::sphere::live::draw_planet;
 
     use crate::planets::sphere::live::zoom_in_planet_sphere;
-
-    use crate::planets::sphere::live::UninitSphereRotation;
 
     use crate::planets::sphere::live::rotate_planet_sphere;
 
@@ -201,11 +199,11 @@ pub(crate) mod live {
             });
             base::DestroyDrawable(base::ReleaseDrawable(frame));
         } else if mode == FULL {
-            draw_default_planet_sphere(planet);
+            draw_default_planet_sphere(planet, &scan.sphere.borrow());
         }
         if mode != WAIT {
             scan.context().select();
-            DrawPlanet(0, black());
+            draw_planet(&mut scan.sphere.borrow_mut(), 0, black());
         }
         if mode != UPDATE {
             base::ScreenTransition(3, (&mut r as *mut CRect).cast());
@@ -221,7 +219,7 @@ pub(crate) mod live {
     pub unsafe fn load_planet(
         game: &std::cell::RefCell<crate::engine::battle::Cx<'_>>,
         io: &std::cell::RefCell<crate::engine::observe::Io<'_>>,
-        surface: *mut crate::engine::graphics::native_abi::FRAME_DESC,
+        surface: Option<crate::engine::graphics::drawable_abi::LoadedDrawable>,
     ) -> Option<OrbitPresentation> {
         #[cfg(feature = "debug-process")]
         if crate::front_end::uqmdebug::DISABLE_INTERACTIVITY != 0 {
@@ -243,7 +241,7 @@ pub(crate) mod live {
                 )
             });
             let wait = last_activity & CHECK_LOAD == 0;
-            assert!((*system).InOrbit != 0 && (*system).TopoFrame.is_null());
+            assert!((*system).InOrbit != 0);
             if wait {
                 draw_display(&context, presentation.scan(), WAIT);
             }
@@ -280,8 +278,6 @@ pub(crate) mod live {
     /// references to the planet resources released by this call.
     pub unsafe extern "C" fn FreePlanet() {
         let system = solar_system::current();
-        let orbit = std::ptr::addr_of_mut!((*system).Orbit);
-        UninitSphereRotation();
         base::stop_music();
         for i in 0..(*system).PlanetSideFrame.len() {
             base::DestroyDrawable(base::ReleaseDrawable((*system).PlanetSideFrame[i].cast()));
@@ -289,26 +285,8 @@ pub(crate) mod live {
         }
         DestroyStringTable(ReleaseStringTable((*system).XlatRef.cast()));
         (*system).XlatRef = std::ptr::null_mut();
-        base::DestroyDrawable(base::ReleaseDrawable((*system).TopoFrame.cast()));
-        (*system).TopoFrame = std::ptr::null_mut();
         DestroyStringTable(ReleaseStringTable((*system).OrbitalCMap.cast()));
         (*system).OrbitalCMap = std::ptr::null_mut();
-        base::DestroyDrawable(base::ReleaseDrawable((*orbit).TopoZoomFrame.cast()));
-        (*orbit).TopoZoomFrame = std::ptr::null_mut();
-        base::DestroyDrawable(base::ReleaseDrawable((*orbit).SphereFrame.cast()));
-        (*orbit).SphereFrame = std::ptr::null_mut();
-        base::DestroyDrawable(base::ReleaseDrawable((*orbit).TintFrame.cast()));
-        (*orbit).TintFrame = std::ptr::null_mut();
-        (*orbit).TintColor = crate::c_bindings::global_state::Color {
-            r: 0,
-            g: 0,
-            b: 0,
-            a: 255,
-        };
-        base::DestroyDrawable(base::ReleaseDrawable((*orbit).ObjectFrame.cast()));
-        (*orbit).ObjectFrame = std::ptr::null_mut();
-        base::DestroyDrawable(base::ReleaseDrawable((*orbit).WorkFrame.cast()));
-        (*orbit).WorkFrame = std::ptr::null_mut();
         DestroyStringTable(ReleaseStringTable(
             (*system).SysInfo.planet_info.discovery_string.cast(),
         ));

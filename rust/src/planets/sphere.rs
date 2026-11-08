@@ -31,7 +31,10 @@ impl Rotation {
     }
 }
 
+pub(crate) mod images;
+
 pub struct SphereState {
+    pub(crate) images: Option<images::OrbitImages>,
     rotation: Rotation,
     pub(crate) light: Box<crate::planets::render::sphere_geometry::SphereMask>,
     pub(crate) mapping: Box<crate::planets::render::sphere_geometry::SphereTiltMap>,
@@ -46,6 +49,7 @@ impl Default for SphereState {
     fn default() -> Self {
         use crate::planets::render::sphere_geometry::{SphereMapPoint, DIAMETER};
         Self {
+            images: None,
             rotation: Rotation::default(),
             light: Box::new([[0; DIAMETER]; DIAMETER]),
             mapping: Box::new([[SphereMapPoint::default(); DIAMETER]; DIAMETER]),
@@ -59,6 +63,33 @@ impl Default for SphereState {
 }
 
 impl SphereState {
+    pub(crate) fn images(&self) -> &images::OrbitImages {
+        self.images
+            .as_ref()
+            .unwrap_or_else(|| panic!("orbit images are not initialized"))
+    }
+
+    pub(crate) fn images_mut(&mut self) -> &mut images::OrbitImages {
+        self.images
+            .as_mut()
+            .unwrap_or_else(|| panic!("orbit images are not initialized"))
+    }
+
+    pub fn topography(&self) -> crate::engine::graphics::drawable_abi::DrawableLease {
+        self.images().topography()
+    }
+
+    pub fn zoomed_topography(&self) -> crate::engine::graphics::drawable_abi::DrawableLease {
+        self.images().zoom.lease()
+    }
+
+    pub fn sphere_frame(&self) -> crate::engine::graphics::context_abi::ContextFrame {
+        self.images()
+            .sphere
+            .lease()
+            .context_frame(self.rotation.frame as usize)
+    }
+
     fn reset_rotation(&mut self, direction: i32, pulsing: bool) {
         self.rotation = Rotation {
             frame: 1,
@@ -182,8 +213,8 @@ fn zoom_scale(frame: i32, frame_count: i32) -> f64 {
 
 #[cfg(not(test))]
 pub(crate) mod live {
-    use super::{zoom_scale, SphereState};
-    use crate::c_bindings::{global_state::DrawMode, solar_system};
+    use super::{images::required_frame, zoom_scale, SphereState};
+    use crate::c_bindings::global_state::DrawMode;
     use crate::comm::locdata::{CColor, CRect};
     use crate::engine::Kernel as KernelOwner;
     use crate::graphics::context_abi::SetContextClipRect;
@@ -198,17 +229,7 @@ pub(crate) mod live {
     use crate::engine::graphics::context_abi::ContextLease;
     use crate::engine::time::counter_abi::GetTimeCounter;
 
-    use crate::graphics::pixmap_abi::SetAbsFrameIndex;
-
     use crate::graphics::drawable_abi::GetFrameRect;
-
-    use crate::graphics::pixmap_abi::CaptureDrawable;
-
-    use crate::graphics::drawable_abi::CreateDrawable;
-
-    use crate::graphics::pixmap_abi::ReleaseDrawable;
-
-    use crate::graphics::drawable_abi::DestroyDrawable;
 
     use crate::planets::plangen::live::render_sphere;
 
@@ -238,83 +259,113 @@ pub(crate) mod live {
         r
     }
 
-    #[no_mangle]
-    unsafe extern "C" fn DrawPlanetSphere(x: i32, y: i32) {
-        let orbit = std::ptr::addr_of!((*solar_system::current()).Orbit);
+    fn draw_planet_sphere(state: &SphereState, x: i32, y: i32) {
+        let images = state.images();
         CffiPlatform.batch();
-        stamp((*orbit).SphereFrame.cast(), x as i16, y as i16);
-        if !(*orbit).ObjectFrame.is_null() {
-            stamp((*orbit).ObjectFrame.cast(), x as i16, y as i16);
+        stamp(
+            required_frame(&images.sphere.lease(), state.rotation.frame as usize).cast(),
+            x as i16,
+            y as i16,
+        );
+        if let Some(object) = images.object() {
+            let index = if state.rotation.throb {
+                state.rotation.frame as usize
+            } else {
+                0
+            };
+            stamp(required_frame(&object, index).cast(), x as i16, y as i16);
         }
         CffiPlatform.unbatch();
     }
 
-    pub unsafe fn draw_default_planet_sphere(planet: &ContextLease) {
+    pub unsafe fn draw_default_planet_sphere(planet: &ContextLease, state: &SphereState) {
         planet.with_selected(|| {
-            DrawPlanetSphere((ScreenWidth - 78) / 2, (ScreenHeight - 13 - 75 - 5 - 9) / 2);
+            draw_planet_sphere(
+                state,
+                (ScreenWidth - 78) / 2,
+                (ScreenHeight - 13 - 75 - 5 - 9) / 2,
+            );
         });
     }
 
     pub unsafe fn init_sphere_rotation(state: &mut SphereState, direction: i32, pulsing: bool) {
-        let orbit = std::ptr::addr_of_mut!((*solar_system::current()).Orbit);
         state.reset_rotation(direction, pulsing);
         if state.rotation.throb {
-            (*orbit).WorkFrame = (*orbit).ObjectFrame;
-            let size = bounds((*orbit).ObjectFrame.cast());
-            (*orbit).ObjectFrame =
-                CaptureDrawable(CreateDrawable(2 | 8, size.width, size.height, 2)).cast();
+            let rect = state
+                .images()
+                .shield
+                .as_ref()
+                .unwrap_or_else(|| panic!("orbit image frame is not initialized"))
+                .lease()
+                .frame_rect(0);
+            state.images_mut().throb = Some(super::images::image(
+                2 | 8,
+                rect.extent.width as usize,
+                rect.extent.height as usize,
+                2,
+            ));
         }
         prepare_next_rotation_frame(state);
     }
 
-    #[no_mangle]
-    pub unsafe extern "C" fn UninitSphereRotation() {
-        let orbit = std::ptr::addr_of_mut!((*solar_system::current()).Orbit);
-        if !(*orbit).WorkFrame.is_null() {
-            DestroyDrawable(ReleaseDrawable((*orbit).ObjectFrame.cast()));
-            (*orbit).ObjectFrame = (*orbit).WorkFrame;
-            (*orbit).WorkFrame = std::ptr::null_mut();
-        }
-    }
-
     unsafe fn prepare_next_rotation_frame(state: &mut SphereState) {
-        let orbit = std::ptr::addr_of_mut!((*solar_system::current()).Orbit);
         let mut rotation = state.rotation;
         rotation.advance(ScreenWidth - 78);
         state.rotation = rotation;
-        (*orbit).SphereFrame =
-            SetAbsFrameIndex((*orbit).SphereFrame.cast(), rotation.frame as u16).cast();
-        render_sphere(
-            state,
-            (*orbit).SphereFrame.cast(),
-            rotation.point,
-            rotation.throb,
-        );
+        let target = required_frame(&state.images().sphere.lease(), rotation.frame as usize);
+        render_sphere(state, target, rotation.point, rotation.throb);
         if rotation.throb {
-            (*orbit).ObjectFrame =
-                SetAbsFrameIndex((*orbit).ObjectFrame.cast(), rotation.frame as u16).cast();
-            set_shield_throb_effect(
-                state,
-                (*orbit).WorkFrame.cast(),
-                rotation.point,
-                (*orbit).ObjectFrame.cast(),
+            let shield = required_frame(
+                &state
+                    .images()
+                    .shield
+                    .as_ref()
+                    .unwrap_or_else(|| panic!("orbit shield is not initialized"))
+                    .lease(),
+                0,
             );
+            let throb = required_frame(
+                &state
+                    .images()
+                    .throb
+                    .as_ref()
+                    .unwrap_or_else(|| panic!("orbit throb is not initialized"))
+                    .lease(),
+                rotation.frame as usize,
+            );
+            set_shield_throb_effect(state, shield, rotation.point, throb);
         }
     }
 
     pub unsafe fn zoom_in_planet_sphere(planet: &ContextLease, state: &RefCell<SphereState>) {
-        let orbit = std::ptr::addr_of!((*solar_system::current()).Orbit);
         let width = ScreenWidth - 78;
         let scan_height = ScreenHeight - 13 - 75 - 5;
         let frame_count = (840 * 6 / 5) / (840 / 24);
         let corner = crate::math::random() as i32;
         let dx = 1 - (corner & 1) * 2;
         let dy = 1 - (corner & 2);
-        let frame_rect = bounds(if !(*orbit).ObjectFrame.is_null() {
-            (*orbit).ObjectFrame.cast()
-        } else {
-            (*orbit).SphereFrame.cast()
-        });
+        let frame_rect = {
+            let sphere = state.borrow();
+            let frame = sphere.images().object().map_or_else(
+                || sphere.sphere_frame(),
+                |object| {
+                    object.context_frame(if sphere.rotation.throb {
+                        sphere.rotation.frame as usize
+                    } else {
+                        0
+                    })
+                },
+            );
+            let rect = frame.rect();
+            CRect {
+                corner: crate::comm::locdata::CPoint {
+                    x: rect.corner.x,
+                    y: rect.corner.y,
+                },
+                width: rect.extent.width,
+                height: rect.extent.height,
+            }
+        };
         let mut repair = frame_rect;
         for i in 0..=frame_count {
             let next_time = GetTimeCounter().wrapping_add(840 / 24);
@@ -330,7 +381,7 @@ pub(crate) mod live {
             }
             let old_mode = SetGraphicScaleMode(1);
             let old_scale = SetGraphicScale((256.0 * scale + 0.5) as i32);
-            DrawPlanetSphere(x, y);
+            draw_planet_sphere(&state.borrow(), x, y);
             SetGraphicScale(old_scale);
             SetGraphicScaleMode(old_mode);
             CffiPlatform.unbatch();
@@ -350,17 +401,16 @@ pub(crate) mod live {
         if !animation.rotation_due(GetTimeCounter(), keep_rate, ScreenWidth - 78) {
             return;
         }
-        draw_default_planet_sphere(planet);
+        draw_default_planet_sphere(planet, &state.borrow());
         prepare_next_rotation_frame(&mut state.borrow_mut());
     }
 
-    unsafe fn tint_frame(color: CColor) {
-        let system = solar_system::current();
+    unsafe fn tint_frame(state: &SphereState, color: CColor) {
         let old_context = SetContext(KernelOwner::current().read(|owner| owner.off_screen_context));
-        SetContextFGFrame((*system).Orbit.TintFrame.cast());
+        SetContextFGFrame(required_frame(&state.images().tint.lease(), 0).cast());
         SetContextClipRect(std::ptr::null_mut());
         let rect = CffiPlatform.context_clip_rect();
-        stamp((*system).TopoFrame.cast(), 0, 0);
+        stamp(required_frame(&state.topography(), 0).cast(), 0, 0);
         let old_mode = SetContextDrawMode(DrawMode {
             kind: 1,
             factor: 255 / 2,
@@ -380,10 +430,7 @@ pub(crate) mod live {
         a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a
     }
 
-    #[no_mangle]
-    pub unsafe extern "C" fn DrawPlanet(tint_y: i32, color: CColor) {
-        let system = solar_system::current();
-        let orbit = std::ptr::addr_of_mut!((*system).Orbit);
+    pub unsafe fn draw_planet(state: &mut SphereState, tint_y: i32, color: CColor) {
         CffiPlatform.batch();
         if same_rgb(
             color,
@@ -394,11 +441,11 @@ pub(crate) mod live {
                 a: 255,
             },
         ) {
-            stamp((*system).TopoFrame.cast(), 0, 0);
+            stamp(required_frame(&state.topography(), 0).cast(), 0, 0);
         } else {
-            let frame = (*orbit).TintFrame;
+            let frame = required_frame(&state.images().tint.lease(), 0);
             let height = i32::from(bounds(frame.cast()).height);
-            let cached = (*orbit).TintColor;
+            let cached = state.images().tint_color;
             if !same_rgb(
                 color,
                 CColor {
@@ -408,8 +455,8 @@ pub(crate) mod live {
                     a: cached.a,
                 },
             ) {
-                tint_frame(color);
-                (*orbit).TintColor = crate::c_bindings::global_state::Color {
+                tint_frame(state, color);
+                state.images_mut().tint_color = CColor {
                     r: color.r,
                     g: color.g,
                     b: color.b,
@@ -417,7 +464,7 @@ pub(crate) mod live {
                 };
             }
             if tint_y < height - 1 {
-                stamp((*system).TopoFrame.cast(), 0, 0);
+                stamp(required_frame(&state.topography(), 0).cast(), 0, 0);
             }
             if tint_y >= 0 {
                 let old = CffiPlatform.context_clip_rect();

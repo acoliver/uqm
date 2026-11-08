@@ -77,9 +77,17 @@ pub fn check(h: &mut Harness) {
         let animation =
             uqm_rust::engine::Kernel::current().read(|kernel| kernel.planet_animation.clone());
         let mut sphere = uqm_rust::planets::sphere::SphereState::default();
-        c_api::generate_planet_surface(&mut sphere, &animation, false, world, earth.into_frame());
+        c_api::generate_planet_surface(
+            &mut sphere,
+            &animation,
+            false,
+            world,
+            earth.into_drawable(),
+        );
 
-        assert!(!(*system).TopoFrame.is_null());
+        let topography = sphere.topography();
+        let topo_frame = topography.frame(0).unwrap();
+        assert!(!topo_frame.is_null());
         assert_eq!(
             sphere.elevation().len(),
             MAP_WIDTH as usize * MAP_HEIGHT as usize
@@ -89,11 +97,11 @@ pub fn check(h: &mut Harness) {
             (MAP_WIDTH as usize + 75) * MAP_HEIGHT as usize
         );
         let first_elevation = sphere.elevation()[0];
-        assert!(!(*system).Orbit.SphereFrame.is_null());
-        let after_tint = frame_rgb((*system).TopoFrame);
+        assert_eq!(sphere.sphere_frame().rect().extent.width, 75);
+        let after_tint = frame_rgb(topo_frame);
         assert_eq!(after_tint.len(), before_tint.len());
         assert_eq!(
-            super::shield_additive::frame_bytes((*system).TopoFrame),
+            super::shield_additive::frame_bytes(topo_frame),
             expected_tint
         );
         for (index, (before, after)) in before_tint.iter().zip(&after_tint).enumerate() {
@@ -105,12 +113,11 @@ pub fn check(h: &mut Harness) {
         }
         println!("real Earth shield tint: all {} RGB pixels equal [255, source.g, source.b]; complete buffer equals isolated Rust additive core", after_tint.len());
         c_api::FreePlanet();
-        c_api::TFB_FlushGraphicsEx(1);
-        assert!((*system).TopoFrame.is_null());
         assert_eq!(sphere.elevation()[0], first_elevation);
+        drop(topography);
         drop(sphere);
-        assert!((*system).Orbit.SphereFrame.is_null());
-        println!("real Earth definition consumed by actual GeneratePlanetSurface, shield and sphere allocated, then actual FreePlanet cleared surface/sphere/topography owners");
+        c_api::TFB_FlushGraphicsEx(1);
+        println!("real Earth definition consumed by actual GeneratePlanetSurface, shield and sphere allocated, then FreePlanet plus owned release cleared surface/sphere/topography allocations");
         assert_eq!(
             sdl2::sys::SDL_GetNumAllocations(),
             baseline,

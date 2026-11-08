@@ -197,21 +197,19 @@ fn check_drawable_ownership(h: &mut Harness) {
                 (map_width, map_height)
             );
         }
-        h.state.TopoFrame = retained.into_frame();
-        // The move cleared the owner slot. Only actual FreePlanet now releases
-        // the retained source or rescaled surface; queued image frees drain below.
+        let owned = retained.into_drawable().unwrap();
+        assert_eq!(owned.lease().frame(0), Some(live));
+        drop(owned);
+        // SAFETY: all surface owners have dropped; drain their deferred image releases.
         unsafe {
-            assert_eq!(h.state.TopoFrame, live);
-            c_api::FreePlanet();
-            assert!(h.state.TopoFrame.is_null());
             c_api::TFB_FlushGraphicsEx(1);
         }
         assert_eq!(
             allocations(),
             baseline,
-            "source/rescale/FreePlanet leaked SDL allocations"
+            "source/rescale owners leaked SDL allocations"
         );
-        println!("Sol drawable ownership: {width}x{height} two-frame allocation -> retained {map_width}x{map_height} -> actual FreePlanet; SDL allocations {created} -> {baseline}");
+        println!("Sol drawable ownership: {width}x{height} two-frame allocation -> retained {map_width}x{map_height} -> owned release; SDL allocations {created} -> {baseline}");
     }
     // DEBUG's early-return LoadPlanet path must release an unconsumed non-null
     // definition as well, rather than proving only a missing-resource branch.

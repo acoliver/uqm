@@ -32,7 +32,7 @@ use crate::planets::solarsys::drawing::DrawStarBackGround;
 
 use crate::planets::sphere::live::draw_default_planet_sphere;
 
-use crate::planets::sphere::live::DrawPlanet;
+use crate::planets::sphere::live::draw_planet;
 
 use crate::planets::orbit::live::DrawScannedObjects;
 
@@ -116,11 +116,11 @@ pub unsafe extern "C" fn RepairBackRect(rect: *mut CRect) {
     DrawFromExtraScreen(std::ptr::from_mut(&mut new).cast());
 }
 
-unsafe fn erase_coarse(planet: &ContextLease) {
+unsafe fn erase_coarse(planet: &ContextLease, scan: &ScanState) {
     planet.select();
     CffiPlatform.batch();
     DrawStarBackGround();
-    draw_default_planet_sphere(planet);
+    draw_default_planet_sphere(planet, &scan.sphere.borrow());
     CffiPlatform.unbatch();
 }
 
@@ -205,7 +205,7 @@ fn flash_location(
 pub unsafe fn redraw_surface_scan(scan: &ScanState, location: Option<CPoint>) {
     scan.context().with_selected(|| {
         CffiPlatform.batch();
-        DrawPlanet(0, black());
+        draw_planet(&mut scan.sphere.borrow_mut(), 0, black());
         DrawScannedObjects(1);
         if let Some(location) = location {
             set_location(scan, location, false);
@@ -252,7 +252,7 @@ unsafe fn dispatch_lander(
     let misc_data = cx.kernel.misc_data_frame;
     let (mut context, old_callback) = cx.with_legacy(|| {
         let landing_fuel = fuel() as i16;
-        erase_coarse(planet);
+        erase_coarse(planet, scan);
         let old_callback = SetInputCallback(runtime.input(), None);
         (
             prepare_lander(
@@ -438,7 +438,7 @@ unsafe fn prepare_pick_side(scan: &ScanState, input: &InputSession) {
     ClearSISRect(1 << 2);
     scan.context().select();
     CffiPlatform.batch();
-    DrawPlanet(0, black());
+    draw_planet(&mut scan.sphere.borrow_mut(), 0, black());
     DrawScannedObjects(0);
     CffiPlatform.unbatch();
     let message = CString::new(format!(
@@ -560,7 +560,7 @@ unsafe fn scan_planet(
             );
             scan_state.context().select();
             CffiPlatform.batch();
-            DrawPlanet(0, black());
+            draw_planet(&mut scan_state.sphere.borrow_mut(), 0, black());
             CffiPlatform.unbatch();
             (GetTimeCounter(), color(tint_colors[usize::from(scan)]))
         });
@@ -572,7 +572,7 @@ unsafe fn scan_planet(
             }
             cx.with_legacy(|| {
                 CffiPlatform.batch();
-                DrawPlanet(line, tint);
+                draw_planet(&mut scan_state.sphere.borrow_mut(), line, tint);
             });
             scanned_stuff(cx, line as u16, scan);
             CffiPlatform.unbatch();
@@ -581,7 +581,7 @@ unsafe fn scan_planet(
         if line < 84 {
             cx.with_legacy(|| {
                 CffiPlatform.batch();
-                DrawPlanet(83, tint);
+                draw_planet(&mut scan_state.sphere.borrow_mut(), 83, tint);
             });
             scanned_stuff(cx, 83, scan);
             CffiPlatform.unbatch();
@@ -594,7 +594,7 @@ unsafe fn scan_planet(
     });
     if scan_type == 4 {
         cx.with_legacy(|| {
-            DrawPlanet(0, black());
+            draw_planet(&mut scan_state.sphere.borrow_mut(), 0, black());
             DrawScannedObjects(0);
         });
     }
@@ -711,8 +711,8 @@ unsafe fn finish_scan_system(scan: &ScanState, planet: &ContextLease) {
     CffiPlatform.set_flash(FlashTarget::Off);
     CffiPlatform.batch();
     scan.context().select();
-    DrawPlanet(0, black());
-    erase_coarse(planet);
+    draw_planet(&mut scan.sphere.borrow_mut(), 0, black());
+    erase_coarse(planet, scan);
     CffiPlatform.unbatch();
     scan.cursor.borrow_mut().erase = None;
 }

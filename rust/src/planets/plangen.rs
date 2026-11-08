@@ -14,7 +14,7 @@ pub(crate) mod live {
 
     use std::ptr::{addr_of_mut, null_mut};
 
-    use crate::planets::sphere::SphereState;
+    use crate::planets::sphere::{images::required_frame, SphereState};
 
     #[cfg(feature = "debug-process")]
     use crate::graphics::context_abi::CreateContextAux;
@@ -26,19 +26,7 @@ pub(crate) mod live {
 
     use crate::graphics::context_abi::DestroyContext;
 
-    use crate::graphics::pixmap_abi::CaptureDrawable;
-
-    use crate::graphics::drawable_abi::CreateDrawable;
-
-    use crate::graphics::pixmap_abi::ReleaseDrawable;
-
-    use crate::graphics::drawable_abi::DestroyDrawable;
-
-    use crate::graphics::pixmap_abi::SetAbsFrameIndex;
-
     use crate::graphics::pixmap_abi::GetFrameCount;
-
-    use crate::graphics::drawable_abi::RescaleFrame;
 
     use crate::graphics::drawable_abi::ReadFramePixelIndexes;
 
@@ -68,22 +56,16 @@ pub(crate) mod live {
         static mut ScreenWidth: i32;
     }
 
-    unsafe fn frame(flags: u8, width: usize, height: usize, count: u16) -> *mut c::FRAME_DESC {
-        CaptureDrawable(CreateDrawable(flags, width as i16, height as i16, count)).cast()
-    }
-
     unsafe fn init_orbit(state: &mut SphereState, width: usize, shielded: bool) {
-        let orbit = addr_of_mut!((*solar_system::current()).Orbit);
-        (*orbit).SphereFrame = frame(2 | 8, 75, 75, 2);
-        (*orbit).TintFrame = frame(2, width, 75, 1);
-        (*orbit).ObjectFrame = null_mut();
-        (*orbit).WorkFrame = null_mut();
-        (*orbit).TopoZoomFrame = frame(2, width * 4, 75 * 4, 1);
+        state.images = Some(crate::planets::sphere::images::OrbitImages::new(width));
         state.allocate_pixels(width, shielded);
     }
 
-    unsafe fn create_shield(state: &mut SphereState) -> *mut c::FRAME_DESC {
-        let target = frame(2 | 8, 89, 89, 1);
+    unsafe fn create_shield(
+        state: &mut SphereState,
+    ) -> crate::engine::graphics::drawable_abi::LoadedDrawable {
+        let image = crate::planets::sphere::images::image(2 | 8, 89, 89, 1);
+        let target = required_frame(&image.lease(), 0);
         let pixels = &mut state.scratch;
         for y in -44_i32..=44 {
             for x in -44_i32..=44 {
@@ -114,7 +96,7 @@ pub(crate) mod live {
         }
         WriteFramePixelColors(target, pixels.as_ptr(), 89, 89);
         SetFrameHot(target.cast(), CPoint { x: 45, y: 45 });
-        target
+        image
     }
 
     pub unsafe fn set_shield_throb_effect(
@@ -180,6 +162,49 @@ pub(crate) mod live {
         system.XlatPtr = GetStringAddress(system.XlatRef.cast()).cast();
     }
 
+    unsafe fn load_definition(
+        state: &mut SphereState,
+        definition: crate::engine::graphics::drawable_abi::LoadedDrawable,
+        width: usize,
+    ) {
+        let frame = required_frame(&definition.lease(), 0);
+        let resized =
+            i32::from((*frame).Bounds.width) != width as i32 || (*frame).Bounds.height != 75;
+        let topography = resized.then(|| {
+            definition
+                .rescaled(0, width as i32, 75)
+                .unwrap_or_else(|| panic!("rescaling planet definition"))
+        });
+        if GetFrameCount(frame.cast()) > 1 {
+            let elevation = required_frame(&definition.lease(), 1);
+            let scaled =
+                if (*elevation).Bounds.width != width as i16 || (*elevation).Bounds.height != 75 {
+                    Some(
+                        definition
+                            .rescaled(1, width as i32, 75)
+                            .unwrap_or_else(|| panic!("rescaling planet elevation")),
+                    )
+                } else {
+                    None
+                };
+            let elevation = scaled
+                .as_ref()
+                .map_or(elevation, |image| required_frame(&image.lease(), 0));
+            ReadFramePixelIndexes(
+                elevation.cast(),
+                state.elevation.as_mut_ptr().cast(),
+                width as i32,
+                75,
+            );
+            for value in &mut state.elevation {
+                *value = (*value as u8).wrapping_sub(128) as i8;
+            }
+        } else {
+            state.elevation.fill(0);
+        }
+        state.images_mut().topography = Some(topography.unwrap_or(definition));
+    }
+
     /// # Safety
     /// Planet and definition must be live records from the current solar system;
     /// the graphics resources and generation context must be initialized on the game thread.
@@ -188,7 +213,7 @@ pub(crate) mod live {
         animation: &crate::engine::kernel::planet_animation::PlanetAnimation,
         pulsing_shield: bool,
         planet: *mut crate::engine::world::planet::PlanetDesc,
-        mut definition: *mut c::FRAME_DESC,
+        definition: Option<crate::engine::graphics::drawable_abi::LoadedDrawable>,
     ) {
         let system = solar_system::current();
         let width = (ScreenWidth - 78) as usize;
@@ -201,40 +226,11 @@ pub(crate) mod live {
         let previous_context = SetContext(context);
         let retained_context = crate::graphics::context_abi::ContextLease::require(context);
         init_orbit(state, width, shielded);
-        let orbit = addr_of_mut!((*system).Orbit);
         let info = addr_of_mut!((*system).SysInfo.planet_info);
         let data = crate::planets::tables::PLANET_ARRAY.0[usize::from((*planet).data_index & !128)];
         let algo = data.type_ & 12;
-        if !definition.is_null() {
-            definition = SetAbsFrameIndex(definition.cast(), 0).cast();
-            let resized = i32::from((*definition).Bounds.width) != width as i32
-                || (*definition).Bounds.height != 75;
-            (*system).TopoFrame = if resized {
-                CaptureDrawable(RescaleFrame(definition.cast(), width as i32, 75)).cast()
-            } else {
-                definition
-            };
-            if GetFrameCount(definition.cast()) > 1 {
-                let mut elevation = SetAbsFrameIndex(definition.cast(), 1).cast::<c::FRAME_DESC>();
-                if (*elevation).Bounds.width != width as i16 || (*elevation).Bounds.height != 75 {
-                    elevation =
-                        CaptureDrawable(RescaleFrame(elevation.cast(), width as i32, 75)).cast();
-                }
-                ReadFramePixelIndexes(
-                    elevation.cast(),
-                    state.elevation.as_mut_ptr().cast(),
-                    width as i32,
-                    75,
-                );
-                for value in &mut state.elevation {
-                    *value = (*value as u8).wrapping_sub(128) as i8;
-                }
-            } else {
-                state.elevation.fill(0);
-            }
-            if resized {
-                DestroyDrawable(ReleaseDrawable(definition.cast()));
-            }
+        if let Some(definition) = definition {
+            load_definition(state, definition, width);
         } else {
             let depth = &mut state.elevation;
             let rng = crate::planets::ffi::sys_gen_rng();
@@ -284,17 +280,12 @@ pub(crate) mod live {
                 }
                 _ => {}
             }
-            (*system).TopoFrame = frame(2, width, 75, 1);
+            let topography = crate::planets::sphere::images::image(2, width, 75, 1);
+            let target = required_frame(&topography.lease(), 0);
             load_surface_palette(&mut *system, &data, (*info).temperature);
-            render_system_topography(
-                &retained_context,
-                system,
-                (*system).TopoFrame,
-                depth,
-                width as i32,
-                75,
-            )
-            .expect("render planet topography");
+            render_system_topography(&retained_context, system, target, depth, width as i32, 75)
+                .expect("render planet topography");
+            state.images_mut().topography = Some(topography);
         }
         if !shielded && (*info).atmo_density != 65535 {
             let depth = &state.elevation;
@@ -310,7 +301,7 @@ pub(crate) mod live {
             render_system_topography(
                 &retained_context,
                 system,
-                (*orbit).TopoZoomFrame,
+                required_frame(&state.zoomed_topography(), 0),
                 &scaled,
                 (width * 4) as i32,
                 300,
@@ -318,7 +309,7 @@ pub(crate) mod live {
             .expect("render scaled planet topography");
         }
         ReadFramePixelColors(
-            (*system).TopoFrame,
+            required_frame(&state.topography(), 0),
             state.colors.as_mut_ptr(),
             (width + 75) as i32,
             75,
@@ -341,12 +332,13 @@ pub(crate) mod live {
         };
         state.generate(Point::new(loc.x, loc.y), i32::from((*info).axial_tilt));
         if shielded {
-            (*orbit).ObjectFrame = create_shield(state);
+            let shield = create_shield(state);
+            state.images_mut().shield = Some(shield);
         }
         let direction = 1 - 2 * (i32::from((*info).axial_tilt) & 1);
         init_sphere_rotation(state, direction, pulsing_shield);
         if shielded {
-            let old = SetContextFGFrame((*system).TopoFrame.cast());
+            let old = SetContextFGFrame(required_frame(&state.topography(), 0).cast());
             SetContextClipRect(null_mut());
             let mut rect: c::RECT = std::mem::zeroed();
             c::GetContextClipRect(&mut rect);
