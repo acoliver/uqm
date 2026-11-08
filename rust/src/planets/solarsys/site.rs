@@ -41,19 +41,17 @@ impl<'a, 'game, 'observer> Site<'a, 'game, 'observer> {
         report_context: Option<crate::planets::report::typography::ReportContext>,
     ) -> Self {
         let record = NonNull::new(record).unwrap_or_else(|| panic!("live solar system"));
-        // SAFETY: the caller retains the initialized record for the host's lifetime.
-        let index = unsafe { record.as_ref().generator_index };
         Self {
             game,
             io,
             pickup,
-            index,
+            // SAFETY: the caller retains the initialized record for the host's lifetime.
+            index: unsafe { record.as_ref().generator_index },
             record,
             presentation: None,
             report_resources: report_context
                 .as_ref()
-                .map(|context| context.resources.clone())
-                .unwrap_or_default(),
+                .map_or_else(Default::default, |context| context.resources.clone()),
             report_context,
         }
     }
