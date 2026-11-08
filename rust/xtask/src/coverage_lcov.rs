@@ -11,6 +11,14 @@ struct Record {
 }
 
 impl Record {
+    fn total(slot: &mut Option<u64>, count: &str, name: &str) -> Result<(), String> {
+        let count = count.parse::<u64>().map_err(|e| e.to_string())?;
+        if slot.replace(count).is_some() {
+            return Err(format!("duplicate LCOV {name}"));
+        }
+        Ok(())
+    }
+
     fn line(&mut self, data: &str) -> Result<(), String> {
         let fields: Vec<_> = data.split(',').collect();
         if !(2..=3).contains(&fields.len()) {
@@ -61,22 +69,10 @@ pub(crate) fn parse(text: &str) -> Result<BTreeMap<String, LineHits>, String> {
             record.as_mut().ok_or("LCOV DA has no source")?.line(data)?;
         } else if let Some(count) = line.strip_prefix("LF:") {
             let current = record.as_mut().ok_or("LCOV LF has no source")?;
-            if current
-                .found
-                .replace(count.parse::<u64>().map_err(|e| e.to_string())?)
-                .is_some()
-            {
-                return Err("duplicate LCOV LF".into());
-            }
+            Record::total(&mut current.found, count, "LF")?;
         } else if let Some(count) = line.strip_prefix("LH:") {
             let current = record.as_mut().ok_or("LCOV LH has no source")?;
-            if current
-                .hit
-                .replace(count.parse::<u64>().map_err(|e| e.to_string())?)
-                .is_some()
-            {
-                return Err("duplicate LCOV LH".into());
-            }
+            Record::total(&mut current.hit, count, "LH")?;
         } else if ![
             "TN:", "FN:", "FNDA:", "FNF:", "FNH:", "BRDA:", "BRF:", "BRH:",
         ]

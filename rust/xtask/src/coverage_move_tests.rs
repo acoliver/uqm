@@ -311,4 +311,11 @@ fn record_and_tighten_use_real_line_hits_and_preserve_other_counters() {
         .findings
         .retain(|f| f.metric != "cfg_not_test_modules");
     assert!(move_check::analyze(root, "HEAD", &recorded, &retired, &f.hits, true).is_err());
+    let removal = ["remove".into(), TARGET.into()];
+    move_edit::edit(root, &removal).unwrap();
+    let removed = Baseline::read(&path).unwrap();
+    assert!(removed.coverage_moves.debt.is_empty());
+    assert_eq!(removed.entries, recorded.entries);
+    assert!(move_edit::edit(root, &removal).is_err());
+    assert!(move_check::analyze(root, "HEAD", &removed, &f.current, &f.hits, true).is_err());
 }

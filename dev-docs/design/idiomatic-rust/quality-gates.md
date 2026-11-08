@@ -405,6 +405,34 @@ Rules enforced by xtask:
    exercise those backends. Other files require behavior tests to reach 70%.
    Debt exempts only the added-file floor, never the workspace measurement or its
    70% floor. Baseline rewrites preserve these entries.
+
+   [#936](https://github.com/acoliver/uqm/issues/936) also permits per-declaration
+   debt for validated partial-file moves whose foreign test dependencies remain
+   excluded. This uses the quality move registry and host-specific LLVM executable
+   line evidence captured before the move. A declaration's measured coverage cannot
+   fall below its source coverage. Unchanged moved lines are removed only from the
+   added-code floor's numerator and denominator, never from workspace coverage.
+   New or changed lines in the destination still need 70% coverage. The only source
+   normalization permitted is insertion of parameters/arguments for the fixed
+   Comm/Cx/World/Kernel owner types, or removal of a receiver whose body never used
+   self. Any other expression or call-name change remains new code.
+
+   Request source capture with `cargo xtask coverage sources request <prefix>`.
+   The next coverage run emits committed-source `coverage-proof` records from its
+   LLVM LCOV export. Import each host's log before moving declarations with
+   `cargo xtask coverage sources import <log> <prefix>`. The source text must
+   match the measured commit. After registering the declaration moves, record
+   their measured line debt with `cargo xtask coverage moves record <owner>
+   --base <ref>`. Owners are U5-02 (#688, cargo), U6-03 (#693, UI) and U6-04
+   (#694, input/clock/events). Debt requires that owner's foreign test exclusions
+   to remain present; it cannot survive their retirement. Later changes use
+   `coverage moves tighten <owner> --base <ref>`, which can only shrink entries.
+   Remove retired entries with `coverage moves remove <identity>`. Removing debt
+   during the original move still leaves its pending source correspondence subject
+   to validation, so removal cannot bypass that move's added-code floor.
+   Missing owners, unmapped declarations, reused source credit and moved coverage
+   loss fail. Normalized lines remain debt rather than acquiring fabricated hits.
+
    Files with zero instrumented lines, including declaration/re-export-only files that
    LLVM omits from its report, are listed as `no executable lines` and do not fail
    ([#711](https://github.com/acoliver/uqm/issues/711)). The workspace must still

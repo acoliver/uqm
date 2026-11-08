@@ -30,8 +30,20 @@ pub(crate) fn report(root: &Path) -> Result<BTreeMap<String, lcov::LineHits>, St
 }
 
 pub(crate) fn edit(root: &Path, args: &[String]) -> Result<(), String> {
+    if let [operation, identity] = args {
+        if operation == "remove" {
+            let path = root.join("rust/xtask/quality-baseline.toml");
+            let mut baseline = Baseline::read(&path)?;
+            baseline
+                .coverage_moves
+                .debt
+                .remove(identity)
+                .ok_or_else(|| format!("no coverage relocation debt for {identity}"))?;
+            return baseline.write(&path);
+        }
+    }
     let [operation, owner, option, reference] = args else {
-        return Err("usage: coverage moves record <U5-02|U6-03|U6-04> --base <ref> | coverage moves tighten <owner> --base <ref>".into());
+        return Err("usage: coverage moves record <U5-02|U6-03|U6-04> --base <ref> | coverage moves tighten <owner> --base <ref> | coverage moves remove <identity>".into());
     };
     if option != "--base" || !["record", "tighten"].contains(&operation.as_str()) {
         return Err("coverage moves needs record or tighten and --base <ref>".into());

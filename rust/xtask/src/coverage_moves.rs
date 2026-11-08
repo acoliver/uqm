@@ -19,13 +19,13 @@ pub(crate) struct Debt {
     pub lines: u64,
 }
 
-pub(crate) struct Attribution {
+pub(super) struct Attribution {
     pub moved: BTreeSet<usize>,
     pub new: Lines,
     pub uncovered: u64,
 }
 
-pub(crate) fn attribute(before: &Proof, current: &Proof) -> Result<Attribution, String> {
+pub(super) fn attribute(before: &Proof, current: &Proof) -> Result<Attribution, String> {
     before.validate()?;
     current.validate()?;
     let old = counts(&before.lines);
@@ -57,7 +57,7 @@ pub(crate) fn attribute(before: &Proof, current: &Proof) -> Result<Attribution, 
     })
 }
 
-pub(crate) fn counts(hits: &LineHits) -> Lines {
+pub(super) fn counts(hits: &LineHits) -> Lines {
     Lines {
         count: hits.len() as u64,
         covered: hits.values().filter(|hit| **hit).count() as u64,
