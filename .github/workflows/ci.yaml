@@ -68,6 +68,7 @@ jobs:
           name: clippy-baseline-linux-x86_64
           path: rust/xtask/quality-baseline.toml
           retention-days: 3
+      - run: cargo test --locked --no-run
       - run: cargo test --workspace --locked --no-default-features --features "$FEATURES"
 
   supply:
