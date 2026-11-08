@@ -6,6 +6,7 @@ pub(crate) mod baseline;
 mod budgets;
 mod cfg;
 mod deps;
+pub(crate) mod expect_sites;
 mod layers;
 mod macros;
 pub(crate) mod metrics;

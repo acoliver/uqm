@@ -212,6 +212,26 @@ impl<'a> Visit<'a> for Walker {
             self.identifier(&item.ident);
         }
     }
+    fn visit_expr_method_call(&mut self, expression: &'a syn::ExprMethodCall) {
+        if expression.method == "expect"
+            && self.names.is_none()
+            && !self.defs_only
+            && !self.generated
+        {
+            let start = expression.span().start();
+            self.measurement
+                .expect_sites
+                .insert(super::super::expect_sites::Site {
+                    file: self.context.file.clone(),
+                    owner: self.context.module.clone(),
+                    expression: expression.to_token_stream().to_string(),
+                    line: start.line,
+                    column: start.column + 1,
+                });
+        }
+        visit::visit_expr_method_call(self, expression);
+    }
+
     fn visit_item_fn(&mut self, item: &'a syn::ItemFn) {
         self.exported_symbol(&item.attrs, &item.sig.ident);
         if let syn::ReturnType::Type(_, ty) = &item.sig.output {
