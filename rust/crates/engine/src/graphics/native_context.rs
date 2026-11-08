@@ -74,6 +74,17 @@ impl ContextFrame {
         }
     }
 
+    /// Read a frame-local pixel without applying its hotspot. Flush pending drawing first.
+    pub fn pixel(&self, point: POINT) -> Color {
+        let extent = self.rect().extent;
+        assert!(
+            point.x >= 0 && point.y >= 0 && point.x < extent.width && point.y < extent.height,
+            "frame pixel is outside its extent"
+        );
+        // SAFETY: the retained frame is live on its graphics thread and the pixel is in bounds.
+        unsafe { drawable_abi::GetFramePixel(self.frame, point) }
+    }
+
     pub fn replace_hotspot(&self, hotspot: HOT_SPOT) -> HOT_SPOT {
         for allocation in &self._allocations {
             allocation.assert_thread();

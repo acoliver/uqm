@@ -1,6 +1,6 @@
+use crate::engine::Kernel;
 #[cfg(not(test))]
-use crate::engine::World;
-use crate::engine::{Kernel, WorldData};
+use crate::engine::{World, WorldData};
 use crate::graphics::context_abi::ContextLease;
 #[cfg(not(test))]
 use crate::ui::palette::pilot_color;
@@ -90,12 +90,6 @@ unsafe fn radar_y() -> i32 {
     ScreenHeight - 56
 }
 
-#[inline]
-fn sis() -> crate::engine::Projection<SIS_STATE> {
-    // SAFETY: flagship is a field of the leased World; map keeps its thread
-    // assertion and exclusive borrow flag until the SIS projection is dropped.
-    unsafe { WorldData::current().map(|world| &raw mut (*world).flagship) }
-}
 #[inline]
 #[cfg(not(test))]
 unsafe fn set_color(color: Color) {
@@ -239,7 +233,7 @@ pub unsafe fn draw_captains_name() {
 /// Graphics, fonts, game strings and SIS inventory must be initialized.
 #[cfg(not(test))]
 pub unsafe fn draw_flagship_stats() {
-    let s = sis().read(|state| *state);
+    let s = WorldData::current().read(|world| world.flagship);
     let super::flagship_stats::Stats {
         energy_regen,
         energy_wait,
@@ -412,8 +406,8 @@ pub unsafe extern "C" fn DrawAutoPilotMessage(reset: BOOLEAN) {
         return;
     }
     let autopilot = WorldData::current().read(|owner| owner.game.autopilot);
-    let on =
-        (autopilot.x != -1 && autopilot.y != -1) || sis().read(|owner| owner.fuel_on_board) == 0;
+    let on = (autopilot.x != -1 && autopilot.y != -1)
+        || WorldData::current().read(|owner| owner.flagship.fuel_on_board) == 0;
     if on || LAST_PILOT != 0 {
         if !on {
             DrawSISMessage(ptr::null());
@@ -421,14 +415,16 @@ pub unsafe extern "C" fn DrawAutoPilotMessage(reset: BOOLEAN) {
         } else if GetTimeCounter() >= NEXT_PILOT_TIME {
             if crate::engine::World::current().read(|world| world.activity()) & CHECK_ABORT as u16
                 == 0
-                && sis().read(|owner| owner.crew_enlisted) != COUNT::MAX
+                && WorldData::current().read(|owner| owner.flagship.crew_enlisted) != COUNT::MAX
             {
                 let old = SetContext(Kernel::current().read(|owner| owner.off_screen_context));
                 SetContextForeGroundColor(pilot_color(PILOT_CYCLE_INDEX as usize));
                 DrawSISMessageEx(
                     game_string(
                         NAVIGATION_STRING_BASE
-                            + if sis().read(|owner| owner.fuel_on_board) == 0 {
+                            + if WorldData::current().read(|owner| owner.flagship.fuel_on_board)
+                                == 0
+                            {
                                 2
                             } else {
                                 3

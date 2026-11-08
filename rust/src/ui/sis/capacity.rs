@@ -254,10 +254,7 @@ mod tests {
         )) {
             return;
         }
-        use crate::graphics::{
-            context_abi::{ContextFrame, ContextLease},
-            drawable_abi::GetFramePixel,
-        };
+        use crate::graphics::context_abi::{ContextFrame, ContextLease};
         let mut game = crate::engine::Game::new();
         let display = crate::campaign_display_test::CampaignDisplay::install(&mut game)
             .unwrap_or_else(|error| panic!("capacity fixture: {error}"));
@@ -271,16 +268,31 @@ mod tests {
         state.fuel_on_board = 1001;
         let before = *state;
         let context = ContextLease::require(game.kernel.status_context);
-        context.set_frame(ContextFrame::retain(std::ptr::NonNull::new(
-            game.kernel.screen,
-        )));
+        let frame = ContextFrame::retain(std::ptr::NonNull::new(game.kernel.screen));
+        context.set_frame(frame.clone());
         context.set_background(rgb15(0, 0, 0));
         context.clear();
         draw_blueprint_cells(&context, state, true);
         context.flush();
+        let extent = frame.rect().extent;
+        for point in [
+            POINT { x: -1, y: 0 },
+            POINT {
+                x: extent.width,
+                y: 0,
+            },
+            POINT {
+                x: 0,
+                y: extent.height,
+            },
+        ] {
+            assert!(
+                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| frame.pixel(point)))
+                    .is_err()
+            );
+        }
         let pixel = |x, y| {
-            // SAFETY: this serialized fixture retains and flushes its screen before reading pixels.
-            let color = unsafe { GetFramePixel(game.kernel.screen, POINT { x, y }) };
+            let color = frame.pixel(POINT { x, y });
             (color.r, color.g, color.b)
         };
         for (x, y, rgb) in [
@@ -318,6 +330,7 @@ mod tests {
                 before.fuel_on_board
             )
         );
+        drop(frame);
         drop(context);
         display.finish(game);
     }
