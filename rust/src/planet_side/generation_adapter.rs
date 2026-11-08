@@ -124,12 +124,12 @@ impl<'a, 'game, 'observer> CffiSurfaceGenerator<'a, 'game, 'observer> {
 
     #[cfg(not(test))]
     unsafe fn generate_node(&mut self, scan_type: ScanType, node: u16, info: &mut NodeInfo) -> u16 {
+        let record = self.solar_system.cast();
+        let mut pickup = PickupContext::NoLander;
+        let report = self.report_context.clone();
         // SAFETY: the adapter retains this system and orbital descriptor throughout the selected callback.
         unsafe {
-            let record = self.solar_system.cast();
             let target = body(record, self.world.cast());
-            let mut pickup = PickupContext::NoLander;
-            let report = self.report_context.clone();
             let mut site = Site::new(self.game, self.io, record, &mut pickup, report);
             site.with_system(|generator, system, host| {
                 scan::generate(generator, system, target, node, scan_type as u8, info, host)
@@ -138,17 +138,12 @@ impl<'a, 'game, 'observer> CffiSurfaceGenerator<'a, 'game, 'observer> {
     }
 
     #[cfg(not(test))]
-    unsafe fn pickup_node(
-        &mut self,
-        scan_type: ScanType,
-        node: u16,
-        effects: &mut PickupContext,
-    ) -> bool {
+    fn pickup_node(&mut self, scan_type: ScanType, node: u16, effects: &mut PickupContext) -> bool {
+        let record = self.solar_system.cast();
+        let report = self.report_context.clone();
         // SAFETY: the adapter retains this system and orbital descriptor throughout the selected callback.
         unsafe {
-            let record = self.solar_system.cast();
             let target = body(record, self.world.cast());
-            let report = self.report_context.clone();
             let mut site = Site::new(self.game, self.io, record, effects, report);
             site.with_system(|generator, system, host| {
                 crate::planets::scan::pickup(generator, system, target, node, scan_type as u8, host)
@@ -361,7 +356,7 @@ impl SurfaceGenerator for CffiSurfaceGenerator<'_, '_, '_> {
     ) -> Result<bool, AdapterError> {
         #[cfg(not(test))]
         {
-            self.pickup_with(scan, node, |this| unsafe {
+            self.pickup_with(scan, node, |this| {
                 this.pickup_node(scan, u16::from(node.get()), effects)
             })
         }
