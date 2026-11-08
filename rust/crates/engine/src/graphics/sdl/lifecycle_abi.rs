@@ -155,6 +155,11 @@ pub unsafe extern "C" fn TFB_ProcessEvents() {
     let mut event = std::mem::MaybeUninit::uninit();
     while sdl2_sys::SDL_PollEvent(event.as_mut_ptr()) > 0 {
         let event = event.assume_init();
+        if event.type_ == sdl2_sys::SDL_EventType::SDL_WINDOWEVENT as u32
+            || event.type_ == sdl2_sys::SDL_EventType::SDL_DISPLAYEVENT as u32
+        {
+            ffi::observe_display_event(sdl2::event::Event::from_ll(event));
+        }
         crate::input_port::process_input_event(&event);
         if event.type_ == sdl2_sys::SDL_EventType::SDL_QUIT as u32 {
             ptr::write_volatile(ptr::addr_of_mut!(QuitPosted), 1);

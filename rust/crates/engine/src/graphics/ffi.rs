@@ -830,6 +830,12 @@ pub unsafe extern "C" fn rust_gfx_color(r: u8, g: u8, b: u8, a: u8, rect: *const
 // Event processing
 // ============================================================================
 
+pub(crate) fn observe_display_event(event: sdl2::event::Event) {
+    if let Some(state) = get_gfx_state() {
+        super::presentation_diagnostics::display_event(&mut state.presentation_samples, &event);
+    }
+}
+
 /// Process SDL events, returns 1 if quit requested
 // PANIC-FREE: if-let guard for uninitialized state. poll_iter and match
 // on event variants do not panic.
@@ -840,16 +846,7 @@ pub unsafe extern "C" fn rust_gfx_color(r: u8, g: u8, b: u8, a: u8, rect: *const
 pub unsafe extern "C" fn rust_gfx_process_events() -> c_int {
     if let Some(state) = get_gfx_state() {
         for event in state.event_pump.poll_iter() {
-            if matches!(
-                event,
-                sdl2::event::Event::Display { .. } | sdl2::event::Event::Window { .. }
-            ) {
-                state.presentation_samples.push(
-                    super::presentation_diagnostics::PresentationSample::Display {
-                        event: format!("{event:?}"),
-                    },
-                );
-            }
+            super::presentation_diagnostics::display_event(&mut state.presentation_samples, &event);
             if let sdl2::event::Event::Quit { .. } = event {
                 return 1;
             }
