@@ -3761,9 +3761,9 @@ u6_04_world_projection = { limit = 118, ends = "U6-04", scopes = { "ffi|owner_pr
 "loc|loc|uqm-xtask::abi_check::@file" = 1461
 "loc|loc|uqm-xtask::native_suite::@file" = 1516
 "loc|loc|uqm::automation::child_session::@file" = 2774
-"loc|loc|uqm::automation::coordinator::@file" = 2922
+"loc|loc|uqm::automation::coordinator::@file" = 2770
 "loc|loc|uqm::automation::native_runner::@file" = 3716
-"loc|loc|uqm::automation::native_window::@file" = 3552
+"loc|loc|uqm::automation::native_window::@file" = 3550
 "loc|loc|uqm::automation::scheduler::@file" = 1429
 "loc|loc|uqm::automation::script::@file" = 1793
 "loc|loc|uqm::automation::suite::@file" = 906
@@ -3785,7 +3785,7 @@ u6_04_world_projection = { limit = 118, ends = "U6-04", scopes = { "ffi|owner_pr
 "loc|loc|uqm::ships::native::abi::@file" = 2006
 "loc|loc|uqm::ships::registry::@file" = 943
 "loc|loc|uqm::starbase::shipyard_screen::@file" = 910
-"loc|loc|uqm::target::uqm-gameplay-proof::@file" = 2280
+"loc|loc|uqm::target::uqm-gameplay-proof::@file" = 2277
 "loc|loc|uqm::ui::shipyard::@file" = 877
 "unsafe|unsafe_block_lines|uqm-engine::uqm-engine" = 2372
 "unsafe|unsafe_block_lines|uqm-xtask::uqm-xtask" = 8
