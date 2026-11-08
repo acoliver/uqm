@@ -5,10 +5,7 @@ use crate::graphics::{
     context_abi::ContextLease,
     native_abi::{Color, EXTENT, POINT, RECT},
 };
-use crate::starbase::sis_modules::{
-    ModuleType, FUEL_RESERVE, FUEL_TANK_CAPACITY, FUEL_VOLUME_PER_ROW, HEFUEL_TANK_CAPACITY,
-    MAX_FUEL_BARS,
-};
+use crate::starbase::sis_modules::{fuel_bar_at, ModuleType, FUEL_RESERVE, FUEL_VOLUME_PER_ROW};
 use crate::ui::rgb15;
 
 const CREW_PER_ROW: i32 = 5;
@@ -125,29 +122,18 @@ pub(crate) fn storage_cell(state: &SisState) -> Option<CapacityCell> {
 }
 
 pub(crate) fn fuel_cell(state: &SisState) -> Option<(CapacityCell, Color)> {
-    let amount = state.fuel_on_board;
-    if amount < FUEL_RESERVE {
-        return None;
-    }
-    let mut capacity = FUEL_RESERVE;
-    for (slot, &module) in state.module_slots.iter().enumerate().rev() {
-        let volume = module_fuel_capacity(module);
-        capacity += volume;
-        if amount < capacity {
-            let row = (volume - (capacity - amount)) * MAX_FUEL_BARS / HEFUEL_TANK_CAPACITY;
-            return Some((
-                CapacityCell {
-                    point: POINT {
-                        x: (21 + slot as i32 * SHIP_PIECE_OFFSET) as i16,
-                        y: (if volume == FUEL_TANK_CAPACITY { 27 } else { 30 } - row as i32) as i16,
-                    },
-                    foreground: fuel_color(row as usize),
-                },
-                fuel_color(row as usize + 1),
-            ));
-        }
-    }
-    None
+    let capacities = state.module_slots.map(module_fuel_capacity);
+    let bar = fuel_bar_at(&capacities, state.fuel_on_board, state.fuel_on_board)?;
+    Some((
+        CapacityCell {
+            point: POINT {
+                x: bar.x as i16,
+                y: bar.y as i16,
+            },
+            foreground: fuel_color(bar.row as usize),
+        },
+        fuel_color(bar.row as usize + 1),
+    ))
 }
 
 fn draw_fuel_bar(context: &ContextLease, state: &SisState, filled: bool) {
