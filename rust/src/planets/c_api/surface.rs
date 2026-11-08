@@ -173,10 +173,12 @@ pub unsafe fn load_planet_surface(
     game: &std::cell::RefCell<crate::engine::battle::Cx<'_>>,
     io: &std::cell::RefCell<crate::engine::observe::Io<'_>>,
     surface: Option<CapturedSurface>,
+    reports: crate::planets::report::typography::ReportResources,
 ) -> Option<crate::planets::orbit::presentation::OrbitPresentation> {
     crate::planets::orbit::live::load_planet(
         game,
         io,
         surface.and_then(CapturedSurface::into_drawable),
+        reports,
     )
 }

@@ -1,5 +1,7 @@
 //! Discovery report paging and typewriter presentation from `planets/report.c`.
 
+pub mod typography;
+
 fn character_delay(character: u32, last_in_word: bool) -> u32 {
     let mut delay = 0;
     if character == u32::from(b',') {
@@ -252,13 +254,14 @@ pub(crate) mod live {
     pub unsafe fn discovery_report(
         system: *mut crate::ships::native::abi::SOLARSYS_STATE,
         scan: Option<&ContextLease>,
+        typography: &super::typography::ReportTypography,
     ) {
         crate::app::bridge::enter(|cx| {
             let mut observer = cx.kernel.input_runtime().observer();
             let mut io = Io {
                 observer: &mut *observer,
             };
-            do_discovery_report(cx, &mut io, system, scan);
+            do_discovery_report(cx, &mut io, system, scan, typography);
         });
     }
 
@@ -267,6 +270,7 @@ pub(crate) mod live {
         io: &mut Io<'_>,
         system: *mut crate::ships::native::abi::SOLARSYS_STATE,
         scan: Option<&ContextLease>,
+        typography: &super::typography::ReportTypography,
     ) {
         #[cfg(feature = "debug-process")]
         if crate::front_end::uqmdebug::DISABLE_INTERACTIVITY != 0 {
@@ -286,9 +290,13 @@ pub(crate) mod live {
             let (saved, old_font, old_effect, text, length) = cx.with_legacy(|| {
                 let saved = SaveContextFrame(std::ptr::null_mut());
                 let info = std::ptr::addr_of!((*system).SysInfo.planet_info);
-                let old_font = SetContextFont((*info).lander_font.cast());
+                let old_font = SetContextFont(typography.font.as_raw().cast());
                 let old_effect = SetContextFontEffect(if input.preferences().fonts == 2 {
-                    (*info).lander_font_eff.cast()
+                    typography
+                        .effect()
+                        .frame(0)
+                        .unwrap_or_else(|| panic!("report effect frame"))
+                        .cast()
                 } else {
                     std::ptr::null_mut()
                 });

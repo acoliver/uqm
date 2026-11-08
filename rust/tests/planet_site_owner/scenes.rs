@@ -63,9 +63,17 @@ fn check_scene(
 ) {
     with_site(game, index, |host, system| {
         load(host, system);
+        let typography = host
+            .report_typography()
+            .unwrap_or_else(|| panic!("scene {report} typography"));
+        let measured =
+            typography
+                .font()
+                .measure(c"A", POINT { x: 0, y: 0 }, TEXT_ALIGN_ALIGN_LEFT, 1);
+        assert!(measured.visible);
+        assert_eq!(measured.rect.extent.width, 1);
+        assert_eq!(typography.effect().frame_rect(0).extent.width, 1);
         system.scene(|info, frame| {
-            assert!(!info.lander_font.is_null());
-            assert!(!info.lander_font_eff.is_null());
             if let Some(mask) = mask {
                 assert!(!frame.is_null(), "missing mask {mask}");
                 // SAFETY: the fixture owns this loaded mask until cleanup below.
@@ -99,15 +107,6 @@ fn check_scene(
             } else {
                 assert!(info.discovery_string.is_null());
             }
-            // SAFETY: both font allocations belong exclusively to this fixture.
-            unsafe {
-                uqm_rust::graphics::font_abi::DestroyFont(info.lander_font.cast());
-                DestroyDrawable(uqm_rust::graphics::pixmap_abi::ReleaseDrawable(
-                    info.lander_font_eff.cast(),
-                ));
-            }
-            info.lander_font = ptr::null_mut();
-            info.lander_font_eff = ptr::null_mut();
             if !frame.is_null() {
                 // SAFETY: this is the mask allocation checked above, released exactly once.
                 unsafe { DestroyDrawable(uqm_rust::graphics::pixmap_abi::ReleaseDrawable(*frame)) };

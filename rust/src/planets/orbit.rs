@@ -16,7 +16,6 @@ pub(crate) mod live {
     use crate::c_bindings::{global_state::MENU_STATE, solar_system};
     use crate::comm::locdata::CRect;
     use crate::engine::graphics::context_abi::ContextLease;
-    use crate::engine::world::planet::PlanetInfo;
     use crate::engine::{
         battle::Cx,
         observe::{CheckpointView, Io},
@@ -57,8 +56,6 @@ pub(crate) mod live {
     use crate::strings::string_table::ReleaseStringTable;
 
     use crate::strings::string_table::DestroyStringTable;
-
-    use crate::graphics::font_abi::DestroyFont;
 
     use crate::planets::scan::live::scan_system;
 
@@ -220,6 +217,7 @@ pub(crate) mod live {
         game: &std::cell::RefCell<crate::engine::battle::Cx<'_>>,
         io: &std::cell::RefCell<crate::engine::observe::Io<'_>>,
         surface: Option<crate::engine::graphics::drawable_abi::LoadedDrawable>,
+        reports: crate::planets::report::typography::ReportResources,
     ) -> Option<OrbitPresentation> {
         #[cfg(feature = "debug-process")]
         if crate::front_end::uqmdebug::DISABLE_INTERACTIVITY != 0 {
@@ -228,6 +226,7 @@ pub(crate) mod live {
         let presentation = OrbitPresentation::new(
             game.borrow().kernel,
             CffiPlatform.screen_size().0 as i16 - 78,
+            reports,
         );
         let context = presentation.context();
         let sphere = presentation.sphere();
@@ -257,7 +256,7 @@ pub(crate) mod live {
             orbit_music::set_planet_music((*planet).data_index & !0x80);
             wait
         });
-        orbit_scan::generate_planet_side(game, io);
+        orbit_scan::generate_planet_side(game, io, presentation.scan().report_context());
         game.borrow_mut().with_legacy(|| {
             if PLRPlaying(usize::MAX as *mut c_void) == 0 {
                 base::PlayMusic((orbit_music::LANDER_MUSIC).cast(), 1, 1);
@@ -291,25 +290,7 @@ pub(crate) mod live {
             (*system).SysInfo.planet_info.discovery_string.cast(),
         ));
         (*system).SysInfo.planet_info.discovery_string = std::ptr::null_mut();
-        FreeLanderFont(std::ptr::addr_of_mut!((*system).SysInfo.planet_info));
         SetContext(KernelOwner::current().read(|owner| owner.space_context));
-    }
-
-    #[no_mangle]
-    pub unsafe extern "C" fn LoadStdLanderFont(info: *mut PlanetInfo) {
-        (*info).lander_font = base::LoadGraphicInstance(c"font.lander".as_ptr()).cast();
-        (*info).lander_font_eff = base::CaptureDrawable(
-            (base::LoadGraphicInstance(c"graphics.landerfonteffect".as_ptr())).cast(),
-        )
-        .cast();
-    }
-
-    #[no_mangle]
-    pub unsafe extern "C" fn FreeLanderFont(info: *mut PlanetInfo) {
-        DestroyFont((*info).lander_font.cast());
-        (*info).lander_font = std::ptr::null_mut();
-        base::DestroyDrawable(base::ReleaseDrawable((*info).lander_font_eff.cast()));
-        (*info).lander_font_eff = std::ptr::null_mut();
     }
 
     unsafe fn do_orbit(

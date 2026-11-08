@@ -13,7 +13,11 @@ pub struct OrbitPresentation {
 }
 
 impl OrbitPresentation {
-    pub fn new(kernel: &Kernel, width: i16) -> Self {
+    pub fn new(
+        kernel: &Kernel,
+        width: i16,
+        reports: crate::planets::report::typography::ReportResources,
+    ) -> Self {
         let space = ContextLease::require(kernel.space_context);
         let planet = space.with_selected(|| {
             let mut clip = space.clip_rect();
@@ -27,7 +31,12 @@ impl OrbitPresentation {
         let sphere = Rc::new(RefCell::new(crate::planets::sphere::SphereState::default()));
         Self {
             planet,
-            scan: crate::planets::scan::state::ScanState::new(kernel, width, sphere.clone()),
+            scan: crate::planets::scan::state::ScanState::new(
+                kernel,
+                width,
+                sphere.clone(),
+                reports,
+            ),
             sphere,
         }
     }
@@ -65,8 +74,8 @@ mod tests {
                 height: 227,
             },
         });
-        let first = OrbitPresentation::new(&game.kernel, 242);
-        let second = OrbitPresentation::new(&game.kernel, 242);
+        let first = OrbitPresentation::new(&game.kernel, 242, Default::default());
+        let second = OrbitPresentation::new(&game.kernel, 242, Default::default());
         let first_sphere = first.sphere();
         assert!(Rc::ptr_eq(&first_sphere, &first.scan().sphere));
         {

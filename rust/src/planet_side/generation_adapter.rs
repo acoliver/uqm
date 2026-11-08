@@ -81,7 +81,7 @@ pub struct CffiSurfaceGenerator<'a, 'game, 'observer> {
     world: *mut c_void,
     #[cfg_attr(test, allow(dead_code))]
     role: GeneratorRole,
-    scan_context: Option<crate::engine::graphics::context_abi::ContextLease>,
+    report_context: Option<crate::planets::report::typography::ReportContext>,
 }
 
 impl<'a, 'game, 'observer> CffiSurfaceGenerator<'a, 'game, 'observer> {
@@ -92,7 +92,7 @@ impl<'a, 'game, 'observer> CffiSurfaceGenerator<'a, 'game, 'observer> {
         game: &'a RefCell<Cx<'game>>,
         io: &'a RefCell<Io<'observer>>,
         context: &super::ffi::PlanetSideRunContext,
-        scan_context: crate::engine::graphics::context_abi::ContextLease,
+        report_context: crate::planets::report::typography::ReportContext,
     ) -> Result<Self, AdapterError> {
         let mut generator = Self::with_role(
             game,
@@ -101,7 +101,7 @@ impl<'a, 'game, 'observer> CffiSurfaceGenerator<'a, 'game, 'observer> {
             context.world,
             GeneratorRole::PlanetSide,
         )?;
-        generator.scan_context = Some(scan_context);
+        generator.report_context = Some(report_context);
         Ok(generator)
     }
 
@@ -113,8 +113,12 @@ impl<'a, 'game, 'observer> CffiSurfaceGenerator<'a, 'game, 'observer> {
         io: &'a RefCell<Io<'observer>>,
         solar_system: *mut c_void,
         world: *mut c_void,
+        report_context: Option<crate::planets::report::typography::ReportContext>,
     ) -> Result<Self, AdapterError> {
-        Self::with_role(game, io, solar_system, world, GeneratorRole::OrbitScan)
+        let mut generator =
+            Self::with_role(game, io, solar_system, world, GeneratorRole::OrbitScan)?;
+        generator.report_context = report_context;
+        Ok(generator)
     }
 
     #[cfg(not(test))]
@@ -123,7 +127,7 @@ impl<'a, 'game, 'observer> CffiSurfaceGenerator<'a, 'game, 'observer> {
         unsafe {
             let record = self.solar_system.cast();
             let target = body(record, self.world.cast());
-            let mut site = Site::new(self.game, self.io, record, self.scan_context.clone());
+            let mut site = Site::new(self.game, self.io, record, self.report_context.clone());
             site.with_system(|generator, system, host| {
                 scan::generate(generator, system, target, node, scan_type as u8, info, host)
             })
@@ -136,7 +140,7 @@ impl<'a, 'game, 'observer> CffiSurfaceGenerator<'a, 'game, 'observer> {
         unsafe {
             let record = self.solar_system.cast();
             let target = body(record, self.world.cast());
-            let mut site = Site::new(self.game, self.io, record, self.scan_context.clone());
+            let mut site = Site::new(self.game, self.io, record, self.report_context.clone());
             site.with_system(|generator, system, host| {
                 crate::planets::scan::pickup(generator, system, target, node, scan_type as u8, host)
             })
@@ -219,7 +223,7 @@ impl<'a, 'game, 'observer> CffiSurfaceGenerator<'a, 'game, 'observer> {
                 solar_system,
                 world,
                 role,
-                scan_context: None,
+                report_context: None,
             })
         }
     }
@@ -363,7 +367,7 @@ mod tests {
         run: impl FnOnce(
             &RefCell<Cx<'_>>,
             &RefCell<Io<'_>>,
-            crate::engine::graphics::context_abi::ContextLease,
+            crate::planets::report::typography::ReportContext,
         ),
     ) {
         let mut owners = crate::engine::Game::new();
@@ -380,12 +384,19 @@ mod tests {
         });
         let scan =
             crate::engine::graphics::context_abi::LoadedContext::create(c"generation-test-scan");
-        run(&game, &io, scan.lease());
+        run(
+            &game,
+            &io,
+            crate::planets::report::typography::ReportContext {
+                context: scan.lease(),
+                resources: Default::default(),
+            },
+        );
     }
     #[test]
     #[serial_test::serial]
     fn accepted_live_pickups_update_the_planet_mask_and_dirty_flag() {
-        with_context(|game, io, scan_context| {
+        with_context(|game, io, report_context| {
             crate::state::ffi::rust_init_game_state(game.borrow_mut().world);
             game.borrow_mut().world.data.flagship.crew_enlisted = 23;
             // SAFETY: all scalar and pointer fields admit zero before fixture initialization.
@@ -400,7 +411,7 @@ mod tests {
                     world: world.cast(),
                     ..Default::default()
                 },
-                scan_context,
+                report_context,
             )
             .unwrap();
             assert!(std::ptr::eq(generator.io, io));
@@ -447,13 +458,13 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn null_generation_context_is_rejected() {
-        with_context(|game, io, scan_context| {
+        with_context(|game, io, report_context| {
             assert!(matches!(
                 CffiSurfaceGenerator::for_planet_side(
                     game,
                     io,
                     &super::super::ffi::PlanetSideRunContext::default(),
-                    scan_context,
+                    report_context,
                 ),
                 Err(AdapterError {
                     operation: "surface_generator_context",
@@ -465,7 +476,8 @@ mod tests {
                     game,
                     io,
                     std::ptr::null_mut(),
-                    std::ptr::null_mut()
+                    std::ptr::null_mut(),
+                    None
                 ),
                 Err(AdapterError {
                     operation: "surface_generator_context",
@@ -478,7 +490,7 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn unlinked_generator_fails_without_fallback() {
-        with_context(|game, io, scan_context| {
+        with_context(|game, io, report_context| {
             let pointer = std::ptr::NonNull::<u8>::dangling().as_ptr().cast();
             let mut generator = CffiSurfaceGenerator::for_planet_side(
                 game,
@@ -488,7 +500,7 @@ mod tests {
                     world: pointer,
                     ..Default::default()
                 },
-                scan_context,
+                report_context,
             )
             .unwrap();
             assert_eq!(

@@ -28,8 +28,6 @@ pub fn captured_labels(mut text: String) -> String {
         ("scan_seed:", "ScanSeed:"),
         ("scan_retrieve_mask:", "ScanRetrieveMask:"),
         ("discovery_string:", "DiscoveryString:"),
-        ("lander_font:", "LanderFont:"),
-        ("lander_font_eff:", "LanderFontEff:"),
         ("star_size:", "StarSize:"),
         ("star_intensity:", "StarIntensity:"),
         ("star_energy:", "StarEnergy:"),
@@ -40,5 +38,9 @@ pub fn captured_labels(mut text: String) -> String {
     ] {
         text = text.replace(rust, captured);
     }
-    text
+    // Generation captures contain no presentation assets. Preserve the retired C columns here.
+    text.replace(
+        "DiscoveryString: 0x0",
+        "DiscoveryString: 0x0, LanderFont: 0x0, LanderFontEff: 0x0",
+    )
 }

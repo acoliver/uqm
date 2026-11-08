@@ -20,6 +20,13 @@ pub struct CampaignDisplay {
 
 impl CampaignDisplay {
     pub fn install(game: &mut Game) -> Result<Self, Box<dyn std::error::Error>> {
+        Self::install_with_resources(game, || {})
+    }
+
+    pub fn install_with_resources(
+        game: &mut Game,
+        load: impl FnOnce(),
+    ) -> Result<Self, Box<dyn std::error::Error>> {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../tmp");
         std::fs::create_dir_all(&root)?;
         let directory = tempfile::tempdir_in(root.canonicalize()?)?;
@@ -28,9 +35,12 @@ impl CampaignDisplay {
             image::RgbaImage::from_pixel(width, 1, image::Rgba([255, 255, 255, 255]))
                 .save(directory.path().join(format!("font/{code:04x}.png")))?;
         }
+        image::RgbaImage::from_pixel(1, 1, image::Rgba([255, 255, 255, 255]))
+            .save(directory.path().join("effect.png"))?;
+        std::fs::write(directory.path().join("effect.ani"), "effect.png -1 0 0 0\n")?;
         std::fs::write(
             directory.path().join("fixture.rmp"),
-            "fixture.tiny = FONTRES:font\n",
+            "fixture.tiny = FONTRES:font\nfont.lander = FONTRES:font\ngraphics.landerfonteffect = GFXRES:effect.ani\n",
         )?;
         let host = CString::new(
             directory
@@ -84,6 +94,7 @@ impl CampaignDisplay {
             game.kernel.install_battle_font(
                 LoadedFont::load(c"fixture.tiny").ok_or("battle-font fixture did not load")?,
             );
+            load();
             uqm_rust::mainloop::dir_prep::contentDir = previous_content;
             uio::uio_closeDir(content);
             uio::uio_closeRepository(repository);

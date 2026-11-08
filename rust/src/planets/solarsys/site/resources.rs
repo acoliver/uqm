@@ -53,6 +53,7 @@ impl wreck::WreckSite for Site<'_, '_, '_> {
 
 impl andro::AndrosynthSite for Site<'_, '_, '_> {
     fn load_ruins_story(&mut self, _system: &mut SolarSys<'_>, visits: u32) {
+        self.report_resources.load();
         // SAFETY: the live solar system state on the game thread.
         self.game
             .borrow_mut()
@@ -90,18 +91,25 @@ impl<'a, 'game, 'observer> Site<'a, 'game, 'observer> {
             "orbit presentation loaded twice"
         );
         // SAFETY: this host retains the orbital records; loading consumes the optional definition.
-        self.presentation = unsafe { c_api::load_planet_surface(self.game, self.io, surface) };
+        self.presentation = unsafe {
+            c_api::load_planet_surface(self.game, self.io, surface, self.report_resources.clone())
+        };
     }
 
     pub(super) fn discovery_report(
         &self,
     ) -> crate::planet_side::report_adapter::CffiDiscoveryReport<'a, 'observer, impl FnMut()> {
         let system = self.record.as_ptr();
-        let scan_context = self.scan_context.clone().or_else(|| {
-            self.presentation
-                .as_ref()
-                .map(|presentation| presentation.scan().context())
-        });
+        let resources = self.report_resources.clone();
+        let scan_context = self
+            .report_context
+            .as_ref()
+            .map(|report| report.context.clone())
+            .or_else(|| {
+                self.presentation
+                    .as_ref()
+                    .map(|presentation| presentation.scan().context())
+            });
         // SAFETY: this site retains the initialized system and its report slot.
         let slot =
             unsafe { std::ptr::addr_of_mut!((*system).SysInfo.planet_info.discovery_string) };
@@ -109,8 +117,11 @@ impl<'a, 'game, 'observer> Site<'a, 'game, 'observer> {
             slot.cast(),
             self.io,
             move || {
+                let typography = resources
+                    .snapshot()
+                    .unwrap_or_else(|| panic!("discovery report typography is not loaded"));
                 // SAFETY: the site presents synchronously while its published record remains live.
-                unsafe { discovery_report(system, scan_context.as_ref()) };
+                unsafe { discovery_report(system, scan_context.as_ref(), &typography) };
             },
         )
         .unwrap_or_else(|error| {

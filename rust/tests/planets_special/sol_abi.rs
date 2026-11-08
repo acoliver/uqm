@@ -230,7 +230,10 @@ fn check_drawable_ownership(h: &mut Harness) {
             let definition = game
                 .borrow_mut()
                 .with_legacy(|| CapturedSurface::pixmap(map_width / 2, map_height / 2, 2));
-            assert!(c_api::load_planet_surface(&game, &io, Some(definition)).is_none());
+            assert!(
+                c_api::load_planet_surface(&game, &io, Some(definition), Default::default())
+                    .is_none()
+            );
         });
         c_api::TFB_FlushGraphicsEx(1);
         c_api::DISABLE_INTERACTIVITY = saved_debug;

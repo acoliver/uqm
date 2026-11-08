@@ -10,7 +10,10 @@ use uqm_rust::resource::ffi_bridge;
 use uqm_rust::state::game_state_keys::set_game_state;
 
 pub fn check(h: &mut Harness) {
-    let content = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../sc2/content");
+    let content = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../sc2/content")
+        .canonicalize()
+        .unwrap();
     let path = std::ffi::CString::new(content.to_str().unwrap()).unwrap();
     unsafe {
         c_api::log_init(100);
@@ -258,34 +261,67 @@ unsafe fn scenes(h: &mut Harness) {
         });
         // SAFETY: Harness retains installed owners and live solar/planet
         // descriptors throughout this synchronous orbital callback.
-        assert!(unsafe {
-            crate::invoke_generation(system, |view, host| {
+        let typography = uqm_rust::app::bridge::enter(|cx| {
+            let game = std::cell::RefCell::new(uqm_rust::engine::battle::Cx {
+                b: cx.b,
+                world: cx.world,
+                kernel: cx.kernel,
+                rng: cx.rng,
+            });
+            let mut observer = uqm_rust::engine::observe::Unobserved;
+            let io = std::cell::RefCell::new(uqm_rust::engine::observe::Io {
+                observer: &mut observer,
+            });
+            let mut site = uqm_rust::planets::solarsys::site::Site::new(&game, &io, system, None);
+            assert!(site.with_system(|_, view, host| {
                 GENERATE_SOL_FUNCTIONS.generate_orbital(
                     view,
                     uqm_rust::planets::solarsys::site::dispatch::body(system, world),
                     host,
                 )
-            })
+            }));
+            site.report_typography().unwrap()
         });
+        let font = typography.font();
+        let effect = typography.effect();
+        let measured = font.measure(
+            c"A",
+            uqm_rust::graphics::native_abi::POINT { x: 0, y: 0 },
+            0,
+            1,
+        );
+        assert!(
+            measured.visible,
+            "lander A glyph missing, leading={}",
+            measured.leading
+        );
+        assert!(effect.frame_rect(0).extent.width > 0);
         let info = &(*system).SysInfo.planet_info;
-        assert!(!info.lander_font.is_null());
-        assert!(!info.lander_font_eff.is_null());
         assert!(!info.discovery_string.is_null());
         assert!(!(*system).PlanetSideFrame[1].is_null());
         assert_eq!(info.planet_density, if pluto { 33 } else { 60 });
         c_api::FreePlanet();
         c_api::TFB_FlushGraphicsEx(1);
         let info = &(*system).SysInfo.planet_info;
+        assert!(info.discovery_string.is_null());
+        drop(typography);
         assert!(
-            info.lander_font.is_null()
-                && info.lander_font_eff.is_null()
-                && info.discovery_string.is_null()
+            font.measure(
+                c"A",
+                uqm_rust::graphics::native_abi::POINT { x: 0, y: 0 },
+                0,
+                1
+            )
+            .visible
         );
+        assert!(effect.frame_rect(0).extent.width > 0);
+        drop((font, effect));
+        c_api::TFB_FlushGraphicsEx(1);
         assert!((*system)
             .PlanetSideFrame
             .iter()
             .all(|frame| frame.is_null()));
-        println!("Sol real scene {}: font + effect + mask + report loaded through actual orbital ABI, then FreePlanet cleared every owned slot", if pluto { "Pluto" } else { "moonbase" });
+        println!("Sol real scene {}: font + effect + mask + report loaded through actual orbital ABI, then explicit font leases survive FreePlanet and release after their final user", if pluto { "Pluto" } else { "moonbase" });
     }
     c_api::DISABLE_INTERACTIVITY = saved_debug;
 }
