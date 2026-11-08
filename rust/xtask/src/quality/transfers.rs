@@ -164,6 +164,31 @@ fn deleted_child(source: &str, owner: &str, base: &Measurement, current: &Measur
         })
 }
 
+fn moved_children<'a>(
+    old: &str,
+    new: &str,
+    sources: BTreeSet<&'a str>,
+    base: &Measurement,
+    current: &Measurement,
+    current_ids: &BTreeSet<&str>,
+) -> Result<Vec<(String, &'a str)>, String> {
+    let mut kept = Vec::new();
+    for source in sources {
+        let target = format!("{new}{}", &source[old.len()..]);
+        if current_ids.contains(target.as_str()) {
+            kept.push((target, source));
+        } else if !deleted_child(source, old, base, current) {
+            return Err(format!(
+                "move target {target} is absent; function transfers cannot split"
+            ));
+        }
+    }
+    if kept.is_empty() {
+        return Err(format!("move target {new} is absent"));
+    }
+    Ok(kept)
+}
+
 pub fn validate(
     entries: &BTreeMap<String, u64>,
     current: &Measurement,
@@ -202,26 +227,12 @@ pub fn validate(
             return Err(format!("move source {old} does not exist at base"));
         }
         register(&mut unique, old, new)?;
-        let mut kept = false;
-        for source in sources {
-            let target = format!("{new}{}", &source[old.len()..]);
-            if !current_ids.contains(target.as_str()) {
-                if deleted_child(source, old, base, current) {
-                    continue;
-                }
-                return Err(format!(
-                    "move target {target} is absent; function transfers cannot split"
-                ));
-            }
+        for (target, source) in moved_children(old, new, sources, base, current, &current_ids)? {
             if let Some(previous) = targets.insert(target.clone(), source) {
                 return Err(format!(
                     "{previous} and {source} have the same target {target}"
                 ));
             }
-            kept = true;
-        }
-        if !kept {
-            return Err(format!("move target {new} is absent"));
         }
     }
     let base_entries = unbudgeted_file_loc(base);
