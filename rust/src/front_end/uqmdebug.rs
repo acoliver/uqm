@@ -700,7 +700,10 @@ mod runtime {
         );
     }
     pub fn uqm_debug_creature_bio_value(kind: BYTE) -> c_int {
-        crate::planet_side::creatures::rust_creature_bio_value(kind)
+        use crate::planet_side::creatures::{CreatureCatalog, CreatureKind};
+        CreatureKind::new(kind)
+            .map(|kind| i32::from(CreatureCatalog::stats(kind).value))
+            .unwrap_or(-1)
     }
     /// # Safety
     /// World must be the active orbital descriptor and its generation functions live.
