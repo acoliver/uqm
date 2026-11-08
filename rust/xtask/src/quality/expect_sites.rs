@@ -92,6 +92,7 @@ pub(super) fn compare(
     current: &BTreeMap<String, u64>,
     before: &BTreeMap<String, u64>,
     moves: &BTreeMap<String, String>,
+    pending: &BTreeMap<String, String>,
     source: &Proof,
     target: &Proof,
 ) -> Result<(), String> {
@@ -101,7 +102,7 @@ pub(super) fn compare(
     let mut attributed = current.clone();
     for (key, count) in source {
         let (file, owner, expression) = parts(key)?;
-        let Some((old, new)) = super::transfers::matching(moves, owner) else {
+        let Some((old, new)) = super::transfers::matching(pending, owner) else {
             continue;
         };
         let owner = format!("{new}{}", &owner[old.len()..]);
@@ -161,9 +162,16 @@ pub(super) fn check(
     validate(old_proof, &source)?;
     validate(actual, current)?;
     if let Some(prior) = baseline.lint.get(host) {
-        compare(counts, prior, &moves, old_proof, actual)?;
+        compare(counts, prior, &baseline.moved, &moves, old_proof, actual)?;
     }
-    compare(counts, prior_host, &moves, old_proof, actual)?;
+    compare(
+        counts,
+        prior_host,
+        &baseline.moved,
+        &moves,
+        old_proof,
+        actual,
+    )?;
     for (os, previous) in &baseline.lint {
         if let Some(prior) = recorded.lint.get(os) {
             if super::tool::compare(previous, prior, &baseline.moved).is_err() {
@@ -171,7 +179,7 @@ pub(super) fn check(
                 let new = baseline.expect_sites.get(os).unwrap_or(&empty);
                 validate(old, &source)?;
                 validate(new, current)?;
-                compare(previous, prior, &moves, old, new)?;
+                compare(previous, prior, &baseline.moved, &moves, old, new)?;
             }
         }
     }
@@ -248,10 +256,78 @@ mod tests {
     }
 
     #[test]
+    fn pending_expect_move_keeps_retained_physical_file_aliases() -> Result<(), String> {
+        let entries = [
+            (
+                "clippy::undocumented_unsafe_blocks",
+                "ffi_behavior_tests.rs",
+                49,
+            ),
+            (
+                "clippy::undocumented_unsafe_blocks",
+                "joystick_behavior_tests.rs",
+                14,
+            ),
+            (
+                "clippy::undocumented_unsafe_blocks",
+                "sdl_input_tests.rs",
+                15,
+            ),
+            ("unsafe_op_in_unsafe_fn", "sdl_input_tests.rs", 1),
+        ];
+        let mut previous = counters(&[(OLD, 1)]);
+        let mut current = counters(&[(NEW, 1)]);
+        let mut retained = moves();
+        retained.insert("uqm-engine::input".into(), "uqm-engine::input_port".into());
+        for (lint, file, count) in entries {
+            let old = format!("{lint}|uqm-engine::@path::src::input::{file}");
+            let new = format!("{lint}|uqm-engine::@path::src::input_port::{file}");
+            previous.insert(old.clone(), count);
+            current.insert(new.clone(), count);
+            assert!(super::super::tool::compare(
+                &[(new.clone(), count)].into(),
+                &[(old, count)].into(),
+                &retained,
+            )
+            .is_ok());
+        }
+        for (lint, file, count) in entries {
+            let mut grown = current.clone();
+            grown.insert(
+                format!("{lint}|uqm-engine::@path::src::input_port::{file}"),
+                count + 1,
+            );
+            assert!(compare(&grown, &previous, &retained, &moves(), &source(), &target()).is_err());
+        }
+        compare(
+            &current,
+            &previous,
+            &retained,
+            &moves(),
+            &source(),
+            &target(),
+        )
+    }
+
+    #[test]
+    fn retained_alias_cannot_authorize_partial_expect_credit() {
+        assert!(compare(
+            &counters(&[(NEW, 1)]),
+            &counters(&[(OLD, 1)]),
+            &moves(),
+            &BTreeMap::new(),
+            &source(),
+            &target(),
+        )
+        .is_err());
+    }
+
+    #[test]
     fn partial_file_move_conserves_the_source_counter() -> Result<(), String> {
         compare(
             &counters(&[(NEW, 1)]),
             &counters(&[(OLD, 1)]),
+            &moves(),
             &moves(),
             &source(),
             &target(),
@@ -263,6 +339,7 @@ mod tests {
         assert!(compare(
             &counters(&[(OLD, 1), (NEW, 1)]),
             &counters(&[(OLD, 1)]),
+            &moves(),
             &moves(),
             &source(),
             &target()
@@ -276,6 +353,7 @@ mod tests {
             &counters(&[(OLD, 1), (NEW, 1)]),
             &counters(&[(OLD, 2)]),
             &moves(),
+            &moves(),
             &source(),
             &target(),
         )
@@ -287,6 +365,7 @@ mod tests {
         assert!(compare(
             &counters(&[(NEW, 2)]),
             &counters(&[(OLD, 2)]),
+            &moves(),
             &moves(),
             &source(),
             &duplicate
@@ -306,6 +385,7 @@ mod tests {
             &counters(&[(NEW, 1)]),
             &counters(&[(OLD, 1)]),
             &moves(),
+            &moves(),
             &source(),
             &changed
         )
@@ -318,6 +398,7 @@ mod tests {
         assert!(compare(
             &counters(&[(OTHER, 1)]),
             &counters(&[(OLD, 1)]),
+            &moves(),
             &moves(),
             &source(),
             &unrelated
@@ -332,6 +413,7 @@ mod tests {
             &counters(&[(NEW, 2)]),
             &counters(&[(OLD, 2), (NEW, 1)]),
             &moves(),
+            &moves(),
             &source(),
             &two
         )
@@ -343,6 +425,7 @@ mod tests {
         assert!(compare(
             &counters(&[(NEW, 1)]),
             &counters(&[(OLD, 1)]),
+            &moves(),
             &moves(),
             &Proof::new(),
             &target()
