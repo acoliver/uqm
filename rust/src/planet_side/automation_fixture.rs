@@ -528,7 +528,12 @@ mod tests {
         ) -> Result<super::super::generation::GeneratedNode, AdapterError> {
             Err(AdapterError::new("unexpected_generate"))
         }
-        fn pickup(&mut self, _scan: ScanType, _node: ScanNodeId) -> Result<bool, AdapterError> {
+        fn pickup(
+            &mut self,
+            _scan: ScanType,
+            _node: ScanNodeId,
+            _effects: &mut crate::planet_side::special_effects::PickupContext,
+        ) -> Result<bool, AdapterError> {
             *self.pickups.borrow_mut() += 1;
             Ok(true)
         }

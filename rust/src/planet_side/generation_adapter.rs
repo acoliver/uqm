@@ -20,6 +20,7 @@ use super::generation::{GeneratedNode, ScanNodeId, ScanType, SurfaceGenerator};
 #[cfg(not(test))]
 use super::model::SurfacePoint;
 use super::runtime::AdapterError;
+use super::special_effects::PickupContext;
 
 #[cfg(not(test))]
 const GENERATE_ALL: u16 = u16::MAX;
@@ -123,11 +124,13 @@ impl<'a, 'game, 'observer> CffiSurfaceGenerator<'a, 'game, 'observer> {
 
     #[cfg(not(test))]
     unsafe fn generate_node(&mut self, scan_type: ScanType, node: u16, info: &mut NodeInfo) -> u16 {
+        let record = self.solar_system.cast();
+        let mut pickup = PickupContext::NoLander;
+        let report = self.report_context.clone();
         // SAFETY: the adapter retains this system and orbital descriptor throughout the selected callback.
         unsafe {
-            let record = self.solar_system.cast();
             let target = body(record, self.world.cast());
-            let mut site = Site::new(self.game, self.io, record, self.report_context.clone());
+            let mut site = Site::new(self.game, self.io, record, &mut pickup, report);
             site.with_system(|generator, system, host| {
                 scan::generate(generator, system, target, node, scan_type as u8, info, host)
             })
@@ -135,12 +138,13 @@ impl<'a, 'game, 'observer> CffiSurfaceGenerator<'a, 'game, 'observer> {
     }
 
     #[cfg(not(test))]
-    unsafe fn pickup_node(&mut self, scan_type: ScanType, node: u16) -> bool {
+    fn pickup_node(&mut self, scan_type: ScanType, node: u16, effects: &mut PickupContext) -> bool {
+        let record = self.solar_system.cast();
+        let report = self.report_context.clone();
         // SAFETY: the adapter retains this system and orbital descriptor throughout the selected callback.
         unsafe {
-            let record = self.solar_system.cast();
             let target = body(record, self.world.cast());
-            let mut site = Site::new(self.game, self.io, record, self.report_context.clone());
+            let mut site = Site::new(self.game, self.io, record, effects, report);
             site.with_system(|generator, system, host| {
                 crate::planets::scan::pickup(generator, system, target, node, scan_type as u8, host)
             })
@@ -344,16 +348,21 @@ impl SurfaceGenerator for CffiSurfaceGenerator<'_, '_, '_> {
         Err(AdapterError::new("surface_generator_unlinked"))
     }
 
-    fn pickup(&mut self, scan: ScanType, node: ScanNodeId) -> Result<bool, AdapterError> {
+    fn pickup(
+        &mut self,
+        scan: ScanType,
+        node: ScanNodeId,
+        effects: &mut PickupContext,
+    ) -> Result<bool, AdapterError> {
         #[cfg(not(test))]
         {
-            self.pickup_with(scan, node, |this| unsafe {
-                this.pickup_node(scan, u16::from(node.get()))
+            self.pickup_with(scan, node, |this| {
+                this.pickup_node(scan, u16::from(node.get()), effects)
             })
         }
         #[cfg(test)]
         {
-            let _ = (scan, node);
+            let _ = (scan, node, effects);
             Err(AdapterError::new("surface_generator_unlinked"))
         }
     }

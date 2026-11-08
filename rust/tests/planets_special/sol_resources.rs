@@ -273,7 +273,9 @@ unsafe fn scenes(h: &mut Harness) {
             let io = std::cell::RefCell::new(uqm_rust::engine::observe::Io {
                 observer: &mut observer,
             });
-            let mut site = uqm_rust::planets::solarsys::site::Site::new(&game, &io, system, None);
+            let mut pickup = uqm_rust::planet_side::special_effects::PickupContext::NoLander;
+            let mut site =
+                uqm_rust::planets::solarsys::site::Site::new(&game, &io, system, &mut pickup, None);
             assert!(site.with_system(|_, view, host| {
                 GENERATE_SOL_FUNCTIONS.generate_orbital(
                     view,

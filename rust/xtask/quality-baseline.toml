@@ -1925,7 +1925,7 @@ u6_04_world_projection = { limit = 118, ends = "U6-04", scopes = { "ffi|owner_pr
 "allows|clippy::all|uqm-engine::graphics::native_abi" = 934
 "allows|clippy::all|uqm::c_bindings::controller_input" = 23
 "allows|clippy::all|uqm::c_bindings::global_state" = 276
-"allows|clippy::all|uqm::navigation::abi" = 3141
+"allows|clippy::all|uqm::navigation::abi" = 3140
 "allows|clippy::all|uqm::ships::native::abi" = 2043
 "allows|clippy::identity_op|uqm-engine::graphics::native_abi::_#1" = 25
 "allows|clippy::missing_safety_doc|uqm-engine::sound::decoder_api" = 123
@@ -1963,12 +1963,12 @@ u6_04_world_projection = { limit = 118, ends = "U6-04", scopes = { "ffi|owner_pr
 "allows|dead_code|uqm::comm::dispatch::ffi" = 74
 "allows|dead_code|uqm::comm::hail::c_bridge" = 2
 "allows|dead_code|uqm::config::Options" = 36
-"allows|dead_code|uqm::navigation::abi" = 3141
+"allows|dead_code|uqm::navigation::abi" = 3140
 "allows|dead_code|uqm::ships::native::abi" = 2043
 "allows|deprecated|uqm-engine::resource::resource_type::<ResourceValue>::as_color" = 2
 "allows|improper_ctypes|uqm::c_bindings::controller_input" = 23
 "allows|improper_ctypes|uqm::c_bindings::global_state" = 276
-"allows|improper_ctypes|uqm::navigation::abi" = 3141
+"allows|improper_ctypes|uqm::navigation::abi" = 3140
 "allows|non_camel_case_types|uqm-engine::battle::access::record::abi" = 157
 "allows|non_camel_case_types|uqm-engine::battle::access::schema" = 31
 "allows|non_camel_case_types|uqm-engine::graphics::native_abi" = 934
@@ -1978,7 +1978,7 @@ u6_04_world_projection = { limit = 118, ends = "U6-04", scopes = { "ffi|owner_pr
 "allows|non_camel_case_types|uqm-engine::video::ffi::SDL_PixelFormat" = 27
 "allows|non_camel_case_types|uqm::c_bindings::controller_input" = 23
 "allows|non_camel_case_types|uqm::c_bindings::global_state" = 276
-"allows|non_camel_case_types|uqm::navigation::abi" = 3141
+"allows|non_camel_case_types|uqm::navigation::abi" = 3140
 "allows|non_camel_case_types|uqm::ships::native::abi" = 2043
 "allows|non_camel_case_types|uqm::supermelee::netplay::abi" = 72
 "allows|non_snake_case|uqm-engine::battle::access::record::abi" = 157
@@ -2100,7 +2100,7 @@ u6_04_world_projection = { limit = 118, ends = "U6-04", scopes = { "ffi|owner_pr
 "allows|non_snake_case|uqm::game_init::macro_abi" = 33
 "allows|non_snake_case|uqm::mainloop::input_abi::live" = 128
 "allows|non_snake_case|uqm::mainloop::options_abi" = 83
-"allows|non_snake_case|uqm::navigation::abi" = 3141
+"allows|non_snake_case|uqm::navigation::abi" = 3140
 "allows|non_snake_case|uqm::ships::native::abi" = 2043
 "allows|non_snake_case|uqm::supermelee::netplay::abi" = 72
 "allows|non_snake_case|uqm::ui::shipyard_layout" = 48
@@ -2110,7 +2110,7 @@ u6_04_world_projection = { limit = 118, ends = "U6-04", scopes = { "ffi|owner_pr
 "allows|non_upper_case_globals|uqm-engine::resource::ffi_bridge::_cur_resfile_name" = 3
 "allows|non_upper_case_globals|uqm::c_bindings::controller_input" = 23
 "allows|non_upper_case_globals|uqm::c_bindings::global_state" = 276
-"allows|non_upper_case_globals|uqm::navigation::abi" = 3141
+"allows|non_upper_case_globals|uqm::navigation::abi" = 3140
 "allows|non_upper_case_globals|uqm::ships::native::abi" = 2043
 "allows|non_upper_case_globals|uqm::supermelee::netplay::abi" = 72
 "allows|unused_variables|uqm-engine::graphics::scaling::<BiadaptiveScaler>::rgb_to_luminance_simd" = 23
@@ -2631,7 +2631,6 @@ u6_04_world_projection = { limit = 118, ends = "U6-04", scopes = { "ffi|owner_pr
 "ffi|extern_c_fn|uqm::game_init" = 22
 "ffi|extern_c_fn|uqm::mainloop" = 7
 "ffi|extern_c_fn|uqm::navigation" = 2
-"ffi|extern_c_fn|uqm::planet_side" = 3
 "ffi|extern_c_fn|uqm::planets" = 36
 "ffi|extern_c_fn|uqm::savegame" = 7
 "ffi|extern_c_fn|uqm::time" = 8
@@ -2655,7 +2654,6 @@ u6_04_world_projection = { limit = 118, ends = "U6-04", scopes = { "ffi|owner_pr
 "ffi|no_mangle|uqm::front_end" = 1
 "ffi|no_mangle|uqm::game_init" = 9
 "ffi|no_mangle|uqm::mainloop" = 3
-"ffi|no_mangle|uqm::planet_side" = 1
 "ffi|no_mangle|uqm::planets" = 29
 "ffi|no_mangle|uqm::time" = 4
 "ffi|no_mangle|uqm::ui" = 26
@@ -3729,8 +3727,8 @@ u6_04_world_projection = { limit = 118, ends = "U6-04", scopes = { "ffi|owner_pr
 "loc|loc|uqm::comm::talk_segue::@file" = 1075
 "loc|loc|uqm::front_end::gameopt::@file" = 912
 "loc|loc|uqm::front_end::setupmenu::@file" = 1144
-"loc|loc|uqm::front_end::uqmdebug::@file" = 1369
-"loc|loc|uqm::navigation::abi::@file" = 3129
+"loc|loc|uqm::front_end::uqmdebug::@file" = 1368
+"loc|loc|uqm::navigation::abi::@file" = 3128
 "loc|loc|uqm::planets::tables::@file" = 1766
 "loc|loc|uqm::ships::native::abi::@file" = 1987
 "loc|loc|uqm::ships::registry::@file" = 943
@@ -3747,7 +3745,7 @@ u6_04_world_projection = { limit = 118, ends = "U6-04", scopes = { "ffi|owner_pr
 "unsafe|unsafe_block_lines|uqm::game_init" = 2
 "unsafe|unsafe_block_lines|uqm::mainloop" = 192
 "unsafe|unsafe_block_lines|uqm::navigation" = 2
-"unsafe|unsafe_block_lines|uqm::planet_side" = 127
+"unsafe|unsafe_block_lines|uqm::planet_side" = 122
 "unsafe|unsafe_block_lines|uqm::planets" = 138
 "unsafe|unsafe_block_lines|uqm::savegame" = 22
 "unsafe|unsafe_block_lines|uqm::ships" = 84
@@ -3764,7 +3762,7 @@ u6_04_world_projection = { limit = 118, ends = "U6-04", scopes = { "ffi|owner_pr
 "unsafe|unsafe_blocks|uqm::game_init" = 2
 "unsafe|unsafe_blocks|uqm::mainloop" = 98
 "unsafe|unsafe_blocks|uqm::navigation" = 2
-"unsafe|unsafe_blocks|uqm::planet_side" = 13
+"unsafe|unsafe_blocks|uqm::planet_side" = 12
 "unsafe|unsafe_blocks|uqm::planets" = 66
 "unsafe|unsafe_blocks|uqm::savegame" = 11
 "unsafe|unsafe_blocks|uqm::ships" = 8
@@ -3781,7 +3779,7 @@ u6_04_world_projection = { limit = 118, ends = "U6-04", scopes = { "ffi|owner_pr
 "unsafe|unsafe_fn_lines|uqm::game_init" = 355
 "unsafe|unsafe_fn_lines|uqm::mainloop" = 675
 "unsafe|unsafe_fn_lines|uqm::navigation" = 978
-"unsafe|unsafe_fn_lines|uqm::planet_side" = 204
+"unsafe|unsafe_fn_lines|uqm::planet_side" = 196
 "unsafe|unsafe_fn_lines|uqm::planets" = 4223
 "unsafe|unsafe_fn_lines|uqm::savegame" = 487
 "unsafe|unsafe_fn_lines|uqm::ships" = 148
@@ -3798,7 +3796,7 @@ u6_04_world_projection = { limit = 118, ends = "U6-04", scopes = { "ffi|owner_pr
 "unsafe|unsafe_fn|uqm::game_init" = 32
 "unsafe|unsafe_fn|uqm::mainloop" = 71
 "unsafe|unsafe_fn|uqm::navigation" = 41
-"unsafe|unsafe_fn|uqm::planet_side" = 7
+"unsafe|unsafe_fn|uqm::planet_side" = 6
 "unsafe|unsafe_fn|uqm::planets" = 195
 "unsafe|unsafe_fn|uqm::savegame" = 31
 "unsafe|unsafe_fn|uqm::ships" = 40
@@ -3822,7 +3820,7 @@ u6_04_world_projection = { limit = 118, ends = "U6-04", scopes = { "ffi|owner_pr
 "unsafe|unsafe_lines|uqm::game_init" = 357
 "unsafe|unsafe_lines|uqm::mainloop" = 851
 "unsafe|unsafe_lines|uqm::navigation" = 980
-"unsafe|unsafe_lines|uqm::planet_side" = 306
+"unsafe|unsafe_lines|uqm::planet_side" = 302
 "unsafe|unsafe_lines|uqm::planets" = 4317
 "unsafe|unsafe_lines|uqm::savegame" = 508
 "unsafe|unsafe_lines|uqm::ships" = 232

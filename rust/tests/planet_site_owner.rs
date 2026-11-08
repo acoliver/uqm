@@ -50,6 +50,16 @@ fn with_site(
     index: u8,
     run: impl FnOnce(&mut Site<'_, '_, '_>, &mut SolarSys<'_>),
 ) {
+    let mut pickup = uqm_rust::planet_side::special_effects::PickupContext::NoLander;
+    with_pickup_site(game, index, &mut pickup, run);
+}
+
+fn with_pickup_site(
+    game: &mut Game,
+    index: u8,
+    pickup: &mut uqm_rust::planet_side::special_effects::PickupContext,
+    run: impl FnOnce(&mut Site<'_, '_, '_>, &mut SolarSys<'_>),
+) {
     let mut battle = Battle::new();
     let owner = RefCell::new(Cx::new(
         &mut battle,
@@ -82,7 +92,7 @@ fn with_site(
         )
     };
     // SAFETY: the fixture retains the initialized record and releases component borrows before effects.
-    let mut host = unsafe { Site::new(&owner, &io, &mut record, None) };
+    let mut host = unsafe { Site::new(&owner, &io, &mut record, pickup, None) };
     run(&mut host, &mut system);
 }
 
@@ -264,3 +274,6 @@ fn special_contacts_share_queues_but_preserve_race_and_story_choices() {
 
 #[path = "planet_site_owner/scenes.rs"]
 mod scenes;
+
+#[path = "planet_site_owner/pickup.rs"]
+mod pickup;

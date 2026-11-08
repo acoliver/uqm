@@ -21,6 +21,7 @@ use std::ptr::NonNull;
 pub struct Site<'a, 'game, 'observer> {
     pub(crate) game: &'a RefCell<Cx<'game>>,
     io: &'a RefCell<Io<'observer>>,
+    pickup: &'a mut crate::planet_side::special_effects::PickupContext,
     index: u8,
     record: NonNull<SOLARSYS_STATE>,
     presentation: Option<crate::planets::orbit::presentation::OrbitPresentation>,
@@ -36,21 +37,21 @@ impl<'a, 'game, 'observer> Site<'a, 'game, 'observer> {
         game: &'a RefCell<Cx<'game>>,
         io: &'a RefCell<Io<'observer>>,
         record: *mut SOLARSYS_STATE,
+        pickup: &'a mut crate::planet_side::special_effects::PickupContext,
         report_context: Option<crate::planets::report::typography::ReportContext>,
     ) -> Self {
         let record = NonNull::new(record).unwrap_or_else(|| panic!("live solar system"));
-        // SAFETY: the caller retains the initialized record for the host's lifetime.
-        let index = unsafe { record.as_ref().generator_index };
         Self {
             game,
             io,
-            index,
+            pickup,
+            // SAFETY: the caller retains the initialized record for the host's lifetime.
+            index: unsafe { record.as_ref().generator_index },
             record,
             presentation: None,
             report_resources: report_context
                 .as_ref()
-                .map(|context| context.resources.clone())
-                .unwrap_or_default(),
+                .map_or_else(Default::default, |context| context.resources.clone()),
             report_context,
         }
     }

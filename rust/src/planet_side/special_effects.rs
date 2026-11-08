@@ -1,10 +1,4 @@
-//! Typed handoff for effects requested by transitional special-system pickups.
-//!
-//! Selected-system callbacks execute synchronously on the game thread. These
-//! exports replace the former `lander.c` globals and turn callback requests
-//! into a value that the Rust collision adapter applies to its session.
-
-use std::cell::RefCell;
+//! Caller-owned effects requested by one synchronous special-system pickup.
 
 /// Effects emitted while one selected-system pickup callback is running.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -13,63 +7,54 @@ pub struct SpecialPickupEffects {
     pub takeoff_requested: bool,
 }
 
-#[derive(Debug, Clone, Copy, Default)]
-struct ActiveEffects {
-    crew: u8,
-    effects: SpecialPickupEffects,
-    active: bool,
+/// Generation and shot-retirement calls have no lander to affect.
+#[derive(Debug)]
+pub enum PickupContext {
+    NoLander,
+    Lander {
+        remaining_crew: u8,
+        effects: SpecialPickupEffects,
+    },
 }
 
-thread_local! {
-    static ACTIVE: RefCell<ActiveEffects> = RefCell::new(ActiveEffects::default());
-}
-
-pub(crate) fn begin(crew: u8) {
-    ACTIVE.with(|active| {
-        *active.borrow_mut() = ActiveEffects {
-            crew,
+impl PickupContext {
+    #[must_use]
+    pub fn lander(crew: u8) -> Self {
+        Self::Lander {
+            remaining_crew: crew,
             effects: SpecialPickupEffects::default(),
-            active: true,
-        };
-    });
-}
-
-#[must_use]
-pub(crate) fn finish() -> SpecialPickupEffects {
-    ACTIVE.with(|active| {
-        let mut active = active.borrow_mut();
-        let effects = active.effects;
-        *active = ActiveEffects::default();
-        effects
-    })
-}
-
-/// Transitional symbol used by selected-system generators to request takeoff.
-pub extern "C" fn set_lander_takeoff() {
-    ACTIVE.with(|active| {
-        let mut active = active.borrow_mut();
-        if active.active {
-            active.effects.takeoff_requested = true;
         }
-    });
-}
+    }
 
-/// Transitional symbol used by special encounters to kill lander crew.
-///
-/// The period controls presentation in the legacy implementation. Gameplay is
-/// synchronous here, so it does not alter the deterministic crew effect.
-pub extern "C" fn kill_lander_crew_seq(num_killed: u16, _period: u32) -> bool {
-    ACTIVE.with(|active| {
-        let mut active = active.borrow_mut();
-        if !active.active {
+    pub fn request_takeoff(&mut self) {
+        if let Self::Lander { effects, .. } = self {
+            effects.takeoff_requested = true;
+        }
+    }
+
+    /// The interval remains presentation-only; crew effects are synchronous.
+    pub fn kill_crew(&mut self, count: u16, _interval_ticks: u32) -> bool {
+        let Self::Lander {
+            remaining_crew,
+            effects,
+        } = self
+        else {
             return false;
+        };
+        let requested = u8::try_from(count).unwrap_or(u8::MAX);
+        let killed = (*remaining_crew).min(requested);
+        *remaining_crew -= killed;
+        effects.crew_killed += killed;
+        *remaining_crew != 0
+    }
+
+    #[must_use]
+    pub fn effects(&self) -> SpecialPickupEffects {
+        match self {
+            Self::NoLander => SpecialPickupEffects::default(),
+            Self::Lander { effects, .. } => *effects,
         }
-        let requested = u8::try_from(num_killed).unwrap_or(u8::MAX);
-        let killed = active.crew.min(requested);
-        active.crew -= killed;
-        active.effects.crew_killed = active.effects.crew_killed.saturating_add(killed);
-        active.crew != 0
-    })
+    }
 }
 
 #[cfg(test)]
@@ -77,31 +62,43 @@ mod tests {
     use super::*;
 
     #[test]
-    fn callback_effects_are_scoped_to_one_pickup() {
-        begin(5);
-        assert!(kill_lander_crew_seq(2, 10));
-        set_lander_takeoff();
+    fn independent_and_sequential_pickups_do_not_share_effects() {
+        let mut first = PickupContext::lander(5);
+        let mut second = PickupContext::lander(12);
+        assert!(first.kill_crew(2, 10));
+        first.request_takeoff();
+        assert_eq!(second.effects(), SpecialPickupEffects::default());
+        assert!(second.kill_crew(8, 10));
+        assert_eq!(second.effects().crew_killed, 8);
         assert_eq!(
-            finish(),
+            first.effects(),
             SpecialPickupEffects {
                 crew_killed: 2,
                 takeoff_requested: true,
             }
         );
-        assert_eq!(finish(), SpecialPickupEffects::default());
+        assert_eq!(
+            PickupContext::lander(5).effects(),
+            SpecialPickupEffects::default()
+        );
     }
 
     #[test]
-    fn fatal_crew_sequence_reports_no_survivor() {
-        begin(3);
-        assert!(!kill_lander_crew_seq(8, 10));
-        assert_eq!(finish().crew_killed, 3);
+    fn multiple_crew_requests_saturate_at_remaining_crew() {
+        let mut pickup = PickupContext::lander(u8::MAX);
+        assert!(pickup.kill_crew(0, 10));
+        assert!(pickup.kill_crew(2, 10));
+        assert!(!pickup.kill_crew(u16::MAX, 10));
+        assert!(!pickup.kill_crew(1, 10));
+        assert_eq!(pickup.effects().crew_killed, u8::MAX);
+        assert!(!PickupContext::lander(0).kill_crew(0, 10));
     }
 
     #[test]
-    fn callbacks_outside_pickup_do_not_leak_effects() {
-        set_lander_takeoff();
-        assert!(!kill_lander_crew_seq(1, 10));
-        assert_eq!(finish(), SpecialPickupEffects::default());
+    fn no_lander_has_no_crew_or_takeoff_effects() {
+        let mut pickup = PickupContext::NoLander;
+        pickup.request_takeoff();
+        assert!(!pickup.kill_crew(1, 10));
+        assert_eq!(pickup.effects(), SpecialPickupEffects::default());
     }
 }

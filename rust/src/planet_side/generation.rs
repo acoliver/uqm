@@ -148,7 +148,12 @@ pub trait SurfaceGenerator {
     fn node_count(&mut self, scan: ScanType) -> Result<u8, AdapterError>;
     fn generate(&mut self, scan: ScanType, node: ScanNodeId)
         -> Result<GeneratedNode, AdapterError>;
-    fn pickup(&mut self, scan: ScanType, node: ScanNodeId) -> Result<bool, AdapterError>;
+    fn pickup(
+        &mut self,
+        scan: ScanType,
+        node: ScanNodeId,
+        _effects: &mut crate::planet_side::special_effects::PickupContext,
+    ) -> Result<bool, AdapterError>;
     fn can_node(
         &mut self,
         node: ScanNodeId,
@@ -240,8 +245,9 @@ pub fn persist_pickup(
     generator: &mut impl SurfaceGenerator,
     persistence: &mut ScanPersistence,
     generated: GeneratedEntity,
+    effects: &mut super::special_effects::PickupContext,
 ) -> Result<bool, AdapterError> {
-    if generator.pickup(generated.scan, generated.node)? {
+    if generator.pickup(generated.scan, generated.node, effects)? {
         persistence.mark_retrieved(generated.scan, generated.node);
         Ok(true)
     } else {
@@ -301,7 +307,12 @@ mod tests {
             })
         }
 
-        fn pickup(&mut self, scan: ScanType, node: ScanNodeId) -> Result<bool, AdapterError> {
+        fn pickup(
+            &mut self,
+            scan: ScanType,
+            node: ScanNodeId,
+            _effects: &mut crate::planet_side::special_effects::PickupContext,
+        ) -> Result<bool, AdapterError> {
             self.calls.push((scan, node.get()));
             Ok(self.pickup_result)
         }
@@ -423,7 +434,12 @@ mod tests {
             })
         }
 
-        fn pickup(&mut self, _scan: ScanType, _node: ScanNodeId) -> Result<bool, AdapterError> {
+        fn pickup(
+            &mut self,
+            _scan: ScanType,
+            _node: ScanNodeId,
+            _effects: &mut crate::planet_side::special_effects::PickupContext,
+        ) -> Result<bool, AdapterError> {
             Ok(true)
         }
     }
@@ -508,13 +524,23 @@ mod tests {
             node: ScanNodeId::new(4).unwrap(),
         };
         assert_eq!(
-            persist_pickup(&mut generator, &mut persistence, generated),
+            persist_pickup(
+                &mut generator,
+                &mut persistence,
+                generated,
+                &mut super::super::special_effects::PickupContext::NoLander
+            ),
             Ok(false)
         );
         assert_eq!(persistence.mask(ScanType::Energy), 0);
         generator.pickup_result = true;
         assert_eq!(
-            persist_pickup(&mut generator, &mut persistence, generated),
+            persist_pickup(
+                &mut generator,
+                &mut persistence,
+                generated,
+                &mut super::super::special_effects::PickupContext::NoLander
+            ),
             Ok(true)
         );
         assert_eq!(persistence.mask(ScanType::Energy), 1 << 4);
