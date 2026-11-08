@@ -174,7 +174,8 @@ impl GameThreadPacer {
         crate::time::counter_abi::GetTimeCounter()
     }
     pub fn sleep_until(&mut self, deadline: u32) {
-        // SAFETY: the retained context admits this owner to the graphics/pump thread.
+        crate::graphics::dcqueue_abi::require_presentation(&self._context);
+        // SAFETY: this admitted graphics thread owns the initialized display being pumped.
         unsafe { linked::sleep_thread_until(deadline) };
     }
 }

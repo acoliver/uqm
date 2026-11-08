@@ -429,6 +429,31 @@ mod tests {
     use crate::planet_side::session::SessionPhase;
 
     #[test]
+    #[serial_test::serial]
+    fn presentation_requires_initialized_display() {
+        if !crate::native_test_process::own_graphics_process(concat!(
+            module_path!(),
+            "::presentation_requires_initialized_display"
+        )) {
+            return;
+        }
+        {
+            let owner =
+                crate::graphics::context_abi::LoadedContext::create(c"uninitialized display");
+            assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                crate::graphics::dcqueue_abi::present_retained(&owner.lease());
+            }))
+            .is_err());
+        }
+        let mut game = crate::engine::Game::new();
+        let display = crate::campaign_display_test::CampaignDisplay::install(&mut game).unwrap();
+        crate::graphics::dcqueue_abi::present_retained(
+            &crate::graphics::context_abi::ContextLease::require(game.kernel.status_context),
+        );
+        display.finish(game);
+    }
+
+    #[test]
     fn camera_position_projects_to_lander_center() {
         let point = SurfacePoint { x: 400, y: 200 };
         assert_eq!(

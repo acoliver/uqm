@@ -195,6 +195,23 @@ mod tests {
 
     #[test]
     #[serial_test::serial]
+    fn pacing_requires_initialized_display() {
+        if !crate::native_test_process::own_graphics_process(concat!(
+            module_path!(),
+            "::pacing_requires_initialized_display"
+        )) {
+            return;
+        }
+        let owner = crate::graphics::context_abi::LoadedContext::create(c"uninitialized pacing");
+        let mut pacer = crate::threading::pacing::GameThreadPacer::new(owner.lease());
+        assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            pacer.sleep_until(0);
+        }))
+        .is_err());
+    }
+
+    #[test]
+    #[serial_test::serial]
     fn nonzero_settlement_updates_only_the_supplied_campaign_and_draws_real_gauges() {
         super::super::resources::tests::with_packaged_resources(|owners| {
             use crate::graphics::{
