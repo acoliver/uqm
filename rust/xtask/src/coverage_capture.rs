@@ -113,7 +113,7 @@ pub(super) fn import(
     root: &Path,
     baseline: &mut Baseline,
     report: &Path,
-    scope: &str,
+    scopes: &[&str],
     measurement: &Measurement,
 ) -> Result<(), String> {
     let records = records(&fs::read_to_string(report).map_err(|e| e.to_string())?)?;
@@ -140,7 +140,7 @@ pub(super) fn import(
     for function in measurement
         .coverage_functions
         .iter()
-        .filter(|f| prefix(&f.identity, scope))
+        .filter(|f| scopes.iter().any(|scope| prefix(&f.identity, scope)))
     {
         source::unique(&measurement.coverage_functions, &function.identity)?;
         if !hits.contains_key(&function.file) {
@@ -158,9 +158,12 @@ pub(super) fn import(
         imported += 1;
     }
     if imported == 0 {
-        return Err(format!("no measured production functions match {scope}"));
+        return Err(format!("no measured production functions match {scopes:?}"));
     }
-    println!("recorded {imported} {host} coverage source declarations under {scope}");
+    println!(
+        "recorded {imported} {host} coverage source declarations from {} scopes",
+        scopes.len()
+    );
     Ok(())
 }
 
@@ -175,11 +178,12 @@ pub(crate) fn edit(root: &Path, args: &[String]) -> Result<(), String> {
             }
             baseline.coverage_moves.capture.insert(scope.clone());
         }
-        [operation, report, scope] if operation == "import" => {
+        [operation, report, scopes @ ..] if operation == "import" && !scopes.is_empty() => {
             let measurement = crate::quality::walk::measure(root, None, false)?;
-            import(root, &mut baseline, Path::new(report), scope, &measurement)?;
+            let scopes: Vec<_> = scopes.iter().map(String::as_str).collect();
+            import(root, &mut baseline, Path::new(report), &scopes, &measurement)?;
         },
-        _ => return Err("usage: coverage sources request <prefix> | coverage sources import <coverage-log> <prefix>".into()),
+        _ => return Err("usage: coverage sources request <prefix> | coverage sources import <coverage-log> <prefix>...".into()),
     }
     baseline.write(&path)
 }

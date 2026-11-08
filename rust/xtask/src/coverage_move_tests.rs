@@ -257,11 +257,22 @@ fn capture_requires_committed_source_and_import_checks_its_text() {
     let report = root.join("proof.log");
     fs::write(&report, &text).unwrap();
     for _ in 0..2 {
-        capture::import(root, &mut f.baseline, &report, "uqm::host", &f.current).unwrap();
+        capture::import(
+            root,
+            &mut f.baseline,
+            &report,
+            &["uqm::host", TARGET],
+            &f.current,
+        )
+        .unwrap();
     }
     assert_eq!(
         f.baseline.coverage_moves.sources[std::env::consts::OS][TARGET].text,
         NEW.trim_end()
+    );
+    assert_eq!(
+        f.baseline.coverage_moves.sources[std::env::consts::OS].len(),
+        2
     );
     for invalid in [
         String::new(),
@@ -273,7 +284,14 @@ fn capture_requires_committed_source_and_import_checks_its_text() {
     }
     write(root, "rust/src/host.rs", &NEW.replace("7", "8"));
     assert!(capture::emit(root, &f.baseline, &f.current, &f.hits).is_err());
-    assert!(capture::import(root, &mut f.baseline, &report, "uqm::host", &f.current).is_err());
+    assert!(capture::import(
+        root,
+        &mut f.baseline,
+        &report,
+        &["uqm::host", TARGET],
+        &f.current
+    )
+    .is_err());
 }
 
 #[test]

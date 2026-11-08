@@ -420,8 +420,9 @@ Rules enforced by xtask:
    Request source capture with `cargo xtask coverage sources request <prefix>`.
    The next coverage run emits committed-source `coverage-proof` records from its
    LLVM LCOV export. Import each host's log before moving declarations with
-   `cargo xtask coverage sources import <log> <prefix>`. The source text must
-   match the measured commit. After registering the declaration moves, record
+   `cargo xtask coverage sources import <log> <prefix>...`. Batch only the
+   declarations planned to move; overlapping prefixes import each function once.
+   The source text must match the measured commit. After registering the moves, record
    their measured line debt with `cargo xtask coverage moves record <owner>
    --base <ref>`. Owners are U5-02 (#688, cargo), U6-03 (#693, UI) and U6-04
    (#694, input/clock/events). Debt requires that owner's foreign test exclusions
