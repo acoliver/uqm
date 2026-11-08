@@ -15,11 +15,6 @@ use crate::engine::battle::link_queue::LinkQueue;
 use crate::engine::world::queues::{Fleet, Fragment};
 use crate::mainloop::restart_menu::c_extern as base;
 
-/// `SFR_MENU_3DO` is `(RECT*)~0L`.
-const SFR_MENU_3DO: usize = usize::MAX;
-/// `SFR_MENU_ANY` is `(RECT*)~1L`.
-const SFR_MENU_ANY: usize = usize::MAX - 1;
-
 use crate::graphics::context_abi::SetContextForeGroundColor;
 
 use crate::graphics::font_abi::SetContextFont;
@@ -49,8 +44,6 @@ use crate::graphics::pixmap_abi::DecFrameIndex;
 use crate::graphics::pixmap_abi::GetFrameCount;
 
 use crate::graphics::pixmap_abi::GetFrameIndex;
-
-use crate::ui::sis::SetFlashRect;
 
 use crate::strings::string_table::SetAbsStringTableIndex;
 
@@ -354,25 +347,27 @@ impl Gfx for CffiPlatform {
     }
 
     fn set_flash(&self, target: FlashTarget) {
-        match target {
-            FlashTarget::Off => {
-                // SAFETY: NULL stops the flash.
-                unsafe { SetFlashRect(std::ptr::null()) };
-            }
-            FlashTarget::Menu3do => {
-                // SAFETY: `SFR_MENU_3DO` is the C sentinel pointer `~0`.
-                unsafe { SetFlashRect((SFR_MENU_3DO as *const c_void).cast()) };
-            }
-            FlashTarget::MenuAny => {
-                // SAFETY: `SFR_MENU_ANY` is the C sentinel pointer `~1`.
-                unsafe { SetFlashRect((SFR_MENU_ANY as *const c_void).cast()) };
-            }
-            FlashTarget::Rect(rect) => {
-                let rect = to_c_rect(rect);
-                // SAFETY: the rectangle is copied by the call.
-                unsafe { SetFlashRect(std::ptr::from_ref(&rect).cast()) };
-            }
-        }
+        Self::with_kernel(|kernel| match target {
+            FlashTarget::Off => crate::ui::sis::clear_flash(kernel),
+            FlashTarget::Menu3do | FlashTarget::MenuAny => crate::ui::sis::set_menu_flash(
+                kernel,
+                self.screen_size(),
+                matches!(target, FlashTarget::MenuAny),
+            ),
+            FlashTarget::Rect(rect) => crate::ui::sis::highlight_rect(
+                kernel,
+                crate::graphics::native_abi::RECT {
+                    corner: crate::graphics::native_abi::POINT {
+                        x: rect.corner.x,
+                        y: rect.corner.y,
+                    },
+                    extent: crate::graphics::native_abi::EXTENT {
+                        width: rect.width,
+                        height: rect.height,
+                    },
+                },
+            ),
+        });
     }
 
     fn pre_update_flash(&self) {

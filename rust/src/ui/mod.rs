@@ -9,7 +9,6 @@ pub mod confirm;
 pub mod getchar;
 pub mod menu;
 pub mod menu_state;
-#[cfg(not(test))]
 mod palette;
 
 pub mod shipstat;

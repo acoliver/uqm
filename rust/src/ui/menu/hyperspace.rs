@@ -1,12 +1,15 @@
 //! Legacy display and submenu composition for the retained hyperspace menu.
 
+#[cfg(not(test))]
 use super::*;
 
+#[cfg(not(test))]
 enum HyperspaceInput<'a, 'b> {
     Choose(&'a mut u8),
     Submenu(&'a mut crate::engine::observe::Io<'b>, u8),
 }
 
+#[cfg(not(test))]
 unsafe fn input_frame(
     cx: &mut crate::engine::battle::Cx<'_>,
     event: HyperspaceInput<'_, '_>,
@@ -36,6 +39,7 @@ unsafe fn input_frame(
 
 /// # Safety
 /// The game-thread caller retains the initialized SIS display and submenu resources.
+#[cfg(not(test))]
 pub unsafe fn hyperspace_menu(
     cx: &mut crate::engine::battle::Cx<'_>,
     io: &mut crate::engine::observe::Io<'_>,
@@ -56,28 +60,53 @@ pub unsafe fn hyperspace_menu(
                 return;
             }
             // SAFETY: all raw drawing resources remain owned by the suspended context.
-            cx.with_legacy(|| match operation {
+            match operation {
                 Display::Open => {
                     UnbatchGraphics();
                     let context = SetContext(space);
                     let color = SetContextBackGroundColor(crate::navigation::color(0, 0, 0));
                     previous = Some((context, color));
-                    DrawMenuStateStrings(PM_STARMAP, 1);
-                    SetFlashRect(usize::MAX as *const RECT);
+                    crate::ui::menu::draw_menu_state(
+                        cx.kernel,
+                        cx.world,
+                        (cx.screen_dimensions().0, cx.screen_dimensions().1),
+                        PM_STARMAP,
+                        1,
+                    );
+                    crate::ui::sis::set_menu_flash(
+                        cx.kernel,
+                        (cx.screen_dimensions().0, cx.screen_dimensions().1),
+                        false,
+                    );
                     input.set_menu_sounds(15, 16);
                 }
                 Display::HideFlash => {
-                    SetFlashRect(std::ptr::null());
+                    crate::ui::sis::clear_flash(cx.kernel);
                 }
-                Display::Selection(state) => DrawMenuStateStrings(PM_STARMAP, state as i16),
+                Display::Selection(state) => crate::ui::menu::draw_menu_state(
+                    cx.kernel,
+                    cx.world,
+                    (cx.screen_dimensions().0, cx.screen_dimensions().1),
+                    PM_STARMAP,
+                    state as i16,
+                ),
                 Display::ShowFlash => {
-                    SetFlashRect(usize::MAX as *const RECT);
+                    crate::ui::sis::set_menu_flash(
+                        cx.kernel,
+                        (cx.screen_dimensions().0, cx.screen_dimensions().1),
+                        false,
+                    );
                 }
                 Display::Close => {
-                    SetFlashRect(std::ptr::null());
+                    crate::ui::sis::clear_flash(cx.kernel);
                     SetContext(space);
                 }
-                Display::ClearRadar => crate::ui::sis::ClearSISRect(CLEAR_SIS_RADAR as u8),
+                Display::ClearRadar => crate::ui::sis::clear_sis_rect(
+                    cx.kernel,
+                    cx.world,
+                    (cx.screen_dimensions().0, cx.screen_dimensions().1),
+                    CLEAR_SIS_RADAR as u8,
+                ),
                 Display::Restore => {
                     let (context, color) = previous
                         .take()
@@ -89,7 +118,7 @@ pub unsafe fn hyperspace_menu(
                     BatchGraphics();
                 }
                 Display::Wait => unreachable!(),
-            });
+            };
         },
     );
 }

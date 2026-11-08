@@ -28,15 +28,22 @@ fn on_battle_frame(
     } else {
         None
     };
-    cx.with_legacy(|| {
-        // SAFETY: the published campaign owner retains the active SIS display.
-        unsafe {
-            if let Some(universe) = coordinates {
-                crate::ui::sis::DrawHyperCoords(universe);
-            }
-            crate::ui::sis::DrawAutoPilotMessage(0);
-        }
-    });
+    if let Some(universe) = coordinates {
+        crate::ui::sis::draw_hyper_coords(
+            cx.kernel,
+            cx.screen_dimensions().0,
+            crate::graphics::native_abi::POINT {
+                x: universe.x,
+                y: universe.y,
+            },
+        );
+    }
+    crate::ui::sis::draw_autopilot_message(
+        cx.kernel,
+        cx.world,
+        cx.screen_dimensions().0,
+        uqm_engine::time::counter_abi::GetTimeCounter,
+    );
 }
 
 unsafe fn background_init_kernel(cx: &mut crate::engine::battle::Cx<'_>, timeout: u32) {

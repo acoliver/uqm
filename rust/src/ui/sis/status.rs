@@ -68,7 +68,7 @@ pub fn status_message_text(kernel: &Kernel, world: &World) -> CString {
         .unwrap_or_else(|error| panic!("invalid status label: {error}"))
 }
 
-pub(super) fn message_rect() -> RECT {
+pub fn message_rect() -> RECT {
     RECT {
         corner: POINT { x: 2, y: 130 },
         extent: EXTENT {

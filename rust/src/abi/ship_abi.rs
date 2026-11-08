@@ -1009,7 +1009,6 @@ pub use crate::graphics::cmap_abi::FadeScreen;
 
 pub use crate::graphics::cmap_abi::FlushColorXForms;
 
-
 #[cfg(not(test))]
 pub use crate::game_init::space_resources::live::InitShips;
 
@@ -1058,7 +1057,6 @@ pub struct _input_template {
 }
 pub type INPUT_TEMPLATE = _input_template;
 pub type BattleFrameCounter = DWORD;
-
 
 pub type Checksum = uint32;
 pub use crate::battle::netplay::CrcState as crc_State;
@@ -1111,10 +1109,6 @@ pub type MeleeShip = ::std::os::raw::c_uint;
 
 #[cfg(not(test))]
 pub use crate::supermelee::native::menu::live::do_melee;
-
-
-
-
 
 #[cfg(not(test))]
 pub use crate::supermelee::native::menu::live::changes::local_change_team;
@@ -1265,7 +1259,6 @@ pub const SAMATRA_SHIP: _bindgen_ty_4 = crate::engine::world::queues::SAMATRA_RA
 pub const NUM_AVAILABLE_RACES: _bindgen_ty_4 = 24;
 pub type _bindgen_ty_4 = ::std::os::raw::c_uint;
 
-
 #[cfg(not(test))]
 pub use crate::supermelee::native::battle_picker::live::get_initial_melee_star_ships;
 
@@ -1282,24 +1275,18 @@ pub type _bindgen_ty_5 = ::std::os::raw::c_uint;
 
 #[cfg(not(test))]
 
-
-
 #[cfg(not(test))]
 pub use crate::battle::status_native::init_status_offsets;
-
-
 
 #[cfg(not(test))]
 
 #[cfg(not(test))]
 pub use crate::battle::status_native::engine::PostProcessStatus;
 
-
 pub type MENU_SOUND_FLAGS = UWORD;
 
 #[cfg(not(test))]
 pub use crate::mainloop::input_abi::live::SetMenuSounds;
-
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -1352,42 +1339,11 @@ pub use crate::battle::ship_native::engine::collision;
 #[cfg(not(test))]
 pub use crate::battle::ship_native::engine::inertial_thrust;
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 #[cfg(not(test))]
 pub use crate::engine::world::fleet::set_race_allied;
 
 #[cfg(not(test))]
 pub use crate::engine::world::fleet::start_sphere_tracking;
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 #[cfg(not(test))]
 pub use crate::ui::settings::stop_music;
@@ -1608,28 +1564,6 @@ pub type _bindgen_ty_10 = ::std::os::raw::c_uint;
 pub use crate::engine::world::SisState as SIS_STATE;
 #[cfg(not(test))]
 pub use crate::ui::border::init_siscontexts;
-#[cfg(not(test))]
-pub use crate::ui::border::draw_sisframe;
-#[cfg(test)]
-extern "C" {
-    pub fn draw_sisframe();
-}
-#[cfg(not(test))]
-pub unsafe fn DrawHyperCoords(puniverse: POINT) {
-    crate::ui::sis::DrawHyperCoords(crate::navigation::abi::POINT {
-        x: puniverse.x,
-        y: puniverse.y,
-    });
-}
-#[cfg(test)]
-#[cfg(not(test))]
-pub use crate::ui::sis::DrawHyperCoords;
-
-#[cfg(not(test))]
-pub use crate::ui::sis::DrawSISMessage;
-
-#[cfg(not(test))]
-pub use crate::ui::sis::DrawStatusMessage;
 pub const StatMsgMode_SMM_UNDEFINED: StatMsgMode = 0;
 pub const StatMsgMode_SMM_DATE: StatMsgMode = 1;
 pub const StatMsgMode_SMM_RES_UNITS: StatMsgMode = 2;
@@ -1637,8 +1571,6 @@ pub const StatMsgMode_SMM_CREDITS: StatMsgMode = 3;
 pub const StatMsgMode_SMM_DEFAULT: StatMsgMode = 1;
 pub type StatMsgMode = ::std::os::raw::c_uint;
 
-#[cfg(not(test))]
-pub use crate::ui::sis::DeltaSISGauges;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct ANIMATION_DESC {
@@ -1776,26 +1708,6 @@ pub type _bindgen_ty_14 = ::std::os::raw::c_uint;
 
 #[cfg(not(test))]
 pub use crate::navigation::globals::in_quasi_space;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 #[cfg(not(test))]
 
@@ -1946,8 +1858,6 @@ pub const PM_ALT_DISPATCH: _bindgen_ty_19 = 52;
 pub const PM_ALT_EXIT_SCAN: _bindgen_ty_19 = 53;
 pub type _bindgen_ty_19 = ::std::os::raw::c_uint;
 
-#[cfg(not(test))]
-pub use crate::ui::menu::DrawMenuStateStrings;
 pub const SMALL_ROCKY_WORLD: _bindgen_ty_20 = 0;
 pub const LARGE_ROCKY_WORLD: _bindgen_ty_20 = 1;
 pub const GAS_GIANT: _bindgen_ty_20 = 2;
@@ -2078,7 +1988,6 @@ pub struct solarsys_state {
     pub InOrbit: BOOLEAN,
 }
 
-
 pub const HAIL: _bindgen_ty_26 = 0;
 pub const ATTACK: _bindgen_ty_26 = 1;
 pub type _bindgen_ty_26 = ::std::os::raw::c_uint;
@@ -2116,8 +2025,6 @@ pub use crate::game_init::world_resources::live::load_gravity_well;
 
 #[cfg(not(test))]
 pub use crate::game_init::world_resources::live::free_gravity_well;
-
-
 
 pub type TFB_Canvas = *mut ::std::os::raw::c_void;
 pub use crate::graphics::native_abi::tfb_image;

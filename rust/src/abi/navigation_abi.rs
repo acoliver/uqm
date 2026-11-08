@@ -1571,46 +1571,8 @@ pub const NUM_MODULES: _bindgen_ty_5 = 20;
 pub type _bindgen_ty_5 = ::std::os::raw::c_uint;
 pub use crate::ships::native::abi::SIS_STATE;
 #[cfg(not(test))]
-pub use crate::ui::sis::repair_sisborder;
-#[cfg(test)]
-extern "C" {
-    pub fn repair_sisborder();
-}
-#[cfg(not(test))]
 pub use crate::ui::border::init_siscontexts;
-#[cfg(not(test))]
-pub use crate::ui::border::draw_sisframe;
-#[cfg(test)]
-extern "C" {
-    pub fn draw_sisframe();
-}
 
-#[cfg(not(test))]
-pub use crate::ui::sis::ClearSISRect;
-
-#[cfg(not(test))]
-pub use crate::ui::sis::SetFlashRect;
-
-#[cfg(not(test))]
-pub use crate::ui::sis::DrawHyperCoords;
-
-#[cfg(not(test))]
-pub use crate::ui::sis::DrawSISTitle;
-
-#[cfg(not(test))]
-pub use crate::ui::sis::DrawSISMessageEx;
-
-#[cfg(not(test))]
-pub use crate::ui::sis::DrawSISMessage;
-
-#[cfg(not(test))]
-pub use crate::ui::sis::DateToString;
-
-#[cfg(not(test))]
-pub use crate::ui::sis::GetStatusMessageRect;
-
-#[cfg(not(test))]
-pub use crate::ui::sis::DrawStatusMessage;
 pub const StatMsgMode_SMM_UNDEFINED: StatMsgMode = 0;
 pub const StatMsgMode_SMM_DATE: StatMsgMode = 1;
 pub const StatMsgMode_SMM_RES_UNITS: StatMsgMode = 2;
@@ -1618,40 +1580,6 @@ pub const StatMsgMode_SMM_CREDITS: StatMsgMode = 3;
 pub const StatMsgMode_SMM_DEFAULT: StatMsgMode = 1;
 pub type StatMsgMode = ::std::os::raw::c_uint;
 
-#[cfg(not(test))]
-pub use crate::ui::sis::draw_landers;
-#[cfg(not(test))]
-#[cfg(test)]
-extern "C" {
-    pub fn draw_landers();
-}
-
-#[cfg(not(test))]
-pub use crate::ui::sis::DrawStorageBays;
-
-#[cfg(not(test))]
-pub use crate::ui::sis::draw_flagship_stats;
-#[cfg(not(test))]
-pub use crate::ui::sis::GetGaugeRect;
-#[cfg(test)]
-extern "C" {
-    pub fn draw_flagship_stats();
-}
-
-#[cfg(not(test))]
-pub use crate::ui::sis::DrawAutoPilotMessage;
-
-#[cfg(not(test))]
-pub use crate::ui::sis::DeltaSISGauges;
-
-#[cfg(not(test))]
-pub use crate::ui::sis::draw_captains_name;
-#[cfg(not(test))]
-pub use crate::ui::sis::DrawFlagshipName;
-#[cfg(test)]
-extern "C" {
-    pub fn draw_captains_name();
-}
 pub use crate::ships::native::abi::velocity_desc;
 pub type VELOCITY_DESC = velocity_desc;
 
@@ -1773,7 +1701,6 @@ pub use crate::navigation::globals::uninit_game_structures;
 extern "C" {
     pub fn uninit_game_structures();
 }
-
 
 #[cfg(not(test))]
 pub use crate::front_end::fmv::runtime::DoShipSpin;
@@ -1977,7 +1904,6 @@ pub struct globalopts_struct {
 }
 pub type GLOBALOPTS = globalopts_struct;
 
-
 #[cfg(not(test))]
 pub use crate::front_end::setupmenu::runtime::get_global_options;
 
@@ -2119,11 +2045,6 @@ pub const PM_ALT_DISPATCH: _bindgen_ty_13 = 52;
 pub const PM_ALT_EXIT_SCAN: _bindgen_ty_13 = 53;
 pub type _bindgen_ty_13 = ::std::os::raw::c_uint;
 
-#[cfg(not(test))]
-pub use crate::ui::menu::do_menu_chooser;
-
-#[cfg(not(test))]
-pub use crate::ui::menu::DrawMenuStateStrings;
 extern "C" {
     pub static mut ScreenWidth: ::std::os::raw::c_int;
 }
@@ -2617,33 +2538,16 @@ pub use crate::game_init::kernel_abi::uninitIO;
 #[cfg(not(test))]
 pub use crate::game_init::kernel_abi::UninitPlayerInput;
 
-
 pub use crate::navigation::hyperspace::check_hyperspace_encounter;
 
 pub use crate::navigation::hyper_transition::hyper_transition;
 pub use crate::navigation::hyper_transition::save_sis_hyper_state;
-
-
-
-
-
-
-
-
-
-
-
-
 
 #[cfg(not(test))]
 pub use crate::engine::world::fleet::set_race_allied;
 
 #[cfg(not(test))]
 pub use crate::engine::world::fleet::start_sphere_tracking;
-
-
-
-
 
 #[cfg(not(test))]
 pub use crate::state::c_api::planets::uninit_planet_info;
@@ -2653,8 +2557,6 @@ pub use crate::navigation::groups::live::init_group_info;
 
 #[cfg(not(test))]
 pub use crate::navigation::groups::live::uninit_group_info;
-
-
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -2699,11 +2601,7 @@ pub struct GROUP_HEADER {
     pub GroupOffset: [DWORD; 65usize],
 }
 
-
 pub use crate::navigation::groups::write_group_header;
-
-
-
 
 pub const STAR_STRING_BASE: _bindgen_ty_25 = 0;
 pub const DEVICE_STRING_BASE: _bindgen_ty_25 = 133;
@@ -2888,16 +2786,10 @@ pub struct crc_State {
     pub crc: uint32,
 }
 
-
-
-
-
 pub const NetplaySide_NetplaySide_local: NetplaySide = 0;
 pub const NetplaySide_NetplaySide_remote: NetplaySide = 1;
 pub type NetplaySide = ::std::os::raw::c_uint;
 pub type MELEE_OPTIONS = BYTE;
-
-
 
 #[cfg(not(test))]
 pub use crate::supermelee::native::load_teams::live::do_load_team;
@@ -2939,46 +2831,14 @@ pub type MeleeShip = ::std::os::raw::c_uint;
 #[cfg(not(test))]
 pub use crate::supermelee::native::menu::live::do_melee;
 
-
-
-
-
-
-
-
-
-
-
-
 #[cfg(not(test))]
 pub use crate::supermelee::native::menu::live::changes::local_change_ship;
 
 #[cfg(not(test))]
 pub use crate::supermelee::native::menu::live::changes::local_change_team_name;
 
-
 #[cfg(not(test))]
 pub use crate::supermelee::native::menu::live::changes::local_change_team;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 pub const ENEMY_SHIP_INDEX: _bindgen_ty_28 = 0;
 pub const CREW_OBJECT_INDEX: _bindgen_ty_28 = 1;
@@ -3017,7 +2877,6 @@ pub use crate::mainloop::input_abi::live::SetMenuSounds;
 #[cfg(not(test))]
 pub use crate::mainloop::input_abi::live::GetMenuSounds;
 
-
 pub const TALK_COMMANDER: _bindgen_ty_29 = 0;
 pub const OUTFIT_STARSHIP: _bindgen_ty_29 = 1;
 pub const SHIPYARD: _bindgen_ty_29 = 2;
@@ -3040,11 +2899,6 @@ pub use crate::ui::shipyard::do_shipyard;
 #[cfg(not(test))]
 pub use crate::ui::starbase::DrawShipPiece;
 
-
-
-
-
-
 #[cfg(not(test))]
 pub use crate::battle::ship_native::engine::animation_preprocess;
 
@@ -3056,13 +2910,6 @@ pub use crate::battle::ship_native::engine::ship_postprocess;
 
 #[cfg(not(test))]
 pub use crate::battle::ship_native::engine::collision;
-
-
-
-
-
-
-
 
 #[cfg(not(test))]
 pub use crate::planets::devices::InventoryDevices;
@@ -3077,9 +2924,6 @@ pub use crate::ui::util::live::SeedRandomNumbers;
 pub use crate::ui::settings::toggle_music;
 #[cfg(not(test))]
 pub use crate::ui::util::live::SaveContextFrame;
-#[cfg(test)]
-extern "C" {
-}
 #[cfg(not(test))]
 pub use crate::ui::settings::stop_music;
 #[cfg(test)]
@@ -3100,9 +2944,6 @@ extern "C" {
 }
 #[cfg(not(test))]
 pub use crate::ui::settings::toggle_sound_effect;
-#[cfg(test)]
-extern "C" {
-}
 
 #[cfg(not(test))]
 pub use crate::ui::settings::PlayMusic;

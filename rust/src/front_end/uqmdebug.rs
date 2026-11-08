@@ -85,11 +85,9 @@ mod runtime {
     /// # Safety
     /// Must run synchronously on the game thread with initialized game state.
     pub unsafe fn debug_key_pressed_synchronous(cx: &mut crate::engine::battle::Cx<'_>) {
-        cx.with_legacy(|| {
-            equip_ship();
-            give_devices();
-            clear_escorts();
-        });
+        equip_ship(cx);
+        cx.with_legacy(give_devices);
+        clear_escorts(cx);
         for race in [
             ARILOU_SHIP,
             PKUNK_SHIP,
@@ -111,7 +109,7 @@ mod runtime {
                 crate::engine::world::fleet::captain_name,
             );
             if added.is_some() {
-                cx.with_legacy(|| crate::ui::sis::DeltaSISGauges(32767, 32767, 32767));
+                crate::ui::sis::delta_sis_gauges(cx.kernel, cx.world, 32767, 32767, 32767);
             }
         }
         cx.with_legacy(|| {
@@ -191,20 +189,19 @@ mod runtime {
 
     /// # Safety
     /// Must run on the game thread with initialized SIS and optional solar system.
-    pub unsafe fn equip_ship() {
-        if !World::current().write(super::equipment::equip_flagship) {
+    pub unsafe fn equip_ship(cx: &mut Cx<'_>) {
+        if !super::equipment::equip_flagship(cx.world) {
             return;
         }
         if let Some(system) = pSolarSysState.as_mut() {
-            World::current().read(|world| {
-                super::equipment::update_flight(&world.data.flagship, system);
-            });
+            {
+                super::equipment::update_flight(&cx.world.data.flagship, system);
+            };
         }
-        if World::current().read(in_hqspace) != 0
-            || crate::engine::World::current().read(|world| world.activity()) as u8 as u32
-                == IN_INTERPLANETARY
-        {
-            DeltaSISGauges(
+        if in_hqspace(cx.world) != 0 || cx.world.activity() as u8 as u32 == IN_INTERPLANETARY {
+            crate::ui::sis::delta_sis_gauges(
+                cx.kernel,
+                cx.world,
                 UNDEFINED_DELTA as _,
                 UNDEFINED_DELTA as _,
                 UNDEFINED_DELTA as _,
@@ -244,9 +241,11 @@ mod runtime {
     }
     /// # Safety
     /// Must run on the game thread with the escort queue initialized.
-    pub unsafe fn clear_escorts() {
-        World::current().write(equipment::clear_escorts);
-        DeltaSISGauges(
+    pub unsafe fn clear_escorts(cx: &mut Cx<'_>) {
+        equipment::clear_escorts(cx.world);
+        crate::ui::sis::delta_sis_gauges(
+            cx.kernel,
+            cx.world,
             UNDEFINED_DELTA as _,
             UNDEFINED_DELTA as _,
             UNDEFINED_DELTA as _,

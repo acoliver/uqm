@@ -40,10 +40,7 @@ pub(crate) mod live {
             .kernel
             .tiny_font_lease()
             .unwrap_or_else(|| panic!("fuel debit requires the status font"));
-        cx.with_legacy(|| {
-            // SAFETY: Cx lends its world and kernel while the status context and font remain live.
-            unsafe { DeltaSISGauges(0, amount, 0) };
-        });
+        crate::ui::sis::delta_sis_gauges(cx.kernel, cx.world, 0, amount, 0);
     }
 
     pub(crate) unsafe fn screen_geometry() -> super::super::hyper_units::Geometry {

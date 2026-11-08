@@ -5,15 +5,20 @@
 use crate::ui::{rgb15, settings::play_menu_sound};
 mod catalog;
 mod crew;
-use super::{shipyard_frame as frame, shipyard_hangar as hangar, sis::game_string};
+use super::{shipyard_frame as frame, shipyard_hangar as hangar};
 use catalog::{get_available_race_count, get_available_race_from_index};
 use crew::{crew_transaction, purchased_crew};
 
 use crate::engine::battle::{link_queue::LinkId, Cx};
 use crate::engine::world::queues::{FleetInfo, Fragment};
-use crate::engine::{input::InputSession, Kernel, World, WorldData};
+use crate::engine::{input::InputSession, World};
 use crate::navigation::abi::*;
 use crate::starbase::cffi::{avail_race_queue, built_ship_queue};
+use crate::ui::menu::draw_campaign_menu;
+use crate::ui::sis::{
+    clear_flash, clear_sis_rect, delta_sis_gauges, draw_campaign_message, draw_title,
+    highlight_rect, set_menu_flash,
+};
 
 use std::{mem, ptr};
 
@@ -41,8 +46,6 @@ enum ModifyMode {
 }
 
 const BLACK: Color = rgb15(0, 0, 0);
-const MENU_3DO: *const RECT = usize::MAX as *const RECT;
-const MENU_ANY: *const RECT = (usize::MAX - 1) as *const RECT;
 const SOUND_UP: MENU_SOUND_FLAGS = 1 << 0;
 const SOUND_DOWN: MENU_SOUND_FLAGS = 1 << 1;
 const SOUND_ARROWS: MENU_SOUND_FLAGS = 0x0f;
@@ -72,8 +75,12 @@ unsafe fn animate_power_lines(menu: Option<&MENU_STATE>) {
     }
 }
 
-unsafe fn draw_race_strings(menu: &mut MENU_STATE, mut race: BYTE) {
-    let old = SetContext(Kernel::current().read(|owner| owner.status_context));
+unsafe fn draw_race_strings(
+    cx: &mut crate::engine::battle::Cx<'_>,
+    menu: &mut MENU_STATE,
+    mut race: BYTE,
+) {
+    let old = SetContext(cx.kernel.status_context);
     let mut r: RECT = mem::zeroed();
     GetContextClipRect(&mut r);
     let mut stamp = STAMP {
@@ -90,7 +97,10 @@ unsafe fn draw_race_strings(menu: &mut MENU_STATE, mut race: BYTE) {
     r.extent.width = RADAR_WIDTH as i16 + 2;
     r.extent.height = 11;
     BatchGraphics();
-    ClearSISRect(CLEAR_SIS_RADAR as BYTE);
+    {
+        let dimensions = cx.screen_dimensions();
+        clear_sis_rect(cx.kernel, cx.world, dimensions, CLEAR_SIS_RADAR as BYTE)
+    };
     SetContextForeGroundColor(rgb15(0x0a, 0x0a, 0x0a));
     DrawFilledRectangle(&mut r);
     r.corner = stamp.origin;
@@ -99,7 +109,7 @@ unsafe fn draw_race_strings(menu: &mut MENU_STATE, mut race: BYTE) {
     SetContextForeGroundColor(BLACK);
     DrawFilledRectangle(&mut r);
     if race != BYTE::MAX {
-        let Some((index, ship)) = get_available_race_from_index(race) else {
+        let Some((index, ship)) = cx.with_legacy(|| get_available_race_from_index(race)) else {
             panic!("the selected hangar race must be allied");
         };
         race = index as BYTE;
@@ -120,7 +130,7 @@ unsafe fn draw_race_strings(menu: &mut MENU_STATE, mut race: BYTE) {
         DrawStamp(&mut stamp);
         let cost = format!("{}\0", SHIP_COST[race as usize]);
         text.pStr = cost.as_ptr().cast();
-        SetContextFont(Kernel::current().read(|owner| owner.tiny_font));
+        SetContextFont(cx.kernel.tiny_font);
         SetContextForeGroundColor(rgb15(0, 0x1f, 0));
         font_DrawText(&mut text);
     }
@@ -207,7 +217,7 @@ unsafe fn show_combat_ship(
     }
 }
 
-unsafe fn dms_flash_flag_ship() {
+unsafe fn dms_flash_flag_ship(cx: &mut crate::engine::battle::Cx<'_>) {
     let r = RECT {
         corner: POINT { x: 0, y: 0 },
         extent: EXTENT {
@@ -215,22 +225,21 @@ unsafe fn dms_flash_flag_ship() {
             height: 61,
         },
     };
-    SetFlashRect(&r);
+    highlight_rect(cx.kernel, r);
 }
 
-unsafe fn dms_flash_escort_ship(slot: BYTE) {
-    SetFlashRect(&DMS_GetEscortShipRect(slot));
+unsafe fn dms_flash_escort_ship(cx: &mut crate::engine::battle::Cx<'_>, slot: BYTE) {
+    highlight_rect(cx.kernel, DMS_GetEscortShipRect(slot));
 }
 
-unsafe fn dms_flash_flag_ship_crew_count() {
-    let mut r: RECT = mem::zeroed();
-    SetContext(Kernel::current().read(|owner| owner.status_context));
-    GetGaugeRect(&mut r, 1);
-    SetFlashRect(&r);
-    SetContext(Kernel::current().read(|owner| owner.space_context));
+unsafe fn dms_flash_flag_ship_crew_count(cx: &mut crate::engine::battle::Cx<'_>) {
+    SetContext(cx.kernel.status_context);
+    let r = crate::ui::sis::gauges::gauge_rect(true);
+    highlight_rect(cx.kernel, r);
+    SetContext(cx.kernel.space_context);
 }
 
-unsafe fn dms_flash_escort_ship_crew_count(slot: BYTE) {
+unsafe fn dms_flash_escort_ship_crew_count(cx: &mut crate::engine::battle::Cx<'_>, slot: BYTE) {
     let row = slot / HANGAR_SHIPS_ROW;
     let col = slot % HANGAR_SHIPS_ROW;
     let r = RECT {
@@ -243,44 +252,53 @@ unsafe fn dms_flash_escort_ship_crew_count(slot: BYTE) {
             height: 5,
         },
     };
-    SetContext(Kernel::current().read(|owner| owner.space_context));
-    SetFlashRect(&r);
+    SetContext(cx.kernel.space_context);
+    highlight_rect(cx.kernel, r);
 }
 
-unsafe fn dms_flash_active_ship(menu: &mut MENU_STATE) {
+unsafe fn dms_flash_active_ship(cx: &mut crate::engine::battle::Cx<'_>, menu: &mut MENU_STATE) {
     if menu.CurState >> 4 != 0 {
-        dms_flash_flag_ship();
+        dms_flash_flag_ship(cx);
     } else {
-        dms_flash_escort_ship(menu.CurState);
+        dms_flash_escort_ship(cx, menu.CurState);
     }
 }
 
-unsafe fn dms_set_mode(input: &InputSession, menu: &mut MENU_STATE, mode: ModifyMode) {
+unsafe fn dms_set_mode(
+    cx: &mut crate::engine::battle::Cx<'_>,
+    input: &InputSession,
+    menu: &mut MENU_STATE,
+    mode: ModifyMode,
+) {
     match mode {
         ModifyMode::Navigate => {
             SetMenuSounds(input, SOUND_ARROWS, SOUND_SELECT);
-            dms_flash_active_ship(menu);
+            dms_flash_active_ship(cx, menu);
         }
         ModifyMode::AddEscort => {
             SetMenuSounds(input, SOUND_ARROWS, SOUND_SELECT);
-            SetFlashRect(MENU_ANY);
+            set_menu_flash(cx.kernel, cx.screen_dimensions(), true);
         }
         ModifyMode::EditCrew => {
             SetMenuSounds(input, SOUND_UP | SOUND_DOWN, SOUND_SELECT | SOUND_CANCEL);
             if menu.CurState >> 4 != 0 {
-                dms_flash_flag_ship_crew_count();
+                dms_flash_flag_ship_crew_count(cx);
             } else {
-                dms_flash_escort_ship_crew_count(menu.CurState);
+                dms_flash_escort_ship_crew_count(cx, menu.CurState);
             }
         }
         ModifyMode::Exit => {
             SetMenuSounds(input, SOUND_ARROWS, SOUND_SELECT);
-            SetFlashRect(MENU_3DO);
+            set_menu_flash(cx.kernel, cx.screen_dimensions(), false);
         }
     }
 }
 
-unsafe fn dms_spin_ship(menu: &mut MENU_STATE, ship: Option<LinkId<Fragment>>) -> bool {
+unsafe fn dms_spin_ship(
+    cx: &mut crate::engine::battle::Cx<'_>,
+    menu: &mut MENU_STATE,
+    ship: Option<LinkId<Fragment>>,
+) -> bool {
     if menu.CurState >> 4 != 0 {
         return false;
     }
@@ -288,24 +306,29 @@ unsafe fn dms_spin_ship(menu: &mut MENU_STATE, ship: Option<LinkId<Fragment>>) -
         return false;
     }
     let spin_ship = if let Some(id) = ship {
-        let race = built_ship_queue(|queue| queue.get(id).race_id);
-        avail_race_queue(|queue| queue.at(usize::from(race)).map(|id| *queue.get(id)))
+        let race = cx.with_legacy(|| built_ship_queue(|queue| queue.get(id).race_id));
+        cx.with_legacy(|| {
+            avail_race_queue(|queue| queue.at(usize::from(race)).map(|id| *queue.get(id)))
+        })
     } else {
-        get_available_race_from_index(menu.delta_item as BYTE).map(|(_, fleet)| fleet)
+        cx.with_legacy(|| get_available_race_from_index(menu.delta_item as BYTE))
+            .map(|(_, fleet)| fleet)
     };
     let Some(spin_ship) = spin_ship else {
         return false;
     };
-    SetFlashRect(ptr::null());
+    clear_flash(cx.kernel);
     use crate::ships::master_native::find;
     let species = spin_ship.species_id;
-    let (context, index) =
-        Kernel::current().read(|owner| (owner.screen_context, find(&owner.master_queue, species)));
+    let (context, index) = (
+        cx.kernel.screen_context,
+        find(&cx.kernel.master_queue, species),
+    );
     let old = SetContext(context);
     let mut old_clip: RECT = mem::zeroed();
     GetContextClipRect(&mut old_clip);
     if index >= 0 && index < (MeleeShip_MELEE_ZOQFOTPIK + 1) as i32 {
-        DoShipSpin(index as COUNT, menu.hMusic);
+        cx.with_legacy(|| DoShipSpin(index as COUNT, menu.hMusic));
     }
     SetContextClipRect(&mut old_clip);
     SetContext(old);
@@ -327,7 +350,7 @@ unsafe fn dms_modify_crew(
                 dms_dismiss_flag_ship_crew(cx, input)
             };
             if delta != 0 {
-                cx.with_legacy(|| dms_flash_flag_ship_crew_count());
+                dms_flash_flag_ship_crew_count(cx);
             }
             delta
         }
@@ -339,7 +362,7 @@ unsafe fn dms_modify_crew(
             };
             if delta != 0 {
                 let slot = cx.world.built_ships().get(ship).index;
-                cx.with_legacy(|| dms_flash_escort_ship_crew_count(slot));
+                dms_flash_escort_ship_crew_count(cx, slot);
             }
             delta
         }
@@ -355,40 +378,45 @@ unsafe fn dms_modify_crew(
         menu.delta_item &= MODIFY_CREW_FLAG;
     }
     crew_transaction(cx, delta, |cx| {
-        cx.with_legacy(|| DrawMenuStateStrings(PM_CREW as BYTE, SHIPYARD_CREW as i16));
+        draw_campaign_menu(cx, PM_CREW as BYTE, SHIPYARD_CREW as i16);
     });
 }
 
 unsafe fn dms_try_add_escort_ship(cx: &mut Cx<'_>, input: &InputSession, menu: &mut MENU_STATE) {
-    let (index, added) = cx.with_legacy(|| {
-        let Some((index, template)) = get_available_race_from_index(menu.delta_item as BYTE) else {
+    let (index, added) = {
+        let Some((index, template)) =
+            cx.with_legacy(|| get_available_race_from_index(menu.delta_item as BYTE))
+        else {
             panic!("the purchased hangar race must be allied");
         };
-        let added = WorldData::current().read(|world| world.flagship.res_units)
-            >= SHIP_COST[index as usize] as DWORD
-            && built_ship_queue(|queue| {
-                queue
-                    .clone_fragment(
-                        &template,
-                        index as u8,
-                        1,
-                        crate::comm::dispatch::production_captain_name,
-                    )
-                    .is_some()
+        let added = cx.world.data.flagship.res_units >= SHIP_COST[index as usize] as DWORD
+            && cx.with_legacy(|| {
+                built_ship_queue(|queue| {
+                    queue
+                        .clone_fragment(
+                            &template,
+                            index as u8,
+                            1,
+                            crate::comm::dispatch::production_captain_name,
+                        )
+                        .is_some()
+                })
             });
         (index, added)
-    });
+    };
     if added {
         show_combat_ship(cx, input, menu, menu.CurState as COUNT, None);
-        cx.with_legacy(|| {
-            DrawMenuStateStrings(PM_CREW as BYTE, SHIPYARD_CREW as i16);
-            DeltaSISGauges(
+        {
+            draw_campaign_menu(cx, PM_CREW as BYTE, SHIPYARD_CREW as i16);
+            delta_sis_gauges(
+                cx.kernel,
+                cx.world,
                 UNDEFINED_DELTA as SIZE,
                 UNDEFINED_DELTA as SIZE,
                 -(SHIP_COST[index as usize] as i32),
             );
-            dms_set_mode(input, menu, ModifyMode::EditCrew);
-        });
+            dms_set_mode(cx, input, menu, ModifyMode::EditCrew);
+        };
     } else {
         play_menu_sound(
             cx.kernel,
@@ -411,28 +439,30 @@ unsafe fn dms_add_escort_ship(
     let (dx, dy) = movement;
     assert!(menu.delta_item & MODIFY_CREW_FLAG != 0);
     if special {
-        cx.with_legacy(|| {
-            let ship = built_ship_queue(|queue| {
-                queue.find(|ship| COUNT::from(ship.index) == menu.delta_item as COUNT)
+        {
+            let ship = cx.with_legacy(|| {
+                built_ship_queue(|queue| {
+                    queue.find(|ship| COUNT::from(ship.index) == menu.delta_item as COUNT)
+                })
             });
-            if dms_spin_ship(menu, ship) {
-                dms_set_mode(input, menu, ModifyMode::AddEscort);
+            if dms_spin_ship(cx, menu, ship) {
+                dms_set_mode(cx, input, menu, ModifyMode::AddEscort);
             }
-        });
+        };
         return;
     }
     if cancel {
-        cx.with_legacy(|| {
+        {
             menu.delta_item &= !MODIFY_CREW_FLAG;
-            SetFlashRect(ptr::null());
-            DrawMenuStateStrings(PM_CREW as BYTE, SHIPYARD_CREW as i16);
-            dms_set_mode(input, menu, ModifyMode::Navigate);
-        });
+            clear_flash(cx.kernel);
+            draw_campaign_menu(cx, PM_CREW as BYTE, SHIPYARD_CREW as i16);
+            dms_set_mode(cx, input, menu, ModifyMode::Navigate);
+        };
     } else if select {
         dms_try_add_escort_ship(cx, input, menu);
     } else if dx != 0 || dy != 0 {
-        cx.with_legacy(|| {
-            let available = get_available_race_count();
+        {
+            let available = cx.with_legacy(get_available_race_count);
             let mut current = menu.delta_item as BYTE;
             if dx < 0 || dy < 0 {
                 let old = current;
@@ -448,11 +478,11 @@ unsafe fn dms_add_escort_ship(
             }
             if current != menu.delta_item as BYTE {
                 highlight.pre_update_flash_rect();
-                draw_race_strings(menu, current);
+                draw_race_strings(cx, menu, current);
                 highlight.post_update_flash_rect();
                 menu.delta_item = current as SIZE | MODIFY_CREW_FLAG;
             }
-        });
+        };
     }
 }
 
@@ -462,21 +492,25 @@ unsafe fn dms_scrap_escort_ship(
     menu: &mut MENU_STATE,
     handle: LinkId<Fragment>,
 ) {
-    cx.with_legacy(|| SetFlashRect(ptr::null()));
+    clear_flash(cx.kernel);
     show_combat_ship(cx, input, menu, menu.CurState as COUNT, Some(handle));
-    cx.with_legacy(|| {
-        built_ship_queue(|queue| {
-            queue.remove(handle);
-            queue.free(handle);
+    {
+        cx.with_legacy(|| {
+            built_ship_queue(|queue| {
+                queue.remove(handle);
+                queue.free(handle);
+            })
         });
-        DeltaSISGauges(
+        delta_sis_gauges(
+            cx.kernel,
+            cx.world,
             UNDEFINED_DELTA as SIZE,
             UNDEFINED_DELTA as SIZE,
             UNDEFINED_DELTA as i32,
         );
-        SetContext(Kernel::current().read(|owner| owner.space_context));
-        dms_set_mode(input, menu, ModifyMode::Navigate);
-    });
+        SetContext(cx.kernel.space_context);
+        dms_set_mode(cx, input, menu, ModifyMode::Navigate);
+    };
 }
 
 unsafe fn dms_edit_crew_mode(
@@ -496,49 +530,52 @@ unsafe fn dms_edit_crew_mode(
             }
         }
         menu.delta_item &= !MODIFY_CREW_FLAG;
-        cx.with_legacy(|| dms_set_mode(input, menu, ModifyMode::Navigate));
+        dms_set_mode(cx, input, menu, ModifyMode::Navigate);
     } else if dy != 0 {
         dms_modify_crew(cx, input, menu, ship, dy);
     }
 }
 
 unsafe fn dms_navigate_ship_slots(
+    cx: &mut Cx<'_>,
     input: &InputSession,
     menu: &mut MENU_STATE,
     special: bool,
     select: bool,
     cancel: bool,
-    dx: SBYTE,
-    dy: SBYTE,
+    direction: (SBYTE, SBYTE),
 ) {
-    let ship = built_ship_queue(|queue| {
-        queue.find(|ship| COUNT::from(ship.index) == menu.CurState as COUNT)
+    let (dx, dy) = direction;
+    let ship = cx.with_legacy(|| {
+        built_ship_queue(|queue| {
+            queue.find(|ship| COUNT::from(ship.index) == menu.CurState as COUNT)
+        })
     });
     if dx != 0 || dy != 0 {
         let new_state = DMS_MoveCursor(menu.CurState, dx, dy);
         if new_state != menu.CurState {
             menu.CurState = new_state;
-            dms_flash_active_ship(menu);
+            dms_flash_active_ship(cx, menu);
         }
     }
     if special {
-        if dms_spin_ship(menu, ship) {
-            dms_set_mode(input, menu, ModifyMode::Navigate);
+        if dms_spin_ship(cx, menu, ship) {
+            dms_set_mode(cx, input, menu, ModifyMode::Navigate);
         }
     } else if select {
         if ship.is_none() && menu.CurState >> 4 == 0 {
             menu.delta_item = MODIFY_CREW_FLAG;
-            draw_race_strings(menu, 0);
-            dms_set_mode(input, menu, ModifyMode::AddEscort);
+            draw_race_strings(cx, menu, 0);
+            dms_set_mode(cx, input, menu, ModifyMode::AddEscort);
         } else {
             menu.delta_item |= MODIFY_CREW_FLAG;
-            dms_set_mode(input, menu, ModifyMode::EditCrew);
+            dms_set_mode(cx, input, menu, ModifyMode::EditCrew);
         }
     } else if cancel {
         menu.InputFunc = Some(do_shipyard);
         menu.CurState = SHIPYARD_CREW;
-        DrawMenuStateStrings(PM_CREW as BYTE, menu.CurState as i16);
-        dms_set_mode(input, menu, ModifyMode::Exit);
+        draw_campaign_menu(cx, PM_CREW as BYTE, menu.CurState as i16);
+        dms_set_mode(cx, input, menu, ModifyMode::Exit);
     }
 }
 
@@ -548,14 +585,14 @@ unsafe fn do_modify_ships(cx: &mut Cx<'_>, menu: &mut MENU_STATE, input: &InputS
         return 1;
     }
     if menu.Initialized == 0 {
-        cx.with_legacy(|| {
+        {
             menu.InputFunc = Some(do_modify_ships);
             menu.Initialized = 1;
             menu.CurState = 0xf0;
             menu.delta_item = 0;
-            SetContext(Kernel::current().read(|owner| owner.space_context));
-            dms_set_mode(input, menu, ModifyMode::Navigate);
-        });
+            SetContext(cx.kernel.space_context);
+            dms_set_mode(cx, input, menu, ModifyMode::Navigate);
+        };
     } else {
         let special = input.pulsed().menu[KEY_MENU_SPECIAL as usize] != 0;
         let select = input.pulsed().menu[KEY_MENU_SELECT as usize] != 0;
@@ -575,9 +612,7 @@ unsafe fn do_modify_ships(cx: &mut Cx<'_>, menu: &mut MENU_STATE, input: &InputS
             dy = 1;
         }
         if menu.delta_item & MODIFY_CREW_FLAG == 0 {
-            cx.with_legacy(|| {
-                dms_navigate_ship_slots(input, menu, special, select, cancel, dx, dy)
-            });
+            dms_navigate_ship_slots(cx, input, menu, special, select, cancel, (dx, dy));
         } else {
             let ship = cx.with_legacy(|| {
                 built_ship_queue(|queue| {
@@ -596,45 +631,49 @@ unsafe fn do_modify_ships(cx: &mut Cx<'_>, menu: &mut MENU_STATE, input: &InputS
 }
 
 unsafe fn draw_blue_print(
+    cx: &mut Cx<'_>,
     input: &InputSession,
     menu: &mut MENU_STATE,
     flagship: &crate::engine::world::SisState,
     context: &crate::graphics::context_abi::ContextLease,
 ) {
-    let frame = CaptureDrawable(LoadGraphicInstance(c"graphics.blueprints".as_ptr()).cast());
-    let mut stamp = STAMP {
-        origin: POINT { x: 0, y: 0 },
-        frame: DecFrameIndex(frame),
-    };
-    SetContextForeGroundColor(rgb15(0, 0, 0x16));
-    DrawFilledStamp(&mut stamp);
-    for slot in 0..NUM_DRIVE_SLOTS {
-        let piece = flagship.drive_slots[slot as usize];
-        DrawShipPiece(frame, piece as COUNT, slot as COUNT, 1);
-    }
-    for slot in 0..NUM_JET_SLOTS {
-        let piece = flagship.jet_slots[slot as usize];
-        DrawShipPiece(frame, piece as COUNT, slot as COUNT, 1);
-    }
-    for slot in 0..NUM_MODULE_SLOTS {
-        let piece = flagship.module_slots[slot as usize];
-        if !(menu.CurState as u32 == SHIPYARD && piece as u32 == CREW_POD) {
-            DrawShipPiece(frame, piece as COUNT, slot as COUNT, 1);
+    // SAFETY: the shipyard retains its game-thread context, menu and loaded resources.
+    unsafe {
+        let frame = CaptureDrawable(LoadGraphicInstance(c"graphics.blueprints".as_ptr()).cast());
+        let mut stamp = STAMP {
+            origin: POINT { x: 0, y: 0 },
+            frame: DecFrameIndex(frame),
+        };
+        SetContextForeGroundColor(rgb15(0, 0, 0x16));
+        DrawFilledStamp(&mut stamp);
+        for slot in 0..NUM_DRIVE_SLOTS {
+            let piece = flagship.drive_slots[slot as usize];
+            cx.with_legacy(|| DrawShipPiece(frame, piece as COUNT, slot as COUNT, 1));
         }
-    }
-    SetContextForeGroundColor(rgb15(0x0a, 0x0a, 0x1f));
-    for slot in 0..NUM_MODULE_SLOTS {
-        let piece = flagship.module_slots[slot as usize];
-        if menu.CurState as u32 == SHIPYARD && piece as u32 == CREW_POD {
-            DrawShipPiece(frame, piece as COUNT, slot as COUNT, 1);
+        for slot in 0..NUM_JET_SLOTS {
+            let piece = flagship.jet_slots[slot as usize];
+            cx.with_legacy(|| DrawShipPiece(frame, piece as COUNT, slot as COUNT, 1));
         }
+        for slot in 0..NUM_MODULE_SLOTS {
+            let piece = flagship.module_slots[slot as usize];
+            if !(menu.CurState as u32 == SHIPYARD && piece as u32 == CREW_POD) {
+                cx.with_legacy(|| DrawShipPiece(frame, piece as COUNT, slot as COUNT, 1));
+            }
+        }
+        SetContextForeGroundColor(rgb15(0x0a, 0x0a, 0x1f));
+        for slot in 0..NUM_MODULE_SLOTS {
+            let piece = flagship.module_slots[slot as usize];
+            if menu.CurState as u32 == SHIPYARD && piece as u32 == CREW_POD {
+                cx.with_legacy(|| DrawShipPiece(frame, piece as COUNT, slot as COUNT, 1));
+            }
+        }
+        super::sis::capacity::draw_blueprint_cells(
+            context,
+            flagship,
+            input.preferences().fonts == OPT_PC as i32,
+        );
+        DestroyDrawable(ReleaseDrawable(frame));
     }
-    super::sis::capacity::draw_blueprint_cells(
-        context,
-        flagship,
-        input.preferences().fonts == OPT_PC as i32,
-    );
-    DestroyDrawable(ReleaseDrawable(frame));
 }
 
 unsafe fn exit_shipyard(input: &InputSession, menu: &mut MENU_STATE) -> BOOLEAN {
@@ -653,6 +692,7 @@ unsafe fn exit_shipyard(input: &InputSession, menu: &mut MENU_STATE) -> BOOLEAN 
 /// Global game state, queues, graphics, resource and input systems must be initialized;
 /// callbacks and this function must run exclusively on that same thread.
 pub unsafe fn do_shipyard(cx: &mut Cx<'_>, menu: &mut MENU_STATE, input: &InputSession) -> BOOLEAN {
+    let size = cx.screen_dimensions();
     if cx.world.activity() & CHECK_ABORT as u16 != 0 {
         return cx.with_legacy(|| exit_shipyard(input, menu));
     }
@@ -662,7 +702,7 @@ pub unsafe fn do_shipyard(cx: &mut Cx<'_>, menu: &mut MENU_STATE, input: &InputS
     if menu.Initialized == 0 {
         let flagship = cx.world.data.flagship;
         let context = crate::graphics::context_abi::ContextLease::require(cx.kernel.space_context);
-        cx.with_legacy(|| {
+        {
             menu.InputFunc = Some(do_shipyard);
             menu.ModuleFrame =
                 CaptureDrawable(LoadGraphicInstance(c"graphics.shipyard".as_ptr()).cast());
@@ -671,13 +711,15 @@ pub unsafe fn do_shipyard(cx: &mut Cx<'_>, menu: &mut MENU_STATE, input: &InputS
             menu.hMusic = (LoadMusicInstance(c"music.shipyard".as_ptr())).cast();
             SetTransitionSource(ptr::null());
             BatchGraphics();
-            draw_sisframe();
-            DrawSISMessage(game_string(STARBASE_STRING_BASE + 3));
-            DrawSISTitle(game_string(STARBASE_STRING_BASE));
-            SetContext(Kernel::current().read(|owner| owner.space_context));
-            draw_blue_print(input, menu, &flagship, &context);
+            crate::ui::border::draw_sis_frame(cx.kernel, cx.world, size);
+            let message = cx.kernel.game_text((STARBASE_STRING_BASE + 3) as usize);
+            let title = cx.kernel.game_text(STARBASE_STRING_BASE as usize);
+            draw_campaign_message(cx.kernel, cx.world, size.0, Some(message));
+            draw_title(cx.kernel, size.0, title);
+            SetContext(cx.kernel.space_context);
+            draw_blue_print(cx, input, menu, &flagship, &context);
             menu.CurState = SHIPYARD_CREW;
-            DrawMenuStateStrings(PM_CREW as BYTE, menu.CurState as i16);
+            draw_campaign_menu(cx, PM_CREW as BYTE, menu.CurState as i16);
             let mut stamp = STAMP {
                 origin: POINT { x: 0, y: 0 },
                 frame: SetAbsFrameIndex(menu.ModuleFrame, 0),
@@ -696,20 +738,18 @@ pub unsafe fn do_shipyard(cx: &mut Cx<'_>, menu: &mut MENU_STATE, input: &InputS
                 SetContextClipRect(&mut old_r);
                 animate_power_lines(Some(&*menu));
             }
-            SetContextFont(Kernel::current().read(|owner| owner.tiny_font));
+            SetContextFont(cx.kernel.tiny_font);
             ScreenTransition(3, ptr::null());
             UnbatchGraphics();
             PlayMusic(menu.hMusic, 1, 1);
-        });
+        };
         show_combat_ship(cx, input, menu, COUNT::MAX, None);
         frame::install(input, context, || {
             // SAFETY: the shipyard retains its published menu until this hook is removed.
             unsafe { animate_power_lines(None) };
         });
-        cx.with_legacy(|| {
-            SetFlashRect(MENU_3DO);
-            menu.Initialized = 1;
-        });
+        set_menu_flash(cx.kernel, size, false);
+        menu.Initialized = 1;
     } else if cancel || (select && menu.CurState == SHIPYARD_EXIT) {
         return cx.with_legacy(|| exit_shipyard(input, menu));
     } else if select && menu.CurState != SHIPYARD_SAVELOAD {
@@ -722,12 +762,10 @@ pub unsafe fn do_shipyard(cx: &mut Cx<'_>, menu: &mut MENU_STATE, input: &InputS
         if crate::front_end::gameopt::game_options(cx, &mut io) == 0 {
             return cx.with_legacy(|| exit_shipyard(input, menu));
         }
-        cx.with_legacy(|| {
-            DrawMenuStateStrings(PM_CREW as BYTE, menu.CurState as i16);
-            SetFlashRect(MENU_3DO);
-        });
+        draw_campaign_menu(cx, PM_CREW as BYTE, menu.CurState as i16);
+        set_menu_flash(cx.kernel, size, false);
     } else {
-        cx.with_legacy(|| do_menu_chooser(input, menu, PM_CREW as BYTE));
+        crate::ui::menu::choose_menu_state(cx, input, &mut menu.CurState, PM_CREW as BYTE);
     }
     1
 }
@@ -781,7 +819,7 @@ unsafe fn dms_hire_escort_ship_crew(cx: &mut Cx<'_>, id: LinkId<Fragment>) -> SI
     } else {
         -(SHIP_COST[ship.race_id as usize] as i32)
     };
-    cx.with_legacy(|| DeltaSISGauges(0, 0, cost));
+    delta_sis_gauges(cx.kernel, cx.world, 0, 0, cost);
     cx.world.built_ships().get_mut(id).crew_level += 1;
     cx.kernel.sis_highlight.pre_update_flash_rect();
     let slot = cx.world.built_ships().get(id).index;
@@ -806,7 +844,7 @@ unsafe fn dms_dismiss_escort_ship_crew(cx: &mut Cx<'_>, id: LinkId<Fragment>) ->
         } else {
             SHIP_COST[ship.race_id as usize] as i32
         };
-        cx.with_legacy(|| DeltaSISGauges(0, 0, cost));
+        delta_sis_gauges(cx.kernel, cx.world, 0, 0, cost);
         delta = -1;
         cx.world.built_ships().get_mut(id).crew_level -= 1;
     } else {
@@ -839,7 +877,7 @@ unsafe fn dms_hire_flag_ship_crew(cx: &mut Cx<'_>, input: &InputSession) -> SIZE
     context.draw_point(cell.foreground, cell.point);
     cx.kernel.sis_highlight.pre_update_flash_rect();
     let cost = -(cx.world.data.game.crew_cost as i32);
-    cx.with_legacy(|| DeltaSISGauges(1, 0, cost));
+    delta_sis_gauges(cx.kernel, cx.world, 1, 0, cost);
     cx.kernel.sis_highlight.post_update_flash_rect();
     1
 }
@@ -857,10 +895,10 @@ unsafe fn dms_dismiss_flag_ship_crew(cx: &mut Cx<'_>, input: &InputSession) -> S
         } else {
             0
         };
-    cx.with_legacy(|| {
-        DeltaSISGauges(-1, 0, cost);
+    {
+        delta_sis_gauges(cx.kernel, cx.world, -1, 0, cost);
         highlight.post_update_flash_rect();
-    });
+    };
     let cell = super::sis::capacity::crew_cell(
         &cx.world.data.flagship,
         input.preferences().fonts == OPT_PC as i32,

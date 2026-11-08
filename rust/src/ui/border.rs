@@ -234,12 +234,27 @@ fn draw_dark_edges(context: &ContextLease, dimensions: (i32, i32)) {
     context.fill_rectangle(ink, r);
 }
 
-/// # Safety
-/// The caller owns the published campaign display on the game thread.
-#[cfg(not(test))]
-pub unsafe fn draw_sisframe() {
-    let dimensions = (ScreenWidth, ScreenHeight);
-    Kernel::current().read(|kernel| {
-        crate::engine::World::current().write(|world| draw_sis_frame(kernel, world, dimensions))
-    });
+/// Draw the conversation chrome without borrowing the communication runtime.
+pub(crate) fn draw_conversation_frame(
+    kernel: &crate::engine::Kernel,
+    world: &mut crate::engine::World,
+    dimensions: (i32, i32),
+    starbase_title: Option<usize>,
+) {
+    use super::sis::{draw_campaign_message, draw_title};
+    draw_sis_frame(kernel, world, dimensions);
+    if let Some(title) = starbase_title {
+        draw_campaign_message(
+            kernel,
+            world,
+            dimensions.0,
+            Some(kernel.game_text(title + 1)),
+        );
+        draw_title(kernel, dimensions.0, kernel.game_text(title));
+    } else {
+        draw_campaign_message(kernel, world, dimensions.0, None);
+        let name = std::ffi::CStr::from_bytes_until_nul(&world.data.flagship.planet_name)
+            .unwrap_or_else(|error| panic!("invalid planet name: {error}"));
+        draw_title(kernel, dimensions.0, name);
+    }
 }

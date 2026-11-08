@@ -25,13 +25,14 @@ pub(crate) mod runtime {
     use save_load::pick_game;
 
     use super::{picker_action, picker_slot, PickerAction, MAX_SAVED_GAMES, SAVES_PER_PAGE};
-    use crate::engine::{battle::Cx, input::InputSession, observe::Io, Kernel, World};
+    use crate::engine::{battle::Cx, input::InputSession, observe::Io, Kernel};
     use crate::navigation::abi::{
         MENU_SOUND_EFFECT_MENU_SOUND_FAILURE as MENU_FAILURE,
         MENU_SOUND_EFFECT_MENU_SOUND_SUCCESS as MENU_SUCCESS, *,
     };
     use crate::planets::starmap::naming::name_near;
     use crate::ui::settings::play_menu_sound;
+    use crate::ui::sis::{clear_sis_rect, draw_status_message, set_flash_rect, set_menu_flash};
 
     use std::{mem, ptr};
 
@@ -141,7 +142,7 @@ pub(crate) mod runtime {
         let status = ContextLease::require(cx.kernel.status_context);
         let screen = ContextLease::require(cx.kernel.screen_context);
         status.select();
-        crate::ui::sis::set_flash_rect(
+        set_flash_rect(
             &cx.kernel.sis_highlight,
             &screen,
             status.clip_rect(),
@@ -153,7 +154,7 @@ pub(crate) mod runtime {
         );
         let mut buffer = [0u8; MAX_NAME_SIZE];
         draw_name_string(cx.kernel, cx.world, captain, c"", 0, DDSHS_EDIT);
-        crate::ui::sis::draw_status_message(
+        draw_status_message(
             cx.kernel,
             cx.world,
             Some(cx.kernel.game_text(NAMING_STRING_BASE as usize)),
@@ -180,7 +181,7 @@ pub(crate) mod runtime {
         } else {
             buffer.copy_from_slice(setting);
         }
-        crate::ui::sis::set_menu_flash(cx.kernel, cx.screen_dimensions(), false);
+        set_menu_flash(cx.kernel, cx.screen_dimensions(), false);
         let text = std::ffi::CStr::from_bytes_until_nul(&buffer)
             .unwrap_or_else(|error| panic!("invalid saved name: {error}"));
         draw_name_string(cx.kernel, cx.world, captain, text, 0, DDSHS_NORMAL);
@@ -244,7 +245,7 @@ pub(crate) mod runtime {
                 height: 11,
             },
         };
-        crate::ui::sis::set_flash_rect(
+        set_flash_rect(
             &cx.kernel.sis_highlight,
             &screen,
             context.clip_rect(),
@@ -391,7 +392,12 @@ pub(crate) mod runtime {
         UnbatchGraphics();
     }
 
-    unsafe fn draw_savegame_summary(pick_state: *mut PickGameState, game_index: COUNT) {
+    unsafe fn draw_savegame_summary(
+        cx: &mut Cx<'_>,
+        pick_state: *mut PickGameState,
+        game_index: COUNT,
+    ) {
+        let dimensions = cx.screen_dimensions();
         let p_sd = ptr::addr_of_mut!((*pick_state).summary)
             .cast::<SUMMARY_DESC>()
             .add(game_index as usize);
@@ -409,8 +415,8 @@ pub(crate) mod runtime {
         } else {
             let mut old_rect: RECT = mem::zeroed();
             let mut buf: [UNICODE; 256] = [0; 256];
-            let saved = crate::engine::World::current().write(super::preview::SavedState::capture);
-            let old_context = SetContext(Kernel::current().read(|owner| owner.status_context));
+            let saved = super::preview::SavedState::capture(cx.world);
+            let old_context = SetContext(cx.kernel.status_context);
             GetContextClipRect(&mut old_rect);
             r.corner.x = (SIS_ORG_X as i32
                 + ((sis_screen_width() - STATUS_WIDTH as i32) >> 1)
@@ -421,19 +427,13 @@ pub(crate) mod runtime {
             r.extent.width = STATUS_WIDTH as COORD;
             r.extent.height = (ScreenHeight - (SAFE_Y as i32 * 2)) as COORD;
             SetContextClipRect(&mut r);
-            crate::engine::World::current().write(|world| super::preview::install(world, &*p_sd));
-            DateToString(
-                buf.as_mut_ptr(),
-                buf.len(),
-                (*p_sd).month_index,
-                (*p_sd).day_index,
-                (*p_sd).year_index,
-            );
-            ClearSISRect(DRAW_SIS_DISPLAY as BYTE);
-            DrawStatusMessage(buf.as_ptr());
-            crate::engine::World::current().write(|world| world.built_ships().reinit());
+            super::preview::install(cx.world, &*p_sd);
+            let date = save_load::summary_date(cx.kernel, &*p_sd, 255);
+            clear_sis_rect(cx.kernel, cx.world, dimensions, DRAW_SIS_DISPLAY as BYTE);
+            draw_status_message(cx.kernel, cx.world, Some(&date));
+            cx.world.built_ships().reinit();
             SetContextClipRect(&mut old_rect);
-            SetContext(Kernel::current().read(|owner| owner.space_context));
+            SetContext(cx.kernel.space_context);
             s.origin.y = 13;
             for i in 0..4 {
                 s.origin.x = 140 + SUMMARY_X_OFFS + SUMMARY_SIDE_OFFS;
@@ -441,7 +441,7 @@ pub(crate) mod runtime {
                     let dev_index = i * 4 + j;
                     if dev_index < (*p_sd).NumDevices as usize {
                         s.frame = SetAbsFrameIndex(
-                            Kernel::current().read(|owner| owner.misc_data_frame),
+                            cx.kernel.misc_data_frame,
                             77 + (*p_sd).DeviceList[dev_index] as COUNT,
                         );
                         DrawStamp(&mut s);
@@ -450,7 +450,7 @@ pub(crate) mod runtime {
                 }
                 s.origin.y += 18;
             }
-            SetContextFont(Kernel::current().read(|owner| owner.star_con_font));
+            SetContextFont(cx.kernel.star_con_font);
             let mut t = TEXT {
                 baseline: POINT {
                     x: 173 + SUMMARY_X_OFFS + SUMMARY_SIDE_OFFS,
@@ -469,16 +469,16 @@ pub(crate) mod runtime {
                 s.frame = IncFrameIndex(s.frame);
                 DrawStamp(&mut s);
             } else {
-                draw_savegame_cargo(ptr::addr_of_mut!((*p_sd).SS));
-                SetContext(Kernel::current().read(|owner| owner.radar_context));
+                cx.with_legacy(|| draw_savegame_cargo(ptr::addr_of_mut!((*p_sd).SS)));
+                SetContext(cx.kernel.radar_context);
                 GetContextClipRect(&mut old_rect);
                 r.corner.x = SIS_ORG_X as COORD + 10 + SUMMARY_X_OFFS - SUMMARY_SIDE_OFFS;
                 r.corner.y = SIS_ORG_Y as COORD + 84;
                 r.extent = old_rect.extent;
                 SetContextClipRect(&mut r);
-                Kernel::current().read(|kernel| super::preview::lander(kernel, &*p_sd));
+                super::preview::lander(cx.kernel, &*p_sd);
                 SetContextClipRect(&mut old_rect);
-                SetContext(Kernel::current().read(|owner| owner.space_context));
+                SetContext(cx.kernel.space_context);
                 libc::snprintf(
                     buf.as_mut_ptr(),
                     buf.len(),
@@ -509,9 +509,7 @@ pub(crate) mod runtime {
             };
             match (*p_sd).Activity as u32 {
                 IN_LAST_BATTLE | IN_INTERPLANETARY | IN_PLANET_ORBIT | IN_STARBASE => {
-                    let named = World::current().read(|world| {
-                        Kernel::current().read(|kernel| name_near(kernel, world.catalog(), star_pt))
-                    });
+                    let named = name_near(cx.kernel, cx.world.catalog(), star_pt);
                     if let Some((name, point)) = named {
                         utf8StringCopy(buf.as_mut_ptr().cast(), buf.len(), name.as_ptr().cast());
                         star_pt = point;
@@ -523,21 +521,21 @@ pub(crate) mod runtime {
                     utf8StringCopy(
                         (buf.as_mut_ptr()).cast(),
                         buf.len(),
-                        (game_string(NAVIGATION_STRING_BASE)).cast(),
+                        (cx.with_legacy(|| game_string(NAVIGATION_STRING_BASE))).cast(),
                     );
                 }
                 IN_QUASISPACE => {
                     utf8StringCopy(
                         (buf.as_mut_ptr()).cast(),
                         buf.len(),
-                        (game_string(NAVIGATION_STRING_BASE + 1)).cast(),
+                        (cx.with_legacy(|| game_string(NAVIGATION_STRING_BASE + 1))).cast(),
                     );
                 }
                 _ => {
                     buf[0] = 0;
                 }
             }
-            SetContextFont(Kernel::current().read(|owner| owner.tiny_font));
+            SetContextFont(cx.kernel.tiny_font);
             SetContextForeGroundColor(rgb15(0x1b, 0, 0x1b));
             t.CharCount = COUNT::MAX;
             font_DrawText(&mut t);
@@ -549,14 +547,14 @@ pub(crate) mod runtime {
                     utf8StringCopy(
                         (buf.as_mut_ptr()).cast(),
                         buf.len(),
-                        (game_string(STARBASE_STRING_BASE)).cast(),
+                        (cx.with_legacy(|| game_string(STARBASE_STRING_BASE))).cast(),
                     );
                 }
                 IN_LAST_BATTLE => {
                     utf8StringCopy(
                         (buf.as_mut_ptr()).cast(),
                         buf.len(),
-                        (game_string(PLANET_NUMBER_BASE + 32)).cast(),
+                        (cx.with_legacy(|| game_string(PLANET_NUMBER_BASE + 32))).cast(),
                     );
                 }
                 IN_PLANET_ORBIT => {
@@ -581,16 +579,19 @@ pub(crate) mod runtime {
             t.CharCount = COUNT::MAX;
             font_DrawText(&mut t);
             SetContext(old_context);
-            crate::engine::World::current().write(|world| saved.restore(world));
+            saved.restore(cx.world);
         }
         UnbatchGraphics();
     }
 
-    unsafe fn draw_game_selection(pick_state: *mut PickGameState, sel_slot: COUNT) {
+    unsafe fn draw_game_selection(
+        cx: &mut Cx<'_>,
+        pick_state: *mut PickGameState,
+        sel_slot: COUNT,
+    ) {
         let mut buf: [UNICODE; 256] = [0; 256];
-        let mut buf2: [UNICODE; 80] = [0; 80];
         BatchGraphics();
-        SetContextFont(Kernel::current().read(|owner| owner.tiny_font));
+        SetContextFont(cx.kernel.tiny_font);
         let mut r = RECT {
             extent: EXTENT {
                 width: 240,
@@ -646,26 +647,20 @@ pub(crate) mod runtime {
                 utf8StringCopy(
                     (buf.as_mut_ptr()).cast(),
                     buf.len(),
-                    (game_string(SAVEGAME_STRING_BASE + 3)).cast(),
+                    (cx.with_legacy(|| game_string(SAVEGAME_STRING_BASE + 3))).cast(),
                 );
             } else {
-                DateToString(
-                    buf2.as_mut_ptr(),
-                    buf2.len(),
-                    (*desc).month_index,
-                    (*desc).day_index,
-                    (*desc).year_index,
-                );
+                let date = save_load::summary_date(cx.kernel, &*desc, 79);
                 let name = if (*desc).SaveName[0] != 0 {
                     ptr::addr_of!((*desc).SaveName).cast::<UNICODE>()
                 } else {
-                    game_string(SAVEGAME_STRING_BASE + 4)
+                    cx.with_legacy(|| game_string(SAVEGAME_STRING_BASE + 4))
                 };
                 libc::snprintf(
                     buf.as_mut_ptr(),
                     buf.len(),
                     c"%s: %s".as_ptr(),
-                    buf2.as_ptr(),
+                    date.as_ptr(),
                     name,
                 );
             }
@@ -676,11 +671,15 @@ pub(crate) mod runtime {
         UnbatchGraphics();
     }
 
-    unsafe fn redraw_pick_display(pick_state: *mut PickGameState, sel_slot: COUNT) {
+    unsafe fn redraw_pick_display(
+        cx: &mut Cx<'_>,
+        pick_state: *mut PickGameState,
+        sel_slot: COUNT,
+    ) {
         BatchGraphics();
-        draw_blank_savegame_display(pick_state);
-        draw_savegame_summary(pick_state, sel_slot);
-        draw_game_selection(pick_state, sel_slot);
+        cx.with_legacy(|| draw_blank_savegame_display(pick_state));
+        draw_savegame_summary(cx, pick_state, sel_slot);
+        draw_game_selection(cx, pick_state, sel_slot);
         UnbatchGraphics();
     }
 
@@ -732,7 +731,7 @@ pub(crate) mod runtime {
                 if new_state != (*p_ms).CurState {
                     (*p_ms).CurState = new_state;
                     SetContext(cx.kernel.space_context);
-                    cx.with_legacy(|| redraw_pick_display(pick_state, (*p_ms).CurState as COUNT));
+                    redraw_pick_display(cx, pick_state, (*p_ms).CurState as COUNT);
                 }
                 cx.with_legacy(|| SleepThreadUntil(time_in.wrapping_add(ONE_SECOND / 30)));
             }
@@ -756,7 +755,7 @@ pub(crate) mod runtime {
                     if pick_game(cx, io, u32::from(*state == SAVE_GAME), 0) != 0 {
                         return false;
                     }
-                    crate::ui::sis::set_menu_flash(cx.kernel, cx.screen_dimensions(), false);
+                    set_menu_flash(cx.kernel, cx.screen_dimensions(), false);
                 }
                 QUIT_GAME => {
                     if runtime.confirm_exit(cx) {
@@ -806,7 +805,7 @@ pub(crate) mod runtime {
             PM_SAVE_GAME as u8,
             i16::from(state),
         );
-        crate::ui::sis::set_menu_flash(cx.kernel, cx.screen_dimensions(), false);
+        set_menu_flash(cx.kernel, cx.screen_dimensions(), false);
         SetMenuSounds(input, MENU_SOUND_ARROWS, MENU_SOUND_SELECT);
         cx.with_legacy(|| {
             io.observer
@@ -828,7 +827,7 @@ pub(crate) mod runtime {
             input.preferences().menu,
             setting,
         );
-        crate::ui::sis::draw_status_message(cx.kernel, cx.world, Some(&text));
+        draw_status_message(cx.kernel, cx.world, Some(&text));
     }
 
     fn setting_feedback(kernel: &Kernel, flags: u8, menu: i32, setting: u8) -> std::ffi::CString {
@@ -948,7 +947,7 @@ pub(crate) mod runtime {
         );
         feedback_setting(cx, input, state);
         cx.run_input(io, false, |cx, io| do_settings(cx, io, input, &mut state));
-        crate::ui::sis::draw_status_message(cx.kernel, cx.world, None);
+        draw_status_message(cx.kernel, cx.world, None);
     }
 }
 

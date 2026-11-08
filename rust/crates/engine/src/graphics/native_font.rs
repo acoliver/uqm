@@ -20,6 +20,11 @@ impl FontLease {
         Self(allocation)
     }
 
+    pub fn leading(&self) -> i16 {
+        // SAFETY: the lease retains the font on its registered graphics thread.
+        unsafe { (*self.as_raw()).Leading as i16 }
+    }
+
     pub fn measure(
         &self,
         string: &CStr,
@@ -164,6 +169,7 @@ mod tests {
             lease: FontLease::retain(raw),
         };
         let lease = owner.lease();
+        assert_eq!(lease.leading(), 17);
         let baseline = super::super::native_abi::POINT { x: 20, y: 30 };
         for name in [c"", CStr::from_bytes_with_nul(&[0xe9, 0]).unwrap()] {
             let measured = lease.measure(name, baseline, 0, 30);

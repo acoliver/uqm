@@ -323,20 +323,35 @@ pub(crate) mod live {
                         crate::engine::battle::hyperspace::select_palette(cx.kernel, quasispace);
                         return;
                     }
-                    cx.with_legacy(|| match operation {
-                        EntryDisplay::RepairBorder => crate::ui::sis::repair_sisborder(),
-                        EntryDisplay::DrawFrame => crate::ui::border::draw_sisframe(),
-                        EntryDisplay::DrawGauges => crate::ui::sis::ClearSISRect(
+                    let dimensions = cx.screen_dimensions();
+                    match operation {
+                        EntryDisplay::RepairBorder => crate::ui::sis::repair_sis_border(
+                            cx.kernel,
+                            (dimensions.0, dimensions.1),
+                        ),
+                        EntryDisplay::DrawFrame => {
+                            crate::ui::border::draw_sis_frame(cx.kernel, cx.world, dimensions)
+                        }
+                        EntryDisplay::DrawGauges => crate::ui::sis::clear_sis_rect(
+                            cx.kernel,
+                            cx.world,
+                            (dimensions.0, dimensions.1),
                             crate::navigation::abi::DRAW_SIS_DISPLAY as u8,
                         ),
-                        EntryDisplay::ClearMessage => {
-                            crate::ui::sis::DrawSISMessage(std::ptr::null())
-                        }
-                        EntryDisplay::ClearRadar => crate::ui::sis::ClearSISRect(
+                        EntryDisplay::ClearMessage => crate::ui::sis::draw_campaign_message(
+                            cx.kernel,
+                            cx.world,
+                            dimensions.0,
+                            None,
+                        ),
+                        EntryDisplay::ClearRadar => crate::ui::sis::clear_sis_rect(
+                            cx.kernel,
+                            cx.world,
+                            (dimensions.0, dimensions.1),
                             crate::navigation::abi::CLEAR_SIS_RADAR as u8,
                         ),
                         EntryDisplay::Palette(_) => unreachable!(),
-                    });
+                    };
                 });
             }
             players

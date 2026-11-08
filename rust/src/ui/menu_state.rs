@@ -1,7 +1,6 @@
 //! Menu cursor stepping, including the grouped settings entries.
 
 mod navigation;
-#[cfg(not(test))]
 pub(crate) use navigation::alternate;
 #[cfg(test)]
 use navigation::MenuStep;

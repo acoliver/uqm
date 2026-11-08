@@ -159,10 +159,7 @@ fn run_campaign(
         let decision = lifecycle::prepare_dispatch(cx.world);
         dispatch(cx, io, decision);
         lifecycle::complete_encounter(cx.world, decision);
-        cx.with_legacy(|| {
-            // SAFETY: the campaign's initialized display accepts a null full-screen rectangle.
-            unsafe { crate::ui::sis::SetFlashRect(std::ptr::null()) };
-        });
+        crate::ui::sis::clear_flash(cx.kernel);
         let action = lifecycle::finish_dispatch(cx.world, cx.kernel);
         if action != BreakAction::Continue && cx.world.data.flagship.crew_enlisted == u16::MAX {
             if let Some(observer) = observer {
@@ -211,10 +208,7 @@ fn dispatch(cx: &mut Cx<'_>, io: &mut Io<'_>, decision: ActivityDecision) {
             unsafe { crate::comm::dispatch::race_communication(cx, io) };
         }
         ActivityDecision::ExploreSolarSystem | ActivityDecision::Battle => {
-            cx.with_legacy(|| {
-                // SAFETY: the campaign retains the initialized SIS display.
-                unsafe { crate::ui::sis::DrawAutoPilotMessage(1) };
-            });
+            cx.kernel.pilot_flash.borrow_mut().reset();
             let rate = if decision == ActivityDecision::ExploreSolarSystem {
                 30
             } else {
