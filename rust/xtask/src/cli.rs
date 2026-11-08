@@ -4,6 +4,21 @@ pub(super) fn run() -> Result<(), String> {
     run_arguments(env::args().skip(1))
 }
 
+fn require_build_context(root: &Path) -> Result<(), String> {
+    let built_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    require_build_source(root, &built_root)?;
+    if let Some(target) = env::var_os("CARGO_TARGET_DIR") {
+        let target = env::current_dir()
+            .map_err(|error| error.to_string())?
+            .join(target);
+        let target = std::fs::canonicalize(&target).map_err(|error| error.to_string())?;
+        if target != root.join("rust/target") {
+            return Err("CARGO_TARGET_DIR must name this checkout's rust/target".into());
+        }
+    }
+    Ok(())
+}
+
 fn require_build_source(root: &Path, built_root: &Path) -> Result<(), String> {
     let root = std::fs::canonicalize(root).map_err(|error| error.to_string())?;
     let built = std::fs::canonicalize(built_root).map_err(|error| {
@@ -38,17 +53,7 @@ fn run_arguments(arguments: impl IntoIterator<Item = String>) -> Result<(), Stri
         return native_acceptance_runner::entry_with_arguments(&native_arguments);
     }
     let root = repository_root()?;
-    let built_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    require_build_source(&root, &built_root)?;
-    if let Some(target) = env::var_os("CARGO_TARGET_DIR") {
-        let target = env::current_dir()
-            .map_err(|error| error.to_string())?
-            .join(target);
-        let target = std::fs::canonicalize(&target).map_err(|error| error.to_string())?;
-        if target != root.join("rust/target") {
-            return Err("CARGO_TARGET_DIR must name this checkout's rust/target".into());
-        }
-    }
+    require_build_context(&root)?;
     #[cfg(feature = "native")]
     if command == NATIVE_ACCEPTANCE_COMMAND {
         let mut native_arguments = vec!["uqm-native-acceptance".to_string()];
