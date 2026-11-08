@@ -138,6 +138,37 @@ fn retiring_scoped_debt_cannot_create_target_allowance() {
 }
 
 #[test]
+fn retired_projection_moved_to_an_unrelated_function_is_growth() {
+    let root = archived_fixture();
+    std::fs::write(
+        root.path().join("rust/src/lib.rs"),
+        "pub mod comm { pub mod live { pub mod adapter { pub fn selected() {} } } }
+         pub fn unrelated() { crate::engine::World::current(); }",
+    )
+    .unwrap();
+    let measured = measure_fixture(root.path()).unwrap();
+    let (base, recorded) = baseline::archived_measurement(root.path(), "HEAD").unwrap();
+    let mut baseline =
+        Baseline::read(&root.path().join("rust/xtask/quality-baseline.toml")).unwrap();
+    baseline.budget.remove(NAME);
+    baseline
+        .add_moves(&[(OLD, NEW)], &measured, &base, &recorded.unwrap().moved)
+        .unwrap();
+    let error = compare_base(
+        root.path(),
+        "HEAD",
+        &measured,
+        &mut baseline,
+        &Options::default(),
+    )
+    .unwrap_err();
+    assert!(
+        error.contains("quality growth") && error.contains("owner_projections"),
+        "{error}"
+    );
+}
+
+#[test]
 fn scoped_and_unscoped_retirement_without_a_move_require_zero_debt() {
     for (name, metric, scoped) in [
         (NAME, "owner_projections", true),
