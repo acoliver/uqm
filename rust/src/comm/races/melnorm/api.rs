@@ -23,13 +23,9 @@ mod live {
 
     use crate::comm::commglue_abi::runtime::NPCNumber;
 
-    use crate::ui::sis::DrawStatusMessage;
-
     use crate::planets::cargo::live::DrawCargoStrings;
 
     use crate::mainloop::input_abi::live::AnyButtonPress;
-
-    use crate::ui::sis::ClearSISRect;
 
     use crate::threading::pacing::linked::sleep_thread as SleepThread;
     impl MelnormApi for LiveScript<'_, '_, Handler> {
@@ -73,9 +69,10 @@ mod live {
                 .set_status_message_mode(mode as u32) as i32
         }
         fn draw_status(&mut self) {
-            self.cx.borrow_mut().with_legacy(|| unsafe {
-                DrawStatusMessage(std::ptr::null());
-            })
+            {
+                let cx = &mut *self.cx.borrow_mut();
+                crate::ui::sis::draw_status_message(cx.kernel, cx.world, None)
+            }
         }
         fn draw_cargo(&mut self, old: u8, new: u8) {
             self.cx.borrow_mut().with_legacy(|| unsafe {
@@ -99,9 +96,11 @@ mod live {
             unsafe { AnyButtonPress(&mut cx, input, 1) != 0 }
         }
         fn clear_display(&mut self) {
-            self.cx.borrow_mut().with_legacy(|| unsafe {
-                ClearSISRect(8);
-            })
+            {
+                let cx = &mut *self.cx.borrow_mut();
+                let dimensions = cx.screen_dimensions();
+                crate::ui::sis::clear_sis_rect(cx.kernel, cx.world, (dimensions.0, dimensions.1), 8)
+            }
         }
     }
 }

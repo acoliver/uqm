@@ -78,8 +78,6 @@ pub(super) mod live {
 
     use crate::graphics::cmap_abi::XFormColorMap;
 
-    use crate::ui::sis::DeltaSISGauges;
-
     use crate::comm::comm_abi::AlienTalkSegue;
 
     extern "C" {
@@ -194,16 +192,18 @@ pub(super) mod live {
         }
 
         fn add_lander(&mut self) {
-            self.cx.borrow_mut().with_legacy(|| unsafe {
+            let cx = &mut *self.cx.borrow_mut();
+            cx.with_legacy(|| unsafe {
                 (**WorldData::current()).flagship.num_landers += 1;
-                draw_landers();
-            })
+            });
+            draw_landers(cx.kernel, cx.world);
         }
 
         fn gauges(&mut self, crew: i16, fuel: i16, units: i32) {
-            self.cx
-                .borrow_mut()
-                .with_legacy(|| unsafe { DeltaSISGauges(crew, fuel, units) })
+            {
+                let cx = &mut *self.cx.borrow_mut();
+                crate::ui::sis::delta_sis_gauges(cx.kernel, cx.world, crew, fuel, units)
+            }
         }
 
         fn palette(&mut self, index: u16) {

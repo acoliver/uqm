@@ -15,8 +15,6 @@ use routing::conversation_setup;
 use crate::engine::StoryKey;
 use crate::engine::World;
 #[cfg(not(test))]
-use crate::engine::WorldData;
-#[cfg(not(test))]
 use crate::engine::{
     battle::Cx,
     observe::{CheckpointView, Io},
@@ -259,31 +257,10 @@ mod ffi {
     pub use crate::comm::locdata::COMM_DATA as CommData;
 
     #[cfg(not(test))]
-    pub use crate::ui::border::draw_sisframe;
     #[cfg(test)]
-    extern "C" {
-        pub fn draw_sisframe();
-    }
-    #[cfg(not(test))]
-    pub use crate::ui::sis::repair_sisborder;
-    #[cfg(test)]
-    extern "C" {
-        pub fn repair_sisborder();
-    }
+    extern "C" {}
 
     #[cfg(not(test))]
-    #[cfg(not(test))]
-    pub use crate::ui::sis::ClearSISRect;
-
-    #[cfg(not(test))]
-    pub use crate::ui::sis::DrawSISMessage;
-
-    #[cfg(not(test))]
-    pub use crate::ui::sis::DrawHyperCoords;
-
-    #[cfg(not(test))]
-    pub use crate::ui::sis::DrawSISTitle;
-
     #[cfg(not(test))]
     pub use crate::comm::races::arilou::live::init_arilou_comm;
 
@@ -520,35 +497,64 @@ pub unsafe fn init_communication(cx: &mut Cx<'_>, io: &mut Io<'_>, which_comm: u
     if last_activity & CHECK_LOAD != 0 {
         cx.kernel.last_activity = last_activity & !CHECK_LOAD;
     }
-    cx.with_legacy(|| {
-        if last_activity & CHECK_LOAD != 0 && which_comm != conv::COMMANDER {
-            if lobyte(last_activity) == 0 {
-                ffi::draw_sisframe();
-            } else {
-                ffi::ClearSISRect((DRAW_SIS_DISPLAY) as u8);
-                ffi::repair_sisborder();
-            }
-            ffi::DrawSISMessage(std::ptr::null());
-            if in_hq_space(activity) {
-                let point = WorldData::current().read(|world| world.game.ship_stamp.origin);
-                ffi::DrawHyperCoords(CPoint {
+    let dimensions = cx.screen_dimensions();
+    if last_activity & CHECK_LOAD != 0 && which_comm != conv::COMMANDER {
+        if lobyte(last_activity) == 0 {
+            crate::ui::border::draw_sis_frame(cx.kernel, cx.world, dimensions);
+        } else {
+            crate::ui::sis::clear_sis_rect(
+                cx.kernel,
+                cx.world,
+                (dimensions.0, dimensions.1),
+                (DRAW_SIS_DISPLAY) as u8,
+            );
+            crate::ui::sis::repair_sis_border(cx.kernel, (dimensions.0, dimensions.1));
+        }
+        crate::ui::sis::draw_campaign_message(cx.kernel, cx.world, dimensions.0, None);
+        if in_hq_space(activity) {
+            let point = cx.world.data.game.ship_stamp.origin;
+            {
+                let point = CPoint {
                     x: point.x,
                     y: point.y,
-                });
-            } else if WorldData::current().read(|world| world.game.ip_planet) == 0 {
-                let star = &*(**World::current())
-                    .star_pointer()
-                    .cast::<crate::savegame::runtime::star::CStarDesc>();
-                ffi::DrawHyperCoords(CPoint {
+                };
+                crate::ui::sis::draw_hyper_coords(
+                    cx.kernel,
+                    dimensions.0,
+                    crate::graphics::native_abi::POINT {
+                        x: point.x,
+                        y: point.y,
+                    },
+                )
+            };
+        } else if cx.world.data.game.ip_planet == 0 {
+            let star = &*cx
+                .world
+                .star_pointer()
+                .cast::<crate::savegame::runtime::star::CStarDesc>();
+            {
+                let point = CPoint {
                     x: star.star_pt.x,
                     y: star.star_pt.y,
-                });
-            } else {
-                let name = WorldData::current().read(|world| world.flagship.planet_name);
-                ffi::DrawSISTitle(name.as_ptr().cast());
-            }
+                };
+                crate::ui::sis::draw_hyper_coords(
+                    cx.kernel,
+                    dimensions.0,
+                    crate::graphics::native_abi::POINT {
+                        x: point.x,
+                        y: point.y,
+                    },
+                )
+            };
+        } else {
+            let name = cx.world.data.flagship.planet_name;
+            crate::ui::sis::draw_title(
+                cx.kernel,
+                dimensions.0,
+                std::ffi::CStr::from_ptr((name.as_ptr()).cast()),
+            );
         }
-    });
+    }
     let (conversation, ship_type) = conversation_setup(which_comm);
     run_encounter(cx, io, conversation, ship_type)
 }
@@ -664,7 +670,7 @@ pub(crate) unsafe fn prepare_samatra_dev_fixture(
     cx.world.built_ships().reinit();
     let added = crate::engine::world::fleet::add_escort_ships(cx.world, 4, 12, pick_captain_name);
     if added.is_some() {
-        cx.with_legacy(|| crate::ui::sis::DeltaSISGauges(32767, 32767, 32767));
+        crate::ui::sis::delta_sis_gauges(cx.kernel, cx.world, 32767, 32767, 32767);
     }
     if added != Some(12) {
         return Err("boss fixture could not allocate Pkunk escorts");

@@ -78,10 +78,8 @@ impl orz::OrzSite for Site<'_, '_, '_> {
         FleetGroups::clone_ship_into_built_queue(self, self.contact().0);
     }
     fn repair_sis_border(&mut self) {
-        self.game.borrow_mut().with_legacy(|| {
-            // SAFETY: game thread, inside a planet orbit.
-            unsafe { repair_sis_border() };
-        })
+        let cx = self.game.borrow();
+        crate::ui::sis::repair_sis_border(cx.kernel, cx.screen_dimensions());
     }
     fn load_taalo_device_scene(&mut self, _system: &mut SolarSys<'_>) {
         self.load_scene(c"graphics.taalodevice", c"text.taalodevice", 0);
@@ -90,10 +88,8 @@ impl orz::OrzSite for Site<'_, '_, '_> {
 
 impl thrad::ThraddashSite for Site<'_, '_, '_> {
     fn repair_sis_border(&mut self) {
-        self.game.borrow_mut().with_legacy(|| {
-            // SAFETY: as above.
-            unsafe { repair_sis_border() };
-        })
+        let cx = self.game.borrow();
+        crate::ui::sis::repair_sis_border(cx.kernel, cx.screen_dimensions());
     }
     fn load_aqua_scene(&mut self, _system: &mut SolarSys<'_>) {
         self.load_scene(c"graphics.aquahelix", c"text.aquahelix", 0);
@@ -150,25 +146,23 @@ impl UrquanEncounterSite for Site<'_, '_, '_> {
         self.game.borrow().world.data.flagship.fuel_on_board
     }
     fn delta_fuel(&mut self, delta: i16) {
-        self.game.borrow_mut().with_legacy(|| {
-            // SAFETY: game thread.
-            unsafe { delta_fuel(delta) };
-        })
+        let cx = &mut *self.game.borrow_mut();
+        crate::ui::sis::delta_sis_gauges(cx.kernel, cx.world, 0, delta, 0);
     }
     fn random(&mut self) -> u32 {
         self.game.borrow_mut().with_legacy(crate::math::random)
     }
     fn clear_sis_message(&mut self) {
-        self.game.borrow_mut().with_legacy(|| {
-            // SAFETY: game thread.
-            unsafe { clear_sis_message() };
-        })
+        let cx = self.game.borrow();
+        crate::ui::sis::draw_campaign_message(cx.kernel, cx.world, cx.screen_dimensions().0, None);
     }
     fn draw_hyper_coords(&mut self, loc: (i16, i16)) {
-        self.game.borrow_mut().with_legacy(|| {
-            // SAFETY: game thread.
-            unsafe { draw_hyper_coords(loc) };
-        })
+        let cx = self.game.borrow();
+        crate::ui::sis::draw_hyper_coords(
+            cx.kernel,
+            cx.screen_dimensions().0,
+            crate::graphics::native_abi::POINT { x: loc.0, y: loc.1 },
+        );
     }
     fn finish_encounter(&mut self) {}
 }
@@ -188,10 +182,8 @@ impl utw::UtwigSite for Site<'_, '_, '_> {
         c_api::built_ship_queue_has_ships(self.game.borrow().world)
     }
     fn repair_sis_border(&mut self) {
-        self.game.borrow_mut().with_legacy(|| {
-            // SAFETY: game thread after communication.
-            unsafe { c_api::repair_sis_border() };
-        })
+        let cx = self.game.borrow();
+        crate::ui::sis::repair_sis_border(cx.kernel, cx.screen_dimensions());
     }
     fn load_scene(&mut self, _system: &mut SolarSys<'_>, bomb: bool) {
         if bomb {
@@ -210,10 +202,8 @@ impl myc::MyconSite for Site<'_, '_, '_> {
         c_api::built_ship_queue_has_ships(self.game.borrow().world)
     }
     fn repair_sis_border(&mut self) {
-        self.game.borrow_mut().with_legacy(|| {
-            // SAFETY: game thread after communication.
-            unsafe { c_api::repair_sis_border() };
-        })
+        let cx = self.game.borrow();
+        crate::ui::sis::repair_sis_border(cx.kernel, cx.screen_dimensions());
     }
     fn load_scene(&mut self, _system: &mut SolarSys<'_>, scene: myc::Scene) {
         let (graphics, text) = match scene {
@@ -229,10 +219,8 @@ impl vux::VuxSite for Site<'_, '_, '_> {
         self.game.borrow().world.flag(StoryKey::ZEX_IS_DEAD) != 0
     }
     fn repair_sis_border(&mut self) {
-        self.game.borrow_mut().with_legacy(|| {
-            // SAFETY: game thread after communication.
-            unsafe { c_api::repair_sis_border() };
-        })
+        let cx = self.game.borrow();
+        crate::ui::sis::repair_sis_border(cx.kernel, cx.screen_dimensions());
     }
     fn load_scene(&mut self, _system: &mut SolarSys<'_>, scene: vux::Scene) {
         match scene {

@@ -16,11 +16,12 @@ pub(crate) mod live {
     use crate::c_bindings::{global_state::MENU_STATE, solar_system};
     use crate::comm::locdata::CRect;
     use crate::engine::graphics::context_abi::ContextLease;
+    use crate::engine::Kernel as KernelOwner;
     use crate::engine::{
         battle::Cx,
         observe::{CheckpointView, Io},
     };
-    use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
+    use crate::engine::Kernel as KernelOwner;
     use crate::mainloop::restart_menu::c_extern::{self as base, SetContext};
     use crate::mainloop::types::activity_flags::{CHECK_ABORT, CHECK_LOAD, START_ENCOUNTER};
     use crate::planet_side::orbit_scan;
@@ -28,16 +29,9 @@ pub(crate) mod live {
     use crate::starbase::gfx::{ContextId, FlashTarget, Gfx, Point, Rect, Rgba, Stamp};
     use std::ffi::c_void;
 
-    use crate::ui::border::draw_sisframe;
-    use crate::ui::sis::repair_sisborder;
-
     use crate::planets::scan::state::ScanState;
 
     use crate::planets::solarsys::drawing::DrawStarBackGround;
-
-    use crate::ui::sis::DrawSISMessage;
-
-    use crate::ui::sis::DrawSISTitle;
 
     use crate::graphics::gfx_common_abi::LoadIntoExtraScreen;
 
@@ -68,10 +62,6 @@ pub(crate) mod live {
     use crate::front_end::gameopt::runtime::game_options;
 
     use crate::planets::pstarmap::star_map;
-
-    use crate::ui::menu::do_menu_chooser;
-
-    use crate::ui::menu::DrawMenuStateStrings;
 
     use crate::mainloop::input_abi::live::SetInputCallback;
 
@@ -163,54 +153,66 @@ pub(crate) mod live {
     const WAIT: u8 = 1;
     const UPDATE: u8 = 2;
 
-    unsafe fn draw_display(planet: &ContextLease, scan: &ScanState, mode: u8) {
-        let planet_name = WorldFields::current().read(|world| world.flagship.planet_name);
+    unsafe fn draw_display(cx: &mut Cx<'_>, planet: &ContextLease, scan: &ScanState, mode: u8) {
         let g = CffiPlatform;
-        g.set_context(ContextId::Space);
-        let clip = g.context_clip_rect();
-        let mut r = CRect {
-            corner: crate::comm::locdata::CPoint {
-                x: clip.corner.x,
-                y: clip.corner.y,
-            },
-            width: clip.width,
-            height: clip.height,
-        };
-        g.batch();
+        let mut r = cx.with_legacy(|| {
+            g.set_context(ContextId::Space);
+            let clip = g.context_clip_rect();
+            g.batch();
+            CRect {
+                corner: crate::comm::locdata::CPoint {
+                    x: clip.corner.x,
+                    y: clip.corner.y,
+                },
+                width: clip.width,
+                height: clip.height,
+            }
+        });
         if mode != UPDATE {
             base::SetTransitionSource(std::ptr::null_mut());
-            draw_sisframe();
-            DrawSISMessage(std::ptr::null());
-            DrawSISTitle(planet_name.as_ptr().cast());
-            DrawStarBackGround();
-            DrawPlanetSurfaceBorder();
-        }
-        if mode == WAIT {
-            scan.context().select();
-            let frame = base::CaptureDrawable(
-                (base::LoadGraphicInstance(c"graphics.orbitenter".as_ptr())).cast(),
-            );
-            g.draw_stamp(Stamp {
-                origin: Point { x: 0, y: 0 },
-                frame: frame as usize,
+            let dimensions = cx.screen_dimensions();
+            crate::ui::border::draw_sis_frame(cx.kernel, cx.world, dimensions);
+            crate::ui::sis::draw_campaign_message(cx.kernel, cx.world, dimensions.0, None);
+            let name = std::ffi::CStr::from_bytes_until_nul(&cx.world.data.flagship.planet_name)
+                .unwrap_or_else(|error| panic!("invalid orbital planet name: {error}"));
+            crate::ui::sis::draw_title(cx.kernel, dimensions.0, name);
+            cx.with_legacy(|| {
+                DrawStarBackGround();
+                DrawPlanetSurfaceBorder();
             });
-            base::DestroyDrawable(base::ReleaseDrawable(frame));
-        } else if mode == FULL {
-            draw_default_planet_sphere(planet, &scan.sphere.borrow());
         }
-        if mode != WAIT {
-            scan.context().select();
-            draw_planet(&mut scan.sphere.borrow_mut(), 0, black());
-        }
-        if mode != UPDATE {
-            base::ScreenTransition(3, (&mut r as *mut CRect).cast());
-        }
-        g.unbatch();
-        LoadIntoExtraScreen(std::ptr::from_mut(&mut r).cast());
+        cx.with_legacy(|| {
+            if mode == WAIT {
+                scan.context().select();
+                let frame = base::CaptureDrawable(
+                    (base::LoadGraphicInstance(c"graphics.orbitenter".as_ptr())).cast(),
+                );
+                g.draw_stamp(Stamp {
+                    origin: Point { x: 0, y: 0 },
+                    frame: frame as usize,
+                });
+                base::DestroyDrawable(base::ReleaseDrawable(frame));
+            } else if mode == FULL {
+                draw_default_planet_sphere(planet, &scan.sphere.borrow());
+            }
+            if mode != WAIT {
+                scan.context().select();
+                draw_planet(&mut scan.sphere.borrow_mut(), 0, black());
+            }
+            if mode != UPDATE {
+                base::ScreenTransition(3, (&mut r as *mut CRect).cast());
+            }
+            g.unbatch();
+            LoadIntoExtraScreen(std::ptr::from_mut(&mut r).cast());
+        });
     }
 
-    pub unsafe fn redraw_planet_orbit_display(planet: &ContextLease, scan: &ScanState) {
-        draw_display(planet, scan, FULL);
+    pub unsafe fn redraw_planet_orbit_display(
+        cx: &mut Cx<'_>,
+        planet: &ContextLease,
+        scan: &ScanState,
+    ) {
+        draw_display(cx, planet, scan, FULL);
     }
 
     pub unsafe fn load_planet(
@@ -239,13 +241,18 @@ pub(crate) mod live {
                     owner.configuration.preferences().shield == 1,
                 )
             });
-            let wait = last_activity & CHECK_LOAD == 0;
             assert!((*system).InOrbit != 0);
-            if wait {
-                draw_display(&context, presentation.scan(), WAIT);
-            }
+            (
+                last_activity & CHECK_LOAD == 0,
+                pulsing_shield,
+                (*system).pOrbitalDesc,
+            )
+        });
+        if wait {
+            draw_display(&mut game.borrow_mut(), &context, presentation.scan(), WAIT);
+        }
+        game.borrow_mut().with_legacy(|| {
             base::stop_music();
-            let planet = (*system).pOrbitalDesc;
             generate_planet_surface(
                 &mut sphere.borrow_mut(),
                 &animation,
@@ -280,11 +287,14 @@ pub(crate) mod live {
         game.borrow_mut().with_legacy(|| {
             if wait {
                 zoom_in_planet_sphere(&context, &sphere);
-                draw_display(&context, presentation.scan(), UPDATE);
-            } else {
-                draw_display(&context, presentation.scan(), FULL);
             }
         });
+        draw_display(
+            &mut game.borrow_mut(),
+            &context,
+            presentation.scan(),
+            if wait { UPDATE } else { FULL },
+        );
         Some(presentation)
     }
 
@@ -322,7 +332,7 @@ pub(crate) mod live {
         {
             return 0;
         }
-        if cx.with_legacy(|| do_menu_chooser(input, menu, 0)) != 0 || !selected {
+        if crate::ui::menu::choose_menu_state(cx, input, &mut menu.CurState, 0) != 0 || !selected {
             return 1;
         }
         cx.with_legacy(|| CffiPlatform.set_flash(FlashTarget::Off));
@@ -347,18 +357,16 @@ pub(crate) mod live {
                 }
             }
             1 => {
-                let old = cx.with_legacy(|| {
-                    let old = SetInputCallback(runtime.input(), None);
-                    repair_sisborder();
-                    old
-                });
+                let old = cx.with_legacy(|| SetInputCallback(runtime.input(), None));
+                let dimensions = cx.screen_dimensions();
+                crate::ui::sis::repair_sis_border(cx.kernel, dimensions);
                 let autopilot = star_map(cx, io);
                 if cx.world.activity() & CHECK_ABORT != 0 {
                     return 0;
                 }
                 cx.with_legacy(|| SetInputCallback(runtime.input(), old));
                 if autopilot == 0 {
-                    cx.with_legacy(|| draw_display(planet, scan, FULL));
+                    draw_display(cx, planet, scan, FULL);
                 } else {
                     return 0;
                 }
@@ -370,7 +378,13 @@ pub(crate) mod live {
             if selected {
                 menu.CurState =
                     submenu_selection(menu.CurState, selected, input.preferences().menu == 2);
-                cx.with_legacy(|| DrawMenuStateStrings(0, i16::from(menu.CurState)));
+                crate::ui::menu::draw_menu_state(
+                    cx.kernel,
+                    cx.world,
+                    (cx.screen_dimensions().0, cx.screen_dimensions().1),
+                    0,
+                    i16::from(menu.CurState),
+                );
             }
             cx.with_legacy(|| CffiPlatform.set_flash(FlashTarget::Menu3do));
         }
@@ -402,22 +416,19 @@ pub(crate) mod live {
             presentation.sphere(),
             cx.kernel.planet_animation.clone(),
         );
-        let old = cx.with_legacy(|| {
-            DrawMenuStateStrings(0, 0);
-            CffiPlatform.set_flash(FlashTarget::Menu3do);
-            base::SetMenuSounds(input, 15, 16);
-            SetInputCallback(runtime.input(), Some(hook))
-        });
+        let dimensions = cx.screen_dimensions();
+        crate::ui::menu::draw_menu_state(cx.kernel, cx.world, dimensions, 0, 0);
+        crate::ui::sis::set_menu_flash(cx.kernel, dimensions, false);
+        base::SetMenuSounds(input, 15, 16);
+        let old = SetInputCallback(runtime.input(), Some(hook));
         io.observer.checkpoint(&CheckpointView::PlanetMenu(1));
         cx.run_input(io, true, |cx, io| {
             do_orbit(cx, io, &planet, presentation.scan(), &mut menu) != 0
         });
         io.observer.checkpoint(&CheckpointView::PlanetMenu(0));
-        cx.with_legacy(|| {
-            SetInputCallback(runtime.input(), old);
-            CffiPlatform.set_flash(FlashTarget::Off);
-            DrawMenuStateStrings(1, -6);
-        });
+        SetInputCallback(runtime.input(), old);
+        crate::ui::sis::clear_flash(cx.kernel);
+        crate::ui::menu::draw_menu_state(cx.kernel, cx.world, dimensions, 1, -6);
     }
 }
 

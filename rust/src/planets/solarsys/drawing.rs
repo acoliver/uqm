@@ -1,6 +1,6 @@
 use super::*;
 use crate::engine::world::planet::PlanetDesc;
-use crate::engine::{Kernel as KernelOwner, World as WorldOwner, WorldData as WorldFields};
+use crate::engine::{Kernel as KernelOwner, World as WorldOwner};
 use crate::planets::generate::orbit_tables::NUMBER_OF_PLANET_TYPES;
 
 use crate::graphics::context_abi::SetContext;
@@ -14,10 +14,6 @@ use crate::graphics::frame_abi::ClearDrawable;
 use crate::planets::render::c_api::draw_oval as DrawOval;
 
 use crate::planets::solarsys::GetRandomSeedForStar;
-
-use crate::ui::sis::DrawSISTitle;
-
-use crate::ui::sis::DrawHyperCoords;
 
 use crate::graphics::cmap_abi::GetColorMapAddress;
 
@@ -173,33 +169,38 @@ pub(super) unsafe fn validate_orbits() {
     }
 }
 
-pub(super) unsafe fn draw_inner_system() {
-    let world = WorldFields::current();
-    let s = system();
-    let planet = (*s).pOrbitalDesc;
-    validate_inner_orbits();
-    draw_system((*planet).radius, true);
-
-    DrawSISTitle(std::ptr::addr_of_mut!((**world).flagship.planet_name).cast());
+pub(super) unsafe fn draw_inner_system(cx: &mut Cx<'_>) {
+    cx.with_legacy(|| {
+        let s = system();
+        let planet = (*s).pOrbitalDesc;
+        validate_inner_orbits();
+        draw_system((*planet).radius, true);
+    });
+    let name = std::ffi::CStr::from_bytes_until_nul(&cx.world.data.flagship.planet_name)
+        .unwrap_or_else(|error| panic!("invalid inner-system name: {error}"));
+    crate::ui::sis::draw_title(cx.kernel, cx.screen_dimensions().0, name);
 }
 
-pub(super) unsafe fn draw_outer_system() {
-    validate_orbits();
-    let s = system();
-    draw_system((*s).SunDesc[0].radius, false);
-    DrawHyperCoords((*(**WorldOwner::current()).star_pointer()).star_pt);
+pub(super) unsafe fn draw_outer_system(cx: &mut Cx<'_>) {
+    cx.with_legacy(|| {
+        validate_orbits();
+        let s = system();
+        draw_system((*s).SunDesc[0].radius, false);
+    });
+    let point = (*cx.world.star_pointer()).star_pt;
+    crate::ui::sis::draw_hyper_coords(cx.kernel, cx.screen_dimensions().0, point);
 }
 
 pub(super) unsafe fn draw_system_transition(cx: &mut Cx<'_>, inner: bool) {
     cx.with_legacy(|| {
         SetTransitionSource(std::ptr::null_mut());
         BatchGraphics();
-        if inner {
-            draw_inner_system();
-        } else {
-            draw_outer_system();
-        }
     });
+    if inner {
+        draw_inner_system(cx);
+    } else {
+        draw_outer_system(cx);
+    }
     redraw_queue(cx, false);
     cx.with_legacy(|| {
         ScreenTransition(3, std::ptr::null_mut());
