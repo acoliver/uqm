@@ -54,3 +54,36 @@ fn descriptor_factories_return_independent_values_and_reselect_variants() {
     }
     uqm_rust::comm::state::uninit_communication();
 }
+
+#[test]
+#[serial_test::serial]
+fn all_descriptor_factories_initialize_without_loaded_resources() {
+    let mut game = Game::new();
+    game.world.story = Some(uqm_rust::state::game_state::StoryState::new());
+    let mut battle = Battle::new();
+    let mut cx = Cx::new(
+        &mut battle,
+        &mut game.world,
+        &mut game.kernel,
+        uqm_rust::math::random,
+    );
+    uqm_rust::comm::state::init_communication().unwrap();
+    // SAFETY: the serialized fixture owns the initialized conversation and game thread.
+    unsafe {
+        for conversation in 0..=25 {
+            let descriptor = race_descriptor(&mut cx, conversation);
+            assert!(!descriptor.alien_frame_res.is_null());
+            assert!(!descriptor.conversation_phrases_res.is_null());
+            assert!(descriptor.alien_frame.is_null());
+            assert!(descriptor.init_encounter_func.is_some());
+        }
+        cx.world
+            .set_story_state(StoryKey::GLOBAL_FLAGS_AND_DATA, 1 << 7);
+        let home = race_descriptor(&mut cx, 6);
+        assert_eq!(
+            CStr::from_ptr(home.alien_frame_res).to_bytes(),
+            b"comm.safeones.graphics"
+        );
+    }
+    uqm_rust::comm::state::uninit_communication();
+}
