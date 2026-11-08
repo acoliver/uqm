@@ -30,6 +30,8 @@ mod shipyard_frame;
 #[path = "shipyard/hangar.rs"]
 mod shipyard_hangar;
 pub(crate) mod shipyard_layout;
+#[path = "shipyard/selection.rs"]
+mod shipyard_selection;
 pub mod starbase;
 
 #[cfg(not(test))]

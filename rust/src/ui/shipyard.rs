@@ -5,6 +5,10 @@
 use crate::ui::{rgb15, settings::play_menu_sound};
 mod catalog;
 mod crew;
+use super::shipyard_selection::{
+    dms_flash_active_ship, dms_flash_escort_ship_crew_count, dms_flash_flag_ship_crew_count,
+    dms_set_mode, ModifyMode, SOUND_ARROWS, SOUND_CANCEL, SOUND_SELECT,
+};
 use super::{shipyard_frame as frame, shipyard_hangar as hangar};
 use catalog::{get_available_race_count, get_available_race_from_index};
 use crew::{crew_transaction, purchased_crew};
@@ -37,20 +41,7 @@ const SHIP_WIN_FRAMES: i32 = ((SHIP_WIN_WIDTH >> 1) + 1) as i32;
 const MODIFY_CREW_FLAG: SIZE = 1 << 8;
 use crate::starbase::shipyard::SHIP_COST;
 
-#[derive(Clone, Copy)]
-enum ModifyMode {
-    Navigate,
-    AddEscort,
-    EditCrew,
-    Exit,
-}
-
 const BLACK: Color = rgb15(0, 0, 0);
-const SOUND_UP: u16 = 1 << 0;
-const SOUND_DOWN: u16 = 1 << 1;
-const SOUND_ARROWS: u16 = 0x0f;
-const SOUND_SELECT: u16 = 1 << 4;
-const SOUND_CANCEL: u16 = 1 << 5;
 
 static mut POWER_STAMP: STAMP = STAMP {
     origin: POINT { x: 0, y: 0 },
@@ -213,86 +204,6 @@ unsafe fn show_combat_ship(
             UnbatchGraphics();
             SetContext(old);
             j += 1;
-        }
-    }
-}
-
-fn dms_flash_flag_ship(cx: &mut crate::engine::battle::Cx<'_>) {
-    let r = RECT {
-        corner: POINT { x: 0, y: 0 },
-        extent: EXTENT {
-            width: (cx.screen_dimensions().0
-                - crate::engine::math::battle_types::STATUS_WIDTH
-                - i32::from(crate::starbase::ids::SAFE_X) * 2
-                - 14) as i16,
-            height: 61,
-        },
-    };
-    highlight_rect(cx.kernel, r);
-}
-
-fn dms_flash_escort_ship(cx: &mut crate::engine::battle::Cx<'_>, slot: BYTE) {
-    highlight_rect(cx.kernel, DMS_GetEscortShipRect(slot));
-}
-
-fn dms_flash_flag_ship_crew_count(cx: &mut crate::engine::battle::Cx<'_>) {
-    crate::graphics::context_abi::ContextLease::require(cx.kernel.status_context).select();
-    let r = crate::ui::sis::gauges::gauge_rect(true);
-    highlight_rect(cx.kernel, r);
-    crate::graphics::context_abi::ContextLease::require(cx.kernel.space_context).select();
-}
-
-fn dms_flash_escort_ship_crew_count(cx: &mut crate::engine::battle::Cx<'_>, slot: BYTE) {
-    let row = slot / HANGAR_SHIPS_ROW;
-    let col = slot % HANGAR_SHIPS_ROW;
-    let r = RECT {
-        corner: POINT {
-            x: HANGAR_X_COORDS[col as usize],
-            y: HANGAR_Y + HANGAR_DY * row as i16 + SHIP_WIN_HEIGHT - 6,
-        },
-        extent: EXTENT {
-            width: SHIP_WIN_WIDTH,
-            height: 5,
-        },
-    };
-    crate::graphics::context_abi::ContextLease::require(cx.kernel.space_context).select();
-    highlight_rect(cx.kernel, r);
-}
-
-fn dms_flash_active_ship(cx: &mut crate::engine::battle::Cx<'_>, state: BYTE) {
-    if state >> 4 != 0 {
-        dms_flash_flag_ship(cx);
-    } else {
-        dms_flash_escort_ship(cx, state);
-    }
-}
-
-fn dms_set_mode(
-    cx: &mut crate::engine::battle::Cx<'_>,
-    input: &InputSession,
-    state: BYTE,
-    mode: ModifyMode,
-) {
-    match mode {
-        ModifyMode::Navigate => {
-            input.set_menu_sounds(SOUND_ARROWS, SOUND_SELECT);
-            dms_flash_active_ship(cx, state);
-        }
-        ModifyMode::AddEscort => {
-            input.set_menu_sounds(SOUND_ARROWS, SOUND_SELECT);
-            set_menu_flash(cx.kernel, cx.screen_dimensions(), true);
-        }
-        ModifyMode::EditCrew => {
-            input.set_menu_sounds(SOUND_UP | SOUND_DOWN, SOUND_SELECT | SOUND_CANCEL);
-            if state >> 4 != 0 {
-                dms_flash_flag_ship_crew_count(cx);
-            } else {
-                dms_flash_escort_ship_crew_count(cx, state);
-            }
-        }
-        ModifyMode::Exit => {
-            input.set_menu_sounds(SOUND_ARROWS, SOUND_SELECT);
-            set_menu_flash(cx.kernel, cx.screen_dimensions(), false);
         }
     }
 }
