@@ -246,7 +246,9 @@ impl CheckpointScan {
                 "native checkpoint reused or misidentified a committed presentation".into(),
             );
         }
-        let evidence_range = if expected.class == CheckpointClass::Capture {
+        let evidence_range = if expected.class == CheckpointClass::Capture
+            || matches!(expected.action, Action::WaitForMainMenuReady(_))
+        {
             present_position + 1..position
         } else {
             self.previous_marker..present_position
@@ -396,14 +398,14 @@ mod tests {
         let (source, script) = script(serde_json::json!([{"action":"finish"}]));
         let plan = NativeCheckpointPlan::derive(&source, &script).unwrap();
         let mut battle = record(RecordKind::NativeBattle, "", 0);
-        battle.schema = TraceRecord::BATTLE_SCHEMA;
+        battle.schema = TraceRecord::NATIVE_SCHEMA;
         let mut scan = CheckpointScan::default();
         scan.advance(&plan, &[battle.clone()]).unwrap();
         assert!(plan.committed(&[battle.clone()]).unwrap().is_empty());
         battle.schema = TraceRecord::SCHEMA;
         assert!(CheckpointScan::default().advance(&plan, &[battle]).is_err());
         let mut capture = record(RecordKind::Capture, "", 0);
-        capture.schema = TraceRecord::BATTLE_SCHEMA;
+        capture.schema = TraceRecord::NATIVE_SCHEMA;
         assert!(CheckpointScan::default()
             .advance(&plan, &[capture])
             .is_err());

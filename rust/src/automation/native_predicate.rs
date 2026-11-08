@@ -143,9 +143,10 @@ pub(super) fn satisfied(
         }
         Action::WaitForMainMenuReady(_) => {
             record.kind == RecordKind::Readiness
+                && record.presentation.as_ref() == Some(frame)
                 && record.readiness.as_ref().is_some_and(|ready| {
                     ready.subject == super::coordinator::MAIN_MENU_READINESS_SUBJECT
-                        && ready.observation == super::coordinator::MAIN_MENU_READINESS_OBSERVATION
+                        && ready.observation == super::coordinator::MAIN_MENU_COMMITTED_OBSERVATION
                 })
         }
         Action::AssertActivity(assertion) => {
@@ -664,6 +665,26 @@ mod tests {
         record.kind = RecordKind::SemanticAssertion;
         record.label = Some(label.into());
         record
+    }
+
+    #[test]
+    fn menu_readiness_requires_the_committed_frame_not_initialization() {
+        let action =
+            Action::WaitForMainMenuReady(crate::automation::script::WaitForMainMenuReadyStep {});
+        let mut ready = record("");
+        ready.kind = RecordKind::Readiness;
+        ready.readiness = Some(crate::automation::trace::ReadinessEvidence {
+            subject: super::super::coordinator::MAIN_MENU_READINESS_SUBJECT.into(),
+            observation: super::super::coordinator::MAIN_MENU_READINESS_OBSERVATION.into(),
+        });
+        assert!(!satisfied(&action, &[ready.clone()], &frame()));
+        ready.presentation = Some(frame());
+        assert!(!satisfied(&action, &[ready.clone()], &frame()));
+        ready.readiness.as_mut().unwrap().observation =
+            super::super::coordinator::MAIN_MENU_COMMITTED_OBSERVATION.into();
+        assert!(satisfied(&action, &[ready.clone()], &frame()));
+        ready.presentation.as_mut().unwrap().count += 1;
+        assert!(!satisfied(&action, &[ready], &frame()));
     }
 
     #[test]

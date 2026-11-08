@@ -547,7 +547,10 @@ pub(crate) fn graphics_options(
             io.observer.presented(&mut frame);
             i32::from(frame.stop)
         })),
-        readback_hook: Some(std::rc::Rc::new(move || {
+        readback_hook: Some(std::rc::Rc::new(move |count, samples| {
+            if let Some(owner) = &observer {
+                owner.trace_native_graphics(count, samples);
+            }
             observer
                 .as_ref()
                 .map(|owner| owner.runtime.mirror.capture_generation())

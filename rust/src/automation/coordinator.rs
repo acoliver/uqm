@@ -22,6 +22,8 @@ mod input;
 mod lander;
 use input::discard_held_repeat;
 mod native_battle;
+mod native_graphics;
+pub(super) use native_graphics::MAIN_MENU_COMMITTED_OBSERVATION;
 mod navigation;
 mod parity;
 mod save_capture;
@@ -2379,56 +2381,6 @@ impl AutomationObserver {
         boundary
     }
 
-    fn native_checkpoint_pending(&self, inner: &CoordInner) -> bool {
-        self.native_checkpoint_plan.as_ref().is_some_and(|plan| {
-            plan.checkpoints_between(inner.checkpoint_step..inner.sched_state.step_index)
-                .next()
-                .is_some()
-        })
-    }
-
-    fn commit_native_checkpoints(&self, inner: &mut CoordInner, frame: &PresentedFrame) -> bool {
-        let Some(plan) = &self.native_checkpoint_plan else {
-            return false;
-        };
-        for checkpoint in
-            plan.checkpoints_between(inner.checkpoint_step..inner.sched_state.step_index)
-        {
-            if matches!(checkpoint.action, Action::NavigateToHyperspace(_))
-                && inner.departure.native_frame_pending
-            {
-                return false;
-            }
-            let id = checkpoint.id.clone();
-            let reservation = self.runtime.commit.reserve();
-            let mut record = super::capture::capture_trace_record(
-                reservation.sequence(),
-                self.elapsed_ms(),
-                CaptureGeneration(frame.generation),
-                &id,
-            );
-            record.run = 1;
-            record.kind = RecordKind::Checkpoint;
-            record.input_seen = inner.input_seen;
-            record.present_seen = inner.present_seen;
-            record.presentation = Some(crate::automation::capture::presentation_evidence(frame));
-            record.checkpoint = Some(super::trace::CheckpointEvidence { id });
-            match record.to_jsonl() {
-                Ok(line) => {
-                    reservation.commit_record(line);
-                    inner.native_publication_pending = true;
-                }
-                Err(error) => {
-                    reservation.cancel();
-                    self.capture_failure(inner, error);
-                    return true;
-                }
-            }
-        }
-        inner.checkpoint_step = inner.sched_state.step_index;
-        false
-    }
-
     /// Process a committed present callback. Returns true if the game loop
     /// should stop.
     pub fn process_present(&self, frame: Option<PresentedFrame>) -> bool {
@@ -3579,9 +3531,9 @@ mod tests {
                 .process_present(Some(PresentedFrame {
                     count,
                     generation: 0,
-                    width: 1,
+                    width: 2,
                     height: 1,
-                    rgba: vec![1, 2, 3, 255]
+                    rgba: vec![1, 2, 3, 255, 4, 5, 6, 255]
                 })));
             let records: Vec<_> = std::fs::read_to_string(temp.path().join("trace.jsonl"))
                 .unwrap()
@@ -3799,9 +3751,9 @@ mod tests {
         let frame = |count, generation| PresentedFrame {
             count,
             generation,
-            width: 1,
+            width: 2,
             height: 1,
-            rgba: vec![1, 2, 3, 255],
+            rgba: vec![1, 2, 3, 255, 4, 5, 6, 255],
         };
         assert!(!_app.observer().unwrap().process_menu_transition(0, 1));
         assert!(!_app.observer().unwrap().process_menu_transition(1, 0));

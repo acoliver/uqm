@@ -43,6 +43,7 @@ pub(super) fn sync_native_display_geometry() -> Result<(), String> {
             "NATIVE_PLACEMENT: display={bounds:?} changed={display_changed} client={position:?} native={native:?} requested=({}, {})",
             x, y
         ));
+        state.presentation_samples.push(crate::graphics::presentation_diagnostics::PresentationSample::Display { event: format!("placement:display={bounds:?}:changed={display_changed}:client={position:?}:native={native:?}:requested=({x},{y})") });
         state.canvas.window_mut().set_position(
             sdl2::video::WindowPos::Positioned(x),
             sdl2::video::WindowPos::Positioned(y),
@@ -56,6 +57,11 @@ pub(crate) fn reconfigure_video(flags: c_int, width: c_int, height: c_int) -> Re
         return Err("invalid video dimensions".into());
     }
     let state = get_gfx_state().ok_or("graphics not initialized")?;
+    state.presentation_samples.push(
+        crate::graphics::presentation_diagnostics::PresentationSample::Display {
+            event: format!("reconfigure:flags={flags}:width={width}:height={height}"),
+        },
+    );
     let fullscreen = flags & 1 != 0;
     let window = state.canvas.window_mut();
     window.set_fullscreen(if fullscreen {
@@ -72,11 +78,7 @@ pub(crate) fn reconfigure_video(flags: c_int, width: c_int, height: c_int) -> Re
     state.width = width as u32;
     state.height = height as u32;
     state.fullscreen = fullscreen;
-    let buffer_size = scale_factor_from_flags(flags)
-        .map(|scale| (SCREEN_WIDTH * scale * SCREEN_HEIGHT * scale * 4) as usize);
-    for buffer in &mut state.scaled_buffers {
-        *buffer = buffer_size.map(|size| vec![0; size]);
-    }
+    allocate_scaled_buffers(state);
     state.software_scaler_logged = false;
     state.xbrz_logged = false;
     Ok(())
@@ -125,6 +127,64 @@ pub(super) fn scanlines(
     canvas
         .set_logical_size(SCREEN_WIDTH, SCREEN_HEIGHT)
         .map_err(|e| e.to_string())
+}
+
+pub(super) fn allocate_scaled_buffers(state: &mut RustGraphicsState) {
+    let size = scale_factor_from_flags(state.flags)
+        .map(|scale| (SCREEN_WIDTH * scale * SCREEN_HEIGHT * scale * 4) as usize);
+    for buffer in &mut state.scaled_buffers {
+        *buffer = size.map(|size| vec![0; size]);
+    }
+}
+
+pub(super) struct ScreenPixels<'a> {
+    pub pixels: &'a [u8],
+    pub pitch: usize,
+    pub scale: u32,
+    pub rect: Option<sdl2::rect::Rect>,
+}
+
+pub(super) fn screen_layer(
+    canvas: &mut sdl2::render::Canvas<sdl2::video::Window>,
+    samples: &mut Vec<crate::graphics::presentation_diagnostics::PresentationSample>,
+    screen: i32,
+    alpha: u8,
+    upload: ScreenPixels<'_>,
+) {
+    use crate::graphics::presentation_diagnostics::screen_result;
+    let creator = canvas.texture_creator();
+    let mut texture = match creator.create_texture_streaming(
+        PixelFormatEnum::RGBX8888,
+        SCREEN_WIDTH * upload.scale,
+        SCREEN_HEIGHT * upload.scale,
+    ) {
+        Ok(texture) => texture,
+        Err(error) => {
+            screen_result(samples, screen, alpha, "create", &Err(error));
+            return;
+        }
+    };
+    let result = texture.update(None, upload.pixels, upload.pitch);
+    screen_result(samples, screen, alpha, "upload", &result);
+    if result.is_err() {
+        return;
+    }
+    if alpha == 255 {
+        texture.set_blend_mode(BlendMode::None);
+    } else {
+        texture.set_blend_mode(BlendMode::Blend);
+        texture.set_alpha_mod(alpha);
+    }
+    let source = upload.rect.map(|r| {
+        sdl2::rect::Rect::new(
+            r.x() * upload.scale as i32,
+            r.y() * upload.scale as i32,
+            r.width() * upload.scale,
+            r.height() * upload.scale,
+        )
+    });
+    let result = canvas.copy(&texture, source, upload.rect);
+    screen_result(samples, screen, alpha, "copy", &result);
 }
 
 #[cfg(test)]

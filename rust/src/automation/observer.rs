@@ -111,7 +111,7 @@ impl Observer<Option<super::campaign_state::CampaignView>> for Handle {
     }
 
     fn battle_diagnostics(&self) -> bool {
-        self.0.native_battle_diagnostics()
+        self.0.native_diagnostics()
     }
 
     fn battle_tick(&mut self, tick: &crate::engine::observe::battle::BattleTick) {

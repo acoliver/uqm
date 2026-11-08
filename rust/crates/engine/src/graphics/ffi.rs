@@ -143,6 +143,7 @@ struct RustGraphicsState {
     presented_frame: Option<PresentedFrame>,
     /// Number of frames actually presented by this backend instance.
     presentation_count: u64,
+    presentation_samples: Vec<super::presentation_diagnostics::PresentationSample>,
     #[cfg(feature = "debug-process")]
     native_position: Option<(i32, i32)>,
     #[cfg(feature = "debug-process")]
@@ -372,19 +373,14 @@ pub unsafe fn rust_gfx_init(
         fullscreen,
         presented_frame: None,
         presentation_count: 0,
+        presentation_samples: Vec::new(),
         #[cfg(feature = "debug-process")]
         native_position: options.native_position,
         #[cfg(feature = "debug-process")]
         native_display_bounds: None,
     };
 
-    // Use the same software-scaler policy for allocation and presentation.
-    if let Some(scale_factor) = scale_factor_from_flags(flags) {
-        let buffer_size = (SCREEN_WIDTH * scale_factor * SCREEN_HEIGHT * scale_factor * 4) as usize;
-        for i in 0..TFB_GFX_NUMSCREENS {
-            state.scaled_buffers[i] = Some(vec![0u8; buffer_size]);
-        }
-    }
+    video::allocate_scaled_buffers(&mut state);
 
     set_gfx_state(Some(state));
     if fullscreen {
@@ -545,13 +541,20 @@ pub unsafe extern "C" fn rust_gfx_get_format_conv_surf() -> *mut SDL_Surface {
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
 pub unsafe extern "C" fn rust_gfx_preprocess(
-    _force_redraw: c_int,
-    _transition_amount: c_int,
-    _fade_amount: c_int,
+    force_redraw: c_int,
+    transition_amount: c_int,
+    fade_amount: c_int,
 ) {
     // REQ-PRE-040: transition_amount and fade_amount are intentionally ignored
     // (handled by ScreenLayer/ColorLayer in P06-P08)
     if let Some(state) = get_gfx_state() {
+        state.presentation_samples.push(
+            super::presentation_diagnostics::PresentationSample::Preprocess {
+                force_redraw,
+                transition_amount,
+                fade_amount,
+            },
+        );
         // REQ-PRE-010: Reset blend mode before clearing for clean renderer state
         state.canvas.set_blend_mode(BlendMode::None);
         // REQ-PRE-020: Clear to opaque black
@@ -599,7 +602,7 @@ pub unsafe extern "C" fn rust_gfx_postprocess() {
                 ))
                     .clone()
             }
-            .and_then(|hook| hook())
+            .and_then(|hook| hook(state.presentation_count, &state.presentation_samples))
         {
             match video::presented_frame(&state.canvas, state.presentation_count, generation) {
                 Ok(frame) => state.presented_frame = Some(frame),
@@ -612,6 +615,7 @@ pub unsafe extern "C" fn rust_gfx_postprocess() {
             }
         }
 
+        state.presentation_samples.clear();
         state.canvas.present();
     }
 }
@@ -736,75 +740,36 @@ pub unsafe extern "C" fn rust_gfx_screen(screen: c_int, alpha: u8, rect: *const 
                 }
             }
 
-            // Step 4: Create texture at scaled dimensions
-            // REQ-SCALE-040: texture dimensions = SCREEN_WIDTH*factor × SCREEN_HEIGHT*factor
-            let texture_creator = state.canvas.texture_creator();
-            let mut texture = match texture_creator.create_texture_streaming(
-                PixelFormatEnum::RGBX8888,
-                scaled_w as u32,
-                scaled_h as u32,
-            ) {
-                Ok(t) => t,
-                Err(_) => return,
-            };
-
-            // Step 5: Upload scaled buffer
-            if texture.update(None, buffer, out_stride).is_err() {
-                return;
-            }
-
-            // REQ-SCR-030 / REQ-SCR-040: set blend mode based on alpha
-            if alpha == 255 {
-                texture.set_blend_mode(BlendMode::None);
-            } else {
-                texture.set_blend_mode(BlendMode::Blend);
-                texture.set_alpha_mod(alpha);
-            }
-
-            // Step 6: Compute scaled source rect (multiply by factor)
-            // REQ-SCALE-050 / REQ-WIN-030 / REQ-SCALE-055:
-            // src_rect coords × factor, dst_rect stays unscaled
-            let src_rect = sdl_rect.map(|r| {
-                sdl2::rect::Rect::new(
-                    r.x() * factor as i32,
-                    r.y() * factor as i32,
-                    r.width() * factor,
-                    r.height() * factor,
-                )
-            });
-            let _ = state.canvas.copy(&texture, src_rect, sdl_rect);
+            video::screen_layer(
+                &mut state.canvas,
+                &mut state.presentation_samples,
+                screen,
+                alpha,
+                video::ScreenPixels {
+                    pixels: buffer,
+                    pitch: out_stride,
+                    scale: factor,
+                    rect: sdl_rect,
+                },
+            );
         }
     } else {
-        // ---- Unscaled path (original P08 implementation) ----
-        let texture_creator = state.canvas.texture_creator();
-        let mut texture = match texture_creator.create_texture_streaming(
-            PixelFormatEnum::RGBX8888,
-            SCREEN_WIDTH,
-            SCREEN_HEIGHT,
-        ) {
-            Ok(t) => t,
-            Err(_) => return,
-        };
-
         // SAFETY: the graphics state owns this live surface throughout the upload.
         let surface = unsafe { sdl2::surface::SurfaceRef::from_ll(src_surface.cast()) };
-        if surface
-            .with_lock(|pixels| texture.update(None, pixels, surface.pitch() as usize))
-            .is_err()
-        {
-            return;
-        }
-
-        // REQ-SCR-030 / REQ-SCR-040: set blend mode based on alpha
-        if alpha == 255 {
-            texture.set_blend_mode(BlendMode::None);
-        } else {
-            texture.set_blend_mode(BlendMode::Blend);
-            texture.set_alpha_mod(alpha);
-        }
-
-        // REQ-SCR-050 / REQ-SCR-060 / REQ-SCR-150: render with src_rect == dst_rect
-        let _ = state.canvas.copy(&texture, sdl_rect, sdl_rect);
+        surface.with_lock(|pixels| {
+            video::screen_layer(
+                &mut state.canvas,
+                &mut state.presentation_samples,
+                screen,
+                alpha,
+                video::ScreenPixels {
+                    pixels,
+                    pitch: surface.pitch() as usize,
+                    scale: 1,
+                    rect: sdl_rect,
+                },
+            )
+        });
     }
 
     // REQ-NP-025: texture is dropped here (end of scope, Rust ownership)
@@ -852,12 +817,24 @@ pub unsafe extern "C" fn rust_gfx_color(r: u8, g: u8, b: u8, a: u8, rect: *const
 
     // REQ-CLR-040/050: fill entire screen (null) or specified rect
     let sdl_rect = convert_c_rect(rect);
-    let _ = state.canvas.fill_rect(sdl_rect);
+    let result = state.canvas.fill_rect(sdl_rect);
+    state
+        .presentation_samples
+        .push(super::presentation_diagnostics::PresentationSample::Color {
+            rgba: [r, g, b, a],
+            error: result.err(),
+        });
 }
 
 // ============================================================================
 // Event processing
 // ============================================================================
+
+pub(crate) fn observe_display_event(event: sdl2::event::Event) {
+    if let Some(state) = get_gfx_state() {
+        super::presentation_diagnostics::display_event(&mut state.presentation_samples, &event);
+    }
+}
 
 /// Process SDL events, returns 1 if quit requested
 // PANIC-FREE: if-let guard for uninitialized state. poll_iter and match
@@ -869,6 +846,7 @@ pub unsafe extern "C" fn rust_gfx_color(r: u8, g: u8, b: u8, a: u8, rect: *const
 pub unsafe extern "C" fn rust_gfx_process_events() -> c_int {
     if let Some(state) = get_gfx_state() {
         for event in state.event_pump.poll_iter() {
+            super::presentation_diagnostics::display_event(&mut state.presentation_samples, &event);
             if let sdl2::event::Event::Quit { .. } = event {
                 return 1;
             }
