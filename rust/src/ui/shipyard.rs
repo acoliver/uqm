@@ -595,7 +595,12 @@ unsafe fn do_modify_ships(cx: &mut Cx<'_>, menu: &mut MENU_STATE, input: &InputS
     1
 }
 
-unsafe fn draw_blue_print(input: &InputSession, menu: &mut MENU_STATE) {
+unsafe fn draw_blue_print(
+    input: &InputSession,
+    menu: &mut MENU_STATE,
+    flagship: &crate::engine::world::SisState,
+    context: &crate::graphics::context_abi::ContextLease,
+) {
     let frame = CaptureDrawable(LoadGraphicInstance(c"graphics.blueprints".as_ptr()).cast());
     let mut stamp = STAMP {
         origin: POINT { x: 0, y: 0 },
@@ -604,83 +609,31 @@ unsafe fn draw_blue_print(input: &InputSession, menu: &mut MENU_STATE) {
     SetContextForeGroundColor(rgb15(0, 0, 0x16));
     DrawFilledStamp(&mut stamp);
     for slot in 0..NUM_DRIVE_SLOTS {
-        let piece = WorldData::current().read(|owner| owner.flagship.drive_slots[slot as usize]);
+        let piece = flagship.drive_slots[slot as usize];
         DrawShipPiece(frame, piece as COUNT, slot as COUNT, 1);
     }
     for slot in 0..NUM_JET_SLOTS {
-        let piece = WorldData::current().read(|owner| owner.flagship.jet_slots[slot as usize]);
+        let piece = flagship.jet_slots[slot as usize];
         DrawShipPiece(frame, piece as COUNT, slot as COUNT, 1);
     }
     for slot in 0..NUM_MODULE_SLOTS {
-        let piece = WorldData::current().read(|owner| owner.flagship.module_slots[slot as usize]);
+        let piece = flagship.module_slots[slot as usize];
         if !(menu.CurState as u32 == SHIPYARD && piece as u32 == CREW_POD) {
             DrawShipPiece(frame, piece as COUNT, slot as COUNT, 1);
         }
     }
     SetContextForeGroundColor(rgb15(0x0a, 0x0a, 0x1f));
     for slot in 0..NUM_MODULE_SLOTS {
-        let piece = WorldData::current().read(|owner| owner.flagship.module_slots[slot as usize]);
+        let piece = flagship.module_slots[slot as usize];
         if menu.CurState as u32 == SHIPYARD && piece as u32 == CREW_POD {
             DrawShipPiece(frame, piece as COUNT, slot as COUNT, 1);
         }
     }
-    let mut frames = WorldData::current().read(|owner| owner.flagship.crew_enlisted);
-    (**WorldData::current()).flagship.crew_enlisted = 0;
-    loop {
-        let old = frames;
-        frames = frames.wrapping_sub(1);
-        if old == 0 {
-            break;
-        }
-        let mut point: POINT = mem::zeroed();
-        get_c_pod_capacity(input.preferences().fonts == OPT_PC as i32, &mut point);
-        DrawPoint(&mut point);
-        (**WorldData::current()).flagship.crew_enlisted += 1;
-    }
-    frames = WorldData::current().read(|owner| owner.flagship.total_element_mass);
-    (**WorldData::current()).flagship.total_element_mass = 0;
-    let mut r = RECT {
-        corner: POINT { x: 0, y: 0 },
-        extent: EXTENT {
-            width: 9,
-            height: 1,
-        },
-    };
-    while frames != 0 {
-        let mass = if frames < SBAY_MASS_PER_ROW as COUNT {
-            frames
-        } else {
-            SBAY_MASS_PER_ROW as COUNT
-        };
-        (**WorldData::current()).flagship.total_element_mass += mass;
-        GetSBayCapacity(&mut r.corner);
-        DrawFilledRectangle(&mut r);
-        frames -= mass;
-    }
-    if WorldData::current().read(|owner| owner.flagship.fuel_on_board) > FUEL_RESERVE {
-        let mut volume =
-            WorldData::current().read(|owner| owner.flagship.fuel_on_board) - FUEL_RESERVE;
-        (**WorldData::current()).flagship.fuel_on_board = FUEL_RESERVE;
-        r.extent.width = 3;
-        r.extent.height = 1;
-        while volume != 0 {
-            GetFTankCapacity(&mut r.corner);
-            DrawPoint(&mut r.corner);
-            r.corner.x += r.extent.width + 1;
-            DrawPoint(&mut r.corner);
-            r.corner.x -= r.extent.width;
-            let old_background = SetContextBackGroundColor(BLACK);
-            SetContextForeGroundColor(old_background);
-            DrawFilledRectangle(&mut r);
-            let mass = if volume < FUEL_VOLUME_PER_ROW {
-                volume as COUNT
-            } else {
-                FUEL_VOLUME_PER_ROW as COUNT
-            };
-            (**WorldData::current()).flagship.fuel_on_board += mass as DWORD;
-            volume -= mass as DWORD;
-        }
-    }
+    super::sis::capacity::draw_blueprint_cells(
+        context,
+        flagship,
+        input.preferences().fonts == OPT_PC as i32,
+    );
     DestroyDrawable(ReleaseDrawable(frame));
 }
 
@@ -707,6 +660,8 @@ pub unsafe fn do_shipyard(cx: &mut Cx<'_>, menu: &mut MENU_STATE, input: &InputS
     let cancel = input.pulsed().menu[KEY_MENU_CANCEL as usize] != 0;
     SetMenuSounds(input, SOUND_ARROWS, SOUND_SELECT);
     if menu.Initialized == 0 {
+        let flagship = cx.world.data.flagship;
+        let context = crate::graphics::context_abi::ContextLease::require(cx.kernel.space_context);
         cx.with_legacy(|| {
             menu.InputFunc = Some(do_shipyard);
             menu.ModuleFrame =
@@ -720,7 +675,7 @@ pub unsafe fn do_shipyard(cx: &mut Cx<'_>, menu: &mut MENU_STATE, input: &InputS
             DrawSISMessage(game_string(STARBASE_STRING_BASE + 3));
             DrawSISTitle(game_string(STARBASE_STRING_BASE));
             SetContext(Kernel::current().read(|owner| owner.space_context));
-            draw_blue_print(input, menu);
+            draw_blue_print(input, menu, &flagship, &context);
             menu.CurState = SHIPYARD_CREW;
             DrawMenuStateStrings(PM_CREW as BYTE, menu.CurState as i16);
             let mut stamp = STAMP {
@@ -747,7 +702,6 @@ pub unsafe fn do_shipyard(cx: &mut Cx<'_>, menu: &mut MENU_STATE, input: &InputS
             PlayMusic(menu.hMusic, 1, 1);
         });
         show_combat_ship(cx, input, menu, COUNT::MAX, None);
-        let context = crate::graphics::context_abi::ContextLease::require(cx.kernel.space_context);
         frame::install(input, context, || {
             // SAFETY: the shipyard retains its published menu until this hook is removed.
             unsafe { animate_power_lines(None) };
@@ -871,17 +825,18 @@ unsafe fn dms_dismiss_escort_ship_crew(cx: &mut Cx<'_>, id: LinkId<Fragment>) ->
 }
 
 unsafe fn dms_hire_flag_ship_crew(cx: &mut Cx<'_>, input: &InputSession) -> SIZE {
-    let mut point: POINT = mem::zeroed();
-    let full = cx.with_legacy(|| {
-        get_c_pod_capacity(input.preferences().fonts == OPT_PC as i32, &mut point) <= GetCrewCount()
-    });
-    if full {
+    let Some(cell) = super::sis::capacity::crew_cell(
+        &cx.world.data.flagship,
+        input.preferences().fonts == OPT_PC as i32,
+    ) else {
         return 0;
-    }
+    };
+    let context = crate::graphics::context_abi::ContextLease::require(cx.kernel.space_context);
     if cx.world.data.flagship.res_units < cx.world.data.game.crew_cost as DWORD {
+        context.set_foreground(cell.foreground);
         return 0;
     }
-    cx.with_legacy(|| DrawPoint(&mut point));
+    context.draw_point(cell.foreground, cell.point);
     cx.kernel.sis_highlight.pre_update_flash_rect();
     let cost = -(cx.world.data.game.crew_cost as i32);
     cx.with_legacy(|| DeltaSISGauges(1, 0, cost));
@@ -891,7 +846,7 @@ unsafe fn dms_hire_flag_ship_crew(cx: &mut Cx<'_>, input: &InputSession) -> SIZE
 
 unsafe fn dms_dismiss_flag_ship_crew(cx: &mut Cx<'_>, input: &InputSession) -> SIZE {
     let highlight = cx.kernel.sis_highlight.clone();
-    if cx.with_legacy(|| GetCrewCount()) == 0 {
+    if cx.world.data.flagship.crew_enlisted == 0 {
         return 0;
     }
     let bought = purchased_crew(cx.world);
@@ -905,10 +860,14 @@ unsafe fn dms_dismiss_flag_ship_crew(cx: &mut Cx<'_>, input: &InputSession) -> S
     cx.with_legacy(|| {
         DeltaSISGauges(-1, 0, cost);
         highlight.post_update_flash_rect();
-        let mut point: POINT = mem::zeroed();
-        get_c_pod_capacity(input.preferences().fonts == OPT_PC as i32, &mut point);
-        SetContextForeGroundColor(BLACK);
-        DrawPoint(&mut point);
     });
+    let cell = super::sis::capacity::crew_cell(
+        &cx.world.data.flagship,
+        input.preferences().fonts == OPT_PC as i32,
+    )
+    .unwrap_or_else(|| panic!("dismissed flagship crew exceeds capacity"));
+    let context = crate::graphics::context_abi::ContextLease::require(cx.kernel.space_context);
+    context.set_foreground(cell.foreground);
+    context.draw_point(BLACK, cell.point);
     -1
 }

@@ -73,8 +73,6 @@ use crate::threading::pacing::linked::sleep_thread_until as SleepThreadUntil;
 #[cfg(not(test))]
 use crate::time::counter_abi::GetTimeCounter;
 #[cfg(not(test))]
-use crate::ui::sis::capacity::GetStorageBayCapacity;
-#[cfg(not(test))]
 use crate::ui::sis::draw_landers;
 #[cfg(not(test))]
 use crate::ui::sis::DeltaSISGauges;
@@ -175,16 +173,7 @@ impl CffiShipStatus<'_, '_> {
     /// Return the current flagship mineral storage capacity.
     #[must_use]
     pub fn storage_capacity(&self) -> u16 {
-        #[cfg(not(test))]
-        {
-            self.game
-                .borrow_mut()
-                .with_legacy(|| GetStorageBayCapacity())
-        }
-        #[cfg(test)]
-        {
-            0
-        }
+        crate::ui::sis::capacity::storage_capacity(&self.game.borrow().world.data.flagship)
     }
 }
 
@@ -304,6 +293,25 @@ mod tests {
         let mut clock = CffiPlanetSideClock;
         assert_eq!(clock.now(), Tick(0));
         assert_eq!(clock.sleep_until(Tick(1)), Ok(()));
+    }
+
+    #[test]
+    fn storage_capacity_uses_the_retained_campaign_without_a_published_owner() {
+        let mut owners = crate::engine::Game::new();
+        owners.world.data.flagship.module_slots[7] =
+            crate::starbase::sis_modules::ModuleType::StorageBay as u8;
+        let mut battle = crate::engine::battle::Battle::new();
+        let game = RefCell::new(Cx::new(
+            &mut battle,
+            &mut owners.world,
+            &mut owners.kernel,
+            crate::math::random,
+        ));
+        let ship = CffiShipStatus { game: &game };
+        assert_eq!(ship.storage_capacity(), 500);
+        game.borrow_mut().world.data.flagship.module_slots[8] =
+            crate::starbase::sis_modules::ModuleType::StorageBay as u8;
+        assert_eq!(ship.storage_capacity(), 1000);
     }
 
     #[test]

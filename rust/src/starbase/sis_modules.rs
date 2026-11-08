@@ -190,22 +190,6 @@ impl ModuleSlots {
     pub fn fuel_tank_capacity(&self) -> u32 {
         FUEL_RESERVE + self.0.iter().map(|s| s.fuel_capacity()).sum::<u32>()
     }
-
-    /// `GetFuelTankForFuelUnit` (`sis.c:1417-1437`): the slot and remaining
-    /// compartment size holding raw fuel level `unit`. Slots are searched
-    /// from the last slot to the first, so the highest-numbered tank fills
-    /// first. `None` when the unit does not fit.
-    fn locate_fuel_unit(&self, unit: u32) -> Option<(usize, u32)> {
-        debug_assert!(unit >= FUEL_RESERVE);
-        let mut capacity = FUEL_RESERVE;
-        for slot in (0..NUM_MODULE_SLOTS).rev() {
-            capacity += self.0[slot].fuel_capacity();
-            if unit < capacity {
-                return Some((slot, capacity - unit));
-            }
-        }
-        None
-    }
 }
 
 /// One drawn fuel bar of `RedistributeFuel` (`outfit.c:100-135`).
@@ -241,26 +225,41 @@ pub fn fuel_bar_layout(
     fuel_on_board: u32,
 ) -> Result<Vec<FuelBar>, FuelLayoutError> {
     let capacity = slots.fuel_tank_capacity();
+    let capacities = slots.0.map(ModuleSlot::fuel_capacity);
     let mut bars = Vec::new();
     let mut level = FUEL_RESERVE;
     while level < capacity {
-        let (slot, compartment) = slots
-            .locate_fuel_unit(level)
-            .ok_or(FuelLayoutError { level })?;
-        let volume = slots.0[slot].fuel_capacity();
-        let row = (volume - compartment) * MAX_FUEL_BARS / HEFUEL_TANK_CAPACITY;
-        let y_base = if volume == FUEL_TANK_CAPACITY { 27 } else { 30 };
-        bars.push(FuelBar {
-            level,
-            slot,
-            row,
-            x: 21 + slot as i32 * SHIP_PIECE_OFFSET,
-            y: y_base - row as i32,
-            filled: level < fuel_on_board,
-        });
+        bars.push(fuel_bar_at(&capacities, level, fuel_on_board).ok_or(FuelLayoutError { level })?);
         level += FUEL_VOLUME_PER_ROW;
     }
     Ok(bars)
+}
+
+pub(crate) fn fuel_bar_at(
+    capacities: &[u32; NUM_MODULE_SLOTS],
+    level: u32,
+    fuel_on_board: u32,
+) -> Option<FuelBar> {
+    if level < FUEL_RESERVE {
+        return None;
+    }
+    let mut capacity = FUEL_RESERVE;
+    for (slot, &volume) in capacities.iter().enumerate().rev() {
+        capacity += volume;
+        if level < capacity {
+            let row = (volume - (capacity - level)) * MAX_FUEL_BARS / HEFUEL_TANK_CAPACITY;
+            let y_base = if volume == FUEL_TANK_CAPACITY { 27 } else { 30 };
+            return Some(FuelBar {
+                level,
+                slot,
+                row,
+                x: 21 + slot as i32 * SHIP_PIECE_OFFSET,
+                y: y_base - row as i32,
+                filled: level < fuel_on_board,
+            });
+        }
+    }
+    None
 }
 
 #[cfg(test)]

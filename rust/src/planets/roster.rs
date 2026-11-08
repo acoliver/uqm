@@ -87,7 +87,7 @@ pub(crate) mod live {
 
     use crate::time::counter_abi::GetTimeCounter;
 
-    use crate::ui::sis::capacity::GetCrewPodCapacity;
+    use crate::ui::sis::capacity::crew_capacity;
 
     use crate::ui::sis::GetStatusMessageRect;
 
@@ -263,7 +263,7 @@ pub(crate) mod live {
                 }
             } else if down {
                 let crew = cx.world.data.flagship.crew_enlisted;
-                let capacity = cx.with_legacy(|| GetCrewPodCapacity());
+                let capacity = crew_capacity(&cx.world.data.flagship);
                 if crew < capacity {
                     delta = -1;
                 } else {
