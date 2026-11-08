@@ -2908,9 +2908,6 @@ pub use crate::battle::ship_native::engine::ship_postprocess;
 pub use crate::battle::ship_native::engine::collision;
 
 #[cfg(not(test))]
-pub use crate::planets::devices::InventoryDevices;
-
-#[cfg(not(test))]
 pub use crate::ui::util::live::DrawStarConBox;
 
 #[cfg(not(test))]
