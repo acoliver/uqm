@@ -74,7 +74,10 @@ pub fn check(h: &mut Harness) {
             &mut (*system).SysInfo,
             uqm_rust::planets::generate::special::Body::Planet(2),
         );
-        c_api::generate_planet_surface(false, world, earth.into_frame());
+        let animation =
+            uqm_rust::engine::Kernel::current().read(|kernel| kernel.planet_animation.clone());
+        c_api::generate_planet_surface(&animation, false, world, earth.into_frame());
+
         assert!(!(*system).TopoFrame.is_null());
         assert!(!(*system).Orbit.lpTopoData.is_null());
         assert!(!(*system).Orbit.TopoColors.is_null());

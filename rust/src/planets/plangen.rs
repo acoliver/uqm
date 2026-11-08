@@ -26,9 +26,7 @@ pub(crate) mod live {
     };
 
     use std::ptr::{addr_of_mut, null_mut};
-    use std::sync::Mutex;
 
-    static SCALER: Mutex<Option<TopoScaler>> = Mutex::new(None);
     static mut LIGHT_DIFF: sphere::SphereMask = [[0; sphere::DIAMETER]; sphere::DIAMETER];
     static mut MAP_ROTATE: sphere::SphereTiltMap = [[sphere::SphereMapPoint {
         points: [Point { x: 0, y: 0 }; 4],
@@ -257,7 +255,6 @@ pub(crate) mod live {
         SetFrameHot(target.cast(), CPoint { x: 38, y: 38 });
     }
 
-    #[no_mangle]
     unsafe fn load_surface_palette(
         system: &mut crate::ships::native::abi::SOLARSYS_STATE,
         data: &crate::engine::world::planet::PlanetFrame,
@@ -283,6 +280,7 @@ pub(crate) mod live {
     /// Planet and definition must be live records from the current solar system;
     /// the graphics resources and generation context must be initialized on the game thread.
     pub unsafe fn generate_planet_surface(
+        animation: &crate::engine::kernel::planet_animation::PlanetAnimation,
         pulsing_shield: bool,
         planet: *mut crate::engine::world::planet::PlanetDesc,
         mut definition: *mut c::FRAME_DESC,
@@ -395,17 +393,15 @@ pub(crate) mod live {
         }
         if !shielded && (*info).atmo_density != 65535 {
             let depth = std::slice::from_raw_parts((*orbit).lpTopoData, width * 75);
-            let scaled = SCALER
-                .lock()
-                .expect("topography scaler")
-                .get_or_insert_with(TopoScaler::default)
-                .scale(
-                    depth,
-                    width,
-                    75,
-                    i32::from(data.num_faults),
-                    i32::from(data.fault_depth) * if algo == 4 { 2 } else { 1 },
-                );
+            let mut scaler = TopoScaler::with_seed(animation.topography_seed());
+            let scaled = scaler.scale(
+                depth,
+                width,
+                75,
+                i32::from(data.num_faults),
+                i32::from(data.fault_depth) * if algo == 4 { 2 } else { 1 },
+            );
+            animation.set_topography_seed(scaler.seed());
             render_system_topography(
                 &retained_context,
                 system,

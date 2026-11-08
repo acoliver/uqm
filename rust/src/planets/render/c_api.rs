@@ -196,41 +196,31 @@ impl TopographyGfx for CffiTopographyGfx {
     }
 
     fn batch(&mut self, points: &[TopographyPoint; NUM_BATCH_POINTS], first: usize) {
-        self.batch.replace_point_chain(
-            points.iter().map(|source| {
-                let color = source.color;
-                (
-                    point(source.point),
-                    Color {
-                        r: color.r,
-                        g: color.g,
-                        b: color.b,
-                        a: color.a,
-                    },
-                )
-            }),
-            first,
-        );
+        self.batch
+            .replace_point_chain(topography_points(points), first);
         self.context.draw_preserving_scale(&mut self.batch);
     }
 }
 
 pub fn topography_batch(points: &[TopographyPoint; NUM_BATCH_POINTS], first: usize) -> NativeBatch {
-    NativeBatch::point_chain(
-        points.iter().map(|source| {
-            let color = source.color;
-            (
-                point(source.point),
-                Color {
-                    r: color.r,
-                    g: color.g,
-                    b: color.b,
-                    a: color.a,
-                },
-            )
-        }),
-        first,
-    )
+    NativeBatch::point_chain(topography_points(points), first)
+}
+
+fn topography_points(
+    points: &[TopographyPoint; NUM_BATCH_POINTS],
+) -> impl ExactSizeIterator<Item = (crate::engine::graphics::native_abi::POINT, Color)> + '_ {
+    points.iter().map(|source| {
+        let color = source.color;
+        (
+            point(source.point),
+            Color {
+                r: color.r,
+                g: color.g,
+                b: color.b,
+                a: color.a,
+            },
+        )
+    })
 }
 
 /// Render the current solar-system resources into a native frame.

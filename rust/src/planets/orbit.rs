@@ -62,7 +62,7 @@ pub(crate) mod live {
 
     use crate::planets::sphere::live::UninitSphereRotation;
 
-    use crate::planets::sphere::live::RotatePlanetSphere;
+    use crate::planets::sphere::live::rotate_planet_sphere;
 
     use crate::planets::plangen::live::generate_planet_surface;
 
@@ -252,6 +252,7 @@ pub(crate) mod live {
         if crate::front_end::uqmdebug::DISABLE_INTERACTIVITY != 0 {
             return;
         }
+        let animation = game.borrow().kernel.planet_animation.clone();
         let wait = game.borrow_mut().with_legacy(|| {
             let system = solar_system::current();
             let (last_activity, pulsing_shield) = KernelOwner::current().read(|owner| {
@@ -268,7 +269,7 @@ pub(crate) mod live {
             }
             base::stop_music();
             let planet = (*system).pOrbitalDesc;
-            generate_planet_surface(pulsing_shield, planet, surface);
+            generate_planet_surface(&animation, pulsing_shield, planet, surface);
             orbit_music::set_planet_music((*planet).data_index & !0x80);
             wait
         });
@@ -422,10 +423,12 @@ pub(crate) mod live {
         1
     }
 
-    fn orbit_frame_hook() -> crate::engine::input::InputFrameHook {
+    fn orbit_frame_hook(
+        animation: std::rc::Rc<crate::engine::kernel::planet_animation::PlanetAnimation>,
+    ) -> crate::engine::input::InputFrameHook {
         // SAFETY: The orbit menu removes this hook before freeing its drawing resources.
-        crate::engine::input::InputFrameHook::new(|_, _| unsafe {
-            RotatePlanetSphere(1);
+        crate::engine::input::InputFrameHook::new(move |_, _| unsafe {
+            rotate_planet_sphere(&animation, true);
         })
     }
 
@@ -433,11 +436,12 @@ pub(crate) mod live {
         let runtime = cx.kernel.input_runtime();
         let input = runtime.input();
         let mut menu: MENU_STATE = std::mem::zeroed();
+        let hook = orbit_frame_hook(cx.kernel.planet_animation.clone());
         let old = cx.with_legacy(|| {
             DrawMenuStateStrings(0, 0);
             CffiPlatform.set_flash(FlashTarget::Menu3do);
             base::SetMenuSounds(input, 15, 16);
-            SetInputCallback(runtime.input(), Some(orbit_frame_hook()))
+            SetInputCallback(runtime.input(), Some(hook))
         });
         io.observer.checkpoint(&CheckpointView::PlanetMenu(1));
         cx.run_input(io, true, |cx, io| do_orbit(cx, io, &mut menu) != 0);

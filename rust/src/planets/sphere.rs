@@ -50,7 +50,7 @@ pub(crate) mod live {
         throb: false,
     };
 
-    use crate::time::counter_abi::GetTimeCounter;
+    use crate::engine::time::counter_abi::GetTimeCounter;
 
     use crate::graphics::pixmap_abi::SetAbsFrameIndex;
 
@@ -204,14 +204,14 @@ pub(crate) mod live {
         }
     }
 
-    #[no_mangle]
-    pub unsafe extern "C" fn RotatePlanetSphere(keep_rate: u32) {
-        static mut NEXT_TIME: u32 = 0;
+    pub unsafe fn rotate_planet_sphere(
+        animation: &crate::engine::kernel::planet_animation::PlanetAnimation,
+        keep_rate: bool,
+    ) {
         let now = GetTimeCounter();
-        if keep_rate != 0 && now < NEXT_TIME {
+        if !animation.rotation_due(now, keep_rate, ScreenWidth - 78) {
             return;
         }
-        NEXT_TIME = now.wrapping_add((840 * 12 / (ScreenWidth - 78)) as u32);
         DrawDefaultPlanetSphere();
         PrepareNextRotationFrame();
     }

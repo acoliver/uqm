@@ -187,34 +187,14 @@ unsafe fn set_location(point: CPoint, restore_old: bool) {
     save_location_image();
 }
 
-unsafe fn flash_location() {
-    static mut SHADE: u8 = 0;
-    static mut DELTA: i32 = -2;
-    static mut PREVIOUS: CPoint = CPoint { x: 0, y: 0 };
-    static mut NEXT_TIME: u32 = 0;
+unsafe fn flash_location(animation: &crate::engine::kernel::planet_animation::PlanetAnimation) {
     let now = GetTimeCounter();
-    let changed = PREVIOUS.x != CURSOR_RECT.corner.x || PREVIOUS.y != CURSOR_RECT.corner.y;
-    if !changed && now < NEXT_TIME {
+    let position = CURSOR_RECT.corner;
+    let Some(shade) = animation.cursor_shade((position.x, position.y), now) else {
         return;
-    }
-    if changed {
-        SHADE = 0;
-        DELTA = -2;
-        PREVIOUS = CURSOR_RECT.corner;
-        NEXT_TIME = now.wrapping_add(840 / 16);
-    } else {
-        if SHADE == 0 || SHADE == 0x1a {
-            DELTA = -DELTA;
-        }
-        SHADE = (i32::from(SHADE) + DELTA) as u8;
-        if now.wrapping_sub(NEXT_TIME) > 840 / 16 {
-            NEXT_TIME = now.wrapping_add(840 / 16);
-        } else {
-            NEXT_TIME = NEXT_TIME.wrapping_add(840 / 16);
-        }
-    }
+    };
     SetContext(SCAN_CONTEXT);
-    CffiPlatform.set_fg_color(Rgba::rgb15(SHADE, SHADE, SHADE));
+    CffiPlatform.set_fg_color(Rgba::rgb15(shade, shade, shade));
     draw_cursor(true);
 }
 
@@ -355,7 +335,11 @@ struct PickState {
     success: bool,
 }
 
-unsafe fn pick_input(input: &InputSession, state: &mut PickState) -> u32 {
+unsafe fn pick_input(
+    input: &InputSession,
+    animation: &crate::engine::kernel::planet_animation::PlanetAnimation,
+    state: &mut PickState,
+) -> u32 {
     let time_in = GetTimeCounter();
     let pulse = input.pulsed();
     if crate::engine::World::current().read(|world| world.activity()) & CHECK_ABORT != 0
@@ -394,7 +378,7 @@ unsafe fn pick_input(input: &InputSession, state: &mut PickState) -> u32 {
             true,
         );
     }
-    flash_location();
+    flash_location(animation);
     CffiPlatform.unbatch();
     SleepThreadUntil(time_in.wrapping_add(840 / 40));
     1
@@ -404,10 +388,11 @@ unsafe fn pick_side(cx: &mut Cx<'_>, io: &mut Io<'_>) -> bool {
     let runtime = cx.kernel.input_runtime();
     let input = runtime.input();
     let mut state = PickState { success: false };
+    let animation = cx.kernel.planet_animation.clone();
     cx.with_legacy(|| prepare_pick_side(input));
     io.observer.checkpoint(&CheckpointView::PlanetMenu(4));
     cx.run_input(io, true, |cx, _| {
-        cx.with_legacy(|| pick_input(input, &mut state) != 0)
+        cx.with_legacy(|| pick_input(input, &animation, &mut state) != 0)
     });
     io.observer.checkpoint(&CheckpointView::PlanetMenu(3));
     cx.with_legacy(|| DrawStatusMessage(std::ptr::null()));
