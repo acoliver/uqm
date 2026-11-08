@@ -1,4 +1,5 @@
 //! Legacy display and submenu composition for the retained hyperspace menu.
+//! Cargo, roster, front-end and wait adapters still exclude this composition from unit tests.
 
 #[cfg(not(test))]
 use super::*;

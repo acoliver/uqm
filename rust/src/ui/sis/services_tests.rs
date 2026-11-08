@@ -131,6 +131,29 @@ fn real_sis_and_menu_services_draw_with_retained_resources() {
         },
     };
     crate::callback::ffi::Alarm_init();
+    {
+        use crate::ui::shipyard_selection::{dms_set_mode, ModifyMode};
+        let input = crate::engine::input::InputSession::default();
+        let mut cx =
+            crate::engine::battle::Cx::new(&mut battle, &mut game.world, &mut game.kernel, || {
+                panic!("shipyard selection sampled RNG")
+            });
+        for (mode, state, sounds, highlighted) in [
+            (ModifyMode::Navigate, 0xf0, (15, 16), true),
+            (ModifyMode::Navigate, 11, (15, 16), true),
+            (ModifyMode::AddEscort, 0, (15, 16), true),
+            (ModifyMode::EditCrew, 0xf0, (3, 48), true),
+            (ModifyMode::EditCrew, 11, (3, 48), true),
+            (ModifyMode::Exit, 0, (15, 16), false),
+        ] {
+            dms_set_mode(&mut cx, &input, state, mode);
+            assert_eq!(input.menu_sounds(), sounds);
+            assert_eq!(
+                cx.kernel.sis_highlight.context.borrow().is_some(),
+                highlighted
+            );
+        }
+    }
     highlight_rect(&game.kernel, rect);
     assert!(game.kernel.sis_highlight.context.borrow().is_some());
     set_menu_flash(&game.kernel, (320, 240), false);

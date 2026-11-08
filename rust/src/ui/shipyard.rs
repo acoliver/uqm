@@ -7,7 +7,7 @@ mod catalog;
 mod crew;
 use super::shipyard_selection::{
     dms_flash_active_ship, dms_flash_escort_ship_crew_count, dms_flash_flag_ship_crew_count,
-    dms_set_mode, ModifyMode, SOUND_ARROWS, SOUND_CANCEL, SOUND_SELECT,
+    dms_set_mode, ModifyMode, SOUND_ARROWS, SOUND_SELECT,
 };
 use super::{shipyard_frame as frame, shipyard_hangar as hangar};
 use catalog::{get_available_race_count, get_available_race_from_index};
@@ -21,7 +21,7 @@ use crate::starbase::cffi::{avail_race_queue, built_ship_queue};
 use crate::ui::menu::draw_campaign_menu;
 use crate::ui::sis::{
     clear_flash, clear_sis_rect, delta_sis_gauges, draw_campaign_message, draw_title,
-    highlight_rect, set_menu_flash,
+    set_menu_flash,
 };
 
 use std::{mem, ptr};
@@ -29,8 +29,7 @@ use std::{mem, ptr};
 use crate::front_end::fmv::runtime::DoShipSpin;
 
 use super::shipyard_layout::{
-    DMS_GetEscortShipRect, DMS_MoveCursor, HANGAR_DY, HANGAR_SHIPS_ROW, HANGAR_X_COORDS, HANGAR_Y,
-    SHIP_WIN_HEIGHT, SHIP_WIN_WIDTH, USE_3DO_HANGAR,
+    DMS_GetEscortShipRect, DMS_MoveCursor, SHIP_WIN_HEIGHT, SHIP_WIN_WIDTH, USE_3DO_HANGAR,
 };
 const HANGAR_ANIM_RATE: u32 = 15;
 const SHIPYARD: u32 = 2;
