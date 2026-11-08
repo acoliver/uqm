@@ -8,6 +8,8 @@ use crate::engine::{battle::Cx, input::InputSession, Kernel, StoryKey};
 use crate::navigation::abi::*;
 use std::ffi::c_char;
 
+mod catalog;
+pub use catalog::uqm_debug_creature_bio_value;
 mod colors;
 mod equipment;
 use colors::hsva_to_rgba;
@@ -698,12 +700,6 @@ mod runtime {
             calculate_bio_value(cx, io, pSolarSysState, world) as c_int,
             calculate_mineral_value(cx, io, pSolarSysState, world) as c_int,
         );
-    }
-    pub fn uqm_debug_creature_bio_value(kind: BYTE) -> c_int {
-        use crate::planet_side::creatures::{CreatureCatalog, CreatureKind};
-        CreatureKind::new(kind)
-            .map(|kind| i32::from(CreatureCatalog::raw_lifedata(kind).1 & 0x0f))
-            .unwrap_or(-1)
     }
     /// # Safety
     /// World must be the active orbital descriptor and its generation functions live.
