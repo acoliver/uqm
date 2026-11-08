@@ -114,6 +114,33 @@ mod tests {
     }
 
     #[test]
+    fn source_guard_accepts_its_own_checkout_and_rejects_another() {
+        let built = tempfile::tempdir().unwrap();
+        let other = tempfile::tempdir().unwrap();
+        assert!(require_build_source(built.path(), built.path()).is_ok());
+        let error = require_build_source(other.path(), built.path()).unwrap_err();
+        assert!(error.contains("xtask was built from"), "{error}");
+        assert!(error.contains(&built.path().display().to_string()));
+        assert!(error.contains(&other.path().display().to_string()));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn source_guard_resolves_checkout_aliases_but_rejects_shared_targets() {
+        let directory = tempfile::tempdir().unwrap();
+        let built = directory.path().join("built");
+        let alias = directory.path().join("alias");
+        let shared = directory.path().join("shared-target");
+        std::fs::create_dir_all(built.join("rust")).unwrap();
+        std::fs::create_dir(&shared).unwrap();
+        std::os::unix::fs::symlink(&built, &alias).unwrap();
+        assert!(require_build_source(&alias, &built).is_ok());
+        std::os::unix::fs::symlink(&shared, built.join("rust/target")).unwrap();
+        let error = require_build_source(&built, &built).unwrap_err();
+        assert!(error.contains("rust/target must not be a symlink"), "{error}");
+    }
+
+    #[test]
     fn repository_root_is_found_from_a_nested_working_directory() {
         let checkout = tempfile::tempdir().unwrap();
         let nested = checkout.path().join("rust/xtask/src");
