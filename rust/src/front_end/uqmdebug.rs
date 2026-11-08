@@ -1422,7 +1422,7 @@ pub use runtime::{
     for_all_planet_types, for_all_planets, for_all_stars, forward_to_next_event,
     generate_bio_index, generate_mineral_index, give_devices, planet_type_string,
     reset_crew_battle, reset_energy_battle, show_spheres, tally_resources, tally_resources_to_file,
-    tectonics_string, universe_recurse, uqm_debug_creature_bio_value, DISABLE_INTERACTIVITY,
+    tectonics_string, universe_recurse, DISABLE_INTERACTIVITY,
 };
 
 /// Apply the selected debug destination using only the supplied campaign.
