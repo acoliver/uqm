@@ -47,7 +47,7 @@ pub(crate) mod live {
     }
 
     pub fn SetInputCallback(
-        input: &InputControls,
+        input: &InputSession,
         callback: Option<crate::engine::input::InputFrameHook>,
     ) -> Option<crate::engine::input::InputFrameHook> {
         input.replace_callback(callback)

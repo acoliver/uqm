@@ -1,7 +1,7 @@
 //! Planetary generation records shared by content and solar-system modes.
 
 use crate::graphics::native_abi::{
-    Color, BYTE, COUNT, DWORD, FONT, FRAME, POINT, RESOURCE, SIZE, STAMP, STRING, UWORD,
+    Color, BYTE, COUNT, DWORD, POINT, RESOURCE, SIZE, STAMP, STRING, UWORD,
 };
 
 pub type PlanetDesc = PlanetDescriptor;
@@ -47,8 +47,6 @@ pub struct PlanetInfo {
     pub scan_seed: [DWORD; 3usize],
     pub scan_retrieve_mask: [DWORD; 3usize],
     pub discovery_string: STRING,
-    pub lander_font: FONT,
-    pub lander_font_eff: FRAME,
 }
 
 #[repr(C)]

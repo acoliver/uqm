@@ -10,7 +10,10 @@ use uqm_rust::resource::ffi_bridge;
 use uqm_rust::state::game_state_keys::set_game_state;
 
 pub fn check(h: &mut Harness) {
-    let content = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../sc2/content");
+    let content = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../sc2/content")
+        .canonicalize()
+        .unwrap();
     let path = std::ffi::CString::new(content.to_str().unwrap()).unwrap();
     unsafe {
         c_api::log_init(100);
@@ -36,6 +39,7 @@ pub fn check(h: &mut Harness) {
         assert!(!ffi_bridge::InitResourceSystem().is_null());
         ffi_bridge::LoadResourceIndex(dir.cast(), c"uqm.rmp".as_ptr(), std::ptr::null());
         names(h);
+        binary_palettes();
         scenes(h);
         let baseline = sdl2::sys::SDL_GetNumAllocations();
         indexed_rescale();
@@ -74,15 +78,34 @@ pub fn check(h: &mut Harness) {
             &mut (*system).SysInfo,
             uqm_rust::planets::generate::special::Body::Planet(2),
         );
-        c_api::generate_planet_surface(false, world, earth.into_frame());
-        assert!(!(*system).TopoFrame.is_null());
-        assert!(!(*system).Orbit.lpTopoData.is_null());
-        assert!(!(*system).Orbit.TopoColors.is_null());
-        assert!(!(*system).Orbit.SphereFrame.is_null());
-        let after_tint = frame_rgb((*system).TopoFrame);
+        let animation =
+            uqm_rust::engine::Kernel::current().read(|kernel| kernel.planet_animation.clone());
+        let mut sphere = uqm_rust::planets::sphere::SphereState::default();
+        c_api::generate_planet_surface(
+            &mut sphere,
+            &animation,
+            false,
+            world,
+            earth.into_drawable(),
+        );
+
+        let topography = sphere.topography();
+        let topo_frame = topography.frame(0).unwrap();
+        assert!(!topo_frame.is_null());
+        assert_eq!(
+            sphere.elevation().len(),
+            MAP_WIDTH as usize * MAP_HEIGHT as usize
+        );
+        assert_eq!(
+            sphere.colors().len(),
+            (MAP_WIDTH as usize + 75) * MAP_HEIGHT as usize
+        );
+        let first_elevation = sphere.elevation()[0];
+        assert_eq!(sphere.sphere_frame().rect().extent.width, 75);
+        let after_tint = frame_rgb(topo_frame);
         assert_eq!(after_tint.len(), before_tint.len());
         assert_eq!(
-            super::shield_additive::frame_bytes((*system).TopoFrame),
+            super::shield_additive::frame_bytes(topo_frame),
             expected_tint
         );
         for (index, (before, after)) in before_tint.iter().zip(&after_tint).enumerate() {
@@ -94,12 +117,11 @@ pub fn check(h: &mut Harness) {
         }
         println!("real Earth shield tint: all {} RGB pixels equal [255, source.g, source.b]; complete buffer equals isolated Rust additive core", after_tint.len());
         c_api::FreePlanet();
+        assert_eq!(sphere.elevation()[0], first_elevation);
+        drop(topography);
+        drop(sphere);
         c_api::TFB_FlushGraphicsEx(1);
-        assert!((*system).TopoFrame.is_null());
-        assert!((*system).Orbit.lpTopoData.is_null());
-        assert!((*system).Orbit.TopoColors.is_null());
-        assert!((*system).Orbit.SphereFrame.is_null());
-        println!("real Earth definition consumed by actual GeneratePlanetSurface, shield and sphere allocated, then actual FreePlanet cleared surface/sphere/topography owners");
+        println!("real Earth definition consumed by actual GeneratePlanetSurface, shield and sphere allocated, then FreePlanet plus owned release cleared surface/sphere/topography allocations");
         assert_eq!(
             sdl2::sys::SDL_GetNumAllocations(),
             baseline,
@@ -240,34 +262,67 @@ unsafe fn scenes(h: &mut Harness) {
         });
         // SAFETY: Harness retains installed owners and live solar/planet
         // descriptors throughout this synchronous orbital callback.
-        assert!(unsafe {
-            crate::invoke_generation(system, |view, host| {
+        let typography = uqm_rust::app::bridge::enter(|cx| {
+            let game = std::cell::RefCell::new(uqm_rust::engine::battle::Cx {
+                b: cx.b,
+                world: cx.world,
+                kernel: cx.kernel,
+                rng: cx.rng,
+            });
+            let mut observer = uqm_rust::engine::observe::Unobserved;
+            let io = std::cell::RefCell::new(uqm_rust::engine::observe::Io {
+                observer: &mut observer,
+            });
+            let mut site = uqm_rust::planets::solarsys::site::Site::new(&game, &io, system, None);
+            assert!(site.with_system(|_, view, host| {
                 GENERATE_SOL_FUNCTIONS.generate_orbital(
                     view,
                     uqm_rust::planets::solarsys::site::dispatch::body(system, world),
                     host,
                 )
-            })
+            }));
+            site.report_typography().unwrap()
         });
+        let font = typography.font();
+        let effect = typography.effect();
+        let measured = font.measure(
+            c"A",
+            uqm_rust::graphics::native_abi::POINT { x: 0, y: 0 },
+            0,
+            1,
+        );
+        assert!(
+            measured.visible,
+            "lander A glyph missing, leading={}",
+            measured.leading
+        );
+        assert!(effect.frame_rect(0).extent.width > 0);
         let info = &(*system).SysInfo.planet_info;
-        assert!(!info.lander_font.is_null());
-        assert!(!info.lander_font_eff.is_null());
         assert!(!info.discovery_string.is_null());
         assert!(!(*system).PlanetSideFrame[1].is_null());
         assert_eq!(info.planet_density, if pluto { 33 } else { 60 });
         c_api::FreePlanet();
         c_api::TFB_FlushGraphicsEx(1);
         let info = &(*system).SysInfo.planet_info;
+        assert!(info.discovery_string.is_null());
+        drop(typography);
         assert!(
-            info.lander_font.is_null()
-                && info.lander_font_eff.is_null()
-                && info.discovery_string.is_null()
+            font.measure(
+                c"A",
+                uqm_rust::graphics::native_abi::POINT { x: 0, y: 0 },
+                0,
+                1
+            )
+            .visible
         );
+        assert!(effect.frame_rect(0).extent.width > 0);
+        drop((font, effect));
+        c_api::TFB_FlushGraphicsEx(1);
         assert!((*system)
             .PlanetSideFrame
             .iter()
             .all(|frame| frame.is_null()));
-        println!("Sol real scene {}: font + effect + mask + report loaded through actual orbital ABI, then FreePlanet cleared every owned slot", if pluto { "Pluto" } else { "moonbase" });
+        println!("Sol real scene {}: font + effect + mask + report loaded through actual orbital ABI, then explicit font leases survive FreePlanet and release after their final user", if pluto { "Pluto" } else { "moonbase" });
     }
     c_api::DISABLE_INTERACTIVITY = saved_debug;
 }
@@ -317,3 +372,31 @@ unsafe fn indexed_rescale() {
 }
 
 use uqm_rust::planets::generate::SystemGenerator;
+
+unsafe fn binary_palettes() {
+    use uqm_rust::strings::{sresins, string_table as strings};
+    for planet in &uqm_rust::planets::tables::PLANET_ARRAY.0 {
+        for resource in [planet.cmap_instance, planet.xlat_tab_instance] {
+            let resource = std::ffi::CStr::from_ptr(resource);
+            for index in [0, 1, 2, 3, u16::MAX] {
+                let table = sresins::LoadStringTableInstance(resource.as_ptr());
+                assert!(!table.is_null());
+                let entry =
+                    strings::SetAbsStringTableIndex(strings::CaptureStringTable(table), index);
+                let expected = std::slice::from_raw_parts(
+                    strings::GetStringAddress(entry).cast::<u8>(),
+                    usize::from(strings::GetStringLengthBin(entry)),
+                )
+                .to_vec();
+                strings::FreeStringTable(table);
+                let owned = sresins::load_binary_entry(resource, index)
+                    .unwrap_or_else(|| panic!("packaged binary palette {resource:?} is missing"));
+                assert_eq!(
+                    owned, expected,
+                    "binary palette {resource:?} variant {index}"
+                );
+            }
+        }
+    }
+    println!("Binary palette ownership: all 59 planet resource pairs, temperature entries and wrapped indices match legacy selected bytes after native release");
+}

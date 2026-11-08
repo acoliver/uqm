@@ -5,7 +5,7 @@
 use crate::ui::{rgb15, settings::play_menu_sound};
 mod catalog;
 mod crew;
-use super::{shipyard_hangar as hangar, sis::game_string};
+use super::{shipyard_frame as frame, shipyard_hangar as hangar, sis::game_string};
 use catalog::{get_available_race_count, get_available_race_from_index};
 use crew::{crew_transaction, purchased_crew};
 
@@ -70,15 +70,6 @@ unsafe fn animate_power_lines(menu: Option<&MENU_STATE>) {
         DrawStamp(ptr::addr_of_mut!(POWER_STAMP));
         POWER_COLORMAP = SetRelStringTableIndex(POWER_COLORMAP, 1);
     }
-}
-
-unsafe fn on_input_frame(
-    _checkpoint: &mut dyn FnMut(crate::engine::observe::CheckpointView<'_>),
-    _input: &crate::engine::input::InputControls,
-) {
-    let old = SetContext(Kernel::current().read(|owner| owner.space_context));
-    animate_power_lines(None);
-    SetContext(old);
 }
 
 unsafe fn draw_race_strings(menu: &mut MENU_STATE, mut race: BYTE) {
@@ -756,8 +747,12 @@ pub unsafe fn do_shipyard(cx: &mut Cx<'_>, menu: &mut MENU_STATE, input: &InputS
             PlayMusic(menu.hMusic, 1, 1);
         });
         show_combat_ship(cx, input, menu, COUNT::MAX, None);
+        let context = crate::graphics::context_abi::ContextLease::require(cx.kernel.space_context);
+        frame::install(input, context, || {
+            // SAFETY: the shipyard retains its published menu until this hook is removed.
+            unsafe { animate_power_lines(None) };
+        });
         cx.with_legacy(|| {
-            SetInputCallback(input, Some(on_input_frame));
             SetFlashRect(MENU_3DO);
             menu.Initialized = 1;
         });

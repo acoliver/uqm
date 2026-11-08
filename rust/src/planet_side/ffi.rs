@@ -54,7 +54,7 @@ use super::collision_adapter::{CffiGameplayRandom, SurfaceCollisionAdapter};
 use super::controller::PlanetSideController;
 use super::generation::ScanPersistence;
 use super::generation_adapter::CffiSurfaceGenerator;
-use super::graphics_adapter::CffiPlanetSideGraphics;
+use super::graphics_adapter::{CffiPlanetSideGraphics, SurfaceDrawing};
 use super::mask_adapter::extract_lander_masks;
 use super::model::SurfacePoint;
 use super::resources::{LanderGraphic, PlanetSideAssetAccess};
@@ -75,6 +75,7 @@ const fn failure(status: i32) -> PlanetSideReply {
 /// # Safety
 /// Native handles in context must remain live throughout the synchronous lander session.
 pub unsafe fn run_session(
+    drawing: SurfaceDrawing<'_>,
     controls: &crate::engine::input::InputSession,
     activity: crate::engine::world::activity::ActivityControl,
     cx: &mut crate::engine::battle::Cx<'_>,
@@ -94,8 +95,10 @@ pub unsafe fn run_session(
     let observe = std::cell::RefCell::new(crate::engine::observe::Io {
         observer: &mut *io.observer,
     });
-    let (trip, fixture) = admit_trip(&observe);
-    let result = run_retained_session(controls, activity, &game, &observe, context, &trip, fixture);
+    let admission = admit_trip(&observe);
+    let result = run_retained_session(
+        drawing, controls, activity, &game, &observe, context, &admission,
+    );
     if matches!(result, Ok(Ok(_))) {
         // SAFETY: the outer ABI contract keeps the current solar record live through return.
         context.retrieval_masks = unsafe {
@@ -108,16 +111,16 @@ pub unsafe fn run_session(
         };
     }
     let reply = session_reply(&result);
-    complete_trip(&trip, &observe, &result);
+    complete_trip(&admission.0, &observe, &result);
     reply
 }
 
-fn admit_trip(
-    observe: &std::cell::RefCell<crate::engine::observe::Io<'_>>,
-) -> (
+type TripAdmission = (
     std::rc::Rc<std::cell::RefCell<TripTelemetry>>,
     Option<crate::engine::observe_port::planet_side::FixtureLayout>,
-) {
+);
+
+fn admit_trip(observe: &std::cell::RefCell<crate::engine::observe::Io<'_>>) -> TripAdmission {
     let admission = observe
         .borrow_mut()
         .observer
@@ -157,22 +160,23 @@ fn complete_trip(
 }
 
 fn run_retained_session(
+    drawing: SurfaceDrawing<'_>,
     controls: &crate::engine::input::InputSession,
     activity: crate::engine::world::activity::ActivityControl,
     game: &std::cell::RefCell<crate::engine::battle::Cx<'_>>,
     observe: &std::cell::RefCell<crate::engine::observe::Io<'_>>,
     context: &mut PlanetSideRunContext,
-    telemetry: &std::rc::Rc<std::cell::RefCell<TripTelemetry>>,
-    fixture: Option<crate::engine::observe_port::planet_side::FixtureLayout>,
+    admission: &TripAdmission,
 ) -> Result<
     Result<super::session::SessionOutcome, super::controller::ControllerError>,
     super::runtime::AdapterError,
 > {
+    let (telemetry, fixture) = admission;
     let assets = game
         .borrow_mut()
         .with_legacy(super::init_lander::borrowed_assets)?;
-    let mut generator =
-        CffiSurfaceGenerator::for_planet_side(game, observe, context.solar_system, context.world)?;
+    let reports = drawing.scan.report_context();
+    let mut generator = CffiSurfaceGenerator::for_planet_side(game, observe, context, reports)?;
     let mut visuals = CffiSurfaceVisuals::new(
         context.misc_data_frame,
         context.energy_frame,
@@ -186,7 +190,7 @@ fn run_retained_session(
     let session = create_trip_session(&mut ship, context)?;
     let mut world_visuals = super::visual_adapter::CffiWorldVisuals::new(&assets, &mut visuals);
     let channels = game.borrow().kernel.channels.clone();
-    install_fixture(fixture, &session, &surface, &mut world_visuals)?;
+    install_fixture(*fixture, &session, &surface, &mut world_visuals)?;
     let (earthquake_frame_count, lava_frame_count) = hazard_frame_counts(&assets);
     let publish = |trip: &TripTelemetry| super::adapters::publish_trip(observe, trip);
     let collision = SurfaceCollisionAdapter {
@@ -209,6 +213,7 @@ fn run_retained_session(
         input: CffiPlanetSideInput::new(controls.controls().clone(), activity),
         collision,
         graphics: CffiPlanetSideGraphics {
+            drawing,
             game,
             surface: surface.clone(),
             assets: &assets,

@@ -13,8 +13,10 @@ parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("source", type=Path)
 parser.add_argument("output", type=Path)
 parser.add_argument("--evidence", type=Path, required=True)
+parser.add_argument("--headers", type=Path, help="Retained original sc2 directory containing its headers")
 args = parser.parse_args()
 root = Path(__file__).resolve().parents[1]
+headers = args.headers or root / "sc2"
 args.output.parent.mkdir(parents=True, exist_ok=True)
 args.evidence.mkdir(parents=True, exist_ok=True)
 source = args.source.read_text()
@@ -23,6 +25,12 @@ end = source.index("\nstatic inline void\nP3mult", start)
 body = source[start:end]
 header = '''#include "planets.h"
 #define NUM_BATCH_POINTS 64
+struct oracle_palette {
+ PLANET_DESC *pOrbitalDesc;
+ STRING XlatRef;
+ const void *XlatPtr;
+ COLORMAP OrbitalCMap;
+};
 struct operations {
  FRAME (*frame)(FRAME);
  POINT (*origin)(POINT);
@@ -31,7 +39,7 @@ struct operations {
  BYTE *(*colors)(COLORMAP);
  void (*batch)(PRIMITIVE *, PRIM_LINKS, BATCH_FLAGS);
  const PlanetFrame *table;
- SOLARSYS_STATE *system;
+ struct oracle_palette *system;
 };
 static const struct operations *ops;
 #define SetContextFGFrame ops->frame
@@ -53,8 +61,8 @@ void original_render_topography(const struct operations *input,
 unit = args.evidence / "original-render-topography.c.txt"
 unit.write_text(header + body + footer)
 command = ["clang", "-O2", "-std=gnu99", "-dynamiclib", "-x", "c",
-           "-I" + str(root / "sc2/src/uqm/planets"),
-           "-I" + str(root / "sc2/src"), "-I" + str(root / "sc2"),
+           "-I" + str(headers / "src/uqm/planets"),
+           "-I" + str(headers / "src"), "-I" + str(headers),
            str(unit), "-o", str(args.output)]
 print(" ".join(command), flush=True)
 subprocess.run(command, check=True)

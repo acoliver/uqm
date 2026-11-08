@@ -56,6 +56,7 @@ pub unsafe extern "C" fn draw_filled_oval(rect: *mut c::RECT) {
 
 /// A short-lived borrow of the current graphics context on the game thread.
 struct CffiOvalGfx {
+    context: ContextLease,
     viewport: CRect,
     color: c::Color,
 }
@@ -68,6 +69,7 @@ impl CffiOvalGfx {
     unsafe fn current(screen_width: i32, screen_height: i32) -> Self {
         let layout = RadarLayout::for_screen(screen_width, screen_height);
         Self {
+            context: ContextLease::require(crate::engine::graphics::context_abi::_pCurContext),
             viewport: CRect {
                 width: layout.sis_screen_width as i16,
                 height: layout.sis_screen_height as i16,
@@ -105,16 +107,31 @@ fn rect(r: &CRect) -> c::RECT {
     }
 }
 
+fn empty_primitive() -> crate::engine::graphics::native_abi::PRIMITIVE {
+    use crate::engine::graphics::native_abi::{Color, POINT, PRIMITIVE, PRIM_DESC};
+    PRIMITIVE {
+        Links: 0,
+        Type: 0,
+        color: Color {
+            r: 0,
+            g: 0,
+            b: 0,
+            a: 0,
+        },
+        Object: PRIM_DESC {
+            Point: POINT { x: 0, y: 0 },
+        },
+    }
+}
+
 impl OvalGfx for CffiOvalGfx {
     fn viewport(&self) -> CRect {
         self.viewport
     }
 
     fn line_visible(&mut self, viewport: &CRect, first: CPoint, second: CPoint) -> bool {
-        let mut line: c::BRESENHAM_LINE = unsafe { std::mem::zeroed() };
-        line.first = point(first);
-        line.second = point(second);
-        unsafe { c::_clip_line(&rect(viewport), &mut line) != 0 }
+        self.context
+            .line_visible(rect(viewport), point(first), point(second))
     }
 
     fn draw_line(&mut self, first: CPoint, second: CPoint) {
@@ -126,7 +143,7 @@ impl OvalGfx for CffiOvalGfx {
     }
 
     fn points(&mut self, points: &[CPoint]) {
-        let mut primitives: [c::PRIMITIVE; 4] = unsafe { std::mem::zeroed() };
+        let mut primitives: [c::PRIMITIVE; 4] = std::array::from_fn(|_| empty_primitive());
         for (prim, p) in primitives.iter_mut().zip(points) {
             prim.Type = c::gfx_object_POINT_PRIM as u8;
             prim.Object.Point = point(*p);
@@ -135,7 +152,7 @@ impl OvalGfx for CffiOvalGfx {
     }
 
     fn filled_rows(&mut self, rows: &[CRect; 2]) {
-        let mut primitives: [c::PRIMITIVE; 2] = unsafe { std::mem::zeroed() };
+        let mut primitives: [c::PRIMITIVE; 2] = std::array::from_fn(|_| empty_primitive());
         for (prim, row) in primitives.iter_mut().zip(rows) {
             prim.Type = c::gfx_object_RECTFILL_PRIM as u8;
             prim.Object.Rect = rect(row);
@@ -149,129 +166,93 @@ use super::topography::{
     NUM_BATCH_POINTS,
 };
 
-use crate::graphics::context_abi::SetContextClipRect;
-use crate::graphics::drawable_abi::SetContextFGFrame;
+use crate::graphics::context_abi::{ContextFrame, ContextLease};
+use crate::graphics::native_abi::Color;
+use crate::graphics::native_batch::NativeBatch;
 
-use crate::graphics::context_abi::SetContextOrigin;
-
-use crate::graphics::cmap_abi::GetColorMapAddress;
-
-use crate::strings::string_table::GetStringLengthBin;
-
-/// Borrow of the existing context renderer, without any new frame registry.
-struct CffiTopographyGfx;
+struct CffiTopographyGfx {
+    context: ContextLease,
+    batch: NativeBatch,
+}
 
 impl CffiTopographyGfx {
-    /// # Safety
-    /// Game thread, active context and live borrowed RAM frames throughout the
-    /// complete render call; no reentry or concurrent context/resource changes.
-    pub unsafe fn current() -> Self {
-        Self
+    fn new(context: &ContextLease) -> Self {
+        Self {
+            context: context.clone(),
+            batch: NativeBatch::new(Vec::new()),
+        }
     }
 }
 
 impl TopographyGfx for CffiTopographyGfx {
-    type Frame = *mut c::FRAME_DESC;
+    type Frame = ContextFrame;
 
     fn set_frame(&mut self, frame: Self::Frame) -> Self::Frame {
-        unsafe { SetContextFGFrame(frame.cast()).cast() }
+        let old = self.context.target();
+        self.context.set_frame(frame);
+        old
     }
 
     fn set_origin(&mut self, origin: CPoint) -> CPoint {
-        let old = unsafe { SetContextOrigin(point(origin)) };
+        let old = self.context.target().replace_hotspot(point(origin));
         CPoint { x: old.x, y: old.y }
     }
 
     fn clip(&mut self) -> CRect {
-        let mut clip: c::RECT = unsafe { std::mem::zeroed() };
-        unsafe { c::GetContextClipRect(&mut clip) };
-        input(clip)
+        input(self.context.clip_rect())
     }
 
-    fn set_clip(&mut self, mut clip: Option<CRect>) {
-        unsafe { SetContextClipRect(clip.as_mut().map_or(std::ptr::null_mut(), |r| r).cast()) };
+    fn set_clip(&mut self, clip: Option<CRect>) {
+        if let Some(clip) = clip {
+            self.context.set_clip(rect(&clip));
+        } else {
+            self.context.clear_clip();
+        }
     }
 
     fn batch(&mut self, points: &[TopographyPoint; NUM_BATCH_POINTS], first: usize) {
-        let mut primitives = topography_primitives(points);
-        unsafe { c::DrawBatch(primitives.as_mut_ptr(), first as u32, 0) };
+        self.batch
+            .replace_point_chain(topography_points(points), first);
+        self.context.draw_preserving_scale(&mut self.batch);
     }
 }
 
-/// Native primitive encoding shared by the adapter and linked RAM observer.
-/// Only the caller-selected tail of the array is submitted to DrawBatch.
-pub fn topography_primitives(
+pub fn topography_batch(points: &[TopographyPoint; NUM_BATCH_POINTS], first: usize) -> NativeBatch {
+    NativeBatch::point_chain(topography_points(points), first)
+}
+
+fn topography_points(
     points: &[TopographyPoint; NUM_BATCH_POINTS],
-) -> [c::PRIMITIVE; NUM_BATCH_POINTS] {
-    let mut primitives: [c::PRIMITIVE; NUM_BATCH_POINTS] = unsafe { std::mem::zeroed() };
-    for (index, (primitive, source)) in primitives.iter_mut().zip(points).enumerate() {
-        let next = if index + 1 == NUM_BATCH_POINTS {
-            u16::MAX
-        } else {
-            (index + 1) as u16
-        };
-        primitive.Links = u32::from(u16::MAX) | (u32::from(next) << 16);
-        primitive.Type = c::gfx_object_POINT_PRIM as u8;
-        primitive.Object.Point = point(source.point);
+) -> impl ExactSizeIterator<Item = (crate::engine::graphics::native_abi::POINT, Color)> + '_ {
+    points.iter().map(|source| {
         let color = source.color;
-        primitive.color = c::Color {
-            r: color.r,
-            g: color.g,
-            b: color.b,
-            a: color.a,
-        };
-    }
-    primitives
+        (
+            point(source.point),
+            Color {
+                r: color.r,
+                g: color.g,
+                b: color.b,
+                a: color.a,
+            },
+        )
+    })
 }
 
-/// Render the current solar-system resources into a native frame.
-///
-/// # Safety
-/// Game thread, active context, live destination and system/orbital descriptor.
-/// Resource handles and XlatPtr must refer to their live external resource
-/// storage for the call, without mutable aliases. No ownership is transferred.
-pub unsafe fn render_system_topography(
-    system: *const c::SOLARSYS_STATE,
-    destination: *mut c::FRAME_DESC,
+/// Render a retained palette into the supplied native frame.
+pub fn render_native_topography(
+    context: &ContextLease,
+    destination: ContextFrame,
     depth: &[i8],
     width: i32,
     height: i32,
+    palette: Option<TopographyPalette<'_>>,
 ) -> Result<(), TopographyError> {
-    let mut gfx = CffiTopographyGfx::current();
-    if (*system).XlatRef.is_null() {
-        return render_topography(&mut gfx, destination, depth, width, height, None);
-    }
-    let index =
-        (*(*system).pOrbitalDesc).data_index & !crate::planets::generate::consts::PLANET_SHIELDED;
-    let planet = crate::planets::tables::PLANET_ARRAY
-        .0
-        .get(usize::from(index))
-        .ok_or(TopographyError::PlanetIndex)?;
-    // XLAT_DESC starts with three signed SIZE levels, followed by 256 bytes.
-    let prefix = 3 * std::mem::size_of::<i16>();
-    if usize::from(GetStringLengthBin((*system).XlatRef.cast())) < prefix + 256 {
-        return Err(TopographyError::TranslationLength);
-    }
-    let translation = &*(*system)
-        .XlatPtr
-        .cast::<u8>()
-        .add(prefix)
-        .cast::<[u8; 256]>();
-    let colors = std::slice::from_raw_parts(
-        GetColorMapAddress((*system).OrbitalCMap.cast()).cast::<u8>(),
-        usize::from(GetStringLengthBin((*system).OrbitalCMap.cast())),
-    );
     render_topography(
-        &mut gfx,
+        &mut CffiTopographyGfx::new(context),
         destination,
         depth,
         width,
         height,
-        Some(TopographyPalette {
-            translation,
-            colors,
-            planet_type: planet.type_,
-            base_elevation: planet.base_elevation,
-        }),
+        palette,
     )
 }

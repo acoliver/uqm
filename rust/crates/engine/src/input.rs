@@ -6,7 +6,7 @@ use std::rc::Rc;
 pub use crate::input_port::*;
 pub use crate::input_port::{controls::InputControls, session::InputSession};
 
-pub use crate::input_port::controls::InputFrameHook;
+pub use crate::input_port::session::InputFrameHook;
 
 pub trait Frame {
     fn admit(

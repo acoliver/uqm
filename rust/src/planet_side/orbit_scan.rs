@@ -55,6 +55,7 @@ mod production {
     pub unsafe fn generate(
         game: &std::cell::RefCell<Cx<'_>>,
         io: &std::cell::RefCell<crate::engine::observe::Io<'_>>,
+        report_context: crate::planets::report::typography::ReportContext,
     ) {
         let solar = solar_system::current();
         if solar.is_null()
@@ -73,6 +74,7 @@ mod production {
             io,
             solar.cast(),
             (*solar).pOrbitalDesc.cast(),
+            Some(report_context),
         ) else {
             return;
         };
@@ -252,6 +254,7 @@ mod production {
 pub unsafe fn generate_planet_side(
     game: &std::cell::RefCell<crate::engine::battle::Cx<'_>>,
     io: &std::cell::RefCell<crate::engine::observe::Io<'_>>,
+    reports: crate::planets::report::typography::ReportContext,
 ) {
     {
         let mut cx = game.borrow_mut();
@@ -259,7 +262,7 @@ pub unsafe fn generate_planet_side(
         crate::battle::process_native::init_display_list(&mut cx, unscaled);
     }
     // SAFETY: the caller retains the current system and display-list resources.
-    unsafe { production::generate(game, io) };
+    unsafe { production::generate(game, io, reports) };
 }
 
 #[cfg(test)]

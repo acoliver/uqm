@@ -237,10 +237,13 @@ impl vux::VuxSite for Site<'_, '_, '_> {
     fn load_scene(&mut self, _system: &mut SolarSys<'_>, scene: vux::Scene) {
         match scene {
             vux::Scene::Maidens => Site::load_scene(self, c"graphics.maidens", c"text.maidens", 0),
-            vux::Scene::Beast => self.game.borrow_mut().with_legacy(|| {
-                // SAFETY: the live system is exclusive for the resource load.
-                unsafe { c_api::load_beast_scene(self.record.as_ptr()) };
-            }),
+            vux::Scene::Beast => {
+                self.report_resources.load();
+                self.game.borrow_mut().with_legacy(|| {
+                    // SAFETY: the live system is exclusive for the resource load.
+                    unsafe { c_api::load_beast_scene(self.record.as_ptr()) };
+                })
+            }
             vux::Scene::Ruins => Site::load_scene(self, c"graphics.ruins", c"text.ruins", 0),
         }
     }
@@ -355,12 +358,7 @@ impl yehat::YehatSite for Site<'_, '_, '_> {
         Npcs::load_ip_groups(self);
     }
     fn load_ruins_scene(&mut self, _system: &mut SolarSys<'_>) {
-        self.game.borrow_mut().with_legacy(|| {
-            // SAFETY: `system` is the live solar system state on the game thread.
-            unsafe {
-                load_lander_scene(self.record.as_ptr(), c"graphics.ruins", c"text.ruins", 0);
-            }
-        })
+        self.load_scene(c"graphics.ruins", c"text.ruins", 0);
     }
 }
 
@@ -413,6 +411,7 @@ impl ChmmrSite for Site<'_, '_, '_> {
         Npcs::load_ip_groups(self);
     }
     fn visit_starbase(&mut self, _system: &mut SolarSys<'_>) {
+        self.report_resources.load();
         self.game.borrow_mut().with_legacy(|| {
             // SAFETY: the live solar system state on the game thread.
             unsafe { load_starbase_report(self.record.as_ptr()) };
@@ -425,8 +424,7 @@ impl ChmmrSite for Site<'_, '_, '_> {
                     )
                 });
             assert!(presented, "the starbase report table was loaded");
-            // SAFETY: as above.
-            unsafe { free_lander_font(self.record.as_ptr()) };
+            self.report_resources.clear();
         })
     }
 }

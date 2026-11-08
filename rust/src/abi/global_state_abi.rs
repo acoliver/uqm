@@ -172,7 +172,6 @@ pub use crate::navigation::abi::IP_GROUP;
 pub type BRIEF_SHIP_INFO = brief_ship_info;
 pub type ENCOUNTER = encounter;
 pub type STAR_DESC = star_desc;
-pub type PLANET_ORBIT = planet_orbit;
 pub type SOLARSYS_STATE = solarsys_state;
 pub use crate::ships::native::abi::menu_state;
 pub type MENU_STATE = menu_state;
@@ -183,7 +182,6 @@ pub use crate::planets::render::c_api::{
 };
 #[cfg(not(test))]
 pub use crate::planets::solarsys::{planetOuterLocation, XFormIPLoc};
-pub use crate::ships::native::abi::planet_orbit;
 pub use crate::ships::native::abi::solarsys_state;
 #[cfg(test)]
 #[cfg(not(test))]

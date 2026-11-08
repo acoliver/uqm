@@ -222,8 +222,6 @@ mod tests {
                 scan_seed: [104729, 7, 65537],
                 scan_retrieve_mask: [0; 3],
                 discovery_string: std::ptr::null_mut(),
-                lander_font: std::ptr::null_mut(),
-                lander_font_eff: std::ptr::null_mut(),
             },
         }
     }

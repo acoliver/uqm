@@ -54,18 +54,18 @@ unsafe fn pc_value(x: i16, y: i16, label: i32, value: String) {
     text(x + rect.width, y, Align::Left, value);
 }
 
-pub(super) unsafe fn coarse(style: i32) {
+pub(super) unsafe fn coarse(planet: &ContextLease, style: i32) {
     if style == 2 {
-        pc();
+        pc(planet);
     } else {
-        three_do();
+        three_do(planet);
     }
 }
 
-unsafe fn pc() {
+unsafe fn pc(planet: &ContextLease) {
     let info = (*solar_system::current()).SysInfo.planet_info;
     let g = CffiPlatform;
-    SetContext(PlanetContext);
+    planet.select();
     g.set_fg_color(Rgba::rgb15(0, 0, 21));
     SetContextFont((KernelOwner::current().read(|owner| owner.micro_font)).cast());
     text(width() >> 1, 13, Align::Center, title());
@@ -143,10 +143,10 @@ unsafe fn pc() {
     );
 }
 
-unsafe fn three_do() {
+unsafe fn three_do(planet: &ContextLease) {
     let info = (*solar_system::current()).SysInfo.planet_info;
     let g = CffiPlatform;
-    SetContext(PlanetContext);
+    planet.select();
     g.set_fg_color(Rgba::rgb15(15, 0, 25));
     SetContextFont((KernelOwner::current().read(|owner| owner.micro_font)).cast());
     text(width() >> 1, 13, Align::Center, title());

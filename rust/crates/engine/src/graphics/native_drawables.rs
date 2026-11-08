@@ -167,6 +167,24 @@ impl LoadedDrawable {
         NonNull::new(drawable).map(Self::retain_loaded)
     }
 
+    /// Rescale one pixel frame into a separate owner, preserving the source.
+    /// Empty frames, invalid indices and dimensions outside native bounds return `None`.
+    pub fn rescaled(&self, index: usize, width: i32, height: i32) -> Option<Self> {
+        let (width, height) = (i16::try_from(width).ok()?, i16::try_from(height).ok()?);
+        let frame = self.lease.frame(index)?;
+        let bounds = self.lease.frame_rect(index).extent;
+        if width <= 0 || height <= 0 || bounds.width <= 0 || bounds.height <= 0 {
+            return None;
+        }
+        // SAFETY: this lease retains a factory-initialized pixel frame on its graphics thread.
+        // RescaleFrame returns a new registered drawable with independent release authority.
+        let drawable = unsafe {
+            assert!(!(*frame).image.is_null(), "frame has no pixels");
+            super::drawable_abi::RescaleFrame(frame, i32::from(width), i32::from(height))
+        };
+        NonNull::new(drawable).map(Self::retain_loaded)
+    }
+
     /// Copy an area relative to the context's clip into an independently owned drawable.
     /// An absent area copies the current clip; an empty intersection returns `None`.
     pub fn capture(
@@ -477,6 +495,33 @@ mod tests {
             )
         };
         assert_eq!((pixel.r, pixel.g, pixel.b), (23, 45, 67));
+        whole.lease().set_hotspot(0, HOT_SPOT { x: -2, y: 3 });
+        assert!(whole.rescaled(1, 32, 24).is_none());
+        assert!(whole.rescaled(0, 0, 24).is_none());
+        assert!(whole.rescaled(0, 32, -1).is_none());
+        let scaled = whole.rescaled(0, 32, 24).unwrap();
+        let scaled_lease = scaled.lease();
+        let allocation = Rc::downgrade(&scaled_lease._allocation);
+        drop(scaled);
+        let bounds = scaled_lease.frame_rect(0);
+        assert_eq!((bounds.extent.width, bounds.extent.height), (32, 24));
+        assert_eq!((bounds.corner.x, bounds.corner.y), (4, -6));
+        assert_eq!(whole.lease().frame_rect(0).extent.width, 16);
+        assert_eq!(whole.lease().frame_rect(0).corner.x, 2);
+        // SAFETY: the lease retains a live pixel image and this point is within its bounds.
+        let scaled_pixel = unsafe {
+            super::super::drawable_abi::GetFramePixel(
+                scaled_lease.frame(0).unwrap(),
+                POINT { x: 0, y: 0 },
+            )
+        };
+        assert_eq!(
+            (scaled_pixel.r, scaled_pixel.g, scaled_pixel.b),
+            (23, 45, 67)
+        );
+        assert!(allocation.upgrade().is_some());
+        drop(scaled_lease);
+        assert!(allocation.upgrade().is_none());
         drop(frame);
         drop(captured);
         drop(whole);

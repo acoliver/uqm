@@ -81,6 +81,7 @@ pub struct CffiSurfaceGenerator<'a, 'game, 'observer> {
     world: *mut c_void,
     #[cfg_attr(test, allow(dead_code))]
     role: GeneratorRole,
+    report_context: Option<crate::planets::report::typography::ReportContext>,
 }
 
 impl<'a, 'game, 'observer> CffiSurfaceGenerator<'a, 'game, 'observer> {
@@ -90,10 +91,18 @@ impl<'a, 'game, 'observer> CffiSurfaceGenerator<'a, 'game, 'observer> {
     pub fn for_planet_side(
         game: &'a RefCell<Cx<'game>>,
         io: &'a RefCell<Io<'observer>>,
-        solar_system: *mut c_void,
-        world: *mut c_void,
+        context: &super::ffi::PlanetSideRunContext,
+        report_context: crate::planets::report::typography::ReportContext,
     ) -> Result<Self, AdapterError> {
-        Self::with_role(game, io, solar_system, world, GeneratorRole::PlanetSide)
+        let mut generator = Self::with_role(
+            game,
+            io,
+            context.solar_system,
+            context.world,
+            GeneratorRole::PlanetSide,
+        )?;
+        generator.report_context = Some(report_context);
+        Ok(generator)
     }
 
     /// Adapter for orbit-scan map rendering.  Generation never touches the
@@ -104,8 +113,12 @@ impl<'a, 'game, 'observer> CffiSurfaceGenerator<'a, 'game, 'observer> {
         io: &'a RefCell<Io<'observer>>,
         solar_system: *mut c_void,
         world: *mut c_void,
+        report_context: Option<crate::planets::report::typography::ReportContext>,
     ) -> Result<Self, AdapterError> {
-        Self::with_role(game, io, solar_system, world, GeneratorRole::OrbitScan)
+        let mut generator =
+            Self::with_role(game, io, solar_system, world, GeneratorRole::OrbitScan)?;
+        generator.report_context = report_context;
+        Ok(generator)
     }
 
     #[cfg(not(test))]
@@ -114,7 +127,8 @@ impl<'a, 'game, 'observer> CffiSurfaceGenerator<'a, 'game, 'observer> {
         unsafe {
             let record = self.solar_system.cast();
             let target = body(record, self.world.cast());
-            Site::new(self.game, self.io, record).with_system(|generator, system, host| {
+            let mut site = Site::new(self.game, self.io, record, self.report_context.clone());
+            site.with_system(|generator, system, host| {
                 scan::generate(generator, system, target, node, scan_type as u8, info, host)
             })
         }
@@ -126,7 +140,8 @@ impl<'a, 'game, 'observer> CffiSurfaceGenerator<'a, 'game, 'observer> {
         unsafe {
             let record = self.solar_system.cast();
             let target = body(record, self.world.cast());
-            Site::new(self.game, self.io, record).with_system(|generator, system, host| {
+            let mut site = Site::new(self.game, self.io, record, self.report_context.clone());
+            site.with_system(|generator, system, host| {
                 crate::planets::scan::pickup(generator, system, target, node, scan_type as u8, host)
             })
         }
@@ -208,6 +223,7 @@ impl<'a, 'game, 'observer> CffiSurfaceGenerator<'a, 'game, 'observer> {
                 solar_system,
                 world,
                 role,
+                report_context: None,
             })
         }
     }
@@ -347,7 +363,13 @@ impl SurfaceGenerator for CffiSurfaceGenerator<'_, '_, '_> {
 mod tests {
     use super::*;
 
-    fn with_context(run: impl FnOnce(&RefCell<Cx<'_>>, &RefCell<Io<'_>>)) {
+    fn with_context(
+        run: impl FnOnce(
+            &RefCell<Cx<'_>>,
+            &RefCell<Io<'_>>,
+            crate::planets::report::typography::ReportContext,
+        ),
+    ) {
         let mut owners = crate::engine::Game::new();
         let mut battle = crate::engine::battle::Battle::new();
         let game = RefCell::new(Cx::new(
@@ -360,12 +382,21 @@ mod tests {
         let io = RefCell::new(Io {
             observer: &mut observer,
         });
-        run(&game, &io);
+        let scan =
+            crate::engine::graphics::context_abi::LoadedContext::create(c"generation-test-scan");
+        run(
+            &game,
+            &io,
+            crate::planets::report::typography::ReportContext {
+                context: scan.lease(),
+                resources: Default::default(),
+            },
+        );
     }
     #[test]
     #[serial_test::serial]
     fn accepted_live_pickups_update_the_planet_mask_and_dirty_flag() {
-        with_context(|game, io| {
+        with_context(|game, io, report_context| {
             crate::state::ffi::rust_init_game_state(game.borrow_mut().world);
             game.borrow_mut().world.data.flagship.crew_enlisted = 23;
             // SAFETY: all scalar and pointer fields admit zero before fixture initialization.
@@ -375,8 +406,12 @@ mod tests {
             let mut generator = CffiSurfaceGenerator::for_planet_side(
                 game,
                 io,
-                std::ptr::from_mut(&mut *system).cast(),
-                world.cast(),
+                &super::super::ffi::PlanetSideRunContext {
+                    solar_system: std::ptr::from_mut(&mut *system).cast(),
+                    world: world.cast(),
+                    ..Default::default()
+                },
+                report_context,
             )
             .unwrap();
             assert!(std::ptr::eq(generator.io, io));
@@ -421,14 +456,15 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn null_generation_context_is_rejected() {
-        with_context(|game, io| {
+        with_context(|game, io, report_context| {
             assert!(matches!(
                 CffiSurfaceGenerator::for_planet_side(
                     game,
                     io,
-                    std::ptr::null_mut(),
-                    std::ptr::null_mut()
+                    &super::super::ffi::PlanetSideRunContext::default(),
+                    report_context,
                 ),
                 Err(AdapterError {
                     operation: "surface_generator_context",
@@ -440,7 +476,8 @@ mod tests {
                     game,
                     io,
                     std::ptr::null_mut(),
-                    std::ptr::null_mut()
+                    std::ptr::null_mut(),
+                    None
                 ),
                 Err(AdapterError {
                     operation: "surface_generator_context",
@@ -451,11 +488,21 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn unlinked_generator_fails_without_fallback() {
-        with_context(|game, io| {
+        with_context(|game, io, report_context| {
             let pointer = std::ptr::NonNull::<u8>::dangling().as_ptr().cast();
-            let mut generator =
-                CffiSurfaceGenerator::for_planet_side(game, io, pointer, pointer).unwrap();
+            let mut generator = CffiSurfaceGenerator::for_planet_side(
+                game,
+                io,
+                &super::super::ffi::PlanetSideRunContext {
+                    solar_system: pointer,
+                    world: pointer,
+                    ..Default::default()
+                },
+                report_context,
+            )
+            .unwrap();
             assert_eq!(
                 generator.node_count(ScanType::Mineral),
                 Err(AdapterError::new("surface_generator_unlinked"))

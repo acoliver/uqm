@@ -23,6 +23,9 @@ pub struct Site<'a, 'game, 'observer> {
     io: &'a RefCell<Io<'observer>>,
     index: u8,
     record: NonNull<SOLARSYS_STATE>,
+    presentation: Option<crate::planets::orbit::presentation::OrbitPresentation>,
+    report_context: Option<crate::planets::report::typography::ReportContext>,
+    report_resources: crate::planets::report::typography::ReportResources,
 }
 
 impl<'a, 'game, 'observer> Site<'a, 'game, 'observer> {
@@ -33,6 +36,7 @@ impl<'a, 'game, 'observer> Site<'a, 'game, 'observer> {
         game: &'a RefCell<Cx<'game>>,
         io: &'a RefCell<Io<'observer>>,
         record: *mut SOLARSYS_STATE,
+        report_context: Option<crate::planets::report::typography::ReportContext>,
     ) -> Self {
         let record = NonNull::new(record).unwrap_or_else(|| panic!("live solar system"));
         // SAFETY: the caller retains the initialized record for the host's lifetime.
@@ -42,7 +46,19 @@ impl<'a, 'game, 'observer> Site<'a, 'game, 'observer> {
             io,
             index,
             record,
+            presentation: None,
+            report_resources: report_context
+                .as_ref()
+                .map(|context| context.resources.clone())
+                .unwrap_or_default(),
+            report_context,
         }
+    }
+
+    pub fn report_typography(
+        &self,
+    ) -> Option<std::rc::Rc<crate::planets::report::typography::ReportTypography>> {
+        self.report_resources.snapshot()
     }
 
     fn contact(&self) -> (u8, u32, &'static CStr) {
@@ -76,6 +92,7 @@ impl<'a, 'game, 'observer> Site<'a, 'game, 'observer> {
     }
 
     fn load_scene(&self, graphics: &CStr, strings: &CStr, report: u16) {
+        self.report_resources.load();
         let record = self.record.as_ptr();
         self.game.borrow_mut().with_legacy(|| {
             // SAFETY: the generation view has no outstanding record borrows during this effect.

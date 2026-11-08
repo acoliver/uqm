@@ -1,5 +1,7 @@
 //! Discovery report paging and typewriter presentation from `planets/report.c`.
 
+pub mod typography;
+
 fn character_delay(character: u32, last_in_word: bool) -> u32 {
     let mut delay = 0;
     if character == u32::from(b',') {
@@ -26,7 +28,6 @@ pub(crate) mod live {
     use crate::comm::{locdata::CRect, sis_graphics::CText};
 
     use crate::engine::{battle::Cx, observe::Io};
-    use crate::graphics::context_abi::SetContext;
     use crate::mainloop::input_abi::live::FlushInput;
 
     use crate::starbase::{
@@ -52,7 +53,8 @@ pub(crate) mod live {
         pixmap_abi::{ReleaseDrawable, SetAbsFrameIndex},
     };
 
-    use crate::planets::scan::live::{DestroyScanContext, GetScanContext};
+    use crate::engine::graphics::context_abi::ContextLease;
+    use crate::planets::scan::state::create_context;
 
     use crate::ui::util::live::{
         wait_for_any_button, wait_for_any_button_until, wait_for_no_input, SaveContextFrame,
@@ -249,13 +251,17 @@ pub(crate) mod live {
 
     /// # Safety
     /// The game thread publishes the active owner for the generator callback.
-    pub unsafe fn discovery_report(system: *mut crate::ships::native::abi::SOLARSYS_STATE) {
+    pub unsafe fn discovery_report(
+        system: *mut crate::ships::native::abi::SOLARSYS_STATE,
+        scan: Option<&ContextLease>,
+        typography: &super::typography::ReportTypography,
+    ) {
         crate::app::bridge::enter(|cx| {
             let mut observer = cx.kernel.input_runtime().observer();
             let mut io = Io {
                 observer: &mut *observer,
             };
-            do_discovery_report(cx, &mut io, system);
+            do_discovery_report(cx, &mut io, system, scan, typography);
         });
     }
 
@@ -263,6 +269,8 @@ pub(crate) mod live {
         cx: &mut Cx<'_>,
         io: &mut Io<'_>,
         system: *mut crate::ships::native::abi::SOLARSYS_STATE,
+        scan: Option<&ContextLease>,
+        typography: &super::typography::ReportTypography,
     ) {
         #[cfg(feature = "debug-process")]
         if crate::front_end::uqmdebug::DISABLE_INTERACTIVITY != 0 {
@@ -271,22 +279,28 @@ pub(crate) mod live {
         let runtime = cx.kernel.input_runtime();
         let input = runtime.input();
         let sound = cx.kernel.menu_sound_bank().map(|bank| bank.clip(0));
-        let (own_context, old_context, saved, old_font, old_effect, text, length) =
-            cx.with_legacy(|| {
-                let mut own_context = 0;
-                let context = GetScanContext(&mut own_context);
-                let old_context = SetContext((context).cast());
+        let (context, owned) = match scan {
+            Some(context) => (context.clone(), None),
+            None => {
+                let owner = create_context(cx.kernel, CffiPlatform.screen_size().0 as i16 - 78);
+                (owner.lease(), Some(owner))
+            }
+        };
+        let saved = context.with_selected(|| {
+            let (saved, old_font, old_effect, text, length) = cx.with_legacy(|| {
                 let saved = SaveContextFrame(std::ptr::null_mut());
                 let info = std::ptr::addr_of!((*system).SysInfo.planet_info);
-                let old_font = SetContextFont((*info).lander_font.cast());
+                let old_font = SetContextFont(typography.font.as_raw().cast());
                 let old_effect = SetContextFontEffect(if input.preferences().fonts == 2 {
-                    (*info).lander_font_eff.cast()
+                    typography
+                        .effect()
+                        .frame(0)
+                        .unwrap_or_else(|| panic!("report effect frame"))
+                        .cast()
                 } else {
                     std::ptr::null_mut()
                 });
                 (
-                    own_context,
-                    old_context,
                     saved,
                     old_font,
                     old_effect,
@@ -294,23 +308,22 @@ pub(crate) mod live {
                     GetStringLength((*info).discovery_string.cast()),
                 )
             });
-        make_report(input, cx, io, sound, text, length);
-        cx.with_legacy(|| {
-            SetContextFontEffect(old_effect);
-            SetContextFont(old_font);
-            CffiPlatform.draw_stamp(Stamp {
-                origin: Point {
-                    x: saved.origin.x,
-                    y: saved.origin.y,
-                },
-                frame: saved.frame as usize,
-            });
-            SetContext(old_context);
-            if own_context != 0 {
-                DestroyScanContext();
-            }
-            DestroyDrawable(ReleaseDrawable(saved.frame));
+            make_report(input, cx, io, sound, text, length);
+            cx.with_legacy(|| {
+                SetContextFontEffect(old_effect);
+                SetContextFont(old_font);
+                CffiPlatform.draw_stamp(Stamp {
+                    origin: Point {
+                        x: saved.origin.x,
+                        y: saved.origin.y,
+                    },
+                    frame: saved.frame as usize,
+                });
+                saved.frame
+            })
         });
+        drop(owned);
+        DestroyDrawable(ReleaseDrawable(saved));
         wait_for_no_input(cx, io, u32::MAX, 1);
     }
 }

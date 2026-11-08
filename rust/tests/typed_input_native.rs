@@ -58,7 +58,7 @@ impl Observer<Option<CampaignView>> for Recording {
     }
 }
 
-unsafe fn record_hook(
+fn record_hook(
     emit: &mut dyn FnMut(CheckpointView<'_>),
     input: &uqm_rust::engine::input::InputControls,
 ) {
@@ -75,7 +75,10 @@ fn nested_callbacks_complete_before_the_outer_frame_and_stopped_admission_does_n
         dcqueue_abi::Init_DrawCommandQueue();
         uqm_rust::mainloop::input_abi::SetDefaultMenuRepeatDelay(input);
         input.set_menu_sounds(32, 64);
-        uqm_rust::mainloop::input_abi::SetInputCallback(input, Some(record_hook));
+        uqm_rust::mainloop::input_abi::SetInputCallback(
+            input,
+            Some(uqm_rust::engine::input::InputFrameHook::new(record_hook)),
+        );
         let events = Rc::new(RefCell::new(Vec::new()));
         let activities = Rc::new(RefCell::new(Vec::new()));
         let mut observer = Recording {

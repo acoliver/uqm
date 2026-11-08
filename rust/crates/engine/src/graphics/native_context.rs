@@ -142,6 +142,48 @@ impl Operation {
 #[derive(Clone)]
 pub struct ContextLease(Rc<Allocation>);
 
+/// Unique release authority for a context retained by drawing leases.
+pub struct LoadedContext {
+    context: ContextLease,
+}
+
+impl LoadedContext {
+    pub fn create(name: &'static std::ffi::CStr) -> Self {
+        #[cfg(feature = "debug-process")]
+        let context = {
+            // SAFETY: the registry admits this graphics thread; the name remains live.
+            unsafe { context_abi::CreateContextAux(name.as_ptr()) }
+        };
+        #[cfg(not(feature = "debug-process"))]
+        let context = {
+            let _ = name;
+            // SAFETY: the registry admits this serialized graphics thread.
+            unsafe { context_abi::CreateContextAux() }
+        };
+        Self {
+            context: ContextLease::require(context),
+        }
+    }
+
+    pub fn lease(&self) -> ContextLease {
+        self.context.clone()
+    }
+}
+
+impl Drop for LoadedContext {
+    fn drop(&mut self) {
+        self.context.assert_thread();
+        if self
+            .context
+            .selected_context()
+            .is_some_and(|selected| Rc::ptr_eq(&selected.0, &self.context.0))
+        {
+            self.context.apply(Operation::Deselect);
+        }
+        release(self.context.0.context);
+    }
+}
+
 pub struct BatchPause(ContextLease);
 impl Drop for BatchPause {
     fn drop(&mut self) {
@@ -660,15 +702,31 @@ impl ContextLease {
     }
 
     pub fn draw_primitives(&self, batch: &mut super::native_batch::NativeBatch, scale: i32) {
+        self.submit_batch(batch, Some(scale));
+    }
+
+    pub fn draw_preserving_scale(&self, batch: &mut super::native_batch::NativeBatch) {
+        self.submit_batch(batch, None);
+    }
+
+    fn submit_batch(&self, batch: &mut super::native_batch::NativeBatch, scale: Option<i32>) {
         let _target = self.target();
-        let head = if batch.is_empty() { u16::MAX } else { 0 };
+        let head = if batch.is_empty() {
+            u16::MAX
+        } else {
+            batch.head
+        };
+        if let Some(scale) = scale {
+            // SAFETY: selecting the retained target checked its graphics thread.
+            unsafe { gfx::SetGraphicScale(scale) };
+        }
         // SAFETY: this lease retains the graphics-thread context/target. The
         // batch owns bounded links and retains all registered stamp sources;
         // it cannot contain text pointers into caller storage.
-        unsafe {
-            gfx::SetGraphicScale(scale);
-            super::frame_abi::DrawBatch(batch.primitives.as_mut_ptr(), u32::from(head), 0);
-            gfx::SetGraphicScale(0);
+        unsafe { super::frame_abi::DrawBatch(batch.primitives.as_mut_ptr(), u32::from(head), 0) };
+        if scale.is_some() {
+            // SAFETY: this context remains selected on its graphics thread.
+            unsafe { gfx::SetGraphicScale(0) };
         }
     }
 
@@ -708,4 +766,42 @@ pub(super) fn release(context: NonNull<context_desc>) {
         .remove(&(context.as_ptr() as usize))
         .unwrap_or_else(|| panic!("release of an unowned context: {context:p}"));
     drop(allocation);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    #[serial_test::serial]
+    fn context_owners_release_once_and_leases_keep_each_allocation_alive() {
+        let baseline = ffi::native_allocations().contexts.len();
+        let first = LoadedContext::create(c"first-owned-context");
+        let second = LoadedContext::create(c"second-owned-context");
+        let first_lease = first.lease();
+        let second_lease = second.lease();
+        let first_allocation = Rc::downgrade(&first_lease.0);
+        let second_allocation = Rc::downgrade(&second_lease.0);
+        assert!(!Rc::ptr_eq(&first_lease.0, &second_lease.0));
+        assert_eq!(ffi::native_allocations().contexts.len(), baseline + 2);
+        first_lease.select();
+        second_lease.select();
+        drop(first);
+        assert_eq!(ffi::native_allocations().contexts.len(), baseline + 1);
+        assert!(first_allocation.upgrade().is_some());
+        drop(first_lease);
+        assert!(first_allocation.upgrade().is_none());
+        assert_eq!(
+            // SAFETY: this serialized fixture retains the selected second context.
+            unsafe { context_abi::_pCurContext },
+            second_lease.0.context.as_ptr()
+        );
+        drop(second);
+        assert_eq!(ffi::native_allocations().contexts.len(), baseline);
+        assert!(second_allocation.upgrade().is_some());
+        drop(second_lease);
+        assert!(second_allocation.upgrade().is_none());
+        // SAFETY: releasing the selected owner clears native context selection.
+        assert!(unsafe { context_abi::_pCurContext }.is_null());
+    }
 }

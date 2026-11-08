@@ -6,6 +6,7 @@ use crate::planets::c_api::{self, *};
 use crate::planets::generate::default::PlanetNames;
 use crate::planets::generate::home_contact::LanderTakeoff;
 use crate::planets::generate::{andro, burv, spa, vault, wreck};
+use crate::planets::report::live::discovery_report;
 
 impl LanderTakeoff for Site<'_, '_, '_> {
     fn lander_takeoff(&mut self) {
@@ -52,6 +53,7 @@ impl wreck::WreckSite for Site<'_, '_, '_> {
 
 impl andro::AndrosynthSite for Site<'_, '_, '_> {
     fn load_ruins_story(&mut self, _system: &mut SolarSys<'_>, visits: u32) {
+        self.report_resources.load();
         // SAFETY: the live solar system state on the game thread.
         self.game
             .borrow_mut()
@@ -66,30 +68,48 @@ impl crate::planets::generate::host::PlanetSite for Site<'_, '_, '_> {
         crate::planets::generate::rainbow::rainbow_ordinal(&before, before.len())
     }
     fn load_planet(&mut self, _system: &mut SolarSys<'_>) {
-        // SAFETY: the mode retains the current orbital records and native resources.
-        unsafe { c_api::load_planet_surface(self.game, self.io, None) };
+        self.load_surface(None);
     }
     fn load_earth_planet(&mut self, _system: &mut SolarSys<'_>) {
         let surface = self.game.borrow_mut().with_legacy(|| {
-            // SAFETY: the initialized graphics backend owns the detached resource on this thread.
-            let surface = unsafe { CapturedSurface::load(c"graphics.earthmask") };
             let width = crate::planets::generate::consts::MAP_WIDTH as i16;
             let height = crate::planets::generate::consts::MAP_HEIGHT as i16;
-            // SAFETY: the detached definition is exclusive until transferred to planet loading.
-            unsafe { surface.into_definition(width, height) }.unwrap_or_else(|error| {
-                panic!("Earth surface definition could not be rescaled: {error:?}")
-            })
+            // SAFETY: this thread owns the detached resource through normalization and transfer.
+            unsafe { CapturedSurface::load(c"graphics.earthmask").into_definition(width, height) }
+                .unwrap_or_else(|error| {
+                    panic!("Earth surface definition could not be rescaled: {error:?}")
+                })
         });
-        // SAFETY: no record or RNG reference is retained across planet loading.
-        unsafe { c_api::load_planet_surface(self.game, self.io, Some(surface)) };
+        self.load_surface(Some(surface));
     }
 }
 
 impl<'a, 'game, 'observer> Site<'a, 'game, 'observer> {
+    fn load_surface(&mut self, surface: Option<CapturedSurface>) {
+        assert!(
+            self.presentation.is_none(),
+            "orbit presentation loaded twice"
+        );
+        // SAFETY: this host retains the orbital records; loading consumes the optional definition.
+        self.presentation = unsafe {
+            c_api::load_planet_surface(self.game, self.io, surface, self.report_resources.clone())
+        };
+    }
+
     pub(super) fn discovery_report(
         &self,
     ) -> crate::planet_side::report_adapter::CffiDiscoveryReport<'a, 'observer, impl FnMut()> {
         let system = self.record.as_ptr();
+        let resources = self.report_resources.clone();
+        let scan_context = self
+            .report_context
+            .as_ref()
+            .map(|report| report.context.clone())
+            .or_else(|| {
+                self.presentation
+                    .as_ref()
+                    .map(|presentation| presentation.scan().context())
+            });
         // SAFETY: this site retains the initialized system and its report slot.
         let slot =
             unsafe { std::ptr::addr_of_mut!((*system).SysInfo.planet_info.discovery_string) };
@@ -97,8 +117,11 @@ impl<'a, 'game, 'observer> Site<'a, 'game, 'observer> {
             slot.cast(),
             self.io,
             move || {
+                let typography = resources
+                    .snapshot()
+                    .unwrap_or_else(|| panic!("discovery report typography is not loaded"));
                 // SAFETY: the site presents synchronously while its published record remains live.
-                unsafe { crate::planets::report::live::discovery_report(system) };
+                unsafe { discovery_report(system, scan_context.as_ref(), &typography) };
             },
         )
         .unwrap_or_else(|error| {

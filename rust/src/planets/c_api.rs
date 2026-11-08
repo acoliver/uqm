@@ -5,8 +5,6 @@ use crate::engine::World as WorldOwner;
 mod surface;
 pub use surface::{load_planet_surface, CapturedSurface};
 
-use std::ffi::c_void;
-
 use crate::c_bindings::global_state::EncounterGroup as ENCOUNTER_GROUP;
 use crate::comm::dispatch::{ship, CPoint, ONE_SECOND};
 use crate::mainloop::restart_menu::c_extern::{
@@ -14,14 +12,14 @@ use crate::mainloop::restart_menu::c_extern::{
 };
 use crate::planets::universe_units::{universe_to_logx, universe_to_logy};
 
+#[cfg(all(not(test), feature = "debug-process"))]
+pub use crate::front_end::uqmdebug::DISABLE_INTERACTIVITY;
 #[cfg(not(test))]
 use crate::ui::sis::repair_sisborder;
 #[cfg(test)]
 extern "C" {
     fn repair_sisborder();
 }
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::DISABLE_INTERACTIVITY;
 
 pub use crate::log_abi::log_init;
 
@@ -32,10 +30,6 @@ pub use crate::navigation::groups::live::uninit_group_info;
 pub use crate::planets::orbit::live::FreePlanet;
 
 pub use crate::planets::plangen::live::generate_planet_surface;
-
-use crate::planets::orbit::live::LoadStdLanderFont;
-
-use crate::planets::orbit::live::FreeLanderFont;
 
 use crate::strings::string_table::GetStringTableCount;
 
@@ -51,12 +45,6 @@ pub use crate::strings::sresins::LoadStringTableInstance;
 
 use crate::graphics::pixmap_abi::CaptureDrawable;
 
-use crate::graphics::pixmap_abi::ReleaseDrawable;
-
-use crate::graphics::drawable_abi::DestroyDrawable;
-
-use crate::graphics::drawable_abi::RescaleFrame;
-
 use crate::graphics::tfb_draw_abi::TFB_DrawImage_New;
 
 use crate::graphics::native_canvas::scaling::TFB_DrawCanvas_Rescale_Nearest;
@@ -66,8 +54,6 @@ pub use crate::graphics::drawable_abi::ReadFramePixelIndexes;
 use crate::graphics::pixmap_abi::GetFrameCount;
 
 use crate::graphics::pixmap_abi::SetAbsFrameIndex;
-
-use crate::graphics::drawable_abi::CreateDrawable;
 
 pub use crate::graphics::dcqueue_abi::Init_DrawCommandQueue;
 
@@ -130,14 +116,11 @@ pub fn rebel_escort_feasible(world: &crate::engine::World) -> bool {
     }
 }
 
-/// The beast report has no mask, but still loads the lander font.
+/// The beast report has no mask; Site retains its typography.
 ///
 /// # Safety
 /// `system` is the live system, with no outstanding references into it.
 pub unsafe fn load_beast_scene(system: *mut crate::c_bindings::global_state::SOLARSYS_STATE) {
-    LoadStdLanderFont(
-        (std::ptr::addr_of_mut!((*system).SysInfo.planet_info).cast::<c_void>()).cast(),
-    );
     (*system).PlanetSideFrame[1] = std::ptr::null_mut();
     (*system).SysInfo.planet_info.discovery_string =
         CaptureStringTable(LoadStringTableInstance(c"text.vuxbeast".as_ptr())).cast();
@@ -237,7 +220,7 @@ pub fn star_indexes_before_current(world: &WorldOwner) -> Vec<u8> {
         .collect()
 }
 
-/// `LoadStdLanderFont (info)`, the mask `graphics` frame and the report
+/// Load the mask `graphics` frame and the report
 /// `strtab`, with the report started at `first_report` (the string-table
 /// index call only when it is not the first).
 ///
@@ -250,9 +233,6 @@ pub unsafe fn load_lander_scene(
     strtab: &std::ffi::CStr,
     first_report: u16,
 ) {
-    LoadStdLanderFont(
-        (std::ptr::addr_of_mut!((*system).SysInfo.planet_info).cast::<c_void>()).cast(),
-    );
     (*system).PlanetSideFrame[1] =
         CaptureDrawable((LoadGraphicInstance(graphics.as_ptr())).cast()).cast();
     let table = CaptureStringTable(LoadStringTableInstance(strtab.as_ptr()));
@@ -263,7 +243,7 @@ pub unsafe fn load_lander_scene(
     };
 }
 
-/// `LoadStdLanderFont (info)`, the `graphics.ruins` mask and the Androsynth
+/// Load the `graphics.ruins` mask and the Androsynth
 /// ruins report table started at report `visits`. When every report was
 /// already given the table is destroyed and `DiscoveryString` cleared.
 ///
@@ -273,9 +253,6 @@ pub unsafe fn load_ruins_story(
     system: *mut crate::c_bindings::global_state::SOLARSYS_STATE,
     visits: u32,
 ) {
-    LoadStdLanderFont(
-        (std::ptr::addr_of_mut!((*system).SysInfo.planet_info).cast::<c_void>()).cast(),
-    );
     (*system).PlanetSideFrame[1] =
         CaptureDrawable((LoadGraphicInstance(c"graphics.ruins".as_ptr())).cast()).cast();
     let table = CaptureStringTable(LoadStringTableInstance(c"text.androsynthruins".as_ptr()));
@@ -290,25 +267,14 @@ pub unsafe fn load_ruins_story(
     }
 }
 
-/// `LoadStdLanderFont (info)` and the `text.chmmrbase` report table, as the
+/// Load the `text.chmmrbase` report table as the
 /// `DiscoveryString` the starbase report presents.
 ///
 /// # Safety
 /// `system` must be the live solar system state, on the game thread.
 pub unsafe fn load_starbase_report(system: *mut crate::c_bindings::global_state::SOLARSYS_STATE) {
-    LoadStdLanderFont(
-        (std::ptr::addr_of_mut!((*system).SysInfo.planet_info).cast::<c_void>()).cast(),
-    );
     (*system).SysInfo.planet_info.discovery_string =
         CaptureStringTable(LoadStringTableInstance(c"text.chmmrbase".as_ptr())).cast();
-}
-
-/// `FreeLanderFont (info)`.
-///
-/// # Safety
-/// `system` must be the live solar system state, on the game thread.
-pub unsafe fn free_lander_font(system: *mut crate::c_bindings::global_state::SOLARSYS_STATE) {
-    FreeLanderFont((std::ptr::addr_of_mut!((*system).SysInfo.planet_info).cast::<c_void>()).cast());
 }
 
 /// `GetHeadLink (&GLOBAL (npc_built_ship_q)) != 0`.

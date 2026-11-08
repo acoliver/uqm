@@ -1,4 +1,5 @@
 //! Persistent gameplay resources and pools owned by Game.
+pub mod planet_animation;
 use super::battle::{
     kernel::{Channels, SoundQueue, StarPlane},
     ShipId,
@@ -92,6 +93,7 @@ pub struct Kernel {
     pub naming_callback: Option<fn(&Kernel, &crate::World, i32)>,
     pub status_message_mode: u32,
     pub star_map_flash: StarMapFlash,
+    pub planet_animation: std::rc::Rc<planet_animation::PlanetAnimation>,
     pub instant_move: bool,
     pub sis_highlight: std::rc::Rc<SisHighlight>,
     pub status_frame: crate::graphics::native_abi::FRAME,
@@ -280,6 +282,7 @@ impl Kernel {
             naming_callback: None,
             status_message_mode: 1,
             star_map_flash: StarMapFlash::default(),
+            planet_animation: std::rc::Rc::default(),
             instant_move: false,
             sis_highlight: std::rc::Rc::new(SisHighlight::default()),
             status_frame: ptr::null_mut(),

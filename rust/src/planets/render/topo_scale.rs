@@ -25,13 +25,15 @@ pub struct TopoScaler {
     seed: u32,
 }
 
-impl Default for TopoScaler {
-    fn default() -> Self {
-        Self { seed: 0x12345678 }
-    }
-}
-
 impl TopoScaler {
+    pub fn with_seed(seed: u32) -> Self {
+        Self { seed }
+    }
+
+    pub fn seed(&self) -> u32 {
+        self.seed
+    }
+
     fn random(&mut self) -> u32 {
         if self.seed == 0 {
             self.seed = 15807;

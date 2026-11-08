@@ -2,14 +2,13 @@ use super::{landing_fuel, move_cursor};
 use crate::battle::element::ElementFlags;
 use crate::c_bindings::{controller_input::*, solar_system};
 use crate::comm::locdata::{CColor, CPoint, CRect};
+use crate::engine::graphics::context_abi::{ContextFrame, ContextLease};
 use crate::engine::{
     battle::Cx,
     input::InputSession,
     observe::{CheckpointView, Io},
     Kernel, StoryKey,
 };
-use crate::graphics::context_abi::SetContext;
-use crate::graphics::drawable_abi::SetContextFGFrame;
 use crate::mainloop::restart_menu::c_extern::{
     self as base, uqm_sleep_thread_until as SleepThreadUntil,
 };
@@ -22,36 +21,22 @@ use std::ffi::{c_void, CString};
 
 mod display;
 
-static mut SCAN_CONTEXT: *mut crate::graphics::native_abi::context_desc = std::ptr::null_mut();
-static mut PLANET_LOCATION: CPoint = CPoint { x: 0, y: 0 };
-static mut CURSOR_RECT: CRect = CRect {
-    corner: CPoint { x: 0, y: 0 },
-    width: 0,
-    height: 0,
-};
-static mut ERASE_FRAME: *mut c_void = std::ptr::null_mut();
-
 use crate::time::counter_abi::GetTimeCounter;
 
-use crate::graphics::drawable_abi::GetFrameRect;
-
-use crate::graphics::drawable_abi::GetFrameHot;
-
-use crate::graphics::drawable_abi::SetFrameHot;
-
-use crate::graphics::context_abi::CopyContextRect;
+use super::state::ScanState;
+use crate::engine::graphics::drawable_abi::LoadedDrawable;
 
 use crate::graphics::gfx_common_abi::DrawFromExtraScreen;
 
 use crate::planets::solarsys::drawing::DrawStarBackGround;
 
-use crate::planets::sphere::live::DrawDefaultPlanetSphere;
+use crate::planets::sphere::live::draw_default_planet_sphere;
 
-use crate::planets::sphere::live::DrawPlanet;
+use crate::planets::sphere::live::draw_planet;
 
 use crate::planets::orbit::live::DrawScannedObjects;
 
-use crate::planets::orbit::live::RedrawPlanetOrbitDisplay;
+use crate::planets::orbit::live::redraw_planet_orbit_display;
 
 use crate::ui::sis::DeltaSISGauges;
 
@@ -75,19 +60,9 @@ use crate::ui::menu::do_menu_chooser;
 
 use crate::ui::menu::DrawMenuStateStrings;
 
-#[cfg(feature = "debug-process")]
-use crate::graphics::context_abi::CreateContextAux;
-
-#[cfg(not(feature = "debug-process"))]
-use crate::graphics::context_abi::CreateContextAux;
-
-use crate::graphics::context_abi::DestroyContext;
-
 use crate::graphics::font_abi::SetContextFont;
 
 extern "C" {
-
-    static mut PlanetContext: *mut crate::graphics::native_abi::context_desc;
 
     static mut SpaceJunkFrame: *mut crate::graphics::native_abi::frame_desc;
 
@@ -123,17 +98,11 @@ fn draw(frame: *mut c_void, point: CPoint, filled: bool) {
         CffiPlatform.draw_stamp(stamp);
     }
 }
-unsafe fn bounds(frame: *mut c_void) -> CRect {
-    let mut rect = CRect::default();
-    GetFrameRect((frame).cast(), (&mut rect as *mut CRect).cast());
-    rect
-}
-unsafe fn cursor_frame() -> *mut c_void {
-    (base::SetAbsFrameIndex(
-        (Kernel::current().read(|owner| owner.misc_data_frame)).cast(),
-        105,
+fn cursor_frame() -> ContextFrame {
+    ContextFrame::retain(std::ptr::NonNull::new(
+        Kernel::current().read(|owner| owner.misc_data_frame),
     ))
-    .cast()
+    .indexed_frame(105)
 }
 
 #[no_mangle]
@@ -147,89 +116,103 @@ pub unsafe extern "C" fn RepairBackRect(rect: *mut CRect) {
     DrawFromExtraScreen(std::ptr::from_mut(&mut new).cast());
 }
 
-unsafe fn erase_coarse() {
-    SetContext(PlanetContext);
+unsafe fn erase_coarse(planet: &ContextLease, scan: &ScanState) {
+    planet.select();
     CffiPlatform.batch();
     DrawStarBackGround();
-    DrawDefaultPlanetSphere();
+    draw_default_planet_sphere(planet, &scan.sphere.borrow());
     CffiPlatform.unbatch();
 }
 
-unsafe fn save_location_image() {
-    let hot = GetFrameHot((cursor_frame()).cast());
-    base::DestroyDrawable(base::ReleaseDrawable((ERASE_FRAME).cast()));
-    let mut rect = CURSOR_RECT;
+fn save_location_image(scan: &ScanState) {
+    let corner = cursor_frame().rect().corner;
+    let hot = crate::graphics::native_abi::HOT_SPOT {
+        x: corner.x.wrapping_neg(),
+        y: corner.y.wrapping_neg(),
+    };
+    let mut cursor = scan.cursor.borrow_mut();
+    cursor.erase = None;
+    let mut rect = cursor.rect;
     rect.corner.x -= hot.x;
     rect.corner.y -= hot.y;
-    ERASE_FRAME =
-        (base::CaptureDrawable(CopyContextRect(std::ptr::from_mut(&mut rect).cast()))).cast();
-    SetFrameHot((ERASE_FRAME).cast(), hot);
+    let saved = LoadedDrawable::capture(
+        &scan.context(),
+        Some(crate::graphics::native_abi::RECT {
+            corner: crate::graphics::native_abi::POINT {
+                x: rect.corner.x,
+                y: rect.corner.y,
+            },
+            extent: crate::graphics::native_abi::EXTENT {
+                width: rect.width,
+                height: rect.height,
+            },
+        }),
+    )
+    .unwrap_or_else(|| panic!("landing cursor background intersects scan context"));
+    saved.lease().set_hotspot(0, hot);
+    cursor.erase = Some(saved);
 }
-unsafe fn restore_location_image() {
-    draw(ERASE_FRAME, CURSOR_RECT.corner, false);
+fn restore_location_image(scan: &ScanState) {
+    let cursor = scan.cursor.borrow();
+    let saved = cursor
+        .erase
+        .as_ref()
+        .unwrap_or_else(|| panic!("saved landing cursor background"));
+    scan.context().draw_stamp(
+        &saved.lease().context_frame(0),
+        crate::graphics::native_abi::POINT {
+            x: cursor.rect.corner.x,
+            y: cursor.rect.corner.y,
+        },
+    );
 }
-unsafe fn draw_cursor(filled: bool) {
-    draw(cursor_frame(), CURSOR_RECT.corner, filled);
-}
-unsafe fn set_cursor_location(point: CPoint) {
-    CURSOR_RECT.corner = CPoint {
-        x: point.x >> 2,
-        y: point.y >> 2,
+fn draw_cursor(scan: &ScanState, filled: bool) {
+    let context = scan.context();
+    let point = scan.cursor.borrow().rect.corner;
+    let point = crate::graphics::native_abi::POINT {
+        x: point.x,
+        y: point.y,
     };
-}
-unsafe fn set_location(point: CPoint, restore_old: bool) {
-    PLANET_LOCATION = point;
-    SetContext(SCAN_CONTEXT);
-    if restore_old {
-        restore_location_image();
-    }
-    set_cursor_location(point);
-    save_location_image();
-}
-
-unsafe fn flash_location() {
-    static mut SHADE: u8 = 0;
-    static mut DELTA: i32 = -2;
-    static mut PREVIOUS: CPoint = CPoint { x: 0, y: 0 };
-    static mut NEXT_TIME: u32 = 0;
-    let now = GetTimeCounter();
-    let changed = PREVIOUS.x != CURSOR_RECT.corner.x || PREVIOUS.y != CURSOR_RECT.corner.y;
-    if !changed && now < NEXT_TIME {
-        return;
-    }
-    if changed {
-        SHADE = 0;
-        DELTA = -2;
-        PREVIOUS = CURSOR_RECT.corner;
-        NEXT_TIME = now.wrapping_add(840 / 16);
+    if filled {
+        context.draw_filled_stamp(&cursor_frame(), point, context.foreground());
     } else {
-        if SHADE == 0 || SHADE == 0x1a {
-            DELTA = -DELTA;
-        }
-        SHADE = (i32::from(SHADE) + DELTA) as u8;
-        if now.wrapping_sub(NEXT_TIME) > 840 / 16 {
-            NEXT_TIME = now.wrapping_add(840 / 16);
-        } else {
-            NEXT_TIME = NEXT_TIME.wrapping_add(840 / 16);
-        }
+        context.draw_stamp(&cursor_frame(), point);
     }
-    SetContext(SCAN_CONTEXT);
-    CffiPlatform.set_fg_color(Rgba::rgb15(SHADE, SHADE, SHADE));
-    draw_cursor(true);
+}
+fn set_location(scan: &ScanState, point: CPoint, restore_old: bool) {
+    scan.context().select();
+    if restore_old {
+        restore_location_image(scan);
+    }
+    scan.cursor.borrow_mut().move_to(point);
+    save_location_image(scan);
 }
 
-#[no_mangle]
-pub unsafe extern "C" fn RedrawSurfaceScan(location: *const CPoint) {
-    let old = SetContext(SCAN_CONTEXT);
-    CffiPlatform.batch();
-    DrawPlanet(0, black());
-    DrawScannedObjects(1);
-    if !location.is_null() {
-        set_location(*location, false);
-        draw_cursor(false);
-    }
-    CffiPlatform.unbatch();
-    SetContext(old);
+fn flash_location(
+    scan: &ScanState,
+    animation: &crate::engine::kernel::planet_animation::PlanetAnimation,
+) {
+    let now = GetTimeCounter();
+    let position = scan.cursor.borrow().rect.corner;
+    let Some(shade) = animation.cursor_shade((position.x, position.y), now) else {
+        return;
+    };
+    scan.context().select();
+    CffiPlatform.set_fg_color(Rgba::rgb15(shade, shade, shade));
+    draw_cursor(scan, true);
+}
+
+pub unsafe fn redraw_surface_scan(scan: &ScanState, location: Option<CPoint>) {
+    scan.context().with_selected(|| {
+        CffiPlatform.batch();
+        draw_planet(&mut scan.sphere.borrow_mut(), 0, black());
+        DrawScannedObjects(1);
+        if let Some(location) = location {
+            set_location(scan, location, false);
+            draw_cursor(scan, false);
+        }
+        CffiPlatform.unbatch();
+    });
 }
 
 unsafe fn fuel() -> u16 {
@@ -259,19 +242,33 @@ unsafe fn spawn_fwiffo() {
     });
 }
 
-unsafe fn dispatch_lander(cx: &mut Cx<'_>, io: &mut Io<'_>) -> bool {
+unsafe fn dispatch_lander(
+    planet: &ContextLease,
+    scan: &ScanState,
+    cx: &mut Cx<'_>,
+    io: &mut Io<'_>,
+) -> bool {
     let runtime = cx.kernel.input_runtime();
     let misc_data = cx.kernel.misc_data_frame;
     let (mut context, old_callback) = cx.with_legacy(|| {
         let landing_fuel = fuel() as i16;
-        erase_coarse();
+        erase_coarse(planet, scan);
         let old_callback = SetInputCallback(runtime.input(), None);
         (
-            prepare_lander(landing_fuel, misc_data.cast(), solar_system::current()),
+            prepare_lander(
+                scan,
+                landing_fuel,
+                misc_data.cast(),
+                solar_system::current(),
+            ),
             old_callback,
         )
     });
     let reply = run_session(
+        crate::planet_side::graphics_adapter::SurfaceDrawing {
+            planet: planet.clone(),
+            scan,
+        },
         runtime.input(),
         cx.world.activity_control(),
         cx,
@@ -317,29 +314,30 @@ unsafe fn dispatch_lander(cx: &mut Cx<'_>, io: &mut Io<'_>) -> bool {
         return false;
     }
     cx.with_legacy(|| {
-        RedrawPlanetOrbitDisplay();
-        display::coarse(runtime.input().preferences().coarse_scan);
+        redraw_planet_orbit_display(planet, scan);
+        display::coarse(planet, runtime.input().preferences().coarse_scan);
         SetInputCallback(runtime.input(), old_callback);
     });
     true
 }
 
 unsafe fn prepare_lander(
+    scan: &ScanState,
     landing_fuel: i16,
     misc_data: *mut c_void,
     system: *mut crate::ships::native::abi::SOLARSYS_STATE,
 ) -> PlanetSideRunContext {
     DeltaSISGauges(0, -landing_fuel, 0);
-    SetContext(SCAN_CONTEXT);
-    draw_cursor(false);
+    scan.context().select();
+    draw_cursor(scan, false);
     PlanetSideRunContext {
         solar_system: system.cast(),
         world: (*system).pOrbitalDesc.cast(),
         misc_data_frame: misc_data,
         energy_frame: (*system).PlanetSideFrame[1].cast(),
         life_frames: std::array::from_fn(|i| (*system).PlanetSideFrame[i + 3].cast()),
-        landing_x: i32::from(PLANET_LOCATION.x),
-        landing_y: i32::from(PLANET_LOCATION.y),
+        landing_x: i32::from(scan.cursor.borrow().location.x),
+        landing_y: i32::from(scan.cursor.borrow().location.y),
         facing: crate::math::random() as u8,
         retrieval_masks: (*system).SysInfo.planet_info.scan_retrieve_mask,
         tick_period: 840 / 35,
@@ -355,7 +353,12 @@ struct PickState {
     success: bool,
 }
 
-unsafe fn pick_input(input: &InputSession, state: &mut PickState) -> u32 {
+unsafe fn pick_input(
+    scan: &ScanState,
+    input: &InputSession,
+    animation: &crate::engine::kernel::planet_animation::PlanetAnimation,
+    state: &mut PickState,
+) -> u32 {
     let time_in = GetTimeCounter();
     let pulse = input.pulsed();
     if crate::engine::World::current().read(|world| world.activity()) & CHECK_ABORT != 0
@@ -383,10 +386,11 @@ unsafe fn pick_input(input: &InputSession, state: &mut PickState) -> u32 {
         dy = 1;
     }
     CffiPlatform.batch();
-    let point = PLANET_LOCATION;
+    let point = scan.cursor.borrow().location;
     let next = move_cursor((point.x, point.y), dx, dy, width());
     if next != (point.x, point.y) {
         set_location(
+            scan,
             CPoint {
                 x: next.0,
                 y: next.1,
@@ -394,41 +398,47 @@ unsafe fn pick_input(input: &InputSession, state: &mut PickState) -> u32 {
             true,
         );
     }
-    flash_location();
+    flash_location(scan, animation);
     CffiPlatform.unbatch();
     SleepThreadUntil(time_in.wrapping_add(840 / 40));
     1
 }
 
-unsafe fn pick_side(cx: &mut Cx<'_>, io: &mut Io<'_>) -> bool {
+unsafe fn pick_side(
+    planet: &ContextLease,
+    scan: &ScanState,
+    cx: &mut Cx<'_>,
+    io: &mut Io<'_>,
+) -> bool {
     let runtime = cx.kernel.input_runtime();
     let input = runtime.input();
     let mut state = PickState { success: false };
-    cx.with_legacy(|| prepare_pick_side(input));
+    let animation = cx.kernel.planet_animation.clone();
+    cx.with_legacy(|| prepare_pick_side(scan, input));
     io.observer.checkpoint(&CheckpointView::PlanetMenu(4));
     cx.run_input(io, true, |cx, _| {
-        cx.with_legacy(|| pick_input(input, &mut state) != 0)
+        cx.with_legacy(|| pick_input(scan, input, &animation, &mut state) != 0)
     });
     io.observer.checkpoint(&CheckpointView::PlanetMenu(3));
     cx.with_legacy(|| DrawStatusMessage(std::ptr::null()));
     let result = if state.success {
-        dispatch_lander(cx, io)
+        dispatch_lander(planet, scan, cx, io)
     } else {
-        cx.with_legacy(|| restore_location_image());
+        cx.with_legacy(|| restore_location_image(scan));
         true
     };
     cx.with_legacy(|| base::SetMenuSounds(input, 15, 16));
     result
 }
 
-unsafe fn prepare_pick_side(input: &InputSession) {
+unsafe fn prepare_pick_side(scan: &ScanState, input: &InputSession) {
     let fuel = fuel();
 
     use crate::ui::sis::ClearSISRect;
     ClearSISRect(1 << 2);
-    SetContext(SCAN_CONTEXT);
+    scan.context().select();
     CffiPlatform.batch();
-    DrawPlanet(0, black());
+    draw_planet(&mut scan.sphere.borrow_mut(), 0, black());
     DrawScannedObjects(0);
     CffiPlatform.unbatch();
     let message = CString::new(format!(
@@ -438,8 +448,9 @@ unsafe fn prepare_pick_side(input: &InputSession) {
     ))
     .unwrap();
     DrawStatusMessage(message.as_ptr());
-    set_cursor_location(PLANET_LOCATION);
-    save_location_image();
+    let location = scan.cursor.borrow().location;
+    scan.cursor.borrow_mut().move_to(location);
+    save_location_image(scan);
     InitLander(0);
     base::SetMenuSounds(input, 0, 16);
 }
@@ -502,7 +513,14 @@ unsafe fn scanned_stuff(cx: &mut crate::engine::battle::Cx<'_>, y: u16, scan: u1
     g.set_fg_color(old_color);
 }
 
-unsafe fn scan_planet(input: &InputSession, cx: &mut Cx<'_>, io: &mut Io<'_>, scan_type: u16) {
+unsafe fn scan_planet(
+    scan_state: &ScanState,
+    planet: &ContextLease,
+    input: &InputSession,
+    cx: &mut Cx<'_>,
+    io: &mut Io<'_>,
+    scan_type: u16,
+) {
     let (start, end) = if scan_type == 4 {
         (0, 2)
     } else {
@@ -522,7 +540,7 @@ unsafe fn scan_planet(input: &InputSession, cx: &mut Cx<'_>, io: &mut Io<'_>, sc
     for scan in start..=end {
         let (mut timeout, tint) = cx.with_legacy(|| {
             let baseline_y = ScreenHeight - 13 - 75 - 7;
-            SetContext(PlanetContext);
+            planet.select();
             repair = CRect {
                 corner: CPoint {
                     x: 0,
@@ -540,9 +558,9 @@ unsafe fn scan_planet(input: &InputSession, cx: &mut Cx<'_>, io: &mut Io<'_>, sc
                 crate::starbase::gfx::Align::Center,
                 CffiPlatform.game_string(305 + i32::from(scan)),
             );
-            SetContext(SCAN_CONTEXT);
+            scan_state.context().select();
             CffiPlatform.batch();
-            DrawPlanet(0, black());
+            draw_planet(&mut scan_state.sphere.borrow_mut(), 0, black());
             CffiPlatform.unbatch();
             (GetTimeCounter(), color(tint_colors[usize::from(scan)]))
         });
@@ -554,7 +572,7 @@ unsafe fn scan_planet(input: &InputSession, cx: &mut Cx<'_>, io: &mut Io<'_>, sc
             }
             cx.with_legacy(|| {
                 CffiPlatform.batch();
-                DrawPlanet(line, tint);
+                draw_planet(&mut scan_state.sphere.borrow_mut(), line, tint);
             });
             scanned_stuff(cx, line as u16, scan);
             CffiPlatform.unbatch();
@@ -563,20 +581,20 @@ unsafe fn scan_planet(input: &InputSession, cx: &mut Cx<'_>, io: &mut Io<'_>, sc
         if line < 84 {
             cx.with_legacy(|| {
                 CffiPlatform.batch();
-                DrawPlanet(83, tint);
+                draw_planet(&mut scan_state.sphere.borrow_mut(), 83, tint);
             });
             scanned_stuff(cx, 83, scan);
             CffiPlatform.unbatch();
         }
     }
     cx.with_legacy(|| {
-        SetContext(PlanetContext);
+        planet.select();
         RepairBackRect(&mut repair);
-        SetContext(SCAN_CONTEXT);
+        scan_state.context().select();
     });
     if scan_type == 4 {
         cx.with_legacy(|| {
-            DrawPlanet(0, black());
+            draw_planet(&mut scan_state.sphere.borrow_mut(), 0, black());
             DrawScannedObjects(0);
         });
     }
@@ -589,7 +607,13 @@ unsafe fn unavailable() -> bool {
         || (*system).SysInfo.planet_info.atmo_density == u16::MAX
 }
 
-unsafe fn scan_input(cx: &mut Cx<'_>, io: &mut Io<'_>, menu: &mut MENU_STATE) -> u32 {
+unsafe fn scan_input(
+    scan: &ScanState,
+    planet: &ContextLease,
+    cx: &mut Cx<'_>,
+    io: &mut Io<'_>,
+    menu: &mut MENU_STATE,
+) -> u32 {
     let runtime = cx.kernel.input_runtime();
     let input = runtime.input();
     let pulse = input.pulsed();
@@ -614,7 +638,7 @@ unsafe fn scan_input(cx: &mut Cx<'_>, io: &mut Io<'_>, menu: &mut MENU_STATE) ->
                 return 1;
             }
             cx.with_legacy(|| CffiPlatform.set_flash(FlashTarget::Off));
-            if !pick_side(cx, io) {
+            if !pick_side(planet, scan, cx, io) {
                 return 0;
             }
             cx.with_legacy(|| DrawMenuStateStrings(7, i16::from(menu.CurState)));
@@ -625,7 +649,7 @@ unsafe fn scan_input(cx: &mut Cx<'_>, io: &mut Io<'_>, menu: &mut MENU_STATE) ->
             play_menu_sound(cx.kernel, cx.world, 2);
             return 1;
         }
-        scan_planet(input, cx, io, u16::from(menu.CurState));
+        scan_planet(scan, planet, input, cx, io, u16::from(menu.CurState));
         if menu.CurState == 4 {
             menu.CurState = 5;
             io.observer.checkpoint(&CheckpointView::PlanetMenu(3));
@@ -637,95 +661,58 @@ unsafe fn scan_input(cx: &mut Cx<'_>, io: &mut Io<'_>, menu: &mut MENU_STATE) ->
     1
 }
 
-#[no_mangle]
-pub unsafe extern "C" fn GetScanContext(owner: *mut i32) -> *mut c_void {
-    if !SCAN_CONTEXT.is_null() {
-        if !owner.is_null() {
-            *owner = 0;
-        }
-    } else {
-        if !owner.is_null() {
-            *owner = 1;
-        }
-        let old = SetContext(Kernel::current().read(|owner| owner.space_context));
-        let mut rect = CffiPlatform.context_clip_rect();
-        let context = new_context(c"ScanContext".as_ptr());
-        SetContext((context).cast());
-        SetContextFGFrame(Kernel::current().read(|owner| owner.screen).cast());
-        rect.corner.x += rect.width - width();
-        rect.corner.y += rect.height - 75;
-        rect.width = width();
-        rect.height = 75;
-        CffiPlatform.set_context_clip_rect(rect);
-        SetContext(old);
-        SCAN_CONTEXT = (context).cast();
-    }
-    (SCAN_CONTEXT).cast()
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn DestroyScanContext() {
-    if !SCAN_CONTEXT.is_null() {
-        DestroyContext(SCAN_CONTEXT);
-        SCAN_CONTEXT = std::ptr::null_mut();
-    }
-}
-
-pub unsafe fn scan_system(cx: &mut Cx<'_>, io: &mut Io<'_>) {
+pub unsafe fn scan_system(
+    scan: &ScanState,
+    planet: &ContextLease,
+    cx: &mut Cx<'_>,
+    io: &mut Io<'_>,
+) {
     let runtime = cx.kernel.input_runtime();
     let input = runtime.input();
     let mut menu: MENU_STATE = std::mem::zeroed();
     cx.with_legacy(|| {
-        prepare_scan_system(input, &mut menu);
+        prepare_scan_system(scan, planet, input, &mut menu);
         base::SetMenuSounds(input, 15, 16);
     });
     io.observer.checkpoint(&CheckpointView::PlanetMenu(2));
-    cx.run_input(io, false, |cx, io| scan_input(cx, io, &mut menu) != 0);
+    cx.run_input(io, false, |cx, io| {
+        scan_input(scan, planet, cx, io, &mut menu) != 0
+    });
     io.observer.checkpoint(&CheckpointView::PlanetMenu(0));
-    cx.with_legacy(|| finish_scan_system());
+    cx.with_legacy(|| finish_scan_system(scan, planet));
 }
 
-unsafe fn prepare_scan_system(input: &InputSession, menu: &mut MENU_STATE) {
-    GetScanContext(std::ptr::null_mut());
+unsafe fn prepare_scan_system(
+    scan: &ScanState,
+    planet: &ContextLease,
+    input: &InputSession,
+    menu: &mut MENU_STATE,
+) {
     if input.preferences().menu == 1 && unavailable() {
         menu.CurState = 3;
     } else {
         menu.CurState = 4;
-        PLANET_LOCATION = CPoint {
+        scan.cursor.borrow_mut().location = CPoint {
             x: (width() >> 1) << 2,
             y: (75 >> 1) << 2,
         };
-        let cursor = bounds(cursor_frame());
-        CURSOR_RECT.width = cursor.width;
-        CURSOR_RECT.height = cursor.height;
-        SetContext(SCAN_CONTEXT);
+        let cursor = cursor_frame().rect();
+        scan.cursor.borrow_mut().rect.width = cursor.extent.width;
+        scan.cursor.borrow_mut().rect.height = cursor.extent.height;
+        scan.context().select();
         DrawScannedObjects(0);
     }
     DrawMenuStateStrings(7, i16::from(menu.CurState));
     CffiPlatform.set_flash(FlashTarget::Menu3do);
-    display::coarse(input.preferences().coarse_scan);
+    display::coarse(planet, input.preferences().coarse_scan);
 }
 
-unsafe fn finish_scan_system() {
+unsafe fn finish_scan_system(scan: &ScanState, planet: &ContextLease) {
     CffiPlatform.set_flash(FlashTarget::Off);
     CffiPlatform.batch();
-    SetContext(SCAN_CONTEXT);
-    DrawPlanet(0, black());
-    erase_coarse();
+    scan.context().select();
+    draw_planet(&mut scan.sphere.borrow_mut(), 0, black());
+    erase_coarse(planet, scan);
     CffiPlatform.unbatch();
-    base::DestroyDrawable(base::ReleaseDrawable((ERASE_FRAME).cast()));
-    ERASE_FRAME = std::ptr::null_mut();
-}
-
-#[cfg(not(test))]
-unsafe fn new_context(name: *const std::ffi::c_char) -> *mut std::ffi::c_void {
-    #[cfg(feature = "debug-process")]
-    {
-        (CreateContextAux(name)).cast()
-    }
-    #[cfg(not(feature = "debug-process"))]
-    {
-        let _ = name;
-        CreateContextAux().cast()
-    }
+    scan.cursor.borrow_mut().erase = None;
 }
