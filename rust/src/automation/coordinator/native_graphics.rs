@@ -93,7 +93,7 @@ impl AutomationObserver {
         reservation.commit_record(
             record
                 .to_jsonl()
-                .expect("serialize committed menu readiness"),
+                .unwrap_or_else(|error| panic!("serialize committed menu readiness: {error}")),
         );
     }
 
@@ -123,7 +123,7 @@ impl AutomationObserver {
         reservation.commit_record(
             record
                 .to_jsonl()
-                .expect("serialize native graphics samples"),
+                .unwrap_or_else(|error| panic!("serialize native graphics samples: {error}")),
         );
     }
 }
