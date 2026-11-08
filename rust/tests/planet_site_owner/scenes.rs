@@ -3,6 +3,8 @@ use std::{
     ffi::{CStr, CString},
     ptr,
 };
+#[cfg(feature = "debug-process")]
+use uqm_rust::planets::generate::{slylandro::HomeSite, syreen::StarbaseSite};
 use uqm_rust::{
     graphics::{
         dcqueue_abi::TFB_FlushGraphics,
@@ -12,9 +14,8 @@ use uqm_rust::{
     },
     io::uio_bridge as uio,
     planets::generate::{
-        andro::AndrosynthSite, burv::BurvScenes, slylandro::HomeSite, spa::SpathiSite,
-        syreen::StarbaseSite, thrad::ThraddashSite, vault::VaultSite, wreck::WreckSite,
-        zoq::ZoqFotPikSite,
+        andro::AndrosynthSite, burv::BurvScenes, spa::SpathiSite, thrad::ThraddashSite,
+        vault::VaultSite, wreck::WreckSite, zoq::ZoqFotPikSite,
     },
 };
 
@@ -364,21 +365,26 @@ fn scene_capabilities_load_their_masks_report_indices_and_caller_names() {
             CStr::from_ptr(game.world.data.flagship.planet_name.as_ptr().cast()),
             c"Caller planet"
         );
-        let old_interactivity = uqm_rust::front_end::uqmdebug::DISABLE_INTERACTIVITY;
-        uqm_rust::front_end::uqmdebug::DISABLE_INTERACTIVITY = 1;
-        with_site(&mut game, ORZ_DEFINED, |h, _| {
-            HomeContactSite::talk(h);
-            ZoqFotPikSite::talk_black_urquan(h);
-            TalkingPetSite::talk_pet(h);
-            UtwigSite::talk_druuge(h);
-            SamatraSite::talk_rebels(h);
-            StarbaseSite::talk_to_syreen(h);
-            HomeSite::talk_to_slylandro(h);
-            YehatSite::talk_to_yehat(h);
-            ChmmrSite::talk_to_chmmr(h);
-            ChmmrSite::talk_to_ilwrath(h);
-        });
-        uqm_rust::front_end::uqmdebug::DISABLE_INTERACTIVITY = old_interactivity;
+        // Suppressing dialogue interactivity exists only in the debug-process harness,
+        // matching the `#[cfg]` on the production uses in src/planets/orbit.rs.
+        #[cfg(feature = "debug-process")]
+        {
+            let old_interactivity = uqm_rust::front_end::uqmdebug::DISABLE_INTERACTIVITY;
+            uqm_rust::front_end::uqmdebug::DISABLE_INTERACTIVITY = 1;
+            with_site(&mut game, ORZ_DEFINED, |h, _| {
+                HomeContactSite::talk(h);
+                ZoqFotPikSite::talk_black_urquan(h);
+                TalkingPetSite::talk_pet(h);
+                UtwigSite::talk_druuge(h);
+                SamatraSite::talk_rebels(h);
+                StarbaseSite::talk_to_syreen(h);
+                HomeSite::talk_to_slylandro(h);
+                YehatSite::talk_to_yehat(h);
+                ChmmrSite::talk_to_chmmr(h);
+                ChmmrSite::talk_to_ilwrath(h);
+            });
+            uqm_rust::front_end::uqmdebug::DISABLE_INTERACTIVITY = old_interactivity;
+        }
         assert_eq!(game.world.activity(), 0);
         TFB_FlushGraphics();
         drop(game);
