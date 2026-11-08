@@ -33,11 +33,3 @@ accessor!(uqm_set_config_dir(value: *mut uio_DirHandle) = options::configDir = v
 accessor!(uqm_set_save_dir(value: *mut uio_DirHandle) = options::saveDir = value.cast());
 accessor!(uqm_set_melee_dir(value: *mut uio_DirHandle) = options::meleeDir = value.cast());
 accessor!(uqm_set_content_mount_handle(value: *mut uio_MountHandle) = contentMountHandle = value.cast());
-
-/// # Safety
-/// Data is null or points to a complete live LOCDATA on the game thread.
-pub unsafe fn rust_copy_locdata_to_comm_data(data: *const std::ffi::c_void) {
-    if !data.is_null() {
-        crate::comm::locdata::COMM_DATA = data.cast::<crate::comm::locdata::CLocData>().read();
-    }
-}

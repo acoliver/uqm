@@ -764,10 +764,9 @@ pub(crate) mod live {
     /// Initialize the encounter on the game thread.
     ///
     /// # Safety
-    /// The caller must copy the descriptor before another encounter initializes.
-    pub unsafe fn init_syreen_comm(cx: &mut Cx<'_>) -> *mut CLocData {
-        static mut DESC: Option<CLocData> = None;
-        let desc = (&mut *std::ptr::addr_of_mut!(DESC)).get_or_insert_with(descriptor);
+    /// Communication state must be initialized on the game thread.
+    pub unsafe fn init_syreen_comm(cx: &mut Cx<'_>) -> CLocData {
+        let desc = descriptor();
         run(cx, |s| s.initialize());
         desc
     }
@@ -777,7 +776,7 @@ impl super::RaceDialogue for SyreenDialogue {
     fn init(&self, _cx: &mut Cx<'_>) -> CommData {
         #[cfg(not(test))]
         {
-            unsafe { as_comm_data(&*live::init_syreen_comm(_cx)) }
+            unsafe { as_comm_data(&live::init_syreen_comm(_cx)) }
         }
         #[cfg(test)]
         {
