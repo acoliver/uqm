@@ -151,6 +151,44 @@ fn root_layer_reference(finding: &Finding) -> bool {
             || finding.metric.starts_with("planned."))
 }
 
+fn deleted_child(source: &str, owner: &str, base: &Measurement, current: &Measurement) -> bool {
+    source != owner
+        && base.declarations.iter().any(|declaration| {
+            declaration.identity == source
+                && declaration.metric != "field"
+                && !current.declarations.iter().any(|candidate| {
+                    candidate.metric == declaration.metric
+                        && candidate.identity.rsplit("::").next()
+                            == declaration.identity.rsplit("::").next()
+                })
+        })
+}
+
+fn moved_children<'a>(
+    old: &str,
+    new: &str,
+    sources: BTreeSet<&'a str>,
+    base: &Measurement,
+    current: &Measurement,
+    current_ids: &BTreeSet<&str>,
+) -> Result<Vec<(String, &'a str)>, String> {
+    let mut kept = Vec::new();
+    for source in sources {
+        let target = format!("{new}{}", &source[old.len()..]);
+        if current_ids.contains(target.as_str()) {
+            kept.push((target, source));
+        } else if !deleted_child(source, old, base, current) {
+            return Err(format!(
+                "move target {target} is absent; function transfers cannot split"
+            ));
+        }
+    }
+    if kept.is_empty() {
+        return Err(format!("move target {new} is absent"));
+    }
+    Ok(kept)
+}
+
 pub fn validate(
     entries: &BTreeMap<String, u64>,
     current: &Measurement,
@@ -189,16 +227,10 @@ pub fn validate(
             return Err(format!("move source {old} does not exist at base"));
         }
         register(&mut unique, old, new)?;
-        for source in sources {
-            let target = format!("{new}{}", &source[old.len()..]);
+        for (target, source) in moved_children(old, new, sources, base, current, &current_ids)? {
             if let Some(previous) = targets.insert(target.clone(), source) {
                 return Err(format!(
                     "{previous} and {source} have the same target {target}"
-                ));
-            }
-            if !current_ids.contains(target.as_str()) {
-                return Err(format!(
-                    "move target {target} is absent; function transfers cannot split"
                 ));
             }
         }
@@ -268,7 +300,11 @@ pub fn limits(
             let target = format!("{new}{}", &finding.identity[old.len()..]);
             let owner = match owners.get(target.as_str()) {
                 Some(owner) => owner,
-                None if root_layer_reference(&finding) => continue,
+                None if root_layer_reference(&finding)
+                    || deleted_child(&finding.identity, old, base, current) =>
+                {
+                    continue
+                }
                 None => return Err(format!("missing target {target}")),
             };
             finding.identity = target;
@@ -541,6 +577,66 @@ mod nested_tests {
                 .collect(),
             ..Default::default()
         }
+    }
+
+    fn conversation_move(
+        child: Option<&str>,
+    ) -> (Measurement, Measurement, BTreeMap<String, String>) {
+        let source = "uqm::comm::races::example::live";
+        let target = "uqm::comm::live::example";
+        let mut base = measured(&[&format!("{source}::init"), &format!("{source}::init::DESC")]);
+        base.declarations[0].metric = "fn".into();
+        base.declarations[1].metric = "static".into();
+        base.findings.push(Finding {
+            counter: "ffi".into(),
+            metric: "static_mut".into(),
+            value: 1,
+            ..base.declarations[1].clone()
+        });
+        let mut current = measured(&[&format!("{target}::init")]);
+        current.declarations[0].metric = "fn".into();
+        if let Some(child) = child {
+            let mut declaration = base.declarations[1].clone();
+            declaration.identity = child.into();
+            current.findings.push(Finding {
+                counter: "ffi".into(),
+                metric: "static_mut".into(),
+                value: 1,
+                ..declaration.clone()
+            });
+            current.declarations.push(declaration);
+        }
+        (base, current, [(source.into(), target.into())].into())
+    }
+
+    #[test]
+    fn deleted_move_retires_a_truly_removed_child_without_target_credit() -> Result<(), String> {
+        let (base, current, moves) = conversation_move(None);
+        let recorded = base.baseline();
+        validate(&recorded, &current, &base, &moves)?;
+        let transferred = limits(&recorded, &current, &base, &moves, &BTreeMap::new())?;
+        assert!(recorded.keys().any(|key| key.contains("static_mut")));
+        assert!(!transferred.keys().any(|key| key.contains("static_mut")));
+        Ok(())
+    }
+
+    #[test]
+    fn deleted_move_rejects_a_child_relocated_elsewhere() {
+        let (base, current, moves) = conversation_move(Some("uqm::other::DESC"));
+        assert!(validate(&base.baseline(), &current, &base, &moves).is_err());
+    }
+
+    #[test]
+    fn deleted_move_preserves_children_kept_at_the_target() -> Result<(), String> {
+        let (base, current, moves) =
+            conversation_move(Some("uqm::comm::live::example::init::DESC"));
+        let recorded = base.baseline();
+        validate(&recorded, &current, &base, &moves)?;
+        assert_eq!(
+            limits(&recorded, &current, &base, &moves, &BTreeMap::new())?,
+            recorded
+        );
+        Ok(())
     }
 
     #[test]

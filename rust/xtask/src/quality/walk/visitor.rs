@@ -48,6 +48,19 @@ fn item_name(item: &Item) -> Option<String> {
     })
 }
 
+fn declaration_kind(item: &Item) -> Option<&'static str> {
+    match item {
+        Item::Static(_) => Some("static"),
+        Item::Struct(_) => Some("struct"),
+        Item::Enum(_) => Some("enum"),
+        Item::Union(_) => Some("union"),
+        Item::Type(_) => Some("type"),
+        Item::Fn(_) => Some("fn"),
+        Item::Const(_) => Some("const"),
+        _ => None,
+    }
+}
+
 impl<'a> Visit<'a> for Walker {
     fn visit_file(&mut self, file: &'a syn::File) {
         if file.attrs.iter().any(|a| {
@@ -96,21 +109,10 @@ impl<'a> Visit<'a> for Walker {
                 self.context.allows.clone(),
             ));
         }
-        if self.names.is_none()
-            && matches!(
-                item,
-                Item::Static(_)
-                    | Item::Struct(_)
-                    | Item::Enum(_)
-                    | Item::Union(_)
-                    | Item::Type(_)
-                    | Item::Fn(_)
-                    | Item::Const(_)
-            )
-        {
+        if let (None, Some(kind)) = (self.names.as_ref(), declaration_kind(item)) {
             self.measurement.declarations.push(self.finding(
                 "declaration",
-                "item",
+                kind,
                 self.context.module.clone(),
                 0,
             ));
