@@ -422,11 +422,11 @@ pub(crate) mod live {
         1
     }
 
-    unsafe fn input_frame(
-        _checkpoint: &mut dyn FnMut(crate::engine::observe::CheckpointView<'_>),
-        _input: &crate::engine::input::InputControls,
-    ) {
-        RotatePlanetSphere(1);
+    fn orbit_frame_hook() -> crate::engine::input::InputFrameHook {
+        // SAFETY: The orbit menu removes this hook before freeing its drawing resources.
+        crate::engine::input::InputFrameHook::new(|_, _| unsafe {
+            RotatePlanetSphere(1);
+        })
     }
 
     pub unsafe fn planet_orbit_menu(cx: &mut Cx<'_>, io: &mut Io<'_>) {
@@ -437,7 +437,7 @@ pub(crate) mod live {
             DrawMenuStateStrings(0, 0);
             CffiPlatform.set_flash(FlashTarget::Menu3do);
             base::SetMenuSounds(input, 15, 16);
-            SetInputCallback(runtime.input(), Some(input_frame))
+            SetInputCallback(runtime.input(), Some(orbit_frame_hook()))
         });
         io.observer.checkpoint(&CheckpointView::PlanetMenu(1));
         cx.run_input(io, true, |cx, io| do_orbit(cx, io, &mut menu) != 0);

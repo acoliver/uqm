@@ -15,11 +15,7 @@ struct ControllerState {
     menu_sounds: (u16, u16),
     debug_key: i32,
     injection_rejected: bool,
-    callback: Option<InputFrameHook>,
 }
-
-pub type InputFrameHook =
-    unsafe fn(&mut dyn FnMut(crate::observe_port::CheckpointView<'_>), &InputControls);
 
 /// Clones retain the same allocation; access stays on the provider's owner thread.
 #[derive(Clone)]
@@ -151,19 +147,6 @@ impl InputControls {
 
     pub fn replace_debug_key(&self, pressed: i32) -> i32 {
         std::mem::replace(&mut self.state().debug_key, pressed)
-    }
-
-    pub fn callback(&self) -> Option<InputFrameHook> {
-        self.state().callback
-    }
-
-    pub fn replace_callback(&self, callback: Option<InputFrameHook>) -> Option<InputFrameHook> {
-        let mut state = self.state();
-        assert!(
-            state.callback.is_none() || callback.is_none(),
-            "input callback already installed"
-        );
-        std::mem::replace(&mut state.callback, callback)
     }
 
     pub fn reject_injection(&self) {

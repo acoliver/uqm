@@ -660,15 +660,31 @@ impl ContextLease {
     }
 
     pub fn draw_primitives(&self, batch: &mut super::native_batch::NativeBatch, scale: i32) {
+        self.submit_batch(batch, Some(scale));
+    }
+
+    pub fn draw_preserving_scale(&self, batch: &mut super::native_batch::NativeBatch) {
+        self.submit_batch(batch, None);
+    }
+
+    fn submit_batch(&self, batch: &mut super::native_batch::NativeBatch, scale: Option<i32>) {
         let _target = self.target();
-        let head = if batch.is_empty() { u16::MAX } else { 0 };
+        let head = if batch.is_empty() {
+            u16::MAX
+        } else {
+            batch.head
+        };
+        if let Some(scale) = scale {
+            // SAFETY: selecting the retained target checked its graphics thread.
+            unsafe { gfx::SetGraphicScale(scale) };
+        }
         // SAFETY: this lease retains the graphics-thread context/target. The
         // batch owns bounded links and retains all registered stamp sources;
         // it cannot contain text pointers into caller storage.
-        unsafe {
-            gfx::SetGraphicScale(scale);
-            super::frame_abi::DrawBatch(batch.primitives.as_mut_ptr(), u32::from(head), 0);
-            gfx::SetGraphicScale(0);
+        unsafe { super::frame_abi::DrawBatch(batch.primitives.as_mut_ptr(), u32::from(head), 0) };
+        if scale.is_some() {
+            // SAFETY: this context remains selected on its graphics thread.
+            unsafe { gfx::SetGraphicScale(0) };
         }
     }
 

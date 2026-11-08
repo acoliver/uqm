@@ -72,10 +72,12 @@ fn moving_a_handle_to_another_thread_does_not_admit_provider_access() {
 #[test]
 fn retained_handles_share_callback_installation_and_restoration() {
     fn hook(_: &mut dyn FnMut(uqm_engine::observe_port::CheckpointView<'_>), _: &InputControls) {}
-    let input = InputControls::default();
+    let input = uqm_engine::input_port::session::InputSession::default();
     let retained = input.clone();
-    let other = InputControls::default();
-    assert!(input.replace_callback(Some(hook)).is_none());
+    let other = uqm_engine::input_port::session::InputSession::default();
+    assert!(input
+        .replace_callback(Some(uqm_engine::input::InputFrameHook::new(hook)))
+        .is_none());
     assert!(retained.callback().is_some());
     assert!(other.callback().is_none());
     let saved = retained.replace_callback(None);

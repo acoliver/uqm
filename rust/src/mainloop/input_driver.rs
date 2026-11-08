@@ -93,10 +93,8 @@ impl InputLoop<'_, '_, '_, '_> {
         if let Some(callback) = callback {
             let io = &mut self.io;
             let controls = self.input.controls();
-            // SAFETY: the installed function remains valid until its owner removes it.
-            self.cx.with_legacy(|| unsafe {
-                callback(&mut |view| io.observer.checkpoint(&view), controls)
-            });
+            self.cx
+                .with_legacy(|| callback.call(&mut |view| io.observer.checkpoint(&view), controls));
         }
     }
 

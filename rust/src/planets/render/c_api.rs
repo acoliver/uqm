@@ -149,79 +149,88 @@ use super::topography::{
     NUM_BATCH_POINTS,
 };
 
-use crate::graphics::context_abi::SetContextClipRect;
-use crate::graphics::drawable_abi::SetContextFGFrame;
-
-use crate::graphics::context_abi::SetContextOrigin;
-
 use crate::graphics::cmap_abi::GetColorMapAddress;
-
+use crate::graphics::context_abi::{ContextFrame, ContextLease};
+use crate::graphics::native_abi::Color;
+use crate::graphics::native_batch::NativeBatch;
 use crate::strings::string_table::GetStringLengthBin;
 
-/// Borrow of the existing context renderer, without any new frame registry.
-struct CffiTopographyGfx;
+struct CffiTopographyGfx {
+    context: ContextLease,
+    batch: NativeBatch,
+}
 
 impl CffiTopographyGfx {
-    /// # Safety
-    /// Game thread, active context and live borrowed RAM frames throughout the
-    /// complete render call; no reentry or concurrent context/resource changes.
-    pub unsafe fn current() -> Self {
-        Self
+    fn new(context: &ContextLease) -> Self {
+        Self {
+            context: context.clone(),
+            batch: NativeBatch::new(Vec::new()),
+        }
     }
 }
 
 impl TopographyGfx for CffiTopographyGfx {
-    type Frame = *mut c::FRAME_DESC;
+    type Frame = ContextFrame;
 
     fn set_frame(&mut self, frame: Self::Frame) -> Self::Frame {
-        unsafe { SetContextFGFrame(frame.cast()).cast() }
+        let old = self.context.target();
+        self.context.set_frame(frame);
+        old
     }
 
     fn set_origin(&mut self, origin: CPoint) -> CPoint {
-        let old = unsafe { SetContextOrigin(point(origin)) };
+        let old = self.context.target().replace_hotspot(point(origin));
         CPoint { x: old.x, y: old.y }
     }
 
     fn clip(&mut self) -> CRect {
-        let mut clip: c::RECT = unsafe { std::mem::zeroed() };
-        unsafe { c::GetContextClipRect(&mut clip) };
-        input(clip)
+        input(self.context.clip_rect())
     }
 
-    fn set_clip(&mut self, mut clip: Option<CRect>) {
-        unsafe { SetContextClipRect(clip.as_mut().map_or(std::ptr::null_mut(), |r| r).cast()) };
+    fn set_clip(&mut self, clip: Option<CRect>) {
+        if let Some(clip) = clip {
+            self.context.set_clip(rect(&clip));
+        } else {
+            self.context.clear_clip();
+        }
     }
 
     fn batch(&mut self, points: &[TopographyPoint; NUM_BATCH_POINTS], first: usize) {
-        let mut primitives = topography_primitives(points);
-        unsafe { c::DrawBatch(primitives.as_mut_ptr(), first as u32, 0) };
+        self.batch.replace_point_chain(
+            points.iter().map(|source| {
+                let color = source.color;
+                (
+                    point(source.point),
+                    Color {
+                        r: color.r,
+                        g: color.g,
+                        b: color.b,
+                        a: color.a,
+                    },
+                )
+            }),
+            first,
+        );
+        self.context.draw_preserving_scale(&mut self.batch);
     }
 }
 
-/// Native primitive encoding shared by the adapter and linked RAM observer.
-/// Only the caller-selected tail of the array is submitted to DrawBatch.
-pub fn topography_primitives(
-    points: &[TopographyPoint; NUM_BATCH_POINTS],
-) -> [c::PRIMITIVE; NUM_BATCH_POINTS] {
-    let mut primitives: [c::PRIMITIVE; NUM_BATCH_POINTS] = unsafe { std::mem::zeroed() };
-    for (index, (primitive, source)) in primitives.iter_mut().zip(points).enumerate() {
-        let next = if index + 1 == NUM_BATCH_POINTS {
-            u16::MAX
-        } else {
-            (index + 1) as u16
-        };
-        primitive.Links = u32::from(u16::MAX) | (u32::from(next) << 16);
-        primitive.Type = c::gfx_object_POINT_PRIM as u8;
-        primitive.Object.Point = point(source.point);
-        let color = source.color;
-        primitive.color = c::Color {
-            r: color.r,
-            g: color.g,
-            b: color.b,
-            a: color.a,
-        };
-    }
-    primitives
+pub fn topography_batch(points: &[TopographyPoint; NUM_BATCH_POINTS], first: usize) -> NativeBatch {
+    NativeBatch::point_chain(
+        points.iter().map(|source| {
+            let color = source.color;
+            (
+                point(source.point),
+                Color {
+                    r: color.r,
+                    g: color.g,
+                    b: color.b,
+                    a: color.a,
+                },
+            )
+        }),
+        first,
+    )
 }
 
 /// Render the current solar-system resources into a native frame.
@@ -231,13 +240,15 @@ pub fn topography_primitives(
 /// Resource handles and XlatPtr must refer to their live external resource
 /// storage for the call, without mutable aliases. No ownership is transferred.
 pub unsafe fn render_system_topography(
+    context: &ContextLease,
     system: *const c::SOLARSYS_STATE,
     destination: *mut c::FRAME_DESC,
     depth: &[i8],
     width: i32,
     height: i32,
 ) -> Result<(), TopographyError> {
-    let mut gfx = CffiTopographyGfx::current();
+    let mut gfx = CffiTopographyGfx::new(context);
+    let destination = ContextFrame::retain(std::ptr::NonNull::new(destination.cast()));
     if (*system).XlatRef.is_null() {
         return render_topography(&mut gfx, destination, depth, width, height, None);
     }

@@ -575,11 +575,11 @@ pub(crate) mod runtime {
         1
     }
 
-    unsafe fn on_input_frame(
-        checkpoint: &mut dyn FnMut(CheckpointView<'_>),
-        _input: &crate::engine::input::InputControls,
-    ) {
-        process_frame(checkpoint);
+    fn credits_frame_hook() -> crate::engine::input::InputFrameHook {
+        // SAFETY: The credits owner removes this hook before releasing its published drawing state.
+        crate::engine::input::InputFrameHook::new(|checkpoint, _| unsafe {
+            process_frame(checkpoint);
+        })
     }
 
     unsafe fn prepare_credits(
@@ -612,7 +612,7 @@ pub(crate) mod runtime {
         CommWndRect.corner.y = 5;
         init_credits();
         VICTORY_CREDITS_ACTIVE = with_outtakes;
-        SetInputCallback(input, Some(on_input_frame));
+        SetInputCallback(input, Some(credits_frame_hook()));
         if with_outtakes {
             OUT_TAKES_RUNNING = 1;
         }

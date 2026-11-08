@@ -258,6 +258,27 @@ pub(crate) mod live {
     }
 
     #[no_mangle]
+    unsafe fn load_surface_palette(
+        system: &mut crate::ships::native::abi::SOLARSYS_STATE,
+        data: &crate::engine::world::planet::PlanetFrame,
+        temperature: i16,
+    ) {
+        system.OrbitalCMap = CaptureStringTable(LoadStringTableInstance(data.cmap_instance)).cast();
+        system.XlatRef = CaptureStringTable(LoadStringTableInstance(data.xlat_tab_instance)).cast();
+        let index = if temperature > 100 {
+            2
+        } else if temperature > -40 {
+            1
+        } else {
+            0
+        };
+        if index != 0 {
+            system.OrbitalCMap = SetAbsStringTableIndex(system.OrbitalCMap.cast(), index).cast();
+            system.XlatRef = SetAbsStringTableIndex(system.XlatRef.cast(), index).cast();
+        }
+        system.XlatPtr = GetStringAddress(system.XlatRef.cast()).cast();
+    }
+
     /// # Safety
     /// Planet and definition must be live records from the current solar system;
     /// the graphics resources and generation context must be initialized on the game thread.
@@ -275,6 +296,7 @@ pub(crate) mod live {
         #[cfg(not(feature = "debug-process"))]
         let context = CreateContextAux();
         let previous_context = SetContext(context);
+        let retained_context = crate::graphics::context_abi::ContextLease::require(context);
         init_orbit(width);
         let orbit = addr_of_mut!((*system).Orbit);
         let info = addr_of_mut!((*system).SysInfo.planet_info);
@@ -360,25 +382,16 @@ pub(crate) mod live {
                 _ => {}
             }
             (*system).TopoFrame = frame(2, width, 75, 1);
-            (*system).OrbitalCMap =
-                CaptureStringTable(LoadStringTableInstance(data.cmap_instance)).cast();
-            (*system).XlatRef =
-                CaptureStringTable(LoadStringTableInstance(data.xlat_tab_instance)).cast();
-            let index = if (*info).temperature > 100 {
-                2
-            } else if (*info).temperature > -40 {
-                1
-            } else {
-                0
-            };
-            if index != 0 {
-                (*system).OrbitalCMap =
-                    SetAbsStringTableIndex((*system).OrbitalCMap.cast(), index).cast();
-                (*system).XlatRef = SetAbsStringTableIndex((*system).XlatRef.cast(), index).cast();
-            }
-            (*system).XlatPtr = GetStringAddress((*system).XlatRef.cast()).cast();
-            render_system_topography(system, (*system).TopoFrame, depth, width as i32, 75)
-                .expect("render planet topography");
+            load_surface_palette(&mut *system, &data, (*info).temperature);
+            render_system_topography(
+                &retained_context,
+                system,
+                (*system).TopoFrame,
+                depth,
+                width as i32,
+                75,
+            )
+            .expect("render planet topography");
         }
         if !shielded && (*info).atmo_density != 65535 {
             let depth = std::slice::from_raw_parts((*orbit).lpTopoData, width * 75);
@@ -394,6 +407,7 @@ pub(crate) mod live {
                     i32::from(data.fault_depth) * if algo == 4 { 2 } else { 1 },
                 );
             render_system_topography(
+                &retained_context,
                 system,
                 (*orbit).TopoZoomFrame,
                 &scaled,

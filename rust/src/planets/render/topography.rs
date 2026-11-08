@@ -33,9 +33,9 @@ pub enum TopographyError {
 }
 
 /// Existing context operations; drawing is infallible, as in C's void DrawBatch.
-/// The frame is borrowed, never captured, destroyed or transferred here.
+/// Each render temporarily selects its supplied frame and restores the previous target.
 pub trait TopographyGfx {
-    type Frame: Copy;
+    type Frame;
     fn set_frame(&mut self, frame: Self::Frame) -> Self::Frame;
     fn set_origin(&mut self, origin: CPoint) -> CPoint;
     fn clip(&mut self) -> CRect;

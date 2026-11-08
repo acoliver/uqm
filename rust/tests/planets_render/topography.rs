@@ -165,7 +165,8 @@ impl TopographyGfx for Observed {
         unsafe { set_clip(r.as_mut().map_or(std::ptr::null_mut(), |r| r)) };
     }
     fn batch(&mut self, points: &[TopographyPoint; 64], first: usize) {
-        let mut prims = uqm_rust::planets::render::c_api::topography_primitives(points);
+        let encoded = uqm_rust::planets::render::c_api::topography_batch(points, first);
+        let mut prims = encoded.primitives().to_vec();
         unsafe { batch(prims.as_mut_ptr(), first as u32, 0) };
     }
 }
@@ -579,8 +580,15 @@ pub fn full_c_fixture_core_and_host_parity() {
             offset += record.len();
             if case.base.is_none() {
                 ram.reset(mode, case.clip);
-                render_system_topography(&system, ram.target(), &depth, case.width, case.height)
-                    .unwrap();
+                render_system_topography(
+                    &uqm_rust::graphics::context_abi::ContextLease::require(ram.context.cast()),
+                    &system,
+                    ram.target(),
+                    &depth,
+                    case.width,
+                    case.height,
+                )
+                .unwrap();
                 assert_eq!(
                     ram.result(mode),
                     actual,
@@ -635,7 +643,14 @@ fn host_errors_preserve_real_context_and_pixels() {
             system.pOrbitalDesc = &mut desc;
             system.XlatRef = xlat_entry.handle();
             assert_eq!(
-                render_system_topography(&system, ram.target(), &[], 1, 1),
+                render_system_topography(
+                    &uqm_rust::graphics::context_abi::ContextLease::require(ram.context.cast()),
+                    &system,
+                    ram.target(),
+                    &[],
+                    1,
+                    1
+                ),
                 Err(error)
             );
             assert_eq!(ram.result(mode), before);
