@@ -9,5 +9,7 @@ CMAKE_POLICY_VERSION_MINIMUM = "3.5"
 # pkg-config. No workstation- or package-manager-specific path is valid here.
 
 [alias]
-xtask = "run --locked --manifest-path xtask/Cargo.toml --no-default-features --"
-xtask-native = "run --locked --release --manifest-path xtask/Cargo.toml --"
+# Run from rust/. Never share compiled outputs between checkouts: workspace
+# artifacts embed source paths, and unhashed binaries otherwise overwrite peers.
+xtask = "run --locked --target-dir target --manifest-path xtask/Cargo.toml --no-default-features --"
+xtask-native = "run --locked --release --target-dir target --manifest-path xtask/Cargo.toml --"

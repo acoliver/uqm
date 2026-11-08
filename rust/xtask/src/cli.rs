@@ -1,7 +1,41 @@
 use super::*;
 
 pub(super) fn run() -> Result<(), String> {
+    let root = repository_root()?;
+    let built_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    require_build_source(&root, &built_root)?;
+    if let Some(target) = env::var_os("CARGO_TARGET_DIR") {
+        let target = env::current_dir()
+            .map_err(|error| error.to_string())?
+            .join(target);
+        let target = std::fs::canonicalize(&target).map_err(|error| error.to_string())?;
+        if target != root.join("rust/target") {
+            return Err("CARGO_TARGET_DIR must name this checkout's rust/target".into());
+        }
+    }
     run_arguments(env::args().skip(1))
+}
+
+fn require_build_source(root: &Path, built_root: &Path) -> Result<(), String> {
+    let root = std::fs::canonicalize(root).map_err(|error| error.to_string())?;
+    let built = std::fs::canonicalize(built_root).map_err(|error| {
+        format!(
+            "xtask was built from {}: {error}; rebuild it in this checkout",
+            built_root.display()
+        )
+    })?;
+    if root != built {
+        return Err(format!(
+            "xtask was built from {}, but this checkout is {}; rebuild it with a separate rust/target",
+            built.display(), root.display()
+        ));
+    }
+    if root.join("rust/target").is_symlink() {
+        return Err(
+            "rust/target must not be a symlink; unlink it and rebuild in this checkout".into(),
+        );
+    }
+    Ok(())
 }
 
 fn run_arguments(arguments: impl IntoIterator<Item = String>) -> Result<(), String> {
@@ -137,7 +171,10 @@ mod tests {
         assert!(require_build_source(&alias, &built).is_ok());
         std::os::unix::fs::symlink(&shared, built.join("rust/target")).unwrap();
         let error = require_build_source(&built, &built).unwrap_err();
-        assert!(error.contains("rust/target must not be a symlink"), "{error}");
+        assert!(
+            error.contains("rust/target must not be a symlink"),
+            "{error}"
+        );
     }
 
     #[test]
