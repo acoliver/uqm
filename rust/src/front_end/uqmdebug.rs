@@ -775,8 +775,8 @@ mod runtime {
             *entry = (*entry).wrapping_add(1);
         }
     }
-    unsafe fn element_category(kind: usize) -> usize {
-        (*Elements.add(kind) & 7) as usize
+    fn element_category(kind: usize) -> usize {
+        usize::from(crate::planets::tables::ELEMENT_ARRAY[kind] & 7)
     }
     /// # Safety
     /// World must be the active orbital descriptor and its generation functions live.

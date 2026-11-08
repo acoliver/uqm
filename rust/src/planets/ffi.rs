@@ -8,23 +8,14 @@
 //! touches this state.
 
 use crate::c_bindings::global_state::{POINT, SOLARSYS_STATE};
-use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, PlanetInfo, SystemInfo};
+use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetInfo, SystemInfo};
 use crate::engine::World as WorldOwner;
 use crate::math::RandomContext;
 use crate::planets::generate::calc::{self, AnalysisSite, StarDescription};
-use crate::planets::generate::orbit_tables::NUMBER_OF_PLANET_TYPES;
 use crate::planets::generate::orbits::{self, OrbitRequest};
 use crate::planets::generate::surface;
-use crate::planets::tables::{ELEMENT_ARRAY, PLANET_ARRAY};
+use crate::planets::tables::PLANET_ARRAY;
 use crate::planets::topography;
-
-/// `PlanData` (formerly defined in `surface.c`): the planet-frame table.
-#[export_name = "PlanData"]
-pub static mut PLAN_DATA: *const PlanetFrame = PLANET_ARRAY.0.as_ptr();
-
-/// `Elements` (formerly defined in `surface.c`): the element category table.
-#[export_name = "Elements"]
-pub static mut ELEMENTS: *const u8 = ELEMENT_ARRAY.as_ptr();
 
 extern "C" {
     #[link_name = "SysGenRNG"]
@@ -39,14 +30,6 @@ extern "C" {
 /// may be live.
 pub(crate) unsafe fn sys_gen_rng<'a>() -> &'a mut RandomContext {
     &mut *std::ptr::addr_of!(SYS_GEN_RNG).read()
-}
-
-/// `PlanData[0..NUMBER_OF_PLANET_TYPES]`.
-///
-/// # Safety
-/// `PlanData` must point at the planet-frame table.
-pub(crate) unsafe fn plan_data<'a>() -> &'a [PlanetFrame] {
-    std::slice::from_raw_parts(std::ptr::addr_of!(PLAN_DATA).read(), NUMBER_OF_PLANET_TYPES)
 }
 
 /// A caller that does not want the node still gets the draws, so the stream
@@ -124,7 +107,7 @@ pub unsafe extern "C" fn do_planetary_analysis_c(sys_info: *mut SystemInfo, desc
     let (star, site) = analysis_context(sys_info, desc);
     calc::do_planetary_analysis(
         sys_gen_rng(),
-        plan_data(),
+        &PLANET_ARRAY.0,
         star,
         site,
         &mut *sys_info,

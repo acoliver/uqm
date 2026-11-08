@@ -1,9 +1,8 @@
 //! The `plandata.c` tables: the star catalog, the element category table
 //! and the planet-frame table.
 //!
-//! The values and layout are the C ones, byte for byte: C reads them through
-//! `star_array`, `Elements` and `PlanData` using the generated `STAR_DESC` and
-//! `PlanetFrame` layouts, so the entries here use those same layouts.
+//! Values and layouts match the frozen C fixtures. Gameplay borrows these
+//! immutable definitions directly.
 
 use crate::engine::world::planet::{ElementEntry, PlanetFrame};
 use std::ffi::{c_char, CStr};
@@ -20,11 +19,20 @@ pub const PLANET_TYPE_COUNT: usize = 59;
 
 /// An immutable table whose pointers all refer to `'static` NUL-terminated
 /// strings, so sharing it between threads is sound.
+///
+/// The manual `Sync` implementation must not make interior-mutable values shareable.
+///
+/// ```compile_fail
+/// use uqm_rust::planets::tables::SharedTable;
+/// fn require_sync<T: Sync>(_: T) {}
+/// require_sync(SharedTable(std::cell::Cell::new(0_u8)));
+/// ```
 #[repr(transparent)]
 pub struct SharedTable<T>(pub T);
 
-// SAFETY: the table is never written and holds only `'static` string pointers.
-unsafe impl<T> Sync for SharedTable<T> {}
+// SAFETY: PlanetFrame has no interior mutability. Sharing its scalar data and
+// const resource-name pointers does not dereference or modify those pointers.
+unsafe impl Sync for SharedTable<[PlanetFrame; PLANET_TYPE_COUNT]> {}
 
 const fn star(x: i16, y: i16, star_type: u8, index: u8, prefix: u8, postfix: u8) -> CStarDesc {
     CStarDesc {

@@ -28,11 +28,6 @@ const GENERATE_ALL: u16 = u16::MAX;
 #[cfg(not(test))]
 use crate::planets::scan;
 
-#[cfg(not(test))]
-extern "C" {
-    static mut Elements: *const u8;
-}
-
 /// Why a [`CffiSurfaceGenerator`] exists, fixed by its typed constructor.
 ///
 /// Both callers drive the same native node generator, but only a real PlanetSide
@@ -271,16 +266,13 @@ impl SurfaceGenerator for CffiSurfaceGenerator<'_, '_, '_> {
             let mut info: NodeInfo = std::mem::zeroed();
             let _ = self.generate_node(scan, u16::from(node.get()), &mut info);
             let kind = match scan {
-                ScanType::Mineral => {
-                    if Elements.is_null() {
-                        return Err(AdapterError::new("element_catalog"));
-                    }
-                    GeneratedNodeKind::Mineral {
-                        category: usize::from(*Elements.add(usize::from(info.type_)) & 0x07),
-                        gross_size: info.density & 0x07,
-                        fine_quantity: info.density >> 8,
-                    }
-                }
+                ScanType::Mineral => GeneratedNodeKind::Mineral {
+                    category: usize::from(
+                        crate::planets::tables::ELEMENT_ARRAY[usize::from(info.type_)] & 0x07,
+                    ),
+                    gross_size: info.density & 0x07,
+                    fine_quantity: info.density >> 8,
+                },
                 ScanType::Energy => GeneratedNodeKind::Energy,
                 ScanType::Biological => {
                     let creature_index =

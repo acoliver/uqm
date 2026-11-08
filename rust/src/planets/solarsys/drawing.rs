@@ -93,7 +93,7 @@ pub(super) unsafe fn validate_orbit(planet: *mut PlanetDesc, xn: i32, yn: i32, d
     }
     let index = (*planet).data_index & !WORLD_TYPE_SPECIAL;
     if usize::from(index) < NUMBER_OF_PLANET_TYPES {
-        let typ = crate::planets::ffi::plan_data()[usize::from(index)].type_;
+        let typ = crate::planets::tables::PLANET_ARRAY.0[usize::from(index)].type_;
         let mut size = u32::from(typ & PLANETS_SIZE_MASK as u8);
         if xn > display_factor() {
             size += 3;
@@ -362,7 +362,7 @@ unsafe fn set_color_map_index(map: *mut c_void, index: u32) -> *mut c_void {
 unsafe fn set_planet_color_map(planet: *mut PlanetDesc) {
     let index = usize::from((*planet).data_index & !WORLD_TYPE_SPECIAL);
     assert!(index < NUMBER_OF_PLANET_TYPES);
-    let color = crate::planets::ffi::plan_data()[index].type_ >> 4;
+    let color = crate::planets::tables::PLANET_ARRAY.0[index].type_ >> 4;
     SetColorMap(GetColorMapAddress(
         (set_color_map_index(ORBITAL_CMAP, u32::from(color))).cast(),
     ));
