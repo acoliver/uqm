@@ -79,12 +79,7 @@ fn gravity_keys(selector: u8) -> [Option<String>; 3] {
 #[cfg(not(test))]
 pub(crate) mod live {
     use super::gravity_keys;
-    use crate::graphics::native_abi::frame_desc;
-    use crate::graphics::{pixmap_abi::CaptureDrawable, resgfx::LoadGraphicInstance};
-    use std::{
-        ffi::{c_void, CString},
-        ptr,
-    };
+    use std::{ffi::CString, ptr};
 
     pub fn load_gravity_well(kernel: &mut crate::engine::Kernel, selector: u8) {
         for (frame, key) in kernel.planet.iter_mut().zip(gravity_keys(selector)) {
@@ -101,22 +96,6 @@ pub(crate) mod live {
 
     pub fn free_gravity_well(kernel: &mut crate::engine::Kernel) {
         crate::engine::battle::frames::free_image(&mut kernel.planet, "engine-global:planet");
-    }
-
-    /// # Safety
-    /// Resource and graphics systems must be initialized on the game thread.
-    #[no_mangle]
-    pub unsafe extern "C" fn load_life_form(selector: u8) -> *mut frame_desc {
-        let key = CString::new(format!("graphics.life.{selector}")).unwrap();
-        CaptureDrawable(LoadGraphicInstance(key.as_ptr()).cast())
-    }
-
-    /// # Safety
-    /// The music resource loader must be initialized on the game thread.
-    #[no_mangle]
-    pub unsafe extern "C" fn load_orbit_theme(selector: u8) -> *mut c_void {
-        let key = CString::new(format!("music.orbit{}", u16::from(selector) + 1)).unwrap();
-        crate::sound::resource_types::LoadMusicInstance(key.as_ptr())
     }
 }
 

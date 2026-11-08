@@ -476,7 +476,7 @@ pub(crate) mod runtime {
                 r.corner.y = SIS_ORG_Y as COORD + 84;
                 r.extent = old_rect.extent;
                 SetContextClipRect(&mut r);
-                InitLander((*p_sd).Flags | OVERRIDE_LANDER_FLAGS as BYTE);
+                Kernel::current().read(|kernel| super::preview::lander(kernel, &*p_sd));
                 SetContextClipRect(&mut old_rect);
                 SetContext(Kernel::current().read(|owner| owner.space_context));
                 libc::snprintf(

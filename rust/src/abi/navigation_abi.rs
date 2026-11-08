@@ -2298,8 +2298,6 @@ pub use crate::planets::solarsys::displayToLocation;
 #[cfg(not(test))]
 pub use crate::planets::solarsys::planetOuterLocation;
 
-pub use crate::planet_side::init_lander::InitLander;
-
 #[cfg(not(test))]
 pub use crate::planets::solarsys::lifecycle::SaveSolarSysLocation;
 pub const VIEW_STATE_VIEW_STABLE: VIEW_STATE = 0;

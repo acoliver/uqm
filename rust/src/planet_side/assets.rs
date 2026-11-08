@@ -1,42 +1,17 @@
 //! Typed PlanetSide asset ownership and lander sound indexing.
 
-use std::ffi::c_void;
-
 use super::hazards::SoundCue;
 use super::runtime::{AdapterError, PlanetSideAudio};
 
-/// Sound availability metadata from a resource port, or a retained bank.
-///
-/// Production audio requires the retained bank admitted by the asset owner.
-/// Raw port metadata is never dereferenced for playback.
+/// Every sound clip retains the detached bank acquired with the graphics.
 #[derive(Debug, Clone)]
-pub struct LanderSoundTable {
-    raw: *mut c_void,
-    owner: Option<crate::sound::owned_bank::LoadedSoundBank>,
-}
-
+pub struct LanderSoundTable(crate::sound::owned_bank::LoadedSoundBank);
 impl LanderSoundTable {
-    #[must_use]
-    pub const fn from_raw(raw: *mut c_void) -> Self {
-        Self { raw, owner: None }
-    }
-
-    #[must_use]
-    pub const fn is_loaded(&self) -> bool {
-        !self.raw.is_null()
-    }
     pub(crate) fn from_bank(bank: crate::sound::owned_bank::LoadedSoundBank) -> Self {
-        Self {
-            raw: bank.as_raw().cast(),
-            owner: Some(bank),
-        }
+        Self(bank)
     }
-
     fn clip(&self, index: u16) -> crate::sound::owned_bank::SoundClip {
-        self.owner
-            .as_ref()
-            .unwrap_or_else(|| panic!("lander audio requires its retained sound bank"))
-            .clip(index)
+        self.0.clip(index)
     }
 }
 
@@ -64,12 +39,7 @@ impl CffiPlanetSideAudio {
 
 impl PlanetSideAudio for CffiPlanetSideAudio {
     fn play(&mut self, world: &crate::engine::World, cue: SoundCue) -> Result<(), AdapterError> {
-        if !self.sounds.is_loaded() {
-            return Err(AdapterError::new("lander_sound_table_not_loaded"));
-        }
-
         let sound = self.sounds.clip(sound_index(cue));
-        #[cfg(not(test))]
         {
             let priority = if matches!(cue, SoundCue::Returns | SoundCue::Destroyed) {
                 3
@@ -85,8 +55,6 @@ impl PlanetSideAudio for CffiPlanetSideAudio {
                 priority,
             );
         }
-        #[cfg(test)]
-        let _ = (world, sound);
         self.telemetry.borrow_mut().sound(cue);
         Ok(())
     }
@@ -114,12 +82,20 @@ const fn sound_index(cue: SoundCue) -> u16 {
 mod tests {
     use super::*;
 
+    fn fixture_bank() -> crate::sound::owned_bank::LoadedSoundBank {
+        crate::sound::owned_bank::LoadedSoundBank::from_samples(
+            (0..13)
+                .map(|_| crate::sound::types::SoundSample::new())
+                .collect(),
+        )
+    }
+
     #[test]
     fn audio_retains_the_supplied_kernel_channel_state() {
         let game = crate::engine::Game::new();
         let channels = game.kernel.channels.clone();
         let audio = CffiPlanetSideAudio::new(
-            LanderSoundTable::from_raw(std::ptr::null_mut()),
+            LanderSoundTable::from_bank(fixture_bank()),
             channels.clone(),
             super::super::telemetry::tests::trip(),
         );
@@ -129,6 +105,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn lander_audio_retains_its_bank_and_accepts_an_unpublished_world() {
         let bank = crate::sound::owned_bank::LoadedSoundBank::from_samples(
             (0..13)
@@ -172,30 +149,30 @@ mod tests {
     }
 
     #[test]
-    fn unloaded_sound_table_is_a_typed_error() {
+    #[serial_test::serial]
+    fn retained_adapter_accepts_all_cues() {
         let mut audio = CffiPlanetSideAudio::new(
-            LanderSoundTable::from_raw(std::ptr::null_mut()),
+            LanderSoundTable::from_bank(fixture_bank()),
             crate::engine::Game::new().kernel.channels,
             super::super::telemetry::tests::trip(),
         );
-        assert_eq!(
-            audio.play(&crate::engine::World::new(), SoundCue::Pickup),
-            Err(AdapterError::new("lander_sound_table_not_loaded"))
-        );
-    }
-
-    #[test]
-    fn loaded_non_linked_adapter_accepts_all_cues() {
-        let mut audio = CffiPlanetSideAudio::new(
-            LanderSoundTable::from_bank(crate::sound::owned_bank::LoadedSoundBank::from_samples(
-                vec![crate::sound::types::SoundSample::new()],
-            )),
-            crate::engine::Game::new().kernel.channels,
-            super::super::telemetry::tests::trip(),
-        );
-        assert_eq!(
-            audio.play(&crate::engine::World::new(), SoundCue::Destroyed),
-            Ok(())
-        );
+        let world = crate::engine::World::new();
+        for cue in [
+            SoundCue::BiologicalDisaster,
+            SoundCue::Earthquake,
+            SoundCue::Lightning,
+            SoundCue::Lava,
+            SoundCue::LanderInjured,
+            SoundCue::LanderShoots,
+            SoundCue::LanderHits,
+            SoundCue::LifeformCanned,
+            SoundCue::Pickup,
+            SoundCue::Full,
+            SoundCue::Departs,
+            SoundCue::Returns,
+            SoundCue::Destroyed,
+        ] {
+            assert_eq!(audio.play(&world, cue), Ok(()));
+        }
     }
 }

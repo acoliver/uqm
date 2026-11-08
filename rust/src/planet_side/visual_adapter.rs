@@ -1,37 +1,34 @@
-//! Production visual selection for generated surface nodes.
+//! Production visual selection with retained frames and collision masks.
+use super::{
+    assembly::{EntityVisual, SurfaceVisualPort, WorldVisualPort},
+    creatures::CreatureKind,
+    entities::{SurfaceEntity, SurfaceEntityKind},
+    generation::GeneratedEntity,
+    graphics_adapter::SurfaceFrame,
+    hazards::HazardKind,
+    mask_adapter::extract_frame_mask,
+    resources::{LanderGraphic, PlanetSideAssets},
+    runtime::AdapterError,
+    scan_frames::{mineral_surface_sprite, ScanFrameError},
+};
+use crate::graphics::{context_abi::ContextFrame, drawable_abi::LoadedDrawable};
 
-use std::ffi::c_void;
-
-use super::assembly::{EntityVisual, SurfaceVisualPort, WorldVisualPort};
-use super::creatures::CreatureKind;
-use super::entities::{SurfaceEntity, SurfaceEntityKind};
-use super::generation::{GeneratedEntity, ScanType};
-use super::graphics_adapter::SurfaceFrame;
-use super::hazards::HazardKind;
-use super::mask_adapter::extract_frame_mask;
-use super::resources::{LanderGraphic, PlanetSideAssetAccess};
-use super::runtime::AdapterError;
-use super::scan_frames::{mineral_surface_sprite, ScanFrameError};
-
-/// Captured production frame sources needed by generated surface nodes.
 pub struct CffiSurfaceVisuals {
-    misc_data: *mut c_void,
-    energy: *mut c_void,
-    life: [*mut c_void; 3],
+    misc_data: ContextFrame,
+    energy: Option<ContextFrame>,
+    life: [Option<ContextFrame>; 3],
     life_types: [Option<u8>; 3],
-    canister_resources: super::resources::CffiResourcePort,
-    canister: *mut c_void,
-    #[cfg(not(test))]
-    owned_life: [bool; 3],
+    canister: Option<LoadedDrawable>,
+    owned_life: Vec<LoadedDrawable>,
 }
 
 impl CffiSurfaceVisuals {
     pub fn new(
-        misc_data: *mut c_void,
-        energy: *mut c_void,
-        life: [*mut c_void; 3],
+        misc_data: ContextFrame,
+        energy: Option<ContextFrame>,
+        life: [Option<ContextFrame>; 3],
     ) -> Result<Self, AdapterError> {
-        if misc_data.is_null() {
+        if misc_data.frame_count() == 0 {
             return Err(AdapterError::new("misc_data_frame"));
         }
         Ok(Self {
@@ -39,72 +36,64 @@ impl CffiSurfaceVisuals {
             energy,
             life,
             life_types: [None; 3],
-            canister_resources: Default::default(),
-            canister: std::ptr::null_mut(),
-            #[cfg(not(test))]
-            owned_life: [false; 3],
+            canister: None,
+            owned_life: Vec::new(),
         })
     }
 
-    fn canister_frame(&mut self) -> Result<*mut c_void, AdapterError> {
-        use super::resources::ResourcePort;
-        if self.canister.is_null() {
-            self.canister = self.canister_resources.load("graphics.lifecan")?;
+    fn canister_frame(&mut self) -> Result<ContextFrame, AdapterError> {
+        if self.canister.is_none() {
+            self.canister = Some(
+                LoadedDrawable::load(c"graphics.lifecan")
+                    .ok_or(AdapterError::new("load_resource"))?,
+            );
         }
-        Ok(self.canister)
+        Ok(self
+            .canister
+            .as_ref()
+            .unwrap_or_else(|| unreachable!())
+            .lease()
+            .context_frame(0))
     }
 
-    fn life_frame(&mut self, creature: u8) -> Result<*mut c_void, AdapterError> {
+    fn life_frame(&mut self, creature: u8) -> Result<ContextFrame, AdapterError> {
         if let Some(index) = self
             .life_types
             .iter()
             .position(|assigned| *assigned == Some(creature))
         {
-            return Ok(self.life[index]);
+            return Ok(self.life[index]
+                .as_ref()
+                .unwrap_or_else(|| unreachable!())
+                .clone());
         }
-        let Some(index) = self.life_types.iter().position(Option::is_none) else {
-            return Err(AdapterError::new("life_variation_overflow"));
-        };
-        if self.life[index].is_null() {
-            #[cfg(not(test))]
-            unsafe {
-                self.life[index] = (load_life_form(creature)).cast();
-                self.owned_life[index] = !self.life[index].is_null();
-            }
-            #[cfg(test)]
-            return Err(AdapterError::new("life_frame_missing"));
-        }
-        if self.life[index].is_null() {
-            return Err(AdapterError::new("life_frame_missing"));
+        let index = self
+            .life_types
+            .iter()
+            .position(Option::is_none)
+            .ok_or(AdapterError::new("life_variation_overflow"))?;
+        if self.life[index].is_none() {
+            let key = std::ffi::CString::new(format!("graphics.life.{creature}"))
+                .unwrap_or_else(|_| unreachable!());
+            let owner =
+                LoadedDrawable::load(&key).ok_or(AdapterError::new("life_frame_missing"))?;
+            self.life[index] = Some(owner.lease().context_frame(0));
+            self.owned_life.push(owner);
         }
         self.life_types[index] = Some(creature);
-        Ok(self.life[index])
+        Ok(self.life[index]
+            .as_ref()
+            .unwrap_or_else(|| unreachable!())
+            .clone())
     }
 }
 
-#[cfg(not(test))]
-use crate::game_init::world_resources::live::load_life_form;
-#[cfg(not(test))]
-use crate::graphics::drawable_abi::DestroyDrawable;
-#[cfg(not(test))]
-use crate::graphics::pixmap_abi::ReleaseDrawable;
-#[cfg(not(test))]
-use crate::graphics::pixmap_abi::SetAbsFrameIndex;
-
-impl Drop for CffiSurfaceVisuals {
-    fn drop(&mut self) {
-        use super::resources::ResourcePort;
-        self.canister_resources.free("graphics.lifecan");
-        #[cfg(not(test))]
-        unsafe {
-            for (frame, owned) in self.life.iter_mut().zip(self.owned_life) {
-                if owned && !frame.is_null() {
-                    *frame = (ReleaseDrawable((*frame).cast())).cast();
-                    DestroyDrawable((*frame).cast());
-                }
-            }
-        }
-    }
+fn visual(base: ContextFrame, index: u16) -> Result<EntityVisual, AdapterError> {
+    let mask = extract_frame_mask(&base.wrapped_frame(index))?;
+    Ok(EntityVisual {
+        frame: SurfaceFrame { base, index },
+        mask,
+    })
 }
 
 impl SurfaceVisualPort for CffiSurfaceVisuals {
@@ -114,18 +103,16 @@ impl SurfaceVisualPort for CffiSurfaceVisuals {
         entity: &SurfaceEntity,
     ) -> Result<EntityVisual, AdapterError> {
         let (base, index) = match entity.kind {
-            SurfaceEntityKind::MineralNode { category, size, .. } => {
-                (self.misc_data, mineral_visual_frame(category, size)?)
-            }
-            SurfaceEntityKind::EnergyNode { .. } => {
-                if self.energy.is_null() {
-                    return Err(AdapterError::new("energy_frame_missing"));
-                }
-                (self.energy, 0)
-            }
-            // Select the drawable life frame (and therefore its collision mask)
-            // from the typed entity frame, never a hardcoded zero.  The
-            // lifecycle frame is normalized to the four-frame life animation.
+            SurfaceEntityKind::MineralNode { category, size, .. } => (
+                self.misc_data.clone(),
+                mineral_visual_frame(category, size)?,
+            ),
+            SurfaceEntityKind::EnergyNode { .. } => (
+                self.energy
+                    .clone()
+                    .ok_or(AdapterError::new("energy_frame_missing"))?,
+                0,
+            ),
             SurfaceEntityKind::CannedCreature { frame_index, .. } => {
                 (self.canister_frame()?, frame_index)
             }
@@ -137,22 +124,8 @@ impl SurfaceVisualPort for CffiSurfaceVisuals {
             ),
             _ => return Err(AdapterError::new("generated_visual_kind")),
         };
-        if generated.scan == ScanType::Energy && base.is_null() {
-            return Err(AdapterError::new("energy_frame_missing"));
-        }
-
-        #[cfg(not(test))]
-        let selected = unsafe { SetAbsFrameIndex((base).cast(), index) };
-        #[cfg(test)]
-        let selected = base;
-        if selected.is_null() {
-            return Err(AdapterError::new("surface_frame_missing"));
-        }
-        let mask = unsafe { extract_frame_mask((selected).cast())? };
-        Ok(EntityVisual {
-            frame: SurfaceFrame { base, index },
-            mask,
-        })
+        let _ = generated;
+        visual(base, index)
     }
 }
 
@@ -176,164 +149,64 @@ fn mineral_visual_frame(category: usize, size: u16) -> Result<u16, AdapterError>
     })
 }
 
-/// Production visual port for dynamically-spawned world entities.
-///
-/// Provides frames and collision masks for lander stun-bolt shots, canned
-/// creatures, and environmental hazards using the globally loaded PlanetSide
-/// asset set.
-pub struct CffiWorldVisuals<'a, A: PlanetSideAssetAccess> {
-    assets: &'a A,
-    /// Reuses the life-frame slot table from [`CffiSurfaceVisuals`] for canned
-    /// creature visuals.
+pub struct CffiWorldVisuals<'a> {
+    assets: &'a PlanetSideAssets,
     surface_visuals: &'a mut CffiSurfaceVisuals,
 }
 
-impl<'a, A: PlanetSideAssetAccess> CffiWorldVisuals<'a, A> {
-    pub fn new(assets: &'a A, surface_visuals: &'a mut CffiSurfaceVisuals) -> Self {
+impl<'a> CffiWorldVisuals<'a> {
+    pub fn new(assets: &'a PlanetSideAssets, surface_visuals: &'a mut CffiSurfaceVisuals) -> Self {
         Self {
             assets,
             surface_visuals,
         }
     }
+}
 
-    fn lander_shot_frame(&self, facing: u8) -> Result<(*mut c_void, u16), AdapterError> {
-        let base = self.assets.graphic(LanderGraphic::Lander);
-        if base.is_null() {
-            return Err(AdapterError::new("lander_frame_not_loaded"));
-        }
-        // Shot images immediately follow the 16 directional lander images.
-        Ok((base, 16 + u16::from(facing % 16)))
+impl WorldVisualPort for CffiWorldVisuals<'_> {
+    fn shot_visual(&mut self, facing: u8) -> Result<EntityVisual, AdapterError> {
+        visual(
+            self.assets.graphic(LanderGraphic::Lander),
+            16 + u16::from(facing % 16),
+        )
     }
-
-    fn hazard_base(&self, kind: HazardKind) -> Result<*mut c_void, AdapterError> {
+    fn canned_creature_visual(
+        &mut self,
+        animation_frame: u16,
+    ) -> Result<EntityVisual, AdapterError> {
+        visual(self.surface_visuals.canister_frame()?, animation_frame)
+    }
+    fn hazard_visual(&mut self, kind: HazardKind) -> Result<EntityVisual, AdapterError> {
         let graphic = match kind {
             HazardKind::Earthquake => LanderGraphic::Earthquake,
             HazardKind::Lightning => LanderGraphic::Lightning,
             HazardKind::Lava => LanderGraphic::Lava,
             HazardKind::Biological => return Err(AdapterError::new("biological_hazard_visual")),
         };
-        let base = self.assets.graphic(graphic);
-        if base.is_null() {
-            return Err(AdapterError::new("hazard_frame_not_loaded"));
-        }
-        Ok(base)
+        visual(self.assets.graphic(graphic), 0)
     }
-}
-
-impl<A: PlanetSideAssetAccess> WorldVisualPort for CffiWorldVisuals<'_, A> {
-    fn shot_visual(&mut self, facing: u8) -> Result<EntityVisual, AdapterError> {
-        let (base, index) = self.lander_shot_frame(facing)?;
-        #[cfg(not(test))]
-        let selected = unsafe { SetAbsFrameIndex((base).cast(), index) };
-        #[cfg(test)]
-        let selected = base;
-        if selected.is_null() {
-            return Err(AdapterError::new("shot_frame_missing"));
-        }
-        let mask = unsafe { extract_frame_mask((selected).cast())? };
-        Ok(EntityVisual {
-            frame: SurfaceFrame { base, index },
-            mask,
-        })
-    }
-
-    fn canned_creature_visual(
-        &mut self,
-        animation_frame: u16,
-    ) -> Result<EntityVisual, AdapterError> {
-        let base = self.surface_visuals.canister_frame()?;
-        #[cfg(not(test))]
-        let selected = unsafe { SetAbsFrameIndex(base.cast(), animation_frame) };
-        #[cfg(test)]
-        let selected = base;
-        let mask = unsafe { extract_frame_mask(selected.cast())? };
-        Ok(EntityVisual {
-            frame: SurfaceFrame {
-                base,
-                index: animation_frame,
-            },
-            mask,
-        })
-    }
-
-    fn hazard_visual(&mut self, kind: HazardKind) -> Result<EntityVisual, AdapterError> {
-        let base = self.hazard_base(kind)?;
-        #[cfg(not(test))]
-        let selected = unsafe { SetAbsFrameIndex((base).cast(), 0) };
-        #[cfg(test)]
-        let selected = base;
-        if selected.is_null() {
-            return Err(AdapterError::new("hazard_frame_missing"));
-        }
-        let mask = unsafe { extract_frame_mask((selected).cast())? };
-        Ok(EntityVisual {
-            frame: SurfaceFrame { base, index: 0 },
-            mask,
-        })
-    }
-
     fn creature_animation_visual(
         &mut self,
-        kind: super::creatures::CreatureKind,
+        kind: CreatureKind,
         animation_frame: u16,
     ) -> Result<EntityVisual, AdapterError> {
-        let base = self.surface_visuals.life_frame(kind.index())?;
-        #[cfg(not(test))]
-        let selected = unsafe { SetAbsFrameIndex((base).cast(), animation_frame) };
-        #[cfg(test)]
-        let selected = base;
-        if selected.is_null() {
-            return Err(AdapterError::new("creature_animation_frame_missing"));
-        }
-        let mask = unsafe { extract_frame_mask((selected).cast())? };
-        Ok(EntityVisual {
-            frame: SurfaceFrame {
-                base,
-                index: animation_frame,
-            },
-            mask,
-        })
+        visual(
+            self.surface_visuals.life_frame(kind.index())?,
+            animation_frame,
+        )
     }
 }
 
-impl<A: PlanetSideAssetAccess> super::automation_fixture::FixtureVisualPort
-    for CffiWorldVisuals<'_, A>
-{
-    fn mineral_visual(
-        &mut self,
-        entity: &super::entities::SurfaceEntity,
-    ) -> Result<EntityVisual, AdapterError> {
-        // Synthetic fixture minerals carry only the typed SurfaceEntity (never a
-        // GeneratedEntity): the frame/mask selection is identical to the production
-        // generated-node path, including the category bound.
-        let (category, size) = match &entity.kind {
-            super::entities::SurfaceEntityKind::MineralNode { category, size, .. } => {
-                (*category, *size)
-            }
-            _ => return Err(AdapterError::new("fixture_mineral_visual")),
+impl super::automation_fixture::FixtureVisualPort for CffiWorldVisuals<'_> {
+    fn mineral_visual(&mut self, entity: &SurfaceEntity) -> Result<EntityVisual, AdapterError> {
+        let SurfaceEntityKind::MineralNode { category, size, .. } = entity.kind else {
+            return Err(AdapterError::new("fixture_mineral_visual"));
         };
-        let frame_index = mineral_visual_frame(category, size)?;
-        let base = self.surface_visuals.misc_data;
-        if base.is_null() {
-            return Err(AdapterError::new("surface_frame_missing"));
-        }
-        #[cfg(not(test))]
-        let selected = unsafe { SetAbsFrameIndex((base).cast(), frame_index) };
-        #[cfg(test)]
-        let selected = base;
-        if selected.is_null() {
-            return Err(AdapterError::new("surface_frame_missing"));
-        }
-        let mask = unsafe { extract_frame_mask((selected).cast())? };
-        Ok(EntityVisual {
-            frame: SurfaceFrame {
-                base,
-                index: frame_index,
-            },
-            mask,
-        })
+        visual(
+            self.surface_visuals.misc_data.clone(),
+            mineral_visual_frame(category, size)?,
+        )
     }
-
     fn creature_visual(
         &mut self,
         kind: CreatureKind,
@@ -350,8 +223,11 @@ mod tests {
     use crate::planet_side::generation::{GeneratedEntity, ScanNodeId, ScanType};
     use crate::planet_side::model::SurfacePoint;
 
-    fn pointer(value: usize) -> *mut c_void {
-        value as *mut c_void
+    fn frame(width: i16) -> ContextFrame {
+        LoadedDrawable::create(8, width, 1, 60)
+            .unwrap()
+            .lease()
+            .context_frame(0)
     }
 
     /// The production mineral kind → frame index via the shared helper, as the
@@ -447,7 +323,11 @@ mod tests {
     #[test]
     fn visual_context_requires_misc_frame() {
         assert!(matches!(
-            CffiSurfaceVisuals::new(std::ptr::null_mut(), pointer(2), [pointer(3); 3]),
+            CffiSurfaceVisuals::new(
+                ContextFrame::retain(None),
+                None,
+                std::array::from_fn(|_| None)
+            ),
             Err(AdapterError {
                 operation: "misc_data_frame",
                 batch_depth_corrections: 0
@@ -469,38 +349,44 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn life_variations_are_stable_and_limited_to_three() {
-        let mut visuals =
-            CffiSurfaceVisuals::new(pointer(1), pointer(2), [pointer(3), pointer(4), pointer(5)])
-                .unwrap();
-        assert_eq!(visuals.life_frame(7), Ok(pointer(3)));
-        assert_eq!(visuals.life_frame(8), Ok(pointer(4)));
-        assert_eq!(visuals.life_frame(7), Ok(pointer(3)));
-        assert_eq!(visuals.life_frame(9), Ok(pointer(5)));
-        assert_eq!(
+        let mut game = crate::engine::Game::new();
+        let display = crate::campaign_display_test::CampaignDisplay::install(&mut game).unwrap();
+        let mut visuals = CffiSurfaceVisuals::new(
+            frame(1),
+            None,
+            std::array::from_fn(|index| Some(frame(index as i16 + 3))),
+        )
+        .unwrap();
+        assert_eq!(visuals.life_frame(7).unwrap().rect().extent.width, 3);
+        assert_eq!(visuals.life_frame(8).unwrap().rect().extent.width, 4);
+        assert_eq!(visuals.life_frame(7).unwrap().rect().extent.width, 3);
+        assert_eq!(visuals.life_frame(9).unwrap().rect().extent.width, 5);
+        assert!(matches!(
             visuals.life_frame(10),
-            Err(AdapterError::new("life_variation_overflow"))
-        );
+            Err(AdapterError {
+                operation: "life_variation_overflow",
+                ..
+            })
+        ));
+        drop(visuals);
+        display.finish(game);
     }
 
     #[test]
-    fn shot_frame_follows_lander_facing() {
-        let assets = crate::planet_side::resources::BorrowedPlanetSideAssets::for_test(
-            [pointer(1); 8],
-            pointer(2),
-        );
-        let mut surface = CffiSurfaceVisuals::new(pointer(3), pointer(4), [pointer(5); 3]).unwrap();
-        let visuals = CffiWorldVisuals::new(&assets, &mut surface);
-        assert_eq!(visuals.lander_shot_frame(0), Ok((pointer(1), 16)));
-        assert_eq!(visuals.lander_shot_frame(7), Ok((pointer(1), 23)));
-        assert_eq!(visuals.lander_shot_frame(15), Ok((pointer(1), 31)));
-    }
-
-    #[test]
+    #[serial_test::serial]
     fn invalid_mineral_category_is_rejected_before_mask_extraction() {
         // The production entry point rejects an invalid category through the shared
         // helper before any frame or mask work, using a typed entity.
-        let mut visuals = CffiSurfaceVisuals::new(pointer(1), pointer(2), [pointer(3); 3]).unwrap();
+        let mut game = crate::engine::Game::new();
+        let display = crate::campaign_display_test::CampaignDisplay::install(&mut game).unwrap();
+        let mut visuals = CffiSurfaceVisuals::new(
+            frame(1),
+            None,
+            std::array::from_fn(|index| Some(frame(index as i16 + 3))),
+        )
+        .unwrap();
         let entity = SurfaceEntity {
             kind: SurfaceEntityKind::MineralNode {
                 category: MINERAL_CATEGORY_COUNT,
@@ -527,5 +413,7 @@ mod tests {
                 batch_depth_corrections: 0
             })
         ));
+        drop(visuals);
+        display.finish(game);
     }
 }

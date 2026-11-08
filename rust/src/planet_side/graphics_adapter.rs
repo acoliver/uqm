@@ -1,11 +1,14 @@
 //! Production surface drawing adapter over low-level graphics services.
 
+use crate::graphics::{
+    context_abi::{ContextFrame, ContextLease},
+    native_abi::POINT as CPoint,
+};
 use std::collections::HashMap;
-use std::ffi::c_void;
 
 use super::assembly::SharedSurface;
 use super::entities::{SurfaceEntityId, SurfaceEntityKind};
-use super::resources::PlanetSideAssetAccess;
+use super::resources::PlanetSideAssets;
 use super::runtime::{AdapterError, PlanetSideGraphics, RenderSnapshot};
 
 use super::selection::{LANDING_CURSOR_STEP, MAP_WIDTH};
@@ -46,13 +49,12 @@ const BIO_FRAME_ODD: u16 = 42;
 const MINERAL_FRAME_EVEN: u16 = 43;
 const MINERAL_FRAME_ODD: u16 = 44;
 const CREW_ALIVE_FRAME: u16 = 55;
-#[cfg(not(test))]
 const CREW_DEAD_FRAME: u16 = 56;
 
 /// Drawable frame assigned to a Rust surface entity.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone)]
 pub struct SurfaceFrame {
-    pub base: *mut c_void,
+    pub base: ContextFrame,
     pub index: u16,
 }
 
@@ -73,7 +75,7 @@ impl SurfaceFrameRegistry {
 
     #[must_use]
     pub fn get(&self, entity: SurfaceEntityId) -> Option<SurfaceFrame> {
-        self.frames.get(&entity).copied()
+        self.frames.get(&entity).cloned()
     }
 
     /// Number of registered frames.
@@ -109,131 +111,76 @@ impl SurfaceFrameRegistry {
 pub struct SurfaceDrawing<'a> {
     pub planet: crate::engine::graphics::context_abi::ContextLease,
     pub scan: &'a crate::planets::scan::state::ScanState,
+    pub refresh: fn(
+        &crate::planets::scan::state::ScanState,
+        &mut crate::engine::battle::Cx<'_>,
+        &super::assembly::SurfaceAssembly,
+        super::model::SurfacePoint,
+    ),
+    pub radar: ContextLease,
 }
 
 /// Concrete graphics adapter. It renders the Rust world in insertion order and
 /// draws the lander at the center of the orbit viewport.
-pub struct CffiPlanetSideGraphics<'a, 'game, A: PlanetSideAssetAccess> {
+pub struct CffiPlanetSideGraphics<'a, 'game> {
     pub drawing: SurfaceDrawing<'a>,
     pub game: &'a std::cell::RefCell<crate::engine::battle::Cx<'game>>,
     pub surface: SharedSurface,
-    pub assets: &'a A,
+    pub assets: &'a PlanetSideAssets,
     pub last_scan_position: Option<super::model::SurfacePoint>,
 }
 
-#[cfg(not(test))]
-use crate::graphics::native_abi::point as CPoint;
-
-#[cfg(not(test))]
-#[repr(C)]
-struct CStamp {
-    origin: CPoint,
-    frame: *mut c_void,
-}
-#[cfg(not(test))]
-use crate::graphics::context_abi::SetContext;
-#[cfg(not(test))]
-use crate::graphics::dcqueue_abi::TFB_FlushGraphicsEx;
-#[cfg(not(test))]
-use crate::graphics::frame_abi::ClearDrawable;
-#[cfg(not(test))]
-use crate::graphics::frame_abi::DrawStamp;
-#[cfg(not(test))]
-use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
-#[cfg(not(test))]
-use crate::graphics::pixmap_abi::SetAbsFrameIndex;
-#[cfg(not(test))]
-use crate::graphics::sdl::lifecycle_abi::TFB_SwapBuffers;
-#[cfg(not(test))]
-use crate::planets::scan::live::redraw_surface_scan;
-
-impl<A: PlanetSideAssetAccess> PlanetSideGraphics for CffiPlanetSideGraphics<'_, '_, A> {
+impl PlanetSideGraphics for CffiPlanetSideGraphics<'_, '_> {
     fn render(&mut self, snapshot: &RenderSnapshot) -> Result<(), AdapterError> {
-        #[cfg(not(test))]
-        {
-            super::orbit_scan::sync_positions(&mut self.game.borrow_mut(), &self.surface.borrow());
-            let radar_context = self.game.borrow().kernel.radar_context;
-            let game = self.game;
-            let scan_position = crate::comm::locdata::CPoint {
-                x: snapshot.lander.position.x as i16,
-                y: snapshot.lander.position.y as i16,
-            };
-            let topography = self.drawing.scan.sphere.borrow().zoomed_topography();
-            let topo_frame = topography
-                .frame(0)
-                .unwrap_or_else(|| panic!("orbit topography frame is not registered"))
-                .cast();
-            return game.borrow_mut().with_legacy(|| unsafe {
-                redraw_surface_scan(self.drawing.scan, Some(scan_position));
-                self.last_scan_position = Some(snapshot.lander.position);
-
-                self.drawing.planet.with_selected(|| {
-                    BatchGraphics();
-
-                    draw_surface_tiles(topo_frame, snapshot.lander.position);
-
-                    draw_surface_entities(&self.surface.borrow(), snapshot.lander.position);
-
-                    // Select the lander graphic and frame index based on lifecycle phase.
-                    let (lander_graphic, frame_index) = select_lander_graphic(
-                        snapshot.phase,
-                        snapshot.lander.facing,
-                        snapshot.animation_frame,
-                    );
-                    let lander_base = self.assets.graphic(lander_graphic);
-                    if lander_base.is_null() {
-                        UnbatchGraphics();
-                        return Err(AdapterError::new("lander_frame_not_loaded"));
-                    }
-                    let lander_y = LANDER_SCREEN_Y as i16 + snapshot.lifecycle_offset() as i16;
-                    let mut lander = CStamp {
-                        origin: CPoint {
-                            x: LANDER_SCREEN_X as i16,
-                            y: lander_y,
-                        },
-                        frame: (SetAbsFrameIndex((lander_base).cast(), frame_index)).cast(),
-                    };
-                    DrawStamp(std::ptr::from_mut(&mut lander).cast());
-                    UnbatchGraphics();
-
-                    // Draw cargo and crew meters in the radar panel. These overlay the
-                    // InitLander status display and must be refreshed every frame so
-                    // that active pickups visibly fill the bars and damage visibly
-                    // decrements crew — matching the deleted lander.c
-                    // FillLanderHold / DeltaLanderCrew behavior.
-                    let lander_base_for_meters =
-                        self.assets.graphic(super::resources::LanderGraphic::Lander);
-                    if !lander_base_for_meters.is_null() {
-                        let old_radar_ctx = SetContext(radar_context);
-                        BatchGraphics();
-                        draw_cargo_meters(lander_base_for_meters, snapshot);
-                        draw_crew_meter(lander_base_for_meters, snapshot.lander.crew.get());
-                        UnbatchGraphics();
-                        SetContext(old_radar_ctx);
-                    }
-
-                    Ok(())
-                })?;
-                TFB_FlushGraphicsEx(1);
-                TFB_SwapBuffers(1);
-                Ok(())
-            });
-        }
-        #[cfg(test)]
-        {
-            let _ = snapshot;
-            Ok(())
-        }
+        (self.drawing.refresh)(
+            self.drawing.scan,
+            &mut self.game.borrow_mut(),
+            &self.surface.borrow(),
+            snapshot.lander.position,
+        );
+        self.last_scan_position = Some(snapshot.lander.position);
+        let topography = self
+            .drawing
+            .scan
+            .sphere
+            .borrow()
+            .zoomed_topography()
+            .context_frame(0);
+        self.drawing.planet.draw_batch(|| {
+            draw_surface_tiles(&self.drawing.planet, &topography, snapshot.lander.position);
+            draw_surface_entities(
+                &self.drawing.planet,
+                &self.surface.borrow(),
+                snapshot.lander.position,
+            );
+            let (graphic, index) = select_lander_graphic(
+                snapshot.phase,
+                snapshot.lander.facing,
+                snapshot.animation_frame,
+            );
+            self.drawing.planet.draw_stamp(
+                &self.assets.graphic(graphic).wrapped_frame(index),
+                CPoint {
+                    x: LANDER_SCREEN_X as i16,
+                    y: LANDER_SCREEN_Y as i16 + snapshot.lifecycle_offset() as i16,
+                },
+            );
+        });
+        self.drawing.planet.with_selected(|| {
+            self.drawing.radar.draw_batch(|| {
+                let lander = self.assets.graphic(super::resources::LanderGraphic::Lander);
+                draw_cargo_meters(&self.drawing.radar, &lander, snapshot);
+                draw_crew_meter(&self.drawing.radar, &lander, snapshot.lander.crew.get());
+            })
+        });
+        crate::graphics::dcqueue_abi::present_retained(&self.drawing.planet);
+        Ok(())
     }
 }
 
-/// Draw registered world entities into the current surface context.
-///
-/// # Safety
-/// The caller must own the graphics thread, with a live context, destination
-/// frame, and all registered source frames. This does not present the frame.
-#[cfg(not(test))]
-pub unsafe fn draw_surface_entities(
+/// Draw registered world entities without presenting the frame.
+pub fn draw_surface_entities(
+    context: &ContextLease,
     surface: &super::assembly::SurfaceAssembly,
     camera: super::model::SurfacePoint,
 ) {
@@ -244,26 +191,23 @@ pub unsafe fn draw_surface_entities(
         let Some((x, y)) = project_surface_point(entity.position, camera) else {
             continue;
         };
-        let mut stamp = CStamp {
-            origin: CPoint { x, y },
-            frame: SetAbsFrameIndex(frame.base.cast(), frame.index).cast(),
-        };
+        let selected = frame.base.wrapped_frame(frame.index);
         if let SurfaceEntityKind::LiveCreature {
             damage_wait: damage_wait @ 1..=7,
             ..
         } = entity.kind
         {
-            let old_color =
-                crate::graphics::context_abi::SetContextForeGroundColor(damage_color(damage_wait));
-            crate::graphics::frame_abi::DrawFilledStamp(std::ptr::from_mut(&mut stamp).cast());
-            crate::graphics::context_abi::SetContextForeGroundColor(old_color);
+            context.draw_filled_stamp_preserving_color(
+                &selected,
+                CPoint { x, y },
+                damage_color(damage_wait),
+            );
         } else {
-            DrawStamp(std::ptr::from_mut(&mut stamp).cast());
+            context.draw_stamp(&selected, CPoint { x, y });
         }
     }
 }
 
-#[cfg(not(test))]
 fn damage_color(remaining: u8) -> crate::graphics::native_abi::Color {
     let (r, g, b) = match remaining {
         7 => (31, 31, 31),
@@ -402,77 +346,58 @@ pub const fn crew_alive_frame() -> u16 {
     CREW_ALIVE_FRAME
 }
 
-#[cfg(not(test))]
-unsafe fn draw_crew_meter(lander_base: *mut c_void, crew_count: u8) {
+fn draw_crew_meter(context: &ContextLease, lander: &ContextFrame, crew_count: u8) {
     for slot in 0..MAX_CREW_SLOTS {
-        let Some((x, y)) = crew_slot_position(slot) else {
-            break;
-        };
-        let frame = if slot < crew_count {
+        let (x, y) = crew_slot_position(slot).unwrap_or_else(|| unreachable!());
+        let index = if slot < crew_count {
             CREW_ALIVE_FRAME
         } else {
             CREW_DEAD_FRAME
         };
-        let mut stamp = CStamp {
-            origin: CPoint { x, y },
-            frame: (SetAbsFrameIndex((lander_base).cast(), frame)).cast(),
-        };
-        DrawStamp(std::ptr::from_mut(&mut stamp).cast());
+        context.draw_stamp(&lander.wrapped_frame(index), CPoint { x, y });
     }
 }
 
-#[cfg(not(test))]
-unsafe fn draw_cargo_meters(lander_base: *mut c_void, snapshot: &RenderSnapshot) {
-    // Biological cargo bar.
-    let bio_segments = bio_bar_segments(snapshot.biological_level);
-    for index in 0..bio_segments {
-        let (x, y) = cargo_segment_position(index);
-        let frame_idx = cargo_segment_frame(index, true);
-        let mut stamp = CStamp {
-            origin: CPoint { x, y },
-            frame: (SetAbsFrameIndex((lander_base).cast(), frame_idx)).cast(),
-        };
-        DrawStamp(std::ptr::from_mut(&mut stamp).cast());
-    }
-
-    // Mineral cargo bar. With improved cargo, the display level is halved so
-    // the 50-pixel bar represents up to 100 units of mineral capacity.
-    let mineral_segments = mineral_bar_segments(
-        snapshot.mineral_level,
-        snapshot.lander.upgrades.improved_cargo,
-    );
-    for index in 0..mineral_segments {
-        let (x, y) = cargo_segment_position(index);
-        let frame_idx = cargo_segment_frame(index, false);
-        let mut stamp = CStamp {
-            origin: CPoint { x, y },
-            frame: (SetAbsFrameIndex((lander_base).cast(), frame_idx)).cast(),
-        };
-        DrawStamp(std::ptr::from_mut(&mut stamp).cast());
+fn draw_cargo_meters(context: &ContextLease, lander: &ContextFrame, snapshot: &RenderSnapshot) {
+    for (segments, bio) in [
+        (bio_bar_segments(snapshot.biological_level), true),
+        (
+            mineral_bar_segments(
+                snapshot.mineral_level,
+                snapshot.lander.upgrades.improved_cargo,
+            ),
+            false,
+        ),
+    ] {
+        for index in 0..segments {
+            let (x, y) = cargo_segment_position(index);
+            context.draw_stamp(
+                &lander.wrapped_frame(cargo_segment_frame(index, bio)),
+                CPoint { x, y },
+            );
+        }
     }
 }
 
-#[cfg(not(test))]
-unsafe fn draw_surface_tiles(frame: *mut c_void, camera: super::model::SurfacePoint) {
-    ClearDrawable();
-    let mut stamp = CStamp {
-        origin: CPoint {
-            x: (-camera.x + SURFACE_WIDTH / 2) as i16,
-            y: (-camera.y + SURFACE_HEIGHT / 2) as i16,
-        },
-        frame,
+fn draw_surface_tiles(
+    context: &ContextLease,
+    frame: &ContextFrame,
+    camera: super::model::SurfacePoint,
+) {
+    context.clear();
+    let mut origin = CPoint {
+        x: (-camera.x + SURFACE_WIDTH / 2) as i16,
+        y: (-camera.y + SURFACE_HEIGHT / 2) as i16,
     };
-    DrawStamp(std::ptr::from_mut(&mut stamp).cast());
-    stamp.origin.x = stamp
-        .origin
+    context.draw_stamp(frame, origin);
+    origin.x = origin
         .x
         .wrapping_add((MAP_WIDTH * LANDING_CURSOR_STEP) as i16);
-    DrawStamp(std::ptr::from_mut(&mut stamp).cast());
-    stamp.origin.x = stamp
-        .origin
+    context.draw_stamp(frame, origin);
+    origin.x = origin
         .x
         .wrapping_sub((MAP_WIDTH * LANDING_CURSOR_STEP * 2) as i16);
-    DrawStamp(std::ptr::from_mut(&mut stamp).cast());
+    context.draw_stamp(frame, origin);
 }
 
 /// Convert fixed-point world coordinates to a viewport coordinate, choosing
@@ -502,6 +427,31 @@ mod tests {
     use crate::planet_side::model::SurfacePoint;
     use crate::planet_side::resources::LanderGraphic;
     use crate::planet_side::session::SessionPhase;
+
+    #[test]
+    #[serial_test::serial]
+    fn presentation_requires_initialized_display() {
+        if !crate::native_test_process::own_graphics_process(concat!(
+            module_path!(),
+            "::presentation_requires_initialized_display"
+        )) {
+            return;
+        }
+        {
+            let owner =
+                crate::graphics::context_abi::LoadedContext::create(c"uninitialized display");
+            assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                crate::graphics::dcqueue_abi::present_retained(&owner.lease());
+            }))
+            .is_err());
+        }
+        let mut game = crate::engine::Game::new();
+        let display = crate::campaign_display_test::CampaignDisplay::install(&mut game).unwrap();
+        crate::graphics::dcqueue_abi::present_retained(
+            &crate::graphics::context_abi::ContextLease::require(game.kernel.status_context),
+        );
+        display.finish(game);
+    }
 
     #[test]
     fn camera_position_projects_to_lander_center() {

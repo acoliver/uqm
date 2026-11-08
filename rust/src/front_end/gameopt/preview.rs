@@ -43,9 +43,95 @@ pub(super) unsafe fn install(world: &mut World, summary: &crate::navigation::abi
     }
 }
 
+pub(super) fn lander(
+    kernel: &crate::engine::Kernel,
+    summary: &crate::navigation::abi::SUMMARY_DESC,
+) {
+    if let Some(owner) = &kernel.lander_resources {
+        let assets = crate::planet_side::resources::PlanetSideAssets::retain(owner);
+        crate::planet_side::init_lander::draw_lander(
+            &crate::graphics::context_abi::ContextLease::require(kernel.radar_context),
+            &assets,
+            crate::planet_side::init_lander::LanderStatus::preview(&summary.SS, summary.Flags),
+        );
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[serial_test::serial]
+    fn lander_preview_draws_saved_values_without_mutating_the_current_flagship() {
+        crate::planet_side::resources::tests::with_packaged_resources(|game| {
+            use crate::graphics::{
+                context_abi::{ContextFrame, ContextLease},
+                native_abi::{Color, EXTENT, POINT, RECT},
+            };
+            game.kernel.radar_context = game.kernel.status_context;
+            let radar = ContextLease::require(game.kernel.radar_context);
+            radar.set_frame(ContextFrame::retain(std::ptr::NonNull::new(
+                game.kernel.screen,
+            )));
+            radar.set_clip(RECT {
+                corner: POINT { x: 0, y: 0 },
+                extent: EXTENT {
+                    width: 56,
+                    height: 53,
+                },
+            });
+            let mut summary = crate::navigation::abi::SUMMARY_DESC {
+                SS: game.world.data.flagship,
+                Activity: 0,
+                Flags: 0,
+                day_index: 0,
+                month_index: 0,
+                year_index: 0,
+                MCreditLo: 0,
+                MCreditHi: 0,
+                NumShips: 0,
+                NumDevices: 0,
+                ShipList: [0; 12],
+                DeviceList: [0; 16],
+                SaveName: [0; 64],
+            };
+            lander(&game.kernel, &summary);
+            game.kernel.lander_resources =
+                Some(crate::engine::kernel::lander_resources::LanderResources::load().unwrap());
+            let current = game.world.data.flagship;
+            let mut saved = current;
+            saved.num_landers = 1;
+            saved.module_slots[0] = crate::starbase::sis_modules::ModuleType::StorageBay as u8;
+            saved.total_element_mass = 475;
+            summary.SS = saved;
+            summary.Flags = 0x52;
+            lander(&game.kernel, &summary);
+            radar.flush();
+            let mut pixels = vec![Color::default(); 320 * 240];
+            assert_ne!(
+                // SAFETY: the supplied target and complete buffer remain live through readback.
+                unsafe {
+                    crate::graphics::drawable_abi::ReadFramePixelColors(
+                        game.kernel.screen,
+                        pixels.as_mut_ptr(),
+                        320,
+                        240,
+                    )
+                },
+                0
+            );
+            assert!(pixels
+                .iter()
+                .any(|pixel| pixel.r != 0 || pixel.g != 0 || pixel.b != 0));
+            assert_eq!(game.world.data.flagship.num_landers, current.num_landers);
+            assert_eq!(
+                game.world.data.flagship.total_element_mass,
+                current.total_element_mass
+            );
+            assert_eq!(game.world.data.flagship.module_slots, current.module_slots);
+        });
+    }
 
     #[test]
     fn restore_reinstates_the_flagship_and_escorts_without_rewinding_other_state() {

@@ -68,17 +68,6 @@ impl PlanetSideInput for CffiPlanetSideInput {
     }
 }
 
-#[cfg(not(test))]
-use crate::threading::pacing::linked::sleep_thread_until as SleepThreadUntil;
-#[cfg(not(test))]
-use crate::time::counter_abi::GetTimeCounter;
-#[cfg(not(test))]
-use crate::ui::sis::draw_landers;
-#[cfg(not(test))]
-use crate::ui::sis::DeltaSISGauges;
-#[cfg(not(test))]
-use crate::ui::sis::DrawStorageBays;
-
 fn read_player_one_input(input: &InputControls, activity: &ActivityControl) -> FrameInput {
     use uqm_engine::input_port::frames::{
         KEY_ESCAPE, KEY_LEFT, KEY_RIGHT, KEY_SPECIAL, KEY_UP, KEY_WEAPON,
@@ -96,27 +85,13 @@ fn read_player_one_input(input: &InputControls, activity: &ActivityControl) -> F
 }
 
 /// Main-thread clock adapter preserving the established pump-and-flush sleep path.
-pub struct CffiPlanetSideClock;
-
+pub struct CffiPlanetSideClock(pub crate::threading::pacing::GameThreadPacer);
 impl PlanetSideClock for CffiPlanetSideClock {
     fn now(&self) -> Tick {
-        #[cfg(not(test))]
-        {
-            Tick(GetTimeCounter())
-        }
-        #[cfg(test)]
-        {
-            Tick(0)
-        }
+        Tick(self.0.now())
     }
-
     fn sleep_until(&mut self, deadline: Tick) -> Result<(), AdapterError> {
-        #[cfg(not(test))]
-        unsafe {
-            SleepThreadUntil(deadline.0);
-        }
-        #[cfg(test)]
-        let _ = deadline;
+        self.0.sleep_until(deadline.0);
         Ok(())
     }
 }
@@ -179,12 +154,10 @@ impl CffiShipStatus<'_, '_> {
 
 impl ShipStatusPort for CffiShipStatus<'_, '_> {
     fn apply(&mut self, delta: &ShipDelta) -> Result<(), AdapterError> {
-        #[cfg(not(test))]
         if delta.crew != 0 {
-            // SAFETY: the retained game publishes the live gauge owners for this call.
-            self.game
-                .borrow_mut()
-                .with_legacy(|| unsafe { DeltaSISGauges(delta.crew, 0, 0) });
+            let mut game = self.game.borrow_mut();
+            let Cx { kernel, world, .. } = &mut *game;
+            crate::ui::sis::gauges::delta_sis_gauges(kernel, world, delta.crew, 0, 0);
         }
         {
             let mut game = self.game.borrow_mut();
@@ -195,12 +168,9 @@ impl ShipStatusPort for CffiShipStatus<'_, '_> {
                 sis.num_landers = sis.num_landers.saturating_add(delta.landers as u8);
             }
         }
-        #[cfg(not(test))]
         if delta.landers != 0 {
-            // SAFETY: native drawing runs while the retained game owns the graphics state.
-            self.game
-                .borrow_mut()
-                .with_legacy(|| unsafe { draw_landers() });
+            let game = self.game.borrow();
+            crate::ui::sis::gauges::draw_landers(game.kernel, game.world);
         }
         {
             let mut game = self.game.borrow_mut();
@@ -211,12 +181,9 @@ impl ShipStatusPort for CffiShipStatus<'_, '_> {
             sis.total_element_mass = sis.total_element_mass.saturating_add(delta.element_mass);
             sis.total_bio_mass = sis.total_bio_mass.saturating_add(delta.biological_mass);
         }
-        #[cfg(not(test))]
         if delta.element_mass != 0 {
-            // SAFETY: the storage display reads the game published for this call.
-            self.game
-                .borrow_mut()
-                .with_legacy(|| unsafe { DrawStorageBays(0) });
+            let game = self.game.borrow();
+            crate::ui::sis::gauges::draw_storage_bays(game.kernel, game.world, false);
         }
         Ok(())
     }
@@ -225,6 +192,84 @@ impl ShipStatusPort for CffiShipStatus<'_, '_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[serial_test::serial]
+    fn pacing_requires_initialized_display() {
+        if !crate::native_test_process::own_graphics_process(concat!(
+            module_path!(),
+            "::pacing_requires_initialized_display"
+        )) {
+            return;
+        }
+        let owner = crate::graphics::context_abi::LoadedContext::create(c"uninitialized pacing");
+        let mut pacer = crate::threading::pacing::GameThreadPacer::new(owner.lease());
+        assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            pacer.sleep_until(0);
+        }))
+        .is_err());
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn nonzero_settlement_updates_only_the_supplied_campaign_and_draws_real_gauges() {
+        super::super::resources::tests::with_packaged_resources(|owners| {
+            use crate::graphics::{
+                context_abi::{ContextFrame, ContextLease},
+                drawable_abi::LoadedDrawable,
+            };
+            use crate::starbase::sis_modules::ModuleType;
+            let frames = LoadedDrawable::load(c"graphics.flagshipstatus").unwrap();
+            owners.kernel.flag_stat_frame = frames.lease().frame(0).unwrap();
+            let context = ContextLease::require(owners.kernel.status_context);
+            context.set_frame(ContextFrame::retain(std::ptr::NonNull::new(
+                owners.kernel.screen,
+            )));
+            let sis = &mut owners.world.data.flagship;
+            sis.module_slots[0] = ModuleType::CrewPod as u8;
+            sis.module_slots[1] = ModuleType::StorageBay as u8;
+            sis.crew_enlisted = 20;
+            sis.num_landers = 2;
+            sis.total_element_mass = 10;
+            sis.element_amounts[0] = 10;
+            sis.total_bio_mass = 4;
+            let untouched = crate::engine::Game::new();
+            let mut battle = crate::engine::battle::Battle::new();
+            {
+                let game = RefCell::new(Cx::new(
+                    &mut battle,
+                    &mut owners.world,
+                    &mut owners.kernel,
+                    crate::math::random,
+                ));
+                let mut ship = CffiShipStatus { game: &game };
+                assert_eq!(ship.storage_capacity(), 500);
+                let mut delta = ShipDelta {
+                    crew: -3,
+                    landers: -1,
+                    element_mass: 25,
+                    biological_mass: 3,
+                    ..Default::default()
+                };
+                delta.element_amounts[2] = 25;
+                ship.apply(&delta).unwrap();
+                let status = ship.snapshot();
+                assert_eq!(
+                    (
+                        status.crew_enlisted,
+                        status.landers,
+                        status.total_element_mass,
+                        status.total_bio_mass
+                    ),
+                    (17, 1, 35, 7)
+                );
+                assert_eq!(status.element_amounts, [10, 0, 25, 0, 0, 0, 0, 0]);
+            }
+            assert_eq!(untouched.world.data.flagship.crew_enlisted, 0);
+            assert_eq!(untouched.world.data.flagship.num_landers, 0);
+            context.flush();
+        });
+    }
 
     #[test]
     fn copied_observation_is_published_before_the_clock_pumps_presentations() {
@@ -289,10 +334,24 @@ mod tests {
     }
 
     #[test]
-    fn non_linked_clock_is_available_for_unit_tests() {
-        let mut clock = CffiPlanetSideClock;
-        assert_eq!(clock.now(), Tick(0));
-        assert_eq!(clock.sleep_until(Tick(1)), Ok(()));
+    #[serial_test::serial]
+    fn clock_uses_the_actual_counter_and_pumps_an_elapsed_deadline() {
+        let mut game = crate::engine::Game::new();
+        let display = crate::campaign_display_test::CampaignDisplay::install(&mut game).unwrap();
+        let context =
+            crate::graphics::context_abi::ContextLease::require(game.kernel.status_context);
+        let mut clock =
+            CffiPlanetSideClock(crate::threading::pacing::GameThreadPacer::new(context));
+        let before = crate::time::counter_abi::GetTimeCounter();
+        assert!(clock.now().0 >= before);
+        clock.sleep_until(Tick(before)).unwrap();
+        assert!(clock.now().0 >= before);
+        let deadline = Tick(clock.now().0.wrapping_add(2));
+        clock.sleep_until(deadline).unwrap();
+        assert!(clock.now().0.wrapping_sub(deadline.0) < u32::MAX / 2);
+        assert_ne!(clock.now(), Tick(0));
+        drop(clock);
+        display.finish(game);
     }
 
     #[test]

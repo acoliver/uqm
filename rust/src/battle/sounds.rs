@@ -1,6 +1,5 @@
 //! Battle sound queue, effect-channel reuse and positional-object tracking.
 
-#[cfg(not(test))]
 use crate::engine::battle::Cx;
 use crate::engine::battle::ElementId;
 
@@ -8,14 +7,12 @@ use crate::engine::battle::kernel::Channels;
 #[cfg(test)]
 use crate::engine::battle::kernel::SoundQueue;
 
-#[cfg(not(test))]
 use crate::sound::heart_ffi::{
     get_positional_object, set_positional_object, update_sound_position,
 };
 
-#[cfg(not(test))]
 pub(crate) mod engine {
-    pub use super::*;
+    use super::*;
     use crate::ships::native::abi::*;
 
     /// # Safety
@@ -126,6 +123,25 @@ mod tests {
                 .map(|_| crate::sound::types::SoundSample::new())
                 .collect(),
         )
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn real_sound_queue_operations_accept_an_empty_unpublished_campaign() {
+        let mut game = crate::engine::Game::new();
+        let mut battle = crate::engine::battle::Battle::new();
+        let mut cx = Cx::new(
+            &mut battle,
+            &mut game.world,
+            &mut game.kernel,
+            crate::math::random,
+        );
+        assert!(!engine::position(&mut cx, None).positional);
+        assert_eq!(engine::NON_POSITIONAL.positional, 0);
+        engine::update_positions(&mut cx);
+        engine::flush_sounds(&mut cx);
+        engine::remove_sounds(cx.kernel, None);
+        assert_eq!(cx.kernel.sounds.count, 0);
     }
 
     #[test]

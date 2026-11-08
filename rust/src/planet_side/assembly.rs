@@ -226,7 +226,7 @@ mod tests {
         ) -> Result<EntityVisual, AdapterError> {
             Ok(EntityVisual {
                 frame: SurfaceFrame {
-                    base: std::ptr::NonNull::<u8>::dangling().as_ptr().cast(),
+                    base: crate::graphics::context_abi::ContextFrame::retain(None),
                     index: 7,
                 },
                 mask: solid(),
@@ -330,7 +330,7 @@ mod tests {
             .unwrap();
             Ok(EntityVisual {
                 frame: SurfaceFrame {
-                    base: std::ptr::NonNull::<u8>::dangling().as_ptr().cast(),
+                    base: crate::graphics::context_abi::ContextFrame::retain(None),
                     index: animation_frame,
                 },
                 mask,
@@ -365,7 +365,7 @@ mod tests {
             },
             EntityVisual {
                 frame: SurfaceFrame {
-                    base: std::ptr::NonNull::<u8>::dangling().as_ptr().cast(),
+                    base: crate::graphics::context_abi::ContextFrame::retain(None),
                     index: 0,
                 },
                 mask: solid(),

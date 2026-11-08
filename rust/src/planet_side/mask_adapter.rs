@@ -1,161 +1,99 @@
-//! Production collision-mask extraction from captured graphics frames.
-//!
-//! This module uses a dedicated source-matched frame prefix. It deliberately
-//! does not reuse the battle `IntersectControl` mirror, whose field order is
-//! incompatible with PlanetSide's legacy geometry ABI.
+//! Collision masks from retained native frames.
 
-use std::ffi::c_void;
+use super::{geometry::CollisionMask, model::SurfacePoint, runtime::AdapterError};
+use crate::graphics::context_abi::ContextFrame;
 
-use super::geometry::CollisionMask;
-#[cfg(not(test))]
-use super::model::SurfacePoint;
-use super::runtime::AdapterError;
-
-#[repr(C)]
-#[derive(Clone, Copy)]
-struct CPoint {
-    x: i16,
-    y: i16,
+pub fn extract_frame_mask(frame: &ContextFrame) -> Result<CollisionMask, AdapterError> {
+    let occupancy = frame
+        .alpha_occupancy()
+        .ok_or(AdapterError::new("collision_frame_invalid"))?;
+    let rect = frame.rect();
+    CollisionMask::from_occupancy(
+        rect.extent.width as u16,
+        rect.extent.height as u16,
+        SurfacePoint {
+            x: -i32::from(rect.corner.x),
+            y: -i32::from(rect.corner.y),
+        },
+        &occupancy,
+    )
+    .map_err(|_| AdapterError::new("collision_mask_build"))
 }
 
-#[repr(C)]
-#[derive(Clone, Copy)]
-struct CExtent {
-    width: i16,
-    height: i16,
-}
-
-/// Exact `FRAME_DESC` layout from `libs/graphics/drawable.h`.
-#[repr(C)]
-struct CFrameDesc {
-    frame_type: u16,
-    index: u16,
-    hot_spot: CPoint,
-    bounds: CExtent,
-    image: *mut c_void,
-    parent: *mut c_void,
-}
-
-#[cfg(not(test))]
-use crate::graphics::native_canvas::lifecycle::TFB_DrawCanvas_Lock;
-#[cfg(not(test))]
-use crate::graphics::native_canvas::lifecycle::TFB_DrawCanvas_Unlock;
-#[cfg(not(test))]
-use crate::graphics::native_canvas::pixels::TFB_DrawCanvas_GetPixel;
-#[cfg(not(test))]
-use crate::graphics::pixmap_abi::SetAbsFrameIndex;
-
-#[cfg(not(test))]
-struct CanvasLock(*mut c_void);
-
-#[cfg(not(test))]
-impl Drop for CanvasLock {
-    fn drop(&mut self) {
-        unsafe { TFB_DrawCanvas_Unlock(self.0) };
-    }
-}
-
-/// Extract a one-bit mask from a captured production frame.
-///
-/// # Safety
-///
-/// `frame` must be a live captured `FRAME_DESC` whose image owns a live normal
-/// canvas for the duration of the call.
-pub unsafe fn extract_frame_mask(frame: *mut c_void) -> Result<CollisionMask, AdapterError> {
-    #[cfg(not(test))]
-    {
-        if frame.is_null() {
-            return Err(AdapterError::new("collision_frame_null"));
-        }
-        let descriptor = &*frame.cast::<CFrameDesc>();
-        if descriptor.image.is_null()
-            || descriptor.bounds.width <= 0
-            || descriptor.bounds.height <= 0
-        {
-            return Err(AdapterError::new("collision_frame_invalid"));
-        }
-
-        // `NormalImg` is the first field of `TFB_Image` in tfb_draw.h.
-        let canvas = descriptor.image.cast::<*mut c_void>().read();
-        if canvas.is_null() {
-            return Err(AdapterError::new("collision_canvas_missing"));
-        }
-
-        let width = u16::try_from(descriptor.bounds.width)
-            .map_err(|_| AdapterError::new("collision_frame_extent"))?;
-        let height = u16::try_from(descriptor.bounds.height)
-            .map_err(|_| AdapterError::new("collision_frame_extent"))?;
-        TFB_DrawCanvas_Lock(canvas);
-        let _lock = CanvasLock(canvas);
-        let mut occupancy = Vec::with_capacity(usize::from(width) * usize::from(height));
-        for y in 0..i32::from(height) {
-            for x in 0..i32::from(width) {
-                occupancy.push(u8::from(TFB_DrawCanvas_GetPixel(canvas, x, y).a != 0));
-            }
-        }
-        CollisionMask::from_occupancy(
-            width,
-            height,
-            SurfacePoint {
-                x: i32::from(descriptor.hot_spot.x),
-                y: i32::from(descriptor.hot_spot.y),
-            },
-            &occupancy,
-        )
-        .map_err(|_| AdapterError::new("collision_mask_build"))
-    }
-    #[cfg(test)]
-    {
-        let _ = frame;
-        Err(AdapterError::new("collision_mask_unlinked"))
-    }
-}
-
-/// Extract all 16 directional lander masks from one captured drawable.
-///
-/// # Safety
-///
-/// `base` must be a live captured lander frame handle with at least 16 frames.
-pub unsafe fn extract_lander_masks(base: *mut c_void) -> Result<Vec<CollisionMask>, AdapterError> {
-    #[cfg(not(test))]
-    {
-        if base.is_null() {
-            return Err(AdapterError::new("lander_collision_frame_null"));
-        }
-        let mut masks = Vec::with_capacity(16);
-        for index in 0..16 {
-            let frame = SetAbsFrameIndex((base).cast(), index);
-            masks.push(extract_frame_mask((frame).cast())?);
-        }
-        Ok(masks)
-    }
-    #[cfg(test)]
-    {
-        let _ = base;
-        Err(AdapterError::new("collision_mask_unlinked"))
-    }
+pub fn extract_lander_masks(base: &ContextFrame) -> Result<Vec<CollisionMask>, AdapterError> {
+    (0..16)
+        .map(|index| extract_frame_mask(&base.wrapped_frame(index)))
+        .collect()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::graphics::{
+        drawable_abi::{LoadedDrawable, WriteFramePixelColors},
+        native_abi::{Color, HOT_SPOT},
+    };
 
     #[test]
-    fn unlinked_extraction_is_a_typed_error() {
-        assert_eq!(
-            unsafe { extract_frame_mask(std::ptr::null_mut()) },
-            Err(AdapterError::new("collision_mask_unlinked"))
+    #[serial_test::serial]
+    fn absent_frame_does_not_enter_another_threads_live_registry() {
+        if !crate::native_test_process::own_graphics_process(concat!(
+            module_path!(),
+            "::absent_frame_does_not_enter_another_threads_live_registry"
+        )) {
+            return;
+        }
+        let mut game = crate::engine::Game::new();
+        let display = crate::campaign_display_test::CampaignDisplay::install(&mut game).unwrap();
+        let frame = ContextFrame::retain(std::ptr::NonNull::new(game.kernel.screen));
+        assert!(
+            std::thread::spawn(|| {
+                assert!(ContextFrame::retain(None).alpha_occupancy().is_none());
+            })
+            .join()
+            .is_ok(),
+            "an absent frame must not access another thread's graphics allocation"
         );
-        assert_eq!(
-            unsafe { extract_lander_masks(std::ptr::null_mut()) },
-            Err(AdapterError::new("collision_mask_unlinked"))
-        );
+        assert!(frame.rect().extent.width > 0);
+        drop(frame);
+        display.finish(game);
     }
 
-    #[cfg(target_pointer_width = "64")]
     #[test]
-    fn frame_descriptor_layout_matches_64_bit_c_abi() {
-        assert_eq!(std::mem::size_of::<CFrameDesc>(), 32);
-        assert_eq!(std::mem::align_of::<CFrameDesc>(), 8);
+    #[serial_test::serial]
+    fn retained_mask_uses_normal_alpha_and_hotspot_after_owner_release() {
+        let mut game = crate::engine::Game::new();
+        let display = crate::campaign_display_test::CampaignDisplay::install(&mut game).unwrap();
+        let owner = LoadedDrawable::create(8, 2, 2, 16).unwrap();
+        let lease = owner.lease();
+        lease.set_hotspot(0, HOT_SPOT { x: 1, y: -2 });
+        let pixels = [0, 1, 127, 255].map(|a| Color {
+            r: 0,
+            g: 0,
+            b: 0,
+            a,
+        });
+        // SAFETY: this serialized fixture owns the four-pixel destination and complete source buffer.
+        assert_ne!(
+            unsafe { WriteFramePixelColors(lease.frame(0).unwrap(), pixels.as_ptr(), 2, 2) },
+            0
+        );
+        let frame = lease.context_frame(0);
+        drop(lease);
+        drop(owner);
+        assert_eq!(frame.alpha_occupancy().unwrap(), [0, 1, 1, 1]);
+        let mask = extract_frame_mask(&frame).unwrap();
+        assert_eq!(
+            mask,
+            CollisionMask::from_occupancy(2, 2, SurfacePoint { x: 1, y: -2 }, &[0, 1, 1, 1])
+                .unwrap()
+        );
+        assert_eq!(extract_lander_masks(&frame).unwrap().len(), 16);
+        assert_eq!(
+            extract_frame_mask(&ContextFrame::retain(None)),
+            Err(AdapterError::new("collision_frame_invalid"))
+        );
+        drop(frame);
+        display.finish(game);
     }
 }

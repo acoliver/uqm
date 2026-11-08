@@ -19,10 +19,11 @@ pub struct ContextFrame {
 }
 impl ContextFrame {
     pub fn retain(frame: Option<NonNull<frame_desc>>) -> Self {
-        let frame = frame.map_or(std::ptr::null_mut(), NonNull::as_ptr);
         Self {
-            frame,
-            _allocations: native_drawables::retain_frame_allocations(&[frame]),
+            frame: frame.map_or(std::ptr::null_mut(), NonNull::as_ptr),
+            _allocations: frame.map_or_else(Vec::new, |frame| {
+                native_drawables::retain_frame_allocations(&[frame.as_ptr()])
+            }),
         }
     }
 
@@ -83,6 +84,48 @@ impl ContextFrame {
         );
         // SAFETY: the retained frame is live on its graphics thread and the pixel is in bounds.
         unsafe { drawable_abi::GetFramePixel(self.frame, point) }
+    }
+
+    /// Read the normal canvas alpha mask, ignoring its hotspot and draw mode.
+    pub fn alpha_occupancy(&self) -> Option<Vec<u8>> {
+        for allocation in &self._allocations {
+            allocation.assert_thread();
+        }
+        // SAFETY: registry leases retain this frame, image and canvas on their owning thread.
+        unsafe {
+            let descriptor = self.frame.as_ref()?;
+            if descriptor.image.is_null()
+                || descriptor.Bounds.width <= 0
+                || descriptor.Bounds.height <= 0
+            {
+                return None;
+            }
+            let canvas = (*descriptor.image).NormalImg;
+            if canvas.is_null() {
+                return None;
+            }
+            super::native_canvas::lifecycle::TFB_DrawCanvas_Lock(canvas);
+            let mut occupancy = Vec::with_capacity(
+                descriptor.Bounds.width as usize * descriptor.Bounds.height as usize,
+            );
+            for y in 0..i32::from(descriptor.Bounds.height) {
+                for x in 0..i32::from(descriptor.Bounds.width) {
+                    occupancy.push(u8::from(
+                        super::native_canvas::pixels::TFB_DrawCanvas_GetPixel(canvas, x, y).a != 0,
+                    ));
+                }
+            }
+            super::native_canvas::lifecycle::TFB_DrawCanvas_Unlock(canvas);
+            Some(occupancy)
+        }
+    }
+
+    pub fn frame_count(&self) -> u16 {
+        for allocation in &self._allocations {
+            allocation.assert_thread();
+        }
+        // SAFETY: the retained frame belongs to a complete registered drawable.
+        unsafe { super::pixmap_abi::GetFrameCount(self.frame) }
     }
 
     pub fn replace_hotspot(&self, hotspot: HOT_SPOT) -> HOT_SPOT {
@@ -782,6 +825,27 @@ pub(super) fn release(context: NonNull<context_desc>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[serial_test::serial]
+    fn retained_frame_metadata_rejects_pixel_less_frames_and_survives_logical_release() {
+        // SAFETY: this serialized fixture owns this newly registered drawable.
+        let drawable = unsafe {
+            let drawable = drawable_abi::AllocDrawable(16);
+            (*drawable).MaxIndex = 15;
+            drawable
+        };
+        // SAFETY: the complete drawable remains owned until its explicit release below.
+        let raw = unsafe { super::super::pixmap_abi::CaptureDrawable(drawable) };
+        let retained = ContextFrame::retain(NonNull::new(raw));
+        assert_eq!(retained.frame_count(), 16);
+        assert!(retained.alpha_occupancy().is_none());
+        // SAFETY: this unique native release leaves physical storage with retained frames.
+        unsafe { drawable_abi::DestroyDrawable(drawable) };
+        assert_eq!(retained.wrapped_frame(31).frame_count(), 16);
+        assert!(ContextFrame::retain(None).alpha_occupancy().is_none());
+        assert_eq!(ContextFrame::retain(None).frame_count(), 0);
+    }
 
     #[test]
     #[serial_test::serial]

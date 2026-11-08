@@ -396,7 +396,7 @@ mod tests {
             };
             Ok(EntityVisual {
                 frame: SurfaceFrame {
-                    base: std::ptr::null_mut(),
+                    base: crate::graphics::context_abi::ContextFrame::retain(None),
                     index: frame,
                 },
                 mask: solid(),
@@ -410,7 +410,7 @@ mod tests {
         ) -> Result<EntityVisual, AdapterError> {
             Ok(EntityVisual {
                 frame: SurfaceFrame {
-                    base: std::ptr::null_mut(),
+                    base: crate::graphics::context_abi::ContextFrame::retain(None),
                     index: animation_frame,
                 },
                 mask: brainbox_mask(animation_frame),
@@ -431,7 +431,7 @@ mod tests {
         ) -> Result<EntityVisual, AdapterError> {
             Ok(EntityVisual {
                 frame: SurfaceFrame {
-                    base: std::ptr::null_mut(),
+                    base: crate::graphics::context_abi::ContextFrame::retain(None),
                     index: 0,
                 },
                 mask: solid(),
@@ -451,7 +451,7 @@ mod tests {
         fn shot_visual(&mut self, facing: u8) -> Result<EntityVisual, AdapterError> {
             Ok(EntityVisual {
                 frame: SurfaceFrame {
-                    base: std::ptr::null_mut(),
+                    base: crate::graphics::context_abi::ContextFrame::retain(None),
                     index: u16::from(facing),
                 },
                 mask: solid(),
@@ -464,7 +464,7 @@ mod tests {
         ) -> Result<EntityVisual, AdapterError> {
             Ok(EntityVisual {
                 frame: SurfaceFrame {
-                    base: std::ptr::null_mut(),
+                    base: crate::graphics::context_abi::ContextFrame::retain(None),
                     index: 0,
                 },
                 mask: solid(),
@@ -474,7 +474,7 @@ mod tests {
         fn hazard_visual(&mut self, _kind: HazardKind) -> Result<EntityVisual, AdapterError> {
             Ok(EntityVisual {
                 frame: SurfaceFrame {
-                    base: std::ptr::null_mut(),
+                    base: crate::graphics::context_abi::ContextFrame::retain(None),
                     index: 0,
                 },
                 mask: solid(),
@@ -488,7 +488,7 @@ mod tests {
         ) -> Result<EntityVisual, AdapterError> {
             Ok(EntityVisual {
                 frame: SurfaceFrame {
-                    base: std::ptr::null_mut(),
+                    base: crate::graphics::context_abi::ContextFrame::retain(None),
                     index: animation_frame,
                 },
                 mask: brainbox_mask(animation_frame),

@@ -506,6 +506,28 @@ pub unsafe extern "C" fn TFB_PurgeDanglingGraphics() {
     }
     unlock_dcq();
 }
+pub(crate) fn require_presentation(_context: &super::context_abi::ContextLease) {
+    // SAFETY: the retained lease admits this thread to the graphics lifecycle state.
+    unsafe {
+        assert!(
+            !DCQ_MUTEX.is_null()
+                && !super::sdl::lifecycle_abi::SDL_Screen.is_null()
+                && !super::sdl::lifecycle_abi::GRAPHICS_BACKEND.is_null(),
+            "graphics presentation requires an initialized display"
+        );
+    }
+}
+
+/// Present a complete frame while its game-thread graphics lease remains live.
+pub fn present_retained(context: &super::context_abi::ContextLease) {
+    require_presentation(context);
+    // SAFETY: this admitted graphics thread owns the initialized queue and display.
+    unsafe {
+        TFB_FlushGraphicsEx(1);
+        super::sdl::lifecycle_abi::TFB_SwapBuffers(1);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
