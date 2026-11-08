@@ -36,6 +36,31 @@ mod tests {
 
     #[test]
     #[serial_test::serial]
+    fn absent_frame_does_not_enter_another_threads_live_registry() {
+        if !crate::native_test_process::own_graphics_process(concat!(
+            module_path!(),
+            "::absent_frame_does_not_enter_another_threads_live_registry"
+        )) {
+            return;
+        }
+        let mut game = crate::engine::Game::new();
+        let display = crate::campaign_display_test::CampaignDisplay::install(&mut game).unwrap();
+        let frame = ContextFrame::retain(std::ptr::NonNull::new(game.kernel.screen));
+        assert!(
+            std::thread::spawn(|| {
+                assert!(ContextFrame::retain(None).alpha_occupancy().is_none());
+            })
+            .join()
+            .is_ok(),
+            "an absent frame must not access another thread's graphics allocation"
+        );
+        assert!(frame.rect().extent.width > 0);
+        drop(frame);
+        display.finish(game);
+    }
+
+    #[test]
+    #[serial_test::serial]
     fn retained_mask_uses_normal_alpha_and_hotspot_after_owner_release() {
         let mut game = crate::engine::Game::new();
         let display = crate::campaign_display_test::CampaignDisplay::install(&mut game).unwrap();

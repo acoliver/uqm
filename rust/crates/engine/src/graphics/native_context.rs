@@ -19,10 +19,11 @@ pub struct ContextFrame {
 }
 impl ContextFrame {
     pub fn retain(frame: Option<NonNull<frame_desc>>) -> Self {
-        let frame = frame.map_or(std::ptr::null_mut(), NonNull::as_ptr);
         Self {
-            frame,
-            _allocations: native_drawables::retain_frame_allocations(&[frame]),
+            frame: frame.map_or(std::ptr::null_mut(), NonNull::as_ptr),
+            _allocations: frame.map_or_else(Vec::new, |frame| {
+                native_drawables::retain_frame_allocations(&[frame.as_ptr()])
+            }),
         }
     }
 
