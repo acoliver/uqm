@@ -106,37 +106,6 @@ mod tests {
             saved.total_element_mass = 475;
             summary.SS = saved;
             summary.Flags = 0x52;
-            let source = game
-                .kernel
-                .lander_resources
-                .as_ref()
-                .unwrap()
-                .graphic(0)
-                .wrapped_frame(32);
-            let extent = source.rect().extent;
-            let lit = (0..extent.height)
-                .flat_map(|y| (0..extent.width).map(move |x| POINT { x, y }))
-                .filter(|point| {
-                    let pixel = source.pixel(*point);
-                    pixel.r != 0 || pixel.g != 0 || pixel.b != 0
-                })
-                .count();
-            // SAFETY: the serialized fixture owns graphics admission and its selected target.
-            let admission = unsafe {
-                (
-                    crate::graphics::context_abi::_GraphicsStatusFlags,
-                    crate::graphics::drawable_abi::_CurFramePtr == game.kernel.screen,
-                    crate::graphics::gfx_common_abi::GetGraphicScale(),
-                )
-            };
-            let target = ContextFrame::retain(std::ptr::NonNull::new(game.kernel.screen)).rect();
-            let clip = radar.clip_rect();
-            eprintln!(
-                "preview source {}x{}, {lit} colored pixels; admission {admission:?}; target ({},{}) {}x{}; clip ({},{}) {}x{}",
-                extent.width, extent.height,
-                target.corner.x, target.corner.y, target.extent.width, target.extent.height,
-                clip.corner.x, clip.corner.y, clip.extent.width, clip.extent.height,
-            );
             lander(&game.kernel, &summary);
             radar.flush();
             let mut pixels = vec![Color::default(); 320 * 240];

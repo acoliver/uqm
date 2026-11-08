@@ -87,6 +87,8 @@ pub(crate) mod tests {
             );
             let palette =
                 crate::strings::sresins::load_binary_entry(c"colortable.main", 0).unwrap();
+            let map_count = usize::from(palette[1] - palette[0]) + 1;
+            assert_eq!(palette.len(), 2 + map_count * 256 * 3);
             crate::graphics::cmap_abi::SetColorMap(palette.as_ptr());
             test(&mut game);
             crate::graphics::dcqueue_abi::TFB_FlushGraphics();
