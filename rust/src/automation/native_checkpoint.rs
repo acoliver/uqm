@@ -201,7 +201,7 @@ impl CheckpointScan {
         };
         for (index, record) in records.iter().enumerate().skip(self.identified) {
             if record.sequence != index as u64
-                || record.schema != TraceRecord::SCHEMA
+                || !record.has_valid_schema()
                 || first.run != record.run
             {
                 return Err("native trace sequence, schema or run identity differs".into());
@@ -389,6 +389,24 @@ mod tests {
         } else {
             vec![evidence, present, checkpoint]
         }
+    }
+
+    #[test]
+    fn native_battle_schema_is_accepted_by_incremental_checkpoint_scan() {
+        let (source, script) = script(serde_json::json!([{"action":"finish"}]));
+        let plan = NativeCheckpointPlan::derive(&source, &script).unwrap();
+        let mut battle = record(RecordKind::NativeBattle, "", 0);
+        battle.schema = TraceRecord::BATTLE_SCHEMA;
+        let mut scan = CheckpointScan::default();
+        scan.advance(&plan, &[battle.clone()]).unwrap();
+        assert!(plan.committed(&[battle.clone()]).unwrap().is_empty());
+        battle.schema = TraceRecord::SCHEMA;
+        assert!(CheckpointScan::default().advance(&plan, &[battle]).is_err());
+        let mut capture = record(RecordKind::Capture, "", 0);
+        capture.schema = TraceRecord::BATTLE_SCHEMA;
+        assert!(CheckpointScan::default()
+            .advance(&plan, &[capture])
+            .is_err());
     }
 
     #[test]

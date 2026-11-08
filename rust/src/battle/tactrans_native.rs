@@ -179,28 +179,24 @@ pub(crate) mod engine {
         kernel.ditty_playing = 0;
     }
 
-    fn ditty_playing(kernel: &mut crate::engine::Kernel) -> bool {
-        if kernel.ditty_playing == 0 {
-            return false;
-        }
-        kernel.ditty_playing = u32::from(crate::sound::music::plr_playing_current());
-        kernel.ditty_playing != 0
-    }
-
     pub fn reset_winner(kernel: &mut crate::engine::Kernel) {
         kernel.winner = None;
     }
 
     fn ready_for_battle_end(cx: &mut Cx<'_>) -> bool {
-        if ditty_playing(cx.kernel) {
-            return false;
-        }
         let inputs = cx.kernel.player_input.clone();
         let runtime = cx.kernel.input_runtime();
         let mut observer = runtime.observer();
         let mut io = crate::engine::observe::Io {
             observer: observer.as_mut(),
         };
+        if crate::engine::observe::battle::replacement_gate(
+            &mut cx.kernel.ditty_playing,
+            crate::sound::music::plr_playing_current,
+            &mut io,
+        ) {
+            return false;
+        }
         crate::supermelee::native::protocol::with_battle_driver(cx, &mut io, |driver| {
             inputs.iter().all(|input| {
                 input

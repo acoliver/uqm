@@ -36,6 +36,7 @@ mod deny;
 mod display_awake;
 #[cfg(feature = "native")]
 mod evidence;
+mod native_battle_diff;
 #[cfg(feature = "native")]
 pub mod native_cli;
 #[cfg(feature = "native")]

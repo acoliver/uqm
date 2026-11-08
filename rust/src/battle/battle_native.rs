@@ -341,9 +341,18 @@ pub(crate) mod engine {
         if cx.world.activity() & IN_BATTLE as u16 == 0 {
             return false;
         }
-        cx.with_legacy(|| advance_observation(io));
+        complete_observed_frame(cx, io);
         net.set_frame(frame.wrapping_add(1));
         true
+    }
+
+    fn complete_observed_frame(cx: &mut crate::engine::battle::Cx<'_>, io: &mut Io<'_>) {
+        crate::engine::observe::battle::observe_tick(
+            cx,
+            io,
+            crate::engine::observe::battle::BattlePhase::Advanced,
+        );
+        cx.with_legacy(|| advance_observation(io));
     }
 
     fn select_all_ships(cx: &mut crate::engine::battle::Cx<'_>, count: SIZE) -> BOOLEAN {

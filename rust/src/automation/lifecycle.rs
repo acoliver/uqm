@@ -273,6 +273,7 @@ pub fn write_lifecycle_trace(
             command_acknowledgement: None,
             checkpoint: None,
             failure: None,
+            native_battle: None,
         };
         let jsonl = record.to_jsonl()?;
         let res = commit.reserve_sequence(*sequence);

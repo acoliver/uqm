@@ -4,6 +4,7 @@ pub use super::observe_port::{
     CheckpointView, DeviceObservation, Injected, InputSetup, InputView, Observer, PeerSetup,
     Presented, Unobserved,
 };
+pub mod battle;
 use super::{Kernel, World};
 pub type Io<'a> = super::observe_port::ObservationIo<'a, Option<CampaignView>>;
 

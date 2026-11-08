@@ -23,6 +23,7 @@ impl CoordInner {
             pending_player_input: None,
             held_repeat_key: None,
             verified_battle_frames: 0,
+            native_battle_previous_ms: [None; 3],
             flight_position: FlightPositionTracker::default(),
             battle_loss: BattleLossTracker::default(),
             flagship_turn: FlagshipTurnTracker::default(),

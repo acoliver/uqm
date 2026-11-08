@@ -157,6 +157,7 @@ pub fn ack_trace_record(
         }),
         checkpoint: None,
         failure: None,
+        native_battle: None,
     }
 }
 
