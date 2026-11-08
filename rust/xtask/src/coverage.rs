@@ -265,6 +265,8 @@ fn collect(root: &Path, cargo: &std::ffi::OsStr) -> Result<Measured, String> {
             .args([
                 "llvm-cov",
                 "report",
+                "--package",
+                "*",
                 "--no-default-features",
                 "--features",
                 "audio_heart,debug-process,native",
@@ -423,7 +425,8 @@ mod tests {
             root.path(),
             r#"
 if [ "$*" = 'llvm-cov --version' ]; then echo 'cargo-llvm-cov 0.8.5'; exit 0; fi
-if [ "$1 $2 $3" = 'llvm-cov report --no-default-features' ]; then
+if [ "$1 $2" = 'llvm-cov report' ]; then
+  [ "$*" = "llvm-cov report --package * --no-default-features --features audio_heart,debug-process,native --lcov --output-path $PWD/target/quality-coverage.lcov" ]
   printf 'SF:src/lib.rs\nDA:1,1\nDA:2,1\nDA:3,1\nDA:4,1\nDA:5,1\nDA:6,1\nDA:7,1\nDA:8,0\nDA:9,0\nDA:10,0\nLF:10\nLH:7\nend_of_record\n' > target/quality-coverage.lcov
   exit 0
 fi
