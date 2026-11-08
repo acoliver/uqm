@@ -5,8 +5,7 @@
 use crate::ui::{rgb15, settings::play_menu_sound};
 mod catalog;
 mod crew;
-mod frame;
-use super::{shipyard_hangar as hangar, sis::game_string};
+use super::{shipyard_frame as frame, shipyard_hangar as hangar, sis::game_string};
 use catalog::{get_available_race_count, get_available_race_from_index};
 use crew::{crew_transaction, purchased_crew};
 
@@ -748,7 +747,11 @@ pub unsafe fn do_shipyard(cx: &mut Cx<'_>, menu: &mut MENU_STATE, input: &InputS
             PlayMusic(menu.hMusic, 1, 1);
         });
         show_combat_ship(cx, input, menu, COUNT::MAX, None);
-        frame::install(input, cx.kernel);
+        let context = crate::graphics::context_abi::ContextLease::require(cx.kernel.space_context);
+        frame::install(input, context, || {
+            // SAFETY: the shipyard retains its published menu until this hook is removed.
+            unsafe { animate_power_lines(None) };
+        });
         cx.with_legacy(|| {
             SetFlashRect(MENU_3DO);
             menu.Initialized = 1;
