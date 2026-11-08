@@ -2169,8 +2169,7 @@ pub const HIGH_DENSITY: _bindgen_ty_19 = 4;
 pub const SUPER_DENSITY: _bindgen_ty_19 = 5;
 pub type _bindgen_ty_19 = ::std::os::raw::c_uint;
 
-#[cfg(not(test))]
-pub use crate::planets::ffi::do_planetary_analysis_c as DoPlanetaryAnalysis;
+
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct star_desc {
