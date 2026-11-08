@@ -3780,7 +3780,7 @@ u6_04_world_projection = { limit = 118, ends = "U6-04", scopes = { "ffi|owner_pr
 "unsafe|unsafe_fn_lines|uqm::mainloop" = 675
 "unsafe|unsafe_fn_lines|uqm::navigation" = 978
 "unsafe|unsafe_fn_lines|uqm::planet_side" = 196
-"unsafe|unsafe_fn_lines|uqm::planets" = 4225
+"unsafe|unsafe_fn_lines|uqm::planets" = 4223
 "unsafe|unsafe_fn_lines|uqm::savegame" = 487
 "unsafe|unsafe_fn_lines|uqm::ships" = 148
 "unsafe|unsafe_fn_lines|uqm::state" = 274
@@ -3821,7 +3821,7 @@ u6_04_world_projection = { limit = 118, ends = "U6-04", scopes = { "ffi|owner_pr
 "unsafe|unsafe_lines|uqm::mainloop" = 851
 "unsafe|unsafe_lines|uqm::navigation" = 980
 "unsafe|unsafe_lines|uqm::planet_side" = 302
-"unsafe|unsafe_lines|uqm::planets" = 4319
+"unsafe|unsafe_lines|uqm::planets" = 4317
 "unsafe|unsafe_lines|uqm::savegame" = 508
 "unsafe|unsafe_lines|uqm::ships" = 232
 "unsafe|unsafe_lines|uqm::starbase" = 70
