@@ -1,25 +1,11 @@
-//! Planet oval ABI and topography adapter over the existing context renderer.
+//! Oval and topography drawing on caller-retained contexts.
 
-use crate::c_bindings::{assert_c_layout, global_state as c};
 use crate::comm::locdata::{CPoint, CRect};
 use crate::starbase::ids::RadarLayout;
 
 use super::oval::OvalGfx;
 
-assert_c_layout!(CRect, c::RECT { corner: corner });
-const _: () = {
-    assert!(std::mem::offset_of!(CRect, width) == std::mem::offset_of!(c::RECT, extent));
-    assert!(
-        std::mem::offset_of!(CRect, height)
-            == std::mem::offset_of!(c::RECT, extent) + std::mem::offset_of!(c::EXTENT, height)
-    );
-};
-const _: unsafe extern "C" fn(*mut c::RECT, c::BYTE) = c::DrawOval;
-const _: unsafe extern "C" fn(*mut c::RECT) = c::DrawFilledOval;
-const _: unsafe extern "C" fn(*mut c::RECT, c::BYTE) = draw_oval;
-const _: unsafe extern "C" fn(*mut c::RECT) = draw_filled_oval;
-
-fn input(rect: c::RECT) -> CRect {
+fn input(rect: crate::graphics::native_abi::RECT) -> CRect {
     CRect {
         corner: CPoint {
             x: rect.corner.x,
@@ -30,101 +16,55 @@ fn input(rect: c::RECT) -> CRect {
     }
 }
 
-/// `planets.h`: outline with the original unsigned-byte off-step cadence.
-///
-/// # Safety
-/// Game thread only, with a readable RECT and an active graphics context and
-/// foreground frame for the entire call. The renderer must not switch context
-/// or reenter game menus. No input borrow survives a graphics call.
-#[export_name = "DrawOval"]
-pub unsafe extern "C" fn draw_oval(rect: *mut c::RECT, num_off_pixels: c::BYTE) {
-    let rect = input(rect.read());
-    let mut gfx = CffiOvalGfx::current(c::ScreenWidth, c::ScreenHeight);
-    super::oval::draw_oval(&rect, num_off_pixels, &mut gfx);
-}
-
-/// `planets.h`: filled ellipse, retaining repeated centre rows.
-///
-/// # Safety
-/// The same game-thread, input and graphics lifetime contract as [`draw_oval`].
-#[export_name = "DrawFilledOval"]
-pub unsafe extern "C" fn draw_filled_oval(rect: *mut c::RECT) {
-    let rect = input(rect.read());
-    let mut gfx = CffiOvalGfx::current(c::ScreenWidth, c::ScreenHeight);
-    super::oval::draw_filled_oval(&rect, &mut gfx);
-}
-
-/// A short-lived borrow of the current graphics context on the game thread.
-struct CffiOvalGfx {
+/// Oval drawing on a caller-retained native context.
+pub struct NativeOvalGfx {
     context: ContextLease,
     viewport: CRect,
-    color: c::Color,
+    color: Color,
 }
 
-impl CffiOvalGfx {
-    /// # Safety
-    /// The current C context and foreground frame must remain active for this
-    /// adapter's lifetime. Calls must stay on the game thread, with no context
-    /// changes or reentrant menus between them.
-    unsafe fn current(screen_width: i32, screen_height: i32) -> Self {
+impl NativeOvalGfx {
+    pub fn new(context: &ContextLease, screen_width: i32, screen_height: i32) -> Self {
         let layout = RadarLayout::for_screen(screen_width, screen_height);
         Self {
-            context: ContextLease::require(crate::engine::graphics::context_abi::_pCurContext),
+            context: context.clone(),
             viewport: CRect {
                 width: layout.sis_screen_width as i16,
                 height: layout.sis_screen_height as i16,
                 ..CRect::default()
             },
-            color: c::GetContextForeGroundColor(),
+            color: context.foreground(),
         }
     }
 
-    fn batch(&mut self, primitives: &mut [c::PRIMITIVE]) {
-        for index in 0..primitives.len() {
-            let next = if index + 1 == primitives.len() {
-                u16::MAX
-            } else {
-                (index + 1) as u16
-            };
-            primitives[index].Links = u32::from(u16::MAX) | (u32::from(next) << 16);
-            primitives[index].color = self.color;
-        }
-        unsafe { c::DrawBatch(primitives.as_mut_ptr(), 0, 0) };
+    fn batch(&self, shapes: impl IntoIterator<Item = NativeShape>) {
+        let commands = shapes
+            .into_iter()
+            .map(|shape| DrawCommand {
+                color: self.color,
+                shape,
+            })
+            .collect();
+        self.context
+            .draw_preserving_scale(&mut NativeBatch::forward_chain(commands));
     }
 }
 
-fn point(p: CPoint) -> c::POINT {
-    c::POINT { x: p.x, y: p.y }
+fn point(p: CPoint) -> crate::graphics::native_abi::POINT {
+    crate::graphics::native_abi::POINT { x: p.x, y: p.y }
 }
 
-fn rect(r: &CRect) -> c::RECT {
-    c::RECT {
+fn rect(r: &CRect) -> crate::graphics::native_abi::RECT {
+    crate::graphics::native_abi::RECT {
         corner: point(r.corner),
-        extent: c::EXTENT {
+        extent: crate::graphics::native_abi::EXTENT {
             width: r.width,
             height: r.height,
         },
     }
 }
 
-fn empty_primitive() -> crate::engine::graphics::native_abi::PRIMITIVE {
-    use crate::engine::graphics::native_abi::{Color, POINT, PRIMITIVE, PRIM_DESC};
-    PRIMITIVE {
-        Links: 0,
-        Type: 0,
-        color: Color {
-            r: 0,
-            g: 0,
-            b: 0,
-            a: 0,
-        },
-        Object: PRIM_DESC {
-            Point: POINT { x: 0, y: 0 },
-        },
-    }
-}
-
-impl OvalGfx for CffiOvalGfx {
+impl OvalGfx for NativeOvalGfx {
     fn viewport(&self) -> CRect {
         self.viewport
     }
@@ -135,29 +75,23 @@ impl OvalGfx for CffiOvalGfx {
     }
 
     fn draw_line(&mut self, first: CPoint, second: CPoint) {
-        let mut line = c::LINE {
-            first: point(first),
-            second: point(second),
-        };
-        unsafe { c::DrawLine(&mut line) };
+        self.context
+            .draw_line(self.color, point(first), point(second));
     }
 
     fn points(&mut self, points: &[CPoint]) {
-        let mut primitives: [c::PRIMITIVE; 4] = std::array::from_fn(|_| empty_primitive());
-        for (prim, p) in primitives.iter_mut().zip(points) {
-            prim.Type = c::gfx_object_POINT_PRIM as u8;
-            prim.Object.Point = point(*p);
-        }
-        self.batch(&mut primitives[..points.len()]);
+        self.context
+            .draw_preserving_scale(&mut NativeBatch::point_chain(
+                points.iter().map(|p| (point(*p), self.color)),
+                0,
+            ));
     }
 
     fn filled_rows(&mut self, rows: &[CRect; 2]) {
-        let mut primitives: [c::PRIMITIVE; 2] = std::array::from_fn(|_| empty_primitive());
-        for (prim, row) in primitives.iter_mut().zip(rows) {
-            prim.Type = c::gfx_object_RECTFILL_PRIM as u8;
-            prim.Object.Rect = rect(row);
-        }
-        self.batch(&mut primitives);
+        self.batch(rows.iter().map(|row| NativeShape::Rectangle {
+            rect: rect(row),
+            filled: true,
+        }));
     }
 }
 
@@ -168,7 +102,7 @@ use super::topography::{
 
 use crate::graphics::context_abi::{ContextFrame, ContextLease};
 use crate::graphics::native_abi::Color;
-use crate::graphics::native_batch::NativeBatch;
+use crate::graphics::native_batch::{DrawCommand, NativeBatch, NativeShape};
 
 struct CffiTopographyGfx {
     context: ContextLease,
@@ -255,4 +189,131 @@ pub fn render_native_topography(
         height,
         palette,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::engine::graphics::{
+        context_abi::LoadedContext,
+        drawable_abi::{LoadedDrawable, ReadFramePixelColors},
+    };
+
+    #[test]
+    #[serial_test::serial]
+    fn oval_retains_its_supplied_context_and_frame_after_owner_release() {
+        let mut game = crate::engine::Game::new();
+        let display = crate::campaign_display_test::CampaignDisplay::install(&mut game).unwrap();
+        {
+            let owner = LoadedContext::create(c"retained oval fixture");
+            let drawable = LoadedDrawable::create(2, 32, 32, 1).unwrap();
+            let frame = drawable.lease().frame(0).unwrap();
+            let context = owner.lease();
+            context.set_frame(drawable.lease().context_frame(0));
+            let color = Color {
+                r: 71,
+                g: 131,
+                b: 197,
+                a: 255,
+            };
+            context.set_foreground(color);
+            let mut renderer = NativeOvalGfx::new(&context, 320, 240);
+            // SAFETY: the serialized fixture owns native drawing state.
+            let old_scale = unsafe { crate::graphics::gfx_common_abi::set_graphic_scale(171) };
+            drop(owner);
+            drop(drawable);
+            drop(context);
+            let unrelated = LoadedContext::create(c"unrelated oval context");
+            let unrelated_context = unrelated.lease();
+            let unrelated_frame = LoadedDrawable::create(2, 32, 32, 1).unwrap();
+            unrelated_context.set_frame(unrelated_frame.lease().context_frame(0));
+            unrelated_context.set_foreground(Color {
+                r: 255,
+                g: 0,
+                b: 0,
+                a: 255,
+            });
+            let read_unrelated = || {
+                let mut pixels = vec![
+                    Color {
+                        r: 0,
+                        g: 0,
+                        b: 0,
+                        a: 0
+                    };
+                    32 * 32
+                ];
+                // SAFETY: the independent owner retains this RAM frame and complete pixel buffer.
+                assert_ne!(
+                    unsafe {
+                        ReadFramePixelColors(
+                            unrelated_frame.lease().frame(0).unwrap(),
+                            pixels.as_mut_ptr(),
+                            32,
+                            32,
+                        )
+                    },
+                    0
+                );
+                pixels
+                    .into_iter()
+                    .map(|pixel| (pixel.r, pixel.g, pixel.b, pixel.a))
+                    .collect::<Vec<_>>()
+            };
+            let unrelated_before = read_unrelated();
+            unrelated_context.select();
+            let rectangle = CRect {
+                corner: CPoint { x: 3, y: 5 },
+                width: 15,
+                height: 9,
+            };
+            assert!(!renderer.line_visible(
+                &renderer.viewport(),
+                CPoint { x: -8, y: -8 },
+                CPoint { x: -4, y: -4 }
+            ));
+            super::super::oval::draw_oval(&rectangle, 1, &mut renderer);
+            super::super::oval::draw_filled_oval(&rectangle, &mut renderer);
+            super::super::oval::draw_oval(
+                &CRect {
+                    width: 1,
+                    ..rectangle
+                },
+                0,
+                &mut renderer,
+            );
+            renderer.context.flush();
+            let mut pixels = vec![
+                Color {
+                    r: 0,
+                    g: 0,
+                    b: 0,
+                    a: 0
+                };
+                32 * 32
+            ];
+            // SAFETY: the renderer retains the initialized RAM frame and the buffer covers it.
+            assert_ne!(
+                unsafe { ReadFramePixelColors(frame, pixels.as_mut_ptr(), 32, 32) },
+                0
+            );
+            assert!(pixels
+                .iter()
+                .any(|p| (p.r, p.g, p.b, p.a) == (71, 131, 197, 255)));
+            assert_eq!(read_unrelated(), unrelated_before);
+            assert_eq!(unrelated_context.foreground().r, 255);
+            let foreground = renderer.context.foreground();
+            assert_eq!(
+                (foreground.r, foreground.g, foreground.b, foreground.a),
+                (71, 131, 197, 255)
+            );
+            // SAFETY: the serialized fixture owns native drawing state.
+            unsafe {
+                assert_eq!(crate::graphics::gfx_common_abi::get_graphic_scale(), 171);
+                crate::graphics::gfx_common_abi::set_graphic_scale(old_scale);
+            }
+            ContextLease::require(game.kernel.status_context).select();
+        }
+        display.finish(game);
+    }
 }

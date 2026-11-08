@@ -1,4 +1,4 @@
-//! Offscreen coverage of the exported Rust oval ABI against original C fixtures.
+//! Offscreen coverage of retained-context oval drawing against original C fixtures.
 //! Uses real RAM drawables and C graphics dependencies, never a video driver.
 
 use std::ffi::c_void;
@@ -206,7 +206,7 @@ fn rects(width: i16, height: i16) -> Vec<[i16; 4]> {
     cases
 }
 
-pub fn exported_ovals_match_original_c_full_offscreen_buffers() {
+pub fn retained_ovals_match_original_c_full_offscreen_buffers() {
     let seed_before = unsafe { (*super::SysGenRNG).seed() };
     // Standard tests require every full-buffer digest. A supplied original-C
     // capture adds a streaming byte-for-byte comparison without checking in or
@@ -232,25 +232,37 @@ pub fn exported_ovals_match_original_c_full_offscreen_buffers() {
                     });
                 }
                 for mode in [Some(0), Some(1), Some(7), Some(255), None] {
-                    let mut c_rect = c::RECT {
+                    let c_rect = c::RECT {
                         corner: c::POINT { x, y },
                         extent: c::EXTENT { width, height },
                     };
                     canvas.reset();
                     canvas.assert_context(alpha);
-                    unsafe {
-                        if let Some(off) = mode {
-                            c::DrawOval(&mut c_rect, off);
-                        } else {
-                            c::DrawFilledOval(&mut c_rect);
-                        }
+                    let context = uqm_rust::graphics::context_abi::ContextLease::require(
+                        canvas.context.cast(),
+                    );
+                    let rectangle = uqm_rust::comm::locdata::CRect {
+                        corner: uqm_rust::comm::locdata::CPoint { x, y },
+                        width,
+                        height,
+                    };
+                    let mut renderer = uqm_rust::planets::render::c_api::NativeOvalGfx::new(
+                        &context, screen.0, screen.1,
+                    );
+                    if let Some(off) = mode {
+                        uqm_rust::planets::render::oval::draw_oval(&rectangle, off, &mut renderer);
+                    } else {
+                        uqm_rust::planets::render::oval::draw_filled_oval(
+                            &rectangle,
+                            &mut renderer,
+                        );
                     }
                     canvas.assert_context(alpha);
                     let actual = canvas.pixels();
                     if (x, y, width, height) == (10, 20, 5, 5) {
                         assert!(
                             actual.iter().any(|p| *p != [11, 23, 37, 255]),
-                            "exported Rust oval must draw into the RAM frame"
+                            "retained Rust oval must draw into the RAM frame"
                         );
                     }
                     assert_eq!(
@@ -270,7 +282,7 @@ pub fn exported_ovals_match_original_c_full_offscreen_buffers() {
                         raw.read_exact(&mut expected)
                             .expect("complete original-C buffer");
                         raw_digest.update(&expected);
-                        assert_eq!(bytes, expected, "exported ABI differs from original C: screen={screen:?} case={case} alpha={alpha} mode={mode:?}");
+                        assert_eq!(bytes, expected, "retained renderer differs from original C: screen={screen:?} case={case} alpha={alpha} mode={mode:?}");
                     }
                 }
             }

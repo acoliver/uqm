@@ -2,6 +2,7 @@
 pub mod lander_resources;
 mod pilot_flash;
 pub mod planet_animation;
+pub mod roster_flash;
 use super::battle::{
     kernel::{Channels, SoundQueue, StarPlane},
     ShipId,
@@ -98,6 +99,8 @@ pub struct Kernel {
     pub star_map_flash: StarMapFlash,
     pub lander_resources: Option<lander_resources::LanderResources>,
     pub pilot_flash: std::cell::RefCell<PilotFlash>,
+    pub roster_flash: roster_flash::RosterFlash,
+    pub device_observation: crate::observe::DeviceObservation,
     pub planet_animation: std::rc::Rc<planet_animation::PlanetAnimation>,
     pub instant_move: bool,
     pub sis_highlight: std::rc::Rc<SisHighlight>,
@@ -289,6 +292,8 @@ impl Kernel {
             star_map_flash: StarMapFlash::default(),
             lander_resources: None,
             pilot_flash: std::cell::RefCell::default(),
+            roster_flash: roster_flash::RosterFlash::default(),
+            device_observation: crate::observe::DeviceObservation::default(),
             planet_animation: std::rc::Rc::default(),
             instant_move: false,
             sis_highlight: std::rc::Rc::new(SisHighlight::default()),

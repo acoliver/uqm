@@ -49,6 +49,7 @@ pub enum CheckpointView<'a> {
     ShipPicker(bool),
     ShipPickerCursor { x: i16, y: i16 },
     StarMap(Option<StarMapView>),
+    Devices(&'a DeviceObservation),
     Won,
     PresentationStarted,
     PresentationCancelled,
