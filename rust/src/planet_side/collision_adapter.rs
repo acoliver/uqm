@@ -16,7 +16,7 @@ use super::hazards::{HazardKind, SoundCue};
 use super::model::SurfacePoint;
 use super::runtime::{AdapterError, CollisionContact, PlanetSideCollision, WorldStepResult};
 use super::simulation::{LanderState, Shot};
-use super::special_effects::{self, SpecialPickupEffects};
+use super::special_effects::{PickupContext, SpecialPickupEffects};
 use super::world::{self, HazardChances, WorldStepInputs};
 
 /// Gameplay RNG boundary. Surface generation uses a separate random context.
@@ -170,9 +170,12 @@ impl<R, G: SurfaceGenerator, V, P> SurfaceCollisionAdapter<R, G, V, P> {
                     .copied()
             };
             let should_remove = match mapping {
-                Some(mapping) => {
-                    persist_pickup(&mut self.generator, &mut self.persistence, mapping)?
-                }
+                Some(mapping) => persist_pickup(
+                    &mut self.generator,
+                    &mut self.persistence,
+                    mapping,
+                    &mut PickupContext::NoLander,
+                )?,
                 None => true,
             };
             if should_remove {
@@ -339,26 +342,27 @@ where
                 .find(|entry| entry.entity == entity_id)
                 .copied()
         };
-        let mut effects = SpecialPickupEffects::default();
+        let mut effects = PickupContext::lander(crew);
         let should_remove = match outcome {
             CollisionOutcome::Cargo {
                 remove_node: true, ..
             } => match generated {
-                Some(mapping) => {
-                    special_effects::begin(crew);
-                    let result =
-                        persist_pickup(&mut self.generator, &mut self.persistence, mapping);
-                    effects = special_effects::finish();
-                    result?
-                }
+                Some(mapping) => persist_pickup(
+                    &mut self.generator,
+                    &mut self.persistence,
+                    mapping,
+                    &mut effects,
+                )?,
                 None => true,
             },
             CollisionOutcome::EnergyPickupRequested { .. } => {
                 let mapping = generated.ok_or(AdapterError::new("energy_generation_mapping"))?;
-                special_effects::begin(crew);
-                let result = persist_pickup(&mut self.generator, &mut self.persistence, mapping);
-                effects = special_effects::finish();
-                let retrieved = result?;
+                let retrieved = persist_pickup(
+                    &mut self.generator,
+                    &mut self.persistence,
+                    mapping,
+                    &mut effects,
+                )?;
                 if retrieved {
                     self.telemetry
                         .borrow_mut()
@@ -386,7 +390,7 @@ where
                 },
             );
         }
-        Ok(effects)
+        Ok(effects.effects())
     }
 
     fn register_shot(&mut self, shot: Shot) -> Result<(), AdapterError> {
@@ -606,8 +610,9 @@ mod tests {
             &mut self,
             _scan: super::super::generation::ScanType,
             _node: super::super::generation::ScanNodeId,
+            _effects: &mut crate::planet_side::special_effects::PickupContext,
         ) -> Result<bool, AdapterError> {
-            super::super::special_effects::set_lander_takeoff();
+            _effects.request_takeoff();
             Ok(true)
         }
     }
@@ -644,6 +649,7 @@ mod tests {
             &mut self,
             _scan: super::super::generation::ScanType,
             _node: super::super::generation::ScanNodeId,
+            _effects: &mut crate::planet_side::special_effects::PickupContext,
         ) -> Result<bool, AdapterError> {
             Ok(true)
         }
@@ -877,6 +883,7 @@ mod tests {
             &mut self,
             _: super::super::generation::ScanType,
             node: super::super::generation::ScanNodeId,
+            _effects: &mut crate::planet_side::special_effects::PickupContext,
         ) -> Result<bool, AdapterError> {
             self.files
                 .borrow_mut()
@@ -1744,5 +1751,183 @@ mod tests {
             before.seam_hits + 1,
             "a classified wrapped-only contact counts as a seam hit"
         );
+    }
+
+    struct EffectGenerator {
+        result: Result<bool, AdapterError>,
+        crew_loss: u16,
+        takeoff: bool,
+        no_lander: bool,
+    }
+
+    impl SurfaceGenerator for EffectGenerator {
+        fn node_count(
+            &mut self,
+            scan: super::super::generation::ScanType,
+        ) -> Result<u8, AdapterError> {
+            Generator.node_count(scan)
+        }
+        fn generate(
+            &mut self,
+            scan: super::super::generation::ScanType,
+            node: super::super::generation::ScanNodeId,
+        ) -> Result<super::super::generation::GeneratedNode, AdapterError> {
+            Generator.generate(scan, node)
+        }
+        fn can_node(
+            &mut self,
+            node: super::super::generation::ScanNodeId,
+            position: SurfacePoint,
+            value: u16,
+        ) -> Result<(), AdapterError> {
+            Generator.can_node(node, position, value)
+        }
+        fn pickup(
+            &mut self,
+            _: super::super::generation::ScanType,
+            _: super::super::generation::ScanNodeId,
+            effects: &mut PickupContext,
+        ) -> Result<bool, AdapterError> {
+            assert_eq!(matches!(effects, PickupContext::NoLander), self.no_lander);
+            effects.kill_crew(self.crew_loss, 42);
+            if self.takeoff {
+                effects.request_takeoff();
+            }
+            self.result.clone()
+        }
+    }
+
+    fn effect_adapter(
+        scan: super::super::generation::ScanType,
+        result: Result<bool, AdapterError>,
+        no_lander: bool,
+    ) -> SurfaceCollisionAdapter<Random, EffectGenerator, TestWorldVisuals> {
+        use super::super::generation::{GeneratedEntity, ScanNodeId};
+        let kind = match scan {
+            super::super::generation::ScanType::Energy => SurfaceEntityKind::EnergyNode { node: 0 },
+            _ => SurfaceEntityKind::CannedCreature {
+                value: 1,
+                animation_wait: 0,
+                frame_index: 0,
+            },
+        };
+        let surface = shared_surface_with_entity(SurfaceEntity {
+            kind,
+            position: SurfacePoint::default(),
+            finite_life: None,
+        });
+        let id = surface.borrow().world.iter().next().unwrap().0;
+        surface.borrow_mut().generated.push(GeneratedEntity {
+            entity: id,
+            scan,
+            node: ScanNodeId::new(0).unwrap(),
+        });
+        SurfaceCollisionAdapter {
+            generator: EffectGenerator {
+                result,
+                crew_loss: 8,
+                takeoff: true,
+                no_lander,
+            },
+            telemetry: super::super::telemetry::tests::trip(),
+            publish: |_: &super::super::telemetry::TripTelemetry| {},
+            surface,
+            random: Random {
+                values: Default::default(),
+                calls: 0,
+            },
+            persistence: ScanPersistence::default(),
+            world_visuals: TestWorldVisuals,
+            earthquake_frame_count: 13,
+            lava_frame_count: 7,
+        }
+    }
+
+    #[test]
+    fn accepted_and_rejected_pickups_return_effects_but_only_accepted_nodes_disappear() {
+        use super::super::generation::{ScanNodeId, ScanType};
+        for scan in [ScanType::Energy, ScanType::Biological] {
+            for accepted in [false, true] {
+                let mut adapter = effect_adapter(scan, Ok(accepted), false);
+                let contact = adapter.contacts(&lander()).unwrap()[0];
+                let outcome = if scan == ScanType::Energy {
+                    CollisionOutcome::EnergyPickupRequested { node: 0 }
+                } else {
+                    CollisionOutcome::Cargo {
+                        pickup: CargoPickup::Collected {
+                            amount: 1,
+                            complete: true,
+                        },
+                        remove_node: true,
+                    }
+                };
+                assert_eq!(
+                    adapter.commit(contact, &outcome, 12).unwrap(),
+                    SpecialPickupEffects {
+                        crew_killed: 8,
+                        takeoff_requested: true
+                    }
+                );
+                assert_eq!(
+                    adapter
+                        .persistence
+                        .is_retrieved(scan, ScanNodeId::new(0).unwrap()),
+                    accepted
+                );
+                let surface = adapter.surface.borrow();
+                assert_eq!(
+                    surface.world.get(contact.entity.unwrap()).is_none(),
+                    accepted
+                );
+                assert_eq!(
+                    surface.masks.entity_mask(contact.entity.unwrap()).is_none(),
+                    accepted
+                );
+                assert_eq!(surface.generated.is_empty(), accepted);
+            }
+        }
+    }
+
+    #[test]
+    fn failed_callback_does_not_leak_effects_into_a_later_pickup() {
+        use super::super::generation::ScanType;
+        let mut adapter = effect_adapter(
+            ScanType::Energy,
+            Err(AdapterError::new("pickup_failed")),
+            false,
+        );
+        let contact = adapter.contacts(&lander()).unwrap()[0];
+        let outcome = CollisionOutcome::EnergyPickupRequested { node: 0 };
+        assert_eq!(
+            adapter.commit(contact, &outcome, 12),
+            Err(AdapterError::new("pickup_failed"))
+        );
+        assert_eq!(adapter.persistence.to_masks(), [0; 3]);
+        assert!(adapter
+            .surface
+            .borrow()
+            .world
+            .get(contact.entity.unwrap())
+            .is_some());
+        adapter.generator.result = Ok(true);
+        adapter.generator.crew_loss = 0;
+        adapter.generator.takeoff = false;
+        assert_eq!(
+            adapter.commit(contact, &outcome, 12).unwrap(),
+            SpecialPickupEffects::default()
+        );
+        assert_eq!(adapter.persistence.to_masks(), [0, 1, 0]);
+    }
+
+    #[test]
+    fn shot_retirement_has_explicit_no_lander_and_accepted_only_removal() {
+        use super::super::generation::ScanType;
+        for accepted in [false, true] {
+            let mut adapter = effect_adapter(ScanType::Biological, Ok(accepted), true);
+            let id = adapter.surface.borrow().generated[0].entity;
+            adapter.commit_retrieved_nodes(&[id]).unwrap();
+            assert_eq!(adapter.surface.borrow().world.get(id).is_none(), accepted);
+            assert_eq!(adapter.persistence.to_masks(), [0, 0, u32::from(accepted)]);
+        }
     }
 }

@@ -212,7 +212,12 @@ mod tests {
                 },
             })
         }
-        fn pickup(&mut self, _scan: ScanType, _node: ScanNodeId) -> Result<bool, AdapterError> {
+        fn pickup(
+            &mut self,
+            _scan: ScanType,
+            _node: ScanNodeId,
+            _effects: &mut crate::planet_side::special_effects::PickupContext,
+        ) -> Result<bool, AdapterError> {
             Ok(true)
         }
     }

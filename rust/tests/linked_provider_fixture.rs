@@ -6,8 +6,11 @@ use uqm_rust::front_end::uqmdebug::uqm_debug_creature_bio_value;
 #[test]
 #[cfg(feature = "debug-process")]
 fn debug_consumer_observes_the_rust_creature_catalog() {
-    for creature_type in 0..27 {
-        let expected = uqm_rust::planet_side::creatures::rust_creature_bio_value(creature_type);
+    use uqm_rust::planet_side::creatures::{CreatureCatalog, CreatureKind};
+    for creature_type in 0..=u8::MAX {
+        let expected = CreatureKind::new(creature_type)
+            .map(|kind| i32::from(CreatureCatalog::raw_lifedata(kind).1 & 0x0f))
+            .unwrap_or(-1);
         let observed = uqm_debug_creature_bio_value(creature_type);
         assert_eq!(observed, expected, "creature type {creature_type}");
     }

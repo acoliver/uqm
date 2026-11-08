@@ -126,15 +126,6 @@ impl CreatureCatalog {
     }
 }
 
-/// Return the biological multiplier used by `calculateBioValue`, or `-1` for
-/// an invalid creature type.
-#[no_mangle]
-pub extern "C" fn rust_creature_bio_value(creature_type: u8) -> i32 {
-    CreatureKind::new(creature_type)
-        .map(|kind| i32::from(CreatureCatalog::raw_lifedata(kind).1 & 0x0f))
-        .unwrap_or(-1)
-}
-
 const HUNT: u8 = 0;
 const FLEE: u8 = 1;
 const UNPREDICTABLE: u8 = 2;
@@ -224,16 +215,19 @@ mod tests {
     }
 
     #[test]
-    fn ffi_accessor_matches_calculate_bio_value_semantics() {
+    fn catalog_preserves_the_debug_multiplier_low_nibble() {
         for index in 0..CREATURE_COUNT as u8 {
             let packed = CreatureCatalog::raw_lifedata(CreatureKind::new(index).unwrap()).1;
-            assert_eq!(rust_creature_bio_value(index), i32::from(packed & 0x0f));
+            assert_eq!(
+                CreatureCatalog::stats(CreatureKind::new(index).unwrap()).hit_points,
+                packed & 0x0f
+            );
         }
     }
 
     #[test]
-    fn ffi_accessor_rejects_invalid_indices_unambiguously() {
-        assert_eq!(rust_creature_bio_value(CREATURE_COUNT as u8), -1);
-        assert_eq!(rust_creature_bio_value(u8::MAX), -1);
+    fn catalog_rejects_invalid_indices_unambiguously() {
+        assert_eq!(CreatureKind::new(CREATURE_COUNT as u8), None);
+        assert_eq!(CreatureKind::new(u8::MAX), None);
     }
 }

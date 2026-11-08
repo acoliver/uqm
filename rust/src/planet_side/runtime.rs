@@ -1062,6 +1062,54 @@ mod tests {
 
     #[test]
     #[serial_test::serial]
+    fn fatal_pickup_effects_keep_takeoff_before_explosion_order() {
+        let mut owner = crate::engine::Game::new();
+        let mut battle = crate::engine::battle::Battle::new();
+        let cx = &RefCell::new(Cx::new(
+            &mut battle,
+            &mut owner.world,
+            &mut owner.kernel,
+            crate::math::random,
+        ));
+        for takeoff_requested in [false, true] {
+            let mut session = session();
+            let mut adapters = RuntimeAdapters {
+                input: Input(FrameInput::default()),
+                collision: EffectCollision(SpecialPickupEffects {
+                    crew_killed: 12,
+                    takeoff_requested,
+                }),
+                graphics: Graphics::default(),
+                audio: Audio::default(),
+                clock: Clock::default(),
+                ship: Ship::default(),
+            };
+            assert_eq!(
+                run_frame(cx, &mut session, &mut adapters, 1),
+                Ok(RuntimeStep::Continue)
+            );
+            assert_eq!(session.lander.crew.get(), 0);
+            assert_eq!(
+                session.phase,
+                if takeoff_requested {
+                    SessionPhase::Active
+                } else {
+                    SessionPhase::Explosion
+                }
+            );
+            assert_eq!(
+                adapters.audio.0,
+                if takeoff_requested {
+                    vec![]
+                } else {
+                    vec![SoundCue::Destroyed]
+                }
+            );
+        }
+    }
+
+    #[test]
+    #[serial_test::serial]
     fn special_pickup_auto_takeoff_completes_without_input() {
         let mut owner = crate::engine::Game::new();
         let mut battle = crate::engine::battle::Battle::new();
