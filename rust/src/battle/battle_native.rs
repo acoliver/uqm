@@ -500,6 +500,7 @@ mod tests {
             Injected {
                 seed: self.seed,
                 stop: false,
+                planet_side: None,
             }
         }
 

@@ -273,7 +273,8 @@ mod tests {
                 vec![solid()]
             ),
             Err(AdapterError {
-                operation: "lander_collision_masks"
+                operation: "lander_collision_masks",
+                batch_depth_corrections: 0
             })
         ));
     }

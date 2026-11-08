@@ -85,24 +85,33 @@ impl crate::planets::generate::host::PlanetSite for Site<'_, '_, '_> {
     }
 }
 
-pub(super) unsafe fn discovery_report(
-    system: *mut crate::ships::native::abi::SOLARSYS_STATE,
-) -> crate::planet_side::report_adapter::CffiDiscoveryReport {
-    // SAFETY: the caller owns this initialized system for the report lifetime.
-    let slot = unsafe { std::ptr::addr_of_mut!((*system).SysInfo.planet_info.discovery_string) };
-    crate::planet_side::report_adapter::CffiDiscoveryReport::new(slot.cast(), system)
+impl<'a, 'game, 'observer> Site<'a, 'game, 'observer> {
+    pub(super) fn discovery_report(
+        &self,
+    ) -> crate::planet_side::report_adapter::CffiDiscoveryReport<'a, 'observer, impl FnMut()> {
+        let system = self.record.as_ptr();
+        // SAFETY: this site retains the initialized system and its report slot.
+        let slot =
+            unsafe { std::ptr::addr_of_mut!((*system).SysInfo.planet_info.discovery_string) };
+        crate::planet_side::report_adapter::CffiDiscoveryReport::new(
+            slot.cast(),
+            self.io,
+            move || {
+                // SAFETY: the site presents synchronously while its published record remains live.
+                unsafe { crate::planets::report::live::discovery_report(system) };
+            },
+        )
         .unwrap_or_else(|error| {
             panic!("the discovery string slot is part of the system state: {error:?}")
         })
+    }
 }
 
 impl crate::planets::generate::host::ReportSite for Site<'_, '_, '_> {
     fn report(&mut self, _system: &mut SolarSys<'_>, disposition: ReportDisposition) -> bool {
         use crate::planet_side::report_adapter::DiscoveryReportPort;
-        let record = self.record.as_ptr();
         self.game.borrow_mut().with_legacy(|| {
-            // SAFETY: presentation is synchronous, with no record reference held by content.
-            unsafe { discovery_report(record) }
+            self.discovery_report()
                 .present(disposition)
                 .unwrap_or_else(|error| panic!("the discovery report site is linked: {error:?}"))
         })

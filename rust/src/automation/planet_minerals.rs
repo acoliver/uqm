@@ -12,9 +12,9 @@
 use crate::automation::navigation::NavigationControl;
 use crate::automation::script::CollectPlanetMineralsStep;
 use crate::battle::battle_types::{angle_to_facing, arctan, shortest_path_delta};
+use crate::engine::observe_port::planet_side::{phase_name, MineralDeposit, PlanetSideObservation};
 use crate::planet_side::cargo::{ElementCategory, NUM_ELEMENT_CATEGORIES};
 use crate::planet_side::model::SurfacePoint;
-use crate::planet_side::telemetry::{self, MineralDeposit};
 use crate::planet_side::world::WORLD_WIDTH;
 
 /// `SessionPhase::Active`, the only phase in which the lander answers input.
@@ -38,10 +38,11 @@ pub struct PlanetSnapshot {
 }
 
 impl PlanetSnapshot {
-    /// The live session, read field by field on the game thread.
     #[must_use]
-    pub fn live() -> Self {
-        let observation = telemetry::observation();
+    pub fn from_observation(
+        observation: PlanetSideObservation,
+        deposits: Option<Vec<MineralDeposit>>,
+    ) -> Self {
         Self {
             active: observation.active,
             generation: observation.generation,
@@ -52,7 +53,7 @@ impl PlanetSnapshot {
             },
             facing: observation.facing,
             units: observation.mineral_units,
-            deposits: telemetry::deposits(),
+            deposits,
         }
     }
 }
@@ -95,7 +96,7 @@ impl CollectError {
     pub fn trace_label(&self, step: &CollectPlanetMineralsStep) -> String {
         let reason = match self {
             Self::LeftPlanetSide { phase } => {
-                format!("left_planet_side:phase={}", telemetry::phase_name(*phase))
+                format!("left_planet_side:phase={}", phase_name(*phase))
             }
             Self::NoDeposits => "no_deposits".to_string(),
             Self::Timeout { units } => format!("timeout:units={units}"),

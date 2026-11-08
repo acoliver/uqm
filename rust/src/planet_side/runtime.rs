@@ -50,12 +50,16 @@ impl RenderSnapshot {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AdapterError {
     pub operation: &'static str,
+    pub batch_depth_corrections: i32,
 }
 
 impl AdapterError {
     #[must_use]
     pub const fn new(operation: &'static str) -> Self {
-        Self { operation }
+        Self {
+            operation,
+            batch_depth_corrections: 0,
+        }
     }
 }
 

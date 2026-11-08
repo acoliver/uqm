@@ -40,6 +40,7 @@ impl Observer<Option<CampaignView>> for WaitObserver {
         Injected {
             stop: true,
             seed: None,
+            planet_side: None,
         }
     }
     fn checkpoint(&mut self, _: &CheckpointView<'_>) {}

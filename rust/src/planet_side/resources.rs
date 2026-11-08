@@ -272,7 +272,8 @@ mod tests {
         assert!(matches!(
             result,
             Err(AdapterError {
-                operation: "load_planet_side_graphic"
+                operation: "load_planet_side_graphic",
+                batch_depth_corrections: 0
             })
         ));
         assert_eq!(*freed.lock().unwrap(), [GRAPHIC_KEYS[1], GRAPHIC_KEYS[0]]);
@@ -290,7 +291,8 @@ mod tests {
         assert!(matches!(
             result,
             Err(AdapterError {
-                operation: "load_planet_side_sound"
+                operation: "load_planet_side_sound",
+                batch_depth_corrections: 0
             })
         ));
         let mut expected = GRAPHIC_KEYS.to_vec();

@@ -1,6 +1,6 @@
 use super::observer::Handle;
 use super::{campaign_state, coordinator::AutomationObserver, ending::Ending};
-use crate::engine::observe::{CheckpointView, Observer};
+use crate::engine::observe::{CheckpointView, InputView, Observer};
 use std::sync::Arc;
 
 fn observer() -> (tempfile::TempDir, Handle) {
@@ -226,4 +226,131 @@ fn starting_another_scene_resets_dispatch_and_requires_new_observations() {
             Some(plan.expected_dialogue_conversation)
         )
     );
+}
+
+#[test]
+fn lander_checkpoints_are_copied_into_the_supplied_observer() {
+    use crate::engine::observe_port::planet_side::{MineralDeposit, PlanetSideSnapshot};
+    let (_first_output, mut first) = observer();
+    let (_second_output, second) = observer();
+    let mut trip = PlanetSideSnapshot::default();
+    trip.observation.generation = 4;
+    trip.observation.active = true;
+    trip.observation.phase = 4;
+    trip.observation.current_x = 30;
+    trip.observation.current_y = 60;
+    trip.observation.facing = 7;
+    trip.observation.mineral_units[6] = 5;
+    trip.deposits = Some(vec![MineralDeposit {
+        x: 35,
+        y: 65,
+        category: 6,
+    }]);
+    trip.energy_nodes = vec![(31, 80, 90)];
+    trip.energy_retrieved = 1 << 31;
+    first.checkpoint(&CheckpointView::PlanetSide(&trip));
+    let copied = first.0.planet_side.lock().clone();
+    assert_eq!(copied, trip);
+    trip.energy_nodes.clear();
+    trip.deposits = None;
+    assert_eq!(*first.0.planet_side.lock(), copied);
+    assert_eq!(*second.0.planet_side.lock(), PlanetSideSnapshot::default());
+    let mineral = super::planet_minerals::PlanetSnapshot::from_observation(
+        copied.observation,
+        copied.deposits.clone(),
+    );
+    assert_eq!(mineral.generation, 4);
+    assert_eq!(
+        mineral.position,
+        crate::planet_side::model::SurfacePoint { x: 30, y: 60 }
+    );
+    assert_eq!(mineral.facing, 7);
+    assert_eq!(mineral.units[6], 5);
+    assert_eq!(mineral.deposits, copied.deposits);
+    assert!(mineral.active);
+    first.checkpoint(&CheckpointView::PlanetSide(&trip));
+    assert_eq!(*first.0.planet_side.lock(), trip);
+    assert_eq!(*second.0.planet_side.lock(), PlanetSideSnapshot::default());
+}
+
+#[test]
+fn lander_fixture_requests_belong_to_each_observer() {
+    use crate::engine::observe_port::planet_side::FixtureLayout;
+    let (_first_output, first) = observer();
+    let (_second_output, second) = observer();
+    first
+        .0
+        .planet_side_fixtures
+        .lock()
+        .queue(FixtureLayout::CollisionParity)
+        .unwrap();
+    assert!(second.0.planet_side_fixtures.lock().take().is_none());
+    assert_eq!(
+        first.0.planet_side_fixtures.lock().take(),
+        Some(FixtureLayout::CollisionParity)
+    );
+    assert!(first.0.planet_side_fixtures.lock().take().is_none());
+    first
+        .0
+        .planet_side_fixtures
+        .lock()
+        .queue(FixtureLayout::CollisionParity)
+        .unwrap();
+    second
+        .0
+        .planet_side_fixtures
+        .lock()
+        .queue(FixtureLayout::MineralGallery)
+        .unwrap();
+    first.0.finalize(0).unwrap();
+    assert!(first.0.planet_side_fixtures.lock().take().is_none());
+    assert_eq!(
+        second.0.planet_side_fixtures.lock().take(),
+        Some(FixtureLayout::MineralGallery)
+    );
+}
+
+#[test]
+fn lander_admission_consumes_only_its_observers_request_and_sequence() {
+    use crate::engine::observe_port::planet_side::FixtureLayout;
+    let (_first_output, mut first) = observer();
+    let (_second_output, mut second) = observer();
+    first
+        .0
+        .planet_side_fixtures
+        .lock()
+        .queue(FixtureLayout::MineralGallery)
+        .unwrap();
+    let first_trip = first
+        .input_admitted(&InputView::PlanetSideBegin, &None)
+        .planet_side
+        .unwrap();
+    assert_eq!(first_trip.generation, 1);
+    assert_eq!(first_trip.fixture, Some(FixtureLayout::MineralGallery));
+    let next_trip = first
+        .input_admitted(&InputView::PlanetSideBegin, &None)
+        .planet_side
+        .unwrap();
+    assert_eq!(next_trip.generation, 2);
+    assert_eq!(next_trip.fixture, None);
+    let other_trip = second
+        .input_admitted(&InputView::PlanetSideBegin, &None)
+        .planet_side
+        .unwrap();
+    assert_eq!(other_trip.generation, 1);
+    assert_eq!(other_trip.fixture, None);
+}
+
+#[test]
+fn report_visibility_belongs_to_the_supplied_observer_and_survives_trip_updates() {
+    let (_first_output, mut first) = observer();
+    let (_second_output, second) = observer();
+    first.checkpoint(&CheckpointView::PlanetSideReport(true));
+    assert!(*first.0.planet_side_report.lock());
+    assert!(!*second.0.planet_side_report.lock());
+    first.checkpoint(&CheckpointView::PlanetSide(&Default::default()));
+    assert!(*first.0.planet_side_report.lock());
+    first.checkpoint(&CheckpointView::PlanetSideReport(false));
+    assert!(!*first.0.planet_side_report.lock());
+    assert!(!*second.0.planet_side_report.lock());
 }

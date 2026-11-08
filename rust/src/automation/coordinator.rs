@@ -19,6 +19,7 @@ use crate::engine::{battle::Cx, StoryKey};
 mod fixtures;
 mod initialization;
 mod input;
+mod lander;
 use input::discard_held_repeat;
 mod navigation;
 mod parity;
@@ -129,7 +130,7 @@ struct PendingAcceptedPlayerInput {
 /// being observed, it must have settled, and its terminal code must match.
 fn planet_side_wait_satisfied(
     awaited: Option<u64>,
-    observation: &crate::planet_side::telemetry::PlanetSideObservation,
+    observation: &crate::engine::observe_port::planet_side::PlanetSideObservation,
     outcome: crate::automation::script::PlanetSideOutcomeName,
 ) -> bool {
     awaited == Some(observation.generation)
@@ -141,7 +142,7 @@ fn planet_side_wait_satisfied(
 /// it exhausted its ticks.
 fn planet_side_wait_mismatch_label(
     awaited: Option<u64>,
-    observation: &crate::planet_side::telemetry::PlanetSideObservation,
+    observation: &crate::engine::observe_port::planet_side::PlanetSideObservation,
     outcome: crate::automation::script::PlanetSideOutcomeName,
 ) -> String {
     format!(
@@ -151,7 +152,7 @@ fn planet_side_wait_mismatch_label(
         observation.generation,
         observation.active,
         observation.terminal,
-        crate::planet_side::telemetry::phase_name(observation.phase),
+        crate::engine::observe_port::planet_side::phase_name(observation.phase),
         observation.current_crew
     )
 }
@@ -302,6 +303,10 @@ pub struct AutomationObserver {
     pub(crate) ui: super::ui_observation::UiObservation,
     pub(crate) scene: Mutex<scenario::SceneObservation>,
     pub(crate) ending: Mutex<super::ending::Ending>,
+    pub(crate) planet_side: Mutex<crate::engine::observe_port::planet_side::PlanetSideSnapshot>,
+    pub(crate) planet_side_fixtures: Mutex<crate::planet_side::automation_fixture::FixtureRequests>,
+    pub(crate) planet_side_sequence: Mutex<u64>,
+    pub(crate) planet_side_report: Mutex<bool>,
     #[cfg(feature = "debug-process")]
     pub(crate) pending_native_presentation:
         Mutex<Option<super::native_window::NativeWindowChildState>>,
@@ -431,6 +436,10 @@ impl AutomationObserver {
             ui: Default::default(),
             scene: Default::default(),
             ending: Default::default(),
+            planet_side: Default::default(),
+            planet_side_fixtures: Default::default(),
+            planet_side_sequence: Default::default(),
+            planet_side_report: Default::default(),
             #[cfg(feature = "debug-process")]
             pending_native_presentation: Default::default(),
             activity,
@@ -1070,7 +1079,7 @@ impl AutomationObserver {
 
         let progress = inner
             .planet_minerals
-            .observe(&planet_minerals::PlanetSnapshot::live(), &collect);
+            .observe(&self.planet_snapshot(), &collect);
         match progress {
             Ok(CollectProgress::Steering(control)) => {
                 if !self.set_navigation_controls(control) {
@@ -1206,7 +1215,8 @@ impl AutomationObserver {
         if inner.sched_state.phase == ActionPhase::WaitingForInput {
             inner.energy = EnergyTracker::default();
         }
-        let (nodes, retrieved) = crate::planet_side::telemetry::energy_snapshot();
+        let trip = self.planet_side.lock().clone();
+        let (nodes, retrieved) = (trip.energy_nodes, trip.energy_retrieved);
         let flags = ARTIFACT_FLAGS
             .iter()
             .map(|(key, _)| world.story_value(*key).map(u32::from))
@@ -1216,8 +1226,8 @@ impl AutomationObserver {
             return event;
         };
         let observation = EnergyObservation {
-            report_active: crate::planet_side::report_adapter::report_active(),
-            lander: planet_minerals::PlanetSnapshot::live(),
+            report_active: *self.planet_side_report.lock(),
+            lander: self.planet_snapshot(),
             nodes,
             retrieved,
             vault_unlocked: world.story_value(StoryKey::SHIP_VAULT_UNLOCKED) == Some(1),
@@ -1903,7 +1913,7 @@ impl AutomationObserver {
         };
         let label = planet_side_wait_mismatch_label(
             inner.awaited_planet_side_generation,
-            &crate::planet_side::telemetry::observation(),
+            &self.planet_side.lock().observation,
             wait.outcome,
         );
         self.write_trace_labeled(inner, RecordKind::SemanticAssertion, label);
@@ -2231,7 +2241,7 @@ impl AutomationObserver {
         if let Some(Action::AssertPlanetSideCollisions(assertion)) =
             self.actions.get(inner.sched_state.step_index)
         {
-            let observation = crate::planet_side::telemetry::observation();
+            let observation = self.planet_side.lock().observation;
             let actual = (
                 observation.mineral_pickups,
                 observation.creature_hits,
@@ -2652,7 +2662,7 @@ impl AutomationObserver {
         // Clear any pending fixture request before runtime finalization:
         // the single fixture is one-shot per script, so an unconsumed queue
         // must never leak into another script.
-        crate::planet_side::automation_fixture::clear_pending_fixture_request();
+        self.planet_side_fixtures.lock().clear();
 
         let terminal = {
             let mut inner = self.inner.lock();
@@ -2705,95 +2715,6 @@ impl AutomationObserver {
     // -----------------------------------------------------------------------
     //  Internal helpers
     // -----------------------------------------------------------------------
-    /// Service whichever planet-side wait is the current action.
-    ///
-    /// Returns `None` when the current action is not a planet-side wait, so the
-    /// caller can fall through to the remaining action handlers.
-    fn service_planet_side_wait(&self, inner: &mut CoordInner) -> Option<PlanetSideWaitResult> {
-        match self.actions.get(inner.sched_state.step_index) {
-            Some(Action::WaitForPlanetSideStart(_)) => Some(self.observe_planet_side_start(inner)),
-            Some(Action::WaitForPlanetSideEnd(wait)) => {
-                Some(self.observe_planet_side_end(inner, wait.outcome))
-            }
-            _ => None,
-        }
-    }
-
-    /// Record a serviced planet-side wait, returning the scheduler event to use.
-    fn record_planet_side_result(
-        &self,
-        inner: &mut CoordInner,
-        result: PlanetSideWaitResult,
-        current: SchedulerEvent,
-    ) -> SchedulerEvent {
-        for label in result.labels {
-            self.write_trace_labeled(inner, RecordKind::SemanticAssertion, label);
-        }
-        if result.reached {
-            SchedulerEvent::ConditionReached
-        } else {
-            current
-        }
-    }
-
-    /// Latch the generation of a newly started planet-side trip.
-    fn observe_planet_side_start(&self, inner: &mut CoordInner) -> PlanetSideWaitResult {
-        let observation = crate::planet_side::telemetry::observation();
-        if !observation.active {
-            return PlanetSideWaitResult::pending();
-        }
-        inner.awaited_planet_side_generation = Some(observation.generation);
-        inner.observed_planet_side_phase = None;
-        PlanetSideWaitResult::reached(format!(
-            "planet_side_started:generation={}:crew={}:position={},{}",
-            observation.generation,
-            observation.start_crew,
-            observation.start_x,
-            observation.start_y
-        ))
-    }
-
-    /// Accept the settled outcome of the trip this wait is bound to, tracing
-    /// every lifecycle transition seen along the way.
-    ///
-    /// A trip publishes its terminal code only once it has settled, and that
-    /// code stays resident afterwards. Matching on the latched generation is
-    /// therefore required: without it a later wait would immediately consume an
-    /// earlier trip's result. Transitions are rare, so recording each one shows
-    /// whether a trip that never ends is stuck before takeoff or stalled in the
-    /// takeoff animation. Deduplication is keyed by generation as well as phase
-    /// so the same phase in a later trip is not swallowed.
-    fn observe_planet_side_end(
-        &self,
-        inner: &mut CoordInner,
-        outcome: crate::automation::script::PlanetSideOutcomeName,
-    ) -> PlanetSideWaitResult {
-        let observation = crate::planet_side::telemetry::observation();
-        let mut result = PlanetSideWaitResult::pending();
-
-        let seen = (observation.generation, observation.phase);
-        if inner.observed_planet_side_phase != Some(seen) {
-            inner.observed_planet_side_phase = Some(seen);
-            result.labels.push(format!(
-                "planet_side_phase:generation={}:phase={}",
-                observation.generation,
-                crate::planet_side::telemetry::phase_name(observation.phase)
-            ));
-        }
-
-        if !planet_side_wait_satisfied(inner.awaited_planet_side_generation, &observation, outcome)
-        {
-            return result;
-        }
-        inner.awaited_planet_side_generation = None;
-        result.reached = true;
-        result.labels.push(format!(
-            "planet_side_completed:generation={}:outcome={outcome:?}:crew={}:minerals={}",
-            observation.generation, observation.returned_crew, observation.returned_minerals
-        ));
-        result
-    }
-
     /// Hold exactly the thrust, turn and fire keys of `control`.
     fn set_fight_controls(&self, control: FightControl) -> bool {
         use crate::automation::script::PlayerKey;
@@ -4454,8 +4375,8 @@ mod tests {
     fn settled(
         generation: u64,
         terminal: u32,
-    ) -> crate::planet_side::telemetry::PlanetSideObservation {
-        crate::planet_side::telemetry::PlanetSideObservation {
+    ) -> crate::engine::observe_port::planet_side::PlanetSideObservation {
+        crate::engine::observe_port::planet_side::PlanetSideObservation {
             generation,
             active: false,
             terminal,
@@ -4477,7 +4398,10 @@ mod tests {
     #[test]
     fn exhausted_planet_side_wait_names_the_state_it_last_observed() {
         let outcome = crate::automation::script::PlanetSideOutcomeName::Returned;
-        let mut observation = settled(1, crate::planet_side::telemetry::terminal::DESTROYED);
+        let mut observation = settled(
+            1,
+            crate::engine::observe_port::planet_side::terminal::DESTROYED,
+        );
         observation.active = true;
         observation.phase = 8;
         observation.current_crew = 0;

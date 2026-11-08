@@ -612,7 +612,7 @@ impl PlanetSideOutcomeName {
     /// Terminal code recorded by `planet_side::telemetry::finish`.
     #[must_use]
     pub const fn terminal_code(self) -> u32 {
-        use crate::planet_side::telemetry::terminal;
+        use crate::engine::observe_port::planet_side::terminal;
         match self {
             Self::Returned => terminal::RETURNED,
             Self::Destroyed => terminal::DESTROYED,
@@ -3100,7 +3100,7 @@ mod tests {
 
     #[test]
     fn planet_side_outcome_terminal_codes_are_distinct_and_never_running() {
-        use crate::planet_side::telemetry::terminal;
+        use crate::engine::observe_port::planet_side::terminal;
         let codes = [
             PlanetSideOutcomeName::Returned.terminal_code(),
             PlanetSideOutcomeName::Destroyed.terminal_code(),

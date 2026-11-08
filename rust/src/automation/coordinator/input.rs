@@ -239,11 +239,12 @@ impl AutomationObserver {
                 self.actions.get(inner.sched_state.step_index),
                 Some(Action::SetupPlanetSideMineralGallery(_))
             );
-            let request = if gallery {
-                crate::planet_side::automation_fixture::coordinator_queues_mineral_gallery_request()
+            let layout = if gallery {
+                crate::engine::observe_port::planet_side::FixtureLayout::MineralGallery
             } else {
-                crate::planet_side::automation_fixture::coordinator_queues_fixture_request()
+                crate::engine::observe_port::planet_side::FixtureLayout::CollisionParity
             };
+            let request = self.planet_side_fixtures.lock().queue(layout);
             match request {
                 Ok(()) => {
                     self.write_trace_labeled(

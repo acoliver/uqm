@@ -18,7 +18,6 @@
 //! itself never calls a telemetry increment and never declares a collision.
 
 use crate::battle::velocity::VelocityDesc;
-use std::sync::atomic::{AtomicU8, Ordering};
 
 use super::assembly::{insert_surface_entity, EntityVisual, SharedSurface};
 use super::creatures::CreatureKind;
@@ -115,67 +114,48 @@ pub const fn automation_gate(active: bool) -> AutomationGate {
     }
 }
 
-static FIXTURE_REQUESTED: AtomicU8 = AtomicU8::new(0);
-
-/// Make the script action the sole authority for the fixture.
-///
-/// The coordinator invokes this when the active
-/// `setup_planet_side_collision_fixture` script action executes, and only then
-/// is the one-shot fixture request queued.  An active coordinator with no such
-/// action never touches it, so every other PlanetSide automation script keeps the
-/// generated world unchanged.
-///
-/// The action is explicit and one-shot: a second queue while a request is still
-/// pending fails fast with a typed error rather than succeeding idempotently.  The
-/// coordinator maps that failure to a semantic mismatch so a duplicate never leaks a
-/// second fixture install.
-///
-/// # Errors
-///
-/// Returns an [`AdapterError`] when a fixture request is already pending.
-pub(crate) fn coordinator_queues_fixture_request() -> Result<(), AdapterError> {
-    queue_fixture_request(1)
+/// One pending request owned by the automation coordinator.
+#[derive(Debug, Default)]
+pub struct FixtureRequests {
+    pending: Option<crate::engine::observe_port::planet_side::FixtureLayout>,
 }
 
-pub(crate) fn coordinator_queues_mineral_gallery_request() -> Result<(), AdapterError> {
-    queue_fixture_request(2)
-}
-
-fn queue_fixture_request(layout: u8) -> Result<(), AdapterError> {
-    if FIXTURE_REQUESTED
-        .compare_exchange(0, layout, Ordering::SeqCst, Ordering::SeqCst)
-        .is_err()
-    {
-        Err(AdapterError::new("fixture_request_already_pending"))
-    } else {
+impl FixtureRequests {
+    pub fn queue(
+        &mut self,
+        layout: crate::engine::observe_port::planet_side::FixtureLayout,
+    ) -> Result<(), AdapterError> {
+        if self.pending.is_some() {
+            return Err(AdapterError::new("fixture_request_already_pending"));
+        }
+        self.pending = Some(layout);
         Ok(())
     }
-}
 
-/// The one coordinator-facing function that consumes the queued flag.
-///
-/// Ordinary gameplay that never executed the script action gets `None`; production
-/// [`AutomationObserver::is_active`] is checked by the caller before tapping, so a stale
-/// queue cannot be consumed or fail outside automation.
-#[must_use]
-pub(crate) fn tap_planet_side_fixture_request(position: SurfacePoint) -> Option<PlanetSideFixture> {
-    match FIXTURE_REQUESTED.swap(0, Ordering::SeqCst) {
-        0 => None,
-        1 => Some(PlanetSideFixture::for_collision_parity(position)),
-        2 => Some(PlanetSideFixture::mineral_gallery(position)),
-        _ => unreachable!("only the coordinator queues fixture layouts"),
+    pub fn take(&mut self) -> Option<crate::engine::observe_port::planet_side::FixtureLayout> {
+        self.pending.take()
     }
-}
 
-/// The one coordinator-facing function that clears a queued but unconsumed fixture.
-///
-/// The coordinator clears any pending request at its single finalization path so
-/// the one-shot queue cannot leak into a later script.
-pub(crate) fn clear_pending_fixture_request() {
-    FIXTURE_REQUESTED.store(0, Ordering::SeqCst);
+    pub fn clear(&mut self) {
+        self.pending = None;
+    }
 }
 
 impl PlanetSideFixture {
+    pub fn from_layout(
+        layout: crate::engine::observe_port::planet_side::FixtureLayout,
+        position: SurfacePoint,
+    ) -> Self {
+        match layout {
+            crate::engine::observe_port::planet_side::FixtureLayout::CollisionParity => {
+                Self::for_collision_parity(position)
+            }
+            crate::engine::observe_port::planet_side::FixtureLayout::MineralGallery => {
+                Self::mineral_gallery(position)
+            }
+        }
+    }
+
     /// An empty fixture request.
     #[must_use]
     pub fn new() -> Self {
@@ -352,6 +332,8 @@ impl PlanetSideFixture {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::engine::observe_port::planet_side::FixtureLayout;
+
     use crate::planet_side::assembly::{share_surface, SurfaceAssembly, WorldVisualPort};
     use crate::planet_side::cargo::{BioCargo, MineralCargo};
     use crate::planet_side::collision::{
@@ -388,14 +370,6 @@ mod tests {
         )
     }
 
-    /// The process-global fixture request flag is shared across tests; take
-    /// turns through a private test mutex so the queue tests never race.
-    fn fixture_test_serialize() -> std::sync::MutexGuard<'static, ()> {
-        static SERIALIZE_FIXTURE: std::sync::Mutex<()> = std::sync::Mutex::new(());
-        SERIALIZE_FIXTURE
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-    }
     fn solid() -> CollisionMask {
         CollisionMask::from_occupancy(1, 1, SurfacePoint::default(), &[1]).unwrap()
     }
@@ -564,6 +538,8 @@ mod tests {
         surface: &SharedSurface,
     ) -> SurfaceCollisionAdapter<Random, RecordingGenerator, TestWorldVisuals> {
         SurfaceCollisionAdapter {
+            telemetry: super::super::telemetry::tests::trip(),
+            publish: |_: &super::super::telemetry::TripTelemetry| {},
             surface: surface.clone(),
             random: Random,
             generator: RecordingGenerator::default(),
@@ -590,13 +566,21 @@ mod tests {
 
     #[test]
     fn mineral_gallery_queues_all_categories_and_sizes_once() {
-        let _serialize = fixture_test_serialize();
-        clear_pending_fixture_request();
-        coordinator_queues_mineral_gallery_request().unwrap();
-        coordinator_queues_fixture_request().expect_err("pending gallery cannot be overwritten");
+        let mut requests = FixtureRequests::default();
+        requests.clear();
+        requests.queue(FixtureLayout::MineralGallery).unwrap();
+        requests
+            .queue(FixtureLayout::CollisionParity)
+            .expect_err("pending gallery cannot be overwritten");
         let anchor = SurfacePoint { x: 1, y: 200 };
-        let fixture = tap_planet_side_fixture_request(anchor).unwrap();
-        assert!(tap_planet_side_fixture_request(anchor).is_none());
+        let fixture = requests
+            .take()
+            .map(|layout| PlanetSideFixture::from_layout(layout, anchor))
+            .unwrap();
+        assert!(requests
+            .take()
+            .map(|layout| PlanetSideFixture::from_layout(layout, anchor))
+            .is_none());
         assert_eq!(fixture.minerals.len(), 24);
         assert!(fixture.brainboxes.is_empty());
         for category in 0..8 {
@@ -635,12 +619,11 @@ mod tests {
         let anchor = SurfacePoint { x: 50, y: 80 };
         let session = session_at(anchor);
         let surface = share_empty();
-        let _exclusive = crate::planet_side::telemetry::tests::exclusive();
         let fixture = PlanetSideFixture::new()
             .with_mineral(2, 3, 5, anchor)
             .with_brainbox(1, BRAINBOX_SETUP_FRAME, anchor);
-        crate::planet_side::telemetry::begin(&session);
-        let before = crate::planet_side::telemetry::observation();
+        let port = adapter(&surface);
+        let before = port.telemetry.borrow().snapshot().observation;
 
         fixture
             .install(
@@ -651,7 +634,7 @@ mod tests {
             )
             .unwrap();
 
-        let after = crate::planet_side::telemetry::observation();
+        let after = port.telemetry.borrow().snapshot().observation;
         assert_eq!(
             after.mineral_pickups, before.mineral_pickups,
             "install must not count a mineral pickup"
@@ -716,14 +699,12 @@ mod tests {
 
     #[test]
     fn fixture_mineral_is_synthetic_and_stays_out_of_native_generated_mapping() {
-        let _serialize = fixture_test_serialize();
         // A fixture mineral must appear in the world and its frames/masks, but
         // never in SurfaceAssembly.generated, which production reserves for native
         // generated scan nodes and their pickup/persistence.  It still collects
         // through the production collision adapter, calls no SurfaceGenerator
         // pickup, changes no ScanPersistence bit, increments the real pickup
         // counter, and is removed.
-        let _exclusive = crate::planet_side::telemetry::tests::exclusive();
         let anchor = SurfacePoint { x: 50, y: 80 };
         let session = session_at(anchor);
         let surface = share_empty();
@@ -767,6 +748,8 @@ mod tests {
         // Production collection: cargo resolves, the real pickup counter moves,
         // no SurfaceGenerator::pickup runs, and no ScanPersistence bit changes.
         let mut port = SurfaceCollisionAdapter {
+            telemetry: super::super::telemetry::tests::trip(),
+            publish: |_: &super::super::telemetry::TripTelemetry| {},
             surface: surface.clone(),
             random: Random,
             generator: RecordingGenerator {
@@ -777,7 +760,7 @@ mod tests {
             earthquake_frame_count: 13,
             lava_frame_count: 7,
         };
-        let before = crate::planet_side::telemetry::observation();
+        let before = port.telemetry.borrow().snapshot().observation;
         let contacts = port.contacts(&session.lander).unwrap();
         let contact = *contacts
             .iter()
@@ -795,7 +778,11 @@ mod tests {
         );
         port.commit(contact, &collected, 12).unwrap();
         assert_eq!(
-            crate::planet_side::telemetry::observation().mineral_pickups,
+            port.telemetry
+                .borrow()
+                .snapshot()
+                .observation
+                .mineral_pickups,
             before.mineral_pickups + 1,
             "the real pickup counter increments"
         );
@@ -822,19 +809,26 @@ mod tests {
 
     #[test]
     fn coordinator_queue_is_the_sole_authority_and_never_installs_by_activity() {
-        let _serialize = fixture_test_serialize();
-        clear_pending_fixture_request();
+        let mut requests = FixtureRequests::default();
+        requests.clear();
         // `coordinator_queues_fixture_request` is called only by the script
         // action.  A coordinator that never executed it never queues.
-        coordinator_queues_fixture_request().unwrap();
+        requests.queue(FixtureLayout::CollisionParity).unwrap();
         // A second queue while the request is still pending is a fail-fast
         // duplicate, never an idempotent success.
-        coordinator_queues_fixture_request().expect_err("a duplicate pending fixture is rejected");
+        requests
+            .queue(FixtureLayout::CollisionParity)
+            .expect_err("a duplicate pending fixture is rejected");
         let anchor = SurfacePoint { x: 10, y: 20 };
-        let requested = tap_planet_side_fixture_request(anchor);
+        let requested = requests
+            .take()
+            .map(|layout| PlanetSideFixture::from_layout(layout, anchor));
         assert!(requested.is_some(), "the action queues exactly one request");
         assert!(
-            tap_planet_side_fixture_request(anchor).is_none(),
+            requests
+                .take()
+                .map(|layout| PlanetSideFixture::from_layout(layout, anchor))
+                .is_none(),
             "the queued request is consumed once, and no second remains"
         );
         let session = session_at(anchor);
@@ -853,11 +847,12 @@ mod tests {
             surface.borrow().world.is_empty(),
             "rejection must not install a single entity"
         );
-        clear_pending_fixture_request();
+        requests.clear();
     }
 
     #[test]
     fn one_observation_decides_both_the_tap_and_the_install_gate() {
+        let mut requests = FixtureRequests::default();
         // run_session samples `AutomationObserver::is_active()` exactly once before
         // tapping and derives both the tap and the install gate from that same
         // observation.  Mirror that contract: an inactive observation must not
@@ -865,16 +860,17 @@ mod tests {
         // active observation.  Tap under the active observation directly — the
         // inactive observation's job is only to not consume — and install under
         // that same active observation, never re-reading the gate.
-        let _serialize = fixture_test_serialize();
-        clear_pending_fixture_request();
-        coordinator_queues_fixture_request().unwrap();
+        requests.clear();
+        requests.queue(FixtureLayout::CollisionParity).unwrap();
         let anchor = SurfacePoint { x: 10, y: 20 };
         let inactive = false;
         let session = session_at(anchor);
         let surface = share_empty();
 
         let fixture_request = if inactive {
-            tap_planet_side_fixture_request(anchor)
+            requests
+                .take()
+                .map(|layout| PlanetSideFixture::from_layout(layout, anchor))
         } else {
             None
         };
@@ -904,7 +900,11 @@ mod tests {
         // exactly the two-observation split this change removes.
         let active = true;
         let gate = automation_gate(active);
-        let tap = |position| tap_planet_side_fixture_request(position);
+        let mut tap = |position| {
+            requests
+                .take()
+                .map(|layout| PlanetSideFixture::from_layout(layout, position))
+        };
         let fixture = if active { tap(anchor) } else { None }
             .expect("the active observation finds the one-shot request still queued");
         assert_eq!(
@@ -929,28 +929,31 @@ mod tests {
             None,
             "the single request was consumed exactly once"
         );
-        clear_pending_fixture_request();
+        requests.clear();
     }
 
     #[test]
     fn clear_removes_an_unconsumed_request() {
-        let _serialize = fixture_test_serialize();
-        clear_pending_fixture_request();
+        let mut requests = FixtureRequests::default();
+        requests.clear();
         // A queued but never-consumed fixture must not survive a clear: the
         // coordinator finalization clears any pending request so the one-shot
         // queue cannot leak into a later script.
-        coordinator_queues_fixture_request().unwrap();
-        clear_pending_fixture_request();
+        requests.queue(FixtureLayout::CollisionParity).unwrap();
+        requests.clear();
         let anchor = SurfacePoint { x: 10, y: 20 };
         assert!(
-            tap_planet_side_fixture_request(anchor).is_none(),
+            requests
+                .take()
+                .map(|layout| PlanetSideFixture::from_layout(layout, anchor))
+                .is_none(),
             "clearing removes the unconsumed request"
         );
         assert!(
-            coordinator_queues_fixture_request().is_ok(),
+            requests.queue(FixtureLayout::CollisionParity).is_ok(),
             "after a clear a fresh queue is accepted"
         );
-        clear_pending_fixture_request();
+        requests.clear();
     }
 
     #[test]
@@ -961,7 +964,6 @@ mod tests {
         // partial install must leave world length, generated length, frame count,
         // and entity-mask count exactly as they were — the staging happens
         // before the assembly borrow, and a failure aborts the whole batch.
-        let _fixture_lock = fixture_test_serialize();
         let anchor = SurfacePoint { x: 50, y: 80 };
         let session = session_at(anchor);
         let surface = share_empty();
@@ -1006,7 +1008,6 @@ mod tests {
         let anchor = SurfacePoint { x: 50, y: 80 };
         let session = session_at(anchor);
         let surface = share_empty();
-        let _exclusive = crate::planet_side::telemetry::tests::exclusive();
         PlanetSideFixture::new()
             .with_mineral(2, 3, 5, anchor)
             .with_mineral(
@@ -1038,7 +1039,7 @@ mod tests {
             .unwrap();
 
         let mut port = adapter(&surface);
-        let before = crate::planet_side::telemetry::observation();
+        let before = port.telemetry.borrow().snapshot().observation;
         let contacts = port.contacts(&session.lander).unwrap();
         assert_eq!(
             contacts.len(),
@@ -1046,7 +1047,7 @@ mod tests {
             "only the direct deposit and the one wrapped copy connect; the tie stays apart"
         );
         assert_eq!(
-            crate::planet_side::telemetry::observation().seam_hits,
+            port.telemetry.borrow().snapshot().observation.seam_hits,
             before.seam_hits + 1,
             "only the seam deposit connects through the wrapped copy"
         );
@@ -1073,7 +1074,11 @@ mod tests {
         assert!(matches!(collected, CollisionOutcome::Cargo { .. }));
         port.commit(contact, &collected, 12).unwrap();
         assert_eq!(
-            crate::planet_side::telemetry::observation().mineral_pickups,
+            port.telemetry
+                .borrow()
+                .snapshot()
+                .observation
+                .mineral_pickups,
             before.mineral_pickups + 1
         );
     }
@@ -1093,7 +1098,6 @@ mod tests {
         let anchor = SurfacePoint { x: 50, y: 80 };
         let session = session_at(anchor);
         let surface = share_empty();
-        let _exclusive = crate::planet_side::telemetry::tests::exclusive();
         PlanetSideFixture::new()
             .with_brainbox(1, BRAINBOX_SETUP_FRAME, anchor)
             .install(
@@ -1105,7 +1109,7 @@ mod tests {
             .unwrap();
 
         let mut port = adapter(&surface);
-        let before = crate::planet_side::telemetry::observation();
+        let before = port.telemetry.borrow().snapshot().observation;
         port.register_shot(Shot {
             position: anchor,
             facing: 0,
@@ -1123,7 +1127,7 @@ mod tests {
         port.apply_world_step(cx, &result, &mut Audio { played: Vec::new() })
             .unwrap();
         assert_eq!(
-            crate::planet_side::telemetry::observation().creature_hits,
+            port.telemetry.borrow().snapshot().observation.creature_hits,
             before.creature_hits + 1
         );
     }
@@ -1195,5 +1199,26 @@ mod tests {
             Some(1 + *frame_index),
             "registered mask follows the same animation frame"
         );
+    }
+
+    #[test]
+    fn owned_requests_are_isolated_and_consumed_once() {
+        use crate::engine::observe_port::planet_side::FixtureLayout;
+        let mut first = FixtureRequests::default();
+        let mut second = FixtureRequests::default();
+        first.queue(FixtureLayout::CollisionParity).unwrap();
+        assert_eq!(
+            first.queue(FixtureLayout::MineralGallery),
+            Err(AdapterError::new("fixture_request_already_pending"))
+        );
+        assert!(second.take().is_none());
+        assert_eq!(first.take(), Some(FixtureLayout::CollisionParity));
+        assert!(first.take().is_none());
+        second.queue(FixtureLayout::MineralGallery).unwrap();
+        assert_eq!(second.take(), Some(FixtureLayout::MineralGallery));
+        first.queue(FixtureLayout::CollisionParity).unwrap();
+        first.clear();
+        assert!(first.take().is_none());
+        assert!(second.take().is_none());
     }
 }

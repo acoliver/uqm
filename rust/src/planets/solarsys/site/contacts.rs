@@ -1,6 +1,5 @@
 //! Contact and encounter capabilities of the solar-system host.
 
-use super::resources::discovery_report;
 use super::*;
 use crate::comm::dispatch::{conv, ship};
 use crate::engine::StoryKey;
@@ -417,8 +416,8 @@ impl ChmmrSite for Site<'_, '_, '_> {
         self.game.borrow_mut().with_legacy(|| {
             // SAFETY: the live solar system state on the game thread.
             unsafe { load_starbase_report(self.record.as_ptr()) };
-            // SAFETY: as above.
-            let presented = unsafe { discovery_report(self.record.as_ptr()) }
+            let presented = self
+                .discovery_report()
                 .present(ReportDisposition::Once)
                 .unwrap_or_else(|error| {
                     panic!(

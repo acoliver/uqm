@@ -43,6 +43,7 @@ impl LanderSoundTable {
 /// Concrete audio adapter for an already loaded lander sound table.
 pub struct CffiPlanetSideAudio {
     sounds: LanderSoundTable,
+    telemetry: std::rc::Rc<std::cell::RefCell<super::telemetry::TripTelemetry>>,
     channels: std::rc::Rc<std::cell::RefCell<crate::engine::battle::kernel::Channels>>,
 }
 
@@ -51,8 +52,13 @@ impl CffiPlanetSideAudio {
     pub(crate) const fn new(
         sounds: LanderSoundTable,
         channels: std::rc::Rc<std::cell::RefCell<crate::engine::battle::kernel::Channels>>,
+        telemetry: std::rc::Rc<std::cell::RefCell<super::telemetry::TripTelemetry>>,
     ) -> Self {
-        Self { sounds, channels }
+        Self {
+            sounds,
+            channels,
+            telemetry,
+        }
     }
 }
 
@@ -81,7 +87,7 @@ impl PlanetSideAudio for CffiPlanetSideAudio {
         }
         #[cfg(test)]
         let _ = (world, sound);
-        super::telemetry::sound(cue);
+        self.telemetry.borrow_mut().sound(cue);
         Ok(())
     }
 }
@@ -115,6 +121,7 @@ mod tests {
         let audio = CffiPlanetSideAudio::new(
             LanderSoundTable::from_raw(std::ptr::null_mut()),
             channels.clone(),
+            super::super::telemetry::tests::trip(),
         );
         assert!(std::rc::Rc::ptr_eq(&audio.channels, &channels));
         drop(game);
@@ -133,7 +140,8 @@ mod tests {
         let channels = std::rc::Rc::new(std::cell::RefCell::new(
             crate::engine::battle::kernel::Channels::new(),
         ));
-        let mut audio = CffiPlanetSideAudio::new(sounds, channels);
+        let mut audio =
+            CffiPlanetSideAudio::new(sounds, channels, super::super::telemetry::tests::trip());
         drop(bank);
         assert_eq!(audio.sounds.clip(8).identity(), identity);
         audio
@@ -168,6 +176,7 @@ mod tests {
         let mut audio = CffiPlanetSideAudio::new(
             LanderSoundTable::from_raw(std::ptr::null_mut()),
             crate::engine::Game::new().kernel.channels,
+            super::super::telemetry::tests::trip(),
         );
         assert_eq!(
             audio.play(&crate::engine::World::new(), SoundCue::Pickup),
@@ -182,6 +191,7 @@ mod tests {
                 vec![crate::sound::types::SoundSample::new()],
             )),
             crate::engine::Game::new().kernel.channels,
+            super::super::telemetry::tests::trip(),
         );
         assert_eq!(
             audio.play(&crate::engine::World::new(), SoundCue::Destroyed),
