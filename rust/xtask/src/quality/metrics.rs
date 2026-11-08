@@ -62,6 +62,7 @@ pub struct AllowCoverage {
 
 #[derive(Clone, Default, Debug)]
 pub struct Measurement {
+    pub coverage_functions: Vec<crate::coverage::source::Function>,
     pub expect_sites: BTreeSet<super::expect_sites::Site>,
     pub findings: Vec<Finding>,
     pub declarations: Vec<Finding>,

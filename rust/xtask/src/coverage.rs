@@ -1,5 +1,19 @@
+#[path = "coverage_capture.rs"]
+mod capture;
 #[path = "coverage_debt.rs"]
 pub(crate) mod debt;
+#[path = "coverage_lcov.rs"]
+mod lcov;
+#[path = "coverage_move_check.rs"]
+mod move_check;
+#[path = "coverage_move_edit.rs"]
+mod move_edit;
+#[path = "coverage_moves.rs"]
+pub(crate) mod moves;
+#[path = "coverage_source.rs"]
+pub(crate) mod source;
+#[path = "coverage_threading.rs"]
+mod threading;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -27,7 +41,7 @@ struct File {
 struct Summary {
     lines: Lines,
 }
-#[derive(Deserialize, Default)]
+#[derive(Deserialize, Default, Debug)]
 struct Lines {
     count: u64,
     covered: u64,
@@ -111,7 +125,16 @@ fn added_production_files(
         .collect())
 }
 
+#[cfg(test)]
 fn check(measured: &BTreeMap<String, Lines>, added: &BTreeSet<String>) -> Result<(), String> {
+    check_new(measured, added, &BTreeMap::new())
+}
+
+fn check_new(
+    measured: &BTreeMap<String, Lines>,
+    added: &BTreeSet<String>,
+    new: &BTreeMap<String, Lines>,
+) -> Result<(), String> {
     let total = measured.values().fold(Lines::default(), |mut sum, lines| {
         sum.count += lines.count;
         sum.covered += lines.covered;
@@ -134,7 +157,7 @@ fn check(measured: &BTreeMap<String, Lines>, added: &BTreeSet<String>) -> Result
         ));
     }
     for file in added {
-        match measured.get(file) {
+        match new.get(file).or_else(|| measured.get(file)) {
             Some(lines) if lines.count > 0 => {
                 println!(
                     "added production file {file}: {:.2}% ({}/{})",
@@ -157,6 +180,12 @@ fn check(measured: &BTreeMap<String, Lines>, added: &BTreeSet<String>) -> Result
 }
 
 pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
+    if args.first().is_some_and(|arg| arg == "moves") {
+        return move_edit::edit(root, &args[1..]);
+    }
+    if args.first().is_some_and(|arg| arg == "sources") {
+        return capture::edit(root, &args[1..]);
+    }
     if args.first().is_some_and(|arg| arg == "debt") {
         return debt::edit(root, &args[1..]);
     }
@@ -169,15 +198,37 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
     if let Some(arg) = args.next() {
         return Err(format!("unexpected coverage option {arg}"));
     }
-    let added = added_production_files(root, base, &tool::identities(root)?)?;
+    let current = crate::quality::walk::measure(root, None, false)?;
+    let added = added_production_files(root, base, &tool::identities_from(&current))?;
     let baseline =
         crate::quality::baseline::Baseline::read(&root.join("rust/xtask/quality-baseline.toml"))?;
     let exempt = debt::exemptions(root, base, &baseline)?;
-    let added = added.difference(&exempt).cloned().collect();
-    measure(root, &added, std::ffi::OsStr::new(&crate::quality::cargo()))
+    let mut added: BTreeSet<_> = added.difference(&exempt).cloned().collect();
+    let measured = collect(root, std::ffi::OsStr::new(&crate::quality::cargo()))?;
+    capture::emit(root, &baseline, &current, &measured.hits)?;
+    let attributed = move_check::analyze(
+        root,
+        base.unwrap_or("HEAD"),
+        &baseline,
+        &current,
+        &measured.hits,
+        true,
+    )?;
+    added.extend(attributed.files.iter().cloned());
+    check_new(
+        &measured.files,
+        &added,
+        &move_check::new_lines(&measured.hits, &attributed),
+    )
 }
 
-fn measure(root: &Path, added: &BTreeSet<String>, cargo: &std::ffi::OsStr) -> Result<(), String> {
+#[derive(Debug)]
+struct Measured {
+    files: BTreeMap<String, Lines>,
+    hits: BTreeMap<String, lcov::LineHits>,
+}
+
+fn collect(root: &Path, cargo: &std::ffi::OsStr) -> Result<Measured, String> {
     let version =
         crate::quality::tool::output(tool::command(cargo).args(["llvm-cov", "--version"]))?;
     if !version.status.success()
@@ -206,10 +257,46 @@ fn measure(root: &Path, added: &BTreeSet<String>, cargo: &std::ffi::OsStr) -> Re
             .env("SDL_VIDEODRIVER", "dummy")
             .env("SDL_AUDIODRIVER", "dummy"),
     )?;
-    check(
-        &parse(root, &fs::read(report).map_err(|e| e.to_string())?)?,
-        added,
-    )
+    let files = parse(root, &fs::read(report).map_err(|e| e.to_string())?)?;
+    let lcov_path = root.join("rust/target/quality-coverage.lcov");
+    tool::status(
+        tool::command(cargo)
+            .current_dir(root.join("rust"))
+            .args([
+                "llvm-cov",
+                "report",
+                "--no-default-features",
+                "--features",
+                "audio_heart,debug-process,native",
+                "--lcov",
+                "--output-path",
+            ])
+            .arg(&lcov_path),
+    )?;
+    let exported = lcov::parse(&fs::read_to_string(lcov_path).map_err(|e| e.to_string())?)?;
+    let mut hits = BTreeMap::new();
+    for (path, lines) in exported {
+        let relative = Path::new(&path)
+            .strip_prefix(root.join("rust"))
+            .unwrap_or(Path::new(&path));
+        let file = relative
+            .to_str()
+            .ok_or("LCOV path is not UTF-8")?
+            .replace('\\', "/");
+        if files.contains_key(&file) {
+            hits.insert(file, lines);
+        }
+    }
+    for (file, lines) in &files {
+        let actual = moves::counts(
+            hits.get(file)
+                .ok_or_else(|| format!("LCOV missing workspace file {file}"))?,
+        );
+        if actual.count != lines.count || actual.covered != lines.covered {
+            return Err(format!("LLVM JSON and LCOV totals disagree: {file}"));
+        }
+    }
+    Ok(Measured { files, hits })
 }
 
 #[cfg(test)]
@@ -336,14 +423,18 @@ mod tests {
             root.path(),
             r#"
 if [ "$*" = 'llvm-cov --version' ]; then echo 'cargo-llvm-cov 0.8.5'; exit 0; fi
+if [ "$1 $2 $3" = 'llvm-cov report --no-default-features' ]; then
+  printf 'SF:src/lib.rs\nDA:1,1\nDA:2,1\nDA:3,1\nDA:4,1\nDA:5,1\nDA:6,1\nDA:7,1\nDA:8,0\nDA:9,0\nDA:10,0\nLF:10\nLH:7\nend_of_record\n' > target/quality-coverage.lcov
+  exit 0
+fi
 [ "$*" = "llvm-cov --workspace --locked --no-default-features --features audio_heart,debug-process,native --json --summary-only --output-path $PWD/target/quality-coverage.json" ]
 [ "$SDL_VIDEODRIVER" = dummy ] && [ "$SDL_AUDIODRIVER" = dummy ]
 printf '%s' '{"data":[{"files":[{"filename":"src/lib.rs","summary":{"lines":{"count":10,"covered":7}}}]}]}' > target/quality-coverage.json
 "#,
         );
-        measure(root.path(), &BTreeSet::new(), cargo.as_os_str()).unwrap();
+        collect(root.path(), cargo.as_os_str()).unwrap();
         let cargo = tool::fixture_program(root.path(), "echo wrong-version");
-        assert!(measure(root.path(), &BTreeSet::new(), cargo.as_os_str())
+        assert!(collect(root.path(), cargo.as_os_str())
             .unwrap_err()
             .contains("install cargo-llvm-cov"));
         let cargo = tool::fixture_program(
@@ -353,13 +444,8 @@ if [ "$*" = 'llvm-cov --version' ]; then echo 'cargo-llvm-cov 0.8.5'; exit 0; fi
 exit 1
 "#,
         );
-        assert!(measure(root.path(), &BTreeSet::new(), cargo.as_os_str()).is_err());
-        assert!(measure(
-            root.path(),
-            &BTreeSet::new(),
-            root.path().join("missing").as_os_str()
-        )
-        .is_err());
+        assert!(collect(root.path(), cargo.as_os_str()).is_err());
+        assert!(collect(root.path(), root.path().join("missing").as_os_str()).is_err());
         for args in [
             vec!["--tighten".into()],
             vec!["--base".into()],
@@ -369,3 +455,7 @@ exit 1
         }
     }
 }
+
+#[cfg(test)]
+#[path = "coverage_move_tests.rs"]
+mod move_tests;

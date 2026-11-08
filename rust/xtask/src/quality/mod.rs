@@ -19,7 +19,7 @@ mod retirement;
 #[cfg(test)]
 mod scoped_tests;
 pub(crate) mod tool;
-mod transfers;
+pub(crate) mod transfers;
 pub(crate) mod walk;
 
 use std::collections::BTreeMap;
