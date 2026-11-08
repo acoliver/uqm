@@ -151,12 +151,11 @@ pub(crate) mod live {
     pub(super) fn uninit(_cx: &mut Cx<'_>) -> u16 {
         0
     }
-    pub unsafe fn init_slyland_comm(cx: &mut Cx<'_>) -> *mut crate::comm::locdata::CLocData {
-        static mut DESC: Option<crate::comm::locdata::CLocData> = None;
+    pub unsafe fn init_slyland_comm(cx: &mut Cx<'_>) -> crate::comm::locdata::CLocData {
         extern "C" {
             static mut ScreenWidth: i32;
         }
-        let d = (&mut *std::ptr::addr_of_mut!(DESC)).get_or_insert_with(|| descriptor(ScreenWidth));
+        let mut d = descriptor(ScreenWidth);
         d.alien_text_baseline.x = (1 + ((ScreenWidth - 80) >> 1)) as i16;
         d.alien_text_width = (ScreenWidth - 80 - 16) as u16;
         run(cx, |s| s.initialize());
@@ -175,7 +174,7 @@ impl super::RaceDialogue for SlylandDialogue {
     fn init(&self, _cx: &mut Cx<'_>) -> CommData {
         #[cfg(not(test))]
         {
-            unsafe { as_comm_data(&*live::init_slyland_comm(_cx)) }
+            unsafe { as_comm_data(&live::init_slyland_comm(_cx)) }
         }
         #[cfg(test)]
         {

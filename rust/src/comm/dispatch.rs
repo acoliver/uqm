@@ -708,68 +708,54 @@ pub fn place_flagship_at_star(world: &mut World, location: (i16, i16)) -> Result
 // ---------------------------------------------------------------------------
 
 #[cfg(not(test))]
-/// Port of C `StartSphereTracking(race)`. Reads/modifies FLEET_INFO to
-/// initialize sphere-of-influence tracking for the given race.
-/// Rust-side replacement for C's `init_race()`.
+/// Build a fresh descriptor for the selected conversation and initialize its script.
 ///
-/// The C `init_race` in `commglue.c` has a broken control flow under
-/// `USE_RUST_COMM`: when `rust_init_race_dialogue()` returns 1, it
-/// falls through past the switch and returns `init_arilou_comm()` for
-/// every race. This function bypasses that by dispatching directly to
-/// the correct `init_*_comm` C function via FFI, then calling
-/// `rust_init_race_dialogue` for Rust dialogue setup.
-///
-/// Returns a `LOCDATA*` (as `*mut c_void`) from the correct race's
-/// init function, or null if the race has no init function.
 /// # Safety
-///
-/// Must be called from an initialized game context (after resource loading).
-/// The returned pointer is a raw C LOCDATA pointer and must not be freed by
-/// the caller — it points to static C data.
-pub unsafe fn rust_init_race_dispatch(cx: &mut Cx<'_>, comm_id: u32) -> *mut c_void {
+/// Called on the game thread after communication state initialization.
+pub unsafe fn race_descriptor(cx: &mut Cx<'_>, comm_id: u32) -> crate::comm::locdata::CLocData {
     // Initialize Rust dialogue state (callbacks, phrase state, etc.)
     ffi::rust_init_race_dialogue(cx, comm_id as i32);
 
-    // Dispatch to the correct C init_*_comm function
+    // Preserve the existing initialization order and conversation variants.
     match comm_id {
-        conv::ARILOU => (ffi::init_arilou_comm(cx)).cast(),
-        conv::BLACKURQ => ffi::init_blackurq_comm(cx).cast(),
-        conv::CHMMR => ffi::init_chmmr_comm(cx).cast(),
+        conv::ARILOU => ffi::init_arilou_comm(cx),
+        conv::BLACKURQ => ffi::init_blackurq_comm(cx),
+        conv::CHMMR => ffi::init_chmmr_comm(cx),
         conv::COMMANDER => {
             if cx.world.story_state(StoryKey::STARBASE_AVAILABLE) == 0 {
-                (ffi::init_commander_comm(cx)).cast()
+                ffi::init_commander_comm(cx)
             } else {
-                (ffi::init_starbase_comm(cx)).cast()
+                ffi::init_starbase_comm(cx)
             }
         }
-        conv::DRUUGE => ffi::init_druuge_comm(cx).cast(),
-        conv::ILWRATH => ffi::init_ilwrath_comm(cx).cast(),
-        conv::MELNORME => ffi::init_melnorme_comm(cx).cast(),
-        conv::MYCON => ffi::init_mycon_comm(cx).cast(),
-        conv::ORZ => ffi::init_orz_comm(cx).cast(),
-        conv::PKUNK => ffi::init_pkunk_comm(cx).cast(),
-        conv::SHOFIXTI => ffi::init_shofixti_comm(cx).cast(),
-        conv::SLYLANDRO => ffi::init_slyland_comm(cx).cast(),
-        conv::SLYLANDRO_HOME => ffi::init_slylandro_comm(cx).cast(),
+        conv::DRUUGE => ffi::init_druuge_comm(cx),
+        conv::ILWRATH => ffi::init_ilwrath_comm(cx),
+        conv::MELNORME => ffi::init_melnorme_comm(cx),
+        conv::MYCON => ffi::init_mycon_comm(cx),
+        conv::ORZ => ffi::init_orz_comm(cx),
+        conv::PKUNK => ffi::init_pkunk_comm(cx),
+        conv::SHOFIXTI => ffi::init_shofixti_comm(cx),
+        conv::SLYLANDRO => ffi::init_slyland_comm(cx),
+        conv::SLYLANDRO_HOME => ffi::init_slylandro_comm(cx),
         conv::SPATHI => {
             if (cx.world.story_state(StoryKey::GLOBAL_FLAGS_AND_DATA) & (1 << 7)) == 0 {
-                (ffi::init_spathi_comm(cx)).cast()
+                ffi::init_spathi_comm(cx)
             } else {
-                (ffi::init_spahome_comm(cx)).cast()
+                ffi::init_spahome_comm(cx)
             }
         }
-        conv::SUPOX => ffi::init_supox_comm(cx).cast(),
-        conv::SYREEN => ffi::init_syreen_comm(cx).cast(),
-        conv::TALKING_PET => ffi::init_talkpet_comm(cx).cast(),
-        conv::THRADD => ffi::init_thradd_comm(cx).cast(),
-        conv::UMGAH => ffi::init_umgah_comm(cx).cast(),
-        conv::URQUAN => ffi::init_urquan_comm(cx).cast(),
-        conv::UTWIG => ffi::init_utwig_comm(cx).cast(),
-        conv::VUX => ffi::init_vux_comm(cx).cast(),
-        conv::YEHAT_REBEL => ffi::init_rebel_yehat_comm(cx).cast(),
-        conv::YEHAT => ffi::init_yehat_comm(cx).cast(),
-        conv::ZOQFOTPIK => ffi::init_zoqfot_comm(cx).cast(),
-        _ => ffi::init_chmmr_comm(cx).cast(),
+        conv::SUPOX => ffi::init_supox_comm(cx),
+        conv::SYREEN => ffi::init_syreen_comm(cx),
+        conv::TALKING_PET => ffi::init_talkpet_comm(cx),
+        conv::THRADD => ffi::init_thradd_comm(cx),
+        conv::UMGAH => ffi::init_umgah_comm(cx),
+        conv::URQUAN => ffi::init_urquan_comm(cx),
+        conv::UTWIG => ffi::init_utwig_comm(cx),
+        conv::VUX => ffi::init_vux_comm(cx),
+        conv::YEHAT_REBEL => ffi::init_rebel_yehat_comm(cx),
+        conv::YEHAT => ffi::init_yehat_comm(cx),
+        conv::ZOQFOTPIK => ffi::init_zoqfot_comm(cx),
+        _ => ffi::init_chmmr_comm(cx),
     }
 }
 #[cfg(not(test))]

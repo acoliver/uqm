@@ -613,15 +613,13 @@ pub(crate) mod live {
         0
     }
 
-    /// Return the static Earth Commander descriptor for the current encounter.
+    /// Build the Earth Commander descriptor for the current encounter.
     ///
     /// # Safety
-    /// Game thread only; the engine must copy the descriptor before initializing
-    /// another encounter. Loaded handles belong to CommData, not this template.
-    pub unsafe fn init_commander_comm(cx: &mut Cx<'_>) -> *mut CLocData {
-        static mut DESC: Option<CLocData> = None;
-        let desc = (&mut *std::ptr::addr_of_mut!(DESC)).get_or_insert_with(descriptor);
-        configure(desc, api(cx).get(StoryKey::RADIOACTIVES_PROVIDED) != 0);
+    /// Game thread only; initialization updates the active encounter's segue.
+    pub unsafe fn init_commander_comm(cx: &mut Cx<'_>) -> CLocData {
+        let mut desc = descriptor();
+        configure(&mut desc, api(cx).get(StoryKey::RADIOACTIVES_PROVIDED) != 0);
         // setSegue(peace) also updates the legacy battle bit used by dispatch.
         api(cx).set(StoryKey::BATTLE_SEGUE, 0);
         crate::comm::ffi::rust_set_segue(0);

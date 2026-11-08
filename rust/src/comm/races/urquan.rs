@@ -231,13 +231,11 @@ pub(crate) mod live {
         0
     }
 
-    pub unsafe fn init_urquan_comm(cx: &mut Cx<'_>) -> *mut CLocData {
-        static mut DESCRIPTOR: Option<CLocData> = None;
+    pub unsafe fn init_urquan_comm(cx: &mut Cx<'_>) -> CLocData {
         extern "C" {
             static mut ScreenWidth: i32;
         }
-        let descriptor = (&mut *std::ptr::addr_of_mut!(DESCRIPTOR))
-            .get_or_insert_with(|| super::descriptor(ScreenWidth));
+        let mut descriptor = super::descriptor(ScreenWidth);
         (descriptor.alien_text_baseline, descriptor.alien_text_width) = text_layout(ScreenWidth);
         run(cx, |dialogue| dialogue.initialize());
         descriptor
@@ -250,7 +248,7 @@ impl super::RaceDialogue for UrquanDialogue {
     fn init(&self, _cx: &mut Cx<'_>) -> CommData {
         #[cfg(not(test))]
         {
-            unsafe { as_comm_data(&*live::init_urquan_comm(_cx)) }
+            unsafe { as_comm_data(&live::init_urquan_comm(_cx)) }
         }
         #[cfg(test)]
         {

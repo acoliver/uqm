@@ -251,18 +251,6 @@ pub fn has_comm_data() -> bool {
 // Public API
 // ---------------------------------------------------------------------------
 
-#[cfg(not(test))]
-/// Dispatch to the C-owned `init_race` switch and return the raw LOCDATA pointer.
-///
-/// Returns null if the conversation ID is unrecognized.
-///
-/// # Safety
-/// Must be called from the game thread. The returned pointer is valid for
-/// the lifetime of the encounter.
-pub unsafe fn init_race(cx: &mut crate::engine::battle::Cx<'_>, comm_id: i32) -> *const c_void {
-    unsafe { crate::comm::dispatch::rust_init_race_dispatch(cx, comm_id as u32).cast_const() }
-}
-
 /// Copy a dialogue descriptor into the owned communication state.
 pub fn read_locdata(ld: &CLocData) -> CommData {
     let mut alien_ambient_array = [AnimationDescData::default(); MAX_ANIMATIONS];

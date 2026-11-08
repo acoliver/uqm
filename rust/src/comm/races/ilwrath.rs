@@ -587,11 +587,10 @@ pub(crate) mod live {
     /// Initialize the encounter descriptor and initial battle segue.
     ///
     /// # Safety
-    /// Game thread only. The caller must copy the descriptor before another encounter.
-    pub unsafe fn init_ilwrath_comm(cx: &mut Cx<'_>) -> *mut CLocData {
-        static mut DESC: Option<CLocData> = None;
-        let desc = (&mut *std::ptr::addr_of_mut!(DESC)).get_or_insert_with(descriptor);
-        run(cx, |s| s.initialize(desc));
+    /// Game thread only; communication state must already be initialized.
+    pub unsafe fn init_ilwrath_comm(cx: &mut Cx<'_>) -> CLocData {
+        let mut desc = descriptor();
+        run(cx, |s| s.initialize(&mut desc));
         desc
     }
 }
@@ -600,7 +599,7 @@ impl super::RaceDialogue for IlwrathDialogue {
     fn init(&self, _cx: &mut Cx<'_>) -> CommData {
         #[cfg(not(test))]
         {
-            unsafe { as_comm_data(&*live::init_ilwrath_comm(_cx)) }
+            unsafe { as_comm_data(&live::init_ilwrath_comm(_cx)) }
         }
         #[cfg(test)]
         {

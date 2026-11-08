@@ -4,19 +4,12 @@ use super::*;
 
 #[cfg(not(test))]
 pub(super) fn load_descriptor(cx: &mut Cx<'_>, comm_id: u32) -> bool {
-    // SAFETY: the returned descriptor is copied before any other encounter initializes.
-    unsafe {
-        let descriptor = rust_init_race_dispatch(cx, comm_id);
-        if !descriptor.is_null() {
-            std::ptr::copy_nonoverlapping(
-                descriptor.cast::<crate::comm::locdata::CLocData>(),
-                &raw mut ffi::CommData,
-                1,
-            );
-            set_comm_data(read_locdata(&*descriptor.cast()));
-        }
-        !descriptor.is_null()
-    }
+    // SAFETY: dispatch owns the initialized conversation on the game thread.
+    let descriptor = unsafe { race_descriptor(cx, comm_id) };
+    set_comm_data(read_locdata(&descriptor));
+    // SAFETY: the legacy runtime exclusively owns this slot until session migration.
+    unsafe { ffi::CommData = descriptor };
+    true
 }
 
 #[cfg(not(test))]

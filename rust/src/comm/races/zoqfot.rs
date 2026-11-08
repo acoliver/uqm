@@ -806,11 +806,10 @@ pub(crate) mod live {
     /// Initialize the encounter on the game thread.
     ///
     /// # Safety
-    /// The caller must copy the descriptor before another encounter initializes.
-    pub unsafe fn init_zoqfot_comm(cx: &mut Cx<'_>) -> *mut CLocData {
-        static mut DESC: Option<CLocData> = None;
-        let desc = (&mut *std::ptr::addr_of_mut!(DESC)).get_or_insert_with(descriptor);
-        run(cx, |s| s.initialize(desc));
+    /// Communication state must be initialized on the game thread.
+    pub unsafe fn init_zoqfot_comm(cx: &mut Cx<'_>) -> CLocData {
+        let mut desc = descriptor();
+        run(cx, |s| s.initialize(&mut desc));
         desc
     }
 }
@@ -819,7 +818,7 @@ impl super::RaceDialogue for ZoqfotDialogue {
     fn init(&self, _cx: &mut Cx<'_>) -> CommData {
         #[cfg(not(test))]
         {
-            unsafe { as_comm_data(&*live::init_zoqfot_comm(_cx)) }
+            unsafe { as_comm_data(&live::init_zoqfot_comm(_cx)) }
         }
         #[cfg(test)]
         {

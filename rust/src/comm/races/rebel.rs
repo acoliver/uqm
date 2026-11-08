@@ -274,12 +274,11 @@ pub(crate) mod live {
     pub(super) fn uninit(_cx: &mut Cx<'_>) -> u16 {
         0
     }
-    pub unsafe fn init_rebel_yehat_comm(cx: &mut Cx<'_>) -> *mut CLocData {
-        static mut D: Option<CLocData> = None;
+    pub unsafe fn init_rebel_yehat_comm(cx: &mut Cx<'_>) -> CLocData {
         extern "C" {
             static mut ScreenWidth: i32;
         }
-        let d = (&mut *std::ptr::addr_of_mut!(D)).get_or_insert_with(|| descriptor(ScreenWidth));
+        let mut d = descriptor(ScreenWidth);
         (d.alien_text_baseline, d.alien_text_width) = text_layout(ScreenWidth);
         run(cx, |s| s.initialize());
         d
@@ -290,7 +289,7 @@ impl super::RaceDialogue for RebelDialogue {
     fn init(&self, _cx: &mut Cx<'_>) -> CommData {
         #[cfg(not(test))]
         {
-            unsafe { as_comm_data(&*live::init_rebel_yehat_comm(_cx)) }
+            unsafe { as_comm_data(&live::init_rebel_yehat_comm(_cx)) }
         }
         #[cfg(test)]
         {
