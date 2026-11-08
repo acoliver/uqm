@@ -13,6 +13,9 @@ mod recorded;
 #[cfg(test)]
 mod recorded_tests;
 #[cfg(test)]
+mod retired_move_tests;
+mod retirement;
+#[cfg(test)]
 mod scoped_tests;
 pub(crate) mod tool;
 mod transfers;
@@ -432,7 +435,9 @@ fn compare_base(
         .as_ref()
         .map(|b| b.budget.clone())
         .unwrap_or_default();
-    let mut before = budgets::scoped_entries(&base, &base_budgets);
+    let transferable =
+        retirement::transfer_base(&base, measurement, &base_budgets, &baseline.budget, &moves)?;
+    let mut before = budgets::scoped_entries(&transferable.measurement, &transferable.budgets);
     if options.approved() {
         recorded::check_base(&measured, baseline, &before, recorded.as_ref())?;
     }
@@ -449,7 +454,7 @@ fn compare_base(
     }
     if !options.allow_growth {
         baseline::validate_transfers(&baseline.entries, measurement, &base, &moves)?;
-        let transferred = transfers::limits(&before, measurement, &base, &moves, &base_budgets)?;
+        let transferred = transferable.limits(&before, measurement, &moves)?;
         baseline::check_limits(
             &budgets::without_budgeted(&current, &baseline.budget),
             &budgets::without_budgeted(&transferred, &baseline.budget),
@@ -460,7 +465,8 @@ fn compare_base(
             budgets::check_growth(&baseline.budget, &BTreeMap::new())?;
         }
         if let Some(recorded) = &recorded {
-            let mut recorded_entries = recorded.entries.clone();
+            let mut recorded_entries =
+                budgets::without_budgeted(&recorded.entries, &transferable.retired);
             if options.allow_engine_os {
                 approvals::engine_os(&mut recorded_entries);
             }
@@ -472,15 +478,9 @@ fn compare_base(
                         .map(|(k, v)| (k.clone(), *v)),
                 );
             }
-            let moved_budgets = budgets::relocated(&recorded.budget, &moves)?;
+            let moved_budgets = budgets::relocated(&transferable.budgets, &moves)?;
             budgets::check_growth(&baseline.budget, &moved_budgets)?;
-            let transferred = transfers::limits(
-                &recorded_entries,
-                measurement,
-                &base,
-                &moves,
-                &recorded.budget,
-            )?;
+            let transferred = transferable.limits(&recorded_entries, measurement, &moves)?;
             baseline::check_limits(
                 &budgets::without_budgeted(&baseline.entries, &baseline.budget),
                 &budgets::without_budgeted(&transferred, &baseline.budget),
