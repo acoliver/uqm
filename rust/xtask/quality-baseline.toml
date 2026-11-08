@@ -1776,7 +1776,7 @@ u5_02_world_projection = { limit = 102, ends = "U5-02", scopes = { "ffi|owner_pr
 u5_03_world_projection = { limit = 5, ends = "U5-03", scopes = { "ffi|owner_projections|uqm::planet_side::init_lander::InitLander" = 1, "ffi|owner_projections|uqm::planet_side::init_lander::draw_lander_status" = 2, "ffi|owner_projections|uqm::planet_side::init_lander::sis_num_landers" = 1, "ffi|owner_projections|uqm::planet_side::init_lander::sis_total_element_mass" = 1 } }
 u6_01_world_projection = { limit = 58, ends = "U6-01", scopes = { "ffi|owner_projections|uqm::comm::commglue_abi::runtime::GetAllianceName" = 1, "ffi|owner_projections|uqm::comm::commglue_abi::runtime::get" = 1, "ffi|owner_projections|uqm::comm::commglue_abi::runtime::getSegue" = 3, "ffi|owner_projections|uqm::comm::commglue_abi::runtime::set" = 1, "ffi|owner_projections|uqm::comm::commglue_abi::runtime::setSegue" = 3, "ffi|owner_projections|uqm::comm::dispatch::avail_race_queue" = 1, "ffi|owner_projections|uqm::comm::dispatch::built_ship_queue" = 1, "ffi|owner_projections|uqm::comm::dispatch::encounter::fight_if_selected" = 8, "ffi|owner_projections|uqm::comm::dispatch::encounter_queue" = 1, "ffi|owner_projections|uqm::comm::dispatch::init_communication" = 4, "ffi|owner_projections|uqm::comm::dispatch::npc_built_ship_queue" = 1, "ffi|owner_projections|uqm::comm::dispatch::place_flagship_at_star" = 1, "ffi|owner_projections|uqm::comm::dispatch::prepare_samatra_dev_fixture" = 1, "ffi|owner_projections|uqm::comm::dispatch::race_communication" = 4, "ffi|owner_projections|uqm::comm::dispatch::rust_init_race_dispatch" = 2, "ffi|owner_projections|uqm::comm::ffi::get_alliance_name" = 1, "ffi|owner_projections|uqm::comm::ffi::get_alliance_name_full" = 2, "ffi|owner_projections|uqm::comm::ffi::rust_npc_phrase_cb" = 1, "ffi|owner_projections|uqm::comm::hail::game_string" = 1, "ffi|owner_projections|uqm::comm::hail::hail_alien" = 3, "ffi|owner_projections|uqm::comm::hail::is_starbase_conversation" = 2, "ffi|owner_projections|uqm::comm::hail::planet_name" = 1, "ffi|owner_projections|uqm::comm::oscill_abi::runtime::DrawOscilloscope" = 2, "ffi|owner_projections|uqm::comm::sis_graphics::<CommWindow as CommWindowGfx>::draw_scroll_indicator" = 1, "ffi|owner_projections|uqm::comm::sis_graphics::<CommWindow as CommWindowGfx>::space_context" = 1, "ffi|owner_projections|uqm::comm::sis_graphics::draw_summary_page_contents" = 2, "ffi|owner_projections|uqm::comm::sis_graphics::game_string" = 1, "ffi|owner_projections|uqm::comm::talk_segue::c_bridge::clear_last_activity_load_flag" = 1, "ffi|owner_projections|uqm::comm::talk_segue::dinput::do_last_replay_frame" = 2, "ffi|owner_projections|uqm::comm::talk_segue::init_speech_graphics" = 1, "ffi|owner_projections|uqm::comm::talk_segue::set_slider_image_frame" = 1, "ffi|owner_projections|uqm::comm::talk_segue::update_speech_graphics" = 2 } }
 u6_02_world_projection = { limit = 44, ends = "U6-02", scopes = { "ffi|owner_projections|uqm::comm::races::alliance::live::<LiveScript<'_,'_,H> as AllianceApi<H>>::set_allied" = 1, "ffi|owner_projections|uqm::comm::races::alliance::live::<LiveScript<'_,'_,H> as AllianceApi<H>>::track" = 1, "ffi|owner_projections|uqm::comm::races::blackur::api::<super::super::script::live::LiveScript<Handler> as BlackurApi>::battle_group" = 2, "ffi|owner_projections|uqm::comm::races::chmmr::api::<super::super::script::live::LiveScript<'_,'_,Handler> as ChmmrApi>::refit" = 1, "ffi|owner_projections|uqm::comm::races::comandr::<ComandrDialogue as super::RaceDialogue>::init" = 1, "ffi|owner_projections|uqm::comm::races::druuge::api::<crate::comm::races::script::live::LiveScript<'_,'_,Handler> as DruugeApi>::crew_cost" = 1, "ffi|owner_projections|uqm::comm::races::druuge::api::<crate::comm::races::script::live::LiveScript<'_,'_,Handler> as DruugeApi>::has_escorts" = 1, "ffi|owner_projections|uqm::comm::races::druuge::api::<crate::comm::races::script::live::LiveScript<'_,'_,Handler> as DruugeApi>::set_crew_cost" = 1, "ffi|owner_projections|uqm::comm::races::druuge::api::<crate::comm::races::script::live::LiveScript<'_,'_,Handler> as DruugeApi>::ship" = 1, "ffi|owner_projections|uqm::comm::races::melnorm::api::live::<LiveScript<'_,'_,Handler> as MelnormApi>::module_cost" = 1, "ffi|owner_projections|uqm::comm::races::melnorm::api::live::<LiveScript<'_,'_,Handler> as MelnormApi>::set_module_cost" = 1, "ffi|owner_projections|uqm::comm::races::melnorm::api::live::<LiveScript<'_,'_,Handler> as MelnormApi>::set_ship" = 1, "ffi|owner_projections|uqm::comm::races::melnorm::api::live::<LiveScript<'_,'_,Handler> as MelnormApi>::ship" = 1, "ffi|owner_projections|uqm::comm::races::pkunk::api::<crate::comm::races::script::live::LiveScript<'_,'_,Handler> as PkunkApi>::date" = 1, "ffi|owner_projections|uqm::comm::races::rebel::api::<super::super::script::live::LiveScript<Handler> as RebelApi>::date" = 1, "ffi|owner_projections|uqm::comm::races::script::live::<LiveScript<'_,'_,H> as ScriptApi<H>>::add_lander" = 1, "ffi|owner_projections|uqm::comm::races::script::live::<LiveScript<'_,'_,H> as ScriptApi<H>>::get" = 1, "ffi|owner_projections|uqm::comm::races::script::live::<LiveScript<'_,'_,H> as ScriptApi<H>>::response" = 1, "ffi|owner_projections|uqm::comm::races::script::live::<LiveScript<'_,'_,H> as ScriptApi<H>>::set" = 1, "ffi|owner_projections|uqm::comm::races::script::live::<LiveScript<'_,'_,H> as ScriptApi<H>>::supplies" = 3, "ffi|owner_projections|uqm::comm::races::slyland::api::live::<LiveScript<'_,'_,Handler> as SlylandApi>::position" = 2, "ffi|owner_projections|uqm::comm::races::starbas::api::live::<LiveScript<'_,'_,Handler> as StarbaseApi>::date" = 1, "ffi|owner_projections|uqm::comm::races::starbas::api::live::<LiveScript<'_,'_,Handler> as StarbaseApi>::mineral_amount" = 1, "ffi|owner_projections|uqm::comm::races::starbas::api::live::<LiveScript<'_,'_,Handler> as StarbaseApi>::mineral_worth" = 1, "ffi|owner_projections|uqm::comm::races::starbas::api::live::<LiveScript<'_,'_,Handler> as StarbaseApi>::remove_minerals" = 2, "ffi|owner_projections|uqm::comm::races::starbas::api::live::<LiveScript<'_,'_,Handler> as StarbaseApi>::ship" = 1, "ffi|owner_projections|uqm::comm::races::starbas::api::live::<LiveScript<'_,'_,Handler> as StarbaseApi>::skip_sale" = 1, "ffi|owner_projections|uqm::comm::races::starbas::api::live::<LiveScript<'_,'_,Handler> as StarbaseApi>::using_speech" = 1, "ffi|owner_projections|uqm::comm::races::syreen::api::<super::super::script::live::LiveScript<Handler> as SyreenApi>::using_speech" = 1, "ffi|owner_projections|uqm::comm::races::talkpet::api::<super::super::script::live::LiveScript<'_,'_,Handler> as TalkpetApi>::flags" = 1, "ffi|owner_projections|uqm::comm::races::talkpet::api::<super::super::script::live::LiveScript<'_,'_,Handler> as TalkpetApi>::npc_ships" = 1, "ffi|owner_projections|uqm::comm::races::talkpet::api::<super::super::script::live::LiveScript<'_,'_,Handler> as TalkpetApi>::umgah_alive" = 1, "ffi|owner_projections|uqm::comm::races::umgah::api::<super::super::script::live::LiveScript<Handler> as UmgahApi>::add_biomass" = 2, "ffi|owner_projections|uqm::comm::races::urquan::api::<super::super::script::live::LiveScript<'_,'_,Handler> as UrquanApi>::group_battle" = 3, "ffi|owner_projections|uqm::comm::races::zoqfot::api::live::<LiveScript<'_,'_,Handler> as ZoqApi>::date" = 2 } }
-u6_03_world_projection = { limit = 96, ends = "U6-03", scopes = { "ffi|owner_projections|uqm::starbase::cffi::<CffiPlatform as Gfx>::game_string" = 1, "ffi|owner_projections|uqm::starbase::cffi::<CffiPlatform as Gfx>::play_frame" = 1, "ffi|owner_projections|uqm::starbase::cffi::<CffiPlatform as Gfx>::set_font_effect" = 1, "ffi|owner_projections|uqm::starbase::cffi::<CffiPlatform>::font_ptr" = 1, "ffi|owner_projections|uqm::starbase::cffi::<CffiPlatform>::with_kernel" = 1, "ffi|owner_projections|uqm::starbase::cffi::avail_race_queue" = 1, "ffi|owner_projections|uqm::starbase::cffi::built_ship_queue" = 1, "ffi|owner_projections|uqm::ui::border::draw_sisframe" = 2, "ffi|owner_projections|uqm::ui::getchar::do_text_entry" = 1, "ffi|owner_projections|uqm::ui::menu::DrawMenuStateStrings" = 2, "ffi|owner_projections|uqm::ui::menu::previous_menu_state" = 1, "ffi|owner_projections|uqm::ui::outfit::display_landers" = 2, "ffi|owner_projections|uqm::ui::outfit::draw_module_strings" = 3, "ffi|owner_projections|uqm::ui::outfit::game_string" = 1, "ffi|owner_projections|uqm::ui::settings::PlayMusic" = 1, "ffi|owner_projections|uqm::ui::settings::PlaySoundEffect" = 1, "ffi|owner_projections|uqm::ui::shipyard::dms_flash_escort_ship_crew_count" = 1, "ffi|owner_projections|uqm::ui::shipyard::dms_flash_flag_ship_crew_count" = 2, "ffi|owner_projections|uqm::ui::shipyard::dms_scrap_escort_ship" = 1, "ffi|owner_projections|uqm::ui::shipyard::dms_spin_ship" = 1, "ffi|owner_projections|uqm::ui::shipyard::dms_try_add_escort_ship" = 1, "ffi|owner_projections|uqm::ui::shipyard::do_modify_ships" = 1, "ffi|owner_projections|uqm::ui::shipyard::do_shipyard" = 2, "ffi|owner_projections|uqm::ui::shipyard::draw_blue_print" = 14, "ffi|owner_projections|uqm::ui::shipyard::draw_race_strings" = 2, "ffi|owner_projections|uqm::ui::shipyard::on_input_frame" = 1, "ffi|owner_projections|uqm::ui::sis::ClearSISRect" = 1, "ffi|owner_projections|uqm::ui::sis::DeltaSISGauges" = 2, "ffi|owner_projections|uqm::ui::sis::DrawAutoPilotMessage" = 6, "ffi|owner_projections|uqm::ui::sis::DrawFlagshipName" = 2, "ffi|owner_projections|uqm::ui::sis::DrawSISMessageEx" = 2, "ffi|owner_projections|uqm::ui::sis::DrawSISTitle" = 1, "ffi|owner_projections|uqm::ui::sis::DrawStatusMessage" = 2, "ffi|owner_projections|uqm::ui::sis::DrawStorageBays" = 2, "ffi|owner_projections|uqm::ui::sis::SetFlashRect" = 1, "ffi|owner_projections|uqm::ui::sis::draw_captains_name" = 2, "ffi|owner_projections|uqm::ui::sis::draw_flagship_stats" = 5, "ffi|owner_projections|uqm::ui::sis::draw_landers" = 2, "ffi|owner_projections|uqm::ui::sis::game_string" = 1, "ffi|owner_projections|uqm::ui::sis::repair_sisborder" = 1, "ffi|owner_projections|uqm::ui::starbase::DrawShipPiece" = 2, "ffi|owner_projections|uqm::ui::starbase::draw_base_state_strings" = 2, "ffi|owner_projections|uqm::ui::starbase::finish_starbase_screen" = 2, "ffi|owner_projections|uqm::ui::starbase::game_string" = 1, "ffi|owner_projections|uqm::ui::starbase::update_starbase_screen" = 4, "ffi|owner_projections|uqm::ui::util::live::pause_game" = 8 } }
+u6_03_world_projection = { limit = 81, ends = "U6-03", scopes = { "ffi|owner_projections|uqm::starbase::cffi::<CffiPlatform as Gfx>::game_string" = 1, "ffi|owner_projections|uqm::starbase::cffi::<CffiPlatform as Gfx>::play_frame" = 1, "ffi|owner_projections|uqm::starbase::cffi::<CffiPlatform as Gfx>::set_font_effect" = 1, "ffi|owner_projections|uqm::starbase::cffi::<CffiPlatform>::font_ptr" = 1, "ffi|owner_projections|uqm::starbase::cffi::<CffiPlatform>::with_kernel" = 1, "ffi|owner_projections|uqm::starbase::cffi::avail_race_queue" = 1, "ffi|owner_projections|uqm::starbase::cffi::built_ship_queue" = 1, "ffi|owner_projections|uqm::ui::border::draw_sisframe" = 2, "ffi|owner_projections|uqm::ui::getchar::do_text_entry" = 1, "ffi|owner_projections|uqm::ui::menu::DrawMenuStateStrings" = 2, "ffi|owner_projections|uqm::ui::menu::previous_menu_state" = 1, "ffi|owner_projections|uqm::ui::outfit::display_landers" = 2, "ffi|owner_projections|uqm::ui::outfit::draw_module_strings" = 3, "ffi|owner_projections|uqm::ui::outfit::game_string" = 1, "ffi|owner_projections|uqm::ui::settings::PlayMusic" = 1, "ffi|owner_projections|uqm::ui::settings::PlaySoundEffect" = 1, "ffi|owner_projections|uqm::ui::shipyard::dms_flash_escort_ship_crew_count" = 1, "ffi|owner_projections|uqm::ui::shipyard::dms_flash_flag_ship_crew_count" = 2, "ffi|owner_projections|uqm::ui::shipyard::dms_scrap_escort_ship" = 1, "ffi|owner_projections|uqm::ui::shipyard::dms_spin_ship" = 1, "ffi|owner_projections|uqm::ui::shipyard::dms_try_add_escort_ship" = 1, "ffi|owner_projections|uqm::ui::shipyard::do_modify_ships" = 1, "ffi|owner_projections|uqm::ui::shipyard::do_shipyard" = 2, "ffi|owner_projections|uqm::ui::shipyard::draw_race_strings" = 2, "ffi|owner_projections|uqm::ui::sis::ClearSISRect" = 1, "ffi|owner_projections|uqm::ui::sis::DeltaSISGauges" = 2, "ffi|owner_projections|uqm::ui::sis::DrawAutoPilotMessage" = 6, "ffi|owner_projections|uqm::ui::sis::DrawFlagshipName" = 2, "ffi|owner_projections|uqm::ui::sis::DrawSISMessageEx" = 2, "ffi|owner_projections|uqm::ui::sis::DrawSISTitle" = 1, "ffi|owner_projections|uqm::ui::sis::DrawStatusMessage" = 2, "ffi|owner_projections|uqm::ui::sis::DrawStorageBays" = 2, "ffi|owner_projections|uqm::ui::sis::SetFlashRect" = 1, "ffi|owner_projections|uqm::ui::sis::draw_captains_name" = 2, "ffi|owner_projections|uqm::ui::sis::draw_flagship_stats" = 5, "ffi|owner_projections|uqm::ui::sis::draw_landers" = 2, "ffi|owner_projections|uqm::ui::sis::game_string" = 1, "ffi|owner_projections|uqm::ui::sis::repair_sisborder" = 1, "ffi|owner_projections|uqm::ui::starbase::DrawShipPiece" = 2, "ffi|owner_projections|uqm::ui::starbase::draw_base_state_strings" = 2, "ffi|owner_projections|uqm::ui::starbase::finish_starbase_screen" = 2, "ffi|owner_projections|uqm::ui::starbase::game_string" = 1, "ffi|owner_projections|uqm::ui::starbase::update_starbase_screen" = 4, "ffi|owner_projections|uqm::ui::util::live::pause_game" = 8 } }
 u6_04_content_edges = { limit = 110, ends = "U6-04", scopes = { "layers|module_edges|uqm::battle::ai_entry::@file" = 4, "layers|module_edges|uqm::battle::cyborg_native::@file" = 3, "layers|module_edges|uqm::battle::process_native::@file" = 2, "layers|module_edges|uqm::battle::ship_native::@file" = 3, "layers|module_edges|uqm::battle::weapon_native::@file" = 5, "layers|module_edges|uqm::battle::world_elements::@file" = 3, "layers|module_edges|uqm::ships::races::androsynth_native::engine::@file" = 1, "layers|module_edges|uqm::ships::races::arilou_native::@file" = 2, "layers|module_edges|uqm::ships::races::blackurq_native::engine::@file" = 1, "layers|module_edges|uqm::ships::races::chenjesu_native::engine::@file" = 1, "layers|module_edges|uqm::ships::races::chmmr_native::engine::@file" = 2, "layers|module_edges|uqm::ships::races::druuge_native::engine::@file" = 1, "layers|module_edges|uqm::ships::races::human_native::engine::@file" = 2, "layers|module_edges|uqm::ships::races::ilwrath_native::@file" = 2, "layers|module_edges|uqm::ships::races::melnorme_native::engine::@file" = 1, "layers|module_edges|uqm::ships::races::mmrnmhrm_native::engine::@file" = 2, "layers|module_edges|uqm::ships::races::mycon_native::engine::@file" = 1, "layers|module_edges|uqm::ships::races::orz_native::engine::@file" = 2, "layers|module_edges|uqm::ships::races::pkunk_native::engine::@file" = 3, "layers|module_edges|uqm::ships::races::samatra::engine::@file" = 2, "layers|module_edges|uqm::ships::races::shofixti_native::engine::@file" = 3, "layers|module_edges|uqm::ships::races::sis_native::engine::@file" = 3, "layers|module_edges|uqm::ships::races::slylandro_native::engine::@file" = 2, "layers|module_edges|uqm::ships::races::spathi_native::@file" = 1, "layers|module_edges|uqm::ships::races::supox_native::engine::@file" = 2, "layers|module_edges|uqm::ships::races::syreen_native::engine::@file" = 2, "layers|module_edges|uqm::ships::races::thraddash_native::engine::@file" = 2, "layers|module_edges|uqm::ships::races::umgah_native::engine::@file" = 1, "layers|module_edges|uqm::ships::races::urquan_native::engine::@file" = 2, "layers|module_edges|uqm::ships::races::utwig_native::engine::@file" = 1, "layers|module_edges|uqm::ships::races::vux_native::engine::@file" = 1, "layers|module_edges|uqm::ships::races::yehat_native::engine::@file" = 1, "layers|module_edges|uqm::ships::races::zoqfot_native::engine::@file" = 1, "layers|planned.uqm-content|uqm::ships::races::androsynth_native::engine::@file" = 1, "layers|planned.uqm-content|uqm::ships::races::arilou_native::@file" = 2, "layers|planned.uqm-content|uqm::ships::races::blackurq_native::engine::@file" = 1, "layers|planned.uqm-content|uqm::ships::races::chenjesu_native::engine::@file" = 1, "layers|planned.uqm-content|uqm::ships::races::chmmr_native::engine::@file" = 2, "layers|planned.uqm-content|uqm::ships::races::druuge_native::engine::@file" = 1, "layers|planned.uqm-content|uqm::ships::races::human_native::engine::@file" = 2, "layers|planned.uqm-content|uqm::ships::races::ilwrath_native::@file" = 2, "layers|planned.uqm-content|uqm::ships::races::melnorme_native::engine::@file" = 1, "layers|planned.uqm-content|uqm::ships::races::mmrnmhrm_native::engine::@file" = 2, "layers|planned.uqm-content|uqm::ships::races::mycon_native::engine::@file" = 1, "layers|planned.uqm-content|uqm::ships::races::orz_native::engine::@file" = 2, "layers|planned.uqm-content|uqm::ships::races::pkunk_native::engine::@file" = 3, "layers|planned.uqm-content|uqm::ships::races::samatra::engine::@file" = 2, "layers|planned.uqm-content|uqm::ships::races::shofixti_native::engine::@file" = 3, "layers|planned.uqm-content|uqm::ships::races::sis_native::engine::@file" = 3, "layers|planned.uqm-content|uqm::ships::races::slylandro_native::engine::@file" = 2, "layers|planned.uqm-content|uqm::ships::races::spathi_native::@file" = 1, "layers|planned.uqm-content|uqm::ships::races::supox_native::engine::@file" = 2, "layers|planned.uqm-content|uqm::ships::races::syreen_native::engine::@file" = 2, "layers|planned.uqm-content|uqm::ships::races::thraddash_native::engine::@file" = 2, "layers|planned.uqm-content|uqm::ships::races::umgah_native::engine::@file" = 1, "layers|planned.uqm-content|uqm::ships::races::urquan_native::engine::@file" = 2, "layers|planned.uqm-content|uqm::ships::races::utwig_native::engine::@file" = 1, "layers|planned.uqm-content|uqm::ships::races::vux_native::engine::@file" = 1, "layers|planned.uqm-content|uqm::ships::races::yehat_native::engine::@file" = 1, "layers|planned.uqm-content|uqm::ships::races::zoqfot_native::engine::@file" = 1 } }
 u6_04_world_projection = { limit = 118, ends = "U6-04", scopes = { "ffi|owner_projections|uqm::comm::glue::resolve_phrase" = 1, "ffi|owner_projections|uqm::comm::speech_graphics::<SpeechGraphics>::update" = 2, "ffi|owner_projections|uqm::comm::speech_graphics::activity_frame" = 1, "ffi|owner_projections|uqm::front_end::cnctdlg::do_melee_connect_dialog" = 1, "ffi|owner_projections|uqm::front_end::cnctdlg::game_string" = 1, "ffi|owner_projections|uqm::front_end::cnctdlg::mcd_draw_button" = 1, "ffi|owner_projections|uqm::front_end::credits::runtime::Credits" = 3, "ffi|owner_projections|uqm::front_end::credits::runtime::credits_input" = 1, "ffi|owner_projections|uqm::front_end::credits::runtime::outtakes" = 1, "ffi|owner_projections|uqm::front_end::fmv::runtime::splash_screen" = 4, "ffi|owner_projections|uqm::front_end::gameopt::runtime::ConfirmSaveLoad" = 1, "ffi|owner_projections|uqm::front_end::gameopt::runtime::GameOptions" = 3, "ffi|owner_projections|uqm::front_end::gameopt::runtime::do_game_options" = 1, "ffi|owner_projections|uqm::front_end::gameopt::runtime::do_pick_game" = 2, "ffi|owner_projections|uqm::front_end::gameopt::runtime::do_settings" = 6, "ffi|owner_projections|uqm::front_end::gameopt::runtime::draw_game_selection" = 1, "ffi|owner_projections|uqm::front_end::gameopt::runtime::draw_name_string" = 3, "ffi|owner_projections|uqm::front_end::gameopt::runtime::draw_save_name_string" = 2, "ffi|owner_projections|uqm::front_end::gameopt::runtime::draw_savegame_cargo" = 3, "ffi|owner_projections|uqm::front_end::gameopt::runtime::draw_savegame_summary" = 14, "ffi|owner_projections|uqm::front_end::gameopt::runtime::feedback_setting" = 1, "ffi|owner_projections|uqm::front_end::gameopt::runtime::game_string" = 1, "ffi|owner_projections|uqm::front_end::gameopt::runtime::name_captain_or_ship" = 2, "ffi|owner_projections|uqm::front_end::gameopt::runtime::save_load::pick_game" = 5, "ffi|owner_projections|uqm::front_end::intro::runtime::fade_clear_screen" = 1, "ffi|owner_projections|uqm::front_end::intro::runtime::generate_sis" = 2, "ffi|owner_projections|uqm::front_end::intro::runtime::presentation_commands" = 1, "ffi|owner_projections|uqm::front_end::intro::runtime::show_slides" = 1, "ffi|owner_projections|uqm::front_end::intro::runtime::video_input" = 1, "ffi|owner_projections|uqm::front_end::setupmenu::runtime::do_setup_menu" = 2, "ffi|owner_projections|uqm::front_end::setupmenu::runtime::setup_menu" = 1, "ffi|owner_projections|uqm::front_end::uqmdebug::runtime::activate_all_ships" = 1, "ffi|owner_projections|uqm::front_end::uqmdebug::runtime::calculate_mineral_value" = 1, "ffi|owner_projections|uqm::front_end::uqmdebug::runtime::clear_escorts" = 1, "ffi|owner_projections|uqm::front_end::uqmdebug::runtime::do_instant_move" = 5, "ffi|owner_projections|uqm::front_end::uqmdebug::runtime::draw_context" = 1, "ffi|owner_projections|uqm::front_end::uqmdebug::runtime::dump_events" = 1, "ffi|owner_projections|uqm::front_end::uqmdebug::runtime::dump_planet" = 1, "ffi|owner_projections|uqm::front_end::uqmdebug::runtime::dump_strings" = 1, "ffi|owner_projections|uqm::front_end::uqmdebug::runtime::equip_ship" = 4, "ffi|owner_projections|uqm::front_end::uqmdebug::runtime::for_all_planets" = 1, "ffi|owner_projections|uqm::front_end::uqmdebug::runtime::forward_to_next_event" = 1, "ffi|owner_projections|uqm::front_end::uqmdebug::runtime::game_string" = 1, "ffi|owner_projections|uqm::front_end::uqmdebug::runtime::get_screen" = 1, "ffi|owner_projections|uqm::front_end::uqmdebug::runtime::give_devices" = 1, "ffi|owner_projections|uqm::front_end::uqmdebug::runtime::is_context_visible" = 1, "ffi|owner_projections|uqm::front_end::uqmdebug::runtime::moon_recurse" = 1, "ffi|owner_projections|uqm::front_end::uqmdebug::runtime::planet_recurse" = 1, "ffi|owner_projections|uqm::front_end::uqmdebug::runtime::put_screen" = 1, "ffi|owner_projections|uqm::front_end::uqmdebug::runtime::reset_crew_battle" = 2, "ffi|owner_projections|uqm::front_end::uqmdebug::runtime::reset_energy_battle" = 2, "ffi|owner_projections|uqm::front_end::uqmdebug::runtime::show_spheres" = 1, "ffi|owner_projections|uqm::front_end::uqmdebug::runtime::star_recurse" = 3, "ffi|owner_projections|uqm::front_end::uqmdebug::runtime::universe_recurse" = 2, "ffi|owner_projections|uqm::mainloop::restart_menu::menu_abi::uqm_get_utwig_bomb" = 1, "ffi|owner_projections|uqm::mainloop::restart_menu::menu_abi::uqm_get_utwig_bomb_on_ship" = 1, "ffi|owner_projections|uqm::mainloop::restart_menu::menu_abi::uqm_set_utwig_bomb_on_ship" = 1, "ffi|owner_projections|uqm::planets::cargo::live::ShowRemainingCapacity" = 1, "ffi|owner_projections|uqm::planets::cargo::live::discard" = 3, "ffi|owner_projections|uqm::planets::cargo::live::display" = 1, "ffi|owner_projections|uqm::planets::cargo::live::element_amount" = 3, "ffi|owner_projections|uqm::planets::report::live::make_report" = 1, "ffi|owner_projections|uqm::planets::sphere::live::tint_frame" = 1 } }
 
@@ -1927,7 +1927,7 @@ u6_04_world_projection = { limit = 118, ends = "U6-04", scopes = { "ffi|owner_pr
 "allows|clippy::all|uqm-engine::graphics::native_abi" = 934
 "allows|clippy::all|uqm::c_bindings::controller_input" = 23
 "allows|clippy::all|uqm::c_bindings::global_state" = 276
-"allows|clippy::all|uqm::navigation::abi" = 3164
+"allows|clippy::all|uqm::navigation::abi" = 3142
 "allows|clippy::all|uqm::ships::native::abi" = 2043
 "allows|clippy::identity_op|uqm-engine::graphics::native_abi::_#1" = 25
 "allows|clippy::missing_safety_doc|uqm-engine::sound::decoder_api" = 123
@@ -1965,12 +1965,12 @@ u6_04_world_projection = { limit = 118, ends = "U6-04", scopes = { "ffi|owner_pr
 "allows|dead_code|uqm::comm::dispatch::ffi" = 74
 "allows|dead_code|uqm::comm::hail::c_bridge" = 2
 "allows|dead_code|uqm::config::Options" = 36
-"allows|dead_code|uqm::navigation::abi" = 3164
+"allows|dead_code|uqm::navigation::abi" = 3142
 "allows|dead_code|uqm::ships::native::abi" = 2043
 "allows|deprecated|uqm-engine::resource::resource_type::<ResourceValue>::as_color" = 2
 "allows|improper_ctypes|uqm::c_bindings::controller_input" = 23
 "allows|improper_ctypes|uqm::c_bindings::global_state" = 276
-"allows|improper_ctypes|uqm::navigation::abi" = 3164
+"allows|improper_ctypes|uqm::navigation::abi" = 3142
 "allows|non_camel_case_types|uqm-engine::battle::access::record::abi" = 157
 "allows|non_camel_case_types|uqm-engine::battle::access::schema" = 31
 "allows|non_camel_case_types|uqm-engine::graphics::native_abi" = 934
@@ -1980,7 +1980,7 @@ u6_04_world_projection = { limit = 118, ends = "U6-04", scopes = { "ffi|owner_pr
 "allows|non_camel_case_types|uqm-engine::video::ffi::SDL_PixelFormat" = 27
 "allows|non_camel_case_types|uqm::c_bindings::controller_input" = 23
 "allows|non_camel_case_types|uqm::c_bindings::global_state" = 276
-"allows|non_camel_case_types|uqm::navigation::abi" = 3164
+"allows|non_camel_case_types|uqm::navigation::abi" = 3142
 "allows|non_camel_case_types|uqm::ships::native::abi" = 2043
 "allows|non_camel_case_types|uqm::supermelee::netplay::abi" = 72
 "allows|non_snake_case|uqm-engine::battle::access::record::abi" = 157
@@ -2102,7 +2102,7 @@ u6_04_world_projection = { limit = 118, ends = "U6-04", scopes = { "ffi|owner_pr
 "allows|non_snake_case|uqm::game_init::macro_abi" = 33
 "allows|non_snake_case|uqm::mainloop::input_abi::live" = 128
 "allows|non_snake_case|uqm::mainloop::options_abi" = 83
-"allows|non_snake_case|uqm::navigation::abi" = 3164
+"allows|non_snake_case|uqm::navigation::abi" = 3142
 "allows|non_snake_case|uqm::ships::native::abi" = 2043
 "allows|non_snake_case|uqm::supermelee::netplay::abi" = 72
 "allows|non_snake_case|uqm::ui::shipyard_layout" = 48
@@ -2112,7 +2112,7 @@ u6_04_world_projection = { limit = 118, ends = "U6-04", scopes = { "ffi|owner_pr
 "allows|non_upper_case_globals|uqm-engine::resource::ffi_bridge::_cur_resfile_name" = 3
 "allows|non_upper_case_globals|uqm::c_bindings::controller_input" = 23
 "allows|non_upper_case_globals|uqm::c_bindings::global_state" = 276
-"allows|non_upper_case_globals|uqm::navigation::abi" = 3164
+"allows|non_upper_case_globals|uqm::navigation::abi" = 3142
 "allows|non_upper_case_globals|uqm::ships::native::abi" = 2043
 "allows|non_upper_case_globals|uqm::supermelee::netplay::abi" = 72
 "allows|unused_variables|uqm-engine::graphics::scaling::<BiadaptiveScaler>::rgb_to_luminance_simd" = 23
@@ -2120,7 +2120,6 @@ u6_04_world_projection = { limit = 118, ends = "U6-04", scopes = { "ffi|owner_pr
 "allows|unused_variables|uqm-engine::graphics::scaling::<NearestScaler>::copy_pixel_simd" = 16
 "complexity|cognitive|uqm-engine::graphics::dcqueue::<DrawCommandQueue>::handle_command" = 54
 "complexity|cognitive|uqm-engine::graphics::dcqueue_abi::TFB_FlushGraphicsEx" = 51
-"complexity|cognitive|uqm-engine::graphics::ffi::rust_gfx_screen" = 41
 "complexity|cognitive|uqm-engine::graphics::font_abi::measure" = 52
 "complexity|cognitive|uqm-engine::graphics::geometry_ffi::_clip_line" = 105
 "complexity|cognitive|uqm-engine::graphics::geometry_ffi::intersection::drawables_intersect" = 98
@@ -2407,8 +2406,8 @@ u6_04_world_projection = { limit = 118, ends = "U6-04", scopes = { "ffi|owner_pr
 "complexity|cyclomatic|uqm::ui::starbase::DrawShipPiece" = 31
 "complexity|loc|uqm-engine::graphics::dcqueue::<DrawCommandQueue>::handle_command" = 226
 "complexity|loc|uqm-engine::graphics::dcqueue_abi::TFB_FlushGraphicsEx" = 202
-"complexity|loc|uqm-engine::graphics::ffi::rust_gfx_init" = 150
-"complexity|loc|uqm-engine::graphics::ffi::rust_gfx_screen" = 112
+"complexity|loc|uqm-engine::graphics::ffi::rust_gfx_init" = 146
+"complexity|loc|uqm-engine::graphics::ffi::rust_gfx_screen" = 89
 "complexity|loc|uqm-engine::graphics::geometry_ffi::_clip_line" = 167
 "complexity|loc|uqm-engine::graphics::geometry_ffi::intersection::drawables_intersect" = 150
 "complexity|loc|uqm-engine::graphics::geometry_ffi::intersection::frame_intersect" = 176
@@ -2607,8 +2606,7 @@ u6_04_world_projection = { limit = 118, ends = "U6-04", scopes = { "ffi|owner_pr
 "complexity|loc|uqm::supermelee::setup::persistence::builtin_teams" = 94
 "complexity|loc|uqm::target::uqm-gameplay-proof::build_gallery" = 83
 "complexity|loc|uqm::target::uqm::main" = 86
-"complexity|loc|uqm::ui::outfit::do_install_module" = 158
-"complexity|loc|uqm::ui::shipyard::draw_blue_print" = 88
+"complexity|loc|uqm::ui::outfit::do_install_module" = 156
 "complexity|loc|uqm::ui::sis::draw_flagship_stats" = 108
 "complexity|loc|uqm::ui::starbase::DrawShipPiece" = 162
 "ffi|abi_includes|uqm-engine::uqm-engine" = 1
@@ -2639,7 +2637,7 @@ u6_04_world_projection = { limit = 118, ends = "U6-04", scopes = { "ffi|owner_pr
 "ffi|extern_c_fn|uqm::planets" = 36
 "ffi|extern_c_fn|uqm::savegame" = 7
 "ffi|extern_c_fn|uqm::time" = 8
-"ffi|extern_c_fn|uqm::ui" = 37
+"ffi|extern_c_fn|uqm::ui" = 27
 "ffi|foreign_items|uqm-engine::uqm-engine" = 49
 "ffi|foreign_items|uqm::automation" = 20
 "ffi|foreign_items|uqm::c_bindings" = 3
@@ -2662,7 +2660,7 @@ u6_04_world_projection = { limit = 118, ends = "U6-04", scopes = { "ffi|owner_pr
 "ffi|no_mangle|uqm::planet_side" = 2
 "ffi|no_mangle|uqm::planets" = 29
 "ffi|no_mangle|uqm::time" = 4
-"ffi|no_mangle|uqm::ui" = 36
+"ffi|no_mangle|uqm::ui" = 26
 "ffi|owner_projections|uqm::comm" = 0
 "ffi|owner_projections|uqm::front_end" = 0
 "ffi|owner_projections|uqm::mainloop" = 0
@@ -2682,7 +2680,7 @@ u6_04_world_projection = { limit = 118, ends = "U6-04", scopes = { "ffi|owner_pr
 "ffi|raw_pointer_parameters|uqm::savegame" = 17
 "ffi|raw_pointer_parameters|uqm::ships" = 22
 "ffi|raw_pointer_parameters|uqm::state" = 26
-"ffi|raw_pointer_parameters|uqm::ui" = 28
+"ffi|raw_pointer_parameters|uqm::ui" = 25
 "ffi|repr_c|uqm-engine::uqm-engine" = 156
 "ffi|repr_c|uqm::automation" = 5
 "ffi|repr_c|uqm::comm" = 15
@@ -3739,7 +3737,7 @@ u6_04_world_projection = { limit = 118, ends = "U6-04", scopes = { "ffi|owner_pr
 "loc|loc|uqm-xtask::abi_check::@file" = 1461
 "loc|loc|uqm-xtask::native_suite::@file" = 1516
 "loc|loc|uqm::automation::child_session::@file" = 2774
-"loc|loc|uqm::automation::coordinator::@file" = 2770
+"loc|loc|uqm::automation::coordinator::@file" = 2724
 "loc|loc|uqm::automation::native_runner::@file" = 3716
 "loc|loc|uqm::automation::native_window::@file" = 3550
 "loc|loc|uqm::automation::scheduler::@file" = 1429
@@ -3758,14 +3756,14 @@ u6_04_world_projection = { limit = 118, ends = "U6-04", scopes = { "ffi|owner_pr
 "loc|loc|uqm::front_end::gameopt::@file" = 912
 "loc|loc|uqm::front_end::setupmenu::@file" = 1144
 "loc|loc|uqm::front_end::uqmdebug::@file" = 1369
-"loc|loc|uqm::navigation::abi::@file" = 3152
+"loc|loc|uqm::navigation::abi::@file" = 3130
 "loc|loc|uqm::planets::tables::@file" = 1766
 "loc|loc|uqm::ships::native::abi::@file" = 1987
 "loc|loc|uqm::ships::registry::@file" = 943
 "loc|loc|uqm::starbase::shipyard_screen::@file" = 910
 "loc|loc|uqm::target::uqm-gameplay-proof::@file" = 2277
-"loc|loc|uqm::ui::shipyard::@file" = 872
-"unsafe|unsafe_block_lines|uqm-engine::uqm-engine" = 2379
+"loc|loc|uqm::ui::shipyard::@file" = 831
+"unsafe|unsafe_block_lines|uqm-engine::uqm-engine" = 2380
 "unsafe|unsafe_block_lines|uqm-xtask::uqm-xtask" = 8
 "unsafe|unsafe_block_lines|uqm::app" = 44
 "unsafe|unsafe_block_lines|uqm::automation" = 721
@@ -3775,14 +3773,14 @@ u6_04_world_projection = { limit = 118, ends = "U6-04", scopes = { "ffi|owner_pr
 "unsafe|unsafe_block_lines|uqm::game_init" = 2
 "unsafe|unsafe_block_lines|uqm::mainloop" = 192
 "unsafe|unsafe_block_lines|uqm::navigation" = 2
-"unsafe|unsafe_block_lines|uqm::planet_side" = 284
+"unsafe|unsafe_block_lines|uqm::planet_side" = 280
 "unsafe|unsafe_block_lines|uqm::planets" = 129
 "unsafe|unsafe_block_lines|uqm::savegame" = 22
 "unsafe|unsafe_block_lines|uqm::ships" = 84
 "unsafe|unsafe_block_lines|uqm::starbase" = 70
-"unsafe|unsafe_block_lines|uqm::ui" = 82
+"unsafe|unsafe_block_lines|uqm::ui" = 81
 "unsafe|unsafe_block_lines|uqm::uqm" = 9
-"unsafe|unsafe_blocks|uqm-engine::uqm-engine" = 458
+"unsafe|unsafe_blocks|uqm-engine::uqm-engine" = 459
 "unsafe|unsafe_blocks|uqm-xtask::uqm-xtask" = 3
 "unsafe|unsafe_blocks|uqm::app" = 17
 "unsafe|unsafe_blocks|uqm::automation" = 129
@@ -3792,14 +3790,14 @@ u6_04_world_projection = { limit = 118, ends = "U6-04", scopes = { "ffi|owner_pr
 "unsafe|unsafe_blocks|uqm::game_init" = 2
 "unsafe|unsafe_blocks|uqm::mainloop" = 98
 "unsafe|unsafe_blocks|uqm::navigation" = 2
-"unsafe|unsafe_blocks|uqm::planet_side" = 49
+"unsafe|unsafe_blocks|uqm::planet_side" = 48
 "unsafe|unsafe_blocks|uqm::planets" = 65
 "unsafe|unsafe_blocks|uqm::savegame" = 11
 "unsafe|unsafe_blocks|uqm::ships" = 8
 "unsafe|unsafe_blocks|uqm::starbase" = 37
-"unsafe|unsafe_blocks|uqm::ui" = 18
+"unsafe|unsafe_blocks|uqm::ui" = 17
 "unsafe|unsafe_blocks|uqm::uqm" = 1
-"unsafe|unsafe_fn_lines|uqm-engine::uqm-engine" = 15898
+"unsafe|unsafe_fn_lines|uqm-engine::uqm-engine" = 15892
 "unsafe|unsafe_fn_lines|uqm::app" = 3
 "unsafe|unsafe_fn_lines|uqm::automation" = 228
 "unsafe|unsafe_fn_lines|uqm::battle" = 3
@@ -3809,13 +3807,13 @@ u6_04_world_projection = { limit = 118, ends = "U6-04", scopes = { "ffi|owner_pr
 "unsafe|unsafe_fn_lines|uqm::game_init" = 363
 "unsafe|unsafe_fn_lines|uqm::mainloop" = 675
 "unsafe|unsafe_fn_lines|uqm::navigation" = 978
-"unsafe|unsafe_fn_lines|uqm::planet_side" = 425
-"unsafe|unsafe_fn_lines|uqm::planets" = 4191
+"unsafe|unsafe_fn_lines|uqm::planet_side" = 428
+"unsafe|unsafe_fn_lines|uqm::planets" = 4192
 "unsafe|unsafe_fn_lines|uqm::savegame" = 487
 "unsafe|unsafe_fn_lines|uqm::ships" = 148
 "unsafe|unsafe_fn_lines|uqm::state" = 274
 "unsafe|unsafe_fn_lines|uqm::time" = 59
-"unsafe|unsafe_fn_lines|uqm::ui" = 3018
+"unsafe|unsafe_fn_lines|uqm::ui" = 2891
 "unsafe|unsafe_fn|uqm-engine::uqm-engine" = 957
 "unsafe|unsafe_fn|uqm::app" = 1
 "unsafe|unsafe_fn|uqm::automation" = 6
@@ -3832,7 +3830,7 @@ u6_04_world_projection = { limit = 118, ends = "U6-04", scopes = { "ffi|owner_pr
 "unsafe|unsafe_fn|uqm::ships" = 40
 "unsafe|unsafe_fn|uqm::state" = 23
 "unsafe|unsafe_fn|uqm::time" = 7
-"unsafe|unsafe_fn|uqm::ui" = 108
+"unsafe|unsafe_fn|uqm::ui" = 104
 "unsafe|unsafe_impl_lines|uqm-engine::uqm-engine" = 16
 "unsafe|unsafe_impl_lines|uqm::comm" = 2
 "unsafe|unsafe_impl_lines|uqm::planet_side" = 2
@@ -3841,7 +3839,7 @@ u6_04_world_projection = { limit = 118, ends = "U6-04", scopes = { "ffi|owner_pr
 "unsafe|unsafe_impl|uqm::comm" = 2
 "unsafe|unsafe_impl|uqm::planet_side" = 2
 "unsafe|unsafe_impl|uqm::planets" = 1
-"unsafe|unsafe_lines|uqm-engine::uqm-engine" = 17797
+"unsafe|unsafe_lines|uqm-engine::uqm-engine" = 17792
 "unsafe|unsafe_lines|uqm-xtask::uqm-xtask" = 8
 "unsafe|unsafe_lines|uqm::app" = 46
 "unsafe|unsafe_lines|uqm::automation" = 824
@@ -3852,14 +3850,14 @@ u6_04_world_projection = { limit = 118, ends = "U6-04", scopes = { "ffi|owner_pr
 "unsafe|unsafe_lines|uqm::game_init" = 365
 "unsafe|unsafe_lines|uqm::mainloop" = 851
 "unsafe|unsafe_lines|uqm::navigation" = 980
-"unsafe|unsafe_lines|uqm::planet_side" = 686
-"unsafe|unsafe_lines|uqm::planets" = 4276
+"unsafe|unsafe_lines|uqm::planet_side" = 685
+"unsafe|unsafe_lines|uqm::planets" = 4277
 "unsafe|unsafe_lines|uqm::savegame" = 508
 "unsafe|unsafe_lines|uqm::ships" = 232
 "unsafe|unsafe_lines|uqm::starbase" = 70
 "unsafe|unsafe_lines|uqm::state" = 274
 "unsafe|unsafe_lines|uqm::time" = 59
-"unsafe|unsafe_lines|uqm::ui" = 3092
+"unsafe|unsafe_lines|uqm::ui" = 2964
 "unsafe|unsafe_lines|uqm::uqm" = 9
 
 [moved]
@@ -3872,10 +3870,6 @@ u6_04_world_projection = { limit = 118, ends = "U6-04", scopes = { "ffi|owner_pr
 "uqm::navigation::hyper_data::@file" = "uqm-engine::battle::hyperspace::@file"
 "uqm::navigation::hyper_menu::@file" = "uqm::ui::menu::hyperspace::@file"
 "uqm::network" = "uqm-engine::network"
-"uqm::planets::plangen::live::RenderPlanetSphere" = "uqm::planets::plangen::live::render_sphere"
-"uqm::planets::plangen::live::SetShieldThrobEffect" = "uqm::planets::plangen::live::set_shield_throb_effect"
-"uqm::planets::sphere::live::PrepareNextRotationFrame" = "uqm::planets::sphere::live::prepare_next_rotation_frame"
-"uqm::planets::sphere::live::ZoomInPlanetSphere" = "uqm::planets::sphere::live::zoom_in_planet_sphere"
 "uqm::resource" = "uqm-engine::resource"
 "uqm::sound" = "uqm-engine::sound"
 "uqm::threading" = "uqm-engine::threading"
