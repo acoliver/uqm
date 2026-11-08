@@ -307,7 +307,13 @@ fn record_with_sites(
     if options.tighten {
         baseline.lint.insert(host.into(), measured);
         if let Some((_, proof)) = sites {
-            baseline.expect_sites.insert(host.into(), proof.clone());
+            let recorded = baseline.expect_sites.get(host).cloned().unwrap_or_default();
+            let retained = super::expect_sites::retain(proof, &recorded, &baseline.moved)?;
+            if retained.is_empty() {
+                baseline.expect_sites.remove(host);
+            } else {
+                baseline.expect_sites.insert(host.into(), retained);
+            }
         }
         baseline.write(&path)?;
     }

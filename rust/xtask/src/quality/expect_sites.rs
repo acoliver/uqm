@@ -150,6 +150,10 @@ pub(super) fn check(
         .ok_or("expect relocation needs --base and archived diagnostics")?;
     let (source, recorded) = super::baseline::archived_measurement(root, reference)?;
     let recorded = recorded.ok_or("expect relocation needs an archived baseline")?;
+    let prior_host = recorded
+        .lint
+        .get(host)
+        .ok_or("expect relocation needs archived host lint counters")?;
     let moves = super::transfers::pending(&baseline.moved, Some(&recorded.moved));
     super::transfers::validate(&recorded.entries, current, &source, &moves)?;
     let empty = Proof::new();
@@ -159,9 +163,7 @@ pub(super) fn check(
     if let Some(prior) = baseline.lint.get(host) {
         compare(counts, prior, &moves, old_proof, actual)?;
     }
-    if let Some(prior) = recorded.lint.get(host) {
-        compare(counts, prior, &moves, old_proof, actual)?;
-    }
+    compare(counts, prior_host, &moves, old_proof, actual)?;
     for (os, previous) in &baseline.lint {
         if let Some(prior) = recorded.lint.get(os) {
             if super::tool::compare(previous, prior, &baseline.moved).is_err() {
@@ -174,6 +176,23 @@ pub(super) fn check(
         }
     }
     Ok(())
+}
+
+pub(super) fn retain(
+    actual: &Proof,
+    recorded: &Proof,
+    moves: &BTreeMap<String, String>,
+) -> Result<Proof, String> {
+    let mut retained = Proof::new();
+    for (key, count) in recorded {
+        let (_, owner, _) = parts(key)?;
+        if super::transfers::matching(moves, owner).is_none() {
+            if let Some(current) = actual.get(key) {
+                retained.insert(key.clone(), (*count).min(*current));
+            }
+        }
+    }
+    Ok(retained)
 }
 
 pub(super) fn check_recorded(
@@ -328,5 +347,30 @@ mod tests {
             &target()
         )
         .is_err());
+    }
+
+    #[test]
+    fn recording_keeps_only_seeded_proof_and_prunes_completed_moves() -> Result<(), String> {
+        let mut actual = source();
+        actual.extend(proof(OTHER, "uqm::other::unrelated", EXPR, 1));
+        assert_eq!(retain(&actual, &source(), &BTreeMap::new())?, source());
+        assert!(retain(&actual, &source(), &moves())?.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn deleted_or_changed_proof_is_pruned_and_never_credits_a_new_expression() -> Result<(), String>
+    {
+        assert!(retain(&Proof::new(), &source(), &BTreeMap::new())?.is_empty());
+        let changed = proof(
+            OLD,
+            "uqm::content::race::live::response",
+            "other.expect()",
+            1,
+        );
+        assert!(retain(&changed, &source(), &BTreeMap::new())?.is_empty());
+        assert!(validate(&source(), &Measurement::default()).is_err());
+        assert!(check_recorded(&changed, &source(), &Proof::new()).is_err());
+        Ok(())
     }
 }
