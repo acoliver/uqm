@@ -26,6 +26,7 @@ pub(crate) mod runtime {
 
     use super::{picker_action, picker_slot, PickerAction, MAX_SAVED_GAMES, SAVES_PER_PAGE};
     use crate::engine::{battle::Cx, input::InputSession, observe::Io, Kernel};
+    use crate::graphics::context_abi::ContextLease;
     use crate::navigation::abi::{
         MENU_SOUND_EFFECT_MENU_SOUND_FAILURE as MENU_FAILURE,
         MENU_SOUND_EFFECT_MENU_SOUND_SUCCESS as MENU_SUCCESS, *,
@@ -38,7 +39,6 @@ pub(crate) mod runtime {
 
     const SUMMARY_X_OFFS: i16 = 14;
     const SUMMARY_SIDE_OFFS: i16 = 7;
-    const MAX_NAME_SIZE: usize = SIS_NAME_SIZE as usize;
 
     const SAVE_GAME: u8 = 0;
     const LOAD_GAME: u8 = 1;
@@ -138,7 +138,6 @@ pub(crate) mod runtime {
     }
 
     fn name_captain_or_ship(cx: &mut Cx<'_>, io: &mut Io<'_>, input: &InputSession, captain: bool) {
-        use crate::graphics::context_abi::ContextLease;
         let status = ContextLease::require(cx.kernel.status_context);
         let screen = ContextLease::require(cx.kernel.screen_context);
         status.select();
@@ -152,7 +151,7 @@ pub(crate) mod runtime {
                 SHIP_NAME_RECT
             }),
         );
-        let mut buffer = [0u8; MAX_NAME_SIZE];
+        let mut buffer = [0u8; SIS_NAME_SIZE as usize];
         draw_name_string(cx.kernel, cx.world, captain, c"", 0, DDSHS_EDIT);
         draw_status_message(
             cx.kernel,
@@ -229,7 +228,6 @@ pub(crate) mod runtime {
         game_index: u16,
         buffer: &mut [u8; 256],
     ) -> bool {
-        use crate::graphics::context_abi::ContextLease;
         let text = std::ffi::CStr::from_bytes_until_nul(buffer)
             .unwrap_or_else(|error| panic!("invalid save name: {error}"));
         let cursor = text.to_bytes().len();

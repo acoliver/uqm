@@ -1,15 +1,16 @@
 struct NativeCharacterInput(crate::engine::input::InputSession);
 impl NativeCharacterInput {
     fn new(input: &crate::engine::input::InputSession) -> Self {
+        use crate::engine::input::frames::{FLIGHT_KEYS, MENU_KEYS, TEMPLATES};
         let state = input.immediate_ptr();
         // SAFETY: the retained input owns both stable vectors until unbinding in Drop.
         unsafe {
             crate::input::sdl_input::tfb_set_input_vectors(
                 std::ptr::addr_of_mut!((*state).menu).cast(),
-                28,
+                MENU_KEYS as i32,
                 std::ptr::addr_of_mut!((*state).key).cast(),
-                6,
-                7,
+                TEMPLATES as i32,
+                FLIGHT_KEYS as i32,
             );
             assert_eq!(crate::input::sdl_input::TFB_InitInput(0, 0), 0);
         }
