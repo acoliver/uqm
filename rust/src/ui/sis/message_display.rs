@@ -202,7 +202,7 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn ui_message_edits_draw_bounded_cursor_and_split_color_then_restore_the_context() {
-        if !campaign_display::own_graphics_process(concat!(
+        if !own_graphics_process(concat!(
             module_path!(),
             "::ui_message_edits_draw_bounded_cursor_and_split_color_then_restore_the_context"
         )) {

@@ -178,7 +178,7 @@ fn cursor_frames_publish_visit_lifecycle_zoom_and_autopilot() {
 #[test]
 #[serial_test::serial]
 fn portal_overrides_a_snapped_star_and_quasispace_rejects_search() {
-    if !crate::campaign_display_test::own_graphics_process(concat!(
+    if !crate::native_test_process::own_graphics_process(concat!(
         module_path!(),
         "::portal_overrides_a_snapped_star_and_quasispace_rejects_search"
     )) {

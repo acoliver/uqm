@@ -485,7 +485,7 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn callbacks_move_and_cycle_matches_then_cancel_through_the_real_editor() {
-        if !crate::campaign_display_test::own_graphics_process(concat!(
+        if !crate::native_test_process::own_graphics_process(concat!(
             module_path!(),
             "::callbacks_move_and_cycle_matches_then_cancel_through_the_real_editor"
         )) {

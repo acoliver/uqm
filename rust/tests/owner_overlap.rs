@@ -1,6 +1,8 @@
 //! Legacy callers may borrow disjoint fields without reacquiring their owner.
 #[path = "support/campaign_display.rs"]
 mod campaign_display;
+#[path = "support/native_process.rs"]
+mod native_process;
 #[test]
 #[serial_test::serial]
 fn battle_ditty_stop_uses_the_already_borrowed_kernel() {
@@ -79,7 +81,7 @@ fn empty_npc_phrase_does_not_acquire_an_owner() {
 #[test]
 #[serial_test::serial]
 fn sis_slot_snapshot_releases_world_before_support_ship_drawing() {
-    if !campaign_display::own_graphics_process(
+    if !native_process::own_graphics_process(
         "sis_slot_snapshot_releases_world_before_support_ship_drawing",
     ) {
         return;
@@ -494,7 +496,7 @@ fn hyperspace_movement_releases_world_before_fuel_queries() {
 #[test]
 #[serial_test::serial]
 fn campaign_events_schedule_and_dispatch_using_the_existing_world() {
-    if !campaign_display::own_graphics_process(
+    if !native_process::own_graphics_process(
         "campaign_events_schedule_and_dispatch_using_the_existing_world",
     ) {
         return;

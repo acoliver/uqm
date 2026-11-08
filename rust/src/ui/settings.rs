@@ -157,13 +157,13 @@ mod tests {
         let mut world = crate::engine::World::new();
         world.data.game.glob_flags = MUSIC_DISABLED as u8;
         play_loaded_music(&world, None, 1, 3);
-        // SAFETY: this serialized test owns the settings playback state.
-        let playback = unsafe { (LAST_MUSIC_REF.is_null(), LAST_CONTINUOUS, LAST_PRIORITY) };
-        assert_eq!(playback, (true, 1, 3));
+        let (request, continuous, priority) = crate::sound::music::requested_music();
+        assert!(matches!(request, crate::sound::music::MusicRequest::Absent));
+        assert_eq!((continuous, priority), (true, 3));
         assert_eq!(world.data.game.glob_flags, MUSIC_DISABLED as u8);
         stop_loaded_music(None);
         stop_battle_music();
-        // SAFETY: no other settings call runs on this serialized test thread.
-        assert!(unsafe { LAST_MUSIC_REF.is_null() });
+        let (request, _, _) = crate::sound::music::requested_music();
+        assert!(matches!(request, crate::sound::music::MusicRequest::Absent));
     }
 }

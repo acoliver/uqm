@@ -453,7 +453,7 @@ mod tests {
         let mut cx = Cx::new(&mut battle, &mut game.world, &mut game.kernel, || 0);
         let mut salvage = Salvage::new(cx.kernel, 1);
         let mut drew_armada = false;
-        salvage.panel(&mut cx, None, |_, _, side, panel| {
+        salvage.panel(&mut cx, |_, _, side, panel| {
             assert_eq!(side, 1);
             drew_armada = true;
             panel.corner.x = 10;
