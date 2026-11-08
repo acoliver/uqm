@@ -15,7 +15,10 @@ Both aliases select its local `target`; xtask checks its compiled-in source root
 against the current checkout before dispatch, rejects a symlinked `rust/target`,
 and rejects a foreign `CARGO_TARGET_DIR` before launching child builds. This
 checks checkout identity, not whether a manually invoked binary has the latest
-commit. Use the Cargo aliases to rebuild changed sources.
+commit. Use the Cargo aliases to rebuild changed sources. Internal observer
+helpers run from retained evidence directories, do not build from a checkout,
+and retain their controller's executable-digest validation rather than a
+current-directory source check.
 
 ## Measured disk cost
 

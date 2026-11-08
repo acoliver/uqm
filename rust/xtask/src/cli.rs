@@ -1,18 +1,6 @@
 use super::*;
 
 pub(super) fn run() -> Result<(), String> {
-    let root = repository_root()?;
-    let built_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    require_build_source(&root, &built_root)?;
-    if let Some(target) = env::var_os("CARGO_TARGET_DIR") {
-        let target = env::current_dir()
-            .map_err(|error| error.to_string())?
-            .join(target);
-        let target = std::fs::canonicalize(&target).map_err(|error| error.to_string())?;
-        if target != root.join("rust/target") {
-            return Err("CARGO_TARGET_DIR must name this checkout's rust/target".into());
-        }
-    }
     run_arguments(env::args().skip(1))
 }
 
@@ -42,15 +30,31 @@ fn run_arguments(arguments: impl IntoIterator<Item = String>) -> Result<(), Stri
     let mut args = arguments.into_iter();
     let command = args.next().ok_or_else(usage)?;
     #[cfg(feature = "native")]
-    if command == "observer-helper" || command == NATIVE_ACCEPTANCE_COMMAND {
-        let mut native_arguments = vec!["uqm-native-acceptance".to_string()];
-        if command == "observer-helper" {
-            native_arguments.push(command);
-        }
+    if command == "observer-helper" {
+        // Observer helpers inherit the evidence directory, not a checkout. Their
+        // executable identity is checked by the already-admitted controller.
+        let mut native_arguments = vec!["uqm-native-acceptance".to_string(), command];
         native_arguments.extend(args);
         return native_acceptance_runner::entry_with_arguments(&native_arguments);
     }
     let root = repository_root()?;
+    let built_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    require_build_source(&root, &built_root)?;
+    if let Some(target) = env::var_os("CARGO_TARGET_DIR") {
+        let target = env::current_dir()
+            .map_err(|error| error.to_string())?
+            .join(target);
+        let target = std::fs::canonicalize(&target).map_err(|error| error.to_string())?;
+        if target != root.join("rust/target") {
+            return Err("CARGO_TARGET_DIR must name this checkout's rust/target".into());
+        }
+    }
+    #[cfg(feature = "native")]
+    if command == NATIVE_ACCEPTANCE_COMMAND {
+        let mut native_arguments = vec!["uqm-native-acceptance".to_string()];
+        native_arguments.extend(args);
+        return native_acceptance_runner::entry_with_arguments(&native_arguments);
+    }
     let extra: Vec<_> = args.collect();
     #[cfg(all(debug_assertions, feature = "native"))]
     if command == "native" && matches!(extra.first().map(String::as_str), Some("run" | "smoke")) {
@@ -98,9 +102,8 @@ fn usage() -> String {
     "usage: cargo xtask <quality|clippy|coverage|deny|abi-check|parity|native-battle-diff> or cargo xtask-native <debug|release|test|native>".into()
 }
 
-/// The checkout that contains the current directory. Resolved at run time: a
-/// shared target can hold an xtask binary built from some other, removed
-/// checkout, and its compile-time manifest path would point at that checkout.
+/// Find the requested checkout at run time before checking that this binary
+/// was built from that same source tree.
 pub(super) fn repository_root() -> Result<PathBuf, String> {
     let start = env::current_dir()
         .map_err(|error| format!("cannot read the current directory: {error}"))?;

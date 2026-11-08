@@ -33,3 +33,23 @@ fn xtask_refuses_a_foreign_target_for_child_builds() {
         "{error}"
     );
 }
+
+#[cfg(feature = "native")]
+#[test]
+fn native_observer_helper_dispatches_from_its_evidence_directory() {
+    let evidence = tempfile::tempdir().unwrap();
+    let output = Command::new(env!("CARGO_BIN_EXE_uqm-xtask"))
+        .current_dir(evidence.path())
+        .args([
+            "observer-helper",
+            "observe",
+            "invalid-pid",
+            "any",
+            "response.json",
+        ])
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    let error = String::from_utf8(output.stderr).unwrap();
+    assert!(error.contains("parse observer target PID"), "{error}");
+}
