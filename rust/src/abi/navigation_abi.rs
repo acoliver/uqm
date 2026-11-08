@@ -1645,39 +1645,6 @@ pub use crate::ui::sis::DrawAutoPilotMessage;
 pub use crate::ui::sis::DeltaSISGauges;
 
 #[cfg(not(test))]
-pub use crate::ui::sis::capacity::GetCrewCount;
-
-#[cfg(not(test))]
-pub use crate::ui::sis::capacity::GetModuleCrewCapacity;
-
-#[cfg(not(test))]
-pub use crate::ui::sis::capacity::GetCrewPodCapacity;
-
-#[cfg(not(test))]
-pub use crate::ui::sis::capacity::get_c_pod_capacity;
-
-#[cfg(not(test))]
-pub use crate::ui::sis::capacity::GetModuleStorageCapacity;
-
-#[cfg(not(test))]
-pub use crate::ui::sis::capacity::GetStorageBayCapacity;
-
-#[cfg(not(test))]
-pub use crate::ui::sis::capacity::GetSBayCapacity;
-
-#[cfg(not(test))]
-pub use crate::ui::sis::capacity::GetModuleFuelCapacity;
-
-#[cfg(not(test))]
-pub use crate::ui::sis::capacity::GetFuelTankCapacity;
-
-#[cfg(not(test))]
-pub use crate::ui::sis::capacity::GetFTankCapacity;
-
-#[cfg(not(test))]
-pub use crate::ui::sis::capacity::CountSISPieces;
-
-#[cfg(not(test))]
 pub use crate::ui::sis::draw_captains_name;
 #[cfg(not(test))]
 pub use crate::ui::sis::DrawFlagshipName;

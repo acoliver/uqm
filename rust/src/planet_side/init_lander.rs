@@ -93,7 +93,7 @@ use crate::graphics::pixmap_abi::ReleaseDrawable;
 #[cfg(not(test))]
 use crate::graphics::pixmap_abi::SetAbsFrameIndex;
 #[cfg(not(test))]
-use crate::ui::sis::capacity::GetStorageBayCapacity;
+use crate::ui::sis::capacity::storage_capacity;
 
 /// Load the global LanderFrame graphics. Called by `load_lander_data`.
 pub fn load_lander_frames() {
@@ -209,15 +209,6 @@ fn sis_num_landers() -> u8 {
     }
 }
 
-/// Read `GLOBAL_SIS(TotalElementMass)` from the global SIS state.
-#[cfg(not(test))]
-fn sis_total_element_mass() -> u16 {
-    unsafe {
-        let world = WorldData::current();
-        std::ptr::addr_of!((**world).flagship.total_element_mass).read()
-    }
-}
-
 /// Read a game state bit-field via the FFI singleton.
 #[cfg(not(test))]
 fn get_game_state(world: &crate::engine::World, name: crate::engine::StoryKey) -> u32 {
@@ -280,11 +271,12 @@ unsafe fn draw_lander_status(lander_frame_0: *mut c_void, lander_flags: u8) {
 
     let (shield_flags, capacity_shift);
     if lander_flags == 0 {
-        shield_flags =
-            World::current().read(|world| get_game_state(world, StoryKey::LANDER_SHIELDS)) as u8;
-        capacity_shift = World::current()
-            .read(|world| get_game_state(world, StoryKey::IMPROVED_LANDER_CARGO))
-            as u8;
+        (shield_flags, capacity_shift) = World::current().read(|world| {
+            (
+                get_game_state(world, StoryKey::LANDER_SHIELDS) as u8,
+                get_game_state(world, StoryKey::IMPROVED_LANDER_CARGO) as u8,
+            )
+        });
     } else {
         shield_flags = lander_flags
             & ((1 << EARTHQUAKE_DISASTER)
@@ -316,7 +308,9 @@ unsafe fn draw_lander_status(lander_frame_0: *mut c_void, lander_flags: u8) {
         DrawStamp(std::ptr::from_mut(&mut s).cast());
     }
 
-    let free_space = GetStorageBayCapacity().wrapping_sub(sis_total_element_mass());
+    let free_space = WorldData::current().read(|owner| {
+        storage_capacity(&owner.flagship).wrapping_sub(owner.flagship.total_element_mass)
+    });
     let max_scrounged = MAX_SCROUNGED
         .checked_shl(u32::from(capacity_shift))
         .unwrap_or(MAX_SCROUNGED);

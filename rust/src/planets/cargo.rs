@@ -29,7 +29,7 @@ pub(crate) mod live {
     use crate::starbase::gfx::{Align, ContextId, FontId, Gfx, Point, Rect, Rgba, Stamp, TextDraw};
     use std::ffi::{c_void, CString};
 
-    use crate::ui::sis::capacity::GetStorageBayCapacity;
+    use crate::ui::sis::capacity::storage_capacity;
 
     use crate::graphics::drawable_abi::GetFrameRect;
 
@@ -61,9 +61,10 @@ pub(crate) mod live {
         let g = CffiPlatform;
         let old = g.set_context(ContextId::Status);
         g.set_font(FontId::Tiny);
-        let free = u32::from(GetStorageBayCapacity()).wrapping_sub(u32::from(
-            WorldFields::current().read(|owner| owner.flagship.total_element_mass),
-        ));
+        let free = WorldFields::current().read(|owner| {
+            u32::from(storage_capacity(&owner.flagship))
+                .wrapping_sub(u32::from(owner.flagship.total_element_mass))
+        });
         g.batch();
         g.set_fg_color(BACK);
         g.fill_rect(Rect {

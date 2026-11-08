@@ -40,11 +40,7 @@ fn update_crew(state: &mut SIS_STATE, delta: i16) {
     if delta == 0 || delta == UNDEFINED_DELTA {
         return;
     }
-    let capacity = state
-        .module_slots
-        .iter()
-        .map(|&m| crate::ui::sis_capacity_math::module_crew_capacity(m))
-        .sum();
+    let capacity = capacity::crew_capacity(state);
     state.crew_enlisted = if delta < 0 && state.crew_enlisted <= (-i32::from(delta)) as u16 {
         0
     } else {
@@ -61,9 +57,7 @@ fn update_fuel(state: &mut SIS_STATE, delta: i16) -> bool {
         (state.fuel_on_board / FUEL_TANK_SCALE) as u16
     };
     if delta != UNDEFINED_DELTA {
-        let capacity = state.module_slots.iter().fold(FUEL_RESERVE, |cap, &m| {
-            cap + capacity::GetModuleFuelCapacity(m)
-        });
+        let capacity = capacity::fuel_capacity(state);
         state.fuel_on_board = if delta < 0 && state.fuel_on_board <= (-i32::from(delta)) as u32 {
             0
         } else {

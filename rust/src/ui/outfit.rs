@@ -99,36 +99,6 @@ unsafe fn draw_module_strings(menu: &mut MENU_STATE, module: BYTE) {
     SetContext(old);
 }
 
-unsafe fn redistribute_fuel() {
-    let volume = WorldData::current().read(|owner| owner.flagship.fuel_on_board);
-    let old = SetContext(Kernel::current().read(|owner| owner.space_context));
-    let mut r: RECT = mem::zeroed();
-    r.extent.height = 1;
-    BatchGraphics();
-    (**WorldData::current()).flagship.fuel_on_board = FUEL_RESERVE;
-    while WorldData::current().read(|owner| owner.flagship.fuel_on_board)
-        < GetFTankCapacity(&mut r.corner)
-    {
-        if WorldData::current().read(|owner| owner.flagship.fuel_on_board) < volume {
-            r.extent.width = 3;
-            DrawPoint(&mut r.corner);
-            r.corner.x += r.extent.width + 1;
-            DrawPoint(&mut r.corner);
-            r.corner.x -= r.extent.width;
-            let background = SetContextBackGroundColor(BLACK);
-            SetContextForeGroundColor(background);
-        } else {
-            r.extent.width = 5;
-            SetContextForeGroundColor(rgb15(0x0b, 0, 0));
-        }
-        DrawFilledRectangle(&mut r);
-        (**WorldData::current()).flagship.fuel_on_board += FUEL_VOLUME_PER_ROW;
-    }
-    UnbatchGraphics();
-    SetContext(old);
-    (**WorldData::current()).flagship.fuel_on_board = volume;
-}
-
 unsafe fn display_landers(menu: &mut MENU_STATE) {
     let mut s = STAMP {
         origin: POINT { x: 0, y: 0 },
@@ -259,27 +229,33 @@ fn module_selection_range(world: &World, state: BYTE) -> (SIZE, SIZE) {
 }
 
 unsafe fn finish_module_transaction(
+    cx: &mut crate::engine::battle::Cx<'_>,
     menu: &mut MENU_STATE,
     input: &crate::engine::input::InputSession,
     new_piece: BYTE,
     old_piece: BYTE,
     cost: i32,
 ) {
-    DeltaSISGauges(UNDEFINED_DELTA as SIZE, UNDEFINED_DELTA as SIZE, cost);
+    cx.with_legacy(|| DeltaSISGauges(UNDEFINED_DELTA as SIZE, UNDEFINED_DELTA as SIZE, cost));
     if menu.CurState == PLANET_LANDER as BYTE || menu.CurState == EMPTY_SLOT + 3 {
-        display_landers(menu);
+        cx.with_legacy(|| display_landers(menu));
     } else {
-        DrawShipPiece(
-            menu.ModuleFrame,
-            new_piece as COUNT,
-            menu.delta_item as COUNT,
-            0,
-        );
+        cx.with_legacy(|| {
+            DrawShipPiece(
+                menu.ModuleFrame,
+                new_piece as COUNT,
+                menu.delta_item as COUNT,
+                0,
+            )
+        });
         if new_piece > TURNING_JETS as BYTE && old_piece > TURNING_JETS as BYTE {
-            redistribute_fuel();
+            crate::ui::sis::capacity::draw_fuel_bars(
+                &crate::graphics::context_abi::ContextLease::require(cx.kernel.space_context),
+                &cx.world.data.flagship,
+            );
         }
         if input.preferences().fonts == OPT_PC as i32 {
-            draw_flagship_stats();
+            cx.with_legacy(|| draw_flagship_stats());
         }
     }
 }
@@ -336,9 +312,7 @@ unsafe fn do_install_module(
                     new_piece,
                     old_piece,
                 );
-                cx.with_legacy(|| {
-                    finish_module_transaction(menu, input, new_piece, old_piece, cost)
-                });
+                finish_module_transaction(cx, menu, input, new_piece, old_piece, cost);
             }
             cancel = false;
         }
@@ -462,8 +436,7 @@ unsafe fn change_fuel_quantity(
     } else {
         return;
     };
-    let max_fit = cx
-        .with_legacy(|| GetFuelTankCapacity())
+    let max_fit = crate::ui::sis::capacity::fuel_capacity(&cx.world.data.flagship)
         .wrapping_sub(cx.world.data.flagship.fuel_on_board) as i32;
     let max_afford =
         (cx.world.data.flagship.res_units / cx.world.data.game.fuel_cost as DWORD) as i32;
@@ -489,8 +462,11 @@ unsafe fn change_fuel_quantity(
             highlight.pre_update_flash_rect();
             DeltaSISGauges(0, incr as SIZE, -cost);
             highlight.post_update_flash_rect();
-            redistribute_fuel();
         });
+        crate::ui::sis::capacity::draw_fuel_bars(
+            &crate::graphics::context_abi::ContextLease::require(cx.kernel.space_context),
+            &cx.world.data.flagship,
+        );
     }
     let context = cx.kernel.status_context;
     cx.with_legacy(|| {
@@ -561,10 +537,11 @@ unsafe fn initialize_outfit(
             }
         }
     }
-    cx.with_legacy(|| {
-        redistribute_fuel();
-        display_landers(menu);
-    });
+    crate::ui::sis::capacity::draw_fuel_bars(
+        &crate::graphics::context_abi::ContextLease::require(cx.kernel.space_context),
+        &cx.world.data.flagship,
+    );
+    cx.with_legacy(|| display_landers(menu));
     if cx.world.story_state(StoryKey::CHMMR_BOMB_STATE) < 3 {
         let shields = cx.world.story_state(StoryKey::LANDER_SHIELDS);
         s.frame = SetAbsFrameIndex(menu.ModuleFrame, GetFrameCount(menu.ModuleFrame) - 5);
