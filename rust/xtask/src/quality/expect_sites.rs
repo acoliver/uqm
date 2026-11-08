@@ -186,10 +186,11 @@ pub(super) fn retain(
     let mut retained = Proof::new();
     for (key, count) in recorded {
         let (_, owner, _) = parts(key)?;
-        if super::transfers::matching(moves, owner).is_none() {
-            if let Some(current) = actual.get(key) {
-                retained.insert(key.clone(), (*count).min(*current));
-            }
+        if super::transfers::matching(moves, owner).is_some() {
+            continue;
+        }
+        if let Some(current) = actual.get(key) {
+            retained.insert(key.clone(), (*count).min(*current));
         }
     }
     Ok(retained)
