@@ -49,8 +49,30 @@ pub struct PlanetInfo {
     pub discovery_string: STRING,
 }
 
+impl Default for PlanetInfo {
+    fn default() -> Self {
+        Self {
+            axial_tilt: 0,
+            tectonics: 0,
+            weather: 0,
+            planet_density: 0,
+            planet_radius: 0,
+            gravity: 0,
+            temperature: 0,
+            rotation_period: 0,
+            atmo_density: 0,
+            life_chance: 0,
+            planet_to_sun_dist: 0,
+            plan_data_ptr: std::ptr::null(),
+            scan_seed: [0; 3],
+            scan_retrieve_mask: [0; 3],
+            discovery_string: std::ptr::null_mut(),
+        }
+    }
+}
+
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Default)]
 pub struct SystemInfo {
     pub star_size: BYTE,
     pub star_intensity: BYTE,

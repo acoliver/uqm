@@ -3,7 +3,7 @@
 
 use crate::engine::World as WorldOwner;
 mod surface;
-pub use surface::{load_planet_surface, CapturedSurface};
+pub use surface::CapturedSurface;
 
 use crate::c_bindings::global_state::EncounterGroup as ENCOUNTER_GROUP;
 use crate::comm::dispatch::{ship, CPoint, ONE_SECOND};
@@ -21,9 +21,9 @@ pub use crate::navigation::groups::live::init_group_info;
 
 pub use crate::navigation::groups::live::uninit_group_info;
 
-pub use crate::planets::orbit::live::FreePlanet;
+pub use crate::planets::orbit::live::{load_planet, FreePlanet};
 
-pub use crate::planets::plangen::live::generate_planet_surface;
+pub use crate::planets::plangen::live::{generate_planet_surface, SurfaceInputs};
 
 use crate::strings::string_table::GetStringTableCount;
 

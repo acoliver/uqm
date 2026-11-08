@@ -1,7 +1,7 @@
 //! Scene, report, lander and planet-display effects.
 
 use super::*;
-use crate::engine::StoryKey;
+use crate::engine::{world::generation::Body, StoryKey};
 use crate::planets::c_api::{self, *};
 use crate::planets::generate::default::PlanetNames;
 use crate::planets::generate::home_contact::LanderTakeoff;
@@ -67,10 +67,10 @@ impl crate::planets::generate::host::PlanetSite for Site<'_, '_, '_> {
         let before = c_api::star_indexes_before_current(self.game.borrow().world);
         crate::planets::generate::rainbow::rainbow_ordinal(&before, before.len())
     }
-    fn load_planet(&mut self, _system: &mut SolarSys<'_>) {
-        self.load_surface(None);
+    fn load_planet(&mut self, system: &mut SolarSys<'_>, body: Body) {
+        self.load_surface(system, body, None);
     }
-    fn load_earth_planet(&mut self, _system: &mut SolarSys<'_>) {
+    fn load_earth_planet(&mut self, system: &mut SolarSys<'_>, body: Body) {
         let surface = self.game.borrow_mut().with_legacy(|| {
             let width = crate::planets::generate::consts::MAP_WIDTH as i16;
             let height = crate::planets::generate::consts::MAP_HEIGHT as i16;
@@ -80,19 +80,30 @@ impl crate::planets::generate::host::PlanetSite for Site<'_, '_, '_> {
                     panic!("Earth surface definition could not be rescaled: {error:?}")
                 })
         });
-        self.load_surface(Some(surface));
+        self.load_surface(system, body, Some(surface));
     }
 }
 
 impl<'a, 'game, 'observer> Site<'a, 'game, 'observer> {
-    fn load_surface(&mut self, surface: Option<CapturedSurface>) {
+    fn load_surface(
+        &mut self,
+        system: &mut SolarSys<'_>,
+        body: Body,
+        surface: Option<CapturedSurface>,
+    ) {
         assert!(
             self.presentation.is_none(),
             "orbit presentation loaded twice"
         );
-        // SAFETY: this host retains the orbital records; loading consumes the optional definition.
+        // SAFETY: this host retains the initialized orbital records throughout the effect.
+        let in_orbit = unsafe { (*self.record.as_ptr()).InOrbit != 0 };
+        let definition = surface.and_then(CapturedSurface::into_drawable);
+        let reports = self.report_resources.clone();
+        // SAFETY: this host retains the graphics resources and consumes the optional definition.
         self.presentation = unsafe {
-            c_api::load_planet_surface(self.game, self.io, surface, self.report_resources.clone())
+            load_planet(
+                self.game, self.io, system, body, in_orbit, definition, reports,
+            )
         };
     }
 

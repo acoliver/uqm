@@ -122,12 +122,12 @@ impl Orbital for Site {
     }
 }
 impl crate::planets::generate::host::PlanetSite for Site {
-    fn load_planet(&mut self, _: &mut SolarSys<'_>) {
+    fn load_planet(&mut self, _: &mut SolarSys<'_>, _: Body) {
         assert_ne!(self.body, Body::Planet(2));
         assert!(self.surface.is_none());
         self.queues.call("load-planet");
     }
-    fn load_earth_planet(&mut self, _: &mut SolarSys<'_>) {
+    fn load_earth_planet(&mut self, _: &mut SolarSys<'_>, _: Body) {
         assert_eq!(self.body, Body::Planet(2));
         assert!(self.surface.is_none());
         self.queues.call("graphics.earthmask");

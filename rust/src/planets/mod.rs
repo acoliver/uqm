@@ -6,8 +6,6 @@
 #[cfg(not(test))]
 pub mod c_api;
 pub(crate) mod device_effects;
-#[cfg(not(test))]
-pub mod ffi;
 pub mod generate;
 pub mod render;
 pub mod starmap;

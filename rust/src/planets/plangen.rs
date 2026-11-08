@@ -2,7 +2,7 @@
 
 #[cfg(not(test))]
 pub(crate) mod live {
-    use crate::c_bindings::{global_state as c, solar_system};
+    use crate::c_bindings::global_state as c;
     use crate::comm::locdata::{CPoint, CRect};
     use crate::graphics::context_abi::SetContextClipRect;
     use crate::graphics::drawable::Point;
@@ -12,7 +12,7 @@ pub(crate) mod live {
     };
     use crate::planets::sphere::shield_level;
 
-    use std::ptr::{addr_of_mut, null_mut};
+    use std::ptr::null_mut;
 
     use crate::planets::sphere::{images::required_frame, SphereState};
 
@@ -43,10 +43,6 @@ pub(crate) mod live {
     use crate::graphics::context_abi::SetContextForeGroundColor;
 
     use crate::graphics::frame_abi::DrawFilledRectangle;
-
-    extern "C" {
-        static mut ScreenWidth: i32;
-    }
 
     unsafe fn init_orbit(state: &mut SphereState, width: usize, shielded: bool) {
         state.images = Some(crate::planets::sphere::images::OrbitImages::new(width));
@@ -248,20 +244,32 @@ pub(crate) mod live {
         }
     }
 
+    pub struct SurfaceInputs<'a> {
+        pub rng: &'a mut crate::math::RandomContext,
+        pub planet: &'a crate::engine::world::planet::PlanetDesc,
+        pub info: &'a crate::engine::world::planet::PlanetInfo,
+        pub location: Point,
+        pub width: usize,
+    }
+
     /// # Safety
-    /// Planet and definition must be live records from the current solar system;
-    /// the graphics resources and generation context must be initialized on the game thread.
+    /// The graphics backend and resources must be initialized on the game thread.
     pub unsafe fn generate_planet_surface(
         state: &mut SphereState,
         animation: &crate::engine::kernel::planet_animation::PlanetAnimation,
         pulsing_shield: bool,
-        planet: *mut crate::engine::world::planet::PlanetDesc,
+        source: SurfaceInputs<'_>,
         definition: Option<crate::engine::graphics::drawable_abi::LoadedDrawable>,
     ) {
-        let system = solar_system::current();
-        let width = (ScreenWidth - 78) as usize;
-        let shielded = (*planet).data_index & 128 != 0;
-        crate::planets::ffi::sys_gen_rng().reseed((*planet).rand_seed);
+        let SurfaceInputs {
+            rng,
+            planet,
+            info,
+            location,
+            width,
+        } = source;
+        let shielded = planet.data_index & 128 != 0;
+        rng.reseed(planet.rand_seed);
         #[cfg(feature = "debug-process")]
         let context = CreateContextAux(c"Plangen.TopoContext".as_ptr());
         #[cfg(not(feature = "debug-process"))]
@@ -269,18 +277,16 @@ pub(crate) mod live {
         let previous_context = SetContext(context);
         let retained_context = crate::graphics::context_abi::ContextLease::require(context);
         init_orbit(state, width, shielded);
-        let info = addr_of_mut!((*system).SysInfo.planet_info);
-        let data = crate::planets::tables::PLANET_ARRAY.0[usize::from((*planet).data_index & !128)];
+        let data = crate::planets::tables::PLANET_ARRAY.0[usize::from(planet.data_index & !128)];
         let algo = data.type_ & 12;
         let palette = if let Some(definition) = definition {
             load_definition(state, definition, width);
             None
         } else {
             let depth = &mut state.elevation;
-            let rng = crate::planets::ffi::sys_gen_rng();
             generate_elevation(rng, depth, width, &data);
             let topography = crate::planets::sphere::images::image(2, width, 75, 1);
-            let palette = load_surface_palette((*planet).data_index & !128, (*info).temperature);
+            let palette = load_surface_palette(planet.data_index & !128, info.temperature);
             render_native_topography(
                 &retained_context,
                 topography.lease().context_frame(0),
@@ -293,7 +299,7 @@ pub(crate) mod live {
             state.images_mut().topography = Some(topography);
             Some(palette)
         };
-        if !shielded && (*info).atmo_density != 65535 {
+        if !shielded && info.atmo_density != 65535 {
             let depth = &state.elevation;
             let mut scaler = TopoScaler::with_seed(animation.topography_seed());
             let scaled = scaler.scale(
@@ -330,18 +336,12 @@ pub(crate) mod live {
         } else {
             depth.fill(0);
         }
-        let desc = (*system).pOrbitalDesc;
-        let loc = if (*desc).prev_desc == addr_of_mut!((*system).SunDesc[0]) {
-            (*desc).location
-        } else {
-            (*(*desc).prev_desc).location
-        };
-        state.generate(Point::new(loc.x, loc.y), i32::from((*info).axial_tilt));
+        state.generate(location, i32::from(info.axial_tilt));
         if shielded {
             let shield = create_shield(state);
             state.images_mut().shield = Some(shield);
         }
-        let direction = 1 - 2 * (i32::from((*info).axial_tilt) & 1);
+        let direction = 1 - 2 * (i32::from(info.axial_tilt) & 1);
         init_sphere_rotation(state, direction, pulsing_shield);
         if shielded {
             let old = SetContextFGFrame(required_frame(&state.topography(), 0).cast());

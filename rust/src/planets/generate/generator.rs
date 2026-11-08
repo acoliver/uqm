@@ -58,7 +58,7 @@ pub trait SystemGenerator: Sync {
         host: &mut dyn SiteHost,
     ) -> bool {
         special::with_orbit(system, body, |orbit| orbit.analyse());
-        super::host::PlanetSite::load_planet(host, system);
+        super::host::PlanetSite::load_planet(host, system, body);
         true
     }
 

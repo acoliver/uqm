@@ -77,11 +77,11 @@ impl<T: Story + ?Sized> Story for &mut T {
     }
 }
 impl<S, H, R, L, F: FnOnce()> PlanetSite for Effects<'_, S, H, R, L, F> {
-    fn load_planet(&mut self, _: &mut SolarSys<'_>) {
+    fn load_planet(&mut self, _: &mut SolarSys<'_>, _: Body) {
         self.load.take().expect("one planet load")();
     }
-    fn load_earth_planet(&mut self, system: &mut SolarSys<'_>) {
-        self.load_planet(system);
+    fn load_earth_planet(&mut self, system: &mut SolarSys<'_>, body: Body) {
+        self.load_planet(system, body);
     }
     fn rainbow_ordinal(&self) -> u8 {
         panic!("explicit test ordinal")
@@ -198,10 +198,10 @@ impl Story for NoEffects {
     }
 }
 impl PlanetSite for NoEffects {
-    fn load_planet(&mut self, _: &mut SolarSys<'_>) {
+    fn load_planet(&mut self, _: &mut SolarSys<'_>, _: Body) {
         panic!("unexpected planet load")
     }
-    fn load_earth_planet(&mut self, _: &mut SolarSys<'_>) {
+    fn load_earth_planet(&mut self, _: &mut SolarSys<'_>, _: Body) {
         panic!("unexpected Earth load")
     }
     fn rainbow_ordinal(&self) -> u8 {
@@ -216,11 +216,11 @@ impl ReportSite for NoEffects {
 impl super::SiteHost for NoEffects {}
 
 impl<S: Story, H: super::host::PlanetSite> super::host::PlanetSite for (&mut S, &mut H) {
-    fn load_planet(&mut self, system: &mut SolarSys<'_>) {
-        self.1.load_planet(system);
+    fn load_planet(&mut self, system: &mut SolarSys<'_>, body: Body) {
+        self.1.load_planet(system, body);
     }
-    fn load_earth_planet(&mut self, system: &mut SolarSys<'_>) {
-        self.1.load_earth_planet(system);
+    fn load_earth_planet(&mut self, system: &mut SolarSys<'_>, body: Body) {
+        self.1.load_earth_planet(system, body);
     }
     fn rainbow_ordinal(&self) -> u8 {
         self.1.rainbow_ordinal()

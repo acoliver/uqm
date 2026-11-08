@@ -2,8 +2,8 @@
 //!
 //! These fixtures were captured from the C code before `calc.c`, `surface.c`
 //! and `orbits.c` were deleted, so this test needs no C and remains the
-//! permanent parity proof. `planets_parity` replays them through the exported
-//! C symbols.
+//! parity proof. `planets_parity` also drives the supplied production record
+//! views and native resource boundaries.
 
 use uqm_rust::engine::world::planet::{
     ElementEntry, NodeInfo, PlanetDesc, PlanetFrame, SystemInfo,

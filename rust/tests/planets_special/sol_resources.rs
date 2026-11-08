@@ -85,8 +85,22 @@ pub fn check(h: &mut Harness) {
             &mut sphere,
             &animation,
             false,
-            world,
+            c_api::SurfaceInputs {
+                rng: &mut *super::SysGenRNG,
+                planet: &*world,
+                info: &(*system).SysInfo.planet_info,
+                location: uqm_rust::graphics::drawable::Point::new(
+                    (*world).location.x,
+                    (*world).location.y,
+                ),
+                width: usize::from(MAP_WIDTH),
+            },
             earth.into_drawable(),
+        );
+        assert_eq!(
+            (*super::SysGenRNG).seed(),
+            104729,
+            "packaged definitions still reseed the supplied system RNG"
         );
 
         let topography = sphere.topography();

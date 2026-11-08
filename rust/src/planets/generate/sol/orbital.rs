@@ -189,9 +189,9 @@ pub fn generate_orbital(
     }
     override_info(system.planet_info(), body);
     if body == Body::Planet(2) {
-        host.load_earth_planet(system);
+        host.load_earth_planet(system, body);
     } else {
-        host.load_planet(system);
+        host.load_planet(system, body);
     }
     true
 }
