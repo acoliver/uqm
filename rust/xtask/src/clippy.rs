@@ -18,6 +18,7 @@ const DEBT: &[&str] = &[
 #[derive(Default)]
 struct Diagnostics {
     counts: BTreeMap<String, u64>,
+    expect_locations: BTreeSet<crate::quality::expect_sites::Location>,
     seen: BTreeSet<String>,
     errors: Vec<String>,
 }
@@ -70,6 +71,19 @@ impl Diagnostics {
             primary["line_start"], primary["column_start"], diagnostic["message"]
         );
         if self.seen.insert(event) {
+            if code == "clippy::expect_used" {
+                let line = primary["line_start"]
+                    .as_u64()
+                    .ok_or("expect diagnostic has no line")?;
+                let column = primary["column_start"]
+                    .as_u64()
+                    .ok_or("expect diagnostic has no column")?;
+                self.expect_locations.insert((
+                    identity.clone(),
+                    usize::try_from(line).map_err(|e| e.to_string())?,
+                    usize::try_from(column).map_err(|e| e.to_string())?,
+                ));
+            }
             *self.counts.entry(format!("{code}|{identity}")).or_default() += 1;
         }
         Ok(())
@@ -78,7 +92,8 @@ impl Diagnostics {
 
 pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
     let options = Options::parse(args)?;
-    let identities = tool::identities(root)?;
+    let measurement = crate::quality::walk::measure(root, None, false)?;
+    let identities = tool::identities_from(&measurement);
     let mut command = Command::new(crate::quality::cargo());
     command.current_dir(root.join("rust")).args([
         "clippy",
@@ -128,7 +143,8 @@ pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
             .sum();
         println!("{lint}: {total}");
     }
-    tool::record(root, &options, diagnostics.counts)
+    let proof = crate::quality::expect_sites::proof(&measurement, &diagnostics.expect_locations);
+    tool::record_expect(root, &options, diagnostics.counts, &measurement, &proof)
 }
 
 #[cfg(test)]

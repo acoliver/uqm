@@ -1,3 +1,58 @@
+#[test]
+fn partial_expect_extraction_keeps_retained_file_loc_limits() -> Result<(), String> {
+    let retained = format!("fn retained() {{\n{}\n}}", "let _ = 0;\n".repeat(900));
+    let old = format!("mod live {{ fn response(value: u32) {{ u16::try_from(value).expect(\"COUNT\"); }} }}\n{retained}");
+    let new = format!("mod host;\n{retained}");
+    let source = fixture(&[("src/lib.rs", &old)], None, false);
+    let current = fixture(
+        &[
+            ("src/lib.rs", &new),
+            (
+                "src/host.rs",
+                "fn response(value: u32) { u16::try_from(value).expect(\"COUNT\"); }",
+            ),
+        ],
+        None,
+        false,
+    );
+    let loc = source
+        .findings
+        .iter()
+        .find(|f| f.counter == "loc" && f.identity == "uqm::@file")
+        .ok_or("source file LOC missing")?;
+    assert!(loc.value > 800);
+    let mut baseline = crate::quality::baseline::Baseline {
+        entries: [(loc.key(), loc.value)].into(),
+        ..Default::default()
+    };
+    baseline.add_move("uqm::live", "uqm::host", &current, &source)?;
+    assert_eq!(baseline.entries.get(&loc.key()), Some(&loc.value));
+    assert!(!baseline.entries.contains_key("loc|loc|uqm::host::@file"));
+    Ok(())
+}
+
+#[test]
+fn partial_expect_extraction_rejects_a_retained_source_declaration() {
+    let old = "mod live { fn response(value: u32) { u16::try_from(value).expect(\"COUNT\"); } }";
+    let new = format!("{old} mod host;");
+    let source = fixture(&[("src/lib.rs", old)], None, false);
+    let current = fixture(
+        &[
+            ("src/lib.rs", &new),
+            (
+                "src/host.rs",
+                "fn response(value: u32) { u16::try_from(value).expect(\"COUNT\"); }",
+            ),
+        ],
+        None,
+        false,
+    );
+    let moves = [("uqm::live".into(), "uqm::host".into())].into();
+    assert!(
+        crate::quality::transfers::validate(&BTreeMap::new(), &current, &source, &moves).is_err()
+    );
+}
+
 use super::*;
 fn fixture(files: &[(&str, &str)], names: Option<&[String]>, defs_only: bool) -> Measurement {
     let root = tempfile::tempdir().unwrap();
@@ -915,4 +970,49 @@ fn module_move_checks_deleted_children_by_actual_declaration_kind() {
         let result = baseline.add_move("uqm::before", "uqm::after", &current, &base);
         assert_eq!(result.is_ok(), permitted, "{source}: {result:?}");
     }
+}
+
+#[test]
+fn expect_sites_keep_function_impl_file_and_compiler_span_attribution() {
+    let measured = fixture(
+        &[(
+            "src/lib.rs",
+            r#"
+        mod live {
+            fn response(value: u32) { u16::try_from(value).expect("COUNT"); }
+            struct Host;
+            impl Host {
+                fn fragment(value: u32) { u16::try_from(value).expect("fragment"); }
+            }
+            fn custom(value: Custom) { value.expect("not a diagnostic"); }
+            #[cfg(test)] fn excluded(value: u32) { u16::try_from(value).expect("test"); }
+        }
+    "#,
+        )],
+        None,
+        false,
+    );
+    assert_eq!(measured.expect_sites.len(), 3);
+    assert!(measured
+        .expect_sites
+        .iter()
+        .any(|site| site.owner == "uqm::live::<Host>::fragment"));
+    let diagnostics = measured
+        .expect_sites
+        .iter()
+        .filter(|site| site.owner == "uqm::live::response")
+        .map(|site| ("uqm::@file".to_string(), site.line, site.column))
+        .collect();
+    let proof = crate::quality::expect_sites::proof(&measured, &diagnostics);
+    assert_eq!(proof.len(), 1);
+    assert!(proof
+        .keys()
+        .all(|key| key.starts_with("uqm::@file|uqm::live::response|")));
+    assert!(crate::quality::expect_sites::validate(&proof, &measured).is_ok());
+    let mut forged = proof;
+    forged.insert(
+        "uqm::other::@file|uqm::live::response|fake.expect()".into(),
+        1,
+    );
+    assert!(crate::quality::expect_sites::validate(&forged, &measured).is_err());
 }

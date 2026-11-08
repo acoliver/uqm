@@ -92,12 +92,17 @@ pub fn status(command: &mut Command) -> Result<(), String> {
 }
 
 pub fn identities(root: &Path) -> Result<BTreeMap<String, String>, String> {
-    Ok(super::walk::measure(root, None, false)?
+    Ok(identities_from(&super::walk::measure(root, None, false)?))
+}
+pub(crate) fn identities_from(
+    measurement: &super::metrics::Measurement,
+) -> BTreeMap<String, String> {
+    measurement
         .findings
-        .into_iter()
+        .iter()
         .filter(|f| f.counter == "loc")
-        .map(|f| (f.file, f.identity))
-        .collect())
+        .map(|f| (f.file.clone(), f.identity.clone()))
+        .collect()
 }
 pub fn file_identity(
     root: &Path,
@@ -223,33 +228,77 @@ pub fn compare(
     }
 }
 
-pub fn record(
+pub(crate) fn record_expect(
     root: &Path,
     options: &Options,
     measured: BTreeMap<String, u64>,
+    measurement: &super::metrics::Measurement,
+    proof: &super::expect_sites::Proof,
 ) -> Result<(), String> {
-    record_for_host(root, options, measured, std::env::consts::OS)
+    record_with_sites(
+        root,
+        options,
+        measured,
+        std::env::consts::OS,
+        Some((measurement, proof)),
+    )
 }
 
-fn record_for_host(
+fn record_with_sites(
     root: &Path,
     options: &Options,
     measured: BTreeMap<String, u64>,
     host: &str,
+    sites: Option<(&super::metrics::Measurement, &super::expect_sites::Proof)>,
 ) -> Result<(), String> {
     let path = root.join("rust/xtask/quality-baseline.toml");
     let mut baseline = Baseline::read(&path)?;
     let previous = baseline.lint.get(host);
-    if let Some(previous) = previous {
-        if !options.allow_growth {
-            compare(&measured, previous, &baseline.moved)?;
-        }
-    } else if !options.tighten {
+    if previous.is_none() && !options.tighten {
         return Err(format!(
             "tool baseline for {host} missing; initialize with --tighten"
         ));
     }
-    compare_base(root, options, &baseline, &measured, host)?;
+    let checked = (|| {
+        if let Some(previous) = previous {
+            if !options.allow_growth {
+                compare(&measured, previous, &baseline.moved)?;
+            }
+        }
+        compare_base(root, options, &baseline, &measured, host)
+    })();
+    if let Err(error) = checked {
+        if let Some((measurement, proof)) = sites {
+            super::expect_sites::check(
+                root,
+                options,
+                &baseline,
+                measurement,
+                &measured,
+                proof,
+                host,
+            )?;
+        } else {
+            return Err(error);
+        }
+    }
+    if let Some((_, proof)) = sites {
+        let recorded = baseline.expect_sites.get(host).cloned().unwrap_or_default();
+        let archived = if let Some(reference) = &options.base {
+            baseline::baseline_at_ref(root, reference)?
+                .and_then(|b| b.expect_sites.get(host).cloned())
+                .unwrap_or_default()
+        } else {
+            super::expect_sites::Proof::new()
+        };
+        super::expect_sites::check_recorded(proof, &recorded, &archived)?;
+        if !baseline.expect_sites.contains_key(host) {
+            println!(
+                "expect-sites {host} {}",
+                serde_json::to_string(proof).map_err(|e| e.to_string())?
+            );
+        }
+    }
     println!(
         "lint debt ({host}): {} per-file entries, total={}",
         measured.len(),
@@ -257,6 +306,9 @@ fn record_for_host(
     );
     if options.tighten {
         baseline.lint.insert(host.into(), measured);
+        if let Some((_, proof)) = sites {
+            baseline.expect_sites.insert(host.into(), proof.clone());
+        }
         baseline.write(&path)?;
     }
     Ok(())
@@ -426,6 +478,14 @@ pub(crate) fn fixture_directory() -> tempfile::TempDir {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn record(
+        root: &Path,
+        options: &Options,
+        measured: BTreeMap<String, u64>,
+    ) -> Result<(), String> {
+        record_with_sites(root, options, measured, std::env::consts::OS, None)
+    }
 
     #[test]
     fn initial_lint_counts_require_new_enforcement_unchanged_sources_and_exact_counts() {
@@ -653,25 +713,25 @@ mod tests {
             base: Some("HEAD".into()),
             ..Options::default()
         };
-        record_for_host(root.path(), &options, counts(4), "macos").unwrap();
-        assert!(record_for_host(root.path(), &options, counts(3), "linux").is_err());
-        assert!(record_for_host(root.path(), &options, counts(5), "macos").is_err());
-        assert!(record_for_host(root.path(), &options, counts(1), "windows").is_err());
+        record_with_sites(root.path(), &options, counts(4), "macos", None).unwrap();
+        assert!(record_with_sites(root.path(), &options, counts(3), "linux", None).is_err());
+        assert!(record_with_sites(root.path(), &options, counts(5), "macos", None).is_err());
+        assert!(record_with_sites(root.path(), &options, counts(1), "windows", None).is_err());
         let tighten = Options {
             tighten: true,
             ..options
         };
-        record_for_host(root.path(), &tighten, counts(3), "macos").unwrap();
+        record_with_sites(root.path(), &tighten, counts(3), "macos", None).unwrap();
         let tightened = Baseline::read(&path).unwrap();
         assert_eq!(tightened.lint["linux"], baseline.lint["linux"]);
         assert_eq!(tightened.lint["macos"], counts(3));
-        assert!(record_for_host(root.path(), &tighten, counts(4), "macos").is_err());
-        record_for_host(root.path(), &tighten, counts(1), "linux").unwrap();
+        assert!(record_with_sites(root.path(), &tighten, counts(4), "macos", None).is_err());
+        record_with_sites(root.path(), &tighten, counts(1), "linux", None).unwrap();
         assert_eq!(Baseline::read(&path).unwrap().lint["macos"], counts(3));
         let mut inflated = Baseline::read(&path).unwrap();
         inflated.lint.insert("linux".into(), counts(3));
         inflated.write(&path).unwrap();
-        assert!(record_for_host(root.path(), &tighten, counts(3), "macos").is_err());
+        assert!(record_with_sites(root.path(), &tighten, counts(3), "macos", None).is_err());
     }
 
     #[test]

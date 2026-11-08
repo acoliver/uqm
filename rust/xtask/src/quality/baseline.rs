@@ -12,6 +12,7 @@ pub struct Baseline {
     pub budget: BTreeMap<String, super::budgets::Budget>,
     pub layers: bool,
     pub lint: BTreeMap<String, BTreeMap<String, u64>>,
+    pub expect_sites: BTreeMap<String, super::expect_sites::Proof>,
     pub coverage_debt: BTreeMap<String, String>,
 }
 
@@ -43,6 +44,17 @@ impl Baseline {
                         .ok_or_else(|| format!("invalid lint host section: {host}"))?;
                     result.lint.insert(host.into(), lint_values(values)?);
                 }
+            }
+        }
+        if let Some(table) = document
+            .get("expect_sites")
+            .and_then(toml_edit::Item::as_table)
+        {
+            for (host, value) in table {
+                let sites = value
+                    .as_table()
+                    .ok_or("invalid expect proof host section")?;
+                result.expect_sites.insert(host.into(), lint_values(sites)?);
             }
         }
         if let Some(item) = document.get("budget") {
@@ -87,6 +99,21 @@ impl Baseline {
                 hosts.insert(host, toml_edit::Item::Table(table));
             }
             document.insert("lint", toml_edit::Item::Table(hosts));
+        }
+        if !self.expect_sites.is_empty() {
+            let mut hosts = toml_edit::Table::new();
+            hosts.set_implicit(true);
+            for (host, values) in &self.expect_sites {
+                let mut table = toml_edit::Table::new();
+                for (key, value) in values {
+                    table.insert(
+                        key,
+                        toml_edit::value(i64::try_from(*value).map_err(|e| e.to_string())?),
+                    );
+                }
+                hosts.insert(host, toml_edit::Item::Table(table));
+            }
+            document.insert("expect_sites", toml_edit::Item::Table(hosts));
         }
         if !self.budget.is_empty() {
             document.insert(
@@ -728,5 +755,29 @@ macos = "invalid"
         assert!(check_limits(&after, &before, &BTreeMap::new(), true).is_ok());
         let growth = entries(&[("unsafe|unsafe_blocks|uqm::engine", 4)]);
         assert!(check_limits(&growth, &before, &BTreeMap::new(), true).is_err());
+    }
+
+    #[test]
+    fn expect_diagnostic_proof_round_trips_without_changing_counters() {
+        let root = super::super::tool::fixture_directory();
+        let path = root.path().join("baseline.toml");
+        let baseline = Baseline {
+            lint: [(
+                "macos".into(),
+                entries(&[("clippy::expect_used|old::@file", 2)]),
+            )]
+            .into(),
+            expect_sites: [(
+                "macos".into(),
+                entries(&[(
+                    "old::@file|old::callback|u16 :: try_from (r) . expect (\"COUNT\")",
+                    1,
+                )]),
+            )]
+            .into(),
+            ..Baseline::default()
+        };
+        baseline.write(&path).unwrap();
+        assert_eq!(Baseline::read(&path).unwrap(), baseline);
     }
 }
