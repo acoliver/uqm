@@ -1,125 +1,254 @@
-//! Star-map UI, ported from `planets/pstarmap.c` (GPL-2.0-or-later).
-//!
-//! All graphics handles here are native FRAME/CONTEXT pointers. The game
-//! thread owns the map state; callbacks may reenter drawing and input code.
-
+//! Owned star-map input, drawing and search for one synchronous visit.
+mod animation;
+mod cursor;
 mod screen;
-#[cfg(not(test))]
-use screen::enlarge;
-use screen::repair_rectangle;
-#[cfg(not(test))]
-#[cfg(not(test))]
-use screen::{finish_star_map, prepare_star_map};
-
-#[cfg(not(test))]
-use crate::engine::world::queues::{Fleet, FleetInfo};
-use crate::engine::Kernel;
-#[cfg(not(test))]
-use crate::engine::{
-    battle::{
-        link_queue::{LinkId, LinkQueue},
-        Cx,
-    },
-    input::InputSession,
-};
-#[cfg(not(test))]
-use crate::engine::{StoryKey, World, WorldData};
-#[cfg(not(test))]
-use crate::graphics::{
-    context_abi::{
-        GetContextClipRect, SetContextBackGroundColor, SetContextClipRect, SetContextOrigin,
-    },
-    drawable_abi::GetFrameRect,
-    font_abi,
-    frame_abi::ClearDrawable,
-    gfx_common_abi::{
-        BatchGraphics, LoadIntoExtraScreen, ScreenTransition, SetTransitionSource, UnbatchGraphics,
-    },
-};
-#[cfg(not(test))]
-use crate::ships::native::abi::TEXT;
-use crate::ships::native::abi::{Color, EXTENT, FRAME, MENU_STATE, POINT, RECT, STAMP};
-
-use crate::graphics::{
-    context_abi::{SetContext, SetContextForeGroundColor},
-    frame_abi, pixmap_abi,
-};
-#[cfg(not(test))]
-use crate::planets::{
-    render::c_api::{draw_filled_oval as DrawFilledOval, draw_oval as DrawOval},
-    scan::live::RepairBackRect,
-    starmap::{naming::GetClusterName, FindStar},
-    starmap_cursor::do_move_cursor,
-};
-
-use crate::savegame::runtime::star::{CStarDesc, NUM_SOLAR_SYSTEMS};
-#[cfg(not(test))]
-use crate::strings::{string_table, unicode};
-
-use std::{
-    ffi::{c_char, c_long},
-    ptr,
-};
-
-#[path = "pstarmap/search.rs"]
 pub(crate) mod search;
-#[cfg(not(test))]
-pub use search::do_star_search;
+mod state;
 
-#[cfg(not(test))]
-const MAX_X_UNIVERSE: i32 = 9999;
-#[cfg(not(test))]
-const MAX_Y_UNIVERSE: i32 = 9999;
+#[cfg(test)]
+use crate::engine::observe_port::starmap::signed_div_with_error;
+use crate::engine::observe_port::starmap::Projection;
+use crate::engine::time::counter_abi::GetTimeCounter;
+use crate::engine::{
+    battle::{link_queue::LinkId, Cx},
+    input::{Frame, InputSession},
+    observe::{CheckpointView, Injected, InputView, Io, StarMapView},
+    world::queues::{Fleet, FleetInfo},
+    Kernel, StoryKey, World,
+};
+use crate::graphics::{
+    context_abi::{ContextFrame, ContextLease},
+    native_abi::{Color, EXTENT, POINT, RECT},
+    native_font::FontLease,
+};
+use crate::savegame::runtime::star::{CStarDesc, NUM_SOLAR_SYSTEMS};
+use screen::{enlarge, repair_rectangle, Display};
+use state::MapState;
+use std::{
+    ffi::{c_long, CStr, CString},
+    ptr::NonNull,
+};
+
 const ONE_SECOND: u32 = 840;
-#[cfg(not(test))]
 const MAX_ZOOM_SHIFT: i32 = 4;
-#[cfg(not(test))]
 const ARILOU_SPACE: POINT = POINT { x: 438, y: 6372 };
-#[cfg(not(test))]
 const QUASI_SPACE: POINT = POINT { x: 5000, y: 5000 };
 const ARILOU_HOME: POINT = POINT { x: 6134, y: 5900 };
 
-static mut MAP_ORIGIN: POINT = POINT { x: 0, y: 0 };
-static mut ZOOM_LEVEL: i32 = 0;
-static mut STAR_MAP_FRAME: FRAME = ptr::null_mut();
-#[cfg(not(test))]
-static mut TRANSITION_PENDING: bool = false;
-
-use crate::time::counter_abi::GetTimeCounter;
-
-#[cfg(not(test))]
-use crate::ui::sis::{DrawHyperCoords, DrawSISMessage, DrawSISMessageEx, DrawStatusMessage};
-
-#[cfg(not(test))]
-use crate::navigation::globals::in_hqspace;
-
-#[cfg(not(test))]
-use crate::mainloop::input_abi::live::{
-    AnyButtonPress, FlushInput, SetDefaultMenuRepeatDelay, SetMenuRepeatDelay, SetMenuSounds,
-};
-
-extern "C" {
-    #[cfg(not(test))]
-    static mut cursorLoc: POINT;
-    #[cfg(not(test))]
-    static mut star_array: *mut CStarDesc;
-    static mut ScreenWidth: i32;
-    static mut ScreenHeight: i32;
-    #[cfg(not(test))]
-    fn sprintf(dst: *mut c_char, fmt: *const c_char, ...) -> i32;
+fn which_space(world: &World) -> u8 {
+    world.story_state(StoryKey::ARILOU_SPACE_SIDE) as u8
 }
-
-#[cfg(not(test))]
-use crate::threading::pacing::linked::sleep_thread as SleepThread;
-
-const fn rgb15(r: u8, g: u8, b: u8) -> Color {
-    Color {
-        r: (r << 3) | (r >> 2),
-        g: (g << 3) | (g >> 2),
-        b: (b << 3) | (b >> 2),
-        a: 255,
+fn portal_open(world: &World) -> bool {
+    world.story_state(StoryKey::ARILOU_SPACE) != 0
+}
+fn current_location(world: &World, dimensions: (i32, i32)) -> POINT {
+    if crate::navigation::globals::in_hqspace(world) == 0 {
+        world
+            .selected_star()
+            .unwrap_or_else(|| panic!("map requires a selected star"))
+            .star_pt
+    } else {
+        let geometry = crate::navigation::hyper_units::Geometry::new(dimensions);
+        POINT {
+            x: geometry.universe_x(world.data.flagship.log_x),
+            y: geometry.universe_y(world.data.flagship.log_y),
+        }
     }
 }
+
+struct StarMap {
+    state: MapState,
+    display: Display,
+    universe: POINT,
+    initialized: bool,
+    last_label: CString,
+    transition: bool,
+}
+impl StarMap {
+    fn new(cx: &Cx<'_>) -> Self {
+        let dimensions = cx.screen_dimensions();
+        let universe = current_location(cx.world, dimensions);
+        let destination = cx.world.data.game.autopilot;
+        Self {
+            state: MapState::new(
+                dimensions,
+                if destination == (POINT { x: -1, y: -1 }) {
+                    universe
+                } else {
+                    destination
+                },
+            ),
+            display: Display::new(cx.kernel, dimensions),
+            universe,
+            initialized: false,
+            last_label: c"".into(),
+            transition: true,
+        }
+    }
+    fn dimensions(&self) -> (i32, i32) {
+        (
+            self.state.projection.width + 78,
+            self.state.projection.height + 13,
+        )
+    }
+    fn observe(&self, io: &mut Io<'_>) {
+        io.observer
+            .checkpoint(&CheckpointView::StarMap(self.initialized.then_some(
+                StarMapView {
+                    cursor: self.state.cursor,
+                    projection: self.state.projection,
+                },
+            )));
+    }
+    fn flash(&self, kernel: &mut Kernel) {
+        if let Some(color) = kernel.star_map_flash.advance(GetTimeCounter) {
+            let point = self.state.screen(self.universe);
+            self.display.context.with_selected(|| {
+                self.display.context.draw_filled_stamp_preserving_color(
+                    &self.display.frame.next_frame(),
+                    point,
+                    rgb15(color, color, color),
+                )
+            });
+        }
+    }
+    fn draw_cursor(&self, point: POINT) {
+        self.display.context.draw_stamp(&self.display.frame, point);
+    }
+    fn erase_cursor(&self, point: POINT) {
+        let mut rect = self.display.frame.rect();
+        rect.corner.x = rect.corner.x.wrapping_add(point.x);
+        if rect.corner.x < 0 {
+            rect.extent.width = rect.extent.width.wrapping_add(rect.corner.x);
+            rect.corner.x = 0;
+        } else if i32::from(rect.corner.x) + i32::from(rect.extent.width)
+            >= self.state.projection.width
+        {
+            rect.extent.width = (self.state.projection.width - i32::from(rect.corner.x)) as i16;
+        }
+        rect.corner.y = rect.corner.y.wrapping_add(point.y);
+        if rect.corner.y < 0 {
+            rect.extent.height = rect.extent.height.wrapping_add(rect.corner.y);
+            rect.corner.y = 0;
+        } else if i32::from(rect.corner.y) + i32::from(rect.extent.height)
+            >= self.state.projection.height
+        {
+            rect.extent.height = (self.state.projection.height - i32::from(rect.corner.y)) as i16;
+        }
+        let origin = self.display.context.clip_rect().corner;
+        rect.corner.x = rect.corner.x.wrapping_add(origin.x);
+        rect.corner.y = rect.corner.y.wrapping_add(origin.y);
+        rect.extent.height = rect.extent.height.wrapping_add(rect.corner.y & 1);
+        rect.corner.y &= !1;
+        self.display.context.restore_screen_region(rect);
+    }
+    fn move_cursor(&mut self, world: &World, sx: i32, sy: i32, absolute: Option<POINT>) {
+        let movement = self.state.move_cursor(sx, sy, absolute);
+        if movement.recentered {
+            self.draw_map(world, 0, None, true);
+        } else {
+            self.erase_cursor(movement.old);
+            self.draw_cursor(movement.next);
+        }
+    }
+    fn update_cursor_info(&mut self, kernel: &Kernel, world: &World) {
+        let screen = self.state.screen_cursor();
+        let selected = self.state.snap_cursor(world);
+        let mut text = selected.map_or_else(
+            || c"".into(),
+            |id| {
+                super::starmap::naming::cluster_name(
+                    kernel,
+                    &world.catalog()[id.0],
+                    crate::navigation::abi::STAR_NUMBER_BASE as usize,
+                )
+            },
+        );
+        if portal_open(world) {
+            let portal = if which_space(world) <= 1 {
+                ARILOU_SPACE
+            } else {
+                QUASI_SPACE
+            };
+            if self.state.screen(portal) == screen {
+                self.state.cursor = portal;
+                text = kernel.game_text(132).into();
+            }
+        }
+        crate::ui::sis::draw_hyper_coords(kernel, self.dimensions().0, self.state.cursor);
+        if text != self.last_label {
+            self.last_label = text;
+            crate::ui::sis::draw_message(kernel, self.dimensions().0, &self.last_label, -1, -1, 0);
+        }
+    }
+    fn fuel(&self, kernel: &Kernel, world: &World) {
+        let fuel = fuel_requirement(
+            current_location(world, self.dimensions()),
+            self.state.cursor,
+            which_space(world),
+            crate::math::square_root,
+        );
+        let mut text = kernel.game_text(439).to_bytes().to_vec();
+        text.extend_from_slice(format!(" {}.{}", fuel / 100, (fuel % 100) / 10).as_bytes());
+        let text = CString::new(text).unwrap_or_else(|error| panic!("invalid fuel label: {error}"));
+        crate::ui::sis::draw_status_message(kernel, world, Some(&text));
+    }
+    fn zoom(&mut self, cx: &mut Cx<'_>, direction: i16) {
+        if self.state.zoom(direction) {
+            self.draw_map(cx.world, 0, None, true);
+            cx.kernel.input_runtime().sleep(cx, ONE_SECOND / 8);
+        }
+    }
+}
+
+/// Run the map with its cursor, graphics leases and search owned by this stack frame.
+pub fn star_map(cx: &mut Cx<'_>, io: &mut Io<'_>) -> u32 {
+    let runtime = cx.kernel.input_runtime();
+    let input = runtime.input();
+    let mut map = StarMap::new(cx);
+    if which_space(cx.world) <= 1 {
+        map.update_map(cx, input);
+    }
+    map.draw_map(cx.world, 0, None, false);
+    map.transition = false;
+    map.display.context.with_batch(|| {
+        map.display
+            .context
+            .save_screen_region(map.display.context.clip_rect());
+        map.draw_cursor(map.state.screen_cursor());
+    });
+    input.set_menu_sounds(0, 0);
+    input.configure_repeat(14, 105, 7, true, GetTimeCounter());
+    let previous = map.display.context.selected_context();
+    runtime.run(cx, io, false, &mut map);
+    io.observer.checkpoint(&CheckpointView::StarMap(None));
+    input.set_menu_sounds(15, 16);
+    input.configure_repeat(
+        ONE_SECOND / 12,
+        ONE_SECOND / 2,
+        ONE_SECOND / 12,
+        false,
+        GetTimeCounter(),
+    );
+    let dimensions = map.dimensions();
+    crate::ui::sis::draw_hyper_coords(cx.kernel, dimensions.0, map.universe);
+    let text = crate::ui::sis::default_message_text(cx.kernel, cx.world);
+    crate::ui::sis::draw_message(cx.kernel, dimensions.0, &text, -1, -1, 0);
+    crate::ui::sis::draw_status_message(cx.kernel, cx.world, None);
+    if let Some(previous) = previous {
+        previous.select();
+    }
+    if cx.world.data.game.autopilot == map.universe {
+        cx.world.data.game.autopilot = POINT { x: -1, y: -1 };
+    }
+    u32::from(cx.world.data.game.autopilot.x != -1 && cx.world.data.game.autopilot.y != -1)
+}
+
+#[cfg(test)]
+mod tests;
+
+#[cfg(test)]
+mod owned_tests;
 
 const RACE_COLORS: [Color; 23] = [
     rgb15(0, 0, 16),
@@ -147,31 +276,15 @@ const RACE_COLORS: [Color; 23] = [
     rgb15(20, 7, 31),
 ];
 
-unsafe fn width() -> i32 {
-    ScreenWidth - 78
+const fn rgb15(r: u8, g: u8, b: u8) -> Color {
+    Color {
+        r: (r << 3) | (r >> 2),
+        g: (g << 3) | (g >> 2),
+        b: (b << 3) | (b >> 2),
+        a: 255,
+    }
 }
-unsafe fn height() -> i32 {
-    ScreenHeight - 13
-}
-#[cfg(not(test))]
-fn which_space() -> u8 {
-    World::current().read(|world| world.story_state(StoryKey::ARILOU_SPACE_SIDE)) as u8
-}
-#[cfg(not(test))]
-fn portal_open() -> bool {
-    World::current().read(|world| world.story_state(StoryKey::ARILOU_SPACE)) != 0
-}
-#[cfg(not(test))]
-unsafe fn game_string(index: u16) -> *const c_char {
-    string_table::GetStringAddress(string_table::SetAbsStringTableIndex(
-        Kernel::current().read(|owner| owner.game_strings).cast(),
-        index,
-    ))
-}
-#[cfg(not(test))]
-fn point(p: crate::comm::dispatch::CPoint) -> POINT {
-    POINT { x: p.x, y: p.y }
-}
+
 fn zero_rect() -> RECT {
     RECT {
         corner: POINT { x: 0, y: 0 },
@@ -182,142 +295,6 @@ fn zero_rect() -> RECT {
     }
 }
 
-fn signed_div_with_error(mut value: c_long, divisor: c_long) -> c_long {
-    let invert = value < 0;
-    if invert {
-        value = -value;
-    }
-    value = (value + (divisor >> 1)) / divisor;
-    if invert {
-        -value
-    } else {
-        value
-    }
-}
-
-#[derive(Clone, Copy)]
-struct Projection {
-    origin: POINT,
-    zoom: i32,
-    width: i32,
-    height: i32,
-}
-impl Projection {
-    fn x(self, ux: c_long) -> i16 {
-        let fit = 10000 / self.width + 1;
-        (signed_div_with_error(
-            ((ux - c_long::from(self.origin.x)) << self.zoom) * c_long::from(self.width),
-            c_long::from(9999 + fit),
-        ) + c_long::from((self.width - 1) >> 1)) as i16
-    }
-    fn y(self, uy: c_long) -> i16 {
-        (signed_div_with_error(
-            ((c_long::from(self.origin.y) - uy) << self.zoom) * c_long::from(self.height),
-            10001,
-        ) + c_long::from((self.height - 1) >> 1)) as i16
-    }
-    fn inverse_x(self, dx: i16) -> i16 {
-        let fit = 10000 / self.width + 1;
-        ((((c_long::from(dx) - c_long::from((self.width - 1) >> 1)) * c_long::from(9999 + fit))
-            >> self.zoom)
-            / c_long::from(self.width)
-            + c_long::from(self.origin.x)) as i16
-    }
-    fn inverse_y(self, dy: i16) -> i16 {
-        ((((c_long::from((self.height - 1) >> 1) - c_long::from(dy)) * 10001) >> self.zoom)
-            / c_long::from(self.height)
-            + c_long::from(self.origin.y)) as i16
-    }
-}
-unsafe fn projection() -> Projection {
-    Projection {
-        origin: MAP_ORIGIN,
-        zoom: ZOOM_LEVEL,
-        width: width(),
-        height: height(),
-    }
-}
-
-/// # Safety
-/// Game-thread only; map state and screen dimensions must be initialized.
-#[no_mangle]
-pub unsafe extern "C" fn universeToDispx(ux: c_long) -> i16 {
-    projection().x(ux)
-}
-/// # Safety
-/// Game-thread only; map state and screen dimensions must be initialized.
-#[no_mangle]
-pub unsafe extern "C" fn universeToDispy(uy: c_long) -> i16 {
-    projection().y(uy)
-}
-unsafe fn ux(x: i16) -> i16 {
-    universeToDispx(c_long::from(x))
-}
-unsafe fn uy(y: i16) -> i16 {
-    universeToDispy(c_long::from(y))
-}
-
-#[cfg(not(test))]
-unsafe fn current_location() -> POINT {
-    if World::current().read(in_hqspace) == 0 {
-        point(
-            (*(**World::current()).star_pointer(crate::planets::starmap::current_catalog()))
-                .star_pt,
-        )
-    } else {
-        let lx = (((ScreenWidth - 64) << 5) >> 4) * 195;
-        let ly = ((ScreenHeight << 5) >> 4) * 25;
-        POINT {
-            x: ((WorldData::current().read(|owner| owner.flagship.log_x) * 6250 + (lx >> 1)) / lx)
-                as i16,
-            y: (9999
-                - (WorldData::current().read(|owner| owner.flagship.log_y) * 625 + (ly >> 1)) / ly)
-                as i16,
-        }
-    }
-}
-
-/// # Safety
-/// Game-thread only, with native map frames and graphics context live.
-#[no_mangle]
-pub unsafe extern "C" fn flashCurrentLocation(where_: *const POINT) {
-    static mut COLOR: u8 = 0;
-    static mut DELTA: i32 = -2;
-    static mut UNIVERSE: POINT = POINT { x: 0, y: 0 };
-    static mut NEXT_TIME: u32 = 0;
-    if !where_.is_null() {
-        UNIVERSE = where_.read();
-    }
-    if GetTimeCounter() >= NEXT_TIME {
-        NEXT_TIME = GetTimeCounter().wrapping_add(ONE_SECOND / 16);
-        let old_context = SetContext(Kernel::current().read(|owner| owner.space_context));
-        if COLOR == 0 || COLOR == 0x1a {
-            DELTA = -DELTA;
-        }
-        COLOR = COLOR.wrapping_add(DELTA as u8);
-        let old_color = SetContextForeGroundColor(rgb15(COLOR, COLOR, COLOR));
-        let mut stamp = STAMP {
-            origin: POINT {
-                x: ux(UNIVERSE.x),
-                y: uy(UNIVERSE.y),
-            },
-            frame: pixmap_abi::IncFrameIndex(STAR_MAP_FRAME.cast()).cast(),
-        };
-        frame_abi::DrawFilledStamp(ptr::from_mut(&mut stamp).cast());
-        SetContextForeGroundColor(old_color);
-        SetContext(old_context);
-    }
-}
-#[cfg(not(test))]
-unsafe fn draw_cursor(x: i16, y: i16) {
-    let mut stamp = STAMP {
-        origin: POINT { x, y },
-        frame: STAR_MAP_FRAME,
-    };
-    frame_abi::DrawStamp(ptr::from_mut(&mut stamp).cast());
-}
-
-// SIZE arithmetic narrows at the same assignments as the C line walker.
 struct LineWalk {
     dx: i16,
     dy: i16,
@@ -328,6 +305,7 @@ struct LineWalk {
     cycle: i16,
     delta: i16,
 }
+
 impl LineWalk {
     fn new(mut dx: i16, mut dy: i16) -> Self {
         let xi = if dx >= 0 {
@@ -369,31 +347,6 @@ impl LineWalk {
         }
     }
 }
-#[cfg(not(test))]
-unsafe fn draw_autopilot(destination: POINT) {
-    let mut p = current_location();
-    p = POINT {
-        x: ux(p.x),
-        y: uy(p.y),
-    };
-    let mut walk = LineWalk::new(
-        ux(destination.x).wrapping_sub(p.x),
-        uy(destination.y).wrapping_sub(p.y),
-    );
-    SetContextForeGroundColor(rgb15(4, 4, 31));
-    walk.delta &= !1;
-    loop {
-        let previous = walk.delta;
-        walk.delta = walk.delta.wrapping_sub(1);
-        if previous == 0 {
-            break;
-        }
-        if walk.delta & 1 == 0 {
-            frame_abi::DrawPoint(ptr::from_mut(&mut p).cast());
-        }
-        walk.step(&mut p);
-    }
-}
 
 fn box_union(a: RECT, b: RECT) -> RECT {
     let x = i32::from(a.corner.x).min(i32::from(b.corner.x));
@@ -413,442 +366,12 @@ fn box_union(a: RECT, b: RECT) -> RECT {
         },
     }
 }
-#[cfg(not(test))]
-fn fleet_queue<R>(edit: impl FnOnce(&mut LinkQueue<'_, Fleet, 24>) -> R) -> R {
-    World::current().write(|world| edit(&mut world.avail_races()))
-}
-#[cfg(not(test))]
-fn lock_fleet(handle: LinkId<Fleet>) -> FleetInfo {
-    fleet_queue(|queue| *queue.get(handle))
-}
-#[cfg(not(test))]
-unsafe fn sphere_text(fleet: &FleetInfo, r: RECT) -> TEXT {
-    font_abi::SetContextFont(Kernel::current().read(|owner| owner.tiny_font).cast());
-    let string = string_table::SetAbsStringTableIndex(fleet.race_strings.cast(), 1);
-    TEXT {
-        baseline: POINT {
-            x: r.corner.x.wrapping_add(r.extent.width >> 1),
-            y: r.corner
-                .y
-                .wrapping_add(r.extent.height >> 1)
-                .wrapping_sub(1),
-        },
-        align: 1,
-        CharCount: string_table::GetStringLength(string),
-        pStr: string_table::GetStringAddress(string),
-    }
-}
-#[cfg(not(test))]
-unsafe fn get_sphere_rect(fleet: &FleetInfo) -> (RECT, RECT) {
-    let diameter = c_long::from(i32::from(fleet.known_strength) * 11);
-    let mut w = universeToDispx(diameter).wrapping_sub(ux(0));
-    if w < 0 {
-        w = w.wrapping_neg();
-    } else if w == 0 {
-        w = 1;
-    }
-    let mut h = universeToDispy(diameter).wrapping_sub(uy(0));
-    if h < 0 {
-        h = h.wrapping_neg();
-    } else if h == 0 {
-        h = 1;
-    }
-    let r = RECT {
-        corner: POINT {
-            x: ux(fleet.known_loc.x).wrapping_sub(w >> 1),
-            y: uy(fleet.known_loc.y).wrapping_sub(h >> 1),
-        },
-        extent: EXTENT {
-            width: w,
-            height: h,
-        },
-    };
-    let mut t = sphere_text(fleet, r);
-    let mut repair = zero_rect();
-    font_abi::TextRect(
-        ptr::from_mut(&mut t).cast(),
-        ptr::from_mut(&mut repair).cast(),
-        ptr::null_mut(),
-    );
-    if repair.corner.x <= 0 {
-        repair.corner.x = 1;
-    } else if i32::from(repair.corner.x) + i32::from(repair.extent.width) >= width() {
-        repair.corner.x = (width() - i32::from(repair.extent.width) - 1) as i16;
-    }
-    if repair.corner.y <= 0 {
-        repair.corner.y = 1;
-    } else if i32::from(repair.corner.y) + i32::from(repair.extent.height) >= height() {
-        repair.corner.y = (height() - i32::from(repair.extent.height) - 1) as i16;
-    }
-    repair = box_union(repair, r);
-    repair.extent.width = repair.extent.width.wrapping_add(1);
-    repair.extent.height = repair.extent.height.wrapping_add(1);
-    (r, repair)
-}
+
 fn intersects(a: RECT, b: RECT) -> bool {
     i32::from(a.corner.x) < i32::from(b.corner.x) + i32::from(b.extent.width)
         && i32::from(a.corner.y) < i32::from(b.corner.y) + i32::from(b.extent.height)
         && i32::from(a.corner.x) + i32::from(a.extent.width) > i32::from(b.corner.x)
         && i32::from(a.corner.y) + i32::from(a.extent.height) > i32::from(b.corner.y)
-}
-
-#[cfg(not(test))]
-/// # Safety
-/// Game-thread only. `clip` is null, the sentinel `(RECT*)-1`, or a live RECT.
-#[no_mangle]
-pub unsafe extern "C" fn DrawStarMap(race_update: u16, clip: *mut RECT) {
-    let draw_cursor_flag = clip as isize != -1;
-    let clip = if draw_cursor_flag {
-        clip
-    } else {
-        ptr::null_mut()
-    };
-    let mut old_r = zero_rect();
-    let mut old_origin = POINT { x: 0, y: 0 };
-    SetContext(Kernel::current().read(|owner| owner.space_context));
-    if !clip.is_null() {
-        GetContextClipRect(&mut old_r);
-        (*clip).corner.x = (*clip).corner.x.wrapping_add(old_r.corner.x);
-        (*clip).corner.y = (*clip).corner.y.wrapping_add(old_r.corner.y);
-        SetContextClipRect(clip.cast());
-        (*clip).corner.x = (*clip).corner.x.wrapping_sub(old_r.corner.x);
-        (*clip).corner.y = (*clip).corner.y.wrapping_sub(old_r.corner.y);
-        old_origin = SetContextOrigin(POINT {
-            x: (*clip).corner.x.wrapping_neg(),
-            y: (*clip).corner.y.wrapping_neg(),
-        });
-    }
-    if TRANSITION_PENDING {
-        SetTransitionSource(ptr::null_mut());
-    }
-    BatchGraphics();
-    let space = which_space();
-    let mut star = star_array.add(if space <= 1 { 0 } else { NUM_SOLAR_SYSTEMS + 1 });
-    if space <= 1 {
-        SetContextForeGroundColor(rgb15(0, 0, 7));
-        SetContextBackGroundColor(rgb15(0, 0, 0));
-    } else {
-        SetContextForeGroundColor(rgb15(0, 11, 0));
-        SetContextBackGroundColor(rgb15(0, 8, 0));
-    }
-    ClearDrawable();
-    let fuel = WorldData::current().read(|owner| owner.flagship.fuel_on_board);
-    let mut diameter = (i64::from(fuel) << 1).min(i64::from(MAX_X_UNIVERSE * 4)) as c_long;
-    if race_update == 0 && space < 2 && diameter != 0 {
-        let location = current_location();
-        if diameter > c_long::from(MAX_X_UNIVERSE * 4) {
-            diameter = c_long::from(MAX_X_UNIVERSE * 4);
-        }
-        let mut w = universeToDispx(diameter).wrapping_sub(ux(0));
-        if w < 0 {
-            w = w.wrapping_neg();
-        }
-        let mut h = universeToDispy(diameter).wrapping_sub(uy(0));
-        if h < 0 {
-            h = h.wrapping_neg();
-        }
-        let mut r = RECT {
-            corner: POINT {
-                x: ux(location.x).wrapping_sub(w >> 1),
-                y: uy(location.y).wrapping_sub(h >> 1),
-            },
-            extent: EXTENT {
-                width: w,
-                height: h,
-            },
-        };
-        let old_color = SetContextForeGroundColor(rgb15(3, 3, 3));
-        DrawFilledOval(&mut r);
-        SetContextForeGroundColor(old_color);
-    }
-    let mut i = MAX_Y_UNIVERSE + 1;
-    while i >= 0 {
-        let mut r = RECT {
-            corner: POINT {
-                x: ux(0),
-                y: universeToDispy(c_long::from(i)),
-            },
-            extent: EXTENT {
-                width: (width() << ZOOM_LEVEL) as i16,
-                height: 1,
-            },
-        };
-        frame_abi::DrawFilledRectangle(ptr::from_mut(&mut r).cast());
-        r.corner.y = universeToDispy(c_long::from(MAX_Y_UNIVERSE + 1));
-        r.extent.width = 1;
-        r.extent.height = (height() << ZOOM_LEVEL) as i16;
-        let mut j = MAX_X_UNIVERSE + 1;
-        while j >= 0 {
-            r.corner.x = universeToDispx(c_long::from(j));
-            frame_abi::DrawFilledRectangle(ptr::from_mut(&mut r).cast());
-            j -= 500;
-        }
-        i -= 500;
-    }
-    let star_frame = pixmap_abi::SetRelFrameIndex(STAR_MAP_FRAME.cast(), 2);
-    if space <= 1 {
-        let mut index = 0;
-        let mut handle = fleet_queue(|queue| queue.head());
-        while let Some(id) = handle {
-            let fleet = lock_fleet(id);
-            let next = fleet_queue(|queue| queue.succ(id));
-            if fleet.known_strength != 0 {
-                let (mut r, repair) = get_sphere_rect(&fleet);
-                if i32::from(r.corner.x) < width()
-                    && i32::from(r.corner.y) < height()
-                    && i32::from(r.corner.x) + i32::from(r.extent.width) > 0
-                    && i32::from(r.corner.y) + i32::from(r.extent.height) > 0
-                    && (clip.is_null() || intersects(repair, *clip))
-                {
-                    let mut color = RACE_COLORS[index];
-                    SetContextForeGroundColor(if index + 1 == usize::from(race_update) {
-                        rgb15(31, 31, 31)
-                    } else {
-                        color
-                    });
-                    DrawOval(&mut r, 0);
-                    let mut t = sphere_text(&fleet, r);
-                    font_abi::TextRect(
-                        ptr::from_mut(&mut t).cast(),
-                        ptr::from_mut(&mut r).cast(),
-                        ptr::null_mut(),
-                    );
-                    if r.corner.x <= 0 {
-                        t.baseline.x = t.baseline.x.wrapping_sub(r.corner.x).wrapping_add(1);
-                    } else if i32::from(r.corner.x) + i32::from(r.extent.width) >= width() {
-                        t.baseline.x = (i32::from(t.baseline.x)
-                            - (i32::from(r.corner.x) + i32::from(r.extent.width) - width() + 1))
-                            as i16;
-                    }
-                    if r.corner.y <= 0 {
-                        t.baseline.y = t.baseline.y.wrapping_sub(r.corner.y).wrapping_add(1);
-                    } else if i32::from(r.corner.y) + i32::from(r.extent.height) >= height() {
-                        t.baseline.y = (i32::from(t.baseline.y)
-                            - (i32::from(r.corner.y) + i32::from(r.extent.height) - height() + 1))
-                            as i16;
-                    }
-                    color.r = color.r.saturating_add(24);
-                    color.g = color.g.saturating_add(24);
-                    color.b = color.b.saturating_add(24);
-                    SetContextForeGroundColor(color);
-                    font_abi::font_DrawText(ptr::from_mut(&mut t).cast());
-                }
-            }
-            handle = next;
-            index += 1;
-        }
-    }
-    loop {
-        let location = point((*star).star_pt);
-        let index = if space <= 1 {
-            i16::from(((*star).star_type & 0x18) >> 3) * 6 + i16::from((*star).star_type >> 5)
-        } else if location.x == ARILOU_HOME.x && location.y == ARILOU_HOME.y {
-            2 * 6 + 1
-        } else {
-            6 + 1
-        };
-        let mut stamp = STAMP {
-            origin: POINT {
-                x: ux(location.x),
-                y: uy(location.y),
-            },
-            frame: pixmap_abi::SetRelFrameIndex(star_frame, index).cast(),
-        };
-        frame_abi::DrawStamp(ptr::from_mut(&mut stamp).cast());
-        star = star.add(1);
-        if i32::from((*star).star_pt.x) > MAX_X_UNIVERSE
-            || i32::from((*star).star_pt.y) > MAX_Y_UNIVERSE
-        {
-            break;
-        }
-    }
-    if portal_open() {
-        let location = if space <= 1 {
-            ARILOU_SPACE
-        } else {
-            QUASI_SPACE
-        };
-        let mut stamp = STAMP {
-            origin: POINT {
-                x: ux(location.x),
-                y: uy(location.y),
-            },
-            frame: pixmap_abi::SetRelFrameIndex(star_frame, 6 + 1).cast(),
-        };
-        frame_abi::DrawStamp(ptr::from_mut(&mut stamp).cast());
-    }
-    let destination = WorldData::current().read(|owner| owner.game.autopilot);
-    if race_update == 0 && destination.x != -1 && destination.y != -1 {
-        draw_autopilot(destination);
-    }
-    if TRANSITION_PENDING {
-        let mut r = zero_rect();
-        GetContextClipRect(&mut r);
-        ScreenTransition(3, ptr::from_ref(&r).cast());
-        TRANSITION_PENDING = false;
-    }
-    UnbatchGraphics();
-    if !clip.is_null() {
-        SetContextClipRect(ptr::from_mut(&mut old_r).cast());
-        SetContextOrigin(old_origin);
-    }
-    if race_update == 0 && draw_cursor_flag {
-        let mut r = zero_rect();
-        GetContextClipRect(&mut r);
-        LoadIntoExtraScreen(ptr::from_mut(&mut r).cast());
-        draw_cursor(ux(cursorLoc.x), uy(cursorLoc.y));
-    }
-}
-
-#[cfg(not(test))]
-unsafe fn erase_cursor(x: i16, y: i16) {
-    let mut r = zero_rect();
-    GetFrameRect(STAR_MAP_FRAME.cast(), ptr::from_mut(&mut r).cast());
-    r.corner.x = r.corner.x.wrapping_add(x);
-    if r.corner.x < 0 {
-        r.extent.width = r.extent.width.wrapping_add(r.corner.x);
-        r.corner.x = 0;
-    } else if i32::from(r.corner.x) + i32::from(r.extent.width) >= width() {
-        r.extent.width = (width() - i32::from(r.corner.x)) as i16;
-    }
-    r.corner.y = r.corner.y.wrapping_add(y);
-    if r.corner.y < 0 {
-        r.extent.height = r.extent.height.wrapping_add(r.corner.y);
-        r.corner.y = 0;
-    } else if i32::from(r.corner.y) + i32::from(r.extent.height) >= height() {
-        r.extent.height = (height() - i32::from(r.corner.y)) as i16;
-    }
-    RepairBackRect(ptr::from_mut(&mut r).cast());
-}
-
-#[cfg(not(test))]
-/// # Safety
-/// Game-thread only, with the star-map UI active.
-pub unsafe fn zoom_star_map(direction: i16) {
-    if direction > 0 && ZOOM_LEVEL < MAX_ZOOM_SHIFT {
-        ZOOM_LEVEL += 1;
-        MAP_ORIGIN = cursorLoc;
-        DrawStarMap(0, ptr::null_mut());
-        SleepThread(ONE_SECOND / 8);
-    } else if direction < 0 && ZOOM_LEVEL > 0 {
-        MAP_ORIGIN = if ZOOM_LEVEL > 1 {
-            cursorLoc
-        } else {
-            POINT { x: 4999, y: 4999 }
-        };
-        ZOOM_LEVEL -= 1;
-        DrawStarMap(0, ptr::null_mut());
-        SleepThread(ONE_SECOND / 8);
-    }
-}
-
-#[cfg(not(test))]
-/// # Safety
-/// Game-thread only. `newpt` is null or points to an absolute universe location.
-#[no_mangle]
-pub unsafe extern "C" fn UpdateCursorLocation(mut sx: i32, mut sy: i32, newpt: *const POINT) {
-    let old = POINT {
-        x: ux(cursorLoc.x),
-        y: uy(cursorLoc.y),
-    };
-    let mut screen;
-    if !newpt.is_null() {
-        sx = 0;
-        sy = 0;
-        screen = POINT {
-            x: ux((*newpt).x),
-            y: uy((*newpt).y),
-        };
-        cursorLoc = *newpt;
-    } else {
-        screen = POINT {
-            x: (i32::from(old.x) + sx) as i16,
-            y: (i32::from(old.y) + sy) as i16,
-        };
-    }
-    if sx != 0 {
-        cursorLoc.x = (i32::from(projection().inverse_x(screen.x)) - sx) as i16;
-        while ux(cursorLoc.x) == old.x {
-            cursorLoc.x = (i32::from(cursorLoc.x) + sx) as i16;
-        }
-        cursorLoc.x = cursorLoc.x.clamp(0, 9999);
-        screen.x = ux(cursorLoc.x);
-    }
-    if sy != 0 {
-        cursorLoc.y = (i32::from(projection().inverse_y(screen.y)) + sy) as i16;
-        while uy(cursorLoc.y) == old.y {
-            cursorLoc.y = (i32::from(cursorLoc.y) - sy) as i16;
-        }
-        cursorLoc.y = cursorLoc.y.clamp(0, 9999);
-        screen.y = uy(cursorLoc.y);
-    }
-    if screen.x < 0
-        || screen.y < 0
-        || i32::from(screen.x) >= width()
-        || i32::from(screen.y) >= height()
-    {
-        MAP_ORIGIN = cursorLoc;
-        DrawStarMap(0, ptr::null_mut());
-    } else {
-        erase_cursor(old.x, old.y);
-        draw_cursor(screen.x, screen.y);
-    }
-}
-
-#[cfg(not(test))]
-/// # Safety
-/// Game-thread only. `previous` points to a writable 256-byte C string buffer.
-#[no_mangle]
-pub unsafe extern "C" fn UpdateCursorInfo(previous: *mut c_char) {
-    let mut text = [0 as c_char; 256];
-    let screen = POINT {
-        x: ux(cursorLoc.x),
-        y: uy(cursorLoc.y),
-    };
-    let mut last = ptr::null_mut();
-    let mut best: *mut CStarDesc = ptr::null_mut();
-    loop {
-        last = FindStar(last, ptr::addr_of_mut!(cursorLoc).cast(), 75, 75);
-        if last.is_null() {
-            break;
-        }
-        let p = (*last).star_pt;
-        if ux(p.x) == screen.x
-            && uy(p.y) == screen.y
-            && (best.is_null() || ((*last).star_type & 0x18) >= ((*best).star_type & 0x18))
-        {
-            best = last;
-        }
-    }
-    if !best.is_null() {
-        cursorLoc = point((*best).star_pt);
-        GetClusterName(best, text.as_mut_ptr());
-    } else {
-        cursorLoc = POINT {
-            x: projection().inverse_x(screen.x).clamp(0, 9999),
-            y: projection().inverse_y(screen.y).clamp(0, 9999),
-        };
-    }
-    if portal_open() {
-        let p = if which_space() <= 1 {
-            ARILOU_SPACE
-        } else {
-            QUASI_SPACE
-        };
-        if ux(p.x) == screen.x && uy(p.y) == screen.y {
-            cursorLoc = p;
-            unicode::utf8_string_copy(
-                text.as_mut_ptr().cast(),
-                text.len(),
-                game_string(132).cast(),
-            );
-        }
-    }
-    DrawHyperCoords(cursorLoc);
-    if search::strcmp(text.as_ptr(), previous) != 0 {
-        search::strcpy(previous, text.as_ptr());
-        DrawSISMessage(text.as_ptr());
-    }
 }
 
 fn fuel_requirement(from: POINT, to: POINT, space: u8, sqrt: impl FnOnce(u32) -> u16) -> u16 {
@@ -859,229 +382,5 @@ fn fuel_requirement(from: POINT, to: POINT, space: u8, sqrt: impl FnOnce(u32) ->
         0
     } else {
         sqrt(f).wrapping_add(100 / 20)
-    }
-}
-
-#[cfg(not(test))]
-/// # Safety
-/// Game-thread only, with the star-map status UI active.
-pub unsafe fn update_fuel_requirement() {
-    let fuel = fuel_requirement(current_location(), cursorLoc, which_space(), |f| {
-        crate::math::square_root(f)
-    });
-    let mut buf = [0 as c_char; 80];
-    sprintf(
-        buf.as_mut_ptr(),
-        c"%s %u.%u".as_ptr(),
-        game_string(439),
-        u32::from(fuel / 100),
-        u32::from((fuel % 100) / 10),
-    );
-    DrawStatusMessage(buf.as_ptr());
-}
-
-#[cfg(not(test))]
-/// # Safety
-/// Game-thread only, with game globals and native UI resources initialized.
-pub unsafe fn star_map(cx: &mut Cx<'_>, io: &mut crate::engine::observe::Io<'_>) -> u32 {
-    let runtime = cx.kernel.input_runtime();
-    let input = runtime.input();
-    let misc_data = cx.kernel.misc_data_frame;
-    let space = cx.kernel.space_context;
-    let autopilot = cx.world.data.game.autopilot;
-    let (mut menu, universe) =
-        prepare_star_map(cx, input, misc_data.cast(), space.cast(), autopilot);
-    cx.with_legacy(|| {
-        SetMenuSounds(input, 0, 0);
-        SetMenuRepeatDelay(input, ONE_SECOND / 60, ONE_SECOND / 8, ONE_SECOND / 120, 1);
-    });
-    cx.run_input(io, false, |cx, _| do_move_cursor(cx, &mut menu, input) != 0);
-    cx.with_legacy(|| {
-        SetMenuSounds(input, 15, 16);
-        SetDefaultMenuRepeatDelay(input);
-        finish_star_map(universe);
-    });
-    if cx.world.data.game.autopilot.x == universe.x && cx.world.data.game.autopilot.y == universe.y
-    {
-        cx.world.data.game.autopilot = POINT { x: -1, y: -1 };
-    }
-    u32::from(cx.world.data.game.autopilot.x != -1 && cx.world.data.game.autopilot.y != -1)
-}
-
-#[cfg(test)]
-#[path = "pstarmap/tests.rs"]
-mod tests;
-
-#[cfg(not(test))]
-#[derive(Default)]
-struct Flags {
-    button: bool,
-    interrupted: bool,
-    drawn: bool,
-}
-
-#[cfg(not(test))]
-unsafe fn repair_map(race: u16, last: &mut RECT, next: RECT) {
-    let mut r = repair_rectangle(*last, next, width(), height());
-    *last = next;
-    DrawStarMap(race, &mut r);
-}
-
-#[cfg(not(test))]
-unsafe fn interrupted(cx: &mut Cx<'_>, input: &InputSession, flags: &mut Flags) -> bool {
-    if flags.button {
-        if AnyButtonPress(cx, input, 1) == 0 {
-            flags.button = false;
-        }
-    } else {
-        flags.interrupted = flags.interrupted || AnyButtonPress(cx, input, 1) != 0;
-        if flags.interrupted {
-            flags.drawn = true;
-            return true;
-        }
-    }
-    false
-}
-
-#[cfg(not(test))]
-unsafe fn update_sphere_position(
-    cx: &mut Cx<'_>,
-    input: &InputSession,
-    id: LinkId<Fleet>,
-    index: u16,
-    flags: &mut Flags,
-) {
-    let fleet = *cx.world.avail_races().get(id);
-    let dx = fleet.loc.x.wrapping_sub(fleet.known_loc.x);
-    let dy = fleet.loc.y.wrapping_sub(fleet.known_loc.y);
-    if dx != 0 || dy != 0 {
-        let mut walk = LineWalk::new(dx, dy);
-        if !flags.drawn {
-            cx.with_legacy(|| DrawStarMap(u16::MAX, ptr::null_mut()));
-            flags.drawn = true;
-        }
-        let (initial, mut last) = cx.with_legacy(|| get_sphere_rect(&lock_fleet(id)));
-        enlarge(&mut last);
-        let mut visible = false;
-        let mut final_r = zero_rect();
-        let mut canceled = false;
-        loop {
-            let (sphere, mut r) = loop {
-                walk.step(&mut cx.world.avail_races().get_mut(id).known_loc);
-                let pair = cx.with_legacy(|| get_sphere_rect(&lock_fleet(id)));
-                let before = walk.delta;
-                walk.delta = walk.delta.wrapping_sub(1);
-                if before == 0
-                    || (walk.delta & 0x1f == 0
-                        && (initial.corner.x != pair.0.corner.x
-                            || initial.corner.y != pair.0.corner.y))
-                {
-                    break pair;
-                }
-            };
-            if interrupted(cx, input, flags) {
-                canceled = true;
-                break;
-            }
-            enlarge(&mut r);
-            if initial.corner.x != sphere.corner.x || initial.corner.y != sphere.corner.y {
-                visible = true;
-                cx.with_legacy(|| repair_map(index, &mut last, r));
-            }
-            final_r = r;
-            if walk.delta < 0 {
-                break;
-            }
-        }
-        if !canceled && visible {
-            cx.with_legacy(|| repair_map(u16::MAX, &mut last, final_r));
-        }
-        {
-            let mut queue = cx.world.avail_races();
-            let fleet = queue.get_mut(id);
-            fleet.known_loc = fleet.loc;
-        };
-    }
-}
-
-#[cfg(not(test))]
-unsafe fn update_map(cx: &mut Cx<'_>, input: &InputSession) {
-    FlushInput(input);
-    let mut flags = Flags {
-        button: true,
-        ..Flags::default()
-    };
-    let mut index = 1u16;
-    let mut handle = cx.world.avail_races().head();
-    while let Some(id) = handle {
-        let next = cx.world.avail_races().succ(id);
-        interrupted(cx, input, &mut flags);
-        let fleet = *cx.world.avail_races().get(id);
-        if fleet.known_strength != 0 {
-            update_sphere_position(cx, input, id, index, &mut flags);
-            let fleet = *cx.world.avail_races().get(id);
-            let mut delta =
-                (i32::from(fleet.actual_strength) - i32::from(fleet.known_strength)) as i16;
-            if delta != 0 {
-                if !flags.drawn {
-                    cx.with_legacy(|| DrawStarMap(u16::MAX, ptr::null_mut()));
-                    flags.drawn = true;
-                }
-                let dx = if delta > 0 {
-                    1i16
-                } else {
-                    delta = delta.wrapping_neg();
-                    -1i16
-                };
-                delta = delta.wrapping_sub(1);
-                let (initial, mut last) = cx.with_legacy(|| get_sphere_rect(&lock_fleet(id)));
-                enlarge(&mut last);
-                let mut visible = false;
-                let mut final_r = zero_rect();
-                let mut final_sphere = initial;
-                let mut canceled = false;
-                loop {
-                    let (sphere, mut r) = loop {
-                        {
-                            let mut queue = cx.world.avail_races();
-                            let fleet = queue.get_mut(id);
-                            fleet.known_strength = fleet.known_strength.wrapping_add(dx as u16);
-                        };
-                        let pair = cx.with_legacy(|| get_sphere_rect(&lock_fleet(id)));
-                        let before = delta;
-                        delta = delta.wrapping_sub(1);
-                        if before == 0
-                            || (delta & 0xf == 0 && initial.extent.height != pair.0.extent.height)
-                        {
-                            break pair;
-                        }
-                    };
-                    if interrupted(cx, input, &mut flags) {
-                        canceled = true;
-                        break;
-                    }
-                    enlarge(&mut r);
-                    if initial.extent.height != sphere.extent.height {
-                        visible = true;
-                        cx.with_legacy(|| repair_map(index, &mut last, r));
-                    }
-                    final_r = r;
-                    final_sphere = sphere;
-                    if delta < 0 {
-                        break;
-                    }
-                }
-                if !canceled && (visible || initial.extent.width != final_sphere.extent.width) {
-                    cx.with_legacy(|| repair_map(u16::MAX, &mut last, final_r));
-                }
-                {
-                    let mut queue = cx.world.avail_races();
-                    let fleet = queue.get_mut(id);
-                    fleet.known_strength = fleet.actual_strength;
-                };
-            }
-        }
-        handle = next;
-        index += 1;
     }
 }

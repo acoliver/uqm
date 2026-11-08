@@ -18,18 +18,27 @@ fn run_replay(
     run: &str,
     parity: bool,
 ) -> Result<serde_json::Value, Box<dyn Error>> {
+    let script = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("scripts")
+        .join(format!("{scenario}.json"));
+    run_script(root, &script, run, parity)
+}
+
+fn run_script(
+    root: &Path,
+    path: &Path,
+    run: &str,
+    parity: bool,
+) -> Result<serde_json::Value, Box<dyn Error>> {
     let directory = root.join(run);
     std::fs::create_dir(&directory)?;
     let directory = directory.canonicalize()?;
-    let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let script: serde_json::Value = serde_json::from_slice(&std::fs::read(
-        manifest.join("scripts").join(format!("{scenario}.json")),
-    )?)?;
+    let script: serde_json::Value = serde_json::from_slice(&std::fs::read(path)?)?;
     if let Some(save) = script["start_save"]["path"].as_str() {
         let saves = directory.join("config/save");
         std::fs::create_dir_all(&saves)?;
         std::fs::copy(
-            manifest.join("scripts").join(save),
+            path.parent().ok_or("script has no directory")?.join(save),
             saves.join("uqmsave.00"),
         )?;
     }
@@ -42,7 +51,9 @@ fn run_replay(
         command.env_remove("UQM_PARITY");
     }
     let mut child = command
-        .args(["--replay", scenario, "--replay-summary"])
+        .arg("--replay")
+        .arg(path)
+        .arg("--replay-summary")
         .arg(&summary)
         .arg("--automation-output")
         .arg(directory.join("automation"))
@@ -73,8 +84,19 @@ fn run_replay(
     };
     assert!(
         status.success(),
-        "{run} failed: {}",
-        std::fs::read_to_string(directory.join("game.log"))?
+        "{run} failed: {}
+summary: {:?}
+trace tail: {:?}",
+        std::fs::read_to_string(directory.join("game.log"))?,
+        std::fs::read_to_string(&summary),
+        std::fs::read_to_string(directory.join("automation/trace.jsonl")).map(|trace| {
+            trace
+                .lines()
+                .rev()
+                .take(8)
+                .map(str::to_owned)
+                .collect::<Vec<_>>()
+        })
     );
     Ok(serde_json::from_slice(&std::fs::read(summary)?)?)
 }
@@ -104,6 +126,28 @@ fn super_melee_replays_complete_with_equal_nonempty_summaries() -> Result<(), Bo
     }
     assert_eq!(first, second);
     eprintln!("replay summaries match: {first}");
+    Ok(())
+}
+
+#[test]
+fn solar_system_save_load_restores_sol_after_a_hyperspace_exit() -> Result<(), Box<dyn Error>> {
+    let temporary = Path::new(env!("CARGO_MANIFEST_DIR")).join("../tmp");
+    std::fs::create_dir_all(&temporary)?;
+    let root = tempfile::Builder::new()
+        .prefix("replay-solar-save-")
+        .tempdir_in(temporary)?;
+    install_content(root.path())?;
+    let script =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/native/sol-save-load-v1.json");
+    let summary = run_script(root.path(), &script, "roundtrip", false)?;
+    assert_eq!(summary["completed"], true, "{summary}");
+    assert_eq!(summary["final_activity"], 4, "{summary}");
+    assert!(
+        summary["inputs_admitted"]
+            .as_u64()
+            .ok_or("input counter is not unsigned")?
+            > 0
+    );
     Ok(())
 }
 

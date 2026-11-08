@@ -161,7 +161,6 @@ pub(crate) mod live {
     use crate::navigation::abi::*;
     use crate::navigation::get;
 
-    use crate::planets::starmap::star_array;
     use crate::state::c_api::{
         close_state_file, delete_state_file, length_state_file, open_state_file, seek_state_file,
     };
@@ -311,7 +310,7 @@ pub(crate) mod live {
         home: &[u32; 23],
         percent: &[u8; 24],
     ) -> (usize, u16) {
-        let universe = (*world.star_pointer(crate::planets::starmap::current_catalog())).star_pt;
+        let universe = (*world.star_pointer()).star_pt;
         let mut best_index = 0usize;
         let mut best_percent = 0u16;
         let mut handle = world.avail_races_ref().head();
@@ -323,11 +322,7 @@ pub(crate) mod live {
             let radius = fleet.actual_strength;
             let chance = percent[index] as u16;
             if radius != 0 && chance != 0 {
-                if home[index] != 0
-                    && (*world.star_pointer(crate::planets::starmap::current_catalog())).index
-                        as u32
-                        == home[index]
-                {
+                if home[index] != 0 && (*world.star_pointer()).index as u32 == home[index] {
                     best_index = index;
                     best_percent = if home[index] == SPATHI_DEFINED || home[index] == SUPOX_DEFINED
                     {
@@ -376,8 +371,7 @@ pub(crate) mod live {
                 number = MAX_BATTLE_GROUPS as u8;
             } else if number < 5
                 && home[best_index] != 0
-                && (*world.star_pointer(crate::planets::starmap::current_catalog())).index as u32
-                    == home[best_index]
+                && (*world.star_pointer()).index as u32 == home[best_index]
             {
                 number = 5;
             }
@@ -516,8 +510,9 @@ pub(crate) mod live {
         if offset == 0
             && (header.star_index
                 != world
-                    .star_pointer(crate::planets::starmap::current_catalog())
-                    .offset_from(star_array) as u16
+                    .current_star
+                    .unwrap_or_else(|| panic!("group state requires a selected star"))
+                    .0 as u16
                 || !validate_date(world, false, &mut month, &mut day, &mut year))
         {
             close_state_file(world, file);
@@ -655,8 +650,9 @@ pub(crate) mod live {
         header.month_index = month as u8;
         header.year_index = year;
         header.star_index = world
-            .star_pointer(crate::planets::starmap::current_catalog())
-            .offset_from(star_array) as u16;
+            .current_star
+            .unwrap_or_else(|| panic!("group state requires a selected star"))
+            .0 as u16;
         flush(world, &mut header, offset, which, file);
         close_state_file(world, file);
         offset

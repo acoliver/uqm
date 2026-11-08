@@ -67,7 +67,7 @@ pub(in crate::automation::melee_fixture) fn execute(
                     log_y: cx.world.data.flagship.log_y,
                     star: cx
                         .world
-                        .star_pointer(crate::planets::starmap::current_catalog())
+                        .star_pointer()
                         .as_ref()
                         .map(|s| (s.star_pt.x, s.star_pt.y)),
                 },
@@ -176,11 +176,7 @@ fn borrow_world(cx: &Cx<'_>) -> World {
     let mut world = World::new(
         cx.world.activity(),
         cx.b.counters,
-        // SAFETY: the catalog selection is read on its owning game thread.
-        unsafe {
-            cx.world
-                .star_pointer(crate::planets::starmap::current_catalog()) as usize
-        },
+        cx.world.star_pointer() as usize,
     );
     let mut next = cx.elements().head();
     while let Some(id) = next {
@@ -218,7 +214,7 @@ unsafe fn apply(cx: &mut Cx<'_>, effect: Effect, checkpoint: &dyn Fn()) -> Resul
                 return Ok(Reply::None);
             }
             Effect::ClearStar => {
-                cx.world.select_star(None, None);
+                cx.world.select_star(None);
                 return Ok(Reply::None);
             }
             Effect::Remove(_) | Effect::ZoomProof(..) => {

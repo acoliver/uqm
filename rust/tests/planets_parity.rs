@@ -48,7 +48,7 @@ unsafe extern "C" {
     static mut ScreenWidth: i32;
     static planet_array: [PlanetFrame; 59];
     static element_array: [u8; 133];
-    static mut starmap_array: [CStarDesc; CATALOG_LEN];
+    static starmap_array: [CStarDesc; CATALOG_LEN];
 
     fn DeltaTopography(num_iterations: u16, depth: *mut i8, rect: *const Rect, depth_delta: i16);
     fn DoPlanetaryAnalysis(sys_info: *mut SystemInfo, desc: *mut PlanetDesc);
@@ -125,7 +125,7 @@ struct ExportedGenerators {
     state: Box<SOLARSYS_STATE>,
     /// The fixture star occupies slot zero of this retained catalog.
     star: Box<[CStarDesc; CATALOG_LEN]>,
-    previous_catalog: *mut CStarDesc,
+    previous_catalog: [CStarDesc; CATALOG_LEN],
     previous_star: Option<uqm_rust::engine::StarId>,
 }
 
@@ -139,8 +139,7 @@ impl ExportedGenerators {
             ScreenWidth = 320;
             pSolarSysState = &mut *state;
         }
-        // SAFETY: the serialized harness saves the catalog it restores before its backing storage is dropped.
-        let previous_catalog = unsafe { uqm_rust::planets::starmap::star_array };
+        let previous_catalog = uqm_rust::engine::World::current().read(|world| *world.catalog());
         let previous_star = uqm_rust::engine::World::current().read(|world| world.current_star);
         // SAFETY: the serialized harness copies the initialized integer-only catalog.
         let mut star = Box::new(unsafe { starmap_array });
@@ -157,17 +156,10 @@ impl ExportedGenerators {
     fn set_star(&mut self, size: u8, star_type: u8) {
         self.state.SunDesc[0].data_index = size;
         self.star[0].star_type = star_type;
-        unsafe {
-            uqm_rust::planets::starmap::star_array = self.star.as_mut_ptr();
-            (**uqm_rust::engine::World::current()).select_star(
-                (self
-                    .star
-                    .as_mut_ptr()
-                    .cast::<uqm_rust::engine::world::CStarDesc>())
-                .as_ref(),
-                uqm_rust::planets::starmap::current_catalog(),
-            );
-        }
+        uqm_rust::engine::World::current().write(|world| {
+            world.set_catalog(std::borrow::Cow::Owned(*self.star));
+            world.current_star = Some(uqm_rust::engine::StarId(0));
+        });
     }
 }
 
@@ -531,11 +523,10 @@ fn plandata_tables_equal_the_c_originals() {
 
 impl Drop for ExportedGenerators {
     fn drop(&mut self) {
-        // SAFETY: the enclosing serialized test retains the published game.
-        unsafe {
-            uqm_rust::planets::starmap::star_array = self.previous_catalog;
-            (**uqm_rust::engine::World::current()).current_star = self.previous_star;
-        }
+        uqm_rust::engine::World::current().write(|world| {
+            world.set_catalog(std::borrow::Cow::Owned(self.previous_catalog));
+            world.current_star = self.previous_star;
+        });
     }
 }
 

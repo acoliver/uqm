@@ -131,7 +131,7 @@ pub(crate) mod live {
         );
     }
     unsafe fn at_star(world: &World, index: u32) -> bool {
-        let star = world.star_pointer(crate::planets::starmap::current_catalog());
+        let star = world.star_pointer();
         world.activity() as u8 as u32 == IN_INTERPLANETARY
             && !star.is_null()
             && (*star).index as u32 == index

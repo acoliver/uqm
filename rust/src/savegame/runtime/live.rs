@@ -20,16 +20,10 @@ use std::fmt;
 
 use super::location::{self, LocationError};
 use super::solar::{GameStrings, SolarSystem, SolarSystemOwner};
-use super::star::{self, CStarDesc, StarError, CATALOG_LEN};
+use super::star::{self, StarError};
 use crate::c_bindings::solar_system;
 use crate::engine::save::{snapshot, SessionView};
 use crate::savegame::types::{SaveFile, StarDesc};
-
-extern "C" {
-
-    #[link_name = "star_array"]
-    static mut STAR_ARRAY: *mut CStarDesc;
-}
 
 /// `GAME_STRING (index)` over the loaded `GameStrings` table.
 struct LiveGameStrings<'a>(&'a Kernel);
@@ -60,7 +54,7 @@ pub unsafe fn capture_prepared(
     name: &[u8],
 ) -> anyhow::Result<SaveFile> {
     let state = solar_system::current();
-    let current = world.star_pointer(Some(live_catalog()));
+    let current = world.star_pointer();
     let strings = LiveGameStrings(kernel);
     let solar = SolarSystem::new(
         state.as_ref(),
@@ -86,44 +80,9 @@ pub unsafe fn capture_prepared(
     )
 }
 
-/// The live star catalog.
-///
-/// # Safety
-/// `star_array` must point at the `CATALOG_LEN` entries of `starmap_array`.
-unsafe fn live_catalog<'a>() -> &'a [CStarDesc; CATALOG_LEN] {
-    let table = std::ptr::addr_of!(STAR_ARRAY).read();
-    assert!(!table.is_null(), "the star catalog is not set up");
-    &*table.cast::<[CStarDesc; CATALOG_LEN]>()
-}
-
-/// # Safety
-/// Game-thread access with the live star catalog retained for this selection.
-pub unsafe fn select_live_star(world: &mut World, star: Option<&CStarDesc>) {
-    // SAFETY: the caller retains the initialized catalog for this game-thread selection.
-    let catalog = unsafe { live_catalog() };
-    world.select_star(star, Some(catalog));
-}
-
-/// The "Star" chunk for the live `CurStarDescPtr`.
-///
-/// # Safety
-/// Game thread only; the star map must be initialised.
-pub unsafe fn capture_live_star(world: &World) -> Result<StarDesc, StarError> {
-    // SAFETY: this game-thread operation retains the initialized star catalog.
-    let catalog = unsafe { Some(live_catalog()) };
-    let current = world.star_pointer(catalog);
-    star::capture_star(live_catalog(), current)
-}
-
-/// Check a loaded "Star" chunk against the live catalog.
-///
-/// # Safety
-/// Game thread only; the star map must be initialised.
-pub unsafe fn resolve_live_star(
-    arilou_space_side: u8,
-    saved: &StarDesc,
-) -> Result<star::LoadedStar, StarError> {
-    star::resolve_star(live_catalog(), arilou_space_side, saved)
+/// The selected star record for the supplied campaign's save.
+pub fn capture_live_star(world: &World) -> Result<StarDesc, StarError> {
+    star::capture_star(world.catalog(), world.star_pointer())
 }
 
 /// Why the live solar-system location could not be prepared.
@@ -164,11 +123,9 @@ impl std::error::Error for LiveLocationError {}
 pub unsafe fn prepare_live_solar_location(world: &mut World) -> Result<(), LiveLocationError> {
     let state = solar_system::current();
     assert!(!state.is_null(), "not in a solar system");
-    // SAFETY: this game-thread operation retains the initialized star catalog.
-    let catalog = unsafe { Some(live_catalog()) };
-    let current = world.star_pointer(catalog);
+    let current = world.star_pointer();
     let star_index =
-        star::catalog_index(live_catalog(), current).map_err(LiveLocationError::Star)?;
+        star::catalog_index(world.catalog(), current).map_err(LiveLocationError::Star)?;
     let location = location::prepare_solar_location(&world.data.game, &*state, star_index)
         .map_err(LiveLocationError::Location)?;
     crate::engine::save::location::apply_solar_location(world, location)

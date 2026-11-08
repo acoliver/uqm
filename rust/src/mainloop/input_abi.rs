@@ -42,7 +42,7 @@ pub(crate) mod live {
         }
         #[cfg(feature = "debug-process")]
         if input.pulsed().menu[KEY_DEBUG as usize] != 0 {
-            cx.with_legacy(|| crate::front_end::uqmdebug::debug_key_pressed_synchronous());
+            crate::front_end::uqmdebug::debug_key_pressed_synchronous(cx);
         }
     }
 

@@ -4,6 +4,9 @@ pub mod planet_side;
 
 use crate::graphics::presented_frame::PresentedFrame;
 
+pub mod starmap;
+pub use starmap::StarMapView;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum InputView {
     BeforeUpdate,
@@ -45,6 +48,7 @@ pub enum CheckpointView<'a> {
     StarbaseMenu(bool),
     ShipPicker(bool),
     ShipPickerCursor { x: i16, y: i16 },
+    StarMap(Option<StarMapView>),
     Won,
     PresentationStarted,
     PresentationCancelled,

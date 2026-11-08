@@ -3,8 +3,6 @@ use crate::engine::World;
 use crate::engine::{Kernel, WorldData};
 use crate::graphics::context_abi::ContextLease;
 #[cfg(not(test))]
-use crate::planets::starmap::current_catalog;
-#[cfg(not(test))]
 use crate::ui::palette::pilot_color;
 use crate::ui::rgb15;
 
@@ -191,12 +189,11 @@ pub unsafe extern "C" fn DrawSISMessageEx(
 ) -> BOOLEAN {
     let text = (!p_str.is_null()).then(|| std::ffi::CStr::from_ptr(p_str.cast()));
     let width = ScreenWidth;
-    let catalog = current_catalog();
     Kernel::current().read(|kernel| {
         let text = text.map_or_else(
             || {
                 std::borrow::Cow::Owned(
-                    World::current().read(|world| default_message_text(kernel, world, catalog)),
+                    World::current().read(|world| default_message_text(kernel, world)),
                 )
             },
             std::borrow::Cow::Borrowed,

@@ -78,8 +78,12 @@ fn stop_request(request: &MusicRequest) {
         }
     }
 }
+pub fn requested_music() -> (MusicRequest, bool, u8) {
+    MUSIC_STATE.lock().requested.clone()
+}
+
 pub fn set_requested_enabled(enabled: bool) {
-    let (request, continuous, priority) = MUSIC_STATE.lock().requested.clone();
+    let (request, continuous, priority) = requested_music();
     if priority <= 1 {
         if enabled {
             play_requested(&request, continuous, priority);

@@ -63,6 +63,7 @@ pub struct UiObservation {
     communication_completions: AtomicU64,
     encounter_menu_active: AtomicBool,
     ship_picker_cursor: std::sync::Mutex<crate::pickship::Cursor>,
+    star_map: std::sync::Mutex<Option<crate::engine::observe::StarMapView>>,
 }
 
 impl Default for UiObservation {
@@ -84,11 +85,26 @@ impl Default for UiObservation {
             communication_completions: AtomicU64::new(0),
             encounter_menu_active: AtomicBool::new(false),
             ship_picker_cursor: std::sync::Mutex::new(crate::pickship::Cursor::START),
+            star_map: std::sync::Mutex::new(None),
         }
     }
 }
 
 impl UiObservation {
+    pub fn observe_star_map(&self, view: Option<crate::engine::observe::StarMapView>) {
+        *self
+            .star_map
+            .lock()
+            .unwrap_or_else(|error| panic!("map observation lock poisoned: {error}")) = view;
+    }
+
+    pub fn star_map(&self) -> Option<crate::engine::observe::StarMapView> {
+        *self
+            .star_map
+            .lock()
+            .unwrap_or_else(|error| panic!("map observation lock poisoned: {error}"))
+    }
+
     pub fn record_ship_escape(&self) {
         self.ship_escape_generation.fetch_add(1, Ordering::SeqCst);
     }
@@ -315,6 +331,7 @@ impl super::coordinator::AutomationObserver {
                 .ui
                 .observe_ship_picker_cursor(crate::pickship::Cursor { x, y }),
             CheckpointView::StarbaseMenu(active) => self.ui.observe_starbase_menu(active),
+            CheckpointView::StarMap(view) => self.ui.observe_star_map(view),
             view => self.ending.lock().observe_checkpoint(view),
         }
     }

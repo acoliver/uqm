@@ -1099,7 +1099,7 @@ mod tests {
         });
         let state = crate::planets::device_effects::DEVICE_STORY_KEYS
             .iter()
-            .copied()
+            .map(|&(_, name)| name)
             .chain(["fuel", "activity"])
             .map(|key| {
                 let (before, after) = match key {

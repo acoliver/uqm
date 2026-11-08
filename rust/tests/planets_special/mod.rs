@@ -65,7 +65,7 @@ extern "C" {
 struct Harness {
     state: Box<SOLARSYS_STATE>,
     star: Box<[CStarDesc; CATALOG_LEN]>,
-    previous_catalog: *mut CStarDesc,
+    previous_catalog: [CStarDesc; CATALOG_LEN],
     previous_star: Option<uqm_rust::engine::StarId>,
     /// `CurStarDescPtr->Index` the next `set_star` installs.
     star_index: u8,
@@ -81,8 +81,7 @@ impl Harness {
             ScreenWidth = 320;
             pSolarSysState = &mut *state;
         }
-        // SAFETY: the serialized harness saves the catalog it restores before its backing storage is dropped.
-        let previous_catalog = unsafe { uqm_rust::planets::starmap::star_array };
+        let previous_catalog = uqm_rust::engine::World::current().read(|world| *world.catalog());
         let previous_star = uqm_rust::engine::World::current().read(|world| world.current_star);
         // SAFETY: the serialized harness copies the initialized integer-only catalog.
         let mut star = Box::new(unsafe { super::starmap_array });
@@ -102,17 +101,10 @@ impl Harness {
         self.state.generator_index = self.star_index;
         self.star[0].star_type = (color << 5) | 0b101;
         self.star[0].index = self.star_index;
-        unsafe {
-            uqm_rust::planets::starmap::star_array = self.star.as_mut_ptr();
-            (**uqm_rust::engine::World::current()).select_star(
-                (self
-                    .star
-                    .as_mut_ptr()
-                    .cast::<uqm_rust::engine::world::CStarDesc>())
-                .as_ref(),
-                uqm_rust::planets::starmap::current_catalog(),
-            );
-        }
+        uqm_rust::engine::World::current().write(|world| {
+            world.set_catalog(std::borrow::Cow::Owned(*self.star));
+            world.current_star = Some(uqm_rust::engine::StarId(0));
+        });
     }
 
     fn seed(&self, seed: u32) {
@@ -377,10 +369,9 @@ pub fn sol_matches_the_c_original(table: &[uqm_rust::engine::world::planet::Plan
 
 impl Drop for Harness {
     fn drop(&mut self) {
-        // SAFETY: the enclosing serialized test retains the published game.
-        unsafe {
-            uqm_rust::planets::starmap::star_array = self.previous_catalog;
-            (**uqm_rust::engine::World::current()).current_star = self.previous_star;
-        }
+        uqm_rust::engine::World::current().write(|world| {
+            world.set_catalog(std::borrow::Cow::Owned(self.previous_catalog));
+            world.current_star = self.previous_star;
+        });
     }
 }

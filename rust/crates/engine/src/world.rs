@@ -1,5 +1,7 @@
 //! Campaign state owned by one game-thread lifecycle.
 
+#[cfg(test)]
+mod catalog_tests;
 pub mod generation;
 pub mod planet;
 
@@ -59,6 +61,7 @@ pub struct World {
     pub clock: super::clock::GameClock,
     pub story: Option<StoryState>,
     pub files: StateFileManager,
+    catalog: Option<std::rc::Rc<std::borrow::Cow<'static, [CStarDesc; CATALOG_LEN]>>>,
     pub current_star: Option<StarId>,
     pub encounter_race: i16,
     fleet_resources:
@@ -122,6 +125,7 @@ impl World {
             },
             story: None,
             files: StateFileManager::new(),
+            catalog: None,
             current_star: None,
             encounter_race: 0,
         }
@@ -202,26 +206,40 @@ impl World {
         self.data.flagship.crew_enlisted = crew;
     }
 
-    /// Return the selected catalog address for legacy read-only callers.
-    pub fn star_pointer(&self, catalog: Option<&[CStarDesc; CATALOG_LEN]>) -> *mut CStarDesc {
-        self.selected_star(catalog)
-            .map_or(std::ptr::null_mut(), |star| {
-                std::ptr::from_ref(star).cast_mut()
-            })
+    pub fn set_catalog(&mut self, catalog: std::borrow::Cow<'static, [CStarDesc; CATALOG_LEN]>) {
+        self.current_star = None;
+        self.catalog = Some(std::rc::Rc::new(catalog));
     }
 
-    pub fn selected_star<'a>(
+    pub fn catalog(&self) -> &[CStarDesc; CATALOG_LEN] {
+        self.catalog
+            .as_ref()
+            .map(|catalog| catalog.as_ref().as_ref())
+            .unwrap_or_else(|| panic!("campaign star catalog is not initialized"))
+    }
+
+    pub fn retain_catalog(
         &self,
-        catalog: Option<&'a [CStarDesc; CATALOG_LEN]>,
-    ) -> Option<&'a CStarDesc> {
-        self.current_star.map(|id| {
-            let catalog = catalog.unwrap_or_else(|| panic!("selected star without a catalog"));
-            &catalog[id.0]
+    ) -> std::rc::Rc<std::borrow::Cow<'static, [CStarDesc; CATALOG_LEN]>> {
+        self.catalog
+            .as_ref()
+            .unwrap_or_else(|| panic!("campaign star catalog is not initialized"))
+            .clone()
+    }
+
+    /// Return the selected catalog address for legacy read-only callers.
+    pub fn star_pointer(&self) -> *mut CStarDesc {
+        self.selected_star().map_or(std::ptr::null_mut(), |star| {
+            std::ptr::from_ref(star).cast_mut()
         })
     }
 
-    pub fn identify_star(&self, star: &CStarDesc, catalog: &[CStarDesc; CATALOG_LEN]) -> StarId {
-        let base = catalog.as_ptr() as usize;
+    pub fn selected_star(&self) -> Option<&CStarDesc> {
+        self.current_star.map(|id| &self.catalog()[id.0])
+    }
+
+    pub fn identify_star(&self, star: &CStarDesc) -> StarId {
+        let base = self.catalog().as_ptr() as usize;
         let address = std::ptr::from_ref(star) as usize;
         let stride = std::mem::size_of::<CStarDesc>();
         let offset = address
@@ -234,17 +252,8 @@ impl World {
         StarId(offset / stride)
     }
 
-    pub fn select_star(
-        &mut self,
-        star: Option<&CStarDesc>,
-        catalog: Option<&[CStarDesc; CATALOG_LEN]>,
-    ) {
-        self.current_star = star.map(|star| {
-            self.identify_star(
-                star,
-                catalog.unwrap_or_else(|| panic!("selected star without a catalog")),
-            )
-        });
+    pub fn select_star(&mut self, star: Option<&CStarDesc>) {
+        self.current_star = star.map(|star| self.identify_star(star));
     }
 }
 

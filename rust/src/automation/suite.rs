@@ -849,10 +849,8 @@ const fn row(scenario: &'static str, domains: &'static [Domain]) -> ScenarioRow 
 
 const fn journey(scenario: &'static str, domains: &'static [Domain]) -> ScenarioRow {
     ScenarioRow {
-        scenario,
-        domains,
-        fixture: None,
         composed_journey: true,
+        ..row(scenario, domains)
     }
 }
 

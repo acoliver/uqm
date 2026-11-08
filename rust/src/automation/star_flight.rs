@@ -35,12 +35,7 @@ impl StarTarget {
             return (438, 6372);
         }
         // The catalog is initialized statically and never modified by gameplay.
-        let star = unsafe {
-            std::ptr::addr_of!(crate::planets::tables::STARMAP_ARRAY)
-                .cast::<crate::savegame::runtime::star::CStarDesc>()
-                .add(usize::from(self.0))
-                .read()
-        };
+        let star = &crate::planets::tables::STARMAP_ARRAY[usize::from(self.0)];
         (star.star_pt.x, star.star_pt.y)
     }
 
@@ -57,12 +52,7 @@ impl StarTarget {
             }
             .into();
         }
-        let star = unsafe {
-            std::ptr::addr_of!(crate::planets::tables::STARMAP_ARRAY)
-                .cast::<crate::savegame::runtime::star::CStarDesc>()
-                .add(usize::from(self.0))
-                .read()
-        };
+        let star = &crate::planets::tables::STARMAP_ARRAY[usize::from(self.0)];
         static STRINGS: std::sync::OnceLock<Vec<&'static str>> = std::sync::OnceLock::new();
         let strings = STRINGS.get_or_init(|| {
             include_str!("../../../sc2/content/base/gamestrings.txt")

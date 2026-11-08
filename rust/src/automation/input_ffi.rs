@@ -695,65 +695,38 @@ pub fn rust_automation_get_pulsed_menu_key(input: &InputControls, index: i32) ->
 //  Unit tests
 // ===========================================================================
 
-/// Read-only interstellar observations, copied at the automation game-thread boundary.
-#[cfg(not(test))]
+/// Interstellar observations use copied map values from the admitted input boundary.
 pub(crate) fn star_flight_observation(
     world: &CampaignView,
     target: super::star_flight::StarTarget,
     ui: &UiObservation,
 ) -> super::star_flight::Observation {
-    extern "C" {
-
-        fn universeToDispx(x: std::ffi::c_long) -> i16;
-        fn universeToDispy(y: std::ffi::c_long) -> i16;
+    let map = ui.star_map();
+    let cursor = map.map(|map| (map.cursor.x, map.cursor.y));
+    let (tx, ty) = target.coordinates();
+    let cursor_delta = map.map_or((0, 0), |map| {
+        (
+            map.projection.x(tx.into()) - map.projection.x(map.cursor.x.into()),
+            map.projection.y(ty.into()) - map.projection.y(map.cursor.y.into()),
+        )
+    });
+    let autopilot = world.autopilot;
+    super::star_flight::Observation {
+        activity: world.activity,
+        current_star: world.current_star.map(|id| id.0 as u16),
+        space_side: world
+            .story_value(crate::engine::StoryKey::ARILOU_SPACE_SIDE)
+            .expect("initialized state"),
+        conversation_active: ui.conversation_snapshot().active,
+        portal_open: world.story_value(crate::engine::StoryKey::ARILOU_SPACE) == Some(1),
+        solar_active: departure_snapshot(world).active != 0,
+        cursor,
+        cursor_delta,
+        autopilot: (autopilot.0 >= 0 && autopilot.1 >= 0).then_some(autopilot),
+        position: hyperspace_position(world),
+        fuel: ship_resources(world).map(|(fuel, _)| fuel),
+        instant_move: world.instant_move,
     }
-    // SAFETY: the coordinator is called synchronously on the game thread.
-    unsafe {
-        let current_star = world.current_star.map(|id| id.0 as u16);
-        let cursor = crate::planets::starmap_cursor::cursor();
-        let (tx, ty) = target.coordinates();
-        let cursor_delta = cursor.map_or((0, 0), |(x, y)| {
-            (
-                universeToDispx(tx.into()) - universeToDispx(x.into()),
-                universeToDispy(ty.into()) - universeToDispy(y.into()),
-            )
-        });
-        let autopilot = world.autopilot;
-        super::star_flight::Observation {
-            activity: world.activity,
-            current_star,
-            space_side: world
-                .story_value(crate::engine::StoryKey::ARILOU_SPACE_SIDE)
-                .expect("initialized state"),
-            conversation_active: ui.conversation_snapshot().active,
-            portal_open: world.story_value(crate::engine::StoryKey::ARILOU_SPACE) == Some(1),
-            solar_active: departure_snapshot(world).active != 0,
-            cursor,
-            cursor_delta,
-            autopilot: (autopilot.0 >= 0 && autopilot.1 >= 0).then_some(autopilot),
-            position: hyperspace_position(world),
-            fuel: ship_resources(world).map(|(fuel, _)| fuel),
-            instant_move: {
-                #[cfg(feature = "debug-process")]
-                {
-                    crate::front_end::uqmdebug::INSTANT_MOVE != 0
-                }
-                #[cfg(not(feature = "debug-process"))]
-                {
-                    false
-                }
-            },
-        }
-    }
-}
-
-#[cfg(test)]
-pub(crate) fn star_flight_observation(
-    _world: &CampaignView,
-    _target: super::star_flight::StarTarget,
-    _ui: &UiObservation,
-) -> super::star_flight::Observation {
-    super::star_flight::Observation::default()
 }
 
 /// Player-selected combat settings: enabled flag and speed selector.

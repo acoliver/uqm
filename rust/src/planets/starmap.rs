@@ -1,25 +1,7 @@
 //! Star catalog lookup and cluster naming, ported from starmap.c.
 
 use crate::comm::dispatch::CPoint;
-use crate::engine::Kernel as KernelOwner;
-use crate::engine::World as WorldOwner;
 use crate::savegame::runtime::star::{CStarDesc, NUM_HYPER_VORTICES, NUM_SOLAR_SYSTEMS};
-use std::ptr;
-
-#[no_mangle]
-pub static mut star_array: *mut CStarDesc = ptr::null_mut();
-
-/// Borrow the current catalog without retaining it across a catalog replacement.
-/// # Safety
-/// Game thread only. A non-null catalog must contain CATALOG_LEN live entries.
-pub unsafe fn current_catalog<'a>() -> Option<&'a [CStarDesc; crate::engine::world::CATALOG_LEN]> {
-    // SAFETY: the caller retains the initialized catalog on the game thread.
-    unsafe {
-        star_array
-            .cast::<[CStarDesc; crate::engine::world::CATALOG_LEN]>()
-            .as_ref()
-    }
-}
 
 pub(crate) fn catalog_star_count(catalog: &[CStarDesc]) -> usize {
     catalog
@@ -104,42 +86,25 @@ pub fn find_star_id(
         .map(|index| crate::engine::StarId(base + index))
 }
 
-/// # Safety
-/// Catalog must be initialized; `last` is NULL or a catalog entry, `point` is readable.
-#[no_mangle]
-pub unsafe extern "C" fn FindStar(
-    last: *mut CStarDesc,
-    point: *mut CPoint,
-    xb: i16,
-    yb: i16,
-) -> *mut CStarDesc {
-    WorldOwner::current().read(|world| {
-        // SAFETY: the caller retains the catalog and supplies valid optional last and point addresses.
-        unsafe { find_star_in(world, last.as_ref(), *point, xb, yb) }
-    })
-}
-
-/// # Safety
-/// The game thread retains the initialized catalog throughout this lookup.
-pub unsafe fn find_star_in(
-    world: &crate::engine::World,
-    last: Option<&CStarDesc>,
-    point: CPoint,
-    xb: i16,
-    yb: i16,
-) -> *mut CStarDesc {
-    // SAFETY: the caller retains the initialized game-thread catalog.
-    let catalog =
-        unsafe { current_catalog() }.unwrap_or_else(|| panic!("star lookup without a catalog"));
-    let last = last.map(|star| world.identify_star(star, catalog));
-    find_star_id(world, catalog, last, point, xb, yb).map_or(ptr::null_mut(), |id| {
-        std::ptr::from_ref(&catalog[id.0]).cast_mut()
-    })
-}
-
 pub(crate) mod naming {
     use super::*;
-    use std::ffi::c_char;
+
+    pub(crate) fn name_near(
+        kernel: &crate::engine::Kernel,
+        catalog: &[CStarDesc; crate::engine::world::CATALOG_LEN],
+        point: CPoint,
+    ) -> Option<(std::ffi::CString, CPoint)> {
+        let index = find_star_index(catalog, None, point, 1, 1, NUM_SOLAR_SYSTEMS - 1)?;
+        let star = &catalog[index];
+        Some((
+            cluster_name(
+                kernel,
+                star,
+                crate::navigation::abi::STAR_NUMBER_BASE as usize,
+            ),
+            star.star_pt,
+        ))
+    }
 
     pub(crate) fn cluster_name(
         kernel: &crate::engine::Kernel,
@@ -158,25 +123,18 @@ pub(crate) mod naming {
         std::ffi::CString::new(text)
             .unwrap_or_else(|error| panic!("cluster name contains NUL: {error}"))
     }
-
-    /// # Safety
-    /// `star` is readable, and `buffer` has space for the prefix and cluster name.
-    #[no_mangle]
-    pub unsafe extern "C" fn GetClusterName(star: *const CStarDesc, buffer: *mut c_char) {
-        let name = KernelOwner::current().read(|kernel| {
-            cluster_name(
-                kernel,
-                &*star,
-                crate::c_bindings::global_state::STAR_NUMBER_BASE as usize,
-            )
-        });
-        std::ptr::copy_nonoverlapping(name.as_ptr(), buffer, name.as_bytes_with_nul().len());
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn universe_catalog_is_one_immutable_complete_table() {
+        let stars: &'static [CStarDesc; crate::engine::world::CATALOG_LEN] =
+            &crate::planets::tables::STARMAP_ARRAY;
+        assert_eq!(catalog_star_count(stars), NUM_SOLAR_SYSTEMS);
+    }
 
     fn star(x: i16, y: i16) -> CStarDesc {
         CStarDesc {

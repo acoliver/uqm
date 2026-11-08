@@ -270,9 +270,6 @@ pub fn start_game_impl<O: RestartMenuOps + ?Sized>(ops: &O) -> bool {
         }
     }
 
-    // Assign global arrays (restart.c:413-421)
-    ops.assign_global_arrays();
-
     // Set player controls (restart.c:423-424)
     ops.set_player_control(0, HUMAN_CONTROL as u16 | STANDARD_RATING as u16);
     ops.set_player_control(1, COMPUTER_CONTROL as u16 | AWESOME_RATING as u16);
@@ -319,7 +316,6 @@ mod tests {
         melee_called: Cell<bool>,
         input_callbacks: Cell<u32>,
         splash_called: Cell<bool>,
-        assign_globals_called: Cell<bool>,
         player_control_0: Cell<u16>,
         player_control_1: Cell<u16>,
         fade_screen_type: Cell<u32>,
@@ -351,7 +347,6 @@ mod tests {
                 melee_called: Cell::new(false),
                 input_callbacks: Cell::new(0),
                 splash_called: Cell::new(false),
-                assign_globals_called: Cell::new(false),
                 player_control_0: Cell::new(0),
                 player_control_1: Cell::new(0),
                 fade_screen_type: Cell::new(0),
@@ -531,9 +526,6 @@ mod tests {
                 self.player_control_1.set(control);
             }
         }
-        fn assign_global_arrays(&self) {
-            self.assign_globals_called.set(true);
-        }
     }
 
     // ---- restart_menu_impl tests -----------------------------------------
@@ -680,7 +672,6 @@ mod tests {
             1,
             "the menu callback runs once before the introduction"
         );
-        assert!(ops.assign_globals_called.get());
         assert_eq!(
             ops.player_control_0.get(),
             u16::from(HUMAN_CONTROL | STANDARD_RATING)
@@ -713,7 +704,6 @@ mod tests {
         ops.new_game.set(false);
         assert!(start_game_impl(&ops));
         assert_eq!(ops.introduction_calls.get(), 0);
-        assert!(ops.assign_globals_called.get());
     }
 
     #[test]
@@ -724,7 +714,6 @@ mod tests {
         assert!(!start_game_impl(&ops));
         assert_eq!(ops.introduction_calls.get(), 1);
         assert_eq!(ops.input_callbacks.get(), 2);
-        assert!(!ops.assign_globals_called.get());
     }
 
     #[test]
@@ -743,7 +732,6 @@ mod tests {
             ops.player_control_1.get(),
             (COMPUTER_CONTROL as u16) | (AWESOME_RATING as u16)
         );
-        assert!(ops.assign_globals_called.get());
     }
 
     #[test]

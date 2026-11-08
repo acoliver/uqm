@@ -133,16 +133,10 @@ fn scene_star_lookup_uses_the_unpublished_world() {
     }
     catalog[0].star_pt.x = 1752;
     catalog[0].star_pt.y = 1450;
-    // SAFETY: the serialized fixture restores the catalog before releasing its backing storage.
-    let result = unsafe {
-        let previous = uqm_rust::planets::starmap::star_array;
-        uqm_rust::planets::starmap::star_array = catalog.as_mut_ptr();
-        let result = uqm_rust::comm::dispatch::place_flagship_at_star(&mut world, (1752, 1450));
-        uqm_rust::planets::starmap::star_array = previous;
-        result
-    };
+    world.set_catalog(std::borrow::Cow::Owned(*catalog));
+    let result = uqm_rust::comm::dispatch::place_flagship_at_star(&mut world, (1752, 1450));
     assert_eq!(result, Ok(()));
-    assert_eq!(world.star_pointer(Some(&catalog)), catalog.as_mut_ptr());
+    assert_eq!(world.star_pointer(), world.catalog().as_ptr().cast_mut());
 }
 
 #[test]
@@ -154,14 +148,8 @@ fn rainbow_ordinal_reads_the_unpublished_world_star() {
     let mut catalog: Box<[CStarDesc; CATALOG_LEN]> = Box::new(unsafe { std::mem::zeroed() });
     catalog[0].index = 4;
     catalog[1].index = 9;
-    world.select_star(Some(&catalog[2]), Some(&catalog));
-    // SAFETY: the serialized fixture retains the complete catalog during the query.
-    let indexes = unsafe {
-        let previous = uqm_rust::planets::starmap::star_array;
-        uqm_rust::planets::starmap::star_array = catalog.as_mut_ptr();
-        let indexes = uqm_rust::planets::c_api::star_indexes_before_current(&world);
-        uqm_rust::planets::starmap::star_array = previous;
-        indexes
-    };
+    world.set_catalog(std::borrow::Cow::Owned(*catalog));
+    world.current_star = Some(uqm_rust::engine::StarId(2));
+    let indexes = uqm_rust::planets::c_api::star_indexes_before_current(&world);
     assert_eq!(indexes, [4, 9]);
 }

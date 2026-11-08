@@ -1,5 +1,3 @@
-#![cfg(not(test))]
-
 use crate::engine::WorldData;
 use crate::navigation::abi::*;
 
@@ -147,4 +145,25 @@ pub(crate) fn play_loaded_sound(
 
 pub(crate) fn stop_battle_music() {
     stop_music()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    #[serial_test::serial]
+    fn absent_loaded_music_preserves_options_and_clears_playback() {
+        let mut world = crate::engine::World::new();
+        world.data.game.glob_flags = MUSIC_DISABLED as u8;
+        play_loaded_music(&world, None, 1, 3);
+        let (request, continuous, priority) = crate::sound::music::requested_music();
+        assert!(matches!(request, crate::sound::music::MusicRequest::Absent));
+        assert_eq!((continuous, priority), (true, 3));
+        assert_eq!(world.data.game.glob_flags, MUSIC_DISABLED as u8);
+        stop_loaded_music(None);
+        stop_battle_music();
+        let (request, _, _) = crate::sound::music::requested_music();
+        assert!(matches!(request, crate::sound::music::MusicRequest::Absent));
+    }
 }

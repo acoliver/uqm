@@ -14,7 +14,8 @@ use colors::hsva_to_rgba;
 mod labels;
 pub use labels::*;
 
-type SystemVisitor<T> = unsafe fn(*const STAR_DESC, *const SOLARSYS_STATE, &mut T);
+type SystemVisitor<T> =
+    unsafe fn(&crate::engine::Kernel, *const STAR_DESC, *const SOLARSYS_STATE, &mut T);
 type WorldVisitor<T> = unsafe fn(
     &mut crate::engine::battle::Cx<'_>,
     &mut crate::engine::observe::Io<'_>,
@@ -77,16 +78,16 @@ mod runtime {
         })
     }
 
-    pub static mut INSTANT_MOVE: BOOLEAN = 0;
     pub static mut DISABLE_INTERACTIVITY: BOOLEAN = 0;
-    pub static mut DEBUG_HOOK: Option<unsafe fn()> = None;
 
     /// # Safety
     /// Must run synchronously on the game thread with initialized game state.
-    pub unsafe fn debug_key_pressed_synchronous() {
-        equip_ship();
-        give_devices();
-        clear_escorts();
+    pub unsafe fn debug_key_pressed_synchronous(cx: &mut crate::engine::battle::Cx<'_>) {
+        cx.with_legacy(|| {
+            equip_ship();
+            give_devices();
+            clear_escorts();
+        });
         for race in [
             ARILOU_SHIP,
             PKUNK_SHIP,
@@ -101,23 +102,25 @@ mod runtime {
             URQUAN_SHIP,
             BLACK_URQUAN_SHIP,
         ] {
-            let added = crate::app::bridge::enter(|cx| {
-                crate::engine::world::fleet::add_escort_ships(
-                    cx.world,
-                    race as COUNT,
-                    1,
-                    crate::engine::world::fleet::captain_name,
-                )
-            });
+            let added = crate::engine::world::fleet::add_escort_ships(
+                cx.world,
+                race as COUNT,
+                1,
+                crate::engine::world::fleet::captain_name,
+            );
             if added.is_some() {
-                crate::ui::sis::DeltaSISGauges(32767, 32767, 32767);
+                cx.with_legacy(|| crate::ui::sis::DeltaSISGauges(32767, 32767, 32767));
             }
         }
-        reset_crew_battle();
-        reset_energy_battle();
-        INSTANT_MOVE = BOOLEAN::from(INSTANT_MOVE == 0);
-        show_spheres();
-        activate_all_ships();
+        cx.with_legacy(|| {
+            reset_crew_battle();
+            reset_energy_battle();
+        });
+        cx.kernel.instant_move = !cx.kernel.instant_move;
+        cx.with_legacy(|| {
+            show_spheres();
+            activate_all_ships();
+        });
     }
 
     // The asynchronous C debug-key hook contains no enabled operations.
@@ -248,61 +251,6 @@ mod runtime {
         );
     }
 
-    // These are the units.h macros, evaluated with the live logical screen size.
-    unsafe fn log_units() -> (i32, i32) {
-        (
-            ((((ScreenWidth - STATUS_WIDTH as i32 - 2 * SAFE_X as i32) << ONE_SHIFT)
-                << MAX_REDUCTION)
-                >> 4)
-                * SECTOR_WIDTH as i32,
-            ((((ScreenHeight - 2 * SAFE_Y as i32) << ONE_SHIFT) << MAX_REDUCTION) >> 4)
-                * SECTOR_HEIGHT as i32,
-        )
-    }
-    /// # Safety
-    /// Must run on the game thread in HyperSpace or QuasiSpace.
-    pub unsafe fn do_instant_move() {
-        let lease = World::current();
-        let world = &mut **lease;
-        let (log_x, log_y) = log_units();
-        let universe_x = ((MAX_X_UNIVERSE as i32 + 1) >> 4) * 10;
-        let universe_y = (MAX_Y_UNIVERSE as i32 + 1) >> 4;
-        let game = ptr::addr_of_mut!(world.data.game);
-        let sis = ptr::addr_of_mut!(world.data.flagship);
-        if (*game).autopilot.x == -1 || (*game).autopilot.y == -1 {
-            (*game).autopilot.x =
-                (((*sis).log_x.wrapping_mul(universe_x) + (log_x >> 1)) / log_x) as COORD;
-            (*game).autopilot.y = (MAX_Y_UNIVERSE as i32
-                - (((*sis).log_y.wrapping_mul(universe_y) + (log_y >> 1)) / log_y))
-                as COORD;
-        } else {
-            (*sis).log_x = ((*game).autopilot.x as i32 * log_x + (universe_x >> 1)) / universe_x;
-            (*sis).log_y = ((MAX_Y_UNIVERSE as i32 - (*game).autopilot.y as i32) * log_y
-                + (universe_y >> 1))
-                / universe_y;
-        }
-        if world.story_state(StoryKey::ARILOU_SPACE_SIDE) <= 1 {
-            let selected =
-                crate::planets::starmap::find_star_in(world, None, (*game).autopilot, 0, 0);
-            world.select_star(
-                selected.as_ref(),
-                crate::planets::starmap::current_catalog(),
-            );
-            if !world
-                .star_pointer(crate::planets::starmap::current_catalog())
-                .is_null()
-            {
-                world.set_story_state(StoryKey::USED_BROADCASTER, 0);
-                world.set_activity(world.activity() & !(IN_BATTLE as ACTIVITY));
-                (*game).ship_facing = 0;
-                (*game).ip_planet = 0;
-                (*game).in_orbit = 0;
-                world.set_activity(world.activity() | START_INTERPLANETARY as ACTIVITY);
-            }
-        }
-        (*game).autopilot.x = -1;
-        (*game).autopilot.y = -1;
-    }
     /// # Safety
     /// Must run on the game thread with the race queue initialized.
     pub unsafe fn show_spheres() {
@@ -319,14 +267,14 @@ mod runtime {
     pub unsafe fn for_all_stars<T>(
         cx: &mut Cx<'_>,
         io: &mut Io<'_>,
-        callback: unsafe fn(&mut Cx<'_>, &mut Io<'_>, *mut STAR_DESC, &mut T),
+        callback: unsafe fn(&mut Cx<'_>, &mut Io<'_>, *const STAR_DESC, &mut T),
         arg: &mut T,
     ) {
         for i in 0..NUM_SOLAR_SYSTEMS as usize {
             callback(
                 cx,
                 io,
-                ptr::addr_of_mut!(starmap_array).cast::<STAR_DESC>().add(i),
+                ptr::addr_of!(starmap_array).cast::<STAR_DESC>().add(i),
                 arg,
             );
         }
@@ -336,23 +284,19 @@ mod runtime {
     pub unsafe fn for_all_planets<T>(
         cx: &mut Cx<'_>,
         io: &mut Io<'_>,
-        star: *mut STAR_DESC,
+        star: *const STAR_DESC,
         system: *mut SOLARSYS_STATE,
         callback: unsafe fn(
             &mut Cx<'_>,
             &mut Io<'_>,
-            *mut STAR_DESC,
+            *const STAR_DESC,
             *mut SOLARSYS_STATE,
             *mut PlanetDesc,
             &mut T,
         ),
         arg: &mut T,
     ) {
-        assert!(
-            cx.world
-                .star_pointer(crate::planets::starmap::current_catalog())
-                == star.cast()
-        );
+        assert!(ptr::eq(cx.world.star_pointer(), star.cast()));
         assert!(pSolarSysState == system);
         for i in 0..(*system).SunDesc[0].num_planets as usize {
             callback(
@@ -370,13 +314,13 @@ mod runtime {
     pub unsafe fn for_all_moons<T>(
         cx: &mut Cx<'_>,
         io: &mut Io<'_>,
-        star: *mut STAR_DESC,
+        star: *const STAR_DESC,
         system: *mut SOLARSYS_STATE,
         planet: *mut PlanetDesc,
         callback: unsafe fn(
             &mut Cx<'_>,
             &mut Io<'_>,
-            *mut STAR_DESC,
+            *const STAR_DESC,
             *mut SOLARSYS_STATE,
             *mut PlanetDesc,
             *mut PlanetDesc,
@@ -424,17 +368,13 @@ mod runtime {
     unsafe fn star_recurse<T>(
         cx: &mut Cx<'_>,
         io: &mut Io<'_>,
-        star: *mut STAR_DESC,
+        star: *const STAR_DESC,
         recurse: &mut UniverseRecurseArg<'_, T>,
     ) {
         let old_system = pSolarSysState;
-        let old_star = cx
-            .world
-            .star_pointer(crate::planets::starmap::current_catalog());
-        cx.world.select_star(
-            (star.cast::<crate::engine::world::CStarDesc>()).as_ref(),
-            crate::planets::starmap::current_catalog(),
-        );
+        let old_star = cx.world.star_pointer();
+        cx.world
+            .select_star((star.cast::<crate::engine::world::CStarDesc>()).as_ref());
         (*SysGenRNG).reseed(GetRandomSeedForStar(star));
         let mut system: SOLARSYS_STATE = mem::zeroed();
         system.SunDesc[0].prev_desc = ptr::null_mut();
@@ -449,7 +389,7 @@ mod runtime {
             generator.generate_planets(system, host)
         });
         if let Some(cb) = recurse.system_func_pre {
-            cx.with_legacy(|| cb(star, &system, recurse.arg));
+            cb(cx.kernel, star, &system, recurse.arg);
         }
         if recurse.planet_func_pre.is_some()
             || recurse.planet_func_post.is_some()
@@ -458,27 +398,20 @@ mod runtime {
             for_all_planets(cx, io, star, &mut system, planet_recurse, recurse);
         }
         if let Some(cb) = recurse.system_func_post {
-            cx.with_legacy(|| cb(star, &system, recurse.arg));
+            cb(cx.kernel, star, &system, recurse.arg);
         }
         pSolarSysState = old_system;
-        cx.world.select_star(
-            (old_star).as_ref(),
-            crate::planets::starmap::current_catalog(),
-        );
+        cx.world.select_star((old_star).as_ref());
     }
     unsafe fn planet_recurse<T>(
         cx: &mut Cx<'_>,
         io: &mut Io<'_>,
-        star: *mut STAR_DESC,
+        star: *const STAR_DESC,
         system: *mut SOLARSYS_STATE,
         planet: *mut PlanetDesc,
         recurse: &mut UniverseRecurseArg<'_, T>,
     ) {
-        assert!(
-            cx.world
-                .star_pointer(crate::planets::starmap::current_catalog())
-                == star.cast()
-        );
+        assert!(ptr::eq(cx.world.star_pointer(), star.cast()));
         assert!(pSolarSysState == system);
         (*planet).prev_desc = ptr::addr_of_mut!((*system).SunDesc[0]);
         if let Some(cb) = recurse.planet_func_pre {
@@ -511,17 +444,13 @@ mod runtime {
     unsafe fn moon_recurse<T>(
         cx: &mut Cx<'_>,
         io: &mut Io<'_>,
-        star: *mut STAR_DESC,
+        star: *const STAR_DESC,
         system: *mut SOLARSYS_STATE,
         planet: *mut PlanetDesc,
         moon: *mut PlanetDesc,
         recurse: &mut UniverseRecurseArg<'_, T>,
     ) {
-        assert!(
-            cx.world
-                .star_pointer(crate::planets::starmap::current_catalog())
-                == star.cast()
-        );
+        assert!(ptr::eq(cx.world.star_pointer(), star.cast()));
         assert!(pSolarSysState == system);
         (*moon).prev_desc = planet;
         if let Some(cb) = recurse.moon_func {
@@ -586,22 +515,27 @@ mod runtime {
         );
     }
     unsafe fn dump_system_callback(
+        kernel: &crate::engine::Kernel,
         star: *const STAR_DESC,
         system: *const SOLARSYS_STATE,
         arg: &mut DumpUniverseArg,
     ) {
-        dump_system(arg.out, star, system);
+        dump_system(kernel, arg.out, star, system);
     }
     /// # Safety
     /// Star and system records must be readable, and `out` an open stream.
     pub unsafe fn dump_system(
+        kernel: &crate::engine::Kernel,
         out: *mut FILE,
         star: *const STAR_DESC,
         _system: *const SOLARSYS_STATE,
     ) {
-        let mut name = [0 as c_char; 256];
+        let name = crate::planets::starmap::naming::cluster_name(
+            kernel,
+            &*star.cast(),
+            STAR_NUMBER_BASE as usize,
+        );
         let mut buffer = [0 as c_char; 40];
-        GetClusterName((star).cast(), name.as_mut_ptr());
         libc::snprintf(
             buffer.as_mut_ptr(),
             buffer.len(),
@@ -954,6 +888,7 @@ mod runtime {
         );
     }
     unsafe fn tally_system_pre_callback(
+        _kernel: &crate::engine::Kernel,
         _: *const STAR_DESC,
         _: *const SOLARSYS_STATE,
         arg: &mut TallyResourcesArg,
@@ -963,13 +898,17 @@ mod runtime {
         context.bio_count = 0;
     }
     unsafe fn tally_system_post_callback(
+        kernel: &crate::engine::Kernel,
         star: *const STAR_DESC,
         _: *const SOLARSYS_STATE,
         arg: &mut TallyResourcesArg,
     ) {
         let context = arg;
-        let mut name = [0 as c_char; 256];
-        GetClusterName((star).cast(), name.as_mut_ptr());
+        let name = crate::planets::starmap::naming::cluster_name(
+            kernel,
+            &*star.cast(),
+            STAR_NUMBER_BASE as usize,
+        );
         libc::fprintf(
             context.out,
             c"%s\t%d\t%d\n".as_ptr(),
@@ -1478,15 +1417,49 @@ mod runtime {
 #[cfg(not(test))]
 pub use runtime::{
     activate_all_ships, calculate_bio_value, calculate_mineral_value, clear_escorts,
-    debug_contexts, debug_key_pressed, debug_key_pressed_synchronous, do_instant_move, dump_event,
-    dump_events, dump_moon, dump_planet, dump_planet_type, dump_planet_types, dump_strings,
-    dump_system, dump_universe, dump_universe_to_file, equip_ship, find_player_ship, for_all_moons,
+    debug_contexts, debug_key_pressed, debug_key_pressed_synchronous, dump_event, dump_events,
+    dump_moon, dump_planet, dump_planet_type, dump_planet_types, dump_strings, dump_system,
+    dump_universe, dump_universe_to_file, equip_ship, find_player_ship, for_all_moons,
     for_all_planet_types, for_all_planets, for_all_stars, forward_to_next_event,
     generate_bio_index, generate_mineral_index, give_devices, planet_type_string,
     reset_crew_battle, reset_energy_battle, show_spheres, tally_resources, tally_resources_to_file,
-    tectonics_string, universe_recurse, uqm_debug_creature_bio_value, DEBUG_HOOK,
-    DISABLE_INTERACTIVITY, INSTANT_MOVE,
+    tectonics_string, universe_recurse, uqm_debug_creature_bio_value, DISABLE_INTERACTIVITY,
 };
+
+/// Apply the selected debug destination using only the supplied campaign.
+pub fn move_flagship(world: &mut crate::engine::World, dimensions: (i32, i32)) {
+    use crate::engine::StoryKey;
+    let log_x = (((dimensions.0 - 64) << 5) >> 4) * 195;
+    let log_y = ((dimensions.1 << 5) >> 4) * 25;
+    let game = &mut world.data.game;
+    let sis = &mut world.data.flagship;
+    if game.autopilot.x == -1 || game.autopilot.y == -1 {
+        game.autopilot.x = ((sis.log_x.wrapping_mul(6250) + (log_x >> 1)) / log_x) as i16;
+        game.autopilot.y = (9999 - ((sis.log_y.wrapping_mul(625) + (log_y >> 1)) / log_y)) as i16;
+    } else {
+        sis.log_x = (i32::from(game.autopilot.x) * log_x + (6250 >> 1)) / 6250;
+        sis.log_y = ((9999 - i32::from(game.autopilot.y)) * log_y + (625 >> 1)) / 625;
+    }
+    if world.story_state(StoryKey::ARILOU_SPACE_SIDE) <= 1 {
+        world.current_star = crate::planets::starmap::find_star_id(
+            world,
+            world.catalog(),
+            None,
+            world.data.game.autopilot,
+            0,
+            0,
+        );
+        if world.current_star.is_some() {
+            world.set_story_state(StoryKey::USED_BROADCASTER, 0);
+            world.set_activity(world.activity() & !(IN_BATTLE as u16));
+            world.data.game.ship_facing = 0;
+            world.data.game.ip_planet = 0;
+            world.data.game.in_orbit = 0;
+            world.set_activity(world.activity() | START_INTERPLANETARY as u16);
+        }
+    }
+    world.data.game.autopilot = POINT { x: -1, y: -1 };
+}
 
 #[cfg(test)]
 mod tests {
@@ -1494,7 +1467,12 @@ mod tests {
 
     #[test]
     fn traversal_callbacks_borrow_typed_context_without_an_abi_cast() {
-        fn system(_: *const STAR_DESC, _: *const SOLARSYS_STATE, events: &mut Vec<&str>) {
+        fn system(
+            _: &crate::engine::Kernel,
+            _: *const STAR_DESC,
+            _: *const SOLARSYS_STATE,
+            events: &mut Vec<&str>,
+        ) {
             events.push("system");
         }
         fn world(
@@ -1528,7 +1506,12 @@ mod tests {
         };
         // These callbacks do not inspect the records; only their typed context.
         unsafe {
-            visitor.system_func_pre.unwrap()(std::ptr::null(), std::ptr::null(), visitor.arg);
+            visitor.system_func_pre.unwrap()(
+                cx.kernel,
+                std::ptr::null(),
+                std::ptr::null(),
+                visitor.arg,
+            );
             visitor.planet_func_pre.unwrap()(&mut cx, &mut io, std::ptr::null(), visitor.arg);
         }
         assert_eq!(events, ["system", "world"]);

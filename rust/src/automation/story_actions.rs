@@ -287,23 +287,28 @@ pub fn device_evidence_holds(device: Device, state: &str) -> bool {
         } else {
             return false;
         };
-        let maximum = if DEVICE_STORY_KEYS.contains(&key) {
-            super::campaign_state::StateKey::parse(&format!("story:{key}"))
-                .expect("device story key")
-                .max_value()
-        } else {
-            match key {
-                "fuel" => u32::MAX,
-                "activity" => u32::from(u16::MAX),
-                _ => return false,
-            }
-        };
-        if value > maximum || map.insert(key.to_owned(), value).is_some() {
+        if map.insert(key.to_owned(), value).is_some() {
             return false;
         }
     }
     if before.len() != DEVICE_STORY_KEYS.len() + 2 || after.len() != before.len() {
         return false;
+    }
+    let bounds = DEVICE_STORY_KEYS
+        .iter()
+        .map(|&(key, name)| {
+            (
+                name,
+                super::campaign_state::StateKey::Story(key).max_value(),
+            )
+        })
+        .chain([("fuel", u32::MAX), ("activity", u32::from(u16::MAX))]);
+    for (name, maximum) in bounds {
+        if !before.get(name).is_some_and(|value| *value <= maximum)
+            || !after.get(name).is_some_and(|value| *value <= maximum)
+        {
+            return false;
+        }
     }
     device_effect_holds(device.id(), &before, &after)
 }
@@ -522,6 +527,49 @@ mod tests {
             tracker.observe(step, obs),
             DeviceProgress::Complete(_)
         ));
+    }
+
+    #[test]
+    fn device_evidence_rejects_unknown_missing_duplicate_and_out_of_range_fields() {
+        let fields = [
+            ("ULTRON_CONDITION", 1, 2),
+            ("ROSY_SPHERE_ON_SHIP", 0, 0),
+            ("AQUA_HELIX_ON_SHIP", 0, 0),
+            ("CLEAR_SPINDLE_ON_SHIP", 1, 0),
+            ("USED_BROADCASTER", 0, 0),
+            ("GLOBAL_FLAGS_AND_DATA", 0, 0),
+            ("CHMMR_EMERGING", 0, 0),
+            ("READY_TO_CONFUSE_URQUAN", 0, 0),
+            ("SHIP_TO_COMPEL", 0, 0),
+            ("PORTAL_COUNTER", 0, 0),
+            ("activity", 4, 4),
+            ("fuel", 1500, 1500),
+        ];
+        let state = fields
+            .iter()
+            .map(|(name, before, after)| format!("before_{name}={before},after_{name}={after}"))
+            .collect::<Vec<_>>()
+            .join(",");
+        assert!(device_evidence_holds(Device::ClearSpindle, &state));
+        for invalid in [
+            state.replace("SHIP_TO_COMPEL", "UNKNOWN_STORY_NAME"),
+            state.replace("before_PORTAL_COUNTER=0,", ""),
+            format!("{state},before_PORTAL_COUNTER=0"),
+            state.replace("after_PORTAL_COUNTER=0", "after_PORTAL_COUNTER=16"),
+            state.replace("after_USED_BROADCASTER=0", "after_USED_BROADCASTER=2"),
+            state.replace("before_activity=4", "before_activity=65536"),
+            state.replace("before_fuel=1500", "before_fuel=4294967296"),
+            state.replace(
+                "after_ULTRON_CONDITION=2",
+                "after_ULTRON_CONDITION=4294967295",
+            ),
+            state.replace("before_fuel=1500", "fuel=1500"),
+        ] {
+            assert!(
+                !device_evidence_holds(Device::ClearSpindle, &invalid),
+                "{invalid}"
+            );
+        }
     }
 
     #[test]

@@ -75,21 +75,24 @@ fn current_star_is_a_catalog_identity_and_foreign_pointers_are_rejected() {
         prefix: 0,
         postfix: 0,
     };
-    let catalog = Box::new([star; CATALOG_LEN]);
     game.world
-        .select_star(Some(&catalog[CATALOG_LEN - 1]), Some(&catalog));
+        .set_catalog(std::borrow::Cow::Owned([star; CATALOG_LEN]));
+    let selected = game
+        .world
+        .identify_star(&game.world.catalog()[CATALOG_LEN - 1]);
+    game.world.current_star = Some(selected);
     assert_eq!(
-        game.world.star_pointer(Some(&catalog)),
-        std::ptr::from_ref(&catalog[CATALOG_LEN - 1]).cast_mut()
+        game.world.star_pointer(),
+        std::ptr::from_ref(&game.world.catalog()[CATALOG_LEN - 1]).cast_mut()
     );
     let selected = game.world.current_star;
     let foreign = star;
     let rejected = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        game.world.select_star(Some(&foreign), Some(&catalog));
+        game.world.select_star(Some(&foreign));
     }));
     assert!(rejected.is_err());
     assert_eq!(game.world.current_star, selected);
-    game.world.select_star(None, None);
+    game.world.select_star(None);
     assert_eq!(game.world.current_star, None);
 }
 

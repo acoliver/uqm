@@ -1,6 +1,8 @@
 //! Legacy callers may borrow disjoint fields without reacquiring their owner.
 #[path = "support/campaign_display.rs"]
 mod campaign_display;
+#[path = "support/native_process.rs"]
+mod native_process;
 #[test]
 #[serial_test::serial]
 fn battle_ditty_stop_uses_the_already_borrowed_kernel() {
@@ -79,6 +81,11 @@ fn empty_npc_phrase_does_not_acquire_an_owner() {
 #[test]
 #[serial_test::serial]
 fn sis_slot_snapshot_releases_world_before_support_ship_drawing() {
+    if !native_process::own_graphics_process(
+        "sis_slot_snapshot_releases_world_before_support_ship_drawing",
+    ) {
+        return;
+    }
     let mut game = Game::new();
     let display = campaign_display::CampaignDisplay::install(&mut game).unwrap();
     let frames = uqm_rust::graphics::drawable_abi::LoadedDrawable::create(8, 64, 140, 100).unwrap();
@@ -147,29 +154,37 @@ fn restored_star_lookup_finishes_before_selecting_the_owned_star() {
     }
     catalog[0].star_pt.x = 1752;
     catalog[0].star_pt.y = 1450;
-    // SAFETY: the serialized fixture owns the temporary catalog and game lifecycle.
+    game.world.set_catalog(std::borrow::Cow::Owned(*catalog));
+    // SAFETY: the serialized fixture owns the catalog and game lifecycle.
     unsafe {
-        let previous = uqm_rust::planets::starmap::star_array;
-        uqm_rust::planets::starmap::star_array = catalog.as_mut_ptr().cast();
         bridge::with_game(&mut game, || {
             let point = POINT { x: 1752, y: 1450 };
             World::current().write(|world| {
-                let selected = uqm_rust::planets::starmap::find_star_in(world, None, point, 0, 0);
-                assert_eq!(selected.cast::<CStarDesc>(), catalog.as_mut_ptr());
-                world.select_star(selected.cast::<CStarDesc>().as_ref(), Some(&catalog));
-                let foreign = *selected;
+                let selected = uqm_rust::planets::starmap::find_star_id(
+                    world,
+                    world.catalog(),
+                    None,
+                    point,
+                    0,
+                    0,
+                )
+                .unwrap();
+                assert_eq!(selected, uqm_rust::engine::StarId(0));
+                world.current_star = Some(selected);
+                let address = world.star_pointer();
+                assert_eq!(address, world.catalog().as_ptr().cast_mut());
+                let foreign = *world.selected_star().unwrap();
                 let rejected = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    uqm_rust::planets::starmap::find_star_in(world, Some(&foreign), point, 0, 0)
+                    world.identify_star(&foreign)
                 }));
                 assert!(rejected.is_err());
-                assert_eq!(world.star_pointer(Some(&catalog)), selected);
+                assert_eq!(world.star_pointer(), address);
             });
         });
-        uqm_rust::planets::starmap::star_array = previous;
     }
     assert_eq!(
-        game.world.star_pointer(Some(&catalog)),
-        catalog.as_mut_ptr()
+        game.world.star_pointer(),
+        game.world.catalog().as_ptr().cast_mut()
     );
 }
 
@@ -356,8 +371,7 @@ fn encounter_teardown_uses_retained_owners_without_reacquisition() {
                         &mut uqm_rust::engine::observe::Io {
                             observer: &mut uqm_rust::engine::observe::Unobserved
                         },
-                        &input,
-                        None
+                        &input
                     ),
                     0
                 );
@@ -482,6 +496,11 @@ fn hyperspace_movement_releases_world_before_fuel_queries() {
 #[test]
 #[serial_test::serial]
 fn campaign_events_schedule_and_dispatch_using_the_existing_world() {
+    if !native_process::own_graphics_process(
+        "campaign_events_schedule_and_dispatch_using_the_existing_world",
+    ) {
+        return;
+    }
     use uqm_rust::engine::StoryKey;
     use uqm_rust::navigation::abi::add_event;
     use uqm_rust::navigation::abi::{
@@ -601,27 +620,11 @@ fn instant_move_selects_a_star_with_the_retained_world() {
         star.star_pt.y = i16::MAX;
     }
     catalog[0].star_pt = POINT { x: 1752, y: 1450 };
-    // SAFETY: the serialized fixture restores the catalog and display dimensions even on failure.
-    unsafe {
-        let previous_catalog = uqm_rust::planets::starmap::star_array;
-        let previous_width = ScreenWidth;
-        let previous_height = ScreenHeight;
-        uqm_rust::planets::starmap::star_array = catalog.as_mut_ptr();
-        ScreenWidth = 320;
-        ScreenHeight = 240;
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            bridge::with_game(&mut game, || {
-                uqm_rust::front_end::uqmdebug::do_instant_move()
-            });
-        }));
-        uqm_rust::planets::starmap::star_array = previous_catalog;
-        ScreenWidth = previous_width;
-        ScreenHeight = previous_height;
-        result.unwrap();
-    }
+    game.world.set_catalog(std::borrow::Cow::Owned(*catalog));
+    uqm_rust::front_end::uqmdebug::move_flagship(&mut game.world, (320, 240));
     assert_eq!(
-        game.world.star_pointer(Some(&catalog)),
-        catalog.as_mut_ptr()
+        game.world.star_pointer(),
+        game.world.catalog().as_ptr().cast_mut()
     );
     assert_eq!(game.world.story_state(StoryKey::USED_BROADCASTER), 0);
     assert_eq!(game.world.activity() & IN_BATTLE as u16, 0);

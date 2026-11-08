@@ -150,7 +150,6 @@ pub(crate) mod engine {
         (23, 0, 0),
     ];
 
-    use crate::engine::world::{CStarDesc, CATALOG_LEN};
     #[cfg(not(test))]
     use crate::planets::starmap::naming::cluster_name;
 
@@ -405,10 +404,7 @@ pub(crate) mod engine {
     }
 
     #[cfg(not(test))]
-    fn prepare_encounter(
-        cx: &mut crate::engine::battle::Cx<'_>,
-        catalog: Option<&[CStarDesc; CATALOG_LEN]>,
-    ) {
+    fn prepare_encounter(cx: &mut crate::engine::battle::Cx<'_>) {
         let context = crate::graphics::context_abi::ContextLease::require(cx.kernel.space_context);
         let font = cx
             .kernel
@@ -433,14 +429,14 @@ pub(crate) mod engine {
             let cluster = if in_hqspace(cx.world) == 0 {
                 let star = cx
                     .world
-                    .selected_star(catalog)
+                    .selected_star()
                     .unwrap_or_else(|| panic!("encounter requires a selected star"));
                 Some(cluster_name(cx.kernel, star, STAR_NUMBER_BASE as usize))
             } else {
                 None
             };
             draw_encounter_location(cx, cluster.as_deref());
-            let message = crate::ui::sis::default_message_text(cx.kernel, cx.world, catalog);
+            let message = crate::ui::sis::default_message_text(cx.kernel, cx.world);
             crate::ui::sis::draw_message(cx.kernel, width, &message, -1, -1, DSME_NONE as u16);
             let planet = crate::graphics::context_abi::ContextFrame::retain(
                 std::ptr::NonNull::new(cx.kernel.planet[0]),
@@ -462,9 +458,8 @@ pub(crate) mod engine {
     pub fn init_encounter(
         cx: &mut crate::engine::battle::Cx<'_>,
         io: &mut crate::engine::observe::Io<'_>,
-        catalog: Option<&[CStarDesc; CATALOG_LEN]>,
     ) -> COUNT {
-        prepare_encounter(cx, catalog);
+        prepare_encounter(cx);
         let mut menu = EncounterSelection::new();
         crate::ui::menu::draw_menu_state(
             cx.kernel,
@@ -484,7 +479,6 @@ pub(crate) mod engine {
         cx: &mut crate::engine::battle::Cx<'_>,
         io: &mut crate::engine::observe::Io<'_>,
         input: &crate::engine::input::InputSession,
-        catalog: Option<&[CStarDesc; CATALOG_LEN]>,
     ) -> COUNT {
         free_gravity_well(cx.kernel);
         if encounter_has_no_salvage(cx.world) {
@@ -520,7 +514,7 @@ pub(crate) mod engine {
                 if salvage.victory < 0 {
                     salvage.victory = 0;
                 } else {
-                    salvage.panel(cx, catalog, draw_armada);
+                    salvage.panel(cx, draw_armada);
                 }
             }
             cx.kernel.ships(NUM_SIDES as usize - 1 - side).reinit();

@@ -128,8 +128,7 @@ pub unsafe fn init_game_structures(cx: &mut crate::engine::battle::Cx<'_>) -> BO
             let dimensions = cx.screen_dimensions();
             init_siscontexts(cx.kernel, dimensions);
             load_sc2_data(&mut cx);
-            let catalog = crate::planets::starmap::current_catalog()
-                .unwrap_or_else(|| panic!("planet state initialization requires the star catalog"));
+            let catalog = cx.world.catalog();
             crate::state::ffi::rust_init_planet_info(
                 cx.world,
                 crate::planets::starmap::catalog_star_count(catalog) as i32,

@@ -14,7 +14,6 @@ use crate::math::arctan;
 use crate::planet_side::orbit_music::load_lander_data;
 use crate::planets::devices::devices_menu;
 use crate::planets::ffi::do_planetary_analysis_c;
-use crate::planets::starmap::FindStar;
 use crate::sound::heart_ffi::PLRPlaying;
 use crate::strings::string_table::{GetStringAddress, SetAbsStringTableIndex};
 use std::ffi::c_char;
@@ -212,9 +211,7 @@ fn temperature_color(temperature: i16) -> c::Color {
 pub(super) unsafe fn load_solar_sys(cx: &mut Cx<'_>, io: &mut Io<'_>) -> *mut PlanetDesc {
     let state = system();
     let mut orbital = ptr::null_mut();
-    let star = *cx
-        .world
-        .star_pointer(crate::planets::starmap::current_catalog());
+    let star = *cx.world.star_pointer();
     (*SysGenRNG).reseed(GetRandomSeedForStar(ptr::from_ref(&star).cast()));
     let sun_type = (star.star_type & 0x18) >> 3;
     SUN_FRAME = SetAbsFrameIndex(SUN_FRAME.cast(), u16::from(sun_type)).cast();
@@ -602,25 +599,29 @@ pub unsafe fn run_explore_solar_sys(cx: &mut Cx<'_>, io: &mut Io<'_>) {
 }
 
 unsafe fn prepare_explore_solar_sys(state: *mut c::SOLARSYS_STATE) {
-    if (**World::current())
-        .star_pointer(crate::planets::starmap::current_catalog())
-        .is_null()
-    {
+    if (**World::current()).star_pointer().is_null() {
         let (log_units_x, log_units_y) = hyperspace_unit_factors();
-        let mut universe = c::POINT {
+        let universe = c::POINT {
             x: ((glob().read(|owner| owner.flagship.log_x) * 6250 + (log_units_x >> 1))
                 / log_units_x) as _,
             y: (9999
                 - (glob().read(|owner| owner.flagship.log_y) * 625 + (log_units_y >> 1))
                     / log_units_y) as _,
         };
-        let star = FindStar(ptr::null_mut(), ptr::addr_of_mut!(universe).cast(), 1, 1)
-            .cast::<crate::engine::world::CStarDesc>();
-        (**World::current()).select_star(star.as_ref(), crate::planets::starmap::current_catalog());
-        if (**World::current())
-            .star_pointer(crate::planets::starmap::current_catalog())
-            .is_null()
-        {
+        World::current().write(|world| {
+            world.current_star = crate::planets::starmap::find_star_id(
+                world,
+                world.catalog(),
+                None,
+                crate::graphics::native_abi::POINT {
+                    x: universe.x,
+                    y: universe.y,
+                },
+                1,
+                1,
+            );
+        });
+        if (**World::current()).star_pointer().is_null() {
             crate::log_abi::log_message(1, "ExploreSolarSys(): do not know where you are!");
             #[cfg(feature = "debug-process")]
             libc::abort();
@@ -630,7 +631,7 @@ unsafe fn prepare_explore_solar_sys(state: *mut c::SOLARSYS_STATE) {
     }
     let (log_units_x, log_units_y) = hyperspace_unit_factors();
     World::current().write(|world| {
-        let star = &*world.star_pointer(crate::planets::starmap::current_catalog());
+        let star = &*world.star_pointer();
         world.data.flagship.log_x = (i32::from(star.star_pt.x) * log_units_x + (6250 >> 1)) / 6250;
         world.data.flagship.log_y =
             ((9999 - i32::from(star.star_pt.y)) * log_units_y + (625 >> 1)) / 625;
@@ -638,8 +639,7 @@ unsafe fn prepare_explore_solar_sys(state: *mut c::SOLARSYS_STATE) {
 
     P_SOLAR_SYS_STATE = state;
     ptr::write_bytes(P_SOLAR_SYS_STATE, 0, 1);
-    let index = World::current()
-        .read(|world| (*world.star_pointer(crate::planets::starmap::current_catalog())).index);
+    let index = World::current().read(|world| (*world.star_pointer()).index);
     (*P_SOLAR_SYS_STATE).generator_index = index;
 }
 
@@ -652,9 +652,7 @@ pub(super) unsafe fn game_string(index: c::COUNT) -> *mut c_char {
 
 #[no_mangle]
 pub unsafe extern "C" fn GetNamedPlanetaryBody() -> *mut c::UNICODE {
-    if (**World::current())
-        .star_pointer(crate::planets::starmap::current_catalog())
-        .is_null()
+    if (**World::current()).star_pointer().is_null()
         || !playerInSolarSystem()
         || !playerInInnerSystem()
     {
@@ -663,7 +661,7 @@ pub unsafe extern "C" fn GetNamedPlanetaryBody() -> *mut c::UNICODE {
     let state = system();
     let orbital = (*state).pOrbitalDesc;
     assert!(!orbital.is_null());
-    match (*(**World::current()).star_pointer(crate::planets::starmap::current_catalog())).index {
+    match (*(**World::current()).star_pointer()).index {
         SOL_DEFINED => {
             let planet = planetIndex(state, orbital);
             if worldIsPlanet(state, orbital) {
