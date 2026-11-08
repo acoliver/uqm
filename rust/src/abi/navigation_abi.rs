@@ -2138,7 +2138,6 @@ pub struct LIFEFORM_DESC {
     pub ValueAndHitPoints: BYTE,
 }
 
-pub use crate::planet_side::creatures::rust_creature_bio_value;
 pub const SMALL_ROCKY_WORLD: _bindgen_ty_14 = 0;
 pub const LARGE_ROCKY_WORLD: _bindgen_ty_14 = 1;
 pub const GAS_GIANT: _bindgen_ty_14 = 2;
