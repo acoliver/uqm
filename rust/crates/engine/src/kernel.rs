@@ -1,4 +1,5 @@
 //! Persistent gameplay resources and pools owned by Game.
+pub mod lander_resources;
 pub mod planet_animation;
 use super::battle::{
     kernel::{Channels, SoundQueue, StarPlane},
@@ -93,6 +94,7 @@ pub struct Kernel {
     pub naming_callback: Option<fn(&Kernel, &crate::World, i32)>,
     pub status_message_mode: u32,
     pub star_map_flash: StarMapFlash,
+    pub lander_resources: Option<lander_resources::LanderResources>,
     pub planet_animation: std::rc::Rc<planet_animation::PlanetAnimation>,
     pub instant_move: bool,
     pub sis_highlight: std::rc::Rc<SisHighlight>,
@@ -282,6 +284,7 @@ impl Kernel {
             naming_callback: None,
             status_message_mode: 1,
             star_map_flash: StarMapFlash::default(),
+            lander_resources: None,
             planet_animation: std::rc::Rc::default(),
             instant_move: false,
             sis_highlight: std::rc::Rc::new(SisHighlight::default()),

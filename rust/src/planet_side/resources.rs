@@ -1,24 +1,10 @@
-//! RAII ownership for PlanetSide resources loaded through the Rust resource system.
-
-use std::collections::HashMap;
-use std::ffi::{c_void, CString};
+//! Retained asset snapshot for a synchronous lander trip or status preview.
 
 use super::assets::LanderSoundTable;
-use super::runtime::AdapterError;
+use crate::engine::{
+    graphics::context_abi::ContextFrame, kernel::lander_resources::LanderResources,
+};
 
-const GRAPHIC_KEYS: [&str; 8] = [
-    "graphics.lander",
-    "graphics.quake",
-    "graphics.lightning",
-    "graphics.lavaspot",
-    "graphics.landershield",
-    "graphics.landerlaunch",
-    "graphics.landerreturn",
-    "graphics.orbview",
-];
-const SOUND_KEY: &str = "sounds.lander";
-
-/// Typed index into the fixed PlanetSide graphic set.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(usize)]
 pub enum LanderGraphic {
@@ -32,271 +18,232 @@ pub enum LanderGraphic {
     OrbitView = 7,
 }
 
-/// Resource-system boundary used for deterministic load/unload testing.
-pub trait ResourcePort {
-    fn load(&mut self, key: &'static str) -> Result<*mut c_void, AdapterError>;
-    fn free(&mut self, key: &'static str);
+pub struct PlanetSideAssets {
+    graphics: [ContextFrame; 8],
+    sounds: LanderSoundTable,
 }
 
-/// Read-only access shared by owned test assets and production's globally
-/// loaded lander asset set.
-pub trait PlanetSideAssetAccess {
-    fn graphic(&self, graphic: LanderGraphic) -> *mut c_void;
-    fn sounds(&self) -> LanderSoundTable;
-}
-
-/// Scoped snapshot of the single production asset owner established by
-/// `load_lander_data` and released by `free_lander_data`.
-pub struct BorrowedPlanetSideAssets {
-    pub(crate) graphics: [*mut c_void; 8],
-    pub(crate) sounds: LanderSoundTable,
-}
-
-impl PlanetSideAssetAccess for BorrowedPlanetSideAssets {
-    fn graphic(&self, graphic: LanderGraphic) -> *mut c_void {
-        self.graphics[graphic as usize]
+impl PlanetSideAssets {
+    pub fn retain(owner: &LanderResources) -> Self {
+        Self {
+            graphics: std::array::from_fn(|index| owner.graphic(index)),
+            sounds: LanderSoundTable::from_bank(owner.sounds()),
+        }
     }
 
-    fn sounds(&self) -> LanderSoundTable {
+    pub fn graphic(&self, graphic: LanderGraphic) -> ContextFrame {
+        self.graphics[graphic as usize].clone()
+    }
+
+    pub fn sounds(&self) -> LanderSoundTable {
         self.sounds.clone()
     }
 }
 
 #[cfg(test)]
-impl BorrowedPlanetSideAssets {
-    pub(crate) fn for_test(graphics: [*mut c_void; 8], sounds: *mut c_void) -> Self {
-        Self {
-            graphics,
-            sounds: LanderSoundTable::from_raw(sounds),
-        }
-    }
-}
-/// Complete loaded PlanetSide asset set. Drop releases every successful load.
-pub struct PlanetSideAssets<R: ResourcePort> {
-    port: R,
-    graphics: [*mut c_void; 8],
-    sounds: *mut c_void,
-    loaded_keys: Vec<&'static str>,
-}
-
-impl<R: ResourcePort> PlanetSideAssets<R> {
-    pub fn load(mut port: R) -> Result<Self, AdapterError> {
-        let mut graphics = [std::ptr::null_mut(); 8];
-        let mut loaded_keys = Vec::with_capacity(9);
-        for (index, key) in GRAPHIC_KEYS.into_iter().enumerate() {
-            match port.load(key) {
-                Ok(handle) if !handle.is_null() => {
-                    graphics[index] = handle;
-                    loaded_keys.push(key);
-                }
-                Ok(_) | Err(_) => {
-                    for loaded in loaded_keys.iter().rev() {
-                        port.free(loaded);
-                    }
-                    return Err(AdapterError::new("load_planet_side_graphic"));
-                }
-            }
-        }
-        let sounds = match port.load(SOUND_KEY) {
-            Ok(handle) if !handle.is_null() => {
-                loaded_keys.push(SOUND_KEY);
-                handle
-            }
-            Ok(_) | Err(_) => {
-                for loaded in loaded_keys.iter().rev() {
-                    port.free(loaded);
-                }
-                return Err(AdapterError::new("load_planet_side_sound"));
-            }
-        };
-        Ok(Self {
-            port,
-            graphics,
-            sounds,
-            loaded_keys,
-        })
-    }
-
-    #[must_use]
-    pub fn graphic(&self, graphic: LanderGraphic) -> *mut c_void {
-        self.graphics[graphic as usize]
-    }
-
-    #[must_use]
-    pub const fn sounds(&self) -> LanderSoundTable {
-        LanderSoundTable::from_raw(self.sounds)
-    }
-}
-
-impl<R: ResourcePort> PlanetSideAssetAccess for PlanetSideAssets<R> {
-    fn graphic(&self, graphic: LanderGraphic) -> *mut c_void {
-        self.graphic(graphic)
-    }
-
-    fn sounds(&self) -> LanderSoundTable {
-        self.sounds()
-    }
-}
-
-impl<R: ResourcePort> Drop for PlanetSideAssets<R> {
-    fn drop(&mut self) {
-        for key in self.loaded_keys.iter().rev() {
-            self.port.free(key);
-        }
-    }
-}
-
-/// Production resource adapter. Loaded resources are detached, captured into
-/// the handle type required by drawing/audio, and released symmetrically.
-#[derive(Default)]
-pub struct CffiResourcePort {
-    handles: HashMap<&'static str, *mut c_void>,
-}
-
-#[cfg(not(test))]
-use crate::game_init::macro_abi::CaptureSound;
-#[cfg(not(test))]
-use crate::game_init::macro_abi::ReleaseSound;
-#[cfg(not(test))]
-use crate::graphics::drawable_abi::DestroyDrawable;
-#[cfg(not(test))]
-use crate::graphics::pixmap_abi::CaptureDrawable;
-#[cfg(not(test))]
-use crate::graphics::pixmap_abi::ReleaseDrawable;
-
-impl ResourcePort for CffiResourcePort {
-    fn load(&mut self, key: &'static str) -> Result<*mut c_void, AdapterError> {
-        let c_key = CString::new(key).map_err(|_| AdapterError::new("resource_key"))?;
-        let raw = unsafe { crate::resource::ffi_bridge::res_GetResource(c_key.as_ptr()) };
-        if raw.is_null() {
-            return Err(AdapterError::new("load_resource"));
-        }
-        let detached = unsafe { crate::resource::ffi_bridge::res_DetachResource(c_key.as_ptr()) };
-        if detached.is_null() {
-            unsafe { crate::resource::ffi_bridge::res_FreeResource(c_key.as_ptr()) };
-            return Err(AdapterError::new("detach_resource"));
-        }
-
-        #[cfg(not(test))]
-        let captured = unsafe {
-            if key == SOUND_KEY {
-                CaptureSound((detached).cast()).cast::<c_void>()
-            } else {
-                CaptureDrawable((detached).cast()).cast::<c_void>()
-            }
-        };
-        #[cfg(test)]
-        let captured = detached;
-
-        if captured.is_null() {
-            #[cfg(not(test))]
-            unsafe {
-                if key == SOUND_KEY {
-                    crate::sound::heart_ffi::DestroySound((ReleaseSound((detached).cast())).cast());
-                } else {
-                    DestroyDrawable(ReleaseDrawable((detached).cast()));
-                }
-            }
-            return Err(AdapterError::new("capture_resource"));
-        }
-        self.handles.insert(key, captured);
-        Ok(captured)
-    }
-
-    fn free(&mut self, key: &'static str) {
-        let Some(handle) = self.handles.remove(key) else {
-            return;
-        };
-        #[cfg(not(test))]
-        unsafe {
-            if key == SOUND_KEY {
-                crate::sound::heart_ffi::DestroySound((ReleaseSound((handle).cast())).cast());
-            } else {
-                DestroyDrawable(ReleaseDrawable((handle).cast()));
-            }
-        }
-        #[cfg(test)]
-        let _ = handle;
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::collections::VecDeque;
-    use std::sync::{Arc, Mutex};
-
+pub(crate) mod tests {
     use super::*;
+    use crate::{
+        engine::Game,
+        graphics::{
+            context_abi::ContextLease,
+            native_abi::{Color, EXTENT, POINT, RECT},
+        },
+        io::uio_bridge as uio,
+    };
+    use std::{ffi::CString, ptr};
 
-    struct Port {
-        results: VecDeque<Result<usize, AdapterError>>,
-        freed: Arc<Mutex<Vec<&'static str>>>,
-    }
-
-    impl ResourcePort for Port {
-        fn load(&mut self, _key: &'static str) -> Result<*mut c_void, AdapterError> {
-            self.results
-                .pop_front()
-                .unwrap_or(Ok(1))
-                .map(|value| value as *mut c_void)
+    pub(crate) fn with_packaged_resources(test: impl FnOnce(&mut Game)) {
+        let mut game = Game::new();
+        let display = crate::campaign_display_test::CampaignDisplay::install(&mut game).unwrap();
+        let content_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../sc2/content")
+            .canonicalize()
+            .unwrap();
+        let path = CString::new(content_root.to_str().unwrap()).unwrap();
+        // SAFETY: this serialized fixture owns the temporary mount and restores its predecessor.
+        unsafe {
+            uio::uio_init();
+            let repo = uio::uio_openRepository(0);
+            assert!(!uio::uio_mountDir(
+                repo,
+                c"/".as_ptr(),
+                1,
+                ptr::null_mut(),
+                ptr::null(),
+                path.as_ptr(),
+                ptr::null_mut(),
+                6,
+                ptr::null_mut()
+            )
+            .is_null());
+            let content = uio::uio_openDir(repo, c"/".as_ptr(), 0);
+            let previous = crate::mainloop::dir_prep::contentDir;
+            crate::mainloop::dir_prep::contentDir = content.cast();
+            crate::resource::ffi_bridge::LoadResourceIndex(
+                content.cast(),
+                c"uqm.rmp".as_ptr(),
+                ptr::null(),
+            );
+            let palette =
+                crate::strings::sresins::load_binary_entry(c"colortable.main", 0).unwrap();
+            crate::graphics::cmap_abi::SetColorMap(palette.as_ptr());
+            test(&mut game);
+            crate::graphics::dcqueue_abi::TFB_FlushGraphics();
+            crate::mainloop::dir_prep::contentDir = previous;
+            uio::uio_closeDir(content);
+            uio::uio_closeRepository(repo);
+            uio::uio_unInit();
         }
-
-        fn free(&mut self, key: &'static str) {
-            self.freed.lock().unwrap().push(key);
-        }
+        display.finish(game);
     }
 
     #[test]
-    fn complete_asset_set_releases_in_reverse_order() {
-        let freed = Arc::new(Mutex::new(Vec::new()));
-        let assets = PlanetSideAssets::load(Port {
-            results: VecDeque::new(),
-            freed: Arc::clone(&freed),
-        })
-        .unwrap();
-        assert!(!assets.graphic(LanderGraphic::Lander).is_null());
-        assert!(assets.sounds().is_loaded());
-        drop(assets);
-        let mut expected = GRAPHIC_KEYS.to_vec();
-        expected.push(SOUND_KEY);
-        expected.reverse();
-        assert_eq!(*freed.lock().unwrap(), expected);
-    }
-
-    #[test]
-    fn partial_graphic_failure_rolls_back_successful_loads() {
-        let freed = Arc::new(Mutex::new(Vec::new()));
-        let result = PlanetSideAssets::load(Port {
-            results: VecDeque::from([Ok(1), Ok(2), Err(AdapterError::new("injected"))]),
-            freed: Arc::clone(&freed),
+    #[serial_test::serial]
+    fn packaged_load_failures_release_each_acquired_graphic_in_reverse_order() {
+        use crate::collections::observation::{self, Event};
+        with_packaged_resources(|_| {
+            let keys = [
+                "graphics.lander",
+                "graphics.quake",
+                "graphics.lightning",
+                "graphics.lavaspot",
+                "graphics.landershield",
+                "graphics.landerlaunch",
+                "graphics.landerreturn",
+                "graphics.orbview",
+                "sounds.lander",
+            ];
+            observation::enable();
+            for (successful, key) in keys.into_iter().enumerate() {
+                // SAFETY: the fixture's resource mount stays live for every reload and rollback.
+                unsafe {
+                    crate::resource::ffi_bridge::LoadResourceIndex(
+                        crate::mainloop::dir_prep::contentDir.cast(),
+                        c"uqm.rmp".as_ptr(),
+                        ptr::null(),
+                    );
+                    crate::graphics::dcqueue_abi::TFB_FlushGraphics();
+                    observation::drain();
+                    crate::resource::ffi_bridge::res_Remove(CString::new(key).unwrap().as_ptr());
+                }
+                assert!(matches!(LanderResources::load(), Err(failed) if failed == key));
+                // SAFETY: the fixture owns the graphics queue through deferred release.
+                unsafe { crate::graphics::dcqueue_abi::TFB_FlushGraphics() };
+                let events = observation::drain();
+                let acquired: Vec<_> = events
+                    .iter()
+                    .filter_map(|event| match event {
+                        Event::Drawable(id) => Some(*id),
+                        _ => None,
+                    })
+                    .collect();
+                let released: Vec<_> = events
+                    .iter()
+                    .filter_map(|event| match event {
+                        Event::DrawableFree(id) => Some(*id),
+                        _ => None,
+                    })
+                    .collect();
+                assert_eq!(acquired.len(), successful, "failed key {key}");
+                assert_eq!(
+                    released,
+                    acquired.into_iter().rev().collect::<Vec<_>>(),
+                    "failed key {key}"
+                );
+            }
         });
-        assert!(matches!(
-            result,
-            Err(AdapterError {
-                operation: "load_planet_side_graphic",
-                batch_depth_corrections: 0
-            })
-        ));
-        assert_eq!(*freed.lock().unwrap(), [GRAPHIC_KEYS[1], GRAPHIC_KEYS[0]]);
     }
 
     #[test]
-    fn sound_failure_releases_all_graphics() {
-        let freed = Arc::new(Mutex::new(Vec::new()));
-        let mut results = (0..8).map(|_| Ok(1)).collect::<VecDeque<_>>();
-        results.push_back(Ok(0));
-        let result = PlanetSideAssets::load(Port {
-            results,
-            freed: Arc::clone(&freed),
+    #[serial_test::serial]
+    fn packaged_assets_retain_frames_sounds_and_music_after_independent_owner_release() {
+        with_packaged_resources(|game| {
+            let first = LanderResources::load().unwrap();
+            let second = LanderResources::load().unwrap();
+            let assets = PlanetSideAssets::retain(&first);
+            let first_sound = first.sounds().clip(0);
+            let second_sound = second.sounds().clip(0);
+            assert_ne!(first_sound.identity(), second_sound.identity());
+            let music = first.music(0).unwrap();
+            assert!(std::sync::Arc::ptr_eq(&music.0, &first.music(5).unwrap().0));
+            assert!(!std::sync::Arc::ptr_eq(
+                &music.0,
+                &second.music(0).unwrap().0
+            ));
+            let frame = assets.graphic(LanderGraphic::Lander);
+            assert!(frame.frame_count() >= 60);
+            let expected = frame.alpha_occupancy().unwrap();
+            drop(first);
+            assert_eq!(frame.alpha_occupancy().unwrap(), expected);
+            let mut visuals = crate::planet_side::visual_adapter::CffiSurfaceVisuals::new(
+                frame.clone(),
+                None,
+                std::array::from_fn(|_| None),
+            )
+            .unwrap();
+            {
+                let mut world = crate::planet_side::visual_adapter::CffiWorldVisuals::new(
+                    &assets,
+                    &mut visuals,
+                );
+                use crate::planet_side::assembly::WorldVisualPort;
+                for facing in 0..16 {
+                    let visual = world.shot_visual(facing).unwrap();
+                    assert_eq!(visual.frame.index, 16 + u16::from(facing));
+                    assert_eq!(
+                        visual.mask,
+                        crate::planet_side::mask_adapter::extract_frame_mask(
+                            &frame.wrapped_frame(16 + u16::from(facing))
+                        )
+                        .unwrap()
+                    );
+                }
+            }
+            let radar = ContextLease::require(game.kernel.status_context);
+            radar.set_frame(crate::graphics::context_abi::ContextFrame::retain(
+                std::ptr::NonNull::new(game.kernel.screen),
+            ));
+            radar.set_clip(RECT {
+                corner: POINT { x: 0, y: 0 },
+                extent: EXTENT {
+                    width: 56,
+                    height: 53,
+                },
+            });
+            let other = crate::graphics::context_abi::LoadedContext::create(c"preserved-selection");
+            other.lease().select();
+            // SAFETY: this fixture owns the selected context until the assertion below.
+            let selected = unsafe { crate::graphics::context_abi::_pCurContext };
+            crate::planet_side::init_lander::draw_lander(
+                &radar,
+                &assets,
+                crate::planet_side::init_lander::LanderStatus::campaign(&game.world),
+            );
+            // SAFETY: this fixture owns both registered contexts and observes selection only.
+            assert_eq!(
+                unsafe { crate::graphics::context_abi::_pCurContext },
+                selected
+            );
+            radar.flush();
+            let mut pixels = vec![Color::default(); 320 * 240];
+            // SAFETY: the registered target and complete destination buffer remain live.
+            assert_ne!(
+                unsafe {
+                    crate::graphics::drawable_abi::ReadFramePixelColors(
+                        game.kernel.screen,
+                        pixels.as_mut_ptr(),
+                        320,
+                        240,
+                    )
+                },
+                0
+            );
+            assert_eq!(
+                (pixels[0].r, pixels[0].g, pixels[0].b, pixels[0].a),
+                (0, 0, 0, 255)
+            );
+            drop((visuals, other, second));
         });
-        assert!(matches!(
-            result,
-            Err(AdapterError {
-                operation: "load_planet_side_sound",
-                batch_depth_corrections: 0
-            })
-        ));
-        let mut expected = GRAPHIC_KEYS.to_vec();
-        expected.reverse();
-        assert_eq!(*freed.lock().unwrap(), expected);
     }
 }

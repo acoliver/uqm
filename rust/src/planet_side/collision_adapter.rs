@@ -714,7 +714,7 @@ mod tests {
         fn shot_visual(&mut self, _facing: u8) -> Result<EntityVisual, AdapterError> {
             Ok(EntityVisual {
                 frame: SurfaceFrame {
-                    base: std::ptr::NonNull::<u8>::dangling().as_ptr().cast(),
+                    base: crate::graphics::context_abi::ContextFrame::retain(None),
                     index: 0,
                 },
                 mask: solid(),
@@ -727,8 +727,8 @@ mod tests {
         ) -> Result<EntityVisual, AdapterError> {
             Ok(EntityVisual {
                 frame: SurfaceFrame {
-                    base: 2_usize as *mut _,
-                    index: animation_frame,
+                    base: crate::graphics::context_abi::ContextFrame::retain(None),
+                    index: 0x100 + animation_frame,
                 },
                 mask: solid(),
             })
@@ -737,7 +737,7 @@ mod tests {
         fn hazard_visual(&mut self, _kind: HazardKind) -> Result<EntityVisual, AdapterError> {
             Ok(EntityVisual {
                 frame: SurfaceFrame {
-                    base: std::ptr::NonNull::<u8>::dangling().as_ptr().cast(),
+                    base: crate::graphics::context_abi::ContextFrame::retain(None),
                     index: 2,
                 },
                 mask: solid(),
@@ -751,7 +751,7 @@ mod tests {
         ) -> Result<EntityVisual, AdapterError> {
             Ok(EntityVisual {
                 frame: SurfaceFrame {
-                    base: std::ptr::NonNull::<u8>::dangling().as_ptr().cast(),
+                    base: crate::graphics::context_abi::ContextFrame::retain(None),
                     index: animation_frame,
                 },
                 mask: solid(),
@@ -799,8 +799,8 @@ mod tests {
                 .apply_world_step(cx, &result, &mut RecordingAudio)
                 .unwrap();
             assert_eq!(
-                surface.borrow().frames.get(id).unwrap().base,
-                2_usize as *mut _,
+                surface.borrow().frames.get(id).unwrap().index / 0x100,
+                1,
                 "living animation must never overwrite the canister sprite"
             );
         }

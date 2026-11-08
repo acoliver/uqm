@@ -162,6 +162,23 @@ pub fn sleep_for(env: &mut impl PacingEnv, duration: u32) {
     env.sleep_ms(ticks_to_ms(duration));
 }
 
+/// Game-thread pacing admitted by a retained graphics context.
+pub struct GameThreadPacer {
+    _context: crate::graphics::context_abi::ContextLease,
+}
+impl GameThreadPacer {
+    pub fn new(context: crate::graphics::context_abi::ContextLease) -> Self {
+        Self { _context: context }
+    }
+    pub fn now(&self) -> u32 {
+        crate::time::counter_abi::GetTimeCounter()
+    }
+    pub fn sleep_until(&mut self, deadline: u32) {
+        // SAFETY: the retained context admits this owner to the graphics/pump thread.
+        unsafe { linked::sleep_thread_until(deadline) };
+    }
+}
+
 pub mod linked {
     use super::{sleep_for, sleep_until, PacingEnv, PacingStats};
     use crate::callback::ffi::{Async_process, Async_timeBeforeNextMs};

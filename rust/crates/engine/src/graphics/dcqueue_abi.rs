@@ -506,6 +506,15 @@ pub unsafe extern "C" fn TFB_PurgeDanglingGraphics() {
     }
     unlock_dcq();
 }
+/// Present a complete frame while its game-thread graphics lease remains live.
+pub fn present_retained(_context: &super::context_abi::ContextLease) {
+    // SAFETY: a retained graphics lease can only be held on the admitted graphics thread.
+    unsafe {
+        TFB_FlushGraphicsEx(1);
+        super::sdl::lifecycle_abi::TFB_SwapBuffers(1);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

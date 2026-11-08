@@ -50,7 +50,7 @@ use crate::navigation::groups::live::put_group_info;
 
 use crate::planets::solarsys::lifecycle::SaveSolarSysLocation;
 
-use crate::planet_side::init_lander::InitLander;
+use crate::planet_side::init_lander::{draw_lander, LanderStatus};
 
 use crate::ui::util::live::wait_for_any_button_until;
 
@@ -268,6 +268,8 @@ unsafe fn dispatch_lander(
         crate::planet_side::graphics_adapter::SurfaceDrawing {
             planet: planet.clone(),
             scan,
+            refresh: refresh_lander_scan,
+            radar: ContextLease::require(cx.kernel.radar_context),
         },
         runtime.input(),
         cx.world.activity_control(),
@@ -414,7 +416,15 @@ unsafe fn pick_side(
     let input = runtime.input();
     let mut state = PickState { success: false };
     let animation = cx.kernel.planet_animation.clone();
-    cx.with_legacy(|| prepare_pick_side(scan, input));
+    let assets = crate::planet_side::resources::PlanetSideAssets::retain(
+        cx.kernel
+            .lander_resources
+            .as_ref()
+            .unwrap_or_else(|| panic!("lander resources not loaded")),
+    );
+    let status = LanderStatus::campaign(cx.world);
+    let radar = ContextLease::require(cx.kernel.radar_context);
+    cx.with_legacy(|| prepare_pick_side(scan, input, &radar, &assets, status));
     io.observer.checkpoint(&CheckpointView::PlanetMenu(4));
     cx.run_input(io, true, |cx, _| {
         cx.with_legacy(|| pick_input(scan, input, &animation, &mut state) != 0)
@@ -431,7 +441,13 @@ unsafe fn pick_side(
     result
 }
 
-unsafe fn prepare_pick_side(scan: &ScanState, input: &InputSession) {
+unsafe fn prepare_pick_side(
+    scan: &ScanState,
+    input: &InputSession,
+    radar: &ContextLease,
+    assets: &crate::planet_side::resources::PlanetSideAssets,
+    status: LanderStatus,
+) {
     let fuel = fuel();
 
     use crate::ui::sis::ClearSISRect;
@@ -451,7 +467,7 @@ unsafe fn prepare_pick_side(scan: &ScanState, input: &InputSession) {
     let location = scan.cursor.borrow().location;
     scan.cursor.borrow_mut().move_to(location);
     save_location_image(scan);
-    InitLander(0);
+    draw_lander(radar, assets, status);
     base::SetMenuSounds(input, 0, 16);
 }
 
@@ -715,4 +731,23 @@ unsafe fn finish_scan_system(scan: &ScanState, planet: &ContextLease) {
     erase_coarse(planet, scan);
     CffiPlatform.unbatch();
     scan.cursor.borrow_mut().erase = None;
+}
+
+fn refresh_lander_scan(
+    scan: &ScanState,
+    cx: &mut Cx<'_>,
+    surface: &crate::planet_side::assembly::SurfaceAssembly,
+    point: crate::planet_side::model::SurfacePoint,
+) {
+    crate::planet_side::orbit_scan::sync_positions(cx, surface);
+    // SAFETY: the caller retains the orbit, scan and campaign resources through this synchronous draw.
+    cx.with_legacy(|| unsafe {
+        redraw_surface_scan(
+            scan,
+            Some(CPoint {
+                x: point.x as i16,
+                y: point.y as i16,
+            }),
+        )
+    });
 }

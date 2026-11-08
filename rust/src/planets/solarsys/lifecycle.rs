@@ -11,7 +11,6 @@ use crate::comm::locdata::CPoint;
 use crate::graphics::pixmap_abi::{GetFrameIndex, ReleaseDrawable, SetAbsFrameIndex};
 use crate::mainloop::restart_menu::c_extern::PlayMusic;
 use crate::math::arctan;
-use crate::planet_side::orbit_music::load_lander_data;
 use crate::planets::devices::devices_menu;
 use crate::planets::ffi::do_planetary_analysis_c;
 use crate::sound::heart_ffi::PLRPlaying;
@@ -438,10 +437,14 @@ unsafe fn prepare_solar_sys(
     io: &mut Io<'_>,
     next_activity: u16,
 ) -> SolarSystemStart {
+    cx.with_legacy(|| super::resources::LoadIPData());
+    if cx.kernel.lander_resources.is_none() {
+        cx.kernel.lander_resources = Some(
+            crate::engine::kernel::lander_resources::LanderResources::load()
+                .unwrap_or_else(|key| panic!("missing lander resource {key}")),
+        );
+    }
     let (state, reentry) = cx.with_legacy(|| {
-        super::resources::LoadIPData();
-        load_lander_data();
-
         let state = system();
         let reentry = glob().read(|owner| owner.game.ship_facing) != 0;
         if !reentry {

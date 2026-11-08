@@ -45,8 +45,6 @@ pub struct PlanetSideReply {
     pub value1: i64,
 }
 
-use crate::graphics::pixmap_abi::GetFrameCount;
-
 use super::adapters::{CffiPlanetSideClock, CffiPlanetSideInput, CffiShipStatus, ObservedClock};
 use super::assembly::{assemble_surface, share_surface};
 use super::assets::CffiPlanetSideAudio;
@@ -57,7 +55,7 @@ use super::generation_adapter::CffiSurfaceGenerator;
 use super::graphics_adapter::{CffiPlanetSideGraphics, SurfaceDrawing};
 use super::mask_adapter::extract_lander_masks;
 use super::model::SurfacePoint;
-use super::resources::{LanderGraphic, PlanetSideAssetAccess};
+use super::resources::{LanderGraphic, PlanetSideAssets};
 use super::runtime::{PlanetSideClock, RuntimeAdapters, Tick};
 use super::session_factory::create_production_session;
 use super::telemetry::TripTelemetry;
@@ -172,18 +170,14 @@ fn run_retained_session(
     super::runtime::AdapterError,
 > {
     let (telemetry, fixture) = admission;
-    let assets = game
-        .borrow_mut()
-        .with_legacy(super::init_lander::borrowed_assets)?;
+    let assets = PlanetSideAssets::retain(game.borrow().kernel.lander_resources.as_ref().ok_or(
+        super::runtime::AdapterError::new("lander_assets_not_loaded"),
+    )?);
     let reports = drawing.scan.report_context();
     let mut generator = CffiSurfaceGenerator::for_planet_side(game, observe, context, reports)?;
-    let mut visuals = CffiSurfaceVisuals::new(
-        context.misc_data_frame,
-        context.energy_frame,
-        context.life_frames,
-    )?;
+    let mut visuals = retained_visuals(context)?;
     let persistence = ScanPersistence::from_masks(context.retrieval_masks);
-    let lander_masks = unsafe { extract_lander_masks(assets.graphic(LanderGraphic::Lander))? };
+    let lander_masks = extract_lander_masks(&assets.graphic(LanderGraphic::Lander))?;
     let assembly = assemble_surface(&mut generator, persistence, &mut visuals, lander_masks)?;
     let surface = share_surface(assembly);
     let mut ship = CffiShipStatus { game };
@@ -209,6 +203,9 @@ fn run_retained_session(
     let _menu_silence = super::menu_sounds::MenuSoundSilence::acquire(controls);
     telemetry.borrow_mut().begin(&session);
     publish(&telemetry.borrow());
+    let clock = CffiPlanetSideClock(crate::threading::pacing::GameThreadPacer::new(
+        drawing.planet.clone(),
+    ));
     let adapters = RuntimeAdapters {
         input: CffiPlanetSideInput::new(controls.controls().clone(), activity),
         collision,
@@ -221,7 +218,7 @@ fn run_retained_session(
         },
         audio: CffiPlanetSideAudio::new(assets.sounds(), channels, telemetry.clone()),
         clock: ObservedClock {
-            clock: CffiPlanetSideClock,
+            clock,
             telemetry: telemetry.clone(),
             io: observe,
         },
@@ -251,14 +248,27 @@ fn run_retained_session(
     Ok(outcome)
 }
 
-fn hazard_frame_counts(assets: &impl PlanetSideAssetAccess) -> (u16, u16) {
-    // SAFETY: the trip retains both hazard frames throughout this metadata read.
-    unsafe {
-        (
-            GetFrameCount(assets.graphic(LanderGraphic::Earthquake).cast()),
-            GetFrameCount(assets.graphic(LanderGraphic::Lava).cast()),
-        )
-    }
+fn retained_visuals(
+    context: &PlanetSideRunContext,
+) -> Result<CffiSurfaceVisuals, super::runtime::AdapterError> {
+    CffiSurfaceVisuals::new(
+        crate::graphics::context_abi::ContextFrame::retain(std::ptr::NonNull::new(
+            context.misc_data_frame.cast(),
+        )),
+        std::ptr::NonNull::new(context.energy_frame.cast())
+            .map(|frame| crate::graphics::context_abi::ContextFrame::retain(Some(frame))),
+        context.life_frames.map(|frame| {
+            std::ptr::NonNull::new(frame.cast())
+                .map(|frame| crate::graphics::context_abi::ContextFrame::retain(Some(frame)))
+        }),
+    )
+}
+
+fn hazard_frame_counts(assets: &PlanetSideAssets) -> (u16, u16) {
+    (
+        assets.graphic(LanderGraphic::Earthquake).frame_count(),
+        assets.graphic(LanderGraphic::Lava).frame_count(),
+    )
 }
 
 fn prepare_frame(

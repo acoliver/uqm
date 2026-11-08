@@ -26,6 +26,7 @@ use uqm_rust::{
 };
 
 #[test]
+#[serial_test::serial]
 fn every_category_and_gross_size_draws_native_content_pixels_and_hotspot() {
     let base = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../sc2/content/base");
     let animation = std::fs::read_to_string(base.join("ui/miscdata.ani")).unwrap();
@@ -59,8 +60,12 @@ fn every_category_and_gross_size_draws_native_content_pixels_and_hotspot() {
         let drawable = LoadGraphicFile(c"ui/miscdata.ani".as_ptr());
         assert!(!drawable.is_null());
         let frames = CaptureDrawable(drawable);
-        let mut visuals =
-            CffiSurfaceVisuals::new(frames.cast(), ptr::null_mut(), [ptr::null_mut(); 3]).unwrap();
+        let mut visuals = CffiSurfaceVisuals::new(
+            ContextFrame::retain(std::ptr::NonNull::new(frames)),
+            None,
+            std::array::from_fn(|_| None),
+        )
+        .unwrap();
         #[cfg(feature = "debug-process")]
         let context = CreateContextAux(c"mineral surface parity".as_ptr());
         #[cfg(not(feature = "debug-process"))]
@@ -84,7 +89,8 @@ fn every_category_and_gross_size_draws_native_content_pixels_and_hotspot() {
             a: 255,
         };
         SetContextBackGroundColor(background);
-        let empty_mask = extract_frame_mask(frames.cast()).unwrap();
+        let empty_mask =
+            extract_frame_mask(&ContextFrame::retain(std::ptr::NonNull::new(frames))).unwrap();
         for category in 0..8 {
             for gross in 0..3 {
                 // GeneratePlanetSide: 2*NUM_SCANDOT_TRANSITIONS +
@@ -143,24 +149,24 @@ fn every_category_and_gross_size_draws_native_content_pixels_and_hotspot() {
                         .visual_for(mapping, surface.world.get(id).unwrap())
                         .unwrap();
                     assert_eq!(usize::from(visual.frame.index), original_frame);
-                    let selected = SetAbsFrameIndex(visual.frame.base.cast(), visual.frame.index);
+                    let selected = visual.frame.base.wrapped_frame(visual.frame.index);
                     assert_eq!(
                         (
-                            (*selected).Bounds.width as u32,
-                            (*selected).Bounds.height as u32
+                            selected.rect().extent.width as u32,
+                            selected.rect().extent.height as u32
                         ),
                         (width, height)
                     );
                     assert_eq!(
                         (
-                            i32::from((*selected).HotSpot.x),
-                            i32::from((*selected).HotSpot.y)
+                            -i32::from(selected.rect().corner.x),
+                            -i32::from(selected.rect().corner.y)
                         ),
                         (hotspot_x, hotspot_y)
                     );
                     surface.frames.insert(id, visual.frame);
                     ClearDrawable();
-                    draw_surface_entities(&surface, camera);
+                    draw_surface_entities(&ContextLease::require(context), &surface, camera);
                     let mut pixels = vec![
                         Color {
                             r: 0,

@@ -23,7 +23,7 @@ pub(crate) mod live {
     use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
     use crate::mainloop::restart_menu::c_extern::{self as base, SetContext};
     use crate::mainloop::types::activity_flags::{CHECK_ABORT, CHECK_LOAD, START_ENCOUNTER};
-    use crate::planet_side::{orbit_music, orbit_scan};
+    use crate::planet_side::orbit_scan;
     use crate::starbase::cffi::CffiPlatform;
     use crate::starbase::gfx::{ContextId, FlashTarget, Gfx, Point, Rect, Rgba, Stamp};
     use std::ffi::c_void;
@@ -231,7 +231,7 @@ pub(crate) mod live {
         let context = presentation.context();
         let sphere = presentation.sphere();
         let animation = game.borrow().kernel.planet_animation.clone();
-        let wait = game.borrow_mut().with_legacy(|| {
+        let (wait, planet_type) = game.borrow_mut().with_legacy(|| {
             let system = solar_system::current();
             let (last_activity, pulsing_shield) = KernelOwner::current().read(|owner| {
                 (
@@ -253,14 +253,31 @@ pub(crate) mod live {
                 planet,
                 surface,
             );
-            orbit_music::set_planet_music((*planet).data_index & !0x80);
-            wait
+
+            (wait, (*planet).data_index & !0x80)
         });
         orbit_scan::generate_planet_side(game, io, presentation.scan().report_context());
-        game.borrow_mut().with_legacy(|| {
+        {
+            let game = game.borrow();
             if PLRPlaying(usize::MAX as *mut c_void) == 0 {
-                base::PlayMusic((orbit_music::LANDER_MUSIC).cast(), 1, 1);
+                let music = game
+                    .kernel
+                    .lander_resources
+                    .as_ref()
+                    .and_then(|resources| resources.music(planet_type));
+                crate::sound::music::remember_music(
+                    music.map_or(
+                        crate::sound::music::MusicRequest::Absent,
+                        crate::sound::music::MusicRequest::Track,
+                    ),
+                    true,
+                    1,
+                    game.world.data.game.glob_flags & crate::navigation::abi::MUSIC_DISABLED as u8
+                        == 0,
+                );
             }
+        }
+        game.borrow_mut().with_legacy(|| {
             if wait {
                 zoom_in_planet_sphere(&context, &sphere);
                 draw_display(&context, presentation.scan(), UPDATE);
