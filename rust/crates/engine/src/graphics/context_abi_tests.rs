@@ -181,6 +181,27 @@ fn scoped_clip_and_origin_restore_after_unwind_and_target_changes() {
     };
     let first = ContextFrame::retain(std::ptr::NonNull::new(first));
     let second = ContextFrame::retain(std::ptr::NonNull::new(second));
+    // SAFETY: this serial fixture retains the context until every scoped effect is restored.
+    let effect = || unsafe { (*raw).FontEffect };
+    assert!(effect().is_null());
+    assert_eq!(
+        context.with_font_effect(Some(&first), || {
+            assert_eq!(effect(), first.frame);
+            let rejected = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                context.with_font_effect(Some(&second), || {
+                    assert_eq!(effect(), second.frame);
+                    panic!("fixture font-effect failure");
+                });
+            }));
+            assert!(rejected.is_err());
+            assert_eq!(effect(), first.frame);
+            context.with_font_effect(None, || assert!(effect().is_null()));
+            assert_eq!(effect(), first.frame);
+            17
+        }),
+        17
+    );
+    assert!(effect().is_null());
     first.replace_hotspot(POINT { x: -3, y: 7 });
     second.replace_hotspot(POINT { x: 9, y: 8 });
     context.set_frame(first.clone());

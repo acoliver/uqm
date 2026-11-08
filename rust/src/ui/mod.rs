@@ -1,6 +1,5 @@
 //! In-game menus and flagship status display.
 
-#[cfg(not(test))]
 pub mod border;
 pub mod util;
 

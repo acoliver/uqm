@@ -81,6 +81,10 @@ fn empty_npc_phrase_does_not_acquire_an_owner() {
 fn sis_slot_snapshot_releases_world_before_support_ship_drawing() {
     let mut game = Game::new();
     let display = campaign_display::CampaignDisplay::install(&mut game).unwrap();
+    let frames = uqm_rust::graphics::drawable_abi::LoadedDrawable::create(8, 64, 140, 100).unwrap();
+    game.kernel.flag_stat_frame = frames.lease().frame(0).unwrap();
+    game.kernel.font_grad_frame = game.kernel.flag_stat_frame;
+    game.kernel.star_con_font = game.kernel.tiny_font;
     game.world.story = Some(uqm_rust::state::game_state::StoryState::new());
     game.world.data.flagship.module_slots.fill(255);
     game.world.data.flagship.drive_slots.fill(255);
@@ -347,7 +351,14 @@ fn encounter_teardown_uses_retained_owners_without_reacquisition() {
         bridge::with_game(&mut game, || {
             bridge::enter(|cx| {
                 assert_eq!(
-                    uqm_rust::battle::encount_native::uninit_encounter(cx, &input, None),
+                    uqm_rust::battle::encount_native::uninit_encounter(
+                        cx,
+                        &mut uqm_rust::engine::observe::Io {
+                            observer: &mut uqm_rust::engine::observe::Unobserved
+                        },
+                        &input,
+                        None
+                    ),
                     0
                 );
             });
@@ -387,6 +398,10 @@ fn lander_status_releases_world_before_gauge_and_lander_drawing() {
         adapters::CffiShipStatus, runtime::ShipStatusPort, session::ShipDelta,
     };
     let mut game = Game::new();
+    let display = campaign_display::CampaignDisplay::install(&mut game).unwrap();
+    let frames = uqm_rust::graphics::drawable_abi::LoadedDrawable::create(8, 64, 140, 100).unwrap();
+    game.kernel.flag_stat_frame = frames.lease().frame(0).unwrap();
+    game.kernel.font_grad_frame = game.kernel.flag_stat_frame;
     game.world.data.flagship.module_slots.fill(255);
     game.world.data.flagship.module_slots[0] = CREW_POD as u8;
     game.world.data.flagship.crew_enlisted = 12;
@@ -411,6 +426,7 @@ fn lander_status_releases_world_before_gauge_and_lander_drawing() {
     }
     assert_eq!(game.world.data.flagship.crew_enlisted, 10);
     assert_eq!(game.world.data.flagship.num_landers, 1);
+    display.finish(game);
 }
 
 #[test]

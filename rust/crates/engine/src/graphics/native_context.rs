@@ -97,7 +97,7 @@ enum Operation {
     ScaleMode(i32),
     Background(Color),
     Foreground(Color),
-    Frame(FRAME),
+    Frame(FRAME, unsafe extern "C" fn(FRAME) -> FRAME),
     Clip(Option<RECT>),
     Clear,
     Fill(Color, RECT),
@@ -176,6 +176,19 @@ impl Drop for ContextSelection {
         } else {
             self.context.apply(Operation::Deselect);
         }
+    }
+}
+
+struct ContextEffect {
+    context: ContextLease,
+    previous: ContextFrame,
+}
+impl Drop for ContextEffect {
+    fn drop(&mut self) {
+        self.context.apply(Operation::Frame(
+            self.previous.frame,
+            context_abi::SetContextFontEffect,
+        ));
     }
 }
 
@@ -265,7 +278,7 @@ impl ContextLease {
         let mut rectangle = operation.rect();
         let rectangle = rectangle
             .as_mut()
-            .map_or(std::ptr::null_mut(), |rect| rect as *mut RECT);
+            .map_or(std::ptr::null_mut(), std::ptr::from_mut);
         // SAFETY: the lease owns the selected context on this graphics thread.
         // Set-frame retains its new allocation; clipping and drawing retain the
         // selected target before entering this native operation boundary.
@@ -276,6 +289,7 @@ impl ContextLease {
                 context_abi::_pCurContext
             };
             let mut deadline = 0;
+            let mut effect = None;
             match operation {
                 Operation::Select | Operation::Deselect => (),
                 Operation::BeginBatch => gfx::batch_graphics(),
@@ -296,9 +310,7 @@ impl ContextLease {
                 Operation::Foreground(color) => {
                     context_abi::SetContextForeGroundColor(color);
                 }
-                Operation::Frame(frame) => {
-                    drawable_abi::SetContextFGFrame(frame);
-                }
+                Operation::Frame(frame, setter) => effect = Some(setter(frame)),
                 Operation::Clip(_) => {
                     context_abi::SetContextClipRect(rectangle);
                 }
@@ -338,7 +350,8 @@ impl ContextLease {
                     super::font_abi::font_DrawText(&mut text);
                 }
             }
-            (self.0.context.as_ref().ForeGroundFrame, previous, deadline)
+            let frame = effect.unwrap_or(self.0.context.as_ref().ForeGroundFrame);
+            (frame, previous, deadline)
         }
     }
 
@@ -416,7 +429,10 @@ impl ContextLease {
 
     /// Retain the registered target allocation before changing the context's frame.
     pub fn set_frame(&self, target: ContextFrame) {
-        self.apply(Operation::Frame(target.frame));
+        self.apply(Operation::Frame(
+            target.frame,
+            drawable_abi::SetContextFGFrame,
+        ));
         *self.0.target.borrow_mut() = Some(target);
     }
 
@@ -539,6 +555,28 @@ impl ContextLease {
         let previous = self.0.font.replace(font.clone());
         self.apply(Operation::Font(font));
         drop(previous);
+    }
+
+    pub fn with_font_effect<R>(
+        &self,
+        effect: Option<&ContextFrame>,
+        draw: impl FnOnce() -> R,
+    ) -> R {
+        self.with_selected(|| {
+            let previous = self
+                .apply(Operation::Frame(
+                    effect.map_or(std::ptr::null_mut(), |frame| frame.frame),
+                    context_abi::SetContextFontEffect,
+                ))
+                .0;
+            let restore = ContextEffect {
+                context: self.clone(),
+                previous: ContextFrame::retain(NonNull::new(previous)),
+            };
+            let result = draw();
+            drop(restore);
+            result
+        })
     }
 
     pub fn set_font(&self, font: &super::native_font::FontLease) {

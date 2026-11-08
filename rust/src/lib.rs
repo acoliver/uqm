@@ -65,3 +65,6 @@ extern crate self as uqm_rust;
 #[cfg(test)]
 #[path = "../tests/support/campaign_display.rs"]
 mod campaign_display_test;
+#[cfg(test)]
+#[path = "../tests/support/native_process.rs"]
+mod native_test_process;

@@ -1,5 +1,6 @@
 //! Game options, naming, and save/load selection, ported from `uqm/gameopt.c`.
 
+mod layout;
 mod naming;
 mod preview;
 
@@ -12,21 +13,19 @@ use picker::{picker_slot, MAX_SAVED_GAMES};
 #[cfg(not(test))]
 pub use crate::savegame::live::load::load_game_descriptions;
 #[cfg(not(test))]
-pub use runtime::{game_options, GameOptions, SetNamingCallback};
+pub use runtime::game_options;
 
 #[cfg(not(test))]
 pub(crate) mod runtime {
-    mod layout;
-    use layout::{BLACK_COLOR, CAPTAIN_NAME_RECT, CAPTAIN_NAME_TEXT_COLOR, SHIP_NAME_RECT};
+    use super::layout::{BLACK_COLOR, CAPTAIN_NAME_RECT, SHIP_NAME_RECT};
+    use super::naming::{draw_name_string, draw_save_name_string};
 
     mod save_load;
 
     use save_load::pick_game;
 
     use super::{picker_action, picker_slot, PickerAction, MAX_SAVED_GAMES, SAVES_PER_PAGE};
-    use crate::engine::{
-        battle::Cx, input::InputSession, observe::Io, Kernel, StoryKey, World, WorldData,
-    };
+    use crate::engine::{battle::Cx, input::InputSession, observe::Io, Kernel, StoryKey, World};
     use crate::navigation::abi::{
         MENU_SOUND_EFFECT_MENU_SOUND_FAILURE as MENU_FAILURE,
         MENU_SOUND_EFFECT_MENU_SOUND_SUCCESS as MENU_SUCCESS, *,
@@ -66,10 +65,8 @@ pub(crate) mod runtime {
     const MENU_SOUND_SELECT: MENU_SOUND_FLAGS = 1 << 4;
     const MENU_SOUND_PAGEUP: MENU_SOUND_FLAGS = 1 << 7;
     const MENU_SOUND_PAGEDOWN: MENU_SOUND_FLAGS = 1 << 8;
-    const SFR_MENU_3DO: *const RECT = usize::MAX as *const RECT;
 
     static mut LAST_USED_SLOT: COUNT = 0;
-    static mut NAMING_CB: NamingCallback = None;
 
     use crate::ui::rgb15;
 
@@ -80,7 +77,7 @@ pub(crate) mod runtime {
         ))
     }
 
-    unsafe fn key(input: &InputSession, index: u32) -> bool {
+    fn key(input: &InputSession, index: u32) -> bool {
         input.pulsed().menu[index as usize] != 0
     }
 
@@ -107,299 +104,172 @@ pub(crate) mod runtime {
                 / log_units_y) as COORD
     }
 
-    use super::naming;
-
-    unsafe fn draw_name_string(
-        name_captain: bool,
-        str: *mut UNICODE,
-        cursor_pos: COUNT,
-        state: COUNT,
-    ) -> BOOLEAN {
-        let (font, status, highlight) = Kernel::current().read(|kernel| {
-            (
-                if name_captain {
-                    kernel.tiny_font
-                } else {
-                    kernel.star_con_font
-                },
-                kernel.status_context,
-                kernel.sis_highlight.clone(),
-            )
-        });
-        let (mut r, back_ground, fore_ground) = layout::name_style(name_captain);
-        let mut lf = TEXT {
-            baseline: POINT {
-                x: r.corner.x + (r.extent.width >> 1) - i16::from(name_captain),
-                y: r.corner.y + r.extent.height - 1,
-            },
-            align: TEXT_ALIGN_ALIGN_CENTER,
-            pStr: str,
-            CharCount: COUNT::MAX,
-        };
-        SetContext(status);
-        SetContextFont(font);
-        if state & DDSHS_EDIT == 0 {
-            if name_captain {
-                draw_captains_name();
-            } else {
-                DrawFlagshipName(1);
-            }
-        } else {
-            let mut text_r: RECT = mem::zeroed();
-            let mut char_deltas = [0u8; MAX_NAME_SIZE];
-            TextRect(&mut lf, &mut text_r, char_deltas.as_mut_ptr());
-            if i32::from(text_r.extent.width) + 2 >= i32::from(r.extent.width) {
-                return 0;
-            }
-            highlight.pre_update_flash_rect();
-            SetContextForeGroundColor(back_ground);
-            DrawFilledRectangle(&mut r);
-            let mut pchar_deltas = char_deltas.as_ptr();
-            for _ in 0..cursor_pos {
-                text_r.corner.x = text_r.corner.x.wrapping_add(*pchar_deltas as i16);
-                pchar_deltas = pchar_deltas.add(1);
-            }
-            if cursor_pos < lf.CharCount {
-                text_r.corner.x -= 1;
-            }
-            if state & DDSHS_BLOCKCUR != 0 {
-                if cursor_pos == lf.CharCount {
-                    text_r.extent.width = 1;
-                } else if i32::from(cursor_pos) + 1 == i32::from(lf.CharCount) {
-                    text_r.extent.width = *pchar_deltas as SIZE + 2;
-                } else {
-                    text_r.extent.width = *pchar_deltas as SIZE + 1;
-                }
-            } else {
-                text_r.extent.width = 1;
-            }
-            text_r.corner.y = r.corner.y;
-            text_r.extent.height = r.extent.height;
-            SetContextForeGroundColor(BLACK_COLOR);
-            DrawFilledRectangle(&mut text_r);
-            SetContextForeGroundColor(fore_ground);
-            font_DrawText(&mut lf);
-            highlight.post_update_flash_rect();
-        }
-        1
+    struct NameCallbacks {
+        captain: bool,
     }
-
-    unsafe fn draw_save_name_string(
-        str: *mut UNICODE,
-        cursor_pos: COUNT,
-        state: COUNT,
-        game_index: COUNT,
-    ) -> BOOLEAN {
-        Kernel::current().read(|kernel| {
-            let (month, day, year) = WorldData::current().read(WorldData::calendar_date);
-            let date = crate::ui::sis::format_date(
-                kernel.game_text((MONTHS_STRING_BASE + u32::from(month) - 1) as usize),
-                day,
-                year,
-            );
-            let label = naming::save_label(&date, std::ffi::CStr::from_ptr(str));
-            SetContextForeGroundColor(rgb15(0x1b, 0, 0x1b));
-            let mut r = RECT {
-                corner: POINT {
-                    x: 8,
-                    y: (160 + ((game_index % SAVES_PER_PAGE) * 13)) as COORD,
-                },
-                extent: EXTENT {
-                    width: 15 + if MAX_SAVED_GAMES > 99 { 5 } else { 0 },
-                    height: 11,
-                },
-            };
-            DrawRectangle(&mut r);
-            r.extent.width = (204 - SAFE_X) as COORD;
-            r.corner.x = (30 + SAFE_X) as COORD;
-            DrawRectangle(&mut r);
-            let mut lf = TEXT {
-                baseline: POINT {
-                    x: r.corner.x + 3,
-                    y: r.corner.y + 8,
-                },
-                align: TEXT_ALIGN_ALIGN_LEFT,
-                pStr: label.text.as_ptr(),
-                CharCount: COUNT::MAX,
-            };
-            let back_ground = rgb15(0x1b, 0, 0x1b);
-            let fore_ground = rgb15(0, 0, 0x14);
-            SetContextFont(kernel.tiny_font);
-            if state & DDSHS_EDIT == 0 {
-                SetContextForeGroundColor(BLACK_COLOR);
-                DrawFilledRectangle(&mut r);
-                // The C local `t` is unused: it draws `lf`, including the date.
-                SetContextForeGroundColor(CAPTAIN_NAME_TEXT_COLOR);
-                font_DrawText(&mut lf);
-            } else {
-                let mut text_r: RECT = mem::zeroed();
-                let mut char_deltas = [0u8; 256];
-                TextRect(&mut lf, &mut text_r, char_deltas.as_mut_ptr());
-                if i32::from(text_r.extent.width) + 2 >= i32::from(r.extent.width) {
-                    return 0;
-                }
-                kernel.sis_highlight.pre_update_flash_rect();
-                SetContextForeGroundColor(back_ground);
-                DrawFilledRectangle(&mut r);
-                let mut pchar_deltas = char_deltas.as_ptr();
-                let full_cursor_pos = (cursor_pos as usize + label.cursor_prefix) as COUNT;
-                for _ in 0..full_cursor_pos {
-                    text_r.corner.x = text_r.corner.x.wrapping_add(*pchar_deltas as i16);
-                    pchar_deltas = pchar_deltas.add(1);
-                }
-                if full_cursor_pos < lf.CharCount {
-                    text_r.corner.x -= 1;
-                }
-                if state & DDSHS_BLOCKCUR != 0 {
-                    if full_cursor_pos == lf.CharCount {
-                        text_r.extent.width = 1;
-                    } else if i32::from(full_cursor_pos) + 1 == i32::from(lf.CharCount) {
-                        text_r.extent.width = *pchar_deltas as SIZE + 2;
-                    } else {
-                        text_r.extent.width = *pchar_deltas as SIZE + 1;
-                    }
-                } else {
-                    text_r.extent.width = 1;
-                }
-                text_r.corner.y = r.corner.y;
-                text_r.extent.height = r.extent.height;
-                SetContextForeGroundColor(BLACK_COLOR);
-                DrawFilledRectangle(&mut text_r);
-                SetContextForeGroundColor(fore_ground);
-                font_DrawText(&mut lf);
-                kernel.sis_highlight.post_update_flash_rect();
-            }
-            1
-        })
-    }
-
-    unsafe fn on_name_change(
-        p_tes: *mut TEXTENTRY_STATE,
-        cx: &mut Cx<'_>,
-        _input: &InputSession,
-    ) -> BOOLEAN {
-        cx.with_legacy(|| {
-            let name_captain = !(*p_tes).CbParam.is_null();
-            let mut hl = DDSHS_EDIT;
-            if (*p_tes).JoystickMode != 0 {
-                hl |= DDSHS_BLOCKCUR;
-            }
+    impl crate::ui::getchar::TextEntryCallbacks for NameCallbacks {
+        fn changed(
+            &mut self,
+            entry: crate::ui::getchar::TextEntryView<'_>,
+            cx: &mut Cx<'_>,
+            _input: &InputSession,
+        ) -> bool {
             draw_name_string(
-                name_captain,
-                (*p_tes).BaseStr,
-                (*p_tes).CursorPos as COUNT,
-                hl,
+                cx.kernel,
+                cx.world,
+                self.captain,
+                entry.text,
+                entry.cursor,
+                DDSHS_EDIT | if entry.joystick { DDSHS_BLOCKCUR } else { 0 },
             )
-        })
+        }
+        fn frame(
+            &mut self,
+            _entry: crate::ui::getchar::TextEntryView<'_>,
+            cx: &mut Cx<'_>,
+            _io: &mut Io<'_>,
+            _input: &InputSession,
+        ) -> bool {
+            cx.kernel.input_runtime().sleep(cx, ONE_SECOND / 30);
+            true
+        }
     }
 
-    unsafe fn name_captain_or_ship(input: &InputSession, name_captain: bool) {
-        let mut buf: [UNICODE; MAX_NAME_SIZE] = [0; MAX_NAME_SIZE];
-        let mut tes: TEXTENTRY_STATE = mem::zeroed();
-        SetContext(Kernel::current().read(|owner| owner.status_context));
-        SetFlashRect(if name_captain {
-            &CAPTAIN_NAME_RECT
+    fn name_captain_or_ship(cx: &mut Cx<'_>, io: &mut Io<'_>, input: &InputSession, captain: bool) {
+        use crate::graphics::context_abi::ContextLease;
+        let status = ContextLease::require(cx.kernel.status_context);
+        let screen = ContextLease::require(cx.kernel.screen_context);
+        status.select();
+        crate::ui::sis::set_flash_rect(
+            &cx.kernel.sis_highlight,
+            &screen,
+            status.clip_rect(),
+            Some(if captain {
+                CAPTAIN_NAME_RECT
+            } else {
+                SHIP_NAME_RECT
+            }),
+        );
+        let mut buffer = [0u8; MAX_NAME_SIZE];
+        draw_name_string(cx.kernel, cx.world, captain, c"", 0, DDSHS_EDIT);
+        crate::ui::sis::draw_status_message(
+            cx.kernel,
+            cx.world,
+            Some(cx.kernel.game_text(NAMING_STRING_BASE as usize)),
+        );
+        let accepted = crate::ui::getchar::edit_text(
+            cx,
+            io,
+            input,
+            &mut buffer,
+            0,
+            &mut NameCallbacks { captain },
+        );
+        let setting = if captain {
+            &mut cx.world.data.flagship.commander_name
         } else {
-            &SHIP_NAME_RECT
-        });
-        draw_name_string(name_captain, buf.as_mut_ptr(), 0, DDSHS_EDIT);
-        DrawStatusMessage(game_string(NAMING_STRING_BASE));
-        tes.MaxSize = mem::size_of::<[UNICODE; MAX_NAME_SIZE]>() as i32;
-        tes.Initialized = 0;
-        tes.BaseStr = buf.as_mut_ptr();
-        tes.CursorPos = 0;
-        tes.CbParam = usize::from(name_captain) as *mut std::ffi::c_void;
-        tes.ChangeCallback = Some(on_name_change);
-        tes.FrameCallback = None;
-        let accepted = do_text_entry(&mut tes, input) != 0;
-        {
-            let world = WorldData::current();
-            let setting = if name_captain {
-                ptr::addr_of_mut!((**world).flagship.commander_name).cast::<u8>()
-            } else {
-                ptr::addr_of_mut!((**world).flagship.ship_name).cast::<u8>()
-            };
-            if accepted {
-                utf8StringCopy(setting, tes.MaxSize as usize, buf.as_ptr().cast());
-            } else {
-                utf8StringCopy(buf.as_mut_ptr().cast(), buf.len(), setting);
-            }
+            &mut cx.world.data.flagship.ship_name
+        };
+        if accepted {
+            let text = std::ffi::CStr::from_bytes_until_nul(&buffer)
+                .unwrap_or_else(|error| panic!("invalid entered name: {error}"));
+            setting.fill(0);
+            let count = text.to_bytes().len().min(setting.len() - 1);
+            setting[..count].copy_from_slice(&text.to_bytes()[..count]);
+        } else {
+            buffer.copy_from_slice(setting);
         }
-        SetFlashRect(SFR_MENU_3DO);
-        draw_name_string(name_captain, buf.as_mut_ptr(), 0, DDSHS_NORMAL);
-        if let Some(callback) = NAMING_CB {
-            callback();
+        crate::ui::sis::set_menu_flash(cx.kernel, cx.screen_dimensions(), false);
+        let text = std::ffi::CStr::from_bytes_until_nul(&buffer)
+            .unwrap_or_else(|error| panic!("invalid saved name: {error}"));
+        draw_name_string(cx.kernel, cx.world, captain, text, 0, DDSHS_NORMAL);
+        if let Some(callback) = cx.kernel.naming_callback {
+            callback(cx.kernel, cx.world, cx.screen_dimensions().0);
         }
     }
 
-    unsafe fn on_save_name_change(
-        p_tes: *mut TEXTENTRY_STATE,
-        cx: &mut Cx<'_>,
-        _input: &InputSession,
-    ) -> BOOLEAN {
-        cx.with_legacy(|| {
-            let mut hl = DDSHS_EDIT;
-            let game_index = (*p_tes).CbParam.cast::<COUNT>();
-            if (*p_tes).JoystickMode != 0 {
-                hl |= DDSHS_BLOCKCUR;
-            }
+    struct SaveNameCallbacks {
+        index: u16,
+    }
+    impl crate::ui::getchar::TextEntryCallbacks for SaveNameCallbacks {
+        fn changed(
+            &mut self,
+            entry: crate::ui::getchar::TextEntryView<'_>,
+            cx: &mut Cx<'_>,
+            _input: &InputSession,
+        ) -> bool {
             draw_save_name_string(
-                (*p_tes).BaseStr,
-                (*p_tes).CursorPos as COUNT,
-                hl,
-                *game_index,
+                cx.kernel,
+                cx.world,
+                entry.text,
+                entry.cursor,
+                DDSHS_EDIT | if entry.joystick { DDSHS_BLOCKCUR } else { 0 },
+                self.index,
             )
-        })
+        }
+        fn frame(
+            &mut self,
+            _entry: crate::ui::getchar::TextEntryView<'_>,
+            cx: &mut Cx<'_>,
+            _io: &mut Io<'_>,
+            _input: &InputSession,
+        ) -> bool {
+            cx.kernel.input_runtime().sleep(cx, ONE_SECOND / 30);
+            true
+        }
     }
 
-    unsafe fn name_save_game(
+    fn name_save_game(
+        cx: &mut Cx<'_>,
+        io: &mut Io<'_>,
         input: &InputSession,
-        game_index: COUNT,
-        buf: *mut UNICODE,
-    ) -> BOOLEAN {
-        let mut tes: TEXTENTRY_STATE = mem::zeroed();
-        let curs_pos = libc::strlen(buf) as COUNT;
-        let g_index = rust_hmalloc(mem::size_of::<COUNT>()).cast::<COUNT>();
-        *g_index = game_index;
-        draw_save_name_string(buf, curs_pos, DDSHS_EDIT, game_index);
-        tes.MaxSize = SAVE_NAME_SIZE as i32;
-        tes.Initialized = 0;
-        tes.BaseStr = buf;
-        tes.CursorPos = curs_pos as i32;
-        tes.CbParam = g_index.cast();
-        tes.ChangeCallback = Some(on_save_name_change);
-        tes.FrameCallback = None;
-        let r = RECT {
+        game_index: u16,
+        buffer: &mut [u8; 256],
+    ) -> bool {
+        use crate::graphics::context_abi::ContextLease;
+        let text = std::ffi::CStr::from_bytes_until_nul(buffer)
+            .unwrap_or_else(|error| panic!("invalid save name: {error}"));
+        let cursor = text.to_bytes().len();
+        draw_save_name_string(cx.kernel, cx.world, text, cursor, DDSHS_EDIT, game_index);
+        let context = ContextLease::require(cx.kernel.space_context);
+        let screen = ContextLease::require(cx.kernel.screen_context);
+        let rect = RECT {
+            corner: POINT {
+                x: (30 + SAFE_X) as i16,
+                y: (160 + ((game_index % SAVES_PER_PAGE) * 13)) as i16,
+            },
             extent: EXTENT {
-                width: (204 - SAFE_X) as COORD,
+                width: (204 - SAFE_X) as i16,
                 height: 11,
             },
-            corner: POINT {
-                x: (30 + SAFE_X) as COORD,
-                y: (160 + ((game_index % SAVES_PER_PAGE) * 13)) as COORD,
-            },
         };
-        SetFlashRect(&r);
-        if do_text_entry(&mut tes, input) == 0 {
-            *buf = 0;
+        crate::ui::sis::set_flash_rect(
+            &cx.kernel.sis_highlight,
+            &screen,
+            context.clip_rect(),
+            Some(rect),
+        );
+        let accepted = crate::ui::getchar::edit_text(
+            cx,
+            io,
+            input,
+            &mut buffer[..SAVE_NAME_SIZE as usize],
+            cursor,
+            &mut SaveNameCallbacks { index: game_index },
+        );
+        if !accepted {
+            buffer[0] = 0;
         }
-        SetFlashRect(ptr::null());
-        draw_save_name_string(buf, curs_pos, DDSHS_NORMAL, game_index);
-        if let Some(callback) = NAMING_CB {
-            callback();
+        cx.kernel.sis_highlight.context.borrow_mut().take();
+        let text = std::ffi::CStr::from_bytes_until_nul(buffer)
+            .unwrap_or_else(|error| panic!("invalid edited save name: {error}"));
+        draw_save_name_string(cx.kernel, cx.world, text, cursor, DDSHS_NORMAL, game_index);
+        if let Some(callback) = cx.kernel.naming_callback {
+            callback(cx.kernel, cx.world, cx.screen_dimensions().0);
         }
         SetMenuSounds(input, MENU_SOUND_ARROWS, MENU_SOUND_SELECT);
-        rust_hfree(g_index.cast());
-        SetFlashRect(ptr::null());
-        u32::from(tes.Success != 0)
-    }
-
-    /// # Safety
-    /// Call on the game thread. The callback must remain valid until replaced
-    /// and may be invoked after any captain, ship, or save naming operation.
-    #[no_mangle]
-    pub unsafe extern "C" fn SetNamingCallback(callback: NamingCallback) {
-        NAMING_CB = callback;
+        cx.kernel.sis_highlight.context.borrow_mut().take();
+        accepted
     }
 
     // Private C-local state, containing only header-generated ABI records.
@@ -874,234 +744,215 @@ pub(crate) mod runtime {
         1
     }
 
-    unsafe fn do_game_options(cx: &mut Cx<'_>, io: &mut Io<'_>, p_ms: *mut MENU_STATE) -> BOOLEAN {
+    fn do_game_options(cx: &mut Cx<'_>, io: &mut Io<'_>, state: &mut u8) -> bool {
         let runtime = cx.kernel.input_runtime();
         let input = runtime.input();
-        if cx.world.activity() & CHECK_ABORT as ACTIVITY != 0 {
-            return 0;
-        }
-        if key(input, KEY_MENU_CANCEL)
-            || (key(input, KEY_MENU_SELECT) && (*p_ms).CurState == EXIT_GAME_MENU)
+        if cx.world.activity() & CHECK_ABORT as ACTIVITY != 0
+            || key(input, KEY_MENU_CANCEL)
+            || (key(input, KEY_MENU_SELECT) && *state == EXIT_GAME_MENU)
         {
-            return 0;
-        } else if key(input, KEY_MENU_SELECT) {
-            match (*p_ms).CurState {
+            return false;
+        }
+        if key(input, KEY_MENU_SELECT) {
+            match *state {
                 SAVE_GAME | LOAD_GAME => {
-                    cx.with_legacy(|| SetFlashRect(ptr::null()));
-                    if pick_game(cx, io, u32::from((*p_ms).CurState == SAVE_GAME), 0) != 0 {
-                        return 0;
+                    cx.kernel.sis_highlight.context.borrow_mut().take();
+                    if pick_game(cx, io, u32::from(*state == SAVE_GAME), 0) != 0 {
+                        return false;
                     }
-                    cx.with_legacy(|| SetFlashRect(SFR_MENU_3DO));
+                    crate::ui::sis::set_menu_flash(cx.kernel, cx.screen_dimensions(), false);
                 }
                 QUIT_GAME => {
-                    if ConfirmExit(cx, input) != 0 {
-                        return 0;
+                    if runtime.confirm_exit(cx) {
+                        return false;
                     }
                 }
                 SETTINGS => {
                     settings_menu(cx, io);
-                    cx.with_legacy(|| {
-                        DrawMenuStateStrings(PM_SAVE_GAME as BYTE, (*p_ms).CurState as SWORD);
-                    });
+                    crate::ui::menu::draw_menu_state(
+                        cx.kernel,
+                        cx.world,
+                        cx.screen_dimensions(),
+                        PM_SAVE_GAME as u8,
+                        i16::from(*state),
+                    );
                 }
                 _ => {}
             }
         } else {
-            cx.with_legacy(|| do_menu_chooser(input, p_ms, PM_SAVE_GAME as BYTE));
+            crate::ui::menu::choose_menu_state(cx, input, state, PM_SAVE_GAME as u8);
         }
-        1
+        true
     }
 
-    /// # Safety
-    /// The game thread must have initialized the game, input, audio, and SIS
-    /// contexts. Runs the modal menu and may replace the live game on load.
-    pub unsafe fn game_options(cx: &mut Cx<'_>, io: &mut Io<'_>) -> BOOLEAN {
+    pub fn game_options(cx: &mut Cx<'_>, io: &mut Io<'_>) -> BOOLEAN {
         let runtime = cx.kernel.input_runtime();
         let input = runtime.input();
-        let mut menu_state: MENU_STATE = mem::zeroed();
         if cx.kernel.last_activity == CHECK_LOAD as ACTIVITY {
-            cx.with_legacy(|| DrawMenuStateStrings(PM_SAVE_GAME as BYTE, LOAD_GAME as SWORD));
-            let success = pick_game(cx, io, 0, 1);
-            if success == 0 {
+            crate::ui::menu::draw_menu_state(
+                cx.kernel,
+                cx.world,
+                cx.screen_dimensions(),
+                PM_SAVE_GAME as u8,
+                LOAD_GAME as i16,
+            );
+            if pick_game(cx, io, 0, 1) == 0 {
                 cx.world
                     .set_activity(cx.world.activity() | CHECK_ABORT as ACTIVITY);
             }
             return 0;
         }
-        menu_state.CurState = SAVE_GAME;
+        let mut state = SAVE_GAME;
+        crate::ui::menu::draw_menu_state(
+            cx.kernel,
+            cx.world,
+            cx.screen_dimensions(),
+            PM_SAVE_GAME as u8,
+            i16::from(state),
+        );
+        crate::ui::sis::set_menu_flash(cx.kernel, cx.screen_dimensions(), false);
+        SetMenuSounds(input, MENU_SOUND_ARROWS, MENU_SOUND_SELECT);
         cx.with_legacy(|| {
-            DrawMenuStateStrings(PM_SAVE_GAME as BYTE, menu_state.CurState as SWORD);
-            SetFlashRect(SFR_MENU_3DO);
-            SetMenuSounds(input, MENU_SOUND_ARROWS, MENU_SOUND_SELECT);
             io.observer
-                .checkpoint(&crate::engine::observe::CheckpointView::GameOptions(true));
+                .checkpoint(&crate::engine::observe::CheckpointView::GameOptions(true))
         });
-        cx.run_input(io, true, |cx, io| {
-            do_game_options(cx, io, ptr::addr_of_mut!(menu_state)) != 0
-        });
+        cx.run_input(io, true, |cx, io| do_game_options(cx, io, &mut state));
         cx.with_legacy(|| {
             io.observer
-                .checkpoint(&crate::engine::observe::CheckpointView::GameOptions(false));
-            SetFlashRect(ptr::null());
+                .checkpoint(&crate::engine::observe::CheckpointView::GameOptions(false))
         });
+        cx.kernel.sis_highlight.context.borrow_mut().take();
         u32::from(cx.world.activity() & (CHECK_ABORT | CHECK_LOAD) as ACTIVITY == 0)
     }
 
-    /// # Safety
-    /// Game-thread legacy boundary with the caller's context published.
-    #[no_mangle]
-    pub unsafe extern "C" fn GameOptions() -> BOOLEAN {
-        crate::app::bridge::enter(|cx| {
-            let mut observer = cx.kernel.input_runtime().observer();
-            let mut io = Io {
-                observer: &mut *observer,
-            };
-            game_options(cx, &mut io)
-        })
-    }
-    unsafe fn feedback_setting(input: &InputSession, which_setting: BYTE) {
-        let flags = WorldData::current().read(|world| world.game.glob_flags);
-        let mut buf: [UNICODE; 128] = [0; 128];
-        match which_setting {
-            SOUND_ON_SETTING | SOUND_OFF_SETTING => {
-                libc::snprintf(
-                    buf.as_mut_ptr(),
-                    buf.len() - 1,
-                    c"%s %s".as_ptr(),
-                    game_string(OPTION_STRING_BASE),
-                    game_string(
-                        OPTION_STRING_BASE
-                            + if flags & SOUND_DISABLED as u8 != 0 {
-                                3
-                            } else {
-                                4
-                            },
-                    ),
-                );
-            }
-            MUSIC_ON_SETTING | MUSIC_OFF_SETTING => {
-                libc::snprintf(
-                    buf.as_mut_ptr(),
-                    buf.len() - 1,
-                    c"%s %s".as_ptr(),
-                    game_string(OPTION_STRING_BASE + 1),
-                    game_string(
-                        OPTION_STRING_BASE
-                            + if flags & MUSIC_DISABLED as u8 != 0 {
-                                3
-                            } else {
-                                4
-                            },
-                    ),
-                );
-            }
-            CYBORG_OFF_SETTING
-            | CYBORG_NORMAL_SETTING
-            | CYBORG_DOUBLE_SETTING
-            | CYBORG_SUPER_SETTING => {
-                let tmpstr = if input.preferences().menu == OPT_PC as i32
-                    && which_setting > CYBORG_NORMAL_SETTING
-                {
-                    if which_setting == CYBORG_DOUBLE_SETTING {
-                        c"+"
-                    } else {
-                        c"++"
-                    }
-                } else {
-                    c""
-                };
-                libc::snprintf(
-                    buf.as_mut_ptr(),
-                    buf.len() - 1,
-                    c"%s %s%s".as_ptr(),
-                    game_string(OPTION_STRING_BASE + 2),
-                    game_string(
-                        OPTION_STRING_BASE
-                            + if flags & CYBORG_ENABLED as u8 == 0 {
-                                3
-                            } else {
-                                4
-                            },
-                    ),
-                    tmpstr.as_ptr(),
-                );
-            }
-            CHANGE_CAPTAIN_SETTING | CHANGE_SHIP_SETTING => {
-                utf8StringCopy(
-                    (buf.as_mut_ptr()).cast(),
-                    buf.len(),
-                    (game_string(NAMING_STRING_BASE)).cast(),
-                );
-            }
-            _ => {}
-        }
-        DrawStatusMessage(buf.as_ptr());
+    fn feedback_setting(cx: &Cx<'_>, input: &InputSession, setting: u8) {
+        let text = setting_feedback(
+            cx.kernel,
+            cx.world.data.game.glob_flags,
+            input.preferences().menu,
+            setting,
+        );
+        crate::ui::sis::draw_status_message(cx.kernel, cx.world, Some(&text));
     }
 
-    unsafe fn do_settings(input: &InputSession, p_ms: *mut MENU_STATE, activity: u16) -> BOOLEAN {
-        if activity & CHECK_ABORT as ACTIVITY != 0 {
-            return 0;
+    fn setting_feedback(kernel: &Kernel, flags: u8, menu: i32, setting: u8) -> std::ffi::CString {
+        let mut text = Vec::new();
+        let option = match setting {
+            SOUND_ON_SETTING | SOUND_OFF_SETTING => Some((0, SOUND_DISABLED as u8)),
+            MUSIC_ON_SETTING | MUSIC_OFF_SETTING => Some((1, MUSIC_DISABLED as u8)),
+            CYBORG_OFF_SETTING..=CYBORG_SUPER_SETTING => Some((2, CYBORG_ENABLED as u8)),
+            _ => None,
+        };
+        if let Some((offset, flag)) = option {
+            text.extend_from_slice(
+                kernel
+                    .game_text((OPTION_STRING_BASE + offset) as usize)
+                    .to_bytes(),
+            );
+            text.push(b' ');
+            let enabled = if flag == CYBORG_ENABLED as u8 {
+                flags & flag != 0
+            } else {
+                flags & flag == 0
+            };
+            text.extend_from_slice(
+                kernel
+                    .game_text((OPTION_STRING_BASE + if enabled { 4 } else { 3 }) as usize)
+                    .to_bytes(),
+            );
+            if offset == 2 && menu == OPT_PC as i32 && setting > CYBORG_NORMAL_SETTING {
+                text.extend_from_slice(if setting == CYBORG_DOUBLE_SETTING {
+                    b"+"
+                } else {
+                    b"++"
+                });
+            }
+        } else if setting == CHANGE_CAPTAIN_SETTING || setting == CHANGE_SHIP_SETTING {
+            text.extend_from_slice(kernel.game_text(NAMING_STRING_BASE as usize).to_bytes());
         }
-        let mut cur_speed = (WorldData::current().read(|owner| owner.game.glob_flags)
-            & COMBAT_SPEED_MASK as u8)
-            >> COMBAT_SPEED_SHIFT;
+        text.truncate(126);
+        std::ffi::CString::new(text)
+            .unwrap_or_else(|error| panic!("invalid setting feedback: {error}"))
+    }
+
+    fn do_settings(cx: &mut Cx<'_>, io: &mut Io<'_>, input: &InputSession, state: &mut u8) -> bool {
+        if cx.world.activity() & CHECK_ABORT as ACTIVITY != 0 {
+            return false;
+        }
         if key(input, KEY_MENU_CANCEL)
-            || (key(input, KEY_MENU_SELECT) && (*p_ms).CurState == EXIT_SETTINGS_MENU)
+            || (key(input, KEY_MENU_SELECT) && *state == EXIT_SETTINGS_MENU)
         {
-            return 0;
-        } else if key(input, KEY_MENU_SELECT) {
-            match (*p_ms).CurState {
+            return false;
+        }
+        if key(input, KEY_MENU_SELECT) {
+            match *state {
                 SOUND_ON_SETTING | SOUND_OFF_SETTING => {
-                    toggle_sound_effect();
-                    (*p_ms).CurState ^= 1;
-                    DrawMenuStateStrings(PM_SOUND_ON as BYTE, (*p_ms).CurState as SWORD);
+                    crate::ui::settings::toggle_sound_effect(cx.world);
+                    *state ^= 1;
+                    crate::ui::menu::draw_menu_state(
+                        cx.kernel,
+                        cx.world,
+                        cx.screen_dimensions(),
+                        PM_SOUND_ON as u8,
+                        i16::from(*state),
+                    );
                 }
                 MUSIC_ON_SETTING | MUSIC_OFF_SETTING => {
-                    toggle_music();
-                    (*p_ms).CurState ^= 1;
-                    DrawMenuStateStrings(PM_SOUND_ON as BYTE, (*p_ms).CurState as SWORD);
+                    crate::ui::settings::toggle_music(cx.world);
+                    *state ^= 1;
+                    crate::ui::menu::draw_menu_state(
+                        cx.kernel,
+                        cx.world,
+                        cx.screen_dimensions(),
+                        PM_SOUND_ON as u8,
+                        i16::from(*state),
+                    );
                 }
                 CHANGE_CAPTAIN_SETTING | CHANGE_SHIP_SETTING => {
-                    name_captain_or_ship(input, (*p_ms).CurState == CHANGE_CAPTAIN_SETTING);
+                    name_captain_or_ship(cx, io, input, *state == CHANGE_CAPTAIN_SETTING)
                 }
                 _ => {
-                    let previous_speed = cur_speed;
-                    cur_speed += 1;
-                    if previous_speed < (NUM_COMBAT_SPEEDS - 1) as BYTE {
-                        (**WorldData::current()).game.glob_flags |= CYBORG_ENABLED as BYTE;
+                    let flags = &mut cx.world.data.game.glob_flags;
+                    let speed = (*flags & COMBAT_SPEED_MASK as u8) >> COMBAT_SPEED_SHIFT;
+                    let next = if speed < (NUM_COMBAT_SPEEDS - 1) as u8 {
+                        *flags |= CYBORG_ENABLED as u8;
+                        speed + 1
                     } else {
-                        cur_speed = 0;
-                        (**WorldData::current()).game.glob_flags &= !(CYBORG_ENABLED as BYTE);
-                    }
-                    (**WorldData::current()).game.glob_flags = (WorldData::current()
-                        .read(|owner| owner.game.glob_flags)
-                        & !(COMBAT_SPEED_MASK as BYTE))
-                        | (cur_speed << COMBAT_SPEED_SHIFT);
-                    (*p_ms).CurState = CYBORG_OFF_SETTING + cur_speed;
-                    DrawMenuStateStrings(PM_SOUND_ON as BYTE, (*p_ms).CurState as SWORD);
+                        *flags &= !(CYBORG_ENABLED as u8);
+                        0
+                    };
+                    *flags = (*flags & !(COMBAT_SPEED_MASK as u8)) | (next << COMBAT_SPEED_SHIFT);
+                    *state = CYBORG_OFF_SETTING + next;
+                    crate::ui::menu::draw_menu_state(
+                        cx.kernel,
+                        cx.world,
+                        cx.screen_dimensions(),
+                        PM_SOUND_ON as u8,
+                        i16::from(*state),
+                    );
                 }
             }
-            feedback_setting(input, (*p_ms).CurState);
-        } else if do_menu_chooser(input, p_ms, PM_SOUND_ON as BYTE) != 0 {
-            feedback_setting(input, (*p_ms).CurState);
+            feedback_setting(cx, input, *state);
+        } else if crate::ui::menu::choose_menu_state(cx, input, state, PM_SOUND_ON as u8) != 0 {
+            feedback_setting(cx, input, *state);
         }
-        1
+        true
     }
 
-    unsafe fn settings_menu(cx: &mut Cx<'_>, io: &mut Io<'_>) {
+    fn settings_menu(cx: &mut Cx<'_>, io: &mut Io<'_>) {
         let runtime = cx.kernel.input_runtime();
         let input = runtime.input();
-        let mut menu_state: MENU_STATE = mem::zeroed();
-        menu_state.CurState = SOUND_ON_SETTING;
-        cx.with_legacy(|| {
-            DrawMenuStateStrings(PM_SOUND_ON as BYTE, menu_state.CurState as SWORD);
-            feedback_setting(input, menu_state.CurState);
-        });
-        cx.run_input(io, false, |cx, _| {
-            let activity = cx.world.activity();
-            cx.with_legacy(|| do_settings(input, ptr::addr_of_mut!(menu_state), activity)) != 0
-        });
-        cx.with_legacy(|| DrawStatusMessage(ptr::null()));
+        let mut state = SOUND_ON_SETTING;
+        crate::ui::menu::draw_menu_state(
+            cx.kernel,
+            cx.world,
+            cx.screen_dimensions(),
+            PM_SOUND_ON as u8,
+            i16::from(state),
+        );
+        feedback_setting(cx, input, state);
+        cx.run_input(io, false, |cx, io| do_settings(cx, io, input, &mut state));
+        crate::ui::sis::draw_status_message(cx.kernel, cx.world, None);
     }
 }
 

@@ -2131,8 +2131,6 @@ pub const GAMESTR_COUNT: _bindgen_ty_27 = 579;
 pub type _bindgen_ty_27 = ::std::os::raw::c_uint;
 
 #[cfg(not(test))]
-pub use crate::front_end::gameopt::runtime::GameOptions;
-#[cfg(not(test))]
 pub use crate::game_init::world_resources::live::load_gravity_well;
 
 #[cfg(not(test))]

@@ -343,7 +343,10 @@ unsafe fn unicode_ptr_to_option(ptr: *const c_char) -> Option<String> {
 /// MUSIC_REF is a double pointer: `Box<Arc<Mutex<SoundSample>>>` stored as
 /// `*mut *mut c_void`. The outer Box is the "MUSIC_REF" handle.
 /// Borrow the Arc from a MUSIC_REF (double-pointer) WITHOUT taking ownership.
-unsafe fn music_ref_borrow(music_ref_ptr: *mut c_void) -> MusicRef {
+///
+/// # Safety
+/// The handle must identify a live, non-null native music allocation for this borrow.
+pub unsafe fn music_ref_borrow(music_ref_ptr: *mut c_void) -> MusicRef {
     let arc_ptr = *(music_ref_ptr as *const *const Mutex<SoundSample>);
     Arc::increment_strong_count(arc_ptr);
     MusicRef(Arc::from_raw(arc_ptr))

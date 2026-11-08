@@ -582,14 +582,9 @@ fn run_encounter(cx: &mut Cx<'_>, io: &mut Io<'_>, which_comm: u32, ship_type: u
         HAIL
     } else {
         cx.with_legacy(|| io.observer.checkpoint(&CheckpointView::EncounterMenu(true)));
-        // SAFETY: the encounter borrows this mode's initialized resources and input runtime.
-        let status = unsafe {
-            crate::battle::encount_native::init_encounter(
-                cx,
-                io,
-                crate::planets::starmap::current_catalog(),
-            )
-        };
+        // SAFETY: the game thread retains the catalog throughout the modal encounter.
+        let catalog = unsafe { crate::planets::starmap::current_catalog() };
+        let status = crate::battle::encount_native::init_encounter(cx, io, catalog);
         cx.with_legacy(|| {
             io.observer
                 .checkpoint(&CheckpointView::EncounterMenu(false))
@@ -610,14 +605,9 @@ fn run_encounter(cx: &mut Cx<'_>, io: &mut Io<'_>, which_comm: u32, ship_type: u
     }
     let status = encounter::fight_if_selected(cx, io);
     let runtime = cx.kernel.input_runtime();
-    // SAFETY: the game-thread catalog and encounter resources remain live through teardown.
-    unsafe {
-        crate::battle::encount_native::engine::uninit_encounter(
-            cx,
-            runtime.input(),
-            crate::planets::starmap::current_catalog(),
-        )
-    };
+    // SAFETY: the game thread retains the catalog through encounter teardown.
+    let catalog = unsafe { crate::planets::starmap::current_catalog() };
+    crate::battle::encount_native::engine::uninit_encounter(cx, io, runtime.input(), catalog);
     status
 }
 

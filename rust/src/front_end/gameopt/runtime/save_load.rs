@@ -1,15 +1,16 @@
 use super::*;
 use crate::savegame::live::load::{load_game_descriptions, LoadRequest};
 
-pub(super) unsafe fn save_load_game(
+pub(super) fn save_load_game(
     cx: &mut Cx<'_>,
+    io: &mut Io<'_>,
     input: &crate::engine::input::InputSession,
     pick_state: &mut PickGameState,
     game_index: COUNT,
     canceled_by_user: &mut BOOLEAN,
 ) -> BOOLEAN {
     let desc = &mut pick_state.summary[game_index as usize];
-    let mut name_buf: [UNICODE; 256] = [0; 256];
+    let mut name_buf = super::super::naming::save_name_buffer(&desc.SaveName);
     let context = crate::graphics::context_abi::ContextLease::retain(
         std::ptr::NonNull::new(cx.kernel.space_context)
             .unwrap_or_else(|| panic!("save/load context")),
@@ -17,24 +18,12 @@ pub(super) unsafe fn save_load_game(
     let mut background = None;
     let success;
     if pick_state.saving != 0 {
-        // SAFETY: both fixed arrays contain SAVE_NAME_SIZE bytes; strncpy preserves NUL padding.
-        unsafe {
-            libc::strncpy(
-                name_buf.as_mut_ptr(),
-                desc.SaveName.as_ptr(),
-                SAVE_NAME_SIZE as usize,
-            );
-        }
-        name_buf[SAVE_NAME_SIZE as usize] = 0;
-        // SAFETY: the game-thread picker retains its graphics context and the writable name buffer.
-        if cx.with_legacy(|| unsafe { name_save_game(input, game_index, name_buf.as_mut_ptr()) })
-            != 0
-        {
+        if name_save_game(cx, io, input, game_index, &mut name_buf) {
             play_menu_sound(cx.kernel, cx.world, MENU_SUCCESS as u16);
             // SAFETY: the game-thread picker retains the stamp, selected summary and name buffer.
             background = crate::ui::save_problem::save_confirmation(cx.kernel, &context, true);
             let summary = ptr::from_mut(desc).cast();
-            let name = name_buf.as_ptr();
+            let name = name_buf.as_ptr().cast();
             // SAFETY: the picker retains its writable summary and terminated name.
             success = unsafe { SaveGame(cx, game_index, summary, name) };
         } else {
@@ -119,8 +108,7 @@ pub(super) fn pick_game(
         let slot = menu_state.CurState as COUNT;
         // SAFETY: the picker is the sole game-thread writer of this remembered slot.
         unsafe { LAST_USED_SLOT = slot };
-        // SAFETY: the synchronous picker owns these published native resources.
-        if unsafe { save_load_game(cx, input, &mut pick_state, slot, &mut canceled_by_user) } != 0 {
+        if save_load_game(cx, io, input, &mut pick_state, slot, &mut canceled_by_user) != 0 {
             let operation = if saving != 0 { "save" } else { "load" };
             log::info!("RUST_PICKER: exit={operation}_success");
             break;
