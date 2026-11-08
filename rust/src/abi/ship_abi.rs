@@ -2059,13 +2059,10 @@ pub type _bindgen_ty_25 = ::std::os::raw::c_uint;
 #[derive(Debug, Copy, Clone)]
 pub struct planet_orbit {
     pub TopoZoomFrame: FRAME,
-    pub lpTopoData: *mut SBYTE,
     pub SphereFrame: FRAME,
     pub ObjectFrame: FRAME,
     pub TintFrame: FRAME,
     pub TintColor: Color,
-    pub TopoColors: *mut Color,
-    pub ScratchArray: *mut Color,
     pub WorkFrame: FRAME,
 }
 #[repr(C)]

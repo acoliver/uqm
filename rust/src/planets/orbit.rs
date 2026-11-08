@@ -24,7 +24,6 @@ pub(crate) mod live {
     use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
     use crate::mainloop::restart_menu::c_extern::{self as base, SetContext};
     use crate::mainloop::types::activity_flags::{CHECK_ABORT, CHECK_LOAD, START_ENCOUNTER};
-    use crate::memory::rust_hfree;
     use crate::planet_side::{orbit_music, orbit_scan};
     use crate::starbase::cffi::CffiPlatform;
     use crate::starbase::gfx::{ContextId, FlashTarget, Gfx, Point, Rect, Rgba, Stamp};
@@ -232,6 +231,7 @@ pub(crate) mod live {
         }
         let presentation = OrbitPresentation::new(game.borrow().kernel);
         let context = presentation.context();
+        let sphere = presentation.sphere();
         let animation = game.borrow().kernel.planet_animation.clone();
         let wait = game.borrow_mut().with_legacy(|| {
             let system = solar_system::current();
@@ -248,7 +248,13 @@ pub(crate) mod live {
             }
             base::stop_music();
             let planet = (*system).pOrbitalDesc;
-            generate_planet_surface(&animation, pulsing_shield, planet, surface);
+            generate_planet_surface(
+                &mut sphere.borrow_mut(),
+                &animation,
+                pulsing_shield,
+                planet,
+                surface,
+            );
             orbit_music::set_planet_music((*planet).data_index & !0x80);
             wait
         });
@@ -258,7 +264,7 @@ pub(crate) mod live {
                 base::PlayMusic((orbit_music::LANDER_MUSIC).cast(), 1, 1);
             }
             if wait {
-                zoom_in_planet_sphere(&context);
+                zoom_in_planet_sphere(&context, &sphere);
                 draw_display(&context, UPDATE);
             } else {
                 draw_display(&context, FULL);
@@ -286,8 +292,6 @@ pub(crate) mod live {
         (*system).TopoFrame = std::ptr::null_mut();
         DestroyStringTable(ReleaseStringTable((*system).OrbitalCMap.cast()));
         (*system).OrbitalCMap = std::ptr::null_mut();
-        rust_hfree((*orbit).lpTopoData.cast());
-        (*orbit).lpTopoData = std::ptr::null_mut();
         base::DestroyDrawable(base::ReleaseDrawable((*orbit).TopoZoomFrame.cast()));
         (*orbit).TopoZoomFrame = std::ptr::null_mut();
         base::DestroyDrawable(base::ReleaseDrawable((*orbit).SphereFrame.cast()));
@@ -304,10 +308,6 @@ pub(crate) mod live {
         (*orbit).ObjectFrame = std::ptr::null_mut();
         base::DestroyDrawable(base::ReleaseDrawable((*orbit).WorkFrame.cast()));
         (*orbit).WorkFrame = std::ptr::null_mut();
-        rust_hfree((*orbit).TopoColors.cast());
-        (*orbit).TopoColors = std::ptr::null_mut();
-        rust_hfree((*orbit).ScratchArray.cast());
-        (*orbit).ScratchArray = std::ptr::null_mut();
         DestroyStringTable(ReleaseStringTable(
             (*system).SysInfo.planet_info.discovery_string.cast(),
         ));
@@ -406,11 +406,12 @@ pub(crate) mod live {
 
     fn orbit_frame_hook(
         planet: ContextLease,
+        sphere: std::rc::Rc<std::cell::RefCell<crate::planets::sphere::SphereState>>,
         animation: std::rc::Rc<crate::engine::kernel::planet_animation::PlanetAnimation>,
     ) -> crate::engine::input::InputFrameHook {
         // SAFETY: The orbit menu removes this hook before freeing its drawing resources.
         crate::engine::input::InputFrameHook::new(move |_, _| unsafe {
-            rotate_planet_sphere(&planet, &animation, true);
+            rotate_planet_sphere(&planet, &sphere, &animation, true);
         })
     }
 
@@ -423,7 +424,11 @@ pub(crate) mod live {
         let input = runtime.input();
         let mut menu: MENU_STATE = std::mem::zeroed();
         let planet = presentation.context();
-        let hook = orbit_frame_hook(planet.clone(), cx.kernel.planet_animation.clone());
+        let hook = orbit_frame_hook(
+            planet.clone(),
+            presentation.sphere(),
+            cx.kernel.planet_animation.clone(),
+        );
         let old = cx.with_legacy(|| {
             DrawMenuStateStrings(0, 0);
             CffiPlatform.set_flash(FlashTarget::Menu3do);

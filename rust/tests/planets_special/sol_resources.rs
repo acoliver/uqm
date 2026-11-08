@@ -76,11 +76,19 @@ pub fn check(h: &mut Harness) {
         );
         let animation =
             uqm_rust::engine::Kernel::current().read(|kernel| kernel.planet_animation.clone());
-        c_api::generate_planet_surface(&animation, false, world, earth.into_frame());
+        let mut sphere = uqm_rust::planets::sphere::SphereState::default();
+        c_api::generate_planet_surface(&mut sphere, &animation, false, world, earth.into_frame());
 
         assert!(!(*system).TopoFrame.is_null());
-        assert!(!(*system).Orbit.lpTopoData.is_null());
-        assert!(!(*system).Orbit.TopoColors.is_null());
+        assert_eq!(
+            sphere.elevation().len(),
+            MAP_WIDTH as usize * MAP_HEIGHT as usize
+        );
+        assert_eq!(
+            sphere.colors().len(),
+            (MAP_WIDTH as usize + 75) * MAP_HEIGHT as usize
+        );
+        let first_elevation = sphere.elevation()[0];
         assert!(!(*system).Orbit.SphereFrame.is_null());
         let after_tint = frame_rgb((*system).TopoFrame);
         assert_eq!(after_tint.len(), before_tint.len());
@@ -99,8 +107,8 @@ pub fn check(h: &mut Harness) {
         c_api::FreePlanet();
         c_api::TFB_FlushGraphicsEx(1);
         assert!((*system).TopoFrame.is_null());
-        assert!((*system).Orbit.lpTopoData.is_null());
-        assert!((*system).Orbit.TopoColors.is_null());
+        assert_eq!(sphere.elevation()[0], first_elevation);
+        drop(sphere);
         assert!((*system).Orbit.SphereFrame.is_null());
         println!("real Earth definition consumed by actual GeneratePlanetSurface, shield and sphere allocated, then actual FreePlanet cleared surface/sphere/topography owners");
         assert_eq!(

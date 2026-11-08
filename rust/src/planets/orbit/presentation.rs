@@ -4,10 +4,11 @@ use crate::engine::{
     graphics::context_abi::{ContextFrame, ContextLease, LoadedContext},
     Kernel,
 };
-use std::ptr::NonNull;
+use std::{cell::RefCell, ptr::NonNull, rc::Rc};
 
 pub struct OrbitPresentation {
     planet: LoadedContext,
+    sphere: Rc<RefCell<crate::planets::sphere::SphereState>>,
 }
 
 impl OrbitPresentation {
@@ -22,10 +23,17 @@ impl OrbitPresentation {
             context.set_clip(clip);
             planet
         });
-        Self { planet }
+        Self {
+            planet,
+            sphere: Rc::new(RefCell::new(crate::planets::sphere::SphereState::default())),
+        }
     }
 
     pub fn context(&self) -> ContextLease {
         self.planet.lease()
+    }
+
+    pub fn sphere(&self) -> Rc<RefCell<crate::planets::sphere::SphereState>> {
+        self.sphere.clone()
     }
 }
