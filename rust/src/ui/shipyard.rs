@@ -5,9 +5,11 @@
 use crate::ui::{rgb15, settings::play_menu_sound};
 mod catalog;
 mod crew;
-use super::{shipyard_frame as frame, shipyard_hangar as hangar};
+mod drawing;
+use super::{shipyard_frame as frame, shipyard_hangar as hangar, sis};
 use catalog::{get_available_race_count, get_available_race_from_index};
 use crew::{crew_transaction, purchased_crew};
+use drawing::draw_blue_print;
 
 use crate::engine::battle::{link_queue::LinkId, Cx};
 use crate::engine::world::queues::{FleetInfo, Fragment};
@@ -628,52 +630,6 @@ unsafe fn do_modify_ships(cx: &mut Cx<'_>, menu: &mut MENU_STATE, input: &InputS
     }
     cx.with_legacy(|| SleepThread(ONE_SECOND / 30));
     1
-}
-
-unsafe fn draw_blue_print(
-    cx: &mut Cx<'_>,
-    input: &InputSession,
-    menu: &mut MENU_STATE,
-    flagship: &crate::engine::world::SisState,
-    context: &crate::graphics::context_abi::ContextLease,
-) {
-    // SAFETY: the shipyard retains its game-thread context, menu and loaded resources.
-    unsafe {
-        let frame = CaptureDrawable(LoadGraphicInstance(c"graphics.blueprints".as_ptr()).cast());
-        let mut stamp = STAMP {
-            origin: POINT { x: 0, y: 0 },
-            frame: DecFrameIndex(frame),
-        };
-        SetContextForeGroundColor(rgb15(0, 0, 0x16));
-        DrawFilledStamp(&mut stamp);
-        for slot in 0..NUM_DRIVE_SLOTS {
-            let piece = flagship.drive_slots[slot as usize];
-            cx.with_legacy(|| DrawShipPiece(frame, piece as COUNT, slot as COUNT, 1));
-        }
-        for slot in 0..NUM_JET_SLOTS {
-            let piece = flagship.jet_slots[slot as usize];
-            cx.with_legacy(|| DrawShipPiece(frame, piece as COUNT, slot as COUNT, 1));
-        }
-        for slot in 0..NUM_MODULE_SLOTS {
-            let piece = flagship.module_slots[slot as usize];
-            if !(menu.CurState as u32 == SHIPYARD && piece as u32 == CREW_POD) {
-                cx.with_legacy(|| DrawShipPiece(frame, piece as COUNT, slot as COUNT, 1));
-            }
-        }
-        SetContextForeGroundColor(rgb15(0x0a, 0x0a, 0x1f));
-        for slot in 0..NUM_MODULE_SLOTS {
-            let piece = flagship.module_slots[slot as usize];
-            if menu.CurState as u32 == SHIPYARD && piece as u32 == CREW_POD {
-                cx.with_legacy(|| DrawShipPiece(frame, piece as COUNT, slot as COUNT, 1));
-            }
-        }
-        super::sis::capacity::draw_blueprint_cells(
-            context,
-            flagship,
-            input.preferences().fonts == OPT_PC as i32,
-        );
-        DestroyDrawable(ReleaseDrawable(frame));
-    }
 }
 
 unsafe fn exit_shipyard(input: &InputSession, menu: &mut MENU_STATE) -> BOOLEAN {
