@@ -5,7 +5,7 @@ use crate::automation::trace::NativeBattleEvidence;
 use crate::engine::observe::battle::{BattleTick, ReplacementGate};
 
 impl AutomationObserver {
-    pub(crate) fn native_battle_diagnostics(&self) -> bool {
+    pub(crate) fn native_diagnostics(&self) -> bool {
         self.native_trace.is_some() && !crate::time::source::is_replay()
     }
 
@@ -18,7 +18,7 @@ impl AutomationObserver {
     }
 
     fn trace_native_battle(&self, tick: Option<BattleTick>, gate: Option<ReplacementGate>) {
-        if !self.native_battle_diagnostics() {
+        if !self.native_diagnostics() {
             return;
         }
         let mut inner = self.inner.lock();
@@ -36,7 +36,7 @@ impl AutomationObserver {
         let (generation, active) = self.ui.ship_picker_observation();
         let reservation = self.runtime.commit.reserve();
         let record = TraceRecord {
-            schema: TraceRecord::BATTLE_SCHEMA,
+            schema: TraceRecord::NATIVE_SCHEMA,
             run: 1,
             sequence: reservation.sequence(),
             input_seen: inner.input_seen,

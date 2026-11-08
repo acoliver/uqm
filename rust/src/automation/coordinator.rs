@@ -23,6 +23,7 @@ mod lander;
 use input::discard_held_repeat;
 mod native_battle;
 mod native_graphics;
+pub(super) use native_graphics::MAIN_MENU_COMMITTED_OBSERVATION;
 mod navigation;
 mod parity;
 mod save_capture;
@@ -3530,9 +3531,9 @@ mod tests {
                 .process_present(Some(PresentedFrame {
                     count,
                     generation: 0,
-                    width: 1,
+                    width: 2,
                     height: 1,
-                    rgba: vec![1, 2, 3, 255]
+                    rgba: vec![1, 2, 3, 255, 4, 5, 6, 255]
                 })));
             let records: Vec<_> = std::fs::read_to_string(temp.path().join("trace.jsonl"))
                 .unwrap()
@@ -3750,9 +3751,9 @@ mod tests {
         let frame = |count, generation| PresentedFrame {
             count,
             generation,
-            width: 1,
+            width: 2,
             height: 1,
-            rgba: vec![1, 2, 3, 255],
+            rgba: vec![1, 2, 3, 255, 4, 5, 6, 255],
         };
         assert!(!_app.observer().unwrap().process_menu_transition(0, 1));
         assert!(!_app.observer().unwrap().process_menu_transition(1, 0));

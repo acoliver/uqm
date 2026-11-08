@@ -217,10 +217,10 @@ impl TraceRecord {
     /// Current schema version. Version 2 added the readiness, command
     /// acknowledgement, checkpoint, and failure records to the version 1 set.
     pub const SCHEMA: u16 = 2;
-    /// Schema 3 adds native_battle records only; replay records remain schema 2.
-    pub const BATTLE_SCHEMA: u16 = 3;
+    /// Schema 3 adds native-only diagnostics; replay records remain schema 2.
+    pub const NATIVE_SCHEMA: u16 = 3;
 
-    /// Each native-only battle record uses schema 3; other kinds retain schema 2.
+    /// Native-only diagnostic records use schema 3; other kinds retain schema 2.
     #[must_use]
     pub fn has_valid_schema(&self) -> bool {
         self.schema
@@ -228,7 +228,7 @@ impl TraceRecord {
                 self.kind,
                 RecordKind::NativeBattle | RecordKind::NativeGraphics
             ) {
-                Self::BATTLE_SCHEMA
+                Self::NATIVE_SCHEMA
             } else {
                 Self::SCHEMA
             }

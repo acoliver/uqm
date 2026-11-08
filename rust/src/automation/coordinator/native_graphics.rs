@@ -3,6 +3,8 @@
 use super::*;
 use crate::graphics::presentation_diagnostics::PresentationSample;
 
+pub(crate) const MAIN_MENU_COMMITTED_OBSERVATION: &str = "committed_non_uniform_menu_frame";
+
 impl AutomationObserver {
     pub(super) fn native_checkpoint_pending(&self, inner: &CoordInner) -> bool {
         self.native_checkpoint_plan.as_ref().is_some_and(|plan| {
@@ -27,6 +29,18 @@ impl AutomationObserver {
                 && inner.departure.native_frame_pending
             {
                 return false;
+            }
+            if matches!(checkpoint.action, Action::WaitForMainMenuReady(_)) {
+                if !frame
+                    .rgba
+                    .as_chunks::<4>()
+                    .0
+                    .iter()
+                    .any(|pixel| pixel[..3] != frame.rgba[..3])
+                {
+                    return false;
+                }
+                self.write_committed_menu_ready(inner, frame);
             }
             let id = checkpoint.id.clone();
             let reservation = self.runtime.commit.reserve();
@@ -58,8 +72,33 @@ impl AutomationObserver {
         false
     }
 
+    fn write_committed_menu_ready(&self, inner: &CoordInner, frame: &PresentedFrame) {
+        let reservation = self.runtime.commit.reserve();
+        let mut record = crate::automation::capture::capture_trace_record(
+            reservation.sequence(),
+            self.elapsed_ms(),
+            CaptureGeneration(frame.generation),
+            "",
+        );
+        record.kind = RecordKind::Readiness;
+        record.run = 1;
+        record.input_seen = inner.input_seen;
+        record.present_seen = inner.present_seen;
+        record.label = None;
+        record.presentation = Some(crate::automation::capture::presentation_evidence(frame));
+        record.readiness = Some(ReadinessEvidence {
+            subject: MAIN_MENU_READINESS_SUBJECT.into(),
+            observation: MAIN_MENU_COMMITTED_OBSERVATION.into(),
+        });
+        reservation.commit_record(
+            record
+                .to_jsonl()
+                .expect("serialize committed menu readiness"),
+        );
+    }
+
     pub(crate) fn trace_native_graphics(&self, count: u64, samples: &[PresentationSample]) {
-        if !self.native_battle_diagnostics() {
+        if !self.native_diagnostics() {
             return;
         }
         let inner = self.inner.lock();
@@ -73,7 +112,7 @@ impl AutomationObserver {
             CaptureGeneration(self.runtime.mirror.capture_generation()),
             "",
         );
-        record.schema = TraceRecord::BATTLE_SCHEMA;
+        record.schema = TraceRecord::NATIVE_SCHEMA;
         record.kind = RecordKind::NativeGraphics;
         record.run = 1;
         record.input_seen = inner.input_seen;
@@ -144,3 +183,7 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "native_menu_tests.rs"]
+mod menu_tests;
