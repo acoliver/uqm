@@ -219,7 +219,9 @@ impl TraceRecord {
     /// Schema 3 adds native_battle records only; replay records remain schema 2.
     pub const BATTLE_SCHEMA: u16 = 3;
 
-    pub(crate) fn has_valid_schema(&self) -> bool {
+    /// Each native-only battle record uses schema 3; other kinds retain schema 2.
+    #[must_use]
+    pub fn has_valid_schema(&self) -> bool {
         self.schema
             == if self.kind == RecordKind::NativeBattle {
                 Self::BATTLE_SCHEMA

@@ -58,6 +58,38 @@ fn counts_keep_exact_action_phase_sequence_and_terminal_counters() {
 }
 
 #[test]
+fn native_battle_schema_does_not_change_counted_actions_or_terminal_counters() {
+    let directory = temporary();
+    let path = directory.path().join("trace.jsonl");
+    fs::write(&path, trace("success")).unwrap();
+    let expected = counts::from_trace(&path, &summary(true), 0).unwrap();
+    let mut records: Vec<serde_json::Value> = trace("success")
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    records[2]["sequence"] = 3.into();
+    records.insert(
+        2,
+        serde_json::json!({
+            "schema":3, "sequence":2, "input_seen":3, "present_seen":4,
+            "kind":"native_battle", "native_battle":{"frame":1}
+        }),
+    );
+    let write_records = |records: &[serde_json::Value]| {
+        let text: String = records.iter().map(|record| format!("{record}\n")).collect();
+        fs::write(&path, text).unwrap();
+    };
+    write_records(&records);
+    assert_eq!(
+        counts::from_trace(&path, &summary(true), 0).unwrap(),
+        expected
+    );
+    records[2]["schema"] = 2.into();
+    write_records(&records);
+    assert!(counts::from_trace(&path, &summary(true), 0).is_err());
+}
+
+#[test]
 fn counts_phase_storage_is_lossless_and_bounded_for_long_replays() {
     let mut counts = success_counts();
     counts.action_phases = (0..10_000)

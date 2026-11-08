@@ -88,6 +88,7 @@ enum Kind {
     RunStart,
     RunEnd,
     InputTick,
+    NativeBattle,
     Presentation,
     Capture,
     MenuTransition,
@@ -171,7 +172,12 @@ pub(super) fn from_trace(path: &Path, summary: &Summary, exit: i32) -> Result<Co
 }
 
 fn validate_record(record: &Record, previous: Option<(u64, u64, u64)>) -> Result<()> {
-    if record.schema != 2 {
+    let expected_schema = if record.kind == Kind::NativeBattle {
+        3
+    } else {
+        2
+    };
+    if record.schema != expected_schema {
         return Err(format!(
             "unsupported automation trace schema {}",
             record.schema

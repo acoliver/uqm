@@ -1686,10 +1686,7 @@ fn validate_trace_and_captures(root: &Path, require_success: bool) -> Result<(),
     let mut traced_captures = BTreeSet::new();
     let mut ordered_capture_labels: Vec<String> = Vec::new();
     for (sequence, record) in records.iter().enumerate() {
-        if record.schema != TraceRecord::SCHEMA
-            || record.run != 1
-            || record.sequence != sequence as u64
-        {
+        if !record.has_valid_schema() || record.run != 1 || record.sequence != sequence as u64 {
             return Err("trace sequence/schema/run is not monotonic and exact".into());
         }
         if record.kind == RecordKind::Presentation {
@@ -1775,7 +1772,7 @@ fn validate_trace_failure(path: &Path) -> Result<(), String> {
         return Err("failure trace is empty".into());
     }
     for (sequence, record) in records.iter().enumerate() {
-        if record.sequence != sequence as u64 || record.schema != TraceRecord::SCHEMA {
+        if record.sequence != sequence as u64 || !record.has_valid_schema() {
             return Err("failure trace sequence is malformed".into());
         }
     }
