@@ -81,7 +81,6 @@ fn take_day_event(
 pub(crate) mod live {
     use super::super::clock_bridge::*;
     use super::*;
-    use std::ptr;
 
     use crate::navigation::events::live::dispatch_event;
 
@@ -114,7 +113,7 @@ pub(crate) mod live {
     }
 
     pub(crate) unsafe fn finish_clock_day(cx: &mut crate::engine::battle::Cx<'_>) {
-        cx.with_legacy(|| crate::ui::sis::DrawStatusMessage(ptr::null()));
+        crate::ui::sis::draw_status_message(cx.kernel, cx.world, None);
         let world = &mut *cx.world;
         let clock = &world.data.game.game_clock;
         let today = (

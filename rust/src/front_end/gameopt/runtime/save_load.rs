@@ -77,24 +77,28 @@ pub(super) fn pick_game(
     let mut menu_state: MENU_STATE = unsafe { mem::zeroed() };
     let (frame, context) = (cx.kernel.play_frame, cx.kernel.space_context);
     // SAFETY: the synchronous picker owns these published native resources.
-    let (old_callback, old_context, mut dlg_stamp, dlg_rect) = cx.with_legacy(|| unsafe {
+    let (old_callback, time_out) = cx.with_legacy(|| unsafe {
         pick_state.summary_frame = SetAbsFrameIndex(frame, 39);
         menu_state.privData = ptr::addr_of_mut!(pick_state).cast();
         menu_state.CurState = LAST_USED_SLOT as BYTE;
         let time_out = FadeMusic(0, (ONE_SECOND / 2) as SIZE);
         let old_callback = SetInputCallback(runtime.input(), None);
-        let (old_context, dlg_stamp, dlg_rect) = prepare_display(
+        (old_callback, time_out)
+    });
+    // SAFETY: the synchronous picker retains the summary and native contexts.
+    let (old_context, mut dlg_stamp, dlg_rect) = unsafe {
+        prepare_display(
+            cx,
             &mut pick_state,
             &menu_state,
             from_main_menu,
             context,
             time_out,
-        );
-        let navigation_sounds = MENU_SOUND_ARROWS | MENU_SOUND_PAGEUP | MENU_SOUND_PAGEDOWN;
-        SetMenuSounds(input, navigation_sounds, 0);
-        log::info!("RUST_PICKER: list_drawn slots=50");
-        (old_callback, old_context, dlg_stamp, dlg_rect)
-    });
+        )
+    };
+    let navigation_sounds = MENU_SOUND_ARROWS | MENU_SOUND_PAGEUP | MENU_SOUND_PAGEDOWN;
+    SetMenuSounds(input, navigation_sounds, 0);
+    log::info!("RUST_PICKER: list_drawn slots=50");
     loop {
         let mut canceled_by_user: BOOLEAN = 0;
         pick_state.success = 0;
@@ -120,8 +124,11 @@ pub(super) fn pick_game(
         // SAFETY: the synchronous picker owns these published native resources.
         cx.with_legacy(|| unsafe {
             load_game_descriptions(&mut *ptr::addr_of_mut!(pick_state.summary).cast());
-            redraw_pick_display(&mut pick_state, menu_state.CurState as COUNT);
         });
+        // SAFETY: the picker retains its initialized summary and drawing contexts.
+        unsafe {
+            redraw_pick_display(cx, &mut pick_state, menu_state.CurState as COUNT);
+        }
     }
     // SAFETY: the picker owns initialized game-thread menu audio.
     SetMenuSounds(input, MENU_SOUND_ARROWS, MENU_SOUND_SELECT);
@@ -142,14 +149,15 @@ pub(super) fn pick_game(
 }
 
 unsafe fn prepare_display(
+    cx: &mut Cx<'_>,
     pick_state: &mut PickGameState,
     menu_state: &MENU_STATE,
     from_main_menu: BOOLEAN,
     space_context: CONTEXT,
     time_out: DWORD,
 ) -> (CONTEXT, STAMP, RECT) {
-    // SAFETY: the caller retains the native picker state and graphics resources.
-    unsafe {
+    // SAFETY: the picker retains its summary, source context and drawable resources.
+    let (old_context, dlg_stamp, dlg_rect) = cx.with_legacy(|| unsafe {
         load_game_descriptions(&mut *ptr::addr_of_mut!(pick_state.summary).cast());
         let old_context = SetContext(space_context);
         let dlg_stamp = SaveContextFrame(ptr::null());
@@ -163,7 +171,12 @@ unsafe fn prepare_display(
         BatchGraphics();
         SetContextBackGroundColor(BLACK_COLOR);
         ClearDrawable();
-        redraw_pick_display(pick_state, menu_state.CurState as COUNT);
+        (old_context, dlg_stamp, dlg_rect)
+    });
+    // SAFETY: the initialized picker state and drawing contexts remain live.
+    unsafe { redraw_pick_display(cx, pick_state, menu_state.CurState as COUNT) };
+    // SAFETY: the picker retains the initialized drawable through the transition.
+    cx.with_legacy(|| unsafe {
         draw_save_load(pick_state);
         if from_main_menu != 0 {
             UnbatchGraphics();
@@ -174,6 +187,23 @@ unsafe fn prepare_display(
             ScreenTransition(3, &ctx_rect);
             UnbatchGraphics();
         }
-        (old_context, dlg_stamp, dlg_rect)
-    }
+    });
+    (old_context, dlg_stamp, dlg_rect)
+}
+
+/// Preserve each preview label's existing byte limit, including partial UTF-8 bytes.
+pub(super) fn summary_date(
+    kernel: &Kernel,
+    summary: &SUMMARY_DESC,
+    max_bytes: usize,
+) -> std::ffi::CString {
+    let mut bytes = crate::ui::sis::campaign_date(
+        kernel,
+        summary.month_index,
+        summary.day_index,
+        summary.year_index,
+    )
+    .into_bytes();
+    bytes.truncate(max_bytes);
+    std::ffi::CString::new(bytes).unwrap_or_else(|error| panic!("invalid preview date: {error}"))
 }

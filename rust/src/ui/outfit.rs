@@ -1,10 +1,14 @@
 //! Outfit installation, fuel transactions and menu callbacks, ported from outfit.c.
 #![cfg(not(test))]
 
-use crate::engine::StoryKey;
 use crate::engine::World;
-use crate::engine::{Kernel, WorldData};
+use crate::engine::{battle::Cx, input::InputSession, StoryKey};
 use crate::navigation::abi::*;
+use crate::ui::menu::draw_campaign_menu;
+use crate::ui::sis::{
+    clear_flash, clear_sis_rect, delta_sis_gauges, draw_campaign_message, draw_flagship_name,
+    draw_flagship_stats, draw_title, highlight_rect, set_menu_flash,
+};
 
 use crate::state::game_state_keys::get_game_state;
 use std::{mem, ptr};
@@ -24,8 +28,6 @@ const LANDER_DISASTERS: [u32; 4] = [
     LIGHTNING_DISASTER,
     LAVASPOT_DISASTER,
 ];
-const MENU_3DO: *const RECT = usize::MAX as *const RECT;
-const MENU_ANY: *const RECT = (usize::MAX - 1) as *const RECT;
 const SOUND_ARROWS: MENU_SOUND_FLAGS = 0x0f;
 const SOUND_SELECT: MENU_SOUND_FLAGS = 1 << 4;
 const SOUND_CANCEL: MENU_SOUND_FLAGS = 1 << 5;
@@ -41,16 +43,8 @@ const fn rgb15(r: u8, g: u8, b: u8) -> Color {
 }
 const BLACK: Color = rgb15(0, 0, 0);
 
-unsafe fn game_string(index: u32) -> *mut UNICODE {
-    GetStringAddress(SetAbsStringTableIndex(
-        Kernel::current().read(|owner| owner.game_strings),
-        index as COUNT,
-    ))
-    .cast()
-}
-
-unsafe fn draw_module_strings(menu: &mut MENU_STATE, module: BYTE) {
-    let old = SetContext(Kernel::current().read(|owner| owner.status_context));
+unsafe fn draw_module_strings(cx: &mut Cx<'_>, menu: &mut MENU_STATE, module: BYTE) {
+    let old = SetContext(cx.kernel.status_context);
     let mut r: RECT = mem::zeroed();
     GetContextClipRect(&mut r);
     let mut s = STAMP {
@@ -80,7 +74,7 @@ unsafe fn draw_module_strings(menu: &mut MENU_STATE, module: BYTE) {
         DrawStamp(&mut s);
         let buffer = format!(
             "{}\0",
-            (**WorldData::current()).game.module_cost[module as usize] as u32 * MODULE_COST_SCALE
+            cx.world.data.game.module_cost[module as usize] as u32 * MODULE_COST_SCALE
         );
         let mut text = TEXT {
             baseline: POINT {
@@ -91,7 +85,7 @@ unsafe fn draw_module_strings(menu: &mut MENU_STATE, module: BYTE) {
             CharCount: COUNT::MAX,
             pStr: buffer.as_ptr().cast(),
         };
-        SetContextFont(Kernel::current().read(|owner| owner.tiny_font));
+        SetContextFont(cx.kernel.tiny_font);
         SetContextForeGroundColor(rgb15(0, 0x1f, 0));
         font_DrawText(&mut text);
     }
@@ -99,12 +93,12 @@ unsafe fn draw_module_strings(menu: &mut MENU_STATE, module: BYTE) {
     SetContext(old);
 }
 
-unsafe fn display_landers(menu: &mut MENU_STATE) {
+unsafe fn display_landers(cx: &mut Cx<'_>, menu: &mut MENU_STATE) {
     let mut s = STAMP {
         origin: POINT { x: 0, y: 0 },
         frame: menu.ModuleFrame,
     };
-    if World::current().read(|world| get_game_state(world, StoryKey::CHMMR_BOMB_STATE)) == 3 {
+    if get_game_state(cx.world, StoryKey::CHMMR_BOMB_STATE) == 3 {
         s.frame = DecFrameIndex(s.frame);
         DrawStamp(&mut s);
     } else {
@@ -113,7 +107,7 @@ unsafe fn display_landers(menu: &mut MENU_STATE) {
             y: LANDER_Y,
         };
         let mut i = 0;
-        while i < WorldData::current().read(|owner| owner.flagship.num_landers) as COUNT {
+        while i < cx.world.data.flagship.num_landers as COUNT {
             DrawStamp(&mut s);
             s.origin.x += LANDER_WIDTH;
             i += 1;
@@ -145,7 +139,7 @@ fn slot_piece(world: &World, state: BYTE, item: SIZE) -> BYTE {
 
 // The C InitFlash label is entered both after a transaction and after moving
 // between slot classes. Horizontal movement instead offsets the existing rect.
-unsafe fn init_flash(menu: &mut MENU_STATE, piece: BYTE) {
+unsafe fn init_flash(cx: &mut Cx<'_>, menu: &mut MENU_STATE, piece: BYTE) {
     let state = menu.CurState;
     let mut width = SHIP_PIECE_OFFSET as SIZE;
     let rect = &mut menu.flash_rect0;
@@ -196,11 +190,11 @@ unsafe fn init_flash(menu: &mut MENU_STATE, piece: BYTE) {
         };
     }
     rect.corner.x += width * menu.delta_item;
-    draw_module_strings(menu, piece);
+    draw_module_strings(cx, menu, piece);
     if state < EMPTY_SLOT {
-        SetFlashRect(MENU_ANY);
+        set_menu_flash(cx.kernel, cx.screen_dimensions(), true);
     } else {
-        SetFlashRect(ptr::addr_of!(menu.flash_rect0));
+        highlight_rect(cx.kernel, menu.flash_rect0);
     }
 }
 
@@ -229,16 +223,22 @@ fn module_selection_range(world: &World, state: BYTE) -> (SIZE, SIZE) {
 }
 
 unsafe fn finish_module_transaction(
-    cx: &mut crate::engine::battle::Cx<'_>,
+    cx: &mut Cx<'_>,
     menu: &mut MENU_STATE,
-    input: &crate::engine::input::InputSession,
+    input: &InputSession,
     new_piece: BYTE,
     old_piece: BYTE,
     cost: i32,
 ) {
-    cx.with_legacy(|| DeltaSISGauges(UNDEFINED_DELTA as SIZE, UNDEFINED_DELTA as SIZE, cost));
+    delta_sis_gauges(
+        cx.kernel,
+        cx.world,
+        UNDEFINED_DELTA as SIZE,
+        UNDEFINED_DELTA as SIZE,
+        cost,
+    );
     if menu.CurState == PLANET_LANDER as BYTE || menu.CurState == EMPTY_SLOT + 3 {
-        cx.with_legacy(|| display_landers(menu));
+        display_landers(cx, menu);
     } else {
         cx.with_legacy(|| {
             DrawShipPiece(
@@ -255,16 +255,13 @@ unsafe fn finish_module_transaction(
             );
         }
         if input.preferences().fonts == OPT_PC as i32 {
-            cx.with_legacy(|| draw_flagship_stats());
+            draw_flagship_stats(cx.kernel, cx.world, cx.screen_dimensions());
         }
     }
 }
 
-unsafe fn do_install_module(
-    cx: &mut crate::engine::battle::Cx<'_>,
-    menu: &mut MENU_STATE,
-    input: &crate::engine::input::InputSession,
-) -> BOOLEAN {
+unsafe fn do_install_module(cx: &mut Cx<'_>, menu: &mut MENU_STATE, input: &InputSession) -> u32 {
+    let size = cx.screen_dimensions();
     if cx.world.activity() & CHECK_ABORT as u16 != 0 {
         menu.InputFunc = Some(do_outfit);
         return 1;
@@ -283,9 +280,9 @@ unsafe fn do_install_module(
         menu.Initialized = 1;
         menu.InputFunc = Some(do_install_module);
         SetContext(cx.kernel.space_context);
-        cx.with_legacy(|| ClearSISRect(CLEAR_SIS_RADAR as BYTE));
-        cx.with_legacy(|| SetFlashRect(ptr::null()));
-        cx.with_legacy(|| init_flash(menu, old_piece));
+        clear_sis_rect(cx.kernel, cx.world, size, CLEAR_SIS_RADAR as BYTE);
+        clear_flash(cx.kernel);
+        init_flash(cx, menu, old_piece);
     } else if select || cancel {
         let mut new_piece = menu.CurState;
         if select && !can_install(cx.world, new_piece, old_piece) {
@@ -297,7 +294,7 @@ unsafe fn do_install_module(
             return 1;
         }
         SetContext(cx.kernel.space_context);
-        cx.with_legacy(|| SetFlashRect(ptr::null()));
+        clear_flash(cx.kernel);
         if select {
             if new_piece >= EMPTY_SLOT && old_piece >= EMPTY_SLOT {
                 new_piece -= EMPTY_SLOT - 1;
@@ -305,13 +302,8 @@ unsafe fn do_install_module(
                     new_piece = PLANET_LANDER as BYTE;
                 }
             } else {
-                let cost = apply_piece(
-                    cx.world,
-                    menu.CurState,
-                    menu.delta_item,
-                    new_piece,
-                    old_piece,
-                );
+                let slot = menu.delta_item;
+                let cost = apply_piece(cx.world, menu.CurState, slot, new_piece, old_piece);
                 finish_module_transaction(cx, menu, input, new_piece, old_piece, cost);
             }
             cancel = false;
@@ -326,17 +318,17 @@ unsafe fn do_install_module(
             if cancel {
                 new_piece = menu.CurState;
             }
-            cx.with_legacy(|| init_flash(menu, new_piece));
+            init_flash(cx, menu, new_piece);
         } else if !cancel {
             menu.CurState = new_piece;
-            cx.with_legacy(|| init_flash(menu, new_piece));
+            init_flash(cx, menu, new_piece);
         } else {
             SetContext(cx.kernel.status_context);
             menu.CurState = OUTFIT_MODULES;
-            cx.with_legacy(|| DrawMenuStateStrings(PM_FUEL as BYTE, menu.CurState as i16));
-            cx.with_legacy(|| SetFlashRect(MENU_3DO));
+            draw_campaign_menu(cx, PM_FUEL as BYTE, menu.CurState as i16);
+            set_menu_flash(cx.kernel, size, false);
             menu.InputFunc = Some(do_outfit);
-            cx.with_legacy(|| ClearSISRect(DRAW_SIS_DISPLAY as BYTE));
+            clear_sis_rect(cx.kernel, cx.world, size, DRAW_SIS_DISPLAY as BYTE);
         }
     } else if left || right || up || down {
         let mut item = if state < EMPTY_SLOT {
@@ -396,7 +388,7 @@ unsafe fn do_install_module(
             if item != menu.CurState as SIZE {
                 menu.CurState = item as BYTE;
                 cx.kernel.sis_highlight.pre_update_flash_rect();
-                cx.with_legacy(|| draw_module_strings(menu, item as BYTE));
+                draw_module_strings(cx, menu, item as BYTE);
                 cx.kernel.sis_highlight.post_update_flash_rect();
             }
         } else if item != menu.delta_item || state != menu.CurState {
@@ -410,20 +402,17 @@ unsafe fn do_install_module(
                 };
                 menu.flash_rect0.corner.x += width * (item - menu.delta_item);
                 menu.delta_item = item;
-                cx.with_legacy(|| draw_module_strings(menu, piece));
-                cx.with_legacy(|| SetFlashRect(ptr::addr_of!(menu.flash_rect0)));
+                draw_module_strings(cx, menu, piece);
+                highlight_rect(cx.kernel, menu.flash_rect0);
             } else {
                 menu.CurState = state;
-                cx.with_legacy(|| init_flash(menu, piece));
+                init_flash(cx, menu, piece);
             }
         }
     }
     1
 }
-unsafe fn change_fuel_quantity(
-    cx: &mut crate::engine::battle::Cx<'_>,
-    input: &crate::engine::input::InputSession,
-) {
+unsafe fn change_fuel_quantity(cx: &mut Cx<'_>, input: &InputSession) {
     let highlight = cx.kernel.sis_highlight.clone();
     let mut incr: i32 = if input.pulsed().menu[KEY_MENU_UP as usize] != 0 {
         FUEL_TANK_SCALE as i32
@@ -458,24 +447,23 @@ unsafe fn change_fuel_quantity(
         );
     } else {
         let cost = incr / FUEL_TANK_SCALE as i32 * cx.world.data.game.fuel_cost as i32;
-        cx.with_legacy(|| {
+        {
             highlight.pre_update_flash_rect();
-            DeltaSISGauges(0, incr as SIZE, -cost);
+            delta_sis_gauges(cx.kernel, cx.world, 0, incr as SIZE, -cost);
             highlight.post_update_flash_rect();
-        });
+        };
         crate::ui::sis::capacity::draw_fuel_bars(
             &crate::graphics::context_abi::ContextLease::require(cx.kernel.space_context),
             &cx.world.data.flagship,
         );
     }
     let context = cx.kernel.status_context;
-    cx.with_legacy(|| {
-        let mut r: RECT = mem::zeroed();
+    {
         let old = SetContext(context);
-        GetGaugeRect(&mut r, 0);
-        SetFlashRect(&r);
+        let r = crate::ui::sis::gauges::gauge_rect(false);
+        highlight_rect(cx.kernel, r);
         SetContext(old);
-    });
+    };
 }
 
 fn on_naming_done(kernel: &crate::engine::Kernel, world: &crate::engine::World, width: i32) {
@@ -496,11 +484,8 @@ unsafe fn exit_outfit(kernel: &mut crate::engine::Kernel, menu: &mut MENU_STATE)
 /// # Safety
 /// `menu` must be the live game-thread menu. Game, resources, input, graphics
 /// and audio must be initialized and exclusively accessed on that thread.
-unsafe fn initialize_outfit(
-    cx: &mut crate::engine::battle::Cx<'_>,
-    menu: &mut MENU_STATE,
-    input: &crate::engine::input::InputSession,
-) {
+unsafe fn initialize_outfit(cx: &mut Cx<'_>, menu: &mut MENU_STATE, input: &InputSession) {
+    let size = cx.screen_dimensions();
     menu.InputFunc = Some(do_outfit);
     menu.Initialized = 1;
     cx.kernel.naming_callback = Some(on_naming_done);
@@ -515,11 +500,12 @@ unsafe fn initialize_outfit(
     };
     SetTransitionSource(ptr::null());
     BatchGraphics();
-    cx.with_legacy(|| {
-        draw_sisframe();
-        DrawSISMessage(game_string(STARBASE_STRING_BASE + 2));
-        DrawSISTitle(game_string(STARBASE_STRING_BASE));
-    });
+
+    crate::ui::border::draw_sis_frame(cx.kernel, cx.world, size);
+    let message = cx.kernel.game_text((STARBASE_STRING_BASE + 2) as usize);
+    let title = cx.kernel.game_text(STARBASE_STRING_BASE as usize);
+    draw_campaign_message(cx.kernel, cx.world, size.0, Some(message));
+    draw_title(cx.kernel, size.0, title);
     SetContext(cx.kernel.space_context);
     DrawStamp(&mut s);
     DestroyDrawable(ReleaseDrawable(s.frame));
@@ -541,7 +527,7 @@ unsafe fn initialize_outfit(
         &crate::graphics::context_abi::ContextLease::require(cx.kernel.space_context),
         &cx.world.data.flagship,
     );
-    cx.with_legacy(|| display_landers(menu));
+    display_landers(cx, menu);
     if cx.world.story_state(StoryKey::CHMMR_BOMB_STATE) < 3 {
         let shields = cx.world.story_state(StoryKey::LANDER_SHIELDS);
         s.frame = SetAbsFrameIndex(menu.ModuleFrame, GetFrameCount(menu.ModuleFrame) - 5);
@@ -554,19 +540,19 @@ unsafe fn initialize_outfit(
             }
         }
     }
-    cx.with_legacy(|| {
-        DrawMenuStateStrings(PM_FUEL as BYTE, menu.CurState as i16);
-        DrawFlagshipName(0);
-    });
+    {
+        draw_campaign_menu(cx, PM_FUEL as BYTE, menu.CurState as i16);
+        draw_flagship_name(cx.kernel, cx.world, size.0, false);
+    };
     if input.preferences().fonts == OPT_PC as i32 {
-        cx.with_legacy(|| draw_flagship_stats());
+        draw_flagship_stats(cx.kernel, cx.world, size);
     }
-    cx.with_legacy(|| {
+    {
         ScreenTransition(3, ptr::null());
-        PlayMusic(menu.hMusic, 1, 1);
+        crate::ui::settings::play_music_for_world(cx.world, menu.hMusic, 1, 1);
         UnbatchGraphics();
-        SetFlashRect(MENU_3DO);
-    });
+        set_menu_flash(cx.kernel, size, false);
+    };
     cx.world.data.flagship.fuel_on_board = cx
         .world
         .data
@@ -580,11 +566,8 @@ unsafe fn initialize_outfit(
 
 /// # Safety
 /// The menu's native graphics resources must remain initialized during this frame.
-pub unsafe fn do_outfit(
-    cx: &mut crate::engine::battle::Cx<'_>,
-    menu: &mut MENU_STATE,
-    input: &crate::engine::input::InputSession,
-) -> BOOLEAN {
+pub unsafe fn do_outfit(cx: &mut Cx<'_>, menu: &mut MENU_STATE, input: &InputSession) -> BOOLEAN {
+    let size = cx.screen_dimensions();
     if cx.world.activity() & CHECK_ABORT as u16 != 0 {
         return exit_outfit(cx.kernel, menu);
     }
@@ -595,7 +578,7 @@ pub unsafe fn do_outfit(
     {
         if menu.CurState == OUTFIT_DOFUEL {
             menu.CurState = OUTFIT_FUEL;
-            cx.with_legacy(|| SetFlashRect(MENU_3DO));
+            set_menu_flash(cx.kernel, size, false);
         } else {
             return exit_outfit(cx.kernel, menu);
         }
@@ -604,16 +587,16 @@ pub unsafe fn do_outfit(
             OUTFIT_FUEL => {
                 menu.CurState = OUTFIT_DOFUEL;
                 let context = cx.kernel.status_context;
-                cx.with_legacy(|| {
+                {
                     SetContext(context);
-                    let mut r: RECT = mem::zeroed();
-                    GetGaugeRect(&mut r, 0);
-                    SetFlashRect(&r);
-                });
+
+                    let r = crate::ui::sis::gauges::gauge_rect(false);
+                    highlight_rect(cx.kernel, r);
+                };
             }
             OUTFIT_DOFUEL => {
                 menu.CurState = OUTFIT_FUEL;
-                cx.with_legacy(|| SetFlashRect(MENU_3DO));
+                set_menu_flash(cx.kernel, size, false);
             }
             OUTFIT_MODULES => {
                 menu.CurState = EMPTY_SLOT + 2;
@@ -637,10 +620,10 @@ pub unsafe fn do_outfit(
                 {
                     return exit_outfit(cx.kernel, menu);
                 }
-                cx.with_legacy(|| {
-                    DrawMenuStateStrings(PM_FUEL as BYTE, menu.CurState as i16);
-                    SetFlashRect(MENU_3DO);
-                });
+                {
+                    draw_campaign_menu(cx, PM_FUEL as BYTE, menu.CurState as i16);
+                    set_menu_flash(cx.kernel, size, false);
+                };
             }
             _ => {}
         }
@@ -654,7 +637,7 @@ pub unsafe fn do_outfit(
             change_fuel_quantity(cx, input);
             cx.with_legacy(|| SleepThread(ONE_SECOND / 30));
         } else {
-            cx.with_legacy(|| do_menu_chooser(input, menu, PM_FUEL as BYTE));
+            crate::ui::menu::choose_menu_state(cx, input, &mut menu.CurState, PM_FUEL as BYTE);
         }
     }
     1

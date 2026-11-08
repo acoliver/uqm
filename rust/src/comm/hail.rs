@@ -13,12 +13,13 @@ use crate::engine::StoryKey;
 use crate::engine::World;
 
 use crate::engine::{battle::Cx, observe::Io};
+
 // ============================================================================
 // C bridge declarations (not compiled in test builds)
 // ============================================================================
 
 #[cfg(not(test))]
-use crate::engine::{Kernel, WorldData};
+use crate::engine::Kernel;
 #[cfg(not(test))]
 pub(super) mod c_bridge {
     use std::ffi::c_int;
@@ -38,12 +39,9 @@ pub(super) mod c_bridge {
     pub use crate::sound::heart_ffi::{fade_music as FadeMusic, stop_sound as StopSound};
     pub use crate::strings::sresins::LoadStringTableInstance;
     pub use crate::strings::string_table::{
-        CaptureStringTable, DestroyStringTable, GetStringAddress, ReleaseStringTable,
-        SetAbsStringTableIndex,
+        CaptureStringTable, DestroyStringTable, ReleaseStringTable,
     };
-    pub use crate::ui::border::draw_sisframe;
     pub use crate::ui::settings::stop_music;
-    pub use crate::ui::sis::DrawSISTitle;
 
     pub use crate::graphics::resgfx::LoadGraphicInstance;
 
@@ -56,8 +54,6 @@ pub(super) mod c_bridge {
     pub use crate::comm::comm_abi::c_SetTextCacheFrame;
 
     pub use crate::graphics::frame_abi::ClearDrawable;
-
-    pub use crate::ui::sis::DrawSISMessage;
 
     pub use crate::comm::comm_abi::c_SetCurInputState;
 
@@ -234,12 +230,10 @@ impl super::player_font::FontRelease for CFontRelease {
 /// Check if this is a starbase conversation by reading C game state.
 /// Matches: GET_GAME_STATE(GLOBAL_FLAGS_AND_DATA) == 0xFF && GET_GAME_STATE(STARBASE_AVAILABLE)
 #[cfg(not(test))]
-fn is_starbase_conversation() -> bool {
+fn is_starbase_conversation(world: &World) -> bool {
     // Direct game state access (replaces c_IsStarbaseConversation)
-    let global_flags =
-        World::current().read(|world| world.story_state(StoryKey::GLOBAL_FLAGS_AND_DATA));
-    let starbase_available =
-        World::current().read(|world| world.story_state(StoryKey::STARBASE_AVAILABLE));
+    let global_flags = world.story_state(StoryKey::GLOBAL_FLAGS_AND_DATA);
+    let starbase_available = world.story_state(StoryKey::STARBASE_AVAILABLE);
     global_flags == 0xFF && starbase_available != 0
 }
 
@@ -247,26 +241,6 @@ fn is_starbase_conversation() -> bool {
 #[cfg(not(test))]
 fn draw_sis_com_window(activity: u16) {
     super::sis_graphics::draw_sis_com_window(activity);
-}
-
-/// Get the planet name from GlobData.flagship.planet_name.
-#[cfg(not(test))]
-unsafe fn planet_name() -> *const std::ffi::c_char {
-    let world = WorldData::current();
-    // GlobData.flagship.planet_name is a char[16] array
-    // Use addr_of_mut! to avoid creating a shared reference to mutable static
-    let planet_name_ptr = std::ptr::addr_of_mut!((**world).flagship.planet_name);
-    planet_name_ptr as *const std::ffi::c_char
-}
-
-/// Get a game string via GAME_STRING macro: SetAbsStringTableIndex(GameStrings, i) → GetStringAddress.
-#[cfg(not(test))]
-pub(crate) unsafe fn game_string(index: i32) -> *const std::ffi::c_char {
-    let s = c_bridge::SetAbsStringTableIndex(
-        Kernel::current().read(|owner| owner.game_strings).cast(),
-        index as u16,
-    );
-    c_bridge::GetStringAddress(s)
 }
 
 // ============================================================================
@@ -474,25 +448,7 @@ pub unsafe fn hail_alien(cx: &mut Cx<'_>, io: &mut Io<'_>) {
                     c_bridge::CommWndRect.corner.y = 10; // SIS_ORG_Y
                     SetContextClipRect((&raw mut c_bridge::CommWndRect).cast());
                 }
-
-                draw_sisframe();
-
-                if is_starbase_conversation() {
-                    // Talking to allied Starbase
-                    let msg = game_string(STARBASE_STRING_BASE + 1);
-                    DrawSISMessage(msg);
-                    let title = game_string(STARBASE_STRING_BASE);
-                    DrawSISTitle(title.cast_mut());
-                } else {
-                    // Default titles: NULL message + planet name
-                    DrawSISMessage(ptr::null());
-                    let planet_name = planet_name();
-                    DrawSISTitle(planet_name.cast_mut());
-                }
             }
-
-            // DrawSISComWindow (C line 1278) — ported from c_DrawSISComWindow
-            draw_sis_com_window(activity);
 
             c_bridge::HailResources {
                 space_ctx,
@@ -507,6 +463,13 @@ pub unsafe fn hail_alien(cx: &mut Cx<'_>, io: &mut Io<'_>) {
                 text_cache_frame,
             }
         });
+
+        if activity & 0xff != 5 {
+            let title = is_starbase_conversation(cx.world).then_some(STARBASE_STRING_BASE as usize);
+            let dimensions = cx.screen_dimensions();
+            crate::ui::border::draw_conversation_frame(cx.kernel, cx.world, dimensions, title);
+        }
+        cx.with_legacy(|| draw_sis_com_window(activity));
 
         cx.kernel.last_activity |= 0x1000;
         if let Some(callback) = c_bridge::CommData.init_encounter_func {

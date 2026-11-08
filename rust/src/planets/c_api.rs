@@ -14,12 +14,6 @@ use crate::planets::universe_units::{universe_to_logx, universe_to_logy};
 
 #[cfg(all(not(test), feature = "debug-process"))]
 pub use crate::front_end::uqmdebug::DISABLE_INTERACTIVITY;
-#[cfg(not(test))]
-use crate::ui::sis::repair_sisborder;
-#[cfg(test)]
-extern "C" {
-    fn repair_sisborder();
-}
 
 pub use crate::log_abi::log_init;
 
@@ -66,12 +60,6 @@ pub use crate::strings::string_table::CaptureStringTable;
 use crate::strings::string_table::SetAbsStringTableIndex;
 
 use crate::navigation::interplanetary::live::notify_others_abi as NotifyOthers;
-
-use crate::ui::sis::DeltaSISGauges;
-
-use crate::ui::sis::DrawSISMessage;
-
-use crate::ui::sis::DrawHyperCoords;
 
 extern "C" {
 
@@ -149,14 +137,6 @@ const INFINITE_FLEET: u16 = !0;
 /// Game thread, with the fleet queue initialised.
 pub fn start_sphere_tracking(world: &mut crate::engine::World, race: u16) -> bool {
     crate::engine::world::fleet::start_sphere_tracking(world, race) != 0
-}
-
-/// `RepairSISBorder ()`.
-///
-/// # Safety
-/// Game thread, inside a planet orbit.
-pub unsafe fn repair_sis_border() {
-    repair_sisborder();
 }
 
 /// `NotifyOthers (race, IPNL_ALL_CLEAR)`.
@@ -350,28 +330,4 @@ pub unsafe fn fade_to_black_for_two_seconds() {
 pub unsafe fn current_star_point() -> (i16, i16) {
     let point = (*(**WorldOwner::current()).star_pointer()).star_pt;
     (point.x, point.y)
-}
-
-/// `DeltaSISGauges (0, delta, 0)`.
-///
-/// # Safety
-/// Game thread.
-pub unsafe fn delta_fuel(delta: i16) {
-    DeltaSISGauges(0, delta, 0);
-}
-
-/// `DrawSISMessage (NULL)`.
-///
-/// # Safety
-/// Game thread.
-pub unsafe fn clear_sis_message() {
-    DrawSISMessage(std::ptr::null());
-}
-
-/// `DrawHyperCoords (loc)`.
-///
-/// # Safety
-/// Game thread.
-pub unsafe fn draw_hyper_coords(loc: (i16, i16)) {
-    DrawHyperCoords(CPoint { x: loc.0, y: loc.1 });
 }

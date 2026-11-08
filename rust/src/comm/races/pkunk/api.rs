@@ -28,10 +28,9 @@ impl PkunkApi for crate::comm::races::script::live::LiveScript<'_, '_, Handler> 
         match added {
             Some(count) => {
                 // SAFETY: the campaign borrow ends before the game-thread display refresh.
-                unsafe {
-                    self.cx
-                        .borrow_mut()
-                        .with_legacy(|| crate::ui::sis::DeltaSISGauges(32767, 32767, 32767))
+                {
+                    let cx = &mut *self.cx.borrow_mut();
+                    crate::ui::sis::delta_sis_gauges(cx.kernel, cx.world, 32767, 32767, 32767)
                 };
                 count
             }

@@ -9,7 +9,6 @@ pub mod confirm;
 pub mod getchar;
 pub mod menu;
 pub mod menu_state;
-#[cfg(not(test))]
 mod palette;
 
 pub mod shipstat;
@@ -31,6 +30,8 @@ mod shipyard_frame;
 #[path = "shipyard/hangar.rs"]
 mod shipyard_hangar;
 pub(crate) mod shipyard_layout;
+#[path = "shipyard/selection.rs"]
+mod shipyard_selection;
 pub mod starbase;
 
 #[cfg(not(test))]

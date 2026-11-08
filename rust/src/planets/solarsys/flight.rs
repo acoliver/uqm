@@ -40,8 +40,6 @@ use crate::graphics::frame_abi::DrawStamp;
 
 use crate::time::clock_abi::live::GameClockTick;
 
-use crate::ui::sis::DrawAutoPilotMessage;
-
 use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
 
 #[inline]
@@ -442,9 +440,9 @@ pub(super) unsafe fn scale_system(cx: &mut Cx<'_>, new_radius: c::SIZE) {
         c::GetContextClipRect(&mut rect);
         SetTransitionSource((&raw mut rect).cast());
         BatchGraphics();
-        draw_outer_system();
         rect
     });
+    draw_outer_system(cx);
     redraw_queue(cx, false);
     cx.with_legacy(|| {
         ScreenTransition(3, (&raw const rect).cast());
@@ -489,10 +487,13 @@ pub(super) unsafe fn ip_frame(cx: &mut Cx<'_>, io: &mut crate::engine::observe::
             restore_system_view();
         });
         redraw_queue(cx, false);
-        cx.with_legacy(|| {
-            DrawAutoPilotMessage(0);
-            UnbatchGraphics();
-        });
+        crate::ui::sis::draw_autopilot_message(
+            cx.kernel,
+            cx.world,
+            cx.screen_dimensions().0,
+            uqm_engine::time::counter_abi::GetTimeCounter,
+        );
+        cx.with_legacy(|| UnbatchGraphics());
     }
 }
 

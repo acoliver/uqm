@@ -33,13 +33,9 @@ pub(crate) mod live {
 
     use crate::graphics::drawable_abi::GetFrameRect;
 
-    use crate::ui::sis::DrawStatusMessage;
-
     use crate::ui::util::live::DrawStarConBox;
 
     use crate::mainloop::input_abi::live::SetMenuSounds;
-
-    use crate::ui::sis::ClearSISRect;
 
     const BACK: Rgba = Rgba::rgb15(0, 0, 20);
     const WORTH: Rgba = Rgba::rgb15(10, 10, 31);
@@ -203,12 +199,11 @@ pub(crate) mod live {
         g.restore_context(old);
     }
 
-    fn description(element: u8) {
-        let message =
-            CString::new(CffiPlatform.game_string(CARGO_STRINGS + 2 + i32::from(element))).unwrap();
-        unsafe {
-            DrawStatusMessage(message.as_ptr());
-        }
+    fn description(cx: &mut Cx<'_>, element: u8) {
+        let message = cx.with_legacy(|| {
+            CString::new(CffiPlatform.game_string(CARGO_STRINGS + 2 + i32::from(element))).unwrap()
+        });
+        crate::ui::sis::draw_status_message(cx.kernel, cx.world, Some(&message));
     }
 
     struct Menu {
@@ -246,8 +241,8 @@ pub(crate) mod live {
                 // SAFETY: the cargo menu retains its selected element and display resources.
                 cx.with_legacy(|| {
                     DrawCargoStrings(menu.current, next);
-                    description(next);
                 });
+                description(cx, next);
                 menu.current = next;
             }
         }
@@ -264,11 +259,12 @@ pub(crate) mod live {
         let mut menu = Menu { current: 0 };
         cx.with_legacy(|| {
             DrawCargoStrings(u8::MAX, 0);
-            description(0);
-            SetMenuSounds(input, 15, 16);
         });
+        description(cx, 0);
+        cx.with_legacy(|| SetMenuSounds(input, 15, 16));
         cx.run_input(io, true, |cx, _| discard(cx, input, &mut menu) != 0);
-        cx.with_legacy(|| ClearSISRect(8));
+        let dimensions = cx.screen_dimensions();
+        crate::ui::sis::clear_sis_rect(cx.kernel, cx.world, dimensions, 8);
     }
 }
 

@@ -77,7 +77,6 @@ fn transfer_crew(crew: &mut u16, maximum: u16, delta: i16) -> bool {
 pub(crate) mod live {
     use super::{navigate, transfer_crew, SHIP_POS};
     use crate::c_bindings::controller_input::*;
-    use crate::comm::locdata::CRect;
     use crate::engine::battle::link_queue::LinkId;
     use crate::engine::world::queues::Fragment;
     use crate::engine::{battle::Cx, observe::Io, World};
@@ -88,12 +87,6 @@ pub(crate) mod live {
     use crate::time::counter_abi::GetTimeCounter;
 
     use crate::ui::sis::capacity::crew_capacity;
-
-    use crate::ui::sis::GetStatusMessageRect;
-
-    use crate::ui::sis::DrawStatusMessage;
-
-    use crate::ui::sis::DeltaSISGauges;
 
     use crate::mainloop::input_abi::live::SetMenuSounds;
 
@@ -130,62 +123,63 @@ pub(crate) mod live {
 
     unsafe fn flash_crew() {
         CffiPlatform.set_context(ContextId::Status);
-        let mut r = CRect::default();
-        GetStatusMessageRect(std::ptr::from_mut(&mut r).cast());
+        let r = crate::ui::sis::status_message_rect();
         CffiPlatform.set_flash(FlashTarget::Rect(Rect {
             corner: Point {
                 x: r.corner.x,
                 y: r.corner.y,
             },
-            width: r.width,
-            height: r.height,
+            width: r.extent.width,
+            height: r.extent.height,
         }));
     }
 
-    unsafe fn delta_crew(menu: &mut Menu, delta: i16) -> bool {
-        let value = World::current().write(|world| {
-            let id = support_ship(world, menu)?;
-            if delta == 0 {
-                menu.frame = world.built_ships_ref().get(id).icons.cast();
-            }
-            let race = world.built_ships_ref().get(id).race_id;
-            let fleets = world.avail_races_ref();
-            let maximum = fleets
-                .get(
-                    fleets
-                        .at(usize::from(race))
-                        .unwrap_or_else(|| panic!("escort fleet")),
-                )
-                .crew_level;
-            let mut ships = world.built_ships();
-            let ship = ships.get_mut(id);
-            if !transfer_crew(&mut ship.crew_level, maximum, delta) {
-                return None;
-            }
-            Some(if ship.crew_level >= maximum {
-                ship.crew_level.to_string()
-            } else {
-                format!("{}/{}", ship.crew_level, maximum)
+    unsafe fn delta_crew(cx: &mut Cx<'_>, menu: &mut Menu, delta: i16) -> bool {
+        let value = cx.with_legacy(|| {
+            World::current().write(|world| {
+                let id = support_ship(world, menu)?;
+                if delta == 0 {
+                    menu.frame = world.built_ships_ref().get(id).icons.cast();
+                }
+                let race = world.built_ships_ref().get(id).race_id;
+                let fleets = world.avail_races_ref();
+                let maximum = fleets
+                    .get(
+                        fleets
+                            .at(usize::from(race))
+                            .unwrap_or_else(|| panic!("escort fleet")),
+                    )
+                    .crew_level;
+                let mut ships = world.built_ships();
+                let ship = ships.get_mut(id);
+                if !transfer_crew(&mut ship.crew_level, maximum, delta) {
+                    return None;
+                }
+                Some(if ship.crew_level >= maximum {
+                    ship.crew_level.to_string()
+                } else {
+                    format!("{}/{}", ship.crew_level, maximum)
+                })
             })
         });
         let Some(value) = value else {
             return false;
         };
         let message = CString::new(value).unwrap();
-        CffiPlatform.pre_update_flash();
-        DrawStatusMessage(message.as_ptr());
-        CffiPlatform.post_update_flash();
-        DeltaSISGauges(-delta, 0, 0);
+        cx.with_legacy(|| CffiPlatform.pre_update_flash());
+        crate::ui::sis::draw_status_message(cx.kernel, cx.world, Some(&message));
+        cx.with_legacy(|| CffiPlatform.post_update_flash());
+        crate::ui::sis::delta_sis_gauges(cx.kernel, cx.world, -delta, 0, 0);
         if delta != 0 {
-            flash_crew();
+            cx.with_legacy(|| flash_crew());
         }
         true
     }
 
-    unsafe fn select(menu: &mut Menu, index: usize) {
+    unsafe fn select(cx: &mut Cx<'_>, menu: &mut Menu, index: usize) {
         menu.point = menu.positions[index];
         menu.frame = std::ptr::null_mut();
-        delta_crew(menu, 0);
+        delta_crew(cx, menu, 0);
     }
 
     unsafe fn flash_ship(menu: &Menu) {
@@ -206,17 +200,23 @@ pub(crate) mod live {
         }
     }
 
-    unsafe fn redraw_selection(menu: &mut Menu, next: usize) {
+    unsafe fn redraw_selection(cx: &mut Cx<'_>, menu: &mut Menu, next: usize) {
         let g = CffiPlatform;
-        g.batch();
-        g.set_context(ContextId::Status);
+        cx.with_legacy(|| {
+            g.batch();
+            g.set_context(ContextId::Status);
+            if next != menu.selected {
+                draw(menu, false);
+            }
+        });
         if next != menu.selected {
-            draw(menu, false);
-            select(menu, next);
+            select(cx, menu, next);
             menu.selected = next;
         }
-        flash_ship(menu);
-        g.unbatch();
+        cx.with_legacy(|| {
+            flash_ship(menu);
+            g.unbatch();
+        });
     }
 
     unsafe fn modify(
@@ -272,7 +272,7 @@ pub(crate) mod live {
             }
             if delta != 0 {
                 // SAFETY: the selected roster entry and its campaign fleet remain live.
-                failed = !cx.with_legacy(|| delta_crew(menu, delta));
+                failed = !delta_crew(cx, menu, delta);
             }
             if failed {
                 crate::ui::settings::play_menu_sound(cx.kernel, cx.world, 2);
@@ -280,7 +280,7 @@ pub(crate) mod live {
         } else {
             let next = navigate(&menu.positions, menu.selected, horizontal, down, up);
             // SAFETY: the roster retains all ship frames and the selected status context.
-            cx.with_legacy(|| redraw_selection(menu, next));
+            redraw_selection(cx, menu, next);
         }
         // SAFETY: the admitted menu keeps initialized game-thread pacing callbacks live.
         cx.with_legacy(|| crate::battle::c_bridge::SleepThread(840 / 30));
@@ -299,7 +299,7 @@ pub(crate) mod live {
             }
             let mut positions = SHIP_POS[..count].to_vec();
             positions.sort_by_key(|point| (point.0, point.1));
-            let mut menu = Menu {
+            let menu = Menu {
                 selected: 0,
                 positions,
                 point: (0, 0),
@@ -307,18 +307,16 @@ pub(crate) mod live {
                 modifying: false,
             };
             CffiPlatform.set_context(ContextId::Status);
-            select(&mut menu, 0);
-            SetMenuSounds(input, 15, 16);
             Some(menu)
         }) else {
             return 0;
         };
+        select(cx, &mut menu, 0);
+        cx.with_legacy(|| SetMenuSounds(input, 15, 16));
         cx.run_input(io, true, |cx, _| modify(cx, input, &mut menu) != 0);
-        cx.with_legacy(|| {
-            CffiPlatform.set_context(ContextId::Status);
-            draw(&menu, false);
-            DrawStatusMessage(std::ptr::null());
-        });
+        cx.with_legacy(|| CffiPlatform.set_context(ContextId::Status));
+        cx.with_legacy(|| draw(&menu, false));
+        crate::ui::sis::draw_status_message(cx.kernel, cx.world, None);
         1
     }
 }

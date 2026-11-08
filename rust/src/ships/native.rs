@@ -33,15 +33,15 @@ pub mod abi {
         destroy_drawable as DestroyDrawable, destroy_music as DestroyMusic,
         destroy_sound as DestroySound, destroy_string_table as DestroyStringTable,
         draw_filled_rectangle as DrawFilledRectangle, draw_filled_stamp as DrawFilledStamp,
-        draw_sis_title as DrawSISTitle, draw_stamp as DrawStamp, draw_text as font_DrawText,
+        draw_stamp as DrawStamp, draw_text as font_DrawText,
         drawables_intersect as DrawablesIntersect, equ_frame_index as SetEquFrameIndex,
         frame_hot as GetFrameHot, frame_rect as GetFrameRect, in_hq_space as in_hqspace,
         in_hyper_space, inc_frame_index as IncFrameIndex, music_playing as PLRPlaying,
         play_music as PlayMusic, release_drawable as ReleaseDrawable,
         release_string_table as ReleaseStringTable, screen_transition as ScreenTransition,
         set_context as SetContext, set_context_font as SetContextFont,
-        set_flash_rect as SetFlashRect, set_mipmap as TFB_DrawScreen_SetMipmap,
-        set_transition_source as SetTransitionSource, string_address as GetStringAddress,
+        set_mipmap as TFB_DrawScreen_SetMipmap, set_transition_source as SetTransitionSource,
+        string_address as GetStringAddress,
     };
 
     // Bindgen does not translate these cast-expression macros from controls.h
@@ -91,10 +91,6 @@ mod engine {
     use crate::graphics::font_abi::font_DrawText;
 
     use crate::graphics::font_abi::SetContextFont;
-
-    use crate::ui::sis::SetFlashRect;
-
-    use crate::ui::sis::DrawSISTitle;
 
     use crate::graphics::gfx_common_abi::SetTransitionSource;
 
@@ -250,18 +246,6 @@ mod engine {
     /// Activity state must be initialized and accessed only on the game thread.
     pub fn in_hyper_space(world: &crate::engine::World) -> abi::BOOLEAN {
         crate::navigation::globals::in_hyper_space(world) as abi::BOOLEAN
-    }
-
-    /// # Safety
-    /// `rect` must be live, null, or an engine flash sentinel on the game thread.
-    pub unsafe fn set_flash_rect(rect: *const abi::RECT) {
-        SetFlashRect(rect.cast());
-    }
-
-    /// # Safety
-    /// `title` must be null or a NUL-terminated string valid through the draw call.
-    pub unsafe fn draw_sis_title(title: *mut std::ffi::c_char) {
-        DrawSISTitle(title);
     }
 
     /// # Safety

@@ -55,7 +55,7 @@ use crate::planets::solarsys::{
     lifecycle::SaveSolarSysLocation, matchWorld, playerInPlanetOrbit, playerInSolarSystem,
 };
 
-use crate::ui::{sis::ClearSISRect, util::live::DrawStarConBox};
+use crate::ui::util::live::DrawStarConBox;
 
 struct Menu {
     list: Vec<u8>,
@@ -393,7 +393,10 @@ pub unsafe fn devices_menu(cx: &mut Cx<'_>, io: &mut Io<'_>) -> i32 {
     if cx.world.data.flagship.crew_enlisted == u16::MAX || cx.world.activity() & 0x4000 != 0 {
         return 0;
     }
-    cx.with_legacy(|| ClearSISRect(8));
+    {
+        let dimensions = cx.screen_dimensions();
+        crate::ui::sis::clear_sis_rect(cx.kernel, cx.world, dimensions, 8)
+    };
     i32::from(
         cx.world.story_state(StoryKey::PORTAL_COUNTER) == 0
             && cx.world.activity() & START_ENCOUNTER == 0

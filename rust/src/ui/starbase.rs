@@ -346,8 +346,10 @@ unsafe fn update_starbase_screen(
     }
     SetMenuSounds(input, SOUND_ARROWS, SOUND_SELECT);
     if (*menu).Initialized == 0 {
-        (**Kernel::current()).last_activity &= !(CHECK_LOAD as u16);
-        SetFlashRect(ptr::null());
+        Kernel::current().write(|kernel| {
+            kernel.last_activity &= !(CHECK_LOAD as u16);
+            crate::ui::sis::clear_flash(kernel);
+        });
         if !(*menu).hMusic.is_null() {
             stop_music();
             DestroyMusic((*menu).hMusic);

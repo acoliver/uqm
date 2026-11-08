@@ -64,9 +64,7 @@ mod ffi {
 
     pub(super) use crate::graphics::drawable_abi::SetContextFGFrame;
     pub(super) use crate::time::counter_abi::GetTimeCounter;
-    pub(super) use crate::ui::border::draw_sisframe;
     pub(super) use crate::ui::settings::stop_music;
-    pub(super) use crate::ui::sis::repair_sisborder;
 
     pub(super) use crate::graphics::drawable_abi::DestroyDrawable;
 
@@ -80,14 +78,6 @@ mod ffi {
 
     pub(super) use crate::graphics::cmap_abi::FadeScreen;
 
-    pub(super) use crate::ui::sis::SetFlashRect;
-
-    pub(super) use crate::ui::menu::DrawMenuStateStrings;
-
-    pub(super) use crate::ui::sis::DrawSISMessage;
-
-    pub(super) use crate::ui::sis::DrawStatusMessage;
-
     pub(super) use crate::navigation::interplanetary::live::do_missions as DoMissions;
 
     pub(super) use crate::state::c_api::planets::get_planet_info;
@@ -99,8 +89,6 @@ mod ffi {
     pub(super) use crate::planets::orbit::live::FreePlanet;
 
     pub(super) use crate::mainloop::input_abi::live::SetMenuSounds;
-
-    pub(super) use crate::ui::menu::do_menu_chooser;
 
     pub(super) use crate::planets::cargo::live::cargo_menu;
 
@@ -308,24 +296,37 @@ pub(super) unsafe fn free_solar_sys() {
     ffi::stop_music();
 }
 
-pub(super) unsafe fn reset_solar_sys(next_activity: u16) {
-    let state = system();
-    assert!((*state).InIpFlight == 0);
-    ffi::DrawMenuStateStrings(PM_STARMAP, -(PM_NAVIGATE - PM_SCAN));
-    crate::app::bridge::enter(|cx| {
-        crate::battle::process_native::init_display_list(
-            cx,
-            cx.kernel.configuration.preferences().melee_scale == 0,
-        );
+pub(super) unsafe fn reset_solar_sys(cx: &mut Cx<'_>, next_activity: u16) {
+    cx.with_legacy(|| {
+        let state = system();
+        assert!((*state).InIpFlight == 0);
     });
-    ffi::DoMissions();
-    check_intersect();
-    (*state).InIpFlight = 1;
-    if PLRPlaying(usize::MAX as *mut c_void) == 0
-        && (Kernel::current().read(|owner| owner.last_activity) != CHECK_LOAD || next_activity != 0)
-    {
-        PlayMusic((SpaceMusic).cast(), 1, 1);
-    }
+    let dimensions = cx.screen_dimensions();
+    crate::ui::menu::draw_menu_state(
+        cx.kernel,
+        cx.world,
+        (dimensions.0, dimensions.1),
+        PM_STARMAP,
+        -(PM_NAVIGATE - PM_SCAN),
+    );
+    cx.with_legacy(|| {
+        let state = system();
+        crate::app::bridge::enter(|cx| {
+            crate::battle::process_native::init_display_list(
+                cx,
+                cx.kernel.configuration.preferences().melee_scale == 0,
+            );
+        });
+        ffi::DoMissions();
+        check_intersect();
+        (*state).InIpFlight = 1;
+        if PLRPlaying(usize::MAX as *mut c_void) == 0
+            && (Kernel::current().read(|owner| owner.last_activity) != CHECK_LOAD
+                || next_activity != 0)
+        {
+            PlayMusic((SpaceMusic).cast(), 1, 1);
+        }
+    });
 }
 
 enum OrbitAdmission {
@@ -387,12 +388,15 @@ unsafe fn finish_planet_orbit(cx: &mut Cx<'_>, io: &mut Io<'_>) {
         let next_activity = cx.world.next_activity;
         let orbital = load_solar_sys(cx, io);
         assert!(orbital.is_null());
-        let inner = cx.with_legacy(|| {
+        cx.with_legacy(|| {
             check_zoom_level();
             validate_orbits();
             validate_inner_orbits();
-            reset_solar_sys(next_activity);
-            ffi::repair_sisborder();
+        });
+        reset_solar_sys(cx, next_activity);
+        let dimensions = cx.screen_dimensions();
+        crate::ui::sis::repair_sis_border(cx.kernel, dimensions);
+        let inner = cx.with_legacy(|| {
             ffi::SetContext(space_context);
             playerInInnerSystem()
         });
@@ -489,34 +493,33 @@ unsafe fn prepare_solar_sys(
             generator.init_npcs(system, host);
         }
     });
-    cx.with_legacy(|| {
-        if !orbital.is_null() {
-            enter_orbital(orbital);
-            SolarSystemStart::Orbit
-        } else {
+    if !orbital.is_null() {
+        cx.with_legacy(|| enter_orbital(orbital));
+        SolarSystemStart::Orbit
+    } else {
+        cx.with_legacy(|| {
             ffi::SetContext(Kernel::current().read(|owner| owner.space_context));
             ffi::SetTransitionSource(ptr::null_mut());
             ffi::BatchGraphics();
-            ffi::draw_sisframe();
-            ffi::DrawSISMessage(ptr::null());
-            reset_solar_sys(next_activity);
-            if Kernel::current().read(|owner| owner.last_activity) == CHECK_LOAD | CHECK_RESTART {
-                draw_outer_system();
-                SolarSystemStart::Fade
-            } else if Kernel::current().read(|owner| owner.last_activity) == CHECK_LOAD
-                && next_activity == 0
-            {
-                SolarSystemStart::ResumeLoad
+        });
+        let dimensions = cx.screen_dimensions();
+        crate::ui::border::draw_sis_frame(cx.kernel, cx.world, dimensions);
+        crate::ui::sis::draw_campaign_message(cx.kernel, cx.world, dimensions.0, None);
+        reset_solar_sys(cx, next_activity);
+        if cx.kernel.last_activity == CHECK_LOAD | CHECK_RESTART {
+            draw_outer_system(cx);
+            SolarSystemStart::Fade
+        } else if cx.kernel.last_activity == CHECK_LOAD && next_activity == 0 {
+            SolarSystemStart::ResumeLoad
+        } else {
+            if inner_system {
+                draw_inner_system(cx);
             } else {
-                if inner_system {
-                    draw_inner_system();
-                } else {
-                    draw_outer_system();
-                }
-                SolarSystemStart::Transition
+                draw_outer_system(cx);
             }
+            SolarSystemStart::Transition
         }
-    })
+    }
 }
 
 pub(super) unsafe fn end_interplanetary(cx: &mut Cx<'_>, io: &mut Io<'_>) {
@@ -734,7 +737,7 @@ unsafe fn do_solar_sys_menu(
     {
         return 0;
     }
-    if cx.with_legacy(|| ffi::do_menu_chooser(input, menu, PM_STARMAP)) != 0 {
+    if crate::ui::menu::choose_menu_state(cx, input, &mut menu.CurState, PM_STARMAP) != 0 {
         return 1;
     }
     if cx.kernel.last_activity == CHECK_LOAD {
@@ -743,7 +746,7 @@ unsafe fn do_solar_sys_menu(
     if select == 0 {
         return 1;
     }
-    cx.with_legacy(|| ffi::SetFlashRect(ptr::null()));
+    crate::ui::sis::clear_flash(cx.kernel);
     match menu.CurState {
         EQUIP_DEVICE => {
             select = devices_menu(cx, io) as c::BOOLEAN;
@@ -779,9 +782,19 @@ unsafe fn do_solar_sys_menu(
             if input.preferences().menu != OPT_PC {
                 menu.CurState = NAVIGATION;
             }
-            cx.with_legacy(|| ffi::DrawMenuStateStrings(PM_STARMAP, i16::from(menu.CurState)));
+            crate::ui::menu::draw_menu_state(
+                cx.kernel,
+                cx.world,
+                (cx.screen_dimensions().0, cx.screen_dimensions().1),
+                PM_STARMAP,
+                i16::from(menu.CurState),
+            );
         }
-        cx.with_legacy(|| ffi::SetFlashRect((usize::MAX as *const c_void).cast()));
+        crate::ui::sis::set_menu_flash(
+            cx.kernel,
+            (cx.screen_dimensions().0, cx.screen_dimensions().1),
+            false,
+        );
     }
     1
 }
@@ -790,19 +803,30 @@ unsafe fn solar_sys_menu(cx: &mut Cx<'_>, io: &mut Io<'_>) {
     let runtime = cx.kernel.input_runtime();
     let input = runtime.input();
     let mut menu: c::MENU_STATE = std::mem::zeroed();
-    cx.with_legacy(|| {
-        if Kernel::current().read(|owner| owner.last_activity) == CHECK_LOAD {
-            menu.CurState = GAME_MENU;
-        } else {
-            ffi::DrawMenuStateStrings(PM_STARMAP, i16::from(STARMAP));
-            menu.CurState = STARMAP;
-        }
-        ffi::DrawStatusMessage(ptr::null());
-        ffi::SetFlashRect((usize::MAX as *const c_void).cast());
-        ffi::SetMenuSounds(input, MENU_SOUND_ARROWS, MENU_SOUND_SELECT);
-    });
+    let dimensions = cx.screen_dimensions();
+    if cx.kernel.last_activity == CHECK_LOAD {
+        menu.CurState = GAME_MENU;
+    } else {
+        crate::ui::menu::draw_menu_state(
+            cx.kernel,
+            cx.world,
+            dimensions,
+            PM_STARMAP,
+            i16::from(STARMAP),
+        );
+        menu.CurState = STARMAP;
+    }
+    crate::ui::sis::draw_status_message(cx.kernel, cx.world, None);
+    crate::ui::sis::set_menu_flash(cx.kernel, dimensions, false);
+    ffi::SetMenuSounds(input, MENU_SOUND_ARROWS, MENU_SOUND_SELECT);
     cx.run_input(io, true, |cx, io| do_solar_sys_menu(cx, io, &mut menu) != 0);
-    cx.with_legacy(|| ffi::DrawMenuStateStrings(PM_STARMAP, -i16::from(NAVIGATION)));
+    crate::ui::menu::draw_menu_state(
+        cx.kernel,
+        cx.world,
+        (cx.screen_dimensions().0, cx.screen_dimensions().1),
+        PM_STARMAP,
+        -i16::from(NAVIGATION),
+    );
 }
 
 unsafe fn do_ip_flight(

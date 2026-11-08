@@ -97,12 +97,13 @@ fn sis_slot_snapshot_releases_world_before_support_ship_drawing() {
     game.world.data.flagship.drive_slots.fill(255);
     game.world.data.flagship.jet_slots.fill(255);
     game.world.data.flagship.crew_enlisted = 12;
-    // SAFETY: the serialized fixture owns the game and its display resources.
-    unsafe {
-        bridge::with_game(&mut game, || {
-            uqm_rust::ui::sis::DeltaSISGauges(i16::MAX, i16::MAX, i32::from(i16::MAX));
-        });
-    }
+    uqm_rust::ui::sis::delta_sis_gauges(
+        &game.kernel,
+        &mut game.world,
+        i16::MAX,
+        i16::MAX,
+        i32::from(i16::MAX),
+    );
     assert_eq!(game.world.data.flagship.crew_enlisted, 12);
     assert_eq!(game.world.data.flagship.module_slots, [255; 16]);
     display.finish(game);

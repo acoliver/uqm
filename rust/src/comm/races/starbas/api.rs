@@ -70,8 +70,6 @@ mod live {
 
     use crate::planets::cargo::live::ShowRemainingCapacity;
 
-    use crate::ui::sis::ClearSISRect;
-
     use crate::mainloop::input_abi::live::AnyButtonPress;
 
     use crate::threading::pacing::linked::sleep_thread as SleepThread;
@@ -159,9 +157,16 @@ mod live {
             })
         }
         fn clear_display(&mut self) {
-            self.cx.borrow_mut().with_legacy(|| unsafe {
-                ClearSISRect(1 << 3);
-            })
+            {
+                let cx = &mut *self.cx.borrow_mut();
+                let dimensions = cx.screen_dimensions();
+                crate::ui::sis::clear_sis_rect(
+                    cx.kernel,
+                    cx.world,
+                    (dimensions.0, dimensions.1),
+                    1 << 3,
+                )
+            }
         }
         fn now(&mut self) -> u32 {
             self.cx

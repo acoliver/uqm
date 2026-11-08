@@ -13,18 +13,20 @@ use crate::strings::string_table::StringTable;
 /// Copy one binary-table entry and release the detached native table.
 pub fn load_binary_entry(resource: &CStr, index: u16) -> Option<Vec<u8>> {
     use super::string_table::{
-        CaptureStringTable, FreeStringTable, GetStringAddress, GetStringLengthBin,
-        SetAbsStringTableIndex,
+        CaptureStringTable, FreeStringTable, GetStringAddress, SetAbsStringTableIndex,
     };
     let table = crate::resource::ffi_bridge::detach_resource_of_type(resource, "BINTAB")?;
     // SAFETY: the binary loader transfers this table and all its entry allocations.
     let entry = unsafe { SetAbsStringTableIndex(CaptureStringTable(table.as_ptr().cast()), index) };
+    // The legacy u16 length query truncates large palettes; entries retain their full byte length.
     // SAFETY: the detached table keeps its selected entry live.
-    let length = usize::from(unsafe { GetStringLengthBin(entry) });
+    let length = usize::try_from(unsafe { (*entry).length }).unwrap_or_else(|error| {
+        panic!("binary resource {resource:?} has an invalid length: {error}")
+    });
     let bytes = if length == 0 {
         Vec::new()
     } else {
-        // SAFETY: a nonempty loaded binary entry contains at least its recorded u16 length.
+        // SAFETY: the loader allocated the entry's full recorded byte length.
         unsafe { std::slice::from_raw_parts(GetStringAddress(entry).cast(), length).to_vec() }
     };
     // SAFETY: the copied bytes no longer borrow the uniquely detached table.

@@ -1,7 +1,5 @@
-#![cfg(not(test))]
-
 use super::palette::*;
-use crate::engine::{Kernel, WorldData};
+use crate::engine::Kernel;
 use crate::navigation::abi::*;
 
 use super::menu_state::{
@@ -11,27 +9,12 @@ use super::menu_state::{
 };
 const OPT_PC: i32 = 2;
 
-/// # Safety
-/// Menu state and game settings must be valid on the game thread.
-pub unsafe extern "C" fn previous_menu_state(base: BYTE, current: BYTE) -> BYTE {
-    super::menu_state::previous_state(
-        base,
-        current,
-        WorldData::current().read(|owner| owner.game.glob_flags),
-    )
-}
-
 mod render;
 pub use render::draw_menu_state;
 
-/// # Safety
-/// Menu state and input globals must be initialized on the game thread.
-pub unsafe fn do_menu_chooser(
-    input: &crate::engine::input::InputSession,
-    menu: *mut MENU_STATE,
-    base_state: BYTE,
-) -> BOOLEAN {
-    crate::app::bridge::enter(|cx| choose_menu_state(cx, input, &mut (*menu).CurState, base_state))
+/// Draw a mode's menu using the owners and viewport supplied by its campaign.
+pub(crate) fn draw_campaign_menu(cx: &crate::engine::battle::Cx<'_>, base: u8, state: i16) {
+    draw_menu_state(cx.kernel, cx.world, cx.screen_dimensions(), base, state);
 }
 
 pub(crate) fn choose_menu_state(
@@ -58,14 +41,7 @@ pub(crate) fn choose_menu_state(
     ) else {
         return 0;
     };
-    let dimensions = cx.screen_dimensions();
-    draw_menu_state(
-        cx.kernel,
-        cx.world,
-        dimensions,
-        step.display.0,
-        step.display.1,
-    );
+    draw_campaign_menu(cx, step.display.0, step.display.1);
     *state = step.state;
     if step.paced {
         cx.kernel.input_runtime().sleep(cx, ONE_SECOND / 20);
@@ -73,15 +49,27 @@ pub(crate) fn choose_menu_state(
     1
 }
 
-/// # Safety
-/// The status context, graphics resources, and menu string tables must be initialized.
-#[no_mangle]
-pub unsafe extern "C" fn DrawMenuStateStrings(begin: BYTE, state: SWORD) {
-    let dimensions = (ScreenWidth, ScreenHeight);
-    Kernel::current().read(|kernel| {
-        crate::engine::World::current()
-            .read(|world| draw_menu_state(kernel, world, dimensions, begin, state));
-    });
-}
-
 pub(crate) mod hyperspace;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn no_keys_preserve_selection_without_display_or_clock_admission() {
+        let mut world = crate::engine::World::new();
+        let mut kernel = Kernel::new();
+        let mut battle = crate::engine::battle::Battle::new();
+        let mut cx = crate::engine::battle::Cx::new(&mut battle, &mut world, &mut kernel, || {
+            panic!("menu sampled random stream")
+        });
+        let input = crate::engine::input::InputSession::default();
+        let mut selection = 1;
+        assert_eq!(
+            choose_menu_state(&mut cx, &input, &mut selection, PM_CREW),
+            0
+        );
+        assert_eq!(selection, 1);
+        assert!(cx.kernel.sis_highlight.context.borrow().is_none());
+    }
+}
