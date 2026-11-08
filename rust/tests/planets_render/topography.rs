@@ -7,8 +7,9 @@ use std::ffi::{c_void, CString};
 use uqm_rust::c_bindings::global_state as c;
 use uqm_rust::comm::locdata::{CPoint, CRect};
 use uqm_rust::planets::c_api::{self, CapturedSurface, FORMAT_CONV_SURF, SDL_SCREEN};
-use uqm_rust::planets::render::c_api::render_system_topography;
+use uqm_rust::planets::render::c_api::render_native_topography;
 use uqm_rust::planets::render::topography::*;
+use uqm_rust::planets::sphere::palette::SurfacePalette;
 use uqm_rust::planets::tables::PLANET_ARRAY;
 
 extern "C" {
@@ -31,6 +32,15 @@ extern "C" {
     ) -> c::BOOLEAN;
 }
 
+// Only the unchanged original C body uses this input layout. Rust rendering owns bytes.
+#[repr(C)]
+struct OraclePalette {
+    planet: *mut uqm_rust::engine::world::planet::PlanetDesc,
+    translation_entry: c::STRING,
+    translation_bytes: *const c_void,
+    color_entry: c::COLORMAP,
+}
+
 #[repr(C)]
 struct Operations {
     frame: unsafe extern "C" fn(c::FRAME) -> c::FRAME,
@@ -40,7 +50,7 @@ struct Operations {
     colors: unsafe extern "C" fn(c::COLORMAP) -> *mut u8,
     batch: unsafe extern "C" fn(*mut c::PRIMITIVE, u32, u8),
     table: *const uqm_rust::engine::world::planet::PlanetFrame,
-    system: *mut c::SOLARSYS_STATE,
+    system: *mut OraclePalette,
 }
 
 type Original = unsafe extern "C" fn(*const Operations, c::FRAME, *mut i8, i32, i32);
@@ -490,17 +500,17 @@ pub fn full_c_fixture_core_and_host_parity() {
             }
             let mut xlat_entry = Entry::new(&mut translation);
             let mut color_entry = Entry::new(&mut colors);
-            let mut system: c::SOLARSYS_STATE = std::mem::zeroed();
+            let mut system: OraclePalette = std::mem::zeroed();
             let mut desc: uqm_rust::engine::world::planet::PlanetDesc = std::mem::zeroed();
             desc.data_index = case.planet as u8 | if case.shielded { 0x80 } else { 0 };
-            system.pOrbitalDesc = &mut desc;
-            system.XlatRef = if case.missing {
+            system.planet = &mut desc;
+            system.translation_entry = if case.missing {
                 std::ptr::null_mut()
             } else {
                 xlat_entry.handle()
             };
-            system.XlatPtr = translation.as_ptr().cast();
-            system.OrbitalCMap = color_entry.handle();
+            system.translation_bytes = translation.as_ptr().cast();
+            system.color_entry = color_entry.handle();
             let count = (case.width.max(0) * case.height.max(0)) as usize;
             let mut depth: Vec<i8> = (0..count + 32)
                 .map(|i| {
@@ -580,13 +590,27 @@ pub fn full_c_fixture_core_and_host_parity() {
             offset += record.len();
             if case.base.is_none() {
                 ram.reset(mode, case.clip);
-                render_system_topography(
+                let owned = if case.missing {
+                    None
+                } else {
+                    Some(
+                        SurfacePalette::from_bytes(
+                            desc.data_index & !128,
+                            &translation,
+                            colors.clone(),
+                        )
+                        .unwrap_or_else(|error| panic!("valid fixture palette: {error:?}")),
+                    )
+                };
+                render_native_topography(
                     &uqm_rust::graphics::context_abi::ContextLease::require(ram.context.cast()),
-                    &system,
-                    ram.target(),
+                    uqm_rust::graphics::context_abi::ContextFrame::retain(std::ptr::NonNull::new(
+                        ram.target(),
+                    )),
                     &depth,
                     case.width,
                     case.height,
+                    owned.as_ref().map(SurfacePalette::view),
                 )
                 .unwrap();
                 assert_eq!(
@@ -615,44 +639,37 @@ fn host_errors_preserve_real_context_and_pixels() {
         };
         ram.reset(mode, true);
         let before = ram.result(mode);
-        let mut xlat = vec![0; 262];
-        let mut colors = vec![0, 0, 61, 62, 63];
-        let mut xlat_entry = Entry::new(&mut xlat);
-        let mut color_entry = Entry::new(&mut colors);
-        let mut system: c::SOLARSYS_STATE = std::mem::zeroed();
-        let mut desc: uqm_rust::engine::world::planet::PlanetDesc = std::mem::zeroed();
-        system.pOrbitalDesc = &mut desc;
-        system.XlatRef = xlat_entry.handle();
-        system.XlatPtr = xlat.as_ptr().cast();
-        system.OrbitalCMap = color_entry.handle();
+        let xlat = vec![0; 262];
+        let colors = vec![0, 0, 61, 62, 63];
         for error in [
             TopographyError::PlanetIndex,
             TopographyError::TranslationLength,
             TopographyError::DepthLength,
         ] {
-            desc.data_index = if error == TopographyError::PlanetIndex {
+            let index = if error == TopographyError::PlanetIndex {
                 127
             } else {
                 0
             };
-            xlat_entry.length = if error == TopographyError::TranslationLength {
+            let length = if error == TopographyError::TranslationLength {
                 261
             } else {
                 262
             };
-            system.pOrbitalDesc = &mut desc;
-            system.XlatRef = xlat_entry.handle();
-            assert_eq!(
-                render_system_topography(
-                    &uqm_rust::graphics::context_abi::ContextLease::require(ram.context.cast()),
-                    &system,
-                    ram.target(),
-                    &[],
-                    1,
-                    1
-                ),
-                Err(error)
-            );
+            let result = SurfacePalette::from_bytes(index, &xlat[..length], colors.clone())
+                .and_then(|palette| {
+                    render_native_topography(
+                        &uqm_rust::graphics::context_abi::ContextLease::require(ram.context.cast()),
+                        uqm_rust::graphics::context_abi::ContextFrame::retain(
+                            std::ptr::NonNull::new(ram.target()),
+                        ),
+                        &[],
+                        1,
+                        1,
+                        Some(palette.view()),
+                    )
+                });
+            assert_eq!(result, Err(error));
             assert_eq!(ram.result(mode), before);
         }
     }

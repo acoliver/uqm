@@ -32,6 +32,7 @@ impl Rotation {
 }
 
 pub(crate) mod images;
+pub mod palette;
 
 pub struct SphereState {
     pub(crate) images: Option<images::OrbitImages>,

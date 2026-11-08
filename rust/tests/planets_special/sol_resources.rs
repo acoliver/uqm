@@ -39,6 +39,7 @@ pub fn check(h: &mut Harness) {
         assert!(!ffi_bridge::InitResourceSystem().is_null());
         ffi_bridge::LoadResourceIndex(dir.cast(), c"uqm.rmp".as_ptr(), std::ptr::null());
         names(h);
+        binary_palettes();
         scenes(h);
         let baseline = sdl2::sys::SDL_GetNumAllocations();
         indexed_rescale();
@@ -371,3 +372,31 @@ unsafe fn indexed_rescale() {
 }
 
 use uqm_rust::planets::generate::SystemGenerator;
+
+unsafe fn binary_palettes() {
+    use uqm_rust::strings::{sresins, string_table as strings};
+    for planet in &uqm_rust::planets::tables::PLANET_ARRAY.0 {
+        for resource in [planet.cmap_instance, planet.xlat_tab_instance] {
+            let resource = std::ffi::CStr::from_ptr(resource);
+            for index in [0, 1, 2, 3, u16::MAX] {
+                let table = sresins::LoadStringTableInstance(resource.as_ptr());
+                assert!(!table.is_null());
+                let entry =
+                    strings::SetAbsStringTableIndex(strings::CaptureStringTable(table), index);
+                let expected = std::slice::from_raw_parts(
+                    strings::GetStringAddress(entry).cast::<u8>(),
+                    usize::from(strings::GetStringLengthBin(entry)),
+                )
+                .to_vec();
+                strings::FreeStringTable(table);
+                let owned = sresins::load_binary_entry(resource, index)
+                    .unwrap_or_else(|| panic!("packaged binary palette {resource:?} is missing"));
+                assert_eq!(
+                    owned, expected,
+                    "binary palette {resource:?} variant {index}"
+                );
+            }
+        }
+    }
+    println!("Binary palette ownership: all 59 planet resource pairs, temperature entries and wrapped indices match legacy selected bytes after native release");
+}

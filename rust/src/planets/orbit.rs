@@ -282,10 +282,6 @@ pub(crate) mod live {
             base::DestroyDrawable(base::ReleaseDrawable((*system).PlanetSideFrame[i].cast()));
             (*system).PlanetSideFrame[i] = std::ptr::null_mut();
         }
-        DestroyStringTable(ReleaseStringTable((*system).XlatRef.cast()));
-        (*system).XlatRef = std::ptr::null_mut();
-        DestroyStringTable(ReleaseStringTable((*system).OrbitalCMap.cast()));
-        (*system).OrbitalCMap = std::ptr::null_mut();
         DestroyStringTable(ReleaseStringTable(
             (*system).SysInfo.planet_info.discovery_string.cast(),
         ));

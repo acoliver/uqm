@@ -1,6 +1,6 @@
 //! Registration of the string table resource types and instance loading.
 
-use std::ffi::{c_char, c_int};
+use std::ffi::{c_char, c_int, CStr};
 
 use crate::resource::ffi_bridge::{
     res_DetachResource, res_GetResource, FreeResourceData, InstallResTypeVectors,
@@ -9,6 +9,28 @@ use crate::resource::ffi_bridge::{
 use crate::resource::ffi_types::ResourceData;
 use crate::strings::getstr::{_get_binary_table_data, _get_conversation_data, _get_string_data};
 use crate::strings::string_table::StringTable;
+
+/// Copy one binary-table entry and release the detached native table.
+pub fn load_binary_entry(resource: &CStr, index: u16) -> Option<Vec<u8>> {
+    use super::string_table::{
+        CaptureStringTable, FreeStringTable, GetStringAddress, GetStringLengthBin,
+        SetAbsStringTableIndex,
+    };
+    let table = crate::resource::ffi_bridge::detach_resource_of_type(resource, "BINTAB")?;
+    // SAFETY: the binary loader transfers this table and all its entry allocations.
+    let entry = unsafe { SetAbsStringTableIndex(CaptureStringTable(table.as_ptr().cast()), index) };
+    // SAFETY: the detached table keeps its selected entry live.
+    let length = usize::from(unsafe { GetStringLengthBin(entry) });
+    let bytes = if length == 0 {
+        Vec::new()
+    } else {
+        // SAFETY: a nonempty loaded binary entry contains at least its recorded u16 length.
+        unsafe { std::slice::from_raw_parts(GetStringAddress(entry).cast(), length).to_vec() }
+    };
+    // SAFETY: the copied bytes no longer borrow the uniquely detached table.
+    unsafe { FreeStringTable(table.as_ptr().cast()) };
+    Some(bytes)
+}
 
 unsafe extern "C" fn get_string_table_file_data(
     pathname: *const c_char,

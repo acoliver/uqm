@@ -8,7 +8,7 @@ pub(crate) mod live {
     use crate::graphics::drawable::Point;
     use crate::graphics::drawable_abi::SetContextFGFrame;
     use crate::planets::render::{
-        c_api::render_system_topography, topo_gen, topo_scale::TopoScaler,
+        c_api::render_native_topography, topo_gen, topo_scale::TopoScaler,
     };
     use crate::planets::sphere::shield_level;
 
@@ -35,14 +35,6 @@ pub(crate) mod live {
     use crate::graphics::drawable_abi::WriteFramePixelColors;
 
     use crate::graphics::drawable_abi::SetFrameHot;
-
-    use crate::strings::string_table::CaptureStringTable;
-
-    use crate::strings::sresins::LoadStringTableInstance;
-
-    use crate::strings::string_table::SetAbsStringTableIndex;
-
-    use crate::strings::string_table::GetStringAddress;
 
     use crate::planets::sphere::live::init_sphere_rotation;
 
@@ -142,24 +134,20 @@ pub(crate) mod live {
     }
 
     unsafe fn load_surface_palette(
-        system: &mut crate::ships::native::abi::SOLARSYS_STATE,
-        data: &crate::engine::world::planet::PlanetFrame,
+        index: u8,
         temperature: i16,
-    ) {
-        system.OrbitalCMap = CaptureStringTable(LoadStringTableInstance(data.cmap_instance)).cast();
-        system.XlatRef = CaptureStringTable(LoadStringTableInstance(data.xlat_tab_instance)).cast();
-        let index = if temperature > 100 {
-            2
-        } else if temperature > -40 {
-            1
-        } else {
-            0
-        };
-        if index != 0 {
-            system.OrbitalCMap = SetAbsStringTableIndex(system.OrbitalCMap.cast(), index).cast();
-            system.XlatRef = SetAbsStringTableIndex(system.XlatRef.cast(), index).cast();
-        }
-        system.XlatPtr = GetStringAddress(system.XlatRef.cast()).cast();
+    ) -> crate::planets::sphere::palette::SurfacePalette {
+        use crate::planets::sphere::palette::{temperature_index, SurfacePalette};
+        use crate::strings::sresins::load_binary_entry;
+        let data = &crate::planets::tables::PLANET_ARRAY.0[usize::from(index)];
+        let variant = temperature_index(temperature);
+        let colors = load_binary_entry(std::ffi::CStr::from_ptr(data.cmap_instance), variant)
+            .unwrap_or_else(|| panic!("planet color map is missing"));
+        let translation =
+            load_binary_entry(std::ffi::CStr::from_ptr(data.xlat_tab_instance), variant)
+                .unwrap_or_else(|| panic!("planet translation table is missing"));
+        SurfacePalette::from_bytes(index, &translation, colors)
+            .unwrap_or_else(|error| panic!("planet palette: {error:?}"))
     }
 
     unsafe fn load_definition(
@@ -205,6 +193,61 @@ pub(crate) mod live {
         state.images_mut().topography = Some(topography.unwrap_or(definition));
     }
 
+    fn generate_elevation(
+        rng: &mut crate::math::RandomContext,
+        depth: &mut [i8],
+        width: usize,
+        data: &crate::engine::world::planet::PlanetFrame,
+    ) {
+        let algo = data.type_ & 12;
+        match algo {
+            8 => topo_gen::make_gas_giant(rng, depth, width, data.num_faults, data.fault_depth),
+            0 | 4 => {
+                if data.num_faults != 0 {
+                    crate::planets::topography::delta_topography(
+                        rng,
+                        data.num_faults,
+                        depth,
+                        width as i16,
+                        75,
+                        data.fault_depth,
+                    );
+                }
+                for _ in 0..data.num_blemishes {
+                    let random = rng.next_random() as u16;
+                    let low = i16::from(random as u8);
+                    let size = match (random >> 8) & 31 {
+                        0 => low % 18 + 18,
+                        1..=4 => low % 9 + 9,
+                        _ => low % 4 + 4,
+                    };
+                    let random = rng.next_random() as u16;
+                    let rect = CRect {
+                        corner: CPoint {
+                            x: ((random >> 8) % (width as u16 - size as u16)) as i16,
+                            y: (random as u8 as u16 % (75 - size as u16)) as i16,
+                        },
+                        width: size,
+                        height: size,
+                    };
+                    topo_gen::make_crater(
+                        depth,
+                        width,
+                        &rect,
+                        data.fault_depth << 2,
+                        -(data.fault_depth << 2),
+                        false,
+                    );
+                }
+                if algo == 4 {
+                    topo_gen::dither_map(rng, depth, width);
+                }
+                topo_gen::validate_map(depth, width);
+            }
+            _ => {}
+        }
+    }
+
     /// # Safety
     /// Planet and definition must be live records from the current solar system;
     /// the graphics resources and generation context must be initialized on the game thread.
@@ -229,64 +272,27 @@ pub(crate) mod live {
         let info = addr_of_mut!((*system).SysInfo.planet_info);
         let data = crate::planets::tables::PLANET_ARRAY.0[usize::from((*planet).data_index & !128)];
         let algo = data.type_ & 12;
-        if let Some(definition) = definition {
+        let palette = if let Some(definition) = definition {
             load_definition(state, definition, width);
+            None
         } else {
             let depth = &mut state.elevation;
             let rng = crate::planets::ffi::sys_gen_rng();
-            match algo {
-                8 => topo_gen::make_gas_giant(rng, depth, width, data.num_faults, data.fault_depth),
-                0 | 4 => {
-                    if data.num_faults != 0 {
-                        crate::planets::topography::delta_topography(
-                            rng,
-                            data.num_faults,
-                            depth,
-                            width as i16,
-                            75,
-                            data.fault_depth,
-                        );
-                    }
-                    for _ in 0..data.num_blemishes {
-                        let random = rng.next_random() as u16;
-                        let low = i16::from(random as u8);
-                        let size = match (random >> 8) & 31 {
-                            0 => low % 18 + 18,
-                            1..=4 => low % 9 + 9,
-                            _ => low % 4 + 4,
-                        };
-                        let random = rng.next_random() as u16;
-                        let rect = CRect {
-                            corner: CPoint {
-                                x: ((random >> 8) % (width as u16 - size as u16)) as i16,
-                                y: (random as u8 as u16 % (75 - size as u16)) as i16,
-                            },
-                            width: size,
-                            height: size,
-                        };
-                        topo_gen::make_crater(
-                            depth,
-                            width,
-                            &rect,
-                            data.fault_depth << 2,
-                            -(data.fault_depth << 2),
-                            false,
-                        );
-                    }
-                    if algo == 4 {
-                        topo_gen::dither_map(rng, depth, width);
-                    }
-                    topo_gen::validate_map(depth, width);
-                }
-                _ => {}
-            }
+            generate_elevation(rng, depth, width, &data);
             let topography = crate::planets::sphere::images::image(2, width, 75, 1);
-            let target = required_frame(&topography.lease(), 0);
-            load_surface_palette(&mut *system, &data, (*info).temperature);
-            render_system_topography(&retained_context, system, target, depth, width as i32, 75)
-                .expect("render planet topography");
+            let palette = load_surface_palette((*planet).data_index & !128, (*info).temperature);
+            render_native_topography(
+                &retained_context,
+                topography.lease().context_frame(0),
+                depth,
+                width as i32,
+                75,
+                Some(palette.view()),
+            )
+            .expect("render planet topography");
             state.images_mut().topography = Some(topography);
-        }
+            Some(palette)
+        };
         if !shielded && (*info).atmo_density != 65535 {
             let depth = &state.elevation;
             let mut scaler = TopoScaler::with_seed(animation.topography_seed());
@@ -298,13 +304,13 @@ pub(crate) mod live {
                 i32::from(data.fault_depth) * if algo == 4 { 2 } else { 1 },
             );
             animation.set_topography_seed(scaler.seed());
-            render_system_topography(
+            render_native_topography(
                 &retained_context,
-                system,
-                required_frame(&state.zoomed_topography(), 0),
+                state.zoomed_topography().context_frame(0),
                 &scaled,
                 (width * 4) as i32,
                 300,
+                palette.as_ref().map(|palette| palette.view()),
             )
             .expect("render scaled planet topography");
         }
