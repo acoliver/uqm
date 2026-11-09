@@ -210,6 +210,14 @@ fn dispatch(cx: &mut Cx<'_>, io: &mut Io<'_>, decision: ActivityDecision) {
                     cx,
                     io,
                     &crate::ui::MenuServices {
+                        communicate: |cx, io, conversation, options| {
+                            crate::comm::dispatch::init_communication_with_options(
+                                cx,
+                                io,
+                                conversation,
+                                options,
+                            )
+                        },
                         game_options: crate::front_end::gameopt::game_options,
                         ship_spin: |cx, _io, index, music| {
                             let music =

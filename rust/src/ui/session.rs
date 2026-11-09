@@ -52,6 +52,12 @@ pub(super) fn draw_piece(
 
 /// Nested modes supplied by the campaign composition, not acquired from ambient state.
 pub struct MenuServices {
+    pub communicate: fn(
+        &mut crate::engine::battle::Cx<'_>,
+        &mut crate::engine::observe::Io<'_>,
+        u32,
+        crate::comm::CommOptions,
+    ) -> u16,
     pub game_options:
         fn(&mut crate::engine::battle::Cx<'_>, &mut crate::engine::observe::Io<'_>) -> u32,
     pub ship_spin: fn(

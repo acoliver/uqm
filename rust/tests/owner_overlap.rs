@@ -269,6 +269,14 @@ fn starbase_releases_world_before_communication_and_cleanup() {
                         observer: &mut observer,
                     },
                     &uqm_rust::ui::MenuServices {
+                        communicate: |cx, io, conversation, options| {
+                            uqm_rust::comm::dispatch::init_communication_with_options(
+                                cx,
+                                io,
+                                conversation,
+                                options,
+                            )
+                        },
                         game_options: uqm_rust::front_end::gameopt::game_options,
                         ship_spin: |cx, _, index, music| {
                             let music =

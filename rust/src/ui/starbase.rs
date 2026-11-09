@@ -45,7 +45,7 @@ fn finish_starbase_screen(world: &mut World, menu: &mut StarbaseSession) -> bool
     menu.initialized = false;
     true
 }
-unsafe fn activate_starbase_selection(
+fn activate_starbase_selection(
     input: &InputSession,
     cx: &mut Cx<'_>,
     io: &mut Io<'_>,
@@ -59,10 +59,11 @@ unsafe fn activate_starbase_selection(
         StarbaseState::TalkCommander => {
             io.observer.checkpoint(&CheckpointView::StarbaseMenu(false));
             cx.kernel.input_runtime().flush();
-            crate::comm::dispatch::init_communication(
+            (services.communicate)(
                 cx,
                 io,
                 crate::comm::dispatch::conv::COMMANDER,
+                Default::default(),
             );
             io.observer.checkpoint(&CheckpointView::StarbaseMenu(true));
             cx.world
@@ -171,7 +172,28 @@ fn cleanup_after_star_base(world: &mut World) {
     }
 }
 
-unsafe fn prepare_starbase_visit(cx: &mut Cx<'_>, io: &mut Io<'_>) -> Option<u32> {
+fn talk_to_commander(
+    cx: &mut Cx<'_>,
+    io: &mut Io<'_>,
+    services: &super::MenuServices,
+    intro: (u32, u32),
+) {
+    (services.communicate)(
+        cx,
+        io,
+        crate::comm::dispatch::conv::COMMANDER,
+        crate::comm::CommOptions {
+            intro,
+            ..Default::default()
+        },
+    );
+}
+
+unsafe fn prepare_starbase_visit(
+    cx: &mut Cx<'_>,
+    io: &mut Io<'_>,
+    services: &super::MenuServices,
+) -> Option<u32> {
     if cx.world.story_state(StoryKey::CHMMR_BOMB_STATE) == 2 {
         cx.world.select_star(None);
         cx.world
@@ -181,15 +203,7 @@ unsafe fn prepare_starbase_visit(cx: &mut Cx<'_>, io: &mut Io<'_>) -> Option<u32
         io.observer.checkpoint(&CheckpointView::EncounterDispatch(
             crate::comm::dispatch::conv::COMMANDER,
         ));
-        crate::comm::dispatch::init_communication_with_options(
-            cx,
-            io,
-            crate::comm::dispatch::conv::COMMANDER,
-            crate::comm::CommOptions {
-                intro: (CROSSFADE_SCREEN, 0),
-                ..Default::default()
-            },
-        );
+        talk_to_commander(cx, io, services, (CROSSFADE_SCREEN, 0));
         if cx.world.story_state(StoryKey::PROBE_ILWRATH_ENCOUNTER) == 0
             || cx.world.activity() & activity_flags::CHECK_ABORT != 0
         {
@@ -203,21 +217,18 @@ unsafe fn prepare_starbase_visit(cx: &mut Cx<'_>, io: &mut Io<'_>) -> Option<u32
         )
         .unwrap_or_else(|| panic!("starbase Ilwrath fragment capacity"));
         cx.world.npc_built_ships().get_mut(ship).race_id = BYTE::MAX;
-        crate::comm::dispatch::init_communication(cx, io, crate::comm::dispatch::conv::ILWRATH);
+        (services.communicate)(
+            cx,
+            io,
+            crate::comm::dispatch::conv::ILWRATH,
+            Default::default(),
+        );
         if cx.world.data.flagship.crew_enlisted == COUNT::MAX
             || cx.world.activity() & activity_flags::CHECK_ABORT != 0
         {
             return None;
         }
-        crate::comm::dispatch::init_communication_with_options(
-            cx,
-            io,
-            crate::comm::dispatch::conv::COMMANDER,
-            crate::comm::CommOptions {
-                intro: (CROSSFADE_SCREEN, 0),
-                ..Default::default()
-            },
-        );
+        talk_to_commander(cx, io, services, (CROSSFADE_SCREEN, 0));
         if cx.world.activity() & activity_flags::CHECK_ABORT != 0 {
             return None;
         }
@@ -237,15 +248,7 @@ unsafe fn prepare_starbase_visit(cx: &mut Cx<'_>, io: &mut Io<'_>) -> Option<u32
         io.observer.checkpoint(&CheckpointView::EncounterDispatch(
             crate::comm::dispatch::conv::COMMANDER,
         ));
-        crate::comm::dispatch::init_communication_with_options(
-            cx,
-            io,
-            crate::comm::dispatch::conv::COMMANDER,
-            crate::comm::CommOptions {
-                intro: (FADE_IN_SCREEN, ONE_SECOND * 2),
-                ..Default::default()
-            },
-        );
+        talk_to_commander(cx, io, services, (FADE_IN_SCREEN, ONE_SECOND * 2));
         if cx.world.activity() & activity_flags::CHECK_ABORT != 0 {
             return None;
         }
@@ -260,7 +263,7 @@ unsafe fn prepare_starbase_visit(cx: &mut Cx<'_>, io: &mut Io<'_>) -> Option<u32
 /// # Safety
 /// The campaign must retain the initialized communication and game-clock services.
 pub unsafe fn run_starbase_visit(cx: &mut Cx<'_>, io: &mut Io<'_>, services: &super::MenuServices) {
-    let Some(previous) = prepare_starbase_visit(cx, io) else {
+    let Some(previous) = prepare_starbase_visit(cx, io, services) else {
         return;
     };
     let runtime = cx.kernel.input_runtime();
