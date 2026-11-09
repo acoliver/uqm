@@ -218,6 +218,16 @@ pub(crate) mod runtime {
                 set_slider_image(frame);
                 assert_eq!((SLIDER.origin.x, BUTTON.origin.y, SLIDER_SPACE), (3, 4, 12));
                 assert!({ SLIDER_CHANGED });
+                let mut disabled = Comm::with_options(crate::comm::CommOptions {
+                    oscilloscope: false,
+                    slider: false,
+                    ..Default::default()
+                });
+                // Disabled widgets must not inspect an unusable waveform cache or consume the slider update.
+                SCOPE_WIDTH = -1;
+                draw_oscilloscope(&mut disabled);
+                draw_slider(&mut disabled);
+                assert_eq!((LAST_OFFSET, SLIDER_CHANGED), (-1, true));
                 drop(restore);
             }
             Ok(())
