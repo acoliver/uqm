@@ -39,7 +39,7 @@ use crate::graphics::gfx_common_abi::ScreenTransition;
 
 use crate::graphics::frame_abi::DrawStamp;
 
-use crate::time::clock_abi::live::GameClockTick;
+use crate::time::clock_abi::game_clock_tick;
 
 use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
 
@@ -448,10 +448,8 @@ pub(super) unsafe fn ip_frame(
 ) {
     let runtime = cx.kernel.input_runtime();
     let input = runtime.input();
-    cx.with_legacy(|| {
-        SetContext(KernelOwner::current().read(|owner| owner.space_context));
-        GameClockTick();
-    });
+    cx.with_legacy(|| SetContext(KernelOwner::current().read(|owner| owner.space_context)));
+    game_clock_tick(cx);
     process_ship_controls(&mut cx.world.data.game, solar, input);
     let game = cx.world.data.game;
     let mut new_radius: c::SIZE = 0;
