@@ -1,5 +1,9 @@
 //! Registration of the string table resource types and instance loading.
 
+#[cfg(test)]
+#[path = "sresins/tests.rs"]
+mod tests;
+
 use std::ffi::{c_char, c_int, CStr};
 
 use crate::resource::ffi_bridge::{
@@ -12,26 +16,46 @@ use crate::strings::string_table::StringTable;
 
 /// Copy one binary-table entry and release the detached native table.
 pub fn load_binary_entry(resource: &CStr, index: u16) -> Option<Vec<u8>> {
-    use super::string_table::{
-        CaptureStringTable, FreeStringTable, GetStringAddress, SetAbsStringTableIndex,
-    };
+    load_binary(resource, Some(index))?.pop()
+}
+
+/// Copy every binary entry before releasing the detached native table.
+pub fn load_binary_entries(resource: &CStr) -> Option<Vec<Vec<u8>>> {
+    load_binary(resource, None)
+}
+
+fn load_binary(resource: &CStr, index: Option<u16>) -> Option<Vec<Vec<u8>>> {
     let table = crate::resource::ffi_bridge::detach_resource_of_type(resource, "BINTAB")?;
-    // SAFETY: the binary loader transfers this table and all its entry allocations.
-    let entry = unsafe { SetAbsStringTableIndex(CaptureStringTable(table.as_ptr().cast()), index) };
-    // The legacy u16 length query truncates large palettes; entries retain their full byte length.
-    // SAFETY: the detached table keeps its selected entry live.
-    let length = usize::try_from(unsafe { (*entry).length }).unwrap_or_else(|error| {
-        panic!("binary resource {resource:?} has an invalid length: {error}")
-    });
-    let bytes = if length == 0 {
-        Vec::new()
-    } else {
-        // SAFETY: the loader allocated the entry's full recorded byte length.
-        unsafe { std::slice::from_raw_parts(GetStringAddress(entry).cast(), length).to_vec() }
-    };
+    // SAFETY: the binary loader transfers the table and its complete entry allocations.
+    let bytes = unsafe { copy_binary_entries(&*table.as_ptr().cast::<StringTable>(), index) };
     // SAFETY: the copied bytes no longer borrow the uniquely detached table.
-    unsafe { FreeStringTable(table.as_ptr().cast()) };
+    unsafe { super::string_table::FreeStringTable(table.as_ptr().cast()) };
     Some(bytes)
+}
+
+unsafe fn copy_binary_entries(table: &StringTable, index: Option<u16>) -> Vec<Vec<u8>> {
+    let count = usize::try_from(table.size)
+        .unwrap_or_else(|error| panic!("binary table has an invalid entry count: {error}"));
+    if count == 0 {
+        return Vec::new();
+    }
+    let range = index.map_or(0..count, |index| {
+        let index = usize::from(index) % count;
+        index..index + 1
+    });
+    range
+        .map(|index| {
+            let entry = &*table.strings.add(index);
+            // The ABI's u16 length query truncates large palettes.
+            let length = usize::try_from(entry.length)
+                .unwrap_or_else(|error| panic!("binary entry has an invalid length: {error}"));
+            if length == 0 {
+                Vec::new()
+            } else {
+                std::slice::from_raw_parts(entry.data.cast::<u8>(), length).to_vec()
+            }
+        })
+        .collect()
 }
 
 unsafe extern "C" fn get_string_table_file_data(
