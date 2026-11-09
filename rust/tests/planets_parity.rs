@@ -165,7 +165,7 @@ impl SuppliedGenerators {
     ) -> R {
         self.select_info(info);
         unsafe {
-            crate::invoke_generation(&mut *self.state, |system, _| {
+            crate::invoke_generation(&mut self.state, |system, _| {
                 system.scan(Body::Planet(0), run)
             })
         }
@@ -194,7 +194,7 @@ impl Generators for SuppliedGenerators {
         };
         self.state.sys.info = SystemInfo::default();
         unsafe {
-            crate::invoke_generation(&mut *self.state, |system, _| {
+            crate::invoke_generation(&mut self.state, |system, _| {
                 if case.is_orbit_entry {
                     calc::analyse_body(system, body);
                     system.orbital(body, |data| *data.info)
@@ -258,7 +258,7 @@ impl Generators for SuppliedGenerators {
         };
         unsafe {
             self.state.sys.rng.reseed(case.seed);
-            crate::invoke_generation(&mut *self.state, |system, _| {
+            crate::invoke_generation(&mut self.state, |system, _| {
                 if moons {
                     system.layout_moons(0, |rng, size, color, _, worlds| {
                         assert_eq!(size, request.star_size);
@@ -292,12 +292,9 @@ impl DefaultOps for SuppliedGenerators {
         self.state.sys.sun.num_planets = 0;
         let rng = unsafe {
             self.state.sys.rng.reseed(seed);
-            assert!(crate::invoke_generation(
-                &mut *self.state,
-                |system, host| {
-                    uqm_rust::planets::generate::generator(0).generate_planets(system, host)
-                }
-            ));
+            assert!(crate::invoke_generation(&mut self.state, |system, host| {
+                uqm_rust::planets::generate::generator(0).generate_planets(system, host)
+            }));
             self.state.sys.rng.seed()
         };
         let drawn = self.state.sys.sun.num_planets;
@@ -317,12 +314,9 @@ impl DefaultOps for SuppliedGenerators {
         self.state.sys.planets[0].num_planets = count;
         let rng = unsafe {
             self.state.sys.rng.reseed(seed);
-            assert!(crate::invoke_generation(
-                &mut *self.state,
-                |system, host| {
-                    uqm_rust::planets::generate::generator(0).generate_moons(system, 0, host)
-                }
-            ));
+            assert!(crate::invoke_generation(&mut self.state, |system, host| {
+                uqm_rust::planets::generate::generator(0).generate_moons(system, 0, host)
+            }));
             self.state.sys.rng.seed()
         };
         Layout {
@@ -411,11 +405,6 @@ fn render_plan_data(table: &[PlanetFrame]) -> String {
     text
 }
 
-/// Reseed the random stream retained by the serialized native host.
-fn reseed_c(context: *mut uqm_rust::math::RandomContext, seed: u32) {
-    unsafe { (*context).reseed(seed) };
-}
-
 fn fixture_path(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures/planets")
@@ -459,7 +448,7 @@ fn supplied_views_reproduce_the_c_fixtures() {
             &exports.state.sys.rng,
         );
         assert!(unsafe {
-            crate::invoke_generation(&mut *exports.state, |system, host| {
+            crate::invoke_generation(&mut exports.state, |system, host| {
                 let generator = uqm_rust::planets::generate::generator(0);
                 let body = uqm_rust::planets::generate::special::Body::Planet(0);
                 generator.pickup_minerals(system, body, 0, host)

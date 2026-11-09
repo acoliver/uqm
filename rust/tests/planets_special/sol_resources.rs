@@ -321,7 +321,6 @@ unsafe fn scenes(h: &mut Harness) {
         assert_eq!(info.planet_density, if pluto { 33 } else { 60 });
         uqm_rust::app::bridge::enter(|cx| c_api::free_planet(cx, &mut *system));
         c_api::TFB_FlushGraphicsEx(1);
-        let info = &(*system).sys.info.planet_info;
         assert!((*system).sys.report.current().is_none());
         drop(typography);
         assert!(

@@ -4,7 +4,6 @@
 //! inputs and must leave the descriptions, node outputs and `SysGenRNG`
 //! position captured from the C originals in the checked-in fixture.
 
-use uqm_rust::engine::world::planet::PlanetDesc;
 use uqm_rust::planets::generate::andro::Generator as generateAndrosynthFunctions;
 use uqm_rust::planets::generate::burv::Generator as generateBurvixeseFunctions;
 use uqm_rust::planets::generate::chmmr::Generator as generateChmmrFunctions;
@@ -139,7 +138,7 @@ impl Harness {
         self.seed(case.2);
 
         assert!(unsafe {
-            crate::invoke_generation(&mut *self.state, |system, host| {
+            crate::invoke_generation(&mut self.state, |system, host| {
                 table.generate_planets(system, host)
             })
         });
@@ -160,13 +159,12 @@ impl Harness {
         self.set_star(case.0, case.1);
         self.state.sys.moons = unsafe { std::mem::zeroed() };
         self.state.sys.planets = unsafe { std::mem::zeroed() };
-        let sun: *mut PlanetDesc = &mut self.state.sys.sun;
+
         self.state.sys.planets[planet_i].num_planets = case.3;
         self.seed(case.2);
-        let _planet: *mut PlanetDesc = &mut self.state.sys.planets[planet_i];
 
         assert!(unsafe {
-            crate::invoke_generation(&mut *self.state, |system, host| {
+            crate::invoke_generation(&mut self.state, |system, host| {
                 table.generate_moons(system, planet_i as u8, host)
             })
         });
@@ -182,14 +180,6 @@ impl Harness {
         self.state.sys.moons = unsafe { std::mem::zeroed() };
         self.state.sys.info = unsafe { std::mem::zeroed() };
         self.state.sys.info.planet_info.scan_seed = scan_seeds(seed);
-        let sun: *mut PlanetDesc = &mut self.state.sys.sun;
-        let _world: *mut PlanetDesc = match body {
-            Body::Planet(p) => &mut self.state.sys.planets[usize::from(p)],
-            Body::Moon { planet, moon } => {
-                let parent: *mut PlanetDesc = &mut self.state.sys.planets[usize::from(planet)];
-                &mut self.state.sys.moons[usize::from(moon)]
-            }
-        };
 
         let record = &raw mut *self.state;
         let mut out = String::new();

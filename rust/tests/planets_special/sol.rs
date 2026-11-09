@@ -4,7 +4,6 @@ use super::Harness;
 use crate::planets_common::sol::{self, Layout, Ops, Scan};
 use uqm_rust::engine::world::planet::{NodeInfo, PlanetDesc, SystemInfo};
 pub(super) use uqm_rust::planets::generate::sol::Generator as generateSolFunctions;
-use uqm_rust::planets::generate::special::Body;
 use uqm_rust::state::game_state_keys::get_game_state;
 
 impl Ops for Harness {
@@ -15,7 +14,7 @@ impl Ops for Harness {
         self.seed(case.seed);
         let mut expected = crate::generation_data(&self.state);
         let result = unsafe {
-            crate::invoke_generation(&mut *self.state, |system, host| {
+            crate::invoke_generation(&mut self.state, |system, host| {
                 generateSolFunctions.generate_planets(system, host)
             })
         };
@@ -42,11 +41,8 @@ impl Ops for Harness {
         self.state.sys.planets = unsafe { std::mem::zeroed() };
         self.state.sys.planets[usize::from(planet)].num_planets = count;
         self.seed(case.seed);
-        // Derive both C arguments and the parent link from one raw root. No
-        // covering Rust mutable reference is created while C uses the links.
         let system = &raw mut *self.state;
         let (mut expected, result) = unsafe {
-            let parent = &raw mut (*system).sys.planets[usize::from(planet)];
             let expected = crate::generation_data(&*system);
             (
                 expected,
@@ -83,13 +79,6 @@ impl Ops for Harness {
         self.state.sys.planets = unsafe { std::mem::zeroed() };
         self.state.sys.moons = unsafe { std::mem::zeroed() };
         let system = &raw mut *self.state;
-        let _world = unsafe {
-            let sun = &raw mut (*system).sys.sun;
-            match case.body {
-                Body::Planet(p) => &raw const (*system).sys.planets[usize::from(p)],
-                Body::Moon { planet, moon } => &raw const (*system).sys.moons[usize::from(moon)],
-            }
-        };
         let generate =
             |view: &mut uqm_rust::engine::world::generation::SolarSys<'_>,
              info: &mut NodeInfo,

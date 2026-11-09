@@ -67,7 +67,7 @@ pub fn check(h: &mut Harness) {
         uqm_rust::engine::World::current().write(|world| {
             (world).set_story_state(uqm_rust::engine::StoryKey::PROBE_MESSAGE_DELIVERED, 0)
         });
-        assert!(crate::invoke_generation(&mut *h.state, |system, host| {
+        assert!(crate::invoke_generation(&mut h.state, |system, host| {
             GENERATE_SOL_FUNCTIONS.init_npcs(system, host)
         }));
         let probe_ref =
@@ -107,7 +107,7 @@ pub fn check(h: &mut Harness) {
         let saved_file = file();
         assert!(saved_file.len() > probe_ref as usize);
         // Loading the saved reference does not create a second group record.
-        assert!(crate::invoke_generation(&mut *h.state, |system, host| {
+        assert!(crate::invoke_generation(&mut h.state, |system, host| {
             GENERATE_SOL_FUNCTIONS.init_npcs(system, host)
         }));
         assert_eq!(
@@ -122,12 +122,12 @@ pub fn check(h: &mut Harness) {
                 .unwrap_or_else(|| panic!("fixture group missing"));
             groups.get_mut(head).task = uqm_rust::planets::generate::default::REFORM_GROUP;
         });
-        assert!(crate::invoke_generation(&mut *h.state, |system, host| {
+        assert!(crate::invoke_generation(&mut h.state, |system, host| {
             GENERATE_SOL_FUNCTIONS.uninit_npcs(system, host)
         }));
         assert!(uqm_rust::engine::World::current()
             .read(|world| world.npc_built_ships_ref().head().is_none()));
-        assert!(crate::invoke_generation(&mut *h.state, |system, host| {
+        assert!(crate::invoke_generation(&mut h.state, |system, host| {
             GENERATE_SOL_FUNCTIONS.reinit_npcs(system, host)
         }));
         assert_eq!(
@@ -156,7 +156,7 @@ pub fn check(h: &mut Harness) {
         uqm_rust::engine::World::current().write(|world| {
             (world).set_story_state(uqm_rust::engine::StoryKey::PROBE_MESSAGE_DELIVERED, 1)
         });
-        assert!(crate::invoke_generation(&mut *h.state, |system, host| {
+        assert!(crate::invoke_generation(&mut h.state, |system, host| {
             GENERATE_SOL_FUNCTIONS.init_npcs(system, host)
         }));
         assert_eq!(
@@ -166,8 +166,7 @@ pub fn check(h: &mut Harness) {
         assert_eq!(file(), saved_file);
 
         let system = &raw mut *h.state;
-        let parent = &raw mut (*system).sys.planets[2];
-        let starbase = &raw mut (*system).sys.moons[0];
+
         for activity in [0, CHECK_ABORT, CHECK_LOAD, CHECK_ABORT | CHECK_LOAD] {
             uqm_rust::engine::World::current().write(|world| world.set_activity(activity));
             c_api::set_encounter_group(17);

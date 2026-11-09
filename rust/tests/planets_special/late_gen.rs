@@ -4,7 +4,6 @@ use crate::planets_common::late_gen::{self, Kind, Layout, Ops, Scan};
 use uqm_rust::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
 use uqm_rust::planets::generate::sam::Generator as generateSaMatraFunctions;
 use uqm_rust::planets::generate::spa::Generator as generateSpathiFunctions;
-use uqm_rust::planets::generate::special::Body;
 use uqm_rust::planets::generate::vux::Generator as generateVuxFunctions;
 use uqm_rust::planets::generate::SystemGenerator;
 use uqm_rust::state::game_state_keys::get_game_state;
@@ -32,7 +31,7 @@ impl Ops for Harness {
 
         let mut expected = crate::generation_data(&self.state);
         let result = unsafe {
-            crate::invoke_generation(&mut *self.state, |system, host| {
+            crate::invoke_generation(&mut self.state, |system, host| {
                 table(case.kind).generate_planets(system, host)
             })
         };
@@ -56,14 +55,12 @@ impl Ops for Harness {
         self.set_star(case.size, case.color);
         self.state.sys.moons.copy_from_slice(moons);
         self.state.sys.planets = unsafe { std::mem::zeroed() };
-        let sun: *mut PlanetDesc = &mut self.state.sys.sun;
         self.state.sys.planets[usize::from(planet)].num_planets = count;
-        let _parent: *mut PlanetDesc = &mut self.state.sys.planets[usize::from(planet)];
         self.seed(case.seed);
 
         let mut expected = crate::generation_data(&self.state);
         let result = unsafe {
-            crate::invoke_generation(&mut *self.state, |system, host| {
+            crate::invoke_generation(&mut self.state, |system, host| {
                 table(case.kind).generate_moons(system, planet, host)
             })
         };
@@ -88,14 +85,6 @@ impl Ops for Harness {
         self.state.sys.planets = unsafe { std::mem::zeroed() };
         self.state.sys.moons = unsafe { std::mem::zeroed() };
         self.state.sys.info = *info;
-        let sun: *mut PlanetDesc = &mut self.state.sys.sun;
-        let _world: *const PlanetDesc = match case.body {
-            Body::Planet(p) => &self.state.sys.planets[usize::from(p)],
-            Body::Moon { planet, moon } => {
-                let parent: *mut PlanetDesc = &mut self.state.sys.planets[usize::from(planet)];
-                &self.state.sys.moons[usize::from(moon)]
-            }
-        };
         match case.body {
             uqm_rust::planets::generate::special::Body::Planet(p) => {
                 self.state.sys.planets[usize::from(p)].data_index = case.frame
@@ -117,12 +106,12 @@ impl Ops for Harness {
         self.seed(case.seed);
         let before = format!("{:?}", crate::generation_data(&self.state));
         let result = unsafe {
-            crate::invoke_generation(&mut *self.state, |view, host| generate(view, node, host))
+            crate::invoke_generation(&mut self.state, |view, host| generate(view, node, host))
         };
         let after_rng = self.rng_position();
         self.seed(case.seed);
         let count_only = unsafe {
-            crate::invoke_generation(&mut *self.state, |view, host| {
+            crate::invoke_generation(&mut self.state, |view, host| {
                 generate(view, &mut crate::planets_common::fresh_node(), host)
             })
         };

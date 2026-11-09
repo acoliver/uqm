@@ -16,26 +16,14 @@ impl Ops for Harness {
         self.state.sys.planets = unsafe { std::mem::zeroed() };
         self.state.sys.moons = unsafe { std::mem::zeroed() };
         let (desc, parent) = sol_orbital::input(case);
-        let system = &raw mut *self.state;
-        // All interior links and call arguments derive from this raw root.
-        // The only resulting table pointer is into the static linked table.
-        let world = unsafe {
-            let sun = &raw mut (*system).sys.sun;
-            match case.body {
-                Body::Planet(p) => {
-                    let world = &raw mut (*system).sys.planets[usize::from(p)];
-                    world.write(desc);
-                    world
-                }
-                Body::Moon { planet, moon } => {
-                    let p = &raw mut (*system).sys.planets[usize::from(planet)];
-                    p.write(parent.unwrap());
-                    let world = &raw mut (*system).sys.moons[usize::from(moon)];
-                    world.write(desc);
-                    world
-                }
+        match case.body {
+            Body::Planet(planet) => self.state.sys.planets[usize::from(planet)] = desc,
+            Body::Moon { planet, moon } => {
+                self.state.sys.planets[usize::from(planet)] = parent.unwrap();
+                self.state.sys.moons[usize::from(moon)] = desc;
             }
-        };
+        }
+        let system = &raw mut *self.state;
         let mut expected = crate::generation_data(&self.state);
         self.seed(0xabcdef01);
         let result = unsafe {

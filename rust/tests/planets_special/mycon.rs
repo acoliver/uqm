@@ -4,7 +4,6 @@ use super::{generateMyconFunctions, Harness};
 use crate::planets_common::mycon::{self, MyconOps, RustMycon, ScanCase};
 use uqm_rust::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame};
 
-use uqm_rust::planets::generate::special::Body;
 use uqm_rust::state::game_state_keys::set_game_state;
 
 impl MyconOps for Harness {
@@ -21,7 +20,7 @@ impl MyconOps for Harness {
         self.seed(case.2);
 
         let result = unsafe {
-            crate::invoke_generation(&mut *self.state, |system, host| {
+            crate::invoke_generation(&mut self.state, |system, host| {
                 generateMyconFunctions.generate_planets(system, host)
             })
         };
@@ -51,14 +50,7 @@ impl MyconOps for Harness {
                 .entry(0)
                 .unwrap()
             }));
-        let sun: *mut PlanetDesc = &mut self.state.sys.sun;
-        let _world: *const PlanetDesc = match case.body {
-            Body::Planet(p) => &self.state.sys.planets[usize::from(p)],
-            Body::Moon { planet, moon } => {
-                let parent: *mut PlanetDesc = &mut self.state.sys.planets[usize::from(planet)];
-                &self.state.sys.moons[usize::from(moon)]
-            }
-        };
+
         let generate =
             |view: &mut uqm_rust::engine::world::generation::SolarSys<'_>,
              info: &mut NodeInfo,
@@ -72,12 +64,12 @@ impl MyconOps for Harness {
         self.seed(case.seed);
         let before = format!("{:?}", crate::generation_data(&self.state));
         let count = unsafe {
-            crate::invoke_generation(&mut *self.state, |view, host| generate(view, node, host))
+            crate::invoke_generation(&mut self.state, |view, host| generate(view, node, host))
         };
         let after_rng = self.rng_position();
         self.seed(case.seed);
         let count_only = unsafe {
-            crate::invoke_generation(&mut *self.state, |view, host| {
+            crate::invoke_generation(&mut self.state, |view, host| {
                 generate(view, &mut crate::planets_common::fresh_node(), host)
             })
         };

@@ -16,7 +16,6 @@ pub fn check() {
     h.seed(104729);
     let system = &raw mut *h.state;
     unsafe {
-        let world = &raw mut (*system).sys.planets[0];
         assert!(!crate::invoke_generation(&mut *system, |view, host| table
             .pickup_energy(
                 view,
@@ -102,7 +101,7 @@ fn check_bomb_queue(h: &mut Harness) {
             world.data.game.battle_group_ref = 0x12345678;
             saved
         });
-        assert!(crate::invoke_generation(&mut *h.state, |system, host| {
+        assert!(crate::invoke_generation(&mut h.state, |system, host| {
             GENERATE_SOL_FUNCTIONS.reinit_npcs(system, host)
         }));
         uqm_rust::engine::World::current().write(|world| {
