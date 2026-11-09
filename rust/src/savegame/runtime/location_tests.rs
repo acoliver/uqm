@@ -270,7 +270,7 @@ fn a_missing_selected_body_is_refused_before_the_save_writes_anything() {
     let system = System::orbiting_planet(3);
     let mut snapshot = system.snapshot((320, 240));
     snapshot.selected = None;
-    let mut game = game(None);
+    let game = game(None);
     let before = copy_of(&game);
     assert_eq!(
         unsafe { prepare_solar_location(&game.world.data.game, &snapshot) }.err(),
@@ -545,7 +545,7 @@ fn an_orbit_outside_an_inner_system_is_refused() {
         fresh_starinfo(&mut game.world, 4);
         set_planetary_change(&mut game.world);
         let before = copy_of(&game);
-        let mut system = System::outer();
+        let system = System::outer();
         let mut snapshot = system.snapshot((320, 240));
         snapshot.in_orbit = true;
         let result = prepare_solar_location(&game.world.data.game, &snapshot);

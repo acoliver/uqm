@@ -1,6 +1,7 @@
 //! Owner-supplied PlanetSide session boundary.
 
 use crate::engine::observe::InputView;
+use crate::planets::solar_system::SolarSystem;
 use std::ffi::c_void;
 
 pub const STATUS_OK: i32 = 0;
@@ -170,16 +171,8 @@ fn run_retained_session(
         super::runtime::AdapterError::new("lander_assets_not_loaded"),
     )?);
     let reports = drawing.scan.report_context();
-    let mut generator = CffiSurfaceGenerator::for_planet_side(
-        game,
-        observe,
-        unsafe {
-            &mut *context
-                .solar_system
-                .cast::<crate::planets::solar_system::SolarSystem>()
-        },
-        reports,
-    );
+    let solar = unsafe { &mut *context.solar_system.cast::<SolarSystem>() };
+    let mut generator = CffiSurfaceGenerator::for_planet_side(game, observe, solar, reports);
     let mut visuals = retained_visuals(context)?;
     let persistence = ScanPersistence::from_masks(context.retrieval_masks);
     let lander_masks = extract_lander_masks(&assets.graphic(LanderGraphic::Lander))?;

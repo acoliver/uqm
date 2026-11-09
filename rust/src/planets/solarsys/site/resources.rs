@@ -125,7 +125,13 @@ impl<'a, 'game, 'observer> Site<'a, 'game, 'observer> {
         // SAFETY: this host retains the graphics resources and consumes the optional definition.
         self.presentation = unsafe {
             load_planet(
-                self.game, self.io, system, self.star, body, in_orbit, definition, reports,
+                self.game,
+                self.io,
+                system,
+                (self.star, body),
+                in_orbit,
+                definition,
+                reports,
             )
         };
     }

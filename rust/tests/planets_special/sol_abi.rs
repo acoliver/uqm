@@ -242,8 +242,10 @@ fn check_drawable_ownership(h: &mut Harness) {
                     &game,
                     &io,
                     system,
-                    uqm_rust::engine::StarId(0),
-                    uqm_rust::engine::world::generation::Body::Planet(0),
+                    (
+                        uqm_rust::engine::StarId(0),
+                        uqm_rust::engine::world::generation::Body::Planet(0)
+                    ),
                     false,
                     definition.into_drawable(),
                     Default::default(),

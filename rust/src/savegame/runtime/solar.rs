@@ -151,7 +151,7 @@ impl SolarSystemOwner for SolarSummary<'_> {
             .unwrap_or(name.len());
         if SIS_NAME_SIZE - used >= 3 {
             name[used] = b'-';
-            name[used + 1] = b'A' + moon as u8;
+            name[used + 1] = b'A' + moon;
             name[used + 2] = 0;
         }
         Ok(name)

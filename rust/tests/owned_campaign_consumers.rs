@@ -141,15 +141,40 @@ fn scene_star_lookup_uses_the_unpublished_world() {
 
 #[test]
 #[serial_test::serial]
-fn rainbow_ordinal_reads_the_unpublished_world_star() {
-    use uqm_rust::engine::world::{CStarDesc, CATALOG_LEN};
+fn rainbow_ordinal_reads_the_unpublished_visit_star() {
+    use std::cell::RefCell;
+    use uqm_rust::engine::{
+        battle::{Battle, Cx},
+        observe::{Io, Unobserved},
+        world::{CStarDesc, CATALOG_LEN},
+        Kernel, StarId,
+    };
+    use uqm_rust::planets::generate::{host::PlanetSite, rainbow::RAINBOW_DEFINED};
     let mut world = World::new();
     // SAFETY: catalog descriptors contain only integer fields.
     let mut catalog: Box<[CStarDesc; CATALOG_LEN]> = Box::new(unsafe { std::mem::zeroed() });
-    catalog[0].index = 4;
+    catalog[0].index = RAINBOW_DEFINED;
     catalog[1].index = 9;
     world.set_catalog(std::borrow::Cow::Owned(*catalog));
-    world.current_star = Some(uqm_rust::engine::StarId(2));
-    let indexes = uqm_rust::planets::c_api::star_indexes_before_current(&world);
-    assert_eq!(indexes, [4, 9]);
+    world.current_star = Some(StarId(0));
+    let mut kernel = Kernel::new();
+    let mut battle = Battle::new();
+    let game = RefCell::new(Cx::new(&mut battle, &mut world, &mut kernel, || {
+        panic!("catalog lookup does not draw randomness")
+    }));
+    let mut observer = Unobserved;
+    let io = RefCell::new(Io {
+        observer: &mut observer,
+    });
+    let mut pickup = uqm_rust::planet_side::special_effects::PickupContext::NoLander;
+    let site = uqm_rust::planets::solarsys::site::Site::new(
+        &game,
+        &io,
+        StarId(2),
+        RAINBOW_DEFINED,
+        false,
+        &mut pickup,
+        None,
+    );
+    assert_eq!(site.rainbow_ordinal(), 1);
 }

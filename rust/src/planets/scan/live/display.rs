@@ -3,7 +3,6 @@ use super::*;
 use crate::comm::sis_graphics::CText;
 use crate::engine::Kernel as KernelOwner;
 use crate::starbase::gfx::{Align, TextDraw};
-use std::ffi::CStr;
 
 use crate::planets::solarsys::lifecycle::named_body_index;
 

@@ -21,9 +21,38 @@ pub(crate) fn to_location(point: POINT, radius: i16, width: i32, height: i32) ->
     }
 }
 
+pub(crate) fn outer_location(
+    solar: &crate::engine::world::generation::SolarSnapshot,
+    planet: u16,
+) -> crate::graphics::native_abi::POINT {
+    to_location(
+        solar.planets[usize::from(planet)].display_origin,
+        solar.zoom_radius,
+        solar.screen.0 - 78,
+        solar.screen.1 - 13,
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn copied_outer_geometry_keeps_its_screen_zoom_and_body() {
+        let mut world = crate::engine::World::new();
+        world.set_catalog(std::borrow::Cow::Borrowed(
+            &crate::planets::tables::STARMAP_ARRAY,
+        ));
+        let mut visit =
+            crate::planets::solar_system::SolarSystem::new(&world, crate::engine::StarId(0));
+        visit.sys.sun.radius = 8192;
+        visit.sys.planets[2].image.origin = POINT { x: -1, y: 3 };
+        let observation = visit.snapshot((320, 200));
+        visit.sys.sun.radius = 4096;
+        visit.sys.planets[2].image.origin.x = 37;
+        let point = outer_location(&observation, 2);
+        assert_eq!((point.x, point.y), (-17846, -13165));
+    }
 
     #[test]
     fn center_and_cardinals_keep_the_original_truncation() {
@@ -58,16 +87,4 @@ mod tests {
             }
         }
     }
-}
-
-pub(crate) fn outer_location(
-    solar: &crate::engine::world::generation::SolarSnapshot,
-    planet: u16,
-) -> crate::graphics::native_abi::POINT {
-    to_location(
-        solar.planets[usize::from(planet)].display_origin,
-        solar.zoom_radius,
-        solar.screen.0 - 78,
-        solar.screen.1 - 13,
-    )
 }

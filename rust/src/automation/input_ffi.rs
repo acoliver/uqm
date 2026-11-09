@@ -122,13 +122,6 @@ impl ViewGeometry {
             display_to_loc: display_factor >> 1,
         }
     }
-
-    /// Read the geometry from the live C screen-size globals.
-    #[cfg(not(test))]
-    fn current() -> Self {
-        let (width, height) = screen_size();
-        Self::from_screen(width, height)
-    }
 }
 
 /// The live `ScreenWidth` and `ScreenHeight`.

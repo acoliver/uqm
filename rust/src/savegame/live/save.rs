@@ -9,7 +9,6 @@ use crate::engine::world::generation::SolarSnapshot;
 use crate::mainloop::dir_prep::saveDir;
 use crate::navigation::globals::in_hqspace;
 use crate::navigation::groups::live::put_group_info;
-use crate::planets::solar_system::SolarSystem;
 
 pub use save_game as SaveGame;
 
@@ -37,18 +36,14 @@ pub(crate) unsafe fn capture(
 /// Game thread; summary and name must point to live writable/terminated objects.
 pub unsafe fn save_game(
     cx: &mut Cx<'_>,
-    solar: Option<&SolarSystem>,
+    solar: Option<SolarSnapshot>,
     slot: u16,
     summary: *mut SummaryDesc,
     name: *const c_char,
 ) -> u32 {
     let result = (|| -> anyhow::Result<()> {
         let slots = SaveSlots::new(saveDir.cast())?;
-        let mut save = capture(
-            cx,
-            solar.map(|solar| solar.snapshot(cx.screen_dimensions())),
-            CStr::from_ptr(name).to_bytes(),
-        )?;
+        let mut save = capture(cx, solar, CStr::from_ptr(name).to_bytes())?;
         summary.write(SummaryDesc::from(&save.summary));
         runtime::prepare_summary_for_write(&mut save.summary);
         slots.write(usize::from(slot), &save)?;

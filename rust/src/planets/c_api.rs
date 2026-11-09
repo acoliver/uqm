@@ -52,7 +52,6 @@ extern "C" {
 }
 
 /// `GROUP_INIT_IP`, `GROUP_SAVE_IP` (`state.h`): `(BYTE)~0`.
-pub(super) const GROUP_INIT_IP: u8 = !0;
 pub(super) const GROUP_SAVE_IP: u8 = !0;
 /// `GROUP_LOAD_IP` is `GROUP_LIST` (`state.h`).
 pub(super) const GROUP_LOAD_IP: u8 = 0;

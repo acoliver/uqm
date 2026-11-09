@@ -469,7 +469,7 @@ unsafe fn prepare_pick_side(
     let fuel = fuel(solar);
     let dimensions = cx.screen_dimensions();
     crate::ui::sis::clear_sis_rect(cx.kernel, cx.world, dimensions, 1 << 2);
-    let message = cx.with_legacy(|| {
+    cx.with_legacy(|| {
         scan.context().select();
         CffiPlatform.batch();
         draw_planet(&mut scan.sphere.borrow_mut(), 0, black());

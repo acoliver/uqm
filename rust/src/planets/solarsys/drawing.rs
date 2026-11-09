@@ -38,7 +38,6 @@ const PLANETS_SIZE_MASK: u32 = 0x03;
 const FACING_SHIFT: u32 = 4;
 
 #[inline]
-#[inline]
 pub(super) unsafe fn orbit_rect(
     rect: *mut c::RECT,
     dx: i32,
@@ -190,7 +189,7 @@ pub(super) unsafe fn draw_inner_system(cx: &mut Cx<'_>, solar: &mut SolarSystem)
     };
     cx.with_legacy(|| {
         validate_inner_orbits(solar);
-        draw_system(solar, solar.sys.planets[usize::from(planet)].radius, true);
+        draw_system(solar, solar.sys.planets[usize::from(planet)].radius);
     });
     let name = std::ffi::CStr::from_bytes_until_nul(&cx.world.data.flagship.planet_name)
         .unwrap_or_else(|error| panic!("invalid inner-system name: {error}"));
@@ -200,7 +199,7 @@ pub(super) unsafe fn draw_inner_system(cx: &mut Cx<'_>, solar: &mut SolarSystem)
 pub(super) unsafe fn draw_outer_system(cx: &mut Cx<'_>, solar: &mut SolarSystem) {
     cx.with_legacy(|| {
         validate_orbits(solar);
-        draw_system(solar, solar.sys.sun.radius, false);
+        draw_system(solar, solar.sys.sun.radius);
     });
     let point = cx.world.catalog()[solar.star().0].star_pt;
     crate::ui::sis::draw_hyper_coords(cx.kernel, cx.screen_dimensions().0, point);
@@ -223,7 +222,7 @@ pub(super) unsafe fn draw_system_transition(cx: &mut Cx<'_>, solar: &mut SolarSy
     });
 }
 
-pub(super) unsafe fn draw_system(solar: &mut SolarSystem, radius: c::SIZE, inner: bool) {
+pub(super) unsafe fn draw_system(solar: &mut SolarSystem, radius: c::SIZE) {
     if SOLAR_SYS_FRAME.is_null() {
         let mut clip: c::RECT = std::mem::zeroed();
         c::GetContextClipRect(&mut clip);

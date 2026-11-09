@@ -11,7 +11,7 @@ use crate::engine::world::{
     StarId,
 };
 use crate::engine::{battle::Cx, observe::Io, StoryKey};
-use crate::planets::solar_system::{BodyLocation, SolarSystem};
+use crate::planets::solar_system::SolarSystem;
 #[cfg(not(test))]
 use crate::planets::solarsys::site::Site;
 use std::cell::RefCell;
@@ -175,7 +175,7 @@ impl<'a, 'game, 'observer, 'tables> CffiSurfaceGenerator<'a, 'game, 'observer, '
 
     #[cfg(not(test))]
     fn node_key(&self, node: ScanNodeId) -> (u16, u8, u8, u8) {
-        BodyLocation::new(self.star, self.body).node_key(node.get())
+        crate::planets::solar_system::BodyLocation::new(self.star, self.body).node_key(node.get())
     }
 
     fn pickup_with(
@@ -402,9 +402,26 @@ mod tests {
             system.sys.sun.num_planets = 1;
             system.enter_inner(0);
             system.enter_orbit(Body::Planet(0));
+            let report_color = crate::graphics::native_abi::Color {
+                r: 3,
+                g: 5,
+                b: 7,
+                a: 11,
+            };
+            report_context.context.set_foreground(report_color);
             let mut generator =
                 CffiSurfaceGenerator::for_planet_side(game, io, &mut system, report_context);
             assert!(std::ptr::eq(generator.io, io));
+            assert_eq!(generator.star, StarId(0));
+            assert_eq!(generator.body, Body::Planet(0));
+            assert!(generator.in_orbit);
+            let actual = generator
+                .report_context
+                .as_ref()
+                .unwrap()
+                .context
+                .foreground();
+            assert_eq!((actual.r, actual.g, actual.b, actual.a), (3, 5, 7, 11));
             for (scan, index) in [
                 (ScanType::Mineral, 31),
                 (ScanType::Energy, 0),

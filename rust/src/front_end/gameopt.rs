@@ -25,6 +25,7 @@ pub(crate) mod runtime {
     use save_load::pick_game;
 
     use super::{picker_action, picker_slot, PickerAction, MAX_SAVED_GAMES, SAVES_PER_PAGE};
+    use crate::engine::world::generation::SolarSnapshot;
     use crate::engine::{battle::Cx, input::InputSession, observe::Io, Kernel};
     use crate::graphics::context_abi::ContextLease;
     use crate::navigation::abi::{
@@ -689,7 +690,7 @@ pub(crate) mod runtime {
     fn do_game_options(
         cx: &mut Cx<'_>,
         io: &mut Io<'_>,
-        solar: Option<&crate::planets::solar_system::SolarSystem>,
+        solar: Option<SolarSnapshot>,
         state: &mut u8,
     ) -> bool {
         let runtime = cx.kernel.input_runtime();
@@ -737,6 +738,7 @@ pub(crate) mod runtime {
         io: &mut Io<'_>,
         solar: Option<&crate::planets::solar_system::SolarSystem>,
     ) -> BOOLEAN {
+        let solar = solar.map(|visit| visit.snapshot(cx.screen_dimensions()));
         let runtime = cx.kernel.input_runtime();
         let input = runtime.input();
         if cx.kernel.last_activity == CHECK_LOAD as ACTIVITY {

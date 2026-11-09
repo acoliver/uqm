@@ -172,7 +172,7 @@ fn an_encounter_is_not_inferred_to_be_an_orbit_from_flight_being_stopped() {
 
 #[test]
 fn the_outer_system_keeps_the_flagships_planet_name() {
-    let mut system = System::outer();
+    let system = System::outer();
     assert_eq!(named(&system, Some(SOL)), "Beta Hydri");
 }
 

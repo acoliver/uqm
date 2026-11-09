@@ -598,16 +598,16 @@ unsafe fn invoke_generation<R>(
     }
 }
 
-fn generation_data(
-    solar: &SolarSystem,
-) -> (
+type GenerationData = (
     PlanetDesc,
     [PlanetDesc; 16],
     [PlanetDesc; 4],
     SystemInfo,
     [Option<uqm_rust::graphics::native_abi::FRAME>; 6],
     Option<usize>,
-) {
+);
+
+fn generation_data(solar: &SolarSystem) -> GenerationData {
     (
         solar.sys.sun,
         solar.sys.planets,

@@ -189,6 +189,13 @@ impl SolarSystem {
         }
     }
 
+    pub fn selected_location(&self) -> BodyLocation {
+        self.body_location(
+            self.selected_body()
+                .expect("planet info requires a selected body"),
+        )
+    }
+
     pub fn body_location(&self, body: Body) -> BodyLocation {
         BodyLocation::new(self.star, body)
     }

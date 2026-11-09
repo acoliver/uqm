@@ -7,7 +7,6 @@ use crate::engine::save::location::{OrbitLocation, SolarLocation};
 use crate::engine::world::generation::SolarSnapshot;
 use crate::engine::world::planet_info::ScanRetrieveMask;
 use crate::graphics::native_abi::FRAME_DESC;
-use crate::graphics::native_abi::POINT as CPoint;
 use crate::planets::solar_system::BodyLocation;
 
 /// `GetFrameIndex (frame)`: 0 for NULL, else the frame's `Index`.

@@ -3,20 +3,16 @@
 use super::drawing::*;
 use super::flight::*;
 use super::*;
-use crate::engine::world::planet::PlanetDesc;
 use crate::engine::{battle::Cx, observe::Io, Kernel, StoryKey, World, WorldData};
 
 use super::site::dispatch::invoke;
 use crate::comm::locdata::CPoint;
 use crate::engine::world::generation::Body;
 use crate::graphics::pixmap_abi::{GetFrameIndex, ReleaseDrawable, SetAbsFrameIndex};
-use crate::math::arctan;
 use crate::planets::devices::devices_menu;
 use crate::planets::generate::calc::preview_body;
 use crate::planets::solar_system::{SolarSystem, SystemLocation};
 use crate::sound::heart_ffi::PLRPlaying;
-use crate::strings::string_table::{GetStringAddress, SetAbsStringTableIndex};
-use std::ffi::c_char;
 
 // globdata.h activity flags occupy the high byte of ACTIVITY.
 const START_ENCOUNTER: u16 = 1 << 10;
@@ -49,9 +45,7 @@ const KEY_MENU_SELECT: usize = 9;
 const KEY_MENU_CANCEL: usize = 10;
 const FADE_ALL_TO_COLOR: u32 = 253;
 const SOL_DEFINED: u8 = 1;
-const SPATHI_DEFINED: u8 = 5;
 const SAMATRA_DEFINED: u8 = 29;
-const MATCH_PLANET: u8 = 0xff;
 const PLANET_NUMBER_BASE: u16 = 375;
 const STARBASE_STRING_BASE: u16 = 422;
 
@@ -106,7 +100,6 @@ pub(super) fn glob() -> crate::engine::Projection<crate::engine::WorldData> {
 }
 
 #[inline]
-
 const fn rgb15(r: u8, g: u8, b: u8) -> c::Color {
     c::Color {
         r: (r << 3) | (r >> 2),
@@ -619,13 +612,6 @@ unsafe fn prepare_explore_solar_sys(world: &mut World) -> crate::engine::world::
     world.data.flagship.log_y =
         ((9999 - i32::from(star.star_pt.y)) * log_units_y + (625 >> 1)) / 625;
     id
-}
-
-pub(super) unsafe fn game_string(index: c::COUNT) -> *mut c_char {
-    GetStringAddress(SetAbsStringTableIndex(
-        Kernel::current().read(|owner| owner.game_strings).cast(),
-        index,
-    ))
 }
 
 pub fn named_body_index(solar: &SolarSystem) -> Option<u16> {

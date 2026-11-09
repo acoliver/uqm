@@ -106,22 +106,10 @@ pub unsafe fn seek_state_file(
 pub(crate) mod planets {
     use crate::engine::world::planet_info::{PlanetInfoManager, ScanRetrieveMask};
     use crate::engine::World;
-    use crate::planets::solar_system::{BodyLocation, SolarSystem};
-
-    pub(crate) fn location(solar: &SolarSystem) -> BodyLocation {
-        solar.body_location(
-            solar
-                .selected_body()
-                .expect("planet info requires a selected body"),
-        )
-    }
-
-    pub fn uninit_planet_info(world: &mut World) {
-        super::rust_uninit_planet_info(world);
-    }
+    use crate::planets::solar_system::SolarSystem;
 
     pub fn get_planet_info(world: &mut World, solar: &mut SolarSystem) {
-        let location = location(solar);
+        let location = solar.selected_location();
         let moons = solar
             .sys
             .planets
@@ -141,7 +129,7 @@ pub(crate) mod planets {
     }
 
     pub fn put_planet_info(world: &mut World, solar: &SolarSystem) {
-        let location = location(solar);
+        let location = solar.selected_location();
         let moons = solar
             .sys
             .planets
@@ -182,7 +170,7 @@ pub(crate) mod planets {
             solar.enter_inner(2);
             solar.enter_orbit(Body::Moon { planet: 2, moon: 1 });
             world.current_star = Some(StarId(99));
-            assert_eq!(location(&solar).node_key(31), (82, 2, 2, 31));
+            assert_eq!(solar.selected_location().node_key(31), (82, 2, 2, 31));
             let masks = [u32::MAX, 1 << 31, 0x1234_5678];
             solar.sys.info.planet_info.scan_retrieve_mask = masks;
             put_planet_info(&mut world, &solar);

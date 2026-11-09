@@ -16,7 +16,6 @@ pub(crate) mod live {
     use crate::c_bindings::global_state::MENU_STATE;
     use crate::comm::locdata::CRect;
     use crate::engine::graphics::context_abi::ContextLease;
-    use crate::engine::Kernel as KernelOwner;
     use crate::engine::{
         battle::Cx,
         observe::{CheckpointView, Io},
@@ -46,10 +45,6 @@ pub(crate) mod live {
     use crate::planets::plangen::live::generate_planet_surface;
 
     use crate::sound::heart_ffi::PLRPlaying;
-
-    use crate::strings::string_table::ReleaseStringTable;
-
-    use crate::strings::string_table::DestroyStringTable;
 
     use crate::planets::scan::live::scan_system;
 
@@ -223,12 +218,15 @@ pub(crate) mod live {
         game: &std::cell::RefCell<crate::engine::battle::Cx<'_>>,
         io: &std::cell::RefCell<crate::engine::observe::Io<'_>>,
         system: &mut crate::engine::world::generation::SolarSys<'_>,
-        star: crate::engine::world::StarId,
-        body: crate::engine::world::generation::Body,
+        target: (
+            crate::engine::world::StarId,
+            crate::engine::world::generation::Body,
+        ),
         in_orbit: bool,
         surface: Option<crate::engine::graphics::drawable_abi::LoadedDrawable>,
         reports: crate::planets::report::typography::ReportResources,
     ) -> Option<OrbitPresentation> {
+        let (star, body) = target;
         #[cfg(feature = "debug-process")]
         if crate::front_end::uqmdebug::DISABLE_INTERACTIVITY != 0 {
             return None;
@@ -293,8 +291,9 @@ pub(crate) mod live {
         Some(presentation)
     }
 
-    unsafe fn play_planet_music(game: &Cx<'_>, planet_type: u8) {
-        if PLRPlaying(usize::MAX as *mut c_void) == 0 {
+    fn play_planet_music(game: &Cx<'_>, planet_type: u8) {
+        // SAFETY: the sentinel queries current playback without dereferencing a music handle.
+        if unsafe { PLRPlaying(usize::MAX as *mut c_void) } == 0 {
             let music = game
                 .kernel
                 .lander_resources
@@ -312,6 +311,10 @@ pub(crate) mod live {
         }
     }
 
+    /// Release the visit's orbit presentation.
+    ///
+    /// # Safety
+    /// Call on the game thread with initialized native presentation resources.
     pub unsafe fn free_planet(cx: &mut Cx<'_>, solar: &mut SolarSystem) {
         let space_context = cx.kernel.space_context;
         cx.with_legacy(|| {

@@ -194,7 +194,7 @@ pub unsafe fn uninit_game_structures(cx: &mut crate::engine::battle::Cx<'_>) {
     cx.world.npc_built_ships().reinit();
     cx.world.built_ships().reinit();
     uninit_group_info(cx.world);
-    uninit_planet_info(cx.world);
+    crate::state::ffi::rust_uninit_planet_info(cx.world);
     if let Some(probe) = cx.world.avail_races_ref().tail() {
         let probe = *cx.world.avail_races_ref().get(probe);
         DestroyDrawable(ReleaseDrawable(probe.melee_icon));

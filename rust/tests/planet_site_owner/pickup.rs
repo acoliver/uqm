@@ -122,7 +122,7 @@ fn production_provider_threads_pickup_effects_and_only_persists_accepted_nodes()
         observer: &mut observer,
     });
     let mut solar = uqm_rust::planets::solar_system::SolarSystem::new(
-        &owner.borrow().world,
+        owner.borrow().world,
         uqm_rust::engine::StarId(82),
     );
     solar.sys.sun.num_planets = 9;
