@@ -4,7 +4,7 @@ use crate::{
         battle::{Battle, Cx},
         Game, StoryKey, World,
     },
-    navigation::{abi::ARILOU_UMGAH_CHECK, events::EventServices, hyper_units::Geometry},
+    navigation::abi::ARILOU_UMGAH_CHECK,
 };
 
 fn world() -> World {
@@ -21,19 +21,16 @@ fn world() -> World {
 fn scheduling_dispatches_immediate_events_even_when_the_pool_is_full() {
     let mut world = world();
     let mut random = || panic!("story event sampled RNG");
-    let mut services = EventServices {
-        geometry: Geometry::new((320, 240)),
-        random: &mut random,
-    };
-    assert!(schedule_event(&mut world, &mut services, 0, 2, 27, 2156, 99).is_none());
+    let mut dispatch = crate::navigation::events::dispatcher((320, 240), &mut random);
+    assert!(schedule_event(&mut world, &mut dispatch, 0, 2, 27, 2156, 99).is_none());
     assert_eq!(world.clock.events_ref().count(), 0);
     for selector in 0..crate::engine::clock::NUM_EVENTS {
-        assert!(schedule_event(&mut world, &mut services, 1, 0, 1, 0, selector as u8).is_some());
+        assert!(schedule_event(&mut world, &mut dispatch, 1, 0, 1, 0, selector as u8).is_some());
     }
-    assert!(schedule_event(&mut world, &mut services, 1, 0, 1, 0, 99).is_none());
+    assert!(schedule_event(&mut world, &mut dispatch, 1, 0, 1, 0, 99).is_none());
     assert!(schedule_event(
         &mut world,
-        &mut services,
+        &mut dispatch,
         1,
         0,
         0,

@@ -83,7 +83,7 @@ fn take_day_event(
 
 pub(crate) fn schedule_event(
     world: &mut crate::engine::World,
-    services: &mut crate::navigation::events::EventServices<'_>,
+    dispatch: &mut impl FnMut(&mut crate::engine::World, u8),
     kind: u32,
     month: u16,
     day: u16,
@@ -91,7 +91,7 @@ pub(crate) fn schedule_event(
     selector: u8,
 ) -> Option<LinkId<ScheduledEvent>> {
     if kind == 1 && month == 0 && day == 0 && year == 0 {
-        crate::navigation::events::dispatch_event(world, services, selector);
+        dispatch(world, selector);
     } else {
         let clock = &world.data.game.game_clock;
         let now = (
@@ -116,11 +116,8 @@ pub fn add_event(
     selector: u8,
 ) -> Option<LinkId<ScheduledEvent>> {
     let mut random = cx.rng;
-    let mut services = crate::navigation::events::EventServices {
-        geometry: crate::navigation::hyper_units::Geometry::new(cx.screen_dimensions()),
-        random: &mut random,
-    };
-    schedule_event(cx.world, &mut services, kind, month, day, year, selector)
+    let mut dispatch = crate::navigation::events::dispatcher(cx.screen_dimensions(), &mut random);
+    schedule_event(cx.world, &mut dispatch, kind, month, day, year, selector)
 }
 
 fn dispatch_day_events(
@@ -143,13 +140,8 @@ fn finish_clock_day(cx: &mut crate::engine::battle::Cx<'_>) {
         u16::from(clock.day_index),
     );
     let mut random = cx.rng;
-    let mut services = crate::navigation::events::EventServices {
-        geometry: crate::navigation::hyper_units::Geometry::new(cx.screen_dimensions()),
-        random: &mut random,
-    };
-    dispatch_day_events(cx.world, today, |world, selector| {
-        crate::navigation::events::dispatch_event(world, &mut services, selector);
-    });
+    let mut dispatch = crate::navigation::events::dispatcher(cx.screen_dimensions(), &mut random);
+    dispatch_day_events(cx.world, today, dispatch);
 }
 
 pub fn game_clock_tick(cx: &mut crate::engine::battle::Cx<'_>) {

@@ -8,6 +8,17 @@ use super::abi::*;
 use crate::engine::world::fleet::{set_race_allied, start_sphere_tracking};
 use crate::engine::{StoryKey, World};
 
+pub(crate) fn dispatcher(
+    dimensions: (i32, i32),
+    random: &mut dyn FnMut() -> u32,
+) -> impl FnMut(&mut World, u8) + '_ {
+    let mut services = EventServices {
+        geometry: crate::navigation::hyper_units::Geometry::new(dimensions),
+        random,
+    };
+    move |world, selector| dispatch_event(world, &mut services, selector)
+}
+
 struct ScheduledCampaignEvent {
     kind: u32,
     month: u16,
@@ -134,7 +145,7 @@ fn relative(
 ) {
     crate::time::clock_abi::schedule_event(
         world,
-        services,
+        &mut |world, selector| dispatch_event(world, services, selector),
         EVENT_TYPE_RELATIVE_EVENT,
         month,
         day,
@@ -153,7 +164,7 @@ pub fn schedule_initial_events(world: &mut World, services: &mut EventServices<'
     relative(world, services, 0, 1, 0, HYPERSPACE_ENCOUNTER_EVENT);
     crate::time::clock_abi::schedule_event(
         world,
-        services,
+        &mut |world, selector| dispatch_event(world, services, selector),
         EVENT_TYPE_ABSOLUTE_EVENT,
         3,
         17,
@@ -175,7 +186,7 @@ pub fn dispatch_event(world: &mut World, services: &mut EventServices<'_>, selec
     if let Some(event) = apply_story_event(world, selector) {
         crate::time::clock_abi::schedule_event(
             world,
-            services,
+            &mut |world, selector| dispatch_event(world, services, selector),
             event.kind,
             event.month,
             event.day,
@@ -245,16 +256,7 @@ pub fn dispatch_event(world: &mut World, services: &mut EventServices<'_>, selec
         }
         ADVANCE_ILWRATH_MISSION => ilwrath(world),
         ADVANCE_MYCON_MISSION => mycon(world, services),
-        YEHAT_REBEL_EVENT => {
-            let rebel = fleet(world, YEHAT_REBEL_SHIP);
-            let royal = fleet(world, YEHAT_SHIP);
-            world.avail_races().get_mut(royal).actual_strength =
-                (world.avail_races_ref().get(royal).actual_strength as u32 * 2 / 3) as u16;
-            world.avail_races().get_mut(rebel).actual_strength =
-                world.avail_races_ref().get(royal).actual_strength;
-            world.avail_races().get_mut(rebel).loc = POINT { x: 5150, y: 0 };
-            start_sphere_tracking(world, YEHAT_REBEL_SHIP as u16);
-        }
+        YEHAT_REBEL_EVENT => yehat_rebellion(world),
         SLYLANDRO_RAMP_DOWN => {
             let factor = get(world, StoryKey::SLYLANDRO_MULTIPLIER).wrapping_sub(1);
             if factor != 0 {
@@ -267,6 +269,17 @@ pub fn dispatch_event(world: &mut World, services: &mut EventServices<'_>, selec
 }
 
 /// `race` identifies an allocated fleet in the supplied world queue.
+fn yehat_rebellion(world: &mut World) {
+    let rebel = fleet(world, YEHAT_REBEL_SHIP);
+    let royal = fleet(world, YEHAT_SHIP);
+    world.avail_races().get_mut(royal).actual_strength =
+        (world.avail_races_ref().get(royal).actual_strength as u32 * 2 / 3) as u16;
+    world.avail_races().get_mut(rebel).actual_strength =
+        world.avail_races_ref().get(royal).actual_strength;
+    world.avail_races().get_mut(rebel).loc = POINT { x: 5150, y: 0 };
+    start_sphere_tracking(world, YEHAT_REBEL_SHIP as u16);
+}
+
 pub fn set_race_destination(world: &mut World, race: u8, x: i16, y: i16, days: u8, selector: u8) {
     let current = fleet(world, race as u32);
     world.avail_races().get_mut(current).dest_loc = POINT { x, y };
