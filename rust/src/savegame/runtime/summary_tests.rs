@@ -557,23 +557,32 @@ fn devices_are_listed_in_id_order_and_stop_at_sixteen() {
 }
 
 #[test]
-fn device_ids_preserve_the_save_format_values() {
-    use crate::navigation::abi;
-    assert_eq!(abi::NUM_DEVICES as usize, NUM_DEVICES);
-    for (actual, expected) in [
-        (abi::PORTAL_SPAWNER_DEVICE, 0),
-        (abi::TALKING_PET_DEVICE, 1),
-        (abi::ROSY_SPHERE_DEVICE, 4),
-        (abi::ULTRON_0_DEVICE, 7),
-        (abi::MAIDENS_DEVICE, 11),
-        (abi::DATA_PLATE_1_DEVICE, 14),
-        (abi::TAALO_PROTECTOR_DEVICE, 17),
-        (abi::DESTRUCT_CODE_DEVICE, 23),
-        (abi::URQUAN_WARP_DEVICE, 24),
-        (abi::LUNAR_BASE_DEVICE, 27),
-    ] {
-        assert_eq!(actual, expected);
+fn live_device_ids_and_reserved_slots_preserve_the_save_format() {
+    use crate::engine::world::story::StoryState;
+    assert_eq!(NUM_DEVICES, 28);
+    let mut listed = [false; NUM_DEVICES];
+    for (id, flag) in DEVICE_FLAGS {
+        let mut bytes = blank_state();
+        set_key(&mut bytes, flag, 1);
+        let devices = inventory_devices(&StoryState::from_bytes(&bytes), NUM_DEVICES);
+        assert_eq!(devices, [id], "{flag}");
+        listed[usize::from(id)] = true;
     }
+    for (condition, id) in [(1, 7u8), (2, 8), (3, 9), (4, 10)] {
+        let mut bytes = blank_state();
+        set_key(&mut bytes, "ULTRON_CONDITION", condition);
+        let devices = inventory_devices(&StoryState::from_bytes(&bytes), NUM_DEVICES);
+        assert_eq!(devices, [id], "Ultron {condition}");
+        listed[usize::from(id)] = true;
+    }
+    assert_eq!(
+        listed
+            .iter()
+            .enumerate()
+            .filter_map(|(id, listed)| (!listed).then_some(id))
+            .collect::<Vec<_>>(),
+        [14, 15, 16, 23]
+    );
 }
 
 // ---------------------------------------------------------------------------
