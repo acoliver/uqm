@@ -1,5 +1,7 @@
 //! Campaign fleet construction and escort bookkeeping ported from build.c.
 
+pub const SPHERE_RADIUS_INCREMENT: u32 = 11;
+
 use super::super::battle::link_queue::{LinkId, LinkQueue};
 use super::super::world::queues::Fragment;
 use super::super::World;
