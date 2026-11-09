@@ -82,6 +82,15 @@ pub struct IpGroup {
     pub melee_icon: FRAME,
 }
 
+impl IpGroup {
+    pub const IN_ORBIT: u8 = 0;
+    pub const EXPLORE: u8 = 1;
+    pub const FLEE: u8 = 2;
+    pub const ON_STATION: u8 = 3;
+    pub const IGNORE_FLAGSHIP: u8 = 4;
+    pub const REFORM_GROUP: u8 = 8;
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum Fleet {}
 impl queue_record::Sealed for Fleet {}
@@ -215,6 +224,33 @@ impl<const N: usize> LinkQueue<'_, Fragment, N> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn group_tasks_preserve_the_saved_nibble_and_independent_flags() {
+        assert_eq!(
+            [
+                IpGroup::IN_ORBIT,
+                IpGroup::EXPLORE,
+                IpGroup::FLEE,
+                IpGroup::ON_STATION
+            ],
+            [0, 1, 2, 3]
+        );
+        assert_eq!((IpGroup::IGNORE_FLAGSHIP, IpGroup::REFORM_GROUP), (4, 8));
+        for task in [
+            IpGroup::IN_ORBIT,
+            IpGroup::EXPLORE,
+            IpGroup::FLEE,
+            IpGroup::ON_STATION,
+        ] {
+            let marked = task | IpGroup::IGNORE_FLAGSHIP | IpGroup::REFORM_GROUP;
+            assert_eq!(
+                marked & !(IpGroup::IGNORE_FLAGSHIP | IpGroup::REFORM_GROUP),
+                task
+            );
+            assert_eq!(marked & 0xf0, 0);
+        }
+    }
 
     #[test]
     fn fragment_clones_preserve_template_fields_and_same_species_name_uniqueness() {
