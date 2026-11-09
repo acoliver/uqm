@@ -160,7 +160,6 @@ pub const NUM_COMBAT_SPEEDS: u32 = 4;
 pub const SOUND_DISABLED: u32 = crate::engine::world::SOUND_DISABLED as u32;
 pub const CYBORG_ENABLED: u32 = 32;
 pub const MAX_ENCOUNTERS: u32 = 16;
-pub const MAX_BATTLE_GROUPS: u32 = 32;
 pub const MAX_SCROUNGED: u32 = 50;
 pub const NUM_SCANDOT_TRANSITIONS: u32 = 4;
 pub const MIN_MOON_RADIUS: u32 = 35;
@@ -203,7 +202,6 @@ pub const BACKGROUND_SHIFT: u32 = 3;
 pub const SCALED_ONE: u32 = 4;
 pub const MAX_X_UNIVERSE: u32 = 9999;
 pub const MAX_Y_UNIVERSE: u32 = 9999;
-pub const SPHERE_RADIUS_INCREMENT: u32 = 11;
 pub const MAX_FLEET_STRENGTH: u32 = 2794;
 pub const UNIT_SCREEN_WIDTH: u32 = 63;
 pub const UNIT_SCREEN_HEIGHT: u32 = 50;
@@ -797,12 +795,6 @@ pub const NUM_SOLAR_SYSTEMS: u32 = 502;
 pub const NUM_RADAR_SCREENS: u32 = 12;
 pub const RADAR_SCAN_WIDTH: u32 = 756;
 pub const RADAR_SCAN_HEIGHT: u32 = 600;
-pub const ARILOU_SPACE_X: u32 = 438;
-pub const ARILOU_SPACE_Y: u32 = 6372;
-pub const QUASI_SPACE_X: u32 = 5000;
-pub const QUASI_SPACE_Y: u32 = 5000;
-pub const ARILOU_HOME_X: u32 = 6134;
-pub const ARILOU_HOME_Y: u32 = 5900;
 pub const SOL_X: u32 = 1752;
 pub const SOL_Y: u32 = 1450;
 pub const NAME_OFFSET: u32 = 5;
@@ -813,9 +805,6 @@ pub const RAND_BUFSIZE: u32 = 4096;
 pub const DEFGRPINFO_FILE: u32 = 2;
 pub const DEF_BUFSIZE: u32 = 10240;
 pub const NUM_SAVED_BATTLE_GROUPS: u32 = 64;
-pub const MAX_REVOLUTIONS: u32 = 5;
-pub const STATION_RADIUS: u32 = 1600;
-pub const ORBIT_RADIUS: u32 = 2400;
 pub const STAR_STRING_COUNT: u32 = 133;
 pub const DEVICE_STRING_COUNT: u32 = 29;
 pub const CARGO_STRING_COUNT: u32 = 10;
@@ -1205,13 +1194,11 @@ pub type COLORMAP_REF = STRING_TABLE;
 pub type COLORMAP = STRING;
 pub type COLORMAPPTR = *mut ::std::os::raw::c_void;
 pub const gfx_object_POINT_PRIM: gfx_object = 0;
-pub const gfx_object_STAMP_PRIM: gfx_object = 1;
 pub const gfx_object_STAMPFILL_PRIM: gfx_object = 2;
 pub const gfx_object_LINE_PRIM: gfx_object = 3;
 pub const gfx_object_TEXT_PRIM: gfx_object = 4;
 pub const gfx_object_RECT_PRIM: gfx_object = 5;
 pub const gfx_object_RECTFILL_PRIM: gfx_object = 6;
-pub const gfx_object_NUM_PRIMS: gfx_object = 7;
 pub type gfx_object = ::std::os::raw::c_uint;
 pub type GRAPHICS_PRIM = BYTE;
 pub use crate::graphics::native_abi::PRIM_DESC;
@@ -2466,13 +2453,6 @@ pub use crate::state::c_api::write_state_file;
 
 pub use crate::state::c_api::seek_state_file;
 pub use crate::engine::world::queues::IpGroup as IP_GROUP;
-pub const IN_ORBIT: _bindgen_ty_24 = 0;
-pub const EXPLORE: _bindgen_ty_24 = 1;
-pub const FLEE: _bindgen_ty_24 = 2;
-pub const ON_STATION: _bindgen_ty_24 = 3;
-pub const IGNORE_FLAGSHIP: _bindgen_ty_24 = 4;
-pub const REFORM_GROUP: _bindgen_ty_24 = 8;
-pub type _bindgen_ty_24 = ::std::os::raw::c_uint;
 
 pub use crate::navigation::groups::write_group_header;
 
@@ -2709,13 +2689,6 @@ pub const ENEMY_WEAPON_INDEX: _bindgen_ty_28 = 2;
 pub const GRAVITY_MASS_INDEX: _bindgen_ty_28 = 3;
 pub const FIRST_EMPTY_INDEX: _bindgen_ty_28 = 4;
 pub type _bindgen_ty_28 = ::std::os::raw::c_uint;
-
-#[cfg(not(test))]
-#[cfg(not(test))]
-pub use crate::navigation::interplanetary::live::notify_others_abi as NotifyOthers;
-
-#[cfg(not(test))]
-pub use crate::navigation::interplanetary::live::do_missions as DoMissions;
 
 #[cfg(not(test))]
 #[cfg(not(test))]
