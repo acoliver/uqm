@@ -336,6 +336,7 @@ unsafe fn activate_starbase_selection(
 unsafe fn update_starbase_screen(
     input: &crate::engine::input::InputSession,
     menu: *mut MENU_STATE,
+    music_enabled: bool,
 ) -> bool {
     if crate::engine::World::current().read(|world| world.activity())
         & (CHECK_ABORT | CHECK_LOAD) as u16
@@ -367,7 +368,12 @@ unsafe fn update_starbase_screen(
         rotate_starbase(menu, (*menu).CurFrame);
         draw_base_state_strings(BYTE::MAX, (*menu).CurState);
         ScreenTransition(3, ptr::null());
-        PlayMusic((*menu).hMusic, 1, 1);
+        crate::sound::music::remember_native_music(
+            std::ptr::NonNull::new((*menu).hMusic.cast()),
+            true,
+            1,
+            music_enabled,
+        );
         UnbatchGraphics();
     } else if input.pulsed().menu[KEY_MENU_SELECT as usize] != 0 {
         return false;
@@ -492,7 +498,8 @@ pub unsafe fn run_starbase_visit(cx: &mut Cx<'_>, io: &mut Io<'_>) {
     let old = cx.with_legacy(|| SetContext(context));
     io.observer.checkpoint(&CheckpointView::StarbaseMenu(true));
     cx.run_input(io, true, |cx, io| {
-        if cx.with_legacy(|| update_starbase_screen(input, &mut menu)) {
+        let music_enabled = cx.world.data.game.glob_flags & 8 == 0;
+        if cx.with_legacy(|| update_starbase_screen(input, &mut menu, music_enabled)) {
             true
         } else {
             activate_starbase_selection(input, cx, io, &mut menu) != 0

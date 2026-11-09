@@ -1,8 +1,17 @@
-//! UI drawing and nested input waits, ported from uqm/util.c.
-
-#[cfg(not(test))]
-use crate::engine::Kernel;
-use crate::navigation::abi::{Color, RECT};
+//! UI drawing and nested input waits.
+use crate::engine::{
+    battle::Cx,
+    input::{frames::KEY_PAUSE, InputSession},
+    observe::Io,
+};
+use crate::graphics::{
+    context_abi::{ContextFrame, ContextLease},
+    drawable_abi::LoadedDrawable,
+    native_abi::{Color, POINT, RECT},
+};
+use crate::sound::heart_ffi::{pause_track, playing_track, resume_track};
+use uqm_engine::graphics::sdl::lifecycle_abi::{game_active, quit_posted};
+use uqm_engine::time::counter_abi::{GetTimeCounter, ONE_SECOND};
 
 pub(crate) fn box_rectangles(
     rect: RECT,
@@ -64,306 +73,201 @@ pub(crate) fn box_rectangles(
     }
 }
 
-#[cfg(not(test))]
-pub(crate) mod live {
-    use super::*;
-    use crate::navigation::abi::*;
+pub struct SavedContext {
+    context: ContextLease,
+    drawable: LoadedDrawable,
+    origin: POINT,
+}
 
-    use std::{mem, ptr};
+impl SavedContext {
+    pub fn capture(context: &ContextLease, area: Option<RECT>) -> Self {
+        Self {
+            context: context.clone(),
+            drawable: LoadedDrawable::capture(context, area)
+                .unwrap_or_else(|| panic!("UI background capture failed")),
+            origin: area.map_or(POINT { x: 0, y: 0 }, |area| area.corner),
+        }
+    }
 
-    /// # Safety
-    /// The rectangle must be valid and the graphics context active on the game thread.
-    #[no_mangle]
-    pub unsafe extern "C" fn DrawStarConBox(
-        rect: *mut RECT,
-        border: SIZE,
-        top: Color,
-        bottom: Color,
-        fill: BOOLEAN,
-        interior: Color,
-    ) {
-        let mut current = None;
-        box_rectangles(
-            *rect,
-            border,
-            top,
-            bottom,
-            (fill != 0).then_some(interior),
-            |color, mut r| {
-                let rgba = (color.r, color.g, color.b, color.a);
-                if current != Some(rgba) {
-                    SetContextForeGroundColor(color);
-                    current = Some(rgba);
+    pub fn restore(&self) {
+        self.context
+            .draw_stamp(&self.drawable.lease().context_frame(0), self.origin);
+    }
+}
+
+pub fn draw_starcon_box(
+    context: &ContextLease,
+    rect: RECT,
+    border: i16,
+    top: Color,
+    bottom: Color,
+    interior: Option<Color>,
+) {
+    let mut current = None;
+    box_rectangles(rect, border, top, bottom, interior, |color, rect| {
+        let rgba = (color.r, color.g, color.b, color.a);
+        if current != Some(rgba) {
+            context.set_foreground(color);
+            current = Some(rgba);
+        }
+        context.fill_rectangle(color, rect);
+    });
+}
+
+pub fn seed_random_numbers() -> u32 {
+    let now = GetTimeCounter();
+    crate::math::seed_random(now);
+    now
+}
+
+pub fn pause_game(cx: &mut Cx<'_>, input: &InputSession) -> u32 {
+    if cx.kernel.activity_frame.is_null()
+        || cx.world.activity() & (0x4000 | 0x100) != 0
+        || cx.kernel.last_activity & (0x1000 | 0x2000) != 0
+    {
+        return 0;
+    }
+    cx.world.set_activity(cx.world.activity() | 0x100);
+    if playing_track() != 0 {
+        pause_track();
+    }
+    let context = ContextLease::require(cx.kernel.screen_context);
+    let activity = ContextFrame::retain(std::ptr::NonNull::new(cx.kernel.activity_frame));
+    let runtime = cx.kernel.input_runtime();
+    context.with_selected(|| {
+        context.with_origin(POINT { x: 0, y: 0 }, || {
+            context.with_unclipped(|| {
+                let bounds = context.clip_rect();
+                let mut rect = activity.rect();
+                rect.corner.x = (bounds.extent.width - rect.extent.width) >> 1;
+                rect.corner.y = (bounds.extent.height - rect.extent.height) >> 1;
+                let saved = SavedContext::capture(&context, Some(rect));
+                context.system_rect(Some(rect));
+                context.draw_stamp(&activity, rect.corner);
+                context.flush();
+                for pressed in [true, false, true] {
+                    while (input.immediate().menu[KEY_PAUSE as usize] != 0) == pressed
+                        && input.paused()
+                    {
+                        uqm_engine::input_port::sdl_input::BeginInputFrame();
+                        cx.with_legacy(uqm_engine::threading::yield_game_thread);
+                    }
                 }
-                DrawFilledRectangle(&mut r);
-            },
-        );
-    }
-
-    /// # Safety
-    /// The random generator must be accessed only from the game thread.
-    #[no_mangle]
-    pub unsafe extern "C" fn SeedRandomNumbers() -> DWORD {
-        let now = GetTimeCounter();
-        TFB_SeedRandom(now);
-        now
-    }
-
-    /// # Safety
-    /// The active context must have a frame; rect is null or points to a valid rectangle.
-    #[no_mangle]
-    pub unsafe extern "C" fn SaveContextFrame(rect: *const RECT) -> STAMP {
-        STAMP {
-            origin: if rect.is_null() {
-                POINT { x: 0, y: 0 }
-            } else {
-                (*rect).corner
-            },
-            frame: CaptureDrawable(CopyContextRect(rect)),
-        }
-    }
-
-    /// # Safety
-    /// Game-thread access to initialized input, graphics and audio state.
-    pub unsafe fn pause_game(input: &crate::engine::input::InputSession) -> BOOLEAN {
-        if Kernel::current()
-            .read(|owner| owner.activity_frame)
-            .is_null()
-            || crate::engine::World::current().read(|world| world.activity())
-                & (CHECK_ABORT | CHECK_PAUSE) as u16
-                != 0
-            || Kernel::current().read(|owner| owner.last_activity)
-                & (CHECK_LOAD | CHECK_RESTART) as u16
-                != 0
-        {
-            return 0;
-        }
-        crate::engine::World::current()
-            .write(|world| world.set_activity(world.activity() | CHECK_PAUSE as u16));
-        if PlayingTrack() != 0 {
-            PauseTrack();
-        }
-        let old_context = SetContext(Kernel::current().read(|owner| owner.screen_context));
-        let old_origin = SetContextOrigin(POINT { x: 0, y: 0 });
-        let mut old_rect: RECT = mem::zeroed();
-        GetContextClipRect(&mut old_rect);
-        SetContextClipRect(ptr::null_mut());
-        let mut context_rect: RECT = mem::zeroed();
-        GetContextClipRect(&mut context_rect);
-        let mut rect: RECT = mem::zeroed();
-        GetFrameRect(
-            Kernel::current().read(|owner| owner.activity_frame),
-            &mut rect,
-        );
-        rect.corner.x = (context_rect.extent.width - rect.extent.width) >> 1;
-        rect.corner.y = (context_rect.extent.height - rect.extent.height) >> 1;
-        let mut saved = SaveContextFrame(&rect);
-        let mut stamp = STAMP {
-            origin: rect.corner,
-            frame: Kernel::current().read(|owner| owner.activity_frame),
-        };
-        SetSystemRect(&rect);
-        DrawStamp(&mut stamp);
-        FlushGraphics();
-        while input.immediate().menu[KEY_PAUSE as usize] != 0 && input.paused() {
-            BeginInputFrame();
-            TaskSwitch();
-        }
-        while input.immediate().menu[KEY_PAUSE as usize] == 0 && input.paused() {
-            BeginInputFrame();
-            TaskSwitch();
-        }
-        while input.immediate().menu[KEY_PAUSE as usize] != 0 && input.paused() {
-            BeginInputFrame();
-            TaskSwitch();
-        }
-        input.set_paused(false);
-        DrawStamp(&mut saved);
-        DestroyDrawable(ReleaseDrawable(saved.frame));
-        ClearSystemRect();
-        SetContextClipRect(&mut old_rect);
-        SetContextOrigin(old_origin);
-        SetContext(old_context);
-        WaitForNoInput(ONE_SECOND / 4, 1);
-        if PlayingTrack() != 0 {
-            ResumeTrack();
-        }
-        TaskSwitch();
-        crate::engine::World::current()
-            .write(|world| world.set_activity(world.activity() & !(CHECK_PAUSE as u16)));
-        1
-    }
-
-    use crate::engine::{battle::Cx, observe::Io};
-
-    fn wait_until(
-        cx: &mut Cx<'_>,
-        io: &mut Io<'_>,
-        released: bool,
-        timeout: TimeCount,
-        reset: BOOLEAN,
-    ) -> BOOLEAN {
-        let runtime = cx.kernel.input_runtime();
-        let input = runtime.input();
-        // SAFETY: the synchronous wait owns initialized game-thread input.
-        let mut pressed = unsafe { AnyButtonPress(cx, input, 1) };
-        while (pressed != 0) == released
-            && (timeout == TimePeriod::MAX || GetTimeCounter() < timeout)
-            && cx.world.activity() & CHECK_ABORT as u16 == 0
-            // SAFETY: quit dispatch and this wait run on the same game thread.
-            && unsafe { QuitPosted == 0 }
-        {
-            let Some(sampled) = cx.nested_input(io, |cx| {
-                // SAFETY: the published input scope remains live during the synchronous sleep.
-                cx.with_legacy(|| unsafe { SleepThread(ONE_SECOND / 40) });
-                // SAFETY: the retained context owns initialized game-thread input.
-                unsafe { AnyButtonPress(cx, input, 1) }
-            }) else {
-                break;
-            };
-            pressed = sampled;
-        }
-        if reset != 0 {
-            // SAFETY: this wait still owns the initialized input scope.
-            cx.with_legacy(|| unsafe { FlushInput(input) });
-        }
-        u32::from((pressed != 0) != released)
-    }
-
-    pub fn wait_for_any_button_until(
-        cx: &mut Cx<'_>,
-        io: &mut Io<'_>,
-        new_button: BOOLEAN,
-        timeout: TimeCount,
-        reset: BOOLEAN,
-    ) -> BOOLEAN {
-        if new_button != 0 && wait_for_no_input_until(cx, io, timeout, 0) == 0 {
-            return 0;
-        }
-        wait_until(cx, io, false, timeout, reset)
-    }
-
-    pub fn wait_for_any_button(
-        cx: &mut Cx<'_>,
-        io: &mut Io<'_>,
-        new_button: BOOLEAN,
-        duration: TimePeriod,
-        reset: BOOLEAN,
-    ) -> BOOLEAN {
-        let timeout = if duration == TimePeriod::MAX {
-            duration
-        } else {
-            duration.wrapping_add(GetTimeCounter())
-        };
-        wait_for_any_button_until(cx, io, new_button, timeout, reset)
-    }
-
-    pub fn wait_for_no_input_until(
-        cx: &mut Cx<'_>,
-        io: &mut Io<'_>,
-        timeout: TimeCount,
-        reset: BOOLEAN,
-    ) -> BOOLEAN {
-        wait_until(cx, io, true, timeout, reset)
-    }
-
-    pub fn wait_for_no_input(
-        cx: &mut Cx<'_>,
-        io: &mut Io<'_>,
-        duration: TimePeriod,
-        reset: BOOLEAN,
-    ) -> BOOLEAN {
-        let timeout = if duration == TimePeriod::MAX {
-            duration
-        } else {
-            duration.wrapping_add(GetTimeCounter())
-        };
-        wait_for_no_input_until(cx, io, timeout, reset)
-    }
-
-    /// # Safety
-    /// Game-thread legacy boundary with the caller's context published.
-    #[no_mangle]
-    pub unsafe extern "C" fn WaitForAnyButtonUntil(
-        new_button: BOOLEAN,
-        timeout: TimeCount,
-        reset: BOOLEAN,
-    ) -> BOOLEAN {
-        crate::app::bridge::enter(|cx| {
-            let mut observer = cx.kernel.input_runtime().observer();
-            let mut io = Io {
-                observer: &mut *observer,
-            };
-            wait_for_any_button_until(cx, &mut io, new_button, timeout, reset)
+                input.set_paused(false);
+                saved.restore();
+                context.system_rect(None);
+            })
         })
+    });
+    let mut observer = runtime.observer();
+    let mut io = Io {
+        observer: &mut *observer,
+    };
+    wait_for_no_input(cx, &mut io, ONE_SECOND / 4, 1);
+    if playing_track() != 0 {
+        resume_track();
     }
-    /// # Safety
-    /// The caller owns initialized input and the published game-thread context.
-    #[no_mangle]
-    pub unsafe extern "C" fn WaitForAnyButton(
-        new_button: BOOLEAN,
-        duration: TimePeriod,
-        reset: BOOLEAN,
-    ) -> BOOLEAN {
-        let timeout = if duration == TimePeriod::MAX {
-            duration
-        } else {
-            duration.wrapping_add(GetTimeCounter())
+    cx.with_legacy(uqm_engine::threading::yield_game_thread);
+    cx.world.set_activity(cx.world.activity() & !0x100);
+    1
+}
+
+fn wait_until(cx: &mut Cx<'_>, io: &mut Io<'_>, released: bool, timeout: u32, reset: u32) -> u32 {
+    let runtime = cx.kernel.input_runtime();
+    let input = runtime.input();
+    runtime.update(cx);
+    let mut pressed = input.current().any_button_pressed();
+    while pressed == released
+        && (timeout == u32::MAX || GetTimeCounter() < timeout)
+        && cx.world.activity() & 0x4000 == 0
+        && !quit_posted()
+    {
+        let Some(sampled) = cx.nested_input(io, |cx| {
+            runtime.sleep(cx, ONE_SECOND / 40);
+            runtime.update(cx);
+            input.current().any_button_pressed()
+        }) else {
+            break;
         };
-        WaitForAnyButtonUntil(new_button, timeout, reset)
+        pressed = sampled;
     }
-    /// # Safety
-    /// The caller owns initialized input and the published game-thread context.
-    #[no_mangle]
-    pub unsafe extern "C" fn WaitForNoInputUntil(timeout: TimeCount, reset: BOOLEAN) -> BOOLEAN {
-        crate::app::bridge::enter(|cx| {
-            let mut observer = cx.kernel.input_runtime().observer();
-            let mut io = Io {
-                observer: &mut *observer,
-            };
-            wait_for_no_input_until(cx, &mut io, timeout, reset)
-        })
+    if reset != 0 {
+        runtime.flush();
     }
-    /// # Safety
-    /// The caller owns initialized input and the published game-thread context.
-    #[no_mangle]
-    pub unsafe extern "C" fn WaitForNoInput(duration: TimePeriod, reset: BOOLEAN) -> BOOLEAN {
-        let timeout = if duration == TimePeriod::MAX {
-            duration
-        } else {
-            duration.wrapping_add(GetTimeCounter())
-        };
-        WaitForNoInputUntil(timeout, reset)
+    u32::from(pressed != released)
+}
+
+pub fn wait_for_any_button_until(
+    cx: &mut Cx<'_>,
+    io: &mut Io<'_>,
+    new_button: u32,
+    timeout: u32,
+    reset: u32,
+) -> u32 {
+    if new_button != 0 && wait_for_no_input_until(cx, io, timeout, 0) == 0 {
+        return 0;
     }
-    /// # Safety
-    /// Game-thread access to initialized input and audio state.
-    #[no_mangle]
-    pub unsafe extern "C" fn SleepGame() {
-        if QuitPosted != 0 {
-            return;
-        }
-        log::debug!("Game is going to sleep");
-        if PlayingTrack() != 0 {
-            PauseTrack();
-        }
-        pause_music();
-        while GameActive == 0 && QuitPosted == 0 {
-            SleepThread(ONE_SECOND / 2);
-        }
-        log::debug!("Game is waking up");
-        WaitForNoInput(ONE_SECOND / 10, 1);
-        resume_music();
-        if PlayingTrack() != 0 {
-            ResumeTrack();
-        }
-        TaskSwitch();
+    wait_until(cx, io, false, timeout, reset)
+}
+
+pub fn wait_for_any_button(
+    cx: &mut Cx<'_>,
+    io: &mut Io<'_>,
+    new_button: u32,
+    duration: u32,
+    reset: u32,
+) -> u32 {
+    let timeout = if duration == u32::MAX {
+        duration
+    } else {
+        duration.wrapping_add(GetTimeCounter())
+    };
+    wait_for_any_button_until(cx, io, new_button, timeout, reset)
+}
+
+pub fn wait_for_no_input_until(cx: &mut Cx<'_>, io: &mut Io<'_>, timeout: u32, reset: u32) -> u32 {
+    wait_until(cx, io, true, timeout, reset)
+}
+
+pub fn wait_for_no_input(cx: &mut Cx<'_>, io: &mut Io<'_>, duration: u32, reset: u32) -> u32 {
+    let timeout = if duration == u32::MAX {
+        duration
+    } else {
+        duration.wrapping_add(GetTimeCounter())
+    };
+    wait_for_no_input_until(cx, io, timeout, reset)
+}
+
+pub fn sleep_game(cx: &mut Cx<'_>) {
+    if quit_posted() {
+        return;
     }
+    log::debug!("Game is going to sleep");
+    if playing_track() != 0 {
+        pause_track();
+    }
+    crate::ui::settings::pause_music();
+    let runtime = cx.kernel.input_runtime();
+    while !game_active() && !quit_posted() {
+        runtime.sleep(cx, ONE_SECOND / 2);
+    }
+    log::debug!("Game is waking up");
+    let mut observer = runtime.observer();
+    let mut io = Io {
+        observer: &mut *observer,
+    };
+    wait_for_no_input(cx, &mut io, ONE_SECOND / 10, 1);
+    crate::ui::settings::resume_music();
+    if playing_track() != 0 {
+        resume_track();
+    }
+    cx.with_legacy(uqm_engine::threading::yield_game_thread);
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::navigation::abi::{EXTENT, POINT};
+    use crate::graphics::native_abi::{EXTENT, POINT};
 
     fn rectangles(border: i16, fill: bool) -> Vec<(u8, i16, i16, i16, i16)> {
         let mut draws = Vec::new();

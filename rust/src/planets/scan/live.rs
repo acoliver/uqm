@@ -48,7 +48,7 @@ use crate::planets::solarsys::lifecycle::SaveSolarSysLocation;
 
 use crate::planet_side::init_lander::{draw_lander, LanderStatus};
 
-use crate::ui::util::live::wait_for_any_button_until;
+use crate::ui::util::wait_for_any_button_until;
 
 use crate::mainloop::input_abi::live::FlushInput;
 

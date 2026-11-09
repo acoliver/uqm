@@ -5,7 +5,7 @@ pub(crate) mod runtime {
     use super::super::intro::runtime::show_presentation;
     use crate::engine::{battle::Cx, observe::Io};
     use crate::navigation::abi::*;
-    use crate::ui::util::live::wait_for_any_button;
+    use crate::ui::util::wait_for_any_button;
 
     use std::ptr;
 
@@ -51,6 +51,7 @@ pub(crate) mod runtime {
             );
         });
         show_presentation(cx, io, name.as_ptr());
+        let music_enabled = cx.world.data.game.glob_flags & 8 == 0;
         cx.with_legacy(|| {
             let mut old_rect: RECT = std::mem::zeroed();
             SleepThreadUntil(FadeScreen(
@@ -63,7 +64,12 @@ pub(crate) mod runtime {
             DrawFromExtraScreen(ptr::null_mut());
             SetContextClipRect(&mut old_rect);
             if !music.is_null() {
-                PlayMusic(music, 1, 1);
+                crate::sound::music::remember_native_music(
+                    std::ptr::NonNull::new(music.cast()),
+                    true,
+                    1,
+                    music_enabled,
+                );
             }
             SleepThreadUntil(FadeScreen(
                 ScreenFadeType_FadeAllToColor,

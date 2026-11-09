@@ -227,9 +227,6 @@ pub use crate::graphics::gfx_common_abi::ScreenTransition;
 
 pub use crate::graphics::context_abi::SetContextBackGroundColor;
 
-#[cfg(not(test))]
-pub use crate::ui::util::live::SeedRandomNumbers;
-
 pub use crate::graphics::resgfx::LoadGraphicInstance;
 
 pub use crate::sound::resource_types::LoadMusicInstance;
@@ -252,9 +249,6 @@ pub use crate::mainloop::input_abi::live::SetDefaultMenuRepeatDelay;
 pub use crate::mainloop::input_abi::live::DoInput;
 
 pub use crate::graphics::gfx_common_abi::SetTransitionSource;
-
-#[cfg(not(test))]
-pub use crate::ui::settings::PlayMusic;
 
 #[cfg(not(test))]
 pub use crate::graphics::flash::Flash_createOverlay;
@@ -288,9 +282,6 @@ pub use crate::graphics::flash::Flash_setState;
 
 #[cfg(not(test))]
 pub use crate::graphics::flash::Flash_setOverlay;
-
-#[cfg(not(test))]
-pub use crate::ui::confirm::do_popup_window;
 
 pub use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
 pub use crate::sound::heart_ffi::DestroyMusic;

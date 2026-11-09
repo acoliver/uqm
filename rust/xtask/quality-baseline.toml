@@ -3884,7 +3884,7 @@ u6_04_world_projection = { limit = 112, ends = "U6-04", scopes = { "ffi|owner_pr
 "loc|loc|uqm::ships::registry::@file" = 943
 "loc|loc|uqm::starbase::shipyard_screen::@file" = 910
 "loc|loc|uqm::target::uqm-gameplay-proof::@file" = 2277
-"unsafe|unsafe_block_lines|uqm-engine::uqm-engine" = 2419
+"unsafe|unsafe_block_lines|uqm-engine::uqm-engine" = 2420
 "unsafe|unsafe_block_lines|uqm-xtask::uqm-xtask" = 8
 "unsafe|unsafe_block_lines|uqm::app" = 42
 "unsafe|unsafe_block_lines|uqm::automation" = 721
@@ -3899,9 +3899,9 @@ u6_04_world_projection = { limit = 112, ends = "U6-04", scopes = { "ffi|owner_pr
 "unsafe|unsafe_block_lines|uqm::savegame" = 22
 "unsafe|unsafe_block_lines|uqm::ships" = 84
 "unsafe|unsafe_block_lines|uqm::starbase" = 66
-"unsafe|unsafe_block_lines|uqm::ui" = 81
+"unsafe|unsafe_block_lines|uqm::ui" = 80
 "unsafe|unsafe_block_lines|uqm::uqm" = 9
-"unsafe|unsafe_blocks|uqm-engine::uqm-engine" = 471
+"unsafe|unsafe_blocks|uqm-engine::uqm-engine" = 472
 "unsafe|unsafe_blocks|uqm-xtask::uqm-xtask" = 3
 "unsafe|unsafe_blocks|uqm::app" = 15
 "unsafe|unsafe_blocks|uqm::automation" = 129
@@ -3916,9 +3916,9 @@ u6_04_world_projection = { limit = 112, ends = "U6-04", scopes = { "ffi|owner_pr
 "unsafe|unsafe_blocks|uqm::savegame" = 11
 "unsafe|unsafe_blocks|uqm::ships" = 8
 "unsafe|unsafe_blocks|uqm::starbase" = 33
-"unsafe|unsafe_blocks|uqm::ui" = 17
+"unsafe|unsafe_blocks|uqm::ui" = 16
 "unsafe|unsafe_blocks|uqm::uqm" = 1
-"unsafe|unsafe_fn_lines|uqm-engine::uqm-engine" = 15820
+"unsafe|unsafe_fn_lines|uqm-engine::uqm-engine" = 15836
 "unsafe|unsafe_fn_lines|uqm::app" = 3
 "unsafe|unsafe_fn_lines|uqm::automation" = 228
 "unsafe|unsafe_fn_lines|uqm::battle" = 3
@@ -3934,8 +3934,8 @@ u6_04_world_projection = { limit = 112, ends = "U6-04", scopes = { "ffi|owner_pr
 "unsafe|unsafe_fn_lines|uqm::ships" = 136
 "unsafe|unsafe_fn_lines|uqm::state" = 274
 "unsafe|unsafe_fn_lines|uqm::time" = 59
-"unsafe|unsafe_fn_lines|uqm::ui" = 2507
-"unsafe|unsafe_fn|uqm-engine::uqm-engine" = 957
+"unsafe|unsafe_fn_lines|uqm::ui" = 2491
+"unsafe|unsafe_fn|uqm-engine::uqm-engine" = 958
 "unsafe|unsafe_fn|uqm::app" = 1
 "unsafe|unsafe_fn|uqm::automation" = 6
 "unsafe|unsafe_fn|uqm::battle" = 1
@@ -3951,7 +3951,7 @@ u6_04_world_projection = { limit = 112, ends = "U6-04", scopes = { "ffi|owner_pr
 "unsafe|unsafe_fn|uqm::ships" = 37
 "unsafe|unsafe_fn|uqm::state" = 23
 "unsafe|unsafe_fn|uqm::time" = 7
-"unsafe|unsafe_fn|uqm::ui" = 68
+"unsafe|unsafe_fn|uqm::ui" = 67
 "unsafe|unsafe_impl_lines|uqm-engine::uqm-engine" = 16
 "unsafe|unsafe_impl_lines|uqm::comm" = 2
 "unsafe|unsafe_impl_lines|uqm::planets" = 1
@@ -3992,4 +3992,5 @@ u6_04_world_projection = { limit = 112, ends = "U6-04", scopes = { "ffi|owner_pr
 "uqm::resource" = "uqm-engine::resource"
 "uqm::sound" = "uqm-engine::sound"
 "uqm::threading" = "uqm-engine::threading"
+"uqm::ui::settings::play_music_for_world" = "uqm-engine::sound::music::remember_native_music"
 "uqm::video" = "uqm-engine::video"

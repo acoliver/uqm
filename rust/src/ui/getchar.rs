@@ -7,71 +7,6 @@ use crate::ui::settings::play_menu_sound;
 use libc::{strcmp, strlen};
 use std::{ffi::c_char, mem, ptr};
 
-pub struct TextEntryView<'a> {
-    pub text: &'a std::ffi::CStr,
-    pub cursor: usize,
-    pub joystick: bool,
-}
-
-impl TextEntryView<'_> {
-    unsafe fn capture(text: &TEXTENTRY_STATE) -> TextEntryView<'_> {
-        TextEntryView {
-            text: std::ffi::CStr::from_ptr(text.BaseStr),
-            cursor: usize::try_from(text.CursorPos)
-                .unwrap_or_else(|error| panic!("negative text cursor: {error}")),
-            joystick: text.JoystickMode != 0,
-        }
-    }
-}
-
-pub trait TextEntryCallbacks {
-    fn changed(&mut self, entry: TextEntryView<'_>, cx: &mut Cx<'_>, input: &InputSession) -> bool;
-    fn frame(
-        &mut self,
-        entry: TextEntryView<'_>,
-        cx: &mut Cx<'_>,
-        io: &mut Io<'_>,
-        input: &InputSession,
-    ) -> bool;
-}
-
-/// Lend one terminated buffer and its callbacks through a synchronous editor session.
-pub fn edit_text(
-    cx: &mut Cx<'_>,
-    io: &mut Io<'_>,
-    input: &InputSession,
-    capacity: usize,
-    buffer: &mut [u8],
-    cursor: usize,
-    callbacks: &mut dyn TextEntryCallbacks,
-) -> bool {
-    if cx.world.activity() & CHECK_ABORT as u16 != 0 {
-        return false;
-    }
-    assert!(
-        (1..=buffer.len()).contains(&capacity),
-        "text editor capacity exceeds its storage"
-    );
-    std::ffi::CStr::from_bytes_until_nul(buffer)
-        .unwrap_or_else(|error| panic!("text editor buffer is not terminated: {error}"));
-    // SAFETY: every pointer starts absent, and the borrowed buffer is stable until
-    // this synchronous loop and all its callbacks finish. The core owns its cache.
-    unsafe {
-        let mut entry: TEXTENTRY_STATE = mem::zeroed();
-        entry.BaseStr = buffer.as_mut_ptr().cast();
-        entry.MaxSize = i32::try_from(capacity)
-            .unwrap_or_else(|error| panic!("text editor buffer too large: {error}"));
-        entry.CursorPos = i32::try_from(cursor)
-            .unwrap_or_else(|error| panic!("text editor cursor too large: {error}"));
-        let text = &raw mut entry;
-        begin_text_entry(text, || {
-            cx.run_input(io, true, |cx, io| {
-                text_entry_frame_impl(text, cx, io, input, Some(&mut *callbacks)) != 0
-            });
-        }) != 0
-    }
-}
-
 const FAILURE: u16 = MENU_SOUND_EFFECT_MENU_SOUND_FAILURE as u16;
 
 #[repr(C)]
@@ -140,16 +75,6 @@ pub unsafe fn text_entry_frame(
     io: &mut Io<'_>,
     input: &InputSession,
 ) -> BOOLEAN {
-    text_entry_frame_impl(text, cx, io, input, None)
-}
-
-unsafe fn text_entry_frame_impl(
-    text: *mut TEXTENTRY_STATE,
-    cx: &mut Cx<'_>,
-    io: &mut Io<'_>,
-    input: &InputSession,
-    mut callbacks: Option<&mut dyn TextEntryCallbacks>,
-) -> BOOLEAN {
     if cx.world.activity() & CHECK_ABORT as u16 != 0 {
         return 0;
     }
@@ -182,9 +107,7 @@ unsafe fn text_entry_frame_impl(
     }
     (*text).InsPt = string;
     if changed {
-        let accepted = if let Some(callbacks) = callbacks.as_deref_mut() {
-            callbacks.changed(TextEntryView::capture(&*text), cx, input)
-        } else if let Some(callback) = (*text).ChangeCallback {
+        let accepted = if let Some(callback) = (*text).ChangeCallback {
             callback(text, cx, input) != 0
         } else {
             true
@@ -196,9 +119,7 @@ unsafe fn text_entry_frame_impl(
             play_menu_sound(cx.kernel, cx.world, FAILURE);
         }
     }
-    if let Some(callbacks) = callbacks {
-        u32::from(callbacks.frame(TextEntryView::capture(&*text), cx, io, input))
-    } else if let Some(callback) = (*text).FrameCallback {
+    if let Some(callback) = (*text).FrameCallback {
         callback(text, cx, io, input)
     } else {
         cx.kernel.input_runtime().sleep(cx, ONE_SECOND / 30);
@@ -449,3 +370,6 @@ unsafe fn joystick_character(
         play_menu_sound(cx.kernel, cx.world, FAILURE);
     }
 }
+
+mod editor;
+pub use editor::{edit_text, Alphabet, Editor, TextEntryCallbacks, TextEntryView};

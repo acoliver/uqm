@@ -44,17 +44,20 @@ pub(super) fn save_load_game(
 
 /// # Safety
 /// The game thread retains the picker drawable and its initialized graphics context.
-pub(super) unsafe fn restore_display(stamp: &mut STAMP, rect: &RECT, restore: bool) {
-    // SAFETY: the caller retains the picker drawable and initialized game-thread graphics context.
+pub(super) unsafe fn restore_display(
+    saved: crate::ui::util::SavedContext,
+    rect: &RECT,
+    restore: bool,
+) {
+    // SAFETY: the picker retains the selected context and all queued drawing resources.
     unsafe {
         if restore {
             SetTransitionSource(rect);
             BatchGraphics();
-            DrawStamp(stamp);
+            saved.restore();
             ScreenTransition(3, rect);
             UnbatchGraphics();
         }
-        DestroyDrawable(ReleaseDrawable(stamp.frame));
     }
 }
 
@@ -86,7 +89,7 @@ pub(super) fn pick_game(
         (old_callback, time_out)
     });
     // SAFETY: the synchronous picker retains the summary and native contexts.
-    let (old_context, mut dlg_stamp, dlg_rect) = unsafe {
+    let (old_context, dlg_stamp, dlg_rect) = unsafe {
         prepare_display(
             cx,
             &mut pick_state,
@@ -140,7 +143,7 @@ pub(super) fn pick_game(
         && (saving != 0 || (pick_state.success == 0 && from_main_menu == 0));
     // SAFETY: the synchronous picker owns these published native resources.
     cx.with_legacy(|| unsafe {
-        save_load::restore_display(&mut dlg_stamp, &dlg_rect, restore);
+        save_load::restore_display(dlg_stamp, &dlg_rect, restore);
         SetContext(old_context);
         resume_music();
         SetInputCallback(runtime.input(), old_callback);
@@ -155,12 +158,15 @@ unsafe fn prepare_display(
     from_main_menu: BOOLEAN,
     space_context: CONTEXT,
     time_out: DWORD,
-) -> (CONTEXT, STAMP, RECT) {
+) -> (CONTEXT, crate::ui::util::SavedContext, RECT) {
     // SAFETY: the picker retains its summary, source context and drawable resources.
     let (old_context, dlg_stamp, dlg_rect) = cx.with_legacy(|| unsafe {
         load_game_descriptions(&mut *ptr::addr_of_mut!(pick_state.summary).cast());
         let old_context = SetContext(space_context);
-        let dlg_stamp = SaveContextFrame(ptr::null());
+        let dlg_stamp = crate::ui::util::SavedContext::capture(
+            &crate::graphics::context_abi::ContextLease::require(space_context.cast()),
+            None,
+        );
         let mut dlg_rect: RECT = mem::zeroed();
         GetContextClipRect(&mut dlg_rect);
         SleepThreadUntil(time_out);

@@ -41,6 +41,18 @@ use std::sync::{Arc, Condvar, Mutex, MutexGuard, TryLockError};
 use std::thread::{self, JoinHandle, ThreadId};
 use std::time::Duration;
 
+pub fn yield_game_thread() {
+    assert_eq!(
+        *legacy_abi::MAIN_THREAD
+            .lock()
+            .unwrap_or_else(|error| panic!("thread owner lock: {error}")),
+        Some(thread::current().id()),
+        "event polling requires the initialized game thread"
+    );
+    // SAFETY: the checked thread owns SDL dispatch and the initialized task system.
+    unsafe { legacy_abi::TaskSwitch() };
+}
+
 /// Error type for threading operations
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ThreadError {

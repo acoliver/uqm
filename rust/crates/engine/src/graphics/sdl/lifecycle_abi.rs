@@ -21,6 +21,18 @@ pub static mut GfxFlags: c_int = 0;
 pub static mut QuitPosted: c_int = 0;
 #[no_mangle]
 pub static mut GameActive: c_int = 1;
+
+pub fn quit_posted() -> bool {
+    let _thread = ffi::native_allocations();
+    // SAFETY: utility input and OS event dispatch run on the same graphics thread.
+    unsafe { QuitPosted != 0 }
+}
+
+pub fn game_active() -> bool {
+    let _thread = ffi::native_allocations();
+    // SAFETY: utility input and OS event dispatch run on the same graphics thread.
+    unsafe { GameActive != 0 }
+}
 #[repr(C)]
 pub struct TfbGraphicsBackend {
     preprocess: unsafe extern "C" fn(c_int, c_int, c_int),

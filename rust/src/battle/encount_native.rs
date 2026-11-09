@@ -539,7 +539,7 @@ pub(crate) mod engine {
         }
         cx.kernel.set_status_message_mode(previous_mode);
         salvage.finish(cx, io, input, |cx, io, duration| {
-            crate::ui::util::live::wait_for_any_button(cx, io, 1, duration, 0);
+            crate::ui::util::wait_for_any_button(cx, io, 1, duration, 0);
         });
         apply_thraddash_body_count(cx.world, killed)
     }

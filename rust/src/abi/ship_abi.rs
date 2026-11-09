@@ -1185,9 +1185,6 @@ pub use crate::mainloop::input_abi::live::SetDefaultMenuRepeatDelay;
 #[cfg(not(test))]
 pub use crate::mainloop::input_abi::live::ConfirmExit;
 
-#[cfg(not(test))]
-pub use crate::ui::util::live::WaitForAnyButton;
-
 pub type STATUS_FLAGS = UWORD;
 pub const SPECIES_ID_NO_ID: SPECIES_ID = 0;
 pub const SPECIES_ID_ARILOU_ID: SPECIES_ID = 1;
@@ -1351,29 +1348,6 @@ pub use crate::ui::settings::stop_music;
 extern "C" {
     pub fn stop_music();
 }
-#[cfg(not(test))]
-pub unsafe fn PlaySoundEffect(
-    S: SOUND,
-    Channel: COUNT,
-    Pos: SoundPosition,
-    PositionalObject: *mut ::std::os::raw::c_void,
-    Priority: BYTE,
-) {
-    crate::ui::settings::PlaySoundEffect(
-        S.cast(),
-        Channel,
-        crate::navigation::abi::SoundPosition {
-            positional: Pos.positional,
-            x: Pos.x,
-            y: Pos.y,
-        },
-        PositionalObject,
-        Priority,
-    );
-}
-#[cfg(test)]
-#[cfg(not(test))]
-pub use crate::ui::settings::PlaySoundEffect;
 pub type Mutex = *mut crate::threading::RustMutex;
 pub type CondVar = *mut crate::threading::RustCondVar;
 pub const SYNC_CLASS_TOPLEVEL: _bindgen_ty_6 = 1;

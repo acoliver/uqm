@@ -37,11 +37,10 @@ pub mod abi {
         drawables_intersect as DrawablesIntersect, equ_frame_index as SetEquFrameIndex,
         frame_hot as GetFrameHot, frame_rect as GetFrameRect, in_hq_space as in_hqspace,
         in_hyper_space, inc_frame_index as IncFrameIndex, music_playing as PLRPlaying,
-        play_music as PlayMusic, release_drawable as ReleaseDrawable,
-        release_string_table as ReleaseStringTable, screen_transition as ScreenTransition,
-        set_context as SetContext, set_context_font as SetContextFont,
-        set_mipmap as TFB_DrawScreen_SetMipmap, set_transition_source as SetTransitionSource,
-        string_address as GetStringAddress,
+        release_drawable as ReleaseDrawable, release_string_table as ReleaseStringTable,
+        screen_transition as ScreenTransition, set_context as SetContext,
+        set_context_font as SetContextFont, set_mipmap as TFB_DrawScreen_SetMipmap,
+        set_transition_source as SetTransitionSource, string_address as GetStringAddress,
     };
 
     // Bindgen does not translate these cast-expression macros from controls.h
@@ -170,12 +169,6 @@ mod engine {
     /// `music` must be a live music handle or the engine wildcard handle.
     pub unsafe fn music_playing(music: abi::MUSIC_REF) -> abi::BOOLEAN {
         crate::battle::c_bridge::PLRPlaying(music.cast()) as abi::BOOLEAN
-    }
-
-    /// # Safety
-    /// `music` must be live and audio state must be owned by the game thread.
-    pub unsafe fn play_music(music: abi::MUSIC_REF, continuous: abi::BOOLEAN, priority: abi::BYTE) {
-        crate::battle::c_bridge::PlayMusic(music.cast(), continuous, priority);
     }
 
     /// # Safety

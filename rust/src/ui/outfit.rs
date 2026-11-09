@@ -4,6 +4,7 @@
 use crate::engine::World;
 use crate::engine::{battle::Cx, input::InputSession, StoryKey};
 use crate::navigation::abi::*;
+use crate::sound::music::remember_native_music;
 use crate::ui::menu::draw_campaign_menu;
 use crate::ui::sis::{
     clear_flash, clear_sis_rect, delta_sis_gauges, draw_campaign_message, draw_flagship_name,
@@ -486,6 +487,7 @@ unsafe fn exit_outfit(kernel: &mut crate::engine::Kernel, menu: &mut MENU_STATE)
 /// and audio must be initialized and exclusively accessed on that thread.
 unsafe fn initialize_outfit(cx: &mut Cx<'_>, menu: &mut MENU_STATE, input: &InputSession) {
     let size = cx.screen_dimensions();
+    let music_enabled = cx.world.data.game.glob_flags & 8 == 0;
     menu.InputFunc = Some(do_outfit);
     menu.Initialized = 1;
     cx.kernel.naming_callback = Some(on_naming_done);
@@ -549,7 +551,8 @@ unsafe fn initialize_outfit(cx: &mut Cx<'_>, menu: &mut MENU_STATE, input: &Inpu
     }
     {
         ScreenTransition(3, ptr::null());
-        crate::ui::settings::play_music_for_world(cx.world, menu.hMusic, 1, 1);
+        let music = std::ptr::NonNull::new(menu.hMusic.cast());
+        remember_native_music(music, true, 1, music_enabled);
         UnbatchGraphics();
         set_menu_flash(cx.kernel, size, false);
     };

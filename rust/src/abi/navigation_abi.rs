@@ -1770,32 +1770,10 @@ pub use crate::mainloop::input_abi::live::SetDefaultMenuRepeatDelay;
 #[cfg(not(test))]
 pub use crate::mainloop::input_abi::live::ResetKeyRepeat;
 
-#[cfg(not(test))]
-pub use crate::ui::util::live::pause_game;
-
-#[cfg(not(test))]
-pub use crate::ui::util::live::SleepGame;
-
-#[cfg(not(test))]
-pub use crate::ui::confirm::do_confirm_exit;
 
 #[cfg(not(test))]
 pub use crate::mainloop::input_abi::live::ConfirmExit;
 
-#[cfg(not(test))]
-pub use crate::ui::util::live::WaitForAnyButton;
-
-#[cfg(not(test))]
-pub use crate::ui::util::live::WaitForAnyButtonUntil;
-
-#[cfg(not(test))]
-pub use crate::ui::util::live::WaitForNoInput;
-
-#[cfg(not(test))]
-pub use crate::ui::util::live::WaitForNoInputUntil;
-
-#[cfg(not(test))]
-pub use crate::ui::confirm::do_popup_window;
 pub type InputFrameCallback = ::std::option::Option<unsafe extern "C" fn()>;
 
 #[cfg(not(test))]
@@ -2168,7 +2146,6 @@ pub const NORMAL_DENSITY: _bindgen_ty_19 = 3;
 pub const HIGH_DENSITY: _bindgen_ty_19 = 4;
 pub const SUPER_DENSITY: _bindgen_ty_19 = 5;
 pub type _bindgen_ty_19 = ::std::os::raw::c_uint;
-
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -2905,15 +2882,7 @@ pub use crate::battle::ship_native::engine::ship_postprocess;
 pub use crate::battle::ship_native::engine::collision;
 
 #[cfg(not(test))]
-pub use crate::ui::util::live::DrawStarConBox;
-
-#[cfg(not(test))]
-pub use crate::ui::util::live::SeedRandomNumbers;
-
-#[cfg(not(test))]
 pub use crate::ui::settings::toggle_music;
-#[cfg(not(test))]
-pub use crate::ui::util::live::SaveContextFrame;
 #[cfg(not(test))]
 pub use crate::ui::settings::stop_music;
 #[cfg(test)]
@@ -2935,11 +2904,6 @@ extern "C" {
 #[cfg(not(test))]
 pub use crate::ui::settings::toggle_sound_effect;
 
-#[cfg(not(test))]
-pub use crate::ui::settings::PlayMusic;
-
-#[cfg(not(test))]
-pub use crate::ui::settings::PlaySoundEffect;
 pub const log_Level_log_Nothing: log_Level = 0;
 pub const log_Level_log_User: log_Level = 1;
 pub const log_Level_log_Fatal: log_Level = 1;

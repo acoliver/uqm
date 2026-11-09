@@ -21,9 +21,6 @@ pub use crate::graphics::drawable_abi::GetFrameRect;
 
 pub use crate::graphics::tfb_draw_abi::TFB_DrawScreen_SetMipmap;
 
-#[cfg(not(test))]
-pub use crate::ui::settings::PlayMusic;
-
 pub use crate::sound::heart_ffi::PLRPlaying;
 
 #[cfg(not(test))]

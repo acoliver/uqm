@@ -53,6 +53,26 @@ pub enum MusicRequest {
     Track(MusicRef),
 }
 
+/// # Safety
+/// `raw` is absent, the current-track sentinel, or a live native music reference
+/// retained by the calling presentation owner during this synchronous admission.
+pub unsafe fn remember_native_music(
+    raw: Option<std::ptr::NonNull<std::ffi::c_void>>,
+    continuous: bool,
+    priority: u8,
+    enabled: bool,
+) {
+    let request = match raw {
+        None => MusicRequest::Absent,
+        Some(raw) if raw.as_ptr() as usize == usize::MAX => MusicRequest::Current,
+        Some(raw) => {
+            // SAFETY: the caller retains this native reference while its sample is cloned.
+            MusicRequest::Track(unsafe { super::heart_ffi::music_ref_borrow(raw.as_ptr()) })
+        }
+    };
+    remember_music(request, continuous, priority, enabled);
+}
+
 pub fn remember_music(request: MusicRequest, continuous: bool, priority: u8, enabled: bool) {
     MUSIC_STATE.lock().requested = (request.clone(), continuous, priority);
     if enabled {
@@ -338,6 +358,37 @@ pub fn fade_music(how_long: u32, end_volume: i32) -> bool {
 mod tests {
     use super::*;
     use crate::sound::test_support::ENGINE_TEST_LOCK;
+
+    #[test]
+    #[serial_test::serial]
+    fn native_admission_clones_the_track_and_preserves_absent_and_current_requests() {
+        let _serial = ENGINE_TEST_LOCK.lock();
+        let track = MusicRef(Arc::new(
+            Mutex::new(crate::sound::types::SoundSample::new()),
+        ));
+        let sample = Arc::downgrade(&track.0);
+        let slot = Box::new(Arc::as_ptr(&track.0));
+        let handle = std::ptr::NonNull::from(slot.as_ref()).cast();
+        // SAFETY: the slot and its sample stay alive through synchronous admission.
+        unsafe { remember_native_music(Some(handle), true, 3, false) };
+        drop(slot);
+        drop(track);
+        assert!(sample.upgrade().is_some());
+        let (request, continuous, priority) = requested_music();
+        assert!(matches!(request, MusicRequest::Track(_)));
+        assert_eq!((continuous, priority), (true, 3));
+        drop(request);
+        stop_requested_music();
+        assert!(sample.upgrade().is_none());
+        // SAFETY: neither an absent request nor the current-track sentinel dereferences a handle.
+        unsafe {
+            remember_native_music(None, false, 1, false);
+            assert!(matches!(requested_music().0, MusicRequest::Absent));
+            remember_native_music(std::ptr::NonNull::new(usize::MAX as *mut _), true, 2, false);
+            assert!(matches!(requested_music().0, MusicRequest::Current));
+        }
+        stop_requested_music();
+    }
 
     #[test]
     fn remembered_music_retains_its_sample_until_the_request_is_stopped() {

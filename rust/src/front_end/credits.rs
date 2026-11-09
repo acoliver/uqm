@@ -660,9 +660,15 @@ pub(crate) mod runtime {
             if with_outtakes {
                 cx.with_legacy(|| io.observer.checkpoint(&CheckpointView::CreditsReady));
             }
+            let music_enabled = cx.world.data.game.glob_flags & 8 == 0;
             cx.with_legacy(|| {
                 if !music.is_null() {
-                    PlayMusic(music, 1, 1);
+                    crate::sound::music::remember_native_music(
+                        std::ptr::NonNull::new(music.cast()),
+                        true,
+                        1,
+                        music_enabled,
+                    );
                 }
             });
             let mut state = CreditsInputState {

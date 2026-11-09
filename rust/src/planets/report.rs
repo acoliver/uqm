@@ -48,16 +48,16 @@ pub(crate) mod live {
 
     use crate::graphics::{
         context_abi::SetContextFontEffect,
-        drawable_abi::{DestroyDrawable, GetFrameRect},
+        drawable_abi::GetFrameRect,
         font_abi::{font_DrawText, SetContextFont},
-        pixmap_abi::{ReleaseDrawable, SetAbsFrameIndex},
+        pixmap_abi::SetAbsFrameIndex,
     };
 
     use crate::engine::graphics::context_abi::ContextLease;
     use crate::planets::scan::state::create_context;
 
-    use crate::ui::util::live::{
-        wait_for_any_button, wait_for_any_button_until, wait_for_no_input, SaveContextFrame,
+    use crate::ui::util::{
+        wait_for_any_button, wait_for_any_button_until, wait_for_no_input, SavedContext,
     };
 
     extern "C" {
@@ -286,9 +286,9 @@ pub(crate) mod live {
                 (owner.lease(), Some(owner))
             }
         };
-        let saved = context.with_selected(|| {
+        context.with_selected(|| {
             let (saved, old_font, old_effect, text, length) = cx.with_legacy(|| {
-                let saved = SaveContextFrame(std::ptr::null_mut());
+                let saved = SavedContext::capture(&context, None);
                 let info = std::ptr::addr_of!((*system).SysInfo.planet_info);
                 let old_font = SetContextFont(typography.font.as_raw().cast());
                 let old_effect = SetContextFontEffect(if input.preferences().fonts == 2 {
@@ -312,18 +312,10 @@ pub(crate) mod live {
             cx.with_legacy(|| {
                 SetContextFontEffect(old_effect);
                 SetContextFont(old_font);
-                CffiPlatform.draw_stamp(Stamp {
-                    origin: Point {
-                        x: saved.origin.x,
-                        y: saved.origin.y,
-                    },
-                    frame: saved.frame as usize,
-                });
-                saved.frame
+                saved.restore();
             })
         });
         drop(owned);
-        DestroyDrawable(ReleaseDrawable(saved));
         wait_for_no_input(cx, io, u32::MAX, 1);
     }
 }

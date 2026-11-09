@@ -1,0 +1,59 @@
+use super::*;
+
+#[test]
+fn utf8_edits_keep_character_cursor_and_bounded_terminated_storage() {
+    let mut buffer = *b"a\xc3\xa9\0\0\0\0\0";
+    let mut editor = Editor::new(&mut buffer, 7, 99);
+    assert_eq!(editor.view().cursor, 2);
+    assert!(editor.insert('界'));
+    assert_eq!(editor.view().text.to_bytes(), "aé界".as_bytes());
+    assert!(!editor.insert('x'));
+    editor.move_left();
+    assert!(editor.delete());
+    assert_eq!(editor.view().text.to_bytes(), "aé".as_bytes());
+    assert!(editor.backspace());
+    assert_eq!(editor.view().text, c"a");
+    assert_eq!(editor.view().cursor, 1);
+}
+
+#[test]
+fn rejected_edit_restores_text_and_cursor() {
+    let mut buffer = *b"ab\0\0\0\0\0\0";
+    let mut editor = Editor::new(&mut buffer, 8, 0);
+    editor.save();
+    editor.move_right();
+    assert!(editor.insert('é'));
+    editor.restore();
+    assert_eq!(editor.view().text, c"ab");
+    assert_eq!(editor.view().cursor, 0);
+}
+
+#[test]
+fn joystick_wraps_alphabet_and_changes_case_without_advancing_cursor() {
+    let mut buffer = [0; 8];
+    let mut editor = Editor::new(&mut buffer, 8, 0);
+    let alphabet = Alphabet::new(c"AÉZ", c"AÉ", c"aé");
+    assert!(editor.joystick(&alphabet, false, true, false));
+    assert_eq!(editor.view().text, c"É");
+    assert_eq!(editor.view().cursor, 0);
+    assert!(editor.view().joystick);
+    assert!(editor.joystick(&alphabet, false, false, true));
+    assert_eq!(editor.view().text, c"é");
+    assert!(editor.joystick(&alphabet, true, false, false));
+    assert_eq!(editor.view().text, c"a");
+    assert!(editor.joystick(&alphabet, true, false, false));
+    assert_eq!(editor.view().text, c"Z");
+}
+
+#[test]
+fn capacity_applies_to_the_terminator_and_existing_text() {
+    let mut buffer = *b"ab\0extra";
+    let mut editor = Editor::new(&mut buffer, 3, 2);
+    assert!(!editor.insert('c'));
+    assert_eq!(editor.view().text, c"ab");
+    assert!(std::panic::catch_unwind(|| {
+        let mut buffer = *b"abc\0";
+        Editor::new(&mut buffer, 3, 0);
+    })
+    .is_err());
+}
