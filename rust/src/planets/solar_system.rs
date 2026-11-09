@@ -26,8 +26,11 @@ pub struct BodyLocation {
 
 impl BodyLocation {
     pub fn new(star: StarId, body: Body) -> Self {
+        let Ok(star) = u16::try_from(star.0) else {
+            panic!("star exceeds planet persistence encoding");
+        };
         Self {
-            star: u16::try_from(star.0).expect("star exceeds planet persistence encoding"),
+            star,
             planet: body.planet() as u8,
             moon: body.persistence_moon(),
         }
@@ -51,6 +54,7 @@ pub struct SolarSystem {
     pub turn_wait: u8,
     pub thrust_counter: u8,
     pub max_ship_speed: u8,
+    pub(super) scale_rect: crate::graphics::native_abi::RECT,
 }
 
 impl SolarSystem {
@@ -74,6 +78,7 @@ impl SolarSystem {
             turn_wait: 0,
             thrust_counter: 0,
             max_ship_speed: 0,
+            scale_rect: Default::default(),
         }
     }
 
@@ -87,6 +92,13 @@ impl SolarSystem {
 
     pub fn selected_body(&self) -> Option<Body> {
         self.selected
+    }
+
+    pub fn require_body(&self) -> Body {
+        match self.selected {
+            Some(body) => body,
+            None => panic!("solar body operation requires a selection"),
+        }
     }
 
     pub fn in_orbit(&self) -> bool {
@@ -190,10 +202,7 @@ impl SolarSystem {
     }
 
     pub fn selected_location(&self) -> BodyLocation {
-        self.body_location(
-            self.selected_body()
-                .expect("planet info requires a selected body"),
-        )
+        self.body_location(self.require_body())
     }
 
     pub fn body_location(&self, body: Body) -> BodyLocation {

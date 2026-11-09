@@ -174,10 +174,7 @@ impl NavigationOps for Cx<'_> {
 
     #[cfg(not(test))]
     fn planet_outer_location(&self, planet: u16) -> POINT {
-        crate::planets::solar_coords::outer_location(
-            &self.solar_frame.expect("navigation requires a solar frame"),
-            planet,
-        )
+        crate::planets::solar_coords::outer_location(self.solar_geometry(), planet)
     }
 
     fn leave_hyperspace(&mut self, kind: u8, point: POINT) {
@@ -192,8 +189,7 @@ impl NavigationOps for Cx<'_> {
 
     #[cfg(not(test))]
     fn flagship_location(&self) -> u8 {
-        self.solar_frame
-            .expect("navigation requires a solar frame")
+        self.solar_geometry()
             .inner_planet
             .map_or(0, |planet| planet + 1)
     }

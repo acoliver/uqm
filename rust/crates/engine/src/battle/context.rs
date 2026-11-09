@@ -77,6 +77,13 @@ pub struct Cx<'a> {
 }
 
 impl Cx<'_> {
+    pub fn solar_geometry(&self) -> &crate::world::generation::SolarSnapshot {
+        match &self.solar_frame {
+            Some(frame) => frame,
+            None => panic!("solar operation requires an admitted geometry frame"),
+        }
+    }
+
     #[inline]
     pub fn random(&mut self) -> u32 {
         (self.rng)()

@@ -99,9 +99,7 @@ impl<'a, 'game, 'observer, 'tables> CffiSurfaceGenerator<'a, 'game, 'observer, '
         'tables: 'static,
     {
         let star = solar.star();
-        let body = solar
-            .selected_body()
-            .expect("lander requires a selected body");
+        let body = solar.require_body();
         let in_orbit = solar.in_orbit();
         Self {
             game,

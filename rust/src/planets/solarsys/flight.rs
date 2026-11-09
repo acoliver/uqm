@@ -374,8 +374,11 @@ pub(super) unsafe fn check_ship_location(
                     .write(|world| world.set_activity(world.activity() | END_INTERPLANETARY));
                 return (0, None);
             }
-            *new_radius =
-                find_radius(i32::from(MAX_ZOOM_RADIUS) << 1, c_point(game.ip_location)) as c::SIZE;
+            *new_radius = find_radius(
+                solar,
+                i32::from(MAX_ZOOM_RADIUS) << 1,
+                c_point(game.ip_location),
+            ) as c::SIZE;
         } else {
             leave_inner_system(solar);
         }
@@ -383,9 +386,9 @@ pub(super) unsafe fn check_ship_location(
     }
 
     if !matches!(solar.location(), SystemLocation::Inner(_))
-        && point_within_rect(SCALE_RECT, c_point(game.ship_stamp.origin))
+        && point_within_rect(solar.scale_rect, c_point(game.ship_stamp.origin))
     {
-        *new_radius = find_radius(i32::from(radius), c_point(game.ip_location)) as c::SIZE;
+        *new_radius = find_radius(solar, i32::from(radius), c_point(game.ip_location)) as c::SIZE;
         return (1, None);
     }
 
@@ -490,7 +493,8 @@ pub(super) unsafe fn check_zoom_level(solar: &mut SolarSystem) -> c::BOOLEAN {
     } else {
         c_point((*game).ip_location)
     };
-    solar.sys.sun.radius = find_radius(i32::from(MAX_ZOOM_RADIUS) << 1, ship_location) as c::SIZE;
+    solar.sys.sun.radius =
+        find_radius(solar, i32::from(MAX_ZOOM_RADIUS) << 1, ship_location) as c::SIZE;
     if !inner_system {
         (*game).ship_stamp.origin =
             game_point(locationToDisplay(ship_location, solar.sys.sun.radius));

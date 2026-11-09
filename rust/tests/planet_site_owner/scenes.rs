@@ -76,13 +76,11 @@ fn check_scene(
         system.scene(|_, frame| {
             if let Some(mask) = mask {
                 assert!(frame.is_some(), "missing mask {mask}");
-                // SAFETY: the fixture owns this loaded mask until cleanup below.
-                let pixel = unsafe {
-                    GetFramePixel(
-                        frame.as_ref().unwrap().lease().frame(0).unwrap(),
-                        POINT { x: 0, y: 0 },
-                    )
+                let Some(frame) = frame.as_ref().and_then(|frame| frame.lease().frame(0)) else {
+                    panic!("mask {mask} has no first frame");
                 };
+                // SAFETY: the fixture owns this loaded mask until cleanup below.
+                let pixel = unsafe { GetFramePixel(frame, POINT { x: 0, y: 0 }) };
                 let palette_index = GRAPHICS
                     .iter()
                     .position(|key| *key == mask)
@@ -109,7 +107,7 @@ fn check_scene(
                 text.current_label()
                     .0
                     .to_str()
-                    .unwrap()
+                    .unwrap_or_else(|error| panic!("report fixture is not UTF-8: {error}"))
                     .trim_end_matches('\n'),
                 format!("{report}-{first}")
             );

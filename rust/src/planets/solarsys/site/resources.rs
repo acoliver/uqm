@@ -76,7 +76,10 @@ impl andro::AndrosynthSite for Site<'_, '_, '_> {
                 if visits >= table.len() as u32 {
                     None
                 } else {
-                    table.entry(u16::try_from(visits).expect("a visit count is at most sixteen"))
+                    let Ok(visits) = u16::try_from(visits) else {
+                        panic!("a visit count is at most sixteen");
+                    };
+                    table.entry(visits)
                 }
             }));
         });

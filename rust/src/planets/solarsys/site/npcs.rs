@@ -14,9 +14,7 @@ use crate::planets::generate::special::FleetGroups;
 impl Npcs for Site<'_, '_, '_> {
     fn init_ip_groups(&mut self) -> bool {
         let mut game = self.game.borrow_mut();
-        let solar_frame = game
-            .solar_frame
-            .expect("NPC invocation requires solar geometry");
+        let solar_frame = *game.solar_geometry();
         let world = &mut *game.world;
 
         // SAFETY: the NPC hook owns the world and its initialized group files.
@@ -32,9 +30,7 @@ impl Npcs for Site<'_, '_, '_> {
     }
     fn build_groups(&mut self) {
         let mut game = self.game.borrow_mut();
-        let solar_frame = game
-            .solar_frame
-            .expect("NPC invocation requires solar geometry");
+        let solar_frame = *game.solar_geometry();
         let world = &mut *game.world;
 
         // SAFETY: the NPC hook owns the world and its initialized group files.
@@ -210,17 +206,15 @@ impl crate::planets::generate::sam::GuardSite for Site<'_, '_, '_> {
     }
     fn init_ip_groups(&mut self, reference: u32) {
         let mut game = self.game.borrow_mut();
-        let solar_frame = game
-            .solar_frame
-            .expect("NPC invocation requires solar geometry");
+        let solar_frame = *game.solar_geometry();
         let world = &mut *game.world;
 
         // SAFETY: the reference was stored in this world's group files.
         unsafe { initialize_solar_groups(world, reference, &solar_frame) };
     }
     fn planet_outer_location(&self, planet: u16) -> crate::engine::graphics::native_abi::POINT {
-        let solar = self.game.borrow().solar_frame.expect("NPC solar geometry");
-        crate::planets::solar_coords::outer_location(&solar, planet)
+        let game = self.game.borrow();
+        crate::planets::solar_coords::outer_location(game.solar_geometry(), planet)
     }
     fn for_each_ip_group(&mut self, visit: &mut dyn FnMut(&mut IP_GROUP)) {
         Npcs::for_each_ip_group(self, visit);
@@ -240,7 +234,7 @@ impl crate::planets::generate::sam::GuardSite for Site<'_, '_, '_> {
         location: crate::engine::graphics::native_abi::POINT,
     ) {
         let mut game = self.game.borrow_mut();
-        let solar_frame = game.solar_frame.expect("NPC solar geometry");
+        let solar_frame = *game.solar_geometry();
         let world = &mut *game.world;
 
         world.data.game.ip_location = CPoint {

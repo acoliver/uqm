@@ -358,10 +358,9 @@ mod runtime {
         let old_frame = cx.solar_frame;
         cx.world
             .select_star(star.cast::<crate::engine::world::CStarDesc>().as_ref());
-        let id = cx
-            .world
-            .current_star
-            .expect("debug traversal star belongs to the catalog");
+        let Some(id) = cx.world.current_star else {
+            panic!("debug traversal star belongs to the catalog");
+        };
         let mut solar = SolarSystem::new(cx.world, id);
         solar.sys.rng.reseed(GetRandomSeedForStar(star));
         solar.sys.sun.rand_seed = solar.sys.rng.next_random();

@@ -1,4 +1,14 @@
 #[test]
+fn zoom_clipping_is_local_to_each_visit() {
+    let world = world();
+    let mut first = super::SolarSystem::new(&world, crate::engine::StarId(82));
+    let second = super::SolarSystem::new(&world, crate::engine::StarId(82));
+    assert_eq!(first.scale_rect, Default::default());
+    first.scale_rect.corner.x = 42;
+    assert_eq!(second.scale_rect, Default::default());
+}
+
+#[test]
 fn scoped_flight_effects_apply_on_both_sides_of_the_input_callback() {
     use super::*;
     use crate::engine::world::generation::SolarFlight;

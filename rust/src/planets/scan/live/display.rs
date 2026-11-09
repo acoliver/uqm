@@ -20,11 +20,7 @@ unsafe fn title(solar: &SolarSystem) -> String {
     if let Some(index) = named_body_index(solar) {
         return CffiPlatform.game_string(i32::from(index));
     }
-    let world_type = solar
-        .sys
-        .descriptor(solar.selected_body().expect("scan requires a body"))
-        .data_index
-        & !0x80;
+    let world_type = solar.sys.descriptor(solar.require_body()).data_index & !0x80;
     if world_type >= 50 {
         CffiPlatform.game_string(305 + 4 + 51)
     } else {

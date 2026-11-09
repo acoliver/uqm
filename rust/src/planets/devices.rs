@@ -168,14 +168,11 @@ unsafe fn use_caster(
         }
         return false;
     }
-    if cx.world.activity() & 0xff != 4 || solar.is_none() {
+    let Some(solar) = solar.filter(|_| cx.world.activity() & 0xff == 4) else {
         return false;
-    }
-    let star = solar
-        .expect("device effect requires a solar visit")
-        .sys
-        .star_index();
-    if orbit_is(solar, 1)
+    };
+    let star = solar.sys.star_index();
+    if orbit_is(Some(solar), 1)
         && u32::from(star) == CHMMR_DEFINED
         && get(cx.world, StoryKey::CHMMR_UNLEASHED) == 0
     {
@@ -183,10 +180,7 @@ unsafe fn use_caster(
         cx.world.set_activity(cx.world.activity() | START_ENCOUNTER);
         reset_groups(cx.world);
         set(cx.world, StoryKey::GLOBAL_FLAGS_AND_DATA, 1 << 7);
-        save_solar_location(
-            cx.world,
-            solar.expect("device effect requires a solar visit"),
-        );
+        save_solar_location(cx.world, solar);
         return true;
     }
     let home = u32::from(star) == ILWRATH_DEFINED;
@@ -208,11 +202,8 @@ unsafe fn use_caster(
         StoryKey::GLOBAL_FLAGS_AND_DATA,
         if home { 1 << 4 } else { 1 << 5 },
     );
-    if solar.is_some_and(SolarSystem::in_orbit) {
-        save_solar_location(
-            cx.world,
-            solar.expect("device effect requires a solar visit"),
-        );
+    if solar.in_orbit() {
+        save_solar_location(cx.world, solar);
     }
     true
 }
@@ -227,16 +218,15 @@ unsafe fn invoke(
     match id {
         4..=6 => repair_ultron(cx.world, ULTRON_COMPONENTS[usize::from(id - 4)]),
         3 => {
-            if cx.world.activity() & 0xff != 4 || !solar.is_some_and(SolarSystem::in_orbit) {
+            let Some(solar) =
+                solar.filter(|solar| cx.world.activity() & 0xff == 4 && solar.in_orbit())
+            else {
                 return 0;
-            }
+            };
             crate::ui::settings::play_menu_sound(cx.kernel, cx.world, 3);
             cx.with_legacy(|| SleepThreadUntil(FadeScreen(250, 840).wrapping_add(1680)));
-            let star = solar
-                .expect("device effect requires a solar visit")
-                .sys
-                .star_index();
-            if u32::from(star) != CHMMR_DEFINED || !orbit_is(solar, 1) {
+            let star = solar.sys.star_index();
+            if u32::from(star) != CHMMR_DEFINED || !orbit_is(Some(solar), 1) {
                 cx.with_legacy(|| FadeScreen(253, 1680));
             } else {
                 set(cx.world, StoryKey::CHMMR_EMERGING, 1);
@@ -268,18 +258,15 @@ unsafe fn invoke(
                     set(cx.world, StoryKey::SHIP_TO_COMPEL, 1);
                     reset_groups(cx.world);
                 }
-                let star = solar
-                    .expect("device effect requires a solar visit")
-                    .sys
-                    .star_index();
+                let Some(solar) = solar else {
+                    panic!("device effect requires a solar visit");
+                };
+                let star = solar.sys.star_index();
                 if u32::from(star) == SAMATRA_DEFINED {
                     set(cx.world, StoryKey::READY_TO_CONFUSE_URQUAN, 1);
                 }
-                if solar.is_some_and(SolarSystem::in_orbit) {
-                    save_solar_location(
-                        cx.world,
-                        solar.expect("device effect requires a solar visit"),
-                    );
+                if solar.in_orbit() {
+                    save_solar_location(cx.world, solar);
                 }
             }
             1

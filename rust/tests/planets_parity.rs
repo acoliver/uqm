@@ -605,7 +605,10 @@ fn generation_data(solar: &SolarSystem) -> GenerationData {
         std::array::from_fn(|i| {
             solar.sys.frames[i]
                 .as_ref()
-                .map(|frame| frame.lease().frame(0).unwrap())
+                .map(|frame| match frame.lease().frame(0) {
+                    Some(frame) => frame,
+                    None => panic!("generated scene has no first frame"),
+                })
         }),
         solar.sys.report.current().map(|text| text.index()),
     )

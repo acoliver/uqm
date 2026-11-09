@@ -44,7 +44,7 @@ pub(crate) mod live {
 
     fn radius(cx: &crate::engine::battle::Cx<'_>, location: u8) -> i16 {
         if location == 0 {
-            cx.solar_frame.expect("IP frame").zoom_radius
+            cx.solar_geometry().zoom_radius
         } else {
             MAX_ZOOM
         }
@@ -207,7 +207,7 @@ pub(crate) mod live {
                             cx.ip_group_mut(element).group_counter -= 1;
                         } else if task == EXPLORE as u8 {
                             let next = ((cx.random() as u16
-                                % cx.solar_frame.expect("IP frame").planet_count as u16)
+                                % cx.solar_geometry().planet_count as u16)
                                 + 1) as u8;
                             if next != target {
                                 cx.element_mut(element).thrust = 0;
@@ -219,7 +219,7 @@ pub(crate) mod live {
                 }
             } else if location == 0 {
                 destination = if cx.ip_group_mut(element).dest_loc == 0 {
-                    cx.solar_frame.expect("IP frame").sun_location
+                    cx.solar_geometry().sun_location
                 } else {
                     cx.planet_outer_location(target as u16 - 1)
                 };

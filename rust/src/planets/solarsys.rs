@@ -12,8 +12,6 @@ pub(crate) mod lifecycle;
 #[path = "solarsys/resources.rs"]
 pub(crate) mod resources;
 
-static mut SCALE_RECT: c::RECT = unsafe { std::mem::zeroed() };
-
 use crate::c_bindings::global_state as c;
 use std::ffi::c_void;
 use std::ptr;

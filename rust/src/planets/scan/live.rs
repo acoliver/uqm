@@ -330,9 +330,7 @@ unsafe fn prepare_lander(
 ) -> PlanetSideRunContext {
     scan.context().select();
     draw_cursor(scan, false);
-    let body = solar
-        .selected_body()
-        .expect("lander requires a selected body");
+    let body = solar.require_body();
     let world = std::ptr::from_ref(solar.sys.descriptor(body))
         .cast_mut()
         .cast();
@@ -341,16 +339,19 @@ unsafe fn prepare_lander(
         solar_system: session,
         world,
         misc_data_frame: misc_data,
-        energy_frame: solar.sys.frames[1]
-            .as_ref()
-            .map_or(std::ptr::null_mut(), |frame| {
-                frame.lease().frame(0).expect("loaded scene frame").cast()
-            }),
+        energy_frame: solar.sys.frames[1].as_ref().map_or(
+            std::ptr::null_mut(),
+            |frame| match frame.lease().frame(0) {
+                Some(frame) => frame.cast(),
+                None => panic!("loaded scene has no first frame"),
+            },
+        ),
         life_frames: std::array::from_fn(|i| {
             solar.sys.frames[i + 3]
                 .as_ref()
-                .map_or(std::ptr::null_mut(), |frame| {
-                    frame.lease().frame(0).expect("loaded scene frame").cast()
+                .map_or(std::ptr::null_mut(), |frame| match frame.lease().frame(0) {
+                    Some(frame) => frame.cast(),
+                    None => panic!("loaded scene has no first frame"),
                 })
         }),
         landing_x: i32::from(scan.cursor.borrow().location.x),
@@ -647,16 +648,7 @@ unsafe fn scan_planet(
 }
 
 fn unavailable(solar: &SolarSystem) -> bool {
-    solar
-        .sys
-        .descriptor(
-            solar
-                .selected_body()
-                .expect("scan requires a selected body"),
-        )
-        .data_index
-        & 0x80
-        != 0
+    solar.sys.descriptor(solar.require_body()).data_index & 0x80 != 0
         || solar.sys.info.planet_info.atmo_density == u16::MAX
 }
 
@@ -705,13 +697,7 @@ unsafe fn scan_input(
             cx.with_legacy(|| CffiPlatform.set_flash(FlashTarget::Menu3do));
             return 1;
         }
-        if solar
-            .sys
-            .descriptor(solar.selected_body().expect("scan requires a body"))
-            .data_index
-            & 0x80
-            != 0
-        {
+        if solar.sys.descriptor(solar.require_body()).data_index & 0x80 != 0 {
             play_menu_sound(cx.kernel, cx.world, 2);
             return 1;
         }
@@ -808,7 +794,7 @@ fn refresh_lander_scan(
     point: crate::planet_side::model::SurfacePoint,
 ) {
     crate::planet_side::orbit_scan::sync_positions(cx, surface);
-    // The active generated mappings are the uncollected nodes in this trip.
+    // SAFETY: this trip retains its scan context and generated element mappings.
     unsafe {
         redraw_surface_scan(
             cx,

@@ -337,9 +337,7 @@ unsafe fn prepare_planet_orbit(
     io: &mut Io<'_>,
     solar: &mut SolarSystem,
 ) -> OrbitAdmission {
-    let target = solar
-        .selected_body()
-        .expect("orbit requires a selected body");
+    let target = solar.require_body();
     if solar.in_ip_flight {
         free_solar_sys(cx, solar);
         if matches!(target, Body::Moon { .. }) {
@@ -538,7 +536,10 @@ pub(super) fn closest_planet_interplanetary(solar: &SolarSystem, point: c::POINT
             best_planet = Some(Body::Planet(i as u8));
         }
     }
-    best_planet.expect("interplanetary encounter requires a planet")
+    match best_planet {
+        Some(planet) => planet,
+        None => panic!("interplanetary encounter requires a planet"),
+    }
 }
 
 pub(super) unsafe fn uninit_solar_sys(cx: &mut Cx<'_>, io: &mut Io<'_>, solar: &mut SolarSystem) {
@@ -605,9 +606,9 @@ unsafe fn prepare_explore_solar_sys(world: &mut World) -> crate::engine::world::
         world.current_star =
             crate::planets::starmap::find_star_id(world, world.catalog(), None, universe, 1, 1);
     }
-    let id = world
-        .current_star
-        .expect("ExploreSolarSys(): do not know where you are");
+    let Some(id) = world.current_star else {
+        panic!("ExploreSolarSys(): do not know where you are");
+    };
     let star = world.catalog()[id.0];
     world.data.flagship.log_x = (i32::from(star.star_pt.x) * log_units_x + (6250 >> 1)) / 6250;
     world.data.flagship.log_y =
@@ -642,10 +643,7 @@ pub unsafe fn save_solar_location(world: &mut World, solar: &SolarSystem) {
             world.set_story_state(StoryKey::PLANETARY_CHANGE, 0);
         }
         assert_ne!(world.data.game.ip_planet, 0);
-        world.data.game.in_orbit = solar
-            .selected_body()
-            .expect("orbit requires a selected body")
-            .saved_orbit();
+        world.data.game.in_orbit = solar.require_body().saved_orbit();
     }
 }
 

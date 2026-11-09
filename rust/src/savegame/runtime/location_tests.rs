@@ -31,9 +31,9 @@ unsafe fn save_solar_location(
     state: &System,
     star_index: usize,
 ) -> Result<(), LocationError> {
-    // SAFETY: each fixture retains its frame through this synchronous read.
     let mut snapshot = state.snapshot((320, 240));
     snapshot.star = crate::engine::StarId(star_index);
+    // SAFETY: each fixture retains its frame through this synchronous read.
     let location = unsafe { prepare_solar_location(&world.data.game, &snapshot) }?;
     crate::engine::save::location::apply_solar_location(world, location)
 }
@@ -273,6 +273,7 @@ fn a_missing_selected_body_is_refused_before_the_save_writes_anything() {
     let game = game(None);
     let before = copy_of(&game);
     assert_eq!(
+        // SAFETY: this fixture's ship frame is NULL.
         unsafe { prepare_solar_location(&game.world.data.game, &snapshot) }.err(),
         Some(LocationError::Solar(SolarError::OrbitalWorldMissing))
     );

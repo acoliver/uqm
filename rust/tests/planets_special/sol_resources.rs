@@ -299,7 +299,10 @@ unsafe fn scenes(h: &mut Harness) {
                     host,
                 )
             }));
-            site.report_typography().unwrap()
+            let Some(typography) = site.report_typography() else {
+                panic!("Sol discovery report has no typography");
+            };
+            typography
         });
         let font = typography.font();
         let effect = typography.effect();

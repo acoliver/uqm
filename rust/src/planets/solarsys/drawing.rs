@@ -142,7 +142,11 @@ pub(super) unsafe fn draw_orbit(
     crate::planets::render::oval::draw_oval(&rectangle, 1, &mut renderer);
 }
 
-pub(super) unsafe fn find_radius(mut from_radius: i32, ship_loc: c::POINT) -> i32 {
+pub(super) unsafe fn find_radius(
+    solar: &mut SolarSystem,
+    mut from_radius: i32,
+    ship_loc: c::POINT,
+) -> i32 {
     loop {
         from_radius >>= 1;
         let next = if from_radius > MIN_ZOOM_RADIUS {
@@ -150,7 +154,7 @@ pub(super) unsafe fn find_radius(mut from_radius: i32, ship_loc: c::POINT) -> i3
         } else {
             0
         };
-        let mut r: c::RECT = std::mem::zeroed();
+        let mut r = c::RECT::default();
         orbit_rect(
             &mut r,
             next,
@@ -160,7 +164,7 @@ pub(super) unsafe fn find_radius(mut from_radius: i32, ship_loc: c::POINT) -> i3
             display_factor() >> 2,
             from_radius,
         );
-        SCALE_RECT = r;
+        solar.scale_rect = r;
         let display = locationToDisplay(ship_loc, from_radius as _);
         if !point_within_rect(r, display) {
             break;

@@ -68,9 +68,12 @@ mod production {
         }
         let persistence = ScanPersistence::from_masks(system.info.planet_info.scan_retrieve_mask);
         let frames = system.frames.each_ref().map(|frame| {
-            frame.as_ref().map_or(std::ptr::null_mut(), |frame| {
-                frame.lease().frame(0).expect("loaded scene frame").cast()
-            })
+            frame
+                .as_ref()
+                .map_or(std::ptr::null_mut(), |frame| match frame.lease().frame(0) {
+                    Some(frame) => frame.cast(),
+                    None => panic!("loaded scene has no first frame"),
+                })
         });
         let mut generator = CffiSurfaceGenerator::for_orbit_scan(
             game,
