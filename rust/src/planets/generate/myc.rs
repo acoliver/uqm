@@ -190,18 +190,28 @@ fn mycon_talk(star_index: u8, site: &mut (impl MyconSite + Story + ?Sized)) -> b
     true
 }
 
+#[derive(Clone, Copy)]
+pub struct EnergyContext {
+    pub star_index: u8,
+    pub report_loaded: bool,
+}
+
 /// `GenerateMycon_generateEnergy`: the Sun Device on planet 0 of its system
 /// until taken, and the egg case on planet 0 of an egg case system while the
 /// orbital left its report strings loaded (they are not once it is taken).
 pub fn generate_energy(
     rng: &mut RandomContext,
     sys_info: &SystemInfo,
-    star_index: u8,
+    context: EnergyContext,
     body: Body,
     which_node: u16,
     info: &mut NodeInfo,
     story: &(impl Story + ?Sized),
 ) -> u16 {
+    let EnergyContext {
+        star_index,
+        report_loaded,
+    } = context;
     if star_index == SUN_DEVICE_DEFINED && body == WORLD {
         if story.flag(StoryKey::SUN_DEVICE) != 0 {
             return 0;
@@ -209,7 +219,7 @@ pub fn generate_energy(
         return default::generate_artifact(rng, sys_info, which_node, info);
     }
     if is_egg_case(star_index) && body == WORLD {
-        if sys_info.planet_info.discovery_string.is_null() {
+        if !report_loaded {
             return 0;
         }
         return default::generate_artifact(rng, sys_info, which_node, info);
@@ -289,9 +299,12 @@ impl SystemGenerator for Generator {
         info: &mut NodeInfo,
         host: &dyn SiteHost,
     ) -> u16 {
-        let star = system.star_index();
+        let context = EnergyContext {
+            star_index: system.star_index(),
+            report_loaded: system.report.current().is_some(),
+        };
         system.scan(body, |rng, sys, _frame| {
-            generate_energy(rng, sys, star, body, node, info, host)
+            generate_energy(rng, sys, context, body, node, info, host)
         })
     }
     fn generate_life(

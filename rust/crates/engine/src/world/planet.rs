@@ -91,6 +91,7 @@ pub struct PlanetDescriptor {
     pub temp_color: Color,
     pub next_index: COUNT,
     pub image: STAMP,
+    pub prev_desc: *mut PlanetDesc,
 }
 
 impl Default for PlanetDescriptor {
@@ -107,6 +108,7 @@ impl Default for PlanetDescriptor {
                 origin: POINT::default(),
                 frame: std::ptr::null_mut(),
             },
+            prev_desc: std::ptr::null_mut(),
         }
     }
 }

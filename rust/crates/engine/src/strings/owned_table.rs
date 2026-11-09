@@ -59,6 +59,15 @@ impl TextEntry {
 }
 
 impl LoadedTextTable {
+    pub fn new(strings: Vec<std::ffi::CString>) -> Self {
+        Self::from_strings(
+            strings
+                .into_iter()
+                .map(|text| text.into_bytes_with_nul())
+                .collect(),
+        )
+    }
+
     pub fn entry(&self, index: u16) -> Option<TextEntry> {
         (!self.0.entries.is_empty()).then(|| TextEntry {
             table: self.clone(),

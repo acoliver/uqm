@@ -170,7 +170,10 @@ impl MyconOps for RustMycon<'_> {
             myc::generate_energy(
                 &mut rng,
                 &scan_info(case),
-                case.star,
+                myc::EnergyContext {
+                    star_index: case.star,
+                    report_loaded: case.strings,
+                },
                 case.body,
                 case.which,
                 node,
