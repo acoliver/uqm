@@ -250,6 +250,9 @@ fn record_with_sites(
 ) -> Result<(), String> {
     let path = root.join("rust/xtask/quality-baseline.toml");
     let mut baseline = Baseline::read(&path)?;
+    if let Some((measurement, _)) = sites {
+        super::expect_sites::prepare(root, options, &mut baseline, measurement)?;
+    }
     let previous = baseline.lint.get(host);
     if previous.is_none() && !options.tighten {
         return Err(format!(
@@ -747,6 +750,148 @@ mod tests {
         both.extend(before.clone());
         assert!(compare(&both, &before, &moves).is_err());
         assert!(compare(&after, &before, &BTreeMap::new()).is_err());
+    }
+
+    #[test]
+    fn landed_partial_expect_move_survives_a_later_linux_check(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let root = fixture_directory();
+        let rust = root.path().join("rust");
+        std::fs::create_dir_all(rust.join("src/mode"))?;
+        std::fs::create_dir_all(rust.join("xtask/src/quality"))?;
+        std::fs::write(
+            rust.join("xtask/src/quality/macros.rs"),
+            "const HANDLERS: &[(&str, &str)] = &[];
+",
+        )?;
+        std::fs::write(
+            rust.join("Cargo.toml"),
+            "[package]\nname = 'uqm'\nversion = '0.1.0'\n[workspace]\n",
+        )?;
+        std::fs::write(
+            rust.join("Cargo.lock"),
+            "version = 4\n[[package]]\nname = 'uqm'\nversion = '0.1.0'\n",
+        )?;
+        std::fs::write(rust.join("src/lib.rs"), "pub mod mode { pub mod race; }\n")?;
+        std::fs::write(
+            rust.join("src/mode/race.rs"),
+            "pub fn response(r: u32) -> u16 { u16::try_from(r).expect(\"COUNT\") }\n",
+        )?;
+        let measurement = super::super::walk::measure(root.path(), None, false)?;
+        let diagnostics = measurement
+            .expect_sites
+            .iter()
+            .map(|site| ("uqm::mode::race::@file".into(), site.line, site.column))
+            .collect();
+        let actual = super::super::expect_sites::proof(&measurement, &diagnostics);
+        assert_eq!(actual.len(), 1);
+        let old_proof = actual
+            .iter()
+            .map(|(key, count)| {
+                (
+                    key.replacen("uqm::mode::race::@file", "uqm::content::race::@file", 1)
+                        .replacen(
+                            "uqm::mode::race::response",
+                            "uqm::content::race::live::response",
+                            1,
+                        ),
+                    *count,
+                )
+            })
+            .collect();
+        let target: BTreeMap<String, u64> =
+            [("clippy::expect_used|uqm::mode::race::@file".into(), 1)].into();
+        let baseline = Baseline {
+            moved: [("uqm::content::race::live".into(), "uqm::mode::race".into())].into(),
+            lint: [
+                (
+                    "linux".into(),
+                    [("clippy::expect_used|uqm::content::race::@file".into(), 1)].into(),
+                ),
+                ("macos".into(), target.clone()),
+            ]
+            .into(),
+            expect_sites: [
+                ("linux".into(), old_proof),
+                ("macos".into(), actual.clone()),
+            ]
+            .into(),
+            ..Default::default()
+        };
+        let path = rust.join("xtask/quality-baseline.toml");
+        baseline.write(&path)?;
+        let git = |args: &[&str]| status(Command::new("git").current_dir(root.path()).args(args));
+        git(&["init", "-q"])?;
+        git(&["add", "."])?;
+        git(&[
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.invalid",
+            "commit",
+            "-qm",
+            "landed move",
+        ])?;
+        let mut pruned = Baseline::read(&path)?;
+        pruned.moved.clear();
+        pruned.write(&path)?;
+        let mut options = Options {
+            base: Some("HEAD".into()),
+            ..Default::default()
+        };
+        record_with_sites(
+            root.path(),
+            &options,
+            target.clone(),
+            "linux",
+            Some((&measurement, &actual)),
+        )?;
+        assert_eq!(Baseline::read(&path)?, pruned);
+        options.tighten = true;
+        record_with_sites(
+            root.path(),
+            &options,
+            target.clone(),
+            "linux",
+            Some((&measurement, &actual)),
+        )?;
+        let recorded = Baseline::read(&path)?;
+        assert_eq!(recorded.lint["linux"], target);
+        assert_eq!(recorded.expect_sites["linux"], actual);
+        assert!(record_with_sites(
+            root.path(),
+            &options,
+            [("clippy::expect_used|uqm::mode::race::@file".into(), 2)].into(),
+            "linux",
+            Some((&measurement, &actual))
+        )
+        .is_err());
+        let mut unregistered = baseline;
+        unregistered.moved.clear();
+        unregistered.write(&path)?;
+        git(&["add", "."])?;
+        git(&[
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.invalid",
+            "commit",
+            "-qm",
+            "unregistered proof",
+        ])?;
+        unregistered
+            .moved
+            .insert("uqm::content::race::live".into(), "uqm::mode::race".into());
+        unregistered.write(&path)?;
+        assert!(record_with_sites(
+            root.path(),
+            &options,
+            target,
+            "linux",
+            Some((&measurement, &actual))
+        )
+        .is_err());
+        Ok(())
     }
 }
 
