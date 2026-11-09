@@ -13,6 +13,21 @@ pub(crate) struct Presentation {
     pub tiny_font: FONT,
     pub game_strings: STRING,
     pub using_speech: u32,
+    pub scope_buffer:
+        std::rc::Rc<std::cell::OnceCell<Option<crate::graphics::drawable_abi::LoadedDrawable>>>,
+}
+
+impl Presentation {
+    pub(crate) fn scope_buffer_frame(&self, width: i16, height: i16) -> FRAME {
+        // Retain the allocation across conversations, including the native null result on allocation failure.
+        self.scope_buffer
+            .get_or_init(|| {
+                crate::graphics::drawable_abi::LoadedDrawable::create(6, width, height, 1)
+            })
+            .as_ref()
+            .and_then(|drawable| drawable.lease().frame(0))
+            .unwrap_or(std::ptr::null_mut())
+    }
 }
 
 impl From<&Kernel> for Presentation {
@@ -26,6 +41,7 @@ impl From<&Kernel> for Presentation {
             tiny_font: kernel.tiny_font,
             game_strings: kernel.game_strings,
             using_speech: kernel.using_speech,
+            scope_buffer: std::rc::Rc::clone(&kernel.comm_scope_buffer),
         }
     }
 }

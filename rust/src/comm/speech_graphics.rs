@@ -86,8 +86,8 @@ impl SpeechGraphics {
             let oscilloscope = activity_frame(comm, 9);
             let slider = activity_frame(comm, 5);
             let play = activity_frame(comm, SliderState::Play.frame_index() as u16);
-            c_bridge::init_oscilloscope((oscilloscope).cast());
-            c_bridge::init_slider(0, 107, 242, slider.cast(), play.cast());
+            c_bridge::init_oscilloscope(comm, (oscilloscope).cast());
+            c_bridge::init_slider(comm, 0, 107, 242, slider.cast(), play.cast());
         }
     }
 
@@ -96,8 +96,10 @@ impl SpeechGraphics {
         comm.speech_graphics_mut().slider_state = state;
 
         #[cfg(not(test))]
-        unsafe {
-            c_bridge::set_slider_image((activity_frame(comm, state.frame_index() as u16)).cast());
+        {
+            // SAFETY: the conversation retains the initialized activity drawable on its graphics thread.
+            let frame = unsafe { activity_frame(comm, state.frame_index() as u16) };
+            c_bridge::set_slider_image(comm, frame.cast());
         }
     }
 
