@@ -6,8 +6,7 @@ use crate::battle::context_access::ContextOps;
 use crate::engine::world::generation::Body;
 #[cfg(not(test))]
 use crate::engine::{battle::Cx, input::InputSession, Kernel, StoryKey};
-use crate::navigation::abi::*;
-use crate::planets::solar_system::SolarSystem;
+use crate::{navigation::abi::*, planets::solar_system::SolarSystem};
 use std::ffi::c_char;
 
 mod catalog;

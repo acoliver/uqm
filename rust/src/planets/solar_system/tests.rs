@@ -1,4 +1,95 @@
 #[test]
+#[serial_test::serial]
+fn visit_cleanup_releases_its_images_without_dropping_kernel_resources() {
+    use crate::engine::{
+        graphics::drawable_abi::{retain_frame_allocations, LoadedDrawable},
+        kernel::solar_resources::SolarResources,
+    };
+    fn image() -> LoadedDrawable {
+        LoadedDrawable::create(2, 0, 0, 2)
+            .unwrap_or_else(|| panic!("fixture drawable allocation failed"))
+    }
+    let mut game = crate::engine::Game::new();
+    game.world = world();
+    game.kernel.solar_resources = Some(SolarResources {
+        flagship: image(),
+        sun: image(),
+        sun_palettes: vec![vec![0, 0]],
+        orbital_palettes: vec![vec![0, 0]],
+        orbital: image(),
+        junk: image(),
+        music: None,
+    });
+    let shared = game
+        .kernel
+        .solar_resources
+        .as_ref()
+        .unwrap_or_else(|| panic!("fixture resources missing"))
+        .flagship
+        .lease()
+        .frame(0)
+        .unwrap_or_else(|| panic!("fixture frame missing"));
+    let mut visit = SolarSystem::new(&game.world, StarId(82));
+    visit.stars = Some(image());
+    visit.system_image = Some(image());
+    let cached = visit
+        .system_image
+        .as_ref()
+        .unwrap_or_else(|| panic!("fixture cache missing"))
+        .lease()
+        .frame(0)
+        .unwrap_or_else(|| panic!("fixture frame missing"));
+    let background = visit
+        .stars
+        .as_ref()
+        .unwrap_or_else(|| panic!("fixture background missing"))
+        .lease()
+        .frame(0)
+        .unwrap_or_else(|| panic!("fixture frame missing"));
+    visit.clear_system_image();
+    assert!(visit.system_image.is_none());
+    assert!(std::panic::catch_unwind(|| retain_frame_allocations(&[cached])).is_err());
+    assert_eq!(
+        retain_frame_allocations(&[background])[0].frame(0),
+        Some(background)
+    );
+    drop(visit);
+    assert!(std::panic::catch_unwind(|| retain_frame_allocations(&[background])).is_err());
+    assert_eq!(
+        retain_frame_allocations(&[shared])[0].frame(0),
+        Some(shared)
+    );
+    let second = SolarSystem::new(&game.world, StarId(82));
+    assert!(second.stars.is_none());
+    assert!(second.system_image.is_none());
+    assert_eq!(
+        retain_frame_allocations(&[shared])[0].frame(0),
+        Some(shared)
+    );
+}
+
+#[test]
+fn presentation_coordinates_belong_to_the_supplied_visit() {
+    let world = world();
+    let mut first = SolarSystem::new(&world, StarId(82));
+    let mut second = SolarSystem::new(&world, StarId(82));
+    first.coordinates = Some(super::super::solar_coords::SolarCoordinates::new((
+        320, 200,
+    )));
+    second.coordinates = Some(super::super::solar_coords::SolarCoordinates::new((
+        640, 360,
+    )));
+    assert_eq!(first.coordinates().dimensions(), (242, 187));
+    assert_eq!(second.coordinates().dimensions(), (562, 347));
+}
+
+#[test]
+#[should_panic(expected = "solar presentation is not initialized")]
+fn presentation_requires_its_admitted_screen() {
+    SolarSystem::new(&world(), StarId(82)).coordinates();
+}
+
+#[test]
 fn zoom_clipping_is_local_to_each_visit() {
     let world = world();
     let mut first = super::SolarSystem::new(&world, crate::engine::StarId(82));

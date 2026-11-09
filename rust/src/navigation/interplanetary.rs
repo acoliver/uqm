@@ -36,6 +36,7 @@ pub(crate) mod live {
     use super::*;
     use crate::navigation::abi::*;
     use crate::navigation::{get, set};
+    use crate::planets::solar_coords::SolarCoordinates;
 
     const IP_SPEED: [i16; 24] = [
         80, 54, 48, 80, 80, 70, 96, 80, 56, 60, 42, 60, 80, 40, 50, 54, 120, 36, 60, 80, 72, 60,
@@ -111,7 +112,8 @@ pub(crate) mod live {
         stamp.origin = cx.ip_group(element).loc;
         cx.set_primitive_stamp(element, stamp);
         let zoom = radius(cx, location);
-        let mut destination = locationToDisplay(cx.ip_group_mut(element).loc, zoom);
+        let mut destination = SolarCoordinates::new(cx.screen_dimensions())
+            .to_display(cx.ip_group_mut(element).loc, zoom);
         cx.element_mut(element).current.location = world(cx, destination);
         cx.init_intersect_start(element);
         let flagship = flagship_location(cx);
@@ -285,7 +287,8 @@ pub(crate) mod live {
                 cx.element_mut(element).velocity.zero();
             }
             if escape {
-                let display = locationToDisplay(cx.ip_group_mut(element).loc, zoom);
+                let display = SolarCoordinates::new(cx.screen_dimensions())
+                    .to_display(cx.ip_group_mut(element).loc, zoom);
                 transition = display.x < 0
                     || display.x as i32 >= cx.screen_dimensions().0 - 64 - 14
                     || display.y < 0
@@ -318,7 +321,8 @@ pub(crate) mod live {
                         x: ((width >> 1) - cosine(angle, width * 9 / 16) as i32) as i16,
                         y: ((height >> 1) - sine(angle, height * 9 / 16) as i32) as i16,
                     };
-                    cx.ip_group_mut(element).loc = displayToLocation(entry, MAX_ZOOM);
+                    cx.ip_group_mut(element).loc =
+                        SolarCoordinates::new(cx.screen_dimensions()).to_location(entry, MAX_ZOOM);
                     location = target;
                     cx.ip_group_mut(element).sys_loc = target;
                 }
@@ -328,8 +332,11 @@ pub(crate) mod live {
         adjust_zoom(zoom, &mut vx, &mut vy);
         cx.ip_group_mut(element).loc.x = cx.ip_group_mut(element).loc.x.wrapping_add(vx);
         cx.ip_group_mut(element).loc.y = cx.ip_group_mut(element).loc.y.wrapping_add(vy);
-        cx.element_mut(element).next.location =
-            world(cx, locationToDisplay(cx.ip_group(element).loc, zoom));
+        cx.element_mut(element).next.location = world(
+            cx,
+            SolarCoordinates::new(cx.screen_dimensions())
+                .to_display(cx.ip_group(element).loc, zoom),
+        );
         if location != flagship
             || (task & REFORM_GROUP as u8 != 0 && cx.ip_group_mut(element).group_counter & 1 != 0)
         {
@@ -458,7 +465,8 @@ pub(crate) mod live {
         let record = *cx.group_record(group);
         cx.element_mut(element).current.location = world(
             cx,
-            locationToDisplay(record.loc, radius(cx, record.sys_loc)),
+            SolarCoordinates::new(cx.screen_dimensions())
+                .to_display(record.loc, radius(cx, record.sys_loc)),
         );
         cx.set_ip_group_parent(element, group);
         cx.setup_element(element);
@@ -489,14 +497,16 @@ pub(crate) mod live {
         adjust_zoom(zoom, &mut vx, &mut vy);
         cx.element_mut(element).current.location = world(
             cx,
-            locationToDisplay(cx.navigation().game.ip_location, zoom),
+            SolarCoordinates::new(cx.screen_dimensions())
+                .to_display(cx.navigation().game.ip_location, zoom),
         );
         cx.init_intersect_start(element);
         cx.navigation_mut().game.ip_location.x =
             cx.navigation_mut().game.ip_location.x.wrapping_add(vx);
         cx.navigation_mut().game.ip_location.y =
             cx.navigation_mut().game.ip_location.y.wrapping_add(vy);
-        let point = locationToDisplay(cx.navigation_mut().game.ip_location, zoom);
+        let point = SolarCoordinates::new(cx.screen_dimensions())
+            .to_display(cx.navigation_mut().game.ip_location, zoom);
         cx.element_mut(element).next.location = world(cx, point);
         cx.navigation_mut().game.ship_stamp.origin = point;
         let frame = cx.flagship_stamp_frame();

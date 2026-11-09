@@ -152,7 +152,7 @@ pub(super) unsafe fn check_intersect(solar: &mut SolarSystem) -> Option<Body> {
     let mut new_wait = 0;
     for (body, wait, center) in candidates {
         planet.IntersectStamp.origin = if center {
-            let (width, height) = sis_dimensions();
+            let (width, height) = solar.coordinates().dimensions();
             c::POINT {
                 x: (width >> 1) as _,
                 y: (height >> 1) as _,
@@ -306,7 +306,7 @@ pub(super) unsafe fn enter_inner_system(
     let game = &mut cx.world.data.game;
     let angle =
         facing_to_angle(GetFrameIndex(game.ship_stamp.frame.cast())).wrapping_add(HALF_CIRCLE);
-    let (width, height) = sis_dimensions();
+    let (width, height) = solar.coordinates().dimensions();
     game.ship_stamp.origin.x = ((width >> 1) + i32::from(cosine(angle, INNER_ENTRY_DISTANCE))) as _;
     game.ship_stamp.origin.y = ((height >> 1) + i32::from(sine(angle, INNER_ENTRY_DISTANCE))) as _;
     if game.ship_stamp.origin.y < 0 {
@@ -314,11 +314,12 @@ pub(super) unsafe fn enter_inner_system(
     } else if i32::from(game.ship_stamp.origin.y) >= height {
         game.ship_stamp.origin.y = (height - 2) as _;
     }
-    game.ip_location = game_point(displayToLocation(
-        c_point(game.ship_stamp.origin),
-        MAX_ZOOM_RADIUS,
-    ));
-    solar.sys.sun.location = displayToLocation(
+    game.ip_location = game_point(
+        solar
+            .coordinates()
+            .to_location(c_point(game.ship_stamp.origin), MAX_ZOOM_RADIUS),
+    );
+    solar.sys.sun.location = solar.coordinates().to_location(
         solar.sys.planets[usize::from(planet)].image.origin,
         solar.sys.sun.radius,
     );
@@ -336,10 +337,11 @@ pub(super) unsafe fn leave_inner_system(solar: &mut SolarSystem) {
     let lease = glob();
     let game = ptr::addr_of_mut!((**lease).game);
     (*game).ip_location = game_point(solar.sys.sun.location);
-    (*game).ship_stamp.origin = game_point(locationToDisplay(
-        c_point((*game).ip_location),
-        solar.sys.sun.radius,
-    ));
+    (*game).ship_stamp.origin = game_point(
+        solar
+            .coordinates()
+            .to_display(c_point((*game).ip_location), solar.sys.sun.radius),
+    );
     (*game).velocity.zero();
     drop(lease);
     solar.wait_intersect = outer_planet_wait;
@@ -362,7 +364,7 @@ pub(super) unsafe fn check_ship_location(
     let radius = solar.sys.sun.radius;
     *new_radius = solar.sys.sun.radius;
 
-    let (width, height) = sis_dimensions();
+    let (width, height) = solar.coordinates().dimensions();
     if game.ship_stamp.origin.x < 0
         || i32::from(game.ship_stamp.origin.x) >= width
         || game.ship_stamp.origin.y < 0
@@ -411,10 +413,11 @@ pub(super) unsafe fn scale_system(cx: &mut Cx<'_>, solar: &mut SolarSystem, new_
         let lease = glob();
         let game = ptr::addr_of_mut!((**lease).game);
         solar.sys.sun.radius = new_radius;
-        (*game).ship_stamp.origin = game_point(locationToDisplay(
-            c_point((*game).ip_location),
-            solar.sys.sun.radius,
-        ));
+        (*game).ship_stamp.origin = game_point(
+            solar
+                .coordinates()
+                .to_display(c_point((*game).ip_location), solar.sys.sun.radius),
+        );
 
         drop(lease);
         // SMOOTH_SYSTEM_ZOOM is disabled in the C source; use its crossfade path.
@@ -494,8 +497,11 @@ pub(super) unsafe fn check_zoom_level(solar: &mut SolarSystem) -> c::BOOLEAN {
     solar.sys.sun.radius =
         find_radius(solar, i32::from(MAX_ZOOM_RADIUS) << 1, ship_location) as c::SIZE;
     if !inner_system {
-        (*game).ship_stamp.origin =
-            game_point(locationToDisplay(ship_location, solar.sys.sun.radius));
+        (*game).ship_stamp.origin = game_point(
+            solar
+                .coordinates()
+                .to_display(ship_location, solar.sys.sun.radius),
+        );
     }
     inner_system as c::BOOLEAN
 }

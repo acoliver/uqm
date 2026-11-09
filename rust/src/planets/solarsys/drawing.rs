@@ -2,6 +2,7 @@ use super::*;
 use crate::engine::world::planet::PlanetDesc;
 use crate::engine::{Kernel as KernelOwner, World as WorldOwner};
 use crate::planets::generate::orbit_tables::NUMBER_OF_PLANET_TYPES;
+use crate::planets::solar_coords::SolarCoordinates;
 use crate::planets::solar_system::{SolarSystem, SystemLocation};
 
 use crate::graphics::context_abi::SetContext;
@@ -38,26 +39,31 @@ const PLANETS_SIZE_MASK: u32 = 0x03;
 const FACING_SHIFT: u32 = 4;
 
 #[inline]
-pub(super) unsafe fn orbit_rect(
-    rect: *mut c::RECT,
+pub(super) fn orbit_rect(
+    coordinates: SolarCoordinates,
     dx: i32,
     dy: i32,
     radius: i32,
     xn: i32,
     yn: i32,
     den: i32,
-) {
-    let (width, height) = sis_dimensions();
-    (*rect).corner.x =
-        (i64::from(width >> 1) + (-i64::from(dx) * i64::from(xn) / i64::from(den))) as _;
-    (*rect).corner.y =
-        (i64::from(height >> 1) + (-i64::from(dy) * i64::from(yn) / i64::from(den))) as _;
-    let orbit_width = i64::from(radius) * i64::from(xn << 1) / i64::from(den);
-    (*rect).extent.width = orbit_width as _;
-    (*rect).extent.height = ((*rect).extent.width >> 1) as _;
+) -> c::RECT {
+    let (width, height) = coordinates.dimensions();
+    let orbit_width = (i64::from(radius) * i64::from(xn << 1) / i64::from(den)) as i16;
+    c::RECT {
+        corner: c::POINT {
+            x: (i64::from(width >> 1) - i64::from(dx) * i64::from(xn) / i64::from(den)) as i16,
+            y: (i64::from(height >> 1) - i64::from(dy) * i64::from(yn) / i64::from(den)) as i16,
+        },
+        extent: c::EXTENT {
+            width: orbit_width,
+            height: orbit_width >> 1,
+        },
+    }
 }
 
 pub(super) unsafe fn planet_orbit_rect(
+    coordinates: SolarCoordinates,
     rect: *mut c::RECT,
     planet: *mut PlanetDesc,
     xn: i32,
@@ -66,14 +72,23 @@ pub(super) unsafe fn planet_orbit_rect(
 ) {
     let mut dx = i32::from((*planet).radius);
     let mut dy = dx;
-    if xn > display_factor() {
+    if xn > coordinates.display_factor() {
         dx = (dx + i32::from((*planet).location.x)) as i16 as i32;
         dy = ((dy + i32::from((*planet).location.y)) << 1) as i16 as i32;
     }
-    orbit_rect(rect, dx, dy, i32::from((*planet).radius), xn, yn, den);
+    *rect = orbit_rect(
+        coordinates,
+        dx,
+        dy,
+        i32::from((*planet).radius),
+        xn,
+        yn,
+        den,
+    );
 }
 
 pub(super) unsafe fn validate_orbit(
+    coordinates: SolarCoordinates,
     planet: *mut PlanetDesc,
     moon: bool,
     origin: c::POINT,
@@ -81,9 +96,9 @@ pub(super) unsafe fn validate_orbit(
     yn: i32,
     den: i32,
 ) {
-    if xn <= display_factor() {
+    if xn <= coordinates.display_factor() {
         let mut rect: c::RECT = std::mem::zeroed();
-        planet_orbit_rect(&mut rect, planet, xn, yn, den);
+        planet_orbit_rect(coordinates, &mut rect, planet, xn, yn, den);
         rect.corner.x += rect.extent.width >> 1;
         rect.corner.y += rect.extent.height >> 1;
         rect.corner.x = (i64::from(rect.corner.x)
@@ -98,7 +113,7 @@ pub(super) unsafe fn validate_orbit(
     if usize::from(index) < NUMBER_OF_PLANET_TYPES {
         let typ = crate::planets::tables::PLANET_ARRAY.0[usize::from(index)].type_;
         let mut size = u32::from(typ & PLANETS_SIZE_MASK as u8);
-        if xn > display_factor() {
+        if xn > coordinates.display_factor() {
             size += 3;
         } else if moon {
             size += 2;
@@ -121,6 +136,7 @@ pub(super) unsafe fn validate_orbit(
 }
 
 pub(super) unsafe fn draw_orbit(
+    coordinates: SolarCoordinates,
     context: &crate::graphics::context_abi::ContextLease,
     planet: *mut PlanetDesc,
     xn: i32,
@@ -128,7 +144,7 @@ pub(super) unsafe fn draw_orbit(
     den: i32,
 ) {
     let mut rect: c::RECT = std::mem::zeroed();
-    planet_orbit_rect(&mut rect, planet, xn, yn, den);
+    planet_orbit_rect(coordinates, &mut rect, planet, xn, yn, den);
     context.set_foreground((*planet).temp_color);
     let mut renderer = NativeOvalGfx::new(context, c::ScreenWidth, c::ScreenHeight);
     let rectangle = crate::comm::locdata::CRect {
@@ -147,6 +163,7 @@ pub(super) unsafe fn find_radius(
     mut from_radius: i32,
     ship_loc: c::POINT,
 ) -> i32 {
+    let coordinates = solar.coordinates();
     loop {
         from_radius >>= 1;
         let next = if from_radius > MIN_ZOOM_RADIUS {
@@ -154,18 +171,17 @@ pub(super) unsafe fn find_radius(
         } else {
             0
         };
-        let mut r = c::RECT::default();
-        orbit_rect(
-            &mut r,
+        let r = orbit_rect(
+            coordinates,
             next,
             next,
             next,
-            display_factor(),
-            display_factor() >> 2,
+            coordinates.display_factor(),
+            coordinates.display_factor() >> 2,
             from_radius,
         );
         solar.scale_rect = r;
-        let display = locationToDisplay(ship_loc, from_radius as _);
+        let display = coordinates.to_display(ship_loc, from_radius as _);
         if !point_within_rect(r, display) {
             break;
         }
@@ -174,14 +190,16 @@ pub(super) unsafe fn find_radius(
 }
 
 pub(super) unsafe fn validate_orbits(solar: &mut SolarSystem) {
+    let coordinates = solar.coordinates();
     let radius = i32::from(solar.sys.sun.radius);
     for planet in &mut solar.sys.planets[..usize::from(solar.sys.sun.num_planets)] {
         validate_orbit(
+            coordinates,
             planet,
             false,
             planet.location,
-            display_factor(),
-            display_factor() / 4,
+            coordinates.display_factor(),
+            coordinates.display_factor() / 4,
             radius,
         );
     }
@@ -228,6 +246,7 @@ pub(super) unsafe fn draw_system_transition(cx: &mut Cx<'_>, solar: &mut SolarSy
 }
 
 pub(super) unsafe fn draw_system(solar: &mut SolarSystem, radius: c::SIZE) {
+    let coordinates = solar.coordinates();
     if SOLAR_SYS_FRAME.is_null() {
         let mut clip: c::RECT = std::mem::zeroed();
         c::GetContextClipRect(&mut clip);
@@ -251,27 +270,29 @@ pub(super) unsafe fn draw_system(solar: &mut SolarSystem, radius: c::SIZE) {
     if let Some(index) = inner_planet {
         let planet = &mut solar.sys.planets[usize::from(index)];
         draw_orbit(
+            coordinates,
             &context,
             planet,
-            display_factor() * 4,
-            display_factor(),
+            coordinates.display_factor() * 4,
+            coordinates.display_factor(),
             i32::from(radius),
         );
         for moon in &mut solar.sys.moons[..usize::from(planet.num_planets)] {
-            draw_orbit(&context, moon, 2, 1, 2);
+            draw_orbit(coordinates, &context, moon, 2, 1, 2);
         }
         draw_inner_planets(solar, index);
     } else {
         for planet in &mut solar.sys.planets[..usize::from(solar.sys.sun.num_planets)] {
             draw_orbit(
+                coordinates,
                 &context,
                 planet,
-                display_factor(),
-                display_factor() / 4,
+                coordinates.display_factor(),
+                coordinates.display_factor() / 4,
                 i32::from(radius),
             );
         }
-        calc_sun_size(&mut solar.sys.sun, radius);
+        calc_sun_size(coordinates, &mut solar.sys.sun, radius);
         for index in solar.draw_order[..=usize::from(solar.sys.sun.num_planets)]
             .iter()
             .copied()
@@ -297,6 +318,7 @@ pub(super) unsafe fn draw_system(solar: &mut SolarSystem, radius: c::SIZE) {
 }
 
 pub(super) unsafe fn create_star_background(solar: &mut SolarSystem) -> *mut c::FRAME_DESC {
+    let coordinates = solar.coordinates();
     let mut clip: c::RECT = std::mem::zeroed();
     let old = SetContext(KernelOwner::current().read(|owner| owner.space_context));
     c::GetContextClipRect(&mut clip);
@@ -315,7 +337,7 @@ pub(super) unsafe fn create_star_background(solar: &mut SolarSystem) -> *mut c::
     solar.sys.rng.reseed(star_seed(
         (*(**WorldOwner::current()).star_pointer()).star_pt,
     ));
-    let (width, height) = sis_dimensions();
+    let (width, height) = coordinates.dimensions();
     let mut stamp = c::STAMP {
         origin: c::POINT { x: 0, y: 0 },
         frame: SpaceJunkFrame,
@@ -376,7 +398,7 @@ unsafe fn set_planet_color_map(planet: *mut PlanetDesc) {
     ));
 }
 
-unsafe fn calc_sun_size(sun: *mut PlanetDesc, radius: c::SIZE) {
+unsafe fn calc_sun_size(coordinates: SolarCoordinates, sun: *mut PlanetDesc, radius: c::SIZE) {
     let mut index = 0;
     if i32::from(radius) <= MAX_ZOOM_RADIUS >> 1 {
         index += 1;
@@ -384,7 +406,7 @@ unsafe fn calc_sun_size(sun: *mut PlanetDesc, radius: c::SIZE) {
             index += 1;
         }
     }
-    let (width, height) = sis_dimensions();
+    let (width, height) = coordinates.dimensions();
     (*sun).image.origin = c::POINT {
         x: (width >> 1) as i16,
         y: (height >> 1) as i16,
@@ -394,9 +416,10 @@ unsafe fn calc_sun_size(sun: *mut PlanetDesc, radius: c::SIZE) {
 }
 
 unsafe fn draw_inner_planets(solar: &mut SolarSystem, index: u8) {
+    let coordinates = solar.coordinates();
     let planet = &mut solar.sys.planets[usize::from(index)];
     set_planet_color_map(planet);
-    let (width, height) = sis_dimensions();
+    let (width, height) = coordinates.dimensions();
     let mut stamp = c::STAMP {
         origin: c::POINT {
             x: (width >> 1) as i16,
@@ -427,21 +450,23 @@ pub unsafe extern "C" fn DrawStarBackGround() {
 }
 
 pub(super) unsafe fn validate_inner_orbits(solar: &mut SolarSystem) {
+    let coordinates = solar.coordinates();
     let SystemLocation::Inner(index) = solar.location() else {
         panic!("validating inner system outside it");
     };
     let planet = &mut solar.sys.planets[usize::from(index)];
     let origin = planet.location;
     validate_orbit(
+        coordinates,
         planet,
         false,
         origin,
-        display_factor() * 4,
-        display_factor(),
+        coordinates.display_factor() * 4,
+        coordinates.display_factor(),
         i32::from(planet.radius),
     );
     for moon in &mut solar.sys.moons[..usize::from(planet.num_planets)] {
-        validate_orbit(moon, true, origin, 2, 1, 2);
+        validate_orbit(coordinates, moon, true, origin, 2, 1, 2);
     }
 }
 

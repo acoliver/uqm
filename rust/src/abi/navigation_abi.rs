@@ -2113,10 +2113,10 @@ pub struct star_desc {
 
 
 #[cfg(not(test))]
-pub use crate::planets::solarsys::locationToDisplay;
+
 
 #[cfg(not(test))]
-pub use crate::planets::solarsys::displayToLocation;
+
 
 
 pub const VIEW_STATE_VIEW_STABLE: VIEW_STATE = 0;

@@ -219,7 +219,7 @@ pub(super) unsafe fn load_solar_sys(
         solar.leave_inner();
     } else {
         solar.sys.sun.location = c_point(cx.world.data.game.ip_location);
-        cx.world.data.game.ip_location = saved_point(displayToLocation(
+        cx.world.data.game.ip_location = saved_point(solar.coordinates().to_location(
             c_point(cx.world.data.game.ship_stamp.origin),
             MAX_ZOOM_RADIUS,
         ));
@@ -344,7 +344,7 @@ unsafe fn prepare_planet_orbit(
             cx.world.data.game.ship_stamp.origin =
                 saved_point(solar.sys.descriptor(target).image.origin);
         } else {
-            let (width, height) = sis_dimensions();
+            let (width, height) = solar.coordinates().dimensions();
             cx.world.data.game.ship_stamp.origin = CPoint {
                 x: (width >> 1) as _,
                 y: (height >> 1) as _,
@@ -440,10 +440,10 @@ unsafe fn prepare_solar_sys(
         let reentry = glob().read(|owner| owner.game.ship_facing) != 0;
         if !reentry {
             (**glob()).game.autopilot = CPoint { x: -1, y: -1 };
-            let (width, height) = sis_dimensions();
+            let (width, height) = solar.coordinates().dimensions();
             (**glob()).game.ship_stamp.origin.x = (width >> 1) as _;
             (**glob()).game.ship_stamp.origin.y = (height - 2) as _;
-            (**glob()).game.ip_location = saved_point(displayToLocation(
+            (**glob()).game.ip_location = saved_point(solar.coordinates().to_location(
                 c_point(glob().read(|owner| owner.game.ship_stamp.origin)),
                 MAX_ZOOM_RADIUS,
             ));
@@ -572,8 +572,7 @@ pub(super) unsafe fn uninit_solar_sys(cx: &mut Cx<'_>, io: &mut Io<'_>, solar: &
 }
 
 #[inline]
-pub(super) unsafe fn hyperspace_unit_factors() -> (i32, i32) {
-    let (width, height) = dimensions();
+pub(super) fn hyperspace_unit_factors((width, height): (i32, i32)) -> (i32, i32) {
     ((((width - 64) << 5) >> 4) * 195, ((height << 5) >> 4) * 25)
 }
 
@@ -583,8 +582,11 @@ pub(super) unsafe fn hyperspace_unit_factors() -> (i32, i32) {
 pub unsafe fn run_explore_solar_sys(cx: &mut Cx<'_>, io: &mut Io<'_>) {
     let runtime = cx.kernel.input_runtime();
     let input = runtime.input();
-    let star = prepare_explore_solar_sys(cx.world);
+    let star = prepare_explore_solar_sys(cx.world, cx.screen_dimensions());
     let mut solar = SolarSystem::new(cx.world, star);
+    solar.coordinates = Some(crate::planets::solar_coords::SolarCoordinates::new(
+        cx.screen_dimensions(),
+    ));
     start_solar_sys(cx, io, &mut solar);
     cx.with_legacy(|| ffi::SetMenuSounds(input, MENU_SOUND_NONE, MENU_SOUND_NONE));
     solar.run_input(cx, io, false, |cx, io, solar| {
@@ -596,8 +598,11 @@ pub unsafe fn run_explore_solar_sys(cx: &mut Cx<'_>, io: &mut Io<'_>) {
         .checkpoint(&crate::engine::observe::CheckpointView::Solar(None));
 }
 
-unsafe fn prepare_explore_solar_sys(world: &mut World) -> crate::engine::world::StarId {
-    let (log_units_x, log_units_y) = hyperspace_unit_factors();
+fn prepare_explore_solar_sys(
+    world: &mut World,
+    screen: (i32, i32),
+) -> crate::engine::world::StarId {
+    let (log_units_x, log_units_y) = hyperspace_unit_factors(screen);
     if world.current_star.is_none() {
         let universe = c::POINT {
             x: ((world.data.flagship.log_x * 6250 + (log_units_x >> 1)) / log_units_x) as _,
