@@ -34,7 +34,6 @@ pub fn captured_labels(mut text: String) -> String {
         ("planet_info:", "PlanetInfo:"),
         ("num_planets:", "NumPlanets:"),
         ("next_index:", "NextIndex:"),
-        ("prev_desc:", "pPrevDesc:"),
     ] {
         text = text.replace(rust, captured);
     }

@@ -72,6 +72,7 @@ pub struct Cx<'a> {
     pub kernel: &'a mut super::record::Kernel,
     /// The existing global stream. No seed is copied at context boundaries.
     pub rng: fn() -> u32,
+    pub solar_flight: Option<&'a std::cell::Cell<Option<crate::world::generation::SolarFlight>>>,
     pub solar_frame: Option<crate::world::generation::SolarSnapshot>,
 }
 
@@ -106,6 +107,7 @@ impl<'a> Cx<'a> {
             world,
             kernel,
             rng,
+            solar_flight: None,
             solar_frame: None,
         }
     }
@@ -116,6 +118,7 @@ impl<'a> Cx<'a> {
             world: self.world,
             kernel: self.kernel,
             rng: self.rng,
+            solar_flight: self.solar_flight,
             solar_frame: self.solar_frame,
         }
     }

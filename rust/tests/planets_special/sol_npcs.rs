@@ -67,10 +67,9 @@ pub fn check(h: &mut Harness) {
         uqm_rust::engine::World::current().write(|world| {
             (world).set_story_state(uqm_rust::engine::StoryKey::PROBE_MESSAGE_DELIVERED, 0)
         });
-        assert!(crate::invoke_generation(
-            &mut *h.state,
-            |system, host| GENERATE_SOL_FUNCTIONS.init_npcs(system, host)
-        ));
+        assert!(crate::invoke_generation(&mut *h.state, |system, host| {
+            GENERATE_SOL_FUNCTIONS.init_npcs(system, host)
+        }));
         let probe_ref =
             uqm_rust::engine::WorldData::current().read(|world| world.game.battle_group_ref);
         assert_ne!(probe_ref, 0);
@@ -108,10 +107,9 @@ pub fn check(h: &mut Harness) {
         let saved_file = file();
         assert!(saved_file.len() > probe_ref as usize);
         // Loading the saved reference does not create a second group record.
-        assert!(crate::invoke_generation(
-            &mut *h.state,
-            |system, host| GENERATE_SOL_FUNCTIONS.init_npcs(system, host)
-        ));
+        assert!(crate::invoke_generation(&mut *h.state, |system, host| {
+            GENERATE_SOL_FUNCTIONS.init_npcs(system, host)
+        }));
         assert_eq!(
             uqm_rust::engine::WorldData::current().read(|world| world.game.battle_group_ref),
             probe_ref
@@ -124,16 +122,14 @@ pub fn check(h: &mut Harness) {
                 .unwrap_or_else(|| panic!("fixture group missing"));
             groups.get_mut(head).task = uqm_rust::planets::generate::default::REFORM_GROUP;
         });
-        assert!(crate::invoke_generation(
-            &mut *h.state,
-            |system, host| GENERATE_SOL_FUNCTIONS.uninit_npcs(system, host)
-        ));
+        assert!(crate::invoke_generation(&mut *h.state, |system, host| {
+            GENERATE_SOL_FUNCTIONS.uninit_npcs(system, host)
+        }));
         assert!(uqm_rust::engine::World::current()
             .read(|world| world.npc_built_ships_ref().head().is_none()));
-        assert!(crate::invoke_generation(
-            &mut *h.state,
-            |system, host| GENERATE_SOL_FUNCTIONS.reinit_npcs(system, host)
-        ));
+        assert!(crate::invoke_generation(&mut *h.state, |system, host| {
+            GENERATE_SOL_FUNCTIONS.reinit_npcs(system, host)
+        }));
         assert_eq!(
             uqm_rust::engine::WorldData::current().read(|world| world.game.battle_group_ref),
             probe_ref
@@ -160,10 +156,9 @@ pub fn check(h: &mut Harness) {
         uqm_rust::engine::World::current().write(|world| {
             (world).set_story_state(uqm_rust::engine::StoryKey::PROBE_MESSAGE_DELIVERED, 1)
         });
-        assert!(crate::invoke_generation(
-            &mut *h.state,
-            |system, host| GENERATE_SOL_FUNCTIONS.init_npcs(system, host)
-        ));
+        assert!(crate::invoke_generation(&mut *h.state, |system, host| {
+            GENERATE_SOL_FUNCTIONS.init_npcs(system, host)
+        }));
         assert_eq!(
             uqm_rust::engine::WorldData::current().read(|world| world.game.battle_group_ref),
             probe_ref
@@ -172,19 +167,17 @@ pub fn check(h: &mut Harness) {
 
         let system = &raw mut *h.state;
         let parent = &raw mut (*system).sys.planets[2];
-        (*parent).prev_desc = &raw mut (*system).sys.sun;
         let starbase = &raw mut (*system).sys.moons[0];
-        (*starbase).prev_desc = parent;
         for activity in [0, CHECK_ABORT, CHECK_LOAD, CHECK_ABORT | CHECK_LOAD] {
             uqm_rust::engine::World::current().write(|world| world.set_activity(activity));
             c_api::set_encounter_group(17);
             uqm_rust::engine::World::current().write(|world| {
                 (world).set_story_state(uqm_rust::engine::StoryKey::GLOBAL_FLAGS_AND_DATA, 0)
             });
-            assert!(crate::invoke_generation(system, |view, host| {
+            assert!(crate::invoke_generation(&mut *system, |view, host| {
                 GENERATE_SOL_FUNCTIONS.generate_orbital(
                     view,
-                    uqm_rust::planets::solarsys::site::dispatch::body(system, starbase),
+                    uqm_rust::engine::world::generation::Body::Moon { planet: 2, moon: 0 },
                     host,
                 )
             }));

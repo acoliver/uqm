@@ -3,9 +3,11 @@
 
 #[cfg(not(test))]
 use crate::battle::context_access::ContextOps;
+use crate::engine::world::generation::Body;
 #[cfg(not(test))]
 use crate::engine::{battle::Cx, input::InputSession, Kernel, StoryKey};
 use crate::navigation::abi::*;
+use crate::planets::solar_system::SolarSystem;
 use std::ffi::c_char;
 
 mod catalog;
@@ -16,12 +18,12 @@ use colors::hsva_to_rgba;
 mod labels;
 pub use labels::*;
 
-type SystemVisitor<T> =
-    unsafe fn(&crate::engine::Kernel, *const STAR_DESC, *const SOLARSYS_STATE, &mut T);
+type SystemVisitor<T> = unsafe fn(&crate::engine::Kernel, *const STAR_DESC, &SolarSystem, &mut T);
 type WorldVisitor<T> = unsafe fn(
     &mut crate::engine::battle::Cx<'_>,
     &mut crate::engine::observe::Io<'_>,
-    *const crate::engine::world::planet::PlanetDesc,
+    &mut SolarSystem,
+    Body,
     &mut T,
 );
 
@@ -38,7 +40,7 @@ pub struct UniverseRecurseArg<'a, T> {
 mod runtime {
     use super::*;
     use crate::engine::{observe::Io, world::planet::*, World};
-    use crate::planets::solarsys::site::dispatch::{body, with_system};
+    use crate::planets::solarsys::site::dispatch::invoke;
 
     use crate::planets::tables::{PLANET_ARRAY as planet_array, STARMAP_ARRAY as starmap_array};
     use libc::FILE;
@@ -61,20 +63,19 @@ mod runtime {
     unsafe fn call_generate_for_scan_type(
         cx: &mut Cx<'_>,
         io: &mut Io<'_>,
-        system: *const SOLARSYS_STATE,
-        world: *const PlanetDesc,
+        solar: &mut SolarSystem,
+        target: Body,
         node: COUNT,
         scan_type: BYTE,
         info: *mut NodeInfo,
     ) -> COUNT {
-        let target = body(system, world);
         let mut spare = NodeInfo::default();
         let info = if info.is_null() {
             &mut spare
         } else {
             &mut *info
         };
-        with_system(cx, io, system.cast_mut(), |generator, system, host| {
+        invoke(cx, io, solar, |generator, system, host| {
             crate::planets::scan::generate(generator, system, target, node, scan_type, info, host)
         })
         .0
@@ -193,10 +194,10 @@ mod runtime {
         if !super::equipment::equip_flagship(cx.world) {
             return;
         }
-        if let Some(system) = pSolarSysState.as_mut() {
-            {
-                super::equipment::update_flight(&cx.world.data.flagship, system);
-            };
+        if let Some(effects) = cx.solar_flight {
+            let mut flight = crate::engine::world::generation::SolarFlight::default();
+            super::equipment::update_flight(&cx.world.data.flagship, &mut flight);
+            effects.set(Some(flight));
         }
         if in_hqspace(cx.world) != 0 || cx.world.activity() as u8 as u32 == IN_INTERPLANETARY {
             crate::ui::sis::delta_sis_gauges(
@@ -286,28 +287,19 @@ mod runtime {
         cx: &mut Cx<'_>,
         io: &mut Io<'_>,
         star: *const STAR_DESC,
-        system: *mut SOLARSYS_STATE,
+        solar: &mut SolarSystem,
         callback: unsafe fn(
             &mut Cx<'_>,
             &mut Io<'_>,
             *const STAR_DESC,
-            *mut SOLARSYS_STATE,
-            *mut PlanetDesc,
+            &mut SolarSystem,
+            u8,
             &mut T,
         ),
         arg: &mut T,
     ) {
-        assert!(ptr::eq(cx.world.star_pointer(), star.cast()));
-        assert!(pSolarSysState == system);
-        for i in 0..(*system).SunDesc[0].num_planets as usize {
-            callback(
-                cx,
-                io,
-                star,
-                system,
-                ptr::addr_of_mut!((*system).PlanetDesc[i]),
-                arg,
-            );
+        for planet in 0..solar.sys.sun.num_planets {
+            callback(cx, io, star, solar, planet, arg);
         }
     }
     /// # Safety
@@ -316,30 +308,20 @@ mod runtime {
         cx: &mut Cx<'_>,
         io: &mut Io<'_>,
         star: *const STAR_DESC,
-        system: *mut SOLARSYS_STATE,
-        planet: *mut PlanetDesc,
+        solar: &mut SolarSystem,
+        planet: u8,
         callback: unsafe fn(
             &mut Cx<'_>,
             &mut Io<'_>,
             *const STAR_DESC,
-            *mut SOLARSYS_STATE,
-            *mut PlanetDesc,
-            *mut PlanetDesc,
+            &mut SolarSystem,
+            Body,
             &mut T,
         ),
         arg: &mut T,
     ) {
-        assert!(pSolarSysState == system);
-        for i in 0..(*planet).num_planets as usize {
-            callback(
-                cx,
-                io,
-                star,
-                system,
-                planet,
-                ptr::addr_of_mut!((*system).MoonDesc[i]),
-                arg,
-            );
+        for moon in 0..solar.sys.planets[usize::from(planet)].num_planets {
+            callback(cx, io, star, solar, Body::Moon { planet, moon }, arg);
         }
     }
     /// # Safety
@@ -372,100 +354,97 @@ mod runtime {
         star: *const STAR_DESC,
         recurse: &mut UniverseRecurseArg<'_, T>,
     ) {
-        let old_system = pSolarSysState;
-        let old_star = cx.world.star_pointer();
+        let old_star = cx.world.current_star;
+        let old_frame = cx.solar_frame;
         cx.world
-            .select_star((star.cast::<crate::engine::world::CStarDesc>()).as_ref());
-        (*SysGenRNG).reseed(GetRandomSeedForStar(star));
-        let mut system: SOLARSYS_STATE = mem::zeroed();
-        system.SunDesc[0].prev_desc = ptr::null_mut();
-        system.SunDesc[0].rand_seed = (*SysGenRNG).next_random();
-        system.SunDesc[0].data_index = (((*star).Type as u32
+            .select_star(star.cast::<crate::engine::world::CStarDesc>().as_ref());
+        let id = cx
+            .world
+            .current_star
+            .expect("debug traversal star belongs to the catalog");
+        let mut solar = SolarSystem::new(cx.world, id);
+        solar.sys.rng.reseed(GetRandomSeedForStar(star));
+        solar.sys.sun.rand_seed = solar.sys.rng.next_random();
+        solar.sys.sun.data_index = (((*star).Type as u32
             & ((0xff << STAR_TYPE_SHIFT) & !(0xff << STAR_COLOR_SHIFT)))
             >> STAR_TYPE_SHIFT) as BYTE;
-        system.SunDesc[0].location = POINT { x: 0, y: 0 };
-        system.generator_index = (*star).Index;
-        pSolarSysState = &mut system;
-        with_system(cx, io, &mut system, |generator, system, host| {
+        invoke(cx, io, &mut solar, |generator, system, host| {
             generator.generate_planets(system, host)
         });
         if let Some(cb) = recurse.system_func_pre {
-            cb(cx.kernel, star, &system, recurse.arg);
+            cb(cx.kernel, star, &solar, recurse.arg);
         }
         if recurse.planet_func_pre.is_some()
             || recurse.planet_func_post.is_some()
             || recurse.moon_func.is_some()
         {
-            for_all_planets(cx, io, star, &mut system, planet_recurse, recurse);
+            for_all_planets(cx, io, star, &mut solar, planet_recurse, recurse);
         }
         if let Some(cb) = recurse.system_func_post {
-            cb(cx.kernel, star, &system, recurse.arg);
+            cb(cx.kernel, star, &solar, recurse.arg);
         }
-        pSolarSysState = old_system;
-        cx.world.select_star((old_star).as_ref());
+        cx.world.current_star = old_star;
+        cx.solar_frame = old_frame;
+        io.observer
+            .checkpoint(&crate::engine::observe::CheckpointView::Solar(
+                old_frame.as_ref(),
+            ));
     }
     unsafe fn planet_recurse<T>(
         cx: &mut Cx<'_>,
         io: &mut Io<'_>,
         star: *const STAR_DESC,
-        system: *mut SOLARSYS_STATE,
-        planet: *mut PlanetDesc,
+        solar: &mut SolarSystem,
+        planet: u8,
         recurse: &mut UniverseRecurseArg<'_, T>,
     ) {
-        assert!(ptr::eq(cx.world.star_pointer(), star.cast()));
-        assert!(pSolarSysState == system);
-        (*planet).prev_desc = ptr::addr_of_mut!((*system).SunDesc[0]);
+        let target = Body::Planet(planet);
+        solar.enter_inner(planet);
         if let Some(cb) = recurse.planet_func_pre {
-            (*system).pOrbitalDesc = planet;
-            let target = body(system, planet);
-            with_system(cx, io, system, |generator, system, host| {
+            invoke(cx, io, solar, |generator, system, host| {
                 crate::planets::generate::calc::analyse_body(system, target);
                 generator.generate_orbital(system, target, host)
             });
-            cb(cx, io, planet, recurse.arg);
+            cb(cx, io, solar, target, recurse.arg);
         }
         if recurse.moon_func.is_some() {
-            (*SysGenRNG).reseed((*planet).rand_seed);
-            let target = body(system, planet);
-            with_system(cx, io, system, |generator, system, host| {
-                generator.generate_moons(system, target.planet() as u8, host)
+            solar
+                .sys
+                .rng
+                .reseed(solar.sys.planets[usize::from(planet)].rand_seed);
+            invoke(cx, io, solar, |generator, system, host| {
+                generator.generate_moons(system, planet, host)
             });
-            for_all_moons(cx, io, star, system, planet, moon_recurse, recurse);
+            for_all_moons(cx, io, star, solar, planet, moon_recurse, recurse);
         }
         if let Some(cb) = recurse.planet_func_post {
-            (*system).pOrbitalDesc = planet;
-            let target = body(system, planet);
-            with_system(cx, io, system, |generator, system, host| {
+            solar.select_body(target);
+            invoke(cx, io, solar, |generator, system, host| {
                 crate::planets::generate::calc::analyse_body(system, target);
                 generator.generate_orbital(system, target, host)
             });
-            cb(cx, io, planet, recurse.arg);
+            cb(cx, io, solar, target, recurse.arg);
         }
     }
     unsafe fn moon_recurse<T>(
         cx: &mut Cx<'_>,
         io: &mut Io<'_>,
-        star: *const STAR_DESC,
-        system: *mut SOLARSYS_STATE,
-        planet: *mut PlanetDesc,
-        moon: *mut PlanetDesc,
+        _: *const STAR_DESC,
+        solar: &mut SolarSystem,
+        target: Body,
         recurse: &mut UniverseRecurseArg<'_, T>,
     ) {
-        assert!(ptr::eq(cx.world.star_pointer(), star.cast()));
-        assert!(pSolarSysState == system);
-        (*moon).prev_desc = planet;
         if let Some(cb) = recurse.moon_func {
-            (*system).pOrbitalDesc = moon;
-            let analyse = (*moon).data_index != HIERARCHY_STARBASE as BYTE
-                && (*moon).data_index != SA_MATRA as BYTE;
-            let target = body(system, moon);
-            with_system(cx, io, system, |generator, system, host| {
+            solar.select_body(target);
+            let data = solar.sys.descriptor(target).data_index;
+            let analyse = data != HIERARCHY_STARBASE as BYTE && data != SA_MATRA as BYTE;
+            invoke(cx, io, solar, |generator, system, host| {
                 if analyse {
                     crate::planets::generate::calc::analyse_body(system, target);
                 }
                 generator.generate_orbital(system, target, host)
             });
-            cb(cx, io, moon, recurse.arg);
+            cb(cx, io, solar, target, recurse.arg);
         }
     }
 
@@ -518,10 +497,10 @@ mod runtime {
     unsafe fn dump_system_callback(
         kernel: &crate::engine::Kernel,
         star: *const STAR_DESC,
-        system: *const SOLARSYS_STATE,
+        solar: &SolarSystem,
         arg: &mut DumpUniverseArg,
     ) {
-        dump_system(kernel, arg.out, star, system);
+        dump_system(kernel, arg.out, star, solar);
     }
     /// # Safety
     /// Star and system records must be readable, and `out` an open stream.
@@ -529,7 +508,7 @@ mod runtime {
         kernel: &crate::engine::Kernel,
         out: *mut FILE,
         star: *const STAR_DESC,
-        _system: *const SOLARSYS_STATE,
+        _solar: &SolarSystem,
     ) {
         let name = crate::planets::starmap::naming::cluster_name(
             kernel,
@@ -566,10 +545,11 @@ mod runtime {
     unsafe fn dump_planet_callback(
         cx: &mut Cx<'_>,
         io: &mut Io<'_>,
-        planet: *const PlanetDesc,
+        solar: &mut SolarSystem,
+        body: Body,
         arg: &mut DumpUniverseArg,
     ) {
-        dump_planet(cx, io, arg.out, planet);
+        dump_planet(cx, io, arg.out, solar, body);
     }
     /// # Safety
     /// Planet must belong to the active system, and `out` be an open stream.
@@ -577,27 +557,30 @@ mod runtime {
         cx: &mut Cx<'_>,
         io: &mut Io<'_>,
         out: *mut FILE,
-        planet: *const PlanetDesc,
+        solar: &mut SolarSystem,
+        body: Body,
     ) {
-        let target = body(pSolarSysState, planet);
-        with_system(cx, io, pSolarSysState, |generator, system, host| {
-            generator.generate_name(system, target, host)
+        invoke(cx, io, solar, |generator, system, host| {
+            generator.generate_name(system, body, host)
         });
         libc::fprintf(
             out,
             c"- %-37s  %s\n".as_ptr(),
             cx.world.data.flagship.planet_name.as_ptr().cast::<c_char>(),
-            planet_type_string(((*planet).data_index & !(PLANET_SHIELDED as BYTE)) as c_int),
+            planet_type_string(
+                (solar.sys.descriptor(body).data_index & !(PLANET_SHIELDED as BYTE)) as c_int,
+            ),
         );
-        dump_world(cx, io, out, planet);
+        dump_world(cx, io, out, solar, body);
     }
     unsafe fn dump_moon_callback(
         cx: &mut Cx<'_>,
         io: &mut Io<'_>,
-        moon: *const PlanetDesc,
+        solar: &mut SolarSystem,
+        body: Body,
         arg: &mut DumpUniverseArg,
     ) {
-        dump_moon(cx, io, arg.out, moon);
+        dump_moon(cx, io, arg.out, solar, body);
     }
     /// # Safety
     /// Moon must belong to the active system, and `out` be an open stream.
@@ -605,36 +588,44 @@ mod runtime {
         cx: &mut Cx<'_>,
         io: &mut Io<'_>,
         out: *mut FILE,
-        moon: *const PlanetDesc,
+        solar: &mut SolarSystem,
+        body: Body,
     ) {
-        let kind = if (*moon).data_index == HIERARCHY_STARBASE as BYTE {
+        let kind = if solar.sys.descriptor(body).data_index == HIERARCHY_STARBASE as BYTE {
             c"StarBase".as_ptr()
-        } else if (*moon).data_index == SA_MATRA as BYTE {
+        } else if solar.sys.descriptor(body).data_index == SA_MATRA as BYTE {
             c"Sa-Matra".as_ptr()
         } else {
-            planet_type_string(((*moon).data_index & !(PLANET_SHIELDED as BYTE)) as c_int)
+            planet_type_string(
+                (solar.sys.descriptor(body).data_index & !(PLANET_SHIELDED as BYTE)) as c_int,
+            )
         };
         libc::fprintf(
             out,
             c"  - Moon %-30c  %s\n".as_ptr(),
-            b'a' as c_int + moon.offset_from(ptr::addr_of!((*pSolarSysState).MoonDesc[0])) as c_int,
+            b'a' as c_int
+                + match body {
+                    Body::Moon { moon, .. } => i32::from(moon),
+                    _ => panic!("moon visitor requires a moon"),
+                },
             kind,
         );
-        dump_world(cx, io, out, moon);
+        dump_world(cx, io, out, solar, body);
     }
     unsafe fn dump_world(
         cx: &mut Cx<'_>,
         io: &mut Io<'_>,
         out: *mut FILE,
-        world: *const PlanetDesc,
+        solar: &mut SolarSystem,
+        body: Body,
     ) {
-        if (*world).data_index == HIERARCHY_STARBASE as BYTE {
+        if solar.sys.descriptor(body).data_index == HIERARCHY_STARBASE as BYTE {
             return;
         }
-        if (*world).data_index == SA_MATRA as BYTE {
+        if solar.sys.descriptor(body).data_index == SA_MATRA as BYTE {
             return;
         }
-        let info = (*pSolarSysState).SysInfo.planet_info;
+        let info = solar.sys.info.planet_info;
         libc::fprintf(
             out,
             c"          AxialTilt:  %d\n".as_ptr(),
@@ -690,14 +681,14 @@ mod runtime {
             c"          DistToSun:  %d\n".as_ptr(),
             info.planet_to_sun_dist as c_int,
         );
-        if (*world).data_index & PLANET_SHIELDED as BYTE != 0 {
+        if solar.sys.descriptor(body).data_index & PLANET_SHIELDED as BYTE != 0 {
             return;
         }
         libc::fprintf(
             out,
             c"          Bio: %4d    Min: %4d\n".as_ptr(),
-            calculate_bio_value(cx, io, pSolarSysState, world) as c_int,
-            calculate_mineral_value(cx, io, pSolarSysState, world) as c_int,
+            calculate_bio_value(cx, io, solar, body) as c_int,
+            calculate_mineral_value(cx, io, solar, body) as c_int,
         );
     }
     /// # Safety
@@ -705,15 +696,15 @@ mod runtime {
     pub unsafe fn calculate_bio_value(
         cx: &mut Cx<'_>,
         io: &mut Io<'_>,
-        system: *const SOLARSYS_STATE,
-        world: *const PlanetDesc,
+        solar: &mut SolarSystem,
+        body: Body,
     ) -> COUNT {
-        assert_eq!((*system).pOrbitalDesc.cast_const(), world);
+        assert_eq!(solar.selected_body(), Some(body));
         let count = call_generate_for_scan_type(
             cx,
             io,
-            system,
-            world,
+            solar,
+            body,
             COUNT::MAX,
             PlanetScanTypes_BIOLOGICAL_SCAN as BYTE,
             ptr::null_mut(),
@@ -724,8 +715,8 @@ mod runtime {
             call_generate_for_scan_type(
                 cx,
                 io,
-                system,
-                world,
+                solar,
+                body,
                 i,
                 PlanetScanTypes_BIOLOGICAL_SCAN as BYTE,
                 &mut info,
@@ -743,16 +734,16 @@ mod runtime {
     pub unsafe fn generate_bio_index(
         cx: &mut Cx<'_>,
         io: &mut Io<'_>,
-        system: *const SOLARSYS_STATE,
-        world: *const PlanetDesc,
+        solar: &mut SolarSystem,
+        body: Body,
         bio: *mut COUNT,
     ) {
-        assert_eq!((*system).pOrbitalDesc.cast_const(), world);
+        assert_eq!(solar.selected_body(), Some(body));
         let count = call_generate_for_scan_type(
             cx,
             io,
-            system,
-            world,
+            solar,
+            body,
             COUNT::MAX,
             PlanetScanTypes_BIOLOGICAL_SCAN as BYTE,
             ptr::null_mut(),
@@ -765,8 +756,8 @@ mod runtime {
             call_generate_for_scan_type(
                 cx,
                 io,
-                system,
-                world,
+                solar,
+                body,
                 i,
                 PlanetScanTypes_BIOLOGICAL_SCAN as BYTE,
                 &mut info,
@@ -783,15 +774,15 @@ mod runtime {
     pub unsafe fn calculate_mineral_value(
         cx: &mut Cx<'_>,
         io: &mut Io<'_>,
-        system: *const SOLARSYS_STATE,
-        world: *const PlanetDesc,
+        solar: &mut SolarSystem,
+        body: Body,
     ) -> COUNT {
-        assert_eq!((*system).pOrbitalDesc.cast_const(), world);
+        assert_eq!(solar.selected_body(), Some(body));
         let count = call_generate_for_scan_type(
             cx,
             io,
-            system,
-            world,
+            solar,
+            body,
             COUNT::MAX,
             PlanetScanTypes_MINERAL_SCAN as BYTE,
             ptr::null_mut(),
@@ -802,8 +793,8 @@ mod runtime {
             call_generate_for_scan_type(
                 cx,
                 io,
-                system,
-                world,
+                solar,
+                body,
                 i,
                 PlanetScanTypes_MINERAL_SCAN as BYTE,
                 &mut info,
@@ -821,16 +812,16 @@ mod runtime {
     pub unsafe fn generate_mineral_index(
         cx: &mut Cx<'_>,
         io: &mut Io<'_>,
-        system: *const SOLARSYS_STATE,
-        world: *const PlanetDesc,
+        solar: &mut SolarSystem,
+        body: Body,
         minerals: *mut COUNT,
     ) {
-        assert_eq!((*system).pOrbitalDesc.cast_const(), world);
+        assert_eq!(solar.selected_body(), Some(body));
         let count = call_generate_for_scan_type(
             cx,
             io,
-            system,
-            world,
+            solar,
+            body,
             COUNT::MAX,
             PlanetScanTypes_MINERAL_SCAN as BYTE,
             ptr::null_mut(),
@@ -843,8 +834,8 @@ mod runtime {
             call_generate_for_scan_type(
                 cx,
                 io,
-                system,
-                world,
+                solar,
+                body,
                 i,
                 PlanetScanTypes_MINERAL_SCAN as BYTE,
                 &mut info,
@@ -888,7 +879,7 @@ mod runtime {
     unsafe fn tally_system_pre_callback(
         _kernel: &crate::engine::Kernel,
         _: *const STAR_DESC,
-        _: *const SOLARSYS_STATE,
+        _: &SolarSystem,
         arg: &mut TallyResourcesArg,
     ) {
         let context = arg;
@@ -898,7 +889,7 @@ mod runtime {
     unsafe fn tally_system_post_callback(
         kernel: &crate::engine::Kernel,
         star: *const STAR_DESC,
-        _: *const SOLARSYS_STATE,
+        _: &SolarSystem,
         arg: &mut TallyResourcesArg,
     ) {
         let context = arg;
@@ -918,37 +909,40 @@ mod runtime {
     unsafe fn tally_planet_callback(
         cx: &mut Cx<'_>,
         io: &mut Io<'_>,
-        world: *const PlanetDesc,
+        solar: &mut SolarSystem,
+        body: Body,
         arg: &mut TallyResourcesArg,
     ) {
-        tally_resources_world(cx, io, arg, world);
+        tally_resources_world(cx, io, arg, solar, body);
     }
     unsafe fn tally_moon_callback(
         cx: &mut Cx<'_>,
         io: &mut Io<'_>,
-        world: *const PlanetDesc,
+        solar: &mut SolarSystem,
+        body: Body,
         arg: &mut TallyResourcesArg,
     ) {
-        tally_resources_world(cx, io, arg, world);
+        tally_resources_world(cx, io, arg, solar, body);
     }
     unsafe fn tally_resources_world(
         cx: &mut Cx<'_>,
         io: &mut Io<'_>,
         arg: &mut TallyResourcesArg,
-        world: *const PlanetDesc,
+        solar: &mut SolarSystem,
+        body: Body,
     ) {
-        if (*world).data_index == HIERARCHY_STARBASE as BYTE {
+        if solar.sys.descriptor(body).data_index == HIERARCHY_STARBASE as BYTE {
             return;
         }
-        if (*world).data_index == SA_MATRA as BYTE {
+        if solar.sys.descriptor(body).data_index == SA_MATRA as BYTE {
             return;
         }
-        arg.bio_count =
-            arg.bio_count
-                .wrapping_add(calculate_bio_value(cx, io, pSolarSysState, world));
-        arg.mineral_count =
-            arg.mineral_count
-                .wrapping_add(calculate_mineral_value(cx, io, pSolarSysState, world));
+        arg.bio_count = arg
+            .bio_count
+            .wrapping_add(calculate_bio_value(cx, io, solar, body));
+        arg.mineral_count = arg
+            .mineral_count
+            .wrapping_add(calculate_mineral_value(cx, io, solar, body));
     }
 
     /// # Safety
@@ -1468,7 +1462,7 @@ mod tests {
         fn system(
             _: &crate::engine::Kernel,
             _: *const STAR_DESC,
-            _: *const SOLARSYS_STATE,
+            _: &SolarSystem,
             events: &mut Vec<&str>,
         ) {
             events.push("system");
@@ -1476,12 +1470,17 @@ mod tests {
         fn world(
             _: &mut crate::engine::battle::Cx<'_>,
             _: &mut crate::engine::observe::Io<'_>,
-            _: *const crate::engine::world::planet::PlanetDesc,
+            _: &mut SolarSystem,
+            _: Body,
             events: &mut Vec<&str>,
         ) {
             events.push("world");
         }
         let mut owners = crate::engine::Game::new();
+        owners.world.set_catalog(std::borrow::Cow::Borrowed(
+            &crate::planets::tables::STARMAP_ARRAY,
+        ));
+        let mut solar = SolarSystem::new(&owners.world, crate::engine::StarId(0));
         let mut battle = crate::engine::battle::Battle::new();
         let mut cx = crate::engine::battle::Cx::new(
             &mut battle,
@@ -1504,13 +1503,14 @@ mod tests {
         };
         // These callbacks do not inspect the records; only their typed context.
         unsafe {
-            visitor.system_func_pre.unwrap()(
-                cx.kernel,
-                std::ptr::null(),
-                std::ptr::null(),
+            visitor.system_func_pre.unwrap()(cx.kernel, std::ptr::null(), &solar, visitor.arg);
+            visitor.planet_func_pre.unwrap()(
+                &mut cx,
+                &mut io,
+                &mut solar,
+                Body::Planet(0),
                 visitor.arg,
             );
-            visitor.planet_func_pre.unwrap()(&mut cx, &mut io, std::ptr::null(), visitor.arg);
         }
         assert_eq!(events, ["system", "world"]);
         let _: fn(u8) -> *const c_char = event_name;

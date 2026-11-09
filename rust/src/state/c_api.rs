@@ -103,85 +103,99 @@ pub unsafe fn seek_state_file(
     rust_seek_state_file(world, (*file).index, offset as _, whence)
 }
 
-#[cfg(not(test))]
 pub(crate) mod planets {
-    use super::*;
-    use crate::c_bindings::{global_state::SOLARSYS_STATE, solar_system};
+    use crate::engine::world::planet_info::{PlanetInfoManager, ScanRetrieveMask};
+    use crate::engine::World;
+    use crate::planets::solar_system::{BodyLocation, SolarSystem};
 
-    pub(crate) unsafe fn location(
-        world: &crate::engine::World,
-        system: *mut SOLARSYS_STATE,
-    ) -> (c_int, c_int, c_int) {
-        let star = world
-            .current_star
-            .unwrap_or_else(|| panic!("planet info requires a selected star"))
-            .0 as u16;
-        let planet = (*(*system).pBaseDesc)
-            .prev_desc
-            .offset_from((*system).PlanetDesc.as_ptr()) as u16;
-        let orbital = (*system).pOrbitalDesc;
-        let moon = if (*orbital).prev_desc == (*system).SunDesc.as_mut_ptr() {
-            0
-        } else {
-            (orbital.offset_from((*system).MoonDesc.as_ptr()) + 1) as u16
-        };
-        (star as c_int, planet as c_int, moon as c_int)
+    pub(crate) fn location(solar: &SolarSystem) -> BodyLocation {
+        solar.body_location(
+            solar
+                .selected_body()
+                .expect("planet info requires a selected body"),
+        )
     }
 
-    unsafe fn moons(system: *mut SOLARSYS_STATE) -> ([u8; 16], c_int) {
-        let mut moons = [0; 16];
-        let count = (*system).SunDesc[0].num_planets as usize;
-        for (i, moon) in moons[..count].iter_mut().enumerate() {
-            *moon = (*system).PlanetDesc[i].num_planets;
-        }
-        (moons, count as c_int)
+    pub fn uninit_planet_info(world: &mut World) {
+        super::rust_uninit_planet_info(world);
     }
 
-    /// # Safety
-    /// Called on the game thread, without concurrent state-file access.
-    pub fn uninit_planet_info(world: &mut crate::engine::World) {
-        rust_uninit_planet_info(world);
-    }
-
-    /// # Safety
-    /// A live solar system and current orbital descriptor must be selected.
-    pub unsafe fn get_planet_info(world: &mut crate::engine::World) {
-        let system = solar_system::current();
-        (*system).SysInfo.planet_info.scan_retrieve_mask = [0; 3];
-        let (star, planet, moon) = location(world, system);
-        let (moons, count) = moons(system);
-        let mut mask = [0; 3];
-        if {
-            rust_get_planet_info(
-                world,
-                star,
-                planet,
-                moon,
-                moons.as_ptr(),
-                count,
-                mask.as_mut_ptr(),
+    pub fn get_planet_info(world: &mut World, solar: &mut SolarSystem) {
+        let location = location(solar);
+        let moons = solar
+            .sys
+            .planets
+            .each_ref()
+            .map(|planet| planet.num_planets);
+        let mut manager = PlanetInfoManager::new(&mut world.files);
+        // Preserve the empty-mask policy for absent or unreadable external planet data.
+        solar.sys.info.planet_info.scan_retrieve_mask = manager
+            .get_planet_info(
+                usize::from(location.star),
+                usize::from(location.planet),
+                usize::from(location.moon),
+                &moons[..usize::from(solar.sys.sun.num_planets)],
             )
-        } != 0
-        {
-            (*system).SysInfo.planet_info.scan_retrieve_mask = mask;
-        }
+            .unwrap_or_default()
+            .to_array();
     }
 
-    /// # Safety
-    /// A live solar system and current orbital descriptor must be selected.
-    pub unsafe fn put_planet_info(world: &mut crate::engine::World) {
-        let system = solar_system::current();
-        let (star, planet, moon) = location(world, system);
-        let (moons, count) = moons(system);
-        rust_put_planet_info(
-            world,
-            star,
-            planet,
-            moon,
-            moons.as_ptr(),
-            count,
-            (*system).SysInfo.planet_info.scan_retrieve_mask.as_ptr(),
+    pub fn put_planet_info(world: &mut World, solar: &SolarSystem) {
+        let location = location(solar);
+        let moons = solar
+            .sys
+            .planets
+            .each_ref()
+            .map(|planet| planet.num_planets);
+        let mut manager = PlanetInfoManager::new(&mut world.files);
+        let mask = ScanRetrieveMask::from_array(&solar.sys.info.planet_info.scan_retrieve_mask);
+        let _ = manager.put_planet_info(
+            usize::from(location.star),
+            usize::from(location.planet),
+            usize::from(location.moon),
+            &mask,
+            &moons[..usize::from(solar.sys.sun.num_planets)],
         );
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        use crate::engine::{
+            world::{generation::Body, StarId},
+            World,
+        };
+
+        #[test]
+        fn selected_body_masks_and_key_ignore_the_campaigns_later_star_selection() {
+            let mut world = World::new();
+            world.set_catalog(std::borrow::Cow::Borrowed(
+                &crate::planets::tables::STARMAP_ARRAY,
+            ));
+            let stars = world.catalog().len();
+            PlanetInfoManager::new(&mut world.files)
+                .init_planet_info(stars)
+                .unwrap();
+            let mut solar = SolarSystem::new(&world, StarId(82));
+            solar.sys.sun.num_planets = 3;
+            solar.sys.planets[2].num_planets = 2;
+            solar.enter_inner(2);
+            solar.enter_orbit(Body::Moon { planet: 2, moon: 1 });
+            world.current_star = Some(StarId(99));
+            assert_eq!(location(&solar).node_key(31), (82, 2, 2, 31));
+            let masks = [u32::MAX, 1 << 31, 0x1234_5678];
+            solar.sys.info.planet_info.scan_retrieve_mask = masks;
+            put_planet_info(&mut world, &solar);
+            solar.sys.info.planet_info.scan_retrieve_mask = [0; 3];
+            get_planet_info(&mut world, &mut solar);
+            assert_eq!(solar.sys.info.planet_info.scan_retrieve_mask, masks);
+            solar.enter_orbit(Body::Planet(2));
+            get_planet_info(&mut world, &mut solar);
+            assert_eq!(solar.sys.info.planet_info.scan_retrieve_mask, [0; 3]);
+            solar.enter_orbit(Body::Moon { planet: 2, moon: 1 });
+            get_planet_info(&mut world, &mut solar);
+            assert_eq!(solar.sys.info.planet_info.scan_retrieve_mask, masks);
+        }
     }
 }
 

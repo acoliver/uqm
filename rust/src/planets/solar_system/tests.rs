@@ -1,3 +1,40 @@
+#[test]
+fn scoped_flight_effects_apply_on_both_sides_of_the_input_callback() {
+    use super::*;
+    use crate::engine::world::generation::SolarFlight;
+    use std::cell::Cell;
+    let mut game = crate::engine::Game::new();
+    game.world = world();
+    let mut solar = SolarSystem::new(&game.world, StarId(82));
+    let independent = SolarSystem::new(&game.world, StarId(82));
+    let effects = Cell::new(Some(SolarFlight {
+        max_ship_speed: 40,
+        turn_wait: 3,
+    }));
+    let mut battle = crate::engine::battle::Battle::new();
+    let mut cx = Cx::new(&mut battle, &mut game.world, &mut game.kernel, || 0);
+    cx.solar_flight = Some(&effects);
+    let mut observer = crate::engine::observe::Unobserved;
+    let mut io = Io {
+        observer: &mut observer,
+    };
+    let mut frame = SolarInput {
+        solar: &mut solar,
+        step: |cx: &mut Cx<'_>, _: &mut Io<'_>, solar: &mut SolarSystem| {
+            assert_eq!((solar.max_ship_speed, solar.turn_wait), (40, 3));
+            cx.solar_flight.unwrap().set(Some(SolarFlight {
+                max_ship_speed: 64,
+                turn_wait: 5,
+            }));
+            false
+        },
+    };
+    assert!(!frame.frame(&mut cx, &mut io));
+    assert!(effects.get().is_none());
+    assert_eq!((frame.solar.max_ship_speed, frame.solar.turn_wait), (64, 5));
+    assert_eq!((independent.max_ship_speed, independent.turn_wait), (0, 0));
+}
+
 use super::*;
 use crate::engine::{world::generation::Body, world::StarId, World};
 

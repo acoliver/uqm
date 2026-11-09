@@ -27,7 +27,7 @@ use uqm_rust::planets::generate::vault::Generator as generateVaultFunctions;
 use uqm_rust::planets::generate::wreck::Generator as generateWreckFunctions;
 use uqm_rust::planets::generate::yehat::Generator as generateYehatFunctions;
 use uqm_rust::planets::generate::zoq::Generator as generateZoqFotPikFunctions;
-use uqm_rust::planets::solarsys::P_SOLAR_SYS_STATE as pSolarSysState;
+use uqm_rust::planets::solar_system::SolarSystem;
 mod late_abi;
 mod late_gen;
 mod mycon;
@@ -48,7 +48,7 @@ use uqm_rust::battle::gendef::{
     AQUA_HELIX_DEFINED, BOMB_DEFINED, EGG_CASE0_DEFINED, MYCON_DEFINED, ORZ_DEFINED,
     SUN_DEVICE_DEFINED, TAALO_PROTECTOR_DEFINED, THRADD_DEFINED, UTWIG_DEFINED,
 };
-use uqm_rust::c_bindings::global_state::SOLARSYS_STATE;
+
 use uqm_rust::math::RandomContext;
 use uqm_rust::planets::generate::special::Body;
 use uqm_rust::planets::generate::SystemGenerator;
@@ -56,14 +56,13 @@ use uqm_rust::state::game_state_keys::set_game_state;
 
 use uqm_rust::state::ffi::rust_init_game_state;
 extern "C" {
-    static mut SysGenRNG: *mut RandomContext;
 
     static mut ScreenWidth: i32;
 
 }
 
 struct Harness {
-    state: Box<SOLARSYS_STATE>,
+    state: Box<SolarSystem>,
     star: Box<[CStarDesc; CATALOG_LEN]>,
     previous_catalog: [CStarDesc; CATALOG_LEN],
     previous_star: Option<uqm_rust::engine::StarId>,
@@ -73,13 +72,10 @@ struct Harness {
 
 impl Harness {
     fn new() -> Self {
-        let mut state: Box<SOLARSYS_STATE> = Box::new(unsafe { std::mem::zeroed() });
         unsafe {
             // `set_game_state` is a no-op until the game state exists.
             uqm_rust::engine::World::current().write(rust_init_game_state);
-            SysGenRNG = uqm_rust::math::new_context();
             ScreenWidth = 320;
-            pSolarSysState = &mut *state;
         }
         let previous_catalog = uqm_rust::engine::World::current().read(|world| *world.catalog());
         let previous_star = uqm_rust::engine::World::current().read(|world| world.current_star);
@@ -87,6 +83,10 @@ impl Harness {
         let mut star = Box::new(unsafe { super::starmap_array });
         // SAFETY: a star record contains only integer fields; zero initializes its fixture values.
         star[0] = unsafe { std::mem::zeroed() };
+        let state = uqm_rust::engine::World::current().write(|world| {
+            world.set_catalog(std::borrow::Cow::Owned(*star));
+            Box::new(SolarSystem::new(world, uqm_rust::engine::StarId(0)))
+        });
         Self {
             state,
             star,
@@ -98,21 +98,33 @@ impl Harness {
 
     fn set_star(&mut self, size: u8, color: u8) {
         self.state.sys.sun.data_index = size;
-        self.state.generator_index = self.star_index;
         self.star[0].star_type = (color << 5) | 0b101;
         self.star[0].index = self.star_index;
         uqm_rust::engine::World::current().write(|world| {
             world.set_catalog(std::borrow::Cow::Owned(*self.star));
             world.current_star = Some(uqm_rust::engine::StarId(0));
         });
+        let mut next = uqm_rust::engine::world::generation::SolarSys::new(
+            &uqm_rust::planets::tables::PLANET_ARRAY.0,
+            self.star[0].star_type,
+            self.star[0].index,
+            std::mem::replace(&mut self.state.sys.rng, RandomContext::with_seed(12345)),
+        );
+        next.sun = self.state.sys.sun;
+        next.planets = self.state.sys.planets;
+        next.moons = self.state.sys.moons;
+        next.info = self.state.sys.info;
+        next.frames = std::mem::take(&mut self.state.sys.frames);
+        next.report = std::mem::take(&mut self.state.sys.report);
+        self.state.sys = next;
     }
 
-    fn seed(&self, seed: u32) {
-        unsafe { (*SysGenRNG).reseed(seed) };
+    fn seed(&mut self, seed: u32) {
+        self.state.sys.rng.reseed(seed);
     }
 
     fn rng_position(&self) -> u32 {
-        unsafe { (*SysGenRNG).seed() }
+        self.state.sys.rng.seed()
     }
 
     /// The C `generatePlanets` slot: planet table, drawn count, RNG position.
@@ -149,7 +161,6 @@ impl Harness {
         self.state.sys.moons = unsafe { std::mem::zeroed() };
         self.state.sys.planets = unsafe { std::mem::zeroed() };
         let sun: *mut PlanetDesc = &mut self.state.sys.sun;
-        self.state.sys.planets[planet_i].prev_desc = sun;
         self.state.sys.planets[planet_i].num_planets = case.3;
         self.seed(case.2);
         let _planet: *mut PlanetDesc = &mut self.state.sys.planets[planet_i];
@@ -173,14 +184,9 @@ impl Harness {
         self.state.sys.info.planet_info.scan_seed = scan_seeds(seed);
         let sun: *mut PlanetDesc = &mut self.state.sys.sun;
         let _world: *mut PlanetDesc = match body {
-            Body::Planet(p) => {
-                self.state.sys.planets[usize::from(p)].prev_desc = sun;
-                &mut self.state.sys.planets[usize::from(p)]
-            }
+            Body::Planet(p) => &mut self.state.sys.planets[usize::from(p)],
             Body::Moon { planet, moon } => {
                 let parent: *mut PlanetDesc = &mut self.state.sys.planets[usize::from(planet)];
-                self.state.sys.planets[usize::from(planet)].prev_desc = sun;
-                self.state.sys.moons[usize::from(moon)].prev_desc = parent;
                 &mut self.state.sys.moons[usize::from(moon)]
             }
         };
@@ -190,7 +196,7 @@ impl Harness {
         self.seed(seed);
         let mut node = fresh_node();
         let count = unsafe {
-            crate::invoke_generation(record, |system, host| {
+            crate::invoke_generation(&mut *record, |system, host| {
                 table.generate_energy(system, body, !0, &mut node, host)
             })
         };
@@ -199,7 +205,7 @@ impl Harness {
             self.seed(seed);
             let mut node = fresh_node();
             let ret = unsafe {
-                crate::invoke_generation(record, |system, host| {
+                crate::invoke_generation(&mut *record, |system, host| {
                     table.generate_energy(system, body, which, &mut node, host)
                 })
             };

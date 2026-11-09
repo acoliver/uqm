@@ -1,43 +1,8 @@
-//! The solar-system questions `PrepareSummary` (save.c) asks, answered in Rust
-//! from the live `SOLARSYS_STATE`.
-//!
-//! This is the read side of solarsys.c ported: `playerInSolarSystem`,
-//! `playerInPlanetOrbit`, `playerInInnerSystem`, `worldIsPlanet`,
-//! `worldIsMoon`, `planetIndex`, `moonIndex`, `matchWorld`,
-//! `GetNamedPlanetaryBody` and `GetPlanetOrMoonName`. None of them is called
-//! in C any more from the summary: the answers are computed here from the
-//! state the C game keeps.
-//!
-//! What stays C is the *initialisation* of that state: `pSolarSysState`, the
-//! orbit tables `ExploreSolarSys` fills in, `CurStarDescPtr` and the game
-//! string table. They are borrowed through [`SolarSystem`], which holds one
-//! shared borrow of the state, the star index and a string source. The layout
-//! of `SOLARSYS_STATE` is bindgen's reading of planets.h
-//! (`c_bindings::global_state`), so no field offset is written by hand.
-//!
-//! The reads follow the C code, including its limits:
-//!
-//! * a world is an entry of `PlanetDesc` (its `pPrevDesc` is the sun) or of
-//!   `MoonDesc` (its `pPrevDesc` is a planet); indexes are the element
-//!   positions in those arrays;
-//! * the "inner system" test compares `pBaseDesc` with the start of
-//!   `PlanetDesc`;
-//! * only Sol (planets, Earth's starbase and the moons of Earth, Jupiter,
-//!   Saturn and Neptune) and Sa-Matra's system have named bodies; Spathi's
-//!   planet is `NOTYET` in C and unnamed here;
-//! * an unnamed moon is the flagship's planet name plus `-A`, `-B`, ... as long
-//!   as the suffix fits the 16-byte name.
-//!
-//! Where this differs from the C code on purpose: C does pointer arithmetic on
-//! whatever `pOrbitalDesc` holds; here a pointer that is not an element of
-//! `PlanetDesc` or `MoonDesc`, or whose `pPrevDesc` does not fit the array it
-//! sits in, is a [`SolarError`]. `pBaseDesc` being neither array is the
-//! assertion C has in `playerInInnerSystem`, and panics.
+//! Save-summary reads from the supplied owning solar session.
 
 use super::summary::{utf8_string_copy, SessionSummary, SA_MATRA_STRING};
-use crate::c_bindings::global_state::SOLARSYS_STATE;
 use crate::engine::save::summary as summary_values;
-use crate::engine::world::planet::PlanetDesc;
+use crate::engine::world::generation::{Body, SolarSnapshot};
 use crate::savegame::types::SIS_NAME_SIZE;
 
 /// What the solar-system state and the game strings say about the game.
@@ -97,28 +62,11 @@ pub trait GameStrings {
     fn game_string(&self, index: u16) -> Vec<u8>;
 }
 
-/// A world of the live system, by position in its table.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum World {
-    /// `PlanetDesc[planet]`.
-    Planet { planet: usize },
-    /// `MoonDesc[moon]`, orbiting `PlanetDesc[planet]`.
-    Moon { planet: usize, moon: usize },
-}
-
-/// The position of `world` in `table`, if it is exactly one of its elements.
-/// Only addresses are compared; nothing is dereferenced.
-pub(super) fn position_in(table: &[PlanetDesc], world: *const PlanetDesc) -> Option<usize> {
-    let size = std::mem::size_of::<PlanetDesc>();
-    let offset = (world as usize).wrapping_sub(table.as_ptr() as usize);
-    (offset < std::mem::size_of_val(table) && offset.is_multiple_of(size)).then_some(offset / size)
-}
-
 /// The borrowed solar-system owner of a running game, as `PrepareSummary` and
 /// `GetPlanetOrMoonName` see it.
-pub struct SolarSystem<'a> {
-    /// `pSolarSysState`; `None` when it is NULL (`!playerInSolarSystem ()`).
-    state: Option<&'a SOLARSYS_STATE>,
+pub struct SolarSummary<'a> {
+    /// No visit is supplied while another mode owns the campaign.
+    state: Option<SolarSnapshot>,
     /// `CurStarDescPtr->Index`; `None` when `CurStarDescPtr` is NULL.
     star_index: Option<u8>,
     /// `GLOBAL_SIS (PlanetName)`.
@@ -126,9 +74,9 @@ pub struct SolarSystem<'a> {
     strings: &'a dyn GameStrings,
 }
 
-impl<'a> SolarSystem<'a> {
+impl<'a> SolarSummary<'a> {
     pub fn new(
-        state: Option<&'a SOLARSYS_STATE>,
+        state: Option<SolarSnapshot>,
         star_index: Option<u8>,
         sis_planet_name: [u8; SIS_NAME_SIZE],
         strings: &'a dyn GameStrings,
@@ -141,44 +89,12 @@ impl<'a> SolarSystem<'a> {
         }
     }
 
-    /// `playerInInnerSystem ()` for a flagship that is in a solar system.
-    pub(super) fn in_inner_system(state: &SOLARSYS_STATE) -> bool {
-        let planets = state.PlanetDesc.as_ptr();
-        let moons = state.MoonDesc.as_ptr();
-        assert!(
-            std::ptr::eq(state.pBaseDesc, planets) || std::ptr::eq(state.pBaseDesc, moons),
-            "pBaseDesc is neither PlanetDesc nor MoonDesc"
-        );
-        !std::ptr::eq(state.pBaseDesc, planets)
+    fn in_inner_system(state: &SolarSnapshot) -> bool {
+        state.inner_planet.is_some()
     }
 
-    /// The world `pOrbitalDesc` names, checked against both tables.
-    pub(super) fn orbital_world(state: &SOLARSYS_STATE) -> Result<World, SolarError> {
-        let orbital = state.pOrbitalDesc.cast_const();
-        if orbital.is_null() {
-            return Err(SolarError::OrbitalWorldMissing);
-        }
-        let sun = state.SunDesc.as_ptr();
-        if let Some(planet) = position_in(&state.PlanetDesc, orbital) {
-            // `worldIsPlanet`: the world orbits the sun.
-            if !std::ptr::eq(state.PlanetDesc[planet].prev_desc, sun) {
-                return Err(SolarError::WorldDisagreesWithItsTable);
-            }
-            return Ok(World::Planet { planet });
-        }
-        if let Some(moon) = position_in(&state.MoonDesc, orbital) {
-            // `planetIndex` of a moon is the planet it orbits.
-            let host = state.MoonDesc[moon].prev_desc.cast_const();
-            let planet = position_in(&state.PlanetDesc, host)
-                .ok_or(SolarError::WorldDisagreesWithItsTable)?;
-            return Ok(World::Moon { planet, moon });
-        }
-        Err(SolarError::WorldNotInSystem)
-    }
-
-    /// `playerInPlanetOrbit ()`.
     fn in_orbit(&self) -> bool {
-        self.state.is_some_and(|state| state.InOrbit != 0)
+        self.state.is_some_and(|state| state.in_orbit)
     }
 
     /// `GetNamedPlanetaryBody ()`: the text of the body's own name, or `None`
@@ -187,14 +103,14 @@ impl<'a> SolarSystem<'a> {
         let (Some(star), Some(state)) = (self.star_index, self.state) else {
             return Ok(None);
         };
-        if !Self::in_inner_system(state) {
+        if !Self::in_inner_system(&state) {
             return Ok(None);
         }
-        let world = Self::orbital_world(state)?;
+        let world = state.selected.ok_or(SolarError::OrbitalWorldMissing)?;
         let string = |index: u16| Some(self.strings.game_string(index));
         let named = match (star, world) {
-            (SOL_DEFINED, World::Planet { planet }) => string(PLANET_NUMBER_BASE + planet as u16),
-            (SOL_DEFINED, World::Moon { planet, moon }) => match (planet, moon) {
+            (SOL_DEFINED, Body::Planet(planet)) => string(PLANET_NUMBER_BASE + planet as u16),
+            (SOL_DEFINED, Body::Moon { planet, moon }) => match (planet, moon) {
                 (2, 0) => string(STARBASE_STRING_BASE),
                 (2, 1) => string(PLANET_NUMBER_BASE + 9),
                 (4, 0..=3) => string(PLANET_NUMBER_BASE + 10 + moon as u16),
@@ -203,9 +119,7 @@ impl<'a> SolarSystem<'a> {
                 _ => None,
             },
             // `matchWorld (.., 4, 0)`: the first moon of the fifth planet.
-            (SAMATRA_DEFINED, World::Moon { planet: 4, moon: 0 }) => {
-                string(PLANET_NUMBER_BASE + 32)
-            }
+            (SAMATRA_DEFINED, Body::Moon { planet: 4, moon: 0 }) => string(PLANET_NUMBER_BASE + 32),
             // Spathi's first planet is `#ifdef NOTYET` in C and has no name.
             _ => None,
         };
@@ -213,7 +127,7 @@ impl<'a> SolarSystem<'a> {
     }
 }
 
-impl SolarSystemOwner for SolarSystem<'_> {
+impl SolarSystemOwner for SolarSummary<'_> {
     /// `GetPlanetOrMoonName (buf, SIS_NAME_SIZE)`.
     fn planet_or_moon_name(&self) -> Result<[u8; SIS_NAME_SIZE], SolarError> {
         if let Some(named) = self.named_planetary_body()? {
@@ -224,10 +138,10 @@ impl SolarSystemOwner for SolarSystem<'_> {
         let Some(state) = self.state else {
             return Ok(name);
         };
-        if !Self::in_inner_system(state) {
+        if !Self::in_inner_system(&state) {
             return Ok(name);
         }
-        let World::Moon { moon, .. } = Self::orbital_world(state)? else {
+        let Some(Body::Moon { moon, .. }) = state.selected else {
             return Ok(name);
         };
         // Orbiting an unnamed moon: "-A", "-B", ... when it fits.

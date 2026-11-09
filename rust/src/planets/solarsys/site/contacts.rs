@@ -64,8 +64,9 @@ impl HomeContactSite for Site<'_, '_, '_> {
     fn load_ip_groups(&mut self) {
         Npcs::load_ip_groups(self);
     }
-    fn load_ruins_scene(&mut self, _system: &mut SolarSys<'_>, artifact_taken: bool) {
+    fn load_ruins_scene(&mut self, system: &mut SolarSys<'_>, artifact_taken: bool) {
         self.load_scene(
+            system,
             c"graphics.ruins",
             self.contact().2,
             u16::from(artifact_taken),
@@ -81,8 +82,8 @@ impl orz::OrzSite for Site<'_, '_, '_> {
         let cx = self.game.borrow();
         crate::ui::sis::repair_sis_border(cx.kernel, cx.screen_dimensions());
     }
-    fn load_taalo_device_scene(&mut self, _system: &mut SolarSys<'_>) {
-        self.load_scene(c"graphics.taalodevice", c"text.taalodevice", 0);
+    fn load_taalo_device_scene(&mut self, system: &mut SolarSys<'_>) {
+        self.load_scene(system, c"graphics.taalodevice", c"text.taalodevice", 0);
     }
 }
 
@@ -91,8 +92,8 @@ impl thrad::ThraddashSite for Site<'_, '_, '_> {
         let cx = self.game.borrow();
         crate::ui::sis::repair_sis_border(cx.kernel, cx.screen_dimensions());
     }
-    fn load_aqua_scene(&mut self, _system: &mut SolarSys<'_>) {
-        self.load_scene(c"graphics.aquahelix", c"text.aquahelix", 0);
+    fn load_aqua_scene(&mut self, system: &mut SolarSys<'_>) {
+        self.load_scene(system, c"graphics.aquahelix", c"text.aquahelix", 0);
     }
 }
 
@@ -137,10 +138,8 @@ impl UrquanEncounterSite for Site<'_, '_, '_> {
         })
     }
     fn star_point(&self) -> (i16, i16) {
-        self.game.borrow_mut().with_legacy(|| {
-            // SAFETY: `CurStarDescPtr` is the system being visited.
-            unsafe { current_star_point() }
-        })
+        let point = self.game.borrow().world.catalog()[self.star.0].star_pt;
+        (point.x, point.y)
     }
     fn fuel_on_board(&self) -> u32 {
         self.game.borrow().world.data.flagship.fuel_on_board
@@ -185,11 +184,11 @@ impl utw::UtwigSite for Site<'_, '_, '_> {
         let cx = self.game.borrow();
         crate::ui::sis::repair_sis_border(cx.kernel, cx.screen_dimensions());
     }
-    fn load_scene(&mut self, _system: &mut SolarSys<'_>, bomb: bool) {
+    fn load_scene(&mut self, system: &mut SolarSys<'_>, bomb: bool) {
         if bomb {
-            Site::load_scene(self, c"graphics.utwigbomb", c"text.utwigbomb", 0);
+            Site::load_scene(self, system, c"graphics.utwigbomb", c"text.utwigbomb", 0);
         } else {
-            Site::load_scene(self, c"graphics.ruins", c"text.ruins", 0);
+            Site::load_scene(self, system, c"graphics.ruins", c"text.ruins", 0);
         }
     }
 }
@@ -205,12 +204,12 @@ impl myc::MyconSite for Site<'_, '_, '_> {
         let cx = self.game.borrow();
         crate::ui::sis::repair_sis_border(cx.kernel, cx.screen_dimensions());
     }
-    fn load_scene(&mut self, _system: &mut SolarSys<'_>, scene: myc::Scene) {
+    fn load_scene(&mut self, system: &mut SolarSys<'_>, scene: myc::Scene) {
         let (graphics, text) = match scene {
             myc::Scene::SunDevice => (c"graphics.sundevice", c"text.sundevice"),
             myc::Scene::EggCase => (c"graphics.eggcase", c"text.eggcase"),
         };
-        Site::load_scene(self, graphics, text, 0);
+        Site::load_scene(self, system, graphics, text, 0);
     }
 }
 
@@ -222,17 +221,19 @@ impl vux::VuxSite for Site<'_, '_, '_> {
         let cx = self.game.borrow();
         crate::ui::sis::repair_sis_border(cx.kernel, cx.screen_dimensions());
     }
-    fn load_scene(&mut self, _system: &mut SolarSys<'_>, scene: vux::Scene) {
+    fn load_scene(&mut self, system: &mut SolarSys<'_>, scene: vux::Scene) {
         match scene {
-            vux::Scene::Maidens => Site::load_scene(self, c"graphics.maidens", c"text.maidens", 0),
+            vux::Scene::Maidens => {
+                Site::load_scene(self, system, c"graphics.maidens", c"text.maidens", 0)
+            }
             vux::Scene::Beast => {
                 self.report_resources.load();
-                self.game.borrow_mut().with_legacy(|| {
-                    // SAFETY: the live system is exclusive for the resource load.
-                    unsafe { c_api::load_beast_scene(self.record.as_ptr()) };
-                })
+                system.frames[1] = None;
+                self.load_report(system, c"text.vuxbeast", 0);
             }
-            vux::Scene::Ruins => Site::load_scene(self, c"graphics.ruins", c"text.ruins", 0),
+            vux::Scene::Ruins => {
+                Site::load_scene(self, system, c"graphics.ruins", c"text.ruins", 0)
+            }
         }
     }
 }
@@ -345,8 +346,8 @@ impl yehat::YehatSite for Site<'_, '_, '_> {
     fn load_ip_groups(&mut self) {
         Npcs::load_ip_groups(self);
     }
-    fn load_ruins_scene(&mut self, _system: &mut SolarSys<'_>) {
-        self.load_scene(c"graphics.ruins", c"text.ruins", 0);
+    fn load_ruins_scene(&mut self, system: &mut SolarSys<'_>) {
+        self.load_scene(system, c"graphics.ruins", c"text.ruins", 0);
     }
 }
 
@@ -398,21 +399,13 @@ impl ChmmrSite for Site<'_, '_, '_> {
     fn load_ip_groups(&mut self) {
         Npcs::load_ip_groups(self);
     }
-    fn visit_starbase(&mut self, _system: &mut SolarSys<'_>) {
-        self.report_resources.load();
-        self.game.borrow_mut().with_legacy(|| {
-            // SAFETY: the live solar system state on the game thread.
-            unsafe { load_starbase_report(self.record.as_ptr()) };
-            let presented = self
-                .discovery_report()
-                .present(ReportDisposition::Once)
-                .unwrap_or_else(|error| {
-                    panic!(
-                        "the starbase report is presented through the linked C archive: {error:?}"
-                    )
-                });
-            assert!(presented, "the starbase report table was loaded");
-            self.report_resources.clear();
-        })
+    fn visit_starbase(&mut self, system: &mut SolarSys<'_>) {
+        self.load_report(system, c"text.chmmrbase", 0);
+        let presented = self
+            .discovery_report(&mut system.report)
+            .present(ReportDisposition::Once)
+            .unwrap_or_else(|error| panic!("the starbase report is linked: {error:?}"));
+        assert!(presented, "the starbase report table was loaded");
+        self.report_resources.clear();
     }
 }

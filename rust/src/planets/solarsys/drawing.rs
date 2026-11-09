@@ -2,6 +2,7 @@ use super::*;
 use crate::engine::world::planet::PlanetDesc;
 use crate::engine::{Kernel as KernelOwner, World as WorldOwner};
 use crate::planets::generate::orbit_tables::NUMBER_OF_PLANET_TYPES;
+use crate::planets::solar_system::{SolarSystem, SystemLocation};
 
 use crate::graphics::context_abi::SetContext;
 
@@ -37,10 +38,6 @@ const PLANETS_SIZE_MASK: u32 = 0x03;
 const FACING_SHIFT: u32 = 4;
 
 #[inline]
-pub(super) unsafe fn system() -> *mut c::SOLARSYS_STATE {
-    crate::c_bindings::solar_system::current()
-}
-
 #[inline]
 pub(super) unsafe fn orbit_rect(
     rect: *mut c::RECT,
@@ -77,7 +74,14 @@ pub(super) unsafe fn planet_orbit_rect(
     orbit_rect(rect, dx, dy, i32::from((*planet).radius), xn, yn, den);
 }
 
-pub(super) unsafe fn validate_orbit(planet: *mut PlanetDesc, xn: i32, yn: i32, den: i32) {
+pub(super) unsafe fn validate_orbit(
+    planet: *mut PlanetDesc,
+    moon: bool,
+    origin: c::POINT,
+    xn: i32,
+    yn: i32,
+    den: i32,
+) {
     if xn <= display_factor() {
         let mut rect: c::RECT = std::mem::zeroed();
         planet_orbit_rect(&mut rect, planet, xn, yn, den);
@@ -97,7 +101,7 @@ pub(super) unsafe fn validate_orbit(planet: *mut PlanetDesc, xn: i32, yn: i32, d
         let mut size = u32::from(typ & PLANETS_SIZE_MASK as u8);
         if xn > display_factor() {
             size += 3;
-        } else if (*planet).prev_desc != (*system()).SunDesc.as_mut_ptr() {
+        } else if moon {
             size += 2;
         } else if den <= (MAX_ZOOM_RADIUS >> 2) {
             size += 1;
@@ -105,11 +109,6 @@ pub(super) unsafe fn validate_orbit(planet: *mut PlanetDesc, xn: i32, yn: i32, d
                 size += 1;
             }
         }
-        let origin = if (*planet).prev_desc == (*system()).SunDesc.as_mut_ptr() {
-            (*planet).location
-        } else {
-            (*(*planet).prev_desc).location
-        };
         let angle = crate::math::arctan(origin.x, origin.y);
         (*planet).image.frame = set_frame_index(
             ORBITAL_FRAME,
@@ -171,38 +170,39 @@ pub(super) unsafe fn find_radius(mut from_radius: i32, ship_loc: c::POINT) -> i3
     from_radius
 }
 
-pub(super) unsafe fn validate_orbits() {
-    let s = system();
-    let count = (*s).SunDesc[0].num_planets;
-    for i in 0..usize::from(count) {
+pub(super) unsafe fn validate_orbits(solar: &mut SolarSystem) {
+    let radius = i32::from(solar.sys.sun.radius);
+    for planet in &mut solar.sys.planets[..usize::from(solar.sys.sun.num_planets)] {
         validate_orbit(
-            (*s).PlanetDesc.as_mut_ptr().add(i),
+            planet,
+            false,
+            planet.location,
             display_factor(),
             display_factor() / 4,
-            i32::from((*s).SunDesc[0].radius),
+            radius,
         );
     }
 }
 
-pub(super) unsafe fn draw_inner_system(cx: &mut Cx<'_>) {
+pub(super) unsafe fn draw_inner_system(cx: &mut Cx<'_>, solar: &mut SolarSystem) {
+    let SystemLocation::Inner(planet) = solar.location() else {
+        panic!("drawing inner system outside it");
+    };
     cx.with_legacy(|| {
-        let s = system();
-        let planet = (*s).pOrbitalDesc;
-        validate_inner_orbits();
-        draw_system((*planet).radius, true);
+        validate_inner_orbits(solar);
+        draw_system(solar, solar.sys.planets[usize::from(planet)].radius, true);
     });
     let name = std::ffi::CStr::from_bytes_until_nul(&cx.world.data.flagship.planet_name)
         .unwrap_or_else(|error| panic!("invalid inner-system name: {error}"));
     crate::ui::sis::draw_title(cx.kernel, cx.screen_dimensions().0, name);
 }
 
-pub(super) unsafe fn draw_outer_system(cx: &mut Cx<'_>) {
+pub(super) unsafe fn draw_outer_system(cx: &mut Cx<'_>, solar: &mut SolarSystem) {
     cx.with_legacy(|| {
-        validate_orbits();
-        let s = system();
-        draw_system((*s).SunDesc[0].radius, false);
+        validate_orbits(solar);
+        draw_system(solar, solar.sys.sun.radius, false);
     });
-    let point = (*cx.world.star_pointer()).star_pt;
+    let point = cx.world.catalog()[solar.star().0].star_pt;
     crate::ui::sis::draw_hyper_coords(cx.kernel, cx.screen_dimensions().0, point);
 }
 
@@ -212,9 +212,9 @@ pub(super) unsafe fn draw_system_transition(cx: &mut Cx<'_>, solar: &mut SolarSy
         BatchGraphics();
     });
     if inner {
-        draw_inner_system(cx);
+        draw_inner_system(cx, solar);
     } else {
-        draw_outer_system(cx);
+        draw_outer_system(cx, solar);
     }
     redraw_queue(cx, false);
     cx.with_legacy(|| {
@@ -224,7 +224,6 @@ pub(super) unsafe fn draw_system_transition(cx: &mut Cx<'_>, solar: &mut SolarSy
 }
 
 pub(super) unsafe fn draw_system(solar: &mut SolarSystem, radius: c::SIZE, inner: bool) {
-    let s = system();
     if SOLAR_SYS_FRAME.is_null() {
         let mut clip: c::RECT = std::mem::zeroed();
         c::GetContextClipRect(&mut clip);
@@ -241,54 +240,51 @@ pub(super) unsafe fn draw_system(solar: &mut SolarSystem, radius: c::SIZE, inner
         frame: STARS_FRAME,
     };
     draw_stamp(&mut stamp);
-    let base = (*s).pBaseDesc;
-    if inner {
+    let inner_planet = match solar.location() {
+        SystemLocation::Outer => None,
+        SystemLocation::Inner(planet) => Some(planet),
+    };
+    if let Some(index) = inner_planet {
+        let planet = &mut solar.sys.planets[usize::from(index)];
         draw_orbit(
             &context,
-            (*s).pOrbitalDesc,
+            planet,
             display_factor() * 4,
             display_factor(),
             i32::from(radius),
         );
-    }
-    for i in 0..usize::from((*(*base).prev_desc).num_planets) {
-        let current = base.add(i);
-        if inner {
-            draw_orbit(&context, current, 2, 1, 2);
-        } else {
+        for moon in &mut solar.sys.moons[..usize::from(planet.num_planets)] {
+            draw_orbit(&context, moon, 2, 1, 2);
+        }
+        draw_inner_planets(solar, index);
+    } else {
+        for planet in &mut solar.sys.planets[..usize::from(solar.sys.sun.num_planets)] {
             draw_orbit(
                 &context,
-                current,
+                planet,
                 display_factor(),
                 display_factor() / 4,
                 i32::from(radius),
             );
         }
-    }
-    if inner {
-        draw_inner_planets((*s).pOrbitalDesc);
-    } else {
-        calc_sun_size((*s).SunDesc.as_mut_ptr(), radius);
-        let mut index = (*s).FirstPlanetIndex;
-        loop {
-            let current = (*s)
-                .PlanetDesc
-                .as_mut_ptr()
-                .offset(i32::from(index) as isize);
-            if current == (*s).SunDesc.as_mut_ptr() {
+        calc_sun_size(&mut solar.sys.sun, radius);
+        for index in solar.draw_order[..=usize::from(solar.sys.sun.num_planets)]
+            .iter()
+            .copied()
+        {
+            let current = if let Some(index) = index {
+                let planet = &mut solar.sys.planets[usize::from(index)];
+                set_planet_color_map(planet);
+                planet
+            } else {
                 let star_color =
                     ((*(**WorldOwner::current()).star_pointer()).star_type & 0xe0) >> 5;
                 SetColorMap(GetColorMapAddress(
-                    (set_color_map_index(SUN_CMAP, u32::from(star_color))).cast(),
+                    set_color_map_index(SUN_CMAP, u32::from(star_color)).cast(),
                 ));
-            } else {
-                set_planet_color_map(current);
-            }
-            draw_stamp(&mut (*current).image);
-            if index == (*s).LastPlanetIndex {
-                break;
-            }
-            index = (*current).next_index as i16;
+                &mut solar.sys.sun
+            };
+            draw_stamp(&mut current.image);
         }
     }
     SetContext(old);
@@ -296,7 +292,7 @@ pub(super) unsafe fn draw_system(solar: &mut SolarSystem, radius: c::SIZE, inner
     draw_stamp(&mut stamp);
 }
 
-pub(super) unsafe fn create_star_background() -> *mut c::FRAME_DESC {
+pub(super) unsafe fn create_star_background(solar: &mut SolarSystem) -> *mut c::FRAME_DESC {
     let mut clip: c::RECT = std::mem::zeroed();
     let old = SetContext(KernelOwner::current().read(|owner| owner.space_context));
     c::GetContextClipRect(&mut clip);
@@ -312,7 +308,7 @@ pub(super) unsafe fn create_star_background() -> *mut c::FRAME_DESC {
         a: 255,
     });
     ClearDrawable();
-    (*SysGenRNG).reseed(GetRandomSeedForStar(
+    solar.sys.rng.reseed(GetRandomSeedForStar(
         (**WorldOwner::current()).star_pointer().cast(),
     ));
     let (width, height) = sis_dimensions();
@@ -323,7 +319,7 @@ pub(super) unsafe fn create_star_background() -> *mut c::FRAME_DESC {
     for pieces in [5, 30] {
         for _ in 0..8 {
             for _ in 0..pieces {
-                let random = (*SysGenRNG).next_random();
+                let random = solar.sys.rng.next_random();
                 stamp.origin.x = (random as u16 % width as u16) as _;
                 stamp.origin.y = ((random >> 16) as u16 % height as u16) as _;
                 draw_stamp(&mut stamp);
@@ -335,36 +331,25 @@ pub(super) unsafe fn create_star_background() -> *mut c::FRAME_DESC {
     frame
 }
 
-pub(super) unsafe fn sort_planet_positions() {
-    let s = system();
-    let count = usize::from((*s).SunDesc[0].num_planets);
-    let mut order = [0_i16; 17];
-    for (i, slot) in order.iter_mut().enumerate().take(count + 1) {
-        *slot = i as i16 - 1;
+pub(super) fn sort_planet_positions(solar: &mut SolarSystem) {
+    let count = usize::from(solar.sys.sun.num_planets);
+    let mut order = [None; 17];
+    for (index, slot) in order[1..=count].iter_mut().enumerate() {
+        *slot = Some(index as u8);
     }
+    let y = |index: Option<u8>| {
+        index.map_or(solar.sys.sun.image.origin.y, |index| {
+            solar.sys.planets[usize::from(index)].image.origin.y
+        })
+    };
     for i in 0..=count {
         for j in (i + 1..=count).rev() {
-            let a = order[i];
-            let b = order[j];
-            if (*(*s).PlanetDesc.as_mut_ptr().offset(isize::from(a)))
-                .image
-                .origin
-                .y
-                > (*(*s).PlanetDesc.as_mut_ptr().offset(isize::from(b)))
-                    .image
-                    .origin
-                    .y
-            {
+            if y(order[i]) > y(order[j]) {
                 order.swap(i, j);
             }
         }
     }
-    (*s).FirstPlanetIndex = order[0] as _;
-    (*s).LastPlanetIndex = order[count] as _;
-    for i in 0..=count {
-        let next = if i < count { order[i + 1] } else { 0 };
-        (*(*s).PlanetDesc.as_mut_ptr().offset(isize::from(order[i]))).next_index = next as _;
-    }
+    solar.draw_order = order;
 }
 
 pub(super) fn point_within_rect(rect: c::RECT, point: c::POINT) -> bool {
@@ -404,7 +389,8 @@ unsafe fn calc_sun_size(sun: *mut PlanetDesc, radius: c::SIZE) {
         crate::graphics::pixmap_abi::SetRelFrameIndex(SUN_FRAME.cast(), index).cast();
 }
 
-unsafe fn draw_inner_planets(planet: *mut PlanetDesc) {
+unsafe fn draw_inner_planets(solar: &mut SolarSystem, index: u8) {
+    let planet = &mut solar.sys.planets[usize::from(index)];
     set_planet_color_map(planet);
     let (width, height) = sis_dimensions();
     let mut stamp = c::STAMP {
@@ -412,20 +398,18 @@ unsafe fn draw_inner_planets(planet: *mut PlanetDesc) {
             x: (width >> 1) as i16,
             y: (height >> 1) as i16,
         },
-        frame: (*planet).image.frame,
+        frame: planet.image.frame,
     };
-    let index = usize::from((*planet).data_index & !WORLD_TYPE_SPECIAL);
-    if index < NUMBER_OF_PLANET_TYPES && (*planet).data_index & WORLD_TYPE_SPECIAL != 0 {
+    let index = usize::from(planet.data_index & !WORLD_TYPE_SPECIAL);
+    if index < NUMBER_OF_PLANET_TYPES && planet.data_index & WORLD_TYPE_SPECIAL != 0 {
         stamp.frame = set_frame_index(SpaceJunkFrame, 17);
     }
     draw_stamp(&mut stamp);
-    let system = system();
-    for i in 0..usize::from((*planet).num_planets) {
-        let moon = (*system).MoonDesc.as_mut_ptr().add(i);
-        if (*moon).data_index & WORLD_TYPE_SPECIAL == 0 {
+    for moon in &mut solar.sys.moons[..usize::from(planet.num_planets)] {
+        if moon.data_index & WORLD_TYPE_SPECIAL == 0 {
             set_planet_color_map(moon);
         }
-        draw_stamp(&mut (*moon).image);
+        draw_stamp(&mut moon.image);
     }
 }
 
@@ -438,18 +422,22 @@ pub unsafe extern "C" fn DrawStarBackGround() {
     draw_stamp(&mut stamp);
 }
 
-pub(super) unsafe fn validate_inner_orbits() {
-    assert!(playerInInnerSystem());
-    let s = system();
-    let planet = (*s).pOrbitalDesc;
+pub(super) unsafe fn validate_inner_orbits(solar: &mut SolarSystem) {
+    let SystemLocation::Inner(index) = solar.location() else {
+        panic!("validating inner system outside it");
+    };
+    let planet = &mut solar.sys.planets[usize::from(index)];
+    let origin = planet.location;
     validate_orbit(
         planet,
+        false,
+        origin,
         display_factor() * 4,
         display_factor(),
-        i32::from((*planet).radius),
+        i32::from(planet.radius),
     );
-    for i in 0..usize::from((*planet).num_planets) {
-        validate_orbit((*s).MoonDesc.as_mut_ptr().add(i), 2, 1, 2);
+    for moon in &mut solar.sys.moons[..usize::from(planet.num_planets)] {
+        validate_orbit(moon, true, origin, 2, 1, 2);
     }
 }
 

@@ -23,6 +23,8 @@ impl From<&PlanetDesc> for SolarBodySnapshot {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SolarSnapshot {
     pub star: StarId,
+    pub generator_index: u8,
+    pub retrieval_masks: [u32; 3],
     pub screen: (i32, i32),
     pub in_ip_flight: bool,
     pub in_orbit: bool,

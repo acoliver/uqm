@@ -12,10 +12,9 @@
 //!   3+2+3+2+1+1+1+1+1+1+1 bits before it), numbered from the low bit of each
 //!   byte.
 //!
-//! The solar-system state is the real `SOLARSYS_STATE` layout wired as
-//! `ExploreSolarSys` wires it (see `solar_tests`).
+//! Fixtures use the production owning session and its copied save input.
 
-use crate::engine::world::planet::PlanetDesc;
+use crate::engine::world::generation::Body;
 use crate::engine::World;
 use std::ops::{Deref, DerefMut};
 
@@ -29,11 +28,13 @@ use crate::state::ffi::{replace_game_state, rust_init_game_state, snapshot_game_
 
 unsafe fn save_solar_location(
     world: &mut World,
-    state: &crate::c_bindings::global_state::SOLARSYS_STATE,
+    state: &System,
     star_index: usize,
 ) -> Result<(), LocationError> {
     // SAFETY: each fixture retains its frame through this synchronous read.
-    let location = unsafe { prepare_solar_location(&world.data.game, state, star_index) }?;
+    let mut snapshot = state.snapshot((320, 240));
+    snapshot.star = crate::engine::StarId(star_index);
+    let location = unsafe { prepare_solar_location(&world.data.game, &snapshot) }?;
     crate::engine::save::location::apply_solar_location(world, location)
 }
 
@@ -165,15 +166,15 @@ fn words(values: [u32; 3]) -> Vec<u8> {
 /// `planet`, as `ExploreSolarSys` leaves it after `FillOrbits`.
 fn three_planet_system(planet: usize) -> System {
     let mut system = System::inner(planet);
-    system.SunDesc[0].num_planets = 3;
+    system.sys.sun.num_planets = 3;
     for (world, moons) in [1u8, 2, 0].into_iter().enumerate() {
-        system.PlanetDesc[world].num_planets = moons;
+        system.sys.planets[world].num_planets = moons;
     }
     system
 }
 
 fn with_masks(mut system: System, masks: [u32; 3]) -> System {
-    system.SysInfo.planet_info.scan_retrieve_mask = masks;
+    system.sys.info.planet_info.scan_retrieve_mask = masks;
     system
 }
 
@@ -235,7 +236,7 @@ fn an_inner_system_records_one_based_planet_and_the_suns_location() {
         let mut game = game(Some(&mut ship));
         let before = copy_of(&game);
         let mut system = System::inner(planet);
-        system.SunDesc[0].location = POINT { x: 11, y: -22 };
+        system.sys.sun.location = POINT { x: 11, y: -22 };
 
         // SAFETY: the frame is a live `FRAME_DESC`.
         unsafe { save_solar_location(&mut game.world, &system, 0) }.unwrap();
@@ -257,7 +258,7 @@ fn the_inner_system_of_a_moons_planet_names_that_planet() {
     // Not in orbit but heading for a moon: `planetIndex` of a moon is the
     // planet it orbits.
     let mut system = System::inner(6);
-    system.pOrbitalDesc = &mut system.MoonDesc[2];
+    system.select_body(Body::Moon { planet: 6, moon: 2 });
     let mut game = game(None);
     // SAFETY: the frame is NULL.
     unsafe { save_solar_location(&mut game.world, &system, 0) }.unwrap();
@@ -265,43 +266,30 @@ fn the_inner_system_of_a_moons_planet_names_that_planet() {
 }
 
 #[test]
-fn an_inner_system_without_an_orbital_world_is_refused_and_writes_nothing() {
-    let mut system = System::inner(3);
-    system.pOrbitalDesc = std::ptr::null_mut();
+fn a_missing_selected_body_is_refused_before_the_save_writes_anything() {
+    let system = System::orbiting_planet(3);
+    let mut snapshot = system.snapshot((320, 240));
+    snapshot.selected = None;
     let mut game = game(None);
     let before = copy_of(&game);
-    // SAFETY: the frame is NULL.
-    let result = unsafe { save_solar_location(&mut game.world, &system, 0) };
     assert_eq!(
-        result,
-        Err(LocationError::Solar(SolarError::OrbitalWorldMissing))
+        unsafe { prepare_solar_location(&game.world.data.game, &snapshot) }.err(),
+        Some(LocationError::Solar(SolarError::OrbitalWorldMissing))
     );
     unchanged_apart_from(&game, &before, &[]);
 }
 
 #[test]
-fn a_foreign_or_misaligned_orbital_world_is_refused_and_writes_nothing() {
-    // SAFETY: all-zero is a valid `PLANET_DESC`.
-    let mut foreign: PlanetDesc = unsafe { std::mem::zeroed() };
-    let mut cases: Vec<System> = Vec::new();
-    let mut outside = System::inner(1);
-    outside.pOrbitalDesc = &mut foreign;
-    cases.push(outside);
-    let mut misaligned = System::inner(1);
-    misaligned.pOrbitalDesc = (misaligned.PlanetDesc.as_ptr() as usize + 1) as *mut PlanetDesc;
-    cases.push(misaligned);
-
-    for system in &cases {
-        let mut game = game(None);
-        let before = copy_of(&game);
-        // SAFETY: the frame is NULL.
-        let result = unsafe { save_solar_location(&mut game.world, system, 0) };
-        assert_eq!(
-            result,
-            Err(LocationError::Solar(SolarError::WorldNotInSystem))
-        );
-        unchanged_apart_from(&game, &before, &[]);
-    }
+fn a_body_from_another_inner_system_is_refused_without_writing_game_state() {
+    let mut system = System::inner(1);
+    let game = game(None);
+    let before = copy_of(&game);
+    assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(
+        || system.enter_orbit(Body::Planet(2))
+    ))
+    .is_err());
+    unchanged_apart_from(&game, &before, &[]);
+    assert_eq!(system.selected_body(), Some(Body::Planet(1)));
 }
 
 // ---------------------------------------------------------------------------
@@ -317,7 +305,7 @@ fn orbiting_a_planet_stores_one_and_nothing_else() {
         fresh_starinfo(&mut game.world, 4);
         let before = copy_of(&game);
         let mut system = System::orbiting_planet(2);
-        system.SunDesc[0].location = POINT { x: 5, y: 5 };
+        system.sys.sun.location = POINT { x: 5, y: 5 };
 
         // SAFETY: the frame is a live `FRAME_DESC`.
         { save_solar_location(&mut game.world, &system, 1) }.unwrap();
@@ -360,7 +348,8 @@ fn orbit_before_stage_one_is_refused_and_persists_nothing() {
         set_planetary_change(&mut game.world);
         let before = copy_of(&game);
         let mut system = with_masks(three_planet_system(1), [1, 2, 3]);
-        system.InOrbit = 1;
+        let selected = system.selected_body().unwrap();
+        system.enter_orbit(selected);
 
         // SAFETY: the frame is NULL.
         let result = { save_solar_location(&mut game.world, &system, 1) };
@@ -381,8 +370,7 @@ fn a_planetary_change_writes_the_worlds_scan_record_and_then_clears_the_flag() {
         set_planetary_change(&mut game.world);
         // Planet 1 has 2 moons; orbiting its moon 1 is scan record 2 after its own.
         let mut system = with_masks(three_planet_system(1), [0x11, 0x2222, 0x333333]);
-        system.pOrbitalDesc = &mut system.MoonDesc[1];
-        system.InOrbit = 1;
+        system.enter_orbit(Body::Moon { planet: 1, moon: 1 });
 
         // SAFETY: the frame is NULL.
         { save_solar_location(&mut game.world, &system, 3) }.unwrap();
@@ -415,7 +403,8 @@ fn the_planet_itself_is_the_first_record_of_its_planet() {
         fresh_starinfo(&mut game.world, 2);
         set_planetary_change(&mut game.world);
         let mut system = with_masks(three_planet_system(2), [7, 8, 9]);
-        system.InOrbit = 1;
+        let selected = system.selected_body().unwrap();
+        system.enter_orbit(selected);
 
         // SAFETY: the frame is NULL.
         { save_solar_location(&mut game.world, &system, 1) }.unwrap();
@@ -440,14 +429,16 @@ fn a_second_world_of_the_same_star_reuses_the_star_record() {
 
         set_planetary_change(&mut game.world);
         let mut first = with_masks(three_planet_system(0), [1, 2, 3]);
-        first.InOrbit = 1;
+        let selected = first.selected_body().unwrap();
+        first.enter_orbit(selected);
         // SAFETY: the frame is NULL.
         { save_solar_location(&mut game.world, &first, 0) }.unwrap();
         let after_first = starinfo(&game.world);
 
         set_planetary_change(&mut game.world);
         let mut second = with_masks(three_planet_system(1), [4, 5, 6]);
-        second.InOrbit = 1;
+        let selected = second.selected_body().unwrap();
+        second.enter_orbit(selected);
         // SAFETY: the frame is NULL.
         { save_solar_location(&mut game.world, &second, 0) }.unwrap();
         let after_second = starinfo(&game.world);
@@ -467,7 +458,8 @@ fn without_a_planetary_change_the_state_files_are_left_alone() {
         let mut game = game_in_system(None, 2);
         fresh_starinfo(&mut game.world, 4);
         let mut system = with_masks(three_planet_system(1), [9, 9, 9]);
-        system.InOrbit = 1;
+        let selected = system.selected_body().unwrap();
+        system.enter_orbit(selected);
 
         // SAFETY: the frame is NULL.
         { save_solar_location(&mut game.world, &system, 2) }.unwrap();
@@ -488,8 +480,9 @@ fn a_refused_scan_record_leaves_the_flag_the_record_and_the_location_alone() {
         let before = copy_of(&game);
         // Planet 2 has no moons, so a moon of it has no record.
         let mut system = with_masks(three_planet_system(2), [1, 1, 1]);
-        system.pOrbitalDesc = &mut system.MoonDesc[0];
-        system.InOrbit = 1;
+        system.sys.planets[2].num_planets = 1;
+        system.enter_orbit(Body::Moon { planet: 2, moon: 0 });
+        system.sys.planets[2].num_planets = 0;
 
         // SAFETY: the frame is NULL.
         let result = { save_solar_location(&mut game.world, &system, 2) };
@@ -512,8 +505,9 @@ fn a_system_with_more_planets_than_the_table_holds_is_refused() {
         fresh_starinfo(&mut game.world, 4);
         set_planetary_change(&mut game.world);
         let mut system = three_planet_system(1);
-        system.SunDesc[0].num_planets = 17;
-        system.InOrbit = 1;
+        system.sys.sun.num_planets = 17;
+        let selected = system.selected_body().unwrap();
+        system.enter_orbit(selected);
 
         // SAFETY: the frame is NULL.
         let result = { save_solar_location(&mut game.world, &system, 0) };
@@ -528,28 +522,19 @@ fn a_system_with_more_planets_than_the_table_holds_is_refused() {
 }
 
 #[test]
-fn an_orbit_whose_tables_disagree_about_the_planet_is_refused() {
-    // SAFETY: the test retains each frame and solar table for the synchronous read.
-    unsafe {
-        let mut game = game_in_system(None, 2);
-        fresh_starinfo(&mut game.world, 4);
-        set_planetary_change(&mut game.world);
-        let before = copy_of(&game);
-        let mut system = three_planet_system(1);
-        // The inner system belongs to planet 1 but the orbited world is planet 2.
-        system.pOrbitalDesc = &mut system.PlanetDesc[2];
-        system.InOrbit = 1;
-
-        // SAFETY: the frame is NULL.
-        let result = { save_solar_location(&mut game.world, &system, 0) };
-
-        assert_eq!(
-            result,
-            Err(LocationError::Solar(SolarError::WorldDisagreesWithItsTable))
-        );
-        assert!(planetary_change(&game.world));
-        unchanged_apart_from(&game, &before, &[]);
-    }
+fn an_orbit_transition_to_another_planet_preserves_the_pending_save_and_masks() {
+    let mut game = game_in_system(None, 2);
+    fresh_starinfo(&mut game.world, 4);
+    set_planetary_change(&mut game.world);
+    let before = copy_of(&game);
+    let mut system = three_planet_system(1);
+    assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(
+        || system.enter_orbit(Body::Planet(2))
+    ))
+    .is_err());
+    assert!(planetary_change(&game.world));
+    assert_eq!(starinfo(&game.world), vec![0u8; 16]);
+    unchanged_apart_from(&game, &before, &[]);
 }
 
 #[test]
@@ -561,12 +546,10 @@ fn an_orbit_outside_an_inner_system_is_refused() {
         set_planetary_change(&mut game.world);
         let before = copy_of(&game);
         let mut system = System::outer();
-        system.InOrbit = 1;
-
-        // SAFETY: the frame is NULL.
-        let result = { save_solar_location(&mut game.world, &system, 0) };
-
-        assert_eq!(result, Err(LocationError::OrbitOutsideInnerSystem));
+        let mut snapshot = system.snapshot((320, 240));
+        snapshot.in_orbit = true;
+        let result = prepare_solar_location(&game.world.data.game, &snapshot);
+        assert_eq!(result.err(), Some(LocationError::OrbitOutsideInnerSystem));
         assert!(planetary_change(&game.world));
         unchanged_apart_from(&game, &before, &[]);
     }

@@ -30,21 +30,20 @@ impl Ops for Harness {
         });
         self.seed(case.seed);
 
-        let mut expected = *self.state;
+        let mut expected = crate::generation_data(&self.state);
         let result = unsafe {
             crate::invoke_generation(&mut *self.state, |system, host| {
                 table(case.kind).generate_planets(system, host)
             })
         };
-        expected.sys.planets = self.state.sys.planets;
-        expected.sys.sun.num_planets = self.state.sys.sun.num_planets;
-        assert_eq!(format!("{:?}", self.state), format!("{expected:?}"));
+        expected.1 = self.state.sys.planets;
+        expected.0.num_planets = self.state.sys.sun.num_planets;
+        assert_eq!(
+            format!("{:?}", crate::generation_data(&self.state)),
+            format!("{expected:?}")
+        );
         planets.copy_from_slice(&self.state.sys.planets);
-        (
-            result,
-            self.state.sys.sun.num_planets,
-            self.rng_position(),
-        )
+        (result, self.state.sys.sun.num_planets, self.rng_position())
     }
     fn moons(
         &mut self,
@@ -58,19 +57,21 @@ impl Ops for Harness {
         self.state.sys.moons.copy_from_slice(moons);
         self.state.sys.planets = unsafe { std::mem::zeroed() };
         let sun: *mut PlanetDesc = &mut self.state.sys.sun;
-        self.state.sys.planets[usize::from(planet)].prev_desc = sun;
         self.state.sys.planets[usize::from(planet)].num_planets = count;
         let _parent: *mut PlanetDesc = &mut self.state.sys.planets[usize::from(planet)];
         self.seed(case.seed);
 
-        let mut expected = *self.state;
+        let mut expected = crate::generation_data(&self.state);
         let result = unsafe {
             crate::invoke_generation(&mut *self.state, |system, host| {
                 table(case.kind).generate_moons(system, planet, host)
             })
         };
-        expected.sys.moons = self.state.sys.moons;
-        assert_eq!(format!("{:?}", self.state), format!("{expected:?}"));
+        expected.2 = self.state.sys.moons;
+        assert_eq!(
+            format!("{:?}", crate::generation_data(&self.state)),
+            format!("{expected:?}")
+        );
         moons.copy_from_slice(&self.state.sys.moons);
         (result, self.rng_position())
     }
@@ -89,14 +90,9 @@ impl Ops for Harness {
         self.state.sys.info = *info;
         let sun: *mut PlanetDesc = &mut self.state.sys.sun;
         let _world: *const PlanetDesc = match case.body {
-            Body::Planet(p) => {
-                self.state.sys.planets[usize::from(p)].prev_desc = sun;
-                &self.state.sys.planets[usize::from(p)]
-            }
+            Body::Planet(p) => &self.state.sys.planets[usize::from(p)],
             Body::Moon { planet, moon } => {
-                self.state.sys.planets[usize::from(planet)].prev_desc = sun;
                 let parent: *mut PlanetDesc = &mut self.state.sys.planets[usize::from(planet)];
-                self.state.sys.moons[usize::from(moon)].prev_desc = parent;
                 &self.state.sys.moons[usize::from(moon)]
             }
         };
@@ -119,11 +115,9 @@ impl Ops for Harness {
                 }
             };
         self.seed(case.seed);
-        let before = format!("{:?}", self.state);
+        let before = format!("{:?}", crate::generation_data(&self.state));
         let result = unsafe {
-            crate::invoke_generation(&mut *self.state, |view, host| {
-                generate(view, node, host)
-            })
+            crate::invoke_generation(&mut *self.state, |view, host| generate(view, node, host))
         };
         let after_rng = self.rng_position();
         self.seed(case.seed);
@@ -135,7 +129,7 @@ impl Ops for Harness {
         assert_eq!(count_only, result, "NULL output count: {case:?}");
         assert_eq!(self.rng_position(), after_rng, "NULL output RNG: {case:?}");
         assert_eq!(
-            format!("{:?}", self.state),
+            format!("{:?}", crate::generation_data(&self.state)),
             before,
             "scan input changed: {case:?}"
         );

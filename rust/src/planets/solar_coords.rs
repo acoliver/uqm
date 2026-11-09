@@ -59,3 +59,15 @@ mod tests {
         }
     }
 }
+
+pub(crate) fn outer_location(
+    solar: &crate::engine::world::generation::SolarSnapshot,
+    planet: u16,
+) -> crate::graphics::native_abi::POINT {
+    to_location(
+        solar.planets[usize::from(planet)].display_origin,
+        solar.zoom_radius,
+        solar.screen.0 - 78,
+        solar.screen.1 - 13,
+    )
+}

@@ -84,12 +84,7 @@ pub unsafe fn run_session(
         return failure(STATUS_INVALID_ARGUMENT);
     }
 
-    let game = std::cell::RefCell::new(crate::engine::battle::Cx {
-        b: cx.b,
-        world: cx.world,
-        kernel: cx.kernel,
-        rng: cx.rng,
-    });
+    let game = std::cell::RefCell::new(cx.reborrow());
     let observe = std::cell::RefCell::new(crate::engine::observe::Io {
         observer: &mut *io.observer,
     });
@@ -102,8 +97,9 @@ pub unsafe fn run_session(
         context.retrieval_masks = unsafe {
             (*context
                 .solar_system
-                .cast::<crate::c_bindings::global_state::SOLARSYS_STATE>())
-            .SysInfo
+                .cast::<crate::planets::solar_system::SolarSystem>())
+            .sys
+            .info
             .planet_info
             .scan_retrieve_mask
         };
@@ -174,7 +170,16 @@ fn run_retained_session(
         super::runtime::AdapterError::new("lander_assets_not_loaded"),
     )?);
     let reports = drawing.scan.report_context();
-    let mut generator = CffiSurfaceGenerator::for_planet_side(game, observe, context, reports)?;
+    let mut generator = CffiSurfaceGenerator::for_planet_side(
+        game,
+        observe,
+        unsafe {
+            &mut *context
+                .solar_system
+                .cast::<crate::planets::solar_system::SolarSystem>()
+        },
+        reports,
+    );
     let mut visuals = retained_visuals(context)?;
     let persistence = ScanPersistence::from_masks(context.retrieval_masks);
     let lander_masks = extract_lander_masks(&assets.graphic(LanderGraphic::Lander))?;

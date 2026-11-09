@@ -25,35 +25,28 @@ impl Ops for Harness {
                 Body::Planet(p) => {
                     let world = &raw mut (*system).sys.planets[usize::from(p)];
                     world.write(desc);
-                    (*world).prev_desc = sun;
                     world
                 }
                 Body::Moon { planet, moon } => {
                     let p = &raw mut (*system).sys.planets[usize::from(planet)];
                     p.write(parent.unwrap());
-                    (*p).prev_desc = sun;
                     let world = &raw mut (*system).sys.moons[usize::from(moon)];
                     world.write(desc);
-                    (*world).prev_desc = p;
                     world
                 }
             }
         };
-        let mut expected = *self.state;
+        let mut expected = crate::generation_data(&self.state);
         self.seed(0xabcdef01);
         let result = unsafe {
-            crate::invoke_generation(system, |view, host| {
-                super::sol::generateSolFunctions.generate_orbital(
-                    view,
-                    uqm_rust::planets::solarsys::site::dispatch::body(system, world),
-                    host,
-                )
+            crate::invoke_generation(&mut *system, |view, host| {
+                super::sol::generateSolFunctions.generate_orbital(view, case.body, host)
             })
         };
         let info = self.state.sys.info;
-        expected.sys.info = info;
+        expected.3 = info;
         assert_eq!(
-            format!("{:?}", self.state),
+            format!("{:?}", crate::generation_data(&self.state)),
             format!("{expected:?}"),
             "orbital wrote unrelated state: {case:?}"
         );

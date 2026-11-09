@@ -26,11 +26,7 @@ impl MyconOps for Harness {
             })
         };
         planets.copy_from_slice(&self.state.sys.planets);
-        (
-            result,
-            self.state.sys.sun.num_planets,
-            self.rng_position(),
-        )
+        (result, self.state.sys.sun.num_planets, self.rng_position())
     }
 
     fn scan(&mut self, case: ScanCase, node: &mut NodeInfo) -> (u16, u32) {
@@ -48,14 +44,9 @@ impl MyconOps for Harness {
         self.state.sys.info = mycon::scan_info(case);
         let sun: *mut PlanetDesc = &mut self.state.sys.sun;
         let _world: *const PlanetDesc = match case.body {
-            Body::Planet(p) => {
-                self.state.sys.planets[usize::from(p)].prev_desc = sun;
-                &self.state.sys.planets[usize::from(p)]
-            }
+            Body::Planet(p) => &self.state.sys.planets[usize::from(p)],
             Body::Moon { planet, moon } => {
-                self.state.sys.planets[usize::from(planet)].prev_desc = sun;
                 let parent: *mut PlanetDesc = &mut self.state.sys.planets[usize::from(planet)];
-                self.state.sys.moons[usize::from(moon)].prev_desc = parent;
                 &self.state.sys.moons[usize::from(moon)]
             }
         };
@@ -70,11 +61,9 @@ impl MyconOps for Harness {
                 }
             };
         self.seed(case.seed);
-        let before = format!("{:?}", self.state);
+        let before = format!("{:?}", crate::generation_data(&self.state));
         let count = unsafe {
-            crate::invoke_generation(&mut *self.state, |view, host| {
-                generate(view, node, host)
-            })
+            crate::invoke_generation(&mut *self.state, |view, host| generate(view, node, host))
         };
         let after_rng = self.rng_position();
         self.seed(case.seed);
@@ -86,7 +75,7 @@ impl MyconOps for Harness {
         assert_eq!(count_only, count, "NULL output count: {case:?}");
         assert_eq!(self.rng_position(), after_rng, "NULL output RNG: {case:?}");
         assert_eq!(
-            format!("{:?}", self.state),
+            format!("{:?}", crate::generation_data(&self.state)),
             before,
             "scan mutated its solar-system input: {case:?}"
         );

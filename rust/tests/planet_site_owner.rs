@@ -1,11 +1,11 @@
 //! Retained contact capabilities mutate the supplied campaign, without a published owner.
-use std::{cell::RefCell, ptr::NonNull};
+use std::cell::RefCell;
 use uqm_rust::{
     comm::dispatch::ship,
     engine::{
         battle::{Battle, Cx},
         observe::{Io, Unobserved},
-        world::generation::{GenerationRecords, SolarSys},
+        world::generation::SolarSys,
         Game, StoryKey,
     },
     planets::{
@@ -24,7 +24,6 @@ use uqm_rust::{
         },
         solarsys::site::Site,
     },
-    ships::native::abi::SOLARSYS_STATE,
 };
 
 fn campaign() -> Game {
@@ -71,28 +70,16 @@ fn with_pickup_site(
     let io = RefCell::new(Io {
         observer: &mut observer,
     });
-    // SAFETY: these ABI records contain only integers and nullable raw handles.
-    let mut record: SOLARSYS_STATE = unsafe { std::mem::zeroed() };
-    record.generator_index = index;
-    let mut rng = uqm_rust::math::RandomContext::with_seed(123);
-    // SAFETY: all disjoint records and RNG remain exclusively owned here; callbacks hold no component references.
-    let mut system = unsafe {
-        SolarSys::from_records(
-            GenerationRecords {
-                sun: NonNull::from(&mut record.SunDesc[0]),
-                planets: NonNull::from(&mut record.PlanetDesc),
-                moons: NonNull::from(&mut record.MoonDesc),
-                info: NonNull::from(&mut record.SysInfo),
-                scene: NonNull::from(&mut record.PlanetSideFrame[1]),
-            },
-            NonNull::from(&mut rng),
-            &[],
-            0,
-            index,
-        )
-    };
-    // SAFETY: the fixture retains the initialized record and releases component borrows before effects.
-    let mut host = unsafe { Site::new(&owner, &io, &mut record, pickup, None) };
+    let mut system = SolarSys::new(&[], 0, index, uqm_rust::math::RandomContext::with_seed(123));
+    let mut host = Site::new(
+        &owner,
+        &io,
+        uqm_rust::engine::StarId(0),
+        index,
+        false,
+        pickup,
+        None,
+    );
     run(&mut host, &mut system);
 }
 

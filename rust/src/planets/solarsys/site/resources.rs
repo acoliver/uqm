@@ -15,17 +15,18 @@ impl LanderTakeoff for Site<'_, '_, '_> {
 }
 
 impl burv::BurvScenes for Site<'_, '_, '_> {
-    fn load_ruins_scene(&mut self, _system: &mut SolarSys<'_>) {
-        self.load_scene(c"graphics.ruins", c"text.burvixeseruins", 0);
+    fn load_ruins_scene(&mut self, system: &mut SolarSys<'_>) {
+        self.load_scene(system, c"graphics.ruins", c"text.burvixeseruins", 0);
     }
-    fn load_broadcasters_scene(&mut self, _system: &mut SolarSys<'_>) {
-        self.load_scene(c"graphics.burvixcaster", c"text.burvixcaster", 0);
+    fn load_broadcasters_scene(&mut self, system: &mut SolarSys<'_>) {
+        self.load_scene(system, c"graphics.burvixcaster", c"text.burvixcaster", 0);
     }
 }
 
 impl spa::SpathiSite for Site<'_, '_, '_> {
-    fn load_broadcasters_scene(&mut self, _system: &mut SolarSys<'_>, unshielded: bool) {
+    fn load_broadcasters_scene(&mut self, system: &mut SolarSys<'_>, unshielded: bool) {
         self.load_scene(
+            system,
             c"graphics.umgahcaster",
             c"text.umgahcaster",
             u16::from(unshielded),
@@ -34,8 +35,13 @@ impl spa::SpathiSite for Site<'_, '_, '_> {
 }
 
 impl vault::VaultSite for Site<'_, '_, '_> {
-    fn load_vault_scene(&mut self, _system: &mut SolarSys<'_>, first_report: u16) {
-        self.load_scene(c"graphics.syreenvault", c"text.syreenvault", first_report);
+    fn load_vault_scene(&mut self, system: &mut SolarSys<'_>, first_report: u16) {
+        self.load_scene(
+            system,
+            c"graphics.syreenvault",
+            c"text.syreenvault",
+            first_report,
+        );
     }
     fn lander_takeoff(&mut self) {
         self.pickup.request_takeoff();
@@ -43,8 +49,13 @@ impl vault::VaultSite for Site<'_, '_, '_> {
 }
 
 impl wreck::WreckSite for Site<'_, '_, '_> {
-    fn load_wreck_scene(&mut self, _system: &mut SolarSys<'_>, first_report: u16) {
-        self.load_scene(c"graphics.urquanwreck", c"text.urquanwreck", first_report);
+    fn load_wreck_scene(&mut self, system: &mut SolarSys<'_>, first_report: u16) {
+        self.load_scene(
+            system,
+            c"graphics.urquanwreck",
+            c"text.urquanwreck",
+            first_report,
+        );
     }
     fn lander_takeoff(&mut self) {
         self.pickup.request_takeoff();
@@ -52,19 +63,32 @@ impl wreck::WreckSite for Site<'_, '_, '_> {
 }
 
 impl andro::AndrosynthSite for Site<'_, '_, '_> {
-    fn load_ruins_story(&mut self, _system: &mut SolarSys<'_>, visits: u32) {
+    fn load_ruins_story(&mut self, system: &mut SolarSys<'_>, visits: u32) {
+        use crate::engine::{
+            graphics::drawable_abi::LoadedDrawable, strings::owned_table::LoadedTextTable,
+            world::generation::ReportSlot,
+        };
         self.report_resources.load();
-        // SAFETY: the live solar system state on the game thread.
-        self.game
-            .borrow_mut()
-            .with_legacy(|| unsafe { load_ruins_story(self.record.as_ptr(), visits) });
+        self.game.borrow_mut().with_legacy(|| {
+            system.frames[1] = LoadedDrawable::load(c"graphics.ruins");
+            let table = LoadedTextTable::load(c"text.androsynthruins");
+            system.report = ReportSlot::new(table.and_then(|table| {
+                if visits >= table.len() as u32 {
+                    None
+                } else {
+                    table.entry(u16::try_from(visits).expect("a visit count is at most sixteen"))
+                }
+            }));
+        });
     }
 }
 
 impl crate::planets::generate::host::PlanetSite for Site<'_, '_, '_> {
     fn rainbow_ordinal(&self) -> u8 {
-        // SAFETY: the context owns the selected star in the live catalog.
-        let before = c_api::star_indexes_before_current(self.game.borrow().world);
+        let before: Vec<_> = self.game.borrow().world.catalog()[..self.star.0]
+            .iter()
+            .map(|star| star.index)
+            .collect();
         crate::planets::generate::rainbow::rainbow_ordinal(&before, before.len())
     }
     fn load_planet(&mut self, system: &mut SolarSys<'_>, body: Body) {
@@ -95,22 +119,28 @@ impl<'a, 'game, 'observer> Site<'a, 'game, 'observer> {
             self.presentation.is_none(),
             "orbit presentation loaded twice"
         );
-        // SAFETY: this host retains the initialized orbital records throughout the effect.
-        let in_orbit = unsafe { (*self.record.as_ptr()).InOrbit != 0 };
+        let in_orbit = self.in_orbit;
         let definition = surface.and_then(CapturedSurface::into_drawable);
         let reports = self.report_resources.clone();
         // SAFETY: this host retains the graphics resources and consumes the optional definition.
         self.presentation = unsafe {
             load_planet(
-                self.game, self.io, system, body, in_orbit, definition, reports,
+                self.game, self.io, system, self.star, body, in_orbit, definition, reports,
             )
         };
     }
 
-    pub(super) fn discovery_report(
+    pub(super) fn discovery_report<'slot>(
         &self,
-    ) -> crate::planet_side::report_adapter::CffiDiscoveryReport<'a, 'observer, impl FnMut()> {
-        let system = self.record.as_ptr();
+        slot: &'slot mut crate::engine::world::generation::ReportSlot,
+    ) -> crate::planet_side::report_adapter::DiscoveryReport<
+        'slot,
+        'observer,
+        impl FnMut(&crate::engine::strings::owned_table::TextEntry) + 'a + use<'a, 'game, 'observer>,
+    >
+    where
+        'a: 'slot,
+    {
         let resources = self.report_resources.clone();
         let scan_context = self
             .report_context
@@ -121,34 +151,32 @@ impl<'a, 'game, 'observer> Site<'a, 'game, 'observer> {
                     .as_ref()
                     .map(|presentation| presentation.scan().context())
             });
-        // SAFETY: this site retains the initialized system and its report slot.
-        let slot =
-            unsafe { std::ptr::addr_of_mut!((*system).SysInfo.planet_info.discovery_string) };
-        crate::planet_side::report_adapter::CffiDiscoveryReport::new(
-            slot.cast(),
-            self.io,
-            move || {
-                let typography = resources
-                    .snapshot()
-                    .unwrap_or_else(|| panic!("discovery report typography is not loaded"));
-                // SAFETY: the site presents synchronously while its published record remains live.
-                unsafe { discovery_report(system, scan_context.as_ref(), &typography) };
-            },
-        )
-        .unwrap_or_else(|error| {
-            panic!("the discovery string slot is part of the system state: {error:?}")
+        let game = self.game;
+        let io = self.io;
+        crate::planet_side::report_adapter::DiscoveryReport::new(slot, io, move |text| {
+            let typography = resources
+                .snapshot()
+                .unwrap_or_else(|| panic!("discovery report typography is not loaded"));
+            // SAFETY: supplied owners retain the report text and initialized graphics through presentation.
+            unsafe {
+                discovery_report(
+                    &mut game.borrow_mut(),
+                    &mut io.borrow_mut(),
+                    text,
+                    scan_context.as_ref(),
+                    &typography,
+                )
+            };
         })
     }
 }
 
 impl crate::planets::generate::host::ReportSite for Site<'_, '_, '_> {
-    fn report(&mut self, _system: &mut SolarSys<'_>, disposition: ReportDisposition) -> bool {
+    fn report(&mut self, system: &mut SolarSys<'_>, disposition: ReportDisposition) -> bool {
         use crate::planet_side::report_adapter::DiscoveryReportPort;
-        self.game.borrow_mut().with_legacy(|| {
-            self.discovery_report()
-                .present(disposition)
-                .unwrap_or_else(|error| panic!("the discovery report site is linked: {error:?}"))
-        })
+        self.discovery_report(&mut system.report)
+            .present(disposition)
+            .unwrap_or_else(|error| panic!("the discovery report site is linked: {error:?}"))
     }
 }
 
@@ -173,10 +201,10 @@ impl crate::planets::generate::sol::orbital::Orbital for Site<'_, '_, '_> {
     }
     fn load_scene(
         &mut self,
-        _system: &mut SolarSys<'_>,
+        system: &mut SolarSys<'_>,
         scene: crate::planets::generate::sol::orbital::Scene,
     ) {
-        Site::load_scene(self, scene.graphics(), scene.strings(), 0);
+        Site::load_scene(self, system, scene.graphics(), scene.strings(), 0);
     }
 }
 

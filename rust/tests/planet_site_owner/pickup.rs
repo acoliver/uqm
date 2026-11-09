@@ -1,7 +1,6 @@
 use super::*;
 use uqm_rust::engine::world::generation::Body;
 use uqm_rust::planet_side::{
-    ffi::PlanetSideRunContext,
     generation::{ScanNodeId, ScanType, SurfaceGenerator},
     generation_adapter::CffiSurfaceGenerator,
     special_effects::{PickupContext, SpecialPickupEffects},
@@ -122,38 +121,31 @@ fn production_provider_threads_pickup_effects_and_only_persists_accepted_nodes()
     let io = RefCell::new(Io {
         observer: &mut observer,
     });
-    // SAFETY: the fixture owns the integer/nullable-handle record for every synchronous callback.
-    let mut record: SOLARSYS_STATE = unsafe { std::mem::zeroed() };
-    record.generator_index = SOL_DEFINED;
-    let mut rng = uqm_rust::math::RandomContext::with_seed(123);
-    // SAFETY: this serialized fixture retains and restores the sole generator RNG for these calls.
-    let previous_rng =
-        unsafe { std::ptr::replace(&raw mut uqm_rust::planets::solarsys::SysGenRNG, &mut rng) };
+    let mut solar = uqm_rust::planets::solar_system::SolarSystem::new(
+        &owner.borrow().world,
+        uqm_rust::engine::StarId(82),
+    );
+    solar.sys.sun.num_planets = 9;
+    solar.sys.planets[2].num_planets = 2;
     let scan =
         uqm_rust::engine::graphics::context_abi::LoadedContext::create(c"pickup-provider-test");
     for (pluto, crew) in [(true, 3), (true, 12), (false, 12)] {
         let target = if pluto {
-            record.PlanetDesc[8].prev_desc = &raw mut record.SunDesc[0];
-            &raw mut record.PlanetDesc[8]
+            Body::Planet(8)
         } else {
-            record.PlanetDesc[2].prev_desc = &raw mut record.SunDesc[0];
-            record.MoonDesc[1].prev_desc = &raw mut record.PlanetDesc[2];
-            &raw mut record.MoonDesc[1]
+            Body::Moon { planet: 2, moon: 1 }
         };
+        solar.enter_inner(target.planet() as u8);
+        solar.enter_orbit(target);
         let mut provider = CffiSurfaceGenerator::for_planet_side(
             &owner,
             &io,
-            &PlanetSideRunContext {
-                solar_system: std::ptr::from_mut(&mut record).cast(),
-                world: target.cast(),
-                ..Default::default()
-            },
+            &mut solar,
             uqm_rust::planets::report::typography::ReportContext {
                 context: scan.lease(),
                 resources: Default::default(),
             },
-        )
-        .unwrap();
+        );
         let mut pickup = PickupContext::lander(crew);
         assert_eq!(
             provider.pickup(ScanType::Energy, ScanNodeId::new(0).unwrap(), &mut pickup),
@@ -167,16 +159,12 @@ fn production_provider_threads_pickup_effects_and_only_persists_accepted_nodes()
             }
         );
         assert_eq!(
-            record.SysInfo.planet_info.scan_retrieve_mask[1],
+            solar.sys.info.planet_info.scan_retrieve_mask[1],
             u32::from(!pluto)
         );
         assert_eq!(
             owner.borrow().world.flag(StoryKey::PLANETARY_CHANGE),
             u32::from(!pluto)
         );
-    }
-    // SAFETY: the fixture's synchronous callbacks are finished before releasing its RNG.
-    unsafe {
-        uqm_rust::planets::solarsys::SysGenRNG = previous_rng;
     }
 }

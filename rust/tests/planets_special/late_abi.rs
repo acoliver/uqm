@@ -63,7 +63,6 @@ pub fn check() {
     harness.set_star(0, 0);
     harness.seed(104729);
     let sun = std::ptr::addr_of_mut!(harness.state.sys.sun);
-    harness.state.sys.planets[0].prev_desc = sun;
     let _world = std::ptr::addr_of_mut!(harness.state.sys.planets[0]);
 
     for retrieved in 0..=32 {
@@ -76,12 +75,13 @@ pub fn check() {
         uqm_rust::engine::World::current().write(|world| {
             (world).set_story_state(uqm_rust::engine::StoryKey::SPATHI_CREATURES_EXAMINED, 0)
         });
-        harness.state.sys.info.planet_info.scan_retrieve_mask[BIOLOGICAL_SCAN] = if retrieved == 32 {
+        harness.state.sys.info.planet_info.scan_retrieve_mask[BIOLOGICAL_SCAN] = if retrieved == 32
+        {
             u32::MAX
         } else {
             (1_u32 << retrieved) - 1
         };
-        let before = format!("{:?}", harness.state);
+        let before = format!("{:?}", crate::generation_data(&harness.state));
         assert!(unsafe {
             crate::invoke_generation(&mut *harness.state, |view, host| {
                 GENERATE_SPATHI_FUNCTIONS.pickup_life(
@@ -106,10 +106,12 @@ pub fn check() {
             )),
             u32::from(retrieved == 31)
         );
-        assert_eq!(format!("{:?}", harness.state), before);
+        assert_eq!(
+            format!("{:?}", crate::generation_data(&harness.state)),
+            before
+        );
         assert_eq!(harness.rng_position(), 104729);
     }
-    harness.state.sys.planets[1].prev_desc = sun;
     let _other = std::ptr::addr_of_mut!(harness.state.sys.planets[1]);
     uqm_rust::engine::World::current().write(|world| {
         (world).set_story_state(uqm_rust::engine::StoryKey::SPATHI_CREATURES_EXAMINED, 0)
@@ -192,7 +194,7 @@ fn check_live_queues(harness: &mut Harness) {
         harness.set_star(0, 0);
         World::current()
             .write(|world| world.set_story_state(uqm_rust::engine::StoryKey::UTWIG_BOMB, 0));
-        let before = format!("{:?}", harness.state);
+        let before = format!("{:?}", crate::generation_data(&harness.state));
         assert!(crate::invoke_generation(
             &mut *harness.state,
             |system, host| GENERATE_UTWIG_FUNCTIONS.init_npcs(system, host)
@@ -208,7 +210,10 @@ fn check_live_queues(harness: &mut Harness) {
             assert_ne!(reused, ids[0]);
             groups.free(reused);
         });
-        assert_eq!(format!("{:?}", harness.state), before);
+        assert_eq!(
+            format!("{:?}", crate::generation_data(&harness.state)),
+            before
+        );
         assert_eq!(
             World::current()
                 .read(|world| get_game_state(world, uqm_rust::engine::StoryKey::UTWIG_BOMB)),
@@ -258,9 +263,8 @@ fn check_live_queues(harness: &mut Harness) {
         crate::invoke_generation(&mut *harness.state, |_, host| {
             GuardSite::set_and_transform_ip_location(host, outer)
         });
-        let location = crate::invoke_generation(&mut *harness.state, |_, host| {
-            GuardSite::ip_location(host)
-        });
+        let location =
+            crate::invoke_generation(&mut *harness.state, |_, host| GuardSite::ip_location(host));
         assert_eq!((location.x, location.y), (120, -90));
         let origin = std::ptr::addr_of!(
             (**uqm_rust::engine::WorldData::current())

@@ -73,11 +73,16 @@ fn check_scene(
         assert!(measured.visible);
         assert_eq!(measured.rect.extent.width, 1);
         assert_eq!(typography.effect().frame_rect(0).extent.width, 1);
-        system.scene(|info, frame| {
+        system.scene(|_, frame| {
             if let Some(mask) = mask {
-                assert!(!frame.is_null(), "missing mask {mask}");
+                assert!(frame.is_some(), "missing mask {mask}");
                 // SAFETY: the fixture owns this loaded mask until cleanup below.
-                let pixel = unsafe { GetFramePixel(*frame, POINT { x: 0, y: 0 }) };
+                let pixel = unsafe {
+                    GetFramePixel(
+                        frame.as_ref().unwrap().lease().frame(0).unwrap(),
+                        POINT { x: 0, y: 0 },
+                    )
+                };
                 let palette_index = GRAPHICS
                     .iter()
                     .position(|key| *key == mask)
@@ -91,33 +96,28 @@ fn check_scene(
                     "mask {mask}"
                 );
             } else {
-                assert!(frame.is_null());
-            }
-            use uqm_rust::strings::string_table::*;
-            if let Some(first) = first {
-                let table = info.discovery_string.cast();
-                assert!(!info.discovery_string.is_null(), "missing report {report}");
-                // SAFETY: the fixture retains the loaded report and its selected index.
-                assert_eq!(unsafe { GetStringTableIndex(table) }, first);
-                // SAFETY: the loaded report owns this terminated string until cleanup.
-                let text = unsafe { CStr::from_ptr(GetStringAddress(table)) }
-                    .to_str()
-                    .unwrap_or_else(|error| panic!("report {report} is not UTF-8: {error}"));
-                assert_eq!(text.trim_end_matches('\n'), format!("{report}-{first}"));
-            } else {
-                assert!(info.discovery_string.is_null());
-            }
-            if !frame.is_null() {
-                // SAFETY: this is the mask allocation checked above, released exactly once.
-                unsafe { DestroyDrawable(uqm_rust::graphics::pixmap_abi::ReleaseDrawable(*frame)) };
-                *frame = ptr::null_mut();
-            }
-            if !info.discovery_string.is_null() {
-                // SAFETY: the fixture owns the loaded report table, released exactly once.
-                unsafe { DestroyStringTable(ReleaseStringTable(info.discovery_string.cast())) };
-                info.discovery_string = ptr::null_mut();
+                assert!(frame.is_none());
             }
         });
+        if let Some(first) = first {
+            let text = system
+                .report
+                .current()
+                .unwrap_or_else(|| panic!("missing report {report}"));
+            assert_eq!(text.index(), usize::from(first));
+            assert_eq!(
+                text.current_label()
+                    .0
+                    .to_str()
+                    .unwrap()
+                    .trim_end_matches('\n'),
+                format!("{report}-{first}")
+            );
+        } else {
+            assert!(system.report.current().is_none());
+        }
+        system.frames[1] = None;
+        system.report.clear();
     });
 }
 

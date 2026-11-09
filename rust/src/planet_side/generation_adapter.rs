@@ -6,11 +6,15 @@
 
 #[cfg(not(test))]
 use crate::engine::world::planet::NodeInfo;
+use crate::engine::world::{
+    generation::{Body, SolarSys},
+    StarId,
+};
 use crate::engine::{battle::Cx, observe::Io, StoryKey};
+use crate::planets::solar_system::{BodyLocation, SolarSystem};
 #[cfg(not(test))]
-use crate::planets::solarsys::site::{dispatch::body, Site};
+use crate::planets::solarsys::site::Site;
 use std::cell::RefCell;
-use std::ffi::c_void;
 
 #[cfg(not(test))]
 use super::creatures::{CreatureCatalog, CreatureKind};
@@ -68,37 +72,47 @@ fn select_initial_frame(role: GeneratorRole, draw: impl FnOnce() -> u32) -> u8 {
 const ORBIT_SCAN_INITIAL_FRAME: u8 = 0;
 
 /// Borrowed current-system pointers supplied only at the temporary ABI edge.
-pub struct CffiSurfaceGenerator<'a, 'game, 'observer> {
+pub struct CffiSurfaceGenerator<'a, 'game, 'observer, 'tables> {
     game: &'a RefCell<Cx<'game>>,
     io: &'a RefCell<Io<'observer>>,
     #[cfg_attr(test, allow(dead_code))]
-    solar_system: *mut c_void,
-    #[cfg_attr(test, allow(dead_code))]
-    world: *mut c_void,
+    system: &'a mut SolarSys<'tables>,
+    star: StarId,
+    body: Body,
+    in_orbit: bool,
     #[cfg_attr(test, allow(dead_code))]
     role: GeneratorRole,
     report_context: Option<crate::planets::report::typography::ReportContext>,
 }
 
-impl<'a, 'game, 'observer> CffiSurfaceGenerator<'a, 'game, 'observer> {
+impl<'a, 'game, 'observer, 'tables> CffiSurfaceGenerator<'a, 'game, 'observer, 'tables> {
     /// Adapter for a real PlanetSide lander session.  Biological node generation
     /// consumes exactly one gameplay random value per node for the typed 0..3 life
     /// frame, and mining/energy consume nothing.
     pub fn for_planet_side(
         game: &'a RefCell<Cx<'game>>,
         io: &'a RefCell<Io<'observer>>,
-        context: &super::ffi::PlanetSideRunContext,
+        solar: &'a mut SolarSystem,
         report_context: crate::planets::report::typography::ReportContext,
-    ) -> Result<Self, AdapterError> {
-        let mut generator = Self::with_role(
+    ) -> Self
+    where
+        'tables: 'static,
+    {
+        let star = solar.star();
+        let body = solar
+            .selected_body()
+            .expect("lander requires a selected body");
+        let in_orbit = solar.in_orbit();
+        Self {
             game,
             io,
-            context.solar_system,
-            context.world,
-            GeneratorRole::PlanetSide,
-        )?;
-        generator.report_context = Some(report_context);
-        Ok(generator)
+            system: &mut solar.sys,
+            star,
+            body,
+            in_orbit,
+            role: GeneratorRole::PlanetSide,
+            report_context: Some(report_context),
+        }
     }
 
     /// Adapter for orbit-scan map rendering.  Generation never touches the
@@ -107,56 +121,61 @@ impl<'a, 'game, 'observer> CffiSurfaceGenerator<'a, 'game, 'observer> {
     pub fn for_orbit_scan(
         game: &'a RefCell<Cx<'game>>,
         io: &'a RefCell<Io<'observer>>,
-        solar_system: *mut c_void,
-        world: *mut c_void,
+        system: &'a mut SolarSys<'tables>,
+        star: StarId,
+        body: Body,
         report_context: Option<crate::planets::report::typography::ReportContext>,
-    ) -> Result<Self, AdapterError> {
-        let mut generator =
-            Self::with_role(game, io, solar_system, world, GeneratorRole::OrbitScan)?;
-        generator.report_context = report_context;
-        Ok(generator)
+    ) -> Self {
+        Self {
+            game,
+            io,
+            system,
+            star,
+            body,
+            in_orbit: true,
+            role: GeneratorRole::OrbitScan,
+            report_context,
+        }
     }
 
     #[cfg(not(test))]
     unsafe fn generate_node(&mut self, scan_type: ScanType, node: u16, info: &mut NodeInfo) -> u16 {
-        let record = self.solar_system.cast();
         let mut pickup = PickupContext::NoLander;
-        let report = self.report_context.clone();
-        // SAFETY: the adapter retains this system and orbital descriptor throughout the selected callback.
-        unsafe {
-            let target = body(record, self.world.cast());
-            let mut site = Site::new(self.game, self.io, record, &mut pickup, report);
-            site.with_system(|generator, system, host| {
-                scan::generate(generator, system, target, node, scan_type as u8, info, host)
-            })
-        }
+        let mut site = Site::new(
+            self.game,
+            self.io,
+            self.star,
+            self.system.star_index(),
+            self.in_orbit,
+            &mut pickup,
+            self.report_context.clone(),
+        );
+        let target = self.body;
+        site.invoke(self.system, |generator, system, host| {
+            scan::generate(generator, system, target, node, scan_type as u8, info, host)
+        })
     }
 
     #[cfg(not(test))]
     fn pickup_node(&mut self, scan_type: ScanType, node: u16, effects: &mut PickupContext) -> bool {
-        let record = self.solar_system.cast();
-        let report = self.report_context.clone();
-        // SAFETY: the adapter retains this system and orbital descriptor throughout the selected callback.
-        unsafe {
-            let target = body(record, self.world.cast());
-            let mut site = Site::new(self.game, self.io, record, effects, report);
-            site.with_system(|generator, system, host| {
-                crate::planets::scan::pickup(generator, system, target, node, scan_type as u8, host)
-            })
-        }
+        let mut site = Site::new(
+            self.game,
+            self.io,
+            self.star,
+            self.system.star_index(),
+            self.in_orbit,
+            effects,
+            self.report_context.clone(),
+        );
+        let target = self.body;
+        site.invoke(self.system, |generator, system, host| {
+            crate::planets::scan::pickup(generator, system, target, node, scan_type as u8, host)
+        })
     }
 
     #[cfg(not(test))]
     fn node_key(&self, node: ScanNodeId) -> (u16, u8, u8, u8) {
-        // SAFETY: the adapter retains the selected system while its owners are borrowed.
-        let (star, planet, moon) = unsafe {
-            {
-                let game = self.game.borrow();
-                let world = &*game.world;
-                crate::state::c_api::planets::location(world, self.solar_system.cast())
-            }
-        };
-        (star as u16, planet as u8, moon as u8, node.get())
+        BodyLocation::new(self.star, self.body).node_key(node.get())
     }
 
     fn pickup_with(
@@ -170,18 +189,14 @@ impl<'a, 'game, 'observer> CffiSurfaceGenerator<'a, 'game, 'observer> {
             // report helpers were written for the retired lander loop's ambient
             // batch. Rust holds no such batch, so it owns restoring the depth
             // rather than trusting the callback to leave it untouched.
-            let solar_system = self.solar_system;
             let retrieved = super::batch_guard::calling_native_unbatched(
                 "surface_generator_pickup_batch",
                 || callback(self),
             )?;
             if retrieved {
-                // SAFETY: the adapter owns the retained solar record during pickup.
                 unsafe {
-                    let system =
-                        &mut *solar_system.cast::<crate::ships::native::abi::SOLARSYS_STATE>();
                     crate::planets::scan::set_node_retrieved(
-                        &mut system.SysInfo.planet_info,
+                        &mut self.system.info.planet_info,
                         scan as u8,
                         node.get(),
                     );
@@ -206,29 +221,9 @@ impl<'a, 'game, 'observer> CffiSurfaceGenerator<'a, 'game, 'observer> {
             Ok(retrieved)
         }
     }
-    fn with_role(
-        game: &'a RefCell<Cx<'game>>,
-        io: &'a RefCell<Io<'observer>>,
-        solar_system: *mut c_void,
-        world: *mut c_void,
-        role: GeneratorRole,
-    ) -> Result<Self, AdapterError> {
-        if solar_system.is_null() || world.is_null() {
-            Err(AdapterError::new("surface_generator_context"))
-        } else {
-            Ok(Self {
-                game,
-                io,
-                solar_system,
-                world,
-                role,
-                report_context: None,
-            })
-        }
-    }
 }
 
-impl SurfaceGenerator for CffiSurfaceGenerator<'_, '_, '_> {
+impl SurfaceGenerator for CffiSurfaceGenerator<'_, '_, '_, '_> {
     fn node_count(&mut self, scan: ScanType) -> Result<u8, AdapterError> {
         #[cfg(not(test))]
         // SAFETY: this adapter retains the initialized system, descriptor and RNG for the callback.
@@ -372,6 +367,9 @@ mod tests {
         ),
     ) {
         let mut owners = crate::engine::Game::new();
+        owners.world.set_catalog(std::borrow::Cow::Borrowed(
+            &crate::planets::tables::STARMAP_ARRAY,
+        ));
         let mut battle = crate::engine::battle::Battle::new();
         let game = RefCell::new(Cx::new(
             &mut battle,
@@ -400,21 +398,12 @@ mod tests {
         with_context(|game, io, report_context| {
             crate::state::ffi::rust_init_game_state(game.borrow_mut().world);
             game.borrow_mut().world.data.flagship.crew_enlisted = 23;
-            // SAFETY: all scalar and pointer fields admit zero before fixture initialization.
-            let mut system: Box<crate::ships::native::abi::SOLARSYS_STATE> =
-                Box::new(unsafe { std::mem::zeroed() });
-            let world = &raw mut system.PlanetDesc[0];
-            let mut generator = CffiSurfaceGenerator::for_planet_side(
-                game,
-                io,
-                &super::super::ffi::PlanetSideRunContext {
-                    solar_system: std::ptr::from_mut(&mut *system).cast(),
-                    world: world.cast(),
-                    ..Default::default()
-                },
-                report_context,
-            )
-            .unwrap();
+            let mut system = SolarSystem::new(game.borrow().world, StarId(0));
+            system.sys.sun.num_planets = 1;
+            system.enter_inner(0);
+            system.enter_orbit(Body::Planet(0));
+            let mut generator =
+                CffiSurfaceGenerator::for_planet_side(game, io, &mut system, report_context);
             assert!(std::ptr::eq(generator.io, io));
             for (scan, index) in [
                 (ScanType::Mineral, 31),
@@ -434,7 +423,7 @@ mod tests {
                     })
                     .unwrap());
                 assert_eq!(
-                    system.SysInfo.planet_info.scan_retrieve_mask[scan as usize],
+                    generator.system.info.planet_info.scan_retrieve_mask[scan as usize],
                     1 << index
                 );
                 assert_eq!(
@@ -448,7 +437,7 @@ mod tests {
             assert!(!generator
                 .pickup_with(ScanType::Energy, ScanNodeId::new(1).unwrap(), |_| false)
                 .unwrap());
-            assert_eq!(system.SysInfo.planet_info.scan_retrieve_mask[1], 1);
+            assert_eq!(generator.system.info.planet_info.scan_retrieve_mask[1], 1);
             assert_eq!(
                 game.borrow().world.story_state(StoryKey::PLANETARY_CHANGE),
                 0
@@ -458,33 +447,13 @@ mod tests {
 
     #[test]
     #[serial_test::serial]
-    fn null_generation_context_is_rejected() {
-        with_context(|game, io, report_context| {
-            assert!(matches!(
-                CffiSurfaceGenerator::for_planet_side(
-                    game,
-                    io,
-                    &super::super::ffi::PlanetSideRunContext::default(),
-                    report_context,
-                ),
-                Err(AdapterError {
-                    operation: "surface_generator_context",
-                    batch_depth_corrections: 0
-                })
-            ));
-            assert!(matches!(
-                CffiSurfaceGenerator::for_orbit_scan(
-                    game,
-                    io,
-                    std::ptr::null_mut(),
-                    std::ptr::null_mut(),
-                    None
-                ),
-                Err(AdapterError {
-                    operation: "surface_generator_context",
-                    batch_depth_corrections: 0
-                })
-            ));
+    fn missing_selected_body_is_rejected_before_generation() {
+        with_context(|game, io, report| {
+            let mut solar = SolarSystem::new(game.borrow().world, StarId(0));
+            assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                let _ = CffiSurfaceGenerator::for_planet_side(game, io, &mut solar, report);
+            }))
+            .is_err());
         });
     }
 
@@ -492,18 +461,12 @@ mod tests {
     #[serial_test::serial]
     fn unlinked_generator_fails_without_fallback() {
         with_context(|game, io, report_context| {
-            let pointer = std::ptr::NonNull::<u8>::dangling().as_ptr().cast();
-            let mut generator = CffiSurfaceGenerator::for_planet_side(
-                game,
-                io,
-                &super::super::ffi::PlanetSideRunContext {
-                    solar_system: pointer,
-                    world: pointer,
-                    ..Default::default()
-                },
-                report_context,
-            )
-            .unwrap();
+            let mut solar = SolarSystem::new(game.borrow().world, StarId(0));
+            solar.sys.sun.num_planets = 1;
+            solar.enter_inner(0);
+            solar.enter_orbit(Body::Planet(0));
+            let mut generator =
+                CffiSurfaceGenerator::for_planet_side(game, io, &mut solar, report_context);
             assert_eq!(
                 generator.node_count(ScanType::Mineral),
                 Err(AdapterError::new("surface_generator_unlinked"))

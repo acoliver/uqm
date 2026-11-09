@@ -103,7 +103,7 @@ impl SolarSystem {
         self.in_orbit = false;
     }
 
-    pub fn enter_orbit(&mut self, body: Body) {
+    pub fn select_body(&mut self, body: Body) {
         assert_eq!(
             self.location,
             SystemLocation::Inner(body.planet() as u8),
@@ -116,6 +116,10 @@ impl SolarSystem {
             );
         }
         self.selected = Some(body);
+    }
+
+    pub fn enter_orbit(&mut self, body: Body) {
+        self.select_body(body);
         self.in_orbit = true;
     }
 
@@ -133,6 +137,8 @@ impl SolarSystem {
     pub fn snapshot(&self, screen: (i32, i32)) -> SolarSnapshot {
         SolarSnapshot {
             star: self.star,
+            generator_index: self.sys.star_index(),
+            retrieval_masks: self.sys.info.planet_info.scan_retrieve_mask,
             screen,
             in_ip_flight: self.in_ip_flight,
             in_orbit: self.in_orbit,
@@ -169,7 +175,18 @@ impl SolarSystem {
         reset: bool,
         step: impl FnMut(&mut Cx<'_>, &mut Io<'_>, &mut SolarSystem) -> bool,
     ) {
-        cx.run_input_frame(io, reset, &mut SolarInput { solar: self, step });
+        let effects = std::cell::Cell::new(None);
+        let mut input = cx.reborrow();
+        input.solar_flight = Some(&effects);
+        input.run_input_frame(io, reset, &mut SolarInput { solar: self, step });
+        cx.solar_frame = input.solar_frame;
+    }
+
+    pub fn apply_input_effects(&mut self, cx: &Cx<'_>) {
+        if let Some(flight) = cx.solar_flight.and_then(std::cell::Cell::take) {
+            self.max_ship_speed = flight.max_ship_speed;
+            self.turn_wait = flight.turn_wait;
+        }
     }
 
     pub fn body_location(&self, body: Body) -> BodyLocation {
@@ -192,7 +209,10 @@ where
     }
 
     fn frame(&mut self, cx: &mut Cx<'_>, io: &mut Io<'_>) -> bool {
-        (self.step)(cx, io, self.solar)
+        self.solar.apply_input_effects(cx);
+        let running = (self.step)(cx, io, self.solar);
+        self.solar.apply_input_effects(cx);
+        running
     }
 }
 

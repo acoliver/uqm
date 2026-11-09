@@ -31,30 +31,6 @@ pub mod global_state {
     include!("abi/global_state_abi.rs");
 }
 
-/// The live solar-system state exported by `planets::solarsys` as `pSolarSysState`.
-///
-/// Every Rust reader of this global goes through [`current`], so the symbol is
-/// declared once with the whole bindgen layout of `SOLARSYS_STATE`. The solar
-/// system lifecycle owns its stack storage; other modules only borrow it, and
-/// no field is reached through an offset written by hand.
-///
-/// The declaration is available to the running game and integration tests;
-/// isolated unit tests do not own a live solar system.
-#[cfg(not(test))]
-pub mod solar_system {
-    use super::global_state::SOLARSYS_STATE;
-
-    /// The live `pSolarSysState`; NULL outside a solar system.
-    ///
-    /// # Safety
-    /// Game thread only: the lifecycle replaces the pointer while entering and leaving a
-    /// solar system. The caller may dereference the result only while it knows
-    /// the state is not being torn down.
-    pub unsafe fn current() -> *mut SOLARSYS_STATE {
-        crate::planets::solarsys::lifecycle::P_SOLAR_SYS_STATE
-    }
-}
-
 /// Fail the build when a hand-written `#[repr(C)]` mirror disagrees with the
 /// Rust-owned ABI schema: total size, alignment, and for each
 /// listed field its offset and size.

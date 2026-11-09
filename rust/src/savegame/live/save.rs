@@ -5,10 +5,11 @@ use std::ffi::{c_char, CStr};
 use super::super::abi::SummaryDesc;
 use super::super::runtime::{self, groups, live};
 use super::super::{SaveFile, SaveSlots};
+use crate::engine::world::generation::SolarSnapshot;
 use crate::mainloop::dir_prep::saveDir;
 use crate::navigation::globals::in_hqspace;
 use crate::navigation::groups::live::put_group_info;
-use crate::planets::solarsys::playerInSolarSystem;
+use crate::planets::solar_system::SolarSystem;
 
 pub use save_game as SaveGame;
 
@@ -23,13 +24,13 @@ pub(crate) unsafe fn capture(
     let point = cx.world.data.game.ip_location;
     if in_hqspace(cx.world) != 0 {
         crate::engine::save::hyper_save::prepare_hyper_state(cx.world, cx.kernel)?;
-    } else if playerInSolarSystem() {
-        live::prepare_live_solar_location(cx.world)?;
+    } else if let Some(solar) = solar {
+        live::prepare_live_solar_location(cx.world, &solar)?;
     }
     if groups::saves_ip_group_queue(cx.world.activity()) {
         put_group_info(cx.world, 0, u8::MAX);
     }
-    live::capture_prepared(cx.world, cx.kernel, star, point, name)
+    live::capture_prepared(cx.world, cx.kernel, star, point, name, solar)
 }
 
 /// # Safety
@@ -43,7 +44,11 @@ pub unsafe fn save_game(
 ) -> u32 {
     let result = (|| -> anyhow::Result<()> {
         let slots = SaveSlots::new(saveDir.cast())?;
-        let mut save = capture(cx, CStr::from_ptr(name).to_bytes())?;
+        let mut save = capture(
+            cx,
+            solar.map(|solar| solar.snapshot(cx.screen_dimensions())),
+            CStr::from_ptr(name).to_bytes(),
+        )?;
         summary.write(SummaryDesc::from(&save.summary));
         runtime::prepare_summary_for_write(&mut save.summary);
         slots.write(usize::from(slot), &save)?;

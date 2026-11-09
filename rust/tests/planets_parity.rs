@@ -22,7 +22,7 @@ use std::fmt::Write as _;
 use std::path::PathBuf;
 use uqm_rust::engine::world::generation::Body;
 use uqm_rust::planets::generate::{calc, orbits, surface};
-use uqm_rust::planets::solarsys::P_SOLAR_SYS_STATE as pSolarSysState;
+use uqm_rust::planets::solar_system::SolarSystem;
 
 use planets_common::default_gen::{
     self, layout_cases, moon_cases, moons_line, nodes_line, planets_line, DefaultOps, Layout,
@@ -33,12 +33,11 @@ use planets_common::{
     collect, orbit_cases, orbit_line, render_fixture, star_type_byte, world_cases, world_line,
     Generators, OrbitCase, WorldCase, PRESET_LIFE,
 };
-use uqm_rust::c_bindings::global_state::{POINT, SOLARSYS_STATE};
+use uqm_rust::c_bindings::global_state::POINT;
 use uqm_rust::math::RandomContext;
 use uqm_rust::savegame::runtime::star::{CStarDesc, CATALOG_LEN};
 
 unsafe extern "C" {
-    static mut SysGenRNG: *mut RandomContext;
 
     static mut ScreenWidth: i32;
     static planet_array: [PlanetFrame; 59];
@@ -91,7 +90,7 @@ fn exported_topography_reproduces_the_fixture(table: &[PlanetFrame]) {
 }
 
 struct SuppliedGenerators {
-    state: Box<SOLARSYS_STATE>,
+    state: Box<SolarSystem>,
     /// The fixture star occupies slot zero of this retained catalog.
     star: Box<[CStarDesc; CATALOG_LEN]>,
     previous_catalog: [CStarDesc; CATALOG_LEN],
@@ -100,13 +99,9 @@ struct SuppliedGenerators {
 
 impl SuppliedGenerators {
     fn new() -> Self {
-        let mut state: Box<SOLARSYS_STATE> = Box::new(unsafe { std::mem::zeroed() });
-
         unsafe {
-            SysGenRNG = uqm_rust::math::new_context();
             // `MAP_WIDTH` derives from the screen width the graphics init sets.
             ScreenWidth = 320;
-            pSolarSysState = &mut *state;
         }
         let previous_catalog = uqm_rust::engine::World::current().read(|world| *world.catalog());
         let previous_star = uqm_rust::engine::World::current().read(|world| world.current_star);
@@ -114,6 +109,10 @@ impl SuppliedGenerators {
         let mut star = Box::new(unsafe { starmap_array });
         // SAFETY: a star record contains only integer fields; zero initializes its fixture values.
         star[0] = unsafe { std::mem::zeroed() };
+        let state = uqm_rust::engine::World::current().write(|world| {
+            world.set_catalog(std::borrow::Cow::Owned(*star));
+            Box::new(SolarSystem::new(world, uqm_rust::engine::StarId(0)))
+        });
         Self {
             state,
             star,
@@ -129,6 +128,19 @@ impl SuppliedGenerators {
             world.set_catalog(std::borrow::Cow::Owned(*self.star));
             world.current_star = Some(uqm_rust::engine::StarId(0));
         });
+        let mut next = uqm_rust::engine::world::generation::SolarSys::new(
+            &uqm_rust::planets::tables::PLANET_ARRAY.0,
+            self.star[0].star_type,
+            self.star[0].index,
+            std::mem::replace(&mut self.state.sys.rng, RandomContext::with_seed(12345)),
+        );
+        next.sun = self.state.sys.sun;
+        next.planets = self.state.sys.planets;
+        next.moons = self.state.sys.moons;
+        next.info = self.state.sys.info;
+        next.frames = std::mem::take(&mut self.state.sys.frames);
+        next.report = std::mem::take(&mut self.state.sys.report);
+        self.state.sys = next;
     }
 
     fn select_info(&mut self, info: &SystemInfo) {
@@ -169,7 +181,6 @@ impl Generators for SuppliedGenerators {
         desc.radius = case.desc_radius;
         let body = match case.parent_radius {
             None => {
-                desc.prev_desc = &raw mut self.state.sys.sun;
                 self.state.sys.planets[0] = desc;
                 Body::Planet(0)
             }
@@ -177,7 +188,6 @@ impl Generators for SuppliedGenerators {
                 let mut parent: PlanetDesc = unsafe { std::mem::zeroed() };
                 parent.radius = radius;
                 self.state.sys.planets[0] = parent;
-                desc.prev_desc = &raw mut self.state.sys.planets[0];
                 self.state.sys.moons[0] = desc;
                 Body::Moon { planet: 0, moon: 0 }
             }
@@ -247,7 +257,7 @@ impl Generators for SuppliedGenerators {
             types_defined: case.mode.types_defined(),
         };
         unsafe {
-            reseed_c(SysGenRNG, case.seed);
+            self.state.sys.rng.reseed(case.seed);
             crate::invoke_generation(&mut *self.state, |system, _| {
                 if moons {
                     system.layout_moons(0, |rng, size, color, _, worlds| {
@@ -281,13 +291,14 @@ impl DefaultOps for SuppliedGenerators {
         self.state.sys.planets = unsafe { std::mem::zeroed() };
         self.state.sys.sun.num_planets = 0;
         let rng = unsafe {
-            reseed_c(SysGenRNG, seed);
+            self.state.sys.rng.reseed(seed);
             assert!(crate::invoke_generation(
                 &mut *self.state,
-                |system, host| uqm_rust::planets::generate::generator(0)
-                    .generate_planets(system, host)
+                |system, host| {
+                    uqm_rust::planets::generate::generator(0).generate_planets(system, host)
+                }
             ));
-            (*SysGenRNG).seed()
+            self.state.sys.rng.seed()
         };
         let drawn = self.state.sys.sun.num_planets;
         Layout {
@@ -305,13 +316,14 @@ impl DefaultOps for SuppliedGenerators {
         self.state.sys.moons = unsafe { std::mem::zeroed() };
         self.state.sys.planets[0].num_planets = count;
         let rng = unsafe {
-            reseed_c(SysGenRNG, seed);
+            self.state.sys.rng.reseed(seed);
             assert!(crate::invoke_generation(
                 &mut *self.state,
-                |system, host| uqm_rust::planets::generate::generator(0)
-                    .generate_moons(system, 0, host)
+                |system, host| {
+                    uqm_rust::planets::generate::generator(0).generate_moons(system, 0, host)
+                }
             ));
-            (*SysGenRNG).seed()
+            self.state.sys.rng.seed()
         };
         Layout {
             worlds: self.state.sys.moons[..usize::from(count)]
@@ -333,7 +345,7 @@ impl DefaultOps for SuppliedGenerators {
         self.select_info(info);
         let record = &raw mut *self.state;
         unsafe {
-            let count = crate::invoke_generation(record, |system, host| {
+            let count = crate::invoke_generation(&mut *record, |system, host| {
                 use uqm_rust::planets::generate::{default, generator};
                 let body = uqm_rust::planets::generate::special::Body::Planet(0);
                 match kind {
@@ -352,7 +364,7 @@ impl DefaultOps for SuppliedGenerators {
                     }),
                 }
             });
-            (count, (*SysGenRNG).seed())
+            (count, self.state.sys.rng.seed())
         }
     }
 }
@@ -415,8 +427,7 @@ fn check_fixture(name: &str, text: &str) {
     assert_eq!(stored, text, "{name} differs from the checked-in C fixture");
 }
 
-/// Native fixtures still share process-global state (`pSolarSysState`,
-/// `SysGenRNG`), so their comparisons must not run in parallel.
+/// Native drawing and campaign fixtures use one serialized graphics owner.
 #[test]
 fn supplied_views_reproduce_the_c_fixtures() {
     battle_context::run(|_| {
@@ -442,9 +453,11 @@ fn supplied_views_reproduce_the_c_fixtures() {
         planets_special::mycon_matches_the_c_original(table);
         planets_special::late_generators_match(table);
         planets_special::sol_matches_the_c_original(table);
-        oval_parity::retained_ovals_match_original_c_full_offscreen_buffers();
-        topography_parity::full_c_fixture_core_and_host_parity();
-        sphere_geometry_parity::original_c_and_rust_match_fixture_without_rng_effects();
+        oval_parity::retained_ovals_match_original_c_full_offscreen_buffers(&exports.state.sys.rng);
+        topography_parity::full_c_fixture_core_and_host_parity(&exports.state.sys.rng);
+        sphere_geometry_parity::original_c_and_rust_match_fixture_without_rng_effects(
+            &exports.state.sys.rng,
+        );
         assert!(unsafe {
             crate::invoke_generation(&mut *exports.state, |system, host| {
                 let generator = uqm_rust::planets::generate::generator(0);
@@ -561,7 +574,7 @@ impl Drop for SuppliedGenerators {
 }
 
 unsafe fn invoke_generation<R>(
-    record: *mut SOLARSYS_STATE,
+    solar: &mut SolarSystem,
     run: impl FnOnce(
         &mut uqm_rust::engine::world::generation::SolarSys<'_>,
         &mut dyn uqm_rust::planets::generate::SiteHost,
@@ -574,13 +587,37 @@ unsafe fn invoke_generation<R>(
             let mut io = uqm_rust::engine::observe::Io {
                 observer: &mut observer,
             };
-            uqm_rust::planets::solarsys::site::dispatch::with_system(
+            uqm_rust::planets::solarsys::site::dispatch::invoke(
                 cx,
                 &mut io,
-                record,
+                solar,
                 |_, system, host| run(system, host),
             )
             .0
         })
     }
+}
+
+fn generation_data(
+    solar: &SolarSystem,
+) -> (
+    PlanetDesc,
+    [PlanetDesc; 16],
+    [PlanetDesc; 4],
+    SystemInfo,
+    [Option<uqm_rust::graphics::native_abi::FRAME>; 6],
+    Option<usize>,
+) {
+    (
+        solar.sys.sun,
+        solar.sys.planets,
+        solar.sys.moons,
+        solar.sys.info,
+        std::array::from_fn(|i| {
+            solar.sys.frames[i]
+                .as_ref()
+                .map(|frame| frame.lease().frame(0).unwrap())
+        }),
+        solar.sys.report.current().map(|text| text.index()),
+    )
 }

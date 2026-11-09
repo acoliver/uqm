@@ -67,13 +67,13 @@ pub fn check(h: &mut Harness) {
         );
         let system = &raw mut *h.state;
         let world = &raw mut (*system).sys.planets[2];
-        (*world).prev_desc = &raw mut (*system).sys.sun;
         (*world).data_index = 42 | 128;
         (*world).rand_seed = 104729;
         (*world).location.x = 100;
         (*world).location.y = 0;
-        (*system).pOrbitalDesc = world;
-        (*system).InOrbit = 1;
+        (*system).sys.sun.num_planets = 9;
+        (*system).enter_inner(2);
+        (*system).enter_orbit(uqm_rust::engine::world::generation::Body::Planet(2));
         uqm_rust::planets::generate::sol::orbital::physical_overrides(
             &mut (*system).sys.info,
             uqm_rust::planets::generate::special::Body::Planet(2),
@@ -86,7 +86,7 @@ pub fn check(h: &mut Harness) {
             &animation,
             false,
             c_api::SurfaceInputs {
-                rng: &mut *super::SysGenRNG,
+                rng: &mut (*system).sys.rng,
                 planet: &*world,
                 info: &(*system).sys.info.planet_info,
                 location: uqm_rust::graphics::drawable::Point::new(
@@ -98,7 +98,7 @@ pub fn check(h: &mut Harness) {
             earth.into_drawable(),
         );
         assert_eq!(
-            (*super::SysGenRNG).seed(),
+            (*system).sys.rng.seed(),
             104729,
             "packaged definitions still reseed the supplied system RNG"
         );
@@ -130,7 +130,7 @@ pub fn check(h: &mut Harness) {
             );
         }
         println!("real Earth shield tint: all {} RGB pixels equal [255, source.g, source.b]; complete buffer equals isolated Rust additive core", after_tint.len());
-        c_api::FreePlanet();
+        uqm_rust::app::bridge::enter(|cx| c_api::free_planet(cx, &mut *system));
         assert_eq!(sphere.elevation()[0], first_elevation);
         drop(topography);
         drop(sphere);
@@ -177,20 +177,19 @@ unsafe fn frame_rgb(frame: *mut uqm_rust::c_bindings::global_state::FRAME_DESC) 
 unsafe fn names(h: &mut Harness) {
     // SAFETY: the serialized harness retains its captured strings and initialized system through each name callback.
     unsafe {
-        let strings =
-            c_api::CaptureStringTable(c_api::LoadStringTableInstance(c"text.starcon".as_ptr()));
-        assert!(!strings.is_null());
+        let strings_owner =
+            uqm_rust::engine::strings::owned_table::LoadedTextTable::load(c"text.starcon").unwrap();
+        let strings = strings_owner.as_raw();
         let saved = uqm_rust::engine::Kernel::current()
             .write(|kernel| std::mem::replace(&mut kernel.game_strings, strings.cast()));
         let system = &raw mut *h.state;
         for (index, expected) in [(0, "Mercury"), (2, "Earth"), (8, "Pluto")] {
             let parent = &raw mut (*system).sys.planets[index];
-            (*parent).prev_desc = &raw mut (*system).sys.sun;
             (*parent).data_index = index as u8 + 128;
-            assert!(crate::invoke_generation(system, |view, host| {
+            assert!(crate::invoke_generation(&mut *system, |view, host| {
                 GENERATE_SOL_FUNCTIONS.generate_name(
                     view,
-                    uqm_rust::planets::solarsys::site::dispatch::body(system, parent),
+                    uqm_rust::engine::world::generation::Body::Planet(index as u8),
                     host,
                 )
             }));
@@ -208,12 +207,14 @@ unsafe fn names(h: &mut Harness) {
                 index as u32 + 128
             );
             let moon = &raw mut (*system).sys.moons[1];
-            (*moon).prev_desc = parent;
             (*moon).data_index = 27;
-            assert!(crate::invoke_generation(system, |view, host| {
+            assert!(crate::invoke_generation(&mut *system, |view, host| {
                 GENERATE_SOL_FUNCTIONS.generate_name(
                     view,
-                    uqm_rust::planets::solarsys::site::dispatch::body(system, moon),
+                    uqm_rust::engine::world::generation::Body::Moon {
+                        planet: index as u8,
+                        moon: 1,
+                    },
                     host,
                 )
             }));
@@ -236,10 +237,7 @@ unsafe fn names(h: &mut Harness) {
             );
         }
         uqm_rust::engine::Kernel::current().write(|kernel| kernel.game_strings = saved);
-        // Reuse the production discovery-table cleanup boundary for this captured
-        // table after restoring the global that borrowed it.
-        (*system).sys.info.planet_info.discovery_string = strings.cast();
-        c_api::FreePlanet();
+        drop(strings_owner);
         c_api::TFB_FlushGraphicsEx(1);
         println!("Sol name ABI: real game strings, parent names and parent battle frames for planets and moons");
     }
@@ -255,14 +253,12 @@ unsafe fn scenes(h: &mut Harness) {
         h.set_star(0, 0);
         let system = &raw mut *h.state;
         let planet = &raw mut (*system).sys.planets[if pluto { 8 } else { 2 }];
-        (*planet).prev_desc = &raw mut (*system).sys.sun;
         (*planet).radius = 100;
         (*planet).data_index = if pluto { 22 } else { 42 | 128 };
         let world = if pluto {
             planet
         } else {
             let moon = &raw mut (*system).sys.moons[1];
-            (*moon).prev_desc = planet;
             (*moon).radius = 35;
             (*moon).data_index = 27;
             moon
@@ -277,23 +273,29 @@ unsafe fn scenes(h: &mut Harness) {
         // SAFETY: Harness retains installed owners and live solar/planet
         // descriptors throughout this synchronous orbital callback.
         let typography = uqm_rust::app::bridge::enter(|cx| {
-            let game = std::cell::RefCell::new(uqm_rust::engine::battle::Cx {
-                b: cx.b,
-                world: cx.world,
-                kernel: cx.kernel,
-                rng: cx.rng,
-            });
+            let game = std::cell::RefCell::new(cx.reborrow());
             let mut observer = uqm_rust::engine::observe::Unobserved;
             let io = std::cell::RefCell::new(uqm_rust::engine::observe::Io {
                 observer: &mut observer,
             });
             let mut pickup = uqm_rust::planet_side::special_effects::PickupContext::NoLander;
-            let mut site =
-                uqm_rust::planets::solarsys::site::Site::new(&game, &io, system, &mut pickup, None);
-            assert!(site.with_system(|_, view, host| {
+            let mut site = uqm_rust::planets::solarsys::site::Site::new(
+                &game,
+                &io,
+                (*system).star(),
+                (*system).sys.star_index(),
+                (*system).in_orbit(),
+                &mut pickup,
+                None,
+            );
+            assert!(site.invoke(&mut (*system).sys, |_, view, host| {
                 GENERATE_SOL_FUNCTIONS.generate_orbital(
                     view,
-                    uqm_rust::planets::solarsys::site::dispatch::body(system, world),
+                    if pluto {
+                        uqm_rust::engine::world::generation::Body::Planet(8)
+                    } else {
+                        uqm_rust::engine::world::generation::Body::Moon { planet: 2, moon: 1 }
+                    },
                     host,
                 )
             }));
@@ -314,13 +316,13 @@ unsafe fn scenes(h: &mut Harness) {
         );
         assert!(effect.frame_rect(0).extent.width > 0);
         let info = &(*system).sys.info.planet_info;
-        assert!(!info.discovery_string.is_null());
-        assert!(!(*system).sys.frames[1].is_null());
+        assert!((*system).sys.report.current().is_some());
+        assert!((*system).sys.frames[1].is_some());
         assert_eq!(info.planet_density, if pluto { 33 } else { 60 });
-        c_api::FreePlanet();
+        uqm_rust::app::bridge::enter(|cx| c_api::free_planet(cx, &mut *system));
         c_api::TFB_FlushGraphicsEx(1);
         let info = &(*system).sys.info.planet_info;
-        assert!(info.discovery_string.is_null());
+        assert!((*system).sys.report.current().is_none());
         drop(typography);
         assert!(
             font.measure(
@@ -334,10 +336,7 @@ unsafe fn scenes(h: &mut Harness) {
         assert!(effect.frame_rect(0).extent.width > 0);
         drop((font, effect));
         c_api::TFB_FlushGraphicsEx(1);
-        assert!((*system)
-            .sys.frames
-            .iter()
-            .all(|frame| frame.is_null()));
+        assert!((*system).sys.frames.iter().all(|frame| frame.is_none()));
         println!("Sol real scene {}: font + effect + mask + report loaded through actual orbital ABI, then explicit font leases survive FreePlanet and release after their final user", if pluto { "Pluto" } else { "moonbase" });
     }
     c_api::DISABLE_INTERACTIVITY = saved_debug;

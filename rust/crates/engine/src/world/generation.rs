@@ -44,6 +44,12 @@ impl Body {
     }
 }
 
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct SolarFlight {
+    pub max_ship_speed: u8,
+    pub turn_wait: u8,
+}
+
 pub struct SolarSys<'a> {
     pub sun: PlanetDesc,
     pub planets: [PlanetDesc; 16],
