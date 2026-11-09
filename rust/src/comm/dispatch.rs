@@ -590,7 +590,6 @@ fn run_encounter(
             .checkpoint(&CheckpointView::DialogueDispatch(comm_id))
     });
     let comm = &mut Comm::with_options(options);
-    comm.presentation = super::presentation::Presentation::from(&*cx.kernel);
     encounter::load_descriptor(comm, cx, comm_id);
     let status = if cx.world.story_state(StoryKey::BATTLE_SEGUE) == 0 {
         HAIL
@@ -726,11 +725,13 @@ pub fn place_flagship_at_star(world: &mut World, location: (i16, i16)) -> Result
 ///
 /// # Safety
 /// Called on the game thread with an initialized conversation and matching context.
+/// Kernel rendering resources must remain live through session teardown.
 pub unsafe fn race_descriptor(
     comm: &mut Comm,
     cx: &mut Cx<'_>,
     comm_id: u32,
 ) -> crate::comm::locdata::CLocData {
+    comm.presentation = super::presentation::Presentation::from(&*cx.kernel);
     // Initialize Rust dialogue state (callbacks, phrase state, etc.)
     ffi::rust_init_race_dialogue(comm, cx, comm_id as i32);
 

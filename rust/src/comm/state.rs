@@ -245,6 +245,15 @@ impl Comm {
         self.prev_subtitle = None;
     }
 
+    /// Install the descriptor and its typed conversation view together.
+    ///
+    /// # Safety
+    /// Descriptor resources must remain live through session teardown.
+    pub unsafe fn install_descriptor(&mut self, data: super::locdata::CLocData) {
+        self.set_comm_data(super::locdata::read_locdata(&data));
+        self.data = data;
+    }
+
     /// Set communication data for current encounter
     pub fn set_comm_data(&mut self, data: CommData) {
         self.comm_data = Some(data);

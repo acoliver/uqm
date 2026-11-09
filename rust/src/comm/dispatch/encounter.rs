@@ -7,9 +7,11 @@ use super::*;
 
 #[cfg(not(test))]
 pub(super) fn load_descriptor(comm: &mut Comm, cx: &mut Cx<'_>, comm_id: u32) {
-    // SAFETY: dispatch holds the exclusive game-thread owners required by the race factory.
-    comm.data = unsafe { race_descriptor(comm, cx, comm_id) };
-    comm.set_comm_data(crate::comm::locdata::read_locdata(&comm.data));
+    // SAFETY: dispatch owns the game thread and retains the descriptor resources through teardown.
+    unsafe {
+        let descriptor = race_descriptor(comm, cx, comm_id);
+        comm.install_descriptor(descriptor);
+    }
 }
 
 #[cfg(not(test))]

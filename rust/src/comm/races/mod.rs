@@ -146,17 +146,8 @@ pub fn get_race_dialogue(comm_id: i32) -> Option<Box<dyn RaceDialogue>> {
     }
 }
 
-/// FFI entry point: initialize a race dialogue from Rust.
-///
-/// Called from C's `init_race()` in `commglue.c`. If this returns 1,
-/// the race has a Rust dialogue implementation and the Rust CommData
-/// has been populated with resource keys and segue mode. If it returns 0,
-/// the C `init_*_comm()` function should be used instead.
-///
-/// # Safety
-///
-/// This is an FFI function called from C.
-pub unsafe fn rust_init_race_dialogue(
+/// Initialize a dialogue through the supplied host, returning 0 for an unknown ID.
+pub fn rust_init_race_dialogue(
     comm: &mut dyn DialogueHost,
     cx: &mut crate::engine::battle::Cx<'_>,
     comm_id: c_int,
