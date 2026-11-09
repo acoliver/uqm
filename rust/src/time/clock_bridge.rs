@@ -174,6 +174,47 @@ mod tests {
     }
 
     #[test]
+    fn supplied_clock_tick_uses_only_its_world_and_rolls_the_year() {
+        let mut first = crate::engine::World::new();
+        let mut second = crate::engine::World::new();
+        for world in [&mut first, &mut second] {
+            let clock = &mut world.data.game.game_clock;
+            clock.year_index = 2155;
+            clock.month_index = 12;
+            clock.day_index = 31;
+            clock.day_in_ticks = 2;
+            clock.tick_count = 1;
+        }
+        assert!(rust_clock_tick(&mut first));
+        assert_eq!(first.data.calendar_date(), (1, 1, 2156));
+        assert_eq!(first.data.game.game_clock.tick_count, 2);
+        assert_eq!(second.data.calendar_date(), (12, 31, 2155));
+        assert_eq!(second.data.game.game_clock.tick_count, 1);
+        assert!(!rust_clock_tick(&mut first));
+        assert_eq!(first.data.game.game_clock.tick_count, 1);
+        assert!(rust_clock_tick(&mut second));
+        assert_eq!(second.data.calendar_date(), (1, 1, 2156));
+    }
+
+    #[test]
+    fn supplied_clock_tick_does_not_advance_a_paused_clock() {
+        let mut world = crate::engine::World::new();
+        let clock = &mut world.data.game.game_clock;
+        clock.year_index = 2156;
+        clock.month_index = 2;
+        clock.day_index = 28;
+        clock.day_in_ticks = 0;
+        clock.tick_count = 1;
+        assert!(!rust_clock_tick(&mut world));
+        assert_eq!(world.data.calendar_date(), (2, 28, 2156));
+        assert_eq!(world.data.game.game_clock.tick_count, 0);
+        assert!(!rust_clock_tick(&mut world));
+        world.data.game.game_clock.day_in_ticks = 1;
+        assert!(rust_clock_tick(&mut world));
+        assert_eq!(world.data.calendar_date(), (2, 29, 2156));
+    }
+
+    #[test]
     fn test_is_leap_year() {
         assert!(is_leap_year(2000));
         assert!(is_leap_year(2004));

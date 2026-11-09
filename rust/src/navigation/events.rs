@@ -1,5 +1,9 @@
 //! Campaign events and daily fleet movement, ported from gameev.c.
 
+#[cfg(test)]
+#[path = "events/supplied_tests.rs"]
+mod supplied_tests;
+
 use super::abi::*;
 use crate::engine::{StoryKey, World};
 
