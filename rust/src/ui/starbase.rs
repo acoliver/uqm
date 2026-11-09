@@ -408,12 +408,14 @@ unsafe fn update_starbase_screen(
     true
 }
 
-unsafe fn do_time_passage() {
-    SleepThreadUntil(FadeScreen(
-        ScreenFadeType_FadeAllToBlack,
-        (ONE_SECOND * 2) as SIZE,
-    ));
-    MoveGameClockDays(14);
+unsafe fn do_time_passage(cx: &mut Cx<'_>) {
+    cx.with_legacy(|| {
+        SleepThreadUntil(FadeScreen(
+            ScreenFadeType_FadeAllToBlack,
+            (ONE_SECOND * 2) as SIZE,
+        ));
+    });
+    crate::time::clock_abi::advance_days(cx, 14);
 }
 
 fn cleanup_after_star_base(world: &mut World) {
@@ -477,7 +479,7 @@ unsafe fn prepare_starbase_visit(cx: &mut Cx<'_>, io: &mut Io<'_>) -> Option<u32
     if cx.world.story_state(StoryKey::MOONBASE_ON_SHIP) != 0
         || cx.world.story_state(StoryKey::CHMMR_BOMB_STATE) == 2
     {
-        cx.with_legacy(|| do_time_passage());
+        do_time_passage(cx);
         if cx.world.data.flagship.crew_enlisted == COUNT::MAX {
             return None;
         }
@@ -540,8 +542,8 @@ pub unsafe fn run_starbase_visit(cx: &mut Cx<'_>, io: &mut Io<'_>) {
 /// the initialized game thread.
 pub unsafe fn install_bomb_at_earth(cx: &mut Cx<'_>) {
     let screen_context = cx.kernel.screen_context;
+    do_time_passage(cx);
     cx.with_legacy(|| {
-        do_time_passage();
         SetContext(screen_context);
         SetTransitionSource(ptr::null());
         SetContextBackGroundColor(BLACK);
