@@ -38,8 +38,6 @@ use crate::time::counter_abi::GetTimeCounter;
 use super::state::ScanState;
 use crate::engine::graphics::drawable_abi::LoadedDrawable;
 
-use crate::graphics::gfx_common_abi::DrawFromExtraScreen;
-
 use crate::planets::solarsys::drawing::draw_star_background;
 
 use crate::planets::sphere::live::draw_default_planet_sphere;
@@ -115,14 +113,21 @@ fn cursor_frame(scan: &ScanState) -> ContextFrame {
     scan.cursor_image.indexed_frame(105)
 }
 
-pub unsafe fn repair_back_rect(rect: &CRect) {
-    let old = CffiPlatform.context_clip_rect();
-    let mut new = *rect;
-    new.corner.x += old.corner.x;
-    new.corner.y += old.corner.y;
-    new.height += new.corner.y & 1;
+pub(crate) fn repair_back_rect(context: &ContextLease, rect: &CRect) {
+    let old = context.clip_rect();
+    let mut new = crate::graphics::native_abi::RECT {
+        corner: crate::graphics::native_abi::POINT {
+            x: rect.corner.x + old.corner.x,
+            y: rect.corner.y + old.corner.y,
+        },
+        extent: crate::graphics::native_abi::EXTENT {
+            width: rect.width,
+            height: rect.height,
+        },
+    };
+    new.extent.height += new.corner.y & 1;
     new.corner.y &= !1;
-    DrawFromExtraScreen(std::ptr::from_mut(&mut new).cast());
+    context.restore_screen_region(new);
 }
 
 unsafe fn erase_coarse(planet: &ContextLease, scan: &ScanState) {
@@ -583,7 +588,7 @@ unsafe fn scan_planet(
                 width: width(),
                 height: 11,
             };
-            repair_back_rect(&repair);
+            repair_back_rect(planet, &repair);
             planet.set_font(&micro);
             CffiPlatform.set_fg_color(TEXT_COLORS[usize::from(scan)]);
             display::text(
@@ -623,7 +628,7 @@ unsafe fn scan_planet(
     }
     cx.with_legacy(|| {
         planet.select();
-        repair_back_rect(&repair);
+        repair_back_rect(planet, &repair);
         scan_state.context().select();
     });
     if scan_type == 4 {

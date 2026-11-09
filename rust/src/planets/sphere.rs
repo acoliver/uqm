@@ -375,7 +375,7 @@ pub(crate) mod live {
             planet.select();
             CffiPlatform.batch();
             if i > 0 {
-                repair_back_rect(&repair);
+                repair_back_rect(planet, &repair);
             }
             let old_mode = SetGraphicScaleMode(1);
             let old_scale = SetGraphicScale((256.0 * scale + 0.5) as i32);

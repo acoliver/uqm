@@ -152,6 +152,23 @@ fn solar_system_save_load_restores_sol_after_a_hyperspace_exit() -> Result<(), B
 }
 
 #[test]
+#[serial_test::serial]
+fn starbase_visits_run_the_owned_outfit_and_shipyard_sessions() -> Result<(), Box<dyn Error>> {
+    let temporary = Path::new(env!("CARGO_MANIFEST_DIR")).join("../tmp");
+    std::fs::create_dir_all(&temporary)?;
+    let root = tempfile::Builder::new()
+        .prefix("replay-starbase-ui-")
+        .tempdir_in(temporary)?;
+    install_content(root.path())?;
+    let summary = run_replay(root.path(), "starbase-visit-v1", "visit", false)?;
+    assert_eq!(summary["completed"], true, "{summary}");
+    assert_eq!(summary["final_activity"], 4, "{summary}");
+    assert_eq!(summary["inputs_admitted"], 1305, "{summary}");
+    assert_eq!(summary["presents"], 2470, "{summary}");
+    Ok(())
+}
+
+#[test]
 fn campaign_failure_replays_complete_twice_with_identical_summaries() -> Result<(), Box<dyn Error>>
 {
     let temporary = Path::new(env!("CARGO_MANIFEST_DIR")).join("../tmp");
