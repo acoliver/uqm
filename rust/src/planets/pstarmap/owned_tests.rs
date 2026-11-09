@@ -62,9 +62,9 @@ impl InputRuntime for Driver {
             assert_eq!(self.input.repeat_config(), (70, 420, 70, false));
         }
         let cancel = if reset {
-            crate::navigation::abi::KEY_MENU_EDIT_CANCEL
+            crate::engine::input::frames::KEY_MENU_EDIT_CANCEL
         } else {
-            crate::navigation::abi::KEY_MENU_CANCEL
+            crate::engine::input::frames::KEY_MENU_CANCEL
         } as usize;
         for keys in [&[][..], &[cancel][..]] {
             self.press(keys);

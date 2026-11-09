@@ -187,7 +187,7 @@ pub unsafe fn begin_urquan_encounter(world: &mut crate::engine::World, loc: (i16
         if Some(id) == encounters.head() {
             encounters.remove(id);
         }
-        *encounters.get_mut(id) = crate::navigation::abi::ENCOUNTER::default();
+        *encounters.get_mut(id) = crate::engine::world::queues::EncounterRecord::default();
         encounters.insert_before(id, encounters.head());
         let fleets = world.avail_races_ref();
         let template = *fleets.get(
@@ -202,7 +202,7 @@ pub unsafe fn begin_urquan_encounter(world: &mut crate::engine::World, loc: (i16
         encounter.race_id = ship::URQUAN_SHIP;
         encounter.num_ships = 1;
         encounter.flags = ONE_SHOT_ENCOUNTER;
-        encounter.ship_list[0] = crate::navigation::abi::brief_ship_info {
+        encounter.ship_list[0] = crate::engine::world::queues::BriefShipInfo {
             race_id: ship::URQUAN_SHIP,
             crew_level: template.crew_level,
             max_crew: template.max_crew,
