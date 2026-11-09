@@ -157,7 +157,6 @@ pub const THRADDASH_BODY_THRESHOLD: u32 = 25;
 pub const COMBAT_SPEED_SHIFT: u32 = 6;
 pub const COMBAT_SPEED_MASK: u32 = 192;
 pub const NUM_COMBAT_SPEEDS: u32 = 4;
-pub const MUSIC_DISABLED: u32 = 8;
 pub const SOUND_DISABLED: u32 = crate::engine::world::SOUND_DISABLED as u32;
 pub const CYBORG_ENABLED: u32 = 32;
 pub const MAX_ENCOUNTERS: u32 = 16;
@@ -2482,17 +2481,6 @@ pub const IGNORE_FLAGSHIP: _bindgen_ty_24 = 4;
 pub const REFORM_GROUP: _bindgen_ty_24 = 8;
 pub type _bindgen_ty_24 = ::std::os::raw::c_uint;
 
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct GROUP_HEADER {
-    pub NumGroups: BYTE,
-    pub day_index: BYTE,
-    pub month_index: BYTE,
-    pub star_index: COUNT,
-    pub year_index: COUNT,
-    pub GroupOffset: [DWORD; 65usize],
-}
-
 pub use crate::navigation::groups::write_group_header;
 
 pub const STAR_STRING_BASE: _bindgen_ty_25 = 0;
@@ -2500,7 +2488,6 @@ pub const DEVICE_STRING_BASE: _bindgen_ty_25 = 133;
 pub const CARGO_STRING_BASE: _bindgen_ty_25 = 162;
 pub const ELEMENTS_STRING_BASE: _bindgen_ty_25 = 172;
 pub const SCAN_STRING_BASE: _bindgen_ty_25 = 305;
-pub const STAR_NUMBER_BASE: _bindgen_ty_25 = 361;
 pub const PLANET_NUMBER_BASE: _bindgen_ty_25 = 375;
 pub const MONTHS_STRING_BASE: _bindgen_ty_25 = 408;
 pub const FEEDBACK_STRING_BASE: _bindgen_ty_25 = 420;
