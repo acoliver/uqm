@@ -486,7 +486,7 @@ pub(crate) mod runtime {
         }
     }
 
-    unsafe fn outtakes(cx: &mut Cx<'_>, io: &mut Io<'_>, window: &Rc<Cell<CRect>>) {
+    fn outtakes(cx: &mut Cx<'_>, io: &mut Io<'_>, window: &Rc<Cell<CRect>>) {
         const CONVERSATIONS: [CONVERSATION; 15] = [
             CONVERSATION_ZOQFOTPIK_CONVERSATION,
             CONVERSATION_TALKING_PET_CONVERSATION,
@@ -512,17 +512,20 @@ pub(crate) mod runtime {
         });
         let mut i = 0;
         while i < CONVERSATIONS.len() && cx.world.activity() & CHECK_ABORT as u16 == 0 {
-            crate::comm::dispatch::init_communication_with_options(
-                cx,
-                io,
-                CONVERSATIONS[i],
-                CommOptions {
-                    oscilloscope: false,
-                    slider: false,
-                    window: Some(window.clone()),
-                    intro: (CIM_CROSSFADE_WINDOW as u32, 0),
-                },
-            );
+            // SAFETY: Outtakes run under the initialized credits entry's game-thread contract.
+            unsafe {
+                crate::comm::dispatch::init_communication_with_options(
+                    cx,
+                    io,
+                    CONVERSATIONS[i],
+                    CommOptions {
+                        oscilloscope: false,
+                        slider: false,
+                        window: Some(window.clone()),
+                        intro: (CIM_CROSSFADE_WINDOW as u32, 0),
+                    },
+                );
+            }
             i += 1;
         }
         cx.with_legacy(|| {
