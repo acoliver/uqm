@@ -422,16 +422,22 @@ Rules enforced by xtask:
    LLVM LCOV export. Its LF/LH summaries must equal JSON's aggregate totals;
    DA records retain physical-line hits. Closures can contribute an extra aggregate
    line without adding a physical line. Import each host's log before moving declarations with
-   `cargo xtask coverage sources import <log> <prefix>...`. Batch only the
+   `cargo xtask coverage sources import <log> <base> <prefix>...`. Batch only the
    declarations planned to move; overlapping prefixes import each function once.
-   The source text must match the measured commit. After registering the moves, record
+   The source must match the measured commit and the supplied base. Stored evidence
+   contains only a main-history commit, file/span and physical-line hits, never a
+   function body. The commit must be an ancestor of the comparison base, so deleting
+   a squashed feature branch cannot discard the source. Retained-debt comparisons
+   retrieve that original source from Git after the declaration moves. Coverage
+   checkouts therefore need the source history. After registering the moves, record
    their measured line debt with `cargo xtask coverage moves record <owner>
    --base <ref>`. Owners are U5-02 (#688, cargo), U6-03 (#693, UI) and U6-04
    (#694, input/clock/events). Debt requires that owner's foreign test exclusions
    to remain present; it cannot survive their retirement. Later changes use
    `coverage moves tighten <owner> --base <ref>`, which can only shrink entries.
-   Remove retired entries with `coverage moves remove <identity>`. Removing debt
-   during the original move still leaves its pending source correspondence subject
+   Remove retired entries with `coverage moves remove <identity>`; this also removes
+   their source metadata. Record/tighten drops deleted sources with no remaining debt.
+   Removing debt during the original move still leaves its pending source correspondence subject
    to validation, so removal cannot bypass that move's added-code floor.
    Missing owners, unmapped declarations, reused source credit and moved coverage
    loss fail. Normalized lines remain debt rather than acquiring fabricated hits.

@@ -113,10 +113,17 @@ pub(super) fn import(
     root: &Path,
     baseline: &mut Baseline,
     report: &Path,
+    reference: &str,
     scopes: &[&str],
     measurement: &Measurement,
 ) -> Result<(), String> {
     let records = records(&fs::read_to_string(report).map_err(|e| e.to_string())?)?;
+    let commit = git(
+        root,
+        &["rev-parse", "--verify", &format!("{reference}^{{commit}}")],
+    )?
+    .trim()
+    .to_owned();
     let mut hits = BTreeMap::new();
     for record in &records {
         let path = format!("rust/{}", record.file);
@@ -151,10 +158,17 @@ pub(super) fn import(
             continue;
         }
         proof.validate()?;
-        if let Some(previous) = sources.get(&function.identity) {
-            moves::attribute(previous, &proof)?;
+        let snapshot = function.snapshot(&commit, proof.lines.clone());
+        if snapshot.resolve(root)? != proof {
+            return Err(format!(
+                "coverage source differs from recorded base: {}",
+                function.identity
+            ));
         }
-        sources.insert(function.identity.clone(), proof);
+        if let Some(previous) = sources.get(&function.identity) {
+            moves::attribute(&previous.resolve(root)?, &proof)?;
+        }
+        sources.insert(function.identity.clone(), snapshot);
         imported += 1;
     }
     if imported == 0 {
@@ -178,12 +192,12 @@ pub(crate) fn edit(root: &Path, args: &[String]) -> Result<(), String> {
             }
             baseline.coverage_moves.capture.insert(scope.clone());
         }
-        [operation, report, scopes @ ..] if operation == "import" && !scopes.is_empty() => {
+        [operation, report, reference, scopes @ ..] if operation == "import" && !scopes.is_empty() => {
             let measurement = crate::quality::walk::measure(root, None, false)?;
             let scopes: Vec<_> = scopes.iter().map(String::as_str).collect();
-            import(root, &mut baseline, Path::new(report), &scopes, &measurement)?;
+            import(root, &mut baseline, Path::new(report), reference, &scopes, &measurement)?;
         },
-        _ => return Err("usage: coverage sources request <prefix> | coverage sources import <coverage-log> <prefix>...".into()),
+        _ => return Err("usage: coverage sources request <prefix> | coverage sources import <coverage-log> <base> <prefix>...".into()),
     }
     baseline.write(&path)
 }

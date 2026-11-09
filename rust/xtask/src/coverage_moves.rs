@@ -1,13 +1,17 @@
 //! Coverage attribution for validated partial-declaration moves.
 
-use super::{lcov::LineHits, source::Proof, threading, Lines};
+use super::{
+    lcov::LineHits,
+    source::{Proof, Snapshot},
+    threading, Lines,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct State {
     pub capture: BTreeSet<String>,
-    pub sources: BTreeMap<String, BTreeMap<String, Proof>>,
+    pub sources: BTreeMap<String, BTreeMap<String, Snapshot>>,
     pub debt: BTreeMap<String, Debt>,
 }
 
@@ -91,7 +95,7 @@ pub(crate) fn read(document: &toml_edit::DocumentMut) -> Result<State, String> {
         for (host, entries) in hosts {
             let mut proofs = BTreeMap::new();
             for (identity, proof) in entries.as_table().ok_or("invalid coverage source host")? {
-                let proof: Proof =
+                let proof: Snapshot =
                     serde_json::from_str(proof.as_str().ok_or("coverage source must be JSON")?)
                         .map_err(|e| e.to_string())?;
                 proof.validate()?;

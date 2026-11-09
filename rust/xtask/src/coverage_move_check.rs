@@ -56,6 +56,7 @@ fn source_text(
 
 fn validate_sources(
     root: &Path,
+    reference: &str,
     baseline: &Baseline,
     prior: &Baseline,
     current: &Measurement,
@@ -65,6 +66,14 @@ fn validate_sources(
     let Some(sources) = baseline.coverage_moves.sources.get(host) else {
         return Ok(());
     };
+    let commits: BTreeSet<_> = sources.values().map(|proof| &proof.commit).collect();
+    for commit in commits {
+        if capture::git(root, &["merge-base", reference, commit])?.trim() != commit {
+            return Err(format!(
+                "coverage source commit must be an ancestor of the comparison base: {commit}"
+            ));
+        }
+    }
     for (identity, proof) in sources {
         proof.validate()?;
         if current
@@ -73,7 +82,7 @@ fn validate_sources(
             .any(|f| f.identity == *identity)
         {
             let function = source::unique(&current.coverage_functions, identity)?;
-            if function.proof(root, hits)? != *proof {
+            if function.proof(root, hits)? != proof.resolve(root)? {
                 return Err(format!(
                     "refresh measured {host} coverage source proof for {identity}"
                 ));
@@ -121,6 +130,7 @@ fn pending_sources(
             continue;
         }
         let function = source::unique(&before.coverage_functions, identity)?;
+        let proof = proof.resolve(root)?;
         if function.file != proof.file
             || function.start.0 != proof.first
             || source_text(root, reference, function)? != proof.text
@@ -179,7 +189,7 @@ pub(crate) fn analyze(
 ) -> Result<ResultSet, String> {
     let prior = baseline::baseline_at_ref(root, reference)?.unwrap_or_default();
     let host = std::env::consts::OS;
-    validate_sources(root, baseline, &prior, current, hits, host)?;
+    validate_sources(root, reference, baseline, &prior, current, hits, host)?;
     let mut sources = pending_sources(root, reference, baseline, &prior, current, host)?;
     for (target, debt) in &baseline.coverage_moves.debt {
         if let Some(previous) = prior.coverage_moves.debt.get(target) {
@@ -208,9 +218,10 @@ pub(crate) fn analyze(
         }
         let proof = proofs
             .and_then(|p| p.get(&identity))
-            .ok_or_else(|| format!("missing archived {host} coverage proof: {identity}"))?;
+            .ok_or_else(|| format!("missing archived {host} coverage proof: {identity}"))?
+            .resolve(root)?;
         let function = source::unique(&current.coverage_functions, &target)?;
-        let attribution = moves::attribute(proof, &function.proof(root, hits)?)?;
+        let attribution = moves::attribute(&proof, &function.proof(root, hits)?)?;
         result
             .measured_debt
             .insert(target.clone(), attribution.moved.len() as u64);

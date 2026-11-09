@@ -34,11 +34,18 @@ pub(crate) fn edit(root: &Path, args: &[String]) -> Result<(), String> {
         if operation == "remove" {
             let path = root.join("rust/xtask/quality-baseline.toml");
             let mut baseline = Baseline::read(&path)?;
-            baseline
+            let debt = baseline
                 .coverage_moves
                 .debt
                 .remove(identity)
                 .ok_or_else(|| format!("no coverage relocation debt for {identity}"))?;
+            for sources in baseline.coverage_moves.sources.values_mut() {
+                sources.remove(&debt.source);
+            }
+            baseline
+                .coverage_moves
+                .sources
+                .retain(|_, sources| !sources.is_empty());
             return baseline.write(&path);
         }
     }
@@ -84,6 +91,25 @@ pub(super) fn apply(
             );
         }
     }
+    let needed: std::collections::BTreeSet<_> = current
+        .coverage_functions
+        .iter()
+        .map(|f| f.identity.as_str())
+        .chain(
+            baseline
+                .coverage_moves
+                .debt
+                .values()
+                .map(|debt| debt.source.as_str()),
+        )
+        .collect();
+    for sources in baseline.coverage_moves.sources.values_mut() {
+        sources.retain(|identity, _| needed.contains(identity.as_str()));
+    }
+    baseline
+        .coverage_moves
+        .sources
+        .retain(|_, sources| !sources.is_empty());
     move_check::analyze(root, reference, &baseline, current, hits, true)?;
     baseline.write(&path)
 }

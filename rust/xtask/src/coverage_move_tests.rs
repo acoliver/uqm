@@ -17,6 +17,21 @@ struct Fixture {
 fn git(root: &Path, args: &[&str]) {
     tool::status(Command::new("git").current_dir(root).args(args)).unwrap();
 }
+fn commit(root: &Path, message: &str) {
+    git(root, &["add", "."]);
+    git(
+        root,
+        &[
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.invalid",
+            "commit",
+            "-qm",
+            message,
+        ],
+    );
+}
 fn write(root: &Path, file: &str, text: &str) {
     let path = root.join(file);
     fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -55,6 +70,7 @@ fn fixture() -> Fixture {
         "const HANDLERS: &[(&str, &str)] = &[];",
     );
     git(root, &["init", "-q"]);
+    commit(root, "source");
     let before = measure(root);
     let function = source::unique(&before.coverage_functions, SOURCE).unwrap();
     let hits = [(
@@ -65,6 +81,8 @@ fn fixture() -> Fixture {
     )]
     .into();
     let proof = function.proof(root, &hits).unwrap();
+    let source_commit = capture::git(root, &["rev-parse", "HEAD"]).unwrap();
+    let snapshot = function.snapshot(source_commit.trim(), proof.lines);
     let mut baseline = Baseline {
         entries: before.baseline(),
         ..Baseline::default()
@@ -73,10 +91,10 @@ fn fixture() -> Fixture {
         .coverage_moves
         .capture
         .insert("uqm::content".into());
-    baseline
-        .coverage_moves
-        .sources
-        .insert(std::env::consts::OS.into(), [(SOURCE.into(), proof)].into());
+    baseline.coverage_moves.sources.insert(
+        std::env::consts::OS.into(),
+        [(SOURCE.into(), snapshot)].into(),
+    );
     fs::create_dir_all(root.join("rust/xtask")).unwrap();
     baseline
         .write(&root.join("rust/xtask/quality-baseline.toml"))
@@ -119,6 +137,125 @@ fn fixture() -> Fixture {
         current,
         hits,
     }
+}
+
+#[test]
+fn fetching_only_source_commits_cannot_prove_shallow_ancestry() {
+    let f = fixture();
+    let root = f.directory.path();
+    let snapshot = &f.baseline.coverage_moves.sources[std::env::consts::OS][SOURCE];
+    let clone = root.join("shallow");
+    git(
+        root,
+        &[
+            "clone",
+            "-q",
+            "--depth=1",
+            "--no-tags",
+            &format!("file://{}", root.display()),
+            clone.to_str().unwrap(),
+        ],
+    );
+    git(
+        &clone,
+        &[
+            "fetch",
+            "--no-tags",
+            "--depth=1",
+            "origin",
+            &snapshot.commit,
+        ],
+    );
+    assert_eq!(snapshot.resolve(&clone).unwrap().text, OLD.trim_end());
+    let ancestor = || {
+        tool::output(Command::new("git").current_dir(&clone).args([
+            "merge-base",
+            "--is-ancestor",
+            &snapshot.commit,
+            "HEAD",
+        ]))
+        .unwrap()
+        .status
+    };
+    assert_eq!(ancestor().code(), Some(1));
+    git(&clone, &["fetch", "--no-tags", "--unshallow", "origin"]);
+    assert!(ancestor().success());
+}
+
+#[test]
+fn git_source_metadata_rejects_invalid_spans_and_feature_only_anchors() {
+    let mut f = fixture();
+    let root = f.directory.path();
+    let snapshot = &f.baseline.coverage_moves.sources[std::env::consts::OS][SOURCE];
+    assert_eq!(snapshot.resolve(root).unwrap().text, OLD.trim_end());
+    for case in 0..7 {
+        let mut invalid = snapshot.clone();
+        match case {
+            0 => invalid.commit = "short".into(),
+            1 => invalid.start.0 = 0,
+            2 => invalid.end = invalid.start,
+            3 => {
+                invalid.lines.insert(0, false);
+            }
+            4 => {
+                invalid.lines.insert(999, false);
+            }
+            5 => invalid.start.1 = usize::MAX,
+            _ => invalid.commit = "0".repeat(40),
+        }
+        assert!(invalid.resolve(root).is_err());
+    }
+    let base = capture::git(root, &["rev-parse", "HEAD"]).unwrap();
+    commit(root, "feature");
+    f.baseline
+        .coverage_moves
+        .sources
+        .get_mut(std::env::consts::OS)
+        .unwrap()
+        .get_mut(SOURCE)
+        .unwrap()
+        .commit = capture::git(root, &["rev-parse", "HEAD"])
+        .unwrap()
+        .trim()
+        .into();
+    assert!(
+        move_check::analyze(root, base.trim(), &f.baseline, &f.current, &f.hits, false)
+            .err()
+            .unwrap()
+            .contains("ancestor of the comparison base")
+    );
+}
+
+#[test]
+fn git_backed_sources_survive_the_move_without_archiving_production_text() {
+    let f = fixture();
+    let root = f.directory.path();
+    let path = root.join("rust/xtask/quality-baseline.toml");
+    assert!(!fs::read_to_string(&path).unwrap().contains("run(cx, 7)"));
+    f.baseline.write(&path).unwrap();
+    move_edit::apply(root, "record", "U6-04", "HEAD", &f.current, &f.hits).unwrap();
+    git(root, &["add", "."]);
+    git(
+        root,
+        &[
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.invalid",
+            "commit",
+            "-qm",
+            "moved",
+        ],
+    );
+    let baseline = Baseline::read(&path).unwrap();
+    let measured = move_check::analyze(root, "HEAD", &baseline, &f.current, &f.hits, true).unwrap();
+    assert_eq!(measured.measured_debt[TARGET], 3);
+    write(root, "rust/src/host.rs", &NEW.replace("7", "8"));
+    let current = measure(root);
+    let measured = move_check::analyze(root, "HEAD", &baseline, &current, &f.hits, true).unwrap();
+    let new = move_check::new_lines(&f.hits, &measured);
+    assert_eq!(new["src/host.rs"].count, 1);
+    assert_eq!(new["src/host.rs"].covered, 0);
 }
 
 #[test]
@@ -261,13 +398,17 @@ fn capture_requires_committed_source_and_import_checks_its_text() {
             root,
             &mut f.baseline,
             &report,
+            "HEAD",
             &["uqm::host", TARGET],
             &f.current,
         )
         .unwrap();
     }
     assert_eq!(
-        f.baseline.coverage_moves.sources[std::env::consts::OS][TARGET].text,
+        f.baseline.coverage_moves.sources[std::env::consts::OS][TARGET]
+            .resolve(root)
+            .unwrap()
+            .text,
         NEW.trim_end()
     );
     assert_eq!(
@@ -288,6 +429,7 @@ fn capture_requires_committed_source_and_import_checks_its_text() {
         root,
         &mut f.baseline,
         &report,
+        "HEAD",
         &["uqm::host", TARGET],
         &f.current
     )
@@ -333,6 +475,7 @@ fn record_and_tighten_use_real_line_hits_and_preserve_other_counters() {
     move_edit::edit(root, &removal).unwrap();
     let removed = Baseline::read(&path).unwrap();
     assert!(removed.coverage_moves.debt.is_empty());
+    assert!(removed.coverage_moves.sources.is_empty());
     assert_eq!(removed.entries, recorded.entries);
     assert!(move_edit::edit(root, &removal).is_err());
     assert!(move_check::analyze(root, "HEAD", &removed, &f.current, &f.hits, true).is_err());
@@ -342,7 +485,9 @@ fn record_and_tighten_use_real_line_hits_and_preserve_other_counters() {
 fn source_correspondence_includes_visibility_and_attributes() {
     let mut f = fixture();
     let root = f.directory.path();
-    let old = f.baseline.coverage_moves.sources[std::env::consts::OS][SOURCE].clone();
+    let old = f.baseline.coverage_moves.sources[std::env::consts::OS][SOURCE]
+        .resolve(root)
+        .unwrap();
     for prefix in ["pub ", "#[inline] "] {
         write(root, "rust/src/host.rs", &format!("{prefix}{NEW}"));
         f.current = measure(root);

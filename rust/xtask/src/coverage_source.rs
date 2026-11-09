@@ -1,6 +1,6 @@
 //! Function locations from the production quality walk, not filename inference.
 
-use super::lcov::LineHits;
+use super::{capture, lcov::LineHits};
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, fs, path::Path};
 
@@ -12,13 +12,39 @@ pub(crate) struct Function {
     pub end: (usize, usize),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Proof {
     pub file: String,
     pub first: usize,
     pub text: String,
     pub lines: LineHits,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Snapshot {
+    pub commit: String,
+    pub file: String,
+    pub start: (usize, usize),
+    pub end: (usize, usize),
+    pub lines: LineHits,
+}
+
+fn slice(text: &str, first: (usize, usize), last: (usize, usize)) -> Result<String, String> {
+    let offsets: Vec<_> = std::iter::once(0)
+        .chain(text.match_indices('\n').map(|(i, _)| i + 1))
+        .collect();
+    let start = offsets
+        .get(first.0 - 1)
+        .and_then(|offset| offset.checked_add(first.1))
+        .ok_or("coverage function start outside source")?;
+    let end = offsets
+        .get(last.0 - 1)
+        .and_then(|offset| offset.checked_add(last.1))
+        .ok_or("coverage function end outside source")?;
+    text.get(start..end)
+        .map(str::to_owned)
+        .ok_or_else(|| "coverage function span is invalid".into())
 }
 
 impl Function {
@@ -29,20 +55,7 @@ impl Function {
     }
 
     pub fn slice(&self, text: &str) -> Result<String, String> {
-        let offsets: Vec<_> = std::iter::once(0)
-            .chain(text.match_indices('\n').map(|(i, _)| i + 1))
-            .collect();
-        let start = offsets
-            .get(self.start.0 - 1)
-            .ok_or("coverage function start outside source")?
-            + self.start.1;
-        let end = offsets
-            .get(self.end.0 - 1)
-            .ok_or("coverage function end outside source")?
-            + self.end.1;
-        text.get(start..end)
-            .map(str::to_owned)
-            .ok_or_else(|| "coverage function span is invalid".into())
+        slice(text, self.start, self.end)
     }
 
     pub fn proof(
@@ -62,6 +75,50 @@ impl Function {
                 .map(|(line, hit)| (line - self.start.0 + 1, *hit))
                 .collect(),
         })
+    }
+
+    pub fn snapshot(&self, commit: &str, lines: LineHits) -> Snapshot {
+        Snapshot {
+            commit: commit.into(),
+            file: self.file.clone(),
+            start: self.start,
+            end: self.end,
+            lines,
+        }
+    }
+}
+
+impl Snapshot {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.commit.len() != 40
+            || !self.commit.bytes().all(|byte| byte.is_ascii_hexdigit())
+            || self.start.0 == 0
+            || self.start >= self.end
+            || self.lines.is_empty()
+            || self
+                .lines
+                .keys()
+                .any(|line| *line == 0 || *line > self.end.0 - self.start.0 + 1)
+        {
+            return Err("invalid Git-backed coverage source snapshot".into());
+        }
+        Ok(())
+    }
+
+    pub fn resolve(&self, root: &Path) -> Result<Proof, String> {
+        self.validate()?;
+        let text = capture::git(
+            root,
+            &["show", &format!("{}:rust/{}", self.commit, self.file)],
+        )?;
+        let proof = Proof {
+            file: self.file.clone(),
+            first: self.start.0,
+            text: slice(&text, self.start, self.end)?,
+            lines: self.lines.clone(),
+        };
+        proof.validate()?;
+        Ok(proof)
     }
 }
 
