@@ -194,3 +194,58 @@ fn captain_and_ship_editors_keep_cancelled_names_and_accept_empty_names() {
         assert_eq!(ship[0], if accept { 0 } else { b'A' });
     }
 }
+
+#[test]
+#[serial_test::serial]
+fn supplied_graphics_keeps_fonts_and_text_after_the_campaign_is_dropped() {
+    if !native_test_process::own_graphics_process(
+        "supplied_graphics_keeps_fonts_and_text_after_the_campaign_is_dropped",
+    ) {
+        return;
+    }
+    use uqm_rust::{
+        graphics::{
+            context_abi::{ContextFrame, ContextLease},
+            native_abi::POINT,
+        },
+        starbase::{
+            gfx::{Align, ContextId, FontId, Gfx, Point, Rgba, TextDraw},
+            graphics::Graphics,
+        },
+    };
+    let mut game = Game::new();
+    let display = campaign_display::CampaignDisplay::install(&mut game)
+        .unwrap_or_else(|error| panic!("retained graphics fixture: {error}"));
+    let context = ContextLease::require(game.kernel.status_context);
+    context.set_frame(ContextFrame::retain(std::ptr::NonNull::new(
+        game.kernel.screen,
+    )));
+    context.replace_font(None);
+    let graphics = Graphics::new(&game.kernel, (320, 240));
+    drop(game);
+    graphics.set_context(ContextId::Status);
+    let previous = graphics.set_font(FontId::Tiny);
+    assert!(graphics.font_leading() > 0);
+    assert_eq!(graphics.game_string(0), "A");
+    graphics.set_bg_color(Rgba::rgb15(0, 0, 0));
+    graphics.clear_drawable();
+    graphics.set_fg_color(Rgba::rgb15(31, 31, 31));
+    graphics.draw_text(&TextDraw {
+        baseline: Point { x: 4, y: 10 },
+        align: Align::Left,
+        text: graphics.game_string(0),
+    });
+    context.flush();
+    let target = context.target();
+    assert!(
+        (0..16).any(|y| (0..16).any(|x| {
+            let pixel = target.pixel(POINT { x, y });
+            (pixel.r, pixel.g, pixel.b) == (255, 255, 255)
+        })),
+        "the retained font must still render its glyph"
+    );
+    graphics.restore_font(previous);
+    drop(graphics);
+    drop(context);
+    drop(display);
+}

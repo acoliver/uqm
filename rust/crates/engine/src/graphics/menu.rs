@@ -46,29 +46,29 @@ pub fn background(color: Color) -> Color {
 pub fn selected_font() -> Option<FontLease> {
     current().font_lease()
 }
-pub fn select_font(font: Option<FontLease>) {
-    current().replace_font(font);
-}
-pub fn font(font: FONT) -> FONT {
+pub fn select_font(font: Option<FontLease>) -> FONT {
     let context = current();
     let previous = context.font_lease();
     let previous_raw = previous
         .as_ref()
         .map_or(std::ptr::null_mut(), FontLease::as_raw);
-    context.replace_font(NonNull::new(font).map(FontLease::retain));
+    context.replace_font(font);
     previous_raw
+}
+pub fn font(font: FONT) -> FONT {
+    select_font(NonNull::new(font).map(FontLease::retain))
 }
 pub fn selected_effect() -> ContextFrame {
     current().font_effect()
 }
-pub fn select_effect(effect: ContextFrame) {
-    current().set_font_effect(effect);
-}
-pub fn font_effect(frame: FRAME) -> FRAME {
+pub fn select_effect(effect: ContextFrame) -> FRAME {
     let context = current();
     let previous = context.font_effect();
-    context.set_font_effect(ContextFrame::retain(NonNull::new(frame)));
+    context.set_font_effect(effect);
     previous.as_raw()
+}
+pub fn font_effect(frame: FRAME) -> FRAME {
+    select_effect(ContextFrame::retain(NonNull::new(frame)))
 }
 pub fn font_leading() -> i16 {
     selected_font()
@@ -158,6 +158,16 @@ pub fn transition(kind: i32) {
     drop(context);
 }
 
+#[repr(u32)]
+pub enum ScreenFade {
+    Black = 252,
+    Color = 253,
+}
+
+pub fn fade_screen(kind: ScreenFade, interval: i16) -> u32 {
+    current().fade_screen(kind as u32, interval)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -193,14 +203,4 @@ mod tests {
         assert_eq!(font(std::ptr::null_mut()), raw.as_ptr());
         assert!(allocation.upgrade().is_none());
     }
-}
-
-#[repr(u32)]
-pub enum ScreenFade {
-    Black = 252,
-    Color = 253,
-}
-
-pub fn fade_screen(kind: ScreenFade, interval: i16) -> u32 {
-    current().fade_screen(kind as u32, interval)
 }

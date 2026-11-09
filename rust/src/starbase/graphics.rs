@@ -15,8 +15,7 @@ use std::{ffi::CString, ptr::NonNull, rc::Rc};
 pub struct Graphics {
     dimensions: (i32, i32),
     contexts: [Option<ContextLease>; 3],
-    fonts: [native::FONT; 3],
-    _fonts: Vec<FontLease>,
+    fonts: [Option<FontLease>; 3],
     play: ContextFrame,
     gradient: ContextFrame,
     text: LoadedTextTable,
@@ -42,12 +41,7 @@ impl Graphics {
                 kernel.space_context,
             ]
             .map(|raw| NonNull::new(raw).map(ContextLease::retain)),
-            fonts,
-            _fonts: fonts
-                .into_iter()
-                .filter_map(NonNull::new)
-                .map(FontLease::retain)
-                .collect(),
+            fonts: fonts.map(|font| NonNull::new(font).map(FontLease::retain)),
             play: ContextFrame::retain(NonNull::new(kernel.play_frame)),
             gradient: ContextFrame::retain(NonNull::new(kernel.font_grad_frame)),
             text: kernel.game_text_table(),
@@ -139,12 +133,13 @@ impl Gfx for Graphics {
     }
     fn set_font(&self, id: FontId) -> FontHandle {
         let previous = draw::selected_font();
-        let old = draw::font(
+        let old = draw::select_font(
             self.fonts[match id {
                 FontId::StarCon => 0,
                 FontId::Tiny => 1,
                 FontId::Micro => 2,
-            }],
+            }]
+            .clone(),
         ) as usize;
         self.saved_fonts.borrow_mut().push((old, previous));
         FontHandle(old)
@@ -159,10 +154,11 @@ impl Gfx for Graphics {
     }
     fn set_font_effect(&self, index: Option<u16>) -> FontEffectHandle {
         let previous = draw::selected_effect();
-        let effect = index.map_or(std::ptr::null_mut(), |i| {
-            self.gradient.wrapped_frame(i).as_raw()
-        });
-        let old = draw::font_effect(effect) as usize;
+        let effect = index.map_or_else(
+            || ContextFrame::retain(None),
+            |i| self.gradient.wrapped_frame(i),
+        );
+        let old = draw::select_effect(effect) as usize;
         self.saved_effects.borrow_mut().push((old, previous));
         FontEffectHandle(old)
     }
