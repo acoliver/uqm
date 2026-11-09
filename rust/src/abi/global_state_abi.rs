@@ -179,9 +179,6 @@ pub use crate::navigation::abi::brief_ship_info;
 pub use crate::navigation::abi::encounter;
 extern "C" {
 }
-extern "C" {
-    pub static mut EncounterGroup: BYTE;
-}
 pub const STAR_STRING_BASE: _bindgen_ty_24 = 0;
 pub const DEVICE_STRING_BASE: _bindgen_ty_24 = 133;
 pub const CARGO_STRING_BASE: _bindgen_ty_24 = 162;

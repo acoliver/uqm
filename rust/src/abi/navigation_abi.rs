@@ -2416,9 +2416,6 @@ pub use crate::battle::encount_native::engine::fleet_is_infinite;
 #[cfg(not(test))]
 extern "C" {
 }
-extern "C" {
-    pub static mut EncounterGroup: BYTE;
-}
 
 #[cfg(not(test))]
 pub use crate::ships::master_native::engine::find_master_ship;
