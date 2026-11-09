@@ -2163,7 +2163,7 @@ mod tests {
     fn verify_c_bridge_null_guard_colormap() {
         let source = include_str!("talk_segue.rs");
         let body_start = source
-            .find("pub unsafe fn set_color_map_from_comm_data")
+            .find("pub fn set_color_map_from_comm_data(comm:")
             .expect("set_color_map_from_comm_data must be defined");
         let body = &source[body_start..];
         let body_end = body.find("}").expect("function must have a body");
@@ -2193,7 +2193,7 @@ mod tests {
         let source = include_str!("talk_segue.rs");
 
         fn extract_rust_fn_body<'a>(src: &'a str, name: &str) -> Option<&'a str> {
-            let pattern = format!("pub unsafe fn {}", name);
+            let pattern = format!("pub fn {}(comm:", name);
             let idx = src.find(&pattern)?;
             let rest = &src[idx..];
             let mut depth = 0i32;
