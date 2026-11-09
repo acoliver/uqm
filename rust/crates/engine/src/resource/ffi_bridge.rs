@@ -1563,22 +1563,33 @@ mod tests {
         }
         for _ in 0..2 {
             crate::strings::sresins::install_resource_types();
-            let guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
-            let state = guard
-                .as_ref()
-                .unwrap_or_else(|| panic!("resource system is not initialized"));
-            assert_eq!(state.dispatch.type_registry.count(), 8);
             for kind in ["STRTAB", "BINTAB", "CONVERSATION"] {
-                let handlers = state
-                    .dispatch
-                    .type_registry
-                    .lookup(kind)
-                    .unwrap_or_else(|| panic!("{kind} is not registered"));
-                assert!(handlers.load_fun.is_some(), "{kind} has no loader");
+                let release = {
+                    let guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
+                    let state = guard
+                        .as_ref()
+                        .unwrap_or_else(|| panic!("resource system is not initialized"));
+                    assert_eq!(state.dispatch.type_registry.count(), 8);
+                    let handlers = state
+                        .dispatch
+                        .type_registry
+                        .lookup(kind)
+                        .unwrap_or_else(|| panic!("{kind} is not registered"));
+                    assert!(handlers.load_fun.is_some(), "{kind} has no loader");
+                    handlers
+                        .free_fun
+                        .unwrap_or_else(|| panic!("{kind} has no release callback"))
+                };
                 assert!(
-                    handlers.free_fun.is_some(),
-                    "{kind} has no release callback"
+                    !std::ptr::fn_addr_eq(release, FreeResourceData as ResourceFreeFun),
+                    "{kind} must release its table rather than a raw file buffer"
                 );
+                let owner = crate::strings::owned_table::LoadedTextTable::new(vec![
+                    c"retained table".to_owned(),
+                ]);
+                // SAFETY: this callback receives one transferred table reference.
+                assert_eq!(unsafe { release(owner.clone().into_raw().cast()) }, 1);
+                assert_eq!(owner.label(0).0, c"retained table");
             }
         }
     }
