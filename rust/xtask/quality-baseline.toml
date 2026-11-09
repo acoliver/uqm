@@ -4079,7 +4079,7 @@ u6_04_world_projection = { limit = 112, ends = "U6-04", scopes = { "ffi|owner_pr
 "ffi|repr_c|uqm::ships" = 11
 "ffi|repr_c|uqm::state" = 1
 "ffi|static_mut|uqm-engine::uqm-engine" = 72
-"ffi|static_mut|uqm::comm" = 13
+"ffi|static_mut|uqm::comm" = 2
 "ffi|static_mut|uqm::front_end" = 22
 "ffi|static_mut|uqm::planets" = 11
 "ffi|static_mut|uqm::savegame" = 5
@@ -4632,7 +4632,7 @@ u6_04_world_projection = { limit = 112, ends = "U6-04", scopes = { "ffi|owner_pr
 "unsafe|unsafe_block_lines|uqm::app" = 42
 "unsafe|unsafe_block_lines|uqm::automation" = 684
 "unsafe|unsafe_block_lines|uqm::battle" = 1
-"unsafe|unsafe_block_lines|uqm::comm" = 499
+"unsafe|unsafe_block_lines|uqm::comm" = 497
 "unsafe|unsafe_block_lines|uqm::front_end" = 69
 "unsafe|unsafe_block_lines|uqm::game_init" = 2
 "unsafe|unsafe_block_lines|uqm::mainloop" = 188
@@ -4665,7 +4665,7 @@ u6_04_world_projection = { limit = 112, ends = "U6-04", scopes = { "ffi|owner_pr
 "unsafe|unsafe_fn_lines|uqm::app" = 3
 "unsafe|unsafe_fn_lines|uqm::automation" = 196
 "unsafe|unsafe_fn_lines|uqm::battle" = 3
-"unsafe|unsafe_fn_lines|uqm::comm" = 1622
+"unsafe|unsafe_fn_lines|uqm::comm" = 1620
 "unsafe|unsafe_fn_lines|uqm::front_end" = 2853
 "unsafe|unsafe_fn_lines|uqm::game_init" = 370
 "unsafe|unsafe_fn_lines|uqm::mainloop" = 667
@@ -4681,7 +4681,7 @@ u6_04_world_projection = { limit = 112, ends = "U6-04", scopes = { "ffi|owner_pr
 "unsafe|unsafe_fn|uqm::app" = 1
 "unsafe|unsafe_fn|uqm::automation" = 5
 "unsafe|unsafe_fn|uqm::battle" = 1
-"unsafe|unsafe_fn|uqm::comm" = 75
+"unsafe|unsafe_fn|uqm::comm" = 74
 "unsafe|unsafe_fn|uqm::front_end" = 107
 "unsafe|unsafe_fn|uqm::game_init" = 32
 "unsafe|unsafe_fn|uqm::mainloop" = 70
@@ -4704,7 +4704,7 @@ u6_04_world_projection = { limit = 112, ends = "U6-04", scopes = { "ffi|owner_pr
 "unsafe|unsafe_lines|uqm::app" = 44
 "unsafe|unsafe_lines|uqm::automation" = 755
 "unsafe|unsafe_lines|uqm::battle" = 40
-"unsafe|unsafe_lines|uqm::comm" = 2060
+"unsafe|unsafe_lines|uqm::comm" = 2056
 "unsafe|unsafe_lines|uqm::front_end" = 2876
 "unsafe|unsafe_lines|uqm::game_init" = 372
 "unsafe|unsafe_lines|uqm::mainloop" = 839
@@ -4722,7 +4722,6 @@ u6_04_world_projection = { limit = 112, ends = "U6-04", scopes = { "ffi|owner_pr
 [moved]
 "uqm-engine::observe::@file" = "uqm-engine::observe_port::@file"
 "uqm-engine::observe::Io" = "uqm-engine::observe_port::ObservationIo"
-"uqm::front_end::gameopt::runtime::name_save_game" = "uqm::front_end::gameopt::runtime::save_load::name_save_game"
 "uqm::graphics" = "uqm-engine::graphics"
 "uqm::input" = "uqm-engine::input_port"
 "uqm::io" = "uqm-engine::io"
