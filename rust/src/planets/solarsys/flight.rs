@@ -44,7 +44,6 @@ use crate::time::clock_abi::live::GameClockTick;
 use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
 
 #[inline]
-#[inline]
 fn glob() -> crate::engine::Projection<crate::engine::WorldData> {
     WorldFields::current()
 }
@@ -246,10 +245,10 @@ pub(super) unsafe fn flagship_inertial_thrust(
 }
 
 pub(super) unsafe fn process_ship_controls(
+    game: &mut crate::engine::battle::schema::GAME_STATE,
     solar: &mut SolarSystem,
     input: &crate::engine::input::InputSession,
 ) {
-    let game = ptr::addr_of_mut!((**glob()).game);
     let player = input.player_controls()[0] as usize;
     let keys = input.current();
     let mut dy: c::SIZE = if keys.key[player][input::KEY_UP as usize] != 0 {
@@ -266,15 +265,15 @@ pub(super) unsafe fn process_ship_controls(
     }
 
     if dx != 0 || dy < 0 {
-        (*game).autopilot.x = -1;
-        (*game).autopilot.y = -1;
-    } else if (*game).autopilot.x != -1 && (*game).autopilot.y != -1 {
+        game.autopilot.x = -1;
+        game.autopilot.y = -1;
+    } else if game.autopilot.x != -1 && game.autopilot.y != -1 {
         dy = -1;
     } else {
         dy = 0;
     }
 
-    let mut index = GetFrameIndex(((*game).ship_stamp.frame).cast());
+    let mut index = GetFrameIndex((game.ship_stamp.frame).cast());
     if solar.turn_counter != 0 {
         solar.turn_counter -= 1;
     } else if dx != 0 {
@@ -283,15 +282,14 @@ pub(super) unsafe fn process_ship_controls(
         } else {
             index = normalize_facing(index.wrapping_add(1));
         }
-        (*game).ship_stamp.frame =
-            (SetAbsFrameIndex(((*game).ship_stamp.frame).cast(), index)).cast();
+        game.ship_stamp.frame = (SetAbsFrameIndex((game.ship_stamp.frame).cast(), index)).cast();
         solar.turn_counter = solar.turn_wait;
     }
     if solar.thrust_counter != 0 {
         solar.thrust_counter -= 1;
     } else if dy < 0 {
         flagship_inertial_thrust(
-            &mut (*game).velocity,
+            &mut game.velocity,
             facing_to_angle(index),
             solar.max_ship_speed.into(),
         );
@@ -357,10 +355,10 @@ pub(super) fn enter_orbital(cx: &mut Cx<'_>, solar: &mut SolarSystem, body: Body
 }
 
 pub(super) unsafe fn check_ship_location(
+    game: &crate::engine::battle::schema::GAME_STATE,
     solar: &mut SolarSystem,
     new_radius: *mut c::SIZE,
 ) -> (c::BOOLEAN, Option<u8>) {
-    let game = glob().read(|world| world.game);
     let radius = solar.sys.sun.radius;
     *new_radius = solar.sys.sun.radius;
 
@@ -446,15 +444,15 @@ pub(super) unsafe fn ip_frame(
 ) {
     let runtime = cx.kernel.input_runtime();
     let input = runtime.input();
-    let ((location_change, inner_planet), new_radius) = cx.with_legacy(|| {
+    cx.with_legacy(|| {
         SetContext(KernelOwner::current().read(|owner| owner.space_context));
         GameClockTick();
-        process_ship_controls(solar, input);
-
-        let mut new_radius: c::SIZE = 0;
-        let location_change = check_ship_location(solar, &mut new_radius);
-        (location_change, new_radius)
     });
+    process_ship_controls(&mut cx.world.data.game, solar, input);
+    let game = cx.world.data.game;
+    let mut new_radius: c::SIZE = 0;
+    let (location_change, inner_planet) =
+        cx.with_legacy(|| check_ship_location(&game, solar, &mut new_radius));
     if let Some(planet) = inner_planet {
         enter_inner_system(cx, io, solar, planet);
     }
