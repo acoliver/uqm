@@ -68,7 +68,7 @@ mod ffi {
 
     pub(super) use crate::graphics::cmap_abi::FadeScreen;
 
-    pub(super) use crate::navigation::interplanetary::live::do_missions as DoMissions;
+    pub(super) use crate::navigation::interplanetary::do_missions as DoMissions;
 
     pub(super) use crate::state::c_api::planets::get_planet_info;
 

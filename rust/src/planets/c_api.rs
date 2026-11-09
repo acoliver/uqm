@@ -39,8 +39,6 @@ pub use crate::graphics::dcqueue_abi::Uninit_DrawCommandQueue;
 
 pub use crate::graphics::dcqueue_abi::TFB_FlushGraphicsEx;
 
-use crate::navigation::interplanetary::live::notify_others_abi as NotifyOthers;
-
 extern "C" {
 
     #[link_name = "format_conv_surf"]
@@ -84,8 +82,6 @@ pub const SLYLANDRO_HOME_CONVERSATION: u32 = 23;
 /// `YEHAT_CONVERSATION` (`commglue.h`) and `YEHAT_SHIP` (`races.h`).
 pub const YEHAT_CONVERSATION: u32 = 11;
 pub const YEHAT_SHIP: u16 = 11;
-/// `IPNL_ALL_CLEAR` (`ipdisp.h`): `(BYTE)-1`.
-const IPNL_ALL_CLEAR: u8 = !0;
 /// `INFINITE_FLEET` (`races.h`): `(COUNT)~0`.
 const INFINITE_FLEET: u16 = !0;
 
@@ -95,14 +91,6 @@ const INFINITE_FLEET: u16 = !0;
 /// Game thread, with the fleet queue initialised.
 pub fn start_sphere_tracking(world: &mut crate::engine::World, race: u16) -> bool {
     crate::engine::world::fleet::start_sphere_tracking(world, race) != 0
-}
-
-/// `NotifyOthers (race, IPNL_ALL_CLEAR)`.
-///
-/// # Safety
-/// Game thread, inside a planet orbit.
-pub unsafe fn notify_others_all_clear(race: u16) {
-    NotifyOthers(race, IPNL_ALL_CLEAR);
 }
 
 unsafe fn clone_npc_ship(

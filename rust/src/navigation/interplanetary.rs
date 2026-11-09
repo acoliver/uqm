@@ -6,6 +6,9 @@ use crate::battle::context_access::navigation::NavigationOps;
 use crate::battle::context_access::ContextOps;
 #[cfg(not(test))]
 use crate::engine::StoryKey;
+#[cfg(not(test))]
+pub use live::{do_missions, notify_others};
+
 const MAX_ZOOM: i16 = 128 << 6;
 const MIN_ZOOM: i16 = MAX_ZOOM >> 3;
 
@@ -22,19 +25,21 @@ fn adjust_zoom(zoom: i16, dx: &mut i16, dy: &mut i16) {
 }
 
 #[cfg(not(test))]
-fn sine(angle: u16, magnitude: i32) -> i16 {
-    ((crate::math::sinetab[(angle & 63) as usize] as i64 * magnitude as i64)
-        >> crate::navigation::abi::SIN_SHIFT) as i16
-}
-#[cfg(not(test))]
-fn cosine(angle: u16, magnitude: i32) -> i16 {
-    sine(angle.wrapping_add(16), magnitude)
-}
-
-#[cfg(not(test))]
 pub(crate) mod live {
     use super::*;
-    use crate::navigation::abi::*;
+    use crate::battle::element::{
+        APPEARING, CHANGING, COLLISION_FLAG as COLLISION, DISAPPEARING, FINITE_LIFE,
+        IGNORE_VELOCITY, NONSOLID, NORMAL_LIFE,
+    };
+    use crate::comm::dispatch::ship::URQUAN_DRONE_SHIP;
+    use crate::engine::battle::{CollisionHook, ElementHook};
+    use crate::engine::graphics::{native_abi::POINT, EMPTY_PRIMITIVE, STAMP_PRIMITIVE};
+    use crate::engine::math::battle_types::{FACING_SHIFT, HALF_CIRCLE};
+    use crate::engine::save::START_ENCOUNTER;
+    use crate::engine::world::queues::IpGroup as IP_GROUP;
+    use crate::engine::world::queues::{MAX_REVOLUTIONS, ORBIT_RADIUS, STATION_RADIUS};
+    use crate::math::arctan as ARCTAN;
+    use crate::navigation::hyperspace::{cosine, sine};
     use crate::navigation::{get, set};
     use crate::planets::solar_coords::SolarCoordinates;
 
@@ -65,13 +70,7 @@ pub(crate) mod live {
     fn display(cx: &crate::engine::battle::Cx<'_>, point: POINT, radius: i16) -> POINT {
         SolarCoordinates::new(cx.screen_dimensions()).to_display(point, radius)
     }
-    /// # Safety
-    /// Exclusive game-thread access to the initialized interplanetary group queue.
-    pub unsafe extern "C" fn notify_others_abi(race: u16, target: u8) {
-        crate::app::bridge::enter(|cx| notify_others(cx, race, target));
-    }
-
-    fn notify_others(cx: &mut crate::engine::battle::Cx<'_>, race: u16, target: u8) {
+    pub fn notify_others(cx: &mut crate::engine::battle::Cx<'_>, race: u16, target: u8) {
         let mut next = cx.world.ip_groups_ref().head();
         while let Some(id) = next {
             let mut group = *cx.world.ip_groups_ref().get(id);
@@ -80,54 +79,41 @@ pub(crate) mod live {
                 continue;
             }
             if target == 0 {
-                group.task &= !(IGNORE_FLAGSHIP as u8);
+                group.task &= !IP_GROUP::IGNORE_FLAGSHIP;
                 group.orbit_pos = group.dest_loc;
                 group.dest_loc = 0;
             } else if target == u8::MAX {
-                group.task |= IGNORE_FLAGSHIP as u8;
+                group.task |= IP_GROUP::IGNORE_FLAGSHIP;
                 if group.dest_loc == 0 {
                     group.dest_loc = group.orbit_pos;
                     group.orbit_pos = (cx.random() & 15) as u8;
                 }
-                if group.task & REFORM_GROUP as u8 == 0 {
-                    group.group_counter = if group.task & !(IGNORE_FLAGSHIP as u8) != EXPLORE as u8
-                    {
-                        0
-                    } else {
-                        (cx.random() as u16 % MAX_REVOLUTIONS as u16) << FACING_SHIFT
-                    };
+                if group.task & IP_GROUP::REFORM_GROUP == 0 {
+                    group.group_counter =
+                        if group.task & !IP_GROUP::IGNORE_FLAGSHIP != IP_GROUP::EXPLORE {
+                            0
+                        } else {
+                            (cx.random() as u16 % MAX_REVOLUTIONS as u16) << FACING_SHIFT
+                        };
                 }
             } else {
-                group.task |= IGNORE_FLAGSHIP as u8;
+                group.task |= IP_GROUP::IGNORE_FLAGSHIP;
                 group.dest_loc = target;
             }
             *cx.world.ip_groups().get_mut(id) = group;
         }
     }
 
-    pub(crate) fn group_preprocess(
+    fn pursuit_target(
         cx: &mut crate::engine::battle::Cx<'_>,
         element: crate::engine::battle::ElementId,
-    ) {
-        begin_group_step(cx, element);
-        let mut location = cx.ip_group_mut(element).sys_loc;
-        let mut stamp = cx.primitive_stamp(element);
-        stamp.origin = cx.ip_group(element).loc;
-        cx.set_primitive_stamp(element, stamp);
-        let zoom = radius(cx, location);
-        let mut destination = display(cx, cx.ip_group(element).loc, zoom);
-        cx.element_mut(element).current.location = world(cx, destination);
-        cx.init_intersect_start(element);
-        let flagship = flagship_location(cx);
-        let mut task = reform_group(cx, element);
-        if task & !((IGNORE_FLAGSHIP | REFORM_GROUP) as u8) == FLEE as u8
-            && task & IGNORE_FLAGSHIP as u8 != 0
-        {
-            cx.element_mut(element).flags |= NONSOLID as u16;
-        }
+        location: u8,
+        flagship: u8,
+        mut task: u8,
+    ) -> (u8, u8) {
         let mut target = cx.ip_group_mut(element).dest_loc;
-        if task & ((IGNORE_FLAGSHIP | REFORM_GROUP) as u8) == 0 {
-            if target == 0 && task != FLEE as u8 {
+        if task & (IP_GROUP::IGNORE_FLAGSHIP | IP_GROUP::REFORM_GROUP) == 0 {
+            if target == 0 && task != IP_GROUP::FLEE {
                 target = flagship;
                 if cx.element_mut(element).thrust > 5 {
                     cx.element_mut(element).thrust = 0;
@@ -137,7 +123,7 @@ pub(crate) mod live {
                 let mut detect = 1200i64;
                 if location != 0 {
                     detect *= MAX_ZOOM as i64 / MIN_ZOOM as i64;
-                    if cx.ip_group_mut(element).race_id as u32 == URQUAN_DRONE_SHIP {
+                    if cx.ip_group_mut(element).race_id == URQUAN_DRONE_SHIP {
                         detect <<= 1;
                     }
                 }
@@ -166,25 +152,50 @@ pub(crate) mod live {
                 }
             }
         }
+        (task, target)
+    }
+
+    pub(crate) fn group_preprocess(
+        cx: &mut crate::engine::battle::Cx<'_>,
+        element: crate::engine::battle::ElementId,
+    ) {
+        begin_group_step(cx, element);
+        let mut location = cx.ip_group_mut(element).sys_loc;
+        let mut stamp = cx.primitive_stamp(element);
+        stamp.origin = cx.ip_group(element).loc;
+        cx.set_primitive_stamp(element, stamp);
+        let zoom = radius(cx, location);
+        let mut destination = display(cx, cx.ip_group(element).loc, zoom);
+        cx.element_mut(element).current.location = world(cx, destination);
+        cx.init_intersect_start(element);
+        let flagship = flagship_location(cx);
+        let mut task = reform_group(cx, element);
+        if task & !(IP_GROUP::IGNORE_FLAGSHIP | IP_GROUP::REFORM_GROUP) == IP_GROUP::FLEE
+            && task & IP_GROUP::IGNORE_FLAGSHIP != 0
+        {
+            cx.element_mut(element).flags |= NONSOLID;
+        }
+        let (pursuit_task, mut target) = pursuit_target(cx, element, location, flagship, task);
+        task = pursuit_task;
         let (current_x, current_y) = cx.element_mut(element).velocity.get_current_components();
         let (mut vx, mut vy) = (current_x as i16, current_y as i16);
-        task &= !(IGNORE_FLAGSHIP as u8);
-        if task <= ON_STATION as u8 {
-            if task == FLEE as u8 {
+        task &= !IP_GROUP::IGNORE_FLAGSHIP;
+        if task <= IP_GROUP::ON_STATION {
+            if task == IP_GROUP::FLEE {
                 destination = POINT {
                     x: cx.ip_group_mut(element).loc.x.wrapping_mul(2),
                     y: cx.ip_group_mut(element).loc.y.wrapping_mul(2),
                 };
-            } else if ((task != ON_STATION as u8 || cx.ip_group_mut(element).dest_loc == 0)
+            } else if ((task != IP_GROUP::ON_STATION || cx.ip_group_mut(element).dest_loc == 0)
                 && location == target)
-                || (task == ON_STATION as u8
+                || (task == IP_GROUP::ON_STATION
                     && cx.ip_group_mut(element).dest_loc != 0
                     && location == 0)
             {
                 if cx.ip_group_mut(element).dest_loc == 0 {
                     destination = cx.navigation().game.ip_location;
                 } else {
-                    let (distance, origin) = if task != ON_STATION as u8 {
+                    let (distance, origin) = if task != IP_GROUP::ON_STATION {
                         (ORBIT_RADIUS as i32, POINT { x: 0, y: 0 })
                     } else {
                         (
@@ -209,7 +220,7 @@ pub(crate) mod live {
                         cx.element_mut(element).thrust = u8::MAX;
                         if cx.ip_group_mut(element).group_counter != 0 {
                             cx.ip_group_mut(element).group_counter -= 1;
-                        } else if task == EXPLORE as u8 {
+                        } else if task == IP_GROUP::EXPLORE {
                             let next = ((cx.random() as u16
                                 % cx.solar_geometry().planet_count as u16)
                                 + 1) as u8;
@@ -228,7 +239,7 @@ pub(crate) mod live {
                     cx.planet_outer_location(target as u16 - 1)
                 };
             } else {
-                if task == ON_STATION as u8 {
+                if task == IP_GROUP::ON_STATION {
                     target = 0;
                 }
                 destination = POINT {
@@ -244,7 +255,7 @@ pub(crate) mod live {
                 cx.element_mut(element).thrust -= 1;
             } else if (vx == 0 && vy == 0) || angle != cx.element(element).velocity.travel_angle {
                 let speed = if wait != 0 && cx.ip_group_mut(element).dest_loc != 0 {
-                    if task == ON_STATION as u8 {
+                    if task == IP_GROUP::ON_STATION {
                         30
                     } else {
                         60
@@ -265,7 +276,7 @@ pub(crate) mod live {
             let mut escape = false;
             if location == target {
                 if target == 0 {
-                    if task == FLEE as u8 {
+                    if task == IP_GROUP::FLEE {
                         escape = true;
                     }
                 } else if target == cx.ip_group_mut(element).dest_loc {
@@ -273,7 +284,7 @@ pub(crate) mod live {
                 }
             } else if location == 0 {
                 adjust_zoom(zoom, &mut dx, &mut dy);
-                if task == ON_STATION as u8 && cx.ip_group_mut(element).dest_loc != 0 {
+                if task == IP_GROUP::ON_STATION && cx.ip_group_mut(element).dest_loc != 0 {
                     partial = true;
                 } else {
                     transition = reaches(dx, dy, delta_x, delta_y);
@@ -295,7 +306,7 @@ pub(crate) mod live {
                     || display.y as i32 >= cx.screen_dimensions().1 - 13;
             }
             if transition {
-                cx.element_mut(element).flags |= NONSOLID as u16;
+                cx.element_mut(element).flags |= NONSOLID;
                 vx = 0;
                 vy = 0;
                 cx.element_mut(element).velocity.zero();
@@ -305,13 +316,13 @@ pub(crate) mod live {
                     cx.ip_group_mut(element).sys_loc = 0;
                 } else if target == 0 {
                     cx.element_mut(element).life = 0;
-                    cx.element_mut(element).flags |= (DISAPPEARING | NONSOLID) as u16;
+                    cx.element_mut(element).flags |= DISAPPEARING | NONSOLID;
                     cx.ip_group_mut(element).in_system = 0;
                     return;
                 } else {
                     if target == cx.ip_group_mut(element).dest_loc {
                         cx.ip_group_mut(element).orbit_pos =
-                            (((angle + HALF_CIRCLE as u16 + 2) >> 2) & 15) as u8;
+                            (((angle + HALF_CIRCLE + 2) >> 2) & 15) as u8;
                         cx.ip_group_mut(element).group_counter =
                             (cx.random() as u16 % MAX_REVOLUTIONS as u16) << FACING_SHIFT;
                     }
@@ -335,24 +346,25 @@ pub(crate) mod live {
         cx.element_mut(element).next.location =
             world(cx, display(cx, cx.ip_group(element).loc, zoom));
         if location != flagship
-            || (task & REFORM_GROUP as u8 != 0 && cx.ip_group_mut(element).group_counter & 1 != 0)
+            || (task & IP_GROUP::REFORM_GROUP != 0
+                && cx.ip_group_mut(element).group_counter & 1 != 0)
         {
-            cx.primitive_style_mut(element).kind = gfx_object_NUM_PRIMS as u8;
-            cx.element_mut(element).flags |= NONSOLID as u16;
+            cx.primitive_style_mut(element).kind = EMPTY_PRIMITIVE;
+            cx.element_mut(element).flags |= NONSOLID;
         } else {
-            cx.primitive_style_mut(element).kind = gfx_object_STAMP_PRIM as u8;
-            if task & REFORM_GROUP as u8 != 0 {
-                cx.element_mut(element).flags |= NONSOLID as u16;
+            cx.primitive_style_mut(element).kind = STAMP_PRIMITIVE;
+            if task & IP_GROUP::REFORM_GROUP != 0 {
+                cx.element_mut(element).flags |= NONSOLID;
             }
         }
-        cx.element_mut(element).flags |= CHANGING as u16;
+        cx.element_mut(element).flags |= CHANGING;
     }
 
     fn begin_group_step(
         cx: &mut crate::engine::battle::Cx<'_>,
         element: crate::engine::battle::ElementId,
     ) {
-        cx.element_mut(element).flags &= !((DISAPPEARING | NONSOLID) as u16);
+        cx.element_mut(element).flags &= !DISAPPEARING | NONSOLID;
         let life = cx.element(element).life.wrapping_add(1);
         cx.element_mut(element).life = life;
     }
@@ -362,14 +374,14 @@ pub(crate) mod live {
         element: crate::engine::battle::ElementId,
     ) -> u8 {
         let mut task = cx.ip_group_mut(element).task;
-        if task & REFORM_GROUP as u8 != 0 {
+        if task & IP_GROUP::REFORM_GROUP != 0 {
             cx.ip_group_mut(element).group_counter =
                 cx.ip_group_mut(element).group_counter.wrapping_sub(1);
             if cx.ip_group_mut(element).group_counter == 0 {
-                task &= !(REFORM_GROUP as u8);
+                task &= !IP_GROUP::REFORM_GROUP;
                 cx.ip_group_mut(element).task = task;
                 cx.ip_group_mut(element).group_counter =
-                    if task & !(IGNORE_FLAGSHIP as u8) != EXPLORE as u8 {
+                    if task & !IP_GROUP::IGNORE_FLAGSHIP != IP_GROUP::EXPLORE {
                         0
                     } else {
                         (cx.random() as u16 % MAX_REVOLUTIONS as u16) << FACING_SHIFT
@@ -389,12 +401,11 @@ pub(crate) mod live {
         first: crate::engine::battle::ElementId,
         second: crate::engine::battle::ElementId,
     ) {
-        if cx.element(second).flags & COLLISION as u16 == 0 {
-            cx.element_mut(first).flags |= (COLLISION | NONSOLID) as u16;
+        if cx.element(second).flags & COLLISION == 0 {
+            cx.element_mut(first).flags |= COLLISION | NONSOLID;
         } else {
-            cx.element_mut(second).flags &= !(COLLISION as u16);
-            cx.world
-                .set_activity(cx.world.activity() | START_ENCOUNTER as u16);
+            cx.element_mut(second).flags &= !COLLISION;
+            cx.world.set_activity(cx.world.activity() | START_ENCOUNTER);
         }
     }
     pub(crate) fn flagship_collision(
@@ -404,7 +415,7 @@ pub(crate) mod live {
         second: crate::engine::battle::ElementId,
         _: &mut POINT,
     ) {
-        if cx.world.activity() & START_ENCOUNTER as u16 == 0 {
+        if cx.world.activity() & START_ENCOUNTER == 0 {
             collide_flagship(cx, first, second);
         }
     }
@@ -415,18 +426,18 @@ pub(crate) mod live {
         second: crate::engine::battle::ElementId,
         _: &mut POINT,
     ) {
-        if cx.world.activity() & START_ENCOUNTER as u16 != 0 {
+        if cx.world.activity() & START_ENCOUNTER != 0 {
             return;
         }
         if cx.parent(second) != crate::engine::battle::Parent::None {
             let state = cx.element(second);
-            if cx.element(first).flags & COLLISION as u16 != 0
+            if cx.element(first).flags & COLLISION != 0
                 || (state.current.location.x == state.next.location.x
                     && state.current.location.y == state.next.location.y)
             {
-                cx.element_mut(first).flags &= !(COLLISION as u16);
+                cx.element_mut(first).flags &= !COLLISION;
             } else {
-                cx.element_mut(second).flags |= COLLISION as u16;
+                cx.element_mut(second).flags |= COLLISION;
                 let location = cx.primitive_stamp(first).origin;
                 cx.ip_group_mut(first).loc = location;
                 let current = cx.element(first).current.location;
@@ -436,7 +447,7 @@ pub(crate) mod live {
         } else {
             let group_id = cx.ip_group(first).group_id;
             cx.set_encounter_group(group_id);
-            cx.ip_group_mut(first).task |= REFORM_GROUP as u8;
+            cx.ip_group_mut(first).task |= IP_GROUP::REFORM_GROUP;
             cx.ip_group_mut(first).group_counter = 100;
             let race = cx.ip_group(first).race_id as u16;
             notify_others(cx, race, u8::MAX);
@@ -452,8 +463,8 @@ pub(crate) mod live {
         };
         cx.element_mut(element).mass = 1;
         cx.element_mut(element).hits = 1;
-        cx.element_mut(element).flags = (CHANGING | FINITE_LIFE | IGNORE_VELOCITY) as u16;
-        cx.primitive_style_mut(element).kind = gfx_object_STAMP_PRIM as u8;
+        cx.element_mut(element).flags = CHANGING | FINITE_LIFE | IGNORE_VELOCITY;
+        cx.primitive_style_mut(element).kind = STAMP_PRIMITIVE;
         cx.set_group_image(element, group);
         let frame = cx.absolute_frame(cx.group_icon(group).view(), 1);
         cx.set_frame(element, false, frame);
@@ -506,17 +517,17 @@ pub(crate) mod live {
         let frame = cx.flagship_stamp_frame();
         cx.set_frame(element, true, frame);
         if cx.element_mut(element).turn == flagship {
-            cx.element_mut(element).flags &= !(NONSOLID as u16);
+            cx.element_mut(element).flags &= !NONSOLID;
         } else {
-            cx.element_mut(element).flags |= NONSOLID as u16;
+            cx.element_mut(element).flags |= NONSOLID;
             cx.element_mut(element).turn = flagship;
         }
         let escape = get(cx.world, StoryKey::ESCAPE_COUNTER);
-        if escape != 0 && cx.world.activity() & START_ENCOUNTER as u16 == 0 {
-            cx.element_mut(element).flags |= NONSOLID as u16;
+        if escape != 0 && cx.world.activity() & START_ENCOUNTER == 0 {
+            cx.element_mut(element).flags |= NONSOLID;
             set(cx.world, StoryKey::ESCAPE_COUNTER, escape - 1);
         }
-        cx.element_mut(element).flags |= CHANGING as u16;
+        cx.element_mut(element).flags |= CHANGING;
     }
     fn spawn_flagship(cx: &mut crate::engine::battle::Cx<'_>) {
         let Some(element) = cx.alloc_element() else {
@@ -526,13 +537,13 @@ pub(crate) mod live {
         cx.element_mut(element).mass = 1;
         let location = flagship_location(cx);
         cx.element_mut(element).turn = location;
-        cx.element_mut(element).flags = (APPEARING | IGNORE_VELOCITY) as u16;
+        cx.element_mut(element).flags = APPEARING | IGNORE_VELOCITY;
         if get(cx.world, StoryKey::ESCAPE_COUNTER) != 0 {
-            cx.element_mut(element).flags |= NONSOLID as u16;
+            cx.element_mut(element).flags |= NONSOLID;
         }
-        cx.element_mut(element).life = NORMAL_LIFE as u16;
+        cx.element_mut(element).life = NORMAL_LIFE;
         cx.element_mut(element).thrust = 42;
-        cx.primitive_style_mut(element).kind = gfx_object_STAMP_PRIM as u8;
+        cx.primitive_style_mut(element).kind = STAMP_PRIMITIVE;
         cx.set_flagship_image(element);
         cx.element_mut(element).pre = Some(ElementHook::Native(flagship_preprocess));
         cx.element_mut(element).collide = Some(CollisionHook::Native(flagship_collision));

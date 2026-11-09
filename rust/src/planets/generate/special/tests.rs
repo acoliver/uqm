@@ -4,12 +4,12 @@
 use crate::engine::StoryKey;
 use std::collections::HashMap;
 
-use crate::c_bindings::global_state::IP_GROUP;
+use crate::engine::world::queues::IpGroup as IP_GROUP;
 use crate::planet_side::report_adapter::{DiscoveryReportPort, ReportDisposition};
 use crate::planet_side::runtime::AdapterError;
-use crate::planets::generate::default::{Npcs, FLEE, IGNORE_FLAGSHIP, REFORM_GROUP};
+use crate::planets::generate::default::Npcs;
 use crate::planets::generate::special::{
-    Body, FleetGroups, Story, IN_ORBIT, MELNORME_SHIP, URQUAN_SHIP, ZOQFOTPIK_SHIP,
+    Body, FleetGroups, Story, MELNORME_SHIP, URQUAN_SHIP, ZOQFOTPIK_SHIP,
 };
 use crate::planets::generate::{colony, rainbow, syreen, vault, wreck, yehat, zfpscout};
 
@@ -454,7 +454,7 @@ fn colony_builds_its_group_once_and_parks_it_in_orbit() {
     let parked = &host.groups[0];
     assert_eq!(
         (parked.task, parked.sys_loc, parked.dest_loc),
-        (IN_ORBIT, 1, 1)
+        (IP_GROUP::IN_ORBIT, 1, 1)
     );
     assert_eq!(
         (parked.loc.x, parked.loc.y, parked.group_counter),
@@ -468,7 +468,7 @@ fn colony_builds_its_group_once_and_parks_it_in_orbit() {
     assert!(colony::init_npcs(&mut (&mut story, &mut host)));
     assert!(host.built_clones.is_empty());
     assert_eq!(host.group_ref, 7);
-    assert_eq!(host.groups[0].task, IN_ORBIT);
+    assert_eq!(host.groups[0].task, IP_GROUP::IN_ORBIT);
 }
 
 #[test]
@@ -550,12 +550,12 @@ fn zoqfotpik_scout_builds_its_group_only_before_the_meeting() {
 
 #[test]
 fn zoqfotpik_scout_flees_only_after_colliding_with_the_flagship() {
-    let collided = FLEE | IGNORE_FLAGSHIP | REFORM_GROUP;
+    let collided = IP_GROUP::FLEE | IP_GROUP::IGNORE_FLAGSHIP | IP_GROUP::REFORM_GROUP;
     for (race, task, group_ref, flees) in [
-        (ZOQFOTPIK_SHIP, REFORM_GROUP, 3, true),
+        (ZOQFOTPIK_SHIP, IP_GROUP::REFORM_GROUP, 3, true),
         (ZOQFOTPIK_SHIP, 0, 3, false),
-        (URQUAN_SHIP, REFORM_GROUP, 3, false),
-        (ZOQFOTPIK_SHIP, REFORM_GROUP, 0, false),
+        (URQUAN_SHIP, IP_GROUP::REFORM_GROUP, 3, false),
+        (ZOQFOTPIK_SHIP, IP_GROUP::REFORM_GROUP, 0, false),
     ] {
         let mut host = fleet(group_ref);
         host.groups = vec![group(race, task)];

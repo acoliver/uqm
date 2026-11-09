@@ -5,13 +5,14 @@
 //! `COLONY_GRPOFFS0` (32-bit group reference).
 
 use crate::engine::world::planet::PlanetDesc;
+use crate::engine::world::queues::IpGroup as IP_GROUP;
 use crate::engine::StoryKey;
 use crate::math::RandomContext;
 use crate::planets::generate::consts::PLANET_SHIELDED;
 use crate::planets::generate::default;
 use crate::planets::generate::orbits::{self, OrbitRequest};
 use crate::planets::generate::special::{
-    self, Body, FleetGroups, Story, EARTH_ATMOSPHERE, IN_ORBIT, URQUAN_SHIP, WATER_WORLD,
+    self, Body, FleetGroups, Story, EARTH_ATMOSPHERE, URQUAN_SHIP, WATER_WORLD,
 };
 
 /// `GenerateColony_initNpcs`.
@@ -20,7 +21,7 @@ pub fn init_npcs(host: &mut (impl FleetGroups + Story + ?Sized)) -> bool {
     default::init_npcs(host);
     if host.battle_group_ref() != 0 {
         host.head_ip_group(&mut |group| {
-            group.task = IN_ORBIT;
+            group.task = IP_GROUP::IN_ORBIT;
             group.sys_loc = 1;
             group.dest_loc = 1;
             group.loc.x = 0;

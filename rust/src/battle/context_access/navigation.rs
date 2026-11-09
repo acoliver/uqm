@@ -2,8 +2,14 @@
 use crate::engine::battle::Cx;
 #[cfg(not(test))]
 use crate::engine::battle::{ElementId, Parent};
+use crate::engine::graphics::native_abi::POINT;
+use crate::engine::save::{START_ENCOUNTER, START_INTERPLANETARY};
+#[cfg(not(test))]
+use crate::engine::world::queues::IpGroup as IP_GROUP;
 use crate::engine::StoryKey;
-use crate::navigation::abi::*;
+use crate::navigation::hyper_units::{
+    ARILOU_HOME_X, ARILOU_HOME_Y, ARILOU_SPACE_X, ARILOU_SPACE_Y, QUASI_SPACE_X, QUASI_SPACE_Y,
+};
 
 use crate::navigation::hyper_units::Geometry;
 use crate::planets::starmap::find_star_id;
@@ -36,7 +42,7 @@ pub(crate) fn interplanetary(
     world.data.game.ship_facing = 0;
     world.set_story_state(StoryKey::USED_BROADCASTER, 0);
     if world.story_state(StoryKey::ARILOU_SPACE_SIDE) <= 1 {
-        world.set_activity(world.activity() | START_INTERPLANETARY as u16);
+        world.set_activity(world.activity() | START_INTERPLANETARY);
         world.set_story_state(StoryKey::ESCAPE_COUNTER, 0);
     } else {
         world.data.game.autopilot = POINT { x: -1, y: -1 };
@@ -46,7 +52,7 @@ pub(crate) fn interplanetary(
         if catalog[star.0].star_pt.x == ARILOU_HOME_X as i16
             && catalog[star.0].star_pt.y == ARILOU_HOME_Y as i16
         {
-            world.set_activity(world.activity() | START_ENCOUNTER as u16);
+            world.set_activity(world.activity() | START_ENCOUNTER);
         } else {
             let (x, y) = PORTALS[star.0 - 503];
             world.data.flagship.log_x = geometry.log_x(x);

@@ -19,10 +19,12 @@ impl HomeContactSite for Site<'_, '_, '_> {
         start_sphere_tracking(self.game.borrow_mut().world, u16::from(self.contact().0))
     }
     fn notify_others_all_clear(&mut self) {
-        self.game.borrow_mut().with_legacy(|| {
-            // SAFETY: as above.
-            unsafe { notify_others_all_clear(u16::from(self.contact().0)) };
-        })
+        let race = u16::from(self.contact().0);
+        crate::navigation::interplanetary::notify_others(
+            &mut self.game.borrow_mut(),
+            race,
+            u8::MAX,
+        );
     }
     fn save_ip_groups(&mut self) {
         Npcs::save_ip_groups(self);
@@ -297,10 +299,11 @@ impl yehat::YehatSite for Site<'_, '_, '_> {
         start_sphere_tracking(self.game.borrow_mut().world, u16::from(ship::YEHAT_SHIP))
     }
     fn notify_others_all_clear(&mut self) {
-        self.game.borrow_mut().with_legacy(|| {
-            // SAFETY: as above.
-            unsafe { notify_others_all_clear(u16::from(ship::YEHAT_SHIP)) };
-        })
+        crate::navigation::interplanetary::notify_others(
+            &mut self.game.borrow_mut(),
+            u16::from(ship::YEHAT_SHIP),
+            u8::MAX,
+        );
     }
     fn save_ip_groups(&mut self) {
         Npcs::save_ip_groups(self);

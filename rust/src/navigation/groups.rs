@@ -155,8 +155,20 @@ fn cosine(angle: u32, magnitude: i32) -> i32 {
 #[cfg(not(test))]
 pub(crate) mod live {
     use super::*;
-    use crate::navigation::abi::*;
+    use crate::comm::dispatch::ship::{SLYLANDRO_SHIP, SUPOX_SHIP, UTWIG_SHIP};
+    use crate::engine::world::queues::IpGroup as IP_GROUP;
+    use crate::engine::{
+        graphics::native_abi::POINT,
+        math::battle_types::{CIRCLE_SHIFT, FACING_SHIFT},
+        save::groups::MAX_BATTLE_GROUPS,
+        world::{
+            fleet::SPHERE_RADIUS_INCREMENT,
+            queues::{FleetInfo as FLEET_INFO, MAX_REVOLUTIONS, STATION_RADIUS},
+        },
+    };
+    use crate::math::{random as TFB_Random, square_root};
     use crate::navigation::get;
+    use crate::planets::generate::identities::*;
 
     use crate::state::c_api::{
         close_state_file, delete_state_file, length_state_file, open_state_file, seek_state_file,
@@ -166,7 +178,7 @@ pub(crate) mod live {
     const ENCOUNTER_PERCENT: [u8; 24] = [
         0, 0, 0, 20, 20, 0, 10, 20, 20, 20, 20, 40, 0, 20, 60, 20, 5, 20, 40, 0, 0, 40, 40, 0,
     ];
-    const HOME_SYSTEMS: [u32; 23] = [
+    const HOME_SYSTEMS: [u8; 23] = [
         0,
         0,
         0,
@@ -302,11 +314,7 @@ pub(crate) mod live {
         })
     }
 
-    unsafe fn select_encounter(
-        world: &World,
-        home: &[u32; 23],
-        percent: &[u8; 24],
-    ) -> (usize, u16) {
+    unsafe fn select_encounter(world: &World, home: &[u8; 23], percent: &[u8; 24]) -> (usize, u16) {
         let universe = (*world.star_pointer()).star_pt;
         let mut best_index = 0usize;
         let mut best_percent = 0u16;
@@ -319,7 +327,7 @@ pub(crate) mod live {
             let radius = fleet.actual_strength;
             let chance = percent[index] as u16;
             if radius != 0 && chance != 0 {
-                if home[index] != 0 && (*world.star_pointer()).index as u32 == home[index] {
+                if home[index] != 0 && (*world.star_pointer()).index == home[index] {
                     best_index = index;
                     best_percent = if home[index] == SPATHI_DEFINED || home[index] == SUPOX_DEFINED
                     {
@@ -367,11 +375,11 @@ pub(crate) mod live {
         let (best_index, best_percent) = select_encounter(world, &home, &percent);
         if best_percent != 0 {
             let mut number = ((TFB_Random() as u16 % (best_percent >> 1)) + 1) as u8;
-            if number > MAX_BATTLE_GROUPS as u8 {
-                number = MAX_BATTLE_GROUPS as u8;
+            if number > MAX_BATTLE_GROUPS {
+                number = MAX_BATTLE_GROUPS;
             } else if number < 5
                 && home[best_index] != 0
-                && (*world.star_pointer()).index as u32 == home[best_index]
+                && (*world.star_pointer()).index == home[best_index]
             {
                 number = 5;
             }
@@ -402,14 +410,14 @@ pub(crate) mod live {
         group.group_id = which;
         group.in_system = 1;
         let random = TFB_Random();
-        let mut task = random as u8 % ON_STATION as u8;
-        if task == FLEE as u8 {
-            task = ON_STATION as u8;
+        let mut task = random as u8 % IP_GROUP::ON_STATION;
+        if task == IP_GROUP::FLEE {
+            task = IP_GROUP::ON_STATION;
         }
         group.orbit_pos = (random >> 16) as u8 & 15;
         let mut location = solar.planet_count;
-        if location == 1 && task == EXPLORE as u8 {
-            task = IN_ORBIT as u8;
+        if location == 1 && task == IP_GROUP::EXPLORE {
+            task = IP_GROUP::IN_ORBIT;
         } else {
             location = ((random >> 8) as u8 % location) + 1;
         }
@@ -418,9 +426,9 @@ pub(crate) mod live {
         group.loc.x = ((random as u16 % 10000) as i32 - 5000) as i16;
         group.loc.y = (((random >> 16) % 10000) as i32 - 5000) as i16;
         group.group_counter = 0;
-        if task == EXPLORE as u8 {
+        if task == IP_GROUP::EXPLORE {
             group.group_counter = (TFB_Random() as u16 % MAX_REVOLUTIONS as u16) << FACING_SHIFT;
-        } else if task == ON_STATION as u8 {
+        } else if task == IP_GROUP::ON_STATION {
             let origin = crate::planets::solar_coords::outer_location(solar, location as u16 - 1);
             let angle = (group.orbit_pos as u32 + 1) << (CIRCLE_SHIFT - FACING_SHIFT);
             group.loc.x = (origin.x as i32 + cosine(angle, STATION_RADIUS as i32)) as i16;
@@ -507,7 +515,7 @@ pub(crate) mod live {
         offset: u32,
         header: &GroupHeader,
         solar: &crate::engine::world::generation::SolarSnapshot,
-    ) -> BOOLEAN {
+    ) -> u32 {
         world.ip_groups().reinit();
         let mut day = header.day_index as u16;
         let mut month = header.month_index as u16;
@@ -553,7 +561,7 @@ pub(crate) mod live {
         world: &mut World,
         offset: u32,
         solar: &crate::engine::world::generation::SolarSnapshot,
-    ) -> BOOLEAN {
+    ) -> u32 {
         let file = open(world, offset, u8::MAX);
         if file.is_null() {
             return 0;
@@ -566,7 +574,7 @@ pub(crate) mod live {
 
     /// # Safety
     /// Current world and solar-system queues must be initialized and exclusively accessible.
-    pub unsafe fn get_group_info(world: &mut World, offset: u32, which: u8) -> BOOLEAN {
+    pub unsafe fn get_group_info(world: &mut World, offset: u32, which: u8) -> u32 {
         let file = open(world, offset, which);
         if file.is_null() {
             return 0;

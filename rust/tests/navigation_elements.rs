@@ -5,6 +5,8 @@ mod battle_context;
 
 use battle::{Battle, NativeFrameSet as NativeFrames, Object};
 use uqm_rust::engine::battle::{ElementHook, ElementId};
+use uqm_rust::engine::world::queues::IpGroup;
+use uqm_rust::navigation::interplanetary;
 use uqm_rust::ships::native::abi::*;
 
 fn transition_hook() -> ElementHook {
@@ -88,7 +90,6 @@ fn interplanetary_flagship_keeps_motion_and_native_hooks() {
         let frames = NativeFrames::new(16);
         // SAFETY: the serialized fixture owns and restores navigation's live projections.
         unsafe {
-            use uqm_rust::navigation::abi as nav;
             let mut solar = uqm_rust::engine::World::current().read(|world| {
                 uqm_rust::planets::solar_system::SolarSystem::new(
                     world,
@@ -115,7 +116,7 @@ fn interplanetary_flagship_keeps_motion_and_native_hooks() {
             (**uqm_rust::engine::WorldData::current()).game.velocity = velocity;
             uqm_rust::app::bridge::enter(|cx| {
                 solar.refresh_frame(cx);
-                nav::DoMissions(cx);
+                interplanetary::do_missions(cx);
                 let flagship = cx.elements().head().expect("spawned flagship");
                 let state = cx.element(flagship);
                 let Some(ElementHook::Native(pre)) = state.pre else {
@@ -150,7 +151,6 @@ fn interplanetary_group_preserves_parent_and_updates_its_own_record() {
         let frames = NativeFrames::new(16);
         // SAFETY: this serialized fixture owns the group pool, solar descriptors and frames.
         unsafe {
-            use uqm_rust::navigation::abi as nav;
             let mut solar = uqm_rust::engine::World::current().read(|world| {
                 uqm_rust::planets::solar_system::SolarSystem::new(
                     world,
@@ -179,11 +179,11 @@ fn interplanetary_group_preserves_parent_and_updates_its_own_record() {
                 group.group_id = 7;
                 group.in_system = 1;
                 group.dest_loc = 1;
-                group.task = (nav::ON_STATION | nav::IGNORE_FLAGSHIP) as u8;
+                group.task = IpGroup::ON_STATION | IpGroup::IGNORE_FLAGSHIP;
                 group.loc = POINT { x: 300, y: 400 };
                 group.melee_icon = frames.frame(0);
                 queue.put(id);
-                (id, queue.raw(id).cast::<nav::IP_GROUP>())
+                (id, queue.raw(id).cast::<IpGroup>())
             });
             uqm_rust::engine::World::current().write(|w| w.encounter_race = -1);
             (**uqm_rust::engine::Kernel::current()).stars_in_space = frames.frame(0);
@@ -194,7 +194,7 @@ fn interplanetary_group_preserves_parent_and_updates_its_own_record() {
             (**uqm_rust::engine::WorldData::current()).game.ip_location = POINT { x: 100, y: 200 };
             uqm_rust::app::bridge::enter(|cx| {
                 solar.refresh_frame(cx);
-                nav::DoMissions(cx);
+                interplanetary::do_missions(cx);
                 let flagship = cx.elements().head().expect("spawned flagship");
                 assert_eq!(cx.element(flagship).turn, 1);
                 let id = cx.elements().succ(flagship).expect("spawned group");
@@ -217,9 +217,9 @@ fn interplanetary_group_preserves_parent_and_updates_its_own_record() {
             assert_ne!(((*group).loc.x, (*group).loc.y), (300, 400));
             assert_eq!((*group).sys_loc, 0);
             assert_eq!((*group).group_id, 7);
-            nav::NotifyOthers(0, 2);
+            uqm_rust::app::bridge::enter(|cx| interplanetary::notify_others(cx, 0, 2));
             assert_eq!((*group).dest_loc, 2);
-            assert_ne!((*group).task & nav::IGNORE_FLAGSHIP as u8, 0);
+            assert_ne!((*group).task & IpGroup::IGNORE_FLAGSHIP, 0);
             uqm_rust::engine::World::current().write(|world| world.ip_groups().reinit());
             (**uqm_rust::engine::WorldData::current()).game.ship_stamp = old_stamp;
             (**uqm_rust::engine::WorldData::current()).game.ip_location = old_location;
@@ -227,4 +227,112 @@ fn interplanetary_group_preserves_parent_and_updates_its_own_record() {
             uqm_rust::engine::World::current().write(|w| w.encounter_race = old_race);
         }
     });
+}
+
+#[test]
+fn notifications_change_only_the_supplied_unpublished_campaign() {
+    use uqm_rust::engine::{battle::Cx, world::queues::IpGroup, Game, World};
+    use uqm_rust::navigation::interplanetary::notify_others;
+
+    let mut game = Game::new();
+    let mut other = World::new();
+    for world in [&mut game.world, &mut other] {
+        let mut groups = world.ip_groups();
+        let id = groups
+            .alloc()
+            .unwrap_or_else(|| panic!("fixture group capacity"));
+        *groups.get_mut(id) = IpGroup {
+            race_id: 4,
+            task: IpGroup::ON_STATION | IpGroup::IGNORE_FLAGSHIP,
+            orbit_pos: 6,
+            dest_loc: 3,
+            ..Default::default()
+        };
+        groups.put(id);
+    }
+    let mut battle = uqm_rust::engine::battle::Battle::new();
+    let mut cx = Cx::new(&mut battle, &mut game.world, &mut game.kernel, || {
+        panic!("targeted notifications must not draw RNG")
+    });
+    notify_others(&mut cx, 4, 2);
+    let id = cx
+        .world
+        .ip_groups_ref()
+        .head()
+        .unwrap_or_else(|| panic!("fixture group"));
+    assert_eq!(cx.world.ip_groups_ref().get(id).dest_loc, 2);
+    notify_others(&mut cx, 4, 0);
+    let group = *cx.world.ip_groups_ref().get(id);
+    assert_eq!(
+        (group.task, group.orbit_pos, group.dest_loc),
+        (IpGroup::ON_STATION, 2, 0)
+    );
+    let groups = other.ip_groups_ref();
+    let id = groups
+        .head()
+        .unwrap_or_else(|| panic!("other campaign group"));
+    let group = groups.get(id);
+    assert_eq!(
+        (group.task, group.orbit_pos, group.dest_loc),
+        (IpGroup::ON_STATION | IpGroup::IGNORE_FLAGSHIP, 6, 3)
+    );
+}
+
+#[test]
+fn all_clear_uses_the_supplied_rng_and_preserves_reforming_groups() {
+    use uqm_rust::engine::{battle::Cx, world::queues::IpGroup, Game};
+    use uqm_rust::navigation::interplanetary::notify_others;
+
+    let mut game = Game::new();
+    for (race, task, dest, orbit, counter) in [
+        (4, IpGroup::EXPLORE, 0, 3, 99),
+        (4, IpGroup::FLEE | IpGroup::REFORM_GROUP, 2, 5, 17),
+        (5, IpGroup::EXPLORE, 1, 4, 33),
+    ] {
+        let mut groups = game.world.ip_groups();
+        let id = groups
+            .alloc()
+            .unwrap_or_else(|| panic!("fixture group capacity"));
+        *groups.get_mut(id) = IpGroup {
+            race_id: race,
+            task,
+            dest_loc: dest,
+            orbit_pos: orbit,
+            group_counter: counter,
+            ..Default::default()
+        };
+        groups.put(id);
+    }
+    let mut battle = uqm_rust::engine::battle::Battle::new();
+    let mut cx = Cx::new(&mut battle, &mut game.world, &mut game.kernel, || 7);
+    notify_others(&mut cx, 4, u8::MAX);
+    let groups = cx.world.ip_groups_ref();
+    let first = groups.head().unwrap_or_else(|| panic!("exploring group"));
+    let second = groups
+        .succ(first)
+        .unwrap_or_else(|| panic!("reforming group"));
+    let third = groups
+        .succ(second)
+        .unwrap_or_else(|| panic!("unrelated race"));
+    let first = groups.get(first);
+    assert_eq!(first.task, IpGroup::EXPLORE | IpGroup::IGNORE_FLAGSHIP);
+    assert_eq!(
+        (first.dest_loc, first.orbit_pos, first.group_counter),
+        (3, 7, 32)
+    );
+    let second = groups.get(second);
+    assert_eq!(
+        second.task,
+        IpGroup::FLEE | IpGroup::REFORM_GROUP | IpGroup::IGNORE_FLAGSHIP
+    );
+    assert_eq!(
+        (second.dest_loc, second.orbit_pos, second.group_counter),
+        (2, 5, 17)
+    );
+    let third = groups.get(third);
+    assert_eq!(third.task, IpGroup::EXPLORE);
+    assert_eq!(
+        (third.dest_loc, third.orbit_pos, third.group_counter),
+        (1, 4, 33)
+    );
 }

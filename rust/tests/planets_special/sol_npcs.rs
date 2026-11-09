@@ -2,6 +2,7 @@
 
 use super::Harness;
 use uqm_rust::comm::dispatch::{CHECK_ABORT, CHECK_LOAD, START_ENCOUNTER};
+use uqm_rust::engine::world::queues::IpGroup;
 use uqm_rust::engine::StoryKey;
 use uqm_rust::planets::c_api;
 use uqm_rust::planets::generate::sol::Generator as GENERATE_SOL_FUNCTIONS;
@@ -120,7 +121,7 @@ pub fn check(h: &mut Harness) {
             let head = groups
                 .head()
                 .unwrap_or_else(|| panic!("fixture group missing"));
-            groups.get_mut(head).task = uqm_rust::planets::generate::default::REFORM_GROUP;
+            groups.get_mut(head).task = IpGroup::REFORM_GROUP;
         });
         assert!(crate::invoke_generation(&mut h.state, |system, host| {
             GENERATE_SOL_FUNCTIONS.uninit_npcs(system, host)
@@ -147,11 +148,7 @@ pub fn check(h: &mut Harness) {
                     .unwrap_or_else(|| panic!("fixture group missing")),
             )
         });
-        assert_eq!(
-            probe.task,
-            uqm_rust::planets::generate::default::FLEE
-                | uqm_rust::planets::generate::default::IGNORE_FLAGSHIP
-        );
+        assert_eq!(probe.task, IpGroup::FLEE | IpGroup::IGNORE_FLAGSHIP);
         assert_eq!(probe.dest_loc, 0);
         uqm_rust::engine::World::current().write(|world| {
             (world).set_story_state(uqm_rust::engine::StoryKey::PROBE_MESSAGE_DELIVERED, 1)

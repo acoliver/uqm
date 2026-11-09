@@ -9,9 +9,10 @@
 
 use crate::comm::dispatch::ship::SHOFIXTI_SHIP;
 use crate::engine::world::planet::PlanetDesc;
+use crate::engine::world::queues::IpGroup as IP_GROUP;
 use crate::engine::StoryKey;
 use crate::math::RandomContext;
-use crate::planets::generate::default::{self, FLEE, IGNORE_FLAGSHIP, REFORM_GROUP};
+use crate::planets::generate::default;
 use crate::planets::generate::orbits::{self, OrbitRequest};
 use crate::planets::generate::special::{FleetGroups, Story, SELENIC_WORLD};
 use crate::ships::queue::{NAME_OFFSET, NUM_CAPTAINS_NAMES};
@@ -126,8 +127,8 @@ fn check_old_shofixti(host: &mut (impl FleetGroups + Story + ?Sized)) {
     }
     let recruited = host.flag(StoryKey::SHOFIXTI_RECRUITED) != 0;
     host.head_ip_group(&mut |group| {
-        if group.race_id == SHOFIXTI_SHIP && group.task & REFORM_GROUP != 0 && recruited {
-            group.task = FLEE | IGNORE_FLAGSHIP | REFORM_GROUP;
+        if group.race_id == SHOFIXTI_SHIP && group.task & IP_GROUP::REFORM_GROUP != 0 && recruited {
+            group.task = IP_GROUP::FLEE | IP_GROUP::IGNORE_FLAGSHIP | IP_GROUP::REFORM_GROUP;
             group.dest_loc = 0;
         }
     });
