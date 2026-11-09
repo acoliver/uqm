@@ -218,7 +218,9 @@ fn dispatch(cx: &mut Cx<'_>, io: &mut Io<'_>, decision: ActivityDecision) {
                                 options,
                             )
                         },
-                        game_options: crate::front_end::gameopt::game_options,
+                        game_options: |cx, io| {
+                            crate::front_end::gameopt::game_options(cx, io, None)
+                        },
                         ship_spin: |cx, _io, index, music| {
                             let music =
                                 music.map_or(std::ptr::null_mut(), |music| music.as_raw().cast());
