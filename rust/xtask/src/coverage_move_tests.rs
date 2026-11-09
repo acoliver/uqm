@@ -180,6 +180,8 @@ fn fetching_only_source_commits_cannot_prove_shallow_ancestry() {
     assert_eq!(ancestor().code(), Some(1));
     git(&clone, &["fetch", "--no-tags", "--unshallow", "origin"]);
     assert!(ancestor().success());
+    git(&clone, &["fetch", "--no-tags", "--depth=1", "origin"]);
+    assert_eq!(ancestor().code(), Some(1));
 }
 
 #[test]
