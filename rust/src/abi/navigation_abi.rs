@@ -2114,9 +2114,6 @@ pub struct star_desc {
 
 
 #[cfg(not(test))]
-pub use crate::planets::solarsys::GetRandomSeedForStar;
-
-#[cfg(not(test))]
 pub use crate::planets::solarsys::locationToDisplay;
 
 #[cfg(not(test))]

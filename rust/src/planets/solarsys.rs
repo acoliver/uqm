@@ -69,29 +69,4 @@ fn display_factor() -> i32 {
     (sis_dimensions().0 >> 1) - 8
 }
 
-/// # Safety
-/// Game-thread caller; descriptor pointers must refer to the live system or a
-/// complete, readable system description. Output pointers must be writable.
-#[no_mangle]
-pub unsafe extern "C" fn GetRandomSeedForStar(star: *const c::STAR_DESC) -> c::DWORD {
-    unsafe {
-        let point = (*star).star_pt;
-        ((point.y as u16 as u32) << 16) | (point.x as u16 as u32)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn random_seed_packs_signed_coordinates_as_words() {
-        let star = c::STAR_DESC {
-            star_pt: c::POINT { x: -2, y: 0x1234 },
-            ..unsafe { std::mem::zeroed() }
-        };
-        assert_eq!(unsafe { GetRandomSeedForStar(&star) }, 0x1234_fffe);
-    }
-}
-
 pub mod site;
