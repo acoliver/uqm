@@ -3,6 +3,7 @@ pub mod lander_resources;
 mod pilot_flash;
 pub mod planet_animation;
 pub mod roster_flash;
+pub mod solar_resources;
 use super::battle::{
     kernel::{Channels, SoundQueue, StarPlane},
     ShipId,
@@ -98,6 +99,8 @@ pub struct Kernel {
     pub status_message_mode: u32,
     pub star_map_flash: StarMapFlash,
     pub lander_resources: Option<lander_resources::LanderResources>,
+    pub solar_resources: Option<solar_resources::SolarResources>,
+    pub solar_frame_deadline: u32,
     pub pilot_flash: std::cell::RefCell<PilotFlash>,
     pub roster_flash: roster_flash::RosterFlash,
     pub device_observation: crate::observe::DeviceObservation,
@@ -292,6 +295,8 @@ impl Kernel {
             status_message_mode: 1,
             star_map_flash: StarMapFlash::default(),
             lander_resources: None,
+            solar_resources: None,
+            solar_frame_deadline: 0,
             pilot_flash: std::cell::RefCell::default(),
             roster_flash: roster_flash::RosterFlash::default(),
             device_observation: crate::observe::DeviceObservation::default(),
