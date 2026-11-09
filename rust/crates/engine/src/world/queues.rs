@@ -1,5 +1,9 @@
 //! Campaign records live in fixed-capacity pools; links belong to the pool, not the records.
 
+pub const MAX_REVOLUTIONS: u32 = 5;
+pub const STATION_RADIUS: u32 = 1600;
+pub const ORBIT_RADIUS: u32 = 2400;
+
 use super::super::battle::link_queue::{
     queue_record, LinkId, LinkQueue, MutableQueueRecord, QueueRecord,
 };

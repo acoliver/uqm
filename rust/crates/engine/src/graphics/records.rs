@@ -2,6 +2,7 @@
 pub use super::geometry_ffi::BoxIntersect;
 use super::native_abi::{Color, GRAPHICS_PRIM, POINT, PRIM_DESC, PRIM_LINKS, STAMP};
 
+pub const STAMP_PRIMITIVE: u8 = 1;
 pub const LINE_PRIMITIVE: u8 = 3;
 pub const EMPTY_PRIMITIVE: GRAPHICS_PRIM = 7;
 
