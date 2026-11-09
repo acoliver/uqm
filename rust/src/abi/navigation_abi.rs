@@ -2463,7 +2463,6 @@ pub use crate::engine::world::fleet::set_race_allied;
 pub use crate::engine::world::fleet::start_sphere_tracking;
 
 #[cfg(not(test))]
-pub use crate::state::c_api::planets::uninit_planet_info;
 
 #[cfg(not(test))]
 pub use crate::navigation::groups::live::init_group_info;
