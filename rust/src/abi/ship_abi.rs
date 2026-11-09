@@ -1752,7 +1752,6 @@ pub const LANDER_DEPARTS: _bindgen_ty_18 = 10;
 pub const LANDER_RETURNS: _bindgen_ty_18 = 11;
 pub const LANDER_DESTROYED: _bindgen_ty_18 = 12;
 pub type _bindgen_ty_18 = ::std::os::raw::c_uint;
-pub type SOLARSYS_STATE = solarsys_state;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct menu_state {
@@ -1935,29 +1934,6 @@ pub const NORMAL_DENSITY: _bindgen_ty_25 = 3;
 pub const HIGH_DENSITY: _bindgen_ty_25 = 4;
 pub const SUPER_DENSITY: _bindgen_ty_25 = 5;
 pub type _bindgen_ty_25 = ::std::os::raw::c_uint;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct solarsys_state {
-    pub InputFunc:
-        ::std::option::Option<unsafe extern "C" fn(arg1: *mut solarsys_state) -> BOOLEAN>,
-    pub InIpFlight: BOOLEAN,
-    pub WaitIntersect: COUNT,
-    pub SunDesc: [crate::engine::world::planet::PlanetDesc; 1usize],
-    pub PlanetDesc: [crate::engine::world::planet::PlanetDesc; 16usize],
-    pub MoonDesc: [crate::engine::world::planet::PlanetDesc; 4usize],
-    pub pBaseDesc: *mut crate::engine::world::planet::PlanetDesc,
-    pub pOrbitalDesc: *mut crate::engine::world::planet::PlanetDesc,
-    pub FirstPlanetIndex: SIZE,
-    pub LastPlanetIndex: SIZE,
-    pub turn_counter: BYTE,
-    pub turn_wait: BYTE,
-    pub thrust_counter: BYTE,
-    pub max_ship_speed: BYTE,
-    pub SysInfo: crate::engine::world::planet::SystemInfo,
-    pub generator_index: u8,
-    pub PlanetSideFrame: [FRAME; 6usize],
-    pub InOrbit: BOOLEAN,
-}
 
 pub const HAIL: _bindgen_ty_26 = 0;
 pub const ATTACK: _bindgen_ty_26 = 1;
