@@ -1,49 +1,15 @@
-//! Legacy display and submenu composition for the retained hyperspace menu.
-//! Cargo, roster, front-end and wait adapters still exclude this composition from unit tests.
-
-#[cfg(not(test))]
+//! Retained hyperspace menu presentation with supplied submenu routing.
 use super::*;
+use crate::graphics::menu as draw;
 
-#[cfg(not(test))]
-enum HyperspaceInput<'a, 'b> {
-    Choose(&'a mut u8),
-    Submenu(&'a mut crate::engine::observe::Io<'b>, u8),
-}
-
-#[cfg(not(test))]
-unsafe fn input_frame(
-    cx: &mut crate::engine::battle::Cx<'_>,
-    event: HyperspaceInput<'_, '_>,
-) -> bool {
-    match event {
-        HyperspaceInput::Choose(state) => {
-            let runtime = cx.kernel.input_runtime();
-            choose_menu_state(cx, runtime.input(), state, PM_STARMAP) != 0
-        }
-        // SAFETY: the later-owned submenu receives the retained context and observer.
-        HyperspaceInput::Submenu(io, selection) => match selection {
-            1 => {
-                crate::planets::pstarmap::star_map(cx, io);
-                true
-            }
-            2 => crate::planets::devices::devices_menu(cx, io, None) != 0,
-            3 => {
-                crate::planets::cargo::live::cargo_menu(cx, io);
-                true
-            }
-            4 => crate::planets::roster::live::roster_menu(cx, io) != 0,
-            5 => crate::front_end::gameopt::runtime::game_options(cx, io, None) != 0,
-            _ => unreachable!(),
-        },
-    }
-}
-
-/// # Safety
-/// The game-thread caller retains the initialized SIS display and submenu resources.
-#[cfg(not(test))]
-pub unsafe fn hyperspace_menu(
+pub fn hyperspace_menu(
     cx: &mut crate::engine::battle::Cx<'_>,
     io: &mut crate::engine::observe::Io<'_>,
+    mut submenu: impl FnMut(
+        &mut crate::engine::battle::Cx<'_>,
+        &mut crate::engine::observe::Io<'_>,
+        u8,
+    ) -> bool,
 ) {
     let runtime = cx.kernel.input_runtime();
     let input = runtime.input();
@@ -51,8 +17,8 @@ pub unsafe fn hyperspace_menu(
     crate::navigation::hyper_menu::run(
         cx,
         io,
-        |cx, state| input_frame(cx, HyperspaceInput::Choose(state)),
-        |cx, io, selection| input_frame(cx, HyperspaceInput::Submenu(io, selection)),
+        |cx, state| choose_menu_state(cx, input, state, PM_STARMAP) != 0,
+        |cx, io, selection| submenu(cx, io, selection),
         |cx, io, operation| {
             use crate::navigation::hyper_menu::Display;
             let space = cx.kernel.space_context;
@@ -60,12 +26,11 @@ pub unsafe fn hyperspace_menu(
                 crate::ui::util::wait_for_no_input(cx, io, ONE_SECOND / 2, 0);
                 return;
             }
-            // SAFETY: all raw drawing resources remain owned by the suspended context.
             match operation {
                 Display::Open => {
-                    UnbatchGraphics();
-                    let context = SetContext(space);
-                    let color = SetContextBackGroundColor(crate::navigation::color(0, 0, 0));
+                    draw::unbatch();
+                    let context = draw::select(space);
+                    let color = draw::background(crate::navigation::color(0, 0, 0));
                     previous = Some((context, color));
                     crate::ui::menu::draw_menu_state(
                         cx.kernel,
@@ -100,7 +65,7 @@ pub unsafe fn hyperspace_menu(
                 }
                 Display::Close => {
                     crate::ui::sis::clear_flash(cx.kernel);
-                    SetContext(space);
+                    draw::select(space);
                 }
                 Display::ClearRadar => crate::ui::sis::clear_sis_rect(
                     cx.kernel,
@@ -112,11 +77,11 @@ pub unsafe fn hyperspace_menu(
                     let (context, color) = previous
                         .take()
                         .unwrap_or_else(|| panic!("hyperspace menu was not opened"));
-                    SetContextBackGroundColor(color);
-                    SetContext(context);
+                    draw::background(color);
+                    draw::select(context);
                 }
                 Display::Batch => {
-                    BatchGraphics();
+                    draw::batch();
                 }
                 Display::Wait => unreachable!(),
             };

@@ -428,7 +428,7 @@ impl<'a, P: Platform + ?Sized> OutfitScreen<'a, P> {
             if u16::from(*piece) < EMPTY_SLOT {
                 draw_ship_piece(
                     p,
-                    &sis,
+                    &sis.module_slots,
                     module_frame,
                     u16::from(*piece),
                     index as u16,
@@ -440,7 +440,7 @@ impl<'a, P: Platform + ?Sized> OutfitScreen<'a, P> {
             if u16::from(*piece) < EMPTY_SLOT {
                 draw_ship_piece(
                     p,
-                    &sis,
+                    &sis.module_slots,
                     module_frame,
                     u16::from(*piece),
                     index as u16,
@@ -452,7 +452,7 @@ impl<'a, P: Platform + ?Sized> OutfitScreen<'a, P> {
             if u16::from(*piece) < EMPTY_SLOT {
                 draw_ship_piece(
                     p,
-                    &sis,
+                    &sis.module_slots,
                     module_frame,
                     u16::from(*piece),
                     index as u16,

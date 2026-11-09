@@ -4,7 +4,8 @@ use crate::graphics::context_abi::ContextLease;
 use crate::ui::palette::pilot_color;
 use crate::ui::rgb15;
 
-use crate::navigation::abi::*;
+use crate::engine::world::campaign::*;
+use crate::graphics::native_abi::*;
 
 use std::ffi::{CStr, CString};
 

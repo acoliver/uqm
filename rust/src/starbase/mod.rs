@@ -45,6 +45,7 @@ pub mod cffi;
 pub mod draw;
 pub mod fuel;
 pub mod gfx;
+pub mod graphics;
 pub mod ids;
 pub mod input;
 pub mod module_chooser;

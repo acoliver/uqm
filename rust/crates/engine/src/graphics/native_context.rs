@@ -10,6 +10,7 @@ pub(super) struct Allocation {
     owned: native_drawables::OwnedAllocation,
     target: RefCell<Option<ContextFrame>>,
     font: RefCell<Option<super::native_font::FontLease>>,
+    effect: RefCell<Option<ContextFrame>>,
 }
 
 #[derive(Clone)]
@@ -18,6 +19,13 @@ pub struct ContextFrame {
     _allocations: Vec<native_drawables::DrawableLease>,
 }
 impl ContextFrame {
+    pub fn as_raw(&self) -> FRAME {
+        for allocation in &self._allocations {
+            allocation.assert_thread();
+        }
+        self.frame
+    }
+
     pub fn retain(frame: Option<NonNull<frame_desc>>) -> Self {
         Self {
             frame: frame.map_or(std::ptr::null_mut(), NonNull::as_ptr),
@@ -281,10 +289,7 @@ struct ContextEffect {
 }
 impl Drop for ContextEffect {
     fn drop(&mut self) {
-        self.context.apply(Operation::Frame(
-            self.previous.frame,
-            context_abi::SetContextFontEffect,
-        ));
+        self.context.set_font_effect(self.previous.clone());
     }
 }
 
@@ -320,6 +325,11 @@ impl Drop for ContextTextState {
 }
 
 impl ContextLease {
+    pub fn as_raw(&self) -> CONTEXT {
+        self.assert_thread();
+        self.0.context.as_ptr()
+    }
+
     pub fn require(context: CONTEXT) -> Self {
         Self::retain(NonNull::new(context).unwrap_or_else(|| panic!("required context is absent")))
     }
@@ -725,9 +735,46 @@ impl ContextLease {
         }));
     }
 
-    fn replace_font(&self, font: Option<super::native_font::FontLease>) {
+    pub fn replace_font(&self, font: Option<super::native_font::FontLease>) {
         let previous = self.0.font.replace(font.clone());
         self.apply(Operation::Font(font));
+        drop(previous);
+    }
+
+    pub fn font_lease(&self) -> Option<super::native_font::FontLease> {
+        self.assert_thread();
+        // SAFETY: the retained context owns this graphics-thread descriptor.
+        let font = unsafe { self.0.context.as_ref().Font };
+        NonNull::new(font).map(|font| {
+            self.0
+                .font
+                .borrow()
+                .as_ref()
+                .filter(|lease| lease.as_raw() == font.as_ptr())
+                .cloned()
+                .unwrap_or_else(|| super::native_font::FontLease::retain(font))
+        })
+    }
+
+    pub fn font_effect(&self) -> ContextFrame {
+        self.assert_thread();
+        // SAFETY: the retained context owns this graphics-thread descriptor.
+        let frame = unsafe { self.0.context.as_ref().FontEffect };
+        self.0
+            .effect
+            .borrow()
+            .as_ref()
+            .filter(|effect| effect.frame == frame)
+            .cloned()
+            .unwrap_or_else(|| ContextFrame::retain(NonNull::new(frame)))
+    }
+
+    pub fn set_font_effect(&self, effect: ContextFrame) {
+        let previous = self.0.effect.replace(Some(effect.clone()));
+        self.apply(Operation::Frame(
+            effect.frame,
+            context_abi::SetContextFontEffect,
+        ));
         drop(previous);
     }
 
@@ -737,15 +784,15 @@ impl ContextLease {
         draw: impl FnOnce() -> R,
     ) -> R {
         self.with_selected(|| {
-            let previous = self
-                .apply(Operation::Frame(
-                    effect.map_or(std::ptr::null_mut(), |frame| frame.frame),
-                    context_abi::SetContextFontEffect,
-                ))
-                .0;
+            let previous = self.font_effect();
+            self.set_font_effect(
+                effect
+                    .cloned()
+                    .unwrap_or_else(|| ContextFrame::retain(None)),
+            );
             let restore = ContextEffect {
                 context: self.clone(),
-                previous: ContextFrame::retain(NonNull::new(previous)),
+                previous,
             };
             let result = draw();
             drop(restore);
@@ -837,6 +884,7 @@ pub(super) fn register(context: NonNull<context_desc>) {
         ),
         target: RefCell::new(None),
         font: RefCell::new(None),
+        effect: RefCell::new(None),
     });
     assert!(
         allocations

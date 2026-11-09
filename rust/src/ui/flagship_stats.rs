@@ -1,10 +1,10 @@
 //! Flagship statistics computed from owned equipment, without graphics access.
 
-use crate::engine::world::SisState;
-use crate::navigation::abi::{
+use crate::engine::world::campaign::{
     DYNAMO_UNIT, FUEL_TANK, FUEL_TANK_CAPACITY, FUEL_TANK_SCALE, FUSION_THRUSTER,
     HEFUEL_TANK_CAPACITY, HIGHEFF_FUELSYS, SHIVA_FURNACE, TURNING_JETS,
 };
+use crate::engine::world::SisState;
 
 #[derive(Debug, PartialEq)]
 pub(super) struct Stats {
@@ -56,7 +56,7 @@ mod tests {
     fn sis() -> SisState {
         let mut sis = crate::engine::World::new().data.flagship;
         sis.module_slots
-            .fill(crate::navigation::abi::NUM_MODULES as u8);
+            .fill(crate::engine::world::campaign::NUM_MODULES as u8);
         sis
     }
 

@@ -1,7 +1,7 @@
 //! Owned flagship transactions for the module-installation menu.
 
+use crate::engine::world::campaign::*;
 use crate::engine::World;
-use crate::navigation::abi::*;
 
 pub(super) const EMPTY_SLOT: u8 = NUM_MODULES as u8;
 

@@ -116,7 +116,7 @@ pub fn rotate_starbase<G: Gfx + ?Sized>(
     }
 
     if now >= animation.next_time || setup_frame.is_some() {
-        animation.next_time = now + ONE_SECOND / 20;
+        animation.next_time = now.wrapping_add(ONE_SECOND / 20);
 
         g.draw_stamp(Stamp {
             origin: animation.origin,
@@ -153,7 +153,7 @@ fn shifted(point: Point, dx: i32, dy: i32) -> Point {
 /// `DrawShipPiece`.
 pub fn draw_ship_piece<G: Gfx + ?Sized>(
     g: &G,
-    sis: &SisView,
+    module_slots: &[u8; 16],
     module_frame: FrameId,
     which_piece: u16,
     which_slot: u16,
@@ -172,8 +172,7 @@ pub fn draw_ship_piece<G: Gfx + ?Sized>(
     } else {
         if piece < EMPTY_SLOT + 2 {
             repair = 1;
-            if piece < EMPTY_SLOT
-                && (slot == 0 || piece_slot(&sis.module_slots, slot - 1) < EMPTY_SLOT)
+            if piece < EMPTY_SLOT && (slot == 0 || piece_slot(module_slots, slot - 1) < EMPTY_SLOT)
             {
                 repair += 1;
             }
@@ -181,7 +180,7 @@ pub fn draw_ship_piece<G: Gfx + ?Sized>(
             if slot == 0 || slot >= NUM_MODULE_SLOTS - 3 {
                 piece += 1;
             }
-            if slot < last_slot && piece_slot(&sis.module_slots, slot + 1) < EMPTY_SLOT {
+            if slot < last_slot && piece_slot(module_slots, slot + 1) < EMPTY_SLOT {
                 repair = -1;
                 if piece == EMPTY_SLOT + 3 || slot + 1 == NUM_MODULE_SLOTS - 3 {
                     repair -= 1;
@@ -285,7 +284,7 @@ pub fn draw_ship_piece<G: Gfx + ?Sized>(
 
     if repair != 0 {
         let next_slot = slot + 1;
-        let mut next_piece = piece_slot(&sis.module_slots, next_slot);
+        let mut next_piece = piece_slot(module_slots, next_slot);
         if next_piece == EMPTY_SLOT + 2 && next_slot >= NUM_MODULE_SLOTS - 3 {
             next_piece += 1;
         }

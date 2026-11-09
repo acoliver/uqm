@@ -86,7 +86,7 @@ pub(crate) fn alternate(base: &mut u8, current: &mut u8) -> bool {
             }
             _ => {
                 crate::log_abi::log_message(
-                    crate::navigation::abi::log_Level_log_Error as i32,
+                    crate::logging::LogLevel::Error as i32,
                     &format!(
                         "Unknown state combination: {}, {}",
                         *base as i32, *current as i32

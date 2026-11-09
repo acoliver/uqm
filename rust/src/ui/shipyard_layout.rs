@@ -1,7 +1,7 @@
 //! Hangar positions and cursor traversal for the shipped PC layout.
 #![allow(non_snake_case)]
 
-use crate::navigation::abi::{BYTE, EXTENT, POINT, RECT, SBYTE};
+use crate::graphics::native_abi::{BYTE, EXTENT, POINT, RECT};
 
 // Mirrors the shipped C build, which does not define USE_3DO_HANGAR.
 pub(crate) const USE_3DO_HANGAR: bool = false;
@@ -32,7 +32,7 @@ pub(crate) const fn DMS_GetEscortShipRect(slot: BYTE) -> RECT {
     }
 }
 
-pub(crate) const fn DMS_MoveCursor(state: BYTE, dx: SBYTE, dy: SBYTE) -> BYTE {
+pub(crate) const fn DMS_MoveCursor(state: BYTE, dx: i8, dy: i8) -> BYTE {
     let mut row = (state & 0x0f) / HANGAR_SHIPS_ROW;
     let mut col = (state & 0x0f) % HANGAR_SHIPS_ROW;
     let mut flagship = state >> 4 != 0;

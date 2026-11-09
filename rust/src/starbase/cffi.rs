@@ -11,8 +11,6 @@ use super::gfx::{
 
 use crate::comm::locdata::{CColor, CPoint, CRect, CStamp};
 use crate::comm::sis_graphics::CText;
-use crate::engine::battle::link_queue::LinkQueue;
-use crate::engine::world::queues::{Fleet, Fragment};
 use crate::mainloop::restart_menu::c_extern as base;
 
 use crate::graphics::context_abi::SetContextForeGroundColor;
@@ -395,12 +393,4 @@ impl Gfx for CffiPlatform {
             CStr::from_ptr(text).to_string_lossy().into_owned()
         }
     }
-}
-
-pub(crate) fn built_ship_queue<R>(edit: impl FnOnce(&mut LinkQueue<'_, Fragment, 12>) -> R) -> R {
-    crate::engine::World::current().write(|world| edit(&mut world.built_ships()))
-}
-
-pub(crate) fn avail_race_queue<R>(read: impl FnOnce(&LinkQueue<'_, Fleet, 24>) -> R) -> R {
-    crate::engine::World::current().read(|world| read(&world.avail_races_ref()))
 }

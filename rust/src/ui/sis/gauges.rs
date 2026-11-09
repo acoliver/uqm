@@ -36,7 +36,7 @@ pub fn gauge_rect(crew: bool) -> RECT {
         },
     }
 }
-fn update_crew(state: &mut SIS_STATE, delta: i16) {
+fn update_crew(state: &mut crate::engine::world::SisState, delta: i16) {
     if delta == 0 || delta == UNDEFINED_DELTA {
         return;
     }
@@ -47,7 +47,7 @@ fn update_crew(state: &mut SIS_STATE, delta: i16) {
         ((i32::from(state.crew_enlisted) + i32::from(delta)) as u16).min(capacity)
     };
 }
-fn update_fuel(state: &mut SIS_STATE, delta: i16) -> bool {
+fn update_fuel(state: &mut crate::engine::world::SisState, delta: i16) -> bool {
     if delta == 0 {
         return false;
     }
@@ -69,7 +69,7 @@ fn update_fuel(state: &mut SIS_STATE, delta: i16) -> bool {
     }
     (state.fuel_on_board / FUEL_TANK_SCALE) as u16 != old
 }
-fn update_resources(state: &mut SIS_STATE, delta: i16, mode: StatMsgMode) {
+fn update_resources(state: &mut crate::engine::world::SisState, delta: i16, mode: u32) {
     if delta == 0 || delta == UNDEFINED_DELTA {
         return;
     }
@@ -78,7 +78,7 @@ fn update_resources(state: &mut SIS_STATE, delta: i16, mode: StatMsgMode) {
     } else {
         state.res_units.wrapping_add(i32::from(delta) as u32)
     };
-    assert_eq!(mode, StatMsgMode_SMM_RES_UNITS);
+    assert_eq!(mode, STAT_MSG_MODE_SMM_RES_UNITS);
 }
 fn draw_number(context: &ContextLease, font: &FontLease, crew: bool, value: u16) {
     let rect = gauge_rect(crew);
@@ -450,7 +450,7 @@ mod tests {
         game.world.data.flagship.commander_name[..2].copy_from_slice(b"A\0");
         game.world.data.flagship.ship_name[..2].copy_from_slice(b"A\0");
         game.kernel
-            .set_status_message_mode(StatMsgMode_SMM_RES_UNITS);
+            .set_status_message_mode(STAT_MSG_MODE_SMM_RES_UNITS);
         delta_sis_gauges(&game.kernel, &mut game.world, 0, 0, 0);
         delta_sis_gauges(&game.kernel, &mut game.world, 5, 10, 20);
         assert_eq!(
@@ -518,10 +518,10 @@ mod tests {
         assert!(update_fuel(&mut state, -200));
         assert_eq!(state.fuel_on_board, 0);
         assert!(update_fuel(&mut state, UNDEFINED_DELTA));
-        update_resources(&mut state, -11, StatMsgMode_SMM_RES_UNITS);
+        update_resources(&mut state, -11, STAT_MSG_MODE_SMM_RES_UNITS);
         assert_eq!(state.res_units, 0);
         state.res_units = u32::MAX;
-        update_resources(&mut state, 2, StatMsgMode_SMM_RES_UNITS);
+        update_resources(&mut state, 2, STAT_MSG_MODE_SMM_RES_UNITS);
         assert_eq!(state.res_units, 1);
     }
 }

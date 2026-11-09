@@ -46,7 +46,7 @@ fn draw_pc_menu(
     context.fill_rectangle(INACTIVE_COLOR, *rect);
     if i16::from(count) * ITEM_HEIGHT > rect.extent.height {
         crate::log_abi::log_message(
-            log_Level_log_Error as i32,
+            LOG__LEVEL_LOG__ERROR as i32,
             "Warning, no room for all menu items!",
         );
     } else {

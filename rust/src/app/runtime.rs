@@ -205,7 +205,23 @@ fn dispatch(cx: &mut Cx<'_>, io: &mut Io<'_>, decision: ActivityDecision) {
         }
         ActivityDecision::VisitStarBase => {
             // SAFETY: the campaign and display remain live through the starbase mode.
-            unsafe { crate::ui::starbase::run_starbase_visit(cx, io) };
+            unsafe {
+                crate::ui::starbase::run_starbase_visit(
+                    cx,
+                    io,
+                    &crate::ui::MenuServices {
+                        game_options: crate::front_end::gameopt::game_options,
+                        ship_spin: |cx, _io, index, music| {
+                            let music =
+                                music.map_or(std::ptr::null_mut(), |music| music.as_raw().cast());
+                            // SAFETY: the supplied music and campaign remain retained during the presentation.
+                            cx.with_legacy(|| {
+                                crate::front_end::fmv::runtime::DoShipSpin(index, music)
+                            });
+                        },
+                    },
+                )
+            };
         }
         ActivityDecision::RaceCommunication => {
             // SAFETY: the campaign retains the communication mode's owners and resources.

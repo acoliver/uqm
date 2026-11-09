@@ -1,10 +1,14 @@
 //! Outfit installation, fuel transactions and menu callbacks, ported from outfit.c.
-#![cfg(not(test))]
 
+use super::menu_state::PM_FUEL;
+use super::session::{draw_piece, MenuAssets};
+use crate::engine::input::frames::*;
+use crate::engine::observe::Io;
+use crate::engine::world::campaign::*;
 use crate::engine::World;
 use crate::engine::{battle::Cx, input::InputSession, StoryKey};
-use crate::navigation::abi::*;
-use crate::sound::music::remember_native_music;
+use crate::graphics::native_abi::*;
+use crate::graphics::{drawable_abi::LoadedDrawable, menu as draw};
 use crate::ui::menu::draw_campaign_menu;
 use crate::ui::sis::{
     clear_flash, clear_sis_rect, delta_sis_gauges, draw_campaign_message, draw_flagship_name,
@@ -12,7 +16,7 @@ use crate::ui::sis::{
 };
 
 use crate::state::game_state_keys::get_game_state;
-use std::{mem, ptr};
+use std::ptr;
 
 const OUTFIT_FUEL: BYTE = 0;
 const OUTFIT_MODULES: BYTE = 1;
@@ -29,10 +33,10 @@ const LANDER_DISASTERS: [u32; 4] = [
     LIGHTNING_DISASTER,
     LAVASPOT_DISASTER,
 ];
-const SOUND_ARROWS: MENU_SOUND_FLAGS = 0x0f;
-const SOUND_SELECT: MENU_SOUND_FLAGS = 1 << 4;
-const SOUND_CANCEL: MENU_SOUND_FLAGS = 1 << 5;
-const SOUND_FUEL: MENU_SOUND_FLAGS = (1 << 0) | (1 << 1) | (1 << 7) | (1 << 8);
+const SOUND_ARROWS: u16 = 0x0f;
+const SOUND_SELECT: u16 = 1 << 4;
+const SOUND_CANCEL: u16 = 1 << 5;
+const SOUND_FUEL: u16 = (1 << 0) | (1 << 1) | (1 << 7) | (1 << 8);
 
 const fn rgb15(r: u8, g: u8, b: u8) -> Color {
     Color {
@@ -44,15 +48,17 @@ const fn rgb15(r: u8, g: u8, b: u8) -> Color {
 }
 const BLACK: Color = rgb15(0, 0, 0);
 
-unsafe fn draw_module_strings(cx: &mut Cx<'_>, menu: &mut MENU_STATE, module: BYTE) {
-    let old = SetContext(cx.kernel.status_context);
-    let mut r: RECT = mem::zeroed();
-    GetContextClipRect(&mut r);
+fn draw_module_strings(cx: &mut Cx<'_>, menu: &mut OutfitSession, module: BYTE) {
+    let old = draw::select(cx.kernel.status_context);
+    let mut r = draw::clip();
     let mut s = STAMP {
         origin: POINT {
-            x: (4 + ScreenWidth - STATUS_WIDTH as i32 - SAFE_X as i32) as i16 - r.corner.x,
-            y: (SIS_ORG_Y as i32 + ScreenHeight - SAFE_Y as i32 * 2 - 13 - RADAR_HEIGHT as i32)
-                as i16
+            x: (4 + cx.screen_dimensions().0 - STATUS_WIDTH as i32 - SAFE_X as i32) as i16
+                - r.corner.x,
+            y: (SIS_ORG_Y as i32 + cx.screen_dimensions().1
+                - SAFE_Y as i32 * 2
+                - 13
+                - RADAR_HEIGHT as i32) as i16
                 - r.corner.y,
         },
         frame: ptr::null_mut(),
@@ -61,47 +67,45 @@ unsafe fn draw_module_strings(cx: &mut Cx<'_>, menu: &mut MENU_STATE, module: BY
     r.corner.y = s.origin.y - 11;
     r.extent.width = RADAR_WIDTH as i16 + 2;
     r.extent.height = 11;
-    BatchGraphics();
-    SetContextForeGroundColor(rgb15(0x0a, 0x0a, 0x0a));
-    DrawFilledRectangle(&mut r);
+    draw::batch();
+    draw::foreground(rgb15(0x0a, 0x0a, 0x0a));
+    draw::fill(r);
     if module >= EMPTY_SLOT {
         r.corner = s.origin;
         r.extent.width = RADAR_WIDTH as i16;
         r.extent.height = RADAR_HEIGHT as i16;
-        SetContextForeGroundColor(BLACK);
-        DrawFilledRectangle(&mut r);
-    } else if !menu.CurFrame.is_null() {
-        s.frame = SetAbsFrameIndex(menu.CurFrame, module as COUNT);
-        DrawStamp(&mut s);
+        draw::foreground(BLACK);
+        draw::fill(r);
+    } else if !menu.assets.art().is_null() {
+        s.frame = draw::frame(menu.assets.art(), module as COUNT);
+        draw::stamp(s.frame, s.origin);
         let buffer = format!(
             "{}\0",
             cx.world.data.game.module_cost[module as usize] as u32 * MODULE_COST_SCALE
         );
-        let mut text = TEXT {
-            baseline: POINT {
+        draw::font(cx.kernel.tiny_font);
+        draw::foreground(rgb15(0, 0x1f, 0));
+        super::session::text(
+            &buffer,
+            POINT {
                 x: s.origin.x + RADAR_WIDTH as i16 - 2,
                 y: s.origin.y + RADAR_HEIGHT as i16 - 2,
             },
-            align: TEXT_ALIGN_ALIGN_RIGHT,
-            CharCount: COUNT::MAX,
-            pStr: buffer.as_ptr().cast(),
-        };
-        SetContextFont(cx.kernel.tiny_font);
-        SetContextForeGroundColor(rgb15(0, 0x1f, 0));
-        font_DrawText(&mut text);
+            TEXT_ALIGN_ALIGN_RIGHT,
+        );
     }
-    UnbatchGraphics();
-    SetContext(old);
+    draw::unbatch();
+    draw::select(old);
 }
 
-unsafe fn display_landers(cx: &mut Cx<'_>, menu: &mut MENU_STATE) {
+fn display_landers(cx: &mut Cx<'_>, menu: &mut OutfitSession) {
     let mut s = STAMP {
         origin: POINT { x: 0, y: 0 },
-        frame: menu.ModuleFrame,
+        frame: menu.assets.modules(),
     };
     if get_game_state(cx.world, StoryKey::CHMMR_BOMB_STATE) == 3 {
-        s.frame = DecFrameIndex(s.frame);
-        DrawStamp(&mut s);
+        s.frame = draw::relative_frame(s.frame, -1);
+        draw::stamp(s.frame, s.origin);
     } else {
         s.origin = POINT {
             x: LANDER_X,
@@ -109,13 +113,13 @@ unsafe fn display_landers(cx: &mut Cx<'_>, menu: &mut MENU_STATE) {
         };
         let mut i = 0;
         while i < cx.world.data.flagship.num_landers as COUNT {
-            DrawStamp(&mut s);
+            draw::stamp(s.frame, s.origin);
             s.origin.x += LANDER_WIDTH;
             i += 1;
         }
-        SetContextForeGroundColor(BLACK);
+        draw::foreground(BLACK);
         while i < MAX_LANDERS as COUNT {
-            DrawFilledStamp(&mut s);
+            draw::filled_stamp(s.frame, s.origin);
             s.origin.x += LANDER_WIDTH;
             i += 1;
         }
@@ -140,10 +144,10 @@ fn slot_piece(world: &World, state: BYTE, item: SIZE) -> BYTE {
 
 // The C InitFlash label is entered both after a transaction and after moving
 // between slot classes. Horizontal movement instead offsets the existing rect.
-unsafe fn init_flash(cx: &mut Cx<'_>, menu: &mut MENU_STATE, piece: BYTE) {
-    let state = menu.CurState;
+fn init_flash(cx: &mut Cx<'_>, menu: &mut OutfitSession, piece: BYTE) {
+    let state = menu.state;
     let mut width = SHIP_PIECE_OFFSET as SIZE;
-    let rect = &mut menu.flash_rect0;
+    let rect = &mut menu.flash_rect;
     if state == PLANET_LANDER as BYTE || state == EMPTY_SLOT + 3 {
         *rect = RECT {
             corner: POINT {
@@ -195,7 +199,7 @@ unsafe fn init_flash(cx: &mut Cx<'_>, menu: &mut MENU_STATE, piece: BYTE) {
     if state < EMPTY_SLOT {
         set_menu_flash(cx.kernel, cx.screen_dimensions(), true);
     } else {
-        highlight_rect(cx.kernel, menu.flash_rect0);
+        highlight_rect(cx.kernel, menu.flash_rect);
     }
 }
 
@@ -223,9 +227,9 @@ fn module_selection_range(world: &World, state: BYTE) -> (SIZE, SIZE) {
     (first, last)
 }
 
-unsafe fn finish_module_transaction(
+fn finish_module_transaction(
     cx: &mut Cx<'_>,
-    menu: &mut MENU_STATE,
+    menu: &mut OutfitSession,
     input: &InputSession,
     new_piece: BYTE,
     old_piece: BYTE,
@@ -238,17 +242,18 @@ unsafe fn finish_module_transaction(
         UNDEFINED_DELTA as SIZE,
         cost,
     );
-    if menu.CurState == PLANET_LANDER as BYTE || menu.CurState == EMPTY_SLOT + 3 {
+    if menu.state == PLANET_LANDER as BYTE || menu.state == EMPTY_SLOT + 3 {
         display_landers(cx, menu);
     } else {
-        cx.with_legacy(|| {
-            DrawShipPiece(
-                menu.ModuleFrame,
-                new_piece as COUNT,
-                menu.delta_item as COUNT,
-                0,
-            )
-        });
+        draw_piece(
+            cx.kernel,
+            &cx.world.data.flagship,
+            cx.screen_dimensions(),
+            menu.assets.modules(),
+            new_piece as COUNT,
+            menu.delta_item as COUNT,
+            false,
+        );
         if new_piece > TURNING_JETS as BYTE && old_piece > TURNING_JETS as BYTE {
             crate::ui::sis::capacity::draw_fuel_bars(
                 &crate::graphics::context_abi::ContextLease::require(cx.kernel.space_context),
@@ -261,10 +266,10 @@ unsafe fn finish_module_transaction(
     }
 }
 
-unsafe fn do_install_module(cx: &mut Cx<'_>, menu: &mut MENU_STATE, input: &InputSession) -> u32 {
+fn do_install_module(cx: &mut Cx<'_>, menu: &mut OutfitSession, input: &InputSession) -> u32 {
     let size = cx.screen_dimensions();
     if cx.world.activity() & CHECK_ABORT as u16 != 0 {
-        menu.InputFunc = Some(do_outfit);
+        menu.page = OutfitPage::Main;
         return 1;
     }
     let select = input.pulsed().menu[KEY_MENU_SELECT as usize] != 0;
@@ -273,19 +278,19 @@ unsafe fn do_install_module(cx: &mut Cx<'_>, menu: &mut MENU_STATE, input: &Inpu
     let right = input.pulsed().menu[KEY_MENU_RIGHT as usize] != 0;
     let up = input.pulsed().menu[KEY_MENU_UP as usize] != 0;
     let down = input.pulsed().menu[KEY_MENU_DOWN as usize] != 0;
-    SetMenuSounds(input, SOUND_ARROWS, SOUND_SELECT);
-    let mut state = menu.CurState;
+    input.set_menu_sounds(SOUND_ARROWS, SOUND_SELECT);
+    let mut state = menu.state;
     let old_piece = slot_piece(cx.world, state, menu.delta_item);
     let (first, last) = module_selection_range(cx.world, state);
-    if menu.Initialized == 0 {
-        menu.Initialized = 1;
-        menu.InputFunc = Some(do_install_module);
-        SetContext(cx.kernel.space_context);
+    if !menu.initialized {
+        menu.initialized = true;
+        menu.page = OutfitPage::Install;
+        draw::select(cx.kernel.space_context);
         clear_sis_rect(cx.kernel, cx.world, size, CLEAR_SIS_RADAR as BYTE);
         clear_flash(cx.kernel);
         init_flash(cx, menu, old_piece);
     } else if select || cancel {
-        let mut new_piece = menu.CurState;
+        let mut new_piece = menu.state;
         if select && !can_install(cx.world, new_piece, old_piece) {
             crate::ui::settings::play_menu_sound(
                 cx.kernel,
@@ -294,7 +299,7 @@ unsafe fn do_install_module(cx: &mut Cx<'_>, menu: &mut MENU_STATE, input: &Inpu
             );
             return 1;
         }
-        SetContext(cx.kernel.space_context);
+        draw::select(cx.kernel.space_context);
         clear_flash(cx.kernel);
         if select {
             if new_piece >= EMPTY_SLOT && old_piece >= EMPTY_SLOT {
@@ -304,36 +309,36 @@ unsafe fn do_install_module(cx: &mut Cx<'_>, menu: &mut MENU_STATE, input: &Inpu
                 }
             } else {
                 let slot = menu.delta_item;
-                let cost = apply_piece(cx.world, menu.CurState, slot, new_piece, old_piece);
+                let cost = apply_piece(cx.world, menu.state, slot, new_piece, old_piece);
                 finish_module_transaction(cx, menu, input, new_piece, old_piece, cost);
             }
             cancel = false;
         }
-        if menu.CurState < EMPTY_SLOT {
-            menu.CurState += EMPTY_SLOT - 1;
-            if menu.CurState < EMPTY_SLOT {
-                menu.CurState = EMPTY_SLOT + 3;
-            } else if menu.CurState > EMPTY_SLOT + 2 {
-                menu.CurState = EMPTY_SLOT + 2;
+        if menu.state < EMPTY_SLOT {
+            menu.state += EMPTY_SLOT - 1;
+            if menu.state < EMPTY_SLOT {
+                menu.state = EMPTY_SLOT + 3;
+            } else if menu.state > EMPTY_SLOT + 2 {
+                menu.state = EMPTY_SLOT + 2;
             }
             if cancel {
-                new_piece = menu.CurState;
+                new_piece = menu.state;
             }
             init_flash(cx, menu, new_piece);
         } else if !cancel {
-            menu.CurState = new_piece;
+            menu.state = new_piece;
             init_flash(cx, menu, new_piece);
         } else {
-            SetContext(cx.kernel.status_context);
-            menu.CurState = OUTFIT_MODULES;
-            draw_campaign_menu(cx, PM_FUEL as BYTE, menu.CurState as i16);
+            draw::select(cx.kernel.status_context);
+            menu.state = OUTFIT_MODULES;
+            draw_campaign_menu(cx, PM_FUEL as BYTE, menu.state as i16);
             set_menu_flash(cx.kernel, size, false);
-            menu.InputFunc = Some(do_outfit);
+            menu.page = OutfitPage::Main;
             clear_sis_rect(cx.kernel, cx.world, size, DRAW_SIS_DISPLAY as BYTE);
         }
     } else if left || right || up || down {
         let mut item = if state < EMPTY_SLOT {
-            menu.CurState as SIZE
+            menu.state as SIZE
         } else {
             menu.delta_item
         };
@@ -386,34 +391,34 @@ unsafe fn do_install_module(cx: &mut Cx<'_>, menu: &mut MENU_STATE, input: &Inpu
             }
         }
         if state < EMPTY_SLOT {
-            if item != menu.CurState as SIZE {
-                menu.CurState = item as BYTE;
+            if item != menu.state as SIZE {
+                menu.state = item as BYTE;
                 cx.kernel.sis_highlight.pre_update_flash_rect();
                 draw_module_strings(cx, menu, item as BYTE);
                 cx.kernel.sis_highlight.post_update_flash_rect();
             }
-        } else if item != menu.delta_item || state != menu.CurState {
+        } else if item != menu.delta_item || state != menu.state {
             let piece = slot_piece(cx.world, state, item);
-            SetContext(cx.kernel.space_context);
-            if state == menu.CurState {
+            draw::select(cx.kernel.space_context);
+            if state == menu.state {
                 let width = if state == PLANET_LANDER as BYTE || state == EMPTY_SLOT + 3 {
                     LANDER_WIDTH
                 } else {
                     SHIP_PIECE_OFFSET as SIZE
                 };
-                menu.flash_rect0.corner.x += width * (item - menu.delta_item);
+                menu.flash_rect.corner.x += width * (item - menu.delta_item);
                 menu.delta_item = item;
                 draw_module_strings(cx, menu, piece);
-                highlight_rect(cx.kernel, menu.flash_rect0);
+                highlight_rect(cx.kernel, menu.flash_rect);
             } else {
-                menu.CurState = state;
+                menu.state = state;
                 init_flash(cx, menu, piece);
             }
         }
     }
     1
 }
-unsafe fn change_fuel_quantity(cx: &mut Cx<'_>, input: &InputSession) {
+fn change_fuel_quantity(cx: &mut Cx<'_>, input: &InputSession) {
     let highlight = cx.kernel.sis_highlight.clone();
     let mut incr: i32 = if input.pulsed().menu[KEY_MENU_UP as usize] != 0 {
         FUEL_TANK_SCALE as i32
@@ -460,10 +465,10 @@ unsafe fn change_fuel_quantity(cx: &mut Cx<'_>, input: &InputSession) {
     }
     let context = cx.kernel.status_context;
     {
-        let old = SetContext(context);
+        let old = draw::select(context);
         let r = crate::ui::sis::gauges::gauge_rect(false);
         highlight_rect(cx.kernel, r);
-        SetContext(old);
+        draw::select(old);
     };
 }
 
@@ -471,46 +476,41 @@ fn on_naming_done(kernel: &crate::engine::Kernel, world: &crate::engine::World, 
     crate::ui::sis::gauges::draw_flagship_name(kernel, world, width, false);
 }
 
-unsafe fn exit_outfit(kernel: &mut crate::engine::Kernel, menu: &mut MENU_STATE) -> BOOLEAN {
-    DestroyDrawable(ReleaseDrawable(menu.CurFrame));
-    menu.CurFrame = ptr::null_mut();
-    DestroyDrawable(ReleaseDrawable(menu.ModuleFrame));
-    menu.ModuleFrame = ptr::null_mut();
+fn exit_outfit(kernel: &mut crate::engine::Kernel, menu: &mut OutfitSession) -> BOOLEAN {
+    menu.assets.art = None;
+    menu.assets.modules = None;
     kernel.naming_callback = None;
     0
 }
 
-/// Process an Outfit input frame, retaining installation state in `MENU_STATE`.
+/// Process an Outfit input frame, retaining installation state in `OutfitSession`.
 ///
-/// # Safety
-/// `menu` must be the live game-thread menu. Game, resources, input, graphics
-/// and audio must be initialized and exclusively accessed on that thread.
-unsafe fn initialize_outfit(cx: &mut Cx<'_>, menu: &mut MENU_STATE, input: &InputSession) {
+fn initialize_outfit(cx: &mut Cx<'_>, menu: &mut OutfitSession, input: &InputSession) {
     let size = cx.screen_dimensions();
-    let music_enabled = cx.world.data.game.glob_flags & 8 == 0;
-    menu.InputFunc = Some(do_outfit);
-    menu.Initialized = 1;
+    menu.page = OutfitPage::Main;
+    menu.initialized = true;
     cx.kernel.naming_callback = Some(on_naming_done);
-    menu.CurFrame = CaptureDrawable(LoadGraphicInstance(c"graphics.modulesmenu".as_ptr()).cast());
-    menu.hMusic = (LoadMusicInstance(c"music.outfit".as_ptr())).cast();
-    menu.CurState = OUTFIT_FUEL;
-    menu.ModuleFrame =
-        CaptureDrawable(LoadGraphicInstance(c"graphics.outfitmodules".as_ptr()).cast());
+    menu.assets.art = LoadedDrawable::load(c"graphics.modulesmenu");
+    menu.assets.music = crate::sound::resource_types::LoadedMusic::load(c"music.outfit");
+    menu.state = OUTFIT_FUEL;
+    menu.assets.modules = LoadedDrawable::load(c"graphics.outfitmodules");
+    let background = LoadedDrawable::load(c"graphics.outfit")
+        .unwrap_or_else(|| panic!("outfit background missing"));
     let mut s = STAMP {
         origin: POINT { x: 0, y: 0 },
-        frame: CaptureDrawable(LoadGraphicInstance(c"graphics.outfit".as_ptr()).cast()),
+        frame: background.lease().frame(0).unwrap(),
     };
-    SetTransitionSource(ptr::null());
-    BatchGraphics();
+    draw::transition_source();
+    draw::batch();
 
     crate::ui::border::draw_sis_frame(cx.kernel, cx.world, size);
     let message = cx.kernel.game_text((STARBASE_STRING_BASE + 2) as usize);
     let title = cx.kernel.game_text(STARBASE_STRING_BASE as usize);
     draw_campaign_message(cx.kernel, cx.world, size.0, Some(message));
     draw_title(cx.kernel, size.0, title);
-    SetContext(cx.kernel.space_context);
-    DrawStamp(&mut s);
-    DestroyDrawable(ReleaseDrawable(s.frame));
+    draw::select(cx.kernel.space_context);
+    draw::stamp(s.frame, s.origin);
+    drop(background);
     let slots = cx.world.data.flagship;
     for pieces in [
         slots.drive_slots.as_slice(),
@@ -519,9 +519,15 @@ unsafe fn initialize_outfit(cx: &mut Cx<'_>, menu: &mut MENU_STATE, input: &Inpu
     ] {
         for (slot, &piece) in pieces.iter().enumerate() {
             if piece < EMPTY_SLOT {
-                cx.with_legacy(|| {
-                    DrawShipPiece(menu.ModuleFrame, piece as COUNT, slot as COUNT, 0)
-                });
+                draw_piece(
+                    cx.kernel,
+                    &cx.world.data.flagship,
+                    cx.screen_dimensions(),
+                    menu.assets.modules(),
+                    piece as COUNT,
+                    slot as COUNT,
+                    false,
+                );
             }
         }
     }
@@ -532,28 +538,30 @@ unsafe fn initialize_outfit(cx: &mut Cx<'_>, menu: &mut MENU_STATE, input: &Inpu
     display_landers(cx, menu);
     if cx.world.story_state(StoryKey::CHMMR_BOMB_STATE) < 3 {
         let shields = cx.world.story_state(StoryKey::LANDER_SHIELDS);
-        s.frame = SetAbsFrameIndex(menu.ModuleFrame, GetFrameCount(menu.ModuleFrame) - 5);
+        s.frame = draw::frame(
+            menu.assets.modules(),
+            draw::frame_count(menu.assets.modules()) - 5,
+        );
         for (index, disaster) in LANDER_DISASTERS.into_iter().enumerate() {
             if index != 0 {
-                s.frame = IncFrameIndex(s.frame);
+                s.frame = draw::relative_frame(s.frame, 1);
             }
             if shields & (1 << disaster) != 0 {
-                DrawStamp(&mut s);
+                draw::stamp(s.frame, s.origin);
             }
         }
     }
     {
-        draw_campaign_menu(cx, PM_FUEL as BYTE, menu.CurState as i16);
+        draw_campaign_menu(cx, PM_FUEL as BYTE, menu.state as i16);
         draw_flagship_name(cx.kernel, cx.world, size.0, false);
     };
     if input.preferences().fonts == OPT_PC as i32 {
         draw_flagship_stats(cx.kernel, cx.world, size);
     }
     {
-        ScreenTransition(3, ptr::null());
-        let music = std::ptr::NonNull::new(menu.hMusic.cast());
-        remember_native_music(music, true, 1, music_enabled);
-        UnbatchGraphics();
+        draw::transition(3);
+        crate::ui::settings::play_loaded_music(cx.world, menu.assets.music.as_ref(), 1, 1);
+        draw::unbatch();
         set_menu_flash(cx.kernel, size, false);
     };
     cx.world.data.flagship.fuel_on_board = cx
@@ -564,84 +572,128 @@ unsafe fn initialize_outfit(cx: &mut Cx<'_>, menu: &mut MENU_STATE, input: &Inpu
         .wrapping_add(FUEL_TANK_SCALE >> 1)
         / FUEL_TANK_SCALE;
     cx.world.data.flagship.fuel_on_board *= FUEL_TANK_SCALE;
-    SetContext(cx.kernel.status_context);
+    draw::select(cx.kernel.status_context);
 }
 
-/// # Safety
-/// The menu's native graphics resources must remain initialized during this frame.
-pub unsafe fn do_outfit(cx: &mut Cx<'_>, menu: &mut MENU_STATE, input: &InputSession) -> BOOLEAN {
+fn do_outfit(
+    cx: &mut Cx<'_>,
+    menu: &mut OutfitSession,
+    input: &InputSession,
+    io: &mut Io<'_>,
+    services: &super::MenuServices,
+) -> BOOLEAN {
     let size = cx.screen_dimensions();
     if cx.world.activity() & CHECK_ABORT as u16 != 0 {
         return exit_outfit(cx.kernel, menu);
     }
-    if menu.Initialized == 0 {
+    if !menu.initialized {
         initialize_outfit(cx, menu, input);
     } else if input.pulsed().menu[KEY_MENU_CANCEL as usize] != 0
-        || (input.pulsed().menu[KEY_MENU_SELECT as usize] != 0 && menu.CurState == OUTFIT_EXIT)
+        || (input.pulsed().menu[KEY_MENU_SELECT as usize] != 0 && menu.state == OUTFIT_EXIT)
     {
-        if menu.CurState == OUTFIT_DOFUEL {
-            menu.CurState = OUTFIT_FUEL;
+        if menu.state == OUTFIT_DOFUEL {
+            menu.state = OUTFIT_FUEL;
             set_menu_flash(cx.kernel, size, false);
         } else {
             return exit_outfit(cx.kernel, menu);
         }
     } else if input.pulsed().menu[KEY_MENU_SELECT as usize] != 0 {
-        match menu.CurState {
+        match menu.state {
             OUTFIT_FUEL => {
-                menu.CurState = OUTFIT_DOFUEL;
+                menu.state = OUTFIT_DOFUEL;
                 let context = cx.kernel.status_context;
                 {
-                    SetContext(context);
+                    draw::select(context);
 
                     let r = crate::ui::sis::gauges::gauge_rect(false);
                     highlight_rect(cx.kernel, r);
                 };
             }
             OUTFIT_DOFUEL => {
-                menu.CurState = OUTFIT_FUEL;
+                menu.state = OUTFIT_FUEL;
                 set_menu_flash(cx.kernel, size, false);
             }
             OUTFIT_MODULES => {
-                menu.CurState = EMPTY_SLOT + 2;
+                menu.state = EMPTY_SLOT + 2;
                 menu.delta_item = if cx.world.story_state(StoryKey::CHMMR_BOMB_STATE) != 3 {
                     0
                 } else {
                     NUM_BOMB_MODULES as SIZE
                 };
-                menu.first_item.y = 0;
-                menu.Initialized = 0;
+                menu.initialized = false;
                 do_install_module(cx, menu, input);
             }
             OUTFIT_SAVELOAD => {
-                if {
-                    let mut observer = cx.kernel.input_runtime().observer();
-                    let mut io = crate::engine::observe::Io {
-                        observer: &mut *observer,
-                    };
-                    crate::front_end::gameopt::game_options(cx, &mut io, None)
-                } == 0
-                {
+                if (services.game_options)(cx, io) == 0 {
                     return exit_outfit(cx.kernel, menu);
                 }
                 {
-                    draw_campaign_menu(cx, PM_FUEL as BYTE, menu.CurState as i16);
+                    draw_campaign_menu(cx, PM_FUEL as BYTE, menu.state as i16);
                     set_menu_flash(cx.kernel, size, false);
                 };
             }
             _ => {}
         }
     } else {
-        if menu.CurState == OUTFIT_DOFUEL {
-            SetMenuSounds(input, SOUND_FUEL, SOUND_SELECT | SOUND_CANCEL);
+        if menu.state == OUTFIT_DOFUEL {
+            input.set_menu_sounds(SOUND_FUEL, SOUND_SELECT | SOUND_CANCEL);
         } else {
-            SetMenuSounds(input, SOUND_ARROWS, SOUND_SELECT);
+            input.set_menu_sounds(SOUND_ARROWS, SOUND_SELECT);
         }
-        if menu.CurState == OUTFIT_DOFUEL {
+        if menu.state == OUTFIT_DOFUEL {
             change_fuel_quantity(cx, input);
-            cx.with_legacy(|| SleepThread(ONE_SECOND / 30));
+            cx.kernel.input_runtime().sleep(cx, ONE_SECOND / 30);
         } else {
-            crate::ui::menu::choose_menu_state(cx, input, &mut menu.CurState, PM_FUEL as BYTE);
+            crate::ui::menu::choose_menu_state(cx, input, &mut menu.state, PM_FUEL as BYTE);
         }
     }
     1
+}
+
+#[derive(Default)]
+enum OutfitPage {
+    #[default]
+    Main,
+    Install,
+}
+struct OutfitSession {
+    initialized: bool,
+    state: u8,
+    delta_item: i16,
+    flash_rect: RECT,
+    assets: MenuAssets,
+    page: OutfitPage,
+}
+impl Default for OutfitSession {
+    fn default() -> Self {
+        Self {
+            initialized: false,
+            state: 0,
+            delta_item: 0,
+            flash_rect: RECT {
+                corner: POINT { x: 0, y: 0 },
+                extent: EXTENT {
+                    width: 0,
+                    height: 0,
+                },
+            },
+            assets: MenuAssets::default(),
+            page: OutfitPage::Main,
+        }
+    }
+}
+pub fn run(
+    cx: &mut Cx<'_>,
+    io: &mut Io<'_>,
+    services: &super::MenuServices,
+) -> Option<crate::sound::resource_types::LoadedMusic> {
+    let runtime = cx.kernel.input_runtime();
+    let input = runtime.input();
+    let mut menu = OutfitSession::default();
+    cx.run_input(io, true, |cx, io| match menu.page {
+        OutfitPage::Main => do_outfit(cx, &mut menu, input, io, services) != 0,
+        OutfitPage::Install => do_install_module(cx, &mut menu, input) != 0,
+    });
+    cx.kernel.naming_callback = None;
+    menu.assets.music.take()
 }

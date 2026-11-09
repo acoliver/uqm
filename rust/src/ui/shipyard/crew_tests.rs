@@ -1,16 +1,13 @@
 //! Exercise the production crew accounting without native graphics.
 
-#[cfg(not(test))]
-use crate::battle::context_access::race_access::RaceOps;
-#[path = "crew.rs"]
-mod crew;
+use super::shipyard_crew as crew;
 
+use crate::engine::world::campaign::{GOOD_GUY, SHOFIXTI_SHIP};
 use crate::engine::{
     battle::{Battle, Cx},
     world::{queues::FleetInfo, story::StoryState},
     Game, StoryKey,
 };
-use crate::navigation::abi::{GOOD_GUY, SHOFIXTI_SHIP};
 
 fn transact(initial: u16, delta: i16, allied: bool) -> (u16, u8, Vec<(u16, u8)>) {
     let mut game = Game::new();

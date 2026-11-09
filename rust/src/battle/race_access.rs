@@ -173,8 +173,28 @@ impl RaceOps for Cx<'_> {
         let mut io = crate::engine::observe::Io {
             observer: &mut *observer,
         };
-        // SAFETY: Cx retains the live campaign display throughout this synchronous menu.
-        unsafe { crate::ui::menu::hyperspace::hyperspace_menu(self, &mut io) };
+        fn submenu(
+            cx: &mut Cx<'_>,
+            io: &mut crate::engine::observe::Io<'_>,
+            selection: u8,
+        ) -> bool {
+            // SAFETY: the suspended Cx retains the campaign throughout each synchronous mode.
+            match selection {
+                1 => {
+                    crate::planets::pstarmap::star_map(cx, io);
+                    true
+                }
+                2 => unsafe { crate::planets::devices::devices_menu(cx, io) != 0 },
+                3 => {
+                    unsafe { crate::planets::cargo::live::cargo_menu(cx, io) };
+                    true
+                }
+                4 => unsafe { crate::planets::roster::live::roster_menu(cx, io) != 0 },
+                5 => crate::front_end::gameopt::game_options(cx, io) != 0,
+                _ => unreachable!("invalid hyperspace submenu"),
+            }
+        }
+        crate::ui::menu::hyperspace::hyperspace_menu(self, &mut io, submenu);
     }
 
     fn hyperspace_cancel_pressed(&self) -> bool {

@@ -1,7 +1,7 @@
 //! Status labels rendered from the supplied campaign and display owners.
 use super::{
-    rgb15, StatMsgMode_SMM_CREDITS as CREDITS, StatMsgMode_SMM_RES_UNITS as RES_UNITS,
-    MONTHS_STRING_BASE, STATUS_MESSAGE_HEIGHT, STATUS_MESSAGE_WIDTH, STATUS_STRING_BASE,
+    rgb15, MONTHS_STRING_BASE, STATUS_MESSAGE_HEIGHT, STATUS_MESSAGE_WIDTH, STATUS_STRING_BASE,
+    STAT_MSG_MODE_SMM_CREDITS as CREDITS, STAT_MSG_MODE_SMM_RES_UNITS as RES_UNITS,
 };
 use crate::{
     engine::{Kernel, StoryKey, World},

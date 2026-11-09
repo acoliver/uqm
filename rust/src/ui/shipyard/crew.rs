@@ -1,11 +1,12 @@
 //! Campaign crew-purchase accounting.
 
+use crate::engine::world::campaign::*;
 use crate::engine::{
     battle::{link_queue::LinkId, Cx},
     world::queues::Fragment,
     StoryKey, World,
 };
-use crate::navigation::abi::*;
+use crate::graphics::native_abi::*;
 
 pub(super) fn purchased_crew(world: &World) -> SIZE {
     u16::from_le_bytes([
