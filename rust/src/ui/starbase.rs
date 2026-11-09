@@ -409,12 +409,8 @@ unsafe fn update_starbase_screen(
 }
 
 unsafe fn do_time_passage(cx: &mut Cx<'_>) {
-    cx.with_legacy(|| {
-        SleepThreadUntil(FadeScreen(
-            ScreenFadeType_FadeAllToBlack,
-            (ONE_SECOND * 2) as SIZE,
-        ));
-    });
+    let interval = (ONE_SECOND * 2) as SIZE;
+    cx.with_legacy(|| SleepThreadUntil(FadeScreen(ScreenFadeType_FadeAllToBlack, interval)));
     crate::time::clock_abi::advance_days(cx, 14);
 }
 
