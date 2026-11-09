@@ -278,26 +278,7 @@ pub(crate) mod live {
             body,
             presentation.scan().report_context(),
         );
-        {
-            let game = game.borrow();
-            if PLRPlaying(usize::MAX as *mut c_void) == 0 {
-                let music = game
-                    .kernel
-                    .lander_resources
-                    .as_ref()
-                    .and_then(|resources| resources.music(planet_type));
-                crate::sound::music::remember_music(
-                    music.map_or(
-                        crate::sound::music::MusicRequest::Absent,
-                        crate::sound::music::MusicRequest::Track,
-                    ),
-                    true,
-                    1,
-                    game.world.data.game.glob_flags & crate::navigation::abi::MUSIC_DISABLED as u8
-                        == 0,
-                );
-            }
-        }
+        play_planet_music(&game.borrow(), planet_type);
         game.borrow_mut().with_legacy(|| {
             if wait {
                 zoom_in_planet_sphere(&context, &sphere);
@@ -310,6 +291,25 @@ pub(crate) mod live {
             if wait { UPDATE } else { FULL },
         );
         Some(presentation)
+    }
+
+    unsafe fn play_planet_music(game: &Cx<'_>, planet_type: u8) {
+        if PLRPlaying(usize::MAX as *mut c_void) == 0 {
+            let music = game
+                .kernel
+                .lander_resources
+                .as_ref()
+                .and_then(|resources| resources.music(planet_type));
+            crate::sound::music::remember_music(
+                music.map_or(
+                    crate::sound::music::MusicRequest::Absent,
+                    crate::sound::music::MusicRequest::Track,
+                ),
+                true,
+                1,
+                game.world.data.game.glob_flags & crate::navigation::abi::MUSIC_DISABLED as u8 == 0,
+            );
+        }
     }
 
     pub unsafe fn free_planet(cx: &mut Cx<'_>, solar: &mut SolarSystem) {

@@ -224,3 +224,56 @@ pub(super) fn summary_date(
     bytes.truncate(max_bytes);
     std::ffi::CString::new(bytes).unwrap_or_else(|error| panic!("invalid preview date: {error}"))
 }
+
+fn name_save_game(
+    cx: &mut Cx<'_>,
+    io: &mut Io<'_>,
+    input: &InputSession,
+    game_index: u16,
+    buffer: &mut [u8; 256],
+) -> bool {
+    let text = std::ffi::CStr::from_bytes_until_nul(buffer)
+        .unwrap_or_else(|error| panic!("invalid save name: {error}"));
+    let cursor = text.to_bytes().len();
+    draw_save_name_string(cx.kernel, cx.world, text, cursor, DDSHS_EDIT, game_index);
+    let context = ContextLease::require(cx.kernel.space_context);
+    let screen = ContextLease::require(cx.kernel.screen_context);
+    let rect = RECT {
+        corner: POINT {
+            x: (30 + SAFE_X) as i16,
+            y: (160 + ((game_index % SAVES_PER_PAGE) * 13)) as i16,
+        },
+        extent: EXTENT {
+            width: (204 - SAFE_X) as i16,
+            height: 11,
+        },
+    };
+    set_flash_rect(
+        &cx.kernel.sis_highlight,
+        &screen,
+        context.clip_rect(),
+        Some(rect),
+    );
+    let accepted = crate::ui::getchar::edit_text(
+        cx,
+        io,
+        input,
+        SAVE_NAME_SIZE as usize,
+        &mut buffer[..SAVE_NAME_SIZE as usize],
+        cursor,
+        &mut SaveNameCallbacks { index: game_index },
+    );
+    if !accepted {
+        buffer[0] = 0;
+    }
+    cx.kernel.sis_highlight.context.borrow_mut().take();
+    let text = std::ffi::CStr::from_bytes_until_nul(buffer)
+        .unwrap_or_else(|error| panic!("invalid edited save name: {error}"));
+    draw_save_name_string(cx.kernel, cx.world, text, cursor, DDSHS_NORMAL, game_index);
+    if let Some(callback) = cx.kernel.naming_callback {
+        callback(cx.kernel, cx.world, cx.screen_dimensions().0);
+    }
+    SetMenuSounds(input, MENU_SOUND_ARROWS, MENU_SOUND_SELECT);
+    cx.kernel.sis_highlight.context.borrow_mut().take();
+    accepted
+}
