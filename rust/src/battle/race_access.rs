@@ -184,12 +184,19 @@ impl RaceOps for Cx<'_> {
                     crate::planets::pstarmap::star_map(cx, io);
                     true
                 }
-                2 => unsafe { crate::planets::devices::devices_menu(cx, io) != 0 },
+                2 => {
+                    // SAFETY: Cx retains the campaign and display through this synchronous mode.
+                    unsafe { crate::planets::devices::devices_menu(cx, io) != 0 }
+                }
                 3 => {
+                    // SAFETY: Cx retains the campaign and display through this synchronous mode.
                     unsafe { crate::planets::cargo::live::cargo_menu(cx, io) };
                     true
                 }
-                4 => unsafe { crate::planets::roster::live::roster_menu(cx, io) != 0 },
+                4 => {
+                    // SAFETY: Cx retains the campaign and display through this synchronous mode.
+                    unsafe { crate::planets::roster::live::roster_menu(cx, io) != 0 }
+                }
                 5 => crate::front_end::gameopt::game_options(cx, io) != 0,
                 _ => unreachable!("invalid hyperspace submenu"),
             }

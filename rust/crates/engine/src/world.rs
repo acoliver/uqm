@@ -10,7 +10,6 @@ pub const MUSIC_DISABLED: u8 = 8;
 pub const SOUND_DISABLED: u8 = 16;
 
 pub mod activity;
-pub mod campaign;
 pub mod fleet;
 pub mod new_game;
 pub mod planet_info;

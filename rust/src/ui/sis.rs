@@ -1,10 +1,12 @@
 use crate::engine::Kernel;
 use crate::engine::World;
 use crate::graphics::context_abi::ContextLease;
+use crate::mainloop::types::activity_flags;
+use crate::starbase::ids;
 use crate::ui::palette::pilot_color;
 use crate::ui::rgb15;
+use uqm_engine::time::counter_abi::ONE_SECOND;
 
-use crate::engine::world::campaign::*;
 use crate::graphics::native_abi::*;
 
 use std::ffi::{CStr, CString};
@@ -59,8 +61,8 @@ pub fn draw_autopilot_message(
     let autopilot = world.data.game.autopilot;
     let fuel_empty = world.data.flagship.fuel_on_board == 0;
     let on = (autopilot.x != -1 && autopilot.y != -1) || fuel_empty;
-    let can_draw =
-        world.activity() & CHECK_ABORT as u16 == 0 && world.data.flagship.crew_enlisted != u16::MAX;
+    let can_draw = world.activity() & activity_flags::CHECK_ABORT as u16 == 0
+        && world.data.flagship.crew_enlisted != u16::MAX;
     kernel
         .pilot_flash
         .borrow_mut()
@@ -74,7 +76,7 @@ pub fn draw_autopilot_message(
                 context.with_selected(|| {
                     context.set_foreground(pilot_color(usize::from(phase)));
                     let text = kernel.game_text(
-                        (NAVIGATION_STRING_BASE + if fuel_empty { 2 } else { 3 }) as usize,
+                        (ids::NAVIGATION_STRING_BASE + if fuel_empty { 2 } else { 3 }) as usize,
                     );
                     draw_message(kernel, width, text, -1, -1, DSME_MYCOLOR as u16);
                 });
@@ -119,7 +121,7 @@ pub fn draw_campaign_message(kernel: &Kernel, world: &World, width: i32, text: O
 
 pub fn campaign_date(kernel: &Kernel, month: u8, day: u8, year: u16) -> CString {
     format_date(
-        kernel.game_text(MONTHS_STRING_BASE as usize + usize::from(month) - 1),
+        kernel.game_text(ids::MONTHS_STRING_BASE as usize + usize::from(month) - 1),
         day,
         year,
     )
@@ -184,3 +186,12 @@ pub fn clear_sis_rect(kernel: &Kernel, world: &mut World, dimensions: (i32, i32)
         });
     });
 }
+
+pub(crate) const CLEAR_RADAR: u8 = 4;
+pub(crate) const DRAW_DISPLAY: u8 = 8;
+pub(crate) const UNDEFINED_DELTA: i16 = i16::MAX;
+pub(crate) const DSME_NONE: u16 = 0;
+pub(crate) const DSME_SETFR: u16 = 1;
+pub(crate) const DSME_CLEARFR: u16 = 2;
+pub(crate) const DSME_BLOCKCUR: u16 = 4;
+pub(crate) const DSME_MYCOLOR: u16 = 8;

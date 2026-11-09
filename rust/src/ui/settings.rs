@@ -1,4 +1,8 @@
 use crate::engine::world::MUSIC_DISABLED;
+
+pub(crate) const OPT_3DO: i32 = 1;
+pub(crate) const OPT_PC: i32 = 2;
+pub(crate) const MENU_SOUND_FAILURE: u16 = 2;
 const SOUND_DISABLED: u8 = 16;
 const GAME_SOUND_PRIORITY: u8 = 2;
 

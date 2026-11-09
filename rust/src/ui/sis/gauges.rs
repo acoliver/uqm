@@ -2,6 +2,11 @@
 use super::*;
 use crate::engine::World;
 use crate::graphics::{context_abi::ContextFrame, native_font::FontLease};
+use crate::starbase::ids;
+use crate::starbase::module_guard;
+use crate::starbase::platform::StatusMessageMode;
+use crate::starbase::sis_modules as equipment;
+use crate::starbase::sis_modules::ModuleType;
 use std::{
     ffi::{CStr, CString},
     ptr::NonNull,
@@ -54,7 +59,7 @@ fn update_fuel(state: &mut crate::engine::world::SisState, delta: i16) -> bool {
     let old = if delta == UNDEFINED_DELTA {
         u16::MAX
     } else {
-        (state.fuel_on_board / FUEL_TANK_SCALE) as u16
+        (state.fuel_on_board / equipment::FUEL_TANK_SCALE) as u16
     };
     if delta != UNDEFINED_DELTA {
         let capacity = capacity::fuel_capacity(state);
@@ -67,7 +72,7 @@ fn update_fuel(state: &mut crate::engine::world::SisState, delta: i16) -> bool {
                 .min(capacity)
         };
     }
-    (state.fuel_on_board / FUEL_TANK_SCALE) as u16 != old
+    (state.fuel_on_board / equipment::FUEL_TANK_SCALE) as u16 != old
 }
 fn update_resources(state: &mut crate::engine::world::SisState, delta: i16, mode: u32) {
     if delta == 0 || delta == UNDEFINED_DELTA {
@@ -78,7 +83,7 @@ fn update_resources(state: &mut crate::engine::world::SisState, delta: i16, mode
     } else {
         state.res_units.wrapping_add(i32::from(delta) as u32)
     };
-    assert_eq!(mode, STAT_MSG_MODE_SMM_RES_UNITS);
+    assert_eq!(mode, (StatusMessageMode::ResUnits as u32));
 }
 fn draw_number(context: &ContextLease, font: &FontLease, crew: bool, value: u16) {
     let rect = gauge_rect(crew);
@@ -146,7 +151,7 @@ pub fn draw_flagship_name(kernel: &Kernel, world: &World, width: i32, status: bo
         name(&world.data.flagship.ship_name).to_owned()
     } else {
         let mut bytes = kernel
-            .game_text((NAMING_STRING_BASE + 1) as usize)
+            .game_text((ids::NAMING_STRING_BASE + 1) as usize)
             .to_bytes()
             .to_vec();
         bytes.push(b' ');
@@ -193,8 +198,8 @@ pub fn draw_landers(kernel: &Kernel, world: &World) {
             y: 29,
         };
         let spacing = rect.extent.width + 2;
-        rect.extent.width = (i32::from(rect.extent.width) * MAX_LANDERS as i32
-            + 2 * (MAX_LANDERS as i32 - 1)
+        rect.extent.width = (i32::from(rect.extent.width) * ids::MAX_LANDERS as i32
+            + 2 * (ids::MAX_LANDERS as i32 - 1)
             + 2) as i16;
         rect.corner.x -= rect.extent.width >> 1;
         rect.corner.y += origin.y;
@@ -217,7 +222,7 @@ pub fn draw_storage_bays(kernel: &Kernel, world: &World, refresh: bool) {
             },
         };
         if refresh {
-            rect.extent.width = (NUM_MODULE_SLOTS * 3) as i16;
+            rect.extent.width = (equipment::NUM_MODULE_SLOTS * 3) as i16;
             rect.corner.x = 32 - (rect.extent.width >> 1);
             context.fill_rectangle(rgb15(0, 0, 0), rect);
             rect.extent.width = 2;
@@ -225,21 +230,21 @@ pub fn draw_storage_bays(kernel: &Kernel, world: &World, refresh: bool) {
         let mut bays = state
             .module_slots
             .iter()
-            .filter(|&&m| m == STORAGE_BAY as u8)
+            .filter(|&&m| m == ModuleType::StorageBay as u8)
             .count() as u8;
         if bays == 0 {
             return;
         }
         rect.corner.x = (32 - ((i32::from(bays) * 3) >> 1)) as i16;
         let mut mass = state.total_element_mass;
-        while mass >= STORAGE_BAY_CAPACITY as u16 {
+        while mass >= module_guard::STORAGE_BAY_CAPACITY as u16 {
             context.fill_rectangle(rgb15(10, 10, 10), rect);
             rect.corner.x += 3;
             bays = bays.wrapping_sub(1);
-            mass -= STORAGE_BAY_CAPACITY as u16;
+            mass -= module_guard::STORAGE_BAY_CAPACITY as u16;
         }
-        rect.extent.height = ((4 * i32::from(mass) + STORAGE_BAY_CAPACITY as i32 - 1)
-            / STORAGE_BAY_CAPACITY as i32) as i16;
+        rect.extent.height = ((4 * i32::from(mass) + module_guard::STORAGE_BAY_CAPACITY as i32 - 1)
+            / module_guard::STORAGE_BAY_CAPACITY as i32) as i16;
         if rect.extent.height != 0 {
             rect.corner.y += 4 - rect.extent.height;
             context.fill_rectangle(rgb15(10, 10, 10), rect);
@@ -266,7 +271,7 @@ fn draw_slots(
     mode: usize,
 ) {
     for &piece in slots {
-        if piece < NUM_MODULES as u8 {
+        if piece < equipment::NUM_MODULES as u8 {
             let image = frames.indexed_frame(usize::from(piece) + 1 + mode);
             context.draw_stamp(&image, POINT { x: 1, y });
             if mode != 2 {
@@ -292,7 +297,7 @@ fn draw_pc_sis(kernel: &Kernel, context: &ContextLease) {
         context.with_font_effect(Some(&gradients.indexed_frame(effect)), || {
             context.draw_text(
                 &font,
-                kernel.game_text((STATUS_STRING_BASE + index) as usize),
+                kernel.game_text((ids::STATUS_STRING_BASE + index) as usize),
                 baseline,
                 TEXT_ALIGN_ALIGN_CENTER,
                 rgb15(0, 0, 0),
@@ -312,7 +317,7 @@ fn draw_pc_sis(kernel: &Kernel, context: &ContextLease) {
     context.with_font_effect(None, || {
         context.draw_text(
             &font,
-            kernel.game_text((STATUS_STRING_BASE + 5) as usize),
+            kernel.game_text((ids::STATUS_STRING_BASE + 5) as usize),
             POINT { x: 32, y: 9 },
             TEXT_ALIGN_ALIGN_CENTER,
             rgb15(2, 4, 30),
@@ -369,7 +374,7 @@ pub fn delta_sis_gauges(kernel: &Kernel, world: &mut World, crew: i16, fuel: i16
                 &context,
                 &font,
                 false,
-                (world.data.flagship.fuel_on_board / FUEL_TANK_SCALE) as u16,
+                (world.data.flagship.fuel_on_board / equipment::FUEL_TANK_SCALE) as u16,
             );
         }
         if crew == UNDEFINED_DELTA {
@@ -411,7 +416,7 @@ mod tests {
             .unwrap_or_else(|error| panic!("gauge fixture: {error}"));
         game.kernel
             .install_game_text(crate::strings::owned_table::LoadedTextTable::fixture(
-                vec![b"A\0".to_vec(); (STATUS_STRING_BASE + 6) as usize],
+                vec![b"A\0".to_vec(); (ids::STATUS_STRING_BASE + 6) as usize],
             ));
         let font = font(&game.kernel);
         game.kernel.screen_context = game.kernel.status_context;
@@ -440,17 +445,25 @@ mod tests {
             .data
             .flagship
             .module_slots
-            .fill(NUM_MODULES as u8);
-        game.world.data.flagship.drive_slots.fill(NUM_MODULES as u8);
-        game.world.data.flagship.jet_slots.fill(NUM_MODULES as u8);
-        game.world.data.flagship.module_slots[0] = CREW_POD as u8;
-        game.world.data.flagship.module_slots[1] = STORAGE_BAY as u8;
+            .fill(equipment::NUM_MODULES as u8);
+        game.world
+            .data
+            .flagship
+            .drive_slots
+            .fill(equipment::NUM_MODULES as u8);
+        game.world
+            .data
+            .flagship
+            .jet_slots
+            .fill(equipment::NUM_MODULES as u8);
+        game.world.data.flagship.module_slots[0] = ModuleType::CrewPod as u8;
+        game.world.data.flagship.module_slots[1] = ModuleType::StorageBay as u8;
         game.world.data.flagship.num_landers = 2;
         game.world.data.flagship.total_element_mass = 625;
         game.world.data.flagship.commander_name[..2].copy_from_slice(b"A\0");
         game.world.data.flagship.ship_name[..2].copy_from_slice(b"A\0");
         game.kernel
-            .set_status_message_mode(STAT_MSG_MODE_SMM_RES_UNITS);
+            .set_status_message_mode((StatusMessageMode::ResUnits as u32));
         delta_sis_gauges(&game.kernel, &mut game.world, 0, 0, 0);
         delta_sis_gauges(&game.kernel, &mut game.world, 5, 10, 20);
         assert_eq!(
@@ -479,7 +492,7 @@ mod tests {
             .data
             .flagship
             .module_slots
-            .fill(NUM_MODULES as u8);
+            .fill(equipment::NUM_MODULES as u8);
         draw_storage_bays(&game.kernel, &game.world, true);
         crate::ui::border::draw_sis_frame(&game.kernel, &mut game.world, (320, 240));
         assert_eq!(
@@ -506,7 +519,7 @@ mod tests {
         state.crew_enlisted = 40;
         state.fuel_on_board = 105;
         state.res_units = 10;
-        state.module_slots[0] = CREW_POD as u8;
+        state.module_slots[0] = ModuleType::CrewPod as u8;
         update_crew(&mut state, 20);
         assert_eq!(state.crew_enlisted, 50);
         update_crew(&mut state, -60);
@@ -518,10 +531,10 @@ mod tests {
         assert!(update_fuel(&mut state, -200));
         assert_eq!(state.fuel_on_board, 0);
         assert!(update_fuel(&mut state, UNDEFINED_DELTA));
-        update_resources(&mut state, -11, STAT_MSG_MODE_SMM_RES_UNITS);
+        update_resources(&mut state, -11, (StatusMessageMode::ResUnits as u32));
         assert_eq!(state.res_units, 0);
         state.res_units = u32::MAX;
-        update_resources(&mut state, 2, STAT_MSG_MODE_SMM_RES_UNITS);
+        update_resources(&mut state, 2, (StatusMessageMode::ResUnits as u32));
         assert_eq!(state.res_units, 1);
     }
 }

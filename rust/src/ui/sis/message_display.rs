@@ -194,9 +194,8 @@ mod tests {
         native_abi::*,
     };
     use crate::native_test_process::own_graphics_process;
-    use crate::ships::native::abi::{
-        DSME_BLOCKCUR, DSME_CLEARFR, DSME_MYCOLOR, DSME_SETFR, OPT_3DO, OPT_PC,
-    };
+    use crate::ui::settings::{OPT_3DO, OPT_PC};
+    use crate::ui::sis::{DSME_BLOCKCUR, DSME_CLEARFR, DSME_MYCOLOR, DSME_SETFR};
     use crate::{campaign_display_test as campaign_display, engine::Game, ui};
 
     #[test]
@@ -341,9 +340,9 @@ mod tests {
         assert!(game.kernel.sis_highlight.context.borrow().is_some());
         ui::sis::set_menu_flash(&game.kernel, (320, 240), false);
         assert!(game.kernel.sis_highlight.context.borrow().is_none());
-        game.kernel
-            .configuration
-            .update_preferences(|preferences| preferences.menu = OPT_3DO as i32);
+        game.kernel.configuration.update_preferences(|preferences| {
+            preferences.menu = crate::ui::settings::OPT_3DO as i32
+        });
         ui::sis::set_menu_flash(&game.kernel, (320, 240), false);
         assert!(game.kernel.sis_highlight.context.borrow().is_some());
         game.kernel.sis_highlight.context.borrow_mut().take();

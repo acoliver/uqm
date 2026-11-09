@@ -1,6 +1,7 @@
 use std::{cell::Cell, ptr, rc::Rc};
 use uqm_rust::{
     battle::RaceOps,
+    engine::input::frames::{KEY_MENU_RIGHT, KEY_MENU_SELECT},
     engine::{
         battle::{input::InputContext, Battle, Cx},
         input::{frames::InputState, Frame, InputControls, InputRuntime, InputSession},
@@ -14,7 +15,7 @@ use uqm_rust::{
         native_abi::*,
         sdl::lifecycle_abi::{GraphicsOptions, TFB_InitGraphics, TFB_UninitGraphics},
     },
-    navigation::abi::{IN_BATTLE, KEY_MENU_RIGHT, KEY_MENU_SELECT},
+    mainloop::types::activity_flags::IN_BATTLE,
 };
 
 struct MenuDriver {

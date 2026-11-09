@@ -1,24 +1,25 @@
 //! Starbase encounters, menus and retained flagship drawing.
 #![cfg(not(test))]
 use crate::engine::input::{frames::*, InputSession};
-use crate::engine::world::campaign::*;
 use crate::engine::{
     battle::Cx,
     observe::{CheckpointView, Io},
     StoryKey, World,
 };
-use crate::graphics::{
-    cmap_abi::FadeScreen, drawable_abi::LoadedDrawable, menu as draw, native_abi::*,
-};
+use crate::graphics::{drawable_abi::LoadedDrawable, menu as draw, native_abi::*};
+use crate::mainloop::types::activity_flags;
+use crate::mainloop::types::ActivityKind;
 use crate::sound::resource_types::LoadedMusic;
+use crate::starbase::platform::StatusMessageMode;
 use crate::starbase::{
     draw::{draw_base_state_strings, rotate_starbase, StarbaseAnimation},
     graphics::Graphics,
     starbase_menu::StarbaseState,
 };
 use crate::threading::pacing::linked::sleep_thread_until as SleepThreadUntil;
-use crate::time::clock_abi::live::MoveGameClockDays;
 use crate::ui::settings::stop_music;
+use crate::ui::sis;
+use uqm_engine::time::counter_abi::ONE_SECOND;
 const CROSSFADE_SCREEN: u32 = 2;
 const FADE_IN_SCREEN: u32 = 3;
 const SOUND_ARROWS: u16 = 0x0f;
@@ -36,7 +37,8 @@ fn finish_starbase_screen(world: &mut World, menu: &mut StarbaseSession) -> bool
     stop_music();
     menu.music = None;
     if menu.state == StarbaseState::DepartBase {
-        if world.activity() & (CHECK_ABORT | CHECK_LOAD) as u16 == 0 {
+        if world.activity() & (activity_flags::CHECK_ABORT | activity_flags::CHECK_LOAD) as u16 == 0
+        {
             world.set_story_state(StoryKey::STARBASE_VISITED, 0);
         }
         return false;
@@ -58,7 +60,11 @@ unsafe fn activate_starbase_selection(
         StarbaseState::TalkCommander => {
             io.observer.checkpoint(&CheckpointView::StarbaseMenu(false));
             cx.kernel.input_runtime().flush();
-            crate::comm::dispatch::init_communication(cx, io, CONVERSATION_COMMANDER_CONVERSATION);
+            crate::comm::dispatch::init_communication(
+                cx,
+                io,
+                crate::comm::dispatch::conv::COMMANDER,
+            );
             io.observer.checkpoint(&CheckpointView::StarbaseMenu(true));
             cx.world
                 .set_story_state(StoryKey::GLOBAL_FLAGS_AND_DATA, u8::MAX as u32);
@@ -81,14 +87,15 @@ fn update_starbase_screen(
     input: &InputSession,
     menu: &mut StarbaseSession,
 ) -> bool {
-    if cx.world.activity() & (CHECK_ABORT | CHECK_LOAD) as u16 != 0 {
+    if cx.world.activity() & (activity_flags::CHECK_ABORT | activity_flags::CHECK_LOAD) as u16 != 0
+    {
         menu.state = StarbaseState::DepartBase;
         return false;
     }
     input.set_menu_sounds(SOUND_ARROWS, SOUND_SELECT);
     if !menu.initialized {
-        cx.kernel.last_activity &= !(CHECK_LOAD as u16);
-        crate::ui::sis::clear_flash(cx.kernel);
+        cx.kernel.last_activity &= !(activity_flags::CHECK_LOAD as u16);
+        sis::clear_flash(cx.kernel);
         if menu.music.is_some() {
             stop_music();
             menu.music = None;
@@ -108,12 +115,12 @@ fn update_starbase_screen(
             .unwrap_or_else(|| panic!("starbase graphics missing"))
             .lease()
             .frame(0)
-            .unwrap();
+            .unwrap_or_else(|| panic!("starbase art has no frame"));
         rotate_starbase(
             &graphics,
             &mut menu.animation,
             Some(frame as usize),
-            crate::time::source::now_ticks(),
+            uqm_engine::time::source::now_ticks(),
         );
         draw_base_state_strings(&graphics, None, menu.state);
         draw::transition(3);
@@ -143,7 +150,7 @@ fn update_starbase_screen(
             &graphics,
             &mut menu.animation,
             None,
-            crate::time::source::now_ticks(),
+            uqm_engine::time::source::now_ticks(),
         );
         draw::unbatch();
         cx.kernel.input_runtime().sleep(cx, ONE_SECOND / 30);
@@ -153,15 +160,16 @@ fn update_starbase_screen(
 
 unsafe fn do_time_passage(cx: &mut Cx<'_>) {
     let interval = (ONE_SECOND * 2) as SIZE;
-    cx.with_legacy(|| SleepThreadUntil(FadeScreen(ScreenFadeType_FadeAllToBlack, interval)));
+    cx.with_legacy(|| SleepThreadUntil(draw::fade_screen(draw::ScreenFade::Black, interval)));
     crate::time::clock_abi::advance_days(cx, 14);
 }
 
 fn cleanup_after_star_base(world: &mut World) {
-    if world.activity() & (CHECK_LOAD | CHECK_ABORT) as u16 == 0 {
+    if world.activity() & (activity_flags::CHECK_LOAD | activity_flags::CHECK_ABORT) as u16 == 0 {
         world.set_story_state(StoryKey::GLOBAL_FLAGS_AND_DATA, 0);
-        world.set_activity(CHECK_LOAD as u16);
-        world.next_activity = IN_INTERPLANETARY as u16 | START_INTERPLANETARY as u16;
+        world.set_activity(activity_flags::CHECK_LOAD as u16);
+        world.next_activity = (ActivityKind::InInterplanetary as u32) as u16
+            | activity_flags::START_INTERPLANETARY as u16;
     }
 }
 
@@ -173,42 +181,46 @@ unsafe fn prepare_starbase_visit(cx: &mut Cx<'_>, io: &mut Io<'_>) -> Option<u32
     }
     if cx.world.story_state(StoryKey::STARBASE_AVAILABLE) == 0 {
         io.observer.checkpoint(&CheckpointView::EncounterDispatch(
-            CONVERSATION_COMMANDER_CONVERSATION,
+            crate::comm::dispatch::conv::COMMANDER,
         ));
         crate::comm::dispatch::init_communication_with_options(
             cx,
             io,
-            CONVERSATION_COMMANDER_CONVERSATION,
+            crate::comm::dispatch::conv::COMMANDER,
             crate::comm::CommOptions {
                 intro: (CROSSFADE_SCREEN, 0),
                 ..Default::default()
             },
         );
         if cx.world.story_state(StoryKey::PROBE_ILWRATH_ENCOUNTER) == 0
-            || cx.world.activity() & CHECK_ABORT as u16 != 0
+            || cx.world.activity() & activity_flags::CHECK_ABORT as u16 != 0
         {
             cleanup_after_star_base(cx.world);
             return None;
         }
-        let ship = crate::comm::dispatch::clone_npc_fragment(cx.world, ILWRATH_SHIP as u8, 7)
-            .unwrap_or_else(|| panic!("starbase Ilwrath fragment capacity"));
+        let ship = crate::comm::dispatch::clone_npc_fragment(
+            cx.world,
+            crate::comm::dispatch::ship::ILWRATH_SHIP as u8,
+            7,
+        )
+        .unwrap_or_else(|| panic!("starbase Ilwrath fragment capacity"));
         cx.world.npc_built_ships().get_mut(ship).race_id = BYTE::MAX;
-        crate::comm::dispatch::init_communication(cx, io, CONVERSATION_ILWRATH_CONVERSATION);
+        crate::comm::dispatch::init_communication(cx, io, crate::comm::dispatch::conv::ILWRATH);
         if cx.world.data.flagship.crew_enlisted == COUNT::MAX
-            || cx.world.activity() & CHECK_ABORT as u16 != 0
+            || cx.world.activity() & activity_flags::CHECK_ABORT as u16 != 0
         {
             return None;
         }
         crate::comm::dispatch::init_communication_with_options(
             cx,
             io,
-            CONVERSATION_COMMANDER_CONVERSATION,
+            crate::comm::dispatch::conv::COMMANDER,
             crate::comm::CommOptions {
                 intro: (CROSSFADE_SCREEN, 0),
                 ..Default::default()
             },
         );
-        if cx.world.activity() & CHECK_ABORT as u16 != 0 {
+        if cx.world.activity() & activity_flags::CHECK_ABORT as u16 != 0 {
             return None;
         }
         cx.world
@@ -216,7 +228,7 @@ unsafe fn prepare_starbase_visit(cx: &mut Cx<'_>, io: &mut Io<'_>) -> Option<u32
     }
     let previous = cx
         .kernel
-        .set_status_message_mode(STAT_MSG_MODE_SMM_RES_UNITS);
+        .set_status_message_mode((StatusMessageMode::ResUnits as u32));
     if cx.world.story_state(StoryKey::MOONBASE_ON_SHIP) != 0
         || cx.world.story_state(StoryKey::CHMMR_BOMB_STATE) == 2
     {
@@ -225,18 +237,18 @@ unsafe fn prepare_starbase_visit(cx: &mut Cx<'_>, io: &mut Io<'_>) -> Option<u32
             return None;
         }
         io.observer.checkpoint(&CheckpointView::EncounterDispatch(
-            CONVERSATION_COMMANDER_CONVERSATION,
+            crate::comm::dispatch::conv::COMMANDER,
         ));
         crate::comm::dispatch::init_communication_with_options(
             cx,
             io,
-            CONVERSATION_COMMANDER_CONVERSATION,
+            crate::comm::dispatch::conv::COMMANDER,
             crate::comm::CommOptions {
                 intro: (FADE_IN_SCREEN, ONE_SECOND * 2),
                 ..Default::default()
             },
         );
-        if cx.world.activity() & CHECK_ABORT as u16 != 0 {
+        if cx.world.activity() & activity_flags::CHECK_ABORT as u16 != 0 {
             return None;
         }
         cx.world
@@ -289,10 +301,11 @@ pub unsafe fn install_bomb_at_earth(cx: &mut Cx<'_>) {
         draw::transition_source();
         draw::background(BLACK);
         draw::clear();
-        SleepThreadUntil(FadeScreen(SCREEN_FADE_TYPE__FADE_ALL_TO_COLOR, 0));
+        SleepThreadUntil(draw::fade_screen(draw::ScreenFade::Color, 0));
     });
     cx.world.set_story_state(StoryKey::CHMMR_BOMB_STATE, 3);
-    cx.world.set_activity(CHECK_LOAD as u16);
-    cx.world.next_activity = IN_INTERPLANETARY as u16 | START_INTERPLANETARY as u16;
+    cx.world.set_activity(activity_flags::CHECK_LOAD as u16);
+    cx.world.next_activity = (ActivityKind::InInterplanetary as u32) as u16
+        | activity_flags::START_INTERPLANETARY as u16;
     cx.world.select_star(None);
 }

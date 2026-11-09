@@ -2,7 +2,6 @@ use super::shipyard_layout::{
     HANGAR_DY, HANGAR_SHIPS_ROW, HANGAR_X_COORDS, HANGAR_Y, SHIP_WIN_WIDTH,
 };
 use crate::engine::battle::link_queue::{LinkId, LinkQueue};
-use crate::engine::world::campaign::*;
 use crate::engine::world::queues::Fragment;
 use crate::graphics::native_abi::*;
 use std::ptr;
@@ -21,7 +20,10 @@ pub(super) fn prepare_windows(
     module_frame: FRAME,
     mut window: COUNT,
     yanked: Option<LinkId<Fragment>>,
-) -> ([ShipWindow; MAX_BUILT_SHIPS as usize], COUNT) {
+) -> (
+    [ShipWindow; crate::starbase::shipyard::HANGAR_SHIPS as usize],
+    COUNT,
+) {
     let stamp = STAMP {
         origin: POINT { x: 0, y: 0 },
         frame: ptr::null_mut(),
@@ -32,7 +34,7 @@ pub(super) fn prepare_windows(
         image: stamp,
         left_door: stamp,
         right_door: stamp,
-    }; MAX_BUILT_SHIPS as usize];
+    }; crate::starbase::shipyard::HANGAR_SHIPS as usize];
     let mut num_ships: COUNT = 1;
     if let Some(id) = yanked {
         let ship = queue.get(id);

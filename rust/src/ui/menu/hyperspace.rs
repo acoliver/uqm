@@ -71,7 +71,7 @@ pub fn hyperspace_menu(
                     cx.kernel,
                     cx.world,
                     (cx.screen_dimensions().0, cx.screen_dimensions().1),
-                    CLEAR_SIS_RADAR as u8,
+                    crate::ui::sis::CLEAR_RADAR,
                 ),
                 Display::Restore => {
                     let (context, color) = previous

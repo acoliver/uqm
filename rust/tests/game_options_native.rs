@@ -6,13 +6,15 @@ mod native_test_process;
 
 use std::{cell::RefCell, collections::VecDeque, rc::Rc};
 use uqm_rust::{
+    engine::input::frames::{
+        KEY_MENU_CANCEL, KEY_MENU_EDIT_CANCEL, KEY_MENU_RIGHT, KEY_MENU_SELECT,
+    },
     engine::{
         battle::Cx,
         input::{frames::InputState, Frame, InputRuntime, InputSession},
         observe::{CampaignView, Io, Observer, Unobserved},
         Game,
     },
-    navigation::abi::{KEY_MENU_CANCEL, KEY_MENU_EDIT_CANCEL, KEY_MENU_RIGHT, KEY_MENU_SELECT},
 };
 
 struct ScriptedInput {
@@ -62,7 +64,9 @@ impl InputRuntime for ScriptedInput {
 fn options(keys: &[u32]) -> (u32, u8, [u8; 16], [u8; 16]) {
     use campaign_display::CampaignDisplay;
     use uqm_rust::graphics::context_abi::{ContextFrame, ContextLease};
-    use uqm_rust::navigation::abi::*;
+    use uqm_rust::starbase::ids::{
+        MAINMENU_STRING_BASE, MONTHS_STRING_BASE, NAMING_STRING_BASE, OPTION_STRING_BASE,
+    };
     let mut game = Game::new();
     let display = CampaignDisplay::install(&mut game)
         .unwrap_or_else(|error| panic!("options display: {error}"));

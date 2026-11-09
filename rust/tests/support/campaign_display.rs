@@ -112,8 +112,8 @@ impl CampaignDisplay {
                 .lease()
                 .frame(0)
                 .ok_or("fixture screen has no frame")?;
-            let count = (uqm_rust::navigation::abi::MONTHS_STRING_BASE as usize + 12)
-                .max(uqm_rust::navigation::abi::STATUS_STRING_BASE as usize + 3);
+            let count = (uqm_rust::starbase::ids::MONTHS_STRING_BASE as usize + 12)
+                .max(uqm_rust::starbase::ids::STATUS_STRING_BASE as usize + 3);
             game.kernel.install_game_text(
                 uqm_rust::strings::owned_table::LoadedTextTable::fixture(vec![
                     b"A\0".to_vec();

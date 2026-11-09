@@ -32,7 +32,7 @@ use crate::mainloop::types::{activity_flags, ActivityValue};
 const FIRST_PURCHASE_MODULE: ModuleType = ModuleType::CrewPod;
 /// The last module the player may buy (`NUM_PURCHASE_MODULES - 1`). The
 /// bomb modules after it come with the Chmmr bomb.
-const LAST_PURCHASE_MODULE: ModuleType = ModuleType::AntimissileDefense;
+pub const LAST_PURCHASE_MODULE: ModuleType = ModuleType::AntimissileDefense;
 
 /// Which kind of slot the player is choosing among. The kinds are the four
 /// `EMPTY_SLOT + n` values of `MENU_STATE.CurState`, in that order.

@@ -1,3 +1,4 @@
+const GAMESTR_COUNT: usize = 579;
 #[path = "../../../tests/support/conversation_display.rs"]
 mod conversation_display;
 use super::*;

@@ -194,3 +194,13 @@ mod tests {
         assert!(allocation.upgrade().is_none());
     }
 }
+
+#[repr(u32)]
+pub enum ScreenFade {
+    Black = 252,
+    Color = 253,
+}
+
+pub fn fade_screen(kind: ScreenFade, interval: i16) -> u32 {
+    current().fade_screen(kind as u32, interval)
+}
