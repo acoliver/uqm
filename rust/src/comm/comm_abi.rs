@@ -120,9 +120,7 @@ unsafe fn draw_subtitle(comm: &mut Comm, text: &mut CText) -> i16 {
     text.baseline.y
 }
 
-/// # Safety
-/// Game thread only; invalidates the cached subtitle before the next redraw.
-pub unsafe fn clear_subtitles(comm: &mut Comm) {
+pub fn clear_subtitles(comm: &mut Comm) {
     comm.display.clear_subtitles = true;
     comm.display.last_subtitle = null();
     comm.display.subtitle.p_str = null();
@@ -172,9 +170,7 @@ pub unsafe fn comm_redraw_subtitles(comm: &mut Comm, enabled: bool) {
 pub unsafe fn set_talking_finished(comm: &mut Comm, finished: i32) {
     super::ffi::rust_set_talking_finished(comm, finished);
 }
-/// # Safety
-/// CommData must be initialized on the game thread.
-pub unsafe fn setup_subtitle_text_from_comm_data(comm: &mut Comm) {
+pub fn setup_subtitle_text_from_comm_data(comm: &mut Comm) {
     comm.display.subtitle.baseline = comm.data.alien_text_baseline;
     comm.display.subtitle.align = comm.data.alien_text_align as i32;
 }
@@ -194,9 +190,7 @@ pub unsafe fn set_text_cache_context(comm: &mut Comm, context: *mut c_void) {
 pub unsafe fn set_text_cache_frame(comm: &mut Comm, frame: *mut c_void) {
     comm.display.text_cache_frame = frame;
 }
-/// # Safety
-/// Game thread only.
-pub unsafe fn anim_context(comm: &mut Comm) -> *mut c_void {
+pub fn anim_context(comm: &mut Comm) -> *mut c_void {
     comm.display.anim_context
 }
 /// # Safety
@@ -204,9 +198,7 @@ pub unsafe fn anim_context(comm: &mut Comm) -> *mut c_void {
 pub unsafe fn clear_subtitles_pending(comm: &mut Comm) -> i32 {
     i32::from(comm.display.clear_subtitles)
 }
-/// # Safety
-/// Game thread only.
-pub unsafe fn reset_clear_subtitles(comm: &mut Comm) {
+pub fn reset_clear_subtitles(comm: &mut Comm) {
     comm.display.clear_subtitles = false;
 }
 

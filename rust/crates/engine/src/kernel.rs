@@ -263,7 +263,6 @@ impl Kernel {
     }
 
     pub fn new() -> Self {
-        let star_planes = Box::new([30, 60, 90].map(StarPlane::new));
         Self {
             configuration: crate::configuration::Configuration::default(),
             input_runtime: None,
@@ -340,7 +339,7 @@ impl Kernel {
             sounds: SoundQueue::new(),
             channels: std::rc::Rc::new(std::cell::RefCell::new(Channels::new())),
             space_origin: POINT { x: 0, y: 0 },
-            star_planes,
+            star_planes: Box::new([30, 60, 90].map(StarPlane::new)),
         }
     }
 }
