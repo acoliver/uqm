@@ -3352,7 +3352,7 @@ u6_04_world_projection = { limit = 112, ends = "U6-04", scopes = { "ffi|owner_pr
 "allows|clippy::all|uqm-engine::graphics::native_abi" = 934
 "allows|clippy::all|uqm::c_bindings::controller_input" = 23
 "allows|clippy::all|uqm::c_bindings::global_state" = 272
-"allows|clippy::all|uqm::navigation::abi" = 3028
+"allows|clippy::all|uqm::navigation::abi" = 3025
 "allows|clippy::all|uqm::ships::native::abi" = 2000
 "allows|clippy::identity_op|uqm-engine::graphics::native_abi::_#1" = 25
 "allows|clippy::missing_safety_doc|uqm-engine::sound::decoder_api" = 123
@@ -3389,12 +3389,12 @@ u6_04_world_projection = { limit = 112, ends = "U6-04", scopes = { "ffi|owner_pr
 "allows|dead_code|uqm::c_bindings::global_state" = 272
 "allows|dead_code|uqm::comm::dispatch::ffi" = 59
 "allows|dead_code|uqm::config::Options" = 36
-"allows|dead_code|uqm::navigation::abi" = 3028
+"allows|dead_code|uqm::navigation::abi" = 3025
 "allows|dead_code|uqm::ships::native::abi" = 2000
 "allows|deprecated|uqm-engine::resource::resource_type::<ResourceValue>::as_color" = 2
 "allows|improper_ctypes|uqm::c_bindings::controller_input" = 23
 "allows|improper_ctypes|uqm::c_bindings::global_state" = 272
-"allows|improper_ctypes|uqm::navigation::abi" = 3028
+"allows|improper_ctypes|uqm::navigation::abi" = 3025
 "allows|non_camel_case_types|uqm-engine::battle::access::record::abi" = 157
 "allows|non_camel_case_types|uqm-engine::battle::access::schema" = 31
 "allows|non_camel_case_types|uqm-engine::graphics::native_abi" = 934
@@ -3404,7 +3404,7 @@ u6_04_world_projection = { limit = 112, ends = "U6-04", scopes = { "ffi|owner_pr
 "allows|non_camel_case_types|uqm-engine::video::ffi::SDL_PixelFormat" = 27
 "allows|non_camel_case_types|uqm::c_bindings::controller_input" = 23
 "allows|non_camel_case_types|uqm::c_bindings::global_state" = 272
-"allows|non_camel_case_types|uqm::navigation::abi" = 3028
+"allows|non_camel_case_types|uqm::navigation::abi" = 3025
 "allows|non_camel_case_types|uqm::ships::native::abi" = 2000
 "allows|non_camel_case_types|uqm::supermelee::netplay::abi" = 72
 "allows|non_snake_case|uqm-engine::battle::access::record::abi" = 157
@@ -3526,7 +3526,7 @@ u6_04_world_projection = { limit = 112, ends = "U6-04", scopes = { "ffi|owner_pr
 "allows|non_snake_case|uqm::game_init::macro_abi" = 33
 "allows|non_snake_case|uqm::mainloop::input_abi::live" = 128
 "allows|non_snake_case|uqm::mainloop::options_abi" = 83
-"allows|non_snake_case|uqm::navigation::abi" = 3028
+"allows|non_snake_case|uqm::navigation::abi" = 3025
 "allows|non_snake_case|uqm::ships::native::abi" = 2000
 "allows|non_snake_case|uqm::supermelee::netplay::abi" = 72
 "allows|non_snake_case|uqm::ui::shipyard_layout" = 48
@@ -3536,7 +3536,7 @@ u6_04_world_projection = { limit = 112, ends = "U6-04", scopes = { "ffi|owner_pr
 "allows|non_upper_case_globals|uqm-engine::resource::ffi_bridge::_cur_resfile_name" = 3
 "allows|non_upper_case_globals|uqm::c_bindings::controller_input" = 23
 "allows|non_upper_case_globals|uqm::c_bindings::global_state" = 272
-"allows|non_upper_case_globals|uqm::navigation::abi" = 3028
+"allows|non_upper_case_globals|uqm::navigation::abi" = 3025
 "allows|non_upper_case_globals|uqm::ships::native::abi" = 2000
 "allows|non_upper_case_globals|uqm::supermelee::netplay::abi" = 72
 "allows|unused_variables|uqm-engine::graphics::scaling::<BiadaptiveScaler>::rgb_to_luminance_simd" = 23
@@ -4055,7 +4055,7 @@ u6_04_world_projection = { limit = 112, ends = "U6-04", scopes = { "ffi|owner_pr
 "ffi|foreign_items|uqm::comm" = 13
 "ffi|foreign_items|uqm::front_end" = 4
 "ffi|foreign_items|uqm::mainloop" = 3
-"ffi|foreign_items|uqm::navigation" = 24
+"ffi|foreign_items|uqm::navigation" = 22
 "ffi|foreign_items|uqm::planets" = 11
 "ffi|foreign_items|uqm::ships" = 8
 "ffi|foreign_items|uqm::starbase" = 2
@@ -4098,7 +4098,7 @@ u6_04_world_projection = { limit = 112, ends = "U6-04", scopes = { "ffi|owner_pr
 "ffi|repr_c|uqm::ships" = 12
 "ffi|repr_c|uqm::state" = 1
 "ffi|static_mut|uqm-engine::uqm-engine" = 72
-"ffi|static_mut|uqm::comm" = 2
+"ffi|static_mut|uqm::comm" = 13
 "ffi|static_mut|uqm::front_end" = 22
 "ffi|static_mut|uqm::planets" = 14
 "ffi|static_mut|uqm::savegame" = 5
@@ -4690,7 +4690,7 @@ u6_04_world_projection = { limit = 112, ends = "U6-04", scopes = { "ffi|owner_pr
 "loc|loc|uqm-xtask::abi_check::@file" = 1461
 "loc|loc|uqm-xtask::native_suite::@file" = 1516
 "loc|loc|uqm::automation::child_session::@file" = 2774
-"loc|loc|uqm::automation::coordinator::@file" = 2684
+"loc|loc|uqm::automation::coordinator::@file" = 2678
 "loc|loc|uqm::automation::native_runner::@file" = 3716
 "loc|loc|uqm::automation::native_window::@file" = 3550
 "loc|loc|uqm::automation::scheduler::@file" = 1429
@@ -4700,10 +4700,10 @@ u6_04_world_projection = { limit = 112, ends = "U6-04", scopes = { "ffi|owner_pr
 "loc|loc|uqm::comm::races::melnorm::@file" = 869
 "loc|loc|uqm::comm::races::pkunk::@file" = 970
 "loc|loc|uqm::comm::races::starbas::@file" = 1440
-"loc|loc|uqm::comm::talk_segue::@file" = 1066
+"loc|loc|uqm::comm::talk_segue::@file" = 1062
 "loc|loc|uqm::front_end::gameopt::@file" = 911
 "loc|loc|uqm::front_end::uqmdebug::@file" = 1367
-"loc|loc|uqm::navigation::abi::@file" = 3016
+"loc|loc|uqm::navigation::abi::@file" = 3013
 "loc|loc|uqm::planets::tables::@file" = 1766
 "loc|loc|uqm::ships::native::abi::@file" = 1945
 "loc|loc|uqm::ships::registry::@file" = 943
@@ -4714,10 +4714,10 @@ u6_04_world_projection = { limit = 112, ends = "U6-04", scopes = { "ffi|owner_pr
 "unsafe|unsafe_block_lines|uqm::app" = 42
 "unsafe|unsafe_block_lines|uqm::automation" = 721
 "unsafe|unsafe_block_lines|uqm::battle" = 1
-"unsafe|unsafe_block_lines|uqm::comm" = 518
+"unsafe|unsafe_block_lines|uqm::comm" = 498
 "unsafe|unsafe_block_lines|uqm::front_end" = 81
 "unsafe|unsafe_block_lines|uqm::game_init" = 2
-"unsafe|unsafe_block_lines|uqm::mainloop" = 189
+"unsafe|unsafe_block_lines|uqm::mainloop" = 188
 "unsafe|unsafe_block_lines|uqm::navigation" = 1
 "unsafe|unsafe_block_lines|uqm::planet_side" = 119
 "unsafe|unsafe_block_lines|uqm::planets" = 118
@@ -4731,7 +4731,7 @@ u6_04_world_projection = { limit = 112, ends = "U6-04", scopes = { "ffi|owner_pr
 "unsafe|unsafe_blocks|uqm::app" = 15
 "unsafe|unsafe_blocks|uqm::automation" = 129
 "unsafe|unsafe_blocks|uqm::battle" = 1
-"unsafe|unsafe_blocks|uqm::comm" = 137
+"unsafe|unsafe_blocks|uqm::comm" = 132
 "unsafe|unsafe_blocks|uqm::front_end" = 17
 "unsafe|unsafe_blocks|uqm::game_init" = 2
 "unsafe|unsafe_blocks|uqm::mainloop" = 95
@@ -4743,13 +4743,13 @@ u6_04_world_projection = { limit = 112, ends = "U6-04", scopes = { "ffi|owner_pr
 "unsafe|unsafe_blocks|uqm::starbase" = 33
 "unsafe|unsafe_blocks|uqm::ui" = 6
 "unsafe|unsafe_blocks|uqm::uqm" = 1
-"unsafe|unsafe_fn_lines|uqm-engine::uqm-engine" = 15830
+"unsafe|unsafe_fn_lines|uqm-engine::uqm-engine" = 15826
 "unsafe|unsafe_fn_lines|uqm::app" = 3
 "unsafe|unsafe_fn_lines|uqm::automation" = 228
 "unsafe|unsafe_fn_lines|uqm::battle" = 3
 "unsafe|unsafe_fn_lines|uqm::c_bindings" = 3
-"unsafe|unsafe_fn_lines|uqm::comm" = 1671
-"unsafe|unsafe_fn_lines|uqm::front_end" = 2849
+"unsafe|unsafe_fn_lines|uqm::comm" = 1622
+"unsafe|unsafe_fn_lines|uqm::front_end" = 2862
 "unsafe|unsafe_fn_lines|uqm::game_init" = 370
 "unsafe|unsafe_fn_lines|uqm::mainloop" = 667
 "unsafe|unsafe_fn_lines|uqm::navigation" = 978
@@ -4759,13 +4759,13 @@ u6_04_world_projection = { limit = 112, ends = "U6-04", scopes = { "ffi|owner_pr
 "unsafe|unsafe_fn_lines|uqm::ships" = 120
 "unsafe|unsafe_fn_lines|uqm::state" = 274
 "unsafe|unsafe_fn_lines|uqm::time" = 59
-"unsafe|unsafe_fn_lines|uqm::ui" = 1853
-"unsafe|unsafe_fn|uqm-engine::uqm-engine" = 958
+"unsafe|unsafe_fn_lines|uqm::ui" = 1874
+"unsafe|unsafe_fn|uqm-engine::uqm-engine" = 957
 "unsafe|unsafe_fn|uqm::app" = 1
 "unsafe|unsafe_fn|uqm::automation" = 6
 "unsafe|unsafe_fn|uqm::battle" = 1
 "unsafe|unsafe_fn|uqm::c_bindings" = 1
-"unsafe|unsafe_fn|uqm::comm" = 82
+"unsafe|unsafe_fn|uqm::comm" = 75
 "unsafe|unsafe_fn|uqm::front_end" = 107
 "unsafe|unsafe_fn|uqm::game_init" = 32
 "unsafe|unsafe_fn|uqm::mainloop" = 70
@@ -4783,16 +4783,16 @@ u6_04_world_projection = { limit = 112, ends = "U6-04", scopes = { "ffi|owner_pr
 "unsafe|unsafe_impl|uqm-engine::uqm-engine" = 16
 "unsafe|unsafe_impl|uqm::comm" = 2
 "unsafe|unsafe_impl|uqm::planets" = 1
-"unsafe|unsafe_lines|uqm-engine::uqm-engine" = 17783
+"unsafe|unsafe_lines|uqm-engine::uqm-engine" = 17779
 "unsafe|unsafe_lines|uqm-xtask::uqm-xtask" = 8
 "unsafe|unsafe_lines|uqm::app" = 44
 "unsafe|unsafe_lines|uqm::automation" = 824
 "unsafe|unsafe_lines|uqm::battle" = 51
 "unsafe|unsafe_lines|uqm::c_bindings" = 3
-"unsafe|unsafe_lines|uqm::comm" = 2128
-"unsafe|unsafe_lines|uqm::front_end" = 2889
+"unsafe|unsafe_lines|uqm::comm" = 2059
+"unsafe|unsafe_lines|uqm::front_end" = 2902
 "unsafe|unsafe_lines|uqm::game_init" = 372
-"unsafe|unsafe_lines|uqm::mainloop" = 843
+"unsafe|unsafe_lines|uqm::mainloop" = 839
 "unsafe|unsafe_lines|uqm::navigation" = 979
 "unsafe|unsafe_lines|uqm::planet_side" = 299
 "unsafe|unsafe_lines|uqm::planets" = 4016
@@ -4801,11 +4801,10 @@ u6_04_world_projection = { limit = 112, ends = "U6-04", scopes = { "ffi|owner_pr
 "unsafe|unsafe_lines|uqm::starbase" = 66
 "unsafe|unsafe_lines|uqm::state" = 274
 "unsafe|unsafe_lines|uqm::time" = 59
-"unsafe|unsafe_lines|uqm::ui" = 1853
+"unsafe|unsafe_lines|uqm::ui" = 1874
 "unsafe|unsafe_lines|uqm::uqm" = 9
 
 [moved]
-"uqm-engine::input" = "uqm-engine::input_port"
 "uqm-engine::observe::@file" = "uqm-engine::observe_port::@file"
 "uqm-engine::observe::Io" = "uqm-engine::observe_port::ObservationIo"
 "uqm::comm::commanim_abi::runtime::InitCommAnimations" = "uqm::comm::commanim_abi::runtime::init_comm_animations"
@@ -4921,5 +4920,4 @@ u6_04_world_projection = { limit = 112, ends = "U6-04", scopes = { "ffi|owner_pr
 "uqm::resource" = "uqm-engine::resource"
 "uqm::sound" = "uqm-engine::sound"
 "uqm::threading" = "uqm-engine::threading"
-"uqm::ui::settings::play_music_for_world" = "uqm-engine::sound::music::remember_native_music"
 "uqm::video" = "uqm-engine::video"

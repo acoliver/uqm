@@ -1301,15 +1301,15 @@ fn init_speech_graphics(comm: &mut Comm) {
         let frame5 = c_bridge::SetAbsFrameIndex(af, 5);
         let frame2 = c_bridge::SetAbsFrameIndex(af, 2);
         let frame9 = c_bridge::SetAbsFrameIndex(af, 9);
-        c_bridge::init_oscilloscope(comm, frame9);
-        c_bridge::init_slider(comm, 0, slider_y, sis_w, frame5, frame2);
+        c_bridge::init_oscilloscope(frame9);
+        c_bridge::init_slider(0, slider_y, sis_w, frame5, frame2);
     }
 }
 
 #[cfg(not(test))]
 unsafe fn set_slider_image_frame(comm: &mut Comm, index: u16) {
     let frame = c_bridge::SetAbsFrameIndex((comm.presentation.activity_frame).cast(), index);
-    c_bridge::set_slider_image(comm, frame);
+    c_bridge::set_slider_image(frame);
 }
 
 fn set_slider_image(comm: &mut Comm, img: SliderImage) {

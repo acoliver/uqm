@@ -25,7 +25,6 @@ pub struct Comm {
     pub(crate) race_scratch: super::races::RuntimeScratch,
     pub(crate) data: super::locdata::CLocData,
     pub options: super::CommOptions,
-    pub(crate) scope: super::oscill_abi::runtime::RuntimeState,
     pub(crate) display: super::comm_abi::RuntimeState,
     pub(crate) animation_runtime: super::commanim_abi::runtime::RuntimeState,
     pub(crate) response_display: [u8; 3],
@@ -124,7 +123,6 @@ impl Comm {
             race_scratch: Default::default(),
             data: Default::default(),
             options: Default::default(),
-            scope: Default::default(),
             display: Default::default(),
             animation_runtime: Default::default(),
             response_display: [0; 3],
@@ -915,9 +913,6 @@ mod session_owner_tests {
             super::super::oscill_abi::runtime::draw_oscilloscope(&mut comm);
             super::super::oscill_abi::runtime::draw_slider(&mut comm);
         }
-        assert!(!comm.scope.scope_init);
-        assert!(comm.scope.scope_work.is_null());
-        assert_eq!(comm.scope.last_offset, -1);
         assert_eq!(
             (comm.display.window.corner.x, comm.display.window.corner.y),
             (31, 47)

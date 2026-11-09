@@ -13,8 +13,6 @@ pub(crate) struct Presentation {
     pub tiny_font: FONT,
     pub game_strings: STRING,
     pub using_speech: u32,
-    pub scope_buffer:
-        std::rc::Rc<std::cell::OnceCell<Option<crate::graphics::drawable_abi::LoadedDrawable>>>,
 }
 
 impl From<&Kernel> for Presentation {
@@ -28,7 +26,6 @@ impl From<&Kernel> for Presentation {
             tiny_font: kernel.tiny_font,
             game_strings: kernel.game_strings,
             using_speech: kernel.using_speech,
-            scope_buffer: std::rc::Rc::clone(&kernel.comm_scope_buffer),
         }
     }
 }
