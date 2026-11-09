@@ -1,5 +1,5 @@
 //! Campaign message labels borrowed from their world, catalog and text owners.
-use crate::mainloop::types::ActivityKind;
+use crate::engine::world::activity::ActivityKind;
 use crate::starbase::ids;
 use crate::{
     engine::{Kernel, World},

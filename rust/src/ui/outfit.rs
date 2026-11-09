@@ -1,5 +1,5 @@
 //! Outfit installation, fuel transactions and menu callbacks, ported from outfit.c.
-use crate::mainloop::types::activity_flags;
+use crate::engine::world::activity::activity_flags;
 use crate::starbase::ids;
 use crate::starbase::module_guard;
 use crate::starbase::sis_modules as equipment;
@@ -59,13 +59,12 @@ fn draw_module_strings(cx: &mut Cx<'_>, menu: &mut OutfitSession, module: BYTE) 
     let mut r = draw::clip();
     let mut s = STAMP {
         origin: POINT {
-            x: (4 + cx.screen_dimensions().0 - ids::STATUS_WIDTH as i32 - ids::SAFE_X as i32)
-                as i16
+            x: (4 + cx.screen_dimensions().0 - ids::STATUS_WIDTH - ids::SAFE_X as i32) as i16
                 - r.corner.x,
-            y: (ids::SIS_ORG_Y as i32 + cx.screen_dimensions().1
+            y: (ids::SIS_ORG_Y + cx.screen_dimensions().1
                 - ids::SAFE_Y as i32 * 2
                 - 13
-                - ids::RADAR_HEIGHT as i32) as i16
+                - ids::RADAR_HEIGHT) as i16
                 - r.corner.y,
         },
         frame: ptr::null_mut(),
@@ -171,8 +170,8 @@ fn init_flash(cx: &mut Cx<'_>, menu: &mut OutfitSession, piece: BYTE) {
     } else if state == ModuleType::FusionThruster as BYTE || state == EMPTY_SLOT {
         *rect = RECT {
             corner: POINT {
-                x: ids::DRIVE_TOP.x as i16 - 1,
-                y: ids::DRIVE_TOP.y as i16 - 1,
+                x: ids::DRIVE_TOP.x - 1,
+                y: ids::DRIVE_TOP.y - 1,
             },
             extent: EXTENT {
                 width: 8,
@@ -182,8 +181,8 @@ fn init_flash(cx: &mut Cx<'_>, menu: &mut OutfitSession, piece: BYTE) {
     } else if state == ModuleType::TurningJets as BYTE || state == EMPTY_SLOT + 1 {
         *rect = RECT {
             corner: POINT {
-                x: ids::JET_TOP.x as i16 - 1,
-                y: ids::JET_TOP.y as i16 - 1,
+                x: ids::JET_TOP.x - 1,
+                y: ids::JET_TOP.y - 1,
             },
             extent: EXTENT {
                 width: 9,
@@ -193,11 +192,11 @@ fn init_flash(cx: &mut Cx<'_>, menu: &mut OutfitSession, piece: BYTE) {
     } else {
         *rect = RECT {
             corner: POINT {
-                x: ids::MODULE_TOP.x as i16 - 1,
-                y: ids::MODULE_TOP.y as i16 - 1,
+                x: ids::MODULE_TOP.x - 1,
+                y: ids::MODULE_TOP.y - 1,
             },
             extent: EXTENT {
-                width: ids::SHIP_PIECE_OFFSET as i16 + 2,
+                width: ids::SHIP_PIECE_OFFSET + 2,
                 height: 34,
             },
         };
@@ -270,7 +269,7 @@ fn finish_module_transaction(
                 &cx.world.data.flagship,
             );
         }
-        if input.preferences().fonts == crate::ui::settings::OPT_PC as i32 {
+        if input.preferences().fonts == crate::ui::settings::OPT_PC {
             draw_flagship_stats(cx.kernel, cx.world, cx.screen_dimensions());
         }
     }
@@ -278,7 +277,7 @@ fn finish_module_transaction(
 
 fn do_install_module(cx: &mut Cx<'_>, menu: &mut OutfitSession, input: &InputSession) -> u32 {
     let size = cx.screen_dimensions();
-    if cx.world.activity() & activity_flags::CHECK_ABORT as u16 != 0 {
+    if cx.world.activity() & activity_flags::CHECK_ABORT != 0 {
         menu.page = OutfitPage::Main;
         return 1;
     }
@@ -302,11 +301,7 @@ fn do_install_module(cx: &mut Cx<'_>, menu: &mut OutfitSession, input: &InputSes
     } else if select || cancel {
         let mut new_piece = menu.state;
         if select && !can_install(cx.world, new_piece, old_piece) {
-            crate::ui::settings::play_menu_sound(
-                cx.kernel,
-                cx.world,
-                crate::ui::settings::MENU_SOUND_FAILURE as u16,
-            );
+            crate::ui::settings::play_menu_failure(cx.kernel, cx.world);
             return 1;
         }
         draw::select(cx.kernel.space_context);
@@ -457,11 +452,7 @@ fn change_fuel_quantity(cx: &mut Cx<'_>, input: &InputSession) {
         incr = min_fit;
     }
     if incr == 0 {
-        crate::ui::settings::play_menu_sound(
-            cx.kernel,
-            cx.world,
-            crate::ui::settings::MENU_SOUND_FAILURE as u16,
-        );
+        crate::ui::settings::play_menu_failure(cx.kernel, cx.world);
     } else {
         let cost = incr / equipment::FUEL_TANK_SCALE as i32 * cx.world.data.game.fuel_cost as i32;
         {
@@ -552,7 +543,7 @@ fn initialize_outfit(cx: &mut Cx<'_>, menu: &mut OutfitSession, input: &InputSes
         draw_campaign_menu(cx, PM_FUEL as BYTE, menu.state as i16);
         draw_flagship_name(cx.kernel, cx.world, size.0, false);
     };
-    if input.preferences().fonts == crate::ui::settings::OPT_PC as i32 {
+    if input.preferences().fonts == crate::ui::settings::OPT_PC {
         draw_flagship_stats(cx.kernel, cx.world, size);
     }
     {
@@ -580,7 +571,7 @@ fn do_outfit(
     services: &super::MenuServices,
 ) -> BOOLEAN {
     let size = cx.screen_dimensions();
-    if cx.world.activity() & activity_flags::CHECK_ABORT as u16 != 0 {
+    if cx.world.activity() & activity_flags::CHECK_ABORT != 0 {
         return exit_outfit(cx.kernel, menu);
     }
     if !menu.initialized {

@@ -77,7 +77,7 @@ fn real_sis_and_menu_services_draw_with_retained_resources() {
         .update_preferences(|preferences| preferences.menu = 2);
     game.kernel
         .install_game_text(crate::strings::owned_table::LoadedTextTable::fixture(
-            vec![b"A\0".to_vec(); GAMESTR_COUNT as usize],
+            vec![b"A\0".to_vec(); GAMESTR_COUNT],
         ));
     let effect = gradient(&mut game);
     let context = ContextLease::require(game.kernel.status_context);

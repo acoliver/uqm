@@ -114,8 +114,6 @@ pub(crate) mod live {
     use super::{navigate, update_crew, SHIP_POS};
     use crate::c_bindings::controller_input::*;
     use crate::engine::{battle::Cx, observe::Io};
-    use crate::starbase::cffi::CffiPlatform;
-    use crate::starbase::gfx::{ContextId, FlashTarget, Gfx, Point, Rect, Rgba};
     use std::ffi::CString;
 
     use crate::time::counter_abi::GetTimeCounter;
@@ -149,17 +147,9 @@ pub(crate) mod live {
         }
     }
 
-    unsafe fn flash_crew() {
-        CffiPlatform.set_context(ContextId::Status);
-        let r = crate::ui::sis::status_message_rect();
-        CffiPlatform.set_flash(FlashTarget::Rect(Rect {
-            corner: Point {
-                x: r.corner.x,
-                y: r.corner.y,
-            },
-            width: r.extent.width,
-            height: r.extent.height,
-        }));
+    fn flash_crew(kernel: &crate::engine::Kernel) {
+        crate::graphics::context_abi::ContextLease::require(kernel.status_context).select();
+        crate::ui::sis::highlight_rect(kernel, crate::ui::sis::status_message_rect());
     }
 
     unsafe fn delta_crew(cx: &mut Cx<'_>, menu: &mut Menu, delta: i16) -> bool {
@@ -170,12 +160,12 @@ pub(crate) mod live {
             menu.frame = frame;
         }
         let message = CString::new(value).unwrap();
-        cx.with_legacy(|| CffiPlatform.pre_update_flash());
+        cx.kernel.sis_highlight.pre_update_flash_rect();
         crate::ui::sis::draw_status_message(cx.kernel, cx.world, Some(&message));
-        cx.with_legacy(|| CffiPlatform.post_update_flash());
+        cx.kernel.sis_highlight.post_update_flash_rect();
         crate::ui::sis::delta_sis_gauges(cx.kernel, cx.world, -delta, 0, 0);
         if delta != 0 {
-            cx.with_legacy(|| flash_crew());
+            flash_crew(cx.kernel);
         }
         true
     }
@@ -220,24 +210,20 @@ pub(crate) mod live {
         let down = pulse.menu[KEY_MENU_DOWN as usize] != 0;
         let horizontal =
             pulse.menu[KEY_MENU_LEFT as usize] != 0 || pulse.menu[KEY_MENU_RIGHT as usize] != 0;
-        let g = CffiPlatform;
         if cancel && !menu.modifying {
             return 0;
         } else if select_key || cancel {
             menu.modifying ^= true;
-            // SAFETY: the roster retains its selected ship, fonts and display resources.
-            cx.with_legacy(|| {
-                if !menu.modifying {
-                    g.set_flash(FlashTarget::Off);
-                    SetMenuSounds(input, 15, 16);
-                } else {
-                    g.set_context(ContextId::Status);
-                    g.set_fg_color(Rgba::rgb15(31, 31, 31));
-                    draw(menu, true);
-                    flash_crew();
-                    SetMenuSounds(input, 3, 48);
-                }
-            });
+            if !menu.modifying {
+                crate::ui::sis::clear_flash(cx.kernel);
+                cx.with_legacy(|| SetMenuSounds(input, 15, 16));
+            } else {
+                menu.context.select();
+                menu.context.set_foreground(crate::ui::rgb15(31, 31, 31));
+                draw(menu, true);
+                flash_crew(cx.kernel);
+                cx.with_legacy(|| SetMenuSounds(input, 3, 48));
+            }
         } else if menu.modifying {
             let mut delta = 0;
             let mut failed = false;
@@ -301,8 +287,8 @@ pub(crate) mod live {
         select(cx, &mut menu, 0);
         cx.with_legacy(|| SetMenuSounds(input, 15, 16));
         cx.run_input(io, true, |cx, _| modify(cx, input, &mut menu) != 0);
-        cx.with_legacy(|| CffiPlatform.set_context(ContextId::Status));
-        cx.with_legacy(|| draw(&menu, false));
+        menu.context.select();
+        draw(&menu, false);
         crate::ui::sis::draw_status_message(cx.kernel, cx.world, None);
         1
     }

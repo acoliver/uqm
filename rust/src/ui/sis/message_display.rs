@@ -20,7 +20,7 @@ fn draw_cursor(
         if index < count {
             rect.corner.x = rect.corner.x.wrapping_sub(1);
         }
-        rect.extent.width = if flags & DSME_BLOCKCUR as u16 != 0 && index < count {
+        rect.extent.width = if flags & DSME_BLOCKCUR != 0 && index < count {
             i16::from(measurement.deltas[index]) + if index + 1 == count { 2 } else { 1 }
         } else {
             1
@@ -116,14 +116,14 @@ pub fn draw_message(
         context.set_frame(frame);
         context.set_clip(clip);
         context.set_background(rgb15(0, 0, 20));
-        let color = if flags & DSME_MYCOLOR as u16 == 0 {
+        let color = if flags & DSME_MYCOLOR == 0 {
             rgb15(27, 0, 27)
         } else {
             context.foreground()
         };
         context.set_foreground(color);
         context.set_font(&font);
-        if flags & DSME_CLEARFR as u16 != 0 {
+        if flags & DSME_CLEARFR != 0 {
             *kernel.sis_highlight.context.borrow_mut() = None;
         }
         let drawn = context.with_batch(|| {
@@ -139,7 +139,7 @@ pub fn draw_message(
                     return false;
                 }
             }
-            if flags & DSME_SETFR as u16 != 0 {
+            if flags & DSME_SETFR != 0 {
                 let screen = ContextLease::require(kernel.screen_context);
                 set_flash_rect(
                     &kernel.sis_highlight,
@@ -194,7 +194,7 @@ mod tests {
         native_abi::*,
     };
     use crate::native_test_process::own_graphics_process;
-    use crate::ui::settings::{OPT_3DO, OPT_PC};
+    use crate::ui::settings::OPT_PC;
     use crate::ui::sis::{DSME_BLOCKCUR, DSME_CLEARFR, DSME_MYCOLOR, DSME_SETFR};
     use crate::{campaign_display_test as campaign_display, engine::Game, ui};
 
@@ -250,7 +250,7 @@ mod tests {
                 c"AA",
                 cursor,
                 extra,
-                flags as u16
+                flags
             ));
             assert_eq!(context.clip_rect().extent.width, 320);
             // SAFETY: the fixture owns the retained screen; flushing completes the edit before pixel reads.
@@ -306,7 +306,7 @@ mod tests {
             c"AA",
             -1,
             -1,
-            DSME_SETFR as u16
+            DSME_SETFR
         ));
         assert!(game.kernel.sis_highlight.context.borrow().is_some());
         assert!(ui::sis::draw_message(
@@ -315,7 +315,7 @@ mod tests {
             c"AA",
             -1,
             -1,
-            DSME_CLEARFR as u16
+            DSME_CLEARFR
         ));
         assert!(game.kernel.sis_highlight.context.borrow().is_none());
         context.set_foreground(Color {
@@ -330,19 +330,19 @@ mod tests {
             c"AA",
             -1,
             -1,
-            DSME_MYCOLOR as u16
+            DSME_MYCOLOR
         ));
         assert_eq!(context.foreground().r, 19);
         game.kernel
             .configuration
-            .update_preferences(|preferences| preferences.menu = OPT_PC as i32);
+            .update_preferences(|preferences| preferences.menu = OPT_PC);
         ui::sis::set_menu_flash(&game.kernel, (320, 240), true);
         assert!(game.kernel.sis_highlight.context.borrow().is_some());
         ui::sis::set_menu_flash(&game.kernel, (320, 240), false);
         assert!(game.kernel.sis_highlight.context.borrow().is_none());
-        game.kernel.configuration.update_preferences(|preferences| {
-            preferences.menu = crate::ui::settings::OPT_3DO as i32
-        });
+        game.kernel
+            .configuration
+            .update_preferences(|preferences| preferences.menu = 1);
         ui::sis::set_menu_flash(&game.kernel, (320, 240), false);
         assert!(game.kernel.sis_highlight.context.borrow().is_some());
         game.kernel.sis_highlight.context.borrow_mut().take();

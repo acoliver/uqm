@@ -102,6 +102,23 @@ pub(super) fn prepare_windows(
     (windows, num_ships)
 }
 
+pub(super) fn draw_background(module_frame: FRAME) {
+    use crate::graphics::menu as draw;
+    let frame = draw::frame(module_frame, 0);
+    if super::shipyard_layout::USE_3DO_HANGAR {
+        draw::stamp(frame, POINT { x: 0, y: 0 });
+    } else {
+        let old = draw::clip();
+        let mut clip = old;
+        clip.corner.x -= 1;
+        clip.extent.width += 2;
+        clip.extent.height += 1;
+        draw::set_clip(clip);
+        draw::stamp(frame, POINT { x: 0, y: 0 });
+        draw::set_clip(old);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -24,7 +24,7 @@ fn transact(initial: u16, delta: i16, allied: bool) -> (u16, u8, Vec<(u16, u8)>)
                 .unwrap_or_else(|| panic!("the fleet fixture fits its pool"));
             *races.get_mut(id) = FleetInfo {
                 allied_state: if index == crate::comm::dispatch::ship::SHOFIXTI_SHIP {
-                    (crate::starbase::platform::AlliedState::GoodGuy as u16) as u16
+                    crate::starbase::platform::AlliedState::GoodGuy as u16
                 } else {
                     0
                 },

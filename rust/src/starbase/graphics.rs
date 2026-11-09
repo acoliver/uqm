@@ -16,6 +16,7 @@ pub struct Graphics {
     dimensions: (i32, i32),
     contexts: [Option<ContextLease>; 3],
     fonts: [Option<FontLease>; 3],
+    off_screen: Option<ContextLease>,
     play: ContextFrame,
     gradient: ContextFrame,
     text: LoadedTextTable,
@@ -42,12 +43,18 @@ impl Graphics {
             ]
             .map(|raw| NonNull::new(raw).map(ContextLease::retain)),
             fonts: fonts.map(|font| NonNull::new(font).map(FontLease::retain)),
+            off_screen: NonNull::new(kernel.off_screen_context).map(ContextLease::retain),
             play: ContextFrame::retain(NonNull::new(kernel.play_frame)),
             gradient: ContextFrame::retain(NonNull::new(kernel.font_grad_frame)),
             text: kernel.game_text_table(),
             highlight: kernel.sis_highlight.clone(),
             pc_menu: kernel.configuration.preferences().menu == 2,
         }
+    }
+    pub fn off_screen_context(&self) -> &ContextLease {
+        self.off_screen
+            .as_ref()
+            .unwrap_or_else(|| panic!("off-screen graphics context is absent"))
     }
     fn context(&self, id: ContextId) -> &ContextLease {
         self.contexts[match id {

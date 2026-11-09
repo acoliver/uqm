@@ -83,7 +83,7 @@ fn update_resources(state: &mut crate::engine::world::SisState, delta: i16, mode
     } else {
         state.res_units.wrapping_add(i32::from(delta) as u32)
     };
-    assert_eq!(mode, (StatusMessageMode::ResUnits as u32));
+    assert_eq!(mode, StatusMessageMode::ResUnits as u32);
 }
 fn draw_number(context: &ContextLease, font: &FontLease, crew: bool, value: u16) {
     let rect = gauge_rect(crew);
@@ -463,7 +463,7 @@ mod tests {
         game.world.data.flagship.commander_name[..2].copy_from_slice(b"A\0");
         game.world.data.flagship.ship_name[..2].copy_from_slice(b"A\0");
         game.kernel
-            .set_status_message_mode((StatusMessageMode::ResUnits as u32));
+            .set_status_message_mode(StatusMessageMode::ResUnits as u32);
         delta_sis_gauges(&game.kernel, &mut game.world, 0, 0, 0);
         delta_sis_gauges(&game.kernel, &mut game.world, 5, 10, 20);
         assert_eq!(
@@ -531,10 +531,10 @@ mod tests {
         assert!(update_fuel(&mut state, -200));
         assert_eq!(state.fuel_on_board, 0);
         assert!(update_fuel(&mut state, UNDEFINED_DELTA));
-        update_resources(&mut state, -11, (StatusMessageMode::ResUnits as u32));
+        update_resources(&mut state, -11, StatusMessageMode::ResUnits as u32);
         assert_eq!(state.res_units, 0);
         state.res_units = u32::MAX;
-        update_resources(&mut state, 2, (StatusMessageMode::ResUnits as u32));
+        update_resources(&mut state, 2, StatusMessageMode::ResUnits as u32);
         assert_eq!(state.res_units, 1);
     }
 }

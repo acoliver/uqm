@@ -1,14 +1,14 @@
 //! Starbase encounters, menus and retained flagship drawing.
 #![cfg(not(test))]
 use crate::engine::input::{frames::*, InputSession};
+use crate::engine::world::activity::activity_flags;
+use crate::engine::world::activity::ActivityKind;
 use crate::engine::{
     battle::Cx,
     observe::{CheckpointView, Io},
     StoryKey, World,
 };
 use crate::graphics::{drawable_abi::LoadedDrawable, menu as draw, native_abi::*};
-use crate::mainloop::types::activity_flags;
-use crate::mainloop::types::ActivityKind;
 use crate::sound::resource_types::LoadedMusic;
 use crate::starbase::platform::StatusMessageMode;
 use crate::starbase::{
@@ -37,8 +37,7 @@ fn finish_starbase_screen(world: &mut World, menu: &mut StarbaseSession) -> bool
     stop_music();
     menu.music = None;
     if menu.state == StarbaseState::DepartBase {
-        if world.activity() & (activity_flags::CHECK_ABORT | activity_flags::CHECK_LOAD) as u16 == 0
-        {
+        if world.activity() & (activity_flags::CHECK_ABORT | activity_flags::CHECK_LOAD) == 0 {
             world.set_story_state(StoryKey::STARBASE_VISITED, 0);
         }
         return false;
@@ -87,14 +86,13 @@ fn update_starbase_screen(
     input: &InputSession,
     menu: &mut StarbaseSession,
 ) -> bool {
-    if cx.world.activity() & (activity_flags::CHECK_ABORT | activity_flags::CHECK_LOAD) as u16 != 0
-    {
+    if cx.world.activity() & (activity_flags::CHECK_ABORT | activity_flags::CHECK_LOAD) != 0 {
         menu.state = StarbaseState::DepartBase;
         return false;
     }
     input.set_menu_sounds(SOUND_ARROWS, SOUND_SELECT);
     if !menu.initialized {
-        cx.kernel.last_activity &= !(activity_flags::CHECK_LOAD as u16);
+        cx.kernel.last_activity &= !activity_flags::CHECK_LOAD;
         sis::clear_flash(cx.kernel);
         if menu.music.is_some() {
             stop_music();
@@ -165,11 +163,11 @@ unsafe fn do_time_passage(cx: &mut Cx<'_>) {
 }
 
 fn cleanup_after_star_base(world: &mut World) {
-    if world.activity() & (activity_flags::CHECK_LOAD | activity_flags::CHECK_ABORT) as u16 == 0 {
+    if world.activity() & (activity_flags::CHECK_LOAD | activity_flags::CHECK_ABORT) == 0 {
         world.set_story_state(StoryKey::GLOBAL_FLAGS_AND_DATA, 0);
-        world.set_activity(activity_flags::CHECK_LOAD as u16);
-        world.next_activity = (ActivityKind::InInterplanetary as u32) as u16
-            | activity_flags::START_INTERPLANETARY as u16;
+        world.set_activity(activity_flags::CHECK_LOAD);
+        world.next_activity =
+            (ActivityKind::InInterplanetary as u32) as u16 | activity_flags::START_INTERPLANETARY;
     }
 }
 
@@ -193,21 +191,21 @@ unsafe fn prepare_starbase_visit(cx: &mut Cx<'_>, io: &mut Io<'_>) -> Option<u32
             },
         );
         if cx.world.story_state(StoryKey::PROBE_ILWRATH_ENCOUNTER) == 0
-            || cx.world.activity() & activity_flags::CHECK_ABORT as u16 != 0
+            || cx.world.activity() & activity_flags::CHECK_ABORT != 0
         {
             cleanup_after_star_base(cx.world);
             return None;
         }
         let ship = crate::comm::dispatch::clone_npc_fragment(
             cx.world,
-            crate::comm::dispatch::ship::ILWRATH_SHIP as u8,
+            crate::comm::dispatch::ship::ILWRATH_SHIP,
             7,
         )
         .unwrap_or_else(|| panic!("starbase Ilwrath fragment capacity"));
         cx.world.npc_built_ships().get_mut(ship).race_id = BYTE::MAX;
         crate::comm::dispatch::init_communication(cx, io, crate::comm::dispatch::conv::ILWRATH);
         if cx.world.data.flagship.crew_enlisted == COUNT::MAX
-            || cx.world.activity() & activity_flags::CHECK_ABORT as u16 != 0
+            || cx.world.activity() & activity_flags::CHECK_ABORT != 0
         {
             return None;
         }
@@ -220,7 +218,7 @@ unsafe fn prepare_starbase_visit(cx: &mut Cx<'_>, io: &mut Io<'_>) -> Option<u32
                 ..Default::default()
             },
         );
-        if cx.world.activity() & activity_flags::CHECK_ABORT as u16 != 0 {
+        if cx.world.activity() & activity_flags::CHECK_ABORT != 0 {
             return None;
         }
         cx.world
@@ -228,7 +226,7 @@ unsafe fn prepare_starbase_visit(cx: &mut Cx<'_>, io: &mut Io<'_>) -> Option<u32
     }
     let previous = cx
         .kernel
-        .set_status_message_mode((StatusMessageMode::ResUnits as u32));
+        .set_status_message_mode(StatusMessageMode::ResUnits as u32);
     if cx.world.story_state(StoryKey::MOONBASE_ON_SHIP) != 0
         || cx.world.story_state(StoryKey::CHMMR_BOMB_STATE) == 2
     {
@@ -248,7 +246,7 @@ unsafe fn prepare_starbase_visit(cx: &mut Cx<'_>, io: &mut Io<'_>) -> Option<u32
                 ..Default::default()
             },
         );
-        if cx.world.activity() & activity_flags::CHECK_ABORT as u16 != 0 {
+        if cx.world.activity() & activity_flags::CHECK_ABORT != 0 {
             return None;
         }
         cx.world
@@ -304,8 +302,8 @@ pub unsafe fn install_bomb_at_earth(cx: &mut Cx<'_>) {
         SleepThreadUntil(draw::fade_screen(draw::ScreenFade::Color, 0));
     });
     cx.world.set_story_state(StoryKey::CHMMR_BOMB_STATE, 3);
-    cx.world.set_activity(activity_flags::CHECK_LOAD as u16);
-    cx.world.next_activity = (ActivityKind::InInterplanetary as u32) as u16
-        | activity_flags::START_INTERPLANETARY as u16;
+    cx.world.set_activity(activity_flags::CHECK_LOAD);
+    cx.world.next_activity =
+        (ActivityKind::InInterplanetary as u32) as u16 | activity_flags::START_INTERPLANETARY;
     cx.world.select_star(None);
 }

@@ -10,7 +10,6 @@ use crate::graphics::{menu as draw, native_abi::*};
 use crate::starbase::shipyard::SHIP_COST;
 use crate::ui::{
     rgb15,
-    settings::play_menu_sound,
     shipyard_layout::{DMS_GetEscortShipRect, SHIP_WIN_WIDTH},
     sis::delta_sis_gauges,
 };
@@ -32,15 +31,14 @@ pub(super) fn crew_transaction(cx: &mut Cx<'_>, delta: SIZE, redraw: impl FnOnce
     if bought < 0 {
         bought = if delta < 0 { 0 } else { 0x7fff };
     } else if delta > 0 {
-        if bought as i32 >= crate::starbase::shipyard::CREW_EXPENSE_THRESHOLD as i32
-            && (bought as i32 - delta as i32)
-                < crate::starbase::shipyard::CREW_EXPENSE_THRESHOLD as i32
+        if bought as i32 >= crate::starbase::shipyard::CREW_EXPENSE_THRESHOLD
+            && (bought as i32 - delta as i32) < crate::starbase::shipyard::CREW_EXPENSE_THRESHOLD
         {
             cx.world.data.game.crew_cost += 2;
             redraw(cx);
         }
-    } else if (bought as i32) < crate::starbase::shipyard::CREW_EXPENSE_THRESHOLD as i32
-        && bought as i32 - delta as i32 >= crate::starbase::shipyard::CREW_EXPENSE_THRESHOLD as i32
+    } else if (bought as i32) < crate::starbase::shipyard::CREW_EXPENSE_THRESHOLD
+        && bought as i32 - delta as i32 >= crate::starbase::shipyard::CREW_EXPENSE_THRESHOLD
     {
         cx.world.data.game.crew_cost -= 2;
         redraw(cx);
@@ -149,11 +147,7 @@ pub(super) fn dms_dismiss_escort_ship_crew(cx: &mut Cx<'_>, id: LinkId<Fragment>
         delta = -1;
         cx.world.built_ships().get_mut(id).crew_level -= 1;
     } else {
-        play_menu_sound(
-            cx.kernel,
-            cx.world,
-            crate::ui::settings::MENU_SOUND_FAILURE as u16,
-        );
+        crate::ui::settings::play_menu_failure(cx.kernel, cx.world);
     }
     cx.kernel.sis_highlight.pre_update_flash_rect();
     let slot = cx.world.built_ships().get(id).index;
@@ -166,7 +160,7 @@ pub(super) fn dms_dismiss_escort_ship_crew(cx: &mut Cx<'_>, id: LinkId<Fragment>
 pub(super) fn dms_hire_flag_ship_crew(cx: &mut Cx<'_>, input: &InputSession) -> SIZE {
     let Some(cell) = super::sis::capacity::crew_cell(
         &cx.world.data.flagship,
-        input.preferences().fonts == crate::ui::settings::OPT_PC as i32,
+        input.preferences().fonts == crate::ui::settings::OPT_PC,
     ) else {
         return 0;
     };
@@ -202,7 +196,7 @@ pub(super) fn dms_dismiss_flag_ship_crew(cx: &mut Cx<'_>, input: &InputSession) 
     };
     let cell = super::sis::capacity::crew_cell(
         &cx.world.data.flagship,
-        input.preferences().fonts == crate::ui::settings::OPT_PC as i32,
+        input.preferences().fonts == crate::ui::settings::OPT_PC,
     )
     .unwrap_or_else(|| panic!("dismissed flagship crew exceeds capacity"));
     let context = crate::graphics::context_abi::ContextLease::require(cx.kernel.space_context);

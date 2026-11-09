@@ -8,8 +8,8 @@
 //!
 //! # Runtime integration
 //!
-//! The game-facing C-ABI providers live in `crate::ui::{outfit,shipyard,starbase}`.
-//! They preserve the engine menu callbacks, graphics and encounter lifecycle.
+//! The owned runtime sessions live in `crate::ui::{outfit,shipyard,starbase}`.
+//! They preserve input, graphics and encounter ordering with supplied services.
 //! The SIS provider shares this module's tested fuel-capacity rule. The pure
 //! screen models below remain separate from those runtime event loops; their
 //! Save/Load and ShipSpin routes still return typed `Unported` errors rather
@@ -40,8 +40,6 @@
 //! - [`shipyard`]: Shipyard rules (`shipyard.c`); `shipyard_screen` (private)
 //!   is the screen (`do_shipyard`, `DoModifyShips`).
 
-#[cfg(not(test))]
-pub mod cffi;
 pub mod draw;
 pub mod fuel;
 pub mod gfx;

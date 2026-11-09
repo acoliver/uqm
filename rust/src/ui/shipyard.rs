@@ -1,5 +1,5 @@
 //! Shipyard menu, crew transactions and hangar animation, ported from shipyard.c.
-use crate::mainloop::types::activity_flags;
+use crate::engine::world::activity::activity_flags;
 use crate::starbase::ids;
 use crate::starbase::sis_modules as equipment;
 use crate::starbase::sis_modules::ModuleType;
@@ -20,7 +20,7 @@ use crate::graphics::{
     context_abi::ContextFrame, drawable_abi::LoadedDrawable, menu as draw,
     palette_cycle::PaletteCycle,
 };
-use crate::ui::{rgb15, settings::play_menu_sound};
+use crate::ui::rgb15;
 use catalog::{get_available_race_count, get_available_race_from_index};
 use crew::{
     crew_transaction, dms_dismiss_escort_ship_crew, dms_dismiss_flag_ship_crew,
@@ -42,9 +42,7 @@ use sis::{
 
 use std::ptr;
 
-use super::shipyard_layout::{
-    DMS_GetEscortShipRect, DMS_MoveCursor, SHIP_WIN_HEIGHT, SHIP_WIN_WIDTH, USE_3DO_HANGAR,
-};
+use super::shipyard_layout::{DMS_MoveCursor, SHIP_WIN_HEIGHT, SHIP_WIN_WIDTH, USE_3DO_HANGAR};
 const HANGAR_ANIM_RATE: u32 = 15;
 const SHIPYARD: u32 = 2;
 const SHIPYARD_CREW: u8 = 0;
@@ -89,13 +87,12 @@ fn draw_race_strings(
     let mut r = draw::clip();
     let mut stamp = STAMP {
         origin: POINT {
-            x: (4 + cx.screen_dimensions().0 - ids::STATUS_WIDTH as i32 - ids::SAFE_X as i32)
-                as i16
+            x: (4 + cx.screen_dimensions().0 - ids::STATUS_WIDTH - ids::SAFE_X as i32) as i16
                 - r.corner.x,
-            y: (ids::SIS_ORG_Y as i32 + cx.screen_dimensions().1
+            y: (ids::SIS_ORG_Y + cx.screen_dimensions().1
                 - ids::SAFE_Y as i32 * 2
                 - 13
-                - ids::RADAR_HEIGHT as i32) as i16
+                - ids::RADAR_HEIGHT) as i16
                 - r.corner.y,
         },
         frame: ptr::null_mut(),
@@ -185,7 +182,7 @@ fn show_combat_ship(
                 let info = &mut windows[i as usize];
                 let clip = RECT {
                     corner: POINT {
-                        x: ids::SIS_ORG_X as i16 + info.finished.x,
+                        x: ids::SIS_ORG_X + info.finished.x,
                         y: ids::SIS_ORG_Y as i16 + info.finished.y,
                     },
                     extent: EXTENT {
@@ -299,11 +296,7 @@ fn dms_modify_crew(
         }
     };
     if delta == 0 {
-        play_menu_sound(
-            cx.kernel,
-            cx.world,
-            crate::ui::settings::MENU_SOUND_FAILURE as u16,
-        );
+        crate::ui::settings::play_menu_failure(cx.kernel, cx.world);
     }
     if handle.is_some() {
         menu.delta_item &= MODIFY_CREW_FLAG;
@@ -348,11 +341,7 @@ fn dms_try_add_escort_ship(cx: &mut Cx<'_>, input: &InputSession, menu: &mut Shi
             dms_set_mode(cx, input, menu.state, ModifyMode::EditCrew);
         };
     } else {
-        play_menu_sound(
-            cx.kernel,
-            cx.world,
-            crate::ui::settings::MENU_SOUND_FAILURE as u16,
-        );
+        crate::ui::settings::play_menu_failure(cx.kernel, cx.world);
     }
 }
 
@@ -529,7 +518,7 @@ fn do_modify_ships(
     io: &mut Io<'_>,
     services: &super::MenuServices,
 ) -> BOOLEAN {
-    if cx.world.activity() & activity_flags::CHECK_ABORT as u16 != 0 {
+    if cx.world.activity() & activity_flags::CHECK_ABORT != 0 {
         menu.page = ShipyardPage::Main;
         return 1;
     }
@@ -623,7 +612,7 @@ fn draw_blue_print(
     draw::foreground(rgb15(0, 0, 0x16));
     draw::filled_stamp(stamp.frame, stamp.origin);
     for slot in 0..ids::NUM_DRIVE_SLOTS {
-        let piece = flagship.drive_slots[slot as usize];
+        let piece = flagship.drive_slots[slot];
         draw_piece(
             cx.kernel,
             flagship,
@@ -635,7 +624,7 @@ fn draw_blue_print(
         );
     }
     for slot in 0..ids::NUM_JET_SLOTS {
-        let piece = flagship.jet_slots[slot as usize];
+        let piece = flagship.jet_slots[slot];
         draw_piece(
             cx.kernel,
             flagship,
@@ -647,7 +636,7 @@ fn draw_blue_print(
         );
     }
     for slot in 0..equipment::NUM_MODULE_SLOTS {
-        let piece = flagship.module_slots[slot as usize];
+        let piece = flagship.module_slots[slot];
         if !(menu.state as u32 == SHIPYARD && piece as u32 == ModuleType::CrewPod as u32) {
             draw_piece(
                 cx.kernel,
@@ -662,7 +651,7 @@ fn draw_blue_print(
     }
     draw::foreground(rgb15(0x0a, 0x0a, 0x1f));
     for slot in 0..equipment::NUM_MODULE_SLOTS {
-        let piece = flagship.module_slots[slot as usize];
+        let piece = flagship.module_slots[slot];
         if menu.state as u32 == SHIPYARD && piece as u32 == ModuleType::CrewPod as u32 {
             draw_piece(
                 cx.kernel,
@@ -678,7 +667,7 @@ fn draw_blue_print(
     super::sis::capacity::draw_blueprint_cells(
         context,
         flagship,
-        input.preferences().fonts == crate::ui::settings::OPT_PC as i32,
+        input.preferences().fonts == crate::ui::settings::OPT_PC,
     );
     drop(blueprints);
 }
@@ -700,7 +689,7 @@ fn do_shipyard(
     services: &super::MenuServices,
 ) -> BOOLEAN {
     let size = cx.screen_dimensions();
-    if cx.world.activity() & activity_flags::CHECK_ABORT as u16 != 0 {
+    if cx.world.activity() & activity_flags::CHECK_ABORT != 0 {
         return exit_shipyard(input, menu);
     }
     let select = input.pulsed().menu[KEY_MENU_SELECT as usize] != 0;
@@ -735,21 +724,8 @@ fn do_shipyard(
             draw_blue_print(cx, input, menu, &flagship, &context);
             menu.state = SHIPYARD_CREW;
             draw_campaign_menu(cx, PM_CREW as BYTE, menu.state as i16);
-            let stamp = STAMP {
-                origin: POINT { x: 0, y: 0 },
-                frame: draw::frame(menu.assets.modules(), 0),
-            };
-            if USE_3DO_HANGAR {
-                draw::stamp(stamp.frame, stamp.origin);
-            } else {
-                let old_r = draw::clip();
-                let mut r = old_r;
-                r.corner.x -= 1;
-                r.extent.width += 2;
-                r.extent.height += 1;
-                draw::set_clip(r);
-                draw::stamp(stamp.frame, stamp.origin);
-                draw::set_clip(old_r);
+            hangar::draw_background(menu.assets.modules());
+            if !USE_3DO_HANGAR {
                 animate_power_lines(menu, true);
             }
             draw::font(cx.kernel.tiny_font);

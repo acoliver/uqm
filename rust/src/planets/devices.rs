@@ -17,8 +17,8 @@ use crate::comm::{
     locdata::{CColor, CRect},
 };
 use crate::starbase::{
-    cffi::CffiPlatform,
     gfx::{Align, ContextId, FontId, Gfx, Point, Rect, Rgba, TextDraw},
+    graphics::Graphics,
 };
 use crate::state::game_state_keys::{get_game_state as get, set_game_state as set};
 
@@ -62,8 +62,7 @@ fn color(r: u8, g: u8, b: u8) -> CColor {
     }
 }
 
-fn draw_device(id: u8, pos: usize, selected: bool) {
-    let g = CffiPlatform;
+fn draw_device(g: &Graphics, id: u8, pos: usize, selected: bool) {
     let y = 33 + pos as i16 * 18 + 2;
     g.set_fg_color(if selected {
         Rgba::rgb15(10, 10, 31)
@@ -95,8 +94,7 @@ fn draw_device(id: u8, pos: usize, selected: bool) {
     }
 }
 
-unsafe fn draw(menu: &Menu, old: Option<usize>, refresh: bool) {
-    let g = CffiPlatform;
+fn draw(menu: &Menu, g: &Graphics, old: Option<usize>, refresh: bool) {
     g.batch();
     g.set_context(ContextId::Status);
     if refresh {
@@ -134,12 +132,12 @@ unsafe fn draw(menu: &Menu, old: Option<usize>, refresh: bool) {
                     y: 34 + pos as i16 * 18,
                 },
             );
-            draw_device(*id, pos, false);
+            draw_device(g, *id, pos, false);
         }
     } else if let Some(old) = old.filter(|old| *old != menu.selected) {
-        draw_device(menu.list[old], old - menu.top, false);
+        draw_device(g, menu.list[old], old - menu.top, false);
     }
-    draw_device(menu.list[menu.selected], menu.selected - menu.top, true);
+    draw_device(g, menu.list[menu.selected], menu.selected - menu.top, true);
     g.unbatch();
 }
 
@@ -342,7 +340,12 @@ unsafe fn frame(
         };
         let refresh = top != menu.top;
         menu.top = top;
-        cx.with_legacy(|| draw(menu, Some(old), refresh));
+        draw(
+            menu,
+            &Graphics::new(cx.kernel, cx.screen_dimensions()),
+            Some(old),
+            refresh,
+        );
         cx.kernel.device_observation.selected = next;
         publish(cx.kernel, io);
     }
@@ -399,6 +402,11 @@ unsafe fn prepare_devices_menu(cx: &mut Cx<'_>) -> Option<Menu> {
     };
     cx.kernel.device_observation.list = Some(menu.list.clone());
     cx.kernel.device_observation.selected = 0;
-    cx.with_legacy(|| draw(&menu, None, true));
+    draw(
+        &menu,
+        &Graphics::new(cx.kernel, cx.screen_dimensions()),
+        None,
+        true,
+    );
     Some(menu)
 }

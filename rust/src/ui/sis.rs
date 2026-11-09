@@ -1,7 +1,7 @@
+use crate::engine::world::activity::activity_flags;
 use crate::engine::Kernel;
 use crate::engine::World;
 use crate::graphics::context_abi::ContextLease;
-use crate::mainloop::types::activity_flags;
 use crate::starbase::ids;
 use crate::ui::palette::pilot_color;
 use crate::ui::rgb15;
@@ -61,7 +61,7 @@ pub fn draw_autopilot_message(
     let autopilot = world.data.game.autopilot;
     let fuel_empty = world.data.flagship.fuel_on_board == 0;
     let on = (autopilot.x != -1 && autopilot.y != -1) || fuel_empty;
-    let can_draw = world.activity() & activity_flags::CHECK_ABORT as u16 == 0
+    let can_draw = world.activity() & activity_flags::CHECK_ABORT == 0
         && world.data.flagship.crew_enlisted != u16::MAX;
     kernel
         .pilot_flash
@@ -69,7 +69,7 @@ pub fn draw_autopilot_message(
         .update(on, can_draw, now, |update| match update {
             PilotUpdate::DefaultMessage => {
                 let text = default_message_text(kernel, world);
-                draw_message(kernel, width, &text, -1, -1, DSME_NONE as u16);
+                draw_message(kernel, width, &text, -1, -1, DSME_NONE);
             }
             PilotUpdate::Pulse(phase) => {
                 let context = ContextLease::require(kernel.off_screen_context);
@@ -78,7 +78,7 @@ pub fn draw_autopilot_message(
                     let text = kernel.game_text(
                         (ids::NAVIGATION_STRING_BASE + if fuel_empty { 2 } else { 3 }) as usize,
                     );
-                    draw_message(kernel, width, text, -1, -1, DSME_MYCOLOR as u16);
+                    draw_message(kernel, width, text, -1, -1, DSME_MYCOLOR);
                 });
             }
         });
