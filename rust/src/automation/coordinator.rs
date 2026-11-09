@@ -1606,7 +1606,11 @@ impl AutomationObserver {
             let preview = self.ui.encounter_menu_active();
             let conversation = self.ui.conversation_snapshot().active;
             let contact = preview || conversation;
-            let snapshot = crate::automation::input_ffi::contact_snapshot(world, step.race);
+            let snapshot = crate::automation::input_ffi::contact_snapshot(
+                world,
+                self.ui.solar_snapshot(),
+                step.race,
+            );
             let control = if contact {
                 Default::default()
             } else if let Some((snapshot, same_view)) = snapshot {
@@ -1663,6 +1667,7 @@ impl AutomationObserver {
         {
             let snapshot = crate::automation::input_ffi::navigation_snapshot(
                 world,
+                self.ui.solar_snapshot(),
                 i32::from(navigation.planet),
                 None,
             );
@@ -1753,6 +1758,7 @@ impl AutomationObserver {
         {
             let snapshot = crate::automation::input_ffi::navigation_snapshot(
                 world,
+                self.ui.solar_snapshot(),
                 i32::from(navigation.planet),
                 Some(i32::from(navigation.moon)),
             );
