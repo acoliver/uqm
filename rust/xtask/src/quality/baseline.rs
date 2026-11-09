@@ -14,6 +14,7 @@ pub struct Baseline {
     pub lint: BTreeMap<String, BTreeMap<String, u64>>,
     pub expect_sites: BTreeMap<String, super::expect_sites::Proof>,
     pub coverage_debt: BTreeMap<String, String>,
+    pub coverage_moves: crate::coverage::moves::State,
 }
 
 impl Baseline {
@@ -31,6 +32,7 @@ impl Baseline {
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false),
             coverage_debt: crate::coverage::debt::read(&document)?,
+            coverage_moves: crate::coverage::moves::read(&document)?,
             ..Self::default()
         };
         if let Some(table) = document.get("lint").and_then(toml_edit::Item::as_table) {
@@ -85,6 +87,7 @@ impl Baseline {
         let mut document = toml_edit::DocumentMut::new();
         document.insert("layers", toml_edit::value(self.layers));
         crate::coverage::debt::write(&mut document, &self.coverage_debt);
+        crate::coverage::moves::write(&mut document, &self.coverage_moves)?;
         if !self.lint.is_empty() {
             let mut hosts = toml_edit::Table::new();
             hosts.set_implicit(true);

@@ -91,9 +91,6 @@ pub fn status(command: &mut Command) -> Result<(), String> {
     }
 }
 
-pub fn identities(root: &Path) -> Result<BTreeMap<String, String>, String> {
-    Ok(identities_from(&super::walk::measure(root, None, false)?))
-}
 pub(crate) fn identities_from(
     measurement: &super::metrics::Measurement,
 ) -> BTreeMap<String, String> {

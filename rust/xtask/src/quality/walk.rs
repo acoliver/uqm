@@ -578,11 +578,23 @@ impl Walker {
         }
     }
 
-    fn function(&mut self, signature: &syn::Signature, block: &syn::Block) {
+    fn function(&mut self, signature: &syn::Signature, block: &syn::Block, declaration: Span) {
         self.definition(&signature.ident);
         self.context.hooks.clear();
         if self.names.is_some() {
             return;
+        }
+        if !self.generated {
+            let start = declaration.start();
+            let end = block.span().end();
+            self.measurement
+                .coverage_functions
+                .push(crate::coverage::source::Function {
+                    identity: self.context.module.clone(),
+                    file: self.context.file.clone(),
+                    start: (start.line, start.column),
+                    end: (end.line, end.column),
+                });
         }
         let (cyclomatic, cognitive) =
             match metrics::Complexity::measure_configured(block, &self.context.configs) {
