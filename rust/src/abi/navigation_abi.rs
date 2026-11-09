@@ -1,4 +1,3 @@
-use crate::engine::{battle::Cx, input::InputSession, observe::Io};
 use crate::graphics::flash::{FlashState, FlashType};
 pub use crate::engine::battle::{CollisionHook, ElementHook};
 // Shared engine records used by the Rust runtime.
@@ -1781,41 +1780,6 @@ pub use crate::mainloop::input_abi::live::SetInputCallback;
 
 #[cfg(not(test))]
 pub use crate::mainloop::input_abi::live::DoInput;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct joy_char {
-    _unused: [u8; 0],
-}
-pub type joy_char_t = joy_char;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct textentry_state {
-    pub Initialized: BOOLEAN,
-    pub NextTime: DWORD,
-    pub Success: BOOLEAN,
-    pub CacheStr: *mut UNICODE,
-    pub JoyAlphaString: STRING,
-    pub JoystickMode: BOOLEAN,
-    pub UpperRegister: BOOLEAN,
-    pub JoyAlpha: *mut joy_char_t,
-    pub JoyAlphaLength: ::std::os::raw::c_int,
-    pub JoyUpper: *mut joy_char_t,
-    pub JoyLower: *mut joy_char_t,
-    pub JoyRegLength: ::std::os::raw::c_int,
-    pub InsPt: *mut UNICODE,
-    pub BaseStr: *mut UNICODE,
-    pub CursorPos: ::std::os::raw::c_int,
-    pub MaxSize: ::std::os::raw::c_int,
-    pub ChangeCallback: Option<ChangeFn>,
-    pub FrameCallback: Option<FrameFn>,
-    pub CbParam: *mut ::std::os::raw::c_void,
-}
-pub type ChangeFn = unsafe fn(*mut textentry_state, &mut Cx<'_>, &InputSession) -> u32;
-pub type FrameFn = unsafe fn(*mut textentry_state, &mut Cx<'_>, &mut Io<'_>, &InputSession) -> u32;
-pub type TEXTENTRY_STATE = textentry_state;
-
-#[cfg(not(test))]
-pub use crate::ui::getchar::do_text_entry;
 pub const OPT_ENABLABLE_OPTVAL_DISABLED: OPT_ENABLABLE = 0;
 pub const OPT_ENABLABLE_OPTVAL_ENABLED: OPT_ENABLABLE = 1;
 pub type OPT_ENABLABLE = ::std::os::raw::c_uint;

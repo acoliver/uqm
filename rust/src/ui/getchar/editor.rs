@@ -204,9 +204,15 @@ impl<'a> Editor<'a> {
         true
     }
 
-    fn joystick(&mut self, alphabet: &Alphabet, up: bool, down: bool, page: bool) -> bool {
+    fn joystick(
+        &mut self,
+        alphabet: &Alphabet,
+        up: bool,
+        down: bool,
+        page: bool,
+    ) -> Result<bool, ()> {
         let Some(first) = alphabet.characters.first().copied() else {
-            return false;
+            return Ok(false);
         };
         self.joystick = true;
         let actual = self.text()[self.position..].chars().next();
@@ -237,7 +243,15 @@ impl<'a> Editor<'a> {
         } else {
             next = Alphabet::switch(next, &alphabet.upper, &alphabet.lower);
         }
-        next != current && self.replace(actual.map_or(0, char::len_utf8), Some(next))
+        if next == current {
+            return Ok(false);
+        }
+        let changed = self.replace(actual.map_or(0, char::len_utf8), Some(next));
+        if !changed && actual.is_none() {
+            Err(())
+        } else {
+            Ok(changed)
+        }
     }
 
     fn cursor_keys(&mut self, pulse: &InputState) -> bool {
@@ -305,12 +319,15 @@ impl<'a> Editor<'a> {
         .iter()
         .any(|key| pressed(*key))
         {
-            changed |= self.joystick(
+            match self.joystick(
                 alphabet,
                 pressed(KEY_MENU_UP),
                 pressed(KEY_MENU_DOWN),
                 pressed(KEY_MENU_PAGE_UP) || pressed(KEY_MENU_PAGE_DOWN),
-            );
+            ) {
+                Ok(edited) => changed |= edited,
+                Err(()) => crate::ui::settings::play_menu_sound(cx.kernel, cx.world, 2),
+            }
         }
         if pressed(KEY_MENU_SELECT) {
             self.success = true;

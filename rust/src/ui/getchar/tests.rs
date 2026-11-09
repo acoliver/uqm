@@ -33,15 +33,15 @@ fn joystick_wraps_alphabet_and_changes_case_without_advancing_cursor() {
     let mut buffer = [0; 8];
     let mut editor = Editor::new(&mut buffer, 8, 0);
     let alphabet = Alphabet::new(c"AÉZ", c"AÉ", c"aé");
-    assert!(editor.joystick(&alphabet, false, true, false));
+    assert_eq!(editor.joystick(&alphabet, false, true, false), Ok(true));
     assert_eq!(editor.view().text, c"É");
     assert_eq!(editor.view().cursor, 0);
     assert!(editor.view().joystick);
-    assert!(editor.joystick(&alphabet, false, false, true));
+    assert_eq!(editor.joystick(&alphabet, false, false, true), Ok(true));
     assert_eq!(editor.view().text, c"é");
-    assert!(editor.joystick(&alphabet, true, false, false));
+    assert_eq!(editor.joystick(&alphabet, true, false, false), Ok(true));
     assert_eq!(editor.view().text, c"a");
-    assert!(editor.joystick(&alphabet, true, false, false));
+    assert_eq!(editor.joystick(&alphabet, true, false, false), Ok(true));
     assert_eq!(editor.view().text, c"Z");
 }
 
@@ -56,4 +56,45 @@ fn capacity_applies_to_the_terminator_and_existing_text() {
         Editor::new(&mut buffer, 3, 0);
     })
     .is_err());
+}
+
+#[test]
+fn joystick_distinguishes_a_full_append_from_an_unchanged_existing_character() {
+    let alphabet = Alphabet::new(c"AÉZ", c"AÉ", c"aé");
+    let mut buffer = *b"a\0";
+    let mut editor = Editor::new(&mut buffer, 2, 1);
+    assert_eq!(editor.joystick(&alphabet, false, true, false), Err(()));
+    assert_eq!(editor.view().text, c"a");
+    editor.move_left();
+    assert_eq!(editor.joystick(&alphabet, false, true, false), Ok(false));
+    assert_eq!(editor.view().text, c"a");
+}
+
+#[test]
+fn cursor_keys_use_character_boundaries_and_keep_their_original_precedence() {
+    let mut buffer = [0; 16];
+    buffer[..7].copy_from_slice("aé界\0".as_bytes());
+    let mut editor = Editor::new(&mut buffer, 16, 0);
+    let mut press = |key| {
+        let mut pulse = InputState::default();
+        pulse.menu[key as usize] = 1;
+        editor.cursor_keys(&pulse)
+    };
+    assert!(press(KEY_MENU_RIGHT));
+    assert!(press(KEY_MENU_END));
+    assert!(press(KEY_MENU_LEFT));
+    assert!(press(KEY_MENU_BACKSPACE));
+    assert!(press(KEY_MENU_DELETE));
+    assert!(press(KEY_MENU_HOME));
+    assert!(!press(KEY_MENU_LEFT));
+    assert!(!press(KEY_MENU_BACKSPACE));
+    assert_eq!(editor.view().text, c"a");
+    assert_eq!(editor.view().cursor, 0);
+    let mut pulse = InputState::default();
+    pulse.menu[KEY_MENU_DELETE as usize] = 1;
+    pulse.menu[KEY_MENU_RIGHT as usize] = 1;
+    assert!(editor.cursor_keys(&pulse));
+    assert_eq!(editor.view().text, c"");
+    assert_eq!(editor.view().cursor, 0);
+    assert!(!editor.cursor_keys(&pulse));
 }
