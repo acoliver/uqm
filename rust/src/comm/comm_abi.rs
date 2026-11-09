@@ -193,9 +193,7 @@ pub unsafe fn set_text_cache_frame(comm: &mut Comm, frame: *mut c_void) {
 pub fn anim_context(comm: &mut Comm) -> *mut c_void {
     comm.display.anim_context
 }
-/// # Safety
-/// Game thread only.
-pub unsafe fn clear_subtitles_pending(comm: &mut Comm) -> i32 {
+pub fn clear_subtitles_pending(comm: &mut Comm) -> i32 {
     i32::from(comm.display.clear_subtitles)
 }
 pub fn reset_clear_subtitles(comm: &mut Comm) {
@@ -273,6 +271,7 @@ mod owner_tests {
         let _: fn(&mut Comm) = setup_subtitle_text_from_comm_data;
         let _: fn(&mut Comm) -> *mut c_void = anim_context;
         let _: fn(&mut Comm) = reset_clear_subtitles;
+        let _: fn(&mut Comm) -> i32 = clear_subtitles_pending;
         fn move_baseline(comm: &mut Comm) {
             comm.data.alien_text_baseline.y = 23;
         }
