@@ -261,21 +261,23 @@ pub(super) mod c_bridge {
     }
 
     /// Play alien music from CommData.AlienSong (port of c_PlayAlienMusic).
-    pub unsafe fn play_alien_music(comm: &mut Comm, enabled: bool) {
+    pub fn play_alien_music(comm: &mut Comm, enabled: bool) {
         let song = comm.data.alien_song;
         if song.is_null() {
             return;
         }
-        remember_native_music(NonNull::new(song.cast()), true, 1, enabled);
+        // SAFETY: the encounter retains the loaded song through synchronous sample admission.
+        unsafe { remember_native_music(NonNull::new(song.cast()), true, 1, enabled) };
     }
 
     /// Apply alien colormap from CommData.AlienColorMap (port of c_SetColorMapFromCommData).
-    pub unsafe fn set_color_map_from_comm_data(comm: &mut Comm) {
+    pub fn set_color_map_from_comm_data(comm: &mut Comm) {
         let cmap = comm.data.alien_colormap;
         if cmap.is_null() {
             return;
         }
-        SetColorMap(GetColorMapAddress((cmap).cast()));
+        // SAFETY: hail retains the loaded colormap until encounter resource teardown.
+        unsafe { SetColorMap(GetColorMapAddress((cmap).cast())) };
     }
 }
 
@@ -927,7 +929,7 @@ pub fn player_response_input(
 /// # Safety
 /// Must be called from the game thread with CommData fully initialized.
 pub unsafe fn alien_talk_first_call_init(_comm: &mut Comm, cx: &mut Cx<'_>) {
-    let enabled = cx.world.data.game.glob_flags & 8 == 0;
+    let _enabled = cx.world.data.game.glob_flags & 8 == 0;
     #[cfg(not(test))]
     cx.with_legacy(|| {
         rust_init_speech_graphics(_comm);
@@ -935,7 +937,7 @@ pub unsafe fn alien_talk_first_call_init(_comm: &mut Comm, cx: &mut Cx<'_>) {
         c_bridge::draw_alien_frame(_comm, 0, 1);
         rust_update_speech_graphics(_comm);
         comm_intro_transition(_comm);
-        c_bridge::play_alien_music(_comm, enabled);
+        c_bridge::play_alien_music(_comm, _enabled);
         c_bridge::FadeMusic((c_bridge::music_volume::BACKGROUND) as u8, 0i16);
         c_bridge::init_comm_animations(_comm);
     });
@@ -1498,16 +1500,9 @@ fn run_comm_anim_frame(_input: &crate::engine::input::InputSession, comm: &mut C
 /// @plan PLAN-20260325-COMMPT3.P03
 /// @requirement REQ-MU-001, REQ-MU-002
 /// @pseudocode 001-colormap-music-bridges lines 09-15
-fn play_alien_music(comm: &mut Comm, enabled: bool) {
+fn play_alien_music(_comm: &mut Comm, _enabled: bool) {
     #[cfg(not(test))]
-    unsafe {
-        let _ = comm;
-        c_bridge::play_alien_music(comm, enabled);
-    }
-    #[cfg(test)]
-    {
-        let _ = comm;
-    }
+    c_bridge::play_alien_music(_comm, _enabled);
 }
 
 fn set_music_background_vol(comm: &mut Comm) {
@@ -1557,16 +1552,9 @@ fn fade_music_to_background(comm: &mut Comm) {
 /// @plan PLAN-20260325-COMMPT3.P03
 /// @requirement REQ-CM-001, REQ-CM-002
 /// @pseudocode 001-colormap-music-bridges lines 01-08
-fn set_colormap(comm: &mut Comm) {
+fn set_colormap(_comm: &mut Comm) {
     #[cfg(not(test))]
-    unsafe {
-        let _ = comm;
-        c_bridge::set_color_map_from_comm_data(comm);
-    }
-    #[cfg(test)]
-    {
-        let _ = comm;
-    }
+    c_bridge::set_color_map_from_comm_data(_comm);
 }
 
 fn draw_alien_frame(comm: &mut Comm) {
