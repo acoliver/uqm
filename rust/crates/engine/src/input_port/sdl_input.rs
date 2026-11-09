@@ -44,7 +44,21 @@ const MENU_NAMES: &[&str] = &[
 ];
 const FLIGHT_NAMES: &[&str] = &["up", "down", "left", "right", "weapon", "special", "escape"];
 
-use super::templates::input_templates as INPUT_TEMPLATES;
+use super::templates::bounded_template_name;
+
+pub fn input_templates() -> [CString; 6] {
+    INPUT
+        .lock()
+        .names
+        .clone()
+        .map(|name| CString::new(name).unwrap_or_else(|_| unreachable!("template NUL")))
+}
+
+pub fn rename_template(index: usize, name: &CStr) -> CString {
+    let name = bounded_template_name(name);
+    INPUT.lock().names[index] = name.to_string_lossy().into_owned();
+    name
+}
 #[cfg(not(test))]
 use crate::threading::legacy_abi::TaskSwitch;
 
@@ -121,6 +135,7 @@ struct InputState {
     num_templates: usize,
     num_flight: usize,
     controls: Vec<VCONTROL_GESTURE>,
+    names: [String; 6],
     initialized: bool,
     character_mode: bool,
     applied_character_mode: bool,
@@ -136,6 +151,7 @@ impl InputState {
             num_templates: 0,
             num_flight: 0,
             controls: Vec::new(),
+            names: [const { String::new() }; 6],
             initialized: false,
             character_mode: false,
             applied_character_mode: false,
@@ -182,15 +198,12 @@ impl InputState {
     unsafe fn register_flight(&mut self) {
         for template in 0..self.num_templates {
             let key = resource_key(format!("keys.{}.name", template + 1));
-            let dest = ptr::addr_of_mut!(INPUT_TEMPLATES)
-                .cast::<c_char>()
-                .add(template * 30);
-            if res_IsString(key.as_ptr()) != 0 {
-                libc::strncpy(dest, res_GetString(key.as_ptr()), 29);
-                *dest.add(29) = 0;
+            let name = if res_IsString(key.as_ptr()) != 0 {
+                CStr::from_ptr(res_GetString(key.as_ptr()))
             } else {
-                *dest = 0;
-            }
+                c""
+            };
+            self.names[template] = bounded_template_name(name).to_string_lossy().into_owned();
             for (control, name) in FLIGHT_NAMES.iter().take(self.num_flight).enumerate() {
                 for alternate in 0..ALTERNATES {
                     let key = flight_key(template, name, alternate);
@@ -404,13 +417,17 @@ pub unsafe extern "C" fn InterrogateInputState(
     buffer: *mut c_char,
     maxlen: c_int,
 ) {
+    let text = control_name(template, control, alternate);
+    write_buffer(buffer, maxlen, &text);
+}
+
+pub fn control_name(template: c_int, control: c_int, alternate: c_int) -> String {
     let state = INPUT.lock();
     let Some(index) = state.control_index(template, control, alternate) else {
         crate::log_abi::log_message(3, "InterrogateInputState(): invalid control index");
-        *buffer = 0;
-        return;
+        return String::new();
     };
-    let text = match state.controls[index].to_gesture() {
+    match state.controls[index].to_gesture() {
         Some(Gesture::Key(key)) => key_name(key).to_owned(),
         Some(Gesture::JoyButton { port, button }) => format!("[J{} B{}]", port as i32, button + 1),
         Some(Gesture::JoyAxis {
@@ -424,12 +441,8 @@ pub unsafe extern "C" fn InterrogateInputState(
             if polarity > 0 { '+' } else { '-' }
         ),
         Some(Gesture::JoyHat { port, hat, dir }) => format!("[J{} H{} {}]", port as i32, hat, dir),
-        None => {
-            *buffer = 0;
-            return;
-        }
-    };
-    write_buffer(buffer, maxlen, &text);
+        None => String::new(),
+    }
 }
 
 #[no_mangle]
@@ -440,16 +453,16 @@ pub extern "C" fn RemoveInputState(template: c_int, control: c_int, alternate: c
         return;
     };
     let target = state.target(template as usize, control as usize);
-    unsafe {
-        vcontrol_remove_gesture_binding(&mut state.controls[index], target);
-        state.controls[index].gesture_type = VCONTROL_NONE;
-        let key = flight_key(
-            template as usize,
-            FLIGHT_NAMES[control as usize],
-            alternate as usize,
-        );
-        res_Remove(key.as_ptr());
-    }
+    // SAFETY: the validated indices refer to this provider's retained vectors.
+    unsafe { vcontrol_remove_gesture_binding(&mut state.controls[index], target) };
+    state.controls[index].gesture_type = VCONTROL_NONE;
+    let key = flight_key(
+        template as usize,
+        FLIGHT_NAMES[control as usize],
+        alternate as usize,
+    );
+    // SAFETY: the resource key remains terminated and live for the synchronous removal.
+    unsafe { res_Remove(key.as_ptr()) };
 }
 
 #[no_mangle]
@@ -459,9 +472,10 @@ pub extern "C" fn RebindInputState(template: c_int, control: c_int, alternate: c
         return;
     };
     RemoveInputState(template, control, alternate);
+    let mut gesture = empty_gesture();
+    // SAFETY: the initialized native provider owns the gesture queue and pumps it synchronously.
     unsafe {
         ffi::rust_vcontrol_clear_gesture();
-        let mut gesture = empty_gesture();
         while vcontrol_get_last_gesture(&mut gesture) == 0 {
             // TaskSwitch pumps SDL events in the single-threaded game runtime.
             #[cfg(not(test))]
@@ -469,18 +483,19 @@ pub extern "C" fn RebindInputState(template: c_int, control: c_int, alternate: c
             #[cfg(test)]
             crate::threading::task_switch();
         }
-        let mut state = INPUT.lock();
-        vcontrol_add_gesture_binding(
-            &mut gesture,
-            state.target(template as usize, control as usize),
-        );
+    }
+    let mut state = INPUT.lock();
+    let target = state.target(template as usize, control as usize);
+    let key = flight_key(
+        template as usize,
+        FLIGHT_NAMES[control as usize],
+        alternate as usize,
+    );
+    let mut value = [0 as c_char; 40];
+    // SAFETY: validated indices retain the destination and the formatter's full output buffer.
+    unsafe {
+        vcontrol_add_gesture_binding(&mut gesture, target);
         state.controls[index] = gesture;
-        let key = flight_key(
-            template as usize,
-            FLIGHT_NAMES[control as usize],
-            alternate as usize,
-        );
-        let mut value = [0 as c_char; 40];
         vcontrol_dump_gesture(value.as_mut_ptr(), 39, &mut state.controls[index]);
         res_PutString(key.as_ptr(), value.as_ptr());
     }

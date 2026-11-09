@@ -452,93 +452,63 @@ pub unsafe extern "C" fn SaveResourceIndex(
     if file.is_null() {
         return;
     }
-
-    let mut guard = match RESOURCE_STATE.lock() {
-        Ok(g) => g,
-        Err(poisoned) => poisoned.into_inner(),
-    };
-    ensure_init(&mut guard);
-
-    let state = guard.as_ref().unwrap();
-
-    let root_str = if root.is_null() {
+    let prefix = if root.is_null() {
         None
     } else {
         cstr_to_str(root)
     };
-
-    // Collect entries matching root prefix and serialize
-    let mut lines: Vec<String> = Vec::new();
-    let mut keys: Vec<&String> = state.dispatch.entries.keys().collect();
-    keys.sort();
-
-    for key in keys {
-        if let Some(prefix) = root_str {
-            if !key.starts_with(prefix) {
-                continue;
-            }
-        }
-
-        let desc = &state.dispatch.entries[key];
-
-        // @plan PLAN-20260314-RESOURCE.P07
-        // @requirement REQ-RES-IDX-005
-        // Skip entries without toString function — this filters out heap types
-        // and unknown types that can't be serialized back to config format.
-
-        // Look up the handler for this entry's type_handler_key (not res_type,
-        // since unknown types have res_type != type_handler_key)
-        let handler = state.dispatch.type_registry.lookup(&desc.type_handler_key);
-        let to_string_fn = match handler.and_then(|h| h.to_string) {
-            Some(f) => f,
-            None => continue, // Skip entries without toString
-        };
-
-        // Serialize the entry using toString.
-        // STRING types: use the Rust fname directly — avoids unsafe str_ptr
-        // which can hold a dangling/invalid pointer after type changes.
-        let serialized = if desc.res_type == "STRING" {
-            format!("{}:{}", desc.res_type, desc.fname)
-        } else {
-            let mut buf = [0u8; 256];
-            let mut data_copy: ResourceData = unsafe { std::ptr::read(&desc.data) };
-            unsafe {
-                to_string_fn(&mut data_copy, buf.as_mut_ptr() as *mut c_char, 256);
-            }
-            let len = buf.iter().position(|&b| b == 0).unwrap_or(256);
-            let value_str = std::str::from_utf8(&buf[..len]).unwrap_or("");
-            format!("{}:{}", desc.res_type, value_str)
-        };
-
-        let output_key = if strip_root != 0 {
-            if let Some(prefix) = root_str {
-                key.strip_prefix(prefix).unwrap_or(key)
-            } else {
-                key.as_str()
-            }
-        } else {
-            key.as_str()
-        };
-
-        lines.push(format!("{} = {}\n", output_key, serialized));
-    }
-
-    // Open output file
-    let mode = c"wt".as_ptr() as *const c_char;
-    let fp = uio_fopen(dir, file, mode);
+    let lines = serialize_index(prefix, strip_root != 0);
+    let fp = uio_fopen(dir, file, c"wt".as_ptr());
     if fp.is_null() {
         log::warn!("SaveResourceIndex: failed to open file for writing");
         return;
     }
-
-    for line in &lines {
-        let bytes = line.as_bytes();
-        uio_fwrite(bytes.as_ptr() as *const c_void, 1, bytes.len(), (fp).cast());
+    for line in lines {
+        uio_fwrite(line.as_ptr().cast(), 1, line.len(), fp.cast());
     }
-
     uio_fclose(fp);
 }
 
+pub(super) fn serialize_index(prefix: Option<&str>, strip: bool) -> Vec<String> {
+    with_dispatch(|dispatch| {
+        let mut keys: Vec<_> = dispatch.entries.keys().collect();
+        keys.sort();
+        let mut lines = Vec::new();
+        for key in keys {
+            if prefix.is_some_and(|prefix| !key.starts_with(prefix)) {
+                continue;
+            }
+            let desc = &dispatch.entries[key];
+            let Some(to_string) = dispatch
+                .type_registry
+                .lookup(&desc.type_handler_key)
+                .and_then(|handler| handler.to_string)
+            else {
+                continue;
+            };
+            let value = if desc.res_type == "STRING" {
+                desc.fname.clone()
+            } else {
+                let mut buffer = [0u8; 256];
+                // SAFETY: the dispatch lock retains the descriptor/registered handler;
+                // the callback receives a local data copy and its complete output buffer.
+                let mut data = desc.data;
+                unsafe { to_string(&mut data, buffer.as_mut_ptr().cast(), 256) };
+                let len = buffer.iter().position(|byte| *byte == 0).unwrap_or(256);
+                std::str::from_utf8(&buffer[..len]).unwrap_or("").to_owned()
+            };
+            let output_key = if strip {
+                prefix
+                    .and_then(|prefix| key.strip_prefix(prefix))
+                    .unwrap_or(key)
+            } else {
+                key
+            };
+            lines.push(format!("{output_key} = {}:{value}\n", desc.res_type));
+        }
+        lines
+    })
+}
 // =============================================================================
 // Type registration
 // =============================================================================
@@ -583,7 +553,7 @@ pub unsafe extern "C" fn InstallResTypeVectors(
 // Resource access
 // =============================================================================
 
-fn with_dispatch<R>(access: impl FnOnce(&mut ResourceDispatch) -> R) -> R {
+pub(super) fn with_dispatch<R>(access: impl FnOnce(&mut ResourceDispatch) -> R) -> R {
     let mut guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
     ensure_init(&mut guard);
     access(

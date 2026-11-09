@@ -666,8 +666,27 @@ impl RestartMenuOps for CffiOps<'_, '_, '_> {
         })
     }
     fn setup_menu(&self) {
-        // SAFETY: the restart session owns the initialized display and input runtime.
-        unsafe { self.owned(|cx, io| crate::front_end::setupmenu::runtime::setup_menu(cx, io)) }
+        self.owned(|cx, io| {
+            use crate::front_end::setupmenu::{setup_menu, SetupConfiguration, SetupResources};
+            use uqm_engine::{
+                configuration::runtime::RuntimeSettings, graphics::context_abi::ContextLease,
+                resource::settings::Settings,
+            };
+            let context = ContextLease::require(cx.kernel.screen_context);
+            let runtime = RuntimeSettings::capture(&context);
+            let font = cx
+                .kernel
+                .battle_font()
+                .unwrap_or_else(|| panic!("setup font not loaded"));
+            let resources = SetupResources::load(context, font);
+            let configuration = SetupConfiguration {
+                input: cx.kernel.input_runtime().input().clone(),
+                runtime,
+                settings: Settings,
+                names: uqm_engine::input_port::templates::input_templates(),
+            };
+            setup_menu(cx, io, configuration, resources);
+        })
     }
     fn free_game_data(&self) {
         // SAFETY: the stopped game session owns its resources and suspends itself for callbacks.

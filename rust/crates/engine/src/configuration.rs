@@ -1,4 +1,5 @@
 //! Application preferences and startup values retained by their consumers.
+pub mod runtime;
 
 use std::ffi::CString;
 use std::sync::{Arc, Mutex, MutexGuard};
