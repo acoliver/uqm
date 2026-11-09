@@ -160,7 +160,6 @@ fn live_callbacks_keep_the_supplied_session_and_phrase_owner(
         fleets.get_mut(id).crew_level = 10;
         fleets.put(id);
     }
-    drop(fleets);
     let mut battle = Battle::new();
     let mut cx = Cx::new(
         &mut battle,
