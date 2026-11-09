@@ -1,15 +1,16 @@
 use super::Handler;
 use crate::comm::races::alliance::AllianceApi;
+#[cfg(test)]
 use crate::engine::StoryKey;
 use crate::planets::universe_units::{universe_to_logx, universe_to_logy};
 use crate::starbase::sis_modules::{ModuleType, EMPTY_MODULE_SLOT, FUEL_RESERVE};
 
-pub(super) trait ChmmrApi: AllianceApi<Handler> {
+pub(crate) trait ChmmrApi: AllianceApi<Handler> {
     fn refit(&mut self);
     fn intro_mode(&mut self, mode: i32, duration: i32);
 }
 
-fn refit(glob: &mut crate::engine::WorldData, starbase: bool) {
+pub(crate) fn refit(glob: &mut crate::engine::WorldData, starbase: bool) {
     let ship = &mut glob.flagship;
     let game = &mut glob.game;
     ship.res_units = 1_000_000;
@@ -77,25 +78,9 @@ fn refit(glob: &mut crate::engine::WorldData, starbase: bool) {
         .map(|module| module as u8),
     );
 }
-#[cfg(not(test))]
-impl ChmmrApi for super::super::script::live::LiveScript<'_, '_, Handler> {
-    fn refit(&mut self) {
-        use crate::comm::races::script::ScriptApi;
-        let starbase = self.get(StoryKey::STARBASE_AVAILABLE) != 0;
 
-        {
-            refit(&mut self.cx.borrow_mut().world.data, starbase);
-        }
-    }
-    fn intro_mode(&mut self, mode: i32, duration: i32) {
-        self.cx.borrow_mut().with_legacy(|| {
-            use crate::comm::comm_abi::SetCommIntroMode;
-            SetCommIntroMode(mode as u32, duration as u32);
-        })
-    }
-}
 #[cfg(test)]
-pub(super) struct World {
+pub(crate) struct World {
     pub glob: crate::engine::WorldData,
     pub refits: usize,
     pub intros: Vec<(i32, i32)>,

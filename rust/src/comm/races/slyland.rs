@@ -2,197 +2,128 @@
 //!
 //! @plan PLAN-20260724-MAINLOOP-AND-COMM.P13-15
 
-use super::script::as_comm_data;
-use crate::comm::types::CommData;
-use crate::engine::battle::Cx;
-
 // ---------------------------------------------------------------------------
 // String indices (from strings.h)
 // ---------------------------------------------------------------------------
 
-const WE_COME_IN_PEACE_1: u32 = 1;
-const WE_COME_IN_PEACE_2: u32 = 2;
-const WE_COME_IN_PEACE_3: u32 = 3;
-const WE_COME_IN_PEACE_4: u32 = 4;
-const WE_COME_IN_PEACE_5: u32 = 5;
-const WE_COME_IN_PEACE_6: u32 = 6;
-const WE_COME_IN_PEACE_7: u32 = 7;
-const WE_COME_IN_PEACE_8: u32 = 8;
-const THREAT_1: u32 = 9;
-const THREAT_2: u32 = 10;
-const THREAT_3: u32 = 11;
-const THREAT_4: u32 = 12;
-const PROGRAMMED_TO_DEFEND_1: u32 = 13;
-const PROGRAMMED_TO_DEFEND_2: u32 = 14;
-const PROGRAMMED_TO_DEFEND_3: u32 = 15;
-const PROGRAMMED_TO_DEFEND_4: u32 = 16;
-const SOMETHING_WRONG_1: u32 = 17;
-const SOMETHING_WRONG_2: u32 = 18;
-const SOMETHING_WRONG_3: u32 = 19;
-const SOMETHING_WRONG_4: u32 = 20;
-const NOMINAL_FUNCTION_1: u32 = 21;
-const NOMINAL_FUNCTION_2: u32 = 22;
-const NOMINAL_FUNCTION_3: u32 = 23;
-const NOMINAL_FUNCTION_4: u32 = 24;
-const WE_ARE_US_1: u32 = 25;
-const WE_ARE_US_2: u32 = 26;
-const WE_ARE_US_3: u32 = 27;
-const WE_ARE_US_4: u32 = 28;
-const THIS_IS_PROBE_1: u32 = 29;
-const THIS_IS_PROBE_2: u32 = 30;
-const THIS_IS_PROBE_3: u32 = 31;
-const THIS_IS_PROBE_40: u32 = 32;
-const THIS_IS_PROBE_41: u32 = 33;
-const THIS_IS_PROBE_42: u32 = 34;
-const WHY_ATTACK_1: u32 = 35;
-const WHY_ATTACK_2: u32 = 36;
-const WHY_ATTACK_3: u32 = 37;
-const WHY_ATTACK_4: u32 = 38;
-const PEACEFUL_MISSION_1: u32 = 39;
-const PEACEFUL_MISSION_2: u32 = 40;
-const PEACEFUL_MISSION_3: u32 = 41;
-const PEACEFUL_MISSION_4: u32 = 42;
-const BYE_1: u32 = 43;
-const BYE_2: u32 = 44;
-const BYE_3: u32 = 45;
-const BYE_4: u32 = 46;
-const GOODBYE_1: u32 = 47;
-const GOODBYE_2: u32 = 48;
-const GOODBYE_3: u32 = 49;
-const GOODBYE_4: u32 = 50;
-const HOSTILE: u32 = 51;
-const DESTRUCT_SEQUENCE: u32 = 52;
-const DESTRUCT_CODE: u32 = 53;
-const COORD_PLUS: u32 = 54;
-const COORD_MINUS: u32 = 55;
-const COORD_POINT: u32 = 56;
-const ENUMERATE_HUNDRED: u32 = 57;
-const ENUMERATE_THOUSAND: u32 = 58;
-const ENUMERATE_ZERO: u32 = 59;
-const ENUMERATE_ONE: u32 = 60;
-const ENUMERATE_TWO: u32 = 61;
-const ENUMERATE_THREE: u32 = 62;
-const ENUMERATE_FOUR: u32 = 63;
-const ENUMERATE_FIVE: u32 = 64;
-const ENUMERATE_SIX: u32 = 65;
-const ENUMERATE_SEVEN: u32 = 66;
-const ENUMERATE_EIGHT: u32 = 67;
-const ENUMERATE_NINE: u32 = 68;
-const ENUMERATE_TEN: u32 = 69;
-const ENUMERATE_ELEVEN: u32 = 70;
-const ENUMERATE_TWELVE: u32 = 71;
-const ENUMERATE_THIRTEEN: u32 = 72;
-const ENUMERATE_FOURTEEN: u32 = 73;
-const ENUMERATE_FIFTEEN: u32 = 74;
-const ENUMERATE_SIXTEEN: u32 = 75;
-const ENUMERATE_SEVENTEEN: u32 = 76;
-const ENUMERATE_EIGHTEEN: u32 = 77;
-const ENUMERATE_NINETEEN: u32 = 78;
-const ENUMERATE_TWENTY: u32 = 79;
-const ENUMERATE_THIRTY: u32 = 80;
-const ENUMERATE_FOURTY: u32 = 81;
-const ENUMERATE_FIFTY: u32 = 82;
-const ENUMERATE_SIXTY: u32 = 83;
-const ENUMERATE_SEVENTY: u32 = 84;
-const ENUMERATE_EIGHTY: u32 = 85;
-const ENUMERATE_NINETY: u32 = 86;
+pub(crate) const WE_COME_IN_PEACE_1: u32 = 1;
+pub(crate) const WE_COME_IN_PEACE_2: u32 = 2;
+pub(crate) const WE_COME_IN_PEACE_3: u32 = 3;
+pub(crate) const WE_COME_IN_PEACE_4: u32 = 4;
+pub(crate) const WE_COME_IN_PEACE_5: u32 = 5;
+pub(crate) const WE_COME_IN_PEACE_6: u32 = 6;
+pub(crate) const WE_COME_IN_PEACE_7: u32 = 7;
+pub(crate) const WE_COME_IN_PEACE_8: u32 = 8;
+pub(crate) const THREAT_1: u32 = 9;
+pub(crate) const THREAT_2: u32 = 10;
+pub(crate) const THREAT_3: u32 = 11;
+pub(crate) const THREAT_4: u32 = 12;
+pub(crate) const PROGRAMMED_TO_DEFEND_1: u32 = 13;
+pub(crate) const PROGRAMMED_TO_DEFEND_2: u32 = 14;
+pub(crate) const PROGRAMMED_TO_DEFEND_3: u32 = 15;
+pub(crate) const PROGRAMMED_TO_DEFEND_4: u32 = 16;
+pub(crate) const SOMETHING_WRONG_1: u32 = 17;
+pub(crate) const SOMETHING_WRONG_2: u32 = 18;
+pub(crate) const SOMETHING_WRONG_3: u32 = 19;
+pub(crate) const SOMETHING_WRONG_4: u32 = 20;
+pub(crate) const NOMINAL_FUNCTION_1: u32 = 21;
+pub(crate) const NOMINAL_FUNCTION_2: u32 = 22;
+pub(crate) const NOMINAL_FUNCTION_3: u32 = 23;
+pub(crate) const NOMINAL_FUNCTION_4: u32 = 24;
+pub(crate) const WE_ARE_US_1: u32 = 25;
+pub(crate) const WE_ARE_US_2: u32 = 26;
+pub(crate) const WE_ARE_US_3: u32 = 27;
+pub(crate) const WE_ARE_US_4: u32 = 28;
+pub(crate) const THIS_IS_PROBE_1: u32 = 29;
+pub(crate) const THIS_IS_PROBE_2: u32 = 30;
+pub(crate) const THIS_IS_PROBE_3: u32 = 31;
+pub(crate) const THIS_IS_PROBE_40: u32 = 32;
+pub(crate) const THIS_IS_PROBE_41: u32 = 33;
+pub(crate) const THIS_IS_PROBE_42: u32 = 34;
+pub(crate) const WHY_ATTACK_1: u32 = 35;
+pub(crate) const WHY_ATTACK_2: u32 = 36;
+pub(crate) const WHY_ATTACK_3: u32 = 37;
+pub(crate) const WHY_ATTACK_4: u32 = 38;
+pub(crate) const PEACEFUL_MISSION_1: u32 = 39;
+pub(crate) const PEACEFUL_MISSION_2: u32 = 40;
+pub(crate) const PEACEFUL_MISSION_3: u32 = 41;
+pub(crate) const PEACEFUL_MISSION_4: u32 = 42;
+pub(crate) const BYE_1: u32 = 43;
+pub(crate) const BYE_2: u32 = 44;
+pub(crate) const BYE_3: u32 = 45;
+pub(crate) const BYE_4: u32 = 46;
+pub(crate) const GOODBYE_1: u32 = 47;
+pub(crate) const GOODBYE_2: u32 = 48;
+pub(crate) const GOODBYE_3: u32 = 49;
+pub(crate) const GOODBYE_4: u32 = 50;
+pub(crate) const HOSTILE: u32 = 51;
+pub(crate) const DESTRUCT_SEQUENCE: u32 = 52;
+pub(crate) const DESTRUCT_CODE: u32 = 53;
+pub(crate) const COORD_PLUS: u32 = 54;
+pub(crate) const COORD_MINUS: u32 = 55;
+pub(crate) const COORD_POINT: u32 = 56;
+pub(crate) const ENUMERATE_HUNDRED: u32 = 57;
+pub(crate) const ENUMERATE_THOUSAND: u32 = 58;
+pub(crate) const ENUMERATE_ZERO: u32 = 59;
+pub(crate) const ENUMERATE_ONE: u32 = 60;
+pub(crate) const ENUMERATE_TWO: u32 = 61;
+pub(crate) const ENUMERATE_THREE: u32 = 62;
+pub(crate) const ENUMERATE_FOUR: u32 = 63;
+pub(crate) const ENUMERATE_FIVE: u32 = 64;
+pub(crate) const ENUMERATE_SIX: u32 = 65;
+pub(crate) const ENUMERATE_SEVEN: u32 = 66;
+pub(crate) const ENUMERATE_EIGHT: u32 = 67;
+pub(crate) const ENUMERATE_NINE: u32 = 68;
+pub(crate) const ENUMERATE_TEN: u32 = 69;
+pub(crate) const ENUMERATE_ELEVEN: u32 = 70;
+pub(crate) const ENUMERATE_TWELVE: u32 = 71;
+pub(crate) const ENUMERATE_THIRTEEN: u32 = 72;
+pub(crate) const ENUMERATE_FOURTEEN: u32 = 73;
+pub(crate) const ENUMERATE_FIFTEEN: u32 = 74;
+pub(crate) const ENUMERATE_SIXTEEN: u32 = 75;
+pub(crate) const ENUMERATE_SEVENTEEN: u32 = 76;
+pub(crate) const ENUMERATE_EIGHTEEN: u32 = 77;
+pub(crate) const ENUMERATE_NINETEEN: u32 = 78;
+pub(crate) const ENUMERATE_TWENTY: u32 = 79;
+pub(crate) const ENUMERATE_THIRTY: u32 = 80;
+pub(crate) const ENUMERATE_FOURTY: u32 = 81;
+pub(crate) const ENUMERATE_FIFTY: u32 = 82;
+pub(crate) const ENUMERATE_SIXTY: u32 = 83;
+pub(crate) const ENUMERATE_SEVENTY: u32 = 84;
+pub(crate) const ENUMERATE_EIGHTY: u32 = 85;
+pub(crate) const ENUMERATE_NINETY: u32 = 86;
 
-mod api;
-use api::SlylandApi;
+pub(crate) mod api;
+pub(crate) use api::SlylandApi;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Handler {
+pub(crate) enum Handler {
     Combat,
 }
 
-struct Dialogue<'a, A> {
-    api: &'a mut A,
+pub(crate) struct Dialogue<'a, A> {
+    pub(crate) api: &'a mut A,
 }
 
 mod logic;
-mod numbers;
+pub(crate) mod numbers;
 
 // ---------------------------------------------------------------------------
 // Resource keys (from resinst.h)
 // ---------------------------------------------------------------------------
 
-const RACE_PMAP_ANIM: &[u8] = b"comm.probe.graphics\0";
-const RACE_FONT: &[u8] = b"comm.probe.font\0";
-const RACE_COLOR_MAP: &[u8] = b"comm.probe.colortable\0";
-const RACE_MUSIC: &[u8] = b"comm.probe.music\0";
-const RACE_CONVERSATION_PHRASES: &[u8] = b"comm.probe.dialogue\0";
-mod descriptor;
-use descriptor::descriptor;
+pub(crate) const RACE_PMAP_ANIM: &[u8] = b"comm.probe.graphics\0";
+pub(crate) const RACE_FONT: &[u8] = b"comm.probe.font\0";
+pub(crate) const RACE_COLOR_MAP: &[u8] = b"comm.probe.colortable\0";
+pub(crate) const RACE_MUSIC: &[u8] = b"comm.probe.music\0";
+pub(crate) const RACE_CONVERSATION_PHRASES: &[u8] = b"comm.probe.dialogue\0";
 
-#[cfg(not(test))]
-pub(crate) mod live {
-    use super::super::script::live::LiveScript;
-    use super::*;
-
-    fn run(cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, LiveScript<'_, '_, Handler>>)) {
-        let mut api = LiveScript::new(cx, callback);
-        f(&mut Dialogue { api: &mut api });
-    }
-
-    fn combat(cx: &mut Cx<'_>, response: u32) {
-        run(cx, |dialogue| {
-            dialogue.handle(Handler::Combat, response as i32)
-        });
-    }
-
-    fn callback(_: Handler) -> crate::comm::response::ResponseFunc {
-        combat
-    }
-
-    pub(super) fn intro(cx: &mut Cx<'_>) {
-        run(cx, |dialogue| dialogue.intro());
-    }
-    pub(super) fn post(_cx: &mut Cx<'_>) {}
-    pub(super) fn uninit(_cx: &mut Cx<'_>) -> u16 {
-        0
-    }
-    pub unsafe fn init_slyland_comm(cx: &mut Cx<'_>) -> crate::comm::locdata::CLocData {
-        extern "C" {
-            static mut ScreenWidth: i32;
-        }
-        let mut d = descriptor(ScreenWidth);
-        d.alien_text_baseline.x = (1 + ((ScreenWidth - 80) >> 1)) as i16;
-        d.alien_text_width = (ScreenWidth - 80 - 16) as u16;
-        run(cx, |s| s.initialize());
-        d
-    }
-}
+#[cfg(test)]
+use crate::comm::descriptors::slyland::descriptor;
 
 #[cfg(test)]
 #[path = "slyland/tests.rs"]
 mod branch_tests;
-
-/// Slyland race dialogue implementation.
-pub struct SlylandDialogue;
-
-impl super::RaceDialogue for SlylandDialogue {
-    fn init(&self, _cx: &mut Cx<'_>) -> CommData {
-        #[cfg(not(test))]
-        {
-            unsafe { as_comm_data(&live::init_slyland_comm(_cx)) }
-        }
-        #[cfg(test)]
-        {
-            as_comm_data(&descriptor(320))
-        }
-    }
-
-    fn intro(&self, _cx: &mut Cx<'_>) {
-        #[cfg(not(test))]
-        live::intro(_cx);
-    }
-
-    fn post_encounter(&self, _cx: &mut Cx<'_>) {}
-
-    fn uninit(&self, _cx: &mut Cx<'_>) -> u32 {
-        0
-    }
-}
 
 #[cfg(test)]
 mod tests {

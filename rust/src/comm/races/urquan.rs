@@ -2,19 +2,16 @@
 //!
 //! @plan PLAN-20260724-MAINLOOP-AND-COMM.P13-15
 
-use super::script::{animation, as_comm_data};
-use crate::comm::locdata::{CColor, CLocData, CPoint};
-use crate::comm::types::CommData;
-use crate::engine::battle::Cx;
+pub(crate) use crate::comm::locdata::CPoint;
 
-mod api;
-mod dialogue;
+pub(crate) mod api;
+pub(crate) mod dialogue;
 mod phrases;
 
 #[cfg(test)]
 mod parity_tests;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Handler {
+pub(crate) enum Handler {
     Combat,
     Normal,
     Hypno,
@@ -27,84 +24,84 @@ enum Handler {
 // String indices (from strings.h)
 // ---------------------------------------------------------------------------
 
-const HELLO_SAMATRA: u32 = 1;
-const SENSE_EVIL: u32 = 2;
-const INIT_URQUAN_WAKE_UP: u32 = 3;
-const WHERE_AM_I: u32 = 4;
-const YOU_ARE_HERE: u32 = 5;
-const WHY_DOES_MY_HEAD_HURT: u32 = 6;
-const HURTS_BECAUSE: u32 = 7;
-const WHAT_ABOUT_2_WEEKS: u32 = 8;
-const ABOUT_2_WEEKS: u32 = 9;
-const COMPULSION: u32 = 10;
-const WHAT_COMPULSION: u32 = 11;
-const WASCALLY_LITTLE_GUY: u32 = 12;
-const WHAT_IT_LOOK_LIKE: u32 = 13;
-const TERRAN_AMPHIBIAN: u32 = 14;
-const TALKING_PET_ON_STEROIDS: u32 = 15;
-const BAD_NEWS: u32 = 16;
-const TURD_AND_TOAD: u32 = 17;
-const WHAT_IS_TURD_AND_TOAD: u32 = 18;
-const ALIEN_MIND_CONTROL: u32 = 19;
-const WHAT_FELT_LIKE: u32 = 20;
-const POSSESSED_BY_DEVIL: u32 = 21;
-const STUPID_DEVIL: u32 = 22;
-const FALLING_ASLEEP: u32 = 23;
-const SOMEONE_ELSE_CONTROLLED: u32 = 24;
-const SOUNDS_FAMILIAR: u32 = 25;
-const BEFORE_COFFEE: u32 = 26;
-const EXPLAIN: u32 = 27;
-const WHY_EXPLAIN: u32 = 28;
-const MUST_EXPLAIN: u32 = 29;
-const BYE_INIT_HYPNO: u32 = 30;
-const GOODBYE_AND_DIE_INIT_HYPNO: u32 = 31;
-const SUBSEQUENT_URQUAN_WAKE_UP: u32 = 32;
-const UH_OH: u32 = 33;
-const NO_UH_OH: u32 = 34;
-const STOP_MEETING: u32 = 35;
-const NO_STOP_MEETING: u32 = 36;
-const BYE_SUB_HYPNO: u32 = 37;
-const GOODBYE_AND_DIE_SUB_HYPNO: u32 = 38;
-const CAUGHT_YA: u32 = 39;
-const INIT_FLEE_HUMAN: u32 = 40;
-const SUBSEQUENT_FLEE_HUMAN: u32 = 41;
-const WHY_FLEE: u32 = 42;
-const FLEE_BECAUSE: u32 = 43;
-const WHAT_HAPPENS_NOW: u32 = 44;
-const HAPPENS_NOW: u32 = 45;
-const WHAT_ABOUT_YOU: u32 = 46;
-const ABOUT_US: u32 = 47;
-const BYE_WARS_OVER: u32 = 48;
-const GOODBYE_WARS_OVER: u32 = 49;
-const SEND_MESSAGE: u32 = 50;
-const INIT_HELLO: u32 = 51;
-const SUBSEQUENT_HELLO_1: u32 = 52;
-const SUBSEQUENT_HELLO_2: u32 = 53;
-const SUBSEQUENT_HELLO_3: u32 = 54;
-const SUBSEQUENT_HELLO_4: u32 = 55;
-const YOU_MUST_SURRENDER: u32 = 56;
-const NOPE: u32 = 57;
-const I_SURRENDER: u32 = 58;
-const DISOBEDIENCE_PUNISHED: u32 = 59;
-const I_WONT_SURRENDER: u32 = 60;
-const BAD_CHOICE: u32 = 61;
-const I_WILL_SURRENDER: u32 = 62;
-const GOOD_CHOICE: u32 = 63;
-const KEY_PHRASE: u32 = 64;
-const URQUAN_STORY: u32 = 65;
-const LIKE_TO_LEAVE: u32 = 66;
-const INDEPENDENCE_IS_BAD: u32 = 67;
-const WHATS_UP_1: u32 = 68;
-const GENERAL_INFO_1: u32 = 69;
-const WHATS_UP_2: u32 = 70;
-const GENERAL_INFO_2: u32 = 71;
-const WHATS_UP_3: u32 = 72;
-const GENERAL_INFO_3: u32 = 73;
-const WHATS_UP_4: u32 = 74;
-const GENERAL_INFO_4: u32 = 75;
-const OUT_TAKES: u32 = 76;
+pub(crate) const HELLO_SAMATRA: u32 = 1;
+pub(crate) const SENSE_EVIL: u32 = 2;
+pub(crate) const INIT_URQUAN_WAKE_UP: u32 = 3;
+pub(crate) const WHERE_AM_I: u32 = 4;
+pub(crate) const YOU_ARE_HERE: u32 = 5;
+pub(crate) const WHY_DOES_MY_HEAD_HURT: u32 = 6;
+pub(crate) const HURTS_BECAUSE: u32 = 7;
+pub(crate) const WHAT_ABOUT_2_WEEKS: u32 = 8;
+pub(crate) const ABOUT_2_WEEKS: u32 = 9;
+pub(crate) const COMPULSION: u32 = 10;
+pub(crate) const WHAT_COMPULSION: u32 = 11;
+pub(crate) const WASCALLY_LITTLE_GUY: u32 = 12;
+pub(crate) const WHAT_IT_LOOK_LIKE: u32 = 13;
+pub(crate) const TERRAN_AMPHIBIAN: u32 = 14;
+pub(crate) const TALKING_PET_ON_STEROIDS: u32 = 15;
+pub(crate) const BAD_NEWS: u32 = 16;
+pub(crate) const TURD_AND_TOAD: u32 = 17;
+pub(crate) const WHAT_IS_TURD_AND_TOAD: u32 = 18;
+pub(crate) const ALIEN_MIND_CONTROL: u32 = 19;
+pub(crate) const WHAT_FELT_LIKE: u32 = 20;
+pub(crate) const POSSESSED_BY_DEVIL: u32 = 21;
+pub(crate) const STUPID_DEVIL: u32 = 22;
+pub(crate) const FALLING_ASLEEP: u32 = 23;
+pub(crate) const SOMEONE_ELSE_CONTROLLED: u32 = 24;
+pub(crate) const SOUNDS_FAMILIAR: u32 = 25;
+pub(crate) const BEFORE_COFFEE: u32 = 26;
+pub(crate) const EXPLAIN: u32 = 27;
+pub(crate) const WHY_EXPLAIN: u32 = 28;
+pub(crate) const MUST_EXPLAIN: u32 = 29;
+pub(crate) const BYE_INIT_HYPNO: u32 = 30;
+pub(crate) const GOODBYE_AND_DIE_INIT_HYPNO: u32 = 31;
+pub(crate) const SUBSEQUENT_URQUAN_WAKE_UP: u32 = 32;
+pub(crate) const UH_OH: u32 = 33;
+pub(crate) const NO_UH_OH: u32 = 34;
+pub(crate) const STOP_MEETING: u32 = 35;
+pub(crate) const NO_STOP_MEETING: u32 = 36;
+pub(crate) const BYE_SUB_HYPNO: u32 = 37;
+pub(crate) const GOODBYE_AND_DIE_SUB_HYPNO: u32 = 38;
+pub(crate) const CAUGHT_YA: u32 = 39;
+pub(crate) const INIT_FLEE_HUMAN: u32 = 40;
+pub(crate) const SUBSEQUENT_FLEE_HUMAN: u32 = 41;
+pub(crate) const WHY_FLEE: u32 = 42;
+pub(crate) const FLEE_BECAUSE: u32 = 43;
+pub(crate) const WHAT_HAPPENS_NOW: u32 = 44;
+pub(crate) const HAPPENS_NOW: u32 = 45;
+pub(crate) const WHAT_ABOUT_YOU: u32 = 46;
+pub(crate) const ABOUT_US: u32 = 47;
+pub(crate) const BYE_WARS_OVER: u32 = 48;
+pub(crate) const GOODBYE_WARS_OVER: u32 = 49;
+pub(crate) const SEND_MESSAGE: u32 = 50;
+pub(crate) const INIT_HELLO: u32 = 51;
+pub(crate) const SUBSEQUENT_HELLO_1: u32 = 52;
+pub(crate) const SUBSEQUENT_HELLO_2: u32 = 53;
+pub(crate) const SUBSEQUENT_HELLO_3: u32 = 54;
+pub(crate) const SUBSEQUENT_HELLO_4: u32 = 55;
+pub(crate) const YOU_MUST_SURRENDER: u32 = 56;
+pub(crate) const NOPE: u32 = 57;
+pub(crate) const I_SURRENDER: u32 = 58;
+pub(crate) const DISOBEDIENCE_PUNISHED: u32 = 59;
+pub(crate) const I_WONT_SURRENDER: u32 = 60;
+pub(crate) const BAD_CHOICE: u32 = 61;
+pub(crate) const I_WILL_SURRENDER: u32 = 62;
+pub(crate) const GOOD_CHOICE: u32 = 63;
+pub(crate) const KEY_PHRASE: u32 = 64;
+pub(crate) const URQUAN_STORY: u32 = 65;
+pub(crate) const LIKE_TO_LEAVE: u32 = 66;
+pub(crate) const INDEPENDENCE_IS_BAD: u32 = 67;
+pub(crate) const WHATS_UP_1: u32 = 68;
+pub(crate) const GENERAL_INFO_1: u32 = 69;
+pub(crate) const WHATS_UP_2: u32 = 70;
+pub(crate) const GENERAL_INFO_2: u32 = 71;
+pub(crate) const WHATS_UP_3: u32 = 72;
+pub(crate) const GENERAL_INFO_3: u32 = 73;
+pub(crate) const WHATS_UP_4: u32 = 74;
+pub(crate) const GENERAL_INFO_4: u32 = 75;
+pub(crate) const OUT_TAKES: u32 = 76;
 
-fn text_layout(screen_width: i32) -> (CPoint, u16) {
+pub(crate) fn text_layout(screen_width: i32) -> (CPoint, u16) {
     let text_width = screen_width - 80;
     (
         CPoint {
@@ -115,164 +112,8 @@ fn text_layout(screen_width: i32) -> (CPoint, u16) {
     )
 }
 
-fn descriptor(screen_width: i32) -> CLocData {
-    let (baseline, width) = text_layout(screen_width);
-    let mut d = CLocData {
-        alien_frame_res: c"comm.urquan.graphics".as_ptr(),
-        alien_font_res: c"comm.urquan.font".as_ptr(),
-        alien_colormap_res: c"comm.urquan.colortable".as_ptr(),
-        alien_song_res: c"comm.urquan.music".as_ptr(),
-        conversation_phrases_res: c"comm.urquan.dialogue".as_ptr(),
-        alien_text_fcolor: CColor {
-            r: 255,
-            g: 255,
-            b: 255,
-            a: 255,
-        },
-        alien_text_bcolor: CColor {
-            r: 0,
-            g: 0,
-            b: 0,
-            a: 255,
-        },
-        alien_text_baseline: baseline,
-        alien_text_width: width,
-        alien_text_align: 1,
-        alien_text_valign: 0,
-        num_animations: 7,
-        ..CLocData::default()
-    };
-    d.alien_ambient_array[0] = animation(7, 6, 1 << 1, (84, 0), (84, 0));
-    for (index, start) in [13, 16, 19].into_iter().enumerate() {
-        d.alien_ambient_array[index + 1] = animation(start, 3, 1 << 2, (42, 0), (840, 2520));
-    }
-    for (index, (start, frames)) in [(22, 7), (29, 7), (36, 8)].into_iter().enumerate() {
-        d.alien_ambient_array[index + 4] = animation(start, frames, 1 << 1, (56, 0), (840, 2520));
-    }
-    d.alien_transition_desc = animation(1, 2, 0, (140, 0), (0, 0));
-    d.alien_talk_desc = animation(2, 5, 0, (56, 0), (70, 0));
-    #[cfg(not(test))]
-    {
-        d.init_encounter_func = Some(live::intro);
-        d.post_encounter_func = Some(live::post);
-        d.uninit_encounter_func = Some(live::uninit);
-    }
-    d
-}
-
-#[cfg(not(test))]
-pub(crate) mod live {
-    use super::super::script::live::LiveScript;
-    use super::*;
-
-    fn run(
-        cx: &mut Cx<'_>,
-        f: impl FnOnce(&mut dialogue::Dialogue<'_, LiveScript<'_, '_, Handler>>),
-    ) {
-        let mut api = LiveScript::new(cx, callback);
-        f(&mut dialogue::Dialogue { api: &mut api });
-    }
-
-    fn combat(cx: &mut Cx<'_>, response: u32) {
-        run(cx, |dialogue| {
-            dialogue.handle(Handler::Combat, response as i32)
-        });
-    }
-    fn normal(cx: &mut Cx<'_>, response: u32) {
-        run(cx, |dialogue| {
-            dialogue.handle(Handler::Normal, response as i32)
-        });
-    }
-    fn hypno(cx: &mut Cx<'_>, response: u32) {
-        run(cx, |dialogue| {
-            dialogue.handle(Handler::Hypno, response as i32)
-        });
-    }
-    fn mention_compulsion(cx: &mut Cx<'_>, response: u32) {
-        run(cx, |dialogue| {
-            dialogue.handle(Handler::MentionCompulsion, response as i32)
-        });
-    }
-    fn describe_pet(cx: &mut Cx<'_>, response: u32) {
-        run(cx, |dialogue| {
-            dialogue.handle(Handler::DescribePet, response as i32)
-        });
-    }
-    fn describe_compulsion(cx: &mut Cx<'_>, response: u32) {
-        run(cx, |dialogue| {
-            dialogue.handle(Handler::DescribeCompulsion, response as i32)
-        });
-    }
-    fn loser(cx: &mut Cx<'_>, response: u32) {
-        run(cx, |dialogue| {
-            dialogue.handle(Handler::Loser, response as i32)
-        });
-    }
-
-    fn callback(handler: Handler) -> crate::comm::response::ResponseFunc {
-        match handler {
-            Handler::Combat => combat,
-            Handler::Normal => normal,
-            Handler::Hypno => hypno,
-            Handler::MentionCompulsion => mention_compulsion,
-            Handler::DescribePet => describe_pet,
-            Handler::DescribeCompulsion => describe_compulsion,
-            Handler::Loser => loser,
-        }
-    }
-
-    pub(super) fn intro(cx: &mut Cx<'_>) {
-        run(cx, |dialogue| dialogue.intro());
-    }
-    pub(super) fn post(cx: &mut Cx<'_>) {
-        run(cx, |dialogue| dialogue.post());
-    }
-    pub(super) fn uninit(_cx: &mut Cx<'_>) -> u16 {
-        0
-    }
-
-    pub unsafe fn init_urquan_comm(cx: &mut Cx<'_>) -> CLocData {
-        extern "C" {
-            static mut ScreenWidth: i32;
-        }
-        let mut descriptor = super::descriptor(ScreenWidth);
-        (descriptor.alien_text_baseline, descriptor.alien_text_width) = text_layout(ScreenWidth);
-        run(cx, |dialogue| dialogue.initialize());
-        descriptor
-    }
-}
-
-pub struct UrquanDialogue;
-
-impl super::RaceDialogue for UrquanDialogue {
-    fn init(&self, _cx: &mut Cx<'_>) -> CommData {
-        #[cfg(not(test))]
-        {
-            unsafe { as_comm_data(&live::init_urquan_comm(_cx)) }
-        }
-        #[cfg(test)]
-        {
-            as_comm_data(&descriptor(320))
-        }
-    }
-
-    fn intro(&self, _cx: &mut Cx<'_>) {
-        #[cfg(not(test))]
-        live::intro(_cx);
-    }
-
-    fn post_encounter(&self, _cx: &mut Cx<'_>) {
-        #[cfg(not(test))]
-        live::post(_cx);
-    }
-
-    fn uninit(&self, _cx: &mut Cx<'_>) -> u32 {
-        #[cfg(not(test))]
-        return live::uninit(_cx) as u32;
-        #[cfg(test)]
-        0
-    }
-}
+#[cfg(test)]
+use crate::comm::descriptors::urquan::descriptor;
 
 #[cfg(test)]
 mod tests {

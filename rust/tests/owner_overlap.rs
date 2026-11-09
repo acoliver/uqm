@@ -73,7 +73,14 @@ fn empty_npc_phrase_does_not_acquire_an_owner() {
     // SAFETY: this serialized fixture publishes its game, and phrase zero is a no-op.
     unsafe {
         bridge::with_game(&mut game, || {
-            World::current().write(|_| uqm_rust::comm::ffi::rust_npc_phrase_cb(0, None));
+            World::current().write(|world| {
+                uqm_rust::comm::ffi::rust_npc_phrase_cb(
+                    world,
+                    &mut uqm_rust::comm::Comm::new(),
+                    0,
+                    None,
+                )
+            });
         });
     }
 }

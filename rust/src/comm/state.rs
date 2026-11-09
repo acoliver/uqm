@@ -1,9 +1,6 @@
 //! Communication state management
 //!
-//! Global state for the communication system.
-
-use parking_lot::RwLock;
-use std::sync::LazyLock;
+//! State retained by one synchronous conversation.
 
 use super::animation::AnimContext;
 use super::encounter::EncounterState;
@@ -19,13 +16,22 @@ use super::summary::ConversationSummary;
 use super::track::TrackManager;
 use super::types::{CommData, CommError, CommIntroMode, CommResult};
 
-/// Global communication state
-pub static COMM_STATE: LazyLock<RwLock<CommState>> =
-    LazyLock::new(|| RwLock::new(CommState::new()));
+type PhraseEvents = std::sync::Arc<parking_lot::Mutex<Vec<fn(&mut Comm)>>>;
 
 /// Communication state
-#[derive(Debug)]
-pub struct CommState {
+pub struct Comm {
+    pub(crate) presentation: super::presentation::Presentation,
+    phrase_events: PhraseEvents,
+    pub(crate) race_scratch: super::races::RuntimeScratch,
+    pub(crate) data: super::locdata::CLocData,
+    pub options: super::CommOptions,
+    pub(crate) scope: super::oscill_abi::runtime::RuntimeState,
+    pub(crate) display: super::comm_abi::RuntimeState,
+    pub(crate) animation_runtime: super::commanim_abi::runtime::RuntimeState,
+    pub(crate) response_display: [u8; 3],
+    pub(crate) subtitle_buf: Vec<u8>,
+    pub(crate) player_font: super::player_font::ConversationFont,
+    pub(crate) next_speech_time: u32,
     /// Whether communication is initialized
     initialized: bool,
 
@@ -103,16 +109,28 @@ pub struct CommState {
     prev_subtitle: Option<String>,
 }
 
-impl Default for CommState {
+impl Default for Comm {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl CommState {
+impl Comm {
     /// Create a new communication state
     pub fn new() -> Self {
         Self {
+            presentation: Default::default(),
+            phrase_events: Default::default(),
+            race_scratch: Default::default(),
+            data: Default::default(),
+            options: Default::default(),
+            scope: Default::default(),
+            display: Default::default(),
+            animation_runtime: Default::default(),
+            response_display: [0; 3],
+            subtitle_buf: Vec::with_capacity(512),
+            player_font: super::player_font::ConversationFont::new(),
+            next_speech_time: 0,
             initialized: false,
             comm_data: None,
             track: TrackManager::new(),
@@ -136,6 +154,36 @@ impl CommState {
             subtitle_display: SubtitleDisplay::new(),
             prev_subtitle: None,
         }
+    }
+
+    pub(crate) fn queue_phrase_callback(
+        &self,
+        callback: super::glue::PhraseCallback,
+    ) -> Option<Box<dyn Fn(i32) + Send>> {
+        callback.map(|callback| {
+            let events = self.phrase_events.clone();
+            Box::new(move |_| events.lock().push(callback)) as Box<dyn Fn(i32) + Send>
+        })
+    }
+
+    pub(crate) fn apply_phrase_events(&mut self) {
+        let events = std::mem::take(&mut *self.phrase_events.lock());
+        for event in events {
+            event(self);
+        }
+    }
+
+    pub fn with_options(options: super::CommOptions) -> Self {
+        let mut comm = Self::new();
+        if let Some(window) = &options.window {
+            comm.display.window = window.get();
+        }
+        comm.set_intro_mode(CommIntroMode::from(options.intro.0));
+        comm.set_fade_time(options.intro.1);
+        comm.options = options;
+        comm.initialized = true;
+        comm.oscilloscope.activate();
+        comm
     }
 
     /// Initialize communication
@@ -464,6 +512,14 @@ impl CommState {
         let selected = self.responses.selected().max(0) as usize;
         self.response_ui
             .refresh_responses(activity, &self.responses, selected);
+        #[cfg(not(test))]
+        super::response_ui::refresh_responses_production(
+            self,
+            activity,
+            self.response_ui.top_response() as u8,
+            self.responses.count() as u8,
+            selected as u8,
+        );
     }
 
     // Subtitle display
@@ -527,38 +583,60 @@ impl CommState {
     }
 }
 
-// Global access functions
-
-/// Initialize the global communication system
-pub fn init_communication() -> CommResult<()> {
-    COMM_STATE.write().init()
-}
-
-/// Uninitialize the global communication system
-pub fn uninit_communication() {
-    COMM_STATE.write().uninit();
-}
-
-/// Check if communication is initialized
-pub fn is_initialized() -> bool {
-    COMM_STATE.read().is_initialized()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use serial_test::serial;
 
-    // Helper to reset state between tests
-    fn reset_state() {
-        let mut state = COMM_STATE.write();
-        state.uninit();
+    #[test]
+    fn conversation_state_is_independent_and_persists_between_frames() {
+        let mut first = Comm::new();
+        let mut second = Comm::new();
+        first.init().unwrap();
+        second.init().unwrap();
+        first.add_response(17, "First conversation", None);
+        first.disable_phrase(9);
+        first.top_response = Some(0);
+        first.set_intro_mode(CommIntroMode::from(3));
+        first.set_fade_time(1680);
+        second.add_response(23, "Second conversation", None);
+        second.clear_responses();
+        assert_eq!(first.responses().count(), 1);
+        assert_eq!(first.responses().get(0).unwrap().response_ref, 17);
+        assert!(!first.phrase_enabled(9));
+        assert!(second.phrase_enabled(9));
+        assert_eq!(first.top_response, Some(0));
+        assert_eq!(first.fade_time(), 1680);
+        assert_eq!(second.fade_time(), 0);
+        first.response_display = [7, 8, 9];
+        first.next_speech_time = 1680;
+        first.race_scratch.slyland_choices[0] = 17;
+        first.race_scratch.last_alien = 5;
+        assert_eq!(second.response_display, [0; 3]);
+        assert_eq!(second.next_speech_time, 0);
+        assert_eq!(second.race_scratch.slyland_choices, [0; 5]);
+        assert_eq!(second.race_scratch.last_alien, 0);
+        assert!(second.race_scratch.druuge.is_none());
+        assert!(second.race_scratch.mycon.is_none());
+        assert!(second.race_scratch.melnorm.is_none());
+        assert!(second.race_scratch.spathi.is_none());
+        assert!(second.race_scratch.starbas.is_none());
+        assert_eq!(
+            first.player_font.install(std::ptr::null_mut()),
+            Err(super::super::player_font::ConversationFontError::LoadFailed)
+        );
+        first.reset_for_encounter();
+        assert_eq!(first.responses().count(), 0);
+        assert!(first.phrase_enabled(9));
+        assert_eq!(first.intro_mode(), CommIntroMode::from(3));
+        assert_eq!(first.fade_time(), 1680);
+        assert!(second.is_initialized());
     }
 
     #[test]
     #[serial]
     fn test_comm_state_new() {
-        let state = CommState::new();
+        let state = Comm::new();
         assert!(!state.is_initialized());
         assert!(!state.is_talking());
     }
@@ -566,7 +644,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_comm_init_uninit() {
-        let mut state = CommState::new();
+        let mut state = Comm::new();
 
         assert!(state.init().is_ok());
         assert!(state.is_initialized());
@@ -581,19 +659,19 @@ mod tests {
     #[test]
     #[serial]
     fn test_global_init_uninit() {
-        reset_state();
+        let mut comm = Comm::new();
 
-        assert!(init_communication().is_ok());
-        assert!(is_initialized());
+        assert!(comm.init().is_ok());
+        assert!(comm.is_initialized());
 
-        uninit_communication();
-        assert!(!is_initialized());
+        comm.uninit();
+        assert!(!comm.is_initialized());
     }
 
     #[test]
     #[serial]
     fn test_comm_data() {
-        let mut state = CommState::new();
+        let mut state = Comm::new();
 
         let data = CommData::new();
         state.set_comm_data(data);
@@ -604,7 +682,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_track_management() {
-        let mut state = CommState::new();
+        let mut state = Comm::new();
         state.init().unwrap();
 
         state.track_mut().splice_track(1, Some("Hello"), 0.0, 2.0);
@@ -619,7 +697,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_track_not_initialized() {
-        let mut state = CommState::new();
+        let mut state = Comm::new();
 
         assert!(matches!(
             state.start_track(),
@@ -630,7 +708,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_response_management() {
-        let mut state = CommState::new();
+        let mut state = Comm::new();
 
         assert!(state.add_response(1, "Option A", None));
         assert!(state.add_response(2, "Option B", None));
@@ -651,7 +729,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_subtitle_tracking() {
-        let mut state = CommState::new();
+        let mut state = Comm::new();
         state.init().unwrap();
 
         state.subtitles_mut().add_subtitle(0.0, "First");
@@ -667,7 +745,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_oscilloscope() {
-        let mut state = CommState::new();
+        let mut state = Comm::new();
         state.init().unwrap();
 
         state.add_oscilloscope_samples(&[100, 200, 300]);
@@ -679,7 +757,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_talking_state() {
-        let mut state = CommState::new();
+        let mut state = Comm::new();
 
         assert!(!state.is_talking_finished());
 
@@ -691,7 +769,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_intro_mode() {
-        let mut state = CommState::new();
+        let mut state = Comm::new();
 
         assert_eq!(state.intro_mode(), CommIntroMode::Default);
 
@@ -702,7 +780,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_fade_time() {
-        let mut state = CommState::new();
+        let mut state = Comm::new();
 
         state.set_fade_time(30);
         assert_eq!(state.fade_time(), 30);
@@ -711,7 +789,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_input_paused() {
-        let mut state = CommState::new();
+        let mut state = Comm::new();
 
         assert!(!state.is_input_paused());
 
@@ -722,7 +800,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_update() {
-        let mut state = CommState::new();
+        let mut state = Comm::new();
         state.init().unwrap();
 
         state.track_mut().splice_track(1, Some("Test"), 0.0, 1.0);
@@ -739,7 +817,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_clear() {
-        let mut state = CommState::new();
+        let mut state = Comm::new();
         state.init().unwrap();
 
         state.set_comm_data(CommData::new());
@@ -761,7 +839,7 @@ mod tests {
         // `SetCommIntroMode (CIM_FADE_IN_SCREEN, ...)` runs before
         // `InitCommunication`, and only `CommIntroTransition` consumes it
         // (comm.c:730-767), so the hail's own state reset must not drop it.
-        let mut state = CommState::new();
+        let mut state = Comm::new();
         state.init().unwrap();
         state.set_comm_data(CommData::new());
         state.add_response(1, "Test", None);
@@ -775,5 +853,71 @@ mod tests {
         assert_eq!(state.intro_mode(), CommIntroMode::from(3));
         assert_eq!(state.fade_time(), 1680);
         assert!(state.is_initialized());
+    }
+}
+
+#[cfg(test)]
+mod session_owner_tests {
+    use super::*;
+
+    #[test]
+    fn playback_callbacks_follow_the_owner_after_a_move_and_repeat_on_seek() {
+        fn speaker(comm: &mut Comm) {
+            comm.data.alien_text_baseline.x += 1;
+        }
+        let first = Comm::new();
+        let second = Comm::new();
+        assert!(first.queue_phrase_callback(None).is_none());
+        let callback = first.queue_phrase_callback(Some(speaker)).unwrap();
+        callback(0);
+        callback(17);
+        assert_eq!(first.data.alien_text_baseline.x, 0);
+        let mut moved = Box::new(first);
+        moved.apply_phrase_events();
+        assert_eq!(moved.data.alien_text_baseline.x, 2);
+        assert_eq!(second.data.alien_text_baseline.x, 0);
+        moved.apply_phrase_events();
+        assert_eq!(moved.data.alien_text_baseline.x, 2);
+        callback(0);
+        moved.apply_phrase_events();
+        assert_eq!(moved.data.alien_text_baseline.x, 3);
+        drop(moved);
+        callback(17);
+        assert_eq!(second.data.alien_text_baseline.x, 0);
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn credits_options_preserve_the_window_and_skip_both_native_widgets() {
+        let window = super::super::locdata::CRect {
+            corner: super::super::locdata::CPoint { x: 31, y: 47 },
+            width: 212,
+            height: 109,
+        };
+        let mut comm = Comm::with_options(super::super::CommOptions {
+            oscilloscope: false,
+            slider: false,
+            window: Some(std::rc::Rc::new(std::cell::Cell::new(window))),
+            intro: (2, 840),
+        });
+        assert!(comm.is_initialized());
+        // SAFETY: disabled widgets return before using any native surface or resource handle.
+        unsafe {
+            super::super::oscill_abi::runtime::draw_oscilloscope(&mut comm);
+            super::super::oscill_abi::runtime::draw_slider(&mut comm);
+        }
+        assert!(!comm.scope.scope_init);
+        assert!(comm.scope.scope_work.is_null());
+        assert_eq!(comm.scope.last_offset, -1);
+        assert_eq!(
+            (comm.display.window.corner.x, comm.display.window.corner.y),
+            (31, 47)
+        );
+        assert_eq!(
+            (comm.display.window.width, comm.display.window.height),
+            (212, 109)
+        );
+        assert_eq!(comm.intro_mode() as u32, 2);
+        assert_eq!(comm.fade_time(), 840);
     }
 }

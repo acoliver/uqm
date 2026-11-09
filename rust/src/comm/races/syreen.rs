@@ -1,14 +1,11 @@
 //! Syreen dialogue, ported from syreenc.c.
-use super::script::{animation, as_comm_data};
-use crate::comm::locdata::{CColor, CLocData, CPoint};
-use crate::comm::types::CommData;
-use crate::engine::{battle::Cx, StoryKey};
+pub(crate) use crate::engine::StoryKey;
 mod phrases;
 use phrases::*;
-mod api;
-use api::SyreenApi;
+pub(crate) mod api;
+pub(crate) use api::SyreenApi;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Handler {
+pub(crate) enum Handler {
     FriendlyExit,
     Sex,
     Foreplay,
@@ -19,11 +16,11 @@ enum Handler {
     InitialSyreen,
     SyreenVault,
 }
-struct Dialogue<'a, A> {
-    api: &'a mut A,
+pub(crate) struct Dialogue<'a, A> {
+    pub(crate) api: &'a mut A,
 }
 impl<A: SyreenApi> Dialogue<'_, A> {
-    fn handle(&mut self, h: Handler, r: i32) {
+    pub(crate) fn handle(&mut self, h: Handler, r: i32) {
         match h {
             Handler::FriendlyExit => self.friendly_exit(r),
             Handler::Sex => self.sex(r),
@@ -36,7 +33,7 @@ impl<A: SyreenApi> Dialogue<'_, A> {
             Handler::SyreenVault => self.syreen_vault(r),
         }
     }
-    fn friendly_exit(&mut self, r: i32) {
+    pub(crate) fn friendly_exit(&mut self, r: i32) {
         self.api.segue(0);
         if r == BYE {
             self.api.npc(GOODBYE);
@@ -65,7 +62,7 @@ impl<A: SyreenApi> Dialogue<'_, A> {
             self.api.set(StoryKey::PLAYER_HAVING_SEX, 0_u8);
         }
     }
-    fn sex(&mut self, r: i32) {
+    pub(crate) fn sex(&mut self, r: i32) {
         if r == IN_THE_SPIRIT {
             self.api.npc(OK_SPIRIT);
         } else if r == WHAT_IN_MIND {
@@ -103,7 +100,7 @@ impl<A: SyreenApi> Dialogue<'_, A> {
             }
         }
     }
-    fn foreplay(&mut self, r: i32) {
+    pub(crate) fn foreplay(&mut self, r: i32) {
         if (r == WHATS_MY_REWARD) || (r == WHAT_ABOUT_US) {
             if r == WHATS_MY_REWARD {
                 self.api.npc(HERES_REWARD);
@@ -136,7 +133,7 @@ impl<A: SyreenApi> Dialogue<'_, A> {
         self.api
             .response((HANDS_OFF) as u16, Handler::FriendlyExit, &[]);
     }
-    fn after_ambush(&mut self, r: i32) {
+    pub(crate) fn after_ambush(&mut self, r: i32) {
         if r == WHAT_NOW_AFTER_AMBUSH {
             self.api.npc(DO_THIS_AFTER_AMBUSH);
             self.api.disable((WHAT_NOW_AFTER_AMBUSH) as u16);
@@ -191,7 +188,7 @@ impl<A: SyreenApi> Dialogue<'_, A> {
         self.api
             .response((BYE_AFTER_AMBUSH) as u16, Handler::FriendlyExit, &[]);
     }
-    fn ambush_ready(&mut self, r: i32) {
+    pub(crate) fn ambush_ready(&mut self, r: i32) {
         if r == REPEAT_PLAN {
             self.api.npc(OK_REPEAT_PLAN);
             self.api.disable((REPEAT_PLAN) as u16);
@@ -203,7 +200,7 @@ impl<A: SyreenApi> Dialogue<'_, A> {
         self.api
             .response((BYE_BEFORE_AMBUSH) as u16, Handler::FriendlyExit, &[]);
     }
-    fn syreen_shuttle(&mut self, r: i32) {
+    pub(crate) fn syreen_shuttle(&mut self, r: i32) {
         if r == WHATS_NEXT_STEP {
             self.api.npc(OPEN_VAULT);
             self.api.disable((WHATS_NEXT_STEP) as u16);
@@ -260,7 +257,7 @@ impl<A: SyreenApi> Dialogue<'_, A> {
                 .response((NOT_SURE) as u16, Handler::SyreenShuttle, &[]);
         }
     }
-    fn normal_syreen(&mut self, r: i32) {
+    pub(crate) fn normal_syreen(&mut self, r: i32) {
         let mut i: i32;
         let mut last_stack: i32;
         let mut p_str = [0i32; 4];
@@ -411,7 +408,7 @@ impl<A: SyreenApi> Dialogue<'_, A> {
         }
         self.api.response((BYE) as u16, Handler::FriendlyExit, &[]);
     }
-    fn initial_syreen(&mut self, r: i32) {
+    pub(crate) fn initial_syreen(&mut self, r: i32) {
         if r == WE_ARE_VICE_SQUAD {
             self.api.npc(OK_VICE);
             self.api.npc(HOW_CAN_YOU_BE_HERE);
@@ -452,7 +449,7 @@ impl<A: SyreenApi> Dialogue<'_, A> {
                 .response((I_NEED_TOUCH_O_VISION) as u16, Handler::InitialSyreen, &[]);
         }
     }
-    fn plan_ambush(&mut self, _r: i32) {
+    pub(crate) fn plan_ambush(&mut self, _r: i32) {
         self.api.npc(OK_FOUND_VAULT);
         self.api.set(StoryKey::MYCON_AMBUSH, 1_u8);
         self.api.set(StoryKey::SYREEN_HOME_VISITS, 0_u8);
@@ -461,7 +458,7 @@ impl<A: SyreenApi> Dialogue<'_, A> {
         self.api
             .response((BYE_AFTER_VAULT) as u16, Handler::FriendlyExit, &[]);
     }
-    fn syreen_vault(&mut self, r: i32) {
+    pub(crate) fn syreen_vault(&mut self, r: i32) {
         if r == VAULT_HINT {
             self.api.npc(OK_HINT);
             self.api.disable((VAULT_HINT) as u16);
@@ -473,7 +470,7 @@ impl<A: SyreenApi> Dialogue<'_, A> {
         self.api
             .response((BYE_BEFORE_VAULT) as u16, Handler::FriendlyExit, &[]);
     }
-    fn intro(&mut self) {
+    pub(crate) fn intro(&mut self) {
         let mut visits: i32;
         if (i32::from(self.api.activity()) as u8 as i32) == 5 {
             self.api.npc(OUT_TAKES);
@@ -600,200 +597,14 @@ impl<A: SyreenApi> Dialogue<'_, A> {
         }
         self.api.set(StoryKey::SYREEN_HOME_VISITS, visits as u8);
     }
-    fn post_syreen_enc(&mut self) {}
-    fn initialize(&mut self) {
+    pub(crate) fn post_syreen_enc(&mut self) {}
+    pub(crate) fn initialize(&mut self) {
         self.api.segue(0);
     }
 }
-fn descriptor() -> CLocData {
-    let mut d = CLocData {
-        alien_frame_res: c"comm.syreen.graphics".as_ptr(),
-        alien_font_res: c"comm.syreen.font".as_ptr(),
-        alien_colormap_res: c"comm.syreen.colortable".as_ptr(),
-        alien_song_res: c"comm.syreen.music".as_ptr(),
-        conversation_phrases_res: c"comm.syreen.dialogue".as_ptr(),
-        alien_text_fcolor: CColor {
-            r: 255,
-            g: 255,
-            b: 255,
-            a: 255,
-        },
-        alien_text_bcolor: CColor {
-            r: 0,
-            g: 0,
-            b: 0,
-            a: 255,
-        },
-        alien_text_baseline: CPoint { x: 121, y: 0 },
-        alien_text_width: 224,
-        alien_text_align: 1,
-        alien_text_valign: 0,
-        num_animations: 15,
-        ..CLocData::default()
-    };
-    d.alien_ambient_array[0] = animation(5, 2, 1, (56, 56), (840, 2520));
-    d.alien_ambient_array[1] = animation(7, 2, 1, (56, 56), (840, 2520));
-    d.alien_ambient_array[2] = animation(9, 2, 1, (56, 56), (840, 2520));
-    d.alien_ambient_array[3] = animation(11, 2, 1, (56, 56), (840, 2520));
-    d.alien_ambient_array[4] = animation(13, 2, 1, (56, 56), (840, 2520));
-    d.alien_ambient_array[5] = animation(15, 2, 1, (56, 56), (840, 2520));
-    d.alien_ambient_array[5].block_mask = 4096;
-    d.alien_ambient_array[6] = animation(17, 2, 1, (56, 56), (840, 2520));
-    d.alien_ambient_array[7] = animation(19, 2, 1, (56, 56), (840, 2520));
-    d.alien_ambient_array[7].block_mask = 8192;
-    d.alien_ambient_array[8] = animation(21, 6, 1, (56, 56), (840, 2520));
-    d.alien_ambient_array[9] = animation(27, 4, 4, (56, 56), (8400, 2520));
-    d.alien_ambient_array[9].block_mask = 16384;
-    d.alien_ambient_array[10] = animation(31, 6, 2, (56, 56), (840, 2520));
-    d.alien_ambient_array[11] = animation(37, 4, 1, (56, 56), (56, 56));
-    d.alien_ambient_array[12] = animation(41, 3, 4, (84, 56), (8400, 2520));
-    d.alien_ambient_array[12].block_mask = 32;
-    d.alien_ambient_array[13] = animation(44, 4, 12, (140, 0), (2520, 840));
-    d.alien_ambient_array[13].block_mask = 16512;
-    d.alien_ambient_array[14] = animation(48, 3, 12, (112, 56), (8400, 840));
-    d.alien_ambient_array[14].block_mask = 8704;
-    d.alien_transition_desc = animation(0, 0, 0, (0, 0), (0, 0));
-    d.alien_talk_desc = animation(1, 4, 0, (56, 0), (70, 0));
-    #[cfg(not(test))]
-    {
-        d.init_encounter_func = Some(live::intro);
-        d.post_encounter_func = Some(live::post);
-        d.uninit_encounter_func = Some(live::uninit);
-    }
-    d
-}
-#[cfg(not(test))]
-pub(crate) mod live {
-    use super::super::script::live::LiveScript;
-    use super::*;
-    fn run(cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, LiveScript<'_, '_, Handler>>)) {
-        let mut api = LiveScript::new(cx, callback);
-        f(&mut Dialogue { api: &mut api });
-    }
-    fn friendly_exit(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::FriendlyExit,
-                i32::try_from(r).expect("invalid response"),
-            )
-        });
-    }
-    fn sex(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(Handler::Sex, i32::try_from(r).expect("invalid response"))
-        });
-    }
-    fn foreplay(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::Foreplay,
-                i32::try_from(r).expect("invalid response"),
-            )
-        });
-    }
-    fn after_ambush(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::AfterAmbush,
-                i32::try_from(r).expect("invalid response"),
-            )
-        });
-    }
-    fn ambush_ready(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::AmbushReady,
-                i32::try_from(r).expect("invalid response"),
-            )
-        });
-    }
-    fn syreen_shuttle(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::SyreenShuttle,
-                i32::try_from(r).expect("invalid response"),
-            )
-        });
-    }
-    fn normal_syreen(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::NormalSyreen,
-                i32::try_from(r).expect("invalid response"),
-            )
-        });
-    }
-    fn initial_syreen(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::InitialSyreen,
-                i32::try_from(r).expect("invalid response"),
-            )
-        });
-    }
-    fn syreen_vault(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::SyreenVault,
-                i32::try_from(r).expect("invalid response"),
-            )
-        });
-    }
-    fn callback(h: Handler) -> crate::comm::response::ResponseFunc {
-        match h {
-            Handler::FriendlyExit => friendly_exit,
-            Handler::Sex => sex,
-            Handler::Foreplay => foreplay,
-            Handler::AfterAmbush => after_ambush,
-            Handler::AmbushReady => ambush_ready,
-            Handler::SyreenShuttle => syreen_shuttle,
-            Handler::NormalSyreen => normal_syreen,
-            Handler::InitialSyreen => initial_syreen,
-            Handler::SyreenVault => syreen_vault,
-        }
-    }
-    pub(super) fn intro(cx: &mut Cx<'_>) {
-        run(cx, |s| s.intro());
-    }
-    pub(super) fn post(cx: &mut Cx<'_>) {
-        run(cx, |s| s.post_syreen_enc());
-    }
-    pub(super) fn uninit(_cx: &mut Cx<'_>) -> u16 {
-        0
-    }
-    /// Initialize the encounter on the game thread.
-    ///
-    /// # Safety
-    /// Communication state must be initialized on the game thread.
-    pub unsafe fn init_syreen_comm(cx: &mut Cx<'_>) -> CLocData {
-        let desc = descriptor();
-        run(cx, |s| s.initialize());
-        desc
-    }
-}
-pub struct SyreenDialogue;
-impl super::RaceDialogue for SyreenDialogue {
-    fn init(&self, _cx: &mut Cx<'_>) -> CommData {
-        #[cfg(not(test))]
-        {
-            unsafe { as_comm_data(&live::init_syreen_comm(_cx)) }
-        }
-        #[cfg(test)]
-        {
-            as_comm_data(&descriptor())
-        }
-    }
-    fn intro(&self, _cx: &mut Cx<'_>) {
-        #[cfg(not(test))]
-        live::intro(_cx);
-    }
-    fn post_encounter(&self, _cx: &mut Cx<'_>) {
-        #[cfg(not(test))]
-        live::post(_cx);
-    }
-    fn uninit(&self, _cx: &mut Cx<'_>) -> u32 {
-        0
-    }
-}
+
+#[cfg(test)]
+use crate::comm::descriptors::syreen::descriptor;
+
 #[cfg(test)]
 mod tests;

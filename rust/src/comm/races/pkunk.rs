@@ -1,12 +1,10 @@
 //! Pkunk dialogue, ported from pkunkc.c.
-use super::script::{animation, as_comm_data, GLOBAL_PLAYER_NAME, GLOBAL_SHIP_NAME};
-use crate::comm::locdata::{CColor, CLocData, CPoint};
-use crate::comm::types::CommData;
-use crate::engine::{battle::Cx, StoryKey};
+pub(crate) use super::script::{GLOBAL_PLAYER_NAME, GLOBAL_SHIP_NAME};
+pub(crate) use crate::engine::StoryKey;
 mod phrases;
 use phrases::*;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Handler {
+pub(crate) enum Handler {
     ExitConversation,
     PkunkAngry,
     DiscussConquer,
@@ -18,13 +16,13 @@ enum Handler {
     PkunkNeutralSpace,
     PkunkMigrate,
 }
-struct Dialogue<'a, A> {
-    api: &'a mut A,
+pub(crate) struct Dialogue<'a, A> {
+    pub(crate) api: &'a mut A,
 }
-mod api;
-use api::PkunkApi;
+pub(crate) mod api;
+pub(crate) use api::PkunkApi;
 impl<A: PkunkApi> Dialogue<'_, A> {
-    fn handle(&mut self, h: Handler, r: u16) {
+    pub(crate) fn handle(&mut self, h: Handler, r: u16) {
         match h {
             Handler::ExitConversation => self.exit_conversation(r),
             Handler::PkunkAngry => self.pkunk_angry(r),
@@ -38,7 +36,7 @@ impl<A: PkunkApi> Dialogue<'_, A> {
             Handler::PkunkMigrate => self.pkunk_migrate(r),
         }
     }
-    fn ships_ready(&mut self) -> bool {
+    pub(crate) fn ships_ready(&mut self) -> bool {
         let (year, month, day) = self.api.date();
         self.api.get(StoryKey::PKUNK_MANNER) == 3
             && (i32::from(year) - 2155, month, day)
@@ -48,7 +46,7 @@ impl<A: PkunkApi> Dialogue<'_, A> {
                     u16::from(self.api.get(StoryKey::PKUNK_SHIP_DAY)),
                 )
     }
-    fn prepare_ship(&mut self) {
+    pub(crate) fn prepare_ship(&mut self) {
         if self.api.gift_ships() != 0 {
             let (year, month, day) = self.api.date();
             self.api.set(StoryKey::PKUNK_SHIP_MONTH, month as u8);
@@ -59,7 +57,7 @@ impl<A: PkunkApi> Dialogue<'_, A> {
             );
         }
     }
-    fn exit_conversation(&mut self, r: u16) {
+    pub(crate) fn exit_conversation(&mut self, r: u16) {
         self.api.segue(0_u32);
         if r == FRIENDLY_BYE_SPACE {
             self.api.npc(i32::from(FRIENDLY_GOODBYE_SPACE));
@@ -133,7 +131,7 @@ impl<A: PkunkApi> Dialogue<'_, A> {
             self.api.set(StoryKey::PKUNK_REASONS, reason_mask);
         }
     }
-    fn pkunk_angry(&mut self, r: u16) {
+    pub(crate) fn pkunk_angry(&mut self, r: u16) {
         if r == WHY_INSULTS {
             self.api.npc(i32::from(RELEASE_TENSION));
             self.api.disable(WHY_INSULTS);
@@ -165,7 +163,7 @@ impl<A: PkunkApi> Dialogue<'_, A> {
         }
         self.api.response(BYE_ANGRY, Handler::ExitConversation, &[]);
     }
-    fn discuss_conquer(&mut self, r: u16) {
+    pub(crate) fn discuss_conquer(&mut self, r: u16) {
         if r == WE_CONQUER {
             self.api.npc(i32::from(WHY_CONQUER));
             self.api.disable(WE_CONQUER);
@@ -188,7 +186,7 @@ impl<A: PkunkApi> Dialogue<'_, A> {
             .response(MUST_CONQUER, Handler::ExitConversation, &[]);
         self.api.response(NO_CONQUEST, Handler::PkunkHome, &[]);
     }
-    fn offer_alliance(&mut self, r: u16) {
+    pub(crate) fn offer_alliance(&mut self, r: u16) {
         if r == WE_ARE_VINDICATOR0 {
             self.api.npc(i32::from(WHY_YOU_HERE));
         } else if r == EXPLORING_UNIVERSE {
@@ -210,7 +208,7 @@ impl<A: PkunkApi> Dialogue<'_, A> {
             self.api.response(FUN_CRUISE, Handler::OfferAlliance, &[]);
         }
     }
-    fn about_pkunk(&mut self, r: u16) {
+    pub(crate) fn about_pkunk(&mut self, r: u16) {
         let mut info_left: u8;
         info_left = u8::from(false);
         if r == WHAT_ABOUT_YOU {
@@ -259,7 +257,7 @@ impl<A: PkunkApi> Dialogue<'_, A> {
             self.api.disable(WHAT_ABOUT_YOU);
         }
     }
-    fn about_ilwrath(&mut self, r: u16) {
+    pub(crate) fn about_ilwrath(&mut self, r: u16) {
         let mut info_left: u8;
         info_left = u8::from(false);
         if r == WHAT_ABOUT_ILWRATH {
@@ -302,7 +300,7 @@ impl<A: PkunkApi> Dialogue<'_, A> {
             self.api.disable(WHAT_ABOUT_ILWRATH);
         }
     }
-    fn pkunk_home(&mut self, r: u16) {
+    pub(crate) fn pkunk_home(&mut self, r: u16) {
         let fragments: Vec<i32>;
         let mut num_visits: u8;
         if r == NO_CONQUEST {
@@ -462,7 +460,7 @@ impl<A: PkunkApi> Dialogue<'_, A> {
         self.api
             .response(BYE_FRIENDLY, Handler::ExitConversation, &[]);
     }
-    fn pkunk_friendly_space(&mut self, r: u16) {
+    pub(crate) fn pkunk_friendly_space(&mut self, r: u16) {
         let mut num_visits: u8;
         if r == WHATS_UP_SPACE {
             if self.ships_ready() {
@@ -595,7 +593,7 @@ impl<A: PkunkApi> Dialogue<'_, A> {
         self.api
             .response(FRIENDLY_BYE_SPACE, Handler::ExitConversation, &[]);
     }
-    fn pkunk_neutral_space(&mut self, r: u16) {
+    pub(crate) fn pkunk_neutral_space(&mut self, r: u16) {
         let mut num_visits: u8;
         if r == FORM_ALLIANCE {
             self.api.npc(i32::from(GO_TO_HOMEWORLD));
@@ -655,7 +653,7 @@ impl<A: PkunkApi> Dialogue<'_, A> {
         self.api
             .response(NEUTRAL_BYE_SPACE, Handler::ExitConversation, &[]);
     }
-    fn pkunk_migrate(&mut self, _r: u16) {
+    pub(crate) fn pkunk_migrate(&mut self, _r: u16) {
         let reason_mask: u8 = self.api.get(StoryKey::PKUNK_REASONS);
         if !((i32::from(reason_mask) & (1 << 0)) != 0) {
             self.api
@@ -676,7 +674,7 @@ impl<A: PkunkApi> Dialogue<'_, A> {
         self.api
             .response(SUIT_YOURSELF, Handler::ExitConversation, &[]);
     }
-    fn intro(&mut self) {
+    pub(crate) fn intro(&mut self) {
         let mut num_visits: u8;
         if i32::from((self.api.activity()) as u8) == 5 {
             self.api.npc(i32::from(OUT_TAKES));
@@ -946,7 +944,7 @@ impl<A: PkunkApi> Dialogue<'_, A> {
             self.pkunk_migrate(0_u16);
         }
     }
-    fn post_pkunk_enc(&mut self) {
+    pub(crate) fn post_pkunk_enc(&mut self) {
         let manner: u8;
         if ((self.api.get_segue()) as i32 == 1)
             && (i32::from({
@@ -961,7 +959,7 @@ impl<A: PkunkApi> Dialogue<'_, A> {
             }
         }
     }
-    fn initialize(&mut self) {
+    pub(crate) fn initialize(&mut self) {
         if (i32::from(self.api.get(StoryKey::PKUNK_MANNER)) == 3)
             || (i32::from((self.api.activity()) as u8) == 5)
         {
@@ -971,197 +969,9 @@ impl<A: PkunkApi> Dialogue<'_, A> {
         }
     }
 }
-fn descriptor() -> CLocData {
-    let mut d = CLocData {
-        alien_frame_res: c"comm.pkunk.graphics".as_ptr(),
-        alien_font_res: c"comm.pkunk.font".as_ptr(),
-        alien_colormap_res: c"comm.pkunk.colortable".as_ptr(),
-        alien_song_res: c"comm.pkunk.music".as_ptr(),
-        conversation_phrases_res: c"comm.pkunk.dialogue".as_ptr(),
-        alien_text_fcolor: CColor {
-            r: 255,
-            g: 255,
-            b: 255,
-            a: 255,
-        },
-        alien_text_bcolor: CColor {
-            r: 0,
-            g: 0,
-            b: 0,
-            a: 255,
-        },
-        alien_text_baseline: CPoint { x: 121, y: 0 },
-        alien_text_width: 224,
-        alien_text_align: 1,
-        alien_text_valign: 0,
-        num_animations: 3,
-        ..CLocData::default()
-    };
-    d.alien_ambient_array[0] = animation(3, 4, 10, (28, 0), (840, 2520));
-    d.alien_ambient_array[1] = {
-        let mut a = animation(7, 4, 12, (84, 0), (840, 2520));
-        a.block_mask = 4;
-        a
-    };
-    d.alien_ambient_array[2] = {
-        let mut a = animation(11, 3, 12, (28, 0), (840, 2520));
-        a.block_mask = 2;
-        a
-    };
-    d.alien_transition_desc = animation(0, 0, 0, (0, 0), (0, 0));
-    d.alien_talk_desc = animation(1, 2, 0, (56, 140), (70, 420));
-    #[cfg(not(test))]
-    {
-        d.init_encounter_func = Some(live::intro);
-        d.post_encounter_func = Some(live::post);
-        d.uninit_encounter_func = Some(live::uninit);
-    }
-    d
-}
-#[cfg(not(test))]
-pub(crate) mod live {
-    use super::*;
-    use crate::comm::races::script::live::LiveScript;
-    fn run(cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, LiveScript<'_, '_, Handler>>)) {
-        let mut api = LiveScript::new(cx, callback);
-        f(&mut Dialogue { api: &mut api });
-    }
-    fn exit_conversation(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::ExitConversation,
-                u16::try_from(r).expect("response exceeds COUNT"),
-            )
-        });
-    }
-    fn pkunk_angry(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::PkunkAngry,
-                u16::try_from(r).expect("response exceeds COUNT"),
-            )
-        });
-    }
-    fn discuss_conquer(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::DiscussConquer,
-                u16::try_from(r).expect("response exceeds COUNT"),
-            )
-        });
-    }
-    fn offer_alliance(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::OfferAlliance,
-                u16::try_from(r).expect("response exceeds COUNT"),
-            )
-        });
-    }
-    fn about_pkunk(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::AboutPkunk,
-                u16::try_from(r).expect("response exceeds COUNT"),
-            )
-        });
-    }
-    fn about_ilwrath(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::AboutIlwrath,
-                u16::try_from(r).expect("response exceeds COUNT"),
-            )
-        });
-    }
-    fn pkunk_home(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::PkunkHome,
-                u16::try_from(r).expect("response exceeds COUNT"),
-            )
-        });
-    }
-    fn pkunk_friendly_space(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::PkunkFriendlySpace,
-                u16::try_from(r).expect("response exceeds COUNT"),
-            )
-        });
-    }
-    fn pkunk_neutral_space(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::PkunkNeutralSpace,
-                u16::try_from(r).expect("response exceeds COUNT"),
-            )
-        });
-    }
-    fn pkunk_migrate(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::PkunkMigrate,
-                u16::try_from(r).expect("response exceeds COUNT"),
-            )
-        });
-    }
-    fn callback(h: Handler) -> crate::comm::response::ResponseFunc {
-        match h {
-            Handler::ExitConversation => exit_conversation,
-            Handler::PkunkAngry => pkunk_angry,
-            Handler::DiscussConquer => discuss_conquer,
-            Handler::OfferAlliance => offer_alliance,
-            Handler::AboutPkunk => about_pkunk,
-            Handler::AboutIlwrath => about_ilwrath,
-            Handler::PkunkHome => pkunk_home,
-            Handler::PkunkFriendlySpace => pkunk_friendly_space,
-            Handler::PkunkNeutralSpace => pkunk_neutral_space,
-            Handler::PkunkMigrate => pkunk_migrate,
-        }
-    }
-    pub(super) fn intro(cx: &mut Cx<'_>) {
-        run(cx, |s| s.intro());
-    }
-    pub(super) fn post(cx: &mut Cx<'_>) {
-        run(cx, |s| s.post_pkunk_enc());
-    }
-    pub(super) fn uninit(_cx: &mut Cx<'_>) -> u16 {
-        0
-    }
-    /// Initialize this encounter on the game thread.
-    ///
-    /// # Safety
-    /// Communication state must be initialized on the game thread.
-    pub unsafe fn init_pkunk_comm(cx: &mut Cx<'_>) -> CLocData {
-        let desc = descriptor();
-        run(cx, |s| s.initialize());
-        desc
-    }
-}
-pub struct PkunkDialogue;
-impl super::RaceDialogue for PkunkDialogue {
-    fn init(&self, _cx: &mut Cx<'_>) -> CommData {
-        #[cfg(not(test))]
-        {
-            unsafe { as_comm_data(&live::init_pkunk_comm(_cx)) }
-        }
-        #[cfg(test)]
-        {
-            as_comm_data(&descriptor())
-        }
-    }
-    fn intro(&self, _cx: &mut Cx<'_>) {
-        #[cfg(not(test))]
-        live::intro(_cx);
-    }
-    fn post_encounter(&self, _cx: &mut Cx<'_>) {
-        #[cfg(not(test))]
-        live::post(_cx);
-    }
-    fn uninit(&self, _cx: &mut Cx<'_>) -> u32 {
-        0
-    }
-}
+
+#[cfg(test)]
+use crate::comm::descriptors::pkunk::descriptor;
+
 #[cfg(test)]
 mod tests;

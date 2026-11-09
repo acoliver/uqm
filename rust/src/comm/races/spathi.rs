@@ -1,18 +1,15 @@
 //! Spathi dialogue, ported from the original C script.
 
-use super::encounter::EncounterApi;
-use super::script::{animation, as_comm_data};
-use crate::comm::locdata::{CColor, CLocData, CPoint};
-use crate::comm::types::CommData;
-use crate::engine::battle::Cx;
-use crate::engine::StoryKey;
+pub(crate) use super::encounter::EncounterApi;
+pub(crate) use crate::comm::locdata::CLocData;
+pub(crate) use crate::engine::StoryKey;
 mod phrases;
 use phrases::*;
-const SPATHI_SHIP: u16 = 6;
-const GOOD_GUY: u16 = 1;
+pub(crate) const SPATHI_SHIP: u16 = 6;
+pub(crate) const GOOD_GUY: u16 = 1;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Handler {
+pub(crate) enum Handler {
     ExitConversation,
     SpathiOnPluto,
     SpathiMustGrovel,
@@ -23,15 +20,15 @@ enum Handler {
     SpathiNeutral,
 }
 #[derive(Default)]
-struct Session {
+pub(crate) struct Session {
     refusals: u8,
 }
-struct Dialogue<'a, A> {
-    api: &'a mut A,
-    session: &'a mut Session,
+pub(crate) struct Dialogue<'a, A> {
+    pub(crate) api: &'a mut A,
+    pub(crate) session: &'a mut Session,
 }
 impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
-    fn handle(&mut self, handler: Handler, r: u16) {
+    pub(crate) fn handle(&mut self, handler: Handler, r: u16) {
         match handler {
             Handler::ExitConversation => self.exit_conversation(r),
             Handler::SpathiOnPluto => self.spathi_on_pluto(r),
@@ -43,7 +40,7 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
             Handler::SpathiNeutral => self.spathi_neutral(r),
         }
     }
-    fn initialize(&mut self, desc: &mut CLocData) {
+    pub(crate) fn initialize(&mut self, desc: &mut CLocData) {
         if self.api.get(StoryKey::FOUND_PLUTO_SPATHI) == 1 {
             desc.alien_alt_song_res = c"comm.fwiffo.music".as_ptr();
             desc.alien_song_flags |= 1;
@@ -55,7 +52,7 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
             || self.api.activity() as u8 == 5;
         self.api.segue(u32::from(!peaceful));
     }
-    fn exit_conversation(&mut self, r: u16) {
+    pub(crate) fn exit_conversation(&mut self, r: u16) {
         self.api.segue(0);
         if r == BYE_ALLY_SPACE {
             self.api.npc(i32::from(GOODBYE_ALLY_SPACE));
@@ -96,7 +93,7 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
             }
         }
     }
-    fn spathi_on_pluto(&mut self, r: u16) {
+    pub(crate) fn spathi_on_pluto(&mut self, r: u16) {
         if r == HI_THERE {
             self.api.npc(i32::from(ARE_YOU_SURE));
         } else if r == DONT_KILL {
@@ -229,7 +226,7 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
         self.api
             .response(CHANGED_MIND, Handler::ExitConversation, &[]);
     }
-    fn spathi_must_grovel(&mut self, r: u16) {
+    pub(crate) fn spathi_must_grovel(&mut self, r: u16) {
         if r == IDENTIFY {
             self.api.npc(i32::from(I_FWIFFO));
             self.api
@@ -261,7 +258,7 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
                 .response(TELL_ME_COORDINATES, Handler::ExitConversation, &[]);
         }
     }
-    fn spathi_allies(&mut self, r: u16) {
+    pub(crate) fn spathi_allies(&mut self, r: u16) {
         if r == 0 {
             let mut num_visits: u8;
             num_visits = self.api.get(StoryKey::SPATHI_VISITS);
@@ -313,7 +310,7 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
         self.api
             .response(BYE_ALLY_SPACE, Handler::ExitConversation, &[]);
     }
-    fn spathi_friendly(&mut self, r: u16) {
+    pub(crate) fn spathi_friendly(&mut self, r: u16) {
         if r == 0 {
             let mut num_visits: u8;
             num_visits = self.api.get(StoryKey::SPATHI_VISITS);
@@ -351,7 +348,7 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
         self.api
             .response(BYE_FRIENDLY_SPACE, Handler::ExitConversation, &[]);
     }
-    fn spathi_befriend(&mut self, r: u16) {
+    pub(crate) fn spathi_befriend(&mut self, r: u16) {
         let mut info_left: bool;
         let mut last_stack: u8;
         let mut p_str: [u16; 2] = [0; 2];
@@ -409,7 +406,7 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
             self.spathi_neutral(r);
         }
     }
-    fn spathi_antagonize(&mut self, r: u16) {
+    pub(crate) fn spathi_antagonize(&mut self, r: u16) {
         if r == PREPARE_TO_DIE {
             self.api.npc(i32::from(ALWAYS_PREPARED));
             self.api.set(StoryKey::SPATHI_STACK2, 1_u8);
@@ -443,7 +440,7 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
         self.api
             .response(ATTACK_YOU_NOW, Handler::ExitConversation, &[]);
     }
-    fn spathi_neutral(&mut self, r: u16) {
+    pub(crate) fn spathi_neutral(&mut self, r: u16) {
         if r == 0 {
             let mut num_visits: u8;
             num_visits = self.api.get(StoryKey::SPATHI_VISITS);
@@ -494,7 +491,7 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
         self.api
             .response(PART_IN_PEACE, Handler::ExitConversation, &[]);
     }
-    fn intro(&mut self) {
+    pub(crate) fn intro(&mut self) {
         let manner: u8 = self.api.get(StoryKey::SPATHI_MANNER);
         if self.api.get(StoryKey::FOUND_PLUTO_SPATHI) == 1 {
             self.session.refusals = 0;
@@ -546,7 +543,7 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
             self.spathi_neutral(0_u16);
         }
     }
-    fn post_spathi_enc(&mut self) {
+    pub(crate) fn post_spathi_enc(&mut self) {
         if self.api.get(StoryKey::FOUND_PLUTO_SPATHI) == 1 {
             self.api.set(StoryKey::FOUND_PLUTO_SPATHI, 2);
         } else if self.api.get_segue() == 1 {
@@ -563,188 +560,9 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
         }
     }
 }
-fn descriptor() -> CLocData {
-    let mut desc = CLocData {
-        alien_frame_res: c"comm.spathi.graphics".as_ptr(),
-        alien_font_res: c"comm.spathi.font".as_ptr(),
-        alien_colormap_res: c"comm.spathi.colortable".as_ptr(),
-        alien_song_res: c"comm.spathi.music".as_ptr(),
-        conversation_phrases_res: c"comm.spathi.dialogue".as_ptr(),
-        alien_text_fcolor: CColor {
-            r: 255,
-            g: 255,
-            b: 255,
-            a: 255,
-        },
-        alien_text_bcolor: CColor {
-            r: 0,
-            g: 0,
-            b: 0,
-            a: 255,
-        },
-        alien_text_baseline: CPoint { x: 164, y: 0 },
-        alien_text_width: 288,
-        alien_text_align: 1,
-        alien_text_valign: 0,
-        num_animations: 8,
-        ..CLocData::default()
-    };
-    desc.alien_ambient_array[0] = animation(1, 6, 2, (42, 0), (0, 840));
-    desc.alien_ambient_array[0].block_mask = 2;
-    desc.alien_ambient_array[1] = animation(7, 9, 2, (42, 0), (42, 0));
-    desc.alien_ambient_array[1].block_mask = 1;
-    desc.alien_ambient_array[2] = animation(16, 4, 2, (84, 56), (84, 56));
-    desc.alien_ambient_array[2].block_mask = 16;
-    desc.alien_ambient_array[3] = animation(20, 4, 4, (56, 56), (56, 56));
-    desc.alien_ambient_array[3].block_mask = 32;
-    desc.alien_ambient_array[4] = animation(24, 5, 4, (56, 0), (840, 2520));
-    desc.alien_ambient_array[4].block_mask = 4;
-    desc.alien_ambient_array[5] = animation(34, 4, 4, (56, 0), (840, 2520));
-    desc.alien_ambient_array[5].block_mask = 8;
-    desc.alien_ambient_array[6] = animation(38, 3, 4, (56, 0), (840, 2520));
-    desc.alien_ambient_array[7] = animation(41, 3, 4, (56, 0), (840, 2520));
-    desc.alien_talk_desc = animation(0, 0, 0, (0, 0), (0, 0));
-    #[cfg(not(test))]
-    {
-        desc.init_encounter_func = Some(live::intro);
-        desc.post_encounter_func = Some(live::post);
-        desc.uninit_encounter_func = Some(live::uninit);
-    }
-    desc
-}
-#[cfg(not(test))]
-pub(crate) mod live {
-    use super::*;
-    use crate::comm::races::script::live::LiveScript;
-    fn run(cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, LiveScript<'_, '_, Handler>>)) {
-        let mut api = LiveScript::new(cx, callback);
-        static mut SESSION: Option<Session> = None;
-        // Only the game thread dispatches these callbacks.
-        let session =
-            unsafe { (&mut *std::ptr::addr_of_mut!(SESSION)).get_or_insert_with(Session::default) };
-        f(&mut Dialogue {
-            api: &mut api,
-            session,
-        });
-    }
-    fn exit_conversation(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::ExitConversation,
-                u16::try_from(r).expect("response reference exceeds COUNT"),
-            )
-        });
-    }
-    fn spathi_on_pluto(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::SpathiOnPluto,
-                u16::try_from(r).expect("response reference exceeds COUNT"),
-            )
-        });
-    }
-    fn spathi_must_grovel(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::SpathiMustGrovel,
-                u16::try_from(r).expect("response reference exceeds COUNT"),
-            )
-        });
-    }
-    fn spathi_allies(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::SpathiAllies,
-                u16::try_from(r).expect("response reference exceeds COUNT"),
-            )
-        });
-    }
-    fn spathi_friendly(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::SpathiFriendly,
-                u16::try_from(r).expect("response reference exceeds COUNT"),
-            )
-        });
-    }
-    fn spathi_befriend(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::SpathiBefriend,
-                u16::try_from(r).expect("response reference exceeds COUNT"),
-            )
-        });
-    }
-    fn spathi_antagonize(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::SpathiAntagonize,
-                u16::try_from(r).expect("response reference exceeds COUNT"),
-            )
-        });
-    }
-    fn spathi_neutral(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::SpathiNeutral,
-                u16::try_from(r).expect("response reference exceeds COUNT"),
-            )
-        });
-    }
-    fn callback(handler: Handler) -> crate::comm::response::ResponseFunc {
-        match handler {
-            Handler::ExitConversation => exit_conversation,
-            Handler::SpathiOnPluto => spathi_on_pluto,
-            Handler::SpathiMustGrovel => spathi_must_grovel,
-            Handler::SpathiAllies => spathi_allies,
-            Handler::SpathiFriendly => spathi_friendly,
-            Handler::SpathiBefriend => spathi_befriend,
-            Handler::SpathiAntagonize => spathi_antagonize,
-            Handler::SpathiNeutral => spathi_neutral,
-        }
-    }
-    pub(super) fn intro(cx: &mut Cx<'_>) {
-        run(cx, |s| s.intro());
-    }
-    pub(super) fn post(cx: &mut Cx<'_>) {
-        run(cx, |s| s.post_spathi_enc());
-    }
-    pub(super) fn uninit(_cx: &mut Cx<'_>) -> u16 {
-        0
-    }
-    /// Initialize the encounter descriptor and initial battle segue.
-    ///
-    /// # Safety
-    /// Game thread only; communication state must already be initialized.
-    pub unsafe fn init_spathi_comm(cx: &mut Cx<'_>) -> CLocData {
-        let mut desc = descriptor();
-        run(cx, |s| s.initialize(&mut desc));
-        desc
-    }
-}
-pub struct SpathiDialogue;
-impl super::RaceDialogue for SpathiDialogue {
-    fn init(&self, _cx: &mut Cx<'_>) -> CommData {
-        #[cfg(not(test))]
-        {
-            unsafe { as_comm_data(&live::init_spathi_comm(_cx)) }
-        }
-        #[cfg(test)]
-        {
-            as_comm_data(&descriptor())
-        }
-    }
-    fn intro(&self, _cx: &mut Cx<'_>) {
-        #[cfg(not(test))]
-        live::intro(_cx);
-    }
-    fn post_encounter(&self, _cx: &mut Cx<'_>) {
-        #[cfg(not(test))]
-        live::post(_cx);
-    }
-    fn uninit(&self, _cx: &mut Cx<'_>) -> u32 {
-        0
-    }
-}
+
+#[cfg(test)]
+use crate::comm::descriptors::spathi::descriptor;
+
 #[cfg(test)]
 mod tests;

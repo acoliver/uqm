@@ -40,11 +40,8 @@ pub(crate) mod runtime {
 
     // uqm/comm.h is not included in navigation's generated ABI yet.
 
-    use crate::comm::comm_abi::SetCommIntroMode;
-
-    extern "C" {
-        static mut CommWndRect: crate::comm::locdata::CRect;
-    }
+    use crate::comm::{locdata::CRect, CommOptions};
+    use std::{cell::Cell, rc::Rc};
     const CIM_CROSSFADE_WINDOW: c_int = 1;
     const TRANS_COLOR: Color = rgb15(0, 0, 31);
     const CREDITS_TEXT_COLOR: Color = rgb15(31, 31, 31);
@@ -261,7 +258,7 @@ pub(crate) mod runtime {
         frame
     }
 
-    unsafe fn render_screen(target: CONTEXT) {
+    unsafe fn render_screen(target: CONTEXT, mut window: CRect) {
         let old_context = SetContext(target);
         let mut stamp = STAMP {
             origin: POINT { x: 0, y: 0 },
@@ -280,12 +277,12 @@ pub(crate) mod runtime {
         }
         if OUT_TAKES_RUNNING != 0 {
             SetContextForeGroundColor(TRANS_COLOR);
-            DrawFilledRectangle(ptr::addr_of_mut!(CommWndRect).cast());
+            DrawFilledRectangle(ptr::from_mut(&mut window).cast());
         }
         SetContext(old_context);
     }
 
-    unsafe fn init_credits() {
+    unsafe fn init_credits(window: CRect) {
         TEXT_FRAMES = [EMPTY_FRAME; MAX_CREDIT_FRAMES];
         #[cfg(feature = "debug-process")]
         {
@@ -317,7 +314,7 @@ pub(crate) mod runtime {
         SetContext(DRAW_CONTEXT);
         SetContextFGFrame(target_frame);
         SetContext(old_context);
-        render_screen(LOCAL_CONTEXT);
+        render_screen(LOCAL_CONTEXT, window);
         CREDITS_RATE = CREDITS_BASE_RATE;
         CREDITS_RUNNING = 1;
     }
@@ -354,7 +351,7 @@ pub(crate) mod runtime {
 
     static mut VICTORY_CREDITS_ACTIVE: bool = false;
 
-    unsafe fn process_frame(checkpoint: &mut dyn FnMut(CheckpointView<'_>)) {
+    unsafe fn process_frame(window: &Cell<CRect>, checkpoint: &mut dyn FnMut(CheckpointView<'_>)) {
         let now = GetTimeCounter();
         if now < NEXT_TIME {
             return;
@@ -453,7 +450,7 @@ pub(crate) mod runtime {
                 }
             }
         }
-        render_screen(LOCAL_CONTEXT);
+        render_screen(LOCAL_CONTEXT, window.get());
     }
 
     unsafe fn load_credits() -> BOOLEAN {
@@ -489,7 +486,7 @@ pub(crate) mod runtime {
         }
     }
 
-    unsafe fn outtakes(cx: &mut Cx<'_>, io: &mut Io<'_>) {
+    unsafe fn outtakes(cx: &mut Cx<'_>, io: &mut Io<'_>, window: &Rc<Cell<CRect>>) {
         const CONVERSATIONS: [CONVERSATION; 15] = [
             CONVERSATION_ZOQFOTPIK_CONVERSATION,
             CONVERSATION_TALKING_PET_CONVERSATION,
@@ -511,20 +508,25 @@ pub(crate) mod runtime {
         let old_subtitles = cx.with_legacy(|| {
             let old = configuration.preferences().subtitles;
             configuration.update_preferences(|options| options.subtitles = 1);
-            sliderDisabled = 1;
-            oscillDisabled = 1;
             old
         });
         let mut i = 0;
         while i < CONVERSATIONS.len() && cx.world.activity() & CHECK_ABORT as u16 == 0 {
-            cx.with_legacy(|| SetCommIntroMode((CIM_CROSSFADE_WINDOW) as u32, 0));
-            crate::comm::dispatch::init_communication(cx, io, CONVERSATIONS[i]);
+            crate::comm::dispatch::init_communication_with_options(
+                cx,
+                io,
+                CONVERSATIONS[i],
+                CommOptions {
+                    oscilloscope: false,
+                    slider: false,
+                    window: Some(window.clone()),
+                    intro: (CIM_CROSSFADE_WINDOW as u32, 0),
+                },
+            );
             i += 1;
         }
         cx.with_legacy(|| {
             configuration.update_preferences(|options| options.subtitles = old_subtitles);
-            sliderDisabled = 0;
-            oscillDisabled = 0;
         });
     }
 
@@ -575,10 +577,10 @@ pub(crate) mod runtime {
         1
     }
 
-    fn credits_frame_hook() -> crate::engine::input::InputFrameHook {
+    fn credits_frame_hook(window: Rc<Cell<CRect>>) -> crate::engine::input::InputFrameHook {
         // SAFETY: The credits owner removes this hook before releasing its published drawing state.
-        crate::engine::input::InputFrameHook::new(|checkpoint, _| unsafe {
-            process_frame(checkpoint);
+        crate::engine::input::InputFrameHook::new(move |checkpoint, _| unsafe {
+            process_frame(&window, checkpoint);
         })
     }
 
@@ -586,6 +588,7 @@ pub(crate) mod runtime {
         input: &crate::engine::input::InputSession,
         context: CONTEXT,
         with_outtakes: bool,
+        window: &Rc<Cell<CRect>>,
         io: &mut Io<'_>,
     ) -> Option<MUSIC_REF> {
         let music = LoadMusicInstance(CREDITS_MUSIC.as_ptr().cast()).cast();
@@ -607,12 +610,18 @@ pub(crate) mod runtime {
         if with_outtakes {
             io.observer.checkpoint(&CheckpointView::CreditsStarted);
         }
-        CommWndRect.corner.x =
-            ((screen_rect.extent.width as c_int - CommWndRect.width as c_int) / 2) as COORD;
-        CommWndRect.corner.y = 5;
-        init_credits();
+        let width = screen_rect.extent.width - 14;
+        window.set(CRect {
+            corner: crate::comm::locdata::CPoint {
+                x: (screen_rect.extent.width - width) / 2,
+                y: 5,
+            },
+            width,
+            height: 0,
+        });
+        init_credits(window.get());
         VICTORY_CREDITS_ACTIVE = with_outtakes;
-        SetInputCallback(input, Some(credits_frame_hook()));
+        SetInputCallback(input, Some(credits_frame_hook(window.clone())));
         if with_outtakes {
             OUT_TAKES_RUNNING = 1;
         }
@@ -648,12 +657,14 @@ pub(crate) mod runtime {
         let runtime = cx.kernel.input_runtime();
         let input = runtime.input();
         let context = cx.kernel.screen_context;
-        let Some(music) = cx.with_legacy(|| prepare_credits(input, context, with_outtakes, io))
+        let window = Rc::new(Cell::new(CRect::default()));
+        let Some(music) =
+            cx.with_legacy(|| prepare_credits(input, context, with_outtakes, &window, io))
         else {
             return;
         };
         if with_outtakes {
-            outtakes(cx, io);
+            outtakes(cx, io, &window);
             cx.with_legacy(|| OUT_TAKES_RUNNING = 0);
         }
         if cx.world.activity() & CHECK_ABORT as u16 == 0 {

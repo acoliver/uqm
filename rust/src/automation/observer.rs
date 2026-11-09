@@ -59,6 +59,7 @@ impl Observer<Option<super::campaign_state::CampaignView>> for Handle {
                     stop: false,
                     seed: Some(self.0.seed_value(domain, fallback)),
                     planet_side: None,
+                    comm_response: self.0.ui.take_response_request(),
                 }
             }
             InputView::PendingSpeech => self
@@ -76,6 +77,7 @@ impl Observer<Option<super::campaign_state::CampaignView>> for Handle {
             stop,
             seed: None,
             planet_side: None,
+            comm_response: self.0.ui.take_response_request(),
         }
     }
 
@@ -104,6 +106,7 @@ impl Observer<Option<super::campaign_state::CampaignView>> for Handle {
                 stop,
                 seed: None,
                 planet_side: None,
+                comm_response: self.0.ui.take_response_request(),
             }
         } else {
             input_admission::legacy(setup, || self.input_admitted(view, world))

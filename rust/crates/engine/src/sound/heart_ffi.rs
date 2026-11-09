@@ -647,12 +647,6 @@ pub unsafe extern "C" fn GraphForegroundStream(
 // Speech track facade
 // =============================================================================
 
-unsafe fn phrase_track_callback(
-    callback: Option<PhraseCallback>,
-) -> Option<Box<dyn Fn(i32) + Send>> {
-    callback.map(|callback| Box::new(move |_| callback()) as Box<dyn Fn(i32) + Send>)
-}
-
 ///
 /// # Safety
 ///
@@ -662,7 +656,7 @@ pub unsafe fn splice_track(
     track_name_ptr: *const c_char,
     track_text_ptr: *const c_char,
     timestamp_ptr: *const c_char,
-    callback_ptr: Option<PhraseCallback>,
+    callback: Option<Box<dyn Fn(i32) + Send>>,
 ) {
     let name = unicode_ptr_to_option(track_name_ptr);
     let text = unicode_ptr_to_option(track_text_ptr);
@@ -672,9 +666,8 @@ pub unsafe fn splice_track(
         name,
         text.as_ref().map(|s| s.len()),
         timestamp.as_ref().map(|s| s.len()),
-        callback_ptr.is_some()
+        callback.is_some()
     );
-    let callback = phrase_track_callback(callback_ptr);
 
     // Create per-page decoders with time-limited ranges (like C's SoundDecoder_Load)
     let decoders = create_per_page_decoders(name.as_deref(), text.as_deref(), timestamp.as_deref());
@@ -1557,15 +1550,15 @@ mod tests {
     fn phrase_callback_is_optional_and_reusable_when_seeking() {
         use std::sync::atomic::{AtomicU32, Ordering};
 
-        static CALLS: AtomicU32 = AtomicU32::new(0);
-        unsafe fn notified() {
-            CALLS.fetch_add(1, Ordering::SeqCst);
-        }
-
-        assert!(unsafe { phrase_track_callback(None) }.is_none());
-        let callback = unsafe { phrase_track_callback(Some(notified)) }.unwrap();
+        let absent: Option<Box<dyn Fn(i32) + Send>> = None;
+        assert!(absent.is_none());
+        let calls = std::sync::Arc::new(AtomicU32::new(0));
+        let captured = calls.clone();
+        let callback: Box<dyn Fn(i32) + Send> = Box::new(move |_| {
+            captured.fetch_add(1, Ordering::SeqCst);
+        });
         callback(0);
         callback(17);
-        assert_eq!(CALLS.load(Ordering::SeqCst), 2);
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
     }
 }

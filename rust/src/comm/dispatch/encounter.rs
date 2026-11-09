@@ -1,33 +1,29 @@
 //! Resource phases around the typed communication session.
 
+#[cfg(not(test))]
+use crate::comm::Comm;
+
 use super::*;
 
 #[cfg(not(test))]
-pub(super) fn load_descriptor(cx: &mut Cx<'_>, comm_id: u32) -> bool {
-    // SAFETY: dispatch owns the initialized conversation on the game thread.
-    let descriptor = unsafe { race_descriptor(cx, comm_id) };
-    set_comm_data(read_locdata(&descriptor));
-    // SAFETY: the legacy runtime exclusively owns this slot until session migration.
-    unsafe { ffi::CommData = descriptor };
-    true
+pub(super) fn load_descriptor(comm: &mut Comm, cx: &mut Cx<'_>, comm_id: u32) {
+    // SAFETY: dispatch holds the exclusive game-thread owners required by the race factory.
+    comm.data = unsafe { race_descriptor(comm, cx, comm_id) };
+    comm.set_comm_data(crate::comm::locdata::read_locdata(&comm.data));
 }
 
 #[cfg(not(test))]
-pub(super) fn finish_unhailed(cx: &mut Cx<'_>, has_descriptor: bool) {
+pub(super) fn finish_unhailed(comm: &mut Comm, cx: &mut Cx<'_>) {
     let active = cx.world.activity() & (CHECK_ABORT | CHECK_LOAD) == 0;
-    if has_descriptor {
-        // SAFETY: the descriptor remains live until encounter teardown on this thread.
-        let post = unsafe { ffi::CommData.post_encounter_func };
-        if active {
-            if let Some(callback) = post {
-                callback(cx);
-            }
+    let post = comm.data.post_encounter_func;
+    if active {
+        if let Some(callback) = post {
+            callback(comm, cx);
         }
-        // SAFETY: post-encounter dispatch has completed on the game thread.
-        let uninit = unsafe { ffi::CommData.uninit_encounter_func };
-        if let Some(callback) = uninit {
-            callback(cx);
-        }
+    }
+    let uninit = comm.data.uninit_encounter_func;
+    if let Some(callback) = uninit {
+        callback(comm, cx);
     }
 }
 

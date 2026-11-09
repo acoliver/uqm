@@ -1,13 +1,11 @@
 //! Thradd dialogue, ported from thraddc.c.
-use super::alliance::AllianceApi;
-use super::script::{animation, as_comm_data, GLOBAL_PLAYER_NAME};
-use crate::comm::locdata::{CColor, CLocData, CPoint};
-use crate::comm::types::CommData;
-use crate::engine::{battle::Cx, StoryKey};
+pub(crate) use super::alliance::AllianceApi;
+pub(crate) use super::script::GLOBAL_PLAYER_NAME;
+pub(crate) use crate::engine::StoryKey;
 mod phrases;
 use phrases::*;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Handler {
+pub(crate) enum Handler {
     ExitConversation,
     ThraddAllies,
     ThraddDemeanor,
@@ -15,11 +13,11 @@ enum Handler {
     HelixWorld,
     ThraddHostile,
 }
-struct Dialogue<'a, A> {
-    api: &'a mut A,
+pub(crate) struct Dialogue<'a, A> {
+    pub(crate) api: &'a mut A,
 }
 impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
-    fn handle(&mut self, h: Handler, r: u16) {
+    pub(crate) fn handle(&mut self, h: Handler, r: u16) {
         match h {
             Handler::ExitConversation => self.exit_conversation(r),
             Handler::ThraddAllies => self.thradd_allies(r),
@@ -29,7 +27,7 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
             Handler::ThraddHostile => self.thradd_hostile(r),
         }
     }
-    fn get_culture_name(&self) -> i32 {
+    pub(crate) fn get_culture_name(&self) -> i32 {
         match self.api.get(StoryKey::THRADD_CULTURE) {
             1 => i32::from(CULTURE),
             2 => i32::from(FAT_JERKS),
@@ -37,7 +35,7 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
             _ => panic!("unknown Thraddash culture"),
         }
     }
-    fn polite_phrase(&mut self, which_phrase: u8) {
+    pub(crate) fn polite_phrase(&mut self, which_phrase: u8) {
         match which_phrase {
             0 => {
                 self.api.npc(i32::from(HELLO_POLITE_1));
@@ -54,7 +52,7 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
             _ => {}
         }
     }
-    fn rhyme_phrase(&mut self, which_phrase: u8) {
+    pub(crate) fn rhyme_phrase(&mut self, which_phrase: u8) {
         match which_phrase {
             0 => {
                 self.api.npc(i32::from(HELLO_RHYME_1));
@@ -71,7 +69,7 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
             _ => {}
         }
     }
-    fn pig_latin_phrase(&mut self, which_phrase: u8) {
+    pub(crate) fn pig_latin_phrase(&mut self, which_phrase: u8) {
         match which_phrase {
             0 => {
                 self.api.npc(i32::from(HELLO_PIG_LATIN_1));
@@ -88,7 +86,7 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
             _ => {}
         }
     }
-    fn like_you_phrase(&mut self, which_phrase: u8) {
+    pub(crate) fn like_you_phrase(&mut self, which_phrase: u8) {
         match which_phrase {
             0 => {
                 self.api.npc(i32::from(HELLO_LIKE_YOU_1));
@@ -105,7 +103,7 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
             _ => {}
         }
     }
-    fn exit_conversation(&mut self, r: u16) {
+    pub(crate) fn exit_conversation(&mut self, r: u16) {
         self.api.segue(1_u32);
         if r == BYE_HOSTILE_2 {
             self.api.npc(i32::from(GOODBYE_HOSTILE_2));
@@ -179,7 +177,7 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
             self.api.segue(0_u32);
         }
     }
-    fn thradd_allies(&mut self, r: u16) {
+    pub(crate) fn thradd_allies(&mut self, r: u16) {
         let mut num_visits: u8;
         if r == WHY_YOU_HERE_ALLY {
             self.api.npc(i32::from(GUARDING_HELIX_ALLY));
@@ -274,7 +272,7 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
         }
         self.api.response(BYE_ALLY, Handler::ExitConversation, &[]);
     }
-    fn thradd_demeanor(&mut self, r: u16) {
+    pub(crate) fn thradd_demeanor(&mut self, r: u16) {
         if r == YOU_DECIDE {
             self.api.npc(i32::from(OK_CULTURE_20));
             self.api.set(StoryKey::THRADD_CULTURE, 1_u8);
@@ -293,7 +291,7 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
         self.api
             .response(JUST_LIKE_US, Handler::ExitConversation, &[]);
     }
-    fn thradd_culture(&mut self, r: u16) {
+    pub(crate) fn thradd_culture(&mut self, r: u16) {
         if r == BE_POLITE {
             self.api.npc(i32::from(OK_POLITE));
             self.api.set(StoryKey::THRADD_INTRO, 0_u8);
@@ -318,7 +316,7 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
         self.api
             .response(THE_SLAVE_EMPIRE0, Handler::ThraddDemeanor, &fragments);
     }
-    fn thradd_worship(&mut self, _r: u16) {
+    pub(crate) fn thradd_worship(&mut self, _r: u16) {
         self.api.set(StoryKey::THRADD_VISITS, 0_u8);
         self.api.set(StoryKey::THRADD_MANNER, 1_u8);
         self.api.set(StoryKey::THRADD_STACK_1, 0_u8);
@@ -331,7 +329,7 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
         self.api
             .response(JUST_THE_WAY_WE_DO, Handler::ThraddCulture, &[]);
     }
-    fn helix_world(&mut self, r: u16) {
+    pub(crate) fn helix_world(&mut self, r: u16) {
         if r == WHY_YOU_HERE_HOSTILE {
             self.api.npc(i32::from(NONE_OF_YOUR_CONCERN));
             self.api.set(StoryKey::THRADD_CULTURE, 1_u8);
@@ -370,7 +368,7 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
         self.api
             .response(BYE_HOSTILE_HELIX, Handler::ExitConversation, &[]);
     }
-    fn thradd_hostile(&mut self, r: u16) {
+    pub(crate) fn thradd_hostile(&mut self, r: u16) {
         if r == WHATS_UP_HOSTILE_1 {
             self.api.npc(i32::from(GENERAL_INFO_HOSTILE_1));
             self.api.set(StoryKey::THRADD_INFO, 1_u8);
@@ -486,7 +484,7 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
                 .response(BYE_HOSTILE_2, Handler::ExitConversation, &[]);
         }
     }
-    fn intro(&mut self) {
+    pub(crate) fn intro(&mut self) {
         let mut visits: u8;
         if (self.api.activity() as u8) == 5 {
             self.api.npc(i32::from(OUT_TAKES));
@@ -726,8 +724,8 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
             }
         }
     }
-    fn post_thradd_enc(&mut self) {}
-    fn initialize(&mut self) {
+    pub(crate) fn post_thradd_enc(&mut self) {}
+    pub(crate) fn initialize(&mut self) {
         if (self.api.get(StoryKey::THRADD_MANNER) != 0) || ((self.api.activity() as u8) == 5) {
             self.api.segue(0_u32);
         } else {
@@ -735,178 +733,9 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
         }
     }
 }
-fn descriptor() -> CLocData {
-    let mut d = CLocData {
-        alien_frame_res: c"comm.thraddash.graphics".as_ptr(),
-        alien_font_res: c"comm.thraddash.font".as_ptr(),
-        alien_colormap_res: c"comm.thraddash.colortable".as_ptr(),
-        alien_song_res: c"comm.thraddash.music".as_ptr(),
-        conversation_phrases_res: c"comm.thraddash.dialogue".as_ptr(),
-        alien_text_fcolor: CColor {
-            r: 255,
-            g: 255,
-            b: 255,
-            a: 255,
-        },
-        alien_text_bcolor: CColor {
-            r: 0,
-            g: 0,
-            b: 0,
-            a: 255,
-        },
-        alien_text_baseline: CPoint { x: 121, y: 0 },
-        alien_text_width: 224,
-        alien_text_align: 1,
-        alien_text_valign: 0,
-        num_animations: 8,
-        ..CLocData::default()
-    };
-    d.alien_ambient_array[0] = {
-        let mut a = animation(8, 4, 1, (56, 56), (56, 56));
-        a.block_mask = 16;
-        a
-    };
-    d.alien_ambient_array[1] = animation(12, 9, 2, (42, 0), (840, 2520));
-    d.alien_ambient_array[2] = animation(21, 6, 1, (42, 0), (840, 2520));
-    d.alien_ambient_array[3] = {
-        let mut a = animation(27, 3, 4, (42, 0), (840, 2520));
-        a.block_mask = 16;
-        a
-    };
-    d.alien_ambient_array[4] = {
-        let mut a = animation(30, 12, 10, (70, 0), (840, 840));
-        a.block_mask = 41;
-        a
-    };
-    d.alien_ambient_array[5] = {
-        let mut a = animation(42, 5, 4, (84, 28), (840, 2520));
-        a.block_mask = 80;
-        a
-    };
-    d.alien_ambient_array[6] = {
-        let mut a = animation(47, 5, 4, (84, 28), (840, 2520));
-        a.block_mask = 32;
-        a
-    };
-    d.alien_ambient_array[7] = animation(52, 4, 1, (42, 0), (42, 0));
-    d.alien_transition_desc = animation(0, 0, 0, (0, 0), (0, 0));
-    d.alien_talk_desc = animation(1, 7, 0, (56, 0), (70, 0));
-    #[cfg(not(test))]
-    {
-        d.init_encounter_func = Some(live::intro);
-        d.post_encounter_func = Some(live::post);
-        d.uninit_encounter_func = Some(live::uninit);
-    }
-    d
-}
-#[cfg(not(test))]
-pub(crate) mod live {
-    use super::*;
-    use crate::comm::races::script::live::LiveScript;
-    fn run(cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, LiveScript<'_, '_, Handler>>)) {
-        let mut api = LiveScript::new(cx, callback);
-        f(&mut Dialogue { api: &mut api });
-    }
-    fn exit_conversation(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::ExitConversation,
-                u16::try_from(r).expect("response exceeds COUNT"),
-            )
-        });
-    }
-    fn thradd_allies(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::ThraddAllies,
-                u16::try_from(r).expect("response exceeds COUNT"),
-            )
-        });
-    }
-    fn thradd_demeanor(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::ThraddDemeanor,
-                u16::try_from(r).expect("response exceeds COUNT"),
-            )
-        });
-    }
-    fn thradd_culture(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::ThraddCulture,
-                u16::try_from(r).expect("response exceeds COUNT"),
-            )
-        });
-    }
-    fn helix_world(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::HelixWorld,
-                u16::try_from(r).expect("response exceeds COUNT"),
-            )
-        });
-    }
-    fn thradd_hostile(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::ThraddHostile,
-                u16::try_from(r).expect("response exceeds COUNT"),
-            )
-        });
-    }
-    fn callback(h: Handler) -> crate::comm::response::ResponseFunc {
-        match h {
-            Handler::ExitConversation => exit_conversation,
-            Handler::ThraddAllies => thradd_allies,
-            Handler::ThraddDemeanor => thradd_demeanor,
-            Handler::ThraddCulture => thradd_culture,
-            Handler::HelixWorld => helix_world,
-            Handler::ThraddHostile => thradd_hostile,
-        }
-    }
-    pub(super) fn intro(cx: &mut Cx<'_>) {
-        run(cx, |s| s.intro());
-    }
-    pub(super) fn post(cx: &mut Cx<'_>) {
-        run(cx, |s| s.post_thradd_enc());
-    }
-    pub(super) fn uninit(_cx: &mut Cx<'_>) -> u16 {
-        0
-    }
-    /// Initialize this encounter on the game thread.
-    ///
-    /// # Safety
-    /// Communication state must be initialized on the game thread.
-    pub unsafe fn init_thradd_comm(cx: &mut Cx<'_>) -> CLocData {
-        let desc = descriptor();
-        run(cx, |s| s.initialize());
-        desc
-    }
-}
-pub struct ThraddDialogue;
-impl super::RaceDialogue for ThraddDialogue {
-    fn init(&self, _cx: &mut Cx<'_>) -> CommData {
-        #[cfg(not(test))]
-        {
-            unsafe { as_comm_data(&live::init_thradd_comm(_cx)) }
-        }
-        #[cfg(test)]
-        {
-            as_comm_data(&descriptor())
-        }
-    }
-    fn intro(&self, _cx: &mut Cx<'_>) {
-        #[cfg(not(test))]
-        live::intro(_cx);
-    }
-    fn post_encounter(&self, _cx: &mut Cx<'_>) {
-        #[cfg(not(test))]
-        live::post(_cx);
-    }
-    fn uninit(&self, _cx: &mut Cx<'_>) -> u32 {
-        0
-    }
-}
+
+#[cfg(test)]
+use crate::comm::descriptors::thradd::descriptor;
+
 #[cfg(test)]
 mod tests;

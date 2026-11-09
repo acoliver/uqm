@@ -3,12 +3,12 @@ use super::*;
 use crate::comm::races::encounter::EncounterApi;
 use crate::engine::StoryKey;
 
-pub(super) struct Dialogue<'a, A> {
-    pub(super) api: &'a mut A,
+pub(crate) struct Dialogue<'a, A> {
+    pub(crate) api: &'a mut A,
 }
 
 impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
-    pub(super) fn handle(&mut self, handler: Handler, response: i32) {
+    pub(crate) fn handle(&mut self, handler: Handler, response: i32) {
         match handler {
             Handler::Combat => self.combat(response),
             Handler::Menagerie => self.menagerie(response),
@@ -28,7 +28,7 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
         self.api.set(key, next);
     }
 
-    pub(super) fn combat(&mut self, response: i32) {
+    pub(crate) fn combat(&mut self, response: i32) {
         self.api.segue(1);
         match response as u32 {
             OK_TAKE_BEAST => {
@@ -116,7 +116,7 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
         }
     }
 
-    pub(super) fn menagerie(&mut self, response: i32) {
+    pub(crate) fn menagerie(&mut self, response: i32) {
         let response = response as u32;
         if response == I_HAVE_BEAST || [WHY_TRUST_1, WHY_TRUST_2, WHY_TRUST_3].contains(&response) {
             match response {
@@ -236,7 +236,7 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
         self.offer(BYE_ZEX, Handler::Combat);
     }
 
-    pub(super) fn normal(&mut self, response: i32) {
+    pub(crate) fn normal(&mut self, response: i32) {
         match response as u32 {
             WHY_SO_MEAN => {
                 self.api.npc(URQUAN_SLAVES as i32);
@@ -310,13 +310,13 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
         self.offer(BYE_HOSTILE_SPACE, Handler::Combat);
     }
 
-    pub(super) fn initialize(&mut self) {
+    pub(crate) fn initialize(&mut self) {
         let peaceful = (self.api.get(StoryKey::GLOBAL_FLAGS_AND_DATA) & (1 << 6)) != 0
             || self.api.activity() as u8 == crate::comm::dispatch::WON_LAST_BATTLE as u8;
         self.api.segue(if peaceful { 0 } else { 1 });
     }
 
-    pub(super) fn intro(&mut self) {
+    pub(crate) fn intro(&mut self) {
         if self.api.activity() as u8 == crate::comm::dispatch::WON_LAST_BATTLE as u8 {
             self.api.npc(OUT_TAKES as i32);
             self.api.segue(0);

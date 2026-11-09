@@ -2,17 +2,15 @@
 //!
 //! @plan PLAN-20260724-MAINLOOP-AND-COMM.P13-15
 
-use super::script::as_comm_data;
-use crate::comm::types::CommData;
-use crate::engine::{battle::Cx, StoryKey};
+pub(crate) use crate::engine::StoryKey;
 
 mod phrases;
 use phrases::*;
 
-mod api;
-use api::SlyhomeApi;
+pub(crate) mod api;
+pub(crate) use api::SlyhomeApi;
 
-const HOME_TOPICS: [u32; 7] = [
+pub(crate) const HOME_TOPICS: [u32; 7] = [
     WE_ARE_US0,
     WHAT_OTHER_VISITORS,
     ANY_OTHER_VISITORS,
@@ -23,7 +21,7 @@ const HOME_TOPICS: [u32; 7] = [
 ];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Handler {
+pub(crate) enum Handler {
     Exit,
     Home,
     Human,
@@ -33,15 +31,15 @@ enum Handler {
     Bug,
     Fix,
 }
-struct Dialogue<'a, A> {
-    api: &'a mut A,
+pub(crate) struct Dialogue<'a, A> {
+    pub(crate) api: &'a mut A,
 }
 
 impl<A: SlyhomeApi> Dialogue<'_, A> {
-    fn initialize(&mut self) {
+    pub(crate) fn initialize(&mut self) {
         self.api.segue(0);
     }
-    fn handle(&mut self, h: Handler, r: i32) {
+    pub(crate) fn handle(&mut self, h: Handler, r: i32) {
         match h {
             Handler::Exit => self.exit(r),
             Handler::Home => self.home(r),
@@ -53,10 +51,10 @@ impl<A: SlyhomeApi> Dialogue<'_, A> {
             Handler::Fix => self.fix(r),
         }
     }
-    fn offer(&mut self, p: u32, h: Handler) {
+    pub(crate) fn offer(&mut self, p: u32, h: Handler) {
         self.api.response(p as u16, h, &[]);
     }
-    fn home(&mut self, r: i32) {
+    pub(crate) fn home(&mut self, r: i32) {
         match r as u32 {
             WE_ARE_US0 => {
                 self.api.npc(TERRIBLY_EXCITING as i32);
@@ -175,7 +173,7 @@ impl<A: SlyhomeApi> Dialogue<'_, A> {
         }
         self.offer(BYE, Handler::Exit);
     }
-    fn human(&mut self, r: i32) {
+    pub(crate) fn human(&mut self, r: i32) {
         let (line, key, value) = match r as u32 {
             HAPPY_TO_TELL_MORE => (TELL_MORE, Some(StoryKey::SLYLANDRO_STACK4), 1),
             WOULD_YOU_LIKE_TO_KNOW_MORE => (YES_TELL_MORE, None, 0),
@@ -212,7 +210,7 @@ impl<A: SlyhomeApi> Dialogue<'_, A> {
             self.api.set(StoryKey::SLYLANDRO_STACK4, 2);
         }
     }
-    fn alien(&mut self, r: i32) {
+    pub(crate) fn alien(&mut self, r: i32) {
         let (line, disable) = match r as u32 {
             LIKE_MORE_ABOUT_YOU => (SURE_KNOW_WHAT, false),
             WHAT_ABOUT_HOME => (ABOUT_HOME, true),
@@ -244,7 +242,7 @@ impl<A: SlyhomeApi> Dialogue<'_, A> {
             self.api.disable(LIKE_MORE_ABOUT_YOU as u16);
         }
     }
-    fn probe(&mut self, r: i32) {
+    pub(crate) fn probe(&mut self, r: i32) {
         if r as u32 == TALK_MORE_PROBE_ATTACK {
             self.function(r);
             return;
@@ -330,7 +328,7 @@ impl<A: SlyhomeApi> Dialogue<'_, A> {
             self.api.disable(KNOW_MORE_PROBE as u16);
         }
     }
-    fn function(&mut self, r: i32) {
+    pub(crate) fn function(&mut self, r: i32) {
         let line = match r as u32 {
             TALK_MORE_PROBE_ATTACK => NO_PROBLEM_BUT_SURE,
             TELL_ME_ABOUT_BASICS => {
@@ -428,7 +426,7 @@ impl<A: SlyhomeApi> Dialogue<'_, A> {
         }
         self.offer(ENOUGH_PROBLEM, Handler::Probe);
     }
-    fn bug(&mut self, r: i32) {
+    pub(crate) fn bug(&mut self, r: i32) {
         let line = match r as u32 {
             PROBE_HAS_BUG => NO_IT_DOESNT,
             TELL_ME_ABOUT_REP_2 => REP_NO_PROBLEM,
@@ -453,7 +451,7 @@ impl<A: SlyhomeApi> Dialogue<'_, A> {
             self.offer(TELL_ME_ABOUT_ATTACK, Handler::Bug);
         }
     }
-    fn fix(&mut self, r: i32) {
+    pub(crate) fn fix(&mut self, r: i32) {
         let (line, p) = match r as u32 {
             THINK_ABOUT_REP_PRIORITIES => (UH_OH, 0),
             HUNT_THEM_DOWN => (GROW_TOO_FAST, HUNT_THEM_DOWN),
@@ -474,7 +472,7 @@ impl<A: SlyhomeApi> Dialogue<'_, A> {
         }
         self.offer(MEGA_SELF_DESTRUCT, Handler::Home);
     }
-    fn exit(&mut self, _r: i32) {
+    pub(crate) fn exit(&mut self, _r: i32) {
         self.api.segue(0);
         self.api
             .npc(if self.api.get(StoryKey::SLYLANDRO_HOME_VISITS) == 1 {
@@ -483,7 +481,7 @@ impl<A: SlyhomeApi> Dialogue<'_, A> {
                 GOODBYE_2 as i32
             });
     }
-    fn intro(&mut self) {
+    pub(crate) fn intro(&mut self) {
         if self.api.get(StoryKey::SLYLANDRO_KNOW_BROKEN) != 0
             && self.api.get(StoryKey::RECALL_VISITS) == 0
         {
@@ -507,108 +505,17 @@ impl<A: SlyhomeApi> Dialogue<'_, A> {
 // Resource keys (from resinst.h)
 // ---------------------------------------------------------------------------
 
-const RACE_PMAP_ANIM: &[u8] = b"comm.slylandro.graphics\0";
-const RACE_FONT: &[u8] = b"comm.slylandro.font\0";
-const RACE_COLOR_MAP: &[u8] = b"comm.slylandro.colortable\0";
-const RACE_MUSIC: &[u8] = b"comm.slylandro.music\0";
-const RACE_CONVERSATION_PHRASES: &[u8] = b"comm.slylandro.dialogue\0";
+pub(crate) const RACE_PMAP_ANIM: &[u8] = b"comm.slylandro.graphics\0";
+pub(crate) const RACE_FONT: &[u8] = b"comm.slylandro.font\0";
+pub(crate) const RACE_COLOR_MAP: &[u8] = b"comm.slylandro.colortable\0";
+pub(crate) const RACE_MUSIC: &[u8] = b"comm.slylandro.music\0";
+pub(crate) const RACE_CONVERSATION_PHRASES: &[u8] = b"comm.slylandro.dialogue\0";
 
-mod descriptor;
-use descriptor::descriptor;
-
-/// Slyhome race dialogue implementation.
-#[cfg(not(test))]
-pub(crate) mod live {
-    use super::super::script::live::LiveScript;
-    use super::*;
-    fn run(cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, LiveScript<'_, '_, Handler>>)) {
-        let mut api = LiveScript::new(cx, callback);
-        f(&mut Dialogue { api: &mut api });
-    }
-    fn exit(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| s.handle(Handler::Exit, r as i32));
-    }
-    fn home(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| s.handle(Handler::Home, r as i32));
-    }
-    fn human(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| s.handle(Handler::Human, r as i32));
-    }
-    fn alien(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| s.handle(Handler::Alien, r as i32));
-    }
-    fn probe(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| s.handle(Handler::Probe, r as i32));
-    }
-    fn function(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| s.handle(Handler::Function, r as i32));
-    }
-    fn bug(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| s.handle(Handler::Bug, r as i32));
-    }
-    fn fix(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| s.handle(Handler::Fix, r as i32));
-    }
-    fn callback(h: Handler) -> crate::comm::response::ResponseFunc {
-        match h {
-            Handler::Exit => exit,
-            Handler::Home => home,
-            Handler::Human => human,
-            Handler::Alien => alien,
-            Handler::Probe => probe,
-            Handler::Function => function,
-            Handler::Bug => bug,
-            Handler::Fix => fix,
-        }
-    }
-    pub(super) fn intro(cx: &mut Cx<'_>) {
-        run(cx, |s| s.intro());
-    }
-    pub(super) fn post(_cx: &mut Cx<'_>) {}
-    pub(super) fn uninit(_cx: &mut Cx<'_>) -> u16 {
-        0
-    }
-    pub unsafe fn init_slylandro_comm(cx: &mut Cx<'_>) -> crate::comm::locdata::CLocData {
-        extern "C" {
-            static mut ScreenWidth: i32;
-        }
-        let mut d = descriptor(ScreenWidth);
-        d.alien_text_baseline.x = (1 + ((ScreenWidth - 80) >> 1)) as i16;
-        d.alien_text_width = (ScreenWidth - 80) as u16;
-        run(cx, |s| s.initialize());
-        d
-    }
-}
-
+#[cfg(test)]
+use crate::comm::descriptors::slyhome::descriptor;
 #[cfg(test)]
 #[path = "slyhome/tests.rs"]
 mod branch_tests;
-
-pub struct SlyhomeDialogue;
-
-impl super::RaceDialogue for SlyhomeDialogue {
-    fn init(&self, _cx: &mut Cx<'_>) -> CommData {
-        #[cfg(not(test))]
-        {
-            unsafe { as_comm_data(&live::init_slylandro_comm(_cx)) }
-        }
-        #[cfg(test)]
-        {
-            as_comm_data(&descriptor(320))
-        }
-    }
-
-    fn intro(&self, _cx: &mut Cx<'_>) {
-        #[cfg(not(test))]
-        live::intro(_cx);
-    }
-
-    fn post_encounter(&self, _cx: &mut Cx<'_>) {}
-
-    fn uninit(&self, _cx: &mut Cx<'_>) -> u32 {
-        0
-    }
-}
 
 #[cfg(test)]
 mod tests {

@@ -2427,10 +2427,8 @@ pub const CONVERSATION_INVALID_CONVERSATION: CONVERSATION = 26;
 pub type CONVERSATION = ::std::os::raw::c_uint;
 
 extern "C" {
-    pub static mut sliderDisabled: i32;
 }
 extern "C" {
-    pub static mut oscillDisabled: i32;
 }
 pub const GLOBAL_PLAYER_NAME: _bindgen_ty_22 = -1000000;
 pub const GLOBAL_SHIP_NAME: _bindgen_ty_22 = -999999;

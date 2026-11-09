@@ -1,29 +1,26 @@
 //! Mycon dialogue, ported from myconc.c.
-use super::script::{animation, as_comm_data};
-use crate::comm::locdata::{CColor, CLocData, CPoint};
-use crate::comm::types::CommData;
-use crate::engine::{battle::Cx, StoryKey};
+pub(crate) use crate::engine::StoryKey;
 mod phrases;
 use phrases::*;
-mod api;
-use api::MyconApi;
+pub(crate) mod api;
+pub(crate) use api::MyconApi;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Handler {
+pub(crate) enum Handler {
     CombatIsInevitable,
     SunDevice,
     TrickMycon,
     NormalMycon,
 }
 #[derive(Default)]
-struct Session {
+pub(crate) struct Session {
     made_choice: i32,
 }
-struct Dialogue<'a, A> {
-    api: &'a mut A,
-    session: &'a mut Session,
+pub(crate) struct Dialogue<'a, A> {
+    pub(crate) api: &'a mut A,
+    pub(crate) session: &'a mut Session,
 }
 impl<A: MyconApi> Dialogue<'_, A> {
-    fn handle(&mut self, h: Handler, r: i32) {
+    pub(crate) fn handle(&mut self, h: Handler, r: i32) {
         match h {
             Handler::CombatIsInevitable => self.combat_is_inevitable(r),
             Handler::SunDevice => self.sun_device(r),
@@ -31,7 +28,7 @@ impl<A: MyconApi> Dialogue<'_, A> {
             Handler::NormalMycon => self.normal_mycon(r),
         }
     }
-    fn do_ramble(&mut self, r: i32) {
+    pub(crate) fn do_ramble(&mut self, r: i32) {
         let mut counter: i32;
         counter = i32::from(self.api.get(StoryKey::MYCON_RAMBLE));
         let res = {
@@ -155,7 +152,7 @@ impl<A: MyconApi> Dialogue<'_, A> {
             self.session.made_choice = 1;
         }
     }
-    fn combat_is_inevitable(&mut self, r: i32) {
+    pub(crate) fn combat_is_inevitable(&mut self, r: i32) {
         self.api.segue(1);
         if r == BYE_SPACE {
             self.api.npc(BYE_AND_DIE_SPACE);
@@ -176,7 +173,7 @@ impl<A: MyconApi> Dialogue<'_, A> {
         }
         self.session.made_choice = 0;
     }
-    fn sun_device(&mut self, r: i32) {
+    pub(crate) fn sun_device(&mut self, r: i32) {
         if r == WHATS_UP_SUN_DEVICE {
             self.api.npc(GENERAL_INFO_SUN_DEVICE);
             self.api.disable((WHATS_UP_SUN_DEVICE) as u16);
@@ -209,7 +206,7 @@ impl<A: MyconApi> Dialogue<'_, A> {
         self.api
             .response((BYE_SUN_DEVICE) as u16, Handler::CombatIsInevitable, &[]);
     }
-    fn trick_mycon(&mut self, r: i32) {
+    pub(crate) fn trick_mycon(&mut self, r: i32) {
         if r == I_HAVE_A_CUNNING_PLAN {
             self.api.npc(TELL_US_ABOUT_WORLD);
             self.api.disable((I_HAVE_A_CUNNING_PLAN) as u16);
@@ -243,7 +240,7 @@ impl<A: MyconApi> Dialogue<'_, A> {
             self.api.response((CLUE_3) as u16, Handler::TrickMycon, &[]);
         }
     }
-    fn normal_mycon(&mut self, r: i32) {
+    pub(crate) fn normal_mycon(&mut self, r: i32) {
         if r == WHAT_ABOUT_SHATTERED {
             self.api.npc(ABOUT_SHATTERED);
             self.api.set(StoryKey::KNOW_ABOUT_SHATTERED, 2_u8);
@@ -373,7 +370,7 @@ impl<A: MyconApi> Dialogue<'_, A> {
                 .response((BYE_HOMEWORLD) as u16, Handler::CombatIsInevitable, &[]);
         }
     }
-    fn intro(&mut self) {
+    pub(crate) fn intro(&mut self) {
         let mut visits: i32;
         if self.api.get(StoryKey::SUN_DEVICE) != 0 {
             visits = i32::from(self.api.get(StoryKey::MYCON_VISITS));
@@ -504,8 +501,8 @@ impl<A: MyconApi> Dialogue<'_, A> {
             self.normal_mycon(0_u16 as i32);
         }
     }
-    fn post_mycon_enc(&mut self) {}
-    fn initialize(&mut self) {
+    pub(crate) fn post_mycon_enc(&mut self) {}
+    pub(crate) fn initialize(&mut self) {
         self.session.made_choice = 0;
         if (i32::from(self.api.activity()) as u8 as i32) != 5 {
             self.api.segue(1);
@@ -514,145 +511,9 @@ impl<A: MyconApi> Dialogue<'_, A> {
         }
     }
 }
-fn descriptor() -> CLocData {
-    let mut d = CLocData {
-        alien_frame_res: c"comm.mycon.graphics".as_ptr(),
-        alien_font_res: c"comm.mycon.font".as_ptr(),
-        alien_colormap_res: c"comm.mycon.colortable".as_ptr(),
-        alien_song_res: c"comm.mycon.music".as_ptr(),
-        conversation_phrases_res: c"comm.mycon.dialogue".as_ptr(),
-        alien_text_fcolor: CColor {
-            r: 255,
-            g: 255,
-            b: 255,
-            a: 255,
-        },
-        alien_text_bcolor: CColor {
-            r: 0,
-            g: 0,
-            b: 0,
-            a: 255,
-        },
-        alien_text_baseline: CPoint { x: 121, y: 0 },
-        alien_text_width: 224,
-        alien_text_align: 1,
-        alien_text_valign: 0,
-        num_animations: 5,
-        ..CLocData::default()
-    };
-    d.alien_ambient_array[0] = animation(12, 6, 2, (63, 0), (63, 0));
-    d.alien_ambient_array[0].block_mask = 2;
-    d.alien_ambient_array[1] = animation(18, 4, 2, (63, 0), (63, 0));
-    d.alien_ambient_array[1].block_mask = 1;
-    d.alien_ambient_array[2] = animation(22, 6, 2, (63, 0), (63, 0));
-    d.alien_ambient_array[3] = animation(28, 5, 2, (63, 0), (63, 0));
-    d.alien_ambient_array[4] = animation(33, 4, 4, (63, 0), (63, 0));
-    d.alien_transition_desc = animation(0, 0, 0, (0, 0), (0, 0));
-    d.alien_talk_desc = animation(1, 11, 0, (56, 0), (70, 0));
-    #[cfg(not(test))]
-    {
-        d.init_encounter_func = Some(live::intro);
-        d.post_encounter_func = Some(live::post);
-        d.uninit_encounter_func = Some(live::uninit);
-    }
-    d
-}
-#[cfg(not(test))]
-pub(crate) mod live {
-    use super::super::script::live::LiveScript;
-    use super::*;
-    fn run(cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, LiveScript<'_, '_, Handler>>)) {
-        let mut api = LiveScript::new(cx, callback);
-        static mut SESSION: Session = Session { made_choice: 0 };
-        unsafe {
-            f(&mut Dialogue {
-                api: &mut api,
-                session: &mut *std::ptr::addr_of_mut!(SESSION),
-            });
-        }
-    }
-    fn combat_is_inevitable(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::CombatIsInevitable,
-                i32::try_from(r).expect("invalid response"),
-            )
-        });
-    }
-    fn sun_device(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::SunDevice,
-                i32::try_from(r).expect("invalid response"),
-            )
-        });
-    }
-    fn trick_mycon(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::TrickMycon,
-                i32::try_from(r).expect("invalid response"),
-            )
-        });
-    }
-    fn normal_mycon(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::NormalMycon,
-                i32::try_from(r).expect("invalid response"),
-            )
-        });
-    }
-    fn callback(h: Handler) -> crate::comm::response::ResponseFunc {
-        match h {
-            Handler::CombatIsInevitable => combat_is_inevitable,
-            Handler::SunDevice => sun_device,
-            Handler::TrickMycon => trick_mycon,
-            Handler::NormalMycon => normal_mycon,
-        }
-    }
-    pub(super) fn intro(cx: &mut Cx<'_>) {
-        run(cx, |s| s.intro());
-    }
-    pub(super) fn post(cx: &mut Cx<'_>) {
-        run(cx, |s| s.post_mycon_enc());
-    }
-    pub(super) fn uninit(_cx: &mut Cx<'_>) -> u16 {
-        0
-    }
-    /// Initialize the encounter on the game thread.
-    ///
-    /// # Safety
-    /// Communication state must be initialized on the game thread.
-    pub unsafe fn init_mycon_comm(cx: &mut Cx<'_>) -> CLocData {
-        let desc = descriptor();
-        run(cx, |s| s.initialize());
-        desc
-    }
-}
-pub struct MyconDialogue;
-impl super::RaceDialogue for MyconDialogue {
-    fn init(&self, _cx: &mut Cx<'_>) -> CommData {
-        #[cfg(not(test))]
-        {
-            unsafe { as_comm_data(&live::init_mycon_comm(_cx)) }
-        }
-        #[cfg(test)]
-        {
-            as_comm_data(&descriptor())
-        }
-    }
-    fn intro(&self, _cx: &mut Cx<'_>) {
-        #[cfg(not(test))]
-        live::intro(_cx);
-    }
-    fn post_encounter(&self, _cx: &mut Cx<'_>) {
-        #[cfg(not(test))]
-        live::post(_cx);
-    }
-    fn uninit(&self, _cx: &mut Cx<'_>) -> u32 {
-        0
-    }
-}
+
+#[cfg(test)]
+use crate::comm::descriptors::mycon::descriptor;
+
 #[cfg(test)]
 mod tests;

@@ -1,19 +1,17 @@
 //! Melnorme dialogue and trading, ported from melnorm.c.
 
-use super::encounter::EncounterApi;
-use super::script::{animation, as_comm_data};
-use crate::comm::locdata::{CColor, CLocData, CPoint, CSisState};
-use crate::comm::types::CommData;
-use crate::engine::{battle::Cx, StoryKey};
-mod api;
-mod numbers;
+pub(crate) use super::encounter::EncounterApi;
+pub(crate) use crate::comm::locdata::{CLocData, CSisState};
+pub(crate) use crate::engine::StoryKey;
+pub(crate) mod api;
+pub(crate) mod numbers;
 mod phrases;
 mod rescue;
-use api::MelnormApi;
+pub(crate) use api::MelnormApi;
 use phrases::*;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Handler {
+pub(crate) enum Handler {
     ExitConversation,
     DoRescue,
     DoBuy,
@@ -25,7 +23,7 @@ enum Handler {
     DoMelnormePissed,
 }
 
-const fn empty_ship() -> CSisState {
+pub(crate) const fn empty_ship() -> CSisState {
     CSisState {
         log_x: 0,
         log_y: 0,
@@ -44,7 +42,7 @@ const fn empty_ship() -> CSisState {
         planet_name: [0; 16],
     }
 }
-struct Session {
+pub(crate) struct Session {
     local_stack0: u8,
     local_stack1: u8,
     asked_to_buy: bool,
@@ -53,7 +51,7 @@ struct Session {
     sis_copy: CSisState,
 }
 impl Session {
-    const fn new() -> Self {
+    pub(crate) const fn new() -> Self {
         Self {
             local_stack0: 0,
             local_stack1: 0,
@@ -64,18 +62,18 @@ impl Session {
         }
     }
 }
-struct Dialogue<'a, A> {
-    api: &'a mut A,
-    session: &'a mut Session,
+pub(crate) struct Dialogue<'a, A> {
+    pub(crate) api: &'a mut A,
+    pub(crate) session: &'a mut Session,
 }
 
 #[derive(Clone, Copy)]
-enum Tech {
+pub(crate) enum Tech {
     Module(usize, u8),
     Shield(u8),
     State(StoryKey),
 }
-const TECHS: [Tech; 13] = [
+pub(crate) const TECHS: [Tech; 13] = [
     Tech::Module(10, 80),
     Tech::State(StoryKey::IMPROVED_LANDER_SPEED),
     Tech::Module(13, 80),
@@ -91,7 +89,7 @@ const TECHS: [Tech; 13] = [
     Tech::Module(8, 80),
 ];
 impl<A: MelnormApi> Dialogue<'_, A> {
-    fn handle(&mut self, h: Handler, r: u16) {
+    pub(crate) fn handle(&mut self, h: Handler, r: u16) {
         match h {
             Handler::ExitConversation => self.exit_conversation(r),
             Handler::DoRescue => self.do_rescue(r),
@@ -104,21 +102,21 @@ impl<A: MelnormApi> Dialogue<'_, A> {
             Handler::DoMelnormePissed => self.do_melnorme_pissed(r),
         }
     }
-    fn initialize(&mut self, _desc: &mut CLocData) {
+    pub(crate) fn initialize(&mut self, _desc: &mut CLocData) {
         self.session.local_stack0 = 0;
         self.session.local_stack1 = 0;
         self.session.prev_msg_mode = 0;
         self.api.segue(0);
         self.session.asked_to_buy = false;
     }
-    fn has_tech(&self, i: usize) -> bool {
+    pub(crate) fn has_tech(&self, i: usize) -> bool {
         match TECHS[i] {
             Tech::Module(id, _) => self.api.module_cost(id) != 0,
             Tech::Shield(bit) => self.api.get(StoryKey::LANDER_SHIELDS) & (1 << bit) != 0,
             Tech::State(key) => self.api.get(key) != 0,
         }
     }
-    fn grant_tech(&mut self, i: usize) {
+    pub(crate) fn grant_tech(&mut self, i: usize) {
         match TECHS[i] {
             Tech::Module(id, cost) => self.api.set_module_cost(id, cost),
             Tech::Shield(bit) => self.api.set(
@@ -128,21 +126,21 @@ impl<A: MelnormApi> Dialogue<'_, A> {
             Tech::State(key) => self.api.set(key, 1),
         }
     }
-    fn next_tech(&self) -> Option<usize> {
+    pub(crate) fn next_tech(&self) -> Option<usize> {
         (0..TECHS.len()).find(|&i| !self.has_tech(i))
     }
-    fn credits(&self) -> u16 {
+    pub(crate) fn credits(&self) -> u16 {
         u16::from_le_bytes([
             self.api.get(StoryKey::MELNORME_CREDIT0),
             self.api.get(StoryKey::MELNORME_CREDIT1),
         ])
     }
-    fn set_credits(&mut self, credits: u16) {
+    pub(crate) fn set_credits(&mut self, credits: u16) {
         let [lo, hi] = credits.to_le_bytes();
         self.api.set(StoryKey::MELNORME_CREDIT0, lo);
         self.api.set(StoryKey::MELNORME_CREDIT1, hi);
     }
-    fn delta_credit(&mut self, delta: i16) -> bool {
+    pub(crate) fn delta_credit(&mut self, delta: i16) -> bool {
         let credit = self.credits();
         if delta >= 0 || -i32::from(delta) <= i32::from(credit) {
             self.set_credits(credit.wrapping_add(delta as u16));
@@ -155,12 +153,12 @@ impl<A: MelnormApi> Dialogue<'_, A> {
             false
         }
     }
-    fn any_info(&self) -> bool {
+    pub(crate) fn any_info(&self) -> bool {
         self.api.get(StoryKey::MELNORME_EVENTS_INFO_STACK) < 8
             || self.api.get(StoryKey::MELNORME_ALIEN_INFO_STACK) < 16
             || self.api.get(StoryKey::MELNORME_HISTORY_INFO_STACK) < 9
     }
-    fn info(&mut self, r: u16) {
+    pub(crate) fn info(&mut self, r: u16) {
         let (key, first, count) = match r {
             BUY_CURRENT_EVENTS => (StoryKey::MELNORME_EVENTS_INFO_STACK, OK_BUY_EVENT_1, 8),
             BUY_ALIEN_RACES => (StoryKey::MELNORME_ALIEN_INFO_STACK, OK_BUY_ALIEN_RACE_1, 16),
@@ -184,7 +182,7 @@ impl<A: MelnormApi> Dialogue<'_, A> {
         self.api.npc(i32::from(phrase));
         self.api.set(key, stack.wrapping_add(1));
     }
-    fn capacity(&self) -> u32 {
+    pub(crate) fn capacity(&self) -> u32 {
         1000 + self
             .api
             .ship()
@@ -197,7 +195,7 @@ impl<A: MelnormApi> Dialogue<'_, A> {
             })
             .sum::<u32>()
     }
-    fn buy_menu(&mut self, capacity: u32) {
+    pub(crate) fn buy_menu(&mut self, capacity: u32) {
         if self.api.ship().fuel_on_board < capacity {
             self.api.response(BUY_FUEL, Handler::DoBuy, &[]);
         }
@@ -212,7 +210,7 @@ impl<A: MelnormApi> Dialogue<'_, A> {
         self.api
             .response(BE_LEAVING_NOW, Handler::ExitConversation, &[]);
     }
-    fn do_buy(&mut self, r: u16) {
+    pub(crate) fn do_buy(&mut self, r: u16) {
         let credit = self.credits();
         let capacity = self.capacity();
         if credit == 0 {
@@ -336,14 +334,14 @@ impl<A: MelnormApi> Dialogue<'_, A> {
             self.buy_menu(capacity);
         }
     }
-    fn new_rainbows(&self) -> u8 {
+    pub(crate) fn new_rainbows(&self) -> u8 {
         let mask = u16::from_le_bytes([
             self.api.get(StoryKey::RAINBOW_WORLD0),
             self.api.get(StoryKey::RAINBOW_WORLD1),
         ]);
         (mask.count_ones() as u8).wrapping_sub(self.api.get(StoryKey::MELNORME_RAINBOW_COUNT))
     }
-    fn do_sell(&mut self, r: u16) {
+    pub(crate) fn do_sell(&mut self, r: u16) {
         let mut rainbows = self.new_rainbows();
         let mut queued = false;
         if r != SELL {
@@ -420,7 +418,7 @@ impl<A: MelnormApi> Dialogue<'_, A> {
             self.nature_of_conversation(r);
         }
     }
-    fn nature_of_conversation(&mut self, mut r: u16) {
+    pub(crate) fn nature_of_conversation(&mut self, mut r: u16) {
         if r == GET_ON_WITH_BUSINESS {
             self.api.set(StoryKey::MELNORME_YACK_STACK2, 5);
             r = 0;
@@ -491,7 +489,7 @@ impl<A: MelnormApi> Dialogue<'_, A> {
             self.api.response(NO_HELP, Handler::ExitConversation, &[]);
         }
     }
-    fn yack0_respond(&mut self) {
+    pub(crate) fn yack0_respond(&mut self) {
         match self.api.get(StoryKey::MELNORME_YACK_STACK0) {
             0 => {
                 let mut fragments = vec![i32::from(WE_ARE_FROM_ALLIANCE0)];
@@ -503,7 +501,7 @@ impl<A: MelnormApi> Dialogue<'_, A> {
             _ => {}
         }
     }
-    fn do_first_meeting(&mut self, r: u16) {
+    pub(crate) fn do_first_meeting(&mut self, r: u16) {
         let mut last_stack = 0;
         if r == 0 {
             let mut n = self.api.get(StoryKey::MELNORME_BUSINESS_COUNT);
@@ -564,7 +562,7 @@ impl<A: MelnormApi> Dialogue<'_, A> {
         self.api
             .response(NO_TRADE_NOW, Handler::ExitConversation, &[]);
     }
-    fn post_melnorme_enc(&mut self) {
+    pub(crate) fn post_melnorme_enc(&mut self) {
         if self.session.prev_msg_mode != 0 {
             self.api.status_mode(self.session.prev_msg_mode);
         }
@@ -572,50 +570,8 @@ impl<A: MelnormApi> Dialogue<'_, A> {
     }
 }
 
-fn descriptor() -> CLocData {
-    let mut d = CLocData {
-        alien_frame_res: c"comm.melnorme.graphics".as_ptr(),
-        alien_font_res: c"comm.melnorme.font".as_ptr(),
-        alien_colormap_res: c"comm.melnorme.colortable".as_ptr(),
-        alien_song_res: c"comm.melnorme.music".as_ptr(),
-        conversation_phrases_res: c"comm.melnorme.dialogue".as_ptr(),
-        alien_text_fcolor: CColor {
-            r: 255,
-            g: 255,
-            b: 255,
-            a: 255,
-        },
-        alien_text_bcolor: CColor {
-            r: 0,
-            g: 0,
-            b: 0,
-            a: 255,
-        },
-        alien_text_baseline: CPoint { x: 121, y: 0 },
-        alien_text_width: 224,
-        alien_text_align: 1,
-        alien_text_valign: 0,
-        num_animations: 4,
-        alien_number_speech: numbers::descriptor(),
-        ..CLocData::default()
-    };
-    d.alien_ambient_array[0] = animation(6, 5, 4, (70, 0), (3360, 3360));
-    d.alien_ambient_array[0].block_mask = 2;
-    d.alien_ambient_array[1] = animation(11, 9, 4, (42, 0), (3360, 3360));
-    d.alien_ambient_array[1].block_mask = 1;
-    d.alien_ambient_array[2] = animation(20, 2, 4, (84, 56), (840, 2520));
-    d.alien_ambient_array[3] = animation(22, 2, 4, (84, 56), (840, 2520));
-    d.alien_talk_desc = animation(1, 5, 0, (56, 0), (70, 0));
-    #[cfg(not(test))]
-    {
-        d.init_encounter_func = Some(live::intro);
-        d.post_encounter_func = Some(live::post);
-        d.uninit_encounter_func = Some(live::uninit);
-    }
-    d
-}
 impl<A: MelnormApi> Dialogue<'_, A> {
-    fn exit_conversation(&mut self, r: u16) {
+    pub(crate) fn exit_conversation(&mut self, r: u16) {
         if r == NO_TRADE_NOW {
             self.api.npc(i32::from(OK_NO_TRADE_NOW_BYE));
         } else if r == YOURE_ON {
@@ -662,7 +618,7 @@ impl<A: MelnormApi> Dialogue<'_, A> {
             self.api.npc(i32::from(FRIENDLY_GOODBYE));
         }
     }
-    fn do_bluster(&mut self, r: u16) {
+    pub(crate) fn do_bluster(&mut self, r: u16) {
         if r == TRADE_IS_FOR_THE_WEAK {
             self.api.fade_palette(2, 420);
             self.api.set(StoryKey::MELNORME_YACK_STACK2, 4_u8);
@@ -710,7 +666,7 @@ impl<A: MelnormApi> Dialogue<'_, A> {
         }
         self.api.response(YOURE_ON, Handler::ExitConversation, &[]);
     }
-    fn yack1_respond(&mut self) {
+    pub(crate) fn yack1_respond(&mut self) {
         match self.api.get(StoryKey::MELNORME_YACK_STACK1) {
             0 => {
                 self.api
@@ -729,7 +685,7 @@ impl<A: MelnormApi> Dialogue<'_, A> {
             _ => {}
         }
     }
-    fn yack2_respond(&mut self) {
+    pub(crate) fn yack2_respond(&mut self) {
         match self.api.get(StoryKey::MELNORME_YACK_STACK2) {
             0 => {
                 self.api
@@ -750,7 +706,7 @@ impl<A: MelnormApi> Dialogue<'_, A> {
             _ => {}
         }
     }
-    fn do_melnorme_miffed(&mut self, r: u16) {
+    pub(crate) fn do_melnorme_miffed(&mut self, r: u16) {
         if r == 0 {
             let mut miffed_count: u8;
             miffed_count = self.api.get(StoryKey::MELNORME_MIFFED_COUNT);
@@ -809,7 +765,7 @@ impl<A: MelnormApi> Dialogue<'_, A> {
         self.api
             .response(BYE_MELNORME_SLIGHTLY_ANGRY, Handler::ExitConversation, &[]);
     }
-    fn do_melnorme_pissed(&mut self, r: u16) {
+    pub(crate) fn do_melnorme_pissed(&mut self, r: u16) {
         if r == 0 {
             let mut pissed_count: u8;
             pissed_count = self.api.get(StoryKey::MELNORME_PISSED_COUNT);
@@ -859,7 +815,7 @@ impl<A: MelnormApi> Dialogue<'_, A> {
         self.api
             .response(BYE_MELNORME_PISSED_OFF, Handler::ExitConversation, &[]);
     }
-    fn do_melnorme_hate(&mut self, r: u16) {
+    pub(crate) fn do_melnorme_hate(&mut self, r: u16) {
         let mut hate_count: u8;
         let _ = r;
         hate_count = self.api.get(StoryKey::MELNORME_HATE_COUNT);
@@ -890,7 +846,7 @@ impl<A: MelnormApi> Dialogue<'_, A> {
         self.api
             .response(YOU_HATE_US_SO_WE_GO_AWAY, Handler::ExitConversation, &[]);
     }
-    fn intro(&mut self) {
+    pub(crate) fn intro(&mut self) {
         self.session.prev_msg_mode = self.api.status_mode(3);
         if self.api.get(StoryKey::MET_MELNORME) == 0 {
             self.api.set(StoryKey::MET_MELNORME, 1_u8);
@@ -918,149 +874,8 @@ impl<A: MelnormApi> Dialogue<'_, A> {
     }
 }
 
-#[cfg(not(test))]
-pub(crate) mod live {
-    use super::*;
-    use crate::comm::races::script::live::LiveScript;
-    static mut SESSION: Session = Session::new();
+#[cfg(test)]
+use crate::comm::descriptors::melnorm::descriptor;
 
-    fn run(cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, LiveScript<'_, '_, Handler>>)) {
-        let mut api = LiveScript::new(cx, callback);
-        unsafe {
-            f(&mut Dialogue {
-                api: &mut api,
-                session: &mut *std::ptr::addr_of_mut!(SESSION),
-            });
-        }
-    }
-    fn exit_conversation(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::ExitConversation,
-                u16::try_from(r).expect("response exceeds COUNT"),
-            )
-        });
-    }
-    fn do_rescue(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::DoRescue,
-                u16::try_from(r).expect("response exceeds COUNT"),
-            )
-        });
-    }
-    fn do_buy(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::DoBuy,
-                u16::try_from(r).expect("response exceeds COUNT"),
-            )
-        });
-    }
-    fn do_sell(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::DoSell,
-                u16::try_from(r).expect("response exceeds COUNT"),
-            )
-        });
-    }
-    fn nature_of_conversation(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::NatureOfConversation,
-                u16::try_from(r).expect("response exceeds COUNT"),
-            )
-        });
-    }
-    fn do_bluster(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::DoBluster,
-                u16::try_from(r).expect("response exceeds COUNT"),
-            )
-        });
-    }
-    fn do_first_meeting(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::DoFirstMeeting,
-                u16::try_from(r).expect("response exceeds COUNT"),
-            )
-        });
-    }
-    fn do_melnorme_miffed(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::DoMelnormeMiffed,
-                u16::try_from(r).expect("response exceeds COUNT"),
-            )
-        });
-    }
-    fn do_melnorme_pissed(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::DoMelnormePissed,
-                u16::try_from(r).expect("response exceeds COUNT"),
-            )
-        });
-    }
-
-    fn callback(h: Handler) -> crate::comm::response::ResponseFunc {
-        match h {
-            Handler::ExitConversation => exit_conversation,
-            Handler::DoRescue => do_rescue,
-            Handler::DoBuy => do_buy,
-            Handler::DoSell => do_sell,
-            Handler::NatureOfConversation => nature_of_conversation,
-            Handler::DoBluster => do_bluster,
-            Handler::DoFirstMeeting => do_first_meeting,
-            Handler::DoMelnormeMiffed => do_melnorme_miffed,
-            Handler::DoMelnormePissed => do_melnorme_pissed,
-        }
-    }
-    pub(super) fn intro(cx: &mut Cx<'_>) {
-        run(cx, |s| s.intro());
-    }
-    pub(super) fn post(cx: &mut Cx<'_>) {
-        run(cx, |s| s.post_melnorme_enc());
-    }
-    pub(super) fn uninit(_cx: &mut Cx<'_>) -> u16 {
-        0
-    }
-    /// Initialize the encounter on the game thread.
-    ///
-    /// # Safety
-    /// Communication state must be initialized on the game thread.
-    pub unsafe fn init_melnorme_comm(cx: &mut Cx<'_>) -> CLocData {
-        let mut desc = descriptor();
-        run(cx, |s| s.initialize(&mut desc));
-        desc
-    }
-}
-pub struct MelnormDialogue;
-impl super::RaceDialogue for MelnormDialogue {
-    fn init(&self, _cx: &mut Cx<'_>) -> CommData {
-        #[cfg(not(test))]
-        {
-            unsafe { as_comm_data(&live::init_melnorme_comm(_cx)) }
-        }
-        #[cfg(test)]
-        {
-            as_comm_data(&descriptor())
-        }
-    }
-    fn intro(&self, _cx: &mut Cx<'_>) {
-        #[cfg(not(test))]
-        live::intro(_cx);
-    }
-    fn post_encounter(&self, _cx: &mut Cx<'_>) {
-        #[cfg(not(test))]
-        live::post(_cx);
-    }
-    fn uninit(&self, _cx: &mut Cx<'_>) -> u32 {
-        0
-    }
-}
 #[cfg(test)]
 mod tests;

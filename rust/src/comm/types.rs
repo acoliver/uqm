@@ -1,4 +1,5 @@
 //! Core types for the communication system
+use crate::comm::Comm;
 use std::ffi::c_void;
 use std::fmt;
 
@@ -191,11 +192,11 @@ pub struct CommData {
     // Dialogue lifecycle callbacks
     // -----------------------------------------------------------------------
     /// Called when entering communications (`init_encounter_func`).
-    pub init_encounter_func: Option<fn(&mut crate::engine::battle::Cx<'_>)>,
+    pub init_encounter_func: Option<fn(&mut Comm, &mut crate::engine::battle::Cx<'_>)>,
     /// Called when leaving communications normally (`post_encounter_func`).
-    pub post_encounter_func: Option<fn(&mut crate::engine::battle::Cx<'_>)>,
+    pub post_encounter_func: Option<fn(&mut Comm, &mut crate::engine::battle::Cx<'_>)>,
     /// Called for cleanup after the encounter ends (`uninit_encounter_func`).
-    pub uninit_encounter_func: Option<fn(&mut crate::engine::battle::Cx<'_>) -> u16>,
+    pub uninit_encounter_func: Option<fn(&mut Comm, &mut crate::engine::battle::Cx<'_>) -> u16>,
 
     // -----------------------------------------------------------------------
     // Resource IDs (C `RESOURCE` = `const char *`, stored as raw pointers)
@@ -318,17 +319,20 @@ impl CommData {
     }
 
     /// Set the initialization callback.
-    pub fn set_init_func(&mut self, func: fn(&mut crate::engine::battle::Cx<'_>)) {
+    pub fn set_init_func(&mut self, func: fn(&mut Comm, &mut crate::engine::battle::Cx<'_>)) {
         self.init_encounter_func = Some(func);
     }
 
     /// Set the post-encounter callback.
-    pub fn set_post_func(&mut self, func: fn(&mut crate::engine::battle::Cx<'_>)) {
+    pub fn set_post_func(&mut self, func: fn(&mut Comm, &mut crate::engine::battle::Cx<'_>)) {
         self.post_encounter_func = Some(func);
     }
 
     /// Set the cleanup callback.
-    pub fn set_uninit_func(&mut self, func: fn(&mut crate::engine::battle::Cx<'_>) -> u16) {
+    pub fn set_uninit_func(
+        &mut self,
+        func: fn(&mut Comm, &mut crate::engine::battle::Cx<'_>) -> u16,
+    ) {
         self.uninit_encounter_func = Some(func);
     }
 
@@ -431,19 +435,26 @@ mod tests {
     #[test]
     fn test_comm_data_set_callbacks() {
         let mut data = CommData::new();
-        fn init(_cx: &mut crate::engine::battle::Cx<'_>) {}
-        fn post(_cx: &mut crate::engine::battle::Cx<'_>) {}
-        fn uninit(_cx: &mut crate::engine::battle::Cx<'_>) -> u16 {
+        fn init(_comm: &mut Comm, _cx: &mut crate::engine::battle::Cx<'_>) {}
+        fn post(_comm: &mut Comm, _cx: &mut crate::engine::battle::Cx<'_>) {}
+        fn uninit(_comm: &mut Comm, _cx: &mut crate::engine::battle::Cx<'_>) -> u16 {
             42
         }
         data.set_init_func(init);
         data.set_post_func(post);
         data.set_uninit_func(uninit);
 
-        crate::comm::with_test_context(data.init_encounter_func.unwrap());
-        crate::comm::with_test_context(data.post_encounter_func.unwrap());
+        crate::comm::with_test_context(|cx| {
+            data.init_encounter_func.unwrap()(&mut Comm::new(), cx)
+        });
+        crate::comm::with_test_context(|cx| {
+            data.post_encounter_func.unwrap()(&mut Comm::new(), cx)
+        });
         assert_eq!(
-            crate::comm::with_test_context(data.uninit_encounter_func.unwrap()),
+            crate::comm::with_test_context(|cx| data.uninit_encounter_func.unwrap()(
+                &mut Comm::new(),
+                cx
+            )),
             42
         );
     }

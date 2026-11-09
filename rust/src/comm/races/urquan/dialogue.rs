@@ -3,12 +3,12 @@ use super::phrases::{general_info, visit_phrase};
 use super::*;
 use crate::engine::StoryKey;
 
-pub(super) struct Dialogue<'a, A> {
-    pub(super) api: &'a mut A,
+pub(crate) struct Dialogue<'a, A> {
+    pub(crate) api: &'a mut A,
 }
 
 impl<A: UrquanApi> Dialogue<'_, A> {
-    pub(super) fn handle(&mut self, handler: Handler, response: i32) {
+    pub(crate) fn handle(&mut self, handler: Handler, response: i32) {
         match handler {
             Handler::Combat => self.combat(response),
             Handler::Normal => self.normal(response),
@@ -216,7 +216,7 @@ impl<A: UrquanApi> Dialogue<'_, A> {
             .response(BYE_WARS_OVER as u16, Handler::Combat, &[]);
     }
 
-    pub(super) fn initialize(&mut self) {
+    pub(crate) fn initialize(&mut self) {
         let activity = self.api.activity() as u8;
         let peaceful = self.api.get(StoryKey::PLAYER_HYPNOTIZED) != 0
             || activity == crate::comm::dispatch::WON_LAST_BATTLE as u8
@@ -225,11 +225,11 @@ impl<A: UrquanApi> Dialogue<'_, A> {
         self.api.segue(if peaceful { 0 } else { 1 });
     }
 
-    pub(super) fn post(&mut self) {
+    pub(crate) fn post(&mut self) {
         self.api.set(StoryKey::PLAYER_HYPNOTIZED, 0);
     }
 
-    pub(super) fn intro(&mut self) {
+    pub(crate) fn intro(&mut self) {
         let activity = self.api.activity() as u8;
         if activity == crate::comm::dispatch::WON_LAST_BATTLE as u8 {
             self.api.npc(OUT_TAKES as i32);

@@ -43,10 +43,6 @@ pub(crate) struct ConversationFont {
     handle: AtomicPtr<c_void>,
 }
 
-/// The running conversation's player font.
-#[cfg(not(test))]
-pub(crate) static CONVERSATION_PLAYER_FONT: ConversationFont = ConversationFont::new();
-
 impl ConversationFont {
     pub(crate) const fn new() -> Self {
         Self {

@@ -1,20 +1,13 @@
 use super::Handler;
 use crate::comm::races::alliance::AllianceApi;
 
-pub(super) trait MyconApi: AllianceApi<Handler> {
+pub(crate) trait MyconApi: AllianceApi<Handler> {
     fn random(&mut self) -> u32;
-}
-
-#[cfg(not(test))]
-impl MyconApi for super::super::script::live::LiveScript<'_, '_, Handler> {
-    fn random(&mut self) -> u32 {
-        self.cx.borrow_mut().with_legacy(crate::math::random)
-    }
 }
 
 #[cfg(test)]
 #[derive(Default)]
-pub(super) struct World {
+pub(crate) struct World {
     pub random: std::collections::VecDeque<u32>,
     pub random_calls: usize,
 }

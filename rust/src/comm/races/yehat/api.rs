@@ -2,37 +2,16 @@ use super::Handler;
 #[cfg(test)]
 use crate::comm::races::encounter::testing::Fake;
 use crate::comm::races::encounter::EncounterApi;
-#[cfg(not(test))]
-use crate::comm::races::script::live::LiveScript;
 
-pub(super) trait YehatApi: EncounterApi<Handler> {
+pub(crate) trait YehatApi: EncounterApi<Handler> {
     fn have_shofixti_escort(&self) -> bool;
     fn random_bit(&mut self) -> u8;
     fn schedule_rebel_event(&mut self);
 }
 
-#[cfg(not(test))]
-impl YehatApi for LiveScript<'_, '_, Handler> {
-    fn have_shofixti_escort(&self) -> bool {
-        crate::engine::world::fleet::count_escort_ships(
-            self.cx.borrow().world,
-            u16::from(crate::comm::dispatch::ship::SHOFIXTI_SHIP),
-        ) != 0
-    }
-    fn random_bit(&mut self) -> u8 {
-        (crate::math::random() & 1) as u8
-    }
-    fn schedule_rebel_event(&mut self) {
-        // SAFETY: the callback owns the initialized campaign clock on the game thread.
-        unsafe {
-            crate::time::clock_abi::live::add_event(self.cx.borrow_mut().world, 1, 0, 0, 0, 15)
-        };
-    }
-}
-
 #[cfg(test)]
 #[derive(Default)]
-pub(super) struct World {
+pub(crate) struct World {
     pub have_shofixti: bool,
     pub random_bit: u8,
     pub random_calls: usize,

@@ -8,8 +8,8 @@
 //! @plan PLAN-20260314-COMM.P08
 //! @requirement EC-REQ-001 through EC-REQ-016, OL-REQ-002
 
-use super::state::COMM_STATE;
 use super::types::{CommError, CommResult};
+use crate::comm::Comm;
 
 // ============================================================================
 // Encounter status codes matching C (comm.c)
@@ -169,7 +169,7 @@ impl EncounterResources {
 // Encounter lifecycle
 // ============================================================================
 
-/// Active encounter state, held in CommState.
+/// Active encounter state, held in Comm.
 #[derive(Debug)]
 pub struct EncounterState {
     /// Whether an encounter is currently active.
@@ -215,8 +215,8 @@ impl EncounterState {
 /// This records that the encounter is active and the init callback has
 /// been invoked. In production, the actual callbacks are invoked by C;
 /// this provides the Rust-side tracking and ordering enforcement.
-pub fn begin_encounter() -> CommResult<()> {
-    let mut state = COMM_STATE.write();
+pub fn begin_encounter(comm: &mut Comm) -> CommResult<()> {
+    let state = &mut *comm;
     let enc = &mut state.encounter;
     if enc.active {
         return Err(CommError::AlreadyInitialized);
@@ -227,8 +227,8 @@ pub fn begin_encounter() -> CommResult<()> {
 }
 
 /// Record normal encounter exit (init→post→uninit).
-pub fn end_encounter_normal() -> CommResult<()> {
-    let mut state = COMM_STATE.write();
+pub fn end_encounter_normal(comm: &mut Comm) -> CommResult<()> {
+    let state = &mut *comm;
     let enc = &mut state.encounter;
     if !enc.active {
         return Err(CommError::NotInitialized);
@@ -243,8 +243,8 @@ pub fn end_encounter_normal() -> CommResult<()> {
 }
 
 /// Record abort encounter exit (init→uninit, skip post).
-pub fn end_encounter_abort() -> CommResult<()> {
-    let mut state = COMM_STATE.write();
+pub fn end_encounter_abort(comm: &mut Comm) -> CommResult<()> {
+    let state = &mut *comm;
     let enc = &mut state.encounter;
     if !enc.active {
         return Err(CommError::NotInitialized);
@@ -259,8 +259,8 @@ pub fn end_encounter_abort() -> CommResult<()> {
 }
 
 /// Record attack-without-hail exit (post→uninit, no init).
-pub fn end_encounter_attack() -> CommResult<()> {
-    let mut state = COMM_STATE.write();
+pub fn end_encounter_attack(comm: &mut Comm) -> CommResult<()> {
+    let state = &mut *comm;
     let enc = &mut state.encounter;
     // Attack path doesn't call init, so we mark encounter active temporarily
     enc.active = true;
@@ -273,8 +273,8 @@ pub fn end_encounter_attack() -> CommResult<()> {
 }
 
 /// Check if an encounter is currently active.
-pub fn is_encounter_active() -> bool {
-    COMM_STATE.read().encounter.active
+pub fn is_encounter_active(comm: &mut Comm) -> bool {
+    comm.encounter.active
 }
 
 // ============================================================================
@@ -286,112 +286,126 @@ mod tests {
     use super::*;
     use serial_test::serial;
 
-    fn reset_state() {
-        let mut state = COMM_STATE.write();
+    fn reset_state(comm: &mut Comm) {
+        let state = &mut *comm;
         state.encounter.reset();
     }
 
     #[test]
     #[serial]
     fn test_normal_exit_calls_init_post_uninit() {
-        reset_state();
-        assert!(begin_encounter().is_ok());
-        assert!(is_encounter_active());
+        let mut owner = Comm::new();
+        let comm = &mut owner;
+        reset_state(comm);
+        assert!(begin_encounter(comm).is_ok());
+        assert!(is_encounter_active(comm));
 
         // Check callbacks were set before end
         {
-            let state = COMM_STATE.read();
+            let state = &*comm;
             assert!(state.encounter.callbacks.init_called);
         }
 
-        assert!(end_encounter_normal().is_ok());
-        assert!(!is_encounter_active());
+        assert!(end_encounter_normal(comm).is_ok());
+        assert!(!is_encounter_active(comm));
 
         // After end, callbacks are reset for reuse
-        let state = COMM_STATE.read();
+        let state = &*comm;
         assert!(!state.encounter.callbacks.init_called);
     }
 
     #[test]
     #[serial]
     fn test_abort_skips_post() {
-        reset_state();
-        assert!(begin_encounter().is_ok());
+        let mut owner = Comm::new();
+        let comm = &mut owner;
+        reset_state(comm);
+        assert!(begin_encounter(comm).is_ok());
 
         // Verify init was called
         {
-            let state = COMM_STATE.read();
+            let state = &*comm;
             assert!(state.encounter.callbacks.init_called);
         }
 
-        assert!(end_encounter_abort().is_ok());
+        assert!(end_encounter_abort(comm).is_ok());
 
         // After end, state is reset for reuse
-        let state = COMM_STATE.read();
+        let state = &*comm;
         assert!(!state.encounter.active);
     }
 
     #[test]
     #[serial]
     fn test_attack_without_hail() {
-        reset_state();
+        let mut owner = Comm::new();
+        let comm = &mut owner;
+        reset_state(comm);
         // Attack path: post + uninit, no init — should succeed
-        assert!(end_encounter_attack().is_ok());
+        assert!(end_encounter_attack(comm).is_ok());
 
         // After end, state is reset for reuse
-        let state = COMM_STATE.read();
+        let state = &*comm;
         assert!(!state.encounter.active);
     }
 
     #[test]
     #[serial]
     fn test_double_init_rejected() {
-        reset_state();
-        assert!(begin_encounter().is_ok());
-        assert!(begin_encounter().is_err());
+        let mut owner = Comm::new();
+        let comm = &mut owner;
+        reset_state(comm);
+        assert!(begin_encounter(comm).is_ok());
+        assert!(begin_encounter(comm).is_err());
         // Clean up
-        let _ = end_encounter_abort();
+        let _ = end_encounter_abort(comm);
     }
 
     #[test]
     #[serial]
     fn test_resource_teardown() {
-        reset_state();
+        let mut owner = Comm::new();
+        let comm = &mut owner;
+        reset_state(comm);
         {
-            let mut state = COMM_STATE.write();
+            let state = &mut *comm;
             state.encounter.resources.alien_frame = 42;
             state.encounter.resources.alien_font = 43;
             state.encounter.resources.alien_song = 44;
         }
 
-        assert!(begin_encounter().is_ok());
-        assert!(end_encounter_normal().is_ok());
+        assert!(begin_encounter(comm).is_ok());
+        assert!(end_encounter_normal(comm).is_ok());
 
-        let state = COMM_STATE.read();
+        let state = &*comm;
         assert!(!state.encounter.resources.has_resources());
     }
 
     #[test]
     #[serial]
     fn test_state_valid_after_teardown() {
-        reset_state();
-        assert!(begin_encounter().is_ok());
-        assert!(end_encounter_normal().is_ok());
+        let mut owner = Comm::new();
+        let comm = &mut owner;
+        reset_state(comm);
+        assert!(begin_encounter(comm).is_ok());
+        assert!(end_encounter_normal(comm).is_ok());
 
         // Should be able to start a new encounter
-        assert!(begin_encounter().is_ok());
-        assert!(end_encounter_normal().is_ok());
+        assert!(begin_encounter(comm).is_ok());
+        assert!(end_encounter_normal(comm).is_ok());
     }
 
     #[test]
     #[serial]
     fn test_encounter_active_flag() {
-        reset_state();
-        assert!(!is_encounter_active());
-        assert!(begin_encounter().is_ok());
-        assert!(is_encounter_active());
-        assert!(end_encounter_normal().is_ok());
-        assert!(!is_encounter_active());
+        let mut owner = Comm::new();
+        let comm = &mut owner;
+        reset_state(comm);
+        assert!(!is_encounter_active(comm));
+        assert!(begin_encounter(comm).is_ok());
+        assert!(is_encounter_active(comm));
+        assert!(end_encounter_normal(comm).is_ok());
+        assert!(!is_encounter_active(comm));
     }
 
     #[test]

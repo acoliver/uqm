@@ -104,6 +104,8 @@ pub struct Kernel {
     pub planet_animation: std::rc::Rc<planet_animation::PlanetAnimation>,
     pub instant_move: bool,
     pub sis_highlight: std::rc::Rc<SisHighlight>,
+    pub comm_scope_buffer:
+        std::rc::Rc<std::cell::OnceCell<Option<crate::graphics::drawable_abi::LoadedDrawable>>>,
     pub status_frame: crate::graphics::native_abi::FRAME,
     pub flag_stat_frame: crate::graphics::native_abi::FRAME,
     pub misc_data_frame: crate::graphics::native_abi::FRAME,
@@ -297,6 +299,7 @@ impl Kernel {
             planet_animation: std::rc::Rc::default(),
             instant_move: false,
             sis_highlight: std::rc::Rc::new(SisHighlight::default()),
+            comm_scope_buffer: Default::default(),
             status_frame: ptr::null_mut(),
             flag_stat_frame: ptr::null_mut(),
             misc_data_frame: ptr::null_mut(),

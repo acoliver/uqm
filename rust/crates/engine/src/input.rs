@@ -296,6 +296,7 @@ mod tests {
                 stop: self.stop,
                 seed: None,
                 planet_side: None,
+                comm_response: None,
             }
         }
 

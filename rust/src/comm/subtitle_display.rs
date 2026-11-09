@@ -6,6 +6,7 @@
 //!
 //! @plan PLAN-20260314-COMM.P10
 
+use crate::comm::Comm;
 /// Subtitle display state with change detection.
 ///
 /// Rust owns the current text and dirty flags; all pixel rendering is
@@ -59,12 +60,12 @@ impl SubtitleDisplay {
     ///
     /// Does nothing if there is no current text. In test mode, no C calls are
     /// made.
-    pub fn redraw(&self, enabled: bool) {
-        let _ = (self.current_text.is_none(), enabled);
+    pub fn redraw(comm: &mut Comm, enabled: bool) {
+        let _ = (comm.subtitle_display().current_text.is_none(), enabled);
 
         #[cfg(not(test))]
         unsafe {
-            c_bridge::comm_redraw_subtitles(enabled);
+            c_bridge::comm_redraw_subtitles(comm, enabled);
         }
     }
 

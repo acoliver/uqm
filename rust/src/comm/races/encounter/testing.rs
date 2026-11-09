@@ -4,7 +4,7 @@ use crate::engine::StoryKey;
 use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, PartialEq, Eq)]
-pub(in crate::comm::races) enum Effect<H> {
+pub(crate) enum Effect<H> {
     Npc(i32),
     Offer(u16, H, Vec<i32>),
     Set(StoryKey, u8),
@@ -34,7 +34,7 @@ pub(in crate::comm::races) enum Effect<H> {
     Skip,
 }
 
-pub(in crate::comm::races) struct Fake<H, E = ()> {
+pub(crate) struct Fake<H, E = ()> {
     pub state: HashMap<StoryKey, u8>,
     pub disabled: HashSet<u16>,
     pub effects: Vec<Effect<H>>,

@@ -52,7 +52,10 @@ fn checkpoint_observations_belong_to_each_observer() {
     for event in [
         CheckpointView::GameOptions(true),
         CheckpointView::CommunicationStarted,
-        CheckpointView::CommunicationResponses(3),
+        CheckpointView::CommunicationResponses {
+            count: 3,
+            choices: &Default::default(),
+        },
         CheckpointView::ResponsesReady(true),
         CheckpointView::CommunicationReplay(true),
         CheckpointView::StarbaseMenu(true),

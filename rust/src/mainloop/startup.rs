@@ -152,9 +152,6 @@ mod live {
             .configuration
             .update_preferences(|preferences| preferences.gamma = gamma);
         crate::graphics::cmap_abi::InitColorMaps();
-        if crate::comm::ffi::rust_init_communication() == 0 {
-            return 1;
-        }
         let immediate = input.immediate_ptr();
         crate::input::sdl_input::tfb_set_input_vectors(
             ptr::addr_of_mut!((*immediate).menu).cast(),

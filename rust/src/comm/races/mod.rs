@@ -10,29 +10,29 @@
 //! - `NPCPhrase` → `rust_npc_phrase_cb` (FFI to Rust comm system)
 //! - `Response` → `rust_DoResponsePhrase` (FFI to Rust response system)
 //! - `GET_GAME_STATE`/`SET_GAME_STATE` → Rust game state singleton (P09)
-//! - `setSegue`/`getSegue` → Rust `comm::state::CommState`
+//! - `setSegue`/`getSegue` → Rust `comm::state::Comm`
 //! - `PHRASE_ENABLED`/`DISABLE_PHRASE` → `rust_phrase_enabled`/`rust_disable_phrase`
 //!
 //! @plan PLAN-20260724-MAINLOOP-AND-COMM.P12-P15
 
 use std::os::raw::c_int;
 
-use super::types::CommData;
+pub use script::{DialogueHost, DialogueKind};
 
-mod alliance;
+pub(crate) mod alliance;
 pub mod arilou;
 pub mod blackur;
 pub mod chmmr;
 pub mod comandr;
 pub mod druuge;
-mod encounter;
+pub(crate) mod encounter;
 pub mod ilwrath;
 pub mod melnorm;
 pub mod mycon;
 pub mod orz;
 pub mod pkunk;
 pub mod rebel;
-mod script;
+pub(crate) mod script;
 pub mod shofixt;
 pub mod slyhome;
 pub mod slyland;
@@ -60,16 +60,26 @@ pub mod zoqfot;
 /// - `uninit()`: Cleanup after encounter (called as `uninit_encounter_func`)
 pub trait RaceDialogue: Send + Sync {
     /// Populate CommData for this race and set the initial segue.
-    fn init(&self, cx: &mut crate::engine::battle::Cx<'_>) -> CommData;
+    fn init(&self, host: &mut dyn DialogueHost, cx: &mut crate::engine::battle::Cx<'_>);
+    fn intro(&self, host: &mut dyn DialogueHost, cx: &mut crate::engine::battle::Cx<'_>);
+    fn post_encounter(&self, host: &mut dyn DialogueHost, cx: &mut crate::engine::battle::Cx<'_>);
+    fn uninit(&self, host: &mut dyn DialogueHost, cx: &mut crate::engine::battle::Cx<'_>) -> u32;
+}
 
-    /// Initial dialogue entry point. Called when the encounter starts.
-    fn intro(&self, cx: &mut crate::engine::battle::Cx<'_>);
-
-    /// Post-encounter processing. Called when the encounter ends normally.
-    fn post_encounter(&self, cx: &mut crate::engine::battle::Cx<'_>);
-
-    /// Cleanup. Called after the encounter ends.
-    fn uninit(&self, cx: &mut crate::engine::battle::Cx<'_>) -> u32;
+struct Race(DialogueKind);
+impl RaceDialogue for Race {
+    fn init(&self, host: &mut dyn DialogueHost, cx: &mut crate::engine::battle::Cx<'_>) {
+        host.initialize(self.0, cx);
+    }
+    fn intro(&self, host: &mut dyn DialogueHost, cx: &mut crate::engine::battle::Cx<'_>) {
+        host.intro(self.0, cx);
+    }
+    fn post_encounter(&self, host: &mut dyn DialogueHost, cx: &mut crate::engine::battle::Cx<'_>) {
+        host.post_encounter(self.0, cx);
+    }
+    fn uninit(&self, host: &mut dyn DialogueHost, cx: &mut crate::engine::battle::Cx<'_>) -> u32 {
+        host.uninit(self.0, cx)
+    }
 }
 
 // Conversation IDs from commglue.h enum
@@ -107,31 +117,31 @@ const YEHAT_REBEL_CONVERSATION: i32 = 25;
 #[must_use]
 pub fn get_race_dialogue(comm_id: i32) -> Option<Box<dyn RaceDialogue>> {
     match comm_id {
-        ARILOU_CONVERSATION => Some(Box::new(arilou::ArilouDialogue)),
-        CHMMR_CONVERSATION => Some(Box::new(chmmr::ChmmrDialogue)),
-        COMMANDER_CONVERSATION => Some(Box::new(comandr::ComandrDialogue)),
-        ORZ_CONVERSATION => Some(Box::new(orz::OrzDialogue)),
-        PKUNK_CONVERSATION => Some(Box::new(pkunk::PkunkDialogue)),
-        SHOFIXTI_CONVERSATION => Some(Box::new(shofixt::ShofixtDialogue)),
-        SPATHI_CONVERSATION => Some(Box::new(spathi::SpathiDialogue)),
-        SUPOX_CONVERSATION => Some(Box::new(supox::SupoxDialogue)),
-        THRADD_CONVERSATION => Some(Box::new(thradd::ThraddDialogue)),
-        UTWIG_CONVERSATION => Some(Box::new(utwig::UtwigDialogue)),
-        VUX_CONVERSATION => Some(Box::new(vux::VuxDialogue)),
-        YEHAT_CONVERSATION => Some(Box::new(yehat::YehatDialogue)),
-        MELNORME_CONVERSATION => Some(Box::new(melnorm::MelnormDialogue)),
-        DRUUGE_CONVERSATION => Some(Box::new(druuge::DruugeDialogue)),
-        ILWRATH_CONVERSATION => Some(Box::new(ilwrath::IlwrathDialogue)),
-        MYCON_CONVERSATION => Some(Box::new(mycon::MyconDialogue)),
-        SLYLANDRO_CONVERSATION => Some(Box::new(slyland::SlylandDialogue)),
-        UMGAH_CONVERSATION => Some(Box::new(umgah::UmgahDialogue)),
-        URQUAN_CONVERSATION => Some(Box::new(urquan::UrquanDialogue)),
-        ZOQFOTPIK_CONVERSATION => Some(Box::new(zoqfot::ZoqfotDialogue)),
-        SYREEN_CONVERSATION => Some(Box::new(syreen::SyreenDialogue)),
-        BLACKURQ_CONVERSATION => Some(Box::new(blackur::BlackurDialogue)),
-        TALKING_PET_CONVERSATION => Some(Box::new(talkpet::TalkpetDialogue)),
-        SLYLANDRO_HOME_CONVERSATION => Some(Box::new(slyhome::SlyhomeDialogue)),
-        YEHAT_REBEL_CONVERSATION => Some(Box::new(rebel::RebelDialogue)),
+        ARILOU_CONVERSATION => Some(Box::new(Race(DialogueKind::Arilou))),
+        CHMMR_CONVERSATION => Some(Box::new(Race(DialogueKind::Chmmr))),
+        COMMANDER_CONVERSATION => Some(Box::new(Race(DialogueKind::Comandr))),
+        ORZ_CONVERSATION => Some(Box::new(Race(DialogueKind::Orz))),
+        PKUNK_CONVERSATION => Some(Box::new(Race(DialogueKind::Pkunk))),
+        SHOFIXTI_CONVERSATION => Some(Box::new(Race(DialogueKind::Shofixt))),
+        SPATHI_CONVERSATION => Some(Box::new(Race(DialogueKind::Spathi))),
+        SUPOX_CONVERSATION => Some(Box::new(Race(DialogueKind::Supox))),
+        THRADD_CONVERSATION => Some(Box::new(Race(DialogueKind::Thradd))),
+        UTWIG_CONVERSATION => Some(Box::new(Race(DialogueKind::Utwig))),
+        VUX_CONVERSATION => Some(Box::new(Race(DialogueKind::Vux))),
+        YEHAT_CONVERSATION => Some(Box::new(Race(DialogueKind::Yehat))),
+        MELNORME_CONVERSATION => Some(Box::new(Race(DialogueKind::Melnorm))),
+        DRUUGE_CONVERSATION => Some(Box::new(Race(DialogueKind::Druuge))),
+        ILWRATH_CONVERSATION => Some(Box::new(Race(DialogueKind::Ilwrath))),
+        MYCON_CONVERSATION => Some(Box::new(Race(DialogueKind::Mycon))),
+        SLYLANDRO_CONVERSATION => Some(Box::new(Race(DialogueKind::Slyland))),
+        UMGAH_CONVERSATION => Some(Box::new(Race(DialogueKind::Umgah))),
+        URQUAN_CONVERSATION => Some(Box::new(Race(DialogueKind::Urquan))),
+        ZOQFOTPIK_CONVERSATION => Some(Box::new(Race(DialogueKind::Zoqfot))),
+        SYREEN_CONVERSATION => Some(Box::new(Race(DialogueKind::Syreen))),
+        BLACKURQ_CONVERSATION => Some(Box::new(Race(DialogueKind::Blackur))),
+        TALKING_PET_CONVERSATION => Some(Box::new(Race(DialogueKind::Talkpet))),
+        SLYLANDRO_HOME_CONVERSATION => Some(Box::new(Race(DialogueKind::Slyhome))),
+        YEHAT_REBEL_CONVERSATION => Some(Box::new(Race(DialogueKind::Rebel))),
         _ => None,
     }
 }
@@ -147,16 +157,26 @@ pub fn get_race_dialogue(comm_id: i32) -> Option<Box<dyn RaceDialogue>> {
 ///
 /// This is an FFI function called from C.
 pub unsafe fn rust_init_race_dialogue(
+    comm: &mut dyn DialogueHost,
     cx: &mut crate::engine::battle::Cx<'_>,
     comm_id: c_int,
 ) -> c_int {
     match get_race_dialogue(comm_id) {
         Some(dialogue) => {
-            let data = dialogue.init(cx);
-            // Sync to the global CommData singleton
-            crate::comm::locdata::set_comm_data(data);
+            dialogue.init(comm, cx);
             1
         }
         None => 0,
     }
+}
+
+#[derive(Default)]
+pub(crate) struct RuntimeScratch {
+    pub druuge: Option<druuge::Session>,
+    pub mycon: Option<mycon::Session>,
+    pub melnorm: Option<melnorm::Session>,
+    pub spathi: Option<spathi::Session>,
+    pub starbas: Option<starbas::Session>,
+    pub slyland_choices: [u16; 5],
+    pub last_alien: u8,
 }

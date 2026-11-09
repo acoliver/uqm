@@ -1,8 +1,13 @@
-use super::*;
-use crate::comm::locdata::{CColor, CLocData, CPoint};
-use crate::comm::races::script::animation;
+#[cfg(not(test))]
+use crate::comm::live::slyhome as live;
+use crate::comm::races::script::{animation, as_comm_data};
+use crate::comm::races::slyhome::*;
+use crate::comm::{types::CommData, Comm};
+use crate::engine::battle::Cx;
 
-pub(super) fn descriptor(screen_width: i32) -> CLocData {
+use crate::comm::locdata::{CColor, CLocData, CPoint};
+
+pub(crate) fn descriptor(screen_width: i32) -> CLocData {
     let mut d = CLocData {
         alien_frame_res: RACE_PMAP_ANIM.as_ptr().cast(),
         alien_font_res: RACE_FONT.as_ptr().cast(),
@@ -58,3 +63,22 @@ pub(super) fn descriptor(screen_width: i32) -> CLocData {
     }
     d
 }
+
+pub(crate) fn init(_comm: &mut Comm, _cx: &mut Cx<'_>) -> CommData {
+    #[cfg(not(test))]
+    {
+        // SAFETY: initialization holds the exclusive game-thread session and Cx loans.
+        unsafe { as_comm_data(&live::init_slylandro_comm(_comm, _cx)) }
+    }
+    #[cfg(test)]
+    {
+        as_comm_data(&descriptor(320))
+    }
+}
+
+pub(crate) fn intro(_comm: &mut Comm, _cx: &mut Cx<'_>) {
+    #[cfg(not(test))]
+    live::intro(_comm, _cx);
+}
+
+pub(crate) fn post_encounter(_comm: &mut Comm, _cx: &mut Cx<'_>) {}

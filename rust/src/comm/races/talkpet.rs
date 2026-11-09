@@ -1,14 +1,11 @@
 //! Talkpet dialogue, ported from talkpet.c.
-use super::script::{animation, as_comm_data};
-use crate::comm::locdata::{CColor, CLocData, CPoint};
-use crate::comm::types::CommData;
-use crate::engine::{battle::Cx, StoryKey};
+pub(crate) use crate::engine::StoryKey;
 mod phrases;
 use phrases::*;
-mod api;
-use api::TalkpetApi;
+pub(crate) mod api;
+pub(crate) use api::TalkpetApi;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Handler {
+pub(crate) enum Handler {
     ExitConversation,
     MindFuckUrquan,
     MindControl,
@@ -18,11 +15,11 @@ enum Handler {
     KillPet,
     PetDeal,
 }
-struct Dialogue<'a, A> {
-    api: &'a mut A,
+pub(crate) struct Dialogue<'a, A> {
+    pub(crate) api: &'a mut A,
 }
 impl<A: TalkpetApi> Dialogue<'_, A> {
-    fn handle(&mut self, h: Handler, r: i32) {
+    pub(crate) fn handle(&mut self, h: Handler, r: i32) {
         match h {
             Handler::ExitConversation => self.exit_conversation(r),
             Handler::MindFuckUrquan => self.mind_fuck_urquan(r),
@@ -34,7 +31,7 @@ impl<A: TalkpetApi> Dialogue<'_, A> {
             Handler::PetDeal => self.pet_deal(r),
         }
     }
-    fn exit_conversation(&mut self, r: i32) {
+    pub(crate) fn exit_conversation(&mut self, r: i32) {
         self.api.segue(0);
         self.api.set(StoryKey::SHIP_TO_COMPEL, 0_u8);
         if r == COMPEL_URQUAN {
@@ -62,7 +59,7 @@ impl<A: TalkpetApi> Dialogue<'_, A> {
             self.api.set(StoryKey::ARILOU_STACK_2, 0_u8);
         }
     }
-    fn mind_fuck_urquan(&mut self, r: i32) {
+    pub(crate) fn mind_fuck_urquan(&mut self, r: i32) {
         if r == WHAT_NOW {
             self.api.npc(DO_THIS);
             self.api.disable((WHAT_NOW) as u16);
@@ -81,10 +78,10 @@ impl<A: TalkpetApi> Dialogue<'_, A> {
         self.api
             .response((COMPEL_URQUAN) as u16, Handler::ExitConversation, &[]);
     }
-    fn mind_control_strobe(&mut self) {
+    pub(crate) fn mind_control_strobe(&mut self) {
         self.api.strobe();
     }
-    fn mind_control(&mut self, mut r: i32) {
+    pub(crate) fn mind_control(&mut self, mut r: i32) {
         let resp_func: Handler;
         if r == WHAT_ABOUT_POWERS {
             self.api.npc(NOT_POWERS_BUT_FLOWERS);
@@ -99,7 +96,7 @@ impl<A: TalkpetApi> Dialogue<'_, A> {
         self.mind_control_strobe();
         self.api.response((r) as u16, resp_func, &[]);
     }
-    fn pet_info(&mut self, r: i32) {
+    pub(crate) fn pet_info(&mut self, r: i32) {
         if r == ABOUT_YOUR_RACE {
             self.api.npc(WHAT_ABOUT_RACE);
         } else if r == WHAT_ABOUT_PHYSIOLOGY {
@@ -135,7 +132,7 @@ impl<A: TalkpetApi> Dialogue<'_, A> {
         self.api
             .response((ENOUGH_INFO) as u16, Handler::PetDevice, &[]);
     }
-    fn pet_device(&mut self, r: i32) {
+    pub(crate) fn pet_device(&mut self, r: i32) {
         let mut visits: i32;
         if r == WHATS_UP_ONBOARD {
             visits = i32::from(self.api.get(StoryKey::TALKING_PET_INFO));
@@ -219,7 +216,7 @@ impl<A: TalkpetApi> Dialogue<'_, A> {
         self.api
             .response((BYE_ONBOARD) as u16, Handler::ExitConversation, &[]);
     }
-    fn compel_player(&mut self, r: i32) {
+    pub(crate) fn compel_player(&mut self, r: i32) {
         let mut i: i32;
         let mut last_stack: i32;
         let mut p_str = [0i32; 3];
@@ -326,7 +323,7 @@ impl<A: TalkpetApi> Dialogue<'_, A> {
         self.api
             .response((BYE_AT_UMGAH) as u16, Handler::CompelPlayer, &[]);
     }
-    fn kill_pet(&mut self, r: i32) {
+    pub(crate) fn kill_pet(&mut self, r: i32) {
         if r == MUST_KILL {
             self.api.npc(DONT_KILL);
             self.api.talk_segue((!0_u16 as i32) as u16);
@@ -339,7 +336,7 @@ impl<A: TalkpetApi> Dialogue<'_, A> {
         self.api
             .response((WANT_KILL_3) as u16, Handler::ExitConversation, &[]);
     }
-    fn pet_deal(&mut self, r: i32) {
+    pub(crate) fn pet_deal(&mut self, r: i32) {
         if r == WHAT_KIND_OF_DEAL {
             self.api.npc(HELP_DEFEAT_URQUAN);
             self.api.disable((WHAT_KIND_OF_DEAL) as u16);
@@ -397,7 +394,7 @@ impl<A: TalkpetApi> Dialogue<'_, A> {
             self.api.response((MUST_KILL) as u16, Handler::KillPet, &[]);
         }
     }
-    fn intro(&mut self) {
+    pub(crate) fn intro(&mut self) {
         let mut visits: i32;
         if (i32::from(self.api.activity()) as u8 as i32) == 5 {
             self.api.npc(OUT_TAKES);
@@ -512,8 +509,8 @@ impl<A: TalkpetApi> Dialogue<'_, A> {
             self.pet_deal(0_u16 as i32);
         }
     }
-    fn post_talkpet_enc(&mut self) {}
-    fn initialize(&mut self) {
+    pub(crate) fn post_talkpet_enc(&mut self) {}
+    pub(crate) fn initialize(&mut self) {
         if (i32::from(self.api.activity()) as u8 as i32) != 1 {
             self.api.segue(0);
         } else {
@@ -521,190 +518,9 @@ impl<A: TalkpetApi> Dialogue<'_, A> {
         }
     }
 }
-fn descriptor() -> CLocData {
-    let mut d = CLocData {
-        alien_frame_res: c"comm.talkingpet.graphics".as_ptr(),
-        alien_font_res: c"comm.talkingpet.font".as_ptr(),
-        alien_colormap_res: c"comm.talkingpet.colortable".as_ptr(),
-        alien_song_res: c"comm.talkingpet.music".as_ptr(),
-        conversation_phrases_res: c"comm.talkingpet.dialogue".as_ptr(),
-        alien_text_fcolor: CColor {
-            r: 255,
-            g: 255,
-            b: 255,
-            a: 255,
-        },
-        alien_text_bcolor: CColor {
-            r: 0,
-            g: 0,
-            b: 0,
-            a: 255,
-        },
-        alien_text_baseline: CPoint { x: 121, y: 0 },
-        alien_text_width: 224,
-        alien_text_align: 1,
-        alien_text_valign: 0,
-        num_animations: 17,
-        ..CLocData::default()
-    };
-    d.alien_ambient_array[0] = animation(7, 3, 12, (56, 56), (840, 2520));
-    d.alien_ambient_array[1] = animation(10, 3, 12, (56, 56), (840, 2520));
-    d.alien_ambient_array[2] = animation(13, 3, 1, (56, 56), (840, 2520));
-    d.alien_ambient_array[3] = animation(16, 2, 1, (56, 56), (840, 2520));
-    d.alien_ambient_array[4] = animation(18, 3, 4, (42, 0), (840, 2520));
-    d.alien_ambient_array[4].block_mask = 8192;
-    d.alien_ambient_array[5] = animation(21, 3, 4, (42, 0), (840, 2520));
-    d.alien_ambient_array[5].block_mask = 20480;
-    d.alien_ambient_array[6] = animation(24, 2, 1, (84, 0), (840, 2520));
-    d.alien_ambient_array[7] = animation(26, 2, 1, (84, 0), (840, 2520));
-    d.alien_ambient_array[8] = animation(28, 4, 1, (84, 0), (840, 2520));
-    d.alien_ambient_array[9] = animation(32, 3, 1, (84, 0), (840, 2520));
-    d.alien_ambient_array[10] = animation(35, 5, 1, (84, 0), (840, 2520));
-    d.alien_ambient_array[11] = animation(40, 2, 1, (84, 0), (840, 2520));
-    d.alien_ambient_array[12] = animation(42, 6, 10, (84, 0), (840, 2520));
-    d.alien_ambient_array[12].block_mask = 32;
-    d.alien_ambient_array[13] = animation(48, 2, 1, (84, 0), (840, 2520));
-    d.alien_ambient_array[13].block_mask = 16;
-    d.alien_ambient_array[14] = animation(50, 2, 1, (84, 0), (840, 2520));
-    d.alien_ambient_array[14].block_mask = 32;
-    d.alien_ambient_array[15] = animation(52, 2, 9, (84, 0), (840, 2520));
-    d.alien_ambient_array[16] = animation(1, 30, 178, (42, 0), (0, 0));
-    d.alien_transition_desc = animation(0, 0, 0, (0, 0), (0, 0));
-    d.alien_talk_desc = animation(1, 6, 0, (56, 0), (70, 0));
-    #[cfg(not(test))]
-    {
-        d.init_encounter_func = Some(live::intro);
-        d.post_encounter_func = Some(live::post);
-        d.uninit_encounter_func = Some(live::uninit);
-    }
-    d
-}
-#[cfg(not(test))]
-pub(crate) mod live {
-    use super::super::script::live::LiveScript;
-    use super::*;
-    fn run(cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, LiveScript<'_, '_, Handler>>)) {
-        let mut api = LiveScript::new(cx, callback);
-        f(&mut Dialogue { api: &mut api });
-    }
-    fn exit_conversation(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::ExitConversation,
-                i32::try_from(r).expect("invalid response"),
-            )
-        });
-    }
-    fn mind_fuck_urquan(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::MindFuckUrquan,
-                i32::try_from(r).expect("invalid response"),
-            )
-        });
-    }
-    fn mind_control(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::MindControl,
-                i32::try_from(r).expect("invalid response"),
-            )
-        });
-    }
-    fn pet_info(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::PetInfo,
-                i32::try_from(r).expect("invalid response"),
-            )
-        });
-    }
-    fn pet_device(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::PetDevice,
-                i32::try_from(r).expect("invalid response"),
-            )
-        });
-    }
-    fn compel_player(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::CompelPlayer,
-                i32::try_from(r).expect("invalid response"),
-            )
-        });
-    }
-    fn kill_pet(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::KillPet,
-                i32::try_from(r).expect("invalid response"),
-            )
-        });
-    }
-    fn pet_deal(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::PetDeal,
-                i32::try_from(r).expect("invalid response"),
-            )
-        });
-    }
-    fn callback(h: Handler) -> crate::comm::response::ResponseFunc {
-        match h {
-            Handler::ExitConversation => exit_conversation,
-            Handler::MindFuckUrquan => mind_fuck_urquan,
-            Handler::MindControl => mind_control,
-            Handler::PetInfo => pet_info,
-            Handler::PetDevice => pet_device,
-            Handler::CompelPlayer => compel_player,
-            Handler::KillPet => kill_pet,
-            Handler::PetDeal => pet_deal,
-        }
-    }
-    pub(super) fn intro(cx: &mut Cx<'_>) {
-        run(cx, |s| s.intro());
-    }
-    pub(super) fn post(cx: &mut Cx<'_>) {
-        run(cx, |s| s.post_talkpet_enc());
-    }
-    pub(super) fn uninit(_cx: &mut Cx<'_>) -> u16 {
-        0
-    }
-    /// Initialize the encounter on the game thread.
-    ///
-    /// # Safety
-    /// Communication state must be initialized on the game thread.
-    pub unsafe fn init_talkpet_comm(cx: &mut Cx<'_>) -> CLocData {
-        let desc = descriptor();
-        run(cx, |s| s.initialize());
-        desc
-    }
-}
-pub struct TalkpetDialogue;
-impl super::RaceDialogue for TalkpetDialogue {
-    fn init(&self, _cx: &mut Cx<'_>) -> CommData {
-        #[cfg(not(test))]
-        {
-            unsafe { as_comm_data(&live::init_talkpet_comm(_cx)) }
-        }
-        #[cfg(test)]
-        {
-            as_comm_data(&descriptor())
-        }
-    }
-    fn intro(&self, _cx: &mut Cx<'_>) {
-        #[cfg(not(test))]
-        live::intro(_cx);
-    }
-    fn post_encounter(&self, _cx: &mut Cx<'_>) {
-        #[cfg(not(test))]
-        live::post(_cx);
-    }
-    fn uninit(&self, _cx: &mut Cx<'_>) -> u32 {
-        0
-    }
-}
+
+#[cfg(test)]
+use crate::comm::descriptors::talkpet::descriptor;
+
 #[cfg(test)]
 mod tests;

@@ -1,24 +1,21 @@
 //! Umgah dialogue, ported from umgahc.c.
-use super::script::{animation, as_comm_data};
-use crate::comm::locdata::{CColor, CLocData, CPoint};
-use crate::comm::types::CommData;
-use crate::engine::{battle::Cx, StoryKey};
+pub(crate) use crate::engine::StoryKey;
 mod phrases;
 use phrases::*;
-mod api;
-use api::UmgahApi;
+pub(crate) mod api;
+pub(crate) use api::UmgahApi;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Handler {
+pub(crate) enum Handler {
     CombatIsInevitable,
     Zombies,
     NormalUmgah,
     UmgahReward,
 }
-struct Dialogue<'a, A> {
-    api: &'a mut A,
+pub(crate) struct Dialogue<'a, A> {
+    pub(crate) api: &'a mut A,
 }
 impl<A: UmgahApi> Dialogue<'_, A> {
-    fn handle(&mut self, h: Handler, r: i32) {
+    pub(crate) fn handle(&mut self, h: Handler, r: i32) {
         match h {
             Handler::CombatIsInevitable => self.combat_is_inevitable(r),
             Handler::Zombies => self.zombies(r),
@@ -26,7 +23,7 @@ impl<A: UmgahApi> Dialogue<'_, A> {
             Handler::UmgahReward => self.umgah_reward(r),
         }
     }
-    fn combat_is_inevitable(&mut self, r: i32) {
+    pub(crate) fn combat_is_inevitable(&mut self, r: i32) {
         self.api.segue(1);
         if r == BYE_ZOMBIE {
             self.api.npc(GOODBYE_ZOMBIE);
@@ -60,7 +57,7 @@ impl<A: UmgahApi> Dialogue<'_, A> {
             self.api.set(StoryKey::UMGAH_HOSTILE, 1_u8);
         }
     }
-    fn zombies(&mut self, r: i32) {
+    pub(crate) fn zombies(&mut self, r: i32) {
         if i32::from(self.api.get(StoryKey::MET_NORMAL_UMGAH)) != 0 {
             if r == WHATS_UP_ZOMBIES {
                 self.api.npc(GENERAL_INFO_ZOMBIE);
@@ -222,7 +219,7 @@ impl<A: UmgahApi> Dialogue<'_, A> {
                 .response((BYE_ZOMBIE) as u16, Handler::CombatIsInevitable, &[]);
         }
     }
-    fn normal_umgah(&mut self, r: i32) {
+    pub(crate) fn normal_umgah(&mut self, r: i32) {
         if r == WHATS_UP_PRE_ZOMBIE {
             self.api.npc(GENERAL_INFO_PRE_ZOMBIE);
             self.api.disable((WHATS_UP_PRE_ZOMBIE) as u16);
@@ -258,7 +255,7 @@ impl<A: UmgahApi> Dialogue<'_, A> {
         self.api
             .response((BYE_PRE_ZOMBIE) as u16, Handler::CombatIsInevitable, &[]);
     }
-    fn umgah_reward(&mut self, r: i32) {
+    pub(crate) fn umgah_reward(&mut self, r: i32) {
         if r == WHAT_BEFORE_TPET {
             self.api.npc(TRKD_SPATHI_AND_ILWRATH);
             self.api.disable((WHAT_BEFORE_TPET) as u16);
@@ -316,7 +313,7 @@ impl<A: UmgahApi> Dialogue<'_, A> {
         self.api
             .response((BYE_POST_ZOMBIE) as u16, Handler::CombatIsInevitable, &[]);
     }
-    fn intro(&mut self) {
+    pub(crate) fn intro(&mut self) {
         let mut visits: i32;
         if self.api.get(StoryKey::UMGAH_HOSTILE) != 0 {
             visits = i32::from(self.api.get(StoryKey::UMGAH_VISITS));
@@ -514,12 +511,12 @@ impl<A: UmgahApi> Dialogue<'_, A> {
             }
         }
     }
-    fn post_umgah_enc(&mut self) {
+    pub(crate) fn post_umgah_enc(&mut self) {
         if !(i32::from(self.api.get(StoryKey::UMGAH_ZOMBIE_BLOBBIES)) != 0) {
             self.api.set(StoryKey::MET_NORMAL_UMGAH, 1_u8);
         }
     }
-    fn initialize(&mut self) {
+    pub(crate) fn initialize(&mut self) {
         if ((i32::from(self.api.get(StoryKey::TALKING_PET)) != 0)
             && !(i32::from(self.api.get(StoryKey::UMGAH_HOSTILE)) != 0))
             || ((i32::from(self.api.activity()) as u8 as i32) == 5)
@@ -530,160 +527,9 @@ impl<A: UmgahApi> Dialogue<'_, A> {
         }
     }
 }
-fn descriptor() -> CLocData {
-    let mut d = CLocData {
-        alien_frame_res: c"comm.umgah.graphics".as_ptr(),
-        alien_font_res: c"comm.umgah.font".as_ptr(),
-        alien_colormap_res: c"comm.umgah.colortable".as_ptr(),
-        alien_song_res: c"comm.umgah.music".as_ptr(),
-        conversation_phrases_res: c"comm.umgah.dialogue".as_ptr(),
-        alien_text_fcolor: CColor {
-            r: 255,
-            g: 255,
-            b: 255,
-            a: 255,
-        },
-        alien_text_bcolor: CColor {
-            r: 0,
-            g: 0,
-            b: 0,
-            a: 255,
-        },
-        alien_text_baseline: CPoint { x: 121, y: 0 },
-        alien_text_width: 224,
-        alien_text_align: 1,
-        alien_text_valign: 0,
-        num_animations: 16,
-        ..CLocData::default()
-    };
-    d.alien_ambient_array[0] = animation(5, 3, 4, (42, 0), (840, 2520));
-    d.alien_ambient_array[0].block_mask = 32;
-    d.alien_ambient_array[1] = animation(8, 3, 4, (42, 0), (840, 2520));
-    d.alien_ambient_array[1].block_mask = 64;
-    d.alien_ambient_array[2] = animation(11, 2, 4, (42, 0), (840, 2520));
-    d.alien_ambient_array[2].block_mask = 128;
-    d.alien_ambient_array[3] = animation(13, 2, 4, (42, 0), (840, 2520));
-    d.alien_ambient_array[3].block_mask = 256;
-    d.alien_ambient_array[4] = animation(15, 2, 4, (42, 0), (840, 2520));
-    d.alien_ambient_array[4].block_mask = 512;
-    d.alien_ambient_array[5] = animation(17, 3, 2, (98, 0), (2520, 2520));
-    d.alien_ambient_array[5].block_mask = 1;
-    d.alien_ambient_array[6] = animation(20, 3, 2, (98, 0), (2520, 2520));
-    d.alien_ambient_array[6].block_mask = 2;
-    d.alien_ambient_array[7] = animation(23, 2, 2, (98, 0), (2520, 2520));
-    d.alien_ambient_array[7].block_mask = 4;
-    d.alien_ambient_array[8] = animation(25, 2, 2, (98, 0), (2520, 2520));
-    d.alien_ambient_array[8].block_mask = 8;
-    d.alien_ambient_array[9] = animation(27, 2, 2, (98, 0), (2520, 2520));
-    d.alien_ambient_array[9].block_mask = 16;
-    d.alien_ambient_array[10] = animation(29, 3, 4, (84, 0), (840, 2520));
-    d.alien_ambient_array[11] = animation(32, 3, 4, (84, 0), (840, 2520));
-    d.alien_ambient_array[12] = animation(35, 5, 4, (84, 0), (840, 2520));
-    d.alien_ambient_array[13] = animation(40, 6, 4, (84, 0), (84, 0));
-    d.alien_ambient_array[14] = animation(46, 2, 2, (168, 0), (840, 2520));
-    d.alien_ambient_array[14].block_mask = 32768;
-    d.alien_ambient_array[15] = animation(48, 2, 2, (168, 0), (840, 2520));
-    d.alien_ambient_array[15].block_mask = 16384;
-    d.alien_transition_desc = animation(0, 0, 0, (0, 0), (0, 0));
-    d.alien_talk_desc = animation(1, 4, 0, (56, 0), (70, 0));
-    #[cfg(not(test))]
-    {
-        d.init_encounter_func = Some(live::intro);
-        d.post_encounter_func = Some(live::post);
-        d.uninit_encounter_func = Some(live::uninit);
-    }
-    d
-}
-#[cfg(not(test))]
-pub(crate) mod live {
-    use super::super::script::live::LiveScript;
-    use super::*;
-    fn run(cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, LiveScript<'_, '_, Handler>>)) {
-        let mut api = LiveScript::new(cx, callback);
-        f(&mut Dialogue { api: &mut api });
-    }
-    fn combat_is_inevitable(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::CombatIsInevitable,
-                i32::try_from(r).expect("invalid response"),
-            )
-        });
-    }
-    fn zombies(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::Zombies,
-                i32::try_from(r).expect("invalid response"),
-            )
-        });
-    }
-    fn normal_umgah(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::NormalUmgah,
-                i32::try_from(r).expect("invalid response"),
-            )
-        });
-    }
-    fn umgah_reward(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::UmgahReward,
-                i32::try_from(r).expect("invalid response"),
-            )
-        });
-    }
-    fn callback(h: Handler) -> crate::comm::response::ResponseFunc {
-        match h {
-            Handler::CombatIsInevitable => combat_is_inevitable,
-            Handler::Zombies => zombies,
-            Handler::NormalUmgah => normal_umgah,
-            Handler::UmgahReward => umgah_reward,
-        }
-    }
-    pub(super) fn intro(cx: &mut Cx<'_>) {
-        run(cx, |s| s.intro());
-    }
-    pub(super) fn post(cx: &mut Cx<'_>) {
-        run(cx, |s| s.post_umgah_enc());
-    }
-    pub(super) fn uninit(_cx: &mut Cx<'_>) -> u16 {
-        0
-    }
-    /// Initialize the encounter on the game thread.
-    ///
-    /// # Safety
-    /// Communication state must be initialized on the game thread.
-    pub unsafe fn init_umgah_comm(cx: &mut Cx<'_>) -> CLocData {
-        let desc = descriptor();
-        run(cx, |s| s.initialize());
-        desc
-    }
-}
-pub struct UmgahDialogue;
-impl super::RaceDialogue for UmgahDialogue {
-    fn init(&self, _cx: &mut Cx<'_>) -> CommData {
-        #[cfg(not(test))]
-        {
-            unsafe { as_comm_data(&live::init_umgah_comm(_cx)) }
-        }
-        #[cfg(test)]
-        {
-            as_comm_data(&descriptor())
-        }
-    }
-    fn intro(&self, _cx: &mut Cx<'_>) {
-        #[cfg(not(test))]
-        live::intro(_cx);
-    }
-    fn post_encounter(&self, _cx: &mut Cx<'_>) {
-        #[cfg(not(test))]
-        live::post(_cx);
-    }
-    fn uninit(&self, _cx: &mut Cx<'_>) -> u32 {
-        0
-    }
-}
+
+#[cfg(test)]
+use crate::comm::descriptors::umgah::descriptor;
+
 #[cfg(test)]
 mod tests;

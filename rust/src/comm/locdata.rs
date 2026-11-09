@@ -1,16 +1,14 @@
+use crate::comm::Comm;
 // LOCDATA direct FFI access — reads C LOCDATA struct fields without C bridge functions
 // @plan PLAN-20260314-COMM.P03
 // @requirement EC-REQ-003, DS-REQ-004, SC-REQ-003
 
 use std::ffi::{c_char, c_void};
-use std::sync::Mutex;
 
 use crate::battle::velocity::VelocityDesc;
 use crate::c_bindings::{assert_c_layout, global_state};
 
 use super::types::{AnimationDescData, CommData, TextAlign, TextValign, MAX_ANIMATIONS};
-
-pub static mut COMM_DATA: CLocData = unsafe { std::mem::zeroed() };
 
 // ===========================================================================
 // C-compatible repr(C) types — mirror the C struct layout exactly
@@ -145,9 +143,9 @@ pub struct CAnimationDesc {
 #[derive(Default)]
 pub struct CLocData {
     // Function pointers (3 × 8 bytes on 64-bit)
-    pub init_encounter_func: Option<fn(&mut crate::engine::battle::Cx<'_>)>,
-    pub post_encounter_func: Option<fn(&mut crate::engine::battle::Cx<'_>)>,
-    pub uninit_encounter_func: Option<fn(&mut crate::engine::battle::Cx<'_>) -> u16>,
+    pub init_encounter_func: Option<fn(&mut Comm, &mut crate::engine::battle::Cx<'_>)>,
+    pub post_encounter_func: Option<fn(&mut Comm, &mut crate::engine::battle::Cx<'_>)>,
+    pub uninit_encounter_func: Option<fn(&mut Comm, &mut crate::engine::battle::Cx<'_>) -> u16>,
 
     // Resource IDs (const char* pointers)
     pub alien_frame_res: *const c_char,
@@ -214,43 +212,6 @@ fn anim_desc_to_rust(src: &CAnimationDesc) -> AnimationDescData {
     }
 }
 
-// ===========================================================================
-// CommData singleton
-// ===========================================================================
-
-/// Global CommData singleton. Populated by `sync_comm_data_from_locdata()`
-/// when C's InitCommunication copies LOCDATA to CommData.
-/// Rust code reads from this instead of going through C accessors.
-static GLOBAL_COMM_DATA: Mutex<Option<CommData>> = Mutex::new(None);
-
-/// Store a CommData into the global singleton.
-pub fn set_comm_data(data: CommData) {
-    let mut guard = GLOBAL_COMM_DATA.lock().expect("GLOBAL_COMM_DATA poisoned");
-    *guard = Some(data);
-}
-
-/// Clear the global CommData singleton (e.g., when ending an encounter).
-pub fn clear_comm_data() {
-    let mut guard = GLOBAL_COMM_DATA.lock().expect("GLOBAL_COMM_DATA poisoned");
-    *guard = None;
-}
-
-/// Get a clone of the global CommData, if populated.
-pub fn get_comm_data() -> Option<CommData> {
-    let guard = GLOBAL_COMM_DATA.lock().expect("GLOBAL_COMM_DATA poisoned");
-    guard.clone()
-}
-
-/// Check whether the global CommData has been populated.
-pub fn has_comm_data() -> bool {
-    let guard = GLOBAL_COMM_DATA.lock().expect("GLOBAL_COMM_DATA poisoned");
-    guard.is_some()
-}
-
-// ---------------------------------------------------------------------------
-// Public API
-// ---------------------------------------------------------------------------
-
 /// Copy a dialogue descriptor into the owned communication state.
 pub fn read_locdata(ld: &CLocData) -> CommData {
     let mut alien_ambient_array = [AnimationDescData::default(); MAX_ANIMATIONS];
@@ -304,13 +265,13 @@ mod tests {
     fn descriptor_conversion_preserves_typed_lifecycle_callbacks() {
         use std::sync::atomic::{AtomicU8, Ordering};
         static CALLS: AtomicU8 = AtomicU8::new(0);
-        fn init(_cx: &mut crate::engine::battle::Cx<'_>) {
+        fn init(_comm: &mut Comm, _cx: &mut crate::engine::battle::Cx<'_>) {
             assert_eq!(CALLS.fetch_add(1, Ordering::SeqCst), 0);
         }
-        fn post(_cx: &mut crate::engine::battle::Cx<'_>) {
+        fn post(_comm: &mut Comm, _cx: &mut crate::engine::battle::Cx<'_>) {
             assert_eq!(CALLS.fetch_add(1, Ordering::SeqCst), 1);
         }
-        fn uninit(_cx: &mut crate::engine::battle::Cx<'_>) -> u16 {
+        fn uninit(_comm: &mut Comm, _cx: &mut crate::engine::battle::Cx<'_>) -> u16 {
             assert_eq!(CALLS.fetch_add(1, Ordering::SeqCst), 2);
             17
         }
@@ -321,10 +282,17 @@ mod tests {
             ..CLocData::default()
         };
         let data = read_locdata(&descriptor);
-        crate::comm::with_test_context(data.init_encounter_func.unwrap());
-        crate::comm::with_test_context(data.post_encounter_func.unwrap());
+        crate::comm::with_test_context(|cx| {
+            data.init_encounter_func.unwrap()(&mut Comm::new(), cx)
+        });
+        crate::comm::with_test_context(|cx| {
+            data.post_encounter_func.unwrap()(&mut Comm::new(), cx)
+        });
         assert_eq!(
-            crate::comm::with_test_context(data.uninit_encounter_func.unwrap()),
+            crate::comm::with_test_context(|cx| data.uninit_encounter_func.unwrap()(
+                &mut Comm::new(),
+                cx
+            )),
             17
         );
         assert_eq!(CALLS.load(Ordering::SeqCst), 3);

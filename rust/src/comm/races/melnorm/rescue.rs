@@ -10,7 +10,7 @@ fn position(s: &CSisState) -> (i16, i16) {
     )
 }
 impl<A: MelnormApi> Dialogue<'_, A> {
-    pub(super) fn ship_worth(&self) -> u16 {
+    pub(crate) fn ship_worth(&self) -> u16 {
         let s = self.api.ship();
         let mut worth = u16::from(s.num_landers) * u16::from(self.api.module_cost(0));
         for m in s.drive_slots {
@@ -50,7 +50,7 @@ impl<A: MelnormApi> Dialogue<'_, A> {
                 .map(|i| u32::from(s.module_slots[i]))
                 .sum::<u32>()
     }
-    pub(super) fn strip_ship(&mut self, mut fuel: u16) -> bool {
+    pub(crate) fn strip_ship(&mut self, mut fuel: u16) -> bool {
         self.api.set(StoryKey::MELNORME_RESCUE_REFUSED, 0);
         let mut ship = self.api.ship();
         let mut pods = -(ship.crew_enlisted.div_ceil(50) as i8);
@@ -192,7 +192,7 @@ impl<A: MelnormApi> Dialogue<'_, A> {
         }
         true
     }
-    pub(super) fn do_rescue(&mut self, _r: u16) {
+    pub(crate) fn do_rescue(&mut self, _r: u16) {
         let (x, y) = position(&self.api.ship());
         let dx = x.wrapping_sub(1752);
         let dy = y.wrapping_sub(1450);

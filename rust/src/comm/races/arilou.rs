@@ -1,24 +1,21 @@
 //! Arilou dialogue, ported from arilouc.c.
-use super::alliance::AllianceApi;
-use super::script::{animation, as_comm_data};
-use crate::comm::locdata::{CColor, CLocData, CPoint};
-use crate::comm::types::CommData;
-use crate::engine::{battle::Cx, StoryKey};
+pub(crate) use super::alliance::AllianceApi;
+pub(crate) use crate::engine::StoryKey;
 mod phrases;
 use phrases::*;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Handler {
+pub(crate) enum Handler {
     ExitConversation,
     ArilouHome,
     AngryHomeArilou,
     AngrySpaceArilou,
     FriendlySpaceArilou,
 }
-struct Dialogue<'a, A> {
-    api: &'a mut A,
+pub(crate) struct Dialogue<'a, A> {
+    pub(crate) api: &'a mut A,
 }
 impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
-    fn handle(&mut self, h: Handler, r: u16) {
+    pub(crate) fn handle(&mut self, h: Handler, r: u16) {
         match h {
             Handler::ExitConversation => self.exit_conversation(r),
             Handler::ArilouHome => self.arilou_home(r),
@@ -27,7 +24,7 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
             Handler::FriendlySpaceArilou => self.friendly_space_arilou(r),
         }
     }
-    fn exit_conversation(&mut self, r: u16) {
+    pub(crate) fn exit_conversation(&mut self, r: u16) {
         self.api.segue(0_u32);
         if r == BYE_ANGRY_SPACE {
             self.api.npc(i32::from(GOODBYE_ANGRY_SPACE));
@@ -45,7 +42,7 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
             self.api.set(StoryKey::ARILOU_MANNER, 2_u8);
         }
     }
-    fn arilou_home(&mut self, r: u16) {
+    pub(crate) fn arilou_home(&mut self, r: u16) {
         let mut last_stack: u8;
         let mut p_str: [u16; 4] = [0; 4];
         last_stack = 0_u8;
@@ -182,7 +179,7 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
         self.api
             .response(BYE_FRIENDLY_HOMEWORLD, Handler::ExitConversation, &[]);
     }
-    fn angry_home_arilou(&mut self, r: u16) {
+    pub(crate) fn angry_home_arilou(&mut self, r: u16) {
         if r == INVADERS_FROM_MARS {
             self.api.npc(i32::from(HAD_OUR_REASONS));
             self.api.disable(INVADERS_FROM_MARS);
@@ -215,7 +212,7 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
         self.api
             .response(I_JUST_LIKE_TO_LEAVE, Handler::AngryHomeArilou, &[]);
     }
-    fn angry_space_arilou(&mut self, r: u16) {
+    pub(crate) fn angry_space_arilou(&mut self, r: u16) {
         if r == IM_SORRY {
             self.api.npc(i32::from(APOLOGIZE_AT_HOMEWORLD));
             self.api.disable(IM_SORRY);
@@ -228,7 +225,7 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
         self.api
             .response(BYE_ANGRY_SPACE, Handler::ExitConversation, &[]);
     }
-    fn friendly_space_arilou(&mut self, r: u16) {
+    pub(crate) fn friendly_space_arilou(&mut self, r: u16) {
         let mut num_visits: u8;
         if r == CONFUSED_BY_HELLO {
             self.api.npc(i32::from(CONFUSED_RESPONSE));
@@ -343,7 +340,7 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
         self.api
             .response(BYE_FRIENDLY_SPACE, Handler::ExitConversation, &[]);
     }
-    fn intro(&mut self) {
+    pub(crate) fn intro(&mut self) {
         let mut num_visits: u8;
         if i32::from((self.api.activity()) as u8) == 5 {
             self.api.npc(i32::from(OUT_TAKES));
@@ -507,7 +504,7 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
             }
         }
     }
-    fn post_arilou_enc(&mut self) {
+    pub(crate) fn post_arilou_enc(&mut self) {
         let manner: u8;
         if ((self.api.get_segue()) as i32 == 1)
             && (i32::from({
@@ -532,7 +529,7 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
             }
         }
     }
-    fn initialize(&mut self) {
+    pub(crate) fn initialize(&mut self) {
         if ((i32::from(self.api.get(StoryKey::ARILOU_SPACE_SIDE)) > 1)
             || (i32::from(self.api.get(StoryKey::ARILOU_MANNER)) == 3))
             || (i32::from((self.api.activity()) as u8) == 5)
@@ -543,229 +540,9 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
         }
     }
 }
-fn descriptor() -> CLocData {
-    let mut d = CLocData {
-        alien_frame_res: c"comm.arilou.graphics".as_ptr(),
-        alien_font_res: c"comm.arilou.font".as_ptr(),
-        alien_colormap_res: c"comm.arilou.colortable".as_ptr(),
-        alien_song_res: c"comm.arilou.music".as_ptr(),
-        conversation_phrases_res: c"comm.arilou.dialogue".as_ptr(),
-        alien_text_fcolor: CColor {
-            r: 255,
-            g: 255,
-            b: 255,
-            a: 255,
-        },
-        alien_text_bcolor: CColor {
-            r: 0,
-            g: 0,
-            b: 0,
-            a: 255,
-        },
-        alien_text_baseline: CPoint { x: 121, y: 0 },
-        alien_text_width: 224,
-        alien_text_align: 1,
-        alien_text_valign: 0,
-        num_animations: 20,
-        ..CLocData::default()
-    };
-    d.alien_ambient_array[0] = {
-        let mut a = animation(4, 9, 2, (28, 0), (840, 2520));
-        a.block_mask = 65538;
-        a
-    };
-    d.alien_ambient_array[1] = {
-        let mut a = animation(13, 9, 2, (28, 0), (840, 2520));
-        a.block_mask = 65537;
-        a
-    };
-    d.alien_ambient_array[2] = {
-        let mut a = animation(22, 9, 2, (28, 0), (840, 2520));
-        a.block_mask = 65536;
-        a
-    };
-    d.alien_ambient_array[3] = {
-        let mut a = animation(31, 9, 2, (28, 0), (840, 2520));
-        a.block_mask = 16;
-        a
-    };
-    d.alien_ambient_array[4] = {
-        let mut a = animation(40, 10, 2, (28, 0), (840, 2520));
-        a.block_mask = 8;
-        a
-    };
-    d.alien_ambient_array[5] = {
-        let mut a = animation(50, 9, 2, (28, 0), (840, 2520));
-        a.block_mask = 128;
-        a
-    };
-    d.alien_ambient_array[6] = animation(59, 8, 2, (28, 0), (840, 2520));
-    d.alien_ambient_array[7] = {
-        let mut a = animation(67, 9, 2, (28, 0), (840, 2520));
-        a.block_mask = 32;
-        a
-    };
-    d.alien_ambient_array[8] = {
-        let mut a = animation(76, 9, 2, (28, 0), (840, 2520));
-        a.block_mask = 512;
-        a
-    };
-    d.alien_ambient_array[9] = {
-        let mut a = animation(85, 9, 2, (28, 0), (840, 2520));
-        a.block_mask = 256;
-        a
-    };
-    d.alien_ambient_array[10] = animation(94, 9, 2, (28, 0), (840, 2520));
-    d.alien_ambient_array[11] = {
-        let mut a = animation(103, 9, 2, (28, 0), (840, 2520));
-        a.block_mask = 8192;
-        a
-    };
-    d.alien_ambient_array[12] = animation(112, 9, 2, (28, 0), (840, 2520));
-    d.alien_ambient_array[13] = {
-        let mut a = animation(121, 8, 2, (28, 0), (840, 2520));
-        a.block_mask = 2048;
-        a
-    };
-    d.alien_ambient_array[14] = {
-        let mut a = animation(129, 9, 2, (28, 0), (840, 2520));
-        a.block_mask = 32768;
-        a
-    };
-    d.alien_ambient_array[15] = {
-        let mut a = animation(138, 8, 2, (28, 0), (840, 2520));
-        a.block_mask = 16384;
-        a
-    };
-    d.alien_ambient_array[16] = {
-        let mut a = animation(146, 9, 2, (28, 0), (840, 2520));
-        a.block_mask = 7;
-        a
-    };
-    d.alien_ambient_array[17] = {
-        let mut a = animation(155, 2, 10, (56, 0), (840, 2520));
-        a.block_mask = 524288;
-        a
-    };
-    d.alien_ambient_array[18] = {
-        let mut a = animation(157, 2, 10, (56, 0), (840, 2520));
-        a.block_mask = 524288;
-        a
-    };
-    d.alien_ambient_array[19] = {
-        let mut a = animation(159, 4, 2, (70, 0), (840, 2520));
-        a.block_mask = 393216;
-        a
-    };
-    d.alien_transition_desc = animation(0, 0, 0, (0, 0), (0, 0));
-    d.alien_talk_desc = animation(1, 3, 0, (56, 0), (70, 0));
-    #[cfg(not(test))]
-    {
-        d.init_encounter_func = Some(live::intro);
-        d.post_encounter_func = Some(live::post);
-        d.uninit_encounter_func = Some(live::uninit);
-    }
-    d
-}
-#[cfg(not(test))]
-pub(crate) mod live {
-    use super::*;
-    use crate::comm::races::script::live::LiveScript;
-    fn run(cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, LiveScript<'_, '_, Handler>>)) {
-        let mut api = LiveScript::new(cx, callback);
-        f(&mut Dialogue { api: &mut api });
-    }
-    fn exit_conversation(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::ExitConversation,
-                u16::try_from(r).expect("response exceeds COUNT"),
-            )
-        });
-    }
-    fn arilou_home(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::ArilouHome,
-                u16::try_from(r).expect("response exceeds COUNT"),
-            )
-        });
-    }
-    fn angry_home_arilou(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::AngryHomeArilou,
-                u16::try_from(r).expect("response exceeds COUNT"),
-            )
-        });
-    }
-    fn angry_space_arilou(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::AngrySpaceArilou,
-                u16::try_from(r).expect("response exceeds COUNT"),
-            )
-        });
-    }
-    fn friendly_space_arilou(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::FriendlySpaceArilou,
-                u16::try_from(r).expect("response exceeds COUNT"),
-            )
-        });
-    }
-    fn callback(h: Handler) -> crate::comm::response::ResponseFunc {
-        match h {
-            Handler::ExitConversation => exit_conversation,
-            Handler::ArilouHome => arilou_home,
-            Handler::AngryHomeArilou => angry_home_arilou,
-            Handler::AngrySpaceArilou => angry_space_arilou,
-            Handler::FriendlySpaceArilou => friendly_space_arilou,
-        }
-    }
-    pub(super) fn intro(cx: &mut Cx<'_>) {
-        run(cx, |s| s.intro());
-    }
-    pub(super) fn post(cx: &mut Cx<'_>) {
-        run(cx, |s| s.post_arilou_enc());
-    }
-    pub(super) fn uninit(_cx: &mut Cx<'_>) -> u16 {
-        0
-    }
-    /// Initialize this encounter on the game thread.
-    ///
-    /// # Safety
-    /// Communication state must be initialized on the game thread.
-    pub unsafe fn init_arilou_comm(cx: &mut Cx<'_>) -> CLocData {
-        let desc = descriptor();
-        run(cx, |s| s.initialize());
-        desc
-    }
-}
-pub struct ArilouDialogue;
-impl super::RaceDialogue for ArilouDialogue {
-    fn init(&self, _cx: &mut Cx<'_>) -> CommData {
-        #[cfg(not(test))]
-        {
-            unsafe { as_comm_data(&live::init_arilou_comm(_cx)) }
-        }
-        #[cfg(test)]
-        {
-            as_comm_data(&descriptor())
-        }
-    }
-    fn intro(&self, _cx: &mut Cx<'_>) {
-        #[cfg(not(test))]
-        live::intro(_cx);
-    }
-    fn post_encounter(&self, _cx: &mut Cx<'_>) {
-        #[cfg(not(test))]
-        live::post(_cx);
-    }
-    fn uninit(&self, _cx: &mut Cx<'_>) -> u32 {
-        0
-    }
-}
+
+#[cfg(test)]
+use crate::comm::descriptors::arilou::descriptor;
+
 #[cfg(test)]
 mod tests;

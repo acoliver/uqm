@@ -47,6 +47,8 @@ impl ConversationSnapshot {
 
 /// UI observations retained by one app-owned automation observer.
 pub struct UiObservation {
+    response_choices: parking_lot::Mutex<crate::engine::observe::ResponseChoices>,
+    response_request: parking_lot::Mutex<Option<usize>>,
     game_options_active: AtomicBool,
     communication_response_count: AtomicUsize,
     communication_response_generation: AtomicU64,
@@ -70,6 +72,8 @@ pub struct UiObservation {
 impl Default for UiObservation {
     fn default() -> Self {
         Self {
+            response_choices: Default::default(),
+            response_request: Default::default(),
             game_options_active: AtomicBool::new(false),
             communication_response_count: AtomicUsize::new(0),
             communication_response_generation: AtomicU64::new(0),
@@ -105,6 +109,21 @@ impl UiObservation {
             .lock()
             .unwrap_or_else(|error| panic!("device observation lock poisoned: {error}"))
             .clone()
+    }
+
+    pub(crate) fn observe_choices(&self, choices: &crate::engine::observe::ResponseChoices) {
+        *self.response_choices.lock() = choices.clone();
+    }
+    pub(crate) fn offered_response_index(&self, phrase: &str) -> Result<usize, String> {
+        self.response_choices.lock().index(phrase)
+    }
+    pub(crate) fn request_response(&self, index: usize) -> i32 {
+        assert!(index < self.communication_responses().1);
+        *self.response_request.lock() = Some(index);
+        1
+    }
+    pub(crate) fn take_response_request(&self) -> Option<usize> {
+        self.response_request.lock().take()
     }
 
     pub fn observe_star_map(&self, view: Option<crate::engine::observe::StarMapView>) {
@@ -241,6 +260,8 @@ impl UiObservation {
 
     /// Record entry into a production communication input loop.
     pub fn begin_communication(&self) {
+        self.observe_choices(&Default::default());
+        self.take_response_request();
         self.communication_response_count
             .store(0, Ordering::Release);
         self.communication_responses_ready
@@ -250,6 +271,8 @@ impl UiObservation {
 
     /// Record normal return from a production communication input loop.
     pub fn complete_communication(&self) {
+        self.observe_choices(&Default::default());
+        self.take_response_request();
         self.communication_responses_ready
             .store(false, Ordering::Release);
         self.communication_active.store(false, Ordering::Release);
@@ -329,7 +352,8 @@ impl super::coordinator::AutomationObserver {
             CheckpointView::EncounterDispatch(id) => self.scene.lock().observe_encounter(id),
             CheckpointView::DialogueDispatch(id) => self.scene.lock().observe_dialogue(id),
             CheckpointView::EncounterMenu(active) => self.ui.observe_encounter_menu(active),
-            CheckpointView::CommunicationResponses(count) => {
+            CheckpointView::CommunicationResponses { count, choices } => {
+                self.ui.observe_choices(choices);
                 self.ui.observe_communication_responses(count)
             }
             CheckpointView::ResponsesReady(ready) => {

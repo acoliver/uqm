@@ -2,19 +2,16 @@
 //!
 //! @plan PLAN-20260724-MAINLOOP-AND-COMM.P13-15
 
-use super::script::as_comm_data;
-use crate::comm::types::CommData;
-use crate::engine::battle::Cx;
-use crate::engine::StoryKey;
+pub(crate) use crate::engine::StoryKey;
 
 mod phrases;
 use phrases::*;
 
-mod api;
-use api::SpahomeApi;
+pub(crate) mod api;
+pub(crate) use api::SpahomeApi;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Handler {
+pub(crate) enum Handler {
     Exit,
     Password,
     Council,
@@ -26,11 +23,11 @@ enum Handler {
     Allies,
     Info,
 }
-struct Dialogue<'a, A> {
-    api: &'a mut A,
+pub(crate) struct Dialogue<'a, A> {
+    pub(crate) api: &'a mut A,
 }
 impl<A: SpahomeApi> Dialogue<'_, A> {
-    fn initialize(&mut self) {
+    pub(crate) fn initialize(&mut self) {
         self.api
             .segue(if self.api.get(StoryKey::SPATHI_MANNER) == 3 {
                 0
@@ -38,7 +35,7 @@ impl<A: SpahomeApi> Dialogue<'_, A> {
                 1
             });
     }
-    fn post(&mut self) {
+    pub(crate) fn post(&mut self) {
         if self.api.get_segue() == 1 {
             let manner = self.api.get(StoryKey::SPATHI_MANNER);
             if manner != 2 {
@@ -50,10 +47,10 @@ impl<A: SpahomeApi> Dialogue<'_, A> {
             }
         }
     }
-    fn offer(&mut self, p: u32, h: Handler) {
+    pub(crate) fn offer(&mut self, p: u32, h: Handler) {
         self.api.response(p as u16, h, &[])
     }
-    fn handle(&mut self, h: Handler, r: i32) {
+    pub(crate) fn handle(&mut self, h: Handler, r: i32) {
         match h {
             Handler::Exit => self.exit(r),
             Handler::Password => self.password(r),
@@ -67,7 +64,7 @@ impl<A: SpahomeApi> Dialogue<'_, A> {
             Handler::Info => self.info(r),
         }
     }
-    fn exit(&mut self, r: i32) {
+    pub(crate) fn exit(&mut self, r: i32) {
         self.api.segue(0);
         match r as u32 {
             WE_ATTACK_AGAIN => {
@@ -137,13 +134,13 @@ impl<A: SpahomeApi> Dialogue<'_, A> {
             _ => {}
         }
     }
-    fn party_joined(&mut self) {
+    pub(crate) fn party_joined(&mut self) {
         self.api.set(StoryKey::SPATHI_HOME_VISITS, 0);
         self.api.set(StoryKey::SPATHI_VISITS, 0);
         self.api.set(StoryKey::SPATHI_PARTY, 1);
         self.api.set(StoryKey::SPATHI_MANNER, 3);
     }
-    fn password(&mut self, r: i32) {
+    pub(crate) fn password(&mut self, r: i32) {
         if r == 0 {
             let n = self.api.get(StoryKey::SPATHI_HOME_VISITS);
             if n == 1 {
@@ -187,7 +184,7 @@ impl<A: SpahomeApi> Dialogue<'_, A> {
             }
         }
     }
-    fn angry(&mut self, r: i32) {
+    pub(crate) fn angry(&mut self, r: i32) {
         if r == 0 {
             self.api.npc(MEAN_GUYS_RETURN as i32);
             self.offer(WE_APOLOGIZE, Handler::Angry)
@@ -198,7 +195,7 @@ impl<A: SpahomeApi> Dialogue<'_, A> {
         self.offer(WE_ATTACK_AGAIN, Handler::Exit);
         self.offer(BYE_ANGRY_SPATHI, Handler::Exit)
     }
-    fn alliance(&mut self, r: i32) {
+    pub(crate) fn alliance(&mut self, r: i32) {
         let (line, disable) = match r as u32 {
             MISUNDERSTANDING => {
                 self.api.npc(JUST_MISUNDERSTANDING as i32);
@@ -239,7 +236,7 @@ impl<A: SpahomeApi> Dialogue<'_, A> {
             }
         }
     }
-    fn learn(&mut self, r: i32) {
+    pub(crate) fn learn(&mut self, r: i32) {
         let line = match r as u32 {
             0 => {
                 self.api.npc(QUEST_AGAIN as i32);
@@ -298,7 +295,7 @@ impl<A: SpahomeApi> Dialogue<'_, A> {
             self.offer(WHY_DONT_YOU_DO_IT, Handler::Learn)
         }
     }
-    fn quest(&mut self, r: i32) {
+    pub(crate) fn quest(&mut self, r: i32) {
         if r == 0 {
             self.api
                 .npc(if self.api.get(StoryKey::LIED_ABOUT_CREATURES) == 0 {
@@ -338,7 +335,7 @@ impl<A: SpahomeApi> Dialogue<'_, A> {
             self.offer(BYE_BEFORE_PARTY, Handler::Exit)
         }
     }
-    fn council(&mut self, r: i32) {
+    pub(crate) fn council(&mut self, r: i32) {
         let line = match r as u32 {
             0 => HELLO_AGAIN,
             GOOD_PASSWORD => {
@@ -414,7 +411,7 @@ impl<A: SpahomeApi> Dialogue<'_, A> {
         }
         self.offer(BYE_NO_ALLY_OFFER, Handler::Exit)
     }
-    fn party(&mut self, r: i32) {
+    pub(crate) fn party(&mut self, r: i32) {
         if r == 0 {
             let n = self.api.get(StoryKey::SPATHI_HOME_VISITS);
             if let Some(&p) = [MUST_PARTY_1, MUST_PARTY_2, MUST_PARTY_3].get(usize::from(n)) {
@@ -460,7 +457,7 @@ impl<A: SpahomeApi> Dialogue<'_, A> {
         };
         self.offer(goodbye, Handler::Exit);
     }
-    fn allies(&mut self, r: i32) {
+    pub(crate) fn allies(&mut self, r: i32) {
         if r == 0 {
             let n = self.api.get(StoryKey::SPATHI_HOME_VISITS);
             if let Some(&p) = [HELLO_ALLIES_1, HELLO_ALLIES_2, HELLO_ALLIES_3].get(usize::from(n)) {
@@ -523,7 +520,7 @@ impl<A: SpahomeApi> Dialogue<'_, A> {
         }
         self.offer(BYE_ALLY, Handler::Exit)
     }
-    fn info(&mut self, r: i32) {
+    pub(crate) fn info(&mut self, r: i32) {
         let line = match r as u32 {
             LIKE_SOME_INFO => WHAT_ABOUT,
             WHAT_ABOUT_HIERARCHY => {
@@ -574,7 +571,7 @@ impl<A: SpahomeApi> Dialogue<'_, A> {
             self.api.disable(LIKE_SOME_INFO as u16);
         }
     }
-    fn intro(&mut self) {
+    pub(crate) fn intro(&mut self) {
         if self.api.get(StoryKey::SPATHI_MANNER) == 2 {
             self.api.npc(HATE_YOU_FOREVER as i32);
             self.api.segue(1)
@@ -622,121 +619,19 @@ impl<A: SpahomeApi> Dialogue<'_, A> {
 // Resource keys (from resinst.h)
 // ---------------------------------------------------------------------------
 
-const RACE_PMAP_ANIM: &[u8] = b"comm.safeones.graphics\0";
-const RACE_FONT: &[u8] = b"comm.spathi.font\0";
-const RACE_COLOR_MAP: &[u8] = b"comm.safeones.colortable\0";
-const RACE_MUSIC: &[u8] = b"comm.spathi.music\0";
-const RACE_ALT_MUSIC: &[u8] = b"comm.safeones.music\0";
-const RACE_CONVERSATION_PHRASES: &[u8] = b"comm.safeones.dialogue\0";
+pub(crate) const RACE_PMAP_ANIM: &[u8] = b"comm.safeones.graphics\0";
+pub(crate) const RACE_FONT: &[u8] = b"comm.spathi.font\0";
+pub(crate) const RACE_COLOR_MAP: &[u8] = b"comm.safeones.colortable\0";
+pub(crate) const RACE_MUSIC: &[u8] = b"comm.spathi.music\0";
+pub(crate) const RACE_ALT_MUSIC: &[u8] = b"comm.safeones.music\0";
+pub(crate) const RACE_CONVERSATION_PHRASES: &[u8] = b"comm.safeones.dialogue\0";
 
-mod descriptor;
-use descriptor::descriptor;
-
+#[cfg(test)]
+use crate::comm::descriptors::spahome::descriptor;
 /// Spahome race dialogue implementation.
-#[cfg(not(test))]
-pub(crate) mod live {
-    use super::super::script::live::LiveScript;
-    use super::*;
-    fn run(cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, LiveScript<'_, '_, Handler>>)) {
-        let mut api = LiveScript::new(cx, callback);
-        f(&mut Dialogue { api: &mut api });
-    }
-    fn exit(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| s.handle(Handler::Exit, r as i32));
-    }
-    fn password(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| s.handle(Handler::Password, r as i32));
-    }
-    fn council(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| s.handle(Handler::Council, r as i32));
-    }
-    fn angry(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| s.handle(Handler::Angry, r as i32));
-    }
-    fn alliance(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| s.handle(Handler::Alliance, r as i32));
-    }
-    fn learn(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| s.handle(Handler::Learn, r as i32));
-    }
-    fn quest(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| s.handle(Handler::Quest, r as i32));
-    }
-    fn party(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| s.handle(Handler::Party, r as i32));
-    }
-    fn allies(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| s.handle(Handler::Allies, r as i32));
-    }
-    fn info(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| s.handle(Handler::Info, r as i32));
-    }
-    fn callback(h: Handler) -> crate::comm::response::ResponseFunc {
-        match h {
-            Handler::Exit => exit,
-            Handler::Password => password,
-            Handler::Council => council,
-            Handler::Angry => angry,
-            Handler::Alliance => alliance,
-            Handler::Learn => learn,
-            Handler::Quest => quest,
-            Handler::Party => party,
-            Handler::Allies => allies,
-            Handler::Info => info,
-        }
-    }
-    pub(super) fn intro(cx: &mut Cx<'_>) {
-        run(cx, |s| s.intro());
-    }
-    pub(super) fn post(cx: &mut Cx<'_>) {
-        run(cx, |s| s.post());
-    }
-    pub(super) fn uninit(_cx: &mut Cx<'_>) -> u16 {
-        0
-    }
-    pub unsafe fn init_spahome_comm(cx: &mut Cx<'_>) -> crate::comm::locdata::CLocData {
-        extern "C" {
-            static mut ScreenWidth: i32;
-        }
-        let mut d = descriptor(ScreenWidth);
-        d.alien_text_baseline.x = (1 + ((ScreenWidth - 80) >> 1)) as i16;
-        d.alien_text_width = (ScreenWidth - 80 - 16) as u16;
-        run(cx, |s| s.initialize());
-        d
-    }
-}
 #[cfg(test)]
 #[path = "spahome/tests.rs"]
 mod branch_tests;
-
-pub struct SpahomeDialogue;
-
-impl super::RaceDialogue for SpahomeDialogue {
-    fn init(&self, _cx: &mut Cx<'_>) -> CommData {
-        #[cfg(not(test))]
-        {
-            unsafe { as_comm_data(&live::init_spahome_comm(_cx)) }
-        }
-        #[cfg(test)]
-        {
-            as_comm_data(&descriptor(320))
-        }
-    }
-
-    fn intro(&self, _cx: &mut Cx<'_>) {
-        #[cfg(not(test))]
-        live::intro(_cx);
-    }
-
-    fn post_encounter(&self, _cx: &mut Cx<'_>) {
-        #[cfg(not(test))]
-        live::post(_cx);
-    }
-
-    fn uninit(&self, _cx: &mut Cx<'_>) -> u32 {
-        0
-    }
-}
 
 #[cfg(test)]
 mod tests {

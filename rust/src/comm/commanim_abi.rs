@@ -1,11 +1,11 @@
 //! Live dialogue animation engine, ported from commanim.c (GPL-2.0-or-later).
 
 use super::locdata::CAnimationDesc;
+use crate::comm::Comm;
 
 const RANDOM: u8 = 1;
 const CIRCULAR: u8 = 2;
 const YOYO: u8 = 4;
-#[cfg(not(test))]
 const WAIT_TALKING: u8 = 8;
 const COLOR: u8 = 16;
 const INTRO: u8 = 32;
@@ -15,7 +15,6 @@ const DISABLED: u8 = 128;
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub(crate) struct Sequence {
-    desc: *mut CAnimationDesc,
     alarm: u32,
     direction: i32,
     current: u16,
@@ -27,7 +26,6 @@ pub(crate) struct Sequence {
 
 impl Sequence {
     const EMPTY: Self = Self {
-        desc: std::ptr::null_mut(),
         alarm: 0,
         direction: 0,
         current: 0,
@@ -37,8 +35,8 @@ impl Sequence {
         change: 0,
     };
 
-    unsafe fn neutral(&self) -> bool {
-        if (*self.desc).anim_flags & CIRCULAR != 0 {
+    fn neutral(&self, d: &CAnimationDesc) -> bool {
+        if d.anim_flags & CIRCULAR != 0 {
             self.next == 0
         } else {
             self.current == 0
@@ -51,10 +49,8 @@ impl Sequence {
         self.change = 1;
     }
 
-    unsafe fn setup_ambient(desc: *mut CAnimationDesc, random: &mut impl FnMut() -> u32) -> Self {
-        let d = &*desc;
+    fn setup_ambient(d: &CAnimationDesc, random: &mut impl FnMut() -> u32) -> Self {
         let mut s = Self {
-            desc,
             direction: 1,
             left: d.num_frames.into(),
             kind: i32::from(d.anim_flags & COLOR != 0),
@@ -73,8 +69,7 @@ impl Sequence {
         s
     }
 
-    unsafe fn advance_ambient(&mut self, random: &mut impl FnMut() -> u32) -> bool {
-        let d = &*self.desc;
+    fn advance_ambient(&mut self, d: &CAnimationDesc, random: &mut impl FnMut() -> u32) -> bool {
         self.left = self.left.wrapping_sub(1);
         let active = self.left != 0 || (d.anim_flags & YOYO != 0 && self.next != 0);
         if active {
@@ -104,13 +99,13 @@ impl Sequence {
         active
     }
 
-    unsafe fn advance_talk(
+    fn advance_talk(
         &mut self,
+        d: &mut CAnimationDesc,
         ticks: u32,
         live: CAnimationDesc,
         random: &mut impl FnMut() -> u32,
     ) {
-        let d = &mut *self.desc;
         if self.direction == 0 {
             self.direction = 1;
             if live.start_index != d.start_index {
@@ -134,13 +129,13 @@ impl Sequence {
         }
     }
 
-    unsafe fn advance_transit(
+    fn advance_transit(
         &mut self,
+        d: &mut CAnimationDesc,
         ticks: u32,
         live: &mut CAnimationDesc,
         random: &mut impl FnMut() -> u32,
     ) -> bool {
-        let d = &mut *self.desc;
         let mut done = false;
         if self.direction == 0 {
             self.alarm = 0;
@@ -193,10 +188,9 @@ fn frame_index(d: &CAnimationDesc, from: u16, random: &mut impl FnMut() -> u32) 
     (u32::from(from) + random() % (u32::from(d.num_frames) - u32::from(from))) as u16
 }
 
-#[cfg(not(test))]
 pub(crate) mod runtime {
     use super::*;
-    use crate::comm::locdata::{CPoint, CStamp, COMM_DATA};
+    use crate::comm::locdata::{CPoint, CStamp};
 
     use crate::graphics::cmap_abi::GetColorMapAddress;
 
@@ -212,9 +206,6 @@ pub(crate) mod runtime {
     use crate::strings::string_table::SetAbsStringTableIndex;
     use crate::time::counter_abi::GetTimeCounter;
 
-    static mut LAST_TIME: u32 = 0;
-    static mut SEQUENCES: [Sequence; 22] = [Sequence::EMPTY; 22];
-    static mut ACTIVE_MASK: u32 = 0;
     const EMPTY_DESC: CAnimationDesc = CAnimationDesc {
         start_index: 0,
         num_frames: 0,
@@ -225,83 +216,92 @@ pub(crate) mod runtime {
         random_restart_rate: 0,
         block_mask: 0,
     };
-    static mut TALK_DESC: CAnimationDesc = EMPTY_DESC;
-    static mut TRANSIT_DESC: CAnimationDesc = EMPTY_DESC;
-    static mut TOTAL: u16 = 0;
 
+    pub(crate) struct RuntimeState {
+        pub(crate) last_time: u32,
+        pub(crate) sequences: [Sequence; 22],
+        pub(crate) active_mask: u32,
+        pub(crate) talk_desc: CAnimationDesc,
+        pub(crate) transit_desc: CAnimationDesc,
+        pub(crate) total: u16,
+    }
+    impl Default for RuntimeState {
+        fn default() -> Self {
+            Self {
+                last_time: 0,
+                sequences: [Sequence::EMPTY; 22],
+                active_mask: 0,
+                talk_desc: EMPTY_DESC,
+                transit_desc: EMPTY_DESC,
+                total: 0,
+            }
+        }
+    }
     fn random() -> u32 {
         crate::math::random()
     }
 
     /// # Safety
     /// CommData must be initialized and exclusively owned by the game thread.
-    #[no_mangle]
-    pub unsafe extern "C" fn InitCommAnimations() {
-        ACTIVE_MASK = 0;
-        TALK_DESC = COMM_DATA.alien_talk_desc;
-        TRANSIT_DESC = COMM_DATA.alien_transition_desc;
-        TRANSIT_DESC.anim_flags |= DISABLED;
-        TALK_DESC.anim_flags |= DISABLED;
-        SEQUENCES[0] = Sequence {
-            desc: &raw mut TRANSIT_DESC,
-            ..Sequence::EMPTY
-        };
-        SEQUENCES[1] = Sequence {
-            desc: &raw mut TALK_DESC,
-            ..Sequence::EMPTY
-        };
-        for i in 0..usize::from(COMM_DATA.num_animations) {
-            SEQUENCES[i + 2] =
-                Sequence::setup_ambient(&raw mut COMM_DATA.alien_ambient_array[i], &mut random);
+    pub unsafe fn init_comm_animations(comm: &mut Comm) {
+        comm.animation_runtime.active_mask = 0;
+        comm.animation_runtime.talk_desc = comm.data.alien_talk_desc;
+        comm.animation_runtime.transit_desc = comm.data.alien_transition_desc;
+        comm.animation_runtime.transit_desc.anim_flags |= DISABLED;
+        comm.animation_runtime.talk_desc.anim_flags |= DISABLED;
+        comm.animation_runtime.sequences[0] = Sequence::EMPTY;
+        comm.animation_runtime.sequences[1] = Sequence::EMPTY;
+        for i in 0..usize::from(comm.data.num_animations) {
+            comm.animation_runtime.sequences[i + 2] =
+                Sequence::setup_ambient(&comm.data.alien_ambient_array[i], &mut random);
         }
-        TOTAL = 2 + COMM_DATA.num_animations;
-        LAST_TIME = GetTimeCounter();
+        comm.animation_runtime.total = 2 + comm.data.num_animations;
+        comm.animation_runtime.last_time = GetTimeCounter();
     }
 
     /// # Safety
     /// Called from the game thread with initialized animations and graphics.
-    #[no_mangle]
-    pub unsafe extern "C" fn ProcessCommAnimations(mut full: i32, paused: i32) -> i32 {
+    pub unsafe fn process_comm_animations(comm: &mut Comm, mut full: i32, paused: i32) -> i32 {
         if paused != 0 {
             XFormColorMap_step();
             return 0;
         }
         let now = GetTimeCounter();
-        let elapsed = now.wrapping_sub(LAST_TIME);
-        LAST_TIME = now;
-        let mut next_mask = ACTIVE_MASK;
+        let elapsed = now.wrapping_sub(comm.animation_runtime.last_time);
+        comm.animation_runtime.last_time = now;
+        let mut next_mask = comm.animation_runtime.active_mask;
         let mut can_talk = true;
-        for i in 0..usize::from(COMM_DATA.num_animations) {
-            let s = &mut SEQUENCES[i + 2];
-            let d = &*s.desc;
+        for i in 0..usize::from(comm.data.num_animations) {
+            let s = &mut comm.animation_runtime.sequences[i + 2];
+            let d = &comm.data.alien_ambient_array[i];
             let bit = 1u32 << i;
             if d.anim_flags & DISABLED != 0 {
                 continue;
             }
-            let conflicts = d.anim_flags & COMM_DATA.alien_talk_desc.anim_flags & WAIT_TALKING != 0;
+            let conflicts = d.anim_flags & comm.data.alien_talk_desc.anim_flags & WAIT_TALKING != 0;
             if s.direction == 0 {
                 if !conflicts {
                     s.direction = 1;
                 }
             } else if s.alarm > elapsed {
                 s.alarm -= elapsed;
-            } else if ACTIVE_MASK & d.block_mask != 0 {
+            } else if comm.animation_runtime.active_mask & d.block_mask != 0 {
                 assert_eq!(
-                    ACTIVE_MASK & bit,
+                    comm.animation_runtime.active_mask & bit,
                     0,
                     "Check animations' mutual blocking masks"
                 );
-                assert!(s.neutral());
+                assert!(s.neutral(d));
                 s.alarm = restart_rate(d, &mut random) + 1;
                 continue;
-            } else if s.advance_ambient(&mut random) {
-                ACTIVE_MASK |= bit;
+            } else if s.advance_ambient(d, &mut random) {
+                comm.animation_runtime.active_mask |= bit;
                 next_mask |= bit;
             } else {
                 next_mask &= !bit;
             }
             if s.kind == 0 && s.direction != 0 && conflicts {
-                if s.neutral() {
+                if s.neutral(d) {
                     s.direction = 0;
                     next_mask &= !bit;
                 } else {
@@ -309,59 +309,34 @@ pub(crate) mod runtime {
                 }
             }
         }
-        ACTIVE_MASK = next_mask;
-        let flags = COMM_DATA.alien_talk_desc.anim_flags;
-        if can_talk && COMM_DATA.alien_talk_desc.num_frames > 0 && flags & WAIT_TALKING != 0 {
-            let mut done = false;
-            if flags & DONE != 0 && COMM_DATA.alien_transition_desc.num_frames > 0 {
-                COMM_DATA.alien_transition_desc.anim_flags |= DONE;
-            }
-            if COMM_DATA.alien_transition_desc.anim_flags & (INTRO | DONE) != 0 {
-                if COMM_DATA.alien_transition_desc.anim_flags & DONE != 0
-                    && SEQUENCES[0].direction == 0
-                {
-                    SEQUENCES[1].reset();
-                }
-                let transition = &raw mut COMM_DATA.alien_transition_desc;
-                done = SEQUENCES[0].advance_transit(elapsed, &mut *transition, &mut random);
-            } else if flags & DONE == 0 {
-                SEQUENCES[1].advance_talk(elapsed, COMM_DATA.alien_talk_desc, &mut random);
-            } else {
-                SEQUENCES[1].reset();
-                done = true;
-            }
-            if COMM_DATA.alien_talk_desc.anim_flags & DONE != 0 && done {
-                COMM_DATA.alien_talk_desc.anim_flags &= !(WAIT_TALKING | DONE);
-            }
-        } else if SEQUENCES[1].direction == 0 {
-            TALK_DESC.anim_flags |= DISABLED;
-        }
+        comm.animation_runtime.active_mask = next_mask;
+        process_talking(comm, elapsed, can_talk);
         BatchGraphics();
         if XFormColorMap_step() != 0 {
             full = 1;
         }
-        for i in 0..usize::from(COMM_DATA.num_animations) {
-            let s = &mut SEQUENCES[i + 2];
-            let d = &*s.desc;
+        for i in 0..usize::from(comm.data.num_animations) {
+            let s = &mut comm.animation_runtime.sequences[i + 2];
+            let d = &comm.data.alien_ambient_array[i];
             if d.anim_flags & DISABLED != 0 || s.kind != 1 || s.change == 0 {
                 continue;
             }
             XFormColorMap(
                 GetColorMapAddress(SetAbsStringTableIndex(
-                    (COMM_DATA.alien_colormap).cast(),
+                    (comm.data.alien_colormap).cast(),
                     d.start_index.wrapping_add(s.current),
                 )),
                 s.alarm.wrapping_sub(1) as i16,
             );
             s.change = 0;
         }
-        let mut change = DrawAlienFrame((&raw mut SEQUENCES).cast(), TOTAL, full);
+        let mut change = draw_alien_frame(comm, comm.animation_runtime.total, full);
         if full != 0 {
             change = 1;
         }
         UnbatchGraphics();
-        for i in 0..usize::from(COMM_DATA.num_animations) {
-            let d = &mut *SEQUENCES[i + 2].desc;
+        for i in 0..usize::from(comm.data.num_animations) {
+            let d = &mut comm.data.alien_ambient_array[i];
             if d.anim_flags & DISABLED != 0 {
                 continue;
             }
@@ -372,24 +347,57 @@ pub(crate) mod runtime {
         change
     }
 
+    fn process_talking(comm: &mut Comm, elapsed: u32, can_talk: bool) {
+        let flags = comm.data.alien_talk_desc.anim_flags;
+        if can_talk && comm.data.alien_talk_desc.num_frames > 0 && flags & WAIT_TALKING != 0 {
+            let mut done = false;
+            if flags & DONE != 0 && comm.data.alien_transition_desc.num_frames > 0 {
+                comm.data.alien_transition_desc.anim_flags |= DONE;
+            }
+            if comm.data.alien_transition_desc.anim_flags & (INTRO | DONE) != 0 {
+                if comm.data.alien_transition_desc.anim_flags & DONE != 0
+                    && comm.animation_runtime.sequences[0].direction == 0
+                {
+                    comm.animation_runtime.sequences[1].reset();
+                }
+                done = comm.animation_runtime.sequences[0].advance_transit(
+                    &mut comm.animation_runtime.transit_desc,
+                    elapsed,
+                    &mut comm.data.alien_transition_desc,
+                    &mut random,
+                );
+            } else if flags & DONE == 0 {
+                comm.animation_runtime.sequences[1].advance_talk(
+                    &mut comm.animation_runtime.talk_desc,
+                    elapsed,
+                    comm.data.alien_talk_desc,
+                    &mut random,
+                );
+            } else {
+                comm.animation_runtime.sequences[1].reset();
+                done = true;
+            }
+            if comm.data.alien_talk_desc.anim_flags & DONE != 0 && done {
+                comm.data.alien_talk_desc.anim_flags &= !(WAIT_TALKING | DONE);
+            }
+        } else if comm.animation_runtime.sequences[1].direction == 0 {
+            comm.animation_runtime.talk_desc.anim_flags |= DISABLED;
+        }
+    }
+
     /// # Safety
     /// Sequence array, CommData, and drawing context must be live and exclusive.
-    #[no_mangle]
-    pub unsafe extern "C" fn DrawAlienFrame(
-        sequences: *mut Sequence,
-        count: u16,
-        full: i32,
-    ) -> i32 {
+    pub unsafe fn draw_alien_frame(comm: &mut Comm, count: u16, full: i32) -> i32 {
         let mut change = 0;
         BatchGraphics();
         let mut stamp = CStamp {
             origin: CPoint { x: 0, y: 0 },
-            frame: COMM_DATA.alien_frame,
+            frame: comm.data.alien_frame,
         };
         if full != 0 {
             DrawStamp((&raw mut stamp).cast());
-            for i in (0..usize::from(COMM_DATA.num_animations)).rev() {
-                let descriptor = &raw mut COMM_DATA.alien_ambient_array[i];
+            for i in (0..usize::from(comm.data.num_animations)).rev() {
+                let descriptor = &raw mut comm.data.alien_ambient_array[i];
                 let d = &mut *descriptor;
                 if d.anim_flags & (RANDOM | CIRCULAR | YOYO) != 0 {
                     continue;
@@ -397,15 +405,19 @@ pub(crate) mod runtime {
                 d.anim_flags |= DISABLED;
                 if d.anim_flags & COLOR == 0 {
                     stamp.frame =
-                        (SetAbsFrameIndex((COMM_DATA.alien_frame).cast(), d.start_index)).cast();
+                        (SetAbsFrameIndex((comm.data.alien_frame).cast(), d.start_index)).cast();
                     DrawStamp((&raw mut stamp).cast());
                 }
             }
         }
-        if !sequences.is_null() {
+        {
             for i in (0..usize::from(count)).rev() {
-                let s = &mut *sequences.add(i);
-                let d = &*s.desc;
+                let s = &mut comm.animation_runtime.sequences[i];
+                let d = match i {
+                    0 => &comm.animation_runtime.transit_desc,
+                    1 => &comm.animation_runtime.talk_desc,
+                    _ => &comm.data.alien_ambient_array[i - 2],
+                };
                 if d.anim_flags & DISABLED != 0 || s.kind != 0 {
                     continue;
                 }
@@ -413,7 +425,7 @@ pub(crate) mod runtime {
                     continue;
                 }
                 stamp.frame = (SetAbsFrameIndex(
-                    (COMM_DATA.alien_frame).cast(),
+                    (comm.data.alien_frame).cast(),
                     d.start_index.wrapping_add(s.current),
                 ))
                 .cast();
@@ -433,7 +445,7 @@ mod tests {
 
     #[test]
     fn circular_neutral_last_and_restart_delay() {
-        let mut d = CAnimationDesc {
+        let d = CAnimationDesc {
             num_frames: 3,
             anim_flags: CIRCULAR,
             base_frame_rate: 4,
@@ -445,33 +457,33 @@ mod tests {
             calls += 1;
             12
         };
-        unsafe {
-            let mut s = Sequence::setup_ambient(&mut d, &mut rng);
+        {
+            let mut s = Sequence::setup_ambient(&d, &mut rng);
             assert_eq!((s.current, s.next, s.alarm), (2, 0, 10));
-            assert!(s.neutral());
-            assert!(s.advance_ambient(&mut rng));
+            assert!(s.neutral(&d));
+            assert!(s.advance_ambient(&d, &mut rng));
             assert_eq!((s.current, s.next, s.alarm), (0, 1, 5));
-            assert!(s.advance_ambient(&mut rng));
-            assert!(!s.advance_ambient(&mut rng));
+            assert!(s.advance_ambient(&d, &mut rng));
+            assert!(!s.advance_ambient(&d, &mut rng));
             assert_eq!((s.current, s.next, s.alarm), (2, 0, 10));
-            assert!(s.neutral());
+            assert!(s.neutral(&d));
         }
         assert_eq!(calls, 4);
     }
 
     #[test]
     fn yoyo_returns_to_neutral_before_becoming_inactive() {
-        let mut d = CAnimationDesc {
+        let d = CAnimationDesc {
             num_frames: 3,
             anim_flags: YOYO,
             ..Default::default()
         };
-        unsafe {
-            let mut s = Sequence::setup_ambient(&mut d, &mut || 0);
+        {
+            let mut s = Sequence::setup_ambient(&d, &mut || 0);
             let mut frames = Vec::new();
             let mut active = Vec::new();
             for _ in 0..4 {
-                active.push(s.advance_ambient(&mut || 0));
+                active.push(s.advance_ambient(&d, &mut || 0));
                 frames.push(s.current);
             }
             assert_eq!(frames, [1, 2, 1, 0]);
@@ -484,7 +496,7 @@ mod tests {
 
     #[test]
     fn random_end_draws_neutral_but_still_consumes_next_rng() {
-        let mut d = CAnimationDesc {
+        let d = CAnimationDesc {
             num_frames: 2,
             anim_flags: RANDOM,
             ..Default::default()
@@ -494,10 +506,10 @@ mod tests {
             calls += 1;
             1
         };
-        unsafe {
-            let mut s = Sequence::setup_ambient(&mut d, &mut rng);
-            assert!(s.advance_ambient(&mut rng));
-            assert!(!s.advance_ambient(&mut rng));
+        {
+            let mut s = Sequence::setup_ambient(&d, &mut rng);
+            assert!(s.advance_ambient(&d, &mut rng));
+            assert!(!s.advance_ambient(&d, &mut rng));
             assert_eq!((s.current, s.next), (0, 1));
         }
         assert_eq!(calls, 6);
@@ -514,21 +526,18 @@ mod tests {
             ..Default::default()
         };
         let live = d;
-        let mut s = Sequence {
-            desc: &mut d,
-            ..Sequence::EMPTY
-        };
+        let mut s = Sequence { ..Sequence::EMPTY };
         let mut calls = 0;
         let mut rng = || {
             calls += 1;
             2
         };
-        unsafe {
-            s.advance_talk(0, live, &mut rng);
+        {
+            s.advance_talk(&mut d, 0, live, &mut rng);
             assert_eq!((s.current, s.alarm), (3, 15));
-            s.advance_talk(14, live, &mut rng);
+            s.advance_talk(&mut d, 14, live, &mut rng);
             assert_eq!((s.current, s.alarm), (3, 1));
-            s.advance_talk(1, live, &mut rng);
+            s.advance_talk(&mut d, 1, live, &mut rng);
             assert_eq!((s.current, s.alarm), (0, 5));
         }
         assert_eq!(calls, 4);
@@ -548,20 +557,45 @@ mod tests {
             anim_flags: INTRO | DONE,
             ..Default::default()
         };
-        let mut s = Sequence {
-            desc: &mut d,
-            ..Sequence::EMPTY
-        };
-        unsafe {
-            assert!(!s.advance_transit(0, &mut live, &mut || 0));
+        let mut s = Sequence { ..Sequence::EMPTY };
+        {
+            assert!(!s.advance_transit(&mut d, 0, &mut live, &mut || 0));
             assert_eq!((s.current, s.direction, d.start_index), (0, -1, 10));
-            assert!(s.advance_transit(0, &mut live, &mut || 0));
+            assert!(s.advance_transit(&mut d, 0, &mut live, &mut || 0));
             assert_eq!(live.anim_flags, INTRO);
             assert_ne!(d.anim_flags & DISABLED, 0);
-            assert!(!s.advance_transit(0, &mut live, &mut || 0));
+            assert!(!s.advance_transit(&mut d, 0, &mut live, &mut || 0));
             assert_eq!((s.current, s.direction, d.start_index), (1, 1, 30));
-            assert!(!s.advance_transit(0, &mut live, &mut || 0));
+            assert!(!s.advance_transit(&mut d, 0, &mut live, &mut || 0));
             assert_eq!(live.anim_flags, 0);
         }
+    }
+}
+
+#[cfg(test)]
+mod owner_tests {
+    use super::*;
+
+    #[test]
+    #[serial_test::serial]
+    fn initialized_sequences_survive_a_move_and_a_paused_frame() {
+        let mut first = Comm::new();
+        let second = Comm::new();
+        first.data.num_animations = 1;
+        first.data.alien_ambient_array[0].num_frames = 1;
+        first.data.alien_ambient_array[0].anim_flags = CIRCULAR;
+        unsafe {
+            runtime::init_comm_animations(&mut first);
+        }
+        first.animation_runtime.last_time = 17;
+        let mut moved = Box::new(first);
+        assert_eq!(moved.animation_runtime.total, 3);
+        assert_eq!(second.animation_runtime.total, 0);
+        assert_eq!(
+            unsafe { runtime::process_comm_animations(&mut moved, 0, 1) },
+            0
+        );
+        assert_eq!(moved.animation_runtime.last_time, 17);
+        assert_eq!(moved.animation_runtime.total, 3);
     }
 }

@@ -2,17 +2,17 @@ use super::*;
 use crate::engine::StoryKey;
 
 impl<A: SlylandApi> Dialogue<'_, A> {
-    pub(super) fn initialize(&mut self) {
+    pub(crate) fn initialize(&mut self) {
         self.api.segue(1);
     }
 
-    pub(super) fn handle(&mut self, handler: Handler, response: i32) {
+    pub(crate) fn handle(&mut self, handler: Handler, response: i32) {
         match handler {
             Handler::Combat => self.combat(response),
         }
     }
 
-    pub(super) fn say_coord(&mut self, coordinate: i16) {
+    pub(crate) fn say_coord(&mut self, coordinate: i16) {
         let coordinate = i32::from(coordinate);
         let magnitude = coordinate.abs();
         self.api.splice(if coordinate < 0 {
@@ -25,7 +25,7 @@ impl<A: SlylandApi> Dialogue<'_, A> {
         self.api.number(magnitude % 10, false);
     }
 
-    pub(super) fn combat(&mut self, response: i32) {
+    pub(crate) fn combat(&mut self, response: i32) {
         let topics = [
             (
                 StoryKey::SLYLANDRO_PROBE_THREAT,
@@ -123,7 +123,7 @@ impl<A: SlylandApi> Dialogue<'_, A> {
         self.api.segue(1);
     }
 
-    pub(super) fn intro(&mut self) {
+    pub(crate) fn intro(&mut self) {
         let n = self.api.get(StoryKey::SLYLANDRO_PROBE_VISITS);
         if let Some(&p) = [
             WE_COME_IN_PEACE_1,

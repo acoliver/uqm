@@ -1,16 +1,15 @@
 //! Zoqfot dialogue, ported from the original C script.
-use super::alliance::AllianceApi;
-use super::script::{animation, as_comm_data, GLOBAL_SHIP_NAME};
-use crate::comm::locdata::{CColor, CLocData, CPoint};
-use crate::comm::types::CommData;
-use crate::engine::{battle::Cx, StoryKey};
+pub(crate) use super::alliance::AllianceApi;
+pub(crate) use super::script::GLOBAL_SHIP_NAME;
+pub(crate) use crate::comm::locdata::{CColor, CLocData, CPoint};
+pub(crate) use crate::engine::StoryKey;
 mod phrases;
 use phrases::*;
-mod api;
-use super::alliance::ZOQFOTPIK_SHIP;
-use api::{Speaker, ZoqApi};
+pub(crate) mod api;
+pub(crate) use super::alliance::ZOQFOTPIK_SHIP;
+pub(crate) use api::{Speaker, ZoqApi};
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Handler {
+pub(crate) enum Handler {
     ExitConversation,
     ZoqFotIntro,
     FormAlliance,
@@ -18,11 +17,11 @@ enum Handler {
     ZoqFotInfo,
     ZoqFotHome,
 }
-struct Dialogue<'a, A> {
-    api: &'a mut A,
+pub(crate) struct Dialogue<'a, A> {
+    pub(crate) api: &'a mut A,
 }
 impl<A: ZoqApi> Dialogue<'_, A> {
-    fn handle(&mut self, h: Handler, r: u16) {
+    pub(crate) fn handle(&mut self, h: Handler, r: u16) {
         match h {
             Handler::ExitConversation => self.exit_conversation(r),
             Handler::ZoqFotIntro => self.zoq_fot_intro(r),
@@ -32,12 +31,12 @@ impl<A: ZoqApi> Dialogue<'_, A> {
             Handler::ZoqFotHome => self.zoq_fot_home(r),
         }
     }
-    fn initialize(&mut self, _desc: &mut CLocData) {
+    pub(crate) fn initialize(&mut self, _desc: &mut CLocData) {
         self.api.segue(u32::from(
             self.api.alliance(ZOQFOTPIK_SHIP) != 1 && self.api.activity() as u8 != 5,
         ));
     }
-    fn exit_conversation(&mut self, r: u16) {
+    pub(crate) fn exit_conversation(&mut self, r: u16) {
         self.api.segue(0);
         if r == BYE_HOMEWORLD {
             self.api.speak(GOODBYE_HOME0, Speaker::Zoq);
@@ -92,7 +91,7 @@ impl<A: ZoqApi> Dialogue<'_, A> {
             self.api.segue(1);
         }
     }
-    fn form_alliance(&mut self, r: u16) {
+    pub(crate) fn form_alliance(&mut self, r: u16) {
         let _ = r;
         self.api.speak(ALLY_WITH_US0, Speaker::Zoq);
         self.api.speak(ALLY_WITH_US1, Speaker::Pik);
@@ -106,7 +105,7 @@ impl<A: ZoqApi> Dialogue<'_, A> {
         self.api
             .response(DECIDE_LATER, Handler::ExitConversation, &[]);
     }
-    fn zoq_fot_intro(&mut self, r: u16) {
+    pub(crate) fn zoq_fot_intro(&mut self, r: u16) {
         if r == WE_ARE_VINDICATOR0 {
             self.api.speak(WE_GLAD0, Speaker::Zoq);
             self.api.speak(WE_GLAD1, Speaker::Pik);
@@ -206,7 +205,7 @@ impl<A: ZoqApi> Dialogue<'_, A> {
                 .response(VALUABLE_INFO, Handler::ExitConversation, &[]);
         }
     }
-    fn aquaint_zoq_fot(&mut self, r: u16) {
+    pub(crate) fn aquaint_zoq_fot(&mut self, r: u16) {
         let mut fragments: Vec<i32> = Vec::new();
         if r == WHICH_FOT {
             self.api.speak(HE_IS0, Speaker::Zoq);
@@ -255,7 +254,7 @@ impl<A: ZoqApi> Dialogue<'_, A> {
         self.api
             .response(VALUABLE_INFO, Handler::ExitConversation, &[]);
     }
-    fn zoq_fot_info(&mut self, r: u16) {
+    pub(crate) fn zoq_fot_info(&mut self, r: u16) {
         let mut info_left: u8;
         if r == WANT_SPECIFIC_INFO {
             self.api.speak(WHAT_SPECIFIC_INFO0, Speaker::Zoq);
@@ -349,7 +348,7 @@ impl<A: ZoqApi> Dialogue<'_, A> {
             self.api.disable(WANT_SPECIFIC_INFO);
         }
     }
-    fn zoq_fot_home(&mut self, r: u16) {
+    pub(crate) fn zoq_fot_home(&mut self, r: u16) {
         let mut num_visits: u8;
         if r == WHATS_UP_HOMEWORLD {
             num_visits = self.api.get(StoryKey::ZOQFOT_INFO);
@@ -520,7 +519,7 @@ impl<A: ZoqApi> Dialogue<'_, A> {
         self.api
             .response(BYE_HOMEWORLD, Handler::ExitConversation, &[]);
     }
-    fn intro(&mut self) {
+    pub(crate) fn intro(&mut self) {
         let mut num_visits: u8;
         if (self.api.activity() as u8) == 5 {
             self.api.speak(OUT_TAKES0, Speaker::Zoq);
@@ -688,154 +687,9 @@ impl<A: ZoqApi> Dialogue<'_, A> {
         }
     }
 }
-fn descriptor() -> CLocData {
-    let mut d = CLocData {
-        alien_frame_res: c"comm.zoqfotpik.graphics".as_ptr(),
-        alien_font_res: c"comm.zoqfotpik.font".as_ptr(),
-        alien_colormap_res: c"comm.zoqfotpik.colortable".as_ptr(),
-        alien_song_res: c"comm.zoqfotpik.music".as_ptr(),
-        conversation_phrases_res: c"comm.zoqfotpik.dialogue".as_ptr(),
-        alien_text_fcolor: CColor {
-            r: 0,
-            g: 0,
-            b: 0,
-            a: 255,
-        },
-        alien_text_bcolor: CColor {
-            r: 0,
-            g: 0,
-            b: 0,
-            a: 255,
-        },
-        alien_text_baseline: CPoint { x: 0, y: 0 },
-        alien_text_width: 119,
-        alien_text_align: 1,
-        alien_text_valign: 1,
-        num_animations: 3,
-        ..CLocData::default()
-    };
-    d.alien_ambient_array[0] = animation(1, 4, 12, (35, 0), (0, 8400));
-    d.alien_ambient_array[1] = animation(5, 5, 2, (49, 0), (1680, 0));
-    d.alien_ambient_array[2] = animation(10, 8, 2, (56, 0), (0, 8400));
-    d.alien_transition_desc = animation(23, 3, 0, (28, 0), (0, 0));
-    d.alien_talk_desc = animation(18, 5, 0, (56, 0), (70, 0));
-    #[cfg(not(test))]
-    {
-        d.init_encounter_func = Some(live::intro);
-        d.post_encounter_func = Some(live::post);
-        d.uninit_encounter_func = Some(live::uninit);
-    }
-    d
-}
 
-#[cfg(not(test))]
-pub(crate) mod live {
-    use super::*;
-    use crate::comm::races::script::live::LiveScript;
+#[cfg(test)]
+use crate::comm::descriptors::zoqfot::descriptor;
 
-    fn run(cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, LiveScript<'_, '_, Handler>>)) {
-        let mut api = LiveScript::new(cx, callback);
-        f(&mut Dialogue { api: &mut api });
-    }
-    fn exit_conversation(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::ExitConversation,
-                u16::try_from(r).expect("response exceeds COUNT"),
-            )
-        });
-    }
-    fn zoq_fot_intro(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::ZoqFotIntro,
-                u16::try_from(r).expect("response exceeds COUNT"),
-            )
-        });
-    }
-    fn form_alliance(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::FormAlliance,
-                u16::try_from(r).expect("response exceeds COUNT"),
-            )
-        });
-    }
-    fn aquaint_zoq_fot(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::AquaintZoqFot,
-                u16::try_from(r).expect("response exceeds COUNT"),
-            )
-        });
-    }
-    fn zoq_fot_info(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::ZoqFotInfo,
-                u16::try_from(r).expect("response exceeds COUNT"),
-            )
-        });
-    }
-    fn zoq_fot_home(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::ZoqFotHome,
-                u16::try_from(r).expect("response exceeds COUNT"),
-            )
-        });
-    }
-
-    fn callback(h: Handler) -> crate::comm::response::ResponseFunc {
-        match h {
-            Handler::ExitConversation => exit_conversation,
-            Handler::ZoqFotIntro => zoq_fot_intro,
-            Handler::FormAlliance => form_alliance,
-            Handler::AquaintZoqFot => aquaint_zoq_fot,
-            Handler::ZoqFotInfo => zoq_fot_info,
-            Handler::ZoqFotHome => zoq_fot_home,
-        }
-    }
-    pub(super) fn intro(cx: &mut Cx<'_>) {
-        run(cx, |s| s.intro());
-    }
-    pub(super) fn post(_cx: &mut Cx<'_>) {}
-    pub(super) fn uninit(_cx: &mut Cx<'_>) -> u16 {
-        0
-    }
-    /// Initialize the encounter on the game thread.
-    ///
-    /// # Safety
-    /// Communication state must be initialized on the game thread.
-    pub unsafe fn init_zoqfot_comm(cx: &mut Cx<'_>) -> CLocData {
-        let mut desc = descriptor();
-        run(cx, |s| s.initialize(&mut desc));
-        desc
-    }
-}
-pub struct ZoqfotDialogue;
-impl super::RaceDialogue for ZoqfotDialogue {
-    fn init(&self, _cx: &mut Cx<'_>) -> CommData {
-        #[cfg(not(test))]
-        {
-            unsafe { as_comm_data(&live::init_zoqfot_comm(_cx)) }
-        }
-        #[cfg(test)]
-        {
-            as_comm_data(&descriptor())
-        }
-    }
-    fn intro(&self, _cx: &mut Cx<'_>) {
-        #[cfg(not(test))]
-        live::intro(_cx);
-    }
-    fn post_encounter(&self, _cx: &mut Cx<'_>) {
-        #[cfg(not(test))]
-        live::post(_cx);
-    }
-    fn uninit(&self, _cx: &mut Cx<'_>) -> u32 {
-        0
-    }
-}
 #[cfg(test)]
 mod tests;

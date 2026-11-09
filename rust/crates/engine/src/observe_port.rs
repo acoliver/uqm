@@ -38,7 +38,10 @@ pub enum CheckpointView<'a> {
     EncounterDispatch(u32),
     DialogueDispatch(u32),
     EncounterMenu(bool),
-    CommunicationResponses(usize),
+    CommunicationResponses {
+        count: usize,
+        choices: &'a ResponseChoices,
+    },
     ResponsesReady(bool),
     CommunicationStarted,
     CommunicationEnded,
@@ -47,7 +50,10 @@ pub enum CheckpointView<'a> {
     PlanetMenu(usize),
     StarbaseMenu(bool),
     ShipPicker(bool),
-    ShipPickerCursor { x: i16, y: i16 },
+    ShipPickerCursor {
+        x: i16,
+        y: i16,
+    },
     StarMap(Option<StarMapView>),
     Devices(&'a DeviceObservation),
     Won,
@@ -64,6 +70,7 @@ pub struct Injected {
     pub stop: bool,
     pub seed: Option<u32>,
     pub planet_side: Option<planet_side::TripAdmission>,
+    pub comm_response: Option<usize>,
 }
 
 pub struct Presented {
@@ -184,6 +191,7 @@ mod tests {
                     stop: false,
                     seed: Some(self.nested as u32),
                     planet_side: None,
+                    comm_response: None,
                 }
             }
             fn checkpoint(&mut self, _: &CheckpointView<'_>) {}
@@ -241,9 +249,29 @@ mod tests {
                 stop: false,
                 seed: Some(1),
                 planet_side: None,
+                comm_response: None,
             }
         );
         assert_eq!(observer.nested, 1);
         assert_eq!(effects, ["configure", "connect", "connected"]);
+    }
+}
+
+/// Callable phrase names copied at a conversation's observation boundary.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ResponseChoices(pub Vec<Option<String>>);
+
+impl ResponseChoices {
+    pub fn index(&self, phrase: &str) -> Result<usize, String> {
+        let mut matches = self
+            .0
+            .iter()
+            .enumerate()
+            .filter_map(|(i, name)| (name.as_deref() == Some(phrase)).then_some(i));
+        match (matches.next(), matches.next()) {
+            (Some(i), None) => Ok(i),
+            (None, _) => Err(format!("response_not_offered:phrase={phrase}")),
+            _ => Err(format!("response_ambiguous:phrase={phrase}")),
+        }
     }
 }

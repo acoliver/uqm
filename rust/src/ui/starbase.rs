@@ -2,7 +2,6 @@
 #![cfg(not(test))]
 
 use super::{outfit::do_outfit, shipyard::do_shipyard};
-use crate::comm::comm_abi::SetCommIntroMode;
 use crate::engine::{
     battle::Cx,
     observe::{CheckpointView, Io},
@@ -435,8 +434,15 @@ unsafe fn prepare_starbase_visit(cx: &mut Cx<'_>, io: &mut Io<'_>) -> Option<u32
         io.observer.checkpoint(&CheckpointView::EncounterDispatch(
             CONVERSATION_COMMANDER_CONVERSATION,
         ));
-        SetCommIntroMode(CROSSFADE_SCREEN, 0);
-        crate::comm::dispatch::init_communication(cx, io, CONVERSATION_COMMANDER_CONVERSATION);
+        crate::comm::dispatch::init_communication_with_options(
+            cx,
+            io,
+            CONVERSATION_COMMANDER_CONVERSATION,
+            crate::comm::CommOptions {
+                intro: (CROSSFADE_SCREEN, 0),
+                ..Default::default()
+            },
+        );
         if cx.world.story_state(StoryKey::PROBE_ILWRATH_ENCOUNTER) == 0
             || cx.world.activity() & CHECK_ABORT as u16 != 0
         {
@@ -452,8 +458,15 @@ unsafe fn prepare_starbase_visit(cx: &mut Cx<'_>, io: &mut Io<'_>) -> Option<u32
         {
             return None;
         }
-        SetCommIntroMode(CROSSFADE_SCREEN, 0);
-        crate::comm::dispatch::init_communication(cx, io, CONVERSATION_COMMANDER_CONVERSATION);
+        crate::comm::dispatch::init_communication_with_options(
+            cx,
+            io,
+            CONVERSATION_COMMANDER_CONVERSATION,
+            crate::comm::CommOptions {
+                intro: (CROSSFADE_SCREEN, 0),
+                ..Default::default()
+            },
+        );
         if cx.world.activity() & CHECK_ABORT as u16 != 0 {
             return None;
         }
@@ -471,8 +484,15 @@ unsafe fn prepare_starbase_visit(cx: &mut Cx<'_>, io: &mut Io<'_>) -> Option<u32
         io.observer.checkpoint(&CheckpointView::EncounterDispatch(
             CONVERSATION_COMMANDER_CONVERSATION,
         ));
-        SetCommIntroMode(FADE_IN_SCREEN, ONE_SECOND * 2);
-        crate::comm::dispatch::init_communication(cx, io, CONVERSATION_COMMANDER_CONVERSATION);
+        crate::comm::dispatch::init_communication_with_options(
+            cx,
+            io,
+            CONVERSATION_COMMANDER_CONVERSATION,
+            crate::comm::CommOptions {
+                intro: (FADE_IN_SCREEN, ONE_SECOND * 2),
+                ..Default::default()
+            },
+        );
         if cx.world.activity() & CHECK_ABORT as u16 != 0 {
             return None;
         }
