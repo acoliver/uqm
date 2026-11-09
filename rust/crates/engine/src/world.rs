@@ -50,7 +50,6 @@ pub struct FuelDistance {
 }
 
 pub struct World {
-    #[cfg(not(test))]
     pub last_encounter_group: u8,
     #[cfg(not(test))]
     pub hyper_distance: FuelDistance,
@@ -64,6 +63,7 @@ pub struct World {
     catalog: Option<std::rc::Rc<std::borrow::Cow<'static, [CStarDesc; CATALOG_LEN]>>>,
     pub current_star: Option<StarId>,
     pub encounter_race: i16,
+    pub encounter_group: u8,
     fleet_resources:
         std::collections::BTreeMap<u32, crate::battle::link_queue::ShipPickerResources>,
 }
@@ -112,7 +112,6 @@ impl World {
             fleet_resources: std::collections::BTreeMap::new(),
             data: WorldData::new(),
             next_activity: 0,
-            #[cfg(not(test))]
             last_encounter_group: 0,
             queues: CampaignQueues::new(),
             clock: super::clock::GameClock::new(),
@@ -128,6 +127,7 @@ impl World {
             catalog: None,
             current_star: None,
             encounter_race: 0,
+            encounter_group: 0,
         }
     }
 
@@ -426,6 +426,27 @@ mod tests {
 #[cfg(test)]
 mod default_tests {
     use super::*;
+
+    #[test]
+    fn encounter_selection_belongs_to_each_campaign_and_is_not_its_group_file() {
+        let mut first = World::new();
+        let mut second = World::new();
+        assert_eq!(first.encounter_group, 0);
+        first.last_encounter_group = 123;
+        first.encounter_group = 7;
+        second.encounter_group = 11;
+        assert_eq!(
+            (first.encounter_group, first.last_encounter_group),
+            (7, 123)
+        );
+        assert_eq!(
+            (second.encounter_group, second.last_encounter_group),
+            (11, 0)
+        );
+        first.encounter_group = 0;
+        assert_eq!(second.encounter_group, 11);
+        assert_eq!(first.last_encounter_group, 123);
+    }
 
     #[test]
     fn default_constructed_owner_has_initial_state() {

@@ -96,6 +96,31 @@ fn race_of_first_npc(game: &Game) -> u8 {
 
 #[test]
 #[serial_test::serial]
+fn encounter_selection_and_reset_use_only_the_supplied_campaign() {
+    use uqm_rust::planets::generate::sol::orbital::Orbital;
+    let mut first = campaign();
+    let mut second = campaign();
+    first.world.last_encounter_group = 123;
+    first.world.encounter_race = 9;
+    with_site(&mut first, SOL_DEFINED, |host, _| {
+        host.set_encounter_group(7)
+    });
+    with_site(&mut second, SOL_DEFINED, |host, _| {
+        host.set_encounter_group(11)
+    });
+    assert_eq!(first.world.encounter_group, 7);
+    assert_eq!(second.world.encounter_group, 11);
+    with_site(&mut first, SAMATRA_DEFINED, |host, _| {
+        host.reset_encounter()
+    });
+    assert_eq!(first.world.encounter_group, 0);
+    assert_eq!(first.world.encounter_race, -1);
+    assert_eq!(first.world.last_encounter_group, 123);
+    assert_eq!(second.world.encounter_group, 11);
+}
+
+#[test]
+#[serial_test::serial]
 fn every_home_contact_tracks_and_clones_its_own_race() {
     let mut game = campaign();
     for (index, race) in [

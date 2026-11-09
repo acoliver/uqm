@@ -227,27 +227,25 @@ fn fuel(solar: &SolarSystem) -> u16 {
     landing_fuel(solar.sys.info.planet_info.gravity)
 }
 
-unsafe fn spawn_fwiffo() {
-    crate::planets::c_api::set_encounter_group(0);
-    crate::engine::World::current().write(|world| {
-        put_group_info(world, 0, u8::MAX);
-        world.ip_groups().reinit();
-        assert_eq!(world.npc_built_ships_ref().count(), 0);
-        let fleets = world.avail_races_ref();
-        let template = *fleets.get(
-            fleets
-                .at(crate::comm::dispatch::ship::SPATHI_SHIP as usize)
-                .unwrap_or_else(|| panic!("Spathi fleet")),
-        );
-        if let Some(id) = world.npc_built_ships().clone_fragment(
-            &template,
-            crate::comm::dispatch::ship::SPATHI_SHIP,
-            1,
-            crate::comm::dispatch::production_captain_name,
-        ) {
-            world.npc_built_ships().get_mut(id).captains_name_index = 5 + 16;
-        }
-    });
+unsafe fn spawn_fwiffo(world: &mut crate::engine::World) {
+    world.encounter_group = 0;
+    put_group_info(world, 0, u8::MAX);
+    world.ip_groups().reinit();
+    assert_eq!(world.npc_built_ships_ref().count(), 0);
+    let fleets = world.avail_races_ref();
+    let template = *fleets.get(
+        fleets
+            .at(crate::comm::dispatch::ship::SPATHI_SHIP as usize)
+            .unwrap_or_else(|| panic!("Spathi fleet")),
+    );
+    if let Some(id) = world.npc_built_ships().clone_fragment(
+        &template,
+        crate::comm::dispatch::ship::SPATHI_SHIP,
+        1,
+        crate::comm::dispatch::production_captain_name,
+    ) {
+        world.npc_built_ships().get_mut(id).captains_name_index = 5 + 16;
+    }
 }
 
 unsafe fn dispatch_lander(
@@ -307,9 +305,7 @@ unsafe fn dispatch_lander(
         return false;
     }
     if cx.world.story_state(StoryKey::FOUND_PLUTO_SPATHI) == 1 {
-        cx.with_legacy(|| {
-            spawn_fwiffo();
-        });
+        spawn_fwiffo(cx.world);
         cx.world.next_activity |= CHECK_LOAD;
         cx.world.set_activity(cx.world.activity() | START_ENCOUNTER);
         save_solar_location(cx.world, solar);

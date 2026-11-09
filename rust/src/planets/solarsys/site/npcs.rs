@@ -168,10 +168,7 @@ impl crate::planets::generate::sam::GuardSite for Site<'_, '_, '_> {
     }
     fn reset_encounter(&mut self) {
         let mut game = self.game.borrow_mut();
-        let world = &mut *game.world;
-
-        // SAFETY: encounter state is only accessed on the game thread.
-        unsafe { reset_encounter(world) };
+        reset_encounter(game.world);
     }
     fn built_ship_count(&self) -> u16 {
         let mut game = self.game.borrow_mut();

@@ -144,7 +144,7 @@ unsafe fn draw(menu: &Menu, old: Option<usize>, refresh: bool) {
 }
 
 unsafe fn reset_groups(world: &mut World) {
-    crate::c_bindings::global_state::EncounterGroup = 0;
+    world.encounter_group = 0;
     put_group_info(world, 0, 255);
     world.ip_groups().reinit();
     assert_eq!(world.npc_built_ships_ref().count(), 0);
@@ -253,7 +253,7 @@ unsafe fn invoke(
                 cx.world.set_activity(cx.world.activity() & !0x0200);
                 save_sis_hyper_state(cx);
             } else {
-                crate::c_bindings::global_state::EncounterGroup = 0;
+                cx.world.encounter_group = 0;
                 if cx.world.ip_groups_ref().head().is_some() {
                     set(cx.world, StoryKey::SHIP_TO_COMPEL, 1);
                     reset_groups(cx.world);

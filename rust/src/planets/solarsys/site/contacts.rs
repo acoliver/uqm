@@ -264,8 +264,7 @@ impl sam::SamatraSite for Site<'_, '_, '_> {
         c_api::built_ship_queue_has_ships(self.game.borrow().world)
     }
     fn reset_encounter(&mut self) {
-        // SAFETY: the retained orbital owner exclusively controls encounter state.
-        unsafe { c_api::reset_encounter(self.game.borrow_mut().world) };
+        c_api::reset_encounter(self.game.borrow_mut().world);
     }
     fn track_yehat(&mut self) -> bool {
         c_api::start_sphere_tracking(self.game.borrow_mut().world, u16::from(ship::YEHAT_SHIP))

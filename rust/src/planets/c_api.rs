@@ -4,7 +4,6 @@
 mod surface;
 pub use surface::CapturedSurface;
 
-use crate::c_bindings::global_state::EncounterGroup as ENCOUNTER_GROUP;
 use crate::comm::dispatch::{ship, CPoint, ONE_SECOND};
 use crate::mainloop::restart_menu::c_extern::{
     uqm_sleep_thread_until, FadeScreen, FADE_ALL_TO_BLACK,
@@ -57,20 +56,9 @@ pub(super) const GROUP_SAVE_IP: u8 = !0;
 pub(super) const GROUP_LOAD_IP: u8 = 0;
 
 /// Clear the guard encounter so the interplanetary groups do not chase.
-///
-/// # Safety
-/// Game thread; the encounter globals belong to the current visit.
-pub unsafe fn reset_encounter(world: &mut crate::engine::World) {
-    std::ptr::addr_of_mut!(ENCOUNTER_GROUP).write(0);
+pub fn reset_encounter(world: &mut crate::engine::World) {
+    world.encounter_group = 0;
     world.encounter_race = -1;
-}
-
-/// The group selected by a starbase encounter.
-///
-/// # Safety
-/// Game thread, with no references to the encounter global outstanding.
-pub unsafe fn set_encounter_group(value: u8) {
-    std::ptr::addr_of_mut!(ENCOUNTER_GROUP).write(value);
 }
 
 /// The remaining legacy escort queue's feasibility check for rebel Yehat.

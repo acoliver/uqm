@@ -202,10 +202,7 @@ impl NavigationOps for Cx<'_> {
     }
     #[cfg(not(test))]
     fn set_encounter_group(&mut self, group: u8) {
-        // SAFETY: encounter selection is owned by this exclusive navigation context.
-        unsafe {
-            EncounterGroup = group;
-        }
+        self.world.encounter_group = group;
     }
     #[cfg(not(test))]
     fn navigation_stars(&self) -> crate::engine::battle::views::FrameSelection {

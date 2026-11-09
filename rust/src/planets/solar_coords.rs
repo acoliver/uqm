@@ -1,5 +1,5 @@
 //! Integer coordinate transforms used by interplanetary flight.
-use crate::c_bindings::global_state::POINT;
+use crate::engine::graphics::native_abi::POINT;
 
 pub(crate) fn star_seed(point: POINT) -> u32 {
     (u32::from(point.y as u16) << 16) | u32::from(point.x as u16)

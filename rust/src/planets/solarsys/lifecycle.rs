@@ -11,7 +11,10 @@ use crate::engine::world::generation::Body;
 use crate::graphics::pixmap_abi::{GetFrameIndex, ReleaseDrawable, SetAbsFrameIndex};
 use crate::planets::devices::devices_menu;
 use crate::planets::generate::calc::preview_body;
-use crate::planets::solar_system::{SolarSystem, SystemLocation};
+use crate::planets::{
+    solar_coords::star_seed,
+    solar_system::{SolarSystem, SystemLocation},
+};
 use crate::sound::heart_ffi::PLRPlaying;
 
 // globdata.h activity flags occupy the high byte of ACTIVITY.
@@ -182,7 +185,7 @@ pub(super) unsafe fn load_solar_sys(
     solar: &mut SolarSystem,
 ) -> Option<Body> {
     let star = cx.world.catalog()[solar.star().0];
-    solar.sys.rng.reseed(crate::planets::solar_coords::star_seed(star.star_pt));
+    solar.sys.rng.reseed(star_seed(star.star_pt));
     let sun_type = (star.star_type & 0x18) >> 3;
     SUN_FRAME = SetAbsFrameIndex(SUN_FRAME.cast(), u16::from(sun_type)).cast();
     solar.sys.sun.rand_seed = solar.sys.rng.next_random();
@@ -465,7 +468,7 @@ unsafe fn prepare_solar_sys(
     if !reentry {
         let world = &mut *cx.world;
         world.encounter_race = -1;
-        EncounterGroup = 0;
+        world.encounter_group = 0;
         world.data.game.battle_group_ref = 0;
         world.ip_groups().reinit();
         world.npc_built_ships().reinit();
@@ -549,13 +552,13 @@ pub(super) unsafe fn uninit_solar_sys(cx: &mut Cx<'_>, io: &mut Io<'_>, solar: &
         end_interplanetary(cx, io, solar);
         return;
     }
-    if cx.world.activity() & START_ENCOUNTER != 0 && EncounterGroup != 0 {
+    if cx.world.activity() & START_ENCOUNTER != 0 && cx.world.encounter_group != 0 {
         {
             let world = &mut *cx.world;
             crate::navigation::groups::live::get_group_info(
                 world,
                 world.data.game.battle_group_ref,
-                EncounterGroup,
+                world.encounter_group,
             )
         };
         if cx.world.data.game.ip_planet == 0 {
