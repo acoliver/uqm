@@ -94,6 +94,25 @@ pub struct PlanetDescriptor {
     pub prev_desc: *mut PlanetDesc,
 }
 
+impl Default for PlanetDescriptor {
+    fn default() -> Self {
+        Self {
+            rand_seed: 0,
+            data_index: 0,
+            num_planets: 0,
+            radius: 0,
+            location: POINT::default(),
+            temp_color: Color::default(),
+            next_index: 0,
+            image: STAMP {
+                origin: POINT::default(),
+                frame: std::ptr::null_mut(),
+            },
+            prev_desc: std::ptr::null_mut(),
+        }
+    }
+}
+
 #[repr(C)]
 #[derive(Debug, Copy, Clone, Default)]
 pub struct NodeRecord {

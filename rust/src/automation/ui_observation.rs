@@ -67,6 +67,7 @@ pub struct UiObservation {
     ship_picker_cursor: std::sync::Mutex<crate::pickship::Cursor>,
     star_map: std::sync::Mutex<Option<crate::engine::observe::StarMapView>>,
     devices: std::sync::Mutex<crate::engine::observe::DeviceObservation>,
+    solar: std::sync::Mutex<Option<crate::engine::world::generation::SolarSnapshot>>,
 }
 
 impl Default for UiObservation {
@@ -92,11 +93,30 @@ impl Default for UiObservation {
             ship_picker_cursor: std::sync::Mutex::new(crate::pickship::Cursor::START),
             star_map: std::sync::Mutex::new(None),
             devices: std::sync::Mutex::new(Default::default()),
+            solar: std::sync::Mutex::new(None),
         }
     }
 }
 
 impl UiObservation {
+    pub fn observe_solar(
+        &self,
+        snapshot: Option<&crate::engine::world::generation::SolarSnapshot>,
+    ) {
+        *self
+            .solar
+            .lock()
+            .unwrap_or_else(|error| panic!("solar observation lock poisoned: {error}")) =
+            snapshot.copied();
+    }
+
+    pub fn solar_snapshot(&self) -> Option<crate::engine::world::generation::SolarSnapshot> {
+        *self
+            .solar
+            .lock()
+            .unwrap_or_else(|error| panic!("solar observation lock poisoned: {error}"))
+    }
+
     pub fn observe_devices(&self, state: &crate::engine::observe::DeviceObservation) {
         self.devices
             .lock()
@@ -373,6 +393,7 @@ impl super::coordinator::AutomationObserver {
             CheckpointView::StarbaseMenu(active) => self.ui.observe_starbase_menu(active),
             CheckpointView::StarMap(view) => self.ui.observe_star_map(view),
             CheckpointView::Devices(view) => self.ui.observe_devices(view),
+            CheckpointView::Solar(view) => self.ui.observe_solar(view),
             view => self.ending.lock().observe_checkpoint(view),
         }
     }

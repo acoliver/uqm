@@ -1,12 +1,16 @@
-//! Short-lived access to the engine records used by system generators.
+//! Owned mutable generation data with borrowed immutable planet definitions.
 
 pub mod report;
+mod snapshot;
+pub use report::ReportSlot;
+pub use snapshot::{SolarBodySnapshot, SolarSnapshot};
+
+#[cfg(test)]
+mod ownership_tests;
 
 use super::planet::{PlanetDesc, PlanetFrame, PlanetInfo, SystemInfo};
-use crate::graphics::native_abi::{FRAME, POINT};
+use crate::graphics::{drawable_abi::LoadedDrawable, native_abi::POINT};
 use crate::math::RandomContext;
-use std::marker::PhantomData;
-use std::ptr::NonNull;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Body {
@@ -20,23 +24,37 @@ impl Body {
             Self::Planet(planet) | Self::Moon { planet, .. } => usize::from(planet),
         }
     }
-}
 
-pub struct GenerationRecords {
-    pub sun: NonNull<PlanetDesc>,
-    pub planets: NonNull<[PlanetDesc; 16]>,
-    pub moons: NonNull<[PlanetDesc; 4]>,
-    pub info: NonNull<SystemInfo>,
-    pub scene: NonNull<FRAME>,
+    pub fn persistence_moon(self) -> u8 {
+        match self {
+            Self::Planet(_) => 0,
+            Self::Moon { moon, .. } => moon
+                .checked_add(1)
+                .unwrap_or_else(|| panic!("moon index exceeds persistence encoding")),
+        }
+    }
+
+    pub fn saved_orbit(self) -> u8 {
+        match self {
+            Self::Planet(_) => 1,
+            Self::Moon { moon, .. } => moon
+                .checked_add(2)
+                .unwrap_or_else(|| panic!("moon index exceeds saved-orbit encoding")),
+        }
+    }
 }
 
 pub struct SolarSys<'a> {
-    records: GenerationRecords,
-    rng: NonNull<RandomContext>,
+    pub sun: PlanetDesc,
+    pub planets: [PlanetDesc; 16],
+    pub moons: [PlanetDesc; 4],
+    pub info: SystemInfo,
+    pub rng: RandomContext,
+    pub frames: [Option<LoadedDrawable>; 6],
+    pub report: ReportSlot,
     plan_data: &'a [PlanetFrame],
     star_type: u8,
     star_index: u8,
-    exclusive: PhantomData<&'a mut ()>,
 }
 
 pub struct OrbitalData<'a> {
@@ -50,24 +68,23 @@ pub struct OrbitalData<'a> {
 }
 
 impl<'a> SolarSys<'a> {
-    /// # Safety
-    /// All records and RNG must be live, disjoint and exclusively available for
-    /// this view's lifetime. External effects may access them only between
-    /// callbacks, after all references returned by the view have expired.
-    pub unsafe fn from_records(
-        records: GenerationRecords,
-        rng: NonNull<RandomContext>,
+    pub fn new(
         plan_data: &'a [PlanetFrame],
         star_type: u8,
         star_index: u8,
+        rng: RandomContext,
     ) -> Self {
         Self {
-            records,
+            sun: PlanetDesc::default(),
+            planets: [PlanetDesc::default(); 16],
+            moons: [PlanetDesc::default(); 4],
+            info: SystemInfo::default(),
             rng,
+            frames: std::array::from_fn(|_| None),
+            report: ReportSlot::default(),
             plan_data,
             star_type,
             star_index,
-            exclusive: PhantomData,
         }
     }
 
@@ -79,17 +96,13 @@ impl<'a> SolarSys<'a> {
         &mut self,
         run: impl FnOnce(&mut RandomContext, &[PlanetFrame], u8, u8, &mut [PlanetDesc; 16]) -> u8,
     ) {
-        // SAFETY: construction retains disjoint records, and no borrow escapes the callback.
-        unsafe {
-            let sun = self.records.sun.as_mut();
-            sun.num_planets = run(
-                self.rng.as_mut(),
-                self.plan_data,
-                sun.data_index,
-                self.star_type >> 5,
-                self.records.planets.as_mut(),
-            );
-        }
+        self.sun.num_planets = run(
+            &mut self.rng,
+            self.plan_data,
+            self.sun.data_index,
+            self.star_type >> 5,
+            &mut self.planets,
+        );
     }
 
     pub fn layout_moons<R>(
@@ -97,66 +110,58 @@ impl<'a> SolarSys<'a> {
         planet: u8,
         run: impl FnOnce(&mut RandomContext, u8, u8, &PlanetDesc, &mut [PlanetDesc; 4]) -> R,
     ) -> R {
-        // SAFETY: the arrays are disjoint and these borrows end with the callback.
-        unsafe {
-            run(
-                self.rng.as_mut(),
-                self.records.sun.as_ref().data_index,
-                self.star_type >> 5,
-                &self.records.planets.as_ref()[usize::from(planet)],
-                self.records.moons.as_mut(),
-            )
-        }
+        run(
+            &mut self.rng,
+            self.sun.data_index,
+            self.star_type >> 5,
+            &self.planets[usize::from(planet)],
+            &mut self.moons,
+        )
     }
 
     pub fn body_data_index(&self, body: Body) -> u8 {
-        self.world(body).data_index
+        self.descriptor(body).data_index
     }
 
     pub fn orbital_location(&self, body: Body) -> POINT {
-        self.world(match body {
-            Body::Planet(_) => body,
-            Body::Moon { planet, .. } => Body::Planet(planet),
-        })
-        .location
+        self.planets[body.planet()].location
     }
 
     pub fn planet_data_index(&self, planet: usize) -> u8 {
-        // SAFETY: construction retains the array, and this is a shared read.
-        unsafe { self.records.planets.as_ref()[planet].data_index }
+        self.planets[planet].data_index
     }
 
-    fn world(&self, body: Body) -> &PlanetDesc {
-        // SAFETY: construction retains both arrays; indices are bounds checked.
-        unsafe {
-            match body {
-                Body::Planet(planet) => &self.records.planets.as_ref()[usize::from(planet)],
-                Body::Moon { moon, .. } => &self.records.moons.as_ref()[usize::from(moon)],
-            }
+    pub fn descriptor(&self, body: Body) -> &PlanetDesc {
+        match body {
+            Body::Planet(planet) => &self.planets[usize::from(planet)],
+            Body::Moon { moon, .. } => &self.moons[usize::from(moon)],
+        }
+    }
+
+    pub fn descriptor_mut(&mut self, body: Body) -> &mut PlanetDesc {
+        match body {
+            Body::Planet(planet) => &mut self.planets[usize::from(planet)],
+            Body::Moon { moon, .. } => &mut self.moons[usize::from(moon)],
         }
     }
 
     pub fn orbital<R>(&mut self, body: Body, run: impl FnOnce(OrbitalData<'_>) -> R) -> R {
-        // SAFETY: all records and RNG are disjoint; no reference escapes the callback.
-        unsafe {
-            let planets = self.records.planets.as_ref();
-            let (world, parent_radius) = match body {
-                Body::Planet(planet) => (&planets[usize::from(planet)], None),
-                Body::Moon { planet, moon } => (
-                    &self.records.moons.as_ref()[usize::from(moon)],
-                    Some(planets[usize::from(planet)].radius),
-                ),
-            };
-            run(OrbitalData {
-                rng: self.rng.as_mut(),
-                plan_data: self.plan_data,
-                star_size: self.records.sun.as_ref().data_index,
-                star_type: self.star_type,
-                parent_radius,
-                info: self.records.info.as_mut(),
-                world,
-            })
-        }
+        let (world, parent_radius) = match body {
+            Body::Planet(planet) => (&self.planets[usize::from(planet)], None),
+            Body::Moon { planet, moon } => (
+                &self.moons[usize::from(moon)],
+                Some(self.planets[usize::from(planet)].radius),
+            ),
+        };
+        run(OrbitalData {
+            rng: &mut self.rng,
+            plan_data: self.plan_data,
+            star_size: self.sun.data_index,
+            star_type: self.star_type,
+            parent_radius,
+            info: &mut self.info,
+            world,
+        })
     }
 
     pub fn scan<R>(
@@ -165,34 +170,22 @@ impl<'a> SolarSys<'a> {
         run: impl FnOnce(&mut RandomContext, &SystemInfo, &PlanetFrame) -> R,
     ) -> R {
         let frame = usize::from(self.body_data_index(body) & 0x7f);
-        // SAFETY: the RNG and info are disjoint; the frame table is retained.
-        unsafe {
-            run(
-                self.rng.as_mut(),
-                self.records.info.as_ref(),
-                &self.plan_data[frame],
-            )
-        }
+        run(&mut self.rng, &self.info, &self.plan_data[frame])
     }
 
     pub fn system_info(&mut self) -> &mut SystemInfo {
-        // SAFETY: the returned borrow excludes other access through this view.
-        unsafe { self.records.info.as_mut() }
+        &mut self.info
     }
 
     pub fn planet_info(&mut self) -> &mut PlanetInfo {
-        // SAFETY: this borrow excludes other access through the view until it ends.
-        unsafe { &mut self.records.info.as_mut().planet_info }
+        &mut self.info.planet_info
     }
 
-    pub fn scene<R>(&mut self, run: impl FnOnce(&mut PlanetInfo, &mut FRAME) -> R) -> R {
-        // SAFETY: info and the frame slot are disjoint and exclusively retained.
-        unsafe {
-            run(
-                &mut self.records.info.as_mut().planet_info,
-                self.records.scene.as_mut(),
-            )
-        }
+    pub fn scene<R>(
+        &mut self,
+        run: impl FnOnce(&mut PlanetInfo, &mut Option<LoadedDrawable>) -> R,
+    ) -> R {
+        run(&mut self.info.planet_info, &mut self.frames[1])
     }
 }
 

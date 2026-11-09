@@ -629,12 +629,7 @@ mod projection_tests {
         };
         // SAFETY: this test retains both local world authorities for the context's lifetime.
         let mut world = { WorldOwner::new() };
-        let cx = Cx {
-            b: &mut battle,
-            world: &mut world,
-            kernel: &mut kernel,
-            rng: || 0,
-        };
+        let cx = Cx::new(&mut battle, &mut world, &mut kernel, || 0);
         assert_eq!(cx.ship_pointer(id), pointer);
         let replacement = {
             let mut ships = LinkQueue::<Starship>::new(&mut cx.kernel.races[0]);

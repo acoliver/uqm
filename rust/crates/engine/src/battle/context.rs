@@ -72,6 +72,7 @@ pub struct Cx<'a> {
     pub kernel: &'a mut super::record::Kernel,
     /// The existing global stream. No seed is copied at context boundaries.
     pub rng: fn() -> u32,
+    pub solar_frame: Option<crate::world::generation::SolarSnapshot>,
 }
 
 impl Cx<'_> {
@@ -105,6 +106,17 @@ impl<'a> Cx<'a> {
             world,
             kernel,
             rng,
+            solar_frame: None,
+        }
+    }
+
+    pub fn reborrow(&mut self) -> Cx<'_> {
+        Cx {
+            b: self.b,
+            world: self.world,
+            kernel: self.kernel,
+            rng: self.rng,
+            solar_frame: self.solar_frame,
         }
     }
 }
