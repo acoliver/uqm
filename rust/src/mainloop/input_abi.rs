@@ -20,10 +20,10 @@ pub(crate) mod live {
     /// The initialized input runtime is retained on the game thread during nested UI calls.
     pub unsafe fn UpdateInputState(cx: &mut Cx<'_>, input: &InputSession) {
         if crate::graphics::sdl::lifecycle_abi::GameActive == 0 {
-            cx.with_legacy(|| crate::ui::util::live::SleepGame());
+            crate::ui::util::sleep_game(cx);
         }
         if input.paused() {
-            cx.with_legacy(|| crate::ui::util::live::pause_game(input));
+            crate::ui::util::pause_game(cx, input);
         }
         if input.exit_requested() {
             ConfirmExit(cx, input);
