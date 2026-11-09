@@ -215,6 +215,7 @@ pub(super) unsafe fn draw_system_transition(cx: &mut Cx<'_>, solar: &mut SolarSy
     } else {
         draw_outer_system(cx, solar);
     }
+    solar.refresh_frame(cx);
     redraw_queue(cx, false);
     cx.with_legacy(|| {
         ScreenTransition(3, std::ptr::null_mut());

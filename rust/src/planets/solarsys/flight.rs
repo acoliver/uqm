@@ -422,6 +422,7 @@ pub(super) unsafe fn scale_system(cx: &mut Cx<'_>, solar: &mut SolarSystem, new_
         rect
     });
     draw_outer_system(cx, solar);
+    solar.refresh_frame(cx);
     redraw_queue(cx, false);
     cx.with_legacy(|| {
         ScreenTransition(3, (&raw const rect).cast());

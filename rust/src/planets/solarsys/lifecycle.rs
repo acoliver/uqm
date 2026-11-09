@@ -402,6 +402,7 @@ enum SolarSystemStart {
 unsafe fn start_solar_sys(cx: &mut Cx<'_>, io: &mut Io<'_>, solar: &mut SolarSystem) {
     let next_activity = cx.world.next_activity;
     let start = prepare_solar_sys(cx, io, solar, next_activity);
+    solar.refresh_frame(cx);
     match start {
         SolarSystemStart::Orbit => {}
         SolarSystemStart::ResumeLoad => cx.with_legacy(|| ffi::UnbatchGraphics()),
