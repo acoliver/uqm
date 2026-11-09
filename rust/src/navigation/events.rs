@@ -268,7 +268,6 @@ pub fn dispatch_event(world: &mut World, services: &mut EventServices<'_>, selec
     }
 }
 
-/// `race` identifies an allocated fleet in the supplied world queue.
 fn yehat_rebellion(world: &mut World) {
     let rebel = fleet(world, YEHAT_REBEL_SHIP);
     let royal = fleet(world, YEHAT_SHIP);
@@ -280,6 +279,7 @@ fn yehat_rebellion(world: &mut World) {
     start_sphere_tracking(world, YEHAT_REBEL_SHIP as u16);
 }
 
+/// `race` identifies an allocated fleet in the supplied world queue.
 pub fn set_race_destination(world: &mut World, race: u8, x: i16, y: i16, days: u8, selector: u8) {
     let current = fleet(world, race as u32);
     world.avail_races().get_mut(current).dest_loc = POINT { x, y };

@@ -140,7 +140,7 @@ fn finish_clock_day(cx: &mut crate::engine::battle::Cx<'_>) {
         u16::from(clock.day_index),
     );
     let mut random = cx.rng;
-    let mut dispatch = crate::navigation::events::dispatcher(cx.screen_dimensions(), &mut random);
+    let dispatch = crate::navigation::events::dispatcher(cx.screen_dimensions(), &mut random);
     dispatch_day_events(cx.world, today, dispatch);
 }
 
