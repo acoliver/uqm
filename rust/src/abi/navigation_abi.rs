@@ -2762,9 +2762,6 @@ extern "C" {
 }
 pub use crate::ships::native::abi::_input_template;
 pub type INPUT_TEMPLATE = _input_template;
-extern "C" {
-    pub static mut input_templates: [[std::ffi::c_char; 30]; 6];
-}
 #[cfg(not(test))]
 pub use crate::mainloop::options_abi::setGammaCorrection;
 #[cfg(not(test))]

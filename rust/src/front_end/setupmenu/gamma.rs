@@ -25,6 +25,32 @@ impl GammaRange {
     fn curve(x: f32) -> f32 {
         (((x - 1.0) * GAMMA_CURVE_B) as f64).exp() as f32
     }
+
+    pub(super) fn step(
+        &mut self,
+        value: &mut i32,
+        direction: i32,
+        mut set: impl FnMut(f32) -> bool,
+    ) {
+        let previous = *value;
+        *value += direction;
+        let mut gamma = self.slider_to_gamma(*value);
+        let accepted = set(gamma);
+        if !accepted {
+            *value = previous;
+            gamma = self.slider_to_gamma(*value);
+        }
+        if gamma < self.min || (!accepted && direction < 0) {
+            self.min = gamma;
+            self.update_bounds(true);
+            *value = 0;
+        } else if gamma > self.max || (!accepted && direction > 0) {
+            self.max = gamma;
+            self.update_bounds(false);
+            *value = 100;
+        }
+    }
+
     fn solve(y: f32) -> f32 {
         ((y as f64).ln() / GAMMA_CURVE_B as f64 + 1.0) as f32
     }

@@ -14,6 +14,7 @@ use std::ffi::{c_char, c_int, c_uint, c_void};
 /// typedef union { DWORD num; void *ptr; const char *str; } RESOURCE_DATA;
 /// ```
 #[repr(C)]
+#[derive(Clone, Copy)]
 pub union ResourceData {
     pub num: u32,
     pub ptr: *mut c_void,

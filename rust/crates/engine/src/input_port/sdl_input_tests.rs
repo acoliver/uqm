@@ -201,9 +201,9 @@ fn resource_controls_register_menu_alternates_templates_and_removal() {
                     .is_none());
             }
         }
-        let name = CStr::from_ptr(ptr::addr_of!(INPUT_TEMPLATES).cast::<c_char>());
-        assert_eq!(name.to_bytes(), b"a name longer than twenty nin");
-        assert_eq!(*ptr::addr_of!(INPUT_TEMPLATES).cast::<c_char>().add(30), 0);
+        let names = super::super::templates::input_templates();
+        assert_eq!(names[0].to_bytes(), b"a name longer than twenty nin");
+        assert!(names[1].is_empty());
         ffi::rust_vcontrol_process_key_down(32);
         assert_eq!(menu[0] & 0xff, 1);
         ffi::rust_vcontrol_process_key_down(27);

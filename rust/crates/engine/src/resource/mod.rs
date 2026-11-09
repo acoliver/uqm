@@ -7,6 +7,7 @@ pub mod ffi_bridge;
 pub mod ffi_types;
 pub mod propfile;
 pub mod resource_type;
+pub mod settings;
 pub mod stringbank;
 pub mod type_registry;
 

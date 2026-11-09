@@ -110,6 +110,14 @@ impl LoadedTextTable {
         self.0.entries.as_ptr().cast_mut()
     }
 
+    pub fn len(&self) -> usize {
+        self.0.strings.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.strings.is_empty()
+    }
+
     pub fn text(&self, index: usize) -> Option<&CStr> {
         let text = &self.0.strings[index];
         (!text.is_empty()).then(|| {
