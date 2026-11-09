@@ -1,4 +1,3 @@
-#[cfg(not(test))]
 use crate::comm::live::shofixt as live;
 use crate::comm::locdata::*;
 use crate::comm::races::script::{animation, as_comm_data};
@@ -48,12 +47,9 @@ pub(crate) fn descriptor(screen_width: i32) -> CLocData {
     d.alien_ambient_array[10] = animation(63, 6, 2, (42, 28), (42, 28));
     d.alien_ambient_array[10].block_mask = 1 << 9;
     d.alien_talk_desc = animation(1, 4, 0, (42, 0), (56, 0));
-    #[cfg(not(test))]
-    {
-        d.init_encounter_func = Some(live::intro);
-        d.post_encounter_func = Some(live::post);
-        d.uninit_encounter_func = Some(live::uninit);
-    }
+    d.init_encounter_func = Some(live::intro);
+    d.post_encounter_func = Some(live::post);
+    d.uninit_encounter_func = Some(live::uninit);
     d
 }
 
