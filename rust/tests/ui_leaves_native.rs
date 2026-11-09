@@ -171,6 +171,7 @@ impl Observer<Option<CampaignView>> for WaitObserver {
         assert_eq!(*view, InputView::Nested);
         self.0 += 1;
         Injected {
+            comm_response: None,
             stop: false,
             seed: None,
             planet_side: None,
