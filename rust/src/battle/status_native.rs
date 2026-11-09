@@ -269,6 +269,27 @@ fn captain_border(y: COORD, height: SIZE, mut fill: impl FnMut(Color, RECT)) {
     fill(light, rect(3, cy, 1, 30));
 }
 
+pub(crate) fn draw_battle_crew_amount(
+    context: &crate::graphics::context_abi::ContextLease,
+    font: &crate::graphics::native_font::FontLease,
+    crew: COUNT,
+    y_offs: COORD,
+    pc_menu: bool,
+) {
+    let buffer = crew_text(crew);
+    let string = std::ffi::CStr::from_bytes_until_nul(&buffer)
+        .unwrap_or_else(|_| unreachable!("crew text is NUL-terminated"));
+    let (baseline, background) = crew_counter_layout(y_offs, pc_menu);
+    context.fill_rectangle(rgb15(0x0a, 0x0a, 0x0a), background);
+    context.draw_text(
+        font,
+        string,
+        baseline,
+        TEXT_ALIGN_ALIGN_LEFT,
+        rgb15(0, 0, 0),
+    );
+}
+
 #[cfg(not(test))]
 #[allow(non_snake_case)]
 pub(crate) mod engine {
@@ -309,27 +330,6 @@ pub(crate) mod engine {
                 cx.draw_stamp(cx.relative_frame(base.view(), offset).view(), origin, false);
             }
         }
-    }
-
-    pub(crate) fn draw_battle_crew_amount(
-        context: &crate::graphics::context_abi::ContextLease,
-        font: &crate::graphics::native_font::FontLease,
-        crew: COUNT,
-        y_offs: COORD,
-        pc_menu: bool,
-    ) {
-        let buffer = crew_text(crew);
-        let string = std::ffi::CStr::from_bytes_until_nul(&buffer)
-            .unwrap_or_else(|_| unreachable!("crew text is NUL-terminated"));
-        let (baseline, background) = crew_counter_layout(y_offs, pc_menu);
-        context.fill_rectangle(rgb15(0x0a, 0x0a, 0x0a), background);
-        context.draw_text(
-            font,
-            string,
-            baseline,
-            TEXT_ALIGN_ALIGN_LEFT,
-            rgb15(0, 0, 0),
-        );
     }
 
     fn prepare_captain(cx: &mut Cx<'_>, ship: crate::engine::battle::ShipId) -> CAPTAIN_STUFF {
@@ -487,9 +487,6 @@ pub(crate) mod engine {
 pub use engine::{
     delta_crew, delta_energy, draw_captains_window, preprocess_status, PostProcessStatus,
 };
-
-#[cfg(not(test))]
-pub(crate) use engine::draw_battle_crew_amount;
 
 #[cfg(test)]
 mod tests {

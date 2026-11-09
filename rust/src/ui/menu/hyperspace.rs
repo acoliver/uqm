@@ -57,7 +57,7 @@ pub unsafe fn hyperspace_menu(
             use crate::navigation::hyper_menu::Display;
             let space = cx.kernel.space_context;
             if operation == Display::Wait {
-                crate::ui::util::live::wait_for_no_input(cx, io, ONE_SECOND / 2, 0);
+                crate::ui::util::wait_for_no_input(cx, io, ONE_SECOND / 2, 0);
                 return;
             }
             // SAFETY: all raw drawing resources remain owned by the suspended context.

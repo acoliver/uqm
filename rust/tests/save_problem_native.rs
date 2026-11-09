@@ -22,12 +22,18 @@ use uqm_rust::{
 #[derive(Clone)]
 struct WaitObserver {
     waits: Rc<Cell<usize>>,
+    polls: Rc<Cell<usize>>,
     frame: *mut frame_desc,
 }
 
 impl Observer<Option<CampaignView>> for WaitObserver {
     fn input_admitted(&mut self, view: &InputView, campaign: &Option<CampaignView>) -> Injected {
         assert_eq!(*view, InputView::Nested);
+        assert_eq!(
+            self.polls.get(),
+            2 * (self.waits.get() + 1),
+            "release and press waits each poll before admission"
+        );
         assert!(campaign.is_some());
         // SAFETY: the fixture retains this canvas until the popup finishes.
         let pixel = unsafe { GetFramePixel(self.frame, POINT { x: 118, y: 110 }) };
@@ -74,7 +80,7 @@ impl InputRuntime for Runtime {
     }
 
     fn update(&self, _cx: &mut Cx<'_>) {
-        panic!("the observer must stop the wait before sampling input");
+        self.0.polls.set(self.0.polls.get() + 1);
     }
     fn run(&self, _: &mut Cx<'_>, _: &mut Io<'_>, _: bool, _: &mut dyn Frame) {
         panic!("the popup uses the nested wait, not a second input driver");
@@ -85,6 +91,7 @@ impl InputRuntime for Runtime {
 }
 
 #[test]
+#[serial_test::serial]
 fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
     std::env::set_var("SDL_VIDEODRIVER", "dummy");
     std::env::set_var("SDL_AUDIODRIVER", "dummy");
@@ -184,6 +191,7 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
             std::ptr::NonNull::new(font).unwrap(),
         );
         let waits = Rc::new(Cell::new(0));
+        let polls = Rc::new(Cell::new(0));
         let mut game = Game::new();
         game.kernel.space_context = context;
         game.kernel.star_con_font = font;
@@ -191,6 +199,7 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
         game.kernel.install_input_runtime(Rc::new(Runtime(
             WaitObserver {
                 waits: waits.clone(),
+                polls: polls.clone(),
                 frame,
             },
             uqm_rust::engine::input::InputSession::default(),
@@ -949,6 +958,7 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
             }
         });
         assert_eq!(waits.get(), 2);
+        assert_eq!(polls.get(), 4);
         game.kernel.game_strings = ptr::null_mut();
         game.kernel.star_con_font = ptr::null_mut();
         game.kernel.space_context = ptr::null_mut();

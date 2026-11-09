@@ -9,7 +9,6 @@ use crate::engine::{battle::Cx, observe::Io, Kernel, StoryKey, World, WorldData}
 use super::site::dispatch::{body, with_system};
 use crate::comm::locdata::CPoint;
 use crate::graphics::pixmap_abi::{GetFrameIndex, ReleaseDrawable, SetAbsFrameIndex};
-use crate::mainloop::restart_menu::c_extern::PlayMusic;
 use crate::math::arctan;
 use crate::planets::devices::devices_menu;
 use crate::planets::generate::calc::preview_body;
@@ -308,6 +307,7 @@ pub(super) unsafe fn reset_solar_sys(cx: &mut Cx<'_>, next_activity: u16) {
         PM_STARMAP,
         -(PM_NAVIGATE - PM_SCAN),
     );
+    let music_enabled = cx.world.data.game.glob_flags & 8 == 0;
     cx.with_legacy(|| {
         let state = system();
         crate::app::bridge::enter(|cx| {
@@ -323,7 +323,12 @@ pub(super) unsafe fn reset_solar_sys(cx: &mut Cx<'_>, next_activity: u16) {
             && (Kernel::current().read(|owner| owner.last_activity) != CHECK_LOAD
                 || next_activity != 0)
         {
-            PlayMusic((SpaceMusic).cast(), 1, 1);
+            crate::sound::music::remember_native_music(
+                std::ptr::NonNull::new(SpaceMusic.cast()),
+                true,
+                1,
+                music_enabled,
+            );
         }
     });
 }

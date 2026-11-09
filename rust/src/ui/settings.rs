@@ -1,52 +1,17 @@
-use crate::engine::WorldData;
-use crate::navigation::abi::*;
+const MUSIC_DISABLED: u8 = 8;
+const SOUND_DISABLED: u8 = 16;
+const GAME_SOUND_PRIORITY: u8 = 2;
 
 pub fn toggle_music(world: &mut crate::engine::World) {
-    world.data.game.glob_flags ^= MUSIC_DISABLED as u8;
-    crate::sound::music::set_requested_enabled(
-        world.data.game.glob_flags & MUSIC_DISABLED as u8 == 0,
-    );
+    world.data.game.glob_flags ^= MUSIC_DISABLED;
+    crate::sound::music::set_requested_enabled(world.data.game.glob_flags & MUSIC_DISABLED == 0);
 }
 
-/// # Safety
-/// The reference identifies a live native music resource on the game thread.
-#[no_mangle]
-pub unsafe extern "C" fn PlayMusic(music_ref: MUSIC_REF, continuous: BOOLEAN, priority: BYTE) {
-    crate::engine::World::current().read(|world| {
-        // SAFETY: the caller retains the native reference throughout synchronous admission.
-        unsafe { play_music_for_world(world, music_ref, continuous, priority) }
-    });
-}
-
-/// # Safety
-/// The reference is live during synchronous admission into the audio owner's cache.
-pub(crate) unsafe fn play_music_for_world(
-    world: &crate::engine::World,
-    raw: MUSIC_REF,
-    continuous: BOOLEAN,
-    priority: BYTE,
-) {
-    use crate::sound::music::MusicRequest;
-    let request = if raw.is_null() {
-        MusicRequest::Absent
-    } else if raw as usize == usize::MAX {
-        MusicRequest::Current
-    } else {
-        // SAFETY: the caller retains the live native resource until its sample is cloned.
-        MusicRequest::Track(unsafe { crate::sound::heart_ffi::music_ref_borrow(raw.cast()) })
-    };
-    crate::sound::music::remember_music(
-        request,
-        continuous != 0,
-        priority,
-        world.data.game.glob_flags & MUSIC_DISABLED as u8 == 0,
-    );
-}
 pub(crate) fn play_loaded_music(
     world: &crate::engine::World,
     music: Option<&crate::sound::resource_types::LoadedMusic>,
-    continuous: BOOLEAN,
-    priority: BYTE,
+    continuous: u32,
+    priority: u8,
 ) {
     let request = music.map_or(crate::sound::music::MusicRequest::Absent, |music| {
         crate::sound::music::MusicRequest::Track(music.playback())
@@ -55,7 +20,7 @@ pub(crate) fn play_loaded_music(
         request,
         continuous != 0,
         priority,
-        world.data.game.glob_flags & MUSIC_DISABLED as u8 == 0,
+        world.data.game.glob_flags & MUSIC_DISABLED == 0,
     );
 }
 pub fn stop_music() {
@@ -74,45 +39,7 @@ pub fn pause_music() {
     crate::sound::music::pause_requested_music();
 }
 pub fn toggle_sound_effect(world: &mut crate::engine::World) {
-    world.data.game.glob_flags ^= SOUND_DISABLED as u8;
-}
-
-/// # Safety
-/// The sound player and positional object must remain valid for the call.
-#[no_mangle]
-pub unsafe extern "C" fn PlaySoundEffect(
-    sound: SOUND,
-    channel: COUNT,
-    position: SoundPosition,
-    positional_object: *mut ::std::ffi::c_void,
-    priority: BYTE,
-) {
-    let sound_disabled =
-        WorldData::current().read(|owner| owner.game.glob_flags) & (SOUND_DISABLED as u8) != 0;
-    eprintln!(
-        "[PlaySoundEffect] S={sound:p} ch={} pri={} sound_disabled={}",
-        channel,
-        priority,
-        u8::from(sound_disabled)
-    );
-    if !sound_disabled {
-        SetChannelVolume(
-            u32::from(channel),
-            (MAX_VOLUME >> 1) as i32,
-            i32::from(priority),
-        );
-        crate::sound::heart_ffi::play_channel(
-            u32::from(channel),
-            sound.cast(),
-            crate::sound::types::SoundPosition {
-                positional: position.positional != 0,
-                x: position.x,
-                y: position.y,
-            },
-            positional_object as usize,
-            priority,
-        );
-    }
+    world.data.game.glob_flags ^= SOUND_DISABLED;
 }
 
 pub(crate) fn play_menu_sound(
@@ -127,7 +54,7 @@ pub(crate) fn play_menu_sound(
             0,
             crate::sound::types::SoundPosition::non_positional(),
             0,
-            GAME_SOUND_PRIORITY as u8,
+            GAME_SOUND_PRIORITY,
         );
     }
 }
@@ -155,12 +82,12 @@ mod tests {
     #[serial_test::serial]
     fn absent_loaded_music_preserves_options_and_clears_playback() {
         let mut world = crate::engine::World::new();
-        world.data.game.glob_flags = MUSIC_DISABLED as u8;
+        world.data.game.glob_flags = MUSIC_DISABLED;
         play_loaded_music(&world, None, 1, 3);
         let (request, continuous, priority) = crate::sound::music::requested_music();
         assert!(matches!(request, crate::sound::music::MusicRequest::Absent));
         assert_eq!((continuous, priority), (true, 3));
-        assert_eq!(world.data.game.glob_flags, MUSIC_DISABLED as u8);
+        assert_eq!(world.data.game.glob_flags, MUSIC_DISABLED);
         stop_loaded_music(None);
         stop_battle_music();
         let (request, _, _) = crate::sound::music::requested_music();

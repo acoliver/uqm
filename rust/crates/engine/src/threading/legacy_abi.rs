@@ -18,7 +18,7 @@ struct StartInfo {
 
 static PENDING_DEATH: Mutex<[usize; 8]> = Mutex::new([0; 8]);
 static LIFECYCLE_ACTIVE: AtomicBool = AtomicBool::new(false);
-static MAIN_THREAD: Mutex<Option<ThreadId>> = Mutex::new(None);
+pub(super) static MAIN_THREAD: Mutex<Option<ThreadId>> = Mutex::new(None);
 
 unsafe extern "C" fn thread_helper(opaque: *mut c_void) -> c_int {
     let start = *Box::from_raw(opaque.cast::<StartInfo>());

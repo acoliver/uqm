@@ -42,7 +42,7 @@ use crate::planets::solarsys::{
     lifecycle::SaveSolarSysLocation, matchWorld, playerInPlanetOrbit, playerInSolarSystem,
 };
 
-use crate::ui::util::live::DrawStarConBox;
+use crate::ui::util::draw_starcon_box;
 
 struct Menu {
     icons: crate::graphics::context_abi::ContextFrame,
@@ -100,18 +100,24 @@ unsafe fn draw(menu: &Menu, old: Option<usize>, refresh: bool) {
     g.batch();
     g.set_context(ContextId::Status);
     if refresh {
-        let mut rect = CRect {
+        let rect = CRect {
             corner: crate::comm::locdata::CPoint { x: 2, y: 20 },
             width: 60,
             height: 109,
         };
-        DrawStarConBox(
-            std::ptr::from_mut(&mut rect).cast(),
+        draw_starcon_box(
+            &menu.context,
+            crate::graphics::native_abi::RECT {
+                corner: rect.corner,
+                extent: crate::graphics::native_abi::EXTENT {
+                    width: rect.width,
+                    height: rect.height,
+                },
+            },
             1,
             color(16, 16, 16),
             color(8, 8, 8),
-            1,
-            color(0, 0, 20),
+            Some(color(0, 0, 20)),
         );
         g.set_font(FontId::StarCon);
         g.set_fg_color(Rgba::rgb15(10, 31, 31));

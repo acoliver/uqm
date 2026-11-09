@@ -6,7 +6,7 @@ use crate::graphics::{
     native_abi::{Color, POINT, RECT, TEXT_ALIGN_ALIGN_CENTER},
     native_font::FontLease,
 };
-use crate::ui::util::{box_rectangles, live::wait_for_any_button};
+use crate::ui::util::{box_rectangles, wait_for_any_button};
 
 fn color(v: u8) -> Color {
     super::rgb15(v, v, v)

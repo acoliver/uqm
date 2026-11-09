@@ -34,6 +34,7 @@ pub(super) unsafe fn parse_text_lines(lines: *mut TEXT, max: usize, buffer: *mut
 #[cfg(not(test))]
 pub(crate) mod runtime {
     use super::*;
+    use crate::sound::music::remember_native_music;
 
     use crate::video::{
         control::{VidGetPosition, VidProcessFrame, VidSeek},
@@ -229,6 +230,7 @@ pub(crate) mod runtime {
     unsafe fn presentation_commands(
         state: &mut PresentationState,
         io: &mut Io<'_>,
+        music_enabled: bool,
     ) -> PresentationStep {
         while state.oper_index < GetStringTableCount(state.slide_show) {
             let mut opcode = [0 as c_char; 16];
@@ -293,28 +295,23 @@ pub(crate) mod runtime {
                     SetContextFont(*font);
                 }
                 b"ANI" => {
-                    utf8StringCopy(
-                        (state.buffer.as_mut_ptr()).cast(),
-                        state.buffer.len(),
-                        (src).cast(),
-                    );
+                    let buffer = &mut state.buffer;
+                    utf8StringCopy(buffer.as_mut_ptr().cast(), buffer.len(), src.cast());
                     if !state.frame.is_null() {
                         DestroyDrawable(ReleaseDrawable(state.frame));
                     }
                     state.frame = CaptureDrawable(LoadGraphicFile(state.buffer.as_ptr()));
                 }
                 b"MUSIC" => {
-                    utf8StringCopy(
-                        (state.buffer.as_mut_ptr()).cast(),
-                        state.buffer.len(),
-                        (src).cast(),
-                    );
+                    let buffer = &mut state.buffer;
+                    utf8StringCopy(buffer.as_mut_ptr().cast(), buffer.len(), src.cast());
                     if !state.music_ref.is_null() {
                         stop_music();
                         DestroyMusic(state.music_ref);
                     }
                     state.music_ref = (LoadMusicFile(state.buffer.as_ptr())).cast();
-                    PlayMusic(state.music_ref, 0, 1);
+                    let music = std::ptr::NonNull::new(state.music_ref.cast());
+                    remember_native_music(music, false, 1, music_enabled);
                 }
                 b"WAIT" | b"SYNC" | b"DSYNC" => {
                     let mut msecs = 0;
@@ -386,11 +383,8 @@ pub(crate) mod runtime {
                     }
                 }
                 b"TFI" => {
-                    utf8StringCopy(
-                        (state.buffer.as_mut_ptr()).cast(),
-                        state.buffer.len(),
-                        (src).cast(),
-                    );
+                    let buffer = &mut state.buffer;
+                    utf8StringCopy(buffer.as_mut_ptr().cast(), buffer.len(), src.cast());
                     state.lines_count = parse_text_lines(
                         state.text_lines.as_mut_ptr(),
                         MAX_TEXT_LINES,
@@ -563,11 +557,8 @@ pub(crate) mod runtime {
                 }
                 b"CALL" => {
                     unbatch(state, true);
-                    utf8StringCopy(
-                        (state.buffer.as_mut_ptr()).cast(),
-                        state.buffer.len(),
-                        (src).cast(),
-                    );
+                    let buffer = &mut state.buffer;
+                    utf8StringCopy(buffer.as_mut_ptr().cast(), buffer.len(), src.cast());
                     return PresentationStep::Call;
                 }
                 b"LINE" => {
@@ -657,7 +648,8 @@ pub(crate) mod runtime {
             return keep;
         }
         loop {
-            match cx.with_legacy(|| presentation_commands(state, io)) {
+            let music_enabled = cx.world.data.game.glob_flags & 8 == 0;
+            match cx.with_legacy(|| presentation_commands(state, io, music_enabled)) {
                 PresentationStep::Input(keep) => return keep,
                 PresentationStep::Call => {
                     show_file(cx, io, state.buffer.as_ptr());

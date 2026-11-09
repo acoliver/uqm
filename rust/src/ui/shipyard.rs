@@ -2,6 +2,7 @@
 
 //! Shipyard menu, crew transactions and hangar animation, ported from shipyard.c.
 
+use crate::sound::music::remember_native_music;
 use crate::ui::{rgb15, settings::play_menu_sound};
 mod catalog;
 mod crew;
@@ -603,6 +604,7 @@ unsafe fn exit_shipyard(input: &InputSession, menu: &mut MENU_STATE) -> BOOLEAN 
 /// callbacks and this function must run exclusively on that same thread.
 pub unsafe fn do_shipyard(cx: &mut Cx<'_>, menu: &mut MENU_STATE, input: &InputSession) -> BOOLEAN {
     let size = cx.screen_dimensions();
+    let music_enabled = cx.world.data.game.glob_flags & 8 == 0;
     if cx.world.activity() & CHECK_ABORT as u16 != 0 {
         return cx.with_legacy(|| exit_shipyard(input, menu));
     }
@@ -651,7 +653,8 @@ pub unsafe fn do_shipyard(cx: &mut Cx<'_>, menu: &mut MENU_STATE, input: &InputS
             SetContextFont(cx.kernel.tiny_font);
             ScreenTransition(3, ptr::null());
             UnbatchGraphics();
-            crate::ui::settings::play_music_for_world(cx.world, menu.hMusic, 1, 1);
+            let music = std::ptr::NonNull::new(menu.hMusic.cast());
+            remember_native_music(music, true, 1, music_enabled);
         };
         show_combat_ship(cx, input, menu, COUNT::MAX, None);
         frame::install(input, context, || {

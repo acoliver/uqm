@@ -1,9 +1,10 @@
-#![cfg(not(test))]
-
 use crate::battle::status_native::draw_battle_crew_amount as draw_crew;
 use crate::engine::battle::link_queue::PickShip;
+use crate::engine::battle::record::SHIP_INFO;
 use crate::engine::Kernel;
-use crate::navigation::abi::*;
+use crate::graphics::native_abi::{
+    Color, BYTE, COORD, COUNT, EXTENT, POINT, RECT, SIZE, TEXT_ALIGN_ALIGN_CENTER,
+};
 
 const STATUS_WIDTH: COORD = 64;
 const SHIP_INFO_HEIGHT: COORD = 65;

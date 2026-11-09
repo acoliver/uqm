@@ -1,4 +1,3 @@
-use crate::engine::{battle::Cx, input::InputSession, observe::Io};
 use crate::graphics::flash::{FlashState, FlashType};
 pub use crate::engine::battle::{CollisionHook, ElementHook};
 // Shared engine records used by the Rust runtime.
@@ -1770,32 +1769,10 @@ pub use crate::mainloop::input_abi::live::SetDefaultMenuRepeatDelay;
 #[cfg(not(test))]
 pub use crate::mainloop::input_abi::live::ResetKeyRepeat;
 
-#[cfg(not(test))]
-pub use crate::ui::util::live::pause_game;
-
-#[cfg(not(test))]
-pub use crate::ui::util::live::SleepGame;
-
-#[cfg(not(test))]
-pub use crate::ui::confirm::do_confirm_exit;
 
 #[cfg(not(test))]
 pub use crate::mainloop::input_abi::live::ConfirmExit;
 
-#[cfg(not(test))]
-pub use crate::ui::util::live::WaitForAnyButton;
-
-#[cfg(not(test))]
-pub use crate::ui::util::live::WaitForAnyButtonUntil;
-
-#[cfg(not(test))]
-pub use crate::ui::util::live::WaitForNoInput;
-
-#[cfg(not(test))]
-pub use crate::ui::util::live::WaitForNoInputUntil;
-
-#[cfg(not(test))]
-pub use crate::ui::confirm::do_popup_window;
 pub type InputFrameCallback = ::std::option::Option<unsafe extern "C" fn()>;
 
 #[cfg(not(test))]
@@ -1803,41 +1780,6 @@ pub use crate::mainloop::input_abi::live::SetInputCallback;
 
 #[cfg(not(test))]
 pub use crate::mainloop::input_abi::live::DoInput;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct joy_char {
-    _unused: [u8; 0],
-}
-pub type joy_char_t = joy_char;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct textentry_state {
-    pub Initialized: BOOLEAN,
-    pub NextTime: DWORD,
-    pub Success: BOOLEAN,
-    pub CacheStr: *mut UNICODE,
-    pub JoyAlphaString: STRING,
-    pub JoystickMode: BOOLEAN,
-    pub UpperRegister: BOOLEAN,
-    pub JoyAlpha: *mut joy_char_t,
-    pub JoyAlphaLength: ::std::os::raw::c_int,
-    pub JoyUpper: *mut joy_char_t,
-    pub JoyLower: *mut joy_char_t,
-    pub JoyRegLength: ::std::os::raw::c_int,
-    pub InsPt: *mut UNICODE,
-    pub BaseStr: *mut UNICODE,
-    pub CursorPos: ::std::os::raw::c_int,
-    pub MaxSize: ::std::os::raw::c_int,
-    pub ChangeCallback: Option<ChangeFn>,
-    pub FrameCallback: Option<FrameFn>,
-    pub CbParam: *mut ::std::os::raw::c_void,
-}
-pub type ChangeFn = unsafe fn(*mut textentry_state, &mut Cx<'_>, &InputSession) -> u32;
-pub type FrameFn = unsafe fn(*mut textentry_state, &mut Cx<'_>, &mut Io<'_>, &InputSession) -> u32;
-pub type TEXTENTRY_STATE = textentry_state;
-
-#[cfg(not(test))]
-pub use crate::ui::getchar::do_text_entry;
 pub const OPT_ENABLABLE_OPTVAL_DISABLED: OPT_ENABLABLE = 0;
 pub const OPT_ENABLABLE_OPTVAL_ENABLED: OPT_ENABLABLE = 1;
 pub type OPT_ENABLABLE = ::std::os::raw::c_uint;
@@ -2168,7 +2110,6 @@ pub const NORMAL_DENSITY: _bindgen_ty_19 = 3;
 pub const HIGH_DENSITY: _bindgen_ty_19 = 4;
 pub const SUPER_DENSITY: _bindgen_ty_19 = 5;
 pub type _bindgen_ty_19 = ::std::os::raw::c_uint;
-
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -2905,15 +2846,7 @@ pub use crate::battle::ship_native::engine::ship_postprocess;
 pub use crate::battle::ship_native::engine::collision;
 
 #[cfg(not(test))]
-pub use crate::ui::util::live::DrawStarConBox;
-
-#[cfg(not(test))]
-pub use crate::ui::util::live::SeedRandomNumbers;
-
-#[cfg(not(test))]
 pub use crate::ui::settings::toggle_music;
-#[cfg(not(test))]
-pub use crate::ui::util::live::SaveContextFrame;
 #[cfg(not(test))]
 pub use crate::ui::settings::stop_music;
 #[cfg(test)]
@@ -2935,11 +2868,6 @@ extern "C" {
 #[cfg(not(test))]
 pub use crate::ui::settings::toggle_sound_effect;
 
-#[cfg(not(test))]
-pub use crate::ui::settings::PlayMusic;
-
-#[cfg(not(test))]
-pub use crate::ui::settings::PlaySoundEffect;
 pub const log_Level_log_Nothing: log_Level = 0;
 pub const log_Level_log_User: log_Level = 1;
 pub const log_Level_log_Fatal: log_Level = 1;

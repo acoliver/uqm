@@ -581,6 +581,35 @@ impl ContextLease {
         result
     }
 
+    pub fn with_unclipped<R>(&self, draw: impl FnOnce() -> R) -> R {
+        let (previous, explicit) = self.clip_snapshot();
+        let restore = ContextClip {
+            context: self.clone(),
+            previous: explicit.then_some(previous),
+        };
+        self.clear_clip();
+        let result = draw();
+        drop(restore);
+        result
+    }
+
+    pub fn system_rect(&self, rect: Option<RECT>) {
+        self.assert_thread();
+        // SAFETY: this lease admits the serialized graphics thread; the rectangle is borrowed locally.
+        unsafe {
+            match rect {
+                Some(rect) => super::sdl::lifecycle_abi::SetSystemRect(&rect),
+                None => super::sdl::lifecycle_abi::ClearSystemRect(),
+            }
+        }
+    }
+
+    pub fn screen_dimensions(&self) -> (i32, i32) {
+        self.assert_thread();
+        // SAFETY: the graphics thread initializes and owns these display dimensions.
+        unsafe { (gfx::ScreenWidth, gfx::ScreenHeight) }
+    }
+
     fn copy_screen_region(&self, mut rect: RECT, save: bool) {
         self.select();
         // SAFETY: the selected lease retains its context; the rectangle is local.
