@@ -335,7 +335,7 @@ pub(super) fn run(
         false,
         GetTimeCounter(),
     );
-    let success = edit_text(cx, io, input, &mut buffer, 0, &mut search);
+    let success = edit_text(cx, io, input, buffer.len(), &mut buffer, 0, &mut search);
     let text = CStr::from_bytes_until_nul(&buffer)
         .unwrap_or_else(|error| panic!("search editor lost text terminator: {error}"));
     crate::ui::sis::draw_message(cx.kernel, search.map.dimensions().0, text, -1, -1, 2);

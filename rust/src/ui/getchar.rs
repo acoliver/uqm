@@ -40,6 +40,7 @@ pub fn edit_text(
     cx: &mut Cx<'_>,
     io: &mut Io<'_>,
     input: &InputSession,
+    capacity: usize,
     buffer: &mut [u8],
     cursor: usize,
     callbacks: &mut dyn TextEntryCallbacks,
@@ -47,6 +48,10 @@ pub fn edit_text(
     if cx.world.activity() & CHECK_ABORT as u16 != 0 {
         return false;
     }
+    assert!(
+        (1..=buffer.len()).contains(&capacity),
+        "text editor capacity exceeds its storage"
+    );
     std::ffi::CStr::from_bytes_until_nul(buffer)
         .unwrap_or_else(|error| panic!("text editor buffer is not terminated: {error}"));
     // SAFETY: every pointer starts absent, and the borrowed buffer is stable until
@@ -54,7 +59,7 @@ pub fn edit_text(
     unsafe {
         let mut entry: TEXTENTRY_STATE = mem::zeroed();
         entry.BaseStr = buffer.as_mut_ptr().cast();
-        entry.MaxSize = i32::try_from(buffer.len())
+        entry.MaxSize = i32::try_from(capacity)
             .unwrap_or_else(|error| panic!("text editor buffer too large: {error}"));
         entry.CursorPos = i32::try_from(cursor)
             .unwrap_or_else(|error| panic!("text editor cursor too large: {error}"));

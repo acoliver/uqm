@@ -145,12 +145,13 @@ pub(crate) mod live {
                 let confirmed = crate::front_end::cnctdlg::melee_connect_dialog(
                     cx,
                     io,
+                    input,
                     &mut state.netplay,
-                    side as i32,
+                    usize::from(side),
                 );
                 redraw(cx, state);
                 state.last_input_time = GetTimeCounter();
-                if confirmed != 0 {
+                if confirmed {
                     state.initialized = 0;
                     state.phase = crate::supermelee::session::MenuPhase::Connecting;
                 }

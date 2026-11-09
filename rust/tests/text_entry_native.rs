@@ -209,7 +209,15 @@ fn borrowed_frame(key: usize, activity: u16, buffer: &mut [u8]) -> (bool, Callba
     let success = unsafe {
         uqm_rust::app::bridge::with_game(&mut game, || {
             uqm_rust::app::bridge::enter(|cx| {
-                uqm_rust::ui::getchar::edit_text(cx, &mut io, &input, buffer, 0, &mut callbacks)
+                uqm_rust::ui::getchar::edit_text(
+                    cx,
+                    &mut io,
+                    &input,
+                    buffer.len(),
+                    buffer,
+                    0,
+                    &mut callbacks,
+                )
             })
         })
     };

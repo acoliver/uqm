@@ -48,8 +48,15 @@ fn edit_name(
     name(cx, state, side, 1, None);
     let mut buf =
         super::super::rules::name_editor_buffer(state.melee_setup.teams[side as usize].c_name());
-    let success =
-        crate::ui::getchar::edit_text(cx, io, input, &mut buf, 0, &mut NameCallbacks(state));
+    let success = crate::ui::getchar::edit_text(
+        cx,
+        io,
+        input,
+        buf.len(),
+        &mut buf,
+        0,
+        &mut NameCallbacks(state),
+    );
     state.cur_index = u16::MAX;
     if !success
         || !{
