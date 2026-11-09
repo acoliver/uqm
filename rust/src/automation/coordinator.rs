@@ -15,6 +15,7 @@
 //! @plan PLAN-20260723-RUNTIME-AUTOMATION.P08
 //! @requirement REQ-FFI-001..005, REQ-SCHED-001, REQ-WATCH-001
 
+use super::input_ffi::{contact_snapshot, navigation_snapshot};
 use crate::engine::{battle::Cx, StoryKey};
 mod device;
 mod fixtures;
@@ -1568,6 +1569,7 @@ impl AutomationObserver {
         inner: &mut CoordInner,
         mut scheduler_event: SchedulerEvent,
     ) -> SchedulerEvent {
+        let solar = self.ui.solar_snapshot();
         use super::script::PatrolPolicy;
         let policy = Self::patrol_policy(self.actions.get(inner.sched_state.step_index));
         let transit_budget =
@@ -1606,11 +1608,7 @@ impl AutomationObserver {
             let preview = self.ui.encounter_menu_active();
             let conversation = self.ui.conversation_snapshot().active;
             let contact = preview || conversation;
-            let snapshot = crate::automation::input_ffi::contact_snapshot(
-                world,
-                self.ui.solar_snapshot(),
-                step.race,
-            );
+            let snapshot = contact_snapshot(world, solar, step.race);
             let control = if contact {
                 Default::default()
             } else if let Some((snapshot, same_view)) = snapshot {
@@ -1665,12 +1663,7 @@ impl AutomationObserver {
         if let Some(Action::NavigateToPlanet(navigation)) =
             self.actions.get(inner.sched_state.step_index)
         {
-            let snapshot = crate::automation::input_ffi::navigation_snapshot(
-                world,
-                self.ui.solar_snapshot(),
-                i32::from(navigation.planet),
-                None,
-            );
+            let snapshot = navigation_snapshot(world, solar, i32::from(navigation.planet), None);
             let reached =
                 snapshot.active != 0 && snapshot.inner_planet == i32::from(navigation.planet);
             let control = crate::automation::navigation::steer_toward_target(
@@ -1756,9 +1749,9 @@ impl AutomationObserver {
         } else if let Some(Action::NavigateToMoon(navigation)) =
             self.actions.get(inner.sched_state.step_index)
         {
-            let snapshot = crate::automation::input_ffi::navigation_snapshot(
+            let snapshot = navigation_snapshot(
                 world,
-                self.ui.solar_snapshot(),
+                solar,
                 i32::from(navigation.planet),
                 Some(i32::from(navigation.moon)),
             );
