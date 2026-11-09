@@ -16,12 +16,9 @@
 use super::response::ResponseFunc;
 use super::response_ui::{refresh_responses, select_conversation_summary};
 use super::state::CommState;
-use crate::engine::input::InputSession;
+use crate::engine::{battle::Cx, input::InputSession, observe::Io, World};
 #[cfg(not(test))]
-use crate::engine::observe::CheckpointView;
-#[cfg(not(test))]
-use crate::engine::Kernel;
-use crate::engine::{battle::Cx, observe::Io, World};
+use crate::engine::{observe::CheckpointView, Kernel};
 use std::ffi::c_int;
 
 fn communication_background_volume(background: u8, using_speech: u32) -> u8 {
@@ -65,7 +62,7 @@ pub(super) mod c_bridge {
     pub const ONE_SECOND_TICKS: i32 = 840;
     pub use crate::time::source as clock;
 
-    pub fn play_alien_music() {}
+    pub fn play_alien_music(_enabled: bool) {}
     pub fn set_color_map_from_comm_data() {}
     pub fn call_refresh_responses(_cx: &mut super::Cx<'_>, _top: u8, _count: u8, _cur: u8) {}
     pub fn call_select_conversation_summary(_cx: &mut super::Cx<'_>, _io: &mut super::Io<'_>) {}
@@ -86,8 +83,9 @@ pub(super) mod c_bridge {
     pub use crate::sound::heart_ffi::play_track as PlayTrack;
     pub use crate::sound::heart_ffi::playing_track as PlayingTrack;
     pub use crate::sound::heart_ffi::stop_track as StopTrack;
+    use crate::sound::music::remember_native_music;
     pub use crate::time::source as clock;
-    use std::ffi::c_int;
+    use std::{ffi::c_int, ptr::NonNull};
 
     pub use crate::comm::comm_abi::comm_CheckSubtitles;
 
@@ -116,8 +114,6 @@ pub(super) mod c_bridge {
     pub use crate::comm::commanim_abi::runtime::ProcessCommAnimations;
 
     pub use crate::comm::comm_abi::comm_redraw_subtitles;
-
-    pub use crate::ui::settings::PlayMusic;
 
     pub use crate::graphics::cmap_abi::GetColorMapAddress;
 
@@ -244,12 +240,12 @@ pub(super) mod c_bridge {
     }
 
     /// Play alien music from CommData.AlienSong (port of c_PlayAlienMusic).
-    pub unsafe fn play_alien_music() {
+    pub unsafe fn play_alien_music(enabled: bool) {
         let song = COMM_DATA.alien_song;
         if song.is_null() {
             return;
         }
-        PlayMusic((song).cast(), 1, 1);
+        remember_native_music(NonNull::new(song.cast()), true, 1, enabled);
     }
 
     /// Apply alien colormap from CommData.AlienColorMap (port of c_SetColorMapFromCommData).
@@ -770,6 +766,7 @@ pub fn alien_talk_segue(
     if !state.first_talk_call {
         state.first_talk_call = true;
         // First call this encounter — initialize speech subsystem
+        let music_enabled = cx.world.data.game.glob_flags & 8 == 0;
         cx.with_legacy(|| {
             init_speech_graphics(state);
             set_colormap(state);
@@ -777,7 +774,7 @@ pub fn alien_talk_segue(
             update_speech_graphics(state);
             comm_intro_transition();
 
-            play_alien_music(state);
+            play_alien_music(state, music_enabled);
             set_music_background_vol(state);
 
             #[cfg(not(test))]
@@ -915,6 +912,7 @@ pub fn player_response_input(
 /// # Safety
 /// Must be called from the game thread with CommData fully initialized.
 pub unsafe fn alien_talk_first_call_init(cx: &mut Cx<'_>) {
+    let _enabled = cx.world.data.game.glob_flags & 8 == 0;
     #[cfg(not(test))]
     cx.with_legacy(|| {
         rust_init_speech_graphics();
@@ -922,7 +920,7 @@ pub unsafe fn alien_talk_first_call_init(cx: &mut Cx<'_>) {
         c_bridge::DrawAlienFrame(std::ptr::null_mut(), 0, 1);
         rust_update_speech_graphics();
         comm_intro_transition();
-        c_bridge::play_alien_music();
+        c_bridge::play_alien_music(_enabled);
         c_bridge::FadeMusic((c_bridge::music_volume::BACKGROUND) as u8, 0i16);
         c_bridge::InitCommAnimations();
     });
@@ -1486,15 +1484,15 @@ fn run_comm_anim_frame(_input: &crate::engine::input::InputSession, state: &mut 
 /// @plan PLAN-20260325-COMMPT3.P03
 /// @requirement REQ-MU-001, REQ-MU-002
 /// @pseudocode 001-colormap-music-bridges lines 09-15
-fn play_alien_music(state: &mut CommState) {
+fn play_alien_music(state: &mut CommState, enabled: bool) {
     #[cfg(not(test))]
     unsafe {
         let _ = state;
-        c_bridge::play_alien_music();
+        c_bridge::play_alien_music(enabled);
     }
     #[cfg(test)]
     {
-        let _ = state;
+        let _ = (state, enabled);
     }
 }
 
@@ -2227,10 +2225,11 @@ mod tests {
         // play_alien_music must have a real body
         let music_body = extract_rust_fn_body(source, "play_alien_music")
             .expect("play_alien_music must be defined");
-        let music_has_impl = music_body.contains("PlayMusic") && music_body.contains("is_null()");
+        let music_has_impl =
+            music_body.contains("remember_native_music") && music_body.contains("is_null()");
         assert!(
             music_has_impl,
-            "play_alien_music must call PlayMusic with null guard"
+            "play_alien_music must admit native music with null guard"
         );
     }
 
