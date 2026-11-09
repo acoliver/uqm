@@ -6,6 +6,7 @@ pub mod generation;
 pub mod planet;
 
 use crate::battle::schema::GAME_STATE;
+pub const MUSIC_DISABLED: u8 = 8;
 pub const SOUND_DISABLED: u8 = 16;
 
 pub mod activity;

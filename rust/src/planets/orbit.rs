@@ -306,7 +306,7 @@ pub(crate) mod live {
                 ),
                 true,
                 1,
-                game.world.data.game.glob_flags & crate::navigation::abi::MUSIC_DISABLED as u8 == 0,
+                game.world.data.game.glob_flags & crate::engine::world::MUSIC_DISABLED == 0,
             );
         }
     }
