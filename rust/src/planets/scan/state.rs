@@ -31,6 +31,9 @@ pub struct ScanState {
     reports: crate::planets::report::typography::ReportResources,
     pub(crate) sphere: std::rc::Rc<RefCell<crate::planets::sphere::SphereState>>,
     context: LoadedContext,
+    pub(crate) background: Option<ContextFrame>,
+    pub(crate) cursor_image: ContextFrame,
+    pub(crate) offscreen: ContextLease,
     pub(crate) cursor: RefCell<ScanCursor>,
 }
 
@@ -56,11 +59,15 @@ impl ScanState {
         width: i16,
         sphere: std::rc::Rc<RefCell<crate::planets::sphere::SphereState>>,
         reports: crate::planets::report::typography::ReportResources,
+        background: Option<ContextFrame>,
     ) -> Self {
         Self {
             sphere,
             reports,
             context: create_context(kernel, width),
+            background,
+            cursor_image: ContextFrame::retain(NonNull::new(kernel.misc_data_frame)),
+            offscreen: ContextLease::require(kernel.off_screen_context),
             cursor: RefCell::new(ScanCursor::default()),
         }
     }
@@ -97,8 +104,30 @@ mod tests {
             },
         });
         space.select();
-        let first = ScanState::new(&game.kernel, 242, Default::default(), Default::default());
-        let second = ScanState::new(&game.kernel, 242, Default::default(), Default::default());
+        let cursor_image = LoadedDrawable::create(2, 0, 0, 106).unwrap();
+        let background = LoadedDrawable::create(2, 0, 0, 2).unwrap();
+        game.kernel.misc_data_frame = cursor_image.lease().frame(0).unwrap();
+        let first = ScanState::new(
+            &game.kernel,
+            242,
+            Default::default(),
+            Default::default(),
+            Some(background.lease().context_frame(1)),
+        );
+        let second = ScanState::new(
+            &game.kernel,
+            242,
+            Default::default(),
+            Default::default(),
+            None,
+        );
+        game.kernel.misc_data_frame = std::ptr::null_mut();
+        drop(cursor_image);
+        drop(background);
+        assert_eq!(first.cursor_image.indexed_frame(105).frame_count(), 106);
+        assert_eq!(first.offscreen.clip_rect(), space.clip_rect());
+        assert_eq!(first.background.as_ref().unwrap().frame_count(), 2);
+        assert!(second.background.is_none());
         let retained = first.context();
         let expected = retained.clip_rect();
         assert_eq!((expected.corner.x, expected.corner.y), (7, 165));

@@ -247,7 +247,7 @@ fn check_drawable_ownership(h: &mut Harness) {
                     ),
                     false,
                     definition.into_drawable(),
-                    Default::default(),
+                    (Default::default(), None),
                 )
                 .is_none());
             });

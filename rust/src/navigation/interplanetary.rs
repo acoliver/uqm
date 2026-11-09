@@ -62,6 +62,9 @@ pub(crate) mod live {
             y: (((point.y as i32) << 2) + (height >> 1) - (height >> 4)) as i16,
         }
     }
+    fn display(cx: &crate::engine::battle::Cx<'_>, point: POINT, radius: i16) -> POINT {
+        SolarCoordinates::new(cx.screen_dimensions()).to_display(point, radius)
+    }
     /// # Safety
     /// Exclusive game-thread access to the initialized interplanetary group queue.
     pub unsafe extern "C" fn notify_others_abi(race: u16, target: u8) {
@@ -112,8 +115,7 @@ pub(crate) mod live {
         stamp.origin = cx.ip_group(element).loc;
         cx.set_primitive_stamp(element, stamp);
         let zoom = radius(cx, location);
-        let mut destination = SolarCoordinates::new(cx.screen_dimensions())
-            .to_display(cx.ip_group_mut(element).loc, zoom);
+        let mut destination = display(cx, cx.ip_group(element).loc, zoom);
         cx.element_mut(element).current.location = world(cx, destination);
         cx.init_intersect_start(element);
         let flagship = flagship_location(cx);
@@ -240,8 +242,7 @@ pub(crate) mod live {
             let wait = cx.element_mut(element).thrust;
             if wait != 0 && wait != u8::MAX {
                 cx.element_mut(element).thrust -= 1;
-            } else if (vx == 0 && vy == 0) || angle != cx.element_mut(element).velocity.travel_angle
-            {
+            } else if (vx == 0 && vy == 0) || angle != cx.element(element).velocity.travel_angle {
                 let speed = if wait != 0 && cx.ip_group_mut(element).dest_loc != 0 {
                     if task == ON_STATION as u8 {
                         30
@@ -287,8 +288,7 @@ pub(crate) mod live {
                 cx.element_mut(element).velocity.zero();
             }
             if escape {
-                let display = SolarCoordinates::new(cx.screen_dimensions())
-                    .to_display(cx.ip_group_mut(element).loc, zoom);
+                let display = display(cx, cx.ip_group(element).loc, zoom);
                 transition = display.x < 0
                     || display.x as i32 >= cx.screen_dimensions().0 - 64 - 14
                     || display.y < 0
@@ -332,11 +332,8 @@ pub(crate) mod live {
         adjust_zoom(zoom, &mut vx, &mut vy);
         cx.ip_group_mut(element).loc.x = cx.ip_group_mut(element).loc.x.wrapping_add(vx);
         cx.ip_group_mut(element).loc.y = cx.ip_group_mut(element).loc.y.wrapping_add(vy);
-        cx.element_mut(element).next.location = world(
-            cx,
-            SolarCoordinates::new(cx.screen_dimensions())
-                .to_display(cx.ip_group(element).loc, zoom),
-        );
+        cx.element_mut(element).next.location =
+            world(cx, display(cx, cx.ip_group(element).loc, zoom));
         if location != flagship
             || (task & REFORM_GROUP as u8 != 0 && cx.ip_group_mut(element).group_counter & 1 != 0)
         {
@@ -495,11 +492,8 @@ pub(crate) mod live {
         let flagship = flagship_location(cx);
         let zoom = radius(cx, flagship);
         adjust_zoom(zoom, &mut vx, &mut vy);
-        cx.element_mut(element).current.location = world(
-            cx,
-            SolarCoordinates::new(cx.screen_dimensions())
-                .to_display(cx.navigation().game.ip_location, zoom),
-        );
+        cx.element_mut(element).current.location =
+            world(cx, display(cx, cx.navigation().game.ip_location, zoom));
         cx.init_intersect_start(element);
         cx.navigation_mut().game.ip_location.x =
             cx.navigation_mut().game.ip_location.x.wrapping_add(vx);

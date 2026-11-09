@@ -39,20 +39,23 @@ unsafe fn copy_binary_entries(table: &StringTable, index: Option<u16>) -> Vec<Ve
     if count == 0 {
         return Vec::new();
     }
+    // SAFETY: the detached loader table owns exactly `size` initialized entries.
+    let entries = unsafe { std::slice::from_raw_parts(table.strings, count) };
     let range = index.map_or(0..count, |index| {
         let index = usize::from(index) % count;
         index..index + 1
     });
     range
         .map(|index| {
-            let entry = &*table.strings.add(index);
+            let entry = &entries[index];
             // The ABI's u16 length query truncates large palettes.
             let length = usize::try_from(entry.length)
                 .unwrap_or_else(|error| panic!("binary entry has an invalid length: {error}"));
             if length == 0 {
                 Vec::new()
             } else {
-                std::slice::from_raw_parts(entry.data.cast::<u8>(), length).to_vec()
+                // SAFETY: the loader owns the entry's full recorded allocation until copying ends.
+                unsafe { std::slice::from_raw_parts(entry.data.cast::<u8>(), length).to_vec() }
             }
         })
         .collect()

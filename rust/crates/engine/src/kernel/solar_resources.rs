@@ -7,6 +7,12 @@ use crate::{
 };
 use std::ffi::CStr;
 
+#[derive(Default)]
+pub struct SolarPresentation {
+    pub assets: Option<SolarResources>,
+    pub frame_deadline: u32,
+}
+
 pub struct SolarResources {
     // Field order preserves the legacy teardown order.
     pub flagship: LoadedDrawable,

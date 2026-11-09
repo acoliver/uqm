@@ -217,12 +217,9 @@ pub(crate) mod live {
     use super::{images::required_frame, zoom_scale, SphereState};
     use crate::c_bindings::global_state::DrawMode;
     use crate::comm::locdata::{CColor, CRect};
-    use crate::engine::Kernel as KernelOwner;
     use crate::graphics::context_abi::SetContextClipRect;
     use crate::graphics::drawable_abi::SetContextFGFrame;
-    use crate::mainloop::restart_menu::c_extern::{
-        uqm_sleep_thread_until as SleepThreadUntil, SetContext,
-    };
+    use crate::mainloop::restart_menu::c_extern::uqm_sleep_thread_until as SleepThreadUntil;
     use crate::starbase::cffi::CffiPlatform;
     use crate::starbase::gfx::{Gfx, Point, Rect, Rgba, Stamp};
     use std::{cell::RefCell, ffi::c_void};
@@ -236,7 +233,7 @@ pub(crate) mod live {
 
     use crate::planets::plangen::live::set_shield_throb_effect;
 
-    use crate::planets::scan::live::RepairBackRect;
+    use crate::planets::scan::live::repair_back_rect;
 
     use crate::graphics::context_abi::SetContextDrawMode;
 
@@ -378,7 +375,7 @@ pub(crate) mod live {
             planet.select();
             CffiPlatform.batch();
             if i > 0 {
-                RepairBackRect(&mut repair);
+                repair_back_rect(&repair);
             }
             let old_mode = SetGraphicScaleMode(1);
             let old_scale = SetGraphicScale((256.0 * scale + 0.5) as i32);
@@ -406,32 +403,37 @@ pub(crate) mod live {
         prepare_next_rotation_frame(&mut state.borrow_mut());
     }
 
-    unsafe fn tint_frame(state: &SphereState, color: CColor) {
-        let old_context = SetContext(KernelOwner::current().read(|owner| owner.off_screen_context));
-        SetContextFGFrame(required_frame(&state.images().tint.lease(), 0).cast());
-        SetContextClipRect(std::ptr::null_mut());
-        let rect = CffiPlatform.context_clip_rect();
-        stamp(required_frame(&state.topography(), 0).cast(), 0, 0);
-        let old_mode = SetContextDrawMode(DrawMode {
-            kind: 1,
-            factor: 255 / 2,
+    unsafe fn tint_frame(offscreen: &ContextLease, state: &SphereState, color: CColor) {
+        offscreen.with_selected(|| {
+            SetContextFGFrame(required_frame(&state.images().tint.lease(), 0).cast());
+            SetContextClipRect(std::ptr::null_mut());
+            let rect = CffiPlatform.context_clip_rect();
+            stamp(required_frame(&state.topography(), 0).cast(), 0, 0);
+            let old_mode = SetContextDrawMode(DrawMode {
+                kind: 1,
+                factor: 255 / 2,
+            });
+            CffiPlatform.set_fg_color(Rgba {
+                r: color.r,
+                g: color.g,
+                b: color.b,
+                a: color.a,
+            });
+            CffiPlatform.fill_rect(rect);
+            SetContextDrawMode(old_mode);
         });
-        CffiPlatform.set_fg_color(Rgba {
-            r: color.r,
-            g: color.g,
-            b: color.b,
-            a: color.a,
-        });
-        CffiPlatform.fill_rect(rect);
-        SetContextDrawMode(old_mode);
-        SetContext(old_context);
     }
 
     fn same_rgb(a: CColor, b: CColor) -> bool {
         a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a
     }
 
-    pub unsafe fn draw_planet(state: &mut SphereState, tint_y: i32, color: CColor) {
+    pub unsafe fn draw_planet(
+        offscreen: &ContextLease,
+        state: &mut SphereState,
+        tint_y: i32,
+        color: CColor,
+    ) {
         CffiPlatform.batch();
         if same_rgb(
             color,
@@ -456,7 +458,7 @@ pub(crate) mod live {
                     a: cached.a,
                 },
             ) {
-                tint_frame(state, color);
+                tint_frame(offscreen, state, color);
                 state.images_mut().tint_color = CColor {
                     r: color.r,
                     g: color.g,

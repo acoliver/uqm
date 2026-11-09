@@ -11,7 +11,8 @@ fn visit_cleanup_releases_its_images_without_dropping_kernel_resources() {
     }
     let mut game = crate::engine::Game::new();
     game.world = world();
-    game.kernel.solar_resources = Some(SolarResources {
+    game.kernel.solar_presentation.frame_deadline = 47;
+    game.kernel.solar_presentation.assets = Some(SolarResources {
         flagship: image(),
         sun: image(),
         sun_palettes: vec![vec![0, 0]],
@@ -22,7 +23,8 @@ fn visit_cleanup_releases_its_images_without_dropping_kernel_resources() {
     });
     let shared = game
         .kernel
-        .solar_resources
+        .solar_presentation
+        .assets
         .as_ref()
         .unwrap_or_else(|| panic!("fixture resources missing"))
         .flagship
@@ -66,6 +68,9 @@ fn visit_cleanup_releases_its_images_without_dropping_kernel_resources() {
         retain_frame_allocations(&[shared])[0].frame(0),
         Some(shared)
     );
+    game.kernel.solar_presentation.assets = None;
+    assert!(std::panic::catch_unwind(|| retain_frame_allocations(&[shared])).is_err());
+    assert_eq!(game.kernel.solar_presentation.frame_deadline, 47);
 }
 
 #[test]

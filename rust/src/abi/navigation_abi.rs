@@ -2112,13 +2112,6 @@ pub struct star_desc {
 
 
 
-#[cfg(not(test))]
-
-
-#[cfg(not(test))]
-
-
-
 pub const VIEW_STATE_VIEW_STABLE: VIEW_STATE = 0;
 pub const VIEW_STATE_VIEW_SCROLL: VIEW_STATE = 1;
 pub const VIEW_STATE_VIEW_CHANGE: VIEW_STATE = 2;

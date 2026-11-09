@@ -4,7 +4,7 @@ use super::drawing::{draw_outer_system, draw_system_transition, find_radius, poi
 use super::*;
 use crate::comm::locdata::CPoint;
 use crate::engine::world::generation::Body;
-use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
+use crate::engine::{Kernel, World};
 use crate::planets::solar_system::{SolarSystem, SystemLocation};
 use uqm_engine::input_port::frames as input;
 
@@ -42,11 +42,6 @@ use crate::graphics::frame_abi::DrawStamp;
 use crate::time::clock_abi::game_clock_tick;
 
 use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
-
-#[inline]
-fn glob() -> crate::engine::Projection<crate::engine::WorldData> {
-    WorldFields::current()
-}
 
 #[inline]
 fn normalize_facing(facing: c::COUNT) -> c::COUNT {
@@ -97,24 +92,24 @@ fn game_point(point: c::POINT) -> CPoint {
 }
 
 pub(super) unsafe fn get_collision_frame(
+    kernel: &Kernel,
     solar: &SolarSystem,
     body: Body,
     wait_planet: c::COUNT,
 ) -> c::FRAME {
     if solar.wait_intersect != c::COUNT::MAX && solar.wait_intersect != wait_planet {
-        DecFrameIndex(
-            KernelOwner::current()
-                .read(|owner| owner.stars_in_space)
-                .cast(),
-        )
-        .cast()
+        DecFrameIndex(kernel.stars_in_space.cast()).cast()
     } else {
         solar.sys.descriptor(body).image.frame
     }
 }
 
-pub(super) unsafe fn check_intersect(solar: &mut SolarSystem) -> Option<Body> {
-    let game = glob().read(|owner| owner.game);
+pub(super) unsafe fn check_intersect(
+    world: &World,
+    kernel: &Kernel,
+    solar: &mut SolarSystem,
+) -> Option<Body> {
+    let game = world.data.game;
     let mut ship: c::INTERSECT_CONTROL = std::mem::zeroed();
     let mut planet: c::INTERSECT_CONTROL = std::mem::zeroed();
     ship.IntersectStamp.origin = c_point(game.ship_stamp.origin);
@@ -161,7 +156,7 @@ pub(super) unsafe fn check_intersect(solar: &mut SolarSystem) -> Option<Body> {
             solar.sys.descriptor(body).image.origin
         };
         planet.EndPoint = planet.IntersectStamp.origin;
-        planet.IntersectStamp.frame = get_collision_frame(solar, body, wait);
+        planet.IntersectStamp.frame = get_collision_frame(kernel, solar, body, wait);
         if crate::graphics::geometry_ffi::DrawablesIntersect(
             ptr::addr_of_mut!(ship).cast(),
             ptr::addr_of_mut!(planet).cast(),
@@ -328,24 +323,26 @@ pub(super) unsafe fn enter_inner_system(
     solar.enter_inner(planet);
 }
 
-pub(super) unsafe fn leave_inner_system(solar: &mut SolarSystem) {
+pub(super) unsafe fn leave_inner_system(
+    world: &mut World,
+    kernel: &Kernel,
+    solar: &mut SolarSystem,
+) {
     let SystemLocation::Inner(planet) = solar.location() else {
         panic!("leaving an outer system");
     };
     solar.leave_inner();
     let outer_planet_wait = make_word(planet.wrapping_add(1), 0);
-    let lease = glob();
-    let game = ptr::addr_of_mut!((**lease).game);
-    (*game).ip_location = game_point(solar.sys.sun.location);
-    (*game).ship_stamp.origin = game_point(
+    let game = &mut world.data.game;
+    game.ip_location = game_point(solar.sys.sun.location);
+    game.ship_stamp.origin = game_point(
         solar
             .coordinates()
-            .to_display(c_point((*game).ip_location), solar.sys.sun.radius),
+            .to_display(c_point(game.ip_location), solar.sys.sun.radius),
     );
-    (*game).velocity.zero();
-    drop(lease);
+    game.velocity.zero();
     solar.wait_intersect = outer_planet_wait;
-    check_intersect(solar);
+    check_intersect(world, kernel, solar);
     if solar.wait_intersect != outer_planet_wait {
         solar.wait_intersect = c::COUNT::MAX;
     }
@@ -357,10 +354,12 @@ pub(super) fn enter_orbital(cx: &mut Cx<'_>, solar: &mut SolarSystem, body: Body
 }
 
 pub(super) unsafe fn check_ship_location(
-    game: &crate::engine::battle::schema::GAME_STATE,
+    world: &mut World,
+    kernel: &Kernel,
     solar: &mut SolarSystem,
-    new_radius: *mut c::SIZE,
+    new_radius: &mut c::SIZE,
 ) -> (c::BOOLEAN, Option<u8>) {
+    let game = world.data.game;
     let radius = solar.sys.sun.radius;
     *new_radius = solar.sys.sun.radius;
 
@@ -372,8 +371,7 @@ pub(super) unsafe fn check_ship_location(
     {
         if !matches!(solar.location(), SystemLocation::Inner(_)) {
             if radius == MAX_ZOOM_RADIUS {
-                crate::engine::World::current()
-                    .write(|world| world.set_activity(world.activity() | END_INTERPLANETARY));
+                world.set_activity(world.activity() | END_INTERPLANETARY);
                 return (0, None);
             }
             *new_radius = find_radius(
@@ -382,7 +380,7 @@ pub(super) unsafe fn check_ship_location(
                 c_point(game.ip_location),
             ) as c::SIZE;
         } else {
-            leave_inner_system(solar);
+            leave_inner_system(world, kernel, solar);
         }
         return (1, None);
     }
@@ -395,9 +393,9 @@ pub(super) unsafe fn check_ship_location(
     }
 
     if game.autopilot.x == -1 && game.autopilot.y == -1 {
-        if let Some(body) = check_intersect(solar) {
+        if let Some(body) = check_intersect(world, kernel, solar) {
             if matches!(solar.location(), SystemLocation::Inner(_)) {
-                (**glob()).game.velocity.zero();
+                world.data.game.velocity.zero();
                 solar.enter_orbit(body);
                 return (0, None);
             } else {
@@ -409,17 +407,14 @@ pub(super) unsafe fn check_ship_location(
 }
 
 pub(super) unsafe fn scale_system(cx: &mut Cx<'_>, solar: &mut SolarSystem, new_radius: c::SIZE) {
+    solar.sys.sun.radius = new_radius;
+    let game = &mut cx.world.data.game;
+    game.ship_stamp.origin = game_point(
+        solar
+            .coordinates()
+            .to_display(c_point(game.ip_location), solar.sys.sun.radius),
+    );
     let rect = cx.with_legacy(|| {
-        let lease = glob();
-        let game = ptr::addr_of_mut!((**lease).game);
-        solar.sys.sun.radius = new_radius;
-        (*game).ship_stamp.origin = game_point(
-            solar
-                .coordinates()
-                .to_display(c_point((*game).ip_location), solar.sys.sun.radius),
-        );
-
-        drop(lease);
         // SMOOTH_SYSTEM_ZOOM is disabled in the C source; use its crossfade path.
         let mut rect: c::RECT = std::mem::zeroed();
         c::GetContextClipRect(&mut rect);
@@ -436,10 +431,17 @@ pub(super) unsafe fn scale_system(cx: &mut Cx<'_>, solar: &mut SolarSystem, new_
     });
 }
 
-pub(super) unsafe fn restore_system_view() {
+pub(super) unsafe fn restore_system_view(solar: &SolarSystem) {
     let mut stamp = c::STAMP {
         origin: c::POINT { x: 0, y: 0 },
-        frame: SOLAR_SYS_FRAME,
+        frame: resources::frame(
+            solar
+                .system_image
+                .as_ref()
+                .unwrap_or_else(|| panic!("solar system image is not initialized")),
+            0,
+        )
+        .cast(),
     };
     DrawStamp((&raw mut stamp).cast());
 }
@@ -451,13 +453,12 @@ pub(super) unsafe fn ip_frame(
 ) {
     let runtime = cx.kernel.input_runtime();
     let input = runtime.input();
-    cx.with_legacy(|| SetContext(KernelOwner::current().read(|owner| owner.space_context)));
+    SetContext(cx.kernel.space_context);
     game_clock_tick(cx);
     process_ship_controls(&mut cx.world.data.game, solar, input);
-    let game = cx.world.data.game;
     let mut new_radius: c::SIZE = 0;
     let (location_change, inner_planet) =
-        cx.with_legacy(|| check_ship_location(&game, solar, &mut new_radius));
+        check_ship_location(cx.world, cx.kernel, solar, &mut new_radius);
     if let Some(planet) = inner_planet {
         enter_inner_system(cx, io, solar, planet);
     }
@@ -473,7 +474,7 @@ pub(super) unsafe fn ip_frame(
         solar.refresh_frame(cx);
         cx.with_legacy(|| {
             BatchGraphics();
-            restore_system_view();
+            restore_system_view(solar);
         });
         redraw_queue(cx, false);
         crate::ui::sis::draw_autopilot_message(
@@ -486,18 +487,20 @@ pub(super) unsafe fn ip_frame(
     }
 }
 
-pub(super) unsafe fn check_zoom_level(solar: &mut SolarSystem) -> c::BOOLEAN {
-    let game = ptr::addr_of_mut!((**glob()).game);
+pub(super) fn check_zoom_level(
+    game: &mut crate::engine::battle::schema::GAME_STATE,
+    solar: &mut SolarSystem,
+) -> c::BOOLEAN {
     let inner_system = matches!(solar.location(), SystemLocation::Inner(_));
     let ship_location = if inner_system {
         solar.sys.sun.location
     } else {
-        c_point((*game).ip_location)
+        c_point(game.ip_location)
     };
     solar.sys.sun.radius =
         find_radius(solar, i32::from(MAX_ZOOM_RADIUS) << 1, ship_location) as c::SIZE;
     if !inner_system {
-        (*game).ship_stamp.origin = game_point(
+        game.ship_stamp.origin = game_point(
             solar
                 .coordinates()
                 .to_display(ship_location, solar.sys.sun.radius),

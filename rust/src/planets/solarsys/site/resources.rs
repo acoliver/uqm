@@ -134,7 +134,7 @@ impl<'a, 'game, 'observer> Site<'a, 'game, 'observer> {
                 (self.star, body),
                 in_orbit,
                 definition,
-                reports,
+                (reports, self.background.clone()),
             )
         };
     }

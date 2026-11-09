@@ -25,14 +25,14 @@ fn needs_page_marker(row: i32, rows: i32, remaining: u16, columns: i32, lf_remai
 #[cfg(not(test))]
 pub(crate) mod live {
     use super::{character_delay, needs_page_marker};
-    use crate::comm::{locdata::CRect, sis_graphics::CText};
+    use crate::comm::sis_graphics::CText;
 
     use crate::engine::{battle::Cx, observe::Io};
     use crate::mainloop::input_abi::live::FlushInput;
 
     use crate::starbase::{
         cffi::CffiPlatform,
-        gfx::{Gfx, Point, Rgba, Stamp},
+        gfx::{Gfx, Rgba},
     };
 
     use crate::engine::strings::owned_table::TextEntry;
@@ -46,9 +46,8 @@ pub(crate) mod live {
 
     use crate::graphics::{
         context_abi::SetContextFontEffect,
-        drawable_abi::GetFrameRect,
+        drawable_abi::DrawableLease,
         font_abi::{font_DrawText, SetContextFont},
-        pixmap_abi::SetAbsFrameIndex,
     };
 
     use crate::engine::graphics::context_abi::ContextLease;
@@ -59,45 +58,43 @@ pub(crate) mod live {
     };
 
     extern "C" {
-        static mut SpaceJunkFrame: *mut crate::graphics::native_abi::frame_desc;
 
         static mut ScreenWidth: i32;
 
     }
 
-    unsafe fn clear(input: &crate::engine::input::InputSession) {
+    unsafe fn clear(
+        input: &crate::engine::input::InputSession,
+        junk: &DrawableLease,
+        context: &ContextLease,
+    ) {
         let g = CffiPlatform;
-        let frame = SetAbsFrameIndex(
-            (SpaceJunkFrame).cast(),
-            if input.preferences().fonts == 2 {
+        let frame = junk
+            .context_frame(0)
+            .wrapped_frame(if input.preferences().fonts == 2 {
                 21
             } else {
                 18
-            },
-        );
-        let mut r = CRect::default();
-        GetFrameRect(frame, (&mut r as *mut CRect).cast());
+            });
+        let r = frame.rect();
         g.batch();
         g.set_bg_color(Rgba::BLACK);
         g.clear_drawable();
         g.set_fg_color(Rgba::rgb15(0, 7, 0));
-        let start_x = r.width >> 1;
+        let start_x = r.extent.width >> 1;
         let mut y = 1;
         for _ in 0..75 / 6 {
             let mut x = start_x;
             for _ in 0..(ScreenWidth - 78) / 6 {
-                let stamp = Stamp {
-                    origin: Point { x, y },
-                    frame: frame as usize,
-                };
+                let point = crate::graphics::native_abi::POINT { x, y };
                 if input.preferences().fonts == 2 {
-                    g.draw_stamp(stamp);
+                    context.draw_stamp(&frame, point);
                 } else {
-                    g.draw_filled_stamp(stamp);
+                    context.draw_filled_stamp(&frame, point, context.foreground());
                 }
-                x += r.width + 1;
+                x += r.extent.width + 1;
             }
-            y += r.height + 1;
+            y += r.extent.height + 1;
         }
         g.unbatch();
     }
@@ -152,17 +149,17 @@ pub(crate) mod live {
         cx: &mut Cx<'_>,
         io: &mut Io<'_>,
         sound: Option<crate::sound::owned_bank::SoundClip>,
+        context: &ContextLease,
         text: *const u8,
         mut remaining: u16,
     ) {
         let g = CffiPlatform;
+        let junk = crate::planets::solarsys::resources::retained(cx.kernel)
+            .junk
+            .lease();
         let (end_page, r) = cx.with_legacy(|| {
             let end_page = CString::new(format!("{}\n", g.game_string(305 + 3))).unwrap();
-            let mut r = CRect::default();
-            GetFrameRect(
-                SetAbsFrameIndex((SpaceJunkFrame).cast(), 18),
-                (&mut r as *mut CRect).cast(),
-            );
+            let r = junk.context_frame(0).wrapped_frame(18).rect();
             (end_page, r)
         });
         let end_len = utf8StringCount(end_page.as_ptr().cast()) as u16;
@@ -173,7 +170,7 @@ pub(crate) mod live {
         t.char_count = 1;
         let mut printer = ReportPrinter {
             sound,
-            advance: r.width + 1,
+            advance: r.extent.width + 1,
             sleepy: true,
         };
         let mut last_c = 0;
@@ -181,11 +178,11 @@ pub(crate) mod live {
         cx.with_legacy(|| {
             FlushInput(input);
             if remaining != 0 {
-                clear(input);
+                clear(input, &junk, context);
                 g.set_fg_color(Rgba::rgb15(0, 31, 0));
             }
         });
-        t.baseline.y = r.height + 1;
+        t.baseline.y = r.extent.height + 1;
         while remaining != 0 {
             let last_string = t.p_str;
             let mut next = t.p_str.cast::<u8>();
@@ -199,7 +196,8 @@ pub(crate) mod live {
                 t.p_str = end_page.as_ptr();
                 remaining = remaining.wrapping_add(end_len);
             }
-            t.baseline.x = ((r.width >> 1) as i32 + i32::from(col) * i32::from(r.width + 1)) as i16;
+            t.baseline.x = ((r.extent.width >> 1) as i32
+                + i32::from(col) * i32::from(r.extent.width + 1)) as i16;
             loop {
                 let mut end = t.p_str.cast::<u8>();
                 next = end;
@@ -216,13 +214,13 @@ pub(crate) mod live {
                     next = t.p_str.cast();
                     last_c = getCharFromString(&mut next);
                     t.p_str = next.cast();
-                    t.baseline.x += r.width + 1;
+                    t.baseline.x += r.extent.width + 1;
                 }
                 if i32::from(col) > columns || last_c == u32::from(b'\n') || remaining == 0 {
                     break;
                 }
             }
-            t.baseline.y += r.height + 1;
+            t.baseline.y += r.extent.height + 1;
             row += 1;
             if row == rows || remaining == 0 {
                 t.p_str = last_string;
@@ -232,14 +230,14 @@ pub(crate) mod live {
                 if wait_for_any_button(cx, io, 1, u32::MAX, 0) == 0 {
                     break;
                 }
-                t.baseline.y = r.height + 1;
+                t.baseline.y = r.extent.height + 1;
                 row = 0;
                 if remaining != 0 {
                     cx.with_legacy(|| {
                         if !printer.sleepy {
                             g.batch();
                         }
-                        clear(input);
+                        clear(input, &junk, context);
                         g.set_fg_color(Rgba::rgb15(0, 31, 0));
                     });
                 }
@@ -286,7 +284,7 @@ pub(crate) mod live {
                 });
                 (saved, old_font, old_effect)
             });
-            make_report(input, cx, io, sound, text.as_ptr().cast(), length);
+            make_report(input, cx, io, sound, &context, text.as_ptr().cast(), length);
             cx.with_legacy(|| {
                 SetContextFontEffect(old_effect);
                 SetContextFont(old_font);

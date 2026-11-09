@@ -1,47 +1,21 @@
-//! Native interplanetary art, colormaps and music.
-use super::*;
-use crate::graphics::pixmap_abi::{CaptureDrawable, ReleaseDrawable};
-use crate::graphics::resgfx::LoadGraphicInstance;
-use crate::sound::{heart_ffi::DestroyMusic, resource_types::LoadMusicInstance};
-use crate::strings::sresins::LoadStringTableInstance;
-use crate::strings::string_table::{CaptureStringTable, DestroyStringTable, ReleaseStringTable};
+//! Retained interplanetary resources borrowed from the supplied campaign Kernel.
 
-use crate::graphics::drawable_abi::DestroyDrawable;
+use crate::engine::{kernel::solar_resources::SolarResources, Kernel};
+use crate::graphics::{drawable_abi::LoadedDrawable, native_abi::FRAME};
 
-#[no_mangle]
-pub unsafe extern "C" fn FreeIPData() {
-    DestroyDrawable(ReleaseDrawable(SISIPFRAME.cast()).cast());
-    SISIPFRAME = ptr::null_mut();
-    DestroyDrawable(ReleaseDrawable(SUN_FRAME.cast()).cast());
-    SUN_FRAME = ptr::null_mut();
-    DestroyStringTable(ReleaseStringTable(SUN_CMAP.cast()));
-    SUN_CMAP = ptr::null_mut();
-    DestroyStringTable(ReleaseStringTable(ORBITAL_CMAP.cast()));
-    ORBITAL_CMAP = ptr::null_mut();
-    DestroyDrawable(ReleaseDrawable(ORBITAL_FRAME.cast()).cast());
-    ORBITAL_FRAME = ptr::null_mut();
-    DestroyDrawable(ReleaseDrawable(SpaceJunkFrame.cast()).cast());
-    SpaceJunkFrame = ptr::null_mut();
-    DestroyMusic(SpaceMusic);
-    SpaceMusic = ptr::null_mut();
+pub(crate) fn retained(kernel: &Kernel) -> &SolarResources {
+    kernel
+        .solar_presentation
+        .assets
+        .as_ref()
+        .unwrap_or_else(|| panic!("interplanetary resources are not loaded"))
 }
 
-#[no_mangle]
-pub(super) unsafe extern "C" fn LoadIPData() {
-    if SpaceJunkFrame.is_null() {
-        SpaceJunkFrame =
-            CaptureDrawable(LoadGraphicInstance(c"graphics.orbitbackground".as_ptr()).cast())
-                .cast();
-        SISIPFRAME =
-            CaptureDrawable(LoadGraphicInstance(c"graphics.flagship".as_ptr()).cast()).cast();
-        ORBITAL_CMAP =
-            CaptureStringTable(LoadStringTableInstance(c"colortable.orbplan".as_ptr())).cast();
-        ORBITAL_FRAME =
-            CaptureDrawable(LoadGraphicInstance(c"graphics.planets".as_ptr()).cast()).cast();
-        SUN_CMAP =
-            CaptureStringTable(LoadStringTableInstance(c"colortable.truespace".as_ptr())).cast();
-        SUN_FRAME =
-            CaptureDrawable(LoadGraphicInstance(c"graphics.truespacesun".as_ptr()).cast()).cast();
-        SpaceMusic = LoadMusicInstance(c"music.space".as_ptr());
-    }
+pub(crate) fn frame(owner: &LoadedDrawable, index: u16) -> FRAME {
+    let first = owner
+        .lease()
+        .frame(0)
+        .unwrap_or_else(|| panic!("interplanetary drawable has no frame"));
+    // SAFETY: the supplied owner retains every frame in this native drawable.
+    unsafe { crate::graphics::pixmap_abi::SetAbsFrameIndex(first, index) }
 }
