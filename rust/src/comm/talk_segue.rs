@@ -441,7 +441,7 @@ pub mod dinput {
                 io.observer
                     .checkpoint(&CheckpointView::CommunicationReplay(false));
             }
-            unsafe { c_bridge::clear_subtitles(comm) };
+            c_bridge::clear_subtitles(comm);
 
             if ts.ended != 0 {
                 unsafe { super::set_slider_image_frame(comm, 8) };
@@ -1256,7 +1256,7 @@ fn check_subtitles(comm: &mut Comm) {
 
 fn clear_subtitles(comm: &mut Comm) {
     #[cfg(not(test))]
-    unsafe {
+    {
         let _ = comm;
         c_bridge::clear_subtitles(comm);
     }

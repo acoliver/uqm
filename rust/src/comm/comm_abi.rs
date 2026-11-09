@@ -269,6 +269,10 @@ mod owner_tests {
     #[test]
     #[serial_test::serial]
     fn subtitle_invalidation_drains_only_the_supplied_sessions_callbacks() {
+        let _: fn(&mut Comm) = clear_subtitles;
+        let _: fn(&mut Comm) = setup_subtitle_text_from_comm_data;
+        let _: fn(&mut Comm) -> *mut c_void = anim_context;
+        let _: fn(&mut Comm) = reset_clear_subtitles;
         fn move_baseline(comm: &mut Comm) {
             comm.data.alien_text_baseline.y = 23;
         }
