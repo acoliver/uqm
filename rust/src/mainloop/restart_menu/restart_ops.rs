@@ -442,8 +442,8 @@ impl RestartMenuOps for CffiOps<'_, '_, '_> {
             .seed
             .unwrap_or(0);
         self.legacy(|| {
-            seed_new_campaign(seed, || unsafe {
-                let _ = c_extern::SeedRandomNumbers();
+            seed_new_campaign(seed, || {
+                let _ = crate::ui::util::seed_random_numbers();
             })
         });
     }
@@ -529,10 +529,17 @@ impl RestartMenuOps for CffiOps<'_, '_, '_> {
         })
     }
     fn play_music(&self, handle: usize) {
-        self.legacy(|| {
-            // SAFETY: handle was obtained from LoadMusicInstance and is valid.
-            unsafe { c_extern::PlayMusic((handle as *mut c_void).cast(), 1, 1) }
-        })
+        self.owned(|cx, _| {
+            // SAFETY: handle is retained by this menu's music owner during admission.
+            unsafe {
+                crate::sound::music::remember_native_music(
+                    std::ptr::NonNull::new(handle as *mut c_void),
+                    true,
+                    1,
+                    cx.world.data.game.glob_flags & 8 == 0,
+                )
+            }
+        });
     }
     fn stop_music(&self) {
         self.legacy(|| {
