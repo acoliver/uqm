@@ -97,7 +97,7 @@ impl Harness {
     }
 
     fn set_star(&mut self, size: u8, color: u8) {
-        self.state.SunDesc[0].data_index = size;
+        self.state.sys.sun.data_index = size;
         self.state.generator_index = self.star_index;
         self.star[0].star_type = (color << 5) | 0b101;
         self.star[0].index = self.star_index;
@@ -122,8 +122,8 @@ impl Harness {
         case: (u8, u8, u32),
     ) -> (Vec<Desc>, u8, u32) {
         self.set_star(case.0, case.1);
-        self.state.PlanetDesc = unsafe { std::mem::zeroed() };
-        self.state.SunDesc[0].num_planets = 0;
+        self.state.sys.planets = unsafe { std::mem::zeroed() };
+        self.state.sys.sun.num_planets = 0;
         self.seed(case.2);
 
         assert!(unsafe {
@@ -132,8 +132,8 @@ impl Harness {
             })
         });
         (
-            self.state.PlanetDesc.iter().map(desc_of).collect(),
-            self.state.SunDesc[0].num_planets,
+            self.state.sys.planets.iter().map(desc_of).collect(),
+            self.state.sys.sun.num_planets,
             self.rng_position(),
         )
     }
@@ -146,13 +146,13 @@ impl Harness {
         planet_i: usize,
     ) -> (Vec<Desc>, u32) {
         self.set_star(case.0, case.1);
-        self.state.MoonDesc = unsafe { std::mem::zeroed() };
-        self.state.PlanetDesc = unsafe { std::mem::zeroed() };
-        let sun: *mut PlanetDesc = &mut self.state.SunDesc[0];
-        self.state.PlanetDesc[planet_i].prev_desc = sun;
-        self.state.PlanetDesc[planet_i].num_planets = case.3;
+        self.state.sys.moons = unsafe { std::mem::zeroed() };
+        self.state.sys.planets = unsafe { std::mem::zeroed() };
+        let sun: *mut PlanetDesc = &mut self.state.sys.sun;
+        self.state.sys.planets[planet_i].prev_desc = sun;
+        self.state.sys.planets[planet_i].num_planets = case.3;
         self.seed(case.2);
-        let _planet: *mut PlanetDesc = &mut self.state.PlanetDesc[planet_i];
+        let _planet: *mut PlanetDesc = &mut self.state.sys.planets[planet_i];
 
         assert!(unsafe {
             crate::invoke_generation(&raw mut *self.state, |system, host| {
@@ -160,28 +160,28 @@ impl Harness {
             })
         });
         (
-            self.state.MoonDesc.iter().map(desc_of).collect(),
+            self.state.sys.moons.iter().map(desc_of).collect(),
             self.rng_position(),
         )
     }
 
     /// The C `generateEnergy` slot on `body`; the node list it produces.
     fn c_energy(&mut self, table: &dyn SystemGenerator, body: Body, seed: u32) -> String {
-        self.state.PlanetDesc = unsafe { std::mem::zeroed() };
-        self.state.MoonDesc = unsafe { std::mem::zeroed() };
-        self.state.SysInfo = unsafe { std::mem::zeroed() };
-        self.state.SysInfo.planet_info.scan_seed = scan_seeds(seed);
-        let sun: *mut PlanetDesc = &mut self.state.SunDesc[0];
+        self.state.sys.planets = unsafe { std::mem::zeroed() };
+        self.state.sys.moons = unsafe { std::mem::zeroed() };
+        self.state.sys.info = unsafe { std::mem::zeroed() };
+        self.state.sys.info.planet_info.scan_seed = scan_seeds(seed);
+        let sun: *mut PlanetDesc = &mut self.state.sys.sun;
         let _world: *mut PlanetDesc = match body {
             Body::Planet(p) => {
-                self.state.PlanetDesc[usize::from(p)].prev_desc = sun;
-                &mut self.state.PlanetDesc[usize::from(p)]
+                self.state.sys.planets[usize::from(p)].prev_desc = sun;
+                &mut self.state.sys.planets[usize::from(p)]
             }
             Body::Moon { planet, moon } => {
-                let parent: *mut PlanetDesc = &mut self.state.PlanetDesc[usize::from(planet)];
-                self.state.PlanetDesc[usize::from(planet)].prev_desc = sun;
-                self.state.MoonDesc[usize::from(moon)].prev_desc = parent;
-                &mut self.state.MoonDesc[usize::from(moon)]
+                let parent: *mut PlanetDesc = &mut self.state.sys.planets[usize::from(planet)];
+                self.state.sys.planets[usize::from(planet)].prev_desc = sun;
+                self.state.sys.moons[usize::from(moon)].prev_desc = parent;
+                &mut self.state.sys.moons[usize::from(moon)]
             }
         };
 

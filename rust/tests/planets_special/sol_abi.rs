@@ -16,8 +16,8 @@ pub fn check() {
     h.seed(104729);
     let system = &raw mut *h.state;
     unsafe {
-        let world = &raw mut (*system).PlanetDesc[0];
-        (*world).prev_desc = &raw mut (*system).SunDesc[0];
+        let world = &raw mut (*system).sys.planets[0];
+        (*world).prev_desc = &raw mut (*system).sys.sun;
         assert!(!crate::invoke_generation(system, |view, host| table
             .pickup_energy(
                 view,
@@ -73,7 +73,7 @@ fn check_initialized_identity(h: &mut Harness) {
     };
     assert!(generated);
     assert_eq!(
-        h.state.SunDesc[0].num_planets, 9,
+        h.state.sys.sun.num_planets, 9,
         "the initialized Sol generator must survive a later star-index change"
     );
     h.set_star(0, 0);

@@ -12,27 +12,27 @@ use uqm_rust::state::game_state_keys::get_game_state;
 impl Ops for Harness {
     fn orbital(&mut self, case: Case) -> (bool, SystemInfo, u32) {
         self.set_star(case.layout.size, case.layout.color);
-        self.state.SysInfo = sol_orbital::initial_info(case.layout.seed);
-        self.state.PlanetDesc = unsafe { std::mem::zeroed() };
-        self.state.MoonDesc = unsafe { std::mem::zeroed() };
+        self.state.sys.info = sol_orbital::initial_info(case.layout.seed);
+        self.state.sys.planets = unsafe { std::mem::zeroed() };
+        self.state.sys.moons = unsafe { std::mem::zeroed() };
         let (desc, parent) = sol_orbital::input(case);
         let system = &raw mut *self.state;
         // All interior links and call arguments derive from this raw root.
         // The only resulting table pointer is into the static linked table.
         let world = unsafe {
-            let sun = &raw mut (*system).SunDesc[0];
+            let sun = &raw mut (*system).sys.sun;
             match case.body {
                 Body::Planet(p) => {
-                    let world = &raw mut (*system).PlanetDesc[usize::from(p)];
+                    let world = &raw mut (*system).sys.planets[usize::from(p)];
                     world.write(desc);
                     (*world).prev_desc = sun;
                     world
                 }
                 Body::Moon { planet, moon } => {
-                    let p = &raw mut (*system).PlanetDesc[usize::from(planet)];
+                    let p = &raw mut (*system).sys.planets[usize::from(planet)];
                     p.write(parent.unwrap());
                     (*p).prev_desc = sun;
-                    let world = &raw mut (*system).MoonDesc[usize::from(moon)];
+                    let world = &raw mut (*system).sys.moons[usize::from(moon)];
                     world.write(desc);
                     (*world).prev_desc = p;
                     world
@@ -50,8 +50,8 @@ impl Ops for Harness {
                 )
             })
         };
-        let info = self.state.SysInfo;
-        expected.SysInfo = info;
+        let info = self.state.sys.info;
+        expected.sys.info = info;
         assert_eq!(
             format!("{:?}", self.state),
             format!("{expected:?}"),

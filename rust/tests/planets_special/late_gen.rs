@@ -20,8 +20,8 @@ impl Ops for Harness {
     fn layout(&mut self, case: Layout, planets: &mut [PlanetDesc]) -> (bool, u8, u32) {
         self.star_index = case.star;
         self.set_star(case.size, case.color);
-        self.state.PlanetDesc.copy_from_slice(planets);
-        self.state.SunDesc[0].num_planets = 0;
+        self.state.sys.planets.copy_from_slice(planets);
+        self.state.sys.sun.num_planets = 0;
         uqm_rust::engine::World::current().write(|world| {
             (world).set_story_state(
                 uqm_rust::engine::StoryKey::SPATHI_SHIELDED_SELVES,
@@ -36,13 +36,13 @@ impl Ops for Harness {
                 table(case.kind).generate_planets(system, host)
             })
         };
-        expected.PlanetDesc = self.state.PlanetDesc;
-        expected.SunDesc[0].num_planets = self.state.SunDesc[0].num_planets;
+        expected.sys.planets = self.state.sys.planets;
+        expected.sys.sun.num_planets = self.state.sys.sun.num_planets;
         assert_eq!(format!("{:?}", self.state), format!("{expected:?}"));
-        planets.copy_from_slice(&self.state.PlanetDesc);
+        planets.copy_from_slice(&self.state.sys.planets);
         (
             result,
-            self.state.SunDesc[0].num_planets,
+            self.state.sys.sun.num_planets,
             self.rng_position(),
         )
     }
@@ -55,12 +55,12 @@ impl Ops for Harness {
     ) -> (bool, u32) {
         self.star_index = case.star;
         self.set_star(case.size, case.color);
-        self.state.MoonDesc.copy_from_slice(moons);
-        self.state.PlanetDesc = unsafe { std::mem::zeroed() };
-        let sun: *mut PlanetDesc = &mut self.state.SunDesc[0];
-        self.state.PlanetDesc[usize::from(planet)].prev_desc = sun;
-        self.state.PlanetDesc[usize::from(planet)].num_planets = count;
-        let _parent: *mut PlanetDesc = &mut self.state.PlanetDesc[usize::from(planet)];
+        self.state.sys.moons.copy_from_slice(moons);
+        self.state.sys.planets = unsafe { std::mem::zeroed() };
+        let sun: *mut PlanetDesc = &mut self.state.sys.sun;
+        self.state.sys.planets[usize::from(planet)].prev_desc = sun;
+        self.state.sys.planets[usize::from(planet)].num_planets = count;
+        let _parent: *mut PlanetDesc = &mut self.state.sys.planets[usize::from(planet)];
         self.seed(case.seed);
 
         let mut expected = *self.state;
@@ -69,9 +69,9 @@ impl Ops for Harness {
                 table(case.kind).generate_moons(system, planet, host)
             })
         };
-        expected.MoonDesc = self.state.MoonDesc;
+        expected.sys.moons = self.state.sys.moons;
         assert_eq!(format!("{:?}", self.state), format!("{expected:?}"));
-        moons.copy_from_slice(&self.state.MoonDesc);
+        moons.copy_from_slice(&self.state.sys.moons);
         (result, self.rng_position())
     }
     fn scan(&mut self, case: Scan, info: &SystemInfo, node: &mut NodeInfo) -> (u16, u32) {
@@ -84,28 +84,28 @@ impl Ops for Harness {
             uqm_rust::engine::World::current()
                 .write(|world| (world).set_story_state(key, u32::from(case.taken)));
         }
-        self.state.PlanetDesc = unsafe { std::mem::zeroed() };
-        self.state.MoonDesc = unsafe { std::mem::zeroed() };
-        self.state.SysInfo = *info;
-        let sun: *mut PlanetDesc = &mut self.state.SunDesc[0];
+        self.state.sys.planets = unsafe { std::mem::zeroed() };
+        self.state.sys.moons = unsafe { std::mem::zeroed() };
+        self.state.sys.info = *info;
+        let sun: *mut PlanetDesc = &mut self.state.sys.sun;
         let _world: *const PlanetDesc = match case.body {
             Body::Planet(p) => {
-                self.state.PlanetDesc[usize::from(p)].prev_desc = sun;
-                &self.state.PlanetDesc[usize::from(p)]
+                self.state.sys.planets[usize::from(p)].prev_desc = sun;
+                &self.state.sys.planets[usize::from(p)]
             }
             Body::Moon { planet, moon } => {
-                self.state.PlanetDesc[usize::from(planet)].prev_desc = sun;
-                let parent: *mut PlanetDesc = &mut self.state.PlanetDesc[usize::from(planet)];
-                self.state.MoonDesc[usize::from(moon)].prev_desc = parent;
-                &self.state.MoonDesc[usize::from(moon)]
+                self.state.sys.planets[usize::from(planet)].prev_desc = sun;
+                let parent: *mut PlanetDesc = &mut self.state.sys.planets[usize::from(planet)];
+                self.state.sys.moons[usize::from(moon)].prev_desc = parent;
+                &self.state.sys.moons[usize::from(moon)]
             }
         };
         match case.body {
             uqm_rust::planets::generate::special::Body::Planet(p) => {
-                self.state.PlanetDesc[usize::from(p)].data_index = case.frame
+                self.state.sys.planets[usize::from(p)].data_index = case.frame
             }
             uqm_rust::planets::generate::special::Body::Moon { moon, .. } => {
-                self.state.MoonDesc[usize::from(moon)].data_index = case.frame
+                self.state.sys.moons[usize::from(moon)].data_index = case.frame
             }
         }
         let generate =

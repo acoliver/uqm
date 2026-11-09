@@ -62,9 +62,9 @@ pub fn check() {
     harness.star_index = SPATHI_DEFINED;
     harness.set_star(0, 0);
     harness.seed(104729);
-    let sun = std::ptr::addr_of_mut!(harness.state.SunDesc[0]);
-    harness.state.PlanetDesc[0].prev_desc = sun;
-    let _world = std::ptr::addr_of_mut!(harness.state.PlanetDesc[0]);
+    let sun = std::ptr::addr_of_mut!(harness.state.sys.sun);
+    harness.state.sys.planets[0].prev_desc = sun;
+    let _world = std::ptr::addr_of_mut!(harness.state.sys.planets[0]);
 
     for retrieved in 0..=32 {
         uqm_rust::engine::World::current().write(|world| {
@@ -76,7 +76,7 @@ pub fn check() {
         uqm_rust::engine::World::current().write(|world| {
             (world).set_story_state(uqm_rust::engine::StoryKey::SPATHI_CREATURES_EXAMINED, 0)
         });
-        harness.state.SysInfo.planet_info.scan_retrieve_mask[BIOLOGICAL_SCAN] = if retrieved == 32 {
+        harness.state.sys.info.planet_info.scan_retrieve_mask[BIOLOGICAL_SCAN] = if retrieved == 32 {
             u32::MAX
         } else {
             (1_u32 << retrieved) - 1
@@ -109,8 +109,8 @@ pub fn check() {
         assert_eq!(format!("{:?}", harness.state), before);
         assert_eq!(harness.rng_position(), 104729);
     }
-    harness.state.PlanetDesc[1].prev_desc = sun;
-    let _other = std::ptr::addr_of_mut!(harness.state.PlanetDesc[1]);
+    harness.state.sys.planets[1].prev_desc = sun;
+    let _other = std::ptr::addr_of_mut!(harness.state.sys.planets[1]);
     uqm_rust::engine::World::current().write(|world| {
         (world).set_story_state(uqm_rust::engine::StoryKey::SPATHI_CREATURES_EXAMINED, 0)
     });
@@ -239,15 +239,15 @@ fn check_live_queues(harness: &mut Harness) {
                 .origin
         )
         .read();
-        let saved_sun = harness.state.SunDesc[0];
-        let saved_planet = harness.state.PlanetDesc[4];
+        let saved_sun = harness.state.sys.sun;
+        let saved_planet = harness.state.sys.planets[4];
         // units.h and solarsys.c: SIS height = screen height - 13;
         // DISPLAY_TO_LOC = ((SIS width >> 1) - 8) >> 1.
         let half_width = i32::from(uqm_rust::planets::generate::consts::MAP_WIDTH) >> 1;
         let half_height = (ScreenHeight - 13) >> 1;
         let display_to_loc = (half_width - 8) >> 1;
-        harness.state.SunDesc[0].radius = (display_to_loc * 10) as i16;
-        harness.state.PlanetDesc[4].image.origin = POINT {
+        harness.state.sys.sun.radius = (display_to_loc * 10) as i16;
+        harness.state.sys.planets[4].image.origin = POINT {
             x: (half_width + 12) as i16,
             y: (half_height - 9) as i16,
         };
@@ -282,8 +282,8 @@ fn check_live_queues(harness: &mut Harness) {
                 .origin
         )
         .write(saved_origin);
-        harness.state.SunDesc[0] = saved_sun;
-        harness.state.PlanetDesc[4] = saved_planet;
+        harness.state.sys.sun = saved_sun;
+        harness.state.sys.planets[4] = saved_planet;
         println!("live adapter checks: guard traversal, bomb queue reset, encounter reset and coordinate ABI");
     }
 }

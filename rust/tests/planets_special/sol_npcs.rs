@@ -45,7 +45,7 @@ pub fn check(h: &mut Harness) {
         );
         uqm_rust::engine::World::current().write(|world| c_api::init_group_info(world, 1));
         h.set_star(0, 0);
-        h.state.SunDesc[0].num_planets = 9;
+        h.state.sys.sun.num_planets = 9;
         let (saved_catalog, saved_star) =
             uqm_rust::engine::World::current().read(|world| (*world.catalog(), world.current_star));
         uqm_rust::engine::World::current().write(|world| {
@@ -171,9 +171,9 @@ pub fn check(h: &mut Harness) {
         assert_eq!(file(), saved_file);
 
         let system = &raw mut *h.state;
-        let parent = &raw mut (*system).PlanetDesc[2];
-        (*parent).prev_desc = &raw mut (*system).SunDesc[0];
-        let starbase = &raw mut (*system).MoonDesc[0];
+        let parent = &raw mut (*system).sys.planets[2];
+        (*parent).prev_desc = &raw mut (*system).sys.sun;
+        let starbase = &raw mut (*system).sys.moons[0];
         (*starbase).prev_desc = parent;
         for activity in [0, CHECK_ABORT, CHECK_LOAD, CHECK_ABORT | CHECK_LOAD] {
             uqm_rust::engine::World::current().write(|world| world.set_activity(activity));

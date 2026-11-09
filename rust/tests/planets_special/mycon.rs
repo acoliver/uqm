@@ -16,8 +16,8 @@ impl MyconOps for Harness {
     ) -> (bool, u8, u32) {
         self.star_index = star;
         self.set_star(case.0, case.1);
-        self.state.PlanetDesc.copy_from_slice(planets);
-        self.state.SunDesc[0].num_planets = 0;
+        self.state.sys.planets.copy_from_slice(planets);
+        self.state.sys.sun.num_planets = 0;
         self.seed(case.2);
 
         let result = unsafe {
@@ -25,10 +25,10 @@ impl MyconOps for Harness {
                 generateMyconFunctions.generate_planets(system, host)
             })
         };
-        planets.copy_from_slice(&self.state.PlanetDesc);
+        planets.copy_from_slice(&self.state.sys.planets);
         (
             result,
-            self.state.SunDesc[0].num_planets,
+            self.state.sys.sun.num_planets,
             self.rng_position(),
         )
     }
@@ -43,20 +43,20 @@ impl MyconOps for Harness {
                 u32::from(case.taken),
             )
         });
-        self.state.PlanetDesc = unsafe { std::mem::zeroed() };
-        self.state.MoonDesc = unsafe { std::mem::zeroed() };
-        self.state.SysInfo = mycon::scan_info(case);
-        let sun: *mut PlanetDesc = &mut self.state.SunDesc[0];
+        self.state.sys.planets = unsafe { std::mem::zeroed() };
+        self.state.sys.moons = unsafe { std::mem::zeroed() };
+        self.state.sys.info = mycon::scan_info(case);
+        let sun: *mut PlanetDesc = &mut self.state.sys.sun;
         let _world: *const PlanetDesc = match case.body {
             Body::Planet(p) => {
-                self.state.PlanetDesc[usize::from(p)].prev_desc = sun;
-                &self.state.PlanetDesc[usize::from(p)]
+                self.state.sys.planets[usize::from(p)].prev_desc = sun;
+                &self.state.sys.planets[usize::from(p)]
             }
             Body::Moon { planet, moon } => {
-                self.state.PlanetDesc[usize::from(planet)].prev_desc = sun;
-                let parent: *mut PlanetDesc = &mut self.state.PlanetDesc[usize::from(planet)];
-                self.state.MoonDesc[usize::from(moon)].prev_desc = parent;
-                &self.state.MoonDesc[usize::from(moon)]
+                self.state.sys.planets[usize::from(planet)].prev_desc = sun;
+                let parent: *mut PlanetDesc = &mut self.state.sys.planets[usize::from(planet)];
+                self.state.sys.moons[usize::from(moon)].prev_desc = parent;
+                &self.state.sys.moons[usize::from(moon)]
             }
         };
         let generate =

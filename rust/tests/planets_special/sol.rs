@@ -10,8 +10,8 @@ use uqm_rust::state::game_state_keys::get_game_state;
 impl Ops for Harness {
     fn planets(&mut self, case: Layout, descs: &mut [PlanetDesc; 16]) -> (bool, u8, u32) {
         self.set_star(case.size, case.color);
-        self.state.PlanetDesc = *descs;
-        self.state.SunDesc[0].num_planets = 0x7f;
+        self.state.sys.planets = *descs;
+        self.state.sys.sun.num_planets = 0x7f;
         self.seed(case.seed);
         let mut expected = *self.state;
         let result = unsafe {
@@ -19,9 +19,9 @@ impl Ops for Harness {
                 generateSolFunctions.generate_planets(system, host)
             })
         };
-        *descs = self.state.PlanetDesc;
-        expected.PlanetDesc = *descs;
-        expected.SunDesc[0].num_planets = self.state.SunDesc[0].num_planets;
+        *descs = self.state.sys.planets;
+        expected.sys.planets = *descs;
+        expected.sys.sun.num_planets = self.state.sys.sun.num_planets;
         assert_eq!(
             format!("{:?}", self.state),
             format!("{expected:?}"),
@@ -29,7 +29,7 @@ impl Ops for Harness {
         );
         (
             result,
-            self.state.SunDesc[0].num_planets,
+            self.state.sys.sun.num_planets,
             self.rng_position(),
         )
     }
@@ -42,16 +42,16 @@ impl Ops for Harness {
         descs: &mut [PlanetDesc; 4],
     ) -> (bool, u32) {
         self.set_star(case.size, case.color);
-        self.state.MoonDesc = *descs;
-        self.state.PlanetDesc = unsafe { std::mem::zeroed() };
-        self.state.PlanetDesc[usize::from(planet)].num_planets = count;
+        self.state.sys.moons = *descs;
+        self.state.sys.planets = unsafe { std::mem::zeroed() };
+        self.state.sys.planets[usize::from(planet)].num_planets = count;
         self.seed(case.seed);
         // Derive both C arguments and the parent link from one raw root. No
         // covering Rust mutable reference is created while C uses the links.
         let system = &raw mut *self.state;
         let (mut expected, result) = unsafe {
-            let parent = &raw mut (*system).PlanetDesc[usize::from(planet)];
-            (*parent).prev_desc = &raw mut (*system).SunDesc[0];
+            let parent = &raw mut (*system).sys.planets[usize::from(planet)];
+            (*parent).prev_desc = &raw mut (*system).sys.sun;
             let expected = *system;
             (
                 expected,
@@ -60,8 +60,8 @@ impl Ops for Harness {
                 }),
             )
         };
-        *descs = self.state.MoonDesc;
-        expected.MoonDesc = *descs;
+        *descs = self.state.sys.moons;
+        expected.sys.moons = *descs;
         assert_eq!(
             format!("{:?}", self.state),
             format!("{expected:?}"),
@@ -84,22 +84,22 @@ impl Ops for Harness {
                 u32::from(case.destroyed),
             )
         });
-        self.state.SysInfo = *info;
-        self.state.PlanetDesc = unsafe { std::mem::zeroed() };
-        self.state.MoonDesc = unsafe { std::mem::zeroed() };
+        self.state.sys.info = *info;
+        self.state.sys.planets = unsafe { std::mem::zeroed() };
+        self.state.sys.moons = unsafe { std::mem::zeroed() };
         let system = &raw mut *self.state;
         let _world = unsafe {
-            let sun = &raw mut (*system).SunDesc[0];
+            let sun = &raw mut (*system).sys.sun;
             match case.body {
                 Body::Planet(p) => {
-                    (*system).PlanetDesc[usize::from(p)].prev_desc = sun;
-                    &raw const (*system).PlanetDesc[usize::from(p)]
+                    (*system).sys.planets[usize::from(p)].prev_desc = sun;
+                    &raw const (*system).sys.planets[usize::from(p)]
                 }
                 Body::Moon { planet, moon } => {
-                    (*system).PlanetDesc[usize::from(planet)].prev_desc = sun;
-                    (*system).MoonDesc[usize::from(moon)].prev_desc =
-                        &raw mut (*system).PlanetDesc[usize::from(planet)];
-                    &raw const (*system).MoonDesc[usize::from(moon)]
+                    (*system).sys.planets[usize::from(planet)].prev_desc = sun;
+                    (*system).sys.moons[usize::from(moon)].prev_desc =
+                        &raw mut (*system).sys.planets[usize::from(planet)];
+                    &raw const (*system).sys.moons[usize::from(moon)]
                 }
             }
         };

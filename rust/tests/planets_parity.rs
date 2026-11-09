@@ -123,7 +123,7 @@ impl SuppliedGenerators {
     }
 
     fn set_star(&mut self, size: u8, star_type: u8) {
-        self.state.SunDesc[0].data_index = size;
+        self.state.sys.sun.data_index = size;
         self.star[0].star_type = star_type;
         uqm_rust::engine::World::current().write(|world| {
             world.set_catalog(std::borrow::Cow::Owned(*self.star));
@@ -132,7 +132,7 @@ impl SuppliedGenerators {
     }
 
     fn select_info(&mut self, info: &SystemInfo) {
-        self.state.SysInfo = *info;
+        self.state.sys.info = *info;
         let Some(index) = uqm_rust::planets::tables::PLANET_ARRAY
             .0
             .iter()
@@ -143,7 +143,7 @@ impl SuppliedGenerators {
         else {
             panic!("fixture analysis retains an immutable planet frame");
         };
-        self.state.PlanetDesc[0].data_index = index;
+        self.state.sys.planets[0].data_index = index;
     }
 
     fn with_scan<R>(
@@ -169,20 +169,20 @@ impl Generators for SuppliedGenerators {
         desc.radius = case.desc_radius;
         let body = match case.parent_radius {
             None => {
-                desc.prev_desc = &raw mut self.state.SunDesc[0];
-                self.state.PlanetDesc[0] = desc;
+                desc.prev_desc = &raw mut self.state.sys.sun;
+                self.state.sys.planets[0] = desc;
                 Body::Planet(0)
             }
             Some(radius) => {
                 let mut parent: PlanetDesc = unsafe { std::mem::zeroed() };
                 parent.radius = radius;
-                self.state.PlanetDesc[0] = parent;
-                desc.prev_desc = &raw mut self.state.PlanetDesc[0];
-                self.state.MoonDesc[0] = desc;
+                self.state.sys.planets[0] = parent;
+                desc.prev_desc = &raw mut self.state.sys.planets[0];
+                self.state.sys.moons[0] = desc;
                 Body::Moon { planet: 0, moon: 0 }
             }
         };
-        self.state.SysInfo = SystemInfo::default();
+        self.state.sys.info = SystemInfo::default();
         unsafe {
             crate::invoke_generation(&raw mut *self.state, |system, _| {
                 if case.is_orbit_entry {
@@ -227,12 +227,12 @@ impl Generators for SuppliedGenerators {
 
     fn fill_orbits(&mut self, case: &OrbitCase, descs: &mut [PlanetDesc]) -> Option<u8> {
         self.set_star(case.star_size, (case.star_color << 5) | 0b101);
-        self.state.SunDesc[0].num_planets = 0;
+        self.state.sys.sun.num_planets = 0;
         let moons = case.mode.generating_moons();
         if moons {
-            self.state.MoonDesc[..descs.len()].copy_from_slice(descs);
+            self.state.sys.moons[..descs.len()].copy_from_slice(descs);
         } else {
-            self.state.PlanetDesc[..descs.len()].copy_from_slice(descs);
+            self.state.sys.planets[..descs.len()].copy_from_slice(descs);
         }
         let slots = if case.mode.num_planets() == u8::MAX {
             9
@@ -265,11 +265,11 @@ impl Generators for SuppliedGenerators {
             });
         }
         if moons {
-            descs.copy_from_slice(&self.state.MoonDesc[..descs.len()]);
+            descs.copy_from_slice(&self.state.sys.moons[..descs.len()]);
         } else {
-            descs.copy_from_slice(&self.state.PlanetDesc[..descs.len()]);
+            descs.copy_from_slice(&self.state.sys.planets[..descs.len()]);
         }
-        let drawn = self.state.SunDesc[0].num_planets;
+        let drawn = self.state.sys.sun.num_planets;
         (case.mode.num_planets() == u8::MAX).then_some(drawn)
     }
 }
@@ -278,8 +278,8 @@ impl Generators for SuppliedGenerators {
 impl DefaultOps for SuppliedGenerators {
     fn planets(&mut self, star_size: u8, star_color: u8, seed: u32) -> Layout {
         self.set_star(star_size, (star_color << 5) | 0b101);
-        self.state.PlanetDesc = unsafe { std::mem::zeroed() };
-        self.state.SunDesc[0].num_planets = 0;
+        self.state.sys.planets = unsafe { std::mem::zeroed() };
+        self.state.sys.sun.num_planets = 0;
         let rng = unsafe {
             reseed_c(SysGenRNG, seed);
             assert!(crate::invoke_generation(
@@ -289,9 +289,9 @@ impl DefaultOps for SuppliedGenerators {
             ));
             (*SysGenRNG).seed()
         };
-        let drawn = self.state.SunDesc[0].num_planets;
+        let drawn = self.state.sys.sun.num_planets;
         Layout {
-            worlds: self.state.PlanetDesc[..usize::from(drawn)]
+            worlds: self.state.sys.planets[..usize::from(drawn)]
                 .iter()
                 .map(default_gen::world_of)
                 .collect(),
@@ -302,8 +302,8 @@ impl DefaultOps for SuppliedGenerators {
 
     fn moons(&mut self, star_size: u8, star_color: u8, seed: u32, count: u8) -> Layout {
         self.set_star(star_size, (star_color << 5) | 0b101);
-        self.state.MoonDesc = unsafe { std::mem::zeroed() };
-        self.state.PlanetDesc[0].num_planets = count;
+        self.state.sys.moons = unsafe { std::mem::zeroed() };
+        self.state.sys.planets[0].num_planets = count;
         let rng = unsafe {
             reseed_c(SysGenRNG, seed);
             assert!(crate::invoke_generation(
@@ -314,7 +314,7 @@ impl DefaultOps for SuppliedGenerators {
             (*SysGenRNG).seed()
         };
         Layout {
-            worlds: self.state.MoonDesc[..usize::from(count)]
+            worlds: self.state.sys.moons[..usize::from(count)]
                 .iter()
                 .map(default_gen::world_of)
                 .collect(),
