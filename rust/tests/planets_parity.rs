@@ -153,7 +153,7 @@ impl SuppliedGenerators {
     ) -> R {
         self.select_info(info);
         unsafe {
-            crate::invoke_generation(&raw mut *self.state, |system, _| {
+            crate::invoke_generation(&mut *self.state, |system, _| {
                 system.scan(Body::Planet(0), run)
             })
         }
@@ -184,7 +184,7 @@ impl Generators for SuppliedGenerators {
         };
         self.state.sys.info = SystemInfo::default();
         unsafe {
-            crate::invoke_generation(&raw mut *self.state, |system, _| {
+            crate::invoke_generation(&mut *self.state, |system, _| {
                 if case.is_orbit_entry {
                     calc::analyse_body(system, body);
                     system.orbital(body, |data| *data.info)
@@ -248,7 +248,7 @@ impl Generators for SuppliedGenerators {
         };
         unsafe {
             reseed_c(SysGenRNG, case.seed);
-            crate::invoke_generation(&raw mut *self.state, |system, _| {
+            crate::invoke_generation(&mut *self.state, |system, _| {
                 if moons {
                     system.layout_moons(0, |rng, size, color, _, worlds| {
                         assert_eq!(size, request.star_size);
@@ -283,7 +283,7 @@ impl DefaultOps for SuppliedGenerators {
         let rng = unsafe {
             reseed_c(SysGenRNG, seed);
             assert!(crate::invoke_generation(
-                &raw mut *self.state,
+                &mut *self.state,
                 |system, host| uqm_rust::planets::generate::generator(0)
                     .generate_planets(system, host)
             ));
@@ -307,7 +307,7 @@ impl DefaultOps for SuppliedGenerators {
         let rng = unsafe {
             reseed_c(SysGenRNG, seed);
             assert!(crate::invoke_generation(
-                &raw mut *self.state,
+                &mut *self.state,
                 |system, host| uqm_rust::planets::generate::generator(0)
                     .generate_moons(system, 0, host)
             ));
@@ -446,7 +446,7 @@ fn supplied_views_reproduce_the_c_fixtures() {
         topography_parity::full_c_fixture_core_and_host_parity();
         sphere_geometry_parity::original_c_and_rust_match_fixture_without_rng_effects();
         assert!(unsafe {
-            crate::invoke_generation(&raw mut *exports.state, |system, host| {
+            crate::invoke_generation(&mut *exports.state, |system, host| {
                 let generator = uqm_rust::planets::generate::generator(0);
                 let body = uqm_rust::planets::generate::special::Body::Planet(0);
                 generator.pickup_minerals(system, body, 0, host)

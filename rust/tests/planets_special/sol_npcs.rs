@@ -68,7 +68,7 @@ pub fn check(h: &mut Harness) {
             (world).set_story_state(uqm_rust::engine::StoryKey::PROBE_MESSAGE_DELIVERED, 0)
         });
         assert!(crate::invoke_generation(
-            &raw mut *h.state,
+            &mut *h.state,
             |system, host| GENERATE_SOL_FUNCTIONS.init_npcs(system, host)
         ));
         let probe_ref =
@@ -109,7 +109,7 @@ pub fn check(h: &mut Harness) {
         assert!(saved_file.len() > probe_ref as usize);
         // Loading the saved reference does not create a second group record.
         assert!(crate::invoke_generation(
-            &raw mut *h.state,
+            &mut *h.state,
             |system, host| GENERATE_SOL_FUNCTIONS.init_npcs(system, host)
         ));
         assert_eq!(
@@ -125,13 +125,13 @@ pub fn check(h: &mut Harness) {
             groups.get_mut(head).task = uqm_rust::planets::generate::default::REFORM_GROUP;
         });
         assert!(crate::invoke_generation(
-            &raw mut *h.state,
+            &mut *h.state,
             |system, host| GENERATE_SOL_FUNCTIONS.uninit_npcs(system, host)
         ));
         assert!(uqm_rust::engine::World::current()
             .read(|world| world.npc_built_ships_ref().head().is_none()));
         assert!(crate::invoke_generation(
-            &raw mut *h.state,
+            &mut *h.state,
             |system, host| GENERATE_SOL_FUNCTIONS.reinit_npcs(system, host)
         ));
         assert_eq!(
@@ -161,7 +161,7 @@ pub fn check(h: &mut Harness) {
             (world).set_story_state(uqm_rust::engine::StoryKey::PROBE_MESSAGE_DELIVERED, 1)
         });
         assert!(crate::invoke_generation(
-            &raw mut *h.state,
+            &mut *h.state,
             |system, host| GENERATE_SOL_FUNCTIONS.init_npcs(system, host)
         ));
         assert_eq!(

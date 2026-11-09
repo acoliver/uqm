@@ -15,7 +15,7 @@ impl Ops for Harness {
         self.seed(case.seed);
         let mut expected = *self.state;
         let result = unsafe {
-            crate::invoke_generation(&raw mut *self.state, |system, host| {
+            crate::invoke_generation(&mut *self.state, |system, host| {
                 generateSolFunctions.generate_planets(system, host)
             })
         };

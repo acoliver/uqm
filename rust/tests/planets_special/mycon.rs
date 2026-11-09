@@ -21,7 +21,7 @@ impl MyconOps for Harness {
         self.seed(case.2);
 
         let result = unsafe {
-            crate::invoke_generation(&raw mut *self.state, |system, host| {
+            crate::invoke_generation(&mut *self.state, |system, host| {
                 generateMyconFunctions.generate_planets(system, host)
             })
         };
@@ -72,14 +72,14 @@ impl MyconOps for Harness {
         self.seed(case.seed);
         let before = format!("{:?}", self.state);
         let count = unsafe {
-            crate::invoke_generation(&raw mut *self.state, |view, host| {
+            crate::invoke_generation(&mut *self.state, |view, host| {
                 generate(view, node, host)
             })
         };
         let after_rng = self.rng_position();
         self.seed(case.seed);
         let count_only = unsafe {
-            crate::invoke_generation(&raw mut *self.state, |view, host| {
+            crate::invoke_generation(&mut *self.state, |view, host| {
                 generate(view, &mut crate::planets_common::fresh_node(), host)
             })
         };

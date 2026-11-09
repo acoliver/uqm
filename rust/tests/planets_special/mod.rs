@@ -127,7 +127,7 @@ impl Harness {
         self.seed(case.2);
 
         assert!(unsafe {
-            crate::invoke_generation(&raw mut *self.state, |system, host| {
+            crate::invoke_generation(&mut *self.state, |system, host| {
                 table.generate_planets(system, host)
             })
         });
@@ -155,7 +155,7 @@ impl Harness {
         let _planet: *mut PlanetDesc = &mut self.state.sys.planets[planet_i];
 
         assert!(unsafe {
-            crate::invoke_generation(&raw mut *self.state, |system, host| {
+            crate::invoke_generation(&mut *self.state, |system, host| {
                 table.generate_moons(system, planet_i as u8, host)
             })
         });

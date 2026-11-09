@@ -100,7 +100,7 @@ fn check_bomb_queue(h: &mut Harness) {
             saved
         });
         assert!(crate::invoke_generation(
-            &raw mut *h.state,
+            &mut *h.state,
             |system, host| GENERATE_SOL_FUNCTIONS.reinit_npcs(system, host)
         ));
         uqm_rust::engine::World::current().write(|world| {
