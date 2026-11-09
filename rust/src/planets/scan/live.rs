@@ -439,7 +439,7 @@ unsafe fn pick_side(
     );
     let status = LanderStatus::campaign(cx.world);
     let radar = ContextLease::require(cx.kernel.radar_context);
-    prepare_pick_side(solar, cx, scan, input, &radar, &assets, status);
+    prepare_pick_side(solar, cx, scan, &radar, &assets, status);
     io.observer.checkpoint(&CheckpointView::PlanetMenu(4));
     solar.run_input(cx, io, true, |cx, _, _| {
         let activity = cx.world.activity();
@@ -461,11 +461,13 @@ unsafe fn prepare_pick_side(
     solar: &mut SolarSystem,
     cx: &mut Cx<'_>,
     scan: &ScanState,
-    input: &InputSession,
     radar: &ContextLease,
     assets: &crate::planet_side::resources::PlanetSideAssets,
     status: LanderStatus,
 ) {
+    let runtime = cx.kernel.input_runtime();
+    let input = runtime.input();
+    let g = Graphics::new(cx.kernel, cx.screen_dimensions());
     let fuel = fuel(solar);
     let dimensions = cx.screen_dimensions();
     crate::ui::sis::clear_sis_rect(cx.kernel, cx.world, dimensions, 1 << 2);
