@@ -235,6 +235,7 @@ unsafe fn spawn_fwiffo() {
 }
 
 unsafe fn dispatch_lander(
+    solar: &mut SolarSystem,
     planet: &ContextLease,
     scan: &ScanState,
     cx: &mut Cx<'_>,
@@ -391,6 +392,7 @@ unsafe fn pick_input(
 }
 
 unsafe fn pick_side(
+    solar: &mut SolarSystem,
     planet: &ContextLease,
     scan: &ScanState,
     cx: &mut Cx<'_>,
@@ -426,6 +428,7 @@ unsafe fn pick_side(
 }
 
 unsafe fn prepare_pick_side(
+    solar: &mut SolarSystem,
     cx: &mut Cx<'_>,
     scan: &ScanState,
     input: &InputSession,
@@ -459,7 +462,12 @@ unsafe fn prepare_pick_side(
     });
 }
 
-unsafe fn scanned_stuff(cx: &mut crate::engine::battle::Cx<'_>, y: u16, scan: u16) {
+unsafe fn scanned_stuff(
+    solar: &SolarSystem,
+    cx: &mut crate::engine::battle::Cx<'_>,
+    y: u16,
+    scan: u16,
+) {
     let g = CffiPlatform;
     let old_color = g.set_fg_color(Rgba::BLACK);
     {
@@ -518,6 +526,7 @@ unsafe fn scanned_stuff(cx: &mut crate::engine::battle::Cx<'_>, y: u16, scan: u1
 }
 
 unsafe fn scan_planet(
+    solar: &mut SolarSystem,
     scan_state: &ScanState,
     planet: &ContextLease,
     input: &InputSession,
@@ -612,6 +621,7 @@ unsafe fn unavailable() -> bool {
 }
 
 unsafe fn scan_input(
+    solar: &mut SolarSystem,
     scan: &ScanState,
     planet: &ContextLease,
     cx: &mut Cx<'_>,
@@ -678,6 +688,7 @@ unsafe fn scan_input(
 }
 
 pub unsafe fn scan_system(
+    solar: &mut SolarSystem,
     scan: &ScanState,
     planet: &ContextLease,
     cx: &mut Cx<'_>,
@@ -697,6 +708,7 @@ pub unsafe fn scan_system(
 }
 
 unsafe fn prepare_scan_system(
+    solar: &mut SolarSystem,
     cx: &mut Cx<'_>,
     scan: &ScanState,
     planet: &ContextLease,

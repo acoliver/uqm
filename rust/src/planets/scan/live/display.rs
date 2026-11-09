@@ -54,7 +54,7 @@ unsafe fn pc_value(x: i16, y: i16, label: i32, value: String) {
     text(x + rect.width, y, Align::Left, value);
 }
 
-pub(super) unsafe fn coarse(planet: &ContextLease, style: i32) {
+pub(super) unsafe fn coarse(solar: &SolarSystem, planet: &ContextLease, style: i32) {
     if style == 2 {
         pc(planet);
     } else {
@@ -62,7 +62,7 @@ pub(super) unsafe fn coarse(planet: &ContextLease, style: i32) {
     }
 }
 
-unsafe fn pc(planet: &ContextLease) {
+unsafe fn pc(solar: &SolarSystem, planet: &ContextLease) {
     let info = (*solar_system::current()).SysInfo.planet_info;
     let g = CffiPlatform;
     planet.select();
@@ -143,7 +143,7 @@ unsafe fn pc(planet: &ContextLease) {
     );
 }
 
-unsafe fn three_do(planet: &ContextLease) {
+unsafe fn three_do(solar: &SolarSystem, planet: &ContextLease) {
     let info = (*solar_system::current()).SysInfo.planet_info;
     let g = CffiPlatform;
     planet.select();

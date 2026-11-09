@@ -107,7 +107,7 @@ fn options(keys: &[u32]) -> (u32, u8, [u8; 16], [u8; 16]) {
     let result = unsafe {
         uqm_rust::app::bridge::with_game(&mut game, || {
             uqm_rust::app::bridge::enter(|cx| {
-                uqm_rust::front_end::gameopt::game_options(cx, &mut io)
+                uqm_rust::front_end::gameopt::game_options(cx, &mut io, None)
             })
         })
     };

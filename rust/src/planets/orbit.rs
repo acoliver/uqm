@@ -326,6 +326,7 @@ pub(crate) mod live {
     unsafe fn do_orbit(
         cx: &mut Cx<'_>,
         io: &mut Io<'_>,
+        solar: &mut SolarSystem,
         planet: &ContextLease,
         scan: &ScanState,
         menu: &mut MENU_STATE,
@@ -412,6 +413,7 @@ pub(crate) mod live {
     pub unsafe fn planet_orbit_menu(
         cx: &mut Cx<'_>,
         io: &mut Io<'_>,
+        solar: &mut SolarSystem,
         presentation: &OrbitPresentation,
     ) {
         let runtime = cx.kernel.input_runtime();

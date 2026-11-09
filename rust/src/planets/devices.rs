@@ -155,7 +155,11 @@ unsafe fn orbit_is(planet: u8) -> bool {
     playerInPlanetOrbit() && matchWorld(system, (*system).pOrbitalDesc, planet, 255)
 }
 
-unsafe fn use_caster(cx: &mut Cx<'_>, next_activity: &mut u16) -> bool {
+unsafe fn use_caster(
+    cx: &mut Cx<'_>,
+    solar: Option<&SolarSystem>,
+    next_activity: &mut u16,
+) -> bool {
     if in_hqspace(cx.world) != 0 {
         if get(cx.world, StoryKey::ARILOU_SPACE_SIDE) <= 1 {
             set(cx.world, StoryKey::USED_BROADCASTER, 1);
@@ -208,7 +212,12 @@ unsafe fn use_caster(cx: &mut Cx<'_>, next_activity: &mut u16) -> bool {
 }
 
 /// Returns the original DeviceStatus (failure, success, success without sound).
-unsafe fn invoke(cx: &mut Cx<'_>, id: u8, next_activity: &mut u16) -> u8 {
+unsafe fn invoke(
+    cx: &mut Cx<'_>,
+    solar: Option<&SolarSystem>,
+    id: u8,
+    next_activity: &mut u16,
+) -> u8 {
     match id {
         4..=6 => repair_ultron(cx.world, ULTRON_COMPONENTS[usize::from(id - 4)]),
         3 => {
@@ -285,6 +294,7 @@ unsafe fn frame(
     cx: &mut Cx<'_>,
     io: &mut Io<'_>,
     input: &crate::engine::input::InputSession,
+    solar: Option<&SolarSystem>,
     menu: &mut Menu,
     next_activity: &mut u16,
 ) -> i32 {

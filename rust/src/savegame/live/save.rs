@@ -14,7 +14,11 @@ pub use save_game as SaveGame;
 
 /// # Safety
 /// The game thread retains the active solar session and initialized star catalog.
-pub(crate) unsafe fn capture(cx: &mut Cx<'_>, name: &[u8]) -> anyhow::Result<SaveFile> {
+pub(crate) unsafe fn capture(
+    cx: &mut Cx<'_>,
+    solar: Option<SolarSnapshot>,
+    name: &[u8],
+) -> anyhow::Result<SaveFile> {
     let star = live::capture_live_star(cx.world)?;
     let point = cx.world.data.game.ip_location;
     if in_hqspace(cx.world) != 0 {
@@ -32,6 +36,7 @@ pub(crate) unsafe fn capture(cx: &mut Cx<'_>, name: &[u8]) -> anyhow::Result<Sav
 /// Game thread; summary and name must point to live writable/terminated objects.
 pub unsafe fn save_game(
     cx: &mut Cx<'_>,
+    solar: Option<&SolarSystem>,
     slot: u16,
     summary: *mut SummaryDesc,
     name: *const c_char,

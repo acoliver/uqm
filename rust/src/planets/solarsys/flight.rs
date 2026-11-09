@@ -253,7 +253,10 @@ pub(super) unsafe fn flagship_inertial_thrust(
     0
 }
 
-pub(super) unsafe fn process_ship_controls(input: &crate::engine::input::InputSession) {
+pub(super) unsafe fn process_ship_controls(
+    solar: &mut SolarSystem,
+    input: &crate::engine::input::InputSession,
+) {
     let state = system();
     let game = ptr::addr_of_mut!((**glob()).game);
     let player = input.player_controls()[0] as usize;
@@ -423,7 +426,7 @@ pub(super) unsafe fn check_ship_location(
     (0, None)
 }
 
-pub(super) unsafe fn scale_system(cx: &mut Cx<'_>, new_radius: c::SIZE) {
+pub(super) unsafe fn scale_system(cx: &mut Cx<'_>, solar: &mut SolarSystem, new_radius: c::SIZE) {
     let rect = cx.with_legacy(|| {
         let lease = glob();
         let game = ptr::addr_of_mut!((**lease).game);
@@ -458,7 +461,11 @@ pub(super) unsafe fn restore_system_view() {
     DrawStamp((&raw mut stamp).cast());
 }
 
-pub(super) unsafe fn ip_frame(cx: &mut Cx<'_>, io: &mut crate::engine::observe::Io<'_>) {
+pub(super) unsafe fn ip_frame(
+    cx: &mut Cx<'_>,
+    io: &mut crate::engine::observe::Io<'_>,
+    solar: &mut SolarSystem,
+) {
     let runtime = cx.kernel.input_runtime();
     let input = runtime.input();
     let ((location_change, inner_planet), new_radius) = cx.with_legacy(|| {

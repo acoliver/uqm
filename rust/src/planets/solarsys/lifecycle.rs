@@ -294,7 +294,7 @@ pub(super) unsafe fn free_solar_sys() {
     ffi::stop_music();
 }
 
-pub(super) unsafe fn reset_solar_sys(cx: &mut Cx<'_>, next_activity: u16) {
+pub(super) unsafe fn reset_solar_sys(cx: &mut Cx<'_>, solar: &mut SolarSystem, next_activity: u16) {
     cx.with_legacy(|| {
         let state = system();
         assert!((*state).InIpFlight == 0);
@@ -349,7 +349,11 @@ unsafe fn run_planet_orbit(cx: &mut Cx<'_>, io: &mut Io<'_>) {
     finish_planet_orbit(cx, io);
 }
 
-unsafe fn prepare_planet_orbit(cx: &mut Cx<'_>, io: &mut Io<'_>) -> OrbitAdmission {
+unsafe fn prepare_planet_orbit(
+    cx: &mut Cx<'_>,
+    io: &mut Io<'_>,
+    solar: &mut SolarSystem,
+) -> OrbitAdmission {
     let state = system();
     cx.with_legacy(|| {
         if (*state).InIpFlight != 0 {
@@ -443,6 +447,7 @@ unsafe fn start_solar_sys(cx: &mut Cx<'_>, io: &mut Io<'_>) {
 unsafe fn prepare_solar_sys(
     cx: &mut Cx<'_>,
     io: &mut Io<'_>,
+    solar: &mut SolarSystem,
     next_activity: u16,
 ) -> SolarSystemStart {
     cx.with_legacy(|| super::resources::LoadIPData());
@@ -731,6 +736,7 @@ pub unsafe extern "C" fn SaveSolarSysLocation() {
 unsafe fn do_solar_sys_menu(
     cx: &mut Cx<'_>,
     io: &mut Io<'_>,
+    solar: &mut SolarSystem,
     menu: &mut c::MENU_STATE,
 ) -> c::BOOLEAN {
     let runtime = cx.kernel.input_runtime();

@@ -206,7 +206,7 @@ pub(super) unsafe fn draw_outer_system(cx: &mut Cx<'_>) {
     crate::ui::sis::draw_hyper_coords(cx.kernel, cx.screen_dimensions().0, point);
 }
 
-pub(super) unsafe fn draw_system_transition(cx: &mut Cx<'_>, inner: bool) {
+pub(super) unsafe fn draw_system_transition(cx: &mut Cx<'_>, solar: &mut SolarSystem, inner: bool) {
     cx.with_legacy(|| {
         SetTransitionSource(std::ptr::null_mut());
         BatchGraphics();
@@ -223,7 +223,7 @@ pub(super) unsafe fn draw_system_transition(cx: &mut Cx<'_>, inner: bool) {
     });
 }
 
-pub(super) unsafe fn draw_system(radius: c::SIZE, inner: bool) {
+pub(super) unsafe fn draw_system(solar: &mut SolarSystem, radius: c::SIZE, inner: bool) {
     let s = system();
     if SOLAR_SYS_FRAME.is_null() {
         let mut clip: c::RECT = std::mem::zeroed();

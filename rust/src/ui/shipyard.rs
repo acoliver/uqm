@@ -672,7 +672,7 @@ pub unsafe fn do_shipyard(cx: &mut Cx<'_>, menu: &mut MENU_STATE, input: &InputS
         let mut io = crate::engine::observe::Io {
             observer: &mut *cx.kernel.input_runtime().observer(),
         };
-        if crate::front_end::gameopt::game_options(cx, &mut io) == 0 {
+        if crate::front_end::gameopt::game_options(cx, &mut io, None) == 0 {
             return cx.with_legacy(|| exit_shipyard(input, menu));
         }
         draw_campaign_menu(cx, PM_CREW as BYTE, menu.CurState as i16);

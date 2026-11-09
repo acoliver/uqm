@@ -739,7 +739,12 @@ pub(crate) mod runtime {
         1
     }
 
-    fn do_game_options(cx: &mut Cx<'_>, io: &mut Io<'_>, state: &mut u8) -> bool {
+    fn do_game_options(
+        cx: &mut Cx<'_>,
+        io: &mut Io<'_>,
+        solar: Option<&crate::planets::solar_system::SolarSystem>,
+        state: &mut u8,
+    ) -> bool {
         let runtime = cx.kernel.input_runtime();
         let input = runtime.input();
         if cx.world.activity() & CHECK_ABORT as ACTIVITY != 0
@@ -752,7 +757,7 @@ pub(crate) mod runtime {
             match *state {
                 SAVE_GAME | LOAD_GAME => {
                     cx.kernel.sis_highlight.context.borrow_mut().take();
-                    if pick_game(cx, io, u32::from(*state == SAVE_GAME), 0) != 0 {
+                    if pick_game(cx, io, solar, u32::from(*state == SAVE_GAME), 0) != 0 {
                         return false;
                     }
                     set_menu_flash(cx.kernel, cx.screen_dimensions(), false);
@@ -780,7 +785,11 @@ pub(crate) mod runtime {
         true
     }
 
-    pub fn game_options(cx: &mut Cx<'_>, io: &mut Io<'_>) -> BOOLEAN {
+    pub fn game_options(
+        cx: &mut Cx<'_>,
+        io: &mut Io<'_>,
+        solar: Option<&crate::planets::solar_system::SolarSystem>,
+    ) -> BOOLEAN {
         let runtime = cx.kernel.input_runtime();
         let input = runtime.input();
         if cx.kernel.last_activity == CHECK_LOAD as ACTIVITY {
@@ -791,7 +800,7 @@ pub(crate) mod runtime {
                 PM_SAVE_GAME as u8,
                 LOAD_GAME as i16,
             );
-            if pick_game(cx, io, 0, 1) == 0 {
+            if pick_game(cx, io, solar, 0, 1) == 0 {
                 cx.world
                     .set_activity(cx.world.activity() | CHECK_ABORT as ACTIVITY);
             }
@@ -811,7 +820,9 @@ pub(crate) mod runtime {
             io.observer
                 .checkpoint(&crate::engine::observe::CheckpointView::GameOptions(true))
         });
-        cx.run_input(io, true, |cx, io| do_game_options(cx, io, &mut state));
+        cx.run_input(io, true, |cx, io| {
+            do_game_options(cx, io, solar, &mut state)
+        });
         cx.with_legacy(|| {
             io.observer
                 .checkpoint(&crate::engine::observe::CheckpointView::GameOptions(false))

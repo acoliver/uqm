@@ -179,7 +179,7 @@ pub(crate) mod engine {
         ) {
             SelectionAction::Finish => return false,
             SelectionAction::Options => {
-                if crate::front_end::gameopt::game_options(cx, io) == 0 {
+                if crate::front_end::gameopt::game_options(cx, io, None) == 0 {
                     return false;
                 }
                 crate::ui::menu::draw_menu_state(

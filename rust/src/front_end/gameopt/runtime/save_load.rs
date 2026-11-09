@@ -4,6 +4,7 @@ use crate::savegame::live::load::{load_game_descriptions, LoadRequest};
 pub(super) fn save_load_game(
     cx: &mut Cx<'_>,
     io: &mut Io<'_>,
+    solar: Option<&crate::planets::solar_system::SolarSystem>,
     input: &crate::engine::input::InputSession,
     pick_state: &mut PickGameState,
     game_index: COUNT,
@@ -25,7 +26,7 @@ pub(super) fn save_load_game(
             let summary = ptr::from_mut(desc).cast();
             let name = name_buf.as_ptr().cast();
             // SAFETY: the picker retains its writable summary and terminated name.
-            success = unsafe { SaveGame(cx, game_index, summary, name) };
+            success = unsafe { SaveGame(cx, solar, game_index, summary, name) };
         } else {
             success = 0;
             *canceled_by_user = 1;
@@ -64,6 +65,7 @@ pub(super) unsafe fn restore_display(
 pub(super) fn pick_game(
     cx: &mut Cx<'_>,
     io: &mut Io<'_>,
+    solar: Option<&crate::planets::solar_system::SolarSystem>,
     saving: BOOLEAN,
     from_main_menu: BOOLEAN,
 ) -> BOOLEAN {
@@ -115,7 +117,16 @@ pub(super) fn pick_game(
         let slot = menu_state.CurState as COUNT;
         // SAFETY: the picker is the sole game-thread writer of this remembered slot.
         unsafe { LAST_USED_SLOT = slot };
-        if save_load_game(cx, io, input, &mut pick_state, slot, &mut canceled_by_user) != 0 {
+        if save_load_game(
+            cx,
+            io,
+            solar,
+            input,
+            &mut pick_state,
+            slot,
+            &mut canceled_by_user,
+        ) != 0
+        {
             let operation = if saving != 0 { "save" } else { "load" };
             log::info!("RUST_PICKER: exit={operation}_success");
             break;

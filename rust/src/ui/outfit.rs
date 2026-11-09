@@ -618,7 +618,7 @@ pub unsafe fn do_outfit(cx: &mut Cx<'_>, menu: &mut MENU_STATE, input: &InputSes
                     let mut io = crate::engine::observe::Io {
                         observer: &mut *observer,
                     };
-                    crate::front_end::gameopt::game_options(cx, &mut io)
+                    crate::front_end::gameopt::game_options(cx, &mut io, None)
                 } == 0
                 {
                     return exit_outfit(cx.kernel, menu);
