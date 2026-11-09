@@ -148,10 +148,11 @@ impl SetupSession {
                 let runtime = cx.kernel.input_runtime();
                 runtime.flush();
                 self.resources.binding_prompt();
-                sdl_input::RebindInputState(
+                sdl_input::rebind_input_state(
                     self.menu.choices[20] as i32,
                     control as i32,
                     self.menu.binding_column as i32,
+                    || runtime.yield_poll(cx),
                 );
                 self.populate_keys();
                 runtime.flush();

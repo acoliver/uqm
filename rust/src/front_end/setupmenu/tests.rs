@@ -66,3 +66,25 @@ fn setup_string_splitting_preserves_empty_last_line_and_final_unsplit_remainder(
         [c"a".to_owned(), c"b\nc".to_owned()]
     );
 }
+
+#[test]
+fn every_binding_row_routes_select_delete_and_keeps_both_columns_in_bounds() {
+    let mut menu = MenuState::new([7; 24]);
+    menu.enter(7, true);
+    for control in 0..7 {
+        menu.focus[7] = control + 3;
+        for column in 0..2 {
+            menu.binding_column = column;
+            assert_eq!(menu.event(Event::Select), Action::Rebind(control));
+            assert_eq!(menu.event(Event::Delete), Action::Clear(control));
+            for _ in 0..4 {
+                menu.event(Event::Right);
+                assert!(menu.binding_column < 2);
+            }
+            for _ in 0..4 {
+                menu.event(Event::Left);
+                assert!(menu.binding_column < 2);
+            }
+        }
+    }
+}

@@ -59,8 +59,6 @@ pub fn rename_template(index: usize, name: &CStr) -> CString {
     INPUT.lock().names[index] = name.to_string_lossy().into_owned();
     name
 }
-#[cfg(not(test))]
-use crate::threading::legacy_abi::TaskSwitch;
 
 struct CharacterBuffer {
     data: [u32; 256],
@@ -465,24 +463,24 @@ pub extern "C" fn RemoveInputState(template: c_int, control: c_int, alternate: c
     unsafe { res_Remove(key.as_ptr()) };
 }
 
-#[no_mangle]
-pub extern "C" fn RebindInputState(template: c_int, control: c_int, alternate: c_int) {
+pub use rebind_input_state as RebindInputState;
+
+pub fn rebind_input_state(
+    template: c_int,
+    control: c_int,
+    alternate: c_int,
+    mut poll: impl FnMut(),
+) {
     let Some(index) = INPUT.lock().control_index(template, control, alternate) else {
         crate::log_abi::log_message(3, "RebindInputState(): invalid control index");
         return;
     };
     RemoveInputState(template, control, alternate);
     let mut gesture = empty_gesture();
-    // SAFETY: the initialized native provider owns the gesture queue and pumps it synchronously.
-    unsafe {
-        ffi::rust_vcontrol_clear_gesture();
-        while vcontrol_get_last_gesture(&mut gesture) == 0 {
-            // TaskSwitch pumps SDL events in the single-threaded game runtime.
-            #[cfg(not(test))]
-            TaskSwitch();
-            #[cfg(test)]
-            crate::threading::task_switch();
-        }
+    ffi::rust_vcontrol_clear_gesture();
+    // SAFETY: each poll writes this complete, live gesture record.
+    while unsafe { vcontrol_get_last_gesture(&mut gesture) } == 0 {
+        poll();
     }
     let mut state = INPUT.lock();
     let target = state.target(template as usize, control as usize);
