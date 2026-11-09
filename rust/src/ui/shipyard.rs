@@ -2,9 +2,9 @@
 
 //! Shipyard menu, crew transactions and hangar animation, ported from shipyard.c.
 
+use super::shipyard_catalog as catalog;
 use crate::sound::music::remember_native_music;
 use crate::ui::{rgb15, settings::play_menu_sound};
-mod catalog;
 mod crew;
 use super::shipyard_selection::{
     dms_flash_active_ship, dms_flash_escort_ship_crew_count, dms_flash_flag_ship_crew_count,
@@ -100,7 +100,8 @@ unsafe fn draw_race_strings(
     SetContextForeGroundColor(BLACK);
     DrawFilledRectangle(&mut r);
     if race != BYTE::MAX {
-        let Some((index, ship)) = cx.with_legacy(|| get_available_race_from_index(race)) else {
+        let Some((index, ship)) = cx.with_legacy(|| get_available_race_from_index(cx.world, race))
+        else {
             panic!("the selected hangar race must be allied");
         };
         race = index as BYTE;
@@ -225,7 +226,7 @@ unsafe fn dms_spin_ship(
             avail_race_queue(|queue| queue.at(usize::from(race)).map(|id| *queue.get(id)))
         })
     } else {
-        cx.with_legacy(|| get_available_race_from_index(menu.delta_item as BYTE))
+        cx.with_legacy(|| get_available_race_from_index(cx.world, menu.delta_item as BYTE))
             .map(|(_, fleet)| fleet)
     };
     let Some(spin_ship) = spin_ship else {
@@ -299,7 +300,7 @@ unsafe fn dms_modify_crew(
 unsafe fn dms_try_add_escort_ship(cx: &mut Cx<'_>, input: &InputSession, menu: &mut MENU_STATE) {
     let (index, added) = {
         let Some((index, template)) =
-            cx.with_legacy(|| get_available_race_from_index(menu.delta_item as BYTE))
+            cx.with_legacy(|| get_available_race_from_index(cx.world, menu.delta_item as BYTE))
         else {
             panic!("the purchased hangar race must be allied");
         };
@@ -376,7 +377,7 @@ unsafe fn dms_add_escort_ship(
         dms_try_add_escort_ship(cx, input, menu);
     } else if dx != 0 || dy != 0 {
         {
-            let available = cx.with_legacy(get_available_race_count);
+            let available = get_available_race_count(cx.world);
             let mut current = menu.delta_item as BYTE;
             if dx < 0 || dy < 0 {
                 let old = current;

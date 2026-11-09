@@ -19,6 +19,8 @@ mod flagship_stats;
 pub mod outfit;
 mod outfit_state;
 pub mod shipyard;
+#[path = "shipyard/catalog.rs"]
+mod shipyard_catalog;
 #[cfg(test)]
 #[path = "shipyard/catalog_tests.rs"]
 mod shipyard_catalog_tests;
