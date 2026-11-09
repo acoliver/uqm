@@ -2,8 +2,9 @@
 //!
 //! Handles player response options during conversations.
 
+use crate::comm::Comm;
 /// Dialogue callback receiving the selected response reference.
-pub type ResponseFunc = fn(&mut crate::engine::battle::Cx<'_>, u32);
+pub type ResponseFunc = fn(&mut Comm, &mut crate::engine::battle::Cx<'_>, u32);
 
 /// A response option in a conversation
 #[derive(Clone)]
@@ -110,20 +111,23 @@ impl ResponseSystem {
         phrase: &str,
         name: impl Fn(u32) -> Option<String>,
     ) -> Result<usize, String> {
-        let mut matches = self
-            .responses
-            .iter()
-            .enumerate()
-            .filter_map(|(index, response)| {
-                (response.response_func.is_some()
-                    && name(response.response_ref).as_deref() == Some(phrase))
-                .then_some(index)
-            });
-        match (matches.next(), matches.next()) {
-            (Some(index), None) => Ok(index),
-            (None, _) => Err(format!("response_not_offered:phrase={phrase}")),
-            _ => Err(format!("response_ambiguous:phrase={phrase}")),
-        }
+        self.choices(name).index(phrase)
+    }
+
+    pub fn choices(
+        &self,
+        name: impl Fn(u32) -> Option<String>,
+    ) -> crate::engine::observe::ResponseChoices {
+        crate::engine::observe::ResponseChoices(
+            self.responses
+                .iter()
+                .map(|response| {
+                    response
+                        .response_func
+                        .and_then(|_| name(response.response_ref))
+                })
+                .collect(),
+        )
     }
 
     /// Get number of responses
@@ -209,12 +213,16 @@ impl ResponseSystem {
     ///
     /// Returns the response_ref of the selected response if a callback was
     /// invoked, or None if no response is selected or it has no callback.
-    pub fn execute_selected(&self, cx: &mut crate::engine::battle::Cx<'_>) -> Option<u32> {
+    pub fn execute_selected(
+        &self,
+        comm: &mut Comm,
+        cx: &mut crate::engine::battle::Cx<'_>,
+    ) -> Option<u32> {
         let response = self.get_selected()?;
         let func = response.response_func?;
 
         // Call with response_ref as argument per RS-REQ-011
-        func(cx, response.response_ref);
+        func(comm, cx, response.response_ref);
 
         Some(response.response_ref)
     }
@@ -224,7 +232,7 @@ impl ResponseSystem {
 mod tests {
     use super::*;
 
-    fn test_callback(_cx: &mut crate::engine::battle::Cx<'_>, _ref: u32) {}
+    fn test_callback(_comm: &mut Comm, _cx: &mut crate::engine::battle::Cx<'_>, _ref: u32) {}
 
     #[test]
     fn test_response_entry_new() {
@@ -360,18 +368,24 @@ mod tests {
     use std::sync::atomic::{AtomicU32, Ordering};
     static CALLBACK_ARG: AtomicU32 = AtomicU32::new(0);
 
-    fn recording_callback(_cx: &mut crate::engine::battle::Cx<'_>, response_ref: u32) {
+    fn recording_callback(
+        _comm: &mut Comm,
+        _cx: &mut crate::engine::battle::Cx<'_>,
+        response_ref: u32,
+    ) {
         CALLBACK_ARG.store(response_ref, Ordering::SeqCst);
     }
 
     #[test]
     fn test_execute_selected_passes_response_ref() {
+        let mut owner = Comm::new();
+        let comm = &mut owner;
         CALLBACK_ARG.store(0, Ordering::SeqCst);
         let mut sys = ResponseSystem::new();
         sys.do_response_phrase(42, "Test", Some(recording_callback));
         sys.start_display();
 
-        let result = crate::comm::with_test_context(|cx| sys.execute_selected(cx));
+        let result = crate::comm::with_test_context(|cx| sys.execute_selected(comm, cx));
         assert_eq!(result, Some(42));
         assert_eq!(CALLBACK_ARG.load(Ordering::SeqCst), 42);
     }
@@ -403,7 +417,7 @@ mod tests {
 #[cfg(test)]
 mod phrase_selection_tests {
     use super::*;
-    fn callback(_cx: &mut crate::engine::battle::Cx<'_>, _: u32) {}
+    fn callback(_comm: &mut Comm, _cx: &mut crate::engine::battle::Cx<'_>, _: u32) {}
     fn name(reference: u32) -> Option<String> {
         match reference {
             55 => Some("we_will_transfer_now".into()),

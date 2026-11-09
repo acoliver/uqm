@@ -9,6 +9,9 @@
 
 mod encounter;
 mod routing;
+#[cfg(not(test))]
+use crate::comm::Comm;
+
 use routing::conversation_setup;
 
 #[cfg(not(test))]
@@ -22,13 +25,7 @@ use crate::engine::{
 use std::os::raw::c_void;
 
 use crate::c_bindings::global_state;
-#[cfg(not(test))]
-use crate::comm::locdata::{read_locdata, set_comm_data};
 use crate::engine::battle::link_queue::LinkId;
-#[cfg(not(test))]
-use crate::engine::battle::link_queue::LinkQueue;
-#[cfg(not(test))]
-use crate::engine::world::queues::Fleet;
 use crate::engine::world::queues::Fragment;
 
 // ---------------------------------------------------------------------------
@@ -254,93 +251,89 @@ pub const RACE_SHIP_FOR_COMM: [u8; 27] = [
 mod ffi {
 
     #[cfg(not(test))]
-    pub use crate::comm::locdata::COMM_DATA as CommData;
-
-    #[cfg(not(test))]
     #[cfg(test)]
     extern "C" {}
 
     #[cfg(not(test))]
-    #[cfg(not(test))]
-    pub use crate::comm::races::arilou::live::init_arilou_comm;
+    pub use crate::comm::live::arilou::init_arilou_comm;
 
     #[cfg(not(test))]
-    pub use crate::comm::races::blackur::live::init_blackurq_comm;
+    pub use crate::comm::live::blackur::init_blackurq_comm;
 
     #[cfg(not(test))]
-    pub use crate::comm::races::chmmr::live::init_chmmr_comm;
+    pub use crate::comm::live::chmmr::init_chmmr_comm;
 
     #[cfg(not(test))]
-    pub use crate::comm::races::comandr::live::init_commander_comm;
+    pub use crate::comm::live::comandr::init_commander_comm;
 
     #[cfg(not(test))]
-    pub use crate::comm::races::starbas::live::init_starbase_comm;
+    pub use crate::comm::live::starbas::init_starbase_comm;
 
     #[cfg(not(test))]
-    pub use crate::comm::races::druuge::live::init_druuge_comm;
+    pub use crate::comm::live::druuge::init_druuge_comm;
 
     #[cfg(not(test))]
-    pub use crate::comm::races::ilwrath::live::init_ilwrath_comm;
+    pub use crate::comm::live::ilwrath::init_ilwrath_comm;
 
     #[cfg(not(test))]
-    pub use crate::comm::races::melnorm::live::init_melnorme_comm;
+    pub use crate::comm::live::melnorm::init_melnorme_comm;
 
     #[cfg(not(test))]
-    pub use crate::comm::races::mycon::live::init_mycon_comm;
+    pub use crate::comm::live::mycon::init_mycon_comm;
 
     #[cfg(not(test))]
-    pub use crate::comm::races::orz::live::init_orz_comm;
+    pub use crate::comm::live::orz::init_orz_comm;
 
     #[cfg(not(test))]
-    pub use crate::comm::races::pkunk::live::init_pkunk_comm;
+    pub use crate::comm::live::pkunk::init_pkunk_comm;
 
     #[cfg(not(test))]
-    pub use crate::comm::races::shofixt::live::init_shofixti_comm;
+    pub use crate::comm::live::shofixt::init_shofixti_comm;
 
     #[cfg(not(test))]
-    pub use crate::comm::races::slyland::live::init_slyland_comm;
+    pub use crate::comm::live::slyland::init_slyland_comm;
 
     #[cfg(not(test))]
-    pub use crate::comm::races::slyhome::live::init_slylandro_comm;
+    pub use crate::comm::live::slyhome::init_slylandro_comm;
 
     #[cfg(not(test))]
-    pub use crate::comm::races::spathi::live::init_spathi_comm;
+    pub use crate::comm::live::spathi::init_spathi_comm;
 
     #[cfg(not(test))]
-    pub use crate::comm::races::spahome::live::init_spahome_comm;
+    pub use crate::comm::live::spahome::init_spahome_comm;
 
     #[cfg(not(test))]
-    pub use crate::comm::races::supox::live::init_supox_comm;
+    pub use crate::comm::live::supox::init_supox_comm;
 
     #[cfg(not(test))]
-    pub use crate::comm::races::syreen::live::init_syreen_comm;
+    pub use crate::comm::live::syreen::init_syreen_comm;
 
     #[cfg(not(test))]
-    pub use crate::comm::races::talkpet::live::init_talkpet_comm;
+    pub use crate::comm::live::talkpet::init_talkpet_comm;
 
     #[cfg(not(test))]
-    pub use crate::comm::races::thradd::live::init_thradd_comm;
+    pub use crate::comm::live::thradd::init_thradd_comm;
 
     #[cfg(not(test))]
-    pub use crate::comm::races::umgah::live::init_umgah_comm;
+    pub use crate::comm::live::umgah::init_umgah_comm;
 
     #[cfg(not(test))]
-    pub use crate::comm::races::urquan::live::init_urquan_comm;
+    pub use crate::comm::live::urquan::init_urquan_comm;
 
     #[cfg(not(test))]
-    pub use crate::comm::races::utwig::live::init_utwig_comm;
+    pub use crate::comm::live::utwig::init_utwig_comm;
 
     #[cfg(not(test))]
-    pub use crate::comm::races::vux::live::init_vux_comm;
+    pub use crate::comm::live::vux::init_vux_comm;
 
     #[cfg(not(test))]
-    pub use crate::comm::races::rebel::live::init_rebel_yehat_comm;
+    pub use crate::comm::live::rebel::init_rebel_yehat_comm;
 
     #[cfg(not(test))]
-    pub use crate::comm::races::yehat::live::init_yehat_comm;
+    pub use crate::comm::live::yehat::init_yehat_comm;
 
     #[cfg(not(test))]
-    pub use crate::comm::races::zoqfot::live::init_zoqfot_comm;
+    pub use crate::comm::live::zoqfot::init_zoqfot_comm;
 
     #[cfg(not(test))]
     pub use crate::comm::races::rust_init_race_dialogue;
@@ -370,11 +363,6 @@ fn lobyte(x: u16) -> u16 {
 /// Calls C FFI to read CurrentActivity from global state.
 fn in_hq_space(activity: u16) -> bool {
     lobyte(activity) == IN_HYPERSPACE
-}
-
-#[cfg(not(test))]
-fn avail_race_queue<R>(edit: impl FnOnce(&mut LinkQueue<'_, Fleet, 24>) -> R) -> R {
-    World::current().write(|world| edit(&mut world.avail_races()))
 }
 
 // ---------------------------------------------------------------------------
@@ -486,6 +474,18 @@ pub unsafe fn race_communication(cx: &mut Cx<'_>, io: &mut Io<'_>) {
 /// # Safety
 /// Called on the game thread with initialized game state and resources.
 pub unsafe fn init_communication(cx: &mut Cx<'_>, io: &mut Io<'_>, which_comm: u32) -> u16 {
+    init_communication_with_options(cx, io, which_comm, crate::comm::CommOptions::default())
+}
+
+#[cfg(not(test))]
+/// # Safety
+/// The game-thread context and presentation resources must be initialized.
+pub unsafe fn init_communication_with_options(
+    cx: &mut Cx<'_>,
+    io: &mut Io<'_>,
+    which_comm: u32,
+    options: crate::comm::CommOptions,
+) -> u16 {
     #[cfg(all(not(test), feature = "debug-process"))]
     {
         if crate::front_end::uqmdebug::DISABLE_INTERACTIVITY != 0 {
@@ -556,15 +556,21 @@ pub unsafe fn init_communication(cx: &mut Cx<'_>, io: &mut Io<'_>, which_comm: u
         }
     }
     let (conversation, ship_type) = conversation_setup(which_comm);
-    run_encounter(cx, io, conversation, ship_type)
+    run_encounter(cx, io, conversation, ship_type, options)
 }
 
 #[cfg(not(test))]
 /// Perform sphere tracking, battle setup, dialogue and teardown in C order.
-fn run_encounter(cx: &mut Cx<'_>, io: &mut Io<'_>, which_comm: u32, ship_type: u16) -> u16 {
+fn run_encounter(
+    cx: &mut Cx<'_>,
+    io: &mut Io<'_>,
+    which_comm: u32,
+    ship_type: u16,
+    options: crate::comm::CommOptions,
+) -> u16 {
     if ship_type != u16::from(ship::URQUAN_DRONE_SHIP) {
         // SAFETY: the mode owns the initialized campaign during resource dispatch.
-        cx.with_legacy(|| unsafe { start_sphere_tracking(ship_type as u8) });
+        crate::engine::world::fleet::start_sphere_tracking(cx.world, ship_type);
         let build = which_comm == conv::ORZ
             || (which_comm == conv::TALKING_PET
                 && (cx.world.story_state(StoryKey::TALKING_PET_ON_SHIP) == 0
@@ -583,7 +589,8 @@ fn run_encounter(cx: &mut Cx<'_>, io: &mut Io<'_>, which_comm: u32, ship_type: u
         io.observer
             .checkpoint(&CheckpointView::DialogueDispatch(comm_id))
     });
-    let has_descriptor = encounter::load_descriptor(cx, comm_id);
+    let comm = &mut Comm::with_options(options);
+    encounter::load_descriptor(comm, cx, comm_id);
     let status = if cx.world.story_state(StoryKey::BATTLE_SEGUE) == 0 {
         HAIL
     } else {
@@ -593,7 +600,7 @@ fn run_encounter(cx: &mut Cx<'_>, io: &mut Io<'_>, which_comm: u32, ship_type: u
             io.observer
                 .checkpoint(&CheckpointView::EncounterMenu(false))
         });
-        if status == HAIL && has_descriptor {
+        if status == HAIL {
             cx.world.set_story_state(StoryKey::BATTLE_SEGUE, 0);
             HAIL
         } else {
@@ -603,9 +610,9 @@ fn run_encounter(cx: &mut Cx<'_>, io: &mut Io<'_>, which_comm: u32, ship_type: u
     };
     if status == HAIL {
         // SAFETY: the loaded descriptor and resources remain live for the synchronous session.
-        unsafe { crate::comm::hail::hail_alien(cx, io) };
+        unsafe { crate::comm::hail::hail_alien(comm, cx, io) };
     } else {
-        encounter::finish_unhailed(cx, has_descriptor);
+        encounter::finish_unhailed(comm, cx);
     }
     let status = encounter::fight_if_selected(cx, io);
     let runtime = cx.kernel.input_runtime();
@@ -717,76 +724,59 @@ pub fn place_flagship_at_star(world: &mut World, location: (i16, i16)) -> Result
 /// Build a fresh descriptor for the selected conversation and initialize its script.
 ///
 /// # Safety
-/// Called on the game thread after communication state initialization.
-pub unsafe fn race_descriptor(cx: &mut Cx<'_>, comm_id: u32) -> crate::comm::locdata::CLocData {
+/// Called on the game thread with an initialized conversation and matching context.
+/// Kernel rendering resources must remain live through session teardown.
+pub unsafe fn race_descriptor(
+    comm: &mut Comm,
+    cx: &mut Cx<'_>,
+    comm_id: u32,
+) -> crate::comm::locdata::CLocData {
+    comm.presentation = super::presentation::Presentation::from(&*cx.kernel);
     // Initialize Rust dialogue state (callbacks, phrase state, etc.)
-    ffi::rust_init_race_dialogue(cx, comm_id as i32);
+    ffi::rust_init_race_dialogue(comm, cx, comm_id as i32);
 
     // Preserve the existing initialization order and conversation variants.
     match comm_id {
-        conv::ARILOU => ffi::init_arilou_comm(cx),
-        conv::BLACKURQ => ffi::init_blackurq_comm(cx),
-        conv::CHMMR => ffi::init_chmmr_comm(cx),
+        conv::ARILOU => ffi::init_arilou_comm(comm, cx),
+        conv::BLACKURQ => ffi::init_blackurq_comm(comm, cx),
+        conv::CHMMR => ffi::init_chmmr_comm(comm, cx),
         conv::COMMANDER => {
             if cx.world.story_state(StoryKey::STARBASE_AVAILABLE) == 0 {
-                ffi::init_commander_comm(cx)
+                ffi::init_commander_comm(comm, cx)
             } else {
-                ffi::init_starbase_comm(cx)
+                ffi::init_starbase_comm(comm, cx)
             }
         }
-        conv::DRUUGE => ffi::init_druuge_comm(cx),
-        conv::ILWRATH => ffi::init_ilwrath_comm(cx),
-        conv::MELNORME => ffi::init_melnorme_comm(cx),
-        conv::MYCON => ffi::init_mycon_comm(cx),
-        conv::ORZ => ffi::init_orz_comm(cx),
-        conv::PKUNK => ffi::init_pkunk_comm(cx),
-        conv::SHOFIXTI => ffi::init_shofixti_comm(cx),
-        conv::SLYLANDRO => ffi::init_slyland_comm(cx),
-        conv::SLYLANDRO_HOME => ffi::init_slylandro_comm(cx),
+        conv::DRUUGE => ffi::init_druuge_comm(comm, cx),
+        conv::ILWRATH => ffi::init_ilwrath_comm(comm, cx),
+        conv::MELNORME => ffi::init_melnorme_comm(comm, cx),
+        conv::MYCON => ffi::init_mycon_comm(comm, cx),
+        conv::ORZ => ffi::init_orz_comm(comm, cx),
+        conv::PKUNK => ffi::init_pkunk_comm(comm, cx),
+        conv::SHOFIXTI => ffi::init_shofixti_comm(comm, cx),
+        conv::SLYLANDRO => ffi::init_slyland_comm(comm, cx),
+        conv::SLYLANDRO_HOME => ffi::init_slylandro_comm(comm, cx),
         conv::SPATHI => {
             if (cx.world.story_state(StoryKey::GLOBAL_FLAGS_AND_DATA) & (1 << 7)) == 0 {
-                ffi::init_spathi_comm(cx)
+                ffi::init_spathi_comm(comm, cx)
             } else {
-                ffi::init_spahome_comm(cx)
+                ffi::init_spahome_comm(comm, cx)
             }
         }
-        conv::SUPOX => ffi::init_supox_comm(cx),
-        conv::SYREEN => ffi::init_syreen_comm(cx),
-        conv::TALKING_PET => ffi::init_talkpet_comm(cx),
-        conv::THRADD => ffi::init_thradd_comm(cx),
-        conv::UMGAH => ffi::init_umgah_comm(cx),
-        conv::URQUAN => ffi::init_urquan_comm(cx),
-        conv::UTWIG => ffi::init_utwig_comm(cx),
-        conv::VUX => ffi::init_vux_comm(cx),
-        conv::YEHAT_REBEL => ffi::init_rebel_yehat_comm(cx),
-        conv::YEHAT => ffi::init_yehat_comm(cx),
-        conv::ZOQFOTPIK => ffi::init_zoqfot_comm(cx),
-        _ => ffi::init_chmmr_comm(cx),
+        conv::SUPOX => ffi::init_supox_comm(comm, cx),
+        conv::SYREEN => ffi::init_syreen_comm(comm, cx),
+        conv::TALKING_PET => ffi::init_talkpet_comm(comm, cx),
+        conv::THRADD => ffi::init_thradd_comm(comm, cx),
+        conv::UMGAH => ffi::init_umgah_comm(comm, cx),
+        conv::URQUAN => ffi::init_urquan_comm(comm, cx),
+        conv::UTWIG => ffi::init_utwig_comm(comm, cx),
+        conv::VUX => ffi::init_vux_comm(comm, cx),
+        conv::YEHAT_REBEL => ffi::init_rebel_yehat_comm(comm, cx),
+        conv::YEHAT => ffi::init_yehat_comm(comm, cx),
+        conv::ZOQFOTPIK => ffi::init_zoqfot_comm(comm, cx),
+        _ => ffi::init_chmmr_comm(comm, cx),
     }
 }
-#[cfg(not(test))]
-///
-/// Returns `race` if tracking started, 0 if race is extinct or not found.
-unsafe fn start_sphere_tracking(race: u8) -> u16 {
-    avail_race_queue(|queue| {
-        let Some(id) = queue.at(usize::from(race)) else {
-            return 0;
-        };
-        let fleet = queue.get_mut(id);
-        if fleet.actual_strength == 0 && fleet.allied_state == DEAD_GUY {
-            return 0;
-        }
-        if fleet.actual_strength != 0
-            && fleet.known_strength == 0
-            && fleet.actual_strength != INFINITE_RADIUS
-        {
-            fleet.known_strength = 1;
-            fleet.known_loc = fleet.loc;
-        }
-        u16::from(race)
-    })
-}
-
 // ---------------------------------------------------------------------------
 // VisitStarBase — ported from starbase.c:430
 // ---------------------------------------------------------------------------

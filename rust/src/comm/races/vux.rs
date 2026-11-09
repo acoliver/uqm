@@ -2,18 +2,15 @@
 //!
 //! @plan PLAN-20260724-MAINLOOP-AND-COMM.P13-15
 
-use super::script::{animation, as_comm_data};
-use crate::comm::locdata::{CColor, CLocData, CPoint};
-use crate::comm::types::CommData;
-use crate::engine::battle::Cx;
+pub(crate) use crate::comm::locdata::CPoint;
 
-mod dialogue;
+pub(crate) mod dialogue;
 #[cfg(test)]
 mod parity_tests;
 mod phrases;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Handler {
+pub(crate) enum Handler {
     Combat,
     Menagerie,
     Normal,
@@ -23,110 +20,110 @@ enum Handler {
 // String indices (from strings.h)
 // ---------------------------------------------------------------------------
 
-const NULL_PHRASE: u32 = 0;
-const ZEX_HELLO_1: u32 = 1;
-const ZEX_HELLO_2: u32 = 2;
-const ZEX_HELLO_3: u32 = 3;
-const ZEX_HELLO_4: u32 = 4;
-const FIGHT_OR_TRADE_1: u32 = 5;
-const FIGHT_OR_TRADE_2: u32 = 6;
-const WHAT_YOU_DO_HERE: u32 = 7;
-const MY_MENAGERIE: u32 = 8;
-const WHAT_ABOUT_MENAGERIE: u32 = 9;
-const NEED_NEW_CREATURE: u32 = 10;
-const WHAT_ABOUT_CREATURE: u32 = 11;
-const ABOUT_CREATURE: u32 = 12;
-const ABOUT_CREATURE_AGAIN: u32 = 13;
-const CREATURE_AGAIN: u32 = 14;
-const I_HAVE_BEAST: u32 = 15;
-const GIVE_BEAST: u32 = 16;
-const OK_TAKE_BEAST: u32 = 17;
-const FOOL_AIEE0: u32 = 18;
-const FOOL_AIEE1: u32 = 19;
-const WHY_TRUST_1: u32 = 20;
-const TRUST_1: u32 = 21;
-const WHY_TRUST_2: u32 = 22;
-const TRUST_2: u32 = 23;
-const WHY_TRUST_3: u32 = 24;
-const TRUST_3: u32 = 25;
-const WHY_DONT_YOU_ATTACK: u32 = 26;
-const LIKE_YOU: u32 = 27;
-const WHY_LIKE_ME: u32 = 28;
-const LIKE_BECAUSE: u32 = 29;
-const ARE_YOU_A_PERVERT: u32 = 30;
-const CALL_ME_WHAT_YOU_WISH: u32 = 31;
-const TAKE_BY_FORCE: u32 = 32;
-const PRECURSOR_DEVICE: u32 = 33;
-const REGARDLESS: u32 = 34;
-const THEN_FIGHT: u32 = 35;
-const YOU_LIED: u32 = 36;
-const YUP_LIED: u32 = 37;
-const KILL_YOU: u32 = 38;
-const FIGHT_AGAIN: u32 = 39;
-const BYE_ZEX: u32 = 40;
-const GOODBYE_ZEX: u32 = 41;
-const HOMEWORLD_HELLO_1: u32 = 42;
-const HOMEWORLD_HELLO_2: u32 = 43;
-const HOMEWORLD_HELLO_3: u32 = 44;
-const HOMEWORLD_HELLO_4: u32 = 45;
-const SPACE_HELLO_1: u32 = 46;
-const SPACE_HELLO_2: u32 = 47;
-const SPACE_HELLO_3: u32 = 48;
-const SPACE_HELLO_4: u32 = 49;
-const KILL_YOU_SQUIDS_1: u32 = 50;
-const KILL_YOU_SQUIDS_2: u32 = 51;
-const KILL_YOU_SQUIDS_3: u32 = 52;
-const KILL_YOU_SQUIDS_4: u32 = 53;
-const WE_FIGHT: u32 = 54;
-const WHY_SO_MEAN: u32 = 55;
-const URQUAN_SLAVES: u32 = 56;
-const DEEPER_REASON: u32 = 57;
-const OLD_INSULT: u32 = 58;
-const IF_WE_APOLOGIZE: u32 = 59;
-const PROBABLY_NOT: u32 = 60;
-const TRY_ANY_WAY: u32 = 61;
-const NOPE: u32 = 62;
-const APOLOGY_1: u32 = 64;
-const NOT_ACCEPTED_1: u32 = 65;
-const APOLOGY_2: u32 = 66;
-const NOT_ACCEPTED_2: u32 = 67;
-const APOLOGY_3: u32 = 68;
-const NOT_ACCEPTED_3: u32 = 69;
-const APOLOGY_4: u32 = 70;
-const NOT_ACCEPTED_4: u32 = 71;
-const APOLOGY_5: u32 = 72;
-const NOT_ACCEPTED_5: u32 = 73;
-const APOLOGY_6: u32 = 74;
-const NOT_ACCEPTED_6: u32 = 75;
-const APOLOGY_7: u32 = 76;
-const NOT_ACCEPTED_7: u32 = 77;
-const APOLOGY_8: u32 = 78;
-const NOT_ACCEPTED_8: u32 = 79;
-const APOLOGY_9: u32 = 80;
-const NOT_ACCEPTED_9: u32 = 81;
-const APOLOGY_10: u32 = 82;
-const TRUTH: u32 = 83;
-const WHATS_UP_HOSTILE: u32 = 84;
-const GENERAL_INFO_HOSTILE_1: u32 = 85;
-const GENERAL_INFO_HOSTILE_2: u32 = 86;
-const GENERAL_INFO_HOSTILE_3: u32 = 87;
-const GENERAL_INFO_HOSTILE_4: u32 = 88;
-const CANT_WE_BE_FRIENDS_1: u32 = 89;
-const NEVER_UGLY_HUMANS_1: u32 = 90;
-const CANT_WE_BE_FRIENDS_2: u32 = 91;
-const NEVER_UGLY_HUMANS_2: u32 = 92;
-const CANT_WE_BE_FRIENDS_3: u32 = 93;
-const NEVER_UGLY_HUMANS_3: u32 = 94;
-const CANT_WE_BE_FRIENDS_4: u32 = 95;
-const NEVER_UGLY_HUMANS_4: u32 = 96;
-const BYE_HOSTILE_SPACE: u32 = 97;
-const GOODBYE_AND_DIE_HOSTILE_SPACE_1: u32 = 98;
-const GOODBYE_AND_DIE_HOSTILE_SPACE_2: u32 = 99;
-const GOODBYE_AND_DIE_HOSTILE_SPACE_3: u32 = 100;
-const GOODBYE_AND_DIE_HOSTILE_SPACE_4: u32 = 101;
-const OUT_TAKES: u32 = 102;
+pub(crate) const NULL_PHRASE: u32 = 0;
+pub(crate) const ZEX_HELLO_1: u32 = 1;
+pub(crate) const ZEX_HELLO_2: u32 = 2;
+pub(crate) const ZEX_HELLO_3: u32 = 3;
+pub(crate) const ZEX_HELLO_4: u32 = 4;
+pub(crate) const FIGHT_OR_TRADE_1: u32 = 5;
+pub(crate) const FIGHT_OR_TRADE_2: u32 = 6;
+pub(crate) const WHAT_YOU_DO_HERE: u32 = 7;
+pub(crate) const MY_MENAGERIE: u32 = 8;
+pub(crate) const WHAT_ABOUT_MENAGERIE: u32 = 9;
+pub(crate) const NEED_NEW_CREATURE: u32 = 10;
+pub(crate) const WHAT_ABOUT_CREATURE: u32 = 11;
+pub(crate) const ABOUT_CREATURE: u32 = 12;
+pub(crate) const ABOUT_CREATURE_AGAIN: u32 = 13;
+pub(crate) const CREATURE_AGAIN: u32 = 14;
+pub(crate) const I_HAVE_BEAST: u32 = 15;
+pub(crate) const GIVE_BEAST: u32 = 16;
+pub(crate) const OK_TAKE_BEAST: u32 = 17;
+pub(crate) const FOOL_AIEE0: u32 = 18;
+pub(crate) const FOOL_AIEE1: u32 = 19;
+pub(crate) const WHY_TRUST_1: u32 = 20;
+pub(crate) const TRUST_1: u32 = 21;
+pub(crate) const WHY_TRUST_2: u32 = 22;
+pub(crate) const TRUST_2: u32 = 23;
+pub(crate) const WHY_TRUST_3: u32 = 24;
+pub(crate) const TRUST_3: u32 = 25;
+pub(crate) const WHY_DONT_YOU_ATTACK: u32 = 26;
+pub(crate) const LIKE_YOU: u32 = 27;
+pub(crate) const WHY_LIKE_ME: u32 = 28;
+pub(crate) const LIKE_BECAUSE: u32 = 29;
+pub(crate) const ARE_YOU_A_PERVERT: u32 = 30;
+pub(crate) const CALL_ME_WHAT_YOU_WISH: u32 = 31;
+pub(crate) const TAKE_BY_FORCE: u32 = 32;
+pub(crate) const PRECURSOR_DEVICE: u32 = 33;
+pub(crate) const REGARDLESS: u32 = 34;
+pub(crate) const THEN_FIGHT: u32 = 35;
+pub(crate) const YOU_LIED: u32 = 36;
+pub(crate) const YUP_LIED: u32 = 37;
+pub(crate) const KILL_YOU: u32 = 38;
+pub(crate) const FIGHT_AGAIN: u32 = 39;
+pub(crate) const BYE_ZEX: u32 = 40;
+pub(crate) const GOODBYE_ZEX: u32 = 41;
+pub(crate) const HOMEWORLD_HELLO_1: u32 = 42;
+pub(crate) const HOMEWORLD_HELLO_2: u32 = 43;
+pub(crate) const HOMEWORLD_HELLO_3: u32 = 44;
+pub(crate) const HOMEWORLD_HELLO_4: u32 = 45;
+pub(crate) const SPACE_HELLO_1: u32 = 46;
+pub(crate) const SPACE_HELLO_2: u32 = 47;
+pub(crate) const SPACE_HELLO_3: u32 = 48;
+pub(crate) const SPACE_HELLO_4: u32 = 49;
+pub(crate) const KILL_YOU_SQUIDS_1: u32 = 50;
+pub(crate) const KILL_YOU_SQUIDS_2: u32 = 51;
+pub(crate) const KILL_YOU_SQUIDS_3: u32 = 52;
+pub(crate) const KILL_YOU_SQUIDS_4: u32 = 53;
+pub(crate) const WE_FIGHT: u32 = 54;
+pub(crate) const WHY_SO_MEAN: u32 = 55;
+pub(crate) const URQUAN_SLAVES: u32 = 56;
+pub(crate) const DEEPER_REASON: u32 = 57;
+pub(crate) const OLD_INSULT: u32 = 58;
+pub(crate) const IF_WE_APOLOGIZE: u32 = 59;
+pub(crate) const PROBABLY_NOT: u32 = 60;
+pub(crate) const TRY_ANY_WAY: u32 = 61;
+pub(crate) const NOPE: u32 = 62;
+pub(crate) const APOLOGY_1: u32 = 64;
+pub(crate) const NOT_ACCEPTED_1: u32 = 65;
+pub(crate) const APOLOGY_2: u32 = 66;
+pub(crate) const NOT_ACCEPTED_2: u32 = 67;
+pub(crate) const APOLOGY_3: u32 = 68;
+pub(crate) const NOT_ACCEPTED_3: u32 = 69;
+pub(crate) const APOLOGY_4: u32 = 70;
+pub(crate) const NOT_ACCEPTED_4: u32 = 71;
+pub(crate) const APOLOGY_5: u32 = 72;
+pub(crate) const NOT_ACCEPTED_5: u32 = 73;
+pub(crate) const APOLOGY_6: u32 = 74;
+pub(crate) const NOT_ACCEPTED_6: u32 = 75;
+pub(crate) const APOLOGY_7: u32 = 76;
+pub(crate) const NOT_ACCEPTED_7: u32 = 77;
+pub(crate) const APOLOGY_8: u32 = 78;
+pub(crate) const NOT_ACCEPTED_8: u32 = 79;
+pub(crate) const APOLOGY_9: u32 = 80;
+pub(crate) const NOT_ACCEPTED_9: u32 = 81;
+pub(crate) const APOLOGY_10: u32 = 82;
+pub(crate) const TRUTH: u32 = 83;
+pub(crate) const WHATS_UP_HOSTILE: u32 = 84;
+pub(crate) const GENERAL_INFO_HOSTILE_1: u32 = 85;
+pub(crate) const GENERAL_INFO_HOSTILE_2: u32 = 86;
+pub(crate) const GENERAL_INFO_HOSTILE_3: u32 = 87;
+pub(crate) const GENERAL_INFO_HOSTILE_4: u32 = 88;
+pub(crate) const CANT_WE_BE_FRIENDS_1: u32 = 89;
+pub(crate) const NEVER_UGLY_HUMANS_1: u32 = 90;
+pub(crate) const CANT_WE_BE_FRIENDS_2: u32 = 91;
+pub(crate) const NEVER_UGLY_HUMANS_2: u32 = 92;
+pub(crate) const CANT_WE_BE_FRIENDS_3: u32 = 93;
+pub(crate) const NEVER_UGLY_HUMANS_3: u32 = 94;
+pub(crate) const CANT_WE_BE_FRIENDS_4: u32 = 95;
+pub(crate) const NEVER_UGLY_HUMANS_4: u32 = 96;
+pub(crate) const BYE_HOSTILE_SPACE: u32 = 97;
+pub(crate) const GOODBYE_AND_DIE_HOSTILE_SPACE_1: u32 = 98;
+pub(crate) const GOODBYE_AND_DIE_HOSTILE_SPACE_2: u32 = 99;
+pub(crate) const GOODBYE_AND_DIE_HOSTILE_SPACE_3: u32 = 100;
+pub(crate) const GOODBYE_AND_DIE_HOSTILE_SPACE_4: u32 = 101;
+pub(crate) const OUT_TAKES: u32 = 102;
 
-fn text_layout(screen_width: i32) -> (CPoint, u16) {
+pub(crate) fn text_layout(screen_width: i32) -> (CPoint, u16) {
     let text_width = screen_width - 80;
     (
         CPoint {
@@ -137,155 +134,8 @@ fn text_layout(screen_width: i32) -> (CPoint, u16) {
     )
 }
 
-fn descriptor(screen_width: i32) -> CLocData {
-    let (baseline, width) = text_layout(screen_width);
-    let mut desc = CLocData {
-        alien_frame_res: c"comm.vux.graphics".as_ptr(),
-        alien_font_res: c"comm.vux.font".as_ptr(),
-        alien_colormap_res: c"comm.vux.colortable".as_ptr(),
-        alien_song_res: c"comm.vux.music".as_ptr(),
-        conversation_phrases_res: c"comm.vux.dialogue".as_ptr(),
-        alien_text_fcolor: CColor {
-            r: 255,
-            g: 255,
-            b: 255,
-            a: 255,
-        },
-        alien_text_bcolor: CColor {
-            r: 0,
-            g: 0,
-            b: 0,
-            a: 255,
-        },
-        alien_text_baseline: baseline,
-        alien_text_width: width,
-        alien_text_align: 1,
-        alien_text_valign: 0,
-        num_animations: 17,
-        ..CLocData::default()
-    };
-    let specs = [
-        (12, 3, 1 << 0, (28, 28), (28, 28), 0),
-        (15, 5, 1 << 0, (28, 28), (28, 28), 0),
-        (20, 14, 1 << 1, (28, 0), (28, 0), 0),
-        (34, 7, 1 << 1, (28, 28), (28, 28), 0),
-        (41, 6, 1 << 0, (28, 28), (28, 28), 0),
-        (47, 11, 1 << 1, (28, 28), (28, 28), 0),
-        (58, 3, 1 << 0, (28, 28), (28, 28), 0),
-        (61, 4, 1 << 0, (28, 28), (28, 28), 0),
-        (65, 4, 1 << 0, (28, 28), (28, 28), 0),
-        (69, 2, 1 << 0, (28, 28), (28, 28), 0),
-        (71, 3, 1 << 2, (42, 0), (840, 2520), 0),
-        (74, 6, 1 << 2, (56, 56), (56, 56), 0),
-        (80, 5, 1 << 2, (56, 56), (56, 56), 1 << 14),
-        (85, 5, 1 << 2, (56, 56), (56, 56), 0),
-        (90, 5, 1 << 2, (56, 56), (56, 56), 1 << 12),
-        (95, 4, 1 << 2, (56, 56), (4200, 4200), 0),
-        (99, 4, 1 << 2, (56, 56), (4200, 4200), 0),
-    ];
-    for (index, (start, frames, flags, frame_rate, restart_rate, block_mask)) in
-        specs.into_iter().enumerate()
-    {
-        desc.alien_ambient_array[index] = animation(start, frames, flags, frame_rate, restart_rate);
-        desc.alien_ambient_array[index].block_mask = block_mask;
-    }
-    desc.alien_talk_desc = animation(1, 11, 0, (56, 0), (70, 0));
-    #[cfg(not(test))]
-    {
-        desc.init_encounter_func = Some(live::intro);
-        desc.post_encounter_func = Some(live::post);
-        desc.uninit_encounter_func = Some(live::uninit);
-    }
-    desc
-}
-
-#[cfg(not(test))]
-pub(crate) mod live {
-    use super::super::script::live::LiveScript;
-    use super::*;
-
-    fn run(
-        cx: &mut Cx<'_>,
-        f: impl FnOnce(&mut dialogue::Dialogue<'_, LiveScript<'_, '_, Handler>>),
-    ) {
-        let mut api = LiveScript::new(cx, callback);
-        f(&mut dialogue::Dialogue { api: &mut api });
-    }
-
-    fn combat(cx: &mut Cx<'_>, response: u32) {
-        run(cx, |dialogue| {
-            dialogue.handle(Handler::Combat, response as i32)
-        });
-    }
-    fn menagerie(cx: &mut Cx<'_>, response: u32) {
-        run(cx, |dialogue| {
-            dialogue.handle(Handler::Menagerie, response as i32)
-        });
-    }
-    fn normal(cx: &mut Cx<'_>, response: u32) {
-        run(cx, |dialogue| {
-            dialogue.handle(Handler::Normal, response as i32)
-        });
-    }
-
-    fn callback(handler: Handler) -> crate::comm::response::ResponseFunc {
-        match handler {
-            Handler::Combat => combat,
-            Handler::Menagerie => menagerie,
-            Handler::Normal => normal,
-        }
-    }
-
-    pub(super) fn intro(cx: &mut Cx<'_>) {
-        run(cx, |dialogue| dialogue.intro());
-    }
-    pub(super) fn post(_cx: &mut Cx<'_>) {}
-    pub(super) fn uninit(_cx: &mut Cx<'_>) -> u16 {
-        0
-    }
-
-    pub unsafe fn init_vux_comm(cx: &mut Cx<'_>) -> CLocData {
-        extern "C" {
-            static mut ScreenWidth: i32;
-        }
-        let mut descriptor = super::descriptor(ScreenWidth);
-        (descriptor.alien_text_baseline, descriptor.alien_text_width) = text_layout(ScreenWidth);
-        run(cx, |dialogue| dialogue.initialize());
-        descriptor
-    }
-}
-
-pub struct VuxDialogue;
-
-impl super::RaceDialogue for VuxDialogue {
-    fn init(&self, _cx: &mut Cx<'_>) -> CommData {
-        #[cfg(not(test))]
-        {
-            unsafe { as_comm_data(&live::init_vux_comm(_cx)) }
-        }
-        #[cfg(test)]
-        {
-            as_comm_data(&descriptor(320))
-        }
-    }
-
-    fn intro(&self, _cx: &mut Cx<'_>) {
-        #[cfg(not(test))]
-        live::intro(_cx);
-    }
-
-    fn post_encounter(&self, _cx: &mut Cx<'_>) {
-        #[cfg(not(test))]
-        live::post(_cx);
-    }
-
-    fn uninit(&self, _cx: &mut Cx<'_>) -> u32 {
-        #[cfg(not(test))]
-        return live::uninit(_cx) as u32;
-        #[cfg(test)]
-        0
-    }
-}
+#[cfg(test)]
+use crate::comm::descriptors::vux::descriptor;
 
 #[cfg(test)]
 mod tests;

@@ -18,10 +18,10 @@
 //! come from the audio thread. Shared state is protected by Mutex.
 
 pub mod animation;
-#[cfg(not(test))]
 pub(crate) mod comm_abi;
 mod commanim_abi;
 mod commglue_abi;
+pub(crate) mod descriptors;
 pub mod dispatch;
 pub mod encounter;
 pub mod ffi;
@@ -29,11 +29,14 @@ pub mod ffi;
 mod ffi_behavior_tests;
 pub mod glue;
 pub mod hail;
+mod input;
+pub(crate) mod live;
 pub mod locdata;
 mod oscill_abi;
 pub mod oscilloscope;
 pub mod phrase_state;
 pub mod player_font;
+mod presentation;
 pub mod races;
 pub mod response;
 pub mod response_ui;
@@ -54,7 +57,7 @@ pub mod types;
 pub use animation::{AnimContext, CommAnimState};
 pub use oscilloscope::Oscilloscope;
 pub use response::{ResponseEntry, ResponseSystem};
-pub use state::{CommState, COMM_STATE};
+pub use state::Comm;
 pub use subtitle::{SubtitleChunk, SubtitleTracker};
 pub use track::{SoundChunk, TrackManager};
 pub use types::{
@@ -73,4 +76,22 @@ pub(crate) fn with_test_context<R>(
         &mut game.kernel,
         crate::math::random,
     ))
+}
+
+#[derive(Clone)]
+pub struct CommOptions {
+    pub oscilloscope: bool,
+    pub slider: bool,
+    pub window: Option<std::rc::Rc<std::cell::Cell<locdata::CRect>>>,
+    pub intro: (u32, u32),
+}
+impl Default for CommOptions {
+    fn default() -> Self {
+        Self {
+            oscilloscope: true,
+            slider: true,
+            window: None,
+            intro: (0, 0),
+        }
+    }
 }

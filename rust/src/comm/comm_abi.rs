@@ -1,7 +1,9 @@
 //! Remaining live dialogue API and subtitle cache, ported from comm.c.
 //! Copyright Paul Reiche, Fred Ford, 1992-2002. GPL-2.0-or-later.
 
-use super::locdata::{CPoint, CRect, CStamp, COMM_DATA};
+use crate::comm::locdata::{CPoint, CRect, CStamp};
+use crate::comm::Comm;
+
 use super::sis_graphics::CText;
 use std::ffi::{c_char, c_void};
 use std::ptr::{null, null_mut};
@@ -23,46 +25,9 @@ use crate::sound::heart_ffi::get_track_subtitle as GetTrackSubtitle;
 
 use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
 
-#[no_mangle]
-pub static mut shared_phrase_buf: [c_char; 2048] = [0; 2048];
-#[no_mangle]
-pub static mut CommWndRect: CRect = CRect {
-    corner: CPoint { x: 7, y: 10 },
-    width: 0,
-    height: 0,
-};
-
-static mut ANIM_CONTEXT: *mut c_void = null_mut();
-static mut TEXT_CACHE_CONTEXT: *mut crate::graphics::native_abi::context_desc = null_mut();
-static mut TEXT_CACHE_FRAME: *mut c_void = null_mut();
-static mut CLEAR_SUBTITLES: bool = false;
-static mut SUBTITLE: CText = CText::new(null(), 0);
-static mut LAST_SUBTITLE: *const c_char = null();
-static mut LAST_BASELINE: i16 = 0;
-
-#[repr(C)]
-struct ResponseEntry {
-    reference: u16,
-    text: CText,
-    callback: Option<extern "C" fn(u16)>,
-}
-#[repr(C)]
-pub(super) struct EncounterState {
-    pub(super) input: Option<unsafe extern "C" fn(*mut EncounterState) -> i32>,
-    initialized: u16,
-    next_time: u32,
-    count: u8,
-    current: u8,
-    top: u8,
-    responses: [ResponseEntry; 8],
-    phrase: [c_char; 1024],
-}
-static mut CURRENT_INPUT: *mut EncounterState = null_mut();
-
 /// # Safety
 /// Text and next must be writable; text must reference a NUL-terminated string.
-#[no_mangle]
-pub unsafe extern "C" fn getLineWithinWidth(
+pub unsafe fn get_line_within_width(
     text: *mut CText,
     next: *mut *const c_char,
     width: i16,
@@ -85,15 +50,15 @@ pub unsafe extern "C" fn getLineWithinWidth(
     ))
 }
 
-unsafe fn count_lines(text: &mut CText) -> i32 {
-    let width = COMM_DATA.alien_text_width as i16;
-    SetContextFont((COMM_DATA.alien_font).cast());
+unsafe fn count_lines(comm: &mut Comm, text: &mut CText) -> i32 {
+    let width = comm.data.alien_text_width as i16;
+    SetContextFont((comm.data.alien_font).cast());
     let mut ptr = text.p_str;
     let mut count = 0;
     loop {
         count += 1;
         text.p_str = ptr;
-        if getLineWithinWidth(text, &mut ptr, width, u16::MAX) != 0 {
+        if get_line_within_width(text, &mut ptr, width, u16::MAX) != 0 {
             break;
         }
     }
@@ -101,30 +66,30 @@ unsafe fn count_lines(text: &mut CText) -> i32 {
     count
 }
 
-unsafe fn draw_subtitle(text: &mut CText) -> i16 {
+unsafe fn draw_subtitle(comm: &mut Comm, text: &mut CText) -> i16 {
     BatchGraphics();
     let mut stamp = CStamp {
         origin: CPoint { x: 0, y: 0 },
-        frame: TEXT_CACHE_FRAME,
+        frame: comm.display.text_cache_frame,
     };
-    if LAST_SUBTITLE == text.p_str {
+    if comm.display.last_subtitle == text.p_str {
         DrawStamp(std::ptr::from_mut(&mut stamp).cast());
         UnbatchGraphics();
-        return LAST_BASELINE;
+        return comm.display.last_baseline;
     }
-    let old_context = SetContext(TEXT_CACHE_CONTEXT);
+    let old_context = SetContext(comm.display.text_cache_context);
     ClearDrawable();
-    LAST_SUBTITLE = text.p_str;
-    let width = COMM_DATA.alien_text_width as i16;
-    SetContextFont((COMM_DATA.alien_font).cast());
+    comm.display.last_subtitle = text.p_str;
+    let width = comm.data.alien_text_width as i16;
+    SetContextFont((comm.data.alien_font).cast());
     let mut leading = 0i16;
     GetContextFontLeading(&mut leading);
     let mut ptr = text.p_str;
-    if COMM_DATA.alien_text_valign & 3 != 0 {
-        let lines = count_lines(text);
-        if COMM_DATA.alien_text_valign == 2 {
+    if comm.data.alien_text_valign & 3 != 0 {
+        let lines = count_lines(comm, text);
+        if comm.data.alien_text_valign == 2 {
             text.baseline.y = (i32::from(text.baseline.y) - i32::from(leading) * lines) as i16;
-        } else if COMM_DATA.alien_text_valign == 1 {
+        } else if comm.data.alien_text_valign == 1 {
             text.baseline.y =
                 (i32::from(text.baseline.y) - (i32::from(leading) * lines) / 2) as i16;
         }
@@ -136,12 +101,12 @@ unsafe fn draw_subtitle(text: &mut CText) -> i16 {
     loop {
         text.p_str = ptr;
         text.baseline.y = text.baseline.y.wrapping_add(leading);
-        let eol = getLineWithinWidth(text, &mut ptr, width, max_chars);
+        let eol = get_line_within_width(text, &mut ptr, width, max_chars);
         max_chars = max_chars.wrapping_sub(text.char_count).saturating_sub(1);
         font_DrawTracedText(
             std::ptr::from_mut(text).cast(),
-            COMM_DATA.alien_text_fcolor,
-            COMM_DATA.alien_text_bcolor,
+            comm.data.alien_text_fcolor,
+            comm.data.alien_text_bcolor,
         );
         if eol != 0 || max_chars == 0 {
             break;
@@ -150,147 +115,233 @@ unsafe fn draw_subtitle(text: &mut CText) -> i16 {
     text.p_str = ptr;
     SetContext(old_context);
     DrawStamp(std::ptr::from_mut(&mut stamp).cast());
-    LAST_BASELINE = text.baseline.y;
+    comm.display.last_baseline = text.baseline.y;
     UnbatchGraphics();
     text.baseline.y
 }
 
-/// # Safety
-/// Game thread only; invalidates the cached subtitle before the next redraw.
-#[no_mangle]
-pub unsafe extern "C" fn comm_ClearSubtitles() {
-    CLEAR_SUBTITLES = true;
-    LAST_SUBTITLE = null();
-    SUBTITLE.p_str = null();
-    SUBTITLE.char_count = 0;
+pub fn clear_subtitles(comm: &mut Comm) {
+    comm.display.clear_subtitles = true;
+    comm.display.last_subtitle = null();
+    comm.display.subtitle.p_str = null();
+    comm.display.subtitle.char_count = 0;
 }
 
 /// # Safety
 /// Track player and CommData must be initialized on the game thread.
-#[no_mangle]
-pub unsafe extern "C" fn comm_CheckSubtitles() {
+pub unsafe fn check_subtitles(comm: &mut Comm) {
+    comm.apply_phrase_events();
     let text = GetTrackSubtitle();
-    let baseline = COMM_DATA.alien_text_baseline;
-    let align = COMM_DATA.alien_text_align as i32;
-    if text != SUBTITLE.p_str
-        || SUBTITLE.baseline.x != baseline.x
-        || SUBTITLE.baseline.y != baseline.y
-        || SUBTITLE.align != align
+    let baseline = comm.data.alien_text_baseline;
+    let align = comm.data.alien_text_align as i32;
+    if text != comm.display.subtitle.p_str
+        || comm.display.subtitle.baseline.x != baseline.x
+        || comm.display.subtitle.baseline.y != baseline.y
+        || comm.display.subtitle.align != align
     {
-        CLEAR_SUBTITLES = true;
-        SUBTITLE.baseline = baseline;
-        SUBTITLE.align = align;
-        if SUBTITLE.p_str == text {
+        comm.display.clear_subtitles = true;
+        comm.display.subtitle.baseline = baseline;
+        comm.display.subtitle.align = align;
+        if comm.display.subtitle.p_str == text {
             crate::log_abi::log_message(
                 crate::log_abi::LOG_WARNING,
                 "Dialog text and location changed out of sync",
             );
         }
-        SUBTITLE.p_str = text;
-        SUBTITLE.char_count = if text.is_null() { 0 } else { u16::MAX };
+        comm.display.subtitle.p_str = text;
+        comm.display.subtitle.char_count = if text.is_null() { 0 } else { u16::MAX };
     }
 }
 
 /// # Safety
 /// Subtitle cache and current drawing context must be live on the game thread.
-pub unsafe fn comm_redraw_subtitles(enabled: bool) {
+pub unsafe fn comm_redraw_subtitles(comm: &mut Comm, enabled: bool) {
     if !enabled {
         return;
     }
-    if !SUBTITLE.p_str.is_null() {
-        let mut text = SUBTITLE;
-        draw_subtitle(&mut text);
+    if !comm.display.subtitle.p_str.is_null() {
+        let mut text = comm.display.subtitle;
+        draw_subtitle(comm, &mut text);
     }
 }
 
 /// # Safety
 /// Called from the game thread, outside a COMM_STATE lock.
-#[no_mangle]
-pub unsafe extern "C" fn c_SetTalkingFinished(finished: i32) {
-    super::ffi::rust_set_talking_finished(finished);
+pub unsafe fn set_talking_finished(comm: &mut Comm, finished: i32) {
+    super::ffi::rust_set_talking_finished(comm, finished);
 }
-/// # Safety
-/// CommData must be initialized on the game thread.
-#[no_mangle]
-pub unsafe extern "C" fn c_SetupSubtitleTextFromCommData() {
-    SUBTITLE.baseline = COMM_DATA.alien_text_baseline;
-    SUBTITLE.align = COMM_DATA.alien_text_align as i32;
+pub fn setup_subtitle_text_from_comm_data(comm: &mut Comm) {
+    comm.display.subtitle.baseline = comm.data.alien_text_baseline;
+    comm.display.subtitle.align = comm.data.alien_text_align as i32;
 }
+
 /// # Safety
-/// State must be null or a live C encounter state until cleared.
-#[no_mangle]
-pub unsafe extern "C" fn c_SetCurInputState(state: *mut c_void) {
-    CURRENT_INPUT = state.cast();
-}
-/// # Safety
-/// Game thread only; the registered encounter state must still be live.
-#[no_mangle]
-pub unsafe extern "C" fn c_ClearPhraseBuf() {
-    if !CURRENT_INPUT.is_null() {
-        (*CURRENT_INPUT).phrase[0] = 0;
-    }
+/// Context must remain live while registered; game thread only.
+pub unsafe fn set_anim_context(comm: &mut Comm, context: *mut c_void) {
+    comm.display.anim_context = context;
 }
 /// # Safety
 /// Context must remain live while registered; game thread only.
-#[no_mangle]
-pub unsafe extern "C" fn c_SetAnimContext(context: *mut c_void) {
-    ANIM_CONTEXT = context;
-}
-/// # Safety
-/// Context must remain live while registered; game thread only.
-#[no_mangle]
-pub unsafe extern "C" fn c_SetTextCacheContext(context: *mut c_void) {
-    TEXT_CACHE_CONTEXT = (context).cast();
+pub unsafe fn set_text_cache_context(comm: &mut Comm, context: *mut c_void) {
+    comm.display.text_cache_context = (context).cast();
 }
 /// # Safety
 /// Frame must remain live while registered; game thread only.
-#[no_mangle]
-pub unsafe extern "C" fn c_SetTextCacheFrame(frame: *mut c_void) {
-    TEXT_CACHE_FRAME = frame;
+pub unsafe fn set_text_cache_frame(comm: &mut Comm, frame: *mut c_void) {
+    comm.display.text_cache_frame = frame;
 }
-/// # Safety
-/// Game thread only.
-#[no_mangle]
-pub unsafe extern "C" fn c_GetAnimContext() -> *mut c_void {
-    ANIM_CONTEXT
+pub fn anim_context(comm: &mut Comm) -> *mut c_void {
+    comm.display.anim_context
 }
-/// # Safety
-/// Game thread only.
-#[no_mangle]
-pub unsafe extern "C" fn c_GetClearSubtitles() -> i32 {
-    i32::from(CLEAR_SUBTITLES)
+pub fn clear_subtitles_pending(comm: &mut Comm) -> i32 {
+    i32::from(comm.display.clear_subtitles)
 }
-/// # Safety
-/// Game thread only.
-#[no_mangle]
-pub unsafe extern "C" fn c_ResetClearSubtitles() {
-    CLEAR_SUBTITLES = false;
+pub fn reset_clear_subtitles(comm: &mut Comm) {
+    comm.display.clear_subtitles = false;
 }
 
 /// # Safety
 /// The game thread must have an active published communication context.
-#[no_mangle]
-pub unsafe extern "C" fn AlienTalkSegue(track: u16) {
-    crate::app::bridge::enter(|cx| {
+pub unsafe fn alien_talk_segue(
+    comm: &mut Comm,
+    cx: &mut crate::engine::battle::Cx<'_>,
+    track: u16,
+) {
+    {
         let runtime = cx.kernel.input_runtime();
         let mut observer = runtime.observer();
         let mut io = crate::engine::observe::Io {
             observer: &mut *observer,
         };
-        super::ffi::observe_responses(&mut io);
-        super::ffi::rust_alien_talk_segue(runtime.input(), cx, &mut io, track.into());
-    });
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn EnableTalkingAnim(enable: i32) {
-    if enable != 0 {
-        COMM_DATA.alien_talk_desc.anim_flags &= !16;
-    } else {
-        COMM_DATA.alien_talk_desc.anim_flags |= 16;
+        super::ffi::observe_responses(comm, &mut io);
+        super::ffi::rust_alien_talk_segue(comm, runtime.input(), cx, &mut io, track.into());
     }
 }
-#[no_mangle]
-pub extern "C" fn SetCommIntroMode(mode: u32, duration: u32) {
-    super::ffi::set_comm_intro_mode(mode, duration);
+
+pub unsafe fn enable_talking_anim(comm: &mut Comm, enable: i32) {
+    if enable != 0 {
+        comm.data.alien_talk_desc.anim_flags &= !16;
+    } else {
+        comm.data.alien_talk_desc.anim_flags |= 16;
+    }
+}
+pub fn set_comm_intro_mode(comm: &mut Comm, mode: u32, duration: u32) {
+    super::ffi::set_comm_intro_mode(comm, mode, duration);
+}
+
+pub(crate) struct RuntimeState {
+    pub(crate) phrase_buf: [c_char; 2048],
+    pub(crate) window: CRect,
+    pub(crate) anim_context: *mut c_void,
+    pub(crate) text_cache_context: *mut crate::graphics::native_abi::context_desc,
+    pub(crate) text_cache_frame: *mut c_void,
+    pub(crate) clear_subtitles: bool,
+    pub(crate) subtitle: CText,
+    pub(crate) last_subtitle: *const c_char,
+    pub(crate) last_baseline: i16,
+}
+impl Default for RuntimeState {
+    fn default() -> Self {
+        Self {
+            phrase_buf: [0; 2048],
+            window: CRect {
+                corner: CPoint { x: 7, y: 10 },
+                width: 0,
+                height: 0,
+            },
+            anim_context: null_mut(),
+            text_cache_context: null_mut(),
+            text_cache_frame: null_mut(),
+            clear_subtitles: false,
+            subtitle: CText::new(null(), 0),
+            last_subtitle: null(),
+            last_baseline: 0,
+        }
+    }
+}
+
+#[cfg(test)]
+mod owner_tests {
+    use super::*;
+
+    #[test]
+    #[serial_test::serial]
+    fn subtitle_invalidation_drains_only_the_supplied_sessions_callbacks() {
+        let _: fn(&mut Comm) = clear_subtitles;
+        let _: fn(&mut Comm) = setup_subtitle_text_from_comm_data;
+        let _: fn(&mut Comm) -> *mut c_void = anim_context;
+        let _: fn(&mut Comm) = reset_clear_subtitles;
+        let _: fn(&mut Comm) -> i32 = clear_subtitles_pending;
+        fn move_baseline(comm: &mut Comm) {
+            comm.data.alien_text_baseline.y = 23;
+        }
+        let mut first = Comm::new();
+        let second = Comm::new();
+        first.data.alien_text_baseline.x = 17;
+        first.queue_phrase_callback(Some(move_baseline)).unwrap()(0);
+        // SAFETY: the serialized fixture owns both sessions and uses unloaded, null resource handles.
+        unsafe {
+            setup_subtitle_text_from_comm_data(&mut first);
+            assert_eq!(first.display.subtitle.baseline.x, 17);
+            check_subtitles(&mut first);
+            assert_eq!(first.display.subtitle.baseline.y, 23);
+            clear_subtitles(&mut first);
+            assert_eq!(clear_subtitles_pending(&mut first), 1);
+            comm_redraw_subtitles(&mut first, false);
+            assert_eq!(clear_subtitles_pending(&mut first), 1);
+            reset_clear_subtitles(&mut first);
+            assert_eq!(clear_subtitles_pending(&mut first), 0);
+            enable_talking_anim(&mut first, 0);
+            assert_eq!(first.data.alien_talk_desc.anim_flags & 16, 16);
+            enable_talking_anim(&mut first, 1);
+            assert_eq!(first.data.alien_talk_desc.anim_flags & 16, 0);
+            set_talking_finished(&mut first, 1);
+        }
+        set_comm_intro_mode(&mut first, 2, 840);
+        assert_eq!(first.fade_time(), 840);
+        assert!(!second.is_talking_finished());
+        assert_eq!(second.display.subtitle.baseline.x, 0);
+        assert_eq!(second.display.subtitle.baseline.y, 0);
+        crate::comm::with_test_context(|cx| {
+            crate::comm::input::fixture::install(cx);
+            // SAFETY: the fixture installed its input driver in the supplied exclusive Cx.
+            unsafe {
+                alien_talk_segue(&mut first, cx, 1);
+            }
+        });
+        assert!(!first.first_talk_call);
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn render_registrations_borrow_resources_for_only_the_supplied_session() {
+        use crate::graphics::{context_abi, drawable_abi, pixmap_abi};
+        // SAFETY: the serialized fixture creates its own drawable/context and frees them after borrowed registrations end.
+        unsafe {
+            #[cfg(feature = "debug-process")]
+            let context = context_abi::CreateContextAux(c"comm-session".as_ptr());
+            #[cfg(not(feature = "debug-process"))]
+            let context = context_abi::CreateContextAux();
+            let drawable = drawable_abi::CreateDrawable(0, 0, 0, 1);
+            let frame = pixmap_abi::CaptureDrawable(drawable);
+            assert!(!context.is_null());
+            assert!(!frame.is_null());
+            let mut first = Comm::new();
+            let second = Comm::new();
+            first.display.phrase_buf[0] = b'X' as c_char;
+            set_anim_context(&mut first, context.cast());
+            set_text_cache_context(&mut first, context.cast());
+            set_text_cache_frame(&mut first, frame.cast());
+            assert_eq!(anim_context(&mut first), context.cast());
+            assert_eq!(first.display.text_cache_context, context);
+            assert_eq!(first.display.text_cache_frame, frame.cast());
+            assert!(second.display.anim_context.is_null());
+            assert!(second.display.text_cache_context.is_null());
+            assert!(second.display.text_cache_frame.is_null());
+            assert_eq!(second.display.phrase_buf[0], 0);
+            drop(first);
+            assert_eq!(drawable_abi::DestroyDrawable(drawable), 1);
+            assert_eq!(context_abi::DestroyContext(context), 1);
+        }
+    }
 }

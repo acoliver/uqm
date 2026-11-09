@@ -12,7 +12,7 @@ pub const HANDLERS: &[(&str, &str)] = &[
     ("src/mainloop/main2_abi.rs", "operation"),
     ("src/mainloop/restart_menu/menu_abi.rs", "operation"),
     ("src/collections/hash_table.rs", "define_hash_table"),
-    ("src/comm/races/comandr.rs", "callbacks"),
+    ("src/comm/live/comandr.rs", "callbacks"),
     ("src/world/story/schema.rs", "game_state_fields"),
     ("src/c_bindings.rs", "assert_c_layout"),
 ];

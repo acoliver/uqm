@@ -1,24 +1,22 @@
 //! Shared boundary for dialogue scripts while the surrounding engine still uses C.
 
-use crate::comm::locdata::{CAnimationDesc, CLocData};
-use crate::engine::StoryKey;
-#[cfg(not(test))]
-use crate::engine::WorldData;
+pub(crate) use crate::comm::locdata::{CAnimationDesc, CLocData};
+pub(crate) use crate::engine::StoryKey;
 
-pub(super) const ANIM_DISABLED: u8 = 1 << 7;
-pub(super) const ONE_SECOND: u16 = 840;
-pub(super) const FUEL_TANK_SCALE: u32 = 100;
-pub(super) const GLOBAL_PLAYER_NAME: i32 = -1_000_000;
-pub(super) const GLOBAL_SHIP_NAME: i32 = -999_999;
+pub(crate) const ANIM_DISABLED: u8 = 1 << 7;
+pub(crate) const ONE_SECOND: u16 = 840;
+pub(crate) const FUEL_TANK_SCALE: u32 = 100;
+pub(crate) const GLOBAL_PLAYER_NAME: i32 = -1_000_000;
+pub(crate) const GLOBAL_SHIP_NAME: i32 = -999_999;
 
 #[derive(Clone, Copy, Default)]
-pub(super) struct Supplies {
+pub(crate) struct Supplies {
     pub landers: u8,
     pub fuel: u32,
     pub radioactives: u16,
 }
 
-pub(super) trait ScriptApi<H> {
+pub(crate) trait ScriptApi<H> {
     fn get(&self, key: StoryKey) -> u8;
     fn set(&mut self, key: StoryKey, value: u8);
     fn npc(&mut self, phrase: i32);
@@ -43,7 +41,7 @@ pub(super) trait ScriptApi<H> {
     fn fade_palette(&mut self, index: u16, duration: i16);
 }
 
-pub(super) fn animation(
+pub(crate) fn animation(
     start_index: u16,
     num_frames: u8,
     anim_flags: u8,
@@ -62,178 +60,49 @@ pub(super) fn animation(
     }
 }
 
-#[cfg(not(test))]
-pub(super) mod live {
-    use super::*;
-    use crate::comm::locdata::COMM_DATA;
-    use std::ffi::{c_char, CStr};
-
-    use crate::ui::sis::draw_landers;
-
-    use crate::strings::string_table::SetAbsStringTableIndex;
-
-    use crate::strings::string_table::GetStringAddress;
-
-    use crate::graphics::cmap_abi::GetColorMapAddress;
-
-    use crate::graphics::cmap_abi::XFormColorMap;
-
-    use crate::comm::comm_abi::AlienTalkSegue;
-
-    extern "C" {
-
-        static mut shared_phrase_buf: [c_char; 2048];
-    }
-
-    // Callbacks and live globals belong to the game thread, as in the C scripts.
-    pub(in crate::comm::races) struct LiveScript<'a, 'b, H> {
-        pub cx: std::cell::RefCell<&'a mut crate::engine::battle::Cx<'b>>,
-        pub callback: fn(H) -> crate::comm::response::ResponseFunc,
-    }
-
-    impl<'a, 'b, H> LiveScript<'a, 'b, H> {
-        pub fn new(
-            cx: &'a mut crate::engine::battle::Cx<'b>,
-            callback: fn(H) -> fn(&mut crate::engine::battle::Cx<'_>, u32),
-        ) -> Self {
-            Self {
-                callback,
-                cx: std::cell::RefCell::new(cx),
-            }
-        }
-    }
-
-    impl<H> ScriptApi<H> for LiveScript<'_, '_, H> {
-        fn get(&self, key: StoryKey) -> u8 {
-            self.cx.borrow().world.story_state(key) as u8
-        }
-
-        fn set(&mut self, key: StoryKey, value: u8) {
-            self.cx
-                .borrow_mut()
-                .world
-                .set_story_state(key, u32::from(value));
-        }
-
-        fn npc(&mut self, phrase: i32) {
-            self.cx
-                .borrow_mut()
-                .with_legacy(|| unsafe { crate::comm::ffi::rust_npc_phrase_cb(phrase, None) })
-        }
-
-        fn response(&mut self, phrase: u16, handler: H, fragments: &[i32]) {
-            self.cx.borrow_mut().with_legacy(|| {
-                unsafe {
-                    let world = WorldData::current();
-                    let text = if fragments.is_empty() {
-                        GetStringAddress(SetAbsStringTableIndex(
-                            (COMM_DATA.conversation_phrases).cast(),
-                            phrase - 1,
-                        ))
-                    } else {
-                        // Concatenate bytes exactly as construct_response does, including
-                        // the spaces already present in the translated phrase fragments.
-                        let mut text = Vec::new();
-                        for &fragment in fragments {
-                            let ptr = match fragment {
-                                GLOBAL_PLAYER_NAME => {
-                                    std::ptr::addr_of!((**world).flagship.commander_name).cast()
-                                }
-                                GLOBAL_SHIP_NAME => {
-                                    std::ptr::addr_of!((**world).flagship.ship_name).cast()
-                                }
-                                _ => {
-                                    let index = u16::try_from(fragment - 1)
-                                        .expect("invalid response fragment");
-                                    GetStringAddress(SetAbsStringTableIndex(
-                                        (COMM_DATA.conversation_phrases).cast(),
-                                        index,
-                                    ))
-                                }
-                            };
-                            text.extend_from_slice(CStr::from_ptr(ptr).to_bytes());
-                        }
-                        assert!(
-                            text.len() < 2048,
-                            "constructed dialogue response exceeds shared buffer"
-                        );
-                        let buf = std::ptr::addr_of_mut!(shared_phrase_buf).cast::<u8>();
-                        std::ptr::copy_nonoverlapping(text.as_ptr(), buf, text.len());
-                        buf.add(text.len()).write(0);
-                        buf.cast()
-                    };
-                    crate::comm::ffi::do_response_phrase(
-                        u32::from(phrase),
-                        Some(CStr::from_ptr(text)),
-                        Some((self.callback)(handler)),
-                    );
-                }
-            })
-        }
-
-        fn enabled(&self, phrase: u16) -> bool {
-            self.cx
-                .borrow_mut()
-                .with_legacy(|| crate::comm::ffi::rust_phrase_enabled(i32::from(phrase)) != 0)
-        }
-
-        fn disable(&mut self, phrase: u16) {
-            self.cx
-                .borrow_mut()
-                .with_legacy(|| crate::comm::ffi::rust_disable_phrase(i32::from(phrase)))
-        }
-
-        fn supplies(&self) -> Supplies {
-            self.cx.borrow_mut().with_legacy(|| Supplies {
-                landers: WorldData::current().read(|owner| owner.flagship.num_landers),
-                fuel: WorldData::current().read(|owner| owner.flagship.fuel_on_board),
-                radioactives: WorldData::current().read(|owner| owner.flagship.element_amounts[6]),
-            })
-        }
-
-        fn add_lander(&mut self) {
-            let cx = &mut *self.cx.borrow_mut();
-            cx.with_legacy(|| unsafe {
-                (**WorldData::current()).flagship.num_landers += 1;
-            });
-            draw_landers(cx.kernel, cx.world);
-        }
-
-        fn gauges(&mut self, crew: i16, fuel: i16, units: i32) {
-            {
-                let cx = &mut *self.cx.borrow_mut();
-                crate::ui::sis::delta_sis_gauges(cx.kernel, cx.world, crew, fuel, units)
-            }
-        }
-
-        fn palette(&mut self, index: u16) {
-            self.cx.borrow_mut().with_legacy(|| unsafe {
-                COMM_DATA.alien_colormap =
-                    (SetAbsStringTableIndex((COMM_DATA.alien_colormap).cast(), index)).cast()
-            })
-        }
-
-        fn talk_segue(&mut self, track: u16) {
-            self.cx
-                .borrow_mut()
-                .with_legacy(|| unsafe { AlienTalkSegue(track) })
-        }
-
-        fn disable_animation(&mut self, index: usize) {
-            self.cx.borrow_mut().with_legacy(|| unsafe {
-                COMM_DATA.alien_ambient_array[index].anim_flags |= ANIM_DISABLED
-            })
-        }
-
-        fn fade_palette(&mut self, index: u16, duration: i16) {
-            self.cx.borrow_mut().with_legacy(|| unsafe {
-                let map = SetAbsStringTableIndex((COMM_DATA.alien_colormap).cast(), index);
-                XFormColorMap(GetColorMapAddress(map), duration);
-            })
-        }
-    }
+pub(crate) fn as_comm_data(desc: &CLocData) -> crate::comm::types::CommData {
+    crate::comm::locdata::read_locdata(desc)
 }
 
-pub(super) fn as_comm_data(desc: &CLocData) -> crate::comm::types::CommData {
-    crate::comm::locdata::read_locdata(desc)
+#[derive(Clone, Copy)]
+#[repr(usize)]
+pub enum DialogueKind {
+    Blackur,
+    Chmmr,
+    Yehat,
+    Umgah,
+    Mycon,
+    Talkpet,
+    Utwig,
+    Druuge,
+    Syreen,
+    Orz,
+    Spahome,
+    Ilwrath,
+    Starbas,
+    Slyhome,
+    Arilou,
+    Supox,
+    Shofixt,
+    Pkunk,
+    Rebel,
+    Slyland,
+    Vux,
+    Melnorm,
+    Zoqfot,
+    Comandr,
+    Urquan,
+    Thradd,
+    Spathi,
+}
+
+impl DialogueKind {
+    pub(crate) const COUNT: usize = 27;
+}
+
+pub trait DialogueHost {
+    fn initialize(&mut self, kind: DialogueKind, cx: &mut crate::engine::battle::Cx<'_>);
+    fn intro(&mut self, kind: DialogueKind, cx: &mut crate::engine::battle::Cx<'_>);
+    fn post_encounter(&mut self, kind: DialogueKind, cx: &mut crate::engine::battle::Cx<'_>);
+    fn uninit(&mut self, kind: DialogueKind, cx: &mut crate::engine::battle::Cx<'_>) -> u32;
 }

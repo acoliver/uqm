@@ -510,6 +510,7 @@ mod tests {
                 seed: self.seed,
                 stop: false,
                 planet_side: None,
+                comm_response: None,
             }
         }
 

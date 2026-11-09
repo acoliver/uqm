@@ -1,12 +1,9 @@
 //! Druuge dialogue, ported from druugec.c.
-use super::script::{animation, as_comm_data};
-use crate::comm::locdata::{CColor, CLocData, CPoint};
-use crate::comm::types::CommData;
-use crate::engine::{battle::Cx, StoryKey};
+pub(crate) use crate::engine::StoryKey;
 mod phrases;
 use phrases::*;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Handler {
+pub(crate) enum Handler {
     ExitConversation,
     Buy,
     Trade,
@@ -17,19 +14,19 @@ enum Handler {
     Space,
 }
 #[derive(Default)]
-struct Session {
+pub(crate) struct Session {
     slavery_count: u16,
     attempted_salvage: bool,
     last_response: u16,
 }
-struct Dialogue<'a, A> {
-    api: &'a mut A,
-    session: &'a mut Session,
+pub(crate) struct Dialogue<'a, A> {
+    pub(crate) api: &'a mut A,
+    pub(crate) session: &'a mut Session,
 }
-mod api;
-use api::DruugeApi;
+pub(crate) mod api;
+pub(crate) use api::DruugeApi;
 impl<A: DruugeApi> Dialogue<'_, A> {
-    fn handle(&mut self, h: Handler, r: u16) {
+    pub(crate) fn handle(&mut self, h: Handler, r: u16) {
         match h {
             Handler::ExitConversation => self.exit_conversation(r),
             Handler::Buy => self.buy(r),
@@ -41,7 +38,7 @@ impl<A: DruugeApi> Dialogue<'_, A> {
             Handler::Space => self.space(r),
         }
     }
-    fn exit_conversation(&mut self, r: u16) {
+    pub(crate) fn exit_conversation(&mut self, r: u16) {
         if r == BYE {
             self.api.segue(0_u32);
             if (i32::from(self.api.get(StoryKey::GLOBAL_FLAGS_AND_DATA)) & (1 << 7)) != 0 {
@@ -94,7 +91,7 @@ impl<A: DruugeApi> Dialogue<'_, A> {
             self.api.npc(i32::from(FIGHT_FOR_BOMB));
         }
     }
-    fn buy(&mut self, r: u16) {
+    pub(crate) fn buy(&mut self, r: u16) {
         if (r == WANT_TO_BUY) || (r == IM_READY_TO_BUY) {
             self.api.npc(i32::from(READY_TO_SELL));
             if !(self.api.get(StoryKey::ROSY_SPHERE) != 0) {
@@ -174,7 +171,7 @@ impl<A: DruugeApi> Dialogue<'_, A> {
         self.api.response(BUY_FUEL, Handler::Buy, &[]);
         self.api.response(DONE_BUYING, Handler::TradeWorld, &[]);
     }
-    fn trade(&mut self, r: u16) {
+    pub(crate) fn trade(&mut self, r: u16) {
         if !(r == WHATS_THE_SPHERE_AGAIN) {
             self.api.npc(i32::from(TRADE_FOR_SPHERE));
             self.session.last_response = r;
@@ -189,7 +186,7 @@ impl<A: DruugeApi> Dialogue<'_, A> {
                 .response(WHATS_THE_SPHERE_AGAIN, Handler::Trade, &[]);
         }
     }
-    fn do_transaction(&mut self, r: u16) {
+    pub(crate) fn do_transaction(&mut self, r: u16) {
         if r == SELL_MAIDENS {
             self.api.set(StoryKey::MAIDENS_ON_SHIP, 0);
         } else if r == SELL_FRAGMENTS {
@@ -281,7 +278,7 @@ impl<A: DruugeApi> Dialogue<'_, A> {
         }
     }
 
-    fn sell(&mut self, r: u16) {
+    pub(crate) fn sell(&mut self, r: u16) {
         if r == WANT_TO_SELL {
             self.api.npc(i32::from(READY_TO_BUY));
         } else if (r == NO_WAY) || (r == WAY) {
@@ -320,7 +317,7 @@ impl<A: DruugeApi> Dialogue<'_, A> {
         }
         self.api.response(DONE_SELLING, Handler::TradeWorld, &[]);
     }
-    fn explain_slave_trade(&mut self, r: u16) {
+    pub(crate) fn explain_slave_trade(&mut self, r: u16) {
         if r == WANT_TO_BUY {
             self.api.npc(i32::from(WE_SELL_FOR_CREW));
         } else if r == ISNT_THIS_SLAVE_TRADING {
@@ -345,7 +342,7 @@ impl<A: DruugeApi> Dialogue<'_, A> {
             .response(I_WILL_NEVER_TRADE_CREW, Handler::TradeWorld, &[]);
         self.api.response(IM_READY_TO_BUY, Handler::Buy, &[]);
     }
-    fn trade_world(&mut self, r: u16) {
+    pub(crate) fn trade_world(&mut self, r: u16) {
         if r == WHATS_UP_AT_TRADE_WORLD {
             let mut num_visits: u8;
             num_visits = self.api.get(StoryKey::DRUUGE_HOME_INFO);
@@ -398,7 +395,7 @@ impl<A: DruugeApi> Dialogue<'_, A> {
         }
         self.api.response(BYE, Handler::ExitConversation, &[]);
     }
-    fn bomb_ambush(&mut self, r: u16) {
+    pub(crate) fn bomb_ambush(&mut self, r: u16) {
         if r == WHATS_UP_AT_BOMB_PLANET {
             self.api.npc(i32::from(GEN_INFO_AT_BOMB_PLANET));
             self.api.set(StoryKey::BOMB_VISITS, 2_u8);
@@ -421,7 +418,7 @@ impl<A: DruugeApi> Dialogue<'_, A> {
         }
         self.api.response(BYE, Handler::ExitConversation, &[]);
     }
-    fn space(&mut self, r: u16) {
+    pub(crate) fn space(&mut self, r: u16) {
         if r == WHATS_UP_IN_SPACE {
             let mut num_visits: u8;
             num_visits = self.api.get(StoryKey::DRUUGE_SPACE_INFO);
@@ -457,7 +454,7 @@ impl<A: DruugeApi> Dialogue<'_, A> {
         }
         self.api.response(BYE, Handler::ExitConversation, &[]);
     }
-    fn intro(&mut self) {
+    pub(crate) fn intro(&mut self) {
         let mut visits: u8;
         if i32::from((self.api.activity()) as u8) == 5 {
             self.api.npc(i32::from(OUT_TAKES));
@@ -648,7 +645,7 @@ impl<A: DruugeApi> Dialogue<'_, A> {
             }
         }
     }
-    fn post_druuge_enc(&mut self) {
+    pub(crate) fn post_druuge_enc(&mut self) {
         if (((self.api.get_segue()) as i32 == 1) && !self.session.attempted_salvage)
             && !(self.api.get(StoryKey::DRUUGE_MANNER) != 0)
             && !(self.api.get(StoryKey::ATTACKED_DRUUGE) != 0)
@@ -657,7 +654,7 @@ impl<A: DruugeApi> Dialogue<'_, A> {
             self.api.set(StoryKey::DRUUGE_VISITS, 0_u8);
         }
     }
-    fn initialize(&mut self) {
+    pub(crate) fn initialize(&mut self) {
         self.session.slavery_count = 0;
         self.session.attempted_salvage = false;
         if ((i32::from(self.api.get(StoryKey::DRUUGE_MANNER)) == 0)
@@ -670,189 +667,9 @@ impl<A: DruugeApi> Dialogue<'_, A> {
         }
     }
 }
-fn descriptor() -> CLocData {
-    let mut d = CLocData {
-        alien_frame_res: c"comm.druuge.graphics".as_ptr(),
-        alien_font_res: c"comm.druuge.font".as_ptr(),
-        alien_colormap_res: c"comm.druuge.colortable".as_ptr(),
-        alien_song_res: c"comm.druuge.music".as_ptr(),
-        conversation_phrases_res: c"comm.druuge.dialogue".as_ptr(),
-        alien_text_fcolor: CColor {
-            r: 255,
-            g: 255,
-            b: 255,
-            a: 255,
-        },
-        alien_text_bcolor: CColor {
-            r: 0,
-            g: 0,
-            b: 0,
-            a: 255,
-        },
-        alien_text_baseline: CPoint { x: 121, y: 70 },
-        alien_text_width: 224,
-        alien_text_align: 1,
-        alien_text_valign: 1,
-        num_animations: 11,
-        ..CLocData::default()
-    };
-    d.alien_ambient_array[0] = animation(5, 4, 2, (63, 0), (63, 0));
-    d.alien_ambient_array[1] = animation(9, 4, 2, (63, 0), (63, 0));
-    d.alien_ambient_array[2] = animation(13, 6, 2, (63, 0), (63, 0));
-    d.alien_ambient_array[3] = animation(19, 3, 2, (42, 0), (840, 2520));
-    d.alien_ambient_array[4] = animation(22, 3, 1, (70, 0), (840, 2520));
-    d.alien_ambient_array[5] = animation(25, 3, 1, (70, 0), (840, 2520));
-    d.alien_ambient_array[6] = animation(28, 3, 1, (70, 0), (840, 2520));
-    d.alien_ambient_array[7] = animation(31, 2, 2, (70, 0), (840, 2520));
-    d.alien_ambient_array[8] = animation(33, 7, 10, (70, 0), (5880, 2520));
-    d.alien_ambient_array[9] = animation(40, 4, 2, (252, 0), (252, 0));
-    d.alien_ambient_array[10] = animation(44, 4, 2, (168, 0), (168, 0));
-    d.alien_transition_desc = animation(0, 0, 0, (0, 0), (0, 0));
-    d.alien_talk_desc = animation(1, 4, 0, (56, 56), (70, 70));
-    #[cfg(not(test))]
-    {
-        d.init_encounter_func = Some(live::intro);
-        d.post_encounter_func = Some(live::post);
-        d.uninit_encounter_func = Some(live::uninit);
-    }
-    d
-}
-#[cfg(not(test))]
-pub(crate) mod live {
-    use super::*;
-    use crate::comm::races::script::live::LiveScript;
-    fn run(cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, LiveScript<'_, '_, Handler>>)) {
-        let mut api = LiveScript::new(cx, callback);
-        static mut SESSION: Session = Session {
-            slavery_count: 0,
-            attempted_salvage: false,
-            last_response: 0,
-        };
-        unsafe {
-            f(&mut Dialogue {
-                api: &mut api,
-                session: &mut *std::ptr::addr_of_mut!(SESSION),
-            });
-        }
-    }
-    fn exit_conversation(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::ExitConversation,
-                u16::try_from(r).expect("response exceeds COUNT"),
-            )
-        });
-    }
-    fn buy(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::Buy,
-                u16::try_from(r).expect("response exceeds COUNT"),
-            )
-        });
-    }
-    fn trade(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::Trade,
-                u16::try_from(r).expect("response exceeds COUNT"),
-            )
-        });
-    }
-    fn sell(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::Sell,
-                u16::try_from(r).expect("response exceeds COUNT"),
-            )
-        });
-    }
-    fn explain_slave_trade(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::ExplainSlaveTrade,
-                u16::try_from(r).expect("response exceeds COUNT"),
-            )
-        });
-    }
-    fn trade_world(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::TradeWorld,
-                u16::try_from(r).expect("response exceeds COUNT"),
-            )
-        });
-    }
-    fn bomb_ambush(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::BombAmbush,
-                u16::try_from(r).expect("response exceeds COUNT"),
-            )
-        });
-    }
-    fn space(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::Space,
-                u16::try_from(r).expect("response exceeds COUNT"),
-            )
-        });
-    }
-    fn callback(h: Handler) -> crate::comm::response::ResponseFunc {
-        match h {
-            Handler::ExitConversation => exit_conversation,
-            Handler::Buy => buy,
-            Handler::Trade => trade,
-            Handler::Sell => sell,
-            Handler::ExplainSlaveTrade => explain_slave_trade,
-            Handler::TradeWorld => trade_world,
-            Handler::BombAmbush => bomb_ambush,
-            Handler::Space => space,
-        }
-    }
-    pub(super) fn intro(cx: &mut Cx<'_>) {
-        run(cx, |s| s.intro());
-    }
-    pub(super) fn post(cx: &mut Cx<'_>) {
-        run(cx, |s| s.post_druuge_enc());
-    }
-    pub(super) fn uninit(_cx: &mut Cx<'_>) -> u16 {
-        0
-    }
-    /// Initialize this encounter on the game thread.
-    ///
-    /// # Safety
-    /// Communication state must be initialized on the game thread.
-    pub unsafe fn init_druuge_comm(cx: &mut Cx<'_>) -> CLocData {
-        let desc = descriptor();
-        run(cx, |s| s.initialize());
-        desc
-    }
-}
-pub struct DruugeDialogue;
-impl super::RaceDialogue for DruugeDialogue {
-    fn init(&self, _cx: &mut Cx<'_>) -> CommData {
-        #[cfg(not(test))]
-        {
-            unsafe { as_comm_data(&live::init_druuge_comm(_cx)) }
-        }
-        #[cfg(test)]
-        {
-            as_comm_data(&descriptor())
-        }
-    }
-    fn intro(&self, _cx: &mut Cx<'_>) {
-        #[cfg(not(test))]
-        live::intro(_cx);
-    }
-    fn post_encounter(&self, _cx: &mut Cx<'_>) {
-        #[cfg(not(test))]
-        live::post(_cx);
-    }
-    fn uninit(&self, _cx: &mut Cx<'_>) -> u32 {
-        0
-    }
-}
+
+#[cfg(test)]
+use crate::comm::descriptors::druuge::descriptor;
+
 #[cfg(test)]
 mod tests;

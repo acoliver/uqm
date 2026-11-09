@@ -1,14 +1,13 @@
 //! Utwig dialogue, ported from the original C script.
-use super::alliance::AllianceApi;
-use super::script::{animation, as_comm_data, GLOBAL_PLAYER_NAME};
-use crate::comm::locdata::{CColor, CLocData, CPoint};
-use crate::comm::types::CommData;
-use crate::engine::{battle::Cx, StoryKey};
+pub(crate) use super::alliance::AllianceApi;
+pub(crate) use super::script::GLOBAL_PLAYER_NAME;
+pub(crate) use crate::comm::locdata::CLocData;
+pub(crate) use crate::engine::StoryKey;
 mod phrases;
-use super::alliance::{SUPOX_SHIP, UTWIG_SHIP};
+pub(crate) use super::alliance::{SUPOX_SHIP, UTWIG_SHIP};
 use phrases::*;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Handler {
+pub(crate) enum Handler {
     AlliedHome,
     ExitConversation,
     BeforeKohrAh,
@@ -16,11 +15,11 @@ enum Handler {
     NeutralUtwig,
     BombWorld,
 }
-struct Dialogue<'a, A> {
-    api: &'a mut A,
+pub(crate) struct Dialogue<'a, A> {
+    pub(crate) api: &'a mut A,
 }
 impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
-    fn handle(&mut self, h: Handler, r: u16) {
+    pub(crate) fn handle(&mut self, h: Handler, r: u16) {
         match h {
             Handler::AlliedHome => self.allied_home(r),
             Handler::ExitConversation => self.exit_conversation(r),
@@ -30,7 +29,7 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
             Handler::BombWorld => self.bomb_world(r),
         }
     }
-    fn initialize(&mut self, desc: &mut CLocData) {
+    pub(crate) fn initialize(&mut self, desc: &mut CLocData) {
         if self.api.get(StoryKey::UTWIG_HAVE_ULTRON) != 0 {
             desc.alien_alt_song_res = c"comm.utwig.ultron.music".as_ptr();
             desc.alien_song_flags |= 1;
@@ -41,7 +40,7 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
             self.api.get(StoryKey::UTWIG_HAVE_ULTRON) == 0 && self.api.activity() as u8 != 5,
         ));
     }
-    fn exit_conversation(&mut self, r: u16) {
+    pub(crate) fn exit_conversation(&mut self, r: u16) {
         self.api.segue(0);
         if r == BYE_NEUTRAL {
             self.api.npc(i32::from(GOODBYE_NEUTRAL));
@@ -123,7 +122,7 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
             }
         }
     }
-    fn allied_home(&mut self, r: u16) {
+    pub(crate) fn allied_home(&mut self, r: u16) {
         let mut news: u8;
         news = self.api.get(StoryKey::UTWIG_WAR_NEWS);
         let num_visits: u8 = self.api.get(StoryKey::UTWIG_SUPOX_MISSION);
@@ -194,7 +193,7 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
         self.api
             .response(BYE_ALLIED_HOMEWORLD, Handler::ExitConversation, &[]);
     }
-    fn before_kohr_ah(&mut self, r: u16) {
+    pub(crate) fn before_kohr_ah(&mut self, r: u16) {
         let mut num_visits: u8;
         if r == WHATS_UP_BEFORE_SPACE {
             num_visits = self.api.get(StoryKey::UTWIG_INFO);
@@ -230,7 +229,7 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
         self.api
             .response(BYE_BEFORE_SPACE, Handler::ExitConversation, &[]);
     }
-    fn after_kohr_ah(&mut self, r: u16) {
+    pub(crate) fn after_kohr_ah(&mut self, r: u16) {
         let mut num_visits: u8;
         if r == WHATS_UP_AFTER_SPACE {
             num_visits = self.api.get(StoryKey::UTWIG_INFO);
@@ -266,7 +265,7 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
         self.api
             .response(BYE_AFTER_SPACE, Handler::ExitConversation, &[]);
     }
-    fn neutral_utwig(&mut self, r: u16) {
+    pub(crate) fn neutral_utwig(&mut self, r: u16) {
         let mut fragments: Vec<i32> = Vec::new();
         let _i: u8;
         let mut last_stack: u8;
@@ -394,7 +393,7 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
         self.api
             .response(BYE_NEUTRAL, Handler::ExitConversation, &[]);
     }
-    fn bomb_world(&mut self, r: u16) {
+    pub(crate) fn bomb_world(&mut self, r: u16) {
         let mut last_stack: u8;
         let mut p_str: [u16; 2] = [0; 2];
         last_stack = 0;
@@ -477,7 +476,7 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
                 .response(BYE_NEUTRAL, Handler::ExitConversation, &[]);
         }
     }
-    fn intro(&mut self) {
+    pub(crate) fn intro(&mut self) {
         let mut num_visits: u8;
         if (self.api.activity() as u8) == 5 {
             self.api.npc(i32::from(OUT_TAKES));
@@ -701,169 +700,9 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
         }
     }
 }
-fn descriptor() -> CLocData {
-    let mut d = CLocData {
-        alien_frame_res: c"comm.utwig.graphics".as_ptr(),
-        alien_font_res: c"comm.utwig.font".as_ptr(),
-        alien_colormap_res: c"comm.utwig.colortable".as_ptr(),
-        alien_song_res: c"comm.utwig.music".as_ptr(),
-        conversation_phrases_res: c"comm.utwig.dialogue".as_ptr(),
-        alien_text_fcolor: CColor {
-            r: 255,
-            g: 255,
-            b: 255,
-            a: 255,
-        },
-        alien_text_bcolor: CColor {
-            r: 0,
-            g: 0,
-            b: 0,
-            a: 255,
-        },
-        alien_text_baseline: CPoint { x: 121, y: 70 },
-        alien_text_width: 224,
-        alien_text_align: 1,
-        alien_text_valign: 1,
-        num_animations: 16,
-        ..CLocData::default()
-    };
-    d.alien_ambient_array[0] = animation(4, 3, 4, (56, 28), (840, 2520));
-    d.alien_ambient_array[1] = animation(7, 4, 4, (56, 28), (8400, 2520));
-    d.alien_ambient_array[1].block_mask = 4;
-    d.alien_ambient_array[2] = animation(11, 2, 12, (112, 28), (8400, 2520));
-    d.alien_ambient_array[2].block_mask = 2;
-    d.alien_ambient_array[3] = animation(13, 5, 2, (70, 0), (70, 0));
-    d.alien_ambient_array[4] = animation(18, 2, 1, (112, 28), (8400, 2520));
-    d.alien_ambient_array[5] = animation(20, 2, 1, (112, 28), (8400, 2520));
-    d.alien_ambient_array[6] = animation(22, 3, 1, (112, 28), (8400, 2520));
-    d.alien_ambient_array[7] = animation(25, 2, 1, (112, 28), (8400, 2520));
-    d.alien_ambient_array[8] = animation(27, 3, 4, (112, 28), (8400, 2520));
-    d.alien_ambient_array[9] = animation(30, 2, 1, (112, 28), (8400, 2520));
-    d.alien_ambient_array[10] = animation(32, 2, 1, (112, 28), (8400, 2520));
-    d.alien_ambient_array[11] = animation(34, 2, 1, (112, 28), (8400, 2520));
-    d.alien_ambient_array[12] = animation(36, 2, 1, (112, 28), (8400, 2520));
-    d.alien_ambient_array[13] = animation(38, 2, 1, (112, 28), (8400, 2520));
-    d.alien_ambient_array[14] = animation(40, 2, 1, (112, 28), (8400, 2520));
-    d.alien_ambient_array[15] = animation(42, 3, 4, (112, 28), (8400, 2520));
-    d.alien_transition_desc = animation(0, 0, 0, (0, 0), (0, 0));
-    d.alien_talk_desc = animation(1, 3, 0, (42, 42), (98, 420));
-    #[cfg(not(test))]
-    {
-        d.init_encounter_func = Some(live::intro);
-        d.post_encounter_func = Some(live::post);
-        d.uninit_encounter_func = Some(live::uninit);
-    }
-    d
-}
 
-#[cfg(not(test))]
-pub(crate) mod live {
-    use super::*;
-    use crate::comm::races::script::live::LiveScript;
+#[cfg(test)]
+use crate::comm::descriptors::utwig::descriptor;
 
-    fn run(cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, LiveScript<'_, '_, Handler>>)) {
-        let mut api = LiveScript::new(cx, callback);
-        f(&mut Dialogue { api: &mut api });
-    }
-    fn allied_home(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::AlliedHome,
-                u16::try_from(r).expect("response exceeds COUNT"),
-            )
-        });
-    }
-    fn exit_conversation(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::ExitConversation,
-                u16::try_from(r).expect("response exceeds COUNT"),
-            )
-        });
-    }
-    fn before_kohr_ah(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::BeforeKohrAh,
-                u16::try_from(r).expect("response exceeds COUNT"),
-            )
-        });
-    }
-    fn after_kohr_ah(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::AfterKohrAh,
-                u16::try_from(r).expect("response exceeds COUNT"),
-            )
-        });
-    }
-    fn neutral_utwig(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::NeutralUtwig,
-                u16::try_from(r).expect("response exceeds COUNT"),
-            )
-        });
-    }
-    fn bomb_world(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::BombWorld,
-                u16::try_from(r).expect("response exceeds COUNT"),
-            )
-        });
-    }
-
-    fn callback(h: Handler) -> crate::comm::response::ResponseFunc {
-        match h {
-            Handler::AlliedHome => allied_home,
-            Handler::ExitConversation => exit_conversation,
-            Handler::BeforeKohrAh => before_kohr_ah,
-            Handler::AfterKohrAh => after_kohr_ah,
-            Handler::NeutralUtwig => neutral_utwig,
-            Handler::BombWorld => bomb_world,
-        }
-    }
-    pub(super) fn intro(cx: &mut Cx<'_>) {
-        run(cx, |s| s.intro());
-    }
-    pub(super) fn post(_cx: &mut Cx<'_>) {}
-    pub(super) fn uninit(_cx: &mut Cx<'_>) -> u16 {
-        0
-    }
-    /// Initialize the encounter on the game thread.
-    ///
-    /// # Safety
-    /// Communication state must be initialized on the game thread.
-    pub unsafe fn init_utwig_comm(cx: &mut Cx<'_>) -> CLocData {
-        let mut desc = descriptor();
-        run(cx, |s| s.initialize(&mut desc));
-        desc
-    }
-}
-pub struct UtwigDialogue;
-impl super::RaceDialogue for UtwigDialogue {
-    fn init(&self, _cx: &mut Cx<'_>) -> CommData {
-        #[cfg(not(test))]
-        {
-            unsafe { as_comm_data(&live::init_utwig_comm(_cx)) }
-        }
-        #[cfg(test)]
-        {
-            as_comm_data(&descriptor())
-        }
-    }
-    fn intro(&self, _cx: &mut Cx<'_>) {
-        #[cfg(not(test))]
-        live::intro(_cx);
-    }
-    fn post_encounter(&self, _cx: &mut Cx<'_>) {
-        #[cfg(not(test))]
-        live::post(_cx);
-    }
-    fn uninit(&self, _cx: &mut Cx<'_>) -> u32 {
-        0
-    }
-}
 #[cfg(test)]
 mod tests;

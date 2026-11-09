@@ -1,10 +1,9 @@
 //! Script glue, ported from commglue.c (GPL-2.0-or-later).
 
+#[cfg(not(test))]
+use crate::comm::Comm;
+
 use crate::c_bindings::global_state::NUMBER_SPEECH_DESC;
-#[cfg(not(test))]
-use crate::engine::Kernel;
-#[cfg(not(test))]
-use crate::engine::World;
 
 /// Collect one-based phrase indices in the same recursive order as NPCNumberPhrase.
 unsafe fn number_phrases(
@@ -58,7 +57,6 @@ unsafe fn number_phrases(
 #[cfg(not(test))]
 pub(crate) mod runtime {
     use super::*;
-    use crate::comm::locdata::COMM_DATA;
     use crate::engine::StoryKey;
     use std::ffi::c_char;
     use std::ptr::null_mut;
@@ -66,36 +64,31 @@ pub(crate) mod runtime {
     use crate::sound::heart_ffi::splice_multi_track as SpliceMultiTrack;
     use crate::sound::heart_ffi::splice_track as SpliceTrack;
 
-    use crate::strings::string_table::GetStringAddress;
-
     use crate::strings::string_table::GetStringSoundClip;
 
     use crate::strings::string_table::SetAbsStringTableIndex;
 
-    use crate::strings::string_table::SetRelStringTableIndex;
-
     /// # Safety
     /// Called from the game thread with a valid printf integer format or null.
-    #[no_mangle]
-    pub unsafe extern "C" fn NPCNumber(number: i32, format: *const c_char) {
+    pub unsafe fn npc_number(comm: &mut Comm, number: i32, format: *const c_char) {
         let format = if format.is_null() {
             c"%d".as_ptr()
         } else {
             format
         };
-        if COMM_DATA.alien_number_speech.is_null() {
+        if comm.data.alien_number_speech.is_null() {
             let mut buffer = [0 as c_char; 32];
             libc::snprintf(buffer.as_mut_ptr(), buffer.len(), format, number);
             SpliceTrack(null_mut(), buffer.as_mut_ptr(), null_mut(), None);
         } else {
-            let speech = &*COMM_DATA.alien_number_speech.cast::<NUMBER_SPEECH_DESC>();
+            let speech = &*comm.data.alien_number_speech.cast::<NUMBER_SPEECH_DESC>();
             let mut indices = Vec::new();
             number_phrases(speech, number, true, &mut indices);
             let mut tracks = [std::ptr::null::<c_char>(); 20];
             assert!(indices.len() < tracks.len());
             for (track, index) in tracks.iter_mut().zip(indices) {
                 *track = GetStringSoundClip(SetAbsStringTableIndex(
-                    (COMM_DATA.conversation_phrases).cast(),
+                    (comm.data.conversation_phrases).cast(),
                     index.wrapping_sub(1),
                 ))
                 .cast();
@@ -106,67 +99,35 @@ pub(crate) mod runtime {
         }
     }
 
-    /// # Safety
-    /// Buffer must hold the complete alliance name, including commander and suffix.
-    #[no_mangle]
-    pub unsafe extern "C" fn GetAllianceName(buffer: *mut c_char, first: u16) {
-        let (variant, commander_name) = World::current().read(|world| {
-            (
-                world.story_state(StoryKey::NEW_ALLIANCE_NAME) as u8,
-                world.data.flagship.commander_name,
-            )
-        });
-        let entry = SetAbsStringTableIndex(
-            (COMM_DATA.conversation_phrases).cast(),
-            first.wrapping_sub(1).wrapping_add(variant.into()),
-        );
-        libc::strcpy(buffer, GetStringAddress(entry));
-        if variant == 3 {
-            libc::strcat(buffer, commander_name.as_ptr().cast());
-            libc::strcat(buffer, GetStringAddress(SetRelStringTableIndex(entry, 1)));
-        }
-    }
-
-    /// # Safety
-    /// Called on the game thread with a valid Segue enum value.
-    #[no_mangle]
-    pub unsafe extern "C" fn setSegue(segue: i32) {
-        let world = World::current();
+    pub fn set_segue(comm: &mut Comm, cx: &mut crate::engine::battle::Cx<'_>, segue: u32) {
+        comm.set_segue(crate::comm::segue::Segue::from(segue));
+        let world = &mut cx.world;
         match segue {
-            0 => world.write(|world| world.set_story_state(StoryKey::BATTLE_SEGUE, 0)),
-            1 => world.write(|world| world.set_story_state(StoryKey::BATTLE_SEGUE, 1)),
+            0 => world.set_story_state(StoryKey::BATTLE_SEGUE, 0),
+            1 => world.set_story_state(StoryKey::BATTLE_SEGUE, 1),
             2 => {
-                (**Kernel::current()).instant_victory = 1;
-                world.write(|world| world.set_story_state(StoryKey::BATTLE_SEGUE, 1));
+                cx.kernel.instant_victory = 1;
+                world.set_story_state(StoryKey::BATTLE_SEGUE, 1);
             }
             3 => {
-                world.write(|world| {
-                    world.set_story_state(StoryKey::BATTLE_SEGUE, 0);
-                    world.data.flagship.crew_enlisted = u16::MAX;
-                    world.set_activity(world.activity() | 0x2000);
-                });
+                world.set_story_state(StoryKey::BATTLE_SEGUE, 0);
+                world.data.flagship.crew_enlisted = u16::MAX;
+                world.set_activity(world.activity() | 0x2000);
             }
             _ => unreachable!("invalid Segue"),
         }
     }
-
-    /// # Safety
-    /// Called on the game thread with initialized game state.
-    #[no_mangle]
-    pub unsafe extern "C" fn getSegue() -> i32 {
-        World::current().read(|world| {
-            if world.story_state(StoryKey::BATTLE_SEGUE) == 0 {
-                if world.data.flagship.crew_enlisted == u16::MAX && world.activity() & 0x2000 != 0 {
-                    3
-                } else {
-                    0
-                }
-            } else if Kernel::current().read(|owner| owner.instant_victory) != 0 {
-                2
-            } else {
-                1
-            }
-        })
+    pub fn get_segue(cx: &crate::engine::battle::Cx<'_>) -> u32 {
+        let world = &cx.world;
+        if world.story_state(StoryKey::BATTLE_SEGUE) == 0 {
+            u32::from(
+                world.data.flagship.crew_enlisted == u16::MAX && world.activity() & 0x2000 != 0,
+            ) * 3
+        } else if cx.kernel.instant_victory != 0 {
+            2
+        } else {
+            1
+        }
     }
 }
 

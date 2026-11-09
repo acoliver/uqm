@@ -1,30 +1,27 @@
 //! Kohr-Ah dialogue, ported from blackurq.c.
-use super::script::{animation, as_comm_data};
-use crate::comm::locdata::{CColor, CLocData, CPoint};
-use crate::comm::types::CommData;
-use crate::engine::battle::Cx;
-use crate::engine::StoryKey;
+pub(crate) use crate::comm::locdata::CPoint;
+pub(crate) use crate::engine::StoryKey;
 mod phrases;
 use phrases::*;
-mod api;
-use api::BlackurApi;
+pub(crate) mod api;
+pub(crate) use api::BlackurApi;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Handler {
+pub(crate) enum Handler {
     Combat,
     Story,
 }
-struct Dialogue<'a, A> {
-    api: &'a mut A,
+pub(crate) struct Dialogue<'a, A> {
+    pub(crate) api: &'a mut A,
 }
 impl<A: BlackurApi> Dialogue<'_, A> {
-    fn handle(&mut self, h: Handler, r: i32) {
+    pub(crate) fn handle(&mut self, h: Handler, r: i32) {
         match h {
             Handler::Combat => self.combat(r),
             Handler::Story => self.story(r),
         }
     }
-    fn sequence(&mut self, key: StoryKey, phrases: &[i32]) -> u8 {
+    pub(crate) fn sequence(&mut self, key: StoryKey, phrases: &[i32]) -> u8 {
         let n = self.api.get(key);
         if let Some(&p) = phrases.get(usize::from(n)) {
             self.api.npc(p);
@@ -35,11 +32,11 @@ impl<A: BlackurApi> Dialogue<'_, A> {
             n.wrapping_add(1)
         }
     }
-    fn advance_sequence(&mut self, key: StoryKey, phrases: &[i32]) {
+    pub(crate) fn advance_sequence(&mut self, key: StoryKey, phrases: &[i32]) {
         let next = self.sequence(key, phrases);
         self.api.set(key, next);
     }
-    fn combat(&mut self, r: i32) {
+    pub(crate) fn combat(&mut self, r: i32) {
         self.api.segue(1);
         match r {
             x if x == BYE => {
@@ -133,7 +130,7 @@ impl<A: BlackurApi> Dialogue<'_, A> {
             _ => {}
         }
     }
-    fn frenzy(&mut self, _: i32) {
+    pub(crate) fn frenzy(&mut self, _: i32) {
         let n = self.api.get(StoryKey::KOHR_AH_REASONS) as usize;
         if n < 4 {
             self.api
@@ -153,7 +150,7 @@ impl<A: BlackurApi> Dialogue<'_, A> {
                 .response((BYE_FRENZY_1 + n as i32) as u16, Handler::Combat, &[]);
         }
     }
-    fn story(&mut self, r: i32) {
+    pub(crate) fn story(&mut self, r: i32) {
         match r {
             x if x == KEY_PHRASE => {
                 self.api.npc(RESPONSE_TO_KEY_PHRASE);
@@ -190,7 +187,7 @@ impl<A: BlackurApi> Dialogue<'_, A> {
         self.api
             .response(GUESS_THATS_ALL as u16, Handler::Combat, &[]);
     }
-    fn die_human(&mut self, _: i32) {
+    pub(crate) fn die_human(&mut self, _: i32) {
         let n = self.api.get(StoryKey::KOHR_AH_REASONS) as usize;
         if n < 4 {
             self.api
@@ -219,7 +216,7 @@ impl<A: BlackurApi> Dialogue<'_, A> {
         }
         self.api.response(BYE as u16, Handler::Combat, &[]);
     }
-    fn intro(&mut self) {
+    pub(crate) fn intro(&mut self) {
         let activity = self.api.activity() as u8;
         if activity == crate::comm::dispatch::WON_LAST_BATTLE as u8 {
             self.api.npc(OUT_TAKES);
@@ -266,7 +263,7 @@ impl<A: BlackurApi> Dialogue<'_, A> {
             self.api.set(StoryKey::KOHR_AH_VISITS, next);
         }
     }
-    fn initialize(&mut self) {
+    pub(crate) fn initialize(&mut self) {
         self.api.segue(
             if self.api.get(StoryKey::KOHR_AH_KILLED_ALL) == 0
                 && self.api.activity() as u8 != crate::comm::dispatch::WON_LAST_BATTLE as u8
@@ -278,7 +275,7 @@ impl<A: BlackurApi> Dialogue<'_, A> {
         );
     }
 }
-fn text_layout(screen_width: i32) -> (CPoint, u16) {
+pub(crate) fn text_layout(screen_width: i32) -> (CPoint, u16) {
     let text_width = screen_width - 80;
     (
         CPoint {
@@ -288,111 +285,9 @@ fn text_layout(screen_width: i32) -> (CPoint, u16) {
         (text_width - 16) as u16,
     )
 }
-fn descriptor(screen_width: i32) -> CLocData {
-    let (baseline, width) = text_layout(screen_width);
-    let mut d = CLocData {
-        alien_frame_res: c"comm.kohrah.graphics".as_ptr(),
-        alien_font_res: c"comm.kohrah.font".as_ptr(),
-        alien_colormap_res: c"comm.kohrah.colortable".as_ptr(),
-        alien_song_res: c"comm.kohrah.music".as_ptr(),
-        conversation_phrases_res: c"comm.kohrah.dialogue".as_ptr(),
-        alien_text_fcolor: CColor {
-            r: 255,
-            g: 255,
-            b: 255,
-            a: 255,
-        },
-        alien_text_bcolor: CColor {
-            r: 0,
-            g: 0,
-            b: 0,
-            a: 255,
-        },
-        alien_text_baseline: baseline,
-        alien_text_width: width,
-        alien_text_align: 1,
-        alien_text_valign: 0,
-        num_animations: 8,
-        ..CLocData::default()
-    };
-    d.alien_ambient_array[0] = animation(7, 6, 2, (56, 0), (840, 2520));
-    d.alien_ambient_array[1] = animation(13, 7, 2, (56, 0), (840, 2520));
-    for (i, s) in [20, 23, 26].into_iter().enumerate() {
-        d.alien_ambient_array[i + 2] = animation(s, 3, 4, (56, 0), (840, 2520));
-    }
-    d.alien_ambient_array[5] = animation(29, 4, 1, (84, 0), (84, 0));
-    d.alien_ambient_array[6] = animation(33, 5, 0x0a, (84, 0), (840, 2520));
-    d.alien_ambient_array[7] = animation(38, 4, 2, (84, 0), (840, 2520));
-    d.alien_transition_desc = animation(1, 2, 0, (140, 0), (0, 0));
-    d.alien_talk_desc = animation(2, 5, 0, (56, 0), (70, 0));
-    #[cfg(not(test))]
-    {
-        d.init_encounter_func = Some(live::intro);
-        d.post_encounter_func = Some(live::post);
-        d.uninit_encounter_func = Some(live::uninit);
-    }
-    d
-}
-#[cfg(not(test))]
-pub(crate) mod live {
-    use super::super::script::live::LiveScript;
-    use super::*;
-    fn run(cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, LiveScript<'_, '_, Handler>>)) {
-        let mut a = LiveScript::new(cx, callback);
-        f(&mut Dialogue { api: &mut a });
-    }
-    fn combat(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| s.handle(Handler::Combat, r as i32));
-    }
-    fn story(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| s.handle(Handler::Story, r as i32));
-    }
-    fn callback(h: Handler) -> crate::comm::response::ResponseFunc {
-        match h {
-            Handler::Combat => combat,
-            Handler::Story => story,
-        }
-    }
-    pub(super) fn intro(cx: &mut Cx<'_>) {
-        run(cx, |s| s.intro());
-    }
-    pub(super) fn post(_cx: &mut Cx<'_>) {}
-    pub(super) fn uninit(_cx: &mut Cx<'_>) -> u16 {
-        0
-    }
-    pub unsafe fn init_blackurq_comm(cx: &mut Cx<'_>) -> CLocData {
-        extern "C" {
-            static mut ScreenWidth: i32;
-        }
-        let mut d = descriptor(ScreenWidth);
-        (d.alien_text_baseline, d.alien_text_width) = text_layout(ScreenWidth);
-        run(cx, |s| s.initialize());
-        d
-    }
-}
-pub struct BlackurDialogue;
-impl super::RaceDialogue for BlackurDialogue {
-    fn init(&self, _cx: &mut Cx<'_>) -> CommData {
-        #[cfg(not(test))]
-        {
-            unsafe { as_comm_data(&live::init_blackurq_comm(_cx)) }
-        }
-        #[cfg(test)]
-        {
-            as_comm_data(&descriptor(320))
-        }
-    }
-    fn intro(&self, _cx: &mut Cx<'_>) {
-        #[cfg(not(test))]
-        live::intro(_cx);
-    }
-    fn post_encounter(&self, _cx: &mut Cx<'_>) {
-        #[cfg(not(test))]
-        live::post(_cx);
-    }
-    fn uninit(&self, _cx: &mut Cx<'_>) -> u32 {
-        0
-    }
-}
+
+#[cfg(test)]
+use crate::comm::descriptors::blackur::descriptor;
+
 #[cfg(test)]
 mod tests;

@@ -1,24 +1,21 @@
 //! Yehat Rebel dialogue, ported from rebel.c.
-use super::script::{animation, as_comm_data};
-use crate::comm::locdata::{CColor, CLocData, CPoint};
-use crate::comm::types::CommData;
-use crate::engine::battle::Cx;
-use crate::engine::StoryKey;
+pub(crate) use crate::comm::locdata::CPoint;
+pub(crate) use crate::engine::StoryKey;
 mod phrases;
 use phrases::*;
-mod api;
-use api::RebelApi;
+pub(crate) mod api;
+pub(crate) use api::RebelApi;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Handler {
+pub(crate) enum Handler {
     Exit,
     Info,
     Rebels,
 }
-struct Dialogue<'a, A> {
-    api: &'a mut A,
+pub(crate) struct Dialogue<'a, A> {
+    pub(crate) api: &'a mut A,
 }
 impl<A: RebelApi> Dialogue<'_, A> {
-    fn handle(&mut self, h: Handler, r: i32) {
+    pub(crate) fn handle(&mut self, h: Handler, r: i32) {
         match h {
             Handler::Exit => {
                 if r == BYE_REBEL {
@@ -29,7 +26,7 @@ impl<A: RebelApi> Dialogue<'_, A> {
             Handler::Rebels => self.rebels(r),
         }
     }
-    fn info(&mut self, r: i32) {
+    pub(crate) fn info(&mut self, r: i32) {
         if r == GIVE_INFO_REBELS {
             self.api.npc(WHAT_INFO)
         } else if r == WHAT_ABOUT_URQUAN {
@@ -66,7 +63,7 @@ impl<A: RebelApi> Dialogue<'_, A> {
             self.api.disable(GIVE_INFO_REBELS as u16)
         }
     }
-    fn rebels(&mut self, r: i32) {
+    pub(crate) fn rebels(&mut self, r: i32) {
         if r == HOW_GOES_REVOLUTION {
             let n = self.api.get(StoryKey::YEHAT_REBEL_INFO);
             if let Some(&phrase) = [
@@ -139,7 +136,7 @@ impl<A: RebelApi> Dialogue<'_, A> {
         }
         self.api.response(BYE_REBEL as u16, Handler::Exit, &[])
     }
-    fn intro(&mut self) {
+    pub(crate) fn intro(&mut self) {
         self.api.segue(0);
         if self.api.activity() as u8 == crate::comm::dispatch::IN_LAST_BATTLE as u8 {
             self.api.npc(YEHAT_CAVALRY);
@@ -171,11 +168,11 @@ impl<A: RebelApi> Dialogue<'_, A> {
             self.rebels(0)
         }
     }
-    fn initialize(&mut self) {
+    pub(crate) fn initialize(&mut self) {
         self.api.segue(0)
     }
 }
-fn text_layout(screen_width: i32) -> (CPoint, u16) {
+pub(crate) fn text_layout(screen_width: i32) -> (CPoint, u16) {
     (
         CPoint {
             x: ((screen_width - 78) * 2 / 3) as i16,
@@ -184,129 +181,9 @@ fn text_layout(screen_width: i32) -> (CPoint, u16) {
         ((screen_width - 96) * 2 / 3) as u16,
     )
 }
-fn descriptor(screen_width: i32) -> CLocData {
-    let (baseline, width) = text_layout(screen_width);
-    let mut d = CLocData {
-        alien_frame_res: c"comm.yehat.graphics".as_ptr(),
-        alien_font_res: c"comm.yehat.font".as_ptr(),
-        alien_colormap_res: c"comm.yehat.colortable".as_ptr(),
-        alien_song_res: c"comm.yehat.music".as_ptr(),
-        alien_alt_song_res: c"comm.yehat.rebel.music".as_ptr(),
-        conversation_phrases_res: c"comm.yehat.rebel.dialogue".as_ptr(),
-        alien_text_fcolor: CColor {
-            r: 255,
-            g: 255,
-            b: 255,
-            a: 255,
-        },
-        alien_text_bcolor: CColor {
-            r: 0,
-            g: 0,
-            b: 0,
-            a: 255,
-        },
-        alien_text_baseline: baseline,
-        alien_text_width: width,
-        alien_text_align: 1,
-        alien_text_valign: 1,
-        alien_song_flags: 1,
-        num_animations: 15,
-        ..CLocData::default()
-    };
-    d.alien_ambient_array[0] = animation(4, 3, 0x0c, (84, 84), (840, 2520));
-    d.alien_ambient_array[0].block_mask = (1 << 6) | (1 << 7);
-    d.alien_ambient_array[1] = animation(7, 3, 0x0c, (84, 84), (840, 2520));
-    d.alien_ambient_array[1].block_mask = (1 << 6) | (1 << 7);
-    d.alien_ambient_array[2] = animation(10, 3, 4, (42, 0), (840, 2520));
-    d.alien_ambient_array[2].block_mask = (1 << 4) | (1 << 14);
-    d.alien_ambient_array[3] = animation(13, 3, 4, (42, 0), (840, 2520));
-    d.alien_ambient_array[3].block_mask = 1 << 5;
-    d.alien_ambient_array[4] = animation(16, 5, 4, (56, 56), (8400, 2520));
-    d.alien_ambient_array[4].block_mask = (1 << 2) | (1 << 14);
-    d.alien_ambient_array[5] = animation(21, 5, 4, (56, 56), (8400, 2520));
-    d.alien_ambient_array[5].block_mask = 1 << 3;
-    d.alien_ambient_array[6] = animation(26, 2, 0x0c, (56, 56), (8400, 2520));
-    d.alien_ambient_array[6].block_mask = (1 << 0) | (1 << 1);
-    d.alien_ambient_array[7] = animation(28, 2, 0x0c, (56, 56), (8400, 2520));
-    d.alien_ambient_array[7].block_mask = (1 << 0) | (1 << 1);
-    for (i, start) in (30..=45).step_by(3).enumerate() {
-        d.alien_ambient_array[i + 8] = animation(start, 3, 4, (28, 28), (28, 28));
-    }
-    d.alien_ambient_array[14] = animation(48, 4, 0x0c, (28, 0), (840, 2520));
-    d.alien_ambient_array[14].block_mask = (1 << 2) | (1 << 4);
-    d.alien_talk_desc = animation(1, 3, 0, (56, 0), (70, 0));
-    #[cfg(not(test))]
-    {
-        d.init_encounter_func = Some(live::intro);
-        d.post_encounter_func = Some(live::post);
-        d.uninit_encounter_func = Some(live::uninit);
-    }
-    d
-}
-#[cfg(not(test))]
-pub(crate) mod live {
-    use super::super::script::live::LiveScript;
-    use super::*;
-    fn run(cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, LiveScript<'_, '_, Handler>>)) {
-        let mut a = LiveScript::new(cx, callback);
-        f(&mut Dialogue { api: &mut a })
-    }
-    fn exit(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| s.handle(Handler::Exit, r as i32))
-    }
-    fn info(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| s.handle(Handler::Info, r as i32))
-    }
-    fn rebels(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| s.handle(Handler::Rebels, r as i32))
-    }
-    fn callback(h: Handler) -> crate::comm::response::ResponseFunc {
-        match h {
-            Handler::Exit => exit,
-            Handler::Info => info,
-            Handler::Rebels => rebels,
-        }
-    }
-    pub(super) fn intro(cx: &mut Cx<'_>) {
-        run(cx, |s| s.intro())
-    }
-    pub(super) fn post(_cx: &mut Cx<'_>) {}
-    pub(super) fn uninit(_cx: &mut Cx<'_>) -> u16 {
-        0
-    }
-    pub unsafe fn init_rebel_yehat_comm(cx: &mut Cx<'_>) -> CLocData {
-        extern "C" {
-            static mut ScreenWidth: i32;
-        }
-        let mut d = descriptor(ScreenWidth);
-        (d.alien_text_baseline, d.alien_text_width) = text_layout(ScreenWidth);
-        run(cx, |s| s.initialize());
-        d
-    }
-}
-pub struct RebelDialogue;
-impl super::RaceDialogue for RebelDialogue {
-    fn init(&self, _cx: &mut Cx<'_>) -> CommData {
-        #[cfg(not(test))]
-        {
-            unsafe { as_comm_data(&live::init_rebel_yehat_comm(_cx)) }
-        }
-        #[cfg(test)]
-        {
-            as_comm_data(&descriptor(320))
-        }
-    }
-    fn intro(&self, _cx: &mut Cx<'_>) {
-        #[cfg(not(test))]
-        live::intro(_cx)
-    }
-    fn post_encounter(&self, _cx: &mut Cx<'_>) {
-        #[cfg(not(test))]
-        live::post(_cx)
-    }
-    fn uninit(&self, _cx: &mut Cx<'_>) -> u32 {
-        0
-    }
-}
+
+#[cfg(test)]
+use crate::comm::descriptors::rebel::descriptor;
+
 #[cfg(test)]
 mod tests;

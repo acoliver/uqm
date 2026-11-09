@@ -1,14 +1,11 @@
 //! Chmmr dialogue, ported from chmmrc.c.
-use super::script::{animation, as_comm_data};
-use crate::comm::locdata::{CColor, CLocData, CPoint};
-use crate::comm::types::CommData;
-use crate::engine::{battle::Cx, StoryKey};
+pub(crate) use crate::engine::StoryKey;
 mod phrases;
 use phrases::*;
-mod api;
-use api::ChmmrApi;
+pub(crate) mod api;
+pub(crate) use api::ChmmrApi;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Handler {
+pub(crate) enum Handler {
     ExitConversation,
     NotReady,
     ImproveBomb,
@@ -17,11 +14,11 @@ enum Handler {
     ChmmrShielded,
     AfterBomb,
 }
-struct Dialogue<'a, A> {
-    api: &'a mut A,
+pub(crate) struct Dialogue<'a, A> {
+    pub(crate) api: &'a mut A,
 }
 impl<A: ChmmrApi> Dialogue<'_, A> {
-    fn handle(&mut self, h: Handler, r: i32) {
+    pub(crate) fn handle(&mut self, h: Handler, r: i32) {
         match h {
             Handler::ExitConversation => self.exit_conversation(r),
             Handler::NotReady => self.not_ready(r),
@@ -32,7 +29,7 @@ impl<A: ChmmrApi> Dialogue<'_, A> {
             Handler::AfterBomb => self.after_bomb(r),
         }
     }
-    fn exit_conversation(&mut self, r: i32) {
+    pub(crate) fn exit_conversation(&mut self, r: i32) {
         self.api.segue(0);
         if r == BYE {
             self.api.npc(GOODBYE);
@@ -53,7 +50,7 @@ impl<A: ChmmrApi> Dialogue<'_, A> {
             self.api.refit();
         }
     }
-    fn not_ready(&mut self, r: i32) {
+    pub(crate) fn not_ready(&mut self, r: i32) {
         if r == 0 {
             self.api.npc(RETURN_WHEN_READY);
         } else if r == FURTHER_ASSISTANCE {
@@ -98,7 +95,7 @@ impl<A: ChmmrApi> Dialogue<'_, A> {
         self.api
             .response((BYE) as u16, Handler::ExitConversation, &[]);
     }
-    fn improve_bomb(&mut self, r: i32) {
+    pub(crate) fn improve_bomb(&mut self, r: i32) {
         if r == 0 {
             self.api.npc(WE_WILL_IMPROVE_BOMB);
         } else if r == WHAT_NOW {
@@ -138,7 +135,7 @@ impl<A: ChmmrApi> Dialogue<'_, A> {
         self.api
             .response((PROCEED) as u16, Handler::ExitConversation, &[]);
     }
-    fn chmmr_free(&mut self, r: i32) {
+    pub(crate) fn chmmr_free(&mut self, r: i32) {
         if (((r == 0) || (r == I_AM_CAPTAIN0)) || (r == I_AM_SAVIOR)) || (r == I_AM_SILLY) {
             self.api.npc(WHY_HAVE_YOU_FREED_US);
             self.api.talk_segue((!0_u16 as i32) as u16);
@@ -175,7 +172,7 @@ impl<A: ChmmrApi> Dialogue<'_, A> {
             }
         }
     }
-    fn chmmr_advice(&mut self, r: i32) {
+    pub(crate) fn chmmr_advice(&mut self, r: i32) {
         let mut advice_left: i32;
         if r == NEED_ADVICE {
             self.api.npc(WHAT_ADVICE);
@@ -236,7 +233,7 @@ impl<A: ChmmrApi> Dialogue<'_, A> {
             self.api.disable((NEED_ADVICE) as u16);
         }
     }
-    fn chmmr_shielded(&mut self, r: i32) {
+    pub(crate) fn chmmr_shielded(&mut self, r: i32) {
         if r == FIND_OUT_WHATS_UP {
             self.api.npc(HYBRID_PROCESS);
             self.api.disable((FIND_OUT_WHATS_UP) as u16);
@@ -278,7 +275,7 @@ impl<A: ChmmrApi> Dialogue<'_, A> {
         self.api
             .response((BYE_SHIELDED) as u16, Handler::ExitConversation, &[]);
     }
-    fn after_bomb(&mut self, r: i32) {
+    pub(crate) fn after_bomb(&mut self, r: i32) {
         if r == WHATS_UP_AFTER_BOMB {
             if i32::from(self.api.get(StoryKey::CHMMR_STACK)) != 0 {
                 self.api.npc(GENERAL_INFO_AFTER_BOMB_2);
@@ -302,7 +299,7 @@ impl<A: ChmmrApi> Dialogue<'_, A> {
         self.api
             .response((BYE_AFTER_BOMB) as u16, Handler::ExitConversation, &[]);
     }
-    fn intro(&mut self) {
+    pub(crate) fn intro(&mut self) {
         let mut visits: i32;
         if i32::from(self.api.get(StoryKey::CHMMR_BOMB_STATE)) >= 2 {
             visits = i32::from(self.api.get(StoryKey::CHMMR_HOME_VISITS));
@@ -394,170 +391,14 @@ impl<A: ChmmrApi> Dialogue<'_, A> {
             self.api.set(StoryKey::CHMMR_HOME_VISITS, visits as u8);
         }
     }
-    fn post_chmmr_enc(&mut self) {}
-    fn initialize(&mut self) {
+    pub(crate) fn post_chmmr_enc(&mut self) {}
+    pub(crate) fn initialize(&mut self) {
         self.api.segue(0);
     }
 }
-fn descriptor() -> CLocData {
-    let mut d = CLocData {
-        alien_frame_res: c"comm.chmmr.graphics".as_ptr(),
-        alien_font_res: c"comm.chmmr.font".as_ptr(),
-        alien_colormap_res: c"comm.chmmr.colortable".as_ptr(),
-        alien_song_res: c"comm.chmmr.music".as_ptr(),
-        conversation_phrases_res: c"comm.chmmr.dialogue".as_ptr(),
-        alien_text_fcolor: CColor {
-            r: 255,
-            g: 255,
-            b: 255,
-            a: 255,
-        },
-        alien_text_bcolor: CColor {
-            r: 0,
-            g: 0,
-            b: 0,
-            a: 255,
-        },
-        alien_text_baseline: CPoint { x: 121, y: 0 },
-        alien_text_width: 224,
-        alien_text_align: 1,
-        alien_text_valign: 0,
-        num_animations: 6,
-        ..CLocData::default()
-    };
-    d.alien_ambient_array[0] = animation(12, 5, 2, (42, 0), (840, 2520));
-    d.alien_ambient_array[1] = animation(17, 5, 2, (42, 0), (840, 2520));
-    d.alien_ambient_array[2] = animation(22, 5, 2, (42, 0), (840, 2520));
-    d.alien_ambient_array[3] = animation(27, 20, 4, (42, 0), (840, 2520));
-    d.alien_ambient_array[4] = animation(47, 14, 4, (42, 0), (840, 2520));
-    d.alien_ambient_array[5] = animation(61, 24, 4, (42, 0), (840, 2520));
-    d.alien_transition_desc = animation(0, 0, 0, (0, 0), (0, 0));
-    d.alien_talk_desc = animation(1, 11, 0, (14, 0), (14, 0));
-    #[cfg(not(test))]
-    {
-        d.init_encounter_func = Some(live::intro);
-        d.post_encounter_func = Some(live::post);
-        d.uninit_encounter_func = Some(live::uninit);
-    }
-    d
-}
-#[cfg(not(test))]
-pub(crate) mod live {
-    use super::super::script::live::LiveScript;
-    use super::*;
-    fn run(cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, LiveScript<'_, '_, Handler>>)) {
-        let mut api = LiveScript::new(cx, callback);
-        f(&mut Dialogue { api: &mut api });
-    }
-    fn exit_conversation(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::ExitConversation,
-                i32::try_from(r).expect("invalid response"),
-            )
-        });
-    }
-    fn not_ready(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::NotReady,
-                i32::try_from(r).expect("invalid response"),
-            )
-        });
-    }
-    fn improve_bomb(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::ImproveBomb,
-                i32::try_from(r).expect("invalid response"),
-            )
-        });
-    }
-    fn chmmr_free(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::ChmmrFree,
-                i32::try_from(r).expect("invalid response"),
-            )
-        });
-    }
-    fn chmmr_advice(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::ChmmrAdvice,
-                i32::try_from(r).expect("invalid response"),
-            )
-        });
-    }
-    fn chmmr_shielded(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::ChmmrShielded,
-                i32::try_from(r).expect("invalid response"),
-            )
-        });
-    }
-    fn after_bomb(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::AfterBomb,
-                i32::try_from(r).expect("invalid response"),
-            )
-        });
-    }
-    fn callback(h: Handler) -> crate::comm::response::ResponseFunc {
-        match h {
-            Handler::ExitConversation => exit_conversation,
-            Handler::NotReady => not_ready,
-            Handler::ImproveBomb => improve_bomb,
-            Handler::ChmmrFree => chmmr_free,
-            Handler::ChmmrAdvice => chmmr_advice,
-            Handler::ChmmrShielded => chmmr_shielded,
-            Handler::AfterBomb => after_bomb,
-        }
-    }
-    pub(super) fn intro(cx: &mut Cx<'_>) {
-        run(cx, |s| s.intro());
-    }
-    pub(super) fn post(cx: &mut Cx<'_>) {
-        run(cx, |s| s.post_chmmr_enc());
-    }
-    pub(super) fn uninit(_cx: &mut Cx<'_>) -> u16 {
-        0
-    }
-    /// Initialize the encounter on the game thread.
-    ///
-    /// # Safety
-    /// Communication state must be initialized on the game thread.
-    pub unsafe fn init_chmmr_comm(cx: &mut Cx<'_>) -> CLocData {
-        let desc = descriptor();
-        run(cx, |s| s.initialize());
-        desc
-    }
-}
-pub struct ChmmrDialogue;
-impl super::RaceDialogue for ChmmrDialogue {
-    fn init(&self, _cx: &mut Cx<'_>) -> CommData {
-        #[cfg(not(test))]
-        {
-            unsafe { as_comm_data(&live::init_chmmr_comm(_cx)) }
-        }
-        #[cfg(test)]
-        {
-            as_comm_data(&descriptor())
-        }
-    }
-    fn intro(&self, _cx: &mut Cx<'_>) {
-        #[cfg(not(test))]
-        live::intro(_cx);
-    }
-    fn post_encounter(&self, _cx: &mut Cx<'_>) {
-        #[cfg(not(test))]
-        live::post(_cx);
-    }
-    fn uninit(&self, _cx: &mut Cx<'_>) -> u32 {
-        0
-    }
-}
+
+#[cfg(test)]
+use crate::comm::descriptors::chmmr::descriptor;
+
 #[cfg(test)]
 mod tests;

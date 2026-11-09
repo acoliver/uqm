@@ -8,10 +8,10 @@
 //! # Ported functions
 //!
 //! - `draw_sis_com_window()` ← `c_DrawSISComWindow()`
-//! - `feedback_player_phrase(text)` ← `c_FeedbackPlayerPhrase()`
-//! - `refresh_responses(top, count, cur)` ← `c_RefreshResponses()`
-//! - `select_conversation_summary()` ← `c_SelectConversationSummary()`
-//! - `do_summary_page(state)` ← `do_summary_page()` (internal helper)
+//! - `feedback_player_phrase(comm, text)` ← `c_FeedbackPlayerPhrase()`
+//! - `refresh_responses(comm, top, count, cur)` ← `c_RefreshResponses()`
+//! - `select_conversation_summary(comm)` ← `c_SelectConversationSummary()`
+//! - `do_summary_page(comm, state)` ← `do_summary_page(comm)` (internal helper)
 //!
 //! @plan PLAN-20260314-COMM.P05b
 
@@ -19,9 +19,10 @@
 // mutable statics and uses field reassignment after Default initialization.
 // The patterns are inherent to C ABI compatibility.
 
-use crate::comm::locdata::{CColor, CPoint, CRect};
 #[cfg(not(test))]
-use crate::engine::Kernel;
+use crate::comm::Comm;
+
+use crate::comm::locdata::{CColor, CPoint, CRect};
 
 // ============================================================================
 // C ABI types matching gfxlib.h
@@ -144,9 +145,9 @@ const KEY_MENU_RIGHT: usize = 8;
 mod c_bridge {
     pub use crate::comm::ffi::rust_get_response_text;
 
-    pub use crate::comm::comm_abi::comm_ClearSubtitles;
+    pub use crate::comm::comm_abi::clear_subtitles;
 
-    pub use crate::comm::comm_abi::getLineWithinWidth;
+    pub use crate::comm::comm_abi::get_line_within_width;
 
     pub use crate::graphics::context_abi::SetContext;
 
@@ -180,19 +181,13 @@ mod c_bridge {
 // Last response window state (module-level)
 // ============================================================================
 
-#[cfg(not(test))]
-static mut LAST_TOP_RESPONSE: u8 = 0;
-#[cfg(not(test))]
-static mut LAST_NUM_RESPONSES: u8 = 0;
-#[cfg(not(test))]
-static mut LAST_CUR_RESPONSE: u8 = 0;
-
 // ============================================================================
 // do_summary_page — DoInput callback for summary page scrolling
 // ============================================================================
 
 #[cfg(not(test))]
 unsafe fn do_summary_page_frame(
+    comm: &mut Comm,
     input: &crate::engine::input::InputSession,
     pss: &mut SummaryLoopState,
     activity: u16,
@@ -210,7 +205,7 @@ unsafe fn do_summary_page_frame(
             return 0;
         }
     } else if pss.print_next != 0 {
-        draw_summary_page_contents(pss);
+        draw_summary_page_contents(comm, pss);
         pss.print_next = 0;
     } else {
         c_bridge::SleepThread(ONE_SECOND / 20);
@@ -220,8 +215,8 @@ unsafe fn do_summary_page_frame(
 }
 
 #[cfg(not(test))]
-unsafe fn draw_summary_page_contents(pss: &mut SummaryLoopState) {
-    let old_ctx = c_bridge::SetContext(Kernel::current().read(|owner| owner.space_context));
+unsafe fn draw_summary_page_contents(comm: &mut Comm, pss: &mut SummaryLoopState) {
+    let old_ctx = c_bridge::SetContext(comm.presentation.space_context);
 
     let mut rect = CRect {
         corner: CPoint {
@@ -235,7 +230,7 @@ unsafe fn draw_summary_page_contents(pss: &mut SummaryLoopState) {
     c_bridge::DrawFilledRectangle(std::ptr::from_mut(&mut rect).cast());
 
     c_bridge::SetContextForeGroundColor(COMM_HISTORY_TEXT_COLOR);
-    c_bridge::SetContextFont((Kernel::current().read(|owner| owner.tiny_font)).cast());
+    c_bridge::SetContextFont((comm.presentation.tiny_font).cast());
 
     let tw = rect.width - 2 - 2;
     let mut t = CText {
@@ -264,7 +259,7 @@ unsafe fn draw_summary_page_contents(pss: &mut SummaryLoopState) {
 
         t.char_count = u16::MAX;
         while row < MAX_SUMM_ROWS
-            && c_bridge::getLineWithinWidth(&mut t, &mut next, tw, u16::MAX) == 0
+            && c_bridge::get_line_within_width(&mut t, &mut next, tw, u16::MAX) == 0
         {
             c_bridge::font_DrawText(std::ptr::from_mut(&mut t).cast());
             t.baseline.y += DELTA_Y_SUMMARY;
@@ -287,7 +282,7 @@ unsafe fn draw_summary_page_contents(pss: &mut SummaryLoopState) {
     if row >= MAX_SUMM_ROWS && (!pss.next_sub.is_null() || !pss.left_over.is_null()) {
         let mut buffer = [0u8; 80];
         let bullet = STR_MIDDLE_DOT_BYTES.as_ptr() as *const std::ffi::c_char;
-        let more_str = game_string(FEEDBACK_STRING_BASE + 1);
+        let more_str = game_string(comm, FEEDBACK_STRING_BASE + 1);
         let more_str_c = STR_MIDDLE_DOT_BYTES.as_ptr() as *const std::ffi::c_char;
 
         // Build "·MORE·" string
@@ -370,11 +365,9 @@ const FEEDBACK_STRING_BASE: i32 = 0x0100;
 
 /// Inline GAME_STRING(i) macro: GetStringAddress(SetAbsStringTableIndex(GameStrings, i))
 #[cfg(not(test))]
-unsafe fn game_string(id: i32) -> *const std::ffi::c_char {
-    let table = c_bridge::SetAbsStringTableIndex(
-        (Kernel::current().read(|owner| owner.game_strings)).cast(),
-        id as u16,
-    );
+unsafe fn game_string(comm: &Comm, id: i32) -> *const std::ffi::c_char {
+    let table =
+        c_bridge::SetAbsStringTableIndex((comm.presentation.game_strings).cast(), id as u16);
     c_bridge::GetStringAddress(table)
 }
 
@@ -602,12 +595,13 @@ fn draw_player_text_wrapped<G: CommWindowGfx>(gfx: &mut G, text: &mut CText, lea
 
 /// The game's drawing surface: the C graphics exports.
 #[cfg(not(test))]
-struct CommWindow {
+struct CommWindow<'a> {
+    comm: &'a mut Comm,
     activity: u16,
 }
 
 #[cfg(not(test))]
-impl CommWindowGfx for CommWindow {
+impl CommWindowGfx for CommWindow<'_> {
     fn current_activity(&self) -> u16 {
         self.activity
     }
@@ -615,7 +609,7 @@ impl CommWindowGfx for CommWindow {
     fn space_context(&self) -> *mut std::ffi::c_void {
         // SAFETY: set once at startup, read on the game thread.
         {
-            (Kernel::current().read(|owner| owner.space_context)).cast()
+            (self.comm.presentation.space_context).cast()
         }
     }
 
@@ -669,18 +663,19 @@ impl CommWindowGfx for CommWindow {
         max_chars: u16,
     ) -> std::ffi::c_int {
         // SAFETY: `text` and `next` are valid for the call.
-        unsafe { c_bridge::getLineWithinWidth(text, next, width, max_chars) }
+        unsafe { c_bridge::get_line_within_width(text, next, width, max_chars) }
     }
 
     fn game_string(&mut self, id: i32) -> *const std::ffi::c_char {
         // SAFETY: `GameStrings` is loaded before any communication starts.
-        unsafe { game_string(id) }
+        unsafe { game_string(self.comm, id) }
     }
 
     fn response_text(&mut self, index: u8, buf: &mut [u8]) -> bool {
         // SAFETY: `buf` is valid for `buf.len()` bytes.
         unsafe {
             c_bridge::rust_get_response_text(
+                self.comm,
                 std::ffi::c_int::from(index),
                 buf.as_mut_ptr() as *mut std::ffi::c_char,
                 buf.len()
@@ -694,7 +689,7 @@ impl CommWindowGfx for CommWindow {
         // SAFETY: `ActivityFrame` is loaded before any communication starts.
         unsafe {
             let frame = c_bridge::SetAbsFrameIndex(
-                (Kernel::current().read(|owner| owner.activity_frame)).cast(),
+                (self.comm.presentation.activity_frame).cast(),
                 frame_index,
             );
             if let Some(mut stamp) = scroll_indicator_stamp(frame.cast(), origin_y) {
@@ -704,14 +699,14 @@ impl CommWindowGfx for CommWindow {
     }
 
     fn conversation_player_font(&mut self) -> *mut std::ffi::c_void {
-        crate::comm::player_font::CONVERSATION_PLAYER_FONT.current()
+        self.comm.player_font.current()
     }
 }
 
 /// Draw the SIS communication window background.
 #[cfg(not(test))]
-pub fn draw_sis_com_window(activity: u16) {
-    draw_sis_com_window_with(&mut CommWindow { activity });
+pub fn draw_sis_com_window(comm: &mut Comm, activity: u16) {
+    draw_sis_com_window_with(&mut CommWindow { comm, activity });
 }
 
 /// Render the player's selected response text in the SIS comm window.
@@ -720,20 +715,30 @@ pub fn draw_sis_com_window(activity: u16) {
 /// Caller must ensure `text` is a valid null-terminated C string or null,
 /// and that the graphics subsystem is initialized.
 #[cfg(not(test))]
-pub unsafe fn feedback_player_phrase(activity: u16, text: *const std::ffi::c_char) {
-    feedback_player_phrase_with(&mut CommWindow { activity }, text);
+pub unsafe fn feedback_player_phrase(
+    comm: &mut Comm,
+    activity: u16,
+    text: *const std::ffi::c_char,
+) {
+    feedback_player_phrase_with(&mut CommWindow { comm, activity }, text);
 }
 
 /// Render the response list in the SIS comm window.
 #[cfg(not(test))]
 /// # Safety
 /// Response text and graphics must be initialized and accessed on the game thread.
-pub unsafe fn refresh_responses(activity: u16, top: u8, num_responses: u8, cur_response: u8) {
-    LAST_TOP_RESPONSE = top;
-    LAST_NUM_RESPONSES = num_responses;
-    LAST_CUR_RESPONSE = cur_response;
+pub unsafe fn refresh_responses(
+    comm: &mut Comm,
+    activity: u16,
+    top: u8,
+    num_responses: u8,
+    cur_response: u8,
+) {
+    comm.response_display[0] = top;
+    comm.response_display[1] = num_responses;
+    comm.response_display[2] = cur_response;
     refresh_responses_with(
-        &mut CommWindow { activity },
+        &mut CommWindow { comm, activity },
         top,
         num_responses,
         cur_response,
@@ -746,13 +751,15 @@ pub unsafe fn refresh_responses(activity: u16, top: u8, num_responses: u8, cur_r
 /// # Safety
 /// The supplied context must retain the active communication graphics and response state.
 pub unsafe fn select_conversation_summary(
+    comm: &mut Comm,
     cx: &mut crate::engine::battle::Cx<'_>,
     io: &mut crate::engine::observe::Io<'_>,
 ) {
     let mut text_buf = [0u8; 1024];
-    if LAST_NUM_RESPONSES > 0
+    if comm.response_display[1] > 0
         && c_bridge::rust_get_response_text(
-            LAST_CUR_RESPONSE as std::ffi::c_int,
+            comm,
+            comm.response_display[2] as std::ffi::c_int,
             text_buf.as_mut_ptr().cast(),
             text_buf
                 .len()
@@ -761,26 +768,28 @@ pub unsafe fn select_conversation_summary(
         ) != 0
     {
         let activity = cx.world.activity();
-        cx.with_legacy(|| feedback_player_phrase(activity, text_buf.as_ptr().cast()));
+        cx.with_legacy(|| feedback_player_phrase(comm, activity, text_buf.as_ptr().cast()));
     }
     let mut state = SummaryLoopState::default();
-    do_summary_page(cx, io, &mut state);
-    if LAST_NUM_RESPONSES > 0 {
+    do_summary_page(comm, cx, io, &mut state);
+    if comm.response_display[1] > 0 {
         let activity = cx.world.activity();
         cx.with_legacy(|| {
             refresh_responses(
+                comm,
                 activity,
-                LAST_TOP_RESPONSE,
-                LAST_NUM_RESPONSES,
-                LAST_CUR_RESPONSE,
+                comm.response_display[0],
+                comm.response_display[1],
+                comm.response_display[2],
             )
         });
     }
-    c_bridge::comm_ClearSubtitles();
+    c_bridge::clear_subtitles(comm);
 }
 
 #[cfg(not(test))]
 unsafe fn do_summary_page(
+    comm: &mut Comm,
     cx: &mut crate::engine::battle::Cx<'_>,
     io: &mut crate::engine::observe::Io<'_>,
     state: &mut SummaryLoopState,
@@ -790,9 +799,9 @@ unsafe fn do_summary_page(
     state.print_next = 1;
     state.next_sub = c_bridge::GetFirstTrackSubtitle();
     state.left_over = std::ptr::null();
-    cx.run_input(io, false, |cx, _| {
+    comm.run_input(cx, io, false, |comm, cx, _| {
         let activity = cx.world.activity();
-        cx.with_legacy(|| do_summary_page_frame(input, state, activity) != 0)
+        cx.with_legacy(|| do_summary_page_frame(comm, input, state, activity) != 0)
     });
 }
 

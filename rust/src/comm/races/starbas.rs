@@ -1,24 +1,21 @@
 //! Starbase and Hayes dialogue, ported from the original C script.
 
-use super::encounter::EncounterApi;
-use super::script::{animation, as_comm_data};
-use crate::comm::locdata::{CColor, CLocData, CPoint};
-use crate::comm::types::CommData;
-use crate::engine::battle::Cx;
-use crate::engine::StoryKey;
+pub(crate) use super::encounter::EncounterApi;
+pub(crate) use crate::comm::locdata::CLocData;
+pub(crate) use crate::engine::StoryKey;
 mod phrases;
-use super::script::{GLOBAL_PLAYER_NAME, GLOBAL_SHIP_NAME};
+pub(crate) use super::script::{GLOBAL_PLAYER_NAME, GLOBAL_SHIP_NAME};
 use phrases::*;
-mod api;
-use api::*;
-const SPATHI_SHIP: u16 = 6;
-const GOOD_GUY: u16 = 1;
+pub(crate) mod api;
+pub(crate) use api::*;
+pub(crate) const SPATHI_SHIP: u16 = 6;
+pub(crate) const GOOD_GUY: u16 = 1;
 
 /// Resource units awarded when Hayes brings the Starbase online.
 pub const STARBASE_READY_REWARD: u16 = 2500;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Handler {
+pub(crate) enum Handler {
     ByeBye,
     AllianceInfo,
     HierarchyInfo,
@@ -34,7 +31,7 @@ enum Handler {
     SellMinerals,
 }
 #[derive(Default)]
-struct Session {
+pub(crate) struct Session {
     bulletins: u32,
     stacks: [u8; 4],
     alliance: u8,
@@ -44,12 +41,12 @@ struct Session {
     ancient: u8,
     defeat: u8,
 }
-struct Dialogue<'a, A> {
-    api: &'a mut A,
-    session: &'a mut Session,
+pub(crate) struct Dialogue<'a, A> {
+    pub(crate) api: &'a mut A,
+    pub(crate) session: &'a mut Session,
 }
 impl<A: StarbaseApi> Dialogue<'_, A> {
-    fn handle(&mut self, handler: Handler, r: u16) {
+    pub(crate) fn handle(&mut self, handler: Handler, r: u16) {
         match handler {
             Handler::ByeBye => self.bye_bye(r),
             Handler::AllianceInfo => self.alliance_info(r),
@@ -66,17 +63,17 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
             Handler::SellMinerals => self.sell_minerals(r),
         }
     }
-    fn get32(&self, keys: [StoryKey; 4]) -> u32 {
+    pub(crate) fn get32(&self, keys: [StoryKey; 4]) -> u32 {
         u32::from_le_bytes(keys.map(|key| self.api.get(key)))
     }
 
-    fn set32(&mut self, keys: [StoryKey; 4], value: u32) {
+    pub(crate) fn set32(&mut self, keys: [StoryKey; 4], value: u32) {
         for (key, byte) in keys.into_iter().zip(value.to_le_bytes()) {
             self.api.set(key, byte);
         }
     }
 
-    fn check_timing(&mut self, mut month_index: u16, mut day_index: u16) -> bool {
+    pub(crate) fn check_timing(&mut self, mut month_index: u16, mut day_index: u16) -> bool {
         let days_in_month = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
         let mut mi = u16::from(self.api.get(StoryKey::STARBASE_MONTH));
         let mut year_index = 2155;
@@ -96,7 +93,7 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
         (year_index, month_index, day_index) < (now.year, u16::from(now.month), u16::from(now.day))
     }
 
-    fn tell_star_base(&mut self, r: u16) {
+    pub(crate) fn tell_star_base(&mut self, r: u16) {
         match r {
             STARBASE_FUNCTIONS => {
                 self.api.npc(i32::from(WHICH_FUNCTION));
@@ -185,7 +182,7 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
         self.api.response(ENOUGH_STARBASE, Handler::NeedInfo, &[]);
     }
 
-    fn sell_minerals(&mut self, r: u16) {
+    pub(crate) fn sell_minerals(&mut self, r: u16) {
         let mut total = 0u16;
         let mut sleepy = true;
         for i in 0..8 {
@@ -286,13 +283,13 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
         self.normal_starbase(r);
     }
 
-    fn initialize(&mut self, desc: &mut CLocData) {
+    pub(crate) fn initialize(&mut self, desc: &mut CLocData) {
         desc.alien_alt_song_res = c"comm.starbase.music".as_ptr();
         desc.alien_song_flags |= 1;
         self.session.bulletins = 0;
         self.api.segue(0);
     }
-    fn bye_bye(&mut self, _r: u16) {
+    pub(crate) fn bye_bye(&mut self, _r: u16) {
         self.session.bulletins |= self.get32(STARBASE_BULLETS);
         self.set32(STARBASE_BULLETS, self.session.bulletins);
         if self.api.get(StoryKey::CHMMR_BOMB_STATE) >= 2 {
@@ -343,7 +340,7 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
             self.api.npc(i32::from(p_str1));
         }
     }
-    fn alliance_info(&mut self, r: u16) {
+    pub(crate) fn alliance_info(&mut self, r: u16) {
         if r == WHAT_ABOUT_ALLIANCE {
             self.api.npc(i32::from(WHICH_ALLIANCE));
             self.session.alliance = 0;
@@ -386,7 +383,7 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
         }
         self.api.response(ENOUGH_ALLIANCE, Handler::AlienRaces, &[]);
     }
-    fn hierarchy_info(&mut self, r: u16) {
+    pub(crate) fn hierarchy_info(&mut self, r: u16) {
         if r == WHAT_ABOUT_HIERARCHY {
             self.api.npc(i32::from(WHICH_HIERARCHY));
             self.session.hierarchy = 0;
@@ -436,7 +433,7 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
         self.api
             .response(ENOUGH_HIERARCHY, Handler::AlienRaces, &[]);
     }
-    fn alien_races(&mut self, r: u16) {
+    pub(crate) fn alien_races(&mut self, r: u16) {
         if r == ALIEN_RACES {
             self.api.npc(i32::from(WHICH_ALIEN));
             self.session.races = 0;
@@ -464,7 +461,7 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
         }
         self.api.response(ENOUGH_ALIENS, Handler::TellHistory, &[]);
     }
-    fn war_info(&mut self, r: u16) {
+    pub(crate) fn war_info(&mut self, r: u16) {
         if r == THE_WAR {
             self.api.npc(i32::from(WHICH_WAR));
             self.session.war = 0;
@@ -495,7 +492,7 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
         }
         self.api.response(ENOUGH_WAR, Handler::TellHistory, &[]);
     }
-    fn ancient_history(&mut self, r: u16) {
+    pub(crate) fn ancient_history(&mut self, r: u16) {
         if r == ANCIENT_HISTORY {
             self.api.npc(i32::from(WHICH_ANCIENT));
             self.session.ancient = 0;
@@ -521,7 +518,7 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
         }
         self.api.response(ENOUGH_ANCIENT, Handler::TellHistory, &[]);
     }
-    fn tell_history(&mut self, r: u16) {
+    pub(crate) fn tell_history(&mut self, r: u16) {
         let mut pstack: [u16; 3] = [0; 3];
         if r == HISTORY {
             self.api.npc(i32::from(WHICH_HISTORY));
@@ -573,7 +570,7 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
         }
         self.api.response(ENOUGH_HISTORY, Handler::NeedInfo, &[]);
     }
-    fn defeat_urquan(&mut self, r: u16) {
+    pub(crate) fn defeat_urquan(&mut self, r: u16) {
         if r == HOW_DEFEAT {
             self.api.npc(i32::from(DEFEAT_LIKE_SO));
             self.session.defeat = 0;
@@ -607,7 +604,7 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
         }
         self.api.response(ENOUGH_DEFEAT, Handler::TellMission, &[]);
     }
-    fn analyze_condition(&mut self) {
+    pub(crate) fn analyze_condition(&mut self) {
         let mut i: u8;
         let mut num_thrusters: u8 = 0;
         let mut num_jets: u8 = 0;
@@ -788,7 +785,7 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
             }
         }
     }
-    fn tell_mission(&mut self, r: u16) {
+    pub(crate) fn tell_mission(&mut self, r: u16) {
         let mut pstack: [u16; 4] = [0; 4];
         if r == OUR_MISSION {
             self.api.npc(i32::from(WHICH_MISSION));
@@ -865,7 +862,7 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
         }
         self.api.response(ENOUGH_MISSION, Handler::NeedInfo, &[]);
     }
-    fn need_info(&mut self, r: u16) {
+    pub(crate) fn need_info(&mut self, r: u16) {
         if r == NEED_INFO {
             self.api.npc(i32::from(WHAT_KIND_OF_INFO));
         } else if r == ENOUGH_STARBASE {
@@ -882,7 +879,7 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
         self.api
             .response(NO_NEED_INFO, Handler::NormalStarbase, &[]);
     }
-    fn discuss_devices(&mut self, talk_about: bool) -> bool {
+    pub(crate) fn discuss_devices(&mut self, talk_about: bool) -> bool {
         let discussed = talk_about as u8;
         let mut i: u16;
         let mut vux_beast_index: u16;
@@ -1129,7 +1126,7 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
         }
         phrase_index > 2
     }
-    fn check_bulletins(&mut self, repeat: bool) {
+    pub(crate) fn check_bulletins(&mut self, repeat: bool) {
         let mut p_intro: u16;
         let mut b0: u8;
         let mut bulletin_mask: u32;
@@ -1356,7 +1353,7 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
             self.set32(STARBASE_BULLETS, bulletin_mask);
         }
     }
-    fn normal_starbase(&mut self, r: u16) {
+    pub(crate) fn normal_starbase(&mut self, r: u16) {
         if r == NO_NEED_INFO {
             self.api.npc(i32::from(OK_NO_NEED_INFO));
         } else if r == NEW_DEVICES {
@@ -1445,239 +1442,19 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
         self.api.response(NEED_INFO, Handler::NeedInfo, &[]);
         self.api.response(GOODBYE_COMMANDER, Handler::ByeBye, &[]);
     }
-    fn intro(&mut self) {
+    pub(crate) fn intro(&mut self) {
         self.normal_starbase(0);
     }
-    fn post_starbase_enc(&mut self) {
+    pub(crate) fn post_starbase_enc(&mut self) {
         self.api.set(StoryKey::MOONBASE_ON_SHIP, 0_u8);
         if self.api.get(StoryKey::CHMMR_BOMB_STATE) == 2 {
             self.api.set(StoryKey::CHMMR_BOMB_STATE, 3_u8);
         }
     }
 }
-fn descriptor() -> CLocData {
-    let mut desc = CLocData {
-        alien_frame_res: c"comm.commander.graphics".as_ptr(),
-        alien_font_res: c"comm.commander.font".as_ptr(),
-        alien_colormap_res: c"comm.commander.colortable".as_ptr(),
-        alien_song_res: c"comm.commander.music".as_ptr(),
-        conversation_phrases_res: c"comm.starbase.dialogue".as_ptr(),
-        alien_text_fcolor: CColor {
-            r: 255,
-            g: 255,
-            b: 255,
-            a: 255,
-        },
-        alien_text_bcolor: CColor {
-            r: 0,
-            g: 0,
-            b: 0,
-            a: 255,
-        },
-        alien_text_baseline: CPoint { x: 164, y: 20 },
-        alien_text_width: 143,
-        alien_text_align: 1,
-        alien_text_valign: 1,
-        num_animations: 10,
-        ..CLocData::default()
-    };
-    desc.alien_ambient_array[0] = animation(1, 3, 4, (56, 0), (0, 6720));
-    desc.alien_ambient_array[1] = animation(10, 30, 2, (21, 0), (1680, 0));
-    desc.alien_ambient_array[2] = animation(40, 7, 2, (21, 0), (0, 6720));
-    desc.alien_ambient_array[3] = animation(47, 8, 2, (21, 0), (0, 6720));
-    desc.alien_ambient_array[4] = animation(55, 6, 2, (21, 0), (0, 6720));
-    desc.alien_ambient_array[5] = animation(61, 6, 2, (21, 0), (0, 6720));
-    desc.alien_ambient_array[6] = animation(67, 7, 2, (21, 0), (0, 6720));
-    desc.alien_ambient_array[7] = animation(74, 11, 2, (21, 0), (0, 6720));
-    desc.alien_ambient_array[8] = animation(85, 10, 2, (21, 0), (0, 6720));
-    desc.alien_ambient_array[9] = animation(95, 1, 0, (0, 0), (0, 0));
-    desc.alien_talk_desc = animation(4, 6, 0, (84, 56), (98, 70));
-    #[cfg(not(test))]
-    {
-        desc.init_encounter_func = Some(live::intro);
-        desc.post_encounter_func = Some(live::post);
-        desc.uninit_encounter_func = Some(live::uninit);
-    }
-    desc
-}
-#[cfg(not(test))]
-pub(crate) mod live {
-    use super::*;
-    use crate::comm::races::script::live::LiveScript;
-    fn run(cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, LiveScript<'_, '_, Handler>>)) {
-        let mut api = LiveScript::new(cx, callback);
-        static mut SESSION: Option<Session> = None;
-        // Only the game thread dispatches these callbacks.
-        let session =
-            unsafe { (&mut *std::ptr::addr_of_mut!(SESSION)).get_or_insert_with(Session::default) };
-        f(&mut Dialogue {
-            api: &mut api,
-            session,
-        });
-    }
-    fn bye_bye(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::ByeBye,
-                u16::try_from(r).expect("response reference exceeds COUNT"),
-            )
-        });
-    }
-    fn alliance_info(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::AllianceInfo,
-                u16::try_from(r).expect("response reference exceeds COUNT"),
-            )
-        });
-    }
-    fn hierarchy_info(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::HierarchyInfo,
-                u16::try_from(r).expect("response reference exceeds COUNT"),
-            )
-        });
-    }
-    fn alien_races(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::AlienRaces,
-                u16::try_from(r).expect("response reference exceeds COUNT"),
-            )
-        });
-    }
-    fn war_info(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::WarInfo,
-                u16::try_from(r).expect("response reference exceeds COUNT"),
-            )
-        });
-    }
-    fn ancient_history(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::AncientHistory,
-                u16::try_from(r).expect("response reference exceeds COUNT"),
-            )
-        });
-    }
-    fn tell_history(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::TellHistory,
-                u16::try_from(r).expect("response reference exceeds COUNT"),
-            )
-        });
-    }
-    fn defeat_urquan(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::DefeatUrquan,
-                u16::try_from(r).expect("response reference exceeds COUNT"),
-            )
-        });
-    }
-    fn tell_mission(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::TellMission,
-                u16::try_from(r).expect("response reference exceeds COUNT"),
-            )
-        });
-    }
-    fn tell_star_base(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::TellStarBase,
-                u16::try_from(r).expect("response reference exceeds COUNT"),
-            )
-        });
-    }
-    fn need_info(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::NeedInfo,
-                u16::try_from(r).expect("response reference exceeds COUNT"),
-            )
-        });
-    }
-    fn normal_starbase(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::NormalStarbase,
-                u16::try_from(r).expect("response reference exceeds COUNT"),
-            )
-        });
-    }
-    fn sell_minerals(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::SellMinerals,
-                u16::try_from(r).expect("response reference exceeds COUNT"),
-            )
-        });
-    }
-    fn callback(handler: Handler) -> crate::comm::response::ResponseFunc {
-        match handler {
-            Handler::ByeBye => bye_bye,
-            Handler::AllianceInfo => alliance_info,
-            Handler::HierarchyInfo => hierarchy_info,
-            Handler::AlienRaces => alien_races,
-            Handler::WarInfo => war_info,
-            Handler::AncientHistory => ancient_history,
-            Handler::TellHistory => tell_history,
-            Handler::DefeatUrquan => defeat_urquan,
-            Handler::TellMission => tell_mission,
-            Handler::TellStarBase => tell_star_base,
-            Handler::NeedInfo => need_info,
-            Handler::NormalStarbase => normal_starbase,
-            Handler::SellMinerals => sell_minerals,
-        }
-    }
-    pub(super) fn intro(cx: &mut Cx<'_>) {
-        run(cx, |s| s.intro());
-    }
-    pub(super) fn post(cx: &mut Cx<'_>) {
-        run(cx, |s| s.post_starbase_enc());
-    }
-    pub(super) fn uninit(_cx: &mut Cx<'_>) -> u16 {
-        0
-    }
-    /// Initialize the encounter descriptor and initial battle segue.
-    ///
-    /// # Safety
-    /// Game thread only; communication state must already be initialized.
-    pub unsafe fn init_starbase_comm(cx: &mut Cx<'_>) -> CLocData {
-        let mut desc = descriptor();
-        run(cx, |s| s.initialize(&mut desc));
-        desc
-    }
-}
-pub struct StarbasDialogue;
-impl super::RaceDialogue for StarbasDialogue {
-    fn init(&self, _cx: &mut Cx<'_>) -> CommData {
-        #[cfg(not(test))]
-        {
-            unsafe { as_comm_data(&live::init_starbase_comm(_cx)) }
-        }
-        #[cfg(test)]
-        {
-            as_comm_data(&descriptor())
-        }
-    }
-    fn intro(&self, _cx: &mut Cx<'_>) {
-        #[cfg(not(test))]
-        live::intro(_cx);
-    }
-    fn post_encounter(&self, _cx: &mut Cx<'_>) {
-        #[cfg(not(test))]
-        live::post(_cx);
-    }
-    fn uninit(&self, _cx: &mut Cx<'_>) -> u32 {
-        0
-    }
-}
+
+#[cfg(test)]
+use crate::comm::descriptors::starbas::descriptor;
+
 #[cfg(test)]
 mod tests;

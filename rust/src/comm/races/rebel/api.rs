@@ -3,7 +3,7 @@ use crate::comm::races::encounter::EncounterApi;
 use crate::engine::StoryKey;
 
 #[derive(Clone, Copy)]
-pub(super) struct Date {
+pub(crate) struct Date {
     pub year: u16,
     pub month: u8,
     pub day: u8,
@@ -20,7 +20,7 @@ impl Default for Date {
     }
 }
 
-pub(super) trait RebelApi: EncounterApi<Handler> {
+pub(crate) trait RebelApi: EncounterApi<Handler> {
     fn date(&self) -> Date;
 
     fn ship_not_ready(&self) -> bool {
@@ -49,18 +49,7 @@ pub(super) trait RebelApi: EncounterApi<Handler> {
         );
     }
 }
-#[cfg(not(test))]
-impl RebelApi for super::super::script::live::LiveScript<'_, '_, Handler> {
-    fn date(&self) -> Date {
-        let cx = self.cx.borrow();
-        let clock = &cx.world.data.game.game_clock;
-        Date {
-            year: clock.year_index,
-            month: clock.month_index,
-            day: clock.day_index,
-        }
-    }
-}
+
 #[cfg(test)]
 impl RebelApi for crate::comm::races::encounter::testing::Fake<Handler, Date> {
     fn date(&self) -> Date {

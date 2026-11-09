@@ -1,20 +1,21 @@
 //! Pending speech is resolved before the communication frame handles responses.
 
-use super::COMM_STATE;
 use crate::comm::talk_segue;
+use crate::comm::Comm;
 use crate::engine::{
     battle::Cx,
     observe::{CampaignView, CheckpointView, InputView, Io},
 };
 
 pub(super) fn run_pending(
+    comm: &mut Comm,
     _input: &crate::engine::input::InputSession,
     cx: &mut Cx<'_>,
     io: &mut Io<'_>,
 ) -> bool {
     #[cfg(not(test))]
     use talk_segue::WAIT_TRACK_ALL;
-    let is_finished = COMM_STATE.read().is_talking_finished();
+    let is_finished = comm.is_talking_finished();
     eprintln!(
         "[DBG] rust_DoCommunication: is_talking_finished={}",
         is_finished
@@ -22,13 +23,13 @@ pub(super) fn run_pending(
     if !is_finished {
         // First-call initialization (only once per encounter)
         {
-            let mut state = COMM_STATE.write();
+            let state = &mut *comm;
             if !state.first_talk_call {
                 state.first_talk_call = true;
                 // Drop lock before calling C bridges
-                drop(state);
+
                 // SAFETY: the retained game-thread encounter owns initialized speech resources.
-                unsafe { talk_segue::alien_talk_first_call_init(cx) };
+                unsafe { talk_segue::alien_talk_first_call_init(comm, cx) };
             }
         }
 
@@ -37,24 +38,22 @@ pub(super) fn run_pending(
         io.observer
             .checkpoint(&CheckpointView::ResponsesReady(false));
 
-        let response_count = COMM_STATE.read().responses().count();
+        let response_count = comm.responses().count();
         let campaign = CampaignView::capture(cx.world, cx.kernel);
         let semantic_skip = cx.with_legacy(|| {
-            io.observer
-                .input_admitted(&InputView::PendingSpeech, &Some(campaign.clone()))
+            comm.admit_observer(io, &InputView::PendingSpeech, &Some(campaign.clone()))
                 .stop
-                || io
-                    .observer
-                    .input_admitted(
+                || comm
+                    .admit_observer(
+                        io,
                         &InputView::PendingResponse {
                             count: response_count,
                         },
                         &Some(campaign.clone()),
                     )
                     .stop
-                || io
-                    .observer
-                    .input_admitted(&InputView::ClosingSpeech, &Some(campaign))
+                || comm
+                    .admit_observer(io, &InputView::ClosingSpeech, &Some(campaign))
                     .stop
         });
         if semantic_skip {
@@ -66,13 +65,13 @@ pub(super) fn run_pending(
         let ended = if semantic_skip {
             true
         } else {
-            talk_segue::dinput::run_talk_segue_dinput(_input, cx, io, WAIT_TRACK_ALL)
+            talk_segue::dinput::run_talk_segue_dinput(comm, _input, cx, io, WAIT_TRACK_ALL)
         };
         #[cfg(test)]
         let ended = true;
 
         // Update state with result
-        COMM_STATE.write().set_talking_finished(ended);
+        comm.set_talking_finished(ended);
 
         if ended {
             cx.with_legacy(talk_segue::fade_music_to_foreground_bridge);

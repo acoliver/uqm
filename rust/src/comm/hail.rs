@@ -1,16 +1,15 @@
 //! hail_alien encounter orchestration.
 //!
-//! Implements the full alien encounter sequence replacing C's `hail_alien()`.
+//! Implements the full alien encounter sequence replacing C's `hail_alien(comm)`.
 //! Follows comm.c:1183–1308 step-by-step plus DoCommunication exit handling
 //! from comm.c:1100–1138.
 //!
 //! @plan PLAN-20260326-COMMPT2.P07
 //! @requirement REQ-HL-001
 
+use crate::comm::Comm;
 #[cfg(not(test))]
 use crate::engine::StoryKey;
-#[cfg(not(test))]
-use crate::engine::World;
 
 use crate::engine::{battle::Cx, observe::Io};
 
@@ -19,12 +18,9 @@ use crate::engine::{battle::Cx, observe::Io};
 // ============================================================================
 
 #[cfg(not(test))]
-use crate::engine::Kernel;
-#[cfg(not(test))]
 pub(super) mod c_bridge {
+    use crate::comm::Comm;
     use std::ffi::c_int;
-
-    pub use crate::comm::locdata::COMM_DATA as CommData;
 
     pub use crate::graphics::context_abi::{
         CreateContextAux, DestroyContext, SetContext, SetContextBackGroundColor, SetContextClipRect,
@@ -47,30 +43,24 @@ pub(super) mod c_bridge {
 
     pub use crate::sound::resource_types::LoadMusicInstance;
 
-    pub use crate::comm::comm_abi::c_SetAnimContext;
+    pub use crate::comm::comm_abi::set_anim_context;
 
-    pub use crate::comm::comm_abi::c_SetTextCacheContext;
+    pub use crate::comm::comm_abi::set_text_cache_context;
 
-    pub use crate::comm::comm_abi::c_SetTextCacheFrame;
+    pub use crate::comm::comm_abi::set_text_cache_frame;
 
     pub use crate::graphics::frame_abi::ClearDrawable;
 
-    pub use crate::comm::comm_abi::c_SetCurInputState;
-
     pub use crate::graphics::cmap_abi::FlushColorXForms;
 
-    pub use crate::comm::comm_abi::c_SetTalkingFinished;
+    pub use crate::comm::comm_abi::set_talking_finished;
 
-    pub use crate::comm::comm_abi::c_SetupSubtitleTextFromCommData;
-
-    pub use crate::comm::comm_abi::c_ClearPhraseBuf;
+    pub use crate::comm::comm_abi::setup_subtitle_text_from_comm_data;
 
     extern "C" {
 
         pub static mut ScreenWidth: c_int;
         pub static mut ScreenHeight: c_int;
-        #[allow(dead_code)]
-        pub static mut CommWndRect: crate::comm::locdata::CRect;
 
     }
     pub use crate::graphics::gfx_common_abi::BatchGraphics;
@@ -78,7 +68,6 @@ pub(super) mod c_bridge {
     pub use crate::threading::pacing::linked::sleep_thread_until as SleepThreadUntil;
 
     use super::{CFontRelease, NORMAL_VOLUME};
-    use crate::comm::player_font::CONVERSATION_PLAYER_FONT;
 
     pub(super) struct HailResources {
         pub(super) space_ctx: *mut crate::graphics::native_abi::context_desc,
@@ -94,7 +83,7 @@ pub(super) mod c_bridge {
     }
 
     impl HailResources {
-        pub(super) unsafe fn finish(self, cx: &mut crate::engine::battle::Cx<'_>) {
+        pub(super) unsafe fn finish(self, comm: &mut Comm, cx: &mut crate::engine::battle::Cx<'_>) {
             let Self {
                 space_ctx,
                 anim_ctx,
@@ -114,7 +103,7 @@ pub(super) mod c_bridge {
 
                 // FlushColorXForms, ClearSubtitles (C lines 1130–1131)
                 FlushColorXForms();
-                crate::comm::ffi::rust_clear_subtitles();
+                crate::comm::ffi::rust_clear_subtitles(comm);
 
                 // Stop audio, fade music (C lines 1133–1136)
                 stop_music();
@@ -129,12 +118,12 @@ pub(super) mod c_bridge {
             });
             let activity = cx.world.activity();
             if (activity & 0x4000) == 0 && (activity & 0x1000) == 0 {
-                if let Some(callback) = CommData.post_encounter_func {
-                    callback(cx);
+                if let Some(callback) = comm.data.post_encounter_func {
+                    callback(comm, cx);
                 }
             }
-            if let Some(callback) = CommData.uninit_encounter_func {
-                callback(cx);
+            if let Some(callback) = comm.data.uninit_encounter_func {
+                callback(comm, cx);
             }
 
             // ----------------------------------------------------------------
@@ -180,15 +169,15 @@ pub(super) mod c_bridge {
 
                 // PlayerFont — not captured; queued response/feedback glyph draws may
                 // still read it, so the release drains the draw queue first.
-                CONVERSATION_PLAYER_FONT.release(&mut CFontRelease);
+                comm.player_font.release(&mut CFontRelease);
 
                 // ----------------------------------------------------------------
                 // Steps 19–20: Clear CommData fields and pCurInputState
                 // ----------------------------------------------------------------
-                unsafe { CommData.conversation_phrases_res = std::ptr::null() };
-                unsafe { CommData.conversation_phrases = std::ptr::null_mut() };
+                comm.data.conversation_phrases_res = std::ptr::null();
+                comm.data.conversation_phrases = std::ptr::null_mut();
                 // Clear Rust-side comm_data (resources already destroyed above)
-                crate::comm::state::COMM_STATE.write().clear_comm_data();
+                comm.clear_comm_data();
                 // pCurInputState was already cleared by c_RunEncounterDoInput.
             });
         }
@@ -230,7 +219,7 @@ impl super::player_font::FontRelease for CFontRelease {
 /// Check if this is a starbase conversation by reading C game state.
 /// Matches: GET_GAME_STATE(GLOBAL_FLAGS_AND_DATA) == 0xFF && GET_GAME_STATE(STARBASE_AVAILABLE)
 #[cfg(not(test))]
-fn is_starbase_conversation(world: &World) -> bool {
+fn is_starbase_conversation(world: &crate::engine::World) -> bool {
     // Direct game state access (replaces c_IsStarbaseConversation)
     let global_flags = world.story_state(StoryKey::GLOBAL_FLAGS_AND_DATA);
     let starbase_available = world.story_state(StoryKey::STARBASE_AVAILABLE);
@@ -239,8 +228,8 @@ fn is_starbase_conversation(world: &World) -> bool {
 
 /// Draw the player communication panel using the shared C-parity renderer.
 #[cfg(not(test))]
-fn draw_sis_com_window(activity: u16) {
-    super::sis_graphics::draw_sis_com_window(activity);
+fn draw_sis_com_window(comm: &mut Comm, activity: u16) {
+    super::sis_graphics::draw_sis_com_window(comm, activity);
 }
 
 // ============================================================================
@@ -255,7 +244,7 @@ const NORMAL_VOLUME: i32 = 128;
 
 /// Run the full alien encounter sequence.
 ///
-/// Implements C's `hail_alien()` (comm.c:1183–1308) plus the
+/// Implements C's `hail_alien(comm)` (comm.c:1183–1308) plus the
 /// `DoCommunication` exit-handling path (comm.c:1100–1138).
 ///
 /// # Safety
@@ -263,7 +252,7 @@ const NORMAL_VOLUME: i32 = 128;
 ///
 /// @plan PLAN-20260326-COMMPT2.P07
 /// @requirement REQ-HL-001
-pub unsafe fn hail_alien(cx: &mut Cx<'_>, io: &mut Io<'_>) {
+pub unsafe fn hail_alien(_comm: &mut Comm, cx: &mut Cx<'_>, io: &mut Io<'_>) {
     #[cfg(test)]
     let _ = (cx, io);
     #[cfg(not(test))]
@@ -271,7 +260,6 @@ pub unsafe fn hail_alien(cx: &mut Cx<'_>, io: &mut Io<'_>) {
     #[cfg(not(test))]
     {
         let input = cx.kernel.input_runtime().input().clone();
-        use super::player_font::CONVERSATION_PLAYER_FONT;
         use c_bridge::*;
         use std::ptr;
 
@@ -283,15 +271,15 @@ pub unsafe fn hail_alien(cx: &mut Cx<'_>, io: &mut Io<'_>) {
         let activity = cx.world.activity();
         let resources = cx.with_legacy(|| {
             eprintln!("[DBG] HailAlien: clearing COMM_STATE");
-            super::state::COMM_STATE.write().reset_for_encounter();
+            _comm.reset_for_encounter();
             {
-                let s = super::state::COMM_STATE.read();
+                let s = &*_comm;
                 eprintln!(
                     "[DBG] HailAlien: after clear, talking_finished={}",
                     s.is_talking_finished()
                 );
             }
-            c_SetTalkingFinished(0);
+            set_talking_finished(_comm, 0);
 
             // ----------------------------------------------------------------
             // Step 2: Load PlayerFont
@@ -299,7 +287,8 @@ pub unsafe fn hail_alien(cx: &mut Cx<'_>, io: &mut Io<'_>) {
             let player_font = LoadGraphicInstance(c"font.player".as_ptr());
             // The conversation owns this font: the response and feedback renderers
             // borrow it, and it is freed only at teardown after queued draws drain.
-            CONVERSATION_PLAYER_FONT
+            _comm
+                .player_font
                 .install(player_font)
                 .unwrap_or_else(|error| panic!("HailAlien: {error}"));
 
@@ -308,41 +297,38 @@ pub unsafe fn hail_alien(cx: &mut Cx<'_>, io: &mut Io<'_>) {
             // ----------------------------------------------------------------
 
             // AlienFrame: load → capture → set
-            let alien_frame_raw =
-                LoadGraphicInstance(unsafe { c_bridge::CommData.alien_frame_res });
+            let alien_frame_raw = LoadGraphicInstance(_comm.data.alien_frame_res);
             let alien_frame = CaptureDrawable(alien_frame_raw.cast());
-            unsafe { c_bridge::CommData.alien_frame = alien_frame.cast() };
+            _comm.data.alien_frame = alien_frame.cast();
 
             // AlienFont: load → set (not captured, direct Destroy on exit)
-            let alien_font = LoadGraphicInstance(unsafe { c_bridge::CommData.alien_font_res });
-            unsafe { c_bridge::CommData.alien_font = alien_font };
+            let alien_font = LoadGraphicInstance(_comm.data.alien_font_res);
+            _comm.data.alien_font = alien_font;
 
             // AlienColorMap: load → capture → set
-            let alien_cmap_raw =
-                LoadStringTableInstance(unsafe { c_bridge::CommData.alien_colormap_res });
+            let alien_cmap_raw = LoadStringTableInstance(_comm.data.alien_colormap_res);
             let alien_cmap = CaptureStringTable(alien_cmap_raw);
-            unsafe { c_bridge::CommData.alien_colormap = alien_cmap.cast() };
+            _comm.data.alien_colormap = alien_cmap.cast();
 
             // AlienSong: alt-song fallback then primary
-            let song_flags = unsafe { c_bridge::CommData.alien_song_flags };
-            let alt_song_res = unsafe { c_bridge::CommData.alien_alt_song_res };
+            let song_flags = { _comm.data.alien_song_flags };
+            let alt_song_res = { _comm.data.alien_alt_song_res };
             let alien_song = if (song_flags & LDASF_USE_ALTERNATE) != 0 && !alt_song_res.is_null() {
                 let alt = LoadMusicInstance(alt_song_res);
                 if !alt.is_null() {
                     alt
                 } else {
-                    LoadMusicInstance(unsafe { c_bridge::CommData.alien_song_res })
+                    LoadMusicInstance(_comm.data.alien_song_res)
                 }
             } else {
-                LoadMusicInstance(unsafe { c_bridge::CommData.alien_song_res })
+                LoadMusicInstance(_comm.data.alien_song_res)
             };
-            unsafe { c_bridge::CommData.alien_song = alien_song };
+            _comm.data.alien_song = alien_song;
 
             // ConversationPhrases: load → capture → set
-            let phrases_raw =
-                LoadStringTableInstance(unsafe { c_bridge::CommData.conversation_phrases_res });
+            let phrases_raw = LoadStringTableInstance(_comm.data.conversation_phrases_res);
             let phrases = CaptureStringTable(phrases_raw);
-            unsafe { c_bridge::CommData.conversation_phrases = phrases.cast() };
+            _comm.data.conversation_phrases = phrases.cast();
 
             // Populate COMM_STATE.comm_data so Rust-side NPCPhrase can
             // resolve conversation phrases without calling back into C.
@@ -355,13 +341,13 @@ pub unsafe fn hail_alien(cx: &mut Cx<'_>, io: &mut Io<'_>) {
                     alien_song,
                     ..Default::default()
                 };
-                super::state::COMM_STATE.write().set_comm_data(comm_data);
+                _comm.set_comm_data(comm_data);
             }
 
             // ----------------------------------------------------------------
             // Step 4: Subtitle text setup
             // ----------------------------------------------------------------
-            c_SetupSubtitleTextFromCommData();
+            setup_subtitle_text_from_comm_data(_comm);
 
             // ----------------------------------------------------------------
             // Step 5: TextCacheContext setup
@@ -380,8 +366,8 @@ pub unsafe fn hail_alien(cx: &mut Cx<'_>, io: &mut Io<'_>) {
                 CreateDrawable(want_pixmap as u8, sis_w as i16, cache_height as i16, 1);
             let text_cache_frame = CaptureDrawable(cache_frame_raw);
 
-            c_SetTextCacheContext(text_cache_ctx.cast());
-            c_SetTextCacheFrame(text_cache_frame.cast());
+            set_text_cache_context(_comm, text_cache_ctx.cast());
+            set_text_cache_frame(_comm, text_cache_frame.cast());
             SetContext(text_cache_ctx);
             SetContextFGFrame(text_cache_frame);
             // TextBack = BUILD_COLOR(MAKE_RGB15(0x00, 0x00, 0x10), 0x00)
@@ -398,12 +384,11 @@ pub unsafe fn hail_alien(cx: &mut Cx<'_>, io: &mut Io<'_>) {
             // ----------------------------------------------------------------
             // Step 6: Clear phrase buffer
             // ----------------------------------------------------------------
-            c_ClearPhraseBuf();
 
             // ----------------------------------------------------------------
             // Step 7: Set SpaceContext and save old font
             // ----------------------------------------------------------------
-            let space_ctx = { Kernel::current().read(|owner| owner.space_context) };
+            let space_ctx = { _comm.presentation.space_context };
             SetContext(space_ctx.cast());
             let old_font = SetContextFont(player_font.cast());
 
@@ -411,9 +396,9 @@ pub unsafe fn hail_alien(cx: &mut Cx<'_>, io: &mut Io<'_>) {
             // Step 8: Create AnimContext and configure
             // ----------------------------------------------------------------
             let anim_ctx = create_named_context(c"AnimContext".as_ptr().cast());
-            c_SetAnimContext(anim_ctx.cast());
+            set_anim_context(_comm, anim_ctx.cast());
             SetContext(anim_ctx);
-            let screen = { Kernel::current().read(|owner| owner.screen) };
+            let screen = { _comm.presentation.screen };
             SetContextFGFrame(screen.cast());
 
             let mut frame_rect = crate::comm::locdata::CRect::default();
@@ -421,13 +406,17 @@ pub unsafe fn hail_alien(cx: &mut Cx<'_>, io: &mut Io<'_>) {
 
             // CommWndRect.extent = { SIS_SCREEN_WIDTH, frame_rect.height }
             // CommWndRect.corner stays at its current value for WON_LAST_BATTLE
-            let wnd_x = unsafe { c_bridge::CommWndRect.corner.x as i32 };
-            let wnd_y = unsafe { c_bridge::CommWndRect.corner.y as i32 };
-            unsafe {
-                c_bridge::CommWndRect.corner.x = wnd_x as i16;
-                c_bridge::CommWndRect.corner.y = wnd_y as i16;
-                c_bridge::CommWndRect.width = sis_w as i16;
-                c_bridge::CommWndRect.height = frame_rect.height;
+            let wnd_x = { _comm.display.window.corner.x as i32 };
+            let wnd_y = { _comm.display.window.corner.y as i32 };
+            {
+                _comm.display.window.corner.x = wnd_x as i16;
+                _comm.display.window.corner.y = wnd_y as i16;
+                _comm.display.window.width = sis_w as i16;
+                _comm.display.window.height = frame_rect.height;
+            }
+
+            if let Some(window) = &_comm.options.window {
+                window.set(_comm.display.window);
             }
 
             // ----------------------------------------------------------------
@@ -436,17 +425,17 @@ pub unsafe fn hail_alien(cx: &mut Cx<'_>, io: &mut Io<'_>) {
             SetTransitionSource(ptr::null());
             BatchGraphics();
 
-            if (activity & 0xFF) == 5 {
+            if (activity & 0xFF) == 5 || _comm.options.window.is_some() {
                 // WON_LAST_BATTLE branch: set clip to current CommWndRect
                 unsafe {
-                    SetContextClipRect((&raw mut c_bridge::CommWndRect).cast());
+                    SetContextClipRect((&raw mut _comm.display.window).cast());
                 }
             } else {
                 // Normal branch: set clip to SIS origin + CommWndRect size
                 unsafe {
-                    c_bridge::CommWndRect.corner.x = 7; // SIS_ORG_X
-                    c_bridge::CommWndRect.corner.y = 10; // SIS_ORG_Y
-                    SetContextClipRect((&raw mut c_bridge::CommWndRect).cast());
+                    _comm.display.window.corner.x = 7; // SIS_ORG_X
+                    _comm.display.window.corner.y = 10; // SIS_ORG_Y
+                    SetContextClipRect((&raw mut _comm.display.window).cast());
                 }
             }
 
@@ -469,12 +458,12 @@ pub unsafe fn hail_alien(cx: &mut Cx<'_>, io: &mut Io<'_>) {
             let dimensions = cx.screen_dimensions();
             crate::ui::border::draw_conversation_frame(cx.kernel, cx.world, dimensions, title);
         }
-        cx.with_legacy(|| draw_sis_com_window(activity));
+        cx.with_legacy(|| draw_sis_com_window(_comm, activity));
 
         cx.kernel.last_activity |= 0x1000;
-        if let Some(callback) = c_bridge::CommData.init_encounter_func {
-            callback(cx);
-            super::ffi::observe_responses(io);
+        if let Some(callback) = _comm.data.init_encounter_func {
+            callback(_comm, cx);
+            super::ffi::observe_responses(_comm, io);
         }
 
         // Run the encounter loop: DoInput with rust_do_communication as InputFunc.
@@ -484,22 +473,15 @@ pub unsafe fn hail_alien(cx: &mut Cx<'_>, io: &mut Io<'_>) {
             const MENU_SOUND_UP: u16 = 1 << 0;
             const MENU_SOUND_DOWN: u16 = 1 << 1;
             const MENU_SOUND_SELECT: u16 = 1 << 4;
-
-            type EncounterStateDInput = crate::comm::comm_abi::EncounterState;
-
-            let mut es: EncounterStateDInput = std::mem::zeroed();
-            es.input = None;
             cx.with_legacy(|| {
-                c_bridge::c_SetCurInputState(&mut es as *mut _ as *mut std::ffi::c_void);
                 input.set_menu_sounds(MENU_SOUND_UP | MENU_SOUND_DOWN, MENU_SOUND_SELECT);
             });
             io.observer
                 .checkpoint(&CheckpointView::CommunicationStarted);
-            cx.run_input(io, false, |cx, io| {
-                crate::comm::ffi::rust_do_communication(&input, cx, io) != 0
+            _comm.run_input(cx, io, false, |_comm, cx, io| {
+                crate::comm::ffi::rust_do_communication(_comm, &input, cx, io) != 0
             });
             io.observer.checkpoint(&CheckpointView::CommunicationEnded);
-            cx.with_legacy(|| c_bridge::c_SetCurInputState(std::ptr::null_mut()));
         }
 
         // ----------------------------------------------------------------
@@ -511,11 +493,10 @@ pub unsafe fn hail_alien(cx: &mut Cx<'_>, io: &mut Io<'_>) {
         // FlushColorXForms, ClearSubtitles, stop audio) is performed here.
         // ----------------------------------------------------------------
 
-        resources.finish(cx);
+        resources.finish(_comm, cx);
         let campaign = crate::engine::observe::CampaignView::capture(cx.world, cx.kernel);
         cx.with_legacy(|| {
-            io.observer
-                .input_admitted(&InputView::CommunicationCompleted, &Some(campaign))
+            _comm.admit_observer(io, &InputView::CommunicationCompleted, &Some(campaign))
         });
     }
 }
@@ -526,10 +507,13 @@ pub unsafe fn hail_alien(cx: &mut Cx<'_>, io: &mut Io<'_>) {
 
 #[cfg(test)]
 mod tests {
+    use crate::comm::Comm;
     /// hail_alien is a no-op in test builds (all C bridge calls are gated
     /// behind #[cfg(not(test))]). The public function must exist and be callable.
     #[test]
     fn test_hail_alien_compiles() {
+        let mut owner = Comm::new();
+        let comm = &mut owner;
         // Verify the function exists and is callable in test context.
         // The actual logic is gated behind cfg(not(test)) and requires
         // the full C game runtime, so we just confirm it compiles.
@@ -545,7 +529,7 @@ mod tests {
         let mut io = crate::engine::observe::Io {
             observer: &mut observer,
         };
-        unsafe { super::hail_alien(&mut cx, &mut io) };
+        unsafe { super::hail_alien(comm, &mut cx, &mut io) };
     }
 }
 

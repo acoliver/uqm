@@ -47,7 +47,7 @@ const fn digit(divider: i32, subtrahend: i32, strings: *const u16, common: u16) 
         CommonNameIndex: common,
     }
 }
-// NPCNumber only reads this descriptor and the phrase tables it borrows.
+// npc_number only reads this descriptor and the phrase tables it borrows.
 static mut NUMBERS: NUMBER_SPEECH_DESC = NUMBER_SPEECH_DESC {
     NumDigits: 5,
     Digits: [
@@ -60,6 +60,6 @@ static mut NUMBERS: NUMBER_SPEECH_DESC = NUMBER_SPEECH_DESC {
         digit(0, 0, std::ptr::null(), 0),
     ],
 };
-pub(super) fn descriptor() -> *const NUMBER_SPEECH_DESC {
+pub(crate) fn descriptor() -> *const NUMBER_SPEECH_DESC {
     std::ptr::addr_of!(NUMBERS)
 }

@@ -2,7 +2,7 @@
 
 pub use super::observe_port::{
     CheckpointView, DeviceObservation, Injected, InputSetup, InputView, Observer, PeerSetup,
-    Presented, StarMapView, Unobserved,
+    Presented, ResponseChoices, StarMapView, Unobserved,
 };
 pub mod battle;
 use super::{Kernel, World};

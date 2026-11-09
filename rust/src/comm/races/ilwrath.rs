@@ -1,16 +1,13 @@
 //! Ilwrath dialogue, ported from the original C script.
 
-use super::encounter::EncounterApi;
-use super::script::{animation, as_comm_data};
-use crate::comm::locdata::{CColor, CLocData, CPoint};
-use crate::comm::types::CommData;
-use crate::engine::battle::Cx;
-use crate::engine::StoryKey;
+pub(crate) use super::encounter::EncounterApi;
+pub(crate) use crate::comm::locdata::CLocData;
+pub(crate) use crate::engine::StoryKey;
 mod phrases;
 use phrases::*;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Handler {
+pub(crate) enum Handler {
     CombatIsInevitable,
     IlwrathGods,
     IlwrathInfo,
@@ -18,11 +15,11 @@ enum Handler {
     GodsOrder,
     GodsSpeak,
 }
-struct Dialogue<'a, A> {
-    api: &'a mut A,
+pub(crate) struct Dialogue<'a, A> {
+    pub(crate) api: &'a mut A,
 }
 impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
-    fn handle(&mut self, handler: Handler, r: u16) {
+    pub(crate) fn handle(&mut self, handler: Handler, r: u16) {
         match handler {
             Handler::CombatIsInevitable => self.combat_is_inevitable(r),
             Handler::IlwrathGods => self.ilwrath_gods(r),
@@ -32,13 +29,13 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
             Handler::GodsSpeak => self.gods_speak(r),
         }
     }
-    fn initialize(&mut self, _desc: &mut CLocData) {
+    pub(crate) fn initialize(&mut self, _desc: &mut CLocData) {
         let peaceful = self.api.get(StoryKey::PROBE_ILWRATH_ENCOUNTER) != 0
             || self.api.get(StoryKey::GLOBAL_FLAGS_AND_DATA) & ((1 << 4) | (1 << 5)) != 0
             || self.api.activity() as u8 == 5;
         self.api.segue(u32::from(!peaceful));
     }
-    fn combat_is_inevitable(&mut self, r: u16) {
+    pub(crate) fn combat_is_inevitable(&mut self, r: u16) {
         self.api.segue(1);
         if r == YOU_ARE_WEAK {
             self.api.npc(i32::from(STRENGTH_NOT_ALL));
@@ -112,7 +109,7 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
             }
         }
     }
-    fn ilwrath_gods(&mut self, r: u16) {
+    pub(crate) fn ilwrath_gods(&mut self, r: u16) {
         let mut gods_left: bool;
         gods_left = false;
         if r == WANT_INFO_ON_GODS {
@@ -152,7 +149,7 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
             self.api.disable(WANT_INFO_ON_GODS);
         }
     }
-    fn ilwrath_info(&mut self, r: u16) {
+    pub(crate) fn ilwrath_info(&mut self, r: u16) {
         if r == WANT_INFO_ON_ILWRATH {
             self.api.npc(i32::from(WHAT_ABOUT_ILWRATH));
         } else if r == WHAT_ABOUT_PHYSIO {
@@ -195,7 +192,7 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
         }
         self.api.response(ENOUGH_ILWRATH, Handler::IlwrathHome, &[]);
     }
-    fn ilwrath_home(&mut self, r: u16) {
+    pub(crate) fn ilwrath_home(&mut self, r: u16) {
         if r == 0 {
             let mut num_visits: u8;
             num_visits = self.api.get(StoryKey::ILWRATH_HOME_VISITS);
@@ -235,7 +232,7 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
         self.api
             .response(BYE_HOMEWORLD, Handler::CombatIsInevitable, &[]);
     }
-    fn gods_order(&mut self, r: u16) {
+    pub(crate) fn gods_order(&mut self, r: u16) {
         let mut orders_left: bool;
         orders_left = false;
         if r == OTHER_DIVINE_ORDERS {
@@ -274,7 +271,7 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
             self.api.disable(OTHER_DIVINE_ORDERS);
         }
     }
-    fn gods_speak(&mut self, r: u16) {
+    pub(crate) fn gods_speak(&mut self, r: u16) {
         let mut num_visits: u8;
         if r == 0 {
             if self.api.get(StoryKey::ILWRATH_FIGHT_THRADDASH) != 0 {
@@ -349,7 +346,7 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
         self.api
             .response(BYE_GODS, Handler::CombatIsInevitable, &[]);
     }
-    fn ilwrath_space(&mut self, r: u16) {
+    pub(crate) fn ilwrath_space(&mut self, r: u16) {
         let mut num_visits: u8;
         if r == 0 {
             num_visits = self.api.get(StoryKey::ILWRATH_VISITS);
@@ -411,7 +408,7 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
         self.api
             .response(BYE_SPACE, Handler::CombatIsInevitable, &[]);
     }
-    fn intro(&mut self) {
+    pub(crate) fn intro(&mut self) {
         let mut num_visits: u8;
         if self.api.get(StoryKey::PROBE_ILWRATH_ENCOUNTER) != 0 {
             self.api.npc(i32::from(SEND_MESSAGE));
@@ -468,155 +465,11 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
             }
         }
     }
-    fn post_ilwrath_enc(&mut self) {}
+    pub(crate) fn post_ilwrath_enc(&mut self) {}
 }
-fn descriptor() -> CLocData {
-    let mut desc = CLocData {
-        alien_frame_res: c"comm.ilwrath.graphics".as_ptr(),
-        alien_font_res: c"comm.ilwrath.font".as_ptr(),
-        alien_colormap_res: c"comm.ilwrath.colortable".as_ptr(),
-        alien_song_res: c"comm.ilwrath.music".as_ptr(),
-        conversation_phrases_res: c"comm.ilwrath.dialogue".as_ptr(),
-        alien_text_fcolor: CColor {
-            r: 255,
-            g: 255,
-            b: 255,
-            a: 255,
-        },
-        alien_text_bcolor: CColor {
-            r: 0,
-            g: 0,
-            b: 0,
-            a: 255,
-        },
-        alien_text_baseline: CPoint { x: 164, y: 70 },
-        alien_text_width: 288,
-        alien_text_align: 1,
-        alien_text_valign: 1,
-        num_animations: 4,
-        ..CLocData::default()
-    };
-    desc.alien_ambient_array[0] = animation(6, 5, 2, (42, 0), (840, 2520));
-    desc.alien_ambient_array[1] = animation(11, 5, 2, (42, 0), (840, 2520));
-    desc.alien_ambient_array[2] = animation(16, 5, 2, (42, 0), (840, 2520));
-    desc.alien_ambient_array[3] = animation(21, 6, 2, (42, 0), (840, 2520));
-    desc.alien_talk_desc = animation(1, 5, 0, (56, 0), (70, 0));
-    #[cfg(not(test))]
-    {
-        desc.init_encounter_func = Some(live::intro);
-        desc.post_encounter_func = Some(live::post);
-        desc.uninit_encounter_func = Some(live::uninit);
-    }
-    desc
-}
-#[cfg(not(test))]
-pub(crate) mod live {
-    use super::*;
-    use crate::comm::races::script::live::LiveScript;
-    fn run(cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, LiveScript<'_, '_, Handler>>)) {
-        let mut api = LiveScript::new(cx, callback);
-        f(&mut Dialogue { api: &mut api });
-    }
-    fn combat_is_inevitable(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::CombatIsInevitable,
-                u16::try_from(r).expect("response reference exceeds COUNT"),
-            )
-        });
-    }
-    fn ilwrath_gods(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::IlwrathGods,
-                u16::try_from(r).expect("response reference exceeds COUNT"),
-            )
-        });
-    }
-    fn ilwrath_info(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::IlwrathInfo,
-                u16::try_from(r).expect("response reference exceeds COUNT"),
-            )
-        });
-    }
-    fn ilwrath_home(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::IlwrathHome,
-                u16::try_from(r).expect("response reference exceeds COUNT"),
-            )
-        });
-    }
-    fn gods_order(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::GodsOrder,
-                u16::try_from(r).expect("response reference exceeds COUNT"),
-            )
-        });
-    }
-    fn gods_speak(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::GodsSpeak,
-                u16::try_from(r).expect("response reference exceeds COUNT"),
-            )
-        });
-    }
-    fn callback(handler: Handler) -> crate::comm::response::ResponseFunc {
-        match handler {
-            Handler::CombatIsInevitable => combat_is_inevitable,
-            Handler::IlwrathGods => ilwrath_gods,
-            Handler::IlwrathInfo => ilwrath_info,
-            Handler::IlwrathHome => ilwrath_home,
-            Handler::GodsOrder => gods_order,
-            Handler::GodsSpeak => gods_speak,
-        }
-    }
-    pub(super) fn intro(cx: &mut Cx<'_>) {
-        run(cx, |s| s.intro());
-    }
-    pub(super) fn post(cx: &mut Cx<'_>) {
-        run(cx, |s| s.post_ilwrath_enc());
-    }
-    pub(super) fn uninit(_cx: &mut Cx<'_>) -> u16 {
-        0
-    }
-    /// Initialize the encounter descriptor and initial battle segue.
-    ///
-    /// # Safety
-    /// Game thread only; communication state must already be initialized.
-    pub unsafe fn init_ilwrath_comm(cx: &mut Cx<'_>) -> CLocData {
-        let mut desc = descriptor();
-        run(cx, |s| s.initialize(&mut desc));
-        desc
-    }
-}
-pub struct IlwrathDialogue;
-impl super::RaceDialogue for IlwrathDialogue {
-    fn init(&self, _cx: &mut Cx<'_>) -> CommData {
-        #[cfg(not(test))]
-        {
-            unsafe { as_comm_data(&live::init_ilwrath_comm(_cx)) }
-        }
-        #[cfg(test)]
-        {
-            as_comm_data(&descriptor())
-        }
-    }
-    fn intro(&self, _cx: &mut Cx<'_>) {
-        #[cfg(not(test))]
-        live::intro(_cx);
-    }
-    fn post_encounter(&self, _cx: &mut Cx<'_>) {
-        #[cfg(not(test))]
-        live::post(_cx);
-    }
-    fn uninit(&self, _cx: &mut Cx<'_>) -> u32 {
-        0
-    }
-}
+
+#[cfg(test)]
+use crate::comm::descriptors::ilwrath::descriptor;
+
 #[cfg(test)]
 mod tests;

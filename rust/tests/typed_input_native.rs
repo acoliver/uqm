@@ -41,6 +41,7 @@ impl Observer<Option<CampaignView>> for Recording {
             stop: self.stop,
             seed: None,
             planet_side: None,
+            comm_response: None,
         }
     }
 

@@ -91,6 +91,6 @@ static mut SPEECH: NumberSpeech = NumberSpeech {
         digit(0, 0, std::ptr::null(), 0),
     ],
 };
-pub(super) fn descriptor() -> *const c_void {
+pub(crate) fn descriptor() -> *const c_void {
     std::ptr::addr_of!(SPEECH).cast()
 }

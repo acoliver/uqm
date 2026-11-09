@@ -1,12 +1,10 @@
 //! Orz dialogue, ported from orzc.c.
-use super::script::{animation, as_comm_data, GLOBAL_PLAYER_NAME, GLOBAL_SHIP_NAME};
-use crate::comm::locdata::{CColor, CLocData, CPoint};
-use crate::comm::types::CommData;
-use crate::engine::{battle::Cx, StoryKey};
+pub(crate) use super::script::{GLOBAL_PLAYER_NAME, GLOBAL_SHIP_NAME};
+pub(crate) use crate::engine::StoryKey;
 mod phrases;
 use phrases::*;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Handler {
+pub(crate) enum Handler {
     ExitConversation,
     TaaloWorld,
     OrzAllied,
@@ -14,13 +12,13 @@ enum Handler {
     OrzNeutral,
     OrzAngry,
 }
-struct Dialogue<'a, A> {
-    api: &'a mut A,
+pub(crate) struct Dialogue<'a, A> {
+    pub(crate) api: &'a mut A,
 }
-mod api;
-use api::OrzApi;
+pub(crate) mod api;
+pub(crate) use api::OrzApi;
 impl<A: OrzApi> Dialogue<'_, A> {
-    fn handle(&mut self, h: Handler, r: u16) {
+    pub(crate) fn handle(&mut self, h: Handler, r: u16) {
         match h {
             Handler::ExitConversation => self.exit_conversation(r),
             Handler::TaaloWorld => self.taalo_world(r),
@@ -30,7 +28,7 @@ impl<A: OrzApi> Dialogue<'_, A> {
             Handler::OrzAngry => self.orz_angry(r),
         }
     }
-    fn exit_conversation(&mut self, r: u16) {
+    pub(crate) fn exit_conversation(&mut self, r: u16) {
         self.api.segue(0_u32);
         if r == BYE_ALLY {
             self.api.npc(i32::from(GOODBYE_ALLY));
@@ -116,7 +114,7 @@ impl<A: OrzApi> Dialogue<'_, A> {
             self.api.set(StoryKey::ORZ_PERSONAL_INFO, num_visits);
         }
     }
-    fn taalo_world(&mut self, r: u16) {
+    pub(crate) fn taalo_world(&mut self, r: u16) {
         let manner: u8 = self.api.get(StoryKey::ORZ_MANNER);
         if r == DEMAND_TO_LAND {
             self.api.npc(i32::from(ASK_NICELY));
@@ -179,7 +177,7 @@ impl<A: OrzApi> Dialogue<'_, A> {
         }
         self.api.response(BYE_TAALO, Handler::ExitConversation, &[]);
     }
-    fn orz_allied(&mut self, r: u16) {
+    pub(crate) fn orz_allied(&mut self, r: u16) {
         let mut num_visits: u8;
         if r == WHATS_UP_ALLY {
             num_visits = self.api.get(StoryKey::ORZ_GENERAL_INFO);
@@ -260,7 +258,7 @@ impl<A: OrzApi> Dialogue<'_, A> {
         }
         self.api.response(BYE_ALLY, Handler::ExitConversation, &[]);
     }
-    fn where_androsyn(&mut self, _r: u16) {
+    pub(crate) fn where_androsyn(&mut self, _r: u16) {
         self.api.npc(i32::from(DISEMBLE_ABOUT_ANDROSYN));
         self.api.disable(WHERE_ANDROSYN);
         self.api
@@ -268,7 +266,7 @@ impl<A: OrzApi> Dialogue<'_, A> {
         self.api
             .response(DONT_REALLY_CARE, Handler::OrzNeutral, &[]);
     }
-    fn offer_alliance(&mut self, r: u16) {
+    pub(crate) fn offer_alliance(&mut self, r: u16) {
         if r == SEEM_LIKE_NICE_GUYS {
             self.api.npc(i32::from(ARE_NICE_WANT_ALLY));
         } else if r == TALK_ABOUT_ALLIANCE {
@@ -286,7 +284,7 @@ impl<A: OrzApi> Dialogue<'_, A> {
         self.api
             .response(YES_ALLIANCE, Handler::ExitConversation, &[]);
     }
-    fn orz_neutral(&mut self, r: u16) {
+    pub(crate) fn orz_neutral(&mut self, r: u16) {
         let mut fragments: Vec<i32> = Vec::new();
         let mut last_stack: u8;
         let mut p_str: [u16; 3] = [0; 3];
@@ -381,7 +379,7 @@ impl<A: OrzApi> Dialogue<'_, A> {
         self.api
             .response(BYE_NEUTRAL, Handler::ExitConversation, &[]);
     }
-    fn orz_angry(&mut self, r: u16) {
+    pub(crate) fn orz_angry(&mut self, r: u16) {
         if r == WHATS_UP_ANGRY {
             let mut num_visits: u8;
             num_visits = self.api.get(StoryKey::ORZ_GENERAL_INFO);
@@ -440,7 +438,7 @@ impl<A: OrzApi> Dialogue<'_, A> {
         }
         self.api.response(BYE_ANGRY, Handler::ExitConversation, &[]);
     }
-    fn intro(&mut self) {
+    pub(crate) fn intro(&mut self) {
         let mut num_visits: u8;
         if i32::from((self.api.activity()) as u8) == 5 {
             self.api.npc(i32::from(OUT_TAKES));
@@ -689,7 +687,7 @@ impl<A: OrzApi> Dialogue<'_, A> {
             self.api.talking(true);
         }
     }
-    fn post_orz_enc(&mut self) {
+    pub(crate) fn post_orz_enc(&mut self) {
         let manner: u8;
         if ((self.api.get_segue()) as i32 == 1)
             && (i32::from({
@@ -705,7 +703,7 @@ impl<A: OrzApi> Dialogue<'_, A> {
             }
         }
     }
-    fn initialize(&mut self) {
+    pub(crate) fn initialize(&mut self) {
         if (i32::from(self.api.get(StoryKey::ORZ_MANNER)) == 3)
             || (i32::from((self.api.activity()) as u8) == 5)
         {
@@ -715,187 +713,9 @@ impl<A: OrzApi> Dialogue<'_, A> {
         }
     }
 }
-fn descriptor() -> CLocData {
-    let mut d = CLocData {
-        alien_frame_res: c"comm.orz.graphics".as_ptr(),
-        alien_font_res: c"comm.orz.font".as_ptr(),
-        alien_colormap_res: c"comm.orz.colortable".as_ptr(),
-        alien_song_res: c"comm.orz.music".as_ptr(),
-        conversation_phrases_res: c"comm.orz.dialogue".as_ptr(),
-        alien_text_fcolor: CColor {
-            r: 255,
-            g: 255,
-            b: 255,
-            a: 255,
-        },
-        alien_text_bcolor: CColor {
-            r: 0,
-            g: 0,
-            b: 0,
-            a: 255,
-        },
-        alien_text_baseline: CPoint { x: 121, y: 0 },
-        alien_text_width: 224,
-        alien_text_align: 1,
-        alien_text_valign: 0,
-        num_animations: 12,
-        ..CLocData::default()
-    };
-    d.alien_ambient_array[0] = animation(4, 6, 2, (84, 0), (840, 2520));
-    d.alien_ambient_array[1] = animation(10, 5, 2, (84, 0), (840, 2520));
-    d.alien_ambient_array[2] = animation(15, 2, 1, (84, 84), (840, 2520));
-    d.alien_ambient_array[3] = animation(17, 3, 4, (84, 84), (840, 2520));
-    d.alien_ambient_array[4] = {
-        let mut a = animation(20, 2, 4, (84, 0), (84, 2520));
-        a.block_mask = 128;
-        a
-    };
-    d.alien_ambient_array[5] = {
-        let mut a = animation(22, 8, 2, (84, 0), (84, 2520));
-        a.block_mask = 64;
-        a
-    };
-    d.alien_ambient_array[6] = {
-        let mut a = animation(30, 3, 2, (84, 0), (84, 2520));
-        a.block_mask = 32;
-        a
-    };
-    d.alien_ambient_array[7] = {
-        let mut a = animation(33, 3, 4, (84, 0), (84, 2520));
-        a.block_mask = 16;
-        a
-    };
-    d.alien_ambient_array[8] = animation(36, 25, 2, (14, 56), (840, 2520));
-    d.alien_ambient_array[9] = animation(61, 15, 2, (14, 56), (840, 2520));
-    d.alien_ambient_array[10] = {
-        let mut a = animation(76, 17, 2, (14, 56), (840, 2520));
-        a.block_mask = 4096;
-        a
-    };
-    d.alien_ambient_array[11] = animation(93, 25, 2, (14, 56), (840, 2520));
-    d.alien_ambient_array[12] = {
-        let mut a = animation(118, 11, 2, (14, 56), (840, 2520));
-        a.block_mask = 1024;
-        a
-    };
-    d.alien_transition_desc = animation(0, 0, 0, (0, 0), (0, 0));
-    d.alien_talk_desc = animation(1, 3, 0, (56, 56), (70, 315));
-    #[cfg(not(test))]
-    {
-        d.init_encounter_func = Some(live::intro);
-        d.post_encounter_func = Some(live::post);
-        d.uninit_encounter_func = Some(live::uninit);
-    }
-    d
-}
-#[cfg(not(test))]
-pub(crate) mod live {
-    use super::*;
-    use crate::comm::races::script::live::LiveScript;
-    fn run(cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, LiveScript<'_, '_, Handler>>)) {
-        let mut api = LiveScript::new(cx, callback);
-        f(&mut Dialogue { api: &mut api });
-    }
-    fn exit_conversation(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::ExitConversation,
-                u16::try_from(r).expect("response exceeds COUNT"),
-            )
-        });
-    }
-    fn taalo_world(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::TaaloWorld,
-                u16::try_from(r).expect("response exceeds COUNT"),
-            )
-        });
-    }
-    fn orz_allied(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::OrzAllied,
-                u16::try_from(r).expect("response exceeds COUNT"),
-            )
-        });
-    }
-    fn offer_alliance(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::OfferAlliance,
-                u16::try_from(r).expect("response exceeds COUNT"),
-            )
-        });
-    }
-    fn orz_neutral(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::OrzNeutral,
-                u16::try_from(r).expect("response exceeds COUNT"),
-            )
-        });
-    }
-    fn orz_angry(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| {
-            s.handle(
-                Handler::OrzAngry,
-                u16::try_from(r).expect("response exceeds COUNT"),
-            )
-        });
-    }
-    fn callback(h: Handler) -> crate::comm::response::ResponseFunc {
-        match h {
-            Handler::ExitConversation => exit_conversation,
-            Handler::TaaloWorld => taalo_world,
-            Handler::OrzAllied => orz_allied,
-            Handler::OfferAlliance => offer_alliance,
-            Handler::OrzNeutral => orz_neutral,
-            Handler::OrzAngry => orz_angry,
-        }
-    }
-    pub(super) fn intro(cx: &mut Cx<'_>) {
-        run(cx, |s| s.intro());
-    }
-    pub(super) fn post(cx: &mut Cx<'_>) {
-        run(cx, |s| s.post_orz_enc());
-    }
-    pub(super) fn uninit(_cx: &mut Cx<'_>) -> u16 {
-        0
-    }
-    /// Initialize this encounter on the game thread.
-    ///
-    /// # Safety
-    /// Communication state must be initialized on the game thread.
-    pub unsafe fn init_orz_comm(cx: &mut Cx<'_>) -> CLocData {
-        let desc = descriptor();
-        run(cx, |s| s.initialize());
-        desc
-    }
-}
-pub struct OrzDialogue;
-impl super::RaceDialogue for OrzDialogue {
-    fn init(&self, _cx: &mut Cx<'_>) -> CommData {
-        #[cfg(not(test))]
-        {
-            unsafe { as_comm_data(&live::init_orz_comm(_cx)) }
-        }
-        #[cfg(test)]
-        {
-            as_comm_data(&descriptor())
-        }
-    }
-    fn intro(&self, _cx: &mut Cx<'_>) {
-        #[cfg(not(test))]
-        live::intro(_cx);
-    }
-    fn post_encounter(&self, _cx: &mut Cx<'_>) {
-        #[cfg(not(test))]
-        live::post(_cx);
-    }
-    fn uninit(&self, _cx: &mut Cx<'_>) -> u32 {
-        0
-    }
-}
+
+#[cfg(test)]
+use crate::comm::descriptors::orz::descriptor;
+
 #[cfg(test)]
 mod tests;

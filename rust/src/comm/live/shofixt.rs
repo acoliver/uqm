@@ -1,0 +1,76 @@
+use crate::comm::descriptors::shofixt::descriptor;
+use crate::comm::live::script::LiveScript;
+use crate::comm::races::shofixt::*;
+use crate::comm::{locdata::CLocData, Comm};
+use crate::engine::battle::Cx;
+fn run(
+    comm: &mut Comm,
+    cx: &mut Cx<'_>,
+    f: impl FnOnce(&mut Dialogue<'_, LiveScript<'_, '_, Handler>>),
+) {
+    let mut a = LiveScript::new(comm, cx, callback);
+    f(&mut Dialogue { api: &mut a })
+}
+fn exit(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
+    run(comm, cx, |s| s.handle(Handler::Exit, r as i32))
+}
+fn maidens(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
+    run(comm, cx, |s| s.handle(Handler::GiveMaidens, r as i32))
+}
+fn console(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
+    run(comm, cx, |s| s.handle(Handler::Console, r as i32))
+}
+fn explain(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
+    run(comm, cx, |s| s.handle(Handler::Explain, r as i32))
+}
+fn realize(comm: &mut Comm, cx: &mut Cx<'_>, _: u32) {
+    run(comm, cx, |s| s.handle(Handler::Realize, 0))
+}
+fn friendly(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
+    run(comm, cx, |s| s.handle(Handler::Friendly, r as i32))
+}
+fn callback(h: Handler) -> crate::comm::response::ResponseFunc {
+    match h {
+        Handler::Exit => exit,
+        Handler::GiveMaidens => maidens,
+        Handler::Console => console,
+        Handler::Explain => explain,
+        Handler::Realize => realize,
+        Handler::Friendly => friendly,
+    }
+}
+pub(crate) fn intro(comm: &mut Comm, cx: &mut Cx<'_>) {
+    run(comm, cx, |s| s.intro())
+}
+pub(crate) fn post(_comm: &mut Comm, _cx: &mut Cx<'_>) {}
+pub(crate) fn uninit(_comm: &mut Comm, _cx: &mut Cx<'_>) -> u16 {
+    0
+}
+pub unsafe fn init_shofixti_comm(comm: &mut Comm, cx: &mut Cx<'_>) -> CLocData {
+    extern "C" {
+        static mut ScreenWidth: i32;
+    }
+    // SAFETY: the caller initializes encounters on the game thread with stable display dimensions.
+    let width = unsafe { ScreenWidth };
+    let mut d = descriptor(width);
+    (d.alien_text_baseline, d.alien_text_width) = text_layout(width);
+    run(comm, cx, |s| s.initialize());
+    d
+}
+
+mod api {
+
+    use super::Handler;
+
+    use crate::comm::races::shofixt::api::*;
+
+    #[cfg(not(test))]
+    impl ShofixtApi for crate::comm::live::script::LiveScript<'_, '_, Handler> {
+        fn schedule_return(&mut self) {
+            // SAFETY: the borrowed World owns the event queue used by this game-thread callback.
+            unsafe {
+                crate::time::clock_abi::live::add_event(self.cx.borrow_mut().world, 1, 2, 0, 0, 8);
+            }
+        }
+    }
+}

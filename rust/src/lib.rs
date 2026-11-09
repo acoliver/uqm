@@ -45,7 +45,7 @@ pub use uqm_engine::video;
 
 pub use bridge_log::rust_bridge_log_msg;
 pub use cli::Cli;
-pub use comm::{CommState, COMM_STATE};
+pub use comm::Comm;
 pub use config::Options;
 pub use input::{VControl, VCONTROL};
 pub use logging::LogLevel;

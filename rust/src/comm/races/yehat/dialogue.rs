@@ -3,12 +3,12 @@ use super::phrases::{space_info, visit_phrase};
 use super::*;
 use crate::engine::StoryKey;
 
-pub(super) struct Dialogue<'a, A> {
-    pub(super) api: &'a mut A,
+pub(crate) struct Dialogue<'a, A> {
+    pub(crate) api: &'a mut A,
 }
 
 impl<A: YehatApi> Dialogue<'_, A> {
-    pub(super) fn handle(&mut self, handler: Handler, response: i32) {
+    pub(crate) fn handle(&mut self, handler: Handler, response: i32) {
         match handler {
             Handler::Exit => self.exit(response),
             Handler::Royalists => self.royalists(response),
@@ -31,7 +31,7 @@ impl<A: YehatApi> Dialogue<'_, A> {
         self.api.set(key, next);
     }
 
-    pub(super) fn exit(&mut self, response: i32) {
+    pub(crate) fn exit(&mut self, response: i32) {
         self.api.segue(1);
         match response as u32 {
             BYE_HOMEWORLD => self.api.npc(GOODBYE_AND_DIE_HOMEWORLD as i32),
@@ -78,7 +78,7 @@ impl<A: YehatApi> Dialogue<'_, A> {
         }
     }
 
-    pub(super) fn royalists(&mut self, response: i32) {
+    pub(crate) fn royalists(&mut self, response: i32) {
         match response as u32 {
             HOW_IS_REBELLION => {
                 self.counter(
@@ -108,7 +108,7 @@ impl<A: YehatApi> Dialogue<'_, A> {
         self.offer(BYE_ROYALIST, Handler::Exit);
     }
 
-    pub(super) fn start_revolt(&mut self, response: i32) {
+    pub(crate) fn start_revolt(&mut self, response: i32) {
         match response as u32 {
             SHOFIXTI_ALIVE_1 => {
                 self.api.npc(SEND_HIM_OVER_1 as i32);
@@ -125,7 +125,7 @@ impl<A: YehatApi> Dialogue<'_, A> {
         self.offer(NOT_SEND, Handler::Exit);
     }
 
-    pub(super) fn home(&mut self, response: i32) {
+    pub(crate) fn home(&mut self, response: i32) {
         match response as u32 {
             WHATS_UP_HOMEWORLD => {
                 self.counter(
@@ -180,7 +180,7 @@ impl<A: YehatApi> Dialogue<'_, A> {
         self.offer(BYE_HOMEWORLD, Handler::Exit);
     }
 
-    pub(super) fn space(&mut self, response: i32) {
+    pub(crate) fn space(&mut self, response: i32) {
         let mut last_stack = 0;
         let mut options = [None; 3];
         match response as u32 {
@@ -292,7 +292,7 @@ impl<A: YehatApi> Dialogue<'_, A> {
         self.api.npc(phrase as i32);
     }
 
-    pub(super) fn initialize(&mut self) {
+    pub(crate) fn initialize(&mut self) {
         let peaceful = self.api.activity() as u8 == crate::comm::dispatch::WON_LAST_BATTLE as u8;
         if !peaceful {
             self.api.segue(1);
@@ -301,7 +301,7 @@ impl<A: YehatApi> Dialogue<'_, A> {
         }
     }
 
-    pub(super) fn intro(&mut self) {
+    pub(crate) fn intro(&mut self) {
         if self.api.activity() as u8 == crate::comm::dispatch::WON_LAST_BATTLE as u8 {
             self.api.npc(OUT_TAKES as i32);
             self.api.segue(0);

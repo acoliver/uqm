@@ -423,6 +423,7 @@ mod tests {
                     stop: Some(*view) == self.stop,
                     seed: None,
                     planet_side: None,
+                    comm_response: None,
                 }
             }
             fn checkpoint(&mut self, _: &CheckpointView<'_>) {}

@@ -1,45 +1,14 @@
 //! Alliance and mission effects used by the Supox, Utwig and Zoq-Fot-Pik scripts.
-use super::encounter::EncounterApi;
-use crate::comm::dispatch::ship;
-pub(super) const SUPOX_SHIP: u16 = ship::SUPOX_SHIP as u16;
-pub(super) const UTWIG_SHIP: u16 = ship::UTWIG_SHIP as u16;
-pub(super) const ZOQFOTPIK_SHIP: u16 = ship::ZOQFOTPIK_SHIP as u16;
+pub(crate) use super::encounter::EncounterApi;
+pub(crate) use crate::comm::dispatch::ship;
+pub(crate) const SUPOX_SHIP: u16 = ship::SUPOX_SHIP as u16;
+pub(crate) const UTWIG_SHIP: u16 = ship::UTWIG_SHIP as u16;
+pub(crate) const ZOQFOTPIK_SHIP: u16 = ship::ZOQFOTPIK_SHIP as u16;
 
-pub(super) trait AllianceApi<H>: EncounterApi<H> {
+pub(crate) trait AllianceApi<H>: EncounterApi<H> {
     fn set_allied(&mut self, race: u16, allied: bool);
     fn track(&mut self, race: u16);
     fn event(&mut self, kind: i32, month: u16, day: u16, year: u16, selector: u8);
-}
-
-#[cfg(not(test))]
-mod live {
-    use super::*;
-    use crate::comm::races::script::live::LiveScript;
-
-    use crate::engine::world::fleet::set_race_allied;
-
-    use crate::engine::world::fleet::start_sphere_tracking;
-
-    impl<H> AllianceApi<H> for LiveScript<'_, '_, H> {
-        fn set_allied(&mut self, race: u16, allied: bool) {
-            set_race_allied(self.cx.borrow_mut().world, race, u32::from(allied));
-        }
-        fn track(&mut self, race: u16) {
-            start_sphere_tracking(self.cx.borrow_mut().world, race);
-        }
-        fn event(&mut self, kind: i32, month: u16, day: u16, year: u16, selector: u8) {
-            unsafe {
-                crate::time::clock_abi::live::add_event(
-                    self.cx.borrow_mut().world,
-                    kind as u32,
-                    month,
-                    day,
-                    year,
-                    selector,
-                );
-            }
-        }
-    }
 }
 
 #[cfg(test)]

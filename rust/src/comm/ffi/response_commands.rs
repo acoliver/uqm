@@ -1,11 +1,12 @@
 //! Response mutations and their ordered observer notifications.
 
-use super::COMM_STATE;
+use crate::comm::Comm;
 use std::ffi::{c_int, c_uint, CStr};
 
 /// Add a response option, rejecting absent or non-UTF-8 resource text.
 /// `func` receives `response_ref` when the response is selected.
 pub fn do_response_phrase(
+    comm: &mut Comm,
     response_ref: c_uint,
     text: Option<&CStr>,
     func: Option<crate::comm::response::ResponseFunc>,
@@ -23,10 +24,8 @@ pub fn do_response_phrase(
         return 0;
     };
 
-    let ok = COMM_STATE
-        .write()
-        .add_response(response_ref, text_str, func);
-    let response_count = COMM_STATE.read().responses().count();
+    let ok = comm.add_response(response_ref, text_str, func);
+    let response_count = comm.responses().count();
     eprintln!(
         "[DBG] rust_DoResponsePhrase: added={}, count={}",
         ok, response_count
@@ -39,38 +38,47 @@ pub fn do_response_phrase(
 }
 
 /// Clear all responses
-pub fn rust_clear_responses() {
-    COMM_STATE.write().clear_responses();
+pub fn rust_clear_responses(comm: &mut Comm) {
+    comm.clear_responses();
 }
 
-pub(crate) fn observe_responses(io: &mut crate::engine::observe::Io<'_>) {
-    let count = COMM_STATE.read().responses().count();
-    io.observer
-        .checkpoint(&crate::engine::observe::CheckpointView::CommunicationResponses(count));
+pub(crate) fn observe_responses(comm: &mut Comm, io: &mut crate::engine::observe::Io<'_>) {
+    let choices = crate::comm::ffi::response_choices(comm);
+    io.observer.checkpoint(
+        &crate::engine::observe::CheckpointView::CommunicationResponses {
+            count: comm.responses().count(),
+            choices: &choices,
+        },
+    );
 }
 
 pub(super) fn deliver_selected(
+    comm: &mut Comm,
     cx: &mut crate::engine::battle::Cx<'_>,
     io: &mut crate::engine::observe::Io<'_>,
 ) {
-    io.observer
-        .checkpoint(&crate::engine::observe::CheckpointView::CommunicationResponses(0));
+    io.observer.checkpoint(
+        &crate::engine::observe::CheckpointView::CommunicationResponses {
+            count: 0,
+            choices: &Default::default(),
+        },
+    );
     io.observer
         .checkpoint(&crate::engine::observe::CheckpointView::ResponsesReady(
             false,
         ));
     let result = {
-        let mut state = COMM_STATE.write();
+        let state = &mut *comm;
         let activity = cx.world.activity();
-        cx.with_legacy(|| crate::comm::talk_segue::select_response(activity, &mut state))
+        cx.with_legacy(|| crate::comm::talk_segue::select_response(activity, state))
     };
     if let Some((func, reference)) = result {
         eprintln!("[DBG] rust_DoCommunication: calling response callback ref={reference}");
-        func(cx, reference);
-        observe_responses(io);
+        func(comm, cx, reference);
+        observe_responses(comm, io);
         eprintln!(
             "[DBG] rust_DoCommunication: callback returned, talking_finished={}",
-            COMM_STATE.read().is_talking_finished()
+            comm.is_talking_finished()
         );
     }
 }
@@ -91,11 +99,7 @@ mod tests {
             Injected::default()
         }
         fn checkpoint(&mut self, view: &CheckpointView<'_>) {
-            assert!(
-                COMM_STATE.try_write().is_some(),
-                "observer must run outside the state lock"
-            );
-            if let CheckpointView::CommunicationResponses(count) = view {
+            if let CheckpointView::CommunicationResponses { count, .. } = view {
                 self.0.push(*count);
             }
         }
@@ -105,16 +109,16 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn selected_callback_releases_state_and_publishes_its_result_to_the_observer() {
-        fn callback(_cx: &mut Cx<'_>, reference: u32) {
+        let mut owner = Comm::new();
+        let comm = &mut owner;
+        fn callback(comm: &mut Comm, _cx: &mut Cx<'_>, reference: u32) {
             assert_eq!(reference, 17);
-            let mut state = COMM_STATE
-                .try_write()
-                .expect("response callback must run outside the state lock");
+            let state = comm;
             assert_eq!(state.responses().count(), 0);
             state.add_response(18, "Next response", None);
         }
         {
-            let mut state = COMM_STATE.write();
+            let state = &mut *comm;
             state.uninit();
             state.init().unwrap();
             state.add_response(17, "Select", Some(callback));
@@ -131,12 +135,13 @@ mod tests {
         );
         let mut counts = Counts(Vec::new());
         deliver_selected(
+            comm,
             &mut cx,
             &mut Io {
                 observer: &mut counts,
             },
         );
         assert_eq!(counts.0, [0, 1]);
-        COMM_STATE.write().uninit();
+        comm.uninit();
     }
 }

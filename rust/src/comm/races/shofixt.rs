@@ -1,15 +1,13 @@
 //! Shofixti dialogue, ported from shofixt.c.
-use super::script::{animation, as_comm_data, GLOBAL_PLAYER_NAME, GLOBAL_SHIP_NAME};
-use crate::comm::locdata::{CColor, CLocData, CPoint};
-use crate::comm::types::CommData;
-use crate::engine::battle::Cx;
-use crate::engine::StoryKey;
+pub(crate) use super::script::{GLOBAL_PLAYER_NAME, GLOBAL_SHIP_NAME};
+pub(crate) use crate::comm::locdata::CPoint;
+pub(crate) use crate::engine::StoryKey;
 mod phrases;
 use phrases::*;
-mod api;
-use api::ShofixtApi;
+pub(crate) mod api;
+pub(crate) use api::ShofixtApi;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Handler {
+pub(crate) enum Handler {
     Exit,
     GiveMaidens,
     Console,
@@ -17,11 +15,11 @@ enum Handler {
     Realize,
     Friendly,
 }
-struct Dialogue<'a, A> {
-    api: &'a mut A,
+pub(crate) struct Dialogue<'a, A> {
+    pub(crate) api: &'a mut A,
 }
 impl<A: ShofixtApi> Dialogue<'_, A> {
-    fn handle(&mut self, h: Handler, r: i32) {
+    pub(crate) fn handle(&mut self, h: Handler, r: i32) {
         match h {
             Handler::Exit => self.exit(r),
             Handler::GiveMaidens => self.give_maidens(r),
@@ -31,7 +29,7 @@ impl<A: ShofixtApi> Dialogue<'_, A> {
             Handler::Friendly => self.friendly(r),
         }
     }
-    fn exit(&mut self, r: i32) {
+    pub(crate) fn exit(&mut self, r: i32) {
         self.api.segue(1);
         if r == BYE0 {
             self.api.npc(GOODBYE);
@@ -90,7 +88,7 @@ impl<A: ShofixtApi> Dialogue<'_, A> {
             );
         }
     }
-    fn give_maidens(&mut self, r: i32) {
+    pub(crate) fn give_maidens(&mut self, r: i32) {
         if r == IMPORTANT_DUTY {
             self.api.npc(WHAT_DUTY);
             for p in [PROCREATING_WILDLY, REPLENISHING_YOUR_SPECIES, HOPE_YOU_HAVE] {
@@ -103,7 +101,7 @@ impl<A: ShofixtApi> Dialogue<'_, A> {
             }
         }
     }
-    fn console(&mut self, r: i32) {
+    pub(crate) fn console(&mut self, r: i32) {
         if r == DONT_DO_IT {
             self.api.npc(YES_I_DO_IT);
             self.api.disable(DONT_DO_IT as u16)
@@ -121,7 +119,7 @@ impl<A: ShofixtApi> Dialogue<'_, A> {
             .response(NEED_YOU_FOR_DUTY as u16, Handler::Exit, &[]);
         self.api.response(GO_AHEAD as u16, Handler::Exit, &[])
     }
-    fn explain(&mut self, r: i32) {
+    pub(crate) fn explain(&mut self, r: i32) {
         self.api.npc(if r == I_AM_NICE {
             MUST_UNDERSTAND
         } else if r == I_AM_GUY {
@@ -134,7 +132,7 @@ impl<A: ShofixtApi> Dialogue<'_, A> {
             self.api.response(p as u16, Handler::Console, &[])
         }
     }
-    fn realize(&mut self) {
+    pub(crate) fn realize(&mut self) {
         self.api.npc(DGRUNTI);
         self.api.set(StoryKey::SHOFIXTI_STACK1, 0);
         self.api.set(StoryKey::SHOFIXTI_STACK3, 0);
@@ -148,7 +146,7 @@ impl<A: ShofixtApi> Dialogue<'_, A> {
             self.api.response(p as u16, Handler::Explain, &[])
         }
     }
-    fn hostile(&mut self) {
+    pub(crate) fn hostile(&mut self) {
         match self.api.get(StoryKey::SHOFIXTI_STACK1) {
             0 => self.api.response(DONT_ATTACK as u16, Handler::Exit, &[]),
             1 => self.api.response(HEY_STOP as u16, Handler::Exit, &[]),
@@ -176,7 +174,7 @@ impl<A: ShofixtApi> Dialogue<'_, A> {
         self.api
             .response(DONT_WANT_TO_FIGHT as u16, Handler::Exit, &[])
     }
-    fn friendly(&mut self, r: i32) {
+    pub(crate) fn friendly(&mut self, r: i32) {
         let mut last = 0usize;
         let mut responses: [Option<(i32, Vec<i32>)>; 3] = [None, None, None];
         if r == REPORT0 {
@@ -233,7 +231,7 @@ impl<A: ShofixtApi> Dialogue<'_, A> {
             &[BYE0, self.api.shofixti_name(), BYE1],
         )
     }
-    fn intro(&mut self) {
+    pub(crate) fn intro(&mut self) {
         if self.api.activity() as u8 == crate::comm::dispatch::WON_LAST_BATTLE as u8 {
             self.api.npc(OUT_TAKES);
             self.api.segue(0);
@@ -278,11 +276,11 @@ impl<A: ShofixtApi> Dialogue<'_, A> {
             self.hostile()
         }
     }
-    fn initialize(&mut self) {
+    pub(crate) fn initialize(&mut self) {
         self.api.segue(0)
     }
 }
-fn text_layout(screen_width: i32) -> (CPoint, u16) {
+pub(crate) fn text_layout(screen_width: i32) -> (CPoint, u16) {
     let text_width = screen_width - 80;
     (
         CPoint {
@@ -292,133 +290,9 @@ fn text_layout(screen_width: i32) -> (CPoint, u16) {
         text_width as u16,
     )
 }
-fn descriptor(screen_width: i32) -> CLocData {
-    let (baseline, width) = text_layout(screen_width);
-    let mut d = CLocData {
-        alien_frame_res: c"comm.shofixti.graphics".as_ptr(),
-        alien_font_res: c"comm.shofixti.font".as_ptr(),
-        alien_colormap_res: c"comm.shofixti.colortable".as_ptr(),
-        alien_song_res: c"comm.shofixti.music".as_ptr(),
-        conversation_phrases_res: c"comm.shofixti.dialogue".as_ptr(),
-        alien_text_fcolor: CColor {
-            r: 255,
-            g: 255,
-            b: 255,
-            a: 255,
-        },
-        alien_text_bcolor: CColor {
-            r: 0,
-            g: 0,
-            b: 0,
-            a: 255,
-        },
-        alien_text_baseline: baseline,
-        alien_text_width: width,
-        alien_text_align: 1,
-        alien_text_valign: 0,
-        num_animations: 11,
-        ..CLocData::default()
-    };
-    d.alien_ambient_array[0] = animation(5, 15, 2, (28, 0), (28, 0));
-    d.alien_ambient_array[1] = animation(20, 3, 1, (84, 0), (420, 1260));
-    d.alien_ambient_array[2] = animation(23, 3, 1, (84, 0), (420, 1260));
-    d.alien_ambient_array[3] = animation(26, 3, 4, (28, 0), (840, 2520));
-    d.alien_ambient_array[4] = animation(29, 4, 4, (56, 0), (840, 2520));
-    d.alien_ambient_array[5] = animation(33, 6, 2, (42, 28), (42, 28));
-    d.alien_ambient_array[6] = animation(39, 7, 2, (42, 28), (42, 28));
-    d.alien_ambient_array[6].block_mask = 1 << 7;
-    d.alien_ambient_array[7] = animation(46, 6, 2, (42, 28), (42, 28));
-    d.alien_ambient_array[7].block_mask = 1 << 6;
-    d.alien_ambient_array[8] = animation(52, 4, 2, (42, 28), (42, 28));
-    d.alien_ambient_array[9] = animation(56, 7, 2, (42, 28), (42, 28));
-    d.alien_ambient_array[9].block_mask = 1 << 10;
-    d.alien_ambient_array[10] = animation(63, 6, 2, (42, 28), (42, 28));
-    d.alien_ambient_array[10].block_mask = 1 << 9;
-    d.alien_talk_desc = animation(1, 4, 0, (42, 0), (56, 0));
-    #[cfg(not(test))]
-    {
-        d.init_encounter_func = Some(live::intro);
-        d.post_encounter_func = Some(live::post);
-        d.uninit_encounter_func = Some(live::uninit);
-    }
-    d
-}
-#[cfg(not(test))]
-pub(crate) mod live {
-    use super::super::script::live::LiveScript;
-    use super::*;
-    fn run(cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, LiveScript<'_, '_, Handler>>)) {
-        let mut a = LiveScript::new(cx, callback);
-        f(&mut Dialogue { api: &mut a })
-    }
-    fn exit(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| s.handle(Handler::Exit, r as i32))
-    }
-    fn maidens(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| s.handle(Handler::GiveMaidens, r as i32))
-    }
-    fn console(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| s.handle(Handler::Console, r as i32))
-    }
-    fn explain(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| s.handle(Handler::Explain, r as i32))
-    }
-    fn realize(cx: &mut Cx<'_>, _: u32) {
-        run(cx, |s| s.handle(Handler::Realize, 0))
-    }
-    fn friendly(cx: &mut Cx<'_>, r: u32) {
-        run(cx, |s| s.handle(Handler::Friendly, r as i32))
-    }
-    fn callback(h: Handler) -> crate::comm::response::ResponseFunc {
-        match h {
-            Handler::Exit => exit,
-            Handler::GiveMaidens => maidens,
-            Handler::Console => console,
-            Handler::Explain => explain,
-            Handler::Realize => realize,
-            Handler::Friendly => friendly,
-        }
-    }
-    pub(super) fn intro(cx: &mut Cx<'_>) {
-        run(cx, |s| s.intro())
-    }
-    pub(super) fn post(_cx: &mut Cx<'_>) {}
-    pub(super) fn uninit(_cx: &mut Cx<'_>) -> u16 {
-        0
-    }
-    pub unsafe fn init_shofixti_comm(cx: &mut Cx<'_>) -> CLocData {
-        extern "C" {
-            static mut ScreenWidth: i32;
-        }
-        let mut d = descriptor(ScreenWidth);
-        (d.alien_text_baseline, d.alien_text_width) = text_layout(ScreenWidth);
-        run(cx, |s| s.initialize());
-        d
-    }
-}
-pub struct ShofixtDialogue;
-impl super::RaceDialogue for ShofixtDialogue {
-    fn init(&self, _cx: &mut Cx<'_>) -> CommData {
-        #[cfg(not(test))]
-        {
-            unsafe { as_comm_data(&live::init_shofixti_comm(_cx)) }
-        }
-        #[cfg(test)]
-        {
-            as_comm_data(&descriptor(320))
-        }
-    }
-    fn intro(&self, _cx: &mut Cx<'_>) {
-        #[cfg(not(test))]
-        live::intro(_cx)
-    }
-    fn post_encounter(&self, _cx: &mut Cx<'_>) {
-        #[cfg(not(test))]
-        live::post(_cx)
-    }
-    fn uninit(&self, _cx: &mut Cx<'_>) -> u32 {
-        0
-    }
-}
+
+#[cfg(test)]
+use crate::comm::descriptors::shofixt::descriptor;
+
 #[cfg(test)]
 mod tests;

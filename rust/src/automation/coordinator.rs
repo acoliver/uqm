@@ -868,12 +868,9 @@ impl AutomationObserver {
                 && generation > inner.consumed_response_generation
                 && count > 0
             {
-                match crate::comm::ffi::offered_response_index(&select.phrase) {
+                match self.ui.offered_response_index(&select.phrase) {
                     Ok(index) if ready => {
-                        assert_eq!(
-                            crate::comm::ffi::rust_select_response_index(index as i32),
-                            1
-                        );
+                        assert_eq!(self.ui.request_response(index), 1);
                         let key_index =
                             i32::from(crate::automation::script::MenuKey::Select.index());
                         if !self.inject_menu_key(key_index, 1) {
@@ -904,7 +901,7 @@ impl AutomationObserver {
                 && count > select.index
             {
                 if ready {
-                    crate::comm::ffi::rust_select_response_index(select.index as i32);
+                    self.ui.request_response(select.index);
                     let key_index = i32::from(crate::automation::script::MenuKey::Select.index());
                     if !self.inject_menu_key(key_index, 1) {
                         self.reject_input(inner, "menu", key_index, 1);
@@ -1364,7 +1361,7 @@ impl AutomationObserver {
         let (talking, _) = self.ui.communication_lifecycle();
         if talking && matches!(progress, RetreatProgress::Input { .. }) {
             for phrase in ["like_to_leave", "bye"] {
-                if crate::comm::ffi::offered_response_index(phrase).is_ok() {
+                if self.ui.offered_response_index(phrase).is_ok() {
                     self.service_patrol_contact(world, inner, phrase);
                     return event;
                 }
@@ -1534,12 +1531,9 @@ impl AutomationObserver {
         let (generation, count, ready) = self.ui.communication_responses();
         let mut select = preview && inner.input_seen % 4 == 3;
         if active && count > 0 && generation > inner.consumed_response_generation {
-            match crate::comm::ffi::offered_response_index(phrase) {
+            match self.ui.offered_response_index(phrase) {
                 Ok(index) if ready => {
-                    assert_eq!(
-                        crate::comm::ffi::rust_select_response_index(index as i32),
-                        1
-                    );
+                    assert_eq!(self.ui.request_response(index), 1);
                     select = true;
                     inner.consumed_response_generation = generation;
                     inner.patrol_response_pending = true;

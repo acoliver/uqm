@@ -1,4 +1,4 @@
-//! Response list rendering state.
+//! Response list rendering comm.
 //!
 //! Tracks scrolling state for the player response list and delegates actual
 //! rendering to C bridge functions. Rust manages visible range, scroll
@@ -7,7 +7,7 @@
 //! @plan PLAN-20260314-COMM.P10
 
 use super::response::ResponseSystem;
-use super::state::CommState;
+use super::state::Comm;
 use crate::engine::{battle::Cx, observe::Io};
 
 /// Visible range for the response list, with scroll indicators.
@@ -23,7 +23,7 @@ pub struct VisibleRange {
     pub has_down_indicator: bool,
 }
 
-/// Response UI rendering state.
+/// Response UI rendering comm.
 ///
 /// Tracks the scroll position and refresh flag for the response list.
 /// All actual pixel rendering goes through C bridge functions.
@@ -42,7 +42,7 @@ impl Default for ResponseUI {
 }
 
 impl ResponseUI {
-    /// Create a new response UI state. Starts needing a refresh.
+    /// Create a new response UI comm. Starts needing a refresh.
     pub fn new() -> Self {
         Self {
             top_response: 0,
@@ -105,24 +105,19 @@ impl ResponseUI {
         let range = Self::calculate_visible_range(count, selected, MAX_VISIBLE);
         self.top_response = range.top;
         self.needs_refresh = false;
-
-        #[cfg(not(test))]
-        {
-            refresh_responses_production(activity, range.top as u8, count as u8, selected as u8);
-        }
     }
 
     /// Display feedback text for the selected player phrase.
     ///
     /// In production calls C bridge to render the text in the SIS comms
     /// window. In test mode, no-op.
-    pub fn draw_feedback(&self, activity: u16, text: &str) {
+    pub fn draw_feedback(_comm: &mut Comm, activity: u16, text: &str) {
         #[cfg(not(test))]
         {
             use std::ffi::CString;
             if let Ok(cs) = CString::new(text) {
                 // Safety: cs.as_ptr() is valid for the duration of the C call.
-                unsafe { feedback_player_phrase_production(activity, cs.as_ptr()) };
+                unsafe { feedback_player_phrase_production(_comm, activity, cs.as_ptr()) };
             }
         }
         #[cfg(test)]
@@ -151,40 +146,40 @@ impl ResponseUI {
         self.needs_refresh
     }
 
-    /// Reset to initial state.
+    /// Reset to initial comm.
     pub fn clear(&mut self) {
         self.top_response = 0;
         self.needs_refresh = true;
     }
 }
 
-pub(super) fn refresh_responses(activity: u16, state: &mut CommState) {
+pub(super) fn refresh_responses(activity: u16, comm: &mut Comm) {
     #[cfg(not(test))]
     {
-        let top = state.response_ui().top_response() as u8;
-        let count = state.responses().count() as u8;
-        let cur = state.responses().selected().max(0) as u8;
-        refresh_responses_production(activity, top, count, cur);
+        let top = comm.response_ui().top_response() as u8;
+        let count = comm.responses().count() as u8;
+        let cur = comm.responses().selected().max(0) as u8;
+        refresh_responses_production(comm, activity, top, count, cur);
     }
     #[cfg(test)]
     {
         // In tests, start_display initializes display state
         let _ = activity;
-        state.responses_mut().start_display();
+        comm.responses_mut().start_display();
     }
 }
 
-pub(super) fn select_conversation_summary(cx: &mut Cx<'_>, io: &mut Io<'_>, state: &mut CommState) {
+pub(super) fn select_conversation_summary(cx: &mut Cx<'_>, io: &mut Io<'_>, comm: &mut Comm) {
     #[cfg(not(test))]
     {
-        let _ = state;
-        select_conversation_summary_production(cx, io);
+        let _ = comm;
+        select_conversation_summary_production(comm, cx, io);
     }
     #[cfg(test)]
     {
         // Simulate: rebuild the summary from track subtitles
         let _ = (cx, io);
-        state.rebuild_summary();
+        comm.rebuild_summary();
     }
 }
 
@@ -194,9 +189,9 @@ pub(super) fn select_conversation_summary(cx: &mut Cx<'_>, io: &mut Io<'_>, stat
 
 /// Public entry point for talk_segue.rs to call refresh_responses.
 #[cfg(not(test))]
-pub fn refresh_responses_production(activity: u16, top: u8, count: u8, cur: u8) {
+pub fn refresh_responses_production(comm: &mut Comm, activity: u16, top: u8, count: u8, cur: u8) {
     // Safety: called from single-threaded game loop with initialized graphics.
-    unsafe { crate::comm::sis_graphics::refresh_responses(activity, top, count, cur) };
+    unsafe { crate::comm::sis_graphics::refresh_responses(comm, activity, top, count, cur) };
 }
 
 /// Public entry point for talk_segue.rs to call feedback_player_phrase.
@@ -204,18 +199,23 @@ pub fn refresh_responses_production(activity: u16, top: u8, count: u8, cur: u8) 
 /// # Safety
 /// Caller must ensure `text` is a valid null-terminated C string or null.
 #[cfg(not(test))]
-pub unsafe fn feedback_player_phrase_production(activity: u16, text: *const std::ffi::c_char) {
-    crate::comm::sis_graphics::feedback_player_phrase(activity, text);
+pub unsafe fn feedback_player_phrase_production(
+    comm: &mut Comm,
+    activity: u16,
+    text: *const std::ffi::c_char,
+) {
+    crate::comm::sis_graphics::feedback_player_phrase(comm, activity, text);
 }
 
 /// Public entry point for talk_segue.rs to call select_conversation_summary.
 #[cfg(not(test))]
 pub fn select_conversation_summary_production(
+    comm: &mut Comm,
     cx: &mut crate::engine::battle::Cx<'_>,
     io: &mut crate::engine::observe::Io<'_>,
 ) {
     // SAFETY: the retained context owns the initialized conversation on the game thread.
-    unsafe { crate::comm::sis_graphics::select_conversation_summary(cx, io) };
+    unsafe { crate::comm::sis_graphics::select_conversation_summary(comm, cx, io) };
 }
 
 // ============================================================================

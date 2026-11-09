@@ -1,19 +1,17 @@
 use super::*;
-#[cfg(not(test))]
-use crate::engine::WorldData;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum Speaker {
+pub(crate) enum Speaker {
     Zoq,
     Pik,
 }
-pub(super) trait ZoqApi: AllianceApi<Handler> {
+pub(crate) trait ZoqApi: AllianceApi<Handler> {
     fn speak(&mut self, phrase: u16, speaker: Speaker);
     fn begin_talk(&mut self, track: u16);
     fn date(&self) -> (i16, u8);
 }
 
-pub(super) fn select_speaker(desc: &mut CLocData, last_alien: &mut u8, speaker: Speaker) {
+pub(crate) fn select_speaker(desc: &mut CLocData, last_alien: &mut u8, speaker: Speaker) {
     let (alien, transition, talk, frames, x) = match speaker {
         Speaker::Zoq => (0, 23, 18, 5, 61),
         Speaker::Pik => (2, 26, 29, 2, 181),
@@ -50,61 +48,10 @@ pub(super) fn select_speaker(desc: &mut CLocData, last_alien: &mut u8, speaker: 
 
 // These callbacks run synchronously on the game thread, when the queued phrase
 // begins. Selecting at queue time would apply the final speaker to every line.
-#[cfg(not(test))]
-mod live {
-    use super::*;
-    use crate::comm::locdata::COMM_DATA;
-    use crate::comm::races::script::{live::LiveScript, ScriptApi};
-    static mut LAST_ALIEN: u8 = 1;
-
-    unsafe fn select(speaker: Speaker) {
-        select_speaker(
-            &mut *std::ptr::addr_of_mut!(COMM_DATA),
-            &mut *std::ptr::addr_of_mut!(LAST_ALIEN),
-            speaker,
-        );
-    }
-    unsafe fn zoq() {
-        select(Speaker::Zoq);
-    }
-    unsafe fn pik() {
-        select(Speaker::Pik);
-    }
-    impl ZoqApi for LiveScript<'_, '_, Handler> {
-        fn speak(&mut self, phrase: u16, speaker: Speaker) {
-            self.cx.borrow_mut().with_legacy(|| unsafe {
-                crate::comm::ffi::rust_npc_phrase_cb(
-                    i32::from(phrase),
-                    Some(match speaker {
-                        Speaker::Zoq => zoq,
-                        Speaker::Pik => pik,
-                    }),
-                );
-            })
-        }
-        fn begin_talk(&mut self, track: u16) {
-            unsafe {
-                LAST_ALIEN = 1;
-                select(Speaker::Zoq);
-            }
-            self.talk_segue(track);
-        }
-        fn date(&self) -> (i16, u8) {
-            self.cx.borrow_mut().with_legacy(|| {
-                {
-                    (
-                        WorldData::current().read(|owner| owner.game.game_clock.year_index) as i16,
-                        WorldData::current().read(|owner| owner.game.game_clock.month_index),
-                    )
-                }
-            })
-        }
-    }
-}
 
 #[cfg(test)]
 #[derive(Clone, Copy)]
-pub(super) struct Clock {
+pub(crate) struct Clock {
     pub year: i16,
     pub month: u8,
 }

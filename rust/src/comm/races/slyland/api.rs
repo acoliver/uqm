@@ -1,9 +1,7 @@
 use super::Handler;
 use crate::comm::races::encounter::EncounterApi;
-#[cfg(not(test))]
-use crate::engine::WorldData;
 
-pub(super) trait SlylandApi: EncounterApi<Handler> {
+pub(crate) trait SlylandApi: EncounterApi<Handler> {
     fn choices(&self) -> [u16; 5];
     fn remember_choices(&mut self, choices: [u16; 5]);
     fn position(&self) -> (i32, i32, i32, i32);
@@ -11,68 +9,14 @@ pub(super) trait SlylandApi: EncounterApi<Handler> {
     fn number(&mut self, number: i32, padded: bool);
 }
 
-#[cfg(not(test))]
-mod live {
-    use super::*;
-    use crate::comm::races::script::live::LiveScript;
-
-    // Like the original response references, these belong to the game thread.
-    static mut CHOICES: [u16; 5] = [0; 5];
-
-    use crate::comm::commglue_abi::runtime::NPCNumber;
-
-    extern "C" {
-
-        static mut ScreenWidth: i32;
-        static mut ScreenHeight: i32;
-    }
-    impl SlylandApi for LiveScript<'_, '_, Handler> {
-        fn choices(&self) -> [u16; 5] {
-            unsafe { CHOICES }
-        }
-        fn remember_choices(&mut self, choices: [u16; 5]) {
-            self.cx.borrow_mut().with_legacy(|| unsafe {
-                CHOICES = choices;
-            })
-        }
-        fn position(&self) -> (i32, i32, i32, i32) {
-            self.cx.borrow_mut().with_legacy(|| unsafe {
-                (
-                    WorldData::current().read(|owner| owner.flagship.log_x),
-                    WorldData::current().read(|owner| owner.flagship.log_y),
-                    ScreenWidth,
-                    ScreenHeight,
-                )
-            })
-        }
-        fn splice(&mut self, phrase: u32) {
-            self.cx.borrow_mut().with_legacy(|| unsafe {
-                crate::comm::ffi::rust_npc_phrase_splice(phrase as i32);
-            })
-        }
-        fn number(&mut self, number: i32, padded: bool) {
-            self.cx.borrow_mut().with_legacy(|| unsafe {
-                NPCNumber(
-                    number,
-                    if padded {
-                        c"%03d".as_ptr()
-                    } else {
-                        std::ptr::null()
-                    },
-                );
-            })
-        }
-    }
-}
-
 #[cfg(test)]
 #[derive(Debug, PartialEq, Eq)]
-pub(super) enum Speech {
+pub(crate) enum Speech {
     Splice(u32),
     Number(i32, bool),
 }
 #[cfg(test)]
-pub(super) struct World {
+pub(crate) struct World {
     pub choices: [u16; 5],
     pub position: (i32, i32, i32, i32),
     pub speech: Vec<(usize, Speech)>,
