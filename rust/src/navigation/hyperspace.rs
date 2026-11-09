@@ -1,6 +1,7 @@
 //! Hyperspace movement and encounter spawning.
 
 use super::abi::*;
+use crate::engine::world::fleet::SPHERE_RADIUS_INCREMENT;
 use crate::engine::StoryKey;
 use crate::math::square_root;
 
