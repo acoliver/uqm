@@ -45,9 +45,7 @@ impl ConversationDisplay {
     }
 
     pub(super) fn finish(self, game: Game) {
-        // SAFETY: the fixture retains its drawing resources through this flush.
-        unsafe { crate::graphics::dcqueue_abi::TFB_FlushGraphics() };
-        drop(game);
+        self._display.finish(game);
         drop(self);
     }
 }

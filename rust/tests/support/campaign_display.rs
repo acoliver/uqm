@@ -127,7 +127,7 @@ impl CampaignDisplay {
             })
         }
     }
-    pub fn finish(self, game: Game) {
+    pub fn finish(&self, game: Game) {
         // SAFETY: the fixture retains its queued drawing resources until this flush.
         unsafe { uqm_rust::graphics::dcqueue_abi::TFB_FlushGraphics() };
         drop(game);

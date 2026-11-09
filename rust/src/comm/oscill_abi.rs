@@ -155,6 +155,74 @@ pub(crate) mod runtime {
             UnbatchGraphics();
         }
     }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        use crate::graphics::{
+            drawable_abi::{DestroyDrawable, LoadedDrawable},
+            pixmap_abi::ReleaseDrawable,
+            sdl::lifecycle_abi,
+        };
+
+        #[test]
+        #[serial_test::serial]
+        fn legacy_widget_initialization_preserves_cache_and_slider_geometry(
+        ) -> Result<(), Box<dyn std::error::Error>> {
+            struct Restore(
+                *mut crate::graphics::ffi::SDL_Surface,
+                *mut crate::graphics::ffi::SDL_Surface,
+            );
+            impl Drop for Restore {
+                fn drop(&mut self) {
+                    // SAFETY: only this serialized fixture initializes the legacy widget cache.
+                    unsafe {
+                        DestroyDrawable(ReleaseDrawable(SCOPE_WORK));
+                        SCOPE_FRAME = null_mut();
+                        SCOPE_WORK = null_mut();
+                        SCOPE_INIT = false;
+                        SCOPE_COLOR = CColor {
+                            r: 0,
+                            g: 0,
+                            b: 0,
+                            a: 0,
+                        };
+                        SCOPE_WIDTH = 0;
+                        SCOPE_HEIGHT = 0;
+                        SLIDER = EMPTY_STAMP;
+                        BUTTON = EMPTY_STAMP;
+                        SLIDER_CHANGED = false;
+                        LAST_OFFSET = -1;
+                        SLIDER_SPACE = 0;
+                        lifecycle_abi::format_conv_surf = self.0;
+                        lifecycle_abi::SDL_Screen = self.1;
+                    }
+                }
+            }
+            let format = sdl2::surface::Surface::new(8, 6, sdl2::pixels::PixelFormatEnum::RGBA32)?;
+            let screen = sdl2::surface::Surface::new(8, 6, sdl2::pixels::PixelFormatEnum::RGB888)?;
+            // SAFETY: the fixture owns both surfaces and restores the borrowed globals before they drop.
+            unsafe {
+                assert!(!{ SCOPE_INIT });
+                let restore = Restore(lifecycle_abi::format_conv_surf, lifecycle_abi::SDL_Screen);
+                lifecycle_abi::format_conv_surf = format.raw().cast();
+                lifecycle_abi::SDL_Screen = screen.raw().cast();
+                let background = LoadedDrawable::create(6, 8, 6, 1).ok_or("missing background")?;
+                let frame = background.lease().frame(0).ok_or("missing frame")?;
+                init_oscilloscope(frame);
+                let work = SCOPE_WORK;
+                assert!(!work.is_null());
+                init_oscilloscope(frame);
+                assert_eq!((SCOPE_WORK, SCOPE_WIDTH, SCOPE_HEIGHT), (work, 6, 4));
+                init_slider(3, 4, 20, frame, frame);
+                set_slider_image(frame);
+                assert_eq!((SLIDER.origin.x, BUTTON.origin.y, SLIDER_SPACE), (3, 4, 12));
+                assert!({ SLIDER_CHANGED });
+                drop(restore);
+            }
+            Ok(())
+        }
+    }
 }
 
 #[cfg(test)]
