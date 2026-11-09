@@ -92,7 +92,6 @@ pub struct Kernel {
     pub micro_font: crate::graphics::native_abi::FONT,
     #[cfg(not(test))]
     micro_font_owner: Option<crate::graphics::native_font::LoadedFont>,
-    #[cfg(not(test))]
     game_text: Option<crate::strings::owned_table::LoadedTextTable>,
     pub tiny_font: crate::graphics::native_abi::FONT,
     pub activity_frame: crate::graphics::native_abi::FRAME,
@@ -153,7 +152,6 @@ pub struct Kernel {
     pub star_planes: Box<[StarPlane; 3]>,
 }
 impl Kernel {
-    #[cfg(not(test))]
     pub fn install_game_text(&mut self, text: crate::strings::owned_table::LoadedTextTable) {
         self.game_strings = text.as_raw().cast();
         self.game_text = Some(text);
@@ -172,11 +170,15 @@ impl Kernel {
         self.menu_sounds = std::ptr::null_mut();
         self.menu_sound_bank = None;
     }
-    #[cfg(not(test))]
+    pub fn game_text_table(&self) -> crate::strings::owned_table::LoadedTextTable {
+        self.game_text
+            .clone()
+            .unwrap_or_else(|| panic!("game text not loaded"))
+    }
+
     pub fn game_text(&self, index: usize) -> &std::ffi::CStr {
         self.game_text_entry(index).unwrap_or(c"")
     }
-    #[cfg(not(test))]
     pub fn game_text_entry(&self, index: usize) -> Option<&std::ffi::CStr> {
         self.game_text
             .as_ref()
@@ -287,7 +289,6 @@ impl Kernel {
             micro_font: ptr::null_mut(),
             #[cfg(not(test))]
             micro_font_owner: None,
-            #[cfg(not(test))]
             game_text: None,
             tiny_font: ptr::null_mut(),
             activity_frame: ptr::null_mut(),
