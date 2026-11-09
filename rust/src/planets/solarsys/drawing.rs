@@ -11,7 +11,7 @@ use crate::graphics::drawable_abi::CreateDrawable;
 
 use crate::graphics::frame_abi::ClearDrawable;
 
-use crate::planets::render::c_api::draw_oval as DrawOval;
+use crate::planets::render::c_api::NativeOvalGfx;
 
 use crate::planets::solarsys::GetRandomSeedForStar;
 
@@ -93,7 +93,7 @@ pub(super) unsafe fn validate_orbit(planet: *mut PlanetDesc, xn: i32, yn: i32, d
     }
     let index = (*planet).data_index & !WORLD_TYPE_SPECIAL;
     if usize::from(index) < NUMBER_OF_PLANET_TYPES {
-        let typ = crate::planets::ffi::plan_data()[usize::from(index)].type_;
+        let typ = crate::planets::tables::PLANET_ARRAY.0[usize::from(index)].type_;
         let mut size = u32::from(typ & PLANETS_SIZE_MASK as u8);
         if xn > display_factor() {
             size += 3;
@@ -122,11 +122,26 @@ pub(super) unsafe fn validate_orbit(planet: *mut PlanetDesc, xn: i32, yn: i32, d
     }
 }
 
-pub(super) unsafe fn draw_orbit(planet: *mut PlanetDesc, xn: i32, yn: i32, den: i32) {
+pub(super) unsafe fn draw_orbit(
+    context: &crate::graphics::context_abi::ContextLease,
+    planet: *mut PlanetDesc,
+    xn: i32,
+    yn: i32,
+    den: i32,
+) {
     let mut rect: c::RECT = std::mem::zeroed();
     planet_orbit_rect(&mut rect, planet, xn, yn, den);
-    set_foreground((*planet).temp_color);
-    DrawOval(&mut rect, 1);
+    context.set_foreground((*planet).temp_color);
+    let mut renderer = NativeOvalGfx::new(context, c::ScreenWidth, c::ScreenHeight);
+    let rectangle = crate::comm::locdata::CRect {
+        corner: crate::comm::locdata::CPoint {
+            x: rect.corner.x,
+            y: rect.corner.y,
+        },
+        width: rect.extent.width,
+        height: rect.extent.height,
+    };
+    crate::planets::render::oval::draw_oval(&rectangle, 1, &mut renderer);
 }
 
 pub(super) unsafe fn find_radius(mut from_radius: i32, ship_loc: c::POINT) -> i32 {
@@ -216,7 +231,9 @@ pub(super) unsafe fn draw_system(radius: c::SIZE, inner: bool) {
         SOLAR_SYS_FRAME =
             CaptureDrawable(CreateDrawable(2, clip.extent.width, clip.extent.height, 1)).cast();
     }
-    let old = SetContext(KernelOwner::current().read(|owner| owner.off_screen_context));
+    let offscreen = KernelOwner::current().read(|owner| owner.off_screen_context);
+    let context = crate::graphics::context_abi::ContextLease::require(offscreen);
+    let old = SetContext(offscreen);
     set_frame(SOLAR_SYS_FRAME);
     set_clip(std::ptr::null_mut());
     let mut stamp = c::STAMP {
@@ -227,6 +244,7 @@ pub(super) unsafe fn draw_system(radius: c::SIZE, inner: bool) {
     let base = (*s).pBaseDesc;
     if inner {
         draw_orbit(
+            &context,
             (*s).pOrbitalDesc,
             display_factor() * 4,
             display_factor(),
@@ -236,9 +254,10 @@ pub(super) unsafe fn draw_system(radius: c::SIZE, inner: bool) {
     for i in 0..usize::from((*(*base).prev_desc).num_planets) {
         let current = base.add(i);
         if inner {
-            draw_orbit(current, 2, 1, 2);
+            draw_orbit(&context, current, 2, 1, 2);
         } else {
             draw_orbit(
+                &context,
                 current,
                 display_factor(),
                 display_factor() / 4,
@@ -362,7 +381,7 @@ unsafe fn set_color_map_index(map: *mut c_void, index: u32) -> *mut c_void {
 unsafe fn set_planet_color_map(planet: *mut PlanetDesc) {
     let index = usize::from((*planet).data_index & !WORLD_TYPE_SPECIAL);
     assert!(index < NUMBER_OF_PLANET_TYPES);
-    let color = crate::planets::ffi::plan_data()[index].type_ >> 4;
+    let color = crate::planets::tables::PLANET_ARRAY.0[index].type_ >> 4;
     SetColorMap(GetColorMapAddress(
         (set_color_map_index(ORBITAL_CMAP, u32::from(color))).cast(),
     ));
@@ -441,8 +460,6 @@ mod native {
 
     pub(super) use crate::graphics::context_abi::SetContextBackGroundColor;
 
-    pub(super) use crate::graphics::context_abi::SetContextForeGroundColor;
-
     pub(super) use crate::graphics::frame_abi::DrawStamp;
 }
 unsafe fn set_frame(frame: *mut c::FRAME_DESC) -> *mut c::FRAME_DESC {
@@ -453,14 +470,6 @@ unsafe fn set_clip(rect: *mut c::RECT) {
 }
 unsafe fn set_background(color: c::Color) {
     native::SetContextBackGroundColor(crate::comm::locdata::CColor {
-        r: color.r,
-        g: color.g,
-        b: color.b,
-        a: color.a,
-    });
-}
-unsafe fn set_foreground(color: c::Color) {
-    native::SetContextForeGroundColor(crate::comm::locdata::CColor {
         r: color.r,
         g: color.g,
         b: color.b,

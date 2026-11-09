@@ -2,6 +2,14 @@
 
 use crate::engine::{StoryKey, World};
 
+pub(super) fn inventory(world: &World, maximum: usize) -> Vec<u8> {
+    let story = world
+        .story
+        .as_ref()
+        .unwrap_or_else(|| panic!("initialized device inventory"));
+    crate::engine::save::summary::inventory_devices(story, maximum)
+}
+
 pub(super) const ULTRON_COMPONENTS: [StoryKey; 3] = [
     StoryKey::ROSY_SPHERE_ON_SHIP,
     StoryKey::AQUA_HELIX_ON_SHIP,
@@ -83,6 +91,26 @@ pub fn device_effect_holds(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn inventory_reads_only_the_supplied_world_and_honors_the_limit() {
+        let mut first = world(0);
+        let mut second = world(0);
+        first.set_story_state(StoryKey::TALKING_PET_ON_SHIP, 1);
+        first.set_story_state(StoryKey::UTWIG_BOMB_ON_SHIP, 1);
+        second.set_story_state(StoryKey::SUN_DEVICE_ON_SHIP, 1);
+        let first_list = inventory(&first, 28);
+        assert!(first_list.contains(&1));
+        assert!(first_list.contains(&2));
+        assert!(!first_list.contains(&3));
+        assert_eq!(inventory(&first, 0), Vec::<u8>::new());
+        assert_eq!(inventory(&first, 1), first_list[..1]);
+        let second_list = inventory(&second, 28);
+        assert!(second_list.contains(&3));
+        assert!(!second_list.contains(&1));
+        assert!(!second_list.contains(&2));
+        assert_eq!(inventory(&first, 28), first_list);
+    }
 
     #[test]
     fn observed_device_story_keys_are_typed_and_preserve_trace_names() {

@@ -1535,9 +1535,6 @@ pub const LIGHT: _bindgen_ty_9 = 0;
 pub const MEDIUM: _bindgen_ty_9 = 1;
 pub const HEAVY: _bindgen_ty_9 = 2;
 pub type _bindgen_ty_9 = ::std::os::raw::c_uint;
-unsafe extern "C" {
-    pub static mut Elements: *const BYTE;
-}
 pub const PLANET_LANDER: _bindgen_ty_10 = 0;
 pub const FUSION_THRUSTER: _bindgen_ty_10 = 1;
 pub const TURNING_JETS: _bindgen_ty_10 = 2;

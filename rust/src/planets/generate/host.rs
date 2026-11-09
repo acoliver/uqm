@@ -1,12 +1,12 @@
 //! Effects available to system generators, supplied by the solar-system mode.
 
 use super::special::Story;
-use crate::engine::world::generation::{ReportDisposition, SolarSys};
+use crate::engine::world::generation::{Body, ReportDisposition, SolarSys};
 
 pub trait PlanetSite {
     fn rainbow_ordinal(&self) -> u8;
-    fn load_planet(&mut self, system: &mut SolarSys<'_>);
-    fn load_earth_planet(&mut self, system: &mut SolarSys<'_>);
+    fn load_planet(&mut self, system: &mut SolarSys<'_>, body: Body);
+    fn load_earth_planet(&mut self, system: &mut SolarSys<'_>, body: Body);
 }
 
 pub trait ReportSite {

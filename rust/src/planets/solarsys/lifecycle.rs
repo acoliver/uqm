@@ -3,7 +3,7 @@
 use super::drawing::*;
 use super::flight::*;
 use super::*;
-use crate::engine::world::planet::{PlanetDesc, SystemInfo};
+use crate::engine::world::planet::PlanetDesc;
 use crate::engine::{battle::Cx, observe::Io, Kernel, StoryKey, World, WorldData};
 
 use super::site::dispatch::{body, with_system};
@@ -12,7 +12,7 @@ use crate::graphics::pixmap_abi::{GetFrameIndex, ReleaseDrawable, SetAbsFrameInd
 use crate::mainloop::restart_menu::c_extern::PlayMusic;
 use crate::math::arctan;
 use crate::planets::devices::devices_menu;
-use crate::planets::ffi::do_planetary_analysis_c;
+use crate::planets::generate::calc::preview_body;
 use crate::sound::heart_ffi::PLRPlaying;
 use crate::strings::string_table::{GetStringAddress, SetAbsStringTableIndex};
 use std::ffi::c_char;
@@ -226,9 +226,8 @@ pub(super) unsafe fn load_solar_sys(cx: &mut Cx<'_>, io: &mut Io<'_>) -> *mut Pl
         if i >= usize::from((*sun).num_planets) {
             (*planet).image.frame = ptr::null_mut();
         } else {
-            // The Rust analysis implementation borrows the whole SystemInfo.
-            let mut info: SystemInfo = std::mem::zeroed();
-            cx.with_legacy(|| do_planetary_analysis_c(ptr::addr_of_mut!(info), planet));
+            let target = body(state, planet);
+            let info = with_system(cx, io, state, |_, system, _| preview_body(system, target)).0;
             (*planet).temp_color = temperature_color(info.planet_info.temperature);
         }
     }

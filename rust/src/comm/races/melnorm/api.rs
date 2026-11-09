@@ -23,7 +23,7 @@ mod live {
 
     use crate::comm::commglue_abi::runtime::NPCNumber;
 
-    use crate::planets::cargo::live::DrawCargoStrings;
+    use crate::planets::cargo::draw_cargo;
 
     use crate::mainloop::input_abi::live::AnyButtonPress;
 
@@ -75,9 +75,8 @@ mod live {
             }
         }
         fn draw_cargo(&mut self, old: u8, new: u8) {
-            self.cx.borrow_mut().with_legacy(|| unsafe {
-                DrawCargoStrings(old, new);
-            })
+            let cx = self.cx.borrow();
+            draw_cargo(cx.kernel, cx.world, old, new);
         }
         fn sleep(&mut self, ticks: u32) {
             self.cx.borrow_mut().with_legacy(|| unsafe {

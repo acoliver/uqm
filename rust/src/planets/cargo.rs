@@ -1,5 +1,8 @@
 //! Cargo display and mineral-discard menu, ported from `planets/cargo.c`.
 
+mod display;
+pub use display::{draw_cargo, show_capacity};
+
 fn next_element(current: u8, back: bool, forward: bool) -> u8 {
     if back {
         if current == 0 {
@@ -22,182 +25,14 @@ fn next_element(current: u8, back: bool, forward: bool) -> u8 {
 pub(crate) mod live {
     use super::next_element;
     use crate::c_bindings::controller_input::*;
-    use crate::comm::locdata::{CColor, CPoint, CRect};
     use crate::engine::{battle::Cx, observe::Io};
-    use crate::engine::{Kernel as KernelOwner, WorldData as WorldFields};
     use crate::starbase::cffi::CffiPlatform;
-    use crate::starbase::gfx::{Align, ContextId, FontId, Gfx, Point, Rect, Rgba, Stamp, TextDraw};
-    use std::ffi::{c_void, CString};
-
-    use crate::ui::sis::capacity::storage_capacity;
-
-    use crate::graphics::drawable_abi::GetFrameRect;
-
-    use crate::ui::util::live::DrawStarConBox;
+    use crate::starbase::gfx::Gfx;
+    use std::ffi::CString;
 
     use crate::mainloop::input_abi::live::SetMenuSounds;
 
-    const BACK: Rgba = Rgba::rgb15(0, 0, 20);
-    const WORTH: Rgba = Rgba::rgb15(10, 10, 31);
-    const AMOUNT: Rgba = Rgba::rgb15(0, 20, 20);
-    const SELECTED: Rgba = Rgba::rgb15(10, 31, 31);
-    // gamestr.h: DEVICE_STRING_BASE + DEVICE_STRING_COUNT.
     const CARGO_STRINGS: i32 = 162;
-
-    fn text(x: i16, y: i16, align: Align, value: String) {
-        CffiPlatform.draw_text(&TextDraw {
-            baseline: Point { x, y },
-            align,
-            text: value,
-        });
-    }
-
-    #[no_mangle]
-    pub unsafe extern "C" fn ShowRemainingCapacity() {
-        let g = CffiPlatform;
-        let old = g.set_context(ContextId::Status);
-        g.set_font(FontId::Tiny);
-        let free = WorldFields::current().read(|owner| {
-            u32::from(storage_capacity(&owner.flagship))
-                .wrapping_sub(u32::from(owner.flagship.total_element_mass))
-        });
-        g.batch();
-        g.set_fg_color(BACK);
-        g.fill_rect(Rect {
-            corner: Point { x: 40, y: 107 },
-            width: 20,
-            height: 7,
-        });
-        g.set_fg_color(WORTH);
-        text(59, 113, Align::Right, free.to_string());
-        g.unbatch();
-        g.restore_context(old);
-    }
-
-    unsafe fn element_amount(element: u8, selected: bool) {
-        let g = CffiPlatform;
-        let y = if element == 8 {
-            119
-        } else {
-            35 + i16::from(element) * 9
-        };
-        g.set_fg_color(if selected { WORTH } else { BACK });
-        g.fill_rect(Rect {
-            corner: Point { x: 19, y },
-            width: 40,
-            height: 7,
-        });
-        let amount = if element == 8 {
-            WorldFields::current().read(|owner| owner.flagship.total_bio_mass)
-        } else {
-            g.set_fg_color(if selected { AMOUNT } else { WORTH });
-            text(
-                32,
-                y + 6,
-                Align::Right,
-                (**WorldFields::current()).game.element_worth[usize::from(element)].to_string(),
-            );
-            WorldFields::current()
-                .read(|owner| owner.flagship.element_amounts[usize::from(element)])
-        };
-        g.set_fg_color(if selected { SELECTED } else { AMOUNT });
-        text(58, y + 6, Align::Right, amount.to_string());
-    }
-
-    unsafe fn display() {
-        let g = CffiPlatform;
-        let color = |v: Rgba| CColor {
-            r: v.r,
-            g: v.g,
-            b: v.b,
-            a: v.a,
-        };
-        let mut r = CRect {
-            corner: CPoint { x: 2, y: 20 },
-            width: 60,
-            height: 109,
-        };
-        DrawStarConBox(
-            std::ptr::from_mut(&mut r).cast(),
-            1,
-            color(Rgba::rgb15(16, 16, 16)),
-            color(Rgba::rgb15(8, 8, 8)),
-            1,
-            color(BACK),
-        );
-        g.set_font(FontId::StarCon);
-        g.set_fg_color(SELECTED);
-        text(31, 27, Align::Center, g.game_string(CARGO_STRINGS));
-        g.set_font(FontId::Tiny);
-        let mut frame = g.abs_frame(
-            KernelOwner::current().read(|owner| owner.misc_data_frame) as usize,
-            11,
-        );
-        GetFrameRect((frame as *mut c_void).cast(), (&mut r as *mut CRect).cast());
-        g.set_fg_color(WORTH);
-        text(32, 34, Align::Right, "$".into());
-        text(58, 34, Align::Right, "#".into());
-        for i in 0..8 {
-            let y = 35 + i16::from(i) * 9;
-            g.set_fg_color(Rgba::BLACK);
-            g.fill_rect(Rect {
-                corner: Point { x: 7, y },
-                width: r.width,
-                height: r.height,
-            });
-            g.draw_stamp(Stamp {
-                origin: Point {
-                    x: 7 + (r.width >> 1),
-                    y: y + (r.height >> 1),
-                },
-                frame,
-            });
-            frame = g.rel_frame(frame, 5);
-            element_amount(i, false);
-        }
-        g.set_fg_color(Rgba::BLACK);
-        g.fill_rect(Rect {
-            corner: Point { x: 7, y: 119 },
-            width: r.width,
-            height: r.height,
-        });
-        g.draw_stamp(Stamp {
-            origin: Point {
-                x: 7 + (r.width >> 1),
-                y: 119 + (r.height >> 1),
-            },
-            frame: g.abs_frame(frame, 68),
-        });
-        element_amount(8, false);
-        g.set_fg_color(WORTH);
-        g.fill_rect(Rect {
-            corner: Point { x: 4, y: 117 },
-            width: 56,
-            height: 1,
-        });
-        text(5, 113, Align::Left, g.game_string(CARGO_STRINGS + 1));
-        ShowRemainingCapacity();
-    }
-
-    #[no_mangle]
-    pub unsafe extern "C" fn DrawCargoStrings(mut old_element: u8, new_element: u8) {
-        let g = CffiPlatform;
-        let old = g.set_context(ContextId::Status);
-        g.set_font(FontId::Tiny);
-        g.batch();
-        if old_element > 8 {
-            display();
-            old_element = new_element;
-        }
-        if old_element != new_element {
-            element_amount(old_element, false);
-        }
-        if new_element != u8::MAX {
-            element_amount(new_element, true);
-        }
-        g.unbatch();
-        g.restore_context(old);
-    }
 
     fn description(cx: &mut Cx<'_>, element: u8) {
         let message = cx.with_legacy(|| {
@@ -214,6 +49,7 @@ pub(crate) mod live {
         cx: &mut Cx<'_>,
         input: &crate::engine::input::InputSession,
         menu: &mut Menu,
+        display: &super::display::CargoDisplay,
     ) -> i32 {
         let pulse = input.pulsed();
         if cx.world.activity() & (1 << 14) != 0 || pulse.menu[KEY_MENU_CANCEL as usize] != 0 {
@@ -224,10 +60,10 @@ pub(crate) mod live {
             if *amount != 0 {
                 *amount -= 1;
                 // SAFETY: the cargo menu retains the initialized campaign display.
-                cx.with_legacy(|| DrawCargoStrings(menu.current, menu.current));
+                display.draw(cx.world, menu.current, menu.current);
                 cx.world.data.flagship.total_element_mass -= 1;
                 // SAFETY: the cargo menu retains the initialized capacity display.
-                cx.with_legacy(|| ShowRemainingCapacity());
+                display.show_capacity(cx.world);
             } else {
                 crate::ui::settings::play_menu_sound(cx.kernel, cx.world, 2);
             }
@@ -239,9 +75,7 @@ pub(crate) mod live {
             );
             if next != menu.current {
                 // SAFETY: the cargo menu retains its selected element and display resources.
-                cx.with_legacy(|| {
-                    DrawCargoStrings(menu.current, next);
-                });
+                display.draw(cx.world, menu.current, next);
                 description(cx, next);
                 menu.current = next;
             }
@@ -257,12 +91,13 @@ pub(crate) mod live {
         let runtime = cx.kernel.input_runtime();
         let input = runtime.input();
         let mut menu = Menu { current: 0 };
-        cx.with_legacy(|| {
-            DrawCargoStrings(u8::MAX, 0);
-        });
+        let display = super::display::CargoDisplay::new(cx.kernel);
+        display.draw(cx.world, u8::MAX, 0);
         description(cx, 0);
         cx.with_legacy(|| SetMenuSounds(input, 15, 16));
-        cx.run_input(io, true, |cx, _| discard(cx, input, &mut menu) != 0);
+        cx.run_input(io, true, |cx, _| {
+            discard(cx, input, &mut menu, &display) != 0
+        });
         let dimensions = cx.screen_dimensions();
         crate::ui::sis::clear_sis_rect(cx.kernel, cx.world, dimensions, 8);
     }
@@ -271,6 +106,84 @@ pub(crate) mod live {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[serial_test::serial]
+    fn cargo_uses_supplied_campaign_and_retains_its_display_resources() {
+        use crate::graphics::{
+            context_abi::ContextLease, drawable_abi::LoadedDrawable, native_font::LoadedFont,
+        };
+        let mut game = crate::engine::Game::new();
+        let mut heading = None;
+        let display = crate::campaign_display_test::CampaignDisplay::install_with_resources(
+            &mut game,
+            || {
+                heading = LoadedFont::load(c"fixture.tiny");
+            },
+        )
+        .unwrap();
+        let heading = heading.unwrap();
+        game.kernel.star_con_font = heading.as_raw();
+        let icons = LoadedDrawable::create(2, 1, 1, 74).unwrap();
+        game.kernel.misc_data_frame = icons.lease().frame(0).unwrap();
+        let context = ContextLease::require(game.kernel.status_context);
+        let canvas = LoadedDrawable::create(2, 64, 160, 1).unwrap();
+        context.set_frame(canvas.lease().context_frame(0));
+        let cargo = super::display::CargoDisplay::new(&game.kernel);
+        drop((icons, heading));
+        let mut other = crate::engine::Game::new();
+        game.world.data.flagship.module_slots[0] =
+            crate::starbase::sis_modules::ModuleType::StorageBay as u8;
+        game.world.data.flagship.total_element_mass = 1;
+        game.world.data.flagship.element_amounts[0] = 1;
+        other.world.data.flagship.total_element_mass = 2;
+        other.world.data.flagship.element_amounts[0] = 2;
+        assert_eq!(super::display::remaining_capacity(&game.world), 499);
+        assert_eq!(
+            super::display::remaining_capacity(&other.world),
+            u32::MAX - 1
+        );
+        let pixel = || {
+            context.flush();
+            let mut pixels = vec![
+                crate::graphics::native_abi::Color {
+                    r: 0,
+                    g: 0,
+                    b: 0,
+                    a: 0
+                };
+                64 * 160
+            ];
+            assert_ne!(
+                // SAFETY: the serialized fixture retains this RAM frame and its complete pixel buffer.
+                unsafe {
+                    crate::graphics::drawable_abi::ReadFramePixelColors(
+                        canvas.lease().frame(0).unwrap(),
+                        pixels.as_mut_ptr(),
+                        64,
+                        160,
+                    )
+                },
+                0
+            );
+            let value = pixels[35 * 64 + 20];
+            (value.r, value.g, value.b, value.a)
+        };
+        cargo.draw(&game.world, u8::MAX, 0);
+        assert_eq!(pixel(), (82, 82, 255, 255));
+        cargo.draw(&other.world, 0, 8);
+        assert_eq!(pixel(), (0, 0, 165, 255));
+        cargo.draw(&game.world, 8, u8::MAX);
+        cargo.show_capacity(&other.world);
+        context.flush();
+        assert_eq!(game.world.data.flagship.element_amounts[0], 1);
+        assert_eq!(other.world.data.flagship.element_amounts[0], 2);
+        drop((cargo, context, canvas, other));
+        game.kernel.star_con_font = std::ptr::null_mut();
+        game.kernel.misc_data_frame = std::ptr::null_mut();
+        display.finish(game);
+    }
+
     #[test]
     fn mineral_navigation_wraps_and_back_takes_priority() {
         assert_eq!(next_element(0, true, false), 7);

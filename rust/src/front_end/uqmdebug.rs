@@ -417,9 +417,9 @@ mod runtime {
         (*planet).prev_desc = ptr::addr_of_mut!((*system).SunDesc[0]);
         if let Some(cb) = recurse.planet_func_pre {
             (*system).pOrbitalDesc = planet;
-            cx.with_legacy(|| DoPlanetaryAnalysis(ptr::addr_of_mut!((*system).SysInfo), planet));
             let target = body(system, planet);
             with_system(cx, io, system, |generator, system, host| {
+                crate::planets::generate::calc::analyse_body(system, target);
                 generator.generate_orbital(system, target, host)
             });
             cb(cx, io, planet, recurse.arg);
@@ -434,9 +434,9 @@ mod runtime {
         }
         if let Some(cb) = recurse.planet_func_post {
             (*system).pOrbitalDesc = planet;
-            cx.with_legacy(|| DoPlanetaryAnalysis(ptr::addr_of_mut!((*system).SysInfo), planet));
             let target = body(system, planet);
             with_system(cx, io, system, |generator, system, host| {
+                crate::planets::generate::calc::analyse_body(system, target);
                 generator.generate_orbital(system, target, host)
             });
             cb(cx, io, planet, recurse.arg);
@@ -456,13 +456,13 @@ mod runtime {
         (*moon).prev_desc = planet;
         if let Some(cb) = recurse.moon_func {
             (*system).pOrbitalDesc = moon;
-            if (*moon).data_index != HIERARCHY_STARBASE as BYTE
-                && (*moon).data_index != SA_MATRA as BYTE
-            {
-                cx.with_legacy(|| DoPlanetaryAnalysis(ptr::addr_of_mut!((*system).SysInfo), moon));
-            }
+            let analyse = (*moon).data_index != HIERARCHY_STARBASE as BYTE
+                && (*moon).data_index != SA_MATRA as BYTE;
             let target = body(system, moon);
             with_system(cx, io, system, |generator, system, host| {
+                if analyse {
+                    crate::planets::generate::calc::analyse_body(system, target);
+                }
                 generator.generate_orbital(system, target, host)
             });
             cb(cx, io, moon, recurse.arg);
@@ -775,8 +775,8 @@ mod runtime {
             *entry = (*entry).wrapping_add(1);
         }
     }
-    unsafe fn element_category(kind: usize) -> usize {
-        (*Elements.add(kind) & 7) as usize
+    fn element_category(kind: usize) -> usize {
+        usize::from(crate::planets::tables::ELEMENT_ARRAY[kind] & 7)
     }
     /// # Safety
     /// World must be the active orbital descriptor and its generation functions live.

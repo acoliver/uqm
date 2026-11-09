@@ -177,18 +177,8 @@ pub use crate::ships::native::abi::menu_state;
 pub type MENU_STATE = menu_state;
 pub use crate::navigation::abi::star_desc;
 #[cfg(not(test))]
-pub use crate::planets::render::c_api::{
-    draw_filled_oval as DrawFilledOval, draw_oval as DrawOval,
-};
-#[cfg(not(test))]
 pub use crate::planets::solarsys::{planetOuterLocation, XFormIPLoc};
 pub use crate::ships::native::abi::solarsys_state;
-#[cfg(test)]
-#[cfg(not(test))]
-pub use crate::planets::render::c_api::draw_filled_oval as DrawFilledOval;
-#[cfg(test)]
-#[cfg(not(test))]
-pub use crate::planets::render::c_api::draw_oval as DrawOval;
 #[cfg(test)]
 #[cfg(not(test))]
 pub use crate::planets::solarsys::planetOuterLocation;

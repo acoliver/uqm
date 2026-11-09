@@ -66,9 +66,9 @@ mod live {
 
     use crate::comm::comm_abi::EnableTalkingAnim;
 
-    use crate::planets::cargo::live::DrawCargoStrings;
+    use crate::planets::cargo::draw_cargo;
 
-    use crate::planets::cargo::live::ShowRemainingCapacity;
+    use crate::planets::cargo::show_capacity;
 
     use crate::mainloop::input_abi::live::AnyButtonPress;
 
@@ -147,14 +147,12 @@ mod live {
             })
         }
         fn draw_cargo(&mut self, old: u8, new: u8) {
-            self.cx.borrow_mut().with_legacy(|| unsafe {
-                DrawCargoStrings(old, new);
-            })
+            let cx = self.cx.borrow();
+            draw_cargo(cx.kernel, cx.world, old, new);
         }
         fn show_capacity(&mut self) {
-            self.cx.borrow_mut().with_legacy(|| unsafe {
-                ShowRemainingCapacity();
-            })
+            let cx = self.cx.borrow();
+            show_capacity(cx.kernel, cx.world);
         }
         fn clear_display(&mut self) {
             {

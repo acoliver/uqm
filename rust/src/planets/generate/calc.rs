@@ -4,6 +4,7 @@
 //! Every RNG draw happens in the same order and count as the C original, so
 //! the generated universe is unchanged.
 
+use crate::engine::world::generation::{Body, OrbitalData, SolarSys};
 use crate::engine::world::planet::{PlanetDesc, PlanetFrame, PlanetInfo, SystemInfo};
 use crate::math::RandomContext;
 use crate::planets::generate::consts::{
@@ -39,6 +40,43 @@ pub struct AnalysisSite {
     /// True when the target is `pSolarSysState->SysInfo` (orbit entry),
     /// false when the system is first generated.
     pub is_orbit_entry: bool,
+}
+
+/// Analyse the supplied body without generating or replacing its scan seeds.
+pub fn analyse_body(system: &mut SolarSys<'_>, body: Body) {
+    system.orbital(body, |data| analyse(data, true));
+}
+
+/// First-entry analysis advances the RNG but leaves the orbital info unchanged.
+pub fn preview_body(system: &mut SolarSys<'_>, body: Body) -> SystemInfo {
+    system.orbital(body, |data| {
+        let mut info = SystemInfo::default();
+        analyse(
+            OrbitalData {
+                info: &mut info,
+                ..data
+            },
+            false,
+        );
+        info
+    })
+}
+
+fn analyse(data: OrbitalData<'_>, is_orbit_entry: bool) {
+    do_planetary_analysis(
+        data.rng,
+        data.plan_data,
+        StarDescription {
+            size: data.star_size,
+            star_type: data.star_type,
+        },
+        AnalysisSite {
+            parent_radius: data.parent_radius,
+            is_orbit_entry,
+        },
+        data.info,
+        data.world,
+    );
 }
 
 fn calc_from_base(rng: &mut RandomContext, base: u16, variance: u16) -> u16 {
@@ -300,4 +338,102 @@ pub fn do_planetary_analysis(
     info.weather >>= 5;
 
     info.life_chance = calc_life_chance(info, frame) as i16;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::engine::world::generation::Body;
+    use crate::planets::generate::{special::Orbit, testing};
+    use crate::planets::tables::PLANET_ARRAY;
+
+    fn check_supplied_analysis(body: Body, preview: bool) {
+        let mut rng = RandomContext::with_seed(7919);
+        // SAFETY: the test records contain only zero-valid scalar and pointer fields.
+        let mut world: PlanetDesc = unsafe { std::mem::zeroed() };
+        world.rand_seed = 1;
+        world.data_index = 42;
+        world.radius = 100;
+        world.location.x = 37;
+        world.location.y = -53;
+        // SAFETY: this detached record has no owned pointer fields.
+        let mut info: SystemInfo = unsafe { std::mem::zeroed() };
+        info.planet_info.scan_seed = [101, 202, 303];
+        info.planet_info.scan_retrieve_mask = [11, 22, 33];
+        info.planet_info.temperature = -999;
+        let before = format!("{info:?}");
+        let star = StarDescription {
+            size: 0,
+            star_type: (5 << 5) | 5,
+        };
+        let site = AnalysisSite {
+            parent_radius: match body {
+                Body::Planet(_) => None,
+                Body::Moon { .. } => Some(512),
+            },
+            is_orbit_entry: !preview,
+        };
+        let mut expected_rng = RandomContext::with_seed(7919);
+        let mut expected = if preview {
+            // SAFETY: preview starts from a detached zero-valid record, as in the C fixture.
+            unsafe { std::mem::zeroed() }
+        } else {
+            info
+        };
+        do_planetary_analysis(
+            &mut expected_rng,
+            &PLANET_ARRAY.0,
+            star,
+            site,
+            &mut expected,
+            &world,
+        );
+        let actual = testing::with_orbit(
+            &mut Orbit {
+                rng: &mut rng,
+                plan_data: &PLANET_ARRAY.0,
+                star,
+                site,
+                sys_info: &mut info,
+                world: &world,
+            },
+            body,
+            |system| {
+                let location = system.orbital_location(body);
+                assert_eq!(
+                    (location.x, location.y),
+                    match body {
+                        Body::Planet(_) => (37, -53),
+                        Body::Moon { .. } => (0, 0),
+                    },
+                );
+                if preview {
+                    preview_body(system, body)
+                } else {
+                    analyse_body(system, body);
+                    *system.system_info()
+                }
+            },
+        );
+        assert_eq!(format!("{actual:?}"), format!("{expected:?}"), "{body:?}");
+        assert_eq!(rng.seed(), expected_rng.seed(), "{body:?}");
+        if preview {
+            assert_eq!(format!("{info:?}"), before, "preview changed orbital info");
+        } else {
+            assert_eq!(info.planet_info.scan_seed, [101, 202, 303]);
+            assert_eq!(info.planet_info.scan_retrieve_mask, [11, 22, 33]);
+        }
+    }
+
+    #[test]
+    fn preview_uses_supplied_body_without_replacing_orbital_info() {
+        check_supplied_analysis(Body::Planet(2), true);
+        check_supplied_analysis(Body::Moon { planet: 2, moon: 1 }, true);
+    }
+
+    #[test]
+    fn analysis_preserves_scan_state_and_exact_rng_draws() {
+        check_supplied_analysis(Body::Planet(2), false);
+        check_supplied_analysis(Body::Moon { planet: 2, moon: 1 }, false);
+    }
 }

@@ -220,6 +220,6 @@ pub fn default_orbital(
     site: &mut (impl super::host::PlanetSite + ?Sized),
 ) -> bool {
     with_orbit(system, body, |orbit| orbit.analyse());
-    site.load_planet(system);
+    site.load_planet(system, body);
     true
 }

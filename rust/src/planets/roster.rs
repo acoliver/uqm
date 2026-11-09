@@ -73,16 +73,50 @@ fn transfer_crew(crew: &mut u16, maximum: u16, delta: i16) -> bool {
     }
 }
 
+fn update_crew(
+    world: &mut crate::engine::World,
+    point: (i16, i16),
+    delta: i16,
+) -> Option<(Option<crate::graphics::context_abi::ContextFrame>, String)> {
+    let index = SHIP_POS.iter().position(|candidate| *candidate == point)?;
+    let id = world.built_ships_ref().at(index)?;
+    let record = world.built_ships_ref();
+    let ship = record.get(id);
+    let frame = if delta == 0 {
+        std::ptr::NonNull::new(ship.icons)
+            .map(|frame| crate::graphics::context_abi::ContextFrame::retain(Some(frame)))
+    } else {
+        None
+    };
+    let fleets = world.avail_races_ref();
+    let maximum = fleets
+        .get(
+            fleets
+                .at(usize::from(ship.race_id))
+                .unwrap_or_else(|| panic!("escort fleet")),
+        )
+        .crew_level;
+    let mut ships = world.built_ships();
+    let ship = ships.get_mut(id);
+    if !transfer_crew(&mut ship.crew_level, maximum, delta) {
+        return None;
+    }
+    let label = if ship.crew_level >= maximum {
+        ship.crew_level.to_string()
+    } else {
+        format!("{}/{}", ship.crew_level, maximum)
+    };
+    Some((frame, label))
+}
+
 #[cfg(not(test))]
 pub(crate) mod live {
-    use super::{navigate, transfer_crew, SHIP_POS};
+    use super::{navigate, update_crew, SHIP_POS};
     use crate::c_bindings::controller_input::*;
-    use crate::engine::battle::link_queue::LinkId;
-    use crate::engine::world::queues::Fragment;
-    use crate::engine::{battle::Cx, observe::Io, World};
+    use crate::engine::{battle::Cx, observe::Io};
     use crate::starbase::cffi::CffiPlatform;
-    use crate::starbase::gfx::{ContextId, FlashTarget, Gfx, Point, Rect, Rgba, Stamp};
-    use std::ffi::{c_void, CString};
+    use crate::starbase::gfx::{ContextId, FlashTarget, Gfx, Point, Rect, Rgba};
+    use std::ffi::CString;
 
     use crate::time::counter_abi::GetTimeCounter;
 
@@ -94,30 +128,24 @@ pub(crate) mod live {
         selected: usize,
         positions: Vec<(i16, i16)>,
         point: (i16, i16),
-        frame: *mut c_void,
+        frame: Option<crate::graphics::context_abi::ContextFrame>,
+        context: crate::graphics::context_abi::ContextLease,
         modifying: bool,
     }
 
-    fn support_ship(world: &World, menu: &Menu) -> Option<LinkId<Fragment>> {
-        let index = SHIP_POS.iter().position(|point| *point == menu.point)?;
-        world.built_ships_ref().at(index)
-    }
-
     fn draw(menu: &Menu, filled: bool) {
-        if menu.frame.is_null() {
+        let Some(frame) = &menu.frame else {
             return;
-        }
-        let stamp = Stamp {
-            origin: Point {
-                x: menu.point.0,
-                y: menu.point.1,
-            },
-            frame: menu.frame as usize,
+        };
+        let origin = crate::graphics::native_abi::POINT {
+            x: menu.point.0,
+            y: menu.point.1,
         };
         if filled {
-            CffiPlatform.draw_filled_stamp(stamp);
+            menu.context
+                .draw_filled_stamp(frame, origin, menu.context.foreground());
         } else {
-            CffiPlatform.draw_stamp(stamp);
+            menu.context.draw_stamp(frame, origin);
         }
     }
 
@@ -135,36 +163,12 @@ pub(crate) mod live {
     }
 
     unsafe fn delta_crew(cx: &mut Cx<'_>, menu: &mut Menu, delta: i16) -> bool {
-        let value = cx.with_legacy(|| {
-            World::current().write(|world| {
-                let id = support_ship(world, menu)?;
-                if delta == 0 {
-                    menu.frame = world.built_ships_ref().get(id).icons.cast();
-                }
-                let race = world.built_ships_ref().get(id).race_id;
-                let fleets = world.avail_races_ref();
-                let maximum = fleets
-                    .get(
-                        fleets
-                            .at(usize::from(race))
-                            .unwrap_or_else(|| panic!("escort fleet")),
-                    )
-                    .crew_level;
-                let mut ships = world.built_ships();
-                let ship = ships.get_mut(id);
-                if !transfer_crew(&mut ship.crew_level, maximum, delta) {
-                    return None;
-                }
-                Some(if ship.crew_level >= maximum {
-                    ship.crew_level.to_string()
-                } else {
-                    format!("{}/{}", ship.crew_level, maximum)
-                })
-            })
-        });
-        let Some(value) = value else {
+        let Some((frame, value)) = update_crew(cx.world, menu.point, delta) else {
             return false;
         };
+        if delta == 0 {
+            menu.frame = frame;
+        }
         let message = CString::new(value).unwrap();
         cx.with_legacy(|| CffiPlatform.pre_update_flash());
         crate::ui::sis::draw_status_message(cx.kernel, cx.world, Some(&message));
@@ -178,44 +182,26 @@ pub(crate) mod live {
 
     unsafe fn select(cx: &mut Cx<'_>, menu: &mut Menu, index: usize) {
         menu.point = menu.positions[index];
-        menu.frame = std::ptr::null_mut();
+        menu.frame = None;
         delta_crew(cx, menu, 0);
     }
 
-    unsafe fn flash_ship(menu: &Menu) {
-        static mut COLOR: Rgba = Rgba::rgb15(31, 0, 0);
-        static mut NEXT_TIME: u32 = 0;
-        if GetTimeCounter() >= NEXT_TIME {
-            NEXT_TIME = GetTimeCounter().wrapping_add(840 / 15);
-            let mut color = COLOR;
-            if color.g >= Rgba::rgb15(0, 25, 25).g {
-                color = Rgba::rgb15(31, 0, 0);
-            } else {
-                color.g += Rgba::rgb15(0, 2, 2).g;
-                color.b += Rgba::rgb15(0, 2, 2).b;
-            }
-            COLOR = color;
-            CffiPlatform.set_fg_color(color);
+    fn flash_ship(flash: &mut crate::engine::kernel::roster_flash::RosterFlash, menu: &Menu) {
+        if let Some(color) = flash.advance(GetTimeCounter) {
+            menu.context.set_foreground(color);
             draw(menu, true);
         }
     }
 
     unsafe fn redraw_selection(cx: &mut Cx<'_>, menu: &mut Menu, next: usize) {
-        let g = CffiPlatform;
-        cx.with_legacy(|| {
-            g.batch();
-            g.set_context(ContextId::Status);
+        let context = menu.context.clone();
+        context.with_batch(|| {
             if next != menu.selected {
                 draw(menu, false);
+                select(cx, menu, next);
+                menu.selected = next;
             }
-        });
-        if next != menu.selected {
-            select(cx, menu, next);
-            menu.selected = next;
-        }
-        cx.with_legacy(|| {
-            flash_ship(menu);
-            g.unbatch();
+            flash_ship(&mut cx.kernel.roster_flash, menu);
         });
     }
 
@@ -293,23 +279,24 @@ pub(crate) mod live {
         let runtime = cx.kernel.input_runtime();
         let input = runtime.input();
         let count = cx.world.built_ships_ref().count();
-        let Some(mut menu) = cx.with_legacy(|| {
-            if count == 0 {
-                return None;
-            }
+        if count == 0 {
+            return 0;
+        }
+        let mut menu = {
             let mut positions = SHIP_POS[..count].to_vec();
             positions.sort_by_key(|point| (point.0, point.1));
             let menu = Menu {
                 selected: 0,
                 positions,
                 point: (0, 0),
-                frame: std::ptr::null_mut(),
+                frame: None,
+                context: crate::graphics::context_abi::ContextLease::require(
+                    cx.kernel.status_context,
+                ),
                 modifying: false,
             };
-            CffiPlatform.set_context(ContextId::Status);
-            Some(menu)
-        }) else {
-            return 0;
+            menu.context.select();
+            menu
         };
         select(cx, &mut menu, 0);
         cx.with_legacy(|| SetMenuSounds(input, 15, 16));
@@ -324,6 +311,32 @@ pub(crate) mod live {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn crew_updates_only_the_supplied_world_and_selected_escort() {
+        fn world(crew: u16, maximum: u16) -> crate::engine::World {
+            let mut world = crate::engine::World::new();
+            let mut fleets = world.avail_races();
+            let id = fleets.alloc().unwrap();
+            fleets.get_mut(id).crew_level = maximum;
+            fleets.put(id);
+            let mut ships = world.built_ships();
+            for value in [crew, 3] {
+                let id = ships.alloc().unwrap();
+                ships.get_mut(id).crew_level = value;
+                ships.put(id);
+            }
+            world
+        }
+        let mut first = world(1, 10);
+        let mut second = world(5, 8);
+        assert!(update_crew(&mut first, SHIP_POS[0], -1).is_none());
+        assert_eq!(update_crew(&mut second, SHIP_POS[0], 1).unwrap().1, "6/8");
+        assert_eq!(update_crew(&mut first, SHIP_POS[0], 1).unwrap().1, "2/10");
+        assert_eq!(update_crew(&mut first, SHIP_POS[1], 0).unwrap().1, "3/10");
+        assert!(update_crew(&mut first, (0, 0), 1).is_none());
+        assert!(update_crew(&mut first, SHIP_POS[2], 1).is_none());
+    }
+
     #[test]
     fn crew_transfer_preserves_captain_and_template_capacity() {
         let mut crew = 1;

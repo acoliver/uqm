@@ -3,7 +3,7 @@
 use super::device_effects::{effect_state, repair_ultron, ULTRON_COMPONENTS};
 use crate::battle::c_bridge::SleepThread;
 use crate::engine::{battle::Cx, observe::Io};
-use crate::engine::{Kernel as KernelOwner, StoryKey, World as WorldOwner};
+use crate::engine::{StoryKey, World};
 
 use crate::mainloop::{
     input_abi::live::SetMenuSounds,
@@ -11,35 +11,22 @@ use crate::mainloop::{
     types::activity_flags::{CHECK_LOAD, START_ENCOUNTER},
 };
 
-use std::sync::Mutex;
-
 use crate::c_bindings::global_state::{CHMMR_DEFINED, ILWRATH_DEFINED, SAMATRA_DEFINED};
 use crate::comm::{
     dispatch::ship,
     locdata::{CColor, CRect},
 };
-use crate::engine::observe::DeviceObservation;
-
 use crate::starbase::{
     cffi::CffiPlatform,
-    gfx::{Align, ContextId, FontId, Gfx, Point, Rect, Rgba, Stamp, TextDraw},
+    gfx::{Align, ContextId, FontId, Gfx, Point, Rect, Rgba, TextDraw},
 };
-
 use crate::state::game_state_keys::{get_game_state as get, set_game_state as set};
 
-static OBSERVATION: Mutex<DeviceObservation> = Mutex::new(DeviceObservation {
-    in_orbit: false,
-    pc_menu: false,
-    list: None,
-    selected: 0,
-    activation: None,
-});
-
-pub fn observation(configuration: &uqm_engine::configuration::Configuration) -> DeviceObservation {
-    let mut observed = OBSERVATION.lock().unwrap().clone();
-    observed.in_orbit = unsafe { playerInPlanetOrbit() };
-    observed.pc_menu = configuration.preferences().menu == 2;
-    observed
+fn publish(kernel: &crate::engine::Kernel, io: &mut Io<'_>) {
+    io.observer
+        .checkpoint(&crate::engine::observe::CheckpointView::Devices(
+            &kernel.device_observation,
+        ));
 }
 
 use crate::navigation::hyper_transition::save_sis_hyper_state;
@@ -58,6 +45,8 @@ use crate::planets::solarsys::{
 use crate::ui::util::live::DrawStarConBox;
 
 struct Menu {
+    icons: crate::graphics::context_abi::ContextFrame,
+    context: crate::graphics::context_abi::ContextLease,
     list: Vec<u8>,
     selected: usize,
     top: usize,
@@ -132,16 +121,13 @@ unsafe fn draw(menu: &Menu, old: Option<usize>, refresh: bool) {
             text: g.game_string(133),
         });
         for (pos, id) in menu.list.iter().skip(menu.top).take(5).enumerate() {
-            g.draw_stamp(Stamp {
-                origin: Point {
+            menu.context.draw_stamp(
+                &menu.icons.indexed_frame(77 + usize::from(*id)),
+                crate::graphics::native_abi::POINT {
                     x: 4,
                     y: 34 + pos as i16 * 18,
                 },
-                frame: g.abs_frame(
-                    KernelOwner::current().read(|owner| owner.misc_data_frame) as usize,
-                    77 + u16::from(*id),
-                ),
-            });
+            );
             draw_device(*id, pos, false);
         }
     } else if let Some(old) = old.filter(|old| *old != menu.selected) {
@@ -151,13 +137,11 @@ unsafe fn draw(menu: &Menu, old: Option<usize>, refresh: bool) {
     g.unbatch();
 }
 
-unsafe fn reset_groups() {
+unsafe fn reset_groups(world: &mut World) {
     crate::c_bindings::global_state::EncounterGroup = 0;
-    crate::engine::World::current().write(|world| {
-        put_group_info(world, 0, 255);
-        world.ip_groups().reinit();
-        assert_eq!(world.npc_built_ships_ref().count(), 0);
-    });
+    put_group_info(world, 0, 255);
+    world.ip_groups().reinit();
+    assert_eq!(world.npc_built_ships_ref().count(), 0);
 }
 
 unsafe fn orbit_is(planet: u8) -> bool {
@@ -165,60 +149,54 @@ unsafe fn orbit_is(planet: u8) -> bool {
     playerInPlanetOrbit() && matchWorld(system, (*system).pOrbitalDesc, planet, 255)
 }
 
-unsafe fn use_caster(next_activity: &mut u16) -> bool {
-    if WorldOwner::current().read(in_hqspace) != 0 {
-        if WorldOwner::current().read(|world| get(world, StoryKey::ARILOU_SPACE_SIDE)) <= 1 {
-            WorldOwner::current().write(|world| set(world, StoryKey::USED_BROADCASTER, 1));
+unsafe fn use_caster(cx: &mut Cx<'_>, next_activity: &mut u16) -> bool {
+    if in_hqspace(cx.world) != 0 {
+        if get(cx.world, StoryKey::ARILOU_SPACE_SIDE) <= 1 {
+            set(cx.world, StoryKey::USED_BROADCASTER, 1);
             return true;
         }
         return false;
     }
-    if crate::engine::World::current().read(|world| world.activity()) & 0xff != 4
-        || !playerInSolarSystem()
-    {
+    if cx.world.activity() & 0xff != 4 || !cx.with_legacy(|| playerInSolarSystem()) {
         return false;
     }
-    if orbit_is(1)
-        && u32::from((*(**WorldOwner::current()).star_pointer()).index) == CHMMR_DEFINED
-        && WorldOwner::current().read(|world| get(world, StoryKey::CHMMR_UNLEASHED)) == 0
+    let star = cx
+        .world
+        .selected_star()
+        .unwrap_or_else(|| panic!("device use requires a selected star"))
+        .index;
+    if cx.with_legacy(|| orbit_is(1))
+        && u32::from(star) == CHMMR_DEFINED
+        && get(cx.world, StoryKey::CHMMR_UNLEASHED) == 0
     {
         *next_activity |= CHECK_LOAD;
-        crate::engine::World::current()
-            .write(|world| world.set_activity(world.activity() | START_ENCOUNTER));
-        reset_groups();
-        WorldOwner::current().write(|world| set(world, StoryKey::GLOBAL_FLAGS_AND_DATA, 1 << 7));
-        SaveSolarSysLocation();
+        cx.world.set_activity(cx.world.activity() | START_ENCOUNTER);
+        reset_groups(cx.world);
+        set(cx.world, StoryKey::GLOBAL_FLAGS_AND_DATA, 1 << 7);
+        cx.with_legacy(|| SaveSolarSysLocation());
         return true;
     }
-    let home = u32::from((*(**WorldOwner::current()).star_pointer()).index) == ILWRATH_DEFINED;
-    let mut found = home
-        && WorldOwner::current()
-            .write(|world| start_sphere_tracking(world, u16::from(ship::ILWRATH_SHIP)))
-            != 0;
+    let home = u32::from(star) == ILWRATH_DEFINED;
+    let mut found = home && start_sphere_tracking(cx.world, u16::from(ship::ILWRATH_SHIP)) != 0;
     if !found {
-        found = WorldOwner::current().read(|world| {
-            let groups = world.ip_groups_ref();
-            groups
-                .head()
-                .is_some_and(|id| groups.get(id).race_id == ship::ILWRATH_SHIP)
-        });
+        let groups = cx.world.ip_groups_ref();
+        found = groups
+            .head()
+            .is_some_and(|id| groups.get(id).race_id == ship::ILWRATH_SHIP);
     }
     if !found {
         return false;
     }
     *next_activity |= CHECK_LOAD;
-    crate::engine::World::current()
-        .write(|world| world.set_activity(world.activity() | START_ENCOUNTER));
-    reset_groups();
-    WorldOwner::current().write(|world| {
-        set(
-            world,
-            StoryKey::GLOBAL_FLAGS_AND_DATA,
-            if home { 1 << 4 } else { 1 << 5 },
-        )
-    });
-    if playerInPlanetOrbit() {
-        SaveSolarSysLocation();
+    cx.world.set_activity(cx.world.activity() | START_ENCOUNTER);
+    reset_groups(cx.world);
+    set(
+        cx.world,
+        StoryKey::GLOBAL_FLAGS_AND_DATA,
+        if home { 1 << 4 } else { 1 << 5 },
+    );
+    if cx.with_legacy(|| playerInPlanetOrbit()) {
+        cx.with_legacy(|| SaveSolarSysLocation());
     }
     true
 }
@@ -232,21 +210,20 @@ unsafe fn invoke(cx: &mut Cx<'_>, id: u8, next_activity: &mut u16) -> u8 {
                 return 0;
             }
             crate::ui::settings::play_menu_sound(cx.kernel, cx.world, 3);
-            cx.with_legacy(|| {
-                SleepThreadUntil(FadeScreen(250, 840).wrapping_add(1680));
-                let star = (**WorldOwner::current()).star_pointer();
-                if u32::from((*star).index) != CHMMR_DEFINED || !orbit_is(1) {
-                    FadeScreen(253, 1680);
-                } else {
-                    WorldOwner::current().write(|world| set(world, StoryKey::CHMMR_EMERGING, 1));
-                    crate::engine::World::current()
-                        .write(|world| world.set_activity(world.activity() | START_ENCOUNTER));
-                    reset_groups();
-                    WorldOwner::current().write(|world| {
-                        crate::comm::dispatch::clone_npc_fragment(world, ship::CHMMR_SHIP, 0);
-                    });
-                }
-            });
+            cx.with_legacy(|| SleepThreadUntil(FadeScreen(250, 840).wrapping_add(1680)));
+            let star = cx
+                .world
+                .selected_star()
+                .unwrap_or_else(|| panic!("device use requires a selected star"))
+                .index;
+            if u32::from(star) != CHMMR_DEFINED || !cx.with_legacy(|| orbit_is(1)) {
+                cx.with_legacy(|| FadeScreen(253, 1680));
+            } else {
+                set(cx.world, StoryKey::CHMMR_EMERGING, 1);
+                cx.world.set_activity(cx.world.activity() | START_ENCOUNTER);
+                reset_groups(cx.world);
+                crate::comm::dispatch::clone_npc_fragment(cx.world, ship::CHMMR_SHIP, 0);
+            }
             2
         }
         2 => {
@@ -266,26 +243,26 @@ unsafe fn invoke(cx: &mut Cx<'_>, id: u8, next_activity: &mut u16) -> u8 {
                 cx.world.set_activity(cx.world.activity() & !0x0200);
                 save_sis_hyper_state(cx);
             } else {
-                cx.with_legacy(|| {
-                    crate::c_bindings::global_state::EncounterGroup = 0;
-                    if WorldOwner::current().read(|world| world.ip_groups_ref().head().is_some()) {
-                        WorldOwner::current()
-                            .write(|world| set(world, StoryKey::SHIP_TO_COMPEL, 1));
-                        reset_groups();
-                    }
-                    let star = (**WorldOwner::current()).star_pointer();
-                    if u32::from((*star).index) == SAMATRA_DEFINED {
-                        WorldOwner::current()
-                            .write(|world| set(world, StoryKey::READY_TO_CONFUSE_URQUAN, 1));
-                    }
-                    if playerInPlanetOrbit() {
-                        SaveSolarSysLocation();
-                    }
-                });
+                crate::c_bindings::global_state::EncounterGroup = 0;
+                if cx.world.ip_groups_ref().head().is_some() {
+                    set(cx.world, StoryKey::SHIP_TO_COMPEL, 1);
+                    reset_groups(cx.world);
+                }
+                let star = cx
+                    .world
+                    .selected_star()
+                    .unwrap_or_else(|| panic!("device use requires a selected star"))
+                    .index;
+                if u32::from(star) == SAMATRA_DEFINED {
+                    set(cx.world, StoryKey::READY_TO_CONFUSE_URQUAN, 1);
+                }
+                if cx.with_legacy(|| playerInPlanetOrbit()) {
+                    cx.with_legacy(|| SaveSolarSysLocation());
+                }
             }
             1
         }
-        12 | 13 => cx.with_legacy(|| u8::from(use_caster(next_activity))),
+        12 | 13 => u8::from(use_caster(cx, next_activity)),
         0 => {
             if in_hyper_space(cx.world) == 0 || cx.world.data.flagship.fuel_on_board < 1000 {
                 return 0;
@@ -300,6 +277,7 @@ unsafe fn invoke(cx: &mut Cx<'_>, id: u8, next_activity: &mut u16) -> u8 {
 
 unsafe fn frame(
     cx: &mut Cx<'_>,
+    io: &mut Io<'_>,
     input: &crate::engine::input::InputSession,
     menu: &mut Menu,
     next_activity: &mut u16,
@@ -325,9 +303,10 @@ unsafe fn frame(
                 .map(|(key, value)| format!("before_{key}={value},after_{key}={}", after[key]))
                 .collect::<Vec<_>>()
                 .join(",");
-            let mut obs = OBSERVATION.lock().unwrap();
+            let obs = &mut cx.kernel.device_observation;
             let generation = obs.activation.as_ref().map_or(1, |(n, _, _, _)| n + 1);
             obs.activation = Some((generation, id, state, verified));
+            publish(cx.kernel, io);
         }
         return i32::from(status == 0);
     }
@@ -354,23 +333,11 @@ unsafe fn frame(
         let refresh = top != menu.top;
         menu.top = top;
         cx.with_legacy(|| draw(menu, Some(old), refresh));
-        OBSERVATION.lock().unwrap().selected = next;
+        cx.kernel.device_observation.selected = next;
+        publish(cx.kernel, io);
     }
     cx.with_legacy(|| SleepThread(840 / 30));
     1
-}
-
-/// # Safety
-/// `map` must have room for `size` device IDs. Called on the game thread.
-#[no_mangle]
-pub unsafe extern "C" fn InventoryDevices(map: *mut u8, size: u16) -> i16 {
-    let state = WorldOwner::current()
-        .read(crate::state::ffi::snapshot_game_state)
-        .expect("initialized device inventory");
-    let state = crate::state::game_state::StoryState::from_bytes(&state);
-    let list = crate::savegame::runtime::summary::inventory_devices(&state, usize::from(size));
-    std::ptr::copy_nonoverlapping(list.as_ptr(), map, list.len());
-    list.len() as i16
 }
 
 /// # Safety
@@ -378,18 +345,20 @@ pub unsafe extern "C" fn InventoryDevices(map: *mut u8, size: u16) -> i16 {
 pub unsafe fn devices_menu(cx: &mut Cx<'_>, io: &mut Io<'_>) -> i32 {
     let runtime = cx.kernel.input_runtime();
     let input = runtime.input();
-    let Some(mut menu) = cx.with_legacy(|| prepare_devices_menu()) else {
+    let Some(mut menu) = prepare_devices_menu(cx) else {
         return 0;
     };
     cx.with_legacy(|| SetMenuSounds(input, 0x000f | 0x0080 | 0x0100, 0x0010));
-    cx.run_input(io, true, |cx, _| {
+    publish(cx.kernel, io);
+    cx.run_input(io, true, |cx, io| {
         let mut next_activity = 0;
-        let result = frame(cx, input, &mut menu, &mut next_activity) != 0;
+        let result = frame(cx, io, input, &mut menu, &mut next_activity) != 0;
         cx.world.next_activity |= next_activity;
         result
     });
     cx.with_legacy(|| SetMenuSounds(input, 0x000f, 0x0010));
-    OBSERVATION.lock().unwrap().list = None;
+    cx.kernel.device_observation.list = None;
+    publish(cx.kernel, io);
     if cx.world.data.flagship.crew_enlisted == u16::MAX || cx.world.activity() & 0x4000 != 0 {
         return 0;
     }
@@ -404,22 +373,22 @@ pub unsafe fn devices_menu(cx: &mut Cx<'_>, io: &mut Io<'_>) -> i32 {
     )
 }
 
-unsafe fn prepare_devices_menu() -> Option<Menu> {
-    let mut list = [0; 28];
-    let count = InventoryDevices(list.as_mut_ptr(), 28) as usize;
-    if count == 0 {
+unsafe fn prepare_devices_menu(cx: &mut Cx<'_>) -> Option<Menu> {
+    let list = super::device_effects::inventory(cx.world, 28);
+    if list.is_empty() {
         return None;
     }
     let menu = Menu {
-        list: list[..count].to_vec(),
+        icons: crate::graphics::context_abi::ContextFrame::retain(std::ptr::NonNull::new(
+            cx.kernel.misc_data_frame,
+        )),
+        context: crate::graphics::context_abi::ContextLease::require(cx.kernel.status_context),
+        list,
         selected: 0,
         top: 0,
     };
-    {
-        let mut obs = OBSERVATION.lock().unwrap();
-        obs.list = Some(menu.list.clone());
-        obs.selected = 0;
-    }
-    draw(&menu, None, true);
+    cx.kernel.device_observation.list = Some(menu.list.clone());
+    cx.kernel.device_observation.selected = 0;
+    cx.with_legacy(|| draw(&menu, None, true));
     Some(menu)
 }

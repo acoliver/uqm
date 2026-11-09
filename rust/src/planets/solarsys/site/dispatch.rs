@@ -42,7 +42,7 @@ impl Site<'_, '_, '_> {
             SolarSys::from_records(
                 records,
                 rng,
-                crate::planets::ffi::plan_data(),
+                &crate::planets::tables::PLANET_ARRAY.0,
                 star_type,
                 index,
             )

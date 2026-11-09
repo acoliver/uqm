@@ -214,9 +214,18 @@ pub(crate) mod live {
         draw_display(cx, planet, scan, FULL);
     }
 
+    /// Build an orbit presentation from the supplied generation records.
+    ///
+    /// # Safety
+    /// Game-thread call. Interactive loads require initialized native graphics.
+    /// The supplied system must retain disjoint records and RNG; callbacks may
+    /// access them only between its bounded record borrows.
     pub unsafe fn load_planet(
         game: &std::cell::RefCell<crate::engine::battle::Cx<'_>>,
         io: &std::cell::RefCell<crate::engine::observe::Io<'_>>,
+        system: &mut crate::engine::world::generation::SolarSys<'_>,
+        body: crate::engine::world::generation::Body,
+        in_orbit: bool,
         surface: Option<crate::engine::graphics::drawable_abi::LoadedDrawable>,
         reports: crate::planets::report::typography::ReportResources,
     ) -> Option<OrbitPresentation> {
@@ -224,43 +233,42 @@ pub(crate) mod live {
         if crate::front_end::uqmdebug::DISABLE_INTERACTIVITY != 0 {
             return None;
         }
-        let presentation = OrbitPresentation::new(
-            game.borrow().kernel,
-            CffiPlatform.screen_size().0 as i16 - 78,
-            reports,
-        );
+        let width = CffiPlatform.screen_size().0 as i16 - 78;
+        let presentation = OrbitPresentation::new(game.borrow().kernel, width, reports);
         let context = presentation.context();
         let sphere = presentation.sphere();
-        let animation = game.borrow().kernel.planet_animation.clone();
-        let (wait, pulsing_shield, planet) = game.borrow_mut().with_legacy(|| {
-            let system = solar_system::current();
-            let (last_activity, pulsing_shield) = KernelOwner::current().read(|owner| {
-                (
-                    owner.last_activity,
-                    owner.configuration.preferences().shield == 1,
-                )
-            });
-            assert!((*system).InOrbit != 0);
+        let (animation, last_activity, pulsing_shield) = {
+            let game = game.borrow();
             (
-                last_activity & CHECK_LOAD == 0,
-                pulsing_shield,
-                (*system).pOrbitalDesc,
+                game.kernel.planet_animation.clone(),
+                game.kernel.last_activity,
+                game.kernel.configuration.preferences().shield == 1,
             )
-        });
+        };
+        let wait = last_activity & CHECK_LOAD == 0;
+        assert!(in_orbit);
         if wait {
             draw_display(&mut game.borrow_mut(), &context, presentation.scan(), WAIT);
         }
         let planet_type = game.borrow_mut().with_legacy(|| {
             base::stop_music();
-            generate_planet_surface(
-                &mut sphere.borrow_mut(),
-                &animation,
-                pulsing_shield,
-                planet,
-                surface,
-            );
-
-            (*planet).data_index & !0x80
+            let location = system.orbital_location(body);
+            system.orbital(body, |data| {
+                generate_planet_surface(
+                    &mut sphere.borrow_mut(),
+                    &animation,
+                    pulsing_shield,
+                    crate::planets::plangen::live::SurfaceInputs {
+                        rng: data.rng,
+                        planet: data.world,
+                        info: &data.info.planet_info,
+                        location: crate::graphics::drawable::Point::new(location.x, location.y),
+                        width: width as usize,
+                    },
+                    surface,
+                );
+            });
+            system.body_data_index(body) & !0x80
         });
         orbit_scan::generate_planet_side(game, io, presentation.scan().report_context());
         {

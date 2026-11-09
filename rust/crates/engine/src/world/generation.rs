@@ -1,7 +1,7 @@
 //! Short-lived access to the engine records used by system generators.
 
 use super::planet::{PlanetDesc, PlanetFrame, PlanetInfo, SystemInfo};
-use crate::graphics::native_abi::FRAME;
+use crate::graphics::native_abi::{FRAME, POINT};
 use crate::math::RandomContext;
 use std::marker::PhantomData;
 use std::ptr::NonNull;
@@ -109,6 +109,14 @@ impl<'a> SolarSys<'a> {
 
     pub fn body_data_index(&self, body: Body) -> u8 {
         self.world(body).data_index
+    }
+
+    pub fn orbital_location(&self, body: Body) -> POINT {
+        self.world(match body {
+            Body::Planet(_) => body,
+            Body::Moon { planet, .. } => Body::Planet(planet),
+        })
+        .location
     }
 
     pub fn planet_data_index(&self, planet: usize) -> u8 {

@@ -77,7 +77,7 @@ pub fn generate_orbital(
         info.tectonics = 0;
         info.temperature = 28;
     });
-    super::host::PlanetSite::load_planet(site, system);
+    super::host::PlanetSite::load_planet(site, system, body);
     true
 }
 

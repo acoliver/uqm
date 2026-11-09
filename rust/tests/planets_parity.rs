@@ -1,13 +1,8 @@
-//! Linked test of the C-ABI exports that replaced `calc.c`, `surface.c` and
-//! `orbits.c`.
+//! Linked production generation over supplied solar-system records.
 //!
-//! C callers reach the planet port through `DoPlanetaryAnalysis`,
-//! `GenerateMineralDeposits`, `FillOrbits` and friends, which read the C-owned
-//! `SysGenRNG`, `pSolarSysState`, `CurStarDescPtr` and `PlanData`. This test
-//! drives those exact symbols over the whole input domain and requires the
-//! results to equal the golden fixtures captured from the C originals in
-//! `tests/fixtures/planets/*`, so it proves the adapters wire that state the
-//! way the C did.
+//! Analysis, scan and layout views must reproduce the full domains and frozen
+//! fixtures captured from the C originals in `tests/fixtures/planets/*`.
+//! Native resource and rendering fixtures share the serialized host below.
 
 use uqm_rust::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
 #[path = "planets_render/oval.rs"]
@@ -23,10 +18,10 @@ mod sphere_geometry_parity;
 #[path = "planets_render/topography.rs"]
 mod topography_parity;
 
-use std::ffi::c_void;
 use std::fmt::Write as _;
 use std::path::PathBuf;
-use uqm_rust::planets::ffi::fill_orbits_c as FillOrbits;
+use uqm_rust::engine::world::generation::Body;
+use uqm_rust::planets::generate::{calc, orbits, surface};
 use uqm_rust::planets::solarsys::P_SOLAR_SYS_STATE as pSolarSysState;
 
 use planets_common::default_gen::{
@@ -50,64 +45,38 @@ unsafe extern "C" {
     static element_array: [u8; 133];
     static starmap_array: [CStarDesc; CATALOG_LEN];
 
-    fn DeltaTopography(num_iterations: u16, depth: *mut i8, rect: *const Rect, depth_delta: i16);
-    fn DoPlanetaryAnalysis(sys_info: *mut SystemInfo, desc: *mut PlanetDesc);
-    fn CalcGravity(info: *const c_void) -> u16;
-    fn GenerateMineralDeposits(sys_info: *const SystemInfo, which: u16, info: *mut NodeInfo)
-        -> u16;
-    fn GenerateLifeForms(sys_info: *const SystemInfo, which: u16, info: *mut NodeInfo) -> u16;
-    fn GeneratePresetLife(
-        sys_info: *const SystemInfo,
-        types: *const i8,
-        which: u16,
-        info: *mut NodeInfo,
-    ) -> u16;
-    fn GenerateRandomNodes(
-        sys_info: *const SystemInfo,
-        scan: u16,
-        num_nodes: u16,
-        node_type: u16,
-        which: u16,
-        info: *mut NodeInfo,
-    ) -> u16;
-    fn GenerateRandomLocation(loc: *mut POINT);
 }
-
-/// `RECT` as `{ corner.x, corner.y, extent.width, extent.height }`; only the
-/// extent matters to `DeltaTopography`.
-type Rect = [i16; 4];
 
 /// Cells past the map the C side gets, so an overrun reads as a mismatch
 /// instead of corrupting memory.
 const GUARD_CELLS: usize = 4096;
 
-/// The exported `DeltaTopography`, over the C-owned `SysGenRNG`.
-struct ExportedTopography;
+/// Production topography with a fixture-owned random stream.
+struct OwnedTopography;
 
-impl Topography for ExportedTopography {
+impl Topography for OwnedTopography {
     fn run(&mut self, case: &TopoCase, map: &mut [i8]) -> u32 {
-        let rect: Rect = [0, 0, case.width, case.height];
         let mut padded = map.to_vec();
         padded.resize(map.len() + GUARD_CELLS, 0);
-        unsafe {
-            reseed_c(SysGenRNG, case.seed);
-            DeltaTopography(
-                case.iterations,
-                padded.as_mut_ptr(),
-                &rect,
-                case.depth_delta,
-            );
-        }
+        let mut rng = RandomContext::with_seed(case.seed);
+        uqm_rust::planets::topography::delta_topography(
+            &mut rng,
+            case.iterations,
+            &mut padded,
+            case.width,
+            case.height,
+            case.depth_delta,
+        );
         assert!(
             padded[map.len()..].iter().all(|cell| *cell == 0),
             "DeltaTopography wrote past the map for {case:?}"
         );
         map.copy_from_slice(&padded[..map.len()]);
-        unsafe { (*SysGenRNG).seed() }
+        rng.seed()
     }
 }
 
-/// The exported `DeltaTopography` reproduces the checked-in C fixture: every
+/// Production topography reproduces the checked-in C fixture: every
 /// case's whole depth map and RNG position.
 fn exported_topography_reproduces_the_fixture(table: &[PlanetFrame]) {
     assert_eq!(
@@ -117,11 +86,11 @@ fn exported_topography_reproduces_the_fixture(table: &[PlanetFrame]) {
     );
     check_fixture(
         "topography.txt",
-        &topography::render(&mut ExportedTopography, table),
+        &topography::render(&mut OwnedTopography, table),
     );
 }
 
-struct ExportedGenerators {
+struct SuppliedGenerators {
     state: Box<SOLARSYS_STATE>,
     /// The fixture star occupies slot zero of this retained catalog.
     star: Box<[CStarDesc; CATALOG_LEN]>,
@@ -129,7 +98,7 @@ struct ExportedGenerators {
     previous_star: Option<uqm_rust::engine::StarId>,
 }
 
-impl ExportedGenerators {
+impl SuppliedGenerators {
     fn new() -> Self {
         let mut state: Box<SOLARSYS_STATE> = Box::new(unsafe { std::mem::zeroed() });
 
@@ -161,87 +130,152 @@ impl ExportedGenerators {
             world.current_star = Some(uqm_rust::engine::StarId(0));
         });
     }
+
+    fn select_info(&mut self, info: &SystemInfo) {
+        self.state.SysInfo = *info;
+        let Some(index) = uqm_rust::planets::tables::PLANET_ARRAY
+            .0
+            .iter()
+            .zip(0u8..)
+            .find_map(|(frame, index)| {
+                std::ptr::eq(frame, info.planet_info.plan_data_ptr).then_some(index)
+            })
+        else {
+            panic!("fixture analysis retains an immutable planet frame");
+        };
+        self.state.PlanetDesc[0].data_index = index;
+    }
+
+    fn with_scan<R>(
+        &mut self,
+        info: &SystemInfo,
+        run: impl FnOnce(&mut RandomContext, &SystemInfo, &PlanetFrame) -> R,
+    ) -> R {
+        self.select_info(info);
+        unsafe {
+            crate::invoke_generation(&raw mut *self.state, |system, _| {
+                system.scan(Body::Planet(0), run)
+            })
+        }
+    }
 }
 
-impl Generators for ExportedGenerators {
+impl Generators for SuppliedGenerators {
     fn analyze(&mut self, case: &WorldCase) -> SystemInfo {
         self.set_star(case.star_size, star_type_byte(case));
-
-        let mut parent: PlanetDesc = unsafe { std::mem::zeroed() };
         let mut desc: PlanetDesc = unsafe { std::mem::zeroed() };
         desc.rand_seed = case.rand_seed;
         desc.data_index = case.data_index;
         desc.radius = case.desc_radius;
-        desc.prev_desc = match case.parent_radius {
-            None => &mut self.state.SunDesc[0],
+        let body = match case.parent_radius {
+            None => {
+                desc.prev_desc = &raw mut self.state.SunDesc[0];
+                self.state.PlanetDesc[0] = desc;
+                Body::Planet(0)
+            }
             Some(radius) => {
+                let mut parent: PlanetDesc = unsafe { std::mem::zeroed() };
                 parent.radius = radius;
-                &mut parent
+                self.state.PlanetDesc[0] = parent;
+                desc.prev_desc = &raw mut self.state.PlanetDesc[0];
+                self.state.MoonDesc[0] = desc;
+                Body::Moon { planet: 0, moon: 0 }
             }
         };
-
-        let mut detached: SystemInfo = unsafe { std::mem::zeroed() };
-        self.state.SysInfo = unsafe { std::mem::zeroed() };
-        let target: *mut SystemInfo = if case.is_orbit_entry {
-            &mut self.state.SysInfo
-        } else {
-            &mut detached
-        };
+        self.state.SysInfo = SystemInfo::default();
         unsafe {
-            DoPlanetaryAnalysis(target, &mut desc);
-            *target
+            crate::invoke_generation(&raw mut *self.state, |system, _| {
+                if case.is_orbit_entry {
+                    calc::analyse_body(system, body);
+                    system.orbital(body, |data| *data.info)
+                } else {
+                    calc::preview_body(system, body)
+                }
+            })
         }
     }
 
     fn minerals(&mut self, info: &SystemInfo, which: u16, node: &mut NodeInfo) -> u16 {
-        unsafe { GenerateMineralDeposits(info, which, node) }
+        self.with_scan(info, |rng, info, frame| {
+            surface::generate_mineral_deposits(rng, info, frame, which, node)
+        })
     }
 
     fn life(&mut self, info: &SystemInfo, which: u16, node: &mut NodeInfo) -> u16 {
-        unsafe { GenerateLifeForms(info, which, node) }
+        self.with_scan(info, |rng, info, frame| {
+            surface::generate_life_forms(rng, info, frame, which, node)
+        })
     }
 
     fn preset_life(&mut self, info: &SystemInfo, which: u16, node: &mut NodeInfo) -> u16 {
-        unsafe { GeneratePresetLife(info, PRESET_LIFE.as_ptr(), which, node) }
+        self.with_scan(info, |rng, info, _| {
+            surface::generate_preset_life(
+                rng,
+                info,
+                &PRESET_LIFE[..PRESET_LIFE.len() - 1],
+                which,
+                node,
+            )
+        })
     }
 
     fn random_nodes(&mut self, info: &SystemInfo, which: u16, node: &mut NodeInfo) -> u16 {
-        unsafe { GenerateRandomNodes(info, 1, 4, 9, which, node) }
+        self.with_scan(info, |rng, info, _| {
+            surface::generate_random_nodes(rng, info, 1, 4, 9, which, node)
+        })
     }
 
     fn fill_orbits(&mut self, case: &OrbitCase, descs: &mut [PlanetDesc]) -> Option<u8> {
         self.set_star(case.star_size, (case.star_color << 5) | 0b101);
         self.state.SunDesc[0].num_planets = 0;
-        // C decides "moons" by comparing the base pointer with `MoonDesc`, so
-        // the descriptors must live in the solar system state.
         let moons = case.mode.generating_moons();
-        let base: *mut PlanetDesc = if moons {
-            self.state.MoonDesc.as_mut_ptr()
+        if moons {
+            self.state.MoonDesc[..descs.len()].copy_from_slice(descs);
         } else {
-            self.state.PlanetDesc.as_mut_ptr()
+            self.state.PlanetDesc[..descs.len()].copy_from_slice(descs);
+        }
+        let slots = if case.mode.num_planets() == u8::MAX {
+            9
+        } else {
+            usize::from(case.mode.num_planets())
+        };
+        let request = orbits::OrbitRequest {
+            star_size: case.star_size,
+            star_color: case.star_color,
+            num_planets: case.mode.num_planets(),
+            generating_moons: moons,
+            types_defined: case.mode.types_defined(),
         };
         unsafe {
-            for (slot, desc) in descs.iter().enumerate() {
-                *base.add(slot) = *desc;
-            }
             reseed_c(SysGenRNG, case.seed);
-            FillOrbits(
-                &mut *self.state,
-                case.mode.num_planets(),
-                base,
-                u32::from(case.mode.types_defined()),
-            );
-            for (slot, desc) in descs.iter_mut().enumerate() {
-                *desc = *base.add(slot);
-            }
+            crate::invoke_generation(&raw mut *self.state, |system, _| {
+                if moons {
+                    system.layout_moons(0, |rng, size, color, _, worlds| {
+                        assert_eq!(size, request.star_size);
+                        assert_eq!(color, request.star_color);
+                        assert!(orbits::fill_orbits(rng, request, &mut worlds[..slots]).is_none());
+                    });
+                } else {
+                    system.layout(|rng, _, size, color, worlds| {
+                        assert_eq!(size, request.star_size);
+                        assert_eq!(color, request.star_color);
+                        orbits::fill_orbits(rng, request, &mut worlds[..slots]).unwrap_or(0)
+                    });
+                }
+            });
+        }
+        if moons {
+            descs.copy_from_slice(&self.state.MoonDesc[..descs.len()]);
+        } else {
+            descs.copy_from_slice(&self.state.PlanetDesc[..descs.len()]);
         }
         let drawn = self.state.SunDesc[0].num_planets;
-        (case.mode.num_planets() == !0).then_some(drawn)
+        (case.mode.num_planets() == u8::MAX).then_some(drawn)
     }
 }
 
-/// The exported `GenerateDefault_*` hooks over the pretend solar system.
-impl DefaultOps for ExportedGenerators {
+/// Production default generators over retained fixture records.
+impl DefaultOps for SuppliedGenerators {
     fn planets(&mut self, star_size: u8, star_color: u8, seed: u32) -> Layout {
         self.set_star(star_size, (star_color << 5) | 0b101);
         self.state.PlanetDesc = unsafe { std::mem::zeroed() };
@@ -296,14 +330,7 @@ impl DefaultOps for ExportedGenerators {
         which: u16,
         node: &mut NodeInfo,
     ) -> (u16, u32) {
-        self.state.SysInfo = *info;
-        let frame = unsafe {
-            info.planet_info
-                .plan_data_ptr
-                .offset_from(planet_array.as_slice().as_ptr())
-        };
-        self.state.PlanetDesc[0].data_index =
-            u8::try_from(frame).unwrap_or_else(|error| panic!("fixture frame index: {error:?}"));
+        self.select_info(info);
         let record = &raw mut *self.state;
         unsafe {
             let count = crate::invoke_generation(record, |system, host| {
@@ -330,10 +357,10 @@ impl DefaultOps for ExportedGenerators {
     }
 }
 
-/// The exported `GenerateDefault_*` hooks reproduce the checked-in C fixtures:
+/// Production default generators reproduce the checked-in C fixtures:
 /// every layout (worlds, planet count, RNG position) and every node of every
 /// analysed world.
-fn exported_default_generator_reproduces_the_fixtures(exports: &mut ExportedGenerators) {
+fn exported_default_generator_reproduces_the_fixtures(exports: &mut SuppliedGenerators) {
     let layouts = [
         collect(layout_cases(), layout_cases(), |c| planets_line(exports, c)),
         collect(moon_cases(), moon_cases(), |c| moons_line(exports, c)),
@@ -372,7 +399,7 @@ fn render_plan_data(table: &[PlanetFrame]) -> String {
     text
 }
 
-/// Reseed the `RandomContext` the exports use, through the exported C symbol.
+/// Reseed the random stream retained by the serialized native host.
 fn reseed_c(context: *mut uqm_rust::math::RandomContext, seed: u32) {
     unsafe { (*context).reseed(seed) };
 }
@@ -388,13 +415,13 @@ fn check_fixture(name: &str, text: &str) {
     assert_eq!(stored, text, "{name} differs from the checked-in C fixture");
 }
 
-/// One test: the exports share process-global state (`pSolarSysState`,
-/// `SysGenRNG`), so the comparisons must not run in parallel.
+/// Native fixtures still share process-global state (`pSolarSysState`,
+/// `SysGenRNG`), so their comparisons must not run in parallel.
 #[test]
-fn exported_symbols_reproduce_the_c_fixtures() {
+fn supplied_views_reproduce_the_c_fixtures() {
     battle_context::run(|_| {
         let table = unsafe { &planet_array }.as_slice();
-        let mut exports = ExportedGenerators::new();
+        let mut exports = SuppliedGenerators::new();
         let base = table.as_ptr() as usize;
         gravity_and_random_locations_agree();
 
@@ -415,7 +442,7 @@ fn exported_symbols_reproduce_the_c_fixtures() {
         planets_special::mycon_matches_the_c_original(table);
         planets_special::late_generators_match(table);
         planets_special::sol_matches_the_c_original(table);
-        oval_parity::exported_ovals_match_original_c_full_offscreen_buffers();
+        oval_parity::retained_ovals_match_original_c_full_offscreen_buffers();
         topography_parity::full_c_fixture_core_and_host_parity();
         sphere_geometry_parity::original_c_and_rust_match_fixture_without_rng_effects();
         assert!(unsafe {
@@ -430,34 +457,37 @@ fn exported_symbols_reproduce_the_c_fixtures() {
 }
 
 fn gravity_and_random_locations_agree() {
-    let mut rng = RandomContext::with_seed(99);
     for density in [0u16, 1, 20, 33, 100, 200, 65535] {
         for radius in [0u16, 1, 25, 75, 300, 1500, 65535] {
-            let mut info: SystemInfo = unsafe { std::mem::zeroed() };
+            let mut info = SystemInfo::default();
             info.planet_info.planet_density = density;
             info.planet_info.planet_radius = radius;
-            let exported = unsafe { CalcGravity((&raw const info.planet_info).cast()) };
+            let expected = (u64::from(density) * u64::from(radius) / 100) as u16;
             assert_eq!(
-                exported,
-                uqm_rust::planets::generate::calc::calc_gravity(&info.planet_info),
+                calc::calc_gravity(&info.planet_info),
+                expected,
                 "density {density} radius {radius}"
             );
         }
     }
 
     for seed in 1..2000u32 {
-        let mut exported_point = POINT { x: 0, y: 0 };
-        let mut direct_point = POINT { x: 0, y: 0 };
-        unsafe {
-            reseed_c(SysGenRNG, seed);
-            GenerateRandomLocation(&mut exported_point);
-        }
-        rng.reseed(seed);
-        uqm_rust::planets::generate::surface::generate_random_location(&mut rng, &mut direct_point);
+        let mut rng = RandomContext::with_seed(seed);
+        let mut reference = RandomContext::with_seed(seed);
+        let draw = reference.next_random();
+        let expected = (
+            i16::from((draw as u8) % 226) + 8,
+            i16::from(((draw >> 8) as u8) % 59) + 8,
+        );
+        let mut point = POINT { x: 0, y: 0 };
+        surface::generate_random_location(&mut rng, &mut point);
+        assert_eq!((point.x, point.y), expected, "seed {seed}");
+        assert!((8..234).contains(&point.x));
+        assert!((8..67).contains(&point.y));
         assert_eq!(
-            (exported_point.x, exported_point.y),
-            (direct_point.x, direct_point.y),
-            "seed {seed}"
+            rng.seed(),
+            reference.seed(),
+            "one location draw, seed {seed}"
         );
     }
 }
@@ -521,7 +551,7 @@ fn plandata_tables_equal_the_c_originals() {
     }
 }
 
-impl Drop for ExportedGenerators {
+impl Drop for SuppliedGenerators {
     fn drop(&mut self) {
         uqm_rust::engine::World::current().write(|world| {
             world.set_catalog(std::borrow::Cow::Owned(self.previous_catalog));

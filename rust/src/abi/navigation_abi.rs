@@ -1543,9 +1543,6 @@ pub const LIGHT: _bindgen_ty_4 = 0;
 pub const MEDIUM: _bindgen_ty_4 = 1;
 pub const HEAVY: _bindgen_ty_4 = 2;
 pub type _bindgen_ty_4 = ::std::os::raw::c_uint;
-extern "C" {
-    pub static mut Elements: *const BYTE;
-}
 pub const PLANET_LANDER: _bindgen_ty_5 = 0;
 pub const FUSION_THRUSTER: _bindgen_ty_5 = 1;
 pub const TURNING_JETS: _bindgen_ty_5 = 2;
@@ -2172,8 +2169,7 @@ pub const HIGH_DENSITY: _bindgen_ty_19 = 4;
 pub const SUPER_DENSITY: _bindgen_ty_19 = 5;
 pub type _bindgen_ty_19 = ::std::os::raw::c_uint;
 
-#[cfg(not(test))]
-pub use crate::planets::ffi::do_planetary_analysis_c as DoPlanetaryAnalysis;
+
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct star_desc {
@@ -2910,9 +2906,6 @@ pub use crate::battle::ship_native::engine::ship_postprocess;
 
 #[cfg(not(test))]
 pub use crate::battle::ship_native::engine::collision;
-
-#[cfg(not(test))]
-pub use crate::planets::devices::InventoryDevices;
 
 #[cfg(not(test))]
 pub use crate::ui::util::live::DrawStarConBox;

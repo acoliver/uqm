@@ -84,7 +84,7 @@ pub fn generate_orbital(
     if body == MOON && site.flag(StoryKey::UMGAH_BROADCASTERS) == 0 {
         site.load_broadcasters_scene(system, site.flag(StoryKey::SPATHI_SHIELDED_SELVES) == 0);
     }
-    super::host::PlanetSite::load_planet(site, system);
+    super::host::PlanetSite::load_planet(site, system, body);
     true
 }
 

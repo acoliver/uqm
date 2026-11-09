@@ -230,10 +230,26 @@ fn check_drawable_ownership(h: &mut Harness) {
             let definition = game
                 .borrow_mut()
                 .with_legacy(|| CapturedSurface::pixmap(map_width / 2, map_height / 2, 2));
-            assert!(
-                c_api::load_planet_surface(&game, &io, Some(definition), Default::default())
-                    .is_none()
+            let mut pickup = uqm_rust::planet_side::special_effects::PickupContext::NoLander;
+            let mut site = uqm_rust::planets::solarsys::site::Site::new(
+                &game,
+                &io,
+                &raw mut *h.state,
+                &mut pickup,
+                None,
             );
+            site.with_system(|_, system, _| {
+                assert!(c_api::load_planet(
+                    &game,
+                    &io,
+                    system,
+                    uqm_rust::engine::world::generation::Body::Planet(0),
+                    false,
+                    definition.into_drawable(),
+                    Default::default(),
+                )
+                .is_none());
+            });
         });
         c_api::TFB_FlushGraphicsEx(1);
         c_api::DISABLE_INTERACTIVITY = saved_debug;

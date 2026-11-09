@@ -90,7 +90,7 @@ pub fn generate_orbital(
     } else if body == BROADCASTERS_MOON && scenes.flag(StoryKey::BURVIXESE_BROADCASTERS) == 0 {
         scenes.load_broadcasters_scene(system);
     }
-    super::host::PlanetSite::load_planet(scenes, system);
+    super::host::PlanetSite::load_planet(scenes, system, body);
     true
 }
 

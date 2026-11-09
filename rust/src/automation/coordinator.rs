@@ -16,6 +16,7 @@
 //! @requirement REQ-FFI-001..005, REQ-SCHED-001, REQ-WATCH-001
 
 use crate::engine::{battle::Cx, StoryKey};
+mod device;
 mod fixtures;
 mod initialization;
 mod input;
@@ -1163,50 +1164,6 @@ impl AutomationObserver {
         }
     }
 
-    fn service_device(
-        &self,
-        inner: &mut CoordInner,
-        step: crate::automation::story_actions::UseDeviceStep,
-        event: SchedulerEvent,
-    ) -> SchedulerEvent {
-        use crate::automation::story_actions::{DeviceProgress, DeviceTracker};
-        if inner.sched_state.phase == ActionPhase::WaitingForInput {
-            inner.device = DeviceTracker::default();
-        }
-        #[cfg(not(test))]
-        let observation = crate::planets::devices::observation(&self._configuration);
-        #[cfg(test)]
-        let observation = Default::default();
-        let progress = inner.device.observe(step, observation);
-        let input = if let DeviceProgress::Input(key) = &progress {
-            *key
-        } else {
-            None
-        };
-        if !self.set_navigation_controls(Default::default()) {
-            self.reject_input(inner, "use_device", -1, -1);
-            return event;
-        }
-        for key in crate::automation::script::MenuKey::ALL {
-            if !self.inject_menu_key(i32::from(key.index()), i32::from(input == Some(key))) {
-                self.reject_input(inner, "use_device", -1, -1);
-                return event;
-            }
-        }
-        match progress {
-            DeviceProgress::Input(_) => event,
-            DeviceProgress::Complete(label) => {
-                self.write_trace_labeled(inner, RecordKind::SemanticAssertion, label);
-                SchedulerEvent::NavigationReached
-            }
-            DeviceProgress::Failed(label) => {
-                self.write_trace_labeled(inner, RecordKind::SemanticAssertion, label);
-                self.set_terminal(inner, TerminalClass::SemanticMismatch);
-                event
-            }
-        }
-    }
-
     fn service_energy(
         &self,
         world: &campaign_state::CampaignView,
@@ -1758,7 +1715,7 @@ impl AutomationObserver {
                 self.service_orbit_navigation(world, inner, navigation, scheduler_event);
         } else if let Some(Action::UseDevice(step)) = self.actions.get(inner.sched_state.step_index)
         {
-            scheduler_event = self.service_device(inner, *step, scheduler_event);
+            scheduler_event = self.service_device(world, inner, *step, scheduler_event);
         } else if let Some(Action::CollectEnergyNode(step)) =
             self.actions.get(inner.sched_state.step_index)
         {

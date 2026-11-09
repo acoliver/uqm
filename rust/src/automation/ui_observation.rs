@@ -64,6 +64,7 @@ pub struct UiObservation {
     encounter_menu_active: AtomicBool,
     ship_picker_cursor: std::sync::Mutex<crate::pickship::Cursor>,
     star_map: std::sync::Mutex<Option<crate::engine::observe::StarMapView>>,
+    devices: std::sync::Mutex<crate::engine::observe::DeviceObservation>,
 }
 
 impl Default for UiObservation {
@@ -86,11 +87,26 @@ impl Default for UiObservation {
             encounter_menu_active: AtomicBool::new(false),
             ship_picker_cursor: std::sync::Mutex::new(crate::pickship::Cursor::START),
             star_map: std::sync::Mutex::new(None),
+            devices: std::sync::Mutex::new(Default::default()),
         }
     }
 }
 
 impl UiObservation {
+    pub fn observe_devices(&self, state: &crate::engine::observe::DeviceObservation) {
+        self.devices
+            .lock()
+            .unwrap_or_else(|error| panic!("device observation lock poisoned: {error}"))
+            .clone_from(state);
+    }
+
+    pub fn devices(&self) -> crate::engine::observe::DeviceObservation {
+        self.devices
+            .lock()
+            .unwrap_or_else(|error| panic!("device observation lock poisoned: {error}"))
+            .clone()
+    }
+
     pub fn observe_star_map(&self, view: Option<crate::engine::observe::StarMapView>) {
         *self
             .star_map
@@ -332,6 +348,7 @@ impl super::coordinator::AutomationObserver {
                 .observe_ship_picker_cursor(crate::pickship::Cursor { x, y }),
             CheckpointView::StarbaseMenu(active) => self.ui.observe_starbase_menu(active),
             CheckpointView::StarMap(view) => self.ui.observe_star_map(view),
+            CheckpointView::Devices(view) => self.ui.observe_devices(view),
             view => self.ending.lock().observe_checkpoint(view),
         }
     }
@@ -512,5 +529,31 @@ mod tests {
         ui.observe_communication_responses(0);
         ui.complete_communication();
         assert!(!reached());
+    }
+}
+
+#[cfg(test)]
+mod device_tests {
+    use super::*;
+
+    #[test]
+    fn device_events_are_copied_and_isolated_between_observers() {
+        let first = UiObservation::default();
+        let second = UiObservation::default();
+        let mut observation = crate::engine::observe::DeviceObservation {
+            list: Some(vec![1, 3, 12]),
+            selected: 2,
+            activation: Some((7, 12, "effect".into(), true)),
+            ..Default::default()
+        };
+        first.observe_devices(&observation);
+        observation.list = None;
+        assert_eq!(first.devices().list, Some(vec![1, 3, 12]));
+        assert_eq!(first.devices().selected, 2);
+        assert_eq!(first.devices().activation.as_ref().unwrap().0, 7);
+        assert_eq!(second.devices(), Default::default());
+        first.observe_devices(&observation);
+        assert!(first.devices().list.is_none());
+        assert_eq!(first.devices().activation.as_ref().unwrap().0, 7);
     }
 }

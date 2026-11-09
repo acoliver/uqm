@@ -86,6 +86,14 @@ impl NativeBatch {
         }
     }
 
+    pub fn forward_chain(commands: Vec<DrawCommand>) -> Self {
+        let mut batch = Self::new(commands);
+        for primitive in &mut batch.primitives {
+            primitive.Links |= u32::from(u16::MAX);
+        }
+        batch
+    }
+
     pub fn point_chain(
         points: impl ExactSizeIterator<Item = (POINT, Color)>,
         first: usize,
@@ -133,6 +141,36 @@ impl NativeBatch {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn forward_chain_preserves_sentinel_predecessors_for_rectangle_rows() {
+        let batch = NativeBatch::forward_chain(
+            (0..2)
+                .map(|row| DrawCommand {
+                    color: Color {
+                        r: 11,
+                        g: 22,
+                        b: 33,
+                        a: 101,
+                    },
+                    shape: NativeShape::Rectangle {
+                        rect: RECT {
+                            corner: POINT { x: 1, y: row },
+                            extent: EXTENT {
+                                width: 5,
+                                height: 1,
+                            },
+                        },
+                        filled: true,
+                    },
+                })
+                .collect(),
+        );
+        assert_eq!(batch.primitives()[0].Links, u32::from(u16::MAX) | (1 << 16));
+        assert_eq!(batch.primitives()[1].Links, u32::MAX);
+        assert_eq!(batch.primitives()[0].Type, 6);
+        assert_eq!(batch.primitives()[1].color.a, 101);
+    }
 
     #[test]
     fn point_chain_keeps_tail_indices_and_sentinel_predecessors() {

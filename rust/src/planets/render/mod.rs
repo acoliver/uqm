@@ -1,6 +1,5 @@
-//! Input-free planet rendering, including the live oval ABI provider.
+//! Input-free planet rendering, using caller-retained native graphics.
 
-#[cfg(not(test))]
 pub mod c_api;
 pub mod oval;
 pub mod sphere_geometry;
