@@ -136,6 +136,115 @@ pub(super) fn compare(
     super::tool::compare(&attributed, before, moves)
 }
 
+fn relocated_key(
+    key: &str,
+    moves: &BTreeMap<String, String>,
+    measurement: &Measurement,
+) -> Result<Option<String>, String> {
+    let (file, owner, expression) = parts(key)?;
+    let ids = file_ids(measurement);
+    if measurement.expect_sites.iter().any(|site| {
+        ids.get(site.file.as_str()) == Some(&file)
+            && site.owner == owner
+            && site.expression == expression
+    }) {
+        return Ok(None);
+    }
+    let Some((old, new)) = super::transfers::matching(moves, owner) else {
+        return Ok(None);
+    };
+    let owner = format!("{new}{}", &owner[old.len()..]);
+    let files = measurement
+        .expect_sites
+        .iter()
+        .filter(|site| site.owner == owner && site.expression == expression)
+        .filter_map(|site| ids.get(site.file.as_str()).copied())
+        .collect::<BTreeSet<_>>();
+    if files.len() > 1 {
+        return Err(format!("duplicate expect destination: {owner}"));
+    }
+    Ok(files
+        .into_iter()
+        .next()
+        .map(|file| format!("{file}|{owner}|{expression}")))
+}
+
+pub(super) fn relocate(
+    proof: &Proof,
+    counts: &BTreeMap<String, u64>,
+    moves: &BTreeMap<String, String>,
+    measurement: &Measurement,
+) -> Result<(Proof, BTreeMap<String, u64>), String> {
+    let mut relocated = proof.clone();
+    let mut counts = counts.clone();
+    let mut changed = BTreeSet::new();
+    for (key, count) in proof {
+        let Some(target) = relocated_key(key, moves, measurement)? else {
+            continue;
+        };
+        let (old_file, _, _) = parts(key)?;
+        let (new_file, _, _) = parts(&target)?;
+        if old_file != new_file {
+            let old_key = format!("clippy::expect_used|{old_file}");
+            let remaining = counts
+                .get(&old_key)
+                .copied()
+                .unwrap_or(0)
+                .checked_sub(*count)
+                .ok_or("expect proof exceeds source diagnostic count")?;
+            if remaining == 0 {
+                counts.remove(&old_key);
+            } else {
+                counts.insert(old_key, remaining);
+            }
+            let total = counts
+                .entry(format!("clippy::expect_used|{new_file}"))
+                .or_default();
+            *total = total
+                .checked_add(*count)
+                .ok_or("expect proof counter overflow")?;
+        }
+        relocated.remove(key);
+        let total = relocated.entry(target.clone()).or_default();
+        *total = total
+            .checked_add(*count)
+            .ok_or("expect proof counter overflow")?;
+        changed.insert(target);
+    }
+    let transferred = relocated
+        .iter()
+        .filter(|(key, _)| changed.contains(*key))
+        .map(|(key, count)| (key.clone(), *count))
+        .collect();
+    validate(&transferred, measurement)?;
+    Ok((relocated, counts))
+}
+
+pub(super) fn uses_source(proofs: &BTreeMap<String, Proof>, source: &str) -> bool {
+    proofs.values().flat_map(|proof| proof.keys()).any(|key| {
+        key.split('|')
+            .nth(1)
+            .is_some_and(|owner| super::layers::prefix(owner, source))
+    })
+}
+
+pub(super) fn prepare(
+    root: &std::path::Path,
+    options: &super::tool::Options,
+    baseline: &mut super::baseline::Baseline,
+    current: &Measurement,
+) -> Result<(), String> {
+    if baseline.expect_sites.is_empty() {
+        return Ok(());
+    }
+    let (source, recorded) =
+        super::baseline::archived_measurement(root, options.base.as_deref().unwrap_or("HEAD"))?;
+    let recorded = recorded.ok_or("expect relocation needs an archived baseline")?;
+    let pending = super::transfers::pending(&baseline.moved, Some(&recorded.moved));
+    super::transfers::validate(&recorded.entries, current, &source, &pending)?;
+    baseline.relocate_expect_sites(current, &recorded.moved)
+}
+
 pub(super) fn check(
     root: &std::path::Path,
     options: &super::tool::Options,
@@ -150,7 +259,8 @@ pub(super) fn check(
         .as_deref()
         .ok_or("expect relocation needs --base and archived diagnostics")?;
     let (source, recorded) = super::baseline::archived_measurement(root, reference)?;
-    let recorded = recorded.ok_or("expect relocation needs an archived baseline")?;
+    let mut recorded = recorded.ok_or("expect relocation needs an archived baseline")?;
+    recorded.relocate_expect_sites(&source, &BTreeMap::new())?;
     let prior_host = recorded
         .lint
         .get(host)
@@ -455,6 +565,185 @@ mod tests {
         assert!(retain(&changed, &source(), &BTreeMap::new())?.is_empty());
         assert!(validate(&source(), &Measurement::default()).is_err());
         assert!(check_recorded(&changed, &source(), &Proof::new()).is_err());
+        Ok(())
+    }
+
+    fn landed_measurement() -> Measurement {
+        Measurement {
+            findings: vec![super::super::metrics::Finding {
+                counter: "loc".into(),
+                metric: "loc".into(),
+                identity: NEW.into(),
+                file: "src/mode/race.rs".into(),
+                package: "uqm".into(),
+                subsystem: "mode".into(),
+                value: 1,
+            }],
+            expect_sites: [Site {
+                file: "src/mode/race.rs".into(),
+                owner: "uqm::mode::race::response".into(),
+                expression: EXPR.into(),
+                line: 1,
+                column: 1,
+            }]
+            .into(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn tightening_keeps_an_alias_while_a_hosts_source_proof_is_still_current() -> Result<(), String>
+    {
+        use super::super::baseline::Baseline;
+        let mut measurement = landed_measurement();
+        let mut finding = measurement.findings[0].clone();
+        finding.identity = OLD.into();
+        finding.file = "src/content/race.rs".into();
+        measurement.findings.push(finding);
+        measurement.expect_sites.insert(Site {
+            file: "src/content/race.rs".into(),
+            owner: "uqm::content::race::live::response".into(),
+            expression: EXPR.into(),
+            line: 1,
+            column: 1,
+        });
+        let mut baseline = Baseline {
+            moved: moves(),
+            lint: [
+                ("linux".into(), counters(&[(OLD, 1)])),
+                ("macos".into(), counters(&[(NEW, 1)])),
+            ]
+            .into(),
+            expect_sites: [("linux".into(), source()), ("macos".into(), target())].into(),
+            ..Default::default()
+        };
+        baseline.tighten(
+            &measurement,
+            Some(&Baseline {
+                entries: [(format!("loc|loc|{NEW}"), 1)].into(),
+                ..Default::default()
+            }),
+        )?;
+        assert_eq!(baseline.moved, moves());
+        assert_eq!(baseline.expect_sites["linux"], source());
+        assert_eq!(baseline.lint["linux"], counters(&[(OLD, 1)]));
+        let unrelated = [(
+            "linux".into(),
+            proof(OLD, "uqm::content::race::live_extra::response", EXPR, 1),
+        )]
+        .into();
+        assert!(!uses_source(&unrelated, "uqm::content::race::live"));
+        Ok(())
+    }
+
+    #[test]
+    fn landed_expect_proofs_relocate_without_reusing_partial_file_debt() -> Result<(), String> {
+        let measurement = landed_measurement();
+        let (proof, counters) =
+            relocate(&source(), &counters(&[(OLD, 2)]), &moves(), &measurement)?;
+        assert_eq!(proof, target());
+        assert_eq!(counters, self::counters(&[(OLD, 1), (NEW, 1)]));
+        validate(&proof, &measurement)?;
+        assert_eq!(
+            relocate(&proof, &counters, &moves(), &measurement)?,
+            (proof.clone(), counters.clone())
+        );
+        compare(
+            &self::counters(&[(NEW, 1)]),
+            &counters,
+            &moves(),
+            &BTreeMap::new(),
+            &proof,
+            &target(),
+        )?;
+        assert!(compare(
+            &self::counters(&[(NEW, 2)]),
+            &counters,
+            &moves(),
+            &BTreeMap::new(),
+            &proof,
+            &target(),
+        )
+        .is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn unregistered_or_changed_expect_sites_cannot_relocate() -> Result<(), String> {
+        let mut changed = landed_measurement();
+        changed.expect_sites = changed
+            .expect_sites
+            .into_iter()
+            .map(|mut site| {
+                site.expression = "different.expect()".into();
+                site
+            })
+            .collect();
+        for (moves, measurement) in [
+            (BTreeMap::new(), landed_measurement()),
+            (
+                [(
+                    "uqm::content::race::live_extra".into(),
+                    "uqm::mode::race".into(),
+                )]
+                .into(),
+                landed_measurement(),
+            ),
+            (self::moves(), changed),
+        ] {
+            let counts = counters(&[(OLD, 1)]);
+            let (retained, after) = relocate(&source(), &counts, &moves, &measurement)?;
+            assert_eq!(retained, source());
+            assert_eq!(after, counts);
+            assert!(validate(&retained, &measurement).is_err());
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn relocated_proof_cannot_duplicate_a_destination_or_exceed_source_debt() {
+        let mut duplicated = source();
+        duplicated.extend(target());
+        assert!(relocate(
+            &duplicated,
+            &counters(&[(OLD, 1), (NEW, 1)]),
+            &moves(),
+            &landed_measurement(),
+        )
+        .is_err());
+        assert!(relocate(&source(), &BTreeMap::new(), &moves(), &landed_measurement(),).is_err());
+    }
+
+    #[test]
+    fn tightening_and_retirement_preserve_or_migrate_every_hosts_proofs() -> Result<(), String> {
+        use super::super::baseline::Baseline;
+        let measurement = landed_measurement();
+        let mut baseline = Baseline {
+            moved: moves(),
+            lint: [
+                ("linux".into(), counters(&[(OLD, 1)])),
+                ("macos".into(), counters(&[(NEW, 1)])),
+            ]
+            .into(),
+            expect_sites: [("linux".into(), source()), ("macos".into(), target())].into(),
+            ..Default::default()
+        };
+        baseline.retire_moves(&measurement);
+        assert_eq!(baseline.moved, moves());
+        baseline.moved.clear();
+        baseline.tighten(
+            &measurement,
+            Some(&Baseline {
+                entries: [(format!("loc|loc|{NEW}"), 1)].into(),
+                moved: moves(),
+                ..Default::default()
+            }),
+        )?;
+        for host in ["linux", "macos"] {
+            assert_eq!(baseline.expect_sites[host], target());
+            assert_eq!(baseline.lint[host], counters(&[(NEW, 1)]));
+        }
+        assert!(baseline.moved.is_empty());
         Ok(())
     }
 }

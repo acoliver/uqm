@@ -165,10 +165,13 @@ impl Baseline {
                 false,
             )?;
         }
+        let empty = BTreeMap::new();
+        self.relocate_expect_sites(measurement, base.map(|b| &b.moved).unwrap_or(&empty))?;
         self.entries = measured;
         if let Some(base) = base {
             self.moved.retain(|source, target| {
                 super::tool::lint_uses_source(&self.lint, source)
+                    || super::expect_sites::uses_source(&self.expect_sites, source)
                     || !base
                         .entries
                         .keys()
@@ -183,10 +186,38 @@ impl Baseline {
         moves.extend(
             self.moved
                 .iter()
-                .filter(|(source, _)| super::tool::lint_uses_source(&self.lint, source))
+                .filter(|(source, _)| {
+                    super::tool::lint_uses_source(&self.lint, source)
+                        || super::expect_sites::uses_source(&self.expect_sites, source)
+                })
                 .map(|(source, target)| (source.clone(), target.clone())),
         );
         moves
+    }
+
+    pub(super) fn relocate_expect_sites(
+        &mut self,
+        measurement: &Measurement,
+        recorded_moves: &BTreeMap<String, String>,
+    ) -> Result<(), String> {
+        // An earlier tighten may have pruned aliases before another host refreshed its proofs.
+        let mut moves = recorded_moves.clone();
+        moves.extend(self.moved.clone());
+        let mut lint = self.lint.clone();
+        let mut proofs = self.expect_sites.clone();
+        for (host, proof) in &self.expect_sites {
+            let counts = self
+                .lint
+                .get(host)
+                .ok_or("expect proof has no host lint counters")?;
+            let (proof, counts) =
+                super::expect_sites::relocate(proof, counts, &moves, measurement)?;
+            lint.insert(host.clone(), counts);
+            proofs.insert(host.clone(), proof);
+        }
+        self.lint = lint;
+        self.expect_sites = proofs;
+        Ok(())
     }
 
     pub fn retire_moves(&mut self, base: &Measurement) {
