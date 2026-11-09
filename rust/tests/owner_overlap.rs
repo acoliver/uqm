@@ -509,14 +509,16 @@ fn campaign_events_schedule_and_dispatch_using_the_existing_world() {
     ) {
         return;
     }
-    use uqm_rust::engine::StoryKey;
-    use uqm_rust::navigation::abi::add_event;
-    use uqm_rust::navigation::abi::{
-        dispatch_event, ARILOU_ENTRANCE_EVENT, ARILOU_EXIT_EVENT, ARILOU_UMGAH_CHECK,
+    use uqm_rust::engine::{
+        battle::{Battle, Cx},
+        StoryKey,
     };
-    unsafe extern "C" {
-        fn GameClockTick();
-    }
+    use uqm_rust::navigation::abi::{ARILOU_ENTRANCE_EVENT, ARILOU_EXIT_EVENT, ARILOU_UMGAH_CHECK};
+    use uqm_rust::navigation::{
+        events::{dispatch_event, EventServices},
+        hyper_units::Geometry,
+    };
+    use uqm_rust::time::clock_abi::{add_event, game_clock_tick};
     let mut game = Game::new();
     let display = campaign_display::CampaignDisplay::install(&mut game).unwrap();
     game.world.story = Some(uqm_rust::state::game_state::StoryState::new());
@@ -524,42 +526,39 @@ fn campaign_events_schedule_and_dispatch_using_the_existing_world() {
     clock.year_index = 2155;
     clock.month_index = 1;
     clock.day_index = 1;
-    // SAFETY: this fixture owns the event pool and World throughout dispatch and cleanup.
-    unsafe {
-        game.world.clock.init();
-        bridge::with_game(&mut game, || {
-            World::current().write(|world| {
-                dispatch_event(world, ARILOU_ENTRANCE_EVENT as u8);
-                assert_eq!(world.story_state(StoryKey::ARILOU_SPACE), 1);
-                let events = world.clock.events_ref();
-                let next = events.get(events.head().unwrap());
-                assert_eq!(
-                    (next.year_index, next.month_index, next.day_index),
-                    (2155, 1, 4)
-                );
-                assert_eq!(next.func_index, ARILOU_EXIT_EVENT as u8);
-            });
-            World::current().write(|world| add_event(world, 1, 0, 0, 0, ARILOU_UMGAH_CHECK as u8));
+    game.world.clock.init();
+    let mut battle = Battle::new();
+    {
+        let mut cx = Cx::new(&mut battle, &mut game.world, &mut game.kernel, || {
+            panic!("portal RNG")
+        });
+        let mut random = cx.rng;
+        let mut services = EventServices {
+            geometry: Geometry::new(cx.screen_dimensions()),
+            random: &mut random,
+        };
+        dispatch_event(cx.world, &mut services, ARILOU_ENTRANCE_EVENT as u8);
+        assert_eq!(cx.world.story_state(StoryKey::ARILOU_SPACE), 1);
+        {
+            let events = cx.world.clock.events_ref();
+            let next = events.get(events.head().unwrap());
             assert_eq!(
-                World::current().read(|world| world.story_state(StoryKey::ARILOU_CHECKED_UMGAH)),
-                2
+                (next.year_index, next.month_index, next.day_index),
+                (2155, 1, 4)
             );
-        });
-        bridge::with_game(&mut game, || {
-            World::current().write(|world| {
-                world.set_story_state(StoryKey::ARILOU_CHECKED_UMGAH, 0);
-                world.data.game.game_clock.tick_count = 1;
-                world.data.game.game_clock.day_in_ticks = 1;
-            });
-            World::current().write(|world| add_event(world, 1, 0, 1, 0, ARILOU_UMGAH_CHECK as u8));
-            GameClockTick();
-            World::current().read(|world| {
-                assert_eq!(world.data.game.game_clock.day_index, 2);
-                assert_eq!(world.story_state(StoryKey::ARILOU_CHECKED_UMGAH), 2);
-            });
-        });
-        game.world.clock.uninit();
+            assert_eq!(next.func_index, ARILOU_EXIT_EVENT as u8);
+        }
+        add_event(&mut cx, 1, 0, 0, 0, ARILOU_UMGAH_CHECK as u8);
+        assert_eq!(cx.world.story_state(StoryKey::ARILOU_CHECKED_UMGAH), 2);
+        cx.world.set_story_state(StoryKey::ARILOU_CHECKED_UMGAH, 0);
+        cx.world.data.game.game_clock.tick_count = 1;
+        cx.world.data.game.game_clock.day_in_ticks = 1;
+        add_event(&mut cx, 1, 0, 1, 0, ARILOU_UMGAH_CHECK as u8);
+        game_clock_tick(&mut cx);
+        assert_eq!(cx.world.data.game.game_clock.day_index, 2);
+        assert_eq!(cx.world.story_state(StoryKey::ARILOU_CHECKED_UMGAH), 2);
     }
+    game.world.clock.uninit();
     display.finish(game);
 }
 

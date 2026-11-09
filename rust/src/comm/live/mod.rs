@@ -1,6 +1,8 @@
 //! Mode-side adapters lending a conversation to the race scripts.
 
-#[cfg(not(test))]
+#[cfg(test)]
+mod clock_tests;
+
 pub(crate) mod alliance;
 #[cfg(not(test))]
 pub(crate) mod arilou;
@@ -12,7 +14,6 @@ pub(crate) mod chmmr;
 pub(crate) mod comandr;
 #[cfg(not(test))]
 pub(crate) mod druuge;
-#[cfg(not(test))]
 pub(crate) mod encounter;
 #[cfg(not(test))]
 pub(crate) mod ilwrath;
@@ -26,9 +27,7 @@ pub(crate) mod orz;
 pub(crate) mod pkunk;
 #[cfg(not(test))]
 pub(crate) mod rebel;
-#[cfg(not(test))]
 pub(crate) mod script;
-#[cfg(not(test))]
 pub(crate) mod shofixt;
 #[cfg(not(test))]
 pub(crate) mod slyhome;
@@ -56,7 +55,6 @@ pub(crate) mod urquan;
 pub(crate) mod utwig;
 #[cfg(not(test))]
 pub(crate) mod vux;
-#[cfg(not(test))]
 pub(crate) mod yehat;
 #[cfg(not(test))]
 pub(crate) mod zoqfot;

@@ -152,7 +152,7 @@ mod runtime {
                 let clock = &cx.world.data.game.game_clock;
                 (clock.year_index, clock.month_index, clock.day_index) < date
             } {
-                cx.with_legacy(|| MoveGameClockDays(1));
+                crate::time::clock_abi::advance_days(cx, 1);
             }
             if done {
                 break;

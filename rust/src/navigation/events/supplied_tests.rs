@@ -95,9 +95,9 @@ fn fleet_arrival_dispatches_recursively_before_daily_encounter_work() {
     populate_fleets(&mut world);
     let utwig = world.avail_races_ref().at(UTWIG_SHIP as usize).unwrap();
     let supox = world.avail_races_ref().at(SUPOX_SHIP as usize).unwrap();
-    world.avail_races().get_mut(utwig).actual_strength = 100;
+    world.avail_races().get_mut(utwig).actual_strength = 200;
     world.avail_races().get_mut(utwig).growth_err_term = 127;
-    world.avail_races().get_mut(supox).actual_strength = 100;
+    world.avail_races().get_mut(supox).actual_strength = 200;
     world.avail_races().get_mut(supox).growth_err_term = 127;
     let mut random = || panic!("interplanetary event RNG");
     let mut services = services(&mut random);
@@ -109,8 +109,8 @@ fn fleet_arrival_dispatches_recursively_before_daily_encounter_work() {
     world.avail_races().get_mut(utwig).growth_err_term = 0;
     dispatch_event(&mut world, &mut services, HYPERSPACE_ENCOUNTER_EVENT as u8);
     assert_eq!(world.story_state(StoryKey::UTWIG_SUPOX_MISSION), 2);
-    assert_eq!(world.avail_races_ref().get(supox).actual_strength, 100);
-    assert_eq!(world.avail_races_ref().get(utwig).actual_strength, 99);
+    assert_eq!(world.avail_races_ref().get(supox).actual_strength, 200);
+    assert_eq!(world.avail_races_ref().get(utwig).actual_strength, 199);
     assert_eq!(world.avail_races_ref().get(utwig).days_left, 1);
     assert_eq!(scheduled(&world).len(), 2);
     assert_eq!(scheduled(&world)[0].3, HYPERSPACE_ENCOUNTER_EVENT as u8);

@@ -1,6 +1,5 @@
 //! Script glue, ported from commglue.c (GPL-2.0-or-later).
 
-#[cfg(not(test))]
 use crate::comm::Comm;
 
 use crate::c_bindings::global_state::NUMBER_SPEECH_DESC;
@@ -54,7 +53,6 @@ unsafe fn number_phrases(
     }
 }
 
-#[cfg(not(test))]
 pub(crate) mod runtime {
     use super::*;
     use crate::engine::StoryKey;

@@ -13,16 +13,13 @@ impl<H> AllianceApi<H> for LiveScript<'_, '_, H> {
         start_sphere_tracking(self.cx.borrow_mut().world, race);
     }
     fn event(&mut self, kind: i32, month: u16, day: u16, year: u16, selector: u8) {
-        // SAFETY: the borrowed World owns the event queue and remains live throughout insertion.
-        unsafe {
-            crate::time::clock_abi::live::add_event(
-                self.cx.borrow_mut().world,
-                kind as u32,
-                month,
-                day,
-                year,
-                selector,
-            );
-        }
+        crate::time::clock_abi::add_event(
+            &mut self.cx.borrow_mut(),
+            kind as u32,
+            month,
+            day,
+            year,
+            selector,
+        );
     }
 }

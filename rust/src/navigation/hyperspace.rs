@@ -42,10 +42,6 @@ pub(crate) mod live {
             .unwrap_or_else(|| panic!("fuel debit requires the status font"));
         crate::ui::sis::delta_sis_gauges(cx.kernel, cx.world, 0, amount, 0);
     }
-
-    pub(crate) unsafe fn screen_geometry() -> super::super::hyper_units::Geometry {
-        super::super::hyper_units::Geometry::new((ScreenWidth, ScreenHeight))
-    }
 }
 
 pub fn move_sis(

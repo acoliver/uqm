@@ -44,9 +44,6 @@ impl<H> EncounterApi<H> for LiveScript<'_, '_, H> {
         );
     }
     fn advance_ilwrath(&mut self) {
-        // SAFETY: the borrowed World owns the event queue used by this game-thread callback.
-        unsafe {
-            crate::time::clock_abi::live::add_event(self.cx.borrow_mut().world, 1, 0, 0, 0, 12);
-        }
+        crate::time::clock_abi::add_event(&mut self.cx.borrow_mut(), 1, 0, 0, 0, 12);
     }
 }
