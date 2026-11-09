@@ -362,7 +362,7 @@ fn saved_location_names_use_normal_space_without_mutating_the_campaign() {
             super::super::starmap::naming::cluster_name(
                 cx.kernel,
                 star,
-                crate::navigation::abi::STAR_NUMBER_BASE as usize,
+                crate::starbase::ids::STAR_NUMBER_BASE as usize,
             )
         );
         assert_eq!(cx.world.story_state(StoryKey::ARILOU_SPACE_SIDE), 2);

@@ -193,7 +193,7 @@ impl Search<'_> {
                 super::super::starmap::naming::cluster_name(
                     cx.kernel,
                     star,
-                    crate::navigation::abi::STAR_NUMBER_BASE as usize,
+                    crate::starbase::ids::STAR_NUMBER_BASE as usize,
                 )
             },
         );
@@ -210,7 +210,7 @@ impl Search<'_> {
                 super::super::starmap::naming::cluster_name(
                     cx.kernel,
                     star,
-                    crate::navigation::abi::STAR_NUMBER_BASE as usize,
+                    crate::starbase::ids::STAR_NUMBER_BASE as usize,
                 ),
                 -1,
                 -1,

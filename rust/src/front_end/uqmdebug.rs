@@ -41,6 +41,7 @@ mod runtime {
     use super::*;
     use crate::engine::{observe::Io, world::planet::*, World};
     use crate::planets::{solar_coords::star_seed, solarsys::site::dispatch::invoke};
+    use crate::starbase::ids::STAR_NUMBER_BASE;
 
     use crate::planets::tables::{PLANET_ARRAY as planet_array, STARMAP_ARRAY as starmap_array};
     use libc::FILE;

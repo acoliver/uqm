@@ -100,7 +100,7 @@ pub(crate) mod naming {
             cluster_name(
                 kernel,
                 star,
-                crate::navigation::abi::STAR_NUMBER_BASE as usize,
+                crate::starbase::ids::STAR_NUMBER_BASE as usize,
             ),
             star.star_pt,
         ))

@@ -160,7 +160,7 @@ impl StarMap {
                 super::starmap::naming::cluster_name(
                     kernel,
                     &world.catalog()[id.0],
-                    crate::navigation::abi::STAR_NUMBER_BASE as usize,
+                    crate::starbase::ids::STAR_NUMBER_BASE as usize,
                 )
             },
         );
