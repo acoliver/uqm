@@ -168,10 +168,10 @@ pub fn check(h: &mut Harness) {
         let system = &raw mut *h.state;
 
         for activity in [0, CHECK_ABORT, CHECK_LOAD, CHECK_ABORT | CHECK_LOAD] {
-            uqm_rust::engine::World::current().write(|world| world.set_activity(activity));
-            c_api::set_encounter_group(17);
             uqm_rust::engine::World::current().write(|world| {
-                (world).set_story_state(uqm_rust::engine::StoryKey::GLOBAL_FLAGS_AND_DATA, 0)
+                world.set_activity(activity);
+                world.encounter_group = 17;
+                world.set_story_state(uqm_rust::engine::StoryKey::GLOBAL_FLAGS_AND_DATA, 0);
             });
             assert!(crate::invoke_generation(&mut *system, |view, host| {
                 GENERATE_SOL_FUNCTIONS.generate_orbital(
