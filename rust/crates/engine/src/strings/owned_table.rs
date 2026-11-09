@@ -29,6 +29,17 @@ pub struct TextEntry {
     index: usize,
 }
 impl TextEntry {
+    pub fn index(&self) -> usize {
+        self.index
+    }
+
+    pub fn next_entry(&self) -> Self {
+        Self {
+            table: self.table.clone(),
+            index: (self.index + 1) % self.table.0.entries.len(),
+        }
+    }
+
     pub fn record(&self) -> &StringTableEntry {
         &self.table.0.entries[self.index]
     }

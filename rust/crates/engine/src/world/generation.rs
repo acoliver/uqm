@@ -1,5 +1,7 @@
 //! Short-lived access to the engine records used by system generators.
 
+pub mod report;
+
 use super::planet::{PlanetDesc, PlanetFrame, PlanetInfo, SystemInfo};
 use crate::graphics::native_abi::{FRAME, POINT};
 use crate::math::RandomContext;
