@@ -279,3 +279,101 @@ fn thraddash_arrival_runs_the_immediate_ilwrath_callback_before_returning() {
     }
     assert!(scheduled(&world).is_empty());
 }
+
+#[test]
+fn pkunk_departure_pause_and_absorption_keep_their_event_order() {
+    let mut world = world();
+    populate_fleets(&mut world);
+    let pkunk = world.avail_races_ref().at(PKUNK_SHIP as usize).unwrap();
+    world.avail_races().get_mut(pkunk).actual_strength = 100;
+    world.avail_races().get_mut(pkunk).days_left = 10;
+    let mut random = || panic!("Pkunk event RNG");
+    let mut services = services(&mut random);
+    dispatch_event(&mut world, &mut services, ADVANCE_PKUNK_MISSION as u8);
+    let fleets = world.avail_races_ref();
+    let fleet = fleets.get(pkunk);
+    assert_eq!(
+        (
+            fleet.dest_loc.x,
+            fleet.dest_loc.y,
+            fleet.days_left,
+            fleet.func_index
+        ),
+        (4970, 400, 172, ADVANCE_PKUNK_MISSION as u8)
+    );
+    assert_eq!(world.story_state(StoryKey::PKUNK_MISSION), 1);
+    assert_eq!(world.story_state(StoryKey::PKUNK_ON_THE_MOVE), 1);
+    world.set_story_state(StoryKey::PKUNK_MISSION, 2);
+    world.avail_races().get_mut(pkunk).days_left = 0;
+    world.avail_races().get_mut(pkunk).loc = POINT { x: 502, y: 401 };
+    dispatch_event(&mut world, &mut services, ADVANCE_PKUNK_MISSION as u8);
+    assert_eq!(world.story_state(StoryKey::PKUNK_MISSION), 2);
+    assert_eq!(world.story_state(StoryKey::PKUNK_ON_THE_MOVE), 0);
+    assert_eq!(
+        scheduled(&world),
+        [(2155, 5, 17, ADVANCE_PKUNK_MISSION as u8)]
+    );
+    world.set_story_state(StoryKey::PKUNK_MISSION, 3);
+    dispatch_event(&mut world, &mut services, ADVANCE_PKUNK_MISSION as u8);
+    assert_eq!(world.story_state(StoryKey::PKUNK_MISSION), 4);
+    assert_eq!(world.story_state(StoryKey::YEHAT_ABSORBED_PKUNK), 1);
+    assert_eq!(world.avail_races_ref().get(pkunk).actual_strength, 0);
+    assert_eq!(
+        world.avail_races_ref().get(pkunk).allied_state,
+        DEAD_GUY as u16
+    );
+    assert_eq!(scheduled(&world).len(), 1);
+}
+
+#[test]
+fn mycon_arrival_schedules_losses_before_the_return_destination() {
+    let mut world = world();
+    populate_fleets(&mut world);
+    let mycon = world.avail_races_ref().at(MYCON_SHIP as usize).unwrap();
+    world.avail_races().get_mut(mycon).actual_strength = 100;
+    let mut random = || panic!("Mycon event RNG");
+    let mut services = services(&mut random);
+    dispatch_event(&mut world, &mut services, ADVANCE_MYCON_MISSION as u8);
+    let fleets = world.avail_races_ref();
+    let fleet = fleets.get(mycon);
+    assert_eq!(
+        (
+            fleet.dest_loc.x,
+            fleet.dest_loc.y,
+            fleet.days_left,
+            fleet.func_index
+        ),
+        (6858, 577, 30, ADVANCE_MYCON_MISSION as u8)
+    );
+    world.avail_races().get_mut(mycon).loc = POINT { x: 6858, y: 577 };
+    dispatch_event(&mut world, &mut services, ADVANCE_MYCON_MISSION as u8);
+    assert_eq!(
+        scheduled(&world),
+        [(2155, 3, 3, ADVANCE_MYCON_MISSION as u8)]
+    );
+    let fleets = world.avail_races_ref();
+    let fleet = fleets.get(mycon);
+    assert_eq!(
+        (
+            fleet.growth as i8,
+            fleet.growth_fract,
+            fleet.growth_err_term
+        ),
+        (-3, 146, 127)
+    );
+    dispatch_event(&mut world, &mut services, ADVANCE_MYCON_MISSION as u8);
+    let fleets = world.avail_races_ref();
+    let fleet = fleets.get(mycon);
+    assert_eq!(
+        (
+            fleet.dest_loc.x,
+            fleet.dest_loc.y,
+            fleet.days_left,
+            fleet.func_index
+        ),
+        (6392, 2200, 30, u8::MAX)
+    );
+    assert_eq!((fleet.growth, fleet.growth_fract), (0, 0));
+    assert_eq!(world.story_state(StoryKey::MYCON_KNOW_AMBUSH), 1);
+    assert_eq!(scheduled(&world).len(), 1);
+}
