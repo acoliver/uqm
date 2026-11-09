@@ -40,7 +40,7 @@ pub struct UniverseRecurseArg<'a, T> {
 mod runtime {
     use super::*;
     use crate::engine::{observe::Io, world::planet::*, World};
-    use crate::planets::solarsys::site::dispatch::invoke;
+    use crate::planets::{solar_coords::star_seed, solarsys::site::dispatch::invoke};
 
     use crate::planets::tables::{PLANET_ARRAY as planet_array, STARMAP_ARRAY as starmap_array};
     use libc::FILE;
@@ -362,7 +362,7 @@ mod runtime {
             panic!("debug traversal star belongs to the catalog");
         };
         let mut solar = SolarSystem::new(cx.world, id);
-        solar.sys.rng.reseed(GetRandomSeedForStar(star));
+        solar.sys.rng.reseed(star_seed((*star).star_pt));
         solar.sys.sun.rand_seed = solar.sys.rng.next_random();
         solar.sys.sun.data_index = (((*star).Type as u32
             & ((0xff << STAR_TYPE_SHIFT) & !(0xff << STAR_COLOR_SHIFT)))

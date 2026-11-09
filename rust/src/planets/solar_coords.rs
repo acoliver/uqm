@@ -1,6 +1,10 @@
 //! Integer coordinate transforms used by interplanetary flight.
 use crate::c_bindings::global_state::POINT;
 
+pub(crate) fn star_seed(point: POINT) -> u32 {
+    (u32::from(point.y as u16) << 16) | u32::from(point.x as u16)
+}
+
 pub(crate) fn to_display(point: POINT, radius: i16, width: i32, height: i32) -> POINT {
     let scale = ((width >> 1) - 8) >> 1;
     POINT {
@@ -36,6 +40,18 @@ pub(crate) fn outer_location(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn star_seed_preserves_signed_coordinate_words() {
+        for (x, y, expected) in [
+            (-2, 0x1234, 0x1234_fffe),
+            (0x1234, -2, 0xfffe_1234),
+            (i16::MIN, i16::MAX, 0x7fff_8000),
+            (0, 0, 0),
+        ] {
+            assert_eq!(star_seed(POINT { x, y }), expected);
+        }
+    }
 
     #[test]
     fn copied_outer_geometry_keeps_its_screen_zoom_and_body() {

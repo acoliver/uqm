@@ -14,7 +14,7 @@ use crate::graphics::frame_abi::ClearDrawable;
 
 use crate::planets::render::c_api::NativeOvalGfx;
 
-use crate::planets::solarsys::GetRandomSeedForStar;
+use crate::planets::solar_coords::star_seed;
 
 use crate::graphics::cmap_abi::GetColorMapAddress;
 
@@ -312,8 +312,8 @@ pub(super) unsafe fn create_star_background(solar: &mut SolarSystem) -> *mut c::
         a: 255,
     });
     ClearDrawable();
-    solar.sys.rng.reseed(GetRandomSeedForStar(
-        (**WorldOwner::current()).star_pointer().cast(),
+    solar.sys.rng.reseed(star_seed(
+        (*(**WorldOwner::current()).star_pointer()).star_pt,
     ));
     let (width, height) = sis_dimensions();
     let mut stamp = c::STAMP {

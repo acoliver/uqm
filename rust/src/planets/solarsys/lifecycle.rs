@@ -182,10 +182,7 @@ pub(super) unsafe fn load_solar_sys(
     solar: &mut SolarSystem,
 ) -> Option<Body> {
     let star = cx.world.catalog()[solar.star().0];
-    solar
-        .sys
-        .rng
-        .reseed(GetRandomSeedForStar(ptr::from_ref(&star).cast()));
+    solar.sys.rng.reseed(crate::planets::solar_coords::star_seed(star.star_pt));
     let sun_type = (star.star_type & 0x18) >> 3;
     SUN_FRAME = SetAbsFrameIndex(SUN_FRAME.cast(), u16::from(sun_type)).cast();
     solar.sys.sun.rand_seed = solar.sys.rng.next_random();
