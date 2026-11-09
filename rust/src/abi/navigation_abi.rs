@@ -1869,7 +1869,6 @@ pub const LANDER_RETURNS: _bindgen_ty_12 = 11;
 pub const LANDER_DESTROYED: _bindgen_ty_12 = 12;
 pub type _bindgen_ty_12 = ::std::os::raw::c_uint;
 pub type STAR_DESC = star_desc;
-pub type SOLARSYS_STATE = solarsys_state;
 pub const FlashState_FlashState_fadeIn: FlashState = 0;
 pub const FlashState_FlashState_on: FlashState = 1;
 pub const FlashState_FlashState_fadeOut: FlashState = 2;
@@ -2120,28 +2119,11 @@ pub struct star_desc {
     pub Prefix: BYTE,
     pub Postfix: BYTE,
 }
-pub use crate::ships::native::abi::solarsys_state;
-extern "C" {
-    pub static mut pSolarSysState: *mut SOLARSYS_STATE;
-}
-extern "C" {
-    pub static mut SysGenRNG: *mut RandomContext;
-}
 
-#[cfg(not(test))]
-pub use crate::planets::solarsys::playerInSolarSystem;
 
-#[cfg(not(test))]
-pub use crate::planets::solarsys::playerInPlanetOrbit;
 
-#[cfg(not(test))]
-pub use crate::planets::solarsys::playerInInnerSystem;
 
-#[cfg(not(test))]
-pub use crate::planets::solarsys::planetIndex;
 
-#[cfg(not(test))]
-pub use crate::planets::solarsys::matchWorld;
 
 #[cfg(not(test))]
 pub use crate::planets::solarsys::GetRandomSeedForStar;
@@ -2152,11 +2134,7 @@ pub use crate::planets::solarsys::locationToDisplay;
 #[cfg(not(test))]
 pub use crate::planets::solarsys::displayToLocation;
 
-#[cfg(not(test))]
-pub use crate::planets::solarsys::planetOuterLocation;
 
-#[cfg(not(test))]
-pub use crate::planets::solarsys::lifecycle::SaveSolarSysLocation;
 pub const VIEW_STATE_VIEW_STABLE: VIEW_STATE = 0;
 pub const VIEW_STATE_VIEW_SCROLL: VIEW_STATE = 1;
 pub const VIEW_STATE_VIEW_CHANGE: VIEW_STATE = 2;
@@ -2483,9 +2461,6 @@ pub use crate::engine::world::fleet::set_race_allied;
 
 #[cfg(not(test))]
 pub use crate::engine::world::fleet::start_sphere_tracking;
-
-#[cfg(not(test))]
-pub use crate::state::c_api::planets::uninit_planet_info;
 
 #[cfg(not(test))]
 pub use crate::navigation::groups::live::init_group_info;

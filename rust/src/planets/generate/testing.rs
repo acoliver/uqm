@@ -6,8 +6,6 @@ use crate::engine::world::generation::{Body, ReportDisposition, SolarSys};
 use crate::engine::world::planet::PlanetInfo;
 use crate::engine::StoryKey;
 use crate::planets::tables::PLANET_ARRAY;
-use crate::ships::native::abi::SOLARSYS_STATE;
-use std::ptr::NonNull;
 
 mod contacts;
 mod npcs;
@@ -113,25 +111,12 @@ impl<S, H, R, L: super::home_contact::LanderTakeoff, F> super::home_contact::Lan
 }
 
 pub fn with_empty<R>(run: impl FnOnce(&mut SolarSys<'_>) -> R) -> R {
-    // SAFETY: the ABI record contains only zero-valid scalar and pointer fields.
-    let mut state: SOLARSYS_STATE = unsafe { std::mem::zeroed() };
-    let mut rng = crate::math::RandomContext::with_seed(1);
-    // SAFETY: this scope owns both records until the generation view is dropped.
-    let mut system = unsafe {
-        SolarSys::from_records(
-            crate::engine::world::generation::GenerationRecords {
-                sun: NonNull::from(&mut state.SunDesc[0]),
-                planets: NonNull::from(&mut state.PlanetDesc),
-                moons: NonNull::from(&mut state.MoonDesc),
-                info: NonNull::from(&mut state.SysInfo),
-                scene: NonNull::from(&mut state.PlanetSideFrame[1]),
-            },
-            NonNull::from(&mut rng),
-            &PLANET_ARRAY.0,
-            0,
-            0,
-        )
-    };
+    let mut system = SolarSys::new(
+        &PLANET_ARRAY.0,
+        0,
+        0,
+        crate::math::RandomContext::with_seed(1),
+    );
     run(&mut system)
 }
 
@@ -149,36 +134,17 @@ pub fn with_orbit<R>(
     body: Body,
     run: impl FnOnce(&mut SolarSys<'_>) -> R,
 ) -> R {
-    // SAFETY: the ABI record contains only zero-valid scalar and pointer fields.
-    let mut state: SOLARSYS_STATE = unsafe { std::mem::zeroed() };
-    state.SysInfo = *orbit.sys_info;
-    state.SunDesc[0].data_index = orbit.star.size;
-    match body {
-        Body::Planet(p) => state.PlanetDesc[usize::from(p)] = *orbit.world,
-        Body::Moon { planet, moon } => {
-            state.MoonDesc[usize::from(moon)] = *orbit.world;
-            state.PlanetDesc[usize::from(planet)].radius =
-                orbit.site.parent_radius.unwrap_or(orbit.world.radius);
-        }
+    let mut system = SolarSys::new(orbit.plan_data, orbit.star.star_type, 0, orbit.rng.clone());
+    system.info = *orbit.sys_info;
+    system.sun.data_index = orbit.star.size;
+    *system.descriptor_mut(body) = *orbit.world;
+    if let Body::Moon { planet, .. } = body {
+        system.planets[usize::from(planet)].radius =
+            orbit.site.parent_radius.unwrap_or(orbit.world.radius);
     }
-    // SAFETY: the test owns the temporary system and retains the supplied random stream.
-    let mut system = unsafe {
-        SolarSys::from_records(
-            crate::engine::world::generation::GenerationRecords {
-                sun: NonNull::from(&mut state.SunDesc[0]),
-                planets: NonNull::from(&mut state.PlanetDesc),
-                moons: NonNull::from(&mut state.MoonDesc),
-                info: NonNull::from(&mut state.SysInfo),
-                scene: NonNull::from(&mut state.PlanetSideFrame[1]),
-            },
-            NonNull::from(&mut *orbit.rng),
-            orbit.plan_data,
-            orbit.star.star_type,
-            0,
-        )
-    };
     let result = run(&mut system);
-    *orbit.sys_info = *system.system_info();
+    *orbit.sys_info = system.info;
+    *orbit.rng = system.rng;
     result
 }
 

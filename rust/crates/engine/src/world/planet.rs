@@ -81,7 +81,7 @@ pub struct SystemInfo {
 }
 
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Default)]
 pub struct PlanetDescriptor {
     pub rand_seed: DWORD,
     pub data_index: BYTE,

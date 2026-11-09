@@ -42,7 +42,10 @@ mod production {
     use super::super::scan_frames::{
         mineral_scan_dot, mineral_surface_sprite, ScanFrameError, BIO_SCAN_DOT, ENERGY_SCAN_DOT,
     };
-    use crate::c_bindings::{global_state::SOLARSYS_STATE, solar_system};
+    use crate::engine::world::{
+        generation::{Body, SolarSys},
+        StarId,
+    };
 
     use crate::engine::battle::{views::FrameSelection as Frame, Cx, ElementId};
 
@@ -55,29 +58,31 @@ mod production {
     pub unsafe fn generate(
         game: &std::cell::RefCell<Cx<'_>>,
         io: &std::cell::RefCell<crate::engine::observe::Io<'_>>,
+        system: &mut SolarSys<'_>,
+        star: StarId,
+        body: Body,
         report_context: crate::planets::report::typography::ReportContext,
     ) {
-        let solar = solar_system::current();
-        if solar.is_null()
-            || (*solar).pOrbitalDesc.is_null()
-            || game.borrow().kernel.misc_data_frame.is_null()
-        {
+        if game.borrow().kernel.misc_data_frame.is_null() {
             return;
         }
-        let persistence =
-            ScanPersistence::from_masks((*solar).SysInfo.planet_info.scan_retrieve_mask);
-        // Orbit-scan rendering only builds the display list; the returned
-        // biological initial frame is a deterministic placeholder that the scan never
-        // reads, so it must not consume the gameplay random stream.
-        let Ok(mut generator) = CffiSurfaceGenerator::for_orbit_scan(
+        let persistence = ScanPersistence::from_masks(system.info.planet_info.scan_retrieve_mask);
+        let frames = system.frames.each_ref().map(|frame| {
+            frame
+                .as_ref()
+                .map_or(std::ptr::null_mut(), |frame| match frame.lease().frame(0) {
+                    Some(frame) => frame.cast(),
+                    None => panic!("loaded scene has no first frame"),
+                })
+        });
+        let mut generator = CffiSurfaceGenerator::for_orbit_scan(
             game,
             io,
-            solar.cast(),
-            (*solar).pOrbitalDesc.cast(),
+            system,
+            star,
+            body,
             Some(report_context),
-        ) else {
-            return;
-        };
+        );
 
         for scan in [ScanType::Biological, ScanType::Energy, ScanType::Mineral] {
             let Ok(count) = generator.node_count(scan) else {
@@ -98,7 +103,7 @@ mod production {
                     let Some(element) = cx.alloc_element() else {
                         continue;
                     };
-                    if initialize_element(&mut cx, element, solar, scan, raw_node, generated)
+                    if initialize_element(&mut cx, element, &frames, scan, raw_node, generated)
                         .is_err()
                     {
                         cx.dispose(element);
@@ -147,7 +152,7 @@ mod production {
     unsafe fn initialize_element(
         cx: &mut Cx<'_>,
         element: ElementId,
-        solar: *mut SOLARSYS_STATE,
+        frames: &[*mut crate::engine::graphics::native_abi::FRAME_DESC; 6],
         scan: ScanType,
         raw_node: u8,
         generated: super::super::generation::GeneratedNode,
@@ -202,7 +207,7 @@ mod production {
                 );
                 cx.element_mut(element).turn = 0x44;
                 cx.element_mut(element).mass = MAX_SCROUNGED;
-                stamp.frame = (*solar).PlanetSideFrame[1].cast();
+                stamp.frame = frames[1].cast();
             }
             super::super::generation::GeneratedNodeKind::CannedBiological { value } => {
                 cx.set_frame(
@@ -217,7 +222,7 @@ mod production {
                 );
                 cx.element_mut(element).mass = value as u8;
                 cx.element_mut(element).hits = 0;
-                stamp.frame = (*solar).PlanetSideFrame[0].cast();
+                stamp.frame = frames[0].cast();
             }
             super::super::generation::GeneratedNodeKind::Biological {
                 creature,
@@ -237,7 +242,7 @@ mod production {
                 cx.element_mut(element).turn = 0x44;
                 cx.element_mut(element).mass = creature.index();
                 cx.element_mut(element).hits = u16::from(hit_points);
-                stamp.frame = (*solar).PlanetSideFrame[3].cast();
+                stamp.frame = frames[3].cast();
             }
         }
         cx.set_primitive_stamp(element, stamp);
@@ -254,6 +259,9 @@ mod production {
 pub unsafe fn generate_planet_side(
     game: &std::cell::RefCell<crate::engine::battle::Cx<'_>>,
     io: &std::cell::RefCell<crate::engine::observe::Io<'_>>,
+    system: &mut crate::engine::world::generation::SolarSys<'_>,
+    star: crate::engine::world::StarId,
+    body: crate::engine::world::generation::Body,
     reports: crate::planets::report::typography::ReportContext,
 ) {
     {
@@ -262,7 +270,7 @@ pub unsafe fn generate_planet_side(
         crate::battle::process_native::init_display_list(&mut cx, unscaled);
     }
     // SAFETY: the caller retains the current system and display-list resources.
-    unsafe { production::generate(game, io, reports) };
+    unsafe { production::generate(game, io, system, star, body, reports) };
 }
 
 #[cfg(test)]

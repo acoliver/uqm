@@ -4,18 +4,23 @@ use super::*;
 use crate::comm::dispatch::{ship, CPoint};
 use crate::engine::world::queues::IpGroup as IP_GROUP;
 use crate::engine::StoryKey;
-use crate::navigation::groups::live::{self as group_storage, build_groups, get_group_info};
+use crate::navigation::groups::live::{
+    self as group_storage, build_groups, get_group_info, initialize_solar_groups,
+};
 use crate::planets::c_api::*;
 use crate::planets::generate::default::Npcs;
 use crate::planets::generate::special::FleetGroups;
-use crate::planets::solarsys::{planetOuterLocation, XFormIPLoc};
+
 impl Npcs for Site<'_, '_, '_> {
     fn init_ip_groups(&mut self) -> bool {
         let mut game = self.game.borrow_mut();
+        let solar_frame = *game.solar_geometry();
         let world = &mut *game.world;
 
         // SAFETY: the NPC hook owns the world and its initialized group files.
-        unsafe { get_group_info(world, world.data.game.battle_group_ref, GROUP_INIT_IP) != 0 }
+        unsafe {
+            initialize_solar_groups(world, world.data.game.battle_group_ref, &solar_frame) != 0
+        }
     }
     fn clear_battle_group_ref(&mut self) {
         let mut game = self.game.borrow_mut();
@@ -25,10 +30,11 @@ impl Npcs for Site<'_, '_, '_> {
     }
     fn build_groups(&mut self) {
         let mut game = self.game.borrow_mut();
+        let solar_frame = *game.solar_geometry();
         let world = &mut *game.world;
 
         // SAFETY: the NPC hook owns the world and its initialized group files.
-        unsafe { build_groups(world) };
+        unsafe { build_groups(world, &solar_frame) };
     }
     fn load_ip_groups(&mut self) {
         let mut game = self.game.borrow_mut();
@@ -200,14 +206,15 @@ impl crate::planets::generate::sam::GuardSite for Site<'_, '_, '_> {
     }
     fn init_ip_groups(&mut self, reference: u32) {
         let mut game = self.game.borrow_mut();
+        let solar_frame = *game.solar_geometry();
         let world = &mut *game.world;
 
         // SAFETY: the reference was stored in this world's group files.
-        unsafe { get_group_info(world, reference, GROUP_INIT_IP) };
+        unsafe { initialize_solar_groups(world, reference, &solar_frame) };
     }
     fn planet_outer_location(&self, planet: u16) -> crate::engine::graphics::native_abi::POINT {
-        // SAFETY: the planet index belongs to the current solar system.
-        unsafe { planetOuterLocation(planet) }
+        let game = self.game.borrow();
+        crate::planets::solar_coords::outer_location(game.solar_geometry(), planet)
     }
     fn for_each_ip_group(&mut self, visit: &mut dyn FnMut(&mut IP_GROUP)) {
         Npcs::for_each_ip_group(self, visit);
@@ -227,18 +234,23 @@ impl crate::planets::generate::sam::GuardSite for Site<'_, '_, '_> {
         location: crate::engine::graphics::native_abi::POINT,
     ) {
         let mut game = self.game.borrow_mut();
+        let solar_frame = *game.solar_geometry();
         let world = &mut *game.world;
 
         world.data.game.ip_location = CPoint {
             x: location.x,
             y: location.y,
         };
-        // SAFETY: the fields are disjoint and the coordinate transform does not reenter World.
-        unsafe {
-            let input = &raw mut world.data.game.ip_location;
-            let output = &raw mut world.data.game.ship_stamp.origin;
-            XFormIPLoc(input.cast(), output.cast(), 1);
-        }
+        let point = crate::planets::solar_coords::to_display(
+            location,
+            solar_frame.zoom_radius,
+            solar_frame.screen.0 - 78,
+            solar_frame.screen.1 - 13,
+        );
+        world.data.game.ship_stamp.origin = CPoint {
+            x: point.x,
+            y: point.y,
+        };
     }
 }
 

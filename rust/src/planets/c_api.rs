@@ -1,7 +1,6 @@
 //! The C functions and globals the default system generator still needs, in
 //! one place. Each goes away when its owner is ported.
 
-use crate::engine::World as WorldOwner;
 mod surface;
 pub use surface::CapturedSurface;
 
@@ -21,23 +20,9 @@ pub use crate::navigation::groups::live::init_group_info;
 
 pub use crate::navigation::groups::live::uninit_group_info;
 
-pub use crate::planets::orbit::live::{load_planet, FreePlanet};
+pub use crate::planets::orbit::live::{free_planet, load_planet};
 
 pub use crate::planets::plangen::live::{generate_planet_surface, SurfaceInputs};
-
-use crate::strings::string_table::GetStringTableCount;
-
-use crate::strings::string_table::SetRelStringTableIndex;
-
-use crate::strings::string_table::ReleaseStringTable;
-
-use crate::strings::string_table::DestroyStringTable;
-
-use crate::graphics::resgfx::LoadGraphicInstance;
-
-pub use crate::strings::sresins::LoadStringTableInstance;
-
-use crate::graphics::pixmap_abi::CaptureDrawable;
 
 use crate::graphics::tfb_draw_abi::TFB_DrawImage_New;
 
@@ -55,10 +40,6 @@ pub use crate::graphics::dcqueue_abi::Uninit_DrawCommandQueue;
 
 pub use crate::graphics::dcqueue_abi::TFB_FlushGraphicsEx;
 
-pub use crate::strings::string_table::CaptureStringTable;
-
-use crate::strings::string_table::SetAbsStringTableIndex;
-
 use crate::navigation::interplanetary::live::notify_others_abi as NotifyOthers;
 
 extern "C" {
@@ -71,7 +52,6 @@ extern "C" {
 }
 
 /// `GROUP_INIT_IP`, `GROUP_SAVE_IP` (`state.h`): `(BYTE)~0`.
-pub(super) const GROUP_INIT_IP: u8 = !0;
 pub(super) const GROUP_SAVE_IP: u8 = !0;
 /// `GROUP_LOAD_IP` is `GROUP_LIST` (`state.h`).
 pub(super) const GROUP_LOAD_IP: u8 = 0;
@@ -102,16 +82,6 @@ pub fn rebel_escort_feasible(world: &crate::engine::World) -> bool {
         crate::engine::world::fleet::escort_feasibility(world, u16::from(ship::YEHAT_REBEL_SHIP))
             != 0
     }
-}
-
-/// The beast report has no mask; Site retains its typography.
-///
-/// # Safety
-/// `system` is the live system, with no outstanding references into it.
-pub unsafe fn load_beast_scene(system: *mut crate::c_bindings::global_state::SOLARSYS_STATE) {
-    (*system).PlanetSideFrame[1] = std::ptr::null_mut();
-    (*system).SysInfo.planet_info.discovery_string =
-        CaptureStringTable(LoadStringTableInstance(c"text.vuxbeast".as_ptr())).cast();
 }
 
 /// `GROUPS_RANDOM`.
@@ -191,72 +161,6 @@ pub fn built_ship_count(world: &crate::engine::World) -> u16 {
     world.npc_built_ships_ref().count() as u16
 }
 
-/// The generator index of every catalog entry before the selected star.
-pub fn star_indexes_before_current(world: &WorldOwner) -> Vec<u8> {
-    let before = world.current_star.expect("current star is selected").0;
-    world.catalog()[..before]
-        .iter()
-        .map(|star| star.index)
-        .collect()
-}
-
-/// Load the mask `graphics` frame and the report
-/// `strtab`, with the report started at `first_report` (the string-table
-/// index call only when it is not the first).
-///
-/// # Safety
-/// `system` must be the live solar system state, on the game thread; both
-/// resource names must be NUL terminated.
-pub unsafe fn load_lander_scene(
-    system: *mut crate::c_bindings::global_state::SOLARSYS_STATE,
-    graphics: &std::ffi::CStr,
-    strtab: &std::ffi::CStr,
-    first_report: u16,
-) {
-    (*system).PlanetSideFrame[1] =
-        CaptureDrawable((LoadGraphicInstance(graphics.as_ptr())).cast()).cast();
-    let table = CaptureStringTable(LoadStringTableInstance(strtab.as_ptr()));
-    (*system).SysInfo.planet_info.discovery_string = if first_report == 0 {
-        table.cast()
-    } else {
-        SetAbsStringTableIndex(table, first_report).cast()
-    };
-}
-
-/// Load the `graphics.ruins` mask and the Androsynth
-/// ruins report table started at report `visits`. When every report was
-/// already given the table is destroyed and `DiscoveryString` cleared.
-///
-/// # Safety
-/// `system` must be the live solar system state, on the game thread.
-pub unsafe fn load_ruins_story(
-    system: *mut crate::c_bindings::global_state::SOLARSYS_STATE,
-    visits: u32,
-) {
-    (*system).PlanetSideFrame[1] =
-        CaptureDrawable((LoadGraphicInstance(c"graphics.ruins".as_ptr())).cast()).cast();
-    let table = CaptureStringTable(LoadStringTableInstance(c"text.androsynthruins".as_ptr()));
-    (*system).SysInfo.planet_info.discovery_string = table.cast();
-    if visits >= u32::from(GetStringTableCount(table)) {
-        DestroyStringTable(ReleaseStringTable(table));
-        (*system).SysInfo.planet_info.discovery_string = std::ptr::null_mut();
-    } else {
-        let offset = i16::try_from(visits).expect("a visit count is at most sixteen");
-        (*system).SysInfo.planet_info.discovery_string =
-            SetRelStringTableIndex(table, offset).cast();
-    }
-}
-
-/// Load the `text.chmmrbase` report table as the
-/// `DiscoveryString` the starbase report presents.
-///
-/// # Safety
-/// `system` must be the live solar system state, on the game thread.
-pub unsafe fn load_starbase_report(system: *mut crate::c_bindings::global_state::SOLARSYS_STATE) {
-    (*system).SysInfo.planet_info.discovery_string =
-        CaptureStringTable(LoadStringTableInstance(c"text.chmmrbase".as_ptr())).cast();
-}
-
 /// `GetHeadLink (&GLOBAL (npc_built_ship_q)) != 0`.
 ///
 /// # Safety
@@ -321,13 +225,4 @@ pub unsafe fn begin_urquan_encounter(world: &mut crate::engine::World, loc: (i16
 pub unsafe fn fade_to_black_for_two_seconds() {
     let interval = i16::try_from(ONE_SECOND * 2).expect("two seconds fit a SIZE");
     uqm_sleep_thread_until(FadeScreen(FADE_ALL_TO_BLACK, interval));
-}
-
-/// `CurStarDescPtr->star_pt`.
-///
-/// # Safety
-/// `CurStarDescPtr` must point at a valid star description.
-pub unsafe fn current_star_point() -> (i16, i16) {
-    let point = (*(**WorldOwner::current()).star_pointer()).star_pt;
-    (point.x, point.y)
 }

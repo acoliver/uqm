@@ -4,7 +4,6 @@
 //! inputs and must leave the descriptions, node outputs and `SysGenRNG`
 //! position captured from the C originals in the checked-in fixture.
 
-use uqm_rust::engine::world::planet::PlanetDesc;
 use uqm_rust::planets::generate::andro::Generator as generateAndrosynthFunctions;
 use uqm_rust::planets::generate::burv::Generator as generateBurvixeseFunctions;
 use uqm_rust::planets::generate::chmmr::Generator as generateChmmrFunctions;
@@ -27,7 +26,7 @@ use uqm_rust::planets::generate::vault::Generator as generateVaultFunctions;
 use uqm_rust::planets::generate::wreck::Generator as generateWreckFunctions;
 use uqm_rust::planets::generate::yehat::Generator as generateYehatFunctions;
 use uqm_rust::planets::generate::zoq::Generator as generateZoqFotPikFunctions;
-use uqm_rust::planets::solarsys::P_SOLAR_SYS_STATE as pSolarSysState;
+use uqm_rust::planets::solar_system::SolarSystem;
 mod late_abi;
 mod late_gen;
 mod mycon;
@@ -48,7 +47,7 @@ use uqm_rust::battle::gendef::{
     AQUA_HELIX_DEFINED, BOMB_DEFINED, EGG_CASE0_DEFINED, MYCON_DEFINED, ORZ_DEFINED,
     SUN_DEVICE_DEFINED, TAALO_PROTECTOR_DEFINED, THRADD_DEFINED, UTWIG_DEFINED,
 };
-use uqm_rust::c_bindings::global_state::SOLARSYS_STATE;
+
 use uqm_rust::math::RandomContext;
 use uqm_rust::planets::generate::special::Body;
 use uqm_rust::planets::generate::SystemGenerator;
@@ -56,14 +55,13 @@ use uqm_rust::state::game_state_keys::set_game_state;
 
 use uqm_rust::state::ffi::rust_init_game_state;
 extern "C" {
-    static mut SysGenRNG: *mut RandomContext;
 
     static mut ScreenWidth: i32;
 
 }
 
 struct Harness {
-    state: Box<SOLARSYS_STATE>,
+    state: Box<SolarSystem>,
     star: Box<[CStarDesc; CATALOG_LEN]>,
     previous_catalog: [CStarDesc; CATALOG_LEN],
     previous_star: Option<uqm_rust::engine::StarId>,
@@ -73,13 +71,10 @@ struct Harness {
 
 impl Harness {
     fn new() -> Self {
-        let mut state: Box<SOLARSYS_STATE> = Box::new(unsafe { std::mem::zeroed() });
         unsafe {
             // `set_game_state` is a no-op until the game state exists.
             uqm_rust::engine::World::current().write(rust_init_game_state);
-            SysGenRNG = uqm_rust::math::new_context();
             ScreenWidth = 320;
-            pSolarSysState = &mut *state;
         }
         let previous_catalog = uqm_rust::engine::World::current().read(|world| *world.catalog());
         let previous_star = uqm_rust::engine::World::current().read(|world| world.current_star);
@@ -87,6 +82,10 @@ impl Harness {
         let mut star = Box::new(unsafe { super::starmap_array });
         // SAFETY: a star record contains only integer fields; zero initializes its fixture values.
         star[0] = unsafe { std::mem::zeroed() };
+        let state = uqm_rust::engine::World::current().write(|world| {
+            world.set_catalog(std::borrow::Cow::Owned(*star));
+            Box::new(SolarSystem::new(world, uqm_rust::engine::StarId(0)))
+        });
         Self {
             state,
             star,
@@ -97,22 +96,34 @@ impl Harness {
     }
 
     fn set_star(&mut self, size: u8, color: u8) {
-        self.state.SunDesc[0].data_index = size;
-        self.state.generator_index = self.star_index;
+        self.state.sys.sun.data_index = size;
         self.star[0].star_type = (color << 5) | 0b101;
         self.star[0].index = self.star_index;
         uqm_rust::engine::World::current().write(|world| {
             world.set_catalog(std::borrow::Cow::Owned(*self.star));
             world.current_star = Some(uqm_rust::engine::StarId(0));
         });
+        let mut next = uqm_rust::engine::world::generation::SolarSys::new(
+            &uqm_rust::planets::tables::PLANET_ARRAY.0,
+            self.star[0].star_type,
+            self.star[0].index,
+            std::mem::replace(&mut self.state.sys.rng, RandomContext::with_seed(12345)),
+        );
+        next.sun = self.state.sys.sun;
+        next.planets = self.state.sys.planets;
+        next.moons = self.state.sys.moons;
+        next.info = self.state.sys.info;
+        next.frames = std::mem::take(&mut self.state.sys.frames);
+        next.report = std::mem::take(&mut self.state.sys.report);
+        self.state.sys = next;
     }
 
-    fn seed(&self, seed: u32) {
-        unsafe { (*SysGenRNG).reseed(seed) };
+    fn seed(&mut self, seed: u32) {
+        self.state.sys.rng.reseed(seed);
     }
 
     fn rng_position(&self) -> u32 {
-        unsafe { (*SysGenRNG).seed() }
+        self.state.sys.rng.seed()
     }
 
     /// The C `generatePlanets` slot: planet table, drawn count, RNG position.
@@ -122,18 +133,18 @@ impl Harness {
         case: (u8, u8, u32),
     ) -> (Vec<Desc>, u8, u32) {
         self.set_star(case.0, case.1);
-        self.state.PlanetDesc = unsafe { std::mem::zeroed() };
-        self.state.SunDesc[0].num_planets = 0;
+        self.state.sys.planets = unsafe { std::mem::zeroed() };
+        self.state.sys.sun.num_planets = 0;
         self.seed(case.2);
 
         assert!(unsafe {
-            crate::invoke_generation(&raw mut *self.state, |system, host| {
+            crate::invoke_generation(&mut self.state, |system, host| {
                 table.generate_planets(system, host)
             })
         });
         (
-            self.state.PlanetDesc.iter().map(desc_of).collect(),
-            self.state.SunDesc[0].num_planets,
+            self.state.sys.planets.iter().map(desc_of).collect(),
+            self.state.sys.sun.num_planets,
             self.rng_position(),
         )
     }
@@ -146,51 +157,36 @@ impl Harness {
         planet_i: usize,
     ) -> (Vec<Desc>, u32) {
         self.set_star(case.0, case.1);
-        self.state.MoonDesc = unsafe { std::mem::zeroed() };
-        self.state.PlanetDesc = unsafe { std::mem::zeroed() };
-        let sun: *mut PlanetDesc = &mut self.state.SunDesc[0];
-        self.state.PlanetDesc[planet_i].prev_desc = sun;
-        self.state.PlanetDesc[planet_i].num_planets = case.3;
+        self.state.sys.moons = unsafe { std::mem::zeroed() };
+        self.state.sys.planets = unsafe { std::mem::zeroed() };
+
+        self.state.sys.planets[planet_i].num_planets = case.3;
         self.seed(case.2);
-        let _planet: *mut PlanetDesc = &mut self.state.PlanetDesc[planet_i];
 
         assert!(unsafe {
-            crate::invoke_generation(&raw mut *self.state, |system, host| {
+            crate::invoke_generation(&mut self.state, |system, host| {
                 table.generate_moons(system, planet_i as u8, host)
             })
         });
         (
-            self.state.MoonDesc.iter().map(desc_of).collect(),
+            self.state.sys.moons.iter().map(desc_of).collect(),
             self.rng_position(),
         )
     }
 
     /// The C `generateEnergy` slot on `body`; the node list it produces.
     fn c_energy(&mut self, table: &dyn SystemGenerator, body: Body, seed: u32) -> String {
-        self.state.PlanetDesc = unsafe { std::mem::zeroed() };
-        self.state.MoonDesc = unsafe { std::mem::zeroed() };
-        self.state.SysInfo = unsafe { std::mem::zeroed() };
-        self.state.SysInfo.planet_info.scan_seed = scan_seeds(seed);
-        let sun: *mut PlanetDesc = &mut self.state.SunDesc[0];
-        let _world: *mut PlanetDesc = match body {
-            Body::Planet(p) => {
-                self.state.PlanetDesc[usize::from(p)].prev_desc = sun;
-                &mut self.state.PlanetDesc[usize::from(p)]
-            }
-            Body::Moon { planet, moon } => {
-                let parent: *mut PlanetDesc = &mut self.state.PlanetDesc[usize::from(planet)];
-                self.state.PlanetDesc[usize::from(planet)].prev_desc = sun;
-                self.state.MoonDesc[usize::from(moon)].prev_desc = parent;
-                &mut self.state.MoonDesc[usize::from(moon)]
-            }
-        };
+        self.state.sys.planets = unsafe { std::mem::zeroed() };
+        self.state.sys.moons = unsafe { std::mem::zeroed() };
+        self.state.sys.info = unsafe { std::mem::zeroed() };
+        self.state.sys.info.planet_info.scan_seed = scan_seeds(seed);
 
         let record = &raw mut *self.state;
         let mut out = String::new();
         self.seed(seed);
         let mut node = fresh_node();
         let count = unsafe {
-            crate::invoke_generation(record, |system, host| {
+            crate::invoke_generation(&mut *record, |system, host| {
                 table.generate_energy(system, body, !0, &mut node, host)
             })
         };
@@ -199,7 +195,7 @@ impl Harness {
             self.seed(seed);
             let mut node = fresh_node();
             let ret = unsafe {
-                crate::invoke_generation(record, |system, host| {
+                crate::invoke_generation(&mut *record, |system, host| {
                     table.generate_energy(system, body, which, &mut node, host)
                 })
             };

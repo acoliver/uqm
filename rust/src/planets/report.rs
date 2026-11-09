@@ -35,12 +35,10 @@ pub(crate) mod live {
         gfx::{Gfx, Point, Rgba, Stamp},
     };
 
-    use crate::strings::{
-        string_table::{GetStringAddress, GetStringLength},
-        unicode::{
-            get_char_from_string as getCharFromString, uni_char_is_graph as UniChar_isGraph,
-            utf8_string_count as utf8StringCount, utf8_string_count_n as utf8StringCountN,
-        },
+    use crate::engine::strings::owned_table::TextEntry;
+    use crate::strings::unicode::{
+        get_char_from_string as getCharFromString, uni_char_is_graph as UniChar_isGraph,
+        utf8_string_count as utf8StringCount, utf8_string_count_n as utf8StringCountN,
     };
     use std::ffi::CString;
 
@@ -250,25 +248,11 @@ pub(crate) mod live {
     }
 
     /// # Safety
-    /// The game thread publishes the active owner for the generator callback.
+    /// The game thread retains its initialized report graphics providers throughout presentation.
     pub unsafe fn discovery_report(
-        system: *mut crate::ships::native::abi::SOLARSYS_STATE,
-        scan: Option<&ContextLease>,
-        typography: &super::typography::ReportTypography,
-    ) {
-        crate::app::bridge::enter(|cx| {
-            let mut observer = cx.kernel.input_runtime().observer();
-            let mut io = Io {
-                observer: &mut *observer,
-            };
-            do_discovery_report(cx, &mut io, system, scan, typography);
-        });
-    }
-
-    pub unsafe fn do_discovery_report(
         cx: &mut Cx<'_>,
         io: &mut Io<'_>,
-        system: *mut crate::ships::native::abi::SOLARSYS_STATE,
+        report: &TextEntry,
         scan: Option<&ContextLease>,
         typography: &super::typography::ReportTypography,
     ) {
@@ -286,10 +270,10 @@ pub(crate) mod live {
                 (owner.lease(), Some(owner))
             }
         };
+        let (text, length) = report.current_label();
         context.with_selected(|| {
-            let (saved, old_font, old_effect, text, length) = cx.with_legacy(|| {
+            let (saved, old_font, old_effect) = cx.with_legacy(|| {
                 let saved = SavedContext::capture(&context, None);
-                let info = std::ptr::addr_of!((*system).SysInfo.planet_info);
                 let old_font = SetContextFont(typography.font.as_raw().cast());
                 let old_effect = SetContextFontEffect(if input.preferences().fonts == 2 {
                     typography
@@ -300,15 +284,9 @@ pub(crate) mod live {
                 } else {
                     std::ptr::null_mut()
                 });
-                (
-                    saved,
-                    old_font,
-                    old_effect,
-                    GetStringAddress((*info).discovery_string.cast()).cast(),
-                    GetStringLength((*info).discovery_string.cast()),
-                )
+                (saved, old_font, old_effect)
             });
-            make_report(input, cx, io, sound, text, length);
+            make_report(input, cx, io, sound, text.as_ptr().cast(), length);
             cx.with_legacy(|| {
                 SetContextFontEffect(old_effect);
                 SetContextFont(old_font);

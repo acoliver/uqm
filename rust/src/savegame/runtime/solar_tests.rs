@@ -1,26 +1,19 @@
 //! Tests for the Rust port of the solar-system reads of `PrepareSummary`.
 //!
-//! The state under test is a real `SOLARSYS_STATE` in bindgen's layout, wired
-//! the way `FillOrbits`/`ExploreSolarSys` wire it: every `PlanetDesc` orbits
-//! `SunDesc[0]`, every `MoonDesc` orbits the planet whose inner system is
-//! entered, `pBaseDesc` is `PlanetDesc` in the outer system and `MoonDesc`
-//! in an inner one, `pOrbitalDesc` points into one of the tables. The game
-//! string table is a stand-in whose text for index `i` is `s<i>`, so a test
-//! sees which `GAME_STRING` index was read.
+//! Fixtures retain the production owner and select bodies through its typed transitions.
+//! A supplied game-string table makes the selected string index observable.
 //!
 //! Expected string indexes are worked out here from the `*_COUNT` defines of
 //! `gamestr.h`, and the star indexes from the `gendef.h` enum, not from the
 //! constants the code under test uses. The expected answers are those of
 //! `GetNamedPlanetaryBody`/`GetPlanetOrMoonName` read from solarsys.c.
 
-use crate::engine::world::planet::PlanetDesc;
-use std::mem::{offset_of, size_of};
-use std::ops::{Deref, DerefMut};
-
-use super::solar::SolarSystemOwner;
 use super::solar::*;
-use crate::c_bindings::global_state::{self, SOLARSYS_STATE};
+use crate::c_bindings::global_state;
+use crate::engine::world::generation::Body;
+use crate::planets::solar_system::SolarSystem;
 use crate::savegame::types::SIS_NAME_SIZE;
+use std::ops::{Deref, DerefMut};
 
 /// STAR 133 + DEVICE 29 + CARGO 10 + ELEMENTS 133 + SCAN 56 + STAR_NUMBER 14.
 const PLANET_BASE: u16 = 133 + 29 + 10 + 133 + 56 + 14;
@@ -43,60 +36,48 @@ impl GameStrings for Table {
     }
 }
 
-/// A solar system wired the way the C game wires it.
-pub(super) struct System(Box<SOLARSYS_STATE>);
-
+/// Fixtures retain the production owner and use its real topology transitions.
+pub(super) struct System(pub SolarSystem);
 impl Deref for System {
-    type Target = SOLARSYS_STATE;
-    fn deref(&self) -> &SOLARSYS_STATE {
+    type Target = SolarSystem;
+    fn deref(&self) -> &SolarSystem {
         &self.0
     }
 }
-
 impl DerefMut for System {
-    fn deref_mut(&mut self) -> &mut SOLARSYS_STATE {
+    fn deref_mut(&mut self) -> &mut SolarSystem {
         &mut self.0
     }
 }
-
 impl System {
-    /// The outer system: `pBaseDesc` is `PlanetDesc`, nothing is orbited.
     pub(super) fn outer() -> Self {
-        // SAFETY: all-zero is a valid `SOLARSYS_STATE` (NULL pointers, zero
-        // numbers, `None` for the input function).
-        let mut state: Box<SOLARSYS_STATE> = Box::new(unsafe { std::mem::zeroed() });
-        let sun: *mut PlanetDesc = state.SunDesc.as_mut_ptr();
-        for planet in state.PlanetDesc.iter_mut() {
-            planet.prev_desc = sun;
+        let mut world = crate::engine::World::new();
+        world.set_catalog(std::borrow::Cow::Borrowed(
+            &crate::planets::tables::STARMAP_ARRAY,
+        ));
+        let mut solar = SolarSystem::new(&world, crate::engine::StarId(0));
+        solar.sys.sun.num_planets = 16;
+        for planet in &mut solar.sys.planets {
+            planet.num_planets = 4;
         }
-        state.pBaseDesc = state.PlanetDesc.as_mut_ptr();
-        Self(state)
+        Self(solar)
     }
-
-    /// Fly into the inner system of `planet`.
     pub(super) fn inner(planet: usize) -> Self {
         let mut system = Self::outer();
-        let host: *mut PlanetDesc = &mut system.0.PlanetDesc[planet];
-        for moon in system.0.MoonDesc.iter_mut() {
-            moon.prev_desc = host;
-        }
-        system.0.pBaseDesc = system.0.MoonDesc.as_mut_ptr();
-        system.0.pOrbitalDesc = host;
+        system.enter_inner(planet as u8);
         system
     }
-
-    /// In orbit around `planet` itself.
     pub(super) fn orbiting_planet(planet: usize) -> Self {
         let mut system = Self::inner(planet);
-        system.0.InOrbit = 1;
+        system.enter_orbit(Body::Planet(planet as u8));
         system
     }
-
-    /// In orbit around moon `moon` of `planet`.
     pub(super) fn orbiting_moon(planet: usize, moon: usize) -> Self {
         let mut system = Self::inner(planet);
-        system.0.pOrbitalDesc = &mut system.0.MoonDesc[moon];
-        system.0.InOrbit = 1;
+        system.enter_orbit(Body::Moon {
+            planet: planet as u8,
+            moon: moon as u8,
+        });
         system
     }
 }
@@ -107,8 +88,10 @@ pub(super) fn owner(
     state: &System,
     star: Option<u8>,
     sis_planet_name: [u8; SIS_NAME_SIZE],
-) -> SolarSystem<'_> {
-    SolarSystem::new(Some(state), star, sis_planet_name, &Table)
+) -> SolarSummary<'_> {
+    let mut snapshot = state.snapshot((320, 240));
+    snapshot.generator_index = star.unwrap_or(0);
+    SolarSummary::new(Some(snapshot), star, sis_planet_name, &Table)
 }
 
 pub(super) fn text(name: [u8; SIS_NAME_SIZE]) -> String {
@@ -139,16 +122,18 @@ fn the_header_numbers_are_the_ones_worked_out_from_gamestr_h_and_gendef_h() {
 }
 
 #[test]
-fn the_bindgen_layout_is_the_one_the_hand_written_solar_views_assume() {
-    // `planet_side::orbit_scan` reads `pOrbitalDesc` 1032 bytes in
-    // (8 + 4 + 2 + 2 pad, 21 worlds of 48 bytes, then `pBaseDesc`).
-    assert_eq!(size_of::<PlanetDesc>(), 48);
-    assert_eq!(global_state::MAX_SUNS, 1);
-    assert_eq!(global_state::MAX_PLANETS, 16);
-    assert_eq!(global_state::MAX_MOONS, 4);
-    assert_eq!(offset_of!(SOLARSYS_STATE, SunDesc), 16);
-    assert_eq!(offset_of!(SOLARSYS_STATE, pBaseDesc), 1024);
-    assert_eq!(offset_of!(SOLARSYS_STATE, pOrbitalDesc), 1032);
+fn moving_the_owner_preserves_body_and_persistence_identity_without_rewiring() {
+    let system = System::orbiting_moon(2, 1);
+    let before = system.snapshot((320, 240));
+    let moved = Box::new(system);
+    let after = moved.snapshot((320, 240));
+    assert_eq!(before, after);
+    assert_eq!(
+        moved
+            .body_location(Body::Moon { planet: 2, moon: 1 })
+            .node_key(31),
+        (0, 2, 2, 31)
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -157,7 +142,7 @@ fn the_bindgen_layout_is_the_one_the_hand_written_solar_views_assume() {
 
 #[test]
 fn without_a_solar_system_there_is_no_orbit_and_no_moon_name() {
-    let solar = SolarSystem::new(None, Some(SOL), FLAGSHIP_NAME, &Table);
+    let solar = SolarSummary::new(None, Some(SOL), FLAGSHIP_NAME, &Table);
     assert!(!solar.player_in_planet_orbit());
     assert_eq!(solar.planet_or_moon_name(), Ok(FLAGSHIP_NAME));
 }
@@ -166,19 +151,19 @@ fn without_a_solar_system_there_is_no_orbit_and_no_moon_name() {
 fn the_orbit_test_is_the_in_orbit_flag_of_the_live_state() {
     let mut system = System::inner(2);
     assert!(!owner(&system, Some(SOL), FLAGSHIP_NAME).player_in_planet_orbit());
-    system.InOrbit = 1;
+    system.enter_orbit(Body::Planet(2));
     assert!(owner(&system, Some(SOL), FLAGSHIP_NAME).player_in_planet_orbit());
-    system.InOrbit = 0;
+    system.finish_orbit();
     assert!(!owner(&system, Some(SOL), FLAGSHIP_NAME).player_in_planet_orbit());
 }
 
 #[test]
-fn the_orbit_test_does_not_look_at_the_tables() {
-    // `playerInPlanetOrbit` is `playerInSolarSystem () && InOrbit`: in the
-    // outer system a stale orbit flag still answers true, as in C.
-    let mut system = System::outer();
-    system.InOrbit = 1;
-    assert!(owner(&system, None, FLAGSHIP_NAME).player_in_planet_orbit());
+fn an_encounter_is_not_inferred_to_be_an_orbit_from_flight_being_stopped() {
+    let mut system = System::orbiting_moon(2, 1);
+    system.in_ip_flight = false;
+    assert!(owner(&system, Some(SOL), FLAGSHIP_NAME).player_in_planet_orbit());
+    system.finish_orbit();
+    assert!(!owner(&system, Some(SOL), FLAGSHIP_NAME).player_in_planet_orbit());
 }
 
 // ---------------------------------------------------------------------------
@@ -187,9 +172,7 @@ fn the_orbit_test_does_not_look_at_the_tables() {
 
 #[test]
 fn the_outer_system_keeps_the_flagships_planet_name() {
-    let mut system = System::outer();
-    // Not read in the outer system, even when it is garbage.
-    system.pOrbitalDesc = 0x10 as *mut PlanetDesc;
+    let system = System::outer();
     assert_eq!(named(&system, Some(SOL)), "Beta Hydri");
 }
 
@@ -345,96 +328,34 @@ fn the_final_battle_names_sa_matra_from_the_string_table() {
     let solar = owner(&system, None, FLAGSHIP_NAME);
     let name = solar.last_battle_planet_name();
     assert_eq!(text(name), format!("s{}", PLANET_BASE + 32));
-    let none = SolarSystem::new(None, None, FLAGSHIP_NAME, &Table);
+    let none = SolarSummary::new(None, None, FLAGSHIP_NAME, &Table);
     assert_eq!(none.last_battle_planet_name(), name);
 }
 
-// ---------------------------------------------------------------------------
-// States the C code would index through garbage
-// ---------------------------------------------------------------------------
-
 #[test]
-fn an_inner_system_without_an_orbital_world_is_an_error() {
-    let mut system = System::inner(2);
-    system.pOrbitalDesc = std::ptr::null_mut();
+fn a_copy_with_a_missing_selected_body_propagates_the_summary_error() {
+    let system = System::inner(2);
+    let mut snapshot = system.snapshot((320, 240));
+    snapshot.selected = None;
     assert_eq!(
-        owner(&system, Some(SOL), FLAGSHIP_NAME).planet_or_moon_name(),
+        SolarSummary::new(Some(snapshot), Some(SOL), FLAGSHIP_NAME, &Table).planet_or_moon_name(),
         Err(SolarError::OrbitalWorldMissing)
     );
 }
 
 #[test]
-fn a_world_outside_both_tables_is_an_error() {
-    let mut foreign: Box<PlanetDesc> = Box::new(unsafe { std::mem::zeroed() });
+fn invalid_body_transitions_do_not_mutate_the_owners_selection() {
     let mut system = System::inner(2);
-    system.pOrbitalDesc = &mut *foreign;
-    assert_eq!(
-        owner(&system, Some(SOL), FLAGSHIP_NAME).planet_or_moon_name(),
-        Err(SolarError::WorldNotInSystem)
+    for body in [Body::Planet(3), Body::Moon { planet: 2, moon: 4 }] {
+        let before = system.snapshot((320, 240));
+        assert!(std::panic::catch_unwind(
+            std::panic::AssertUnwindSafe(|| system.enter_orbit(body))
+        )
+        .is_err());
+        assert_eq!(system.snapshot((320, 240)), before);
+    }
+    assert!(
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| system.enter_inner(16))).is_err()
     );
-    // One past the last moon is outside as well.
-    system.pOrbitalDesc = system.MoonDesc.as_mut_ptr_range().end;
-    assert_eq!(
-        owner(&system, Some(SOL), FLAGSHIP_NAME).planet_or_moon_name(),
-        Err(SolarError::WorldNotInSystem)
-    );
-}
-
-#[test]
-fn a_world_between_two_table_entries_is_an_error() {
-    let mut system = System::inner(2);
-    let misaligned = system.PlanetDesc.as_mut_ptr().cast::<u8>().wrapping_add(1);
-    system.pOrbitalDesc = misaligned.cast::<PlanetDesc>();
-    assert_eq!(
-        owner(&system, Some(SOL), FLAGSHIP_NAME).planet_or_moon_name(),
-        Err(SolarError::WorldNotInSystem)
-    );
-    let misaligned = system
-        .MoonDesc
-        .as_mut_ptr()
-        .cast::<u8>()
-        .wrapping_add(size_of::<PlanetDesc>() - 1);
-    system.pOrbitalDesc = misaligned.cast::<PlanetDesc>();
-    assert_eq!(
-        owner(&system, Some(SOL), FLAGSHIP_NAME).planet_or_moon_name(),
-        Err(SolarError::WorldNotInSystem)
-    );
-}
-
-#[test]
-fn a_world_that_disagrees_with_its_table_is_an_error() {
-    // A planet that does not orbit the sun.
-    let mut planet = System::inner(2);
-    let other: *mut PlanetDesc = &mut planet.PlanetDesc[3];
-    planet.PlanetDesc[2].prev_desc = other;
-    assert_eq!(
-        owner(&planet, Some(SOL), FLAGSHIP_NAME).planet_or_moon_name(),
-        Err(SolarError::WorldDisagreesWithItsTable)
-    );
-
-    // A moon that orbits the sun.
-    let mut moon = System::orbiting_moon(2, 1);
-    let sun: *mut PlanetDesc = moon.SunDesc.as_mut_ptr();
-    moon.MoonDesc[1].prev_desc = sun;
-    assert_eq!(
-        owner(&moon, Some(SOL), FLAGSHIP_NAME).planet_or_moon_name(),
-        Err(SolarError::WorldDisagreesWithItsTable)
-    );
-
-    // A moon whose planet is not in `PlanetDesc`.
-    let mut moon = System::orbiting_moon(2, 1);
-    let mut foreign: Box<PlanetDesc> = Box::new(unsafe { std::mem::zeroed() });
-    moon.MoonDesc[1].prev_desc = &mut *foreign;
-    assert_eq!(
-        owner(&moon, Some(SOL), FLAGSHIP_NAME).planet_or_moon_name(),
-        Err(SolarError::WorldDisagreesWithItsTable)
-    );
-}
-
-#[test]
-#[should_panic(expected = "neither PlanetDesc nor MoonDesc")]
-fn a_base_table_that_is_neither_planets_nor_moons_is_a_broken_invariant() {
-    let mut system = System::inner(2);
-    system.pBaseDesc = system.SunDesc.as_mut_ptr();
-    let _ = owner(&system, Some(SOL), FLAGSHIP_NAME).planet_or_moon_name();
+    assert_eq!(system.selected_body(), Some(Body::Planet(2)));
 }

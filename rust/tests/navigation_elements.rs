@@ -89,11 +89,13 @@ fn interplanetary_flagship_keeps_motion_and_native_hooks() {
         // SAFETY: the serialized fixture owns and restores navigation's live projections.
         unsafe {
             use uqm_rust::navigation::abi as nav;
-            let mut solar: Box<nav::SOLARSYS_STATE> = Box::new(std::mem::zeroed());
-            solar.SunDesc[0].radius = 128 << 6;
-            solar.pBaseDesc = solar.PlanetDesc.as_mut_ptr();
-            let old_solar = nav::pSolarSysState;
-            nav::pSolarSysState = &mut *solar;
+            let mut solar = uqm_rust::engine::World::current().read(|world| {
+                uqm_rust::planets::solar_system::SolarSystem::new(
+                    world,
+                    uqm_rust::engine::StarId(0),
+                )
+            });
+            solar.sys.sun.radius = 128 << 6;
             let old_race = uqm_rust::engine::World::current().read(|w| w.encounter_race);
             uqm_rust::engine::World::current().write(|w| w.encounter_race = -1);
             let old_stamp = (**uqm_rust::engine::WorldData::current()).game.ship_stamp;
@@ -111,8 +113,9 @@ fn interplanetary_flagship_keeps_motion_and_native_hooks() {
             let mut velocity = old_velocity;
             velocity.set_components(20, -30);
             (**uqm_rust::engine::WorldData::current()).game.velocity = velocity;
-            nav::DoMissions();
             uqm_rust::app::bridge::enter(|cx| {
+                solar.refresh_frame(cx);
+                nav::DoMissions(cx);
                 let flagship = cx.elements().head().expect("spawned flagship");
                 let state = cx.element(flagship);
                 let Some(ElementHook::Native(pre)) = state.pre else {
@@ -135,7 +138,6 @@ fn interplanetary_flagship_keeps_motion_and_native_hooks() {
             (**uqm_rust::engine::WorldData::current()).game.ship_stamp = old_stamp;
             (**uqm_rust::engine::WorldData::current()).game.ip_location = old_location;
             (**uqm_rust::engine::WorldData::current()).game.velocity = old_velocity;
-            nav::pSolarSysState = old_solar;
             uqm_rust::engine::World::current().write(|w| w.encounter_race = old_race);
         }
     });
@@ -149,15 +151,21 @@ fn interplanetary_group_preserves_parent_and_updates_its_own_record() {
         // SAFETY: this serialized fixture owns the group pool, solar descriptors and frames.
         unsafe {
             use uqm_rust::navigation::abi as nav;
-            let mut solar: Box<nav::SOLARSYS_STATE> = Box::new(std::mem::zeroed());
-            solar.SunDesc[0].radius = 128 << 6;
-            solar.SunDesc[0].num_planets = 1;
-            solar.PlanetDesc[0].image.origin = POINT { x: 80, y: 60 };
-            solar.PlanetDesc[0].prev_desc = solar.SunDesc.as_mut_ptr();
-            solar.MoonDesc[0].prev_desc = solar.PlanetDesc.as_mut_ptr();
-            solar.pBaseDesc = solar.MoonDesc.as_mut_ptr();
-            solar.pOrbitalDesc = solar.MoonDesc.as_mut_ptr();
-            let old_solar = nav::pSolarSysState;
+            let mut solar = uqm_rust::engine::World::current().read(|world| {
+                uqm_rust::planets::solar_system::SolarSystem::new(
+                    world,
+                    uqm_rust::engine::StarId(0),
+                )
+            });
+            solar.sys.sun.radius = 128 << 6;
+            solar.sys.sun.num_planets = 1;
+            solar.sys.planets[0].image.origin = POINT { x: 80, y: 60 };
+            solar.sys.planets[0].num_planets = 1;
+            solar.enter_inner(0);
+            solar.select_body(uqm_rust::engine::world::generation::Body::Moon {
+                planet: 0,
+                moon: 0,
+            });
             let old_race = uqm_rust::engine::World::current().read(|w| w.encounter_race);
             let old_stamp = (**uqm_rust::engine::WorldData::current()).game.ship_stamp;
             let old_location = (**uqm_rust::engine::WorldData::current()).game.ip_location;
@@ -177,7 +185,6 @@ fn interplanetary_group_preserves_parent_and_updates_its_own_record() {
                 queue.put(id);
                 (id, queue.raw(id).cast::<nav::IP_GROUP>())
             });
-            nav::pSolarSysState = &mut *solar;
             uqm_rust::engine::World::current().write(|w| w.encounter_race = -1);
             (**uqm_rust::engine::Kernel::current()).stars_in_space = frames.frame(0);
             (**uqm_rust::engine::WorldData::current())
@@ -185,8 +192,9 @@ fn interplanetary_group_preserves_parent_and_updates_its_own_record() {
                 .ship_stamp
                 .frame = frames.frame(0);
             (**uqm_rust::engine::WorldData::current()).game.ip_location = POINT { x: 100, y: 200 };
-            nav::DoMissions();
             uqm_rust::app::bridge::enter(|cx| {
+                solar.refresh_frame(cx);
+                nav::DoMissions(cx);
                 let flagship = cx.elements().head().expect("spawned flagship");
                 assert_eq!(cx.element(flagship).turn, 1);
                 let id = cx.elements().succ(flagship).expect("spawned group");
@@ -216,7 +224,6 @@ fn interplanetary_group_preserves_parent_and_updates_its_own_record() {
             (**uqm_rust::engine::WorldData::current()).game.ship_stamp = old_stamp;
             (**uqm_rust::engine::WorldData::current()).game.ip_location = old_location;
             (**uqm_rust::engine::Kernel::current()).stars_in_space = old_stars;
-            nav::pSolarSysState = old_solar;
             uqm_rust::engine::World::current().write(|w| w.encounter_race = old_race);
         }
     });

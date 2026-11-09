@@ -29,6 +29,17 @@ pub struct TextEntry {
     index: usize,
 }
 impl TextEntry {
+    pub fn index(&self) -> usize {
+        self.index
+    }
+
+    pub fn next_entry(&self) -> Self {
+        Self {
+            table: self.table.clone(),
+            index: (self.index + 1) % self.table.0.entries.len(),
+        }
+    }
+
     pub fn record(&self) -> &StringTableEntry {
         &self.table.0.entries[self.index]
     }
@@ -38,9 +49,25 @@ impl TextEntry {
     pub fn label(&self, index: u16) -> (&CStr, u16) {
         self.table.label(index)
     }
+
+    pub fn current_label(&self) -> (&CStr, u16) {
+        (
+            self.table.text(self.index).unwrap_or(c""),
+            self.table.0.counts[self.index],
+        )
+    }
 }
 
 impl LoadedTextTable {
+    pub fn new(strings: Vec<std::ffi::CString>) -> Self {
+        Self::from_strings(
+            strings
+                .into_iter()
+                .map(|text| text.into_bytes_with_nul())
+                .collect(),
+        )
+    }
+
     pub fn entry(&self, index: u16) -> Option<TextEntry> {
         (!self.0.entries.is_empty()).then(|| TextEntry {
             table: self.clone(),
@@ -170,6 +197,10 @@ mod tests {
         assert_eq!(owner.label(3), (c"ab", 2));
         assert_eq!(owner.label(1), (c"", 0));
         assert_eq!(owner.label(2), (c"éclair", 6));
+        let selected = owner.entry(2).unwrap();
+        drop(owner);
+        assert_eq!(selected.current_label(), (c"éclair", 6));
+        assert_eq!(selected.next_entry().current_label(), (c"ab", 2));
     }
 
     #[test]

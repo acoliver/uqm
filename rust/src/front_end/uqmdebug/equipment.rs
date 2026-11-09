@@ -72,7 +72,10 @@ pub(super) fn equip_flagship(world: &mut World) -> bool {
     true
 }
 
-pub(super) fn update_flight(sis: &SisState, system: &mut SOLARSYS_STATE) {
+pub(super) fn update_flight(
+    sis: &SisState,
+    system: &mut crate::engine::world::generation::SolarFlight,
+) {
     system.max_ship_speed = (5 * IP_SHIP_THRUST_INCREMENT) as u8;
     for i in 0..NUM_DRIVE_SLOTS as usize {
         // Preserve the original C boolean subscript, including its unusual slot choice.
@@ -175,8 +178,7 @@ mod equipment_tests {
     #[test]
     fn flight_updates_preserve_the_original_boolean_drive_subscript() {
         let mut world = world();
-        // SAFETY: this record contains only integers, nullable pointers and optional callbacks.
-        let mut system: SOLARSYS_STATE = unsafe { std::mem::zeroed() };
+        let mut system = crate::engine::world::generation::SolarFlight::default();
         world.data.flagship.drive_slots.fill(0);
         world.data.flagship.drive_slots[2] = 255;
         world.data.flagship.jet_slots.fill(255);

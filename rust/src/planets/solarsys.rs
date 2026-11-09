@@ -1,8 +1,7 @@
 //! Solar-system state, native resources, drawing and flight from `solarsys.c`.
 //!
 //! Resources retain their native graphics pointers while legacy callers remain.
-//! The lifecycle owns the current system; other modules obtain it
-//! through `solar_system::current()`.
+//! Exploration owns each visit and supplies it explicitly to its callers.
 
 #[path = "solarsys/drawing.rs"]
 pub(crate) mod drawing;
@@ -10,11 +9,8 @@ pub(crate) mod drawing;
 mod flight;
 #[path = "solarsys/lifecycle.rs"]
 pub(crate) mod lifecycle;
-pub use lifecycle::P_SOLAR_SYS_STATE;
 #[path = "solarsys/resources.rs"]
 pub(crate) mod resources;
-
-static mut SCALE_RECT: c::RECT = unsafe { std::mem::zeroed() };
 
 use crate::c_bindings::global_state as c;
 use std::ffi::c_void;
@@ -37,8 +33,6 @@ static mut STARS_FRAME: *mut c::FRAME_DESC = ptr::null_mut();
 static mut SOLAR_SYS_FRAME: *mut c::FRAME_DESC = ptr::null_mut();
 #[no_mangle]
 pub static mut EncounterGroup: c::BYTE = 0;
-#[no_mangle]
-pub static mut SysGenRNG: *mut crate::math::RandomContext = ptr::null_mut();
 
 #[no_mangle]
 pub extern "C" fn locationToDisplay(pt: c::POINT, scale_radius: c::SIZE) -> c::POINT {
@@ -61,145 +55,6 @@ unsafe fn dimensions() -> (i32, i32) {
         ptr::addr_of!(ScreenWidth).read(),
         ptr::addr_of!(ScreenHeight).read(),
     )
-}
-
-/// # Safety
-/// Game-thread caller; descriptor pointers must refer to the live system or a
-/// complete, readable system description. Output pointers must be writable.
-#[no_mangle]
-pub unsafe extern "C" fn planetOuterLocation(planet_i: c::COUNT) -> c::POINT {
-    let system = crate::c_bindings::solar_system::current();
-    let radius = (*system).SunDesc[0].radius;
-    displayToLocation(
-        (*system)
-            .PlanetDesc
-            .as_ptr()
-            .add(usize::from(planet_i))
-            .read()
-            .image
-            .origin,
-        radius,
-    )
-}
-
-/// # Safety
-/// Game-thread caller; descriptor pointers must refer to the live system or a
-/// complete, readable system description. Output pointers must be writable.
-#[no_mangle]
-pub unsafe extern "C" fn worldIsPlanet(
-    solar_sys: *const c::SOLARSYS_STATE,
-    world: *const crate::engine::world::planet::PlanetDesc,
-) -> bool {
-    ptr::eq((*world).prev_desc, (*solar_sys).SunDesc.as_ptr())
-}
-
-/// # Safety
-/// Game-thread caller; descriptor pointers must refer to the live system or a
-/// complete, readable system description. Output pointers must be writable.
-#[no_mangle]
-pub unsafe extern "C" fn worldIsMoon(
-    solar_sys: *const c::SOLARSYS_STATE,
-    world: *const crate::engine::world::planet::PlanetDesc,
-) -> bool {
-    !worldIsPlanet(solar_sys, world)
-}
-
-/// # Safety
-/// Game-thread caller; descriptor pointers must refer to the live system or a
-/// complete, readable system description. Output pointers must be writable.
-#[no_mangle]
-pub unsafe extern "C" fn planetIndex(
-    solar_sys: *const c::SOLARSYS_STATE,
-    world: *const crate::engine::world::planet::PlanetDesc,
-) -> c::COUNT {
-    let planet = if worldIsPlanet(solar_sys, world) {
-        world
-    } else {
-        (*world).prev_desc
-    };
-    planet.offset_from((*solar_sys).PlanetDesc.as_ptr()) as c::COUNT
-}
-
-/// # Safety
-/// Game-thread caller; descriptor pointers must refer to the live system or a
-/// complete, readable system description. Output pointers must be writable.
-#[no_mangle]
-pub unsafe extern "C" fn moonIndex(
-    solar_sys: *const c::SOLARSYS_STATE,
-    moon: *const crate::engine::world::planet::PlanetDesc,
-) -> c::COUNT {
-    assert!(!worldIsPlanet(solar_sys, moon));
-    moon.offset_from((*solar_sys).MoonDesc.as_ptr()) as c::COUNT
-}
-
-/// # Safety
-/// Game-thread caller; descriptor pointers must refer to the live system or a
-/// complete, readable system description. Output pointers must be writable.
-#[no_mangle]
-pub unsafe extern "C" fn matchWorld(
-    solar_sys: *const c::SOLARSYS_STATE,
-    world: *const crate::engine::world::planet::PlanetDesc,
-    planet_i: c::BYTE,
-    moon_i: c::BYTE,
-) -> bool {
-    const MATCH_PLANET: u8 = 0xff;
-    if planetIndex(solar_sys, world) != c::COUNT::from(planet_i) {
-        return false;
-    }
-    if moon_i == MATCH_PLANET {
-        worldIsPlanet(solar_sys, world)
-    } else {
-        worldIsMoon(solar_sys, world) && moonIndex(solar_sys, world) == c::COUNT::from(moon_i)
-    }
-}
-
-/// # Safety
-/// Game-thread caller; descriptor pointers must refer to the live system or a
-/// complete, readable system description. Output pointers must be writable.
-#[no_mangle]
-pub unsafe extern "C" fn playerInSolarSystem() -> bool {
-    !crate::c_bindings::solar_system::current().is_null()
-}
-
-/// # Safety
-/// Game-thread caller; descriptor pointers must refer to the live system or a
-/// complete, readable system description. Output pointers must be writable.
-#[no_mangle]
-pub unsafe extern "C" fn playerInPlanetOrbit() -> bool {
-    playerInSolarSystem() && (*crate::c_bindings::solar_system::current()).InOrbit != 0
-}
-
-/// # Safety
-/// Game-thread caller; descriptor pointers must refer to the live system or a
-/// complete, readable system description. Output pointers must be writable.
-#[no_mangle]
-pub unsafe extern "C" fn playerInInnerSystem() -> bool {
-    let system = crate::c_bindings::solar_system::current();
-    assert!(!system.is_null());
-    assert!(
-        (*system).pBaseDesc == (*system).PlanetDesc.as_mut_ptr()
-            || (*system).pBaseDesc == (*system).MoonDesc.as_mut_ptr()
-    );
-    (*system).pBaseDesc != (*system).PlanetDesc.as_mut_ptr()
-}
-
-/// # Safety
-/// Game-thread caller; descriptor pointers must refer to the live system or a
-/// complete, readable system description. Output pointers must be writable.
-#[no_mangle]
-pub unsafe extern "C" fn XFormIPLoc(
-    input: *mut c::POINT,
-    output: *mut c::POINT,
-    to_display: c::BOOLEAN,
-) {
-    let system = crate::c_bindings::solar_system::current();
-    let radius = (*system).SunDesc[0].radius;
-    let converted = if to_display != 0 {
-        locationToDisplay(input.read(), radius)
-    } else {
-        displayToLocation(input.read(), radius)
-    };
-    output.write(converted);
 }
 
 fn sis_dimensions() -> (i32, i32) {

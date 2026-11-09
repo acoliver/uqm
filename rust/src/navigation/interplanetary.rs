@@ -44,7 +44,7 @@ pub(crate) mod live {
 
     fn radius(cx: &crate::engine::battle::Cx<'_>, location: u8) -> i16 {
         if location == 0 {
-            cx.solar().SunDesc[0].radius
+            cx.solar_geometry().zoom_radius
         } else {
             MAX_ZOOM
         }
@@ -207,7 +207,7 @@ pub(crate) mod live {
                             cx.ip_group_mut(element).group_counter -= 1;
                         } else if task == EXPLORE as u8 {
                             let next = ((cx.random() as u16
-                                % cx.solar().SunDesc[0].num_planets as u16)
+                                % cx.solar_geometry().planet_count as u16)
                                 + 1) as u8;
                             if next != target {
                                 cx.element_mut(element).thrust = 0;
@@ -219,7 +219,7 @@ pub(crate) mod live {
                 }
             } else if location == 0 {
                 destination = if cx.ip_group_mut(element).dest_loc == 0 {
-                    cx.solar().SunDesc[0].location
+                    cx.solar_geometry().sun_location
                 } else {
                     cx.planet_outer_location(target as u16 - 1)
                 };
@@ -539,21 +539,19 @@ pub(crate) mod live {
 
     /// # Safety
     /// The live solar system and display/group queues must be initialized on the game thread.
-    pub unsafe extern "C" fn do_missions() {
-        crate::app::bridge::enter(|cx| {
-            spawn_flagship(cx);
-            if cx.world.encounter_race >= 0 {
-                notify_others(cx, cx.world.encounter_race as u16, 0);
-                cx.world.encounter_race = -1;
+    pub fn do_missions(cx: &mut crate::engine::battle::Cx<'_>) {
+        spawn_flagship(cx);
+        if cx.world.encounter_race >= 0 {
+            notify_others(cx, cx.world.encounter_race as u16, 0);
+            cx.world.encounter_race = -1;
+        }
+        let mut handle = cx.world.ip_groups_ref().head();
+        while let Some(group) = handle {
+            handle = cx.world.ip_groups_ref().succ(group);
+            if cx.group_record(group).in_system != 0 {
+                spawn_group(cx, group);
             }
-            let mut handle = cx.world.ip_groups_ref().head();
-            while let Some(group) = handle {
-                handle = cx.world.ip_groups_ref().succ(group);
-                if cx.group_record(group).in_system != 0 {
-                    spawn_group(cx, group);
-                }
-            }
-        });
+        }
     }
 }
 

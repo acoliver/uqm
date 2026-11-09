@@ -3,9 +3,8 @@ use super::*;
 use crate::comm::sis_graphics::CText;
 use crate::engine::Kernel as KernelOwner;
 use crate::starbase::gfx::{Align, TextDraw};
-use std::ffi::CStr;
 
-use crate::planets::solarsys::lifecycle::GetNamedPlanetaryBody;
+use crate::planets::solarsys::lifecycle::named_body_index;
 
 use crate::graphics::font_abi::TextRect;
 
@@ -17,12 +16,11 @@ pub(super) fn text(x: i16, y: i16, align: Align, text: String) {
     });
 }
 
-unsafe fn title() -> String {
-    let named = GetNamedPlanetaryBody();
-    if !named.is_null() {
-        return CStr::from_ptr(named).to_string_lossy().into_owned();
+unsafe fn title(solar: &SolarSystem) -> String {
+    if let Some(index) = named_body_index(solar) {
+        return CffiPlatform.game_string(i32::from(index));
     }
-    let world_type = (*(*solar_system::current()).pOrbitalDesc).data_index & !0x80;
+    let world_type = solar.sys.descriptor(solar.require_body()).data_index & !0x80;
     if world_type >= 50 {
         CffiPlatform.game_string(305 + 4 + 51)
     } else {
@@ -54,21 +52,21 @@ unsafe fn pc_value(x: i16, y: i16, label: i32, value: String) {
     text(x + rect.width, y, Align::Left, value);
 }
 
-pub(super) unsafe fn coarse(planet: &ContextLease, style: i32) {
+pub(super) unsafe fn coarse(solar: &SolarSystem, planet: &ContextLease, style: i32) {
     if style == 2 {
-        pc(planet);
+        pc(solar, planet);
     } else {
-        three_do(planet);
+        three_do(solar, planet);
     }
 }
 
-unsafe fn pc(planet: &ContextLease) {
-    let info = (*solar_system::current()).SysInfo.planet_info;
+unsafe fn pc(solar: &SolarSystem, planet: &ContextLease) {
+    let info = solar.sys.info.planet_info;
     let g = CffiPlatform;
     planet.select();
     g.set_fg_color(Rgba::rgb15(0, 0, 21));
     SetContextFont((KernelOwner::current().read(|owner| owner.micro_font)).cast());
-    text(width() >> 1, 13, Align::Center, title());
+    text(width() >> 1, 13, Align::Center, title(solar));
     SetContextFont((KernelOwner::current().read(|owner| owner.tiny_font)).cast());
     let orbit = (i64::from(info.planet_to_sun_dist) * 100 + 256) / 512;
     pc_value(5, 40, 0, scan_value(orbit, &g.game_string(487)));
@@ -143,13 +141,13 @@ unsafe fn pc(planet: &ContextLease) {
     );
 }
 
-unsafe fn three_do(planet: &ContextLease) {
-    let info = (*solar_system::current()).SysInfo.planet_info;
+unsafe fn three_do(solar: &SolarSystem, planet: &ContextLease) {
+    let info = solar.sys.info.planet_info;
     let g = CffiPlatform;
     planet.select();
     g.set_fg_color(Rgba::rgb15(15, 0, 25));
     SetContextFont((KernelOwner::current().read(|owner| owner.micro_font)).cast());
-    text(width() >> 1, 13, Align::Center, title());
+    text(width() >> 1, 13, Align::Center, title(solar));
     draw(
         (base::SetAbsFrameIndex((SpaceJunkFrame).cast(), 20)).cast(),
         CPoint { x: 16, y: 0 },

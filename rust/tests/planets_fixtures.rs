@@ -556,7 +556,18 @@ mod rust_special {
                     "egg" => EGG_CASE0_DEFINED,
                     _ => SUN_DEVICE_DEFINED,
                 };
-                myc::generate_energy(rng, info, star_index, body, which, node, &sun_device)
+                myc::generate_energy(
+                    rng,
+                    info,
+                    myc::EnergyContext {
+                        star_index,
+                        report_loaded: !info.planet_info.discovery_string.is_null(),
+                    },
+                    body,
+                    which,
+                    node,
+                    &sun_device,
+                )
             };
             let device = OneFlag(StoryKey::TAALO_PROTECTOR, system == "taalo1");
             let orz = |rng: &mut RandomContext,

@@ -1,37 +1,32 @@
 //! Actual Rust-exported Sol slots, checked against retained original-C fixtures.
 
-use super::{Harness, SysGenRNG};
+use super::Harness;
 use crate::planets_common::sol::{self, Layout, Ops, Scan};
 use uqm_rust::engine::world::planet::{NodeInfo, PlanetDesc, SystemInfo};
 pub(super) use uqm_rust::planets::generate::sol::Generator as generateSolFunctions;
-use uqm_rust::planets::generate::special::Body;
 use uqm_rust::state::game_state_keys::get_game_state;
 
 impl Ops for Harness {
     fn planets(&mut self, case: Layout, descs: &mut [PlanetDesc; 16]) -> (bool, u8, u32) {
         self.set_star(case.size, case.color);
-        self.state.PlanetDesc = *descs;
-        self.state.SunDesc[0].num_planets = 0x7f;
+        self.state.sys.planets = *descs;
+        self.state.sys.sun.num_planets = 0x7f;
         self.seed(case.seed);
-        let mut expected = *self.state;
+        let mut expected = crate::generation_data(&self.state);
         let result = unsafe {
-            crate::invoke_generation(&raw mut *self.state, |system, host| {
+            crate::invoke_generation(&mut self.state, |system, host| {
                 generateSolFunctions.generate_planets(system, host)
             })
         };
-        *descs = self.state.PlanetDesc;
-        expected.PlanetDesc = *descs;
-        expected.SunDesc[0].num_planets = self.state.SunDesc[0].num_planets;
+        *descs = self.state.sys.planets;
+        expected.1 = *descs;
+        expected.0.num_planets = self.state.sys.sun.num_planets;
         assert_eq!(
-            format!("{:?}", self.state),
+            format!("{:?}", crate::generation_data(&self.state)),
             format!("{expected:?}"),
             "planet hook wrote unrelated state"
         );
-        (
-            result,
-            self.state.SunDesc[0].num_planets,
-            self.rng_position(),
-        )
+        (result, self.state.sys.sun.num_planets, self.rng_position())
     }
 
     fn moons(
@@ -42,28 +37,24 @@ impl Ops for Harness {
         descs: &mut [PlanetDesc; 4],
     ) -> (bool, u32) {
         self.set_star(case.size, case.color);
-        self.state.MoonDesc = *descs;
-        self.state.PlanetDesc = unsafe { std::mem::zeroed() };
-        self.state.PlanetDesc[usize::from(planet)].num_planets = count;
+        self.state.sys.moons = *descs;
+        self.state.sys.planets = unsafe { std::mem::zeroed() };
+        self.state.sys.planets[usize::from(planet)].num_planets = count;
         self.seed(case.seed);
-        // Derive both C arguments and the parent link from one raw root. No
-        // covering Rust mutable reference is created while C uses the links.
         let system = &raw mut *self.state;
         let (mut expected, result) = unsafe {
-            let parent = &raw mut (*system).PlanetDesc[usize::from(planet)];
-            (*parent).prev_desc = &raw mut (*system).SunDesc[0];
-            let expected = *system;
+            let expected = crate::generation_data(&*system);
             (
                 expected,
-                crate::invoke_generation(system, |system, host| {
+                crate::invoke_generation(&mut *system, |system, host| {
                     generateSolFunctions.generate_moons(system, planet, host)
                 }),
             )
         };
-        *descs = self.state.MoonDesc;
-        expected.MoonDesc = *descs;
+        *descs = self.state.sys.moons;
+        expected.2 = *descs;
         assert_eq!(
-            format!("{:?}", self.state),
+            format!("{:?}", crate::generation_data(&self.state)),
             format!("{expected:?}"),
             "moon hook wrote unrelated state"
         );
@@ -84,25 +75,10 @@ impl Ops for Harness {
                 u32::from(case.destroyed),
             )
         });
-        self.state.SysInfo = *info;
-        self.state.PlanetDesc = unsafe { std::mem::zeroed() };
-        self.state.MoonDesc = unsafe { std::mem::zeroed() };
+        self.state.sys.info = *info;
+        self.state.sys.planets = unsafe { std::mem::zeroed() };
+        self.state.sys.moons = unsafe { std::mem::zeroed() };
         let system = &raw mut *self.state;
-        let _world = unsafe {
-            let sun = &raw mut (*system).SunDesc[0];
-            match case.body {
-                Body::Planet(p) => {
-                    (*system).PlanetDesc[usize::from(p)].prev_desc = sun;
-                    &raw const (*system).PlanetDesc[usize::from(p)]
-                }
-                Body::Moon { planet, moon } => {
-                    (*system).PlanetDesc[usize::from(planet)].prev_desc = sun;
-                    (*system).MoonDesc[usize::from(moon)].prev_desc =
-                        &raw mut (*system).PlanetDesc[usize::from(planet)];
-                    &raw const (*system).MoonDesc[usize::from(moon)]
-                }
-            }
-        };
         let generate =
             |view: &mut uqm_rust::engine::world::generation::SolarSys<'_>,
              info: &mut NodeInfo,
@@ -113,14 +89,15 @@ impl Ops for Harness {
                     generateSolFunctions.generate_energy(view, case.body, case.which, info, host)
                 }
             };
-        let before = format!("{:?}", self.state);
+        let before = format!("{:?}", crate::generation_data(&self.state));
         self.seed(case.seed);
-        let count =
-            unsafe { crate::invoke_generation(system, |view, host| generate(view, node, host)) };
+        let count = unsafe {
+            crate::invoke_generation(&mut *system, |view, host| generate(view, node, host))
+        };
         let rng = self.rng_position();
         self.seed(case.seed);
         let count_only = unsafe {
-            crate::invoke_generation(system, |view, host| {
+            crate::invoke_generation(&mut *system, |view, host| {
                 generate(view, &mut crate::planets_common::fresh_node(), host)
             })
         };
@@ -130,7 +107,7 @@ impl Ops for Harness {
             "null output: {case:?}"
         );
         assert_eq!(
-            format!("{:?}", self.state),
+            format!("{:?}", crate::generation_data(&self.state)),
             before,
             "scan changed solar system: {case:?}"
         );
@@ -149,7 +126,7 @@ impl Ops for Harness {
             u32::from(case.destroyed)
         );
         // The count-only query above must leave the same post-call seed.
-        assert_eq!(unsafe { (*SysGenRNG).seed() }, rng);
+        assert_eq!(self.state.sys.rng.seed(), rng);
         (count, rng)
     }
 }

@@ -12,7 +12,7 @@
 //! records how often it was asked; what they check is when `PrepareSummary`'s
 //! branches consult it and what they do with the answer. The last group of
 //! solar tests runs the real Rust computation (`solar`) over a wired
-//! `SOLARSYS_STATE` and checks what ends up in the summary.
+//! owning session and checks what ends up in the summary.
 
 #[cfg(not(test))]
 use crate::battle::context_access::race_access::RaceOps;
@@ -22,7 +22,7 @@ use std::cell::Cell;
 use serial_test::serial;
 
 use super::queue_tests::{LiveGame, C_WRITTEN_SAVE};
-use super::solar::{SolarError, SolarSystem, SolarSystemOwner};
+use super::solar::{SolarError, SolarSummary, SolarSystemOwner};
 use super::solar_tests::{owner, text, System, Table, FLAGSHIP_NAME};
 use super::star::*;
 use super::summary::*;
@@ -792,7 +792,7 @@ fn a_changed_solar_system_changes_the_summary() {
 
             // Leaving orbit keeps the name of the inner system's planet but not the
             // orbit activity.
-            system.InOrbit = 0;
+            system.finish_orbit();
             let flying = summary_over(&system, &game, Some(SOL_STAR)).unwrap();
             assert_eq!(text(flying.sis.planet_name), EARTH);
             assert_eq!(flying.activity, IN_INTERPLANETARY as u8);
@@ -861,12 +861,19 @@ fn the_other_activities_do_not_read_the_solar_system() {
         crate::app::bridge::with_game(&mut game_owner, || {
             install(&blank_state());
             // A state `planet_or_moon_name` would reject.
-            let mut broken = System::inner(2);
-            broken.pOrbitalDesc = std::ptr::null_mut();
+            let broken = System::inner(2);
+            let mut snapshot = broken.snapshot((320, 240));
+            snapshot.selected = None;
             for activity in [0u16, 2, 3, 5, 6, 7, 8] {
                 let mut game = LiveGame::bare();
                 game.set_activity(activity | START_ENCOUNTER);
-                let summary = summary_over(&broken, &game, Some(SOL_STAR)).unwrap();
+                let summary = capture_summary(
+                    &sis(),
+                    &game,
+                    &SolarSummary::new(Some(snapshot), Some(SOL_STAR), sis().planet_name, &Table),
+                    b"",
+                )
+                .unwrap();
                 assert_eq!(
                     &summary.sis.planet_name,
                     &sis().planet_name,
@@ -886,10 +893,17 @@ fn a_broken_solar_system_is_an_error_not_a_guessed_name() {
         crate::app::bridge::with_game(&mut game_owner, || {
             install(&blank_state());
             let game = interplanetary_game();
-            let mut broken = System::inner(2);
-            broken.pOrbitalDesc = std::ptr::null_mut();
+            let broken = System::inner(2);
+            let mut snapshot = broken.snapshot((320, 240));
+            snapshot.selected = None;
             assert_eq!(
-                summary_over(&broken, &game, Some(SOL_STAR)).unwrap_err(),
+                capture_summary(
+                    &sis(),
+                    &game,
+                    &SolarSummary::new(Some(snapshot), Some(SOL_STAR), sis().planet_name, &Table),
+                    b""
+                )
+                .unwrap_err(),
                 SummaryError::Solar(SolarError::OrbitalWorldMissing)
             );
         })
@@ -905,7 +919,7 @@ fn no_solar_system_summarises_as_plain_interplanetary_flight() {
         crate::app::bridge::with_game(&mut game_owner, || {
             install(&blank_state());
             let game = interplanetary_game();
-            let solar = SolarSystem::new(None, None, sis().planet_name, &Table);
+            let solar = SolarSummary::new(None, None, sis().planet_name, &Table);
             let summary = capture_summary(&sis(), &game, &solar, b"").unwrap();
             assert_eq!(summary.activity, IN_INTERPLANETARY as u8);
             assert_eq!(&summary.sis.planet_name, &sis().planet_name);

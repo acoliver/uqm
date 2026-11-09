@@ -13,7 +13,8 @@ impl AutomationObserver {
             inner.device = DeviceTracker::default();
         }
         let mut observation = self.ui.devices();
-        observation.in_orbit = input_ffi::departure_snapshot(world).in_orbit != 0;
+        observation.in_orbit =
+            input_ffi::departure_snapshot(world, self.ui.solar_snapshot()).in_orbit != 0;
         observation.pc_menu = self._configuration.preferences().menu == 2;
         let progress = inner.device.observe(step, observation);
         let input = match &progress {

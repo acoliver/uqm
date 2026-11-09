@@ -25,6 +25,7 @@ pub(crate) mod runtime {
     use save_load::pick_game;
 
     use super::{picker_action, picker_slot, PickerAction, MAX_SAVED_GAMES, SAVES_PER_PAGE};
+    use crate::engine::world::generation::SolarSnapshot;
     use crate::engine::{battle::Cx, input::InputSession, observe::Io, Kernel};
     use crate::graphics::context_abi::ContextLease;
     use crate::navigation::abi::{
@@ -219,59 +220,6 @@ pub(crate) mod runtime {
             cx.kernel.input_runtime().sleep(cx, ONE_SECOND / 30);
             true
         }
-    }
-
-    fn name_save_game(
-        cx: &mut Cx<'_>,
-        io: &mut Io<'_>,
-        input: &InputSession,
-        game_index: u16,
-        buffer: &mut [u8; 256],
-    ) -> bool {
-        let text = std::ffi::CStr::from_bytes_until_nul(buffer)
-            .unwrap_or_else(|error| panic!("invalid save name: {error}"));
-        let cursor = text.to_bytes().len();
-        draw_save_name_string(cx.kernel, cx.world, text, cursor, DDSHS_EDIT, game_index);
-        let context = ContextLease::require(cx.kernel.space_context);
-        let screen = ContextLease::require(cx.kernel.screen_context);
-        let rect = RECT {
-            corner: POINT {
-                x: (30 + SAFE_X) as i16,
-                y: (160 + ((game_index % SAVES_PER_PAGE) * 13)) as i16,
-            },
-            extent: EXTENT {
-                width: (204 - SAFE_X) as i16,
-                height: 11,
-            },
-        };
-        set_flash_rect(
-            &cx.kernel.sis_highlight,
-            &screen,
-            context.clip_rect(),
-            Some(rect),
-        );
-        let accepted = crate::ui::getchar::edit_text(
-            cx,
-            io,
-            input,
-            SAVE_NAME_SIZE as usize,
-            &mut buffer[..SAVE_NAME_SIZE as usize],
-            cursor,
-            &mut SaveNameCallbacks { index: game_index },
-        );
-        if !accepted {
-            buffer[0] = 0;
-        }
-        cx.kernel.sis_highlight.context.borrow_mut().take();
-        let text = std::ffi::CStr::from_bytes_until_nul(buffer)
-            .unwrap_or_else(|error| panic!("invalid edited save name: {error}"));
-        draw_save_name_string(cx.kernel, cx.world, text, cursor, DDSHS_NORMAL, game_index);
-        if let Some(callback) = cx.kernel.naming_callback {
-            callback(cx.kernel, cx.world, cx.screen_dimensions().0);
-        }
-        SetMenuSounds(input, MENU_SOUND_ARROWS, MENU_SOUND_SELECT);
-        cx.kernel.sis_highlight.context.borrow_mut().take();
-        accepted
     }
 
     // Private C-local state, containing only header-generated ABI records.
@@ -739,7 +687,12 @@ pub(crate) mod runtime {
         1
     }
 
-    fn do_game_options(cx: &mut Cx<'_>, io: &mut Io<'_>, state: &mut u8) -> bool {
+    fn do_game_options(
+        cx: &mut Cx<'_>,
+        io: &mut Io<'_>,
+        solar: Option<SolarSnapshot>,
+        state: &mut u8,
+    ) -> bool {
         let runtime = cx.kernel.input_runtime();
         let input = runtime.input();
         if cx.world.activity() & CHECK_ABORT as ACTIVITY != 0
@@ -752,7 +705,7 @@ pub(crate) mod runtime {
             match *state {
                 SAVE_GAME | LOAD_GAME => {
                     cx.kernel.sis_highlight.context.borrow_mut().take();
-                    if pick_game(cx, io, u32::from(*state == SAVE_GAME), 0) != 0 {
+                    if pick_game(cx, io, solar, u32::from(*state == SAVE_GAME), 0) != 0 {
                         return false;
                     }
                     set_menu_flash(cx.kernel, cx.screen_dimensions(), false);
@@ -780,7 +733,12 @@ pub(crate) mod runtime {
         true
     }
 
-    pub fn game_options(cx: &mut Cx<'_>, io: &mut Io<'_>) -> BOOLEAN {
+    pub fn game_options(
+        cx: &mut Cx<'_>,
+        io: &mut Io<'_>,
+        solar: Option<&crate::planets::solar_system::SolarSystem>,
+    ) -> BOOLEAN {
+        let solar = solar.map(|visit| visit.snapshot(cx.screen_dimensions()));
         let runtime = cx.kernel.input_runtime();
         let input = runtime.input();
         if cx.kernel.last_activity == CHECK_LOAD as ACTIVITY {
@@ -791,7 +749,7 @@ pub(crate) mod runtime {
                 PM_SAVE_GAME as u8,
                 LOAD_GAME as i16,
             );
-            if pick_game(cx, io, 0, 1) == 0 {
+            if pick_game(cx, io, solar, 0, 1) == 0 {
                 cx.world
                     .set_activity(cx.world.activity() | CHECK_ABORT as ACTIVITY);
             }
@@ -811,7 +769,9 @@ pub(crate) mod runtime {
             io.observer
                 .checkpoint(&crate::engine::observe::CheckpointView::GameOptions(true))
         });
-        cx.run_input(io, true, |cx, io| do_game_options(cx, io, &mut state));
+        cx.run_input(io, true, |cx, io| {
+            do_game_options(cx, io, solar, &mut state)
+        });
         cx.with_legacy(|| {
             io.observer
                 .checkpoint(&crate::engine::observe::CheckpointView::GameOptions(false))

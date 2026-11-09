@@ -13,10 +13,9 @@ fn submenu_selection(current: u8, selected: bool, pc_menu: bool) -> u8 {
 #[cfg(not(test))]
 pub(crate) mod live {
     use super::{presentation::OrbitPresentation, submenu_selection};
-    use crate::c_bindings::{global_state::MENU_STATE, solar_system};
+    use crate::c_bindings::global_state::MENU_STATE;
     use crate::comm::locdata::CRect;
     use crate::engine::graphics::context_abi::ContextLease;
-    use crate::engine::Kernel as KernelOwner;
     use crate::engine::{
         battle::Cx,
         observe::{CheckpointView, Io},
@@ -24,6 +23,7 @@ pub(crate) mod live {
     use crate::mainloop::restart_menu::c_extern::{self as base, SetContext};
     use crate::mainloop::types::activity_flags::{CHECK_ABORT, CHECK_LOAD, START_ENCOUNTER};
     use crate::planet_side::orbit_scan;
+    use crate::planets::solar_system::SolarSystem;
     use crate::starbase::cffi::CffiPlatform;
     use crate::starbase::gfx::{ContextId, FlashTarget, Gfx, Point, Rect, Rgba, Stamp};
     use std::ffi::c_void;
@@ -45,10 +45,6 @@ pub(crate) mod live {
     use crate::planets::plangen::live::generate_planet_surface;
 
     use crate::sound::heart_ffi::PLRPlaying;
-
-    use crate::strings::string_table::ReleaseStringTable;
-
-    use crate::strings::string_table::DestroyStringTable;
 
     use crate::planets::scan::live::scan_system;
 
@@ -73,36 +69,34 @@ pub(crate) mod live {
         }
     }
 
-    #[no_mangle]
-    pub unsafe extern "C" fn DrawScannedObjects(reversed: u32) {
-        crate::app::bridge::enter(|cx| {
-            let mut handle = if reversed != 0 {
-                cx.elements().tail()
+    pub unsafe fn draw_scanned_objects(
+        cx: &mut Cx<'_>,
+        reversed: bool,
+        visible: impl Fn(u16, u16) -> bool,
+    ) {
+        let mut handle = if reversed {
+            cx.elements().tail()
+        } else {
+            cx.elements().head()
+        };
+        while let Some(element) = handle {
+            handle = if reversed {
+                cx.elements().pred(element)
             } else {
-                cx.elements().head()
+                cx.elements().succ(element)
             };
-            while let Some(element) = handle {
-                handle = if reversed != 0 {
-                    cx.elements().pred(element)
-                } else {
-                    cx.elements().succ(element)
+            let state = cx.element(element);
+            if visible(state.flags, state.life) {
+                let stamp = Stamp {
+                    origin: Point {
+                        x: state.current.location.x,
+                        y: state.current.location.y,
+                    },
+                    frame: state.next.image.frame.raw() as usize,
                 };
-                let state = cx.element(element);
-                if crate::planet_side::orbit_scan::node_visible(
-                    state.flags,
-                    state.life,
-                    &(*solar_system::current()).SysInfo.planet_info,
-                ) {
-                    CffiPlatform.draw_stamp(Stamp {
-                        origin: Point {
-                            x: state.current.location.x,
-                            y: state.current.location.y,
-                        },
-                        frame: state.next.image.frame.raw() as usize,
-                    });
-                }
+                cx.with_legacy(|| CffiPlatform.draw_stamp(stamp));
             }
-        });
+        }
     }
 
     #[no_mangle]
@@ -224,11 +218,15 @@ pub(crate) mod live {
         game: &std::cell::RefCell<crate::engine::battle::Cx<'_>>,
         io: &std::cell::RefCell<crate::engine::observe::Io<'_>>,
         system: &mut crate::engine::world::generation::SolarSys<'_>,
-        body: crate::engine::world::generation::Body,
+        target: (
+            crate::engine::world::StarId,
+            crate::engine::world::generation::Body,
+        ),
         in_orbit: bool,
         surface: Option<crate::engine::graphics::drawable_abi::LoadedDrawable>,
         reports: crate::planets::report::typography::ReportResources,
     ) -> Option<OrbitPresentation> {
+        let (star, body) = target;
         #[cfg(feature = "debug-process")]
         if crate::front_end::uqmdebug::DISABLE_INTERACTIVITY != 0 {
             return None;
@@ -270,27 +268,15 @@ pub(crate) mod live {
             });
             system.body_data_index(body) & !0x80
         });
-        orbit_scan::generate_planet_side(game, io, presentation.scan().report_context());
-        {
-            let game = game.borrow();
-            if PLRPlaying(usize::MAX as *mut c_void) == 0 {
-                let music = game
-                    .kernel
-                    .lander_resources
-                    .as_ref()
-                    .and_then(|resources| resources.music(planet_type));
-                crate::sound::music::remember_music(
-                    music.map_or(
-                        crate::sound::music::MusicRequest::Absent,
-                        crate::sound::music::MusicRequest::Track,
-                    ),
-                    true,
-                    1,
-                    game.world.data.game.glob_flags & crate::navigation::abi::MUSIC_DISABLED as u8
-                        == 0,
-                );
-            }
-        }
+        orbit_scan::generate_planet_side(
+            game,
+            io,
+            system,
+            star,
+            body,
+            presentation.scan().report_context(),
+        );
+        play_planet_music(&game.borrow(), planet_type);
         game.borrow_mut().with_legacy(|| {
             if wait {
                 zoom_in_planet_sphere(&context, &sphere);
@@ -305,27 +291,44 @@ pub(crate) mod live {
         Some(presentation)
     }
 
-    #[no_mangle]
-    /// # Safety
-    /// Call on the game thread with a loaded solar system. No other code may retain
-    /// references to the planet resources released by this call.
-    pub unsafe extern "C" fn FreePlanet() {
-        let system = solar_system::current();
-        base::stop_music();
-        for i in 0..(*system).PlanetSideFrame.len() {
-            base::DestroyDrawable(base::ReleaseDrawable((*system).PlanetSideFrame[i].cast()));
-            (*system).PlanetSideFrame[i] = std::ptr::null_mut();
+    fn play_planet_music(game: &Cx<'_>, planet_type: u8) {
+        // SAFETY: the sentinel queries current playback without dereferencing a music handle.
+        if unsafe { PLRPlaying(usize::MAX as *mut c_void) } == 0 {
+            let music = game
+                .kernel
+                .lander_resources
+                .as_ref()
+                .and_then(|resources| resources.music(planet_type));
+            crate::sound::music::remember_music(
+                music.map_or(
+                    crate::sound::music::MusicRequest::Absent,
+                    crate::sound::music::MusicRequest::Track,
+                ),
+                true,
+                1,
+                game.world.data.game.glob_flags & crate::navigation::abi::MUSIC_DISABLED as u8 == 0,
+            );
         }
-        DestroyStringTable(ReleaseStringTable(
-            (*system).SysInfo.planet_info.discovery_string.cast(),
-        ));
-        (*system).SysInfo.planet_info.discovery_string = std::ptr::null_mut();
-        SetContext(KernelOwner::current().read(|owner| owner.space_context));
+    }
+
+    /// Release the visit's orbit presentation.
+    ///
+    /// # Safety
+    /// Call on the game thread with initialized native presentation resources.
+    pub unsafe fn free_planet(cx: &mut Cx<'_>, solar: &mut SolarSystem) {
+        let space_context = cx.kernel.space_context;
+        cx.with_legacy(|| {
+            base::stop_music();
+            solar.sys.frames.fill_with(|| None);
+            solar.sys.report.clear();
+            SetContext(space_context);
+        });
     }
 
     unsafe fn do_orbit(
         cx: &mut Cx<'_>,
         io: &mut Io<'_>,
+        solar: &mut SolarSystem,
         planet: &ContextLease,
         scan: &ScanState,
         menu: &mut MENU_STATE,
@@ -345,13 +348,13 @@ pub(crate) mod live {
         cx.with_legacy(|| CffiPlatform.set_flash(FlashTarget::Off));
         match menu.CurState {
             0 => {
-                scan_system(scan, planet, cx, io);
+                scan_system(solar, scan, planet, cx, io);
                 if cx.world.activity() & START_ENCOUNTER != 0 {
                     return 0;
                 }
             }
             2 => {
-                selected = devices_menu(cx, io) != 0;
+                selected = devices_menu(cx, io, Some(solar)) != 0;
                 if cx.world.activity() & START_ENCOUNTER != 0 {
                     return 0;
                 }
@@ -359,7 +362,7 @@ pub(crate) mod live {
             3 => cargo_menu(cx, io),
             4 => selected = roster_menu(cx, io) != 0,
             5 => {
-                if game_options(cx, io) == 0 {
+                if game_options(cx, io, Some(solar)) == 0 {
                     return 0;
                 }
             }
@@ -412,6 +415,7 @@ pub(crate) mod live {
     pub unsafe fn planet_orbit_menu(
         cx: &mut Cx<'_>,
         io: &mut Io<'_>,
+        solar: &mut SolarSystem,
         presentation: &OrbitPresentation,
     ) {
         let runtime = cx.kernel.input_runtime();
@@ -429,8 +433,8 @@ pub(crate) mod live {
         base::SetMenuSounds(input, 15, 16);
         let old = SetInputCallback(runtime.input(), Some(hook));
         io.observer.checkpoint(&CheckpointView::PlanetMenu(1));
-        cx.run_input(io, true, |cx, io| {
-            do_orbit(cx, io, &planet, presentation.scan(), &mut menu) != 0
+        solar.run_input(cx, io, true, |cx, io, solar| {
+            do_orbit(cx, io, solar, &planet, presentation.scan(), &mut menu) != 0
         });
         io.observer.checkpoint(&CheckpointView::PlanetMenu(0));
         SetInputCallback(runtime.input(), old);

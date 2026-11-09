@@ -11,43 +11,41 @@ use crate::comm::dispatch::{conv, ship};
 use crate::engine::battle::Cx;
 use crate::engine::observe::Io;
 use crate::engine::world::generation::{ReportDisposition, SolarSys};
+use crate::engine::world::StarId;
 use crate::planets::generate::special::Story;
 use crate::planets::generate::SiteHost;
-use crate::ships::native::abi::SOLARSYS_STATE;
 use std::cell::RefCell;
 use std::ffi::CStr;
-use std::ptr::NonNull;
 
 pub struct Site<'a, 'game, 'observer> {
     pub(crate) game: &'a RefCell<Cx<'game>>,
     io: &'a RefCell<Io<'observer>>,
     pickup: &'a mut crate::planet_side::special_effects::PickupContext,
+    star: StarId,
     index: u8,
-    record: NonNull<SOLARSYS_STATE>,
+    in_orbit: bool,
     presentation: Option<crate::planets::orbit::presentation::OrbitPresentation>,
     report_context: Option<crate::planets::report::typography::ReportContext>,
     report_resources: crate::planets::report::typography::ReportResources,
 }
 
 impl<'a, 'game, 'observer> Site<'a, 'game, 'observer> {
-    /// # Safety
-    /// The initialized solar record must remain live throughout this host's
-    /// lifetime and may be accessed only between generation-view callbacks.
-    pub unsafe fn new(
+    pub fn new(
         game: &'a RefCell<Cx<'game>>,
         io: &'a RefCell<Io<'observer>>,
-        record: *mut SOLARSYS_STATE,
+        star: StarId,
+        index: u8,
+        in_orbit: bool,
         pickup: &'a mut crate::planet_side::special_effects::PickupContext,
         report_context: Option<crate::planets::report::typography::ReportContext>,
     ) -> Self {
-        let record = NonNull::new(record).unwrap_or_else(|| panic!("live solar system"));
         Self {
             game,
             io,
             pickup,
-            // SAFETY: the caller retains the initialized record for the host's lifetime.
-            index: unsafe { record.as_ref().generator_index },
-            record,
+            star,
+            index,
+            in_orbit,
             presentation: None,
             report_resources: report_context
                 .as_ref()
@@ -92,12 +90,27 @@ impl<'a, 'game, 'observer> Site<'a, 'game, 'observer> {
         unsafe { crate::comm::dispatch::init_communication(&mut game, &mut io, conversation) };
     }
 
-    fn load_scene(&self, graphics: &CStr, strings: &CStr, report: u16) {
+    fn load_report(&self, system: &mut SolarSys<'_>, strings: &CStr, report: u16) {
+        use crate::engine::{strings::owned_table::LoadedTextTable, world::generation::ReportSlot};
         self.report_resources.load();
-        let record = self.record.as_ptr();
         self.game.borrow_mut().with_legacy(|| {
-            // SAFETY: the generation view has no outstanding record borrows during this effect.
-            unsafe { crate::planets::c_api::load_lander_scene(record, graphics, strings, report) };
+            system.report = ReportSlot::new(
+                LoadedTextTable::load(strings).and_then(|table| table.entry(report)),
+            );
+        });
+    }
+
+    fn load_scene(&self, system: &mut SolarSys<'_>, graphics: &CStr, strings: &CStr, report: u16) {
+        use crate::engine::{
+            graphics::drawable_abi::LoadedDrawable, strings::owned_table::LoadedTextTable,
+            world::generation::ReportSlot,
+        };
+        self.report_resources.load();
+        self.game.borrow_mut().with_legacy(|| {
+            system.frames[1] = LoadedDrawable::load(graphics);
+            system.report = ReportSlot::new(
+                LoadedTextTable::load(strings).and_then(|table| table.entry(report)),
+            );
         });
     }
 }

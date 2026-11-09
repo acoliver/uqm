@@ -206,8 +206,10 @@ fn rects(width: i16, height: i16) -> Vec<[i16; 4]> {
     cases
 }
 
-pub fn retained_ovals_match_original_c_full_offscreen_buffers() {
-    let seed_before = unsafe { (*super::SysGenRNG).seed() };
+pub fn retained_ovals_match_original_c_full_offscreen_buffers(
+    system_rng: &uqm_rust::math::RandomContext,
+) {
+    let seed_before = system_rng.seed();
     // Standard tests require every full-buffer digest. A supplied original-C
     // capture adds a streaming byte-for-byte comparison without checking in or
     // duplicating the large capture.
@@ -289,7 +291,7 @@ pub fn retained_ovals_match_original_c_full_offscreen_buffers() {
         }
     }
     assert_eq!(
-        unsafe { (*super::SysGenRNG).seed() },
+        system_rng.seed(),
         seed_before,
         "ovals do not consume system RNG"
     );

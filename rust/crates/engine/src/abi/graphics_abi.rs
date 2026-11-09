@@ -153,7 +153,7 @@ pub struct point {
 }
 pub type POINT = point;
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Default)]
 pub struct stamp {
     pub origin: POINT,
     pub frame: FRAME,

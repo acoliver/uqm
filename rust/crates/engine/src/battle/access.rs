@@ -694,12 +694,7 @@ mod intersection_projection_tests {
                 crate::battle::frames::FrameArray::fixture([std::ptr::null_mut(); 3], ()),
             );
             let mut world = World::new();
-            let mut cx = Cx {
-                b: &mut battle,
-                world: &mut world,
-                kernel: &mut kernel,
-                rng: || 0,
-            };
+            let mut cx = Cx::new(&mut battle, &mut world, &mut kernel, || 0);
             cx.init_intersect_start(id);
             cx.init_intersect_end(id);
             assert_eq!(

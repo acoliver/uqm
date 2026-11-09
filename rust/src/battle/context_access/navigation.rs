@@ -2,8 +2,6 @@
 use crate::engine::battle::Cx;
 #[cfg(not(test))]
 use crate::engine::battle::{ElementId, Parent};
-#[cfg(not(test))]
-use crate::engine::world::planet::PlanetDesc;
 use crate::engine::StoryKey;
 use crate::navigation::abi::*;
 
@@ -84,8 +82,6 @@ pub trait NavigationOps {
     #[cfg(not(test))]
     fn navigation_mut(&mut self) -> &mut crate::engine::WorldData;
     #[cfg(not(test))]
-    fn solar(&self) -> &SOLARSYS_STATE;
-    #[cfg(not(test))]
     fn ip_group_id(
         &self,
         element: ElementId,
@@ -141,16 +137,6 @@ impl NavigationOps for Cx<'_> {
     }
 
     #[cfg(not(test))]
-    fn solar(&self) -> &SOLARSYS_STATE {
-        // SAFETY: the navigation mode retains its current system for this context borrow.
-        unsafe {
-            pSolarSysState
-                .as_ref()
-                .unwrap_or_else(|| panic!("active solar system"))
-        }
-    }
-
-    #[cfg(not(test))]
     fn ip_group_id(
         &self,
         element: ElementId,
@@ -188,11 +174,7 @@ impl NavigationOps for Cx<'_> {
 
     #[cfg(not(test))]
     fn planet_outer_location(&self, planet: u16) -> POINT {
-        let solar = self.solar();
-        displayToLocation(
-            solar.PlanetDesc[usize::from(planet)].image.origin,
-            solar.SunDesc[0].radius,
-        )
+        crate::planets::solar_coords::outer_location(self.solar_geometry(), planet)
     }
 
     fn leave_hyperspace(&mut self, kind: u8, point: POINT) {
@@ -207,28 +189,9 @@ impl NavigationOps for Cx<'_> {
 
     #[cfg(not(test))]
     fn flagship_location(&self) -> u8 {
-        let solar = self.solar();
-        if solar.pBaseDesc == solar.PlanetDesc.as_ptr().cast_mut() {
-            return 0;
-        }
-        assert_eq!(solar.pBaseDesc, solar.MoonDesc.as_ptr().cast_mut());
-        // SAFETY: the current system retains its active orbital descriptor for this borrow.
-        let orbital = unsafe {
-            solar
-                .pOrbitalDesc
-                .as_ref()
-                .unwrap_or_else(|| panic!("orbital descriptor"))
-        };
-        let planet = if orbital.prev_desc == solar.SunDesc.as_ptr().cast_mut() {
-            solar.pOrbitalDesc
-        } else {
-            orbital.prev_desc
-        };
-        let offset = (planet as usize)
-            .checked_sub(solar.PlanetDesc.as_ptr() as usize)
-            .unwrap_or_else(|| panic!("planet belongs to system"));
-        assert!(offset.is_multiple_of(std::mem::size_of::<PlanetDesc>()));
-        (1 + offset / std::mem::size_of::<PlanetDesc>()) as u8
+        self.solar_geometry()
+            .inner_planet
+            .map_or(0, |planet| planet + 1)
     }
     #[cfg(not(test))]
     fn group_record(

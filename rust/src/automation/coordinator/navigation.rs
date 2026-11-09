@@ -115,7 +115,8 @@ impl AutomationObserver {
         inner: &mut CoordInner,
         mut scheduler_event: SchedulerEvent,
     ) -> SchedulerEvent {
-        let snapshot = crate::automation::input_ffi::departure_snapshot(world);
+        let snapshot =
+            crate::automation::input_ffi::departure_snapshot(world, self.ui.solar_snapshot());
         let solar_system_active = snapshot.active != 0;
         if solar_system_active && snapshot.in_ip_flight != 0 && !inner.departure.flight_observed {
             inner.departure.flight_observed = true;
@@ -184,6 +185,7 @@ impl AutomationObserver {
     ) -> SchedulerEvent {
         let snapshot = crate::automation::input_ffi::navigation_snapshot(
             world,
+            self.ui.solar_snapshot(),
             i32::from(navigation.planet),
             None,
         );

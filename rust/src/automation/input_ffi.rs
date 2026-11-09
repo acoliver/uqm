@@ -19,9 +19,8 @@
 
 use super::{campaign_state::CampaignView, ui_observation::UiObservation};
 use crate::automation::coordinator::AutomationObserver;
-#[cfg(not(test))]
-use crate::c_bindings::global_state::SOLARSYS_STATE;
 use crate::engine::input::InputControls;
+use crate::engine::world::generation::{Body, SolarSnapshot};
 
 // ===========================================================================
 //  C global input state — FFI access to ImmediateInputState.menu[]
@@ -82,9 +81,6 @@ impl NavigationSnapshot {
 #[cfg(not(test))]
 extern "C" {
 
-    /// Live orbit predicate: `playerInSolarSystem() && pSolarSysState->InOrbit`.
-    #[allow(non_snake_case)]
-    fn playerInPlanetOrbit() -> bool;
     #[link_name = "ScreenWidth"]
     static mut SCREEN_WIDTH: i32;
     #[link_name = "ScreenHeight"]
@@ -126,13 +122,6 @@ impl ViewGeometry {
             display_to_loc: display_factor >> 1,
         }
     }
-
-    /// Read the geometry from the live C screen-size globals.
-    #[cfg(not(test))]
-    fn current() -> Self {
-        let (width, height) = screen_size();
-        Self::from_screen(width, height)
-    }
 }
 
 /// The live `ScreenWidth` and `ScreenHeight`.
@@ -161,55 +150,49 @@ const DEFAULT_SCREEN_WIDTH: i32 = 320;
 #[cfg(test)]
 const DEFAULT_SCREEN_HEIGHT: i32 = 240;
 
-/// Read the target-independent flight state of the live solar system.
-///
-/// # Safety
-/// Must run on the game thread while `solar_system` is the live
-/// `pSolarSysState`, as the automation input hook does.
-#[cfg(not(test))]
-unsafe fn read_flight_state(
+/// Read only the mode owner's copied admission value, including its live orbit flag.
+fn read_flight_state(
     world: &CampaignView,
-    solar_system: &SOLARSYS_STATE,
+    solar: &SolarSnapshot,
     snapshot: &mut NavigationSnapshot,
 ) {
     snapshot.active = 1;
-    snapshot.in_ip_flight = i32::from(solar_system.InIpFlight != 0);
-    // Ask the game for live orbit state rather than inferring it. The
-    // authoritative flag is `SOLARSYS_STATE::InOrbit`, which the exported
-    // predicate reads.
-    // `GLOBAL(in_orbit)` is not usable here: it only encodes orbit state
-    // for save/load. `!InIpFlight` is not usable either: the game clears
-    // `InIpFlight` when entering an encounter as well as an orbit, so it
-    // would report orbit during encounters.
-    snapshot.in_orbit = i32::from(playerInPlanetOrbit());
-    snapshot.wait_intersect = solar_system.WaitIntersect;
+    snapshot.in_ip_flight = i32::from(solar.in_ip_flight);
+    snapshot.in_orbit = i32::from(solar.in_orbit);
+    snapshot.wait_intersect = solar.wait_intersect;
     snapshot.ship_x = i32::from(world.ship_position.0);
     snapshot.ship_y = i32::from(world.ship_position.1);
     snapshot.ship_facing = world.ship_facing;
     (snapshot.velocity_x, snapshot.velocity_y) = world.velocity;
-
-    if !solar_system.pOrbitalDesc.is_null() {
-        snapshot.orbital_data_index = i32::from((*solar_system.pOrbitalDesc).data_index);
-        let planet_start = solar_system.PlanetDesc.as_ptr() as usize;
-        let moon_start = solar_system.MoonDesc.as_ptr() as usize;
-        let desc_size = std::mem::size_of::<crate::engine::world::planet::PlanetDesc>();
-        let orbital_address = solar_system.pOrbitalDesc as usize;
-        if orbital_address >= moon_start
-            && orbital_address < moon_start + solar_system.MoonDesc.len() * desc_size
-        {
-            snapshot.orbital_moon = ((orbital_address - moon_start) / desc_size) as i32;
-        }
-        let sun = solar_system.SunDesc.as_ptr();
-        let orbital_planet =
-            if std::ptr::eq((*solar_system.pOrbitalDesc).prev_desc.cast_const(), sun) {
-                solar_system.pOrbitalDesc
-            } else {
-                (*solar_system.pOrbitalDesc).prev_desc
-            } as usize;
-        if orbital_planet >= planet_start {
-            snapshot.inner_planet = ((orbital_planet - planet_start) / desc_size) as i32;
-        }
+    snapshot.inner_planet = solar.inner_planet.map_or(-1, i32::from);
+    if let Some(body) = solar.selected {
+        let descriptor = match body {
+            Body::Planet(planet) => solar.planets[usize::from(planet)],
+            Body::Moon { moon, .. } => {
+                snapshot.orbital_moon = i32::from(moon);
+                solar.moons[usize::from(moon)]
+            }
+        };
+        snapshot.orbital_data_index = i32::from(descriptor.data_index);
     }
+}
+
+fn navigation_base(world: &CampaignView, solar: Option<&SolarSnapshot>) -> NavigationSnapshot {
+    let (width, height) = solar.map_or_else(screen_size, |solar| solar.screen);
+    let geometry = ViewGeometry::from_screen(width, height);
+    let mut snapshot = NavigationSnapshot {
+        inner_planet: -1,
+        orbital_moon: -1,
+        orbital_data_index: -1,
+        target_data_index: -1,
+        view_center_x: geometry.half_width,
+        view_center_y: geometry.half_height,
+        ..NavigationSnapshot::default()
+    };
+    if let Some(solar) = solar {
+        read_flight_state(world, solar, &mut snapshot);
+    }
+    snapshot
 }
 
 /// The flagship's authoritative logical coordinates, `GLOBAL_SIS(log_x/log_y)`.
@@ -306,88 +289,52 @@ pub(crate) fn battle_fleets() -> Option<(u8, u8)> {
     None
 }
 
-/// Sample the live solar system for flying out of it, without a target.
-///
-/// `active` is 0 whenever no solar system is live, which is how a departure
-/// observes that production has torn interplanetary flight down.
-#[cfg(not(test))]
-pub(crate) fn departure_snapshot(world: &CampaignView) -> NavigationSnapshot {
-    let geometry = ViewGeometry::current();
-    let mut snapshot = NavigationSnapshot {
-        inner_planet: -1,
-        orbital_moon: -1,
-        orbital_data_index: -1,
-        target_data_index: -1,
-        view_center_x: geometry.half_width,
-        view_center_y: geometry.half_height,
-        ..NavigationSnapshot::default()
-    };
-    // SAFETY: the production game invokes this hook synchronously on the game
-    // thread, so the solar-system pointer and its state cannot change here.
-    unsafe {
-        if let Some(solar_system) = crate::c_bindings::solar_system::current().as_ref() {
-            read_flight_state(world, solar_system, &mut snapshot);
-        }
-    }
-    snapshot
+/// A missing visit value observes completed interplanetary teardown.
+pub(crate) fn departure_snapshot(
+    world: &CampaignView,
+    solar: Option<SolarSnapshot>,
+) -> NavigationSnapshot {
+    navigation_base(world, solar.as_ref())
 }
 
-#[cfg(test)]
-pub(crate) fn departure_snapshot(world: &CampaignView) -> NavigationSnapshot {
-    navigation_snapshot(world, 0, None)
-}
-
-/// Copy a live group's target geometry without moving it or invoking contact.
-#[cfg(not(test))]
+/// Copy group geometry using the supplied mode observation, without invoking contact.
 pub(crate) fn contact_snapshot(
     world: &CampaignView,
+    solar: Option<SolarSnapshot>,
     race: u8,
 ) -> Option<(NavigationSnapshot, bool)> {
-    use crate::c_bindings::global_state::POINT;
-    extern "C" {
-        fn locationToDisplay(location: POINT, radius: i16) -> POINT;
-    }
-    unsafe {
-        let solar = crate::c_bindings::solar_system::current().as_ref()?;
-        let (_, system, location) = world
-            .groups
-            .iter()
-            .copied()
-            .find(|(id, _, _)| *id == race)?;
-        let mut snapshot = if system == 0 {
-            departure_snapshot(world)
+    let solar = solar?;
+    let (_, system, location) = world
+        .groups
+        .iter()
+        .copied()
+        .find(|(id, _, _)| *id == race)?;
+    let mut snapshot = if system == 0 {
+        departure_snapshot(world, Some(solar))
+    } else {
+        navigation_snapshot(world, Some(solar), i32::from(system) - 1, None)
+    };
+    let same_view = (snapshot.inner_planet + 1) as u8 == system;
+    if same_view {
+        let radius = if system == 0 {
+            solar.zoom_radius
         } else {
-            navigation_snapshot(world, i32::from(system) - 1, None)
+            128 << 6
         };
-        let same_view = (snapshot.inner_planet + 1) as u8 == system;
-        if same_view {
-            let radius = if system == 0 {
-                solar.SunDesc[0].radius
-            } else {
-                128 << 6
-            };
-            let point = locationToDisplay(
-                POINT {
-                    x: location.0,
-                    y: location.1,
-                },
-                radius,
-            );
-            snapshot.target_x = i32::from(point.x);
-            snapshot.target_y = i32::from(point.y);
-            // The contact controller pursues a ship in this view, not its planet.
-            snapshot.inner_planet = -1;
-        }
-        Some((snapshot, same_view))
+        let point = crate::planets::solar_coords::to_display(
+            crate::graphics::native_abi::POINT {
+                x: location.0,
+                y: location.1,
+            },
+            radius,
+            solar.screen.0 - 78,
+            solar.screen.1 - 13,
+        );
+        snapshot.target_x = i32::from(point.x);
+        snapshot.target_y = i32::from(point.y);
+        snapshot.inner_planet = -1;
     }
-}
-
-#[cfg(test)]
-pub(crate) fn contact_snapshot(
-    _world: &CampaignView,
-    _race: u8,
-) -> Option<(NavigationSnapshot, bool)> {
-    None
+    Some((snapshot, same_view))
 }
 
 #[cfg(not(test))]
@@ -432,89 +379,61 @@ fn planet_display_target(
     )
 }
 
-#[cfg(not(test))]
 pub(crate) fn navigation_snapshot(
     world: &CampaignView,
+    solar: Option<SolarSnapshot>,
     target_planet: i32,
     target_moon: Option<i32>,
 ) -> NavigationSnapshot {
-    let geometry = ViewGeometry::current();
-    let mut snapshot = NavigationSnapshot {
-        inner_planet: -1,
-        orbital_moon: -1,
-        orbital_data_index: -1,
-        target_data_index: -1,
-        view_center_x: geometry.half_width,
-        view_center_y: geometry.half_height,
-        ..NavigationSnapshot::default()
-    };
-
-    // SAFETY: this synchronous snapshot borrows the current solar system until
-    // return, without callbacks or any mutation of its planet arrays.
-    let solar = unsafe { crate::c_bindings::solar_system::current().as_ref() };
+    let mut snapshot = navigation_base(world, None);
     let Some(solar_system) = solar else {
         return snapshot;
     };
-    if target_planet < 0 || target_planet >= i32::from(solar_system.SunDesc[0].num_planets) {
+    let geometry = ViewGeometry::from_screen(solar_system.screen.0, solar_system.screen.1);
+    snapshot.view_center_x = geometry.half_width;
+    snapshot.view_center_y = geometry.half_height;
+    if target_planet < 0 || target_planet >= i32::from(solar_system.planet_count) {
         return snapshot;
     }
-    // SAFETY: the live synchronous solar borrow also keeps its global flight state live.
-    unsafe { read_flight_state(world, solar_system, &mut snapshot) };
+    read_flight_state(world, &solar_system, &mut snapshot);
 
     if let Some(moon) = target_moon {
         if snapshot.inner_planet == target_planet
             && moon >= 0
-            && moon < i32::from(solar_system.PlanetDesc[target_planet as usize].num_planets)
+            && moon < i32::from(solar_system.planets[target_planet as usize].satellites)
         {
-            for (index, body) in solar_system.MoonDesc
-                [..usize::from(solar_system.PlanetDesc[target_planet as usize].num_planets)]
+            for (index, body) in solar_system.moons
+                [..usize::from(solar_system.planets[target_planet as usize].satellites)]
                 .iter()
                 .enumerate()
             {
                 if index != moon as usize {
                     snapshot.moon_obstacles[snapshot.moon_obstacle_count] = (
-                        i32::from(body.image.origin.x),
-                        i32::from(body.image.origin.y),
+                        i32::from(body.display_origin.x),
+                        i32::from(body.display_origin.y),
                     );
                     snapshot.moon_obstacle_count += 1;
                 }
             }
-            let target = &solar_system.MoonDesc[moon as usize];
+            let target = &solar_system.moons[moon as usize];
             snapshot.target_data_index = i32::from(target.data_index);
-            let target_origin = target.image.origin;
+            let target_origin = target.display_origin;
             snapshot.target_x = i32::from(target_origin.x);
             snapshot.target_y = i32::from(target_origin.y);
             return snapshot;
         }
     }
 
-    let target_origin = solar_system.PlanetDesc[target_planet as usize].image.origin;
+    let target_origin = solar_system.planets[target_planet as usize].display_origin;
     let (target_x, target_y) = planet_display_target(
         snapshot.inner_planet == target_planet,
         (i32::from(target_origin.x), i32::from(target_origin.y)),
-        i32::from(solar_system.SunDesc[0].radius),
+        i32::from(solar_system.zoom_radius),
         &geometry,
     );
     snapshot.target_x = target_x;
     snapshot.target_y = target_y;
     snapshot
-}
-
-#[cfg(test)]
-pub(crate) fn navigation_snapshot(
-    _world: &CampaignView,
-    _target_planet: i32,
-    _target_moon: Option<i32>,
-) -> NavigationSnapshot {
-    // `active` stays 0, so no controls are derived from this snapshot. The
-    // view centre is still reported honestly so that a caller which reads it
-    // without checking `active` cannot silently steer against (0, 0).
-    let geometry = ViewGeometry::from_screen(DEFAULT_SCREEN_WIDTH, DEFAULT_SCREEN_HEIGHT);
-    NavigationSnapshot {
-        view_center_x: geometry.half_width,
-        view_center_y: geometry.half_height,
-        ..NavigationSnapshot::default()
-    }
 }
 
 pub(crate) fn graphics_options(
@@ -722,7 +641,7 @@ pub(crate) fn star_flight_observation(
             .expect("initialized state"),
         conversation_active: ui.conversation_snapshot().active,
         portal_open: world.story_value(crate::engine::StoryKey::ARILOU_SPACE) == Some(1),
-        solar_active: departure_snapshot(world).active != 0,
+        solar_active: departure_snapshot(world, ui.solar_snapshot()).active != 0,
         cursor,
         cursor_delta,
         autopilot: (autopilot.0 >= 0 && autopilot.1 >= 0).then_some(autopilot),

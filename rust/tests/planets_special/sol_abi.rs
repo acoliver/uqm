@@ -16,23 +16,21 @@ pub fn check() {
     h.seed(104729);
     let system = &raw mut *h.state;
     unsafe {
-        let world = &raw mut (*system).PlanetDesc[0];
-        (*world).prev_desc = &raw mut (*system).SunDesc[0];
-        assert!(!crate::invoke_generation(system, |view, host| table
+        assert!(!crate::invoke_generation(&mut *system, |view, host| table
             .pickup_energy(
                 view,
                 uqm_rust::planets::generate::special::Body::Planet(0),
                 u16::MAX,
                 host
             )));
-        assert!(crate::invoke_generation(system, |view, host| table
+        assert!(crate::invoke_generation(&mut *system, |view, host| table
             .pickup_minerals(
                 view,
                 uqm_rust::planets::generate::special::Body::Planet(0),
                 u16::MAX,
                 host
             )));
-        assert!(crate::invoke_generation(system, |view, host| table
+        assert!(crate::invoke_generation(&mut *system, |view, host| table
             .pickup_life(
                 view,
                 uqm_rust::planets::generate::special::Body::Planet(0),
@@ -49,8 +47,11 @@ pub fn check() {
 }
 
 fn check_initialized_identity(h: &mut Harness) {
-    h.state.generator_index = SOL_DEFINED;
+    h.star_index = SOL_DEFINED;
+    h.set_star(0, 0);
     h.star[0].index = uqm_rust::battle::gendef::SHOFIXTI_DEFINED;
+    uqm_rust::engine::World::current()
+        .write(|world| world.set_catalog(std::borrow::Cow::Owned(*h.star)));
     // SAFETY: the serialized harness retains its catalog, RNG and solar records;
     // the callback releases all generated references before returning.
     let generated = unsafe {
@@ -59,10 +60,10 @@ fn check_initialized_identity(h: &mut Harness) {
             let mut io = uqm_rust::engine::observe::Io {
                 observer: &mut observer,
             };
-            uqm_rust::planets::solarsys::site::dispatch::with_system(
+            uqm_rust::planets::solarsys::site::dispatch::invoke(
                 cx,
                 &mut io,
-                &raw mut *h.state,
+                &mut h.state,
                 |generator, system, host| {
                     assert_eq!(system.star_index(), SOL_DEFINED);
                     generator.generate_planets(system, host)
@@ -73,9 +74,10 @@ fn check_initialized_identity(h: &mut Harness) {
     };
     assert!(generated);
     assert_eq!(
-        h.state.SunDesc[0].num_planets, 9,
+        h.state.sys.sun.num_planets, 9,
         "the initialized Sol generator must survive a later star-index change"
     );
+    h.star_index = 0;
     h.set_star(0, 0);
 }
 
@@ -99,10 +101,9 @@ fn check_bomb_queue(h: &mut Harness) {
             world.data.game.battle_group_ref = 0x12345678;
             saved
         });
-        assert!(crate::invoke_generation(
-            &raw mut *h.state,
-            |system, host| GENERATE_SOL_FUNCTIONS.reinit_npcs(system, host)
-        ));
+        assert!(crate::invoke_generation(&mut h.state, |system, host| {
+            GENERATE_SOL_FUNCTIONS.reinit_npcs(system, host)
+        }));
         uqm_rust::engine::World::current().write(|world| {
             assert_eq!(world.data.game.battle_group_ref, 0);
             assert!(world.ip_groups_ref().head().is_none());
@@ -218,12 +219,7 @@ fn check_drawable_ownership(h: &mut Harness) {
         c_api::DISABLE_INTERACTIVITY = 1;
         uqm_rust::app::bridge::enter(|cx| {
             let mut observer = uqm_rust::engine::observe::Unobserved;
-            let game = std::cell::RefCell::new(uqm_rust::engine::battle::Cx {
-                b: cx.b,
-                world: cx.world,
-                kernel: cx.kernel,
-                rng: cx.rng,
-            });
+            let game = std::cell::RefCell::new(cx.reborrow());
             let io = std::cell::RefCell::new(uqm_rust::engine::observe::Io {
                 observer: &mut observer,
             });
@@ -234,16 +230,21 @@ fn check_drawable_ownership(h: &mut Harness) {
             let mut site = uqm_rust::planets::solarsys::site::Site::new(
                 &game,
                 &io,
-                &raw mut *h.state,
+                h.state.star(),
+                h.state.sys.star_index(),
+                h.state.in_orbit(),
                 &mut pickup,
                 None,
             );
-            site.with_system(|_, system, _| {
+            site.invoke(&mut h.state.sys, |_, system, _| {
                 assert!(c_api::load_planet(
                     &game,
                     &io,
                     system,
-                    uqm_rust::engine::world::generation::Body::Planet(0),
+                    (
+                        uqm_rust::engine::StarId(0),
+                        uqm_rust::engine::world::generation::Body::Planet(0)
+                    ),
                     false,
                     definition.into_drawable(),
                     Default::default(),

@@ -56,6 +56,7 @@ pub enum CheckpointView<'a> {
     },
     StarMap(Option<StarMapView>),
     Devices(&'a DeviceObservation),
+    Solar(Option<&'a crate::world::generation::SolarSnapshot>),
     Won,
     PresentationStarted,
     PresentationCancelled,

@@ -1,8 +1,7 @@
-//! Native interplanetary art, colormaps, music and system RNG ownership.
+//! Native interplanetary art, colormaps and music.
 use super::*;
 use crate::graphics::pixmap_abi::{CaptureDrawable, ReleaseDrawable};
 use crate::graphics::resgfx::LoadGraphicInstance;
-use crate::math::{delete_context as RandomContext_Delete, new_context as RandomContext_New};
 use crate::sound::{heart_ffi::DestroyMusic, resource_types::LoadMusicInstance};
 use crate::strings::sresins::LoadStringTableInstance;
 use crate::strings::string_table::{CaptureStringTable, DestroyStringTable, ReleaseStringTable};
@@ -25,8 +24,6 @@ pub unsafe extern "C" fn FreeIPData() {
     SpaceJunkFrame = ptr::null_mut();
     DestroyMusic(SpaceMusic);
     SpaceMusic = ptr::null_mut();
-    RandomContext_Delete(SysGenRNG.cast());
-    SysGenRNG = ptr::null_mut();
 }
 
 #[no_mangle]
@@ -46,8 +43,5 @@ pub(super) unsafe extern "C" fn LoadIPData() {
         SUN_FRAME =
             CaptureDrawable(LoadGraphicInstance(c"graphics.truespacesun".as_ptr()).cast()).cast();
         SpaceMusic = LoadMusicInstance(c"music.space".as_ptr());
-    }
-    if SysGenRNG.is_null() {
-        SysGenRNG = RandomContext_New().cast();
     }
 }

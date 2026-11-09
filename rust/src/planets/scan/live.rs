@@ -1,6 +1,6 @@
 use super::{landing_fuel, move_cursor};
 use crate::battle::element::ElementFlags;
-use crate::c_bindings::{controller_input::*, solar_system};
+use crate::c_bindings::controller_input::*;
 use crate::comm::locdata::{CColor, CPoint, CRect};
 use crate::engine::graphics::context_abi::{ContextFrame, ContextLease};
 use crate::engine::{
@@ -14,6 +14,7 @@ use crate::mainloop::restart_menu::c_extern::{
 };
 use crate::mainloop::types::activity_flags::{CHECK_ABORT, CHECK_LOAD, START_ENCOUNTER};
 use crate::planet_side::ffi::{run_session, PlanetSideRunContext, STATUS_OK};
+use crate::planets::solar_system::SolarSystem;
 use crate::ships::native::abi::MENU_STATE;
 use crate::starbase::cffi::CffiPlatform;
 use crate::starbase::gfx::{FlashTarget, Gfx, Point, Rgba, Stamp};
@@ -34,7 +35,7 @@ use crate::planets::sphere::live::draw_default_planet_sphere;
 
 use crate::planets::sphere::live::draw_planet;
 
-use crate::planets::orbit::live::DrawScannedObjects;
+use crate::planets::orbit::live::draw_scanned_objects;
 
 use crate::planets::orbit::live::redraw_planet_orbit_display;
 
@@ -44,7 +45,7 @@ use crate::mainloop::input_abi::live::SetInputCallback;
 
 use crate::navigation::groups::live::put_group_info;
 
-use crate::planets::solarsys::lifecycle::SaveSolarSysLocation;
+use crate::planets::solarsys::lifecycle::save_solar_location;
 
 use crate::planet_side::init_lander::{draw_lander, LanderStatus};
 
@@ -194,21 +195,36 @@ fn flash_location(
     draw_cursor(scan, true);
 }
 
-pub unsafe fn redraw_surface_scan(scan: &ScanState, location: Option<CPoint>) {
+pub unsafe fn redraw_surface_scan(
+    cx: &mut Cx<'_>,
+    scan: &ScanState,
+    location: Option<CPoint>,
+    visible: impl Fn(u16, u16) -> bool,
+) {
     scan.context().with_selected(|| {
-        CffiPlatform.batch();
-        draw_planet(&mut scan.sphere.borrow_mut(), 0, black());
-        DrawScannedObjects(1);
-        if let Some(location) = location {
-            set_location(scan, location, false);
-            draw_cursor(scan, false);
-        }
-        CffiPlatform.unbatch();
+        cx.with_legacy(|| {
+            CffiPlatform.batch();
+            draw_planet(&mut scan.sphere.borrow_mut(), 0, black());
+        });
+        draw_scanned_objects(cx, true, visible);
+        cx.with_legacy(|| {
+            if let Some(location) = location {
+                set_location(scan, location, false);
+                draw_cursor(scan, false);
+            }
+            CffiPlatform.unbatch();
+        });
     });
 }
 
-unsafe fn fuel() -> u16 {
-    landing_fuel((*solar_system::current()).SysInfo.planet_info.gravity)
+unsafe fn draw_scanned(cx: &mut Cx<'_>, solar: &SolarSystem, reversed: bool) {
+    draw_scanned_objects(cx, reversed, |flags, life| {
+        crate::planet_side::orbit_scan::node_visible(flags, life, &solar.sys.info.planet_info)
+    });
+}
+
+fn fuel(solar: &SolarSystem) -> u16 {
+    landing_fuel(solar.sys.info.planet_info.gravity)
 }
 
 unsafe fn spawn_fwiffo() {
@@ -235,6 +251,7 @@ unsafe fn spawn_fwiffo() {
 }
 
 unsafe fn dispatch_lander(
+    solar: &mut SolarSystem,
     planet: &ContextLease,
     scan: &ScanState,
     cx: &mut Cx<'_>,
@@ -242,14 +259,14 @@ unsafe fn dispatch_lander(
 ) -> bool {
     let runtime = cx.kernel.input_runtime();
     let misc_data = cx.kernel.misc_data_frame;
-    let (landing_fuel, old_callback, system) = cx.with_legacy(|| {
-        let landing_fuel = fuel() as i16;
+    let (landing_fuel, old_callback) = cx.with_legacy(|| {
+        let landing_fuel = fuel(solar) as i16;
         erase_coarse(planet, scan);
         let old_callback = SetInputCallback(runtime.input(), None);
-        (landing_fuel, old_callback, solar_system::current())
+        (landing_fuel, old_callback)
     });
     crate::ui::sis::delta_sis_gauges(cx.kernel, cx.world, 0, -landing_fuel, 0);
-    let mut context = cx.with_legacy(|| prepare_lander(scan, misc_data.cast(), system));
+    let mut context = cx.with_legacy(|| prepare_lander(scan, misc_data.cast(), solar));
     let reply = run_session(
         crate::planet_side::graphics_adapter::SurfaceDrawing {
             planet: planet.clone(),
@@ -263,9 +280,6 @@ unsafe fn dispatch_lander(
         io,
         &mut context,
     );
-    let system = context
-        .solar_system
-        .cast::<crate::ships::native::abi::SOLARSYS_STATE>();
     if reply.status != STATUS_OK {
         crate::logging::log_add(
             crate::logging::LogLevel::Fatal,
@@ -273,7 +287,7 @@ unsafe fn dispatch_lander(
         );
         cx.world.set_activity(cx.world.activity() | CHECK_ABORT);
     } else {
-        (*system).SysInfo.planet_info.scan_retrieve_mask = context.retrieval_masks;
+        solar.sys.info.planet_info.scan_retrieve_mask = context.retrieval_masks;
         if reply.detail == 4 {
             crate::logging::log_add(
                 crate::logging::LogLevel::Error,
@@ -298,12 +312,12 @@ unsafe fn dispatch_lander(
         });
         cx.world.next_activity |= CHECK_LOAD;
         cx.world.set_activity(cx.world.activity() | START_ENCOUNTER);
-        cx.with_legacy(|| SaveSolarSysLocation());
+        save_solar_location(cx.world, solar);
         return false;
     }
     redraw_planet_orbit_display(cx, planet, scan);
     cx.with_legacy(|| {
-        display::coarse(planet, runtime.input().preferences().coarse_scan);
+        display::coarse(solar, planet, runtime.input().preferences().coarse_scan);
         SetInputCallback(runtime.input(), old_callback);
     });
     true
@@ -312,25 +326,43 @@ unsafe fn dispatch_lander(
 unsafe fn prepare_lander(
     scan: &ScanState,
     misc_data: *mut c_void,
-    system: *mut crate::ships::native::abi::SOLARSYS_STATE,
+    solar: &mut SolarSystem,
 ) -> PlanetSideRunContext {
     scan.context().select();
     draw_cursor(scan, false);
+    let body = solar.require_body();
+    let world = std::ptr::from_ref(solar.sys.descriptor(body))
+        .cast_mut()
+        .cast();
+    let session = std::ptr::from_mut(solar).cast();
     PlanetSideRunContext {
-        solar_system: system.cast(),
-        world: (*system).pOrbitalDesc.cast(),
+        solar_system: session,
+        world,
         misc_data_frame: misc_data,
-        energy_frame: (*system).PlanetSideFrame[1].cast(),
-        life_frames: std::array::from_fn(|i| (*system).PlanetSideFrame[i + 3].cast()),
+        energy_frame: solar.sys.frames[1].as_ref().map_or(
+            std::ptr::null_mut(),
+            |frame| match frame.lease().frame(0) {
+                Some(frame) => frame.cast(),
+                None => panic!("loaded scene has no first frame"),
+            },
+        ),
+        life_frames: std::array::from_fn(|i| {
+            solar.sys.frames[i + 3]
+                .as_ref()
+                .map_or(std::ptr::null_mut(), |frame| match frame.lease().frame(0) {
+                    Some(frame) => frame.cast(),
+                    None => panic!("loaded scene has no first frame"),
+                })
+        }),
         landing_x: i32::from(scan.cursor.borrow().location.x),
         landing_y: i32::from(scan.cursor.borrow().location.y),
         facing: crate::math::random() as u8,
-        retrieval_masks: (*system).SysInfo.planet_info.scan_retrieve_mask,
+        retrieval_masks: solar.sys.info.planet_info.scan_retrieve_mask,
         tick_period: 840 / 35,
         frame_budget: u32::MAX,
-        tectonics_rating: (*system).SysInfo.planet_info.tectonics as u8,
-        weather_rating: (*system).SysInfo.planet_info.weather as u8,
-        temperature: i32::from((*system).SysInfo.planet_info.temperature),
+        tectonics_rating: solar.sys.info.planet_info.tectonics as u8,
+        weather_rating: solar.sys.info.planet_info.weather as u8,
+        temperature: i32::from(solar.sys.info.planet_info.temperature),
         ..PlanetSideRunContext::default()
     }
 }
@@ -391,6 +423,7 @@ unsafe fn pick_input(
 }
 
 unsafe fn pick_side(
+    solar: &mut SolarSystem,
     planet: &ContextLease,
     scan: &ScanState,
     cx: &mut Cx<'_>,
@@ -408,15 +441,15 @@ unsafe fn pick_side(
     );
     let status = LanderStatus::campaign(cx.world);
     let radar = ContextLease::require(cx.kernel.radar_context);
-    prepare_pick_side(cx, scan, input, &radar, &assets, status);
+    prepare_pick_side(solar, cx, scan, input, &radar, &assets, status);
     io.observer.checkpoint(&CheckpointView::PlanetMenu(4));
-    cx.run_input(io, true, |cx, _| {
+    solar.run_input(cx, io, true, |cx, _, _| {
         cx.with_legacy(|| pick_input(scan, input, &animation, &mut state) != 0)
     });
     io.observer.checkpoint(&CheckpointView::PlanetMenu(3));
     crate::ui::sis::draw_status_message(cx.kernel, cx.world, None);
     let result = if state.success {
-        dispatch_lander(planet, scan, cx, io)
+        dispatch_lander(solar, planet, scan, cx, io)
     } else {
         cx.with_legacy(|| restore_location_image(scan));
         true
@@ -426,6 +459,7 @@ unsafe fn pick_side(
 }
 
 unsafe fn prepare_pick_side(
+    solar: &mut SolarSystem,
     cx: &mut Cx<'_>,
     scan: &ScanState,
     input: &InputSession,
@@ -433,14 +467,16 @@ unsafe fn prepare_pick_side(
     assets: &crate::planet_side::resources::PlanetSideAssets,
     status: LanderStatus,
 ) {
-    let fuel = cx.with_legacy(|| fuel());
+    let fuel = fuel(solar);
     let dimensions = cx.screen_dimensions();
     crate::ui::sis::clear_sis_rect(cx.kernel, cx.world, dimensions, 1 << 2);
-    let message = cx.with_legacy(|| {
+    cx.with_legacy(|| {
         scan.context().select();
         CffiPlatform.batch();
         draw_planet(&mut scan.sphere.borrow_mut(), 0, black());
-        DrawScannedObjects(0);
+    });
+    draw_scanned(cx, solar, false);
+    let message = cx.with_legacy(|| {
         CffiPlatform.unbatch();
         CString::new(format!(
             "{}{:.1}",
@@ -459,7 +495,12 @@ unsafe fn prepare_pick_side(
     });
 }
 
-unsafe fn scanned_stuff(cx: &mut crate::engine::battle::Cx<'_>, y: u16, scan: u16) {
+unsafe fn scanned_stuff(
+    solar: &SolarSystem,
+    cx: &mut crate::engine::battle::Cx<'_>,
+    y: u16,
+    scan: u16,
+) {
     let g = CffiPlatform;
     let old_color = g.set_fg_color(Rgba::BLACK);
     {
@@ -471,7 +512,7 @@ unsafe fn scanned_stuff(cx: &mut crate::engine::battle::Cx<'_>, y: u16, scan: u1
                 || dy < 0
                 || crate::planet_side::orbit_scan::node_retrieved(
                     cx.element(element).life,
-                    &(*solar_system::current()).SysInfo.planet_info,
+                    &solar.sys.info.planet_info,
                 )
             {
                 continue;
@@ -518,6 +559,7 @@ unsafe fn scanned_stuff(cx: &mut crate::engine::battle::Cx<'_>, y: u16, scan: u1
 }
 
 unsafe fn scan_planet(
+    solar: &mut SolarSystem,
     scan_state: &ScanState,
     planet: &ContextLease,
     input: &InputSession,
@@ -578,7 +620,7 @@ unsafe fn scan_planet(
                 CffiPlatform.batch();
                 draw_planet(&mut scan_state.sphere.borrow_mut(), line, tint);
             });
-            scanned_stuff(cx, line as u16, scan);
+            scanned_stuff(solar, cx, line as u16, scan);
             CffiPlatform.unbatch();
             line += 1;
         }
@@ -587,7 +629,7 @@ unsafe fn scan_planet(
                 CffiPlatform.batch();
                 draw_planet(&mut scan_state.sphere.borrow_mut(), 83, tint);
             });
-            scanned_stuff(cx, 83, scan);
+            scanned_stuff(solar, cx, 83, scan);
             CffiPlatform.unbatch();
         }
     }
@@ -599,19 +641,19 @@ unsafe fn scan_planet(
     if scan_type == 4 {
         cx.with_legacy(|| {
             draw_planet(&mut scan_state.sphere.borrow_mut(), 0, black());
-            DrawScannedObjects(0);
         });
+        draw_scanned(cx, solar, false);
     }
     FlushInput(input);
 }
 
-unsafe fn unavailable() -> bool {
-    let system = solar_system::current();
-    (*(*system).pOrbitalDesc).data_index & 0x80 != 0
-        || (*system).SysInfo.planet_info.atmo_density == u16::MAX
+fn unavailable(solar: &SolarSystem) -> bool {
+    solar.sys.descriptor(solar.require_body()).data_index & 0x80 != 0
+        || solar.sys.info.planet_info.atmo_density == u16::MAX
 }
 
 unsafe fn scan_input(
+    solar: &mut SolarSystem,
     scan: &ScanState,
     planet: &ContextLease,
     cx: &mut Cx<'_>,
@@ -629,11 +671,11 @@ unsafe fn scan_input(
         return 0;
     } else if selected {
         if menu.CurState == 5 {
-            if unavailable() {
+            if unavailable(solar) {
                 play_menu_sound(cx.kernel, cx.world, 2);
                 return 1;
             }
-            let required = fuel();
+            let required = fuel(solar);
             if cx.world.data.flagship.fuel_on_board < u32::from(required)
                 || cx.world.data.flagship.num_landers == 0
                 || cx.world.data.flagship.crew_enlisted == 0
@@ -642,7 +684,7 @@ unsafe fn scan_input(
                 return 1;
             }
             cx.with_legacy(|| CffiPlatform.set_flash(FlashTarget::Off));
-            if !pick_side(planet, scan, cx, io) {
+            if !pick_side(solar, planet, scan, cx, io) {
                 return 0;
             }
             crate::ui::menu::draw_menu_state(
@@ -655,11 +697,11 @@ unsafe fn scan_input(
             cx.with_legacy(|| CffiPlatform.set_flash(FlashTarget::Menu3do));
             return 1;
         }
-        if (*(*solar_system::current()).pOrbitalDesc).data_index & 0x80 != 0 {
+        if solar.sys.descriptor(solar.require_body()).data_index & 0x80 != 0 {
             play_menu_sound(cx.kernel, cx.world, 2);
             return 1;
         }
-        scan_planet(scan, planet, input, cx, io, u16::from(menu.CurState));
+        scan_planet(solar, scan, planet, input, cx, io, u16::from(menu.CurState));
         if menu.CurState == 4 {
             menu.CurState = 5;
             io.observer.checkpoint(&CheckpointView::PlanetMenu(3));
@@ -671,13 +713,14 @@ unsafe fn scan_input(
                 i16::from(menu.CurState),
             );
         }
-    } else if input.preferences().menu == 2 || !unavailable() {
+    } else if input.preferences().menu == 2 || !unavailable(solar) {
         crate::ui::menu::choose_menu_state(cx, input, &mut menu.CurState, 7);
     }
     1
 }
 
 pub unsafe fn scan_system(
+    solar: &mut SolarSystem,
     scan: &ScanState,
     planet: &ContextLease,
     cx: &mut Cx<'_>,
@@ -686,17 +729,18 @@ pub unsafe fn scan_system(
     let runtime = cx.kernel.input_runtime();
     let input = runtime.input();
     let mut menu: MENU_STATE = std::mem::zeroed();
-    prepare_scan_system(cx, scan, planet, input, &mut menu);
+    prepare_scan_system(solar, cx, scan, planet, input, &mut menu);
     cx.with_legacy(|| base::SetMenuSounds(input, 15, 16));
     io.observer.checkpoint(&CheckpointView::PlanetMenu(2));
-    cx.run_input(io, false, |cx, io| {
-        scan_input(scan, planet, cx, io, &mut menu) != 0
+    solar.run_input(cx, io, false, |cx, io, solar| {
+        scan_input(solar, scan, planet, cx, io, &mut menu) != 0
     });
     io.observer.checkpoint(&CheckpointView::PlanetMenu(0));
     cx.with_legacy(|| finish_scan_system(scan, planet));
 }
 
 unsafe fn prepare_scan_system(
+    solar: &mut SolarSystem,
     cx: &mut Cx<'_>,
     scan: &ScanState,
     planet: &ContextLease,
@@ -704,7 +748,7 @@ unsafe fn prepare_scan_system(
     menu: &mut MENU_STATE,
 ) {
     cx.with_legacy(|| {
-        if input.preferences().menu == 1 && unavailable() {
+        if input.preferences().menu == 1 && unavailable(solar) {
             menu.CurState = 3;
         } else {
             menu.CurState = 4;
@@ -716,9 +760,11 @@ unsafe fn prepare_scan_system(
             scan.cursor.borrow_mut().rect.width = cursor.extent.width;
             scan.cursor.borrow_mut().rect.height = cursor.extent.height;
             scan.context().select();
-            DrawScannedObjects(0);
         }
     });
+    if menu.CurState == 4 {
+        draw_scanned(cx, solar, false);
+    }
     let dimensions = cx.screen_dimensions();
     crate::ui::menu::draw_menu_state(
         cx.kernel,
@@ -728,7 +774,7 @@ unsafe fn prepare_scan_system(
         i16::from(menu.CurState),
     );
     crate::ui::sis::set_menu_flash(cx.kernel, dimensions, false);
-    cx.with_legacy(|| display::coarse(planet, input.preferences().coarse_scan));
+    cx.with_legacy(|| display::coarse(solar, planet, input.preferences().coarse_scan));
 }
 
 unsafe fn finish_scan_system(scan: &ScanState, planet: &ContextLease) {
@@ -748,14 +794,21 @@ fn refresh_lander_scan(
     point: crate::planet_side::model::SurfacePoint,
 ) {
     crate::planet_side::orbit_scan::sync_positions(cx, surface);
-    // SAFETY: the caller retains the orbit, scan and campaign resources through this synchronous draw.
-    cx.with_legacy(|| unsafe {
+    // SAFETY: this trip retains its scan context and generated element mappings.
+    unsafe {
         redraw_surface_scan(
+            cx,
             scan,
             Some(CPoint {
                 x: point.x as i16,
                 y: point.y as i16,
             }),
-        )
-    });
+            |flags, life| {
+                flags & ElementFlags::APPEARING.bits() != 0
+                    && surface.generated.iter().any(|entry| {
+                        life == (entry.scan as u16 | (u16::from(entry.node.get() + 1) << 8))
+                    })
+            },
+        );
+    }
 }

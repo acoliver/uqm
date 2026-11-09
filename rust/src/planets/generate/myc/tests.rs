@@ -7,8 +7,8 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use super::{
-    generate_energy, generate_life, generate_orbital, generate_planets, pickup_energy, MyconSite,
-    Scene, AMBUSH_SHIPS, HOME_TALK_FLAGS, SUN_DEVICE_TALK_FLAGS, WORLD,
+    generate_energy, generate_life, generate_orbital, generate_planets, pickup_energy,
+    EnergyContext, MyconSite, Scene, AMBUSH_SHIPS, HOME_TALK_FLAGS, SUN_DEVICE_TALK_FLAGS, WORLD,
 };
 use crate::comm::dispatch::{CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY};
 use crate::math::RandomContext;
@@ -168,12 +168,20 @@ impl MyconSite for Site {
 fn nodes(star_index: u8, body: Body, story: &FakeStory, strings_loaded: bool) -> u16 {
     let mut info: SystemInfo = unsafe { std::mem::zeroed() };
     info.planet_info.scan_seed = [1, 2, 3];
-    if strings_loaded {
-        info.planet_info.discovery_string = std::ptr::NonNull::dangling().as_ptr();
-    }
     let mut rng = RandomContext::with_seed(7);
     let mut node: NodeInfo = unsafe { std::mem::zeroed() };
-    generate_energy(&mut rng, &info, star_index, body, !0, &mut node, story)
+    generate_energy(
+        &mut rng,
+        &info,
+        EnergyContext {
+            star_index,
+            report_loaded: strings_loaded,
+        },
+        body,
+        !0,
+        &mut node,
+        story,
+    )
 }
 
 #[test]

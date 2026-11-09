@@ -4,7 +4,6 @@ use super::{generateMyconFunctions, Harness};
 use crate::planets_common::mycon::{self, MyconOps, RustMycon, ScanCase};
 use uqm_rust::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame};
 
-use uqm_rust::planets::generate::special::Body;
 use uqm_rust::state::game_state_keys::set_game_state;
 
 impl MyconOps for Harness {
@@ -16,21 +15,17 @@ impl MyconOps for Harness {
     ) -> (bool, u8, u32) {
         self.star_index = star;
         self.set_star(case.0, case.1);
-        self.state.PlanetDesc.copy_from_slice(planets);
-        self.state.SunDesc[0].num_planets = 0;
+        self.state.sys.planets.copy_from_slice(planets);
+        self.state.sys.sun.num_planets = 0;
         self.seed(case.2);
 
         let result = unsafe {
-            crate::invoke_generation(&raw mut *self.state, |system, host| {
+            crate::invoke_generation(&mut self.state, |system, host| {
                 generateMyconFunctions.generate_planets(system, host)
             })
         };
-        planets.copy_from_slice(&self.state.PlanetDesc);
-        (
-            result,
-            self.state.SunDesc[0].num_planets,
-            self.rng_position(),
-        )
+        planets.copy_from_slice(&self.state.sys.planets);
+        (result, self.state.sys.sun.num_planets, self.rng_position())
     }
 
     fn scan(&mut self, case: ScanCase, node: &mut NodeInfo) -> (u16, u32) {
@@ -43,22 +38,19 @@ impl MyconOps for Harness {
                 u32::from(case.taken),
             )
         });
-        self.state.PlanetDesc = unsafe { std::mem::zeroed() };
-        self.state.MoonDesc = unsafe { std::mem::zeroed() };
-        self.state.SysInfo = mycon::scan_info(case);
-        let sun: *mut PlanetDesc = &mut self.state.SunDesc[0];
-        let _world: *const PlanetDesc = match case.body {
-            Body::Planet(p) => {
-                self.state.PlanetDesc[usize::from(p)].prev_desc = sun;
-                &self.state.PlanetDesc[usize::from(p)]
-            }
-            Body::Moon { planet, moon } => {
-                self.state.PlanetDesc[usize::from(planet)].prev_desc = sun;
-                let parent: *mut PlanetDesc = &mut self.state.PlanetDesc[usize::from(planet)];
-                self.state.MoonDesc[usize::from(moon)].prev_desc = parent;
-                &self.state.MoonDesc[usize::from(moon)]
-            }
-        };
+        self.state.sys.planets = unsafe { std::mem::zeroed() };
+        self.state.sys.moons = unsafe { std::mem::zeroed() };
+        self.state.sys.info = mycon::scan_info(case);
+        self.state.sys.info.planet_info.discovery_string = std::ptr::null_mut();
+        self.state.sys.report =
+            uqm_rust::engine::world::generation::ReportSlot::new(case.strings.then(|| {
+                uqm_rust::engine::strings::owned_table::LoadedTextTable::new(vec![
+                    c"egg case report".to_owned(),
+                ])
+                .entry(0)
+                .unwrap_or_else(|| panic!("Mycon report fixture has no first entry"))
+            }));
+
         let generate =
             |view: &mut uqm_rust::engine::world::generation::SolarSys<'_>,
              info: &mut NodeInfo,
@@ -70,23 +62,21 @@ impl MyconOps for Harness {
                 }
             };
         self.seed(case.seed);
-        let before = format!("{:?}", self.state);
+        let before = format!("{:?}", crate::generation_data(&self.state));
         let count = unsafe {
-            crate::invoke_generation(&raw mut *self.state, |view, host| {
-                generate(view, node, host)
-            })
+            crate::invoke_generation(&mut self.state, |view, host| generate(view, node, host))
         };
         let after_rng = self.rng_position();
         self.seed(case.seed);
         let count_only = unsafe {
-            crate::invoke_generation(&raw mut *self.state, |view, host| {
+            crate::invoke_generation(&mut self.state, |view, host| {
                 generate(view, &mut crate::planets_common::fresh_node(), host)
             })
         };
         assert_eq!(count_only, count, "NULL output count: {case:?}");
         assert_eq!(self.rng_position(), after_rng, "NULL output RNG: {case:?}");
         assert_eq!(
-            format!("{:?}", self.state),
+            format!("{:?}", crate::generation_data(&self.state)),
             before,
             "scan mutated its solar-system input: {case:?}"
         );

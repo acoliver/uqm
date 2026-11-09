@@ -5,21 +5,19 @@ use uqm_rust::planets::render::sphere_geometry as geometry;
 #[path = "sphere_cases.rs"]
 mod cases;
 
-struct SavedState {
-    pointer: *mut RandomContext,
+struct SavedState<'a> {
+    rng: &'a RandomContext,
     system_seed: u32,
     global_seed: u32,
     screen: i32,
 }
-impl SavedState {
-    unsafe fn snapshot() -> Self {
-        let pointer = super::SysGenRNG;
-        assert!(!pointer.is_null());
+impl<'a> SavedState<'a> {
+    unsafe fn snapshot(rng: &'a RandomContext) -> Self {
         let global_seed = math::seed_random(1);
         math::seed_random(global_seed);
         Self {
-            pointer,
-            system_seed: (*pointer).seed(),
+            rng,
+            system_seed: rng.seed(),
             global_seed,
             screen: super::ScreenWidth,
         }
@@ -30,29 +28,25 @@ impl SavedState {
         draws
     }
     unsafe fn check(&self, expected: [u32; 8]) {
-        let pointer = super::SysGenRNG;
         let screen = super::ScreenWidth;
-        assert_eq!(pointer, self.pointer, "SysGenRNG pointer changed");
-        assert_eq!((*self.pointer).seed(), self.system_seed);
+        assert_eq!(self.rng.seed(), self.system_seed);
         assert_eq!(screen, self.screen);
         let current_seed = math::seed_random(self.global_seed);
         assert_eq!(current_seed, self.global_seed, "TFB global seed changed");
         assert_eq!(self.draws(), expected, "random stream changed");
     }
 }
-impl Drop for SavedState {
+impl Drop for SavedState<'_> {
     fn drop(&mut self) {
         unsafe {
-            super::SysGenRNG = self.pointer;
-            (*self.pointer).reseed(self.system_seed);
             super::ScreenWidth = self.screen;
         }
         math::seed_random(self.global_seed);
     }
 }
 
-pub fn original_c_and_rust_match_fixture_without_rng_effects() {
-    let saved = unsafe { SavedState::snapshot() };
+pub fn original_c_and_rust_match_fixture_without_rng_effects(rng: &RandomContext) {
+    let saved = unsafe { SavedState::snapshot(rng) };
     assert_eq!(saved.screen, 320, "native runtime logical width");
     let expected = saved.draws();
     let original = cases::original_output();

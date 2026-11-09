@@ -26,13 +26,13 @@ unsafe fn input_frame(
                 crate::planets::pstarmap::star_map(cx, io);
                 true
             }
-            2 => crate::planets::devices::devices_menu(cx, io) != 0,
+            2 => crate::planets::devices::devices_menu(cx, io, None) != 0,
             3 => {
                 crate::planets::cargo::live::cargo_menu(cx, io);
                 true
             }
             4 => crate::planets::roster::live::roster_menu(cx, io) != 0,
-            5 => crate::front_end::gameopt::runtime::game_options(cx, io) != 0,
+            5 => crate::front_end::gameopt::runtime::game_options(cx, io, None) != 0,
             _ => unreachable!(),
         },
     }

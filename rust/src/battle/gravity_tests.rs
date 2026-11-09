@@ -16,12 +16,7 @@ fn with_elements(call: impl FnOnce(&mut Cx<'_>, [ElementId; 3])) {
             id
         });
         let mut world = World::new();
-        let mut cx = Cx {
-            b: &mut battle,
-            world: &mut world,
-            kernel: &mut kernel,
-            rng: || 0,
-        };
+        let mut cx = Cx::new(&mut battle, &mut world, &mut kernel, || 0);
         cx.element_mut(ids[2]).flags = crate::ships::native::abi::NONSOLID as u16;
         call(&mut cx, ids);
     }

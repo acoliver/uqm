@@ -21,17 +21,26 @@ fn orbital_story_and_queue_hosts_share_the_caller_owner() {
     let io = RefCell::new(Io {
         observer: &mut observer,
     });
-    // SAFETY: this fixture retains the solar record, and the two hosts only access story here.
-    let mut system: uqm_rust::ships::native::abi::SOLARSYS_STATE = unsafe { std::mem::zeroed() };
     let mut pickup = uqm_rust::planet_side::special_effects::PickupContext::NoLander;
     let mut story_pickup = uqm_rust::planet_side::special_effects::PickupContext::NoLander;
-    // SAFETY: record and caller owners remain live; no generation component borrow overlaps a call.
-    let (host, mut story) = unsafe {
-        (
-            Site::new(&owner, &io, &mut system, &mut pickup, None),
-            Site::new(&owner, &io, &mut system, &mut story_pickup, None),
-        )
-    };
+    let host = Site::new(
+        &owner,
+        &io,
+        uqm_rust::engine::StarId(0),
+        0,
+        false,
+        &mut pickup,
+        None,
+    );
+    let mut story = Site::new(
+        &owner,
+        &io,
+        uqm_rust::engine::StarId(0),
+        0,
+        false,
+        &mut story_pickup,
+        None,
+    );
     story.set_flag(StoryKey::YEHAT_CIVIL_WAR, 1);
     assert_eq!(host.flag(StoryKey::YEHAT_CIVIL_WAR), 1);
     story.set_word(StoryKey::URQUAN_PROBE_GRPOFFS0, 0x12345678);

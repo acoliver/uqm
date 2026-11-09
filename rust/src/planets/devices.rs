@@ -38,9 +38,9 @@ use crate::navigation::{
     groups::live::put_group_info,
 };
 
-use crate::planets::solarsys::{
-    lifecycle::SaveSolarSysLocation, matchWorld, playerInPlanetOrbit, playerInSolarSystem,
-};
+use crate::engine::world::generation::Body;
+use crate::planets::solar_system::SolarSystem;
+use crate::planets::solarsys::lifecycle::save_solar_location;
 
 use crate::ui::util::draw_starcon_box;
 
@@ -150,12 +150,17 @@ unsafe fn reset_groups(world: &mut World) {
     assert_eq!(world.npc_built_ships_ref().count(), 0);
 }
 
-unsafe fn orbit_is(planet: u8) -> bool {
-    let system = crate::planets::solarsys::lifecycle::P_SOLAR_SYS_STATE;
-    playerInPlanetOrbit() && matchWorld(system, (*system).pOrbitalDesc, planet, 255)
+fn orbit_is(solar: Option<&SolarSystem>, planet: u8) -> bool {
+    solar.is_some_and(|solar| {
+        solar.in_orbit() && solar.selected_body() == Some(Body::Planet(planet))
+    })
 }
 
-unsafe fn use_caster(cx: &mut Cx<'_>, next_activity: &mut u16) -> bool {
+unsafe fn use_caster(
+    cx: &mut Cx<'_>,
+    solar: Option<&SolarSystem>,
+    next_activity: &mut u16,
+) -> bool {
     if in_hqspace(cx.world) != 0 {
         if get(cx.world, StoryKey::ARILOU_SPACE_SIDE) <= 1 {
             set(cx.world, StoryKey::USED_BROADCASTER, 1);
@@ -163,15 +168,11 @@ unsafe fn use_caster(cx: &mut Cx<'_>, next_activity: &mut u16) -> bool {
         }
         return false;
     }
-    if cx.world.activity() & 0xff != 4 || !cx.with_legacy(|| playerInSolarSystem()) {
+    let Some(solar) = solar.filter(|_| cx.world.activity() & 0xff == 4) else {
         return false;
-    }
-    let star = cx
-        .world
-        .selected_star()
-        .unwrap_or_else(|| panic!("device use requires a selected star"))
-        .index;
-    if cx.with_legacy(|| orbit_is(1))
+    };
+    let star = solar.sys.star_index();
+    if orbit_is(Some(solar), 1)
         && u32::from(star) == CHMMR_DEFINED
         && get(cx.world, StoryKey::CHMMR_UNLEASHED) == 0
     {
@@ -179,7 +180,7 @@ unsafe fn use_caster(cx: &mut Cx<'_>, next_activity: &mut u16) -> bool {
         cx.world.set_activity(cx.world.activity() | START_ENCOUNTER);
         reset_groups(cx.world);
         set(cx.world, StoryKey::GLOBAL_FLAGS_AND_DATA, 1 << 7);
-        cx.with_legacy(|| SaveSolarSysLocation());
+        save_solar_location(cx.world, solar);
         return true;
     }
     let home = u32::from(star) == ILWRATH_DEFINED;
@@ -201,28 +202,31 @@ unsafe fn use_caster(cx: &mut Cx<'_>, next_activity: &mut u16) -> bool {
         StoryKey::GLOBAL_FLAGS_AND_DATA,
         if home { 1 << 4 } else { 1 << 5 },
     );
-    if cx.with_legacy(|| playerInPlanetOrbit()) {
-        cx.with_legacy(|| SaveSolarSysLocation());
+    if solar.in_orbit() {
+        save_solar_location(cx.world, solar);
     }
     true
 }
 
 /// Returns the original DeviceStatus (failure, success, success without sound).
-unsafe fn invoke(cx: &mut Cx<'_>, id: u8, next_activity: &mut u16) -> u8 {
+unsafe fn invoke(
+    cx: &mut Cx<'_>,
+    solar: Option<&SolarSystem>,
+    id: u8,
+    next_activity: &mut u16,
+) -> u8 {
     match id {
         4..=6 => repair_ultron(cx.world, ULTRON_COMPONENTS[usize::from(id - 4)]),
         3 => {
-            if cx.world.activity() & 0xff != 4 || !cx.with_legacy(|| playerInPlanetOrbit()) {
+            let Some(solar) =
+                solar.filter(|solar| cx.world.activity() & 0xff == 4 && solar.in_orbit())
+            else {
                 return 0;
-            }
+            };
             crate::ui::settings::play_menu_sound(cx.kernel, cx.world, 3);
             cx.with_legacy(|| SleepThreadUntil(FadeScreen(250, 840).wrapping_add(1680)));
-            let star = cx
-                .world
-                .selected_star()
-                .unwrap_or_else(|| panic!("device use requires a selected star"))
-                .index;
-            if u32::from(star) != CHMMR_DEFINED || !cx.with_legacy(|| orbit_is(1)) {
+            let star = solar.sys.star_index();
+            if u32::from(star) != CHMMR_DEFINED || !orbit_is(Some(solar), 1) {
                 cx.with_legacy(|| FadeScreen(253, 1680));
             } else {
                 set(cx.world, StoryKey::CHMMR_EMERGING, 1);
@@ -254,21 +258,20 @@ unsafe fn invoke(cx: &mut Cx<'_>, id: u8, next_activity: &mut u16) -> u8 {
                     set(cx.world, StoryKey::SHIP_TO_COMPEL, 1);
                     reset_groups(cx.world);
                 }
-                let star = cx
-                    .world
-                    .selected_star()
-                    .unwrap_or_else(|| panic!("device use requires a selected star"))
-                    .index;
+                let Some(solar) = solar else {
+                    panic!("device effect requires a solar visit");
+                };
+                let star = solar.sys.star_index();
                 if u32::from(star) == SAMATRA_DEFINED {
                     set(cx.world, StoryKey::READY_TO_CONFUSE_URQUAN, 1);
                 }
-                if cx.with_legacy(|| playerInPlanetOrbit()) {
-                    cx.with_legacy(|| SaveSolarSysLocation());
+                if solar.in_orbit() {
+                    save_solar_location(cx.world, solar);
                 }
             }
             1
         }
-        12 | 13 => u8::from(use_caster(cx, next_activity)),
+        12 | 13 => u8::from(use_caster(cx, solar, next_activity)),
         0 => {
             if in_hyper_space(cx.world) == 0 || cx.world.data.flagship.fuel_on_board < 1000 {
                 return 0;
@@ -285,6 +288,7 @@ unsafe fn frame(
     cx: &mut Cx<'_>,
     io: &mut Io<'_>,
     input: &crate::engine::input::InputSession,
+    solar: Option<&SolarSystem>,
     menu: &mut Menu,
     next_activity: &mut u16,
 ) -> i32 {
@@ -295,7 +299,7 @@ unsafe fn frame(
     if keys[9] != 0 {
         let id = menu.list[menu.selected];
         let before = effect_state(cx.world);
-        let status = invoke(cx, id, next_activity);
+        let status = invoke(cx, solar, id, next_activity);
         if status == 0 {
             crate::ui::settings::play_menu_sound(cx.kernel, cx.world, 2);
         } else if status == 1 {
@@ -348,7 +352,7 @@ unsafe fn frame(
 
 /// # Safety
 /// Requires the initialized UI and campaign on the owning game thread.
-pub unsafe fn devices_menu(cx: &mut Cx<'_>, io: &mut Io<'_>) -> i32 {
+pub unsafe fn devices_menu(cx: &mut Cx<'_>, io: &mut Io<'_>, solar: Option<&SolarSystem>) -> i32 {
     let runtime = cx.kernel.input_runtime();
     let input = runtime.input();
     let Some(mut menu) = prepare_devices_menu(cx) else {
@@ -358,7 +362,7 @@ pub unsafe fn devices_menu(cx: &mut Cx<'_>, io: &mut Io<'_>) -> i32 {
     publish(cx.kernel, io);
     cx.run_input(io, true, |cx, io| {
         let mut next_activity = 0;
-        let result = frame(cx, io, input, &mut menu, &mut next_activity) != 0;
+        let result = frame(cx, io, input, solar, &mut menu, &mut next_activity) != 0;
         cx.world.next_activity |= next_activity;
         result
     });

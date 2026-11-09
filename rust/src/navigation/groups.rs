@@ -354,7 +354,10 @@ pub(crate) mod live {
 
     /// # Safety
     /// A current star, solar system, and initialized world queues are required.
-    pub unsafe fn build_groups(world: &mut World) {
+    pub unsafe fn build_groups(
+        world: &mut World,
+        solar: &crate::engine::world::generation::SolarSnapshot,
+    ) {
         let mut home = HOME_SYSTEMS;
         let mut percent = ENCOUNTER_PERCENT;
         percent[SLYLANDRO_SHIP as usize] = percent[SLYLANDRO_SHIP as usize]
@@ -389,12 +392,16 @@ pub(crate) mod live {
                 number -= 1;
             }
         }
-        get_group_info(world, 0, u8::MAX);
+        initialize_solar_groups(world, 0, solar);
     }
 
     /// # Safety
     /// The game thread retains the active solar system and the group's queue record.
-    unsafe fn initialize_group(group: &mut IP_GROUP, which: u8) {
+    unsafe fn initialize_group(
+        group: &mut IP_GROUP,
+        which: u8,
+        solar: &crate::engine::world::generation::SolarSnapshot,
+    ) {
         group.group_id = which;
         group.in_system = 1;
         let random = TFB_Random();
@@ -403,7 +410,7 @@ pub(crate) mod live {
             task = ON_STATION as u8;
         }
         group.orbit_pos = (random >> 16) as u8 & 15;
-        let mut location = (*pSolarSysState).SunDesc[0].num_planets;
+        let mut location = solar.planet_count;
         if location == 1 && task == EXPLORE as u8 {
             task = IN_ORBIT as u8;
         } else {
@@ -417,7 +424,7 @@ pub(crate) mod live {
         if task == EXPLORE as u8 {
             group.group_counter = (TFB_Random() as u16 % MAX_REVOLUTIONS as u16) << FACING_SHIFT;
         } else if task == ON_STATION as u8 {
-            let origin = planetOuterLocation(location as u16 - 1);
+            let origin = crate::planets::solar_coords::outer_location(solar, location as u16 - 1);
             let angle = (group.orbit_pos as u32 + 1) << (CIRCLE_SHIFT - FACING_SHIFT);
             group.loc.x = (origin.x as i32 + cosine(angle, STATION_RADIUS as i32)) as i16;
             group.loc.y = (origin.y as i32 + sine(angle, STATION_RADIUS as i32)) as i16;
@@ -502,6 +509,7 @@ pub(crate) mod live {
         file: *mut GameStateFile,
         offset: u32,
         header: &GROUP_HEADER,
+        solar: &crate::engine::world::generation::SolarSnapshot,
     ) -> BOOLEAN {
         world.ip_groups().reinit();
         let mut day = header.day_index as u16;
@@ -532,7 +540,7 @@ pub(crate) mod live {
                 continue;
             }
             let id = build_group(world, race).unwrap_or_else(|| panic!("IP group capacity"));
-            initialize_group(world.ip_groups().get_mut(id), which);
+            initialize_group(world.ip_groups().get_mut(id), which, solar);
         }
         if offset != 0 {
             init_group_info(world, 0);
@@ -542,6 +550,21 @@ pub(crate) mod live {
         }
         close_state_file(world, file);
         u32::from(world.ip_groups_ref().head().is_some())
+    }
+
+    pub unsafe fn initialize_solar_groups(
+        world: &mut World,
+        offset: u32,
+        solar: &crate::engine::world::generation::SolarSnapshot,
+    ) -> BOOLEAN {
+        let file = open(world, offset, u8::MAX);
+        if file.is_null() {
+            return 0;
+        }
+        seek(world, file, offset);
+        let mut header = empty_header();
+        super::read_group_header(world, file, &mut header);
+        initialize_saved_groups(world, file, offset, &header, solar)
     }
 
     /// # Safety
@@ -554,9 +577,11 @@ pub(crate) mod live {
         seek(world, file, offset);
         let mut header: GROUP_HEADER = mem::zeroed();
         super::read_group_header(world, file, &mut header);
-        if which == u8::MAX {
-            return initialize_saved_groups(world, file, offset, &header);
-        }
+        assert_ne!(
+            which,
+            u8::MAX,
+            "solar group initialization requires supplied geometry"
+        );
         if header.GroupOffset[which as usize] == 0 {
             close_state_file(world, file);
             return 0;

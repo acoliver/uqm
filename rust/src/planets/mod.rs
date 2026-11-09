@@ -3,6 +3,8 @@
 //! The functions here are plain Rust over explicit inputs (an RNG stream, the
 //! planet table, star description) so they can be tested without C globals.
 
+pub mod solar_system;
+
 #[cfg(not(test))]
 pub mod c_api;
 pub(crate) mod device_effects;
