@@ -171,6 +171,7 @@ fn run_retained_session(
         super::runtime::AdapterError::new("lander_assets_not_loaded"),
     )?);
     let reports = drawing.scan.report_context();
+    // SAFETY: run_session retains this unique solar visit throughout the synchronous trip.
     let solar = unsafe { &mut *context.solar_system.cast::<SolarSystem>() };
     let mut generator = CffiSurfaceGenerator::for_planet_side(game, observe, solar, reports);
     let mut visuals = retained_visuals(context)?;

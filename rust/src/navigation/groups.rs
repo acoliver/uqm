@@ -562,7 +562,7 @@ pub(crate) mod live {
             return 0;
         }
         seek(world, file, offset);
-        let mut header: GROUP_HEADER = mem::zeroed();
+        let mut header = empty_header();
         super::read_group_header(world, file, &mut header);
         initialize_saved_groups(world, file, offset, &header, solar)
     }

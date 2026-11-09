@@ -192,6 +192,7 @@ impl<'a, 'game, 'observer, 'tables> CffiSurfaceGenerator<'a, 'game, 'observer, '
                 || callback(self),
             )?;
             if retrieved {
+                // SAFETY: scan and node are validated IDs; planet info is exclusively borrowed.
                 unsafe {
                     crate::planets::scan::set_node_retrieved(
                         &mut self.system.info.planet_info,

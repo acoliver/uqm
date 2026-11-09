@@ -48,7 +48,7 @@ impl MyconOps for Harness {
                     c"egg case report".to_owned(),
                 ])
                 .entry(0)
-                .unwrap()
+                .unwrap_or_else(|| panic!("Mycon report fixture has no first entry"))
             }));
 
         let generate =
