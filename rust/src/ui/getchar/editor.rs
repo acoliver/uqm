@@ -71,6 +71,7 @@ impl Alphabet {
 
 pub struct Editor<'a> {
     buffer: &'a mut [u8],
+    insertion_limit: usize,
     length: usize,
     position: usize,
     cursor: usize,
@@ -83,12 +84,12 @@ pub struct Editor<'a> {
 }
 
 impl<'a> Editor<'a> {
-    pub fn new(buffer: &'a mut [u8], capacity: usize, cursor: usize) -> Self {
+    pub fn new(buffer: &'a mut [u8], insertion_limit: usize, cursor: usize) -> Self {
         assert!(
-            (1..=buffer.len()).contains(&capacity),
-            "text editor capacity exceeds its storage"
+            (1..=buffer.len()).contains(&insertion_limit),
+            "invalid text editor insertion limit"
         );
-        let buffer = &mut buffer[..capacity];
+        // A loaded value may already exceed the limit on newly inserted text.
         let text = CStr::from_bytes_until_nul(buffer)
             .unwrap_or_else(|error| panic!("text editor buffer is not terminated: {error}"));
         let string = text
@@ -100,14 +101,16 @@ impl<'a> Editor<'a> {
             .char_indices()
             .nth(cursor)
             .map_or(length, |(offset, _)| offset);
+        let cache = vec![0; buffer.len()];
         Self {
             buffer,
+            insertion_limit,
             length,
             position,
             cursor,
             joystick: false,
             upper: true,
-            cache: vec![0; capacity],
+            cache,
             cached_cursor: cursor,
             cached_position: position,
             success: false,
@@ -151,7 +154,7 @@ impl<'a> Editor<'a> {
         let added = ch.map_or(&[][..], |ch| ch.encode_utf8(&mut encoded).as_bytes());
         let end = self.position + removed;
         let length = self.length - removed + added.len();
-        if length >= self.buffer.len() {
+        if ch.is_some() && length >= self.insertion_limit {
             return false;
         }
         self.buffer

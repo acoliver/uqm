@@ -46,16 +46,37 @@ fn joystick_wraps_alphabet_and_changes_case_without_advancing_cursor() {
 }
 
 #[test]
-fn capacity_applies_to_the_terminator_and_existing_text() {
+fn insertion_capacity_includes_the_terminator_and_storage_requires_one() {
     let mut buffer = *b"ab\0extra";
     let mut editor = Editor::new(&mut buffer, 3, 2);
     assert!(!editor.insert('c'));
     assert_eq!(editor.view().text, c"ab");
     assert!(std::panic::catch_unwind(|| {
-        let mut buffer = *b"abc\0";
+        let mut buffer = *b"abcd";
         Editor::new(&mut buffer, 3, 0);
     })
     .is_err());
+}
+
+#[test]
+fn insertion_limit_preserves_longer_initial_text_and_allows_deletion_and_rollback() {
+    let mut buffer = *b"abcd\0\0";
+    let mut editor = Editor::new(&mut buffer, 3, 4);
+    assert_eq!(editor.view().text, c"abcd");
+    editor.save();
+    assert!(!editor.insert('é'));
+    assert!(editor.backspace());
+    assert_eq!(editor.view().text, c"abc");
+    assert!(!editor.insert('x'));
+    assert!(editor.backspace());
+    assert!(!editor.insert('x'));
+    assert!(editor.backspace());
+    assert!(!editor.insert('é'));
+    assert!(editor.insert('x'));
+    assert_eq!(editor.view().text, c"ax");
+    editor.restore();
+    assert_eq!(editor.view().text, c"abcd");
+    assert_eq!(editor.view().cursor, 4);
 }
 
 #[test]
