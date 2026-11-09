@@ -1,5 +1,9 @@
 //! Clock entry points and save-compatible event scheduling.
 
+#[cfg(test)]
+#[path = "clock_abi/owner_tests.rs"]
+mod owner_tests;
+
 use super::clock_bridge::days_in_month;
 use crate::engine::battle::link_queue::LinkId;
 use crate::engine::clock::{GameClock, ScheduledEvent};
