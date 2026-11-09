@@ -4,7 +4,7 @@
 #[path = "sresins/tests.rs"]
 mod tests;
 
-use std::ffi::{c_char, c_int, CStr};
+use std::ffi::{c_char, c_int, c_void, CStr};
 
 use crate::resource::ffi_bridge::{
     res_DetachResource, res_GetResource, FreeResourceData, InstallResTypeVectors,
@@ -14,51 +14,20 @@ use crate::resource::ffi_types::ResourceData;
 use crate::strings::getstr::{_get_binary_table_data, _get_conversation_data, _get_string_data};
 use crate::strings::string_table::StringTable;
 
-/// Copy one binary-table entry and release the detached native table.
+/// Copy one complete binary entry, retaining the table until the copy finishes.
 pub fn load_binary_entry(resource: &CStr, index: u16) -> Option<Vec<u8>> {
-    load_binary(resource, Some(index))?.pop()
+    super::owned_table::LoadedBinaryTable::load(resource)?
+        .entry(index)
+        .map(<[u8]>::to_vec)
 }
 
-/// Copy every binary entry before releasing the detached native table.
+/// Copy every complete binary entry before releasing its table owner.
 pub fn load_binary_entries(resource: &CStr) -> Option<Vec<Vec<u8>>> {
-    load_binary(resource, None)
-}
-
-fn load_binary(resource: &CStr, index: Option<u16>) -> Option<Vec<Vec<u8>>> {
-    let table = crate::resource::ffi_bridge::detach_resource_of_type(resource, "BINTAB")?;
-    // SAFETY: the binary loader transfers the table and its complete entry allocations.
-    let bytes = unsafe { copy_binary_entries(&*table.as_ptr().cast::<StringTable>(), index) };
-    // SAFETY: the copied bytes no longer borrow the uniquely detached table.
-    unsafe { super::string_table::FreeStringTable(table.as_ptr().cast()) };
-    Some(bytes)
-}
-
-unsafe fn copy_binary_entries(table: &StringTable, index: Option<u16>) -> Vec<Vec<u8>> {
-    let count = usize::try_from(table.size)
-        .unwrap_or_else(|error| panic!("binary table has an invalid entry count: {error}"));
-    if count == 0 {
-        return Vec::new();
-    }
-    // SAFETY: the detached loader table owns exactly `size` initialized entries.
-    let entries = unsafe { std::slice::from_raw_parts(table.strings, count) };
-    let range = index.map_or(0..count, |index| {
-        let index = usize::from(index) % count;
-        index..index + 1
-    });
-    range
-        .map(|index| {
-            let entry = &entries[index];
-            // The ABI's u16 length query truncates large palettes.
-            let length = usize::try_from(entry.length)
-                .unwrap_or_else(|error| panic!("binary entry has an invalid length: {error}"));
-            if length == 0 {
-                Vec::new()
-            } else {
-                // SAFETY: the loader owns the entry's full recorded allocation until copying ends.
-                unsafe { std::slice::from_raw_parts(entry.data.cast::<u8>(), length).to_vec() }
-            }
-        })
-        .collect()
+    Some(
+        super::owned_table::LoadedBinaryTable::load(resource)?
+            .entries()
+            .to_vec(),
+    )
 }
 
 unsafe extern "C" fn get_string_table_file_data(
@@ -75,9 +44,13 @@ unsafe extern "C" fn get_binary_table_file_data(
     (*resdata).ptr = LoadResourceFromPath(pathname, Some(_get_binary_table_data));
 }
 
-/// Registers `STRTAB`, `BINTAB` and `CONVERSATION`. Always returns TRUE.
-#[no_mangle]
-pub extern "C" fn InstallStringTableResType() -> c_int {
+unsafe extern "C" fn free_binary_table(data: *mut c_void) -> c_int {
+    // SAFETY: the binary resource loader transfers this owned table to its release callback.
+    unsafe { super::string_table::DestroyStringTable(data.cast()) }
+}
+
+/// Registers `STRTAB`, `BINTAB` and `CONVERSATION`.
+pub(crate) fn install_resource_types() {
     // SAFETY: the type names are NUL-terminated literals and the callbacks
     // match the resource system's signatures.
     unsafe {
@@ -90,7 +63,7 @@ pub extern "C" fn InstallStringTableResType() -> c_int {
         InstallResTypeVectors(
             c"BINTAB".as_ptr(),
             Some(get_binary_table_file_data),
-            Some(FreeResourceData),
+            Some(free_binary_table),
             None,
         );
         InstallResTypeVectors(
@@ -100,7 +73,6 @@ pub extern "C" fn InstallStringTableResType() -> c_int {
             None,
         );
     }
-    1
 }
 
 /// Loads the table behind `res` and takes ownership of it from the

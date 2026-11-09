@@ -1,19 +1,92 @@
-//! Shared ownership and bounded text views of a detached text table.
+//! Shared ownership of detached string tables and bounded entry views.
 
 use super::string_table::{StringTable, StringTableEntry};
 use std::{ffi::CStr, rc::Rc};
 
 // The existing ABI observes only the header; Rust owns the entries and their bytes.
 #[repr(C)]
-pub(crate) struct TextAllocation {
+pub(crate) struct TableAllocation {
     header: StringTable,
     entries: Box<[StringTableEntry]>,
     strings: Vec<Vec<u8>>,
     counts: Vec<u16>,
 }
 
+impl TableAllocation {
+    fn new(mut strings: Vec<Vec<u8>>, counts: Vec<u16>) -> Rc<Self> {
+        assert!(
+            strings.len() <= i32::MAX as usize,
+            "too many string entries"
+        );
+        let mut entries: Box<[_]> = strings
+            .iter_mut()
+            .enumerate()
+            .map(|(index, bytes)| StringTableEntry {
+                data: if bytes.is_empty() {
+                    std::ptr::null_mut()
+                } else {
+                    bytes.as_mut_ptr().cast()
+                },
+                length: i32::try_from(bytes.len())
+                    .unwrap_or_else(|error| panic!("string entry too long: {error}")),
+                index: index as i32,
+                parent: std::ptr::null_mut(),
+            })
+            .collect();
+        let mut allocation = Rc::new(Self {
+            header: StringTable {
+                flags: 0,
+                size: strings.len() as i32,
+                strings: entries.as_mut_ptr(),
+                name_index: std::ptr::null_mut(),
+                owned_text: true,
+            },
+            entries,
+            strings,
+            counts,
+        });
+        let unique = Rc::get_mut(&mut allocation)
+            .unwrap_or_else(|| panic!("new string allocation must be unique"));
+        let parent = std::ptr::from_mut(&mut unique.header);
+        for entry in &mut unique.entries {
+            entry.parent = parent;
+        }
+        allocation
+    }
+}
+
 #[derive(Clone)]
-pub struct LoadedTextTable(Rc<TextAllocation>);
+pub(super) struct LoadedBinaryTable(Rc<TableAllocation>);
+
+impl LoadedBinaryTable {
+    pub(super) fn from_entries(entries: Vec<Vec<u8>>) -> Self {
+        let counts = vec![0; entries.len()];
+        Self(TableAllocation::new(entries, counts))
+    }
+
+    pub(super) fn load(resource: &CStr) -> Option<Self> {
+        crate::resource::ffi_bridge::detach_resource_of_type(resource, "BINTAB").map(|table| {
+            // SAFETY: the binary loader transfers one Rc<TableAllocation>, header first.
+            Self(unsafe { Rc::from_raw(table.as_ptr().cast()) })
+        })
+    }
+
+    pub(super) fn entries(&self) -> &[Vec<u8>] {
+        &self.0.strings
+    }
+
+    pub(super) fn entry(&self, index: u16) -> Option<&[u8]> {
+        (!self.0.strings.is_empty())
+            .then(|| self.0.strings[usize::from(index) % self.0.strings.len()].as_slice())
+    }
+
+    pub(super) fn into_raw(self) -> *mut StringTable {
+        Rc::into_raw(self.0).cast_mut().cast()
+    }
+}
+
+#[derive(Clone)]
+pub struct LoadedTextTable(Rc<TableAllocation>);
 
 impl std::fmt::Debug for LoadedTextTable {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -76,57 +149,23 @@ impl LoadedTextTable {
     }
     pub fn load(resource: &CStr) -> Option<Self> {
         crate::resource::ffi_bridge::detach_resource_of_type(resource, "STRTAB").map(|table| {
-            // SAFETY: the plain text loader transfers one Rc<TextAllocation> with its header first.
+            // SAFETY: the plain text loader transfers one Rc<TableAllocation>, header first.
             Self(unsafe { Rc::from_raw(table.as_ptr().cast()) })
         })
     }
 
-    pub(super) fn from_strings(mut strings: Vec<Vec<u8>>) -> Self {
-        assert!(strings.len() <= i32::MAX as usize, "too many text entries");
+    pub(super) fn from_strings(strings: Vec<Vec<u8>>) -> Self {
         let counts = strings
             .iter()
-            .map(|text| super::unicode::count_utf8_bytes(text) as u16)
-            .collect();
-        let mut entries: Box<[_]> = strings
-            .iter_mut()
-            .enumerate()
-            .map(|(index, text)| {
+            .map(|text| {
                 if !text.is_empty() {
                     CStr::from_bytes_until_nul(text)
                         .unwrap_or_else(|error| panic!("loaded text is not terminated: {error}"));
                 }
-                StringTableEntry {
-                    data: if text.is_empty() {
-                        std::ptr::null_mut()
-                    } else {
-                        text.as_mut_ptr().cast()
-                    },
-                    length: i32::try_from(text.len())
-                        .unwrap_or_else(|error| panic!("text entry too long: {error}")),
-                    index: index as i32,
-                    parent: std::ptr::null_mut(),
-                }
+                super::unicode::count_utf8_bytes(text) as u16
             })
             .collect();
-        let mut allocation = Rc::new(TextAllocation {
-            header: StringTable {
-                flags: 0,
-                size: strings.len() as i32,
-                strings: entries.as_mut_ptr(),
-                name_index: std::ptr::null_mut(),
-                owned_text: true,
-            },
-            entries,
-            strings,
-            counts,
-        });
-        let unique = Rc::get_mut(&mut allocation)
-            .unwrap_or_else(|| panic!("new text allocation must be unique"));
-        let parent = std::ptr::from_mut(&mut unique.header);
-        for entry in &mut unique.entries {
-            entry.parent = parent;
-        }
-        Self(allocation)
+        Self(TableAllocation::new(strings, counts))
     }
 
     pub(crate) fn into_raw(self) -> *mut StringTable {
@@ -182,6 +221,32 @@ mod tests {
             owner.0.entries[0].parent,
             std::ptr::from_ref(&owner.0.header).cast_mut()
         );
+    }
+
+    #[test]
+    fn binary_views_retain_full_entries_and_native_release_preserves_the_owner() {
+        let large = vec![0x7b; 65537];
+        let owner = LoadedBinaryTable::from_entries(vec![large.clone(), Vec::new(), vec![1, 0, 4]]);
+        assert_eq!(owner.entry(3), Some(large.as_slice()));
+        assert_eq!(owner.entry(1), Some([].as_slice()));
+        let raw = owner.clone().into_raw();
+        // SAFETY: this handoff transfers one strong reference while owner retains another.
+        unsafe {
+            assert_eq!((*raw).size, 3);
+            let entries = std::slice::from_raw_parts((*raw).strings, 3);
+            assert_eq!(entries[0].length, 65537);
+            assert_eq!(entries[0].parent, raw);
+            assert_eq!(entries[2].index, 2);
+            assert_eq!(
+                std::slice::from_raw_parts(entries[2].data.cast::<u8>(), 3),
+                [1, 0, 4]
+            );
+            super::super::string_table::FreeStringTable(raw);
+        }
+        assert_eq!(owner.entries(), [large, Vec::new(), vec![1, 0, 4]]);
+        assert!(LoadedBinaryTable::from_entries(Vec::new())
+            .entry(0)
+            .is_none());
     }
 
     #[test]

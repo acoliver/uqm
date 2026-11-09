@@ -74,7 +74,8 @@ pub unsafe extern "C" fn AllocStringTable(num_entries: c_int, flags: c_int) -> *
 /// the name array sits inside that range and the last array is not walked.
 ///
 /// # Safety
-/// `table` must be NULL or come from [`AllocStringTable`].
+/// `table` must be NULL or transfer one allocation/reference from [`AllocStringTable`]
+/// or a string-table resource loader.
 #[no_mangle]
 pub unsafe extern "C" fn FreeStringTable(table: *mut StringTable) {
     if table.is_null() {
@@ -83,7 +84,7 @@ pub unsafe extern "C" fn FreeStringTable(table: *mut StringTable) {
     let t = &*table;
     if t.owned_text {
         drop(std::rc::Rc::from_raw(
-            table.cast::<super::owned_table::TextAllocation>(),
+            table.cast::<super::owned_table::TableAllocation>(),
         ));
         return;
     }

@@ -58,7 +58,7 @@ use crate::io::uio_bridge::uio_stat;
 #[cfg(not(test))]
 use crate::io::uio_bridge::uio_unlink as uio_unlink_raw;
 #[cfg(not(test))]
-use crate::strings::sresins::InstallStringTableResType;
+use crate::strings::sresins::install_resource_types;
 #[cfg(not(test))]
 use crate::video::legacy::InstallVideoResType;
 
@@ -308,7 +308,7 @@ pub unsafe extern "C" fn InitResourceSystem() -> *mut c_void {
         #[cfg(not(test))]
         unsafe {
             InstallGraphicResTypes();
-            InstallStringTableResType();
+            install_resource_types();
             #[cfg(feature = "audio_heart")]
             {
                 eprintln!("[audio_heart] Registering Rust SNDRES/MUSICRES callbacks");
@@ -1541,10 +1541,11 @@ mod tests {
     #[test]
     #[serial]
     fn test_init_registers_5_types() {
-        unsafe {
-            reset_state();
-            InitResourceSystem();
+        reset_state();
+        // SAFETY: this serialized test owns the resource system.
+        unsafe { InitResourceSystem() };
 
+        {
             let guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
             let state = guard.as_ref().unwrap();
             assert_eq!(
@@ -1559,6 +1560,26 @@ mod tests {
             assert!(state.dispatch.type_registry.lookup("BOOLEAN").is_some());
             assert!(state.dispatch.type_registry.lookup("COLOR").is_some());
             assert!(state.dispatch.type_registry.lookup("UNKNOWNRES").is_some());
+        }
+        for _ in 0..2 {
+            crate::strings::sresins::install_resource_types();
+            let guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
+            let state = guard
+                .as_ref()
+                .unwrap_or_else(|| panic!("resource system is not initialized"));
+            assert_eq!(state.dispatch.type_registry.count(), 8);
+            for kind in ["STRTAB", "BINTAB", "CONVERSATION"] {
+                let handlers = state
+                    .dispatch
+                    .type_registry
+                    .lookup(kind)
+                    .unwrap_or_else(|| panic!("{kind} is not registered"));
+                assert!(handlers.load_fun.is_some(), "{kind} has no loader");
+                assert!(
+                    handlers.free_fun.is_some(),
+                    "{kind} has no release callback"
+                );
+            }
         }
     }
 

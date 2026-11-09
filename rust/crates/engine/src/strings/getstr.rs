@@ -452,32 +452,33 @@ pub unsafe extern "C" fn _get_binary_table_data(fp: *mut c_void, length: u32) ->
     if file.is_null() {
         return null_mut();
     }
-    let table = table_from_binary(file.cast());
+    let bytes = std::slice::from_raw_parts(file.cast(), (length - 4) as usize);
+    let table = table_from_binary(bytes);
     rust_hfree(file);
-    table.cast()
+    table.into_raw().cast()
 }
 
-/// Decodes the in-memory image of a binary table file.
-///
-/// # Safety
-/// `file` must hold a well-formed table image.
-unsafe fn table_from_binary(file: *const u8) -> *mut StringTable {
-    let words = file.cast::<u32>();
-    let word = |i: usize| u32::from_be(words.add(i).read_unaligned());
-
-    let table = AllocStringTable(word(0) as i32, 0);
-    let size = (*table).size as usize;
-    let extra_words = word(1) as usize;
-    let mut data = words.add(2 + size + extra_words).cast::<u8>();
-    for i in 0..size {
-        let len = word(2 + i) as usize;
-        set_entry(
-            (*table).strings.add(i),
-            std::slice::from_raw_parts(data, len),
-        );
-        data = data.add(len);
-    }
-    table
+fn table_from_binary(file: &[u8]) -> super::owned_table::LoadedBinaryTable {
+    let word = |index: usize| {
+        let offset = index * 4;
+        u32::from_be_bytes([
+            file[offset],
+            file[offset + 1],
+            file[offset + 2],
+            file[offset + 3],
+        ]) as usize
+    };
+    let size = word(0);
+    let extra_words = word(1);
+    let mut data = &file[(2 + size + extra_words) * 4..];
+    let entries = (0..size)
+        .map(|index| {
+            let (entry, rest) = data.split_at(word(2 + index));
+            data = rest;
+            entry.to_vec()
+        })
+        .collect();
+    super::owned_table::LoadedBinaryTable::from_entries(entries)
 }
 
 #[cfg(test)]
@@ -646,10 +647,47 @@ mod tests {
             file.extend_from_slice(&w.to_be_bytes());
         }
         file.extend_from_slice(b"abcde");
+        let owner = table_from_binary(&file);
+        assert_eq!(owner.entries(), [b"abc".to_vec(), b"de".to_vec()]);
+        let table = owner.into_raw();
+        // SAFETY: the handoff owns this table and its entry storage until release.
         unsafe {
-            let table = table_from_binary(file.as_ptr());
             assert_eq!(entry_text((*table).strings).unwrap(), b"abc");
             assert_eq!(entry_text((*table).strings.add(1)).unwrap(), b"de");
+            super::super::string_table::FreeStringTable(table);
+        }
+    }
+
+    #[test]
+    fn binary_table_owns_full_lengths_empty_entries_and_embedded_zeros() {
+        let mut file = Vec::new();
+        for word in [3u32, 0, 65537, 0, 4] {
+            file.extend_from_slice(&word.to_be_bytes());
+        }
+        file.extend(std::iter::repeat_n(0x7b, 65537));
+        file.extend_from_slice(&[1, 2, 0, 4]);
+        let owner = table_from_binary(&file);
+        file.fill(0);
+        assert_eq!(
+            owner.entries(),
+            [vec![0x7b; 65537], Vec::new(), vec![1, 2, 0, 4]]
+        );
+        assert_eq!(owner.entry(5), Some([1, 2, 0, 4].as_slice()));
+        assert_eq!(owner.entry(1), Some([].as_slice()));
+        let empty = table_from_binary(&[0; 8]);
+        assert!(empty.entries().is_empty());
+        assert!(empty.entry(0).is_none());
+    }
+
+    #[test]
+    fn binary_table_rejects_truncated_headers_and_entries() {
+        for bytes in [
+            vec![],
+            vec![0; 7],
+            vec![0, 0, 0, 1, 0, 0, 0, 0],
+            vec![0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 2, 0],
+        ] {
+            assert!(std::panic::catch_unwind(|| table_from_binary(&bytes)).is_err());
         }
     }
 }
