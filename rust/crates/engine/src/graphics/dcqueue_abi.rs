@@ -506,12 +506,22 @@ pub unsafe extern "C" fn TFB_PurgeDanglingGraphics() {
     }
     unlock_dcq();
 }
-pub(crate) fn require_presentation(_context: &super::context_abi::ContextLease) {
+pub(crate) fn require_queue(context: &super::context_abi::ContextLease) {
+    context.assert_thread();
+    // SAFETY: the retained graphics owner confines lifecycle access to its producer thread.
+    let initialized = unsafe { !DCQ_MUTEX.is_null() };
+    assert!(
+        initialized,
+        "batch accounting requires an initialized draw queue"
+    );
+}
+
+pub(crate) fn require_presentation(context: &super::context_abi::ContextLease) {
+    require_queue(context);
     // SAFETY: the retained lease admits this thread to the graphics lifecycle state.
     unsafe {
         assert!(
-            !DCQ_MUTEX.is_null()
-                && !super::sdl::lifecycle_abi::SDL_Screen.is_null()
+            !super::sdl::lifecycle_abi::SDL_Screen.is_null()
                 && !super::sdl::lifecycle_abi::GRAPHICS_BACKEND.is_null(),
             "graphics presentation requires an initialized display"
         );

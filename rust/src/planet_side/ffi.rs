@@ -68,24 +68,31 @@ pub fn run_session(
     solar: &mut SolarSystem,
     input: TripInput,
 ) -> TripResult {
+    assert!(
+        input.misc_data_frame.frame_count() != 0,
+        "lander trip requires retained misc frames"
+    );
     let game = std::cell::RefCell::new(cx.reborrow());
     let observe = std::cell::RefCell::new(crate::engine::observe::Io {
         observer: &mut *io.observer,
     });
     let admission = admit_trip(&observe);
     let result = run_retained_session(
-        drawing, controls, activity, &game, &observe, solar, &input, &admission,
+        drawing, controls, activity, &game, solar, &input, &admission,
     );
-    complete_trip(&admission.0, &observe, &result);
+    complete_trip(&admission.telemetry, &observe, &result);
     result
 }
 
-type TripAdmission = (
-    std::rc::Rc<std::cell::RefCell<TripTelemetry>>,
-    Option<crate::engine::observe_port::planet_side::FixtureLayout>,
-);
+struct TripAdmission<'a, 'observer> {
+    telemetry: std::rc::Rc<std::cell::RefCell<TripTelemetry>>,
+    fixture: Option<crate::engine::observe_port::planet_side::FixtureLayout>,
+    observe: &'a std::cell::RefCell<crate::engine::observe::Io<'observer>>,
+}
 
-fn admit_trip(observe: &std::cell::RefCell<crate::engine::observe::Io<'_>>) -> TripAdmission {
+fn admit_trip<'a, 'observer>(
+    observe: &'a std::cell::RefCell<crate::engine::observe::Io<'observer>>,
+) -> TripAdmission<'a, 'observer> {
     let admission = observe
         .borrow_mut()
         .observer
@@ -94,7 +101,11 @@ fn admit_trip(observe: &std::cell::RefCell<crate::engine::observe::Io<'_>>) -> T
     let trip = std::rc::Rc::new(std::cell::RefCell::new(TripTelemetry::pending(
         admission.map_or(0, |admission| admission.generation),
     )));
-    (trip, admission.and_then(|admission| admission.fixture))
+    TripAdmission {
+        telemetry: trip,
+        fixture: admission.and_then(|admission| admission.fixture),
+        observe,
+    }
 }
 
 fn complete_trip(
@@ -121,18 +132,16 @@ fn run_retained_session(
     controls: &crate::engine::input::InputSession,
     activity: crate::engine::world::activity::ActivityControl,
     game: &std::cell::RefCell<crate::engine::battle::Cx<'_>>,
-    observe: &std::cell::RefCell<crate::engine::observe::Io<'_>>,
     solar: &mut SolarSystem,
     context: &TripInput,
-    admission: &TripAdmission,
+    admission: &TripAdmission<'_, '_>,
 ) -> TripResult {
-    let (telemetry, fixture) = admission;
-    let assets = PlanetSideAssets::retain(game.borrow().kernel.lander_resources.as_ref().ok_or(
-        super::runtime::AdapterError::new("lander_assets_not_loaded"),
-    )?);
+    let observe = admission.observe;
+    let telemetry = &admission.telemetry;
+    let fixture = admission.fixture;
+    let (assets, mut visuals) = retained_assets(game, context)?;
     let reports = drawing.scan.report_context();
     let mut generator = CffiSurfaceGenerator::for_planet_side(game, observe, solar, reports);
-    let mut visuals = retained_visuals(context)?;
     let persistence = ScanPersistence::from_masks(generator.retrieval_masks());
     let lander_masks = extract_lander_masks(&assets.graphic(LanderGraphic::Lander))?;
     let assembly = assemble_surface(&mut generator, persistence, &mut visuals, lander_masks)?;
@@ -141,7 +150,7 @@ fn run_retained_session(
     let session = create_trip_session(&mut ship, context)?;
     let mut world_visuals = super::visual_adapter::CffiWorldVisuals::new(&assets, &mut visuals);
     let channels = game.borrow().kernel.channels.clone();
-    install_fixture(*fixture, &session, &surface, &mut world_visuals)?;
+    install_fixture(fixture, &session, &surface, &mut world_visuals)?;
     let (earthquake_frame_count, lava_frame_count) = hazard_frame_counts(&assets);
     let publish = |trip: &TripTelemetry| super::adapters::publish_trip(observe, trip);
     let collision = SurfaceCollisionAdapter {
@@ -209,14 +218,19 @@ fn run_retained_session(
     outcome.map_err(TripError::from)
 }
 
-fn retained_visuals(
+fn retained_assets(
+    game: &std::cell::RefCell<crate::engine::battle::Cx<'_>>,
     context: &TripInput,
-) -> Result<CffiSurfaceVisuals, super::runtime::AdapterError> {
-    CffiSurfaceVisuals::new(
+) -> Result<(PlanetSideAssets, CffiSurfaceVisuals), super::runtime::AdapterError> {
+    let assets = PlanetSideAssets::retain(game.borrow().kernel.lander_resources.as_ref().ok_or(
+        super::runtime::AdapterError::new("lander_assets_not_loaded"),
+    )?);
+    let visuals = CffiSurfaceVisuals::new(
         context.misc_data_frame.clone(),
         context.energy_frame.clone(),
         context.life_frames.clone(),
-    )
+    )?;
+    Ok((assets, visuals))
 }
 
 fn hazard_frame_counts(assets: &PlanetSideAssets) -> (u16, u16) {

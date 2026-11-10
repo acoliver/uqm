@@ -105,6 +105,17 @@ fn real_sol_site_preserves_pluto_fatal_survivor_and_luna_acceptance() {
 #[test]
 #[serial_test::serial]
 fn production_provider_threads_pickup_effects_and_only_persists_accepted_nodes() {
+    struct Queue;
+    impl Drop for Queue {
+        fn drop(&mut self) {
+            // SAFETY: this serialized fixture owns the initialized queue.
+            unsafe { uqm_rust::graphics::dcqueue_abi::Uninit_DrawCommandQueue() };
+        }
+    }
+    // SAFETY: the serialized fixture owns the queue until its guard drops.
+    unsafe { uqm_rust::graphics::dcqueue_abi::Init_DrawCommandQueue() };
+    let _queue = Queue;
+
     let mut game = campaign();
     game.world.set_catalog(std::borrow::Cow::Borrowed(
         &uqm_rust::planets::tables::STARMAP_ARRAY,
@@ -145,6 +156,14 @@ fn production_provider_threads_pickup_effects_and_only_persists_accepted_nodes()
                 context: scan.lease(),
                 resources: Default::default(),
             },
+        );
+        assert_eq!(provider.node_count(ScanType::Energy), Ok(1));
+        assert_eq!(
+            provider
+                .generate(ScanType::Energy, ScanNodeId::new(0).unwrap())
+                .unwrap()
+                .kind,
+            uqm_rust::planet_side::generation::GeneratedNodeKind::Energy
         );
         let mut pickup = PickupContext::lander(crew);
         assert_eq!(

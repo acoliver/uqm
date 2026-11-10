@@ -112,6 +112,7 @@ pub mod widgets_abi;
 
 mod value_helpers;
 
+pub mod batch_depth;
 pub mod flash;
 mod flash_math;
 pub mod native_batch;
