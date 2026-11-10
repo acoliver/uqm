@@ -206,7 +206,8 @@ fn utf8_prefix(bytes: &[u8], limit: usize) -> (usize, usize) {
     (count, cursor)
 }
 
-fn utf8_character(bytes: &[u8]) -> Option<(UniChar, usize)> {
+/// Decode the engine's accepted UTF-8 prefix, including non-scalar code points.
+pub fn utf8_character(bytes: &[u8]) -> Option<(UniChar, usize)> {
     let (width, mut value, minimum) = match *bytes.first()? {
         1..=0x7f => (1, u32::from(bytes[0]), 0),
         0xc0..=0xdf => (2, u32::from(bytes[0] & 0x1f), 0x80),

@@ -22,10 +22,25 @@ fn needs_page_marker(row: i32, rows: i32, remaining: u16, columns: i32, lf_remai
     row == rows - 1 && (i32::from(remaining) > columns || lf_remaining > 1)
 }
 
+fn take_character(text: &mut &std::ffi::CStr) -> u32 {
+    let Some((character, bytes)) = crate::strings::unicode::utf8_character(text.to_bytes()) else {
+        return 0;
+    };
+    *text = &text[bytes..];
+    character
+}
+
+fn word_character_count(mut text: &std::ffi::CStr) -> usize {
+    let mut count = 0;
+    while crate::strings::unicode::uni_char_is_graph(take_character(&mut text)) != 0 {
+        count += 1;
+    }
+    count
+}
+
 #[cfg(not(test))]
 pub(crate) mod live {
-    use super::{character_delay, needs_page_marker};
-    use crate::comm::sis_graphics::CText;
+    use super::{character_delay, needs_page_marker, take_character, word_character_count};
 
     use crate::engine::{battle::Cx, observe::Io};
     use crate::mainloop::input_abi::live::FlushInput;
@@ -36,18 +51,12 @@ pub(crate) mod live {
     };
 
     use crate::engine::strings::owned_table::TextEntry;
-    use crate::strings::unicode::{
-        get_char_from_string as getCharFromString, uni_char_is_graph as UniChar_isGraph,
-        utf8_string_count as utf8StringCount, utf8_string_count_n as utf8StringCountN,
-    };
-    use std::ffi::CString;
+    use std::ffi::{CStr, CString};
 
     use crate::time::counter_abi::GetTimeCounter;
 
     use crate::graphics::{
-        context_abi::SetContextFontEffect,
-        drawable_abi::DrawableLease,
-        font_abi::{font_DrawText, SetContextFont},
+        context_abi::SetContextFontEffect, drawable_abi::DrawableLease, font_abi::SetContextFont,
     };
 
     use crate::engine::graphics::context_abi::ContextLease;
@@ -101,26 +110,48 @@ pub(crate) mod live {
 
     use crate::battle::sounds::engine::play_sound;
 
+    struct ReportText<'a> {
+        string: &'a CStr,
+        baseline: crate::comm::locdata::CPoint,
+    }
+
     struct ReportPrinter {
+        context: ContextLease,
+        font: crate::graphics::native_font::FontLease,
         sound: Option<crate::sound::owned_bank::SoundClip>,
         advance: i16,
         sleepy: bool,
     }
 
     impl ReportPrinter {
-        unsafe fn draw_word(
+        fn draw_word(
             &mut self,
             cx: &mut Cx<'_>,
             io: &mut Io<'_>,
-            t: &mut CText,
+            t: &mut ReportText<'_>,
             mut word_chars: u16,
             mut timeout: u32,
         ) {
             while word_chars != 0 {
                 word_chars -= 1;
-                let mut next = t.p_str.cast();
-                let c = getCharFromString(&mut next);
-                cx.with_legacy(|| font_DrawText(std::ptr::from_mut(t).cast()));
+                let mut next = t.string;
+                let c = take_character(&mut next);
+                self.context.draw_text_bounded(
+                    &self.font,
+                    t.string,
+                    crate::graphics::native_abi::POINT {
+                        x: t.baseline.x,
+                        y: t.baseline.y,
+                    },
+                    crate::graphics::native_abi::TEXT_ALIGN_ALIGN_LEFT,
+                    crate::graphics::native_abi::Color {
+                        r: 0,
+                        g: 255,
+                        b: 0,
+                        a: 255,
+                    },
+                    1,
+                );
                 if self.sleepy && cx.world.activity() & (1 << 14) == 0 {
                     if let Some(sound) = &self.sound {
                         play_sound(
@@ -138,21 +169,23 @@ pub(crate) mod live {
                         cx.with_legacy(|| CffiPlatform.batch());
                     }
                 }
-                t.p_str = next.cast();
+                t.string = next;
                 t.baseline.x += self.advance;
             }
         }
     }
 
     unsafe fn make_report(
-        input: &crate::engine::input::InputSession,
         cx: &mut Cx<'_>,
         io: &mut Io<'_>,
         sound: Option<crate::sound::owned_bank::SoundClip>,
         context: &ContextLease,
-        text: *const u8,
+        font: &crate::graphics::native_font::FontLease,
+        text: &CStr,
         mut remaining: u16,
     ) {
+        let runtime = cx.kernel.input_runtime();
+        let input = runtime.input();
         let g = CffiPlatform;
         let junk = crate::planets::solarsys::resources::retained(cx.kernel)
             .junk
@@ -162,13 +195,16 @@ pub(crate) mod live {
             let r = junk.context_frame(0).wrapped_frame(18).rect();
             (end_page, r)
         });
-        let end_len = utf8StringCount(end_page.as_ptr().cast()) as u16;
+        let end_len = crate::strings::unicode::count_utf8_bytes(end_page.as_bytes()) as u16;
         let columns = (ScreenWidth - 78) / 6;
         let rows = 75 / 6;
-        let mut t = CText::default();
-        t.p_str = text.cast();
-        t.char_count = 1;
+        let mut t = ReportText {
+            string: text,
+            baseline: Default::default(),
+        };
         let mut printer = ReportPrinter {
+            context: context.clone(),
+            font: font.clone(),
             sound,
             advance: r.extent.width + 1,
             sleepy: true,
@@ -184,36 +220,31 @@ pub(crate) mod live {
         });
         t.baseline.y = r.extent.height + 1;
         while remaining != 0 {
-            let last_string = t.p_str;
-            let mut next = t.p_str.cast::<u8>();
+            let last_string = t.string;
+            let mut next = t.string;
             let mut lf_remaining = remaining;
-            while lf_remaining != 0 && getCharFromString(&mut next) != u32::from(b'\n') {
+            while lf_remaining != 0 && take_character(&mut next) != u32::from(b'\n') {
                 lf_remaining -= 1;
             }
             let mut col: u16 = 0;
             if needs_page_marker(row, rows, remaining, columns, lf_remaining) {
                 col = ((columns >> 1) - (i32::from(end_len) >> 1)) as u16;
-                t.p_str = end_page.as_ptr();
+                t.string = end_page.as_c_str();
                 remaining = remaining.wrapping_add(end_len);
             }
             t.baseline.x = ((r.extent.width >> 1) as i32
                 + i32::from(col) * i32::from(r.extent.width + 1)) as i16;
             loop {
-                let mut end = t.p_str.cast::<u8>();
-                next = end;
-                while UniChar_isGraph(getCharFromString(&mut next)) != 0 {
-                    end = next;
-                }
-                let word_chars = utf8StringCountN(t.p_str.cast(), end) as u16;
+                let word_chars = word_character_count(t.string) as u16;
                 col = col.wrapping_add(word_chars);
                 if i32::from(col) <= columns {
                     remaining = remaining.wrapping_sub(word_chars);
                     remaining = remaining.saturating_sub(1);
                     printer.draw_word(cx, io, &mut t, word_chars, GetTimeCounter());
                     col += 1;
-                    next = t.p_str.cast();
-                    last_c = getCharFromString(&mut next);
-                    t.p_str = next.cast();
+                    next = t.string;
+                    last_c = take_character(&mut next);
+                    t.string = next;
                     t.baseline.x += r.extent.width + 1;
                 }
                 if i32::from(col) > columns || last_c == u32::from(b'\n') || remaining == 0 {
@@ -223,7 +254,7 @@ pub(crate) mod live {
             t.baseline.y += r.extent.height + 1;
             row += 1;
             if row == rows || remaining == 0 {
-                t.p_str = last_string;
+                t.string = last_string;
                 if !printer.sleepy {
                     cx.with_legacy(|| g.unbatch());
                 }
@@ -269,6 +300,7 @@ pub(crate) mod live {
             }
         };
         let (text, length) = report.current_label();
+        let font = typography.font();
         context.with_selected(|| {
             let (saved, old_font, old_effect) = cx.with_legacy(|| {
                 let saved = SavedContext::capture(&context, None);
@@ -284,7 +316,7 @@ pub(crate) mod live {
                 });
                 (saved, old_font, old_effect)
             });
-            make_report(input, cx, io, sound, &context, text.as_ptr().cast(), length);
+            make_report(cx, io, sound, &context, &font, text, length);
             cx.with_legacy(|| {
                 SetContextFontEffect(old_effect);
                 SetContextFont(old_font);
@@ -299,6 +331,30 @@ pub(crate) mod live {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn borrowed_report_cursor_advances_utf8_bytes_without_losing_the_suffix() {
+        let mut text = c"Aé中";
+        assert_eq!(take_character(&mut text), u32::from(b'A'));
+        assert_eq!(text, c"é中");
+        assert_eq!(take_character(&mut text), 0xe9);
+        assert_eq!(take_character(&mut text), 0x4e2d);
+        assert_eq!(text, c"");
+        assert_eq!(take_character(&mut text), 0);
+        let mut extended =
+            std::ffi::CStr::from_bytes_with_nul(&[0xf4, 0x90, 0x80, 0x80, 0]).unwrap();
+        assert_eq!(take_character(&mut extended), 0x110000);
+        assert_eq!(extended, c"");
+    }
+
+    #[test]
+    fn borrowed_report_words_keep_engine_graphical_character_boundaries() {
+        assert_eq!(word_character_count(c"é中, next"), 3);
+        assert_eq!(word_character_count(c"A\nB"), 1);
+        assert_eq!(word_character_count(c"A\u{e000}B"), 1);
+        assert_eq!(word_character_count(c""), 0);
+    }
+
     #[test]
     fn punctuation_and_word_end_delays_match_the_readout() {
         assert_eq!(character_delay(u32::from(b'a'), false), 42);
