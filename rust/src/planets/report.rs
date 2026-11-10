@@ -2,6 +2,9 @@
 
 pub mod typography;
 
+#[cfg(test)]
+mod presentation_tests;
+
 fn character_delay(character: u32, last_in_word: bool) -> u32 {
     let mut delay = 0;
     if character == u32::from(b',') {
@@ -38,74 +41,68 @@ fn word_character_count(mut text: &std::ffi::CStr) -> usize {
     count
 }
 
-#[cfg(not(test))]
 pub(crate) mod live {
     use super::{character_delay, needs_page_marker, take_character, word_character_count};
-
-    use crate::engine::{battle::Cx, observe::Io};
-    use crate::mainloop::input_abi::live::FlushInput;
-
-    use crate::starbase::{
-        cffi::CffiPlatform,
-        gfx::{Gfx, Rgba},
-    };
-
-    use crate::engine::strings::owned_table::TextEntry;
-    use std::ffi::{CStr, CString};
-
-    use crate::time::counter_abi::GetTimeCounter;
-
+    use crate::engine::{battle::Cx, observe::Io, strings::owned_table::TextEntry};
     use crate::graphics::{
-        context_abi::SetContextFontEffect, drawable_abi::DrawableLease, font_abi::SetContextFont,
+        context_abi::{BatchGuard, ContextFrame, ContextLease},
+        native_abi::{Color, POINT},
+        native_font::FontLease,
     };
-
-    use crate::engine::graphics::context_abi::ContextLease;
     use crate::planets::scan::state::create_context;
-
+    use crate::time::counter_abi::GetTimeCounter;
     use crate::ui::util::{
         wait_for_any_button, wait_for_any_button_until, wait_for_no_input, SavedContext,
     };
+    use std::ffi::{CStr, CString};
 
-    extern "C" {
+    const GREEN: Color = Color {
+        r: 0,
+        g: 255,
+        b: 0,
+        a: 255,
+    };
+    const DARK_GREEN: Color = Color {
+        r: 0,
+        g: 57,
+        b: 0,
+        a: 255,
+    };
 
-        static mut ScreenWidth: i32;
-
-    }
-
-    unsafe fn clear(
-        input: &crate::engine::input::InputSession,
-        junk: &DrawableLease,
-        context: &ContextLease,
-    ) {
-        let g = CffiPlatform;
-        let frame = junk
-            .context_frame(0)
+    fn clear(printer: &ReportPrinter, input: &crate::engine::input::InputSession) {
+        let frame = printer
+            .junk
             .wrapped_frame(if input.preferences().fonts == 2 {
                 21
             } else {
                 18
             });
         let r = frame.rect();
-        g.batch();
-        g.set_bg_color(Rgba::BLACK);
-        g.clear_drawable();
-        g.set_fg_color(Rgba::rgb15(0, 7, 0));
-        let start_x = r.extent.width >> 1;
-        let mut y = 1;
-        for _ in 0..75 / 6 {
-            let mut x = start_x;
-            for _ in 0..(ScreenWidth - 78) / 6 {
-                let point = crate::graphics::native_abi::POINT { x, y };
-                if input.preferences().fonts == 2 {
-                    context.draw_stamp(&frame, point);
-                } else {
-                    context.draw_filled_stamp(&frame, point, context.foreground());
+        printer.context.with_batch(|| {
+            printer.context.set_background(Color {
+                r: 0,
+                g: 0,
+                b: 0,
+                a: 255,
+            });
+            printer.context.clear();
+            printer.context.set_foreground(DARK_GREEN);
+            let mut y = 1;
+            for _ in 0..75 / 6 {
+                let mut x = r.extent.width >> 1;
+                for _ in 0..(printer.width - 78) / 6 {
+                    if input.preferences().fonts == 2 {
+                        printer.context.draw_stamp(&frame, POINT { x, y });
+                    } else {
+                        printer
+                            .context
+                            .draw_filled_stamp(&frame, POINT { x, y }, DARK_GREEN);
+                    }
+                    x += r.extent.width + 1;
                 }
-                x += r.extent.width + 1;
+                y += r.extent.height + 1;
             }
-            y += r.extent.height + 1;
-        }
-        g.unbatch();
+        });
     }
 
     use crate::battle::sounds::engine::play_sound;
@@ -117,7 +114,10 @@ pub(crate) mod live {
 
     struct ReportPrinter {
         context: ContextLease,
-        font: crate::graphics::native_font::FontLease,
+        font: FontLease,
+        junk: ContextFrame,
+        width: i32,
+        batch: Option<BatchGuard>,
         sound: Option<crate::sound::owned_bank::SoundClip>,
         advance: i16,
         sleepy: bool,
@@ -144,12 +144,7 @@ pub(crate) mod live {
                         y: t.baseline.y,
                     },
                     crate::graphics::native_abi::TEXT_ALIGN_ALIGN_LEFT,
-                    crate::graphics::native_abi::Color {
-                        r: 0,
-                        g: 255,
-                        b: 0,
-                        a: 255,
-                    },
+                    GREEN,
                     1,
                 );
                 if self.sleepy && cx.world.activity() & (1 << 14) == 0 {
@@ -166,7 +161,7 @@ pub(crate) mod live {
                     timeout = timeout.wrapping_add(character_delay(c, word_chars == 0));
                     if wait_for_any_button_until(cx, io, 1, timeout, 0) != 0 {
                         self.sleepy = false;
-                        cx.with_legacy(|| CffiPlatform.batch());
+                        self.batch = Some(self.context.batch());
                     }
                 }
                 t.string = next;
@@ -175,49 +170,32 @@ pub(crate) mod live {
         }
     }
 
-    unsafe fn make_report(
+    fn make_report(
         cx: &mut Cx<'_>,
         io: &mut Io<'_>,
-        sound: Option<crate::sound::owned_bank::SoundClip>,
-        context: &ContextLease,
-        font: &crate::graphics::native_font::FontLease,
+        printer: &mut ReportPrinter,
         text: &CStr,
         mut remaining: u16,
     ) {
         let runtime = cx.kernel.input_runtime();
         let input = runtime.input();
-        let g = CffiPlatform;
-        let junk = crate::planets::solarsys::resources::retained(cx.kernel)
-            .junk
-            .lease();
-        let (end_page, r) = cx.with_legacy(|| {
-            let end_page = CString::new(format!("{}\n", g.game_string(305 + 3))).unwrap();
-            let r = junk.context_frame(0).wrapped_frame(18).rect();
-            (end_page, r)
-        });
+        let end_page = CString::new(format!("{}\n", cx.kernel.game_text(308).to_string_lossy()))
+            .unwrap_or_else(|error| panic!("report page marker contains NUL: {error}"));
+        let r = printer.junk.wrapped_frame(18).rect();
         let end_len = crate::strings::unicode::count_utf8_bytes(end_page.as_bytes()) as u16;
-        let columns = (ScreenWidth - 78) / 6;
+        let columns = (printer.width - 78) / 6;
         let rows = 75 / 6;
         let mut t = ReportText {
             string: text,
             baseline: Default::default(),
         };
-        let mut printer = ReportPrinter {
-            context: context.clone(),
-            font: font.clone(),
-            sound,
-            advance: r.extent.width + 1,
-            sleepy: true,
-        };
         let mut last_c = 0;
         let mut row = 0;
-        cx.with_legacy(|| {
-            FlushInput(input);
-            if remaining != 0 {
-                clear(input, &junk, context);
-                g.set_fg_color(Rgba::rgb15(0, 31, 0));
-            }
-        });
+        runtime.flush();
+        if remaining != 0 {
+            clear(printer, input);
+            printer.context.set_foreground(GREEN);
+        }
         t.baseline.y = r.extent.height + 1;
         while remaining != 0 {
             let last_string = t.string;
@@ -255,73 +233,67 @@ pub(crate) mod live {
             row += 1;
             if row == rows || remaining == 0 {
                 t.string = last_string;
-                if !printer.sleepy {
-                    cx.with_legacy(|| g.unbatch());
-                }
+                printer.batch.take();
                 if wait_for_any_button(cx, io, 1, u32::MAX, 0) == 0 {
                     break;
                 }
                 t.baseline.y = r.extent.height + 1;
                 row = 0;
                 if remaining != 0 {
-                    cx.with_legacy(|| {
-                        if !printer.sleepy {
-                            g.batch();
-                        }
-                        clear(input, &junk, context);
-                        g.set_fg_color(Rgba::rgb15(0, 31, 0));
-                    });
+                    if !printer.sleepy {
+                        printer.batch = Some(printer.context.batch());
+                    }
+                    clear(printer, input);
+                    printer.context.set_foreground(GREEN);
                 }
             }
         }
     }
 
-    /// # Safety
-    /// The game thread retains its initialized report graphics providers throughout presentation.
-    pub unsafe fn discovery_report(
+    pub fn discovery_report(
         cx: &mut Cx<'_>,
         io: &mut Io<'_>,
         report: &TextEntry,
         scan: Option<&ContextLease>,
         typography: &super::typography::ReportTypography,
+        junk: ContextFrame,
     ) {
-        #[cfg(feature = "debug-process")]
-        if crate::front_end::uqmdebug::DISABLE_INTERACTIVITY != 0 {
-            return;
-        }
         let runtime = cx.kernel.input_runtime();
         let input = runtime.input();
         let sound = cx.kernel.menu_sound_bank().map(|bank| bank.clip(0));
+        let width = ContextLease::require(cx.kernel.space_context)
+            .screen_dimensions()
+            .0;
         let (context, owned) = match scan {
             Some(context) => (context.clone(), None),
             None => {
-                let owner = create_context(cx.kernel, CffiPlatform.screen_size().0 as i16 - 78);
+                let owner = create_context(cx.kernel, width as i16 - 78);
                 (owner.lease(), Some(owner))
             }
         };
         let (text, length) = report.current_label();
-        let font = typography.font();
+        let effect = (input.preferences().fonts == 2).then(|| typography.effect().context_frame(0));
+        let mut printer = ReportPrinter {
+            context: context.clone(),
+            font: typography.font(),
+            advance: junk.wrapped_frame(18).rect().extent.width + 1,
+            junk,
+            width,
+            batch: None,
+            sound,
+            sleepy: true,
+        };
         context.with_selected(|| {
-            let (saved, old_font, old_effect) = cx.with_legacy(|| {
-                let saved = SavedContext::capture(&context, None);
-                let old_font = SetContextFont(typography.font.as_raw().cast());
-                let old_effect = SetContextFontEffect(if input.preferences().fonts == 2 {
-                    typography
-                        .effect()
-                        .frame(0)
-                        .unwrap_or_else(|| panic!("report effect frame"))
-                        .cast()
-                } else {
-                    std::ptr::null_mut()
+            let saved = SavedContext::capture(&context, None);
+            context.with_text_state(|| {
+                context.with_font_effect(effect.as_ref(), || {
+                    make_report(cx, io, &mut printer, text, length);
                 });
-                (saved, old_font, old_effect)
             });
-            make_report(cx, io, sound, &context, &font, text, length);
-            cx.with_legacy(|| {
-                SetContextFontEffect(old_effect);
-                SetContextFont(old_font);
-                saved.restore();
-            })
+            if length != 0 {
+                context.set_foreground(GREEN);
+            }
+            saved.restore();
         });
         drop(owned);
         wait_for_no_input(cx, io, u32::MAX, 1);
@@ -331,6 +303,36 @@ pub(crate) mod live {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[serial_test::serial]
+    fn retained_report_batch_releases_on_return_and_panic() {
+        use crate::graphics::{batch_depth::depth, context_abi::LoadedContext, dcqueue_abi};
+        struct Queue;
+        impl Drop for Queue {
+            fn drop(&mut self) {
+                // SAFETY: this serialized fixture owns the queue.
+                unsafe { dcqueue_abi::Uninit_DrawCommandQueue() };
+            }
+        }
+        // SAFETY: this serialized fixture owns the queue until its guard drops.
+        unsafe { dcqueue_abi::Init_DrawCommandQueue() };
+        let _queue = Queue;
+        let owner = LoadedContext::create(c"report-batch-test");
+        let context = owner.lease();
+        {
+            let _batch = context.batch();
+            assert_eq!(depth(&context), 1);
+        }
+        assert_eq!(depth(&context), 0);
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _batch = context.batch();
+            assert_eq!(depth(&context), 1);
+            panic!("interrupted report");
+        }));
+        assert!(result.is_err());
+        assert_eq!(depth(&context), 0);
+    }
 
     #[test]
     fn borrowed_report_cursor_advances_utf8_bytes_without_losing_the_suffix() {
