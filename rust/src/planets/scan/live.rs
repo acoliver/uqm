@@ -13,7 +13,7 @@ use crate::mainloop::restart_menu::c_extern::{
     self as base, uqm_sleep_thread_until as SleepThreadUntil,
 };
 use crate::mainloop::types::activity_flags::{CHECK_ABORT, CHECK_LOAD, START_ENCOUNTER};
-use crate::planet_side::ffi::{run_session, PlanetSideRunContext, STATUS_OK};
+use crate::planet_side::ffi::{run_session, TripError, TripInput};
 use crate::planets::solar_system::SolarSystem;
 use crate::ships::native::abi::MENU_STATE;
 use crate::starbase::cffi::CffiPlatform;
@@ -277,7 +277,7 @@ unsafe fn dispatch_lander(
     io: &mut Io<'_>,
 ) -> bool {
     let runtime = cx.kernel.input_runtime();
-    let misc_data = cx.kernel.misc_data_frame;
+    let misc_data = ContextFrame::retain(std::ptr::NonNull::new(cx.kernel.misc_data_frame));
     let (landing_fuel, old_callback) = cx.with_legacy(|| {
         let landing_fuel = fuel(solar) as i16;
         erase_coarse(planet, scan);
@@ -285,7 +285,7 @@ unsafe fn dispatch_lander(
         (landing_fuel, old_callback)
     });
     crate::ui::sis::delta_sis_gauges(cx.kernel, cx.world, 0, -landing_fuel, 0);
-    let mut context = cx.with_legacy(|| prepare_lander(scan, misc_data.cast(), solar));
+    let context = cx.with_legacy(|| prepare_lander(scan, misc_data, solar));
     let reply = run_session(
         crate::planet_side::graphics_adapter::SurfaceDrawing {
             planet: planet.clone(),
@@ -297,30 +297,22 @@ unsafe fn dispatch_lander(
         cx.world.activity_control(),
         cx,
         io,
-        &mut context,
+        solar,
+        context,
     );
-    if reply.status != STATUS_OK {
-        crate::logging::log_add(
-            crate::logging::LogLevel::Fatal,
-            &format!("Rust PlanetSide failed with status {}", reply.status),
-        );
-        cx.world.set_activity(cx.world.activity() | CHECK_ABORT);
-    } else {
-        solar.sys.info.planet_info.scan_retrieve_mask = context.retrieval_masks;
-        if reply.detail == 4 {
-            crate::logging::log_add(
-                crate::logging::LogLevel::Error,
-                &format!(
-                    "Rust PlanetSide adapter failed (operation code {}); returning to orbit",
-                    reply.value0 as u64
-                ),
-            );
-        } else if reply.detail == 5 {
-            crate::logging::log_add(
-                crate::logging::LogLevel::Error,
-                "Rust PlanetSide frame budget exhausted; returning to orbit",
-            );
-        }
+    match reply {
+        Ok(_) => {}
+        Err(TripError::Adapter(error)) => crate::logging::log_add(
+            crate::logging::LogLevel::Error,
+            &format!(
+                "Rust PlanetSide adapter failed ({}); returning to orbit",
+                error.operation
+            ),
+        ),
+        Err(TripError::FrameBudgetExceeded) => crate::logging::log_add(
+            crate::logging::LogLevel::Error,
+            "Rust PlanetSide frame budget exhausted; returning to orbit",
+        ),
     }
     if cx.world.activity() & CHECK_ABORT != 0 {
         return false;
@@ -340,45 +332,32 @@ unsafe fn dispatch_lander(
 
 unsafe fn prepare_lander(
     scan: &ScanState,
-    misc_data: *mut c_void,
-    solar: &mut SolarSystem,
-) -> PlanetSideRunContext {
+    misc_data: ContextFrame,
+    solar: &SolarSystem,
+) -> TripInput {
     scan.context().select();
     draw_cursor(scan, false);
-    let body = solar.require_body();
-    let world = std::ptr::from_ref(solar.sys.descriptor(body))
-        .cast_mut()
-        .cast();
-    let session = std::ptr::from_mut(solar).cast();
-    PlanetSideRunContext {
-        solar_system: session,
-        world,
+    solar.require_body();
+    TripInput {
         misc_data_frame: misc_data,
-        energy_frame: solar.sys.frames[1].as_ref().map_or(
-            std::ptr::null_mut(),
-            |frame| match frame.lease().frame(0) {
-                Some(frame) => frame.cast(),
-                None => panic!("loaded scene has no first frame"),
-            },
-        ),
+        energy_frame: solar.sys.frames[1]
+            .as_ref()
+            .map(|frame| frame.lease().context_frame(0)),
         life_frames: std::array::from_fn(|i| {
             solar.sys.frames[i + 3]
                 .as_ref()
-                .map_or(std::ptr::null_mut(), |frame| match frame.lease().frame(0) {
-                    Some(frame) => frame.cast(),
-                    None => panic!("loaded scene has no first frame"),
-                })
+                .map(|frame| frame.lease().context_frame(0))
         }),
-        landing_x: i32::from(scan.cursor.borrow().location.x),
-        landing_y: i32::from(scan.cursor.borrow().location.y),
+        landing: crate::planet_side::model::SurfacePoint {
+            x: i32::from(scan.cursor.borrow().location.x),
+            y: i32::from(scan.cursor.borrow().location.y),
+        },
         facing: crate::math::random() as u8,
-        retrieval_masks: solar.sys.info.planet_info.scan_retrieve_mask,
-        tick_period: 840 / 35,
-        frame_budget: u32::MAX,
+        tick_period: std::num::NonZeroU32::new(840 / 35).unwrap_or_else(|| unreachable!()),
+        frame_budget: std::num::NonZeroU32::MAX,
         tectonics_rating: solar.sys.info.planet_info.tectonics as u8,
         weather_rating: solar.sys.info.planet_info.weather as u8,
         temperature: i32::from(solar.sys.info.planet_info.temperature),
-        ..PlanetSideRunContext::default()
     }
 }
 
