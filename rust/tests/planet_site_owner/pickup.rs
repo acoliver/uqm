@@ -1,3 +1,6 @@
+#[path = "../support/campaign_display.rs"]
+mod campaign_display;
+
 use super::*;
 use uqm_rust::engine::world::generation::Body;
 use uqm_rust::planet_side::{
@@ -186,4 +189,119 @@ fn production_provider_threads_pickup_effects_and_only_persists_accepted_nodes()
             u32::from(!pluto)
         );
     }
+}
+
+#[test]
+#[serial_test::serial]
+fn production_site_keeps_its_report_when_typography_is_missing() {
+    use uqm_rust::engine::{
+        strings::owned_table::LoadedTextTable,
+        world::generation::{ReportDisposition, ReportSlot},
+    };
+    use uqm_rust::planets::generate::host::ReportSite;
+    let mut game = campaign();
+    let display = campaign_display::CampaignDisplay::install(&mut game).unwrap();
+    with_site(&mut game, SOL_DEFINED, |host, system| {
+        let table = LoadedTextTable::new(vec![c"Unconsumed report".to_owned()]);
+        system.report = ReportSlot::new(table.entry(0));
+        drop(table);
+        let failed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            ReportSite::report(host, system, ReportDisposition::Once)
+        }));
+        let error = failed.unwrap_err();
+        assert_eq!(
+            error.downcast_ref::<&str>().copied(),
+            Some("discovery report typography is not loaded")
+        );
+        assert_eq!(
+            system.report.current().unwrap().current_label().0,
+            c"Unconsumed report"
+        );
+    });
+    display.finish(game);
+}
+
+#[test]
+#[serial_test::serial]
+fn production_site_presents_and_consumes_an_empty_report_with_supplied_owners() {
+    use uqm_rust::engine::{strings::owned_table::LoadedTextTable, world::generation::ReportSlot};
+    use uqm_rust::graphics::{
+        context_abi::{ContextFrame, ContextLease},
+        drawable_abi::LoadedDrawable,
+    };
+    use uqm_rust::planets::{
+        generate::host::ReportSite,
+        report::typography::{ReportContext, ReportResources},
+    };
+    let mut game = campaign();
+    let resources = ReportResources::default();
+    let display =
+        campaign_display::CampaignDisplay::install_with_resources(&mut game, || resources.load())
+            .unwrap();
+    game.kernel.space_context = game.kernel.off_screen_context;
+    let context = ContextLease::require(game.kernel.space_context);
+    context.set_frame(ContextFrame::retain(std::ptr::NonNull::new(
+        game.kernel.screen,
+    )));
+    let junk = LoadedDrawable::create(8, 1, 1, 22).unwrap();
+    // SAFETY: this serialized fixture temporarily supplies the legacy visit's registered drawable.
+    let previous = unsafe {
+        let previous = uqm_rust::planets::solarsys::SpaceJunkFrame;
+        uqm_rust::planets::solarsys::SpaceJunkFrame = junk.lease().frame(0).unwrap().cast();
+        previous
+    };
+    game.kernel.install_input_runtime(std::rc::Rc::new(
+        uqm_rust::mainloop::input_abi::NativeInputRuntime::new(
+            None,
+            Default::default(),
+            game.kernel.configuration.clone(),
+        ),
+    ));
+    {
+        let mut battle = Battle::new();
+        let owner = RefCell::new(Cx::new(
+            &mut battle,
+            &mut game.world,
+            &mut game.kernel,
+            || 0,
+        ));
+        let mut observer = Unobserved;
+        let io = RefCell::new(Io {
+            observer: &mut observer,
+        });
+        let mut pickup = PickupContext::NoLander;
+        let mut host = Site::new(
+            &owner,
+            &io,
+            uqm_rust::engine::StarId(0),
+            SOL_DEFINED,
+            true,
+            &mut pickup,
+            Some(ReportContext {
+                context: context.clone(),
+                resources: resources.clone(),
+            }),
+        );
+        let mut system = SolarSys::new(
+            &[],
+            0,
+            SOL_DEFINED,
+            uqm_rust::math::RandomContext::with_seed(123),
+        );
+        let table = LoadedTextTable::new(vec![c"".to_owned()]);
+        system.report = ReportSlot::new(table.entry(0));
+        drop(table);
+        assert!(ReportSite::report(
+            &mut host,
+            &mut system,
+            uqm_rust::engine::world::generation::ReportDisposition::Once
+        ));
+        assert!(system.report.current().is_none());
+        assert_eq!(uqm_rust::graphics::batch_depth::depth(&context), 0);
+    }
+    context.flush();
+    // SAFETY: the serialized fixture restores the visit's publication before releasing its drawable.
+    unsafe { uqm_rust::planets::solarsys::SpaceJunkFrame = previous };
+    drop((context, resources, junk));
+    display.finish(game);
 }
