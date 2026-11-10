@@ -364,7 +364,7 @@ pub(crate) mod live {
         cx: &mut crate::engine::battle::Cx<'_>,
         element: crate::engine::battle::ElementId,
     ) {
-        cx.element_mut(element).flags &= !DISAPPEARING | NONSOLID;
+        cx.element_mut(element).flags &= !(DISAPPEARING | NONSOLID);
         let life = cx.element(element).life.wrapping_add(1);
         cx.element_mut(element).life = life;
     }

@@ -217,6 +217,18 @@ fn interplanetary_group_preserves_parent_and_updates_its_own_record() {
             assert_ne!(((*group).loc.x, (*group).loc.y), (300, 400));
             assert_eq!((*group).sys_loc, 0);
             assert_eq!((*group).group_id, 7);
+            uqm_rust::app::bridge::enter(|cx| {
+                let flagship = cx.elements().head().expect("spawned flagship");
+                let id = cx.elements().succ(flagship).expect("spawned group");
+                let hook = cx.element(id).death.expect("group movement hook");
+                cx.world.ip_groups().get_mut(group_id).sys_loc = 1;
+                uqm_rust::battle::process_native::invoke_element::invoke_element(cx, hook, id);
+                assert_eq!(
+                    cx.element(id).flags & (DISAPPEARING | NONSOLID) as u16,
+                    0,
+                    "a group returning to the flagship's location must become collidable"
+                );
+            });
             uqm_rust::app::bridge::enter(|cx| interplanetary::notify_others(cx, 0, 2));
             assert_eq!((*group).dest_loc, 2);
             assert_ne!((*group).task & IpGroup::IGNORE_FLAGSHIP, 0);
