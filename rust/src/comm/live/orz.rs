@@ -91,7 +91,6 @@ mod api {
 
     use crate::comm::races::orz::api::*;
 
-    #[cfg(not(test))]
     impl OrzApi for crate::comm::live::script::LiveScript<'_, '_, Handler> {
         fn remove_escorts(&mut self, race: u16) {
             use crate::engine::world::fleet;

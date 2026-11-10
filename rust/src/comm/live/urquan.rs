@@ -90,7 +90,6 @@ mod api {
     use crate::comm::races::urquan::api::*;
     use crate::engine::StoryKey;
 
-    #[cfg(not(test))]
     impl UrquanApi for crate::comm::live::script::LiveScript<'_, '_, Handler> {
         fn group_battle(&self, state_key: StoryKey) -> bool {
             let cx = self.cx.borrow();

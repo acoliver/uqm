@@ -161,7 +161,6 @@ mod api {
     use super::Handler;
     use crate::comm::races::starbas::api::*;
 
-    #[cfg(not(test))]
     mod live {
         use super::*;
         use crate::comm::live::script::LiveScript;

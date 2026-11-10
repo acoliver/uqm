@@ -52,7 +52,6 @@ mod api {
 
     use crate::comm::races::rebel::api::*;
 
-    #[cfg(not(test))]
     impl RebelApi for crate::comm::live::script::LiveScript<'_, '_, Handler> {
         fn date(&self) -> Date {
             let cx = self.cx.borrow();

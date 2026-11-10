@@ -86,7 +86,6 @@ mod api {
 
     use crate::comm::races::spahome::api::*;
 
-    #[cfg(not(test))]
     impl SpahomeApi for crate::comm::live::script::LiveScript<'_, '_, Handler> {
         fn have_spathi_escort(&self) -> bool {
             crate::engine::world::fleet::count_escort_ships(

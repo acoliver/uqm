@@ -91,7 +91,6 @@ mod api {
     use crate::comm::races::zoqfot::api::*;
     use crate::comm::Comm;
 
-    #[cfg(not(test))]
     mod live {
         use super::*;
         use crate::comm::live::script::LiveScript;
