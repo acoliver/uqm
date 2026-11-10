@@ -6,6 +6,7 @@ pub mod roster_flash;
 pub mod solar_resources;
 use super::battle::{
     kernel::{Channels, SoundQueue, StarPlane},
+    link_queue::RacePool,
     ShipId,
 };
 use crate::graphics::native_abi::{POINT, STRING as SOUND};
@@ -131,7 +132,7 @@ pub struct Kernel {
     ),
     pub portal_point: POINT,
     pub(super) elements: super::battle::ElementTable,
-    pub(super) races: [super::battle::link_queue::RacePool; 2],
+    pub(super) races: [RacePool; 2],
     ship_reset_pending: bool,
     battle_active: bool,
     pub display: super::battle::display::DisplayPool,
@@ -322,9 +323,7 @@ impl Kernel {
             hyperspace_ship_hooks: (None, None),
             portal_point: POINT { x: 0, y: 0 },
             elements: super::battle::ElementTable::with_capacity(150),
-            races: std::array::from_fn(|side| {
-                super::battle::link_queue::RacePool::with_capacity(side as u8, 0)
-            }),
+            races: std::array::from_fn(|side| RacePool::with_capacity(side as u8, 0)),
             ship_reset_pending: false,
             battle_active: false,
             display: super::battle::display::DisplayPool::new(),
@@ -349,7 +348,7 @@ impl Kernel {
 
 impl super::battle::Cx<'_> {
     #[cfg(not(test))]
-    pub fn race_pool(&self, side: usize) -> &super::battle::link_queue::RacePool {
+    pub fn race_pool(&self, side: usize) -> &RacePool {
         &self.kernel.races[side]
     }
 }
