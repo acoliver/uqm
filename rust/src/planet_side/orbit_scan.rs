@@ -10,7 +10,7 @@ pub(crate) fn node_retrieved(life: u16, info: &PlanetInfo) -> bool {
         scan < 3 && (1..=32).contains(&node),
         "invalid scan-node identity"
     );
-    unsafe { crate::planets::scan::is_node_retrieved(std::ptr::from_ref(info), scan, node - 1) }
+    crate::planets::scan::is_node_retrieved(info, scan, node - 1)
 }
 
 pub(crate) fn node_visible(flags: u16, life: u16, info: &PlanetInfo) -> bool {
@@ -390,7 +390,7 @@ mod retrieval_tests {
 
     #[test]
     fn retrieved_blips_stay_hidden_on_redraw_and_rescan_for_every_category() {
-        let mut info: PlanetInfo = unsafe { std::mem::zeroed() };
+        let mut info = PlanetInfo::default();
         for scan in 0..3 {
             let mut element = Element::new();
             element.life_span = (32 << 8) | scan;
@@ -400,7 +400,7 @@ mod retrieval_tests {
                 element.life_span,
                 &info
             ));
-            unsafe { crate::planets::scan::set_node_retrieved(&mut info, scan as u8, 31) };
+            crate::planets::scan::set_node_retrieved(&mut info, scan as u8, 31);
             assert!(node_retrieved(element.life_span, &info));
             assert!(!node_visible(
                 element.state_flags.bits(),
