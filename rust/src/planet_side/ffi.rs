@@ -1,50 +1,48 @@
 //! Owner-supplied PlanetSide session boundary.
 
 use crate::engine::observe::InputView;
+use crate::graphics::context_abi::ContextFrame;
 use crate::planets::solar_system::SolarSystem;
-use std::ffi::c_void;
+use std::num::NonZeroU32;
 
-pub const STATUS_OK: i32 = 0;
-pub const STATUS_INVALID_ARGUMENT: i32 = -4;
-const DETAIL_RETURNED: u32 = 1;
-const DETAIL_DESTROYED: u32 = 2;
-const DETAIL_ABORTED: u32 = 3;
-const DETAIL_ADAPTER_FAILURE: u32 = 4;
-const DETAIL_FRAME_BUDGET: u32 = 5;
-
-/// Borrowed resources and trip parameters supplied by the orbit owner.
-#[repr(C)]
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub struct PlanetSideRunContext {
-    pub solar_system: *mut c_void,
-    pub world: *mut c_void,
-    pub misc_data_frame: *mut c_void,
-    pub energy_frame: *mut c_void,
-    pub life_frames: [*mut c_void; 3],
-    pub landing_x: i32,
-    pub landing_y: i32,
+/// Retained resources and validated parameters for one synchronous lander trip.
+pub struct TripInput {
+    pub misc_data_frame: ContextFrame,
+    pub energy_frame: Option<ContextFrame>,
+    pub life_frames: [Option<ContextFrame>; 3],
+    pub landing: super::model::SurfacePoint,
     pub facing: u8,
-    pub _padding: [u8; 3],
-    pub retrieval_masks: [u32; 3],
-    pub tick_period: u32,
-    pub frame_budget: u32,
-    /// Live planet tectonics rating (0-7) from `PLANET_INFO.Tectonics`.
+    pub tick_period: NonZeroU32,
+    pub frame_budget: NonZeroU32,
     pub tectonics_rating: u8,
-    /// Live planet weather rating (0-7) from `PLANET_INFO.Weather`.
     pub weather_rating: u8,
-    /// Live planet surface temperature from `PLANET_INFO.SurfaceTemperature`.
     pub temperature: i32,
 }
 
-/// Fixed-size reply. No Rust-owned pointer escapes through this record.
-#[repr(C)]
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub struct PlanetSideReply {
-    pub status: i32,
-    pub detail: u32,
-    pub value0: i64,
-    pub value1: i64,
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TripError {
+    Adapter(super::runtime::AdapterError),
+    FrameBudgetExceeded,
 }
+
+impl From<super::runtime::AdapterError> for TripError {
+    fn from(error: super::runtime::AdapterError) -> Self {
+        Self::Adapter(error)
+    }
+}
+
+impl From<super::controller::ControllerError> for TripError {
+    fn from(error: super::controller::ControllerError) -> Self {
+        match error {
+            super::controller::ControllerError::FrameBudgetExceeded => Self::FrameBudgetExceeded,
+            super::controller::ControllerError::Runtime(super::runtime::RuntimeError::Adapter(
+                error,
+            )) => Self::Adapter(error),
+        }
+    }
+}
+
+pub type TripResult = Result<super::session::SessionOutcome, TripError>;
 
 use super::adapters::{CffiPlanetSideClock, CffiPlanetSideInput, CffiShipStatus, ObservedClock};
 use super::assembly::{assemble_surface, share_surface};
@@ -55,59 +53,31 @@ use super::generation::ScanPersistence;
 use super::generation_adapter::CffiSurfaceGenerator;
 use super::graphics_adapter::{CffiPlanetSideGraphics, SurfaceDrawing};
 use super::mask_adapter::extract_lander_masks;
-use super::model::SurfacePoint;
 use super::resources::{LanderGraphic, PlanetSideAssets};
 use super::runtime::{PlanetSideClock, RuntimeAdapters, Tick};
 use super::session_factory::create_production_session;
 use super::telemetry::TripTelemetry;
 use super::visual_adapter::CffiSurfaceVisuals;
 
-const fn failure(status: i32) -> PlanetSideReply {
-    PlanetSideReply {
-        status,
-        detail: 0,
-        value0: 0,
-        value1: 0,
-    }
-}
-
-/// # Safety
-/// Native handles in context must remain live throughout the synchronous lander session.
-pub unsafe fn run_session(
+pub fn run_session(
     drawing: SurfaceDrawing<'_>,
     controls: &crate::engine::input::InputSession,
     activity: crate::engine::world::activity::ActivityControl,
     cx: &mut crate::engine::battle::Cx<'_>,
     io: &mut crate::engine::observe::Io<'_>,
-    context: &mut PlanetSideRunContext,
-) -> PlanetSideReply {
-    if !valid_context(context) {
-        return failure(STATUS_INVALID_ARGUMENT);
-    }
-
+    solar: &mut SolarSystem,
+    input: TripInput,
+) -> TripResult {
     let game = std::cell::RefCell::new(cx.reborrow());
     let observe = std::cell::RefCell::new(crate::engine::observe::Io {
         observer: &mut *io.observer,
     });
     let admission = admit_trip(&observe);
     let result = run_retained_session(
-        drawing, controls, activity, &game, &observe, context, &admission,
+        drawing, controls, activity, &game, &observe, solar, &input, &admission,
     );
-    if matches!(result, Ok(Ok(_))) {
-        // SAFETY: the outer ABI contract keeps the current solar record live through return.
-        context.retrieval_masks = unsafe {
-            (*context
-                .solar_system
-                .cast::<crate::planets::solar_system::SolarSystem>())
-            .sys
-            .info
-            .planet_info
-            .scan_retrieve_mask
-        };
-    }
-    let reply = session_reply(&result);
     complete_trip(&admission.0, &observe, &result);
-    reply
+    result
 }
 
 type TripAdmission = (
@@ -130,22 +100,14 @@ fn admit_trip(observe: &std::cell::RefCell<crate::engine::observe::Io<'_>>) -> T
 fn complete_trip(
     trip: &std::cell::RefCell<TripTelemetry>,
     observe: &std::cell::RefCell<crate::engine::observe::Io<'_>>,
-    result: &Result<
-        Result<super::session::SessionOutcome, super::controller::ControllerError>,
-        super::runtime::AdapterError,
-    >,
+    result: &TripResult,
 ) {
     {
         let mut trip = trip.borrow_mut();
         match &result {
-            Ok(Ok(outcome)) => trip.finish(outcome),
-            Ok(Err(super::controller::ControllerError::FrameBudgetExceeded)) => {
-                trip.frame_budget_failure()
-            }
-            Ok(Err(super::controller::ControllerError::Runtime(
-                super::runtime::RuntimeError::Adapter(error),
-            )))
-            | Err(error) => {
+            Ok(outcome) => trip.finish(outcome),
+            Err(TripError::FrameBudgetExceeded) => trip.frame_budget_failure(),
+            Err(TripError::Adapter(error)) => {
                 trip.batch_depth_corrected(error.batch_depth_corrections);
                 trip.adapter_failure(error.operation);
             }
@@ -160,22 +122,18 @@ fn run_retained_session(
     activity: crate::engine::world::activity::ActivityControl,
     game: &std::cell::RefCell<crate::engine::battle::Cx<'_>>,
     observe: &std::cell::RefCell<crate::engine::observe::Io<'_>>,
-    context: &mut PlanetSideRunContext,
+    solar: &mut SolarSystem,
+    context: &TripInput,
     admission: &TripAdmission,
-) -> Result<
-    Result<super::session::SessionOutcome, super::controller::ControllerError>,
-    super::runtime::AdapterError,
-> {
+) -> TripResult {
     let (telemetry, fixture) = admission;
     let assets = PlanetSideAssets::retain(game.borrow().kernel.lander_resources.as_ref().ok_or(
         super::runtime::AdapterError::new("lander_assets_not_loaded"),
     )?);
     let reports = drawing.scan.report_context();
-    // SAFETY: run_session retains this unique solar visit throughout the synchronous trip.
-    let solar = unsafe { &mut *context.solar_system.cast::<SolarSystem>() };
     let mut generator = CffiSurfaceGenerator::for_planet_side(game, observe, solar, reports);
     let mut visuals = retained_visuals(context)?;
-    let persistence = ScanPersistence::from_masks(context.retrieval_masks);
+    let persistence = ScanPersistence::from_masks(generator.retrieval_masks());
     let lander_masks = extract_lander_masks(&assets.graphic(LanderGraphic::Lander))?;
     let assembly = assemble_surface(&mut generator, persistence, &mut visuals, lander_masks)?;
     let surface = share_surface(assembly);
@@ -223,8 +181,12 @@ fn run_retained_session(
         },
         ship,
     };
-    let mut controller =
-        PlanetSideController::new(session, adapters, context.tick_period, context.frame_budget);
+    let mut controller = PlanetSideController::new(
+        session,
+        adapters,
+        context.tick_period.get(),
+        context.frame_budget.get(),
+    );
     let outcome = controller.run_with_frame(|session, adapters, tick_period| {
         publish(&telemetry.borrow());
         let (deadline, input) = prepare_frame(
@@ -244,22 +206,16 @@ fn run_retained_session(
         &mut controller.adapters.ship,
         outcome.is_ok(),
     )?;
-    Ok(outcome)
+    outcome.map_err(TripError::from)
 }
 
 fn retained_visuals(
-    context: &PlanetSideRunContext,
+    context: &TripInput,
 ) -> Result<CffiSurfaceVisuals, super::runtime::AdapterError> {
     CffiSurfaceVisuals::new(
-        crate::graphics::context_abi::ContextFrame::retain(std::ptr::NonNull::new(
-            context.misc_data_frame.cast(),
-        )),
-        std::ptr::NonNull::new(context.energy_frame.cast())
-            .map(|frame| crate::graphics::context_abi::ContextFrame::retain(Some(frame))),
-        context.life_frames.map(|frame| {
-            std::ptr::NonNull::new(frame.cast())
-                .map(|frame| crate::graphics::context_abi::ContextFrame::retain(Some(frame)))
-        }),
+        context.misc_data_frame.clone(),
+        context.energy_frame.clone(),
+        context.life_frames.clone(),
     )
 }
 
@@ -289,16 +245,9 @@ fn prepare_frame(
 
 fn create_trip_session(
     ship: &mut CffiShipStatus<'_, '_>,
-    context: &PlanetSideRunContext,
+    context: &TripInput,
 ) -> Result<super::session::PlanetSideSession, super::runtime::AdapterError> {
-    let mut session = create_production_session(
-        ship,
-        SurfacePoint {
-            x: context.landing_x,
-            y: context.landing_y,
-        },
-        context.facing,
-    )?;
+    let mut session = create_production_session(ship, context.landing, context.facing)?;
     session.set_hazard_chances(super::world::hazard_chances(
         context.tectonics_rating,
         context.weather_rating,
@@ -344,47 +293,6 @@ fn settle_session(
     Ok(())
 }
 
-fn session_reply(
-    result: &Result<
-        Result<super::session::SessionOutcome, super::controller::ControllerError>,
-        super::runtime::AdapterError,
-    >,
-) -> PlanetSideReply {
-    use super::session::SessionOutcome;
-    match result {
-        Ok(Ok(SessionOutcome::Returned(delta))) => PlanetSideReply {
-            status: STATUS_OK,
-            detail: DETAIL_RETURNED,
-            value0: i64::from(delta.crew),
-            value1: i64::from(delta.element_mass),
-        },
-        Ok(Ok(SessionOutcome::LanderDestroyed(_))) => PlanetSideReply {
-            status: STATUS_OK,
-            detail: DETAIL_DESTROYED,
-            ..PlanetSideReply::default()
-        },
-        Ok(Ok(SessionOutcome::Aborted)) => PlanetSideReply {
-            status: STATUS_OK,
-            detail: DETAIL_ABORTED,
-            ..PlanetSideReply::default()
-        },
-        Ok(Err(super::controller::ControllerError::Runtime(
-            super::runtime::RuntimeError::Adapter(error),
-        )))
-        | Err(error) => PlanetSideReply {
-            status: STATUS_OK,
-            detail: DETAIL_ADAPTER_FAILURE,
-            value0: i64::from(adapter_error_code(error.operation)),
-            ..PlanetSideReply::default()
-        },
-        Ok(Err(super::controller::ControllerError::FrameBudgetExceeded)) => PlanetSideReply {
-            status: STATUS_OK,
-            detail: DETAIL_FRAME_BUDGET,
-            ..PlanetSideReply::default()
-        },
-    }
-}
-
 pub(super) const fn adapter_error_code(operation: &str) -> u32 {
     let bytes = operation.as_bytes();
     let mut hash = 2_166_136_261_u32;
@@ -397,64 +305,36 @@ pub(super) const fn adapter_error_code(operation: &str) -> u32 {
     hash
 }
 
-fn valid_context(context: &PlanetSideRunContext) -> bool {
-    !context.solar_system.is_null()
-        && !context.world.is_null()
-        && !context.misc_data_frame.is_null()
-        && context.tick_period != 0
-        && context.frame_budget != 0
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::engine::observe::CheckpointView;
 
     #[test]
-    fn trip_requires_live_resources_and_nonzero_cadence_and_budget() {
-        let resource = std::ptr::dangling_mut::<c_void>();
-        let context = PlanetSideRunContext {
-            solar_system: resource,
-            world: resource,
-            misc_data_frame: resource,
-            tick_period: 24,
-            frame_budget: 1,
-            ..PlanetSideRunContext::default()
+    fn typed_trip_failures_preserve_the_operation_and_batch_corrections() {
+        let adapter = super::super::runtime::AdapterError {
+            operation: "render",
+            batch_depth_corrections: 2,
         };
-        assert!(valid_context(&context));
-        for invalid in [
-            PlanetSideRunContext {
-                solar_system: std::ptr::null_mut(),
-                ..context
-            },
-            PlanetSideRunContext {
-                world: std::ptr::null_mut(),
-                ..context
-            },
-            PlanetSideRunContext {
-                misc_data_frame: std::ptr::null_mut(),
-                ..context
-            },
-            PlanetSideRunContext {
-                tick_period: 0,
-                ..context
-            },
-            PlanetSideRunContext {
-                frame_budget: 0,
-                ..context
-            },
-        ] {
-            assert!(!valid_context(&invalid));
-        }
+        assert_eq!(
+            TripError::from(adapter.clone()),
+            TripError::Adapter(adapter.clone())
+        );
+        assert_eq!(
+            TripError::from(super::super::controller::ControllerError::FrameBudgetExceeded),
+            TripError::FrameBudgetExceeded
+        );
+        assert_eq!(
+            TripError::from(super::super::controller::ControllerError::Runtime(
+                super::super::runtime::RuntimeError::Adapter(adapter.clone())
+            )),
+            TripError::Adapter(adapter)
+        );
     }
 
     #[test]
     fn finalization_publishes_each_outcome_as_a_copy_of_its_own_trip() {
-        use super::super::{
-            controller::ControllerError,
-            runtime::{AdapterError, RuntimeError},
-            session::SessionOutcome,
-        };
+        use super::super::{runtime::AdapterError, session::SessionOutcome};
         use crate::engine::observe::{CampaignView, Injected, Observer, Presented};
         use crate::engine::observe_port::planet_side::{terminal, PlanetSideSnapshot};
 
@@ -474,26 +354,23 @@ mod tests {
         let mut observer = Recording::default();
         let cases = [
             (
-                Ok(Ok(SessionOutcome::Returned(Default::default()))),
+                Ok(SessionOutcome::Returned(Default::default())),
                 terminal::RETURNED,
             ),
             (
-                Ok(Ok(SessionOutcome::LanderDestroyed(Default::default()))),
+                Ok(SessionOutcome::LanderDestroyed(Default::default())),
                 terminal::DESTROYED,
             ),
-            (Ok(Ok(SessionOutcome::Aborted)), terminal::ABORTED),
+            (Ok(SessionOutcome::Aborted), terminal::ABORTED),
+            (Err(TripError::FrameBudgetExceeded), terminal::FRAME_BUDGET),
             (
-                Ok(Err(ControllerError::FrameBudgetExceeded)),
-                terminal::FRAME_BUDGET,
-            ),
-            (
-                Ok(Err(ControllerError::Runtime(RuntimeError::Adapter(
-                    AdapterError::new("render"),
-                )))),
+                Err(TripError::Adapter(AdapterError::new("render"))),
                 terminal::ADAPTER_FAILURE,
             ),
             (
-                Err(AdapterError::new("lander_assets_not_loaded")),
+                Err(TripError::Adapter(AdapterError::new(
+                    "lander_assets_not_loaded",
+                ))),
                 terminal::ADAPTER_FAILURE,
             ),
         ];

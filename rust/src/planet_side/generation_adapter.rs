@@ -136,6 +136,10 @@ impl<'a, 'game, 'observer, 'tables> CffiSurfaceGenerator<'a, 'game, 'observer, '
         }
     }
 
+    pub(super) fn retrieval_masks(&self) -> [u32; 3] {
+        self.system.info.planet_info.scan_retrieve_mask
+    }
+
     #[cfg(not(test))]
     unsafe fn generate_node(&mut self, scan_type: ScanType, node: u16, info: &mut NodeInfo) -> u16 {
         let mut pickup = PickupContext::NoLander;
