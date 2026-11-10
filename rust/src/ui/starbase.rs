@@ -1,5 +1,4 @@
 //! Starbase encounters, menus and retained flagship drawing.
-#![cfg(not(test))]
 use crate::engine::input::{frames::*, InputSession};
 use crate::engine::world::activity::activity_flags;
 use crate::engine::world::activity::ActivityKind;
@@ -16,7 +15,6 @@ use crate::starbase::{
     graphics::Graphics,
     starbase_menu::StarbaseState,
 };
-use crate::threading::pacing::linked::sleep_thread_until as SleepThreadUntil;
 use crate::ui::settings::stop_music;
 use crate::ui::sis;
 use uqm_engine::time::counter_abi::ONE_SECOND;
@@ -157,9 +155,10 @@ fn update_starbase_screen(
     true
 }
 
-unsafe fn do_time_passage(cx: &mut Cx<'_>) {
+fn do_time_passage(cx: &mut Cx<'_>) {
     let interval = (ONE_SECOND * 2) as SIZE;
-    cx.with_legacy(|| SleepThreadUntil(draw::fade_screen(draw::ScreenFade::Black, interval)));
+    let deadline = draw::fade_screen(draw::ScreenFade::Black, interval);
+    cx.kernel.input_runtime().sleep_until(cx, deadline);
     crate::time::clock_abi::advance_days(cx, 14);
 }
 
@@ -189,7 +188,7 @@ fn talk_to_commander(
     );
 }
 
-unsafe fn prepare_starbase_visit(
+fn prepare_starbase_visit(
     cx: &mut Cx<'_>,
     io: &mut Io<'_>,
     services: &super::MenuServices,
@@ -259,10 +258,7 @@ unsafe fn prepare_starbase_visit(
 }
 
 /// Run the retained visit and its synchronous campaign submodes.
-///
-/// # Safety
-/// The campaign must retain the initialized communication and game-clock services.
-pub unsafe fn run_starbase_visit(cx: &mut Cx<'_>, io: &mut Io<'_>, services: &super::MenuServices) {
+pub fn run_starbase_visit(cx: &mut Cx<'_>, io: &mut Io<'_>, services: &super::MenuServices) {
     let Some(previous) = prepare_starbase_visit(cx, io, services) else {
         return;
     };
@@ -290,20 +286,15 @@ pub unsafe fn run_starbase_visit(cx: &mut Cx<'_>, io: &mut Io<'_>, services: &su
     cleanup_after_star_base(cx.world);
 }
 /// Advance fourteen days, finish bomb installation and force a SolarSys reload.
-///
-/// # Safety
-/// The game clock, live world and graphics must be exclusively accessed on
-/// the initialized game thread.
-pub unsafe fn install_bomb_at_earth(cx: &mut Cx<'_>) {
+pub fn install_bomb_at_earth(cx: &mut Cx<'_>) {
     let screen_context = cx.kernel.screen_context;
     do_time_passage(cx);
-    cx.with_legacy(|| {
-        draw::select(screen_context);
-        draw::transition_source();
-        draw::background(BLACK);
-        draw::clear();
-        SleepThreadUntil(draw::fade_screen(draw::ScreenFade::Color, 0));
-    });
+    draw::select(screen_context);
+    draw::transition_source();
+    draw::background(BLACK);
+    draw::clear();
+    let deadline = draw::fade_screen(draw::ScreenFade::Color, 0);
+    cx.kernel.input_runtime().sleep_until(cx, deadline);
     cx.world.set_story_state(StoryKey::CHMMR_BOMB_STATE, 3);
     cx.world.set_activity(activity_flags::CHECK_LOAD);
     cx.world.next_activity =

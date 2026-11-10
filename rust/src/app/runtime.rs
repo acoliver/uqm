@@ -200,8 +200,7 @@ fn run_campaign(
 fn dispatch(cx: &mut Cx<'_>, io: &mut Io<'_>, decision: ActivityDecision) {
     match decision {
         ActivityDecision::InstallBombAtEarth => {
-            // SAFETY: the campaign retains the initialized story and display.
-            unsafe { crate::ui::starbase::install_bomb_at_earth(cx) };
+            crate::ui::starbase::install_bomb_at_earth(cx);
         }
         ActivityDecision::VisitStarBase => {
             // SAFETY: the campaign and display remain live through the starbase mode.

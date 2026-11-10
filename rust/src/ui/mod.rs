@@ -50,3 +50,15 @@ pub(crate) const fn rgb15(r: u8, g: u8, b: u8) -> crate::graphics::native_abi::C
         a: 255,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::engine::{battle::Cx, observe::Io};
+
+    #[test]
+    fn starbase_modes_use_supplied_owners_without_an_unsafe_boundary() {
+        let _: fn(&mut Cx<'_>, &mut Io<'_>, &MenuServices) = starbase::run_starbase_visit;
+        let _: fn(&mut Cx<'_>) = starbase::install_bomb_at_earth;
+    }
+}
