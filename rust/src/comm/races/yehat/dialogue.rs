@@ -1,6 +1,7 @@
 use super::api::YehatApi;
 use super::phrases::{space_info, visit_phrase};
 use super::*;
+use crate::engine::world::activity::ActivityKind;
 use crate::engine::StoryKey;
 
 pub(crate) struct Dialogue<'a, A> {
@@ -293,7 +294,7 @@ impl<A: YehatApi> Dialogue<'_, A> {
     }
 
     pub(crate) fn initialize(&mut self) {
-        let peaceful = self.api.activity() as u8 == crate::comm::dispatch::WON_LAST_BATTLE as u8;
+        let peaceful = self.api.activity() as u8 == ActivityKind::WonLastBattle as u8;
         if !peaceful {
             self.api.segue(1);
         } else {
@@ -302,7 +303,7 @@ impl<A: YehatApi> Dialogue<'_, A> {
     }
 
     pub(crate) fn intro(&mut self) {
-        if self.api.activity() as u8 == crate::comm::dispatch::WON_LAST_BATTLE as u8 {
+        if self.api.activity() as u8 == ActivityKind::WonLastBattle as u8 {
             self.api.npc(OUT_TAKES as i32);
             self.api.segue(0);
             return;

@@ -1,6 +1,7 @@
 use super::phrases::{hostile_info, visit_phrase};
 use super::*;
 use crate::comm::races::encounter::EncounterApi;
+use crate::engine::world::activity::ActivityKind;
 use crate::engine::StoryKey;
 
 pub(crate) struct Dialogue<'a, A> {
@@ -312,12 +313,12 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
 
     pub(crate) fn initialize(&mut self) {
         let peaceful = (self.api.get(StoryKey::GLOBAL_FLAGS_AND_DATA) & (1 << 6)) != 0
-            || self.api.activity() as u8 == crate::comm::dispatch::WON_LAST_BATTLE as u8;
+            || self.api.activity() as u8 == ActivityKind::WonLastBattle as u8;
         self.api.segue(if peaceful { 0 } else { 1 });
     }
 
     pub(crate) fn intro(&mut self) {
-        if self.api.activity() as u8 == crate::comm::dispatch::WON_LAST_BATTLE as u8 {
+        if self.api.activity() as u8 == ActivityKind::WonLastBattle as u8 {
             self.api.npc(OUT_TAKES as i32);
             self.api.segue(0);
             return;
