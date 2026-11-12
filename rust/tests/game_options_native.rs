@@ -263,3 +263,65 @@ fn supplied_graphics_keeps_fonts_and_text_after_the_campaign_is_dropped() {
     drop(context);
     drop(display);
 }
+
+#[test]
+#[serial_test::serial]
+fn supplied_graphics_restores_context_selection_and_retained_font_effects() {
+    if !native_test_process::own_graphics_process(
+        "supplied_graphics_restores_context_selection_and_retained_font_effects",
+    ) {
+        return;
+    }
+    use uqm_rust::{
+        graphics::{
+            context_abi::{ContextLease, LoadedContext},
+            drawable_abi::LoadedDrawable,
+        },
+        starbase::{
+            gfx::{ContextId, FontId, Gfx},
+            graphics::Graphics,
+        },
+    };
+    let mut game = Game::new();
+    let display = campaign_display::CampaignDisplay::install(&mut game)
+        .unwrap_or_else(|error| panic!("retained graphics fixture: {error}"));
+    let status = ContextLease::require(game.kernel.status_context);
+    let space = LoadedContext::create(c"retained menu space");
+    let space_raw = space.lease().as_raw();
+    game.kernel.space_context = space_raw;
+    let frames = LoadedDrawable::create(8, 1, 1, 3)
+        .unwrap_or_else(|| panic!("retained menu frames allocation failed"));
+    let first = frames.lease().context_frame(0).as_raw();
+    game.kernel.play_frame = first;
+    game.kernel.font_grad_frame = first;
+    let graphics = Graphics::new(&game.kernel, (320, 240));
+    drop(frames);
+    drop(game);
+    assert_eq!(graphics.screen_size(), (320, 240));
+    assert_eq!(graphics.off_screen_context().as_raw(), status.as_raw());
+    status.select();
+    let old_context = graphics.set_context(ContextId::Space);
+    assert_eq!(status.selected_context().unwrap().as_raw(), space_raw);
+    graphics.restore_context(old_context);
+    assert_eq!(status.selected_context().unwrap().as_raw(), status.as_raw());
+    let first = graphics.play_frame();
+    assert_eq!(graphics.frame_count(first), 3);
+    let second = graphics.inc_frame(first);
+    assert_eq!(graphics.frame_index(second), 1);
+    assert_eq!(graphics.dec_frame(second), first);
+    let old_effect = graphics.set_font_effect(Some(1));
+    assert_eq!(status.font_effect().as_raw() as usize, second);
+    let nested_effect = graphics.set_font_effect(None);
+    assert!(status.font_effect().as_raw().is_null());
+    graphics.restore_font_effect(nested_effect);
+    assert_eq!(status.font_effect().as_raw() as usize, second);
+    graphics.restore_font_effect(old_effect);
+    assert!(status.font_effect().as_raw().is_null());
+    let old_font = graphics.set_font(FontId::Micro);
+    assert!(graphics.font_leading() > 0);
+    graphics.restore_font(old_font);
+    drop(graphics);
+    drop(space);
+    drop(status);
+    drop(display);
+}
