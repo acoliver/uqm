@@ -115,8 +115,12 @@ fn initialize_campaign(cx: &mut Cx<'_>) {
     // SAFETY: the application retains initialized kernel resources for campaign setup.
     unsafe { crate::navigation::globals::init_game_structures(cx) };
     crate::time::clock_bridge::rust_clock_init(cx.world);
-    // SAFETY: the retained world's story and game clock have been initialized.
-    unsafe { crate::navigation::events::live::schedule_initial_events(cx.world) };
+    let mut random = cx.rng;
+    let mut services = crate::navigation::events::EventServices {
+        geometry: crate::navigation::hyper_units::Geometry::new(cx.screen_dimensions()),
+        random: &mut random,
+    };
+    crate::navigation::events::schedule_initial_events(cx.world, &mut services);
 }
 
 #[cfg(not(test))]

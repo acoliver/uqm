@@ -1,5 +1,9 @@
 //! Clock entry points and save-compatible event scheduling.
 
+#[cfg(test)]
+#[path = "clock_abi/owner_tests.rs"]
+mod owner_tests;
+
 use super::clock_bridge::days_in_month;
 use crate::engine::battle::link_queue::LinkId;
 use crate::engine::clock::{GameClock, ScheduledEvent};
@@ -77,98 +81,93 @@ fn take_day_event(
     Some((id, selector))
 }
 
-#[cfg(not(test))]
-pub(crate) mod live {
-    use super::super::clock_bridge::*;
-    use super::*;
-
-    use crate::navigation::events::live::dispatch_event;
-
-    /// # Safety
-    /// Immediate events may call legacy game services; the caller owns the live campaign.
-    pub unsafe fn add_event(
-        world: &mut crate::engine::World,
-        kind: u32,
-        month: u16,
-        day: u16,
-        year: u16,
-        selector: u8,
-    ) -> Option<crate::engine::battle::link_queue::LinkId<crate::engine::clock::ScheduledEvent>>
-    {
-        if kind == 1 && month == 0 && day == 0 && year == 0 {
-            dispatch_event(world, selector);
-        } else {
-            let clock = &world.data.game.game_clock;
-            let now = (
-                clock.year_index,
-                u16::from(clock.month_index),
-                u16::from(clock.day_index),
-            );
-            let date = crate::time::clock_abi::event_date(now, kind == 1, (year, month, day));
-            if date >= now {
-                return crate::time::clock_abi::insert_event(&mut world.clock, date, selector);
-            }
-        }
-        None
-    }
-
-    pub(crate) unsafe fn finish_clock_day(cx: &mut crate::engine::battle::Cx<'_>) {
-        crate::ui::sis::draw_status_message(cx.kernel, cx.world, None);
-        let world = &mut *cx.world;
+pub(crate) fn schedule_event(
+    world: &mut crate::engine::World,
+    dispatch: &mut impl FnMut(&mut crate::engine::World, u8),
+    kind: u32,
+    month: u16,
+    day: u16,
+    year: u16,
+    selector: u8,
+) -> Option<LinkId<ScheduledEvent>> {
+    if kind == 1 && month == 0 && day == 0 && year == 0 {
+        dispatch(world, selector);
+    } else {
         let clock = &world.data.game.game_clock;
-        let today = (
+        let now = (
             clock.year_index,
             u16::from(clock.month_index),
             u16::from(clock.day_index),
         );
-        while let Some((id, selector)) = take_day_event(&mut world.clock, today) {
-            dispatch_event(world, selector);
-            world.clock.events().free(id);
+        let date = event_date(now, kind == 1, (year, month, day));
+        if date >= now {
+            return insert_event(&mut world.clock, date, selector);
         }
     }
+    None
+}
 
-    /// # Safety
-    /// Game-thread access to the initialized clock.
-    #[no_mangle]
-    pub unsafe extern "C" fn GameClockTick() {
-        crate::app::bridge::enter(|cx| {
-            if rust_clock_tick(cx.world) {
-                finish_clock_day(cx);
-            }
-        });
-    }
-    /// # Safety
-    /// Game-thread access to the initialized clock.
-    #[no_mangle]
-    pub unsafe extern "C" fn MoveGameClockDays(days: u16) {
-        advance_days(i32::from(days));
-    }
+pub fn add_event(
+    cx: &mut crate::engine::battle::Cx<'_>,
+    kind: u32,
+    month: u16,
+    day: u16,
+    year: u16,
+    selector: u8,
+) -> Option<LinkId<ScheduledEvent>> {
+    let mut random = cx.rng;
+    let mut dispatch = crate::navigation::events::dispatcher(cx.screen_dimensions(), &mut random);
+    schedule_event(cx.world, &mut dispatch, kind, month, day, year, selector)
+}
 
-    /// # Safety
-    /// Game-thread entry with a published context and initialized clock.
-    pub unsafe fn advance_days(days: i32) {
-        log_clock_bridge(&format!("RUST_CLOCK_MOVE: {} days", days));
-        crate::app::bridge::enter(|cx| {
-            for _ in 0..days {
-                next_clock_day_internal(&mut cx.world.data.game.game_clock);
-                finish_clock_day(cx);
-            }
-            let clock = &mut cx.world.data.game.game_clock;
-            clock.tick_count = clock.day_in_ticks;
-        });
+fn dispatch_day_events(
+    world: &mut crate::engine::World,
+    today: (u16, u16, u16),
+    mut dispatch: impl FnMut(&mut crate::engine::World, u8),
+) {
+    while let Some((id, selector)) = take_day_event(&mut world.clock, today) {
+        dispatch(world, selector);
+        world.clock.events().free(id);
     }
-    /// # Safety
-    /// Called with the initialized clock.
-    #[no_mangle]
-    pub extern "C" fn LockGameClock() {
-        rust_clock_lock();
+}
+
+fn finish_clock_day(cx: &mut crate::engine::battle::Cx<'_>) {
+    crate::ui::sis::draw_status_message(cx.kernel, cx.world, None);
+    let clock = &cx.world.data.game.game_clock;
+    let today = (
+        clock.year_index,
+        u16::from(clock.month_index),
+        u16::from(clock.day_index),
+    );
+    let mut random = cx.rng;
+    let dispatch = crate::navigation::events::dispatcher(cx.screen_dimensions(), &mut random);
+    dispatch_day_events(cx.world, today, dispatch);
+}
+
+pub fn game_clock_tick(cx: &mut crate::engine::battle::Cx<'_>) {
+    if super::clock_bridge::rust_clock_tick(cx.world) {
+        finish_clock_day(cx);
     }
-    /// # Safety
-    /// Called with the initialized clock.
-    #[no_mangle]
-    pub extern "C" fn UnlockGameClock() {
-        rust_clock_unlock();
+}
+
+pub fn advance_days(cx: &mut crate::engine::battle::Cx<'_>, days: i32) {
+    super::clock_bridge::log_clock_bridge(&format!("RUST_CLOCK_MOVE: {} days", days));
+    for _ in 0..days {
+        super::clock_bridge::next_clock_day_internal(&mut cx.world.data.game.game_clock);
+        finish_clock_day(cx);
     }
+    let clock = &mut cx.world.data.game.game_clock;
+    clock.tick_count = clock.day_in_ticks;
+}
+
+#[no_mangle]
+pub extern "C" fn LockGameClock() {
+    super::clock_bridge::rust_clock_lock();
+}
+
+#[no_mangle]
+pub extern "C" fn UnlockGameClock() {
+    super::clock_bridge::rust_clock_unlock();
 }
 
 #[cfg(test)]

@@ -75,7 +75,6 @@ mod api {
     use super::Handler;
     use crate::comm::races::yehat::api::*;
 
-    #[cfg(not(test))]
     impl YehatApi for LiveScript<'_, '_, Handler> {
         fn have_shofixti_escort(&self) -> bool {
             crate::engine::world::fleet::count_escort_ships(
@@ -87,10 +86,7 @@ mod api {
             (crate::math::random() & 1) as u8
         }
         fn schedule_rebel_event(&mut self) {
-            // SAFETY: the callback owns the initialized campaign clock on the game thread.
-            unsafe {
-                crate::time::clock_abi::live::add_event(self.cx.borrow_mut().world, 1, 0, 0, 0, 15)
-            };
+            crate::time::clock_abi::add_event(&mut self.cx.borrow_mut(), 1, 0, 0, 0, 15);
         }
     }
 }

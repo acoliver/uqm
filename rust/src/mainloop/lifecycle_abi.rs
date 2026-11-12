@@ -7,10 +7,7 @@ fn on_battle_frame(
     cx: &mut crate::engine::battle::Cx<'_>,
     _io: &mut crate::engine::observe::Io<'_>,
 ) {
-    cx.with_legacy(|| {
-        // SAFETY: the published campaign owner retains the live game clock.
-        unsafe { crate::time::clock_abi::live::GameClockTick() }
-    });
+    crate::time::clock_abi::game_clock_tick(cx);
     let opening = crate::navigation::get(cx.world, StoryKey::ARILOU_SPACE) == 1;
     let counter = crate::navigation::get(cx.world, StoryKey::ARILOU_SPACE_COUNTER);
     crate::navigation::set(

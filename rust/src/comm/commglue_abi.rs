@@ -1,7 +1,7 @@
 //! Script glue, ported from commglue.c (GPL-2.0-or-later).
 
-#[cfg(not(test))]
 use crate::comm::Comm;
+use crate::engine::StoryKey;
 
 use crate::c_bindings::global_state::NUMBER_SPEECH_DESC;
 
@@ -54,10 +54,39 @@ unsafe fn number_phrases(
     }
 }
 
+pub fn set_segue(comm: &mut Comm, cx: &mut crate::engine::battle::Cx<'_>, segue: u32) {
+    comm.set_segue(crate::comm::segue::Segue::from(segue));
+    let world = &mut cx.world;
+    match segue {
+        0 => world.set_story_state(StoryKey::BATTLE_SEGUE, 0),
+        1 => world.set_story_state(StoryKey::BATTLE_SEGUE, 1),
+        2 => {
+            cx.kernel.instant_victory = 1;
+            world.set_story_state(StoryKey::BATTLE_SEGUE, 1);
+        }
+        3 => {
+            world.set_story_state(StoryKey::BATTLE_SEGUE, 0);
+            world.data.flagship.crew_enlisted = u16::MAX;
+            world.set_activity(world.activity() | 0x2000);
+        }
+        _ => unreachable!("invalid Segue"),
+    }
+}
+pub fn get_segue(cx: &crate::engine::battle::Cx<'_>) -> u32 {
+    let world = &cx.world;
+    if world.story_state(StoryKey::BATTLE_SEGUE) == 0 {
+        u32::from(world.data.flagship.crew_enlisted == u16::MAX && world.activity() & 0x2000 != 0)
+            * 3
+    } else if cx.kernel.instant_victory != 0 {
+        2
+    } else {
+        1
+    }
+}
+
 #[cfg(not(test))]
 pub(crate) mod runtime {
     use super::*;
-    use crate::engine::StoryKey;
     use std::ffi::c_char;
     use std::ptr::null_mut;
 
@@ -96,37 +125,6 @@ pub(crate) mod runtime {
             let mut buffer = [0 as c_char; 60];
             libc::snprintf(buffer.as_mut_ptr(), buffer.len(), format, number);
             SpliceMultiTrack(tracks.as_ptr(), buffer.as_ptr());
-        }
-    }
-
-    pub fn set_segue(comm: &mut Comm, cx: &mut crate::engine::battle::Cx<'_>, segue: u32) {
-        comm.set_segue(crate::comm::segue::Segue::from(segue));
-        let world = &mut cx.world;
-        match segue {
-            0 => world.set_story_state(StoryKey::BATTLE_SEGUE, 0),
-            1 => world.set_story_state(StoryKey::BATTLE_SEGUE, 1),
-            2 => {
-                cx.kernel.instant_victory = 1;
-                world.set_story_state(StoryKey::BATTLE_SEGUE, 1);
-            }
-            3 => {
-                world.set_story_state(StoryKey::BATTLE_SEGUE, 0);
-                world.data.flagship.crew_enlisted = u16::MAX;
-                world.set_activity(world.activity() | 0x2000);
-            }
-            _ => unreachable!("invalid Segue"),
-        }
-    }
-    pub fn get_segue(cx: &crate::engine::battle::Cx<'_>) -> u32 {
-        let world = &cx.world;
-        if world.story_state(StoryKey::BATTLE_SEGUE) == 0 {
-            u32::from(
-                world.data.flagship.crew_enlisted == u16::MAX && world.activity() & 0x2000 != 0,
-            ) * 3
-        } else if cx.kernel.instant_victory != 0 {
-            2
-        } else {
-            1
         }
     }
 }

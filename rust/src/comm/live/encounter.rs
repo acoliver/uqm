@@ -5,14 +5,14 @@ use crate::engine::world::fleet;
 
 impl<H> EncounterApi<H> for LiveScript<'_, '_, H> {
     fn segue(&mut self, segue: u32) {
-        crate::comm::commglue_abi::runtime::set_segue(
+        crate::comm::commglue_abi::set_segue(
             &mut self.comm.borrow_mut(),
             &mut self.cx.borrow_mut(),
             segue,
         );
     }
     fn get_segue(&self) -> u32 {
-        crate::comm::commglue_abi::runtime::get_segue(&self.cx.borrow())
+        crate::comm::commglue_abi::get_segue(&self.cx.borrow())
     }
     fn activity(&self) -> u16 {
         self.cx.borrow().world.activity()
@@ -44,9 +44,6 @@ impl<H> EncounterApi<H> for LiveScript<'_, '_, H> {
         );
     }
     fn advance_ilwrath(&mut self) {
-        // SAFETY: the borrowed World owns the event queue used by this game-thread callback.
-        unsafe {
-            crate::time::clock_abi::live::add_event(self.cx.borrow_mut().world, 1, 0, 0, 0, 12);
-        }
+        crate::time::clock_abi::add_event(&mut self.cx.borrow_mut(), 1, 0, 0, 0, 12);
     }
 }

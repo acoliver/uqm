@@ -1,19 +1,15 @@
 //! Calendar and clock lifecycle operations over the campaign owner.
 
-#[cfg(not(test))]
 use std::ffi::c_int;
 
 use crate::bridge_log::rust_bridge_log_msg;
 
 pub use crate::engine::battle::schema::CLOCK_STATE as ClockState;
 
-#[cfg(not(test))]
 use crate::engine::World;
 
 // Constants from clock.h
-#[cfg(not(test))]
 const CLOCK_BASE_FRAMERATE: usize = 24;
-#[cfg(not(test))]
 const START_YEAR: u16 = 2155;
 
 // Event type constants
@@ -43,7 +39,6 @@ pub(crate) fn next_clock_day_internal(clock: &mut ClockState) {
 }
 
 // Initialize the game clock
-#[cfg(not(test))]
 pub fn rust_clock_init(world: &mut World) -> c_int {
     log_clock_bridge("RUST_CLOCK_INIT");
 
@@ -62,7 +57,6 @@ pub fn rust_clock_init(world: &mut World) -> c_int {
 }
 
 // Uninitialize the game clock
-#[cfg(not(test))]
 pub fn rust_clock_uninit(world: &mut World) -> c_int {
     log_clock_bridge("RUST_CLOCK_UNINIT");
 
@@ -78,7 +72,6 @@ pub fn rust_clock_uninit(world: &mut World) -> c_int {
 }
 
 // Set game clock rate (seconds per day)
-#[cfg(not(test))]
 pub fn rust_clock_set_rate(world: &mut World, seconds_per_day: c_int) {
     log_clock_bridge("RUST_CLOCK_RATE");
 
@@ -119,7 +112,6 @@ fn tick(clock: &mut ClockState) -> bool {
     }
 }
 
-#[cfg(not(test))]
 pub fn rust_clock_tick(world: &mut World) -> bool {
     tick(&mut world.data.game.game_clock)
 }
@@ -137,7 +129,6 @@ pub extern "C" fn rust_clock_unlock() {
 }
 
 // Check if game clock is running
-#[cfg(not(test))]
 pub fn rust_clock_is_running(world: &World) -> c_int {
     log_clock_bridge("RUST_CLOCK_RUNNING");
     i32::from(world.data.game.game_clock.day_in_ticks != 0)
@@ -171,6 +162,47 @@ mod tests {
         clock.day_in_ticks = 1;
         assert!(tick(clock));
         assert_eq!((clock.month_index, clock.day_index), (3, 1));
+    }
+
+    #[test]
+    fn supplied_clock_tick_uses_only_its_world_and_rolls_the_year() {
+        let mut first = crate::engine::World::new();
+        let mut second = crate::engine::World::new();
+        for world in [&mut first, &mut second] {
+            let clock = &mut world.data.game.game_clock;
+            clock.year_index = 2155;
+            clock.month_index = 12;
+            clock.day_index = 31;
+            clock.day_in_ticks = 2;
+            clock.tick_count = 1;
+        }
+        assert!(rust_clock_tick(&mut first));
+        assert_eq!(first.data.calendar_date(), (1, 1, 2156));
+        assert_eq!(first.data.game.game_clock.tick_count, 2);
+        assert_eq!(second.data.calendar_date(), (12, 31, 2155));
+        assert_eq!(second.data.game.game_clock.tick_count, 1);
+        assert!(!rust_clock_tick(&mut first));
+        assert_eq!(first.data.game.game_clock.tick_count, 1);
+        assert!(rust_clock_tick(&mut second));
+        assert_eq!(second.data.calendar_date(), (1, 1, 2156));
+    }
+
+    #[test]
+    fn supplied_clock_tick_does_not_advance_a_paused_clock() {
+        let mut world = crate::engine::World::new();
+        let clock = &mut world.data.game.game_clock;
+        clock.year_index = 2156;
+        clock.month_index = 2;
+        clock.day_index = 28;
+        clock.day_in_ticks = 0;
+        clock.tick_count = 1;
+        assert!(!rust_clock_tick(&mut world));
+        assert_eq!(world.data.calendar_date(), (2, 28, 2156));
+        assert_eq!(world.data.game.game_clock.tick_count, 0);
+        assert!(!rust_clock_tick(&mut world));
+        world.data.game.game_clock.day_in_ticks = 1;
+        assert!(rust_clock_tick(&mut world));
+        assert_eq!(world.data.calendar_date(), (2, 29, 2156));
     }
 
     #[test]

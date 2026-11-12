@@ -132,10 +132,7 @@ impl UrquanEncounterSite for Site<'_, '_, '_> {
         })
     }
     fn move_game_clock_days(&mut self, days: u16) {
-        self.game.borrow_mut().with_legacy(|| {
-            // SAFETY: plain call into the Rust game clock, as `MoveGameClockDays`.
-            unsafe { crate::time::clock_abi::live::MoveGameClockDays(days) };
-        })
+        crate::time::clock_abi::advance_days(&mut self.game.borrow_mut(), i32::from(days));
     }
     fn star_point(&self) -> (i16, i16) {
         let point = self.game.borrow().world.catalog()[self.star.0].star_pt;

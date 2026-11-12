@@ -29,7 +29,6 @@ fn move_axis(position: &mut i32, delta: i16, maximum: i32) -> i16 {
 
 #[cfg(not(test))]
 pub(crate) mod live {
-    use super::*;
 
     pub(crate) fn debit_sis_fuel(cx: &mut crate::engine::battle::Cx<'_>, amount: i16) {
         let _context = crate::graphics::context_abi::ContextLease::retain(
@@ -41,10 +40,6 @@ pub(crate) mod live {
             .tiny_font_lease()
             .unwrap_or_else(|| panic!("fuel debit requires the status font"));
         crate::ui::sis::delta_sis_gauges(cx.kernel, cx.world, 0, amount, 0);
-    }
-
-    pub(crate) unsafe fn screen_geometry() -> super::super::hyper_units::Geometry {
-        super::super::hyper_units::Geometry::new((ScreenWidth, ScreenHeight))
     }
 }
 

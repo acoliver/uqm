@@ -64,13 +64,9 @@ mod api {
 
     use crate::comm::races::shofixt::api::*;
 
-    #[cfg(not(test))]
     impl ShofixtApi for crate::comm::live::script::LiveScript<'_, '_, Handler> {
         fn schedule_return(&mut self) {
-            // SAFETY: the borrowed World owns the event queue used by this game-thread callback.
-            unsafe {
-                crate::time::clock_abi::live::add_event(self.cx.borrow_mut().world, 1, 2, 0, 0, 8);
-            }
+            crate::time::clock_abi::add_event(&mut self.cx.borrow_mut(), 1, 2, 0, 0, 8);
         }
     }
 }

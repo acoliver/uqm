@@ -1014,19 +1014,7 @@ pub const EVENT_TYPE_ABSOLUTE_EVENT: EVENT_TYPE = 0;
 pub const EVENT_TYPE_RELATIVE_EVENT: EVENT_TYPE = 1;
 pub type EVENT_TYPE = ::std::os::raw::c_uint;
 
-#[cfg(not(test))]
-pub use crate::navigation::events::live::dispatch_event;
-#[cfg(not(test))]
-pub use crate::time::clock_abi::live::add_event;
-
-#[cfg(not(test))]
-pub use crate::time::clock_abi::live::MoveGameClockDays;
-
-#[cfg(not(test))]
-pub use crate::time::clock_abi::live::LockGameClock;
-
-#[cfg(not(test))]
-pub use crate::time::clock_abi::live::UnlockGameClock;
+pub use crate::time::clock_abi::{LockGameClock, UnlockGameClock};
 
 pub use crate::graphics::native_abi::Color;
 
@@ -2561,12 +2549,6 @@ pub type _bindgen_ty_26 = ::std::os::raw::c_uint;
 pub const ARILOU_GATE_STATE_CLOSING: ARILOU_GATE_STATE = 0;
 pub const ARILOU_GATE_STATE_OPENING: ARILOU_GATE_STATE = 1;
 pub type ARILOU_GATE_STATE = ::std::os::raw::c_uint;
-
-#[cfg(not(test))]
-pub use crate::navigation::events::live::schedule_initial_events;
-
-#[cfg(not(test))]
-pub use crate::navigation::events::live::set_race_destination;
 
 pub const SOL_DEFINED: _bindgen_ty_27 = 1;
 pub const SHOFIXTI_DEFINED: _bindgen_ty_27 = 2;
