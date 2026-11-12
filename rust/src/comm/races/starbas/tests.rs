@@ -1,3 +1,4 @@
+use super::descriptor::descriptor;
 use super::*;
 use crate::comm::races::encounter::testing::{Effect, Fake};
 use crate::comm::races::script::DialogueHost;
@@ -151,12 +152,12 @@ fn descriptor_initialization_and_post_encounter() {
         bulletins: u32::MAX,
         ..Session::default()
     };
-    let mut d = descriptor();
+    let d = descriptor();
     Dialogue {
         api: &mut f,
         session: &mut s,
     }
-    .initialize(&mut d);
+    .initialize();
     assert_eq!(s.bulletins, 0);
     assert_eq!(f.segue, 0);
     assert_eq!(d.num_animations, 10);
@@ -170,13 +171,10 @@ fn descriptor_initialization_and_post_encounter() {
     );
     assert_eq!(d.alien_ambient_array[9].start_index, 95);
     assert_eq!(d.alien_talk_desc.base_restart_rate, 98);
-    assert_eq!(
-        unsafe { std::ffi::CStr::from_ptr(d.alien_alt_song_res) },
-        c"comm.starbase.music"
-    );
+    assert_eq!(d.alien_alt_song_res.unwrap(), c"comm.starbase.music");
     assert_eq!(d.alien_song_flags, 1);
     assert_eq!(
-        unsafe { std::ffi::CStr::from_ptr(d.conversation_phrases_res) },
+        d.conversation_phrases_res.unwrap(),
         c"comm.starbase.dialogue"
     );
     for bomb in [0, 1, 2, 3] {

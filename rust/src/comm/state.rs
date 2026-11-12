@@ -23,7 +23,7 @@ pub struct Comm {
     pub(crate) presentation: super::presentation::Presentation,
     phrase_events: PhraseEvents,
     pub(crate) race_scratch: super::races::RuntimeScratch,
-    pub(crate) data: super::locdata::CLocData,
+    pub(crate) data: super::locdata::SessionData,
     pub options: super::CommOptions,
     pub(crate) scope: super::oscill_abi::runtime::RuntimeState,
     pub(crate) display: super::comm_abi::RuntimeState,
@@ -249,8 +249,8 @@ impl Comm {
     ///
     /// # Safety
     /// Descriptor resources must remain live through session teardown.
-    pub unsafe fn install_descriptor(&mut self, data: super::locdata::CLocData) {
-        self.set_comm_data(super::locdata::read_locdata(&data));
+    pub unsafe fn install_descriptor(&mut self, data: super::locdata::SessionData) {
+        self.set_comm_data(super::locdata::session_view(&data));
         self.data = data;
     }
 
@@ -872,7 +872,7 @@ mod session_owner_tests {
     #[test]
     fn playback_callbacks_follow_the_owner_after_a_move_and_repeat_on_seek() {
         fn speaker(comm: &mut Comm) {
-            comm.data.alien_text_baseline.x += 1;
+            comm.data.definition.alien_text_baseline.x += 1;
         }
         let first = Comm::new();
         let second = Comm::new();
@@ -880,19 +880,19 @@ mod session_owner_tests {
         let callback = first.queue_phrase_callback(Some(speaker)).unwrap();
         callback(0);
         callback(17);
-        assert_eq!(first.data.alien_text_baseline.x, 0);
+        assert_eq!(first.data.definition.alien_text_baseline.x, 0);
         let mut moved = Box::new(first);
         moved.apply_phrase_events();
-        assert_eq!(moved.data.alien_text_baseline.x, 2);
-        assert_eq!(second.data.alien_text_baseline.x, 0);
+        assert_eq!(moved.data.definition.alien_text_baseline.x, 2);
+        assert_eq!(second.data.definition.alien_text_baseline.x, 0);
         moved.apply_phrase_events();
-        assert_eq!(moved.data.alien_text_baseline.x, 2);
+        assert_eq!(moved.data.definition.alien_text_baseline.x, 2);
         callback(0);
         moved.apply_phrase_events();
-        assert_eq!(moved.data.alien_text_baseline.x, 3);
+        assert_eq!(moved.data.definition.alien_text_baseline.x, 3);
         drop(moved);
         callback(17);
-        assert_eq!(second.data.alien_text_baseline.x, 0);
+        assert_eq!(second.data.definition.alien_text_baseline.x, 0);
     }
 
     #[test]

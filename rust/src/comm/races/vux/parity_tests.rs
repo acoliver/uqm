@@ -1,3 +1,4 @@
+use super::descriptor::descriptor;
 use super::dialogue::Dialogue;
 use super::*;
 use crate::comm::races::encounter::testing::{Effect, Fake};
@@ -566,7 +567,7 @@ fn full_descriptor_matches_c_including_opaque_black_and_dynamic_layout() {
         (d.alien_song_res, c"comm.vux.music"),
         (d.conversation_phrases_res, c"comm.vux.dialogue"),
     ] {
-        assert_eq!(unsafe { std::ffi::CStr::from_ptr(resource) }, expected);
+        assert_eq!(resource.unwrap(), expected);
     }
     assert_eq!((d.alien_text_align, d.alien_text_valign), (1, 0));
     assert_eq!(
@@ -587,7 +588,7 @@ fn full_descriptor_matches_c_including_opaque_black_and_dynamic_layout() {
         ),
         (0, 0, 0, 255)
     );
-    assert!(d.alien_alt_song_res.is_null());
+    assert!(d.alien_alt_song_res.is_none());
     assert_eq!(d.alien_song_flags, 0);
     assert!(d.alien_number_speech.is_none());
 }

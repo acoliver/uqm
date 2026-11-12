@@ -1,6 +1,6 @@
 //! Shared boundary for dialogue scripts while the surrounding engine still uses C.
 
-pub(crate) use crate::comm::locdata::{CAnimationDesc, CLocData};
+pub(crate) use crate::comm::races::descriptor::AnimationDescriptor;
 pub(crate) use crate::engine::StoryKey;
 
 pub(crate) const ANIM_DISABLED: u8 = 1 << 7;
@@ -47,8 +47,8 @@ pub(crate) fn animation(
     anim_flags: u8,
     frame_rate: (u16, u16),
     restart_rate: (u16, u16),
-) -> CAnimationDesc {
-    CAnimationDesc {
+) -> AnimationDescriptor {
+    AnimationDescriptor {
         start_index,
         num_frames,
         anim_flags,
@@ -58,8 +58,4 @@ pub(crate) fn animation(
         random_restart_rate: restart_rate.1,
         block_mask: 0,
     }
-}
-
-pub(crate) fn as_comm_data(desc: &CLocData) -> crate::comm::types::CommData {
-    crate::comm::locdata::read_locdata(desc)
 }

@@ -619,15 +619,13 @@ impl<A: SpahomeApi> Dialogue<'_, A> {
 // Resource keys (from resinst.h)
 // ---------------------------------------------------------------------------
 
-pub(crate) const RACE_PMAP_ANIM: &[u8] = b"comm.safeones.graphics\0";
-pub(crate) const RACE_FONT: &[u8] = b"comm.spathi.font\0";
-pub(crate) const RACE_COLOR_MAP: &[u8] = b"comm.safeones.colortable\0";
-pub(crate) const RACE_MUSIC: &[u8] = b"comm.spathi.music\0";
-pub(crate) const RACE_ALT_MUSIC: &[u8] = b"comm.safeones.music\0";
-pub(crate) const RACE_CONVERSATION_PHRASES: &[u8] = b"comm.safeones.dialogue\0";
+pub(crate) const RACE_PMAP_ANIM: &std::ffi::CStr = c"comm.safeones.graphics";
+pub(crate) const RACE_FONT: &std::ffi::CStr = c"comm.spathi.font";
+pub(crate) const RACE_COLOR_MAP: &std::ffi::CStr = c"comm.safeones.colortable";
+pub(crate) const RACE_MUSIC: &std::ffi::CStr = c"comm.spathi.music";
+pub(crate) const RACE_ALT_MUSIC: &std::ffi::CStr = c"comm.safeones.music";
+pub(crate) const RACE_CONVERSATION_PHRASES: &std::ffi::CStr = c"comm.safeones.dialogue";
 
-#[cfg(test)]
-use crate::comm::descriptors::spahome::descriptor;
 /// Spahome race dialogue implementation.
 #[cfg(test)]
 #[path = "spahome/tests.rs"]
@@ -639,10 +637,10 @@ mod tests {
 
     #[test]
     fn test_resource_keys_are_null_terminated() {
-        assert_eq!(RACE_PMAP_ANIM.last(), Some(&0));
-        assert_eq!(RACE_FONT.last(), Some(&0));
-        assert_eq!(RACE_COLOR_MAP.last(), Some(&0));
-        assert_eq!(RACE_MUSIC.last(), Some(&0));
+        assert_eq!(RACE_PMAP_ANIM.to_bytes_with_nul().last(), Some(&0));
+        assert_eq!(RACE_FONT.to_bytes_with_nul().last(), Some(&0));
+        assert_eq!(RACE_COLOR_MAP.to_bytes_with_nul().last(), Some(&0));
+        assert_eq!(RACE_MUSIC.to_bytes_with_nul().last(), Some(&0));
     }
 
     #[test]
@@ -669,3 +667,5 @@ mod tests {
         );
     }
 }
+
+pub(crate) mod descriptor;

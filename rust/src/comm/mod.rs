@@ -56,15 +56,15 @@ pub(crate) mod text_layout;
 pub mod track;
 pub mod types;
 
+pub use races::descriptor::{AnimationDescriptor, MAX_ANIMATIONS};
+
 pub use animation::{AnimContext, CommAnimState};
 pub use oscilloscope::Oscilloscope;
 pub use response::{ResponseEntry, ResponseSystem};
 pub use state::Comm;
 pub use subtitle::{SubtitleChunk, SubtitleTracker};
 pub use track::{SoundChunk, TrackManager};
-pub use types::{
-    AnimationDescData, CommData, CommError, CommIntroMode, CommResult, MAX_ANIMATIONS,
-};
+pub use types::{CommData, CommError, CommIntroMode, CommResult};
 
 #[cfg(test)]
 pub(crate) fn with_test_context<R>(

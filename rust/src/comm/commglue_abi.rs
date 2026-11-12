@@ -102,7 +102,7 @@ pub(crate) mod runtime {
         } else {
             format
         };
-        if let Some(speech) = comm.data.alien_number_speech {
+        if let Some(speech) = comm.data.definition.alien_number_speech {
             let mut indices = Vec::new();
             number_phrases(speech, number, true, &mut indices);
             let mut tracks = [std::ptr::null::<c_char>(); 20];

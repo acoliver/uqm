@@ -1,5 +1,5 @@
 //! Kohr-Ah dialogue, ported from blackurq.c.
-pub(crate) use crate::comm::locdata::CPoint;
+pub(crate) use crate::comm::races::descriptor::Point;
 pub(crate) use crate::engine::StoryKey;
 mod phrases;
 use phrases::*;
@@ -275,10 +275,10 @@ impl<A: BlackurApi> Dialogue<'_, A> {
         );
     }
 }
-pub(crate) fn text_layout(screen_width: i32) -> (CPoint, u16) {
+pub(crate) fn text_layout(screen_width: i32) -> (Point, u16) {
     let text_width = screen_width - 80;
     (
-        CPoint {
+        Point {
             x: (1 + (text_width >> 1)) as i16,
             y: 0,
         },
@@ -287,7 +287,6 @@ pub(crate) fn text_layout(screen_width: i32) -> (CPoint, u16) {
 }
 
 #[cfg(test)]
-use crate::comm::descriptors::blackur::descriptor;
-
-#[cfg(test)]
 mod tests;
+
+pub(crate) mod descriptor;

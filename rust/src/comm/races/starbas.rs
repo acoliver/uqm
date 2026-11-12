@@ -1,7 +1,6 @@
 //! Starbase and Hayes dialogue, ported from the original C script.
 
 pub(crate) use super::encounter::EncounterApi;
-pub(crate) use crate::comm::locdata::CLocData;
 pub(crate) use crate::engine::StoryKey;
 mod phrases;
 pub(crate) use super::script::{GLOBAL_PLAYER_NAME, GLOBAL_SHIP_NAME};
@@ -283,9 +282,7 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
         self.normal_starbase(r);
     }
 
-    pub(crate) fn initialize(&mut self, desc: &mut CLocData) {
-        desc.alien_alt_song_res = c"comm.starbase.music".as_ptr();
-        desc.alien_song_flags |= 1;
+    pub(crate) fn initialize(&mut self) {
         self.session.bulletins = 0;
         self.api.segue(0);
     }
@@ -1454,7 +1451,6 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
 }
 
 #[cfg(test)]
-use crate::comm::descriptors::starbas::descriptor;
-
-#[cfg(test)]
 mod tests;
+
+pub(crate) mod descriptor;

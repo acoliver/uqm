@@ -1,3 +1,4 @@
+use super::descriptor::descriptor;
 use super::*;
 use crate::comm::races::encounter::testing::{Effect, Fake};
 use crate::comm::races::script::DialogueHost;
@@ -219,9 +220,7 @@ fn final_battle_outtakes_lifecycle_and_portrait() {
     assert_eq!(d.alien_ambient_array[16].anim_flags, 178);
     assert_eq!(d.alien_ambient_array[16].base_frame_rate, 42);
     assert_eq!(
-        unsafe { std::ffi::CStr::from_ptr(d.alien_frame_res) }
-            .to_str()
-            .unwrap(),
+        d.alien_frame_res.unwrap().to_str().unwrap(),
         "comm.talkingpet.graphics"
     );
 }

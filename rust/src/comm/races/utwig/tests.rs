@@ -1,3 +1,4 @@
+use super::descriptor::descriptor;
 use super::*;
 use crate::comm::races::encounter::testing::{Effect, Fake};
 use crate::comm::races::script::DialogueHost;
@@ -273,10 +274,7 @@ fn mission_news_escort_and_introduction_dispatch() {
     Dialogue { api: &mut f }.initialize(&mut d);
     assert_eq!(f.segue, 0);
     assert_eq!(d.alien_song_flags & 1, 1);
-    assert_eq!(
-        unsafe { std::ffi::CStr::from_ptr(d.alien_alt_song_res) },
-        c"comm.utwig.ultron.music"
-    );
+    assert_eq!(d.alien_alt_song_res.unwrap(), c"comm.utwig.ultron.music");
     f.put(StoryKey::UTWIG_HAVE_ULTRON, 0);
     Dialogue { api: &mut f }.initialize(&mut d);
     assert_eq!(d.alien_song_flags & 1, 0);

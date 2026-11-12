@@ -1,7 +1,7 @@
-use crate::comm::descriptors::comandr::descriptor;
 use crate::comm::host::Host;
+use crate::comm::races::comandr::descriptor::descriptor;
 use crate::comm::races::comandr::*;
-use crate::comm::{locdata::CLocData, Comm};
+use crate::comm::{locdata::SessionData, Comm};
 use crate::engine::battle::Cx;
 
 fn api<'a, 'b>(
@@ -39,7 +39,7 @@ pub(crate) fn uninit(_comm: &mut Comm, _cx: &mut Cx<'_>) -> u16 {
 }
 
 /// Build the Earth Commander descriptor for this session's campaign state.
-pub fn init_commander_comm(comm: &mut Comm, cx: &mut Cx<'_>) -> CLocData {
+pub fn init_commander_comm(comm: &mut Comm, cx: &mut Cx<'_>) -> SessionData {
     let mut desc = descriptor();
     configure(
         &mut desc,
@@ -48,5 +48,10 @@ pub fn init_commander_comm(comm: &mut Comm, cx: &mut Cx<'_>) -> CLocData {
     // setSegue(peace) also updates the legacy battle bit used by dispatch.
     api(comm, cx).set(StoryKey::BATTLE_SEGUE, 0);
     crate::comm::ffi::rust_set_segue(comm, 0);
-    desc
+    SessionData {
+        init_encounter_func: Some(intro),
+        post_encounter_func: Some(post),
+        uninit_encounter_func: Some(uninit),
+        ..SessionData::new(desc)
+    }
 }
