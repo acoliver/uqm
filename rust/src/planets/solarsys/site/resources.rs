@@ -171,11 +171,10 @@ impl<'a, 'game, 'observer> Site<'a, 'game, 'observer> {
             if unsafe { crate::front_end::uqmdebug::DISABLE_INTERACTIVITY } != 0 {
                 return;
             }
-            // SAFETY: the solar visit retains its registered junk drawable on this thread.
-            let junk = unsafe { crate::planets::solarsys::SpaceJunkFrame };
-            let junk = crate::graphics::context_abi::ContextFrame::retain(std::ptr::NonNull::new(
-                junk.cast(),
-            ));
+            let junk = crate::planets::solarsys::resources::retained(game.borrow().kernel)
+                .junk
+                .lease()
+                .context_frame(0);
             discovery_report(
                 &mut game.borrow_mut(),
                 &mut io.borrow_mut(),

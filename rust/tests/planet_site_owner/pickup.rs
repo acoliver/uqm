@@ -243,13 +243,16 @@ fn production_site_presents_and_consumes_an_empty_report_with_supplied_owners() 
     context.set_frame(ContextFrame::retain(std::ptr::NonNull::new(
         game.kernel.screen,
     )));
-    let junk = LoadedDrawable::create(8, 1, 1, 22).unwrap();
-    // SAFETY: this serialized fixture temporarily supplies the legacy visit's registered drawable.
-    let previous = unsafe {
-        let previous = uqm_rust::planets::solarsys::SpaceJunkFrame;
-        uqm_rust::planets::solarsys::SpaceJunkFrame = junk.lease().frame(0).unwrap().cast();
-        previous
-    };
+    game.kernel.solar_presentation.assets =
+        Some(uqm_rust::engine::kernel::solar_resources::SolarResources {
+            flagship: LoadedDrawable::create(8, 1, 1, 1).unwrap(),
+            sun: LoadedDrawable::create(8, 1, 1, 1).unwrap(),
+            sun_palettes: vec![vec![0, 0]],
+            orbital_palettes: vec![vec![0, 0]],
+            orbital: LoadedDrawable::create(8, 1, 1, 1).unwrap(),
+            junk: LoadedDrawable::create(8, 1, 1, 22).unwrap(),
+            music: None,
+        });
     game.kernel.install_input_runtime(std::rc::Rc::new(
         uqm_rust::mainloop::input_abi::NativeInputRuntime::new(
             None,
@@ -300,8 +303,6 @@ fn production_site_presents_and_consumes_an_empty_report_with_supplied_owners() 
         assert_eq!(uqm_rust::graphics::batch_depth::depth(&context), 0);
     }
     context.flush();
-    // SAFETY: the serialized fixture restores the visit's publication before releasing its drawable.
-    unsafe { uqm_rust::planets::solarsys::SpaceJunkFrame = previous };
-    drop((context, resources, junk));
+    drop((context, resources));
     display.finish(game);
 }
