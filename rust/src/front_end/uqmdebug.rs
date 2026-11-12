@@ -1,6 +1,9 @@
 //! Debug cheats, universe inspection and graphics-context diagnostics.
 #![cfg(feature = "debug-process")]
 
+#[cfg(test)]
+mod supplied_tests;
+
 #[cfg(not(test))]
 use crate::battle::context_access::ContextOps;
 use crate::engine::world::generation::Body;
