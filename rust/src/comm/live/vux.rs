@@ -1,7 +1,6 @@
 use crate::comm::host::Host;
-use crate::comm::races::vux::descriptor::descriptor;
 use crate::comm::races::vux::*;
-use crate::comm::{locdata::SessionData, Comm};
+use crate::comm::Comm;
 use crate::engine::battle::Cx;
 
 fn run(
@@ -45,15 +44,10 @@ pub(crate) fn uninit(_comm: &mut Comm, _cx: &mut Cx<'_>) -> u16 {
     0
 }
 
-pub fn init_vux_comm(comm: &mut Comm, cx: &mut Cx<'_>) -> SessionData {
-    let width = cx.screen_dimensions().0;
-    let mut descriptor = descriptor(width);
-    (descriptor.alien_text_baseline, descriptor.alien_text_width) = text_layout(width);
-    run(comm, cx, |dialogue| dialogue.initialize());
-    SessionData {
-        init_encounter_func: Some(intro),
-        post_encounter_func: Some(post),
-        uninit_encounter_func: Some(uninit),
-        ..SessionData::new(descriptor)
-    }
+pub(crate) fn initialize(
+    comm: &mut Comm,
+    cx: &mut Cx<'_>,
+    _desc: &mut crate::comm::races::descriptor::CommDescriptor,
+) {
+    run(comm, cx, |s| s.initialize());
 }

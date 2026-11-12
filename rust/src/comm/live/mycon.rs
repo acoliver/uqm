@@ -1,7 +1,6 @@
 use crate::comm::host::Host;
-use crate::comm::races::mycon::descriptor::descriptor;
 use crate::comm::races::mycon::*;
-use crate::comm::{locdata::SessionData, Comm};
+use crate::comm::Comm;
 use crate::engine::battle::Cx;
 fn run(comm: &mut Comm, cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, Host<'_, '_, Handler>>)) {
     let mut session = comm.race_scratch.mycon.take().unwrap_or_default();
@@ -65,15 +64,12 @@ pub(crate) fn uninit(_comm: &mut Comm, _cx: &mut Cx<'_>) -> u16 {
     0
 }
 /// Initialize the encounter on the game thread.
-pub fn init_mycon_comm(comm: &mut Comm, cx: &mut Cx<'_>) -> SessionData {
-    let desc = descriptor();
+pub(crate) fn initialize(
+    comm: &mut Comm,
+    cx: &mut Cx<'_>,
+    _desc: &mut crate::comm::races::descriptor::CommDescriptor,
+) {
     run(comm, cx, |s| s.initialize());
-    SessionData {
-        init_encounter_func: Some(intro),
-        post_encounter_func: Some(post),
-        uninit_encounter_func: Some(uninit),
-        ..SessionData::new(desc)
-    }
 }
 
 mod api {

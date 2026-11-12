@@ -1,6 +1,4 @@
 use crate::comm::host::Host;
-use crate::comm::locdata::SessionData;
-use crate::comm::races::slyland::descriptor::descriptor;
 use crate::comm::races::slyland::*;
 use crate::comm::Comm;
 use crate::engine::battle::Cx;
@@ -27,18 +25,12 @@ pub(crate) fn post(_comm: &mut Comm, _cx: &mut Cx<'_>) {}
 pub(crate) fn uninit(_comm: &mut Comm, _cx: &mut Cx<'_>) -> u16 {
     0
 }
-pub fn init_slyland_comm(comm: &mut Comm, cx: &mut Cx<'_>) -> crate::comm::locdata::SessionData {
-    let width = cx.screen_dimensions().0;
-    let mut d = descriptor(width);
-    d.alien_text_baseline.x = (1 + ((width - 80) >> 1)) as i16;
-    d.alien_text_width = (width - 80 - 16) as u16;
+pub(crate) fn initialize(
+    comm: &mut Comm,
+    cx: &mut Cx<'_>,
+    _desc: &mut crate::comm::races::descriptor::CommDescriptor,
+) {
     run(comm, cx, |s| s.initialize());
-    SessionData {
-        init_encounter_func: Some(intro),
-        post_encounter_func: Some(post),
-        uninit_encounter_func: Some(uninit),
-        ..SessionData::new(d)
-    }
 }
 
 mod api {
@@ -47,7 +39,6 @@ mod api {
 
     use crate::comm::races::slyland::api::*;
 
-    #[cfg(not(test))]
     mod live {
         use super::*;
         use crate::comm::host::Host;
@@ -56,11 +47,6 @@ mod api {
 
         use crate::comm::commglue_abi::runtime::npc_number;
 
-        extern "C" {
-
-            static mut ScreenWidth: i32;
-            static mut ScreenHeight: i32;
-        }
         impl SlylandApi for Host<'_, '_, Handler> {
             fn choices(&self) -> [u16; 5] {
                 self.comm.borrow().race_scratch.slyland_choices
@@ -72,15 +58,13 @@ mod api {
             }
             fn position(&self) -> (i32, i32, i32, i32) {
                 let cx = self.cx.borrow();
-                // SAFETY: display dimensions are stable on the game thread holding this campaign loan.
-                unsafe {
-                    (
-                        cx.world.data.flagship.log_x,
-                        cx.world.data.flagship.log_y,
-                        ScreenWidth,
-                        ScreenHeight,
-                    )
-                }
+                let (width, height) = cx.screen_dimensions();
+                (
+                    cx.world.data.flagship.log_x,
+                    cx.world.data.flagship.log_y,
+                    width,
+                    height,
+                )
             }
             fn splice(&mut self, phrase: u32) {
                 let comm = &mut **self.comm.borrow_mut();
