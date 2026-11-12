@@ -1,5 +1,5 @@
 use super::*;
-use crate::ships::native::abi::{NUMBER_SPEECH_DESC, SPEECH_DIGIT};
+use crate::comm::races::descriptor::{NumberSpeech, SpeechDigit};
 
 static DIGITS: [u16; 10] = [
     ENUMERATE_ZERO as u16,
@@ -38,28 +38,16 @@ static TENS: [u16; 10] = [
     ENUMERATE_NINETY as u16,
 ];
 
-const fn digit(divider: i32, subtrahend: i32, strings: *const u16, common: u16) -> SPEECH_DIGIT {
-    SPEECH_DIGIT {
-        Divider: divider,
-        Subtrahend: subtrahend,
-        StrDigits: strings.cast_mut(),
-        Names: std::ptr::null_mut(),
-        CommonNameIndex: common,
-    }
-}
-// npc_number only reads this descriptor and the phrase tables it borrows.
-static mut NUMBERS: NUMBER_SPEECH_DESC = NUMBER_SPEECH_DESC {
-    NumDigits: 5,
-    Digits: [
-        digit(1000, 0, std::ptr::null(), ENUMERATE_THOUSAND as u16),
-        digit(100, 0, DIGITS.as_ptr(), ENUMERATE_HUNDRED as u16),
-        digit(10, 0, TENS.as_ptr(), 0),
-        digit(1, 10, TEENS.as_ptr(), 0),
-        digit(1, 0, DIGITS.as_ptr(), 0),
-        digit(0, 0, std::ptr::null(), 0),
-        digit(0, 0, std::ptr::null(), 0),
+const NUMBER_SPEECH: NumberSpeech = NumberSpeech {
+    digits: &[
+        SpeechDigit::new(1000, 0, None, ENUMERATE_THOUSAND as u16),
+        SpeechDigit::new(100, 0, Some(&DIGITS), ENUMERATE_HUNDRED as u16),
+        SpeechDigit::new(10, 0, Some(&TENS), 0),
+        SpeechDigit::new(1, 10, Some(&TEENS), 0),
+        SpeechDigit::new(1, 0, Some(&DIGITS), 0),
     ],
 };
-pub(crate) fn descriptor() -> *const NUMBER_SPEECH_DESC {
-    std::ptr::addr_of!(NUMBERS)
+
+pub(crate) fn descriptor() -> &'static NumberSpeech {
+    &NUMBER_SPEECH
 }

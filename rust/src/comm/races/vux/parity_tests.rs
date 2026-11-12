@@ -589,5 +589,5 @@ fn full_descriptor_matches_c_including_opaque_black_and_dynamic_layout() {
     );
     assert!(d.alien_alt_song_res.is_null());
     assert_eq!(d.alien_song_flags, 0);
-    assert!(d.alien_number_speech.is_null());
+    assert!(d.alien_number_speech.is_none());
 }

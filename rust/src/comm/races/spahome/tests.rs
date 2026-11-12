@@ -803,7 +803,7 @@ fn full_descriptor_matches_c_resources_layout_and_animations() {
                 assert_eq!(std::ffi::CStr::from_ptr(pointer).to_bytes_with_nul(), key);
             }
         }
-        assert!(d.alien_number_speech.is_null());
+        assert!(d.alien_number_speech.is_none());
         assert_eq!(d.alien_song_flags, 1);
         unsafe {
             assert_eq!(

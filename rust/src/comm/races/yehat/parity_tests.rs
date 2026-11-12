@@ -584,5 +584,5 @@ fn descriptor_matches_every_c_animation_field_and_runtime_geometry() {
     );
     assert!(d.alien_alt_song_res.is_null());
     assert_eq!(d.alien_song_flags, 0);
-    assert!(d.alien_number_speech.is_null());
+    assert!(d.alien_number_speech.is_none());
 }

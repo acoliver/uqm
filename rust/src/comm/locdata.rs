@@ -183,7 +183,7 @@ pub struct CLocData {
     pub alien_talk_desc: CAnimationDesc,
 
     // Number speech (borrowed pointer)
-    pub alien_number_speech: *const c_void,
+    pub alien_number_speech: Option<&'static super::races::descriptor::NumberSpeech>,
 
     // Loaded handles (opaque pointers)
     pub alien_frame: *mut c_void,          // FRAME

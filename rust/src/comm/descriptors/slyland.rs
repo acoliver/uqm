@@ -14,7 +14,7 @@ pub(crate) fn descriptor(screen_width: i32) -> CLocData {
         alien_colormap_res: RACE_COLOR_MAP.as_ptr().cast(),
         alien_song_res: RACE_MUSIC.as_ptr().cast(),
         conversation_phrases_res: RACE_CONVERSATION_PHRASES.as_ptr().cast(),
-        alien_number_speech: crate::comm::races::slyland::numbers::descriptor().cast(),
+        alien_number_speech: Some(crate::comm::races::slyland::numbers::descriptor()),
         alien_text_fcolor: CColor {
             r: 255,
             g: 255,
