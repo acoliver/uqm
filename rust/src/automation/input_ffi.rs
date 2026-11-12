@@ -321,14 +321,12 @@ pub(crate) fn contact_snapshot(
         } else {
             128 << 6
         };
-        let point = crate::planets::solar_coords::to_display(
+        let point = crate::planets::solar_coords::SolarCoordinates::new(solar.screen).to_display(
             crate::graphics::native_abi::POINT {
                 x: location.0,
                 y: location.1,
             },
             radius,
-            solar.screen.0 - 78,
-            solar.screen.1 - 13,
         );
         snapshot.target_x = i32::from(point.x);
         snapshot.target_y = i32::from(point.y);

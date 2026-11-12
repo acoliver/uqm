@@ -23,11 +23,6 @@ pub const GENERATE_ALL: u16 = !0;
 pub const NUM_RACE_RUINS: u16 = 16;
 /// `YEHAT_SHIP` (`races.h`).
 pub const YEHAT_SHIP: u8 = 11;
-/// `GROUP_INIT_IP`, `GROUP_LOAD_IP`, `GROUP_SAVE_IP` and `GROUPS_RANDOM`
-/// are applied by the host (`state.h`); the task bits are `grpinfo.h`.
-pub const FLEE: u8 = 2;
-pub const IGNORE_FLAGSHIP: u8 = 1 << 2;
-pub const REFORM_GROUP: u8 = 1 << 3;
 /// `LARGE_ROCKY_WORLD` and `GAS_GIANT` (`plandata.h`).
 const LARGE_ROCKY_WORLD: u8 = 1;
 const GAS_GIANT: u8 = 2;
@@ -88,9 +83,9 @@ fn check_yehat_rebellion(host: &mut (impl Npcs + ?Sized)) {
         return;
     }
     host.for_each_ip_group(&mut |group| {
-        if group.race_id == YEHAT_SHIP && group.task & IGNORE_FLAGSHIP != 0 {
-            group.task &= REFORM_GROUP;
-            group.task |= FLEE | IGNORE_FLAGSHIP;
+        if group.race_id == YEHAT_SHIP && group.task & IP_GROUP::IGNORE_FLAGSHIP != 0 {
+            group.task &= IP_GROUP::REFORM_GROUP;
+            group.task |= IP_GROUP::FLEE | IP_GROUP::IGNORE_FLAGSHIP;
             group.dest_loc = 0;
         }
     });
@@ -417,21 +412,27 @@ mod tests {
             civil_war: true,
             race: -1,
             groups: vec![
-                group(YEHAT_SHIP, IGNORE_FLAGSHIP | REFORM_GROUP | 1),
+                group(
+                    YEHAT_SHIP,
+                    IP_GROUP::IGNORE_FLAGSHIP | IP_GROUP::REFORM_GROUP | 1,
+                ),
                 group(YEHAT_SHIP, 1),
-                group(YEHAT_SHIP - 1, IGNORE_FLAGSHIP),
+                group(YEHAT_SHIP - 1, IP_GROUP::IGNORE_FLAGSHIP),
             ],
             ..FakeNpcs::default()
         };
         assert!(reinit_npcs(&mut host));
         assert_eq!(host.calls, ["load_ip_groups"]);
         let fled = &host.groups[0];
-        assert_eq!(fled.task, REFORM_GROUP | FLEE | IGNORE_FLAGSHIP);
+        assert_eq!(
+            fled.task,
+            IP_GROUP::REFORM_GROUP | IP_GROUP::FLEE | IP_GROUP::IGNORE_FLAGSHIP
+        );
         assert_eq!(fled.dest_loc, 0);
         assert_eq!((host.groups[1].task, host.groups[1].dest_loc), (1, 9));
         assert_eq!(
             (host.groups[2].task, host.groups[2].dest_loc),
-            (IGNORE_FLAGSHIP, 9)
+            (IP_GROUP::IGNORE_FLAGSHIP, 9)
         );
     }
 
@@ -441,11 +442,11 @@ mod tests {
             let mut host = FakeNpcs {
                 civil_war,
                 race,
-                groups: vec![group(YEHAT_SHIP, IGNORE_FLAGSHIP)],
+                groups: vec![group(YEHAT_SHIP, IP_GROUP::IGNORE_FLAGSHIP)],
                 ..FakeNpcs::default()
             };
             reinit_npcs(&mut host);
-            assert_eq!(host.groups[0].task, IGNORE_FLAGSHIP);
+            assert_eq!(host.groups[0].task, IP_GROUP::IGNORE_FLAGSHIP);
             assert_eq!(host.groups[0].dest_loc, 9);
         }
     }

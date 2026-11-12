@@ -19,10 +19,12 @@ impl HomeContactSite for Site<'_, '_, '_> {
         start_sphere_tracking(self.game.borrow_mut().world, u16::from(self.contact().0))
     }
     fn notify_others_all_clear(&mut self) {
-        self.game.borrow_mut().with_legacy(|| {
-            // SAFETY: as above.
-            unsafe { notify_others_all_clear(u16::from(self.contact().0)) };
-        })
+        let race = u16::from(self.contact().0);
+        crate::navigation::interplanetary::notify_others(
+            &mut self.game.borrow_mut(),
+            race,
+            u8::MAX,
+        );
     }
     fn save_ip_groups(&mut self) {
         Npcs::save_ip_groups(self);
@@ -264,8 +266,7 @@ impl sam::SamatraSite for Site<'_, '_, '_> {
         c_api::built_ship_queue_has_ships(self.game.borrow().world)
     }
     fn reset_encounter(&mut self) {
-        // SAFETY: the retained orbital owner exclusively controls encounter state.
-        unsafe { c_api::reset_encounter(self.game.borrow_mut().world) };
+        c_api::reset_encounter(self.game.borrow_mut().world);
     }
     fn track_yehat(&mut self) -> bool {
         c_api::start_sphere_tracking(self.game.borrow_mut().world, u16::from(ship::YEHAT_SHIP))
@@ -298,10 +299,11 @@ impl yehat::YehatSite for Site<'_, '_, '_> {
         start_sphere_tracking(self.game.borrow_mut().world, u16::from(ship::YEHAT_SHIP))
     }
     fn notify_others_all_clear(&mut self) {
-        self.game.borrow_mut().with_legacy(|| {
-            // SAFETY: as above.
-            unsafe { notify_others_all_clear(u16::from(ship::YEHAT_SHIP)) };
-        })
+        crate::navigation::interplanetary::notify_others(
+            &mut self.game.borrow_mut(),
+            u16::from(ship::YEHAT_SHIP),
+            u8::MAX,
+        );
     }
     fn save_ip_groups(&mut self) {
         Npcs::save_ip_groups(self);

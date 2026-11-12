@@ -43,6 +43,10 @@ pub fn invoke<R>(
             &mut pickup,
             None,
         );
+        site.background = solar
+            .stars
+            .as_ref()
+            .map(|owner| owner.lease().context_frame(0));
         (site.invoke(&mut solar.sys, run), site.presentation.take())
     };
     solar.apply_input_effects(game);

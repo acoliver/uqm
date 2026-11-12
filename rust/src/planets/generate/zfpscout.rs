@@ -8,8 +8,7 @@ use crate::engine::StoryKey;
 use crate::planets::generate::default;
 use crate::planets::generate::special::{self, FleetGroups, Story, ZOQFOTPIK_SHIP};
 
-/// `FLEE`, `IGNORE_FLAGSHIP` and `REFORM_GROUP` (`grpinfo.h`).
-use crate::planets::generate::default::{FLEE, IGNORE_FLAGSHIP, REFORM_GROUP};
+use crate::engine::world::queues::IpGroup as IP_GROUP;
 
 /// `GenerateZoqFotPikScout_initNpcs`.
 pub fn init_npcs(host: &mut (impl FleetGroups + Story + ?Sized)) -> bool {
@@ -28,8 +27,8 @@ pub fn reinit_npcs(host: &mut (impl FleetGroups + ?Sized)) -> bool {
         return true;
     }
     host.head_ip_group(&mut |group| {
-        if group.race_id == ZOQFOTPIK_SHIP && group.task & REFORM_GROUP != 0 {
-            group.task = FLEE | IGNORE_FLAGSHIP | REFORM_GROUP;
+        if group.race_id == ZOQFOTPIK_SHIP && group.task & IP_GROUP::REFORM_GROUP != 0 {
+            group.task = IP_GROUP::FLEE | IP_GROUP::IGNORE_FLAGSHIP | IP_GROUP::REFORM_GROUP;
             group.dest_loc = 0;
         }
     });

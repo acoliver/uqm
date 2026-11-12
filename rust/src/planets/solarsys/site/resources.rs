@@ -2,7 +2,7 @@
 
 use super::*;
 use crate::engine::{world::generation::Body, StoryKey};
-use crate::planets::c_api::{self, *};
+use crate::planets::c_api::*;
 use crate::planets::generate::default::PlanetNames;
 use crate::planets::generate::home_contact::LanderTakeoff;
 use crate::planets::generate::{andro, burv, spa, vault, wreck};
@@ -134,7 +134,7 @@ impl<'a, 'game, 'observer> Site<'a, 'game, 'observer> {
                 (self.star, body),
                 in_orbit,
                 definition,
-                reports,
+                (reports, self.background.clone()),
             )
         };
     }
@@ -191,10 +191,7 @@ impl crate::planets::generate::host::ReportSite for Site<'_, '_, '_> {
 
 impl crate::planets::generate::sol::orbital::Orbital for Site<'_, '_, '_> {
     fn set_encounter_group(&mut self, value: u8) {
-        self.game.borrow_mut().with_legacy(|| {
-            // SAFETY: the encounter belongs to this game-thread context.
-            unsafe { c_api::set_encounter_group(value) };
-        });
+        self.game.borrow_mut().world.encounter_group = value;
     }
     fn current_activity(&self) -> u16 {
         self.game.borrow().world.activity()

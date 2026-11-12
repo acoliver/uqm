@@ -431,7 +431,11 @@ pub(crate) mod engine {
                     .world
                     .selected_star()
                     .unwrap_or_else(|| panic!("encounter requires a selected star"));
-                Some(cluster_name(cx.kernel, star, STAR_NUMBER_BASE as usize))
+                Some(cluster_name(
+                    cx.kernel,
+                    star,
+                    crate::starbase::ids::STAR_NUMBER_BASE as usize,
+                ))
             } else {
                 None
             };

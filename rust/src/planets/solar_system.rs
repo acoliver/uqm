@@ -54,6 +54,9 @@ pub struct SolarSystem {
     pub turn_wait: u8,
     pub thrust_counter: u8,
     pub max_ship_speed: u8,
+    pub(super) coordinates: Option<super::solar_coords::SolarCoordinates>,
+    pub(super) system_image: Option<crate::graphics::drawable_abi::LoadedDrawable>,
+    pub(super) stars: Option<crate::graphics::drawable_abi::LoadedDrawable>,
     pub(super) scale_rect: crate::graphics::native_abi::RECT,
 }
 
@@ -78,8 +81,20 @@ impl SolarSystem {
             turn_wait: 0,
             thrust_counter: 0,
             max_ship_speed: 0,
+            coordinates: None,
+            system_image: None,
+            stars: None,
             scale_rect: Default::default(),
         }
+    }
+
+    pub(super) fn coordinates(&self) -> super::solar_coords::SolarCoordinates {
+        self.coordinates
+            .unwrap_or_else(|| panic!("solar presentation is not initialized"))
+    }
+
+    pub(super) fn clear_system_image(&mut self) {
+        self.system_image = None;
     }
 
     pub fn star(&self) -> StarId {

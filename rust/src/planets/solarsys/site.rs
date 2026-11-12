@@ -25,6 +25,7 @@ pub struct Site<'a, 'game, 'observer> {
     index: u8,
     in_orbit: bool,
     presentation: Option<crate::planets::orbit::presentation::OrbitPresentation>,
+    background: Option<crate::graphics::context_abi::ContextFrame>,
     report_context: Option<crate::planets::report::typography::ReportContext>,
     report_resources: crate::planets::report::typography::ReportResources,
 }
@@ -47,6 +48,7 @@ impl<'a, 'game, 'observer> Site<'a, 'game, 'observer> {
             index,
             in_orbit,
             presentation: None,
+            background: None,
             report_resources: report_context
                 .as_ref()
                 .map_or_else(Default::default, |context| context.resources.clone()),

@@ -1,4 +1,4 @@
-const MUSIC_DISABLED: u8 = 8;
+use crate::engine::world::MUSIC_DISABLED;
 const SOUND_DISABLED: u8 = 16;
 const GAME_SOUND_PRIORITY: u8 = 2;
 

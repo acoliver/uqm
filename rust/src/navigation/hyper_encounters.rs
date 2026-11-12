@@ -9,6 +9,7 @@ use super::hyperspace::{cosine, sine};
 use crate::engine::battle::hooks::animation_preprocess;
 use crate::engine::battle::views::{FrameSelection as Frame, Frames};
 use crate::engine::battle::{Cx, ElementId};
+use crate::engine::graphics::{EMPTY_PRIMITIVE, STAMP_PRIMITIVE};
 use std::ptr;
 
 const MAKEUP: [u8; 23] = [
@@ -34,7 +35,7 @@ pub(super) fn allocate(cx: &mut Cx<'_>, point: POINT) -> Option<ElementId> {
         x: wrap(lx, geometry.width()),
         y: wrap(ly, geometry.height()),
     };
-    cx.primitive_style_mut(element).kind = gfx_object_STAMP_PRIM as u8;
+    cx.primitive_style_mut(element).kind = STAMP_PRIMITIVE;
     let side = get(cx.world, StoryKey::ARILOU_SPACE_SIDE) >> 1;
     let source = &cx.kernel.hyperstars[1 + usize::from(side)];
     let frames = Frames::retain_shared(
@@ -62,7 +63,7 @@ pub(super) fn ambient(cx: &mut Cx<'_>) {
     };
     cx.element_mut(element).player = NEUTRAL_PLAYER_NUM as i16;
     cx.element_mut(element).flags = (APPEARING | FINITE_LIFE | NONSOLID) as u16;
-    cx.primitive_style_mut(element).kind = gfx_object_STAMP_PRIM as u8;
+    cx.primitive_style_mut(element).kind = STAMP_PRIMITIVE;
     cx.element_mut(element).pre = Some(ElementHook::Native(animation_preprocess));
     let random = cx.random();
     let dx = (random as u8 as i32 % geometry.space_width) - (geometry.space_width >> 1);
@@ -235,7 +236,7 @@ fn add(cx: &mut Cx<'_>, encounter: &mut ENCOUNTER, universe: POINT) -> Option<El
             element,
             cx.retreat_frame(Frame::retain(cx.kernel.stars_in_space).view()),
         );
-        cx.primitive_style_mut(element).kind = gfx_object_NUM_PRIMS as u8;
+        cx.primitive_style_mut(element).kind = EMPTY_PRIMITIVE;
         cx.element_mut(element).flags |= (NONSOLID | IGNORE_VELOCITY) as u16;
         let tail = cx.elements().tail();
         cx.insert_before(element, tail);
@@ -268,7 +269,7 @@ fn process(
                 cx.element_mut(element).death = None;
                 return false;
             } else {
-                cx.primitive_style_mut(element).kind = gfx_object_STAMP_PRIM as u8;
+                cx.primitive_style_mut(element).kind = STAMP_PRIMITIVE;
             }
         }
     } else {
@@ -356,7 +357,7 @@ fn process(
         if cx.element_mut(element).flags & NONSOLID as u16 != 0 && encounter.transition_state == 0 {
             let next = cx.element(element).next.location;
             cx.element_mut(element).current.location = next;
-            cx.primitive_style_mut(element).kind = gfx_object_STAMP_PRIM as u8;
+            cx.primitive_style_mut(element).kind = STAMP_PRIMITIVE;
             if cx.element_mut(element).death.is_none() {
                 cx.init_intersect_start(element);
                 cx.element_mut(element).flags &= !(NONSOLID as u16);
@@ -369,7 +370,7 @@ fn process(
             cx.element_mut(element).death = None;
             return false;
         }
-        cx.primitive_style_mut(element).kind = gfx_object_NUM_PRIMS as u8;
+        cx.primitive_style_mut(element).kind = EMPTY_PRIMITIVE;
     }
     *stamp = POINT {
         x: ((point.x as i32 * 56 / (63 * 12)) as i16).wrapping_sub(ox),

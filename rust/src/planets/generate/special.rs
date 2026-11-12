@@ -26,8 +26,6 @@ pub const RED_GAS_GIANT: u8 = 56;
 pub const HIERARCHY_STARBASE: u8 = 127 | PLANET_SHIELDED;
 pub const MIN_MOON_RADIUS: i16 = 35;
 pub const EARTH_ATMOSPHERE: u16 = 50;
-/// `IN_ORBIT` (`grpinfo.h`).
-pub const IN_ORBIT: u8 = 0;
 /// `MELNORME_SHIP`, `URQUAN_SHIP` and `ZOQFOTPIK_SHIP` (`races.h`).
 pub const MELNORME_SHIP: u8 = 12;
 pub const URQUAN_SHIP: u8 = 18;

@@ -331,13 +331,13 @@ fn message_labels_use_the_borrowed_catalog_and_hyperspace_story() {
         },
         ships::native::abi::{
             IN_ENCOUNTER, IN_HYPERSPACE, IN_INTERPLANETARY, IN_LAST_BATTLE, NAVIGATION_STRING_BASE,
-            STAR_NUMBER_BASE,
         },
+        starbase::ids::STAR_NUMBER_BASE,
         strings::owned_table::LoadedTextTable,
         ui::sis::default_message_text,
     };
     let mut strings =
-        vec![vec![0]; (NAVIGATION_STRING_BASE + 2).max(STAR_NUMBER_BASE + 1) as usize];
+        vec![vec![0]; (NAVIGATION_STRING_BASE as usize + 2).max(STAR_NUMBER_BASE as usize + 1)];
     strings[NAVIGATION_STRING_BASE as usize] = b"Hyperspace\0".to_vec();
     strings[(NAVIGATION_STRING_BASE + 1) as usize] = b"Quasispace\0".to_vec();
     strings[STAR_NUMBER_BASE as usize] = b"Alpha\0".to_vec();

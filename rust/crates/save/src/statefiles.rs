@@ -170,13 +170,13 @@ impl<'a> Reader<'a> {
 
 /// `GROUP_HEADER`.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct GroupHeader {
-    pub(crate) num_groups: u8,
-    pub(crate) day_index: u8,
-    pub(crate) month_index: u8,
-    pub(crate) star_index: u16,
-    pub(crate) year_index: u16,
-    pub(crate) group_offset: [u32; NUM_SAVED_BATTLE_GROUPS + 1],
+pub struct GroupHeader {
+    pub num_groups: u8,
+    pub day_index: u8,
+    pub month_index: u8,
+    pub star_index: u16,
+    pub year_index: u16,
+    pub group_offset: [u32; NUM_SAVED_BATTLE_GROUPS + 1],
 }
 
 impl GroupHeader {

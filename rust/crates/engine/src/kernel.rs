@@ -3,8 +3,10 @@ pub mod lander_resources;
 mod pilot_flash;
 pub mod planet_animation;
 pub mod roster_flash;
+pub mod solar_resources;
 use super::battle::{
     kernel::{Channels, SoundQueue, StarPlane},
+    link_queue::RacePool,
     ShipId,
 };
 use crate::graphics::native_abi::{POINT, STRING as SOUND};
@@ -98,6 +100,7 @@ pub struct Kernel {
     pub status_message_mode: u32,
     pub star_map_flash: StarMapFlash,
     pub lander_resources: Option<lander_resources::LanderResources>,
+    pub solar_presentation: solar_resources::SolarPresentation,
     pub pilot_flash: std::cell::RefCell<PilotFlash>,
     pub roster_flash: roster_flash::RosterFlash,
     pub device_observation: crate::observe::DeviceObservation,
@@ -129,7 +132,7 @@ pub struct Kernel {
     ),
     pub portal_point: POINT,
     pub(super) elements: super::battle::ElementTable,
-    pub(super) races: [super::battle::link_queue::RacePool; 2],
+    pub(super) races: [RacePool; 2],
     ship_reset_pending: bool,
     battle_active: bool,
     pub display: super::battle::display::DisplayPool,
@@ -292,6 +295,7 @@ impl Kernel {
             status_message_mode: 1,
             star_map_flash: StarMapFlash::default(),
             lander_resources: None,
+            solar_presentation: Default::default(),
             pilot_flash: std::cell::RefCell::default(),
             roster_flash: roster_flash::RosterFlash::default(),
             device_observation: crate::observe::DeviceObservation::default(),
@@ -319,9 +323,7 @@ impl Kernel {
             hyperspace_ship_hooks: (None, None),
             portal_point: POINT { x: 0, y: 0 },
             elements: super::battle::ElementTable::with_capacity(150),
-            races: std::array::from_fn(|side| {
-                super::battle::link_queue::RacePool::with_capacity(side as u8, 0)
-            }),
+            races: std::array::from_fn(|side| RacePool::with_capacity(side as u8, 0)),
             ship_reset_pending: false,
             battle_active: false,
             display: super::battle::display::DisplayPool::new(),
@@ -346,7 +348,7 @@ impl Kernel {
 
 impl super::battle::Cx<'_> {
     #[cfg(not(test))]
-    pub fn race_pool(&self, side: usize) -> &super::battle::link_queue::RacePool {
+    pub fn race_pool(&self, side: usize) -> &RacePool {
         &self.kernel.races[side]
     }
 }

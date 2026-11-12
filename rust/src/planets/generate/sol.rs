@@ -3,6 +3,7 @@
 //! Live effects are provided by the solar-system mode.
 
 use crate::engine::world::planet::{NodeInfo, PlanetDesc, SystemInfo};
+use crate::engine::world::queues::IpGroup as IP_GROUP;
 use crate::engine::StoryKey;
 
 use super::generator::SystemGenerator;
@@ -127,7 +128,7 @@ pub fn init_npcs(host: &mut (impl FleetGroups + Story + ?Sized)) -> bool {
     if host.flag(StoryKey::PROBE_MESSAGE_DELIVERED) == 0
         && host.init_ip_groups()
         && host.head_ip_group(&mut |group| {
-            group.task = special::IN_ORBIT;
+            group.task = IP_GROUP::IN_ORBIT;
             group.sys_loc = 3;
             group.dest_loc = 3;
             group.loc.x = 0;
@@ -152,8 +153,8 @@ pub fn reinit_npcs<H: FleetGroups + orbital::Queues + Story + ?Sized>(host: &mut
         default::reinit_npcs(host);
         if host.battle_group_ref() != 0 {
             host.head_ip_group(&mut |group| {
-                if group.race_id == URQUAN_DRONE_SHIP && group.task & default::REFORM_GROUP != 0 {
-                    group.task = default::FLEE | default::IGNORE_FLAGSHIP;
+                if group.race_id == URQUAN_DRONE_SHIP && group.task & IP_GROUP::REFORM_GROUP != 0 {
+                    group.task = IP_GROUP::FLEE | IP_GROUP::IGNORE_FLAGSHIP;
                     group.dest_loc = 0;
                 }
             });

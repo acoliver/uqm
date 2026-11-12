@@ -30,13 +30,11 @@ pub(crate) mod live {
 
     use crate::planets::scan::state::ScanState;
 
-    use crate::planets::solarsys::drawing::DrawStarBackGround;
+    use crate::planets::solarsys::drawing::draw_star_background;
 
     use crate::graphics::gfx_common_abi::LoadIntoExtraScreen;
 
     use crate::planets::sphere::live::draw_default_planet_sphere;
-
-    use crate::planets::sphere::live::draw_planet;
 
     use crate::planets::sphere::live::zoom_in_planet_sphere;
 
@@ -99,47 +97,46 @@ pub(crate) mod live {
         }
     }
 
-    #[no_mangle]
-    unsafe extern "C" fn DrawPlanetSurfaceBorder() {
-        let g = CffiPlatform;
-        let old = g.set_context(ContextId::Space);
-        let old_clip = g.context_clip_rect();
-        let mut clip = old_clip;
-        clip.corner.x -= 1;
-        clip.width += 2;
-        clip.height += 1;
-        g.set_context_clip_rect(clip);
-        g.batch();
-        g.set_fg_color(Rgba::rgb15(10, 10, 10));
-        let mut r = Rect {
-            corner: Point {
-                x: 0,
-                y: clip.height - 75 - 5,
-            },
-            width: clip.width,
-            height: 3,
-        };
-        g.fill_rect(r);
-        g.set_fg_color(Rgba::rgb15(8, 8, 8));
-        r.width -= 1;
-        r.height = 1;
-        r.corner.x = 1;
-        r.corner.y -= 1;
-        g.fill_rect(r);
-        r.width = 1;
-        r.height = 77;
-        r.corner.y += 4;
-        r.corner.x = clip.width - 1;
-        g.fill_rect(r);
-        g.set_fg_color(Rgba::rgb15(16, 16, 16));
-        r.corner.x -= g.screen_size().0 as i16 - 78 + 1;
-        g.fill_rect(r);
-        r.width = g.screen_size().0 as i16 - 78 + 2;
-        r.height = 1;
-        g.fill_rect(r);
-        g.unbatch();
-        g.set_context_clip_rect(old_clip);
-        g.restore_context(old);
+    unsafe fn draw_planet_surface_border(space: &ContextLease, screen_width: i16) {
+        space.with_selected(|| {
+            let g = CffiPlatform;
+            let old_clip = g.context_clip_rect();
+            let mut clip = old_clip;
+            clip.corner.x -= 1;
+            clip.width += 2;
+            clip.height += 1;
+            g.set_context_clip_rect(clip);
+            g.batch();
+            g.set_fg_color(Rgba::rgb15(10, 10, 10));
+            let mut r = Rect {
+                corner: Point {
+                    x: 0,
+                    y: clip.height - 75 - 5,
+                },
+                width: clip.width,
+                height: 3,
+            };
+            g.fill_rect(r);
+            g.set_fg_color(Rgba::rgb15(8, 8, 8));
+            r.width -= 1;
+            r.height = 1;
+            r.corner.x = 1;
+            r.corner.y -= 1;
+            g.fill_rect(r);
+            r.width = 1;
+            r.height = 77;
+            r.corner.y += 4;
+            r.corner.x = clip.width - 1;
+            g.fill_rect(r);
+            g.set_fg_color(Rgba::rgb15(16, 16, 16));
+            r.corner.x -= screen_width - 78 + 1;
+            g.fill_rect(r);
+            r.width = screen_width - 78 + 2;
+            r.height = 1;
+            g.fill_rect(r);
+            g.unbatch();
+            g.set_context_clip_rect(old_clip);
+        });
     }
 
     const FULL: u8 = 0;
@@ -169,9 +166,16 @@ pub(crate) mod live {
             let name = std::ffi::CStr::from_bytes_until_nul(&cx.world.data.flagship.planet_name)
                 .unwrap_or_else(|error| panic!("invalid orbital planet name: {error}"));
             crate::ui::sis::draw_title(cx.kernel, dimensions.0, name);
+            let space = ContextLease::require(cx.kernel.space_context);
+            let screen_width = cx.screen_dimensions().0 as i16;
             cx.with_legacy(|| {
-                DrawStarBackGround();
-                DrawPlanetSurfaceBorder();
+                draw_star_background(
+                    &space,
+                    scan.background
+                        .as_ref()
+                        .unwrap_or_else(|| panic!("orbit background is not supplied")),
+                );
+                draw_planet_surface_border(&space, screen_width);
             });
         }
         cx.with_legacy(|| {
@@ -190,7 +194,7 @@ pub(crate) mod live {
             }
             if mode != WAIT {
                 scan.context().select();
-                draw_planet(&mut scan.sphere.borrow_mut(), 0, black());
+                scan.draw_surface(0, black());
             }
             if mode != UPDATE {
                 base::ScreenTransition(3, (&mut r as *mut CRect).cast());
@@ -224,15 +228,19 @@ pub(crate) mod live {
         ),
         in_orbit: bool,
         surface: Option<crate::engine::graphics::drawable_abi::LoadedDrawable>,
-        reports: crate::planets::report::typography::ReportResources,
+        resources: (
+            crate::planets::report::typography::ReportResources,
+            Option<crate::graphics::context_abi::ContextFrame>,
+        ),
     ) -> Option<OrbitPresentation> {
         let (star, body) = target;
+        let (reports, background) = resources;
         #[cfg(feature = "debug-process")]
         if crate::front_end::uqmdebug::DISABLE_INTERACTIVITY != 0 {
             return None;
         }
         let width = CffiPlatform.screen_size().0 as i16 - 78;
-        let presentation = OrbitPresentation::new(game.borrow().kernel, width, reports);
+        let presentation = OrbitPresentation::new(game.borrow().kernel, width, reports, background);
         let context = presentation.context();
         let sphere = presentation.sphere();
         let (animation, last_activity, pulsing_shield) = {
@@ -306,7 +314,7 @@ pub(crate) mod live {
                 ),
                 true,
                 1,
-                game.world.data.game.glob_flags & crate::navigation::abi::MUSIC_DISABLED as u8 == 0,
+                game.world.data.game.glob_flags & crate::engine::world::MUSIC_DISABLED == 0,
             );
         }
     }

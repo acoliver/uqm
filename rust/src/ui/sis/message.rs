@@ -1,7 +1,6 @@
 //! Campaign message labels borrowed from their world, catalog and text owners.
-use super::{
-    IN_HYPERSPACE, IN_INTERPLANETARY, IN_LAST_BATTLE, NAVIGATION_STRING_BASE, STAR_NUMBER_BASE,
-};
+use super::{IN_HYPERSPACE, IN_INTERPLANETARY, IN_LAST_BATTLE, NAVIGATION_STRING_BASE};
+use crate::starbase::ids::STAR_NUMBER_BASE;
 use crate::{
     engine::{Kernel, World},
     navigation::globals::in_hyper_space,

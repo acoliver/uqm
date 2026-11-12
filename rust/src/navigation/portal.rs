@@ -1,6 +1,7 @@
 //! Portal animation state used by hyperspace radar and contact elements.
 
-use super::abi::{ARILOU_SPACE_X, ARILOU_SPACE_Y, POINT, QUASI_SPACE_X, QUASI_SPACE_Y};
+use super::hyper_units::{ARILOU_SPACE_X, ARILOU_SPACE_Y, QUASI_SPACE_X, QUASI_SPACE_Y};
+use crate::engine::graphics::native_abi::POINT;
 use crate::engine::{Kernel, StoryKey, World};
 
 pub(super) fn portals(

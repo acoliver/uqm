@@ -179,15 +179,11 @@ pub use crate::navigation::abi::brief_ship_info;
 pub use crate::navigation::abi::encounter;
 extern "C" {
 }
-extern "C" {
-    pub static mut EncounterGroup: BYTE;
-}
 pub const STAR_STRING_BASE: _bindgen_ty_24 = 0;
 pub const DEVICE_STRING_BASE: _bindgen_ty_24 = 133;
 pub const CARGO_STRING_BASE: _bindgen_ty_24 = 162;
 pub const ELEMENTS_STRING_BASE: _bindgen_ty_24 = 172;
 pub const SCAN_STRING_BASE: _bindgen_ty_24 = 305;
-pub const STAR_NUMBER_BASE: _bindgen_ty_24 = 361;
 pub use crate::engine::save::summary::PLANET_NUMBER_BASE;
 pub const MONTHS_STRING_BASE: _bindgen_ty_24 = 408;
 pub const FEEDBACK_STRING_BASE: _bindgen_ty_24 = 420;

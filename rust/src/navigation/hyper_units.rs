@@ -1,5 +1,12 @@
 //! Original, resolution-dependent hyperspace coordinate factors.
 
+pub const ARILOU_SPACE_X: u32 = 438;
+pub const ARILOU_SPACE_Y: u32 = 6372;
+pub const QUASI_SPACE_X: u32 = 5000;
+pub const QUASI_SPACE_Y: u32 = 5000;
+pub const ARILOU_HOME_X: u32 = 6134;
+pub const ARILOU_HOME_Y: u32 = 5900;
+
 pub(super) fn log_x(universe: i16, space_width: i32) -> i32 {
     (universe as i32 * ((space_width << 5) >> 4) * 195 + 3125) / 6250
 }

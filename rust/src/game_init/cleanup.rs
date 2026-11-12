@@ -13,8 +13,6 @@ extern "C" {
 
 use crate::game_init::space_resources::live::uninit_space;
 
-use crate::planets::solarsys::resources::FreeIPData;
-
 /// # Safety
 /// Run on the game thread after the game loop stops, before graphics teardown.
 pub unsafe fn free_kernel(kernel: &mut crate::engine::Kernel) {
@@ -58,10 +56,7 @@ unsafe fn uninit_kernel(kernel: &mut crate::engine::Kernel) {
 pub unsafe fn free_game_data(cx: &mut crate::engine::battle::Cx<'_>) {
     crate::navigation::globals::free_sc2_data(cx.kernel);
     cx.kernel.lander_resources = None;
-    // SAFETY: the resource callbacks run synchronously while Cx access is suspended.
-    crate::app::bridge::publish(cx, || {
-        FreeIPData();
-    });
+    cx.kernel.solar_presentation.assets = None;
     crate::navigation::hyper_data::free_hyper_data(cx.kernel);
 }
 

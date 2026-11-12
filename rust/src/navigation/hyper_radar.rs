@@ -7,7 +7,7 @@ use crate::engine::{
 
 use super::hyper_encounters::{allocate, ambient, process_all, XOFFS, YOFFS};
 use super::hyper_transition::{portal_collision, portal_death, star_collision, star_death};
-use super::hyper_units::Geometry;
+use super::hyper_units::{Geometry, ARILOU_HOME_X, ARILOU_HOME_Y};
 use super::{color, get};
 use crate::engine::battle::views::FrameSelection as Frame;
 use crate::graphics::context_abi::{ContextFrame, ContextLease};

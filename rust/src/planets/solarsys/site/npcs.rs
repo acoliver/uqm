@@ -168,10 +168,7 @@ impl crate::planets::generate::sam::GuardSite for Site<'_, '_, '_> {
     }
     fn reset_encounter(&mut self) {
         let mut game = self.game.borrow_mut();
-        let world = &mut *game.world;
-
-        // SAFETY: encounter state is only accessed on the game thread.
-        unsafe { reset_encounter(world) };
+        reset_encounter(game.world);
     }
     fn built_ship_count(&self) -> u16 {
         let mut game = self.game.borrow_mut();
@@ -241,12 +238,8 @@ impl crate::planets::generate::sam::GuardSite for Site<'_, '_, '_> {
             x: location.x,
             y: location.y,
         };
-        let point = crate::planets::solar_coords::to_display(
-            location,
-            solar_frame.zoom_radius,
-            solar_frame.screen.0 - 78,
-            solar_frame.screen.1 - 13,
-        );
+        let point = crate::planets::solar_coords::SolarCoordinates::new(solar_frame.screen)
+            .to_display(location, solar_frame.zoom_radius);
         world.data.game.ship_stamp.origin = CPoint {
             x: point.x,
             y: point.y,

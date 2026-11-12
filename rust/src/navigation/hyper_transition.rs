@@ -6,6 +6,7 @@ use crate::battle::context_access::StarOps;
 use crate::engine::StoryKey;
 use std::ptr;
 
+use crate::engine::graphics::EMPTY_PRIMITIVE;
 pub(crate) fn element_universe(cx: &Cx<'_>, element: ElementId) -> POINT {
     let point = cx.element(element).next.location;
     let (width, height) = cx.screen_dimensions();
@@ -65,7 +66,7 @@ pub(crate) fn unhyper(cx: &mut Cx<'_>, element: ElementId) {
                 _ => unreachable!(),
             }
             cx.element_mut(element).velocity.zero();
-            cx.primitive_style_mut(element).kind = gfx_object_NUM_PRIMS as u8;
+            cx.primitive_style_mut(element).kind = EMPTY_PRIMITIVE;
             return;
         }
     }

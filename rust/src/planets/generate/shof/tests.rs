@@ -3,12 +3,12 @@
 use super::{
     generate_planets, init_npcs, reinit_npcs, uninit_npcs, ShofixtiSite, METAL_WORLD, NUM_PLANETS,
 };
-use crate::c_bindings::global_state::IP_GROUP;
 use crate::comm::dispatch::ship::{SHOFIXTI_SHIP, UMGAH_SHIP};
 use crate::engine::world::planet::PlanetDesc;
+use crate::engine::world::queues::IpGroup as IP_GROUP;
 use crate::engine::StoryKey;
 use crate::math::RandomContext;
-use crate::planets::generate::default::{Npcs, FLEE, IGNORE_FLAGSHIP, REFORM_GROUP};
+use crate::planets::generate::default::Npcs;
 use crate::planets::generate::home_contact::tests::FakeStory;
 use crate::planets::generate::special::{FleetGroups, Story, SELENIC_WORLD};
 
@@ -232,13 +232,13 @@ fn nothing_is_stored_once_the_shofixti_are_recruited() {
 
 #[test]
 fn a_recruited_shofixti_the_flagship_collided_with_flees() {
-    let collided = FLEE | IGNORE_FLAGSHIP | REFORM_GROUP;
+    let collided = IP_GROUP::FLEE | IP_GROUP::IGNORE_FLAGSHIP | IP_GROUP::REFORM_GROUP;
     for (race, task, recruited, group_ref, flees) in [
-        (SHOFIXTI_SHIP, REFORM_GROUP, 1, 3, true),
-        (SHOFIXTI_SHIP, REFORM_GROUP, 0, 3, false),
+        (SHOFIXTI_SHIP, IP_GROUP::REFORM_GROUP, 1, 3, true),
+        (SHOFIXTI_SHIP, IP_GROUP::REFORM_GROUP, 0, 3, false),
         (SHOFIXTI_SHIP, 0, 1, 3, false),
-        (UMGAH_SHIP, REFORM_GROUP, 1, 3, false),
-        (SHOFIXTI_SHIP, REFORM_GROUP, 1, 0, false),
+        (UMGAH_SHIP, IP_GROUP::REFORM_GROUP, 1, 3, false),
+        (SHOFIXTI_SHIP, IP_GROUP::REFORM_GROUP, 1, 0, false),
     ] {
         let mut story = story(recruited, 0, 0, 0);
         let mut host = Host::new(group_ref, true);
@@ -260,9 +260,12 @@ fn a_recruited_shofixti_the_flagship_collided_with_flees() {
 fn init_checks_the_old_shofixti_after_the_default_groups() {
     let mut story = story(1, 0, 0, 0);
     let mut host = Host::new(3, true);
-    host.groups = vec![group(SHOFIXTI_SHIP, REFORM_GROUP)];
+    host.groups = vec![group(SHOFIXTI_SHIP, IP_GROUP::REFORM_GROUP)];
     init_npcs(&mut (&mut story, &mut host));
-    assert_eq!(host.groups[0].task, FLEE | IGNORE_FLAGSHIP | REFORM_GROUP);
+    assert_eq!(
+        host.groups[0].task,
+        IP_GROUP::FLEE | IP_GROUP::IGNORE_FLAGSHIP | IP_GROUP::REFORM_GROUP
+    );
 }
 
 #[test]

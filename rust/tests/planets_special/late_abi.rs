@@ -220,18 +220,22 @@ fn check_live_queues(harness: &mut Harness) {
         assert_eq!(harness.rng_position(), 104729);
         World::current().write(|world| world.queues = saved_queues);
 
-        use uqm_rust::c_bindings::global_state::{EncounterGroup, POINT};
+        use uqm_rust::engine::graphics::native_abi::POINT;
         let saved_race = World::current().read(|w| w.encounter_race);
-        let saved_group = std::ptr::addr_of!(EncounterGroup).read();
-        World::current().write(|w| w.encounter_race = 18);
-        std::ptr::addr_of_mut!(EncounterGroup).write(7);
+        let saved_group = World::current().read(|w| w.encounter_group);
+        World::current().write(|w| {
+            w.encounter_race = 18;
+            w.encounter_group = 7;
+        });
         crate::invoke_generation(&mut harness.state, |_, host| {
             GuardSite::reset_encounter(host)
         });
         assert_eq!(World::current().read(|w| w.encounter_race), -1);
-        assert_eq!(std::ptr::addr_of!(EncounterGroup).read(), 0);
-        World::current().write(|w| w.encounter_race = saved_race);
-        std::ptr::addr_of_mut!(EncounterGroup).write(saved_group);
+        assert_eq!(World::current().read(|w| w.encounter_group), 0);
+        World::current().write(|w| {
+            w.encounter_race = saved_race;
+            w.encounter_group = saved_group;
+        });
 
         let saved_location =
             std::ptr::addr_of!((**uqm_rust::engine::WorldData::current()).game.ip_location).read();

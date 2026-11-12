@@ -3,10 +3,10 @@
 use crate::engine::graphics::native_abi::POINT;
 use crate::engine::math::battle_types::{arctan, cosine, sine};
 use crate::engine::world::planet::{PlanetDesc, PlanetFrame};
-use crate::engine::world::queues::IpGroup as IP_GROUP;
+use crate::engine::world::queues::{IpGroup as IP_GROUP, STATION_RADIUS};
 use crate::engine::StoryKey;
 use crate::math::RandomContext;
-use crate::planets::generate::default::{self, FLEE, IGNORE_FLAGSHIP, REFORM_GROUP};
+use crate::planets::generate::default;
 use crate::planets::generate::home_contact::HomeContactSite;
 use crate::planets::generate::orbits::MOON_DELTA;
 use crate::planets::generate::special::{self, Body, Story, MIN_MOON_RADIUS, URQUAN_SHIP};
@@ -15,8 +15,6 @@ use crate::planets::generate::yehat::{CHECK_ABORT, CHECK_LOAD, START_INTERPLANET
 // `races.h`, `grpinfo.h`, `plandata.h`, `units.h` and `globdata.h`.
 const BLACK_URQUAN_SHIP: u8 = 21;
 const MAX_SHIPS_PER_SIDE: u8 = 14;
-const ON_STATION: u8 = 3;
-const STATION_RADIUS: i32 = 1600;
 const SA_MATRA: u8 = 126 | 0x80;
 const LAST_BATTLE: u16 = 1 | (1 << 10);
 const GUARDS: usize = 16;
@@ -101,13 +99,13 @@ fn build_guard(site: &mut (impl GuardSite + Story + ?Sized)) {
             } else if index == 12 {
                 angle = 0;
             }
-            group.task = ON_STATION | IGNORE_FLAGSHIP;
+            group.task = IP_GROUP::ON_STATION | IP_GROUP::IGNORE_FLAGSHIP;
             group.sys_loc = 0;
             group.dest_loc = 5;
             group.orbit_pos = (((angle + 2) >> 2) & 15) as u8;
             group.group_counter = 0;
-            group.loc.x = (i32::from(origin.x) + cosine(angle, STATION_RADIUS)) as i16;
-            group.loc.y = (i32::from(origin.y) + sine(angle, STATION_RADIUS)) as i16;
+            group.loc.x = (i32::from(origin.x) + cosine(angle, STATION_RADIUS as i32)) as i16;
+            group.loc.y = (i32::from(origin.y) + sine(angle, STATION_RADIUS as i32)) as i16;
             angle += if index < 12 { 4 } else { 16 };
             index += 1;
         }
@@ -122,11 +120,11 @@ pub fn reinit_npcs(site: &mut (impl GuardSite + Story + ?Sized)) -> bool {
     let messed_up = site.flag(StoryKey::URQUAN_MESSED_UP) != 0;
     site.for_each_ip_group(&mut |group| {
         if messed_up {
-            group.task &= REFORM_GROUP;
-            group.task |= FLEE | IGNORE_FLAGSHIP;
+            group.task &= IP_GROUP::REFORM_GROUP;
+            group.task |= IP_GROUP::FLEE | IP_GROUP::IGNORE_FLAGSHIP;
             group.dest_loc = 0;
-        } else if group.task & REFORM_GROUP != 0 {
-            group.task &= !REFORM_GROUP;
+        } else if group.task & IP_GROUP::REFORM_GROUP != 0 {
+            group.task &= !IP_GROUP::REFORM_GROUP;
             group.group_counter = 0;
             engaged = true;
         }

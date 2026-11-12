@@ -25,7 +25,7 @@ pub(crate) mod runtime {
     use save_load::pick_game;
 
     use super::{picker_action, picker_slot, PickerAction, MAX_SAVED_GAMES, SAVES_PER_PAGE};
-    use crate::engine::world::generation::SolarSnapshot;
+    use crate::engine::world::{generation::SolarSnapshot, MUSIC_DISABLED};
     use crate::engine::{battle::Cx, input::InputSession, observe::Io, Kernel};
     use crate::graphics::context_abi::ContextLease;
     use crate::navigation::abi::{
@@ -794,7 +794,7 @@ pub(crate) mod runtime {
         let mut text = Vec::new();
         let option = match setting {
             SOUND_ON_SETTING | SOUND_OFF_SETTING => Some((0, SOUND_DISABLED as u8)),
-            MUSIC_ON_SETTING | MUSIC_OFF_SETTING => Some((1, MUSIC_DISABLED as u8)),
+            MUSIC_ON_SETTING | MUSIC_OFF_SETTING => Some((1, MUSIC_DISABLED)),
             CYBORG_OFF_SETTING..=CYBORG_SUPER_SETTING => Some((2, CYBORG_ENABLED as u8)),
             _ => None,
         };

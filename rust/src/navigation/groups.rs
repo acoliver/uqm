@@ -1,9 +1,10 @@
 //! Save-compatible battle-group records and encounter group construction.
 
-use super::abi::{GROUP_HEADER, IP_GROUP, SHIP_FRAGMENT};
+use crate::engine::world::queues::{IpGroup as IP_GROUP, ShipFragment as SHIP_FRAGMENT};
 #[cfg(not(test))]
 use crate::engine::StoryKey;
 use crate::engine::World;
+use uqm_save::statefiles::GroupHeader;
 
 use crate::state::c_api::{read_state_file, write_state_file, GameStateFile};
 
@@ -16,11 +17,7 @@ unsafe fn write(world: &mut World, file: *mut GameStateFile, bytes: &[u8]) {
     write_state_file(world, bytes.as_ptr().cast(), 1, bytes.len() as u16, file);
 }
 
-unsafe fn read_group_header(
-    world: &mut World,
-    file: *mut GameStateFile,
-    header: &mut GROUP_HEADER,
-) {
+unsafe fn read_group_header(world: &mut World, file: *mut GameStateFile, header: &mut GroupHeader) {
     decode_header(&read::<268>(world, file), header);
 }
 
@@ -29,9 +26,9 @@ unsafe fn read_group_header(
 pub unsafe fn write_group_header(
     world: &mut World,
     file: *mut GameStateFile,
-    header: *const GROUP_HEADER,
+    header: &GroupHeader,
 ) {
-    write(world, file, &encode_header(&*header));
+    write(world, file, &encode_header(header));
 }
 
 unsafe fn read_ship_fragment(
@@ -55,14 +52,14 @@ unsafe fn write_ip_group(world: &mut World, file: *mut GameStateFile, group: &IP
     write(world, file, &encode_group(group));
 }
 
-fn decode_header(bytes: &[u8; 268], header: &mut GROUP_HEADER) {
-    header.NumGroups = bytes[0];
+fn decode_header(bytes: &[u8; 268], header: &mut GroupHeader) {
+    header.num_groups = bytes[0];
     header.day_index = bytes[1];
     header.month_index = bytes[2];
     header.star_index = u16::from_ne_bytes([bytes[4], bytes[5]]);
     header.year_index = u16::from_ne_bytes([bytes[6], bytes[7]]);
     for (offset, bytes) in header
-        .GroupOffset
+        .group_offset
         .iter_mut()
         .zip(bytes[8..].as_chunks::<4>().0)
     {
@@ -70,16 +67,16 @@ fn decode_header(bytes: &[u8; 268], header: &mut GROUP_HEADER) {
     }
 }
 
-fn encode_header(header: &GROUP_HEADER) -> [u8; 268] {
+fn encode_header(header: &GroupHeader) -> [u8; 268] {
     let mut bytes = [0; 268];
-    bytes[..3].copy_from_slice(&[header.NumGroups, header.day_index, header.month_index]);
+    bytes[..3].copy_from_slice(&[header.num_groups, header.day_index, header.month_index]);
     bytes[4..6].copy_from_slice(&header.star_index.to_ne_bytes());
     bytes[6..8].copy_from_slice(&header.year_index.to_ne_bytes());
     for (bytes, offset) in bytes[8..]
         .as_chunks_mut::<4>()
         .0
         .iter_mut()
-        .zip(header.GroupOffset)
+        .zip(header.group_offset)
     {
         *bytes = offset.to_ne_bytes();
     }
@@ -158,8 +155,20 @@ fn cosine(angle: u32, magnitude: i32) -> i32 {
 #[cfg(not(test))]
 pub(crate) mod live {
     use super::*;
-    use crate::navigation::abi::*;
+    use crate::comm::dispatch::ship::{SLYLANDRO_SHIP, SUPOX_SHIP, UTWIG_SHIP};
+    use crate::engine::world::queues::IpGroup as IP_GROUP;
+    use crate::engine::{
+        graphics::native_abi::POINT,
+        math::battle_types::{CIRCLE_SHIFT, FACING_SHIFT},
+        save::groups::MAX_BATTLE_GROUPS,
+        world::{
+            fleet::SPHERE_RADIUS_INCREMENT,
+            queues::{FleetInfo as FLEET_INFO, MAX_REVOLUTIONS, STATION_RADIUS},
+        },
+    };
+    use crate::math::{random as TFB_Random, square_root};
     use crate::navigation::get;
+    use crate::planets::generate::identities::*;
 
     use crate::state::c_api::{
         close_state_file, delete_state_file, length_state_file, open_state_file, seek_state_file,
@@ -169,7 +178,7 @@ pub(crate) mod live {
     const ENCOUNTER_PERCENT: [u8; 24] = [
         0, 0, 0, 20, 20, 0, 10, 20, 20, 20, 20, 40, 0, 20, 60, 20, 5, 20, 40, 0, 0, 40, 40, 0,
     ];
-    const HOME_SYSTEMS: [u32; 23] = [
+    const HOME_SYSTEMS: [u8; 23] = [
         0,
         0,
         0,
@@ -205,8 +214,8 @@ pub(crate) mod live {
             c"r+b".as_ptr(),
         )
     }
-    fn empty_header() -> GROUP_HEADER {
-        let mut header: GROUP_HEADER = unsafe { mem::zeroed() };
+    fn empty_header() -> GroupHeader {
+        let mut header: GroupHeader = unsafe { mem::zeroed() };
         header.star_index = u16::MAX;
         header
     }
@@ -305,11 +314,7 @@ pub(crate) mod live {
         })
     }
 
-    unsafe fn select_encounter(
-        world: &World,
-        home: &[u32; 23],
-        percent: &[u8; 24],
-    ) -> (usize, u16) {
+    unsafe fn select_encounter(world: &World, home: &[u8; 23], percent: &[u8; 24]) -> (usize, u16) {
         let universe = (*world.star_pointer()).star_pt;
         let mut best_index = 0usize;
         let mut best_percent = 0u16;
@@ -322,7 +327,7 @@ pub(crate) mod live {
             let radius = fleet.actual_strength;
             let chance = percent[index] as u16;
             if radius != 0 && chance != 0 {
-                if home[index] != 0 && (*world.star_pointer()).index as u32 == home[index] {
+                if home[index] != 0 && (*world.star_pointer()).index == home[index] {
                     best_index = index;
                     best_percent = if home[index] == SPATHI_DEFINED || home[index] == SUPOX_DEFINED
                     {
@@ -370,11 +375,11 @@ pub(crate) mod live {
         let (best_index, best_percent) = select_encounter(world, &home, &percent);
         if best_percent != 0 {
             let mut number = ((TFB_Random() as u16 % (best_percent >> 1)) + 1) as u8;
-            if number > MAX_BATTLE_GROUPS as u8 {
-                number = MAX_BATTLE_GROUPS as u8;
+            if number > MAX_BATTLE_GROUPS {
+                number = MAX_BATTLE_GROUPS;
             } else if number < 5
                 && home[best_index] != 0
-                && (*world.star_pointer()).index as u32 == home[best_index]
+                && (*world.star_pointer()).index == home[best_index]
             {
                 number = 5;
             }
@@ -405,14 +410,14 @@ pub(crate) mod live {
         group.group_id = which;
         group.in_system = 1;
         let random = TFB_Random();
-        let mut task = random as u8 % ON_STATION as u8;
-        if task == FLEE as u8 {
-            task = ON_STATION as u8;
+        let mut task = random as u8 % IP_GROUP::ON_STATION;
+        if task == IP_GROUP::FLEE {
+            task = IP_GROUP::ON_STATION;
         }
         group.orbit_pos = (random >> 16) as u8 & 15;
         let mut location = solar.planet_count;
-        if location == 1 && task == EXPLORE as u8 {
-            task = IN_ORBIT as u8;
+        if location == 1 && task == IP_GROUP::EXPLORE {
+            task = IP_GROUP::IN_ORBIT;
         } else {
             location = ((random >> 8) as u8 % location) + 1;
         }
@@ -421,9 +426,9 @@ pub(crate) mod live {
         group.loc.x = ((random as u16 % 10000) as i32 - 5000) as i16;
         group.loc.y = (((random >> 16) % 10000) as i32 - 5000) as i16;
         group.group_counter = 0;
-        if task == EXPLORE as u8 {
+        if task == IP_GROUP::EXPLORE {
             group.group_counter = (TFB_Random() as u16 % MAX_REVOLUTIONS as u16) << FACING_SHIFT;
-        } else if task == ON_STATION as u8 {
+        } else if task == IP_GROUP::ON_STATION {
             let origin = crate::planets::solar_coords::outer_location(solar, location as u16 - 1);
             let angle = (group.orbit_pos as u32 + 1) << (CIRCLE_SHIFT - FACING_SHIFT);
             group.loc.x = (origin.x as i32 + cosine(angle, STATION_RADIUS as i32)) as i16;
@@ -437,14 +442,14 @@ pub(crate) mod live {
     unsafe fn flush(
         world: &mut World,
 
-        header: &mut GROUP_HEADER,
+        header: &mut GroupHeader,
         offset: u32,
         which: u8,
         file: *mut GameStateFile,
     ) {
         if which == 0 {
-            if header.GroupOffset[0] == 0 {
-                header.GroupOffset[0] = length_state_file(world, file);
+            if header.group_offset[0] == 0 {
+                header.group_offset[0] = length_state_file(world, file);
             }
             assert_eq!(world.npc_built_ships_ref().count(), 0);
             let mut next = world.ip_groups_ref().head();
@@ -458,19 +463,19 @@ pub(crate) mod live {
                     } else {
                         flush(world, header, 0, group.group_id, file);
                     }
-                    header.GroupOffset[usize::from(group.group_id)] = 0;
+                    header.group_offset[usize::from(group.group_id)] = 0;
                     world.ip_groups().remove(id);
                     world.ip_groups().free(id);
                 }
             }
-        } else if which > header.NumGroups {
-            header.NumGroups = which;
-            header.GroupOffset[usize::from(which)] = length_state_file(world, file);
+        } else if which > header.num_groups {
+            header.num_groups = which;
+            header.group_offset[usize::from(which)] = length_state_file(world, file);
         }
         seek(world, file, offset);
         super::write_group_header(world, file, header);
         if which == 0 {
-            seek(world, file, header.GroupOffset[0]);
+            seek(world, file, header.group_offset[0]);
             write(
                 world,
                 file,
@@ -491,7 +496,7 @@ pub(crate) mod live {
             let ships = world.npc_built_ships_ref();
             let race = ships.head().map_or(0, |id| ships.get(id).race_id);
             let count = ships.count() as u8;
-            seek(world, file, header.GroupOffset[usize::from(which)]);
+            seek(world, file, header.group_offset[usize::from(which)]);
             write(world, file, &[race, count]);
             let mut next = world.npc_built_ships_ref().head();
             while let Some(id) = next {
@@ -508,9 +513,9 @@ pub(crate) mod live {
         world: &mut World,
         file: *mut GameStateFile,
         offset: u32,
-        header: &GROUP_HEADER,
+        header: &GroupHeader,
         solar: &crate::engine::world::generation::SolarSnapshot,
-    ) -> BOOLEAN {
+    ) -> u32 {
         world.ip_groups().reinit();
         let mut day = header.day_index as u16;
         let mut month = header.month_index as u16;
@@ -529,11 +534,11 @@ pub(crate) mod live {
             close_state_file(world, file);
             return 0;
         }
-        for which in 1..=header.NumGroups {
-            if header.GroupOffset[which as usize] == 0 {
+        for which in 1..=header.num_groups {
+            if header.group_offset[which as usize] == 0 {
                 continue;
             }
-            seek(world, file, header.GroupOffset[which as usize]);
+            seek(world, file, header.group_offset[which as usize]);
             let race = read::<1>(world, file)[0];
             let ships = read::<1>(world, file)[0];
             if ships == 0 {
@@ -556,7 +561,7 @@ pub(crate) mod live {
         world: &mut World,
         offset: u32,
         solar: &crate::engine::world::generation::SolarSnapshot,
-    ) -> BOOLEAN {
+    ) -> u32 {
         let file = open(world, offset, u8::MAX);
         if file.is_null() {
             return 0;
@@ -569,26 +574,26 @@ pub(crate) mod live {
 
     /// # Safety
     /// Current world and solar-system queues must be initialized and exclusively accessible.
-    pub unsafe fn get_group_info(world: &mut World, offset: u32, which: u8) -> BOOLEAN {
+    pub unsafe fn get_group_info(world: &mut World, offset: u32, which: u8) -> u32 {
         let file = open(world, offset, which);
         if file.is_null() {
             return 0;
         }
         seek(world, file, offset);
-        let mut header: GROUP_HEADER = mem::zeroed();
+        let mut header: GroupHeader = mem::zeroed();
         super::read_group_header(world, file, &mut header);
         assert_ne!(
             which,
             u8::MAX,
             "solar group initialization requires supplied geometry"
         );
-        if header.GroupOffset[which as usize] == 0 {
+        if header.group_offset[which as usize] == 0 {
             close_state_file(world, file);
             return 0;
         }
         if which == 0 {
             let left = world.npc_built_ships_ref().count();
-            seek(world, file, header.GroupOffset[0]);
+            seek(world, file, header.group_offset[0]);
             world.last_encounter_group = read::<1>(world, file)[0];
             if world.last_encounter_group != 0 {
                 if world.data.game.battle_group_ref != 0 {
@@ -603,7 +608,7 @@ pub(crate) mod live {
             }
             world.npc_built_ships().reinit();
             world.ip_groups().reinit();
-            seek(world, file, header.GroupOffset[0] + 1);
+            seek(world, file, header.group_offset[0] + 1);
             let mut number = read::<1>(world, file)[0];
             while number != 0 {
                 let race = read::<1>(world, file)[0];
@@ -629,7 +634,7 @@ pub(crate) mod live {
             }
             world.ip_groups().reinit();
             world.npc_built_ships().reinit();
-            seek(world, file, header.GroupOffset[which as usize] + 1);
+            seek(world, file, header.group_offset[which as usize] + 1);
             let mut number = read::<1>(world, file)[0];
             while number != 0 {
                 let race = read::<1>(world, file)[0];
@@ -652,7 +657,7 @@ pub(crate) mod live {
         if file.is_null() {
             return offset;
         }
-        let mut header: GROUP_HEADER = mem::zeroed();
+        let mut header: GroupHeader = mem::zeroed();
         if offset == u32::MAX {
             offset = length_state_file(world, file);
             seek(world, file, offset);
@@ -746,16 +751,16 @@ mod tests {
             seek_state_file(world, file, 0, 0);
             super::read_ship_fragment(world, file, &mut ship);
             assert_eq!((ship.crew_level, ship.max_crew, ship.race_id), (44, 255, 6));
-            let mut header: GROUP_HEADER = std::mem::zeroed();
-            header.NumGroups = 16;
+            let mut header: GroupHeader = std::mem::zeroed();
+            header.num_groups = 16;
             header.star_index = 0x1234;
             header.year_index = 2160;
-            header.GroupOffset[64] = 0xabcdef01;
+            header.group_offset[64] = 0xabcdef01;
             seek_state_file(world, file, 0, 0);
             super::write_group_header(world, file, &header);
             assert_eq!(length_state_file(world, file), 268);
             seek_state_file(world, file, 0, 0);
-            let mut restored_header: GROUP_HEADER = std::mem::zeroed();
+            let mut restored_header: GroupHeader = std::mem::zeroed();
             super::read_group_header(world, file, &mut restored_header);
             assert_eq!(encode_header(&restored_header), encode_header(&header));
             close_state_file(world, file);
@@ -771,13 +776,13 @@ mod record_tests {
     #[test]
     fn header_bytes_keep_native_endian_fields_and_zero_padding() {
         // SAFETY: this record contains only integers, nullable pointers and optional callbacks.
-        let mut header: GROUP_HEADER = unsafe { std::mem::zeroed() };
-        header.NumGroups = 2;
+        let mut header: GroupHeader = unsafe { std::mem::zeroed() };
+        header.num_groups = 2;
         header.day_index = 3;
         header.month_index = 4;
         header.star_index = 0x0506;
         header.year_index = 0x0708;
-        for (i, offset) in header.GroupOffset.iter_mut().enumerate() {
+        for (i, offset) in header.group_offset.iter_mut().enumerate() {
             *offset = 0x12340000 + i as u32;
         }
         let bytes = encode_header(&header);
@@ -788,12 +793,12 @@ mod record_tests {
             assert_eq!(*chunk, (0x12340000 + i as u32).to_ne_bytes());
         }
         // SAFETY: this record contains only integers, nullable pointers and optional callbacks.
-        let mut restored: GROUP_HEADER = unsafe { std::mem::zeroed() };
+        let mut restored: GroupHeader = unsafe { std::mem::zeroed() };
         decode_header(&bytes, &mut restored);
-        assert_eq!(restored.GroupOffset, header.GroupOffset);
+        assert_eq!(restored.group_offset, header.group_offset);
         assert_eq!(restored.star_index, header.star_index);
         assert_eq!(restored.year_index, header.year_index);
-        assert_eq!(restored.NumGroups, header.NumGroups);
+        assert_eq!(restored.num_groups, header.num_groups);
     }
 
     #[test]

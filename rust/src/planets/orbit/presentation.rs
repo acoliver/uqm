@@ -17,6 +17,7 @@ impl OrbitPresentation {
         kernel: &Kernel,
         width: i16,
         reports: crate::planets::report::typography::ReportResources,
+        background: Option<ContextFrame>,
     ) -> Self {
         let space = ContextLease::require(kernel.space_context);
         let planet = space.with_selected(|| {
@@ -36,6 +37,7 @@ impl OrbitPresentation {
                 width,
                 sphere.clone(),
                 reports,
+                background,
             ),
             sphere,
         }
@@ -74,8 +76,8 @@ mod tests {
                 height: 227,
             },
         });
-        let first = OrbitPresentation::new(&game.kernel, 242, Default::default());
-        let second = OrbitPresentation::new(&game.kernel, 242, Default::default());
+        let first = OrbitPresentation::new(&game.kernel, 242, Default::default(), None);
+        let second = OrbitPresentation::new(&game.kernel, 242, Default::default(), None);
         let first_sphere = first.sphere();
         assert!(Rc::ptr_eq(&first_sphere, &first.scan().sphere));
         {

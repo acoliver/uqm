@@ -3,15 +3,18 @@
 use super::drawing::*;
 use super::flight::*;
 use super::*;
-use crate::engine::{battle::Cx, observe::Io, Kernel, StoryKey, World, WorldData};
+use crate::engine::{battle::Cx, observe::Io, StoryKey, World};
 
 use super::site::dispatch::invoke;
 use crate::comm::locdata::CPoint;
 use crate::engine::world::generation::Body;
-use crate::graphics::pixmap_abi::{GetFrameIndex, ReleaseDrawable, SetAbsFrameIndex};
+use crate::graphics::pixmap_abi::GetFrameIndex;
 use crate::planets::devices::devices_menu;
 use crate::planets::generate::calc::preview_body;
-use crate::planets::solar_system::{SolarSystem, SystemLocation};
+use crate::planets::{
+    solar_coords::star_seed,
+    solar_system::{SolarSystem, SystemLocation},
+};
 use crate::sound::heart_ffi::PLRPlaying;
 
 // globdata.h activity flags occupy the high byte of ACTIVITY.
@@ -49,15 +52,11 @@ const SAMATRA_DEFINED: u8 = 29;
 const PLANET_NUMBER_BASE: u16 = 375;
 const STARBASE_STRING_BASE: u16 = 422;
 
-static mut NEXT_TIME: u32 = 0;
-
 mod ffi {
 
     pub(super) use crate::graphics::drawable_abi::SetContextFGFrame;
     pub(super) use crate::time::counter_abi::GetTimeCounter;
     pub(super) use crate::ui::settings::stop_music;
-
-    pub(super) use crate::graphics::drawable_abi::DestroyDrawable;
 
     pub(super) use crate::graphics::context_abi::SetContext;
 
@@ -69,7 +68,7 @@ mod ffi {
 
     pub(super) use crate::graphics::cmap_abi::FadeScreen;
 
-    pub(super) use crate::navigation::interplanetary::live::do_missions as DoMissions;
+    pub(super) use crate::navigation::interplanetary::do_missions as DoMissions;
 
     pub(super) use crate::state::c_api::planets::get_planet_info;
 
@@ -91,12 +90,6 @@ mod ffi {
 
     pub(super) use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
     pub(super) use crate::threading::pacing::linked::sleep_thread_until as SleepThreadUntil;
-}
-
-#[inline]
-#[track_caller]
-pub(super) fn glob() -> crate::engine::Projection<crate::engine::WorldData> {
-    WorldData::current()
 }
 
 #[inline]
@@ -182,17 +175,14 @@ pub(super) unsafe fn load_solar_sys(
     solar: &mut SolarSystem,
 ) -> Option<Body> {
     let star = cx.world.catalog()[solar.star().0];
-    solar
-        .sys
-        .rng
-        .reseed(GetRandomSeedForStar(ptr::from_ref(&star).cast()));
+    solar.sys.rng.reseed(star_seed(star.star_pt));
     let sun_type = (star.star_type & 0x18) >> 3;
-    SUN_FRAME = SetAbsFrameIndex(SUN_FRAME.cast(), u16::from(sun_type)).cast();
     solar.sys.sun.rand_seed = solar.sys.rng.next_random();
     solar.sys.sun.data_index = sun_type;
     solar.sys.sun.location = c::POINT { x: 0, y: 0 };
     solar.sys.sun.image.origin = solar.sys.sun.location;
-    solar.sys.sun.image.frame = SUN_FRAME;
+    solar.sys.sun.image.frame =
+        resources::frame(&resources::retained(cx.kernel).sun, u16::from(sun_type)).cast();
 
     invoke(cx, io, solar, |generator, system, host| {
         generator.generate_planets(system, host)
@@ -219,7 +209,7 @@ pub(super) unsafe fn load_solar_sys(
         solar.leave_inner();
     } else {
         solar.sys.sun.location = c_point(cx.world.data.game.ip_location);
-        cx.world.data.game.ip_location = saved_point(displayToLocation(
+        cx.world.data.game.ip_location = saved_point(solar.coordinates().to_location(
             c_point(cx.world.data.game.ship_stamp.origin),
             MAX_ZOOM_RADIUS,
         ));
@@ -250,7 +240,8 @@ pub(super) unsafe fn load_solar_sys(
         if i == 0 {
             i += 1;
         }
-        cx.world.data.game.ship_stamp.frame = SetAbsFrameIndex(SISIPFRAME.cast(), i - 1).cast();
+        cx.world.data.game.ship_stamp.frame =
+            resources::frame(&resources::retained(cx.kernel).flagship, i - 1).cast();
         None
     }
 }
@@ -275,11 +266,8 @@ pub(super) unsafe fn free_solar_sys(cx: &mut Cx<'_>, solar: &mut SolarSystem) {
             save_non_orbital_location(cx.world, solar);
         }
     }
-    cx.with_legacy(|| {
-        ffi::DestroyDrawable(ReleaseDrawable(SOLAR_SYS_FRAME.cast()).cast());
-        SOLAR_SYS_FRAME = ptr::null_mut();
-        ffi::stop_music();
-    });
+    solar.clear_system_image();
+    cx.with_legacy(ffi::stop_music);
 }
 
 pub(super) unsafe fn reset_solar_sys(cx: &mut Cx<'_>, solar: &mut SolarSystem, next_activity: u16) {
@@ -299,21 +287,18 @@ pub(super) unsafe fn reset_solar_sys(cx: &mut Cx<'_>, solar: &mut SolarSystem, n
         cx.kernel.configuration.preferences().melee_scale == 0,
     );
     ffi::DoMissions(cx);
-    cx.with_legacy(|| {
-        check_intersect(solar);
-        solar.in_ip_flight = true;
-        if PLRPlaying(usize::MAX as *mut c_void) == 0
-            && (Kernel::current().read(|owner| owner.last_activity) != CHECK_LOAD
-                || next_activity != 0)
-        {
-            crate::sound::music::remember_native_music(
-                std::ptr::NonNull::new(SpaceMusic.cast()),
-                true,
-                1,
-                music_enabled,
-            );
-        }
-    });
+    check_intersect(cx.world, cx.kernel, solar);
+    solar.in_ip_flight = true;
+    if cx.with_legacy(|| PLRPlaying(usize::MAX as *mut c_void)) == 0
+        && (cx.kernel.last_activity != CHECK_LOAD || next_activity != 0)
+    {
+        crate::sound::music::remember_music(
+            resources::retained(cx.kernel).music_request(),
+            true,
+            1,
+            music_enabled,
+        );
+    }
 }
 
 enum OrbitAdmission {
@@ -344,7 +329,7 @@ unsafe fn prepare_planet_orbit(
             cx.world.data.game.ship_stamp.origin =
                 saved_point(solar.sys.descriptor(target).image.origin);
         } else {
-            let (width, height) = sis_dimensions();
+            let (width, height) = solar.coordinates().dimensions();
             cx.world.data.game.ship_stamp.origin = CPoint {
                 x: (width >> 1) as _,
                 y: (height >> 1) as _,
@@ -374,11 +359,9 @@ unsafe fn finish_planet_orbit(cx: &mut Cx<'_>, io: &mut Io<'_>, solar: &mut Sola
         let next_activity = cx.world.next_activity;
         let orbital = load_solar_sys(cx, io, solar);
         assert!(orbital.is_none());
-        cx.with_legacy(|| {
-            check_zoom_level(solar);
-            validate_orbits(solar);
-            validate_inner_orbits(solar);
-        });
+        check_zoom_level(&mut cx.world.data.game, solar);
+        validate_orbits(resources::retained(cx.kernel), solar);
+        validate_inner_orbits(resources::retained(cx.kernel), solar);
         reset_solar_sys(cx, solar, next_activity);
         let dimensions = cx.screen_dimensions();
         crate::ui::sis::repair_sis_border(cx.kernel, dimensions);
@@ -429,46 +412,44 @@ unsafe fn prepare_solar_sys(
     solar: &mut SolarSystem,
     next_activity: u16,
 ) -> SolarSystemStart {
-    cx.with_legacy(|| super::resources::LoadIPData());
+    crate::engine::kernel::solar_resources::SolarResources::retain(
+        &mut cx.kernel.solar_presentation.assets,
+    );
     if cx.kernel.lander_resources.is_none() {
         cx.kernel.lander_resources = Some(
             crate::engine::kernel::lander_resources::LanderResources::load()
                 .unwrap_or_else(|key| panic!("missing lander resource {key}")),
         );
     }
-    let reentry = cx.with_legacy(|| {
-        let reentry = glob().read(|owner| owner.game.ship_facing) != 0;
-        if !reentry {
-            (**glob()).game.autopilot = CPoint { x: -1, y: -1 };
-            let (width, height) = sis_dimensions();
-            (**glob()).game.ship_stamp.origin.x = (width >> 1) as _;
-            (**glob()).game.ship_stamp.origin.y = (height - 2) as _;
-            (**glob()).game.ip_location = saved_point(displayToLocation(
-                c_point(glob().read(|owner| owner.game.ship_stamp.origin)),
-                MAX_ZOOM_RADIUS,
-            ));
-        }
-
-        STARS_FRAME = create_star_background(solar);
-        ffi::SetContext(Kernel::current().read(|owner| owner.space_context));
-        ffi::SetContextFGFrame(Kernel::current().read(|owner| owner.screen).cast());
-        ffi::SetContextBackGroundColor(rgb15(0, 0, 0));
-
-        reentry
-    });
+    let reentry = cx.world.data.game.ship_facing != 0;
+    if !reentry {
+        let game = &mut cx.world.data.game;
+        game.autopilot = CPoint { x: -1, y: -1 };
+        let (width, height) = solar.coordinates().dimensions();
+        game.ship_stamp.origin = CPoint {
+            x: (width >> 1) as _,
+            y: (height - 2) as _,
+        };
+        game.ip_location = saved_point(
+            solar
+                .coordinates()
+                .to_location(c_point(game.ship_stamp.origin), MAX_ZOOM_RADIUS),
+        );
+    }
+    solar.stars = Some(create_star_background(cx.world, cx.kernel, solar));
+    ffi::SetContext(cx.kernel.space_context);
+    ffi::SetContextFGFrame(cx.kernel.screen.cast());
+    ffi::SetContextBackGroundColor(rgb15(0, 0, 0));
     let orbital = load_solar_sys(cx, io, solar);
-    let inner_system = cx.with_legacy(|| {
-        let inner_system = check_zoom_level(solar) != 0;
-        validate_orbits(solar);
-        if inner_system {
-            validate_inner_orbits(solar);
-        }
-        inner_system
-    });
+    let inner_system = check_zoom_level(&mut cx.world.data.game, solar) != 0;
+    validate_orbits(resources::retained(cx.kernel), solar);
+    if inner_system {
+        validate_inner_orbits(resources::retained(cx.kernel), solar);
+    }
     if !reentry {
         let world = &mut *cx.world;
         world.encounter_race = -1;
-        EncounterGroup = 0;
+        world.encounter_group = 0;
         world.data.game.battle_group_ref = 0;
         world.ip_groups().reinit();
         world.npc_built_ships().reinit();
@@ -484,8 +465,8 @@ unsafe fn prepare_solar_sys(
         enter_orbital(cx, solar, body);
         SolarSystemStart::Orbit
     } else {
+        ffi::SetContext(cx.kernel.space_context);
         cx.with_legacy(|| {
-            ffi::SetContext(Kernel::current().read(|owner| owner.space_context));
             ffi::SetTransitionSource(ptr::null_mut());
             ffi::BatchGraphics();
         });
@@ -544,21 +525,18 @@ pub(super) fn closest_planet_interplanetary(solar: &SolarSystem, point: c::POINT
 
 pub(super) unsafe fn uninit_solar_sys(cx: &mut Cx<'_>, io: &mut Io<'_>, solar: &mut SolarSystem) {
     free_solar_sys(cx, solar);
-    cx.with_legacy(|| {
-        ffi::DestroyDrawable(ReleaseDrawable(STARS_FRAME.cast()).cast());
-        STARS_FRAME = ptr::null_mut();
-    });
+    solar.stars = None;
     if cx.world.activity() & END_INTERPLANETARY != 0 {
         end_interplanetary(cx, io, solar);
         return;
     }
-    if cx.world.activity() & START_ENCOUNTER != 0 && EncounterGroup != 0 {
+    if cx.world.activity() & START_ENCOUNTER != 0 && cx.world.encounter_group != 0 {
         {
             let world = &mut *cx.world;
             crate::navigation::groups::live::get_group_info(
                 world,
                 world.data.game.battle_group_ref,
-                EncounterGroup,
+                world.encounter_group,
             )
         };
         if cx.world.data.game.ip_planet == 0 {
@@ -572,8 +550,7 @@ pub(super) unsafe fn uninit_solar_sys(cx: &mut Cx<'_>, io: &mut Io<'_>, solar: &
 }
 
 #[inline]
-pub(super) unsafe fn hyperspace_unit_factors() -> (i32, i32) {
-    let (width, height) = dimensions();
+pub(super) fn hyperspace_unit_factors((width, height): (i32, i32)) -> (i32, i32) {
     ((((width - 64) << 5) >> 4) * 195, ((height << 5) >> 4) * 25)
 }
 
@@ -583,8 +560,11 @@ pub(super) unsafe fn hyperspace_unit_factors() -> (i32, i32) {
 pub unsafe fn run_explore_solar_sys(cx: &mut Cx<'_>, io: &mut Io<'_>) {
     let runtime = cx.kernel.input_runtime();
     let input = runtime.input();
-    let star = prepare_explore_solar_sys(cx.world);
+    let star = prepare_explore_solar_sys(cx.world, cx.screen_dimensions());
     let mut solar = SolarSystem::new(cx.world, star);
+    solar.coordinates = Some(crate::planets::solar_coords::SolarCoordinates::new(
+        cx.screen_dimensions(),
+    ));
     start_solar_sys(cx, io, &mut solar);
     cx.with_legacy(|| ffi::SetMenuSounds(input, MENU_SOUND_NONE, MENU_SOUND_NONE));
     solar.run_input(cx, io, false, |cx, io, solar| {
@@ -596,8 +576,11 @@ pub unsafe fn run_explore_solar_sys(cx: &mut Cx<'_>, io: &mut Io<'_>) {
         .checkpoint(&crate::engine::observe::CheckpointView::Solar(None));
 }
 
-unsafe fn prepare_explore_solar_sys(world: &mut World) -> crate::engine::world::StarId {
-    let (log_units_x, log_units_y) = hyperspace_unit_factors();
+fn prepare_explore_solar_sys(
+    world: &mut World,
+    screen: (i32, i32),
+) -> crate::engine::world::StarId {
+    let (log_units_x, log_units_y) = hyperspace_unit_factors(screen);
     if world.current_star.is_none() {
         let universe = c::POINT {
             x: ((world.data.flagship.log_x * 6250 + (log_units_x >> 1)) / log_units_x) as _,
@@ -769,10 +752,10 @@ unsafe fn do_ip_flight(cx: &mut Cx<'_>, io: &mut Io<'_>, solar: &mut SolarSystem
     } else {
         assert!(solar.in_ip_flight);
         ip_frame(cx, io, solar);
-        cx.with_legacy(|| {
-            ffi::SleepThreadUntil(NEXT_TIME);
-            NEXT_TIME = ffi::GetTimeCounter().wrapping_add(IP_FRAME_RATE);
-        });
+        let deadline = cx.kernel.solar_presentation.frame_deadline;
+        cx.with_legacy(|| ffi::SleepThreadUntil(deadline));
+        cx.kernel.solar_presentation.frame_deadline =
+            ffi::GetTimeCounter().wrapping_add(IP_FRAME_RATE);
     }
     (cx.world.activity() & (START_ENCOUNTER | END_INTERPLANETARY | CHECK_ABORT | CHECK_LOAD) == 0
         && cx.world.data.flagship.crew_enlisted != c::COUNT::MAX) as c::BOOLEAN
