@@ -11,7 +11,7 @@ pub(crate) trait ZoqApi: AllianceApi<Handler> {
     fn date(&self) -> (i16, u8);
 }
 
-pub(crate) fn select_speaker(desc: &mut CLocData, last_alien: &mut u8, speaker: Speaker) {
+pub(crate) fn select_speaker(desc: &mut CommDescriptor, last_alien: &mut u8, speaker: Speaker) {
     let (alien, transition, talk, frames, x) = match speaker {
         Speaker::Zoq => (0, 23, 18, 5, 61),
         Speaker::Pik => (2, 26, 29, 2, 181),
@@ -31,14 +31,14 @@ pub(crate) fn select_speaker(desc: &mut CLocData, last_alien: &mut u8, speaker: 
         Speaker::Zoq => desc.alien_ambient_array[1].anim_flags &= !(1 << 3),
         Speaker::Pik => desc.alien_ambient_array[1].anim_flags |= 1 << 3,
     }
-    desc.alien_text_baseline = CPoint { x, y: 24 };
-    desc.alien_text_fcolor = CColor {
+    desc.alien_text_baseline = Point { x, y: 24 };
+    desc.alien_text_fcolor = Color {
         r: 255,
         g: 255,
         b: 255,
         a: 255,
     };
-    desc.alien_text_bcolor = CColor {
+    desc.alien_text_bcolor = Color {
         r: 0,
         g: 0,
         b: 0,

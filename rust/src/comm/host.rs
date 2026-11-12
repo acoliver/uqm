@@ -166,7 +166,7 @@ impl<H> DialogueHost<H> for Host<'_, '_, H> {
     fn disable_animation(&mut self, index: usize) {
         let comm = &mut **self.comm.borrow_mut();
 
-        comm.data.alien_ambient_array[index].anim_flags |= ANIM_DISABLED;
+        comm.data.definition.alien_ambient_array[index].anim_flags |= ANIM_DISABLED;
     }
 
     fn fade_palette(&mut self, index: u16, duration: i16) {
@@ -218,8 +218,11 @@ mod tests {
                 host.disable_animation(2);
             }
             assert_eq!(cx.world.story_state(StoryKey::NEW_ALLIANCE_NAME), 3);
-            assert_eq!(first.data.alien_ambient_array[2].anim_flags, ANIM_DISABLED);
-            assert_eq!(second.data.alien_ambient_array[2].anim_flags, 0);
+            assert_eq!(
+                first.data.definition.alien_ambient_array[2].anim_flags,
+                ANIM_DISABLED
+            );
+            assert_eq!(second.data.definition.alien_ambient_array[2].anim_flags, 0);
         });
     }
 }

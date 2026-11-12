@@ -1,7 +1,7 @@
 //! Utwig dialogue, ported from the original C script.
 pub(crate) use super::alliance::AllianceApi;
 pub(crate) use super::script::GLOBAL_PLAYER_NAME;
-pub(crate) use crate::comm::locdata::CLocData;
+pub(crate) use crate::comm::races::descriptor::CommDescriptor;
 pub(crate) use crate::engine::StoryKey;
 mod phrases;
 pub(crate) use super::alliance::{SUPOX_SHIP, UTWIG_SHIP};
@@ -29,9 +29,9 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
             Handler::BombWorld => self.bomb_world(r),
         }
     }
-    pub(crate) fn initialize(&mut self, desc: &mut CLocData) {
+    pub(crate) fn initialize(&mut self, desc: &mut CommDescriptor) {
         if self.api.get(StoryKey::UTWIG_HAVE_ULTRON) != 0 {
-            desc.alien_alt_song_res = c"comm.utwig.ultron.music".as_ptr();
+            desc.alien_alt_song_res = Some(c"comm.utwig.ultron.music");
             desc.alien_song_flags |= 1;
         } else {
             desc.alien_song_flags &= !1;
@@ -702,7 +702,6 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
 }
 
 #[cfg(test)]
-use crate::comm::descriptors::utwig::descriptor;
-
-#[cfg(test)]
 mod tests;
+
+pub(crate) mod descriptor;

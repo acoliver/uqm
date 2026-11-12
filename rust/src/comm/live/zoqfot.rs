@@ -1,7 +1,7 @@
-use crate::comm::descriptors::zoqfot::descriptor;
 use crate::comm::host::Host;
+use crate::comm::races::zoqfot::descriptor::descriptor;
 use crate::comm::races::zoqfot::*;
-use crate::comm::{locdata::CLocData, Comm};
+use crate::comm::{locdata::SessionData, Comm};
 use crate::engine::battle::Cx;
 
 fn run(comm: &mut Comm, cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, Host<'_, '_, Handler>>)) {
@@ -75,10 +75,15 @@ pub(crate) fn uninit(_comm: &mut Comm, _cx: &mut Cx<'_>) -> u16 {
     0
 }
 /// Initialize the encounter on the game thread.
-pub fn init_zoqfot_comm(comm: &mut Comm, cx: &mut Cx<'_>) -> CLocData {
+pub fn init_zoqfot_comm(comm: &mut Comm, cx: &mut Cx<'_>) -> SessionData {
     let mut desc = descriptor();
     run(comm, cx, |s| s.initialize(&mut desc));
-    desc
+    SessionData {
+        init_encounter_func: Some(intro),
+        post_encounter_func: Some(post),
+        uninit_encounter_func: Some(uninit),
+        ..SessionData::new(desc)
+    }
 }
 
 mod api {
@@ -92,7 +97,11 @@ mod api {
         use crate::comm::host::Host;
         use crate::comm::races::script::DialogueHost;
         fn select(comm: &mut Comm, speaker: Speaker) {
-            select_speaker(&mut comm.data, &mut comm.race_scratch.last_alien, speaker);
+            select_speaker(
+                &mut comm.data.definition,
+                &mut comm.race_scratch.last_alien,
+                speaker,
+            );
         }
         fn zoq(comm: &mut Comm) {
             select(comm, Speaker::Zoq);

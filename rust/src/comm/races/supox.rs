@@ -1,7 +1,7 @@
 //! Supox dialogue, ported from the original C script.
 pub(crate) use super::alliance::AllianceApi;
 pub(crate) use super::script::{GLOBAL_PLAYER_NAME, GLOBAL_SHIP_NAME};
-pub(crate) use crate::comm::locdata::CLocData;
+pub(crate) use crate::comm::races::descriptor::CommDescriptor;
 pub(crate) use crate::engine::StoryKey;
 mod phrases;
 pub(crate) use super::alliance::{SUPOX_SHIP, UTWIG_SHIP};
@@ -27,7 +27,7 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
             Handler::NeutralSupox => self.neutral_supox(r),
         }
     }
-    pub(crate) fn initialize(&mut self, _desc: &mut CLocData) {
+    pub(crate) fn initialize(&mut self, _desc: &mut CommDescriptor) {
         self.api.segue(u32::from(
             self.api.get(StoryKey::SUPOX_HOSTILE) != 0 && self.api.activity() as u8 != 5,
         ));
@@ -536,7 +536,6 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
 }
 
 #[cfg(test)]
-use crate::comm::descriptors::supox::descriptor;
-
-#[cfg(test)]
 mod tests;
+
+pub(crate) mod descriptor;

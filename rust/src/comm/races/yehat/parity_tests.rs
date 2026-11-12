@@ -1,3 +1,4 @@
+use super::descriptor::descriptor;
 use super::dialogue::Dialogue;
 use super::*;
 use crate::comm::races::encounter::testing::{Effect, Fake};
@@ -561,7 +562,7 @@ fn descriptor_matches_every_c_animation_field_and_runtime_geometry() {
         (d.alien_song_res, c"comm.yehat.music"),
         (d.conversation_phrases_res, c"comm.yehat.dialogue"),
     ] {
-        assert_eq!(unsafe { std::ffi::CStr::from_ptr(resource) }, expected);
+        assert_eq!(resource.unwrap(), expected);
     }
     assert_eq!((d.alien_text_align, d.alien_text_valign), (1, 1));
     assert_eq!(
@@ -582,7 +583,7 @@ fn descriptor_matches_every_c_animation_field_and_runtime_geometry() {
         ),
         (0, 0, 0, 255)
     );
-    assert!(d.alien_alt_song_res.is_null());
+    assert!(d.alien_alt_song_res.is_none());
     assert_eq!(d.alien_song_flags, 0);
     assert!(d.alien_number_speech.is_none());
 }

@@ -669,7 +669,6 @@ impl<A: DruugeApi> Dialogue<'_, A> {
 }
 
 #[cfg(test)]
-use crate::comm::descriptors::druuge::descriptor;
-
-#[cfg(test)]
 mod tests;
+
+pub(crate) mod descriptor;

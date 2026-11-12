@@ -1,7 +1,7 @@
-use crate::comm::descriptors::spathi::descriptor;
 use crate::comm::host::Host;
+use crate::comm::races::spathi::descriptor::descriptor;
 use crate::comm::races::spathi::*;
-use crate::comm::{locdata::CLocData, Comm};
+use crate::comm::{locdata::SessionData, Comm};
 use crate::engine::battle::Cx;
 fn run(comm: &mut Comm, cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, Host<'_, '_, Handler>>)) {
     let mut session = comm.race_scratch.spathi.take().unwrap_or_default();
@@ -101,8 +101,13 @@ pub(crate) fn uninit(_comm: &mut Comm, _cx: &mut Cx<'_>) -> u16 {
     0
 }
 /// Initialize the encounter descriptor and initial battle segue.
-pub fn init_spathi_comm(comm: &mut Comm, cx: &mut Cx<'_>) -> CLocData {
+pub fn init_spathi_comm(comm: &mut Comm, cx: &mut Cx<'_>) -> SessionData {
     let mut desc = descriptor();
     run(comm, cx, |s| s.initialize(&mut desc));
-    desc
+    SessionData {
+        init_encounter_func: Some(intro),
+        post_encounter_func: Some(post),
+        uninit_encounter_func: Some(uninit),
+        ..SessionData::new(desc)
+    }
 }

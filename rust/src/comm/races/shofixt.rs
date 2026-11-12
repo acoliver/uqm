@@ -1,6 +1,6 @@
 //! Shofixti dialogue, ported from shofixt.c.
 pub(crate) use super::script::{GLOBAL_PLAYER_NAME, GLOBAL_SHIP_NAME};
-pub(crate) use crate::comm::locdata::CPoint;
+pub(crate) use crate::comm::races::descriptor::Point;
 pub(crate) use crate::engine::StoryKey;
 mod phrases;
 use phrases::*;
@@ -280,10 +280,10 @@ impl<A: ShofixtApi> Dialogue<'_, A> {
         self.api.segue(0)
     }
 }
-pub(crate) fn text_layout(screen_width: i32) -> (CPoint, u16) {
+pub(crate) fn text_layout(screen_width: i32) -> (Point, u16) {
     let text_width = screen_width - 80;
     (
-        CPoint {
+        Point {
             x: (1 + (text_width >> 1)) as i16,
             y: 0,
         },
@@ -292,7 +292,6 @@ pub(crate) fn text_layout(screen_width: i32) -> (CPoint, u16) {
 }
 
 #[cfg(test)]
-use crate::comm::descriptors::shofixt::descriptor;
-
-#[cfg(test)]
 mod tests;
+
+pub(crate) mod descriptor;

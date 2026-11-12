@@ -1,5 +1,6 @@
-use crate::comm::descriptors::spahome::descriptor;
 use crate::comm::host::Host;
+use crate::comm::locdata::SessionData;
+use crate::comm::races::spahome::descriptor::descriptor;
 use crate::comm::races::spahome::*;
 use crate::comm::Comm;
 use crate::engine::battle::Cx;
@@ -60,20 +61,18 @@ pub(crate) fn post(comm: &mut Comm, cx: &mut Cx<'_>) {
 pub(crate) fn uninit(_comm: &mut Comm, _cx: &mut Cx<'_>) -> u16 {
     0
 }
-pub unsafe fn init_spahome_comm(
-    comm: &mut Comm,
-    cx: &mut Cx<'_>,
-) -> crate::comm::locdata::CLocData {
-    extern "C" {
-        static mut ScreenWidth: i32;
-    }
-    // SAFETY: the caller initializes encounters on the game thread with stable display dimensions.
-    let width = unsafe { ScreenWidth };
+pub fn init_spahome_comm(comm: &mut Comm, cx: &mut Cx<'_>) -> crate::comm::locdata::SessionData {
+    let width = cx.screen_dimensions().0;
     let mut d = descriptor(width);
     d.alien_text_baseline.x = (1 + ((width - 80) >> 1)) as i16;
     d.alien_text_width = (width - 80 - 16) as u16;
     run(comm, cx, |s| s.initialize());
-    d
+    SessionData {
+        init_encounter_func: Some(intro),
+        post_encounter_func: Some(post),
+        uninit_encounter_func: Some(uninit),
+        ..SessionData::new(d)
+    }
 }
 
 mod api {

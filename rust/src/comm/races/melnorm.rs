@@ -1,8 +1,7 @@
 //! Melnorme dialogue and trading, ported from melnorm.c.
 
 pub(crate) use super::encounter::EncounterApi;
-pub(crate) use crate::comm::locdata::{CLocData, CSisState};
-pub(crate) use crate::engine::StoryKey;
+pub(crate) use crate::engine::{world::SisState as CSisState, StoryKey};
 pub(crate) mod api;
 pub(crate) mod numbers;
 mod phrases;
@@ -102,7 +101,7 @@ impl<A: MelnormApi> Dialogue<'_, A> {
             Handler::DoMelnormePissed => self.do_melnorme_pissed(r),
         }
     }
-    pub(crate) fn initialize(&mut self, _desc: &mut CLocData) {
+    pub(crate) fn initialize(&mut self) {
         self.session.local_stack0 = 0;
         self.session.local_stack1 = 0;
         self.session.prev_msg_mode = 0;
@@ -875,7 +874,6 @@ impl<A: MelnormApi> Dialogue<'_, A> {
 }
 
 #[cfg(test)]
-use crate::comm::descriptors::melnorm::descriptor;
-
-#[cfg(test)]
 mod tests;
+
+pub(crate) mod descriptor;

@@ -1,7 +1,7 @@
-use crate::comm::descriptors::vux::descriptor;
 use crate::comm::host::Host;
+use crate::comm::races::vux::descriptor::descriptor;
 use crate::comm::races::vux::*;
-use crate::comm::{locdata::CLocData, Comm};
+use crate::comm::{locdata::SessionData, Comm};
 use crate::engine::battle::Cx;
 
 fn run(
@@ -45,14 +45,15 @@ pub(crate) fn uninit(_comm: &mut Comm, _cx: &mut Cx<'_>) -> u16 {
     0
 }
 
-pub unsafe fn init_vux_comm(comm: &mut Comm, cx: &mut Cx<'_>) -> CLocData {
-    extern "C" {
-        static mut ScreenWidth: i32;
-    }
-    // SAFETY: the caller initializes encounters on the game thread with stable display dimensions.
-    let width = unsafe { ScreenWidth };
+pub fn init_vux_comm(comm: &mut Comm, cx: &mut Cx<'_>) -> SessionData {
+    let width = cx.screen_dimensions().0;
     let mut descriptor = descriptor(width);
     (descriptor.alien_text_baseline, descriptor.alien_text_width) = text_layout(width);
     run(comm, cx, |dialogue| dialogue.initialize());
-    descriptor
+    SessionData {
+        init_encounter_func: Some(intro),
+        post_encounter_func: Some(post),
+        uninit_encounter_func: Some(uninit),
+        ..SessionData::new(descriptor)
+    }
 }

@@ -3,8 +3,7 @@ use crate::comm::Comm;
 use std::ffi::c_void;
 use std::fmt;
 
-/// Number of animation slots in an alien communication sequence (matches C MAX_ANIMATIONS).
-pub const MAX_ANIMATIONS: usize = 20;
+use super::races::descriptor::{AnimationDescriptor, MAX_ANIMATIONS};
 
 /// Animation flags (mirrors C ANIMATION_DESC AnimFlags bits).
 #[allow(
@@ -74,36 +73,6 @@ impl From<u32> for TextValign {
 pub mod AlienSongFlags {
     pub const NONE: u32 = 0;
     pub const USE_ALTERNATE: u32 = 1 << 0;
-}
-
-/// Animation descriptor matching C `ANIMATION_DESC`.
-///
-/// Field widths use the smallest Rust integer that fits the C type:
-/// - `StartIndex` / `BaseFrameRate` / `RandomFrameRate` / `BaseRestartRate` /
-///   `RandomRestartRate` are `COUNT` (u16)
-/// - `NumFrames` / `AnimFlags` are `BYTE` (u8)
-/// - `BlockMask` is `DWORD` (u32)
-///
-/// The struct is `repr(C)` so it can be used directly in FFI if needed.
-#[repr(C)]
-#[derive(Debug, Clone, Copy, Default)]
-pub struct AnimationDescData {
-    /// Index of the first image or color-map entry.
-    pub start_index: u16,
-    /// Number of frames in the animation.
-    pub num_frames: u8,
-    /// Animation type flags (RANDOM_ANIM, CIRCULAR_ANIM, YOYO_ANIM, …).
-    pub anim_flags: u8,
-    /// Minimum interframe delay (game ticks).
-    pub base_frame_rate: u16,
-    /// Maximum additional interframe delay.
-    pub random_frame_rate: u16,
-    /// Minimum delay before restarting the animation.
-    pub base_restart_rate: u16,
-    /// Maximum additional restart delay.
-    pub random_restart_rate: u16,
-    /// Bit-mask of animation indices that cannot run simultaneously.
-    pub block_mask: u32,
 }
 
 /// Error type for communication operations
@@ -237,11 +206,11 @@ pub struct CommData {
     /// Number of active entries in `alien_ambient_array` (`NumAnimations`).
     pub num_animations: u32,
     /// Ambient / background animation slots (`AlienAmbientArray`).
-    pub alien_ambient_array: [AnimationDescData; MAX_ANIMATIONS],
+    pub alien_ambient_array: [AnimationDescriptor; MAX_ANIMATIONS],
     /// Transition animation between silent and talking states (`AlienTransitionDesc`).
-    pub alien_transition_desc: AnimationDescData,
+    pub alien_transition_desc: AnimationDescriptor,
     /// Talking animation descriptor (`AlienTalkDesc`).
-    pub alien_talk_desc: AnimationDescData,
+    pub alien_talk_desc: AnimationDescriptor,
 
     // -----------------------------------------------------------------------
     // Song / audio flags
@@ -290,9 +259,9 @@ impl Default for CommData {
             alien_text_align: TextAlign::Left,
             alien_text_valign: TextValign::Top,
             num_animations: 0,
-            alien_ambient_array: [AnimationDescData::default(); MAX_ANIMATIONS],
-            alien_transition_desc: AnimationDescData::default(),
-            alien_talk_desc: AnimationDescData::default(),
+            alien_ambient_array: [AnimationDescriptor::default(); MAX_ANIMATIONS],
+            alien_transition_desc: AnimationDescriptor::default(),
+            alien_talk_desc: AnimationDescriptor::default(),
             alien_song_flags: 0,
             alien_frame: std::ptr::null_mut(),
             alien_font: std::ptr::null_mut(),
@@ -412,7 +381,7 @@ mod tests {
 
     #[test]
     fn test_animation_desc_data_default() {
-        let desc = AnimationDescData::default();
+        let desc = AnimationDescriptor::default();
         assert_eq!(desc.start_index, 0);
         assert_eq!(desc.num_frames, 0);
         assert_eq!(desc.anim_flags, 0);

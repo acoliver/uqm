@@ -666,7 +666,7 @@ pub unsafe fn race_descriptor(
     comm: &mut Comm,
     cx: &mut Cx<'_>,
     comm_id: u32,
-) -> crate::comm::locdata::CLocData {
+) -> crate::comm::locdata::SessionData {
     comm.presentation = super::presentation::Presentation::from(&*cx.kernel);
     // Initialize Rust dialogue state (callbacks, phrase state, etc.)
     super::lifecycle::initialize_conversation(comm, cx, comm_id);

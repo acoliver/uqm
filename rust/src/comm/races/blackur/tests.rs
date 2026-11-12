@@ -1,3 +1,4 @@
+use super::descriptor::descriptor;
 use super::*;
 use crate::comm::races::encounter::testing::{Effect, Fake};
 use crate::comm::races::script::DialogueHost;
@@ -323,12 +324,9 @@ fn descriptor_matches_resources_layout_and_every_animation_field() {
         (d.alien_song_res, "comm.kohrah.music"),
         (d.conversation_phrases_res, "comm.kohrah.dialogue"),
     ] {
-        assert_eq!(
-            unsafe { std::ffi::CStr::from_ptr(ptr) }.to_str().unwrap(),
-            expected
-        );
+        assert_eq!(ptr.unwrap().to_str().unwrap(), expected);
     }
-    assert!(d.alien_alt_song_res.is_null());
+    assert!(d.alien_alt_song_res.is_none());
     assert_eq!(d.alien_song_flags, 0);
     assert_eq!((d.alien_text_align, d.alien_text_valign), (1, 0));
     assert_eq!(

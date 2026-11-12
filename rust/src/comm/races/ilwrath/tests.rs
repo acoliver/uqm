@@ -1,3 +1,4 @@
+use super::descriptor::descriptor;
 use super::*;
 use crate::comm::races::encounter::testing::{Effect, Fake};
 use crate::comm::races::script::DialogueHost;
@@ -37,10 +38,7 @@ fn init_segue_and_descriptor() {
         assert_eq!(d.num_animations, 4);
         assert_eq!(d.alien_ambient_array[3].num_frames, 6);
         assert_eq!(d.alien_talk_desc.base_frame_rate, 56);
-        assert_eq!(
-            unsafe { std::ffi::CStr::from_ptr(d.alien_frame_res) },
-            c"comm.ilwrath.graphics"
-        );
+        assert_eq!(d.alien_frame_res.unwrap(), c"comm.ilwrath.graphics");
     }
 }
 #[test]
