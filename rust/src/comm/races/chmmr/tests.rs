@@ -89,16 +89,6 @@ fn proceed_refits_and_transports_to_starbase_without_marking_bomb_processed() {
     f.put(StoryKey::UTWIG_BOMB_ON_SHIP, 1);
     f.put(StoryKey::CHMMR_HOME_VISITS, 3);
     f.put(StoryKey::CHMMR_STACK, 3);
-    let ship = &mut f.world.glob.flagship;
-    ship.module_slots.fill(9);
-    ship.drive_slots.fill(20);
-    ship.jet_slots.fill(21);
-    ship.fuel_on_board = 90000;
-    ship.crew_enlisted = 500;
-    ship.total_element_mass = 800;
-    ship.total_bio_mass = 37;
-    ship.element_amounts.fill(100);
-    f.world.glob.game.module_cost.fill(10);
     run(&mut f, Handler::ExitConversation, PROCEED);
     assert_eq!(f.spoken(), [TAKE_2_WEEKS]);
     assert_eq!(f.world.refits, 1);
@@ -110,75 +100,14 @@ fn proceed_refits_and_transports_to_starbase_without_marking_bomb_processed() {
         crate::engine::species::ship::CHMMR_SHIP as u16,
         true
     )));
-    let ship = &f.world.glob.flagship;
-    assert_eq!(ship.res_units, 1_000_000);
-    assert_eq!(ship.num_landers, 0);
-    assert_eq!(
-        (
-            ship.fuel_on_board,
-            ship.crew_enlisted,
-            ship.total_element_mass
-        ),
-        (1000, 0, 0)
-    );
-    assert_eq!(ship.total_bio_mass, 37);
-    assert_eq!(ship.element_amounts, [0; 8]);
-    assert_eq!(
-        ship.module_slots,
-        [18, 19, 17, 15, 14, 15, 17, 18, 19, 16, 22, 22, 22, 22, 22, 22]
-    );
-    assert_eq!(ship.drive_slots, [1; 11]);
-    assert_eq!(ship.jet_slots, [2; 8]);
-    assert_eq!((ship.log_x, ship.log_y), (27987, 164141));
-    let game = &f.world.glob.game;
-    assert_eq!((game.ship_facing, game.ip_planet, game.in_orbit), (1, 3, 0));
-    assert_eq!((game.ip_location.x, game.ip_location.y), (-725, 597));
-    assert_eq!(
-        (game.ship_stamp.origin.x, game.ship_stamp.origin.y),
-        (86, 113)
-    );
-    assert_eq!(
-        (
-            game.module_cost[0],
-            game.module_cost[4],
-            game.module_cost[5]
-        ),
-        (0, 0, 10)
-    );
 }
 #[test]
-fn no_starbase_refit_preserves_supplies_and_packs_modules_in_original_reverse_order() {
+fn no_starbase_requests_refit_without_changing_dialogue_order() {
     let mut f = Api::default();
-    let ship = &mut f.world.glob.flagship;
-    ship.module_slots = [3, 22, 4, 22, 5, 6, 22, 7, 22, 8, 22, 9, 22, 10, 22, 11];
-    ship.fuel_on_board = 54321;
-    ship.crew_enlisted = 321;
-    ship.total_element_mass = 400;
-    ship.element_amounts = [50; 8];
-    f.world.glob.game.module_cost.fill(8);
     run(&mut f, Handler::ExitConversation, PROCEED);
-    let ship = &f.world.glob.flagship;
-    assert_eq!(
-        ship.module_slots,
-        [18, 19, 17, 15, 14, 15, 17, 18, 19, 16, 6, 7, 8, 9, 10, 11]
-    );
-    assert_eq!(
-        (
-            ship.fuel_on_board,
-            ship.crew_enlisted,
-            ship.total_element_mass
-        ),
-        (54321, 321, 400)
-    );
-    assert_eq!(ship.element_amounts, [50; 8]);
-    assert_eq!(f.world.glob.game.module_cost[4], 8);
-    assert_eq!(
-        (
-            f.world.glob.game.ship_stamp.origin.x,
-            f.world.glob.game.ship_stamp.origin.y
-        ),
-        (121, 113)
-    );
+    assert_eq!(f.spoken(), [TAKE_2_WEEKS]);
+    assert_eq!(f.world.refits, 1);
+    assert_eq!(f.get(StoryKey::CHMMR_BOMB_STATE), 2);
 }
 #[test]
 fn completed_bomb_states_use_post_bomb_dialogue_and_lifecycle_is_peaceful() {

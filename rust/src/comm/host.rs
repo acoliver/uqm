@@ -1,3 +1,5 @@
+mod chmmr;
+
 use crate::comm::races::script::*;
 use crate::comm::Comm;
 use crate::engine::StoryKey;
