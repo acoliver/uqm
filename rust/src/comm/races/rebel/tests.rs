@@ -488,5 +488,5 @@ fn descriptor_matches_all_animation_fields_resources_and_resolution_dependent_la
             e
         );
     }
-    assert!(d.alien_number_speech.is_null());
+    assert!(d.alien_number_speech.is_none());
 }

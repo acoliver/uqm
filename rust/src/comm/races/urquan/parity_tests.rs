@@ -412,5 +412,5 @@ fn full_descriptor_uses_c_flags_rates_masks_resources_and_dynamic_geometry() {
     );
     assert!(d.alien_alt_song_res.is_null());
     assert_eq!(d.alien_song_flags, 0);
-    assert!(d.alien_number_speech.is_null());
+    assert!(d.alien_number_speech.is_none());
 }

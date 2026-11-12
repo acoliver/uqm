@@ -381,5 +381,5 @@ fn descriptor_matches_resources_layout_and_every_animation_field() {
             e
         );
     }
-    assert!(d.alien_number_speech.is_null());
+    assert!(d.alien_number_speech.is_none());
 }
