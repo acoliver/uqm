@@ -188,6 +188,14 @@ fn live_callbacks_keep_the_supplied_session_and_phrase_owner(
             cx.world.data.flagship.total_element_mass = 1;
             cx.world.data.game.element_worth[0] = 3;
             cx.world.data.game.module_cost[10] = 0;
+            if (conversation, variant) == (13, 1) {
+                cx.world.data.flagship.module_slots[..4]
+                    .fill(uqm_rust::starbase::sis_modules::ModuleType::CrewPod as u8);
+                cx.world.data.flagship.crew_enlisted = 200;
+                cx.world.data.game.crew_cost = 5;
+                cx.world
+                    .set_story_state(StoryKey::CREW_SOLD_TO_DRUUGE0, 100);
+            }
             let mut comm = Comm::with_options(uqm_rust::comm::CommOptions {
                 oscilloscope: false,
                 slider: false,
@@ -229,6 +237,7 @@ fn live_callbacks_keep_the_supplied_session_and_phrase_owner(
                 (5, _) => &[58, 66, 70], // IMPORTANT_DUTY, PROCREATING_WILDLY, FEMALES
                 (6, 0) => &[4, 29, 31, 37, 43, 47, 56, 48, 59, 61], // Fwiffo recruitment
                 (12, _) => &[17, 111, 151, 195], // GET_ON_WITH_BUSINESS through BUY_NEW_TECH
+                (13, 1) => &[75, 26, 78, 77, 81, 73], // Buy artifact and fuel, then leave
                 (16, _) => &[28],        // WE_ARE_US_4, including the coordinate splice
                 _ => &[],
             };
@@ -238,6 +247,13 @@ fn live_callbacks_keep_the_supplied_session_and_phrase_owner(
                 (5, _) => assert_eq!(cx.world.story_state(StoryKey::SHOFIXTI_RECRUITED), 1),
                 (6, 0) => assert_eq!(cx.world.built_ships_ref().count(), 1),
                 (12, _) => assert_eq!(cx.world.data.game.module_cost[10], 80),
+                (13, 1) => {
+                    assert_eq!(cx.world.story_state(StoryKey::ARTIFACT_2_ON_SHIP), 1);
+                    assert_eq!(cx.world.story_state(StoryKey::CREW_SOLD_TO_DRUUGE0), 210);
+                    assert_eq!(cx.world.story_state(StoryKey::CREW_SOLD_TO_DRUUGE1), 0);
+                    assert_eq!(cx.world.data.flagship.crew_enlisted, 90);
+                    assert_eq!(cx.world.data.game.crew_cost, 12);
+                }
                 (16, _) => assert_eq!(cx.world.story_state(StoryKey::PROBE_EXHIBITED_BUG), 1),
                 _ => {}
             }
