@@ -184,8 +184,7 @@ impl From<u32> for CommIntroMode {
 /// fields (`alien_frame`, `alien_font`, …) are set after the resource is resolved
 /// and hold whatever pointer or index the C graphics/audio layer returns.
 ///
-/// `alien_number_speech` is a borrowed pointer into C-owned memory and must **not**
-/// be freed by Rust code.
+/// `alien_number_speech` borrows an immutable content definition.
 #[derive(Debug, Clone)]
 pub struct CommData {
     // -----------------------------------------------------------------------
@@ -265,11 +264,10 @@ pub struct CommData {
     pub conversation_phrases: *mut c_void,
 
     // -----------------------------------------------------------------------
-    // Number-speech generator (borrowed from C; never freed by Rust)
+    // Number-speech definition
     // -----------------------------------------------------------------------
-    /// Pointer to the C `NUMBER_SPEECH_DESC` used for numeric speech synthesis.
-    /// This is borrowed from alien-specific C data and must **not** be freed here.
-    pub alien_number_speech: *const c_void,
+    /// Immutable race-specific numeric speech data.
+    pub alien_number_speech: Option<&'static super::races::descriptor::NumberSpeech>,
 }
 
 impl Default for CommData {
@@ -301,7 +299,7 @@ impl Default for CommData {
             alien_color_map: std::ptr::null_mut(),
             alien_song: std::ptr::null_mut(),
             conversation_phrases: std::ptr::null_mut(),
-            alien_number_speech: std::ptr::null(),
+            alien_number_speech: None,
         }
     }
 }
@@ -345,7 +343,7 @@ impl CommData {
         self.alien_color_map = std::ptr::null_mut();
         self.alien_song = std::ptr::null_mut();
         self.conversation_phrases = std::ptr::null_mut();
-        self.alien_number_speech = std::ptr::null();
+        self.alien_number_speech = None;
     }
 }
 
@@ -405,7 +403,7 @@ mod tests {
         assert!(data.alien_frame_res.is_null());
         assert!(data.alien_font_res.is_null());
         assert!(data.alien_frame.is_null());
-        assert!(data.alien_number_speech.is_null());
+        assert!(data.alien_number_speech.is_none());
         assert_eq!(data.alien_text_fcolor, 0);
         assert_eq!(data.alien_text_width, 0);
         assert_eq!(data.alien_text_align, TextAlign::Left);
@@ -429,7 +427,7 @@ mod tests {
         data.clear_handles();
         assert!(data.alien_frame.is_null());
         assert!(data.alien_font.is_null());
-        assert!(data.alien_number_speech.is_null());
+        assert!(data.alien_number_speech.is_none());
     }
 
     #[test]

@@ -29,7 +29,7 @@ pub(crate) fn descriptor() -> CLocData {
         alien_text_align: 1,
         alien_text_valign: 0,
         num_animations: 4,
-        alien_number_speech: numbers::descriptor(),
+        alien_number_speech: Some(numbers::descriptor()),
         ..CLocData::default()
     };
     d.alien_ambient_array[0] = animation(6, 5, 4, (70, 0), (3360, 3360));

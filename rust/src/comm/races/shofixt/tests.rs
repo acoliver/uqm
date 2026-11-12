@@ -473,5 +473,5 @@ fn descriptor_matches_resources_text_layout_and_all_animation_fields() {
             e
         );
     }
-    assert!(d.alien_number_speech.is_null());
+    assert!(d.alien_number_speech.is_none());
 }
