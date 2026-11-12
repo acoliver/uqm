@@ -9,6 +9,7 @@ use crate::engine::{
     observe::{CheckpointView, Io},
     StoryKey,
 };
+use crate::graphics::menu as drawing;
 use crate::mainloop::restart_menu::c_extern::{
     self as base, uqm_sleep_thread_until as SleepThreadUntil,
 };
@@ -16,8 +17,8 @@ use crate::mainloop::types::activity_flags::{CHECK_ABORT, CHECK_LOAD, START_ENCO
 use crate::planet_side::ffi::{run_session, TripError, TripInput};
 use crate::planets::solar_system::SolarSystem;
 use crate::ships::native::abi::MENU_STATE;
-use crate::starbase::cffi::CffiPlatform;
-use crate::starbase::gfx::{FlashTarget, Gfx, Point, Rgba, Stamp};
+use crate::starbase::gfx::{Gfx, Rgba};
+use crate::starbase::graphics::Graphics;
 use std::ffi::{c_void, CString};
 
 const TEXT_COLORS: [Rgba; 3] = [
@@ -96,19 +97,17 @@ unsafe fn width() -> i16 {
     (ScreenWidth - 78) as i16
 }
 fn draw(frame: *mut c_void, point: CPoint, filled: bool) {
-    let stamp = Stamp {
-        origin: Point {
-            x: point.x,
-            y: point.y,
-        },
-        frame: frame as usize,
+    let point = crate::graphics::native_abi::POINT {
+        x: point.x,
+        y: point.y,
     };
     if filled {
-        CffiPlatform.draw_filled_stamp(stamp);
+        drawing::filled_stamp(frame.cast(), point);
     } else {
-        CffiPlatform.draw_stamp(stamp);
+        drawing::stamp(frame.cast(), point);
     }
 }
+
 fn cursor_frame(scan: &ScanState) -> ContextFrame {
     scan.cursor_image.indexed_frame(105)
 }
@@ -132,7 +131,7 @@ pub(crate) fn repair_back_rect(context: &ContextLease, rect: &CRect) {
 
 unsafe fn erase_coarse(planet: &ContextLease, scan: &ScanState) {
     planet.select();
-    CffiPlatform.batch();
+    drawing::batch();
     draw_star_background(
         planet,
         scan.background
@@ -140,7 +139,7 @@ unsafe fn erase_coarse(planet: &ContextLease, scan: &ScanState) {
             .unwrap_or_else(|| panic!("scan background is not supplied")),
     );
     draw_default_planet_sphere(planet, &scan.sphere.borrow());
-    CffiPlatform.unbatch();
+    drawing::unbatch();
 }
 
 fn save_location_image(scan: &ScanState) {
@@ -217,7 +216,8 @@ fn flash_location(
         return;
     };
     scan.context().select();
-    CffiPlatform.set_fg_color(Rgba::rgb15(shade, shade, shade));
+    scan.context()
+        .set_foreground(crate::ui::rgb15(shade, shade, shade));
     draw_cursor(scan, true);
 }
 
@@ -229,7 +229,7 @@ pub unsafe fn redraw_surface_scan(
 ) {
     scan.context().with_selected(|| {
         cx.with_legacy(|| {
-            CffiPlatform.batch();
+            drawing::batch();
             scan.draw_surface(0, black());
         });
         draw_scanned_objects(cx, true, visible);
@@ -238,7 +238,7 @@ pub unsafe fn redraw_surface_scan(
                 set_location(scan, location, false);
                 draw_cursor(scan, false);
             }
-            CffiPlatform.unbatch();
+            drawing::unbatch();
         });
     });
 }
@@ -401,7 +401,7 @@ unsafe fn pick_input(
     if current.menu[KEY_MENU_DOWN as usize] != 0 {
         dy = 1;
     }
-    CffiPlatform.batch();
+    drawing::batch();
     let point = scan.cursor.borrow().location;
     let next = move_cursor((point.x, point.y), dx, dy, width());
     if next != (point.x, point.y) {
@@ -415,7 +415,7 @@ unsafe fn pick_input(
         );
     }
     flash_location(scan, animation);
-    CffiPlatform.unbatch();
+    drawing::unbatch();
     SleepThreadUntil(time_in.wrapping_add(840 / 40));
     1
 }
@@ -473,15 +473,15 @@ unsafe fn prepare_pick_side(
     crate::ui::sis::clear_sis_rect(cx.kernel, cx.world, dimensions, 1 << 2);
     cx.with_legacy(|| {
         scan.context().select();
-        CffiPlatform.batch();
+        drawing::batch();
         scan.draw_surface(0, black());
     });
     draw_scanned(cx, solar, false);
     let message = cx.with_legacy(|| {
-        CffiPlatform.unbatch();
+        drawing::unbatch();
         CString::new(format!(
             "{}{:.1}",
-            CffiPlatform.game_string(435 + 5),
+            g.game_string(435 + 5),
             f32::from(fuel) / 100.0
         ))
         .unwrap()
@@ -502,7 +502,7 @@ unsafe fn scanned_stuff(
     y: u16,
     scan: u16,
 ) {
-    let g = CffiPlatform;
+    let g = Graphics::new(cx.kernel, cx.screen_dimensions());
     let old_color = g.set_fg_color(Rgba::BLACK);
     {
         let mut handle = cx.elements().head();
@@ -568,6 +568,7 @@ unsafe fn scan_planet(
     io: &mut Io<'_>,
     scan_type: u16,
 ) {
+    let g = Graphics::new(cx.kernel, cx.screen_dimensions());
     let (start, end) = if scan_type == 4 {
         (0, 2)
     } else {
@@ -592,17 +593,18 @@ unsafe fn scan_planet(
             };
             repair_back_rect(planet, &repair);
             planet.set_font(&micro);
-            CffiPlatform.set_fg_color(TEXT_COLORS[usize::from(scan)]);
+            g.set_fg_color(TEXT_COLORS[usize::from(scan)]);
             display::text(
+                &g,
                 width() >> 1,
                 baseline_y as i16,
                 crate::starbase::gfx::Align::Center,
-                CffiPlatform.game_string(305 + i32::from(scan)),
+                g.game_string(305 + i32::from(scan)),
             );
             scan_state.context().select();
-            CffiPlatform.batch();
+            drawing::batch();
             scan_state.draw_surface(0, black());
-            CffiPlatform.unbatch();
+            drawing::unbatch();
             (GetTimeCounter(), color(TINT_COLORS[usize::from(scan)]))
         });
         let mut line = 0;
@@ -612,20 +614,20 @@ unsafe fn scan_planet(
                 break;
             }
             cx.with_legacy(|| {
-                CffiPlatform.batch();
+                drawing::batch();
                 scan_state.draw_surface(line, tint);
             });
             scanned_stuff(solar, cx, line as u16, scan);
-            CffiPlatform.unbatch();
+            drawing::unbatch();
             line += 1;
         }
         if line < 84 {
             cx.with_legacy(|| {
-                CffiPlatform.batch();
+                drawing::batch();
                 scan_state.draw_surface(83, tint);
             });
             scanned_stuff(solar, cx, 83, scan);
-            CffiPlatform.unbatch();
+            drawing::unbatch();
         }
     }
     cx.with_legacy(|| {
@@ -678,7 +680,7 @@ unsafe fn scan_input(
                 play_menu_sound(cx.kernel, cx.world, 2);
                 return 1;
             }
-            cx.with_legacy(|| CffiPlatform.set_flash(FlashTarget::Off));
+            crate::ui::sis::clear_flash(cx.kernel);
             if !pick_side(solar, planet, scan, cx, io) {
                 return 0;
             }
@@ -689,7 +691,7 @@ unsafe fn scan_input(
                 7,
                 i16::from(menu.CurState),
             );
-            cx.with_legacy(|| CffiPlatform.set_flash(FlashTarget::Menu3do));
+            crate::ui::sis::set_menu_flash(cx.kernel, cx.screen_dimensions(), false);
             return 1;
         }
         if solar.sys.descriptor(solar.require_body()).data_index & 0x80 != 0 {
@@ -721,6 +723,7 @@ pub unsafe fn scan_system(
     cx: &mut Cx<'_>,
     io: &mut Io<'_>,
 ) {
+    let g = Graphics::new(cx.kernel, cx.screen_dimensions());
     let runtime = cx.kernel.input_runtime();
     let input = runtime.input();
     let mut menu: MENU_STATE = std::mem::zeroed();
@@ -731,7 +734,7 @@ pub unsafe fn scan_system(
         scan_input(solar, scan, planet, cx, io, &mut menu) != 0
     });
     io.observer.checkpoint(&CheckpointView::PlanetMenu(0));
-    cx.with_legacy(|| finish_scan_system(scan, planet));
+    cx.with_legacy(|| finish_scan_system(scan, planet, &g));
 }
 
 unsafe fn prepare_scan_system(
@@ -772,13 +775,13 @@ unsafe fn prepare_scan_system(
     display::coarse(cx, solar, planet, input.preferences().coarse_scan);
 }
 
-unsafe fn finish_scan_system(scan: &ScanState, planet: &ContextLease) {
-    CffiPlatform.set_flash(FlashTarget::Off);
-    CffiPlatform.batch();
+unsafe fn finish_scan_system(scan: &ScanState, planet: &ContextLease, g: &Graphics) {
+    g.set_flash(crate::starbase::gfx::FlashTarget::Off);
+    drawing::batch();
     scan.context().select();
     scan.draw_surface(0, black());
     erase_coarse(planet, scan);
-    CffiPlatform.unbatch();
+    drawing::unbatch();
     scan.cursor.borrow_mut().erase = None;
 }
 

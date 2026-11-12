@@ -24,8 +24,8 @@ pub(crate) mod live {
     use crate::mainloop::types::activity_flags::{CHECK_ABORT, CHECK_LOAD, START_ENCOUNTER};
     use crate::planet_side::orbit_scan;
     use crate::planets::solar_system::SolarSystem;
-    use crate::starbase::cffi::CffiPlatform;
-    use crate::starbase::gfx::{ContextId, FlashTarget, Gfx, Point, Rect, Rgba, Stamp};
+    use crate::starbase::gfx::{ContextId, Gfx, Point, Rect, Rgba, Stamp};
+    use crate::starbase::graphics::Graphics;
     use std::ffi::c_void;
 
     use crate::planets::scan::state::ScanState;
@@ -92,14 +92,21 @@ pub(crate) mod live {
                     },
                     frame: state.next.image.frame.raw() as usize,
                 };
-                cx.with_legacy(|| CffiPlatform.draw_stamp(stamp));
+                cx.with_legacy(|| {
+                    crate::graphics::menu::stamp(
+                        stamp.frame as _,
+                        crate::graphics::native_abi::POINT {
+                            x: stamp.origin.x,
+                            y: stamp.origin.y,
+                        },
+                    )
+                });
             }
         }
     }
 
-    unsafe fn draw_planet_surface_border(space: &ContextLease, screen_width: i16) {
+    unsafe fn draw_planet_surface_border(g: &Graphics, space: &ContextLease, screen_width: i16) {
         space.with_selected(|| {
-            let g = CffiPlatform;
             let old_clip = g.context_clip_rect();
             let mut clip = old_clip;
             clip.corner.x -= 1;
@@ -144,7 +151,7 @@ pub(crate) mod live {
     const UPDATE: u8 = 2;
 
     unsafe fn draw_display(cx: &mut Cx<'_>, planet: &ContextLease, scan: &ScanState, mode: u8) {
-        let g = CffiPlatform;
+        let g = Graphics::new(cx.kernel, cx.screen_dimensions());
         let mut r = cx.with_legacy(|| {
             g.set_context(ContextId::Space);
             let clip = g.context_clip_rect();
@@ -175,7 +182,7 @@ pub(crate) mod live {
                         .as_ref()
                         .unwrap_or_else(|| panic!("orbit background is not supplied")),
                 );
-                draw_planet_surface_border(&space, screen_width);
+                draw_planet_surface_border(&g, &space, screen_width);
             });
         }
         cx.with_legacy(|| {
@@ -239,7 +246,7 @@ pub(crate) mod live {
         if crate::front_end::uqmdebug::DISABLE_INTERACTIVITY != 0 {
             return None;
         }
-        let width = CffiPlatform.screen_size().0 as i16 - 78;
+        let width = game.borrow().screen_dimensions().0 as i16 - 78;
         let presentation = OrbitPresentation::new(game.borrow().kernel, width, reports, background);
         let context = presentation.context();
         let sphere = presentation.sphere();
@@ -353,7 +360,7 @@ pub(crate) mod live {
         if crate::ui::menu::choose_menu_state(cx, input, &mut menu.CurState, 0) != 0 || !selected {
             return 1;
         }
-        cx.with_legacy(|| CffiPlatform.set_flash(FlashTarget::Off));
+        crate::ui::sis::clear_flash(cx.kernel);
         match menu.CurState {
             0 => {
                 scan_system(solar, scan, planet, cx, io);
@@ -404,7 +411,7 @@ pub(crate) mod live {
                     i16::from(menu.CurState),
                 );
             }
-            cx.with_legacy(|| CffiPlatform.set_flash(FlashTarget::Menu3do));
+            crate::ui::sis::set_menu_flash(cx.kernel, cx.screen_dimensions(), false);
         }
         1
     }
