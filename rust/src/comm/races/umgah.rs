@@ -51,7 +51,7 @@ impl<A: UmgahApi> Dialogue<'_, A> {
             self.api.npc(FUNNY_IDEA);
             self.api.talk_segue((!0_u16 as i32) as u16);
             self.api.add_escorts(
-                (crate::comm::dispatch::ship::UMGAH_SHIP as i32) as u16,
+                (crate::engine::species::ship::UMGAH_SHIP as i32) as u16,
                 4_i16,
             );
             self.api.set(StoryKey::UMGAH_HOSTILE, 1_u8);

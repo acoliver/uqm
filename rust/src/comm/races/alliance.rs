@@ -1,6 +1,6 @@
 //! Alliance and mission effects used by the Supox, Utwig and Zoq-Fot-Pik scripts.
 pub(crate) use super::encounter::EncounterApi;
-pub(crate) use crate::comm::dispatch::ship;
+pub(crate) use crate::engine::species::ship;
 pub(crate) const SUPOX_SHIP: u16 = ship::SUPOX_SHIP as u16;
 pub(crate) const UTWIG_SHIP: u16 = ship::UTWIG_SHIP as u16;
 pub(crate) const ZOQFOTPIK_SHIP: u16 = ship::ZOQFOTPIK_SHIP as u16;

@@ -4,7 +4,8 @@
 mod surface;
 pub use surface::CapturedSurface;
 
-use crate::comm::dispatch::{ship, CPoint, ONE_SECOND};
+use crate::comm::dispatch::{CPoint, ONE_SECOND};
+use crate::engine::species::ship;
 use crate::mainloop::restart_menu::c_extern::{
     uqm_sleep_thread_until, FadeScreen, FADE_ALL_TO_BLACK,
 };

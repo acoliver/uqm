@@ -124,7 +124,7 @@ mod api {
         fn umgah_alive(&mut self) -> bool {
             crate::engine::world::fleet::start_sphere_tracking(
                 self.cx.borrow_mut().world,
-                crate::comm::dispatch::ship::UMGAH_SHIP as u16,
+                crate::engine::species::ship::UMGAH_SHIP as u16,
             ) != 0
         }
         fn strobe(&mut self) {

@@ -87,7 +87,7 @@ impl<A: RebelApi> Dialogue<'_, A> {
             } else {
                 let n = self
                     .api
-                    .escort_feasibility(crate::comm::dispatch::ship::YEHAT_SHIP as u16)
+                    .escort_feasibility(crate::engine::species::ship::YEHAT_SHIP as u16)
                     as i8;
                 if n == 0 {
                     self.api.npc(NO_ROOM)
@@ -99,8 +99,10 @@ impl<A: RebelApi> Dialogue<'_, A> {
                         HAVE_ALL_SHIPS
                     });
                     self.api.talk_segue(u16::MAX);
-                    self.api
-                        .add_escorts(crate::comm::dispatch::ship::YEHAT_SHIP as u16, count as i16);
+                    self.api.add_escorts(
+                        crate::engine::species::ship::YEHAT_SHIP as u16,
+                        count as i16,
+                    );
                     self.api.prepare_ship()
                 }
             }
@@ -143,15 +145,15 @@ impl<A: RebelApi> Dialogue<'_, A> {
             self.api.talk_segue(u16::MAX);
             let n = (self
                 .api
-                .escort_feasibility(crate::comm::dispatch::ship::YEHAT_REBEL_SHIP as u16)
+                .escort_feasibility(crate::engine::species::ship::YEHAT_REBEL_SHIP as u16)
                 as u8)
                 .min(8);
             self.api.add_escorts(
-                crate::comm::dispatch::ship::YEHAT_REBEL_SHIP as u16,
+                crate::engine::species::ship::YEHAT_REBEL_SHIP as u16,
                 (n - (n >> 1)) as i16,
             );
             self.api.add_escorts(
-                crate::comm::dispatch::ship::PKUNK_SHIP as u16,
+                crate::engine::species::ship::PKUNK_SHIP as u16,
                 (n >> 1) as i16,
             )
         } else {

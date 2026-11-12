@@ -1,7 +1,7 @@
 //! Contact and encounter capabilities of the solar-system host.
 
 use super::*;
-use crate::comm::dispatch::{conv, ship};
+use crate::engine::species::{conv, ship};
 use crate::engine::StoryKey;
 use crate::planet_side::report_adapter::DiscoveryReportPort;
 use crate::planets::c_api::{self, *};

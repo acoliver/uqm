@@ -40,7 +40,7 @@ impl<A: ChmmrApi> Dialogue<'_, A> {
         } else if r == PROCEED {
             self.api.npc(TAKE_2_WEEKS);
             self.api.set_allied(
-                (crate::comm::dispatch::ship::CHMMR_SHIP as i32) as u16,
+                (crate::engine::species::ship::CHMMR_SHIP as i32) as u16,
                 1 != 0,
             );
             self.api.set(StoryKey::CHMMR_HOME_VISITS, 0_u8);
@@ -59,7 +59,7 @@ impl<A: ChmmrApi> Dialogue<'_, A> {
         } else if r == TECH_HELP {
             self.api.npc(USE_OUR_SHIPS_BEFORE);
             self.api.set_allied(
-                (crate::comm::dispatch::ship::CHMMR_SHIP as i32) as u16,
+                (crate::engine::species::ship::CHMMR_SHIP as i32) as u16,
                 1 != 0,
             );
         } else if r == WHERE_WEAPON {
@@ -71,7 +71,7 @@ impl<A: ChmmrApi> Dialogue<'_, A> {
         }
         if i32::from(
             self.api
-                .alliance((crate::comm::dispatch::ship::CHMMR_SHIP as i32) as u16),
+                .alliance((crate::engine::species::ship::CHMMR_SHIP as i32) as u16),
         ) != 1
         {
             self.api
@@ -110,7 +110,7 @@ impl<A: ChmmrApi> Dialogue<'_, A> {
         } else if r == OTHER_ASSISTANCE {
             self.api.npc(USE_OUR_SHIPS_AFTER);
             self.api.set_allied(
-                (crate::comm::dispatch::ship::CHMMR_SHIP as i32) as u16,
+                (crate::engine::species::ship::CHMMR_SHIP as i32) as u16,
                 1 != 0,
             );
         }
@@ -126,7 +126,7 @@ impl<A: ChmmrApi> Dialogue<'_, A> {
         }
         if i32::from(
             self.api
-                .alliance((crate::comm::dispatch::ship::CHMMR_SHIP as i32) as u16),
+                .alliance((crate::engine::species::ship::CHMMR_SHIP as i32) as u16),
         ) != 1
         {
             self.api

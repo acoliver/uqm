@@ -90,7 +90,7 @@ mod api {
         fn have_spathi_escort(&self) -> bool {
             crate::engine::world::fleet::count_escort_ships(
                 self.cx.borrow().world,
-                u16::from(crate::comm::dispatch::ship::SPATHI_SHIP),
+                u16::from(crate::engine::species::ship::SPATHI_SHIP),
             ) != 0
         }
     }

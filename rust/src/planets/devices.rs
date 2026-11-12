@@ -11,10 +11,8 @@ use crate::mainloop::{
     types::activity_flags::{CHECK_LOAD, START_ENCOUNTER},
 };
 
-use crate::comm::{
-    dispatch::ship,
-    locdata::{CColor, CRect},
-};
+use crate::comm::locdata::{CColor, CRect};
+use crate::engine::species::ship;
 use crate::planets::generate::identities::{CHMMR_DEFINED, ILWRATH_DEFINED, SAMATRA_DEFINED};
 use crate::starbase::{
     gfx::{Align, ContextId, FontId, Gfx, Point, Rect, Rgba, TextDraw},

@@ -141,7 +141,7 @@ mod api {
             use crate::engine::world::fleet;
             let added = fleet::add_escort_ships(
                 self.cx.borrow_mut().world,
-                crate::comm::dispatch::ship::PKUNK_SHIP as u16,
+                crate::engine::species::ship::PKUNK_SHIP as u16,
                 4,
                 fleet::captain_name,
             );

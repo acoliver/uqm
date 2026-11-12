@@ -1,7 +1,8 @@
 //! Group queues, fleet construction and system NPC lifecycle.
 
 use super::*;
-use crate::comm::dispatch::{ship, CPoint};
+use crate::comm::dispatch::CPoint;
+use crate::engine::species::ship;
 use crate::engine::world::queues::IpGroup as IP_GROUP;
 use crate::engine::StoryKey;
 use crate::navigation::groups::live::{

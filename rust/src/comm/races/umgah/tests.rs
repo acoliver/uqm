@@ -76,7 +76,7 @@ fn zombie_revelation_and_reward_exit_keep_combat_and_escort_effects() {
             Effect::Segue(1),
             Effect::Npc(FUNNY_IDEA),
             Effect::Talk(u16::MAX),
-            Effect::AddEscorts(crate::comm::dispatch::ship::UMGAH_SHIP as u16, 4),
+            Effect::AddEscorts(crate::engine::species::ship::UMGAH_SHIP as u16, 4),
             Effect::Set(StoryKey::UMGAH_HOSTILE, 1)
         ]
     );

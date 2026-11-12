@@ -79,7 +79,7 @@ mod api {
         fn have_shofixti_escort(&self) -> bool {
             crate::engine::world::fleet::count_escort_ships(
                 self.cx.borrow().world,
-                u16::from(crate::comm::dispatch::ship::SHOFIXTI_SHIP),
+                u16::from(crate::engine::species::ship::SHOFIXTI_SHIP),
             ) != 0
         }
         fn random_bit(&mut self) -> u8 {

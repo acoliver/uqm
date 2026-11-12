@@ -261,12 +261,12 @@ unsafe fn spawn_fwiffo(world: &mut crate::engine::World) {
     let fleets = world.avail_races_ref();
     let template = *fleets.get(
         fleets
-            .at(crate::comm::dispatch::ship::SPATHI_SHIP as usize)
+            .at(crate::engine::species::ship::SPATHI_SHIP as usize)
             .unwrap_or_else(|| panic!("Spathi fleet")),
     );
     if let Some(id) = world.npc_built_ships().clone_fragment(
         &template,
-        crate::comm::dispatch::ship::SPATHI_SHIP,
+        crate::engine::species::ship::SPATHI_SHIP,
         1,
         crate::comm::dispatch::production_captain_name,
     ) {

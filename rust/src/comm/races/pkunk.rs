@@ -81,7 +81,7 @@ impl<A: PkunkApi> Dialogue<'_, A> {
             self.api.event(1, 6_u16, 0_u16, 0_u16, 4_u8);
             if i32::from(
                 self.api
-                    .escort_feasibility((crate::comm::dispatch::ship::PKUNK_SHIP) as u16),
+                    .escort_feasibility((crate::engine::species::ship::PKUNK_SHIP) as u16),
             ) == 0
             {
                 self.api.npc(i32::from(INIT_NO_ROOM));
@@ -780,7 +780,7 @@ impl<A: PkunkApi> Dialogue<'_, A> {
                 if (num_visits != 0) && self.ships_ready() {
                     if i32::from(
                         self.api
-                            .escort_feasibility((crate::comm::dispatch::ship::PKUNK_SHIP) as u16),
+                            .escort_feasibility((crate::engine::species::ship::PKUNK_SHIP) as u16),
                     ) == 0
                     {
                         self.api.npc(i32::from(NO_ROOM));

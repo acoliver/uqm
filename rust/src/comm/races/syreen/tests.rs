@@ -91,7 +91,7 @@ fn shuttle_vault_and_ambush_handoffs_keep_flags_and_choices() {
         Dialogue { api: &mut f }.intro();
         assert_eq!(f.spoken(), [HELLO_AFTER_AMBUSH_1]);
         assert!(f.effects.contains(&Effect::Allied(
-            crate::comm::dispatch::ship::SYREEN_SHIP as u16,
+            crate::engine::species::ship::SYREEN_SHIP as u16,
             true
         )));
     }

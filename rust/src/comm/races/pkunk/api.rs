@@ -21,7 +21,7 @@ impl PkunkApi for super::super::encounter::testing::Fake<Handler, World> {
     fn gift_ships(&mut self) -> u16 {
         self.effects
             .push(super::super::encounter::testing::Effect::AddEscorts(
-                crate::comm::dispatch::ship::PKUNK_SHIP as u16,
+                crate::engine::species::ship::PKUNK_SHIP as u16,
                 4,
             ));
         self.world.ships_added

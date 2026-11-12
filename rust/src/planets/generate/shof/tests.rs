@@ -3,7 +3,7 @@
 use super::{
     generate_planets, init_npcs, reinit_npcs, uninit_npcs, ShofixtiSite, METAL_WORLD, NUM_PLANETS,
 };
-use crate::comm::dispatch::ship::{SHOFIXTI_SHIP, UMGAH_SHIP};
+use crate::engine::species::ship::{SHOFIXTI_SHIP, UMGAH_SHIP};
 use crate::engine::world::planet::PlanetDesc;
 use crate::engine::world::queues::IpGroup as IP_GROUP;
 use crate::engine::StoryKey;
