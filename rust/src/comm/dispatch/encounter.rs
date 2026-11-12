@@ -1,6 +1,5 @@
 //! Resource phases around the typed communication session.
 
-#[cfg(not(test))]
 use crate::comm::Comm;
 
 use super::*;
@@ -14,7 +13,6 @@ pub(super) fn load_descriptor(comm: &mut Comm, cx: &mut Cx<'_>, comm_id: u32) {
     }
 }
 
-#[cfg(not(test))]
 pub(super) fn finish_unhailed(comm: &mut Comm, cx: &mut Cx<'_>) {
     let active = cx.world.activity() & (CHECK_ABORT | CHECK_LOAD) == 0;
     let post = comm.data.post_encounter_func;
@@ -87,6 +85,54 @@ pub(super) fn update_fleet(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn unhailed_teardown_skips_post_on_abort_or_load_but_always_uninitializes() {
+        fn post(_comm: &mut crate::comm::Comm, cx: &mut crate::engine::battle::Cx<'_>) {
+            assert_eq!(
+                cx.world
+                    .story_state(crate::engine::StoryKey::CHMMR_BOMB_STATE),
+                0
+            );
+            cx.world
+                .set_story_state(crate::engine::StoryKey::CHMMR_BOMB_STATE, 1);
+        }
+        fn uninit(_comm: &mut crate::comm::Comm, cx: &mut crate::engine::battle::Cx<'_>) -> u16 {
+            assert_eq!(
+                cx.world
+                    .story_state(crate::engine::StoryKey::CHMMR_BOMB_STATE),
+                u32::from(cx.world.activity() & (CHECK_ABORT | CHECK_LOAD) == 0)
+            );
+            cx.world
+                .set_story_state(crate::engine::StoryKey::CHMMR_BOMB_STATE, 2);
+            0
+        }
+        crate::comm::with_test_context(|cx| {
+            cx.world.story = Some(crate::engine::world::story::StoryState::new());
+            for flags in [0, CHECK_ABORT, CHECK_LOAD, CHECK_ABORT | CHECK_LOAD] {
+                cx.world.set_activity(flags);
+                cx.world
+                    .set_story_state(crate::engine::StoryKey::CHMMR_BOMB_STATE, 0);
+                let mut comm = crate::comm::Comm::new();
+                comm.data.post_encounter_func = Some(post);
+                comm.data.uninit_encounter_func = Some(uninit);
+                finish_unhailed(&mut comm, cx);
+                assert_eq!(
+                    cx.world
+                        .story_state(crate::engine::StoryKey::CHMMR_BOMB_STATE),
+                    2
+                );
+                comm.data.post_encounter_func = None;
+                comm.data.uninit_encounter_func = None;
+                finish_unhailed(&mut comm, cx);
+                assert_eq!(
+                    cx.world
+                        .story_state(crate::engine::StoryKey::CHMMR_BOMB_STATE),
+                    2
+                );
+            }
+        });
+    }
 
     #[test]
     fn surviving_ships_replace_the_encounter_fleet_in_queue_order() {
