@@ -340,3 +340,97 @@ fn event_skip_uses_the_supplied_calendar_and_dispatches_equal_date_events() {
     assert_eq!(cx.world.clock.events_ref().head(), Some(head));
     display.finish(game);
 }
+
+#[test]
+#[serial_test::serial]
+fn moon_dump_preserves_world_bytes_and_skips_shielded_and_special_scans() {
+    use crate::engine::{world::generation::SolarSys, world::planet::PlanetInfo, StarId};
+    use crate::planets::generate::{SiteHost, SystemGenerator};
+    struct NoScans;
+    impl Generation for NoScans {
+        fn invoke<R>(
+            &mut self,
+            _: &mut Cx<'_>,
+            _: &mut Io<'_>,
+            _: &mut SolarSystem,
+            _: impl FnOnce(&dyn SystemGenerator, &mut SolarSys<'_>, &mut dyn SiteHost) -> R,
+        ) -> R {
+            panic!("shielded and special moons must not generate resource scans")
+        }
+    }
+    let mut game = crate::engine::Game::new();
+    game.world.set_catalog(std::borrow::Cow::Owned(
+        crate::planets::tables::STARMAP_ARRAY,
+    ));
+    let mut strings = vec![b"name\0".to_vec(); GAMESTR_COUNT as usize];
+    strings[SCAN_STRING_BASE as usize + 4] = b"rock\0".to_vec();
+    strings[SCAN_STRING_BASE as usize + 54] = b"world\0".to_vec();
+    game.kernel
+        .install_game_text(crate::strings::owned_table::LoadedTextTable::fixture(
+            strings,
+        ));
+    let mut solar = SolarSystem::new(&game.world, StarId(0));
+    solar.sys.sun.num_planets = 1;
+    solar.sys.planets[0].num_planets = 1;
+    solar.enter_inner(0);
+    let body = Body::Moon { planet: 0, moon: 0 };
+    solar.select_body(body);
+    solar.sys.moons[0].data_index = 0x80;
+    solar.sys.info.planet_info = PlanetInfo {
+        axial_tilt: 7,
+        tectonics: 3,
+        weather: 2,
+        planet_density: 1,
+        planet_radius: 100,
+        gravity: 101,
+        temperature: -8,
+        rotation_period: 123,
+        atmo_density: 999,
+        life_chance: -2,
+        planet_to_sun_dist: 789,
+        ..PlanetInfo::default()
+    };
+    let mut battle = crate::engine::battle::Battle::new();
+    let mut cx = Cx::new(&mut battle, &mut game.world, &mut game.kernel, || {
+        panic!("diagnostic formatting must not consume campaign RNG")
+    });
+    let mut observer = crate::engine::observe::Unobserved;
+    let mut io = Io {
+        observer: &mut observer,
+    };
+    let mut out = Vec::new();
+    dump_moon(&mut cx, &mut io, &mut out, &mut solar, body, &mut NoScans).unwrap();
+    let mut expected = b"  - Moon a".to_vec();
+    expected.extend_from_slice(&[b' '; 31]);
+    expected.extend_from_slice(
+        concat!(
+            "rock world\n",
+            "          AxialTilt:  7\n",
+            "          Tectonics:  3\n",
+            "          Weather:    2\n",
+            "          Density:    1\n",
+            "          Radius:     100\n",
+            "          Gravity:    101\n",
+            "          Temp:       -8\n",
+            "          Day:        123\n",
+            "          Atmosphere: 999\n",
+            "          LifeChance: -2\n",
+            "          DistToSun:  789\n",
+        )
+        .as_bytes(),
+    );
+    assert_eq!(out, expected);
+    for (kind, name) in [
+        (HIERARCHY_STARBASE, b"StarBase".as_slice()),
+        (SA_MATRA, b"Sa-Matra".as_slice()),
+    ] {
+        solar.sys.moons[0].data_index = kind as u8;
+        out.clear();
+        dump_moon(&mut cx, &mut io, &mut out, &mut solar, body, &mut NoScans).unwrap();
+        let mut expected = b"  - Moon a".to_vec();
+        expected.extend_from_slice(&[b' '; 31]);
+        expected.extend_from_slice(name);
+        expected.push(b'\n');
+        assert_eq!(out, expected);
+    }
+}
