@@ -169,6 +169,23 @@ fn relocated_key(
         .map(|file| format!("{file}|{owner}|{expression}")))
 }
 
+pub(super) fn move_file(proof: &Proof, old: &str, new: &str) -> Result<Proof, String> {
+    let mut moved = Proof::new();
+    for (key, count) in proof {
+        let (file, owner, expression) = parts(key)?;
+        let file = if super::layers::prefix(file, old) {
+            format!("{new}{}", &file[old.len()..])
+        } else {
+            file.to_owned()
+        };
+        let target = format!("{file}|{owner}|{expression}");
+        if moved.insert(target.clone(), *count).is_some() {
+            return Err(format!("move would merge expect proofs into {target}"));
+        }
+    }
+    Ok(moved)
+}
+
 pub(super) fn relocate(
     proof: &Proof,
     counts: &BTreeMap<String, u64>,

@@ -277,15 +277,29 @@ impl Baseline {
         let entries = super::transfers::adjust(&self.entries, &before, &after)?;
         let mut budget = self.budget.clone();
         let mut lint = self.lint.clone();
+        let mut proofs = self.expect_sites.clone();
         for &(old, new) in steps {
             budget = super::budgets::relocated(&budget, &[(old.into(), new.into())].into())?;
             for values in lint.values_mut() {
                 *values = move_entries(values, old, new, true)?;
             }
+            for proof in proofs.values_mut() {
+                *proof = super::expect_sites::move_file(proof, old, new)?;
+            }
+        }
+        for (host, proof) in &mut proofs {
+            let counts = lint
+                .get(host)
+                .ok_or("expect proof has no host lint counters")?;
+            let (relocated, counts) =
+                super::expect_sites::relocate(proof, counts, &moves, current)?;
+            *proof = relocated;
+            lint.insert(host.clone(), counts);
         }
         self.entries = entries;
         self.budget = budget;
         self.lint = lint;
+        self.expect_sites = proofs;
         self.moved.retain(|source, _| !pending.contains_key(source));
         self.moved.extend(moves);
         Ok(())
