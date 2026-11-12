@@ -209,7 +209,7 @@ fn supplied_graphics_keeps_fonts_and_text_after_the_campaign_is_dropped() {
             native_abi::POINT,
         },
         starbase::{
-            gfx::{Align, ContextId, FontId, Gfx, Point, Rgba, TextDraw},
+            gfx::{Align, ContextId, FontId, Gfx, Point, Rect, Rgba, TextDraw},
             graphics::Graphics,
         },
     };
@@ -244,6 +244,20 @@ fn supplied_graphics_keeps_fonts_and_text_after_the_campaign_is_dropped() {
         })),
         "the retained font must still render its glyph"
     );
+    graphics.set_fg_color(Rgba::rgb15(31, 0, 0));
+    graphics.draw_rect(Rect {
+        corner: Point { x: 20, y: 20 },
+        width: 5,
+        height: 5,
+    });
+    graphics.draw_point(Point { x: 27, y: 22 });
+    context.flush();
+    for (x, y) in [(20, 20), (24, 20), (20, 24), (24, 24), (27, 22)] {
+        let pixel = target.pixel(POINT { x, y });
+        assert_eq!((pixel.r, pixel.g, pixel.b), (255, 0, 0));
+    }
+    let interior = target.pixel(POINT { x: 22, y: 22 });
+    assert_eq!((interior.r, interior.g, interior.b), (0, 0, 0));
     graphics.restore_font(previous);
     drop(graphics);
     drop(context);
