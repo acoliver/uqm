@@ -286,3 +286,57 @@ fn debug_key_uses_the_supplied_rng_and_real_status_resources() {
     assert!(cx.kernel.instant_move);
     display.finish(game);
 }
+
+#[test]
+#[serial_test::serial]
+fn event_skip_uses_the_supplied_calendar_and_dispatches_equal_date_events() {
+    if !crate::native_test_process::own_graphics_process(
+        "front_end::uqmdebug::supplied_tests::event_skip_uses_the_supplied_calendar_and_dispatches_equal_date_events",
+    ) {
+        return;
+    }
+    use crate::graphics::context_abi::ContextFrame;
+    let mut game = crate::engine::Game::new();
+    game.world.story = Some(StoryState::new());
+    game.world.set_activity(IN_INTERPLANETARY as u16);
+    game.world.clock.init();
+    let display = crate::campaign_display_test::CampaignDisplay::install(&mut game).unwrap();
+    let context = ContextLease::require(game.kernel.status_context);
+    context.set_frame(ContextFrame::retain(std::ptr::NonNull::new(
+        game.kernel.screen,
+    )));
+    let clock = &mut game.world.data.game.game_clock;
+    clock.year_index = 2155;
+    clock.month_index = 2;
+    clock.day_index = 1;
+    clock.day_in_ticks = 1;
+    clock.tick_count = 1;
+    let mut battle = crate::engine::battle::Battle::new();
+    let mut cx = Cx::new(&mut battle, &mut game.world, &mut game.kernel, || {
+        panic!("interplanetary daily events must not draw encounter RNG")
+    });
+    forward_to_next_event(&mut cx, true);
+    assert_eq!(cx.world.data.calendar_date(), (2, 1, 2155));
+    for (day, selector) in [(2, HYPERSPACE_ENCOUNTER_EVENT), (3, ARILOU_UMGAH_CHECK)] {
+        crate::time::clock_abi::insert_event(&mut cx.world.clock, (2155, 2, day), selector as u8)
+            .unwrap();
+    }
+    forward_to_next_event(&mut cx, true);
+    assert_eq!(cx.world.data.calendar_date(), (2, 3, 2155));
+    assert_eq!(cx.world.story_state(StoryKey::ARILOU_CHECKED_UMGAH), 2);
+    forward_to_next_event(&mut cx, false);
+    assert_eq!(cx.world.data.calendar_date(), (2, 4, 2155));
+    let events = cx.world.clock.events_ref();
+    assert_eq!(events.count(), 1);
+    let head = events.head().unwrap();
+    assert_eq!(events.get(head).day_index, 5);
+    assert_eq!(
+        events.get(head).func_index,
+        HYPERSPACE_ENCOUNTER_EVENT as u8
+    );
+    cx.world.data.game.game_clock.day_in_ticks = 0;
+    forward_to_next_event(&mut cx, true);
+    assert_eq!(cx.world.data.calendar_date(), (2, 4, 2155));
+    assert_eq!(cx.world.clock.events_ref().head(), Some(head));
+    display.finish(game);
+}

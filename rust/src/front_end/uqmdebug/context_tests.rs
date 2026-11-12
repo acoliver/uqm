@@ -1,10 +1,5 @@
-#![cfg(feature = "debug-process")]
-
-#[path = "support/campaign_display.rs"]
-mod campaign_display;
-
-use std::{cell::Cell, io, rc::Rc};
-use uqm_rust::{
+use crate::{
+    campaign_display_test::CampaignDisplay,
     engine::{
         battle::{input::InputContext, Battle, Cx},
         input::{frames::InputState, Frame, InputControls, InputRuntime, InputSession},
@@ -17,6 +12,11 @@ use uqm_rust::{
         native_abi::{Color, EXTENT, POINT, RECT},
     },
 };
+use std::{cell::Cell, io, rc::Rc};
+
+fn rgba(color: Color) -> (u8, u8, u8, u8) {
+    (color.r, color.g, color.b, color.a)
+}
 
 struct Driver {
     input: InputSession,
@@ -58,7 +58,8 @@ impl InputRuntime for Driver {
             self.screen.target().pixel(POINT { x: 10, y: 10 })
         });
         assert_ne!(
-            pixel, self.background,
+            rgba(pixel),
+            rgba(self.background),
             "the real overlay must reach its target"
         );
         let mut nested = Vec::new();
@@ -66,8 +67,11 @@ impl InputRuntime for Driver {
         assert!(nested.is_empty(), "nested inspection must not recurse");
         assert!(!self.panic_on_run.get(), "injected diagnostic unwind");
         let mut pressed = InputState::default();
-        pressed.menu[uqm_rust::navigation::abi::KEY_MENU_SELECT as usize] = 1;
-        self.input.advance(InputState::default(), pressed, 1000);
+        pressed.menu[crate::navigation::abi::KEY_MENU_SELECT as usize] = 1;
+        let now = self.calls.get() as u32 * 1000;
+        self.input
+            .advance(InputState::default(), InputState::default(), now - 1);
+        self.input.advance(pressed, pressed, now);
         assert!(!frame.frame(cx, io));
     }
 }
@@ -75,8 +79,13 @@ impl InputRuntime for Driver {
 #[test]
 #[serial_test::serial]
 fn contexts_draw_actual_pixels_and_restore_display_selection_and_owned_resources() {
+    if !crate::native_test_process::own_graphics_process(
+        "front_end::uqmdebug::context_tests::contexts_draw_actual_pixels_and_restore_display_selection_and_owned_resources",
+    ) {
+        return;
+    }
     let mut game = Game::new();
-    let display = campaign_display::CampaignDisplay::install(&mut game).unwrap();
+    let display = CampaignDisplay::install(&mut game).unwrap();
     let screen = ContextLease::require(game.kernel.status_context);
     game.kernel.screen_context = game.kernel.status_context;
     screen.set_frame(ContextFrame::retain(std::ptr::NonNull::new(
@@ -98,7 +107,10 @@ fn contexts_draw_actual_pixels_and_restore_display_selection_and_owned_resources
     screen.fill_rectangle(background, screen.clip_rect());
     screen.flush();
     let original = screen.target();
-    assert_eq!(original.pixel(POINT { x: 10, y: 10 }), background);
+    assert_eq!(
+        rgba(original.pixel(POINT { x: 10, y: 10 })),
+        rgba(background)
+    );
     let other = LoadedContext::create(c"non-screen selection");
     let other_context = other.lease();
     other_context.select();
@@ -138,7 +150,10 @@ fn contexts_draw_actual_pixels_and_restore_display_selection_and_owned_resources
         selected
     );
     screen.with_selected(|| screen.flush());
-    assert_eq!(original.pixel(POINT { x: 10, y: 10 }), background);
+    assert_eq!(
+        rgba(original.pixel(POINT { x: 10, y: 10 })),
+        rgba(background)
+    );
 
     struct Broken;
     impl io::Write for Broken {
@@ -168,7 +183,10 @@ fn contexts_draw_actual_pixels_and_restore_display_selection_and_owned_resources
     }));
     assert!(unwind.is_err());
     screen.with_selected(|| screen.flush());
-    assert_eq!(original.pixel(POINT { x: 10, y: 10 }), background);
+    assert_eq!(
+        rgba(original.pixel(POINT { x: 10, y: 10 })),
+        rgba(background)
+    );
     assert_eq!(screen.diagnostic_contexts().len(), contexts_before);
     assert_eq!(
         other_context.selected_context().unwrap().diagnostic_name(),

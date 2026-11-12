@@ -24,6 +24,8 @@ mod contexts;
 pub use contexts::debug_contexts;
 
 #[cfg(test)]
+mod context_tests;
+#[cfg(test)]
 mod supplied_tests;
 
 pub fn debug_key_pressed_synchronous(
