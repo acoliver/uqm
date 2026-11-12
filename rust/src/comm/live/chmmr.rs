@@ -94,29 +94,3 @@ pub fn init_chmmr_comm(comm: &mut Comm, cx: &mut Cx<'_>) -> SessionData {
         ..SessionData::new(desc)
     }
 }
-
-mod api {
-
-    use super::Handler;
-
-    use crate::comm::races::chmmr::api::*;
-    use crate::engine::StoryKey;
-
-    impl ChmmrApi for crate::comm::host::Host<'_, '_, Handler> {
-        fn refit(&mut self) {
-            use crate::comm::races::script::DialogueHost;
-            let starbase = self.get(StoryKey::STARBASE_AVAILABLE) != 0;
-
-            {
-                refit(&mut self.cx.borrow_mut().world.data, starbase);
-            }
-        }
-        fn intro_mode(&mut self, mode: i32, duration: i32) {
-            let comm = &mut **self.comm.borrow_mut();
-            self.cx.borrow_mut().with_legacy(|| {
-                use crate::comm::comm_abi::set_comm_intro_mode;
-                set_comm_intro_mode(comm, mode as u32, duration as u32);
-            })
-        }
-    }
-}
