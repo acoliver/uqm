@@ -72,6 +72,9 @@ fn measure(root: &Path) -> Measurement {
     measured.unwrap()
 }
 fn fixture() -> Fixture {
+    fixture_with_sources(false)
+}
+fn fixture_with_sources(extra: bool) -> Fixture {
     let directory = tool::fixture_directory();
     let root = directory.path();
     write(
@@ -84,12 +87,21 @@ fn fixture() -> Fixture {
         "rust/Cargo.lock",
         "version = 4\n[[package]]\nname = \"uqm\"\nversion = \"0.0.0\"\n",
     );
-    let foreign = "mod mainloop { mod input_abi { #[cfg(not(test))] mod live {} } }\n";
+    let foreign = if extra {
+        "mod mainloop { mod input_abi { #[cfg(not(test))] mod live {} } }\nmod planets { mod cargo { #[cfg(not(test))] mod live {} } }\n"
+    } else {
+        "mod mainloop { mod input_abi { #[cfg(not(test))] mod live {} } }\n"
+    };
     write(root, "rust/src/lib.rs", &format!("mod content;\n{foreign}"));
+    let other = if extra {
+        OLD.replace("fn talk", "fn other")
+    } else {
+        String::new()
+    };
     write(
         root,
         "rust/src/content.rs",
-        &format!("mod race {{ mod live {{\n{OLD}\n}} }}"),
+        &format!("mod race {{ mod live {{\n{OLD}\n{other}\n}} }}"),
     );
     write(
         root,
@@ -118,10 +130,27 @@ fn fixture() -> Fixture {
         .coverage_moves
         .capture
         .insert("uqm::content".into());
-    baseline.coverage_moves.sources.insert(
-        std::env::consts::OS.into(),
-        [(SOURCE.into(), snapshot)].into(),
-    );
+    let mut proofs: BTreeMap<_, _> = [(SOURCE.into(), snapshot)].into();
+    if extra {
+        let identity = "uqm::content::race::live::other";
+        let function = source::unique(&before.coverage_functions, identity).unwrap();
+        let hits = [(
+            function.file.clone(),
+            (function.start.0..=function.end.0)
+                .map(|line| (line, false))
+                .collect(),
+        )]
+        .into();
+        let proof = function.proof(root, &hits).unwrap();
+        proofs.insert(
+            identity.into(),
+            function.snapshot(source_commit.trim(), proof.lines),
+        );
+    }
+    baseline
+        .coverage_moves
+        .sources
+        .insert(std::env::consts::OS.into(), proofs);
     fs::create_dir_all(root.join("rust/xtask")).unwrap();
     baseline
         .write(&root.join("rust/xtask/quality-baseline.toml"))
@@ -620,4 +649,111 @@ fn tightening_repairs_a_legacy_target_without_new_coverage_credit() {
     let current = measure(root);
     assert!(move_edit::apply(root, "tighten", "U6-04", "HEAD", &current, &f.hits).is_err());
     assert_eq!(fs::read(&path).unwrap(), before);
+}
+
+fn renamed_target_with_two_active_owners_and_sources() -> Fixture {
+    let mut f = fixture_with_sources(true);
+    let root = f.directory.path();
+    let path = root.join("rust/xtask/quality-baseline.toml");
+    let proofs = f.baseline.coverage_moves.sources.clone();
+    f.baseline.write(&path).unwrap();
+    move_edit::apply(root, "record", "U6-04", "HEAD", &f.current, &f.hits).unwrap();
+    f.baseline = Baseline::read(&path).unwrap();
+    f.baseline.coverage_moves.sources = proofs;
+    f.baseline.write(&path).unwrap();
+    commit(root, "first relocation with two archived sources");
+    let before = f.current.clone();
+    write(
+        root,
+        "rust/src/host.rs",
+        &NEW.replace("fn talk", "fn speak"),
+    );
+    f.current = measure(root);
+    let prior = Baseline::read(&path).unwrap();
+    f.baseline
+        .add_moves(
+            &[(TARGET, "uqm::host::speak")],
+            &f.current,
+            &before,
+            &prior.moved,
+        )
+        .unwrap();
+    f
+}
+
+#[test]
+fn renamed_debt_rejects_owner_change_when_both_owners_are_active() {
+    let mut f = renamed_target_with_two_active_owners_and_sources();
+    let root = f.directory.path();
+    let renamed = "uqm::host::speak";
+    move_check::analyze(root, "HEAD", &f.baseline, &f.current, &f.hits, true).unwrap();
+    f.baseline
+        .coverage_moves
+        .debt
+        .get_mut(renamed)
+        .unwrap()
+        .owner = "U5-02".into();
+    move_check::analyze(root, "HEAD", &f.baseline, &f.current, &f.hits, false).unwrap();
+    let error = move_check::analyze(root, "HEAD", &f.baseline, &f.current, &f.hits, true)
+        .err()
+        .unwrap();
+    assert!(
+        error.contains("coverage relocation may only shrink"),
+        "{error}"
+    );
+    f.baseline
+        .write(&root.join("rust/xtask/quality-baseline.toml"))
+        .unwrap();
+    commit(root, "cargo owns the inherited debt");
+    move_check::analyze(root, "HEAD", &f.baseline, &f.current, &f.hits, true).unwrap();
+}
+
+#[test]
+fn renamed_debt_rejects_swapping_to_another_archived_source_without_enforcement() {
+    let mut f = renamed_target_with_two_active_owners_and_sources();
+    let root = f.directory.path();
+    assert_eq!(
+        f.baseline.coverage_moves.sources[std::env::consts::OS].len(),
+        2
+    );
+    let renamed = "uqm::host::speak";
+    move_check::analyze(root, "HEAD", &f.baseline, &f.current, &f.hits, false).unwrap();
+    f.baseline
+        .coverage_moves
+        .debt
+        .get_mut(renamed)
+        .unwrap()
+        .source = "uqm::content::race::live::other".into();
+    let error = move_check::analyze(root, "HEAD", &f.baseline, &f.current, &f.hits, false)
+        .err()
+        .unwrap();
+    assert!(error.contains("coverage debt source changed"), "{error}");
+}
+
+#[test]
+fn add_moves_rejects_merging_coverage_credits_without_mutating_the_baseline() {
+    let mut f = fixture();
+    let root = f.directory.path();
+    let path = root.join("rust/xtask/quality-baseline.toml");
+    f.baseline.write(&path).unwrap();
+    move_edit::apply(root, "record", "U6-04", "HEAD", &f.current, &f.hits).unwrap();
+    f.baseline = Baseline::read(&path).unwrap();
+    let other = "uqm::host::other";
+    let before = f.current.clone();
+    let debt = f.baseline.coverage_moves.debt[TARGET].clone();
+    f.baseline.coverage_moves.debt.insert(other.into(), debt);
+    f.baseline.write(&path).unwrap();
+    let original = Baseline::read(&path).unwrap();
+    write(
+        root,
+        "rust/src/host.rs",
+        &NEW.replace("fn talk", "fn other"),
+    );
+    let current = measure(root);
+    let error = f
+        .baseline
+        .add_moves(&[(TARGET, other)], &current, &before, &original.moved)
+        .unwrap_err();
+    assert!(error.contains("merge coverage debt"), "{error}");
+    assert_eq!(f.baseline, original);
 }

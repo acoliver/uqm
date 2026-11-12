@@ -272,3 +272,30 @@ pub(crate) fn new_lines(hits: &Hits, attributed: &ResultSet) -> BTreeMap<String,
     }
     result
 }
+
+#[cfg(test)]
+mod debt_limit_tests {
+    use super::*;
+
+    #[test]
+    fn inherited_source_cannot_change_at_the_debt_limit() {
+        let old = Debt {
+            source: "uqm::old::talk".into(),
+            owner: "U6-04".into(),
+            lines: 2,
+        };
+        let mut debt = old.clone();
+        let attribution = Attribution {
+            moved: [1, 3].into(),
+            new: Lines::default(),
+            uncovered: 2,
+        };
+        debt_limit("uqm::host::talk", &debt, Some(&old), &attribution).unwrap();
+        debt.source = "uqm::other::talk".into();
+        let error = debt_limit("uqm::host::talk", &debt, Some(&old), &attribution).unwrap_err();
+        assert!(
+            error.contains("coverage relocation may only shrink"),
+            "{error}"
+        );
+    }
+}
