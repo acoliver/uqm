@@ -1,22 +1,18 @@
 use crate::comm::descriptors::melnorm::descriptor;
-use crate::comm::live::script::LiveScript;
+use crate::comm::host::Host;
 use crate::comm::locdata::CSisState;
 use crate::comm::races::melnorm::*;
 use crate::comm::{locdata::CLocData, Comm};
 use crate::engine::battle::Cx;
 
-fn run(
-    comm: &mut Comm,
-    cx: &mut Cx<'_>,
-    f: impl FnOnce(&mut Dialogue<'_, LiveScript<'_, '_, Handler>>),
-) {
+fn run(comm: &mut Comm, cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, Host<'_, '_, Handler>>)) {
     let mut session = comm
         .race_scratch
         .melnorm
         .take()
         .unwrap_or_else(Session::new);
     {
-        let mut api = LiveScript::new(comm, cx, callback);
+        let mut api = Host::new(comm, cx, callback);
         f(&mut Dialogue {
             api: &mut api,
             session: &mut session,
@@ -135,14 +131,14 @@ mod api {
     #[cfg(not(test))]
     mod live {
         use super::*;
-        use crate::comm::live::script::LiveScript;
+        use crate::comm::host::Host;
 
         use crate::comm::commglue_abi::runtime::npc_number;
 
         use crate::planets::cargo::draw_cargo;
 
         use crate::threading::pacing::linked::sleep_thread as SleepThread;
-        impl MelnormApi for LiveScript<'_, '_, Handler> {
+        impl MelnormApi for Host<'_, '_, Handler> {
             fn ship(&self) -> CSisState {
                 self.cx.borrow().world.data.flagship
             }

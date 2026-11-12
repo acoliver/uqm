@@ -1,5 +1,5 @@
 use crate::comm::descriptors::vux::descriptor;
-use crate::comm::live::script::LiveScript;
+use crate::comm::host::Host;
 use crate::comm::races::vux::*;
 use crate::comm::{locdata::CLocData, Comm};
 use crate::engine::battle::Cx;
@@ -7,9 +7,9 @@ use crate::engine::battle::Cx;
 fn run(
     comm: &mut Comm,
     cx: &mut Cx<'_>,
-    f: impl FnOnce(&mut dialogue::Dialogue<'_, LiveScript<'_, '_, Handler>>),
+    f: impl FnOnce(&mut dialogue::Dialogue<'_, Host<'_, '_, Handler>>),
 ) {
-    let mut api = LiveScript::new(comm, cx, callback);
+    let mut api = Host::new(comm, cx, callback);
     f(&mut dialogue::Dialogue { api: &mut api });
 }
 

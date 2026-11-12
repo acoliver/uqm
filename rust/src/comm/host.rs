@@ -18,13 +18,13 @@ use crate::comm::comm_abi::alien_talk_segue;
 extern "C" {}
 
 // Callbacks and live globals belong to the game thread, as in the C scripts.
-pub(crate) struct LiveScript<'a, 'b, H> {
+pub(crate) struct Host<'a, 'b, H> {
     pub comm: std::cell::RefCell<&'a mut Comm>,
     pub cx: std::cell::RefCell<&'a mut crate::engine::battle::Cx<'b>>,
     pub callback: fn(H) -> crate::comm::response::ResponseFunc,
 }
 
-impl<'a, 'b, H> LiveScript<'a, 'b, H> {
+impl<'a, 'b, H> Host<'a, 'b, H> {
     pub fn new(
         comm: &'a mut Comm,
         cx: &'a mut crate::engine::battle::Cx<'b>,
@@ -38,7 +38,7 @@ impl<'a, 'b, H> LiveScript<'a, 'b, H> {
     }
 }
 
-impl<H> ScriptApi<H> for LiveScript<'_, '_, H> {
+impl<H> DialogueHost<H> for Host<'_, '_, H> {
     fn get(&self, key: StoryKey) -> u8 {
         self.cx.borrow().world.story_state(key) as u8
     }
@@ -179,5 +179,37 @@ impl<H> ScriptApi<H> for LiveScript<'_, '_, H> {
             let map = SetAbsStringTableIndex((comm.data.alien_colormap).cast(), index);
             XFormColorMap(GetColorMapAddress(map), duration);
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn story_and_animation_effects_use_only_the_supplied_owners() {
+        crate::comm::with_test_context(|cx| {
+            cx.world.story = Some(crate::engine::world::story::StoryState::new());
+            cx.world.data.flagship.num_landers = 2;
+            cx.world.data.flagship.fuel_on_board = 321;
+            cx.world.data.flagship.element_amounts[6] = 17;
+            let mut first = Comm::new();
+            let second = Comm::new();
+            {
+                let mut host = Host::new(&mut first, cx, |_: ()| panic!("unexpected response"));
+                host.set(StoryKey::NEW_ALLIANCE_NAME, 3);
+                assert_eq!(host.get(StoryKey::NEW_ALLIANCE_NAME), 3);
+                assert_eq!(host.alliance_fragments(20), [23, GLOBAL_PLAYER_NAME, 24]);
+                let supplies = host.supplies();
+                assert_eq!(
+                    (supplies.landers, supplies.fuel, supplies.radioactives),
+                    (2, 321, 17)
+                );
+                host.disable_animation(2);
+            }
+            assert_eq!(cx.world.story_state(StoryKey::NEW_ALLIANCE_NAME), 3);
+            assert_eq!(first.data.alien_ambient_array[2].anim_flags, ANIM_DISABLED);
+            assert_eq!(second.data.alien_ambient_array[2].anim_flags, 0);
+        });
     }
 }

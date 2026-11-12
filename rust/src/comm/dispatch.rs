@@ -273,9 +273,6 @@ mod ffi {
 
     #[cfg(not(test))]
     pub use crate::comm::live::zoqfot::init_zoqfot_comm;
-
-    #[cfg(not(test))]
-    pub use crate::comm::races::rust_init_race_dialogue;
 }
 
 // ---------------------------------------------------------------------------
@@ -672,7 +669,7 @@ pub unsafe fn race_descriptor(
 ) -> crate::comm::locdata::CLocData {
     comm.presentation = super::presentation::Presentation::from(&*cx.kernel);
     // Initialize Rust dialogue state (callbacks, phrase state, etc.)
-    ffi::rust_init_race_dialogue(comm, cx, comm_id as i32);
+    super::lifecycle::initialize_conversation(comm, cx, comm_id);
 
     // Preserve the existing initialization order and conversation variants.
     match comm_id {

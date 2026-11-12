@@ -1,7 +1,7 @@
 //! Earth Commander dialogue, ported from comm/comandr/comandr.c.
 
 pub(crate) use super::script::{
-    ScriptApi, ANIM_DISABLED, FUEL_TANK_SCALE, GLOBAL_PLAYER_NAME, GLOBAL_SHIP_NAME, ONE_SECOND,
+    DialogueHost, ANIM_DISABLED, FUEL_TANK_SCALE, GLOBAL_PLAYER_NAME, GLOBAL_SHIP_NAME, ONE_SECOND,
 };
 pub(crate) use crate::comm::locdata::CLocData;
 pub(crate) use crate::engine::StoryKey;
@@ -118,7 +118,7 @@ pub(crate) enum Handler {
 
 pub(crate) struct Commander<'a, A>(pub(crate) &'a mut A);
 
-impl<A: ScriptApi<Handler>> Commander<'_, A> {
+impl<A: DialogueHost<Handler>> Commander<'_, A> {
     pub(crate) fn say(&mut self, phrase: u16) {
         self.0.npc(i32::from(phrase));
     }

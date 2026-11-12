@@ -72,10 +72,10 @@ impl ZoqApi for crate::comm::races::encounter::testing::Fake<Handler, Clock> {
                 phrase,
                 speaker == Speaker::Pik,
             ));
-        crate::comm::races::script::ScriptApi::npc(self, i32::from(phrase));
+        crate::comm::races::script::DialogueHost::npc(self, i32::from(phrase));
     }
     fn begin_talk(&mut self, track: u16) {
-        crate::comm::races::script::ScriptApi::talk_segue(self, track);
+        crate::comm::races::script::DialogueHost::talk_segue(self, track);
     }
     fn date(&self) -> (i16, u8) {
         (self.world.year, self.world.month)

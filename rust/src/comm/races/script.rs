@@ -10,13 +10,13 @@ pub(crate) const GLOBAL_PLAYER_NAME: i32 = -1_000_000;
 pub(crate) const GLOBAL_SHIP_NAME: i32 = -999_999;
 
 #[derive(Clone, Copy, Default)]
-pub(crate) struct Supplies {
+pub struct Supplies {
     pub landers: u8,
     pub fuel: u32,
     pub radioactives: u16,
 }
 
-pub(crate) trait ScriptApi<H> {
+pub trait DialogueHost<H> {
     fn get(&self, key: StoryKey) -> u8;
     fn set(&mut self, key: StoryKey, value: u8);
     fn npc(&mut self, phrase: i32);
@@ -62,47 +62,4 @@ pub(crate) fn animation(
 
 pub(crate) fn as_comm_data(desc: &CLocData) -> crate::comm::types::CommData {
     crate::comm::locdata::read_locdata(desc)
-}
-
-#[derive(Clone, Copy)]
-#[repr(usize)]
-pub enum DialogueKind {
-    Blackur,
-    Chmmr,
-    Yehat,
-    Umgah,
-    Mycon,
-    Talkpet,
-    Utwig,
-    Druuge,
-    Syreen,
-    Orz,
-    Spahome,
-    Ilwrath,
-    Starbas,
-    Slyhome,
-    Arilou,
-    Supox,
-    Shofixt,
-    Pkunk,
-    Rebel,
-    Slyland,
-    Vux,
-    Melnorm,
-    Zoqfot,
-    Comandr,
-    Urquan,
-    Thradd,
-    Spathi,
-}
-
-impl DialogueKind {
-    pub(crate) const COUNT: usize = 27;
-}
-
-pub trait DialogueHost {
-    fn initialize(&mut self, kind: DialogueKind, cx: &mut crate::engine::battle::Cx<'_>);
-    fn intro(&mut self, kind: DialogueKind, cx: &mut crate::engine::battle::Cx<'_>);
-    fn post_encounter(&mut self, kind: DialogueKind, cx: &mut crate::engine::battle::Cx<'_>);
-    fn uninit(&mut self, kind: DialogueKind, cx: &mut crate::engine::battle::Cx<'_>) -> u32;
 }

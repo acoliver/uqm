@@ -1,16 +1,12 @@
 use crate::comm::descriptors::starbas::descriptor;
-use crate::comm::live::script::LiveScript;
+use crate::comm::host::Host;
 use crate::comm::races::starbas::*;
 use crate::comm::{locdata::CLocData, Comm};
 use crate::engine::battle::Cx;
-fn run(
-    comm: &mut Comm,
-    cx: &mut Cx<'_>,
-    f: impl FnOnce(&mut Dialogue<'_, LiveScript<'_, '_, Handler>>),
-) {
+fn run(comm: &mut Comm, cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, Host<'_, '_, Handler>>)) {
     let mut session = comm.race_scratch.starbas.take().unwrap_or_default();
     {
-        let mut api = LiveScript::new(comm, cx, callback);
+        let mut api = Host::new(comm, cx, callback);
         f(&mut Dialogue {
             api: &mut api,
             session: &mut session,
@@ -163,7 +159,7 @@ mod api {
 
     mod live {
         use super::*;
-        use crate::comm::live::script::LiveScript;
+        use crate::comm::host::Host;
 
         use crate::threading::legacy_abi::TaskSwitch;
 
@@ -178,7 +174,7 @@ mod api {
         use crate::threading::pacing::linked::sleep_thread as SleepThread;
         use crate::threading::pacing::linked::sleep_thread_until as SleepThreadUntil;
 
-        impl StarbaseApi for LiveScript<'_, '_, Handler> {
+        impl StarbaseApi for Host<'_, '_, Handler> {
             fn date(&self) -> Date {
                 let cx = self.cx.borrow();
                 let clock = &cx.world.data.game.game_clock;

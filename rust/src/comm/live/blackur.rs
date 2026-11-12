@@ -1,14 +1,10 @@
 use crate::comm::descriptors::blackur::descriptor;
-use crate::comm::live::script::LiveScript;
+use crate::comm::host::Host;
 use crate::comm::races::blackur::*;
 use crate::comm::{locdata::CLocData, Comm};
 use crate::engine::battle::Cx;
-fn run(
-    comm: &mut Comm,
-    cx: &mut Cx<'_>,
-    f: impl FnOnce(&mut Dialogue<'_, LiveScript<'_, '_, Handler>>),
-) {
-    let mut a = LiveScript::new(comm, cx, callback);
+fn run(comm: &mut Comm, cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, Host<'_, '_, Handler>>)) {
+    let mut a = Host::new(comm, cx, callback);
     f(&mut Dialogue { api: &mut a });
 }
 fn combat(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
@@ -49,7 +45,7 @@ mod api {
 
     use crate::engine::StoryKey;
 
-    impl BlackurApi for crate::comm::live::script::LiveScript<'_, '_, Handler> {
+    impl BlackurApi for crate::comm::host::Host<'_, '_, Handler> {
         fn battle_group(&self, key: StoryKey) -> (u32, u32) {
             let cx = self.cx.borrow();
             let offset = crate::state::ffi::rust_get_game_state_32(cx.world, key.start() as i32);

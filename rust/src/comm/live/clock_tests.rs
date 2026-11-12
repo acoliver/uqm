@@ -1,4 +1,4 @@
-use super::script::LiveScript;
+use crate::comm::host::Host;
 use crate::comm::races::{alliance::AllianceApi, encounter::EncounterApi};
 use crate::comm::Comm;
 use crate::engine::{
@@ -56,8 +56,7 @@ fn clock_adapters_schedule_and_dispatch_on_the_supplied_campaign() {
         assert!(yehat.post_encounter_func.is_some());
         assert!(yehat.uninit_encounter_func.is_some());
         {
-            let mut script =
-                LiveScript::new(&mut comm, &mut cx, |_: ()| panic!("response callback"));
+            let mut script = Host::new(&mut comm, &mut cx, |_: ()| panic!("response callback"));
             script.event(1, 0, 0, 0, ARILOU_UMGAH_CHECK as u8);
             script.advance_ilwrath();
         }
@@ -66,7 +65,7 @@ fn clock_adapters_schedule_and_dispatch_on_the_supplied_campaign() {
         {
             use crate::comm::races::shofixt::{api::ShofixtApi, Handler};
             let mut script =
-                LiveScript::new(&mut comm, &mut cx, |_: Handler| panic!("response callback"));
+                Host::new(&mut comm, &mut cx, |_: Handler| panic!("response callback"));
             script.schedule_return();
         }
         let events = cx.world.clock.events_ref();
@@ -83,7 +82,7 @@ fn clock_adapters_schedule_and_dispatch_on_the_supplied_campaign() {
         {
             use crate::comm::races::yehat::{api::YehatApi, Handler};
             let mut script =
-                LiveScript::new(&mut comm, &mut cx, |_: Handler| panic!("response callback"));
+                Host::new(&mut comm, &mut cx, |_: Handler| panic!("response callback"));
             script.schedule_rebel_event();
         }
         let fleets = cx.world.avail_races_ref();

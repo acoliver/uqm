@@ -1,7 +1,7 @@
 use super::dialogue::Dialogue;
 use super::*;
 use crate::comm::races::encounter::testing::{Effect, Fake};
-use crate::comm::races::script::{ScriptApi, GLOBAL_PLAYER_NAME, GLOBAL_SHIP_NAME};
+use crate::comm::races::script::{DialogueHost, GLOBAL_PLAYER_NAME, GLOBAL_SHIP_NAME};
 use crate::engine::StoryKey;
 
 type Api = Fake<Handler, api::World>;

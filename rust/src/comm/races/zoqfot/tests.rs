@@ -1,6 +1,6 @@
 use super::*;
 use crate::comm::races::encounter::testing::{Effect, Fake};
-use crate::comm::races::script::{ScriptApi, GLOBAL_PLAYER_NAME};
+use crate::comm::races::script::{DialogueHost, GLOBAL_PLAYER_NAME};
 use crate::engine::StoryKey;
 type Api = Fake<Handler, api::Clock>;
 fn run(f: &mut Api, h: Handler, r: u16) {

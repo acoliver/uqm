@@ -1,14 +1,10 @@
 use crate::comm::descriptors::orz::descriptor;
-use crate::comm::live::script::LiveScript;
+use crate::comm::host::Host;
 use crate::comm::races::orz::*;
 use crate::comm::{locdata::CLocData, Comm};
 use crate::engine::battle::Cx;
-fn run(
-    comm: &mut Comm,
-    cx: &mut Cx<'_>,
-    f: impl FnOnce(&mut Dialogue<'_, LiveScript<'_, '_, Handler>>),
-) {
-    let mut api = LiveScript::new(comm, cx, callback);
+fn run(comm: &mut Comm, cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, Host<'_, '_, Handler>>)) {
+    let mut api = Host::new(comm, cx, callback);
     f(&mut Dialogue { api: &mut api });
 }
 fn exit_conversation(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
@@ -91,7 +87,7 @@ mod api {
 
     use crate::comm::races::orz::api::*;
 
-    impl OrzApi for crate::comm::live::script::LiveScript<'_, '_, Handler> {
+    impl OrzApi for crate::comm::host::Host<'_, '_, Handler> {
         fn remove_escorts(&mut self, race: u16) {
             use crate::engine::world::fleet;
             let remaining = fleet::remove_escort_ships(self.cx.borrow_mut().world, race, u16::MAX);

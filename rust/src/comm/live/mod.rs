@@ -20,7 +20,6 @@ pub(crate) mod mycon;
 pub(crate) mod orz;
 pub(crate) mod pkunk;
 pub(crate) mod rebel;
-pub(crate) mod script;
 pub(crate) mod shofixt;
 pub(crate) mod slyhome;
 #[cfg(not(test))]

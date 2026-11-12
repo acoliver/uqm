@@ -1,14 +1,10 @@
 use crate::comm::descriptors::shofixt::descriptor;
-use crate::comm::live::script::LiveScript;
+use crate::comm::host::Host;
 use crate::comm::races::shofixt::*;
 use crate::comm::{locdata::CLocData, Comm};
 use crate::engine::battle::Cx;
-fn run(
-    comm: &mut Comm,
-    cx: &mut Cx<'_>,
-    f: impl FnOnce(&mut Dialogue<'_, LiveScript<'_, '_, Handler>>),
-) {
-    let mut a = LiveScript::new(comm, cx, callback);
+fn run(comm: &mut Comm, cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, Host<'_, '_, Handler>>)) {
+    let mut a = Host::new(comm, cx, callback);
     f(&mut Dialogue { api: &mut a })
 }
 fn exit(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
@@ -64,7 +60,7 @@ mod api {
 
     use crate::comm::races::shofixt::api::*;
 
-    impl ShofixtApi for crate::comm::live::script::LiveScript<'_, '_, Handler> {
+    impl ShofixtApi for crate::comm::host::Host<'_, '_, Handler> {
         fn schedule_return(&mut self) {
             crate::time::clock_abi::add_event(&mut self.cx.borrow_mut(), 1, 2, 0, 0, 8);
         }

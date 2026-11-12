@@ -1,5 +1,5 @@
 use crate::comm::descriptors::urquan::descriptor;
-use crate::comm::live::script::LiveScript;
+use crate::comm::host::Host;
 use crate::comm::races::urquan::*;
 use crate::comm::{locdata::CLocData, Comm};
 use crate::engine::battle::Cx;
@@ -7,9 +7,9 @@ use crate::engine::battle::Cx;
 fn run(
     comm: &mut Comm,
     cx: &mut Cx<'_>,
-    f: impl FnOnce(&mut dialogue::Dialogue<'_, LiveScript<'_, '_, Handler>>),
+    f: impl FnOnce(&mut dialogue::Dialogue<'_, Host<'_, '_, Handler>>),
 ) {
-    let mut api = LiveScript::new(comm, cx, callback);
+    let mut api = Host::new(comm, cx, callback);
     f(&mut dialogue::Dialogue { api: &mut api });
 }
 
@@ -90,7 +90,7 @@ mod api {
     use crate::comm::races::urquan::api::*;
     use crate::engine::StoryKey;
 
-    impl UrquanApi for crate::comm::live::script::LiveScript<'_, '_, Handler> {
+    impl UrquanApi for crate::comm::host::Host<'_, '_, Handler> {
         fn group_battle(&self, state_key: StoryKey) -> bool {
             let cx = self.cx.borrow();
             let offset =

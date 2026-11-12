@@ -207,19 +207,19 @@ fn live_callbacks_keep_the_supplied_session_and_phrase_owner(
                 descriptor.post_encounter_func.ok_or("missing post")?,
                 descriptor.uninit_encounter_func.ok_or("missing uninit")?,
             );
-            use uqm_rust::comm::races::{DialogueHost, DialogueKind};
+            use uqm_rust::comm::lifecycle::{self, DialogueKind};
             let host_kind = match (conversation, variant) {
                 (2, 1) => Some(DialogueKind::Starbas),
                 (6, 1) => Some(DialogueKind::Spahome),
                 _ => None,
             };
             if let Some(kind) = host_kind {
-                comm.initialize(kind, &mut cx);
+                lifecycle::initialize(&mut comm, kind, &mut cx);
             }
             // SAFETY: the phrase owner and display outlive all callbacks and session teardown.
             unsafe { comm.install_descriptor(descriptor) };
             if let Some(kind) = host_kind {
-                comm.intro(kind, &mut cx);
+                lifecycle::intro(&mut comm, kind, &mut cx);
             } else {
                 intro(&mut comm, &mut cx);
             }
@@ -242,7 +242,7 @@ fn live_callbacks_keep_the_supplied_session_and_phrase_owner(
                 _ => {}
             }
             if let Some(kind) = host_kind {
-                comm.post_encounter(kind, &mut cx);
+                lifecycle::post_encounter(&mut comm, kind, &mut cx);
             } else {
                 post(&mut comm, &mut cx);
             }

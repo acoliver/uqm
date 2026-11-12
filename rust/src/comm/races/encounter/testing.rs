@@ -87,7 +87,7 @@ impl<H: Copy, E> Fake<H, E> {
         self.state.insert(key, value);
     }
 }
-impl<H: Copy, E> ScriptApi<H> for Fake<H, E> {
+impl<H: Copy, E> DialogueHost<H> for Fake<H, E> {
     fn get(&self, key: StoryKey) -> u8 {
         *self.state.get(&key).unwrap_or(&0)
     }

@@ -15,9 +15,7 @@
 //!
 //! @plan PLAN-20260724-MAINLOOP-AND-COMM.P12-P15
 
-use std::os::raw::c_int;
-
-pub use script::{DialogueHost, DialogueKind};
+pub use script::{DialogueHost, Supplies};
 
 pub(crate) mod alliance;
 pub mod arilou;
@@ -49,117 +47,6 @@ pub mod utwig;
 pub mod vux;
 pub mod yehat;
 pub mod zoqfot;
-
-/// Trait implemented by each race's dialogue module.
-///
-/// Each race provides:
-/// - `init()`: Populate CommData with resource keys, animation descriptors, and
-///   set the initial segue mode based on game state
-/// - `intro()`: The initial dialogue entry point (called as `init_encounter_func`)
-/// - `post_encounter()`: Post-encounter processing (called as `post_encounter_func`)
-/// - `uninit()`: Cleanup after encounter (called as `uninit_encounter_func`)
-pub trait RaceDialogue: Send + Sync {
-    /// Populate CommData for this race and set the initial segue.
-    fn init(&self, host: &mut dyn DialogueHost, cx: &mut crate::engine::battle::Cx<'_>);
-    fn intro(&self, host: &mut dyn DialogueHost, cx: &mut crate::engine::battle::Cx<'_>);
-    fn post_encounter(&self, host: &mut dyn DialogueHost, cx: &mut crate::engine::battle::Cx<'_>);
-    fn uninit(&self, host: &mut dyn DialogueHost, cx: &mut crate::engine::battle::Cx<'_>) -> u32;
-}
-
-struct Race(DialogueKind);
-impl RaceDialogue for Race {
-    fn init(&self, host: &mut dyn DialogueHost, cx: &mut crate::engine::battle::Cx<'_>) {
-        host.initialize(self.0, cx);
-    }
-    fn intro(&self, host: &mut dyn DialogueHost, cx: &mut crate::engine::battle::Cx<'_>) {
-        host.intro(self.0, cx);
-    }
-    fn post_encounter(&self, host: &mut dyn DialogueHost, cx: &mut crate::engine::battle::Cx<'_>) {
-        host.post_encounter(self.0, cx);
-    }
-    fn uninit(&self, host: &mut dyn DialogueHost, cx: &mut crate::engine::battle::Cx<'_>) -> u32 {
-        host.uninit(self.0, cx)
-    }
-}
-
-// Conversation IDs from commglue.h enum
-const ARILOU_CONVERSATION: i32 = 0;
-const CHMMR_CONVERSATION: i32 = 1;
-const COMMANDER_CONVERSATION: i32 = 2;
-const ORZ_CONVERSATION: i32 = 3;
-const PKUNK_CONVERSATION: i32 = 4;
-const SHOFIXTI_CONVERSATION: i32 = 5;
-const SPATHI_CONVERSATION: i32 = 6;
-const SUPOX_CONVERSATION: i32 = 7;
-const THRADD_CONVERSATION: i32 = 8;
-const UTWIG_CONVERSATION: i32 = 9;
-const VUX_CONVERSATION: i32 = 10;
-const YEHAT_CONVERSATION: i32 = 11;
-const MELNORME_CONVERSATION: i32 = 12;
-const DRUUGE_CONVERSATION: i32 = 13;
-const ILWRATH_CONVERSATION: i32 = 14;
-const MYCON_CONVERSATION: i32 = 15;
-const SLYLANDRO_CONVERSATION: i32 = 16;
-const UMGAH_CONVERSATION: i32 = 17;
-const URQUAN_CONVERSATION: i32 = 18;
-const ZOQFOTPIK_CONVERSATION: i32 = 19;
-const SYREEN_CONVERSATION: i32 = 20;
-const BLACKURQ_CONVERSATION: i32 = 21;
-const TALKING_PET_CONVERSATION: i32 = 22;
-const SLYLANDRO_HOME_CONVERSATION: i32 = 23;
-const YEHAT_REBEL_CONVERSATION: i32 = 25;
-
-/// Get the race dialogue implementation for a conversation ID.
-///
-/// Returns `None` for conversation IDs that haven't been ported yet.
-/// Only Arilou has a full implementation — others have stubs with
-/// resource keys and string indices but TODO state machines.
-#[must_use]
-pub fn get_race_dialogue(comm_id: i32) -> Option<Box<dyn RaceDialogue>> {
-    match comm_id {
-        ARILOU_CONVERSATION => Some(Box::new(Race(DialogueKind::Arilou))),
-        CHMMR_CONVERSATION => Some(Box::new(Race(DialogueKind::Chmmr))),
-        COMMANDER_CONVERSATION => Some(Box::new(Race(DialogueKind::Comandr))),
-        ORZ_CONVERSATION => Some(Box::new(Race(DialogueKind::Orz))),
-        PKUNK_CONVERSATION => Some(Box::new(Race(DialogueKind::Pkunk))),
-        SHOFIXTI_CONVERSATION => Some(Box::new(Race(DialogueKind::Shofixt))),
-        SPATHI_CONVERSATION => Some(Box::new(Race(DialogueKind::Spathi))),
-        SUPOX_CONVERSATION => Some(Box::new(Race(DialogueKind::Supox))),
-        THRADD_CONVERSATION => Some(Box::new(Race(DialogueKind::Thradd))),
-        UTWIG_CONVERSATION => Some(Box::new(Race(DialogueKind::Utwig))),
-        VUX_CONVERSATION => Some(Box::new(Race(DialogueKind::Vux))),
-        YEHAT_CONVERSATION => Some(Box::new(Race(DialogueKind::Yehat))),
-        MELNORME_CONVERSATION => Some(Box::new(Race(DialogueKind::Melnorm))),
-        DRUUGE_CONVERSATION => Some(Box::new(Race(DialogueKind::Druuge))),
-        ILWRATH_CONVERSATION => Some(Box::new(Race(DialogueKind::Ilwrath))),
-        MYCON_CONVERSATION => Some(Box::new(Race(DialogueKind::Mycon))),
-        SLYLANDRO_CONVERSATION => Some(Box::new(Race(DialogueKind::Slyland))),
-        UMGAH_CONVERSATION => Some(Box::new(Race(DialogueKind::Umgah))),
-        URQUAN_CONVERSATION => Some(Box::new(Race(DialogueKind::Urquan))),
-        ZOQFOTPIK_CONVERSATION => Some(Box::new(Race(DialogueKind::Zoqfot))),
-        SYREEN_CONVERSATION => Some(Box::new(Race(DialogueKind::Syreen))),
-        BLACKURQ_CONVERSATION => Some(Box::new(Race(DialogueKind::Blackur))),
-        TALKING_PET_CONVERSATION => Some(Box::new(Race(DialogueKind::Talkpet))),
-        SLYLANDRO_HOME_CONVERSATION => Some(Box::new(Race(DialogueKind::Slyhome))),
-        YEHAT_REBEL_CONVERSATION => Some(Box::new(Race(DialogueKind::Rebel))),
-        _ => None,
-    }
-}
-
-/// Initialize a dialogue through the supplied host, returning 0 for an unknown ID.
-pub fn rust_init_race_dialogue(
-    comm: &mut dyn DialogueHost,
-    cx: &mut crate::engine::battle::Cx<'_>,
-    comm_id: c_int,
-) -> c_int {
-    match get_race_dialogue(comm_id) {
-        Some(dialogue) => {
-            dialogue.init(comm, cx);
-            1
-        }
-        None => 0,
-    }
-}
 
 #[derive(Default)]
 pub(crate) struct RuntimeScratch {

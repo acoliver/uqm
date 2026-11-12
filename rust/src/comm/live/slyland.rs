@@ -1,15 +1,11 @@
 use crate::comm::descriptors::slyland::descriptor;
-use crate::comm::live::script::LiveScript;
+use crate::comm::host::Host;
 use crate::comm::races::slyland::*;
 use crate::comm::Comm;
 use crate::engine::battle::Cx;
 
-fn run(
-    comm: &mut Comm,
-    cx: &mut Cx<'_>,
-    f: impl FnOnce(&mut Dialogue<'_, LiveScript<'_, '_, Handler>>),
-) {
-    let mut api = LiveScript::new(comm, cx, callback);
+fn run(comm: &mut Comm, cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, Host<'_, '_, Handler>>)) {
+    let mut api = Host::new(comm, cx, callback);
     f(&mut Dialogue { api: &mut api });
 }
 
@@ -55,7 +51,7 @@ mod api {
     #[cfg(not(test))]
     mod live {
         use super::*;
-        use crate::comm::live::script::LiveScript;
+        use crate::comm::host::Host;
 
         // Like the original response references, these belong to the game thread.
 
@@ -66,7 +62,7 @@ mod api {
             static mut ScreenWidth: i32;
             static mut ScreenHeight: i32;
         }
-        impl SlylandApi for LiveScript<'_, '_, Handler> {
+        impl SlylandApi for Host<'_, '_, Handler> {
             fn choices(&self) -> [u16; 5] {
                 self.comm.borrow().race_scratch.slyland_choices
             }

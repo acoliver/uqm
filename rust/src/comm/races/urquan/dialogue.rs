@@ -308,7 +308,7 @@ mod tests {
     use super::super::api::World;
     use super::*;
     use crate::comm::races::encounter::testing::{Effect, Fake};
-    use crate::comm::races::script::ScriptApi;
+    use crate::comm::races::script::DialogueHost;
 
     type Api = Fake<Handler, World>;
 

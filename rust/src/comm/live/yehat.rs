@@ -1,5 +1,5 @@
 use crate::comm::descriptors::yehat::descriptor;
-use crate::comm::live::script::LiveScript;
+use crate::comm::host::Host;
 use crate::comm::races::yehat::*;
 use crate::comm::{locdata::CLocData, Comm};
 use crate::engine::battle::Cx;
@@ -7,9 +7,9 @@ use crate::engine::battle::Cx;
 fn run(
     comm: &mut Comm,
     cx: &mut Cx<'_>,
-    f: impl FnOnce(&mut dialogue::Dialogue<'_, LiveScript<'_, '_, Handler>>),
+    f: impl FnOnce(&mut dialogue::Dialogue<'_, Host<'_, '_, Handler>>),
 ) {
-    let mut api = LiveScript::new(comm, cx, callback);
+    let mut api = Host::new(comm, cx, callback);
     f(&mut dialogue::Dialogue { api: &mut api });
 }
 
@@ -75,7 +75,7 @@ mod api {
     use super::Handler;
     use crate::comm::races::yehat::api::*;
 
-    impl YehatApi for LiveScript<'_, '_, Handler> {
+    impl YehatApi for Host<'_, '_, Handler> {
         fn have_shofixti_escort(&self) -> bool {
             crate::engine::world::fleet::count_escort_ships(
                 self.cx.borrow().world,

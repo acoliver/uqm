@@ -1,14 +1,10 @@
 use crate::comm::descriptors::pkunk::descriptor;
-use crate::comm::live::script::LiveScript;
+use crate::comm::host::Host;
 use crate::comm::races::pkunk::*;
 use crate::comm::{locdata::CLocData, Comm};
 use crate::engine::battle::Cx;
-fn run(
-    comm: &mut Comm,
-    cx: &mut Cx<'_>,
-    f: impl FnOnce(&mut Dialogue<'_, LiveScript<'_, '_, Handler>>),
-) {
-    let mut api = LiveScript::new(comm, cx, callback);
+fn run(comm: &mut Comm, cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, Host<'_, '_, Handler>>)) {
+    let mut api = Host::new(comm, cx, callback);
     f(&mut Dialogue { api: &mut api });
 }
 fn exit_conversation(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
@@ -127,7 +123,7 @@ mod api {
 
     use crate::comm::races::pkunk::api::*;
 
-    impl PkunkApi for crate::comm::live::script::LiveScript<'_, '_, Handler> {
+    impl PkunkApi for crate::comm::host::Host<'_, '_, Handler> {
         fn date(&self) -> (u16, u16, u16) {
             let owner = self.cx.borrow();
             let date = &owner.world.data.game.game_clock;

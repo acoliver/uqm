@@ -61,7 +61,7 @@ impl Fake {
     }
 }
 
-impl ScriptApi<Handler> for Fake {
+impl DialogueHost<Handler> for Fake {
     fn get(&self, key: StoryKey) -> u8 {
         *self.state.get(&key).unwrap_or(&0)
     }
