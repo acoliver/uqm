@@ -1,6 +1,5 @@
 //! Pkunk dialogue, ported from pkunkc.c.
-pub(crate) use super::script::{GLOBAL_PLAYER_NAME, GLOBAL_SHIP_NAME};
-pub(crate) use crate::engine::StoryKey;
+pub(crate) use super::script::{StoryKey, GLOBAL_PLAYER_NAME, GLOBAL_SHIP_NAME};
 mod phrases;
 use phrases::*;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -971,7 +970,6 @@ impl<A: PkunkApi> Dialogue<'_, A> {
 }
 
 #[cfg(test)]
-use crate::comm::descriptors::pkunk::descriptor;
-
-#[cfg(test)]
 mod tests;
+
+pub(crate) mod descriptor;

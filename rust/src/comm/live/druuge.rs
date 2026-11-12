@@ -1,7 +1,7 @@
-use crate::comm::descriptors::druuge::descriptor;
 use crate::comm::host::Host;
+use crate::comm::races::druuge::descriptor::descriptor;
 use crate::comm::races::druuge::*;
-use crate::comm::{locdata::CLocData, Comm};
+use crate::comm::{locdata::SessionData, Comm};
 use crate::engine::battle::Cx;
 fn run(comm: &mut Comm, cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, Host<'_, '_, Handler>>)) {
     let mut session = comm.race_scratch.druuge.take().unwrap_or_default();
@@ -101,10 +101,15 @@ pub(crate) fn uninit(_comm: &mut Comm, _cx: &mut Cx<'_>) -> u16 {
     0
 }
 /// Initialize this encounter on the game thread.
-pub fn init_druuge_comm(comm: &mut Comm, cx: &mut Cx<'_>) -> CLocData {
+pub fn init_druuge_comm(comm: &mut Comm, cx: &mut Cx<'_>) -> SessionData {
     let desc = descriptor();
     run(comm, cx, |s| s.initialize());
-    desc
+    SessionData {
+        init_encounter_func: Some(intro),
+        post_encounter_func: Some(post),
+        uninit_encounter_func: Some(uninit),
+        ..SessionData::new(desc)
+    }
 }
 
 mod api {

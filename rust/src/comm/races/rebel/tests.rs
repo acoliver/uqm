@@ -1,4 +1,5 @@
 use super::api::Date;
+use super::descriptor::descriptor;
 use super::*;
 use crate::comm::races::encounter::testing::{Effect, Fake};
 use crate::comm::races::script::DialogueHost;
@@ -424,10 +425,7 @@ fn descriptor_matches_all_animation_fields_resources_and_resolution_dependent_la
         (d.alien_alt_song_res, "comm.yehat.rebel.music"),
         (d.conversation_phrases_res, "comm.yehat.rebel.dialogue"),
     ] {
-        assert_eq!(
-            unsafe { std::ffi::CStr::from_ptr(ptr) }.to_str().unwrap(),
-            expected
-        );
+        assert_eq!(ptr.unwrap().to_str().unwrap(), expected);
     }
     assert_eq!(d.alien_song_flags, 1);
     assert_eq!((d.alien_text_align, d.alien_text_valign), (1, 1));

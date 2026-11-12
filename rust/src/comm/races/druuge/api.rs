@@ -7,8 +7,8 @@ pub(crate) const EGG_CASES: [StoryKey; 3] = [
 ];
 
 use super::Handler;
-use crate::comm::locdata::CSisState;
 use crate::comm::races::encounter::EncounterApi;
+use crate::engine::world::SisState as CSisState;
 
 pub(crate) trait DruugeApi: EncounterApi<Handler> {
     fn ship(&self) -> CSisState;

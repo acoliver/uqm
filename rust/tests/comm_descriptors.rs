@@ -5,10 +5,8 @@ mod conversation_display;
 #[path = "support/native_process.rs"]
 mod native_process;
 
-use std::ffi::CStr;
-
 use uqm_rust::{
-    comm::{dispatch::race_descriptor, locdata::CLocData, Comm},
+    comm::{dispatch::race_descriptor, locdata::SessionData, Comm},
     engine::{
         self,
         battle::{Battle, Cx},
@@ -33,19 +31,19 @@ fn descriptor_factories_return_independent_values_and_reselect_variants() {
     comm.init().unwrap();
     // SAFETY: the serialized fixture owns the initialized conversation and game thread.
     unsafe {
-        let mut first: CLocData = race_descriptor(&mut comm, &mut cx, 16);
-        let width = first.alien_text_width;
-        let talk = first.alien_talk_desc.start_index;
-        first.alien_text_width = width.wrapping_add(1);
-        first.alien_talk_desc.start_index = talk.wrapping_add(1);
+        let mut first: SessionData = race_descriptor(&mut comm, &mut cx, 16);
+        let width = first.definition.alien_text_width;
+        let talk = first.definition.alien_talk_desc.start_index;
+        first.definition.alien_text_width = width.wrapping_add(1);
+        first.definition.alien_talk_desc.start_index = talk.wrapping_add(1);
         first.alien_frame = std::ptr::dangling_mut();
         let second = race_descriptor(&mut comm, &mut cx, 16);
-        assert_eq!(second.alien_text_width, width);
-        assert_eq!(second.alien_talk_desc.start_index, talk);
+        assert_eq!(second.definition.alien_text_width, width);
+        assert_eq!(second.definition.alien_talk_desc.start_index, talk);
         assert!(second.alien_frame.is_null());
-        assert_eq!(first.alien_text_width, width.wrapping_add(1));
+        assert_eq!(first.definition.alien_text_width, width.wrapping_add(1));
         assert_eq!(
-            CStr::from_ptr(second.alien_frame_res).to_bytes(),
+            second.definition.alien_frame_res.unwrap().to_bytes(),
             b"comm.probe.graphics"
         );
 
@@ -54,11 +52,19 @@ fn descriptor_factories_return_independent_values_and_reselect_variants() {
         cx.world.set_story_state(StoryKey::STARBASE_AVAILABLE, 1);
         let starbase = race_descriptor(&mut comm, &mut cx, 2);
         assert_eq!(
-            CStr::from_ptr(commander.conversation_phrases_res).to_bytes(),
+            commander
+                .definition
+                .conversation_phrases_res
+                .unwrap()
+                .to_bytes(),
             b"comm.commander.dialogue"
         );
         assert_eq!(
-            CStr::from_ptr(starbase.conversation_phrases_res).to_bytes(),
+            starbase
+                .definition
+                .conversation_phrases_res
+                .unwrap()
+                .to_bytes(),
             b"comm.starbase.dialogue"
         );
     }
@@ -83,8 +89,8 @@ fn all_descriptor_factories_initialize_without_loaded_resources() {
     unsafe {
         for conversation in 0..=25 {
             let descriptor = race_descriptor(&mut comm, &mut cx, conversation);
-            assert!(!descriptor.alien_frame_res.is_null());
-            assert!(!descriptor.conversation_phrases_res.is_null());
+            assert!(!descriptor.definition.alien_frame_res.is_none());
+            assert!(!descriptor.definition.conversation_phrases_res.is_none());
             assert!(descriptor.alien_frame.is_null());
             assert!(descriptor.init_encounter_func.is_some());
         }
@@ -92,7 +98,7 @@ fn all_descriptor_factories_initialize_without_loaded_resources() {
             .set_story_state(StoryKey::GLOBAL_FLAGS_AND_DATA, 1 << 7);
         let home = race_descriptor(&mut comm, &mut cx, 6);
         assert_eq!(
-            CStr::from_ptr(home.alien_frame_res).to_bytes(),
+            home.definition.alien_frame_res.unwrap().to_bytes(),
             b"comm.safeones.graphics"
         );
     }

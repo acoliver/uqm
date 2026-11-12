@@ -1,3 +1,4 @@
+use super::descriptor::descriptor;
 use super::*;
 use crate::comm::races::encounter::testing::{Effect, Fake};
 use crate::comm::races::script::DialogueHost;
@@ -17,9 +18,7 @@ fn descriptor_resources_exist_in_the_shipped_map() {
         desc.alien_song_res,
         desc.conversation_phrases_res,
     ] {
-        let key = unsafe { std::ffi::CStr::from_ptr(resource) }
-            .to_str()
-            .unwrap();
+        let key = resource.unwrap().to_str().unwrap();
         assert!(
             map.lines()
                 .any(|line| line.split_once(" = ").is_some_and(|(name, _)| name == key)),

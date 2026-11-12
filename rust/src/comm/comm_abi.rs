@@ -51,7 +51,7 @@ pub unsafe fn get_line_within_width(
 }
 
 unsafe fn count_lines(comm: &mut Comm, text: &mut CText) -> i32 {
-    let width = comm.data.alien_text_width as i16;
+    let width = comm.data.definition.alien_text_width as i16;
     SetContextFont((comm.data.alien_font).cast());
     let mut ptr = text.p_str;
     let mut count = 0;
@@ -80,16 +80,16 @@ unsafe fn draw_subtitle(comm: &mut Comm, text: &mut CText) -> i16 {
     let old_context = SetContext(comm.display.text_cache_context);
     ClearDrawable();
     comm.display.last_subtitle = text.p_str;
-    let width = comm.data.alien_text_width as i16;
+    let width = comm.data.definition.alien_text_width as i16;
     SetContextFont((comm.data.alien_font).cast());
     let mut leading = 0i16;
     GetContextFontLeading(&mut leading);
     let mut ptr = text.p_str;
-    if comm.data.alien_text_valign & 3 != 0 {
+    if comm.data.definition.alien_text_valign & 3 != 0 {
         let lines = count_lines(comm, text);
-        if comm.data.alien_text_valign == 2 {
+        if comm.data.definition.alien_text_valign == 2 {
             text.baseline.y = (i32::from(text.baseline.y) - i32::from(leading) * lines) as i16;
-        } else if comm.data.alien_text_valign == 1 {
+        } else if comm.data.definition.alien_text_valign == 1 {
             text.baseline.y =
                 (i32::from(text.baseline.y) - (i32::from(leading) * lines) / 2) as i16;
         }
@@ -105,8 +105,8 @@ unsafe fn draw_subtitle(comm: &mut Comm, text: &mut CText) -> i16 {
         max_chars = max_chars.wrapping_sub(text.char_count).saturating_sub(1);
         font_DrawTracedText(
             std::ptr::from_mut(text).cast(),
-            comm.data.alien_text_fcolor,
-            comm.data.alien_text_bcolor,
+            comm.data.definition.alien_text_fcolor,
+            comm.data.definition.alien_text_bcolor,
         );
         if eol != 0 || max_chars == 0 {
             break;
@@ -132,8 +132,8 @@ pub fn clear_subtitles(comm: &mut Comm) {
 pub unsafe fn check_subtitles(comm: &mut Comm) {
     comm.apply_phrase_events();
     let text = GetTrackSubtitle();
-    let baseline = comm.data.alien_text_baseline;
-    let align = comm.data.alien_text_align as i32;
+    let baseline = comm.data.definition.alien_text_baseline;
+    let align = comm.data.definition.alien_text_align as i32;
     if text != comm.display.subtitle.p_str
         || comm.display.subtitle.baseline.x != baseline.x
         || comm.display.subtitle.baseline.y != baseline.y
@@ -171,8 +171,8 @@ pub unsafe fn set_talking_finished(comm: &mut Comm, finished: i32) {
     super::ffi::rust_set_talking_finished(comm, finished);
 }
 pub fn setup_subtitle_text_from_comm_data(comm: &mut Comm) {
-    comm.display.subtitle.baseline = comm.data.alien_text_baseline;
-    comm.display.subtitle.align = comm.data.alien_text_align as i32;
+    comm.display.subtitle.baseline = comm.data.definition.alien_text_baseline;
+    comm.display.subtitle.align = comm.data.definition.alien_text_align as i32;
 }
 
 /// # Safety
@@ -220,9 +220,9 @@ pub unsafe fn alien_talk_segue(
 
 pub unsafe fn enable_talking_anim(comm: &mut Comm, enable: i32) {
     if enable != 0 {
-        comm.data.alien_talk_desc.anim_flags &= !16;
+        comm.data.definition.alien_talk_desc.anim_flags &= !16;
     } else {
-        comm.data.alien_talk_desc.anim_flags |= 16;
+        comm.data.definition.alien_talk_desc.anim_flags |= 16;
     }
 }
 pub fn set_comm_intro_mode(comm: &mut Comm, mode: u32, duration: u32) {
@@ -273,11 +273,11 @@ mod owner_tests {
         let _: fn(&mut Comm) = reset_clear_subtitles;
         let _: fn(&mut Comm) -> i32 = clear_subtitles_pending;
         fn move_baseline(comm: &mut Comm) {
-            comm.data.alien_text_baseline.y = 23;
+            comm.data.definition.alien_text_baseline.y = 23;
         }
         let mut first = Comm::new();
         let second = Comm::new();
-        first.data.alien_text_baseline.x = 17;
+        first.data.definition.alien_text_baseline.x = 17;
         first.queue_phrase_callback(Some(move_baseline)).unwrap()(0);
         // SAFETY: the serialized fixture owns both sessions and uses unloaded, null resource handles.
         unsafe {
@@ -292,9 +292,9 @@ mod owner_tests {
             reset_clear_subtitles(&mut first);
             assert_eq!(clear_subtitles_pending(&mut first), 0);
             enable_talking_anim(&mut first, 0);
-            assert_eq!(first.data.alien_talk_desc.anim_flags & 16, 16);
+            assert_eq!(first.data.definition.alien_talk_desc.anim_flags & 16, 16);
             enable_talking_anim(&mut first, 1);
-            assert_eq!(first.data.alien_talk_desc.anim_flags & 16, 0);
+            assert_eq!(first.data.definition.alien_talk_desc.anim_flags & 16, 0);
             set_talking_finished(&mut first, 1);
         }
         set_comm_intro_mode(&mut first, 2, 840);

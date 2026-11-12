@@ -604,7 +604,6 @@ impl<A: SyreenApi> Dialogue<'_, A> {
 }
 
 #[cfg(test)]
-use crate::comm::descriptors::syreen::descriptor;
-
-#[cfg(test)]
 mod tests;
+
+pub(crate) mod descriptor;

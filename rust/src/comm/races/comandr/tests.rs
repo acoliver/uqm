@@ -1,8 +1,8 @@
+use super::descriptor::descriptor;
 use super::*;
 use crate::comm::races::script::Supplies;
 use crate::engine::StoryKey;
 use std::collections::{HashMap, HashSet};
-use std::ffi::CStr;
 
 #[derive(Debug, PartialEq, Eq)]
 enum Effect {
@@ -122,7 +122,7 @@ fn descriptor_matches_resources_layout_and_animation_timing() {
         (desc.alien_song_res, "comm.commander.music"),
         (desc.conversation_phrases_res, "comm.commander.dialogue"),
     ] {
-        assert_eq!(unsafe { CStr::from_ptr(ptr) }.to_str().unwrap(), name);
+        assert_eq!(ptr.unwrap().to_str().unwrap(), name);
     }
     assert_eq!(
         (
@@ -182,8 +182,8 @@ fn descriptor_matches_resources_layout_and_animation_timing() {
         ),
         (4, 6, 84, 56, 98, 70)
     );
-    assert!(desc.alien_frame.is_null());
-    assert!(desc.alien_alt_song_res.is_null());
+
+    assert!(desc.alien_alt_song_res.is_none());
 }
 
 #[test]
@@ -192,12 +192,12 @@ fn descriptor_reentry_switches_power_and_preserves_other_flags() {
     desc.alien_song_flags = 4;
     configure(&mut desc, true);
     assert_eq!(desc.alien_ambient_array[2].anim_flags, 17 | 128);
-    assert!(desc.alien_alt_song_res.is_null());
+    assert!(desc.alien_alt_song_res.is_none());
     configure(&mut desc, false);
     assert_eq!(desc.alien_ambient_array[2].anim_flags, 17);
     assert_eq!(desc.alien_song_flags, 5);
     assert_eq!(
-        unsafe { CStr::from_ptr(desc.alien_alt_song_res) },
+        desc.alien_alt_song_res.unwrap(),
         c"comm.commander.lowpower.music"
     );
     configure(&mut desc, true);

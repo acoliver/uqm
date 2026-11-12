@@ -1,5 +1,5 @@
 //! Yehat Rebel dialogue, ported from rebel.c.
-pub(crate) use crate::comm::locdata::CPoint;
+pub(crate) use crate::comm::races::descriptor::Point;
 pub(crate) use crate::engine::StoryKey;
 mod phrases;
 use phrases::*;
@@ -174,9 +174,9 @@ impl<A: RebelApi> Dialogue<'_, A> {
         self.api.segue(0)
     }
 }
-pub(crate) fn text_layout(screen_width: i32) -> (CPoint, u16) {
+pub(crate) fn text_layout(screen_width: i32) -> (Point, u16) {
     (
-        CPoint {
+        Point {
             x: ((screen_width - 78) * 2 / 3) as i16,
             y: 60,
         },
@@ -185,7 +185,6 @@ pub(crate) fn text_layout(screen_width: i32) -> (CPoint, u16) {
 }
 
 #[cfg(test)]
-use crate::comm::descriptors::rebel::descriptor;
-
-#[cfg(test)]
 mod tests;
+
+pub(crate) mod descriptor;

@@ -1,4 +1,5 @@
 use super::super::encounter::testing::{Effect, Fake as BaseFake};
+use super::descriptor::descriptor;
 use super::*;
 use crate::engine::StoryKey;
 use api::{Speech, World};
@@ -270,7 +271,7 @@ fn full_descriptor_matches_c_resources_layout_and_animations() {
             ),
             (0, 0, 0, 255)
         );
-        let row = |a: crate::comm::locdata::CAnimationDesc| {
+        let row = |a: crate::comm::races::descriptor::AnimationDescriptor| {
             [
                 u32::from(a.start_index),
                 u32::from(a.num_frames),
@@ -290,7 +291,7 @@ fn full_descriptor_matches_c_resources_layout_and_animations() {
         }
         assert_eq!(row(d.alien_transition_desc), [0; 8]);
         assert_eq!(row(d.alien_talk_desc), [0; 8]);
-        unsafe {
+        {
             for (pointer, key) in [
                 (d.alien_frame_res, RACE_PMAP_ANIM),
                 (d.alien_font_res, RACE_FONT),
@@ -298,19 +299,17 @@ fn full_descriptor_matches_c_resources_layout_and_animations() {
                 (d.alien_song_res, RACE_MUSIC),
                 (d.conversation_phrases_res, RACE_CONVERSATION_PHRASES),
             ] {
-                assert_eq!(std::ffi::CStr::from_ptr(pointer).to_bytes_with_nul(), key);
+                assert_eq!(
+                    pointer.unwrap().to_bytes_with_nul(),
+                    key.to_bytes_with_nul()
+                );
             }
         }
         assert!(std::ptr::eq(
             d.alien_number_speech.unwrap(),
             numbers::descriptor()
         ));
-        assert!(d.alien_alt_song_res.is_null());
+        assert!(d.alien_alt_song_res.is_none());
         assert_eq!(d.alien_song_flags, 0);
-        assert!(d.alien_frame.is_null());
-        assert!(d.alien_font.is_null());
-        assert!(d.alien_colormap.is_null());
-        assert!(d.alien_song.is_null());
-        assert!(d.conversation_phrases.is_null());
     }
 }

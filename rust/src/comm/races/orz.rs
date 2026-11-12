@@ -715,7 +715,6 @@ impl<A: OrzApi> Dialogue<'_, A> {
 }
 
 #[cfg(test)]
-use crate::comm::descriptors::orz::descriptor;
-
-#[cfg(test)]
 mod tests;
+
+pub(crate) mod descriptor;

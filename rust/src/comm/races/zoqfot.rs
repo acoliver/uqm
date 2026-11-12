@@ -1,7 +1,7 @@
 //! Zoqfot dialogue, ported from the original C script.
 pub(crate) use super::alliance::AllianceApi;
 pub(crate) use super::script::GLOBAL_SHIP_NAME;
-pub(crate) use crate::comm::locdata::{CColor, CLocData, CPoint};
+pub(crate) use crate::comm::races::descriptor::{Color, CommDescriptor, Point};
 pub(crate) use crate::engine::StoryKey;
 mod phrases;
 use phrases::*;
@@ -31,7 +31,7 @@ impl<A: ZoqApi> Dialogue<'_, A> {
             Handler::ZoqFotHome => self.zoq_fot_home(r),
         }
     }
-    pub(crate) fn initialize(&mut self, _desc: &mut CLocData) {
+    pub(crate) fn initialize(&mut self, _desc: &mut CommDescriptor) {
         self.api.segue(u32::from(
             self.api.alliance(ZOQFOTPIK_SHIP) != 1 && self.api.activity() as u8 != 5,
         ));
@@ -689,7 +689,6 @@ impl<A: ZoqApi> Dialogue<'_, A> {
 }
 
 #[cfg(test)]
-use crate::comm::descriptors::zoqfot::descriptor;
-
-#[cfg(test)]
 mod tests;
+
+pub(crate) mod descriptor;
