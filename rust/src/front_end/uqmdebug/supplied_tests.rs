@@ -226,3 +226,63 @@ fn battle_refills_borrow_the_player_descriptor_and_restore_status_selection() {
     // SAFETY: all refill calls and their temporary leases have ended.
     unsafe { context_abi::DestroyContext(status) };
 }
+
+#[test]
+#[serial_test::serial]
+fn debug_key_uses_the_supplied_rng_and_real_status_resources() {
+    if !crate::native_test_process::own_graphics_process(
+        "front_end::uqmdebug::supplied_tests::debug_key_uses_the_supplied_rng_and_real_status_resources",
+    ) {
+        return;
+    }
+    use crate::engine::battle::{frames::FrameSelection, link_queue::ShipPickerResources};
+    use crate::graphics::{context_abi::ContextFrame, drawable_abi::LoadedDrawable};
+    let mut game = crate::engine::Game::new();
+    game.world.story = Some(StoryState::new());
+    game.world.set_activity(IN_INTERPLANETARY as u16);
+    let display = crate::campaign_display_test::CampaignDisplay::install(&mut game).unwrap();
+    game.kernel.screen_context = game.kernel.status_context;
+    game.kernel.space_context = game.kernel.status_context;
+    game.kernel
+        .install_game_text(crate::strings::owned_table::LoadedTextTable::fixture(
+            vec![b"A\0".to_vec(); GAMESTR_COUNT as usize],
+        ));
+    let art = LoadedDrawable::create(8, 64, 140, 100).unwrap();
+    let frame = art.lease().frame(0).unwrap();
+    game.kernel.flag_stat_frame = frame;
+    game.kernel.font_grad_frame = frame;
+    let context = ContextLease::require(game.kernel.status_context);
+    context.set_frame(ContextFrame::retain(std::ptr::NonNull::new(
+        game.kernel.screen,
+    )));
+    for species in 0..=BLACK_URQUAN_SHIP {
+        let mut fleets = game.world.avail_races();
+        let id = fleets.alloc().unwrap();
+        fleets.get_mut(id).species_id = species;
+        fleets.put(id);
+        game.world.retain_fleet_resources(
+            species,
+            ShipPickerResources::new(None, FrameSelection::retain(frame)),
+        );
+    }
+    let mut battle = crate::engine::battle::Battle::new();
+    let mut cx = Cx::new(&mut battle, &mut game.world, &mut game.kernel, || 11);
+    let global_rng_before = crate::math::random_state();
+    debug_key_pressed_synchronous(
+        &mut cx,
+        |_, _, _| panic!("no battle crew effect"),
+        |_, _, _| panic!("no battle energy effect"),
+    );
+    assert_eq!(crate::math::random_state(), global_rng_before);
+    let ships = cx.world.built_ships_ref();
+    assert_eq!(ships.count(), 12);
+    let mut next = ships.head();
+    while let Some(id) = next {
+        assert_eq!(ships.get(id).captains_name_index, 16);
+        next = ships.succ(id);
+    }
+    assert_eq!(cx.world.data.flagship.crew_enlisted, 250);
+    assert_eq!(cx.world.data.flagship.fuel_on_board, 21_000);
+    assert!(cx.kernel.instant_move);
+    display.finish(game);
+}

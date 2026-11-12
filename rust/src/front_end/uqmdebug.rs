@@ -48,12 +48,10 @@ pub fn debug_key_pressed_synchronous(
         URQUAN_SHIP,
         BLACK_URQUAN_SHIP,
     ] {
-        let added = crate::engine::world::fleet::add_escort_ships(
-            cx.world,
-            race as u16,
-            1,
-            crate::engine::world::fleet::captain_name,
-        );
+        let random = cx.rng;
+        let added = crate::engine::world::fleet::add_escort_ships(cx.world, race as u16, 1, || {
+            ((random() as u16 & (NUM_CAPTAINS_NAMES - 1) as u16) + NAME_OFFSET as u16) as u8
+        });
         if added.is_some() {
             crate::ui::sis::delta_sis_gauges(cx.kernel, cx.world, 32767, 32767, 32767);
         }
