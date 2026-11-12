@@ -230,6 +230,10 @@ impl Drop for LoadedDrawable {
 }
 
 impl DrawableLease {
+    pub(super) fn frame_count(&self) -> u16 {
+        self._allocation.frames.len() as u16
+    }
+
     pub fn context_frame(&self, index: usize) -> super::native_context::ContextFrame {
         let frame = self
             .frame(index)

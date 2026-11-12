@@ -1,16 +1,17 @@
 use serde::Deserialize;
 
 // ===========================================================================
-//  MenuKey — six typed variants (REQ-SCRIPT-005)
+//  MenuKey typed controls (REQ-SCRIPT-005)
 // ===========================================================================
 
-/// The six menu control variants exposed to automation, mapped from the C
+/// Menu controls exposed to automation, mapped from the C
 /// `controls.h` enum indices.
 ///
-/// The indices match `KEY_MENU_UP..KEY_MENU_CANCEL` (5..=10):
+/// Indices match the existing controls table:
 ///
 /// | Variant | C enum constant | Index |
 /// |---------|-----------------|-------|
+/// | Debug   | `KEY_DEBUG`       | 3     |
 /// | Up      | `KEY_MENU_UP`     | 5     |
 /// | Down    | `KEY_MENU_DOWN`   | 6     |
 /// | Left    | `KEY_MENU_LEFT`   | 7     |
@@ -18,7 +19,7 @@ use serde::Deserialize;
 /// | Select  | `KEY_MENU_SELECT` | 9     |
 /// | Cancel  | `KEY_MENU_CANCEL` | 10    |
 ///
-/// Unknown or numeric-only identifiers are rejected; only the six closed
+/// Unknown or numeric-only identifiers are rejected; only the closed
 /// string names are accepted.
 ///
 /// @plan PLAN-20260723-RUNTIME-AUTOMATION.P01
@@ -26,6 +27,7 @@ use serde::Deserialize;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u8)]
 pub enum MenuKey {
+    Debug = 3,
     Up = 5,
     Down = 6,
     Left = 7,
@@ -38,7 +40,8 @@ pub enum MenuKey {
 
 impl MenuKey {
     /// All variants, in `controls.h` enum order.
-    pub const ALL: [MenuKey; 7] = [
+    pub const ALL: [MenuKey; 8] = [
+        MenuKey::Debug,
         MenuKey::Up,
         MenuKey::Down,
         MenuKey::Left,
@@ -55,11 +58,12 @@ impl MenuKey {
         self as u8
     }
 
-    /// The canonical lowercase string name, matching `menu.<name>.N`
+    /// The lowercase string name, matching `menu.<name>.N`
     /// resource keys in `sc2/content/menu.key`.
     #[must_use]
     pub const fn name(self) -> &'static str {
         match self {
+            MenuKey::Debug => "debug",
             MenuKey::Up => "up",
             MenuKey::Down => "down",
             MenuKey::Left => "left",
@@ -70,13 +74,14 @@ impl MenuKey {
         }
     }
 
-    /// Parse a key from its canonical string name.
+    /// Parse a key from its string name.
     ///
-    /// Returns `None` for any value that is not exactly one of the six names.
+    /// Returns `None` for a value outside the scriptable key names.
     /// Numeric or unknown identifiers are rejected (REQ-SCRIPT-005).
     #[must_use]
     pub fn from_name(name: &str) -> Option<MenuKey> {
         match name {
+            "debug" => Some(MenuKey::Debug),
             "up" => Some(MenuKey::Up),
             "down" => Some(MenuKey::Down),
             "left" => Some(MenuKey::Left),
@@ -93,6 +98,7 @@ impl MenuKey {
     #[must_use]
     pub const fn from_index(index: u8) -> Option<MenuKey> {
         match index {
+            3 => Some(MenuKey::Debug),
             5 => Some(MenuKey::Up),
             6 => Some(MenuKey::Down),
             7 => Some(MenuKey::Left),
@@ -113,7 +119,7 @@ impl<'de> Deserialize<'de> for MenuKey {
         let name = String::deserialize(deserializer)?;
         MenuKey::from_name(&name).ok_or_else(|| {
             serde::de::Error::custom(format!(
-                "unknown menu key '{name}'; expected one of: up, down, left, right, select, cancel, delete"
+                "unknown menu key '{name}'; expected one of: debug, up, down, left, right, select, cancel, delete"
             ))
         })
     }

@@ -2,7 +2,7 @@
 //! validation.
 //!
 //! This module implements REQ-SCRIPT-001..006: strict UTF-8/JSON parsing with
-//! a closed (deny-unknown-fields) versioned root, six typed menu keys, closed
+//! a closed (deny-unknown-fields) versioned root, typed menu keys, closed
 //! action enum, typed main-menu transition assertion, budget/count/activity
 //! validation, the inclusive-limit static lower bound, and final-`finish`
 //! semantics.
@@ -2894,6 +2894,17 @@ mod tests {
         }
     }
     // --- REQ-SCRIPT-005: typed six-key mappings ---
+
+    #[test]
+    fn debug_key_script_reaches_the_real_controls_index() {
+        let text = r#"{"version":1,"name":"debug-key","budgets":{"max_input_ticks":10,"max_presentations":10,"max_wallclock_seconds":10},"steps":[{"action":"tap_menu_key","key":"debug","value":1,"hold":1,"settle":1},{"action":"finish"}]}"#;
+        let doc = parse_script(text.as_bytes(), p()).unwrap();
+        validate_script(doc, p()).unwrap();
+        let key = MenuKey::from_name("debug").unwrap();
+        assert_eq!(key.index(), 3);
+        assert_eq!(crate::automation::input::menu_key_to_index(key), 3);
+        assert_eq!(MenuKey::from_index(3), Some(key));
+    }
 
     #[test]
     fn menu_key_variants_indices_match_controls_h() {

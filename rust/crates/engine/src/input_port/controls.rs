@@ -13,7 +13,6 @@ struct ControllerState {
     paused: bool,
     exit_requested: bool,
     menu_sounds: (u16, u16),
-    debug_key: i32,
     injection_rejected: bool,
 }
 
@@ -139,14 +138,6 @@ impl InputControls {
 
     pub fn set_menu_sounds(&self, first: u16, second: u16) {
         self.state().menu_sounds = (first, second);
-    }
-
-    pub fn debug_key(&self) -> i32 {
-        self.state().debug_key
-    }
-
-    pub fn replace_debug_key(&self, pressed: i32) -> i32 {
-        std::mem::replace(&mut self.state().debug_key, pressed)
     }
 
     pub fn reject_injection(&self) {

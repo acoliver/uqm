@@ -36,13 +36,15 @@ impl ContextFrame {
     }
 
     pub fn next_frame(&self) -> Self {
-        for allocation in &self._allocations {
-            allocation.assert_thread();
-        }
-        // SAFETY: these leases retain this optional frame and its complete drawable allocation.
-        let frame = unsafe { super::pixmap_abi::IncFrameIndex(self.frame) };
+        let Some(allocation) = self._allocations.first() else {
+            return self.clone();
+        };
+        allocation.assert_thread();
+        let index = allocation
+            .frame_index(self.frame)
+            .unwrap_or_else(|| panic!("frame is not retained by its drawable"));
         Self {
-            frame,
+            frame: allocation.wrapped_frame(index + 1),
             _allocations: self._allocations.clone(),
         }
     }
@@ -99,41 +101,43 @@ impl ContextFrame {
         for allocation in &self._allocations {
             allocation.assert_thread();
         }
-        // SAFETY: registry leases retain this frame, image and canvas on their owning thread.
-        unsafe {
+        // SAFETY: the registered allocation keeps this optional descriptor live on this thread.
+        let (image, bounds) = unsafe {
             let descriptor = self.frame.as_ref()?;
-            if descriptor.image.is_null()
-                || descriptor.Bounds.width <= 0
-                || descriptor.Bounds.height <= 0
-            {
-                return None;
-            }
-            let canvas = (*descriptor.image).NormalImg;
-            if canvas.is_null() {
-                return None;
-            }
+            (descriptor.image, descriptor.Bounds)
+        };
+        let image = NonNull::new(image)?;
+        let (width, height) = (bounds.width, bounds.height);
+        if width <= 0 || height <= 0 {
+            return None;
+        }
+        // SAFETY: the retained descriptor owns this image for the operation.
+        let canvas = unsafe { image.as_ref().NormalImg };
+        if canvas.is_null() {
+            return None;
+        }
+        let mut occupancy = Vec::with_capacity(width as usize * height as usize);
+        // SAFETY: the live canvas is locked throughout the bounded pixel walk.
+        unsafe {
             super::native_canvas::lifecycle::TFB_DrawCanvas_Lock(canvas);
-            let mut occupancy = Vec::with_capacity(
-                descriptor.Bounds.width as usize * descriptor.Bounds.height as usize,
-            );
-            for y in 0..i32::from(descriptor.Bounds.height) {
-                for x in 0..i32::from(descriptor.Bounds.width) {
-                    occupancy.push(u8::from(
-                        super::native_canvas::pixels::TFB_DrawCanvas_GetPixel(canvas, x, y).a != 0,
-                    ));
+            for y in 0..i32::from(height) {
+                for x in 0..i32::from(width) {
+                    let color = super::native_canvas::pixels::TFB_DrawCanvas_GetPixel(canvas, x, y);
+                    occupancy.push(u8::from(color.a != 0));
                 }
             }
             super::native_canvas::lifecycle::TFB_DrawCanvas_Unlock(canvas);
-            Some(occupancy)
         }
+        Some(occupancy)
     }
 
     pub fn frame_count(&self) -> u16 {
         for allocation in &self._allocations {
             allocation.assert_thread();
         }
-        // SAFETY: the retained frame belongs to a complete registered drawable.
-        unsafe { super::pixmap_abi::GetFrameCount(self.frame) }
+        self._allocations
+            .first()
+            .map_or(0, |allocation| allocation.frame_count())
     }
 
     pub fn replace_hotspot(&self, hotspot: HOT_SPOT) -> HOT_SPOT {
@@ -143,11 +147,19 @@ impl ContextFrame {
         // SAFETY: retained allocations keep this optional frame live on the owning thread.
         unsafe { drawable_abi::SetFrameHot(self.frame, hotspot) }
     }
+
+    pub fn same_frame(&self, other: &Self) -> bool {
+        self.frame == other.frame
+    }
 }
 
+mod operations;
+use operations::Primitive;
+
 enum Operation {
-    Point(Color, POINT),
+    Primitive(Primitive),
     Select,
+    Current,
     Deselect,
     BeginBatch,
     EndBatch,
@@ -183,7 +195,8 @@ impl Operation {
     fn changes_selection(&self) -> bool {
         !matches!(
             self,
-            Self::BeginBatch
+            Self::Current
+                | Self::BeginBatch
                 | Self::EndBatch
                 | Self::Fade(..)
                 | Self::FinishTransforms
@@ -316,11 +329,16 @@ struct ContextTextState {
     context: ContextLease,
     font: Option<super::native_font::FontLease>,
     color: Color,
+    mode: Option<DrawMode>,
 }
 impl Drop for ContextTextState {
     fn drop(&mut self) {
         self.context.replace_font(self.font.take());
         self.context.apply(Operation::Foreground(self.color));
+        if let Some(mode) = self.mode {
+            self.context
+                .apply(Operation::Primitive(Primitive::DrawMode(mode)));
+        }
     }
 }
 
@@ -369,8 +387,49 @@ impl ContextLease {
 
     pub fn selected_context(&self) -> Option<Self> {
         self.assert_thread();
-        // SAFETY: this lease admits the serialized graphics thread that owns context selection.
-        NonNull::new(unsafe { context_abi::_pCurContext }).map(Self::retain)
+        NonNull::new(self.apply(Operation::Current).1).map(Self::retain)
+    }
+
+    #[cfg(feature = "debug-process")]
+    pub fn diagnostic_contexts(&self) -> Vec<Self> {
+        self.assert_thread();
+        let mut contexts = Vec::new();
+        // SAFETY: the lease admits the owning thread; retained descriptors keep this walk live.
+        unsafe {
+            let mut next = context_abi::GetFirstContext();
+            while let Some(context) = NonNull::new(next) {
+                contexts.push(Self::retain(context));
+                next = context_abi::GetNextContext(context.as_ptr());
+            }
+        }
+        contexts
+    }
+
+    #[cfg(feature = "debug-process")]
+    pub fn diagnostic_name(&self) -> std::ffi::CString {
+        self.assert_thread();
+        // SAFETY: registered context names remain terminated and live until context destruction.
+        unsafe {
+            std::ffi::CStr::from_ptr(context_abi::GetContextName(self.0.context.as_ptr()))
+                .to_owned()
+        }
+    }
+
+    pub fn draw_text_alpha(
+        &self,
+        font: &super::native_font::FontLease,
+        string: &std::ffi::CStr,
+        baseline: POINT,
+        align: TEXT_ALIGN,
+        color: Color,
+    ) {
+        self.with_text_mode(
+            Some(DrawMode {
+                kind: super::context::DrawKind::Alpha as u8,
+                factor: i16::from(color.a),
+            }),
+            || self.draw_text(font, string, baseline, align, color),
+        );
     }
 
     pub fn highlight(&self, rect: RECT) -> super::native_highlight::Highlight {
@@ -385,6 +444,8 @@ impl ContextLease {
         let rectangle = rectangle
             .as_mut()
             .map_or(std::ptr::null_mut(), std::ptr::from_mut);
+        let mut deadline = 0;
+        let mut effect = None;
         // SAFETY: the lease owns the selected context on this graphics thread.
         // Set-frame retains its new allocation; clipping and drawing retain the
         // selected target before entering this native operation boundary.
@@ -394,10 +455,8 @@ impl ContextLease {
             } else {
                 context_abi::_pCurContext
             };
-            let mut deadline = 0;
-            let mut effect = None;
             match operation {
-                Operation::Select | Operation::Deselect => (),
+                Operation::Select | Operation::Current | Operation::Deselect => (),
                 Operation::BeginBatch => gfx::batch_graphics(),
                 Operation::EndBatch => gfx::unbatch_graphics(),
                 Operation::Flush => gfx::flush_graphics(),
@@ -416,15 +475,12 @@ impl ContextLease {
                 Operation::Foreground(color) => {
                     context_abi::SetContextForeGroundColor(color);
                 }
+                Operation::Primitive(primitive) => primitive.draw(self),
                 Operation::Frame(frame, setter) => effect = Some(setter(frame)),
                 Operation::Clip(_) => {
                     context_abi::SetContextClipRect(rectangle);
                 }
                 Operation::Clear => frame_abi::ClearDrawable(),
-                Operation::Point(color, mut point) => {
-                    context_abi::SetContextForeGroundColor(color);
-                    frame_abi::DrawPoint(&mut point);
-                }
                 Operation::Fill(color, mut rect) => {
                     context_abi::SetContextForeGroundColor(color);
                     frame_abi::DrawFilledRectangle(&mut rect);
@@ -501,6 +557,10 @@ impl ContextLease {
     }
 
     pub fn with_text_state<R>(&self, draw: impl FnOnce() -> R) -> R {
+        self.with_text_mode(None, draw)
+    }
+
+    fn with_text_mode<R>(&self, mode: Option<DrawMode>, draw: impl FnOnce() -> R) -> R {
         self.with_selected(|| {
             // SAFETY: the selected lease owns this descriptor on its graphics thread.
             let descriptor = unsafe { self.0.context.as_ref() };
@@ -517,7 +577,11 @@ impl ContextLease {
                 context: self.clone(),
                 font,
                 color: descriptor.ForeGroundColor,
+                mode: mode.map(|_| descriptor.Mode),
             };
+            if let Some(mode) = mode {
+                self.apply(Operation::Primitive(Primitive::DrawMode(mode)));
+            }
             let result = draw();
             drop(restore);
             result
@@ -624,16 +688,13 @@ impl ContextLease {
         unsafe { (gfx::ScreenWidth, gfx::ScreenHeight) }
     }
 
-    fn copy_screen_region(&self, mut rect: RECT, save: bool) {
-        self.select();
-        // SAFETY: the selected lease retains its context; the rectangle is local.
-        unsafe {
-            if save {
-                gfx::LoadIntoExtraScreen(&mut rect);
-            } else {
-                gfx::DrawFromExtraScreen(&mut rect);
-            }
-        }
+    fn copy_screen_region(&self, rect: RECT, save: bool) {
+        let draw = if save {
+            gfx::LoadIntoExtraScreen
+        } else {
+            gfx::DrawFromExtraScreen
+        };
+        self.apply(Operation::Primitive(Primitive::ScreenRegion(rect, draw)));
     }
 
     pub fn save_screen_region(&self, rect: RECT) {
@@ -645,13 +706,10 @@ impl ContextLease {
     }
 
     pub fn draw_line(&self, color: Color, first: POINT, second: POINT) {
-        self.select();
-        let mut line = LINE { first, second };
-        // SAFETY: this lease selects and retains its context on the drawing thread.
-        unsafe {
-            context_abi::SetContextForeGroundColor(color);
-            frame_abi::DrawLine(&mut line);
-        }
+        self.apply(Operation::Primitive(Primitive::Line(
+            color,
+            LINE { first, second },
+        )));
     }
 
     pub fn line_visible(&self, clip: RECT, first: POINT, second: POINT) -> bool {
@@ -670,7 +728,7 @@ impl ContextLease {
     }
 
     pub fn draw_point(&self, color: Color, point: POINT) {
-        self.apply(Operation::Point(color, point));
+        self.apply(Operation::Primitive(Primitive::Point(color, point)));
     }
 
     pub fn draw_rectangle(&self, color: Color, rect: RECT) {

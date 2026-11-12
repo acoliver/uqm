@@ -1,4 +1,5 @@
 //! Persistent gameplay resources and pools owned by Game.
+pub mod diagnostics;
 pub mod lander_resources;
 mod pilot_flash;
 pub mod planet_animation;
@@ -72,6 +73,7 @@ impl StarMapFlash {
 }
 
 pub struct Kernel {
+    pub diagnostics: diagnostics::Diagnostics,
     pub configuration: crate::configuration::Configuration,
     pub(super) input_runtime: Option<std::rc::Rc<dyn super::input::InputRuntime>>,
     pub last_activity: u16,
@@ -269,6 +271,7 @@ impl Kernel {
 
     pub fn new() -> Self {
         Self {
+            diagnostics: diagnostics::Diagnostics::default(),
             configuration: crate::configuration::Configuration::default(),
             input_runtime: None,
             last_activity: 0,

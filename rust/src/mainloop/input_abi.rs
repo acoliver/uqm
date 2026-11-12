@@ -3,14 +3,24 @@
 #[cfg(not(test))]
 use crate::threading::pacing::yield_input_loop;
 
+#[cfg(all(not(test), feature = "debug-process"))]
+use crate::{
+    battle::status_native::{delta_crew, delta_energy},
+    front_end::uqmdebug::debug_key_pressed_synchronous,
+};
+#[cfg(not(test))]
+use crate::{
+    engine::{
+        battle::Cx,
+        input::{InputControls, InputSession},
+    },
+    ships::native::abi::*,
+};
+
 #[cfg(not(test))]
 pub(crate) mod live {
     #![allow(non_snake_case)]
-    use crate::engine::{
-        battle::Cx,
-        input::{InputControls, InputSession},
-    };
-    use crate::ships::native::abi::*;
+    use super::*;
 
     pub fn ResetKeyRepeat(input: &InputControls) {
         input.reset_repeat(crate::time::counter_abi::GetTimeCounter());
@@ -42,7 +52,7 @@ pub(crate) mod live {
         }
         #[cfg(feature = "debug-process")]
         if input.pulsed().menu[KEY_DEBUG as usize] != 0 {
-            crate::front_end::uqmdebug::debug_key_pressed_synchronous(cx);
+            debug_key_pressed_synchronous(cx, delta_crew, delta_energy);
         }
     }
 

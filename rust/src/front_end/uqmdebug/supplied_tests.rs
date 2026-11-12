@@ -59,3 +59,170 @@ fn creature_values_keep_the_low_nibble_and_invalid_sentinel() {
         assert_eq!(uqm_debug_creature_bio_value(value), expected);
     }
 }
+
+#[test]
+#[serial_test::serial]
+fn diagnostic_text_preserves_raw_bytes_truncation_and_category_output() {
+    let mut kernel = Kernel::new();
+    let mut strings = vec![b"name\0".to_vec(); GAMESTR_COUNT as usize];
+    strings[1] = Vec::new();
+    strings[SCAN_STRING_BASE as usize + 4] = [vec![b'x'; 38], vec![0xff, 0]].concat();
+    strings[SCAN_STRING_BASE as usize + 54] = b"world\0".to_vec();
+    strings[SCAN_STRING_BASE as usize + 55] = b"gas\0".to_vec();
+    kernel.install_game_text(crate::strings::owned_table::LoadedTextTable::fixture(
+        strings,
+    ));
+    let first = planet_type_string(&kernel, 0);
+    assert_eq!(first, [vec![b'x'; 38], vec![0xff]].concat());
+    assert_eq!(planet_type_string(&kernel, FIRST_GAS_GIANT as i32), b"gas");
+    assert_eq!(first[38], 0xff);
+    let mut out = Vec::new();
+    let mut errors = Vec::new();
+    dump_strings(&kernel, &mut out, &mut errors).unwrap();
+    assert!(errors.is_empty());
+    assert!(out.starts_with(b"[ STAR_STRING_BASE + 0 ]  name\n"));
+    assert!(out
+        .windows(b"[ STAR_STRING_BASE + 1 ]  \n[ STAR_STRING_BASE + 2 ]  name\n".len())
+        .any(|bytes| bytes == b"[ STAR_STRING_BASE + 1 ]  \n[ STAR_STRING_BASE + 2 ]  name\n"));
+    assert!(out.windows(39).any(|bytes| bytes == first));
+    let mut types = Vec::new();
+    dump_planet_type(
+        &kernel,
+        &mut types,
+        FIRST_GAS_GIANT as i32,
+        &crate::planets::tables::PLANET_ARRAY.0[0],
+    )
+    .unwrap();
+    assert!(types.starts_with(b"gas\n\tType: "));
+    assert!(types
+        .windows(b"Surface generation algoritm:".len())
+        .any(|bytes| bytes == b"Surface generation algoritm:"));
+    assert!(types.ends_with(b"\n\n"));
+}
+
+#[test]
+fn empty_battle_resets_do_not_acquire_a_context_or_apply_an_effect() {
+    let mut game = crate::engine::Game::new();
+    game.world.story = Some(StoryState::new());
+    let mut battle = crate::engine::battle::Battle::new();
+    let mut cx = Cx::new(
+        &mut battle,
+        &mut game.world,
+        &mut game.kernel,
+        crate::math::random,
+    );
+    for activity in [0, IN_BATTLE as u16, IN_HYPERSPACE as u16 | IN_BATTLE as u16] {
+        cx.world.set_activity(activity);
+        reset_crew_battle(&mut cx, |_, _, _| panic!("no battle ship"));
+        reset_energy_battle(&mut cx, |_, _, _| panic!("no battle ship"));
+    }
+}
+
+#[test]
+fn event_dump_walks_the_supplied_fifo_without_mutating_it() {
+    let mut first = World::new();
+    first.clock.init();
+    let second = World::new();
+    for selector in [ARILOU_ENTRANCE_EVENT, ARILOU_EXIT_EVENT] {
+        crate::time::clock_abi::insert_event(&mut first.clock, (2155, 2, 7), selector as u8)
+            .unwrap();
+    }
+    let head = first.clock.events_ref().head();
+    let mut bytes = Vec::new();
+    dump_events(&first, &mut bytes).unwrap();
+    assert_eq!(
+        bytes,
+        b"2155/02/07: ARILOU_ENTRANCE_EVENT\n2155/02/07: ARILOU_EXIT_EVENT\n"
+    );
+    assert_eq!(first.clock.events_ref().head(), head);
+    let mut bytes = Vec::new();
+    dump_events(&second, &mut bytes).unwrap();
+    assert!(bytes.is_empty());
+}
+
+#[test]
+#[serial_test::serial]
+fn battle_refills_borrow_the_player_descriptor_and_restore_status_selection() {
+    use crate::engine::battle::{Race, RaceTemplate};
+    use crate::graphics::context_abi::{self, LoadedContext};
+    fn descriptor(_: &mut World) -> crate::engine::battle::RaceDesc {
+        RaceTemplate::default().descriptor(&RACE)
+    }
+    static RACE: Race = Race {
+        descriptor,
+        preprocess: None,
+        postprocess: None,
+        init_weapon: None,
+        intelligence: None,
+        uninit: None,
+    };
+    let mut game = crate::engine::Game::new();
+    game.world.story = Some(StoryState::new());
+    game.world.set_activity(IN_BATTLE as u16);
+    game.kernel.reset_ship_capacity(RPG_PLAYER_NUM as usize, 1);
+    // SAFETY: this serialized fixture owns and releases the context after all leases.
+    let status = unsafe { context_abi::CreateContextAux(c"refill status".as_ptr()) };
+    game.kernel.status_context = status;
+    let previous = LoadedContext::create(c"refill previous");
+    let previous_context = previous.lease();
+    previous_context.select();
+    let ship = {
+        let mut ships = game.kernel.ships(RPG_PLAYER_NUM as usize);
+        let id = ships.build(1).unwrap();
+        ships.ship_id(id)
+    };
+    let mut battle = crate::engine::battle::Battle::new();
+    let mut cx = Cx::new(&mut battle, &mut game.world, &mut game.kernel, || 0);
+    let element = cx.alloc_element().unwrap();
+    {
+        let mut state = cx.element_mut(element);
+        state.flags = PLAYER_SHIP as u16;
+        state.player = RPG_PLAYER_NUM as i16;
+    }
+    cx.set_parent(element, Some(ship));
+    cx.set_ship_element(ship, Some(element));
+    cx.put(element);
+    assert_eq!(find_player_ship(&cx, RPG_PLAYER_NUM as i16), Some(ship));
+    reset_crew_battle(&mut cx, |_, _, _| panic!("missing descriptor"));
+    reset_energy_battle(&mut cx, |_, _, _| panic!("missing descriptor"));
+    let stats = descriptor(cx.world);
+    cx.attach_descriptor(ship, stats);
+    for (crew, energy) in [(0, 0), (19, 8), (20, 10), (22, 12)] {
+        {
+            let mut stats = cx.race_stats_mut(ship);
+            stats.ship_info.crew_level = crew;
+            stats.ship_info.max_crew = 20;
+            stats.ship_info.energy_level = energy;
+            stats.ship_info.max_energy = 10;
+        }
+        reset_crew_battle(&mut cx, |supplied, id, delta| {
+            assert_eq!(id, element);
+            assert_eq!(supplied.owner(id), ship);
+            assert_eq!(delta, 20 - crew as i16);
+            assert_eq!(
+                previous_context
+                    .selected_context()
+                    .unwrap()
+                    .diagnostic_name()
+                    .as_bytes(),
+                b"refill status"
+            );
+            true
+        });
+        reset_energy_battle(&mut cx, |_, id, delta| {
+            assert_eq!(id, element);
+            assert_eq!(delta, 10 - i16::from(energy));
+            true
+        });
+        assert_eq!(
+            previous_context
+                .selected_context()
+                .unwrap()
+                .diagnostic_name()
+                .as_bytes(),
+            b"refill previous"
+        );
+    }
+    // SAFETY: all refill calls and their temporary leases have ended.
+    unsafe { context_abi::DestroyContext(status) };
+}
