@@ -1,5 +1,6 @@
 //! Kohr-Ah dialogue, ported from blackurq.c.
 pub(crate) use crate::comm::races::descriptor::Point;
+use crate::engine::world::activity::ActivityKind;
 pub(crate) use crate::engine::StoryKey;
 mod phrases;
 use phrases::*;
@@ -218,7 +219,7 @@ impl<A: BlackurApi> Dialogue<'_, A> {
     }
     pub(crate) fn intro(&mut self) {
         let activity = self.api.activity() as u8;
-        if activity == crate::comm::dispatch::WON_LAST_BATTLE as u8 {
+        if activity == ActivityKind::WonLastBattle as u8 {
             self.api.npc(OUT_TAKES);
             self.api.segue(0);
             return;
@@ -234,9 +235,7 @@ impl<A: BlackurApi> Dialogue<'_, A> {
             self.api.npc(SENSE_EVIL);
             self.api.set(StoryKey::KOHR_AH_SENSES_EVIL, 1);
         }
-        if activity == crate::comm::dispatch::IN_INTERPLANETARY as u8
-            && self.api.in_samatra_battle()
-        {
+        if activity == ActivityKind::InInterplanetary as u8 && self.api.in_samatra_battle() {
             self.api.npc(HELLO_SAMATRA);
             self.api.set(StoryKey::AWARE_OF_SAMATRA, 1);
             self.api.segue(1);
@@ -266,7 +265,7 @@ impl<A: BlackurApi> Dialogue<'_, A> {
     pub(crate) fn initialize(&mut self) {
         self.api.segue(
             if self.api.get(StoryKey::KOHR_AH_KILLED_ALL) == 0
-                && self.api.activity() as u8 != crate::comm::dispatch::WON_LAST_BATTLE as u8
+                && self.api.activity() as u8 != ActivityKind::WonLastBattle as u8
             {
                 1
             } else {

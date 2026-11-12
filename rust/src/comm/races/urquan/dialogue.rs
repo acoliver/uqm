@@ -1,6 +1,7 @@
 use super::api::UrquanApi;
 use super::phrases::{general_info, visit_phrase};
 use super::*;
+use crate::engine::world::activity::ActivityKind;
 use crate::engine::StoryKey;
 
 pub(crate) struct Dialogue<'a, A> {
@@ -219,8 +220,8 @@ impl<A: UrquanApi> Dialogue<'_, A> {
     pub(crate) fn initialize(&mut self) {
         let activity = self.api.activity() as u8;
         let peaceful = self.api.get(StoryKey::PLAYER_HYPNOTIZED) != 0
-            || activity == crate::comm::dispatch::WON_LAST_BATTLE as u8
-            || (activity == crate::comm::dispatch::IN_INTERPLANETARY as u8
+            || activity == ActivityKind::WonLastBattle as u8
+            || (activity == ActivityKind::InInterplanetary as u8
                 && self.api.group_battle(StoryKey::URQUAN_PROBE_GRPOFFS0));
         self.api.segue(if peaceful { 0 } else { 1 });
     }
@@ -231,12 +232,12 @@ impl<A: UrquanApi> Dialogue<'_, A> {
 
     pub(crate) fn intro(&mut self) {
         let activity = self.api.activity() as u8;
-        if activity == crate::comm::dispatch::WON_LAST_BATTLE as u8 {
+        if activity == ActivityKind::WonLastBattle as u8 {
             self.api.npc(OUT_TAKES as i32);
             self.api.segue(0);
             return;
         }
-        if activity == crate::comm::dispatch::IN_INTERPLANETARY as u8
+        if activity == ActivityKind::InInterplanetary as u8
             && self.api.group_battle(StoryKey::URQUAN_PROBE_GRPOFFS0)
         {
             self.api.npc(SEND_MESSAGE as i32);
@@ -254,14 +255,14 @@ impl<A: UrquanApi> Dialogue<'_, A> {
             self.api.npc(SENSE_EVIL as i32);
             self.api.set(StoryKey::URQUAN_SENSES_EVIL, 1);
         }
-        if activity == crate::comm::dispatch::IN_INTERPLANETARY as u8
+        if activity == ActivityKind::InInterplanetary as u8
             && self.api.group_battle(StoryKey::COLONY_GRPOFFS0)
         {
             self.api.npc(CAUGHT_YA as i32);
             self.api.segue(1);
             return;
         }
-        if activity == crate::comm::dispatch::IN_INTERPLANETARY as u8
+        if activity == ActivityKind::InInterplanetary as u8
             && self.api.group_battle(StoryKey::SAMATRA_GRPOFFS0)
         {
             self.api.npc(HELLO_SAMATRA as i32);
@@ -366,7 +367,7 @@ mod tests {
     #[test]
     fn intro_sends_probe_message_before_other_greetings() {
         let mut api = Api {
-            activity: crate::comm::dispatch::IN_INTERPLANETARY,
+            activity: ActivityKind::InInterplanetary as u16,
             ..Api::default()
         };
         api.world
@@ -428,7 +429,7 @@ mod tests {
     #[test]
     fn won_battle_plays_outtakes_and_ends_without_offers() {
         let mut api = Api {
-            activity: crate::comm::dispatch::WON_LAST_BATTLE,
+            activity: ActivityKind::WonLastBattle as u16,
             ..Api::default()
         };
         Dialogue { api: &mut api }.intro();
@@ -440,7 +441,7 @@ mod tests {
     #[test]
     fn colony_group_triggers_capture_dialogue_before_samatra_check() {
         let mut api = Api {
-            activity: crate::comm::dispatch::IN_INTERPLANETARY,
+            activity: ActivityKind::InInterplanetary as u16,
             ..Api::default()
         };
         api.world.group_battles.insert(StoryKey::COLONY_GRPOFFS0);
@@ -453,7 +454,7 @@ mod tests {
     #[test]
     fn samatra_group_marks_knowledge_and_starts_hostile_combat() {
         let mut api = Api {
-            activity: crate::comm::dispatch::IN_INTERPLANETARY,
+            activity: ActivityKind::InInterplanetary as u16,
             ..Api::default()
         };
         api.world.group_battles.insert(StoryKey::SAMATRA_GRPOFFS0);
@@ -484,7 +485,7 @@ mod tests {
     #[test]
     fn initialization_sets_peace_for_probe_battle_and_hostility_otherwise() {
         let mut api = Api {
-            activity: crate::comm::dispatch::IN_INTERPLANETARY,
+            activity: ActivityKind::InInterplanetary as u16,
             ..Api::default()
         };
         api.world

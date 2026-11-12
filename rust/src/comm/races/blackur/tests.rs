@@ -2,6 +2,7 @@ use super::descriptor::descriptor;
 use super::*;
 use crate::comm::races::encounter::testing::{Effect, Fake};
 use crate::comm::races::script::DialogueHost;
+use crate::engine::world::activity::ActivityKind;
 use crate::engine::StoryKey;
 
 type Api = Fake<Handler, (u32, u32)>;
@@ -218,7 +219,7 @@ fn story_questions_disable_individually_and_exhaust_in_order() {
 #[test]
 fn intro_priorities_activity_low_byte_and_samatra_group_match() {
     for (activity, killed, expected) in [
-        (crate::comm::dispatch::WON_LAST_BATTLE | 0x100, 1, OUT_TAKES),
+        (ActivityKind::WonLastBattle as u16 | 0x100, 1, OUT_TAKES),
         (0, 1, GAME_OVER_DUDE),
     ] {
         let mut f = Api {
@@ -234,12 +235,12 @@ fn intro_priorities_activity_low_byte_and_samatra_group_match() {
         assert_eq!(f.effects, [Effect::Npc(expected), Effect::Segue(0)]);
     }
     for (group, samatra, activity, matches) in [
-        (0, 0, crate::comm::dispatch::IN_INTERPLANETARY, false),
-        (1, 2, crate::comm::dispatch::IN_INTERPLANETARY, false),
+        (0, 0, ActivityKind::InInterplanetary as u16, false),
+        (1, 2, ActivityKind::InInterplanetary as u16, false),
         (
             0x12345678,
             0x12345678,
-            crate::comm::dispatch::IN_INTERPLANETARY | 0x100,
+            ActivityKind::InInterplanetary as u16 | 0x100,
             true,
         ),
         (1, 1, crate::comm::dispatch::IN_HYPERSPACE, false),

@@ -1,6 +1,7 @@
 //! Shofixti dialogue, ported from shofixt.c.
 pub(crate) use super::script::{GLOBAL_PLAYER_NAME, GLOBAL_SHIP_NAME};
 pub(crate) use crate::comm::races::descriptor::Point;
+use crate::engine::world::activity::ActivityKind;
 pub(crate) use crate::engine::StoryKey;
 mod phrases;
 use phrases::*;
@@ -232,7 +233,7 @@ impl<A: ShofixtApi> Dialogue<'_, A> {
         )
     }
     pub(crate) fn intro(&mut self) {
-        if self.api.activity() as u8 == crate::comm::dispatch::WON_LAST_BATTLE as u8 {
+        if self.api.activity() as u8 == ActivityKind::WonLastBattle as u8 {
             self.api.npc(OUT_TAKES);
             self.api.segue(0);
             return;

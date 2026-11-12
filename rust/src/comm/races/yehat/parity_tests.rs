@@ -3,6 +3,7 @@ use super::dialogue::Dialogue;
 use super::*;
 use crate::comm::races::encounter::testing::{Effect, Fake};
 use crate::comm::races::script::{DialogueHost, GLOBAL_PLAYER_NAME, GLOBAL_SHIP_NAME};
+use crate::engine::world::activity::ActivityKind;
 use crate::engine::StoryKey;
 
 type Api = Fake<Handler, api::World>;
@@ -106,7 +107,7 @@ fn all_greeting_switches_keep_c_byte_postincrement_and_final_decrement() {
         }
     }
     let mut api = Api {
-        activity: 0x100 | crate::comm::dispatch::WON_LAST_BATTLE,
+        activity: 0x100 | ActivityKind::WonLastBattle as u16,
         ..Api::default()
     };
     api.put(StoryKey::YEHAT_CIVIL_WAR, 1);

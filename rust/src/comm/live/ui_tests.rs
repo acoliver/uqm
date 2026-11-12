@@ -52,7 +52,7 @@ fn unblocked_ui_adapters_initialize_with_supplied_campaign_owners(
     )) {
         return Ok(());
     }
-    type Init = unsafe fn(&mut Comm, &mut Cx<'_>) -> crate::comm::locdata::CLocData;
+    type Init = fn(&mut Comm, &mut Cx<'_>) -> crate::comm::locdata::SessionData;
     type Hook = fn(&mut Comm, &mut Cx<'_>);
     type Uninit = fn(&mut Comm, &mut Cx<'_>) -> u16;
     macro_rules! adapter {
@@ -103,13 +103,14 @@ fn unblocked_ui_adapters_initialize_with_supplied_campaign_owners(
         let mut cx = Cx::new(&mut battle, &mut game.world, &mut game.kernel, || {
             panic!("adapter initialization must not consume RNG")
         });
-        // SAFETY: the serialized process owns initialized display dimensions and
-        // each initializer receives exclusive loans of its live campaign/session.
-        let descriptor = unsafe { initialize(&mut comm, &mut cx) };
-        assert!(!descriptor.alien_frame_res.is_null(), "{name}");
-        assert!(!descriptor.alien_font_res.is_null(), "{name}");
-        assert!(!descriptor.conversation_phrases_res.is_null(), "{name}");
-        assert!(descriptor.alien_text_width > 0, "{name}");
+        let descriptor = initialize(&mut comm, &mut cx);
+        assert!(descriptor.definition.alien_frame_res.is_some(), "{name}");
+        assert!(descriptor.definition.alien_font_res.is_some(), "{name}");
+        assert!(
+            descriptor.definition.conversation_phrases_res.is_some(),
+            "{name}"
+        );
+        assert!(descriptor.definition.alien_text_width > 0, "{name}");
         assert_eq!(uninit(&mut comm, &mut cx), 0, "{name}");
         crate::time::clock_bridge::rust_clock_uninit(cx.world);
     }

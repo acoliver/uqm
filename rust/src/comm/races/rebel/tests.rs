@@ -3,6 +3,7 @@ use super::descriptor::descriptor;
 use super::*;
 use crate::comm::races::encounter::testing::{Effect, Fake};
 use crate::comm::races::script::DialogueHost;
+use crate::engine::world::activity::ActivityKind;
 use crate::engine::StoryKey;
 
 type Api = Fake<Handler, Date>;
@@ -372,7 +373,7 @@ fn ship_capacity_signed_conversion_and_grant_effect_order() {
 fn final_battle_cavalry_splits_every_capacity_after_byte_conversion() {
     for capacity in [0, 1, 2, 3, 7, 8, 9, 255, 256, 257] {
         let mut f = Api {
-            activity: crate::comm::dispatch::IN_LAST_BATTLE | 0x100,
+            activity: ActivityKind::InLastBattle as u16 | 0x100,
             feasibility: capacity,
             ..Api::default()
         };

@@ -1,6 +1,7 @@
 use super::descriptor::descriptor;
 use super::*;
 use crate::comm::races::encounter::testing::{Effect, Fake};
+use crate::engine::world::activity::ActivityKind;
 use crate::engine::StoryKey;
 
 fn run(api: &mut Fake<Handler>, action: impl FnOnce(&mut dialogue::Dialogue<'_, Fake<Handler>>)) {
@@ -33,7 +34,7 @@ fn initialization_sets_peace_for_menagerie_and_won_battle_only() {
     assert_eq!(api.segue, 0);
 
     api.put(StoryKey::GLOBAL_FLAGS_AND_DATA, 0);
-    api.activity = crate::comm::dispatch::WON_LAST_BATTLE;
+    api.activity = ActivityKind::WonLastBattle as u16;
     run(&mut api, |dialogue| dialogue.initialize());
     assert_eq!(api.segue, 0);
 }
