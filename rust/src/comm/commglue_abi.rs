@@ -81,7 +81,6 @@ pub fn get_segue(cx: &crate::engine::battle::Cx<'_>) -> u32 {
     }
 }
 
-#[cfg(not(test))]
 pub(crate) mod runtime {
     use super::*;
     use std::ffi::c_char;

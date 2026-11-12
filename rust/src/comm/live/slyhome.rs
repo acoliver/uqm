@@ -1,6 +1,4 @@
 use crate::comm::host::Host;
-use crate::comm::locdata::SessionData;
-use crate::comm::races::slyhome::descriptor::descriptor;
 use crate::comm::races::slyhome::*;
 use crate::comm::Comm;
 use crate::engine::battle::Cx;
@@ -51,16 +49,10 @@ pub(crate) fn post(_comm: &mut Comm, _cx: &mut Cx<'_>) {}
 pub(crate) fn uninit(_comm: &mut Comm, _cx: &mut Cx<'_>) -> u16 {
     0
 }
-pub fn init_slylandro_comm(comm: &mut Comm, cx: &mut Cx<'_>) -> crate::comm::locdata::SessionData {
-    let width = cx.screen_dimensions().0;
-    let mut d = descriptor(width);
-    d.alien_text_baseline.x = (1 + ((width - 80) >> 1)) as i16;
-    d.alien_text_width = (width - 80) as u16;
+pub(crate) fn initialize(
+    comm: &mut Comm,
+    cx: &mut Cx<'_>,
+    _desc: &mut crate::comm::races::descriptor::CommDescriptor,
+) {
     run(comm, cx, |s| s.initialize());
-    SessionData {
-        init_encounter_func: Some(intro),
-        post_encounter_func: Some(post),
-        uninit_encounter_func: Some(uninit),
-        ..SessionData::new(d)
-    }
 }
