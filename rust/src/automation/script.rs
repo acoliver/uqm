@@ -2904,6 +2904,8 @@ mod tests {
         assert_eq!(key.index(), 3);
         assert_eq!(crate::automation::input::menu_key_to_index(key), 3);
         assert_eq!(MenuKey::from_index(3), Some(key));
+        let native = include_bytes!("../../tests/fixtures/native/debug-key-owned-v1.json");
+        validate_script(parse_script(native, p()).unwrap(), p()).unwrap();
     }
 
     #[test]
