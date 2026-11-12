@@ -31,7 +31,7 @@ pub(crate) mod live {
         APPEARING, CHANGING, COLLISION_FLAG as COLLISION, DISAPPEARING, FINITE_LIFE,
         IGNORE_VELOCITY, NONSOLID, NORMAL_LIFE,
     };
-    use crate::comm::dispatch::ship::URQUAN_DRONE_SHIP;
+    use crate::engine::species::ship::URQUAN_DRONE_SHIP;
     use crate::engine::battle::{CollisionHook, ElementHook};
     use crate::engine::graphics::{native_abi::POINT, EMPTY_PRIMITIVE, STAMP_PRIMITIVE};
     use crate::engine::math::battle_types::{FACING_SHIFT, HALF_CIRCLE};

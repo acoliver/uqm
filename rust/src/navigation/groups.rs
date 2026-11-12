@@ -155,7 +155,7 @@ fn cosine(angle: u32, magnitude: i32) -> i32 {
 #[cfg(not(test))]
 pub(crate) mod live {
     use super::*;
-    use crate::comm::dispatch::ship::{SLYLANDRO_SHIP, SUPOX_SHIP, UTWIG_SHIP};
+    use crate::engine::species::ship::{SLYLANDRO_SHIP, SUPOX_SHIP, UTWIG_SHIP};
     use crate::engine::world::queues::IpGroup as IP_GROUP;
     use crate::engine::{
         graphics::native_abi::POINT,
