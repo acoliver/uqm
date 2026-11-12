@@ -18,12 +18,12 @@ fn transact(initial: u16, delta: i16, allied: bool) -> (u16, u8, Vec<(u16, u8)>)
     game.world.data.game.crew_cost = 3;
     if allied {
         let mut races = game.world.avail_races();
-        for index in 0..=crate::comm::dispatch::ship::SHOFIXTI_SHIP {
+        for index in 0..=crate::engine::species::ship::SHOFIXTI_SHIP {
             let id = races
                 .alloc()
                 .unwrap_or_else(|| panic!("the fleet fixture fits its pool"));
             *races.get_mut(id) = FleetInfo {
-                allied_state: if index == crate::comm::dispatch::ship::SHOFIXTI_SHIP {
+                allied_state: if index == crate::engine::species::ship::SHOFIXTI_SHIP {
                     crate::starbase::platform::AlliedState::GoodGuy as u16
                 } else {
                     0
