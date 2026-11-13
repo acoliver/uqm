@@ -78,6 +78,23 @@ pub(crate) fn owner(unit: &str) -> Result<(), String> {
     }
 }
 
+pub(crate) fn relocated(
+    debt: &BTreeMap<String, Debt>,
+    renames: &BTreeMap<String, String>,
+) -> Result<BTreeMap<String, Debt>, String> {
+    let mut result = BTreeMap::new();
+    for (identity, debt) in debt {
+        let target = crate::quality::transfers::matching(renames, identity).map_or_else(
+            || identity.clone(),
+            |(old, new)| format!("{new}{}", &identity[old.len()..]),
+        );
+        if result.insert(target.clone(), debt.clone()).is_some() {
+            return Err(format!("move would merge coverage debt into {target}"));
+        }
+    }
+    Ok(result)
+}
+
 pub(crate) fn read(document: &toml_edit::DocumentMut) -> Result<State, String> {
     let mut state = State::default();
     if let Some(item) = document.get("coverage_capture") {

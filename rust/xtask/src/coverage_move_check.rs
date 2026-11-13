@@ -191,8 +191,10 @@ pub(crate) fn analyze(
     let host = std::env::consts::OS;
     validate_sources(root, reference, baseline, &prior, current, hits, host)?;
     let mut sources = pending_sources(root, reference, baseline, &prior, current, host)?;
+    let pending = transfers::pending(&baseline.moved, Some(&prior.moved));
+    let previous = moves::relocated(&prior.coverage_moves.debt, &pending)?;
     for (target, debt) in &baseline.coverage_moves.debt {
-        if let Some(previous) = prior.coverage_moves.debt.get(target) {
+        if let Some(previous) = previous.get(target) {
             if previous.source != debt.source {
                 return Err(format!("coverage debt source changed: {target}"));
             }
@@ -229,12 +231,7 @@ pub(crate) fn analyze(
         println!("relocated {target}: {} moved token lines ({} uncovered LLVM lines), {} new executable lines ({} covered)", attribution.moved.len(), attribution.uncovered, attribution.new.count, attribution.new.covered);
         if let Some(debt) = baseline.coverage_moves.debt.get(&target) {
             if enforce {
-                debt_limit(
-                    &target,
-                    debt,
-                    prior.coverage_moves.debt.get(&target),
-                    &attribution,
-                )?;
+                debt_limit(&target, debt, previous.get(&target), &attribution)?;
             }
         } else if enforce && !attribution.moved.is_empty() {
             return Err(format!(
@@ -274,4 +271,31 @@ pub(crate) fn new_lines(hits: &Hits, attributed: &ResultSet) -> BTreeMap<String,
         result.insert(file.clone(), lines);
     }
     result
+}
+
+#[cfg(test)]
+mod debt_limit_tests {
+    use super::*;
+
+    #[test]
+    fn inherited_source_cannot_change_at_the_debt_limit() {
+        let old = Debt {
+            source: "uqm::old::talk".into(),
+            owner: "U6-04".into(),
+            lines: 2,
+        };
+        let mut debt = old.clone();
+        let attribution = Attribution {
+            moved: [1, 3].into(),
+            new: Lines::default(),
+            uncovered: 2,
+        };
+        debt_limit("uqm::host::talk", &debt, Some(&old), &attribution).unwrap();
+        debt.source = "uqm::other::talk".into();
+        let error = debt_limit("uqm::host::talk", &debt, Some(&old), &attribution).unwrap_err();
+        assert!(
+            error.contains("coverage relocation may only shrink"),
+            "{error}"
+        );
+    }
 }

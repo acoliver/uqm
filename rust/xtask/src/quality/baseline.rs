@@ -278,8 +278,11 @@ impl Baseline {
         let mut budget = self.budget.clone();
         let mut lint = self.lint.clone();
         let mut proofs = self.expect_sites.clone();
+        let mut coverage = self.coverage_moves.clone();
         for &(old, new) in steps {
-            budget = super::budgets::relocated(&budget, &[(old.into(), new.into())].into())?;
+            let rename = [(old.into(), new.into())].into();
+            budget = super::budgets::relocated(&budget, &rename)?;
+            coverage.debt = crate::coverage::moves::relocated(&coverage.debt, &rename)?;
             for values in lint.values_mut() {
                 *values = move_entries(values, old, new, true)?;
             }
@@ -300,6 +303,7 @@ impl Baseline {
         self.budget = budget;
         self.lint = lint;
         self.expect_sites = proofs;
+        self.coverage_moves = coverage;
         self.moved.retain(|source, _| !pending.contains_key(source));
         self.moved.extend(moves);
         Ok(())

@@ -70,6 +70,10 @@ pub(super) fn apply(
     super::moves::owner(owner)?;
     let path = root.join("rust/xtask/quality-baseline.toml");
     let mut baseline = Baseline::read(&path)?;
+    let prior = crate::quality::baseline::baseline_at_ref(root, reference)?.unwrap_or_default();
+    let pending = crate::quality::transfers::pending(&baseline.moved, Some(&prior.moved));
+    baseline.coverage_moves.debt =
+        super::moves::relocated(&baseline.coverage_moves.debt, &pending)?;
     let result = move_check::analyze(root, reference, &baseline, current, hits, false)?;
     for (target, lines) in &result.measured_debt {
         if *lines == 0 {
