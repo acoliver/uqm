@@ -1,7 +1,6 @@
 //! C FFI bindings for DukVid decoder vtable and the pure Rust video player.
 
 use std::ffi::{c_char, c_int, c_void, CStr};
-use std::ptr;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Mutex;
 

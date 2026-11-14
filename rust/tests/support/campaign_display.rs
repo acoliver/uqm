@@ -30,14 +30,7 @@ impl CampaignDisplay {
         Self::install_prepared(game, load, |_| {})
     }
 
-    pub fn install_with_display(
-        game: &mut Game,
-        draw: impl FnOnce(&mut Game),
-    ) -> Result<Self, Box<dyn std::error::Error>> {
-        Self::install_prepared(game, || {}, draw)
-    }
-
-    fn install_prepared(
+    pub fn install_prepared(
         game: &mut Game,
         load: impl FnOnce(),
         draw: impl FnOnce(&mut Game),

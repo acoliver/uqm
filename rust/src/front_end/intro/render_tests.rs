@@ -200,8 +200,10 @@ fn commands_draw_retained_frames_and_preserve_wait_call_skip_and_restore_order()
 fn command_matrix_renders_text_transitions_and_retains_generated_sis_frames() {
     if !crate::native_test_process::own_graphics_process("front_end::intro::render_tests::command_matrix_renders_text_transitions_and_retains_generated_sis_frames") { return; }
     let mut game = Game::new();
-    let fixture =
-        crate::campaign_display_test::CampaignDisplay::install_with_display(&mut game, |game| {
+    let fixture = crate::campaign_display_test::CampaignDisplay::install_prepared(
+        &mut game,
+        || {},
+        |game| {
             let context = ContextLease::require(game.kernel.status_context);
             game.kernel.screen_context = game.kernel.status_context;
             context.set_frame(ContextFrame::retain(std::ptr::NonNull::new(
@@ -326,7 +328,8 @@ fn command_matrix_renders_text_transitions_and_retains_generated_sis_frames() {
             drop(context);
             drop(driver);
             game.kernel.off_screen_context = game.kernel.status_context;
-        })
-        .unwrap();
+        },
+    )
+    .unwrap();
     fixture.finish(game);
 }
