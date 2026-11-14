@@ -120,3 +120,7 @@ pub unsafe fn InstallVideoResType() -> c_int {
     );
     1
 }
+
+#[cfg(test)]
+#[path = "legacy_tests.rs"]
+mod tests;
