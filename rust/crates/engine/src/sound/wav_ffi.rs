@@ -14,7 +14,7 @@ use super::wav::WavDecoder;
 // Import types from the main ffi module
 use super::ffi::{uio_DirHandle, TFB_DecoderFormats, TFB_SoundDecoder, TFB_SoundDecoderFuncs};
 
-use crate::io::uio_bridge::{uio_close, uio_fstat, uio_open, uio_read};
+use crate::io::uio_owned::read_file;
 
 // =============================================================================
 // Rust WAV decoder wrapper for C FFI
@@ -214,41 +214,14 @@ fn rust_wav_Open(
 
         let wav = &mut *((*rust_dec).rust_decoder as *mut WavDecoder);
 
-        // Use UIO to read the file
-        let handle = uio_open(dir, filename, 0, 0); // O_RDONLY = 0
-        if handle.is_null() {
-            rust_bridge_log_msg(&format!(
-                "RUST_WAV_OPEN_FAILED: uio_open returned null for {}",
-                filename_str
-            ));
-            return 0;
-        }
-
-        // Get file size
-        let mut stat_buf: libc::stat = std::mem::zeroed();
-        if uio_fstat(handle, &mut stat_buf) != 0 {
-            uio_close(handle);
-            rust_bridge_log_msg("RUST_WAV_OPEN_FAILED: uio_fstat failed");
-            return 0;
-        }
-        let file_size = stat_buf.st_size as usize;
-        rust_bridge_log_msg(&format!("RUST_WAV_OPEN: file size = {} bytes", file_size));
-
-        // Read entire file into memory
-        let mut data = vec![0u8; file_size];
-        let mut total_read = 0usize;
-        while total_read < file_size {
-            let bytes_read = uio_read(
-                handle,
-                data.as_mut_ptr().add(total_read),
-                file_size - total_read,
-            );
-            if bytes_read <= 0 {
-                break;
+        let data = match read_file(dir, filename) {
+            Ok(data) => data,
+            Err(error) => {
+                rust_bridge_log_msg(&format!("Unable to read {}: {}", filename_str, error));
+                return 0;
             }
-            total_read += bytes_read as usize;
-        }
-        uio_close(handle);
+        };
+        let total_read = data.len();
 
         if total_read == 0 {
             rust_bridge_log_msg(&format!(

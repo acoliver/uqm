@@ -12,7 +12,7 @@ use super::formats::DecoderFormats;
 
 use super::ffi::{uio_DirHandle, TFB_DecoderFormats, TFB_SoundDecoder, TFB_SoundDecoderFuncs};
 
-use crate::io::uio_bridge::{uio_close, uio_fstat, uio_open, uio_read};
+use crate::io::uio_owned::read_file;
 
 // =============================================================================
 // FFI wrapper struct
@@ -32,35 +32,8 @@ static RUST_DUKA_NAME: &[u8] = b"Rust DukAud\0";
 // Helper: read a file via uio into a Vec<u8>
 // =============================================================================
 
-unsafe fn read_uio_file(dir: *mut uio_DirHandle, path: *const c_char) -> Option<Vec<u8>> {
-    let handle = uio_open(dir, path, 0, 0);
-    if handle.is_null() {
-        return None;
-    }
-
-    let mut stat_buf: libc::stat = std::mem::zeroed();
-    if uio_fstat(handle, &mut stat_buf) != 0 {
-        uio_close(handle);
-        return None;
-    }
-    let size = stat_buf.st_size as usize;
-
-    let mut data = vec![0u8; size];
-    let mut total = 0usize;
-    while total < size {
-        let n = uio_read(handle, data.as_mut_ptr().add(total), size - total);
-        if n <= 0 {
-            break;
-        }
-        total += n as usize;
-    }
-    uio_close(handle);
-
-    if total == 0 {
-        return None;
-    }
-    data.truncate(total);
-    Some(data)
+unsafe fn read_file_bytes(dir: *mut uio_DirHandle, path: *const c_char) -> Option<Vec<u8>> {
+    read_file(dir, path).ok().filter(|data| !data.is_empty())
 }
 
 // =============================================================================
@@ -198,7 +171,7 @@ fn rust_duka_Open(
         }
 
         // Read .duk file
-        let duk_data = match read_uio_file(dir, filename) {
+        let duk_data = match read_file_bytes(dir, filename) {
             Some(d) => d,
             None => {
                 rust_bridge_log_msg(&format!(
@@ -223,7 +196,7 @@ fn rust_duka_Open(
             Err(_) => return 0,
         };
 
-        let frm_data = match read_uio_file(dir, frm_cstr.as_ptr()) {
+        let frm_data = match read_file_bytes(dir, frm_cstr.as_ptr()) {
             Some(d) => d,
             None => {
                 rust_bridge_log_msg(&format!("RUST_DUKAUD_OPEN: failed to read {}", frm_name));

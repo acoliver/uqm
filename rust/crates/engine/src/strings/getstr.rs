@@ -10,7 +10,8 @@ use std::ffi::{c_char, c_void, CStr, CString};
 use std::ptr::null_mut;
 
 use crate::collections::hash_table::{string_add, string_new};
-use crate::io::uio_bridge::{uio_Stream, uio_fclose, uio_fgets, uio_fopen, uio_ftell};
+use crate::host::{FileStream, Files};
+use crate::io::uio_owned::directory;
 use crate::log_abi::{log_message, LOG_WARNING};
 use crate::memory::{rust_hfree, rust_hmalloc};
 use crate::resource::ffi_bridge::{
@@ -20,6 +21,7 @@ use crate::resource::ffi_types::ResourceData;
 use crate::strings::string_table::{
     AllocStringTable, StringTable, StringTableEntry, HAS_NAMEINDEX, HAS_SOUND_CLIPS, HAS_TIMESTAMP,
 };
+use std::path::Path;
 
 use crate::io::handles::contentDir;
 
@@ -36,26 +38,33 @@ trait LineSource {
     fn tell(&self) -> i32;
 }
 
-struct UioLines(*mut uio_Stream);
+struct FileLines<'a>(&'a mut FileStream);
 
-impl LineSource for UioLines {
+impl LineSource for FileLines<'_> {
     fn read_line(&mut self, line: &mut Vec<u8>) -> bool {
-        let mut buf = [0 as c_char; LINE_SIZE];
-        // SAFETY: self.0 is an open stream and buf is LINE_SIZE bytes.
-        let got = unsafe { uio_fgets(buf.as_mut_ptr(), LINE_SIZE as i32, self.0) };
-        if got.is_null() {
-            return false;
+        match self.0.line(LINE_SIZE) {
+            Ok(Some(text)) => {
+                *line = text;
+                true
+            }
+            Ok(None) => false,
+            Err(error) => {
+                log::warn!("String table read failed: {error}");
+                false
+            }
         }
-        // SAFETY: uio_fgets NUL-terminates buf on success.
-        let text = unsafe { CStr::from_ptr(buf.as_ptr()) };
-        line.clear();
-        line.extend_from_slice(text.to_bytes());
-        true
     }
-
     fn tell(&self) -> i32 {
-        // SAFETY: self.0 is an open stream. Offsets are compared as C ints.
-        unsafe { uio_ftell(self.0) as i32 }
+        self.0.position() as i32
+    }
+}
+
+impl LineSource for FileStream {
+    fn read_line(&mut self, line: &mut Vec<u8>) -> bool {
+        FileLines(self).read_line(line)
+    }
+    fn tell(&self) -> i32 {
+        self.position() as i32
     }
 }
 
@@ -211,7 +220,7 @@ fn load_plain_table(src: &mut impl LineSource, length: u32) -> *mut StringTable 
 /// # Safety
 /// `fp` must be an open UIO stream.
 pub unsafe extern "C" fn _get_string_data(fp: *mut c_void, length: u32) -> *mut c_void {
-    load_plain_table(&mut UioLines(fp.cast()), length).cast()
+    load_plain_table(&mut FileLines(&mut *fp.cast::<FileStream>()), length).cast()
 }
 
 /// Name, clip and timestamp data gathered next to the conversation strings.
@@ -392,38 +401,23 @@ pub unsafe extern "C" fn _get_conversation_data(path: *const c_char, resdata: *m
         return;
     }
 
-    let timestamp_fp = ts_path.map(|ts| {
-        let ts_c = CString::new(ts).expect("path has no NUL");
-        uio_fopen(contentDir.cast(), ts_c.as_ptr(), c"rb".as_ptr())
+    let timestamp_src = ts_path.and_then(|ts| {
+        let ts = std::str::from_utf8(ts).ok()?;
+        directory(contentDir.cast())
+            .ok()?
+            .open_read(Path::new(ts))
+            .ok()
     });
-    let timestamp_src = timestamp_fp.filter(|p| !p.is_null()).map(OwnedUio);
     let clip_dir = clip_dir.map(<[u8]>::to_vec);
 
-    let table =
-        load_conversation_table(&mut UioLines(fp.cast()), data_len, clip_dir, timestamp_src);
+    let table = load_conversation_table(
+        &mut FileLines(&mut *fp.cast::<FileStream>()),
+        data_len,
+        clip_dir,
+        timestamp_src,
+    );
     res_CloseResFile(fp);
     (*resdata).ptr = table.cast();
-}
-
-/// Timestamp stream that closes itself when dropped (including when the
-/// loader disables timestamps midway).
-struct OwnedUio(*mut uio_Stream);
-
-impl LineSource for OwnedUio {
-    fn read_line(&mut self, line: &mut Vec<u8>) -> bool {
-        UioLines(self.0).read_line(line)
-    }
-
-    fn tell(&self) -> i32 {
-        UioLines(self.0).tell()
-    }
-}
-
-impl Drop for OwnedUio {
-    fn drop(&mut self) {
-        // SAFETY: the stream was opened by uio_fopen and is closed once.
-        unsafe { uio_fclose(self.0) };
-    }
 }
 
 /// Splits `phrases[:clip_dir[:timestamps]]`.

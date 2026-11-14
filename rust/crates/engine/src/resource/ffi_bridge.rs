@@ -38,44 +38,9 @@ use super::type_registry;
 use crate::graphics::resgfx::InstallGraphicResTypes;
 use crate::io::handles::contentDir;
 #[cfg(not(test))]
-use crate::io::uio_bridge::uio_fclose as uio_fclose_raw;
-#[cfg(not(test))]
-use crate::io::uio_bridge::uio_fgetc;
-#[cfg(not(test))]
-use crate::io::uio_bridge::uio_fopen as uio_fopen_raw;
-#[cfg(not(test))]
-use crate::io::uio_bridge::uio_fputc;
-#[cfg(not(test))]
-use crate::io::uio_bridge::uio_fread;
-#[cfg(not(test))]
-use crate::io::uio_bridge::uio_fseek;
-#[cfg(not(test))]
-use crate::io::uio_bridge::uio_ftell;
-#[cfg(not(test))]
-use crate::io::uio_bridge::uio_fwrite;
-#[cfg(not(test))]
-use crate::io::uio_bridge::uio_stat;
-#[cfg(not(test))]
-use crate::io::uio_bridge::uio_unlink as uio_unlink_raw;
-#[cfg(not(test))]
 use crate::strings::sresins::install_resource_types;
 #[cfg(not(test))]
 use crate::video::legacy::InstallVideoResType;
-
-#[cfg(not(test))]
-unsafe fn uio_fopen(dir: *mut c_void, path: *const c_char, mode: *const c_char) -> *mut c_void {
-    uio_fopen_raw(dir.cast(), path, mode).cast()
-}
-
-#[cfg(not(test))]
-unsafe fn uio_fclose(fp: *mut c_void) -> c_int {
-    uio_fclose_raw(fp.cast())
-}
-
-#[cfg(not(test))]
-unsafe fn uio_unlink(dir: *mut c_void, path: *const c_char) -> c_int {
-    uio_unlink_raw(dir.cast(), path)
-}
 
 // When audio_heart feature is enabled, register Rust audio resource callbacks
 // (the C resource loaders no longer exist).
@@ -125,51 +90,13 @@ unsafe extern "C" fn rust_free_music(data: *mut c_void) -> c_int {
     1
 }
 
-// In tests the same entry points run against the Rust UIO implementation
-// that ships in the binary, so file-backed paths see real files.
-#[cfg(test)]
-use crate::io::uio_bridge as real_uio;
+use crate::host::Files;
+use crate::io::uio_owned::directory;
+use std::path::Path;
 
-#[cfg(test)]
-unsafe fn uio_fopen(dir: *mut c_void, path: *const c_char, mode: *const c_char) -> *mut c_void {
-    real_uio::uio_fopen(dir.cast(), path, mode).cast()
-}
-#[cfg(test)]
-unsafe fn uio_fclose(fp: *mut c_void) -> c_int {
-    real_uio::uio_fclose(fp.cast())
-}
-#[cfg(test)]
-unsafe fn uio_fread(buf: *mut c_void, size: usize, count: usize, fp: *mut c_void) -> usize {
-    real_uio::uio_fread(buf, size, count, fp.cast())
-}
-#[cfg(test)]
-unsafe fn uio_fwrite(buf: *const c_void, size: usize, count: usize, fp: *mut c_void) -> usize {
-    real_uio::uio_fwrite(buf, size, count, fp.cast())
-}
-#[cfg(test)]
-unsafe fn uio_fseek(fp: *mut c_void, offset: c_long, whence: c_int) -> c_int {
-    real_uio::uio_fseek(fp.cast(), offset, whence)
-}
-#[cfg(test)]
-unsafe fn uio_ftell(fp: *mut c_void) -> c_long {
-    real_uio::uio_ftell(fp.cast())
-}
-#[cfg(test)]
-unsafe fn uio_fgetc(fp: *mut c_void) -> c_int {
-    real_uio::uio_fgetc(fp.cast())
-}
-#[cfg(test)]
-unsafe fn uio_fputc(c: c_int, fp: *mut c_void) -> c_int {
-    real_uio::uio_fputc(c, fp.cast())
-}
-#[cfg(test)]
-unsafe fn uio_unlink(dir: *mut c_void, path: *const c_char) -> c_int {
-    real_uio::uio_unlink(dir.cast(), path)
-}
-#[cfg(test)]
-unsafe fn uio_stat(dir: *mut c_void, path: *const c_char, stat_buf: *mut libc::stat) -> c_int {
-    real_uio::uio_stat(dir.cast(), path, stat_buf)
-}
+#[path = "file_stream.rs"]
+mod file_stream;
+use file_stream::*;
 
 // =============================================================================
 // Global state
@@ -389,26 +316,26 @@ pub unsafe extern "C" fn LoadResourceIndex(
 
     // Open file via UIO
     let mode = c"rt".as_ptr() as *const c_char;
-    let fp = uio_fopen(dir, filename, mode);
+    let fp = stream_open(dir, filename, mode);
     if fp.is_null() {
         log::warn!("LoadResourceIndex: failed to open file");
         return;
     }
 
     // Get file length: seek to end, tell, seek back
-    uio_fseek((fp).cast(), 0, 2); // SEEK_END = 2
-    let length = uio_ftell((fp).cast()) as usize;
-    uio_fseek((fp).cast(), 0, 0); // SEEK_SET = 0
+    stream_seek((fp).cast(), 0, 2); // SEEK_END = 2
+    let length = stream_tell((fp).cast()) as usize;
+    stream_seek((fp).cast(), 0, 0); // SEEK_SET = 0
 
     if length == 0 {
-        uio_fclose(fp);
+        stream_close(fp);
         return;
     }
 
     // Read entire file into buffer
     let mut buf = vec![0u8; length];
-    let bytes_read = uio_fread(buf.as_mut_ptr() as *mut c_void, 1, length, (fp).cast());
-    uio_fclose(fp);
+    let bytes_read = stream_read(buf.as_mut_ptr() as *mut c_void, 1, length, (fp).cast());
+    stream_close(fp);
 
     // Truncate to actual bytes read
     buf.truncate(bytes_read);
@@ -458,15 +385,15 @@ pub unsafe extern "C" fn SaveResourceIndex(
         cstr_to_str(root)
     };
     let lines = serialize_index(prefix, strip_root != 0);
-    let fp = uio_fopen(dir, file, c"wt".as_ptr());
+    let fp = stream_open(dir, file, c"wt".as_ptr());
     if fp.is_null() {
         log::warn!("SaveResourceIndex: failed to open file for writing");
         return;
     }
     for line in lines {
-        uio_fwrite(line.as_ptr().cast(), 1, line.len(), fp.cast());
+        stream_write(line.as_ptr().cast(), 1, line.len(), fp.cast());
     }
-    uio_fclose(fp);
+    stream_close(fp);
 }
 
 pub(super) fn serialize_index(prefix: Option<&str>, strip: bool) -> Vec<String> {
@@ -1134,20 +1061,19 @@ pub unsafe extern "C" fn res_OpenResFile(
         return ptr::null_mut();
     }
 
-    // Check if target is a directory using uio_stat
-    let mut sb: libc::stat = std::mem::zeroed();
-    if uio_stat((dir).cast(), filename, &mut sb) == 0 {
-        // S_ISDIR: check if st_mode has the directory bit set
-        // Use libc::S_IFMT and libc::S_IFDIR macros for portability
-        if (sb.st_mode & libc::S_IFMT as crate::platform::FileMode)
-            == libc::S_IFDIR as crate::platform::FileMode
-        {
-            return STREAM_SENTINEL;
-        }
+    if directory(dir.cast())
+        .and_then(|files| {
+            files.stat(Path::new(
+                CStr::from_ptr(filename).to_string_lossy().as_ref(),
+            ))
+        })
+        .is_ok_and(|stat| stat.is_dir)
+    {
+        return STREAM_SENTINEL;
     }
 
     // Not a directory or stat failed — fall through to regular open
-    uio_fopen(dir, filename, mode)
+    stream_open(dir, filename, mode)
 }
 
 /// Close a resource file. Returns 1 on success, 0 on failure.
@@ -1161,7 +1087,7 @@ pub unsafe extern "C" fn res_CloseResFile(fp: *mut c_void) -> c_int {
     if fp.is_null() || fp == STREAM_SENTINEL {
         return 1;
     }
-    if uio_fclose(fp) == 0 {
+    if stream_close(fp) == 0 {
         1
     } else {
         0
@@ -1183,7 +1109,7 @@ pub unsafe extern "C" fn ReadResFile(
     if fp.is_null() || fp == STREAM_SENTINEL || buf.is_null() {
         return 0;
     }
-    uio_fread(buf, size, count, (fp).cast())
+    stream_read(buf, size, count, (fp).cast())
 }
 
 /// Write to a resource file.
@@ -1201,7 +1127,7 @@ pub unsafe extern "C" fn WriteResFile(
     if fp.is_null() || fp == STREAM_SENTINEL || buf.is_null() {
         return 0;
     }
-    uio_fwrite(buf, size, count, (fp).cast())
+    stream_write(buf, size, count, (fp).cast())
 }
 
 /// Get a character from a resource file.
@@ -1214,7 +1140,7 @@ pub unsafe extern "C" fn GetResFileChar(fp: *mut c_void) -> c_int {
     if fp.is_null() || fp == STREAM_SENTINEL {
         return -1; // EOF
     }
-    uio_fgetc((fp).cast())
+    stream_get_char((fp).cast())
 }
 
 /// Put a character to a resource file.
@@ -1227,7 +1153,7 @@ pub unsafe extern "C" fn PutResFileChar(ch: c_char, fp: *mut c_void) -> c_int {
     if fp.is_null() || fp == STREAM_SENTINEL {
         return -1; // EOF
     }
-    uio_fputc(ch as c_int, (fp).cast())
+    stream_put_char(ch as c_int, (fp).cast())
 }
 
 /// Write a newline to a resource file.
@@ -1240,7 +1166,7 @@ pub unsafe extern "C" fn PutResFileNewline(fp: *mut c_void) -> c_int {
     if fp.is_null() || fp == STREAM_SENTINEL {
         return -1; // EOF
     }
-    uio_fputc(b'\n' as c_int, (fp).cast())
+    stream_put_char(b'\n' as c_int, (fp).cast())
 }
 
 /// Seek in a resource file.
@@ -1253,7 +1179,7 @@ pub unsafe extern "C" fn SeekResFile(fp: *mut c_void, offset: c_long, whence: c_
     if fp.is_null() || fp == STREAM_SENTINEL {
         return -1;
     }
-    uio_fseek((fp).cast(), offset, whence) as c_long
+    stream_seek((fp).cast(), offset, whence) as c_long
 }
 
 /// Tell position in a resource file.
@@ -1266,7 +1192,7 @@ pub unsafe extern "C" fn TellResFile(fp: *mut c_void) -> c_long {
     if fp.is_null() || fp == STREAM_SENTINEL {
         return -1;
     }
-    uio_ftell((fp).cast())
+    stream_tell((fp).cast())
 }
 
 /// Get the length of a resource file.
@@ -1284,10 +1210,10 @@ pub unsafe extern "C" fn LengthResFile(fp: *mut c_void) -> usize {
         return 1;
     }
 
-    let cur_pos = uio_ftell((fp).cast());
-    uio_fseek((fp).cast(), 0, 2); // SEEK_END
-    let length = uio_ftell((fp).cast()) as usize;
-    uio_fseek((fp).cast(), cur_pos, 0); // SEEK_SET
+    let cur_pos = stream_tell((fp).cast());
+    stream_seek((fp).cast(), 0, 2); // SEEK_END
+    let length = stream_tell((fp).cast()) as usize;
+    stream_seek((fp).cast(), cur_pos, 0); // SEEK_SET
     length
 }
 
@@ -1301,7 +1227,14 @@ pub unsafe extern "C" fn DeleteResFile(dir: *mut c_void, filename: *const c_char
     if filename.is_null() {
         return 0;
     }
-    if uio_unlink(dir, filename) == 0 {
+    if directory(dir.cast())
+        .and_then(|files| {
+            files.remove(Path::new(
+                CStr::from_ptr(filename).to_string_lossy().as_ref(),
+            ))
+        })
+        .is_ok()
+    {
         1
     } else {
         0
@@ -1391,7 +1324,7 @@ pub unsafe extern "C" fn GetResourceData(fp: *mut c_void, length: u32) -> *mut c
     // a length prefix ~0 (0xFFFFFFFF) meant uncompressed.
     // Currently, .ct and .xlt files still carry a ~0 prefix.
     let mut comp_len: u32 = 0;
-    let read = uio_fread(
+    let read = stream_read(
         &mut comp_len as *mut u32 as *mut c_void,
         std::mem::size_of::<u32>(),
         1,
@@ -1418,7 +1351,7 @@ pub unsafe extern "C" fn GetResourceData(fp: *mut c_void, length: u32) -> *mut c
         return ptr::null_mut();
     }
 
-    let bytes_read = uio_fread(buf as *mut c_void, 1, data_len, (fp).cast());
+    let bytes_read = stream_read(buf as *mut c_void, 1, data_len, (fp).cast());
     if bytes_read != data_len {
         libc::free(buf as *mut c_void);
         return ptr::null_mut();

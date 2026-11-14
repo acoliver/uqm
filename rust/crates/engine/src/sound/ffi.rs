@@ -287,7 +287,7 @@ fn rust_ova_Term(decoder: *mut TFB_SoundDecoder) {
 }
 
 // Import uio_open and uio_read from our io module
-use crate::io::uio_bridge::{uio_close, uio_fstat, uio_open, uio_read};
+use crate::io::uio_owned::read_file;
 
 #[allow(
     non_snake_case,
@@ -319,42 +319,14 @@ fn rust_ova_Open(
 
         let ogg = &mut *((*rust_dec).rust_decoder as *mut OggDecoder);
 
-        // Use UIO to open and read the file through the virtual filesystem
-        // This handles addons, zip files, and path resolution correctly
-        let handle = uio_open(dir, filename, 0 /* O_RDONLY */, 0);
-        if handle.is_null() {
-            rust_bridge_log_msg(&format!(
-                "RUST_OGG_OPEN_FAILED: uio_open returned null for {}",
-                filename_str
-            ));
-            return 0;
-        }
-
-        // Get file size via fstat
-        let mut stat_buf: libc::stat = std::mem::zeroed();
-        if uio_fstat(handle, &mut stat_buf) != 0 {
-            rust_bridge_log_msg("RUST_OGG_OPEN_FAILED: uio_fstat failed");
-            uio_close(handle);
-            return 0;
-        }
-        let file_size = stat_buf.st_size as usize;
-        rust_bridge_log_msg(&format!("RUST_OGG_OPEN: file size = {} bytes", file_size));
-
-        // Read entire file into memory
-        let mut data = vec![0u8; file_size];
-        let mut total_read = 0usize;
-        while total_read < file_size {
-            let n = uio_read(
-                handle,
-                data.as_mut_ptr().add(total_read),
-                file_size - total_read,
-            );
-            if n <= 0 {
-                break;
+        let data = match read_file(dir, filename) {
+            Ok(data) => data,
+            Err(error) => {
+                rust_bridge_log_msg(&format!("Unable to read {}: {}", filename_str, error));
+                return 0;
             }
-            total_read += n as usize;
-        }
-        uio_close(handle);
+        };
+        let total_read = data.len();
 
         if total_read == 0 {
             rust_bridge_log_msg(&format!(

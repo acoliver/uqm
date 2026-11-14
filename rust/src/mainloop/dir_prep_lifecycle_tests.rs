@@ -11,8 +11,8 @@ use tempfile::TempDir;
 use super::*;
 use super::{configDir, contentDir, contentMountHandle, meleeDir, repository, saveDir};
 use crate::io::uio_bridge::{
-    uio_DirList_free, uio_close, uio_closeDir, uio_closeRepository, uio_getDirList, uio_init,
-    uio_open, uio_openRepository, uio_read, uio_unInit,
+    uio_DirList_free, uio_closeDir, uio_closeRepository, uio_getDirList, uio_init,
+    uio_openRepository, uio_unInit,
 };
 
 const ENV_KEYS: [&str; 4] = ["HOME", "UQM_CONFIG_DIR", "UQM_SAVE_DIR", "UQM_MELEE_DIR"];
@@ -87,26 +87,13 @@ impl Drop for Fixture {
     }
 }
 
-fn read_through_uio(dir: *mut uio_DirHandle, name: &str) -> Option<Vec<u8>> {
-    let name = CString::new(name).unwrap();
-    unsafe {
-        let handle = uio_open(dir, name.as_ptr(), 0, 0);
-        if handle.is_null() {
-            return None;
-        }
-        let mut bytes = Vec::new();
-        let mut chunk = [0u8; 256];
-        loop {
-            let n = uio_read(handle, chunk.as_mut_ptr(), chunk.len());
-            assert!(n >= 0, "uio_read failed");
-            if n == 0 {
-                break;
-            }
-            bytes.extend_from_slice(&chunk[..n as usize]);
-        }
-        uio_close(handle);
-        Some(bytes)
-    }
+fn read_through_files(dir: *mut uio_DirHandle, name: &str) -> Option<Vec<u8>> {
+    use crate::engine::host::Files;
+    // SAFETY: the test fixture owns dir throughout this call.
+    unsafe { crate::io::uio_owned::directory(dir) }
+        .ok()?
+        .read(std::path::Path::new(name))
+        .ok()
 }
 
 fn list_through_uio(dir: *mut uio_DirHandle, pattern: &str, match_type: c_int) -> Vec<String> {
@@ -183,7 +170,7 @@ fn config_dir_is_created_exported_and_mounted() {
     );
     assert!(unsafe { !configDir.is_null() });
     std::fs::write(path.join("marker.txt"), b"config marker").unwrap();
-    let seen = read_through_uio(unsafe { configDir }, "marker.txt");
+    let seen = read_through_files(unsafe { configDir }, "marker.txt");
     assert_eq!(seen.as_deref(), Some(&b"config marker"[..]));
 }
 
@@ -233,7 +220,7 @@ fn save_dir_defaults_below_the_config_dir() {
     );
     std::fs::write(expected.join("slot1.sav"), b"saved game").unwrap();
     assert_eq!(
-        read_through_uio(unsafe { saveDir }, "slot1.sav").as_deref(),
+        read_through_files(unsafe { saveDir }, "slot1.sav").as_deref(),
         Some(&b"saved game"[..])
     );
 }
@@ -271,7 +258,7 @@ fn melee_dir_defaults_to_teams_below_the_config_dir() {
     );
     std::fs::write(expected.join("mine.mle"), b"team").unwrap();
     assert_eq!(
-        read_through_uio(unsafe { meleeDir }, "mine.mle").as_deref(),
+        read_through_files(unsafe { meleeDir }, "mine.mle").as_deref(),
         Some(&b"team"[..])
     );
 }
@@ -326,19 +313,19 @@ fn content_dir_is_mounted_with_packages_and_addon_packs() {
     let dir = unsafe { contentDir };
     assert!(!dir.is_null());
     assert_eq!(
-        read_through_uio(dir, "version").as_deref(),
+        read_through_files(dir, "version").as_deref(),
         Some(&b"0.8.0\n"[..])
     );
     assert_eq!(
-        read_through_uio(dir, "from_package.txt").as_deref(),
+        read_through_files(dir, "from_package.txt").as_deref(),
         Some(&b"package data"[..])
     );
     assert_eq!(
-        read_through_uio(dir, "addons/from_top_addon.txt").as_deref(),
+        read_through_files(dir, "addons/from_top_addon.txt").as_deref(),
         Some(&b"top addon data"[..])
     );
     assert_eq!(
-        read_through_uio(dir, "addons/alpha/from_alpha_addon.txt").as_deref(),
+        read_through_files(dir, "addons/alpha/from_alpha_addon.txt").as_deref(),
         Some(&b"alpha addon data"[..])
     );
 }
@@ -360,7 +347,7 @@ fn explicit_addon_dir_is_mounted_under_addons() {
     .unwrap();
 
     assert_eq!(
-        read_through_uio(unsafe { contentDir }, "addons/extra.txt").as_deref(),
+        read_through_files(unsafe { contentDir }, "addons/extra.txt").as_deref(),
         Some(&b"extra data"[..])
     );
 }
@@ -376,7 +363,7 @@ fn content_dir_without_an_addons_directory_still_prepares() {
     prepare_content_dir(&fx.configuration, Some(content.to_str().unwrap()), None).unwrap();
 
     assert_eq!(
-        read_through_uio(unsafe { contentDir }, "version").as_deref(),
+        read_through_files(unsafe { contentDir }, "version").as_deref(),
         Some(&b"0.8.0\n"[..])
     );
 }
@@ -399,12 +386,12 @@ fn shadow_content_of_a_listed_addon_overlays_the_content_dir() {
     let content = build_content_tree(fx.home());
     prepare_content_dir(&fx.configuration, Some(content.to_str().unwrap()), None).unwrap();
     let dir = unsafe { contentDir };
-    assert_eq!(read_through_uio(dir, "shadowed.txt"), None);
+    assert_eq!(read_through_files(dir, "shadowed.txt"), None);
 
     prepare_shadow_addons(&["missing".to_string(), "alpha".to_string()]).unwrap();
 
     assert_eq!(
-        read_through_uio(dir, "shadowed.txt").as_deref(),
+        read_through_files(dir, "shadowed.txt").as_deref(),
         Some(&b"shadow data"[..])
     );
 }
@@ -455,7 +442,7 @@ fn ffi_exports_report_success_and_failure_as_zero_and_minus_one() {
     assert!(fx.config_path().join("save").is_dir());
     assert!(fx.config_path().join("teams").is_dir());
     assert_eq!(
-        read_through_uio(unsafe { contentDir }, "shadowed.txt").as_deref(),
+        read_through_files(unsafe { contentDir }, "shadowed.txt").as_deref(),
         Some(&b"shadow data"[..])
     );
 }
