@@ -6,6 +6,21 @@ pub(super) struct CreditsKeys {
     pub down: bool,
 }
 
+impl CreditsKeys {
+    pub fn read(input: &uqm_engine::input::InputSession) -> Self {
+        use uqm_engine::input::frames::{
+            KEY_MENU_CANCEL, KEY_MENU_DOWN, KEY_MENU_SELECT, KEY_MENU_UP,
+        };
+        let keys = input.pulsed().menu;
+        Self {
+            select: keys[KEY_MENU_SELECT as usize] != 0,
+            cancel: keys[KEY_MENU_CANCEL as usize] != 0,
+            up: keys[KEY_MENU_UP as usize] != 0,
+            down: keys[KEY_MENU_DOWN as usize] != 0,
+        }
+    }
+}
+
 pub(super) struct CreditsControl {
     pub rate: i32,
     pub running: bool,
@@ -38,7 +53,8 @@ impl CreditsControl {
         }
         if keys.up || keys.down {
             let step = self.rate.abs() / 5 + 1;
-            self.rate = (self.rate + if keys.down { step } else { -step }).clamp(-130, 130);
+            self.rate = (self.rate + if keys.down { step } else { -step })
+                .clamp(-super::CREDITS_MAX_RATE, super::CREDITS_MAX_RATE);
         }
         if !self.running {
             self.allow_cancel = true;

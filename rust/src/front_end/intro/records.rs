@@ -92,11 +92,13 @@ impl PresentationState {
     pub fn movie_frame(&self) {
         let frame = self.frame.as_ref().map_or_else(
             || ContextFrame::retain(None),
-            |image| image.lease().context_frame(0),
+            |image| {
+                image
+                    .lease()
+                    .context_frame(0)
+                    .wrapped_frame(self.movie_frame as u16)
+            },
         );
-        self.context.draw_stamp(
-            &frame.wrapped_frame(self.movie_frame as u16),
-            POINT { x: 0, y: 0 },
-        );
+        self.context.draw_stamp(&frame, POINT { x: 0, y: 0 });
     }
 }

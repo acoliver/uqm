@@ -6,6 +6,8 @@ mod commands;
 mod owned_tests;
 mod records;
 mod render;
+#[cfg(test)]
+mod render_tests;
 pub(super) mod text;
 
 use crate::{

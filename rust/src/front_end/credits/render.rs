@@ -463,3 +463,7 @@ impl Drop for HookRestore<'_> {
         self.input.replace_callback(self.previous.take());
     }
 }
+
+#[cfg(test)]
+#[path = "render_tests.rs"]
+mod tests;

@@ -40,7 +40,11 @@ impl CampaignDisplay {
         std::fs::write(directory.path().join("effect.ani"), "effect.png -1 0 0 0\n")?;
         std::fs::write(
             directory.path().join("fixture.rmp"),
-            "fixture.tiny = FONTRES:font\nfont.lander = FONTRES:font\ngraphics.landerfonteffect = GFXRES:effect.ani\n",
+            "fixture.tiny = FONTRES:font\nfont.lander = FONTRES:font\ngraphics.landerfonteffect = GFXRES:effect.ani\ncredits.credits = STRTAB:credits.txt\ncredits.background = GFXRES:effect.ani\ncredits.font.pt13 = FONTRES:font\ncredits.font.pt17 = FONTRES:font\ncredits.font.pt45 = FONTRES:font\n",
+        )?;
+        std::fs::write(
+            directory.path().join("credits.txt"),
+            "#(credits)\n13 L/10 A\n",
         )?;
         let host = CString::new(
             directory

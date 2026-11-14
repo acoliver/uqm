@@ -81,3 +81,21 @@ fn normal_credits_close_only_after_the_strict_five_second_deadline() {
     assert!(control.input(CreditsKeys::default(), false, 100));
     assert_eq!(control.close_time_out, 0);
 }
+
+#[test]
+fn keys_read_the_supplied_session_pulse_without_global_input() {
+    use uqm_engine::input::{
+        frames::{InputState, KEY_MENU_SELECT, KEY_MENU_UP},
+        InputSession,
+    };
+    let input = InputSession::default();
+    let mut pressed = InputState::default();
+    pressed.menu[KEY_MENU_UP as usize] = 1;
+    pressed.menu[KEY_MENU_SELECT as usize] = 1;
+    input.advance(pressed, pressed, 0);
+    let keys = CreditsKeys::read(&input);
+    assert_eq!(
+        (keys.up, keys.select, keys.down, keys.cancel),
+        (true, true, false, false)
+    );
+}

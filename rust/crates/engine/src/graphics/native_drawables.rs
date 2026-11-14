@@ -155,6 +155,17 @@ pub struct LoadedDrawable {
     drawable: NonNull<drawable_desc>,
     lease: DrawableLease,
 }
+enum DrawableSource<'a> {
+    File(&'a std::ffi::CStr),
+    New(u8, i16, i16, u16),
+    Rotated(&'a super::native_context::ContextFrame, i32),
+    Rescaled(&'a super::native_context::ContextFrame, i16, i16),
+    Capture(
+        &'a super::native_context::ContextLease,
+        Option<super::native_abi::RECT>,
+    ),
+}
+
 impl LoadedDrawable {
     pub fn load(resource: &std::ffi::CStr) -> Option<Self> {
         let drawable = crate::resource::ffi_bridge::detach_resource_of_type(resource, "GFXRES")?;
@@ -162,41 +173,28 @@ impl LoadedDrawable {
     }
 
     pub fn load_file(path: &std::ffi::CStr) -> Option<Self> {
-        super::ffi::native_allocations().assert_thread();
-        // SAFETY: the path is terminated and the graphics thread owns serialized loading.
-        NonNull::new(unsafe { super::filegfx::LoadGraphicFile(path.as_ptr()) })
-            .map(Self::retain_loaded)
+        Self::allocate(DrawableSource::File(path))
     }
 
     pub fn rotated(frame: &super::native_context::ContextFrame, angle: i32) -> Option<Self> {
-        let frame = frame.as_raw();
-        // SAFETY: the source lease retains its frame; rotation returns a new registered owner.
-        NonNull::new(unsafe { super::drawable_abi::RotateFrame(frame, angle) })
-            .map(Self::retain_loaded)
+        Self::allocate(DrawableSource::Rotated(frame, angle))
     }
 
     pub fn create(flags: u8, width: i16, height: i16, count: u16) -> Option<Self> {
-        // SAFETY: the provider creates and registers every frame before transferring ownership.
-        let drawable = unsafe { super::drawable_abi::CreateDrawable(flags, width, height, count) };
-        NonNull::new(drawable).map(Self::retain_loaded)
+        Self::allocate(DrawableSource::New(flags, width, height, count))
     }
 
     /// Rescale one pixel frame into a separate owner, preserving the source.
     /// Empty frames, invalid indices and dimensions outside native bounds return `None`.
     pub fn rescaled(&self, index: usize, width: i32, height: i32) -> Option<Self> {
         let (width, height) = (i16::try_from(width).ok()?, i16::try_from(height).ok()?);
-        let frame = self.lease.frame(index)?;
+        self.lease.frame(index)?;
+        let frame = self.lease.context_frame(index);
         let bounds = self.lease.frame_rect(index).extent;
         if width <= 0 || height <= 0 || bounds.width <= 0 || bounds.height <= 0 {
             return None;
         }
-        // SAFETY: this lease retains a factory-initialized pixel frame on its graphics thread.
-        // RescaleFrame returns a new registered drawable with independent release authority.
-        let drawable = unsafe {
-            assert!(!(*frame).image.is_null(), "frame has no pixels");
-            super::drawable_abi::RescaleFrame(frame, i32::from(width), i32::from(height))
-        };
-        NonNull::new(drawable).map(Self::retain_loaded)
+        Self::allocate(DrawableSource::Rescaled(&frame, width, height))
     }
 
     /// Copy an area relative to the context's clip into an independently owned drawable.
@@ -205,17 +203,36 @@ impl LoadedDrawable {
         context: &super::native_context::ContextLease,
         area: Option<super::native_abi::RECT>,
     ) -> Option<Self> {
-        context.with_selected(|| {
-            let _target = context.target();
-            // SAFETY: the context and target remain retained on their graphics thread;
-            // the native copy returns a newly registered drawable with unique release authority.
-            let drawable = unsafe {
-                super::context_abi::CopyContextRect(
-                    area.as_ref().map_or(std::ptr::null(), std::ptr::from_ref),
-                )
-            };
-            NonNull::new(drawable).map(Self::retain_loaded)
-        })
+        Self::allocate(DrawableSource::Capture(context, area))
+    }
+
+    fn allocate(source: DrawableSource<'_>) -> Option<Self> {
+        super::ffi::assert_owner_thread();
+        // SAFETY: source paths are terminated, frame/context borrows retain their registered
+        // allocations, and every provider returns a newly registered drawable on this thread.
+        let drawable = unsafe {
+            match source {
+                DrawableSource::File(path) => super::filegfx::LoadGraphicFile(path.as_ptr()),
+                DrawableSource::New(flags, width, height, count) => {
+                    super::drawable_abi::CreateDrawable(flags, width, height, count)
+                }
+                DrawableSource::Rotated(frame, angle) => {
+                    super::drawable_abi::RotateFrame(frame.as_raw(), angle)
+                }
+                DrawableSource::Rescaled(frame, width, height) => {
+                    let frame = frame.as_raw();
+                    assert!(!(*frame).image.is_null(), "frame has no pixels");
+                    super::drawable_abi::RescaleFrame(frame, i32::from(width), i32::from(height))
+                }
+                DrawableSource::Capture(context, area) => context.with_selected(|| {
+                    let _target = context.target();
+                    super::context_abi::CopyContextRect(
+                        area.as_ref().map_or(std::ptr::null(), std::ptr::from_ref),
+                    )
+                }),
+            }
+        };
+        NonNull::new(drawable).map(Self::retain_loaded)
     }
 
     fn retain_loaded(drawable: NonNull<drawable_desc>) -> Self {

@@ -13,7 +13,6 @@ use crate::{
         world::activity::activity_flags::CHECK_ABORT,
     },
     graphics::{context_abi::ContextLease, native_abi::POINT},
-    navigation::abi::*,
     sound::{
         music::{self, MusicRequest},
         resource_types::LoadedMusic,
@@ -23,25 +22,25 @@ use std::{
     cell::{Cell, RefCell},
     rc::Rc,
 };
-use uqm_engine::time::counter_abi::GetTimeCounter;
+use uqm_engine::{species::conv, time::counter_abi::GetTimeCounter};
 
 fn outtakes(cx: &mut Cx<'_>, io: &mut Io<'_>, window: &Rc<Cell<CRect>>) {
-    const CONVERSATIONS: [CONVERSATION; 15] = [
-        CONVERSATION_ZOQFOTPIK_CONVERSATION,
-        CONVERSATION_TALKING_PET_CONVERSATION,
-        CONVERSATION_ORZ_CONVERSATION,
-        CONVERSATION_UTWIG_CONVERSATION,
-        CONVERSATION_THRADD_CONVERSATION,
-        CONVERSATION_SUPOX_CONVERSATION,
-        CONVERSATION_SYREEN_CONVERSATION,
-        CONVERSATION_SHOFIXTI_CONVERSATION,
-        CONVERSATION_PKUNK_CONVERSATION,
-        CONVERSATION_YEHAT_CONVERSATION,
-        CONVERSATION_DRUUGE_CONVERSATION,
-        CONVERSATION_URQUAN_CONVERSATION,
-        CONVERSATION_VUX_CONVERSATION,
-        CONVERSATION_BLACKURQ_CONVERSATION,
-        CONVERSATION_ARILOU_CONVERSATION,
+    const CONVERSATIONS: [u32; 15] = [
+        conv::ZOQFOTPIK,
+        conv::TALKING_PET,
+        conv::ORZ,
+        conv::UTWIG,
+        conv::THRADD,
+        conv::SUPOX,
+        conv::SYREEN,
+        conv::SHOFIXTI,
+        conv::PKUNK,
+        conv::YEHAT,
+        conv::DRUUGE,
+        conv::URQUAN,
+        conv::VUX,
+        conv::BLACKURQ,
+        conv::ARILOU,
     ];
     let configuration = cx.kernel.configuration.clone();
     let old_subtitles = configuration.preferences().subtitles;
@@ -121,14 +120,8 @@ pub fn credits(cx: &mut Cx<'_>, io: &mut Io<'_>, with_outtakes: bool) {
         }
         input.set_menu_sounds(0, 0);
         cx.run_input(io, true, |cx, _| {
-            let keys = input.pulsed().menu;
             let keep = session.borrow_mut().controls.input(
-                CreditsKeys {
-                    select: keys[KEY_MENU_SELECT as usize] != 0,
-                    cancel: keys[KEY_MENU_CANCEL as usize] != 0,
-                    up: keys[KEY_MENU_UP as usize] != 0,
-                    down: keys[KEY_MENU_DOWN as usize] != 0,
-                },
+                CreditsKeys::read(input),
                 cx.world.activity() & CHECK_ABORT != 0,
                 GetTimeCounter(),
             );

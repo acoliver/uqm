@@ -303,16 +303,6 @@ impl Drop for ContextSelection {
     }
 }
 
-struct ContextTarget {
-    context: ContextLease,
-    previous: ContextFrame,
-}
-impl Drop for ContextTarget {
-    fn drop(&mut self) {
-        self.context.set_frame(self.previous.clone());
-    }
-}
-
 struct ContextEffect {
     context: ContextLease,
     previous: ContextFrame,
@@ -583,19 +573,6 @@ impl ContextLease {
             drawable_abi::SetContextFGFrame,
         ));
         *self.0.target.borrow_mut() = Some(target);
-    }
-
-    pub fn with_frame<R>(&self, target: ContextFrame, draw: impl FnOnce() -> R) -> R {
-        self.with_selected(|| {
-            let restore = ContextTarget {
-                context: self.clone(),
-                previous: self.target(),
-            };
-            self.set_frame(target);
-            let result = draw();
-            drop(restore);
-            result
-        })
     }
 
     pub fn set_clip(&self, rect: RECT) {

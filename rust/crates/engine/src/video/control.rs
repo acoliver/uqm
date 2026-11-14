@@ -251,20 +251,7 @@ fixture.absent = 3DOVID:missing.duk
                 c"video.rmp".as_ptr(),
                 ptr::null(),
             );
-            assert!(LoadedVideo::load(c"fixture.unknown").is_none());
-            let absent = LoadedVideo::load(c"fixture.absent")
-                .unwrap_or_else(|| panic!("missing-file descriptor"));
-            assert!(absent.play().is_none());
-            drop(absent);
-            let descriptor =
-                LoadedVideo::load(c"fixture.video").unwrap_or_else(|| panic!("logo descriptor"));
-            let playback = descriptor.play().unwrap_or_else(|| panic!("logo playback"));
-            drop(descriptor);
-            assert!(playback.is_playing());
-            assert_eq!(playback.position(), 0);
-            playback.seek(100);
-            assert!(playback.process_frame());
-            drop(playback);
+            retained_playback_keeps_its_clip_after_descriptor_drop();
             assert!(VidPlaying().is_null());
             UninitVideoPlayer();
             crate::sound::rodio_audio::rust_audio_uninit();
@@ -273,5 +260,21 @@ fixture.absent = 3DOVID:missing.duk
             crate::graphics::sdl::lifecycle_abi::SDL_Screen = ptr::null_mut();
             sdl2_sys::SDL_FreeSurface(screen);
         }
+    }
+    fn retained_playback_keeps_its_clip_after_descriptor_drop() {
+        assert!(LoadedVideo::load(c"fixture.unknown").is_none());
+        let absent = LoadedVideo::load(c"fixture.absent")
+            .unwrap_or_else(|| panic!("missing-file descriptor"));
+        assert!(absent.play().is_none());
+        drop(absent);
+        let descriptor =
+            LoadedVideo::load(c"fixture.video").unwrap_or_else(|| panic!("logo descriptor"));
+        let playback = descriptor.play().unwrap_or_else(|| panic!("logo playback"));
+        drop(descriptor);
+        assert!(playback.is_playing());
+        assert_eq!(playback.position(), 0);
+        playback.seek(100);
+        assert!(playback.process_frame());
+        drop(playback);
     }
 }

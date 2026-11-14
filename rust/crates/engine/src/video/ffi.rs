@@ -6,7 +6,6 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Mutex;
 
 use crate::bridge_log::rust_bridge_log_msg;
-use crate::host::Files;
 use crate::io::ffi::uio_DirHandle;
 use crate::sound::dukaud::DukAudDecoder;
 use crate::sound::rodio_audio::{self, SoundCategory};
@@ -104,14 +103,7 @@ pub unsafe fn tfb_drawcanvas_unlock(canvas: *mut c_void) {
 
 unsafe fn read_video_file(dir: *mut uio_DirHandle, filename: &str) -> Option<Vec<u8>> {
     let files = crate::io::uio_owned::directory(dir).ok()?;
-    let data = files
-        .read(std::path::Path::new(filename))
-        .or_else(|_| files.read(std::path::Path::new(&format!("/{filename}"))))
-        .ok()?;
-    if data.is_empty() {
-        return None;
-    }
-    Some(data)
+    super::files::read(&files, filename)
 }
 
 fn calculate_video_scale(_src_w: u32, _src_h: u32) -> u32 {
@@ -316,97 +308,49 @@ extern "C" fn rust_dukv_Open(
         return false;
     }
 
-    unsafe {
-        let rust_dec = decoder as *mut TFB_RustDukVideoDecoder;
-
-        let filename_cstr = CStr::from_ptr(filename);
-        let filename_str = match filename_cstr.to_str() {
-            Ok(s) => s,
-            Err(_) => {
-                (*rust_dec).last_error = -1;
-                return false;
-            }
-        };
-
-        let basename = filename_str.trim_end_matches(".duk");
-
-        let duk_file = format!("{}.duk", basename);
-        let frm_file = format!("{}.frm", basename);
-        let hdr_file = format!("{}.hdr", basename);
-        let tbl_file = format!("{}.tbl", basename);
-
-        let duk_data = match read_video_file(dir, &duk_file) {
-            Some(d) => d,
-            None => {
-                (*rust_dec).last_error = -1;
-                return false;
-            }
-        };
-        let frm_data = match read_video_file(dir, &frm_file) {
-            Some(d) => d,
-            None => {
-                (*rust_dec).last_error = -1;
-                return false;
-            }
-        };
-        let hdr_data = match read_video_file(dir, &hdr_file) {
-            Some(d) => d,
-            None => {
-                (*rust_dec).last_error = -1;
-                return false;
-            }
-        };
-        let tbl_data = match read_video_file(dir, &tbl_file) {
-            Some(d) => d,
-            None => {
-                (*rust_dec).last_error = -1;
-                return false;
-            }
-        };
-
-        match DukVideoDecoder::open_from_data(&hdr_data, &tbl_data, &frm_data, &duk_data) {
-            Ok(duk_decoder) => {
-                let src_w = duk_decoder.width();
-                let src_h = duk_decoder.height();
-
-                (*decoder).w = src_w;
-                (*decoder).h = src_h;
-                (*decoder).frame_count = duk_decoder.frame_count();
-                (*decoder).length = duk_decoder.duration();
-                (*decoder).interframe_wait = (1000.0 / DUCK_FPS) as u32;
-                (*decoder).audio_synced = false;
-                (*decoder).pos = 0.0;
-                (*decoder).cur_frame = 0;
-                (*decoder).error = 0;
-                (*decoder).dir = dir;
-
-                let boxed = Box::new(duk_decoder);
-                (*rust_dec).rust_decoder = Box::into_raw(boxed) as *mut c_void;
-
-                // Optional scaler (decoder vtable path currently reports native size to C).
-                let scale = calculate_video_scale(src_w, src_h);
-                if scale > 1 {
-                    let dst_w = src_w * scale;
-                    let dst_h = src_h * scale;
-                    let scaler = Box::new(VideoScaler::new(src_w, src_h, dst_w, dst_h));
-                    (*rust_dec).scaler = Box::into_raw(scaler) as *mut c_void;
-                }
-
-                true
-            }
-            Err(e) => {
-                (*rust_dec).last_error = match e {
-                    VideoError::BadFile(_) => -2,
-                    VideoError::Eof => -5,
-                    VideoError::OutOfBuffer => -4,
-                    VideoError::NotInitialized => -1,
-                    VideoError::IoError(_) => -1,
-                    VideoError::BadArg(_) => -3,
-                };
-                false
-            }
+    // SAFETY: the registered vtable receives its initialized record, a terminated filename,
+    // and a directory that the caller retains through this admission.
+    let (rust_dec, filename, files) = unsafe {
+        (
+            &mut *decoder.cast::<TFB_RustDukVideoDecoder>(),
+            CStr::from_ptr(filename),
+            crate::io::uio_owned::directory(dir),
+        )
+    };
+    let loaded = files
+        .map_err(|_| -1)
+        .and_then(|files| super::files::open(&files, filename));
+    let duk = match loaded {
+        Ok(duk) => duk,
+        Err(error) => {
+            rust_dec.last_error = error;
+            return false;
         }
+    };
+    let (width, height) = (duk.width(), duk.height());
+    let base = &mut rust_dec.base;
+    base.w = width;
+    base.h = height;
+    base.frame_count = duk.frame_count();
+    base.length = duk.duration();
+    base.interframe_wait = (1000.0 / DUCK_FPS) as u32;
+    base.audio_synced = false;
+    base.pos = 0.0;
+    base.cur_frame = 0;
+    base.error = 0;
+    base.dir = dir;
+    rust_dec.rust_decoder = Box::into_raw(Box::new(duk)).cast();
+    let scale = calculate_video_scale(width, height);
+    if scale > 1 {
+        rust_dec.scaler = Box::into_raw(Box::new(VideoScaler::new(
+            width,
+            height,
+            width * scale,
+            height * scale,
+        )))
+        .cast();
     }
+    true
 }
 
 #[allow(

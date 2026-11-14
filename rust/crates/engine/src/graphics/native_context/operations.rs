@@ -82,3 +82,28 @@ impl ContextLease {
         )));
     }
 }
+
+struct ContextTarget {
+    context: ContextLease,
+    previous: ContextFrame,
+}
+impl Drop for ContextTarget {
+    fn drop(&mut self) {
+        self.context.set_frame(self.previous.clone());
+    }
+}
+
+impl ContextLease {
+    pub fn with_frame<R>(&self, target: ContextFrame, draw: impl FnOnce() -> R) -> R {
+        self.with_selected(|| {
+            let restore = ContextTarget {
+                context: self.clone(),
+                previous: self.target(),
+            };
+            self.set_frame(target);
+            let result = draw();
+            drop(restore);
+            result
+        })
+    }
+}
