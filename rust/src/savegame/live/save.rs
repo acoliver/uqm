@@ -1,6 +1,6 @@
 //! Save slots and live session preparation for the owned engine snapshot.
 use crate::engine::battle::Cx;
-use std::ffi::{c_char, CStr};
+use std::ffi::CStr;
 
 use super::super::abi::SummaryDesc;
 use super::super::runtime::{self, groups, live};
@@ -9,8 +9,6 @@ use crate::engine::world::generation::SolarSnapshot;
 use crate::mainloop::dir_prep::saveDir;
 use crate::navigation::globals::in_hqspace;
 use crate::navigation::groups::live::put_group_info;
-
-pub use save_game as SaveGame;
 
 /// # Safety
 /// The game thread retains the active solar session and initialized star catalog.
@@ -32,19 +30,19 @@ pub(crate) unsafe fn capture(
     live::capture_prepared(cx.world, cx.kernel, star, point, name, solar)
 }
 
-/// # Safety
-/// Game thread; summary and name must point to live writable/terminated objects.
-pub unsafe fn save_game(
+pub fn save_game(
     cx: &mut Cx<'_>,
     solar: Option<SolarSnapshot>,
     slot: u16,
-    summary: *mut SummaryDesc,
-    name: *const c_char,
+    summary: &mut SummaryDesc,
+    name: &CStr,
 ) -> u32 {
     let result = (|| -> anyhow::Result<()> {
-        let slots = SaveSlots::new(saveDir.cast())?;
-        let mut save = capture(cx, solar, CStr::from_ptr(name).to_bytes())?;
-        summary.write(SummaryDesc::from(&save.summary));
+        // SAFETY: the game-thread save directory remains open throughout the synchronous operation.
+        let slots = unsafe { SaveSlots::new(saveDir.cast())? };
+        // SAFETY: the supplied context retains campaign and native solar resources.
+        let mut save = unsafe { capture(cx, solar, name.to_bytes())? };
+        *summary = SummaryDesc::from(&save.summary);
         runtime::prepare_summary_for_write(&mut save.summary);
         slots.write(usize::from(slot), &save)?;
         Ok(())

@@ -304,7 +304,7 @@ pub const NUM_HYPER_VORTICES: usize = 15;
 pub const CATALOG_LEN: usize = NUM_SOLAR_SYSTEMS + 1 + (NUM_HYPER_VORTICES + 1) + 1;
 
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Default)]
 pub struct SisState {
     pub log_x: i32,
     pub log_y: i32,
