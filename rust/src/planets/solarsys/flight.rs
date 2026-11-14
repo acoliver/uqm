@@ -86,10 +86,12 @@ pub(super) fn get_collision_frame(
     if solar.wait_intersect != c::COUNT::MAX && solar.wait_intersect != wait_planet {
         let allocations =
             crate::graphics::drawable_abi::retain_frame_allocations(&[kernel.stars_in_space]);
-        let allocation = allocations.first().expect("retained collision placeholder");
+        let allocation = allocations
+            .first()
+            .unwrap_or_else(|| panic!("retained collision placeholder"));
         let index = allocation
             .frame_index(kernel.stars_in_space)
-            .expect("collision placeholder frame index");
+            .unwrap_or_else(|| panic!("collision placeholder frame index"));
         let frame = ContextFrame::retain(NonNull::new(kernel.stars_in_space));
         let previous = if index == 0 {
             usize::from(frame.frame_count()) - 1

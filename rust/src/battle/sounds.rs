@@ -104,6 +104,15 @@ pub mod engine {
         cx.unlink_storage(id);
     }
 
+    pub(crate) fn remove_sounds(kernel: &mut crate::engine::Kernel, object: Option<ElementId>) {
+        for i in FIRST_SFX_CHANNEL..=LAST_SFX_CHANNEL {
+            if kernel.element_sound_source(get_positional_object(i)) == object {
+                set_positional_object(i, 0);
+            }
+        }
+        kernel.sounds.remove_object(object);
+    }
+
     #[cfg(test)]
     mod unlink_tests {
         use crate::engine::{
@@ -181,15 +190,6 @@ pub mod engine {
             let id = cx.alloc_element().unwrap();
             super::unlink(&mut cx, id);
         }
-    }
-
-    pub(crate) fn remove_sounds(kernel: &mut crate::engine::Kernel, object: Option<ElementId>) {
-        for i in FIRST_SFX_CHANNEL..=LAST_SFX_CHANNEL {
-            if kernel.element_sound_source(get_positional_object(i)) == object {
-                set_positional_object(i, 0);
-            }
-        }
-        kernel.sounds.remove_object(object);
     }
 }
 

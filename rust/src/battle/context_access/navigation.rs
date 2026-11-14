@@ -89,8 +89,6 @@ pub trait NavigationOps {
     ) -> crate::engine::battle::link_queue::LinkId<crate::engine::world::queues::Group>;
     fn ip_group(&self, element: ElementId) -> &IP_GROUP;
     fn ip_group_mut(&mut self, element: ElementId) -> &mut IP_GROUP;
-    fn previous_activity(&self) -> u16;
-    fn set_previous_activity(&mut self, activity: u16);
     fn planet_outer_location(&self, planet: u16) -> POINT;
     fn leave_hyperspace(&mut self, kind: u8, point: POINT);
     fn flagship_location(&self) -> u8;
@@ -141,16 +139,6 @@ impl NavigationOps for Cx<'_> {
     fn ip_group_mut(&mut self, element: ElementId) -> &mut IP_GROUP {
         let id = self.ip_group_id(element);
         self.world.ip_groups().into_record_mut(id)
-    }
-
-    fn previous_activity(&self) -> u16 {
-        // SAFETY: the owning game thread serializes navigation activity.
-        self.kernel.last_activity
-    }
-
-    fn set_previous_activity(&mut self, activity: u16) {
-        // SAFETY: this exclusive context owns navigation activity mutations.
-        self.kernel.last_activity = activity;
     }
 
     fn planet_outer_location(&self, planet: u16) -> POINT {
