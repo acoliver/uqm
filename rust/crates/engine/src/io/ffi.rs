@@ -16,16 +16,6 @@ unsafe fn cstr_to_path(c_str: *const c_char) -> Option<PathBuf> {
     CStr::from_ptr(c_str).to_str().ok().map(PathBuf::from)
 }
 
-/// Convert C string to String
-#[allow(dead_code)]
-unsafe fn cstr_to_string(c_str: *const c_char) -> Option<String> {
-    if c_str.is_null() {
-        return None;
-    }
-
-    CStr::from_ptr(c_str).to_str().ok().map(String::from)
-}
-
 // Opaque representation of uio_DirHandle from C
 // We only use it as a pointer, never dereference it
 pub use crate::io::uio_bridge::uio_DirHandle;
