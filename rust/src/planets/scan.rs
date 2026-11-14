@@ -99,6 +99,26 @@ fn set_node_not_retrieved(info: &mut PlanetInfo, scan: u8, node: u8) {
 #[cfg(not(test))]
 pub(crate) mod live;
 
+pub(crate) fn repair_back_rect(
+    context: &crate::graphics::context_abi::ContextLease,
+    rect: &crate::comm::locdata::CRect,
+) {
+    let old = context.clip_rect();
+    let mut new = crate::graphics::native_abi::RECT {
+        corner: crate::graphics::native_abi::POINT {
+            x: rect.corner.x + old.corner.x,
+            y: rect.corner.y + old.corner.y,
+        },
+        extent: crate::graphics::native_abi::EXTENT {
+            width: rect.width,
+            height: rect.height,
+        },
+    };
+    new.extent.height += new.corner.y & 1;
+    new.corner.y &= !1;
+    context.restore_screen_region(new);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -269,24 +289,4 @@ mod tests {
         assert_eq!(move_cursor((964, 296), 1, 1, 242), (0, 296));
         assert_eq!(move_cursor((100, 100), 1, -1, 242), (104, 96));
     }
-}
-
-pub(crate) fn repair_back_rect(
-    context: &crate::graphics::context_abi::ContextLease,
-    rect: &crate::comm::locdata::CRect,
-) {
-    let old = context.clip_rect();
-    let mut new = crate::graphics::native_abi::RECT {
-        corner: crate::graphics::native_abi::POINT {
-            x: rect.corner.x + old.corner.x,
-            y: rect.corner.y + old.corner.y,
-        },
-        extent: crate::graphics::native_abi::EXTENT {
-            width: rect.width,
-            height: rect.height,
-        },
-    };
-    new.extent.height += new.corner.y & 1;
-    new.corner.y &= !1;
-    context.restore_screen_region(new);
 }
