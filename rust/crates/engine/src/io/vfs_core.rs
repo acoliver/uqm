@@ -1,9 +1,10 @@
 //! The mount resolver used by both native resource loading and replay.
 use super::{
     map_virtual_to_host_confined, normalize_virtual_path_full, resolve_mount_for_path,
-    resolve_path, uio_HandleInner, MountInfo, UIO_FSTYPE_ZIP,
+    resolve_path, MountInfo, UIO_FSTYPE_ZIP,
 };
 use crate::host::{File, FileStat, FileStream, Files};
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::{
     fs, io,
     path::{Path, PathBuf},
@@ -14,7 +15,7 @@ pub struct Vfs {
     pub(super) mounts: Vec<MountInfo>,
 }
 
-impl File for uio_HandleInner {
+impl File for FileData {
     fn len(&self) -> io::Result<u64> {
         self.len()
     }
@@ -32,12 +33,11 @@ impl Vfs {
         if write {
             let target = self.write_path(host, &virtual_path, path)?;
             let file = fs::OpenOptions::new()
-                .read(true)
                 .write(true)
                 .create(true)
                 .truncate(true)
                 .open(target)?;
-            return Ok(FileStream::new(uio_HandleInner::File(file)));
+            return Ok(FileStream::new(FileData::File(file)));
         }
         let mut covered = false;
         for mount in self.mounts.iter().filter(|mount| mount.active_in_registry) {
@@ -51,10 +51,10 @@ impl Vfs {
                     .as_ref()
                     .expect("ZIP mount without index")
                     .open_entry(&suffix.to_string_lossy())
-                    .map(uio_HandleInner::ZipEntry)
+                    .map(FileData::ZipEntry)
             } else {
                 fs::File::open(map_virtual_to_host_confined(&mount.mounted_root, suffix))
-                    .map(uio_HandleInner::File)
+                    .map(FileData::File)
             };
             match opened {
                 Ok(file) => return Ok(FileStream::new(file)),
@@ -66,7 +66,7 @@ impl Vfs {
             return Err(io::Error::from(io::ErrorKind::NotFound));
         }
         fs::File::open(resolve_path(host, path))
-            .map(uio_HandleInner::File)
+            .map(FileData::File)
             .map(FileStream::new)
     }
 
@@ -189,5 +189,57 @@ impl Files for Vfs {
     }
     fn stat(&self, path: &Path) -> io::Result<FileStat> {
         self.stat_at(Path::new("/"), Path::new("/"), path)
+    }
+}
+
+pub enum FileData {
+    File(std::fs::File),
+    ZipEntry(crate::io::zip_reader::ZipEntryReader),
+}
+
+impl Read for FileData {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        match self {
+            FileData::File(f) => f.read(buf),
+            FileData::ZipEntry(z) => z.read(buf),
+        }
+    }
+}
+
+impl Write for FileData {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        match self {
+            FileData::File(f) => f.write(buf),
+            FileData::ZipEntry(_) => Err(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                "Cannot write to ZIP entry",
+            )),
+        }
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        match self {
+            FileData::File(f) => f.flush(),
+            FileData::ZipEntry(_) => Ok(()),
+        }
+    }
+}
+
+impl Seek for FileData {
+    fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
+        match self {
+            FileData::File(f) => f.seek(pos),
+            FileData::ZipEntry(z) => z.seek(pos),
+        }
+    }
+}
+
+impl FileData {
+    /// Get file size
+    pub fn len(&self) -> std::io::Result<u64> {
+        match self {
+            FileData::File(f) => f.metadata().map(|m| m.len()),
+            FileData::ZipEntry(z) => Ok(z.size()),
+        }
     }
 }

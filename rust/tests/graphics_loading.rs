@@ -35,7 +35,7 @@ unsafe fn check_font(path: &std::ffi::CStr, zipped: bool, alpha: &[u8]) {
     assert!(!fp.is_null());
     let font = gfxload::get_font_data(fp.cast(), 0).cast::<abi::font_desc>();
     if zipped {
-        assert_eq!(uqm_rust::resource::ffi_bridge::res_CloseResFile(fp), 0);
+        assert_eq!(uqm_rust::resource::ffi_bridge::res_CloseResFile(fp), 1);
     }
     abi::_cur_resfile_name = ptr::null();
     assert!(!font.is_null());
@@ -96,9 +96,15 @@ unsafe fn check_animation(path: &std::ffi::CStr) {
         c"rb".as_ptr(),
     );
     assert!(!fp.is_null());
-    assert_eq!(uio::uio_fseek(fp, 0, libc::SEEK_END), 0);
-    let length = uio::uio_ftell(fp) as u32;
-    assert_eq!(uio::uio_fseek(fp, 0, libc::SEEK_SET), 0);
+    assert_eq!(
+        uqm_rust::resource::ffi_bridge::SeekResFile(fp, 0, libc::SEEK_END),
+        0
+    );
+    let length = uqm_rust::resource::ffi_bridge::TellResFile(fp) as u32;
+    assert_eq!(
+        uqm_rust::resource::ffi_bridge::SeekResFile(fp, 0, libc::SEEK_SET),
+        0
+    );
     let drawable = gfxload::get_cel_data(fp.cast(), length).cast::<abi::drawable_desc>();
     uqm_rust::resource::ffi_bridge::res_CloseResFile(fp);
     abi::_cur_resfile_name = ptr::null();

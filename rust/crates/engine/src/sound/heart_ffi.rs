@@ -8,8 +8,6 @@
 
 pub use self::{destroy_music as DestroyMusic, destroy_sound as DestroySound};
 
-#[cfg(test)]
-use std::ffi::c_long;
 use std::ffi::{c_char, c_int, c_uint, c_void, CStr, CString};
 use std::panic::{self, AssertUnwindSafe};
 use std::path::Path;

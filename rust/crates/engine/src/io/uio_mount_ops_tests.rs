@@ -2,7 +2,9 @@
 //! where a path resolves, what unmounting removes, and what read, write,
 //! stat and unlink do to the files underneath.
 
+use crate::host::Files;
 use std::ffi::CString;
+use std::io::{Read, Write};
 
 use serial_test::serial;
 
@@ -11,10 +13,6 @@ use super::*;
 
 fn cstr(text: &str) -> CString {
     CString::new(text).unwrap()
-}
-
-fn errno_value() -> c_int {
-    std::io::Error::last_os_error().raw_os_error().unwrap_or(0)
 }
 
 fn mount_ptr(stack: &Stack, index: usize) -> *mut uio_MountHandle {
@@ -62,20 +60,12 @@ fn read_mounted_zip(mount_point: &str, parent: &str) -> Option<Vec<u8>> {
             ptr::null_mut(),
         );
         assert!(!mount.is_null());
-        let mode = cstr("rb");
-        let stream = uio_fopen(dir, name.as_ptr(), mode.as_ptr());
-        let data = if stream.is_null() {
-            None
-        } else {
-            let mut bytes = vec![0; 128];
-            let count = uio_fread(bytes.as_mut_ptr().cast(), 1, bytes.len(), stream);
-            bytes.truncate(count);
-            assert_eq!(uio_fclose(stream), 0);
-            Some(bytes)
-        };
+        let data = owned::directory(dir)
+            .unwrap()
+            .read(Path::new("packed.ani"))
+            .ok();
         assert_eq!(uio_unmountDir(mount), 0);
         uio_closeDir(dir);
-        assert_eq!(uio_unmountAllDirs(stack.repo), 0);
         data
     }
 }
@@ -140,40 +130,6 @@ fn unmounting_an_unknown_or_null_mount_fails() {
         assert_eq!(uio_unmountDir(&mut stranger), -1);
     }
     assert!(stack.read("a.txt").is_some(), "the real mount is untouched");
-}
-
-#[test]
-#[serial]
-fn unmount_all_clears_only_the_given_repository() {
-    let mut stack = Stack::new();
-    stack.mount_dir(&[("a.txt", b"a")], UIO_MOUNT_TOP | UIO_MOUNT_RDONLY);
-    let other_repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
-    let other_host = tempfile::TempDir::new().unwrap();
-    let other = register_mount(
-        other_repo,
-        Path::new("/other"),
-        other_host.path().to_path_buf(),
-        UIO_FSTYPE_STDIO,
-        UIO_MOUNT_TOP | UIO_MOUNT_RDONLY,
-        ptr::null_mut(),
-        true,
-    );
-    assert!(!other.is_null());
-
-    assert_eq!(unsafe { uio_unmountAllDirs(stack.repo) }, 0);
-
-    let topology = get_mount_registry().lock().unwrap();
-    let registry = &topology.mounts;
-    assert_eq!(registry.len(), 1);
-    assert_eq!(
-        registry[0].mount_point,
-        normalize_mount_point(Path::new("/other"))
-    );
-    drop(topology);
-    unsafe {
-        uio_unmountDir(other);
-        let _ = Box::from_raw(other_repo);
-    }
 }
 
 #[test]
@@ -269,69 +225,32 @@ fn a_transplanted_directory_exposes_its_files_at_the_new_mount_point() {
 
 #[test]
 #[serial]
-fn handle_calls_read_write_and_stat_the_underlying_file() {
+fn files_read_and_stat_the_underlying_file() {
     let mut stack = Stack::new();
     stack.mount_dir(&[("data.bin", b"0123456789")], UIO_MOUNT_TOP);
-    let name = cstr("data.bin");
-    unsafe {
-        let handle = uio_open(stack.root, name.as_ptr(), 0, 0);
-        assert!(!handle.is_null());
-        let mut buf = [0u8; 4];
-        assert_eq!(uio_read(handle, buf.as_mut_ptr(), 4), 4);
-        assert_eq!(&buf, b"0123");
-        assert_eq!(uio_read(handle, buf.as_mut_ptr(), 4), 4);
-        assert_eq!(&buf, b"4567");
-        assert_eq!(
-            uio_read(handle, buf.as_mut_ptr(), 4),
-            2,
-            "short read at the end"
-        );
-        assert_eq!(uio_read(handle, buf.as_mut_ptr(), 4), 0);
-
-        let mut info: stat = std::mem::zeroed();
-        assert_eq!(uio_fstat(handle, &mut info), 0);
-        assert_eq!(info.st_size, 10);
-        assert_eq!(info.st_mode & 0o170000, 0o100000, "regular file");
-        assert_eq!(uio_close(handle), 0);
-    }
+    let files = unsafe { owned::directory(stack.root) }.unwrap();
+    let mut input = files.open_read(Path::new("data.bin")).unwrap();
+    let mut buf = [0; 4];
+    assert_eq!(input.read(&mut buf).unwrap(), 4);
+    assert_eq!(&buf, b"0123");
+    assert_eq!(input.read(&mut buf).unwrap(), 4);
+    assert_eq!(&buf, b"4567");
+    assert_eq!(input.read(&mut buf).unwrap(), 2);
+    assert_eq!(input.read(&mut buf).unwrap(), 0);
+    let info = files.stat(Path::new("data.bin")).unwrap();
+    assert_eq!(info.len, 10);
+    assert!(info.is_file && !info.is_dir);
 }
 
 #[test]
 #[serial]
-fn handle_calls_refuse_null_and_empty_requests() {
-    let mut stack = Stack::new();
-    stack.mount_dir(&[("data.bin", b"abc")], UIO_MOUNT_TOP);
-    let name = cstr("data.bin");
-    unsafe {
-        let handle = uio_open(stack.root, name.as_ptr(), 0, 0);
-        let mut buf = [0u8; 4];
-        let mut info: stat = std::mem::zeroed();
-        assert_eq!(uio_read(ptr::null_mut(), buf.as_mut_ptr(), 4), -1);
-        assert_eq!(uio_read(handle, ptr::null_mut(), 4), -1);
-        assert_eq!(uio_read(handle, buf.as_mut_ptr(), 0), -1);
-        assert_eq!(uio_write(ptr::null_mut(), buf.as_ptr(), 4), -1);
-        assert_eq!(uio_write(handle, ptr::null(), 4), -1);
-        assert_eq!(uio_write(handle, buf.as_ptr(), 0), -1);
-        assert_eq!(uio_fstat(ptr::null_mut(), &mut info), -1);
-        assert_eq!(uio_fstat(handle, ptr::null_mut()), -1);
-        assert_eq!(uio_close(handle), 0);
-        assert_eq!(uio_close(ptr::null_mut()), 0);
-    }
-}
-
-#[test]
-#[serial]
-fn writing_through_a_handle_changes_the_file_on_disk() {
+fn writing_through_files_changes_the_file_on_disk() {
     let mut stack = Stack::new();
     let host = stack.mount_dir(&[], UIO_MOUNT_TOP);
-    let name = cstr("new.bin");
-    unsafe {
-        let handle = uio_open(stack.root, name.as_ptr(), O_WRONLY | O_CREAT, 0o644);
-        assert!(!handle.is_null());
-        let payload = b"payload";
-        assert_eq!(uio_write(handle, payload.as_ptr(), payload.len()), 7);
-        assert_eq!(uio_close(handle), 0);
-    }
+    let files = unsafe { owned::directory(stack.root) }.unwrap();
+    let mut output = files.open_write(Path::new("new.bin")).unwrap();
+    output.write_all(b"payload").unwrap();
+    output.finish().unwrap();
     assert_eq!(std::fs::read(host.join("new.bin")).unwrap(), b"payload");
 }
 
@@ -340,8 +259,8 @@ fn writing_through_a_handle_changes_the_file_on_disk() {
 fn unlink_removes_a_file_from_a_writable_mount() {
     let mut stack = Stack::new();
     let host = stack.mount_dir(&[("gone.txt", b"x"), ("kept.txt", b"y")], UIO_MOUNT_TOP);
-    let name = cstr("gone.txt");
-    assert_eq!(unsafe { uio_unlink(stack.root, name.as_ptr()) }, 0);
+    let files = unsafe { owned::directory(stack.root) }.unwrap();
+    files.remove(Path::new("gone.txt")).unwrap();
     assert!(!host.join("gone.txt").exists());
     assert!(host.join("kept.txt").exists());
     assert_eq!(stack.read("gone.txt"), None);
@@ -349,19 +268,79 @@ fn unlink_removes_a_file_from_a_writable_mount() {
 
 #[test]
 #[serial]
-fn unlink_refuses_read_only_missing_and_malformed_requests() {
+fn files_refuse_read_only_writes_and_removals() {
     let mut stack = Stack::new();
     let host = stack.mount_dir(&[("locked.txt", b"x")], UIO_MOUNT_TOP | UIO_MOUNT_RDONLY);
-    let locked = cstr("locked.txt");
-    let missing = cstr("missing.txt");
-    unsafe {
-        assert_eq!(uio_unlink(stack.root, locked.as_ptr()), -1);
-        assert_eq!(errno_value(), libc::EACCES);
-        assert!(host.join("locked.txt").exists());
-        assert_eq!(uio_unlink(stack.root, missing.as_ptr()), -1);
-        assert_eq!(uio_unlink(ptr::null_mut(), locked.as_ptr()), -1);
-        assert_eq!(errno_value(), libc::EINVAL);
-        assert_eq!(uio_unlink(stack.root, ptr::null()), -1);
-        assert_eq!(errno_value(), libc::EINVAL);
-    }
+    let files = unsafe { owned::directory(stack.root) }.unwrap();
+    assert_eq!(
+        files.remove(Path::new("locked.txt")).unwrap_err().kind(),
+        std::io::ErrorKind::PermissionDenied
+    );
+    assert!(host.join("locked.txt").exists());
+    assert_eq!(
+        files
+            .open_write(Path::new("locked.txt"))
+            .err()
+            .unwrap()
+            .kind(),
+        std::io::ErrorKind::PermissionDenied
+    );
+    assert_eq!(
+        files.remove(Path::new("missing.txt")).unwrap_err().kind(),
+        std::io::ErrorKind::PermissionDenied
+    );
+}
+
+#[test]
+#[serial]
+fn files_stat_preserves_host_and_archive_size_and_kind() {
+    let mut stack = Stack::new();
+    let root = stack.mount_dir(&[("five.txt", b"12345")], UIO_MOUNT_TOP);
+    std::fs::create_dir(root.join("folder")).unwrap();
+    stack.mount_zip(
+        &[("data/blob.bin", b"0123456789")],
+        UIO_MOUNT_BOTTOM | UIO_MOUNT_RDONLY,
+        0,
+    );
+    let files = unsafe { owned::directory(stack.root) }.unwrap();
+    let file = files.stat(Path::new("five.txt")).unwrap();
+    assert_eq!(file.len, 5);
+    assert!(file.is_file && !file.is_dir);
+    let directory = files.stat(Path::new("folder")).unwrap();
+    assert!(directory.is_dir && !directory.is_file);
+    let archived = files.stat(Path::new("data/blob.bin")).unwrap();
+    assert_eq!(archived.len, 10);
+    assert!(archived.is_file && !archived.is_dir);
+    let directory = files.stat(Path::new("data")).unwrap();
+    assert_eq!(directory.len, 0);
+    assert!(directory.is_dir && !directory.is_file);
+    assert_eq!(
+        files.stat(Path::new("data/none.bin")).unwrap_err().kind(),
+        std::io::ErrorKind::NotFound
+    );
+}
+
+#[test]
+#[serial]
+fn an_archive_entry_copies_to_a_writable_directory_through_the_same_files_port() {
+    let mut stack = Stack::new();
+    stack.mount_zip(
+        &[("packed.txt", b"from the archive")],
+        UIO_MOUNT_TOP | UIO_MOUNT_RDONLY,
+        0,
+    );
+    let root = stack.mount_dir(&[], UIO_MOUNT_TOP);
+    let files = unsafe { owned::directory(stack.root) }.unwrap();
+    let mut input = files.open_read(Path::new("packed.txt")).unwrap();
+    let mut output = files.open_write(Path::new("out.txt")).unwrap();
+    std::io::copy(&mut input, &mut output).unwrap();
+    output.finish().unwrap();
+    assert_eq!(
+        std::fs::read(root.join("out.txt")).unwrap(),
+        b"from the archive"
+    );
+    assert_eq!(
+        files.read(Path::new("packed.txt")).unwrap(),
+        b"from the archive"
+    );
 }

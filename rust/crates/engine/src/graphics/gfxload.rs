@@ -157,10 +157,7 @@ pub unsafe extern "C" fn get_cel_data(fp: *mut c_void, length: u32) -> *mut c_vo
     }
     let mut images = Vec::with_capacity(total);
     let _ = (*file).seek(SeekFrom::Start(position));
-    while images.len() < total {
-        let Some(line) = (*file).line(1024).ok().flatten() else {
-            break;
-        };
+    while let Some(line) = (*file).line(1024).ok().flatten() {
         let line = CString::new(line).expect("line contains no NUL");
         let Some((name, ani)) = parse_ani(line.as_ptr()) else {
             log::warn!("get_cel_data: invalid animation entry");
