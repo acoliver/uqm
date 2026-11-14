@@ -166,3 +166,79 @@ fn generated_shield_and_rotating_frames_use_the_supplied_owners() {
     }
     display.finish(game);
 }
+
+#[test]
+#[serial_test::serial]
+fn normalized_definition_frames_keep_pixels_hotspots_and_release_authority() {
+    use crate::engine::graphics::native_surface::CapturedSurface;
+    let mut game = crate::engine::Game::new();
+    let display = crate::campaign_display_test::CampaignDisplay::install(&mut game).unwrap();
+    {
+        let source = CapturedSurface::pixmap(2, 2, 2);
+        let colors = [
+            Color {
+                r: 173,
+                g: 21,
+                b: 37,
+                a: 255,
+            },
+            Color {
+                r: 31,
+                g: 97,
+                b: 193,
+                a: 255,
+            },
+        ];
+        for (index, color) in colors.into_iter().enumerate() {
+            // SAFETY: the fixture exclusively owns the factory-created frames and full pixel buffer.
+            unsafe {
+                let frame = crate::graphics::pixmap_abi::SetAbsFrameIndex(
+                    source.as_frame().cast(),
+                    index as u16,
+                )
+                .cast();
+                crate::graphics::drawable_abi::WriteFramePixelColors(
+                    frame,
+                    [color; 4].as_ptr(),
+                    2,
+                    2,
+                );
+                crate::graphics::drawable_abi::SetFrameHot(
+                    frame.cast(),
+                    crate::comm::locdata::CPoint { x: -1, y: 1 },
+                );
+            }
+        }
+        let normalized = source
+            .into_definition(4, 6)
+            .unwrap()
+            .into_drawable()
+            .unwrap();
+        let lease = normalized.lease();
+        drop(normalized);
+        for (index, expected) in colors.into_iter().enumerate() {
+            let frame = lease.context_frame(index);
+            assert_eq!((frame.rect().corner.x, frame.rect().corner.y), (2, -3));
+            assert_eq!(
+                (frame.rect().extent.width, frame.rect().extent.height),
+                (4, 6)
+            );
+            let mut pixels = [Color {
+                r: 0,
+                g: 0,
+                b: 0,
+                a: 0,
+            }; 24];
+            frame.read_colors(&mut pixels, 4, 6);
+            assert!(pixels
+                .iter()
+                .all(|pixel| (pixel.r, pixel.g, pixel.b, pixel.a)
+                    == (expected.r, expected.g, expected.b, expected.a)));
+        }
+        let same = CapturedSurface::pixmap(4, 6, 1);
+        let frame = same.as_frame();
+        let normalized = same.into_definition(4, 6).unwrap();
+        assert_eq!(normalized.as_frame(), frame);
+    }
+    display.finish(game);
+}
