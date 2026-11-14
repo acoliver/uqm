@@ -320,7 +320,7 @@ pub fn dump_strings(
             return Ok(());
         }
     }
-    let count = kernel.game_text_len();
+    let count = kernel.game_text_table().len();
     if GAMESTR_COUNT as usize != count {
         writeln!(
             errors,
