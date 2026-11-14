@@ -24,7 +24,8 @@ struct HostDir {
 
 impl HostDir {
     fn new(files: &[(&str, &[u8])]) -> Self {
-        if let Ok(mut registry) = get_mount_registry().lock() {
+        if let Ok(mut topology) = get_mount_registry().lock() {
+            let registry = &mut topology.mounts;
             registry.clear();
         }
         let temp = TempDir::new().unwrap();

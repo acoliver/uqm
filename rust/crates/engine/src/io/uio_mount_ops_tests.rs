@@ -19,7 +19,7 @@ fn errno_value() -> c_int {
 
 fn mount_ptr(stack: &Stack, index: usize) -> *mut uio_MountHandle {
     let _ = stack;
-    get_mount_registry().lock().unwrap()[index].handle_ptr as *mut uio_MountHandle
+    get_mount_registry().lock().unwrap().mounts[index].handle_ptr as *mut uio_MountHandle
 }
 
 fn read_mounted_zip(mount_point: &str, parent: &str) -> Option<Vec<u8>> {
@@ -122,7 +122,7 @@ fn unmounting_removes_the_files_it_provided() {
 
     assert!(stack.read("a.txt").is_some());
     assert_eq!(stack.read("b.txt"), None);
-    assert_eq!(get_mount_registry().lock().unwrap().len(), 1);
+    assert_eq!(get_mount_registry().lock().unwrap().mounts.len(), 1);
 }
 
 #[test]
@@ -162,13 +162,14 @@ fn unmount_all_clears_only_the_given_repository() {
 
     assert_eq!(unsafe { uio_unmountAllDirs(stack.repo) }, 0);
 
-    let registry = get_mount_registry().lock().unwrap();
+    let topology = get_mount_registry().lock().unwrap();
+    let registry = &topology.mounts;
     assert_eq!(registry.len(), 1);
     assert_eq!(
         registry[0].mount_point,
         normalize_mount_point(Path::new("/other"))
     );
-    drop(registry);
+    drop(topology);
     unsafe {
         uio_unmountDir(other);
         let _ = Box::from_raw(other_repo);

@@ -42,11 +42,22 @@ impl Directory {
     }
 
     fn open_mode(&self, name: &CStr, mode: &CStr) -> io::Result<Stream> {
-        // SAFETY: self retains the directory and the strings are terminated for this call.
-        let stream = unsafe { uio_fopen(self.0.as_ptr(), name.as_ptr(), mode.as_ptr()) };
-        NonNull::new(stream)
-            .map(Stream)
-            .ok_or_else(io::Error::last_os_error)
+        use crate::host::Files;
+        let files = self.files();
+        let path = Path::new(
+            name.to_str()
+                .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?,
+        );
+        if mode == c"rb" {
+            files.open_read(path)
+        } else {
+            files.open_write(path)
+        }
+    }
+
+    pub fn files(&self) -> DirectoryFiles {
+        // SAFETY: self owns a live reference throughout the snapshot.
+        unsafe { directory(self.0.as_ptr()).expect("owned directory") }
     }
 
     /// Regular, non-hidden entries in the same enumeration order as the native browser.
@@ -81,13 +92,11 @@ impl Directory {
     }
 
     pub fn remove(&self, name: &CStr) -> io::Result<()> {
-        // SAFETY: self retains the directory and name is terminated.
-        let result = unsafe { uio_unlink(self.0.as_ptr(), name.as_ptr()) };
-        if result == 0 {
-            Ok(())
-        } else {
-            Err(io::Error::last_os_error())
-        }
+        use crate::host::Files;
+        self.files()
+            .remove(Path::new(name.to_str().map_err(|error| {
+                io::Error::new(io::ErrorKind::InvalidInput, error)
+            })?))
     }
 }
 impl Clone for Directory {
@@ -103,72 +112,68 @@ impl Drop for Directory {
     }
 }
 
-pub struct Stream(NonNull<uio_Stream>);
-impl Stream {
-    pub fn len(&self) -> io::Result<u64> {
-        let mut stat = std::mem::MaybeUninit::uninit();
-        // SAFETY: self exclusively owns the open stream, and fstat initializes stat on success.
-        if unsafe { uio_fstat(uio_streamHandle(self.0.as_ptr()), stat.as_mut_ptr()) } == 0 {
-            // SAFETY: successful fstat initialized every field.
-            Ok(unsafe { stat.assume_init() }.st_size as u64)
-        } else {
-            Err(io::Error::last_os_error())
-        }
-    }
+pub use crate::host::FileStream as Stream;
 
-    pub fn is_empty(&self) -> io::Result<bool> {
-        self.len().map(|size| size == 0)
-    }
+#[derive(Clone, Debug)]
+pub struct DirectoryFiles {
+    path: PathBuf,
+    virtual_path: PathBuf,
+}
 
-    pub fn finish(mut self) -> io::Result<()> {
-        let flushed = io::Write::flush(&mut self);
-        let this = std::mem::ManuallyDrop::new(self);
-        // SAFETY: finish consumes the stream, suppressing Drop and closing it exactly once.
-        let closed = unsafe { uio_fclose(this.0.as_ptr()) };
-        flushed?;
-        if closed == 0 {
-            Ok(())
-        } else {
-            Err(io::Error::last_os_error())
-        }
+/// Snapshot a transitional directory at the FFI boundary.
+/// # Safety
+/// A non-null pointer must be a live directory for this call.
+pub unsafe fn directory(pointer: *mut uio_DirHandle) -> io::Result<DirectoryFiles> {
+    // SAFETY: caller supplies a live pointer; null is an external ABI input.
+    let directory =
+        unsafe { pointer.as_ref() }.ok_or_else(|| io::Error::from(io::ErrorKind::InvalidInput))?;
+    Ok(DirectoryFiles {
+        path: directory.path.clone(),
+        virtual_path: directory.virtual_path.clone(),
+    })
+}
+
+impl crate::host::Files for DirectoryFiles {
+    fn open_read(&self, path: &Path) -> io::Result<Stream> {
+        get_mount_registry()
+            .lock()
+            .unwrap()
+            .open_at(&self.path, &self.virtual_path, path, false)
+    }
+    fn open_write(&self, path: &Path) -> io::Result<Stream> {
+        get_mount_registry()
+            .lock()
+            .unwrap()
+            .open_at(&self.path, &self.virtual_path, path, true)
+    }
+    fn remove(&self, path: &Path) -> io::Result<()> {
+        get_mount_registry()
+            .lock()
+            .unwrap()
+            .remove_at(&self.path, &self.virtual_path, path)
+    }
+    fn list(&self, path: &Path) -> io::Result<Vec<String>> {
+        get_mount_registry()
+            .lock()
+            .unwrap()
+            .list_at(&self.path, &self.virtual_path, path)
+    }
+    fn stat(&self, path: &Path) -> io::Result<crate::host::FileStat> {
+        get_mount_registry()
+            .lock()
+            .unwrap()
+            .stat_at(&self.path, &self.virtual_path, path)
     }
 }
-impl io::Read for Stream {
-    fn read(&mut self, bytes: &mut [u8]) -> io::Result<usize> {
-        // SAFETY: the mutable borrow owns the stream and the complete writable slice.
-        let read = unsafe { uio_fread(bytes.as_mut_ptr().cast(), 1, bytes.len(), self.0.as_ptr()) };
-        // SAFETY: the stream remains live and exclusively borrowed.
-        if read == 0 && unsafe { uio_ferror(self.0.as_ptr()) } != 0 {
-            Err(io::Error::last_os_error())
-        } else {
-            Ok(read)
-        }
-    }
-}
-impl io::Write for Stream {
-    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
-        // SAFETY: the mutable borrow owns the stream and the complete readable slice.
-        let written = unsafe { uio_fwrite(bytes.as_ptr().cast(), 1, bytes.len(), self.0.as_ptr()) };
-        // SAFETY: the stream remains live and exclusively borrowed.
-        if written == 0 && unsafe { uio_ferror(self.0.as_ptr()) } != 0 {
-            Err(io::Error::last_os_error())
-        } else {
-            Ok(written)
-        }
-    }
 
-    fn flush(&mut self) -> io::Result<()> {
-        // SAFETY: this mutable borrow owns the live stream.
-        if unsafe { uio_fflush(self.0.as_ptr()) } == 0 {
-            Ok(())
-        } else {
-            Err(io::Error::last_os_error())
-        }
+/// # Safety
+/// Directory and filename must remain live for this ABI call.
+pub unsafe fn read_file(dir: *mut uio_DirHandle, name: *const c_char) -> io::Result<Vec<u8>> {
+    use crate::host::Files;
+    if name.is_null() {
+        return Err(io::Error::from(io::ErrorKind::InvalidInput));
     }
-}
-impl Drop for Stream {
-    fn drop(&mut self) {
-        // SAFETY: Stream is the sole release owner; no raw pointer escapes it.
-        unsafe { uio_fclose(self.0.as_ptr()) };
-    }
+    // SAFETY: caller supplies a terminated string and live directory.
+    let path = unsafe { CStr::from_ptr(name) }.to_string_lossy();
+    unsafe { directory(dir) }?.read(Path::new(path.as_ref()))
 }

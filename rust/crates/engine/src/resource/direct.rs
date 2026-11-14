@@ -3,11 +3,12 @@
 use std::ffi::{c_char, c_int, CStr};
 use std::ptr;
 
-use crate::io::uio_bridge::{
-    uio_DirHandle, uio_DirList_free, uio_closeDir, uio_getDirList, uio_openDirRelative, uio_stat,
-};
+use crate::host::Files;
+use crate::io::uio_bridge::uio_DirHandle;
+use crate::io::uio_owned::directory;
 use crate::memory::rust_hmalloc;
 use crate::strings::string_table::{AllocStringTable, StringTable};
+use std::path::Path;
 
 /// # Safety
 /// `base` must be a live UIO directory, and `path` and `pattern` must be
@@ -19,45 +20,32 @@ pub unsafe extern "C" fn LoadDirEntryTable(
     pattern: *const c_char,
     match_type: c_int,
 ) -> *mut StringTable {
-    let dir = uio_openDirRelative(base, path, 0);
-    assert!(!dir.is_null());
-    let list = uio_getDirList(dir, c"".as_ptr(), pattern, match_type);
-    assert!(!list.is_null());
-    if (*list).numNames == 0 {
-        uio_closeDir(dir);
-        uio_DirList_free(list);
+    let files = directory(base).expect("directory table base");
+    let path = CStr::from_ptr(path).to_string_lossy();
+    let path = Path::new(path.as_ref());
+    let pattern = CStr::from_ptr(pattern).to_string_lossy();
+    let names: Vec<_> = files
+        .list(path)
+        .expect("directory enumeration")
+        .into_iter()
+        .filter(|name| {
+            !name.starts_with('.')
+                && crate::io::uio_bridge::matches_pattern(name, &pattern, match_type)
+                && files.stat(&path.join(name)).is_ok_and(|stat| stat.is_file)
+        })
+        .collect();
+    if names.is_empty() {
         return ptr::null_mut();
     }
-    let names = std::slice::from_raw_parts_mut((*list).names, (*list).numNames as usize);
-    let mut count = 0;
-    for name in names.iter_mut() {
-        let mut stat = std::mem::MaybeUninit::uninit();
-        if **name == b'.' as c_char
-            || uio_stat(dir, *name, stat.as_mut_ptr()) == -1
-            || stat.assume_init().st_mode & libc::S_IFMT as crate::platform::FileMode
-                != libc::S_IFREG as crate::platform::FileMode
-        {
-            *name = ptr::null_mut();
-        } else {
-            count += 1;
-        }
+    let table = AllocStringTable(names.len() as c_int, 0);
+    for (index, name) in names.iter().enumerate() {
+        let entry = &mut *(*table).strings.add(index);
+        let target = rust_hmalloc(name.len() + 1).cast::<c_char>();
+        ptr::copy_nonoverlapping(name.as_ptr().cast(), target, name.len());
+        *target.add(name.len()) = 0;
+        entry.data = target;
+        entry.length = (name.len() + 1) as c_int;
     }
-    uio_closeDir(dir);
-    if count == 0 {
-        uio_DirList_free(list);
-        return ptr::null_mut();
-    }
-    let table = AllocStringTable(count, 0);
-    let mut entry = (*table).strings;
-    for &name in names.iter().filter(|name| !name.is_null()) {
-        let bytes = CStr::from_ptr(name).to_bytes_with_nul();
-        let target = rust_hmalloc(bytes.len()).cast::<c_char>();
-        ptr::copy_nonoverlapping(name, target, bytes.len());
-        (*entry).data = target;
-        (*entry).length = bytes.len() as c_int;
-        entry = entry.add(1);
-    }
-    uio_DirList_free(list);
     table
 }
 
@@ -65,7 +53,7 @@ pub unsafe extern "C" fn LoadDirEntryTable(
 mod tests {
     use super::*;
     use crate::io::uio_bridge::{
-        uio_closeRepository, uio_mountDir, uio_openDir, uio_openRepository,
+        uio_closeDir, uio_closeRepository, uio_mountDir, uio_openDir, uio_openRepository,
     };
     use crate::strings::string_table::FreeStringTable;
     use std::ffi::CString;

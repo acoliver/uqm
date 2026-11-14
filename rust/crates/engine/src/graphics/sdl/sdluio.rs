@@ -1,21 +1,21 @@
 //! SDL_RWops over UQM streams, ported from sdluio.c (GPL-2.0-or-later).
-use crate::io::uio_bridge;
+use crate::host::{FileStream, Files};
+use crate::io::uio_owned::directory;
 use crate::memory::{rust_hfree, rust_hmalloc};
 use sdl2_sys::*;
-use std::ffi::{c_char, c_int, c_void};
+use std::ffi::{c_char, c_int, c_void, CStr};
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::ptr;
 
 use crate::graphics::sdl::png2sdl::TFB_png_to_sdl;
 
-unsafe fn stream(context: *mut SDL_RWops) -> *mut uio_bridge::uio_Stream {
+unsafe fn stream(context: *mut SDL_RWops) -> *mut FileStream {
     (*context).hidden.unknown.data1.cast()
 }
 
-unsafe fn io_error(format: &std::ffi::CStr) {
-    SDL_SetError(
-        format.as_ptr(),
-        libc::strerror(std::io::Error::last_os_error().raw_os_error().unwrap_or(0)),
-    );
+unsafe fn io_error(error: std::io::Error) {
+    let message = std::ffi::CString::new(error.to_string()).expect("I/O error contains no NUL");
+    SDL_SetError(c"%s".as_ptr(), message.as_ptr());
 }
 
 /// # Safety
@@ -24,15 +24,19 @@ pub unsafe extern "C" fn sdluio_load_image(
     dir: *mut c_void,
     filename: *const c_char,
 ) -> *mut SDL_Surface {
-    let fp = uio_bridge::uio_fopen(dir.cast(), filename, c"rb".as_ptr());
-    if fp.is_null() {
-        SDL_SetError(
-            c"Couldn't open '%s': %s".as_ptr(),
-            filename,
-            libc::strerror(std::io::Error::last_os_error().raw_os_error().unwrap_or(0)),
-        );
-        return ptr::null_mut();
-    }
+    let files = directory(dir.cast());
+    let opened = files.and_then(|files| {
+        files.open_read(std::path::Path::new(
+            CStr::from_ptr(filename).to_string_lossy().as_ref(),
+        ))
+    });
+    let fp = match opened {
+        Ok(file) => Box::into_raw(Box::new(file)),
+        Err(error) => {
+            io_error(error);
+            return ptr::null_mut();
+        }
+    };
     let rw: *mut SDL_RWops = rust_hmalloc(std::mem::size_of::<SDL_RWops>()).cast();
     (*rw).seek = Some(sdluio_seek);
     (*rw).read = Some(sdluio_read);
@@ -47,11 +51,19 @@ pub unsafe extern "C" fn sdluio_load_image(
 /// # Safety
 /// Context must be one created by sdluio_load_image and still open.
 pub unsafe extern "C" fn sdluio_seek(context: *mut SDL_RWops, offset: i64, whence: c_int) -> i64 {
-    if uio_bridge::uio_fseek(stream(context), offset as libc::c_long, whence) == -1 {
-        io_error(c"Error seeking in uio_Stream: %s");
-        return -1;
+    let position = match whence {
+        libc::SEEK_SET => SeekFrom::Start(offset as u64),
+        libc::SEEK_CUR => SeekFrom::Current(offset),
+        libc::SEEK_END => SeekFrom::End(offset),
+        _ => return -1,
+    };
+    match (*stream(context)).seek(position) {
+        Ok(position) => position as i64,
+        Err(error) => {
+            io_error(error);
+            -1
+        }
     }
-    uio_bridge::uio_ftell(stream(context)) as i64
 }
 /// # Safety
 /// Context must be open and ptr must hold size * maxnum writable bytes.
@@ -61,12 +73,19 @@ pub unsafe extern "C" fn sdluio_read(
     size: usize,
     maxnum: usize,
 ) -> usize {
-    let read = uio_bridge::uio_fread(ptr, size, maxnum, stream(context));
-    if read == 0 && uio_bridge::uio_ferror(stream(context)) != 0 {
-        io_error(c"Error reading from uio_Stream: %s");
+    if size == 0 || maxnum == 0 {
         return 0;
     }
-    (read as c_int) as usize
+    let Some(len) = size.checked_mul(maxnum) else {
+        return 0;
+    };
+    match (*stream(context)).read(std::slice::from_raw_parts_mut(ptr.cast(), len)) {
+        Ok(read) => read / size,
+        Err(error) => {
+            io_error(error);
+            0
+        }
+    }
 }
 /// # Safety
 /// Context must be open and ptr must hold size * num readable bytes.
@@ -76,17 +95,30 @@ pub unsafe extern "C" fn sdluio_write(
     size: usize,
     num: usize,
 ) -> usize {
-    let written = uio_bridge::uio_fwrite(ptr, size, num, stream(context));
-    if written == 0 && uio_bridge::uio_ferror(stream(context)) != 0 {
-        io_error(c"Error writing to uio_Stream: %s");
+    if size == 0 || num == 0 {
         return 0;
     }
-    written
+    let Some(len) = size.checked_mul(num) else {
+        return 0;
+    };
+    match (*stream(context)).write(std::slice::from_raw_parts(ptr.cast(), len)) {
+        Ok(written) => written / size,
+        Err(error) => {
+            io_error(error);
+            0
+        }
+    }
 }
 /// # Safety
 /// Context must be an open sdluio RWops allocation, consumed by this call.
 pub unsafe extern "C" fn sdluio_close(context: *mut SDL_RWops) -> c_int {
-    let result = uio_bridge::uio_fclose(stream(context));
+    let result = match Box::from_raw(stream(context)).finish() {
+        Ok(()) => 0,
+        Err(error) => {
+            io_error(error);
+            -1
+        }
+    };
     rust_hfree(context.cast());
     result
 }
@@ -103,9 +135,12 @@ mod tests {
         // SAFETY: the repository owns the stream and the allocated RWops is consumed by close.
         unsafe {
             assert!(sdluio_load_image(directory.handle().cast(), c"absent.png".as_ptr()).is_null());
-            let file =
-                uio_bridge::uio_fopen(directory.handle(), c"data.bin".as_ptr(), c"w+b".as_ptr());
-            assert!(!file.is_null());
+            let file = Box::into_raw(Box::new(
+                crate::io::uio_owned::directory(directory.handle())
+                    .unwrap()
+                    .open_write(std::path::Path::new("data.bin"))
+                    .unwrap(),
+            ));
             let rw: *mut SDL_RWops = rust_hmalloc(std::mem::size_of::<SDL_RWops>()).cast();
             (*rw).hidden.unknown.data1 = file.cast();
             assert_eq!(sdluio_write(rw, b"abcdef".as_ptr().cast(), 2, 3), 3);

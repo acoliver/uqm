@@ -6,7 +6,8 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Mutex;
 
 use crate::bridge_log::rust_bridge_log_msg;
-use crate::io::ffi::{uio_DirHandle, uio_Handle, uio_close, uio_open, uio_read};
+use crate::host::Files;
+use crate::io::ffi::uio_DirHandle;
 use crate::sound::dukaud::DukAudDecoder;
 use crate::sound::rodio_audio::{self, SoundCategory};
 
@@ -105,62 +106,16 @@ pub unsafe fn tfb_drawcanvas_unlock(canvas: *mut c_void) {
 
 // ============================================================================
 
-unsafe fn read_uio_handle(handle: *mut uio_Handle, label: &str) -> Option<Vec<u8>> {
-    let mut data = Vec::new();
-    let mut buf = [0u8; 8192];
-    loop {
-        let n = uio_read(handle, buf.as_mut_ptr(), buf.len());
-        if n <= 0 {
-            if n < 0 {
-                log_msg(&format!(
-                    "RUST_VIDEO: uio_read returned {} for {}",
-                    n, label
-                ));
-            }
-            break;
-        }
-        data.extend_from_slice(&buf[..n as usize]);
-    }
-
-    uio_close(handle);
-
+unsafe fn read_video_file(dir: *mut uio_DirHandle, filename: &str) -> Option<Vec<u8>> {
+    let files = crate::io::uio_owned::directory(dir).ok()?;
+    let data = files
+        .read(std::path::Path::new(filename))
+        .or_else(|_| files.read(std::path::Path::new(&format!("/{filename}"))))
+        .ok()?;
     if data.is_empty() {
-        log_msg(&format!("RUST_VIDEO: no data read from {}", label));
         return None;
     }
-
     Some(data)
-}
-
-unsafe fn read_uio_file(dir: *mut uio_DirHandle, filename: &str) -> Option<Vec<u8>> {
-    log_msg(&format!(
-        "RUST_VIDEO: read_uio_file start {} dir={:?}",
-        filename, dir
-    ));
-
-    let c_filename = std::ffi::CString::new(filename).ok()?;
-    let handle = uio_open(dir, c_filename.as_ptr(), 0 /* O_RDONLY */, 0);
-    log_msg(&format!(
-        "RUST_VIDEO: uio_open returned {:?} for {}",
-        handle, filename
-    ));
-    if handle.is_null() {
-        log_msg(&format!("RUST_VIDEO: uio_open failed for {}", filename));
-
-        let c_filename_abs = std::ffi::CString::new(format!("/{}", filename)).ok()?;
-        let handle_abs = uio_open(dir, c_filename_abs.as_ptr(), 0 /* O_RDONLY */, 0);
-        log_msg(&format!(
-            "RUST_VIDEO: uio_open returned {:?} for /{}",
-            handle_abs, filename
-        ));
-        if handle_abs.is_null() {
-            log_msg(&format!("RUST_VIDEO: uio_open failed for /{}", filename));
-            return None;
-        }
-        return read_uio_handle(handle_abs, filename);
-    }
-
-    read_uio_handle(handle, filename)
 }
 
 fn calculate_video_scale(_src_w: u32, _src_h: u32) -> u32 {
@@ -384,28 +339,28 @@ extern "C" fn rust_dukv_Open(
         let hdr_file = format!("{}.hdr", basename);
         let tbl_file = format!("{}.tbl", basename);
 
-        let duk_data = match read_uio_file(dir, &duk_file) {
+        let duk_data = match read_video_file(dir, &duk_file) {
             Some(d) => d,
             None => {
                 (*rust_dec).last_error = -1;
                 return false;
             }
         };
-        let frm_data = match read_uio_file(dir, &frm_file) {
+        let frm_data = match read_video_file(dir, &frm_file) {
             Some(d) => d,
             None => {
                 (*rust_dec).last_error = -1;
                 return false;
             }
         };
-        let hdr_data = match read_uio_file(dir, &hdr_file) {
+        let hdr_data = match read_video_file(dir, &hdr_file) {
             Some(d) => d,
             None => {
                 (*rust_dec).last_error = -1;
                 return false;
             }
         };
-        let tbl_data = match read_uio_file(dir, &tbl_file) {
+        let tbl_data = match read_video_file(dir, &tbl_file) {
             Some(d) => d,
             None => {
                 (*rust_dec).last_error = -1;
@@ -705,19 +660,19 @@ pub unsafe extern "C" fn rust_play_video(
     let hdr_file = format!("{}.hdr", basename);
     let tbl_file = format!("{}.tbl", basename);
 
-    let duk_data = match read_uio_file(dir, &duk_file) {
+    let duk_data = match read_video_file(dir, &duk_file) {
         Some(d) => d,
         None => return false,
     };
-    let frm_data = match read_uio_file(dir, &frm_file) {
+    let frm_data = match read_video_file(dir, &frm_file) {
         Some(d) => d,
         None => return false,
     };
-    let hdr_data = match read_uio_file(dir, &hdr_file) {
+    let hdr_data = match read_video_file(dir, &hdr_file) {
         Some(d) => d,
         None => return false,
     };
-    let tbl_data = match read_uio_file(dir, &tbl_file) {
+    let tbl_data = match read_video_file(dir, &tbl_file) {
         Some(d) => d,
         None => return false,
     };
@@ -1028,19 +983,19 @@ pub unsafe extern "C" fn rust_play_video_direct_window(
     let hdr_file = format!("{}.hdr", basename);
     let tbl_file = format!("{}.tbl", basename);
 
-    let duk_data = match read_uio_file(dir, &duk_file) {
+    let duk_data = match read_video_file(dir, &duk_file) {
         Some(d) => d,
         None => return false,
     };
-    let frm_data = match read_uio_file(dir, &frm_file) {
+    let frm_data = match read_video_file(dir, &frm_file) {
         Some(d) => d,
         None => return false,
     };
-    let hdr_data = match read_uio_file(dir, &hdr_file) {
+    let hdr_data = match read_video_file(dir, &hdr_file) {
         Some(d) => d,
         None => return false,
     };
-    let tbl_data = match read_uio_file(dir, &tbl_file) {
+    let tbl_data = match read_video_file(dir, &tbl_file) {
         Some(d) => d,
         None => return false,
     };
@@ -1207,8 +1162,8 @@ pub unsafe extern "C" fn tfb_play_video(vid: *mut TFB_VideoClip, x: u32, y: u32)
     let duk_file = format!("{}.duk", basename);
     let frm_file = format!("{}.frm", basename);
 
-    let duk_data = read_uio_file(dec.dir, &duk_file);
-    let frm_data = read_uio_file(dec.dir, &frm_file);
+    let duk_data = read_video_file(dec.dir, &duk_file);
+    let frm_data = read_video_file(dec.dir, &frm_file);
 
     if let (Some(duk_bytes), Some(frm_bytes)) = (duk_data, frm_data) {
         let mut audio_dec = DukAudDecoder::new();

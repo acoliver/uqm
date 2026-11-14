@@ -1,8 +1,10 @@
 //! Animation and bitmap-font loaders, ported from gfxload.c (GPL-2.0-or-later).
 use super::native_abi::*;
+use crate::host::FileStream;
 use crate::io::uio_bridge as uio;
 use crate::memory::{rust_hcalloc, rust_hfree, rust_hmalloc};
 use crate::strings::string_table as strings;
+use std::io::{Read, Seek, SeekFrom};
 
 use std::ffi::{c_char, c_void, CStr, CString};
 use std::ptr;
@@ -113,8 +115,8 @@ unsafe fn parse_ani(line: *const c_char) -> Option<(CString, AniData)> {
 /// # Safety
 /// Stream and resource path must remain live for this serialized resource load.
 pub unsafe extern "C" fn get_cel_data(fp: *mut c_void, length: u32) -> *mut c_void {
-    let fp = fp.cast::<uio::uio_Stream>();
-    let mut position = uio::uio_ftell(fp);
+    let fp = fp.cast::<FileStream>();
+    let mut position = (*fp).position();
     let path = if _cur_resfile_name.is_null() {
         &b""[..]
     } else {
@@ -122,7 +124,7 @@ pub unsafe extern "C" fn get_cel_data(fp: *mut c_void, length: u32) -> *mut c_vo
     };
     let (parent, name, prefix) = path_parts(path);
     let mut header = [0u8; 4];
-    uio::uio_fread(header.as_mut_ptr().cast(), 4, 1, fp);
+    let _ = (*fp).read(&mut header);
     let mut mount = ptr::null_mut();
     let (dir, file, prefix) = if !path.is_empty() && u32::from_le_bytes(header) == 0x04034b50 {
         let parent = CString::new(parent).unwrap();
@@ -140,23 +142,26 @@ pub unsafe extern "C" fn get_cel_data(fp: *mut c_void, length: u32) -> *mut c_vo
             2 | 4,
             ptr::null_mut(),
         );
-        let file = uio::uio_fopen(dir, name.as_ptr(), c"r".as_ptr());
+        let file =
+            crate::resource::ffi_bridge::res_OpenResFile(dir.cast(), name.as_ptr(), c"r".as_ptr())
+                .cast::<FileStream>();
         position = 0;
         (dir, file, &b""[..])
     } else {
         (contentDir.cast(), fp, prefix)
     };
-    let mut line = [0 as c_char; 1024];
-    uio::uio_fseek(file, position, libc::SEEK_SET);
+    let _ = (*file).seek(SeekFrom::Start(position));
     let mut total = 0;
-    while !uio::uio_fgets(line.as_mut_ptr(), line.len() as i32, file).is_null() {
+    while (*file).line(1024).ok().flatten().is_some() {
         total += 1;
     }
     let mut images = Vec::with_capacity(total);
-    uio::uio_fseek(file, position, libc::SEEK_SET);
-    while images.len() < total
-        && !uio::uio_fgets(line.as_mut_ptr(), line.len() as i32, file).is_null()
-    {
+    let _ = (*file).seek(SeekFrom::Start(position));
+    while images.len() < total {
+        let Some(line) = (*file).line(1024).ok().flatten() else {
+            break;
+        };
+        let line = CString::new(line).expect("line contains no NUL");
         let Some((name, ani)) = parse_ani(line.as_ptr()) else {
             log::warn!("get_cel_data: invalid animation entry");
             break;
@@ -168,7 +173,7 @@ pub unsafe extern "C" fn get_cel_data(fp: *mut c_void, length: u32) -> *mut c_vo
         } else {
             images.push((canvas, ani));
         }
-        if (uio::uio_ftell(file) as i32).wrapping_sub(position as i32) >= length as i32 {
+        if ((*file).position() as i32).wrapping_sub(position as i32) >= length as i32 {
             break;
         }
     }
@@ -191,7 +196,7 @@ pub unsafe extern "C" fn get_cel_data(fp: *mut c_void, length: u32) -> *mut c_vo
         log::warn!("Couldn't get cel data");
     }
     if !mount.is_null() {
-        uio::uio_fclose(file);
+        crate::resource::ffi_bridge::res_CloseResFile(file.cast());
         uio::uio_closeDir(dir);
         uio::uio_unmountDir(mount);
     }
@@ -235,7 +240,7 @@ unsafe extern "C" fn compare_char(a: *const c_void, b: *const c_void) -> i32 {
 /// # Safety
 /// Resource path and directory/stream sentinel must be valid for a serialized font load.
 pub unsafe extern "C" fn get_font_data(fp: *mut c_void, _length: u32) -> *mut c_void {
-    let fp = fp.cast::<uio_Stream>();
+    let fp = fp.cast::<FileStream>();
     if _cur_resfile_name.is_null() {
         return ptr::null_mut();
     }

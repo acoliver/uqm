@@ -19,7 +19,8 @@ pub(super) struct Stack {
 
 impl Stack {
     pub(super) fn new() -> Self {
-        if let Ok(mut registry) = get_mount_registry().lock() {
+        if let Ok(mut topology) = get_mount_registry().lock() {
+            let registry = &mut topology.mounts;
             registry.clear();
         }
         let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
@@ -82,7 +83,8 @@ impl Stack {
         let relative_handle = if relative == 0 {
             ptr::null_mut()
         } else {
-            let registry = get_mount_registry().lock().unwrap();
+            let topology = get_mount_registry().lock().unwrap();
+            let registry = &topology.mounts;
             let entry = registry.iter().find(|m| m.id == relative).unwrap();
             entry.handle_ptr as *mut uio_MountHandle
         };
@@ -90,7 +92,7 @@ impl Stack {
     }
 
     pub(super) fn first_mount_id(&self) -> usize {
-        get_mount_registry().lock().unwrap()[0].id
+        get_mount_registry().lock().unwrap().mounts[0].id
     }
 
     pub(super) fn read(&self, name: &str) -> Option<Vec<u8>> {
@@ -115,7 +117,8 @@ impl Drop for Stack {
             let _ = Box::from_raw(self.root);
             let _ = Box::from_raw(self.repo);
         }
-        if let Ok(mut registry) = get_mount_registry().lock() {
+        if let Ok(mut topology) = get_mount_registry().lock() {
+            let registry = &mut topology.mounts;
             registry.clear();
         }
     }
@@ -205,7 +208,8 @@ impl Stack {
         let path = dir.path().to_path_buf();
         self._dirs.push(dir);
         let relative_handle = {
-            let registry = get_mount_registry().lock().unwrap();
+            let topology = get_mount_registry().lock().unwrap();
+            let registry = &topology.mounts;
             let entry = registry.iter().find(|m| m.id == relative).unwrap();
             entry.handle_ptr as *mut uio_MountHandle
         };
