@@ -1,12 +1,7 @@
 use super::super::{planet_mass, scan_value};
 use super::*;
-use crate::comm::sis_graphics::CText;
 use crate::graphics::{drawable_abi::DrawableLease, native_font::FontLease};
 use crate::starbase::gfx::{Align, Point, TextDraw};
-
-use crate::planets::solarsys::lifecycle::named_body_index;
-
-use crate::graphics::font_abi::TextRect;
 
 pub(super) fn text(g: &Graphics, x: i16, y: i16, align: Align, text: String) {
     g.draw_text(&TextDraw {
@@ -16,8 +11,8 @@ pub(super) fn text(g: &Graphics, x: i16, y: i16, align: Align, text: String) {
     });
 }
 
-unsafe fn title(solar: &SolarSystem, g: &Graphics) -> String {
-    if let Some(index) = named_body_index(solar) {
+fn title(solar: &SolarSystem, g: &Graphics) -> String {
+    if let Some(index) = solar.named_body_index() {
         return g.game_string(i32::from(index));
     }
     let world_type = solar.sys.descriptor(solar.require_body()).data_index & !0x80;
@@ -32,31 +27,24 @@ unsafe fn title(solar: &SolarSystem, g: &Graphics) -> String {
     }
 }
 
-unsafe fn pc_value(g: &Graphics, x: i16, y: i16, label: i32, value: String) {
+fn pc_value(g: &Graphics, x: i16, y: i16, label: i32, value: String) {
     let title = g.game_string(486 + label);
     g.set_fg_color(Rgba::rgb15(0, 0, 21));
     text(g, x, y, Align::Left, title.clone());
     let string = CString::new(title).unwrap();
-    let mut ctext = CText::default();
-    ctext.baseline = CPoint { x, y };
-    ctext.p_str = string.as_ptr();
-    ctext.char_count = u16::MAX;
-    let mut rect = CRect::default();
-    TextRect(
-        std::ptr::from_mut(&mut ctext).cast(),
-        std::ptr::from_mut(&mut rect).cast(),
-        std::ptr::null_mut(),
-    );
+    let measured = drawing::selected_font()
+        .unwrap_or_else(|| panic!("scan label font is not selected"))
+        .measure(
+            &string,
+            crate::graphics::native_abi::POINT { x, y },
+            0,
+            u16::MAX,
+        );
     g.set_fg_color(Rgba::rgb15(15, 0, 25));
-    text(g, x + rect.width, y, Align::Left, value);
+    text(g, x + measured.rect.extent.width, y, Align::Left, value);
 }
 
-pub(super) unsafe fn coarse(
-    cx: &mut Cx<'_>,
-    solar: &SolarSystem,
-    planet: &ContextLease,
-    style: i32,
-) {
+pub(super) fn coarse(cx: &mut Cx<'_>, solar: &SolarSystem, planet: &ContextLease, style: i32) {
     let g = Graphics::new(cx.kernel, cx.screen_dimensions());
     let micro = FontLease::retain(
         std::ptr::NonNull::new(cx.kernel.micro_font)
@@ -69,14 +57,19 @@ pub(super) unsafe fn coarse(
         );
         cx.with_legacy(|| pc(solar, &g, planet, &micro, &tiny));
     } else {
-        let junk = crate::planets::solarsys::resources::retained(cx.kernel)
+        let junk = cx
+            .kernel
+            .solar_presentation
+            .assets
+            .as_ref()
+            .unwrap_or_else(|| panic!("interplanetary resources are not loaded"))
             .junk
             .lease();
         cx.with_legacy(|| three_do(solar, &g, planet, &micro, &junk));
     }
 }
 
-unsafe fn pc(
+fn pc(
     solar: &SolarSystem,
     g: &Graphics,
     planet: &ContextLease,
@@ -84,10 +77,12 @@ unsafe fn pc(
     tiny: &FontLease,
 ) {
     let info = solar.sys.info.planet_info;
+    let map_width = width(g.screen_size().0);
+    let gas_giant = solar.sys.planet_definition(solar.require_body()).type_ & 3 == 2;
     planet.select();
     g.set_fg_color(Rgba::rgb15(0, 0, 21));
     planet.set_font(micro);
-    text(g, width() >> 1, 13, Align::Center, title(solar, g));
+    text(g, map_width >> 1, 13, Align::Center, title(solar, g));
     planet.set_font(tiny);
     let orbit = (i64::from(info.planet_to_sun_dist) * 100 + 256) / 512;
     pc_value(g, 5, 40, 0, scan_value(orbit, &g.game_string(487)));
@@ -110,14 +105,8 @@ unsafe fn pc(
         7,
         pc_class(g, info.atmo_density == 0, info.weather),
     );
-    pc_value(
-        g,
-        5,
-        96,
-        10,
-        pc_class(g, (*info.plan_data_ptr).type_ & 3 == 2, info.tectonics),
-    );
-    let right = width() - 75;
+    pc_value(g, 5, 96, 10, pc_class(g, gas_giant, info.tectonics));
+    let right = map_width - 75;
     pc_value(
         g,
         right,
@@ -161,7 +150,7 @@ unsafe fn pc(
     );
 }
 
-unsafe fn three_do(
+fn three_do(
     solar: &SolarSystem,
     g: &Graphics,
     planet: &ContextLease,
@@ -169,10 +158,12 @@ unsafe fn three_do(
     junk: &DrawableLease,
 ) {
     let info = solar.sys.info.planet_info;
+    let map_width = width(g.screen_size().0);
+    let gas_giant = solar.sys.planet_definition(solar.require_body()).type_ & 3 == 2;
     planet.select();
     g.set_fg_color(Rgba::rgb15(15, 0, 25));
     planet.set_font(micro);
-    text(g, width() >> 1, 13, Align::Center, title(solar, g));
+    text(g, map_width >> 1, 13, Align::Center, title(solar, g));
     planet.draw_stamp(
         &junk.context_frame(0).wrapped_frame(20),
         crate::graphics::native_abi::POINT { x: 16, y: 0 },
@@ -203,9 +194,9 @@ unsafe fn three_do(
         43,
         101,
         Align::Left,
-        three_do_class((*info.plan_data_ptr).type_ & 3 == 2, info.tectonics),
+        three_do_class(gas_giant, info.tectonics),
     );
-    let right = width() - 43;
+    let right = map_width - 43;
     text(
         g,
         right,

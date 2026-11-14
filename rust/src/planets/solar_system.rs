@@ -11,6 +11,11 @@ use crate::engine::{
     World,
 };
 
+const SOL_DEFINED: u8 = 1;
+const SAMATRA_DEFINED: u8 = 29;
+const PLANET_NUMBER_BASE: u16 = 375;
+const STARBASE_STRING_BASE: u16 = 422;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SystemLocation {
     Outer,
@@ -61,6 +66,24 @@ pub struct SolarSystem {
 }
 
 impl SolarSystem {
+    pub fn named_body_index(&self) -> Option<u16> {
+        let body = self.selected_body()?;
+        let planet = body.planet() as u16;
+        match (self.sys.star_index(), body) {
+            (SOL_DEFINED, Body::Planet(_)) => Some(PLANET_NUMBER_BASE + planet),
+            (SOL_DEFINED, Body::Moon { moon, .. }) => match (planet, moon) {
+                (2, 0) => Some(STARBASE_STRING_BASE),
+                (2, 1) => Some(PLANET_NUMBER_BASE + 9),
+                (4, 0..=3) => Some(PLANET_NUMBER_BASE + 10 + u16::from(moon)),
+                (5, 0) => Some(PLANET_NUMBER_BASE + 14),
+                (7, 0) => Some(PLANET_NUMBER_BASE + 15),
+                _ => None,
+            },
+            (SAMATRA_DEFINED, Body::Moon { planet: 4, moon: 0 }) => Some(PLANET_NUMBER_BASE + 32),
+            _ => None,
+        }
+    }
+
     pub fn new(world: &World, star: StarId) -> Self {
         let descriptor = &world.catalog()[star.0];
         Self {

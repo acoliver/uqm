@@ -96,7 +96,6 @@ fn set_node_not_retrieved(info: &mut PlanetInfo, scan: u8, node: u8) {
     info.scan_retrieve_mask[usize::from(scan)] &= !(1_u32 << node);
 }
 
-#[cfg(not(test))]
 pub(crate) mod live;
 
 pub(crate) fn repair_back_rect(

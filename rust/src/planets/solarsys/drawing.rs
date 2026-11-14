@@ -8,6 +8,7 @@ use crate::graphics::drawable_abi::LoadedDrawable;
 use crate::graphics::menu as draw;
 use crate::planets::generate::orbit_tables::NUMBER_OF_PLANET_TYPES;
 use crate::planets::render::c_api::NativeOvalGfx;
+use crate::planets::render::draw_star_background;
 use crate::planets::solar_coords::{star_seed, SolarCoordinates};
 use crate::planets::solar_system::{SolarSystem, SystemLocation};
 
@@ -413,13 +414,6 @@ fn draw_inner_planets(assets: &SolarResources, solar: &SolarSystem, index: u8) {
         }
         draw_stamp(&moon.image);
     }
-}
-
-pub(crate) fn draw_star_background(context: &ContextLease, background: &ContextFrame) {
-    context.draw_stamp(
-        background,
-        crate::graphics::native_abi::POINT { x: 0, y: 0 },
-    );
 }
 
 pub(super) fn validate_inner_orbits(assets: &SolarResources, solar: &mut SolarSystem) {

@@ -230,15 +230,12 @@ fn check_drawable_ownership(h: &mut Harness) {
             site.invoke(&mut h.state.sys, |_, system, _| {
                 assert!(c_api::load_planet(
                     &game,
-                    &io,
                     system,
-                    (
-                        uqm_rust::engine::StarId(0),
-                        uqm_rust::engine::world::generation::Body::Planet(0)
-                    ),
+                    uqm_rust::engine::world::generation::Body::Planet(0),
                     false,
                     definition.into_drawable(),
                     (Default::default(), None),
+                    |_, _| panic!("noninteractive orbit load must not populate scan nodes"),
                 )
                 .is_none());
             });
