@@ -244,8 +244,8 @@ unsafe fn names(h: &mut Harness) {
 }
 
 unsafe fn scenes(h: &mut Harness) {
-    let saved_debug = c_api::DISABLE_INTERACTIVITY;
-    c_api::DISABLE_INTERACTIVITY = 1;
+    let _quiet = uqm_rust::engine::Kernel::current()
+        .read(|kernel| kernel.diagnostics.suppress_interaction());
     for pluto in [true, false] {
         h.state.sys.info = std::mem::zeroed();
         h.state.sys.planets = std::mem::zeroed();
@@ -341,7 +341,6 @@ unsafe fn scenes(h: &mut Harness) {
         assert!((*system).sys.frames.iter().all(|frame| frame.is_none()));
         println!("Sol real scene {}: font + effect + mask + report loaded through actual orbital ABI, then explicit font leases survive FreePlanet and release after their final user", if pluto { "Pluto" } else { "moonbase" });
     }
-    c_api::DISABLE_INTERACTIVITY = saved_debug;
 }
 
 unsafe fn indexed_rescale() {
