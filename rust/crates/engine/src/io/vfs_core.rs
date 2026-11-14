@@ -1,7 +1,7 @@
 //! The mount resolver used by both native resource loading and replay.
 use super::{
     map_virtual_to_host_confined, normalize_virtual_path_full, resolve_mount_for_path,
-    resolve_path, MountInfo, UIO_FSTYPE_ZIP,
+    resolve_path, MountInfo, MountResolution, UIO_FSTYPE_STDIO, UIO_FSTYPE_ZIP,
 };
 use crate::host::{File, FileStat, FileStream, Files};
 use std::io::{Read, Seek, SeekFrom, Write};
@@ -31,7 +31,7 @@ impl Vfs {
     ) -> io::Result<FileStream> {
         let virtual_path = normalize_virtual_path_full(base, path);
         if write {
-            let target = self.write_path(host, &virtual_path, path)?;
+            let target = self.write_path(host, base, &virtual_path, path)?;
             let file = fs::OpenOptions::new()
                 .write(true)
                 .create(true)
@@ -70,8 +70,32 @@ impl Vfs {
             .map(FileStream::new)
     }
 
-    fn write_path(&self, host: &Path, virtual_path: &Path, path: &Path) -> io::Result<PathBuf> {
-        match resolve_mount_for_path(&self.mounts, virtual_path) {
+    fn write_path(
+        &self,
+        host: &Path,
+        base: &Path,
+        virtual_path: &Path,
+        path: &Path,
+    ) -> io::Result<PathBuf> {
+        // A retained config/save directory keeps its stdio target when content
+        // is subsequently mounted at the same virtual root.
+        let owner = self.mounts.iter().find(|mount| {
+            mount.active_in_registry
+                && mount.fs_type == UIO_FSTYPE_STDIO
+                && base.strip_prefix(&mount.mount_point).is_ok_and(|suffix| {
+                    map_virtual_to_host_confined(&mount.mounted_root, suffix) == host
+                })
+        });
+        let resolved = owner
+            .and_then(|mount| {
+                let suffix = virtual_path.strip_prefix(&mount.mount_point).ok()?;
+                Some(MountResolution {
+                    mount,
+                    host_path: map_virtual_to_host_confined(&mount.mounted_root, suffix),
+                })
+            })
+            .or_else(|| resolve_mount_for_path(&self.mounts, virtual_path));
+        match resolved {
             Some(resolved)
                 if resolved.mount.read_only || resolved.mount.fs_type == UIO_FSTYPE_ZIP =>
             {
@@ -84,7 +108,7 @@ impl Vfs {
 
     pub(super) fn remove_at(&self, host: &Path, base: &Path, path: &Path) -> io::Result<()> {
         let virtual_path = normalize_virtual_path_full(base, path);
-        fs::remove_file(self.write_path(host, &virtual_path, path)?)
+        fs::remove_file(self.write_path(host, base, &virtual_path, path)?)
     }
 
     pub(super) fn stat_at(&self, host: &Path, base: &Path, path: &Path) -> io::Result<FileStat> {
