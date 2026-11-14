@@ -13,9 +13,12 @@ impl ContextFrame {
         let frame = self.as_raw();
         assert!(!frame.is_null(), "absent frame has no pixels");
         let count = usize::try_from(width)
-            .expect("nonnegative pixel width")
-            .checked_mul(usize::try_from(height).expect("nonnegative pixel height"))
-            .expect("pixel buffer size");
+            .unwrap_or_else(|_| panic!("negative pixel width: {width}"))
+            .checked_mul(
+                usize::try_from(height)
+                    .unwrap_or_else(|_| panic!("negative pixel height: {height}")),
+            )
+            .unwrap_or_else(|| panic!("pixel buffer size overflow"));
         let length = match &pixels {
             Pixels::Read(buffer) => buffer.len(),
             Pixels::Write(buffer) => buffer.len(),
@@ -45,21 +48,27 @@ impl ContextFrame {
 
 // Called only after frame admission and buffer-size validation above.
 unsafe fn copy_pixels(frame: FRAME, pixels: Pixels<'_>, width: i32, height: i32) {
+    // SAFETY: admission retains this descriptor; these copied fields do not borrow its pixels.
+    let (kind, image) = unsafe { ((*frame).Type, (*frame).image) };
     assert_ne!(
-        (*frame).Type,
-        SCREEN_DRAWABLE as u16,
+        kind, SCREEN_DRAWABLE as u16,
         "screen frames require readback"
     );
-    assert!(!(*frame).image.is_null(), "frame has no pixel image");
+    assert!(!image.is_null(), "frame has no pixel image");
     let result = match pixels {
         Pixels::Read(buffer) => {
-            drawable_abi::ReadFramePixelColors(frame, buffer.as_mut_ptr(), width, height)
+            // SAFETY: the caller validated the complete output stride and retained this image.
+            unsafe { drawable_abi::ReadFramePixelColors(frame, buffer.as_mut_ptr(), width, height) }
         }
         Pixels::Write(buffer) => {
-            drawable_abi::WriteFramePixelColors(frame, buffer.as_ptr(), width, height)
+            // SAFETY: the caller validated the complete input stride and retained this image.
+            unsafe { drawable_abi::WriteFramePixelColors(frame, buffer.as_ptr(), width, height) }
         }
         Pixels::Indexes(buffer) => {
-            drawable_abi::ReadFramePixelIndexes(frame, buffer.as_mut_ptr(), width, height)
+            // SAFETY: the caller validated the complete output stride and retained this image.
+            unsafe {
+                drawable_abi::ReadFramePixelIndexes(frame, buffer.as_mut_ptr(), width, height)
+            }
         }
     };
     assert_ne!(result, 0, "frame pixel operation failed");

@@ -13,7 +13,7 @@ impl OffscreenFormats {
         let owner = ffi::native_allocations()
             .owner
             .as_ref()
-            .expect("graphics thread admission")
+            .unwrap_or_else(|| panic!("graphics thread admission"))
             .clone();
         let color = sdl2::surface::Surface::new(1, 1, sdl2::pixels::PixelFormatEnum::RGBA8888)?;
         let screen = sdl2::surface::Surface::new(1, 1, sdl2::pixels::PixelFormatEnum::RGBX8888)?;
