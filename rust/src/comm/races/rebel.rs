@@ -1,5 +1,6 @@
 //! Yehat Rebel dialogue, ported from rebel.c.
-pub(crate) use crate::comm::locdata::CPoint;
+pub(crate) use crate::comm::races::descriptor::Point;
+use crate::engine::world::activity::ActivityKind;
 pub(crate) use crate::engine::StoryKey;
 mod phrases;
 use phrases::*;
@@ -140,7 +141,7 @@ impl<A: RebelApi> Dialogue<'_, A> {
     }
     pub(crate) fn intro(&mut self) {
         self.api.segue(0);
-        if self.api.activity() as u8 == crate::comm::dispatch::IN_LAST_BATTLE as u8 {
+        if self.api.activity() as u8 == ActivityKind::InLastBattle as u8 {
             self.api.npc(YEHAT_CAVALRY);
             self.api.talk_segue(u16::MAX);
             let n = (self
@@ -174,9 +175,9 @@ impl<A: RebelApi> Dialogue<'_, A> {
         self.api.segue(0)
     }
 }
-pub(crate) fn text_layout(screen_width: i32) -> (CPoint, u16) {
+pub(crate) fn text_layout(screen_width: i32) -> (Point, u16) {
     (
-        CPoint {
+        Point {
             x: ((screen_width - 78) * 2 / 3) as i16,
             y: 60,
         },
@@ -185,7 +186,6 @@ pub(crate) fn text_layout(screen_width: i32) -> (CPoint, u16) {
 }
 
 #[cfg(test)]
-use crate::comm::descriptors::rebel::descriptor;
-
-#[cfg(test)]
 mod tests;
+
+pub(crate) mod descriptor;

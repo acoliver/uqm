@@ -2,7 +2,7 @@
 //!
 //! @plan PLAN-20260724-MAINLOOP-AND-COMM.P13-15
 
-pub(crate) use crate::comm::locdata::CPoint;
+pub(crate) use crate::comm::races::descriptor::Point;
 
 pub(crate) mod api;
 pub(crate) mod dialogue;
@@ -101,10 +101,10 @@ pub(crate) const WHATS_UP_4: u32 = 74;
 pub(crate) const GENERAL_INFO_4: u32 = 75;
 pub(crate) const OUT_TAKES: u32 = 76;
 
-pub(crate) fn text_layout(screen_width: i32) -> (CPoint, u16) {
+pub(crate) fn text_layout(screen_width: i32) -> (Point, u16) {
     let text_width = screen_width - 80;
     (
-        CPoint {
+        Point {
             x: (1 + (text_width >> 1)) as i16,
             y: 0,
         },
@@ -113,15 +113,12 @@ pub(crate) fn text_layout(screen_width: i32) -> (CPoint, u16) {
 }
 
 #[cfg(test)]
-use crate::comm::descriptors::urquan::descriptor;
-
-#[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn descriptor_matches_c_resource_and_animation_configuration() {
-        let desc = descriptor(320);
+        let desc = descriptor::descriptor(320);
         assert_eq!(desc.num_animations, 7);
         assert_eq!(desc.alien_text_baseline.x, 121);
         assert_eq!(desc.alien_text_width, 224);
@@ -155,3 +152,5 @@ mod tests {
         }
     }
 }
+
+pub(crate) mod descriptor;

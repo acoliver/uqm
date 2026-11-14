@@ -1,6 +1,6 @@
 //! Live dialogue animation engine, ported from commanim.c (GPL-2.0-or-later).
 
-use super::locdata::CAnimationDesc;
+use super::races::descriptor::AnimationDescriptor;
 use crate::comm::Comm;
 
 const RANDOM: u8 = 1;
@@ -35,7 +35,7 @@ impl Sequence {
         change: 0,
     };
 
-    fn neutral(&self, d: &CAnimationDesc) -> bool {
+    fn neutral(&self, d: &AnimationDescriptor) -> bool {
         if d.anim_flags & CIRCULAR != 0 {
             self.next == 0
         } else {
@@ -49,7 +49,7 @@ impl Sequence {
         self.change = 1;
     }
 
-    fn setup_ambient(d: &CAnimationDesc, random: &mut impl FnMut() -> u32) -> Self {
+    fn setup_ambient(d: &AnimationDescriptor, random: &mut impl FnMut() -> u32) -> Self {
         let mut s = Self {
             direction: 1,
             left: d.num_frames.into(),
@@ -69,7 +69,11 @@ impl Sequence {
         s
     }
 
-    fn advance_ambient(&mut self, d: &CAnimationDesc, random: &mut impl FnMut() -> u32) -> bool {
+    fn advance_ambient(
+        &mut self,
+        d: &AnimationDescriptor,
+        random: &mut impl FnMut() -> u32,
+    ) -> bool {
         self.left = self.left.wrapping_sub(1);
         let active = self.left != 0 || (d.anim_flags & YOYO != 0 && self.next != 0);
         if active {
@@ -101,9 +105,9 @@ impl Sequence {
 
     fn advance_talk(
         &mut self,
-        d: &mut CAnimationDesc,
+        d: &mut AnimationDescriptor,
         ticks: u32,
-        live: CAnimationDesc,
+        live: AnimationDescriptor,
         random: &mut impl FnMut() -> u32,
     ) {
         if self.direction == 0 {
@@ -131,9 +135,9 @@ impl Sequence {
 
     fn advance_transit(
         &mut self,
-        d: &mut CAnimationDesc,
+        d: &mut AnimationDescriptor,
         ticks: u32,
-        live: &mut CAnimationDesc,
+        live: &mut AnimationDescriptor,
         random: &mut impl FnMut() -> u32,
     ) -> bool {
         let mut done = false;
@@ -178,13 +182,39 @@ impl Sequence {
     }
 }
 
-fn frame_rate(d: &CAnimationDesc, random: &mut impl FnMut() -> u32) -> u32 {
+fn talk_conflicts(ambient: &AnimationDescriptor, talking: &AnimationDescriptor) -> bool {
+    ambient.anim_flags & talking.anim_flags & WAIT_TALKING != 0
+}
+
+#[cfg(test)]
+#[test]
+fn talk_conflicts_requires_both_animations_to_wait() {
+    for (ambient, talking, expected) in [
+        (0, 0, false),
+        (WAIT_TALKING, 0, false),
+        (0, WAIT_TALKING, false),
+        (WAIT_TALKING, WAIT_TALKING, true),
+        (CIRCULAR, CIRCULAR, false),
+    ] {
+        let ambient = AnimationDescriptor {
+            anim_flags: ambient,
+            ..Default::default()
+        };
+        let talking = AnimationDescriptor {
+            anim_flags: talking,
+            ..Default::default()
+        };
+        assert_eq!(talk_conflicts(&ambient, &talking), expected);
+    }
+}
+
+fn frame_rate(d: &AnimationDescriptor, random: &mut impl FnMut() -> u32) -> u32 {
     u32::from(d.base_frame_rate) + random() % (u32::from(d.random_frame_rate) + 1)
 }
-fn restart_rate(d: &CAnimationDesc, random: &mut impl FnMut() -> u32) -> u32 {
+fn restart_rate(d: &AnimationDescriptor, random: &mut impl FnMut() -> u32) -> u32 {
     u32::from(d.base_restart_rate) + random() % (u32::from(d.random_restart_rate) + 1)
 }
-fn frame_index(d: &CAnimationDesc, from: u16, random: &mut impl FnMut() -> u32) -> u16 {
+fn frame_index(d: &AnimationDescriptor, from: u16, random: &mut impl FnMut() -> u32) -> u16 {
     (u32::from(from) + random() % (u32::from(d.num_frames) - u32::from(from))) as u16
 }
 
@@ -206,7 +236,7 @@ pub(crate) mod runtime {
     use crate::strings::string_table::SetAbsStringTableIndex;
     use crate::time::counter_abi::GetTimeCounter;
 
-    const EMPTY_DESC: CAnimationDesc = CAnimationDesc {
+    const EMPTY_DESC: AnimationDescriptor = AnimationDescriptor {
         start_index: 0,
         num_frames: 0,
         anim_flags: 0,
@@ -221,8 +251,8 @@ pub(crate) mod runtime {
         pub(crate) last_time: u32,
         pub(crate) sequences: [Sequence; 22],
         pub(crate) active_mask: u32,
-        pub(crate) talk_desc: CAnimationDesc,
-        pub(crate) transit_desc: CAnimationDesc,
+        pub(crate) talk_desc: AnimationDescriptor,
+        pub(crate) transit_desc: AnimationDescriptor,
         pub(crate) total: u16,
     }
     impl Default for RuntimeState {
@@ -245,17 +275,17 @@ pub(crate) mod runtime {
     /// CommData must be initialized and exclusively owned by the game thread.
     pub unsafe fn init_comm_animations(comm: &mut Comm) {
         comm.animation_runtime.active_mask = 0;
-        comm.animation_runtime.talk_desc = comm.data.alien_talk_desc;
-        comm.animation_runtime.transit_desc = comm.data.alien_transition_desc;
+        comm.animation_runtime.talk_desc = comm.data.definition.alien_talk_desc;
+        comm.animation_runtime.transit_desc = comm.data.definition.alien_transition_desc;
         comm.animation_runtime.transit_desc.anim_flags |= DISABLED;
         comm.animation_runtime.talk_desc.anim_flags |= DISABLED;
         comm.animation_runtime.sequences[0] = Sequence::EMPTY;
         comm.animation_runtime.sequences[1] = Sequence::EMPTY;
-        for i in 0..usize::from(comm.data.num_animations) {
+        for i in 0..usize::from(comm.data.definition.num_animations) {
             comm.animation_runtime.sequences[i + 2] =
-                Sequence::setup_ambient(&comm.data.alien_ambient_array[i], &mut random);
+                Sequence::setup_ambient(&comm.data.definition.alien_ambient_array[i], &mut random);
         }
-        comm.animation_runtime.total = 2 + comm.data.num_animations;
+        comm.animation_runtime.total = 2 + comm.data.definition.num_animations;
         comm.animation_runtime.last_time = GetTimeCounter();
     }
 
@@ -271,14 +301,14 @@ pub(crate) mod runtime {
         comm.animation_runtime.last_time = now;
         let mut next_mask = comm.animation_runtime.active_mask;
         let mut can_talk = true;
-        for i in 0..usize::from(comm.data.num_animations) {
+        for i in 0..usize::from(comm.data.definition.num_animations) {
             let s = &mut comm.animation_runtime.sequences[i + 2];
-            let d = &comm.data.alien_ambient_array[i];
+            let d = &comm.data.definition.alien_ambient_array[i];
             let bit = 1u32 << i;
             if d.anim_flags & DISABLED != 0 {
                 continue;
             }
-            let conflicts = d.anim_flags & comm.data.alien_talk_desc.anim_flags & WAIT_TALKING != 0;
+            let conflicts = talk_conflicts(d, &comm.data.definition.alien_talk_desc);
             if s.direction == 0 {
                 if !conflicts {
                     s.direction = 1;
@@ -315,9 +345,9 @@ pub(crate) mod runtime {
         if XFormColorMap_step() != 0 {
             full = 1;
         }
-        for i in 0..usize::from(comm.data.num_animations) {
+        for i in 0..usize::from(comm.data.definition.num_animations) {
             let s = &mut comm.animation_runtime.sequences[i + 2];
-            let d = &comm.data.alien_ambient_array[i];
+            let d = &comm.data.definition.alien_ambient_array[i];
             if d.anim_flags & DISABLED != 0 || s.kind != 1 || s.change == 0 {
                 continue;
             }
@@ -335,8 +365,8 @@ pub(crate) mod runtime {
             change = 1;
         }
         UnbatchGraphics();
-        for i in 0..usize::from(comm.data.num_animations) {
-            let d = &mut comm.data.alien_ambient_array[i];
+        for i in 0..usize::from(comm.data.definition.num_animations) {
+            let d = &mut comm.data.definition.alien_ambient_array[i];
             if d.anim_flags & DISABLED != 0 {
                 continue;
             }
@@ -348,14 +378,17 @@ pub(crate) mod runtime {
     }
 
     fn process_talking(comm: &mut Comm, elapsed: u32, can_talk: bool) {
-        let flags = comm.data.alien_talk_desc.anim_flags;
-        if can_talk && comm.data.alien_talk_desc.num_frames > 0 && flags & WAIT_TALKING != 0 {
+        let flags = comm.data.definition.alien_talk_desc.anim_flags;
+        if can_talk
+            && comm.data.definition.alien_talk_desc.num_frames > 0
+            && flags & WAIT_TALKING != 0
+        {
             let mut done = false;
-            if flags & DONE != 0 && comm.data.alien_transition_desc.num_frames > 0 {
-                comm.data.alien_transition_desc.anim_flags |= DONE;
+            if flags & DONE != 0 && comm.data.definition.alien_transition_desc.num_frames > 0 {
+                comm.data.definition.alien_transition_desc.anim_flags |= DONE;
             }
-            if comm.data.alien_transition_desc.anim_flags & (INTRO | DONE) != 0 {
-                if comm.data.alien_transition_desc.anim_flags & DONE != 0
+            if comm.data.definition.alien_transition_desc.anim_flags & (INTRO | DONE) != 0 {
+                if comm.data.definition.alien_transition_desc.anim_flags & DONE != 0
                     && comm.animation_runtime.sequences[0].direction == 0
                 {
                     comm.animation_runtime.sequences[1].reset();
@@ -363,22 +396,22 @@ pub(crate) mod runtime {
                 done = comm.animation_runtime.sequences[0].advance_transit(
                     &mut comm.animation_runtime.transit_desc,
                     elapsed,
-                    &mut comm.data.alien_transition_desc,
+                    &mut comm.data.definition.alien_transition_desc,
                     &mut random,
                 );
             } else if flags & DONE == 0 {
                 comm.animation_runtime.sequences[1].advance_talk(
                     &mut comm.animation_runtime.talk_desc,
                     elapsed,
-                    comm.data.alien_talk_desc,
+                    comm.data.definition.alien_talk_desc,
                     &mut random,
                 );
             } else {
                 comm.animation_runtime.sequences[1].reset();
                 done = true;
             }
-            if comm.data.alien_talk_desc.anim_flags & DONE != 0 && done {
-                comm.data.alien_talk_desc.anim_flags &= !(WAIT_TALKING | DONE);
+            if comm.data.definition.alien_talk_desc.anim_flags & DONE != 0 && done {
+                comm.data.definition.alien_talk_desc.anim_flags &= !(WAIT_TALKING | DONE);
             }
         } else if comm.animation_runtime.sequences[1].direction == 0 {
             comm.animation_runtime.talk_desc.anim_flags |= DISABLED;
@@ -396,8 +429,8 @@ pub(crate) mod runtime {
         };
         if full != 0 {
             DrawStamp((&raw mut stamp).cast());
-            for i in (0..usize::from(comm.data.num_animations)).rev() {
-                let descriptor = &raw mut comm.data.alien_ambient_array[i];
+            for i in (0..usize::from(comm.data.definition.num_animations)).rev() {
+                let descriptor = &raw mut comm.data.definition.alien_ambient_array[i];
                 let d = &mut *descriptor;
                 if d.anim_flags & (RANDOM | CIRCULAR | YOYO) != 0 {
                     continue;
@@ -416,7 +449,7 @@ pub(crate) mod runtime {
                 let d = match i {
                     0 => &comm.animation_runtime.transit_desc,
                     1 => &comm.animation_runtime.talk_desc,
-                    _ => &comm.data.alien_ambient_array[i - 2],
+                    _ => &comm.data.definition.alien_ambient_array[i - 2],
                 };
                 if d.anim_flags & DISABLED != 0 || s.kind != 0 {
                     continue;
@@ -445,7 +478,7 @@ mod tests {
 
     #[test]
     fn circular_neutral_last_and_restart_delay() {
-        let d = CAnimationDesc {
+        let d = AnimationDescriptor {
             num_frames: 3,
             anim_flags: CIRCULAR,
             base_frame_rate: 4,
@@ -473,7 +506,7 @@ mod tests {
 
     #[test]
     fn yoyo_returns_to_neutral_before_becoming_inactive() {
-        let d = CAnimationDesc {
+        let d = AnimationDescriptor {
             num_frames: 3,
             anim_flags: YOYO,
             ..Default::default()
@@ -496,7 +529,7 @@ mod tests {
 
     #[test]
     fn random_end_draws_neutral_but_still_consumes_next_rng() {
-        let d = CAnimationDesc {
+        let d = AnimationDescriptor {
             num_frames: 2,
             anim_flags: RANDOM,
             ..Default::default()
@@ -517,7 +550,7 @@ mod tests {
 
     #[test]
     fn talking_alternates_random_and_neutral_without_extra_rng_on_wait() {
-        let mut d = CAnimationDesc {
+        let mut d = AnimationDescriptor {
             start_index: 10,
             num_frames: 4,
             base_frame_rate: 5,
@@ -546,12 +579,12 @@ mod tests {
 
     #[test]
     fn transition_finishes_done_before_switching_descriptor_for_intro() {
-        let mut d = CAnimationDesc {
+        let mut d = AnimationDescriptor {
             start_index: 10,
             num_frames: 2,
             ..Default::default()
         };
-        let mut live = CAnimationDesc {
+        let mut live = AnimationDescriptor {
             start_index: 30,
             num_frames: 2,
             anim_flags: INTRO | DONE,
@@ -581,9 +614,9 @@ mod owner_tests {
     fn initialized_sequences_survive_a_move_and_a_paused_frame() {
         let mut first = Comm::new();
         let second = Comm::new();
-        first.data.num_animations = 1;
-        first.data.alien_ambient_array[0].num_frames = 1;
-        first.data.alien_ambient_array[0].anim_flags = CIRCULAR;
+        first.data.definition.num_animations = 1;
+        first.data.definition.alien_ambient_array[0].num_frames = 1;
+        first.data.definition.alien_ambient_array[0].anim_flags = CIRCULAR;
         unsafe {
             runtime::init_comm_animations(&mut first);
         }

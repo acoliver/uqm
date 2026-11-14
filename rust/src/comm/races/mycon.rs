@@ -513,7 +513,6 @@ impl<A: MyconApi> Dialogue<'_, A> {
 }
 
 #[cfg(test)]
-use crate::comm::descriptors::mycon::descriptor;
-
-#[cfg(test)]
 mod tests;
+
+pub(crate) mod descriptor;

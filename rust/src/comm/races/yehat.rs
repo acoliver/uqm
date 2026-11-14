@@ -2,7 +2,7 @@
 //!
 //! @plan PLAN-20260724-MAINLOOP-AND-COMM.P13-15
 
-pub(crate) use crate::comm::locdata::CPoint;
+pub(crate) use crate::comm::races::descriptor::Point;
 
 pub(crate) mod api;
 pub(crate) mod dialogue;
@@ -93,9 +93,9 @@ pub(crate) const GOODBYE_AND_DIE_ROYALIST: u32 = 69;
 pub(crate) const NAME_1: u32 = 70;
 pub(crate) const OUT_TAKES: u32 = 75;
 
-pub(crate) fn text_layout(screen_width: i32) -> (CPoint, u16) {
+pub(crate) fn text_layout(screen_width: i32) -> (Point, u16) {
     (
-        CPoint {
+        Point {
             x: ((screen_width - 78) * 2 / 3) as i16,
             y: 60,
         },
@@ -104,7 +104,6 @@ pub(crate) fn text_layout(screen_width: i32) -> (CPoint, u16) {
 }
 
 #[cfg(test)]
-use crate::comm::descriptors::yehat::descriptor;
-
-#[cfg(test)]
 mod tests;
+
+pub(crate) mod descriptor;

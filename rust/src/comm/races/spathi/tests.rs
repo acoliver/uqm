@@ -1,3 +1,4 @@
+use super::descriptor::descriptor;
 use super::*;
 use crate::comm::races::encounter::testing::{Effect, Fake};
 use crate::comm::races::script::DialogueHost;
@@ -47,10 +48,7 @@ fn descriptor_and_initial_segue_music_on_reentry() {
         assert_eq!(f.segue, want);
         assert_eq!(d.alien_song_flags & 1, u32::from(pluto == 1));
         if pluto == 1 {
-            assert_eq!(
-                unsafe { std::ffi::CStr::from_ptr(d.alien_alt_song_res) },
-                c"comm.fwiffo.music"
-            );
+            assert_eq!(d.alien_alt_song_res.unwrap(), c"comm.fwiffo.music");
         }
     }
 }

@@ -1,5 +1,5 @@
 use crate::comm::Comm;
-// LOCDATA direct FFI access — reads C LOCDATA struct fields without C bridge functions
+// Mode-owned conversation instances and retained presentation ABI values.
 // @plan PLAN-20260314-COMM.P03
 // @requirement EC-REQ-003, DS-REQ-004, SC-REQ-003
 
@@ -8,7 +8,10 @@ use std::ffi::{c_char, c_void};
 use crate::battle::velocity::VelocityDesc;
 use crate::c_bindings::assert_c_layout;
 
-use super::types::{AnimationDescData, CommData, TextAlign, TextValign, MAX_ANIMATIONS};
+#[cfg(test)]
+use super::races::descriptor::AnimationDescriptor;
+use super::races::descriptor::{CommDescriptor, MAX_ANIMATIONS};
+use super::types::{CommData, TextAlign, TextValign};
 
 // ===========================================================================
 // C-compatible repr(C) types — mirror the C struct layout exactly
@@ -76,180 +79,73 @@ mod layout {
             incr: incr,
         }
     );
-    assert_c_layout!(
-        CAnimationDesc,
-        crate::ships::native::abi::ANIMATION_DESC {
-            start_index: StartIndex,
-            num_frames: NumFrames,
-            anim_flags: AnimFlags,
-            base_frame_rate: BaseFrameRate,
-            random_frame_rate: RandomFrameRate,
-            base_restart_rate: BaseRestartRate,
-            random_restart_rate: RandomRestartRate,
-            block_mask: BlockMask,
-        }
-    );
-    assert_c_layout!(
-        CLocData,
-        crate::ships::native::abi::LOCDATA {
-            init_encounter_func: init_encounter_func,
-            post_encounter_func: post_encounter_func,
-            uninit_encounter_func: uninit_encounter_func,
-            alien_frame_res: AlienFrameRes,
-            alien_font_res: AlienFontRes,
-            alien_text_fcolor: AlienTextFColor,
-            alien_text_bcolor: AlienTextBColor,
-            alien_text_baseline: AlienTextBaseline,
-            alien_text_width: AlienTextWidth,
-            alien_text_align: AlienTextAlign,
-            alien_text_valign: AlienTextValign,
-            alien_colormap_res: AlienColorMapRes,
-            alien_song_res: AlienSongRes,
-            alien_alt_song_res: AlienAltSongRes,
-            alien_song_flags: AlienSongFlags,
-            conversation_phrases_res: ConversationPhrasesRes,
-            num_animations: NumAnimations,
-            alien_ambient_array: AlienAmbientArray,
-            alien_transition_desc: AlienTransitionDesc,
-            alien_talk_desc: AlienTalkDesc,
-            alien_number_speech: AlienNumberSpeech,
-            alien_frame: AlienFrame,
-            alien_font: AlienFont,
-            alien_colormap: AlienColorMap,
-            alien_song: AlienSong,
-            conversation_phrases: ConversationPhrases,
-        }
-    );
 }
 
-/// C `ANIMATION_DESC` struct (commanim.h).
-/// Fields in declaration order, matching the C layout for direct FFI reads.
-#[repr(C)]
-#[derive(Clone, Copy, Default)]
-pub struct CAnimationDesc {
-    pub start_index: u16,
-    pub num_frames: u8,
-    pub anim_flags: u8,
-    pub base_frame_rate: u16,
-    pub random_frame_rate: u16,
-    pub base_restart_rate: u16,
-    pub random_restart_rate: u16,
-    pub block_mask: u32,
-}
-
-/// This is a direct `#[repr(C)]` mirror of the C struct, allowing Rust to
-/// read all fields via pointer cast without per-field C bridge functions.
-#[repr(C)]
+/// Loaded resources and callbacks owned by one conversation mode.
 #[derive(Default)]
-pub struct CLocData {
-    // Function pointers (3 × 8 bytes on 64-bit)
+pub struct SessionData {
+    pub definition: CommDescriptor,
     pub init_encounter_func: Option<fn(&mut Comm, &mut crate::engine::battle::Cx<'_>)>,
     pub post_encounter_func: Option<fn(&mut Comm, &mut crate::engine::battle::Cx<'_>)>,
     pub uninit_encounter_func: Option<fn(&mut Comm, &mut crate::engine::battle::Cx<'_>) -> u16>,
+    pub alien_frame: *mut c_void,
+    pub alien_font: *mut c_void,
+    pub alien_colormap: *mut c_void,
+    pub alien_song: *mut c_void,
+    pub conversation_phrases: *mut c_void,
+}
 
-    // Resource IDs (const char* pointers)
-    pub alien_frame_res: *const c_char,
-    pub alien_font_res: *const c_char,
+impl SessionData {
+    pub fn new(definition: CommDescriptor) -> Self {
+        Self {
+            definition,
+            ..Self::default()
+        }
+    }
+}
 
-    // Colors (4 bytes each)
-    pub alien_text_fcolor: CColor,
-    pub alien_text_bcolor: CColor,
-
-    // Text baseline point (4 bytes)
-    pub alien_text_baseline: CPoint,
-
-    // Text layout scalars
-    pub alien_text_width: u16,  // COUNT
-    pub alien_text_align: u32,  // TEXT_ALIGN enum (int-sized)
-    pub alien_text_valign: u32, // TEXT_VALIGN enum (int-sized)
-
-    // More resource IDs
-    pub alien_colormap_res: *const c_char,
-    pub alien_song_res: *const c_char,
-    pub alien_alt_song_res: *const c_char,
-
-    // Song flags
-    pub alien_song_flags: u32, // LDAS_FLAGS = DWORD
-
-    // Conversation phrases resource
-    pub conversation_phrases_res: *const c_char,
-
-    // Animation array
-    pub num_animations: u16, // COUNT
-    pub alien_ambient_array: [CAnimationDesc; MAX_ANIMATIONS],
-
-    // Transition / talk animation descriptors
-    pub alien_transition_desc: CAnimationDesc,
-    pub alien_talk_desc: CAnimationDesc,
-
-    // Number speech (borrowed pointer)
-    pub alien_number_speech: *const c_void,
-
-    // Loaded handles (opaque pointers)
-    pub alien_frame: *mut c_void,          // FRAME
-    pub alien_font: *mut c_void,           // FONT
-    pub alien_colormap: *mut c_void,       // COLORMAP = STRING
-    pub alien_song: *mut c_void,           // MUSIC_REF
-    pub conversation_phrases: *mut c_void, // STRING
+pub(crate) fn resource_key(key: Option<&'static std::ffi::CStr>) -> *const c_char {
+    key.map_or(std::ptr::null(), std::ffi::CStr::as_ptr)
 }
 
 fn color_to_u32(c: CColor) -> u32 {
     ((c.r as u32) << 24) | ((c.g as u32) << 16) | ((c.b as u32) << 8) | (c.a as u32)
 }
 
-/// Convert a C `CAnimationDesc` to the Rust-friendly `AnimationDescData`.
-#[inline]
-fn anim_desc_to_rust(src: &CAnimationDesc) -> AnimationDescData {
-    AnimationDescData {
-        start_index: src.start_index,
-        num_frames: src.num_frames,
-        anim_flags: src.anim_flags,
-        base_frame_rate: src.base_frame_rate,
-        random_frame_rate: src.random_frame_rate,
-        base_restart_rate: src.base_restart_rate,
-        random_restart_rate: src.random_restart_rate,
-        block_mask: src.block_mask,
-    }
-}
-
 /// Copy a dialogue descriptor into the owned communication state.
-pub fn read_locdata(ld: &CLocData) -> CommData {
-    let mut alien_ambient_array = [AnimationDescData::default(); MAX_ANIMATIONS];
-    let count = usize::from(ld.num_animations).min(MAX_ANIMATIONS);
-    for (target, source) in alien_ambient_array[..count]
-        .iter_mut()
-        .zip(&ld.alien_ambient_array[..count])
-    {
-        *target = anim_desc_to_rust(source);
-    }
+pub fn session_view(ld: &SessionData) -> CommData {
+    let mut ambient = [Default::default(); MAX_ANIMATIONS];
+    let count = usize::from(ld.definition.num_animations).min(MAX_ANIMATIONS);
+    ambient[..count].copy_from_slice(&ld.definition.alien_ambient_array[..count]);
+    let definition = &ld.definition;
     CommData {
         init_encounter_func: ld.init_encounter_func,
         post_encounter_func: ld.post_encounter_func,
         uninit_encounter_func: ld.uninit_encounter_func,
-        alien_frame_res: ld.alien_frame_res,
-        alien_font_res: ld.alien_font_res,
-        alien_colormap_res: ld.alien_colormap_res,
-        alien_song_res: ld.alien_song_res,
-        alien_alt_song_res: ld.alien_alt_song_res,
-        conversation_phrases_res: ld.conversation_phrases_res,
-        alien_text_fcolor: color_to_u32(ld.alien_text_fcolor),
-        alien_text_bcolor: color_to_u32(ld.alien_text_bcolor),
-        alien_text_baseline_x: ld.alien_text_baseline.x,
-        alien_text_baseline_y: ld.alien_text_baseline.y,
-        alien_text_width: ld.alien_text_width,
-        alien_text_align: TextAlign::from(ld.alien_text_align),
-        alien_text_valign: TextValign::from(ld.alien_text_valign),
-        alien_song_flags: ld.alien_song_flags,
-        alien_transition_desc: anim_desc_to_rust(&ld.alien_transition_desc),
-        alien_talk_desc: anim_desc_to_rust(&ld.alien_talk_desc),
-        alien_number_speech: ld.alien_number_speech,
+        alien_frame_res: resource_key(definition.alien_frame_res),
+        alien_font_res: resource_key(definition.alien_font_res),
+        alien_colormap_res: resource_key(definition.alien_colormap_res),
+        alien_song_res: resource_key(definition.alien_song_res),
+        alien_alt_song_res: resource_key(definition.alien_alt_song_res),
+        conversation_phrases_res: resource_key(definition.conversation_phrases_res),
+        alien_text_fcolor: color_to_u32(definition.alien_text_fcolor),
+        alien_text_bcolor: color_to_u32(definition.alien_text_bcolor),
+        alien_text_baseline_x: definition.alien_text_baseline.x,
+        alien_text_baseline_y: definition.alien_text_baseline.y,
+        alien_text_width: definition.alien_text_width,
+        alien_text_align: TextAlign::from(definition.alien_text_align),
+        alien_text_valign: TextValign::from(definition.alien_text_valign),
+        alien_song_flags: definition.alien_song_flags,
+        alien_transition_desc: definition.alien_transition_desc,
+        alien_talk_desc: definition.alien_talk_desc,
+        alien_number_speech: definition.alien_number_speech,
         alien_frame: ld.alien_frame,
         alien_font: ld.alien_font,
         alien_color_map: ld.alien_colormap,
         alien_song: ld.alien_song,
         conversation_phrases: ld.conversation_phrases,
-        num_animations: u32::from(ld.num_animations),
-        alien_ambient_array,
+        num_animations: u32::from(definition.num_animations),
+        alien_ambient_array: ambient,
     }
 }
 
@@ -275,13 +171,13 @@ mod tests {
             assert_eq!(CALLS.fetch_add(1, Ordering::SeqCst), 2);
             17
         }
-        let descriptor = CLocData {
+        let descriptor = SessionData {
             init_encounter_func: Some(init),
             post_encounter_func: Some(post),
             uninit_encounter_func: Some(uninit),
-            ..CLocData::default()
+            ..SessionData::default()
         };
-        let data = read_locdata(&descriptor);
+        let data = session_view(&descriptor);
         crate::comm::with_test_context(|cx| {
             data.init_encounter_func.unwrap()(&mut Comm::new(), cx)
         });
@@ -296,24 +192,30 @@ mod tests {
             17
         );
         assert_eq!(CALLS.load(Ordering::SeqCst), 3);
-        let empty = read_locdata(&CLocData::default());
+        let empty = session_view(&SessionData::default());
         assert!(empty.init_encounter_func.is_none());
         assert!(empty.post_encounter_func.is_none());
         assert!(empty.uninit_encounter_func.is_none());
     }
 
     #[test]
-    fn test_c_locdata_struct_layout() {
-        // CLocData must be repr(C) and have a reasonable size.
-        // The exact size depends on platform pointer width and padding,
-        // but it must be non-zero and at least 3 pointers (24 bytes on 64-bit).
-        let size = std::mem::size_of::<CLocData>();
-        assert!(size > 0, "CLocData has zero size");
-        assert!(
-            size >= 24,
-            "CLocData too small for 3 function pointers: {}",
-            size
+    fn loaded_state_keeps_content_independent_of_its_resource_handles() {
+        let mut first = SessionData::new(crate::comm::races::orz::descriptor::descriptor());
+        let second = SessionData::new(first.definition.clone());
+        first.alien_frame = std::ptr::dangling_mut();
+        first.definition.alien_ambient_array[12].block_mask = 0;
+        assert_eq!(first.definition.alien_ambient_array[12].block_mask, 0);
+        assert!(second.alien_frame.is_null());
+        assert!(second.alien_font.is_null());
+        assert!(second.alien_colormap.is_null());
+        assert!(second.alien_song.is_null());
+        assert!(second.conversation_phrases.is_null());
+        assert_eq!(second.definition.alien_ambient_array[12].block_mask, 1024);
+        assert_eq!(
+            session_view(&second).alien_ambient_array[11].start_index,
+            93
         );
+        assert_eq!(session_view(&second).alien_ambient_array[12].block_mask, 0);
     }
 
     #[test]
@@ -331,11 +233,11 @@ mod tests {
 
     #[test]
     fn test_animation_desc_data_repr_c_size() {
-        // AnimationDescData has 4×u16 + 2×u8 + pad + u32 — verify it's
+        // AnimationDescriptor has 4×u16 + 2×u8 + pad + u32 — verify it's
         // at least the sum of field sizes (exact may include padding)
-        let size = std::mem::size_of::<AnimationDescData>();
+        let size = std::mem::size_of::<AnimationDescriptor>();
         // 4×u16(8) + 2×u8(2) + u32(4) = 14 minimum, padded to 16 likely
-        assert!(size >= 14, "AnimationDescData too small: {}", size);
+        assert!(size >= 14, "AnimationDescriptor too small: {}", size);
     }
 
     #[test]

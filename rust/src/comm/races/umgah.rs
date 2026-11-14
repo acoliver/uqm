@@ -529,7 +529,6 @@ impl<A: UmgahApi> Dialogue<'_, A> {
 }
 
 #[cfg(test)]
-use crate::comm::descriptors::umgah::descriptor;
-
-#[cfg(test)]
 mod tests;
+
+pub(crate) mod descriptor;

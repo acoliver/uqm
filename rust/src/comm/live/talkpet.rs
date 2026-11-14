@@ -1,7 +1,6 @@
-use crate::comm::descriptors::talkpet::descriptor;
 use crate::comm::host::Host;
 use crate::comm::races::talkpet::*;
-use crate::comm::{locdata::CLocData, Comm};
+use crate::comm::Comm;
 use crate::engine::battle::Cx;
 fn run(comm: &mut Comm, cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, Host<'_, '_, Handler>>)) {
     let mut api = Host::new(comm, cx, callback);
@@ -93,10 +92,12 @@ pub(crate) fn uninit(_comm: &mut Comm, _cx: &mut Cx<'_>) -> u16 {
     0
 }
 /// Initialize the encounter on the game thread.
-pub fn init_talkpet_comm(comm: &mut Comm, cx: &mut Cx<'_>) -> CLocData {
-    let desc = descriptor();
+pub(crate) fn initialize(
+    comm: &mut Comm,
+    cx: &mut Cx<'_>,
+    _desc: &mut crate::comm::races::descriptor::CommDescriptor,
+) {
     run(comm, cx, |s| s.initialize());
-    desc
 }
 
 mod api {
@@ -127,7 +128,7 @@ mod api {
             let comm = &mut **self.comm.borrow_mut();
 
             self.cx.borrow_mut().with_legacy(|| {
-                comm.data.alien_ambient_array[16].anim_flags &=
+                comm.data.definition.alien_ambient_array[16].anim_flags &=
                     !crate::comm::races::script::ANIM_DISABLED;
             })
         }

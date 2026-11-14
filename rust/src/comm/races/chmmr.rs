@@ -398,7 +398,6 @@ impl<A: ChmmrApi> Dialogue<'_, A> {
 }
 
 #[cfg(test)]
-use crate::comm::descriptors::chmmr::descriptor;
-
-#[cfg(test)]
 mod tests;
+
+pub(crate) mod descriptor;

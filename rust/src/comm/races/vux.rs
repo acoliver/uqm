@@ -2,7 +2,7 @@
 //!
 //! @plan PLAN-20260724-MAINLOOP-AND-COMM.P13-15
 
-pub(crate) use crate::comm::locdata::CPoint;
+pub(crate) use crate::comm::races::descriptor::Point;
 
 pub(crate) mod dialogue;
 #[cfg(test)]
@@ -123,10 +123,10 @@ pub(crate) const GOODBYE_AND_DIE_HOSTILE_SPACE_3: u32 = 100;
 pub(crate) const GOODBYE_AND_DIE_HOSTILE_SPACE_4: u32 = 101;
 pub(crate) const OUT_TAKES: u32 = 102;
 
-pub(crate) fn text_layout(screen_width: i32) -> (CPoint, u16) {
+pub(crate) fn text_layout(screen_width: i32) -> (Point, u16) {
     let text_width = screen_width - 80;
     (
-        CPoint {
+        Point {
             x: (1 + (text_width >> 1) + (text_width >> 2)) as i16,
             y: 0,
         },
@@ -135,7 +135,6 @@ pub(crate) fn text_layout(screen_width: i32) -> (CPoint, u16) {
 }
 
 #[cfg(test)]
-use crate::comm::descriptors::vux::descriptor;
-
-#[cfg(test)]
 mod tests;
+
+pub(crate) mod descriptor;

@@ -735,7 +735,6 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
 }
 
 #[cfg(test)]
-use crate::comm::descriptors::thradd::descriptor;
-
-#[cfg(test)]
 mod tests;
+
+pub(crate) mod descriptor;

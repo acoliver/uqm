@@ -7,7 +7,7 @@
 //! @plan PLAN-20260314-COMM.P07
 //! @requirement AO-REQ-001 through AO-REQ-010, AO-REQ-016
 
-use super::types::AnimationDescData;
+use super::races::descriptor::AnimationDescriptor;
 
 // ============================================================================
 // Constants matching C commanim.h
@@ -68,7 +68,7 @@ pub enum Direction {
 #[derive(Debug)]
 pub struct AnimSequence {
     /// Animation descriptor (owned copy).
-    pub desc: AnimationDescData,
+    pub desc: AnimationDescriptor,
     /// Ticks until next frame advance.
     pub alarm: u32,
     /// Current frame index within the sequence.
@@ -88,7 +88,7 @@ pub struct AnimSequence {
 impl Default for AnimSequence {
     fn default() -> Self {
         Self {
-            desc: AnimationDescData::default(),
+            desc: AnimationDescriptor::default(),
             alarm: 0,
             cur_index: 0,
             next_index: 0,
@@ -156,15 +156,15 @@ impl AnimRng {
     }
 }
 
-fn random_frame_rate(rng: &mut AnimRng, desc: &AnimationDescData) -> u32 {
+fn random_frame_rate(rng: &mut AnimRng, desc: &AnimationDescriptor) -> u32 {
     desc.base_frame_rate as u32 + rng.next_mod(desc.random_frame_rate as u32 + 1)
 }
 
-fn random_restart_rate(rng: &mut AnimRng, desc: &AnimationDescData) -> u32 {
+fn random_restart_rate(rng: &mut AnimRng, desc: &AnimationDescriptor) -> u32 {
     desc.base_restart_rate as u32 + rng.next_mod(desc.random_restart_rate as u32 + 1)
 }
 
-fn random_frame_index(rng: &mut AnimRng, desc: &AnimationDescData, from: u32) -> i32 {
+fn random_frame_index(rng: &mut AnimRng, desc: &AnimationDescriptor, from: u32) -> i32 {
     let range = desc.num_frames as u32 - from;
     if range == 0 {
         from as i32
@@ -244,9 +244,9 @@ impl CommAnimState {
     /// Initialize from CommData animation descriptors.
     pub fn init(
         &mut self,
-        ambient_anims: &[AnimationDescData],
-        talk_desc: &AnimationDescData,
-        transit_desc: &AnimationDescData,
+        ambient_anims: &[AnimationDescriptor],
+        talk_desc: &AnimationDescriptor,
+        transit_desc: &AnimationDescriptor,
     ) {
         self.active_mask = 0;
         self.talking = false;
@@ -681,8 +681,8 @@ mod tests {
         random_frame_rate: u16,
         base_restart_rate: u16,
         random_restart_rate: u16,
-    ) -> AnimationDescData {
-        AnimationDescData {
+    ) -> AnimationDescriptor {
+        AnimationDescriptor {
             start_index: 0,
             num_frames,
             anim_flags: flags,
@@ -694,11 +694,11 @@ mod tests {
         }
     }
 
-    fn empty_desc() -> AnimationDescData {
-        AnimationDescData::default()
+    fn empty_desc() -> AnimationDescriptor {
+        AnimationDescriptor::default()
     }
 
-    fn init_state(ambient: &[AnimationDescData]) -> CommAnimState {
+    fn init_state(ambient: &[AnimationDescriptor]) -> CommAnimState {
         let mut state = CommAnimState::new();
         let talk = make_desc(4, 0, 5, 2, 10, 5);
         let transit = make_desc(3, 0, 5, 0, 0, 0);

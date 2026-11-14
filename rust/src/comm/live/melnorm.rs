@@ -1,8 +1,7 @@
-use crate::comm::descriptors::melnorm::descriptor;
 use crate::comm::host::Host;
 use crate::comm::locdata::CSisState;
 use crate::comm::races::melnorm::*;
-use crate::comm::{locdata::CLocData, Comm};
+use crate::comm::Comm;
 use crate::engine::battle::Cx;
 
 fn run(comm: &mut Comm, cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, Host<'_, '_, Handler>>)) {
@@ -117,10 +116,12 @@ pub(crate) fn uninit(_comm: &mut Comm, _cx: &mut Cx<'_>) -> u16 {
     0
 }
 /// Initialize the encounter on the game thread.
-pub fn init_melnorme_comm(comm: &mut Comm, cx: &mut Cx<'_>) -> CLocData {
-    let mut desc = descriptor();
-    run(comm, cx, |s| s.initialize(&mut desc));
-    desc
+pub(crate) fn initialize(
+    comm: &mut Comm,
+    cx: &mut Cx<'_>,
+    _desc: &mut crate::comm::races::descriptor::CommDescriptor,
+) {
+    run(comm, cx, |s| s.initialize());
 }
 
 mod api {
@@ -128,7 +129,6 @@ mod api {
     use super::{CSisState, Handler};
     use crate::comm::races::melnorm::api::*;
 
-    #[cfg(not(test))]
     mod live {
         use super::*;
         use crate::comm::host::Host;

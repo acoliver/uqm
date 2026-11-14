@@ -22,6 +22,7 @@ pub mod arilou;
 pub mod blackur;
 pub mod chmmr;
 pub mod comandr;
+pub mod descriptor;
 pub mod druuge;
 pub(crate) mod encounter;
 pub mod ilwrath;

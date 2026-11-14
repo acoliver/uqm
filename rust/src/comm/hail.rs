@@ -7,6 +7,8 @@
 //! @plan PLAN-20260326-COMMPT2.P07
 //! @requirement REQ-HL-001
 
+#[cfg(not(test))]
+use crate::comm::locdata::resource_key;
 use crate::comm::Comm;
 #[cfg(not(test))]
 use crate::engine::StoryKey;
@@ -40,8 +42,6 @@ pub(super) mod c_bridge {
     pub use crate::ui::settings::stop_music;
 
     pub use crate::graphics::resgfx::LoadGraphicInstance;
-
-    pub use crate::sound::resource_types::LoadMusicInstance;
 
     pub use crate::comm::comm_abi::set_anim_context;
 
@@ -174,7 +174,7 @@ pub(super) mod c_bridge {
                 // ----------------------------------------------------------------
                 // Steps 19–20: Clear CommData fields and pCurInputState
                 // ----------------------------------------------------------------
-                comm.data.conversation_phrases_res = std::ptr::null();
+                comm.data.definition.conversation_phrases_res = None;
                 comm.data.conversation_phrases = std::ptr::null_mut();
                 // Clear Rust-side comm_data (resources already destroyed above)
                 comm.clear_comm_data();
@@ -242,6 +242,20 @@ const NORMAL_VOLUME: i32 = 128;
 // hail_alien — full encounter orchestration
 // ============================================================================
 
+#[cfg(not(test))]
+unsafe fn load_alien_song(
+    descriptor: &super::races::descriptor::CommDescriptor,
+) -> *mut std::ffi::c_void {
+    let alt_song = resource_key(descriptor.alien_alt_song_res);
+    if descriptor.alien_song_flags & LDASF_USE_ALTERNATE != 0 && !alt_song.is_null() {
+        let song = crate::sound::resource_types::LoadMusicInstance(alt_song);
+        if !song.is_null() {
+            return song;
+        }
+    }
+    crate::sound::resource_types::LoadMusicInstance(resource_key(descriptor.alien_song_res))
+}
+
 /// Run the full alien encounter sequence.
 ///
 /// Implements C's `hail_alien(comm)` (comm.c:1183–1308) plus the
@@ -297,36 +311,28 @@ pub unsafe fn hail_alien(_comm: &mut Comm, cx: &mut Cx<'_>, io: &mut Io<'_>) {
             // ----------------------------------------------------------------
 
             // AlienFrame: load → capture → set
-            let alien_frame_raw = LoadGraphicInstance(_comm.data.alien_frame_res);
+            let descriptor = &_comm.data.definition;
+            let alien_frame_raw = LoadGraphicInstance(resource_key(descriptor.alien_frame_res));
             let alien_frame = CaptureDrawable(alien_frame_raw.cast());
             _comm.data.alien_frame = alien_frame.cast();
 
             // AlienFont: load → set (not captured, direct Destroy on exit)
-            let alien_font = LoadGraphicInstance(_comm.data.alien_font_res);
+            let alien_font = LoadGraphicInstance(resource_key(descriptor.alien_font_res));
             _comm.data.alien_font = alien_font;
 
             // AlienColorMap: load → capture → set
-            let alien_cmap_raw = LoadStringTableInstance(_comm.data.alien_colormap_res);
+            let alien_cmap_raw =
+                LoadStringTableInstance(resource_key(descriptor.alien_colormap_res));
             let alien_cmap = CaptureStringTable(alien_cmap_raw);
             _comm.data.alien_colormap = alien_cmap.cast();
 
             // AlienSong: alt-song fallback then primary
-            let song_flags = { _comm.data.alien_song_flags };
-            let alt_song_res = { _comm.data.alien_alt_song_res };
-            let alien_song = if (song_flags & LDASF_USE_ALTERNATE) != 0 && !alt_song_res.is_null() {
-                let alt = LoadMusicInstance(alt_song_res);
-                if !alt.is_null() {
-                    alt
-                } else {
-                    LoadMusicInstance(_comm.data.alien_song_res)
-                }
-            } else {
-                LoadMusicInstance(_comm.data.alien_song_res)
-            };
+            let alien_song = load_alien_song(descriptor);
             _comm.data.alien_song = alien_song;
 
             // ConversationPhrases: load → capture → set
-            let phrases_raw = LoadStringTableInstance(_comm.data.conversation_phrases_res);
+            let phrases_raw =
+                LoadStringTableInstance(resource_key(descriptor.conversation_phrases_res));
             let phrases = CaptureStringTable(phrases_raw);
             _comm.data.conversation_phrases = phrases.cast();
 

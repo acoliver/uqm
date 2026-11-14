@@ -178,12 +178,12 @@ fn biomass_sale_skip_and_incremental_paths_preserve_queue_order() {
 fn first_meeting_order_names_business_and_status_restore() {
     let mut f = Api::default();
     let mut s = Session::new();
-    let mut desc = descriptor();
+    let desc = descriptor();
     Dialogue {
         api: &mut f,
         session: &mut s,
     }
-    .initialize(&mut desc);
+    .initialize();
     Dialogue {
         api: &mut f,
         session: &mut s,

@@ -1,7 +1,6 @@
-use crate::comm::descriptors::urquan::descriptor;
 use crate::comm::host::Host;
 use crate::comm::races::urquan::*;
-use crate::comm::{locdata::CLocData, Comm};
+use crate::comm::Comm;
 use crate::engine::battle::Cx;
 
 fn run(
@@ -71,16 +70,12 @@ pub(crate) fn uninit(_comm: &mut Comm, _cx: &mut Cx<'_>) -> u16 {
     0
 }
 
-pub unsafe fn init_urquan_comm(comm: &mut Comm, cx: &mut Cx<'_>) -> CLocData {
-    extern "C" {
-        static mut ScreenWidth: i32;
-    }
-    // SAFETY: the caller initializes encounters on the game thread with stable display dimensions.
-    let width = unsafe { ScreenWidth };
-    let mut descriptor = descriptor(width);
-    (descriptor.alien_text_baseline, descriptor.alien_text_width) = text_layout(width);
-    run(comm, cx, |dialogue| dialogue.initialize());
-    descriptor
+pub(crate) fn initialize(
+    comm: &mut Comm,
+    cx: &mut Cx<'_>,
+    _desc: &mut crate::comm::races::descriptor::CommDescriptor,
+) {
+    run(comm, cx, |s| s.initialize());
 }
 
 mod api {
