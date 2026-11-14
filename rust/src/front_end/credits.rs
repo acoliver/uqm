@@ -1,5 +1,7 @@
 //! Bidirectional credits scrolling and communication outtakes, ported from uqm/credits.c.
 
+#[cfg(test)]
+mod owned_tests;
 use crate::navigation::abi::*;
 use std::ffi::c_int;
 

@@ -1,5 +1,7 @@
 //! Presentation scripts and legacy-video input, ported from uqm/intro.c.
 
+#[cfg(test)]
+mod owned_tests;
 mod text;
 
 #[cfg(not(test))]
