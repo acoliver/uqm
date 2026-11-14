@@ -1,6 +1,5 @@
 //! Chenjesu fixtures retain the original integer, order and RNG expectations.
 
-use uqm_rust::battle::ContextOps;
 #[path = "support/battle.rs"]
 mod battle;
 #[path = "support/battle_context.rs"]
