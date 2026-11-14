@@ -2909,6 +2909,36 @@ mod tests {
     }
 
     #[test]
+    fn ship_spin_fixture_selects_arilou_melee_index_and_video_resource() {
+        use crate::supermelee::types::MeleeShip;
+        let bytes = include_bytes!("../../tests/fixtures/native/ship-spin-3do-v1.json");
+        let script = validate_script(parse_script(bytes, p()).unwrap(), p()).unwrap();
+        let picker = script.steps().iter().position(|action| {
+            matches!(action, Action::Capture(CaptureStep { label, .. }) if label == "arilou-picker-before-video")
+        }).unwrap();
+        let keys: Vec<_> = script.steps()[..picker]
+            .iter()
+            .filter_map(|action| match action {
+                Action::TapMenuKey(tap) => Some(tap.key),
+                _ => None,
+            })
+            .collect();
+        assert!(keys.ends_with(&[
+            MenuKey::Delete,
+            MenuKey::Left,
+            MenuKey::Select,
+            MenuKey::Right
+        ]));
+        assert_eq!(MeleeShip::Androsynth as u8, 0);
+        assert_eq!(MeleeShip::Arilou as u8, 1);
+        let index = MeleeShip::Arilou as u8;
+        let resource =
+            format!("slides.spins.{index:02} = 3DOVID:addons/3dovideo/ships/ship{index:02}.duk:");
+        let map = include_str!("../../../sc2/content/addons/3dovideo/3dovideo.rmp");
+        assert!(map.lines().any(|line| line.starts_with(&resource)));
+    }
+
+    #[test]
     fn debug_key_script_reaches_the_real_controls_index() {
         let text = r#"{"version":1,"name":"debug-key","budgets":{"max_input_ticks":10,"max_presentations":10,"max_wallclock_seconds":10},"steps":[{"action":"tap_menu_key","key":"debug","value":1,"hold":1,"settle":1},{"action":"finish"}]}"#;
         let doc = parse_script(text.as_bytes(), p()).unwrap();

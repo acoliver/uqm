@@ -18,6 +18,7 @@
     {"action": "tap_menu_key", "key": "delete", "value": 1, "hold": 3, "settle": 6},
     {"action": "tap_menu_key", "key": "left", "value": 1, "hold": 3, "settle": 6},
     {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 3, "settle": 6},
+    {"action": "tap_menu_key", "key": "right", "value": 1, "hold": 3, "settle": 6},
     {"action": "capture", "label": "arilou-picker-before-video"},
     {"action": "tap_menu_key", "key": "special", "value": 1, "hold": 1, "settle": 1},
     {"action": "wait_input_ticks", "count": 15},
