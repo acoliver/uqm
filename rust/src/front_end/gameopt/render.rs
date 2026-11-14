@@ -208,14 +208,14 @@ impl PickerDisplay {
         let x = 173 + SUMMARY_X_OFFS + SUMMARY_SIDE_OFFS;
         if summary.flags & 128 != 0 {
             self.context.draw_stamp(
-                &self.summary_frame.wrapped_frame(0),
+                &self.summary_frame,
                 POINT {
                     x: SUMMARY_X_OFFS - SUMMARY_SIDE_OFFS + 6,
                     y: 0,
                 },
             );
             self.context.draw_stamp(
-                &self.summary_frame.wrapped_frame(1),
+                &self.summary_frame.next_frame(),
                 POINT {
                     x: SUMMARY_X_OFFS + SUMMARY_SIDE_OFFS,
                     y: 0,

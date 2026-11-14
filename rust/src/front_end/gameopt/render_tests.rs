@@ -4,7 +4,7 @@ use super::{
 };
 use crate::engine::{save::summary_record::SummaryDesc, Game};
 use crate::graphics::{
-    context_abi::{ContextFrame, ContextLease},
+    context_abi::{ContextFrame, ContextLease, LoadedContext},
     native_abi::{EXTENT, POINT, RECT},
 };
 
@@ -37,6 +37,18 @@ fn prepared_picker_draws_empty_and_populated_pages_without_published_owners() {
             height: 240,
         },
     });
+    let source = LoadedContext::create(c"picker frame colors");
+    let source_context = source.lease();
+    for (index, color) in [
+        (39, crate::ui::rgb15(31, 0, 0)),
+        (40, crate::ui::rgb15(0, 31, 0)),
+    ] {
+        source_context.set_frame(ContextFrame::retain(std::ptr::NonNull::new(
+            frames.lease().frame(index).unwrap(),
+        )));
+        source_context.set_background(color);
+        source_context.clear();
+    }
     let display = PickerDisplay::new(&game.kernel);
     let mut state = PickerState::new([SummaryDesc::default(); MAX_SAVED_GAMES], false, 7);
     let no_rng = || panic!("empty preview must not consume RNG");
@@ -65,7 +77,15 @@ fn prepared_picker_draws_empty_and_populated_pages_without_published_owners() {
         assert_eq!(game.world.data.flagship.num_landers, 9);
         assert_eq!(game.world.data.flagship.total_bio_mass, 99);
         assert_eq!(context.clip_rect().extent.width, 320);
+        if flags == 128 {
+            let left = target.pixel(POINT { x: 13, y: 0 });
+            let right = target.pixel(POINT { x: 21, y: 0 });
+            assert_eq!((left.r, left.g, left.b), (255, 0, 0));
+            assert_eq!((right.r, right.g, right.b), (0, 255, 0));
+        }
     }
+    drop(source_context);
+    drop(source);
     drop(display);
     drop(context);
     drop(target);
