@@ -26,7 +26,7 @@ pub unsafe extern "C" fn LoadDirEntryTable(
     let pattern = CStr::from_ptr(pattern).to_string_lossy();
     let names: Vec<_> = files
         .list(path)
-        .expect("directory enumeration")
+        .unwrap_or_default()
         .into_iter()
         .filter(|name| {
             !name.starts_with('.')
@@ -57,6 +57,22 @@ mod tests {
     };
     use crate::strings::string_table::FreeStringTable;
     use std::ffi::CString;
+
+    #[test]
+    #[serial_test::serial]
+    fn directory_table_is_empty_for_a_missing_unmounted_directory() {
+        let root = concat!(env!("UQM_RUST_ROOT"), "/../tmp");
+        std::fs::create_dir_all(root).unwrap();
+        let temp = tempfile::tempdir_in(root).unwrap();
+        let path = CString::new(temp.path().to_str().unwrap()).unwrap();
+        unsafe {
+            let repo = uio_openRepository(0);
+            let directory = uio_openDir(repo, path.as_ptr(), 0);
+            assert!(LoadDirEntryTable(directory, c"missing".as_ptr(), c"".as_ptr(), 0).is_null());
+            uio_closeDir(directory);
+            uio_closeRepository(repo);
+        }
+    }
 
     #[test]
     #[serial_test::serial]
