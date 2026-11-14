@@ -52,7 +52,7 @@ fn orbital(body: Body, energy_mask: u32) -> (Site, SystemInfo) {
     sys_info.planet_info.scan_retrieve_mask[ENERGY_SCAN] = energy_mask;
     let mut world: PlanetDesc = unsafe { std::mem::zeroed() };
     world.radius = 400;
-    let plan_data: Vec<PlanetFrame> = vec![unsafe { std::mem::zeroed() }; 128];
+    let plan_data: Vec<PlanetFrame> = vec![PlanetFrame::default(); 128];
     let mut loaded = 0;
     {
         let mut orbit = Orbit {
@@ -132,7 +132,7 @@ fn the_world_has_a_fixed_climate_and_other_bodies_are_left_alone() {
 #[test]
 fn planet_one_is_the_telluric_world() {
     let mut rng = RandomContext::with_seed(5);
-    let plan_data: Vec<PlanetFrame> = vec![unsafe { std::mem::zeroed() }; 128];
+    let plan_data: Vec<PlanetFrame> = vec![PlanetFrame::default(); 128];
     let mut planets: Vec<PlanetDesc> = vec![unsafe { std::mem::zeroed() }; 16];
     // A frame table of zeros has the C layout drawn from the same RNG.
     let drawn = generate_planets(&mut rng, &plan_data, 0, 2, &mut planets);

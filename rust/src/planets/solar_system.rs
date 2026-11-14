@@ -65,7 +65,7 @@ impl SolarSystem {
         let descriptor = &world.catalog()[star.0];
         Self {
             sys: SolarSys::new(
-                &super::tables::PLANET_ARRAY.0,
+                &super::tables::PLANET_ARRAY,
                 descriptor.star_type,
                 descriptor.index,
                 crate::math::RandomContext::with_seed(12345),

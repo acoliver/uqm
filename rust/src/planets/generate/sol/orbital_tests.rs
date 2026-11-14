@@ -153,7 +153,7 @@ fn run_orbital(body: Body, story: &super::lifecycle_tests::State, host: &mut Sit
     let mut expected_info = info;
     let mut expected_orbit = Orbit {
         rng: &mut expected_rng,
-        plan_data: &PLANET_ARRAY.0,
+        plan_data: &PLANET_ARRAY,
         star: StarDescription {
             size: 0,
             star_type: (5 << 5) | 5,
