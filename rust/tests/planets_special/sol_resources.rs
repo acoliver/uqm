@@ -180,9 +180,11 @@ unsafe fn names(h: &mut Harness) {
     unsafe {
         let strings_owner =
             uqm_rust::engine::strings::owned_table::LoadedTextTable::load(c"text.starcon").unwrap();
-        let strings = strings_owner.as_raw();
-        let saved = uqm_rust::engine::Kernel::current()
-            .write(|kernel| std::mem::replace(&mut kernel.game_strings, strings.cast()));
+        uqm_rust::engine::Kernel::current().write(|kernel| {
+            assert!(kernel.game_strings.is_null());
+            assert!(kernel.micro_font.is_null());
+            kernel.install_game_text(strings_owner);
+        });
         let system = &raw mut *h.state;
         for (index, expected) in [(0, "Mercury"), (2, "Earth"), (8, "Pluto")] {
             let parent = &raw mut (*system).sys.planets[index];
@@ -237,8 +239,7 @@ unsafe fn names(h: &mut Harness) {
                 index as u32 + 128
             );
         }
-        uqm_rust::engine::Kernel::current().write(|kernel| kernel.game_strings = saved);
-        drop(strings_owner);
+        uqm_rust::engine::Kernel::current().write(uqm_rust::engine::Kernel::release_encounter_text);
         queue::TFB_FlushGraphicsEx(1);
         println!("Sol name ABI: real game strings, parent names and parent battle frames for planets and moons");
     }
