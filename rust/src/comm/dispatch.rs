@@ -195,11 +195,7 @@ fn lobyte(x: u16) -> u16 {
     x & 0xFF
 }
 
-#[cfg(not(test))]
-/// C: `inHQSpace()` — checks if CurrentActivity is IN_HYPERSPACE (also true for QuasiSpace).
-///
-/// # Safety
-/// Calls C FFI to read CurrentActivity from global state.
+/// C: `inHQSpace()` — checks the supplied activity for HyperSpace or QuasiSpace.
 fn in_hq_space(activity: u16) -> bool {
     lobyte(activity) == IN_HYPERSPACE
 }
@@ -677,6 +673,13 @@ mod tests {
         assert_eq!(lobyte(0x0302), 2); // low byte
         assert_eq!(lobyte(0x0100), 0);
         assert_eq!(lobyte(0x0403), 3); // low byte
+    }
+
+    #[test]
+    fn hq_space_uses_supplied_activity_without_high_flag_bits() {
+        assert!(in_hq_space(IN_HYPERSPACE));
+        assert!(in_hq_space(IN_HYPERSPACE | CHECK_ABORT | CHECK_LOAD));
+        assert!(!in_hq_space(IN_INTERPLANETARY | CHECK_LOAD));
     }
 
     #[test]
