@@ -1,9 +1,10 @@
 //! Real packaged resources and cleanup, without a window or gameplay loop.
 
 use super::Harness;
+use uqm_rust::engine::graphics::{dcqueue_abi as queue, native_surface::CapturedSurface};
 use uqm_rust::io::uio_bridge;
 use uqm_rust::mainloop::dir_prep::contentDir;
-use uqm_rust::planets::c_api::{self, CapturedSurface};
+use uqm_rust::planets::c_api;
 use uqm_rust::planets::generate::consts::{MAP_HEIGHT, MAP_WIDTH};
 use uqm_rust::planets::generate::sol::Generator as GENERATE_SOL_FUNCTIONS;
 use uqm_rust::resource::ffi_bridge;
@@ -81,11 +82,11 @@ pub fn check(h: &mut Harness) {
         let animation =
             uqm_rust::engine::Kernel::current().read(|kernel| kernel.planet_animation.clone());
         let mut sphere = uqm_rust::planets::sphere::SphereState::default();
-        c_api::generate_planet_surface(
+        uqm_rust::planets::plangen::live::generate_planet_surface(
             &mut sphere,
             &animation,
             false,
-            c_api::SurfaceInputs {
+            uqm_rust::planets::plangen::live::SurfaceInputs {
                 rng: &mut (*system).sys.rng,
                 planet: &*world,
                 info: &(*system).sys.info.planet_info,
@@ -134,7 +135,7 @@ pub fn check(h: &mut Harness) {
         assert_eq!(sphere.elevation()[0], first_elevation);
         drop(topography);
         drop(sphere);
-        c_api::TFB_FlushGraphicsEx(1);
+        queue::TFB_FlushGraphicsEx(1);
         println!("real Earth definition consumed by actual GeneratePlanetSurface, shield and sphere allocated, then FreePlanet plus owned release cleared surface/sphere/topography allocations");
         assert_eq!(
             sdl2::sys::SDL_GetNumAllocations(),
@@ -238,7 +239,7 @@ unsafe fn names(h: &mut Harness) {
         }
         uqm_rust::engine::Kernel::current().write(|kernel| kernel.game_strings = saved);
         drop(strings_owner);
-        c_api::TFB_FlushGraphicsEx(1);
+        queue::TFB_FlushGraphicsEx(1);
         println!("Sol name ABI: real game strings, parent names and parent battle frames for planets and moons");
     }
 }
@@ -323,7 +324,7 @@ unsafe fn scenes(h: &mut Harness) {
         assert!(h.state.sys.frames[1].is_some());
         assert_eq!(info.planet_density, if pluto { 33 } else { 60 });
         uqm_rust::app::bridge::enter(|cx| c_api::free_planet(cx, &mut *system));
-        c_api::TFB_FlushGraphicsEx(1);
+        queue::TFB_FlushGraphicsEx(1);
         assert!((*system).sys.report.current().is_none());
         drop(typography);
         assert!(
@@ -337,7 +338,7 @@ unsafe fn scenes(h: &mut Harness) {
         );
         assert!(effect.frame_rect(0).extent.width > 0);
         drop((font, effect));
-        c_api::TFB_FlushGraphicsEx(1);
+        queue::TFB_FlushGraphicsEx(1);
         assert!((*system).sys.frames.iter().all(|frame| frame.is_none()));
         println!("Sol real scene {}: font + effect + mask + report loaded through actual orbital ABI, then explicit font leases survive FreePlanet and release after their final user", if pluto { "Pluto" } else { "moonbase" });
     }
@@ -347,7 +348,7 @@ unsafe fn indexed_rescale() {
     let original = CapturedSurface::load(c"graphics.earthmask");
     let mut pixels = vec![0; usize::from(MAP_WIDTH) * usize::from(MAP_HEIGHT)];
     assert_ne!(
-        c_api::ReadFramePixelIndexes(
+        uqm_rust::graphics::drawable_abi::ReadFramePixelIndexes(
             original.as_frame().add(1).cast(),
             pixels.as_mut_ptr(),
             i32::from(MAP_WIDTH),
@@ -362,7 +363,7 @@ unsafe fn indexed_rescale() {
         .unwrap();
     let mut actual = vec![0; usize::from(width) * usize::from(height)];
     assert_ne!(
-        c_api::ReadFramePixelIndexes(
+        uqm_rust::graphics::drawable_abi::ReadFramePixelIndexes(
             normalized.as_frame().add(1).cast(),
             actual.as_mut_ptr(),
             i32::from(width),
@@ -383,7 +384,7 @@ unsafe fn indexed_rescale() {
         }
     }
     drop(normalized);
-    c_api::TFB_FlushGraphicsEx(1);
+    queue::TFB_FlushGraphicsEx(1);
     println!("real Earth rescale: every indexed elevation pixel matches nearest-neighbor mapping and both frame owners released");
 }
 

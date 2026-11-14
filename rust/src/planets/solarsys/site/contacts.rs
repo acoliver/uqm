@@ -36,13 +36,10 @@ impl HomeContactSite for Site<'_, '_, '_> {
         built_ship_count(self.game.borrow().world)
     }
     fn clone_fleet_into_built_queue(&mut self) {
-        // SAFETY: the orbital host exclusively owns the live campaign context on the game thread.
-        unsafe {
-            clone_infinite_ship_into_built_queue(
-                self.game.borrow_mut().world,
-                u16::from(self.contact().0),
-            )
-        }
+        clone_infinite_ship_into_built_queue(
+            self.game.borrow_mut().world,
+            u16::from(self.contact().0),
+        )
     }
     fn current_activity(&self) -> u16 {
         self.game.borrow().world.activity()
@@ -124,14 +121,15 @@ impl TalkingPetSite for Site<'_, '_, '_> {
 
 impl UrquanEncounterSite for Site<'_, '_, '_> {
     fn begin_urquan_encounter(&mut self, loc: (i16, i16)) -> bool {
-        // SAFETY: the orbital host exclusively owns the live campaign context on the game thread.
-        unsafe { begin_urquan_encounter(self.game.borrow_mut().world, loc) }
+        begin_urquan_encounter(self.game.borrow_mut().world, loc)
     }
     fn fade_to_black(&mut self) {
-        self.game.borrow_mut().with_legacy(|| {
-            // SAFETY: game thread.
-            unsafe { fade_to_black_for_two_seconds() };
-        })
+        let context = crate::engine::graphics::context_abi::ContextLease::require(
+            self.game.borrow().kernel.screen_context,
+        );
+        self.game
+            .borrow_mut()
+            .with_legacy(|| fade_to_black_for_two_seconds(context))
     }
     fn move_game_clock_days(&mut self, days: u16) {
         crate::time::clock_abi::advance_days(&mut self.game.borrow_mut(), i32::from(days));
@@ -244,13 +242,7 @@ impl sam::SamatraSite for Site<'_, '_, '_> {
         } else {
             ship::URQUAN_SHIP
         };
-        // SAFETY: the orbital host exclusively owns the live campaign context on the game thread.
-        unsafe {
-            c_api::clone_infinite_ship_into_built_queue(
-                self.game.borrow_mut().world,
-                u16::from(race),
-            )
-        }
+        c_api::clone_infinite_ship_into_built_queue(self.game.borrow_mut().world, u16::from(race))
     }
     fn clone_remnant(&mut self, black: bool) {
         FleetGroups::clone_ship_into_built_queue(
@@ -315,13 +307,10 @@ impl yehat::YehatSite for Site<'_, '_, '_> {
         built_ship_count(self.game.borrow().world)
     }
     fn clone_yehat_fleet_into_built_queue(&mut self) {
-        // SAFETY: the orbital host exclusively owns the live campaign context on the game thread.
-        unsafe {
-            clone_infinite_ship_into_built_queue(
-                self.game.borrow_mut().world,
-                u16::from(ship::YEHAT_SHIP),
-            )
-        };
+        clone_infinite_ship_into_built_queue(
+            self.game.borrow_mut().world,
+            u16::from(ship::YEHAT_SHIP),
+        );
     }
     fn current_activity(&self) -> u16 {
         self.game.borrow().world.activity()
@@ -368,13 +357,10 @@ impl ChmmrSite for Site<'_, '_, '_> {
         built_ship_count(self.game.borrow().world)
     }
     fn clone_ilwrath_fleet_into_built_queue(&mut self) {
-        // SAFETY: the orbital host exclusively owns the live campaign context on the game thread.
-        unsafe {
-            clone_infinite_ship_into_built_queue(
-                self.game.borrow_mut().world,
-                u16::from(ship::ILWRATH_SHIP),
-            )
-        }
+        clone_infinite_ship_into_built_queue(
+            self.game.borrow_mut().world,
+            u16::from(ship::ILWRATH_SHIP),
+        )
     }
     fn current_activity(&self) -> u16 {
         self.game.borrow().world.activity()

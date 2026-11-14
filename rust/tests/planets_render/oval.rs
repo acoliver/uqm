@@ -6,11 +6,11 @@ use std::fmt::Write;
 use std::io::Read;
 
 use sha2::{Digest, Sha256};
+use uqm_rust::engine::graphics::dcqueue_abi as queue;
 use uqm_rust::engine::graphics::{
     native_offscreen::OffscreenFormats, native_surface::CapturedSurface,
 };
 use uqm_rust::graphics::native_abi as c;
-use uqm_rust::planets::c_api;
 use uqm_rust::starbase::ids::RadarLayout;
 
 extern "C" {
@@ -58,7 +58,7 @@ impl Offscreen {
             ScreenWidth = screen.0;
             ScreenHeight = screen.1;
             TFB_DrawCanvas_Initialize();
-            c_api::Init_DrawCommandQueue();
+            queue::Init_DrawCommandQueue();
             let context = CreateContextAux(c"oval parity".as_ptr());
             assert!(!context.is_null());
             let previous_context = SetContext(context);
@@ -154,10 +154,10 @@ impl Drop for Offscreen {
         unsafe {
             SetContextFGFrame(std::ptr::null_mut());
             drop(self.surface.take());
-            c_api::TFB_FlushGraphicsEx(1);
+            queue::TFB_FlushGraphicsEx(1);
             SetContext(self.previous_context);
             assert_ne!(DestroyContext(self.context), 0);
-            c_api::Uninit_DrawCommandQueue();
+            queue::Uninit_DrawCommandQueue();
             ScreenWidth = self.previous_screen.0;
             ScreenHeight = self.previous_screen.1;
         }
