@@ -7,15 +7,15 @@ use crate::ui::rgb15;
 pub(super) const CAPTAIN_NAME_RECT: RECT = RECT {
     corner: POINT { x: 3, y: 10 },
     extent: EXTENT {
-        width: (SHIP_NAME_WIDTH - 2) as i16,
-        height: SHIP_NAME_HEIGHT as i16,
+        width: SHIP_NAME_WIDTH - 2,
+        height: SHIP_NAME_HEIGHT,
     },
 };
 pub(super) const SHIP_NAME_RECT: RECT = RECT {
     corner: POINT { x: 2, y: 20 },
     extent: EXTENT {
-        width: SHIP_NAME_WIDTH as i16,
-        height: SHIP_NAME_HEIGHT as i16,
+        width: SHIP_NAME_WIDTH,
+        height: SHIP_NAME_HEIGHT,
     },
 };
 

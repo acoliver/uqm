@@ -4,9 +4,9 @@ use std::ffi::{CStr, CString};
 #[cfg(test)]
 #[test]
 fn save_name_copy_preserves_byte_bounds_and_nul_padding() {
-    let mut source = [b'X'; SAVE_NAME_SIZE as usize];
+    let mut source = [b'X'; SAVE_NAME_SIZE];
     let full = save_name_buffer(&source);
-    assert_eq!(&full[..source.len()], &[b'X'; SAVE_NAME_SIZE as usize]);
+    assert_eq!(&full[..source.len()], &[b'X'; SAVE_NAME_SIZE]);
     assert!(full[source.len()..].iter().all(|&byte| byte == 0));
     source[0] = 0xc3u8;
     source[1] = 0xa9u8;
@@ -18,7 +18,7 @@ fn save_name_copy_preserves_byte_bounds_and_nul_padding() {
     assert_eq!(save_name_buffer(&source), [0; 256]);
 }
 
-pub(super) fn save_name_buffer(source: &[u8; SAVE_NAME_SIZE as usize]) -> [u8; 256] {
+pub(super) fn save_name_buffer(source: &[u8; SAVE_NAME_SIZE]) -> [u8; 256] {
     let mut buffer = [0; 256];
     for (destination, &byte) in buffer
         .iter_mut()
@@ -153,8 +153,8 @@ pub(super) fn draw_save_name_string(
     };
     let background = rgb15(27, 0, 27);
     context.draw_rectangle(background, rect);
-    rect.extent.width = (204 - SAFE_X) as i16;
-    rect.corner.x = (30 + SAFE_X) as i16;
+    rect.extent.width = 204 - SAFE_X;
+    rect.corner.x = 30 + SAFE_X;
     context.draw_rectangle(background, rect);
     let baseline = POINT {
         x: rect.corner.x + 3,

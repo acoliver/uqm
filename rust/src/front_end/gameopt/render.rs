@@ -203,22 +203,7 @@ impl PickerDisplay {
         summary: &SummaryDesc,
     ) {
         self.context.select();
-        for i in 0..4 {
-            for j in 0..4 {
-                let index = i * 4 + j;
-                if index < usize::from(summary.num_devices) {
-                    self.context.draw_stamp(
-                        &self
-                            .misc
-                            .wrapped_frame(77 + u16::from(summary.device_list[index])),
-                        POINT {
-                            x: 140 + SUMMARY_X_OFFS + SUMMARY_SIDE_OFFS + j as i16 * 18,
-                            y: 13 + i as i16 * 18,
-                        },
-                    );
-                }
-            }
-        }
+        self.devices(summary);
         self.context.set_font(&self.star);
         let x = 173 + SUMMARY_X_OFFS + SUMMARY_SIDE_OFFS;
         if summary.flags & 128 != 0 {
@@ -287,6 +272,25 @@ impl PickerDisplay {
             TEXT_ALIGN_ALIGN_CENTER,
             rgb15(27, 0, 27),
         );
+    }
+
+    fn devices(&self, summary: &SummaryDesc) {
+        for i in 0..4 {
+            for j in 0..4 {
+                let index = i * 4 + j;
+                if index < usize::from(summary.num_devices) {
+                    self.context.draw_stamp(
+                        &self
+                            .misc
+                            .wrapped_frame(77 + u16::from(summary.device_list[index])),
+                        POINT {
+                            x: 140 + SUMMARY_X_OFFS + SUMMARY_SIDE_OFFS + j as i16 * 18,
+                            y: 13 + i as i16 * 18,
+                        },
+                    );
+                }
+            }
+        }
     }
 
     fn selection(&self, kernel: &Kernel, state: &PickerState) {

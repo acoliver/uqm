@@ -7,12 +7,16 @@ mod layout;
 mod naming;
 mod preview;
 mod render;
+#[cfg(test)]
+mod render_tests;
 
 mod picker;
+#[cfg(test)]
+use picker::picker_slot;
+use picker::MAX_SAVED_GAMES;
 #[cfg(not(test))]
 use picker::SAVES_PER_PAGE;
 pub use picker::{picker_action, PickerAction};
-use picker::{picker_slot, MAX_SAVED_GAMES};
 
 #[cfg(not(test))]
 pub use crate::savegame::live::load::load_game_descriptions;
@@ -130,7 +134,7 @@ pub(crate) mod runtime {
                 SHIP_NAME_RECT
             }),
         );
-        let mut buffer = [0u8; SIS_NAME_SIZE as usize];
+        let mut buffer = [0u8; SIS_NAME_SIZE];
         draw_name_string(cx.kernel, cx.world, captain, c"", 0, DDSHS_EDIT);
         draw_status_message(
             cx.kernel,
@@ -234,14 +238,14 @@ pub(crate) mod runtime {
                         cx.kernel,
                         cx.world,
                         cx.screen_dimensions(),
-                        PM_SAVE_GAME as u8,
+                        PM_SAVE_GAME,
                         i16::from(*state),
                     );
                 }
                 _ => {}
             }
         } else {
-            crate::ui::menu::choose_menu_state(cx, input, state, PM_SAVE_GAME as u8);
+            crate::ui::menu::choose_menu_state(cx, input, state, PM_SAVE_GAME);
         }
         true
     }
@@ -259,7 +263,7 @@ pub(crate) mod runtime {
                 cx.kernel,
                 cx.world,
                 cx.screen_dimensions(),
-                PM_SAVE_GAME as u8,
+                PM_SAVE_GAME,
                 LOAD_GAME as i16,
             );
             if pick_game(cx, io, solar, 0, 1) == 0 {
@@ -272,7 +276,7 @@ pub(crate) mod runtime {
             cx.kernel,
             cx.world,
             cx.screen_dimensions(),
-            PM_SAVE_GAME as u8,
+            PM_SAVE_GAME,
             i16::from(state),
         );
         set_menu_flash(cx.kernel, cx.screen_dimensions(), false);
@@ -323,7 +327,7 @@ pub(crate) mod runtime {
                     .game_text((OPTION_STRING_BASE + if enabled { 4 } else { 3 }) as usize)
                     .to_bytes(),
             );
-            if offset == 2 && menu == OPT_PC as i32 && setting > CYBORG_NORMAL_SETTING {
+            if offset == 2 && menu == OPT_PC && setting > CYBORG_NORMAL_SETTING {
                 text.extend_from_slice(if setting == CYBORG_DOUBLE_SETTING {
                     b"+"
                 } else {
@@ -356,7 +360,7 @@ pub(crate) mod runtime {
                         cx.kernel,
                         cx.world,
                         cx.screen_dimensions(),
-                        PM_SOUND_ON as u8,
+                        PM_SOUND_ON,
                         i16::from(*state),
                     );
                 }
@@ -367,7 +371,7 @@ pub(crate) mod runtime {
                         cx.kernel,
                         cx.world,
                         cx.screen_dimensions(),
-                        PM_SOUND_ON as u8,
+                        PM_SOUND_ON,
                         i16::from(*state),
                     );
                 }
@@ -377,7 +381,7 @@ pub(crate) mod runtime {
                 _ => {
                     let flags = &mut cx.world.data.game.glob_flags;
                     let speed = (*flags & COMBAT_SPEED_MASK) >> COMBAT_SPEED_SHIFT;
-                    let next = if speed < (NUM_COMBAT_SPEEDS - 1) as u8 {
+                    let next = if speed < (NUM_COMBAT_SPEEDS - 1) {
                         *flags |= CYBORG_ENABLED;
                         speed + 1
                     } else {
@@ -390,13 +394,13 @@ pub(crate) mod runtime {
                         cx.kernel,
                         cx.world,
                         cx.screen_dimensions(),
-                        PM_SOUND_ON as u8,
+                        PM_SOUND_ON,
                         i16::from(*state),
                     );
                 }
             }
             feedback_setting(cx, input, *state);
-        } else if crate::ui::menu::choose_menu_state(cx, input, state, PM_SOUND_ON as u8) != 0 {
+        } else if crate::ui::menu::choose_menu_state(cx, input, state, PM_SOUND_ON) != 0 {
             feedback_setting(cx, input, *state);
         }
         true
@@ -410,7 +414,7 @@ pub(crate) mod runtime {
             cx.kernel,
             cx.world,
             cx.screen_dimensions(),
-            PM_SOUND_ON as u8,
+            PM_SOUND_ON,
             i16::from(state),
         );
         feedback_setting(cx, input, state);

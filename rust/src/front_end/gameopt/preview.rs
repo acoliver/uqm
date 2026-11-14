@@ -151,6 +151,50 @@ mod tests {
     }
 
     #[test]
+    fn preview_keeps_duplicate_captain_draw_order_and_restores_on_unwind() {
+        let mut world = World::new();
+        let fleet = world.avail_races().alloc().unwrap();
+        world.avail_races().get_mut(fleet).species_id = 0;
+        world.avail_races().put(fleet);
+        let original = world.built_ships().alloc().unwrap();
+        world.built_ships().get_mut(original).crew_level = 42;
+        world.built_ships().put(original);
+        world.data.flagship.crew_enlisted = 17;
+        let mut summary = crate::engine::save::summary_record::SummaryDesc::default();
+        summary.sis.crew_enlisted = 9;
+        summary.num_ships = 2;
+        let mut draws = [4, 4, 5].into_iter();
+        let seen = std::cell::Cell::new(0);
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            with_preview(
+                &mut world,
+                &summary,
+                || {
+                    seen.set(seen.get() + 1);
+                    draws.next().expect("unexpected preview RNG draw")
+                },
+                |world| {
+                    assert_eq!(seen.get(), 3);
+                    assert_eq!(world.data.flagship.crew_enlisted, 9);
+                    let ships = world.built_ships_ref();
+                    assert_eq!(ships.count(), 2);
+                    let first = ships.head().unwrap();
+                    let second = ships.succ(first).unwrap();
+                    assert_eq!(ships.get(first).captains_name_index, 9);
+                    assert_eq!(ships.get(second).captains_name_index, 10);
+                    panic!("drawing failed");
+                },
+            );
+        }));
+        assert!(result.is_err());
+        assert_eq!(seen.get(), 3);
+        assert_eq!(world.data.flagship.crew_enlisted, 17);
+        assert_eq!(world.built_ships_ref().head(), Some(original));
+        assert_eq!(world.built_ships_ref().get(original).crew_level, 42);
+        assert_eq!(world.built_ships_ref().count(), 1);
+    }
+
+    #[test]
     fn restore_reinstates_the_flagship_and_escorts_without_rewinding_other_state() {
         let mut world = crate::engine::World::new();
         world.data.flagship.crew_enlisted = 20;

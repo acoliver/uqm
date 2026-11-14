@@ -64,7 +64,6 @@ pub fn load_game(slot: u16, request: LoadRequest<'_, '_>) -> u32 {
 }
 
 /// Enumerate the original 50-slot picker list synchronously.
-
 pub fn load_game_descriptions(summaries: &mut [SummaryDesc; super::super::types::MAX_SAVED_GAMES]) {
     for (i, summary) in (0..super::super::types::MAX_SAVED_GAMES as u16).zip(summaries) {
         if load_game(i, LoadRequest::Summary(summary)) == 0 {
