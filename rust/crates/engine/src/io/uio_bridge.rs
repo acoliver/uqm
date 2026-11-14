@@ -1140,11 +1140,12 @@ pub unsafe extern "C" fn uio_getDirList(
             virtual_path, pattern_str, _match_type
         ));
 
+        // The retained directory ABI represents enumeration failure as an empty list.
         let name_strings: Vec<_> = get_mount_registry()
             .lock()
             .unwrap()
             .list_at(&(*dir).path, &(*dir).virtual_path, &rel_path)
-            .expect("directory listing")
+            .unwrap_or_default()
             .into_iter()
             .filter(|name| matches_pattern(name, pattern_str, _match_type))
             .collect();

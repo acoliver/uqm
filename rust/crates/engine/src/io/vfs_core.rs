@@ -170,7 +170,11 @@ fn metadata(meta: fs::Metadata) -> FileStat {
 }
 fn directory_names(path: &Path) -> io::Result<Vec<String>> {
     Ok(fs::read_dir(path)?
-        .filter_map(|entry| entry.ok()?.file_name().to_str().map(str::to_owned))
+        .filter_map(|entry| {
+            entry
+                .ok()
+                .map(|entry| entry.file_name().to_string_lossy().into_owned())
+        })
         .collect())
 }
 
