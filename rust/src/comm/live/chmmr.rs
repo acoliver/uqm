@@ -1,14 +1,10 @@
 use crate::comm::descriptors::chmmr::descriptor;
-use crate::comm::live::script::LiveScript;
+use crate::comm::host::Host;
 use crate::comm::races::chmmr::*;
 use crate::comm::{locdata::CLocData, Comm};
 use crate::engine::battle::Cx;
-fn run(
-    comm: &mut Comm,
-    cx: &mut Cx<'_>,
-    f: impl FnOnce(&mut Dialogue<'_, LiveScript<'_, '_, Handler>>),
-) {
-    let mut api = LiveScript::new(comm, cx, callback);
+fn run(comm: &mut Comm, cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, Host<'_, '_, Handler>>)) {
+    let mut api = Host::new(comm, cx, callback);
     f(&mut Dialogue { api: &mut api });
 }
 fn exit_conversation(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
@@ -101,9 +97,9 @@ mod api {
     use crate::comm::races::chmmr::api::*;
     use crate::engine::StoryKey;
 
-    impl ChmmrApi for crate::comm::live::script::LiveScript<'_, '_, Handler> {
+    impl ChmmrApi for crate::comm::host::Host<'_, '_, Handler> {
         fn refit(&mut self) {
-            use crate::comm::races::script::ScriptApi;
+            use crate::comm::races::script::DialogueHost;
             let starbase = self.get(StoryKey::STARBASE_AVAILABLE) != 0;
 
             {

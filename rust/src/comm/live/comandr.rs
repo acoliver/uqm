@@ -1,5 +1,5 @@
 use crate::comm::descriptors::comandr::descriptor;
-use crate::comm::live::script::LiveScript;
+use crate::comm::host::Host;
 use crate::comm::races::comandr::*;
 use crate::comm::{locdata::CLocData, Comm};
 use crate::engine::battle::Cx;
@@ -7,8 +7,8 @@ use crate::engine::battle::Cx;
 fn api<'a, 'b>(
     comm: &'a mut Comm,
     cx: &'a mut crate::engine::battle::Cx<'b>,
-) -> LiveScript<'a, 'b, Handler> {
-    LiveScript::new(comm, cx, callback)
+) -> Host<'a, 'b, Handler> {
+    Host::new(comm, cx, callback)
 }
 
 macro_rules! callbacks {

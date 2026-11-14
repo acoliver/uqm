@@ -1,14 +1,10 @@
 use crate::comm::descriptors::talkpet::descriptor;
-use crate::comm::live::script::LiveScript;
+use crate::comm::host::Host;
 use crate::comm::races::talkpet::*;
 use crate::comm::{locdata::CLocData, Comm};
 use crate::engine::battle::Cx;
-fn run(
-    comm: &mut Comm,
-    cx: &mut Cx<'_>,
-    f: impl FnOnce(&mut Dialogue<'_, LiveScript<'_, '_, Handler>>),
-) {
-    let mut api = LiveScript::new(comm, cx, callback);
+fn run(comm: &mut Comm, cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, Host<'_, '_, Handler>>)) {
+    let mut api = Host::new(comm, cx, callback);
     f(&mut Dialogue { api: &mut api });
 }
 fn exit_conversation(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
@@ -109,7 +105,7 @@ mod api {
 
     use crate::comm::races::talkpet::api::*;
 
-    impl TalkpetApi for crate::comm::live::script::LiveScript<'_, '_, Handler> {
+    impl TalkpetApi for crate::comm::host::Host<'_, '_, Handler> {
         fn flags(&self) -> u8 {
             self.cx.borrow().world.data.game.glob_flags
         }
@@ -124,7 +120,7 @@ mod api {
         fn umgah_alive(&mut self) -> bool {
             crate::engine::world::fleet::start_sphere_tracking(
                 self.cx.borrow_mut().world,
-                crate::comm::dispatch::ship::UMGAH_SHIP as u16,
+                crate::engine::species::ship::UMGAH_SHIP as u16,
             ) != 0
         }
         fn strobe(&mut self) {

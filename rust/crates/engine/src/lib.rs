@@ -38,3 +38,4 @@ pub use world::StoryKey;
 pub use world::{Game, StarId, World, WorldData};
 
 pub mod save;
+pub mod species;

@@ -1,14 +1,10 @@
 use crate::comm::descriptors::umgah::descriptor;
-use crate::comm::live::script::LiveScript;
+use crate::comm::host::Host;
 use crate::comm::races::umgah::*;
 use crate::comm::{locdata::CLocData, Comm};
 use crate::engine::battle::Cx;
-fn run(
-    comm: &mut Comm,
-    cx: &mut Cx<'_>,
-    f: impl FnOnce(&mut Dialogue<'_, LiveScript<'_, '_, Handler>>),
-) {
-    let mut api = LiveScript::new(comm, cx, callback);
+fn run(comm: &mut Comm, cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, Host<'_, '_, Handler>>)) {
+    let mut api = Host::new(comm, cx, callback);
     f(&mut Dialogue { api: &mut api });
 }
 fn combat_is_inevitable(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
@@ -73,7 +69,7 @@ mod api {
 
     use crate::comm::races::umgah::api::*;
 
-    impl UmgahApi for crate::comm::live::script::LiveScript<'_, '_, Handler> {
+    impl UmgahApi for crate::comm::host::Host<'_, '_, Handler> {
         fn add_biomass(&mut self, amount: u16) {
             let mut cx = self.cx.borrow_mut();
             let sis = &mut cx.world.data.flagship;

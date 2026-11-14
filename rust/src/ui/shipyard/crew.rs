@@ -45,7 +45,7 @@ pub(super) fn crew_transaction(cx: &mut Cx<'_>, delta: SIZE, redraw: impl FnOnce
     }
     if crate::engine::world::fleet::check_alliance(
         cx.world,
-        crate::comm::dispatch::ship::SHOFIXTI_SHIP as COUNT,
+        crate::engine::species::ship::SHOFIXTI_SHIP as COUNT,
     ) != (crate::starbase::platform::AlliedState::GoodGuy as u16) as COUNT
     {
         cx.world

@@ -1,6 +1,6 @@
 use super::*;
 use crate::comm::races::encounter::testing::{Effect, Fake};
-use crate::comm::races::script::ScriptApi;
+use crate::comm::races::script::DialogueHost;
 use crate::engine::StoryKey;
 type Api = Fake<Handler, api::World>;
 fn run(f: &mut Api, h: Handler, r: i32) {
@@ -106,7 +106,7 @@ fn proceed_refits_and_transports_to_starbase_without_marking_bomb_processed() {
     assert_eq!(f.get(StoryKey::CHMMR_HOME_VISITS), 0);
     assert_eq!(f.get(StoryKey::CHMMR_STACK), 0);
     assert!(f.effects.contains(&Effect::Allied(
-        crate::comm::dispatch::ship::CHMMR_SHIP as u16,
+        crate::engine::species::ship::CHMMR_SHIP as u16,
         true
     )));
     let ship = &f.world.glob.flagship;

@@ -2,7 +2,7 @@ use crate::engine::StoryKey;
 mod branches;
 use super::*;
 use crate::comm::races::encounter::testing::Fake;
-use crate::comm::races::script::ScriptApi;
+use crate::comm::races::script::DialogueHost;
 
 #[derive(Default)]
 struct Api {
@@ -20,7 +20,7 @@ impl std::ops::DerefMut for Api {
         &mut self.base
     }
 }
-impl ScriptApi<Handler> for Api {
+impl DialogueHost<Handler> for Api {
     fn get(&self, k: StoryKey) -> u8 {
         self.base.get(k)
     }

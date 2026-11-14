@@ -1,8 +1,8 @@
 //! Encounter effects shared by the Starbase, Spathi and Ilwrath scripts.
 
-pub(crate) use super::script::ScriptApi;
+pub(crate) use super::script::DialogueHost;
 
-pub(crate) trait EncounterApi<H>: ScriptApi<H> {
+pub(crate) trait EncounterApi<H>: DialogueHost<H> {
     fn segue(&mut self, segue: u32);
     fn get_segue(&self) -> u32;
     fn activity(&self) -> u16;

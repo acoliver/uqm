@@ -1,15 +1,11 @@
 use crate::comm::descriptors::zoqfot::descriptor;
-use crate::comm::live::script::LiveScript;
+use crate::comm::host::Host;
 use crate::comm::races::zoqfot::*;
 use crate::comm::{locdata::CLocData, Comm};
 use crate::engine::battle::Cx;
 
-fn run(
-    comm: &mut Comm,
-    cx: &mut Cx<'_>,
-    f: impl FnOnce(&mut Dialogue<'_, LiveScript<'_, '_, Handler>>),
-) {
-    let mut api = LiveScript::new(comm, cx, callback);
+fn run(comm: &mut Comm, cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, Host<'_, '_, Handler>>)) {
+    let mut api = Host::new(comm, cx, callback);
     f(&mut Dialogue { api: &mut api });
 }
 fn exit_conversation(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
@@ -93,8 +89,8 @@ mod api {
 
     mod live {
         use super::*;
-        use crate::comm::live::script::LiveScript;
-        use crate::comm::races::script::ScriptApi;
+        use crate::comm::host::Host;
+        use crate::comm::races::script::DialogueHost;
         fn select(comm: &mut Comm, speaker: Speaker) {
             select_speaker(&mut comm.data, &mut comm.race_scratch.last_alien, speaker);
         }
@@ -104,7 +100,7 @@ mod api {
         fn pik(comm: &mut Comm) {
             select(comm, Speaker::Pik);
         }
-        impl ZoqApi for LiveScript<'_, '_, Handler> {
+        impl ZoqApi for Host<'_, '_, Handler> {
             fn speak(&mut self, phrase: u16, speaker: Speaker) {
                 let comm = &mut **self.comm.borrow_mut();
 

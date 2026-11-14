@@ -1,4 +1,4 @@
-use super::script::LiveScript;
+use crate::comm::host::Host;
 use crate::comm::races::starbas::{api::StarbaseApi, Handler};
 use crate::comm::Comm;
 use crate::engine::{battle::Battle, battle::Cx, Game};
@@ -24,7 +24,7 @@ fn starbase_adapter_uses_the_supplied_inventory_and_calendar() {
         let mut cx = Cx::new(&mut battle, &mut first.world, &mut first.kernel, || {
             panic!("inventory query must not consume RNG")
         });
-        let mut script = LiveScript::<Handler>::new(&mut comm, &mut cx, |_| {
+        let mut script = Host::<Handler>::new(&mut comm, &mut cx, |_| {
             panic!("inventory query must not register a response")
         });
         let ship = script.ship();

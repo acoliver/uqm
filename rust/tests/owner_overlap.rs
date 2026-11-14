@@ -294,7 +294,7 @@ fn starbase_releases_world_before_communication_and_cleanup() {
         observer.0,
         [format!(
             "EncounterDispatch({})",
-            uqm_rust::comm::dispatch::conv::COMMANDER
+            uqm_rust::engine::species::conv::COMMANDER
         )]
     );
 }

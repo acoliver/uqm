@@ -136,9 +136,9 @@ pub fn scene_plan(
             }
             Ok(ScenePlan {
                 scene,
-                encounter_ship: crate::comm::dispatch::ship::SAMATRA_SHIP,
-                expected_encounter_conversation: crate::comm::dispatch::conv::TALKING_PET,
-                expected_dialogue_conversation: crate::comm::dispatch::conv::TALKING_PET,
+                encounter_ship: crate::engine::species::ship::SAMATRA_SHIP,
+                expected_encounter_conversation: crate::engine::species::conv::TALKING_PET,
+                expected_dialogue_conversation: crate::engine::species::conv::TALKING_PET,
                 current_activity: crate::comm::dispatch::IN_LAST_BATTLE
                     | crate::comm::dispatch::START_ENCOUNTER,
                 star_location: (6200, 5935),
@@ -152,9 +152,9 @@ pub fn scene_plan(
         }
         AutomationScene::SolProbeEncounter => Ok(ScenePlan {
             scene,
-            encounter_ship: crate::comm::dispatch::ship::URQUAN_DRONE_SHIP,
-            expected_encounter_conversation: crate::comm::dispatch::conv::URQUAN_DRONE,
-            expected_dialogue_conversation: crate::comm::dispatch::conv::URQUAN,
+            encounter_ship: crate::engine::species::ship::URQUAN_DRONE_SHIP,
+            expected_encounter_conversation: crate::engine::species::conv::URQUAN_DRONE,
+            expected_dialogue_conversation: crate::engine::species::conv::URQUAN,
             current_activity: crate::comm::dispatch::IN_ENCOUNTER
                 | crate::comm::dispatch::START_ENCOUNTER,
             star_location: SOL_UNIVERSE_LOCATION,
@@ -163,8 +163,8 @@ pub fn scene_plan(
         AutomationScene::StarbaseCommander => Ok(ScenePlan {
             scene,
             encounter_ship: 0,
-            expected_encounter_conversation: crate::comm::dispatch::conv::COMMANDER,
-            expected_dialogue_conversation: crate::comm::dispatch::conv::COMMANDER,
+            expected_encounter_conversation: crate::engine::species::conv::COMMANDER,
+            expected_dialogue_conversation: crate::engine::species::conv::COMMANDER,
             current_activity: crate::comm::dispatch::IN_INTERPLANETARY
                 | crate::comm::dispatch::START_ENCOUNTER,
             star_location: SOL_UNIVERSE_LOCATION,

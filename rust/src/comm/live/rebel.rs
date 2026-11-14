@@ -1,14 +1,10 @@
 use crate::comm::descriptors::rebel::descriptor;
-use crate::comm::live::script::LiveScript;
+use crate::comm::host::Host;
 use crate::comm::races::rebel::*;
 use crate::comm::{locdata::CLocData, Comm};
 use crate::engine::battle::Cx;
-fn run(
-    comm: &mut Comm,
-    cx: &mut Cx<'_>,
-    f: impl FnOnce(&mut Dialogue<'_, LiveScript<'_, '_, Handler>>),
-) {
-    let mut a = LiveScript::new(comm, cx, callback);
+fn run(comm: &mut Comm, cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, Host<'_, '_, Handler>>)) {
+    let mut a = Host::new(comm, cx, callback);
     f(&mut Dialogue { api: &mut a })
 }
 fn exit(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
@@ -52,7 +48,7 @@ mod api {
 
     use crate::comm::races::rebel::api::*;
 
-    impl RebelApi for crate::comm::live::script::LiveScript<'_, '_, Handler> {
+    impl RebelApi for crate::comm::host::Host<'_, '_, Handler> {
         fn date(&self) -> Date {
             let cx = self.cx.borrow();
             let clock = &cx.world.data.game.game_clock;

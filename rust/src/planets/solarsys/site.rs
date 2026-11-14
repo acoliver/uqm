@@ -7,9 +7,9 @@ mod npcs;
 mod resources;
 
 use crate::battle::gendef::*;
-use crate::comm::dispatch::{conv, ship};
 use crate::engine::battle::Cx;
 use crate::engine::observe::Io;
+use crate::engine::species::{conv, ship};
 use crate::engine::world::generation::{ReportDisposition, SolarSys};
 use crate::engine::world::StarId;
 use crate::planets::generate::special::Story;

@@ -1,14 +1,10 @@
 use crate::comm::descriptors::spahome::descriptor;
-use crate::comm::live::script::LiveScript;
+use crate::comm::host::Host;
 use crate::comm::races::spahome::*;
 use crate::comm::Comm;
 use crate::engine::battle::Cx;
-fn run(
-    comm: &mut Comm,
-    cx: &mut Cx<'_>,
-    f: impl FnOnce(&mut Dialogue<'_, LiveScript<'_, '_, Handler>>),
-) {
-    let mut api = LiveScript::new(comm, cx, callback);
+fn run(comm: &mut Comm, cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, Host<'_, '_, Handler>>)) {
+    let mut api = Host::new(comm, cx, callback);
     f(&mut Dialogue { api: &mut api });
 }
 fn exit(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
@@ -86,11 +82,11 @@ mod api {
 
     use crate::comm::races::spahome::api::*;
 
-    impl SpahomeApi for crate::comm::live::script::LiveScript<'_, '_, Handler> {
+    impl SpahomeApi for crate::comm::host::Host<'_, '_, Handler> {
         fn have_spathi_escort(&self) -> bool {
             crate::engine::world::fleet::count_escort_ships(
                 self.cx.borrow().world,
-                u16::from(crate::comm::dispatch::ship::SPATHI_SHIP),
+                u16::from(crate::engine::species::ship::SPATHI_SHIP),
             ) != 0
         }
     }

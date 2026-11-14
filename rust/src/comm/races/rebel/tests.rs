@@ -1,7 +1,7 @@
 use super::api::Date;
 use super::*;
 use crate::comm::races::encounter::testing::{Effect, Fake};
-use crate::comm::races::script::ScriptApi;
+use crate::comm::races::script::DialogueHost;
 use crate::engine::StoryKey;
 
 type Api = Fake<Handler, Date>;
@@ -351,7 +351,7 @@ fn ship_capacity_signed_conversion_and_grant_effect_order() {
                 [
                     Effect::Npc(phrase),
                     Effect::Talk(u16::MAX),
-                    Effect::AddEscorts(crate::comm::dispatch::ship::YEHAT_SHIP as u16, count),
+                    Effect::AddEscorts(crate::engine::species::ship::YEHAT_SHIP as u16, count),
                     Effect::Set(StoryKey::YEHAT_SHIP_MONTH, 2),
                     Effect::Set(StoryKey::YEHAT_SHIP_DAY, 1),
                     Effect::Set(StoryKey::YEHAT_SHIP_YEAR, 0),
@@ -387,11 +387,11 @@ fn final_battle_cavalry_splits_every_capacity_after_byte_conversion() {
                 Effect::Npc(YEHAT_CAVALRY),
                 Effect::Talk(u16::MAX),
                 Effect::AddEscorts(
-                    crate::comm::dispatch::ship::YEHAT_REBEL_SHIP as u16,
+                    crate::engine::species::ship::YEHAT_REBEL_SHIP as u16,
                     i16::from(n - (n >> 1))
                 ),
                 Effect::AddEscorts(
-                    crate::comm::dispatch::ship::PKUNK_SHIP as u16,
+                    crate::engine::species::ship::PKUNK_SHIP as u16,
                     i16::from(n >> 1)
                 ),
             ]

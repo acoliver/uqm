@@ -488,7 +488,7 @@ impl<A: SyreenApi> Dialogue<'_, A> {
                 0 => {
                     self.api.npc(HELLO_AFTER_AMBUSH_1);
                     self.api.set_allied(
-                        (crate::comm::dispatch::ship::SYREEN_SHIP as i32) as u16,
+                        (crate::engine::species::ship::SYREEN_SHIP as i32) as u16,
                         1 != 0,
                     );
                 }

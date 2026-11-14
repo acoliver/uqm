@@ -107,7 +107,7 @@ impl<A: SpahomeApi> Dialogue<'_, A> {
             DO_AS_WE_SAY => {
                 self.api.npc(DEPART_FOR_EARTH as i32);
                 self.api
-                    .set_allied(crate::comm::dispatch::ship::SPATHI_SHIP as u16, true);
+                    .set_allied(crate::engine::species::ship::SPATHI_SHIP as u16, true);
                 self.api.event(1, 6, 0, 0, 11);
                 self.api.set(StoryKey::SPATHI_HOME_VISITS, 0);
                 self.api.set(StoryKey::SPATHI_VISITS, 0)
@@ -583,7 +583,7 @@ impl<A: SpahomeApi> Dialogue<'_, A> {
             self.angry(0)
         } else if self
             .api
-            .alliance(crate::comm::dispatch::ship::SPATHI_SHIP as u16)
+            .alliance(crate::engine::species::ship::SPATHI_SHIP as u16)
             == 1
         {
             self.api.palette(1);

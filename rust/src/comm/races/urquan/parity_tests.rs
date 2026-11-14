@@ -2,7 +2,7 @@ use super::api::World;
 use super::dialogue::Dialogue;
 use super::*;
 use crate::comm::races::encounter::testing::{Effect, Fake};
-use crate::comm::races::script::ScriptApi;
+use crate::comm::races::script::DialogueHost;
 use crate::engine::StoryKey;
 
 type Api = Fake<Handler, World>;

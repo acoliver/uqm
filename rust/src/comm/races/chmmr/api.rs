@@ -98,7 +98,7 @@ impl Default for World {
 #[cfg(test)]
 impl ChmmrApi for super::super::encounter::testing::Fake<Handler, World> {
     fn refit(&mut self) {
-        use crate::comm::races::script::ScriptApi;
+        use crate::comm::races::script::DialogueHost;
         let starbase = self.get(StoryKey::STARBASE_AVAILABLE) != 0;
         self.world.refits += 1;
         refit(&mut self.world.glob, starbase);

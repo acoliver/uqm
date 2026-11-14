@@ -110,7 +110,7 @@ impl<A: DruugeApi> Dialogue<'_, A> {
                 self.api.npc(i32::from(NOT_ENOUGH_CREW));
             } else if i32::from(
                 self.api
-                    .escort_feasibility((crate::comm::dispatch::ship::DRUUGE_SHIP) as u16),
+                    .escort_feasibility((crate::engine::species::ship::DRUUGE_SHIP) as u16),
             ) == 0
             {
                 self.api.npc(i32::from(NOT_ENOUGH_ROOM));
@@ -118,7 +118,7 @@ impl<A: DruugeApi> Dialogue<'_, A> {
                 self.api.gauges(-100_i16, 0_i16, 0);
                 self.session.slavery_count = self.session.slavery_count.wrapping_add(100_u16);
                 self.api
-                    .add_escorts((crate::comm::dispatch::ship::DRUUGE_SHIP) as u16, 1_i16);
+                    .add_escorts((crate::engine::species::ship::DRUUGE_SHIP) as u16, 1_i16);
                 self.api.npc(i32::from(BOUGHT_SHIP));
             }
         } else if r == BUY_ROSY_SPHERE {
@@ -212,7 +212,7 @@ impl<A: DruugeApi> Dialogue<'_, A> {
             let mut ships_to_trade = 0;
             let ship_slots = self
                 .api
-                .escort_feasibility(crate::comm::dispatch::ship::DRUUGE_SHIP as u16);
+                .escort_feasibility(crate::engine::species::ship::DRUUGE_SHIP as u16);
             if r == SELL_MAIDENS {
                 self.api.npc(i32::from(BOUGHT_MAIDENS));
                 ships_to_trade = 6;
@@ -230,7 +230,7 @@ impl<A: DruugeApi> Dialogue<'_, A> {
             self.api.npc(i32::from(YOU_GET));
             if ships_to_trade != 0 {
                 self.api.add_escorts(
-                    crate::comm::dispatch::ship::DRUUGE_SHIP as u16,
+                    crate::engine::species::ship::DRUUGE_SHIP as u16,
                     ships_to_trade,
                 );
                 self.api

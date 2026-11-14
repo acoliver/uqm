@@ -1,9 +1,9 @@
-use crate::comm::live::script::LiveScript;
+use crate::comm::host::Host;
 use crate::comm::races::encounter::*;
 
 use crate::engine::world::fleet;
 
-impl<H> EncounterApi<H> for LiveScript<'_, '_, H> {
+impl<H> EncounterApi<H> for Host<'_, '_, H> {
     fn segue(&mut self, segue: u32) {
         crate::comm::commglue_abi::set_segue(
             &mut self.comm.borrow_mut(),

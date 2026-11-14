@@ -60,7 +60,7 @@ fn activate_starbase_selection(
             (services.communicate)(
                 cx,
                 io,
-                crate::comm::dispatch::conv::COMMANDER,
+                crate::engine::species::conv::COMMANDER,
                 Default::default(),
             );
             io.observer.checkpoint(&CheckpointView::StarbaseMenu(true));
@@ -180,7 +180,7 @@ fn talk_to_commander(
     (services.communicate)(
         cx,
         io,
-        crate::comm::dispatch::conv::COMMANDER,
+        crate::engine::species::conv::COMMANDER,
         crate::comm::CommOptions {
             intro,
             ..Default::default()
@@ -200,7 +200,7 @@ fn prepare_starbase_visit(
     }
     if cx.world.story_state(StoryKey::STARBASE_AVAILABLE) == 0 {
         io.observer.checkpoint(&CheckpointView::EncounterDispatch(
-            crate::comm::dispatch::conv::COMMANDER,
+            crate::engine::species::conv::COMMANDER,
         ));
         talk_to_commander(cx, io, services, (CROSSFADE_SCREEN, 0));
         if cx.world.story_state(StoryKey::PROBE_ILWRATH_ENCOUNTER) == 0
@@ -211,7 +211,7 @@ fn prepare_starbase_visit(
         }
         let ship = crate::comm::dispatch::clone_npc_fragment(
             cx.world,
-            crate::comm::dispatch::ship::ILWRATH_SHIP,
+            crate::engine::species::ship::ILWRATH_SHIP,
             7,
         )
         .unwrap_or_else(|| panic!("starbase Ilwrath fragment capacity"));
@@ -219,7 +219,7 @@ fn prepare_starbase_visit(
         (services.communicate)(
             cx,
             io,
-            crate::comm::dispatch::conv::ILWRATH,
+            crate::engine::species::conv::ILWRATH,
             Default::default(),
         );
         if cx.world.data.flagship.crew_enlisted == COUNT::MAX
@@ -245,7 +245,7 @@ fn prepare_starbase_visit(
             return None;
         }
         io.observer.checkpoint(&CheckpointView::EncounterDispatch(
-            crate::comm::dispatch::conv::COMMANDER,
+            crate::engine::species::conv::COMMANDER,
         ));
         talk_to_commander(cx, io, services, (FADE_IN_SCREEN, ONE_SECOND * 2));
         if cx.world.activity() & activity_flags::CHECK_ABORT != 0 {

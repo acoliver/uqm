@@ -1,7 +1,7 @@
 //! Retained contact capabilities mutate the supplied campaign, without a published owner.
 use std::cell::RefCell;
 use uqm_rust::{
-    comm::dispatch::ship,
+    engine::species::ship,
     engine::{
         battle::{Battle, Cx},
         observe::{Io, Unobserved},

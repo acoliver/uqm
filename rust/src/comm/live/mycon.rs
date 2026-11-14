@@ -1,16 +1,12 @@
 use crate::comm::descriptors::mycon::descriptor;
-use crate::comm::live::script::LiveScript;
+use crate::comm::host::Host;
 use crate::comm::races::mycon::*;
 use crate::comm::{locdata::CLocData, Comm};
 use crate::engine::battle::Cx;
-fn run(
-    comm: &mut Comm,
-    cx: &mut Cx<'_>,
-    f: impl FnOnce(&mut Dialogue<'_, LiveScript<'_, '_, Handler>>),
-) {
+fn run(comm: &mut Comm, cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, Host<'_, '_, Handler>>)) {
     let mut session = comm.race_scratch.mycon.take().unwrap_or_default();
     {
-        let mut api = LiveScript::new(comm, cx, callback);
+        let mut api = Host::new(comm, cx, callback);
         f(&mut Dialogue {
             api: &mut api,
             session: &mut session,
@@ -81,7 +77,7 @@ mod api {
 
     use crate::comm::races::mycon::api::*;
 
-    impl MyconApi for crate::comm::live::script::LiveScript<'_, '_, Handler> {
+    impl MyconApi for crate::comm::host::Host<'_, '_, Handler> {
         fn random(&mut self) -> u32 {
             self.cx.borrow_mut().with_legacy(crate::math::random)
         }

@@ -54,7 +54,7 @@ fn offered_callbacks_complete_the_quest_party_and_alliance() {
         select(&mut api, phrase);
     }
     assert_eq!(
-        api.alliances[crate::comm::dispatch::ship::SPATHI_SHIP as usize],
+        api.alliances[crate::engine::species::ship::SPATHI_SHIP as usize],
         1
     );
     api.effects.clear();
@@ -187,7 +187,7 @@ fn every_exit_speaks_the_correct_phrase_and_selects_the_correct_segue() {
             }
             DO_AS_WE_SAY => {
                 assert!(api.effects.contains(&Effect::Allied(
-                    crate::comm::dispatch::ship::SPATHI_SHIP as u16,
+                    crate::engine::species::ship::SPATHI_SHIP as u16,
                     true
                 )));
                 assert!(api.effects.contains(&Effect::Event(1, 6, 0, 0, 11)));
@@ -609,7 +609,7 @@ fn information_exhaustion_disables_the_parent_topic() {
 
 #[test]
 fn intro_dispatches_every_gate_in_c_priority_order() {
-    let ship = crate::comm::dispatch::ship::SPATHI_SHIP as usize;
+    let ship = crate::engine::species::ship::SPATHI_SHIP as usize;
     for (states, allied, line, palette) in [
         (
             vec![(StoryKey::SPATHI_MANNER, 2)],
