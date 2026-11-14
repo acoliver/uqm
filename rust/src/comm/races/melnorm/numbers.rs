@@ -1,7 +1,7 @@
 use super::phrases::*;
 use crate::comm::races::descriptor::{NumberSpeech, SpeechDigit};
 
-static DIGITS: [u16; 10] = [
+const DIGITS: [u16; 10] = [
     ENUMERATE_ZERO,
     ENUMERATE_ONE,
     ENUMERATE_TWO,
@@ -13,7 +13,7 @@ static DIGITS: [u16; 10] = [
     ENUMERATE_EIGHT,
     ENUMERATE_NINE,
 ];
-static TEENS: [u16; 10] = [
+const TEENS: [u16; 10] = [
     ENUMERATE_TEN,
     ENUMERATE_ELEVEN,
     ENUMERATE_TWELVE,
@@ -25,7 +25,7 @@ static TEENS: [u16; 10] = [
     ENUMERATE_EIGHTEEN,
     ENUMERATE_NINETEEN,
 ];
-static TENS: [u16; 10] = [
+const TENS: [u16; 10] = [
     0,
     0,
     ENUMERATE_TWENTY,

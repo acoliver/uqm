@@ -1551,18 +1551,11 @@ pub type StatMsgMode = ::std::os::raw::c_uint;
 pub use crate::ships::native::abi::velocity_desc;
 pub type VELOCITY_DESC = velocity_desc;
 
-pub use crate::ships::native::abi::ANIMATION_DESC;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct SEQUENCE {
     _unused: [u8; 0],
 }
-pub use crate::ships::native::abi::NUMBER_SPEECH_DESC;
-pub use crate::ships::native::abi::SPEECH_DIGIT;
-pub use crate::ships::native::abi::SPEECH_DIGITNAME;
-pub type NUMBER_SPEECH = *const NUMBER_SPEECH_DESC;
-pub type LDAS_FLAGS = DWORD;
-pub use crate::ships::native::abi::LOCDATA;
 pub const PORTAL_SPAWNER_DEVICE: _bindgen_ty_6 = 0;
 pub const TALKING_PET_DEVICE: _bindgen_ty_6 = 1;
 pub const UTWIG_BOMB_DEVICE: _bindgen_ty_6 = 2;

@@ -2,7 +2,7 @@
 //! InitCommunication.
 //!
 //! Encounter dispatch uses typed views of the campaign pools owned by World.
-//! CommData is populated through the existing `init_race` mechanism (P10).
+//! Race content supplies descriptors; the mode lifecycle table builds loaded sessions.
 //!
 //! @plan PLAN-20260724-MAINLOOP-AND-COMM.P11
 //! @requirement REQ-ML-007, REQ-COMM-DISPATCH
