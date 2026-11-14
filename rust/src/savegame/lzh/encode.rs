@@ -229,8 +229,7 @@ impl<S: Write + Seek> CodeDesc<S> {
         Ok(())
     }
 
-    fn finish_encode(&mut self) -> io::Result<()> {
-        let mut tree = self.encoder.take().unwrap();
+    fn finish_encode(&mut self, mut tree: Box<Tree>) -> io::Result<()> {
         let mut r = self.buf_index as usize;
         let mut s = self.restart_index as usize;
         let mut left = self.bytes_left as usize;
@@ -283,8 +282,8 @@ impl<W: Write + Seek> Encoder<W> {
     }
 
     pub fn finish(mut self) -> io::Result<W> {
-        if self.desc.encoder.is_some() {
-            self.desc.finish_encode()?;
+        if let Some(tree) = self.desc.encoder.take() {
+            self.desc.finish_encode(tree)?;
         }
         self.desc.stream.flush()?;
         Ok(self.desc.stream)

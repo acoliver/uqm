@@ -3,6 +3,8 @@ use super::super::{legacy, SaveSlots};
 use crate::comm::dispatch::{IN_INTERPLANETARY, START_ENCOUNTER, START_INTERPLANETARY};
 use crate::engine::{battle::Cx, save::summary_record::SummaryDesc};
 use crate::mainloop::dir_prep::saveDir;
+use uqm_engine::io::uio_owned::directory;
+use uqm_save::SlotError;
 
 pub enum LoadRequest<'a, 'game> {
     Summary(&'a mut SummaryDesc),
@@ -29,8 +31,7 @@ pub fn load_game(slot: u16, request: LoadRequest<'_, '_>) -> u32 {
     let loading = matches!(&request, LoadRequest::Restore(_));
     let result = (|| -> anyhow::Result<()> {
         // SAFETY: the game-thread save directory remains open throughout the synchronous operation.
-        let files = unsafe { crate::io::uio_owned::directory(saveDir.cast()) }
-            .map_err(|_| crate::savegame::SlotError::NoSaveDir)?;
+        let files = unsafe { directory(saveDir.cast()) }.map_err(|_| SlotError::NoSaveDir)?;
         let slots = SaveSlots::new(&files);
         let cx = match request {
             LoadRequest::Summary(summary) => {

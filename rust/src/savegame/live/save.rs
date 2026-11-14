@@ -9,6 +9,8 @@ use crate::engine::world::generation::SolarSnapshot;
 use crate::mainloop::dir_prep::saveDir;
 use crate::navigation::globals::in_hqspace;
 use crate::navigation::groups::live::put_group_info;
+use uqm_engine::io::uio_owned::directory;
+use uqm_save::SlotError;
 
 /// # Safety
 /// The game thread retains the active solar session and initialized star catalog.
@@ -39,8 +41,7 @@ pub fn save_game(
 ) -> u32 {
     let result = (|| -> anyhow::Result<()> {
         // SAFETY: the game-thread save directory remains open throughout the synchronous operation.
-        let files = unsafe { crate::io::uio_owned::directory(saveDir.cast()) }
-            .map_err(|_| crate::savegame::SlotError::NoSaveDir)?;
+        let files = unsafe { directory(saveDir.cast()) }.map_err(|_| SlotError::NoSaveDir)?;
         let slots = SaveSlots::new(&files);
         // SAFETY: the supplied context retains campaign and native solar resources.
         let mut save = unsafe { capture(cx, solar, name.to_bytes())? };

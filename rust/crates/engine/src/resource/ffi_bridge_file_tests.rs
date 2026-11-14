@@ -2,7 +2,7 @@
 //! Rust UIO layer: loading and saving index files, the stream-like file
 //! helpers, and loading resource data from a content directory.
 
-use std::ffi::{c_char, c_void, CStr, CString};
+use std::ffi::{c_void, CStr, CString};
 use std::ptr;
 
 use serial_test::serial;

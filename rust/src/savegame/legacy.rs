@@ -209,7 +209,7 @@ mod live {
     fn open_legacy_slot(slots: &SaveSlots, slot: u16) -> anyhow::Result<(FileStream, Summary)> {
         let mut stream = slots.open_legacy(slot)?;
         let mut header = [0; 164];
-        (&mut stream).read_exact(&mut header)?;
+        stream.read_exact(&mut header)?;
         let summary = decode_legacy_summary(&header)?;
         Ok((stream, summary))
     }
