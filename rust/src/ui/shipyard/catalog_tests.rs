@@ -1,20 +1,10 @@
-//! Exercise the private legacy roster helpers with a real published campaign owner.
+//! Exercise the real roster helpers against independent owned campaigns.
 
-#[path = "catalog.rs"]
-mod catalog;
+use super::shipyard_catalog as catalog;
+use crate::engine::{world::queues::FleetInfo, Game, World};
+use crate::ships::native::abi::{BYTE, GOOD_GUY};
 
-use crate::engine::{
-    battle::link_queue::LinkQueue,
-    world::queues::{Fleet, FleetInfo},
-    Game, World,
-};
-use crate::navigation::abi::{BYTE, COUNT, GOOD_GUY};
-
-fn avail_race_queue<R>(read: impl FnOnce(&LinkQueue<'_, Fleet, 24>) -> R) -> R {
-    World::current().read(|world| read(&world.avail_races_ref()))
-}
-
-fn with_roster(states: &[u16], check: impl FnOnce()) {
+fn with_roster(states: &[u16], check: impl FnOnce(&World)) {
     let mut game = Game::new();
     {
         let mut queue = game.world.avail_races();
@@ -31,17 +21,16 @@ fn with_roster(states: &[u16], check: impl FnOnce()) {
             queue.put(id);
         }
     }
-    // SAFETY: this serialized fixture retains the unique game for the full handoff.
-    unsafe { crate::app::bridge::with_game(&mut game, check) };
+    check(&game.world);
 }
 
 #[test]
 #[serial_test::serial]
 fn empty_roster_has_no_available_escort() {
-    with_roster(&[], || {
-        assert_eq!(catalog::get_available_race_count(), 0);
-        assert!(catalog::get_available_race_from_index(0).is_none());
-        assert!(catalog::get_available_race_from_index(BYTE::MAX).is_none());
+    with_roster(&[], |world| {
+        assert_eq!(catalog::get_available_race_count(world), 0);
+        assert!(catalog::get_available_race_from_index(world, 0).is_none());
+        assert!(catalog::get_available_race_from_index(world, BYTE::MAX).is_none());
     });
 }
 
@@ -49,10 +38,11 @@ fn empty_roster_has_no_available_escort() {
 #[serial_test::serial]
 fn selection_filters_allies_but_returns_the_original_roster_offset() {
     let allied = GOOD_GUY as u16;
-    with_roster(&[0, allied, allied | 0x80, 0, allied], || {
-        assert_eq!(catalog::get_available_race_count(), 2);
+    with_roster(&[0, allied, allied | 0x80, 0, allied], |world| {
+        assert_eq!(catalog::get_available_race_count(world), 2);
         for (selection, offset) in [1, 4].into_iter().enumerate() {
-            let Some((index, fleet)) = catalog::get_available_race_from_index(selection as BYTE)
+            let Some((index, fleet)) =
+                catalog::get_available_race_from_index(world, selection as BYTE)
             else {
                 panic!("the allied roster entry must be selectable");
             };
@@ -61,16 +51,31 @@ fn selection_filters_allies_but_returns_the_original_roster_offset() {
             assert_eq!(fleet.crew_level, 10 + offset);
             assert_eq!(fleet.allied_state, allied);
         }
-        assert!(catalog::get_available_race_from_index(2).is_none());
-        assert!(catalog::get_available_race_from_index(BYTE::MAX).is_none());
+        assert!(catalog::get_available_race_from_index(world, 2).is_none());
+        assert!(catalog::get_available_race_from_index(world, BYTE::MAX).is_none());
     });
 }
 
 #[test]
 #[serial_test::serial]
 fn a_nonempty_roster_without_allies_has_no_selection() {
-    with_roster(&[0, GOOD_GUY as u16 | 0x80, 0], || {
-        assert_eq!(catalog::get_available_race_count(), 0);
-        assert!(catalog::get_available_race_from_index(0).is_none());
+    with_roster(&[0, GOOD_GUY as u16 | 0x80, 0], |world| {
+        assert_eq!(catalog::get_available_race_count(world), 0);
+        assert!(catalog::get_available_race_from_index(world, 0).is_none());
     });
+}
+
+#[test]
+fn independent_rosters_use_the_supplied_owner() {
+    let empty = World::new();
+    let mut allied = World::new();
+    let mut queue = allied.avail_races();
+    let id = queue.alloc().unwrap();
+    queue.get_mut(id).allied_state = GOOD_GUY as u16;
+    queue.put(id);
+    assert_eq!(catalog::get_available_race_count(&empty), 0);
+    assert_eq!(catalog::get_available_race_count(&allied), 1);
+    assert!(catalog::get_available_race_from_index(&empty, 0).is_none());
+    assert!(catalog::get_available_race_from_index(&allied, 0).is_some());
+    assert_eq!(catalog::get_available_race_count(&empty), 0);
 }

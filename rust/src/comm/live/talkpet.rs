@@ -109,7 +109,6 @@ mod api {
 
     use crate::comm::races::talkpet::api::*;
 
-    #[cfg(not(test))]
     impl TalkpetApi for crate::comm::live::script::LiveScript<'_, '_, Handler> {
         fn flags(&self) -> u8 {
             self.cx.borrow().world.data.game.glob_flags

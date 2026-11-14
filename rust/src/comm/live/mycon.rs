@@ -81,7 +81,6 @@ mod api {
 
     use crate::comm::races::mycon::api::*;
 
-    #[cfg(not(test))]
     impl MyconApi for crate::comm::live::script::LiveScript<'_, '_, Handler> {
         fn random(&mut self) -> u32 {
             self.cx.borrow_mut().with_legacy(crate::math::random)

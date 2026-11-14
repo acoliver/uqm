@@ -1,8 +1,7 @@
 //! Status labels rendered from the supplied campaign and display owners.
-use super::{
-    rgb15, StatMsgMode_SMM_CREDITS as CREDITS, StatMsgMode_SMM_RES_UNITS as RES_UNITS,
-    MONTHS_STRING_BASE, STATUS_MESSAGE_HEIGHT, STATUS_MESSAGE_WIDTH, STATUS_STRING_BASE,
-};
+use super::{rgb15, STATUS_MESSAGE_HEIGHT, STATUS_MESSAGE_WIDTH};
+use crate::starbase::ids;
+use crate::starbase::platform::StatusMessageMode;
 use crate::{
     engine::{Kernel, StoryKey, World},
     graphics::{
@@ -25,19 +24,23 @@ pub fn format_date(month: &CStr, day: u8, year: u16) -> CString {
 pub fn status_message_text(kernel: &Kernel, world: &World) -> CString {
     let mut bytes = Vec::new();
     match kernel.status_message_mode {
-        CREDITS => {
+        mode if mode == StatusMessageMode::Credits as u32 => {
             let credits = u16::from(world.story_state(StoryKey::MELNORME_CREDIT0) as u8)
                 | (u16::from(world.story_state(StoryKey::MELNORME_CREDIT1) as u8) << 8);
             bytes.extend_from_slice(format!("{credits} ").as_bytes());
-            bytes.extend_from_slice(kernel.game_text(STATUS_STRING_BASE as usize).to_bytes());
+            bytes.extend_from_slice(
+                kernel
+                    .game_text(ids::STATUS_STRING_BASE as usize)
+                    .to_bytes(),
+            );
         }
-        RES_UNITS => {
+        mode if mode == StatusMessageMode::ResUnits as u32 => {
             if (world.story_state(StoryKey::CHMMR_BOMB_STATE) as u8) < 2 {
                 bytes.extend_from_slice(world.data.flagship.res_units.to_string().as_bytes());
             } else if kernel.configuration.preferences().menu == 2 {
                 bytes.extend_from_slice(
                     kernel
-                        .game_text((STATUS_STRING_BASE + 2) as usize)
+                        .game_text((ids::STATUS_STRING_BASE + 2) as usize)
                         .to_bytes(),
                 );
             } else {
@@ -46,7 +49,7 @@ pub fn status_message_text(kernel: &Kernel, world: &World) -> CString {
             bytes.push(b' ');
             bytes.extend_from_slice(
                 kernel
-                    .game_text((STATUS_STRING_BASE + 1) as usize)
+                    .game_text((ids::STATUS_STRING_BASE + 1) as usize)
                     .to_bytes(),
             );
         }
@@ -54,7 +57,7 @@ pub fn status_message_text(kernel: &Kernel, world: &World) -> CString {
             let (month, day, year) = world.data.calendar_date();
             bytes.extend_from_slice(
                 format_date(
-                    kernel.game_text((MONTHS_STRING_BASE + u32::from(month) - 1) as usize),
+                    kernel.game_text((ids::MONTHS_STRING_BASE + i32::from(month) - 1) as usize),
                     day,
                     year,
                 )

@@ -1,10 +1,8 @@
 //! Flagship statistics computed from owned equipment, without graphics access.
+use crate::starbase::sis_modules as equipment;
+use crate::starbase::sis_modules::ModuleType;
 
 use crate::engine::world::SisState;
-use crate::navigation::abi::{
-    DYNAMO_UNIT, FUEL_TANK, FUEL_TANK_CAPACITY, FUEL_TANK_SCALE, FUSION_THRUSTER,
-    HEFUEL_TANK_CAPACITY, HIGHEFF_FUELSYS, SHIVA_FURNACE, TURNING_JETS,
-};
 
 #[derive(Debug, PartialEq)]
 pub(super) struct Stats {
@@ -20,23 +18,25 @@ pub(super) fn calculate(sis: &SisState) -> Stats {
     let mut energy_wait: u8 = 10;
     let mut thrust: u16 = 10;
     let mut turn_wait: u8 = 17;
-    let mut fuel: u32 = 10 * FUEL_TANK_SCALE;
+    let mut fuel: u32 = 10 * equipment::FUEL_TANK_SCALE;
     for &m in &sis.module_slots {
-        match u32::from(m) {
-            FUEL_TANK => fuel += FUEL_TANK_CAPACITY,
-            HIGHEFF_FUELSYS => fuel += HEFUEL_TANK_CAPACITY,
-            DYNAMO_UNIT => energy_wait = ((i32::from(energy_wait) - 2) as u8).max(4),
-            SHIVA_FURNACE => energy_regen += 1,
+        match ModuleType::from_u8(m) {
+            Some(ModuleType::FuelTank) => fuel += equipment::FUEL_TANK_CAPACITY,
+            Some(ModuleType::HighEffFuelSys) => fuel += equipment::HEFUEL_TANK_CAPACITY,
+            Some(ModuleType::DynamoUnit) => {
+                energy_wait = ((i32::from(energy_wait) - 2) as u8).max(4)
+            }
+            Some(ModuleType::ShivaFurnace) => energy_regen += 1,
             _ => {}
         }
     }
     for &d in &sis.drive_slots {
-        if u32::from(d) == FUSION_THRUSTER {
+        if u32::from(d) == ModuleType::FusionThruster as u32 {
             thrust += 2;
         }
     }
     for &j in &sis.jet_slots {
-        if u32::from(j) == TURNING_JETS {
+        if u32::from(j) == ModuleType::TurningJets as u32 {
             turn_wait -= 2;
         }
     }
@@ -55,8 +55,7 @@ mod tests {
 
     fn sis() -> SisState {
         let mut sis = crate::engine::World::new().data.flagship;
-        sis.module_slots
-            .fill(crate::navigation::abi::NUM_MODULES as u8);
+        sis.module_slots.fill(equipment::NUM_MODULES as u8);
         sis
     }
 
@@ -69,7 +68,7 @@ mod tests {
                 energy_wait: 10,
                 thrust: 10,
                 turn_wait: 17,
-                fuel: 10 * FUEL_TANK_SCALE
+                fuel: 10 * equipment::FUEL_TANK_SCALE
             }
         );
     }
@@ -77,12 +76,12 @@ mod tests {
     #[test]
     fn equipment_counts_preserve_dynamo_floor_and_capacity_units() {
         let mut sis = sis();
-        sis.drive_slots.fill(FUSION_THRUSTER as u8);
-        sis.jet_slots.fill(TURNING_JETS as u8);
-        sis.module_slots[..5].fill(DYNAMO_UNIT as u8);
-        sis.module_slots[5..9].fill(SHIVA_FURNACE as u8);
-        sis.module_slots[9] = FUEL_TANK as u8;
-        sis.module_slots[10] = HIGHEFF_FUELSYS as u8;
+        sis.drive_slots.fill(ModuleType::FusionThruster as u8);
+        sis.jet_slots.fill(ModuleType::TurningJets as u8);
+        sis.module_slots[..5].fill(ModuleType::DynamoUnit as u8);
+        sis.module_slots[5..9].fill(ModuleType::ShivaFurnace as u8);
+        sis.module_slots[9] = ModuleType::FuelTank as u8;
+        sis.module_slots[10] = ModuleType::HighEffFuelSys as u8;
         assert_eq!(
             calculate(&sis),
             Stats {
@@ -90,7 +89,9 @@ mod tests {
                 energy_wait: 4,
                 thrust: 32,
                 turn_wait: 1,
-                fuel: 10 * FUEL_TANK_SCALE + FUEL_TANK_CAPACITY + HEFUEL_TANK_CAPACITY
+                fuel: 10 * equipment::FUEL_TANK_SCALE
+                    + equipment::FUEL_TANK_CAPACITY
+                    + equipment::HEFUEL_TANK_CAPACITY
             }
         );
     }

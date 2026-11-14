@@ -191,7 +191,7 @@ fn apply_transaction<P: Platform + ?Sized>(
         Placement::Drive(item) | Placement::Jet(item) | Placement::Module(item) => {
             draw_ship_piece(
                 platform,
-                &after,
+                &after.module_slots,
                 art.module_frame,
                 u16::from(new_piece),
                 u16::from(item),

@@ -200,12 +200,37 @@ fn run_campaign(
 fn dispatch(cx: &mut Cx<'_>, io: &mut Io<'_>, decision: ActivityDecision) {
     match decision {
         ActivityDecision::InstallBombAtEarth => {
-            // SAFETY: the campaign retains the initialized story and display.
-            unsafe { crate::ui::starbase::install_bomb_at_earth(cx) };
+            crate::ui::starbase::install_bomb_at_earth(cx);
         }
         ActivityDecision::VisitStarBase => {
             // SAFETY: the campaign and display remain live through the starbase mode.
-            unsafe { crate::ui::starbase::run_starbase_visit(cx, io) };
+            unsafe {
+                crate::ui::starbase::run_starbase_visit(
+                    cx,
+                    io,
+                    &crate::ui::MenuServices {
+                        communicate: |cx, io, conversation, options| {
+                            crate::comm::dispatch::init_communication_with_options(
+                                cx,
+                                io,
+                                conversation,
+                                options,
+                            )
+                        },
+                        game_options: |cx, io| {
+                            crate::front_end::gameopt::game_options(cx, io, None)
+                        },
+                        ship_spin: |cx, _io, index, music| {
+                            let music =
+                                music.map_or(std::ptr::null_mut(), |music| music.as_raw().cast());
+                            // SAFETY: the supplied music and campaign remain retained during the presentation.
+                            cx.with_legacy(|| {
+                                crate::front_end::fmv::runtime::DoShipSpin(index, music)
+                            });
+                        },
+                    },
+                )
+            };
         }
         ActivityDecision::RaceCommunication => {
             // SAFETY: the campaign retains the communication mode's owners and resources.

@@ -2,7 +2,7 @@
 use super::util::box_rectangles;
 use crate::engine::Kernel;
 use crate::graphics::context_abi::{ContextFrame, ContextLease};
-use crate::navigation::abi::*;
+use crate::graphics::native_abi::*;
 fn color(r: u8, g: u8, b: u8) -> Color {
     Color {
         r: (r << 3) | (r >> 2),

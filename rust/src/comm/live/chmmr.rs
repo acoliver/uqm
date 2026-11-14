@@ -101,7 +101,6 @@ mod api {
     use crate::comm::races::chmmr::api::*;
     use crate::engine::StoryKey;
 
-    #[cfg(not(test))]
     impl ChmmrApi for crate::comm::live::script::LiveScript<'_, '_, Handler> {
         fn refit(&mut self) {
             use crate::comm::races::script::ScriptApi;

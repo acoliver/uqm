@@ -700,7 +700,7 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
                             },
                         },
                     );
-                    let mut ship: uqm_rust::navigation::abi::SHIP_INFO = std::mem::zeroed();
+                    let mut ship: uqm_rust::engine::battle::record::SHIP_INFO = std::mem::zeroed();
                     ship.max_crew = 2;
                     ship.max_energy = 2;
                     ship.crew_level = 2;
@@ -786,9 +786,9 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
                     }
                 }
             }
-            let mut stats: uqm_rust::navigation::abi::SHIP_INFO = std::mem::zeroed();
+            let mut stats: uqm_rust::engine::battle::record::SHIP_INFO = std::mem::zeroed();
             stats.ship_flags = 1 << 13;
-            let update = |stats: &mut uqm_rust::navigation::abi::SHIP_INFO, crew, energy| {
+            let update = |stats: &mut uqm_rust::engine::battle::record::SHIP_INFO, crew, energy| {
                 uqm_rust::ui::shipstat::update_statistics(
                     Some(&context_lease),
                     false,

@@ -1,6 +1,8 @@
 use super::palette::*;
+use crate::engine::input::frames::*;
 use crate::engine::Kernel;
-use crate::navigation::abi::*;
+use crate::graphics::native_abi::*;
+use uqm_engine::time::counter_abi::ONE_SECOND;
 
 use super::menu_state::{
     alternate, end_state, PM_CHANGE_CAPTAIN, PM_CHANGE_SHIP, PM_CREW, PM_CYBORG_OFF,
@@ -49,7 +51,7 @@ pub(crate) fn choose_menu_state(
     1
 }
 
-pub(crate) mod hyperspace;
+pub mod hyperspace;
 
 #[cfg(test)]
 mod tests {

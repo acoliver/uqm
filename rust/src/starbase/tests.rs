@@ -329,7 +329,7 @@ fn fuel_bars_show_filled_and_empty_cells_for_the_fuel_on_board() {
 fn drive_piece_draws_top_then_side_view_at_the_drive_slot() {
     let platform = RecordingPlatform::new();
     let sis = platform.sis.borrow().clone();
-    draw_ship_piece(&platform, &sis, 5000, 1, 2, false);
+    draw_ship_piece(&platform, &sis.module_slots, 5000, 1, 2, false);
     let stamps: Vec<_> = platform
         .events()
         .into_iter()
@@ -357,7 +357,7 @@ fn drive_piece_draws_top_then_side_view_at_the_drive_slot() {
 fn first_module_slot_piece_draws_its_frame_borders_and_the_next_slot() {
     let platform = RecordingPlatform::new();
     let sis = platform.sis.borrow().clone();
-    draw_ship_piece(&platform, &sis, 5000, 5, 0, false);
+    draw_ship_piece(&platform, &sis.module_slots, 5000, 5, 0, false);
     let events = platform.events();
     assert_eq!(count(&events, |e| matches!(e, Event::FillRect(_))), 12);
     assert_eq!(count(&events, |e| matches!(e, Event::DrawStamp(_))), 4);

@@ -1,6 +1,8 @@
 use std::{cell::Cell, ptr, rc::Rc};
 use uqm_rust::{
     battle::RaceOps,
+    engine::input::frames::{KEY_MENU_RIGHT, KEY_MENU_SELECT},
+    engine::world::activity::activity_flags::IN_BATTLE,
     engine::{
         battle::{input::InputContext, Battle, Cx},
         input::{frames::InputState, Frame, InputControls, InputRuntime, InputSession},
@@ -14,7 +16,6 @@ use uqm_rust::{
         native_abi::*,
         sdl::lifecycle_abi::{GraphicsOptions, TFB_InitGraphics, TFB_UninitGraphics},
     },
-    navigation::abi::{IN_BATTLE, KEY_MENU_RIGHT, KEY_MENU_SELECT},
 };
 
 struct MenuDriver {
@@ -122,7 +123,7 @@ fn native_menu_navigates_empty_devices_and_restores_the_retained_display() {
         SetContext(status);
         let mut game = Game::new();
         game.world.story = Some(uqm_rust::engine::world::story::StoryState::new());
-        game.world.set_activity(IN_BATTLE as u16);
+        game.world.set_activity(IN_BATTLE);
         game.kernel
             .configuration
             .update_preferences(|preferences| preferences.menu = 0);
@@ -148,7 +149,7 @@ fn native_menu_navigates_empty_devices_and_restores_the_retained_display() {
         TFB_FlushGraphics();
         let radar = GetFramePixel(screen, POINT { x: 259, y: 173 });
         assert_eq!((radar.r, radar.g, radar.b), (82, 82, 82));
-        assert_eq!(cx.world.activity(), IN_BATTLE as u16);
+        assert_eq!(cx.world.activity(), IN_BATTLE);
         SetContext(ptr::null_mut());
         for context in contexts {
             DestroyContext(context);

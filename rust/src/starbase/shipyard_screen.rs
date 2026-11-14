@@ -304,7 +304,7 @@ impl<'a, P: Platform + ?Sized> ShipyardScreen<'a, P> {
     fn draw_blueprint(&self) -> Result<(), StarbaseError> {
         let p = self.platform;
         let sis = p.sis()?;
-        let fonts = p.font_style();
+        let (slots, fonts) = (&sis.module_slots, p.font_style());
         // Every crew member needs a seat before anything is drawn.
         let mut dots = Vec::with_capacity(usize::from(sis.crew_enlisted));
         for crew in 0..sis.crew_enlisted {
@@ -322,21 +322,21 @@ impl<'a, P: Platform + ?Sized> ShipyardScreen<'a, P> {
             frame: p.dec_frame(frame),
         });
         for (slot, piece) in sis.drive_slots.iter().enumerate() {
-            draw_ship_piece(p, &sis, frame, u16::from(*piece), slot as u16, true);
+            draw_ship_piece(p, slots, frame, u16::from(*piece), slot as u16, true);
         }
         for (slot, piece) in sis.jet_slots.iter().enumerate() {
-            draw_ship_piece(p, &sis, frame, u16::from(*piece), slot as u16, true);
+            draw_ship_piece(p, slots, frame, u16::from(*piece), slot as u16, true);
         }
         let crew_pod = super::sis_modules::ModuleType::CrewPod as u8;
         for (slot, piece) in sis.module_slots.iter().enumerate() {
             if *piece != crew_pod {
-                draw_ship_piece(p, &sis, frame, u16::from(*piece), slot as u16, true);
+                draw_ship_piece(p, slots, frame, u16::from(*piece), slot as u16, true);
             }
         }
         p.set_fg_color(Rgba::rgb15(0x0A, 0x0A, 0x1F));
         for (slot, piece) in sis.module_slots.iter().enumerate() {
             if *piece == crew_pod {
-                draw_ship_piece(p, &sis, frame, u16::from(*piece), slot as u16, true);
+                draw_ship_piece(p, slots, frame, u16::from(*piece), slot as u16, true);
             }
         }
         for (point, color) in dots {

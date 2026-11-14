@@ -1,5 +1,6 @@
 //! Campaign menus rendered from retained display and text owners.
 use super::*;
+use crate::starbase::ids;
 use crate::{
     engine::World,
     graphics::{
@@ -46,7 +47,7 @@ fn draw_pc_menu(
     context.fill_rectangle(INACTIVE_COLOR, *rect);
     if i16::from(count) * ITEM_HEIGHT > rect.extent.height {
         crate::log_abi::log_message(
-            log_Level_log_Error as i32,
+            crate::logging::LogLevel::Error as i32,
             "Warning, no room for all menu items!",
         );
     } else {
@@ -67,7 +68,7 @@ fn draw_pc_menu(
     context.with_text_state(|| {
         for item in begin..=end {
             let mut label = kernel
-                .game_text((MAINMENU_STRING_BASE + u32::from(item)) as usize)
+                .game_text((ids::MAINMENU_STRING_BASE + i32::from(item)) as usize)
                 .to_bytes()
                 .to_vec();
             let limit = if item == PM_FUEL || item == PM_CREW {
@@ -152,7 +153,7 @@ pub fn draw_menu_state(
     if state < 0 {
         state = -state;
     }
-    if preferences.menu == OPT_PC {
+    if preferences.menu == crate::ui::settings::OPT_PC {
         let mut temp = state as u8;
         alternate(&mut begin, &mut temp);
         state = i16::from(temp);
@@ -186,7 +187,7 @@ pub fn draw_menu_state(
         };
         context.with_batch(|| {
             context.set_foreground(INACTIVE_COLOR);
-            let pc = frame.is_some() && preferences.menu == OPT_PC;
+            let pc = frame.is_some() && preferences.menu == crate::ui::settings::OPT_PC;
             if pc {
                 let selection = pc_selection(begin, state);
                 rect.extent.height = 64;
@@ -199,7 +200,7 @@ pub fn draw_menu_state(
                     &mut rect,
                 );
             } else {
-                if preferences.menu == OPT_PC {
+                if preferences.menu == crate::ui::settings::OPT_PC {
                     rect.corner.x -= 1;
                     rect.extent.width += 1;
                     rect.extent.height = 64;

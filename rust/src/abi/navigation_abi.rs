@@ -2719,21 +2719,6 @@ pub const SHIPYARD: _bindgen_ty_29 = 2;
 pub const DEPART_BASE: _bindgen_ty_29 = 3;
 pub type _bindgen_ty_29 = ::std::os::raw::c_uint;
 pub type STARBASE_STATE = BYTE;
-#[cfg(not(test))]
-pub use crate::ui::starbase::install_bomb_at_earth;
-#[cfg(test)]
-extern "C" {
-    pub fn install_bomb_at_earth();
-}
-
-#[cfg(not(test))]
-pub use crate::ui::outfit::do_outfit;
-
-#[cfg(not(test))]
-pub use crate::ui::shipyard::do_shipyard;
-
-#[cfg(not(test))]
-pub use crate::ui::starbase::DrawShipPiece;
 
 #[cfg(not(test))]
 pub use crate::battle::ship_native::engine::animation_preprocess;

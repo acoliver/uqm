@@ -73,7 +73,6 @@ mod api {
 
     use crate::comm::races::umgah::api::*;
 
-    #[cfg(not(test))]
     impl UmgahApi for crate::comm::live::script::LiveScript<'_, '_, Handler> {
         fn add_biomass(&mut self, amount: u16) {
             let mut cx = self.cx.borrow_mut();

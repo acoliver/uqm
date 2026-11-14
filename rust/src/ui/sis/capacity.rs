@@ -1,12 +1,13 @@
 //! Flagship capacities and physical crew, mineral and fuel positions.
+use crate::starbase::sis_modules as equipment;
 
 use crate::engine::world::SisState;
 use crate::graphics::{
     context_abi::ContextLease,
     native_abi::{Color, EXTENT, POINT, RECT},
 };
-use crate::starbase::sis_modules::{fuel_bar_at, ModuleType, FUEL_RESERVE, FUEL_VOLUME_PER_ROW};
 use crate::ui::rgb15;
+use equipment::{fuel_bar_at, ModuleType};
 
 const CREW_PER_ROW: i32 = 5;
 const SBAY_MASS_PER_ROW: i32 = 50;
@@ -76,7 +77,7 @@ pub(crate) fn storage_capacity(state: &SisState) -> u16 {
 }
 
 pub(crate) fn fuel_capacity(state: &SisState) -> u32 {
-    FUEL_RESERVE
+    equipment::FUEL_RESERVE
         + state
             .module_slots
             .iter()
@@ -164,7 +165,7 @@ fn draw_fuel_bar(context: &ContextLease, state: &SisState, filled: bool) {
 
 pub(crate) fn draw_fuel_bars(context: &ContextLease, state: &SisState) {
     let mut display = *state;
-    display.fuel_on_board = FUEL_RESERVE;
+    display.fuel_on_board = equipment::FUEL_RESERVE;
     let capacity = fuel_capacity(state);
     context.draw_batch(|| {
         while display.fuel_on_board < capacity {
@@ -173,7 +174,7 @@ pub(crate) fn draw_fuel_bars(context: &ContextLease, state: &SisState) {
                 &display,
                 display.fuel_on_board < state.fuel_on_board,
             );
-            display.fuel_on_board += FUEL_VOLUME_PER_ROW;
+            display.fuel_on_board += equipment::FUEL_VOLUME_PER_ROW;
         }
     });
 }
@@ -206,12 +207,12 @@ pub(crate) fn draw_blueprint_cells(context: &ContextLease, state: &SisState, pc_
             );
             remaining -= mass;
         }
-        if state.fuel_on_board > FUEL_RESERVE {
-            display.fuel_on_board = FUEL_RESERVE;
-            let mut remaining = state.fuel_on_board - FUEL_RESERVE;
+        if state.fuel_on_board > equipment::FUEL_RESERVE {
+            display.fuel_on_board = equipment::FUEL_RESERVE;
+            let mut remaining = state.fuel_on_board - equipment::FUEL_RESERVE;
             while remaining != 0 {
                 draw_fuel_bar(context, &display, true);
-                let mass = remaining.min(FUEL_VOLUME_PER_ROW);
+                let mass = remaining.min(equipment::FUEL_VOLUME_PER_ROW);
                 display.fuel_on_board += mass;
                 remaining -= mass;
             }
@@ -225,9 +226,7 @@ mod tests {
 
     fn flagship() -> SisState {
         let mut state = crate::engine::World::new().data.flagship;
-        state
-            .module_slots
-            .fill(crate::starbase::sis_modules::EMPTY_MODULE_SLOT);
+        state.module_slots.fill(equipment::EMPTY_MODULE_SLOT);
         state
     }
 

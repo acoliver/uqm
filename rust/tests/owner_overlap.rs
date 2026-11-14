@@ -268,6 +268,24 @@ fn starbase_releases_world_before_communication_and_cleanup() {
                     &mut Io {
                         observer: &mut observer,
                     },
+                    &uqm_rust::ui::MenuServices {
+                        communicate: |cx, io, conversation, options| {
+                            uqm_rust::comm::dispatch::init_communication_with_options(
+                                cx,
+                                io,
+                                conversation,
+                                options,
+                            )
+                        },
+                        game_options: |cx, io| {
+                            uqm_rust::front_end::gameopt::game_options(cx, io, None)
+                        },
+                        ship_spin: |cx, _, index, music| {
+                            let music =
+                                music.map_or(std::ptr::null_mut(), |music| music.as_raw().cast());
+                            cx.with_legacy(|| uqm_rust::front_end::fmv::DoShipSpin(index, music));
+                        },
+                    },
                 );
             })
         });
@@ -278,7 +296,7 @@ fn starbase_releases_world_before_communication_and_cleanup() {
         observer.0,
         [format!(
             "EncounterDispatch({})",
-            uqm_rust::navigation::abi::CONVERSATION_COMMANDER_CONVERSATION
+            uqm_rust::comm::dispatch::conv::COMMANDER
         )]
     );
 }

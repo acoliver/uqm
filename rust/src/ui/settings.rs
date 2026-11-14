@@ -1,4 +1,6 @@
 use crate::engine::world::MUSIC_DISABLED;
+
+pub(crate) const OPT_PC: i32 = 2;
 const SOUND_DISABLED: u8 = 16;
 const GAME_SOUND_PRIORITY: u8 = 2;
 
@@ -40,6 +42,10 @@ pub fn pause_music() {
 }
 pub fn toggle_sound_effect(world: &mut crate::engine::World) {
     world.data.game.glob_flags ^= SOUND_DISABLED;
+}
+
+pub(crate) fn play_menu_failure(kernel: &crate::engine::Kernel, world: &crate::engine::World) {
+    play_menu_sound(kernel, world, 2);
 }
 
 pub(crate) fn play_menu_sound(

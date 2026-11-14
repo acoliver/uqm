@@ -49,7 +49,6 @@ mod api {
 
     use crate::engine::StoryKey;
 
-    #[cfg(not(test))]
     impl BlackurApi for crate::comm::live::script::LiveScript<'_, '_, Handler> {
         fn battle_group(&self, key: StoryKey) -> (u32, u32) {
             let cx = self.cx.borrow();

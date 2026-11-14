@@ -27,6 +27,7 @@ fn call_transition(id: ElementId) {
 }
 
 #[test]
+#[serial_test::serial]
 fn encounter_transition_preserves_frame_cadence_and_completion() {
     battle_context::run(|_| {
         let owner = Battle::new(8);
@@ -84,6 +85,7 @@ fn encounter_transition_preserves_frame_cadence_and_completion() {
 }
 
 #[test]
+#[serial_test::serial]
 fn interplanetary_flagship_keeps_motion_and_native_hooks() {
     battle_context::run(|_| {
         let _owner = Battle::new(8);
@@ -145,6 +147,7 @@ fn interplanetary_flagship_keeps_motion_and_native_hooks() {
 }
 
 #[test]
+#[serial_test::serial]
 fn interplanetary_group_preserves_parent_and_updates_its_own_record() {
     battle_context::run(|_| {
         let _owner = Battle::new(8);

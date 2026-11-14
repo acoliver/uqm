@@ -127,7 +127,6 @@ mod api {
 
     use crate::comm::races::pkunk::api::*;
 
-    #[cfg(not(test))]
     impl PkunkApi for crate::comm::live::script::LiveScript<'_, '_, Handler> {
         fn date(&self) -> (u16, u16, u16) {
             let owner = self.cx.borrow();

@@ -3,7 +3,7 @@ use super::shipyard_layout::{
 };
 use crate::engine::battle::link_queue::{LinkId, LinkQueue};
 use crate::engine::world::queues::Fragment;
-use crate::navigation::abi::*;
+use crate::graphics::native_abi::*;
 use std::ptr;
 
 #[derive(Clone, Copy)]
@@ -15,14 +15,15 @@ pub(super) struct ShipWindow {
     pub(super) right_door: STAMP,
 }
 
-/// # Safety
-/// The game thread retains the menu drawable and initialized fragment records.
-pub(super) unsafe fn prepare_windows(
+pub(super) fn prepare_windows(
     queue: &mut LinkQueue<'_, Fragment, 12>,
-    menu: &MENU_STATE,
+    module_frame: FRAME,
     mut window: COUNT,
     yanked: Option<LinkId<Fragment>>,
-) -> ([ShipWindow; MAX_BUILT_SHIPS as usize], COUNT) {
+) -> (
+    [ShipWindow; crate::starbase::shipyard::HANGAR_SHIPS as usize],
+    COUNT,
+) {
     let stamp = STAMP {
         origin: POINT { x: 0, y: 0 },
         frame: ptr::null_mut(),
@@ -33,7 +34,7 @@ pub(super) unsafe fn prepare_windows(
         image: stamp,
         left_door: stamp,
         right_door: stamp,
-    }; MAX_BUILT_SHIPS as usize];
+    }; crate::starbase::shipyard::HANGAR_SHIPS as usize];
     let mut num_ships: COUNT = 1;
     if let Some(id) = yanked {
         let ship = queue.get(id);
@@ -47,10 +48,8 @@ pub(super) unsafe fn prepare_windows(
             x: SHIP_WIN_WIDTH >> 1,
             y: 0,
         };
-        // SAFETY: both doors are frames in the retained menu drawable.
-        info.left_door.frame = unsafe { IncFrameIndex(menu.ModuleFrame) };
-        // SAFETY: both doors are frames in the retained menu drawable.
-        info.right_door.frame = unsafe { IncFrameIndex(info.left_door.frame) };
+        info.left_door.frame = crate::graphics::menu::relative_frame(module_frame, 1);
+        info.right_door.frame = crate::graphics::menu::relative_frame(info.left_door.frame, 1);
         info.image.origin = POINT {
             x: (SHIP_WIN_WIDTH >> 1) + 1,
             y: SHIP_WIN_WIDTH >> 1,
@@ -88,10 +87,8 @@ pub(super) unsafe fn prepare_windows(
             info.ship = Some(id);
             info.left_door.origin = POINT { x: -1, y: 0 };
             info.right_door.origin = POINT { x: 1, y: 0 };
-            // SAFETY: both doors are frames in the retained menu drawable.
-            info.left_door.frame = unsafe { IncFrameIndex(menu.ModuleFrame) };
-            // SAFETY: both doors are frames in the retained menu drawable.
-            info.right_door.frame = unsafe { IncFrameIndex(info.left_door.frame) };
+            info.left_door.frame = crate::graphics::menu::relative_frame(module_frame, 1);
+            info.right_door.frame = crate::graphics::menu::relative_frame(info.left_door.frame, 1);
             info.image.origin = POINT {
                 x: (SHIP_WIN_WIDTH >> 1) + 1,
                 y: SHIP_WIN_WIDTH >> 1,
@@ -105,22 +102,33 @@ pub(super) unsafe fn prepare_windows(
     (windows, num_ships)
 }
 
+pub(super) fn draw_background(module_frame: FRAME) {
+    use crate::graphics::menu as draw;
+    let frame = draw::frame(module_frame, 0);
+    if super::shipyard_layout::USE_3DO_HANGAR {
+        draw::stamp(frame, POINT { x: 0, y: 0 });
+    } else {
+        let old = draw::clip();
+        let mut clip = old;
+        clip.corner.x -= 1;
+        clip.extent.width += 2;
+        clip.extent.height += 1;
+        draw::set_clip(clip);
+        draw::stamp(frame, POINT { x: 0, y: 0 });
+        draw::set_clip(old);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::engine::World;
 
-    fn menu() -> MENU_STATE {
-        // SAFETY: menu records contain nullable handles and integers; null frames are supported.
-        unsafe { std::mem::zeroed() }
-    }
-
     #[test]
     fn empty_hangar_has_no_ship_windows() {
         let mut world = World::new();
         let mut queue = world.built_ships();
-        // SAFETY: this fixture owns its empty queue and menu; no drawable is dereferenced.
-        let (windows, count) = unsafe { prepare_windows(&mut queue, &menu(), COUNT::MAX, None) };
+        let (windows, count) = prepare_windows(&mut queue, std::ptr::null_mut(), COUNT::MAX, None);
         assert_eq!(count, 0);
         assert!(windows.iter().all(|window| window.ship.is_none()));
     }
@@ -135,8 +143,7 @@ mod tests {
         let second = queue.alloc().unwrap();
         queue.get_mut(second).index = 7;
         queue.put(second);
-        // SAFETY: the fixture retains both linked records throughout preparation.
-        let (windows, count) = unsafe { prepare_windows(&mut queue, &menu(), COUNT::MAX, None) };
+        let (windows, count) = prepare_windows(&mut queue, std::ptr::null_mut(), COUNT::MAX, None);
         assert_eq!(count, 2);
         assert_eq!(windows[0].ship, Some(first));
         assert_eq!(windows[1].ship, Some(second));
@@ -157,8 +164,7 @@ mod tests {
             queue.put(id);
             id
         });
-        // SAFETY: the fixture retains all records and the mutable queue view.
-        let (windows, count) = unsafe { prepare_windows(&mut queue, &menu(), 3, None) };
+        let (windows, count) = prepare_windows(&mut queue, std::ptr::null_mut(), 3, None);
         assert_eq!(count, 1);
         assert_eq!(windows[0].ship, Some(ids[2]));
         assert_eq!(queue.get(ids[2]).index, 3);
@@ -173,8 +179,7 @@ mod tests {
         let mut world = World::new();
         let mut queue = world.built_ships();
         let removed = queue.alloc().unwrap();
-        // SAFETY: the fixture retains the detached record and menu until preparation returns.
-        let (windows, count) = unsafe { prepare_windows(&mut queue, &menu(), 7, Some(removed)) };
+        let (windows, count) = prepare_windows(&mut queue, std::ptr::null_mut(), 7, Some(removed));
         assert_eq!(count, 1);
         assert_eq!(windows[0].ship, Some(removed));
         assert_eq!(windows[0].left_door.origin.x, -(SHIP_WIN_WIDTH >> 1));

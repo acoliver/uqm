@@ -115,7 +115,6 @@ mod api {
 
     use crate::comm::races::syreen::api::*;
 
-    #[cfg(not(test))]
     impl SyreenApi for crate::comm::live::script::LiveScript<'_, '_, Handler> {
         fn using_speech(&self) -> bool {
             self.cx.borrow().kernel.using_speech != 0

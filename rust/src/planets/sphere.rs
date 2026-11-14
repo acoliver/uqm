@@ -219,9 +219,11 @@ pub(crate) mod live {
     use crate::comm::locdata::{CColor, CRect};
     use crate::graphics::context_abi::SetContextClipRect;
     use crate::graphics::drawable_abi::SetContextFGFrame;
+    use crate::graphics::{
+        menu as draw,
+        native_abi::{Color, POINT},
+    };
     use crate::mainloop::restart_menu::c_extern::uqm_sleep_thread_until as SleepThreadUntil;
-    use crate::starbase::cffi::CffiPlatform;
-    use crate::starbase::gfx::{Gfx, Point, Rect, Rgba, Stamp};
     use std::{cell::RefCell, ffi::c_void};
 
     use crate::engine::graphics::context_abi::ContextLease;
@@ -245,10 +247,7 @@ pub(crate) mod live {
     use crate::graphics::gfx_common_abi::{SetGraphicScale, SetGraphicScaleMode};
 
     fn stamp(frame: *mut c_void, x: i16, y: i16) {
-        CffiPlatform.draw_stamp(Stamp {
-            origin: Point { x, y },
-            frame: frame as usize,
-        });
+        draw::stamp(frame.cast(), POINT { x, y });
     }
 
     unsafe fn bounds(frame: *mut c_void) -> CRect {
@@ -259,7 +258,7 @@ pub(crate) mod live {
 
     fn draw_planet_sphere(state: &SphereState, x: i32, y: i32) {
         let images = state.images();
-        CffiPlatform.batch();
+        draw::batch();
         stamp(
             required_frame(&images.sphere.lease(), state.rotation.frame as usize).cast(),
             x as i16,
@@ -273,7 +272,7 @@ pub(crate) mod live {
             };
             stamp(required_frame(&object, index).cast(), x as i16, y as i16);
         }
-        CffiPlatform.unbatch();
+        draw::unbatch();
     }
 
     pub unsafe fn draw_default_planet_sphere(planet: &ContextLease, state: &SphereState) {
@@ -373,16 +372,16 @@ pub(crate) mod live {
             let y = (scan_height - 9) / 2
                 + (f64::from(dy) * (1.0 - scale) * f64::from(scan_height * 6 / 10) + 0.5) as i32;
             planet.select();
-            CffiPlatform.batch();
+            draw::batch();
             if i > 0 {
-                repair_back_rect(&repair);
+                repair_back_rect(planet, &repair);
             }
             let old_mode = SetGraphicScaleMode(1);
             let old_scale = SetGraphicScale((256.0 * scale + 0.5) as i32);
             draw_planet_sphere(&state.borrow(), x, y);
             SetGraphicScale(old_scale);
             SetGraphicScaleMode(old_mode);
-            CffiPlatform.unbatch();
+            draw::unbatch();
             repair.corner.x = x as i16 + frame_rect.corner.x;
             repair.corner.y = y as i16 + frame_rect.corner.y;
             prepare_next_rotation_frame(&mut state.borrow_mut());
@@ -407,19 +406,19 @@ pub(crate) mod live {
         offscreen.with_selected(|| {
             SetContextFGFrame(required_frame(&state.images().tint.lease(), 0).cast());
             SetContextClipRect(std::ptr::null_mut());
-            let rect = CffiPlatform.context_clip_rect();
+            let rect = draw::clip();
             stamp(required_frame(&state.topography(), 0).cast(), 0, 0);
             let old_mode = SetContextDrawMode(DrawMode {
                 kind: 1,
                 factor: 255 / 2,
             });
-            CffiPlatform.set_fg_color(Rgba {
+            draw::foreground(Color {
                 r: color.r,
                 g: color.g,
                 b: color.b,
                 a: color.a,
             });
-            CffiPlatform.fill_rect(rect);
+            draw::fill(rect);
             SetContextDrawMode(old_mode);
         });
     }
@@ -434,7 +433,7 @@ pub(crate) mod live {
         tint_y: i32,
         color: CColor,
     ) {
-        CffiPlatform.batch();
+        draw::batch();
         if same_rgb(
             color,
             CColor {
@@ -470,16 +469,19 @@ pub(crate) mod live {
                 stamp(required_frame(&state.topography(), 0).cast(), 0, 0);
             }
             if tint_y >= 0 {
-                let old = CffiPlatform.context_clip_rect();
-                CffiPlatform.set_context_clip_rect(Rect {
-                    height: (tint_y + 1) as i16,
+                let old = draw::clip();
+                draw::set_clip(crate::graphics::native_abi::RECT {
+                    extent: crate::graphics::native_abi::EXTENT {
+                        height: (tint_y + 1) as i16,
+                        ..old.extent
+                    },
                     ..old
                 });
                 stamp(frame.cast(), 0, 0);
-                CffiPlatform.set_context_clip_rect(old);
+                draw::set_clip(old);
             }
         }
-        CffiPlatform.unbatch();
+        draw::unbatch();
     }
 }
 

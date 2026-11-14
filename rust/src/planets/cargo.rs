@@ -26,8 +26,6 @@ pub(crate) mod live {
     use super::next_element;
     use crate::c_bindings::controller_input::*;
     use crate::engine::{battle::Cx, observe::Io};
-    use crate::starbase::cffi::CffiPlatform;
-    use crate::starbase::gfx::Gfx;
     use std::ffi::CString;
 
     use crate::mainloop::input_abi::live::SetMenuSounds;
@@ -35,9 +33,13 @@ pub(crate) mod live {
     const CARGO_STRINGS: i32 = 162;
 
     fn description(cx: &mut Cx<'_>, element: u8) {
-        let message = cx.with_legacy(|| {
-            CString::new(CffiPlatform.game_string(CARGO_STRINGS + 2 + i32::from(element))).unwrap()
-        });
+        let message = CString::new(
+            cx.kernel
+                .game_text((CARGO_STRINGS + 2 + i32::from(element)) as usize)
+                .to_string_lossy()
+                .as_ref(),
+        )
+        .unwrap_or_else(|error| panic!("invalid cargo description: {error}"));
         crate::ui::sis::draw_status_message(cx.kernel, cx.world, Some(&message));
     }
 

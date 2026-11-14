@@ -1,18 +1,29 @@
 //! Equipment statistics drawn through retained campaign resources.
 use super::*;
 use crate::graphics::{context_abi::ContextFrame, native_font::FontLease};
+use crate::starbase::ids;
+use crate::starbase::sis_modules as equipment;
+use crate::starbase::sis_modules::ModuleType;
 use std::{ffi::CString, ptr::NonNull};
+use uqm_engine::time::counter_abi::ONE_SECOND;
 
 fn weapon_name(kernel: &Kernel, module: u8) -> CString {
-    let offset = match u32::from(module) {
-        GUN_WEAPON => 8,
-        BLASTER_WEAPON => 9,
-        CANNON_WEAPON => 10,
-        BOMB_MODULE_0..=BOMB_MODULE_5 => 11,
+    let offset = match ModuleType::from_u8(module) {
+        Some(ModuleType::GunWeapon) => 8,
+        Some(ModuleType::BlasterWeapon) => 9,
+        Some(ModuleType::CannonWeapon) => 10,
+        Some(
+            ModuleType::BombModule0
+            | ModuleType::BombModule1
+            | ModuleType::BombModule2
+            | ModuleType::BombModule3
+            | ModuleType::BombModule4
+            | ModuleType::BombModule5,
+        ) => 11,
         _ => 12,
     };
     let mut bytes = kernel
-        .game_text((FLAGSHIP_STRING_BASE + offset) as usize)
+        .game_text((ids::FLAGSHIP_STRING_BASE + offset) as usize)
         .to_bytes()
         .to_vec();
     bytes.truncate(7);
@@ -29,7 +40,7 @@ fn numbers(stats: &crate::ui::flagship_stats::Stats) -> [CString; 4] {
         format!("{:>4}", i32::from(stats.thrust) * 4),
         format!("{:>4}", 1 + 17 - i32::from(stats.turn_wait)),
         format!("{:>2}.{}", energy / 10, energy % 10),
-        format!("{:>4}", stats.fuel / FUEL_TANK_SCALE),
+        format!("{:>4}", stats.fuel / equipment::FUEL_TANK_SCALE),
     ]
     .map(|value| {
         CString::new(value).unwrap_or_else(|error| panic!("invalid equipment statistic: {error}"))
@@ -93,7 +104,7 @@ pub fn draw_flagship_stats(kernel: &Kernel, world: &World, dimensions: (i32, i32
                     (label_x, top, leading),
                     TEXT_ALIGN_ALIGN_RIGHT,
                     std::array::from_fn(|row| {
-                        kernel.game_text(FLAGSHIP_STRING_BASE as usize + row)
+                        kernel.game_text(ids::FLAGSHIP_STRING_BASE as usize + row)
                     }),
                 );
                 column(
@@ -111,7 +122,7 @@ pub fn draw_flagship_stats(kernel: &Kernel, world: &World, dimensions: (i32, i32
                     (rect.extent.width - 25, top, leading),
                     TEXT_ALIGN_ALIGN_RIGHT,
                     std::array::from_fn(|row| {
-                        kernel.game_text(FLAGSHIP_STRING_BASE as usize + row + 4)
+                        kernel.game_text(ids::FLAGSHIP_STRING_BASE as usize + row + 4)
                     }),
                 );
                 column(
@@ -144,7 +155,7 @@ mod tests {
             ]
         );
         let mut kernel = Kernel::new();
-        let mut strings = vec![b"\0".to_vec(); FLAGSHIP_STRING_BASE as usize + 13];
+        let mut strings = vec![b"\0".to_vec(); ids::FLAGSHIP_STRING_BASE as usize + 13];
         for (offset, label) in [
             (8, b"GUN\0".as_slice()),
             (9, b"BLASTER!\0".as_slice()),
@@ -152,17 +163,17 @@ mod tests {
             (11, b"BOMB\0".as_slice()),
             (12, b"\0".as_slice()),
         ] {
-            strings[FLAGSHIP_STRING_BASE as usize + offset] = label.to_vec();
+            strings[ids::FLAGSHIP_STRING_BASE as usize + offset] = label.to_vec();
         }
         kernel.install_game_text(crate::strings::owned_table::LoadedTextTable::fixture(
             strings,
         ));
         for (module, label) in [
-            (GUN_WEAPON, c"GUN    "),
-            (BLASTER_WEAPON, c"BLASTER"),
-            (CANNON_WEAPON, c"CANNON "),
-            (BOMB_MODULE_0, c"BOMB   "),
-            (BOMB_MODULE_5, c"BOMB   "),
+            (ModuleType::GunWeapon as u32, c"GUN    "),
+            (ModuleType::BlasterWeapon as u32, c"BLASTER"),
+            (ModuleType::CannonWeapon as u32, c"CANNON "),
+            (ModuleType::BombModule0 as u32, c"BOMB   "),
+            (ModuleType::BombModule5 as u32, c"BOMB   "),
             (0, c"       "),
         ] {
             assert_eq!(weapon_name(&kernel, module as u8), label.to_owned());
