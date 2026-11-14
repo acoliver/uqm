@@ -28,6 +28,29 @@ fn files_port_roundtrips_and_removes_bytes() {
 }
 
 #[test]
+#[serial_test::serial]
+fn retained_config_writes_ignore_later_content_mounts() {
+    let mut stack = layered_open_tests::Stack::new();
+    let config = stack.mount_dir(&[], UIO_MOUNT_TOP);
+    // SAFETY: the fixture owns the repository and the directory is closed below.
+    let directory = unsafe { uio_openDir(stack.repo, c"/".as_ptr(), 0) };
+    // SAFETY: directory is live until the matching close.
+    let files = unsafe { owned::directory(directory) }.unwrap();
+    let content = stack.mount_dir(&[], UIO_MOUNT_TOP | UIO_MOUNT_RDONLY);
+    let path = Path::new("uqmsave.01");
+    let mut output = files.open_write(path).unwrap();
+    output.write_all(b"save bytes").unwrap();
+    output.finish().unwrap();
+    assert_eq!(std::fs::read(config.join(path)).unwrap(), b"save bytes");
+    assert!(!content.join(path).exists());
+    assert_eq!(files.read(path).unwrap(), b"save bytes");
+    files.remove(path).unwrap();
+    assert!(!config.join(path).exists());
+    // SAFETY: release exactly the reference acquired above.
+    unsafe { uio_closeDir(directory) };
+}
+
+#[test]
 #[cfg(target_os = "linux")]
 fn files_listing_preserves_lossy_native_names() {
     use std::ffi::OsString;
