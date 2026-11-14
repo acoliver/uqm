@@ -4,7 +4,6 @@ use crate::comm::Comm;
 
 use super::*;
 
-#[cfg(not(test))]
 pub(super) fn load_descriptor(comm: &mut Comm, cx: &mut Cx<'_>, comm_id: u32) {
     // SAFETY: dispatch owns the game thread and retains the descriptor resources through teardown.
     unsafe {
@@ -87,6 +86,78 @@ mod tests {
     use super::*;
 
     #[test]
+    #[serial_test::serial]
+    fn descriptor_install_runs_both_passes_and_keeps_the_selected_session() {
+        crate::comm::with_test_context(|cx| {
+            use crate::comm::{live, locdata::resource_key};
+            cx.world.story = Some(crate::engine::world::story::StoryState::new());
+            let mut comm = Comm::new();
+            assert!(comm.race_scratch.spathi.is_none());
+            cx.world
+                .set_story_state(StoryKey::GLOBAL_FLAGS_AND_DATA, 128);
+            cx.world.set_story_state(StoryKey::BATTLE_SEGUE, 0);
+            load_descriptor(&mut comm, cx, conv::SPATHI);
+            assert!(comm.race_scratch.spathi.is_some());
+            assert_eq!(cx.world.story_state(StoryKey::BATTLE_SEGUE), 1);
+            assert_eq!(
+                comm.data.definition.conversation_phrases_res,
+                Some(c"comm.safeones.dialogue")
+            );
+            assert!(std::ptr::fn_addr_eq(
+                comm.data.init_encounter_func.unwrap(),
+                live::spahome::intro as fn(&mut Comm, &mut Cx<'_>)
+            ));
+            let view = comm.comm_data().unwrap();
+            assert_eq!(
+                view.conversation_phrases_res,
+                resource_key(comm.data.definition.conversation_phrases_res)
+            );
+            assert_eq!(view.alien_text_width, comm.data.definition.alien_text_width);
+            assert!(std::ptr::fn_addr_eq(
+                view.post_encounter_func.unwrap(),
+                comm.data.post_encounter_func.unwrap()
+            ));
+            assert!(std::ptr::fn_addr_eq(
+                view.uninit_encounter_func.unwrap(),
+                comm.data.uninit_encounter_func.unwrap()
+            ));
+            assert!(comm.data.alien_frame.is_null());
+            assert!(comm.data.conversation_phrases.is_null());
+
+            cx.world.set_story_state(StoryKey::GLOBAL_FLAGS_AND_DATA, 0);
+            cx.world.set_story_state(StoryKey::FOUND_PLUTO_SPATHI, 1);
+            load_descriptor(&mut comm, cx, conv::SPATHI);
+            assert_eq!(cx.world.story_state(StoryKey::BATTLE_SEGUE), 0);
+            assert_eq!(
+                comm.data.definition.conversation_phrases_res,
+                Some(c"comm.spathi.dialogue")
+            );
+            assert_eq!(comm.data.definition.alien_song_flags & 1, 1);
+            assert!(std::ptr::fn_addr_eq(
+                comm.data.init_encounter_func.unwrap(),
+                live::spathi::intro as fn(&mut Comm, &mut Cx<'_>)
+            ));
+
+            cx.world.set_story_state(StoryKey::STARBASE_AVAILABLE, 1);
+            cx.world.set_story_state(StoryKey::BATTLE_SEGUE, 1);
+            load_descriptor(&mut comm, cx, conv::COMMANDER);
+            assert_eq!(cx.world.story_state(StoryKey::BATTLE_SEGUE), 0);
+            assert_eq!(
+                comm.data.definition.conversation_phrases_res,
+                Some(c"comm.starbase.dialogue")
+            );
+            assert!(std::ptr::fn_addr_eq(
+                comm.data.init_encounter_func.unwrap(),
+                live::starbas::intro as fn(&mut Comm, &mut Cx<'_>)
+            ));
+            assert_eq!(
+                comm.comm_data().unwrap().conversation_phrases_res,
+                resource_key(comm.data.definition.conversation_phrases_res)
+            );
+        });
+    }
+
+    #[test]
     fn unhailed_teardown_skips_post_on_abort_or_load_but_always_uninitializes() {
         fn post(_comm: &mut crate::comm::Comm, cx: &mut crate::engine::battle::Cx<'_>) {
             assert_eq!(
@@ -114,8 +185,15 @@ mod tests {
                 cx.world
                     .set_story_state(crate::engine::StoryKey::CHMMR_BOMB_STATE, 0);
                 let mut comm = crate::comm::Comm::new();
-                comm.data.post_encounter_func = Some(post);
-                comm.data.uninit_encounter_func = Some(uninit);
+                let data = crate::comm::locdata::SessionData {
+                    post_encounter_func: Some(post),
+                    uninit_encounter_func: Some(uninit),
+                    ..crate::comm::locdata::SessionData::new(
+                        crate::comm::races::chmmr::descriptor::descriptor(),
+                    )
+                };
+                // SAFETY: the unplayed definition owns no loaded resources.
+                unsafe { comm.install_descriptor(data) };
                 finish_unhailed(&mut comm, cx);
                 assert_eq!(
                     cx.world
