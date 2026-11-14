@@ -5,7 +5,9 @@ use uqm_engine::Game;
 fn owner(cx: &mut Cx<'_>, side: usize, position: POINT) -> (ShipId, ElementId) {
     let ship = {
         let mut ships = cx.kernel.ships(side);
-        let link = ships.alloc().unwrap();
+        let link = ships
+            .alloc()
+            .unwrap_or_else(|| panic!("fixture allocation must succeed"));
         let ship = ships.ship_id(link);
         ships.put(link);
         ship
@@ -14,7 +16,9 @@ fn owner(cx: &mut Cx<'_>, side: usize, position: POINT) -> (ShipId, ElementId) {
     descriptor.ship_info.crew_level = 10;
     descriptor.ship_info.max_crew = 10;
     cx.attach_descriptor(ship, RaceDesc::fixture(Box::new(descriptor)));
-    let element = cx.alloc_element().unwrap();
+    let element = cx
+        .alloc_element()
+        .unwrap_or_else(|| panic!("fixture allocation must succeed"));
     cx.element_mut(element).flags = 4;
     cx.element_mut(element).life = 1;
     cx.element_mut(element).player = side as i16;
@@ -102,7 +106,9 @@ fn gravity_uses_next_positions_and_preserves_order_for_unpublished_owners() {
         || panic!("gravity must not draw RNG"),
         |cx| {
             let (_, ship) = owner(cx, 0, POINT { x: 2000, y: 2000 });
-            let planet = cx.alloc_element().unwrap();
+            let planet = cx
+                .alloc_element()
+                .unwrap_or_else(|| panic!("fixture allocation must succeed"));
             cx.element_mut(planet).mass = 200;
             cx.element_mut(planet).current.location = POINT { x: 4000, y: 4000 };
             cx.element_mut(planet).next.location = POINT { x: 400, y: 400 };
@@ -153,7 +159,9 @@ fn spawn(
     origin: uqm_engine::battle::WeaponOrigin,
 ) -> uqm_engine::battle::WeaponSpawn {
     assert_dispatched(cx, ship, spawn as *const () as usize);
-    let element = cx.alloc_element().unwrap();
+    let element = cx
+        .alloc_element()
+        .unwrap_or_else(|| panic!("fixture allocation must succeed"));
     cx.element_mut(element).current.location = origin.current.location;
     vec![None, Some(element)]
 }
@@ -230,7 +238,7 @@ fn weapon_dispatch_keeps_failed_slots_and_supplied_origin_without_linking() {
             let weapons = cx.spawn_weapons(ship, origin.clone());
             assert_eq!(weapons.len(), 2);
             assert!(weapons[0].is_none());
-            let weapon = weapons[1].unwrap();
+            let weapon = weapons[1].unwrap_or_else(|| panic!("fixture allocation must succeed"));
             assert_eq!(cx.element(weapon).current.location.x, 123);
             assert_eq!(cx.element(source).current.location.x, 10);
             assert_eq!(cx.elements().head(), head);
