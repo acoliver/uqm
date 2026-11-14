@@ -36,3 +36,4 @@ pub use access::schema;
 mod descriptor;
 
 pub mod hyperspace;
+pub mod flags;
