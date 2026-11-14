@@ -117,7 +117,7 @@ fn the_header_numbers_are_the_ones_worked_out_from_gamestr_h_and_gendef_h() {
     assert_eq!(summary_values::PLANET_NUMBER_BASE as u16, PLANET_BASE);
     assert_eq!(summary_values::STARBASE_STRING_BASE as u16, STARBASE_BASE);
     assert_eq!(summary_values::SOL_DEFINED as u8, SOL);
-    assert_eq!(identities::SPATHI_DEFINED as u8, SPATHI);
+    assert_eq!(identities::SPATHI_DEFINED, SPATHI);
     assert_eq!(summary_values::SAMATRA_DEFINED as u8, SAMATRA);
     assert_eq!(PLANET_BASE + 32, super::summary::SA_MATRA_STRING);
 }
