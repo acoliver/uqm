@@ -1,1425 +1,202 @@
 //! Debug cheats, universe inspection and graphics-context diagnostics.
 #![cfg(feature = "debug-process")]
 
-#[cfg(not(test))]
-use crate::battle::context_access::ContextOps;
-use crate::engine::world::generation::Body;
-#[cfg(not(test))]
-use crate::engine::{battle::Cx, input::InputSession, Kernel, StoryKey};
+use crate::engine::{
+    battle::{Cx, ElementId, ShipId},
+    observe::Io,
+    world::generation::Body,
+    Kernel, StoryKey, World,
+};
+use crate::graphics::context_abi::ContextLease;
 use crate::{navigation::abi::*, planets::solar_system::SolarSystem};
-use std::ffi::c_char;
 
 mod catalog;
 pub use catalog::uqm_debug_creature_bio_value;
 mod colors;
 mod equipment;
-use colors::hsva_to_rgba;
 mod labels;
 pub use labels::*;
+mod traversal;
+pub use traversal::*;
+mod output;
+pub use output::*;
+mod contexts;
+pub use contexts::debug_contexts;
 
-type SystemVisitor<T> = unsafe fn(&crate::engine::Kernel, *const STAR_DESC, &SolarSystem, &mut T);
-type WorldVisitor<T> = unsafe fn(
-    &mut crate::engine::battle::Cx<'_>,
-    &mut crate::engine::observe::Io<'_>,
-    &mut SolarSystem,
-    Body,
-    &mut T,
-);
+#[cfg(test)]
+mod context_tests;
+#[cfg(test)]
+mod supplied_tests;
 
-pub struct UniverseRecurseArg<'a, T> {
-    pub system_func_pre: Option<SystemVisitor<T>>,
-    pub system_func_post: Option<SystemVisitor<T>>,
-    pub planet_func_pre: Option<WorldVisitor<T>>,
-    pub planet_func_post: Option<WorldVisitor<T>>,
-    pub moon_func: Option<WorldVisitor<T>>,
-    pub arg: &'a mut T,
+pub fn debug_key_pressed_synchronous(
+    cx: &mut Cx<'_>,
+    crew: impl FnOnce(&mut Cx<'_>, ElementId, i16) -> bool,
+    energy: impl FnOnce(&mut Cx<'_>, ElementId, i16) -> bool,
+) {
+    equip_ship(cx);
+    give_devices(cx.world);
+    clear_escorts(cx);
+    for race in [
+        ARILOU_SHIP,
+        PKUNK_SHIP,
+        VUX_SHIP,
+        YEHAT_SHIP,
+        MELNORME_SHIP,
+        DRUUGE_SHIP,
+        ILWRATH_SHIP,
+        MYCON_SHIP,
+        SLYLANDRO_SHIP,
+        UMGAH_SHIP,
+        URQUAN_SHIP,
+        BLACK_URQUAN_SHIP,
+    ] {
+        let random = cx.rng;
+        let added = crate::engine::world::fleet::add_escort_ships(cx.world, race as u16, 1, || {
+            ((random() as u16 & (NUM_CAPTAINS_NAMES - 1) as u16) + NAME_OFFSET as u16) as u8
+        });
+        if added.is_some() {
+            crate::ui::sis::delta_sis_gauges(cx.kernel, cx.world, 32767, 32767, 32767);
+        }
+    }
+    reset_crew_battle(cx, crew);
+    reset_energy_battle(cx, energy);
+    cx.kernel.instant_move = !cx.kernel.instant_move;
+    show_spheres(cx.world);
+    activate_all_ships(cx.world);
 }
 
-#[cfg(not(test))]
-mod runtime {
-    use super::*;
-    use crate::engine::{observe::Io, world::planet::*, World};
-    use crate::planets::{solar_coords::star_seed, solarsys::site::dispatch::invoke};
-    use crate::starbase::ids::STAR_NUMBER_BASE;
-
-    use crate::planets::tables::{PLANET_ARRAY as planet_array, STARMAP_ARRAY as starmap_array};
-    use libc::FILE;
-    use std::{ffi::c_int, mem, ptr};
-    extern "C" {
-        #[cfg(target_os = "macos")]
-        #[link_name = "__stderrp"]
-        static mut error_stream: *mut FILE;
-        #[cfg(not(target_os = "macos"))]
-        #[link_name = "stderr"]
-        static mut error_stream: *mut FILE;
-        #[cfg(target_os = "macos")]
-        #[link_name = "__stdoutp"]
-        static mut output_stream: *mut FILE;
-        #[cfg(not(target_os = "macos"))]
-        #[link_name = "stdout"]
-        static mut output_stream: *mut FILE;
+pub fn forward_to_next_event(cx: &mut Cx<'_>, skip_hee: bool) {
+    if crate::time::clock_bridge::rust_clock_is_running(cx.world) == 0 {
+        return;
     }
-
-    unsafe fn call_generate_for_scan_type(
-        cx: &mut Cx<'_>,
-        io: &mut Io<'_>,
-        solar: &mut SolarSystem,
-        target: Body,
-        node: COUNT,
-        scan_type: BYTE,
-        info: *mut NodeInfo,
-    ) -> COUNT {
-        let mut spare = NodeInfo::default();
-        let info = if info.is_null() {
-            &mut spare
-        } else {
-            &mut *info
-        };
-        invoke(cx, io, solar, |generator, system, host| {
-            crate::planets::scan::generate(generator, system, target, node, scan_type, info, host)
-        })
-        .0
-    }
-
-    pub static mut DISABLE_INTERACTIVITY: BOOLEAN = 0;
-
-    /// # Safety
-    /// Must run synchronously on the game thread with initialized game state.
-    pub unsafe fn debug_key_pressed_synchronous(cx: &mut crate::engine::battle::Cx<'_>) {
-        equip_ship(cx);
-        cx.with_legacy(give_devices);
-        clear_escorts(cx);
-        for race in [
-            ARILOU_SHIP,
-            PKUNK_SHIP,
-            VUX_SHIP,
-            YEHAT_SHIP,
-            MELNORME_SHIP,
-            DRUUGE_SHIP,
-            ILWRATH_SHIP,
-            MYCON_SHIP,
-            SLYLANDRO_SHIP,
-            UMGAH_SHIP,
-            URQUAN_SHIP,
-            BLACK_URQUAN_SHIP,
-        ] {
-            let added = crate::engine::world::fleet::add_escort_ships(
-                cx.world,
-                race as COUNT,
-                1,
-                crate::engine::world::fleet::captain_name,
-            );
-            if added.is_some() {
-                crate::ui::sis::delta_sis_gauges(cx.kernel, cx.world, 32767, 32767, 32767);
-            }
-        }
-        cx.with_legacy(|| {
-            reset_crew_battle();
-            reset_energy_battle();
-        });
-        cx.kernel.instant_move = !cx.kernel.instant_move;
-        cx.with_legacy(|| {
-            show_spheres();
-            activate_all_ships();
-        });
-    }
-
-    // The asynchronous C debug-key hook contains no enabled operations.
-    pub fn debug_key_pressed() {}
-
-    /// # Safety
-    /// Must run on the game thread. The game clock and event queue must be live.
-    pub unsafe fn forward_to_next_event(cx: &mut Cx<'_>, skip_hee: BOOLEAN) {
-        if crate::time::clock_bridge::rust_clock_is_running(cx.world) == 0 {
-            return;
-        }
-        LockGameClock();
-        let mut done = skip_hee == 0;
-        loop {
-            let (date, selector) = {
-                let events = cx.world.clock.events_ref();
-                let Some(id) = events.head() else {
-                    return;
-                };
-                let event = events.get(id);
-                (
-                    (event.year_index, event.month_index, event.day_index),
-                    event.func_index,
-                )
+    let mut done = !skip_hee;
+    loop {
+        let (date, selector) = {
+            let events = cx.world.clock.events_ref();
+            let Some(id) = events.head() else {
+                return;
             };
-            done |= u32::from(selector) != HYPERSPACE_ENCOUNTER_EVENT;
-            while {
-                let clock = &cx.world.data.game.game_clock;
-                (clock.year_index, clock.month_index, clock.day_index) < date
-            } {
-                crate::time::clock_abi::advance_days(cx, 1);
-            }
-            if done {
-                break;
-            }
-        }
-        UnlockGameClock();
-    }
-    /// # Safety
-    /// `out` must be an open C stream and `event` a readable event record.
-    pub unsafe fn dump_event(out: *mut FILE, event: &crate::engine::clock::CEvent) {
-        libc::fprintf(
-            out,
-            c"%4u/%02u/%02u: %s\n".as_ptr(),
-            event.year_index as u32,
-            event.month_index as u32,
-            event.day_index as u32,
-            event_name(event.func_index),
-        );
-    }
-    /// # Safety
-    /// Must run with a live game clock and an open output stream.
-    pub unsafe fn dump_events(out: *mut FILE) {
-        let world = World::current();
-        LockGameClock();
-        world.read(|world| {
-            let events = world.clock.events_ref();
-            let mut next = events.head();
-            while let Some(id) = next {
-                next = events.succ(id);
-                dump_event(out, events.get(id));
-            }
-        });
-        UnlockGameClock();
-    }
-
-    /// # Safety
-    /// Must run on the game thread with initialized SIS and optional solar system.
-    pub unsafe fn equip_ship(cx: &mut Cx<'_>) {
-        if !super::equipment::equip_flagship(cx.world) {
-            return;
-        }
-        if let Some(effects) = cx.solar_flight {
-            let mut flight = crate::engine::world::generation::SolarFlight::default();
-            super::equipment::update_flight(&cx.world.data.flagship, &mut flight);
-            effects.set(Some(flight));
-        }
-        if in_hqspace(cx.world) != 0 || cx.world.activity() as u8 as u32 == IN_INTERPLANETARY {
-            crate::ui::sis::delta_sis_gauges(
-                cx.kernel,
-                cx.world,
-                UNDEFINED_DELTA as _,
-                UNDEFINED_DELTA as _,
-                UNDEFINED_DELTA as _,
-            );
-        }
-    }
-
-    /// # Safety
-    /// Must run with the game-state singleton initialized.
-    pub fn give_devices() {
-        for key in [
-            StoryKey::ROSY_SPHERE_ON_SHIP,
-            StoryKey::ARTIFACT_2_ON_SHIP,
-            StoryKey::ARTIFACT_3_ON_SHIP,
-            StoryKey::SUN_DEVICE_ON_SHIP,
-            StoryKey::UTWIG_BOMB_ON_SHIP,
-            StoryKey::ULTRON_CONDITION,
-            StoryKey::MAIDENS_ON_SHIP,
-            StoryKey::TALKING_PET_ON_SHIP,
-            StoryKey::AQUA_HELIX_ON_SHIP,
-            StoryKey::CLEAR_SPINDLE_ON_SHIP,
-            StoryKey::UMGAH_BROADCASTERS_ON_SHIP,
-            StoryKey::TAALO_PROTECTOR_ON_SHIP,
-            StoryKey::EGG_CASE0_ON_SHIP,
-            StoryKey::EGG_CASE1_ON_SHIP,
-            StoryKey::EGG_CASE2_ON_SHIP,
-            StoryKey::SYREEN_SHUTTLE_ON_SHIP,
-            StoryKey::VUX_BEAST_ON_SHIP,
-            StoryKey::PORTAL_SPAWNER_ON_SHIP,
-            StoryKey::PORTAL_KEY_ON_SHIP,
-            StoryKey::BURV_BROADCASTERS_ON_SHIP,
-            StoryKey::MOONBASE_ON_SHIP,
-            StoryKey::DESTRUCT_CODE_ON_SHIP,
-        ] {
-            World::current().write(|world| world.set_story_state(key, 1));
-        }
-    }
-    /// # Safety
-    /// Must run on the game thread with the escort queue initialized.
-    pub unsafe fn clear_escorts(cx: &mut Cx<'_>) {
-        equipment::clear_escorts(cx.world);
-        crate::ui::sis::delta_sis_gauges(
-            cx.kernel,
-            cx.world,
-            UNDEFINED_DELTA as _,
-            UNDEFINED_DELTA as _,
-            UNDEFINED_DELTA as _,
-        );
-    }
-
-    /// # Safety
-    /// Must run on the game thread with the race queue initialized.
-    pub unsafe fn show_spheres() {
-        World::current().write(equipment::reveal_spheres);
-    }
-    /// # Safety
-    /// Must run on the game thread with the race queue initialized.
-    pub unsafe fn activate_all_ships() {
-        World::current().write(equipment::activate_fleets);
-    }
-
-    /// # Safety
-    /// Must run on the game thread. The callback must accept every star and its context.
-    pub unsafe fn for_all_stars<T>(
-        cx: &mut Cx<'_>,
-        io: &mut Io<'_>,
-        callback: unsafe fn(&mut Cx<'_>, &mut Io<'_>, *const STAR_DESC, &mut T),
-        arg: &mut T,
-    ) {
-        for i in 0..NUM_SOLAR_SYSTEMS as usize {
-            callback(
-                cx,
-                io,
-                ptr::addr_of!(starmap_array).cast::<STAR_DESC>().add(i),
-                arg,
-            );
-        }
-    }
-    /// # Safety
-    /// `system` and `star` must be the active system. Callback and context must be valid.
-    pub unsafe fn for_all_planets<T>(
-        cx: &mut Cx<'_>,
-        io: &mut Io<'_>,
-        star: *const STAR_DESC,
-        solar: &mut SolarSystem,
-        callback: unsafe fn(
-            &mut Cx<'_>,
-            &mut Io<'_>,
-            *const STAR_DESC,
-            &mut SolarSystem,
-            u8,
-            &mut T,
-        ),
-        arg: &mut T,
-    ) {
-        for planet in 0..solar.sys.sun.num_planets {
-            callback(cx, io, star, solar, planet, arg);
-        }
-    }
-    /// # Safety
-    /// The planet and system must be active and their generated moon records valid.
-    pub unsafe fn for_all_moons<T>(
-        cx: &mut Cx<'_>,
-        io: &mut Io<'_>,
-        star: *const STAR_DESC,
-        solar: &mut SolarSystem,
-        planet: u8,
-        callback: unsafe fn(
-            &mut Cx<'_>,
-            &mut Io<'_>,
-            *const STAR_DESC,
-            &mut SolarSystem,
-            Body,
-            &mut T,
-        ),
-        arg: &mut T,
-    ) {
-        for moon in 0..solar.sys.planets[usize::from(planet)].num_planets {
-            callback(cx, io, star, solar, Body::Moon { planet, moon }, arg);
-        }
-    }
-    /// # Safety
-    /// Must run on the game thread. All supplied callbacks and their context must
-    /// remain valid throughout universe generation, which can change game state.
-    pub unsafe fn universe_recurse<T>(
-        cx: &mut Cx<'_>,
-        io: &mut Io<'_>,
-        arg: &mut UniverseRecurseArg<'_, T>,
-    ) {
-        if arg.system_func_pre.is_none()
-            && arg.system_func_post.is_none()
-            && arg.planet_func_pre.is_none()
-            && arg.planet_func_post.is_none()
-            && arg.moon_func.is_none()
-        {
-            return;
-        }
-        LockGameClock();
-        let saved_activity = cx.world.activity();
-        DISABLE_INTERACTIVITY = 1;
-        for_all_stars(cx, io, star_recurse, arg);
-        DISABLE_INTERACTIVITY = 0;
-        cx.world.set_activity(saved_activity);
-        UnlockGameClock();
-    }
-    unsafe fn star_recurse<T>(
-        cx: &mut Cx<'_>,
-        io: &mut Io<'_>,
-        star: *const STAR_DESC,
-        recurse: &mut UniverseRecurseArg<'_, T>,
-    ) {
-        let old_star = cx.world.current_star;
-        let old_frame = cx.solar_frame;
-        cx.world
-            .select_star(star.cast::<crate::engine::world::CStarDesc>().as_ref());
-        let Some(id) = cx.world.current_star else {
-            panic!("debug traversal star belongs to the catalog");
-        };
-        let mut solar = SolarSystem::new(cx.world, id);
-        solar.sys.rng.reseed(star_seed((*star).star_pt));
-        solar.sys.sun.rand_seed = solar.sys.rng.next_random();
-        solar.sys.sun.data_index = (((*star).Type as u32
-            & ((0xff << STAR_TYPE_SHIFT) & !(0xff << STAR_COLOR_SHIFT)))
-            >> STAR_TYPE_SHIFT) as BYTE;
-        invoke(cx, io, &mut solar, |generator, system, host| {
-            generator.generate_planets(system, host)
-        });
-        if let Some(cb) = recurse.system_func_pre {
-            cb(cx.kernel, star, &solar, recurse.arg);
-        }
-        if recurse.planet_func_pre.is_some()
-            || recurse.planet_func_post.is_some()
-            || recurse.moon_func.is_some()
-        {
-            for_all_planets(cx, io, star, &mut solar, planet_recurse, recurse);
-        }
-        if let Some(cb) = recurse.system_func_post {
-            cb(cx.kernel, star, &solar, recurse.arg);
-        }
-        cx.world.current_star = old_star;
-        cx.solar_frame = old_frame;
-        io.observer
-            .checkpoint(&crate::engine::observe::CheckpointView::Solar(
-                old_frame.as_ref(),
-            ));
-    }
-    unsafe fn planet_recurse<T>(
-        cx: &mut Cx<'_>,
-        io: &mut Io<'_>,
-        star: *const STAR_DESC,
-        solar: &mut SolarSystem,
-        planet: u8,
-        recurse: &mut UniverseRecurseArg<'_, T>,
-    ) {
-        let target = Body::Planet(planet);
-        solar.enter_inner(planet);
-        if let Some(cb) = recurse.planet_func_pre {
-            invoke(cx, io, solar, |generator, system, host| {
-                crate::planets::generate::calc::analyse_body(system, target);
-                generator.generate_orbital(system, target, host)
-            });
-            cb(cx, io, solar, target, recurse.arg);
-        }
-        if recurse.moon_func.is_some() {
-            solar
-                .sys
-                .rng
-                .reseed(solar.sys.planets[usize::from(planet)].rand_seed);
-            invoke(cx, io, solar, |generator, system, host| {
-                generator.generate_moons(system, planet, host)
-            });
-            for_all_moons(cx, io, star, solar, planet, moon_recurse, recurse);
-        }
-        if let Some(cb) = recurse.planet_func_post {
-            solar.select_body(target);
-            invoke(cx, io, solar, |generator, system, host| {
-                crate::planets::generate::calc::analyse_body(system, target);
-                generator.generate_orbital(system, target, host)
-            });
-            cb(cx, io, solar, target, recurse.arg);
-        }
-    }
-    unsafe fn moon_recurse<T>(
-        cx: &mut Cx<'_>,
-        io: &mut Io<'_>,
-        _: *const STAR_DESC,
-        solar: &mut SolarSystem,
-        target: Body,
-        recurse: &mut UniverseRecurseArg<'_, T>,
-    ) {
-        if let Some(cb) = recurse.moon_func {
-            solar.select_body(target);
-            let data = solar.sys.descriptor(target).data_index;
-            let analyse = data != HIERARCHY_STARBASE as BYTE && data != SA_MATRA as BYTE;
-            invoke(cx, io, solar, |generator, system, host| {
-                if analyse {
-                    crate::planets::generate::calc::analyse_body(system, target);
-                }
-                generator.generate_orbital(system, target, host)
-            });
-            cb(cx, io, solar, target, recurse.arg);
-        }
-    }
-
-    struct DumpUniverseArg {
-        out: *mut FILE,
-    }
-    /// # Safety
-    /// Must run on the game thread with an open output stream.
-    pub unsafe fn dump_universe(cx: &mut Cx<'_>, io: &mut Io<'_>, out: *mut FILE) {
-        let mut context = DumpUniverseArg { out };
-        let mut recurse = UniverseRecurseArg {
-            system_func_pre: Some(dump_system_callback),
-            system_func_post: None,
-            planet_func_pre: Some(dump_planet_callback),
-            planet_func_post: None,
-            moon_func: Some(dump_moon_callback),
-            arg: &mut context,
-        };
-        universe_recurse(cx, io, &mut recurse);
-    }
-    unsafe fn write_generation_file(
-        name: *const c_char,
-        callback: impl FnOnce(*mut FILE),
-        message: *const c_char,
-    ) {
-        let out = libc::fopen(name, c"w".as_ptr());
-        if out.is_null() {
-            let error = std::io::Error::last_os_error().raw_os_error().unwrap();
-            libc::fprintf(
-                error_stream,
-                c"Error: Could not open file '%s' for writing: %s\n".as_ptr(),
-                name,
-                libc::strerror(error),
-            );
-            return;
-        }
-        callback(out);
-        libc::fclose(out);
-        libc::fprintf(output_stream, c"%s".as_ptr(), message);
-    }
-    /// # Safety
-    /// Must run on the game thread; generation can change game state.
-    pub unsafe fn dump_universe_to_file(cx: &mut Cx<'_>, io: &mut Io<'_>) {
-        write_generation_file(
-            c"PlanetInfo".as_ptr(),
-            |out| dump_universe(cx, io, out),
-            c"*** Star dump complete. The game may be in an undefined state.\n".as_ptr(),
-        );
-    }
-    unsafe fn dump_system_callback(
-        kernel: &crate::engine::Kernel,
-        star: *const STAR_DESC,
-        solar: &SolarSystem,
-        arg: &mut DumpUniverseArg,
-    ) {
-        dump_system(kernel, arg.out, star, solar);
-    }
-    /// # Safety
-    /// Star and system records must be readable, and `out` an open stream.
-    pub unsafe fn dump_system(
-        kernel: &crate::engine::Kernel,
-        out: *mut FILE,
-        star: *const STAR_DESC,
-        _solar: &SolarSystem,
-    ) {
-        let name = crate::planets::starmap::naming::cluster_name(
-            kernel,
-            &*star.cast(),
-            STAR_NUMBER_BASE as usize,
-        );
-        let mut buffer = [0 as c_char; 40];
-        libc::snprintf(
-            buffer.as_mut_ptr(),
-            buffer.len(),
-            c"%s %s".as_ptr(),
-            body_color_string(
-                (((*star).Type as u32 & ((0xff << STAR_COLOR_SHIFT) as BYTE as u32))
-                    >> STAR_COLOR_SHIFT) as BYTE,
-            ),
-            star_type_string(
-                (((*star).Type as u32
-                    & (((0xff << STAR_TYPE_SHIFT) & !(0xff << STAR_COLOR_SHIFT)) as BYTE as u32))
-                    >> STAR_TYPE_SHIFT) as BYTE,
-            ),
-        );
-        libc::fprintf(
-            out,
-            c"%-22s  (%3d.%1d, %3d.%1d) %-19s  %s\n".as_ptr(),
-            name.as_ptr(),
-            (*star).star_pt.x as c_int / 10,
-            (*star).star_pt.x as c_int % 10,
-            (*star).star_pt.y as c_int / 10,
-            (*star).star_pt.y as c_int % 10,
-            buffer.as_ptr(),
-            star_presence_string((*star).Index),
-        );
-    }
-    unsafe fn dump_planet_callback(
-        cx: &mut Cx<'_>,
-        io: &mut Io<'_>,
-        solar: &mut SolarSystem,
-        body: Body,
-        arg: &mut DumpUniverseArg,
-    ) {
-        dump_planet(cx, io, arg.out, solar, body);
-    }
-    /// # Safety
-    /// Planet must belong to the active system, and `out` be an open stream.
-    pub unsafe fn dump_planet(
-        cx: &mut Cx<'_>,
-        io: &mut Io<'_>,
-        out: *mut FILE,
-        solar: &mut SolarSystem,
-        body: Body,
-    ) {
-        invoke(cx, io, solar, |generator, system, host| {
-            generator.generate_name(system, body, host)
-        });
-        libc::fprintf(
-            out,
-            c"- %-37s  %s\n".as_ptr(),
-            cx.world.data.flagship.planet_name.as_ptr().cast::<c_char>(),
-            planet_type_string(
-                (solar.sys.descriptor(body).data_index & !(PLANET_SHIELDED as BYTE)) as c_int,
-            ),
-        );
-        dump_world(cx, io, out, solar, body);
-    }
-    unsafe fn dump_moon_callback(
-        cx: &mut Cx<'_>,
-        io: &mut Io<'_>,
-        solar: &mut SolarSystem,
-        body: Body,
-        arg: &mut DumpUniverseArg,
-    ) {
-        dump_moon(cx, io, arg.out, solar, body);
-    }
-    /// # Safety
-    /// Moon must belong to the active system, and `out` be an open stream.
-    pub unsafe fn dump_moon(
-        cx: &mut Cx<'_>,
-        io: &mut Io<'_>,
-        out: *mut FILE,
-        solar: &mut SolarSystem,
-        body: Body,
-    ) {
-        let kind = if solar.sys.descriptor(body).data_index == HIERARCHY_STARBASE as BYTE {
-            c"StarBase".as_ptr()
-        } else if solar.sys.descriptor(body).data_index == SA_MATRA as BYTE {
-            c"Sa-Matra".as_ptr()
-        } else {
-            planet_type_string(
-                (solar.sys.descriptor(body).data_index & !(PLANET_SHIELDED as BYTE)) as c_int,
-            )
-        };
-        libc::fprintf(
-            out,
-            c"  - Moon %-30c  %s\n".as_ptr(),
-            b'a' as c_int
-                + match body {
-                    Body::Moon { moon, .. } => i32::from(moon),
-                    _ => panic!("moon visitor requires a moon"),
-                },
-            kind,
-        );
-        dump_world(cx, io, out, solar, body);
-    }
-    unsafe fn dump_world(
-        cx: &mut Cx<'_>,
-        io: &mut Io<'_>,
-        out: *mut FILE,
-        solar: &mut SolarSystem,
-        body: Body,
-    ) {
-        if solar.sys.descriptor(body).data_index == HIERARCHY_STARBASE as BYTE {
-            return;
-        }
-        if solar.sys.descriptor(body).data_index == SA_MATRA as BYTE {
-            return;
-        }
-        let info = solar.sys.info.planet_info;
-        libc::fprintf(
-            out,
-            c"          AxialTilt:  %d\n".as_ptr(),
-            info.axial_tilt as c_int,
-        );
-        libc::fprintf(
-            out,
-            c"          Tectonics:  %d\n".as_ptr(),
-            info.tectonics as c_int,
-        );
-        libc::fprintf(
-            out,
-            c"          Weather:    %d\n".as_ptr(),
-            info.weather as c_int,
-        );
-        libc::fprintf(
-            out,
-            c"          Density:    %d\n".as_ptr(),
-            info.planet_density as c_int,
-        );
-        libc::fprintf(
-            out,
-            c"          Radius:     %d\n".as_ptr(),
-            info.planet_radius as c_int,
-        );
-        libc::fprintf(
-            out,
-            c"          Gravity:    %d\n".as_ptr(),
-            info.gravity as c_int,
-        );
-        libc::fprintf(
-            out,
-            c"          Temp:       %d\n".as_ptr(),
-            info.temperature as c_int,
-        );
-        libc::fprintf(
-            out,
-            c"          Day:        %d\n".as_ptr(),
-            info.rotation_period as c_int,
-        );
-        libc::fprintf(
-            out,
-            c"          Atmosphere: %d\n".as_ptr(),
-            info.atmo_density as c_int,
-        );
-        libc::fprintf(
-            out,
-            c"          LifeChance: %d\n".as_ptr(),
-            info.life_chance as c_int,
-        );
-        libc::fprintf(
-            out,
-            c"          DistToSun:  %d\n".as_ptr(),
-            info.planet_to_sun_dist as c_int,
-        );
-        if solar.sys.descriptor(body).data_index & PLANET_SHIELDED as BYTE != 0 {
-            return;
-        }
-        libc::fprintf(
-            out,
-            c"          Bio: %4d    Min: %4d\n".as_ptr(),
-            calculate_bio_value(cx, io, solar, body) as c_int,
-            calculate_mineral_value(cx, io, solar, body) as c_int,
-        );
-    }
-    /// # Safety
-    /// World must be the active orbital descriptor and its generation functions live.
-    pub unsafe fn calculate_bio_value(
-        cx: &mut Cx<'_>,
-        io: &mut Io<'_>,
-        solar: &mut SolarSystem,
-        body: Body,
-    ) -> COUNT {
-        assert_eq!(solar.selected_body(), Some(body));
-        let count = call_generate_for_scan_type(
-            cx,
-            io,
-            solar,
-            body,
-            COUNT::MAX,
-            PlanetScanTypes_BIOLOGICAL_SCAN as BYTE,
-            ptr::null_mut(),
-        );
-        let mut result: COUNT = 0;
-        for i in 0..count {
-            let mut info: NodeInfo = mem::zeroed();
-            call_generate_for_scan_type(
-                cx,
-                io,
-                solar,
-                body,
-                i,
-                PlanetScanTypes_BIOLOGICAL_SCAN as BYTE,
-                &mut info,
-            );
-            let value = uqm_debug_creature_bio_value(info.type_ as BYTE);
-            if value < 0 {
-                libc::abort();
-            }
-            result = result.wrapping_add((BIO_CREDIT_VALUE as c_int * value) as COUNT);
-        }
-        result
-    }
-    /// # Safety
-    /// World must be active, and `bio` writable for all creature-type counters.
-    pub unsafe fn generate_bio_index(
-        cx: &mut Cx<'_>,
-        io: &mut Io<'_>,
-        solar: &mut SolarSystem,
-        body: Body,
-        bio: *mut COUNT,
-    ) {
-        assert_eq!(solar.selected_body(), Some(body));
-        let count = call_generate_for_scan_type(
-            cx,
-            io,
-            solar,
-            body,
-            COUNT::MAX,
-            PlanetScanTypes_BIOLOGICAL_SCAN as BYTE,
-            ptr::null_mut(),
-        );
-        for i in 0..(NUM_CREATURE_TYPES + NUM_SPECIAL_CREATURE_TYPES) as usize {
-            *bio.add(i) = 0;
-        }
-        for i in 0..count {
-            let mut info: NodeInfo = mem::zeroed();
-            call_generate_for_scan_type(
-                cx,
-                io,
-                solar,
-                body,
-                i,
-                PlanetScanTypes_BIOLOGICAL_SCAN as BYTE,
-                &mut info,
-            );
-            let entry = bio.add(info.type_ as usize);
-            *entry = (*entry).wrapping_add(1);
-        }
-    }
-    fn element_category(kind: usize) -> usize {
-        usize::from(crate::planets::tables::ELEMENT_ARRAY[kind] & 7)
-    }
-    /// # Safety
-    /// World must be the active orbital descriptor and its generation functions live.
-    pub unsafe fn calculate_mineral_value(
-        cx: &mut Cx<'_>,
-        io: &mut Io<'_>,
-        solar: &mut SolarSystem,
-        body: Body,
-    ) -> COUNT {
-        assert_eq!(solar.selected_body(), Some(body));
-        let count = call_generate_for_scan_type(
-            cx,
-            io,
-            solar,
-            body,
-            COUNT::MAX,
-            PlanetScanTypes_MINERAL_SCAN as BYTE,
-            ptr::null_mut(),
-        );
-        let mut result: COUNT = 0;
-        for i in 0..count {
-            let mut info: NodeInfo = mem::zeroed();
-            call_generate_for_scan_type(
-                cx,
-                io,
-                solar,
-                body,
-                i,
-                PlanetScanTypes_MINERAL_SCAN as BYTE,
-                &mut info,
-            );
-            result = result.wrapping_add(
-                ((info.density >> 8) as u32
-                    * cx.world.data.game.element_worth[element_category(info.type_ as usize)]
-                        as u32) as COUNT,
-            );
-        }
-        result
-    }
-    /// # Safety
-    /// World must be active, and `minerals` writable for all element-category counters.
-    pub unsafe fn generate_mineral_index(
-        cx: &mut Cx<'_>,
-        io: &mut Io<'_>,
-        solar: &mut SolarSystem,
-        body: Body,
-        minerals: *mut COUNT,
-    ) {
-        assert_eq!(solar.selected_body(), Some(body));
-        let count = call_generate_for_scan_type(
-            cx,
-            io,
-            solar,
-            body,
-            COUNT::MAX,
-            PlanetScanTypes_MINERAL_SCAN as BYTE,
-            ptr::null_mut(),
-        );
-        for i in 0..NUM_ELEMENT_CATEGORIES as usize {
-            *minerals.add(i) = 0;
-        }
-        for i in 0..count {
-            let mut info: NodeInfo = mem::zeroed();
-            call_generate_for_scan_type(
-                cx,
-                io,
-                solar,
-                body,
-                i,
-                PlanetScanTypes_MINERAL_SCAN as BYTE,
-                &mut info,
-            );
-            let entry = minerals.add(element_category(info.type_ as usize));
-            *entry = (*entry).wrapping_add(info.density >> 8);
-        }
-    }
-    struct TallyResourcesArg {
-        out: *mut FILE,
-        mineral_count: COUNT,
-        bio_count: COUNT,
-    }
-    /// # Safety
-    /// Must run on the game thread with an open output stream.
-    pub unsafe fn tally_resources(cx: &mut Cx<'_>, io: &mut Io<'_>, out: *mut FILE) {
-        let mut context = TallyResourcesArg {
-            out,
-            mineral_count: 0,
-            bio_count: 0,
-        };
-        let mut recurse = UniverseRecurseArg {
-            system_func_pre: Some(tally_system_pre_callback),
-            system_func_post: Some(tally_system_post_callback),
-            planet_func_pre: Some(tally_planet_callback),
-            planet_func_post: None,
-            moon_func: Some(tally_moon_callback),
-            arg: &mut context,
-        };
-        universe_recurse(cx, io, &mut recurse);
-    }
-    /// # Safety
-    /// Must run on the game thread; generation can change game state.
-    pub unsafe fn tally_resources_to_file(cx: &mut Cx<'_>, io: &mut Io<'_>) {
-        write_generation_file(
-            c"ResourceTally".as_ptr(),
-            |out| tally_resources(cx, io, out),
-            c"*** Resource tally complete. The game may be in an undefined state.\n".as_ptr(),
-        );
-    }
-    unsafe fn tally_system_pre_callback(
-        _kernel: &crate::engine::Kernel,
-        _: *const STAR_DESC,
-        _: &SolarSystem,
-        arg: &mut TallyResourcesArg,
-    ) {
-        let context = arg;
-        context.mineral_count = 0;
-        context.bio_count = 0;
-    }
-    unsafe fn tally_system_post_callback(
-        kernel: &crate::engine::Kernel,
-        star: *const STAR_DESC,
-        _: &SolarSystem,
-        arg: &mut TallyResourcesArg,
-    ) {
-        let context = arg;
-        let name = crate::planets::starmap::naming::cluster_name(
-            kernel,
-            &*star.cast(),
-            STAR_NUMBER_BASE as usize,
-        );
-        libc::fprintf(
-            context.out,
-            c"%s\t%d\t%d\n".as_ptr(),
-            name.as_ptr(),
-            context.mineral_count as c_int,
-            context.bio_count as c_int,
-        );
-    }
-    unsafe fn tally_planet_callback(
-        cx: &mut Cx<'_>,
-        io: &mut Io<'_>,
-        solar: &mut SolarSystem,
-        body: Body,
-        arg: &mut TallyResourcesArg,
-    ) {
-        tally_resources_world(cx, io, arg, solar, body);
-    }
-    unsafe fn tally_moon_callback(
-        cx: &mut Cx<'_>,
-        io: &mut Io<'_>,
-        solar: &mut SolarSystem,
-        body: Body,
-        arg: &mut TallyResourcesArg,
-    ) {
-        tally_resources_world(cx, io, arg, solar, body);
-    }
-    unsafe fn tally_resources_world(
-        cx: &mut Cx<'_>,
-        io: &mut Io<'_>,
-        arg: &mut TallyResourcesArg,
-        solar: &mut SolarSystem,
-        body: Body,
-    ) {
-        if solar.sys.descriptor(body).data_index == HIERARCHY_STARBASE as BYTE {
-            return;
-        }
-        if solar.sys.descriptor(body).data_index == SA_MATRA as BYTE {
-            return;
-        }
-        arg.bio_count = arg
-            .bio_count
-            .wrapping_add(calculate_bio_value(cx, io, solar, body));
-        arg.mineral_count = arg
-            .mineral_count
-            .wrapping_add(calculate_mineral_value(cx, io, solar, body));
-    }
-
-    /// # Safety
-    /// The callback must accept every immutable planet-type record and its context.
-    pub unsafe fn for_all_planet_types<T>(
-        callback: unsafe fn(c_int, *const PlanetFrame, &mut T),
-        arg: &mut T,
-    ) {
-        for i in 0..NUMBER_OF_PLANET_TYPES as usize {
-            callback(
-                i as c_int,
-                ptr::addr_of!(planet_array).cast::<PlanetFrame>().add(i),
-                arg,
-            );
-        }
-    }
-    struct DumpPlanetTypesArg {
-        out: *mut FILE,
-    }
-    /// # Safety
-    /// `out` must be an open output stream, with game strings initialized.
-    pub unsafe fn dump_planet_types(out: *mut FILE) {
-        let mut context = DumpPlanetTypesArg { out };
-        for_all_planet_types(dump_planet_type_callback, &mut context);
-    }
-    unsafe fn dump_planet_type_callback(
-        index: c_int,
-        planet: *const PlanetFrame,
-        arg: &mut DumpPlanetTypesArg,
-    ) {
-        dump_planet_type(arg.out, index, planet);
-    }
-    unsafe fn game_string(index: usize) -> *const c_char {
-        GetStringAddress(SetAbsStringTableIndex(
-            Kernel::current().read(|owner| owner.game_strings),
-            index as COUNT,
-        ))
-    }
-    /// # Safety
-    /// Planet type must be readable, game strings initialized, and stream open.
-    pub unsafe fn dump_planet_type(out: *mut FILE, index: c_int, planet: *const PlanetFrame) {
-        libc::fprintf(out,c"%s\n\tType: %s\n\tColor: %s\n\tSurface generation algoritm: %s\n\tTectonics: %s\n\tAtmosphere: %s\n\tDensity: %s\n\tElements:\n".as_ptr(),
-        planet_type_string(index),world_size_string((*planet).type_ & PLAN_SIZE_MASK as BYTE),
-        body_color_string((*planet).type_ >> 4),world_gen_algo_string((*planet).type_ & PLAN_ALGO_MASK as BYTE),
-        tectonics_string((*planet).base_tectonics),atmosphere_string((*planet).atmo_and_density >> 4),density_string((*planet).atmo_and_density & 15));
-        for i in 0..NUM_USEFUL_ELEMENTS as usize {
-            let entry = &(*planet).useful_elements[i];
-            if entry.density == 0 {
-                continue;
-            }
-            let quality = entry.density >> 4;
-            libc::fprintf(
-                out,
-                c"\t\t0 to %d %s-quality (+%d) deposits of %s (%s)\n".as_ptr(),
-                (entry.density & 15) as c_int,
-                deposit_quality_string(quality),
-                quality as c_int * 5,
-                game_string(ELEMENTS_STRING_BASE as usize + entry.element_type as usize),
-                game_string(
-                    CARGO_STRING_BASE as usize + 2 + element_category(entry.element_type as usize),
-                ),
-            );
-        }
-        libc::fprintf(out, c"\n".as_ptr());
-    }
-    macro_rules! category {
-        ($name:literal,$base:ident,$count:ident) => {
+            let event = events.get(id);
             (
-                concat!($name, "\0").as_ptr().cast::<c_char>(),
-                $base as usize,
-                $count as usize,
+                (event.year_index, event.month_index, event.day_index),
+                event.func_index,
             )
         };
-    }
-    const STRING_CATEGORIES: &[(*const c_char, usize, usize)] = &[
-        (c"0".as_ptr(), 0, 0),
-        category!("STAR_STRING_BASE", STAR_STRING_BASE, STAR_STRING_COUNT),
-        category!(
-            "DEVICE_STRING_BASE",
-            DEVICE_STRING_BASE,
-            DEVICE_STRING_COUNT
-        ),
-        category!("CARGO_STRING_BASE", CARGO_STRING_BASE, CARGO_STRING_COUNT),
-        category!(
-            "ELEMENTS_STRING_BASE",
-            ELEMENTS_STRING_BASE,
-            ELEMENTS_STRING_COUNT
-        ),
-        category!("SCAN_STRING_BASE", SCAN_STRING_BASE, SCAN_STRING_COUNT),
-        category!("STAR_NUMBER_BASE", STAR_NUMBER_BASE, STAR_NUMBER_COUNT),
-        category!(
-            "PLANET_NUMBER_BASE",
-            PLANET_NUMBER_BASE,
-            PLANET_NUMBER_COUNT
-        ),
-        category!(
-            "MONTHS_STRING_BASE",
-            MONTHS_STRING_BASE,
-            MONTHS_STRING_COUNT
-        ),
-        category!(
-            "FEEDBACK_STRING_BASE",
-            FEEDBACK_STRING_BASE,
-            FEEDBACK_STRING_COUNT
-        ),
-        category!(
-            "STARBASE_STRING_BASE",
-            STARBASE_STRING_BASE,
-            STARBASE_STRING_COUNT
-        ),
-        category!(
-            "ENCOUNTER_STRING_BASE",
-            ENCOUNTER_STRING_BASE,
-            ENCOUNTER_STRING_COUNT
-        ),
-        category!(
-            "NAVIGATION_STRING_BASE",
-            NAVIGATION_STRING_BASE,
-            NAVIGATION_STRING_COUNT
-        ),
-        category!(
-            "NAMING_STRING_BASE",
-            NAMING_STRING_BASE,
-            NAMING_STRING_COUNT
-        ),
-        category!("MELEE_STRING_BASE", MELEE_STRING_BASE, MELEE_STRING_COUNT),
-        category!(
-            "SAVEGAME_STRING_BASE",
-            SAVEGAME_STRING_BASE,
-            SAVEGAME_STRING_COUNT
-        ),
-        category!(
-            "OPTION_STRING_BASE",
-            OPTION_STRING_BASE,
-            OPTION_STRING_COUNT
-        ),
-        category!(
-            "QUITMENU_STRING_BASE",
-            QUITMENU_STRING_BASE,
-            QUITMENU_STRING_COUNT
-        ),
-        category!(
-            "STATUS_STRING_BASE",
-            STATUS_STRING_BASE,
-            STATUS_STRING_COUNT
-        ),
-        category!(
-            "FLAGSHIP_STRING_BASE",
-            FLAGSHIP_STRING_BASE,
-            FLAGSHIP_STRING_COUNT
-        ),
-        category!(
-            "ORBITSCAN_STRING_BASE",
-            ORBITSCAN_STRING_BASE,
-            ORBITSCAN_STRING_COUNT
-        ),
-        category!(
-            "MAINMENU_STRING_BASE",
-            MAINMENU_STRING_BASE,
-            MAINMENU_STRING_COUNT
-        ),
-        category!(
-            "NETMELEE_STRING_BASE",
-            NETMELEE_STRING_BASE,
-            NETMELEE_STRING_COUNT
-        ),
-        (
-            c"GAMESTR_COUNT".as_ptr(),
-            GAMESTR_COUNT as usize,
-            usize::MAX,
-        ),
-    ];
-
-    /// # Safety
-    /// Game strings must be initialized. Returned storage is shared and non-reentrant.
-    pub unsafe fn planet_type_string(index: c_int) -> *const c_char {
-        static mut BUFFER: [c_char; 40] = [0; 40];
-        let buffer = ptr::addr_of_mut!(BUFFER).cast();
-        if index >= FIRST_GAS_GIANT as c_int {
-            libc::snprintf(
-                buffer,
-                40,
-                c"%s".as_ptr(),
-                game_string(SCAN_STRING_BASE as usize + 4 + 51),
-            );
-        } else {
-            libc::snprintf(
-                buffer,
-                40,
-                c"%s %s".as_ptr(),
-                game_string((SCAN_STRING_BASE as c_int + 4 + index) as usize),
-                game_string(SCAN_STRING_BASE as usize + 4 + 50),
-            );
+        done |= u32::from(selector) != HYPERSPACE_ENCOUNTER_EVENT;
+        while {
+            let clock = &cx.world.data.game.game_clock;
+            (clock.year_index, clock.month_index, clock.day_index) < date
+        } {
+            crate::time::clock_abi::advance_days(cx, 1);
         }
-        buffer
-    }
-    /// # Safety
-    /// Returned fallback-number storage is shared and must not be accessed concurrently.
-    pub unsafe fn tectonics_string(value: BYTE) -> *const c_char {
-        static mut BUFFER: [c_char; 5] = [0; 5];
-        match value as u32 {
-            NO_TECTONICS => c"none".as_ptr(),
-            LOW_TECTONICS => c"low".as_ptr(),
-            MED_TECTONICS => c"medium".as_ptr(),
-            HIGH_TECTONICS => c"high".as_ptr(),
-            SUPER_TECTONICS => c"super".as_ptr(),
-            _ => {
-                let buffer = ptr::addr_of_mut!(BUFFER).cast();
-                libc::snprintf(buffer, 5, c"%d".as_ptr(), value as c_int);
-                buffer
-            }
+        if done {
+            break;
         }
-    }
-
-    pub fn find_player_ship(cx: &Cx<'_>, player: SIZE) -> Option<crate::engine::battle::ShipId> {
-        let mut handle = cx.elements().head();
-        while let Some(element) = handle {
-            let state = cx.element(element);
-            if state.flags & PLAYER_SHIP as u16 != 0 && state.player == player {
-                return Some(cx.owner(element));
-            }
-            handle = cx.elements().succ(element);
-        }
-        None
-    }
-    /// # Safety
-    /// Must run on the game thread with battle and status context initialized.
-    pub unsafe fn reset_crew_battle() {
-        if crate::engine::World::current().read(|world| world.activity()) & IN_BATTLE as ACTIVITY
-            == 0
-            || World::current().read(in_hqspace) != 0
-        {
-            return;
-        }
-        crate::app::bridge::enter(|cx| {
-            let Some(ship) = find_player_ship(cx, RPG_PLAYER_NUM as SIZE) else {
-                return;
-            };
-            if !cx.has_descriptor(ship) {
-                return;
-            }
-            let info = cx.race_stats(ship).ship_info;
-            let delta = (info.max_crew as c_int - info.crew_level as c_int) as COUNT;
-            let old = SetContext(cx.kernel.status_context);
-            cx.delta_crew(cx.ship_element(ship), delta as SIZE);
-            SetContext(old);
-        });
-    }
-    /// # Safety
-    /// Must run on the game thread with battle and status context initialized.
-    pub unsafe fn reset_energy_battle() {
-        if crate::engine::World::current().read(|world| world.activity()) & IN_BATTLE as ACTIVITY
-            == 0
-            || World::current().read(in_hqspace) != 0
-        {
-            return;
-        }
-        crate::app::bridge::enter(|cx| {
-            let Some(ship) = find_player_ship(cx, RPG_PLAYER_NUM as SIZE) else {
-                return;
-            };
-            if !cx.has_descriptor(ship) {
-                return;
-            }
-            let info = cx.race_stats(ship).ship_info;
-            let delta = (info.max_energy as c_int - info.energy_level as c_int) as COUNT;
-            let old = SetContext(cx.kernel.status_context);
-            cx.delta_energy(cx.ship_element(ship), delta as SIZE);
-            SetContext(old);
-        });
-    }
-
-    /// # Safety
-    /// Game strings must be initialized and `out` an open C stream.
-    pub unsafe fn dump_strings(out: *mut FILE) {
-        let categories = STRING_CATEGORIES;
-        let num_strings =
-            GetStringTableCount(Kernel::current().read(|owner| owner.game_strings)) as usize;
-        for i in 0..categories.len() - 1 {
-            if categories[i].1 + categories[i].2 != categories[i + 1].1 {
-                libc::fprintf(
-                    error_stream,
-                    c"Error: String category list in dumpStrings() is not up to date.\n".as_ptr(),
-                );
-                return;
-            }
-        }
-        if GAMESTR_COUNT as usize != num_strings {
-            libc::fprintf(
-                error_stream,
-                c"Warning: GAMESTR_COUNT is %d, but GameStrings contains %d strings.\n".as_ptr(),
-                GAMESTR_COUNT as c_int,
-                num_strings as c_int,
-            );
-        }
-        let mut category = 0;
-        for i in 0..num_strings {
-            while category < categories.len() && i >= (*categories.as_ptr().add(category + 1)).1 {
-                category += 1;
-            }
-            libc::fprintf(
-                out,
-                c"[ %s + %d ]  %s\n".as_ptr(),
-                categories[category].0,
-                (i - categories[category].1) as c_int,
-                game_string(i),
-            );
-        }
-    }
-
-    unsafe fn is_context_visible(context: CONTEXT) -> bool {
-        let old = SetContext(context);
-        let frame = GetContextFGFrame();
-        SetContext(old);
-        frame == Kernel::current().read(|owner| owner.screen)
-    }
-    unsafe fn count_visible_contexts() -> usize {
-        let mut count = 0;
-        let mut context = GetFirstContext();
-        while !context.is_null() {
-            if is_context_visible(context) {
-                count += 1;
-            }
-            context = GetNextContext(context);
-        }
-        count
-    }
-    unsafe fn draw_context(context: CONTEXT, hue: f64) {
-        let _draw_frame = GetContextFGFrame();
-        let rectangle_color = hsva_to_rgba(hue, 1.0, 0.5, 100);
-        let line_color = hsva_to_rgba(hue, 1.0, 1.0, 90);
-        let text_color = line_color;
-        let old_context = SetContext(context);
-        let mut rect: RECT = mem::zeroed();
-        let _have_clipping_rect = GetContextClipRect(&mut rect);
-        SetContext(old_context);
-        let p1 = rect.corner;
-        let p2 = POINT {
-            x: (rect.corner.x as c_int + rect.extent.width as c_int - 1) as COORD,
-            y: rect.corner.y,
-        };
-        let p3 = POINT {
-            x: rect.corner.x,
-            y: (rect.corner.y as c_int + rect.extent.height as c_int - 1) as COORD,
-        };
-        let p4 = POINT { x: p2.x, y: p3.y };
-        let old_color = SetContextForeGroundColor(rectangle_color);
-        DrawFilledRectangle(&mut rect);
-        SetContextForeGroundColor(line_color);
-        for (first, second) in [(p1, p2), (p2, p4), (p1, p3), (p3, p4), (p1, p4), (p2, p3)] {
-            DrawLine(&mut LINE { first, second });
-        }
-        let old_font = SetContextFont(Kernel::current().read(|owner| owner.tiny_font));
-        SetContextForeGroundColor(text_color);
-        let old_mode = SetContextDrawMode(DrawMode {
-            kind: DrawKind_DRAW_ALPHA as BYTE,
-            factor: text_color.a as SWORD,
-        });
-        let mut text: TEXT = mem::zeroed();
-        text.baseline.x = ((p1.x as c_int + (p2.x as c_int + 1)) / 2) as COORD;
-        text.baseline.y = (p1.y as c_int + 8) as COORD;
-        text.pStr = GetContextName(context);
-        text.align = TEXT_ALIGN_ALIGN_CENTER;
-        text.CharCount = COUNT::MAX;
-        font_DrawText(&mut text);
-        SetContextDrawMode(old_mode);
-        SetContextForeGroundColor(old_color);
-        SetContextFont(old_font);
-    }
-    unsafe fn describe_context(out: *mut FILE, context: CONTEXT) {
-        let old = SetContext(context);
-        let mut rect: RECT = mem::zeroed();
-        GetContextClipRect(&mut rect);
-        libc::fprintf(
-            out,
-            c"Context '%s':\n\tClipRect = (%d, %d)-(%d, %d)  (%d x %d)\n".as_ptr(),
-            GetContextName(context),
-            rect.corner.x as c_int,
-            rect.corner.y as c_int,
-            rect.corner.x as c_int + rect.extent.width as c_int,
-            rect.corner.y as c_int + rect.extent.height as c_int,
-            rect.extent.width as c_int,
-            rect.extent.height as c_int,
-        );
-        SetContext(old);
-    }
-    unsafe fn wait_for_key(input: &InputSession) -> BOOLEAN {
-        if input.pulsed().menu[KEY_MENU_SELECT as usize] != 0
-            || input.pulsed().menu[KEY_MENU_CANCEL as usize] != 0
-        {
-            return 0;
-        }
-        SleepThread(ONE_SECOND / 20);
-        1
-    }
-    unsafe fn get_screen() -> FRAME {
-        let old = SetContext(Kernel::current().read(|owner| owner.screen_context));
-        let rectangle = RECT {
-            corner: POINT { x: 0, y: 0 },
-            extent: EXTENT {
-                width: ScreenWidth as _,
-                height: ScreenHeight as _,
-            },
-        };
-        let frame = CaptureDrawable(LoadDisplayPixmap(&rectangle, ptr::null_mut()));
-        SetContext(old);
-        frame
-    }
-    unsafe fn put_screen(frame: FRAME) {
-        let old = SetContext(Kernel::current().read(|owner| owner.screen_context));
-        DrawStamp(&mut STAMP {
-            origin: POINT { x: 0, y: 0 },
-            frame,
-        });
-        SetContext(old);
-    }
-    /// # Safety
-    /// Must run on the main thread with live graphics and input systems.
-    pub unsafe fn debug_contexts() {
-        static mut IN_DEBUG_CONTEXTS: bool = false;
-        if ptr::read_volatile(ptr::addr_of!(IN_DEBUG_CONTEXTS)) {
-            return;
-        }
-        ptr::write_volatile(ptr::addr_of_mut!(IN_DEBUG_CONTEXTS), true);
-        let count = count_visible_contexts();
-        if count != 0 {
-            let saved = get_screen();
-            FlushGraphics();
-            let debug_context = CreateContextAux(c"debugDrawContext".as_ptr());
-            let debug_frame = CaptureDrawable(CloneFrame(saved));
-            let old = SetContext(debug_context);
-            SetContextFGFrame(debug_frame);
-            let increment = 360.0 / count as f64;
-            let mut visible = 0;
-            let mut context = GetFirstContext();
-            while !context.is_null() {
-                if context != debug_context {
-                    if is_context_visible(context) {
-                        draw_context(context, visible as f64 * increment);
-                        visible += 1;
-                    }
-                    describe_context(error_stream, context);
-                }
-                context = GetNextContext(context);
-            }
-            put_screen(debug_frame);
-            DoInput(
-                1,
-                &mut |cx: &mut Cx<'_>, _: &mut crate::engine::observe::Io<'_>| {
-                    let runtime = cx.kernel.input_runtime();
-                    cx.with_legacy(|| wait_for_key(runtime.input()) != 0)
-                },
-            );
-            SetContext(old);
-            DestroyContext(debug_context);
-            DestroyDrawable(ReleaseDrawable(debug_frame));
-            put_screen(saved);
-            DestroyDrawable(ReleaseDrawable(saved));
-        }
-        ptr::write_volatile(ptr::addr_of_mut!(IN_DEBUG_CONTEXTS), false);
     }
 }
 
-#[cfg(not(test))]
-pub use runtime::{
-    activate_all_ships, calculate_bio_value, calculate_mineral_value, clear_escorts,
-    debug_contexts, debug_key_pressed, debug_key_pressed_synchronous, dump_event, dump_events,
-    dump_moon, dump_planet, dump_planet_type, dump_planet_types, dump_strings, dump_system,
-    dump_universe, dump_universe_to_file, equip_ship, find_player_ship, for_all_moons,
-    for_all_planet_types, for_all_planets, for_all_stars, forward_to_next_event,
-    generate_bio_index, generate_mineral_index, give_devices, planet_type_string,
-    reset_crew_battle, reset_energy_battle, show_spheres, tally_resources, tally_resources_to_file,
-    tectonics_string, universe_recurse, DISABLE_INTERACTIVITY,
-};
+pub fn equip_ship(cx: &mut Cx<'_>) {
+    if !equipment::equip_flagship(cx.world) {
+        return;
+    }
+    if let Some(effects) = cx.solar_flight {
+        let mut flight = crate::engine::world::generation::SolarFlight::default();
+        equipment::update_flight(&cx.world.data.flagship, &mut flight);
+        effects.set(Some(flight));
+    }
+    if crate::navigation::globals::in_hqspace(cx.world) != 0
+        || cx.world.activity() as u8 as u32 == IN_INTERPLANETARY
+    {
+        crate::ui::sis::delta_sis_gauges(cx.kernel, cx.world, 32767, 32767, 32767);
+    }
+}
+
+pub fn give_devices(world: &mut World) {
+    for key in [
+        StoryKey::ROSY_SPHERE_ON_SHIP,
+        StoryKey::ARTIFACT_2_ON_SHIP,
+        StoryKey::ARTIFACT_3_ON_SHIP,
+        StoryKey::SUN_DEVICE_ON_SHIP,
+        StoryKey::UTWIG_BOMB_ON_SHIP,
+        StoryKey::ULTRON_CONDITION,
+        StoryKey::MAIDENS_ON_SHIP,
+        StoryKey::TALKING_PET_ON_SHIP,
+        StoryKey::AQUA_HELIX_ON_SHIP,
+        StoryKey::CLEAR_SPINDLE_ON_SHIP,
+        StoryKey::UMGAH_BROADCASTERS_ON_SHIP,
+        StoryKey::TAALO_PROTECTOR_ON_SHIP,
+        StoryKey::EGG_CASE0_ON_SHIP,
+        StoryKey::EGG_CASE1_ON_SHIP,
+        StoryKey::EGG_CASE2_ON_SHIP,
+        StoryKey::SYREEN_SHUTTLE_ON_SHIP,
+        StoryKey::VUX_BEAST_ON_SHIP,
+        StoryKey::PORTAL_SPAWNER_ON_SHIP,
+        StoryKey::PORTAL_KEY_ON_SHIP,
+        StoryKey::BURV_BROADCASTERS_ON_SHIP,
+        StoryKey::MOONBASE_ON_SHIP,
+        StoryKey::DESTRUCT_CODE_ON_SHIP,
+    ] {
+        world.set_story_state(key, 1);
+    }
+}
+
+pub fn clear_escorts(cx: &mut Cx<'_>) {
+    equipment::clear_escorts(cx.world);
+    crate::ui::sis::delta_sis_gauges(cx.kernel, cx.world, 32767, 32767, 32767);
+}
+pub fn show_spheres(world: &mut World) {
+    equipment::reveal_spheres(world);
+}
+pub fn activate_all_ships(world: &mut World) {
+    equipment::activate_fleets(world);
+}
+
+pub fn find_player_ship(cx: &Cx<'_>, player: i16) -> Option<ShipId> {
+    let mut next = cx.elements().head();
+    while let Some(element) = next {
+        let state = cx.element(element);
+        if state.flags & PLAYER_SHIP as u16 != 0 && state.player == player {
+            return Some(cx.owner(element));
+        }
+        next = cx.elements().succ(element);
+    }
+    None
+}
+
+fn refill(cx: &mut Cx<'_>, energy: bool, apply: impl FnOnce(&mut Cx<'_>, ElementId, i16) -> bool) {
+    if cx.world.activity() & IN_BATTLE as u16 == 0
+        || crate::navigation::globals::in_hqspace(cx.world) != 0
+    {
+        return;
+    }
+    let Some(ship) = find_player_ship(cx, RPG_PLAYER_NUM as i16) else {
+        return;
+    };
+    if !cx.has_descriptor(ship) {
+        return;
+    }
+    let info = cx.race_stats(ship).ship_info;
+    let delta = if energy {
+        i32::from(info.max_energy) - i32::from(info.energy_level)
+    } else {
+        i32::from(info.max_crew) - i32::from(info.crew_level)
+    } as i16;
+    let context = ContextLease::require(cx.kernel.status_context);
+    context.with_selected(|| apply(cx, cx.ship_element(ship), delta));
+}
+
+pub fn reset_crew_battle(cx: &mut Cx<'_>, apply: impl FnOnce(&mut Cx<'_>, ElementId, i16) -> bool) {
+    refill(cx, false, apply);
+}
+pub fn reset_energy_battle(
+    cx: &mut Cx<'_>,
+    apply: impl FnOnce(&mut Cx<'_>, ElementId, i16) -> bool,
+) {
+    refill(cx, true, apply);
+}
 
 /// Apply the selected debug destination using only the supplied campaign.
-pub fn move_flagship(world: &mut crate::engine::World, dimensions: (i32, i32)) {
-    use crate::engine::StoryKey;
+pub fn move_flagship(world: &mut World, dimensions: (i32, i32)) {
     let log_x = (((dimensions.0 - 64) << 5) >> 4) * 195;
     let log_y = ((dimensions.1 << 5) >> 4) * 25;
     let game = &mut world.data.game;
@@ -1455,69 +232,9 @@ pub fn move_flagship(world: &mut crate::engine::World, dimensions: (i32, i32)) {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn traversal_callbacks_borrow_typed_context_without_an_abi_cast() {
-        fn system(
-            _: &crate::engine::Kernel,
-            _: *const STAR_DESC,
-            _: &SolarSystem,
-            events: &mut Vec<&str>,
-        ) {
-            events.push("system");
-        }
-        fn world(
-            _: &mut crate::engine::battle::Cx<'_>,
-            _: &mut crate::engine::observe::Io<'_>,
-            _: &mut SolarSystem,
-            _: Body,
-            events: &mut Vec<&str>,
-        ) {
-            events.push("world");
-        }
-        let mut owners = crate::engine::Game::new();
-        owners.world.set_catalog(std::borrow::Cow::Borrowed(
-            &crate::planets::tables::STARMAP_ARRAY,
-        ));
-        let mut solar = SolarSystem::new(&owners.world, crate::engine::StarId(0));
-        let mut battle = crate::engine::battle::Battle::new();
-        let mut cx = crate::engine::battle::Cx::new(
-            &mut battle,
-            &mut owners.world,
-            &mut owners.kernel,
-            crate::math::random,
-        );
-        let mut observer = crate::engine::observe::Unobserved;
-        let mut io = crate::engine::observe::Io {
-            observer: &mut observer,
-        };
-        let mut events = Vec::new();
-        let visitor = UniverseRecurseArg {
-            system_func_pre: Some(system),
-            system_func_post: None,
-            planet_func_pre: Some(world),
-            planet_func_post: None,
-            moon_func: None,
-            arg: &mut events,
-        };
-        // These callbacks do not inspect the records; only their typed context.
-        unsafe {
-            visitor.system_func_pre.unwrap()(cx.kernel, std::ptr::null(), &solar, visitor.arg);
-            visitor.planet_func_pre.unwrap()(
-                &mut cx,
-                &mut io,
-                &mut solar,
-                Body::Planet(0),
-                visitor.arg,
-            );
-        }
-        assert_eq!(events, ["system", "world"]);
-        let _: fn(u8) -> *const c_char = event_name;
-    }
-
     #[test]
     fn clearing_escort_queue_returns_every_fragment_slot_to_pool() {
-        let mut world = crate::engine::World::new();
+        let mut world = World::new();
         let mut original = Vec::new();
         for _ in 0..12 {
             let mut ships = world.built_ships();
@@ -1526,7 +243,6 @@ mod tests {
             original.push(id);
         }
         assert!(world.built_ships().alloc().is_none());
-
         equipment::clear_escorts(&mut world);
         assert!(world.built_ships_ref().head().is_none());
         assert!(world.built_ships_ref().tail().is_none());
@@ -1538,50 +254,39 @@ mod tests {
         }
         assert!(world.built_ships().alloc().is_none());
     }
-
     #[test]
     fn debug_names_use_header_indices_and_unknown_fallbacks() {
-        unsafe {
-            assert_eq!(
-                std::ffi::CStr::from_ptr(event_name(HYPERSPACE_ENCOUNTER_EVENT as BYTE)),
-                c"HYPERSPACE_ENCOUNTER_EVENT"
-            );
-            assert_eq!(
-                std::ffi::CStr::from_ptr(star_presence_string(MELNORME8_DEFINED as BYTE)),
-                c"Melnorme trader #8"
-            );
-            assert_eq!(std::ffi::CStr::from_ptr(star_presence_string(0)), c"");
-            assert_eq!(
-                std::ffi::CStr::from_ptr(body_color_string(CYAN_BODY as BYTE)),
-                c"cyan"
-            );
-            assert_eq!(
-                std::ffi::CStr::from_ptr(world_gen_algo_string(CRATERED_ALGO as BYTE)),
-                c"CRATERED_ALGO"
-            );
-            assert_eq!(std::ffi::CStr::from_ptr(event_name(BYTE::MAX)), c"???");
-            assert_eq!(
-                std::ffi::CStr::from_ptr(atmosphere_string(BYTE::MAX)),
-                c"super thick"
-            );
-        }
+        assert_eq!(
+            event_name(HYPERSPACE_ENCOUNTER_EVENT as u8),
+            "HYPERSPACE_ENCOUNTER_EVENT"
+        );
+        assert_eq!(
+            star_presence_string(MELNORME8_DEFINED as u8),
+            "Melnorme trader #8"
+        );
+        assert_eq!(star_presence_string(0), "");
+        assert_eq!(body_color_string(CYAN_BODY as u8), "cyan");
+        assert_eq!(world_gen_algo_string(CRATERED_ALGO as u8), "CRATERED_ALGO");
+        assert_eq!(event_name(u8::MAX), "???");
+        assert_eq!(atmosphere_string(u8::MAX), "super thick");
     }
     #[test]
     fn hsv_sectors_preserve_c_rounding_and_alpha() {
-        let cases = [
+        for (hue, (r, g, b)) in [
             (0.0, (255, 0, 0)),
             (60.0, (255, 255, 0)),
             (120.0, (0, 255, 0)),
             (180.0, (0, 255, 255)),
             (240.0, (0, 0, 255)),
             (300.0, (255, 0, 255)),
-        ];
-        for (hue, (r, g, b)) in cases {
-            let color = hsva_to_rgba(hue, 1.0, 1.0, 90);
+        ] {
+            let color = colors::hsva_to_rgba(hue, 1.0, 1.0, 90);
             assert_eq!((color.r, color.g, color.b, color.a), (r, g, b, 90));
         }
-        // The C t expression intentionally differs from the usual HSV formula.
-        let color = hsva_to_rgba(30.0, 0.5, 1.0, 100);
+        let color = colors::hsva_to_rgba(30.0, 0.5, 1.0, 100);
         assert_eq!((color.r, color.g, color.b, color.a), (255, 64, 128, 100));
     }
 }
+
+#[cfg(test)]
+mod traversal_tests;

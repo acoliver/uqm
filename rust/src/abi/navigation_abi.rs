@@ -1002,8 +1002,6 @@ pub const EVENT_TYPE_ABSOLUTE_EVENT: EVENT_TYPE = 0;
 pub const EVENT_TYPE_RELATIVE_EVENT: EVENT_TYPE = 1;
 pub type EVENT_TYPE = ::std::os::raw::c_uint;
 
-pub use crate::time::clock_abi::{LockGameClock, UnlockGameClock};
-
 pub use crate::graphics::native_abi::Color;
 
 #[repr(C)]
@@ -2196,99 +2194,6 @@ pub const URQUAN_DRONE_SHIP: _bindgen_ty_21 = 23;
 pub const SAMATRA_SHIP: _bindgen_ty_21 = 23;
 pub const NUM_AVAILABLE_RACES: _bindgen_ty_21 = 24;
 pub type _bindgen_ty_21 = ::std::os::raw::c_uint;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::activate_all_ships;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::atmosphere_string;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::body_color_string;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::calculate_bio_value;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::calculate_mineral_value;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::clear_escorts;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::debug_contexts;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::debug_key_pressed;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::debug_key_pressed_synchronous;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::density_string;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::deposit_quality_string;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::dump_event;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::dump_events;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::dump_moon;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::dump_planet;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::dump_planet_type;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::dump_planet_types;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::dump_strings;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::dump_system;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::dump_universe;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::dump_universe_to_file;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::equip_ship;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::event_name;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::find_player_ship;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::for_all_moons;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::for_all_planet_types;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::for_all_planets;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::for_all_stars;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::forward_to_next_event;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::generate_bio_index;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::generate_mineral_index;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::give_devices;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::planet_type_string;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::reset_crew_battle;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::reset_energy_battle;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::show_spheres;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::star_presence_string;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::star_type_string;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::tally_resources;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::tally_resources_to_file;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::tectonics_string;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::universe_recurse;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::uqm_debug_creature_bio_value;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::world_gen_algo_string;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::world_size_string;
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::DISABLE_INTERACTIVITY;
-
 #[cfg(not(test))]
 pub use crate::front_end::cnctdlg::melee_connect_dialog as MeleeConnectDialog;
 #[repr(C)]

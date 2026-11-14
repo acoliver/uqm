@@ -60,7 +60,8 @@ fn check_initialized_identity(h: &mut Harness) {
             let mut io = uqm_rust::engine::observe::Io {
                 observer: &mut observer,
             };
-            uqm_rust::planets::solarsys::site::dispatch::invoke(
+            uqm_rust::front_end::uqmdebug::Generation::invoke(
+                &mut uqm_rust::planets::solarsys::site::dispatch::DebugGeneration,
                 cx,
                 &mut io,
                 &mut h.state,
@@ -69,7 +70,6 @@ fn check_initialized_identity(h: &mut Harness) {
                     generator.generate_planets(system, host)
                 },
             )
-            .0
         })
     };
     assert!(generated);
@@ -214,9 +214,9 @@ fn check_drawable_ownership(h: &mut Harness) {
     }
     // DEBUG's early-return LoadPlanet path must release an unconsumed non-null
     // definition as well, rather than proving only a missing-resource branch.
-    let saved_debug = unsafe { c_api::DISABLE_INTERACTIVITY };
+    let quiet = uqm_rust::engine::Kernel::current()
+        .read(|kernel| kernel.diagnostics.suppress_interaction());
     unsafe {
-        c_api::DISABLE_INTERACTIVITY = 1;
         uqm_rust::app::bridge::enter(|cx| {
             let mut observer = uqm_rust::engine::observe::Unobserved;
             let game = std::cell::RefCell::new(cx.reborrow());
@@ -253,8 +253,8 @@ fn check_drawable_ownership(h: &mut Harness) {
             });
         });
         c_api::TFB_FlushGraphicsEx(1);
-        c_api::DISABLE_INTERACTIVITY = saved_debug;
     }
+    drop(quiet);
     assert_eq!(allocations(), baseline);
     super::sol_resources::check(h);
     unsafe {

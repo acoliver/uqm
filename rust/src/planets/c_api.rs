@@ -10,9 +10,6 @@ use crate::mainloop::restart_menu::c_extern::{
 };
 use crate::planets::universe_units::{universe_to_logx, universe_to_logy};
 
-#[cfg(all(not(test), feature = "debug-process"))]
-pub use crate::front_end::uqmdebug::DISABLE_INTERACTIVITY;
-
 pub use crate::log_abi::log_init;
 
 pub use crate::navigation::groups::live::init_group_info;

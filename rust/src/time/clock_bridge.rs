@@ -116,18 +116,6 @@ pub fn rust_clock_tick(world: &mut World) -> bool {
     tick(&mut world.data.game.game_clock)
 }
 
-// Lock the game clock (for debugging)
-pub extern "C" fn rust_clock_lock() {
-    log_clock_bridge("RUST_CLOCK_LOCK");
-    // Note: The mutex lock is handled by C code
-}
-
-// Unlock the game clock (for debugging)
-pub extern "C" fn rust_clock_unlock() {
-    log_clock_bridge("RUST_CLOCK_UNLOCK");
-    // Note: The mutex unlock is handled by C code
-}
-
 // Check if game clock is running
 pub fn rust_clock_is_running(world: &World) -> c_int {
     log_clock_bridge("RUST_CLOCK_RUNNING");

@@ -101,12 +101,4 @@ pub unsafe fn process_utility_keys(input: &crate::engine::input::InputSession) {
             ScreenHeightActual,
         );
     }
-    #[cfg(feature = "debug-process")]
-    {
-        let pressed = state.menu[KEY_DEBUG as usize];
-        if pressed != 0 && input.debug_key() == 0 {
-            crate::front_end::uqmdebug::debug_key_pressed();
-        }
-        input.replace_debug_key(pressed);
-    }
 }

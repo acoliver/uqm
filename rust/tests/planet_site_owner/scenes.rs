@@ -366,8 +366,7 @@ fn scene_capabilities_load_their_masks_report_indices_and_caller_names() {
         // matching the `#[cfg]` on the production uses in src/planets/orbit.rs.
         #[cfg(feature = "debug-process")]
         {
-            let old_interactivity = uqm_rust::front_end::uqmdebug::DISABLE_INTERACTIVITY;
-            uqm_rust::front_end::uqmdebug::DISABLE_INTERACTIVITY = 1;
+            let _quiet = game.kernel.diagnostics.suppress_interaction();
             with_site(&mut game, ORZ_DEFINED, |h, _| {
                 HomeContactSite::talk(h);
                 ZoqFotPikSite::talk_black_urquan(h);
@@ -380,7 +379,6 @@ fn scene_capabilities_load_their_masks_report_indices_and_caller_names() {
                 ChmmrSite::talk_to_chmmr(h);
                 ChmmrSite::talk_to_ilwrath(h);
             });
-            uqm_rust::front_end::uqmdebug::DISABLE_INTERACTIVITY = old_interactivity;
         }
         assert_eq!(game.world.activity(), 0);
         TFB_FlushGraphics();

@@ -5,7 +5,7 @@ use super::{Harness, ScreenWidth};
 use crate::planets_common::sol_orbital::{self, Case, Ops};
 use uqm_rust::engine::world::planet::{PlanetFrame, SystemInfo};
 
-use uqm_rust::planets::c_api::DISABLE_INTERACTIVITY;
+use uqm_rust::engine::kernel::diagnostics::DiagnosticGuard;
 use uqm_rust::planets::generate::special::Body;
 use uqm_rust::state::game_state_keys::get_game_state;
 
@@ -56,20 +56,22 @@ impl Ops for Harness {
     }
 }
 
-struct DebugTraversal(u32, u32, u32);
+struct DebugTraversal {
+    _quiet: DiagnosticGuard,
+    pluto_spathi: u32,
+    moonbase_destroyed: u32,
+}
 
 impl DebugTraversal {
     fn enter() -> Self {
-        let saved = Self(
-            unsafe { DISABLE_INTERACTIVITY },
-            uqm_rust::engine::World::current()
+        let saved = Self {
+            _quiet: uqm_rust::engine::Kernel::current()
+                .read(|kernel| kernel.diagnostics.suppress_interaction()),
+            pluto_spathi: uqm_rust::engine::World::current()
                 .read(|world| (world).story_state(uqm_rust::engine::StoryKey::FOUND_PLUTO_SPATHI)),
-            uqm_rust::engine::World::current()
+            moonbase_destroyed: uqm_rust::engine::World::current()
                 .read(|world| (world).story_state(uqm_rust::engine::StoryKey::MOONBASE_DESTROYED)),
-        );
-        unsafe {
-            DISABLE_INTERACTIVITY = 1;
-        }
+        };
         uqm_rust::engine::World::current().write(|world| {
             (world).set_story_state(uqm_rust::engine::StoryKey::FOUND_PLUTO_SPATHI, 1)
         });
@@ -82,14 +84,17 @@ impl DebugTraversal {
 
 impl Drop for DebugTraversal {
     fn drop(&mut self) {
-        unsafe {
-            DISABLE_INTERACTIVITY = self.0;
-        }
         uqm_rust::engine::World::current().write(|world| {
-            (world).set_story_state(uqm_rust::engine::StoryKey::FOUND_PLUTO_SPATHI, self.1)
+            (world).set_story_state(
+                uqm_rust::engine::StoryKey::FOUND_PLUTO_SPATHI,
+                self.pluto_spathi,
+            )
         });
         uqm_rust::engine::World::current().write(|world| {
-            (world).set_story_state(uqm_rust::engine::StoryKey::MOONBASE_DESTROYED, self.2)
+            (world).set_story_state(
+                uqm_rust::engine::StoryKey::MOONBASE_DESTROYED,
+                self.moonbase_destroyed,
+            )
         });
     }
 }

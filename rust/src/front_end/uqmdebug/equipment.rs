@@ -103,21 +103,19 @@ pub(super) fn clear_escorts(world: &mut crate::engine::World) {
     }
 }
 
-#[cfg(not(test))]
 pub(super) fn reveal_spheres(world: &mut World) {
     let mut fleets = world.avail_races();
     let mut next = fleets.head();
     while let Some(id) = next {
         next = fleets.succ(id);
         let fleet = fleets.get_mut(id);
-        if fleet.actual_strength != COUNT::MAX && fleet.known_strength != fleet.actual_strength {
+        if fleet.actual_strength != u16::MAX && fleet.known_strength != fleet.actual_strength {
             fleet.known_strength = fleet.actual_strength;
             fleet.known_loc = fleet.loc;
         }
     }
 }
 
-#[cfg(not(test))]
 pub(super) fn activate_fleets(world: &mut World) {
     let mut fleets = world.avail_races();
     let mut next = fleets.head();

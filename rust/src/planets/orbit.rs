@@ -243,7 +243,7 @@ pub(crate) mod live {
         let (star, body) = target;
         let (reports, background) = resources;
         #[cfg(feature = "debug-process")]
-        if crate::front_end::uqmdebug::DISABLE_INTERACTIVITY != 0 {
+        if !game.borrow().kernel.diagnostics.interactive() {
             return None;
         }
         let width = game.borrow().screen_dimensions().0 as i16 - 78;

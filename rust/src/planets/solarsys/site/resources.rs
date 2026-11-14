@@ -167,8 +167,7 @@ impl<'a, 'game, 'observer> Site<'a, 'game, 'observer> {
                 .snapshot()
                 .unwrap_or_else(|| panic!("discovery report typography is not loaded"));
             #[cfg(feature = "debug-process")]
-            // SAFETY: the synchronous debug traversal owns this game-thread flag.
-            if unsafe { crate::front_end::uqmdebug::DISABLE_INTERACTIVITY } != 0 {
+            if !game.borrow().kernel.diagnostics.interactive() {
                 return;
             }
             let junk = crate::planets::solarsys::resources::retained(game.borrow().kernel)

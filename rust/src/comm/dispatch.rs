@@ -488,7 +488,7 @@ pub unsafe fn init_communication_with_options(
 ) -> u16 {
     #[cfg(all(not(test), feature = "debug-process"))]
     {
-        if crate::front_end::uqmdebug::DISABLE_INTERACTIVITY != 0 {
+        if !cx.kernel.diagnostics.interactive() {
             return 0;
         }
     }
