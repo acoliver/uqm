@@ -23,7 +23,6 @@ pub mod encount_native;
 pub mod ffi;
 pub mod galaxy;
 pub mod gendef;
-pub mod gravity;
 #[cfg(test)]
 mod gravity_tests;
 mod integration_tests_p14;

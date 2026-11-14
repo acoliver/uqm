@@ -64,7 +64,7 @@ fn part1() -> Vec<(usize, &'static str)> {
             "battle::weapon_native::ModifySilhouette",
         ),
         (
-            crate::battle::weapon_native::engine::track_ship as *const () as usize,
+            crate::engine::battle::tracking::track_ship as *const () as usize,
             "battle::weapon_native::track_ship",
         ),
         (

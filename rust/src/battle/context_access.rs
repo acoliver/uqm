@@ -1,7 +1,5 @@
 //! Game and resource operations wired to the explicit battle context.
 #[cfg(not(test))]
-use crate::battle::context_access::ai_legacy::AiOps;
-#[cfg(not(test))]
 use crate::battle::context_access::race_access::RaceOps;
 #[cfg(not(test))]
 use crate::engine::battle::{frames::FrameSelection, Cx, ElementId, ShipId, Subject};
@@ -9,7 +7,7 @@ use crate::engine::battle::{frames::FrameSelection, Cx, ElementId, ShipId, Subje
 use crate::ships::native::abi::*;
 
 #[cfg(not(test))]
-use crate::engine::battle::{Concerns, WeaponOrigin};
+use crate::engine::battle::Concerns;
 
 mod tactrans_native_access {
     #[cfg(not(test))]
@@ -287,13 +285,9 @@ pub use star_access::StarOps;
 pub trait ContextOps {
     fn race_intelligence_with_junk(&mut self, ship: ShipId, concerns: &mut Concerns);
     fn finish_battle(&mut self);
-    fn plot_intercept(&mut self, a: &Subject, b: &Subject, turns: u16, margin: u16) -> u16;
     fn ship_weapons(&mut self, ship: &Subject, other: &Subject, margin: u16) -> u32;
     fn ship_intelligence(&mut self, _ship: ShipId, concerns: &mut crate::engine::battle::Concerns);
-    fn track_ship(&mut self, id: ElementId, facing: &mut u16) -> i16;
     fn delta_energy(&mut self, id: ElementId, delta: i16) -> bool;
-    fn gravity(&mut self, id: ElementId) -> bool;
-    fn matter_conflict(&mut self, id: ElementId) -> bool;
     fn negotiate_battle(
         &mut self,
         net: &dyn crate::engine::battle::net::BattleNet,
@@ -325,7 +319,6 @@ pub trait ContextOps {
     fn start_battle_song_if_ready(&mut self, ship: ShipId);
     fn hyper_transition(&mut self, id: ElementId) -> bool;
     fn move_hyperspace(&mut self, dx: &mut i16, dy: &mut i16);
-    fn object_cloaked(&mut self, id: ElementId) -> bool;
     fn preprocess_status(&mut self, id: ElementId);
     fn game_sound(&mut self, index: u16, source: ElementId);
     fn weapon_collision(
@@ -336,16 +329,8 @@ pub trait ContextOps {
         pb: &mut POINT,
     ) -> Option<ElementId>;
     fn delta_crew(&mut self, id: ElementId, amount: i16) -> bool;
-    fn spawn_weapons(
-        &mut self,
-        ship: ShipId,
-        origin: WeaponOrigin,
-    ) -> crate::engine::battle::WeaponSpawn;
-    fn invoke_ship_process(&mut self, ship: ShipId, post: bool) -> bool;
 
     fn unlink(&mut self, id: ElementId);
-    fn subject_cloaked(&self, subject: &Subject) -> bool;
-    fn track_subject(&mut self, subject: &mut Subject, facing: &mut u16) -> i16;
     fn draw_statistics(&mut self, ship: ShipId, crew: i16, energy: i16);
     fn draw_captain_controls_pass(
         &mut self,
@@ -377,12 +362,6 @@ impl ContextOps for Cx<'_> {
         self.finish_battle_storage();
     }
 
-    /// Predicts contact using the supplied value projections, including a moved AI subject.
-    /// Obtain a live element's projection with `weapon_origin(ElementId)`.
-    fn plot_intercept(&mut self, a: &Subject, b: &Subject, turns: u16, margin: u16) -> u16 {
-        crate::battle::cyborg_native::plot_intercept(self, a, b, turns, margin)
-    }
-
     /// Tests temporary weapons from the supplied subject without replacing it with live state.
     fn ship_weapons(&mut self, ship: &Subject, other: &Subject, margin: u16) -> u32 {
         crate::battle::cyborg_native::weapons(self, ship, other, margin)
@@ -397,34 +376,8 @@ impl ContextOps for Cx<'_> {
         );
     }
 
-    fn track_ship(&mut self, id: ElementId, facing: &mut u16) -> i16 {
-        crate::battle::weapon_native::track_ship(self, id, facing)
-    }
-
     fn delta_energy(&mut self, id: ElementId, delta: i16) -> bool {
         crate::battle::status_native::delta_energy(self, id, delta)
-    }
-
-    fn gravity(&mut self, id: ElementId) -> bool {
-        crate::battle::gravity::calculate_gravity(self, id, self.screen_dimensions())
-    }
-
-    fn matter_conflict(&mut self, id: ElementId) -> bool {
-        let control_for = |element| {
-            crate::battle::gravity::control(
-                self,
-                element,
-                self.equivalent_frame(
-                    self.element_frame_set_first(element, false),
-                    self.element(element).current.image.frame.view(),
-                ),
-            )
-        };
-        let mut control = control_for(id);
-        crate::battle::gravity::time_space_matter_conflict(self, id, |test| {
-            let mut other = control_for(test);
-            self.projected_intersect(&mut control, &mut other, MAX_TIME_VALUE as u16) != 0
-        })
     }
 
     fn negotiate_battle(
@@ -533,16 +486,6 @@ impl ContextOps for Cx<'_> {
         );
     }
 
-    fn object_cloaked(&mut self, id: ElementId) -> bool {
-        let style = self.primitive_style(id);
-        u32::from(style.kind) >= gfx_object_NUM_PRIMS
-            || (u32::from(style.kind) == gfx_object_STAMPFILL_PRIM
-                && style.color.r == 0
-                && style.color.g == 0
-                && style.color.b == 0
-                && style.color.a == 255)
-    }
-
     fn preprocess_status(&mut self, id: ElementId) {
         crate::battle::status_native::preprocess_status(self, id)
     }
@@ -570,53 +513,6 @@ impl ContextOps for Cx<'_> {
         crate::battle::status_native::delta_crew(self, id, amount)
     }
 
-    fn spawn_weapons(
-        &mut self,
-        ship: ShipId,
-        origin: WeaponOrigin,
-    ) -> crate::engine::battle::WeaponSpawn {
-        let cx = self;
-        let parent = std::ptr::from_ref(cx.ship(ship)) as usize;
-        if let Some(race) = cx.desc(ship).race {
-            let Some(callback) = cx
-                .desc(ship)
-                .race_callbacks
-                .weapon
-                .resolve(race.init_weapon)
-            else {
-                return Vec::new();
-            };
-            crate::battle::process_native::dispatch::invoke(callback as usize, parent, || {
-                callback(cx, ship, origin)
-            })
-        } else {
-            panic!("ship has no race");
-        }
-    }
-
-    fn invoke_ship_process(&mut self, ship: ShipId, post: bool) -> bool {
-        let cx = self;
-        let desc = cx.desc(ship);
-        if let Some(race) = desc.race {
-            let callback = if post {
-                desc.race_callbacks.post.resolve(race.postprocess)
-            } else {
-                desc.race_callbacks.pre.resolve(race.preprocess)
-            };
-            if let Some(callback) = callback {
-                let parent = std::ptr::from_ref(cx.ship(ship)) as usize;
-                crate::battle::process_native::dispatch::invoke(callback as usize, parent, || {
-                    callback(cx, ship)
-                });
-                true
-            } else {
-                false
-            }
-        } else {
-            panic!("ship has no race");
-        }
-    }
-
     fn unlink(&mut self, id: ElementId) {
         assert!(self.elements().linked(id), "element is not linked");
         // SAFETY: stereo configuration belongs to the game thread.
@@ -624,20 +520,6 @@ impl ContextOps for Cx<'_> {
             crate::battle::sounds::engine::remove_sounds(self.kernel, Some(id));
         }
         self.unlink_storage(id);
-    }
-
-    fn subject_cloaked(&self, subject: &Subject) -> bool {
-        let style = self.subject_style(subject);
-        u32::from(style.kind) >= crate::ships::native::abi::gfx_object_NUM_PRIMS
-            || (u32::from(style.kind) == crate::ships::native::abi::gfx_object_STAMPFILL_PRIM
-                && style.color.r == 0
-                && style.color.g == 0
-                && style.color.b == 0
-                && style.color.a == 255)
-    }
-
-    fn track_subject(&mut self, subject: &mut Subject, facing: &mut u16) -> i16 {
-        crate::battle::weapon_native::track_subject(self, subject, facing)
     }
 
     fn draw_statistics(&mut self, ship: ShipId, crew: i16, energy: i16) {

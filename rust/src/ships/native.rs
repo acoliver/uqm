@@ -69,10 +69,12 @@ pub mod abi {
 
     #[cfg(not(test))]
     pub use crate::battle::weapon_native::{
-        initialize_laser, initialize_missile, modify_silhouette, track_ship, weapon_collision,
+        initialize_laser, initialize_missile, modify_silhouette, weapon_collision,
     };
     #[cfg(not(test))]
     pub use crate::battle::world_elements::{abandon_ship, engine::ElementDamage};
+    #[cfg(not(test))]
+    pub use crate::engine::battle::tracking::track_ship;
 }
 
 #[cfg(not(test))]
