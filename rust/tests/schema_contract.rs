@@ -62,3 +62,17 @@ fn every_story_field_starts_at_its_rust_abi_enum_position() {
     assert_eq!(StoryKey::SHOFIXTI_STACK3.start(), 8);
     assert_eq!(StoryKey::SAMATRA_GRPOFFS3.start(), 1230);
 }
+
+mod graphics_signatures {
+    use super::gfx;
+    use uqm_rust::graphics::{context_abi, drawable_abi, frame_abi, geometry_ffi};
+
+    const _: unsafe extern "C" fn() -> gfx::Color = context_abi::GetContextForeGroundColor;
+    const _: unsafe extern "C" fn() -> gfx::FRAME = drawable_abi::GetContextFGFrame;
+    const _: unsafe extern "C" fn(*mut gfx::RECT) -> gfx::BOOLEAN = context_abi::GetContextClipRect;
+    const _: unsafe extern "C" fn() -> gfx::DrawMode = context_abi::GetContextDrawMode;
+    const _: unsafe extern "C" fn(*mut gfx::PRIMITIVE, u32, u8) = frame_abi::DrawBatch;
+    const _: unsafe extern "C" fn(*mut gfx::LINE) = frame_abi::DrawLine;
+    const _: unsafe extern "C" fn(*const gfx::RECT, *mut geometry_ffi::BresenhamLine) -> u8 =
+        geometry_ffi::_clip_line;
+}
