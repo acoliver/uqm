@@ -39,7 +39,16 @@ impl CapturedSurface {
     /// separately rescaled elevation frame. Passing matching extents avoids
     /// that unowned temporary, including for external replacement Earth art.
     pub fn into_definition(self, width: i16, height: i16) -> Result<Self, &'static str> {
-        // SAFETY: this owner retains every source and destination frame on its graphics thread.
+        if let Some(drawable) = &self.drawable {
+            let lease = drawable.lease();
+            // Registry, release owner and this temporary lease are the only permitted references.
+            assert_eq!(
+                std::rc::Rc::strong_count(&lease._allocation),
+                3,
+                "surface definition has retained frame readers"
+            );
+        }
+        // SAFETY: this owner exclusively retains every source and destination on its graphics thread.
         unsafe { self.normalize(width, height) }
     }
 
