@@ -232,7 +232,7 @@ fn visit(
     sys_info.planet_info.weather = 9;
     let mut world: PlanetDesc = unsafe { std::mem::zeroed() };
     world.radius = 400;
-    let plan_data: Vec<PlanetFrame> = vec![unsafe { std::mem::zeroed() }; 128];
+    let plan_data: Vec<PlanetFrame> = vec![PlanetFrame::default(); 128];
     let mut loaded = 0;
     {
         let mut orbit = Orbit {
@@ -518,7 +518,7 @@ fn nothing_happens_when_there_is_no_encounter_to_use() {
 #[test]
 fn the_world_is_telluric_and_only_it_has_ruins() {
     let mut rng = RandomContext::with_seed(5);
-    let plan_data: Vec<PlanetFrame> = vec![unsafe { std::mem::zeroed() }; 128];
+    let plan_data: Vec<PlanetFrame> = vec![PlanetFrame::default(); 128];
     let mut planets: Vec<PlanetDesc> = vec![unsafe { std::mem::zeroed() }; 16];
     generate_planets(&mut rng, &plan_data, 0, 2, &mut planets);
     assert_eq!(planets[0].data_index, TELLURIC_WORLD);

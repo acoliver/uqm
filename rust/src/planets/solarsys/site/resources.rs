@@ -1,11 +1,12 @@
 //! Scene, report, lander and planet-display effects.
 
 use super::*;
+use crate::engine::graphics::native_surface::CapturedSurface;
 use crate::engine::{world::generation::Body, StoryKey};
-use crate::planets::c_api::*;
 use crate::planets::generate::default::PlanetNames;
 use crate::planets::generate::home_contact::LanderTakeoff;
 use crate::planets::generate::{andro, burv, spa, vault, wreck};
+use crate::planets::orbit::live::load_planet;
 use crate::planets::report::live::discovery_report;
 
 impl LanderTakeoff for Site<'_, '_, '_> {
@@ -102,7 +103,8 @@ impl crate::planets::generate::host::PlanetSite for Site<'_, '_, '_> {
             let width = crate::planets::generate::consts::MAP_WIDTH as i16;
             let height = crate::planets::generate::consts::MAP_HEIGHT as i16;
             // SAFETY: this thread owns the detached resource through normalization and transfer.
-            unsafe { CapturedSurface::load(c"graphics.earthmask").into_definition(width, height) }
+            CapturedSurface::load(c"graphics.earthmask")
+                .into_definition(width, height)
                 .unwrap_or_else(|error| {
                     panic!("Earth surface definition could not be rescaled: {error:?}")
                 })

@@ -216,7 +216,7 @@ fn orbit_scenes(body: Body, story: &FakeStory) -> (u32, u32, (u8, u8), u32) {
     sys_info.planet_info.tectonics = 9;
     let mut world: crate::engine::world::planet::PlanetDesc = unsafe { std::mem::zeroed() };
     world.radius = 400;
-    let plan_data: Vec<PlanetFrame> = vec![unsafe { std::mem::zeroed() }; 128];
+    let plan_data: Vec<PlanetFrame> = vec![PlanetFrame::default(); 128];
     let mut orbit = Orbit {
         rng: &mut rng,
         plan_data: &plan_data,

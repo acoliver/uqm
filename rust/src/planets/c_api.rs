@@ -1,13 +1,6 @@
-//! The C functions and globals the default system generator still needs, in
-//! one place. Each goes away when its owner is ported.
-
-mod surface;
-pub use surface::CapturedSurface;
+//! Campaign helpers shared by the planet generation hosts.
 
 use crate::comm::dispatch::{ship, CPoint, ONE_SECOND};
-use crate::mainloop::restart_menu::c_extern::{
-    uqm_sleep_thread_until, FadeScreen, FADE_ALL_TO_BLACK,
-};
 use crate::planets::universe_units::{universe_to_logx, universe_to_logy};
 
 pub use crate::log_abi::log_init;
@@ -17,33 +10,6 @@ pub use crate::navigation::groups::live::init_group_info;
 pub use crate::navigation::groups::live::uninit_group_info;
 
 pub use crate::planets::orbit::live::{free_planet, load_planet};
-
-pub use crate::planets::plangen::live::{generate_planet_surface, SurfaceInputs};
-
-use crate::graphics::tfb_draw_abi::TFB_DrawImage_New;
-
-use crate::graphics::native_canvas::scaling::TFB_DrawCanvas_Rescale_Nearest;
-
-pub use crate::graphics::drawable_abi::ReadFramePixelIndexes;
-
-use crate::graphics::pixmap_abi::GetFrameCount;
-
-use crate::graphics::pixmap_abi::SetAbsFrameIndex;
-
-pub use crate::graphics::dcqueue_abi::Init_DrawCommandQueue;
-
-pub use crate::graphics::dcqueue_abi::Uninit_DrawCommandQueue;
-
-pub use crate::graphics::dcqueue_abi::TFB_FlushGraphicsEx;
-
-extern "C" {
-
-    #[link_name = "format_conv_surf"]
-    pub static mut FORMAT_CONV_SURF: *mut crate::graphics::ffi::SDL_Surface;
-    #[link_name = "SDL_Screen"]
-    pub static mut SDL_SCREEN: *mut crate::graphics::ffi::SDL_Surface;
-
-}
 
 /// `GROUP_INIT_IP`, `GROUP_SAVE_IP` (`state.h`): `(BYTE)~0`.
 pub(super) const GROUP_SAVE_IP: u8 = !0;
@@ -90,7 +56,7 @@ pub fn start_sphere_tracking(world: &mut crate::engine::World, race: u16) -> boo
     crate::engine::world::fleet::start_sphere_tracking(world, race) != 0
 }
 
-unsafe fn clone_npc_ship(
+fn clone_npc_ship(
     world: &mut crate::engine::World,
     ship: u8,
     crew: u16,
@@ -114,10 +80,7 @@ unsafe fn clone_npc_ship(
 }
 
 /// `CloneShipFragment (ship, &GLOBAL (npc_built_ship_q), INFINITE_FLEET)`.
-///
-/// # Safety
-/// Game thread, with the fleet queue initialised.
-pub unsafe fn clone_infinite_ship_into_built_queue(world: &mut crate::engine::World, ship: u16) {
+pub fn clone_infinite_ship_into_built_queue(world: &mut crate::engine::World, ship: u16) {
     clone_npc_ship(
         world,
         u8::try_from(ship).expect("ship index fits a byte"),
@@ -148,10 +111,7 @@ const ONE_SHOT_ENCOUNTER: u8 = 1 << 7;
 /// The one-shot Ur-Quan encounter `ZapToUrquanEncounter` builds at the
 /// universe point `loc` from the `URQUAN_SHIP` fleet template, with the SIS
 /// logical position set to match. False when there is no encounter to use.
-///
-/// # Safety
-/// Game thread; `GlobData` and the fleet queue are initialised.
-pub unsafe fn begin_urquan_encounter(world: &mut crate::engine::World, loc: (i16, i16)) -> bool {
+pub fn begin_urquan_encounter(world: &mut crate::engine::World, loc: (i16, i16)) -> bool {
     {
         let mut encounters = world.encounters();
         let Some(id) = encounters.alloc().or_else(|| encounters.head()) else {
@@ -191,11 +151,10 @@ pub unsafe fn begin_urquan_encounter(world: &mut crate::engine::World, loc: (i16
     }
 }
 
-/// `SleepThreadUntil (FadeScreen (FadeAllToBlack, ONE_SECOND * 2))`.
-///
-/// # Safety
-/// Game thread.
-pub unsafe fn fade_to_black_for_two_seconds() {
-    let interval = i16::try_from(ONE_SECOND * 2).expect("two seconds fit a SIZE");
-    uqm_sleep_thread_until(FadeScreen(FADE_ALL_TO_BLACK, interval));
+/// Fade to black while the supplied graphics owner admits presentation and pacing.
+pub fn fade_to_black_for_two_seconds(context: crate::engine::graphics::context_abi::ContextLease) {
+    let interval = i16::try_from(ONE_SECOND * 2)
+        .unwrap_or_else(|_| panic!("two seconds must fit the fade interval"));
+    let deadline = context.fade_screen(crate::graphics::menu::ScreenFade::Black as u32, interval);
+    crate::engine::threading::pacing::GameThreadPacer::new(context).sleep_until(deadline);
 }

@@ -1,0 +1,278 @@
+use super::*;
+use crate::engine::graphics::{
+    context_abi::LoadedContext,
+    drawable_abi::LoadedDrawable,
+    native_abi::{Color, POINT},
+};
+
+#[test]
+#[serial_test::serial]
+fn retained_pixels_preserve_row_padding_and_survive_owner_release() {
+    let mut game = crate::engine::Game::new();
+    let display = crate::campaign_display_test::CampaignDisplay::install(&mut game).unwrap();
+    {
+        let owner = LoadedDrawable::create(2 | 8, 3, 2, 1).unwrap();
+        let frame = owner.lease().context_frame(0);
+        let color = Color {
+            r: 23,
+            g: 45,
+            b: 67,
+            a: 255,
+        };
+        frame.write_colors(&[color; 6], 3, 2);
+        frame.replace_hotspot(POINT { x: -2, y: 7 });
+        drop(owner);
+        let sentinel = Color {
+            r: 1,
+            g: 2,
+            b: 3,
+            a: 4,
+        };
+        let mut pixels = [sentinel; 10];
+        frame.read_colors(&mut pixels, 5, 2);
+        for row in pixels.as_chunks::<5>().0 {
+            assert!(row[..3]
+                .iter()
+                .all(|p| (p.r, p.g, p.b, p.a) == (23, 45, 67, 255)));
+            assert!(row[3..]
+                .iter()
+                .all(|p| (p.r, p.g, p.b, p.a) == (1, 2, 3, 4)));
+        }
+        assert_eq!(frame.rect().corner.x, 2);
+        assert_eq!(frame.rect().corner.y, -7);
+        assert_eq!(frame.pixel(POINT { x: 2, y: 1 }).g, 45);
+        let context = LoadedContext::create(c"planet pixel regression");
+        context.lease().set_frame(frame);
+    }
+    display.finish(game);
+}
+
+#[test]
+fn real_rotation_and_zoom_compile_in_the_library_test_target() {
+    let _: fn(&mut SphereState, i32, bool) = live::init_sphere_rotation;
+    let _: fn(&crate::graphics::context_abi::ContextLease, &std::cell::RefCell<SphereState>) =
+        live::zoom_in_planet_sphere;
+    let _: fn(&crate::graphics::context_abi::ContextLease, &SphereState) =
+        live::draw_default_planet_sphere;
+}
+
+#[test]
+#[serial_test::serial]
+fn generated_shield_and_rotating_frames_use_the_supplied_owners() {
+    use crate::engine::graphics::native_abi::{DrawMode, EXTENT, RECT};
+    let mut game = crate::engine::Game::new();
+    let display = crate::campaign_display_test::CampaignDisplay::install(&mut game).unwrap();
+    {
+        let definition = LoadedDrawable::create(2, 242, 75, 1).unwrap();
+        let source = Color {
+            r: 61,
+            g: 109,
+            b: 173,
+            a: 255,
+        };
+        definition
+            .lease()
+            .context_frame(0)
+            .write_colors(&vec![source; 242 * 75], 242, 75);
+        let mut sphere = SphereState::default();
+        let planet = crate::engine::world::planet::PlanetDesc {
+            data_index: 128,
+            rand_seed: 12345,
+            ..Default::default()
+        };
+        let info = crate::engine::world::planet::PlanetInfo {
+            atmo_density: u16::MAX,
+            axial_tilt: 17,
+            ..Default::default()
+        };
+        let mut rng = crate::math::RandomContext::with_seed(37);
+        crate::planets::plangen::live::generate_planet_surface(
+            &mut sphere,
+            &game.kernel.planet_animation,
+            true,
+            crate::planets::plangen::live::SurfaceInputs {
+                rng: &mut rng,
+                planet: &planet,
+                info: &info,
+                location: crate::graphics::drawable::Point { x: 10, y: -7 },
+                width: 242,
+            },
+            Some(definition),
+        );
+        assert_eq!(sphere.rotation.point, 241);
+        assert_eq!(sphere.elevation().len(), 242 * 75);
+        let transparent = sphere.sphere_frame().pixel(POINT { x: 0, y: 0 });
+        assert_eq!(transparent.a, 0);
+        let center = sphere.sphere_frame().pixel(POINT { x: 37, y: 37 });
+        assert_eq!(center.a, 255);
+        assert!(center.r > center.g);
+        let shield = sphere
+            .images()
+            .shield
+            .as_ref()
+            .unwrap()
+            .lease()
+            .context_frame(0);
+        assert_eq!((shield.rect().corner.x, shield.rect().corner.y), (-45, -45));
+        assert_eq!(shield.pixel(POINT { x: 0, y: 0 }).a, 0);
+        assert!(sphere.images().throb.is_some());
+        let owner = LoadedContext::create(c"sphere drawing regression");
+        let context = owner.lease();
+        let target = LoadedDrawable::create(2, 242, 147, 1).unwrap();
+        context.set_frame(target.lease().context_frame(0));
+        context.set_clip(RECT {
+            corner: POINT { x: 0, y: 0 },
+            extent: EXTENT {
+                width: 242,
+                height: 147,
+            },
+        });
+        live::draw_default_planet_sphere(&context, &sphere);
+        let sphere = std::cell::RefCell::new(sphere);
+        live::rotate_planet_sphere(&context, &sphere, &game.kernel.planet_animation, false);
+        assert_eq!(sphere.borrow().rotation.point, 240);
+        let offscreen = LoadedContext::create(c"sphere tint regression");
+        context.with_selected(|| {
+            live::draw_planet(
+                &offscreen.lease(),
+                &mut sphere.borrow_mut(),
+                37,
+                crate::comm::locdata::CColor {
+                    r: 17,
+                    g: 71,
+                    b: 131,
+                    a: 255,
+                },
+            )
+        });
+        context.with_draw_mode(
+            DrawMode {
+                kind: 1,
+                factor: 83,
+            },
+            || {
+                context.with_scale(1, 137, || {
+                    // SAFETY: the selected retained context owns this serialized draw state.
+                    let mode = unsafe { crate::graphics::context_abi::GetContextDrawMode() };
+                    assert_eq!((mode.kind, mode.factor), (1, 83));
+                    // SAFETY: the surrounding scale scope holds the admitted graphics context.
+                    let scale = unsafe { crate::graphics::gfx_common_abi::GetGraphicScale() };
+                    assert_eq!(scale, 137);
+                });
+            },
+        );
+        context.flush();
+        assert_eq!(context.clip_rect().extent.height, 147);
+    }
+    display.finish(game);
+}
+
+#[test]
+#[serial_test::serial]
+fn normalized_definition_frames_keep_pixels_hotspots_and_release_authority() {
+    use crate::engine::graphics::native_surface::CapturedSurface;
+    let mut game = crate::engine::Game::new();
+    let display = crate::campaign_display_test::CampaignDisplay::install(&mut game).unwrap();
+    {
+        let source = CapturedSurface::pixmap(2, 2, 2);
+        let colors = [
+            Color {
+                r: 173,
+                g: 21,
+                b: 37,
+                a: 255,
+            },
+            Color {
+                r: 31,
+                g: 97,
+                b: 193,
+                a: 255,
+            },
+        ];
+        for (index, color) in colors.into_iter().enumerate() {
+            // SAFETY: the fixture exclusively owns the factory-created frames and full pixel buffer.
+            unsafe {
+                let frame = crate::graphics::pixmap_abi::SetAbsFrameIndex(
+                    source.as_frame().cast(),
+                    index as u16,
+                )
+                .cast();
+                crate::graphics::drawable_abi::WriteFramePixelColors(
+                    frame,
+                    [color; 4].as_ptr(),
+                    2,
+                    2,
+                );
+                crate::graphics::drawable_abi::SetFrameHot(
+                    frame.cast(),
+                    crate::comm::locdata::CPoint { x: -1, y: 1 },
+                );
+            }
+        }
+        let normalized = source
+            .into_definition(4, 6)
+            .unwrap()
+            .into_drawable()
+            .unwrap();
+        let lease = normalized.lease();
+        drop(normalized);
+        for (index, expected) in colors.into_iter().enumerate() {
+            let frame = lease.context_frame(index);
+            assert_eq!((frame.rect().corner.x, frame.rect().corner.y), (2, -3));
+            assert_eq!(
+                (frame.rect().extent.width, frame.rect().extent.height),
+                (4, 6)
+            );
+            let mut pixels = [Color {
+                r: 0,
+                g: 0,
+                b: 0,
+                a: 0,
+            }; 24];
+            frame.read_colors(&mut pixels, 4, 6);
+            assert!(pixels
+                .iter()
+                .all(|pixel| (pixel.r, pixel.g, pixel.b, pixel.a)
+                    == (expected.r, expected.g, expected.b, expected.a)));
+        }
+        let same = CapturedSurface::pixmap(4, 6, 1);
+        let frame = same.as_frame();
+        let normalized = same.into_definition(4, 6).unwrap();
+        assert_eq!(normalized.as_frame(), frame);
+
+        let source = CapturedSurface::pixmap(2, 2, 1);
+        let retained = crate::graphics::context_abi::ContextFrame::retain(std::ptr::NonNull::new(
+            source.as_frame(),
+        ));
+        let expected = [Color {
+            r: 11,
+            g: 23,
+            b: 47,
+            a: 255,
+        }; 4];
+        retained.write_colors(&expected, 2, 2);
+        let alias = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            source.into_definition(4, 6)
+        }));
+        assert!(
+            alias.is_err(),
+            "normalization cannot move images out from retained readers"
+        );
+        let mut unchanged = [Color {
+            r: 0,
+            g: 0,
+            b: 0,
+            a: 0,
+        }; 4];
+        retained.read_colors(&mut unchanged, 2, 2);
+        assert_eq!(
+            unchanged.map(|color| (color.r, color.g, color.b, color.a)),
+            expected.map(|color| (color.r, color.g, color.b, color.a))
+        );
+        assert_eq!(
+            (retained.rect().extent.width, retained.rect().extent.height),
+            (2, 2)
+        );
+    }
+    display.finish(game);
+}

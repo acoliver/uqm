@@ -1,6 +1,6 @@
 //! Native surface definitions owned from acquisition through orbit generation.
 
-use crate::engine::graphics::drawable_abi::LoadedDrawable;
+use super::drawable_abi::LoadedDrawable;
 use crate::graphics::native_abi::FRAME_DESC;
 
 /// A detached native definition, retaining absence for a missing external resource.
@@ -11,30 +11,21 @@ pub struct CapturedSurface {
 impl CapturedSurface {
     /// Load and detach a native graphic resource.
     /// A missing external resource has a null frame, as in the original.
-    ///
-    /// # Safety
-    /// Game thread, with the resource and graphics systems initialised.
-    pub unsafe fn load(resource: &std::ffi::CStr) -> Self {
+    pub fn load(resource: &std::ffi::CStr) -> Self {
         Self {
             drawable: LoadedDrawable::load(resource),
         }
     }
 
     /// Allocate an owned native pixmap.
-    ///
-    /// # Safety
-    /// Game thread, with the graphics pixel format initialised.
-    pub unsafe fn pixmap(width: i16, height: i16, frames: u16) -> Self {
+    pub fn pixmap(width: i16, height: i16, frames: u16) -> Self {
         Self {
             drawable: LoadedDrawable::create(2, width, height, frames),
         }
     }
 
     /// A separately owned rescaled drawable. The source stays owned here.
-    ///
-    /// # Safety
-    /// The drawable's graphics backend must be initialised on this thread.
-    pub unsafe fn rescaled(&self, width: i32, height: i32) -> Self {
+    pub fn rescaled(&self, width: i32, height: i32) -> Self {
         Self {
             drawable: self
                 .drawable
@@ -43,17 +34,30 @@ impl CapturedSurface {
         }
     }
 
-    /// Normalize every definition frame while its ownership is still in Rust.
-    /// Legacy surface generation retains frame zero but does not release a
-    /// separately rescaled elevation frame. Passing matching extents avoids
-    /// that unowned temporary, including for external replacement Earth art.
+    /// Resize every definition frame before surface generation, preserving indexed palettes.
     ///
-    /// # Safety
-    /// Game thread, with a live graphics backend and exclusive drawable ownership.
-    pub unsafe fn into_definition(self, width: i16, height: i16) -> Result<Self, &'static str> {
-        let count = super::GetFrameCount(self.as_frame().cast());
+    /// # Panics
+    /// Panics if source frames have retained readers: normalization transfers their
+    /// image allocations into new descriptors and requires exclusive ownership.
+    pub fn into_definition(self, width: i16, height: i16) -> Result<Self, &'static str> {
+        if let Some(drawable) = &self.drawable {
+            let lease = drawable.lease();
+            // Registry, release owner and this temporary lease are the only permitted references.
+            assert_eq!(
+                std::rc::Rc::strong_count(&lease._allocation),
+                3,
+                "surface definition has retained frame readers"
+            );
+        }
+        // SAFETY: this owner exclusively retains every source and destination on its graphics thread.
+        unsafe { self.normalize(width, height) }
+    }
+
+    unsafe fn normalize(self, width: i16, height: i16) -> Result<Self, &'static str> {
+        let count = super::pixmap_abi::GetFrameCount(self.as_frame().cast());
         let matches = (0..count).all(|index| {
-            let frame = super::SetAbsFrameIndex(self.as_frame().cast(), index).cast::<FRAME_DESC>();
+            let frame = super::pixmap_abi::SetAbsFrameIndex(self.as_frame().cast(), index)
+                .cast::<FRAME_DESC>();
             ((*frame).Bounds.width, (*frame).Bounds.height) == (width, height)
         });
         if matches {
@@ -64,16 +68,16 @@ impl CapturedSurface {
             return Err("allocating normalized surface definition");
         }
         for index in 0..count {
-            let source =
-                super::SetAbsFrameIndex(self.as_frame().cast(), index).cast::<FRAME_DESC>();
+            let source = super::pixmap_abi::SetAbsFrameIndex(self.as_frame().cast(), index)
+                .cast::<FRAME_DESC>();
             let scaled = if ((*source).Bounds.width, (*source).Bounds.height) == (width, height) {
                 None
             } else {
                 Some(self.scale_definition_frame(index, width, height)?)
             };
             let frame = scaled.as_ref().map_or(source, |surface| surface.as_frame());
-            let dest =
-                super::SetAbsFrameIndex(target.as_frame().cast(), index).cast::<FRAME_DESC>();
+            let dest = super::pixmap_abi::SetAbsFrameIndex(target.as_frame().cast(), index)
+                .cast::<FRAME_DESC>();
             // Move the image, keeping the destination's own parent and index.
             // Matching frames keep their indexed elevation pixels unchanged.
             (*dest).Type = (*frame).Type;
@@ -90,7 +94,8 @@ impl CapturedSurface {
         width: i16,
         height: i16,
     ) -> Result<Self, &'static str> {
-        let source = super::SetAbsFrameIndex(self.as_frame().cast(), index).cast::<FRAME_DESC>();
+        let source =
+            super::pixmap_abi::SetAbsFrameIndex(self.as_frame().cast(), index).cast::<FRAME_DESC>();
         // NormalImg is the first field of tfb_image (tfb_draw.h), the same
         // prefix the existing PlanetSide mask adapter reads. It is an SDL
         // surface, not a Rust graphics-registry handle.
@@ -129,7 +134,7 @@ impl CapturedSurface {
         if result.as_frame().is_null() {
             return Err("allocating indexed definition frame");
         }
-        super::TFB_DrawCanvas_Rescale_Nearest(
+        super::native_canvas::scaling::TFB_DrawCanvas_Rescale_Nearest(
             canvas.cast(),
             surface.raw().cast(),
             -1,
@@ -144,7 +149,7 @@ impl CapturedSurface {
             / i32::from((*source).Bounds.width)) as i16;
         (*result.as_frame()).HotSpot.y = (i32::from((*source).HotSpot.y) * i32::from(height)
             / i32::from((*source).Bounds.height)) as i16;
-        (*result.as_frame()).image = super::TFB_DrawImage_New(surface.raw().cast());
+        (*result.as_frame()).image = super::tfb_draw_abi::TFB_DrawImage_New(surface.raw().cast());
         // The captured image now owns the SDL allocation, released by Drop or
         // the planet cleanup boundary. No Rust Surface owner may also free it.
         std::mem::forget(surface);

@@ -59,7 +59,7 @@ impl OrbitPresentation {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::planets::sphere::images::{image, required_frame, OrbitImages};
+    use crate::planets::sphere::images::{image, OrbitImages};
 
     #[test]
     #[serial_test::serial]
@@ -88,12 +88,12 @@ mod tests {
             assert!(images.object().is_none());
             images.shield = Some(image(2 | 8, 89, 89, 1));
             let shield = images.object().unwrap();
-            assert!(shield.owns_frame(required_frame(&images.shield.as_ref().unwrap().lease(), 0,)));
+            assert!(shield.owns_frame(images.shield.as_ref().unwrap().lease().frame(0).unwrap()));
             images.throb = Some(image(2 | 8, 89, 89, 2));
             assert!(images
                 .object()
                 .unwrap()
-                .owns_frame(required_frame(&images.throb.as_ref().unwrap().lease(), 1)));
+                .owns_frame(images.throb.as_ref().unwrap().lease().frame(1).unwrap()));
             assert_eq!(images.tint.lease().frame_rect(0).extent.width, 242);
             assert_eq!(images.tint_color.a, 255);
         }

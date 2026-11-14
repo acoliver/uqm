@@ -3,12 +3,9 @@ use crate::engine::battle::Cx;
 use crate::engine::kernel::solar_resources::SolarResources;
 use crate::engine::world::planet::PlanetDesc;
 use crate::engine::{Kernel, World};
-use crate::graphics::context_abi::{ContextFrame, ContextLease, SetContext};
+use crate::graphics::context_abi::{ContextFrame, ContextLease};
 use crate::graphics::drawable_abi::LoadedDrawable;
-use crate::graphics::frame_abi::ClearDrawable;
-use crate::graphics::gfx_common_abi::{
-    BatchGraphics, ScreenTransition, SetTransitionSource, UnbatchGraphics,
-};
+use crate::graphics::menu as draw;
 use crate::planets::generate::orbit_tables::NUMBER_OF_PLANET_TYPES;
 use crate::planets::render::c_api::NativeOvalGfx;
 use crate::planets::solar_coords::{star_seed, SolarCoordinates};
@@ -84,7 +81,7 @@ fn validate_orbit(
     }
     let index = planet.data_index & !WORLD_TYPE_SPECIAL;
     if usize::from(index) < NUMBER_OF_PLANET_TYPES {
-        let typ = crate::planets::tables::PLANET_ARRAY.0[usize::from(index)].type_;
+        let typ = crate::planets::tables::PLANET_ARRAY[usize::from(index)].type_;
         let mut size = u32::from(typ & PLANETS_SIZE_MASK as u8);
         if xn > coordinates.display_factor() {
             size += 3;
@@ -109,7 +106,7 @@ fn validate_orbit(
     }
 }
 
-unsafe fn draw_orbit(
+fn draw_orbit(
     coordinates: SolarCoordinates,
     context: &ContextLease,
     planet: &PlanetDesc,
@@ -182,7 +179,7 @@ pub(super) fn validate_orbits(assets: &SolarResources, solar: &mut SolarSystem) 
     }
 }
 
-pub(super) unsafe fn draw_inner_system(cx: &mut Cx<'_>, solar: &mut SolarSystem) {
+pub(super) fn draw_inner_system(cx: &mut Cx<'_>, solar: &mut SolarSystem) {
     validate_inner_orbits(resources::retained(cx.kernel), solar);
     let SystemLocation::Inner(index) = solar.location() else {
         panic!("drawing inner system outside it");
@@ -198,17 +195,17 @@ pub(super) unsafe fn draw_inner_system(cx: &mut Cx<'_>, solar: &mut SolarSystem)
     crate::ui::sis::draw_title(cx.kernel, cx.screen_dimensions().0, name);
 }
 
-pub(super) unsafe fn draw_outer_system(cx: &mut Cx<'_>, solar: &mut SolarSystem) {
+pub(super) fn draw_outer_system(cx: &mut Cx<'_>, solar: &mut SolarSystem) {
     validate_orbits(resources::retained(cx.kernel), solar);
     draw_system(cx.world, cx.kernel, solar, solar.sys.sun.radius);
     let point = cx.world.catalog()[solar.star().0].star_pt;
     crate::ui::sis::draw_hyper_coords(cx.kernel, cx.screen_dimensions().0, point);
 }
 
-pub(super) unsafe fn draw_system_transition(cx: &mut Cx<'_>, solar: &mut SolarSystem, inner: bool) {
+pub(super) fn draw_system_transition(cx: &mut Cx<'_>, solar: &mut SolarSystem, inner: bool) {
     cx.with_legacy(|| {
-        SetTransitionSource(ptr::null_mut());
-        BatchGraphics();
+        draw::transition_source();
+        draw::batch();
     });
     if inner {
         draw_inner_system(cx, solar);
@@ -218,25 +215,24 @@ pub(super) unsafe fn draw_system_transition(cx: &mut Cx<'_>, solar: &mut SolarSy
     solar.refresh_frame(cx);
     crate::battle::process_native::engine::redraw_queue(cx, false);
     cx.with_legacy(|| {
-        ScreenTransition(3, ptr::null_mut());
-        UnbatchGraphics();
+        draw::transition(3);
+        draw::unbatch();
     });
 }
 
-unsafe fn draw_system(world: &World, kernel: &Kernel, solar: &mut SolarSystem, radius: c::SIZE) {
+fn draw_system(world: &World, kernel: &Kernel, solar: &mut SolarSystem, radius: c::SIZE) {
     let assets = resources::retained(kernel);
     let coordinates = solar.coordinates();
     let image = solar.system_image.get_or_insert_with(|| {
-        let mut clip = c::RECT::default();
-        crate::graphics::context_abi::GetContextClipRect(&mut clip);
+        let clip = draw::clip();
         LoadedDrawable::create(2, clip.extent.width, clip.extent.height, 1)
             .unwrap_or_else(|| panic!("solar-system drawable allocation failed"))
     });
     let image = resources::frame(image, 0).cast();
     let context = ContextLease::require(kernel.off_screen_context);
-    let old = SetContext(kernel.off_screen_context);
-    set_frame(image);
-    set_clip(ptr::null_mut());
+    let old = draw::select(kernel.off_screen_context);
+    context.set_frame(ContextFrame::retain(std::ptr::NonNull::new(image)));
+    context.clear_clip();
     let background = solar
         .stars
         .as_ref()
@@ -285,35 +281,34 @@ unsafe fn draw_system(world: &World, kernel: &Kernel, solar: &mut SolarSystem, r
             draw_stamp(&current.image);
         }
     }
-    SetContext(old);
+    draw::select(old);
     draw_stamp(&c::STAMP {
         origin: c::POINT { x: 0, y: 0 },
         frame: image,
     });
 }
 
-pub(super) unsafe fn create_star_background(
+pub(super) fn create_star_background(
     world: &World,
     kernel: &Kernel,
     solar: &mut SolarSystem,
 ) -> LoadedDrawable {
     let coordinates = solar.coordinates();
     let assets = resources::retained(kernel);
-    let old = SetContext(kernel.space_context);
-    let mut clip = c::RECT::default();
-    crate::graphics::context_abi::GetContextClipRect(&mut clip);
+    let old = draw::select(kernel.space_context);
+    let clip = draw::clip();
     let frame = LoadedDrawable::create(2, clip.extent.width, clip.extent.height, 1)
         .unwrap_or_else(|| panic!("star-background drawable allocation failed"));
-    SetContext(kernel.off_screen_context);
-    set_frame(resources::frame(&frame, 0).cast());
-    set_clip(ptr::null_mut());
-    set_background(c::Color {
+    let context = ContextLease::require(kernel.off_screen_context);
+    context.set_frame(frame.lease().context_frame(0));
+    context.clear_clip();
+    context.set_background(c::Color {
         r: 0,
         g: 0,
         b: 0,
         a: 255,
     });
-    ClearDrawable();
+    context.clear();
     solar
         .sys
         .rng
@@ -331,10 +326,10 @@ pub(super) unsafe fn create_star_background(
                 stamp.origin.y = ((random >> 16) as u16 % height as u16) as _;
                 draw_stamp(&stamp);
             }
-            stamp.frame = crate::graphics::pixmap_abi::IncFrameIndex(stamp.frame.cast()).cast();
+            stamp.frame = draw::relative_frame(stamp.frame.cast(), 1).cast();
         }
     }
-    SetContext(old);
+    draw::select(old);
     frame
 }
 
@@ -370,7 +365,7 @@ fn set_planet_color_map(assets: &SolarResources, planet: &PlanetDesc) {
     let index = usize::from(planet.data_index & !WORLD_TYPE_SPECIAL);
     assert!(index < NUMBER_OF_PLANET_TYPES);
     assets.set_orbital_palette(usize::from(
-        crate::planets::tables::PLANET_ARRAY.0[index].type_ >> 4,
+        crate::planets::tables::PLANET_ARRAY[index].type_ >> 4,
     ));
 }
 
@@ -395,7 +390,7 @@ fn calc_sun_size(
     sun.image.frame = resources::frame(&assets.sun, u16::from(sun.data_index) + index).cast();
 }
 
-unsafe fn draw_inner_planets(assets: &SolarResources, solar: &SolarSystem, index: u8) {
+fn draw_inner_planets(assets: &SolarResources, solar: &SolarSystem, index: u8) {
     let coordinates = solar.coordinates();
     let planet = &solar.sys.planets[usize::from(index)];
     set_planet_color_map(assets, planet);
@@ -451,21 +446,6 @@ pub(super) fn validate_inner_orbits(assets: &SolarResources, solar: &mut SolarSy
     }
 }
 
-unsafe fn set_frame(frame: *mut c::FRAME_DESC) {
-    crate::graphics::drawable_abi::SetContextFGFrame(frame.cast());
-}
-unsafe fn set_clip(rect: *mut c::RECT) {
-    crate::graphics::context_abi::SetContextClipRect(rect.cast());
-}
-unsafe fn set_background(color: c::Color) {
-    crate::graphics::context_abi::SetContextBackGroundColor(crate::comm::locdata::CColor {
-        r: color.r,
-        g: color.g,
-        b: color.b,
-        a: color.a,
-    });
-}
-unsafe fn draw_stamp(stamp: &c::STAMP) {
-    let mut stamp = *stamp;
-    crate::graphics::frame_abi::DrawStamp(std::ptr::from_mut(&mut stamp).cast());
+fn draw_stamp(stamp: &c::STAMP) {
+    draw::stamp(stamp.frame, stamp.origin);
 }

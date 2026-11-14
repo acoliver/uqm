@@ -112,7 +112,7 @@ impl<S, H, R, L: super::home_contact::LanderTakeoff, F> super::home_contact::Lan
 
 pub fn with_empty<R>(run: impl FnOnce(&mut SolarSys<'_>) -> R) -> R {
     let mut system = SolarSys::new(
-        &PLANET_ARRAY.0,
+        &PLANET_ARRAY,
         0,
         0,
         crate::math::RandomContext::with_seed(1),

@@ -237,7 +237,7 @@ mod tests {
     #[test]
     fn minerals_use_the_explicit_frame_without_reading_the_legacy_pointer() {
         let info = info();
-        let mut frame = crate::planets::tables::PLANET_ARRAY.0[0];
+        let mut frame = crate::planets::tables::PLANET_ARRAY[0];
         for element in &mut frame.useful_elements {
             element.density = 0;
         }
@@ -261,7 +261,7 @@ mod tests {
     #[test]
     fn a_gas_frame_has_no_life_and_only_reseeds_the_stream() {
         let info = info();
-        let mut frame = crate::planets::tables::PLANET_ARRAY.0[0];
+        let mut frame = crate::planets::tables::PLANET_ARRAY[0];
         frame.type_ = 2;
         let mut rng = RandomContext::with_seed(1);
         let mut node = node();

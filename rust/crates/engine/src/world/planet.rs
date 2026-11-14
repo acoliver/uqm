@@ -1,8 +1,6 @@
 //! Planetary generation records shared by content and solar-system modes.
 
-use crate::graphics::native_abi::{
-    Color, BYTE, COUNT, DWORD, POINT, RESOURCE, SIZE, STAMP, STRING, UWORD,
-};
+use crate::graphics::native_abi::{Color, BYTE, COUNT, DWORD, POINT, SIZE, STAMP, STRING, UWORD};
 
 pub type PlanetDesc = PlanetDescriptor;
 pub type NodeInfo = NodeRecord;
@@ -14,19 +12,42 @@ pub struct ElementEntry {
     pub density: BYTE,
 }
 
-#[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct PlanetFrame {
     pub type_: BYTE,
     pub base_tectonics: BYTE,
     pub atmo_and_density: BYTE,
     pub useful_elements: [ElementEntry; 8usize],
-    pub cmap_instance: RESOURCE,
-    pub xlat_tab_instance: RESOURCE,
+    pub cmap_instance: &'static std::ffi::CStr,
+    pub xlat_tab_instance: &'static std::ffi::CStr,
     pub num_faults: COUNT,
     pub fault_depth: SIZE,
     pub num_blemishes: COUNT,
     pub base_elevation: SIZE,
+}
+
+impl PlanetFrame {
+    pub const EMPTY: Self = Self {
+        type_: 0,
+        base_tectonics: 0,
+        atmo_and_density: 0,
+        useful_elements: [ElementEntry {
+            element_type: 0,
+            density: 0,
+        }; 8],
+        cmap_instance: c"",
+        xlat_tab_instance: c"",
+        num_faults: 0,
+        fault_depth: 0,
+        num_blemishes: 0,
+        base_elevation: 0,
+    };
+}
+
+impl Default for PlanetFrame {
+    fn default() -> Self {
+        Self::EMPTY
+    }
 }
 
 #[repr(C)]

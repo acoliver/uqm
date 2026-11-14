@@ -16,7 +16,6 @@ impl SurfacePalette {
         colors: Vec<u8>,
     ) -> Result<Self, TopographyError> {
         let planet = crate::planets::tables::PLANET_ARRAY
-            .0
             .get(usize::from(index))
             .ok_or(TopographyError::PlanetIndex)?;
         let bytes = translation
@@ -69,11 +68,11 @@ mod tests {
         assert_eq!(view.colors, colors);
         assert_eq!(
             view.planet_type,
-            crate::planets::tables::PLANET_ARRAY.0[0].type_
+            crate::planets::tables::PLANET_ARRAY[0].type_
         );
         assert_eq!(
             view.base_elevation,
-            crate::planets::tables::PLANET_ARRAY.0[0].base_elevation
+            crate::planets::tables::PLANET_ARRAY[0].base_elevation
         );
     }
 

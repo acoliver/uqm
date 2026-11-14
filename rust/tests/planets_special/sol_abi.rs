@@ -3,7 +3,8 @@
 use super::Harness;
 use uqm_rust::battle::gendef::SOL_DEFINED;
 
-use uqm_rust::planets::c_api::{self, CapturedSurface};
+use uqm_rust::engine::graphics::{dcqueue_abi as queue, native_surface::CapturedSurface};
+use uqm_rust::planets::c_api;
 use uqm_rust::planets::generate::consts::{MAP_HEIGHT, MAP_WIDTH};
 use uqm_rust::planets::generate::sol::Generator as GENERATE_SOL_FUNCTIONS;
 use uqm_rust::planets::generate::{generator, SystemGenerator};
@@ -128,30 +129,21 @@ fn allocations() -> i32 {
 }
 
 fn check_drawable_ownership(h: &mut Harness) {
-    let format =
-        sdl2::surface::Surface::new(1, 1, sdl2::pixels::PixelFormatEnum::RGBA8888).unwrap();
-    // Production keeps its non-alpha screen separate from the alpha conversion
-    // surface. Sharing the latter here converts RGB resource art into RGBA.
-    let screen =
-        sdl2::surface::Surface::new(1, 1, sdl2::pixels::PixelFormatEnum::RGBX8888).unwrap();
-    let old_format = unsafe { std::ptr::addr_of!(c_api::FORMAT_CONV_SURF).read() };
-    let old_screen = unsafe { std::ptr::addr_of!(c_api::SDL_SCREEN).read() };
+    let _formats = uqm_rust::engine::graphics::native_offscreen::OffscreenFormats::new().unwrap();
     unsafe {
-        std::ptr::addr_of_mut!(c_api::FORMAT_CONV_SURF).write(format.raw().cast());
-        std::ptr::addr_of_mut!(c_api::SDL_SCREEN).write(screen.raw().cast());
-        c_api::Init_DrawCommandQueue();
+        queue::Init_DrawCommandQueue();
     }
     // Warm SDL's format cache before measuring resource-owned allocations.
     unsafe {
         drop(CapturedSurface::pixmap(2, 2, 1));
-        c_api::TFB_FlushGraphicsEx(1);
+        queue::TFB_FlushGraphicsEx(1);
     }
     let baseline = allocations();
     assert!(baseline >= 0);
     let map_width = MAP_WIDTH as i16;
     let map_height = MAP_HEIGHT as i16;
     for (width, height) in [(map_width, map_height), (map_width / 2, map_height / 2)] {
-        let definition = unsafe { CapturedSurface::pixmap(width, height, 2) };
+        let definition = CapturedSurface::pixmap(width, height, 2);
         let frame = definition.as_frame();
         assert!(!frame.is_null());
         let created = allocations();
@@ -166,19 +158,18 @@ fn check_drawable_ownership(h: &mut Harness) {
         let retained = if (width, height) == (map_width, map_height) {
             definition
         } else {
-            let scaled =
-                unsafe { definition.rescaled(i32::from(map_width), i32::from(map_height)) };
+            let scaled = definition.rescaled(i32::from(map_width), i32::from(map_height));
             assert!(!scaled.as_frame().is_null());
             assert_ne!(scaled.as_frame(), frame);
             let both = allocations();
             assert!(both > created);
             drop(scaled);
-            unsafe { c_api::TFB_FlushGraphicsEx(1) };
+            unsafe { queue::TFB_FlushGraphicsEx(1) };
             assert_eq!(allocations(), created);
-            let normalized = unsafe { definition.into_definition(map_width, map_height) }.unwrap();
+            let normalized = definition.into_definition(map_width, map_height).unwrap();
             assert_ne!(normalized.as_frame(), frame);
             unsafe {
-                c_api::TFB_FlushGraphicsEx(1);
+                queue::TFB_FlushGraphicsEx(1);
                 let elevation = normalized.as_frame().add(1);
                 assert_eq!((*elevation).Index, 1);
                 assert_eq!((*elevation).parent, (*normalized.as_frame()).parent);
@@ -203,7 +194,7 @@ fn check_drawable_ownership(h: &mut Harness) {
         drop(owned);
         // SAFETY: all surface owners have dropped; drain their deferred image releases.
         unsafe {
-            c_api::TFB_FlushGraphicsEx(1);
+            queue::TFB_FlushGraphicsEx(1);
         }
         assert_eq!(
             allocations(),
@@ -252,14 +243,12 @@ fn check_drawable_ownership(h: &mut Harness) {
                 .is_none());
             });
         });
-        c_api::TFB_FlushGraphicsEx(1);
+        queue::TFB_FlushGraphicsEx(1);
     }
     drop(quiet);
     assert_eq!(allocations(), baseline);
     super::sol_resources::check(h);
     unsafe {
-        c_api::Uninit_DrawCommandQueue();
-        std::ptr::addr_of_mut!(c_api::FORMAT_CONV_SURF).write(old_format);
-        std::ptr::addr_of_mut!(c_api::SDL_SCREEN).write(old_screen);
+        queue::Uninit_DrawCommandQueue();
     }
 }
