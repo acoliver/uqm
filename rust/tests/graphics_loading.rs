@@ -24,14 +24,18 @@ fn png(width: u32, height: u32, color: png::ColorType, pixels: &[u8]) -> Vec<u8>
 unsafe fn check_font(path: &std::ffi::CStr, zipped: bool, alpha: &[u8]) {
     abi::_cur_resfile_name = path.as_ptr();
     let fp = if zipped {
-        uio::uio_fopen(contentDir.cast(), path.as_ptr(), c"rb".as_ptr())
+        uqm_rust::resource::ffi_bridge::res_OpenResFile(
+            contentDir.cast(),
+            path.as_ptr(),
+            c"rb".as_ptr(),
+        )
     } else {
-        usize::MAX as *mut uio::uio_Stream
+        usize::MAX as *mut std::ffi::c_void
     };
     assert!(!fp.is_null());
     let font = gfxload::get_font_data(fp.cast(), 0).cast::<abi::font_desc>();
     if zipped {
-        assert_eq!(uio::uio_fclose(fp), 0);
+        assert_eq!(uqm_rust::resource::ffi_bridge::res_CloseResFile(fp), 0);
     }
     abi::_cur_resfile_name = ptr::null();
     assert!(!font.is_null());
@@ -86,13 +90,17 @@ unsafe fn check_animation(path: &std::ffi::CStr) {
             .unwrap_or(path.to_bytes()),
     )
     .unwrap();
-    let fp = uio::uio_fopen(contentDir.cast(), relative_path.as_ptr(), c"rb".as_ptr());
+    let fp = uqm_rust::resource::ffi_bridge::res_OpenResFile(
+        contentDir.cast(),
+        relative_path.as_ptr(),
+        c"rb".as_ptr(),
+    );
     assert!(!fp.is_null());
     assert_eq!(uio::uio_fseek(fp, 0, libc::SEEK_END), 0);
     let length = uio::uio_ftell(fp) as u32;
     assert_eq!(uio::uio_fseek(fp, 0, libc::SEEK_SET), 0);
     let drawable = gfxload::get_cel_data(fp.cast(), length).cast::<abi::drawable_desc>();
-    uio::uio_fclose(fp);
+    uqm_rust::resource::ffi_bridge::res_CloseResFile(fp);
     abi::_cur_resfile_name = ptr::null();
     assert!(!drawable.is_null());
     assert_eq!(((*drawable).Flags, (*drawable).MaxIndex), (2, 1));
