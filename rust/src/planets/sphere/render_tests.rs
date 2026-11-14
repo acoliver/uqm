@@ -239,6 +239,29 @@ fn normalized_definition_frames_keep_pixels_hotspots_and_release_authority() {
         let frame = same.as_frame();
         let normalized = same.into_definition(4, 6).unwrap();
         assert_eq!(normalized.as_frame(), frame);
+
+        let source = CapturedSurface::pixmap(2, 2, 1);
+        let retained = crate::graphics::context_abi::ContextFrame::retain(std::ptr::NonNull::new(
+            source.as_frame(),
+        ));
+        let alias = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            source.into_definition(4, 6)
+        }));
+        assert!(
+            alias.is_err(),
+            "normalization cannot move images out from retained readers"
+        );
+        let mut unchanged = [Color {
+            r: 0,
+            g: 0,
+            b: 0,
+            a: 0,
+        }; 4];
+        retained.read_colors(&mut unchanged, 2, 2);
+        assert_eq!(
+            (retained.rect().extent.width, retained.rect().extent.height),
+            (2, 2)
+        );
     }
     display.finish(game);
 }
