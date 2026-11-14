@@ -1,5 +1,7 @@
 //! Strict native-window acceptance state shared by runtime collection and detached replay.
 
+mod provenance;
+
 use std::{
     collections::BTreeSet,
     fs,
@@ -2709,6 +2711,29 @@ fn validate_retained_native_config(
     Ok(())
 }
 
+fn validate_retained_addons(
+    root: &Path,
+    command: &[String],
+    retained: &[NativeRetainedInput],
+    limit: u64,
+) -> Result<(), NativeWindowProofError> {
+    let addons = super::native_addons::command_addons(command)
+        .map_err(|_| NativeWindowProofError::Receipt)?;
+    let expected =
+        super::native_addons::members(&addons).map_err(|_| NativeWindowProofError::Receipt)?;
+    let actual: Vec<_> = retained
+        .iter()
+        .filter(|file| file.relative_path.starts_with("inputs/content/addons/"))
+        .collect();
+    if actual.len() != expected.len() || expected.iter().any(|file| !actual.contains(&file)) {
+        return Err(NativeWindowProofError::Receipt);
+    }
+    for member in expected {
+        validate_retained_input(root, &member, limit)?;
+    }
+    Ok(())
+}
+
 fn retained_content_root(
     root: &Path,
     content_package: &NativeRetainedInput,
@@ -2757,7 +2782,7 @@ fn validate_native_acceptance_failure_provenance(
 ) -> Result<(), NativeWindowProofError> {
     let maximum_byte_length = manifest.runtime_contract.inventory_limits.member_bytes;
     let command = &manifest.command;
-    if command.len() != 6
+    if super::native_addons::command_addons(command).is_err()
         || command[0].ends_with("/cargo")
         || command[0].ends_with("/sh")
         || command[0].ends_with("/bash")
@@ -2792,6 +2817,12 @@ fn validate_native_acceptance_failure_provenance(
     }
     let script_bytes = validate_retained_input(root, &manifest.script, maximum_byte_length)?;
     validate_retained_input(root, &manifest.content_package, maximum_byte_length)?;
+    validate_retained_addons(
+        root,
+        &manifest.command,
+        &manifest.retained_files,
+        maximum_byte_length,
+    )?;
     let document =
         crate::automation::script::parse_script(&script_bytes, &manifest.script.relative_path)
             .map_err(|_| NativeWindowProofError::Receipt)?;
@@ -2803,43 +2834,12 @@ fn validate_native_acceptance_failure_provenance(
         &manifest.retained_files,
         maximum_byte_length,
     )?;
-    let command_paths = [
-        command[0].as_str(),
-        command[1]
-            .strip_prefix("--configdir=")
-            .ok_or(NativeWindowProofError::Receipt)?,
-        command[2]
-            .strip_prefix("--contentdir=")
-            .ok_or(NativeWindowProofError::Receipt)?,
-        command[3]
-            .strip_prefix("--automation-script=")
-            .ok_or(NativeWindowProofError::Receipt)?,
-        command[4]
-            .strip_prefix("--automation-output=")
-            .ok_or(NativeWindowProofError::Receipt)?,
-        command[5]
-            .strip_prefix("--native-window-proof=")
-            .ok_or(NativeWindowProofError::Receipt)?,
-    ];
-    let mut recorded_root = Path::new(command_paths[0]);
-    for _ in Path::new(&manifest.executable.relative_path).components() {
-        recorded_root = recorded_root
-            .parent()
-            .ok_or(NativeWindowProofError::Receipt)?;
-    }
-    if command_paths
-        .iter()
-        .any(|path| !valid_bound_command_path(path))
-        || Path::new(command_paths[0]) != recorded_root.join(&manifest.executable.relative_path)
-        || Path::new(command_paths[1]) != recorded_root.join("config")
-        || Path::new(command_paths[2]) != recorded_root.join(content_parent)
-        || Path::new(command_paths[3]) != recorded_root.join(&manifest.script.relative_path)
-        || Path::new(command_paths[4]) != recorded_root.join("runtime-automation")
-        || Path::new(command_paths[5]) != recorded_root.join("native-window-proof.json")
-    {
-        return Err(NativeWindowProofError::Receipt);
-    }
-    Ok(())
+    provenance::validate_command_paths(
+        command,
+        &manifest.executable,
+        &manifest.script,
+        &content_parent,
+    )
 }
 
 pub fn native_window_trace_semantic_snapshot(
@@ -3229,6 +3229,12 @@ fn recording_inventory_consistency(
     }
     let script = validate_retained_input(root, &manifest.script, maximum_byte_length)?;
     validate_retained_input(root, &manifest.content_package, maximum_byte_length)?;
+    validate_retained_addons(
+        root,
+        &manifest.command,
+        &manifest.retained_files,
+        maximum_byte_length,
+    )?;
     let document = crate::automation::script::parse_script(&script, &manifest.script.relative_path)
         .map_err(|_| NativeWindowProofError::Receipt)?;
     let script =
@@ -3255,43 +3261,12 @@ fn recorded_provenance_consistency(
         &manifest.retained_files,
         manifest.runtime_contract.inventory_limits.member_bytes,
     )?;
-    let command_paths = [
-        manifest.command[0].as_str(),
-        manifest.command[1]
-            .strip_prefix("--configdir=")
-            .ok_or(NativeWindowProofError::Receipt)?,
-        manifest.command[2]
-            .strip_prefix("--contentdir=")
-            .ok_or(NativeWindowProofError::Receipt)?,
-        manifest.command[3]
-            .strip_prefix("--automation-script=")
-            .ok_or(NativeWindowProofError::Receipt)?,
-        manifest.command[4]
-            .strip_prefix("--automation-output=")
-            .ok_or(NativeWindowProofError::Receipt)?,
-        manifest.command[5]
-            .strip_prefix("--native-window-proof=")
-            .ok_or(NativeWindowProofError::Receipt)?,
-    ];
-    let mut recorded_root = Path::new(command_paths[0]);
-    for _ in Path::new(&manifest.executable.relative_path).components() {
-        recorded_root = recorded_root
-            .parent()
-            .ok_or(NativeWindowProofError::Receipt)?;
-    }
-    if command_paths
-        .iter()
-        .any(|path| !valid_bound_command_path(path))
-        || Path::new(command_paths[0]) != recorded_root.join(&manifest.executable.relative_path)
-        || Path::new(command_paths[1]) != recorded_root.join("config")
-        || Path::new(command_paths[2]) != recorded_root.join(content_parent)
-        || Path::new(command_paths[3]) != recorded_root.join(&manifest.script.relative_path)
-        || Path::new(command_paths[4]) != recorded_root.join("runtime-automation")
-        || Path::new(command_paths[5]) != recorded_root.join("native-window-proof.json")
-    {
-        return Err(NativeWindowProofError::Receipt);
-    }
-    Ok(())
+    provenance::validate_command_paths(
+        &manifest.command,
+        &manifest.executable,
+        &manifest.script,
+        &content_parent,
+    )
 }
 
 fn child_terminal_publications(
@@ -3529,7 +3504,7 @@ fn child_terminal_recording_state(
 }
 
 fn valid_acceptance_command_environment(manifest: &NativeAcceptanceManifest) -> bool {
-    manifest.command.len() == 6
+    super::native_addons::command_addons(&manifest.command).is_ok()
         && !manifest.command[0].ends_with("/cargo")
         && !manifest.command[0].ends_with("/sh")
         && !manifest.command[0].ends_with("/bash")
@@ -6321,5 +6296,26 @@ mod tests {
         let alias = root.path().join("state.json");
         symlink(target, &alias).unwrap();
         assert!(read_native_window_state(&alias, &"a".repeat(64), 42, bounds).is_err());
+    }
+}
+
+#[cfg(test)]
+mod addon_provenance_tests {
+    use super::*;
+
+    #[test]
+    fn addon_proof_requires_exact_pinned_inventory_and_retained_bytes() {
+        let root = tempfile::tempdir().unwrap();
+        let mut command = vec!["fixed".into(); 6];
+        validate_retained_addons(root.path(), &command, &[], 64 * 1024 * 1024).unwrap();
+        let pins = crate::automation::native_addons::members(&["3dovideo".into()]).unwrap();
+        assert!(validate_retained_addons(root.path(), &command, &pins, 64 * 1024 * 1024).is_err());
+        command.push("--addon=3dovideo".into());
+        assert!(validate_retained_addons(root.path(), &command, &[], 64 * 1024 * 1024).is_err());
+        assert!(validate_retained_addons(root.path(), &command, &pins, 64 * 1024 * 1024).is_err());
+        let first = root.path().join(&pins[0].relative_path);
+        fs::create_dir_all(first.parent().unwrap()).unwrap();
+        fs::write(first, vec![0; pins[0].byte_length as usize]).unwrap();
+        assert!(validate_retained_addons(root.path(), &command, &pins, 64 * 1024 * 1024).is_err());
     }
 }

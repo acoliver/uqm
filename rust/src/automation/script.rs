@@ -2896,6 +2896,19 @@ mod tests {
     // --- REQ-SCRIPT-005: typed six-key mappings ---
 
     #[test]
+    fn ship_spin_script_uses_the_special_menu_control() {
+        let native = include_bytes!("../../tests/fixtures/native/ship-spin-3do-v1.json");
+        validate_script(parse_script(native, p()).unwrap(), p()).unwrap();
+        let key = MenuKey::from_name("special").unwrap();
+        assert_eq!(
+            key.index(),
+            crate::engine::input::frames::KEY_MENU_SPECIAL as u8
+        );
+        assert_eq!(crate::automation::input::menu_key_to_index(key), 11);
+        assert_eq!(MenuKey::from_index(11), Some(key));
+    }
+
+    #[test]
     fn debug_key_script_reaches_the_real_controls_index() {
         let text = r#"{"version":1,"name":"debug-key","budgets":{"max_input_ticks":10,"max_presentations":10,"max_wallclock_seconds":10},"steps":[{"action":"tap_menu_key","key":"debug","value":1,"hold":1,"settle":1},{"action":"finish"}]}"#;
         let doc = parse_script(text.as_bytes(), p()).unwrap();
@@ -2941,7 +2954,7 @@ mod tests {
     fn menu_key_rejects_numeric_or_out_of_range_indices() {
         assert_eq!(MenuKey::from_index(0), None);
         assert_eq!(MenuKey::from_index(4), None);
-        assert_eq!(MenuKey::from_index(11), None);
+        assert_eq!(MenuKey::from_index(12), None);
         assert_eq!(MenuKey::from_index(17), None);
         assert_eq!(MenuKey::from_index(19), None);
         assert_eq!(MenuKey::from_index(255), None);

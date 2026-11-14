@@ -917,6 +917,7 @@ mod tests {
             path: "rust/scripts/report-fixture.json".into(),
             expected_input_ticks: None,
             outer_child_timeout_ms: None,
+            addons: Vec::new(),
         }];
         let mut suite = crate::native_suite::SuiteAccounting::create(root, &selected).unwrap();
         suite.begin(0).unwrap();

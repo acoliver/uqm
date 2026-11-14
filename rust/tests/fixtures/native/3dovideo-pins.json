@@ -1,0 +1,732 @@
+[
+  {
+    "relative_path": "inputs/content/addons/3dovideo/3dovideo.rmp",
+    "byte_length": 3349,
+    "sha256": "e9f74e4c1d65325d5bc84108f47cff78665acb91a0a010cf2cb7c8a8a5bc58b8"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/drumall/drumall.dat",
+    "byte_length": 4096,
+    "sha256": "62f501493d769d80bd9bdb121949d5e8aebfa1007ac2d580354a376068e36f12"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/drumall/drumall.duk",
+    "byte_length": 33523592,
+    "sha256": "b92d7cf46d77fd0c2d63f297e0d4ff04d4d84b475c9687b4938e62aa436c2901"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/drumall/drumall.frm",
+    "byte_length": 8564,
+    "sha256": "69043fe346e2fe64f04b0c2ad3a9b22d0052c5808e51f1b8fb1bc4f19c3a5266"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/drumall/drumall.hdr",
+    "byte_length": 48,
+    "sha256": "87ec7d1d9a3255e16e7ac40accaef8a0e9b7a64a902e67f18a9a978cd3d61e04"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/drumall/drumall.tbl",
+    "byte_length": 4096,
+    "sha256": "62f501493d769d80bd9bdb121949d5e8aebfa1007ac2d580354a376068e36f12"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/intro/intro.duk",
+    "byte_length": 38723612,
+    "sha256": "7af4888a16e684c06118db78a2cc9217f863f4035da6c08adea3689a06fecccf"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/intro/intro.frm",
+    "byte_length": 9144,
+    "sha256": "1bef840c7cb5c64eda7c091ca0610e39032afe4005b169615edde1e3952707b0"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/intro/intro.hdr",
+    "byte_length": 48,
+    "sha256": "9f221d0b8b8066d90f57109c9628cb5d2cd1c2dcf9e40399c7e680aa8db28d52"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/intro/intro.tbl",
+    "byte_length": 4096,
+    "sha256": "2f89f34ea7efc6fbd410d89807f1ebb32622e926d8e1d3b894b9f4f1f3c795d2"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/logo/%logo.frm",
+    "byte_length": 198,
+    "sha256": "2f296bf0d801e3533a6608818d9a55c1ed8be11c08c1e20faadf3758908dcee1"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/logo/logo.duk",
+    "byte_length": 2818868,
+    "sha256": "3f403bcae919e6f1be9fb7489a597b8724c37e474196a25e6e1645b4125ac33d"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/logo/logo.frm",
+    "byte_length": 924,
+    "sha256": "2c5969544750b1fb6a4357d6292fe6a95f94fcf2b9df97176a26a66b81030dd8"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/logo/logo.hdr",
+    "byte_length": 48,
+    "sha256": "7775539b16869c31889b92b52d827ec43cdd8c55a5d0fae90c6509ddc93c27cd"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/logo/logo.tbl",
+    "byte_length": 4096,
+    "sha256": "62f501493d769d80bd9bdb121949d5e8aebfa1007ac2d580354a376068e36f12"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship00.aif",
+    "byte_length": 100448,
+    "sha256": "cb110a92c3de05e76312dceb829986aa93ea578098535b6172c5ac99f19ad68a"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship00.duk",
+    "byte_length": 2091956,
+    "sha256": "d0a4999b90db59e4f973aecf9e05afd779a8f6d9219cefc314a789872e8c8103"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship00.frm",
+    "byte_length": 564,
+    "sha256": "9c18e671e04958cfa736838b4a8062f21c1dc84179702e29a1bfcc24b5fb21f9"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship00.hdr",
+    "byte_length": 48,
+    "sha256": "9f221d0b8b8066d90f57109c9628cb5d2cd1c2dcf9e40399c7e680aa8db28d52"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship00.tbl",
+    "byte_length": 4096,
+    "sha256": "62f501493d769d80bd9bdb121949d5e8aebfa1007ac2d580354a376068e36f12"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship01.aif",
+    "byte_length": 112694,
+    "sha256": "50ff982bc438599b261d1e72cb32b7ac7cfc351f841ec1499a828c09715b0a5d"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship01.duk",
+    "byte_length": 2075932,
+    "sha256": "a721b252aa5acdfb4aa58d31277a74efe2c545703e474d8299092b47d9cfaee2"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship01.frm",
+    "byte_length": 564,
+    "sha256": "9ae9d5af350e23f9a67b522e504acab37f3f569ee72194f245209c02e24b655b"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship01.hdr",
+    "byte_length": 48,
+    "sha256": "9f221d0b8b8066d90f57109c9628cb5d2cd1c2dcf9e40399c7e680aa8db28d52"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship01.tbl",
+    "byte_length": 4096,
+    "sha256": "62f501493d769d80bd9bdb121949d5e8aebfa1007ac2d580354a376068e36f12"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship02.aif",
+    "byte_length": 105418,
+    "sha256": "dcf87f03d7e632339049eaa207fccdddb9c4cc8eb9edee86e38c2579229ebe61"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship02.duk",
+    "byte_length": 2194060,
+    "sha256": "258027f653c397b9da143c93be450e8cfb75af8e9d9cc8d99a6ec15d0ac98234"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship02.frm",
+    "byte_length": 564,
+    "sha256": "92c8213b209927d96ac34c1ddfafe0e4b79bcf808efc5929fadc6de54e1aa116"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship02.hdr",
+    "byte_length": 48,
+    "sha256": "9f221d0b8b8066d90f57109c9628cb5d2cd1c2dcf9e40399c7e680aa8db28d52"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship02.tbl",
+    "byte_length": 4096,
+    "sha256": "62f501493d769d80bd9bdb121949d5e8aebfa1007ac2d580354a376068e36f12"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship03.aif",
+    "byte_length": 89798,
+    "sha256": "22901c66b7b8bbb7b1010f9bb35ee34bd4dc44a9f60619534babcff26b479bb0"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship03.duk",
+    "byte_length": 1929112,
+    "sha256": "3d244f8105c115165c765c85d9ab70047f223587edf400ef52a0f8a191b39f1d"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship03.frm",
+    "byte_length": 564,
+    "sha256": "0c36932cab170a32df17d005cff13160012ee3a6dfa30aaed325ce7d5403eec9"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship03.hdr",
+    "byte_length": 48,
+    "sha256": "9f221d0b8b8066d90f57109c9628cb5d2cd1c2dcf9e40399c7e680aa8db28d52"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship03.tbl",
+    "byte_length": 4096,
+    "sha256": "62f501493d769d80bd9bdb121949d5e8aebfa1007ac2d580354a376068e36f12"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship04.aif",
+    "byte_length": 108486,
+    "sha256": "6b8104f5ce4109d6b03a7b50a72e10ea3e806c95c3eb53034df02c4877885272"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship04.duk",
+    "byte_length": 1802920,
+    "sha256": "d5866cae4c1662495fac5003d7c7f0295f3ff44c8ab2be4eb6456c45466bff7a"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship04.frm",
+    "byte_length": 564,
+    "sha256": "71434f5582ae86b6aba614ae1820dae12dc3ffbfe4f98f55025a791270c89f42"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship04.hdr",
+    "byte_length": 48,
+    "sha256": "9f221d0b8b8066d90f57109c9628cb5d2cd1c2dcf9e40399c7e680aa8db28d52"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship04.tbl",
+    "byte_length": 4096,
+    "sha256": "62f501493d769d80bd9bdb121949d5e8aebfa1007ac2d580354a376068e36f12"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship05.aif",
+    "byte_length": 86182,
+    "sha256": "e74b2c760043158a23638ce8814773fa47769973d4ec7babd06b886d28e8877e"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship05.duk",
+    "byte_length": 2169224,
+    "sha256": "88658aa3df16f4b04d1490385d3ca7e2a1cf0dfaa8e6559644b40a3e837ec64f"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship05.frm",
+    "byte_length": 564,
+    "sha256": "e822b6a4c41b83c13f5868ad81e46c445cff17fd812a8c485871f481cf9cbc83"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship05.hdr",
+    "byte_length": 48,
+    "sha256": "9f221d0b8b8066d90f57109c9628cb5d2cd1c2dcf9e40399c7e680aa8db28d52"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship05.tbl",
+    "byte_length": 4096,
+    "sha256": "62f501493d769d80bd9bdb121949d5e8aebfa1007ac2d580354a376068e36f12"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship06.aif",
+    "byte_length": 87174,
+    "sha256": "1c2ed54a3ba260116f61b985df8eb9d901b2f08d29b1a719aef426cf4387c885"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship06.duk",
+    "byte_length": 1956684,
+    "sha256": "19482bfd62a87116a370a3843bb4c6505603ded7fa3fc7b5d582c9535397f8a5"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship06.frm",
+    "byte_length": 564,
+    "sha256": "c6a11889134562feaf7cbcf030ac51ed2614619f8ddf6db0d4dfc1a73976342d"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship06.hdr",
+    "byte_length": 48,
+    "sha256": "9f221d0b8b8066d90f57109c9628cb5d2cd1c2dcf9e40399c7e680aa8db28d52"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship06.tbl",
+    "byte_length": 4096,
+    "sha256": "62f501493d769d80bd9bdb121949d5e8aebfa1007ac2d580354a376068e36f12"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship07.aif",
+    "byte_length": 87750,
+    "sha256": "38bfe8b577a15c70c4b71b39eb6e99c58f1e459401ba09d50349580a3b69ea1b"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship07.duk",
+    "byte_length": 2024824,
+    "sha256": "07d56c1f99aa90b45d503a8edcc70eccc2ed06642325588bc173105cbb454d70"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship07.frm",
+    "byte_length": 564,
+    "sha256": "7616e1bf38b4b5c4021db833421e5a0852801935feefb590ee4677107655e102"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship07.hdr",
+    "byte_length": 48,
+    "sha256": "9f221d0b8b8066d90f57109c9628cb5d2cd1c2dcf9e40399c7e680aa8db28d52"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship07.tbl",
+    "byte_length": 4096,
+    "sha256": "62f501493d769d80bd9bdb121949d5e8aebfa1007ac2d580354a376068e36f12"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship08.aif",
+    "byte_length": 110014,
+    "sha256": "33a9f45928a5f9e53ed7485df215493b2604417e66fe74095c0e569e24b6547d"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship08.duk",
+    "byte_length": 2155788,
+    "sha256": "fb5196fc5fef05adfdd8b09bcc2c2328ef2a0dcbb0c5411dd0a36177f7ce2e56"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship08.frm",
+    "byte_length": 564,
+    "sha256": "aa733b59190849ec5542d797ef0081ab52ae59dd706e94cb2bdd6020942b2102"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship08.hdr",
+    "byte_length": 48,
+    "sha256": "9f221d0b8b8066d90f57109c9628cb5d2cd1c2dcf9e40399c7e680aa8db28d52"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship08.tbl",
+    "byte_length": 4096,
+    "sha256": "62f501493d769d80bd9bdb121949d5e8aebfa1007ac2d580354a376068e36f12"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship09.aif",
+    "byte_length": 111462,
+    "sha256": "fadb56881d4f5f7bbcff33b263155a2449f9316999466a730a54380e9f660a7b"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship09.duk",
+    "byte_length": 2087544,
+    "sha256": "98ce311cc5d224167173587fe16991f122d20f34ebcd924eb8514ff5f8348513"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship09.frm",
+    "byte_length": 564,
+    "sha256": "6dd5588b7a6c228a754861d54b83bc884e05e8781575c81d8decce946af45182"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship09.hdr",
+    "byte_length": 48,
+    "sha256": "9f221d0b8b8066d90f57109c9628cb5d2cd1c2dcf9e40399c7e680aa8db28d52"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship09.tbl",
+    "byte_length": 4096,
+    "sha256": "62f501493d769d80bd9bdb121949d5e8aebfa1007ac2d580354a376068e36f12"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship10.aif",
+    "byte_length": 103772,
+    "sha256": "4f3c46a177e46606072bf4592274eef2a39d795aae21fe2479732c7ddf9509b3"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship10.duk",
+    "byte_length": 2303740,
+    "sha256": "5a14a4c45a46371d911455865d80d85a20cc1610dd5b8749f9044edc1a439862"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship10.frm",
+    "byte_length": 564,
+    "sha256": "5cbf1de30af671e431bacf1aef0948097789a5f54cd0fc5f379b11d9b4016220"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship10.hdr",
+    "byte_length": 48,
+    "sha256": "9f221d0b8b8066d90f57109c9628cb5d2cd1c2dcf9e40399c7e680aa8db28d52"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship10.tbl",
+    "byte_length": 4096,
+    "sha256": "62f501493d769d80bd9bdb121949d5e8aebfa1007ac2d580354a376068e36f12"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship11.aif",
+    "byte_length": 81442,
+    "sha256": "a3f3987ef4f5e7fd0130a645d7446dcb67355d588d520933081f3fb334f2ec25"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship11.duk",
+    "byte_length": 1849232,
+    "sha256": "5baa474bef7d34014c579de33449b547cd11562d8df2219e7f967aad82b69812"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship11.frm",
+    "byte_length": 560,
+    "sha256": "eaa2b4abe00e76c29a6f954b5e91ebe11c1606175ae5a1ce7f49fda6d75a06fd"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship11.hdr",
+    "byte_length": 48,
+    "sha256": "9f221d0b8b8066d90f57109c9628cb5d2cd1c2dcf9e40399c7e680aa8db28d52"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship11.tbl",
+    "byte_length": 4096,
+    "sha256": "62f501493d769d80bd9bdb121949d5e8aebfa1007ac2d580354a376068e36f12"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship12.aif",
+    "byte_length": 93894,
+    "sha256": "af3a509a56961d5337e4993b22aedec8c9ed93864b2b71295ad4fbc0b577981b"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship12.duk",
+    "byte_length": 2182684,
+    "sha256": "5cd7b63f9fd3a00afdc9bbba6f31029d9c54896fc01c4181cd621c02412ae5dc"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship12.frm",
+    "byte_length": 564,
+    "sha256": "0ca3771165dde78829838f0e128ef878f2c61ef506c092a63413f5ec0bdacf1f"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship12.hdr",
+    "byte_length": 48,
+    "sha256": "9f221d0b8b8066d90f57109c9628cb5d2cd1c2dcf9e40399c7e680aa8db28d52"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship12.tbl",
+    "byte_length": 4096,
+    "sha256": "62f501493d769d80bd9bdb121949d5e8aebfa1007ac2d580354a376068e36f12"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship13.aif",
+    "byte_length": 107478,
+    "sha256": "2570c26167b41640d09d0a259a62804a5f52e9a8f0b07397ff1fad98cbdb6ca9"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship13.duk",
+    "byte_length": 2272348,
+    "sha256": "1d494138b358b099898ab46e38c41a90aada61d01cd10b578bab107569c4ba21"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship13.frm",
+    "byte_length": 564,
+    "sha256": "3f0358742a0bf6c10f23b56f3efb59b8eac6bcdcd0598646c35aaedf7badc825"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship13.hdr",
+    "byte_length": 48,
+    "sha256": "9f221d0b8b8066d90f57109c9628cb5d2cd1c2dcf9e40399c7e680aa8db28d52"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship13.tbl",
+    "byte_length": 4096,
+    "sha256": "62f501493d769d80bd9bdb121949d5e8aebfa1007ac2d580354a376068e36f12"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship14.aif",
+    "byte_length": 101638,
+    "sha256": "cbac1bec34dc9d0841eb88ad7ef0367c9d3ffed87122beb39297eb9c343cc068"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship14.duk",
+    "byte_length": 2186996,
+    "sha256": "d6fb64513381cc096c0295f5741814b0b5284345d3b8a4512a88752def4d9b87"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship14.frm",
+    "byte_length": 564,
+    "sha256": "8c810ea9dfc7572eb4e5c7748474380e6a490a7f92741cea6e1b3ebde2b2880b"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship14.hdr",
+    "byte_length": 48,
+    "sha256": "9f221d0b8b8066d90f57109c9628cb5d2cd1c2dcf9e40399c7e680aa8db28d52"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship14.tbl",
+    "byte_length": 4096,
+    "sha256": "62f501493d769d80bd9bdb121949d5e8aebfa1007ac2d580354a376068e36f12"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship15.aif",
+    "byte_length": 88758,
+    "sha256": "b9d58f4d9d3c57e3b774438467ff910ce7ba333390bf40966c620baf2e98190d"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship15.duk",
+    "byte_length": 1894928,
+    "sha256": "fd5346f73e746bc5d618869820ad896631a68f73011eb3c8e9d123ac24cb0197"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship15.frm",
+    "byte_length": 560,
+    "sha256": "88f70c4e6edf8f0b522d9a657ad7bac924da4856b28539abcfc9b3affb1dcc3d"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship15.hdr",
+    "byte_length": 48,
+    "sha256": "9f221d0b8b8066d90f57109c9628cb5d2cd1c2dcf9e40399c7e680aa8db28d52"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship15.tbl",
+    "byte_length": 4096,
+    "sha256": "62f501493d769d80bd9bdb121949d5e8aebfa1007ac2d580354a376068e36f12"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship16.aif",
+    "byte_length": 88872,
+    "sha256": "66332cbf0efbbc437440c5bf7016f8d749536d7b5664cddb042106ad47e1ba9d"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship16.duk",
+    "byte_length": 1962704,
+    "sha256": "92e99ab6ad96f4416e75b05057d7a0e54d258d5bc2acfa16ba341d5aa962ff74"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship16.frm",
+    "byte_length": 564,
+    "sha256": "dc99dbacb9452e24af2928c3a7b46797eea5cb2e20ef871ac5e9fd9e71154529"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship16.hdr",
+    "byte_length": 48,
+    "sha256": "9f221d0b8b8066d90f57109c9628cb5d2cd1c2dcf9e40399c7e680aa8db28d52"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship16.tbl",
+    "byte_length": 4096,
+    "sha256": "62f501493d769d80bd9bdb121949d5e8aebfa1007ac2d580354a376068e36f12"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship17.aif",
+    "byte_length": 82248,
+    "sha256": "35616cac88adec07ff3dd57643f15ef041202d175ef76feb91f977db3b0631c5"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship17.duk",
+    "byte_length": 1897000,
+    "sha256": "ab9fdc6cac443997b1c4f98b239d063f5b0c8796648fba3f9ec05ddab38be285"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship17.frm",
+    "byte_length": 560,
+    "sha256": "4bf4fe999693240127aeadaf89a42b2a83cb9247c1d469dca6494178f0683958"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship17.hdr",
+    "byte_length": 48,
+    "sha256": "9f221d0b8b8066d90f57109c9628cb5d2cd1c2dcf9e40399c7e680aa8db28d52"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship17.tbl",
+    "byte_length": 4096,
+    "sha256": "62f501493d769d80bd9bdb121949d5e8aebfa1007ac2d580354a376068e36f12"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship18.aif",
+    "byte_length": 80550,
+    "sha256": "9ebf7b1ad9db75acef5e6020cb71e296dbbf25e0a28e0432c0806250b880d897"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship18.duk",
+    "byte_length": 2045168,
+    "sha256": "5b90749eeaadb0762e046c7b492b3ec62fa883b7439b7d83a89f486337740eb1"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship18.frm",
+    "byte_length": 564,
+    "sha256": "f0146534a4535ef265cecd74c9628016cb3c87c0a95e14f9af845e418b0c18bd"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship18.hdr",
+    "byte_length": 48,
+    "sha256": "9f221d0b8b8066d90f57109c9628cb5d2cd1c2dcf9e40399c7e680aa8db28d52"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship18.tbl",
+    "byte_length": 4096,
+    "sha256": "62f501493d769d80bd9bdb121949d5e8aebfa1007ac2d580354a376068e36f12"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship19.aif",
+    "byte_length": 103266,
+    "sha256": "c7eb508c779e1b217e100e3905f6d792047ee637f110cf954eaca51d1263f42a"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship19.duk",
+    "byte_length": 2297236,
+    "sha256": "3189d0e9b3dd9ab1f094d6a482f722e9dee962e35065d8386f72bbe6875df81d"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship19.frm",
+    "byte_length": 564,
+    "sha256": "cd16dba37df362e5f36e669e3d228f2af60c3431709d9c90d16f83045280603d"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship19.hdr",
+    "byte_length": 48,
+    "sha256": "9f221d0b8b8066d90f57109c9628cb5d2cd1c2dcf9e40399c7e680aa8db28d52"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship19.tbl",
+    "byte_length": 4096,
+    "sha256": "62f501493d769d80bd9bdb121949d5e8aebfa1007ac2d580354a376068e36f12"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship20.aif",
+    "byte_length": 82400,
+    "sha256": "502d2114808a6de1cc9fa97eff7ea604d3db76877e5836d7b94b09dbeac16989"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship20.duk",
+    "byte_length": 2241660,
+    "sha256": "cb338eaeb0e564623e6ec4b88658d87dc20bac4d9d50c539d81d5bdcddbfd745"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship20.frm",
+    "byte_length": 564,
+    "sha256": "aadcdf638b7cd1013ab0de7207fc8fdfc2883970d496d2997b2148e24500d530"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship20.hdr",
+    "byte_length": 48,
+    "sha256": "0cbc043b980e1ece8873ce13048a62cf81368ef3a7d9c5a879a334b136fc8d26"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship20.tbl",
+    "byte_length": 4096,
+    "sha256": "62f501493d769d80bd9bdb121949d5e8aebfa1007ac2d580354a376068e36f12"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship21.aif",
+    "byte_length": 108810,
+    "sha256": "eaa3cae0e75e9c5d142720d3136afa08d75da09ef91ec8efcf98fd6a2d878e44"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship21.duk",
+    "byte_length": 1986360,
+    "sha256": "8b3a364abedd8b558e1037380210568557064f49986b84b25510d9a8c022e44b"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship21.frm",
+    "byte_length": 564,
+    "sha256": "86db844ca04eefd9dc37d042edfa23280d1a2ed811c8b5bf77b1ada7f8648b53"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship21.hdr",
+    "byte_length": 48,
+    "sha256": "9f221d0b8b8066d90f57109c9628cb5d2cd1c2dcf9e40399c7e680aa8db28d52"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship21.tbl",
+    "byte_length": 4096,
+    "sha256": "62f501493d769d80bd9bdb121949d5e8aebfa1007ac2d580354a376068e36f12"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship22.aif",
+    "byte_length": 78902,
+    "sha256": "69b7a7f85860eba821427ec2b291dd1a45628f505ed354e6bd0435a94df57ae1"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship22.duk",
+    "byte_length": 2050596,
+    "sha256": "cf722ce5def49e17581328363bd826ffbed16b42b817baa345adbb40d20543e2"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship22.frm",
+    "byte_length": 564,
+    "sha256": "7c7c5d00940937ae76aee98f7b923c727b9979e156c78c933916f00a0aa06a73"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship22.hdr",
+    "byte_length": 48,
+    "sha256": "9f221d0b8b8066d90f57109c9628cb5d2cd1c2dcf9e40399c7e680aa8db28d52"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship22.tbl",
+    "byte_length": 4096,
+    "sha256": "62f501493d769d80bd9bdb121949d5e8aebfa1007ac2d580354a376068e36f12"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship23.aif",
+    "byte_length": 105632,
+    "sha256": "de87e1a98f4d1e891d5e05e01d2ba494a5cefd16e41e45a1b1418c4ed6055b3d"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship23.duk",
+    "byte_length": 2033008,
+    "sha256": "6aa89fc968e3f1137bd4dd18eb1764047a16bf60b6292bd0de6825fabac1af69"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship23.frm",
+    "byte_length": 564,
+    "sha256": "0c858c3e2746b389a774bfe236c74a14f87c9717df2150a89ace58e292c0e79a"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship23.hdr",
+    "byte_length": 48,
+    "sha256": "9f221d0b8b8066d90f57109c9628cb5d2cd1c2dcf9e40399c7e680aa8db28d52"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship23.tbl",
+    "byte_length": 4096,
+    "sha256": "62f501493d769d80bd9bdb121949d5e8aebfa1007ac2d580354a376068e36f12"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship24.aif",
+    "byte_length": 74620,
+    "sha256": "f900b54b986b85fa1753cd10be799d4208ae2e2f334c8dae170feeba307b1f6f"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship24.duk",
+    "byte_length": 2156916,
+    "sha256": "19111fa5567739c75c05cbccbf47283cba62b99d1c8e29207b63e02a1daa59b4"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship24.frm",
+    "byte_length": 564,
+    "sha256": "0ad5579a55fb6a97232f45936a2d90d90f8f206ad4bb80c9223e34bd8fb1626d"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship24.hdr",
+    "byte_length": 48,
+    "sha256": "9f221d0b8b8066d90f57109c9628cb5d2cd1c2dcf9e40399c7e680aa8db28d52"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/ship24.tbl",
+    "byte_length": 4096,
+    "sha256": "62f501493d769d80bd9bdb121949d5e8aebfa1007ac2d580354a376068e36f12"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/ships/spin.aif",
+    "byte_length": 90982,
+    "sha256": "8da459d455fa6e88350950dba87a839c949c7f6f9efcfbe01526c34c08d4e07a"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/uqmpack.nfo",
+    "byte_length": 148,
+    "sha256": "686422a329362ff423338954e99552c5bc2384ea2befee39e962da1f029d765a"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/victory/victory.duk",
+    "byte_length": 57853696,
+    "sha256": "0aa16fd8f1f9ef5bfb567202130fb60af6e6e7d0af10a0c3dd37d799a3520560"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/victory/victory.frm",
+    "byte_length": 13604,
+    "sha256": "efa2db23ee96375859fbaa93293dd31a6f519dc2aacfd817131050236e59a5ee"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/victory/victory.hdr",
+    "byte_length": 48,
+    "sha256": "c871faeb9ca81aa64978436cd6f541d8bbb15e1192bea011d6964861270cfc17"
+  },
+  {
+    "relative_path": "inputs/content/addons/3dovideo/victory/victory.tbl",
+    "byte_length": 4096,
+    "sha256": "62f501493d769d80bd9bdb121949d5e8aebfa1007ac2d580354a376068e36f12"
+  }
+]

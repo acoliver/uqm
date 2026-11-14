@@ -1,3 +1,7 @@
+mod directories;
+use super::native_addons;
+use directories::{create_run_directories, RunDirectories};
+
 use super::native_capture::{normalize_native_capture, validate_playable_screenshot_difference};
 use super::native_capture_retry::{
     capture_with_bounded_retry, CaptureAttemptRecord, CaptureAttemptSource,
@@ -1610,12 +1614,7 @@ fn run(inputs: RunInputs<'_>) -> Result<(), String> {
         linked_build_proof,
         linked_build_member_limit,
     } = inputs;
-    if !cfg!(target_os = "macos") {
-        return Err("native-window acceptance is unsupported on this platform".to_string());
-    }
-    if !root.is_absolute() {
-        return Err("evidence root must be absolute".to_string());
-    }
+    directories::admit_root(root)?;
     let script_source_dir = script.parent().map(Path::to_path_buf);
     let fresh_root = create_fresh_root(root)?;
     let root = fresh_root.path();
@@ -1704,6 +1703,7 @@ fn run(inputs: RunInputs<'_>) -> Result<(), String> {
             runtime_contract.content_expansion_budget_bytes,
             Some(&content_input),
         )?;
+        let addons = native_addons::prepare(root, shared.as_ref(), linked_build_member_limit)?;
         let nonce = fresh_nonce()?;
         let requested_bounds = runtime_contract.expected_client_bounds;
         validate_requested_bounds(requested_bounds)?;
@@ -1727,14 +1727,17 @@ fn run(inputs: RunInputs<'_>) -> Result<(), String> {
         )?;
         let state_wake = state_reader.change_wake()?;
         let mut observer = BoundedNativeObserver::spawn(&nonce, runtime_contract)?;
-        let command_arguments = vec![
-            retained_executable.to_string_lossy().into_owned(),
-            format!("--configdir={}", config_root.display()),
-            format!("--contentdir={}", content_root.display()),
-            format!("--automation-script={}", retained_script.display()),
-            format!("--automation-output={}", automation.display()),
-            format!("--native-window-proof={}", proof_config.display()),
-        ];
+        let command_arguments = super::native_addons::game_arguments(
+            [
+                &retained_executable,
+                &config_root,
+                &content_root,
+                &retained_script,
+                &automation,
+                &proof_config,
+            ],
+            &addons,
+        );
         let mut command = Command::new(&retained_executable);
         command
             .args(&command_arguments[1..])
@@ -1841,57 +1844,6 @@ fn run(inputs: RunInputs<'_>) -> Result<(), String> {
     }
     Ok(())
 }
-/// Bounded evidence directories created for one acceptance run.
-struct RunDirectories {
-    inputs: PathBuf,
-    content_root: PathBuf,
-    content_packages: PathBuf,
-    linked_build: PathBuf,
-    automation: PathBuf,
-    screenshots: PathBuf,
-    config_root: PathBuf,
-}
-
-fn create_run_directories(root: &Path) -> Result<RunDirectories, String> {
-    let inputs = root.join("inputs");
-    let content_root = inputs.join("content");
-    let directories = RunDirectories {
-        content_packages: content_root.join("packages"),
-        linked_build: inputs.join("linked-build"),
-        automation: root.join("runtime-automation"),
-        screenshots: root.join("screenshots"),
-        config_root: root.join("config"),
-        inputs,
-        content_root,
-    };
-    for directory in [
-        &directories.inputs,
-        &directories.content_root,
-        &directories.content_packages,
-        &directories.linked_build,
-        &directories.automation,
-        &directories.screenshots,
-        &directories.config_root,
-    ] {
-        super::native_budget::reserve_directory(directory)?;
-        fs::create_dir_all(directory)
-            .map_err(|error| format!("create {}: {error}", directory.display()))?;
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt as _;
-            fs::set_permissions(directory, fs::Permissions::from_mode(0o750))
-                .map_err(|error| format!("publish {}: {error}", directory.display()))?;
-        }
-    }
-    write_json_atomic(
-        &root.join("config-initial.json"),
-        &serde_json::json!({
-            "schema": "uqm-native-initial-config-v1", "files": [],
-        }),
-    )?;
-    Ok(directories)
-}
-
 /// Reject authority bounds that do not match the linked runtime resolution.
 fn validate_requested_bounds(requested_bounds: NativeWindowBounds) -> Result<(), String> {
     if requested_bounds.width
@@ -3861,7 +3813,7 @@ fn relative_regular_file_identity(path: &Path) -> Result<(u64, String), String> 
 }
 
 #[cfg(unix)]
-fn write_bytes_atomic_noclobber(path: &Path, bytes: &[u8]) -> Result<(), String> {
+pub(super) fn write_bytes_atomic_noclobber(path: &Path, bytes: &[u8]) -> Result<(), String> {
     super::native_budget::reserve(path, bytes.len() as u64)?;
     use std::os::fd::{AsRawFd as _, FromRawFd as _};
     use std::os::unix::ffi::OsStringExt as _;
@@ -3935,7 +3887,7 @@ fn write_bytes_atomic_noclobber(path: &Path, bytes: &[u8]) -> Result<(), String>
 }
 
 #[cfg(not(unix))]
-fn write_bytes_atomic_noclobber(path: &Path, bytes: &[u8]) -> Result<(), String> {
+pub(super) fn write_bytes_atomic_noclobber(path: &Path, bytes: &[u8]) -> Result<(), String> {
     let mut file = fs::OpenOptions::new()
         .create_new(true)
         .write(true)
@@ -5923,5 +5875,63 @@ mod crash_identity_regressions {
             apple_timestamp_micros("2026-01-01 04:00:00.123 -0800"),
             Some(start)
         );
+    }
+}
+
+#[cfg(test)]
+mod addon_tests {
+    use super::*;
+
+    #[test]
+    fn addons_install_from_retained_bytes_without_the_source_tree() {
+        use crate::automation::native_artifacts::{ArtifactBudget, SharedSnapshot};
+        let temporary = tempfile::tempdir().unwrap();
+        let suite = temporary.path();
+        let scenario = suite.join("scenarios/0000");
+        fs::create_dir_all(&scenario).unwrap();
+        let addons = vec!["3dovideo".to_string()];
+        let members = crate::automation::native_addons::members(&addons).unwrap();
+        let mut snapshot = SharedSnapshot::create(
+            &suite.join("shared"),
+            ArtifactBudget::new(NativeInventoryLimits {
+                member_count: 1000,
+                member_bytes: 64 * 1024 * 1024,
+                aggregate_bytes: 256 * 1024 * 1024,
+                path_bytes: 4096,
+                aggregate_path_bytes: 1024 * 1024,
+            }),
+        )
+        .unwrap();
+        let source = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        for member in &members {
+            let relative = member
+                .relative_path
+                .strip_prefix("inputs/content/")
+                .unwrap();
+            let bytes = fs::read(source.join("sc2/content").join(relative)).unwrap();
+            crate::automation::native_addons::verify(member, &bytes).unwrap();
+            snapshot.insert(&member.relative_path, &bytes).unwrap();
+        }
+        snapshot.seal().unwrap();
+        let names = members
+            .iter()
+            .map(|member| member.relative_path.clone())
+            .collect::<Vec<_>>();
+        let references = snapshot.references(&names).unwrap();
+        crate::automation::native_addons::install(
+            &scenario,
+            Some(&references),
+            &addons,
+            64 * 1024 * 1024,
+        )
+        .unwrap();
+        drop(snapshot);
+        fs::remove_dir_all(suite.join("shared")).unwrap();
+        for member in &members {
+            let bytes = fs::read(scenario.join(&member.relative_path)).unwrap();
+            crate::automation::native_addons::verify(member, &bytes).unwrap();
+        }
+        assert!(crate::automation::native_addons::install(&scenario, None, &addons, 1024).is_err());
+        crate::automation::native_addons::install(&scenario, None, &[], 1024).unwrap();
     }
 }

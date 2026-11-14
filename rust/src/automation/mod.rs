@@ -44,6 +44,8 @@ pub mod inventory;
 pub mod lifecycle;
 mod melee_fixture;
 pub mod mode;
+#[cfg(feature = "debug-process")]
+pub mod native_addons;
 #[cfg(all(unix, feature = "debug-process"))]
 pub mod native_artifacts;
 #[cfg(all(unix, feature = "debug-process"))]

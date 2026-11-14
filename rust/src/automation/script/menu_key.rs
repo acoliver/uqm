@@ -34,13 +34,14 @@ pub enum MenuKey {
     Right = 8,
     Select = 9,
     Cancel = 10,
+    Special = 11,
     /// Removes the selected ship in the Super Melee fleet editor.
     Delete = 18,
 }
 
 impl MenuKey {
     /// All variants, in `controls.h` enum order.
-    pub const ALL: [MenuKey; 8] = [
+    pub const ALL: [MenuKey; 9] = [
         MenuKey::Debug,
         MenuKey::Up,
         MenuKey::Down,
@@ -48,6 +49,7 @@ impl MenuKey {
         MenuKey::Right,
         MenuKey::Select,
         MenuKey::Cancel,
+        MenuKey::Special,
         MenuKey::Delete,
     ];
 
@@ -70,6 +72,7 @@ impl MenuKey {
             MenuKey::Right => "right",
             MenuKey::Select => "select",
             MenuKey::Cancel => "cancel",
+            MenuKey::Special => "special",
             MenuKey::Delete => "delete",
         }
     }
@@ -88,6 +91,7 @@ impl MenuKey {
             "right" => Some(MenuKey::Right),
             "select" => Some(MenuKey::Select),
             "cancel" => Some(MenuKey::Cancel),
+            "special" => Some(MenuKey::Special),
             "delete" => Some(MenuKey::Delete),
             _ => None,
         }
@@ -105,6 +109,7 @@ impl MenuKey {
             8 => Some(MenuKey::Right),
             9 => Some(MenuKey::Select),
             10 => Some(MenuKey::Cancel),
+            11 => Some(MenuKey::Special),
             18 => Some(MenuKey::Delete),
             _ => None,
         }
@@ -119,7 +124,7 @@ impl<'de> Deserialize<'de> for MenuKey {
         let name = String::deserialize(deserializer)?;
         MenuKey::from_name(&name).ok_or_else(|| {
             serde::de::Error::custom(format!(
-                "unknown menu key '{name}'; expected one of: debug, up, down, left, right, select, cancel, delete"
+                "unknown menu key '{name}'; expected one of: debug, up, down, left, right, select, cancel, special, delete"
             ))
         })
     }

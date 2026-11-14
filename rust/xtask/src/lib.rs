@@ -48,6 +48,12 @@ mod native_gallery;
 #[cfg(feature = "native")]
 mod native_gpu;
 #[cfg(feature = "native")]
+mod native_inputs;
+#[cfg(feature = "native")]
+use native_inputs::{
+    native_shared_member_names, prepare_native_shared_inputs, NativeSharedSources,
+};
+#[cfg(feature = "native")]
 mod native_save;
 #[cfg(feature = "native")]
 mod native_smoke;
@@ -392,14 +398,7 @@ pub(crate) fn execute_native_scenarios(
             let references = shared.references(&names)?;
             let allowance = suite.scenario_allowance(index)?;
             let mut command = Command::new(launch.controller);
-            command.env(
-                "UQM_NATIVE_EVIDENCE_ALLOWANCE",
-                serde_json::to_string(&allowance).map_err(|error| error.to_string())?,
-            );
-            command.env(
-                "UQM_NATIVE_SHARED_INPUTS",
-                serde_json::to_string(&references).map_err(|error| error.to_string())?,
-            );
+            native_inputs::bind_controller(&mut command, scenario, &allowance, &references)?;
             command.current_dir(launch.source).args([
                 NATIVE_ACCEPTANCE_COMMAND,
                 "run",
@@ -528,108 +527,6 @@ fn classify_supervision(
         stdout_log: None,
         stderr_log: None,
     }
-}
-
-#[cfg(feature = "native")]
-fn native_shared_member_names(scenario: &native_config::Scenario) -> Result<Vec<String>, String> {
-    let filename = Path::new(&scenario.path)
-        .file_name()
-        .and_then(|name| name.to_str())
-        .ok_or("script filename is not UTF-8")?;
-    let mut names = vec![
-        "inputs/uqm".into(),
-        format!("inputs/{filename}"),
-        format!(
-            "inputs/content/packages/{}",
-            native_config::CONTENT_FILENAME
-        ),
-        "inputs/content/version".into(),
-    ];
-    names.extend(
-        [
-            "linked-build-receipt.json",
-            "cargo-messages.jsonl",
-            "rust-archive.rlib",
-            "Cargo.toml",
-            "Cargo.lock",
-        ]
-        .map(retained_linked_path),
-    );
-    Ok(names)
-}
-
-#[cfg(feature = "native")]
-struct NativeSharedSources<'a> {
-    source: &'a Path,
-    executable: &'a Path,
-    content: &'a Path,
-    linked: &'a LinkedBuildProof,
-}
-
-#[cfg(feature = "native")]
-fn prepare_native_shared_inputs(
-    evidence: &Path,
-    sources: NativeSharedSources<'_>,
-    selected: &[native_config::Scenario],
-    budget: uqm_rust::automation::native_artifacts::ArtifactBudget,
-) -> Result<uqm_rust::automation::native_artifacts::SharedSnapshot, String> {
-    use std::os::unix::fs::PermissionsExt;
-    use uqm_rust::automation::native_artifacts::SharedSnapshot;
-    let NativeSharedSources {
-        source,
-        executable,
-        content,
-        linked,
-    } = sources;
-    fs::set_permissions(evidence, fs::Permissions::from_mode(0o700))
-        .map_err(|error| error.to_string())?;
-    let limit = native_config::runtime_contract()
-        .inventory_limits
-        .member_bytes;
-    let mut snapshot = SharedSnapshot::create(&evidence.join("shared"), budget)?;
-    snapshot.insert("inputs/uqm", &read_regular_file_bounded(executable, limit)?)?;
-    let bytes = read_regular_file_bounded(&content.join(native_config::CONTENT_FILENAME), limit)?;
-    if bytes.len() as u64 != native_config::CONTENT_BYTE_LENGTH
-        || hex_sha256(&bytes) != native_config::CONTENT_SHA256
-    {
-        return Err("the content package is not the 0.8.0 content this runner expects".into());
-    }
-    snapshot.insert(
-        &format!(
-            "inputs/content/packages/{}",
-            native_config::CONTENT_FILENAME
-        ),
-        &bytes,
-    )?;
-    snapshot.insert(
-        "inputs/content/version",
-        format!("{}\n", native_config::CONTENT_VERSION).as_bytes(),
-    )?;
-    for scenario in selected {
-        native_suite::admit_script(source, scenario)?;
-        let name = Path::new(&scenario.path)
-            .file_name()
-            .and_then(|name| name.to_str())
-            .ok_or("invalid script filename")?;
-        let bytes = read_regular_file_bounded(
-            &source.join(&scenario.path),
-            native_config::SCRIPT_LIMIT_BYTES,
-        )?;
-        snapshot.insert(&format!("inputs/{name}"), &bytes)?;
-    }
-    for entry in fs::read_dir(linked.directory.path()).map_err(|error| error.to_string())? {
-        let entry = entry.map_err(|error| error.to_string())?;
-        let name = entry
-            .file_name()
-            .into_string()
-            .map_err(|_| "invalid linked member filename")?;
-        snapshot.insert(
-            &retained_linked_path(&name),
-            &read_regular_file_bounded(&entry.path(), limit)?,
-        )?;
-    }
-    snapshot.seal()?;
-    Ok(snapshot)
 }
 
 /// Total byte length and file count beneath a directory.
@@ -887,6 +784,58 @@ fn hex_sha256(bytes: &[u8]) -> String {
 #[cfg(feature = "native")]
 mod tests {
     use super::*;
+
+    #[test]
+    fn addon_snapshot_refuses_missing_corrupt_and_symlinked_sources() {
+        let repository = cli::repository_root().unwrap();
+        let temporary = tempfile::tempdir().unwrap();
+        let source = temporary.path().join("source");
+        fs::create_dir(&source).unwrap();
+        let executable = temporary.path().join("uqm");
+        fs::write(&executable, b"executable").unwrap();
+        let linked = LinkedBuildProof {
+            directory: tempfile::tempdir().unwrap(),
+        };
+        let selected = [native_config::Scenario {
+            path: "rust/tests/fixtures/native/ship-spin-3do-v1.json".into(),
+            expected_input_ticks: None,
+            outer_child_timeout_ms: None,
+            addons: vec!["3dovideo".into()],
+        }];
+        let snapshot = |evidence: &Path| {
+            fs::create_dir(evidence).unwrap();
+            prepare_native_shared_inputs(
+                evidence,
+                NativeSharedSources {
+                    source: &source,
+                    executable: &executable,
+                    content: &repository.join("sc2/content/packages"),
+                    linked: &linked,
+                },
+                &selected,
+                uqm_rust::automation::native_artifacts::ArtifactBudget::new(
+                    native_config::runtime_contract().inventory_limits,
+                ),
+            )
+        };
+        let failure = |result: Result<_, String>| match result {
+            Ok(_) => panic!("invalid addon source accepted"),
+            Err(error) => error,
+        };
+        assert!(failure(snapshot(&temporary.path().join("missing"))).contains("read native addon"));
+        let member = &uqm_rust::automation::native_addons::members(&selected[0].addons).unwrap()[0];
+        let relative = member
+            .relative_path
+            .strip_prefix("inputs/content/")
+            .unwrap();
+        let target = source.join("sc2/content").join(relative);
+        fs::create_dir_all(target.parent().unwrap()).unwrap();
+        fs::write(&target, vec![0; member.byte_length as usize]).unwrap();
+        assert!(failure(snapshot(&temporary.path().join("corrupt"))).contains("digest mismatch"));
+        fs::remove_file(&target).unwrap();
+        std::os::unix::fs::symlink(repository.join("sc2/content").join(relative), &target).unwrap();
+        assert!(failure(snapshot(&temporary.path().join("symlink"))).contains("read native addon"));
+    }
 
     #[test]
     fn native_game_build_reuses_workspace_features_without_building_other_binaries() {

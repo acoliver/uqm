@@ -81,6 +81,8 @@ pub struct Scenario {
     /// Present only on scenarios that outlast the default outer deadline.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub outer_child_timeout_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub addons: Vec<String>,
 }
 
 /// The runtime contract shared by every scenario.
@@ -90,6 +92,24 @@ pub fn runtime_contract() -> NativeWindowRuntimeContract {
 }
 
 impl Scenario {
+    pub fn validate_proof(
+        &self,
+        actual: &uqm_rust::automation::NativeRetainedInput,
+        command: &[String],
+    ) -> Result<(), String> {
+        let filename = Path::new(&self.path)
+            .file_name()
+            .and_then(|value| value.to_str())
+            .ok_or("script has no filename")?;
+        if actual.relative_path != format!("inputs/{filename}") {
+            return Err("native scenario proof used a different selected script".into());
+        }
+        if uqm_rust::automation::native_addons::command_addons(command)? != self.addons {
+            return Err("native scenario proof used different selected addons".into());
+        }
+        Ok(())
+    }
+
     /// The runtime contract this scenario runs under.
     #[must_use]
     pub fn runtime_contract(&self) -> NativeWindowRuntimeContract {
@@ -133,7 +153,40 @@ fn scenario_for(root: &Path, path: String) -> Result<Scenario, String> {
         path,
         expected_input_ticks,
         outer_child_timeout_ms,
+        addons: scenario_addons(&full)?,
     })
+}
+
+fn scenario_addons(script: &Path) -> Result<Vec<String>, String> {
+    let path = script.with_extension("native.toml");
+    let text = match std::fs::read_to_string(&path) {
+        Ok(text) => text,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(error) => return Err(format!("read {}: {error}", path.display())),
+    };
+    let document = text
+        .parse::<toml_edit::DocumentMut>()
+        .map_err(|error| error.to_string())?;
+    if document.iter().any(|(key, _)| key != "addons") {
+        return Err(format!(
+            "{}: unknown native scenario option",
+            path.display()
+        ));
+    }
+    let addons = document
+        .get("addons")
+        .and_then(|value| value.as_array())
+        .ok_or("native scenario addons must be an array")?
+        .iter()
+        .map(|value| {
+            value
+                .as_str()
+                .map(str::to_string)
+                .ok_or("native addon name must be a string".to_string())
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    uqm_rust::automation::native_addons::members(&addons)?;
+    Ok(addons)
 }
 
 fn recorded_input_ticks(root: &Path, script_path: &str) -> Result<Option<u64>, String> {
@@ -247,6 +300,50 @@ mod tests {
             height: 1002,
         };
         assert!(work_area.contains(runtime_contract().expected_client_bounds));
+    }
+
+    #[test]
+    fn native_sidecars_select_only_pinned_addons_without_entering_the_corpus() {
+        let path = "rust/tests/fixtures/native/ship-spin-3do-v1.json";
+        let selected = select(&root(), Some(path)).unwrap();
+        assert_eq!(selected[0].addons, ["3dovideo"]);
+        assert_eq!(selected[0].expected_input_ticks, None);
+        assert!(!scenarios(&root())
+            .unwrap()
+            .iter()
+            .any(|scenario| scenario.path == path));
+        crate::native_suite::preflight(&root(), &selected).unwrap();
+    }
+
+    #[test]
+    fn malformed_unknown_duplicate_and_nonstring_addon_options_fail() {
+        let directory = tempfile::tempdir().unwrap();
+        let script = directory.path().join("scenario.json");
+        assert!(scenario_addons(&script).unwrap().is_empty());
+        let sidecar = script.with_extension("native.toml");
+        for text in [
+            "addons = 3",
+            "addons = [42]",
+            "addons = [\"missing\"]",
+            "addons = [\"3dovideo\", \"3dovideo\"]",
+            "addon = []",
+            "invalid",
+        ] {
+            std::fs::write(&sidecar, text).unwrap();
+            assert!(scenario_addons(&script).is_err(), "{text}");
+        }
+        std::fs::write(&sidecar, "addons = []").unwrap();
+        assert!(scenario_addons(&script).unwrap().is_empty());
+    }
+
+    #[test]
+    fn addon_requests_are_explicit_and_empty_requests_keep_their_bytes() {
+        let old = r#"{"path":"rust/scripts/a.json"}"#;
+        let scenario: Scenario = serde_json::from_str(old).unwrap();
+        assert_eq!(serde_json::to_string(&scenario).unwrap(), old);
+        let requested = r#"{"path":"rust/scripts/a.json","addons":["3dovideo"]}"#;
+        let scenario: Scenario = serde_json::from_str(requested).unwrap();
+        assert_eq!(serde_json::to_string(&scenario).unwrap(), requested);
     }
 
     #[test]
