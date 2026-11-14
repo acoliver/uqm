@@ -16,16 +16,6 @@ unsafe fn cstr_to_path(c_str: *const c_char) -> Option<PathBuf> {
     CStr::from_ptr(c_str).to_str().ok().map(PathBuf::from)
 }
 
-/// Convert C string to String
-#[allow(dead_code)]
-unsafe fn cstr_to_string(c_str: *const c_char) -> Option<String> {
-    if c_str.is_null() {
-        return None;
-    }
-
-    CStr::from_ptr(c_str).to_str().ok().map(String::from)
-}
-
 // Opaque representation of uio_DirHandle from C
 // We only use it as a pointer, never dereference it
 pub use crate::io::uio_bridge::uio_DirHandle;
@@ -56,23 +46,6 @@ pub use crate::io::uio_bridge::uio_write;
 pub use crate::io::uio_bridge::uio_fstat;
 
 pub use crate::io::uio_bridge::uio_unlink;
-
-use crate::platform::errno as current_errno;
-
-// Constants for uio_open flags
-const O_RDONLY: c_int = 0;
-const O_WRONLY: c_int = 1;
-const O_CREAT: c_int = 0o100;
-const O_EXCL: c_int = 0o200;
-const O_BINARY: c_int = 0;
-
-// Constants for file permissions (mode)
-const S_IRWXU: c_int = 0o700;
-const S_IRWXG: c_int = 0o070;
-const S_IRWXO: c_int = 0o007;
-
-// EINTR for retry on interrupt
-const EINTR: c_int = 4;
 
 /// Check if a file exists (Phase 1 bridge)
 ///
@@ -132,110 +105,6 @@ pub unsafe extern "C" fn fileExists2(dir: *mut uio_DirHandle, file_name: *const 
     // File exists, close the stream
     uio_fclose(stream);
     1
-}
-
-/// Copy a file (Phase 1 bridge)
-///
-/// # Safety
-///
-/// - `src_dir` must be a valid pointer to uio_DirHandle or be null
-/// - `src_name` must point to a valid null-terminated C string or be null
-/// - `dst_dir` must be a valid pointer to uio_DirHandle or be null
-/// - `new_name` must point to a valid null-terminated C string or be null
-pub unsafe fn copy_file(
-    src_dir: *mut uio_DirHandle,
-    src_name: *const c_char,
-    dst_dir: *mut uio_DirHandle,
-    new_name: *const c_char,
-) -> c_int {
-    use std::fs::OpenOptions;
-    use std::io::Write;
-
-    // Log for debugging
-    if let Ok(mut file) = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open("rust-bridge.log")
-    {
-        let _ = writeln!(file, "RUST_COPY_FILE_CALLED");
-    }
-
-    // Check for null parameters
-    if src_dir.is_null() || src_name.is_null() || dst_dir.is_null() || new_name.is_null() {
-        return -1;
-    }
-
-    // Open source file for reading (matches files.c behavior)
-    let src = uio_open(src_dir, src_name, O_RDONLY | O_BINARY, 0);
-    if src.is_null() {
-        return -1;
-    }
-
-    // Get file stats to preserve permissions
-    let mut stat_buf: stat = std::mem::zeroed();
-    if uio_fstat(src, &mut stat_buf) == -1 {
-        uio_close(src);
-        return -1;
-    }
-
-    // Open destination file for writing (O_EXCL ensures we don't overwrite)
-    let dst = uio_open(
-        dst_dir,
-        new_name,
-        O_WRONLY | O_CREAT | O_EXCL | O_BINARY,
-        (stat_buf.st_mode as c_int) & (S_IRWXU | S_IRWXG | S_IRWXO),
-    );
-    if dst.is_null() {
-        uio_close(src);
-        return -1;
-    }
-
-    // Buffer for copying data (64KB buffer like files.c)
-    const BUFSIZE: usize = 65536;
-    let mut buf = vec![0u8; BUFSIZE];
-
-    // Copy loop - handles partial writes and EINTR like files.c
-    loop {
-        let num_in_buf = uio_read(src, buf.as_mut_ptr(), BUFSIZE);
-        if num_in_buf == -1 {
-            if current_errno() == EINTR {
-                continue;
-            }
-            // Error reading - clean up and delete partial copy
-            uio_close(src);
-            uio_close(dst);
-            uio_unlink(dst_dir, new_name);
-            return -1;
-        }
-        if num_in_buf == 0 {
-            break; // EOF
-        }
-
-        // Write all data, handling partial writes
-        let mut remaining = num_in_buf as usize;
-        let mut buf_ptr = buf.as_ptr();
-
-        while remaining > 0 {
-            let num_written = uio_write(dst, buf_ptr, remaining);
-            if num_written == -1 {
-                if current_errno() == EINTR {
-                    continue;
-                }
-                // Error writing - clean up and delete partial copy
-                uio_close(src);
-                uio_close(dst);
-                uio_unlink(dst_dir, new_name);
-                return -1;
-            }
-            remaining -= num_written as usize;
-            buf_ptr = buf_ptr.add(num_written as usize);
-        }
-    }
-
-    // Success - close handles
-    uio_close(src);
-    uio_close(dst);
-    0
 }
 
 // Keep the existing rust_* prefixed functions for compatibility

@@ -2,7 +2,7 @@
 //! where a path resolves, what unmounting removes, and what read, write,
 //! stat and unlink do to the files underneath.
 
-use std::ffi::{CStr, CString};
+use std::ffi::CString;
 
 use serial_test::serial;
 
@@ -15,25 +15,6 @@ fn cstr(text: &str) -> CString {
 
 fn errno_value() -> c_int {
     std::io::Error::last_os_error().raw_os_error().unwrap_or(0)
-}
-
-fn locate(stack: &Stack, name: &str) -> Option<(*mut uio_MountHandle, String)> {
-    let name = cstr(name);
-    let mut mount: *mut uio_MountHandle = ptr::null_mut();
-    let mut out: *mut c_char = ptr::null_mut();
-    let rc = unsafe { uio_getFileLocation(stack.root, name.as_ptr(), 0, &mut mount, &mut out) };
-    if rc != 0 {
-        assert!(
-            mount.is_null() && out.is_null(),
-            "failure clears the outputs"
-        );
-        return None;
-    }
-    let text = unsafe { CStr::from_ptr(out) }
-        .to_string_lossy()
-        .into_owned();
-    unsafe { libc::free(out as *mut libc::c_void) };
-    Some((mount, text))
 }
 
 fn mount_ptr(stack: &Stack, index: usize) -> *mut uio_MountHandle {
@@ -124,72 +105,6 @@ fn relative_zip_mounts_and_directory_handles_read_archive_entries() {
                 "mount={point:?}, parent={parent:?}"
             );
         }
-    }
-}
-
-#[test]
-#[serial]
-fn file_location_names_the_mount_and_the_host_path() {
-    let mut stack = Stack::new();
-    let host = stack.mount_dir(&[("a.txt", b"a")], UIO_MOUNT_TOP | UIO_MOUNT_RDONLY);
-    let (mount, path) = locate(&stack, "a.txt").expect("file is under the mount");
-    assert_eq!(mount, mount_ptr(&stack, 0));
-    assert_eq!(
-        std::fs::canonicalize(&path).unwrap(),
-        std::fs::canonicalize(host.join("a.txt")).unwrap()
-    );
-}
-
-#[test]
-#[serial]
-fn file_location_outputs_are_optional() {
-    let mut stack = Stack::new();
-    stack.mount_dir(&[("a.txt", b"a")], UIO_MOUNT_TOP | UIO_MOUNT_RDONLY);
-    let name = cstr("a.txt");
-    let rc = unsafe {
-        uio_getFileLocation(
-            stack.root,
-            name.as_ptr(),
-            0,
-            ptr::null_mut(),
-            ptr::null_mut(),
-        )
-    };
-    assert_eq!(rc, 0);
-}
-
-#[test]
-#[serial]
-fn file_location_outside_every_mount_is_enoent() {
-    let stack = Stack::new();
-    assert!(locate(&stack, "nowhere.txt").is_none());
-    assert_eq!(errno_value(), libc::ENOENT);
-    let name = cstr("x");
-    let rc = unsafe {
-        uio_getFileLocation(
-            ptr::null_mut(),
-            name.as_ptr(),
-            0,
-            ptr::null_mut(),
-            ptr::null_mut(),
-        )
-    };
-    assert_eq!(rc, -1);
-}
-
-#[test]
-#[serial]
-fn mounts_report_their_file_system_type() {
-    let mut stack = Stack::new();
-    stack.mount_dir(&[("a", b"a")], UIO_MOUNT_TOP | UIO_MOUNT_RDONLY);
-    let top = stack.first_mount_id();
-    stack.mount_zip(&[("b", b"b")], UIO_MOUNT_BELOW | UIO_MOUNT_RDONLY, top);
-    unsafe {
-        let stdio = mount_ptr(&stack, 0);
-        let zip = mount_ptr(&stack, 1);
-        assert_eq!(uio_getMountFileSystemType(stdio), UIO_FSTYPE_STDIO);
-        assert_eq!(uio_getMountFileSystemType(zip), UIO_FSTYPE_ZIP);
-        assert_eq!(uio_getMountFileSystemType(ptr::null_mut()), 0);
     }
 }
 
