@@ -35,7 +35,10 @@ pub(super) fn with_preview<R>(
     }
     impl Drop for Restore<'_> {
         fn drop(&mut self) {
-            self.state.take().unwrap().restore(self.world);
+            self.state
+                .take()
+                .unwrap_or_else(|| panic!("picker preview restoration state missing"))
+                .restore(self.world);
         }
     }
     let state = SavedState::capture(world);
