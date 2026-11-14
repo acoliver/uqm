@@ -79,14 +79,10 @@ impl Request {
             "missing save {}",
             self.source.display()
         );
-        // SAFETY: InitGameStructures and InitGameClock completed; the runner staged
-        // the source in slot zero of this subprocess's isolated save directory.
-        let loaded = unsafe {
-            crate::savegame::live::load::load_game(
-                0,
-                crate::savegame::live::load::LoadRequest::Restore(cx),
-            )
-        };
+        let loaded = crate::savegame::live::load::load_game(
+            0,
+            crate::savegame::live::load::LoadRequest::Restore(cx),
+        );
         anyhow::ensure!(loaded != 0, "LoadGame failed for {}", self.source.display());
         let activity = cx.world.next_activity;
         self.loaded_activity = Some(activity);

@@ -2214,11 +2214,6 @@ pub struct SUMMARY_DESC {
     pub SaveName: [UNICODE; 64usize],
 }
 
-#[cfg(not(test))]
-pub use crate::savegame::live::load::LoadGame;
-
-#[cfg(not(test))]
-pub use crate::savegame::live::save::SaveGame;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct CODE_REF {

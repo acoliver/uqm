@@ -23,36 +23,56 @@ impl SavedState {
     }
 }
 
-/// # Safety
-/// Race templates must be live and SavedState must hold the campaign escorts.
-#[cfg(not(test))]
-pub(super) unsafe fn install(world: &mut World, summary: &crate::navigation::abi::SUMMARY_DESC) {
-    world.data.flagship = summary.SS;
-    for &species in &summary.ShipList[..usize::from(summary.NumShips)] {
-        let fleets = world.avail_races_ref();
+pub(super) fn with_preview<R>(
+    world: &mut World,
+    summary: &crate::engine::save::summary_record::SummaryDesc,
+    mut random: impl FnMut() -> u32,
+    draw: impl FnOnce(&mut World) -> R,
+) -> R {
+    struct Restore<'a> {
+        world: &'a mut World,
+        state: Option<SavedState>,
+    }
+    impl Drop for Restore<'_> {
+        fn drop(&mut self) {
+            self.state
+                .take()
+                .unwrap_or_else(|| panic!("picker preview restoration state missing"))
+                .restore(self.world);
+        }
+    }
+    let state = SavedState::capture(world);
+    let restore = Restore {
+        world,
+        state: Some(state),
+    };
+    restore.world.data.flagship = summary.sis;
+    for &species in &summary.ship_list[..usize::from(summary.num_ships)] {
+        let fleets = restore.world.avail_races_ref();
         let Some(id) = fleets.at(usize::from(species)) else {
             continue;
         };
         let template = *fleets.get(id);
-        world.built_ships().clone_fragment(
-            &template,
-            species,
-            0,
-            crate::comm::dispatch::production_captain_name,
-        );
+        restore
+            .world
+            .built_ships()
+            .clone_fragment(&template, species, 0, || {
+                crate::ships::queue::pick_captain_name(&mut random)
+            });
     }
+    draw(restore.world)
 }
 
 pub(super) fn lander(
     kernel: &crate::engine::Kernel,
-    summary: &crate::navigation::abi::SUMMARY_DESC,
+    summary: &crate::engine::save::summary_record::SummaryDesc,
 ) {
     if let Some(owner) = &kernel.lander_resources {
         let assets = crate::planet_side::resources::PlanetSideAssets::retain(owner);
         crate::planet_side::init_lander::draw_lander(
             &crate::graphics::context_abi::ContextLease::require(kernel.radar_context),
             &assets,
-            crate::planet_side::init_lander::LanderStatus::preview(&summary.SS, summary.Flags),
+            crate::planet_side::init_lander::LanderStatus::preview(&summary.sis, summary.flags),
         );
     }
 }
@@ -81,20 +101,20 @@ mod tests {
                     height: 53,
                 },
             });
-            let mut summary = crate::navigation::abi::SUMMARY_DESC {
-                SS: game.world.data.flagship,
-                Activity: 0,
-                Flags: 0,
+            let mut summary = crate::engine::save::summary_record::SummaryDesc {
+                sis: game.world.data.flagship,
+                activity: 0,
+                flags: 0,
                 day_index: 0,
                 month_index: 0,
                 year_index: 0,
-                MCreditLo: 0,
-                MCreditHi: 0,
-                NumShips: 0,
-                NumDevices: 0,
-                ShipList: [0; 12],
-                DeviceList: [0; 16],
-                SaveName: [0; 64],
+                mcredit_lo: 0,
+                mcredit_hi: 0,
+                num_ships: 0,
+                num_devices: 0,
+                ship_list: [0; 12],
+                device_list: [0; 16],
+                save_name: [0; 64],
             };
             lander(&game.kernel, &summary);
             game.kernel.lander_resources =
@@ -104,8 +124,8 @@ mod tests {
             saved.num_landers = 1;
             saved.module_slots[0] = crate::starbase::sis_modules::ModuleType::StorageBay as u8;
             saved.total_element_mass = 475;
-            summary.SS = saved;
-            summary.Flags = 0x52;
+            summary.sis = saved;
+            summary.flags = 0x52;
             lander(&game.kernel, &summary);
             radar.flush();
             let mut pixels = vec![Color::default(); 320 * 240];
@@ -131,6 +151,50 @@ mod tests {
             );
             assert_eq!(game.world.data.flagship.module_slots, current.module_slots);
         });
+    }
+
+    #[test]
+    fn preview_keeps_duplicate_captain_draw_order_and_restores_on_unwind() {
+        let mut world = World::new();
+        let fleet = world.avail_races().alloc().unwrap();
+        world.avail_races().get_mut(fleet).species_id = 0;
+        world.avail_races().put(fleet);
+        let original = world.built_ships().alloc().unwrap();
+        world.built_ships().get_mut(original).crew_level = 42;
+        world.built_ships().put(original);
+        world.data.flagship.crew_enlisted = 17;
+        let mut summary = crate::engine::save::summary_record::SummaryDesc::default();
+        summary.sis.crew_enlisted = 9;
+        summary.num_ships = 2;
+        let mut draws = [4, 4, 5].into_iter();
+        let seen = std::cell::Cell::new(0);
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            with_preview(
+                &mut world,
+                &summary,
+                || {
+                    seen.set(seen.get() + 1);
+                    draws.next().expect("unexpected preview RNG draw")
+                },
+                |world| {
+                    assert_eq!(seen.get(), 3);
+                    assert_eq!(world.data.flagship.crew_enlisted, 9);
+                    let ships = world.built_ships_ref();
+                    assert_eq!(ships.count(), 2);
+                    let first = ships.head().unwrap();
+                    let second = ships.succ(first).unwrap();
+                    assert_eq!(ships.get(first).captains_name_index, 9);
+                    assert_eq!(ships.get(second).captains_name_index, 10);
+                    panic!("drawing failed");
+                },
+            );
+        }));
+        assert!(result.is_err());
+        assert_eq!(seen.get(), 3);
+        assert_eq!(world.data.flagship.crew_enlisted, 17);
+        assert_eq!(world.built_ships_ref().head(), Some(original));
+        assert_eq!(world.built_ships_ref().get(original).crew_level, 42);
+        assert_eq!(world.built_ships_ref().count(), 1);
     }
 
     #[test]

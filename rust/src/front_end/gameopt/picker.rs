@@ -3,6 +3,49 @@
 pub(super) const MAX_SAVED_GAMES: usize = 50;
 pub(super) const SAVES_PER_PAGE: u16 = 5;
 
+pub(super) struct PickerState {
+    pub summary: [crate::engine::save::summary_record::SummaryDesc; MAX_SAVED_GAMES],
+    pub saving: bool,
+    pub success: bool,
+    pub slot: u8,
+}
+
+impl PickerState {
+    pub fn new(
+        summary: [crate::engine::save::summary_record::SummaryDesc; MAX_SAVED_GAMES],
+        saving: bool,
+        slot: u8,
+    ) -> Self {
+        assert!(
+            usize::from(slot) < MAX_SAVED_GAMES,
+            "invalid remembered save slot"
+        );
+        Self {
+            summary,
+            saving,
+            success: false,
+            slot,
+        }
+    }
+
+    pub fn action(&self, abort: bool, cancel: bool, select: bool) -> PickerAction {
+        picker_action(
+            abort,
+            cancel,
+            select,
+            self.saving,
+            self.summary[usize::from(self.slot)].year_index != 0,
+        )
+    }
+
+    pub fn navigate(&mut self, left: bool, right: bool, up: bool, down: bool) -> bool {
+        let next = picker_slot(self.slot, left, right, up, down);
+        let changed = next != self.slot;
+        self.slot = next;
+        changed
+    }
+}
+
 pub(super) fn picker_slot(current: u8, left: bool, right: bool, up: bool, down: bool) -> u8 {
     let mut next = current;
     if left {

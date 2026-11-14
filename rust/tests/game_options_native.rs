@@ -62,6 +62,10 @@ impl InputRuntime for ScriptedInput {
 }
 
 fn options(keys: &[u32]) -> (u32, u8, [u8; 16], [u8; 16]) {
+    options_entry(keys, false)
+}
+
+fn options_entry(keys: &[u32], from_main: bool) -> (u32, u8, [u8; 16], [u8; 16]) {
     use campaign_display::CampaignDisplay;
     use uqm_rust::graphics::context_abi::{ContextFrame, ContextLease};
     use uqm_rust::starbase::ids::{
@@ -71,6 +75,16 @@ fn options(keys: &[u32]) -> (u32, u8, [u8; 16], [u8; 16]) {
     let display = CampaignDisplay::install(&mut game)
         .unwrap_or_else(|error| panic!("options display: {error}"));
     uqm_rust::callback::ffi::Alarm_init();
+    let frames = uqm_rust::graphics::drawable_abi::LoadedDrawable::create(8, 1, 1, 100)
+        .unwrap_or_else(|| panic!("options frames"));
+    game.kernel.play_frame = frames
+        .lease()
+        .frame(0)
+        .unwrap_or_else(|| panic!("options first frame"));
+    game.kernel.misc_data_frame = game.kernel.play_frame;
+    if from_main {
+        game.kernel.last_activity = uqm_rust::engine::world::activity::activity_flags::CHECK_LOAD;
+    }
     game.kernel.screen_context = game.kernel.status_context;
     game.kernel.space_context = game.kernel.status_context;
     game.kernel.star_con_font = game.kernel.tiny_font;
@@ -107,15 +121,27 @@ fn options(keys: &[u32]) -> (u32, u8, [u8; 16], [u8; 16]) {
     let mut io = Io {
         observer: &mut observer,
     };
-    // SAFETY: this serial fixture lends the actual campaign for the whole modal chain.
-    let result = unsafe {
-        uqm_rust::app::bridge::with_game(&mut game, || {
-            uqm_rust::app::bridge::enter(|cx| {
-                uqm_rust::front_end::gameopt::game_options(cx, &mut io, None)
-            })
-        })
-    };
+    let mut battle = uqm_rust::engine::battle::Battle::new();
+    let result = uqm_rust::front_end::gameopt::game_options(
+        &mut Cx {
+            b: &mut battle,
+            world: &mut game.world,
+            kernel: &mut game.kernel,
+            rng: || panic!("settings must not consume RNG"),
+            solar_flight: None,
+            solar_frame: None,
+        },
+        &mut io,
+        None,
+    );
     assert!(runtime.keys.borrow().is_empty());
+    if from_main {
+        assert_ne!(
+            game.world.activity() & uqm_rust::engine::world::activity::activity_flags::CHECK_ABORT,
+            0
+        );
+        assert_eq!(game.kernel.last_save_slot, 0);
+    }
     assert!(game.kernel.sis_highlight.context.borrow().is_none());
     let state = (
         result,
@@ -139,6 +165,21 @@ fn options_cancel_returns_without_changing_campaign_settings() {
     }
     let (result, flags, captain, ship) = options(&[KEY_MENU_CANCEL]);
     assert_eq!((result, flags), (1, 0));
+    assert_eq!(&captain[..2], b"A\0");
+    assert_eq!(&ship[..2], b"A\0");
+}
+
+#[test]
+#[serial_test::serial]
+fn first_open_empty_picker_rejects_empty_selection_and_cancels_with_supplied_context() {
+    if !native_test_process::own_graphics_process(
+        "first_open_empty_picker_rejects_empty_selection_and_cancels_with_supplied_context",
+    ) {
+        return;
+    }
+    let (result, flags, captain, ship) =
+        options_entry(&[KEY_MENU_SELECT, KEY_MENU_RIGHT, KEY_MENU_CANCEL], true);
+    assert_eq!((result, flags), (0, 0));
     assert_eq!(&captain[..2], b"A\0");
     assert_eq!(&ship[..2], b"A\0");
 }
