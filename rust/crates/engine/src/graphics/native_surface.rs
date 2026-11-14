@@ -34,10 +34,11 @@ impl CapturedSurface {
         }
     }
 
-    /// Normalize every definition frame while its ownership is still in Rust.
-    /// Legacy surface generation retains frame zero but does not release a
-    /// separately rescaled elevation frame. Passing matching extents avoids
-    /// that unowned temporary, including for external replacement Earth art.
+    /// Resize every definition frame before surface generation, preserving indexed palettes.
+    ///
+    /// # Panics
+    /// Panics if source frames have retained readers: normalization transfers their
+    /// image allocations into new descriptors and requires exclusive ownership.
     pub fn into_definition(self, width: i16, height: i16) -> Result<Self, &'static str> {
         if let Some(drawable) = &self.drawable {
             let lease = drawable.lease();

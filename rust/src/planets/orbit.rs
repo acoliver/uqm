@@ -421,8 +421,7 @@ pub(crate) mod live {
         sphere: std::rc::Rc<std::cell::RefCell<crate::planets::sphere::SphereState>>,
         animation: std::rc::Rc<crate::engine::kernel::planet_animation::PlanetAnimation>,
     ) -> crate::engine::input::InputFrameHook {
-        // SAFETY: The orbit menu removes this hook before freeing its drawing resources.
-        crate::engine::input::InputFrameHook::new(move |_, _| unsafe {
+        crate::engine::input::InputFrameHook::new(move |_, _| {
             rotate_planet_sphere(&planet, &sphere, &animation, true);
         })
     }

@@ -79,7 +79,7 @@ impl Harness {
         let previous_catalog = uqm_rust::engine::World::current().read(|world| *world.catalog());
         let previous_star = uqm_rust::engine::World::current().read(|world| world.current_star);
         // SAFETY: the serialized harness copies the initialized integer-only catalog.
-        let mut star = Box::new(unsafe { super::starmap_array });
+        let mut star = Box::new(uqm_rust::planets::tables::STARMAP_ARRAY);
         // SAFETY: a star record contains only integer fields; zero initializes its fixture values.
         star[0] = unsafe { std::mem::zeroed() };
         let state = uqm_rust::engine::World::current().write(|world| {

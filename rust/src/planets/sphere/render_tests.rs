@@ -30,7 +30,7 @@ fn retained_pixels_preserve_row_padding_and_survive_owner_release() {
         };
         let mut pixels = [sentinel; 10];
         frame.read_colors(&mut pixels, 5, 2);
-        for row in pixels.chunks_exact(5) {
+        for row in pixels.as_chunks::<5>().0 {
             assert!(row[..3]
                 .iter()
                 .all(|p| (p.r, p.g, p.b, p.a) == (23, 45, 67, 255)));
@@ -244,6 +244,13 @@ fn normalized_definition_frames_keep_pixels_hotspots_and_release_authority() {
         let retained = crate::graphics::context_abi::ContextFrame::retain(std::ptr::NonNull::new(
             source.as_frame(),
         ));
+        let expected = [Color {
+            r: 11,
+            g: 23,
+            b: 47,
+            a: 255,
+        }; 4];
+        retained.write_colors(&expected, 2, 2);
         let alias = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             source.into_definition(4, 6)
         }));
@@ -258,6 +265,10 @@ fn normalized_definition_frames_keep_pixels_hotspots_and_release_authority() {
             a: 0,
         }; 4];
         retained.read_colors(&mut unchanged, 2, 2);
+        assert_eq!(
+            unchanged.map(|color| (color.r, color.g, color.b, color.a)),
+            expected.map(|color| (color.r, color.g, color.b, color.a))
+        );
         assert_eq!(
             (retained.rect().extent.width, retained.rect().extent.height),
             (2, 2)
