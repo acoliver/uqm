@@ -620,3 +620,6 @@ mod tests {
         assert_eq!(zoom_scale(count, count), 1.0);
     }
 }
+
+#[cfg(test)]
+mod render_tests;
