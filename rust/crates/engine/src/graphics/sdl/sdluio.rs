@@ -135,12 +135,12 @@ mod tests {
         // SAFETY: the repository owns the stream and the allocated RWops is consumed by close.
         unsafe {
             assert!(sdluio_load_image(directory.handle().cast(), c"absent.png".as_ptr()).is_null());
-            let file = Box::into_raw(Box::new(
-                crate::io::uio_owned::directory(directory.handle())
-                    .unwrap()
-                    .open_write(std::path::Path::new("data.bin"))
-                    .unwrap(),
-            ));
+            let root = concat!(env!("UQM_RUST_ROOT"), "/../tmp");
+            std::fs::create_dir_all(root).unwrap();
+            let read_write = tempfile::tempfile_in(root).unwrap();
+            let file = Box::into_raw(Box::new(FileStream::new(
+                crate::io::uio_bridge::FileData::File(read_write),
+            )));
             let rw: *mut SDL_RWops = rust_hmalloc(std::mem::size_of::<SDL_RWops>()).cast();
             (*rw).hidden.unknown.data1 = file.cast();
             assert_eq!(sdluio_write(rw, b"abcdef".as_ptr().cast(), 2, 3), 3);

@@ -78,6 +78,8 @@ fn get_mount_registry() -> &'static Mutex<Vfs> {
 
 #[path = "vfs_core.rs"]
 mod vfs_core;
+#[cfg(test)]
+pub(crate) use vfs_core::FileData;
 pub use vfs_core::Vfs;
 
 pub use owned::uio_DirHandle;
