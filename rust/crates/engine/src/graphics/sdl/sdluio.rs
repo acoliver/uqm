@@ -16,7 +16,7 @@ unsafe fn stream(context: *mut SDL_RWops) -> *mut FileStream {
 unsafe fn io_error(error: std::io::Error) {
     let mut message = error.to_string().into_bytes();
     message.push(0);
-    SDL_SetError(c"%s".as_ptr(), message.as_ptr().cast());
+    SDL_SetError(c"%s".as_ptr(), message.as_ptr().cast::<c_char>());
 }
 
 /// # Safety
