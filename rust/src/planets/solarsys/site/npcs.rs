@@ -18,10 +18,7 @@ impl Npcs for Site<'_, '_, '_> {
         let solar_frame = *game.solar_geometry();
         let world = &mut *game.world;
 
-        // SAFETY: the NPC hook owns the world and its initialized group files.
-        unsafe {
-            initialize_solar_groups(world, world.data.game.battle_group_ref, &solar_frame) != 0
-        }
+        initialize_solar_groups(world, world.data.game.battle_group_ref, &solar_frame) != 0
     }
     fn clear_battle_group_ref(&mut self) {
         let mut game = self.game.borrow_mut();
@@ -34,22 +31,19 @@ impl Npcs for Site<'_, '_, '_> {
         let solar_frame = *game.solar_geometry();
         let world = &mut *game.world;
 
-        // SAFETY: the NPC hook owns the world and its initialized group files.
-        unsafe { build_groups(world, &solar_frame) };
+        build_groups(world, &solar_frame);
     }
     fn load_ip_groups(&mut self) {
         let mut game = self.game.borrow_mut();
         let world = &mut *game.world;
 
-        // SAFETY: the NPC hook owns the world and its initialized group files.
-        unsafe { get_group_info(world, GROUPS_RANDOM, GROUP_LOAD_IP) };
+        get_group_info(world, GROUPS_RANDOM, GROUP_LOAD_IP);
     }
     fn save_ip_groups(&mut self) {
         let mut game = self.game.borrow_mut();
         let world = &mut *game.world;
 
-        // SAFETY: the NPC hook owns the world and its initialized group files.
-        unsafe { group_storage::put_group_info(world, GROUPS_RANDOM, GROUP_SAVE_IP) };
+        group_storage::put_group_info(world, GROUPS_RANDOM, GROUP_SAVE_IP);
     }
     fn reinit_npc_built_ship_q(&mut self) {
         let mut game = self.game.borrow_mut();
@@ -108,8 +102,7 @@ impl FleetGroups for Site<'_, '_, '_> {
         let mut game = self.game.borrow_mut();
         let world = &mut *game.world;
 
-        // SAFETY: the NPC hook owns the world and its initialized group files.
-        unsafe { group_storage::put_group_info(world, GROUPS_ADD_NEW, 1) }
+        group_storage::put_group_info(world, GROUPS_ADD_NEW, 1)
     }
     fn reinit_built_queue(&mut self) {
         let mut game = self.game.borrow_mut();
@@ -139,8 +132,7 @@ impl crate::planets::generate::shof::ShofixtiSite for Site<'_, '_, '_> {
         let mut game = self.game.borrow_mut();
         let world = &mut *game.world;
 
-        // SAFETY: the NPC hook owns the world and its initialized group files.
-        unsafe { group_storage::put_group_info(world, offset, 1) }
+        group_storage::put_group_info(world, offset, 1)
     }
 }
 
@@ -193,8 +185,7 @@ impl crate::planets::generate::sam::GuardSite for Site<'_, '_, '_> {
         let mut game = self.game.borrow_mut();
         let world = &mut *game.world;
 
-        // SAFETY: the NPC hook owns the world and its initialized group files.
-        unsafe { group_storage::put_group_info(world, reference, group) };
+        group_storage::put_group_info(world, reference, group);
     }
     fn reinit_built_queue(&mut self) {
         let mut game = self.game.borrow_mut();
@@ -208,7 +199,7 @@ impl crate::planets::generate::sam::GuardSite for Site<'_, '_, '_> {
         let world = &mut *game.world;
 
         // SAFETY: the reference was stored in this world's group files.
-        unsafe { initialize_solar_groups(world, reference, &solar_frame) };
+        initialize_solar_groups(world, reference, &solar_frame);
     }
     fn planet_outer_location(&self, planet: u16) -> crate::engine::graphics::native_abi::POINT {
         let game = self.game.borrow();

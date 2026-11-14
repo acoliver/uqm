@@ -466,9 +466,74 @@ pub unsafe extern "C" fn DrawablesIntersect(
     )
 }
 
+/// Collision state whose frame stays retained while the legacy sweep updates its endpoint.
+pub struct FrameIntersection {
+    control: IntersectControl,
+    frame: super::context_abi::ContextFrame,
+}
+
+impl FrameIntersection {
+    pub fn new(frame: super::context_abi::ContextFrame, origin: Point) -> Self {
+        Self {
+            control: IntersectControl {
+                last_time_val: 0,
+                EndPoint: origin,
+                IntersectStamp: Stamp {
+                    origin,
+                    frame: frame.as_raw(),
+                },
+            },
+            frame,
+        }
+    }
+
+    pub fn set_frame(&mut self, frame: super::context_abi::ContextFrame, origin: Point) {
+        self.control.IntersectStamp = Stamp {
+            origin,
+            frame: frame.as_raw(),
+        };
+        self.control.EndPoint = origin;
+        self.frame = frame;
+    }
+
+    pub fn intersect(&mut self, other: &mut Self, max_time: u16) -> u16 {
+        self.frame.as_raw();
+        other.frame.as_raw();
+        // SAFETY: the controls are unique and both frame owners retain their allocations
+        // on the graphics thread for the complete sweep, including endpoint updates.
+        unsafe { DrawablesIntersect(&mut self.control, &mut other.control, max_time) }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[serial_test::serial]
+    fn retained_collision_controls_keep_cached_time_and_own_replaced_frames() {
+        let owner = super::super::drawable_abi::LoadedDrawable::create(2, 0, 0, 2).unwrap();
+        let origin = Point { x: 10, y: -20 };
+        let mut collision = FrameIntersection::new(owner.lease().context_frame(0), origin);
+        assert_eq!(collision.control.IntersectStamp.origin, origin);
+        assert_eq!(collision.control.EndPoint, origin);
+        collision.control.last_time_val = 17;
+        collision.control.EndPoint = Point { x: 1, y: 2 };
+        let replacement = Point { x: -30, y: 40 };
+        collision.set_frame(owner.lease().context_frame(1), replacement);
+        let bounds = owner.lease().frame_rect(1);
+        drop(owner);
+        assert_eq!(collision.control.last_time_val, 17);
+        assert_eq!(collision.control.EndPoint, replacement);
+        assert_eq!(collision.control.IntersectStamp.origin, replacement);
+        assert_eq!(
+            collision.control.IntersectStamp.frame,
+            collision.frame.as_raw()
+        );
+        assert_eq!(collision.frame.rect(), bounds);
+        assert_eq!(collision.frame.frame_count(), 2);
+    }
+
     #[test]
     fn box_intersection_clips_edges_and_rejects_empty() {
         unsafe {

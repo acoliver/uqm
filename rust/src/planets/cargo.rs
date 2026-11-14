@@ -28,8 +28,6 @@ pub(crate) mod live {
     use crate::engine::{battle::Cx, observe::Io};
     use std::ffi::CString;
 
-    use crate::mainloop::input_abi::live::SetMenuSounds;
-
     const CARGO_STRINGS: i32 = 162;
 
     fn description(cx: &mut Cx<'_>, element: u8) {
@@ -47,7 +45,7 @@ pub(crate) mod live {
         current: u8,
     }
 
-    unsafe fn discard(
+    fn discard(
         cx: &mut Cx<'_>,
         input: &crate::engine::input::InputSession,
         menu: &mut Menu,
@@ -82,21 +80,18 @@ pub(crate) mod live {
                 menu.current = next;
             }
         }
-        // SAFETY: the admitted menu keeps initialized game-thread pacing callbacks live.
-        cx.with_legacy(|| crate::battle::c_bridge::SleepThread(840 / 30));
+        cx.kernel.input_runtime().sleep(cx, 840 / 30);
         1
     }
 
-    /// # Safety
-    /// Call on the game thread with campaign globals and screen resources initialized.
-    pub unsafe fn cargo_menu(cx: &mut Cx<'_>, io: &mut Io<'_>) {
+    pub fn cargo_menu(cx: &mut Cx<'_>, io: &mut Io<'_>) {
         let runtime = cx.kernel.input_runtime();
         let input = runtime.input();
         let mut menu = Menu { current: 0 };
         let display = super::display::CargoDisplay::new(cx.kernel);
         display.draw(cx.world, u8::MAX, 0);
         description(cx, 0);
-        cx.with_legacy(|| SetMenuSounds(input, 15, 16));
+        input.controls().set_menu_sounds(15, 16);
         cx.run_input(io, true, |cx, _| {
             discard(cx, input, &mut menu, &display) != 0
         });

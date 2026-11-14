@@ -267,7 +267,7 @@ pub(crate) mod engine {
         };
         if let Some(phoenix) = phoenix.filter(|_| cx.ship_state(ss).control & STANDARD_RATING != 0)
         {
-            cx.unlink(phoenix);
+            crate::battle::sounds::engine::unlink(cx, phoenix);
             cx.dispose(phoenix);
             cx.race_stats_mut(ss).state = RaceState::Pkunk {
                 phoenix: None,

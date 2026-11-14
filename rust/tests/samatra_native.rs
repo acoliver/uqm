@@ -223,7 +223,7 @@ fn identity_does_not_depend_on_scrolling_or_survivor_order() {
                 let generator = generator.unwrap_or_else(|| panic!("eight allocated generators"));
                 uqm_rust::app::bridge::enter(|cx| {
                     cx.element_mut(generator).current.location = POINT { x: 17, y: 31 };
-                    cx.unlink(generator);
+                    uqm_rust::battle::sounds::engine::unlink(cx, generator);
                     cx.put(generator);
                 });
                 call_element("ships::races::samatra::generator_death", generator);

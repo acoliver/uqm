@@ -11,7 +11,7 @@ use crate::sound::heart_ffi::{
     get_positional_object, set_positional_object, update_sound_position,
 };
 
-pub(crate) mod engine {
+pub mod engine {
     use super::*;
     use crate::ships::native::abi::*;
 
@@ -93,6 +93,93 @@ pub(crate) mod engine {
             }
             i += 1;
             cx.kernel.sounds.count -= 1;
+        }
+    }
+
+    pub fn unlink(cx: &mut crate::engine::battle::Cx<'_>, id: crate::engine::battle::ElementId) {
+        assert!(cx.elements().linked(id), "element is not linked");
+        if cx.kernel.configuration.preferences().stereo_sfx != 0 {
+            remove_sounds(cx.kernel, Some(id));
+        }
+        cx.unlink_storage(id);
+    }
+
+    #[cfg(test)]
+    mod unlink_tests {
+        use crate::engine::{
+            battle::{Battle, Cx},
+            Game,
+        };
+        use crate::ships::native::abi::FIRST_SFX_CHANNEL;
+        use crate::sound::heart_ffi::{get_positional_object, set_positional_object};
+
+        #[test]
+        #[serial_test::serial]
+        fn unlink_preserves_queue_order_and_detaches_only_stereo_sources() {
+            for stereo in [0, 1] {
+                let mut game = Game::new();
+                let mut preferences = game.kernel.configuration.preferences();
+                preferences.stereo_sfx = stereo;
+                game.kernel.configuration.set_preferences(preferences);
+                let mut battle = Battle::new();
+                let mut cx = Cx::new(
+                    &mut battle,
+                    &mut game.world,
+                    &mut game.kernel,
+                    crate::math::random,
+                );
+                let first = cx.alloc_element().unwrap();
+                let second = cx.alloc_element().unwrap();
+                cx.put(first);
+                cx.put(second);
+                let bank = crate::sound::owned_bank::LoadedSoundBank::from_samples(vec![
+                    crate::sound::types::SoundSample::new(),
+                    crate::sound::types::SoundSample::new(),
+                ]);
+                cx.kernel.sounds.push(Some(bank.clip(0)), Some(first));
+                cx.kernel.sounds.push(Some(bank.clip(1)), Some(second));
+                set_positional_object(FIRST_SFX_CHANNEL, first.sound_token());
+                set_positional_object(FIRST_SFX_CHANNEL + 1, second.sound_token());
+                super::unlink(&mut cx, first);
+                assert!(!cx.elements().linked(first));
+                assert!(cx.elements().contains(first));
+                assert_eq!(cx.elements().head(), Some(second));
+                assert_eq!(cx.elements().tail(), Some(second));
+                assert_eq!(cx.kernel.sounds.count, 2);
+                let retained = if stereo == 0 { Some(first) } else { None };
+                assert_eq!(&cx.kernel.sounds.objects[..2], &[retained, Some(second)]);
+                assert_eq!(
+                    get_positional_object(FIRST_SFX_CHANNEL),
+                    retained.map_or(0, |id| id.sound_token())
+                );
+                assert_eq!(
+                    get_positional_object(FIRST_SFX_CHANNEL + 1),
+                    second.sound_token()
+                );
+                for index in 0..2 {
+                    assert_eq!(
+                        cx.kernel.sounds.sounds[index].as_ref().unwrap().identity(),
+                        bank.clip(index as u16).identity()
+                    );
+                }
+                set_positional_object(FIRST_SFX_CHANNEL, 0);
+                set_positional_object(FIRST_SFX_CHANNEL + 1, 0);
+            }
+        }
+
+        #[test]
+        #[should_panic(expected = "element is not linked")]
+        fn unlink_rejects_an_allocated_but_unlinked_element() {
+            let mut game = Game::new();
+            let mut battle = Battle::new();
+            let mut cx = Cx::new(
+                &mut battle,
+                &mut game.world,
+                &mut game.kernel,
+                crate::math::random,
+            );
+            let id = cx.alloc_element().unwrap();
+            super::unlink(&mut cx, id);
         }
     }
 

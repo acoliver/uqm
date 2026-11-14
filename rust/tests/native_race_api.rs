@@ -24,7 +24,7 @@ fn ship_teardown_is_idempotent_without_an_arena_and_preserves_encounter_recovery
                 uqm_rust::game_init::space_resources::uninit_ships(cx);
                 assert_eq!(cx.elements().head(), Some(element));
                 assert_eq!(cx.world.activity(), SUPER_MELEE as u16);
-                cx.unlink(element);
+                uqm_rust::battle::sounds::engine::unlink(cx, element);
                 cx.dispose(element);
 
                 cx.world
@@ -133,7 +133,7 @@ fn ordered_lifecycle_preserves_reverse_order_exhaustion_and_primitive_reuse() {
                 assert_eq!(cx.elements().pred(a), Some(c));
                 assert_eq!(cx.elements().pred(c), Some(b));
                 for id in [b, c, a] {
-                    cx.unlink(id);
+                    uqm_rust::battle::sounds::engine::unlink(cx, id);
                     cx.dispose(id);
                     assert!(!cx.elements().contains(id));
                 }

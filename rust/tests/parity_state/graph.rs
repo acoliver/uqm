@@ -352,7 +352,7 @@ impl Drop for ElementRecord {
                 if cx.elements().contains(self.id) {
                     (*self.pointer).PrimIndex = self.primitive;
                     if cx.elements().linked(self.id) {
-                        cx.unlink(self.id);
+                        uqm_rust::battle::sounds::engine::unlink(cx, self.id);
                     }
                     cx.dispose(self.id);
                 }

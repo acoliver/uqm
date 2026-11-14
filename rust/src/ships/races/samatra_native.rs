@@ -127,7 +127,7 @@ pub(crate) mod engine {
                 cx.element_mut(e).life = life;
                 cx.element_mut(e).flags &= !((DISAPPEARING | NONSOLID | COLLISION) as u16);
                 if let Some(blast) = blast {
-                    cx.unlink(blast);
+                    crate::battle::sounds::engine::unlink(cx, blast);
                     cx.dispose(blast);
                 }
             }
@@ -240,7 +240,7 @@ pub(crate) mod engine {
                 cx.element_mut(e).flags &= !((DISAPPEARING | NONSOLID | COLLISION) as u16);
                 cx.element_mut(e).life = NORMAL_LIFE as COUNT;
                 if let Some(blast) = blast {
-                    cx.unlink(blast);
+                    crate::battle::sounds::engine::unlink(cx, blast);
                     cx.dispose(blast);
                 }
             }

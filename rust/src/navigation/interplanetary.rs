@@ -1,12 +1,8 @@
 //! Interplanetary group display, pursuit, collision and flagship movement.
 
-#[cfg(not(test))]
 use crate::battle::context_access::navigation::NavigationOps;
-#[cfg(not(test))]
-use crate::battle::context_access::ContextOps;
-#[cfg(not(test))]
+use crate::battle::sounds::engine::unlink;
 use crate::engine::StoryKey;
-#[cfg(not(test))]
 pub use live::{do_missions, notify_others};
 
 const MAX_ZOOM: i16 = 128 << 6;
@@ -24,7 +20,6 @@ fn adjust_zoom(zoom: i16, dx: &mut i16, dy: &mut i16) {
     *dy >>= shift;
 }
 
-#[cfg(not(test))]
 pub(crate) mod live {
     use super::*;
     use crate::battle::element::{
@@ -492,7 +487,7 @@ pub(crate) mod live {
         if cx.element_mut(element).thrust == 0 {
             if let Some(next) = cx.elements().succ(element) {
                 if Some(next) != cx.elements().tail() {
-                    cx.unlink(next);
+                    unlink(cx, next);
                     cx.put(next);
                 }
             }
@@ -573,6 +568,64 @@ pub(crate) mod live {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn real_interplanetary_hooks_compile_in_the_library_test_target() {
+        let _: fn(&mut crate::engine::battle::Cx<'_>, u16, u8) = live::notify_others;
+        let _: fn(&mut crate::engine::battle::Cx<'_>) = live::do_missions;
+        let _: fn(&mut crate::engine::battle::Cx<'_>, crate::engine::battle::ElementId) =
+            live::flagship_preprocess;
+    }
+
+    #[test]
+    fn broadcasts_update_only_the_matching_race_and_preserve_reforming_counters() {
+        use crate::engine::{
+            battle::{Battle, Cx},
+            world::queues::IpGroup,
+            Game,
+        };
+        let mut game = Game::new();
+        let mut ids = Vec::new();
+        for (race, task) in [
+            (4, IpGroup::EXPLORE),
+            (4, IpGroup::EXPLORE | IpGroup::REFORM_GROUP),
+            (5, IpGroup::EXPLORE),
+        ] {
+            let mut groups = game.world.ip_groups();
+            let id = groups.alloc().unwrap();
+            let group = groups.get_mut(id);
+            group.race_id = race;
+            group.task = task;
+            group.dest_loc = 2;
+            group.orbit_pos = 7;
+            group.group_counter = 123;
+            groups.put(id);
+            ids.push(id);
+        }
+        let mut battle = Battle::new();
+        let mut cx = Cx::new(&mut battle, &mut game.world, &mut game.kernel, || 3);
+        live::notify_others(&mut cx, 4, 6);
+        for id in &ids[..2] {
+            let groups = cx.world.ip_groups_ref();
+            assert_eq!(groups.get(*id).dest_loc, 6);
+            assert_ne!(groups.get(*id).task & IpGroup::IGNORE_FLAGSHIP, 0);
+        }
+        live::notify_others(&mut cx, 4, 0);
+        live::notify_others(&mut cx, 4, u8::MAX);
+        let groups = cx.world.ip_groups_ref();
+        for (index, id) in ids[..2].iter().enumerate() {
+            let group = groups.get(*id);
+            assert_eq!((group.dest_loc, group.orbit_pos), (6, 3));
+            assert_ne!(group.task & IpGroup::IGNORE_FLAGSHIP, 0);
+            assert_eq!(group.group_counter, if index == 0 { 3 << 4 } else { 123 });
+        }
+        let other = groups.get(ids[2]);
+        assert_eq!(
+            (other.dest_loc, other.orbit_pos, other.group_counter),
+            (2, 7, 123)
+        );
+        assert_eq!(other.task, IpGroup::EXPLORE);
+    }
 
     #[test]
     fn zoom_adjustment_keeps_signed_right_shift_rounding() {

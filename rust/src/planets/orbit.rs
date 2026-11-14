@@ -17,7 +17,11 @@ pub struct OrbitServices {
         &mut crate::planets::solar_system::SolarSystem,
         OrbitSubmenu,
     ) -> bool,
-    pub save_location: fn(&mut crate::engine::World, &crate::planets::solar_system::SolarSystem),
+    pub save_location: fn(
+        &mut crate::engine::World,
+        &crate::engine::Kernel,
+        &crate::planets::solar_system::SolarSystem,
+    ),
     pub store_groups: fn(&mut crate::engine::World),
 }
 

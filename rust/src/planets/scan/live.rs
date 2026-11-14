@@ -296,7 +296,7 @@ fn dispatch_lander(
         spawn_fwiffo(cx.world, services);
         cx.world.next_activity |= CHECK_LOAD;
         cx.world.set_activity(cx.world.activity() | START_ENCOUNTER);
-        (services.save_location)(cx.world, solar);
+        (services.save_location)(cx.world, cx.kernel, solar);
         return false;
     }
     redraw_planet_orbit_display(cx, planet, scan);

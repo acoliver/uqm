@@ -80,7 +80,7 @@ fn gravity_reads_next_positions_and_preserves_queue_order() {
                 cx.element_mut(ship.id).flags |= PRE_PROCESS as u16;
                 assert!(cx.gravity(ship.id));
                 assert_eq!(cx.elements().head(), head);
-                cx.unlink(planet);
+                uqm_rust::battle::sounds::engine::unlink(cx, planet);
                 cx.dispose(planet);
             });
         }
@@ -133,7 +133,7 @@ fn ion_trail_is_inserted_before_the_ship_and_keeps_its_owner() {
                 );
                 assert_eq!((state.next.location.x, state.next.location.y), (4000, 4016));
                 assert_eq!(cx.primitive_style(trail).kind, gfx_object_POINT_PRIM as u8);
-                cx.unlink(trail);
+                uqm_rust::battle::sounds::engine::unlink(cx, trail);
                 cx.dispose(trail);
             });
         }
