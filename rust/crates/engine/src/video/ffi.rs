@@ -195,9 +195,26 @@ pub struct TFB_VideoDecoderFuncs {
 #[repr(C)]
 pub struct TFB_RustDukVideoDecoder {
     pub base: TFB_VideoDecoder,
-    pub rust_decoder: *mut c_void,
-    pub scaler: *mut c_void,
+    pub rust_decoder: Option<Box<DukVideoDecoder>>,
+    pub scaler: Option<Box<VideoScaler>>,
     pub last_error: i32,
+}
+
+fn with_decoder_record<R>(
+    decoder: *mut TFB_VideoDecoder,
+    format: Option<*const TFB_PixelFormat>,
+    apply: impl FnOnce(&mut TFB_RustDukVideoDecoder, Option<&TFB_PixelFormat>) -> R,
+) -> Option<R> {
+    // SAFETY: only the serialized vtable calls this boundary. Its registry retains a
+    // zero-initialized, GetStructSize-sized record and the optional Init format.
+    // Zero is the documented None representation of each Option<Box<_>> payload.
+    let (record, format) = unsafe {
+        (
+            decoder.cast::<TFB_RustDukVideoDecoder>().as_mut()?,
+            format.and_then(|format| format.as_ref()),
+        )
+    };
+    Some(apply(record, format))
 }
 
 static RUST_DUKV_FORMAT: Mutex<Option<TFB_PixelFormat>> = Mutex::new(None);
@@ -242,35 +259,23 @@ extern "C" fn rust_dukv_GetStructSize() -> u32 {
     reason = "function name matches the legacy C decoder vtable ABI; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
 )]
 extern "C" fn rust_dukv_GetError(decoder: *mut TFB_VideoDecoder) -> c_int {
-    if decoder.is_null() {
-        return -1;
-    }
-    unsafe {
-        let rust_dec = decoder as *mut TFB_RustDukVideoDecoder;
-        (*rust_dec).last_error
-    }
+    with_decoder_record(decoder, None, |record, _| record.last_error).unwrap_or(-1)
 }
 
 extern "C" fn rust_dukv_init(decoder: *mut TFB_VideoDecoder, fmt: *mut TFB_PixelFormat) -> bool {
-    if decoder.is_null() {
-        return false;
-    }
-
-    unsafe {
-        let rust_dec = decoder as *mut TFB_RustDukVideoDecoder;
-        (*rust_dec).rust_decoder = ptr::null_mut();
-        (*rust_dec).scaler = ptr::null_mut();
-        (*rust_dec).last_error = 0;
-
-        if !fmt.is_null() {
-            (*decoder).format = fmt;
+    with_decoder_record(decoder, Some(fmt), |record, format| {
+        record.rust_decoder = None;
+        record.scaler = None;
+        record.last_error = 0;
+        if let Some(format) = format {
+            record.base.format = fmt;
             if let Ok(mut guard) = RUST_DUKV_FORMAT.lock() {
-                *guard = Some(*fmt);
+                *guard = Some(*format);
             }
         }
-    }
-
-    true
+        true
+    })
+    .unwrap_or(false)
 }
 
 #[allow(
@@ -278,21 +283,10 @@ extern "C" fn rust_dukv_init(decoder: *mut TFB_VideoDecoder, fmt: *mut TFB_Pixel
     reason = "function name matches the legacy C decoder vtable ABI"
 )]
 extern "C" fn rust_dukv_Term(decoder: *mut TFB_VideoDecoder) {
-    if decoder.is_null() {
-        return;
-    }
-
-    unsafe {
-        let rust_dec = decoder as *mut TFB_RustDukVideoDecoder;
-        if !(*rust_dec).rust_decoder.is_null() {
-            let _ = Box::from_raw((*rust_dec).rust_decoder as *mut DukVideoDecoder);
-            (*rust_dec).rust_decoder = ptr::null_mut();
-        }
-        if !(*rust_dec).scaler.is_null() {
-            let _ = Box::from_raw((*rust_dec).scaler as *mut VideoScaler);
-            (*rust_dec).scaler = ptr::null_mut();
-        }
-    }
+    with_decoder_record(decoder, None, |record, _| {
+        record.rust_decoder = None;
+        record.scaler = None;
+    });
 }
 
 #[allow(
@@ -339,16 +333,15 @@ extern "C" fn rust_dukv_Open(
     base.cur_frame = 0;
     base.error = 0;
     base.dir = dir;
-    rust_dec.rust_decoder = Box::into_raw(Box::new(duk)).cast();
+    rust_dec.rust_decoder = Some(Box::new(duk));
     let scale = calculate_video_scale(width, height);
     if scale > 1 {
-        rust_dec.scaler = Box::into_raw(Box::new(VideoScaler::new(
+        rust_dec.scaler = Some(Box::new(VideoScaler::new(
             width,
             height,
             width * scale,
             height * scale,
-        )))
-        .cast();
+        )));
     }
     true
 }
@@ -424,11 +417,9 @@ extern "C" fn rust_dukv_DecodeNext(decoder: *mut TFB_VideoDecoder) -> c_int {
 
     unsafe {
         let rust_dec = decoder as *mut TFB_RustDukVideoDecoder;
-        if (*rust_dec).rust_decoder.is_null() {
+        let Some(duk) = (*rust_dec).rust_decoder.as_deref_mut() else {
             return -1;
-        }
-
-        let duk = &mut *((*rust_dec).rust_decoder as *mut DukVideoDecoder);
+        };
         let cur_frame = (*decoder).cur_frame;
 
         if cur_frame >= (*decoder).frame_count {
@@ -447,8 +438,7 @@ extern "C" fn rust_dukv_DecodeNext(decoder: *mut TFB_VideoDecoder) -> c_int {
 
                 if let Some(get_canvas_line) = (*decoder).callbacks.GetCanvasLine {
                     let fmt = &*(*decoder).format;
-                    if !(*rust_dec).scaler.is_null() {
-                        let scaler = &mut *((*rust_dec).scaler as *mut VideoScaler);
+                    if let Some(scaler) = (*rust_dec).scaler.as_deref_mut() {
                         if let Some(scaled_pixels) = scaler.scale(&frame.data) {
                             let (dst_w, dst_h) = scaler.dst_dimensions();
                             let scaled_frame = VideoFrame {
@@ -493,20 +483,18 @@ extern "C" fn rust_dukv_DecodeNext(decoder: *mut TFB_VideoDecoder) -> c_int {
     reason = "function name matches the legacy C decoder vtable ABI; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
 )]
 extern "C" fn rust_dukv_SeekFrame(decoder: *mut TFB_VideoDecoder, frame: u32) -> u32 {
-    if decoder.is_null() {
-        return 0;
-    }
-    unsafe {
-        let frame_count = (*decoder).frame_count;
+    with_decoder_record(decoder, None, |record, _| {
+        let frame_count = record.base.frame_count;
         let target = if frame >= frame_count {
             frame_count.saturating_sub(1)
         } else {
             frame
         };
-        (*decoder).cur_frame = target;
-        (*decoder).pos = target as f32 / DUCK_FPS;
+        record.base.cur_frame = target;
+        record.base.pos = target as f32 / DUCK_FPS;
         target
-    }
+    })
+    .unwrap_or(0)
 }
 
 #[allow(
@@ -529,10 +517,7 @@ extern "C" fn rust_dukv_SeekTime(decoder: *mut TFB_VideoDecoder, time: f32) -> f
     reason = "function name matches the legacy C decoder vtable ABI; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
 )]
 extern "C" fn rust_dukv_GetFrame(decoder: *mut TFB_VideoDecoder) -> u32 {
-    if decoder.is_null() {
-        return 0;
-    }
-    unsafe { (*decoder).cur_frame }
+    with_decoder_record(decoder, None, |record, _| record.base.cur_frame).unwrap_or(0)
 }
 
 #[allow(
@@ -540,10 +525,7 @@ extern "C" fn rust_dukv_GetFrame(decoder: *mut TFB_VideoDecoder) -> u32 {
     reason = "function name matches the legacy C decoder vtable ABI; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
 )]
 extern "C" fn rust_dukv_GetTime(decoder: *mut TFB_VideoDecoder) -> f32 {
-    if decoder.is_null() {
-        return 0.0;
-    }
-    unsafe { (*decoder).pos }
+    with_decoder_record(decoder, None, |record, _| record.base.pos).unwrap_or(0.0)
 }
 
 pub static RUST_DUKV_DECODER_VTBL: TFB_VideoDecoderFuncs = TFB_VideoDecoderFuncs {
