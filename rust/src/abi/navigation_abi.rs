@@ -1656,8 +1656,6 @@ extern "C" {
     pub fn uninit_game_structures();
 }
 
-#[cfg(not(test))]
-pub use crate::front_end::fmv::runtime::DoShipSpin;
 
 pub const KEY_UP: _bindgen_ty_10 = 0;
 pub const KEY_DOWN: _bindgen_ty_10 = 1;
