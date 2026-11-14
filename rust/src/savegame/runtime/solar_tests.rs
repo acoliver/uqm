@@ -9,8 +9,9 @@
 //! `GetNamedPlanetaryBody`/`GetPlanetOrMoonName` read from solarsys.c.
 
 use super::solar::*;
-use crate::c_bindings::global_state;
+use crate::engine::save::summary as summary_values;
 use crate::engine::world::generation::Body;
+use crate::planets::generate::identities;
 use crate::planets::solar_system::SolarSystem;
 use crate::savegame::types::SIS_NAME_SIZE;
 use std::ops::{Deref, DerefMut};
@@ -113,11 +114,11 @@ fn named(system: &System, star: Option<u8>) -> String {
 
 #[test]
 fn the_header_numbers_are_the_ones_worked_out_from_gamestr_h_and_gendef_h() {
-    assert_eq!(global_state::PLANET_NUMBER_BASE as u16, PLANET_BASE);
-    assert_eq!(global_state::STARBASE_STRING_BASE as u16, STARBASE_BASE);
-    assert_eq!(global_state::SOL_DEFINED as u8, SOL);
-    assert_eq!(global_state::SPATHI_DEFINED as u8, SPATHI);
-    assert_eq!(global_state::SAMATRA_DEFINED as u8, SAMATRA);
+    assert_eq!(summary_values::PLANET_NUMBER_BASE as u16, PLANET_BASE);
+    assert_eq!(summary_values::STARBASE_STRING_BASE as u16, STARBASE_BASE);
+    assert_eq!(summary_values::SOL_DEFINED as u8, SOL);
+    assert_eq!(identities::SPATHI_DEFINED as u8, SPATHI);
+    assert_eq!(summary_values::SAMATRA_DEFINED as u8, SAMATRA);
     assert_eq!(PLANET_BASE + 32, super::summary::SA_MATRA_STRING);
 }
 
@@ -178,7 +179,7 @@ fn the_outer_system_keeps_the_flagships_planet_name() {
 
 #[test]
 fn every_planet_of_sol_is_named_by_its_planet_number() {
-    for planet in 0..global_state::MAX_PLANETS as usize {
+    for planet in 0..16 {
         let system = System::orbiting_planet(planet);
         assert_eq!(
             named(&system, Some(SOL)),
@@ -222,8 +223,8 @@ fn the_other_moons_of_sol_take_the_flagship_name_and_a_letter() {
         (5, 0),
         (7, 0),
     ];
-    for planet in 0..global_state::MAX_PLANETS as usize {
-        for moon in 0..global_state::MAX_MOONS as usize {
+    for planet in 0..16 {
+        for moon in 0..4 {
             if named_moons.contains(&(planet, moon)) {
                 continue;
             }

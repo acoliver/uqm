@@ -634,7 +634,7 @@ unsafe fn do_solar_sys_menu(
     cx: &mut Cx<'_>,
     io: &mut Io<'_>,
     solar: &mut SolarSystem,
-    menu: &mut c::MENU_STATE,
+    menu: &mut crate::ships::native::abi::MENU_STATE,
 ) -> c::BOOLEAN {
     let runtime = cx.kernel.input_runtime();
     let input = runtime.input();
@@ -709,7 +709,7 @@ unsafe fn do_solar_sys_menu(
 unsafe fn solar_sys_menu(cx: &mut Cx<'_>, io: &mut Io<'_>, solar: &mut SolarSystem) {
     let runtime = cx.kernel.input_runtime();
     let input = runtime.input();
-    let mut menu: c::MENU_STATE = std::mem::zeroed();
+    let mut menu: crate::ships::native::abi::MENU_STATE = std::mem::zeroed();
     let dimensions = cx.screen_dimensions();
     if cx.kernel.last_activity == CHECK_LOAD {
         menu.CurState = GAME_MENU;

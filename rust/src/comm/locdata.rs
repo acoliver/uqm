@@ -6,7 +6,7 @@ use crate::comm::Comm;
 use std::ffi::{c_char, c_void};
 
 use crate::battle::velocity::VelocityDesc;
-use crate::c_bindings::{assert_c_layout, global_state};
+use crate::c_bindings::assert_c_layout;
 
 use super::types::{AnimationDescData, CommData, TextAlign, TextValign, MAX_ANIMATIONS};
 
@@ -58,17 +58,17 @@ pub use crate::ships::native::abi::SIS_STATE as CSisState;
 mod layout {
     use super::*;
 
-    assert_c_layout!(CPoint, global_state::POINT { x: x, y: y });
+    assert_c_layout!(CPoint, crate::graphics::native_abi::POINT { x: x, y: y });
     assert_c_layout!(
         CStamp,
-        global_state::STAMP {
+        crate::graphics::native_abi::STAMP {
             origin: origin,
             frame: frame
         }
     );
     assert_c_layout!(
         VelocityDesc,
-        global_state::VELOCITY_DESC {
+        crate::ships::native::abi::VELOCITY_DESC {
             travel_angle: travel_angle,
             vector: vector,
             fract: fract,
@@ -78,7 +78,7 @@ mod layout {
     );
     assert_c_layout!(
         CAnimationDesc,
-        global_state::ANIMATION_DESC {
+        crate::ships::native::abi::ANIMATION_DESC {
             start_index: StartIndex,
             num_frames: NumFrames,
             anim_flags: AnimFlags,
@@ -91,7 +91,7 @@ mod layout {
     );
     assert_c_layout!(
         CLocData,
-        global_state::LOCDATA {
+        crate::ships::native::abi::LOCDATA {
             init_encounter_func: init_encounter_func,
             post_encounter_func: post_encounter_func,
             uninit_encounter_func: uninit_encounter_func,

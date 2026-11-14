@@ -33,7 +33,7 @@ use planets_common::{
     collect, orbit_cases, orbit_line, render_fixture, star_type_byte, world_cases, world_line,
     Generators, OrbitCase, WorldCase, PRESET_LIFE,
 };
-use uqm_rust::c_bindings::global_state::POINT;
+use uqm_rust::graphics::native_abi::POINT;
 use uqm_rust::math::RandomContext;
 use uqm_rust::savegame::runtime::star::{CStarDesc, CATALOG_LEN};
 

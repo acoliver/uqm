@@ -3,7 +3,7 @@
 use crate::comm::Comm;
 use crate::engine::StoryKey;
 
-use crate::c_bindings::global_state::NUMBER_SPEECH_DESC;
+use crate::ships::native::abi::NUMBER_SPEECH_DESC;
 
 /// Collect one-based phrase indices in the same recursive order as NPCNumberPhrase.
 unsafe fn number_phrases(
@@ -132,7 +132,7 @@ pub(crate) mod runtime {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::c_bindings::global_state::{SPEECH_DIGIT, SPEECH_DIGITNAME};
+    use crate::ships::native::abi::{SPEECH_DIGIT, SPEECH_DIGITNAME};
 
     #[test]
     fn recursive_number_speech_and_zero_preserve_phrase_order() {

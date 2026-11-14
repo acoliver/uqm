@@ -16,7 +16,7 @@ const INNER_ENTRY_DISTANCE: i32 = MIN_MOON_RADIUS + (MAX_MOONS - 1) * MOON_DELTA
 const IP_SHIP_THRUST_INCREMENT: i32 = 8;
 const SHIP_AT_MAX_SPEED: c::UWORD = 1 << 7;
 const END_INTERPLANETARY: c::UWORD = 1 << 11;
-const MAX_TIME_VALUE: c::TIME_VALUE = (1 << 8) + 1;
+const MAX_TIME_VALUE: c::UWORD = (1 << 8) + 1;
 const THRUST_WAIT: c::BYTE = 1;
 const HALF_CIRCLE: c::COUNT = 32;
 const QUADRANT: c::COUNT = 16;
@@ -417,7 +417,7 @@ pub(super) unsafe fn scale_system(cx: &mut Cx<'_>, solar: &mut SolarSystem, new_
     let rect = cx.with_legacy(|| {
         // SMOOTH_SYSTEM_ZOOM is disabled in the C source; use its crossfade path.
         let mut rect: c::RECT = std::mem::zeroed();
-        c::GetContextClipRect(&mut rect);
+        crate::graphics::context_abi::GetContextClipRect(&mut rect);
         SetTransitionSource((&raw mut rect).cast());
         BatchGraphics();
         rect

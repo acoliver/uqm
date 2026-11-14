@@ -13,7 +13,6 @@ fn submenu_selection(current: u8, selected: bool, pc_menu: bool) -> u8 {
 #[cfg(not(test))]
 pub(crate) mod live {
     use super::{presentation::OrbitPresentation, submenu_selection};
-    use crate::c_bindings::global_state::MENU_STATE;
     use crate::comm::locdata::CRect;
     use crate::engine::graphics::context_abi::ContextLease;
     use crate::engine::{
@@ -24,6 +23,7 @@ pub(crate) mod live {
     use crate::mainloop::types::activity_flags::{CHECK_ABORT, CHECK_LOAD, START_ENCOUNTER};
     use crate::planet_side::orbit_scan;
     use crate::planets::solar_system::SolarSystem;
+    use crate::ships::native::abi::MENU_STATE;
     use crate::starbase::gfx::{ContextId, Gfx, Point, Rect, Rgba, Stamp};
     use crate::starbase::graphics::Graphics;
     use std::ffi::c_void;

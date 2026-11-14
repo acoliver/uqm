@@ -2,11 +2,11 @@
 
 #[cfg(not(test))]
 pub(crate) mod live {
-    use crate::c_bindings::global_state as c;
     use crate::comm::locdata::{CPoint, CRect};
     use crate::graphics::context_abi::SetContextClipRect;
     use crate::graphics::drawable::Point;
     use crate::graphics::drawable_abi::SetContextFGFrame;
+    use crate::graphics::native_abi as c;
     use crate::planets::render::{
         c_api::render_native_topography, topo_gen, topo_scale::TopoScaler,
     };
@@ -347,7 +347,7 @@ pub(crate) mod live {
             let old = SetContextFGFrame(required_frame(&state.topography(), 0).cast());
             SetContextClipRect(null_mut());
             let mut rect: c::RECT = std::mem::zeroed();
-            c::GetContextClipRect(&mut rect);
+            crate::graphics::context_abi::GetContextClipRect(&mut rect);
             let old_mode = SetContextDrawMode(c::DrawMode {
                 kind: 1,
                 factor: 255,

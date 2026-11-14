@@ -24,9 +24,9 @@ use crate::engine::{
 };
 use std::os::raw::c_void;
 
-use crate::c_bindings::global_state;
 use crate::engine::battle::link_queue::LinkId;
 use crate::engine::world::queues::Fragment;
+use crate::savegame::types::MAX_HYPER_SHIPS as ENCOUNTER_SHIP_CAPACITY;
 
 // ---------------------------------------------------------------------------
 // Resource and geometry types used by retained presentation calls
@@ -45,7 +45,7 @@ pub type CFrameHandle = *mut c_void;
 pub use crate::engine::world::queues::BriefShipInfo;
 pub const MAX_HYPER_SHIPS: usize = 7;
 
-const _: () = assert!(MAX_HYPER_SHIPS == global_state::MAX_HYPER_SHIPS as usize);
+const _: () = assert!(MAX_HYPER_SHIPS == ENCOUNTER_SHIP_CAPACITY);
 
 // ---------------------------------------------------------------------------
 // C constants

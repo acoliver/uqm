@@ -6,7 +6,7 @@ use std::fmt::Write;
 use std::io::Read;
 
 use sha2::{Digest, Sha256};
-use uqm_rust::c_bindings::global_state as c;
+use uqm_rust::graphics::native_abi as c;
 use uqm_rust::planets::c_api::{self, CapturedSurface, FORMAT_CONV_SURF, SDL_SCREEN};
 use uqm_rust::starbase::ids::RadarLayout;
 
@@ -99,11 +99,14 @@ impl Offscreen {
                 self.context,
                 "oval changed context"
             );
-            assert_eq!(c::GetContextFGFrame(), self.frame);
-            let color = c::GetContextForeGroundColor();
+            assert_eq!(
+                uqm_rust::graphics::drawable_abi::GetContextFGFrame(),
+                self.frame
+            );
+            let color = uqm_rust::graphics::context_abi::GetContextForeGroundColor();
             assert_eq!([color.r, color.g, color.b, color.a], [71, 131, 197, alpha]);
             let mut clip: c::RECT = std::mem::zeroed();
-            c::GetContextClipRect(&mut clip);
+            uqm_rust::graphics::context_abi::GetContextClipRect(&mut clip);
             assert_eq!(
                 (
                     clip.corner.x,
@@ -113,7 +116,7 @@ impl Offscreen {
                 ),
                 (0, 0, self.width as i16, self.height as i16)
             );
-            let mode = c::GetContextDrawMode();
+            let mode = uqm_rust::graphics::context_abi::GetContextDrawMode();
             assert_eq!((mode.kind, mode.factor), (0, 255));
             assert_eq!((ScreenWidth, ScreenHeight), self.screen);
             assert_eq!(((*self.frame).HotSpot.x, (*self.frame).HotSpot.y), (0, 0));

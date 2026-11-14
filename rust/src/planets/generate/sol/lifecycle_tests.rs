@@ -1,5 +1,5 @@
 use super::*;
-use crate::c_bindings::global_state::IP_GROUP;
+use crate::engine::world::queues::IpGroup as IP_GROUP;
 use crate::engine::StoryKey;
 use crate::planets::generate::default::Npcs;
 use std::cell::RefCell;

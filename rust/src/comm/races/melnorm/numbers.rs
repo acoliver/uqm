@@ -1,5 +1,5 @@
 use super::phrases::*;
-use crate::c_bindings::{assert_c_layout, global_state};
+use crate::c_bindings::assert_c_layout;
 use std::ffi::c_void;
 
 #[repr(C)]
@@ -18,7 +18,7 @@ struct NumberSpeech {
 }
 assert_c_layout!(
     Digit,
-    global_state::SPEECH_DIGIT {
+    crate::ships::native::abi::SPEECH_DIGIT {
         divider: Divider,
         subtrahend: Subtrahend,
         strings: StrDigits,
@@ -28,7 +28,7 @@ assert_c_layout!(
 );
 assert_c_layout!(
     NumberSpeech,
-    global_state::NUMBER_SPEECH_DESC {
+    crate::ships::native::abi::NUMBER_SPEECH_DESC {
         count: NumDigits,
         digits: Digits
     }

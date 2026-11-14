@@ -149,7 +149,7 @@ pub fn check(h: &mut Harness) {
     }
 }
 
-unsafe fn frame_rgb(frame: *mut uqm_rust::c_bindings::global_state::FRAME_DESC) -> Vec<[u8; 3]> {
+unsafe fn frame_rgb(frame: *mut uqm_rust::graphics::native_abi::FRAME_DESC) -> Vec<[u8; 3]> {
     let surface = (*frame).image.cast::<*mut sdl2::sys::SDL_Surface>().read();
     let info = uqm_rust::graphics::sdl_capture::query_surface_info(surface);
     let format = &*(*surface).format;

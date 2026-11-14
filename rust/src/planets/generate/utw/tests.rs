@@ -10,8 +10,8 @@ use super::{
     generate_energy, generate_orbital, generate_planets, init_npcs, pickup_energy, UtwigSite,
     BOMB_MOON, BOMB_TALK_FLAGS, HOME, HOME_TALK_FLAGS,
 };
-use crate::c_bindings::global_state::IP_GROUP;
 use crate::comm::dispatch::{CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY};
+use crate::engine::world::queues::IpGroup as IP_GROUP;
 use crate::math::RandomContext;
 use crate::planet_side::report_adapter::{DiscoveryReportPort, ReportDisposition};
 use crate::planet_side::runtime::AdapterError;

@@ -137,7 +137,7 @@ pub fn check() {
     println!("additive parity: {compared} native/core rectangles; RGBA/24-bit/16-bit/indexed remain explicitly unsupported");
 }
 
-pub unsafe fn frame_bytes(frame: *mut uqm_rust::c_bindings::global_state::FRAME_DESC) -> Vec<u8> {
+pub unsafe fn frame_bytes(frame: *mut uqm_rust::graphics::native_abi::FRAME_DESC) -> Vec<u8> {
     let surface = (*frame).image.cast::<*mut sdl2::sys::SDL_Surface>().read();
     let mut bytes = vec![0; ((*surface).pitch * (*surface).h) as usize];
     uqm_rust::graphics::sdl_capture::lock_copy_unlock(surface, bytes.as_mut_ptr(), bytes.len())
@@ -145,9 +145,7 @@ pub unsafe fn frame_bytes(frame: *mut uqm_rust::c_bindings::global_state::FRAME_
     bytes
 }
 
-pub unsafe fn earth_expected(
-    frame: *mut uqm_rust::c_bindings::global_state::FRAME_DESC,
-) -> Vec<u8> {
+pub unsafe fn earth_expected(frame: *mut uqm_rust::graphics::native_abi::FRAME_DESC) -> Vec<u8> {
     let surface = (*frame).image.cast::<*mut sdl2::sys::SDL_Surface>().read();
     let f = &*(*surface).format;
     assert!(f.palette.is_null());

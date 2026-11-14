@@ -1,7 +1,7 @@
 //! Native surface definitions owned from acquisition through orbit generation.
 
-use crate::c_bindings::global_state::FRAME_DESC;
 use crate::engine::graphics::drawable_abi::LoadedDrawable;
+use crate::graphics::native_abi::FRAME_DESC;
 
 /// A detached native definition, retaining absence for a missing external resource.
 pub struct CapturedSurface {

@@ -1,5 +1,6 @@
 use super::*;
-use crate::c_bindings::global_state::{IP_GROUP, POINT};
+use crate::engine::world::queues::IpGroup as IP_GROUP;
+use crate::graphics::native_abi::POINT;
 
 impl<S: Story, H: crate::planets::generate::special::FleetGroups, R, L, F>
     crate::planets::generate::special::FleetGroups for Effects<'_, S, H, R, L, F>

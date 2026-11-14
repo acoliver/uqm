@@ -302,7 +302,7 @@ mod engine {
         links: abi::PRIM_LINKS,
         flags: abi::BATCH_FLAGS,
     ) {
-        crate::c_bindings::global_state::DrawBatch(primitives.cast(), links, flags);
+        crate::graphics::frame_abi::DrawBatch(primitives.cast(), links, flags);
     }
 
     /// # Safety

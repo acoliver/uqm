@@ -21,9 +21,9 @@ use std::ops::{Deref, DerefMut};
 use super::location::{prepare_solar_location, LocationError};
 use super::solar::SolarError;
 use super::solar_tests::System;
-use crate::c_bindings::global_state::{EXTENT, FRAME_DESC, POINT};
 use crate::comm::locdata::CGameState;
 use crate::engine::world::state_file::{StateFileError, STARINFO_FILE};
+use crate::graphics::native_abi::{EXTENT, FRAME_DESC, POINT};
 use crate::state::ffi::{replace_game_state, rust_init_game_state, snapshot_game_state};
 
 unsafe fn save_solar_location(

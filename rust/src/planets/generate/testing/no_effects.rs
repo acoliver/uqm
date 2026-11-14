@@ -1,5 +1,6 @@
 use super::*;
-use crate::c_bindings::global_state::{IP_GROUP, POINT};
+use crate::engine::world::queues::IpGroup as IP_GROUP;
+use crate::graphics::native_abi::POINT;
 impl crate::planets::generate::spa::SpathiSite for NoEffects {
     fn load_broadcasters_scene(
         &mut self,
