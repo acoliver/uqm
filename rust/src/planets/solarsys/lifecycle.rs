@@ -47,10 +47,6 @@ const MENU_SOUND_SELECT: u16 = 1 << 4;
 const KEY_MENU_SELECT: usize = 9;
 const KEY_MENU_CANCEL: usize = 10;
 const FADE_ALL_TO_COLOR: u32 = 253;
-const SOL_DEFINED: u8 = 1;
-const SAMATRA_DEFINED: u8 = 29;
-const PLANET_NUMBER_BASE: u16 = 375;
-const STARBASE_STRING_BASE: u16 = 422;
 
 mod ffi {
 
@@ -311,7 +307,26 @@ unsafe fn run_planet_orbit(cx: &mut Cx<'_>, io: &mut Io<'_>, solar: &mut SolarSy
         return;
     };
     if let Some(presentation) = presentation {
-        ffi::planet_orbit_menu(cx, io, solar, &presentation);
+        let services = crate::planets::orbit::OrbitServices {
+            submenu: |cx, io, solar, selection| match selection {
+                crate::planets::orbit::OrbitSubmenu::Devices => {
+                    devices_menu(cx, io, Some(solar)) != 0
+                }
+                crate::planets::orbit::OrbitSubmenu::Cargo => {
+                    ffi::cargo_menu(cx, io);
+                    true
+                }
+                crate::planets::orbit::OrbitSubmenu::Roster => ffi::roster_menu(cx, io) != 0,
+                crate::planets::orbit::OrbitSubmenu::Options => {
+                    ffi::game_options(cx, io, Some(solar)) != 0
+                }
+            },
+            save_location: |world, solar| save_solar_location(world, solar),
+            store_groups: |world| {
+                crate::navigation::groups::live::put_group_info(world, 0, u8::MAX);
+            },
+        };
+        ffi::planet_orbit_menu(cx, io, solar, &presentation, &services);
         ffi::free_planet(cx, solar);
     }
     finish_planet_orbit(cx, io, solar);
@@ -597,24 +612,6 @@ fn prepare_explore_solar_sys(
     world.data.flagship.log_y =
         ((9999 - i32::from(star.star_pt.y)) * log_units_y + (625 >> 1)) / 625;
     id
-}
-
-pub fn named_body_index(solar: &SolarSystem) -> Option<u16> {
-    let body = solar.selected_body()?;
-    let planet = body.planet() as u16;
-    match (solar.sys.star_index(), body) {
-        (SOL_DEFINED, Body::Planet(_)) => Some(PLANET_NUMBER_BASE + planet),
-        (SOL_DEFINED, Body::Moon { moon, .. }) => match (planet, moon) {
-            (2, 0) => Some(STARBASE_STRING_BASE),
-            (2, 1) => Some(PLANET_NUMBER_BASE + 9),
-            (4, 0..=3) => Some(PLANET_NUMBER_BASE + 10 + u16::from(moon)),
-            (5, 0) => Some(PLANET_NUMBER_BASE + 14),
-            (7, 0) => Some(PLANET_NUMBER_BASE + 15),
-            _ => None,
-        },
-        (SAMATRA_DEFINED, Body::Moon { planet: 4, moon: 0 }) => Some(PLANET_NUMBER_BASE + 32),
-        _ => None,
-    }
 }
 
 pub unsafe fn save_solar_location(world: &mut World, solar: &SolarSystem) {

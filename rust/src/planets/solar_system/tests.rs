@@ -1,4 +1,49 @@
 #[test]
+fn selected_body_names_preserve_sol_moons_and_samatra() {
+    let world = world();
+    for (index, cases) in [
+        (
+            1,
+            vec![
+                (Body::Planet(2), Some(377)),
+                (Body::Moon { planet: 2, moon: 0 }, Some(422)),
+                (Body::Moon { planet: 2, moon: 1 }, Some(384)),
+                (Body::Moon { planet: 4, moon: 3 }, Some(388)),
+                (Body::Moon { planet: 5, moon: 0 }, Some(389)),
+                (Body::Moon { planet: 7, moon: 0 }, Some(390)),
+                (Body::Moon { planet: 1, moon: 0 }, None),
+            ],
+        ),
+        (
+            29,
+            vec![
+                (Body::Moon { planet: 4, moon: 0 }, Some(407)),
+                (Body::Planet(4), None),
+            ],
+        ),
+        (0, vec![(Body::Planet(0), None)]),
+    ] {
+        let star = world
+            .catalog()
+            .iter()
+            .position(|star| star.index == index)
+            .unwrap();
+        let mut solar = SolarSystem::new(&world, StarId(star));
+        assert_eq!(solar.named_body_index(), None);
+        for (body, expected) in cases {
+            solar.selected = Some(body);
+            assert_eq!(solar.named_body_index(), expected);
+            let definition = solar.sys.planet_definition(body);
+            assert!(std::ptr::eq(
+                definition,
+                &crate::planets::tables::PLANET_ARRAY
+                    [usize::from(solar.sys.body_data_index(body) & 0x7f)]
+            ));
+        }
+    }
+}
+
+#[test]
 #[serial_test::serial]
 fn visit_cleanup_releases_its_images_without_dropping_kernel_resources() {
     use crate::engine::{

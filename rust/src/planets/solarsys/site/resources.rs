@@ -127,18 +127,57 @@ impl<'a, 'game, 'observer> Site<'a, 'game, 'observer> {
         let in_orbit = self.in_orbit;
         let definition = surface.and_then(CapturedSurface::into_drawable);
         let reports = self.report_resources.clone();
-        // SAFETY: this host retains the graphics resources and consumes the optional definition.
-        self.presentation = unsafe {
-            load_planet(
-                self.game,
-                self.io,
-                system,
-                (self.star, body),
-                in_orbit,
-                definition,
-                (reports, self.background.clone()),
-            )
-        };
+        self.presentation = load_planet(
+            self.game,
+            system,
+            body,
+            in_orbit,
+            definition,
+            (reports, self.background.clone()),
+            |system, report_context| {
+                use crate::engine::battle::views::FrameSelection;
+                let unscaled = self
+                    .game
+                    .borrow()
+                    .kernel
+                    .configuration
+                    .preferences()
+                    .melee_scale
+                    == 0;
+                crate::battle::process_native::init_display_list(
+                    &mut self.game.borrow_mut(),
+                    unscaled,
+                );
+                let persistence = crate::planet_side::generation::ScanPersistence::from_masks(
+                    system.info.planet_info.scan_retrieve_mask,
+                );
+                let frames = system.frames.each_ref().map(|frame| {
+                    frame.as_ref().map_or(FrameSelection::ABSENT, |frame| {
+                        FrameSelection::retain(
+                            frame
+                                .lease()
+                                .frame(0)
+                                .unwrap_or_else(|| panic!("loaded scene has no first frame")),
+                        )
+                    })
+                });
+                let mut generator =
+                    crate::planet_side::generation_adapter::CffiSurfaceGenerator::for_orbit_scan(
+                        self.game,
+                        self.io,
+                        system,
+                        self.star,
+                        body,
+                        Some(report_context),
+                    );
+                crate::planet_side::orbit_scan::generate_planet_side(
+                    self.game,
+                    &mut generator,
+                    &frames,
+                    persistence,
+                );
+            },
+        );
     }
 
     pub(super) fn discovery_report<'slot>(

@@ -45,48 +45,22 @@ pub(crate) fn synced_node_position(
         .map(|(_, _, position)| ((position.x >> 2) as i16, (position.y >> 2) as i16))
 }
 
-#[cfg(not(test))]
 mod production {
     use super::super::generation::{ScanNodeId, ScanPersistence, ScanType, SurfaceGenerator};
-    use super::super::generation_adapter::CffiSurfaceGenerator;
-    use crate::engine::world::{
-        generation::{Body, SolarSys},
-        StarId,
-    };
 
     use super::{initialize_element, Frame};
     use crate::engine::battle::Cx;
 
     pub fn generate(
         game: &std::cell::RefCell<Cx<'_>>,
-        io: &std::cell::RefCell<crate::engine::observe::Io<'_>>,
-        system: &mut SolarSys<'_>,
-        star: StarId,
-        body: Body,
-        report_context: crate::planets::report::typography::ReportContext,
+        generator: &mut dyn SurfaceGenerator,
+        frames: &[Frame; 6],
+        persistence: ScanPersistence,
     ) {
         let misc = Frame::retain(game.borrow().kernel.misc_data_frame);
         if misc.is_absent() {
             return;
         }
-        let persistence = ScanPersistence::from_masks(system.info.planet_info.scan_retrieve_mask);
-        let frames = system.frames.each_ref().map(|frame| {
-            frame
-                .as_ref()
-                .map_or(Frame::ABSENT, |frame| match frame.lease().frame(0) {
-                    Some(frame) => Frame::retain(frame),
-                    None => panic!("loaded scene has no first frame"),
-                })
-        });
-        let mut generator = CffiSurfaceGenerator::for_orbit_scan(
-            game,
-            io,
-            system,
-            star,
-            body,
-            Some(report_context),
-        );
-
         for scan in [ScanType::Biological, ScanType::Energy, ScanType::Mineral] {
             let Ok(count) = generator.node_count(scan) else {
                 continue;
@@ -107,7 +81,7 @@ mod production {
                         continue;
                     };
                     if initialize_element(
-                        &mut cx, element, &misc, &frames, scan, raw_node, generated,
+                        &mut cx, element, &misc, frames, scan, raw_node, generated,
                     )
                     .is_err()
                     {
@@ -248,22 +222,21 @@ fn initialize_element(
     Ok(())
 }
 
-/// Populate the current orbit's scan display list from Rust-owned generation.
-#[cfg(not(test))]
+/// Populate the scan display list through the supplied generation service.
 pub fn generate_planet_side(
     game: &std::cell::RefCell<crate::engine::battle::Cx<'_>>,
-    io: &std::cell::RefCell<crate::engine::observe::Io<'_>>,
-    system: &mut crate::engine::world::generation::SolarSys<'_>,
-    star: crate::engine::world::StarId,
-    body: crate::engine::world::generation::Body,
-    reports: crate::planets::report::typography::ReportContext,
+    generator: &mut dyn super::generation::SurfaceGenerator,
+    frames: &[Frame; 6],
+    persistence: super::generation::ScanPersistence,
 ) {
-    {
-        let mut cx = game.borrow_mut();
-        let unscaled = cx.kernel.configuration.preferences().melee_scale == 0;
-        crate::battle::process_native::init_display_list(&mut cx, unscaled);
-    }
-    production::generate(game, io, system, star, body, reports);
+    production::generate(game, generator, frames, persistence);
+}
+
+pub(crate) fn sync_positions(
+    cx: &mut crate::engine::battle::Cx<'_>,
+    surface: &super::assembly::SurfaceAssembly,
+) {
+    production::sync_positions(cx, surface);
 }
 
 #[cfg(test)]
@@ -541,10 +514,5 @@ mod retrieval_tests {
     }
 }
 
-#[cfg(not(test))]
-pub(crate) fn sync_positions(
-    cx: &mut crate::engine::battle::Cx<'_>,
-    surface: &super::assembly::SurfaceAssembly,
-) {
-    production::sync_positions(cx, surface);
-}
+#[cfg(test)]
+mod population_tests;

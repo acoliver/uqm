@@ -125,6 +125,10 @@ impl<'a> SolarSys<'a> {
         )
     }
 
+    pub fn planet_definition(&self, body: Body) -> &PlanetFrame {
+        &self.plan_data[usize::from(self.body_data_index(body) & 0x7f)]
+    }
+
     pub fn body_data_index(&self, body: Body) -> u8 {
         self.descriptor(body).data_index
     }
