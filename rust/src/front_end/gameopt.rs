@@ -1,5 +1,8 @@
 //! Game options, naming, and save/load selection, ported from `uqm/gameopt.c`.
 
+#[cfg(test)]
+mod picker_tests;
+
 mod layout;
 mod naming;
 mod preview;
