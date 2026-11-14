@@ -148,6 +148,12 @@ impl ContextFrame {
         unsafe { drawable_abi::SetFrameHot(self.frame, hotspot) }
     }
 
+    pub fn transparent_color(&self, color: Color) {
+        let frame = self.as_raw();
+        // SAFETY: the retained non-screen frame belongs to this graphics thread.
+        unsafe { super::drawable_abi::SetFrameTransparentColor(frame, color) };
+    }
+
     pub fn same_frame(&self, other: &Self) -> bool {
         self.frame == other.frame
     }
@@ -294,6 +300,16 @@ impl Drop for ContextSelection {
         } else {
             self.context.apply(Operation::Deselect);
         }
+    }
+}
+
+struct ContextTarget {
+    context: ContextLease,
+    previous: ContextFrame,
+}
+impl Drop for ContextTarget {
+    fn drop(&mut self) {
+        self.context.set_frame(self.previous.clone());
     }
 }
 
@@ -567,6 +583,19 @@ impl ContextLease {
             drawable_abi::SetContextFGFrame,
         ));
         *self.0.target.borrow_mut() = Some(target);
+    }
+
+    pub fn with_frame<R>(&self, target: ContextFrame, draw: impl FnOnce() -> R) -> R {
+        self.with_selected(|| {
+            let restore = ContextTarget {
+                context: self.clone(),
+                previous: self.target(),
+            };
+            self.set_frame(target);
+            let result = draw();
+            drop(restore);
+            result
+        })
     }
 
     pub fn set_clip(&self, rect: RECT) {

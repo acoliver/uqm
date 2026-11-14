@@ -154,6 +154,19 @@ impl LoadedTextTable {
         })
     }
 
+    pub fn load_file(path: &CStr) -> Option<Self> {
+        crate::graphics::ffi::assert_owner_thread();
+        // SAFETY: the serialized game thread retains the content mount and terminated path;
+        // the text loader transfers one Rc<TableAllocation> with its header first.
+        unsafe {
+            let table = super::sfileins::LoadStringTableFile(
+                crate::io::handles::contentDir.cast(),
+                path.as_ptr(),
+            );
+            std::ptr::NonNull::new(table).map(|table| Self(Rc::from_raw(table.as_ptr().cast())))
+        }
+    }
+
     pub(super) fn from_strings(strings: Vec<Vec<u8>>) -> Self {
         let counts = strings
             .iter()

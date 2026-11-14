@@ -2,117 +2,122 @@
 #![allow(non_snake_case)]
 
 use super::ffi::TFB_VideoClip;
-use crate::memory::{rust_hcalloc, rust_hfree, rust_hmalloc};
-use crate::resource::ffi_bridge::{res_DetachResource, res_GetResource, InstallResTypeVectors};
+use crate::resource::ffi_bridge::InstallResTypeVectors;
 use crate::resource::ffi_types::ResourceData;
-use std::ffi::{c_char, c_int, c_void, CStr};
+use std::ffi::{c_char, c_int, c_void, CStr, CString};
 use std::ptr;
 
-#[repr(C)]
-pub struct LegacyVideo {
-    pub video: *mut c_char,
-    pub audio: *mut c_char,
-    pub speech: *mut c_char,
-    pub loop_frame: u32,
+struct Descriptor {
+    video: CString,
+    audio: Option<CString>,
+    speech: Option<CString>,
+    loop_frame: u32,
 }
 
-#[repr(C)]
-pub struct LegacyVideoRef {
-    pub video: *mut TFB_VideoClip,
-    pub audio: *mut c_void,
-    pub speech: *mut c_void,
+use crate::sound::resource_types::LoadedMusic;
+use std::ptr::NonNull;
+
+pub struct LoadedVideo(Box<Descriptor>);
+
+impl LoadedVideo {
+    pub fn load(resource: &CStr) -> Option<Self> {
+        crate::resource::ffi_bridge::detach_resource_of_type(resource, "3DOVID").map(|video| {
+            // SAFETY: the registered descriptor loader transfers one unique Box.
+            Self(unsafe { Box::from_raw(video.as_ptr().cast()) })
+        })
+    }
+
+    pub fn play(&self) -> Option<VideoPlayback> {
+        crate::graphics::ffi::assert_owner_thread();
+        // SAFETY: the descriptor retains its pathname on the admitted graphics thread.
+        let video =
+            NonNull::new(unsafe { super::control::_init_video_file(self.0.video.as_ptr()) })?;
+        let audio = self
+            .0
+            .audio
+            .as_ref()
+            .and_then(|path| LoadedMusic::load_file(path));
+        let speech = self
+            .0
+            .speech
+            .as_ref()
+            .and_then(|path| LoadedMusic::load_file(path));
+        let playback = VideoPlayback {
+            video,
+            speech,
+            audio,
+        };
+        // SAFETY: playback owns the clip and both optional music handles through stop.
+        let result = unsafe {
+            super::control::VidPlayEx(
+                video.as_ptr(),
+                playback
+                    .audio
+                    .as_ref()
+                    .map_or(ptr::null_mut(), LoadedMusic::as_raw),
+                playback
+                    .speech
+                    .as_ref()
+                    .map_or(ptr::null_mut(), LoadedMusic::as_raw),
+                self.0.loop_frame,
+            )
+        };
+        (result != 0).then_some(playback)
+    }
 }
 
-use crate::video::control::VidStop;
-
-use crate::video::control::_init_video_file;
-
-use crate::sound::heart_ffi::LoadMusicFile;
-
-use crate::video::control::DestroyVideo;
-
-use crate::sound::heart_ffi::DestroyMusic;
-use crate::video::control::VidPlayEx;
-
-/// # Safety
-/// `path` must be a terminated resource pathname.
-pub unsafe extern "C" fn LoadVideoFile(path: *const c_char) -> *mut TFB_VideoClip {
-    _init_video_file(path)
+pub struct VideoPlayback {
+    video: NonNull<TFB_VideoClip>,
+    speech: Option<LoadedMusic>,
+    audio: Option<LoadedMusic>,
 }
 
-/// # Safety
-/// `video` must be null or a live legacy descriptor.
-pub unsafe extern "C" fn PlayLegacyVideo(video: *mut LegacyVideo) -> *mut LegacyVideoRef {
-    if video.is_null() {
-        return ptr::null_mut();
+impl VideoPlayback {
+    pub fn is_playing(&self) -> bool {
+        // SAFETY: this playback owns the initialized video clip.
+        unsafe { super::ffi::tfb_video_playing(self.video.as_ptr()) }
     }
-    let reference = rust_hcalloc(size_of::<LegacyVideoRef>()).cast::<LegacyVideoRef>();
-    (*reference).video = LoadVideoFile((*video).video);
-    if (*reference).video.is_null() {
-        return ptr::null_mut();
+
+    pub fn position(&self) -> u32 {
+        // SAFETY: this playback retains the active game-thread video.
+        unsafe { super::control::VidGetPosition() }
     }
-    if !(*video).audio.is_null() {
-        (*reference).audio = LoadMusicFile((*video).audio);
+
+    pub fn seek(&self, position: u32) {
+        // SAFETY: this playback retains the active game-thread video.
+        unsafe { super::control::VidSeek(position) };
     }
-    if !(*video).speech.is_null() {
-        (*reference).speech = LoadMusicFile((*video).speech);
+
+    pub fn process_frame(&self) -> bool {
+        // SAFETY: this playback retains the active game-thread video.
+        unsafe { super::control::VidProcessFrame() != 0 }
     }
-    if VidPlayEx(
-        (*reference).video,
-        (*reference).audio,
-        (*reference).speech,
-        (*video).loop_frame,
-    ) == 0
-    {
-        StopLegacyVideo(reference);
-        return ptr::null_mut();
-    }
-    reference
 }
 
-/// # Safety
-/// `reference` must be null or an owned, live playback reference.
-pub unsafe extern "C" fn StopLegacyVideo(reference: *mut LegacyVideoRef) {
-    if reference.is_null() {
-        return;
+impl Drop for VideoPlayback {
+    fn drop(&mut self) {
+        // SAFETY: unique playback ownership keeps the clip and its audio alive through stop.
+        unsafe {
+            super::control::VidStop();
+            super::control::DestroyVideo(self.video.as_ptr());
+        }
+        drop(self.speech.take());
+        drop(self.audio.take());
     }
-    VidStop();
-    DestroyVideo((*reference).video);
-    if !(*reference).speech.is_null() {
-        DestroyMusic((*reference).speech);
-    }
-    if !(*reference).audio.is_null() {
-        DestroyMusic((*reference).audio);
-    }
-    rust_hfree(reference.cast());
-}
-
-/// # Safety
-/// `reference` must be null or a live playback reference.
-pub unsafe extern "C" fn PlayingLegacyVideo(reference: *mut LegacyVideoRef) -> c_int {
-    if reference.is_null() {
-        return 0;
-    }
-    super::ffi::tfb_video_playing((*reference).video) as c_int
 }
 
 unsafe extern "C" fn free_legacy_data(data: *mut c_void) -> c_int {
     if data.is_null() {
         return 0;
     }
-    let video = data.cast::<LegacyVideo>();
-    rust_hfree((*video).video.cast());
-    rust_hfree((*video).audio.cast());
-    rust_hfree((*video).speech.cast());
-    rust_hfree(data);
+    // SAFETY: the resource registry returns one unreleased descriptor allocation.
+    drop(unsafe { Box::from_raw(data.cast::<Descriptor>()) });
     1
 }
 
-unsafe fn duplicate(bytes: &[u8]) -> *mut c_char {
-    let result = rust_hmalloc(bytes.len() + 1).cast::<c_char>();
-    ptr::copy_nonoverlapping(bytes.as_ptr(), result.cast(), bytes.len());
-    *result.add(bytes.len()) = 0;
-    result
+fn terminated(bytes: &[u8]) -> CString {
+    CString::new(bytes)
+        .unwrap_or_else(|error| panic!("terminated video descriptor contains NUL: {error}"))
 }
 
 fn components(path: &[u8]) -> Vec<&[u8]> {
@@ -122,27 +127,28 @@ fn components(path: &[u8]) -> Vec<&[u8]> {
 }
 
 unsafe extern "C" fn get_legacy_data(path: *const c_char, data: *mut ResourceData) {
-    let parts = components(CStr::from_ptr(path).to_bytes());
-    let video = rust_hcalloc(size_of::<LegacyVideo>()).cast::<LegacyVideo>();
-    (*video).loop_frame = u32::MAX;
-    (*video).video = duplicate(parts[0]);
-    if let Some(audio) = parts.get(1) {
-        (*video).audio = duplicate(audio);
-    }
-    if let Some(speech) = parts.get(2) {
-        (*video).speech = duplicate(speech);
-    }
+    // SAFETY: the resource registry supplies a terminated descriptor and writable output.
+    let parts = components(unsafe { CStr::from_ptr(path) }.to_bytes());
+    let mut descriptor = Descriptor {
+        video: terminated(parts[0]),
+        audio: parts.get(1).map(|bytes| terminated(bytes)),
+        speech: parts.get(2).map(|bytes| terminated(bytes)),
+        loop_frame: u32::MAX,
+    };
     if let Some(loop_string) = parts.get(3) {
-        let value = duplicate(loop_string);
+        let value = terminated(loop_string);
         let mut end = ptr::null_mut();
-        let parsed = libc::strtol(value, &mut end, 10) as u32;
+        // SAFETY: the owned string and end pointer remain live throughout parsing.
+        let parsed = unsafe { libc::strtol(value.as_ptr(), &mut end, 10) } as u32;
         // The original parser checks only the first unconsumed byte and permits whitespace.
-        if *end <= 32 {
-            (*video).loop_frame = parsed;
+        if unsafe { *end <= 32 } {
+            descriptor.loop_frame = parsed;
         }
-        rust_hfree(value.cast());
     }
-    (*data).ptr = video.cast();
+    // SAFETY: the registry receives the unique descriptor allocation for loading or detachment.
+    unsafe {
+        (*data).ptr = Box::into_raw(Box::new(descriptor)).cast();
+    };
 }
 
 /// # Safety
@@ -155,22 +161,6 @@ pub unsafe fn InstallVideoResType() -> c_int {
         None,
     );
     1
-}
-
-/// # Safety
-/// `resource` must identify a registered legacy video resource.
-pub unsafe extern "C" fn LoadLegacyVideoInstance(resource: *const c_char) -> *mut LegacyVideo {
-    let data = res_GetResource(resource);
-    if !data.is_null() {
-        res_DetachResource(resource);
-    }
-    data.cast()
-}
-
-/// # Safety
-/// `video` must be null or an owned descriptor returned by resource loading.
-pub unsafe extern "C" fn DestroyLegacyVideo(video: *mut LegacyVideo) -> c_int {
-    free_legacy_data(video.cast())
 }
 
 #[cfg(test)]
@@ -202,10 +192,10 @@ mod tests {
                     ptr: ptr::null_mut(),
                 };
                 get_legacy_data(path.as_ptr(), &mut data);
-                let descriptor = data.ptr.cast::<LegacyVideo>();
+                let descriptor = data.ptr.cast::<Descriptor>();
                 assert_eq!((*descriptor).loop_frame, expected);
-                assert_eq!(CStr::from_ptr((*descriptor).video), c"v");
-                assert_eq!(DestroyLegacyVideo(descriptor), 1);
+                assert_eq!((*descriptor).video.as_c_str(), c"v");
+                assert_eq!(free_legacy_data(descriptor.cast()), 1);
             }
         }
     }

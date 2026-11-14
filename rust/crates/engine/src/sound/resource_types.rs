@@ -14,6 +14,12 @@ impl LoadedMusic {
         crate::resource::ffi_bridge::detach_resource_of_type(resource, "MUSICRES").map(Self)
     }
 
+    pub fn load_file(path: &std::ffi::CStr) -> Option<Self> {
+        crate::graphics::ffi::assert_owner_thread();
+        // SAFETY: the serialized content loader receives a terminated path and transfers ownership.
+        std::ptr::NonNull::new(unsafe { super::heart_ffi::LoadMusicFile(path.as_ptr()) }).map(Self)
+    }
+
     pub fn playback(&self) -> super::types::MusicRef {
         // SAFETY: this owner keeps the detached Arc handle alive while it is cloned.
         unsafe { super::heart_ffi::music_ref_borrow(self.0.as_ptr()) }

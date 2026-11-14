@@ -701,20 +701,16 @@ impl RestartMenuOps for CffiOps<'_, '_, '_> {
     }
 
     fn credits(&self, victory: bool) {
-        // SAFETY: the restart session runs after graphics, audio and input initialization.
-        self.owned(|cx, io| unsafe { crate::front_end::credits::credits(cx, io, victory) });
+        self.owned(|cx, io| crate::front_end::credits::credits(cx, io, victory));
     }
     fn victory(&self) {
-        // SAFETY: the restart session owns the initialized presentation systems.
-        self.owned(|cx, io| unsafe { crate::front_end::fmv::victory(cx, io) });
+        self.owned(crate::front_end::fmv::victory);
     }
     fn introduction(&self) {
-        // SAFETY: the restart session owns the initialized presentation systems.
-        self.owned(|cx, io| unsafe { crate::front_end::fmv::introduction(cx, io) });
+        self.owned(crate::front_end::fmv::introduction);
     }
     fn splash_screen(&self) {
-        // SAFETY: the restart session owns the initialized display and input runtime.
-        unsafe { self.owned(|cx, io| crate::front_end::fmv::runtime::splash_screen(cx, io, None)) }
+        self.owned(|cx, io| crate::front_end::fmv::splash_screen(cx, io, |_, _| {}));
     }
     fn do_popup_window_msg(&self, string_id: u16) {
         self.owned(|cx, io| super::menu_abi::uqm_do_popup_window_msg(cx, io, string_id))

@@ -169,6 +169,10 @@ pub(super) fn native_allocations() -> std::sync::MutexGuard<'static, Allocations
     RUST_GFX.native_allocations()
 }
 
+pub(crate) fn assert_owner_thread() {
+    drop(native_allocations());
+}
+
 fn get_gfx_state() -> Option<&'static mut RustGraphicsState> {
     unsafe { (*RUST_GFX.0.get()).as_mut() }
 }

@@ -161,6 +161,20 @@ impl LoadedDrawable {
         Some(Self::retain_loaded(drawable.cast()))
     }
 
+    pub fn load_file(path: &std::ffi::CStr) -> Option<Self> {
+        super::ffi::native_allocations().assert_thread();
+        // SAFETY: the path is terminated and the graphics thread owns serialized loading.
+        NonNull::new(unsafe { super::filegfx::LoadGraphicFile(path.as_ptr()) })
+            .map(Self::retain_loaded)
+    }
+
+    pub fn rotated(frame: &super::native_context::ContextFrame, angle: i32) -> Option<Self> {
+        let frame = frame.as_raw();
+        // SAFETY: the source lease retains its frame; rotation returns a new registered owner.
+        NonNull::new(unsafe { super::drawable_abi::RotateFrame(frame, angle) })
+            .map(Self::retain_loaded)
+    }
+
     pub fn create(flags: u8, width: i16, height: i16, count: u16) -> Option<Self> {
         // SAFETY: the provider creates and registers every frame before transferring ownership.
         let drawable = unsafe { super::drawable_abi::CreateDrawable(flags, width, height, count) };

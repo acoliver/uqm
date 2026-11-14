@@ -181,7 +181,7 @@ pub unsafe extern "C" fn DestroyVideo(video: *mut TFB_VideoClip) -> c_int {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::video::legacy::{LegacyVideo, PlayLegacyVideo, PlayingLegacyVideo, StopLegacyVideo};
+    use crate::video::legacy::LoadedVideo;
 
     #[test]
     fn video_lifecycle_uses_real_content_and_replay_audio_without_a_window() {
@@ -196,6 +196,12 @@ mod tests {
         }
         crate::time::source::install(true);
         let directory = crate::video::ffi_vtable_tests::logo_directory();
+        directory.write(
+            "video.rmp",
+            b"fixture.video = 3DOVID:logo.duk
+fixture.absent = 3DOVID:missing.duk
+",
+        );
         // SAFETY: the child owns the content directory, surfaces and decoder handles for the full lifecycle.
         unsafe {
             let screen =
@@ -239,19 +245,26 @@ mod tests {
             VidStop();
             assert!(VidPlaying().is_null());
             assert_eq!(DestroyVideo(clip), 1);
-            let mut legacy = LegacyVideo {
-                video: c"logo.duk".as_ptr().cast_mut(),
-                audio: ptr::null_mut(),
-                speech: ptr::null_mut(),
-                loop_frame: u32::MAX,
-            };
-            assert!(PlayLegacyVideo(ptr::null_mut()).is_null());
-            assert_eq!(PlayingLegacyVideo(ptr::null_mut()), 0);
-            StopLegacyVideo(ptr::null_mut());
-            let reference = PlayLegacyVideo(&mut legacy);
-            assert!(!reference.is_null());
-            assert_eq!(PlayingLegacyVideo(reference), 1);
-            StopLegacyVideo(reference);
+            crate::video::legacy::InstallVideoResType();
+            crate::resource::ffi_bridge::LoadResourceIndex(
+                contentDir.cast(),
+                c"video.rmp".as_ptr(),
+                ptr::null(),
+            );
+            assert!(LoadedVideo::load(c"fixture.unknown").is_none());
+            let absent = LoadedVideo::load(c"fixture.absent")
+                .unwrap_or_else(|| panic!("missing-file descriptor"));
+            assert!(absent.play().is_none());
+            drop(absent);
+            let descriptor =
+                LoadedVideo::load(c"fixture.video").unwrap_or_else(|| panic!("logo descriptor"));
+            let playback = descriptor.play().unwrap_or_else(|| panic!("logo playback"));
+            drop(descriptor);
+            assert!(playback.is_playing());
+            assert_eq!(playback.position(), 0);
+            playback.seek(100);
+            assert!(playback.process_frame());
+            drop(playback);
             assert!(VidPlaying().is_null());
             UninitVideoPlayer();
             crate::sound::rodio_audio::rust_audio_uninit();

@@ -9,6 +9,11 @@ use std::{
 #[derive(Clone, Copy, Default)]
 pub struct Settings;
 impl Settings {
+    pub fn kind(&self, key: &CStr) -> Option<String> {
+        let key = key.to_str().ok()?;
+        with_dispatch(|dispatch| dispatch.get_resource_type(key).map(str::to_owned))
+    }
+
     pub fn boolean(&self, key: &str) -> Option<bool> {
         with_dispatch(|dispatch| {
             (dispatch.get_resource_type(key) == Some("BOOLEAN"))

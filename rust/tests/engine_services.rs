@@ -11,7 +11,17 @@ use uqm_rust::video::{control::*, ffi::*, legacy::*};
 
 #[test]
 fn file_resources_and_movie_playback_share_the_live_content_directory() {
-    let directory = tempfile::tempdir().unwrap();
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../tmp");
+    std::fs::create_dir_all(&root).unwrap_or_else(|error| panic!("fixture root: {error}"));
+    let directory =
+        tempfile::tempdir_in(root).unwrap_or_else(|error| panic!("fixture directory: {error}"));
+    std::fs::write(
+        directory.path().join("video.rmp"),
+        b"fixture.video = 3DOVID:logo.duk
+fixture.absent = 3DOVID:missing.duk
+",
+    )
+    .unwrap_or_else(|error| panic!("video resource index: {error}"));
     std::fs::write(
         directory.path().join("strings.txt"),
         b"#(HELLO)\nHello, captain.\n#(BYE)\nGoodbye.\n",
@@ -88,19 +98,25 @@ fn file_resources_and_movie_playback_share_the_live_content_directory() {
         assert!(VidPlaying().is_null());
         assert_eq!(DestroyVideo(clip), 1);
         assert_eq!(DestroyVideo(ptr::null_mut()), 0);
-        let mut legacy = LegacyVideo {
-            video: c"logo.duk".as_ptr().cast_mut(),
-            audio: ptr::null_mut(),
-            speech: ptr::null_mut(),
-            loop_frame: u32::MAX,
-        };
-        let reference = PlayLegacyVideo(&mut legacy);
-        assert!(!reference.is_null());
-        assert_eq!(PlayingLegacyVideo(reference), 1);
-        StopLegacyVideo(reference);
-        assert_eq!(PlayingLegacyVideo(ptr::null_mut()), 0);
-        assert!(PlayLegacyVideo(ptr::null_mut()).is_null());
-        StopLegacyVideo(ptr::null_mut());
+        uqm_rust::resource::ffi_bridge::InitResourceSystem();
+        uqm_rust::resource::ffi_bridge::LoadResourceIndex(
+            dir.cast(),
+            c"video.rmp".as_ptr(),
+            ptr::null(),
+        );
+        assert!(LoadedVideo::load(c"fixture.unknown").is_none());
+        let absent = LoadedVideo::load(c"fixture.absent")
+            .unwrap_or_else(|| panic!("missing-file descriptor"));
+        assert!(absent.play().is_none());
+        drop(absent);
+        let descriptor =
+            LoadedVideo::load(c"fixture.video").unwrap_or_else(|| panic!("logo descriptor"));
+        let playback = descriptor.play().unwrap_or_else(|| panic!("logo playback"));
+        drop(descriptor);
+        assert!(playback.is_playing());
+        assert!(playback.process_frame());
+        drop(playback);
+        assert!(VidPlaying().is_null());
         assert!(!rust_present_video_to_window(ptr::null(), 0, 0, 0));
         assert!(!rust_play_video(dir.cast(), ptr::null(), 0, 0, false));
         assert!(!rust_play_video(
