@@ -245,8 +245,8 @@ impl Drop for BatchPause {
     }
 }
 
-struct BatchDepth(ContextLease);
-impl Drop for BatchDepth {
+pub struct BatchGuard(ContextLease);
+impl Drop for BatchGuard {
     fn drop(&mut self) {
         self.0.apply(Operation::EndBatch);
     }
@@ -468,9 +468,13 @@ impl ContextLease {
         draw()
     }
 
-    pub fn with_batch<R>(&self, draw: impl FnOnce() -> R) -> R {
+    pub fn batch(&self) -> BatchGuard {
         self.apply(Operation::BeginBatch);
-        let depth = BatchDepth(self.clone());
+        BatchGuard(self.clone())
+    }
+
+    pub fn with_batch<R>(&self, draw: impl FnOnce() -> R) -> R {
+        let depth = self.batch();
         let result = draw();
         drop(depth);
         result

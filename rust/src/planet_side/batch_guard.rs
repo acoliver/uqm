@@ -1,26 +1,9 @@
-//! Rust ownership of the graphics batch depth across transitional callbacks.
+//! Batch-depth policy for synchronous surface pickup callbacks.
 //!
-//! Selected-system pickup callbacks are still native, and some of them present
-//! a discovery report that runs its own input loop. Those helpers were written
-//! for the retired native lander loop, which held a batch open across the whole
-//! surface frame. Rust PlanetSide holds no such ambient batch: it batches only
-//! inside its own render.
-//!
-//! Two things follow, and both are invariants Rust owns rather than hopes for.
-//!
-//! A report cannot be presented underneath a held batch. While the depth is
-//! non-zero the draw command queue never publishes, so a report that waits for
-//! a keypress would wait behind a frame the player never sees. The depth is
-//! therefore checked *before* the callback runs, not merely repaired after.
-//!
-//! A callback that changes the depth is a defect in project-owned code, not
-//! unpredictable input, so it is reported rather than absorbed. The depth is
-//! still returned to its entry value first, because leaving it wrong would stop
-//! the failure itself from ever being drawn.
-//!
-//! Restoration applies to a normal return. A panic cannot cross the `extern "C"`
-//! boundary these callbacks live behind without aborting, so there is no
-//! unwinding path to restore.
+//! A discovery report runs a nested input loop. It must enter unbatched so the
+//! draw queue can publish the text before waiting for input. A callback that
+//! returns with changed depth is reported after restoring the queue, allowing
+//! the failure itself to be drawn. Panics propagate without recovery.
 
 use super::runtime::AdapterError;
 
@@ -47,50 +30,30 @@ pub const fn classify(entry: i32, exit: i32) -> BatchVerdict {
     }
 }
 
-use crate::graphics::gfx_common_abi::{BatchGraphics, GetBatchDepth, UnbatchGraphics};
-
-fn depth() -> i32 {
-    // SAFETY: reads one int under the draw queue's own recursive mutex.
-    unsafe { GetBatchDepth() }
-}
-
-/// Apply exactly `levels` corrections: positive releases, negative acquires.
-///
-/// The count is computed once from an observed depth rather than by re-reading
-/// the global in a loop, so this always terminates.
-fn correct_by(levels: i32) {
-    // SAFETY: these are the queue's own reference-counting operations.
-    unsafe {
-        for _ in 0..levels.max(0) {
-            UnbatchGraphics();
-        }
-        for _ in 0..(-levels).max(0) {
-            BatchGraphics();
-        }
-    }
-}
+use crate::graphics::batch_depth::{correct_by, depth};
 
 /// Invoke a native callback that must run unbatched, and hold it to that.
 ///
 /// Fails if the depth is not zero on entry, or if the callback returns having
 /// changed it. `operation` names the boundary for diagnostics.
 pub fn calling_native_unbatched<T>(
+    context: &crate::graphics::context_abi::ContextLease,
     operation: &'static str,
     body: impl FnOnce() -> T,
 ) -> Result<T, AdapterError> {
-    let entry = depth();
+    let entry = depth(context);
     if let BatchVerdict::EntryNotUnbatched(_) = classify(entry, entry) {
         return Err(AdapterError::new(operation));
     }
 
     let value = body();
 
-    match classify(entry, depth()) {
+    match classify(entry, depth(context)) {
         BatchVerdict::Balanced => Ok(value),
         BatchVerdict::EntryNotUnbatched(_) => Err(AdapterError::new(operation)),
         BatchVerdict::Drift(levels) => {
             // Put the queue back before reporting, so the failure can be drawn.
-            correct_by(levels);
+            correct_by(context, levels);
             Err(AdapterError {
                 operation,
                 batch_depth_corrections: levels,
@@ -105,11 +68,25 @@ mod tests {
 
     #[test]
     #[serial_test::serial]
+    fn batch_observation_rejects_an_uninitialized_queue() {
+        let context = crate::graphics::context_abi::LoadedContext::create(c"queue-admission");
+        let context = context.lease();
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| depth(&context)));
+        assert!(
+            result.is_err(),
+            "batch observation accepted an absent queue"
+        );
+    }
+
+    #[test]
+    #[serial_test::serial]
     fn production_boundary_rejects_drift_and_restores_the_queue() {
         use crate::graphics::{
             dcqueue_abi::{Init_DrawCommandQueue, Uninit_DrawCommandQueue},
             gfx_common_abi::{BatchGraphics, GetBatchDepth, UnbatchGraphics},
         };
+        let context = crate::graphics::context_abi::LoadedContext::create(c"queue-callback");
+        let context = context.lease();
         struct Queue;
         impl Drop for Queue {
             fn drop(&mut self) {
@@ -120,17 +97,19 @@ mod tests {
         // SAFETY: the serialized fixture owns the queue through its guard.
         unsafe { Init_DrawCommandQueue() };
         let _queue = Queue;
-        let error = calling_native_unbatched("pickup_drift", || {
+        let error = calling_native_unbatched(&context, "pickup_drift", || {
             // SAFETY: the serialized callback deliberately introduces one leaked level.
             unsafe { BatchGraphics() };
         });
         assert_eq!(error.unwrap_err().batch_depth_corrections, 1);
         // SAFETY: the serialized fixture owns this queue.
         assert_eq!(unsafe { GetBatchDepth() }, 0);
-        assert_eq!(calling_native_unbatched("balanced", || 7), Ok(7));
+        assert_eq!(calling_native_unbatched(&context, "balanced", || 7), Ok(7));
         // SAFETY: the serialized fixture balances this level before dropping the queue.
         unsafe { BatchGraphics() };
-        assert!(calling_native_unbatched("held", || panic!("held callback ran")).is_err());
+        assert!(
+            calling_native_unbatched(&context, "held", || panic!("held callback ran")).is_err()
+        );
         // SAFETY: balance the level acquired above.
         unsafe { UnbatchGraphics() };
     }

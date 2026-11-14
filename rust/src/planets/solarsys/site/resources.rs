@@ -166,16 +166,23 @@ impl<'a, 'game, 'observer> Site<'a, 'game, 'observer> {
             let typography = resources
                 .snapshot()
                 .unwrap_or_else(|| panic!("discovery report typography is not loaded"));
-            // SAFETY: supplied owners retain the report text and initialized graphics through presentation.
-            unsafe {
-                discovery_report(
-                    &mut game.borrow_mut(),
-                    &mut io.borrow_mut(),
-                    text,
-                    scan_context.as_ref(),
-                    &typography,
-                )
-            };
+            #[cfg(feature = "debug-process")]
+            // SAFETY: the synchronous debug traversal owns this game-thread flag.
+            if unsafe { crate::front_end::uqmdebug::DISABLE_INTERACTIVITY } != 0 {
+                return;
+            }
+            let junk = crate::planets::solarsys::resources::retained(game.borrow().kernel)
+                .junk
+                .lease()
+                .context_frame(0);
+            discovery_report(
+                &mut game.borrow_mut(),
+                &mut io.borrow_mut(),
+                text,
+                scan_context.as_ref(),
+                &typography,
+                junk,
+            );
         })
     }
 }

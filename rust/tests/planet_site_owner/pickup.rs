@@ -1,3 +1,6 @@
+#[path = "../support/campaign_display.rs"]
+mod campaign_display;
+
 use super::*;
 use uqm_rust::engine::world::generation::Body;
 use uqm_rust::planet_side::{
@@ -105,6 +108,17 @@ fn real_sol_site_preserves_pluto_fatal_survivor_and_luna_acceptance() {
 #[test]
 #[serial_test::serial]
 fn production_provider_threads_pickup_effects_and_only_persists_accepted_nodes() {
+    struct Queue;
+    impl Drop for Queue {
+        fn drop(&mut self) {
+            // SAFETY: this serialized fixture owns the initialized queue.
+            unsafe { uqm_rust::graphics::dcqueue_abi::Uninit_DrawCommandQueue() };
+        }
+    }
+    // SAFETY: the serialized fixture owns the queue until its guard drops.
+    unsafe { uqm_rust::graphics::dcqueue_abi::Init_DrawCommandQueue() };
+    let _queue = Queue;
+
     let mut game = campaign();
     game.world.set_catalog(std::borrow::Cow::Borrowed(
         &uqm_rust::planets::tables::STARMAP_ARRAY,
@@ -146,6 +160,14 @@ fn production_provider_threads_pickup_effects_and_only_persists_accepted_nodes()
                 resources: Default::default(),
             },
         );
+        assert_eq!(provider.node_count(ScanType::Energy), Ok(1));
+        assert_eq!(
+            provider
+                .generate(ScanType::Energy, ScanNodeId::new(0).unwrap())
+                .unwrap()
+                .kind,
+            uqm_rust::planet_side::generation::GeneratedNodeKind::Energy
+        );
         let mut pickup = PickupContext::lander(crew);
         assert_eq!(
             provider.pickup(ScanType::Energy, ScanNodeId::new(0).unwrap(), &mut pickup),
@@ -167,4 +189,120 @@ fn production_provider_threads_pickup_effects_and_only_persists_accepted_nodes()
             u32::from(!pluto)
         );
     }
+}
+
+#[test]
+#[serial_test::serial]
+fn production_site_keeps_its_report_when_typography_is_missing() {
+    use uqm_rust::engine::{
+        strings::owned_table::LoadedTextTable,
+        world::generation::{ReportDisposition, ReportSlot},
+    };
+    use uqm_rust::planets::generate::host::ReportSite;
+    let mut game = campaign();
+    let display = campaign_display::CampaignDisplay::install(&mut game).unwrap();
+    with_site(&mut game, SOL_DEFINED, |host, system| {
+        let table = LoadedTextTable::new(vec![c"Unconsumed report".to_owned()]);
+        system.report = ReportSlot::new(table.entry(0));
+        drop(table);
+        let failed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            ReportSite::report(host, system, ReportDisposition::Once)
+        }));
+        let error = failed.unwrap_err();
+        assert_eq!(
+            error.downcast_ref::<&str>().copied(),
+            Some("discovery report typography is not loaded")
+        );
+        assert_eq!(
+            system.report.current().unwrap().current_label().0,
+            c"Unconsumed report"
+        );
+    });
+    display.finish(game);
+}
+
+#[test]
+#[serial_test::serial]
+fn production_site_presents_and_consumes_an_empty_report_with_supplied_owners() {
+    use uqm_rust::engine::{strings::owned_table::LoadedTextTable, world::generation::ReportSlot};
+    use uqm_rust::graphics::{
+        context_abi::{ContextFrame, ContextLease},
+        drawable_abi::LoadedDrawable,
+    };
+    use uqm_rust::planets::{
+        generate::host::ReportSite,
+        report::typography::{ReportContext, ReportResources},
+    };
+    let mut game = campaign();
+    let resources = ReportResources::default();
+    let display =
+        campaign_display::CampaignDisplay::install_with_resources(&mut game, || resources.load())
+            .unwrap();
+    game.kernel.space_context = game.kernel.off_screen_context;
+    let context = ContextLease::require(game.kernel.space_context);
+    context.set_frame(ContextFrame::retain(std::ptr::NonNull::new(
+        game.kernel.screen,
+    )));
+    game.kernel.solar_presentation.assets =
+        Some(uqm_rust::engine::kernel::solar_resources::SolarResources {
+            flagship: LoadedDrawable::create(8, 1, 1, 1).unwrap(),
+            sun: LoadedDrawable::create(8, 1, 1, 1).unwrap(),
+            sun_palettes: vec![vec![0, 0]],
+            orbital_palettes: vec![vec![0, 0]],
+            orbital: LoadedDrawable::create(8, 1, 1, 1).unwrap(),
+            junk: LoadedDrawable::create(8, 1, 1, 22).unwrap(),
+            music: None,
+        });
+    game.kernel.install_input_runtime(std::rc::Rc::new(
+        uqm_rust::mainloop::input_abi::NativeInputRuntime::new(
+            None,
+            Default::default(),
+            game.kernel.configuration.clone(),
+        ),
+    ));
+    {
+        let mut battle = Battle::new();
+        let owner = RefCell::new(Cx::new(
+            &mut battle,
+            &mut game.world,
+            &mut game.kernel,
+            || 0,
+        ));
+        let mut observer = Unobserved;
+        let io = RefCell::new(Io {
+            observer: &mut observer,
+        });
+        let mut pickup = PickupContext::NoLander;
+        let mut host = Site::new(
+            &owner,
+            &io,
+            uqm_rust::engine::StarId(0),
+            SOL_DEFINED,
+            true,
+            &mut pickup,
+            Some(ReportContext {
+                context: context.clone(),
+                resources: resources.clone(),
+            }),
+        );
+        let mut system = SolarSys::new(
+            &[],
+            0,
+            SOL_DEFINED,
+            uqm_rust::math::RandomContext::with_seed(123),
+        );
+        let table = LoadedTextTable::new(vec![c"".to_owned()]);
+        system.report = ReportSlot::new(table.entry(0));
+        drop(table);
+        assert!(ReportSite::report(
+            &mut host,
+            &mut system,
+            uqm_rust::engine::world::generation::ReportDisposition::Once
+        ));
+        assert!(system.report.current().is_none());
+        assert_eq!(uqm_rust::graphics::batch_depth::depth(&context), 0);
+    }
+    context.flush();
+    drop((context, resources));
+    display.finish(game);
 }

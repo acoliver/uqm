@@ -81,19 +81,19 @@ pub fn pickup(
     }
 }
 
-pub(crate) unsafe fn is_node_retrieved(info: *const PlanetInfo, scan: u8, node: u8) -> bool {
-    (*info).scan_retrieve_mask[usize::from(scan)] & (1_u32 << node) != 0
+pub(crate) fn is_node_retrieved(info: &PlanetInfo, scan: u8, node: u8) -> bool {
+    (info.scan_retrieve_mask[usize::from(scan)] & (1_u32 << node)) != 0
 }
 #[cfg(test)]
-unsafe fn count_nodes_retrieved(info: *mut PlanetInfo, scan: u8) -> u16 {
-    (*info).scan_retrieve_mask[usize::from(scan)].count_ones() as u16
+fn count_nodes_retrieved(info: &PlanetInfo, scan: u8) -> u16 {
+    info.scan_retrieve_mask[usize::from(scan)].count_ones() as u16
 }
-pub(crate) unsafe fn set_node_retrieved(info: *mut PlanetInfo, scan: u8, node: u8) {
-    (*info).scan_retrieve_mask[usize::from(scan)] |= 1_u32 << node;
+pub(crate) fn set_node_retrieved(info: &mut PlanetInfo, scan: u8, node: u8) {
+    info.scan_retrieve_mask[usize::from(scan)] |= 1_u32 << node;
 }
 #[cfg(test)]
-unsafe fn set_node_not_retrieved(info: *mut PlanetInfo, scan: u8, node: u8) {
-    (*info).scan_retrieve_mask[usize::from(scan)] &= !(1_u32 << node);
+fn set_node_not_retrieved(info: &mut PlanetInfo, scan: u8, node: u8) {
+    info.scan_retrieve_mask[usize::from(scan)] &= !(1_u32 << node);
 }
 
 #[cfg(not(test))]
@@ -104,23 +104,31 @@ mod tests {
     use super::*;
 
     #[test]
+    fn mask_operations_borrow_the_selected_planet_info() {
+        let read: fn(&PlanetInfo, u8, u8) -> bool = is_node_retrieved;
+        let write: fn(&mut PlanetInfo, u8, u8) = set_node_retrieved;
+        let mut info = PlanetInfo::default();
+        write(&mut info, 2, 31);
+        assert!(read(&info, 2, 31));
+        assert!(!read(&info, 0, 31));
+    }
+
+    #[test]
     fn retrieval_masks_keep_scan_types_and_all_32_nodes_independent() {
-        let mut info: PlanetInfo = unsafe { std::mem::zeroed() };
-        unsafe {
-            for scan in 0..3 {
-                for node in 0..32 {
-                    assert!(!is_node_retrieved(&info, scan, node));
-                    set_node_retrieved(&mut info, scan, node);
-                    assert!(is_node_retrieved(&info, scan, node));
-                    assert_eq!(count_nodes_retrieved(&mut info, scan), u16::from(node) + 1);
-                }
+        let mut info = PlanetInfo::default();
+        for scan in 0..3 {
+            for node in 0..32 {
+                assert!(!is_node_retrieved(&info, scan, node));
+                set_node_retrieved(&mut info, scan, node);
+                assert!(is_node_retrieved(&info, scan, node));
+                assert_eq!(count_nodes_retrieved(&info, scan), u16::from(node) + 1);
             }
-            for scan in 0..3 {
-                set_node_not_retrieved(&mut info, scan, 31);
-                set_node_not_retrieved(&mut info, scan, 0);
-                assert_eq!(count_nodes_retrieved(&mut info, scan), 30);
-                assert_eq!(info.scan_retrieve_mask[usize::from(scan)], 0x7fff_fffe);
-            }
+        }
+        for scan in 0..3 {
+            set_node_not_retrieved(&mut info, scan, 31);
+            set_node_not_retrieved(&mut info, scan, 0);
+            assert_eq!(count_nodes_retrieved(&info, scan), 30);
+            assert_eq!(info.scan_retrieve_mask[usize::from(scan)], 0x7fff_fffe);
         }
     }
 

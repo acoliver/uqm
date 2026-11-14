@@ -20,7 +20,8 @@ use std::cell::RefCell;
 use super::creatures::{CreatureCatalog, CreatureKind};
 #[cfg(not(test))]
 use super::generation::GeneratedNodeKind;
-use super::generation::{GeneratedNode, ScanNodeId, ScanType, SurfaceGenerator};
+use super::generation::{GeneratedNode, SurfaceGenerator};
+use super::generation::{ScanNodeId, ScanType};
 #[cfg(not(test))]
 use super::model::SurfacePoint;
 use super::runtime::AdapterError;
@@ -136,8 +137,12 @@ impl<'a, 'game, 'observer, 'tables> CffiSurfaceGenerator<'a, 'game, 'observer, '
         }
     }
 
+    pub(super) fn retrieval_masks(&self) -> [u32; 3] {
+        self.system.info.planet_info.scan_retrieve_mask
+    }
+
     #[cfg(not(test))]
-    unsafe fn generate_node(&mut self, scan_type: ScanType, node: u16, info: &mut NodeInfo) -> u16 {
+    fn generate_node(&mut self, scan_type: ScanType, node: u16, info: &mut NodeInfo) -> u16 {
         let mut pickup = PickupContext::NoLander;
         let mut site = Site::new(
             self.game,
@@ -171,7 +176,6 @@ impl<'a, 'game, 'observer, 'tables> CffiSurfaceGenerator<'a, 'game, 'observer, '
         })
     }
 
-    #[cfg(not(test))]
     fn node_key(&self, node: ScanNodeId) -> (u16, u8, u8, u8) {
         crate::planets::solar_system::BodyLocation::new(self.star, self.body).node_key(node.get())
     }
@@ -187,20 +191,23 @@ impl<'a, 'game, 'observer, 'tables> CffiSurfaceGenerator<'a, 'game, 'observer, '
             // report helpers were written for the retired lander loop's ambient
             // batch. Rust holds no such batch, so it owns restoring the depth
             // rather than trusting the callback to leave it untouched.
+            let context = self
+                .report_context
+                .as_ref()
+                .unwrap_or_else(|| panic!("surface pickup requires its retained report context"))
+                .context
+                .clone();
             let retrieved = super::batch_guard::calling_native_unbatched(
+                &context,
                 "surface_generator_pickup_batch",
                 || callback(self),
             )?;
             if retrieved {
-                // SAFETY: scan and node are validated IDs; planet info is exclusively borrowed.
-                unsafe {
-                    crate::planets::scan::set_node_retrieved(
-                        &mut self.system.info.planet_info,
-                        scan as u8,
-                        node.get(),
-                    );
-                }
-                #[cfg(not(test))]
+                crate::planets::scan::set_node_retrieved(
+                    &mut self.system.info.planet_info,
+                    scan as u8,
+                    node.get(),
+                );
                 if scan == ScanType::Biological {
                     let key = self.node_key(node);
                     {
@@ -225,8 +232,7 @@ impl<'a, 'game, 'observer, 'tables> CffiSurfaceGenerator<'a, 'game, 'observer, '
 impl SurfaceGenerator for CffiSurfaceGenerator<'_, '_, '_, '_> {
     fn node_count(&mut self, scan: ScanType) -> Result<u8, AdapterError> {
         #[cfg(not(test))]
-        // SAFETY: this adapter retains the initialized system, descriptor and RNG for the callback.
-        unsafe {
+        {
             let count = self.generate_node(scan, GENERATE_ALL, &mut NodeInfo::default());
             u8::try_from(count).map_err(|_| AdapterError::new("surface_node_count"))
         }
@@ -243,8 +249,7 @@ impl SurfaceGenerator for CffiSurfaceGenerator<'_, '_, '_, '_> {
         node: ScanNodeId,
     ) -> Result<GeneratedNode, AdapterError> {
         #[cfg(not(test))]
-        // SAFETY: this adapter retains the initialized system, descriptor and RNG for the callback.
-        unsafe {
+        {
             if scan == ScanType::Biological {
                 let key = self.node_key(node);
                 if let Some(canned) = {
@@ -257,7 +262,7 @@ impl SurfaceGenerator for CffiSurfaceGenerator<'_, '_, '_, '_> {
                     return Ok(GeneratedNode::from_canister(canned));
                 }
             }
-            let mut info: NodeInfo = std::mem::zeroed();
+            let mut info = NodeInfo::default();
             let _ = self.generate_node(scan, u16::from(node.get()), &mut info);
             let kind = match scan {
                 ScanType::Mineral => GeneratedNodeKind::Mineral {
@@ -365,6 +370,17 @@ mod tests {
             crate::planets::report::typography::ReportContext,
         ),
     ) {
+        struct Queue;
+        impl Drop for Queue {
+            fn drop(&mut self) {
+                // SAFETY: this serialized fixture owns the initialized queue.
+                unsafe { crate::graphics::dcqueue_abi::Uninit_DrawCommandQueue() };
+            }
+        }
+        // SAFETY: the serialized fixture owns the queue until its guard drops.
+        unsafe { crate::graphics::dcqueue_abi::Init_DrawCommandQueue() };
+        let _queue = Queue;
+
         let mut owners = crate::engine::Game::new();
         owners.world.set_catalog(std::borrow::Cow::Borrowed(
             &crate::planets::tables::STARMAP_ARRAY,
@@ -475,17 +491,30 @@ mod tests {
 
     #[test]
     #[serial_test::serial]
-    fn unlinked_generator_fails_without_fallback() {
-        with_context(|game, io, report_context| {
+    fn held_pickup_rejects_the_callback_without_persisting_a_node() {
+        with_context(|game, io, report| {
+            crate::state::ffi::rust_init_game_state(game.borrow_mut().world);
             let mut solar = SolarSystem::new(game.borrow().world, StarId(0));
             solar.sys.sun.num_planets = 1;
             solar.enter_inner(0);
             solar.enter_orbit(Body::Planet(0));
-            let mut generator =
-                CffiSurfaceGenerator::for_planet_side(game, io, &mut solar, report_context);
+            let mut generator = CffiSurfaceGenerator::for_planet_side(game, io, &mut solar, report);
+            // SAFETY: this serialized fixture owns the initialized draw queue.
+            unsafe { crate::graphics::gfx_common_abi::BatchGraphics() };
+            let result =
+                generator.pickup_with(ScanType::Energy, ScanNodeId::new(0).unwrap(), |_| {
+                    panic!("held pickup callback ran")
+                });
+            // SAFETY: balance the fixture's entry level before inspecting the result.
+            unsafe { crate::graphics::gfx_common_abi::UnbatchGraphics() };
             assert_eq!(
-                generator.node_count(ScanType::Mineral),
-                Err(AdapterError::new("surface_generator_unlinked"))
+                result,
+                Err(AdapterError::new("surface_generator_pickup_batch"))
+            );
+            assert_eq!(generator.retrieval_masks(), [0; 3]);
+            assert_eq!(
+                game.borrow().world.story_state(StoryKey::PLANETARY_CHANGE),
+                0
             );
         });
     }
