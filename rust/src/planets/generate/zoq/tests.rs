@@ -262,7 +262,7 @@ fn visit(body: Body, distress: u32, configure: impl FnOnce(&mut Site)) -> Vec<Ca
     let mut sys_info: SystemInfo = unsafe { std::mem::zeroed() };
     let mut world: PlanetDesc = unsafe { std::mem::zeroed() };
     world.radius = 400;
-    let plan_data: Vec<PlanetFrame> = vec![unsafe { std::mem::zeroed() }; 128];
+    let plan_data: Vec<PlanetFrame> = vec![PlanetFrame::default(); 128];
     let mut orbit = Orbit {
         rng: &mut rng,
         plan_data: &plan_data,

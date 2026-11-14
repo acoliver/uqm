@@ -53,15 +53,6 @@ impl OrbitImages {
     }
 }
 
-pub(crate) fn required_frame(
-    drawable: &DrawableLease,
-    index: usize,
-) -> crate::engine::graphics::native_abi::FRAME {
-    drawable
-        .frame(index)
-        .unwrap_or_else(|| panic!("orbit image frame {index} is not initialized"))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

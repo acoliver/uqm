@@ -40,9 +40,6 @@ use uqm_rust::savegame::runtime::star::{CStarDesc, CATALOG_LEN};
 unsafe extern "C" {
 
     static mut ScreenWidth: i32;
-    static planet_array: [PlanetFrame; 59];
-    static element_array: [u8; 133];
-    static starmap_array: [CStarDesc; CATALOG_LEN];
 
 }
 
@@ -129,7 +126,7 @@ impl SuppliedGenerators {
             world.current_star = Some(uqm_rust::engine::StarId(0));
         });
         let mut next = uqm_rust::engine::world::generation::SolarSys::new(
-            &uqm_rust::planets::tables::PLANET_ARRAY.0,
+            &uqm_rust::planets::tables::PLANET_ARRAY,
             self.star[0].star_type,
             self.star[0].index,
             std::mem::replace(&mut self.state.sys.rng, RandomContext::with_seed(12345)),
@@ -146,7 +143,6 @@ impl SuppliedGenerators {
     fn select_info(&mut self, info: &SystemInfo) {
         self.state.sys.info = *info;
         let Some(index) = uqm_rust::planets::tables::PLANET_ARRAY
-            .0
             .iter()
             .zip(0u8..)
             .find_map(|(frame, index)| {
@@ -514,8 +510,8 @@ fn render_element_array(table: &[u8]) -> String {
 }
 
 fn render_plan_resources(table: &[PlanetFrame]) -> String {
-    let name = |resource: *const std::ffi::c_char| {
-        unsafe { std::ffi::CStr::from_ptr(resource) }
+    let name = |resource: &std::ffi::CStr| {
+        resource
             .to_str()
             .expect("resource names are ASCII")
             .to_owned()
@@ -537,11 +533,10 @@ fn render_plan_resources(table: &[PlanetFrame]) -> String {
 /// fixtures captured from the C originals field for field (strings included).
 #[test]
 fn plandata_tables_equal_the_c_originals() {
-    let stars = unsafe {
-        std::slice::from_raw_parts((&raw const starmap_array).cast::<CStarDesc>(), CATALOG_LEN)
-    };
-    let frames = unsafe { &planet_array }.as_slice();
-    let elements = unsafe { &element_array }.as_slice();
+    use uqm_rust::planets::tables::{ELEMENT_ARRAY, PLANET_ARRAY, STARMAP_ARRAY};
+    let stars = &STARMAP_ARRAY;
+    let frames = &PLANET_ARRAY;
+    let elements = &ELEMENT_ARRAY;
 
     for (name, text) in [
         ("star_catalog.txt", render_star_catalog(stars)),

@@ -382,7 +382,7 @@ mod tests {
         };
         do_planetary_analysis(
             &mut expected_rng,
-            &PLANET_ARRAY.0,
+            &PLANET_ARRAY,
             star,
             site,
             &mut expected,
@@ -391,7 +391,7 @@ mod tests {
         let actual = testing::with_orbit(
             &mut Orbit {
                 rng: &mut rng,
-                plan_data: &PLANET_ARRAY.0,
+                plan_data: &PLANET_ARRAY,
                 star,
                 site,
                 sys_info: &mut info,

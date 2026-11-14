@@ -159,8 +159,7 @@ impl LanderTakeoff for Pickup {
 pub(crate) fn with_orbit(run: impl FnOnce(&mut Orbit<'_>)) -> (SystemInfo, u32) {
     let mut rng = RandomContext::with_seed(104729);
     // The returned SYSTEM_INFO retains PlanDataPtr after this helper returns.
-    static TABLE: crate::planets::tables::SharedTable<[PlanetFrame; 59]> =
-        crate::planets::tables::SharedTable([unsafe { std::mem::zeroed() }; 59]);
+    static TABLE: [PlanetFrame; 59] = [PlanetFrame::EMPTY; 59];
     let mut world: PlanetDesc = unsafe { std::mem::zeroed() };
     world.rand_seed = 7919;
     world.radius = 512;
@@ -168,7 +167,7 @@ pub(crate) fn with_orbit(run: impl FnOnce(&mut Orbit<'_>)) -> (SystemInfo, u32) 
     info.planet_info.scan_seed = [101, 202, 303];
     run(&mut Orbit {
         rng: &mut rng,
-        plan_data: &TABLE.0,
+        plan_data: &TABLE,
         star: StarDescription {
             size: 0,
             star_type: 0,
@@ -449,7 +448,7 @@ fn pickup_and_queue_invariants_fail_before_side_effects() {
 
 #[test]
 fn beast_insertion_and_maidens_second_layout_preserve_whole_descriptors() {
-    let table = vec![unsafe { std::mem::zeroed() }; 59];
+    let table = vec![PlanetFrame::default(); 59];
     for seed in [1, 7919, 190056, u32::MAX] {
         let mut base: Vec<PlanetDesc> = vec![unsafe { std::mem::zeroed() }; 16];
         for (i, desc) in base.iter_mut().enumerate() {

@@ -270,3 +270,23 @@ mod tests {
         assert_eq!(move_cursor((100, 100), 1, -1, 242), (104, 96));
     }
 }
+
+pub(crate) fn repair_back_rect(
+    context: &crate::graphics::context_abi::ContextLease,
+    rect: &crate::comm::locdata::CRect,
+) {
+    let old = context.clip_rect();
+    let mut new = crate::graphics::native_abi::RECT {
+        corner: crate::graphics::native_abi::POINT {
+            x: rect.corner.x + old.corner.x,
+            y: rect.corner.y + old.corner.y,
+        },
+        extent: crate::graphics::native_abi::EXTENT {
+            width: rect.width,
+            height: rect.height,
+        },
+    };
+    new.extent.height += new.corner.y & 1;
+    new.corner.y &= !1;
+    context.restore_screen_region(new);
+}

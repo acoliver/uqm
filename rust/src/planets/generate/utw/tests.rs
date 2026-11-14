@@ -490,7 +490,7 @@ fn visit(
     let mut sys_info: SystemInfo = unsafe { std::mem::zeroed() };
     let mut world: PlanetDesc = unsafe { std::mem::zeroed() };
     world.radius = 400;
-    let plan_data: Vec<PlanetFrame> = vec![unsafe { std::mem::zeroed() }; 128];
+    let plan_data: Vec<PlanetFrame> = vec![PlanetFrame::default(); 128];
     let mut orbit = Orbit {
         rng: &mut rng,
         plan_data: &plan_data,
@@ -719,7 +719,7 @@ fn other_worlds_go_straight_to_the_default_orbital() {
 
 fn layout(star_index: u8) -> Vec<PlanetDesc> {
     let mut rng = RandomContext::with_seed(5);
-    let plan_data: Vec<PlanetFrame> = vec![unsafe { std::mem::zeroed() }; 128];
+    let plan_data: Vec<PlanetFrame> = vec![PlanetFrame::default(); 128];
     let mut planets: Vec<PlanetDesc> = vec![unsafe { std::mem::zeroed() }; 16];
     generate_planets(&mut rng, &plan_data, 0, 2, &mut planets, star_index);
     planets

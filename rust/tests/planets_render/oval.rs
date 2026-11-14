@@ -6,8 +6,11 @@ use std::fmt::Write;
 use std::io::Read;
 
 use sha2::{Digest, Sha256};
+use uqm_rust::engine::graphics::{
+    native_offscreen::OffscreenFormats, native_surface::CapturedSurface,
+};
 use uqm_rust::graphics::native_abi as c;
-use uqm_rust::planets::c_api::{self, CapturedSurface, FORMAT_CONV_SURF, SDL_SCREEN};
+use uqm_rust::planets::c_api;
 use uqm_rust::starbase::ids::RadarLayout;
 
 extern "C" {
@@ -43,24 +46,14 @@ struct Offscreen {
     height: i32,
     previous_screen: (i32, i32),
     screen: (i32, i32),
-    _format: sdl2::surface::Surface<'static>,
-    _screen_format: sdl2::surface::Surface<'static>,
+    _formats: OffscreenFormats,
 }
 
 impl Offscreen {
     fn new(screen: (i32, i32)) -> Self {
         let layout = RadarLayout::for_screen(screen.0, screen.1);
-        let format =
-            sdl2::surface::Surface::new(1, 1, sdl2::pixels::PixelFormatEnum::RGBA8888).unwrap();
-        let screen_format =
-            sdl2::surface::Surface::new(1, 1, sdl2::pixels::PixelFormatEnum::RGBX8888).unwrap();
+        let formats = OffscreenFormats::new().unwrap();
         unsafe {
-            assert!(
-                FORMAT_CONV_SURF.is_null() && SDL_SCREEN.is_null(),
-                "test must not replace active graphics"
-            );
-            FORMAT_CONV_SURF = format.raw().cast();
-            SDL_SCREEN = screen_format.raw().cast();
             let previous_screen = (ScreenWidth, ScreenHeight);
             ScreenWidth = screen.0;
             ScreenHeight = screen.1;
@@ -86,8 +79,7 @@ impl Offscreen {
                 height: layout.sis_screen_height,
                 previous_screen,
                 screen,
-                _format: format,
-                _screen_format: screen_format,
+                _formats: formats,
             }
         }
     }
@@ -166,8 +158,6 @@ impl Drop for Offscreen {
             SetContext(self.previous_context);
             assert_ne!(DestroyContext(self.context), 0);
             c_api::Uninit_DrawCommandQueue();
-            FORMAT_CONV_SURF = std::ptr::null_mut();
-            SDL_SCREEN = std::ptr::null_mut();
             ScreenWidth = self.previous_screen.0;
             ScreenHeight = self.previous_screen.1;
         }
