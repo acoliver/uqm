@@ -21,3 +21,6 @@ pub trait Net {
 pub fn native_net() -> Box<dyn Net> {
     Box::new(crate::network::NativeNet::default())
 }
+
+mod files;
+pub use files::{File, FileStat, FileStream, Files};

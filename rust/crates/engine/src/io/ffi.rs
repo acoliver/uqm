@@ -20,33 +20,6 @@ unsafe fn cstr_to_path(c_str: *const c_char) -> Option<PathBuf> {
 // We only use it as a pointer, never dereference it
 pub use crate::io::uio_bridge::uio_DirHandle;
 
-// Opaque representation of uio_Stream from C (used by uio_fopen/fclose)
-pub use crate::io::uio_bridge::uio_Stream;
-
-// Opaque representation of uio_Handle from C (used by uio_open/close/read/write/fstat)
-pub use crate::io::uio_bridge::uio_Handle;
-
-// stat struct for uio_fstat
-pub use libc::stat;
-
-// FFI bindings to C uio_* functions
-
-pub use crate::io::uio_bridge::uio_fopen;
-
-pub use crate::io::uio_bridge::uio_fclose;
-
-pub use crate::io::uio_bridge::uio_open;
-
-pub use crate::io::uio_bridge::uio_close;
-
-pub use crate::io::uio_bridge::uio_read;
-
-pub use crate::io::uio_bridge::uio_write;
-
-pub use crate::io::uio_bridge::uio_fstat;
-
-pub use crate::io::uio_bridge::uio_unlink;
-
 /// Check if a file exists (Phase 1 bridge)
 ///
 /// # Safety
@@ -92,19 +65,16 @@ pub unsafe extern "C" fn fileExists2(dir: *mut uio_DirHandle, file_name: *const 
     }
 
     // Check for null parameters
-    if dir.is_null() || file_name.is_null() {
+    if file_name.is_null() {
         return 0;
     }
 
-    // Use C's uio_fopen to check if file exists (matches files.c behavior)
-    let stream = uio_fopen(dir, file_name, c"rb".as_ptr() as *const c_char);
-    if stream.is_null() {
+    use crate::host::Files;
+    let Ok(files) = crate::io::uio_owned::directory(dir) else {
         return 0;
-    }
-
-    // File exists, close the stream
-    uio_fclose(stream);
-    1
+    };
+    let name = CStr::from_ptr(file_name).to_string_lossy();
+    i32::from(files.open_read(std::path::Path::new(name.as_ref())).is_ok())
 }
 
 // Keep the existing rust_* prefixed functions for compatibility

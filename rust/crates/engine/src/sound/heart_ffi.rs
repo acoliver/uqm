@@ -8,8 +8,6 @@
 
 pub use self::{destroy_music as DestroyMusic, destroy_sound as DestroySound};
 
-#[cfg(test)]
-use std::ffi::c_long;
 use std::ffi::{c_char, c_int, c_uint, c_void, CStr, CString};
 use std::panic::{self, AssertUnwindSafe};
 use std::path::Path;
@@ -59,16 +57,6 @@ use super::types::*;
 // =============================================================================
 
 use crate::io::handles::contentDir;
-#[cfg(not(test))]
-use crate::io::uio_bridge::uio_fclose;
-#[cfg(not(test))]
-use crate::io::uio_bridge::uio_fopen;
-#[cfg(not(test))]
-use crate::io::uio_bridge::uio_fread;
-#[cfg(not(test))]
-use crate::io::uio_bridge::uio_fseek;
-#[cfg(not(test))]
-use crate::io::uio_bridge::uio_ftell;
 
 #[allow(
     non_snake_case,
@@ -86,47 +74,10 @@ unsafe fn HFree(ptr: *mut c_void) {
     crate::memory::rust_hfree(ptr)
 }
 
-#[cfg(test)]
-unsafe fn uio_fopen(_dir: *mut c_void, _path: *const c_char, _mode: *const c_char) -> *mut c_void {
-    null_mut()
-}
-#[cfg(test)]
-unsafe fn uio_fclose(_fp: *mut c_void) -> c_int {
-    0
-}
-#[cfg(test)]
-unsafe fn uio_fread(_buf: *mut c_void, _size: usize, _count: usize, _fp: *mut c_void) -> usize {
-    0
-}
-#[cfg(test)]
-unsafe fn uio_fseek(_fp: *mut c_void, _offset: c_long, _whence: c_int) -> c_int {
-    0
-}
-#[cfg(test)]
-unsafe fn uio_ftell(_fp: *mut c_void) -> c_long {
-    0
-}
-// HMalloc/HFree use crate::memory directly (no test stubs needed)
-
-/// Read a file via UIO into a byte vector.
-unsafe fn uio_read_file(path: *const c_char) -> Option<Vec<u8>> {
-    let mode = c"rb".as_ptr() as *const c_char;
-    let fp = uio_fopen((contentDir).cast(), path, mode);
-    if fp.is_null() {
-        return None;
-    }
-    uio_fseek(fp, 0, 2); // SEEK_END
-    let length = uio_ftell(fp) as usize;
-    uio_fseek(fp, 0, 0); // SEEK_SET
-    if length == 0 {
-        uio_fclose(fp);
-        return None;
-    }
-    let mut buf = vec![0u8; length];
-    let read = uio_fread(buf.as_mut_ptr() as *mut c_void, 1, length, fp);
-    uio_fclose(fp);
-    buf.truncate(read);
-    Some(buf)
+unsafe fn read_content_file(path: *const c_char) -> Option<Vec<u8>> {
+    crate::io::uio_owned::read_file(contentDir.cast(), path)
+        .ok()
+        .filter(|data| !data.is_empty())
 }
 
 /// Create a Rust decoder for a file, based on extension.
@@ -241,7 +192,7 @@ unsafe fn create_per_page_decoders(
 
     let file_data = CString::new(name)
         .ok()
-        .and_then(|c_name| uio_read_file(c_name.as_ptr()));
+        .and_then(|c_name| read_content_file(c_name.as_ptr()));
     page_decoders(name, file_data.as_deref(), &page_run_times)
 }
 
@@ -703,7 +654,7 @@ pub unsafe fn splice_multi_track(
             break;
         }
         let name = CStr::from_ptr(name_ptr).to_string_lossy();
-        let data = uio_read_file(name_ptr);
+        let data = read_content_file(name_ptr);
         // C loads the complete clip, or its timed null decoder when voice
         // content is absent. Never append an audio chunk without a decoder.
         decoders.extend(page_decoders(
@@ -1113,7 +1064,7 @@ pub unsafe extern "C" fn LoadSoundFile(filename: *const c_char) -> *mut c_void {
 
     // Read the bank file (text) via UIO
     let c_name = CString::new(name).unwrap_or_default();
-    let data = match uio_read_file(c_name.as_ptr()) {
+    let data = match read_content_file(c_name.as_ptr()) {
         Some(d) => d,
         None => {
             eprintln!("LoadSoundFile({}): failed to read file", name);
@@ -1162,7 +1113,7 @@ pub unsafe extern "C" fn LoadSoundFile(filename: *const c_char) -> *mut c_void {
 
         // Read sound file
         let c_path = CString::new(full_path.as_str()).unwrap_or_default();
-        let snd_data = match uio_read_file(c_path.as_ptr()) {
+        let snd_data = match read_content_file(c_path.as_ptr()) {
             Some(d) => d,
             None => {
                 eprintln!("LoadSoundFile: couldn't read {}", full_path);
@@ -1279,7 +1230,7 @@ pub unsafe extern "C" fn LoadMusicFile(filename: *const c_char) -> *mut c_void {
 
     // Read file via UIO
     let c_name = CString::new(name).unwrap_or_default();
-    let data = match uio_read_file(c_name.as_ptr()) {
+    let data = match read_content_file(c_name.as_ptr()) {
         Some(d) => d,
         None => {
             eprintln!("LoadMusicFile({}): failed to read file", name);

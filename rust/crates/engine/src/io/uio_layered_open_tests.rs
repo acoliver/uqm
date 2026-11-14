@@ -2,7 +2,6 @@
 //! Each mount that covers a path is consulted in priority order, and a
 //! mount that lacks the file lets the lookup continue to the next one.
 
-use std::ffi::CString;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
@@ -19,7 +18,8 @@ pub(super) struct Stack {
 
 impl Stack {
     pub(super) fn new() -> Self {
-        if let Ok(mut registry) = get_mount_registry().lock() {
+        if let Ok(mut topology) = get_mount_registry().lock() {
+            let registry = &mut topology.mounts;
             registry.clear();
         }
         let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
@@ -82,7 +82,8 @@ impl Stack {
         let relative_handle = if relative == 0 {
             ptr::null_mut()
         } else {
-            let registry = get_mount_registry().lock().unwrap();
+            let topology = get_mount_registry().lock().unwrap();
+            let registry = &topology.mounts;
             let entry = registry.iter().find(|m| m.id == relative).unwrap();
             entry.handle_ptr as *mut uio_MountHandle
         };
@@ -90,22 +91,16 @@ impl Stack {
     }
 
     pub(super) fn first_mount_id(&self) -> usize {
-        get_mount_registry().lock().unwrap()[0].id
+        get_mount_registry().lock().unwrap().mounts[0].id
     }
 
     pub(super) fn read(&self, name: &str) -> Option<Vec<u8>> {
-        use std::io::Read;
-        let name = CString::new(name).unwrap();
-        unsafe {
-            let handle = uio_open(self.root, name.as_ptr(), 0, 0);
-            if handle.is_null() {
-                return None;
-            }
-            let mut bytes = Vec::new();
-            (*handle).lock().unwrap().read_to_end(&mut bytes).unwrap();
-            uio_close(handle);
-            Some(bytes)
-        }
+        use crate::host::Files;
+        // SAFETY: the fixture owns root for this call.
+        unsafe { owned::directory(self.root) }
+            .unwrap()
+            .read(Path::new(name))
+            .ok()
     }
 }
 
@@ -115,7 +110,8 @@ impl Drop for Stack {
             let _ = Box::from_raw(self.root);
             let _ = Box::from_raw(self.repo);
         }
-        if let Ok(mut registry) = get_mount_registry().lock() {
+        if let Ok(mut topology) = get_mount_registry().lock() {
+            let registry = &mut topology.mounts;
             registry.clear();
         }
     }
@@ -205,7 +201,8 @@ impl Stack {
         let path = dir.path().to_path_buf();
         self._dirs.push(dir);
         let relative_handle = {
-            let registry = get_mount_registry().lock().unwrap();
+            let topology = get_mount_registry().lock().unwrap();
+            let registry = &topology.mounts;
             let entry = registry.iter().find(|m| m.id == relative).unwrap();
             entry.handle_ptr as *mut uio_MountHandle
         };

@@ -3,15 +3,11 @@
 
 use crate::bridge_log::rust_bridge_log_msg;
 use crate::platform::set_errno;
-use libc::size_t;
 use std::collections::HashMap;
 
-use std::fs::{self, OpenOptions};
-use std::io::{Read, Seek, SeekFrom, Write};
-use std::os::raw::{c_char, c_int, c_long};
+use std::os::raw::{c_char, c_int};
 use std::path::{Path, PathBuf};
 use std::ptr;
-use std::slice;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock};
 
@@ -28,25 +24,8 @@ const UIO_MOUNT_ABOVE: c_int = 3 << 2;
 const UIO_FSTYPE_STDIO: c_int = 1;
 const UIO_FSTYPE_ZIP: c_int = 2;
 
-// Access mode constants
-
-const UIO_STREAM_STATUS_OK: c_int = 0;
-const UIO_STREAM_STATUS_EOF: c_int = 1;
-const UIO_STREAM_STATUS_ERROR: c_int = 2;
-
-const UIO_STREAM_OPERATION_NONE: c_int = 0;
-const UIO_STREAM_OPERATION_READ: c_int = 1;
-
 #[cfg(test)]
 use crate::platform::errno as current_errno;
-
-/// @plan PLAN-20260314-FILE-IO.P05
-/// @requirement REQ-FIO-ERRNO
-/// Helper to fail with errno set and return a failure value
-fn fail_errno<T>(code: c_int, failure_return: T) -> T {
-    set_errno(code);
-    failure_return
-}
 
 /// @plan PLAN-20260314-FILE-IO.P05
 /// @requirement REQ-FIO-PANIC-SAFETY
@@ -64,9 +43,6 @@ macro_rules! ffi_guard {
     };
 }
 
-// =============================================================================
-
-/// @plan PLAN-20260314-FILE-IO.P06
 /// @requirement REQ-FIO-MOUNT-ORDER
 /// @plan PLAN-20260314-FILE-IO.P09
 /// @requirement REQ-FIO-ARCHIVE-MOUNT
@@ -93,14 +69,18 @@ struct MountInfo {
 /// Global initialization flag for the UIO subsystem
 static UIO_INITIALIZED: AtomicBool = AtomicBool::new(false);
 
-static MOUNT_REGISTRY: OnceLock<Mutex<Vec<MountInfo>>> = OnceLock::new();
+static MOUNT_REGISTRY: OnceLock<Mutex<Vfs>> = OnceLock::new();
 static NEXT_MOUNT_ID: AtomicUsize = AtomicUsize::new(1);
 
-fn get_mount_registry() -> &'static Mutex<Vec<MountInfo>> {
-    MOUNT_REGISTRY.get_or_init(|| Mutex::new(Vec::new()))
+fn get_mount_registry() -> &'static Mutex<Vfs> {
+    MOUNT_REGISTRY.get_or_init(|| Mutex::new(Vfs::default()))
 }
 
-// Types matching C structures from io.h and uiostream.h
+#[path = "vfs_core.rs"]
+mod vfs_core;
+#[cfg(test)]
+pub(crate) use vfs_core::FileData;
+pub use vfs_core::Vfs;
 
 pub use owned::uio_DirHandle;
 
@@ -121,94 +101,7 @@ pub struct uio_MountHandle {
 
 // =============================================================================
 // uio_rename / uio_access / uio_stat / uio_mkdir / uio_rmdir / uio_lseek
-// =============================================================================
 
-/// @plan PLAN-20260314-FILE-IO.P05
-/// @requirement REQ-FIO-ERRNO
-/// @plan PLAN-20260314-FILE-IO.P09
-/// @requirement REQ-FIO-ARCHIVE-MOUNT
-///
-/// # Safety
-///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-pub unsafe fn uio_stat(dir: *mut uio_DirHandle, path: *const c_char, stat_buf: *mut stat) -> c_int {
-    ffi_guard!(-1, {
-        log_marker("uio_stat called");
-
-        if dir.is_null() || stat_buf.is_null() {
-            return fail_errno(libc::EINVAL, -1);
-        }
-
-        let dir_virt_path = &(*dir).virtual_path;
-        let input = match cstr_to_pathbuf(path) {
-            Some(p) => p,
-            None => return fail_errno(libc::EINVAL, -1),
-        };
-
-        let virtual_path = normalize_virtual_path_full(dir_virt_path, &input);
-        let registry = get_mount_registry().lock().unwrap();
-
-        // Resolve to topmost visible object in mount order
-        for mount in registry.iter().filter(|m| m.active_in_registry) {
-            let mount_path = Path::new(&mount.mount_point);
-            if virtual_path != mount_path && !virtual_path.starts_with(mount_path) {
-                continue;
-            }
-
-            let suffix = virtual_path
-                .strip_prefix(mount_path)
-                .unwrap_or_else(|_| Path::new(""));
-
-            // Handle ZIP mounts
-            if mount.fs_type == UIO_FSTYPE_ZIP {
-                if let Some(ref zip_index) = mount.zip_index {
-                    let suffix_str = suffix.to_string_lossy();
-
-                    // Check if it's a directory
-                    if zip_index.is_directory(&suffix_str) {
-                        (*stat_buf).st_size = 0;
-                        (*stat_buf).st_mode = 0o040555; // Directory, read+exec for all
-                        return 0;
-                    }
-
-                    // Check if it's a file
-                    if let Some(entry) = zip_index.get_entry(&suffix_str) {
-                        (*stat_buf).st_size = entry.uncompressed_size as i64;
-                        (*stat_buf).st_mode = 0o100444; // Regular file, read-only
-                        return 0;
-                    }
-                }
-                continue;
-            }
-
-            // Handle stdio mounts
-            let host_path = if suffix.as_os_str().is_empty() {
-                mount.mounted_root.clone()
-            } else {
-                map_virtual_to_host_confined(&mount.mounted_root, suffix)
-            };
-
-            match fs::metadata(&host_path) {
-                Ok(meta) => {
-                    (*stat_buf).st_size = meta.len() as i64;
-                    (*stat_buf).st_mode = if meta.is_file() { 0o100000 } else { 0o040000 };
-                    (*stat_buf).st_mode |= if meta.permissions().readonly() {
-                        0o444
-                    } else {
-                        0o666
-                    };
-                    return 0;
-                }
-                Err(_) => continue,
-            }
-        }
-
-        // Not found in any mount
-        fail_errno(libc::ENOENT, -1)
-    })
-}
-
-// C-compatible uio_DirList struct (must match C definition exactly)
 #[allow(
     non_snake_case,
     reason = "field names mirror the legacy C UIO layout API; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
@@ -223,100 +116,6 @@ pub struct uio_DirList {
 // @plan PLAN-20260314-FILE-IO.P09
 // @requirement REQ-FIO-ARCHIVE-MOUNT
 // uio_Handle wraps either a regular file or a ZIP entry reader
-#[allow(
-    non_camel_case_types,
-    reason = "legacy UIO handle type name is part of the transitional C-compatible API; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-)]
-pub enum uio_HandleInner {
-    File(std::fs::File),
-    ZipEntry(crate::io::zip_reader::ZipEntryReader),
-}
-
-impl Read for uio_HandleInner {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        match self {
-            uio_HandleInner::File(f) => f.read(buf),
-            uio_HandleInner::ZipEntry(z) => z.read(buf),
-        }
-    }
-}
-
-impl Write for uio_HandleInner {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        match self {
-            uio_HandleInner::File(f) => f.write(buf),
-            uio_HandleInner::ZipEntry(_) => Err(std::io::Error::new(
-                std::io::ErrorKind::PermissionDenied,
-                "Cannot write to ZIP entry",
-            )),
-        }
-    }
-
-    fn flush(&mut self) -> std::io::Result<()> {
-        match self {
-            uio_HandleInner::File(f) => f.flush(),
-            uio_HandleInner::ZipEntry(_) => Ok(()),
-        }
-    }
-}
-
-impl Seek for uio_HandleInner {
-    fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
-        match self {
-            uio_HandleInner::File(f) => f.seek(pos),
-            uio_HandleInner::ZipEntry(z) => z.seek(pos),
-        }
-    }
-}
-
-impl uio_HandleInner {
-    /// Get file size
-    pub fn len(&self) -> std::io::Result<u64> {
-        match self {
-            uio_HandleInner::File(f) => f.metadata().map(|m| m.len()),
-            uio_HandleInner::ZipEntry(z) => Ok(z.size()),
-        }
-    }
-
-    /// Return whether the file contains no bytes.
-    pub fn is_empty(&self) -> std::io::Result<bool> {
-        self.len().map(|len| len == 0)
-    }
-
-    /// Get metadata (only works for File handles)
-    pub fn metadata(&self) -> std::io::Result<std::fs::Metadata> {
-        match self {
-            uio_HandleInner::File(f) => f.metadata(),
-            uio_HandleInner::ZipEntry(_) => Err(std::io::Error::new(
-                std::io::ErrorKind::Unsupported,
-                "metadata not supported for ZIP entries",
-            )),
-        }
-    }
-}
-
-#[allow(
-    non_camel_case_types,
-    reason = "legacy UIO handle type name is part of the transitional C-compatible API; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-)]
-pub type uio_Handle = Mutex<uio_HandleInner>;
-
-#[repr(C)]
-pub struct uio_Handle_Opaque {
-    _private: [u8; 0],
-}
-
-#[repr(C)]
-pub struct uio_Stream {
-    buf: *mut c_char,
-    data_start: *mut c_char,
-    data_end: *mut c_char,
-    buf_end: *mut c_char,
-    handle: *mut uio_Handle,
-    status: c_int,
-    operation: c_int,
-    open_flags: c_int,
-}
 
 fn repository_key(repository: *mut uio_Repository) -> usize {
     repository as usize
@@ -387,7 +186,7 @@ fn register_mount(
     });
     let handle_ptr = Box::into_raw(handle);
 
-    let mut registry = get_mount_registry().lock().unwrap();
+    let registry = &mut get_mount_registry().lock().unwrap().mounts;
 
     // Derive position from TOP/BOTTOM/ABOVE/BELOW semantics
     // Start positions at 1000 to avoid underflow with TOP insertions
@@ -461,7 +260,7 @@ fn register_mount(
 
     registry.push(info);
     // Sort by position (lower = higher priority)
-    sort_mount_registry(&mut registry);
+    sort_mount_registry(registry);
     handle_ptr
 }
 
@@ -530,7 +329,8 @@ fn remove_mount_entry(handle: *mut uio_MountHandle) -> Option<MountInfo> {
     }
 
     let handle_key = mount_handle_key(handle);
-    let mut registry = get_mount_registry().lock().unwrap();
+    let mut topology = get_mount_registry().lock().unwrap();
+    let registry = &mut topology.mounts;
     let index = registry
         .iter()
         .position(|entry| entry.handle_ptr == handle_key)?;
@@ -539,7 +339,8 @@ fn remove_mount_entry(handle: *mut uio_MountHandle) -> Option<MountInfo> {
 
 fn remove_repository_mounts(repository: *mut uio_Repository) -> Vec<usize> {
     let repository_key = repository_key(repository);
-    let mut registry = get_mount_registry().lock().unwrap();
+    let mut topology = get_mount_registry().lock().unwrap();
+    let registry = &mut topology.mounts;
     let mut handles = Vec::new();
     let mut i = 0;
     while i < registry.len() {
@@ -552,70 +353,6 @@ fn remove_repository_mounts(repository: *mut uio_Repository) -> Vec<usize> {
     handles
 }
 
-fn is_real_filesystem_path(path: &Path) -> bool {
-    if !path.is_absolute() {
-        return false;
-    }
-
-    let Some(component) = path.components().nth(1) else {
-        return false;
-    };
-
-    matches!(
-        component.as_os_str().to_string_lossy().as_ref(),
-        "Users"
-            | "home"
-            | "tmp"
-            | "var"
-            | "opt"
-            | "private"
-            | "System"
-            | "Library"
-            | "Applications"
-    )
-}
-
-fn resolve_virtual_mount_path(registry: &[MountInfo], path: &Path) -> Option<(usize, PathBuf)> {
-    let normalized = normalize_virtual_path(path);
-
-    registry
-        .iter()
-        .filter(|entry| entry.active_in_registry)
-        .find_map(|entry| {
-            let mount_path = Path::new(&entry.mount_point);
-            if normalized == mount_path || normalized.starts_with(mount_path) {
-                let suffix = normalized
-                    .strip_prefix(mount_path)
-                    .unwrap_or_else(|_| Path::new(""));
-                let resolved = if suffix.as_os_str().is_empty() {
-                    entry.mounted_root.clone()
-                } else {
-                    entry.mounted_root.join(suffix)
-                };
-                Some((entry.handle_ptr, resolved))
-            } else {
-                None
-            }
-        })
-}
-
-fn set_stream_status(stream: *mut uio_Stream, status: c_int) {
-    if !stream.is_null() {
-        unsafe {
-            (*stream).status = status;
-        }
-    }
-}
-
-fn set_stream_operation(stream: *mut uio_Stream, operation: c_int) {
-    if !stream.is_null() {
-        unsafe {
-            (*stream).operation = operation;
-        }
-    }
-}
-
-// =============================================================================
 // uio_getFileLocation / uio_unmountDir / uio_unmountAllDirs /
 // uio_getMountFileSystemType / uio_transplantDir
 // =============================================================================
@@ -640,22 +377,6 @@ pub unsafe extern "C" fn uio_unmountDir(mount_handle: *mut uio_MountHandle) -> c
     0
 }
 
-///
-/// # Safety
-///
-/// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn uio_unmountAllDirs(repository: *mut uio_Repository) -> c_int {
-    log_marker("uio_unmountAllDirs called");
-
-    for handle_ptr in remove_repository_mounts(repository) {
-        let _ = Box::from_raw(handle_ptr as *mut uio_MountHandle);
-    }
-
-    0
-}
-
-///
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
@@ -701,369 +422,17 @@ pub unsafe extern "C" fn uio_transplantDir(
 // =============================================================================
 // uio_fgets / uio_fgetc / uio_ungetc / uio_fputc / uio_fputs
 // uio_fflush / uio_feof / uio_ferror / uio_clearerr / uio_streamHandle
-// =============================================================================
 
-///
-/// # Safety
-///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-pub unsafe fn uio_fgets(buf: *mut c_char, size: c_int, stream: *mut uio_Stream) -> *mut c_char {
-    // Wrap entire function in catch_unwind to prevent panics from unwinding across FFI
-    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        uio_fgets_inner(buf, size, stream)
-    }));
+// uio_open_file_block / uio_close_file_block / uio_access_file_block /
+// uio_copy_file_block / uio_set_file_block_usage_hint / uio_open_file_block2
+// uio_clear_file_block_buffers
 
-    match result {
-        Ok(ptr) => ptr,
-        Err(_) => {
-            rust_bridge_log_msg("RUST_UIO: uio_fgets panicked, returning null");
-            ptr::null_mut()
-        }
-    }
-}
+// uio_get_file_system_handler / uio_g_pfile_flags_from_proot_flags / uio_walk_gppath
 
-unsafe fn uio_fgets_inner(buf: *mut c_char, size: c_int, stream: *mut uio_Stream) -> *mut c_char {
-    if stream.is_null() || buf.is_null() || size <= 0 {
-        return ptr::null_mut();
-    }
+// uio_get_stdio_access / uio_release_stdio_access / uio_printMounts
 
-    let max_len = size as usize;
-    let s = &mut *stream;
-    if s.handle.is_null() {
-        return ptr::null_mut();
-    }
+// uio_GPDir / uio_GPFile / uio_GPRoot / uio_PRoot functions
 
-    // Use correct type: uio_Handle = Mutex<uio_HandleInner>
-    let mut guard = match (*s.handle).lock() {
-        Ok(g) => g,
-        Err(_) => {
-            return ptr::null_mut();
-        }
-    };
-
-    let buffer = slice::from_raw_parts_mut(buf.cast::<u8>(), max_len);
-    let mut count = 0usize;
-    let max_read = max_len - 1; // leave room for null terminator
-
-    let mut had_error = false;
-    while count < max_read {
-        let mut byte = [0u8; 1];
-        let read = match guard.read(&mut byte) {
-            Ok(n) => n,
-            Err(_) => {
-                set_stream_status(stream, UIO_STREAM_STATUS_ERROR);
-                had_error = true;
-                break;
-            }
-        };
-        if read == 0 {
-            if count == 0 {
-                set_stream_status(stream, UIO_STREAM_STATUS_EOF);
-            }
-            break;
-        }
-        buffer[count] = byte[0];
-        count += 1;
-        if byte[0] == b'\n' {
-            break;
-        }
-    }
-
-    if count == 0 {
-        return ptr::null_mut();
-    }
-
-    if !had_error {
-        set_stream_status(stream, UIO_STREAM_STATUS_OK);
-    }
-
-    buffer[count] = 0;
-    buf
-}
-
-///
-/// # Safety
-///
-/// Caller must ensure pointer arguments are valid and properly aligned.
-pub unsafe fn uio_fgetc(stream: *mut uio_Stream) -> c_int {
-    rust_bridge_log_msg("RUST_UIO: uio_fgetc entry");
-    if stream.is_null() {
-        return -1;
-    }
-    let s = &mut *stream;
-    if s.handle.is_null() {
-        return -1;
-    }
-    let mut guard = match (*s.handle).lock() {
-        Ok(g) => g,
-        Err(_) => return -1,
-    };
-    let mut byte = [0u8; 1];
-    match guard.read(&mut byte) {
-        Ok(1) => {
-            set_stream_status(stream, UIO_STREAM_STATUS_OK);
-            byte[0] as c_int
-        }
-        Ok(0) => {
-            // EOF
-            set_stream_status(stream, UIO_STREAM_STATUS_EOF);
-            -1
-        }
-        Err(_) => {
-            set_stream_status(stream, UIO_STREAM_STATUS_ERROR);
-            -1
-        }
-        _ => -1,
-    }
-}
-
-///
-/// # Safety
-///
-/// Caller must ensure pointer arguments are valid and properly aligned.
-pub unsafe fn uio_ungetc(c: c_int, stream: *mut uio_Stream) -> c_int {
-    rust_bridge_log_msg("RUST_UIO: uio_ungetc entry");
-    if stream.is_null() {
-        return -1;
-    }
-    let s = &mut *stream;
-    if s.handle.is_null() {
-        return -1;
-    }
-    let mut guard = match (*s.handle).lock() {
-        Ok(g) => g,
-        Err(_) => return -1,
-    };
-    // The stream has no pushback buffer, so only the byte just read can be
-    // handed back; pretending to push back any other byte would make the next
-    // read return different data than the caller was promised.
-    if c == -1 {
-        return -1;
-    }
-    let wanted = c as u8;
-    if guard.seek(SeekFrom::Current(-1)).is_err() {
-        return -1;
-    }
-    let mut previous = [0u8; 1];
-    if !matches!(guard.read(&mut previous), Ok(1)) || previous[0] != wanted {
-        return -1;
-    }
-    if guard.seek(SeekFrom::Current(-1)).is_err() {
-        return -1;
-    }
-    drop(guard);
-    set_stream_status(stream, UIO_STREAM_STATUS_OK);
-    wanted as c_int
-}
-
-///
-/// # Safety
-///
-/// Caller must ensure pointer arguments are valid and properly aligned.
-pub unsafe fn uio_fputc(c: c_int, stream: *mut uio_Stream) -> c_int {
-    if stream.is_null() {
-        return -1;
-    }
-
-    let s = &*stream;
-    if s.handle.is_null() {
-        return -1;
-    }
-
-    let byte = c as u8;
-
-    if let Ok(mut guard) = (*s.handle).lock() {
-        use std::io::Write;
-        match guard.write_all(&[byte]) {
-            Ok(()) => c,
-            Err(_) => -1,
-        }
-    } else {
-        -1
-    }
-}
-
-///
-/// # Safety
-///
-/// Caller must ensure pointer arguments are valid and properly aligned.
-pub unsafe fn uio_fputs(s: *const c_char, stream: *mut uio_Stream) -> c_int {
-    if stream.is_null() || s.is_null() {
-        return -1;
-    }
-
-    let s_stream = &*stream;
-    if s_stream.handle.is_null() {
-        return -1;
-    }
-
-    let cstr = std::ffi::CStr::from_ptr(s);
-    let bytes = cstr.to_bytes();
-
-    if let Ok(mut guard) = (*s_stream.handle).lock() {
-        use std::io::Write;
-        match guard.write_all(bytes) {
-            Ok(()) => 0,
-            Err(_) => -1,
-        }
-    } else {
-        -1
-    }
-}
-
-///
-/// # Safety
-///
-/// Caller must ensure pointer arguments are valid and properly aligned.
-pub unsafe fn uio_fflush(stream: *mut uio_Stream) -> c_int {
-    if stream.is_null() {
-        return 0; // Flushing NULL stream is a no-op success
-    }
-
-    let s = &*stream;
-    if s.handle.is_null() {
-        return 0;
-    }
-
-    if let Ok(mut guard) = (*s.handle).lock() {
-        use std::io::Write;
-        match guard.flush() {
-            Ok(()) => 0,
-            Err(_) => -1,
-        }
-    } else {
-        -1
-    }
-}
-
-/// @plan PLAN-20260314-FILE-IO.P03
-/// @requirement REQ-FIO-STREAM-STATUS
-///
-/// # Safety
-///
-/// Caller must ensure pointer arguments are valid and properly aligned.
-pub unsafe fn uio_feof(stream: *mut uio_Stream) -> c_int {
-    if stream.is_null() {
-        return 0;
-    }
-
-    let status = (*stream).status;
-    if status == UIO_STREAM_STATUS_EOF {
-        1
-    } else {
-        0
-    }
-}
-
-/// @plan PLAN-20260314-FILE-IO.P03
-/// @requirement REQ-FIO-STREAM-STATUS
-///
-/// # Safety
-///
-/// Caller must ensure pointer arguments are valid and properly aligned.
-pub unsafe fn uio_ferror(stream: *mut uio_Stream) -> c_int {
-    if stream.is_null() {
-        return 0;
-    }
-
-    let status = (*stream).status;
-    if status == UIO_STREAM_STATUS_ERROR {
-        1
-    } else {
-        0
-    }
-}
-
-///
-/// # Safety
-///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-pub unsafe fn uio_fwrite(
-    ptr: *const libc::c_void,
-    size: size_t,
-    nmemb: size_t,
-    stream: *mut uio_Stream,
-) -> size_t {
-    if stream.is_null() || ptr.is_null() {
-        return 0;
-    }
-
-    let s = &*stream;
-    if s.handle.is_null() {
-        return 0;
-    }
-
-    let total_bytes = size * nmemb;
-    if total_bytes == 0 {
-        return nmemb; // Writing 0 items is always successful
-    }
-
-    let data = std::slice::from_raw_parts(ptr as *const u8, total_bytes);
-
-    if let Ok(mut handle) = (*s.handle).lock() {
-        use std::io::Write;
-        match handle.write_all(data) {
-            Ok(()) => {
-                set_stream_status(stream, UIO_STREAM_STATUS_OK);
-                nmemb // Return number of items written
-            }
-            Err(_) => {
-                set_stream_status(stream, UIO_STREAM_STATUS_ERROR);
-                0
-            }
-        }
-    } else {
-        set_stream_status(stream, UIO_STREAM_STATUS_ERROR);
-        0
-    }
-}
-
-/// @plan PLAN-20260314-FILE-IO.P03
-/// @requirement REQ-FIO-STREAM-STATUS
-///
-/// # Safety
-///
-/// Caller must ensure pointer arguments are valid and properly aligned.
-pub unsafe fn uio_clearerr(stream: *mut uio_Stream) {
-    if stream.is_null() {
-        return;
-    }
-
-    (*stream).status = UIO_STREAM_STATUS_OK;
-}
-
-///
-/// # Safety
-///
-/// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn uio_streamHandle(stream: *mut uio_Stream) -> *mut uio_Handle {
-    log_marker("uio_streamHandle called");
-    if stream.is_null() {
-        return ptr::null_mut();
-    }
-    (*stream).handle
-}
-
-#[allow(
-    non_camel_case_types,
-    reason = "legacy UIO stat alias mirrors the C API; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-)]
-pub type stat = libc::stat;
-
-// Constants
-const O_RDONLY: c_int = 0;
-const O_WRONLY: c_int = 1;
-const O_RDWR: c_int = 2;
-const O_CREAT: c_int = 0o100;
-const O_EXCL: c_int = 0o200;
-const O_TRUNC: c_int = 0o1000;
-
-const SEEK_SET: c_int = 0;
-const SEEK_CUR: c_int = 1;
-const SEEK_END: c_int = 2;
-
-/// Log a message to the Rust bridge log file (C-ABI function for use by C).
 ///
 /// # Safety
 /// The message pointer must be a valid null-terminated C string.
@@ -1218,7 +587,7 @@ const MATCH_REGEX_ALT: c_int = 5;
 /// Match a name against a pattern based on match type.
 /// For MATCH_REGEX, uses the regex crate to support POSIX ERE-compatible patterns.
 /// Invalid regex patterns return false (no match) instead of crashing.
-fn matches_pattern(name: &str, pattern: &str, match_type: c_int) -> bool {
+pub(crate) fn matches_pattern(name: &str, pattern: &str, match_type: c_int) -> bool {
     if pattern.is_empty() {
         return true;
     }
@@ -1283,9 +652,10 @@ pub unsafe fn uio_init() {
         }
 
         // Clear mount registry to known state
-        let mut registry = get_mount_registry().lock().unwrap();
+        let mut topology = get_mount_registry().lock().unwrap();
+        let registry = &mut topology.mounts;
         registry.clear();
-        drop(registry);
+        drop(topology);
 
         // Clear buffer size registry
         let mut buffer_registry = get_buffer_size_registry().lock().unwrap();
@@ -1321,9 +691,10 @@ pub unsafe extern "C" fn uio_unInit() {
         // Clear all mounts from registry
         // Note: This removes mount metadata but does NOT free mount handles
         // (those are owned by callers who must call uio_unmountDir)
-        let mut registry = get_mount_registry().lock().unwrap();
+        let mut topology = get_mount_registry().lock().unwrap();
+        let registry = &mut topology.mounts;
         registry.clear();
-        drop(registry);
+        drop(topology);
 
         // Note: Buffer size registry is intentionally NOT cleared here.
         // Outstanding uio_DirList and stream handles may still need it
@@ -1363,7 +734,7 @@ pub unsafe extern "C" fn uio_openRepository(flags: c_int) -> *mut uio_Repository
 pub unsafe extern "C" fn uio_closeRepository(repository: *mut uio_Repository) {
     log_marker("uio_closeRepository called");
     if !repository.is_null() {
-        uio_unmountAllDirs(repository);
+        unmount_repository(repository);
         let _ = Box::from_raw(repository);
     }
 }
@@ -1372,10 +743,68 @@ pub unsafe extern "C" fn uio_closeRepository(repository: *mut uio_Repository) {
 // uio_openDir / uio_closeDir / uio_mountDir / uio_openDirRelative
 // =============================================================================
 
+fn is_real_filesystem_path(path: &Path) -> bool {
+    if !path.is_absolute() {
+        return false;
+    }
+
+    let Some(component) = path.components().nth(1) else {
+        return false;
+    };
+
+    matches!(
+        component.as_os_str().to_string_lossy().as_ref(),
+        "Users"
+            | "home"
+            | "tmp"
+            | "var"
+            | "opt"
+            | "private"
+            | "System"
+            | "Library"
+            | "Applications"
+    )
+}
+
+fn resolve_virtual_mount_path(registry: &[MountInfo], path: &Path) -> Option<(usize, PathBuf)> {
+    let normalized = normalize_virtual_path(path);
+
+    registry
+        .iter()
+        .filter(|entry| entry.active_in_registry)
+        .find_map(|entry| {
+            let mount_path = Path::new(&entry.mount_point);
+            if normalized == mount_path || normalized.starts_with(mount_path) {
+                let suffix = normalized
+                    .strip_prefix(mount_path)
+                    .unwrap_or_else(|_| Path::new(""));
+                let resolved = if suffix.as_os_str().is_empty() {
+                    entry.mounted_root.clone()
+                } else {
+                    entry.mounted_root.join(suffix)
+                };
+                Some((entry.handle_ptr, resolved))
+            } else {
+                None
+            }
+        })
+}
+
+unsafe fn unmount_repository(repository: *mut uio_Repository) -> c_int {
+    log_marker("uio_unmountAllDirs called");
+
+    for handle_ptr in remove_repository_mounts(repository) {
+        let _ = Box::from_raw(handle_ptr as *mut uio_MountHandle);
+    }
+
+    0
+}
+
 fn resolve_mount_path(path: &Path) -> PathBuf {
     rust_bridge_log_msg(&format!("RUST_UIO: resolve_mount_path input: {:?}", path));
 
-    let registry = get_mount_registry().lock().unwrap();
+    let topology = get_mount_registry().lock().unwrap();
+    let registry = &topology.mounts;
     if is_real_filesystem_path(path)
         || registry
             .iter()
@@ -1389,7 +818,7 @@ fn resolve_mount_path(path: &Path) -> PathBuf {
         return path.to_path_buf();
     }
 
-    if let Some((_handle_ptr, resolved)) = resolve_virtual_mount_path(&registry, path) {
+    if let Some((_handle_ptr, resolved)) = resolve_virtual_mount_path(registry, path) {
         rust_bridge_log_msg(&format!("RUST_UIO: resolved {:?} -> {:?}", path, resolved));
         resolved
     } else {
@@ -1644,714 +1073,9 @@ pub unsafe extern "C" fn uio_openDirRelative(
 
 // =============================================================================
 // uio_open / uio_close / uio_read / uio_write / uio_fstat
-// =============================================================================
 
-/// @plan PLAN-20260314-FILE-IO.P06a
-/// @requirement REQ-FIO-MUTATION (G14)
-///
-/// # Safety
-///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-pub unsafe fn uio_open(
-    dir: *mut uio_DirHandle,
-    path: *const c_char,
-    flags: c_int,
-    _mode: c_int,
-) -> *mut uio_Handle {
-    ffi_guard!(ptr::null_mut(), {
-        rust_bridge_log_msg(&format!("RUST_UIO: uio_open called with flags {}", flags));
-
-        if dir.is_null() {
-            set_errno(libc::EINVAL);
-            return ptr::null_mut();
-        }
-
-        let dir_host_path = &(*dir).path;
-        let dir_virt_path = &(*dir).virtual_path;
-        let input_path = match cstr_to_pathbuf(path) {
-            Some(p) => p,
-            None => {
-                set_errno(libc::EINVAL);
-                return ptr::null_mut();
-            }
-        };
-
-        let virtual_path = normalize_virtual_path_full(dir_virt_path, &input_path);
-
-        // Check if this is a write operation
-        let is_write_mode =
-            (flags & 3) == O_WRONLY || (flags & 3) == O_RDWR || (flags & O_CREAT) != 0;
-
-        if is_write_mode {
-            // For write operations, try mount registry first
-            let registry = get_mount_registry().lock().unwrap();
-            let file_path =
-                if let Some(resolution) = resolve_mount_for_path(&registry, &virtual_path) {
-                    // Path is in a mount - extract data before dropping registry
-                    let is_readonly = resolution.mount.read_only;
-                    let path = resolution.host_path.clone();
-                    drop(registry);
-
-                    if is_readonly {
-                        // Topmost mount is read-only, fail without falling through
-                        set_errno(libc::EACCES);
-                        return ptr::null_mut();
-                    }
-                    path
-                } else {
-                    drop(registry);
-                    // No mount - fall back to direct path resolution
-                    resolve_path(dir_host_path, &input_path)
-                };
-
-            let mut opts = OpenOptions::new();
-            match flags & 3 {
-                O_WRONLY => {
-                    opts.write(true);
-                }
-                O_RDWR => {
-                    opts.read(true).write(true);
-                }
-                _ => {}
-            }
-
-            if (flags & O_CREAT) != 0 {
-                if (flags & O_EXCL) != 0 {
-                    // O_CREAT | O_EXCL: fail if file exists
-                    opts.create_new(true);
-                } else {
-                    opts.create(true);
-                }
-            }
-            if (flags & O_TRUNC) != 0 {
-                opts.truncate(true);
-            }
-
-            let file = match opts.open(&file_path) {
-                Ok(f) => f,
-                Err(err) => {
-                    log_marker(&format!(
-                        "uio_open write failed: path={:?} err={}",
-                        file_path, err
-                    ));
-                    let err_code = crate::platform::io_errno(&err);
-                    set_errno(err_code);
-                    return ptr::null_mut();
-                }
-            };
-
-            let handle = uio_HandleInner::File(file);
-            return Box::leak(Box::new(Mutex::new(handle))) as *mut uio_Handle;
-        }
-
-        // Read-only mode: consult every mount that covers the path in
-        // priority order. A mount that lacks the file lets the lookup fall
-        // through to the next one; any other failure is reported as is.
-        // @plan PLAN-20260314-FILE-IO.P09
-        // @requirement REQ-FIO-ARCHIVE-MOUNT
-        let registry = get_mount_registry().lock().unwrap();
-        let normalized = normalize_virtual_path(&virtual_path);
-        let mut covered_by_a_mount = false;
-        for mount in registry.iter().filter(|m| m.active_in_registry) {
-            let mount_path = Path::new(&mount.mount_point);
-            if normalized != mount_path && !normalized.starts_with(mount_path) {
-                continue;
-            }
-            covered_by_a_mount = true;
-            let suffix = normalized
-                .strip_prefix(mount_path)
-                .unwrap_or_else(|_| Path::new(""));
-
-            let opened = if mount.fs_type == UIO_FSTYPE_ZIP {
-                match mount.zip_index {
-                    Some(ref zip_index) => zip_index
-                        .open_entry(&suffix.to_string_lossy())
-                        .map(uio_HandleInner::ZipEntry),
-                    None => continue,
-                }
-            } else {
-                let host_path = if suffix.as_os_str().is_empty() {
-                    mount.mounted_root.clone()
-                } else {
-                    map_virtual_to_host_confined(&mount.mounted_root, suffix)
-                };
-                OpenOptions::new()
-                    .read(true)
-                    .open(&host_path)
-                    .map(uio_HandleInner::File)
-            };
-
-            match opened {
-                Ok(inner) => {
-                    drop(registry);
-                    return Box::leak(Box::new(Mutex::new(inner))) as *mut uio_Handle;
-                }
-                Err(err) if err.kind() == std::io::ErrorKind::NotFound => continue,
-                Err(err) => {
-                    drop(registry);
-                    log_marker(&format!(
-                        "uio_open read failed: path={:?} err={}",
-                        virtual_path, err
-                    ));
-                    set_errno(crate::platform::io_errno(&err));
-                    return ptr::null_mut();
-                }
-            }
-        }
-        drop(registry);
-
-        if covered_by_a_mount {
-            set_errno(libc::ENOENT);
-            return ptr::null_mut();
-        }
-
-        // No mount covers the path - fall back to direct path resolution
-        let file_path = resolve_path(dir_host_path, &input_path);
-        let file = match OpenOptions::new().read(true).open(&file_path) {
-            Ok(f) => f,
-            Err(err) => {
-                log_marker(&format!(
-                    "uio_open read failed: path={:?} err={}",
-                    file_path, err
-                ));
-                set_errno(crate::platform::io_errno(&err));
-                return ptr::null_mut();
-            }
-        };
-
-        let handle = uio_HandleInner::File(file);
-        Box::leak(Box::new(Mutex::new(handle))) as *mut uio_Handle
-    })
-}
-
-/// @plan PLAN-20260314-FILE-IO.P11
-/// @requirement REQ-FIO-POST-UNMOUNT-CLEANUP
-/// Close a file handle and free its resources.
-/// Safe to call even if the mount this handle came from was unmounted.
-/// The handle owns its resources independently of mount state.
-///
-/// # Safety
-///
-/// Caller must ensure pointer arguments are valid and properly aligned.
-pub unsafe fn uio_close(handle: *mut uio_Handle) -> c_int {
-    log_marker("uio_close called");
-    if !handle.is_null() {
-        let _ = Box::from_raw(handle);
-    }
-    0 // Success
-}
-
-///
-/// # Safety
-///
-/// Caller must ensure pointer arguments are valid and properly aligned.
-pub unsafe fn uio_read(handle: *mut uio_Handle, buf: *mut u8, count: size_t) -> isize {
-    if handle.is_null() || buf.is_null() || count == 0 {
-        return -1;
-    }
-
-    let mut guard = match (*handle).lock() {
-        Ok(g) => g,
-        Err(_) => return -1,
-    };
-
-    let buffer = slice::from_raw_parts_mut(buf, count);
-    match guard.read(buffer) {
-        Ok(n) => n as isize,
-        Err(_) => -1,
-    }
-}
-
-///
-/// # Safety
-///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-pub unsafe fn uio_write(handle: *mut uio_Handle, buf: *const u8, count: size_t) -> isize {
-    if handle.is_null() || buf.is_null() || count == 0 {
-        return -1;
-    }
-
-    let mut guard = match (*handle).lock() {
-        Ok(g) => g,
-        Err(_) => return -1,
-    };
-
-    let buffer = slice::from_raw_parts(buf, count);
-    match guard.write_all(buffer) {
-        Ok(_) => count as isize,
-        Err(_) => -1,
-    }
-}
-
-///
-/// # Safety
-///
-/// Caller must ensure pointer arguments are valid and properly aligned.
-pub unsafe fn uio_fstat(handle: *mut uio_Handle, stat_buf: *mut stat) -> c_int {
-    if handle.is_null() || stat_buf.is_null() {
-        return -1;
-    }
-
-    let guard = match (*handle).lock() {
-        Ok(g) => g,
-        Err(_) => return -1,
-    };
-
-    match guard.metadata() {
-        Ok(meta) => {
-            (*stat_buf).st_size = meta.len() as i64;
-            (*stat_buf).st_mode = if meta.is_file() { 0o100000 } else { 0o040000 };
-            0 // Success
-        }
-        Err(_) => -1,
-    }
-}
-
-/// @plan PLAN-20260314-FILE-IO.P06a
-/// @requirement REQ-FIO-MUTATION (G14)
-///
-/// # Safety
-///
-/// Caller must ensure pointer arguments are valid and properly aligned.
-pub unsafe fn uio_unlink(dir: *mut uio_DirHandle, path: *const c_char) -> c_int {
-    ffi_guard!(-1, {
-        log_marker("uio_unlink called");
-
-        if dir.is_null() {
-            return fail_errno(libc::EINVAL, -1);
-        }
-
-        let dir_host_path = &(*dir).path;
-        let dir_virt_path = &(*dir).virtual_path;
-        let input_path = match cstr_to_pathbuf(path) {
-            Some(p) => p,
-            None => return fail_errno(libc::EINVAL, -1),
-        };
-
-        let virtual_path = normalize_virtual_path_full(dir_virt_path, &input_path);
-
-        // Try to resolve through mount registry first
-        let registry = get_mount_registry().lock().unwrap();
-        let file_path = if let Some(resolution) = resolve_mount_for_path(&registry, &virtual_path) {
-            // Path is in a mount - extract data before dropping registry
-            let is_readonly = resolution.mount.read_only;
-            let path = resolution.host_path.clone();
-            drop(registry);
-
-            if is_readonly {
-                return fail_errno(libc::EACCES, -1);
-            }
-            path
-        } else {
-            drop(registry);
-            // No mount - fall back to direct path resolution
-            resolve_path(dir_host_path, &input_path)
-        };
-
-        match fs::remove_file(&file_path) {
-            Ok(_) => 0,
-            Err(e) => {
-                let err_code = crate::platform::io_errno(&e);
-                fail_errno(err_code, -1)
-            }
-        }
-    })
-}
-
-// =============================================================================
 // uio_fopen / uio_fclose / uio_fread / uio_fseek / uio_ftell
-// =============================================================================
 
-/// @plan PLAN-20260314-FILE-IO.P05
-/// @requirement REQ-FIO-ERRNO
-///
-/// # Safety
-///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-pub unsafe fn uio_fopen(
-    dir: *mut uio_DirHandle,
-    path: *const c_char,
-    mode: *const c_char,
-) -> *mut uio_Stream {
-    ffi_guard!(ptr::null_mut(), {
-        rust_bridge_log_msg("RUST_UIO: uio_fopen entry");
-        log_marker("uio_fopen called");
-
-        if dir.is_null() {
-            rust_bridge_log_msg("RUST_UIO: uio_fopen null dir");
-            set_errno(libc::EINVAL);
-            return ptr::null_mut();
-        }
-        if mode.is_null() {
-            rust_bridge_log_msg("RUST_UIO: uio_fopen null mode");
-            set_errno(libc::EINVAL);
-            return ptr::null_mut();
-        }
-
-        let dir_host_path = &(*dir).path;
-        let dir_virt_path = &(*dir).virtual_path;
-
-        let input = match cstr_to_pathbuf(path) {
-            Some(p) => p,
-            None => {
-                rust_bridge_log_msg("RUST_UIO: uio_fopen null path");
-                set_errno(libc::EINVAL);
-                return ptr::null_mut();
-            }
-        };
-
-        let mode_str = std::ffi::CStr::from_ptr(mode).to_string_lossy();
-
-        // Validate mode string
-        let valid_mode = mode_str.contains("r") || mode_str.contains("w") || mode_str.contains("a");
-        if !valid_mode {
-            rust_bridge_log_msg(&format!("RUST_UIO: uio_fopen invalid mode: {}", mode_str));
-            set_errno(libc::EINVAL);
-            return ptr::null_mut();
-        }
-
-        // @plan PLAN-20260314-FILE-IO.P09
-        // @requirement REQ-FIO-ARCHIVE-MOUNT
-        // Use virtual path (not host path) for mount resolution
-        let virtual_path = normalize_virtual_path_full(dir_virt_path, &input);
-
-        let registry = get_mount_registry().lock().unwrap();
-
-        // Find the mount for this path
-        let mount_info = registry
-            .iter()
-            .filter(|m| m.active_in_registry)
-            .find(|mount| {
-                let mount_path = Path::new(&mount.mount_point);
-                virtual_path == mount_path || virtual_path.starts_with(mount_path)
-            });
-
-        let handle_inner = if let Some(mount) = mount_info {
-            if mount.fs_type == UIO_FSTYPE_ZIP {
-                // ZIP mount - open entry from archive
-                if !mode_str.contains("r") || mode_str.contains("w") || mode_str.contains("a") {
-                    // ZIP entries are read-only
-                    rust_bridge_log_msg("RUST_UIO: uio_fopen cannot write to ZIP archive");
-                    set_errno(libc::EACCES);
-                    return ptr::null_mut();
-                }
-
-                if let Some(ref zip_index) = mount.zip_index {
-                    let mount_path = Path::new(&mount.mount_point);
-                    let suffix = virtual_path
-                        .strip_prefix(mount_path)
-                        .unwrap_or_else(|_| Path::new(""));
-                    let suffix_str = suffix.to_string_lossy();
-
-                    match zip_index.open_entry(&suffix_str) {
-                        Ok(reader) => uio_HandleInner::ZipEntry(reader),
-                        Err(err) => {
-                            rust_bridge_log_msg(&format!(
-                                "RUST_UIO: uio_fopen ZIP entry not found: {}",
-                                err
-                            ));
-                            set_errno(libc::ENOENT);
-                            return ptr::null_mut();
-                        }
-                    }
-                } else {
-                    rust_bridge_log_msg("RUST_UIO: uio_fopen ZIP mount has no index");
-                    set_errno(libc::EIO);
-                    return ptr::null_mut();
-                }
-            } else {
-                // Regular file mount
-                let file_path = resolve_path(dir_host_path, &input);
-                rust_bridge_log_msg(&format!(
-                    "RUST_UIO: uio_fopen path={:?} mode={}",
-                    file_path, mode_str
-                ));
-
-                let mut opts = OpenOptions::new();
-                if mode_str.contains("r") {
-                    opts.read(true);
-                }
-                if mode_str.contains("w") {
-                    opts.write(true).create(true).truncate(true);
-                }
-                if mode_str.contains("a") {
-                    opts.append(true).create(true);
-                }
-                if mode_str.contains("+") {
-                    opts.read(true).write(true);
-                }
-
-                match opts.open(&file_path) {
-                    Ok(f) => uio_HandleInner::File(f),
-                    Err(err) => {
-                        log_marker(&format!(
-                            "uio_fopen failed: path={:?} err={}",
-                            file_path, err
-                        ));
-                        let err_code = crate::platform::io_errno(&err);
-                        set_errno(err_code);
-                        return ptr::null_mut();
-                    }
-                }
-            }
-        } else {
-            // No mount found - try as regular file (for backward compatibility)
-            let file_path = resolve_path(dir_host_path, &input);
-            rust_bridge_log_msg(&format!(
-                "RUST_UIO: uio_fopen path={:?} mode={} (no mount)",
-                file_path, mode_str
-            ));
-
-            let mut opts = OpenOptions::new();
-            if mode_str.contains("r") {
-                opts.read(true);
-            }
-            if mode_str.contains("w") {
-                opts.write(true).create(true).truncate(true);
-            }
-            if mode_str.contains("a") {
-                opts.append(true).create(true);
-            }
-            if mode_str.contains("+") {
-                opts.read(true).write(true);
-            }
-
-            match opts.open(&file_path) {
-                Ok(f) => uio_HandleInner::File(f),
-                Err(err) => {
-                    log_marker(&format!(
-                        "uio_fopen failed: path={:?} err={}",
-                        file_path, err
-                    ));
-                    let err_code = crate::platform::io_errno(&err);
-                    set_errno(err_code);
-                    return ptr::null_mut();
-                }
-            }
-        };
-
-        drop(registry);
-
-        let open_flags =
-            if mode_str.contains("r") && !mode_str.contains("w") && !mode_str.contains("a") {
-                O_RDONLY
-            } else if mode_str.contains("w") {
-                O_WRONLY | O_CREAT | O_TRUNC
-            } else {
-                0
-            };
-
-        let stream = Box::new(uio_Stream {
-            buf: ptr::null_mut(),
-            data_start: ptr::null_mut(),
-            data_end: ptr::null_mut(),
-            buf_end: ptr::null_mut(),
-            handle: Box::leak(Box::new(Mutex::new(handle_inner))) as *mut uio_Handle,
-            status: UIO_STREAM_STATUS_OK,
-            operation: UIO_STREAM_OPERATION_NONE,
-            open_flags,
-        });
-
-        let stream_ptr = Box::leak(stream) as *mut uio_Stream;
-        rust_bridge_log_msg(&format!(
-            "RUST_UIO: uio_fopen returning stream={:?}",
-            stream_ptr
-        ));
-        stream_ptr
-    })
-}
-
-/// @plan PLAN-20260314-FILE-IO.P03
-/// @requirement REQ-FIO-RESOURCE-MGMT
-/// @plan PLAN-20260314-FILE-IO.P11
-/// @requirement REQ-FIO-POST-UNMOUNT-CLEANUP
-/// @requirement REQ-FIO-RESOURCE-MGMT
-/// Close a stream and free its resources (buffer and underlying handle).
-/// Safe to call even if the mount this stream came from was unmounted.
-/// The stream owns its resources independently of mount state.
-///
-/// # Safety
-///
-/// Caller must ensure pointer arguments are valid and properly aligned.
-pub unsafe fn uio_fclose(stream: *mut uio_Stream) -> c_int {
-    log_marker("uio_fclose called");
-    if !stream.is_null() {
-        let s = &*stream;
-        // Free buffer if allocated
-        if !s.buf.is_null() {
-            if let Some(size) = get_buffer_size(s.buf) {
-                let buffer_layout = std::alloc::Layout::from_size_align(size, 1).unwrap();
-                std::alloc::dealloc(s.buf.cast::<u8>(), buffer_layout);
-                remove_buffer_size(s.buf);
-            }
-            // If size not found in registry, buffer was likely not allocated by us
-            // (or was never registered), so we don't deallocate it to avoid double-free
-        }
-        if !s.handle.is_null() {
-            // Reconstruct Box<uio_Handle> from raw pointer
-            let _ = Box::from_raw(s.handle);
-        }
-        let _ = Box::from_raw(stream);
-    }
-    0 // Success
-}
-
-/// @plan PLAN-20260314-FILE-IO.P04
-/// @requirement REQ-FIO-BUILD-BOUNDARY
-///
-/// # Safety
-///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-pub unsafe fn uio_fread(
-    buf: *mut libc::c_void,
-    size: size_t,
-    nmemb: size_t,
-    stream: *mut uio_Stream,
-) -> size_t {
-    if stream.is_null() {
-        rust_bridge_log_msg("RUST_UIO: uio_fread null stream");
-        return 0;
-    }
-    if buf.is_null() {
-        rust_bridge_log_msg("RUST_UIO: uio_fread null buffer");
-        return 0;
-    }
-    if size == 0 || nmemb == 0 {
-        rust_bridge_log_msg(&format!(
-            "RUST_UIO: uio_fread zero size or nmemb (size={} nmemb={})",
-            size, nmemb
-        ));
-        return 0;
-    }
-
-    let s = &mut *stream;
-
-    // Check if stream has a valid handle pointer
-    if s.handle.is_null() {
-        rust_bridge_log_msg("RUST_UIO: uio_fread handle is null");
-        return 0;
-    }
-
-    // Validate the handle pointer is properly aligned and not obviously corrupted
-    let handle_addr = s.handle as usize;
-    if handle_addr < 4096 {
-        // Pointer is too small to be valid
-        rust_bridge_log_msg(&format!(
-            "RUST_UIO: uio_fread invalid handle pointer: 0x{:x}",
-            handle_addr
-        ));
-        return 0;
-    }
-
-    // Try to safely dereference the handle
-    let file_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| &*s.handle));
-
-    let file = match file_result {
-        Ok(f) => f,
-        Err(_) => {
-            rust_bridge_log_msg("RUST_UIO: uio_fread panic when dereferencing handle");
-            s.status = 2; // uio_Stream_STATUS_ERROR
-            return 0;
-        }
-    };
-
-    let mut guard = match file.lock() {
-        Ok(g) => g,
-        Err(_) => {
-            rust_bridge_log_msg("RUST_UIO: uio_fread failed to lock mutex");
-            s.status = 2; // uio_Stream_STATUS_ERROR
-            return 0;
-        }
-    };
-
-    let total_bytes = size * nmemb;
-    let buffer = slice::from_raw_parts_mut(buf as *mut u8, total_bytes);
-    match guard.read(buffer) {
-        Ok(n) => {
-            set_stream_operation(stream, UIO_STREAM_OPERATION_READ);
-            if n == 0 {
-                // EOF reached - 0 bytes read
-                set_stream_status(stream, UIO_STREAM_STATUS_EOF);
-            } else if n < total_bytes {
-                // Short read but some data - could be EOF or just a short read
-                // Don't set EOF here; let the next read determine it
-                set_stream_status(stream, UIO_STREAM_STATUS_OK);
-            } else {
-                // Full read successful
-                set_stream_status(stream, UIO_STREAM_STATUS_OK);
-            }
-            rust_bridge_log_msg(&format!(
-                "RUST_UIO: uio_fread requested={} read={}",
-                total_bytes, n
-            ));
-            n / size
-        }
-        Err(err) => {
-            rust_bridge_log_msg(&format!("RUST_UIO: uio_fread error: {}", err));
-            set_stream_status(stream, UIO_STREAM_STATUS_ERROR);
-            0
-        }
-    }
-}
-
-///
-/// # Safety
-///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-pub unsafe fn uio_fseek(stream: *mut uio_Stream, offset: c_long, whence: c_int) -> c_int {
-    if stream.is_null() {
-        return -1;
-    }
-
-    let s = &*stream;
-    let file = &(*s.handle);
-    let mut guard = match file.lock() {
-        Ok(g) => g,
-        Err(_) => return -1,
-    };
-
-    let seek_from = match whence {
-        SEEK_SET => SeekFrom::Start(offset as u64),
-        SEEK_CUR => SeekFrom::Current(offset as _),
-        SEEK_END => SeekFrom::End(offset as _),
-        _ => return -1,
-    };
-
-    match guard.seek(seek_from) {
-        Ok(_) => {
-            // Per P02a carry-forward: seek clears EOF flag
-            if (*stream).status == UIO_STREAM_STATUS_EOF {
-                (*stream).status = UIO_STREAM_STATUS_OK;
-            }
-            0
-        }
-        Err(_) => -1,
-    }
-}
-
-///
-/// # Safety
-///
-/// Caller must ensure pointer arguments are valid and properly aligned.
-pub unsafe fn uio_ftell(stream: *mut uio_Stream) -> c_long {
-    if stream.is_null() {
-        return -1;
-    }
-
-    let s = &*stream;
-    let file = &(*s.handle);
-    let mut guard = match file.lock() {
-        Ok(g) => g,
-        Err(_) => return -1,
-    };
-
-    match guard.seek(SeekFrom::Current(0)) {
-        Ok(pos) => pos as c_long,
-        Err(_) => -1,
-    }
-}
-
-// =============================================================================
 // uio_getDirList / uio_DirList_free
 // =============================================================================
 
@@ -2418,108 +1142,15 @@ pub unsafe extern "C" fn uio_getDirList(
             virtual_path, pattern_str, _match_type
         ));
 
-        // Acquire mount registry lock for consistent topology view
-        let registry = get_mount_registry().lock().unwrap();
-
-        // Collect entries from all mounts covering the virtual path
-        // Use indexmap to preserve insertion order (first-seen = highest precedence)
-        use std::collections::BTreeSet;
-        let mut seen_names = BTreeSet::new();
-        let mut name_strings: Vec<String> = Vec::new();
-
-        // Iterate mounts in precedence order (registry is already sorted)
-        for mount in registry.iter().filter(|m| m.active_in_registry) {
-            let mount_path = Path::new(&mount.mount_point);
-
-            // Check if this mount covers the virtual path
-            let is_covered = virtual_path == mount_path || virtual_path.starts_with(mount_path);
-            if !is_covered {
-                continue;
-            }
-
-            // Map virtual path to relative path within mount
-            let suffix = virtual_path
-                .strip_prefix(mount_path)
-                .unwrap_or_else(|_| Path::new(""));
-
-            // @plan PLAN-20260314-FILE-IO.P09
-            // @requirement REQ-FIO-ARCHIVE-MOUNT
-            // Handle ZIP mounts differently than stdio mounts
-            if mount.fs_type == UIO_FSTYPE_ZIP {
-                if let Some(ref zip_index) = mount.zip_index {
-                    let suffix_str = suffix.to_string_lossy();
-                    let archive_entries = zip_index.list_directory(&suffix_str);
-
-                    log_marker(&format!(
-                        "uio_getDirList: ZIP mount '{}' returned {} entries for {:?}",
-                        mount.mount_point,
-                        archive_entries.len(),
-                        suffix_str
-                    ));
-
-                    for name in archive_entries {
-                        // Deduplicate: first-seen wins (higher precedence)
-                        if seen_names.contains(&name) {
-                            continue;
-                        }
-
-                        // Apply pattern matching
-                        if matches_pattern(&name, pattern_str, _match_type) {
-                            seen_names.insert(name.clone());
-                            name_strings.push(name);
-                        }
-                    }
-                }
-                continue;
-            }
-
-            // Stdio mount handling
-            let host_path = if suffix.as_os_str().is_empty() {
-                mount.mounted_root.clone()
-            } else {
-                map_virtual_to_host_confined(&mount.mounted_root, suffix)
-            };
-
-            log_marker(&format!(
-                "uio_getDirList: checking stdio mount '{}' at host_path={:?}",
-                mount.mount_point, host_path
-            ));
-
-            // Read directory if it exists
-            if !host_path.is_dir() {
-                continue;
-            }
-
-            let entries = match fs::read_dir(&host_path) {
-                Ok(entries) => entries,
-                Err(err) => {
-                    log_marker(&format!(
-                        "uio_getDirList: read_dir failed for {:?}: {}, skipping mount",
-                        host_path, err
-                    ));
-                    continue;
-                }
-            };
-
-            // Collect matching entries from this mount
-            for entry in entries.flatten() {
-                if let Some(name_osstr) = entry.file_name().to_str() {
-                    // Deduplicate: first-seen wins (higher precedence)
-                    if seen_names.contains(name_osstr) {
-                        continue;
-                    }
-
-                    // Apply pattern matching
-                    if matches_pattern(name_osstr, pattern_str, _match_type) {
-                        seen_names.insert(name_osstr.to_string());
-                        name_strings.push(name_osstr.to_string());
-                    }
-                }
-            }
-        }
-
-        // Release registry lock before allocation
-        drop(registry);
+        // The retained directory ABI represents enumeration failure as an empty list.
+        let name_strings: Vec<_> = get_mount_registry()
+            .lock()
+            .unwrap()
+            .list_at(&(*dir).path, &(*dir).virtual_path, &rel_path)
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|name| matches_pattern(name, pattern_str, _match_type))
+            .collect();
 
         // Always return non-null uio_DirList, even for empty results
         if name_strings.is_empty() {
@@ -2721,7 +1352,8 @@ mod tests {
 
     // Helper to clear mount registry after tests
     fn clear_mount_registry() {
-        if let Ok(mut registry) = get_mount_registry().lock() {
+        if let Ok(mut topology) = get_mount_registry().lock() {
+            let registry = &mut topology.mounts;
             registry.clear();
         }
     }
@@ -2736,7 +1368,8 @@ mod tests {
             fs_type: UIO_FSTYPE_STDIO,
         }));
 
-        let mut registry = get_mount_registry().lock().unwrap();
+        let mut topology = get_mount_registry().lock().unwrap();
+        let registry = &mut topology.mounts;
         const DEFAULT_START_POSITION: usize = 1000;
         let position = registry
             .iter()
@@ -2758,7 +1391,7 @@ mod tests {
             read_only: false,
             zip_index: None,
         });
-        sort_mount_registry(&mut registry);
+        sort_mount_registry(registry);
     }
 
     // Helper to add a test mount with read_only flag
@@ -2771,7 +1404,8 @@ mod tests {
             fs_type: UIO_FSTYPE_STDIO,
         }));
 
-        let mut registry = get_mount_registry().lock().unwrap();
+        let mut topology = get_mount_registry().lock().unwrap();
+        let registry = &mut topology.mounts;
         const DEFAULT_START_POSITION: usize = 1000;
         let position = registry
             .iter()
@@ -2792,7 +1426,7 @@ mod tests {
             read_only,
             zip_index: None,
         });
-        sort_mount_registry(&mut registry);
+        sort_mount_registry(registry);
     }
 
     #[test]
@@ -2804,7 +1438,8 @@ mod tests {
             add_test_mount("/content", "/tmp/content");
 
             {
-                let registry = get_mount_registry().lock().unwrap();
+                let topology = get_mount_registry().lock().unwrap();
+                let registry = &topology.mounts;
                 let info = registry
                     .iter()
                     .find(|entry| entry.mount_point == "/content")
@@ -3034,464 +1669,9 @@ mod tests {
         }
     }
 
-    #[test]
-    #[serial]
-    fn test_seek_constants() {
-        {
-            // Verify our seek constants match expected values
-            assert_eq!(SEEK_SET, 0);
-            assert_eq!(SEEK_CUR, 1);
-            assert_eq!(SEEK_END, 2);
-        }
-    }
-
-    #[test]
-    #[serial]
-    fn test_open_flags_constants() {
-        {
-            // Verify file open flags
-            assert_eq!(O_RDONLY, 0);
-            assert_eq!(O_WRONLY, 1);
-            assert_eq!(O_RDWR, 2);
-            assert_eq!(O_CREAT, 0o100);
-            assert_eq!(O_TRUNC, 0o1000);
-        }
-    }
-
     // =============================================================================
     // Stream Status Tracking Tests (Phase P03)
     // =============================================================================
-
-    #[test]
-    #[serial]
-    fn test_stream_status_constants() {
-        {
-            assert_eq!(UIO_STREAM_STATUS_OK, 0);
-            assert_eq!(UIO_STREAM_STATUS_EOF, 1);
-            assert_eq!(UIO_STREAM_STATUS_ERROR, 2);
-        }
-    }
-
-    #[test]
-    #[serial]
-    fn test_uio_feof_returns_zero_when_not_eof() {
-        {
-            let mut stream = uio_Stream {
-                buf: ptr::null_mut(),
-                data_start: ptr::null_mut(),
-                data_end: ptr::null_mut(),
-                buf_end: ptr::null_mut(),
-                handle: ptr::null_mut(),
-                status: UIO_STREAM_STATUS_OK,
-                operation: UIO_STREAM_OPERATION_NONE,
-                open_flags: 0,
-            };
-
-            let result = unsafe { uio_feof(&mut stream) };
-            assert_eq!(result, 0);
-        }
-    }
-
-    #[test]
-    #[serial]
-    fn test_uio_feof_returns_nonzero_when_eof() {
-        {
-            let mut stream = uio_Stream {
-                buf: ptr::null_mut(),
-                data_start: ptr::null_mut(),
-                data_end: ptr::null_mut(),
-                buf_end: ptr::null_mut(),
-                handle: ptr::null_mut(),
-                status: UIO_STREAM_STATUS_EOF,
-                operation: UIO_STREAM_OPERATION_NONE,
-                open_flags: 0,
-            };
-
-            let result = unsafe { uio_feof(&mut stream) };
-            assert_eq!(result, 1);
-        }
-    }
-
-    #[test]
-    #[serial]
-    fn test_uio_feof_null_stream() {
-        {
-            let result = unsafe { uio_feof(ptr::null_mut()) };
-            assert_eq!(result, 0);
-        }
-    }
-
-    #[test]
-    #[serial]
-    fn test_uio_ferror_returns_zero_when_no_error() {
-        {
-            let mut stream = uio_Stream {
-                buf: ptr::null_mut(),
-                data_start: ptr::null_mut(),
-                data_end: ptr::null_mut(),
-                buf_end: ptr::null_mut(),
-                handle: ptr::null_mut(),
-                status: UIO_STREAM_STATUS_OK,
-                operation: UIO_STREAM_OPERATION_NONE,
-                open_flags: 0,
-            };
-
-            let result = unsafe { uio_ferror(&mut stream) };
-            assert_eq!(result, 0);
-        }
-    }
-
-    #[test]
-    #[serial]
-    fn test_uio_ferror_returns_nonzero_when_error() {
-        {
-            let mut stream = uio_Stream {
-                buf: ptr::null_mut(),
-                data_start: ptr::null_mut(),
-                data_end: ptr::null_mut(),
-                buf_end: ptr::null_mut(),
-                handle: ptr::null_mut(),
-                status: UIO_STREAM_STATUS_ERROR,
-                operation: UIO_STREAM_OPERATION_NONE,
-                open_flags: 0,
-            };
-
-            let result = unsafe { uio_ferror(&mut stream) };
-            assert_eq!(result, 1);
-        }
-    }
-
-    #[test]
-    #[serial]
-    fn test_uio_ferror_null_stream() {
-        {
-            let result = unsafe { uio_ferror(ptr::null_mut()) };
-            assert_eq!(result, 0);
-        }
-    }
-
-    #[test]
-    #[serial]
-    fn test_uio_clearerr_clears_eof() {
-        {
-            let mut stream = uio_Stream {
-                buf: ptr::null_mut(),
-                data_start: ptr::null_mut(),
-                data_end: ptr::null_mut(),
-                buf_end: ptr::null_mut(),
-                handle: ptr::null_mut(),
-                status: UIO_STREAM_STATUS_EOF,
-                operation: UIO_STREAM_OPERATION_NONE,
-                open_flags: 0,
-            };
-
-            unsafe {
-                uio_clearerr(&mut stream);
-            }
-
-            assert_eq!(stream.status, UIO_STREAM_STATUS_OK);
-        }
-    }
-
-    #[test]
-    #[serial]
-    fn test_uio_clearerr_clears_error() {
-        {
-            let mut stream = uio_Stream {
-                buf: ptr::null_mut(),
-                data_start: ptr::null_mut(),
-                data_end: ptr::null_mut(),
-                buf_end: ptr::null_mut(),
-                handle: ptr::null_mut(),
-                status: UIO_STREAM_STATUS_ERROR,
-                operation: UIO_STREAM_OPERATION_NONE,
-                open_flags: 0,
-            };
-
-            unsafe {
-                uio_clearerr(&mut stream);
-            }
-
-            assert_eq!(stream.status, UIO_STREAM_STATUS_OK);
-        }
-    }
-
-    #[test]
-    #[serial]
-    fn test_uio_clearerr_null_stream() {
-        {
-            // Should not crash
-            unsafe {
-                uio_clearerr(ptr::null_mut());
-            }
-        }
-    }
-
-    #[test]
-    #[serial]
-    fn test_fopen_initializes_status_to_ok() {
-        {
-            use std::fs;
-            use tempfile::TempDir;
-
-            let temp_dir = TempDir::new().unwrap();
-            let test_file = temp_dir.path().join("test.txt");
-            fs::write(&test_file, b"test content").unwrap();
-
-            let repository = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
-            let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
-                path: temp_dir.path().to_path_buf(),
-                virtual_path: temp_dir.path().to_path_buf(),
-                refcount: std::sync::atomic::AtomicI32::new(1),
-                repository,
-                root_end: temp_dir.path().to_path_buf(),
-            }));
-
-            let path = CString::new("test.txt").unwrap();
-            let mode = CString::new("r").unwrap();
-
-            let stream = unsafe { uio_fopen(dir_handle, path.as_ptr(), mode.as_ptr()) };
-            assert!(!stream.is_null());
-
-            unsafe {
-                assert_eq!((*stream).status, UIO_STREAM_STATUS_OK);
-                uio_fclose(stream);
-                let _ = Box::from_raw(dir_handle);
-                let _ = Box::from_raw(repository);
-            }
-        }
-    }
-
-    #[test]
-    #[serial]
-    fn test_read_eof_sets_eof_status() {
-        {
-            use std::fs;
-            use tempfile::TempDir;
-
-            let temp_dir = TempDir::new().unwrap();
-            let test_file = temp_dir.path().join("test.txt");
-            fs::write(&test_file, b"A").unwrap(); // Single byte file
-
-            let repository = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
-            let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
-                path: temp_dir.path().to_path_buf(),
-                virtual_path: temp_dir.path().to_path_buf(),
-                refcount: std::sync::atomic::AtomicI32::new(1),
-                repository,
-                root_end: temp_dir.path().to_path_buf(),
-            }));
-
-            let path = CString::new("test.txt").unwrap();
-            let mode = CString::new("r").unwrap();
-
-            let stream = unsafe { uio_fopen(dir_handle, path.as_ptr(), mode.as_ptr()) };
-            assert!(!stream.is_null());
-
-            unsafe {
-                // Read the single byte
-                let mut buf = [0u8; 1];
-                let read = uio_fread(buf.as_mut_ptr() as *mut libc::c_void, 1, 1, stream);
-                assert_eq!(read, 1);
-                assert_eq!((*stream).status, UIO_STREAM_STATUS_OK);
-
-                // Try to read again - should hit EOF
-                let read = uio_fread(buf.as_mut_ptr() as *mut libc::c_void, 1, 1, stream);
-                assert_eq!(read, 0);
-                assert_eq!((*stream).status, UIO_STREAM_STATUS_EOF);
-
-                // Verify uio_feof returns non-zero
-                assert_eq!(uio_feof(stream), 1);
-                assert_eq!(uio_ferror(stream), 0);
-
-                uio_fclose(stream);
-                let _ = Box::from_raw(dir_handle);
-                let _ = Box::from_raw(repository);
-            }
-        }
-    }
-
-    #[test]
-    #[serial]
-    fn test_clearerr_after_eof() {
-        {
-            use std::fs;
-            use tempfile::TempDir;
-
-            let temp_dir = TempDir::new().unwrap();
-            let test_file = temp_dir.path().join("test.txt");
-            fs::write(&test_file, b"").unwrap(); // Empty file
-
-            let repository = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
-            let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
-                path: temp_dir.path().to_path_buf(),
-                virtual_path: temp_dir.path().to_path_buf(),
-                refcount: std::sync::atomic::AtomicI32::new(1),
-                repository,
-                root_end: temp_dir.path().to_path_buf(),
-            }));
-
-            let path = CString::new("test.txt").unwrap();
-            let mode = CString::new("r").unwrap();
-
-            let stream = unsafe { uio_fopen(dir_handle, path.as_ptr(), mode.as_ptr()) };
-            assert!(!stream.is_null());
-
-            unsafe {
-                // Try to read - should hit EOF immediately
-                let mut buf = [0u8; 1];
-                let read = uio_fread(buf.as_mut_ptr() as *mut libc::c_void, 1, 1, stream);
-                assert_eq!(read, 0);
-                assert_eq!(uio_feof(stream), 1);
-
-                // Clear the error/eof state
-                uio_clearerr(stream);
-                assert_eq!(uio_feof(stream), 0);
-                assert_eq!(uio_ferror(stream), 0);
-
-                uio_fclose(stream);
-                let _ = Box::from_raw(dir_handle);
-                let _ = Box::from_raw(repository);
-            }
-        }
-    }
-
-    #[test]
-    #[serial]
-    fn test_fseek_clears_eof() {
-        {
-            use std::fs;
-            use tempfile::TempDir;
-
-            let temp_dir = TempDir::new().unwrap();
-            let test_file = temp_dir.path().join("test.txt");
-            fs::write(&test_file, b"ABCD").unwrap();
-
-            let repository = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
-            let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
-                path: temp_dir.path().to_path_buf(),
-                virtual_path: temp_dir.path().to_path_buf(),
-                refcount: std::sync::atomic::AtomicI32::new(1),
-                repository,
-                root_end: temp_dir.path().to_path_buf(),
-            }));
-
-            let path = CString::new("test.txt").unwrap();
-            let mode = CString::new("r").unwrap();
-
-            let stream = unsafe { uio_fopen(dir_handle, path.as_ptr(), mode.as_ptr()) };
-            assert!(!stream.is_null());
-
-            unsafe {
-                // Read all data to hit EOF
-                let mut buf = [0u8; 10];
-                let read = uio_fread(buf.as_mut_ptr() as *mut libc::c_void, 1, 10, stream);
-                assert_eq!(read, 4); // Only 4 bytes available
-
-                // Try to read again - should hit EOF
-                let read = uio_fread(buf.as_mut_ptr() as *mut libc::c_void, 1, 1, stream);
-                assert_eq!(read, 0);
-                assert_eq!(uio_feof(stream), 1);
-
-                // Seek back to start
-                let seek_result = uio_fseek(stream, 0, SEEK_SET);
-                assert_eq!(seek_result, 0);
-
-                // EOF flag should be cleared
-                assert_eq!(uio_feof(stream), 0);
-
-                uio_fclose(stream);
-                let _ = Box::from_raw(dir_handle);
-                let _ = Box::from_raw(repository);
-            }
-        }
-    }
-
-    #[test]
-    #[serial]
-    fn test_write_error_sets_error_status() {
-        {
-            use std::fs;
-            use tempfile::TempDir;
-
-            let temp_dir = TempDir::new().unwrap();
-            let test_file = temp_dir.path().join("test.txt");
-            fs::write(&test_file, b"").unwrap();
-
-            let repository = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
-            let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
-                path: temp_dir.path().to_path_buf(),
-                virtual_path: temp_dir.path().to_path_buf(),
-                refcount: std::sync::atomic::AtomicI32::new(1),
-                repository,
-                root_end: temp_dir.path().to_path_buf(),
-            }));
-
-            let path = CString::new("test.txt").unwrap();
-            let mode = CString::new("w").unwrap();
-
-            let stream = unsafe { uio_fopen(dir_handle, path.as_ptr(), mode.as_ptr()) };
-            assert!(!stream.is_null());
-
-            unsafe {
-                // Write some data - should succeed
-                let data = b"test data";
-                let written =
-                    uio_fwrite(data.as_ptr() as *const libc::c_void, 1, data.len(), stream);
-                assert_eq!(written, data.len());
-                assert_eq!((*stream).status, UIO_STREAM_STATUS_OK);
-
-                uio_fclose(stream);
-                let _ = Box::from_raw(dir_handle);
-                let _ = Box::from_raw(repository);
-            }
-        }
-    }
-
-    #[test]
-    #[serial]
-    fn test_fgetc_sets_eof() {
-        {
-            use std::fs;
-            use tempfile::TempDir;
-
-            let temp_dir = TempDir::new().unwrap();
-            let test_file = temp_dir.path().join("test.txt");
-            fs::write(&test_file, b"X").unwrap();
-
-            let repository = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
-            let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
-                path: temp_dir.path().to_path_buf(),
-                virtual_path: temp_dir.path().to_path_buf(),
-                refcount: std::sync::atomic::AtomicI32::new(1),
-                repository,
-                root_end: temp_dir.path().to_path_buf(),
-            }));
-
-            let path = CString::new("test.txt").unwrap();
-            let mode = CString::new("r").unwrap();
-
-            let stream = unsafe { uio_fopen(dir_handle, path.as_ptr(), mode.as_ptr()) };
-            assert!(!stream.is_null());
-
-            unsafe {
-                // Read the single character
-                let ch = uio_fgetc(stream);
-                assert_eq!(ch, b'X' as c_int);
-                assert_eq!((*stream).status, UIO_STREAM_STATUS_OK);
-
-                // Try to read again - should hit EOF
-                let ch = uio_fgetc(stream);
-                assert_eq!(ch, -1);
-                assert_eq!((*stream).status, UIO_STREAM_STATUS_EOF);
-                assert_eq!(uio_feof(stream), 1);
-
-                uio_fclose(stream);
-                let _ = Box::from_raw(dir_handle);
-                let _ = Box::from_raw(repository);
-            }
-        }
-    }
 
     // =============================================================================
     // Path Normalization Tests (Phase P05)
@@ -3612,71 +1792,6 @@ mod tests {
     // errno Setting Tests (Phase P05)
     // =============================================================================
 
-    #[test]
-    #[serial]
-    fn test_uio_fopen_sets_einval_on_invalid_mode() {
-        {
-            use tempfile::TempDir;
-
-            let temp_dir = TempDir::new().unwrap();
-            let repository = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
-            let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
-                path: temp_dir.path().to_path_buf(),
-                virtual_path: temp_dir.path().to_path_buf(),
-                refcount: std::sync::atomic::AtomicI32::new(1),
-                repository,
-                root_end: temp_dir.path().to_path_buf(),
-            }));
-
-            let path = CString::new("test.txt").unwrap();
-            let invalid_mode = CString::new("x").unwrap(); // Invalid mode
-
-            unsafe {
-                // Clear errno first
-                set_errno(0);
-
-                let stream = uio_fopen(dir_handle, path.as_ptr(), invalid_mode.as_ptr());
-                assert!(stream.is_null());
-                assert_eq!(current_errno(), libc::EINVAL);
-
-                let _ = Box::from_raw(dir_handle);
-                let _ = Box::from_raw(repository);
-            }
-        }
-    }
-
-    #[test]
-    #[serial]
-    fn test_uio_open_sets_enoent_on_missing_file() {
-        {
-            use tempfile::TempDir;
-
-            let temp_dir = TempDir::new().unwrap();
-            let repository = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
-            let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
-                path: temp_dir.path().to_path_buf(),
-                virtual_path: temp_dir.path().to_path_buf(),
-                refcount: std::sync::atomic::AtomicI32::new(1),
-                repository,
-                root_end: temp_dir.path().to_path_buf(),
-            }));
-
-            let path = CString::new("nonexistent.txt").unwrap();
-
-            unsafe {
-                // Clear errno first
-                set_errno(0);
-
-                let handle = uio_open(dir_handle, path.as_ptr(), O_RDONLY, 0);
-                assert!(handle.is_null());
-                assert_eq!(current_errno(), libc::ENOENT);
-
-                let _ = Box::from_raw(dir_handle);
-                let _ = Box::from_raw(repository);
-            }
-        }
-    }
-
     // =============================================================================
     // Mount Ordering Tests (Phase P06)
     // =============================================================================
@@ -3718,7 +1833,8 @@ mod tests {
             assert!(!mount2.is_null());
 
             // Verify mount2 has higher priority (lower position)
-            let registry = get_mount_registry().lock().unwrap();
+            let topology = get_mount_registry().lock().unwrap();
+            let registry = &topology.mounts;
             let m1 = registry
                 .iter()
                 .find(|m| m.handle_ptr == mount1 as usize)
@@ -3732,7 +1848,7 @@ mod tests {
                 "TOP mount should have lower position than BOTTOM"
             );
 
-            drop(registry);
+            drop(topology);
             unsafe {
                 let _ = Box::from_raw(mount1);
                 let _ = Box::from_raw(mount2);
@@ -3789,7 +1905,8 @@ mod tests {
                 )
             };
 
-            let registry = get_mount_registry().lock().unwrap();
+            let topology = get_mount_registry().lock().unwrap();
+            let registry = &topology.mounts;
             let m1 = registry
                 .iter()
                 .find(|m| m.handle_ptr == mount1 as usize)
@@ -3812,7 +1929,7 @@ mod tests {
                 "BELOW mount should have higher position"
             );
 
-            drop(registry);
+            drop(topology);
             unsafe {
                 let _ = Box::from_raw(mount1);
                 let _ = Box::from_raw(mount2);
@@ -3899,114 +2016,6 @@ mod tests {
 
     #[test]
     #[serial]
-    fn test_uio_open_write_fails_on_readonly_top_mount() {
-        {
-            use std::fs;
-
-            clear_mount_registry();
-
-            // Create temp directory and file
-            let temp_dir = std::env::temp_dir().join("uqm_test_readonly_write");
-            let _ = fs::remove_dir_all(&temp_dir);
-            fs::create_dir_all(&temp_dir).unwrap();
-
-            // Create a file in the directory
-            let test_file = temp_dir.join("test.txt");
-            fs::write(&test_file, b"original content").unwrap();
-
-            // Mount as read-only
-            add_test_mount_readonly("/data", temp_dir.to_str().unwrap(), true);
-
-            unsafe {
-                let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
-                let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
-                    path: PathBuf::from("/data"),
-                    virtual_path: PathBuf::from("/data"),
-                    refcount: std::sync::atomic::AtomicI32::new(1),
-                    repository: repo,
-                    root_end: PathBuf::from("/data"),
-                }));
-
-                // Try to open for writing - should fail with EACCES
-                let path = CString::new("test.txt").unwrap();
-                set_errno(0);
-                let handle = uio_open(dir_handle, path.as_ptr(), O_WRONLY, 0o644);
-
-                assert!(handle.is_null());
-                assert_eq!(current_errno(), libc::EACCES);
-
-                // Try to open with O_CREAT - should also fail
-                let new_file = CString::new("newfile.txt").unwrap();
-                set_errno(0);
-                let handle2 = uio_open(dir_handle, new_file.as_ptr(), O_WRONLY | O_CREAT, 0o644);
-
-                assert!(handle2.is_null());
-                assert_eq!(current_errno(), libc::EACCES);
-
-                // Reading should still work
-                let handle3 = uio_open(dir_handle, path.as_ptr(), O_RDONLY, 0);
-                assert!(!handle3.is_null());
-                uio_close(handle3);
-
-                let _ = Box::from_raw(dir_handle);
-                let _ = Box::from_raw(repo);
-            }
-
-            let _ = fs::remove_dir_all(&temp_dir);
-            clear_mount_registry();
-        }
-    }
-
-    #[test]
-    #[serial]
-    fn test_uio_unlink_fails_on_readonly_mount() {
-        {
-            use std::fs;
-
-            clear_mount_registry();
-
-            let temp_dir = std::env::temp_dir().join("uqm_test_unlink_readonly");
-            let _ = fs::remove_dir_all(&temp_dir);
-            fs::create_dir_all(&temp_dir).unwrap();
-
-            // Create a file
-            fs::write(temp_dir.join("file.txt"), b"test content").unwrap();
-
-            // Mount as read-only
-            add_test_mount_readonly("/data", temp_dir.to_str().unwrap(), true);
-
-            unsafe {
-                let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
-                let dir = Box::into_raw(Box::new(uio_DirHandle {
-                    path: PathBuf::from("/data"),
-                    virtual_path: PathBuf::from("/data"),
-                    refcount: std::sync::atomic::AtomicI32::new(1),
-                    repository: repo,
-                    root_end: PathBuf::from("/data"),
-                }));
-
-                // Try to unlink - should fail with EACCES
-                let path = CString::new("file.txt").unwrap();
-                set_errno(0);
-                let result = uio_unlink(dir, path.as_ptr());
-
-                assert_eq!(result, -1);
-                assert_eq!(current_errno(), libc::EACCES);
-
-                // File should still exist
-                assert!(temp_dir.join("file.txt").exists());
-
-                let _ = Box::from_raw(dir);
-                let _ = Box::from_raw(repo);
-            }
-
-            let _ = fs::remove_dir_all(&temp_dir);
-            clear_mount_registry();
-        }
-    }
-
-    #[test]
-    #[serial]
     fn test_mount_position_no_underflow() {
         {
             clear_mount_registry();
@@ -4015,7 +2024,8 @@ mod tests {
             add_test_mount("/first", "/tmp/first");
 
             {
-                let registry = get_mount_registry().lock().unwrap();
+                let topology = get_mount_registry().lock().unwrap();
+                let registry = &topology.mounts;
                 let mount = registry.iter().find(|m| m.mount_point == "/first").unwrap();
                 // Position should be reasonable (starting at 1000 or near it)
                 assert!(mount.position < 10000);
@@ -4025,7 +2035,8 @@ mod tests {
             add_test_mount("/second", "/tmp/second");
 
             {
-                let registry = get_mount_registry().lock().unwrap();
+                let topology = get_mount_registry().lock().unwrap();
+                let registry = &topology.mounts;
                 let mount1 = registry.iter().find(|m| m.mount_point == "/first").unwrap();
                 let mount2 = registry
                     .iter()
@@ -4507,7 +2518,8 @@ mod tests {
 
             // Verify mount exists
             {
-                let registry = get_mount_registry().lock().unwrap();
+                let topology = get_mount_registry().lock().unwrap();
+                let registry = &topology.mounts;
                 assert!(!registry.is_empty());
             }
 
@@ -4516,7 +2528,8 @@ mod tests {
 
             // Verify mounts cleared
             {
-                let registry = get_mount_registry().lock().unwrap();
+                let topology = get_mount_registry().lock().unwrap();
+                let registry = &topology.mounts;
                 assert!(registry.is_empty());
             }
 
@@ -4525,120 +2538,10 @@ mod tests {
 
             // Verify registry still empty
             {
-                let registry = get_mount_registry().lock().unwrap();
+                let topology = get_mount_registry().lock().unwrap();
+                let registry = &topology.mounts;
                 assert!(registry.is_empty());
             }
-        }
-    }
-
-    /// @plan PLAN-20260314-FILE-IO.P11
-    /// @requirement REQ-FIO-POST-UNMOUNT-CLEANUP
-    /// Test: uio_close remains safe after mount removal
-    #[test]
-    #[serial]
-    fn test_close_safe_after_unmount() {
-        unsafe {
-            uio_init();
-
-            let temp_dir = std::env::temp_dir().join("uio_test_close_after_unmount");
-            std::fs::create_dir_all(&temp_dir).unwrap();
-            let test_file = temp_dir.join("test.txt");
-            std::fs::write(&test_file, b"test data").unwrap();
-
-            let repo = uio_openRepository(0);
-            let mount_point = CString::new("/testmount").unwrap();
-            let _temp_dir_cstr = CString::new(temp_dir.to_str().unwrap()).unwrap();
-
-            let mount_handle = register_mount(
-                repo,
-                Path::new("/testmount"),
-                temp_dir.clone(),
-                UIO_FSTYPE_STDIO,
-                UIO_MOUNT_TOP,
-                ptr::null_mut(),
-                true,
-            );
-
-            // Open a file through the mount
-            let dir = uio_openDir(repo, mount_point.as_ptr(), 0);
-            assert!(!dir.is_null());
-
-            let filename = CString::new("test.txt").unwrap();
-            let handle = uio_open(dir, filename.as_ptr(), O_RDONLY, 0);
-            assert!(!handle.is_null());
-
-            // Unmount the directory
-            uio_unmountDir(mount_handle);
-
-            // Verify mount is gone
-            {
-                let registry = get_mount_registry().lock().unwrap();
-                assert!(registry.is_empty());
-            }
-
-            // Close the handle - should still work
-            let result = uio_close(handle);
-            assert_eq!(result, 0);
-
-            // Clean up
-            uio_closeDir(dir);
-            uio_closeRepository(repo);
-            std::fs::remove_file(&test_file).ok();
-            std::fs::remove_dir(&temp_dir).ok();
-            uio_unInit();
-        }
-    }
-
-    /// @plan PLAN-20260314-FILE-IO.P11
-    /// @requirement REQ-FIO-POST-UNMOUNT-CLEANUP
-    /// Test: uio_fclose remains safe after mount removal
-    #[test]
-    #[serial]
-    fn test_fclose_safe_after_unmount() {
-        unsafe {
-            uio_init();
-
-            let temp_dir = std::env::temp_dir().join("uio_test_fclose_after_unmount");
-            std::fs::create_dir_all(&temp_dir).unwrap();
-            let test_file = temp_dir.join("test.txt");
-            std::fs::write(&test_file, b"test data").unwrap();
-
-            let repo = uio_openRepository(0);
-            let mount_point = CString::new("/testmount").unwrap();
-            let _temp_dir_cstr = CString::new(temp_dir.to_str().unwrap()).unwrap();
-
-            let mount_handle = register_mount(
-                repo,
-                Path::new("/testmount"),
-                temp_dir.clone(),
-                UIO_FSTYPE_STDIO,
-                UIO_MOUNT_TOP,
-                ptr::null_mut(),
-                true,
-            );
-
-            // Open a file through the mount
-            let dir = uio_openDir(repo, mount_point.as_ptr(), 0);
-            assert!(!dir.is_null());
-
-            let filename = CString::new("test.txt").unwrap();
-            let mode = CString::new("r").unwrap();
-            let stream = uio_fopen(dir, filename.as_ptr(), mode.as_ptr());
-            assert!(!stream.is_null());
-
-            // Unmount the directory
-            uio_unmountDir(mount_handle);
-
-            // Close the stream - should still work
-            let result = uio_fclose(stream);
-            assert_eq!(result, 0);
-
-            // Clean up
-            uio_closeDir(dir);
-            uio_closeRepository(repo);
-            std::fs::remove_file(&test_file).ok();
-            std::fs::remove_dir(&temp_dir).ok();
-            uio_unInit();
         }
     }
 
@@ -4837,7 +2740,8 @@ mod tests {
 
             // Verify mounts exist
             {
-                let registry = get_mount_registry().lock().unwrap();
+                let topology = get_mount_registry().lock().unwrap();
+                let registry = &topology.mounts;
                 assert_eq!(registry.len(), 2);
             }
 
@@ -4846,7 +2750,8 @@ mod tests {
 
             // Verify all mounts cleaned up
             {
-                let registry = get_mount_registry().lock().unwrap();
+                let topology = get_mount_registry().lock().unwrap();
+                let registry = &topology.mounts;
                 assert_eq!(registry.len(), 0);
             }
 
@@ -4890,21 +2795,17 @@ mod tests {
 mod layered_open_tests;
 
 #[cfg(test)]
-#[path = "uio_stream_tests.rs"]
-mod stream_tests;
-
-#[cfg(test)]
-#[path = "uio_fileops_tests.rs"]
-mod fileops_tests;
-
-#[cfg(test)]
-#[path = "uio_fileblock_tests.rs"]
-mod fileblock_tests;
-
-#[cfg(test)]
 #[path = "uio_mount_ops_tests.rs"]
 mod mount_ops_tests;
 
 #[cfg(test)]
 #[path = "uio_owned_tests.rs"]
 mod owned_tests;
+
+#[cfg(test)]
+#[path = "vfs_tests.rs"]
+mod vfs_tests;
+
+#[cfg(test)]
+#[path = "vfs_stream_tests.rs"]
+mod vfs_stream_tests;

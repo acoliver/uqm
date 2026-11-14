@@ -1058,11 +1058,8 @@ pub use crate::graphics::native_abi::uio_Repository;
 pub type FILE = libc::FILE;
 pub use crate::graphics::native_abi::uio_Stream;
 
-pub use crate::io::uio_bridge::uio_fopen;
 
-pub use crate::io::uio_bridge::uio_fclose;
 
-pub use crate::io::uio_bridge::uio_streamHandle;
 pub type uio_bool = bool;
 pub type uio_uint8 = ::std::os::raw::c_uchar;
 pub type uio_sint8 = ::std::os::raw::c_schar;
@@ -1080,7 +1077,6 @@ pub struct uio_DirList {
 }
 pub use crate::io::uio_bridge::uio_init;
 
-pub use crate::io::uio_bridge::uio_fstat;
 pub use crate::ships::native::abi::resource_index_desc;
 pub type RESOURCE_INDEX_DESC = resource_index_desc;
 pub type RESOURCE_INDEX = *mut RESOURCE_INDEX_DESC;
