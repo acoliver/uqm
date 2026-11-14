@@ -57,7 +57,7 @@ impl Directory {
 
     pub fn files(&self) -> DirectoryFiles {
         // SAFETY: self owns a live reference throughout the snapshot.
-        unsafe { directory(self.0.as_ptr()).expect("owned directory") }
+        DirectoryFiles::new(unsafe { self.0.as_ref() })
     }
 
     /// Regular, non-hidden entries in the same enumeration order as the native browser.
@@ -127,41 +127,47 @@ pub unsafe fn directory(pointer: *mut uio_DirHandle) -> io::Result<DirectoryFile
     // SAFETY: caller supplies a live pointer; null is an external ABI input.
     let directory =
         unsafe { pointer.as_ref() }.ok_or_else(|| io::Error::from(io::ErrorKind::InvalidInput))?;
-    Ok(DirectoryFiles {
-        path: directory.path.clone(),
-        virtual_path: directory.virtual_path.clone(),
-    })
+    Ok(DirectoryFiles::new(directory))
+}
+
+impl DirectoryFiles {
+    fn new(directory: &uio_DirHandle) -> Self {
+        Self {
+            path: directory.path.clone(),
+            virtual_path: directory.virtual_path.clone(),
+        }
+    }
 }
 
 impl crate::host::Files for DirectoryFiles {
     fn open_read(&self, path: &Path) -> io::Result<Stream> {
         get_mount_registry()
             .lock()
-            .unwrap()
+            .unwrap_or_else(|error| panic!("Vfs mount registry poisoned: {error}"))
             .open_at(&self.path, &self.virtual_path, path, false)
     }
     fn open_write(&self, path: &Path) -> io::Result<Stream> {
         get_mount_registry()
             .lock()
-            .unwrap()
+            .unwrap_or_else(|error| panic!("Vfs mount registry poisoned: {error}"))
             .open_at(&self.path, &self.virtual_path, path, true)
     }
     fn remove(&self, path: &Path) -> io::Result<()> {
         get_mount_registry()
             .lock()
-            .unwrap()
+            .unwrap_or_else(|error| panic!("Vfs mount registry poisoned: {error}"))
             .remove_at(&self.path, &self.virtual_path, path)
     }
     fn list(&self, path: &Path) -> io::Result<Vec<String>> {
         get_mount_registry()
             .lock()
-            .unwrap()
+            .unwrap_or_else(|error| panic!("Vfs mount registry poisoned: {error}"))
             .list_at(&self.path, &self.virtual_path, path)
     }
     fn stat(&self, path: &Path) -> io::Result<crate::host::FileStat> {
         get_mount_registry()
             .lock()
-            .unwrap()
+            .unwrap_or_else(|error| panic!("Vfs mount registry poisoned: {error}"))
             .stat_at(&self.path, &self.virtual_path, path)
     }
 }
@@ -175,5 +181,6 @@ pub unsafe fn read_file(dir: *mut uio_DirHandle, name: *const c_char) -> io::Res
     }
     // SAFETY: caller supplies a terminated string and live directory.
     let path = unsafe { CStr::from_ptr(name) }.to_string_lossy();
+    // SAFETY: caller supplies a live directory.
     unsafe { directory(dir) }?.read(Path::new(path.as_ref()))
 }
