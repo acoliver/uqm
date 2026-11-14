@@ -33,8 +33,7 @@ pub mod abi {
         destroy_drawable as DestroyDrawable, destroy_music as DestroyMusic,
         destroy_sound as DestroySound, destroy_string_table as DestroyStringTable,
         draw_filled_rectangle as DrawFilledRectangle, draw_filled_stamp as DrawFilledStamp,
-        draw_stamp as DrawStamp, draw_text as font_DrawText,
-        drawables_intersect as DrawablesIntersect, equ_frame_index as SetEquFrameIndex,
+        draw_stamp as DrawStamp, draw_text as font_DrawText, equ_frame_index as SetEquFrameIndex,
         frame_hot as GetFrameHot, frame_rect as GetFrameRect, in_hq_space as in_hqspace,
         in_hyper_space, inc_frame_index as IncFrameIndex, music_playing as PLRPlaying,
         release_drawable as ReleaseDrawable, release_string_table as ReleaseStringTable,
@@ -127,16 +126,6 @@ mod engine {
     /// `context` must be null or a live context owned by the game thread.
     pub unsafe fn set_context(context: abi::CONTEXT) -> abi::CONTEXT {
         crate::battle::c_bridge::SetContext(context.cast()).cast()
-    }
-
-    /// # Safety
-    /// Both controls and their frames must be live and owned by the game thread.
-    pub unsafe fn drawables_intersect(
-        a: *mut abi::INTERSECT_CONTROL,
-        b: *mut abi::INTERSECT_CONTROL,
-        max_time: abi::TIME_VALUE,
-    ) -> abi::TIME_VALUE {
-        crate::graphics::geometry_ffi::DrawablesIntersect(a.cast(), b.cast(), max_time)
     }
 
     /// # Safety
