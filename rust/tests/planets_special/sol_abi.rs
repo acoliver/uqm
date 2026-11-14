@@ -158,8 +158,7 @@ fn check_drawable_ownership(h: &mut Harness) {
         let retained = if (width, height) == (map_width, map_height) {
             definition
         } else {
-            let scaled =
-                unsafe { definition.rescaled(i32::from(map_width), i32::from(map_height)) };
+            let scaled = definition.rescaled(i32::from(map_width), i32::from(map_height));
             assert!(!scaled.as_frame().is_null());
             assert_ne!(scaled.as_frame(), frame);
             let both = allocations();
@@ -167,7 +166,7 @@ fn check_drawable_ownership(h: &mut Harness) {
             drop(scaled);
             unsafe { queue::TFB_FlushGraphicsEx(1) };
             assert_eq!(allocations(), created);
-            let normalized = unsafe { definition.into_definition(map_width, map_height) }.unwrap();
+            let normalized = definition.into_definition(map_width, map_height).unwrap();
             assert_ne!(normalized.as_frame(), frame);
             unsafe {
                 queue::TFB_FlushGraphicsEx(1);
