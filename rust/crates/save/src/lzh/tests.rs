@@ -3,7 +3,7 @@ use std::io::{Cursor, Read, Seek, SeekFrom, Write};
 
 // Captured from the original C encoder before its deletion. The input below
 // crosses the dictionary ring and the Huffman frequency reconstruction limit.
-const LEGACY: &[u8] = include_bytes!("../../../tests/fixtures/lzh/legacy.lzh");
+const LEGACY: &[u8] = include_bytes!("../../../../tests/fixtures/lzh/legacy.lzh");
 
 fn legacy_input() -> Vec<u8> {
     let mut bytes = vec![b' '; 8192];
@@ -46,7 +46,7 @@ fn c_encoder_fixture_is_byte_identical_and_decodes_across_read_boundaries() {
 #[test]
 fn c_encoder_short_stream_vectors() {
     let vectors: Vec<(Vec<u8>, Vec<u8>)> = serde_json::from_str(include_str!(
-        "../../../tests/fixtures/lzh/short-streams.json"
+        "../../../../tests/fixtures/lzh/short-streams.json"
     ))
     .unwrap();
     for (input, expected) in vectors {

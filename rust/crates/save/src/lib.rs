@@ -6,6 +6,7 @@ pub mod encode;
 pub mod error;
 pub mod format;
 pub mod ip_groups;
+pub mod lzh;
 pub mod mle;
 pub mod statefiles;
 pub mod types;

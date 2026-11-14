@@ -203,8 +203,8 @@ mod live {
     use super::*;
 
     use crate::engine::host::FileStream;
-    use crate::savegame::lzh::Decoder;
     use crate::savegame::slots::SaveSlots;
+    use uqm_save::lzh::Decoder;
 
     fn open_legacy_slot(slots: &SaveSlots, slot: u16) -> anyhow::Result<(FileStream, Summary)> {
         let mut stream = slots.open_legacy(slot)?;

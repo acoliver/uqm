@@ -184,7 +184,7 @@ fn legacy_slot_reads_summary_and_compressed_payload_through_files() {
     let mut header = [0xa5; 164];
     header[..122].copy_from_slice(&body[..122]);
     header[124..162].copy_from_slice(&body[122..160]);
-    let mut encoder = crate::savegame::lzh::Encoder::new(Cursor::new(Vec::new())).unwrap();
+    let mut encoder = uqm_save::lzh::Encoder::new(Cursor::new(Vec::new())).unwrap();
     encoder.write_all(&plain).unwrap();
     let compressed = encoder.finish().unwrap().into_inner();
     let bytes = [header.as_slice(), &compressed].concat();
