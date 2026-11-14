@@ -1100,13 +1100,10 @@ pub type ResourceLoadFileFun = ::std::option::Option<
 
 pub use crate::resource::ffi_bridge::res_OpenResFile;
 
-pub use crate::resource::ffi_bridge::GetResFileChar;
 
-pub use crate::resource::ffi_bridge::PutResFileChar;
 
 pub use crate::resource::ffi_bridge::res_CloseResFile;
 
-pub use crate::resource::ffi_bridge::DeleteResFile;
 
 pub use crate::resource::ffi_bridge::res_GetResourceType;
 

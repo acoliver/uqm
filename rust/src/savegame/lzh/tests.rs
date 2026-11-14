@@ -1,5 +1,5 @@
 use super::*;
-use std::ffi::c_void;
+use std::io::{Cursor, Read, Seek, SeekFrom, Write};
 
 // Captured from the original C encoder before its deletion. The input below
 // crosses the dictionary ring and the Huffman frequency reconstruction limit.
@@ -16,180 +16,190 @@ fn legacy_input() -> Vec<u8> {
     bytes
 }
 
-unsafe fn encode(input: &[u8], chunk: usize) -> Vec<u8> {
-    let mut output = vec![0; input.len() * 2 + 1024];
-    let desc = copen(output.as_mut_ptr().cast(), 1, 1);
-    assert!(!desc.is_null());
+fn encode(input: &[u8], chunk: usize) -> Vec<u8> {
+    let mut encoder = Encoder::new(Cursor::new(Vec::new())).unwrap();
     for part in input.chunks(chunk) {
-        assert_eq!(
-            cwrite(part.as_ptr().cast(), 1, part.len() as u16, desc),
-            part.len() as u16
-        );
+        encoder.write_all(part).unwrap();
     }
-    let len = cclose(desc) as usize;
-    output.truncate(if input.is_empty() { 4 } else { len });
-    output
+    encoder.finish().unwrap().into_inner()
 }
 
-unsafe fn decode(input: &[u8], chunk: usize) -> Vec<u8> {
-    // The original memory API, unlike FILE_STREAM, has no EOF signal. The
-    // Huffman bit reader prefetches up to two bytes past the payload.
-    let mut padded = input.to_vec();
-    padded.extend([0; 8]);
-    let desc = copen(padded.as_mut_ptr().cast(), 1, 0);
-    assert!(!desc.is_null());
-    let mut len = 0;
-    cfilelength(desc, &mut len);
-    let mut output = vec![0; len as usize];
+fn decode(input: &[u8], chunk: usize) -> Vec<u8> {
+    let mut decoder = Decoder::new(input).unwrap();
+    let mut output = vec![0; decoder.len() as usize];
     for part in output.chunks_mut(chunk) {
-        assert_eq!(
-            cread(part.as_mut_ptr().cast(), 1, part.len() as u16, desc),
-            part.len() as u16
-        );
+        decoder.read_exact(part).unwrap();
     }
-    let mut extra = 0u8;
-    assert_eq!(cread((&mut extra as *mut u8).cast(), 1, 1, desc), 0);
-    assert_eq!(cclose(desc), len);
+    assert_eq!(decoder.read(&mut [0]).unwrap(), 0);
     output
 }
 
 #[test]
-#[serial_test::serial]
 fn c_encoder_fixture_is_byte_identical_and_decodes_across_read_boundaries() {
     let input = legacy_input();
-    unsafe {
-        for chunk in [1, 15, 16, 17, 257, 4096, 65535] {
-            assert_eq!(encode(&input, chunk), LEGACY, "write chunk {chunk}");
-            assert_eq!(decode(LEGACY, chunk), input, "read chunk {chunk}");
-        }
+    for chunk in [1, 15, 16, 17, 257, 4096, 65535] {
+        assert_eq!(encode(&input, chunk), LEGACY, "write chunk {chunk}");
+        assert_eq!(decode(LEGACY, chunk), input, "read chunk {chunk}");
     }
 }
 
 #[test]
-#[serial_test::serial]
 fn c_encoder_short_stream_vectors() {
     let vectors: Vec<(Vec<u8>, Vec<u8>)> = serde_json::from_str(include_str!(
         "../../../tests/fixtures/lzh/short-streams.json"
     ))
     .unwrap();
-    unsafe {
-        for (input, expected) in vectors {
-            for chunk in [1, 15, 16, 17, 256] {
-                assert_eq!(
-                    encode(&input, chunk),
-                    expected,
-                    "length {} chunk {chunk}",
-                    input.len()
-                );
-                assert_eq!(decode(&expected, chunk), input);
-            }
+    for (input, expected) in vectors {
+        for chunk in [1, 15, 16, 17, 256] {
+            assert_eq!(
+                encode(&input, chunk),
+                expected,
+                "length {} chunk {chunk}",
+                input.len()
+            );
+            assert_eq!(decode(&expected, chunk), input);
         }
     }
 }
 
 #[test]
-#[serial_test::serial]
 fn round_trips_dictionary_and_lookahead_boundaries() {
-    unsafe {
-        for len in [0, 1, 2, 15, 16, 17, 4095, 4096, 4097, 65535] {
-            let input: Vec<_> = (0..len).map(|i| (i * 17) as u8).collect();
-            let packed = encode(&input, 257);
-            assert_eq!(decode(&packed, 13), input);
-        }
+    for len in [0, 1, 2, 15, 16, 17, 4095, 4096, 4097, 65535] {
+        let input: Vec<_> = (0..len).map(|i| (i * 17) as u8).collect();
+        let packed = encode(&input, 257);
+        assert_eq!(decode(&packed, 13), input);
     }
 }
 
 #[test]
-#[serial_test::serial]
-fn whole_items_eof_and_null_descriptors() {
-    unsafe {
-        let input = vec![b'a'; 37];
-        let mut packed = encode(&input, 7);
-        packed.extend([0; 8]);
-        let desc = copen(packed.as_mut_ptr().cast(), 1, 0);
-        let mut output = [0u8; 40];
-        assert_eq!(cread(output.as_mut_ptr().cast(), 4, 10, desc), 9);
-        assert_eq!(output[..36], input[..36]);
-        assert_eq!(cread(output.as_mut_ptr().cast(), 2, 1, desc), 0);
-        assert_eq!(cread(output.as_mut_ptr().cast(), 1, 1, desc), 1);
-        assert_eq!(cclose(desc), 37);
-        assert_eq!(cclose(ptr::null_mut()), 0);
-        let mut len = 123;
-        cfilelength(ptr::null_mut(), &mut len);
-        assert_eq!(len, 0);
-        assert_eq!(cread(ptr::null_mut(), 0, 0, ptr::null_mut()), 0);
-        assert_eq!(cwrite(ptr::null(), 0, 0, ptr::null_mut()), 0);
-        let mut invalid = [255u8; 4];
-        assert!(copen(invalid.as_mut_ptr().cast(), 1, 0).is_null());
-    }
+fn eof_zero_length_reads_and_invalid_headers() {
+    let input = vec![b'a'; 37];
+    let packed = encode(&input, 7);
+    let mut decoder = Decoder::new(packed.as_slice()).unwrap();
+    let mut output = [0; 40];
+    assert_eq!(decoder.read(&mut []).unwrap(), 0);
+    assert_eq!(decoder.read(&mut output[..36]).unwrap(), 36);
+    assert_eq!(output[..36], input[..36]);
+    assert_eq!(decoder.read(&mut output[..2]).unwrap(), 1);
+    assert_eq!(output[0], b'a');
+    assert_eq!(decoder.read(&mut output).unwrap(), 0);
+    assert!(
+        matches!(Decoder::new([255; 4].as_slice()), Err(error) if error.kind() == io::ErrorKind::InvalidData)
+    );
+    assert!(
+        matches!(Decoder::new([0; 3].as_slice()), Err(error) if error.kind() == io::ErrorKind::UnexpectedEof)
+    );
 }
 
 #[test]
-#[serial_test::serial]
-fn file_stream_header_is_rewritten_at_its_original_offset() {
-    use crate::io::uio_bridge::{
-        uio_closeDir, uio_closeRepository, uio_mountDir, uio_openDir, uio_openRepository,
-    };
-    use crate::resource::ffi_bridge::{
-        res_CloseResFile as CloseResFile, res_OpenResFile as OpenResFile, SeekResFile, TellResFile,
-    };
-    use std::ffi::CString;
-
-    std::fs::create_dir_all(concat!(env!("CARGO_MANIFEST_DIR"), "/../tmp")).unwrap();
-    let temp = tempfile::Builder::new()
-        .prefix("lzh-")
-        .tempdir_in(concat!(env!("CARGO_MANIFEST_DIR"), "/../tmp"))
-        .unwrap();
-    let host = CString::new(temp.path().to_str().unwrap()).unwrap();
+fn stream_header_is_rewritten_at_its_original_offset() {
     let input = legacy_input();
-    unsafe {
-        let repo = uio_openRepository(0);
-        assert!(!uio_mountDir(
-            repo,
-            c"/".as_ptr(),
-            1,
-            ptr::null_mut(),
-            ptr::null(),
-            host.as_ptr(),
-            ptr::null_mut(),
-            4,
-            ptr::null_mut()
-        )
-        .is_null());
-        let root = uio_openDir(repo, c"/".as_ptr(), 0);
-        let stream = OpenResFile(root.cast::<c_void>(), c"save".as_ptr(), c"wb+".as_ptr());
-        assert!(!stream.is_null());
-        for byte in b"prefix" {
-            PutResFileChar(*byte as _, stream);
+    let mut stream = Cursor::new(Vec::new());
+    stream.write_all(b"prefix").unwrap();
+    let mut encoder = Encoder::new(stream).unwrap();
+    for part in input.chunks(4096) {
+        encoder.write_all(part).unwrap();
+    }
+    let mut stream = encoder.finish().unwrap();
+    assert_eq!(stream.position(), 10);
+    assert_eq!(stream.get_ref(), &[b"prefix".as_slice(), LEGACY].concat());
+    stream.seek(SeekFrom::Start(6)).unwrap();
+    let mut decoder = Decoder::new(stream).unwrap();
+    let mut output = vec![0; input.len()];
+    for part in output.chunks_mut(113) {
+        decoder.read_exact(part).unwrap();
+    }
+    assert_eq!(output, input);
+}
+
+#[test]
+fn decoders_do_not_share_state() {
+    let first = encode(b"first stream", 1);
+    let second = encode(b"second stream", 2);
+    let mut a = Decoder::new(first.as_slice()).unwrap();
+    let mut b = Decoder::new(second.as_slice()).unwrap();
+    for (&left, &right) in b"first stream".iter().zip(b"second stream") {
+        let mut byte = [0];
+        a.read_exact(&mut byte).unwrap();
+        assert_eq!(byte[0], left);
+        b.read_exact(&mut byte).unwrap();
+        assert_eq!(byte[0], right);
+    }
+}
+
+struct Broken;
+impl Read for Broken {
+    fn read(&mut self, _: &mut [u8]) -> io::Result<usize> {
+        Err(io::ErrorKind::PermissionDenied.into())
+    }
+}
+impl Write for Broken {
+    fn write(&mut self, _: &[u8]) -> io::Result<usize> {
+        Err(io::ErrorKind::WriteZero.into())
+    }
+    fn flush(&mut self) -> io::Result<()> {
+        Err(io::ErrorKind::BrokenPipe.into())
+    }
+}
+impl Seek for Broken {
+    fn seek(&mut self, _: SeekFrom) -> io::Result<u64> {
+        Err(io::ErrorKind::NotSeekable.into())
+    }
+}
+
+#[test]
+fn stream_errors_are_reported() {
+    assert!(
+        matches!(Decoder::new(Broken), Err(error) if error.kind() == io::ErrorKind::PermissionDenied)
+    );
+    assert!(matches!(Encoder::new(Broken), Err(error) if error.kind() == io::ErrorKind::WriteZero));
+    let header = Cursor::new(1u32.to_le_bytes());
+    let mut decoder = Decoder::new(header.chain(Broken)).unwrap();
+    assert_eq!(
+        decoder.read(&mut [0]).unwrap_err().kind(),
+        io::ErrorKind::PermissionDenied
+    );
+}
+
+struct FailingWriter {
+    inner: Cursor<Vec<u8>>,
+    fail_seek: bool,
+}
+impl Write for FailingWriter {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        self.inner.write(bytes)
+    }
+    fn flush(&mut self) -> io::Result<()> {
+        Err(io::ErrorKind::BrokenPipe.into())
+    }
+}
+impl Seek for FailingWriter {
+    fn seek(&mut self, position: SeekFrom) -> io::Result<u64> {
+        if self.fail_seek {
+            Err(io::ErrorKind::NotSeekable.into())
+        } else {
+            self.inner.seek(position)
         }
-        let desc = copen(stream, 0, 1);
-        for part in input.chunks(4096) {
-            assert_eq!(
-                cwrite(part.as_ptr().cast(), 1, part.len() as u16, desc),
-                part.len() as u16
-            );
-        }
-        assert_eq!(cclose(desc) as usize, LEGACY.len());
-        assert_eq!(TellResFile(stream), 10);
-        CloseResFile(stream);
+    }
+}
+
+#[test]
+fn finishing_reports_header_rewrite_and_flush_errors() {
+    for fail_seek in [false, true] {
+        let mut encoder = Encoder::new(FailingWriter {
+            inner: Cursor::new(Vec::new()),
+            fail_seek,
+        })
+        .unwrap();
+        encoder.write_all(b"compressed payload").unwrap();
+        let error = encoder.finish().err().unwrap();
         assert_eq!(
-            std::fs::read(temp.path().join("save")).unwrap(),
-            [b"prefix".as_slice(), LEGACY].concat()
+            error.kind(),
+            if fail_seek {
+                io::ErrorKind::NotSeekable
+            } else {
+                io::ErrorKind::BrokenPipe
+            }
         );
-        let stream = OpenResFile(root.cast(), c"save".as_ptr(), c"rb".as_ptr());
-        assert_eq!(SeekResFile(stream, 6, libc::SEEK_SET), 0);
-        let desc = copen(stream, 0, 0);
-        let mut output = vec![0u8; input.len()];
-        for part in output.chunks_mut(113) {
-            assert_eq!(
-                cread(part.as_mut_ptr().cast(), 1, part.len() as u16, desc),
-                part.len() as u16
-            );
-        }
-        assert_eq!(output, input);
-        cclose(desc);
-        CloseResFile(stream);
-        uio_closeDir(root);
-        uio_closeRepository(repo);
     }
 }

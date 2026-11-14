@@ -1,21 +1,13 @@
-//! Save slot storage: `uqmsave.NN` files in the save directory.
-//!
-//! Files are opened, read, written and removed through the same resource
-//! file calls the C game used (`res_OpenResFile`, `ReadResFile`,
-//! `WriteResFile`, `DeleteResFile`) against the uio save directory, so a
-//! virtual save directory works exactly as it does for the rest of the game.
+//! Save slot storage through the Files port, with failed writes removed.
 
-use std::ffi::{c_void, CString};
-use std::io;
+use std::io::Write;
+use std::path::Path;
 
 use super::decode::{decode_save_from, decode_summary_from};
 use super::encode::encode_save;
 use super::error::SlotError;
 use super::types::{SaveFile, Summary, MAX_SAVED_GAMES};
-use crate::resource::ffi_bridge::{
-    res_CloseResFile, res_OpenResFile, DeleteResFile, LengthResFile, ReadResFile, WriteResFile,
-    STREAM_SENTINEL,
-};
+use crate::engine::host::{FileStream, Files};
 
 /// What one slot holds, as the slot list needs it.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -28,20 +20,13 @@ pub enum SlotState {
 }
 
 /// The 50 save slots of one save directory.
-pub struct SaveSlots {
-    dir: *mut c_void,
+pub struct SaveSlots<'a> {
+    files: &'a dyn Files,
 }
 
-impl SaveSlots {
-    /// # Safety
-    ///
-    /// `dir` must be a live uio directory handle (the game's `saveDir`) that
-    /// stays open for as long as this value is used.
-    pub unsafe fn new(dir: *mut c_void) -> Result<Self, SlotError> {
-        if dir.is_null() {
-            return Err(SlotError::NoSaveDir);
-        }
-        Ok(SaveSlots { dir })
+impl<'a> SaveSlots<'a> {
+    pub fn new(files: &'a dyn Files) -> Self {
+        Self { files }
     }
 
     /// `uqmsave.%02u` (save.c:765).
@@ -55,26 +40,25 @@ impl SaveSlots {
         format!("starcon2.{slot:02}")
     }
 
-    /// Write a save the way `SaveGame` does: the whole file at once, and the
-    /// slot file removed again if any write or the close fails. A failure to
-    /// open leaves whatever was there untouched.
+    /// Write the whole file, removing it if writing or finishing fails.
+    /// A failure to open leaves whatever was there untouched.
     pub fn write(&self, slot: usize, save: &SaveFile) -> Result<(), SlotError> {
         let name = Self::file_name(slot)?;
         let bytes = encode_save(save).map_err(|error| SlotError::Encode { slot, error })?;
-
-        let mut stream = self
-            .open(&name, c"wb")
-            .ok_or(SlotError::OpenFailed { slot })?;
-        if stream.is_directory() {
+        let path = Path::new(&name);
+        if self.is_directory(path) {
             return Err(SlotError::IsDirectory { slot });
         }
-        let written = stream.write_all(&bytes);
-        let closed = stream.close();
+        let mut stream = self
+            .files
+            .open_write(path)
+            .map_err(|_| SlotError::OpenFailed { slot })?;
+        let written = stream.write_all(&bytes).is_ok();
+        let closed = stream.finish().is_ok();
         self.settle_write(slot, written, closed)
     }
 
-    /// The outcome rule of `SaveGame`: a failed write leaves no slot file
-    /// behind. Only the slot's own file is ever removed.
+    /// A failed write leaves no slot file behind. Only that slot is removed.
     pub(super) fn settle_write(
         &self,
         slot: usize,
@@ -84,7 +68,10 @@ impl SaveSlots {
         if written && closed {
             return Ok(());
         }
-        let removed = self.remove(&Self::file_name(slot)?);
+        let removed = self
+            .files
+            .remove(Path::new(&Self::file_name(slot)?))
+            .is_ok();
         Err(SlotError::WriteFailed { slot, removed })
     }
 
@@ -111,41 +98,35 @@ impl SaveSlots {
             .collect()
     }
 
-    fn open_for_read(&self, slot: usize) -> Result<(Stream, u64), SlotError> {
+    fn open_for_read(&self, slot: usize) -> Result<(FileStream, u64), SlotError> {
         let name = Self::file_name(slot)?;
-        let Some(stream) = self.open(&name, c"rb") else {
-            // The C loader would try `starcon2.NN` here. There is no legacy
-            // decoder in this crate, so say so instead of reporting a slot
-            // that holds a game as empty.
-            let legacy = Self::legacy_file_name(slot);
-            return Err(match self.open(&legacy, c"rb") {
-                Some(_) => SlotError::LegacyFormatUnsupported { slot },
-                None => SlotError::Missing { slot },
-            });
-        };
-        if stream.is_directory() {
+        let path = Path::new(&name);
+        if self.is_directory(path) {
             return Err(SlotError::IsDirectory { slot });
         }
-        let len = stream.len();
+        let Ok(stream) = self.files.open_read(path) else {
+            let legacy = Self::legacy_file_name(slot);
+            return Err(if self.files.open_read(Path::new(&legacy)).is_ok() {
+                SlotError::LegacyFormatUnsupported { slot }
+            } else {
+                SlotError::Missing { slot }
+            });
+        };
+        let len = stream.len().map_err(|_| SlotError::OpenFailed { slot })?;
         Ok((stream, len))
     }
 
-    pub(super) fn open(&self, name: &str, mode: &std::ffi::CStr) -> Option<Stream> {
-        let name = CString::new(name).expect("slot file names contain no NUL");
-        // SAFETY: `dir` is live per the contract of `new`; both strings are
-        // NUL-terminated and outlive the call.
-        let fp = unsafe { res_OpenResFile(self.dir, name.as_ptr(), mode.as_ptr()) };
-        if fp.is_null() {
-            None
-        } else {
-            Some(Stream { fp, closed: false })
-        }
+    fn is_directory(&self, path: &Path) -> bool {
+        self.files.stat(path).is_ok_and(|stat| stat.is_dir)
     }
 
-    fn remove(&self, name: &str) -> bool {
-        let name = CString::new(name).expect("slot file names contain no NUL");
-        // SAFETY: as in `open`.
-        unsafe { DeleteResFile(self.dir, name.as_ptr()) == 1 }
+    pub(super) fn open_legacy(&self, slot: u16) -> std::io::Result<FileStream> {
+        let name = Self::legacy_file_name(usize::from(slot));
+        let path = Path::new(&name);
+        if self.is_directory(path) {
+            return Err(std::io::ErrorKind::IsADirectory.into());
+        }
+        self.files.open_read(path)
     }
 }
 
@@ -154,55 +135,5 @@ fn check_slot(slot: usize) -> Result<(), SlotError> {
         Ok(())
     } else {
         Err(SlotError::OutOfRange { slot })
-    }
-}
-
-/// An open resource file, closed when dropped.
-pub(super) struct Stream {
-    pub(super) fp: *mut c_void,
-    closed: bool,
-}
-
-impl Stream {
-    pub(super) fn is_directory(&self) -> bool {
-        self.fp == STREAM_SENTINEL
-    }
-
-    fn len(&self) -> u64 {
-        // SAFETY: `fp` is an open, non-directory stream.
-        unsafe { LengthResFile(self.fp) as u64 }
-    }
-
-    fn write_all(&mut self, bytes: &[u8]) -> bool {
-        // SAFETY: `fp` is an open stream and `bytes` is a valid slice.
-        let n = unsafe { WriteResFile(bytes.as_ptr().cast(), 1, bytes.len(), self.fp) };
-        n == bytes.len()
-    }
-
-    fn close(&mut self) -> bool {
-        self.closed = true;
-        if self.is_directory() {
-            return true;
-        }
-        // SAFETY: `fp` is an open stream and is closed once.
-        unsafe { res_CloseResFile(self.fp) == 1 }
-    }
-}
-
-impl io::Read for &mut Stream {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        if buf.is_empty() {
-            return Ok(0);
-        }
-        // SAFETY: `fp` is an open, non-directory stream and `buf` is valid.
-        Ok(unsafe { ReadResFile(buf.as_mut_ptr().cast(), 1, buf.len(), self.fp) })
-    }
-}
-
-impl Drop for Stream {
-    fn drop(&mut self) {
-        if !self.closed {
-            self.close();
-        }
     }
 }

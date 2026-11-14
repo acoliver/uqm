@@ -285,12 +285,16 @@ fn file_helpers_read_seek_and_measure_a_resource_file() {
         assert_eq!(LengthResFile(fp), 10);
         assert_eq!(TellResFile(fp), 4, "position survives a length query");
 
-        assert_eq!(GetResFileChar(fp), b'4' as c_int);
+        let mut byte = [0u8];
+        assert_eq!(ReadResFile(byte.as_mut_ptr().cast(), 1, 1, fp), 1);
+        assert_eq!(byte[0], b'4');
         assert_eq!(SeekResFile(fp, 8, 0), 0);
-        assert_eq!(GetResFileChar(fp), b'8' as c_int);
+        assert_eq!(ReadResFile(byte.as_mut_ptr().cast(), 1, 1, fp), 1);
+        assert_eq!(byte[0], b'8');
         assert_eq!(SeekResFile(fp, -1, 2), 0);
-        assert_eq!(GetResFileChar(fp), b'9' as c_int);
-        assert_eq!(GetResFileChar(fp), -1);
+        assert_eq!(ReadResFile(byte.as_mut_ptr().cast(), 1, 1, fp), 1);
+        assert_eq!(byte[0], b'9');
+        assert_eq!(ReadResFile(buf.as_mut_ptr().cast(), 1, 1, fp), 0);
         assert_eq!(res_CloseResFile(fp), 1);
     }
 }
@@ -302,7 +306,7 @@ fn file_helpers_write_characters_and_blocks() {
     let fp = open(&content, "out.txt", "wb");
     assert!(!fp.is_null());
     unsafe {
-        assert_eq!(PutResFileChar(b'A' as c_char, fp), b'A' as c_int);
+        assert_eq!(WriteResFile(b"A".as_ptr().cast(), 1, 1, fp), 1);
         assert_eq!(PutResFileNewline(fp), b'\n' as c_int);
         let block = b"block";
         assert_eq!(
@@ -323,8 +327,7 @@ fn file_helpers_treat_null_and_directory_streams_as_empty() {
         for fp in [ptr::null_mut(), STREAM_SENTINEL] {
             assert_eq!(ReadResFile(buf.as_mut_ptr() as *mut c_void, 1, 4, fp), 0);
             assert_eq!(WriteResFile(block.as_ptr() as *const c_void, 1, 4, fp), 0);
-            assert_eq!(GetResFileChar(fp), -1);
-            assert_eq!(PutResFileChar(b'x' as c_char, fp), -1);
+            assert_eq!(ReadResFile(buf.as_mut_ptr().cast(), 1, 1, fp), 0);
             assert_eq!(PutResFileNewline(fp), -1);
             assert_eq!(SeekResFile(fp, 0, 0), -1);
             assert_eq!(TellResFile(fp), -1);
@@ -337,13 +340,18 @@ fn file_helpers_treat_null_and_directory_streams_as_empty() {
 
 #[test]
 #[serial]
-fn deleting_a_resource_file_removes_it_and_reports_failure_for_a_missing_one() {
+fn files_remove_reports_failure_for_a_missing_file() {
+    use crate::host::Files;
     let content = Content::new(&[("old.dat", b"x"), ("keep.dat", b"y")]);
-    unsafe {
-        assert_eq!(DeleteResFile(content.dir, c("old.dat").as_ptr()), 1);
-        assert_eq!(DeleteResFile(content.dir, c("old.dat").as_ptr()), 0);
-        assert_eq!(DeleteResFile(content.dir, ptr::null()), 0);
-    }
+    let files = unsafe { crate::io::uio_owned::directory(content.dir.cast()) }.unwrap();
+    assert!(files.remove(std::path::Path::new("old.dat")).is_ok());
+    assert_eq!(
+        files
+            .remove(std::path::Path::new("old.dat"))
+            .unwrap_err()
+            .kind(),
+        std::io::ErrorKind::NotFound
+    );
     assert!(!content.host("old.dat").exists());
     assert!(content.host("keep.dat").exists());
 }

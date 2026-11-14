@@ -1,6 +1,6 @@
-use super::{CodeDesc, _LP_CUR_CODE_DESC, N_CHAR, R, T};
+use super::{CodeDesc, N_CHAR, R, T};
 
-impl CodeDesc {
+impl<S> CodeDesc<S> {
     pub(super) fn start_huff(&mut self) {
         for i in 0..N_CHAR {
             self.freq[i] = 1;
@@ -87,16 +87,4 @@ impl CodeDesc {
             }
         }
     }
-}
-
-/// # Safety
-/// The current descriptor must have been selected by the stream API.
-pub unsafe extern "C" fn start_huff() {
-    (*_LP_CUR_CODE_DESC).start_huff();
-}
-
-/// # Safety
-/// The current descriptor must be live and `c` must be a Huffman leaf index.
-pub unsafe extern "C" fn _update(c: u16) {
-    (*_LP_CUR_CODE_DESC).update(c as usize);
 }

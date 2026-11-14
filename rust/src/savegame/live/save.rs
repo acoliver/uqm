@@ -39,7 +39,9 @@ pub fn save_game(
 ) -> u32 {
     let result = (|| -> anyhow::Result<()> {
         // SAFETY: the game-thread save directory remains open throughout the synchronous operation.
-        let slots = unsafe { SaveSlots::new(saveDir.cast())? };
+        let files = unsafe { crate::io::uio_owned::directory(saveDir.cast()) }
+            .map_err(|_| crate::savegame::SlotError::NoSaveDir)?;
+        let slots = SaveSlots::new(&files);
         // SAFETY: the supplied context retains campaign and native solar resources.
         let mut save = unsafe { capture(cx, solar, name.to_bytes())? };
         *summary = SummaryDesc::from(&save.summary);

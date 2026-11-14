@@ -199,38 +199,15 @@ pub fn decode_legacy_payload<R: Read>(
     })
 }
 
-#[cfg(not(test))]
 mod live {
     use super::*;
 
-    use crate::savegame::lzh::{cclose, cfilelength, copen, cread, CodeDesc};
+    use crate::engine::host::FileStream;
+    use crate::savegame::lzh::Decoder;
     use crate::savegame::slots::SaveSlots;
 
-    struct Compressed(*mut CodeDesc);
-    impl Read for Compressed {
-        fn read(&mut self, bytes: &mut [u8]) -> io::Result<usize> {
-            let count = bytes.len().min(u16::MAX as usize) as u16;
-            Ok(unsafe { cread(bytes.as_mut_ptr().cast(), 1, count, self.0) } as usize)
-        }
-    }
-    impl Drop for Compressed {
-        fn drop(&mut self) {
-            unsafe {
-                cclose(self.0);
-            }
-        }
-    }
-
-    fn open_legacy_slot(
-        slots: &SaveSlots,
-        slot: u16,
-    ) -> anyhow::Result<(crate::savegame::slots::Stream, Summary)> {
-        let mut stream = slots
-            .open(&format!("starcon2.{slot:02}"), c"rb")
-            .ok_or_else(|| anyhow::anyhow!("no legacy save in slot {slot}"))?;
-        if stream.is_directory() {
-            anyhow::bail!("legacy slot is a directory");
-        }
+    fn open_legacy_slot(slots: &SaveSlots, slot: u16) -> anyhow::Result<(FileStream, Summary)> {
+        let mut stream = slots.open_legacy(slot)?;
         let mut header = [0; 164];
         (&mut stream).read_exact(&mut header)?;
         let summary = decode_legacy_summary(&header)?;
@@ -241,21 +218,14 @@ mod live {
         open_legacy_slot(slots, slot).map(|(_, summary)| summary)
     }
 
-    /// # Safety
-    /// Game thread; the resource system and its compressed-stream decoder are initialized.
-    pub unsafe fn read_legacy_game(slots: &SaveSlots, slot: u16) -> anyhow::Result<LegacySave> {
+    pub fn read_legacy_game(slots: &SaveSlots, slot: u16) -> anyhow::Result<LegacySave> {
         let (stream, summary) = open_legacy_slot(slots, slot)?;
         if !(2155..2186).contains(&summary.year_index) {
             anyhow::bail!("legacy save is corrupt or from an incompatible platform");
         }
-        let decoder = Compressed(copen(stream.fp, 0, 0));
-        if decoder.0.is_null() {
-            anyhow::bail!("invalid legacy compressed stream");
-        }
-        let mut len = 0;
-        cfilelength(decoder.0, &mut len);
+        let decoder = Decoder::new(std::io::BufReader::new(stream))?;
+        let len = decoder.len();
         decode_legacy_payload(&summary, decoder, len)
     }
 }
-#[cfg(not(test))]
 pub use live::{read_legacy_game, read_legacy_summary};

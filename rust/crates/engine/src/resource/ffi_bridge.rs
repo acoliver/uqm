@@ -1130,32 +1130,6 @@ pub unsafe extern "C" fn WriteResFile(
     stream_write(buf, size, count, (fp).cast())
 }
 
-/// Get a character from a resource file.
-///
-/// # Safety
-///
-/// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn GetResFileChar(fp: *mut c_void) -> c_int {
-    if fp.is_null() || fp == STREAM_SENTINEL {
-        return -1; // EOF
-    }
-    stream_get_char((fp).cast())
-}
-
-/// Put a character to a resource file.
-///
-/// # Safety
-///
-/// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn PutResFileChar(ch: c_char, fp: *mut c_void) -> c_int {
-    if fp.is_null() || fp == STREAM_SENTINEL {
-        return -1; // EOF
-    }
-    stream_put_char(ch as c_int, (fp).cast())
-}
-
 /// Write a newline to a resource file.
 ///
 /// # Safety
@@ -1215,30 +1189,6 @@ pub unsafe extern "C" fn LengthResFile(fp: *mut c_void) -> usize {
     let length = stream_tell((fp).cast()) as usize;
     stream_seek((fp).cast(), cur_pos, 0); // SEEK_SET
     length
-}
-
-/// Delete a resource file.
-///
-/// # Safety
-///
-/// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn DeleteResFile(dir: *mut c_void, filename: *const c_char) -> c_int {
-    if filename.is_null() {
-        return 0;
-    }
-    if directory(dir.cast())
-        .and_then(|files| {
-            files.remove(Path::new(
-                CStr::from_ptr(filename).to_string_lossy().as_ref(),
-            ))
-        })
-        .is_ok()
-    {
-        1
-    } else {
-        0
-    }
 }
 
 // =============================================================================
@@ -1964,15 +1914,6 @@ mod tests {
             let result =
                 unsafe { WriteResFile(buf.as_ptr() as *const c_void, 1, 16, ptr::null_mut()) };
             assert_eq!(result, 0, "Write to null should return 0");
-        }
-    }
-
-    #[test]
-    #[serial]
-    fn test_get_res_file_char_null() {
-        {
-            let result = unsafe { GetResFileChar(ptr::null_mut()) };
-            assert_eq!(result, -1, "GetChar from null should return -1 (EOF)");
         }
     }
 

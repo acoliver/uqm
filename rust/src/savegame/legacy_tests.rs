@@ -162,3 +162,47 @@ fn truncated_legacy_payload_is_rejected() {
         assert!(decode_legacy_payload(&summary(), p.as_slice(), length as u32).is_err());
     }
 }
+
+#[test]
+fn legacy_slot_reads_summary_and_compressed_payload_through_files() {
+    use super::slot_tests::SaveDirFixture;
+    use std::io::{Cursor, Write};
+    let fixture = SaveDirFixture::new();
+    let summary = summary();
+    let mut plain = payload(4);
+    for _ in 0..4 {
+        plain.extend(0u16.to_le_bytes());
+    }
+    for image in [b"scan".as_slice(), b"defined", b"random"] {
+        plain.extend((image.len() as u32).to_le_bytes());
+        plain.extend(image);
+    }
+    plain.extend([0; 8]);
+    let expected = decode_legacy_payload(&summary, plain.as_slice(), plain.len() as u32).unwrap();
+    let body = super::encode::encode_summary(&summary);
+    let body = &body[8..];
+    let mut header = [0xa5; 164];
+    header[..122].copy_from_slice(&body[..122]);
+    header[124..162].copy_from_slice(&body[122..160]);
+    let mut encoder = crate::savegame::lzh::Encoder::new(Cursor::new(Vec::new())).unwrap();
+    encoder.write_all(&plain).unwrap();
+    let compressed = encoder.finish().unwrap().into_inner();
+    let bytes = [header.as_slice(), &compressed].concat();
+    std::fs::write(fixture.host("starcon2.07"), &bytes).unwrap();
+    let slots = fixture.slots();
+    let decoded_summary = read_legacy_summary(&slots, 7).unwrap();
+    assert_eq!(decoded_summary, decode_legacy_summary(&header).unwrap());
+    let actual = read_legacy_game(&slots, 7).unwrap();
+    assert_eq!(actual.save, expected.save);
+    assert_eq!(actual.state_files, expected.state_files);
+    assert_eq!(actual.battle_group_ref, expected.battle_group_ref);
+    assert!(read_legacy_summary(&slots, 8).is_err());
+    std::fs::write(fixture.host("starcon2.07"), &bytes[..163]).unwrap();
+    assert!(read_legacy_summary(&slots, 7).is_err());
+    std::fs::write(
+        fixture.host("starcon2.07"),
+        [header.as_slice(), &[255; 4]].concat(),
+    )
+    .unwrap();
+    assert!(read_legacy_game(&slots, 7).is_err());
+}

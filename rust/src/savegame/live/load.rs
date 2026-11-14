@@ -29,7 +29,9 @@ pub fn load_game(slot: u16, request: LoadRequest<'_, '_>) -> u32 {
     let loading = matches!(&request, LoadRequest::Restore(_));
     let result = (|| -> anyhow::Result<()> {
         // SAFETY: the game-thread save directory remains open throughout the synchronous operation.
-        let slots = unsafe { SaveSlots::new(saveDir.cast())? };
+        let files = unsafe { crate::io::uio_owned::directory(saveDir.cast()) }
+            .map_err(|_| crate::savegame::SlotError::NoSaveDir)?;
+        let slots = SaveSlots::new(&files);
         let cx = match request {
             LoadRequest::Summary(summary) => {
                 let decoded = match slots.read_summary(usize::from(slot)) {
@@ -45,8 +47,7 @@ pub fn load_game(slot: u16, request: LoadRequest<'_, '_>) -> u32 {
             let save = slots.read(usize::from(slot))?;
             (save.star, crate::engine::save::apply(save, cx.world)?)
         } else {
-            // SAFETY: the synchronous loader retains the supplied campaign and slot directory.
-            let decoded = unsafe { legacy::read_legacy_game(&slots, slot)? };
+            let decoded = legacy::read_legacy_game(&slots, slot)?;
             let star = decoded.save.star;
             let activity = crate::engine::save::apply_legacy(
                 decoded.save,

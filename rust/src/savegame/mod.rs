@@ -1,7 +1,7 @@
 //! Campaign persistence for modern UMS and legacy compressed saves.
 //!
 //! The menu ABI captures and restores live runtime sections; the codecs own
-//! the wire layouts, and slots owns resource-file storage.
+//! the wire layouts, and slots owns Files-port storage.
 
 pub use uqm_save::{decode, encode, error, format, types};
 

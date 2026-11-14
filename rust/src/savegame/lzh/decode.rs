@@ -1,150 +1,102 @@
-use std::ffi::c_void;
-use std::ptr;
+use super::{CodeDesc, N, R, T, THRESHOLD};
+use std::io::{self, Read};
 
-use super::{CodeDesc, _LP_CUR_CODE_DESC, N, R, T, THRESHOLD};
-
-impl CodeDesc {
-    unsafe fn bits(&mut self, n: u8) -> u16 {
+impl<S: Read> CodeDesc<S> {
+    fn bits(&mut self, n: u8) -> io::Result<u16> {
         while self.workbuflen <= 8 {
-            let byte = self.input().max(0) as u16;
+            let byte = u16::from(self.input()?);
             self.workbuf |= byte << (8 - self.workbuflen);
             self.workbuflen += 8;
         }
         let result = self.workbuf >> (16 - n);
         self.workbuf <<= n;
         self.workbuflen -= n;
-        result
+        Ok(result)
     }
 
-    unsafe fn decode_char(&mut self) -> usize {
+    fn decode_char(&mut self) -> io::Result<usize> {
         let mut c = self.son[R] as usize;
         while c < T {
-            let bit = self.bits(1) as usize;
+            let bit = self.bits(1)? as usize;
             c = self.son[c + bit] as usize;
         }
         self.update(c);
-        c - T
+        Ok(c - T)
     }
 
-    unsafe fn decode_position(&mut self) -> u16 {
-        let byte = self.bits(8);
+    fn decode_position(&mut self) -> io::Result<u16> {
+        let byte = self.bits(8)?;
         let n = D_LEN[byte as usize];
-        (u16::from(D_CODE[byte as usize]) << 6) | (((byte << n) | self.bits(n)) & 0x3f)
+        Ok((u16::from(D_CODE[byte as usize]) << 6) | (((byte << n) | self.bits(n)?) & 0x3f))
     }
 }
 
-/// # Safety
-/// `stream` is a live UIO stream (type 0) or a memory buffer (type 1) large
-/// enough for all reads/writes, including decoder lookahead beyond the last bit.
-pub unsafe extern "C" fn copen(
-    stream: *mut c_void,
-    stream_type: u8,
-    stream_mode: u8,
-) -> *mut CodeDesc {
-    let mut desc = Box::new(CodeDesc::new(stream, stream_type, stream_mode));
-    if stream_mode == 1 {
-        for _ in 0..4 {
-            desc.output(0);
+/// An owned decoder whose uncompressed length is stored in the stream header.
+pub struct Decoder<R> {
+    desc: CodeDesc<R>,
+}
+
+impl<R: Read> Decoder<R> {
+    pub fn new(mut stream: R) -> io::Result<Self> {
+        let mut header = [0; 4];
+        stream.read_exact(&mut header)?;
+        let length = u32::from_le_bytes(header);
+        if length == u32::MAX {
+            return Err(io::ErrorKind::InvalidData.into());
         }
-    } else {
-        let mut length = [0; 4];
-        for byte in &mut length {
-            *byte = desc.input() as u8;
-        }
-        desc.stream_length = u32::from_le_bytes(length);
+        let mut desc = CodeDesc::new(stream);
+        desc.stream_length = length;
+        Ok(Self { desc })
     }
-    desc.publish();
-    if desc.stream_length == u32::MAX {
-        _LP_CUR_CODE_DESC = ptr::null_mut();
-    } else {
-        _LP_CUR_CODE_DESC = Box::into_raw(desc);
+
+    pub fn len(&self) -> u32 {
+        self.desc.stream_length
     }
-    _LP_CUR_CODE_DESC
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
 }
 
-/// # Safety
-/// `desc` is null or a live descriptor returned by `copen`, closed exactly once.
-pub unsafe extern "C" fn cclose(desc: *mut CodeDesc) -> u32 {
-    _LP_CUR_CODE_DESC = desc;
-    if desc.is_null() {
-        return 0;
-    }
-    let mut desc = Box::from_raw(desc);
-    if desc.encoder.is_some() {
-        desc.finish_encode();
-    }
-    let result = desc.stream_index;
-    desc.publish();
-    _LP_CUR_CODE_DESC = ptr::null_mut();
-    result
-}
-
-/// # Safety
-/// `desc` is null or live and `length` points to writable DWORD storage.
-pub unsafe extern "C" fn cfilelength(desc: *mut CodeDesc, length: *mut u32) {
-    *length = if desc.is_null() {
-        0
-    } else {
-        (*desc).stream_length
-    };
-}
-
-/// # Safety
-/// `desc` is null or live. `buf` has room for `size * count` bytes. The stream
-/// must contain a valid legacy-compressed payload and its decoder lookahead.
-pub unsafe extern "C" fn cread(
-    buf: *mut c_void,
-    size: u16,
-    count: u16,
-    desc: *mut CodeDesc,
-) -> u16 {
-    _LP_CUR_CODE_DESC = desc;
-    if desc.is_null() || size == 0 || count == 0 {
-        return 0;
-    }
-    let desc = &mut *desc;
-    let mut bytes = size.wrapping_mul(count);
-    let mut count = count;
-    if desc.stream_index + u32::from(bytes) > desc.stream_length {
-        let item_size = bytes / count;
-        count = ((desc.stream_length - desc.stream_index) / u32::from(item_size)) as u16;
-        bytes = item_size * count;
-    }
-    if bytes == 0 {
-        return 0;
-    }
-    desc.stream_index += u32::from(bytes);
-    let mut r = desc.buf_index;
-    let mut i = desc.restart_index;
-    let mut left = desc.bytes_left;
-    let output = std::slice::from_raw_parts_mut(buf.cast::<u8>(), bytes as usize);
-    for byte in output {
-        if left == 0 {
-            let c = desc.decode_char();
-            if c < 256 {
-                *byte = c as u8;
-                desc.text_buf[r as usize & (N - 1)] = *byte;
-                r = r.wrapping_add(1);
-                continue;
+impl<R: Read> Read for Decoder<R> {
+    fn read(&mut self, output: &mut [u8]) -> io::Result<usize> {
+        let desc = &mut self.desc;
+        let count = output
+            .len()
+            .min((desc.stream_length - desc.stream_index) as usize);
+        let output = &mut output[..count];
+        let mut r = desc.buf_index;
+        let mut i = desc.restart_index;
+        let mut left = desc.bytes_left;
+        for byte in output {
+            if left == 0 {
+                let c = desc.decode_char()?;
+                if c < 256 {
+                    *byte = c as u8;
+                    desc.text_buf[r as usize & (N - 1)] = *byte;
+                    r = r.wrapping_add(1);
+                    continue;
+                }
+                i = r.wrapping_sub(desc.decode_position()?).wrapping_sub(1);
+                left = (c - 255 + THRESHOLD) as u16;
             }
-            i = r.wrapping_sub(desc.decode_position()).wrapping_sub(1);
-            left = (c - 255 + THRESHOLD) as u16;
+            // Each byte enters the dictionary before the next byte of the run is
+            // read. This preserves overlapping LZ matches, including ring wrap.
+            i &= (N - 1) as u16;
+            r &= (N - 1) as u16;
+            *byte = desc.text_buf[i as usize];
+            desc.text_buf[r as usize] = *byte;
+            i += 1;
+            r += 1;
+            left -= 1;
         }
-        // Each byte enters the dictionary before the next byte of the run is
-        // read. This preserves overlapping LZ matches, including ring wrap.
-        i &= (N - 1) as u16;
-        r &= (N - 1) as u16;
-        *byte = desc.text_buf[i as usize];
-        desc.text_buf[r as usize] = *byte;
-        i += 1;
-        r += 1;
-        left -= 1;
+        desc.buf_index = r;
+        desc.restart_index = i;
+        desc.bytes_left = left;
+
+        desc.stream_index += count as u32;
+        Ok(count)
     }
-    desc.buf_index = r;
-    desc.restart_index = i;
-    desc.bytes_left = left;
-    desc.publish();
-    count
 }
 
 const D_CODE: [u8; 256] = [

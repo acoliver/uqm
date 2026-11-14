@@ -93,15 +93,6 @@ pub(super) unsafe fn stream_tell(fp: *mut c_void) -> c_long {
     // SAFETY: the resource ABI supplies a live FileStream.
     unsafe { (&*fp.cast::<FileStream>()).position() as c_long }
 }
-pub(super) unsafe fn stream_get_char(fp: *mut c_void) -> c_int {
-    let mut byte = [0];
-    // SAFETY: the resource ABI lends a live exclusive FileStream.
-    if unsafe { (&mut *fp.cast::<FileStream>()).read(&mut byte) }.ok() == Some(1) {
-        byte[0] as c_int
-    } else {
-        -1
-    }
-}
 pub(super) unsafe fn stream_put_char(ch: c_int, fp: *mut c_void) -> c_int {
     // SAFETY: the resource ABI lends a live exclusive FileStream.
     if unsafe { (&mut *fp.cast::<FileStream>()).write(&[ch as u8]) }.ok() == Some(1) {

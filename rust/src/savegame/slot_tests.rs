@@ -1,70 +1,38 @@
-//! Slot storage against a real uio repository mounted on a scratch directory
-//! that the test owns and removes.
-
-use std::ffi::{c_void, CString};
-use std::fs;
-use std::os::unix::fs::PermissionsExt;
-use std::path::PathBuf;
-use std::ptr;
-
-use serial_test::serial;
-use tempfile::TempDir;
+//! Slot storage through an isolated Vfs on an owned scratch directory.
 
 use super::*;
-use crate::io::uio_bridge::{
-    uio_Repository, uio_closeDir, uio_closeRepository, uio_init, uio_mountDir, uio_openDir,
-    uio_openRepository, uio_unInit,
-};
-
-const UIO_FSTYPE_STDIO: i32 = 1;
-const UIO_MOUNT_TOP: i32 = 1 << 2;
+use crate::engine::host::{FileStat, FileStream, Files};
+use crate::io::uio_bridge::Vfs;
+use serial_test::serial;
+use std::fs;
+use std::os::unix::fs::PermissionsExt;
+use std::path::{Path, PathBuf};
+use tempfile::TempDir;
 
 /// The save game the C game wrote (epic 20 load/save evidence).
 const C_WRITTEN_SAVE: &[u8] = include_bytes!("../../tests/fixtures/savegame/legacy-save.00");
 
-/// A scratch directory mounted at the root of a fresh uio repository, used
-/// as the save directory.
-struct SaveDirFixture {
+/// An isolated Vfs rooted in an owned scratch directory.
+pub(super) struct SaveDirFixture {
     scratch: TempDir,
-    repository_handle: *mut uio_Repository,
-    dir: *mut c_void,
+    vfs: Vfs,
 }
 
 impl SaveDirFixture {
-    fn new() -> Self {
-        let scratch = TempDir::new().unwrap();
-        unsafe {
-            uio_init();
-            let repository = uio_openRepository(0);
-            let root = CString::new("/").unwrap();
-            let host = CString::new(scratch.path().to_str().unwrap()).unwrap();
-            let mount = uio_mountDir(
-                repository,
-                root.as_ptr(),
-                UIO_FSTYPE_STDIO,
-                ptr::null_mut(),
-                ptr::null(),
-                host.as_ptr(),
-                ptr::null_mut(),
-                UIO_MOUNT_TOP,
-                ptr::null_mut(),
-            );
-            assert!(!mount.is_null());
-            let dir = uio_openDir(repository, root.as_ptr(), 0);
-            assert!(!dir.is_null());
-            SaveDirFixture {
-                scratch,
-                repository_handle: repository,
-                dir: dir.cast(),
-            }
+    pub(super) fn new() -> Self {
+        let temp = Path::new(env!("CARGO_MANIFEST_DIR")).join("../tmp");
+        fs::create_dir_all(&temp).unwrap();
+        Self {
+            scratch: TempDir::new_in(temp).unwrap(),
+            vfs: Vfs::default(),
         }
     }
 
-    fn slots(&self) -> SaveSlots {
-        unsafe { SaveSlots::new(self.dir).unwrap() }
+    pub(super) fn slots(&self) -> SaveSlots<'_> {
+        SaveSlots::new(self)
     }
 
-    fn host(&self, name: &str) -> PathBuf {
+    pub(super) fn host(&self, name: &str) -> PathBuf {
         self.scratch.path().join(name)
     }
 
@@ -78,13 +46,21 @@ impl SaveDirFixture {
     }
 }
 
-impl Drop for SaveDirFixture {
-    fn drop(&mut self) {
-        unsafe {
-            uio_closeDir(self.dir.cast());
-            uio_closeRepository(self.repository_handle);
-            uio_unInit();
-        }
+impl Files for SaveDirFixture {
+    fn open_read(&self, path: &Path) -> std::io::Result<FileStream> {
+        self.vfs.open_read(&self.scratch.path().join(path))
+    }
+    fn open_write(&self, path: &Path) -> std::io::Result<FileStream> {
+        self.vfs.open_write(&self.scratch.path().join(path))
+    }
+    fn remove(&self, path: &Path) -> std::io::Result<()> {
+        self.vfs.remove(&self.scratch.path().join(path))
+    }
+    fn list(&self, path: &Path) -> std::io::Result<Vec<String>> {
+        self.vfs.list(&self.scratch.path().join(path))
+    }
+    fn stat(&self, path: &Path) -> std::io::Result<FileStat> {
+        self.vfs.stat(&self.scratch.path().join(path))
     }
 }
 
@@ -98,7 +74,10 @@ fn scratch_directories_are_unique_temporary_and_removed_on_drop() {
     let scratch_path = || {
         let fx = SaveDirFixture::new();
         let path = fx.scratch.path().to_path_buf();
-        assert!(path.starts_with(std::env::temp_dir()), "{path:?}");
+        assert!(
+            path.starts_with(Path::new(env!("CARGO_MANIFEST_DIR")).join("../tmp")),
+            "{path:?}"
+        );
         fs::write(fx.host("scratch.txt"), b"owned by the test").unwrap();
         drop(fx);
         assert!(!path.exists(), "fixture must remove its scratch directory");
@@ -117,14 +96,6 @@ fn slot_file_names_are_uqmsave_with_two_digits() {
         Err(SlotError::OutOfRange { slot: 50 })
     );
     assert_eq!(MAX_SAVED_GAMES, 50);
-}
-
-#[test]
-fn a_null_save_directory_is_refused() {
-    assert!(matches!(
-        unsafe { SaveSlots::new(ptr::null_mut()) },
-        Err(SlotError::NoSaveDir)
-    ));
 }
 
 #[test]
@@ -371,4 +342,90 @@ fn successful_write_removes_nothing() {
     fs::write(fx.host("uqmsave.12"), b"whole").unwrap();
     assert_eq!(fx.slots().settle_write(12, true, true), Ok(()));
     assert_eq!(fs::read(fx.host("uqmsave.12")).unwrap(), b"whole");
+}
+
+struct FailingFile {
+    inner: FileStream,
+    fail_flush: bool,
+}
+impl std::io::Read for FailingFile {
+    fn read(&mut self, bytes: &mut [u8]) -> std::io::Result<usize> {
+        std::io::Read::read(&mut self.inner, bytes)
+    }
+}
+impl std::io::Write for FailingFile {
+    fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+        if !self.fail_flush {
+            if self.inner.position() != 0 {
+                return Err(std::io::ErrorKind::StorageFull.into());
+            }
+            return std::io::Write::write(&mut self.inner, &bytes[..bytes.len().min(2)]);
+        }
+        std::io::Write::write(&mut self.inner, bytes)
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        if self.fail_flush {
+            Err(std::io::ErrorKind::StorageFull.into())
+        } else {
+            std::io::Write::flush(&mut self.inner)
+        }
+    }
+}
+impl std::io::Seek for FailingFile {
+    fn seek(&mut self, position: std::io::SeekFrom) -> std::io::Result<u64> {
+        std::io::Seek::seek(&mut self.inner, position)
+    }
+}
+impl crate::engine::host::File for FailingFile {
+    fn len(&self) -> std::io::Result<u64> {
+        self.inner.len()
+    }
+}
+struct FailingFiles<'a> {
+    directory: &'a SaveDirFixture,
+    fail_flush: bool,
+}
+impl Files for FailingFiles<'_> {
+    fn open_read(&self, path: &Path) -> std::io::Result<FileStream> {
+        self.directory.open_read(path)
+    }
+    fn open_write(&self, path: &Path) -> std::io::Result<FileStream> {
+        Ok(FileStream::new(FailingFile {
+            inner: self.directory.open_write(path)?,
+            fail_flush: self.fail_flush,
+        }))
+    }
+    fn remove(&self, path: &Path) -> std::io::Result<()> {
+        self.directory.remove(path)
+    }
+    fn list(&self, path: &Path) -> std::io::Result<Vec<String>> {
+        self.directory.list(path)
+    }
+    fn stat(&self, path: &Path) -> std::io::Result<FileStat> {
+        self.directory.stat(path)
+    }
+}
+
+#[test]
+fn partial_write_and_finish_errors_remove_only_the_failed_slot() {
+    let fx = SaveDirFixture::new();
+    fs::write(fx.host("uqmsave.18"), b"neighbour").unwrap();
+    fs::write(fx.host("starcon2.17"), b"legacy").unwrap();
+    for fail_flush in [false, true] {
+        let files = FailingFiles {
+            directory: &fx,
+            fail_flush,
+        };
+        let slots = SaveSlots::new(&files);
+        assert_eq!(
+            slots.write(17, &seed()),
+            Err(SlotError::WriteFailed {
+                slot: 17,
+                removed: true
+            })
+        );
+        assert!(!fx.host("uqmsave.17").exists());
+        assert_eq!(fs::read(fx.host("uqmsave.18")).unwrap(), b"neighbour");
+        assert_eq!(fs::read(fx.host("starcon2.17")).unwrap(), b"legacy");
+    }
 }
