@@ -6,8 +6,6 @@ use crate::engine::StoryKey;
 use crate::engine::World;
 use uqm_save::statefiles::GroupHeader;
 
-use crate::state::c_api::{write_state_file, GameStateFile};
-
 fn read<const N: usize>(world: &mut World, file: usize) -> [u8; N] {
     let mut bytes = [0; N];
     world
@@ -29,17 +27,6 @@ fn write(world: &mut World, file: usize, bytes: &[u8]) {
 
 fn read_group_header(world: &mut World, file: usize, header: &mut GroupHeader) {
     decode_header(&read::<268>(world, file), header);
-}
-
-/// # Safety
-/// `file` is an open state-file handle and `header` is readable.
-pub unsafe fn write_group_header(
-    world: &mut World,
-    file: *mut GameStateFile,
-    header: &GroupHeader,
-) {
-    let bytes = encode_header(header);
-    write_state_file(world, bytes.as_ptr().cast(), 1, bytes.len() as u16, file);
 }
 
 fn read_ship_fragment(world: &mut World, file: usize, fragment: &mut SHIP_FRAGMENT) {
