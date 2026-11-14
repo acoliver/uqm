@@ -27,6 +27,21 @@ impl CampaignDisplay {
         game: &mut Game,
         load: impl FnOnce(),
     ) -> Result<Self, Box<dyn std::error::Error>> {
+        Self::install_prepared(game, load, |_| {})
+    }
+
+    pub fn install_with_display(
+        game: &mut Game,
+        draw: impl FnOnce(&mut Game),
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        Self::install_prepared(game, || {}, draw)
+    }
+
+    fn install_prepared(
+        game: &mut Game,
+        load: impl FnOnce(),
+        draw: impl FnOnce(&mut Game),
+    ) -> Result<Self, Box<dyn std::error::Error>> {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../tmp");
         std::fs::create_dir_all(&root)?;
         let directory = tempfile::tempdir_in(root.canonicalize()?)?;
@@ -40,7 +55,7 @@ impl CampaignDisplay {
         std::fs::write(directory.path().join("effect.ani"), "effect.png -1 0 0 0\n")?;
         std::fs::write(
             directory.path().join("fixture.rmp"),
-            "fixture.tiny = FONTRES:font\nfont.lander = FONTRES:font\ngraphics.landerfonteffect = GFXRES:effect.ani\ncredits.credits = STRTAB:credits.txt\ncredits.background = GFXRES:effect.ani\ncredits.font.pt13 = FONTRES:font\ncredits.font.pt17 = FONTRES:font\ncredits.font.pt45 = FONTRES:font\n",
+            "fixture.tiny = FONTRES:font\nfont.lander = FONTRES:font\ngraphics.landerfonteffect = GFXRES:effect.ani\ncredits.credits = STRTAB:credits.txt\ncredits.background = GFXRES:effect.ani\ncredits.font.pt13 = FONTRES:font\ncredits.font.pt17 = FONTRES:font\ncredits.font.pt45 = FONTRES:font\ngraphics.flagshipskeleton = GFXRES:effect.ani\ngraphics.outfitmodules = GFXRES:effect.ani\n",
         )?;
         std::fs::write(
             directory.path().join("credits.txt"),
@@ -99,10 +114,6 @@ impl CampaignDisplay {
                 LoadedFont::load(c"fixture.tiny").ok_or("battle-font fixture did not load")?,
             );
             load();
-            uqm_rust::mainloop::dir_prep::contentDir = previous_content;
-            uio::uio_closeDir(content);
-            uio::uio_closeRepository(repository);
-            uio::uio_unInit();
             #[cfg(feature = "debug-process")]
             let context = CreateContextAux(c"campaign callback fixture".as_ptr());
             #[cfg(not(feature = "debug-process"))]
@@ -124,6 +135,11 @@ impl CampaignDisplay {
                     count
                 ]),
             );
+            draw(game);
+            uqm_rust::mainloop::dir_prep::contentDir = previous_content;
+            uio::uio_closeDir(content);
+            uio::uio_closeRepository(repository);
+            uio::uio_unInit();
             Ok(Self {
                 context,
                 previous,

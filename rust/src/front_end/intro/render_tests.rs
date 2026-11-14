@@ -194,3 +194,139 @@ fn commands_draw_retained_frames_and_preserve_wait_call_skip_and_restore_order()
     drop(driver);
     fixture.finish(game);
 }
+
+#[test]
+#[serial_test::serial]
+fn command_matrix_renders_text_transitions_and_retains_generated_sis_frames() {
+    if !crate::native_test_process::own_graphics_process("front_end::intro::render_tests::command_matrix_renders_text_transitions_and_retains_generated_sis_frames") { return; }
+    let mut game = Game::new();
+    let fixture =
+        crate::campaign_display_test::CampaignDisplay::install_with_display(&mut game, |game| {
+            let context = ContextLease::require(game.kernel.status_context);
+            game.kernel.screen_context = game.kernel.status_context;
+            context.set_frame(ContextFrame::retain(std::ptr::NonNull::new(
+                game.kernel.screen,
+            )));
+            context.set_clip(RECT {
+                corner: POINT { x: 0, y: 0 },
+                extent: EXTENT {
+                    width: 320,
+                    height: 240,
+                },
+            });
+            let offscreen =
+                crate::graphics::context_abi::LoadedContext::create(c"intro SIS fixture");
+            game.kernel.off_screen_context = offscreen.lease().as_raw();
+            let driver = Rc::new(Driver::default());
+            game.kernel.install_input_runtime(driver.clone());
+            game.world.data.game.glob_flags = 8;
+            game.world.data.flagship.drive_slots[0] = 0;
+            game.world.data.flagship.jet_slots[0] = 0;
+            game.world.data.flagship.module_slots[0] = 0;
+            let mut battle = Battle::new();
+            let mut observer = Unobserved;
+            let mut io = Io {
+                observer: &mut observer,
+            };
+            let mut cx = Cx::new(
+                &mut battle,
+                &mut game.world,
+                &mut game.kernel,
+                crate::math::random,
+            );
+            let mut state = PresentationState::new(
+                LoadedTextTable::new(vec![
+                    c"TVA C".to_owned(),
+                    c"TE N".to_owned(),
+                    c"TC 00ff00".to_owned(),
+                    c"TBC 000000".to_owned(),
+                    c"TFC ff0000".to_owned(),
+                    c"FONT 0".to_owned(),
+                    c"TEXT 10 10 A".to_owned(),
+                    c"TFI A".to_owned(),
+                    c"TFO".to_owned(),
+                    c"SAVEBG".to_owned(),
+                    c"CLS".to_owned(),
+                    c"RESTBG".to_owned(),
+                    c"FONT 9".to_owned(),
+                    c"LINE 1".to_owned(),
+                    c"MOVIE 0 2 1".to_owned(),
+                    c"MOVIE 24 0 1".to_owned(),
+                    c"SYNC 20".to_owned(),
+                    c"DSYNC 30".to_owned(),
+                    c"RESYNC".to_owned(),
+                    c"FTW 0".to_owned(),
+                    c"FTB 0".to_owned(),
+                    c"FTC 0".to_owned(),
+                    c"WAIT 20".to_owned(),
+                    c"ANI missing.ani".to_owned(),
+                    c"DRAW SIS 40 40".to_owned(),
+                    c"DRAW".to_owned(),
+                    c"MUSIC missing.ogg".to_owned(),
+                    c"FONT 0 missing-font".to_owned(),
+                    c"TEXT 10 10 A".to_owned(),
+                    c"".to_owned(),
+                ]),
+                context.clone(),
+                false,
+            );
+            state.fonts[0] = crate::graphics::native_font::LoadedFont::load(c"fixture.tiny");
+            assert!(matches!(
+                commands::advance(&mut cx, &mut io, &mut state),
+                commands::Step::Input(true)
+            ));
+            assert_eq!(
+                (
+                    state.movie_frame,
+                    state.movie_end_frame,
+                    state.interframe_delay
+                ),
+                (0, 1, 35)
+            );
+            assert!(state.time_out_on_skip);
+            assert!(matches!(
+                commands::advance(&mut cx, &mut io, &mut state),
+                commands::Step::Input(true)
+            ));
+            assert_eq!(state.last_sync_time, state.start_time.wrapping_add(16));
+            assert!(!state.time_out_on_skip);
+            assert!(matches!(
+                commands::advance(&mut cx, &mut io, &mut state),
+                commands::Step::Input(true)
+            ));
+            assert_eq!(state.time_out, state.last_sync_time.wrapping_add(25));
+            for _ in 0..3 {
+                assert!(matches!(
+                    commands::advance(&mut cx, &mut io, &mut state),
+                    commands::Step::Input(true)
+                ));
+                assert!(!state.time_out_on_skip);
+            }
+            assert!(matches!(
+                commands::advance(&mut cx, &mut io, &mut state),
+                commands::Step::Input(true)
+            ));
+            assert!(state.time_out_on_skip);
+            assert!(matches!(
+                commands::advance(&mut cx, &mut io, &mut state),
+                commands::Step::Input(false)
+            ));
+            assert!(state.context.font_lease().is_none());
+            assert!(state.sis.is_some());
+            context.flush();
+            let pixel = context.target().pixel(POINT { x: 40, y: 40 });
+            assert_eq!((pixel.r, pixel.g, pixel.b), (255, 255, 255));
+            render::draw(&cx, &mut state, b"SIS 50 50 256 90");
+            context.flush();
+            assert_eq!(context.target().pixel(POINT { x: 50, y: 50 }).r, 255);
+            render::draw(&cx, &mut state, b"SIS 50 50 256 90");
+            state.frame = Some(LoadedDrawable::create(2, 2, 2, 1).unwrap());
+            render::draw(&cx, &mut state, b"0 60 60 256 90");
+            drop(state);
+            drop(context);
+            drop(driver);
+            game.kernel.off_screen_context = game.kernel.status_context;
+        })
+        .unwrap();
+    fixture.finish(game);
+}
