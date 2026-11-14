@@ -25,10 +25,6 @@ static VIDEO_AUDIO_HANDLE: AtomicU32 = AtomicU32::new(0);
 /// Rodio handle for video speech track. 0 = none.
 static VIDEO_SPEECH_HANDLE: AtomicU32 = AtomicU32::new(0);
 
-fn log_msg(msg: &str) {
-    rust_bridge_log_msg(msg);
-}
-
 // ============================================================================
 // UIO + gfx externs
 // ============================================================================

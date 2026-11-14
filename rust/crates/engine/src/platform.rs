@@ -44,26 +44,23 @@ pub fn redirect_stderr(path: &std::path::Path) -> std::io::Result<()> {
 /// Translate OS failures to the C runtime errno vocabulary used by the UIO API.
 pub fn io_errno(error: &std::io::Error) -> c_int {
     #[cfg(unix)]
-    {
-        error.raw_os_error().unwrap_or(libc::EIO)
+    if let Some(errno) = error.raw_os_error() {
+        return errno;
     }
-    #[cfg(windows)]
-    {
-        use std::io::ErrorKind;
-        match error.kind() {
-            ErrorKind::NotFound => libc::ENOENT,
-            ErrorKind::PermissionDenied => libc::EACCES,
-            ErrorKind::AlreadyExists => libc::EEXIST,
-            ErrorKind::InvalidInput | ErrorKind::InvalidData => libc::EINVAL,
-            ErrorKind::NotADirectory => libc::ENOTDIR,
-            ErrorKind::IsADirectory => libc::EISDIR,
-            ErrorKind::DirectoryNotEmpty => libc::ENOTEMPTY,
-            ErrorKind::Interrupted => libc::EINTR,
-            ErrorKind::WouldBlock => libc::EAGAIN,
-            ErrorKind::OutOfMemory => libc::ENOMEM,
-            ErrorKind::StorageFull => libc::ENOSPC,
-            _ => libc::EIO,
-        }
+    use std::io::ErrorKind;
+    match error.kind() {
+        ErrorKind::NotFound => libc::ENOENT,
+        ErrorKind::PermissionDenied => libc::EACCES,
+        ErrorKind::AlreadyExists => libc::EEXIST,
+        ErrorKind::InvalidInput | ErrorKind::InvalidData => libc::EINVAL,
+        ErrorKind::NotADirectory => libc::ENOTDIR,
+        ErrorKind::IsADirectory => libc::EISDIR,
+        ErrorKind::DirectoryNotEmpty => libc::ENOTEMPTY,
+        ErrorKind::Interrupted => libc::EINTR,
+        ErrorKind::WouldBlock => libc::EAGAIN,
+        ErrorKind::OutOfMemory => libc::ENOMEM,
+        ErrorKind::StorageFull => libc::ENOSPC,
+        _ => libc::EIO,
     }
 }
 
@@ -128,5 +125,32 @@ pub fn default_config_dir() -> PathBuf {
         // SAFETY: get_home_dir returns a libc-owned NUL-terminated environment/passwd path.
         let home = unsafe { std::ffi::CStr::from_ptr(home) };
         PathBuf::from(std::ffi::OsStr::from_bytes(home.to_bytes())).join(".uqm/")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::io_errno;
+    use std::io::{Error, ErrorKind};
+
+    #[test]
+    fn virtual_file_errors_keep_their_errno_meaning() {
+        for (kind, expected) in [
+            (ErrorKind::NotFound, libc::ENOENT),
+            (ErrorKind::PermissionDenied, libc::EACCES),
+            (ErrorKind::InvalidInput, libc::EINVAL),
+            (ErrorKind::Other, libc::EIO),
+        ] {
+            assert_eq!(io_errno(&Error::from(kind)), expected, "{kind:?}");
+        }
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn native_file_errors_keep_the_original_errno() {
+        assert_eq!(
+            io_errno(&Error::from_raw_os_error(libc::EROFS)),
+            libc::EROFS
+        );
     }
 }

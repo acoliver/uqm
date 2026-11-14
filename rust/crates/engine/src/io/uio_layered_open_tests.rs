@@ -2,7 +2,6 @@
 //! Each mount that covers a path is consulted in priority order, and a
 //! mount that lacks the file lets the lookup continue to the next one.
 
-use std::ffi::CString;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
@@ -96,18 +95,12 @@ impl Stack {
     }
 
     pub(super) fn read(&self, name: &str) -> Option<Vec<u8>> {
-        use std::io::Read;
-        let name = CString::new(name).unwrap();
-        unsafe {
-            let handle = uio_open(self.root, name.as_ptr(), 0, 0);
-            if handle.is_null() {
-                return None;
-            }
-            let mut bytes = Vec::new();
-            (*handle).lock().unwrap().read_to_end(&mut bytes).unwrap();
-            uio_close(handle);
-            Some(bytes)
-        }
+        use crate::host::Files;
+        // SAFETY: the fixture owns root for this call.
+        unsafe { owned::directory(self.root) }
+            .unwrap()
+            .read(Path::new(name))
+            .ok()
     }
 }
 

@@ -4,7 +4,9 @@ use std::io::{Read, Seek, SeekFrom, Write};
 
 #[test]
 fn files_port_roundtrips_and_removes_bytes() {
-    let temp = tempfile::tempdir().unwrap();
+    let root = concat!(env!("UQM_RUST_ROOT"), "/../tmp");
+    std::fs::create_dir_all(root).unwrap();
+    let temp = tempfile::tempdir_in(root).unwrap();
     let files = Vfs::default();
     let path = temp.path().join("slot.sav");
     let mut output = files.open_write(&path).unwrap();
