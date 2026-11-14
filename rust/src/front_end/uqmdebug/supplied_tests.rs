@@ -90,7 +90,7 @@ fn diagnostic_text_preserves_raw_bytes_truncation_and_category_output() {
         &kernel,
         &mut types,
         FIRST_GAS_GIANT as i32,
-        &crate::planets::tables::PLANET_ARRAY.0[0],
+        &crate::planets::tables::PLANET_ARRAY[0],
     )
     .unwrap();
     assert!(types.starts_with(b"gas\n\tType: "));
