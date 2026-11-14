@@ -4,8 +4,8 @@
 use sha2::{Digest, Sha256};
 use std::cell::RefCell;
 use std::ffi::{c_void, CString};
-use uqm_rust::c_bindings::global_state as c;
 use uqm_rust::comm::locdata::{CPoint, CRect};
+use uqm_rust::graphics::native_abi as c;
 use uqm_rust::planets::c_api::{self, CapturedSurface, FORMAT_CONV_SURF, SDL_SCREEN};
 use uqm_rust::planets::render::c_api::render_native_topography;
 use uqm_rust::planets::render::topography::*;
@@ -21,7 +21,7 @@ extern "C" {
     fn SetContextClipRect(rect: *mut c::RECT) -> c::BOOLEAN;
     fn SetContextDrawMode(mode: c::DrawMode) -> c::DrawMode;
     fn SetContextForeGroundColor(color: c::Color) -> c::Color;
-    fn GetColorMapAddress(map: c::COLORMAP) -> *mut u8;
+    fn GetColorMapAddress(map: c::STRING) -> *mut u8;
     fn TFB_DrawCanvas_Initialize();
     fn ReadFramePixelColors(frame: c::FRAME, pixels: *mut c::Color, w: i32, h: i32) -> c::BOOLEAN;
     fn WriteFramePixelColors(
@@ -38,7 +38,7 @@ struct OraclePalette {
     planet: *mut uqm_rust::engine::world::planet::PlanetDesc,
     translation_entry: c::STRING,
     translation_bytes: *const c_void,
-    color_entry: c::COLORMAP,
+    color_entry: c::STRING,
 }
 
 #[repr(C)]
@@ -47,7 +47,7 @@ struct Operations {
     origin: unsafe extern "C" fn(c::POINT) -> c::POINT,
     get_clip: unsafe extern "C" fn(*mut c::RECT) -> c::BOOLEAN,
     set_clip: unsafe extern "C" fn(*mut c::RECT) -> c::BOOLEAN,
-    colors: unsafe extern "C" fn(c::COLORMAP) -> *mut u8,
+    colors: unsafe extern "C" fn(c::STRING) -> *mut u8,
     batch: unsafe extern "C" fn(*mut c::PRIMITIVE, u32, u8),
     table: *const uqm_rust::engine::world::planet::PlanetFrame,
     system: *mut OraclePalette,
@@ -103,7 +103,7 @@ unsafe extern "C" fn origin(p: c::POINT) -> c::POINT {
 }
 unsafe extern "C" fn get_clip(r: *mut c::RECT) -> c::BOOLEAN {
     record(&[3]);
-    c::GetContextClipRect(r)
+    uqm_rust::graphics::context_abi::GetContextClipRect(r)
 }
 unsafe extern "C" fn set_clip(r: *mut c::RECT) -> c::BOOLEAN {
     record(&[4, u8::from(!r.is_null())]);
@@ -134,7 +134,7 @@ unsafe extern "C" fn batch(prims: *mut c::PRIMITIVE, links: u32, flags: u8) {
         index = (p.Links >> 16) as u16;
     }
     record(&u16::MAX.to_le_bytes());
-    c::DrawBatch(prims, links, flags);
+    uqm_rust::graphics::frame_abi::DrawBatch(prims, links, flags);
 }
 
 // For the core comparison these callbacks observe and forward every effect to
@@ -289,7 +289,10 @@ impl Ram {
         take_trace();
     }
     unsafe fn result(&self, mode: c::DrawMode) -> Vec<u8> {
-        assert_eq!(c::GetContextFGFrame(), self.previous);
+        assert_eq!(
+            uqm_rust::graphics::drawable_abi::GetContextFGFrame(),
+            self.previous
+        );
         assert_eq!(SetContext(self.context), self.context);
         assert_eq!(
             ((*self.target()).HotSpot.x, (*self.target()).HotSpot.y),
@@ -299,15 +302,15 @@ impl Ram {
             ((*self.previous).HotSpot.x, (*self.previous).HotSpot.y),
             (-3, 4)
         );
-        let actual_mode = c::GetContextDrawMode();
+        let actual_mode = uqm_rust::graphics::context_abi::GetContextDrawMode();
         assert_eq!(
             (actual_mode.kind, actual_mode.factor),
             (mode.kind, mode.factor)
         );
-        let color = c::GetContextForeGroundColor();
+        let color = uqm_rust::graphics::context_abi::GetContextForeGroundColor();
         assert_eq!([color.r, color.g, color.b, color.a], [31, 61, 91, 101]);
         let mut clip: c::RECT = std::mem::zeroed();
-        let defined = c::GetContextClipRect(&mut clip);
+        let defined = uqm_rust::graphics::context_abi::GetContextClipRect(&mut clip);
         let mut result = defined.to_le_bytes().to_vec();
         for v in [
             clip.corner.x,

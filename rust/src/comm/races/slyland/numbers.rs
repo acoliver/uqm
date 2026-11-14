@@ -1,5 +1,5 @@
 use super::*;
-use crate::c_bindings::global_state::{NUMBER_SPEECH_DESC, SPEECH_DIGIT};
+use crate::ships::native::abi::{NUMBER_SPEECH_DESC, SPEECH_DIGIT};
 
 static DIGITS: [u16; 10] = [
     ENUMERATE_ZERO as u16,

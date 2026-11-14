@@ -11,11 +11,11 @@ use crate::mainloop::{
     types::activity_flags::{CHECK_LOAD, START_ENCOUNTER},
 };
 
-use crate::c_bindings::global_state::{CHMMR_DEFINED, ILWRATH_DEFINED, SAMATRA_DEFINED};
 use crate::comm::{
     dispatch::ship,
     locdata::{CColor, CRect},
 };
+use crate::planets::generate::identities::{CHMMR_DEFINED, ILWRATH_DEFINED, SAMATRA_DEFINED};
 use crate::starbase::{
     gfx::{Align, ContextId, FontId, Gfx, Point, Rect, Rgba, TextDraw},
     graphics::Graphics,
@@ -171,7 +171,7 @@ unsafe fn use_caster(
     };
     let star = solar.sys.star_index();
     if orbit_is(Some(solar), 1)
-        && u32::from(star) == CHMMR_DEFINED
+        && star == CHMMR_DEFINED
         && get(cx.world, StoryKey::CHMMR_UNLEASHED) == 0
     {
         *next_activity |= CHECK_LOAD;
@@ -181,7 +181,7 @@ unsafe fn use_caster(
         save_solar_location(cx.world, solar);
         return true;
     }
-    let home = u32::from(star) == ILWRATH_DEFINED;
+    let home = star == ILWRATH_DEFINED;
     let mut found = home && start_sphere_tracking(cx.world, u16::from(ship::ILWRATH_SHIP)) != 0;
     if !found {
         let groups = cx.world.ip_groups_ref();
@@ -224,7 +224,7 @@ unsafe fn invoke(
             crate::ui::settings::play_menu_sound(cx.kernel, cx.world, 3);
             cx.with_legacy(|| SleepThreadUntil(FadeScreen(250, 840).wrapping_add(1680)));
             let star = solar.sys.star_index();
-            if u32::from(star) != CHMMR_DEFINED || !orbit_is(Some(solar), 1) {
+            if star != CHMMR_DEFINED || !orbit_is(Some(solar), 1) {
                 cx.with_legacy(|| FadeScreen(253, 1680));
             } else {
                 set(cx.world, StoryKey::CHMMR_EMERGING, 1);
@@ -260,7 +260,7 @@ unsafe fn invoke(
                     panic!("device effect requires a solar visit");
                 };
                 let star = solar.sys.star_index();
-                if u32::from(star) == SAMATRA_DEFINED {
+                if star == SAMATRA_DEFINED {
                     set(cx.world, StoryKey::READY_TO_CONFUSE_URQUAN, 1);
                 }
                 if solar.in_orbit() {

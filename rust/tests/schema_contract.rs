@@ -1,11 +1,14 @@
 //! Stable values shared by save files, input, rendering, ships and netplay.
 
 use std::mem::{align_of, offset_of, size_of};
-use uqm_rust::c_bindings::{controller_input as input, global_state as state};
+use uqm_rust::c_bindings::controller_input as input;
+use uqm_rust::engine::world::story::{
+    GAME_STATE_FIELDS, NUM_GAME_STATE_BITS, NUM_GAME_STATE_BYTES,
+};
 use uqm_rust::engine::StoryKey;
+use uqm_rust::graphics::native_abi as gfx;
 use uqm_rust::ships::native::abi as ship;
 use uqm_rust::starbase::sis_modules::{ModuleType, NUM_MODULES};
-use uqm_rust::state::game_state::{GAME_STATE_FIELDS, NUM_GAME_STATE_BITS, NUM_GAME_STATE_BYTES};
 
 #[test]
 fn story_state_size_and_endpoints_remain_stable() {
@@ -39,8 +42,8 @@ fn controller_keys_and_template_numbers_remain_stable() {
 
 #[test]
 fn engine_scalar_widths_and_species_ids_remain_stable() {
-    assert_eq!(size_of::<state::COUNT>(), 2);
-    assert_eq!(size_of::<state::BOOLEAN>(), 4);
+    assert_eq!(size_of::<gfx::COUNT>(), 2);
+    assert_eq!(size_of::<gfx::BOOLEAN>(), 4);
     assert_eq!(size_of::<ship::SPECIES_ID>(), 4);
     assert_eq!(align_of::<ship::SPECIES_ID>(), 4);
     assert_eq!(ship::HUMAN_SHIP, 2);
@@ -60,4 +63,18 @@ fn every_story_field_starts_at_its_rust_abi_enum_position() {
     // fields that cross bytes and the high bytes of serialized group offsets.
     assert_eq!(StoryKey::SHOFIXTI_STACK3.start(), 8);
     assert_eq!(StoryKey::SAMATRA_GRPOFFS3.start(), 1230);
+}
+
+mod graphics_signatures {
+    use super::gfx;
+    use uqm_rust::graphics::{context_abi, drawable_abi, frame_abi, geometry_ffi};
+
+    const _: unsafe extern "C" fn() -> gfx::Color = context_abi::GetContextForeGroundColor;
+    const _: unsafe extern "C" fn() -> gfx::FRAME = drawable_abi::GetContextFGFrame;
+    const _: unsafe extern "C" fn(*mut gfx::RECT) -> gfx::BOOLEAN = context_abi::GetContextClipRect;
+    const _: unsafe extern "C" fn() -> gfx::DrawMode = context_abi::GetContextDrawMode;
+    const _: unsafe extern "C" fn(*mut gfx::PRIMITIVE, u32, u8) = frame_abi::DrawBatch;
+    const _: unsafe extern "C" fn(*mut gfx::LINE) = frame_abi::DrawLine;
+    const _: unsafe extern "C" fn(*const gfx::RECT, *mut geometry_ffi::BresenhamLine) -> u8 =
+        geometry_ffi::_clip_line;
 }

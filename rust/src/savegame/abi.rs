@@ -3,7 +3,7 @@ pub use crate::engine::save::summary_record::SummaryDesc;
 
 crate::c_bindings::assert_c_layout!(
     SummaryDesc,
-    crate::c_bindings::global_state::SUMMARY_DESC {
+    crate::navigation::abi::SUMMARY_DESC {
         sis: SS,
         activity: Activity,
         flags: Flags,

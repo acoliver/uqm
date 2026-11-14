@@ -45,7 +45,7 @@ pub(crate) struct CText {
 
 crate::c_bindings::assert_c_layout!(
     CText,
-    crate::c_bindings::global_state::TEXT {
+    crate::graphics::native_abi::TEXT {
         baseline: baseline,
         p_str: pStr,
         align: align,

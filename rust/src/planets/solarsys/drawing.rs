@@ -228,7 +228,7 @@ unsafe fn draw_system(world: &World, kernel: &Kernel, solar: &mut SolarSystem, r
     let coordinates = solar.coordinates();
     let image = solar.system_image.get_or_insert_with(|| {
         let mut clip = c::RECT::default();
-        c::GetContextClipRect(&mut clip);
+        crate::graphics::context_abi::GetContextClipRect(&mut clip);
         LoadedDrawable::create(2, clip.extent.width, clip.extent.height, 1)
             .unwrap_or_else(|| panic!("solar-system drawable allocation failed"))
     });
@@ -301,7 +301,7 @@ pub(super) unsafe fn create_star_background(
     let assets = resources::retained(kernel);
     let old = SetContext(kernel.space_context);
     let mut clip = c::RECT::default();
-    c::GetContextClipRect(&mut clip);
+    crate::graphics::context_abi::GetContextClipRect(&mut clip);
     let frame = LoadedDrawable::create(2, clip.extent.width, clip.extent.height, 1)
         .unwrap_or_else(|| panic!("star-background drawable allocation failed"));
     SetContext(kernel.off_screen_context);

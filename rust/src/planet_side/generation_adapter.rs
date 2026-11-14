@@ -22,7 +22,6 @@ use super::creatures::{CreatureCatalog, CreatureKind};
 use super::generation::GeneratedNodeKind;
 use super::generation::{GeneratedNode, SurfaceGenerator};
 use super::generation::{ScanNodeId, ScanType};
-#[cfg(not(test))]
 use super::model::SurfacePoint;
 use super::runtime::AdapterError;
 use super::special_effects::PickupContext;
@@ -304,7 +303,6 @@ impl SurfaceGenerator for CffiSurfaceGenerator<'_, '_, '_, '_> {
         }
     }
 
-    #[cfg(not(test))]
     fn can_node(
         &mut self,
         node: ScanNodeId,
@@ -327,16 +325,6 @@ impl SurfaceGenerator for CffiSurfaceGenerator<'_, '_, '_, '_> {
             crate::state::ffi::with_state_files(world, |files| files.can_node(canned))
         }
         .map_err(|_| AdapterError::new("canned_node_state"))
-    }
-
-    #[cfg(test)]
-    fn can_node(
-        &mut self,
-        _: ScanNodeId,
-        _: super::model::SurfacePoint,
-        _: u16,
-    ) -> Result<(), AdapterError> {
-        Err(AdapterError::new("surface_generator_unlinked"))
     }
 
     fn pickup(
@@ -516,6 +504,40 @@ mod tests {
                 game.borrow().world.story_state(StoryKey::PLANETARY_CHANGE),
                 0
             );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn canning_uses_the_supplied_world_and_selected_body_key() {
+        with_context(|game, io, report| {
+            crate::state::ffi::rust_init_game_state(game.borrow_mut().world);
+            let mut solar = SolarSystem::new(game.borrow().world, StarId(0));
+            solar.sys.sun.num_planets = 1;
+            solar.sys.planets[0].num_planets = 1;
+            solar.enter_inner(0);
+            for body in [Body::Planet(0), Body::Moon { planet: 0, moon: 0 }] {
+                solar.enter_orbit(body);
+                let key = solar.body_location(body).node_key(31);
+                let mut generator =
+                    CffiSurfaceGenerator::for_planet_side(game, io, &mut solar, report.clone());
+                generator
+                    .can_node(
+                        ScanNodeId::new(31).unwrap(),
+                        SurfacePoint { x: 40, y: 30 },
+                        12,
+                    )
+                    .unwrap();
+                let canned =
+                    crate::state::ffi::with_state_files(game.borrow_mut().world, |files| {
+                        files.canned_node(key)
+                    })
+                    .unwrap()
+                    .unwrap();
+                assert_eq!((canned.star, canned.planet, canned.moon, canned.node), key);
+                assert_eq!((canned.x, canned.y, canned.value), (40, 30, 12));
+                solar.finish_orbit();
+            }
         });
     }
 

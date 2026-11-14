@@ -215,13 +215,12 @@ fn zoom_scale(frame: i32, frame_count: i32) -> f64 {
 #[cfg(not(test))]
 pub(crate) mod live {
     use super::{images::required_frame, zoom_scale, SphereState};
-    use crate::c_bindings::global_state::DrawMode;
     use crate::comm::locdata::{CColor, CRect};
     use crate::graphics::context_abi::SetContextClipRect;
     use crate::graphics::drawable_abi::SetContextFGFrame;
     use crate::graphics::{
         menu as draw,
-        native_abi::{Color, POINT},
+        native_abi::{Color, DrawMode, POINT},
     };
     use crate::mainloop::restart_menu::c_extern::uqm_sleep_thread_until as SleepThreadUntil;
     use std::{cell::RefCell, ffi::c_void};

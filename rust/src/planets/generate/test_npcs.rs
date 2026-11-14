@@ -49,7 +49,7 @@ impl<S: Story, H: default::Npcs> default::Npcs for (&mut S, &mut H) {
     }
     fn for_each_ip_group(
         &mut self,
-        visit: &mut dyn FnMut(&mut crate::c_bindings::global_state::IP_GROUP),
+        visit: &mut dyn FnMut(&mut crate::engine::world::queues::IpGroup),
     ) {
         self.1.for_each_ip_group(visit)
     }
@@ -73,7 +73,7 @@ impl<S: Story, H: special::FleetGroups> special::FleetGroups for (&mut S, &mut H
     }
     fn head_ip_group(
         &mut self,
-        visit: &mut dyn FnMut(&mut crate::c_bindings::global_state::IP_GROUP),
+        visit: &mut dyn FnMut(&mut crate::engine::world::queues::IpGroup),
     ) -> bool {
         self.1.head_ip_group(visit)
     }
@@ -122,19 +122,19 @@ impl<S: Story, H: sam::GuardSite> sam::GuardSite for (&mut S, &mut H) {
     fn init_ip_groups(&mut self, reference: u32) {
         self.1.init_ip_groups(reference)
     }
-    fn planet_outer_location(&self, planet: u16) -> crate::c_bindings::global_state::POINT {
+    fn planet_outer_location(&self, planet: u16) -> crate::graphics::native_abi::POINT {
         self.1.planet_outer_location(planet)
     }
     fn for_each_ip_group(
         &mut self,
-        visit: &mut dyn FnMut(&mut crate::c_bindings::global_state::IP_GROUP),
+        visit: &mut dyn FnMut(&mut crate::engine::world::queues::IpGroup),
     ) {
         self.1.for_each_ip_group(visit)
     }
-    fn ip_location(&self) -> crate::c_bindings::global_state::POINT {
+    fn ip_location(&self) -> crate::graphics::native_abi::POINT {
         self.1.ip_location()
     }
-    fn set_and_transform_ip_location(&mut self, location: crate::c_bindings::global_state::POINT) {
+    fn set_and_transform_ip_location(&mut self, location: crate::graphics::native_abi::POINT) {
         self.1.set_and_transform_ip_location(location)
     }
 }

@@ -15,22 +15,6 @@ pub mod controller_input {
     include!("abi/controller_input_abi.rs");
 }
 
-/// Rust-owned game, clock, velocity and event ABI schemas.
-///
-/// Only layout is taken from here. The Rust mirrors in `comm::locdata` and
-/// `time::clock_bridge` check themselves against it at compile time.
-#[allow(
-    clippy::all,
-    dead_code,
-    improper_ctypes,
-    non_camel_case_types,
-    non_snake_case,
-    non_upper_case_globals
-)]
-pub mod global_state {
-    include!("abi/global_state_abi.rs");
-}
-
 /// Fail the build when a hand-written `#[repr(C)]` mirror disagrees with the
 /// Rust-owned ABI schema: total size, alignment, and for each
 /// listed field its offset and size.

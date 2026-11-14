@@ -10,9 +10,10 @@ use crate::engine::battle::{ElementId, ElementTable, Parent, ShipId};
 use std::mem::size_of;
 
 use super::hyper_save::*;
-use crate::c_bindings::global_state::{ElementRecord, ShipRecord, PLAYER_SHIP, RPG_PLAYER_NUM};
 use crate::comm::locdata::CGameState;
 use crate::engine::battle::link_queue::RacePool;
+use crate::engine::battle::record::{ElementRecord, ShipRecord};
+use crate::ships::native::abi::{PLAYER_SHIP, RPG_PLAYER_NUM};
 
 /// `PLAYER_SHIP` (element.h), written out so the generated value is checked
 /// against the header's `1 << 2`.
