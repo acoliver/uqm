@@ -257,10 +257,9 @@ fn starbase_releases_world_before_communication_and_cleanup() {
     game.world.story = Some(uqm_rust::state::game_state::StoryState::new());
     game.world.set_activity(CHECK_ABORT as u16);
     let mut observer = Recording(Vec::new());
-    // SAFETY: this serialized fixture restores the developer flag and owns the lifecycle.
+    let _quiet = game.kernel.diagnostics.suppress_interaction();
+    // SAFETY: this serialized fixture owns the published lifecycle.
     unsafe {
-        let previous = uqm_rust::front_end::uqmdebug::DISABLE_INTERACTIVITY;
-        uqm_rust::front_end::uqmdebug::DISABLE_INTERACTIVITY = 1;
         bridge::with_game(&mut game, || {
             bridge::enter(|cx| {
                 uqm_rust::ui::starbase::run_starbase_visit(
@@ -289,7 +288,6 @@ fn starbase_releases_world_before_communication_and_cleanup() {
                 );
             })
         });
-        uqm_rust::front_end::uqmdebug::DISABLE_INTERACTIVITY = previous;
     }
     assert_eq!(game.world.activity(), CHECK_ABORT as u16);
     assert_eq!(

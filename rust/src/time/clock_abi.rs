@@ -160,16 +160,6 @@ pub fn advance_days(cx: &mut crate::engine::battle::Cx<'_>, days: i32) {
     clock.tick_count = clock.day_in_ticks;
 }
 
-#[no_mangle]
-pub extern "C" fn LockGameClock() {
-    super::clock_bridge::rust_clock_lock();
-}
-
-#[no_mangle]
-pub extern "C" fn UnlockGameClock() {
-    super::clock_bridge::rust_clock_unlock();
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
