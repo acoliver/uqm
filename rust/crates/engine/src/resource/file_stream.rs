@@ -78,6 +78,8 @@ pub(super) unsafe fn stream_write(
     }
 }
 pub(super) unsafe fn stream_seek(fp: *mut c_void, offset: c_long, whence: c_int) -> c_int {
+    #[cfg(any(windows, target_pointer_width = "32"))]
+    let offset = i64::from(offset);
     let position = match whence {
         0 => SeekFrom::Start(offset as u64),
         1 => SeekFrom::Current(offset),
@@ -85,11 +87,7 @@ pub(super) unsafe fn stream_seek(fp: *mut c_void, offset: c_long, whence: c_int)
         _ => return -1,
     };
     // SAFETY: the resource ABI lends a live exclusive FileStream.
-    if unsafe { (&mut *fp.cast::<FileStream>()).seek(position) }.is_ok() {
-        0
-    } else {
-        -1
-    }
+    unsafe { (&mut *fp.cast::<FileStream>()).seek(position) }.map_or(-1, |_| 0)
 }
 pub(super) unsafe fn stream_tell(fp: *mut c_void) -> c_long {
     // SAFETY: the resource ABI supplies a live FileStream.
