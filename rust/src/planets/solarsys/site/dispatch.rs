@@ -53,3 +53,19 @@ pub fn invoke<R>(
     solar.observe(game, io);
     result
 }
+
+#[cfg(feature = "debug-process")]
+pub struct DebugGeneration;
+
+#[cfg(feature = "debug-process")]
+impl crate::front_end::uqmdebug::Generation for DebugGeneration {
+    fn invoke<R>(
+        &mut self,
+        cx: &mut Cx<'_>,
+        io: &mut Io<'_>,
+        solar: &mut SolarSystem,
+        run: impl FnOnce(&dyn SystemGenerator, &mut SolarSys<'_>, &mut dyn SiteHost) -> R,
+    ) -> R {
+        invoke(cx, io, solar, run).0
+    }
+}
