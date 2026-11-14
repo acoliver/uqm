@@ -1721,6 +1721,9 @@ dependencies = [
 [[package]]
 name = "uqm-save"
 version = "0.9.0"
+dependencies = [
+ "serde_json",
+]
 
 [[package]]
 name = "uqm-xtask"

@@ -3,6 +3,8 @@ use super::super::{legacy, SaveSlots};
 use crate::comm::dispatch::{IN_INTERPLANETARY, START_ENCOUNTER, START_INTERPLANETARY};
 use crate::engine::{battle::Cx, save::summary_record::SummaryDesc};
 use crate::mainloop::dir_prep::saveDir;
+use uqm_engine::io::uio_owned::directory;
+use uqm_save::SlotError;
 
 pub enum LoadRequest<'a, 'game> {
     Summary(&'a mut SummaryDesc),
@@ -29,7 +31,8 @@ pub fn load_game(slot: u16, request: LoadRequest<'_, '_>) -> u32 {
     let loading = matches!(&request, LoadRequest::Restore(_));
     let result = (|| -> anyhow::Result<()> {
         // SAFETY: the game-thread save directory remains open throughout the synchronous operation.
-        let slots = unsafe { SaveSlots::new(saveDir.cast())? };
+        let files = unsafe { directory(saveDir.cast()) }.map_err(|_| SlotError::NoSaveDir)?;
+        let slots = SaveSlots::new(&files);
         let cx = match request {
             LoadRequest::Summary(summary) => {
                 let decoded = match slots.read_summary(usize::from(slot)) {
@@ -45,8 +48,7 @@ pub fn load_game(slot: u16, request: LoadRequest<'_, '_>) -> u32 {
             let save = slots.read(usize::from(slot))?;
             (save.star, crate::engine::save::apply(save, cx.world)?)
         } else {
-            // SAFETY: the synchronous loader retains the supplied campaign and slot directory.
-            let decoded = unsafe { legacy::read_legacy_game(&slots, slot)? };
+            let decoded = legacy::read_legacy_game(&slots, slot)?;
             let star = decoded.save.star;
             let activity = crate::engine::save::apply_legacy(
                 decoded.save,

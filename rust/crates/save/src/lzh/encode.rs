@@ -1,9 +1,7 @@
-use std::ffi::c_void;
+use super::{CodeDesc, F, N, R, T, THRESHOLD};
+use std::io::{self, Seek, SeekFrom, Write};
 
-use super::{CodeDesc, _LP_CUR_CODE_DESC, F, N, R, T, THRESHOLD};
-use crate::resource::ffi_bridge::SeekResFile;
-
-pub(super) struct Encoder {
+pub(super) struct Tree {
     lson: [usize; N + 1],
     rson: [usize; N + 257],
     dad: [usize; N + 1],
@@ -11,7 +9,7 @@ pub(super) struct Encoder {
     match_length: usize,
 }
 
-impl Encoder {
+impl Tree {
     fn new() -> Box<Self> {
         let mut result = Box::new(Self {
             lson: [0; N + 1],
@@ -117,16 +115,16 @@ impl Encoder {
     }
 }
 
-impl CodeDesc {
-    unsafe fn put_code(&mut self, len: u8, code: u16) {
+impl<S: Write + Seek> CodeDesc<S> {
+    fn put_code(&mut self, len: u8, code: u16) -> io::Result<()> {
         self.workbuf |= code >> self.workbuflen;
         self.workbuflen += len;
         if self.workbuflen >= 8 {
-            self.output((self.workbuf >> 8) as u8);
+            self.output((self.workbuf >> 8) as u8)?;
             self.stream_index += 1;
             self.workbuflen -= 8;
             if self.workbuflen >= 8 {
-                self.output(self.workbuf as u8);
+                self.output(self.workbuf as u8)?;
                 self.stream_index += 1;
                 self.workbuflen -= 8;
                 self.workbuf = (u32::from(code) << (len - self.workbuflen)) as u16;
@@ -134,9 +132,10 @@ impl CodeDesc {
                 self.workbuf <<= 8;
             }
         }
+        Ok(())
     }
 
-    unsafe fn encode_char(&mut self, c: usize) {
+    fn encode_char(&mut self, c: usize) -> io::Result<()> {
         let mut code = 0u16;
         let mut len = 0;
         let mut k = self.prnt[c + T] as usize;
@@ -151,35 +150,37 @@ impl CodeDesc {
                 break;
             }
         }
-        self.put_code(len, code);
+        self.put_code(len, code)?;
         self.update(c + T);
+        Ok(())
     }
 
-    unsafe fn encode_position(&mut self, c: u16) {
+    fn encode_position(&mut self, c: u16) -> io::Result<()> {
         let i = (c >> 6) as usize;
-        self.put_code(P_LEN[i], u16::from(P_CODE[i]) << 8);
-        self.put_code(6, (c & 0x3f) << 10);
+        self.put_code(P_LEN[i], u16::from(P_CODE[i]) << 8)?;
+        self.put_code(6, (c & 0x3f) << 10)?;
+        Ok(())
     }
 
-    unsafe fn encode_match(&mut self, tree: &mut Encoder, r: usize, limit: usize) -> usize {
+    fn encode_match(&mut self, tree: &mut Tree, r: usize, limit: usize) -> io::Result<usize> {
         tree.match_length = tree.match_length.min(limit);
         if tree.match_length <= THRESHOLD {
             tree.match_length = 1;
-            self.encode_char(self.text_buf[r] as usize);
+            self.encode_char(self.text_buf[r] as usize)?;
         } else {
-            self.encode_char(255 - THRESHOLD + tree.match_length);
-            self.encode_position(tree.match_position);
+            self.encode_char(255 - THRESHOLD + tree.match_length)?;
+            self.encode_position(tree.match_position)?;
         }
-        tree.match_length
+        Ok(tree.match_length)
     }
 
-    unsafe fn write(&mut self, mut input: &[u8]) {
+    fn write(&mut self, mut input: &[u8]) -> io::Result<()> {
         let mut r = self.buf_index as usize;
         let mut s = self.restart_index as usize;
         let mut left = self.bytes_left as usize;
         let old_length = self.stream_length as usize;
         self.stream_length = self.stream_length.wrapping_add(input.len() as u32);
-        let mut tree = self.encoder.take().unwrap_or_else(Encoder::new);
+        let mut tree = self.encoder.take().unwrap_or_else(Tree::new);
         if left == 0 && old_length < F {
             let mut i = old_length;
             while i < F && !input.is_empty() {
@@ -189,7 +190,7 @@ impl CodeDesc {
             }
             if i < F {
                 self.encoder = Some(tree);
-                return;
+                return Ok(());
             }
             for i in 1..=F {
                 tree.insert(r - i, &self.text_buf);
@@ -197,12 +198,12 @@ impl CodeDesc {
             tree.insert(r, &self.text_buf);
             if input.is_empty() {
                 self.encoder = Some(tree);
-                return;
+                return Ok(());
             }
         }
         loop {
             if left == 0 {
-                left = self.encode_match(&mut tree, r, F);
+                left = self.encode_match(&mut tree, r, F)?;
             }
             while left != 0 && !input.is_empty() {
                 left -= 1;
@@ -225,10 +226,10 @@ impl CodeDesc {
         self.restart_index = s as u16;
         self.bytes_left = left as u16;
         self.encoder = Some(tree);
+        Ok(())
     }
 
-    pub(super) unsafe fn finish_encode(&mut self) {
-        let mut tree = self.encoder.take().unwrap();
+    fn finish_encode(&mut self, mut tree: Box<Tree>) -> io::Result<()> {
         let mut r = self.buf_index as usize;
         let mut s = self.restart_index as usize;
         let mut left = self.bytes_left as usize;
@@ -247,55 +248,58 @@ impl CodeDesc {
                 len -= 1;
                 if len == 0 {
                     if self.workbuflen != 0 {
-                        self.output((self.workbuf >> 8) as u8);
+                        self.output((self.workbuf >> 8) as u8)?;
                         self.stream_index += 1;
                     }
                     self.stream_index += 4;
-                    if self.stream_type == 0 {
-                        SeekResFile(
-                            self.stream,
-                            -i64::from(self.stream_index) as _,
-                            libc::SEEK_CUR,
-                        );
-                    } else {
-                        self.stream = self
-                            .stream
-                            .cast::<u8>()
-                            .sub(self.stream_index as usize)
-                            .cast();
-                    }
+                    self.stream
+                        .seek(SeekFrom::Current(-i64::from(self.stream_index)))?;
                     for byte in self.stream_length.to_le_bytes() {
-                        self.output(byte);
+                        self.output(byte)?;
                     }
-                    return;
+                    return Ok(());
                 }
                 s = (s + 1) & (N - 1);
                 r = (r + 1) & (N - 1);
                 tree.insert(r, &self.text_buf);
             }
-            left = self.encode_match(&mut tree, r, len);
+            left = self.encode_match(&mut tree, r, len)?;
         }
     }
 }
 
-/// # Safety
-/// `desc` is null or a live write descriptor, and `buf` points to `size * count`
-/// bytes. The memory stream, if used, must have room for compressed output.
-pub unsafe extern "C" fn cwrite(
-    buf: *const c_void,
-    size: u16,
-    count: u16,
-    desc: *mut CodeDesc,
-) -> u16 {
-    _LP_CUR_CODE_DESC = desc;
-    let bytes = size.wrapping_mul(count);
-    if desc.is_null() || bytes == 0 {
-        return 0;
+/// Streaming encoder. Finishing rewrites the length header at its original offset.
+pub struct Encoder<W> {
+    desc: CodeDesc<W>,
+}
+
+impl<W: Write + Seek> Encoder<W> {
+    pub fn new(mut stream: W) -> io::Result<Self> {
+        stream.write_all(&[0; 4])?;
+        Ok(Self {
+            desc: CodeDesc::new(stream),
+        })
     }
-    let desc = &mut *desc;
-    desc.write(std::slice::from_raw_parts(buf.cast::<u8>(), bytes as usize));
-    desc.publish();
-    count
+
+    pub fn finish(mut self) -> io::Result<W> {
+        if let Some(tree) = self.desc.encoder.take() {
+            self.desc.finish_encode(tree)?;
+        }
+        self.desc.stream.flush()?;
+        Ok(self.desc.stream)
+    }
+}
+
+impl<W: Write + Seek> Write for Encoder<W> {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        if !bytes.is_empty() {
+            self.desc.write(bytes)?;
+        }
+        Ok(bytes.len())
+    }
+    fn flush(&mut self) -> io::Result<()> {
+        self.desc.stream.flush()
+    }
 }
 
 const P_CODE: [u8; 64] = [

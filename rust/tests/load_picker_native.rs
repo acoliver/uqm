@@ -196,7 +196,8 @@ fn first_load_entry_flushes_held_keys_and_enumeration_cannot_exit_the_picker() {
             saveDir = dir.cast();
             load_game_descriptions(&mut summaries);
             assert!(summaries.iter().all(|summary| summary.year_index == 0));
-            let slots = SaveSlots::new(saveDir.cast()).unwrap();
+            let files = uqm_rust::io::uio_owned::directory(saveDir.cast()).unwrap();
+            let slots = SaveSlots::new(&files);
             let save = decode_save(include_bytes!("fixtures/savegame/legacy-save.00")).unwrap();
             for slot in 0..50 {
                 if slot % 3 == 1 {
