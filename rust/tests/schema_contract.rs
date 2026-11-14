@@ -2,7 +2,9 @@
 
 use std::mem::{align_of, offset_of, size_of};
 use uqm_rust::c_bindings::controller_input as input;
-use uqm_rust::engine::world::story::{GAME_STATE_FIELDS, NUM_GAME_STATE_BITS, NUM_GAME_STATE_BYTES};
+use uqm_rust::engine::world::story::{
+    GAME_STATE_FIELDS, NUM_GAME_STATE_BITS, NUM_GAME_STATE_BYTES,
+};
 use uqm_rust::engine::StoryKey;
 use uqm_rust::graphics::native_abi as gfx;
 use uqm_rust::ships::native::abi as ship;
