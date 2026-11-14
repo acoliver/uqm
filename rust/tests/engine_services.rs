@@ -26,9 +26,15 @@ fn retained_playback_keeps_its_clip_after_descriptor_drop() {
 
 fn retained_string_table_loads_owned_text() {
     assert!(LoadedTextTable::load_file(c"missing").is_none());
-    let table = LoadedTextTable::load_file(c"strings.txt").unwrap();
+    let table = LoadedTextTable::load_file(c"strings.txt")
+        .unwrap_or_else(|| panic!("owned strings fixture did not load"));
     assert_eq!(table.len(), 2);
-    assert_eq!(table.text(0).unwrap(), c"Hello, captain.");
+    assert_eq!(
+        table
+            .text(0)
+            .unwrap_or_else(|| panic!("owned strings fixture has no first entry")),
+        c"Hello, captain."
+    );
 }
 
 #[test]

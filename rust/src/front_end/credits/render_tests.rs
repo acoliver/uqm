@@ -86,6 +86,24 @@ fn renderer_draws_pixels_and_releases_hook_state_on_unwind() {
         window.get(),
     )));
     let independent = Session::new(&context, resources.clone(), false, window.get());
+    {
+        let mut scroll = session.borrow_mut();
+        scroll.process_frame(&window, &mut |_| {});
+        assert_eq!((scroll.first, scroll.last, scroll.offset), (0, 2, 1));
+        scroll.controls.rate = -36;
+        scroll.next_time = 0;
+        scroll.process_frame(&window, &mut |_| {});
+        assert_eq!(
+            (
+                scroll.first,
+                scroll.last,
+                scroll.offset,
+                scroll.total_height
+            ),
+            (0, 1, 0, 240)
+        );
+        scroll.controls.rate = 9;
+    }
     let mut index = 0;
     let text = session.borrow().render_text_frame(&mut index, 1).unwrap();
     assert_eq!(index, 2);

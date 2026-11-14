@@ -126,13 +126,14 @@ fn record(line: &[u8]) -> Option<Record> {
     }
     let mut lines = Vec::new();
     for (row, text) in rows.iter().enumerate() {
+        let bytes = text.to_bytes();
+        let end = bytes
+            .iter()
+            .position(|&byte| byte == b'\t')
+            .unwrap_or(bytes.len());
         lines.push(CreditText {
-            text: text
-                .to_bytes()
-                .split(|&byte| byte == b'\t')
-                .next()
-                .map(|bytes| CString::new(bytes).unwrap())
-                .unwrap(),
+            text: CString::new(&bytes[..end])
+                .unwrap_or_else(|error| panic!("credits column contains NUL: {error}")),
             column: 0,
             row: (row + 1) as i16,
         });
@@ -146,7 +147,8 @@ fn record(line: &[u8]) -> Option<Record> {
         {
             if lines.len() < 50 {
                 lines.push(CreditText {
-                    text: CString::new(bytes).unwrap(),
+                    text: CString::new(bytes)
+                        .unwrap_or_else(|error| panic!("credits column contains NUL: {error}")),
                     column,
                     row: (row + 1) as i16,
                 });
@@ -197,6 +199,12 @@ fn formats(alignment: &[u8], width: i16, margin: i16) -> [ColumnFormat; 5] {
 }
 
 impl Session {
+    fn active_frame(&self, index: usize) -> &CreditFrame {
+        self.frames[index]
+            .as_ref()
+            .unwrap_or_else(|| panic!("empty credits ring entry {index}"))
+    }
+
     pub fn new(
         context: &ContextLease,
         resources: Rc<Resources>,
@@ -382,7 +390,7 @@ impl Session {
             return;
         }
         if direction > 0 {
-            let height = self.frames[self.first].as_ref().unwrap().height();
+            let height = self.active_frame(self.first).height();
             if self.offset >= height {
                 self.total_height -= height;
                 drop(self.frames[self.first].take());
@@ -391,7 +399,7 @@ impl Session {
             }
         } else if direction < 0 {
             let index = frame_index(self.last as i32 - 1);
-            let height = self.frames[index].as_ref().unwrap().height();
+            let height = self.active_frame(index).height();
             if self.total_height - self.offset - height >= i32::from(self.extent.height) {
                 self.last = index;
                 self.total_height -= height;
@@ -405,11 +413,7 @@ impl Session {
             let mut next = if self.first == self.last {
                 0
             } else {
-                self.frames[frame_index(self.last as i32 - 1)]
-                    .as_ref()
-                    .unwrap()
-                    .index
-                    + 1
+                self.active_frame(frame_index(self.last as i32 - 1)).index + 1
             };
             while self.total_height - self.offset < i32::from(self.extent.height)
                 && next < self.resources.table.len() as i32
@@ -425,7 +429,7 @@ impl Session {
             let mut next = if self.first == self.last {
                 self.resources.table.len() as i32 - 1
             } else {
-                self.frames[self.first].as_ref().unwrap().index - 1
+                self.active_frame(self.first).index - 1
             };
             while self.offset < 0 && next >= 0 {
                 let index = frame_index(self.first as i32 - 1);
