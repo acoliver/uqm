@@ -21,6 +21,7 @@ struct Fixture {
     font: Option<LoadedFont>,
     input: InputSession,
     directory: *mut uio::uio_DirHandle,
+    config_directory: *mut uio::uio_DirHandle,
     repository: *mut uio::uio_Repository,
     previous_content: *mut uqm_engine::io::ffi::uio_DirHandle,
     previous_config: *mut uqm_engine::io::ffi::uio_DirHandle,
@@ -49,7 +50,7 @@ impl Fixture {
         std::env::set_var("SDL_AUDIODRIVER", "dummy");
         let input = InputSession::default();
         // SAFETY: each serial fixture retains its mount, vectors and display until teardown.
-        let (repository, directory, previous_content, previous_config, font) = unsafe {
+        let (repository, directory, config_directory, previous_content, previous_config, font) = unsafe {
             assert_eq!(
                 TFB_InitGraphics(
                     1,
@@ -75,12 +76,25 @@ impl Fixture {
             )
             .is_null());
             let directory = uio::uio_openDir(repository, c"/".as_ptr(), 0);
+            assert!(!uio::uio_mountDir(
+                repository,
+                c"/config".as_ptr(),
+                1,
+                ptr::null_mut(),
+                ptr::null(),
+                path.as_ptr(),
+                ptr::null_mut(),
+                4,
+                ptr::null_mut()
+            )
+            .is_null());
+            let config_directory = uio::uio_openDir(repository, c"/config".as_ptr(), 0);
             let old = (
                 crate::mainloop::dir_prep::contentDir,
                 crate::mainloop::dir_prep::configDir,
             );
             crate::mainloop::dir_prep::contentDir = directory.cast();
-            crate::mainloop::dir_prep::configDir = directory.cast();
+            crate::mainloop::dir_prep::configDir = config_directory.cast();
             crate::resource::ffi_bridge::InitResourceSystem();
             crate::resource::ffi_bridge::LoadResourceIndex(
                 directory.cast(),
@@ -100,6 +114,7 @@ impl Fixture {
             (
                 repository,
                 directory,
+                config_directory,
                 old.0,
                 old.1,
                 LoadedFont::load(c"fixture.font").unwrap(),
@@ -114,6 +129,7 @@ impl Fixture {
             font: Some(font),
             input,
             directory,
+            config_directory,
             repository,
             previous_content,
             previous_config,
@@ -153,6 +169,7 @@ impl Drop for Fixture {
             crate::mainloop::dir_prep::contentDir = self.previous_content;
             crate::mainloop::dir_prep::configDir = self.previous_config;
             uio::uio_closeDir(self.directory);
+            uio::uio_closeDir(self.config_directory);
             uio::uio_closeRepository(self.repository);
             uio::uio_unInit();
         }
