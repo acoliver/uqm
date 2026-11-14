@@ -302,7 +302,7 @@ pub fn dump_planet_type(
 }
 
 pub fn dump_planet_types(kernel: &Kernel, out: &mut impl Write) -> io::Result<()> {
-    for (index, planet) in PLANET_ARRAY.0.iter().enumerate() {
+    for (index, planet) in PLANET_ARRAY.iter().enumerate() {
         dump_planet_type(kernel, out, index as i32, planet)?;
     }
     Ok(())
