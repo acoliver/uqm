@@ -5,11 +5,11 @@ use sha2::{Digest, Sha256};
 use std::cell::RefCell;
 use std::ffi::{c_void, CString};
 use uqm_rust::comm::locdata::{CPoint, CRect};
+use uqm_rust::engine::graphics::dcqueue_abi as queue;
 use uqm_rust::engine::graphics::{
     native_offscreen::OffscreenFormats, native_surface::CapturedSurface,
 };
 use uqm_rust::graphics::native_abi as c;
-use uqm_rust::planets::c_api;
 use uqm_rust::planets::render::c_api::render_native_topography;
 use uqm_rust::planets::render::topography::*;
 use uqm_rust::planets::sphere::palette::SurfacePalette;
@@ -251,7 +251,7 @@ impl Ram {
     unsafe fn new(w: i32, h: i32) -> Self {
         let formats = OffscreenFormats::new().unwrap();
         TFB_DrawCanvas_Initialize();
-        c_api::Init_DrawCommandQueue();
+        queue::Init_DrawCommandQueue();
         let context = CreateContextAux(c"topography parity".as_ptr());
         assert!(!context.is_null());
         let old_context = SetContext(context);
@@ -373,10 +373,10 @@ impl Drop for Ram {
             SetContextFGFrame(std::ptr::null_mut());
             drop(self.target.take());
             drop(self.old_frame.take());
-            c_api::TFB_FlushGraphicsEx(1);
+            queue::TFB_FlushGraphicsEx(1);
             SetContext(self.old_context);
             assert_ne!(DestroyContext(self.context), 0);
-            c_api::Uninit_DrawCommandQueue();
+            queue::Uninit_DrawCommandQueue();
         }
     }
 }

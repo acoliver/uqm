@@ -28,9 +28,34 @@ impl ContextFrame {
             length >= count,
             "pixel buffer is shorter than its stride and height"
         );
-        // SAFETY: this registered lease retains the descriptor and canvas on their owner thread.
-        // The validated buffer covers the complete requested stride; native operations clip to the image.
-        unsafe { copy_pixels(frame, pixels, width, height) }
+        // SAFETY: admission retains this descriptor; these copied fields do not borrow its pixels.
+        let (kind, image) = unsafe { ((*frame).Type, (*frame).image) };
+        assert_ne!(
+            kind, SCREEN_DRAWABLE as u16,
+            "screen frames require readback"
+        );
+        assert!(!image.is_null(), "frame has no pixel image");
+        let result = match pixels {
+            Pixels::Read(buffer) => {
+                // SAFETY: the validated output stride fits this buffer, and the lease retains the image.
+                unsafe {
+                    drawable_abi::ReadFramePixelColors(frame, buffer.as_mut_ptr(), width, height)
+                }
+            }
+            Pixels::Write(buffer) => {
+                // SAFETY: the validated input stride fits this buffer, and the lease retains the image.
+                unsafe {
+                    drawable_abi::WriteFramePixelColors(frame, buffer.as_ptr(), width, height)
+                }
+            }
+            Pixels::Indexes(buffer) => {
+                // SAFETY: the validated output stride fits this buffer, and the lease retains the image.
+                unsafe {
+                    drawable_abi::ReadFramePixelIndexes(frame, buffer.as_mut_ptr(), width, height)
+                }
+            }
+        };
+        assert_ne!(result, 0, "frame pixel operation failed");
     }
 
     pub fn read_colors(&self, pixels: &mut [Color], width: i32, height: i32) {
@@ -44,32 +69,4 @@ impl ContextFrame {
     pub fn read_indexes(&self, pixels: &mut [u8], width: i32, height: i32) {
         self.pixels(Pixels::Indexes(pixels), width, height);
     }
-}
-
-// Called only after frame admission and buffer-size validation above.
-unsafe fn copy_pixels(frame: FRAME, pixels: Pixels<'_>, width: i32, height: i32) {
-    // SAFETY: admission retains this descriptor; these copied fields do not borrow its pixels.
-    let (kind, image) = unsafe { ((*frame).Type, (*frame).image) };
-    assert_ne!(
-        kind, SCREEN_DRAWABLE as u16,
-        "screen frames require readback"
-    );
-    assert!(!image.is_null(), "frame has no pixel image");
-    let result = match pixels {
-        Pixels::Read(buffer) => {
-            // SAFETY: the caller validated the complete output stride and retained this image.
-            unsafe { drawable_abi::ReadFramePixelColors(frame, buffer.as_mut_ptr(), width, height) }
-        }
-        Pixels::Write(buffer) => {
-            // SAFETY: the caller validated the complete input stride and retained this image.
-            unsafe { drawable_abi::WriteFramePixelColors(frame, buffer.as_ptr(), width, height) }
-        }
-        Pixels::Indexes(buffer) => {
-            // SAFETY: the caller validated the complete output stride and retained this image.
-            unsafe {
-                drawable_abi::ReadFramePixelIndexes(frame, buffer.as_mut_ptr(), width, height)
-            }
-        }
-    };
-    assert_ne!(result, 0, "frame pixel operation failed");
 }

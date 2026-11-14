@@ -1,6 +1,6 @@
 //! Live surface generation and rotating sphere pixels from plangen.c.
 
-pub(crate) mod live {
+pub mod live {
     use crate::comm::locdata::{CPoint, CRect};
     use crate::graphics::context_abi::{ContextFrame, LoadedContext};
     use crate::graphics::drawable::Point;
@@ -56,7 +56,7 @@ pub(crate) mod live {
         image
     }
 
-    pub fn set_shield_throb_effect(
+    pub(crate) fn set_shield_throb_effect(
         state: &mut SphereState,
         shield: &ContextFrame,
         offset: i32,
@@ -85,7 +85,12 @@ pub(crate) mod live {
         });
     }
 
-    pub fn render_sphere(state: &mut SphereState, target: &ContextFrame, offset: i32, throb: bool) {
+    pub(crate) fn render_sphere(
+        state: &mut SphereState,
+        target: &ContextFrame,
+        offset: i32,
+        throb: bool,
+    ) {
         state.render_pixels(offset, throb);
         target.write_colors(&state.scratch, 75, 75);
         target.replace_hotspot(c::POINT { x: 38, y: 38 });
