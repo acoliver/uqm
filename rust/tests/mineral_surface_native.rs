@@ -1,6 +1,7 @@
 //! All mineral surface frames through the production visual and stamp path.
 use std::{ffi::CString, ptr};
 use uqm_rust::{
+    engine::graphics::native_offscreen::OffscreenFormats,
     graphics::{
         cmap_abi::{SetColorMap, UninitColorMaps},
         context_abi::*,
@@ -22,7 +23,6 @@ use uqm_rust::{
         model::SurfacePoint,
         visual_adapter::CffiSurfaceVisuals,
     },
-    planets::c_api::{FORMAT_CONV_SURF, SDL_SCREEN},
 };
 
 #[test]
@@ -34,13 +34,8 @@ fn every_category_and_gross_size_draws_native_content_pixels_and_hotspot() {
         .lines()
         .map(|row| row.split_whitespace().collect())
         .collect();
-    let format =
-        sdl2::surface::Surface::new(1, 1, sdl2::pixels::PixelFormatEnum::RGBA8888).unwrap();
-    let screen =
-        sdl2::surface::Surface::new(1, 1, sdl2::pixels::PixelFormatEnum::RGBX8888).unwrap();
+    let _formats = OffscreenFormats::new().unwrap();
     unsafe {
-        FORMAT_CONV_SURF = format.raw().cast();
-        SDL_SCREEN = screen.raw().cast();
         uio::uio_init();
         let repo = uio::uio_openRepository(0);
         let host = CString::new(base.to_str().unwrap()).unwrap();
@@ -234,7 +229,5 @@ fn every_category_and_gross_size_draws_native_content_pixels_and_hotspot() {
         uio::uio_closeRepository(repo);
         uio::uio_unInit();
         UninitColorMaps();
-        FORMAT_CONV_SURF = ptr::null_mut();
-        SDL_SCREEN = ptr::null_mut();
     }
 }

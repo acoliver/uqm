@@ -429,7 +429,7 @@ fn visit(
     }
     let mut world: PlanetDesc = unsafe { std::mem::zeroed() };
     world.radius = 400;
-    let plan_data: Vec<PlanetFrame> = vec![unsafe { std::mem::zeroed() }; 128];
+    let plan_data: Vec<PlanetFrame> = vec![PlanetFrame::default(); 128];
     let mut orbit = Orbit {
         rng: &mut rng,
         plan_data: &plan_data,
@@ -643,7 +643,7 @@ fn other_worlds_go_straight_to_the_default_orbital() {
 #[test]
 fn planet_zero_is_a_shattered_world_with_at_most_two_moons() {
     let mut rng = RandomContext::with_seed(5);
-    let plan_data: Vec<PlanetFrame> = vec![unsafe { std::mem::zeroed() }; 128];
+    let plan_data: Vec<PlanetFrame> = vec![PlanetFrame::default(); 128];
     let mut planets: Vec<PlanetDesc> = vec![unsafe { std::mem::zeroed() }; 16];
     generate_planets(&mut rng, &plan_data, 0, 2, &mut planets);
     assert_eq!(planets[0].data_index, SHATTERED_WORLD);

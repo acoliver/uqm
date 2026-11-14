@@ -212,56 +212,37 @@ fn zoom_scale(frame: i32, frame_count: i32) -> f64 {
     }
 }
 
-#[cfg(not(test))]
 pub(crate) mod live {
-    use super::{images::required_frame, zoom_scale, SphereState};
+    use super::{zoom_scale, SphereState};
     use crate::comm::locdata::{CColor, CRect};
-    use crate::graphics::context_abi::SetContextClipRect;
-    use crate::graphics::drawable_abi::SetContextFGFrame;
     use crate::graphics::{
         menu as draw,
         native_abi::{Color, DrawMode, POINT},
     };
-    use crate::mainloop::restart_menu::c_extern::uqm_sleep_thread_until as SleepThreadUntil;
-    use std::{cell::RefCell, ffi::c_void};
+    use std::cell::RefCell;
 
     use crate::engine::graphics::context_abi::ContextLease;
     use crate::engine::time::counter_abi::GetTimeCounter;
-
-    use crate::graphics::drawable_abi::GetFrameRect;
 
     use crate::planets::plangen::live::render_sphere;
 
     use crate::planets::plangen::live::set_shield_throb_effect;
 
-    use crate::planets::scan::live::repair_back_rect;
-
-    use crate::graphics::context_abi::SetContextDrawMode;
-
-    extern "C" {
-
-        static mut ScreenWidth: i32;
-        static mut ScreenHeight: i32;
-    }
-    use crate::graphics::gfx_common_abi::{SetGraphicScale, SetGraphicScaleMode};
-
-    fn stamp(frame: *mut c_void, x: i16, y: i16) {
-        draw::stamp(frame.cast(), POINT { x, y });
-    }
-
-    unsafe fn bounds(frame: *mut c_void) -> CRect {
-        let mut r = CRect::default();
-        GetFrameRect((frame).cast(), (&mut r as *mut CRect).cast());
-        r
-    }
+    use crate::planets::scan::repair_back_rect;
 
     fn draw_planet_sphere(state: &SphereState, x: i32, y: i32) {
         let images = state.images();
         draw::batch();
-        stamp(
-            required_frame(&images.sphere.lease(), state.rotation.frame as usize).cast(),
-            x as i16,
-            y as i16,
+        draw::stamp(
+            images
+                .sphere
+                .lease()
+                .context_frame(state.rotation.frame as usize)
+                .as_raw(),
+            POINT {
+                x: x as i16,
+                y: y as i16,
+            },
         );
         if let Some(object) = images.object() {
             let index = if state.rotation.throb {
@@ -269,22 +250,29 @@ pub(crate) mod live {
             } else {
                 0
             };
-            stamp(required_frame(&object, index).cast(), x as i16, y as i16);
+            draw::stamp(
+                object.context_frame(index).as_raw(),
+                POINT {
+                    x: x as i16,
+                    y: y as i16,
+                },
+            );
         }
         draw::unbatch();
     }
 
-    pub unsafe fn draw_default_planet_sphere(planet: &ContextLease, state: &SphereState) {
+    pub fn draw_default_planet_sphere(planet: &ContextLease, state: &SphereState) {
+        let (screen_width, screen_height) = planet.screen_dimensions();
         planet.with_selected(|| {
             draw_planet_sphere(
                 state,
-                (ScreenWidth - 78) / 2,
-                (ScreenHeight - 13 - 75 - 5 - 9) / 2,
+                (screen_width - 78) / 2,
+                (screen_height - 13 - 75 - 5 - 9) / 2,
             );
         });
     }
 
-    pub unsafe fn init_sphere_rotation(state: &mut SphereState, direction: i32, pulsing: bool) {
+    pub fn init_sphere_rotation(state: &mut SphereState, direction: i32, pulsing: bool) {
         state.reset_rotation(direction, pulsing);
         if state.rotation.throb {
             let rect = state
@@ -304,39 +292,41 @@ pub(crate) mod live {
         prepare_next_rotation_frame(state);
     }
 
-    unsafe fn prepare_next_rotation_frame(state: &mut SphereState) {
+    fn prepare_next_rotation_frame(state: &mut SphereState) {
         let mut rotation = state.rotation;
-        rotation.advance(ScreenWidth - 78);
+        rotation.advance(state.width as i32);
         state.rotation = rotation;
-        let target = required_frame(&state.images().sphere.lease(), rotation.frame as usize);
-        render_sphere(state, target, rotation.point, rotation.throb);
+        let target = state
+            .images()
+            .sphere
+            .lease()
+            .context_frame(rotation.frame as usize);
+        render_sphere(state, &target, rotation.point, rotation.throb);
         if rotation.throb {
-            let shield = required_frame(
-                &state
-                    .images()
-                    .shield
-                    .as_ref()
-                    .unwrap_or_else(|| panic!("orbit shield is not initialized"))
-                    .lease(),
-                0,
-            );
-            let throb = required_frame(
-                &state
-                    .images()
-                    .throb
-                    .as_ref()
-                    .unwrap_or_else(|| panic!("orbit throb is not initialized"))
-                    .lease(),
-                rotation.frame as usize,
-            );
-            set_shield_throb_effect(state, shield, rotation.point, throb);
+            let shield = state
+                .images()
+                .shield
+                .as_ref()
+                .unwrap_or_else(|| panic!("orbit shield is not initialized"))
+                .lease()
+                .context_frame(0);
+            let throb = state
+                .images()
+                .throb
+                .as_ref()
+                .unwrap_or_else(|| panic!("orbit throb is not initialized"))
+                .lease()
+                .context_frame(rotation.frame as usize);
+            set_shield_throb_effect(state, &shield, rotation.point, &throb);
         }
     }
 
-    pub unsafe fn zoom_in_planet_sphere(planet: &ContextLease, state: &RefCell<SphereState>) {
-        let width = ScreenWidth - 78;
-        let scan_height = ScreenHeight - 13 - 75 - 5;
+    pub fn zoom_in_planet_sphere(planet: &ContextLease, state: &RefCell<SphereState>) {
+        let (screen_width, screen_height) = planet.screen_dimensions();
+        let width = screen_width - 78;
+        let scan_height = screen_height - 13 - 75 - 5;
         let frame_count = (840 * 6 / 5) / (840 / 24);
+        let mut pacer = crate::engine::threading::pacing::GameThreadPacer::new(planet.clone());
         let corner = crate::math::random() as i32;
         let dx = 1 - (corner & 1) * 2;
         let dy = 1 - (corner & 2);
@@ -375,50 +365,57 @@ pub(crate) mod live {
             if i > 0 {
                 repair_back_rect(planet, &repair);
             }
-            let old_mode = SetGraphicScaleMode(1);
-            let old_scale = SetGraphicScale((256.0 * scale + 0.5) as i32);
-            draw_planet_sphere(&state.borrow(), x, y);
-            SetGraphicScale(old_scale);
-            SetGraphicScaleMode(old_mode);
+            planet.with_scale(1, (256.0 * scale + 0.5) as i32, || {
+                draw_planet_sphere(&state.borrow(), x, y);
+            });
             draw::unbatch();
             repair.corner.x = x as i16 + frame_rect.corner.x;
             repair.corner.y = y as i16 + frame_rect.corner.y;
             prepare_next_rotation_frame(&mut state.borrow_mut());
-            SleepThreadUntil(next_time);
+            pacer.sleep_until(next_time);
         }
     }
 
-    pub unsafe fn rotate_planet_sphere(
+    pub fn rotate_planet_sphere(
         planet: &ContextLease,
         state: &RefCell<SphereState>,
         animation: &crate::engine::kernel::planet_animation::PlanetAnimation,
         keep_rate: bool,
     ) {
-        if !animation.rotation_due(GetTimeCounter(), keep_rate, ScreenWidth - 78) {
+        if !animation.rotation_due(
+            GetTimeCounter(),
+            keep_rate,
+            planet.screen_dimensions().0 - 78,
+        ) {
             return;
         }
         draw_default_planet_sphere(planet, &state.borrow());
         prepare_next_rotation_frame(&mut state.borrow_mut());
     }
 
-    unsafe fn tint_frame(offscreen: &ContextLease, state: &SphereState, color: CColor) {
+    fn tint_frame(offscreen: &ContextLease, state: &SphereState, color: CColor) {
         offscreen.with_selected(|| {
-            SetContextFGFrame(required_frame(&state.images().tint.lease(), 0).cast());
-            SetContextClipRect(std::ptr::null_mut());
-            let rect = draw::clip();
-            stamp(required_frame(&state.topography(), 0).cast(), 0, 0);
-            let old_mode = SetContextDrawMode(DrawMode {
-                kind: 1,
-                factor: 255 / 2,
-            });
-            draw::foreground(Color {
-                r: color.r,
-                g: color.g,
-                b: color.b,
-                a: color.a,
-            });
-            draw::fill(rect);
-            SetContextDrawMode(old_mode);
+            offscreen.set_frame(state.images().tint.lease().context_frame(0));
+            offscreen.clear_clip();
+            let rect = offscreen.clip_rect();
+            offscreen.draw_stamp(&state.topography().context_frame(0), POINT { x: 0, y: 0 });
+            offscreen.with_draw_mode(
+                DrawMode {
+                    kind: 1,
+                    factor: 255 / 2,
+                },
+                || {
+                    offscreen.fill_rectangle(
+                        Color {
+                            r: color.r,
+                            g: color.g,
+                            b: color.b,
+                            a: color.a,
+                        },
+                        rect,
+                    );
+                },
+            );
         });
     }
 
@@ -426,7 +423,7 @@ pub(crate) mod live {
         a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a
     }
 
-    pub unsafe fn draw_planet(
+    pub fn draw_planet(
         offscreen: &ContextLease,
         state: &mut SphereState,
         tint_y: i32,
@@ -442,10 +439,13 @@ pub(crate) mod live {
                 a: 255,
             },
         ) {
-            stamp(required_frame(&state.topography(), 0).cast(), 0, 0);
+            draw::stamp(
+                state.topography().context_frame(0).as_raw(),
+                POINT { x: 0, y: 0 },
+            );
         } else {
-            let frame = required_frame(&state.images().tint.lease(), 0);
-            let height = i32::from(bounds(frame.cast()).height);
+            let frame = state.images().tint.lease().context_frame(0);
+            let height = i32::from(frame.rect().extent.height);
             let cached = state.images().tint_color;
             if !same_rgb(
                 color,
@@ -465,7 +465,10 @@ pub(crate) mod live {
                 };
             }
             if tint_y < height - 1 {
-                stamp(required_frame(&state.topography(), 0).cast(), 0, 0);
+                draw::stamp(
+                    state.topography().context_frame(0).as_raw(),
+                    POINT { x: 0, y: 0 },
+                );
             }
             if tint_y >= 0 {
                 let old = draw::clip();
@@ -476,7 +479,7 @@ pub(crate) mod live {
                     },
                     ..old
                 });
-                stamp(frame.cast(), 0, 0);
+                draw::stamp(frame.as_raw(), POINT { x: 0, y: 0 });
                 draw::set_clip(old);
             }
         }

@@ -104,7 +104,7 @@ impl Harness {
             world.current_star = Some(uqm_rust::engine::StarId(0));
         });
         let mut next = uqm_rust::engine::world::generation::SolarSys::new(
-            &uqm_rust::planets::tables::PLANET_ARRAY.0,
+            &uqm_rust::planets::tables::PLANET_ARRAY,
             self.star[0].star_type,
             self.star[0].index,
             std::mem::replace(&mut self.state.sys.rng, RandomContext::with_seed(12345)),

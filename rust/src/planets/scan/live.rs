@@ -112,22 +112,7 @@ fn cursor_frame(scan: &ScanState) -> ContextFrame {
     scan.cursor_image.indexed_frame(105)
 }
 
-pub(crate) fn repair_back_rect(context: &ContextLease, rect: &CRect) {
-    let old = context.clip_rect();
-    let mut new = crate::graphics::native_abi::RECT {
-        corner: crate::graphics::native_abi::POINT {
-            x: rect.corner.x + old.corner.x,
-            y: rect.corner.y + old.corner.y,
-        },
-        extent: crate::graphics::native_abi::EXTENT {
-            width: rect.width,
-            height: rect.height,
-        },
-    };
-    new.extent.height += new.corner.y & 1;
-    new.corner.y &= !1;
-    context.restore_screen_region(new);
-}
+use super::repair_back_rect;
 
 unsafe fn erase_coarse(planet: &ContextLease, scan: &ScanState) {
     planet.select();

@@ -391,9 +391,8 @@ use uqm_rust::planets::generate::SystemGenerator;
 
 unsafe fn binary_palettes() {
     use uqm_rust::strings::{sresins, string_table as strings};
-    for planet in &uqm_rust::planets::tables::PLANET_ARRAY.0 {
+    for planet in &uqm_rust::planets::tables::PLANET_ARRAY {
         for resource in [planet.cmap_instance, planet.xlat_tab_instance] {
-            let resource = std::ffi::CStr::from_ptr(resource);
             for index in [0, 1, 2, 3, u16::MAX] {
                 let table = sresins::LoadStringTableInstance(resource.as_ptr());
                 assert!(!table.is_null());

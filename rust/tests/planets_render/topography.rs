@@ -5,8 +5,11 @@ use sha2::{Digest, Sha256};
 use std::cell::RefCell;
 use std::ffi::{c_void, CString};
 use uqm_rust::comm::locdata::{CPoint, CRect};
+use uqm_rust::engine::graphics::{
+    native_offscreen::OffscreenFormats, native_surface::CapturedSurface,
+};
 use uqm_rust::graphics::native_abi as c;
-use uqm_rust::planets::c_api::{self, CapturedSurface, FORMAT_CONV_SURF, SDL_SCREEN};
+use uqm_rust::planets::c_api;
 use uqm_rust::planets::render::c_api::render_native_topography;
 use uqm_rust::planets::render::topography::*;
 use uqm_rust::planets::sphere::palette::SurfacePalette;
@@ -42,6 +45,37 @@ struct OraclePalette {
 }
 
 #[repr(C)]
+struct OracleFrame {
+    kind: u8,
+    tectonics: u8,
+    atmosphere: u8,
+    elements: [uqm_rust::engine::world::planet::ElementEntry; 8],
+    colors: *const std::ffi::c_char,
+    translation: *const std::ffi::c_char,
+    faults: u16,
+    fault_depth: i16,
+    blemishes: u16,
+    elevation: i16,
+}
+
+impl From<uqm_rust::engine::world::planet::PlanetFrame> for OracleFrame {
+    fn from(frame: uqm_rust::engine::world::planet::PlanetFrame) -> Self {
+        Self {
+            kind: frame.type_,
+            tectonics: frame.base_tectonics,
+            atmosphere: frame.atmo_and_density,
+            elements: frame.useful_elements,
+            colors: frame.cmap_instance.as_ptr(),
+            translation: frame.xlat_tab_instance.as_ptr(),
+            faults: frame.num_faults,
+            fault_depth: frame.fault_depth,
+            blemishes: frame.num_blemishes,
+            elevation: frame.base_elevation,
+        }
+    }
+}
+
+#[repr(C)]
 struct Operations {
     frame: unsafe extern "C" fn(c::FRAME) -> c::FRAME,
     origin: unsafe extern "C" fn(c::POINT) -> c::POINT,
@@ -49,7 +83,7 @@ struct Operations {
     set_clip: unsafe extern "C" fn(*mut c::RECT) -> c::BOOLEAN,
     colors: unsafe extern "C" fn(c::STRING) -> *mut u8,
     batch: unsafe extern "C" fn(*mut c::PRIMITIVE, u32, u8),
-    table: *const uqm_rust::engine::world::planet::PlanetFrame,
+    table: *const OracleFrame,
     system: *mut OraclePalette,
 }
 
@@ -211,18 +245,11 @@ struct Ram {
     old_frame: Option<CapturedSurface>,
     width: i32,
     height: i32,
-    _format: sdl2::surface::Surface<'static>,
-    _screen: sdl2::surface::Surface<'static>,
+    _formats: OffscreenFormats,
 }
 impl Ram {
     unsafe fn new(w: i32, h: i32) -> Self {
-        assert!(FORMAT_CONV_SURF.is_null() && SDL_SCREEN.is_null());
-        let format =
-            sdl2::surface::Surface::new(1, 1, sdl2::pixels::PixelFormatEnum::RGBA8888).unwrap();
-        let screen =
-            sdl2::surface::Surface::new(1, 1, sdl2::pixels::PixelFormatEnum::RGBX8888).unwrap();
-        FORMAT_CONV_SURF = format.raw().cast();
-        SDL_SCREEN = screen.raw().cast();
+        let formats = OffscreenFormats::new().unwrap();
         TFB_DrawCanvas_Initialize();
         c_api::Init_DrawCommandQueue();
         let context = CreateContextAux(c"topography parity".as_ptr());
@@ -241,8 +268,7 @@ impl Ram {
             old_frame: Some(old_frame),
             width: w,
             height: h,
-            _format: format,
-            _screen: screen,
+            _formats: formats,
         }
     }
     fn target(&self) -> c::FRAME {
@@ -351,8 +377,6 @@ impl Drop for Ram {
             SetContext(self.old_context);
             assert_ne!(DestroyContext(self.context), 0);
             c_api::Uninit_DrawCommandQueue();
-            FORMAT_CONV_SURF = std::ptr::null_mut();
-            SDL_SCREEN = std::ptr::null_mut();
         }
     }
 }
@@ -476,7 +500,7 @@ pub fn full_c_fixture_core_and_host_parity(system_rng: &uqm_rust::math::RandomCo
             } else {
                 Ram::new(case.width.max(1) + 3, case.height.max(1) + 2)
             };
-            let mut table = PLANET_ARRAY.0;
+            let mut table = PLANET_ARRAY;
             if let Some(base) = case.base {
                 table[case.planet].base_elevation = base;
             }
@@ -531,6 +555,7 @@ pub fn full_c_fixture_core_and_host_parity(system_rng: &uqm_rust::math::RandomCo
                 kind: case.mode,
                 factor: case.factor,
             };
+            let oracle_table = table.map(OracleFrame::from);
             let ops = Operations {
                 frame,
                 origin,
@@ -538,7 +563,7 @@ pub fn full_c_fixture_core_and_host_parity(system_rng: &uqm_rust::math::RandomCo
                 set_clip,
                 colors: GetColorMapAddress,
                 batch,
-                table: table.as_ptr(),
+                table: oracle_table.as_ptr(),
                 system: &mut system,
             };
             let palette = (!case.missing).then_some(TopographyPalette {

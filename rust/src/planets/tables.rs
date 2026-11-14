@@ -5,7 +5,7 @@
 //! immutable definitions directly.
 
 use crate::engine::world::planet::{ElementEntry, PlanetFrame};
-use std::ffi::{c_char, CStr};
+use std::ffi::CStr;
 
 use crate::comm::dispatch::CPoint;
 use crate::savegame::runtime::star::{CStarDesc, CATALOG_LEN};
@@ -16,23 +16,6 @@ pub const STAR_CATALOG_LEN: usize = CATALOG_LEN;
 pub const ELEMENT_COUNT: usize = 133;
 /// `NUMBER_OF_PLANET_TYPES`.
 pub const PLANET_TYPE_COUNT: usize = 59;
-
-/// An immutable table whose pointers all refer to `'static` NUL-terminated
-/// strings, so sharing it between threads is sound.
-///
-/// The manual `Sync` implementation must not make interior-mutable values shareable.
-///
-/// ```compile_fail
-/// use uqm_rust::planets::tables::SharedTable;
-/// fn require_sync<T: Sync>(_: T) {}
-/// require_sync(SharedTable(std::cell::Cell::new(0_u8)));
-/// ```
-#[repr(transparent)]
-pub struct SharedTable<T>(pub T);
-
-// SAFETY: PlanetFrame has no interior mutability. Sharing its scalar data and
-// const resource-name pointers does not dereference or modify those pointers.
-unsafe impl Sync for SharedTable<[PlanetFrame; PLANET_TYPE_COUNT]> {}
 
 const fn star(x: i16, y: i16, star_type: u8, index: u8, prefix: u8, postfix: u8) -> CStarDesc {
     CStarDesc {
@@ -49,10 +32,6 @@ const fn mineral(element: u8, density: u8) -> ElementEntry {
         element_type: element,
         density,
     }
-}
-
-const fn resource(name: &'static CStr) -> *const c_char {
-    name.as_ptr()
 }
 
 const fn frame(
@@ -78,8 +57,8 @@ const fn frame(
             mineral(minerals[6].0, minerals[6].1),
             mineral(minerals[7].0, minerals[7].1),
         ],
-        cmap_instance: resource(color_map),
-        xlat_tab_instance: resource(translate_table),
+        cmap_instance: color_map,
+        xlat_tab_instance: translate_table,
         num_faults,
         fault_depth,
         num_blemishes,
@@ -88,7 +67,6 @@ const fn frame(
 }
 
 /// `starmap_array`: every star of the universe, then the end sentinel.
-#[export_name = "starmap_array"]
 pub static STARMAP_ARRAY: [CStarDesc; STAR_CATALOG_LEN] = [
     star(5007, 35, 0x27, 0, 6, 74),
     star(708, 41, 0x87, 0, 7, 91),
@@ -613,7 +591,6 @@ pub static STARMAP_ARRAY: [CStarDesc; STAR_CATALOG_LEN] = [
 ];
 
 /// `element_array`: the category of each element, in element order.
-#[export_name = "element_array"]
 pub static ELEMENT_ARRAY: [u8; ELEMENT_COUNT] = [
     0, 0, 0, 2, 2, 0, 0, 1, 1, 3, 2, 2, 2, 0, 0, 1, 1, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
     0, 0, 1, 3, 2, 2, 2, 2, 2, 2, 6, 2, 2, 5, 5, 2, 2, 2, 2, 2, 1, 3, 2, 2, 4, 4, 4, 4, 4, 4, 4, 4,
@@ -623,8 +600,7 @@ pub static ELEMENT_ARRAY: [u8; ELEMENT_COUNT] = [
 ];
 
 /// `planet_array`: one frame per world type.
-#[export_name = "planet_array"]
-pub static PLANET_ARRAY: SharedTable<[PlanetFrame; PLANET_TYPE_COUNT]> = SharedTable([
+pub static PLANET_ARRAY: [PlanetFrame; PLANET_TYPE_COUNT] = [
     frame(
         0x84,
         40,
@@ -1798,4 +1774,4 @@ pub static PLANET_ARRAY: SharedTable<[PlanetFrame; PLANET_TYPE_COUNT]> = SharedT
         (10, 2),
         (8, 29),
     ),
-]);
+];
