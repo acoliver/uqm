@@ -2338,8 +2338,6 @@ pub use crate::state::c_api::write_state_file;
 pub use crate::state::c_api::seek_state_file;
 pub use crate::engine::world::queues::IpGroup as IP_GROUP;
 
-pub use crate::navigation::groups::write_group_header;
-
 pub const STAR_STRING_BASE: _bindgen_ty_25 = 0;
 pub const DEVICE_STRING_BASE: _bindgen_ty_25 = 133;
 pub const CARGO_STRING_BASE: _bindgen_ty_25 = 162;
