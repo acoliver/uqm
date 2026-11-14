@@ -5,6 +5,7 @@ use super::{
     native_abi::DrawMode,
 };
 
+#[derive(Clone, Copy)]
 enum State {
     DrawMode(DrawMode),
     Scale(i32, i32),
@@ -12,13 +13,12 @@ enum State {
 
 struct Restore<'a> {
     context: &'a ContextLease,
-    state: Option<State>,
+    state: State,
 }
 
 impl Drop for Restore<'_> {
     fn drop(&mut self) {
-        self.context
-            .replace_render_state(self.state.take().expect("render state restore"));
+        self.context.replace_render_state(self.state);
     }
 }
 
@@ -39,7 +39,7 @@ impl ContextLease {
     pub fn with_draw_mode<R>(&self, mode: DrawMode, draw: impl FnOnce() -> R) -> R {
         let restore = Restore {
             context: self,
-            state: Some(self.replace_render_state(State::DrawMode(mode))),
+            state: self.replace_render_state(State::DrawMode(mode)),
         };
         let result = draw();
         drop(restore);
@@ -49,7 +49,7 @@ impl ContextLease {
     pub fn with_scale<R>(&self, mode: i32, scale: i32, draw: impl FnOnce() -> R) -> R {
         let restore = Restore {
             context: self,
-            state: Some(self.replace_render_state(State::Scale(mode, scale))),
+            state: self.replace_render_state(State::Scale(mode, scale)),
         };
         let result = draw();
         drop(restore);

@@ -152,12 +152,12 @@ fn generated_shield_and_rotating_frames_use_the_supplied_owners() {
             },
             || {
                 context.with_scale(1, 137, || {
+                    // SAFETY: the selected retained context owns this serialized draw state.
                     let mode = unsafe { crate::graphics::context_abi::GetContextDrawMode() };
                     assert_eq!((mode.kind, mode.factor), (1, 83));
-                    assert_eq!(
-                        unsafe { crate::graphics::gfx_common_abi::GetGraphicScale() },
-                        137
-                    );
+                    // SAFETY: the surrounding scale scope holds the admitted graphics context.
+                    let scale = unsafe { crate::graphics::gfx_common_abi::GetGraphicScale() };
+                    assert_eq!(scale, 137);
                 });
             },
         );
