@@ -1,34 +1,32 @@
-#[cfg(not(test))]
-use crate::comm::live::spahome as live;
-use crate::comm::races::script::{animation, as_comm_data};
-use crate::comm::races::spahome::*;
-use crate::comm::{types::CommData, Comm};
-use crate::engine::battle::Cx;
+use super::{
+    RACE_ALT_MUSIC, RACE_COLOR_MAP, RACE_CONVERSATION_PHRASES, RACE_FONT, RACE_MUSIC,
+    RACE_PMAP_ANIM,
+};
+use crate::comm::races::descriptor::{Color, CommDescriptor, Point};
+use crate::comm::races::script::animation;
 
-use crate::comm::locdata::{CColor, CLocData, CPoint};
-
-pub(crate) fn descriptor(screen_width: i32) -> CLocData {
-    let mut d = CLocData {
-        alien_frame_res: RACE_PMAP_ANIM.as_ptr().cast(),
-        alien_font_res: RACE_FONT.as_ptr().cast(),
-        alien_colormap_res: RACE_COLOR_MAP.as_ptr().cast(),
-        alien_song_res: RACE_MUSIC.as_ptr().cast(),
-        alien_alt_song_res: RACE_ALT_MUSIC.as_ptr().cast(),
+pub(crate) fn descriptor(screen_width: i32) -> CommDescriptor {
+    let mut d = CommDescriptor {
+        alien_frame_res: Some(RACE_PMAP_ANIM),
+        alien_font_res: Some(RACE_FONT),
+        alien_colormap_res: Some(RACE_COLOR_MAP),
+        alien_song_res: Some(RACE_MUSIC),
+        alien_alt_song_res: Some(RACE_ALT_MUSIC),
         alien_song_flags: 1,
-        conversation_phrases_res: RACE_CONVERSATION_PHRASES.as_ptr().cast(),
-        alien_text_fcolor: CColor {
+        conversation_phrases_res: Some(RACE_CONVERSATION_PHRASES),
+        alien_text_fcolor: Color {
             r: 255,
             g: 255,
             b: 255,
             a: 255,
         },
-        alien_text_bcolor: CColor {
+        alien_text_bcolor: Color {
             r: 0,
             g: 0,
             b: 0,
             a: 255,
         },
-        alien_text_baseline: CPoint {
+        alien_text_baseline: Point {
             x: (1 + ((screen_width - 80) >> 1)) as i16,
             y: 0,
         },
@@ -36,7 +34,7 @@ pub(crate) fn descriptor(screen_width: i32) -> CLocData {
         alien_text_align: 1,
         alien_text_valign: 0,
         num_animations: 14,
-        ..CLocData::default()
+        ..CommDescriptor::default()
     };
     for (i, (start, frames, flags, frame_rate, restart_rate, mask)) in [
         (1, 3, 2, (42, 0), (840, 2520), 0),
@@ -74,33 +72,5 @@ pub(crate) fn descriptor(screen_width: i32) -> CLocData {
         d.alien_ambient_array[i] = animation(start, frames, flags, frame_rate, restart_rate);
         d.alien_ambient_array[i].block_mask = mask;
     }
-    #[cfg(not(test))]
-    {
-        d.init_encounter_func = Some(live::intro);
-        d.post_encounter_func = Some(live::post);
-        d.uninit_encounter_func = Some(live::uninit);
-    }
     d
-}
-
-pub(crate) fn init(_comm: &mut Comm, _cx: &mut Cx<'_>) -> CommData {
-    #[cfg(not(test))]
-    {
-        // SAFETY: initialization holds the exclusive game-thread session and Cx loans.
-        unsafe { as_comm_data(&live::init_spahome_comm(_comm, _cx)) }
-    }
-    #[cfg(test)]
-    {
-        as_comm_data(&descriptor(320))
-    }
-}
-
-pub(crate) fn intro(_comm: &mut Comm, _cx: &mut Cx<'_>) {
-    #[cfg(not(test))]
-    live::intro(_comm, _cx);
-}
-
-pub(crate) fn post_encounter(_comm: &mut Comm, _cx: &mut Cx<'_>) {
-    #[cfg(not(test))]
-    live::post(_comm, _cx);
 }

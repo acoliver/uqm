@@ -1,7 +1,7 @@
 //! Ilwrath dialogue, ported from the original C script.
 
 pub(crate) use super::encounter::EncounterApi;
-pub(crate) use crate::comm::locdata::CLocData;
+pub(crate) use crate::comm::races::descriptor::CommDescriptor;
 pub(crate) use crate::engine::StoryKey;
 mod phrases;
 use phrases::*;
@@ -29,7 +29,7 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
             Handler::GodsSpeak => self.gods_speak(r),
         }
     }
-    pub(crate) fn initialize(&mut self, _desc: &mut CLocData) {
+    pub(crate) fn initialize(&mut self, _desc: &mut CommDescriptor) {
         let peaceful = self.api.get(StoryKey::PROBE_ILWRATH_ENCOUNTER) != 0
             || self.api.get(StoryKey::GLOBAL_FLAGS_AND_DATA) & ((1 << 4) | (1 << 5)) != 0
             || self.api.activity() as u8 == 5;
@@ -469,7 +469,6 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
 }
 
 #[cfg(test)]
-use crate::comm::descriptors::ilwrath::descriptor;
-
-#[cfg(test)]
 mod tests;
+
+pub(crate) mod descriptor;

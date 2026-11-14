@@ -1,6 +1,8 @@
+use super::descriptor::descriptor;
 use super::*;
 use crate::comm::races::encounter::testing::{Effect, Fake};
 use crate::comm::races::script::DialogueHost;
+use crate::engine::world::activity::ActivityKind;
 use crate::engine::StoryKey;
 
 type Api = Fake<Handler, ()>;
@@ -369,7 +371,7 @@ fn all_hostile_greeting_counter_values_and_identities_preserve_byte_postincremen
 #[test]
 fn intro_outtakes_short_circuits_and_friendly_hello_does_not_advance_visits() {
     let mut f = Api {
-        activity: crate::comm::dispatch::WON_LAST_BATTLE | 0x100,
+        activity: ActivityKind::WonLastBattle as u16 | 0x100,
         ..Api::default()
     };
     f.put(StoryKey::SHOFIXTI_STACK2, 3);
@@ -412,12 +414,9 @@ fn descriptor_matches_resources_text_layout_and_all_animation_fields() {
         (d.alien_song_res, "comm.shofixti.music"),
         (d.conversation_phrases_res, "comm.shofixti.dialogue"),
     ] {
-        assert_eq!(
-            unsafe { std::ffi::CStr::from_ptr(ptr) }.to_str().unwrap(),
-            expected
-        );
+        assert_eq!(ptr.unwrap().to_str().unwrap(), expected);
     }
-    assert!(d.alien_alt_song_res.is_null());
+    assert!(d.alien_alt_song_res.is_none());
     assert_eq!(d.alien_song_flags, 0);
     assert_eq!((d.alien_text_align, d.alien_text_valign), (1, 0));
     assert_eq!(
@@ -473,5 +472,5 @@ fn descriptor_matches_resources_text_layout_and_all_animation_fields() {
             e
         );
     }
-    assert!(d.alien_number_speech.is_null());
+    assert!(d.alien_number_speech.is_none());
 }

@@ -1,7 +1,6 @@
-use crate::comm::descriptors::comandr::descriptor;
 use crate::comm::host::Host;
 use crate::comm::races::comandr::*;
-use crate::comm::{locdata::CLocData, Comm};
+use crate::comm::Comm;
 use crate::engine::battle::Cx;
 
 fn api<'a, 'b>(
@@ -38,15 +37,13 @@ pub(crate) fn uninit(_comm: &mut Comm, _cx: &mut Cx<'_>) -> u16 {
     0
 }
 
-/// Build the Earth Commander descriptor for this session's campaign state.
-pub fn init_commander_comm(comm: &mut Comm, cx: &mut Cx<'_>) -> CLocData {
-    let mut desc = descriptor();
-    configure(
-        &mut desc,
-        api(comm, cx).get(StoryKey::RADIOACTIVES_PROVIDED) != 0,
-    );
-    // setSegue(peace) also updates the legacy battle bit used by dispatch.
+/// Initialize the selected Commander script after content configuration.
+pub(crate) fn initialize(
+    comm: &mut Comm,
+    cx: &mut Cx<'_>,
+    _desc: &mut crate::comm::races::descriptor::CommDescriptor,
+) {
+    // The first pass configures only content; the selected pass sets the segue.
     api(comm, cx).set(StoryKey::BATTLE_SEGUE, 0);
     crate::comm::ffi::rust_set_segue(comm, 0);
-    desc
 }

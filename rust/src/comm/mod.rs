@@ -21,7 +21,6 @@ pub mod animation;
 pub(crate) mod comm_abi;
 mod commanim_abi;
 mod commglue_abi;
-pub(crate) mod descriptors;
 pub mod dispatch;
 pub mod encounter;
 pub mod ffi;
@@ -31,7 +30,7 @@ pub mod glue;
 pub mod hail;
 pub(crate) mod host;
 mod input;
-pub mod lifecycle;
+pub(crate) mod lifecycle;
 pub(crate) mod live;
 pub mod locdata;
 mod oscill_abi;
@@ -56,15 +55,15 @@ pub(crate) mod text_layout;
 pub mod track;
 pub mod types;
 
+pub use races::descriptor::{AnimationDescriptor, MAX_ANIMATIONS};
+
 pub use animation::{AnimContext, CommAnimState};
 pub use oscilloscope::Oscilloscope;
 pub use response::{ResponseEntry, ResponseSystem};
 pub use state::Comm;
 pub use subtitle::{SubtitleChunk, SubtitleTracker};
 pub use track::{SoundChunk, TrackManager};
-pub use types::{
-    AnimationDescData, CommData, CommError, CommIntroMode, CommResult, MAX_ANIMATIONS,
-};
+pub use types::{CommData, CommError, CommIntroMode, CommResult};
 
 #[cfg(test)]
 pub(crate) fn with_test_context<R>(

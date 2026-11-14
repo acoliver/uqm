@@ -1,7 +1,6 @@
-use crate::comm::descriptors::chmmr::descriptor;
 use crate::comm::host::Host;
 use crate::comm::races::chmmr::*;
-use crate::comm::{locdata::CLocData, Comm};
+use crate::comm::Comm;
 use crate::engine::battle::Cx;
 fn run(comm: &mut Comm, cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, Host<'_, '_, Handler>>)) {
     let mut api = Host::new(comm, cx, callback);
@@ -84,34 +83,10 @@ pub(crate) fn uninit(_comm: &mut Comm, _cx: &mut Cx<'_>) -> u16 {
     0
 }
 /// Initialize the encounter on the game thread.
-pub fn init_chmmr_comm(comm: &mut Comm, cx: &mut Cx<'_>) -> CLocData {
-    let desc = descriptor();
+pub(crate) fn initialize(
+    comm: &mut Comm,
+    cx: &mut Cx<'_>,
+    _desc: &mut crate::comm::races::descriptor::CommDescriptor,
+) {
     run(comm, cx, |s| s.initialize());
-    desc
-}
-
-mod api {
-
-    use super::Handler;
-
-    use crate::comm::races::chmmr::api::*;
-    use crate::engine::StoryKey;
-
-    impl ChmmrApi for crate::comm::host::Host<'_, '_, Handler> {
-        fn refit(&mut self) {
-            use crate::comm::races::script::DialogueHost;
-            let starbase = self.get(StoryKey::STARBASE_AVAILABLE) != 0;
-
-            {
-                refit(&mut self.cx.borrow_mut().world.data, starbase);
-            }
-        }
-        fn intro_mode(&mut self, mode: i32, duration: i32) {
-            let comm = &mut **self.comm.borrow_mut();
-            self.cx.borrow_mut().with_legacy(|| {
-                use crate::comm::comm_abi::set_comm_intro_mode;
-                set_comm_intro_mode(comm, mode as u32, duration as u32);
-            })
-        }
-    }
 }

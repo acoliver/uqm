@@ -1,7 +1,6 @@
-use crate::comm::descriptors::orz::descriptor;
 use crate::comm::host::Host;
 use crate::comm::races::orz::*;
-use crate::comm::{locdata::CLocData, Comm};
+use crate::comm::Comm;
 use crate::engine::battle::Cx;
 fn run(comm: &mut Comm, cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, Host<'_, '_, Handler>>)) {
     let mut api = Host::new(comm, cx, callback);
@@ -75,10 +74,12 @@ pub(crate) fn uninit(_comm: &mut Comm, _cx: &mut Cx<'_>) -> u16 {
     0
 }
 /// Initialize this encounter on the game thread.
-pub fn init_orz_comm(comm: &mut Comm, cx: &mut Cx<'_>) -> CLocData {
-    let desc = descriptor();
+pub(crate) fn initialize(
+    comm: &mut Comm,
+    cx: &mut Cx<'_>,
+    _desc: &mut crate::comm::races::descriptor::CommDescriptor,
+) {
     run(comm, cx, |s| s.initialize());
-    desc
 }
 
 mod api {

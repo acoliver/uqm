@@ -3,7 +3,7 @@
 pub(crate) use super::script::{
     DialogueHost, ANIM_DISABLED, FUEL_TANK_SCALE, GLOBAL_PLAYER_NAME, GLOBAL_SHIP_NAME, ONE_SECOND,
 };
-pub(crate) use crate::comm::locdata::CLocData;
+pub(crate) use crate::comm::races::descriptor::CommDescriptor;
 pub(crate) use crate::engine::StoryKey;
 
 pub(crate) const GLAD_WHEN_YOU_COME_BACK: u16 = 1;
@@ -510,19 +510,18 @@ impl<A: DialogueHost<Handler>> Commander<'_, A> {
     }
 }
 
-pub(crate) fn configure(desc: &mut CLocData, powered: bool) {
+pub(crate) fn configure(desc: &mut CommDescriptor, powered: bool) {
     if powered {
         desc.alien_ambient_array[2].anim_flags |= ANIM_DISABLED;
         desc.alien_song_flags &= !1;
     } else {
         desc.alien_ambient_array[2].anim_flags &= !ANIM_DISABLED;
-        desc.alien_alt_song_res = c"comm.commander.lowpower.music".as_ptr();
+        desc.alien_alt_song_res = Some(c"comm.commander.lowpower.music");
         desc.alien_song_flags |= 1;
     }
 }
 
 #[cfg(test)]
-use crate::comm::descriptors::comandr::descriptor;
-
-#[cfg(test)]
 mod tests;
+
+pub(crate) mod descriptor;

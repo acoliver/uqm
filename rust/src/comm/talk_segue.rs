@@ -158,7 +158,7 @@ pub(super) mod c_bridge {
 
     /// Check if CommData.AlienTransitionDesc.NumFrames > 0 (replaces c_HasTransitionAnim)
     pub unsafe fn has_transition_anim(comm: &Comm) -> c_int {
-        if comm.data.alien_transition_desc.num_frames > 0 {
+        if comm.data.definition.alien_transition_desc.num_frames > 0 {
             1
         } else {
             0
@@ -171,7 +171,7 @@ pub(super) mod c_bridge {
     const TALK_DONE: u8 = 1 << 6;
 
     pub unsafe fn want_talking_anim(comm: &Comm) -> c_int {
-        if comm.data.alien_talk_desc.anim_flags & PAUSE_TALKING == 0 {
+        if comm.data.definition.alien_talk_desc.anim_flags & PAUSE_TALKING == 0 {
             1
         } else {
             0
@@ -179,7 +179,7 @@ pub(super) mod c_bridge {
     }
 
     pub unsafe fn have_talking_anim(comm: &Comm) -> c_int {
-        if comm.data.alien_talk_desc.num_frames > 0 {
+        if comm.data.definition.alien_talk_desc.num_frames > 0 {
             1
         } else {
             0
@@ -187,15 +187,15 @@ pub(super) mod c_bridge {
     }
 
     pub unsafe fn set_run_talking_anim(comm: &mut Comm) {
-        comm.data.alien_talk_desc.anim_flags |= WAIT_TALKING;
+        comm.data.definition.alien_talk_desc.anim_flags |= WAIT_TALKING;
     }
 
     pub unsafe fn set_stop_talking_anim(comm: &mut Comm) {
-        comm.data.alien_talk_desc.anim_flags |= TALK_DONE;
+        comm.data.definition.alien_talk_desc.anim_flags |= TALK_DONE;
     }
 
     pub unsafe fn running_talking_anim(comm: &Comm) -> c_int {
-        if comm.data.alien_talk_desc.anim_flags & WAIT_TALKING != 0 {
+        if comm.data.definition.alien_talk_desc.anim_flags & WAIT_TALKING != 0 {
             1
         } else {
             0
@@ -203,11 +203,11 @@ pub(super) mod c_bridge {
     }
 
     pub unsafe fn set_run_intro_anim(comm: &mut Comm) {
-        comm.data.alien_transition_desc.anim_flags |= TALK_INTRO;
+        comm.data.definition.alien_transition_desc.anim_flags |= TALK_INTRO;
     }
 
     pub unsafe fn running_intro_anim(comm: &Comm) -> c_int {
-        if comm.data.alien_transition_desc.anim_flags & TALK_INTRO != 0 {
+        if comm.data.definition.alien_transition_desc.anim_flags & TALK_INTRO != 0 {
             1
         } else {
             0

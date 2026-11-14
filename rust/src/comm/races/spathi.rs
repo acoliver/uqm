@@ -1,7 +1,7 @@
 //! Spathi dialogue, ported from the original C script.
 
 pub(crate) use super::encounter::EncounterApi;
-pub(crate) use crate::comm::locdata::CLocData;
+pub(crate) use crate::comm::races::descriptor::CommDescriptor;
 pub(crate) use crate::engine::StoryKey;
 mod phrases;
 use phrases::*;
@@ -40,9 +40,9 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
             Handler::SpathiNeutral => self.spathi_neutral(r),
         }
     }
-    pub(crate) fn initialize(&mut self, desc: &mut CLocData) {
+    pub(crate) fn initialize(&mut self, desc: &mut CommDescriptor) {
         if self.api.get(StoryKey::FOUND_PLUTO_SPATHI) == 1 {
-            desc.alien_alt_song_res = c"comm.fwiffo.music".as_ptr();
+            desc.alien_alt_song_res = Some(c"comm.fwiffo.music");
             desc.alien_song_flags |= 1;
         } else {
             desc.alien_song_flags &= !1;
@@ -562,7 +562,6 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
 }
 
 #[cfg(test)]
-use crate::comm::descriptors::spathi::descriptor;
-
-#[cfg(test)]
 mod tests;
+
+pub(crate) mod descriptor;

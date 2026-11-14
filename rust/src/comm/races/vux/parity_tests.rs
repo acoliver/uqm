@@ -1,7 +1,9 @@
+use super::descriptor::descriptor;
 use super::dialogue::Dialogue;
 use super::*;
 use crate::comm::races::encounter::testing::{Effect, Fake};
 use crate::comm::races::script::DialogueHost;
+use crate::engine::world::activity::ActivityKind;
 use crate::engine::StoryKey;
 
 type Api = Fake<Handler>;
@@ -476,7 +478,7 @@ fn all_greeting_paths_hold_last_case_and_increment_unmatched_byte_values() {
         }
     }
     let mut api = Api {
-        activity: 0x100 | crate::comm::dispatch::WON_LAST_BATTLE,
+        activity: 0x100 | ActivityKind::WonLastBattle as u16,
         ..Api::default()
     };
     api.put(StoryKey::GLOBAL_FLAGS_AND_DATA, 192);
@@ -566,7 +568,7 @@ fn full_descriptor_matches_c_including_opaque_black_and_dynamic_layout() {
         (d.alien_song_res, c"comm.vux.music"),
         (d.conversation_phrases_res, c"comm.vux.dialogue"),
     ] {
-        assert_eq!(unsafe { std::ffi::CStr::from_ptr(resource) }, expected);
+        assert_eq!(resource.unwrap(), expected);
     }
     assert_eq!((d.alien_text_align, d.alien_text_valign), (1, 0));
     assert_eq!(
@@ -587,7 +589,7 @@ fn full_descriptor_matches_c_including_opaque_black_and_dynamic_layout() {
         ),
         (0, 0, 0, 255)
     );
-    assert!(d.alien_alt_song_res.is_null());
+    assert!(d.alien_alt_song_res.is_none());
     assert_eq!(d.alien_song_flags, 0);
-    assert!(d.alien_number_speech.is_null());
+    assert!(d.alien_number_speech.is_none());
 }

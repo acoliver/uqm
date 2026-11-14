@@ -1,7 +1,9 @@
+use super::descriptor::descriptor;
 use super::dialogue::Dialogue;
 use super::*;
 use crate::comm::races::encounter::testing::{Effect, Fake};
 use crate::comm::races::script::{DialogueHost, GLOBAL_PLAYER_NAME, GLOBAL_SHIP_NAME};
+use crate::engine::world::activity::ActivityKind;
 use crate::engine::StoryKey;
 
 type Api = Fake<Handler, api::World>;
@@ -105,7 +107,7 @@ fn all_greeting_switches_keep_c_byte_postincrement_and_final_decrement() {
         }
     }
     let mut api = Api {
-        activity: 0x100 | crate::comm::dispatch::WON_LAST_BATTLE,
+        activity: 0x100 | ActivityKind::WonLastBattle as u16,
         ..Api::default()
     };
     api.put(StoryKey::YEHAT_CIVIL_WAR, 1);
@@ -561,7 +563,7 @@ fn descriptor_matches_every_c_animation_field_and_runtime_geometry() {
         (d.alien_song_res, c"comm.yehat.music"),
         (d.conversation_phrases_res, c"comm.yehat.dialogue"),
     ] {
-        assert_eq!(unsafe { std::ffi::CStr::from_ptr(resource) }, expected);
+        assert_eq!(resource.unwrap(), expected);
     }
     assert_eq!((d.alien_text_align, d.alien_text_valign), (1, 1));
     assert_eq!(
@@ -582,7 +584,7 @@ fn descriptor_matches_every_c_animation_field_and_runtime_geometry() {
         ),
         (0, 0, 0, 255)
     );
-    assert!(d.alien_alt_song_res.is_null());
+    assert!(d.alien_alt_song_res.is_none());
     assert_eq!(d.alien_song_flags, 0);
-    assert!(d.alien_number_speech.is_null());
+    assert!(d.alien_number_speech.is_none());
 }

@@ -1,4 +1,5 @@
 use super::super::encounter::testing::{Effect, Fake as BaseFake};
+use super::descriptor::descriptor;
 use super::*;
 use crate::engine::StoryKey;
 use api::{Speech, World};
@@ -191,42 +192,39 @@ fn destruct_code_is_first_and_victory_does_not_exhibit_a_bug() {
 
 #[test]
 fn english_number_descriptor_preserves_all_digit_slots_and_phrase_ids() {
-    let d = unsafe { &*numbers::descriptor() };
-    assert_eq!(d.NumDigits, 5);
+    let d = numbers::descriptor();
+    assert_eq!(d.digits.len(), 5);
     for (i, divider, subtrahend, common) in [
         (0, 1000, 0, 58),
         (1, 100, 0, 57),
         (2, 10, 0, 0),
         (3, 1, 10, 0),
         (4, 1, 0, 0),
-        (5, 0, 0, 0),
-        (6, 0, 0, 0),
     ] {
-        let digit = &d.Digits[i];
+        let digit = &d.digits[i];
         assert_eq!(
-            (digit.Divider, digit.Subtrahend, digit.CommonNameIndex),
+            (digit.divider, digit.subtrahend, digit.common),
             (divider, subtrahend, common)
         );
-        assert!(digit.Names.is_null());
+        assert!(digit.names.is_empty());
     }
-    assert!(d.Digits[0].StrDigits.is_null());
-    assert!(d.Digits[5].StrDigits.is_null());
-    assert!(d.Digits[6].StrDigits.is_null());
-    unsafe {
-        assert_eq!(
-            std::slice::from_raw_parts(d.Digits[1].StrDigits, 10),
-            &[59, 60, 61, 62, 63, 64, 65, 66, 67, 68]
-        );
-        assert_eq!(
-            std::slice::from_raw_parts(d.Digits[2].StrDigits, 10),
-            &[0, 0, 79, 80, 81, 82, 83, 84, 85, 86]
-        );
-        assert_eq!(
-            std::slice::from_raw_parts(d.Digits[3].StrDigits, 10),
-            &[69, 70, 71, 72, 73, 74, 75, 76, 77, 78]
-        );
-        assert_eq!(d.Digits[1].StrDigits, d.Digits[4].StrDigits);
-    }
+    assert!(d.digits[0].strings.is_none());
+    assert_eq!(
+        d.digits[1].strings.unwrap(),
+        &[59, 60, 61, 62, 63, 64, 65, 66, 67, 68]
+    );
+    assert_eq!(
+        d.digits[2].strings.unwrap(),
+        &[0, 0, 79, 80, 81, 82, 83, 84, 85, 86]
+    );
+    assert_eq!(
+        d.digits[3].strings.unwrap(),
+        &[69, 70, 71, 72, 73, 74, 75, 76, 77, 78]
+    );
+    assert!(std::ptr::eq(
+        d.digits[1].strings.unwrap(),
+        d.digits[4].strings.unwrap()
+    ));
 }
 
 #[test]
@@ -273,7 +271,7 @@ fn full_descriptor_matches_c_resources_layout_and_animations() {
             ),
             (0, 0, 0, 255)
         );
-        let row = |a: crate::comm::locdata::CAnimationDesc| {
+        let row = |a: crate::comm::races::descriptor::AnimationDescriptor| {
             [
                 u32::from(a.start_index),
                 u32::from(a.num_frames),
@@ -293,7 +291,7 @@ fn full_descriptor_matches_c_resources_layout_and_animations() {
         }
         assert_eq!(row(d.alien_transition_desc), [0; 8]);
         assert_eq!(row(d.alien_talk_desc), [0; 8]);
-        unsafe {
+        {
             for (pointer, key) in [
                 (d.alien_frame_res, RACE_PMAP_ANIM),
                 (d.alien_font_res, RACE_FONT),
@@ -301,16 +299,17 @@ fn full_descriptor_matches_c_resources_layout_and_animations() {
                 (d.alien_song_res, RACE_MUSIC),
                 (d.conversation_phrases_res, RACE_CONVERSATION_PHRASES),
             ] {
-                assert_eq!(std::ffi::CStr::from_ptr(pointer).to_bytes_with_nul(), key);
+                assert_eq!(
+                    pointer.unwrap().to_bytes_with_nul(),
+                    key.to_bytes_with_nul()
+                );
             }
         }
-        assert_eq!(d.alien_number_speech, numbers::descriptor().cast());
-        assert!(d.alien_alt_song_res.is_null());
+        assert!(std::ptr::eq(
+            d.alien_number_speech.unwrap(),
+            numbers::descriptor()
+        ));
+        assert!(d.alien_alt_song_res.is_none());
         assert_eq!(d.alien_song_flags, 0);
-        assert!(d.alien_frame.is_null());
-        assert!(d.alien_font.is_null());
-        assert!(d.alien_colormap.is_null());
-        assert!(d.alien_song.is_null());
-        assert!(d.conversation_phrases.is_null());
     }
 }

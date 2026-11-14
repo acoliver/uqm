@@ -3,8 +3,7 @@ use crate::comm::Comm;
 use std::ffi::c_void;
 use std::fmt;
 
-/// Number of animation slots in an alien communication sequence (matches C MAX_ANIMATIONS).
-pub const MAX_ANIMATIONS: usize = 20;
+use super::races::descriptor::{AnimationDescriptor, MAX_ANIMATIONS};
 
 /// Animation flags (mirrors C ANIMATION_DESC AnimFlags bits).
 #[allow(
@@ -74,36 +73,6 @@ impl From<u32> for TextValign {
 pub mod AlienSongFlags {
     pub const NONE: u32 = 0;
     pub const USE_ALTERNATE: u32 = 1 << 0;
-}
-
-/// Animation descriptor matching C `ANIMATION_DESC`.
-///
-/// Field widths use the smallest Rust integer that fits the C type:
-/// - `StartIndex` / `BaseFrameRate` / `RandomFrameRate` / `BaseRestartRate` /
-///   `RandomRestartRate` are `COUNT` (u16)
-/// - `NumFrames` / `AnimFlags` are `BYTE` (u8)
-/// - `BlockMask` is `DWORD` (u32)
-///
-/// The struct is `repr(C)` so it can be used directly in FFI if needed.
-#[repr(C)]
-#[derive(Debug, Clone, Copy, Default)]
-pub struct AnimationDescData {
-    /// Index of the first image or color-map entry.
-    pub start_index: u16,
-    /// Number of frames in the animation.
-    pub num_frames: u8,
-    /// Animation type flags (RANDOM_ANIM, CIRCULAR_ANIM, YOYO_ANIM, …).
-    pub anim_flags: u8,
-    /// Minimum interframe delay (game ticks).
-    pub base_frame_rate: u16,
-    /// Maximum additional interframe delay.
-    pub random_frame_rate: u16,
-    /// Minimum delay before restarting the animation.
-    pub base_restart_rate: u16,
-    /// Maximum additional restart delay.
-    pub random_restart_rate: u16,
-    /// Bit-mask of animation indices that cannot run simultaneously.
-    pub block_mask: u32,
 }
 
 /// Error type for communication operations
@@ -184,8 +153,7 @@ impl From<u32> for CommIntroMode {
 /// fields (`alien_frame`, `alien_font`, …) are set after the resource is resolved
 /// and hold whatever pointer or index the C graphics/audio layer returns.
 ///
-/// `alien_number_speech` is a borrowed pointer into C-owned memory and must **not**
-/// be freed by Rust code.
+/// `alien_number_speech` borrows an immutable content definition.
 #[derive(Debug, Clone)]
 pub struct CommData {
     // -----------------------------------------------------------------------
@@ -238,11 +206,11 @@ pub struct CommData {
     /// Number of active entries in `alien_ambient_array` (`NumAnimations`).
     pub num_animations: u32,
     /// Ambient / background animation slots (`AlienAmbientArray`).
-    pub alien_ambient_array: [AnimationDescData; MAX_ANIMATIONS],
+    pub alien_ambient_array: [AnimationDescriptor; MAX_ANIMATIONS],
     /// Transition animation between silent and talking states (`AlienTransitionDesc`).
-    pub alien_transition_desc: AnimationDescData,
+    pub alien_transition_desc: AnimationDescriptor,
     /// Talking animation descriptor (`AlienTalkDesc`).
-    pub alien_talk_desc: AnimationDescData,
+    pub alien_talk_desc: AnimationDescriptor,
 
     // -----------------------------------------------------------------------
     // Song / audio flags
@@ -265,11 +233,10 @@ pub struct CommData {
     pub conversation_phrases: *mut c_void,
 
     // -----------------------------------------------------------------------
-    // Number-speech generator (borrowed from C; never freed by Rust)
+    // Number-speech definition
     // -----------------------------------------------------------------------
-    /// Pointer to the C `NUMBER_SPEECH_DESC` used for numeric speech synthesis.
-    /// This is borrowed from alien-specific C data and must **not** be freed here.
-    pub alien_number_speech: *const c_void,
+    /// Immutable race-specific numeric speech data.
+    pub alien_number_speech: Option<&'static super::races::descriptor::NumberSpeech>,
 }
 
 impl Default for CommData {
@@ -292,16 +259,16 @@ impl Default for CommData {
             alien_text_align: TextAlign::Left,
             alien_text_valign: TextValign::Top,
             num_animations: 0,
-            alien_ambient_array: [AnimationDescData::default(); MAX_ANIMATIONS],
-            alien_transition_desc: AnimationDescData::default(),
-            alien_talk_desc: AnimationDescData::default(),
+            alien_ambient_array: [AnimationDescriptor::default(); MAX_ANIMATIONS],
+            alien_transition_desc: AnimationDescriptor::default(),
+            alien_talk_desc: AnimationDescriptor::default(),
             alien_song_flags: 0,
             alien_frame: std::ptr::null_mut(),
             alien_font: std::ptr::null_mut(),
             alien_color_map: std::ptr::null_mut(),
             alien_song: std::ptr::null_mut(),
             conversation_phrases: std::ptr::null_mut(),
-            alien_number_speech: std::ptr::null(),
+            alien_number_speech: None,
         }
     }
 }
@@ -345,7 +312,7 @@ impl CommData {
         self.alien_color_map = std::ptr::null_mut();
         self.alien_song = std::ptr::null_mut();
         self.conversation_phrases = std::ptr::null_mut();
-        self.alien_number_speech = std::ptr::null();
+        self.alien_number_speech = None;
     }
 }
 
@@ -405,7 +372,7 @@ mod tests {
         assert!(data.alien_frame_res.is_null());
         assert!(data.alien_font_res.is_null());
         assert!(data.alien_frame.is_null());
-        assert!(data.alien_number_speech.is_null());
+        assert!(data.alien_number_speech.is_none());
         assert_eq!(data.alien_text_fcolor, 0);
         assert_eq!(data.alien_text_width, 0);
         assert_eq!(data.alien_text_align, TextAlign::Left);
@@ -414,7 +381,7 @@ mod tests {
 
     #[test]
     fn test_animation_desc_data_default() {
-        let desc = AnimationDescData::default();
+        let desc = AnimationDescriptor::default();
         assert_eq!(desc.start_index, 0);
         assert_eq!(desc.num_frames, 0);
         assert_eq!(desc.anim_flags, 0);
@@ -429,7 +396,7 @@ mod tests {
         data.clear_handles();
         assert!(data.alien_frame.is_null());
         assert!(data.alien_font.is_null());
-        assert!(data.alien_number_speech.is_null());
+        assert!(data.alien_number_speech.is_none());
     }
 
     #[test]

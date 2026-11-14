@@ -38,7 +38,11 @@ fn clock_adapters_schedule_and_dispatch_on_the_supplied_campaign() {
             panic!("adapter RNG")
         });
         // SAFETY: this fixture owns initialized display resources and exclusive campaign loans.
-        let shofixt = unsafe { super::shofixt::init_shofixti_comm(&mut comm, &mut cx) };
+        let shofixt = crate::comm::lifecycle::session(
+            &mut comm,
+            &mut cx,
+            crate::comm::lifecycle::DialogueKind::Shofixt,
+        );
         assert_eq!(cx.world.story_state(StoryKey::BATTLE_SEGUE), 0);
         assert!(std::ptr::fn_addr_eq(
             shofixt.init_encounter_func.unwrap(),
@@ -47,7 +51,11 @@ fn clock_adapters_schedule_and_dispatch_on_the_supplied_campaign() {
         assert!(shofixt.post_encounter_func.is_some());
         assert!(shofixt.uninit_encounter_func.is_some());
         // SAFETY: the same retained display and exclusive loans remain live.
-        let yehat = unsafe { super::yehat::init_yehat_comm(&mut comm, &mut cx) };
+        let yehat = crate::comm::lifecycle::session(
+            &mut comm,
+            &mut cx,
+            crate::comm::lifecycle::DialogueKind::Yehat,
+        );
         assert_eq!(cx.world.story_state(StoryKey::BATTLE_SEGUE), 1);
         assert!(std::ptr::fn_addr_eq(
             yehat.init_encounter_func.unwrap(),

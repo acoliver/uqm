@@ -112,14 +112,11 @@ pub(crate) mod numbers;
 // Resource keys (from resinst.h)
 // ---------------------------------------------------------------------------
 
-pub(crate) const RACE_PMAP_ANIM: &[u8] = b"comm.probe.graphics\0";
-pub(crate) const RACE_FONT: &[u8] = b"comm.probe.font\0";
-pub(crate) const RACE_COLOR_MAP: &[u8] = b"comm.probe.colortable\0";
-pub(crate) const RACE_MUSIC: &[u8] = b"comm.probe.music\0";
-pub(crate) const RACE_CONVERSATION_PHRASES: &[u8] = b"comm.probe.dialogue\0";
-
-#[cfg(test)]
-use crate::comm::descriptors::slyland::descriptor;
+pub(crate) const RACE_PMAP_ANIM: &std::ffi::CStr = c"comm.probe.graphics";
+pub(crate) const RACE_FONT: &std::ffi::CStr = c"comm.probe.font";
+pub(crate) const RACE_COLOR_MAP: &std::ffi::CStr = c"comm.probe.colortable";
+pub(crate) const RACE_MUSIC: &std::ffi::CStr = c"comm.probe.music";
+pub(crate) const RACE_CONVERSATION_PHRASES: &std::ffi::CStr = c"comm.probe.dialogue";
 
 #[cfg(test)]
 #[path = "slyland/tests.rs"]
@@ -131,10 +128,10 @@ mod tests {
 
     #[test]
     fn test_resource_keys_are_null_terminated() {
-        assert_eq!(RACE_PMAP_ANIM.last(), Some(&0));
-        assert_eq!(RACE_FONT.last(), Some(&0));
-        assert_eq!(RACE_COLOR_MAP.last(), Some(&0));
-        assert_eq!(RACE_MUSIC.last(), Some(&0));
+        assert_eq!(RACE_PMAP_ANIM.to_bytes_with_nul().last(), Some(&0));
+        assert_eq!(RACE_FONT.to_bytes_with_nul().last(), Some(&0));
+        assert_eq!(RACE_COLOR_MAP.to_bytes_with_nul().last(), Some(&0));
+        assert_eq!(RACE_MUSIC.to_bytes_with_nul().last(), Some(&0));
     }
 
     #[test]
@@ -161,3 +158,5 @@ mod tests {
         );
     }
 }
+
+pub(crate) mod descriptor;

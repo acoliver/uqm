@@ -1,7 +1,6 @@
-use crate::comm::descriptors::blackur::descriptor;
 use crate::comm::host::Host;
 use crate::comm::races::blackur::*;
-use crate::comm::{locdata::CLocData, Comm};
+use crate::comm::Comm;
 use crate::engine::battle::Cx;
 fn run(comm: &mut Comm, cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, Host<'_, '_, Handler>>)) {
     let mut a = Host::new(comm, cx, callback);
@@ -26,16 +25,12 @@ pub(crate) fn post(_comm: &mut Comm, _cx: &mut Cx<'_>) {}
 pub(crate) fn uninit(_comm: &mut Comm, _cx: &mut Cx<'_>) -> u16 {
     0
 }
-pub unsafe fn init_blackurq_comm(comm: &mut Comm, cx: &mut Cx<'_>) -> CLocData {
-    extern "C" {
-        static mut ScreenWidth: i32;
-    }
-    // SAFETY: the caller initializes encounters on the game thread with stable display dimensions.
-    let width = unsafe { ScreenWidth };
-    let mut d = descriptor(width);
-    (d.alien_text_baseline, d.alien_text_width) = text_layout(width);
+pub(crate) fn initialize(
+    comm: &mut Comm,
+    cx: &mut Cx<'_>,
+    _desc: &mut crate::comm::races::descriptor::CommDescriptor,
+) {
     run(comm, cx, |s| s.initialize());
-    d
 }
 
 mod api {

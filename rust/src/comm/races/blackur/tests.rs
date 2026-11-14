@@ -1,6 +1,8 @@
+use super::descriptor::descriptor;
 use super::*;
 use crate::comm::races::encounter::testing::{Effect, Fake};
 use crate::comm::races::script::DialogueHost;
+use crate::engine::world::activity::ActivityKind;
 use crate::engine::StoryKey;
 
 type Api = Fake<Handler, (u32, u32)>;
@@ -217,7 +219,7 @@ fn story_questions_disable_individually_and_exhaust_in_order() {
 #[test]
 fn intro_priorities_activity_low_byte_and_samatra_group_match() {
     for (activity, killed, expected) in [
-        (crate::comm::dispatch::WON_LAST_BATTLE | 0x100, 1, OUT_TAKES),
+        (ActivityKind::WonLastBattle as u16 | 0x100, 1, OUT_TAKES),
         (0, 1, GAME_OVER_DUDE),
     ] {
         let mut f = Api {
@@ -233,12 +235,12 @@ fn intro_priorities_activity_low_byte_and_samatra_group_match() {
         assert_eq!(f.effects, [Effect::Npc(expected), Effect::Segue(0)]);
     }
     for (group, samatra, activity, matches) in [
-        (0, 0, crate::comm::dispatch::IN_INTERPLANETARY, false),
-        (1, 2, crate::comm::dispatch::IN_INTERPLANETARY, false),
+        (0, 0, ActivityKind::InInterplanetary as u16, false),
+        (1, 2, ActivityKind::InInterplanetary as u16, false),
         (
             0x12345678,
             0x12345678,
-            crate::comm::dispatch::IN_INTERPLANETARY | 0x100,
+            ActivityKind::InInterplanetary as u16 | 0x100,
             true,
         ),
         (1, 1, crate::comm::dispatch::IN_HYPERSPACE, false),
@@ -323,12 +325,9 @@ fn descriptor_matches_resources_layout_and_every_animation_field() {
         (d.alien_song_res, "comm.kohrah.music"),
         (d.conversation_phrases_res, "comm.kohrah.dialogue"),
     ] {
-        assert_eq!(
-            unsafe { std::ffi::CStr::from_ptr(ptr) }.to_str().unwrap(),
-            expected
-        );
+        assert_eq!(ptr.unwrap().to_str().unwrap(), expected);
     }
-    assert!(d.alien_alt_song_res.is_null());
+    assert!(d.alien_alt_song_res.is_none());
     assert_eq!(d.alien_song_flags, 0);
     assert_eq!((d.alien_text_align, d.alien_text_valign), (1, 0));
     assert_eq!(
@@ -381,5 +380,5 @@ fn descriptor_matches_resources_layout_and_every_animation_field() {
             e
         );
     }
-    assert!(d.alien_number_speech.is_null());
+    assert!(d.alien_number_speech.is_none());
 }

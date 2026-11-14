@@ -1,7 +1,6 @@
-use crate::comm::descriptors::utwig::descriptor;
 use crate::comm::host::Host;
 use crate::comm::races::utwig::*;
-use crate::comm::{locdata::CLocData, Comm};
+use crate::comm::Comm;
 use crate::engine::battle::Cx;
 
 fn run(comm: &mut Comm, cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, Host<'_, '_, Handler>>)) {
@@ -75,8 +74,10 @@ pub(crate) fn uninit(_comm: &mut Comm, _cx: &mut Cx<'_>) -> u16 {
     0
 }
 /// Initialize the encounter on the game thread.
-pub fn init_utwig_comm(comm: &mut Comm, cx: &mut Cx<'_>) -> CLocData {
-    let mut desc = descriptor();
-    run(comm, cx, |s| s.initialize(&mut desc));
-    desc
+pub(crate) fn initialize(
+    comm: &mut Comm,
+    cx: &mut Cx<'_>,
+    desc: &mut crate::comm::races::descriptor::CommDescriptor,
+) {
+    run(comm, cx, |s| s.initialize(desc));
 }
