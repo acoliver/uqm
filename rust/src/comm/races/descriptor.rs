@@ -80,6 +80,23 @@ pub struct NumberSpeech {
 #[cfg(test)]
 mod tests {
     #[test]
+    fn digit_constructor_preserves_rules_and_optional_strings() {
+        const STRINGS: [u16; 10] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+        let digit = super::SpeechDigit::new(100, 1, Some(&STRINGS), 11);
+        assert_eq!(
+            (digit.divider, digit.subtrahend, digit.common),
+            (100, 1, 11)
+        );
+        assert_eq!(digit.strings, Some(&STRINGS));
+        assert!(digit.names.is_empty());
+
+        let digit = super::SpeechDigit::new(10, 0, None, 0);
+        assert_eq!((digit.divider, digit.subtrahend, digit.common), (10, 0, 0));
+        assert_eq!(digit.strings, None);
+        assert!(digit.names.is_empty());
+    }
+
+    #[test]
     fn content_factory_is_shareable_and_retains_dormant_animation_slots() {
         fn assert_send_sync<T: Send + Sync>(_: &T) {}
         let mut first: super::CommDescriptor = super::super::orz::descriptor::descriptor();
