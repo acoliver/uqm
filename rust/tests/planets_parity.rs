@@ -102,8 +102,7 @@ impl SuppliedGenerators {
         }
         let previous_catalog = uqm_rust::engine::World::current().read(|world| *world.catalog());
         let previous_star = uqm_rust::engine::World::current().read(|world| world.current_star);
-        // SAFETY: the serialized harness copies the initialized integer-only catalog.
-        let mut star = Box::new(unsafe { starmap_array });
+        let mut star = Box::new(uqm_rust::planets::tables::STARMAP_ARRAY);
         // SAFETY: a star record contains only integer fields; zero initializes its fixture values.
         star[0] = unsafe { std::mem::zeroed() };
         let state = uqm_rust::engine::World::current().write(|world| {
@@ -416,7 +415,7 @@ fn check_fixture(name: &str, text: &str) {
 #[test]
 fn supplied_views_reproduce_the_c_fixtures() {
     battle_context::run(|_| {
-        let table = unsafe { &planet_array }.as_slice();
+        let table = uqm_rust::planets::tables::PLANET_ARRAY.as_slice();
         let mut exports = SuppliedGenerators::new();
         let base = table.as_ptr() as usize;
         gravity_and_random_locations_agree();
@@ -528,9 +527,8 @@ fn render_plan_resources(table: &[PlanetFrame]) -> String {
         .collect()
 }
 
-/// The tables the game links against (`starmap_array`, `element_array` and
-/// `planet_array`), read through their exported symbols, must equal the
-/// fixtures captured from the C originals field for field (strings included).
+/// Production Rust tables must equal the fixtures captured from the C originals
+/// field for field, including their resource names.
 #[test]
 fn plandata_tables_equal_the_c_originals() {
     use uqm_rust::planets::tables::{ELEMENT_ARRAY, PLANET_ARRAY, STARMAP_ARRAY};
