@@ -49,7 +49,7 @@ impl Vfs {
                 mount
                     .zip_index
                     .as_ref()
-                    .expect("ZIP mount without index")
+                    .unwrap_or_else(|| panic!("ZIP mount without index"))
                     .open_entry(&suffix.to_string_lossy())
                     .map(FileData::ZipEntry)
             } else {
@@ -96,7 +96,10 @@ impl Vfs {
             };
             covered = true;
             if mount.fs_type == UIO_FSTYPE_ZIP {
-                let zip = mount.zip_index.as_ref().expect("ZIP mount without index");
+                let zip = mount
+                    .zip_index
+                    .as_ref()
+                    .unwrap_or_else(|| panic!("ZIP mount without index"));
                 let name = suffix.to_string_lossy();
                 if zip.is_directory(&name) {
                     return Ok(FileStat {
@@ -138,7 +141,7 @@ impl Vfs {
                 mount
                     .zip_index
                     .as_ref()
-                    .expect("ZIP mount without index")
+                    .unwrap_or_else(|| panic!("ZIP mount without index"))
                     .list_directory(&suffix.to_string_lossy())
             } else {
                 let target = map_virtual_to_host_confined(&mount.mounted_root, suffix);

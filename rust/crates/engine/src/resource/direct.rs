@@ -20,7 +20,7 @@ pub unsafe extern "C" fn LoadDirEntryTable(
     pattern: *const c_char,
     match_type: c_int,
 ) -> *mut StringTable {
-    let files = directory(base).expect("directory table base");
+    let files = directory(base).unwrap_or_else(|error| panic!("directory table base: {error}"));
     let path = CStr::from_ptr(path).to_string_lossy();
     let path = Path::new(path.as_ref());
     let pattern = CStr::from_ptr(pattern).to_string_lossy();
@@ -65,6 +65,7 @@ mod tests {
         std::fs::create_dir_all(root).unwrap();
         let temp = tempfile::tempdir_in(root).unwrap();
         let path = CString::new(temp.path().to_str().unwrap()).unwrap();
+        // SAFETY: the repository and path outlive the directory and its enumeration.
         unsafe {
             let repo = uio_openRepository(0);
             let directory = uio_openDir(repo, path.as_ptr(), 0);

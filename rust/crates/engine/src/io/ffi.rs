@@ -65,12 +65,14 @@ pub unsafe extern "C" fn fileExists2(dir: *mut uio_DirHandle, file_name: *const 
     }
 
     // Check for null parameters
-    if dir.is_null() || file_name.is_null() {
+    if file_name.is_null() {
         return 0;
     }
 
     use crate::host::Files;
-    let files = crate::io::uio_owned::directory(dir).expect("non-null directory");
+    let Ok(files) = crate::io::uio_owned::directory(dir) else {
+        return 0;
+    };
     let name = CStr::from_ptr(file_name).to_string_lossy();
     i32::from(files.open_read(std::path::Path::new(name.as_ref())).is_ok())
 }
