@@ -1,6 +1,7 @@
 //! Geometry and colors for game-options rendering.
 
-use crate::navigation::abi::{Color, EXTENT, POINT, RECT, SHIP_NAME_HEIGHT, SHIP_NAME_WIDTH};
+use crate::graphics::native_abi::{Color, EXTENT, POINT, RECT};
+use crate::starbase::ids::{SHIP_NAME_HEIGHT, SHIP_NAME_WIDTH};
 use crate::ui::rgb15;
 
 pub(super) const CAPTAIN_NAME_RECT: RECT = RECT {

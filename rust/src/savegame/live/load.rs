@@ -4,8 +4,6 @@ use crate::comm::dispatch::{IN_INTERPLANETARY, START_ENCOUNTER, START_INTERPLANE
 use crate::engine::{battle::Cx, save::summary_record::SummaryDesc};
 use crate::mainloop::dir_prep::saveDir;
 
-pub use load_game as LoadGame;
-
 pub enum LoadRequest<'a, 'game> {
     Summary(&'a mut SummaryDesc),
     Restore(&'a mut Cx<'game>),
@@ -27,12 +25,11 @@ unsafe fn finish_load(cx: &mut Cx<'_>, star: &super::super::StarDesc, activity: 
     }
 }
 
-/// # Safety
-/// Game thread; restore retains initialized game structures and the star catalog.
-pub unsafe fn load_game(slot: u16, request: LoadRequest<'_, '_>) -> u32 {
+pub fn load_game(slot: u16, request: LoadRequest<'_, '_>) -> u32 {
     let loading = matches!(&request, LoadRequest::Restore(_));
     let result = (|| -> anyhow::Result<()> {
-        let slots = SaveSlots::new(saveDir.cast())?;
+        // SAFETY: the game-thread save directory remains open throughout the synchronous operation.
+        let slots = unsafe { SaveSlots::new(saveDir.cast())? };
         let cx = match request {
             LoadRequest::Summary(summary) => {
                 let decoded = match slots.read_summary(usize::from(slot)) {
@@ -48,7 +45,8 @@ pub unsafe fn load_game(slot: u16, request: LoadRequest<'_, '_>) -> u32 {
             let save = slots.read(usize::from(slot))?;
             (save.star, crate::engine::save::apply(save, cx.world)?)
         } else {
-            let decoded = legacy::read_legacy_game(&slots, slot)?;
+            // SAFETY: the synchronous loader retains the supplied campaign and slot directory.
+            let decoded = unsafe { legacy::read_legacy_game(&slots, slot)? };
             let star = decoded.save.star;
             let activity = crate::engine::save::apply_legacy(
                 decoded.save,
@@ -58,21 +56,18 @@ pub unsafe fn load_game(slot: u16, request: LoadRequest<'_, '_>) -> u32 {
             )?;
             (star, activity)
         };
-        finish_load(cx, &star, activity);
+        // SAFETY: the supplied context retains the restored campaign and its native resources.
+        unsafe { finish_load(cx, &star, activity) };
         Ok(())
     })();
     super::complete(result, "LoadGame", loading.then_some((slot, true)))
 }
 
 /// Enumerate the original 50-slot picker list synchronously.
-///
-/// # Safety
-/// Game-thread caller supplies 50 writable summaries and owns the save directory.
-pub unsafe fn load_game_descriptions(
-    summaries: &mut [SummaryDesc; super::super::types::MAX_SAVED_GAMES],
-) {
+
+pub fn load_game_descriptions(summaries: &mut [SummaryDesc; super::super::types::MAX_SAVED_GAMES]) {
     for (i, summary) in (0..super::super::types::MAX_SAVED_GAMES as u16).zip(summaries) {
-        if LoadGame(i, LoadRequest::Summary(summary)) == 0 {
+        if load_game(i, LoadRequest::Summary(summary)) == 0 {
             summary.year_index = 0;
         }
         log::info!(

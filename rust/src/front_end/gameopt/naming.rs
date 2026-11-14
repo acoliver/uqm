@@ -4,12 +4,12 @@ use std::ffi::{CStr, CString};
 #[cfg(test)]
 #[test]
 fn save_name_copy_preserves_byte_bounds_and_nul_padding() {
-    let mut source = [b'X' as std::ffi::c_char; SAVE_NAME_SIZE as usize];
+    let mut source = [b'X'; SAVE_NAME_SIZE as usize];
     let full = save_name_buffer(&source);
     assert_eq!(&full[..source.len()], &[b'X'; SAVE_NAME_SIZE as usize]);
     assert!(full[source.len()..].iter().all(|&byte| byte == 0));
-    source[0] = 0xc3u8 as std::ffi::c_char;
-    source[1] = 0xa9u8 as std::ffi::c_char;
+    source[0] = 0xc3u8;
+    source[1] = 0xa9u8;
     source[2] = 0;
     let terminated = save_name_buffer(&source);
     assert_eq!(&terminated[..2], "é".as_bytes());
@@ -18,14 +18,14 @@ fn save_name_copy_preserves_byte_bounds_and_nul_padding() {
     assert_eq!(save_name_buffer(&source), [0; 256]);
 }
 
-pub(super) fn save_name_buffer(source: &[std::ffi::c_char; SAVE_NAME_SIZE as usize]) -> [u8; 256] {
+pub(super) fn save_name_buffer(source: &[u8; SAVE_NAME_SIZE as usize]) -> [u8; 256] {
     let mut buffer = [0; 256];
     for (destination, &byte) in buffer
         .iter_mut()
         .zip(source)
         .take_while(|(_, byte)| **byte != 0)
     {
-        *destination = byte as u8;
+        *destination = byte;
     }
     buffer
 }
@@ -52,8 +52,12 @@ use super::picker::{MAX_SAVED_GAMES, SAVES_PER_PAGE};
 use crate::ui::rgb15;
 use crate::{
     engine::{Kernel, World},
-    navigation::abi::*,
+    graphics::native_abi::{
+        COUNT, EXTENT, POINT, RECT, TEXT_ALIGN_ALIGN_CENTER, TEXT_ALIGN_ALIGN_LEFT,
+    },
+    starbase::ids::{MONTHS_STRING_BASE, SAFE_X},
 };
+const SAVE_NAME_SIZE: usize = crate::savegame::types::SAVE_NAME_SIZE;
 const DDSHS_EDIT: u16 = 1;
 const DDSHS_BLOCKCUR: u16 = 2;
 pub(super) fn draw_name_string(
@@ -132,7 +136,7 @@ pub(super) fn draw_save_name_string(
     let context = ContextLease::require(kernel.space_context);
     let (month, day, year) = world.data.calendar_date();
     let date = crate::ui::sis::format_date(
-        kernel.game_text((MONTHS_STRING_BASE + u32::from(month) - 1) as usize),
+        kernel.game_text((MONTHS_STRING_BASE + i32::from(month) - 1) as usize),
         day,
         year,
     );

@@ -107,14 +107,19 @@ fn options(keys: &[u32]) -> (u32, u8, [u8; 16], [u8; 16]) {
     let mut io = Io {
         observer: &mut observer,
     };
-    // SAFETY: this serial fixture lends the actual campaign for the whole modal chain.
-    let result = unsafe {
-        uqm_rust::app::bridge::with_game(&mut game, || {
-            uqm_rust::app::bridge::enter(|cx| {
-                uqm_rust::front_end::gameopt::game_options(cx, &mut io, None)
-            })
-        })
-    };
+    let mut battle = uqm_rust::engine::battle::Battle::new();
+    let result = uqm_rust::front_end::gameopt::game_options(
+        &mut Cx {
+            b: &mut battle,
+            world: &mut game.world,
+            kernel: &mut game.kernel,
+            rng: || panic!("settings must not consume RNG"),
+            solar_flight: None,
+            solar_frame: None,
+        },
+        &mut io,
+        None,
+    );
     assert!(runtime.keys.borrow().is_empty());
     assert!(game.kernel.sis_highlight.context.borrow().is_none());
     let state = (

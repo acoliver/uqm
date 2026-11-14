@@ -20,6 +20,26 @@ pub struct SummaryDesc {
     pub save_name: [u8; 64],
 }
 
+impl Default for SummaryDesc {
+    fn default() -> Self {
+        Self {
+            sis: SisState::default(),
+            activity: 0,
+            flags: 0,
+            day_index: 0,
+            month_index: 0,
+            year_index: 0,
+            mcredit_lo: 0,
+            mcredit_hi: 0,
+            num_ships: 0,
+            num_devices: 0,
+            ship_list: [0; 12],
+            device_list: [0; 16],
+            save_name: [0; 64],
+        }
+    }
+}
+
 impl From<&Summary> for SummaryDesc {
     fn from(s: &Summary) -> Self {
         let mut save_name = [0; 64];
