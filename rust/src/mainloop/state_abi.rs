@@ -6,8 +6,6 @@ extern "C" {
     static mut contentMountHandle: *mut uio_MountHandle;
 }
 
-pub(crate) use crate::navigation::{get as game_byte, set as set_game_byte};
-
 macro_rules! accessor {
     ($name:ident() -> $ret:ty = $body:expr) => {
         /// # Safety

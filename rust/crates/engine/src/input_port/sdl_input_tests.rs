@@ -135,15 +135,15 @@ fn numlock_keypad_characters_bypass_controls_only_in_character_mode() {
 fn input_gate_mouse_buttons_frame_start_and_reset_match_c() {
     let _driver = Driver::new();
     unsafe {
-        ptr::write_volatile(ptr::addr_of_mut!(MouseButtonDown), 0);
+        INPUT.lock().mouse_button_down = false;
         INPUT.lock().initialized = false;
         process_input_event(&event(0x401));
-        assert_eq!(ptr::read_volatile(ptr::addr_of!(MouseButtonDown)), 0);
+        assert!(!mouse_button_down());
         INPUT.lock().initialized = true;
         process_input_event(&event(0x401));
-        assert_eq!(ptr::read_volatile(ptr::addr_of!(MouseButtonDown)), 1);
+        assert!(mouse_button_down());
         process_input_event(&event(0x402));
-        assert_eq!(ptr::read_volatile(ptr::addr_of!(MouseButtonDown)), 0);
+        assert!(!mouse_button_down());
     }
     let mut target = 0;
     unsafe {

@@ -1,34 +1,20 @@
-//! RestartMenuOps trait — abstraction over C-side operations.
-//!
-//! @plan PLAN-20260707-RESTARTMENU.P05
-//! @requirement REQ-RM-005
+//! Supplied restart operations and retained menu resources.
+use super::{do_restart::DoRestartState, types::MenuInputState};
+use crate::engine::{
+    battle::Cx,
+    input::{self, frames::*},
+    observe::{Injected, InputView, Io},
+    StoryKey,
+};
+use crate::graphics::{
+    context_abi::{BatchGuard, ContextFrame, ContextLease, Overlay},
+    drawable_abi::LoadedDrawable,
+    native_abi::{Color, POINT, TEXT_ALIGN_ALIGN_RIGHT},
+    native_font::FontLease,
+};
+use crate::sound::resource_types::LoadedMusic;
+use uqm_engine::time::counter_abi::{GetTimeCounter, ONE_SECOND};
 
-#[cfg(not(test))]
-use std::ffi::CString;
-#[cfg(not(test))]
-use std::os::raw::c_void;
-use std::os::raw::{c_int, c_short};
-
-use super::c_extern::Color;
-#[cfg(not(test))]
-use super::c_extern::{self, Point};
-use super::types::MenuInputState;
-
-// ===========================================================================
-//  Constants
-// ===========================================================================
-
-/// `"music.mainmenu"` (imusicre.h:9).
-pub const MAINMENU_MUSIC: &str = "music.mainmenu";
-
-/// `"graphics.newgame"` (igfxres.h:251).
-pub const RESTART_PMAP_ANIM: &str = "graphics.newgame";
-
-/// Seed the generator for a new campaign (restart.c ~350-360).
-///
-/// A proof run supplies a fixed seed through the automation coordinator so a
-/// campaign replays; outside automation the coordinator returns the `0`
-/// sentinel and `clock_seed` seeds from the wall clock as before.
 pub fn seed_new_campaign(automation_seed: u32, clock_seed: impl FnOnce()) {
     if automation_seed != 0 {
         crate::math::seed_random(automation_seed);
@@ -37,686 +23,444 @@ pub fn seed_new_campaign(automation_seed: u32, clock_seed: impl FnOnce()) {
     }
 }
 
-// ===========================================================================
-//  RestartMenuOps trait
-// ===========================================================================
+pub trait RestartHost {
+    fn melee(&mut self, cx: &mut Cx<'_>, io: &mut Io<'_>);
+    fn credits(&mut self, cx: &mut Cx<'_>, io: &mut Io<'_>, victory: bool);
+    fn free_game_data(&mut self, cx: &mut Cx<'_>);
+}
 
-/// Abstraction over all C-side operations the restart menu performs.
-///
-/// Production code uses CffiOps (real FFI). Tests use mock implementations.
-///
-/// @plan PLAN-20260707-RESTARTMENU.P05
-/// @requirement REQ-RM-005
 pub trait RestartMenuOps {
-    fn input(&self, _view: crate::engine::observe::InputView) -> crate::engine::observe::Injected {
-        crate::engine::observe::Injected::default()
+    fn input(&mut self, _view: InputView) -> Injected {
+        Injected::default()
     }
-
-    // --- Activity globals ---
-    fn get_current_activity(&self) -> u16;
-    fn set_current_activity(&self, v: u16);
-    fn get_last_activity(&self) -> u16;
-    fn set_last_activity(&self, v: u16);
-    fn set_next_activity(&self, v: u16);
-
-    // --- Input ---
-    fn get_menu_input(&self) -> MenuInputState;
-    fn get_time_counter(&self) -> u32;
-
-    // --- Game state ---
-    fn get_utwig_bomb_on_ship(&self) -> u8;
-    fn set_utwig_bomb_on_ship(&self, v: u8);
-    fn get_utwig_bomb(&self) -> u8;
-    fn get_crew_enlisted(&self) -> u16;
-
-    // --- Game paused ---
-    fn set_game_paused(&self, val: bool);
-
-    // --- Race queues ---
-    fn reinit_race_queues(&self);
-
-    // --- Graphics ---
-    fn set_screen_context(&self);
-    /// `FadeScreen(ScreenFadeType, SIZE)` — returns a TimeCount for SleepThreadUntil.
-    fn fade_screen(&self, fade_type: u32, duration: c_short) -> u32;
-    fn sleep_thread_until(&self, time: u32);
-    fn sleep_thread(&self, duration: u32);
-    fn batch_graphics(&self);
-    fn unbatch_graphics(&self);
-    fn clear_drawable(&self);
-    fn flush_color_xforms(&self);
-    fn screen_transition(&self, a: c_int);
-    fn set_bg_color(&self, color: Color);
-    fn seed_random(&self);
-
-    // --- Resources ---
-    fn load_menu_graphic(&self) -> usize;
-    fn capture_drawable(&self, load_result: usize) -> usize;
-    fn destroy_drawable(&self, handle: usize);
-    fn release_drawable(&self, handle: usize) -> usize;
-
-    // --- Menu ---
-    /// Set the MENU_STATE pointer for subsequent draw/input calls.
-    fn set_menu_state_ptr(&self, ptr: usize);
-    /// Get the MENU_STATE pointer.
-    fn get_menu_state_ptr(&self) -> usize;
-    /// Get the current frame from MENU_STATE.
-    fn get_menu_frame(&self) -> usize;
-    /// Create the drawing record for the restart menu.
-    /// Returns a pointer (0 in test/mock mode).
-    fn create_menu_state(&self) -> usize;
-    /// Destroy a C MENU_STATE created by create_menu_state.
-    fn destroy_menu_state(&self, ptr: usize);
-
-    // --- MENU_STATE field sync (Rust → C) ---
-    // These write DoRestartState values back to the C MENU_STATE so that
-    // C drawing functions (DrawRestartMenu, DrawRestartMenuGraphic) see
-    // the correct field values.
-    fn sync_flash_context(&self, ctx: usize);
-    fn sync_initialized(&self, val: bool);
-    fn sync_cur_state(&self, state: u8);
-    fn sync_cur_frame(&self, frame: usize);
-    fn sync_h_music(&self, handle: usize);
-    fn draw_restart_menu_graphic(&self);
-    fn draw_restart_menu_state(&self, state: u8);
-    fn set_menu_sounds(&self, s0: u16, s1: u16);
-    fn set_default_menu_repeat_delay(&self);
-    fn set_transition_source_null(&self);
-    fn run_do_input(&self, reset_input: bool, state: &mut super::do_restart::DoRestartState);
-
-    // --- Music ---
-    fn load_menu_music(&self) -> usize;
-    fn play_music(&self, handle: usize);
-    fn stop_music(&self);
-    fn destroy_music(&self, handle: usize);
-    /// `FadeMusic(BYTE, SIZE)` — returns a TimeCount for SleepThreadUntil.
-    fn fade_music(&self, end_vol: u8, time_interval: c_short) -> u32;
-
-    // --- Flash ---
-    fn create_flash_overlay(&self) -> usize;
-    fn flash_process(&self, ctx: usize);
-    fn flash_pause(&self, ctx: usize);
-    fn flash_continue(&self, ctx: usize);
-    fn flash_start(&self, ctx: usize);
-    fn flash_terminate(&self, ctx: usize);
-    fn flash_set_merge_factors(&self, ctx: usize, a: c_int, b: c_int, c: c_int);
-    fn flash_set_speed(&self, ctx: usize, a: u32, b: u32, c: u32, d: u32);
-    fn flash_set_frame_time(&self, ctx: usize, t: u32);
-    fn flash_set_state_fade_in(&self, ctx: usize, duration: u32);
-    fn flash_set_overlay(&self, ctx: usize, frame_idx: u32);
-
-    // --- Lifecycle ---
-    fn melee(&self);
-    fn setup_menu(&self);
-    fn free_game_data(&self);
-    fn credits(&self, victory: bool);
-    fn victory(&self);
-    fn introduction(&self);
-    fn splash_screen(&self);
-    fn do_popup_window_msg(&self, string_id: u16);
-
-    // --- Player control ---
-    fn set_player_control(&self, player: u8, control: u16);
+    fn get_current_activity(&mut self) -> u16;
+    fn set_current_activity(&mut self, value: u16);
+    fn get_last_activity(&mut self) -> u16;
+    fn set_last_activity(&mut self, value: u16);
+    fn set_next_activity(&mut self, value: u16);
+    fn get_menu_input(&mut self) -> MenuInputState;
+    fn get_time_counter(&mut self) -> u32;
+    fn get_utwig_bomb_on_ship(&mut self) -> u8;
+    fn set_utwig_bomb_on_ship(&mut self, value: u8);
+    fn get_utwig_bomb(&mut self) -> u8;
+    fn get_crew_enlisted(&mut self) -> u16;
+    fn set_game_paused(&mut self, value: bool);
+    fn reinit_race_queues(&mut self);
+    fn set_screen_context(&mut self);
+    fn fade_screen(&mut self, kind: u32, duration: i16) -> u32;
+    fn sleep_thread_until(&mut self, time: u32);
+    fn sleep_thread(&mut self, duration: u32);
+    fn batch_graphics(&mut self);
+    fn unbatch_graphics(&mut self);
+    fn clear_drawable(&mut self);
+    fn flush_color_xforms(&mut self);
+    fn screen_transition(&mut self, kind: i32);
+    fn set_bg_color(&mut self, color: Color);
+    fn seed_random(&mut self);
+    fn load_menu_graphic(&mut self);
+    fn destroy_menu_graphic(&mut self);
+    fn draw_restart_menu_graphic(&mut self);
+    fn draw_restart_menu_state(&mut self, state: u8);
+    fn set_menu_sounds(&mut self, first: u16, second: u16);
+    fn set_default_menu_repeat_delay(&mut self);
+    fn set_transition_source_null(&mut self);
+    fn run_do_input(&mut self, reset_input: bool, state: &mut DoRestartState);
+    fn has_menu_music(&mut self) -> bool;
+    fn load_menu_music(&mut self) -> bool;
+    fn play_music(&mut self);
+    fn stop_music(&mut self);
+    fn destroy_music(&mut self);
+    fn fade_music(&mut self, end_volume: u8, duration: i16) -> u32;
+    fn create_flash_overlay(&mut self);
+    fn flash_process(&mut self);
+    fn flash_pause(&mut self);
+    fn flash_continue(&mut self);
+    fn flash_start(&mut self);
+    fn flash_terminate(&mut self);
+    fn flash_set_merge_factors(&mut self, start: i32, end: i32, denominator: i32);
+    fn flash_set_speed(&mut self, fade_in: u32, on: u32, fade_out: u32, off: u32);
+    fn flash_set_frame_time(&mut self, time: u32);
+    fn flash_set_state_fade_in(&mut self, duration: u32);
+    fn melee(&mut self);
+    fn setup_menu(&mut self);
+    fn free_game_data(&mut self);
+    fn credits(&mut self, victory: bool);
+    fn victory(&mut self);
+    fn introduction(&mut self);
+    fn splash_screen(&mut self);
+    fn do_popup_window_msg(&mut self, string_id: u16);
+    fn set_player_control(&mut self, player: u8, control: u16);
 }
 
-// ===========================================================================
-//  CffiOps — production implementation using real FFI (non-test only)
-// ===========================================================================
-
-#[cfg(not(test))]
-struct RestartContext<'a, 'b, 'c> {
-    cx: &'a mut crate::engine::battle::Cx<'b>,
-    io: &'a mut crate::engine::observe::Io<'c>,
+#[derive(Default)]
+pub struct RestartMenu {
+    music: Option<LoadedMusic>,
+    overlay: Option<Overlay>,
+    graphic: Option<LoadedDrawable>,
+    font: Option<FontLease>,
+    context: Option<ContextLease>,
+    batch: Option<BatchGuard>,
+    playing: bool,
 }
 
-#[cfg(not(test))]
-pub struct CffiOps<'a, 'b, 'c> {
-    menu_state: std::cell::Cell<usize>,
-    context: std::cell::RefCell<RestartContext<'a, 'b, 'c>>,
-}
-
-#[cfg(not(test))]
-impl<'a, 'b, 'c> CffiOps<'a, 'b, 'c> {
-    pub fn new(
-        cx: &'a mut crate::engine::battle::Cx<'b>,
-        io: &'a mut crate::engine::observe::Io<'c>,
-    ) -> Self {
-        Self {
-            menu_state: std::cell::Cell::new(0),
-            context: std::cell::RefCell::new(RestartContext { cx, io }),
+impl RestartMenu {
+    pub fn operations<'a, 'world, 'observer>(
+        &'a mut self,
+        cx: &'a mut Cx<'world>,
+        io: &'a mut Io<'observer>,
+        host: &'a mut dyn RestartHost,
+    ) -> impl RestartMenuOps + 'a + use<'a, 'world, 'observer> {
+        Operations {
+            menu: self,
+            cx,
+            io,
+            host,
         }
     }
 
-    fn owned<R>(
-        &self,
-        call: impl FnOnce(&mut crate::engine::battle::Cx<'_>, &mut crate::engine::observe::Io<'_>) -> R,
-    ) -> R {
-        let mut context = self.context.borrow_mut();
-        let RestartContext { cx, io } = &mut *context;
-        call(cx, io)
+    fn context(&self) -> &ContextLease {
+        self.context
+            .as_ref()
+            .unwrap_or_else(|| panic!("restart screen context not selected"))
     }
-
-    fn legacy<R>(&self, call: impl FnOnce() -> R) -> R {
-        self.owned(|cx, _| cx.with_legacy(call))
+    fn frame(&self) -> ContextFrame {
+        self.graphic
+            .as_ref()
+            .unwrap_or_else(|| panic!("restart graphic not loaded"))
+            .lease()
+            .context_frame(0)
+    }
+    fn overlay(&mut self) -> &mut Overlay {
+        self.overlay
+            .as_mut()
+            .unwrap_or_else(|| panic!("restart overlay not created"))
+    }
+}
+impl Drop for RestartMenu {
+    fn drop(&mut self) {
+        drop(self.batch.take());
+        if self.playing {
+            crate::ui::settings::stop_music();
+        }
     }
 }
 
-#[cfg(not(test))]
-impl RestartMenuOps for CffiOps<'_, '_, '_> {
-    fn input(&self, view: crate::engine::observe::InputView) -> crate::engine::observe::Injected {
-        self.owned(|cx, io| {
-            let campaign = crate::engine::observe::CampaignView::for_input(view, || {
-                crate::engine::observe::CampaignView::capture(cx.world, cx.kernel)
-            });
-            cx.with_legacy(|| io.observer.input_admitted(&view, &campaign))
-        })
+struct Operations<'a, 'world, 'observer> {
+    menu: &'a mut RestartMenu,
+    cx: &'a mut Cx<'world>,
+    io: &'a mut Io<'observer>,
+    host: &'a mut dyn RestartHost,
+}
+impl RestartMenuOps for Operations<'_, '_, '_> {
+    fn input(&mut self, view: InputView) -> Injected {
+        input::admit_observer(self.cx, self.io, view)
     }
-
-    fn get_current_activity(&self) -> u16 {
-        self.owned(|cx, _| cx.world.activity())
+    fn get_current_activity(&mut self) -> u16 {
+        self.cx.world.activity()
     }
-    fn set_current_activity(&self, v: u16) {
-        self.owned(|cx, _| cx.world.set_activity(v));
+    fn set_current_activity(&mut self, value: u16) {
+        self.cx.world.set_activity(value);
     }
-    fn get_last_activity(&self) -> u16 {
-        self.owned(|cx, _| cx.kernel.last_activity)
+    fn get_last_activity(&mut self) -> u16 {
+        self.cx.kernel.last_activity
     }
-    fn set_last_activity(&self, v: u16) {
-        self.owned(|cx, _| cx.kernel.last_activity = v);
+    fn set_last_activity(&mut self, value: u16) {
+        self.cx.kernel.last_activity = value;
     }
-    fn set_next_activity(&self, v: u16) {
-        self.owned(|cx, _| cx.world.next_activity = v);
+    fn set_next_activity(&mut self, value: u16) {
+        self.cx.world.next_activity = value;
     }
-
-    fn set_menu_state_ptr(&self, ptr: usize) {
-        self.menu_state.set(ptr);
-    }
-    fn get_menu_state_ptr(&self) -> usize {
-        self.menu_state.get()
-    }
-    fn get_menu_frame(&self) -> usize {
-        // Read pMS->CurFrame from the MENU_STATE struct.
-        // MENU_STATE layout (menustat.h): the CurFrame field is at a known
-        // offset. We read it via the C wrapper.
-        let pms = self.menu_state.get();
-        if pms == 0 {
-            return 0;
+    fn get_menu_input(&mut self) -> MenuInputState {
+        let menu = self.cx.kernel.input_controls().pulsed().menu;
+        MenuInputState {
+            select: menu[KEY_MENU_SELECT as usize] != 0,
+            up: menu[KEY_MENU_UP as usize] != 0,
+            down: menu[KEY_MENU_DOWN as usize] != 0,
+            left: menu[KEY_MENU_LEFT as usize] != 0,
+            right: menu[KEY_MENU_RIGHT as usize] != 0,
+            mouse_down: uqm_engine::input_port::sdl_input::mouse_button_down(),
         }
-        // SAFETY: pms was set by set_menu_state_ptr to a valid MENU_STATE*.
-        // CurFrame is accessed through the MENU_STATE struct.
-        unsafe { super::c_extern::uqm_get_menu_cur_frame(pms as *mut std::os::raw::c_void) }
     }
-    fn create_menu_state(&self) -> usize {
-        self.legacy(|| {
-            // SAFETY: the menu's drawing record remains owned until destroy_menu_state.
-            unsafe { super::c_extern::uqm_create_menu_state() as usize }
-        })
+    fn get_time_counter(&mut self) -> u32 {
+        GetTimeCounter()
     }
-    fn destroy_menu_state(&self, ptr: usize) {
-        self.legacy(|| {
-            // SAFETY: Frees the MENU_STATE allocated by create_menu_state.
-            unsafe { super::c_extern::uqm_destroy_menu_state(ptr as *mut std::os::raw::c_void) }
-        })
+    fn get_utwig_bomb_on_ship(&mut self) -> u8 {
+        self.cx.world.story_state(StoryKey::UTWIG_BOMB_ON_SHIP) as u8
     }
-
-    fn sync_flash_context(&self, ctx: usize) {
-        self.legacy(|| {
-            let pms = self.get_menu_state_ptr();
-            if pms != 0 {
-                // SAFETY: pms is a valid MENU_STATE* set by set_menu_state_ptr.
-                unsafe {
-                    super::c_extern::uqm_set_menu_flash_context(
-                        pms as *mut std::os::raw::c_void,
-                        ctx,
-                    )
-                }
-            }
-        })
+    fn set_utwig_bomb_on_ship(&mut self, value: u8) {
+        self.cx
+            .world
+            .set_story_state(StoryKey::UTWIG_BOMB_ON_SHIP, u32::from(value));
     }
-    fn sync_initialized(&self, val: bool) {
-        self.legacy(|| {
-            let pms = self.get_menu_state_ptr();
-            if pms != 0 {
-                unsafe {
-                    super::c_extern::uqm_set_menu_initialized(
-                        pms as *mut std::os::raw::c_void,
-                        if val { 1 } else { 0 },
-                    )
-                }
-            }
-        })
+    fn get_utwig_bomb(&mut self) -> u8 {
+        self.cx.world.story_state(StoryKey::UTWIG_BOMB) as u8
     }
-    fn sync_cur_state(&self, state: u8) {
-        self.legacy(|| {
-            let pms = self.get_menu_state_ptr();
-            if pms != 0 {
-                unsafe {
-                    super::c_extern::uqm_set_menu_cur_state(pms as *mut std::os::raw::c_void, state)
-                }
-            }
-        })
+    fn get_crew_enlisted(&mut self) -> u16 {
+        self.cx.world.data.flagship.crew_enlisted
     }
-    fn sync_cur_frame(&self, frame: usize) {
-        self.legacy(|| {
-            let pms = self.get_menu_state_ptr();
-            if pms != 0 {
-                unsafe {
-                    super::c_extern::uqm_set_menu_cur_frame(pms as *mut std::os::raw::c_void, frame)
-                }
-            }
-        })
+    fn set_game_paused(&mut self, value: bool) {
+        self.cx.kernel.input_controls().set_paused(value);
     }
-    fn sync_h_music(&self, handle: usize) {
-        self.legacy(|| {
-            let pms = self.get_menu_state_ptr();
-            if pms != 0 {
-                unsafe {
-                    super::c_extern::uqm_set_menu_h_music(pms as *mut std::os::raw::c_void, handle)
-                }
-            }
-        })
+    fn reinit_race_queues(&mut self) {
+        for side in 0..2 {
+            self.cx.kernel.ships(side).reinit();
+        }
     }
-
-    fn get_menu_input(&self) -> MenuInputState {
-        self.owned(|cx, _| {
-            let menu = cx.kernel.input_controls().pulsed().menu;
-            MenuInputState {
-                select: menu[c_extern::KEY_MENU_SELECT as usize] != 0,
-                up: menu[c_extern::KEY_MENU_UP as usize] != 0,
-                down: menu[c_extern::KEY_MENU_DOWN as usize] != 0,
-                left: menu[c_extern::KEY_MENU_LEFT as usize] != 0,
-                right: menu[c_extern::KEY_MENU_RIGHT as usize] != 0,
-                // SAFETY: the SDL provider samples mouse input on this game thread.
-                mouse_down: cx
-                    .with_legacy(|| unsafe { c_extern::uqm_get_mouse_button_down() != 0 }),
-            }
-        })
+    fn set_screen_context(&mut self) {
+        let context = ContextLease::require(self.cx.kernel.screen_context);
+        context.select();
+        self.menu.context = Some(context);
     }
-
-    fn get_time_counter(&self) -> u32 {
-        self.legacy(|| c_extern::uqm_get_time_counter())
+    fn fade_screen(&mut self, kind: u32, duration: i16) -> u32 {
+        self.menu.context().fade_screen(kind, duration)
     }
-
-    fn get_utwig_bomb_on_ship(&self) -> u8 {
-        self.legacy(|| {
-            // SAFETY: Reads a global game-state byte.
-            unsafe { c_extern::uqm_get_utwig_bomb_on_ship() }
-        })
+    fn sleep_thread_until(&mut self, time: u32) {
+        self.cx.kernel.input_runtime().sleep_until(self.cx, time);
     }
-    fn set_utwig_bomb_on_ship(&self, v: u8) {
-        self.legacy(|| {
-            // SAFETY: Writes a global game-state byte.
-            unsafe { c_extern::uqm_set_utwig_bomb_on_ship(v) }
-        })
+    fn sleep_thread(&mut self, duration: u32) {
+        self.cx.kernel.input_runtime().sleep(self.cx, duration);
     }
-    fn get_utwig_bomb(&self) -> u8 {
-        self.legacy(|| {
-            // SAFETY: Reads a global game-state byte.
-            unsafe { c_extern::uqm_get_utwig_bomb() }
-        })
+    fn batch_graphics(&mut self) {
+        assert!(
+            self.menu.batch.is_none(),
+            "restart drawing batch already open"
+        );
+        self.menu.batch = Some(self.menu.context().batch());
     }
-    fn get_crew_enlisted(&self) -> u16 {
-        self.owned(|cx, _| cx.world.data.flagship.crew_enlisted)
+    fn unbatch_graphics(&mut self) {
+        drop(
+            self.menu
+                .batch
+                .take()
+                .unwrap_or_else(|| panic!("restart drawing batch not open")),
+        );
     }
-
-    fn set_game_paused(&self, val: bool) {
-        self.owned(|cx, _| cx.kernel.input_controls().set_paused(val));
+    fn clear_drawable(&mut self) {
+        self.menu.context().clear();
     }
-
-    fn reinit_race_queues(&self) {
-        self.owned(|cx, _| {
-            for side in 0..2 {
-                cx.kernel.ships(side).reinit();
-            }
-        });
+    fn flush_color_xforms(&mut self) {
+        self.menu.context().finish_color_transforms();
     }
-
-    fn set_screen_context(&self) {
-        let context = self.owned(|cx, _| cx.kernel.screen_context);
-        // SAFETY: the drawing context belongs to the initialized kernel on this thread.
-        self.legacy(|| unsafe { c_extern::SetContext(context) });
+    fn screen_transition(&mut self, kind: i32) {
+        assert_eq!(kind, 3);
+        self.menu.context().transition(None);
     }
-
-    fn fade_screen(&self, fade_type: u32, duration: c_short) -> u32 {
-        self.legacy(|| {
-            // SAFETY: FadeScreen is safe to call on the main rendering thread.
-            unsafe { c_extern::FadeScreen(fade_type, duration) }
-        })
+    fn set_bg_color(&mut self, color: Color) {
+        self.menu.context().set_background(color);
     }
-    fn sleep_thread_until(&self, time: u32) {
-        self.legacy(|| {
-            // SAFETY: SleepThreadUntil blocks until the given time counter.
-            unsafe { c_extern::uqm_sleep_thread_until(time) }
-        })
-    }
-    fn sleep_thread(&self, duration: u32) {
-        self.legacy(|| {
-            // SAFETY: SleepThread blocks for the given duration.
-            unsafe { c_extern::uqm_sleep_thread(duration) }
-        })
-    }
-    fn batch_graphics(&self) {
-        self.legacy(|| {
-            // SAFETY: BatchGraphics is safe to call on the main rendering thread.
-            unsafe { c_extern::BatchGraphics() }
-        })
-    }
-    fn unbatch_graphics(&self) {
-        self.legacy(|| {
-            // SAFETY: UnbatchGraphics is safe to call after BatchGraphics.
-            unsafe { c_extern::UnbatchGraphics() }
-        })
-    }
-    fn clear_drawable(&self) {
-        self.legacy(|| {
-            // SAFETY: ClearDrawable clears the current rendering context.
-            unsafe { c_extern::ClearDrawable() }
-        })
-    }
-    fn flush_color_xforms(&self) {
-        self.legacy(|| {
-            // SAFETY: FlushColorXForms flushes pending color transforms.
-            unsafe { c_extern::FlushColorXForms() }
-        })
-    }
-    fn screen_transition(&self, a: c_int) {
-        self.legacy(|| {
-            // SAFETY: ScreenTransition with null drawable is a no-op transition.
-            unsafe { c_extern::ScreenTransition(a, std::ptr::null_mut()) }
-        })
-    }
-    fn set_bg_color(&self, color: Color) {
-        self.legacy(|| {
-            // SAFETY: SetContextBackGroundColor sets the background color for the current context.
-            unsafe {
-                c_extern::SetContextBackGroundColor(color);
-            }
-        })
-    }
-    fn seed_random(&self) {
+    fn seed_random(&mut self) {
         let seed = self
-            .input(crate::engine::observe::InputView::Seed {
+            .input(InputView::Seed {
                 domain: 3,
                 fallback: 0,
             })
             .seed
             .unwrap_or(0);
-        self.legacy(|| {
-            seed_new_campaign(seed, || {
-                let _ = crate::ui::util::seed_random_numbers();
-            })
+        seed_new_campaign(seed, || {
+            crate::ui::util::seed_random_numbers();
         });
     }
-
-    fn load_menu_graphic(&self) -> usize {
-        self.legacy(|| {
-            // SAFETY: RESTART_PMAP_ANIM is a compile-time string constant;
-            // CString allocation is infallible for ASCII without NUL bytes.
-            let res = CString::new(RESTART_PMAP_ANIM).unwrap_or_default();
-            // SAFETY: LoadGraphicInstance reads a resource by name; safe on main thread.
-            unsafe { c_extern::LoadGraphicInstance(res.as_ptr()) as usize }
-        })
-    }
-    fn capture_drawable(&self, load_result: usize) -> usize {
-        self.legacy(|| {
-            // SAFETY: load_result was obtained from LoadGraphicInstance.
-            unsafe { c_extern::CaptureDrawable((load_result as *mut c_void).cast()) as usize }
-        })
-    }
-    fn destroy_drawable(&self, handle: usize) {
-        self.legacy(|| {
-            // SAFETY: handle was obtained from CaptureDrawable and is valid.
-            unsafe {
-                c_extern::DestroyDrawable((handle as *mut c_void).cast());
-            }
-        })
-    }
-    fn release_drawable(&self, handle: usize) -> usize {
-        self.legacy(|| {
-            // SAFETY: handle was obtained from CaptureDrawable.
-            unsafe { c_extern::ReleaseDrawable((handle as *mut c_void).cast()) as usize }
-        })
-    }
-
-    fn draw_restart_menu_graphic(&self) {
-        self.owned(|cx, _| {
-            let font = cx.kernel.tiny_font;
-            let menu = self.get_menu_state_ptr();
-            cx.with_legacy(|| {
-                // SAFETY: the restart session retains the menu, its frame and the Kernel font.
-                unsafe { super::render_abi::draw_restart_menu_graphic(menu as _, font) }
-            })
-        })
-    }
-    fn draw_restart_menu_state(&self, state: u8) {
-        self.legacy(|| {
-            // SAFETY: pMS must be set by the caller. Frame comes from pMS->CurFrame.
-            let pms = self.get_menu_state_ptr();
-            let frame = self.get_menu_frame();
-            unsafe { c_extern::draw_restart_menu(pms as *mut c_void, state, frame as *mut c_void) }
-        })
-    }
-    fn set_menu_sounds(&self, s0: u16, s1: u16) {
-        self.owned(|cx, _| cx.kernel.input_controls().set_menu_sounds(s0, s1));
-    }
-    fn set_default_menu_repeat_delay(&self) {
-        self.owned(|cx, _| c_extern::SetDefaultMenuRepeatDelay(cx.kernel.input_controls()));
-    }
-
-    fn set_transition_source_null(&self) {
-        self.legacy(|| {
-            // SAFETY: Passing null is the documented no-source pattern.
-            unsafe { c_extern::SetTransitionSource(std::ptr::null_mut()) }
-        })
-    }
-    fn run_do_input(&self, reset_input: bool, state: &mut super::do_restart::DoRestartState) {
-        let menu = self.get_menu_state_ptr();
-        self.owned(|cx, io| {
-            cx.run_input(io, reset_input, |cx, io| {
-                let ops = CffiOps::new(cx, io);
-                ops.set_menu_state_ptr(menu);
-                super::do_restart::do_restart_frame(&ops, state)
-            })
-        });
-    }
-
-    fn load_menu_music(&self) -> usize {
-        self.legacy(|| {
-            // SAFETY: MAINMENU_MUSIC is a compile-time string constant.
-            let res = CString::new(MAINMENU_MUSIC).unwrap_or_default();
-            // SAFETY: LoadMusicInstance reads a resource by name; safe on main thread.
-            unsafe { c_extern::LoadMusicInstance(res.as_ptr()) as usize }
-        })
-    }
-    fn play_music(&self, handle: usize) {
-        self.owned(|cx, _| {
-            // SAFETY: handle is retained by this menu's music owner during admission.
-            unsafe {
-                crate::sound::music::remember_native_music(
-                    std::ptr::NonNull::new(handle as *mut c_void),
-                    true,
-                    1,
-                    cx.world.data.game.glob_flags & 8 == 0,
-                )
-            }
-        });
-    }
-    fn stop_music(&self) {
-        self.legacy(|| {
-            // SAFETY: StopMusic is safe to call any time.
-            c_extern::stop_music()
-        })
-    }
-    fn destroy_music(&self, handle: usize) {
-        self.legacy(|| {
-            if handle != 0 {
-                // SAFETY: handle was obtained from LoadMusicInstance and is valid.
-                unsafe {
-                    c_extern::DestroyMusic(handle as *mut c_void);
-                }
-            }
-        })
-    }
-    fn fade_music(&self, end_vol: u8, time_interval: c_short) -> u32 {
-        self.legacy(|| {
-            // SAFETY: fade_music is safe to call on the main thread.
-            c_extern::FadeMusic(end_vol, time_interval)
-        })
-    }
-
-    fn create_flash_overlay(&self) -> usize {
-        let context = self.owned(|cx, _| cx.kernel.screen_context);
-        // SAFETY: the drawing context belongs to the initialized kernel on this thread.
-        self.legacy(|| unsafe {
-            c_extern::Flash_createOverlay(context, std::ptr::null_mut(), std::ptr::null_mut())
-                as usize
-        })
-    }
-    fn flash_process(&self, ctx: usize) {
-        self.legacy(|| {
-            // SAFETY: ctx was obtained from create_flash_overlay.
-            unsafe { c_extern::Flash_process((ctx as *mut c_void).cast()) }
-        })
-    }
-    fn flash_pause(&self, ctx: usize) {
-        self.legacy(|| {
-            // SAFETY: ctx was obtained from create_flash_overlay.
-            unsafe { c_extern::Flash_pause((ctx as *mut c_void).cast()) }
-        })
-    }
-    fn flash_continue(&self, ctx: usize) {
-        self.legacy(|| {
-            // SAFETY: ctx was obtained from create_flash_overlay.
-            unsafe { c_extern::Flash_continue((ctx as *mut c_void).cast()) }
-        })
-    }
-    fn flash_start(&self, ctx: usize) {
-        self.legacy(|| {
-            // SAFETY: ctx was obtained from create_flash_overlay.
-            unsafe { c_extern::Flash_start((ctx as *mut c_void).cast()) }
-        })
-    }
-    fn flash_terminate(&self, ctx: usize) {
-        self.legacy(|| {
-            // SAFETY: ctx was obtained from create_flash_overlay.
-            unsafe { c_extern::Flash_terminate((ctx as *mut c_void).cast()) }
-        })
-    }
-    fn flash_set_merge_factors(&self, ctx: usize, a: c_int, b: c_int, c: c_int) {
-        self.legacy(|| {
-            // SAFETY: ctx was obtained from create_flash_overlay.
-            unsafe { c_extern::Flash_setMergeFactors((ctx as *mut c_void).cast(), a, b, c) }
-        })
-    }
-    fn flash_set_speed(&self, ctx: usize, a: u32, b: u32, c: u32, d: u32) {
-        self.legacy(|| {
-            // SAFETY: ctx was obtained from create_flash_overlay.
-            unsafe { c_extern::Flash_setSpeed((ctx as *mut c_void).cast(), a, b, c, d) }
-        })
-    }
-    fn flash_set_frame_time(&self, ctx: usize, t: u32) {
-        self.legacy(|| {
-            // SAFETY: ctx was obtained from create_flash_overlay.
-            unsafe { c_extern::Flash_setFrameTime((ctx as *mut c_void).cast(), t) }
-        })
-    }
-    fn flash_set_state_fade_in(&self, ctx: usize, duration: u32) {
-        self.legacy(|| {
-            // SAFETY: ctx was obtained from create_flash_overlay.
-            unsafe {
-                c_extern::Flash_setState(
-                    (ctx as *mut c_void).cast(),
-                    c_extern::FLASH_STATE_FADE_IN,
-                    duration,
-                )
-            }
-        })
-    }
-    fn flash_set_overlay(&self, ctx: usize, frame_idx: u32) {
-        self.legacy(|| {
-            // SetAbsFrameIndex takes COUNT (u16), so we cast.
-            let idx: u16 = frame_idx as u16;
-            let pms = self.get_menu_state_ptr();
-            if pms == 0 {
-                return;
-            }
-            // CRITICAL: Flash_setOverlay dereferences origin, so we must pass a
-            // valid POINT, not null. C reference passes {0, 0} (restart.c:99).
-            let origin = Point { x: 0, y: 0 };
-            // SAFETY: pms was set by set_menu_state_ptr. We read CurFrame from
-            // the MENU_STATE struct via the C accessor, then set its absolute
-            // frame index for the flash overlay.
-            unsafe {
-                let cur_frame = self.get_menu_frame();
-                let new_frame = c_extern::SetAbsFrameIndex((cur_frame as *mut c_void).cast(), idx);
-                c_extern::Flash_setOverlay((ctx as *mut c_void).cast(), &origin, new_frame)
-            }
-        })
-    }
-
-    fn melee(&self) {
-        // SAFETY: the restart session owns the game and its input/graphics resources.
-        self.owned(|cx, io| {
-            // SAFETY: restart dispatch owns the initialized game-thread menu resources.
-            unsafe {
-                use uqm_engine::io::{handles, uio_owned::Directory};
-                let config = Directory::retain(
-                    std::ptr::NonNull::new(handles::configDir)
-                        .unwrap_or_else(|| panic!("config directory")),
-                );
-                let teams = Directory::retain(
-                    std::ptr::NonNull::new(handles::meleeDir)
-                        .unwrap_or_else(|| panic!("melee directory")),
-                );
-                crate::supermelee::native::menu::live::melee(cx, io, config, teams)
-            }
-        })
-    }
-    fn setup_menu(&self) {
-        self.owned(|cx, io| {
-            use crate::front_end::setupmenu::{setup_menu, SetupConfiguration, SetupResources};
-            use uqm_engine::{
-                configuration::runtime::RuntimeSettings, graphics::context_abi::ContextLease,
-                resource::settings::Settings,
-            };
-            let context = ContextLease::require(cx.kernel.screen_context);
-            let runtime = RuntimeSettings::capture(&context);
-            let font = cx
+    fn load_menu_graphic(&mut self) {
+        self.menu.graphic = Some(
+            LoadedDrawable::load(c"graphics.newgame").unwrap_or_else(|| panic!("restart graphic")),
+        );
+        self.menu.font = Some(
+            self.cx
                 .kernel
-                .battle_font()
-                .unwrap_or_else(|| panic!("setup font not loaded"));
-            let resources = SetupResources::load(context, font);
-            let configuration = SetupConfiguration {
-                input: cx.kernel.input_runtime().input().clone(),
-                runtime,
-                settings: Settings,
-                names: uqm_engine::input_port::templates::input_templates(),
-            };
-            setup_menu(cx, io, configuration, resources);
-        })
+                .tiny_font_lease()
+                .unwrap_or_else(|| panic!("restart tiny font")),
+        );
     }
-    fn free_game_data(&self) {
-        // SAFETY: the stopped game session owns its resources and suspends itself for callbacks.
-        unsafe { self.owned(|cx, _| c_extern::free_game_data(cx)) }
+    fn destroy_menu_graphic(&mut self) {
+        self.menu.graphic = None;
+        self.menu.font = None;
     }
+    fn draw_restart_menu_graphic(&mut self) {
+        let context = self.menu.context();
+        let frame = self.menu.frame();
+        let bounds = frame.rect().extent;
+        let (width, height) = context.screen_dimensions();
+        context.set_background(Color {
+            r: 0,
+            g: 0,
+            b: 0,
+            a: 255,
+        });
+        let version = std::ffi::CString::new(concat!("v", env!("CARGO_PKG_VERSION")))
+            .unwrap_or_else(|_| panic!("package version contains NUL"));
+        context.with_batch(|| {
+            context.clear();
+            context.finish_color_transforms();
+            context.draw_stamp(
+                &frame,
+                POINT {
+                    x: centered_coordinate(width, bounds.width),
+                    y: centered_coordinate(height, bounds.height),
+                },
+            );
+            context.draw_text(
+                self.menu
+                    .font
+                    .as_ref()
+                    .unwrap_or_else(|| panic!("restart tiny font")),
+                &version,
+                POINT {
+                    x: (width - 3) as i16,
+                    y: (height - 2) as i16,
+                },
+                TEXT_ALIGN_ALIGN_RIGHT,
+                Color {
+                    r: 255,
+                    g: 255,
+                    b: 255,
+                    a: 255,
+                },
+            );
+        });
+    }
+    fn draw_restart_menu_state(&mut self, state: u8) {
+        let frame = self.menu.frame().wrapped_frame(u16::from(state) + 1);
+        self.menu.overlay().set_frame(POINT { x: 0, y: 0 }, frame);
+    }
+    fn set_menu_sounds(&mut self, first: u16, second: u16) {
+        self.cx
+            .kernel
+            .input_controls()
+            .set_menu_sounds(first, second);
+    }
+    fn set_default_menu_repeat_delay(&mut self) {
+        self.cx.kernel.input_controls().configure_repeat(
+            ONE_SECOND / 12,
+            ONE_SECOND / 2,
+            ONE_SECOND / 12,
+            false,
+            GetTimeCounter(),
+        );
+    }
+    fn set_transition_source_null(&mut self) {
+        self.menu.context().transition_source(None);
+    }
+    fn run_do_input(&mut self, reset_input: bool, state: &mut DoRestartState) {
+        let menu = &mut *self.menu;
+        let host = &mut *self.host;
+        self.cx.run_input(self.io, reset_input, |cx, io| {
+            let mut ops = Operations { menu, cx, io, host };
+            super::do_restart::do_restart_frame(&mut ops, state)
+        });
+    }
+    fn has_menu_music(&mut self) -> bool {
+        self.menu.music.is_some()
+    }
+    fn load_menu_music(&mut self) -> bool {
+        self.menu.music = LoadedMusic::load(c"music.mainmenu");
+        self.menu.music.is_some()
+    }
+    fn play_music(&mut self) {
+        crate::ui::settings::play_loaded_music(self.cx.world, self.menu.music.as_ref(), 1, 1);
+        self.menu.playing = true;
+    }
+    fn stop_music(&mut self) {
+        crate::ui::settings::stop_music();
+        self.menu.playing = false;
+    }
+    fn destroy_music(&mut self) {
+        self.menu.music = None;
+    }
+    fn fade_music(&mut self, end_volume: u8, duration: i16) -> u32 {
+        crate::sound::heart_ffi::fade_music(end_volume, duration)
+    }
+    fn create_flash_overlay(&mut self) {
+        self.menu.overlay = Some(self.menu.context().overlay());
+    }
+    fn flash_process(&mut self) {
+        self.menu.overlay().process();
+    }
+    fn flash_pause(&mut self) {
+        self.menu.overlay().pause();
+    }
+    fn flash_continue(&mut self) {
+        self.menu.overlay().resume();
+    }
+    fn flash_start(&mut self) {
+        self.menu.overlay().start();
+    }
+    fn flash_terminate(&mut self) {
+        self.menu.overlay = None;
+    }
+    fn flash_set_merge_factors(&mut self, start: i32, end: i32, denominator: i32) {
+        self.menu
+            .overlay()
+            .set_merge_factors(start, end, denominator);
+    }
+    fn flash_set_speed(&mut self, fade_in: u32, on: u32, fade_out: u32, off: u32) {
+        self.menu.overlay().set_speed(fade_in, on, fade_out, off);
+    }
+    fn flash_set_frame_time(&mut self, time: u32) {
+        self.menu.overlay().set_frame_time(time);
+    }
+    fn flash_set_state_fade_in(&mut self, duration: u32) {
+        self.menu.overlay().fade_in(duration);
+    }
+    fn melee(&mut self) {
+        self.host.melee(self.cx, self.io);
+    }
+    fn setup_menu(&mut self) {
+        use crate::engine::{
+            configuration::runtime::RuntimeSettings, resource::settings::Settings,
+        };
+        use crate::front_end::setupmenu::{setup_menu, SetupConfiguration, SetupResources};
+        let context = self.menu.context().clone();
+        let runtime = RuntimeSettings::capture(&context);
+        let font = self
+            .cx
+            .kernel
+            .battle_font()
+            .unwrap_or_else(|| panic!("setup font not loaded"));
+        let resources = SetupResources::load(context, font);
+        let configuration = SetupConfiguration {
+            input: self.cx.kernel.input_runtime().input().clone(),
+            runtime,
+            settings: Settings,
+            names: crate::engine::input_port::templates::input_templates(),
+        };
+        setup_menu(self.cx, self.io, configuration, resources);
+    }
+    fn free_game_data(&mut self) {
+        self.host.free_game_data(self.cx);
+    }
+    fn credits(&mut self, victory: bool) {
+        self.host.credits(self.cx, self.io, victory);
+    }
+    fn victory(&mut self) {
+        crate::front_end::fmv::victory(self.cx, self.io);
+    }
+    fn introduction(&mut self) {
+        crate::front_end::fmv::introduction(self.cx, self.io);
+    }
+    fn splash_screen(&mut self) {
+        crate::front_end::fmv::splash_screen(self.cx, self.io, |_, _| {});
+    }
+    fn do_popup_window_msg(&mut self, string_id: u16) {
+        let index = (crate::starbase::ids::MAINMENU_STRING_BASE as u16).wrapping_add(string_id);
+        let text = self.cx.kernel.game_text(usize::from(index)).to_owned();
+        crate::ui::confirm::do_popup_window(self.cx, self.io, &text);
+    }
+    fn set_player_control(&mut self, player: u8, control: u16) {
+        self.cx.kernel.player_control[usize::from(player)] = control as u8;
+    }
+}
 
-    fn credits(&self, victory: bool) {
-        self.owned(|cx, io| crate::front_end::credits::credits(cx, io, victory));
-    }
-    fn victory(&self) {
-        self.owned(crate::front_end::fmv::victory);
-    }
-    fn introduction(&self) {
-        self.owned(crate::front_end::fmv::introduction);
-    }
-    fn splash_screen(&self) {
-        self.owned(|cx, io| crate::front_end::fmv::splash_screen(cx, io, |_, _| {}));
-    }
-    fn do_popup_window_msg(&self, string_id: u16) {
-        self.owned(|cx, io| super::menu_abi::uqm_do_popup_window_msg(cx, io, string_id))
-    }
+fn centered_coordinate(screen: i32, image: i16) -> i16 {
+    ((screen - i32::from(image)) >> 1) as i16
+}
 
-    fn set_player_control(&self, player: u8, control: u16) {
-        self.owned(|cx, _| super::menu_abi::uqm_set_player_control(cx.kernel, player, control))
+#[cfg(test)]
+mod layout_tests {
+    #[test]
+    fn centers_restart_frame_with_original_signed_shift_rounding() {
+        use super::centered_coordinate;
+        assert_eq!(centered_coordinate(320, 320), 0);
+        assert_eq!(centered_coordinate(320, 301), 9);
+        assert_eq!(centered_coordinate(200, 203), -2);
     }
 }

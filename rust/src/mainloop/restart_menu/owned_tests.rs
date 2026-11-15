@@ -24,6 +24,8 @@ impl RestartHost for NoLifecycle {
 fn production_menu_borrows_unpublished_story_and_activity_owners_independently() {
     let mut first = Game::new();
     let mut second = Game::new();
+    first.world.story = Some(crate::engine::world::story::StoryState::new());
+    second.world.story = Some(crate::engine::world::story::StoryState::new());
     first.world.set_story_state(StoryKey::UTWIG_BOMB, 1);
     first.world.set_story_state(StoryKey::UTWIG_BOMB_ON_SHIP, 1);
     second
@@ -135,4 +137,101 @@ fn production_menu_admits_the_supplied_observer_without_requiring_display_resour
         observer.0,
         [InputView::ReplacesIntroduction, InputView::MainMenuReady]
     );
+}
+
+#[test]
+#[serial_test::serial]
+fn retained_production_menu_draws_centered_pixels_after_campaign_resources_are_dropped() {
+    if !crate::native_test_process::own_graphics_process("mainloop::restart_menu::owned_tests::retained_production_menu_draws_centered_pixels_after_campaign_resources_are_dropped") {
+        return;
+    }
+    use crate::graphics::{
+        context_abi::{ContextFrame, ContextLease},
+        native_abi::{Color, EXTENT, POINT, RECT},
+    };
+    let mut game = Game::new();
+    let mut menu = RestartMenu::default();
+    let mut host = NoLifecycle;
+    let mut observer = Unobserved;
+    let mut io = Io {
+        observer: &mut observer,
+    };
+    let fixture = crate::campaign_display_test::CampaignDisplay::install_prepared(
+        &mut game,
+        || {},
+        |game| {
+            let context = ContextLease::require(game.kernel.status_context);
+            game.kernel.screen_context = game.kernel.status_context;
+            context.set_frame(ContextFrame::retain(std::ptr::NonNull::new(
+                game.kernel.screen,
+            )));
+            context.set_clip(RECT {
+                corner: POINT { x: 0, y: 0 },
+                extent: EXTENT {
+                    width: 320,
+                    height: 240,
+                },
+            });
+            let mut battle = Battle::new();
+            {
+                let mut cx = Cx::new(
+                    &mut battle,
+                    &mut game.world,
+                    &mut game.kernel,
+                    crate::math::random,
+                );
+                let mut ops = menu.operations(&mut cx, &mut io, &mut host);
+                ops.set_screen_context();
+                ops.load_menu_graphic();
+                ops.draw_restart_menu_graphic();
+                ops.create_flash_overlay();
+                ops.flash_set_merge_factors(-3, 3, 16);
+                ops.flash_set_speed(315, 0, 315, 0);
+                ops.flash_set_frame_time(52);
+                ops.flash_set_state_fade_in(157);
+                ops.draw_restart_menu_state(0);
+                ops.flash_pause();
+                ops.flash_continue();
+                ops.flash_terminate();
+            }
+            context.flush();
+            let target = context.target();
+            let rgba = |point| {
+                let Color { r, g, b, a } = target.pixel(point);
+                (r, g, b, a)
+            };
+            assert_eq!(rgba(POINT { x: 159, y: 119 }), (255, 255, 255, 255));
+            assert_eq!(rgba(POINT { x: 160, y: 119 }), (0, 0, 0, 255));
+            assert!(
+                (230..240)
+                    .any(|y| (300..320).any(|x| rgba(POINT { x, y }) == (255, 255, 255, 255))),
+                "the version label must render with the retained tiny font"
+            );
+            drop(std::mem::replace(game, Game::new()));
+            let mut cx = Cx::new(
+                &mut battle,
+                &mut game.world,
+                &mut game.kernel,
+                crate::math::random,
+            );
+            let mut ops = menu.operations(&mut cx, &mut io, &mut host);
+            ops.batch_graphics();
+            ops.draw_restart_menu_graphic();
+            ops.unbatch_graphics();
+            context.flush();
+            assert_eq!(rgba(POINT { x: 159, y: 119 }), (255, 255, 255, 255));
+            assert!(
+                (230..240)
+                    .any(|y| (300..320).any(|x| rgba(POINT { x, y }) == (255, 255, 255, 255))),
+                "the version label must survive campaign font teardown"
+            );
+            ops.destroy_menu_graphic();
+            assert!(!ops.has_menu_music());
+            assert!(!ops.load_menu_music());
+            ops.destroy_music();
+        },
+    )
+    .unwrap();
+    drop(menu);
+    fixture.finish(game);
 }

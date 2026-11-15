@@ -10,7 +10,6 @@ pub const HANDLERS: &[(&str, &str)] = &[
     ("src/graphics/gfx_common_abi.rs", "screen_global"),
     ("src/mainloop/state_abi.rs", "accessor"),
     ("src/mainloop/main2_abi.rs", "operation"),
-    ("src/mainloop/restart_menu/menu_abi.rs", "operation"),
     ("src/collections/hash_table.rs", "define_hash_table"),
     ("src/comm/live/comandr.rs", "callbacks"),
     ("src/world/story/schema.rs", "game_state_fields"),

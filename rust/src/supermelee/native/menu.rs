@@ -9,8 +9,8 @@ pub(crate) mod live {
     use crate::graphics::{context_abi::ContextLease, drawable_abi::LoadedDrawable};
     use std::ptr::NonNull;
 
-    use crate::mainloop::restart_menu::c_extern::FadeMusic;
     use crate::navigation::abi::{init_space, uninit_space};
+    use crate::sound::heart_ffi::fade_music as FadeMusic;
 
     use crate::ships::native::abi::*;
 

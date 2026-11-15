@@ -58,7 +58,7 @@ pub struct FlashOverlay {
 const HIGHLIGHT: u32 = 0;
 const TRANSITION: u32 = 1;
 const OVERLAY: u32 = 2;
-const FADE_IN: u32 = 0;
+pub(super) const FADE_IN: u32 = 0;
 const ON: u32 = 1;
 const FADE_OUT: u32 = 2;
 const OFF: u32 = 3;

@@ -34,6 +34,10 @@ pub const KEY_MENU_NEXT: u32 = 22;
 pub const KEY_MENU_ANY: u32 = 23;
 pub const NUM_MENU_KEYS: u32 = 24;
 
+pub const MENU_SOUND_UP: u16 = 1 << 0;
+pub const MENU_SOUND_DOWN: u16 = 1 << 1;
+pub const MENU_SOUND_SELECT: u16 = 1 << 4;
+
 pub const TEMPLATES: usize = 6;
 pub const FLIGHT_KEYS: usize = 7;
 pub const MENU_KEYS: usize = 24;

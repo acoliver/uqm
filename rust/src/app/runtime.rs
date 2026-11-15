@@ -94,9 +94,14 @@ fn run_game(
     };
     // SAFETY: the kernel and native input runtime are initialized on their owner thread.
     unsafe { crate::mainloop::lifecycle_abi::uqm_splash_with_bg_init_kernel(&mut cx, &mut io) };
-    while crate::mainloop::restart_menu::orchestration::start_game_impl(
-        &crate::mainloop::restart_menu::restart_ops::CffiOps::new(&mut cx, &mut io),
-    ) {
+    while {
+        let mut menu = crate::mainloop::restart_menu::restart_ops::RestartMenu::default();
+        let mut host = RestartServices;
+        let started = crate::mainloop::restart_menu::orchestration::start_game_impl(
+            &mut menu.operations(&mut cx, &mut io, &mut host),
+        );
+        started
+    } {
         run_campaign(&mut cx, &mut io, observer.as_ref());
     }
     // SAFETY: all campaign modes and their borrowed resources have returned.
@@ -107,6 +112,37 @@ fn run_game(
     }
     cx.with_legacy(|| crate::log_abi::log_showBox(false, false));
     Ok(())
+}
+
+#[cfg(not(test))]
+struct RestartServices;
+
+#[cfg(not(test))]
+impl crate::mainloop::restart_menu::restart_ops::RestartHost for RestartServices {
+    fn melee(&mut self, cx: &mut Cx<'_>, io: &mut Io<'_>) {
+        use crate::engine::io::{handles, uio_owned::Directory};
+        // SAFETY: application startup retains these two directories for the native melee session.
+        let (config, teams) = unsafe {
+            (
+                Directory::retain(
+                    std::ptr::NonNull::new(handles::configDir)
+                        .unwrap_or_else(|| panic!("config directory")),
+                ),
+                Directory::retain(
+                    std::ptr::NonNull::new(handles::meleeDir)
+                        .unwrap_or_else(|| panic!("melee directory")),
+                ),
+            )
+        };
+        crate::supermelee::native::menu::live::melee(cx, io, config, teams);
+    }
+    fn credits(&mut self, cx: &mut Cx<'_>, io: &mut Io<'_>, victory: bool) {
+        crate::front_end::credits::credits(cx, io, victory);
+    }
+    fn free_game_data(&mut self, cx: &mut Cx<'_>) {
+        // SAFETY: the restart policy requests cleanup only after the active campaign has stopped.
+        unsafe { crate::game_init::cleanup::free_game_data(cx) };
+    }
 }
 
 #[cfg(not(test))]
