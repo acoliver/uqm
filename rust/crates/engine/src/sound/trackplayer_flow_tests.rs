@@ -33,6 +33,56 @@ impl Drop for Engine {
     }
 }
 
+#[test]
+fn subtitle_snapshots_keep_identity_and_bytes_after_seeking_and_teardown() {
+    let _engine = engine();
+    assert!(subtitle_snapshot().is_none());
+    splice_two_pages(None);
+    play_track(false).unwrap();
+    let first = subtitle_snapshot().unwrap();
+    assert_eq!(first, subtitle_snapshot().unwrap());
+    assert_eq!(first.text.as_c_str(), c"First line...");
+    let history = subtitle_history();
+    assert_eq!(history.len(), 2);
+    assert_eq!(history[0], first);
+    fast_forward_page().unwrap();
+    let second = subtitle_snapshot().unwrap();
+    assert_ne!(second.identity, first.identity);
+    assert_eq!(second.text.as_c_str(), c"..Second line");
+    stop_track().unwrap();
+    assert!(subtitle_snapshot().is_none());
+    assert!(subtitle_history().is_empty());
+    assert_eq!(first.text.as_c_str(), c"First line...");
+    assert_eq!(history[1].text.as_c_str(), c"..Second line");
+}
+
+#[test]
+fn subtitle_history_skips_untagged_number_audio_without_changing_page_order() {
+    let _engine = engine();
+    splice_two_pages(None);
+    splice_multi_track(vec![voice(1, 0.24)], Some("")).unwrap();
+    TRACK_STATE.lock().no_page_break = false;
+    splice_track(Some("next"), Some("Third"), None, None, vec![voice(1, 1.0)]).unwrap();
+    let history = subtitle_history();
+    assert_eq!(
+        history
+            .iter()
+            .map(|page| page.text.as_c_str())
+            .collect::<Vec<_>>(),
+        [c"First line...", c"..Second line", c"Third"]
+    );
+    assert_ne!(history[0].identity, history[1].identity);
+    assert_ne!(history[1].identity, history[2].identity);
+}
+
+#[test]
+fn speech_admission_requires_borrowed_strings_and_bounded_clip_slices() {
+    use std::ffi::CStr;
+    let _: fn(Option<&CStr>, Option<&CStr>, Option<&CStr>, Option<Box<dyn Fn(i32) + Send>>) =
+        crate::sound::heart_ffi::splice_track;
+    let _: fn(&[&CStr], Option<&CStr>) = crate::sound::heart_ffi::splice_multi_track;
+}
+
 /// A decoder with `pcm_chunks` blocks of audio that lasts `secs` seconds.
 fn voice(pcm_chunks: usize, secs: f32) -> Box<dyn SoundDecoder> {
     let chunks = (0..pcm_chunks).map(|i| vec![i as u8; 400]).collect();

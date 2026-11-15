@@ -130,6 +130,22 @@ mod tests {
     use crate::comm::races::descriptor::{DigitName, SpeechDigit};
 
     #[test]
+    fn number_text_preserves_decimal_and_three_column_printf_bytes() {
+        for (number, plain, padded) in [
+            (0, c"0", c"000"),
+            (7, c"7", c"007"),
+            (-7, c"-7", c"-07"),
+            (1234, c"1234", c"1234"),
+            (i32::MIN, c"-2147483648", c"-2147483648"),
+            (i32::MAX, c"2147483647", c"2147483647"),
+        ] {
+            assert_eq!(runtime::number_text(number, false).as_c_str(), plain);
+            assert_eq!(runtime::number_text(number, true).as_c_str(), padded);
+        }
+        let _: fn(&mut Comm, i32, bool) = runtime::npc_number;
+    }
+
+    #[test]
     fn immutable_race_number_tables_preserve_zero_teens_and_recursive_thousands() {
         use crate::comm::races::{melnorm, slyland};
         fn assert_shared(_: &'static NumberSpeech) {}
