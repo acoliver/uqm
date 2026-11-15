@@ -1,9 +1,12 @@
 //! Live planet, asteroid, rubble, damage and floating-crew callbacks.
 
 use super::flags::*;
+use crate::graphics::native_abi::Color;
 #[cfg(not(test))]
 use crate::graphics::native_abi::EMPTY_PRIMITIVE as gfx_object_NUM_PRIMS;
-use crate::graphics::native_abi::{Color, POINT};
+#[cfg(not(test))]
+use crate::graphics::native_abi::POINT;
+#[cfg(not(test))]
 use crate::math::battle_types::{FACING_SHIFT, FULL_CIRCLE, HALF_CIRCLE, MAX_REDUCTION, ONE_SHIFT};
 #[cfg(not(test))]
 const POINT_PRIMITIVE: u8 = 0;
@@ -163,7 +166,7 @@ mod engine {
         let Some(e) = cx.alloc_element() else {
             if let Some(source) = source {
                 cx.element_mut(source).flags &= !(DISAPPEARING as u16);
-                cx.primitive_style_mut(source).kind = gfx_object_NUM_PRIMS as u8;
+                cx.primitive_style_mut(source).kind = gfx_object_NUM_PRIMS;
                 cx.element_mut(source).set_life_span(1);
             }
             return;
@@ -297,10 +300,10 @@ mod engine {
         let mut intersect = source.intersection();
         let rect = cx.frame_rect(cx.subject_intersect_frame(&source));
         let direction = cx.element(ship).velocity.travel_angle;
-        let (dx, dy) = if direction == FULL_CIRCLE as u16 {
+        let (dx, dy) = if direction == FULL_CIRCLE {
             (0, 0)
         } else {
-            let direction = direction.wrapping_add(HALF_CIRCLE as u16);
+            let direction = direction.wrapping_add(HALF_CIRCLE);
             (cosine(direction as i32, 100), sine(direction as i32, 100))
         };
         while loss != 0 {

@@ -1,4 +1,5 @@
 //! Projectile allocation, collision and blast records on the supplied context.
+#[cfg(not(test))]
 use super::flags::*;
 #[cfg(not(test))]
 use super::hooks::animation_preprocess;
@@ -6,10 +7,13 @@ use super::hooks::animation_preprocess;
 use super::projectile;
 #[cfg(not(test))]
 use super::{CollisionHook, Cx, ElementHook, ElementId};
+#[cfg(not(test))]
 use crate::graphics::native_abi::{LINE_PRIMITIVE as gfx_object_LINE_PRIM, POINT};
 #[cfg(not(test))]
 use crate::graphics::STAMP_PRIMITIVE;
-use crate::math::battle_types::{FULL_CIRCLE, HALF_CIRCLE, ONE_SHIFT};
+use crate::math::battle_types::HALF_CIRCLE;
+#[cfg(not(test))]
+use crate::math::battle_types::{FULL_CIRCLE, ONE_SHIFT};
 use crate::math::{angle_to_facing, normalize_facing};
 #[cfg(not(test))]
 use crate::math::{cosine, sine};
@@ -50,7 +54,7 @@ pub fn initialize_laser(cx: &mut Cx<'_>, b: &crate::battle::views::Laser) -> Opt
         x: position.0,
         y: position.1,
     };
-    cx.primitive_style_mut(e).kind = gfx_object_LINE_PRIM as u8;
+    cx.primitive_style_mut(e).kind = gfx_object_LINE_PRIM;
     cx.primitive_style_mut(e).color = b.color;
     cx.set_star_image(e);
     cx.element_mut(e)
@@ -113,7 +117,7 @@ pub fn weapon_collision(
         if damage != 0 {
             cx.game_sound((2 + (damage >> 1)).min(5) as u16, hit);
         }
-        if cx.primitive_style(w).kind != gfx_object_LINE_PRIM as u8 {
+        if cx.primitive_style(w).kind != gfx_object_LINE_PRIM {
             cx.element_mut(w).flags |= DISAPPEARING as u16;
         }
         cx.element_mut(w).hits = 0;
