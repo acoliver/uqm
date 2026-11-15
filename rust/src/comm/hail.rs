@@ -253,6 +253,18 @@ unsafe fn load_alien_song(
     crate::sound::resource_types::LoadMusicInstance(resource_key(descriptor.alien_song_res))
 }
 
+unsafe fn load_conversation_text(comm: &mut Comm) {
+    comm.display.game_strings = Some(crate::strings::owned_table::LoadedTextTable::retain(
+        std::ptr::NonNull::new(comm.presentation.game_strings.cast())
+            .expect("conversation game strings"),
+    ));
+    comm.display.phrases = comm
+        .data
+        .definition
+        .conversation_phrases_res
+        .and_then(crate::strings::conversation::ConversationTable::load);
+}
+
 /// Run the full alien encounter sequence.
 ///
 /// Implements C's `hail_alien(comm)` (comm.c:1183–1308) plus the
@@ -327,9 +339,7 @@ pub unsafe fn hail_alien(_comm: &mut Comm, cx: &mut Cx<'_>, io: &mut Io<'_>) {
             let alien_song = load_alien_song(descriptor);
             _comm.data.alien_song = alien_song;
 
-            _comm.display.phrases = descriptor
-                .conversation_phrases_res
-                .and_then(crate::strings::conversation::ConversationTable::load);
+            load_conversation_text(_comm);
 
             {
                 let comm_data = super::types::CommData {
@@ -505,6 +515,23 @@ pub unsafe fn hail_alien(_comm: &mut Comm, cx: &mut Cx<'_>, io: &mut Io<'_>) {
 #[cfg(test)]
 mod tests {
     use crate::comm::Comm;
+    #[test]
+    #[serial_test::serial]
+    fn conversation_text_admission_retains_the_supplied_game_labels() {
+        super::super::sis_graphics_font_tests::with_display(
+            "comm::hail::tests::conversation_text_admission_retains_the_supplied_game_labels",
+            |comm, _| {
+                // SAFETY: the real display fixture lends its Kernel-owned plain-text table.
+                unsafe { super::load_conversation_text(comm) };
+                assert_eq!(
+                    comm.display.game_strings.as_ref().unwrap().label(256).0,
+                    c"A"
+                );
+                assert!(comm.display.phrases.is_none());
+            },
+        );
+    }
+
     /// hail_alien is a no-op in test builds (all C bridge calls are gated
     /// behind #[cfg(not(test))]). The public function must exist and be callable.
     #[test]

@@ -3,7 +3,7 @@
 use crate::comm::Comm;
 use crate::engine::observe::CheckpointView;
 use crate::engine::StoryKey;
-use std::ffi::{c_char, c_int, c_uint, CStr};
+use std::ffi::{c_int, c_uint, CStr};
 
 use super::segue::Segue;
 use super::types::CommIntroMode;
@@ -101,51 +101,6 @@ pub fn rust_get_track_length(comm: &mut Comm) -> f32 {
     comm.track().length()
 }
 
-/// Add a speech chunk to the track
-/// # Safety
-///
-/// `text` must be null or point to a valid NUL-terminated string.
-pub unsafe fn rust_splice_track(
-    comm: &mut Comm,
-    audio_handle: c_uint,
-    text: *const c_char,
-    start_time: f32,
-    duration: f32,
-) {
-    let subtitle = if text.is_null() {
-        None
-    } else {
-        unsafe { CStr::from_ptr(text).to_str().ok() }
-    };
-
-    comm.track_mut()
-        .splice_track(audio_handle, subtitle, start_time, duration);
-}
-
-/// Add text-only subtitle to the track
-/// # Safety
-///
-/// `text` must be null or point to a valid NUL-terminated string.
-pub unsafe fn rust_splice_track_text(
-    comm: &mut Comm,
-    text: *const c_char,
-    start_time: f32,
-    duration: f32,
-) {
-    if text.is_null() {
-        return;
-    }
-
-    let text_str = unsafe {
-        match CStr::from_ptr(text).to_str() {
-            Ok(s) => s,
-            Err(_) => return,
-        }
-    };
-
-    comm.track_mut().splice_text(text_str, start_time, duration);
-}
-
 /// Clear the track
 pub fn rust_clear_track(comm: &mut Comm) {
     comm.track_mut().clear();
@@ -183,24 +138,6 @@ pub fn rust_fast_reverse_smooth(comm: &mut Comm) {
 // ============================================================================
 // Subtitle Management
 // ============================================================================
-
-/// Get current subtitle (returns null if none).
-/// Returns a stable C string via thread-local buffer (OL-REQ-009, OL-REQ-010).
-/// Pointer is valid until the next call to rust_get_subtitle on the same thread.
-pub fn rust_get_subtitle(comm: &mut Comm) -> *const c_char {
-    let state = &*comm;
-    match state.current_subtitle() {
-        Some(s) => {
-            let text = s.as_bytes().to_vec();
-            let buf = &mut comm.subtitle_buf;
-            buf.clear();
-            buf.extend_from_slice(&text);
-            buf.push(0); // null terminator
-            buf.as_ptr() as *const c_char
-        }
-        None => std::ptr::null(),
-    }
-}
 
 /// Enable/disable subtitles
 pub fn rust_set_subtitles_enabled(comm: &mut Comm, enabled: c_int) {
@@ -276,46 +213,6 @@ pub fn response_choices(comm: &Comm) -> crate::engine::observe::ResponseChoices 
 /// Get number of responses
 pub fn rust_get_response_count(comm: &mut Comm) -> c_int {
     comm.responses().count() as c_int
-}
-
-/// Copy response text at `index` into `buf` (max `buf_len` bytes, including NUL).
-/// # Safety
-///
-/// A non-null `buf` must be writable for `buf_len` bytes when `buf_len` is positive.
-///
-/// Returns 1 if the text was written, 0 if index is out of range or buf is NULL.
-/// The buffer is always NUL-terminated when returning 1.
-///
-/// Called from C's `c_RefreshResponses` to iterate over the Rust-owned response list.
-///
-/// @plan PLAN-20260326-COMMPT2.P05
-/// @requirement REQ-RB-002
-pub unsafe fn rust_get_response_text(
-    comm: &mut Comm,
-    index: c_int,
-    buf: *mut c_char,
-    buf_len: c_int,
-) -> c_int {
-    if buf.is_null() || buf_len <= 0 || index < 0 {
-        return 0;
-    }
-
-    let state = &*comm;
-    let entry = match state.responses().get(index as usize) {
-        Some(e) => e,
-        None => return 0,
-    };
-
-    let text = entry.response_text.as_bytes();
-    let max = (buf_len as usize).saturating_sub(1);
-    let copy_len = text.len().min(max);
-
-    // SAFETY: buf is non-null with at least buf_len bytes (caller contract).
-    unsafe {
-        std::ptr::copy_nonoverlapping(text.as_ptr() as *const c_char, buf, copy_len);
-        *buf.add(copy_len) = 0;
-    }
-    1
 }
 
 /// Execute selected response callback — passes response_ref as argument (RS-REQ-011).
@@ -712,9 +609,6 @@ pub fn rust_do_communication(
     }
 
     // Phase 2: Response handling.
-    // IMPORTANT: C bridge calls in this phase (c_RefreshResponses,
-    // c_UpdateAnimations) re-enter Rust via rust_get_response_text etc.
-    // We MUST NOT hold COMM_STATE lock during those calls.
 
     // Step 2a: Quick state check (short lock)
     let response_count = {
@@ -934,7 +828,7 @@ pub fn rust_show_conversation_summary(
     cx: &mut crate::engine::battle::Cx<'_>,
     io: &mut crate::engine::observe::Io<'_>,
 ) -> c_int {
-    super::response_ui::select_conversation_summary_production(comm, cx, io);
+    super::sis_graphics::select_conversation_summary(comm, cx, io);
     1
 }
 
@@ -1132,21 +1026,20 @@ mod tests {
     fn test_ffi_track_management() {
         let mut owner = Comm::new();
         let comm = &mut owner;
-        unsafe {
-            reset_state(comm);
-            rust_init_communication(comm);
+        reset_state(comm);
+        rust_init_communication(comm);
 
-            let text = CString::new("Hello world").unwrap();
-            rust_splice_track(comm, 1, text.as_ptr(), 0.0, 2.0);
+        let text = CString::new("Hello world").unwrap();
+        comm.track_mut()
+            .splice_track(1, Some(text.to_str().unwrap()), 0.0, 2.0);
 
-            assert_eq!(rust_start_track(comm), 1);
-            assert_eq!(rust_is_talking(comm), 1);
+        assert_eq!(rust_start_track(comm), 1);
+        assert_eq!(rust_is_talking(comm), 1);
 
-            rust_stop_track(comm);
-            assert_eq!(rust_is_talking(comm), 0);
+        rust_stop_track(comm);
+        assert_eq!(rust_is_talking(comm), 0);
 
-            rust_uninit_communication(comm);
-        }
+        rust_uninit_communication(comm);
     }
 
     #[test]
@@ -1248,18 +1141,17 @@ mod tests {
     fn test_ffi_track_text_only() {
         let mut owner = Comm::new();
         let comm = &mut owner;
-        unsafe {
-            reset_state(comm);
-            rust_init_communication(comm);
+        reset_state(comm);
+        rust_init_communication(comm);
 
-            let text = CString::new("Subtitle only").unwrap();
-            rust_splice_track_text(comm, text.as_ptr(), 0.0, 2.0);
+        let text = CString::new("Subtitle only").unwrap();
+        comm.track_mut()
+            .splice_text(text.to_str().unwrap(), 0.0, 2.0);
 
-            // Track should have a chunk
-            assert!(rust_get_track_length(comm) > 0.0);
+        // Track should have a chunk
+        assert!(rust_get_track_length(comm) > 0.0);
 
-            rust_uninit_communication(comm);
-        }
+        rust_uninit_communication(comm);
     }
 
     #[test]
@@ -1267,25 +1159,24 @@ mod tests {
     fn test_ffi_track_position() {
         let mut owner = Comm::new();
         let comm = &mut owner;
-        unsafe {
-            reset_state(comm);
-            rust_init_communication(comm);
+        reset_state(comm);
+        rust_init_communication(comm);
 
-            let text = CString::new("Test").unwrap();
-            rust_splice_track(comm, 1, text.as_ptr(), 0.0, 5.0);
+        let text = CString::new("Test").unwrap();
+        comm.track_mut()
+            .splice_track(1, Some(text.to_str().unwrap()), 0.0, 5.0);
 
-            rust_start_track(comm);
-            rust_seek_track(comm, 2.5);
-            assert!((rust_get_track_position(comm) - 2.5).abs() < 0.01);
+        rust_start_track(comm);
+        rust_seek_track(comm, 2.5);
+        assert!((rust_get_track_position(comm) - 2.5).abs() < 0.01);
 
-            rust_jump_track(comm);
-            // JumpTrack skips to end of current phrase — position depends on track state
+        rust_jump_track(comm);
+        // JumpTrack skips to end of current phrase — position depends on track state
 
-            rust_rewind_track(comm);
-            assert!((rust_get_track_position(comm) - 0.0).abs() < 0.01);
+        rust_rewind_track(comm);
+        assert!((rust_get_track_position(comm) - 0.0).abs() < 0.01);
 
-            rust_uninit_communication(comm);
-        }
+        rust_uninit_communication(comm);
     }
 
     #[test]
@@ -1293,22 +1184,21 @@ mod tests {
     fn test_ffi_update() {
         let mut owner = Comm::new();
         let comm = &mut owner;
-        unsafe {
-            reset_state(comm);
-            rust_init_communication(comm);
+        reset_state(comm);
+        rust_init_communication(comm);
 
-            let text = CString::new("Test").unwrap();
-            rust_splice_track(comm, 1, text.as_ptr(), 0.0, 1.0);
+        let text = CString::new("Test").unwrap();
+        comm.track_mut()
+            .splice_track(1, Some(text.to_str().unwrap()), 0.0, 1.0);
 
-            rust_start_track(comm);
-            rust_update_communication(comm, 0.5);
-            assert!((rust_get_track_position(comm) - 0.5).abs() < 0.01);
+        rust_start_track(comm);
+        rust_update_communication(comm, 0.5);
+        assert!((rust_get_track_position(comm) - 0.5).abs() < 0.01);
 
-            rust_update_communication(comm, 1.0);
-            assert_eq!(rust_is_talking_finished(comm), 1);
+        rust_update_communication(comm, 1.0);
+        assert_eq!(rust_is_talking_finished(comm), 1);
 
-            rust_uninit_communication(comm);
-        }
+        rust_uninit_communication(comm);
     }
 
     #[test]
@@ -1321,8 +1211,8 @@ mod tests {
             rust_init_communication(comm);
 
             // Should handle null pointers gracefully
-            rust_splice_track(comm, 1, std::ptr::null(), 0.0, 1.0);
-            rust_splice_track_text(comm, std::ptr::null(), 0.0, 1.0);
+            comm.track_mut().splice_track(1, None, 0.0, 1.0);
+            assert!(comm.current_subtitle().is_none());
             assert_eq!(do_response_phrase(comm, 1, None, None), 0);
             rust_add_oscilloscope_samples(comm, std::ptr::null(), 0);
 

@@ -1,8 +1,7 @@
 //! Subtitle display state with change detection.
 //!
 //! Tracks the currently visible subtitle text and detects changes that
-//! require the subtitle display to be cleared or redrawn. Actual rendering
-//! is delegated to C bridge functions.
+//! require the subtitle display to be cleared or redrawn. Rendering uses the supplied conversation and retained graphics resources.
 //!
 //! @plan PLAN-20260314-COMM.P10
 
@@ -10,7 +9,7 @@ use crate::comm::Comm;
 /// Subtitle display state with change detection.
 ///
 /// Rust owns the current text and dirty flags; all pixel rendering is
-/// performed by C through the bridge functions below.
+/// performed by the retained subtitle renderer.
 #[derive(Debug, Default)]
 pub struct SubtitleDisplay {
     /// The subtitle text currently on-screen, if any.
@@ -56,17 +55,13 @@ impl SubtitleDisplay {
         self.current_text = None;
     }
 
-    /// Redraw the current subtitle via C bridge.
+    /// Redraw the current subtitle.
     ///
-    /// Does nothing if there is no current text. In test mode, no C calls are
-    /// made.
+    /// Does nothing if there is no current text.
     pub fn redraw(comm: &mut Comm, enabled: bool) {
         let _ = (comm.subtitle_display().current_text.is_none(), enabled);
 
-        #[cfg(not(test))]
-        unsafe {
-            c_bridge::comm_redraw_subtitles(comm, enabled);
-        }
+        super::comm_abi::comm_redraw_subtitles(comm, enabled);
     }
 
     /// Whether the display needs to be cleared before the next draw.
@@ -93,16 +88,6 @@ impl SubtitleDisplay {
     pub fn last_baseline_y(&self) -> i32 {
         self.last_baseline_y
     }
-}
-
-// ============================================================================
-// C bridge
-// ============================================================================
-
-#[cfg(not(test))]
-mod c_bridge {
-
-    pub use crate::comm::comm_abi::comm_redraw_subtitles;
 }
 
 // ============================================================================

@@ -277,21 +277,6 @@ unsafe fn c_str_to_option(ptr: *const c_char) -> Option<&'static str> {
     }
 }
 
-/// Convert a UNICODE* (which is really char* / C string) to Option<String>.
-/// UQM's UNICODE is typedef'd to `char`, not u16.
-unsafe fn unicode_ptr_to_option(ptr: *const c_char) -> Option<String> {
-    if ptr.is_null() {
-        return None;
-    }
-    let cstr = std::ffi::CStr::from_ptr(ptr);
-    let s = cstr.to_string_lossy().into_owned();
-    if s.is_empty() {
-        None
-    } else {
-        Some(s)
-    }
-}
-
 /// MUSIC_REF is a double pointer: `Box<Arc<Mutex<SoundSample>>>` stored as
 /// `*mut *mut c_void`. The outer Box is the "MUSIC_REF" handle.
 /// Borrow the Arc from a MUSIC_REF (double-pointer) WITHOUT taking ownership.

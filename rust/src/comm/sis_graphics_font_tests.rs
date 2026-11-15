@@ -1,217 +1,142 @@
-//! Font lifetime of the SIS communication window renderers.
-//!
-//! `font_DrawText` queues one draw command per glyph and each command keeps a
-//! pointer into the context font. The queue is consumed later, at the frame
-//! boundary, so a font that is destroyed after queuing but before the
-//! consumer runs leaves commands reading freed glyph data. [`QueuedGfx`]
-//! models that deferred consumer and records every such use after free.
-//! The conversation owns its player font and frees it at teardown through
-//! [`ConversationFont`], the same path `hail_alien` uses.
+//! Exercise the production conversation renderer with registered fonts and pixel storage.
 
-use super::locdata::{CColor, CRect};
-use super::player_font::{ConversationFont, FontRelease};
-use super::sis_graphics::{
-    feedback_player_phrase_with, refresh_responses_with, CText, CommWindowGfx,
+use super::{player_font::FontRelease, Comm};
+use crate::graphics::{
+    context_abi::{ContextFrame, ContextLease},
+    native_abi::{EXTENT, POINT, RECT},
+    native_font::LoadedFont,
 };
-use std::ffi::{c_char, c_int, c_void, CStr};
 
-const GAME_STRING: &CStr = c"You say:";
-
-fn handle(index: usize) -> *mut c_void {
-    (index + 1) as *mut c_void
+struct Release {
+    context: ContextLease,
+    font: Option<LoadedFont>,
+    drained: bool,
 }
-
-struct QueuedGfx {
-    /// `alive` flag per font; handle `n` is `fonts[n - 1]`.
-    fonts: Vec<bool>,
-    context_font: usize,
-    conversation_font: *mut c_void,
-    destroyed_fonts: Vec<usize>,
-    queued_draw_fonts: Vec<usize>,
-    responses: Vec<String>,
-    violations: Vec<String>,
-}
-
-impl QueuedGfx {
-    /// A conversation: the space context already uses `initial` and the
-    /// conversation font is loaded and installed in `slot`.
-    fn in_conversation(slot: &ConversationFont) -> (Self, *mut c_void) {
-        let mut gfx = Self {
-            fonts: Vec::new(),
-            context_font: 0,
-            conversation_font: std::ptr::null_mut(),
-            destroyed_fonts: Vec::new(),
-            queued_draw_fonts: Vec::new(),
-            responses: Vec::new(),
-            violations: Vec::new(),
-        };
-        let initial = gfx.new_font();
-        gfx.context_font = initial as usize;
-        gfx.conversation_font = gfx.new_font();
-        slot.install(gfx.conversation_font).unwrap();
-        (gfx, initial)
-    }
-
-    fn new_font(&mut self) -> *mut c_void {
-        self.fonts.push(true);
-        handle(self.fonts.len() - 1)
-    }
-
-    /// The frame-boundary consumer: every queued draw reads its font.
-    fn consume_queued_draws(&mut self) {
-        for font in std::mem::take(&mut self.queued_draw_fonts) {
-            if !self.fonts[font - 1] {
-                self.violations
-                    .push(format!("queued draw read freed font {font}"));
-            }
-        }
-    }
-}
-
-impl CommWindowGfx for QueuedGfx {
-    fn current_activity(&self) -> u16 {
-        0
-    }
-    fn space_context(&self) -> *mut c_void {
-        handle(99)
-    }
-    fn set_context(&mut self, ctx: *mut c_void) -> *mut c_void {
-        ctx
-    }
-    fn set_context_font(&mut self, font: *mut c_void) -> *mut c_void {
-        std::mem::replace(&mut self.context_font, font as usize) as *mut c_void
-    }
-    fn set_foreground_color(&mut self, _color: CColor) {}
-    fn font_leading(&mut self) -> i16 {
-        8
-    }
-    fn batch(&mut self) {}
-    fn unbatch(&mut self) {}
-    fn fill_rect(&mut self, _rect: &mut CRect) {}
-    fn draw_text(&mut self, _text: &mut CText) {
-        assert!(
-            self.context_font != 0 && self.fonts[self.context_font - 1],
-            "text drawn with no live context font"
-        );
-        self.queued_draw_fonts.push(self.context_font);
-    }
-    fn line_within_width(
-        &mut self,
-        text: &mut CText,
-        next: &mut *const c_char,
-        _width: i16,
-        _max_chars: u16,
-    ) -> c_int {
-        // SAFETY: the renderers pass NUL-terminated strings.
-        let len = unsafe { CStr::from_ptr(text.p_str) }.to_bytes().len();
-        text.char_count = len as u16;
-        *next = unsafe { text.p_str.add(len) };
-        1
-    }
-    fn game_string(&mut self, _id: i32) -> *const c_char {
-        GAME_STRING.as_ptr()
-    }
-    fn response_text(&mut self, index: u8, buf: &mut [u8]) -> bool {
-        let Some(text) = self.responses.get(usize::from(index)) else {
-            return false;
-        };
-        buf[..text.len()].copy_from_slice(text.as_bytes());
-        buf[text.len()] = 0;
-        true
-    }
-    fn draw_scroll_indicator(&mut self, _frame_index: u16, _origin_y: i16) {}
-    fn conversation_player_font(&mut self) -> *mut c_void {
-        self.conversation_font
-    }
-}
-
-impl FontRelease for QueuedGfx {
+impl FontRelease for Release {
     fn drain_draw_queue(&mut self) {
-        self.consume_queued_draws();
+        self.context.flush();
+        self.drained = true;
     }
-    fn destroy_font(&mut self, font: *mut c_void) {
-        let index = font as usize;
-        if self.context_font == index {
-            self.context_font = 0;
-        }
-        let borrowing = self
-            .queued_draw_fonts
-            .iter()
-            .filter(|f| **f == index)
-            .count();
-        if borrowing != 0 {
-            self.violations.push(format!(
-                "font {index} freed while {borrowing} queued draws still borrow its glyphs"
-            ));
-        }
-        self.fonts[index - 1] = false;
-        self.destroyed_fonts.push(index);
+    fn destroy_font(&mut self, font: *mut std::ffi::c_void) {
+        assert!(self.drained);
+        assert_eq!(font, self.font.as_ref().unwrap().as_raw().cast());
+        drop(self.font.take());
     }
 }
 
+pub(super) fn with_display(name: &str, call: impl FnOnce(&mut Comm, &ContextLease)) {
+    if !crate::native_test_process::own_graphics_process(name) {
+        return;
+    }
+    let mut game = crate::engine::Game::new();
+    let fixture = crate::campaign_display_test::CampaignDisplay::install_prepared(
+        &mut game,
+        || {},
+        |game| {
+            let context = ContextLease::require(game.kernel.status_context);
+            context.set_frame(ContextFrame::retain(std::ptr::NonNull::new(
+                game.kernel.screen,
+            )));
+            context.set_clip(RECT {
+                corner: POINT { x: 0, y: 0 },
+                extent: EXTENT {
+                    width: 320,
+                    height: 240,
+                },
+            });
+            let original = crate::graphics::native_font::FontLease::retain(
+                std::ptr::NonNull::new(game.kernel.tiny_font).unwrap(),
+            );
+            context.set_font(&original);
+            let font = LoadedFont::load(c"fixture.tiny").unwrap();
+            let mut comm = Comm::new();
+            comm.presentation.space_context = context.as_raw();
+            comm.presentation.tiny_font = game.kernel.tiny_font;
+            comm.presentation.game_strings = game.kernel.game_strings;
+            comm.display.game_strings =
+                Some(crate::strings::owned_table::LoadedTextTable::new(vec![
+                    c"A".to_owned(),
+                ]));
+            comm.player_font.install(font.as_raw().cast()).unwrap();
+            let mut release = Release {
+                context: context.clone(),
+                font: Some(font),
+                drained: false,
+            };
+            call(&mut comm, &context);
+            comm.player_font.release(&mut release);
+            assert!(release.drained);
+            assert!(release.font.is_none());
+        },
+    )
+    .unwrap();
+    fixture.finish(game);
+}
+
+fn has_text(context: &ContextLease) -> bool {
+    context.flush();
+    let frame = context.target();
+    (122..227).any(|y| {
+        (0..242).any(|x| {
+            let pixel = frame.pixel(POINT { x, y });
+            pixel.r != 0 || pixel.g != 0
+        })
+    })
+}
+
 #[test]
+#[serial_test::serial]
 fn refreshing_responses_keeps_the_font_alive_until_queued_draws_are_consumed() {
-    let slot = ConversationFont::new();
-    let (mut gfx, _initial) = QueuedGfx::in_conversation(&slot);
-    gfx.responses = vec!["Hello.".into(), "Who are you?".into()];
-
-    refresh_responses_with(&mut gfx, 0, 2, 0);
-    gfx.consume_queued_draws();
-
-    assert_eq!(gfx.violations, Vec::<String>::new());
-    assert_eq!(gfx.destroyed_fonts, Vec::<usize>::new());
+    with_display("comm::sis_graphics_font_tests::refreshing_responses_keeps_the_font_alive_until_queued_draws_are_consumed", |comm, context| {
+        comm.add_response(1, "A", None);
+        comm.add_response(2, "A A", None);
+        super::sis_graphics::refresh_responses(comm, 0, 0, 2, 0);
+        assert!(has_text(context));
+        assert_eq!(comm.response_display, [0, 2, 0]);
+    });
 }
 
 #[test]
+#[serial_test::serial]
 fn player_phrase_feedback_keeps_the_font_alive_until_queued_draws_are_consumed() {
-    let slot = ConversationFont::new();
-    let (mut gfx, _initial) = QueuedGfx::in_conversation(&slot);
-
-    // SAFETY: the phrase is a NUL-terminated literal.
-    unsafe { feedback_player_phrase_with(&mut gfx, c"Hello.".as_ptr()) };
-    gfx.consume_queued_draws();
-
-    assert_eq!(gfx.violations, Vec::<String>::new());
-    assert_eq!(gfx.destroyed_fonts, Vec::<usize>::new());
+    with_display("comm::sis_graphics_font_tests::player_phrase_feedback_keeps_the_font_alive_until_queued_draws_are_consumed", |comm, context| {
+        super::sis_graphics::feedback_player_phrase(comm, 0, Some(c"A"));
+        assert!(has_text(context));
+        super::sis_graphics::feedback_player_phrase(comm, 0, None);
+        assert!(!has_text(context));
+    });
 }
 
 #[test]
+#[serial_test::serial]
 fn rendering_restores_the_context_font_it_found() {
-    let slot = ConversationFont::new();
-    let (mut gfx, initial) = QueuedGfx::in_conversation(&slot);
-    gfx.responses = vec!["Hello.".into()];
-
-    refresh_responses_with(&mut gfx, 0, 1, 0);
-    // SAFETY: the phrase is a NUL-terminated literal.
-    unsafe { feedback_player_phrase_with(&mut gfx, c"Hello.".as_ptr()) };
-
-    assert_eq!(gfx.context_font, initial as usize);
+    with_display(
+        "comm::sis_graphics_font_tests::rendering_restores_the_context_font_it_found",
+        |comm, context| {
+            // SAFETY: this fixture retains the selected registered context throughout both draws.
+            let original = unsafe { (*context.as_raw()).Font };
+            comm.add_response(1, "A", None);
+            super::sis_graphics::refresh_responses(comm, 0, 0, 1, 0);
+            super::sis_graphics::feedback_player_phrase(comm, 0, Some(c"A"));
+            // SAFETY: the context remains retained by the fixture.
+            assert_eq!(unsafe { (*context.as_raw()).Font }, original);
+        },
+    );
 }
 
 #[test]
+#[serial_test::serial]
 fn a_conversation_draws_with_one_font_and_frees_it_only_at_teardown() {
-    let slot = ConversationFont::new();
-    let (mut gfx, _initial) = QueuedGfx::in_conversation(&slot);
-    let conversation_font = gfx.conversation_font as usize;
-    gfx.responses = vec!["Hello.".into(), "Who are you?".into()];
-
-    refresh_responses_with(&mut gfx, 0, 2, 0);
-    // SAFETY: the phrase is a NUL-terminated literal.
-    unsafe { feedback_player_phrase_with(&mut gfx, c"Who are you?".as_ptr()) };
-    refresh_responses_with(&mut gfx, 0, 2, 1);
-    assert_eq!(
-        gfx.fonts.len(),
-        2,
-        "renderers must not load fonts of their own"
-    );
-    assert!(gfx.destroyed_fonts.is_empty());
-
-    // Teardown with draws still queued: the release drains them first.
-    assert!(!gfx.queued_draw_fonts.is_empty());
-    let mut teardown = gfx;
-    slot.release(&mut teardown);
-
-    assert_eq!(teardown.violations, Vec::<String>::new());
-    assert_eq!(teardown.destroyed_fonts, [conversation_font]);
-    assert!(teardown.queued_draw_fonts.is_empty());
+    with_display("comm::sis_graphics_font_tests::a_conversation_draws_with_one_font_and_frees_it_only_at_teardown", |comm, context| {
+        let original = comm.player_font.current();
+        comm.add_response(1, "A", None);
+        comm.add_response(2, "A A", None);
+        super::sis_graphics::refresh_responses(comm, 0, 0, 2, 0);
+        super::sis_graphics::feedback_player_phrase(comm, 0, Some(c"A A"));
+        super::sis_graphics::refresh_responses(comm, 0, 0, 2, 1);
+        assert_eq!(comm.player_font.current(), original);
+        assert!(has_text(context));
+        super::sis_graphics::refresh_responses(comm, 0, 1, 2, 1);
+        assert_eq!(comm.response_display, [1, 2, 1]);
+    });
 }

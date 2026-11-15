@@ -104,25 +104,11 @@ pub struct SubPage {
     pub timestamp: f64,
 }
 
-/// Identity of a cached subtitle page, independent of its displayed bytes.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct SubtitleIdentity(usize);
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SubtitleSnapshot {
-    pub identity: SubtitleIdentity,
-    pub text: std::ffi::CString,
-}
-
-impl SoundChunk {
-    fn subtitle_snapshot(&mut self) -> Option<SubtitleSnapshot> {
-        self.ensure_text_cstr();
-        self.text_cstr.as_ref().map(|text| SubtitleSnapshot {
-            identity: SubtitleIdentity(text.as_ptr() as usize),
-            text: text.clone(),
-        })
-    }
-}
+#[path = "trackplayer_subtitles.rs"]
+mod subtitles;
+pub use subtitles::{
+    get_track_subtitle, subtitle_history, subtitle_snapshot, SubtitleIdentity, SubtitleSnapshot,
+};
 
 /// A reference to a subtitle in the current track.
 #[derive(Debug, Clone)]
@@ -821,42 +807,6 @@ fn track_position(in_units: u32, read_position: impl FnOnce() -> u32) -> u32 {
 // =============================================================================
 // Public API — Subtitles (spec §3.2.3)
 // =============================================================================
-
-/// Copy the current page without lending a pointer beyond the track lock.
-pub fn subtitle_snapshot() -> Option<SubtitleSnapshot> {
-    let state = TRACK_STATE.lock();
-    let current = state.cur_sub_chunk?;
-    // SAFETY: the current chunk belongs to the list protected by the held track lock.
-    unsafe { &mut *current.as_ptr() }.subtitle_snapshot()
-}
-
-/// Copy history in the native traversal order: the head, then tagged successor pages.
-pub fn subtitle_history() -> Vec<SubtitleSnapshot> {
-    let mut state = TRACK_STATE.lock();
-    let mut next = state.chunks_head.as_deref_mut();
-    let mut first = true;
-    let mut history = Vec::new();
-    while let Some(chunk) = next {
-        if first || chunk.tag_me {
-            if let Some(subtitle) = chunk.subtitle_snapshot() {
-                history.push(subtitle);
-            }
-        }
-        first = false;
-        next = chunk.next.as_deref_mut();
-    }
-    history
-}
-
-/// Get the subtitle text for the current position.
-pub fn get_track_subtitle() -> Option<String> {
-    let state = TRACK_STATE.lock();
-    state.sound_sample.as_ref()?;
-    state
-        .cur_sub_chunk
-        .map(|c| unsafe { c.as_ref() })
-        .and_then(|c| c.text.clone())
-}
 
 /// Return a stable C string pointer for the current subtitle.
 /// The pointer remains valid and identical as long as `cur_sub_chunk` doesn't change.

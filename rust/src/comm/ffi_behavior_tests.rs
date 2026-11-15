@@ -3,7 +3,7 @@
 //! oscilloscope state, and the encounter lifecycle, all through the exported
 //! `rust_*` entry points.
 
-use std::ffi::{c_char, c_int, c_uint, CStr, CString};
+use std::ffi::{c_int, c_uint, CStr, CString};
 use std::ptr;
 use std::sync::atomic::{AtomicU32, Ordering};
 
@@ -21,18 +21,6 @@ fn offer(
 ) -> c_int {
     let text = CString::new(text).unwrap();
     do_response_phrase(comm, reference, Some(text.as_c_str()), func)
-}
-
-fn response_text(comm: &mut Comm, index: c_int, capacity: c_int) -> (c_int, String) {
-    let mut buf = vec![0x7fu8; 64];
-    let ok =
-        unsafe { rust_get_response_text(comm, index, buf.as_mut_ptr() as *mut c_char, capacity) };
-    let text = CStr::from_bytes_until_nul(&buf)
-        .unwrap()
-        .to_str()
-        .unwrap()
-        .to_owned();
-    (ok, text)
 }
 
 static CHOSEN: AtomicU32 = AtomicU32::new(0);
@@ -68,24 +56,23 @@ fn a_spliced_track_has_a_length_and_plays_from_the_start() {
     let comm = &mut owner;
     assert_eq!(rust_init_communication(comm), 1);
     let line = CString::new("Greetings, Captain.").unwrap();
-    unsafe {
-        assert_eq!(rust_playing_track(comm), 0);
-        rust_splice_track(comm, 7, line.as_ptr(), 0.0, 2.0);
-        rust_splice_track(comm, 8, ptr::null(), 2.0, 1.5);
-        assert!(
-            rust_get_track_length(comm) >= 3.5 - 1e-3,
-            "length {}",
-            rust_get_track_length(comm)
-        );
-        assert_eq!(rust_get_track_position(comm), 0.0);
+    assert_eq!(rust_playing_track(comm), 0);
+    comm.track_mut()
+        .splice_track(7, Some(line.to_str().unwrap()), 0.0, 2.0);
+    comm.track_mut().splice_track(8, None, 2.0, 1.5);
+    assert!(
+        rust_get_track_length(comm) >= 3.5 - 1e-3,
+        "length {}",
+        rust_get_track_length(comm)
+    );
+    assert_eq!(rust_get_track_position(comm), 0.0);
 
-        assert_eq!(rust_start_track(comm), 1);
-        assert_eq!(rust_playing_track(comm), 1);
-        assert_eq!(rust_is_talking(comm), 1);
-        rust_stop_track(comm);
-        assert_eq!(rust_playing_track(comm), 0);
-        assert_eq!(rust_is_talking(comm), 0);
-    }
+    assert_eq!(rust_start_track(comm), 1);
+    assert_eq!(rust_playing_track(comm), 1);
+    assert_eq!(rust_is_talking(comm), 1);
+    rust_stop_track(comm);
+    assert_eq!(rust_playing_track(comm), 0);
+    assert_eq!(rust_is_talking(comm), 0);
 }
 
 #[test]
@@ -95,37 +82,29 @@ fn splicing_text_without_audio_extends_the_track() {
     let comm = &mut owner;
     assert_eq!(rust_init_communication(comm), 1);
     let line = CString::new("Silent line").unwrap();
-    let bad = [0xffu8, 0xfe, 0];
-    unsafe {
-        let before = rust_get_track_length(comm);
-        rust_splice_track_text(comm, ptr::null(), 0.0, 1.0);
-        rust_splice_track_text(comm, bad.as_ptr() as *const c_char, 0.0, 1.0);
-        assert_eq!(
-            rust_get_track_length(comm),
-            before,
-            "null and undecodable text add nothing"
-        );
-        rust_splice_track_text(comm, line.as_ptr(), 0.0, 2.0);
-        assert!(rust_get_track_length(comm) > before);
-    }
+    let _: fn(&mut super::track::TrackManager, &str, f32, f32) =
+        super::track::TrackManager::splice_text;
+    let before = rust_get_track_length(comm);
+    assert_eq!(before, 0.0);
+    assert!(comm.current_subtitle().is_none());
+    comm.track_mut()
+        .splice_text(line.to_str().unwrap(), 0.0, 2.0);
+    assert!(rust_get_track_length(comm) > before);
 }
 
 #[test]
 #[serial]
-fn an_undecodable_subtitle_is_spliced_as_no_subtitle() {
+fn an_audio_chunk_can_omit_its_subtitle() {
     let mut owner = Comm::new();
     let comm = &mut owner;
     assert_eq!(rust_init_communication(comm), 1);
-    let bad = [0xffu8, 0xfe, 0];
-    unsafe {
-        rust_splice_track(comm, 3, bad.as_ptr() as *const c_char, 0.0, 1.0);
-        assert!(rust_get_track_length(comm) >= 1.0 - 1e-3);
-        assert_eq!(rust_start_track(comm), 1);
-        assert!(
-            rust_get_subtitle(comm).is_null(),
-            "there is nothing to display"
-        );
-    }
+    comm.track_mut().splice_track(3, None, 0.0, 1.0);
+    assert!(rust_get_track_length(comm) >= 1.0 - 1e-3);
+    assert_eq!(rust_start_track(comm), 1);
+    assert!(
+        comm.current_subtitle().is_none(),
+        "there is nothing to display"
+    );
 }
 
 #[test]
@@ -135,28 +114,27 @@ fn seeking_rewinding_and_clearing_move_the_play_position() {
     let comm = &mut owner;
     assert_eq!(rust_init_communication(comm), 1);
     let line = CString::new("A long speech").unwrap();
-    unsafe {
-        rust_splice_track(comm, 1, line.as_ptr(), 0.0, 10.0);
-        assert_eq!(rust_start_track(comm), 1);
-        rust_seek_track(comm, 4.0);
-        assert!(
-            (rust_get_track_position(comm) - 4.0).abs() < 1e-3,
-            "{}",
-            rust_get_track_position(comm)
-        );
-        rust_rewind_track(comm);
-        assert_eq!(rust_get_track_position(comm), 0.0);
-        rust_seek_track(comm, 6.5);
-        assert!(
-            (rust_commit_track(comm) - 6.5).abs() < 1e-3,
-            "commit reports where the track is"
-        );
-        rust_jump_track(comm);
-        assert!((0.0..=10.0).contains(&rust_get_track_position(comm)));
-        rust_clear_track(comm);
-        assert_eq!(rust_get_track_length(comm), 0.0);
-        assert_eq!(rust_playing_track(comm), 0);
-    }
+    comm.track_mut()
+        .splice_track(1, Some(line.to_str().unwrap()), 0.0, 10.0);
+    assert_eq!(rust_start_track(comm), 1);
+    rust_seek_track(comm, 4.0);
+    assert!(
+        (rust_get_track_position(comm) - 4.0).abs() < 1e-3,
+        "{}",
+        rust_get_track_position(comm)
+    );
+    rust_rewind_track(comm);
+    assert_eq!(rust_get_track_position(comm), 0.0);
+    rust_seek_track(comm, 6.5);
+    assert!(
+        (rust_commit_track(comm) - 6.5).abs() < 1e-3,
+        "commit reports where the track is"
+    );
+    rust_jump_track(comm);
+    assert!((0.0..=10.0).contains(&rust_get_track_position(comm)));
+    rust_clear_track(comm);
+    assert_eq!(rust_get_track_length(comm), 0.0);
+    assert_eq!(rust_playing_track(comm), 0);
 }
 
 #[test]
@@ -166,50 +144,49 @@ fn paging_moves_between_spliced_lines_and_smooth_scrubbing_moves_half_a_second()
     let comm = &mut owner;
     assert_eq!(rust_init_communication(comm), 1);
     let line = CString::new("One line of speech").unwrap();
-    unsafe {
-        for (handle, start) in [(1, 0.0), (2, 10.0), (3, 20.0)] {
-            rust_splice_track(comm, handle, line.as_ptr(), start, 10.0);
-        }
-        assert_eq!(rust_start_track(comm), 1);
-        assert!((rust_get_track_length(comm) - 30.0).abs() < 1e-3);
-
-        rust_fast_forward_page(comm);
-        assert!((rust_get_track_position(comm) - 10.0).abs() < 1e-3);
-        rust_fast_forward_page(comm);
-        assert!((rust_get_track_position(comm) - 20.0).abs() < 1e-3);
-        rust_fast_forward_page(comm);
-        assert!(
-            (rust_get_track_position(comm) - 30.0).abs() < 1e-3,
-            "past the last line is the end"
-        );
-
-        rust_seek_track(comm, 25.0);
-        rust_fast_reverse_page(comm);
-        assert!(
-            (rust_get_track_position(comm) - 10.0).abs() < 1e-3,
-            "back to the start of the previous line"
-        );
-        rust_fast_reverse_page(comm);
-        assert!(rust_get_track_position(comm).abs() < 1e-3);
-        rust_fast_reverse_page(comm);
-        assert!(
-            rust_get_track_position(comm).abs() < 1e-3,
-            "nothing before the first line"
-        );
-
-        rust_seek_track(comm, 5.0);
-        rust_fast_forward_smooth(comm);
-        assert!((rust_get_track_position(comm) - 5.5).abs() < 1e-3);
-        rust_fast_reverse_smooth(comm);
-        rust_fast_reverse_smooth(comm);
-        assert!((rust_get_track_position(comm) - 4.5).abs() < 1e-3);
-        rust_seek_track(comm, 0.2);
-        rust_fast_reverse_smooth(comm);
-        assert!(
-            rust_get_track_position(comm).abs() < 1e-3,
-            "scrubbing stops at the start"
-        );
+    for (handle, start) in [(1, 0.0), (2, 10.0), (3, 20.0)] {
+        comm.track_mut()
+            .splice_track(handle, Some(line.to_str().unwrap()), start, 10.0);
     }
+    assert_eq!(rust_start_track(comm), 1);
+    assert!((rust_get_track_length(comm) - 30.0).abs() < 1e-3);
+
+    rust_fast_forward_page(comm);
+    assert!((rust_get_track_position(comm) - 10.0).abs() < 1e-3);
+    rust_fast_forward_page(comm);
+    assert!((rust_get_track_position(comm) - 20.0).abs() < 1e-3);
+    rust_fast_forward_page(comm);
+    assert!(
+        (rust_get_track_position(comm) - 30.0).abs() < 1e-3,
+        "past the last line is the end"
+    );
+
+    rust_seek_track(comm, 25.0);
+    rust_fast_reverse_page(comm);
+    assert!(
+        (rust_get_track_position(comm) - 10.0).abs() < 1e-3,
+        "back to the start of the previous line"
+    );
+    rust_fast_reverse_page(comm);
+    assert!(rust_get_track_position(comm).abs() < 1e-3);
+    rust_fast_reverse_page(comm);
+    assert!(
+        rust_get_track_position(comm).abs() < 1e-3,
+        "nothing before the first line"
+    );
+
+    rust_seek_track(comm, 5.0);
+    rust_fast_forward_smooth(comm);
+    assert!((rust_get_track_position(comm) - 5.5).abs() < 1e-3);
+    rust_fast_reverse_smooth(comm);
+    rust_fast_reverse_smooth(comm);
+    assert!((rust_get_track_position(comm) - 4.5).abs() < 1e-3);
+    rust_seek_track(comm, 0.2);
+    rust_fast_reverse_smooth(comm);
+    assert!(
+        rust_get_track_position(comm).abs() < 1e-3,
+        "scrubbing stops at the start"
+    );
 }
 
 #[test]
@@ -219,13 +196,12 @@ fn waiting_on_a_track_is_over_only_once_it_has_stopped() {
     let comm = &mut owner;
     assert_eq!(rust_init_communication(comm), 1);
     let line = CString::new("Speech").unwrap();
-    unsafe {
-        rust_splice_track(comm, 1, line.as_ptr(), 0.0, 5.0);
-        assert_eq!(rust_start_track(comm), 1);
-        assert_eq!(rust_wait_track(comm), 0, "still talking");
-        rust_stop_track(comm);
-        assert_eq!(rust_wait_track(comm), 1);
-    }
+    comm.track_mut()
+        .splice_track(1, Some(line.to_str().unwrap()), 0.0, 5.0);
+    assert_eq!(rust_start_track(comm), 1);
+    assert_eq!(rust_wait_track(comm), 0, "still talking");
+    rust_stop_track(comm);
+    assert_eq!(rust_wait_track(comm), 1);
 }
 
 #[test]
@@ -248,19 +224,16 @@ fn subtitles_can_be_switched_off_and_on() {
 
 #[test]
 #[serial]
-fn the_current_subtitle_is_handed_to_c_as_a_terminated_string() {
+fn the_current_subtitle_is_borrowed_from_its_conversation() {
     let mut owner = Comm::new();
     let comm = &mut owner;
     assert_eq!(rust_init_communication(comm), 1);
     let line = CString::new("We come in peace.").unwrap();
-    unsafe {
-        assert!(rust_get_subtitle(comm).is_null());
-        rust_splice_track(comm, 1, line.as_ptr(), 0.0, 3.0);
-        assert_eq!(rust_start_track(comm), 1);
-        let ptr = rust_get_subtitle(comm);
-        assert!(!ptr.is_null());
-        assert_eq!(CStr::from_ptr(ptr).to_str().unwrap(), "We come in peace.");
-    }
+    assert!(comm.current_subtitle().is_none());
+    comm.track_mut()
+        .splice_track(1, Some(line.to_str().unwrap()), 0.0, 3.0);
+    assert_eq!(rust_start_track(comm), 1);
+    assert_eq!(comm.current_subtitle(), Some("We come in peace."));
 }
 
 #[test]
@@ -380,47 +353,16 @@ fn offering_a_response_needs_readable_text() {
 
 #[test]
 #[serial]
-fn response_text_is_copied_out_and_truncated_to_the_buffer() {
-    let mut owner = Comm::new();
-    let comm = &mut owner;
-    assert_eq!(rust_init_communication(comm), 1);
-    offer(comm, "Tell me about your homeworld.", 5, None);
+fn response_text_is_borrowed_without_a_caller_buffer() {
+    let mut comm = Comm::new();
+    assert_eq!(rust_init_communication(&mut comm), 1);
+    offer(&mut comm, "Tell me about your homeworld.", 5, None);
     assert_eq!(
-        response_text(comm, 0, 64),
-        (1, "Tell me about your homeworld.".to_owned())
+        comm.responses().get(0).unwrap().response_text,
+        "Tell me about your homeworld."
     );
-    assert_eq!(
-        response_text(comm, 0, 8),
-        (1, "Tell me".to_owned()),
-        "room for seven characters and the terminator"
-    );
-    assert_eq!(response_text(comm, 0, 1), (1, String::new()));
-}
-
-#[test]
-#[serial]
-fn response_text_refuses_bad_requests() {
-    let mut owner = Comm::new();
-    let comm = &mut owner;
-    assert_eq!(rust_init_communication(comm), 1);
-    offer(comm, "Only one", 5, None);
-    let mut buf = [0x55u8; 8];
-    unsafe {
-        assert_eq!(rust_get_response_text(comm, 0, ptr::null_mut(), 8), 0);
-        assert_eq!(
-            rust_get_response_text(comm, 0, buf.as_mut_ptr() as *mut c_char, 0),
-            0
-        );
-        assert_eq!(
-            rust_get_response_text(comm, -1, buf.as_mut_ptr() as *mut c_char, 8),
-            0
-        );
-        assert_eq!(
-            rust_get_response_text(comm, 1, buf.as_mut_ptr() as *mut c_char, 8),
-            0
-        );
-    }
-    assert_eq!(buf, [0x55; 8], "the caller's buffer is untouched");
+    assert!(comm.responses().get(1).is_none());
+    assert!(comm.responses().get(usize::MAX).is_none());
 }
 
 #[test]
@@ -652,23 +594,22 @@ fn the_speech_graphics_and_subtitle_display_refresh_without_a_screen() {
     let comm = &mut owner;
     assert_eq!(rust_init_communication(comm), 1);
     let line = CString::new("Subtitle text").unwrap();
-    unsafe {
-        rust_init_speech_graphics(comm);
-        rust_update_speech_graphics(comm);
-        rust_splice_track(comm, 1, line.as_ptr(), 0.0, 3.0);
-        assert_eq!(rust_start_track(comm), 1);
-        rust_check_subtitles(comm);
-        rust_redraw_subtitles(comm, &crate::engine::input::InputSession::default());
-        rust_clear_subtitles(comm);
-        rust_redraw_subtitles(comm, &crate::engine::input::InputSession::default());
-        offer(comm, "Choice", 1, None);
-        rust_refresh_responses(comm, &crate::engine::World::new());
-        assert_eq!(
-            rust_get_response_count(comm),
-            1,
-            "refreshing the list leaves the responses alone"
-        );
-    }
+    rust_init_speech_graphics(comm);
+    rust_update_speech_graphics(comm);
+    comm.track_mut()
+        .splice_track(1, Some(line.to_str().unwrap()), 0.0, 3.0);
+    assert_eq!(rust_start_track(comm), 1);
+    rust_check_subtitles(comm);
+    rust_redraw_subtitles(comm, &crate::engine::input::InputSession::default());
+    rust_clear_subtitles(comm);
+    rust_redraw_subtitles(comm, &crate::engine::input::InputSession::default());
+    offer(comm, "Choice", 1, None);
+    rust_refresh_responses(comm, &crate::engine::World::new());
+    assert_eq!(
+        rust_get_response_count(comm),
+        1,
+        "refreshing the list leaves the responses alone"
+    );
 }
 
 #[test]
@@ -690,22 +631,21 @@ fn the_conversation_summary_pages_through_what_was_said() {
     let mut io = crate::engine::observe::Io {
         observer: &mut observer,
     };
-    unsafe {
-        assert_eq!(
-            rust_show_conversation_summary(comm, &mut cx, &mut io),
-            1,
-            "an empty history exits at once"
-        );
-        for i in 0..30 {
-            rust_splice_track(comm, i + 1, line.as_ptr(), i as f32, 1.0);
-        }
-        assert_eq!(rust_show_conversation_summary(comm, &mut cx, &mut io), 1);
+    assert_eq!(
+        rust_show_conversation_summary(comm, &mut cx, &mut io),
+        1,
+        "an empty history exits at once"
+    );
+    for i in 0..30 {
+        comm.track_mut()
+            .splice_track(i + 1, Some(line.to_str().unwrap()), i as f32, 1.0);
     }
+    assert_eq!(rust_show_conversation_summary(comm, &mut cx, &mut io), 1);
 }
 
 #[test]
 fn state_accessors_use_safe_rust_signatures() {
-    let _: fn(&mut Comm) -> *const c_char = rust_get_subtitle;
+    let _: fn(&Comm) -> Option<&str> = Comm::current_subtitle;
     let _: fn(&mut Comm, &mut crate::engine::battle::Cx<'_>) -> c_uint = rust_execute_response;
     let _: fn(&mut Comm) = rust_init_speech_graphics;
     let _: fn(&mut Comm) = rust_update_speech_graphics;

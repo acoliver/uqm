@@ -116,8 +116,7 @@ impl ResponseUI {
         {
             use std::ffi::CString;
             if let Ok(cs) = CString::new(text) {
-                // Safety: cs.as_ptr() is valid for the duration of the C call.
-                unsafe { feedback_player_phrase_production(_comm, activity, cs.as_ptr()) };
+                super::sis_graphics::feedback_player_phrase(_comm, activity, Some(&cs));
             }
         }
         #[cfg(test)]
@@ -173,7 +172,7 @@ pub(super) fn select_conversation_summary(cx: &mut Cx<'_>, io: &mut Io<'_>, comm
     #[cfg(not(test))]
     {
         let _ = comm;
-        select_conversation_summary_production(comm, cx, io);
+        super::sis_graphics::select_conversation_summary(comm, cx, io);
     }
     #[cfg(test)]
     {
@@ -191,31 +190,7 @@ pub(super) fn select_conversation_summary(cx: &mut Cx<'_>, io: &mut Io<'_>, comm
 #[cfg(not(test))]
 pub fn refresh_responses_production(comm: &mut Comm, activity: u16, top: u8, count: u8, cur: u8) {
     // Safety: called from single-threaded game loop with initialized graphics.
-    unsafe { crate::comm::sis_graphics::refresh_responses(comm, activity, top, count, cur) };
-}
-
-/// Public entry point for talk_segue.rs to call feedback_player_phrase.
-///
-/// # Safety
-/// Caller must ensure `text` is a valid null-terminated C string or null.
-#[cfg(not(test))]
-pub unsafe fn feedback_player_phrase_production(
-    comm: &mut Comm,
-    activity: u16,
-    text: *const std::ffi::c_char,
-) {
-    crate::comm::sis_graphics::feedback_player_phrase(comm, activity, text);
-}
-
-/// Public entry point for talk_segue.rs to call select_conversation_summary.
-#[cfg(not(test))]
-pub fn select_conversation_summary_production(
-    comm: &mut Comm,
-    cx: &mut crate::engine::battle::Cx<'_>,
-    io: &mut crate::engine::observe::Io<'_>,
-) {
-    // SAFETY: the retained context owns the initialized conversation on the game thread.
-    unsafe { crate::comm::sis_graphics::select_conversation_summary(comm, cx, io) };
+    crate::comm::sis_graphics::refresh_responses(comm, activity, top, count, cur);
 }
 
 // ============================================================================

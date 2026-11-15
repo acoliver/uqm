@@ -78,8 +78,9 @@ fn subtitle_history_skips_untagged_number_audio_without_changing_page_order() {
 #[test]
 fn speech_admission_requires_borrowed_strings_and_bounded_clip_slices() {
     use std::ffi::CStr;
-    let _: fn(Option<&CStr>, Option<&CStr>, Option<&CStr>, Option<Box<dyn Fn(i32) + Send>>) =
-        crate::sound::heart_ffi::splice_track;
+    type SpeechAdmission =
+        fn(Option<&CStr>, Option<&CStr>, Option<&CStr>, Option<Box<dyn Fn(i32) + Send>>);
+    let _: SpeechAdmission = crate::sound::heart_ffi::splice_track;
     let _: fn(&[&CStr], Option<&CStr>) = crate::sound::heart_ffi::splice_multi_track;
 }
 

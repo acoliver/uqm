@@ -242,7 +242,7 @@ pub(super) mod c_bridge {
         cx: &mut super::Cx<'_>,
         io: &mut super::Io<'_>,
     ) {
-        super::super::response_ui::select_conversation_summary_production(comm, cx, io);
+        super::super::sis_graphics::select_conversation_summary(comm, cx, io);
     }
     #[cfg(not(test))]
     pub fn call_update_comm_graphics(comm: &mut Comm, input: &crate::engine::input::InputSession) {
@@ -251,13 +251,7 @@ pub(super) mod c_bridge {
     #[cfg(not(test))]
     pub fn call_feedback_player_phrase(comm: &mut Comm, cx: &mut super::Cx<'_>) {
         let activity = cx.world.activity();
-        cx.with_legacy(|| unsafe {
-            super::super::response_ui::feedback_player_phrase_production(
-                comm,
-                activity,
-                std::ptr::null(),
-            )
-        });
+        super::super::sis_graphics::feedback_player_phrase(comm, activity, None);
     }
 
     /// Play alien music from CommData.AlienSong (port of c_PlayAlienMusic).
@@ -495,7 +489,7 @@ pub mod dinput {
                     c_bridge::ONE_SECOND_TICKS as i16,
                 )
             });
-            super::super::response_ui::select_conversation_summary_production(comm, cx, io);
+            super::super::sis_graphics::select_conversation_summary(comm, cx, io);
             lrs.time_out = cx
                 .with_legacy(|| c_bridge::FadeMusic(0, (c_bridge::ONE_SECOND_TICKS * 2) as i16))
                 + (c_bridge::ONE_SECOND_TICKS as u32) / 60;
@@ -1244,10 +1238,7 @@ fn get_scroll_mode(input: &InputSession) -> ScrollMode {
 
 fn check_subtitles(comm: &mut Comm) {
     #[cfg(not(test))]
-    unsafe {
-        let _ = comm;
-        c_bridge::check_subtitles(comm);
-    }
+    c_bridge::check_subtitles(comm);
     #[cfg(test)]
     {
         // In tests, update the subtitle tracker position from the track.
