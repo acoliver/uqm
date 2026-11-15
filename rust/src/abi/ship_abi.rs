@@ -1326,10 +1326,10 @@ pub use crate::battle::ship_native::engine::ship_preprocess;
 pub use crate::battle::ship_native::engine::ship_postprocess;
 
 #[cfg(not(test))]
-pub use crate::battle::ship_native::engine::collision;
+pub use crate::engine::battle::motion::collision;
 
 #[cfg(not(test))]
-pub use crate::battle::ship_native::engine::inertial_thrust;
+pub use crate::engine::battle::motion::inertial_thrust;
 
 #[cfg(not(test))]
 pub use crate::engine::world::fleet::set_race_allied;
