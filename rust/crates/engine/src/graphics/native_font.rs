@@ -102,6 +102,14 @@ impl LoadedFont {
         })
     }
 
+    pub fn load_file(path: &CStr) -> Option<Self> {
+        ffi::native_allocations().assert_thread();
+        // SAFETY: this serialized loader receives a terminated path and registers its result.
+        NonNull::new(unsafe { super::filegfx::LoadFontFile(path.as_ptr()) }).map(|font| Self {
+            lease: FontLease::retain(font),
+        })
+    }
+
     pub fn lease(&self) -> FontLease {
         self.lease.clone()
     }

@@ -71,7 +71,9 @@ pub unsafe fn uqm_splash_with_bg_init_kernel(
     cx: &mut crate::engine::battle::Cx<'_>,
     io: &mut crate::engine::observe::Io<'_>,
 ) {
-    crate::front_end::fmv::runtime::splash_screen(cx, io, Some(background_init_kernel));
+    crate::front_end::fmv::splash_screen(cx, io, |cx, timeout| {
+        background_init_kernel(cx, timeout);
+    });
 }
 
 /// # Safety

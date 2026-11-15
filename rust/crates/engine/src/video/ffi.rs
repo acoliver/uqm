@@ -1,12 +1,10 @@
 //! C FFI bindings for DukVid decoder vtable and the pure Rust video player.
 
 use std::ffi::{c_char, c_int, c_void, CStr};
-use std::ptr;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Mutex;
 
 use crate::bridge_log::rust_bridge_log_msg;
-use crate::host::Files;
 use crate::io::ffi::uio_DirHandle;
 use crate::sound::dukaud::DukAudDecoder;
 use crate::sound::rodio_audio::{self, SoundCategory};
@@ -104,14 +102,7 @@ pub unsafe fn tfb_drawcanvas_unlock(canvas: *mut c_void) {
 
 unsafe fn read_video_file(dir: *mut uio_DirHandle, filename: &str) -> Option<Vec<u8>> {
     let files = crate::io::uio_owned::directory(dir).ok()?;
-    let data = files
-        .read(std::path::Path::new(filename))
-        .or_else(|_| files.read(std::path::Path::new(&format!("/{filename}"))))
-        .ok()?;
-    if data.is_empty() {
-        return None;
-    }
-    Some(data)
+    super::files::read(&files, filename)
 }
 
 fn calculate_video_scale(_src_w: u32, _src_h: u32) -> u32 {
@@ -203,9 +194,26 @@ pub struct TFB_VideoDecoderFuncs {
 #[repr(C)]
 pub struct TFB_RustDukVideoDecoder {
     pub base: TFB_VideoDecoder,
-    pub rust_decoder: *mut c_void,
-    pub scaler: *mut c_void,
+    pub rust_decoder: Option<Box<DukVideoDecoder>>,
+    pub scaler: Option<Box<VideoScaler>>,
     pub last_error: i32,
+}
+
+fn with_decoder_record<R>(
+    decoder: *mut TFB_VideoDecoder,
+    format: Option<*const TFB_PixelFormat>,
+    apply: impl FnOnce(&mut TFB_RustDukVideoDecoder, Option<&TFB_PixelFormat>) -> R,
+) -> Option<R> {
+    // SAFETY: only the serialized vtable calls this boundary. Its registry retains a
+    // zero-initialized, GetStructSize-sized record and the optional Init format.
+    // Zero is the documented None representation of each Option<Box<_>> payload.
+    let (record, format) = unsafe {
+        (
+            decoder.cast::<TFB_RustDukVideoDecoder>().as_mut()?,
+            format.and_then(|format| format.as_ref()),
+        )
+    };
+    Some(apply(record, format))
 }
 
 static RUST_DUKV_FORMAT: Mutex<Option<TFB_PixelFormat>> = Mutex::new(None);
@@ -250,35 +258,23 @@ extern "C" fn rust_dukv_GetStructSize() -> u32 {
     reason = "function name matches the legacy C decoder vtable ABI; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
 )]
 extern "C" fn rust_dukv_GetError(decoder: *mut TFB_VideoDecoder) -> c_int {
-    if decoder.is_null() {
-        return -1;
-    }
-    unsafe {
-        let rust_dec = decoder as *mut TFB_RustDukVideoDecoder;
-        (*rust_dec).last_error
-    }
+    with_decoder_record(decoder, None, |record, _| record.last_error).unwrap_or(-1)
 }
 
 extern "C" fn rust_dukv_init(decoder: *mut TFB_VideoDecoder, fmt: *mut TFB_PixelFormat) -> bool {
-    if decoder.is_null() {
-        return false;
-    }
-
-    unsafe {
-        let rust_dec = decoder as *mut TFB_RustDukVideoDecoder;
-        (*rust_dec).rust_decoder = ptr::null_mut();
-        (*rust_dec).scaler = ptr::null_mut();
-        (*rust_dec).last_error = 0;
-
-        if !fmt.is_null() {
-            (*decoder).format = fmt;
+    with_decoder_record(decoder, Some(fmt), |record, format| {
+        record.rust_decoder = None;
+        record.scaler = None;
+        record.last_error = 0;
+        if let Some(format) = format {
+            record.base.format = fmt;
             if let Ok(mut guard) = RUST_DUKV_FORMAT.lock() {
-                *guard = Some(*fmt);
+                *guard = Some(*format);
             }
         }
-    }
-
-    true
+        true
+    })
+    .unwrap_or(false)
 }
 
 #[allow(
@@ -286,21 +282,10 @@ extern "C" fn rust_dukv_init(decoder: *mut TFB_VideoDecoder, fmt: *mut TFB_Pixel
     reason = "function name matches the legacy C decoder vtable ABI"
 )]
 extern "C" fn rust_dukv_Term(decoder: *mut TFB_VideoDecoder) {
-    if decoder.is_null() {
-        return;
-    }
-
-    unsafe {
-        let rust_dec = decoder as *mut TFB_RustDukVideoDecoder;
-        if !(*rust_dec).rust_decoder.is_null() {
-            let _ = Box::from_raw((*rust_dec).rust_decoder as *mut DukVideoDecoder);
-            (*rust_dec).rust_decoder = ptr::null_mut();
-        }
-        if !(*rust_dec).scaler.is_null() {
-            let _ = Box::from_raw((*rust_dec).scaler as *mut VideoScaler);
-            (*rust_dec).scaler = ptr::null_mut();
-        }
-    }
+    with_decoder_record(decoder, None, |record, _| {
+        record.rust_decoder = None;
+        record.scaler = None;
+    });
 }
 
 #[allow(
@@ -316,97 +301,48 @@ extern "C" fn rust_dukv_Open(
         return false;
     }
 
-    unsafe {
-        let rust_dec = decoder as *mut TFB_RustDukVideoDecoder;
-
-        let filename_cstr = CStr::from_ptr(filename);
-        let filename_str = match filename_cstr.to_str() {
-            Ok(s) => s,
-            Err(_) => {
-                (*rust_dec).last_error = -1;
-                return false;
-            }
-        };
-
-        let basename = filename_str.trim_end_matches(".duk");
-
-        let duk_file = format!("{}.duk", basename);
-        let frm_file = format!("{}.frm", basename);
-        let hdr_file = format!("{}.hdr", basename);
-        let tbl_file = format!("{}.tbl", basename);
-
-        let duk_data = match read_video_file(dir, &duk_file) {
-            Some(d) => d,
-            None => {
-                (*rust_dec).last_error = -1;
-                return false;
-            }
-        };
-        let frm_data = match read_video_file(dir, &frm_file) {
-            Some(d) => d,
-            None => {
-                (*rust_dec).last_error = -1;
-                return false;
-            }
-        };
-        let hdr_data = match read_video_file(dir, &hdr_file) {
-            Some(d) => d,
-            None => {
-                (*rust_dec).last_error = -1;
-                return false;
-            }
-        };
-        let tbl_data = match read_video_file(dir, &tbl_file) {
-            Some(d) => d,
-            None => {
-                (*rust_dec).last_error = -1;
-                return false;
-            }
-        };
-
-        match DukVideoDecoder::open_from_data(&hdr_data, &tbl_data, &frm_data, &duk_data) {
-            Ok(duk_decoder) => {
-                let src_w = duk_decoder.width();
-                let src_h = duk_decoder.height();
-
-                (*decoder).w = src_w;
-                (*decoder).h = src_h;
-                (*decoder).frame_count = duk_decoder.frame_count();
-                (*decoder).length = duk_decoder.duration();
-                (*decoder).interframe_wait = (1000.0 / DUCK_FPS) as u32;
-                (*decoder).audio_synced = false;
-                (*decoder).pos = 0.0;
-                (*decoder).cur_frame = 0;
-                (*decoder).error = 0;
-                (*decoder).dir = dir;
-
-                let boxed = Box::new(duk_decoder);
-                (*rust_dec).rust_decoder = Box::into_raw(boxed) as *mut c_void;
-
-                // Optional scaler (decoder vtable path currently reports native size to C).
-                let scale = calculate_video_scale(src_w, src_h);
-                if scale > 1 {
-                    let dst_w = src_w * scale;
-                    let dst_h = src_h * scale;
-                    let scaler = Box::new(VideoScaler::new(src_w, src_h, dst_w, dst_h));
-                    (*rust_dec).scaler = Box::into_raw(scaler) as *mut c_void;
-                }
-
-                true
-            }
-            Err(e) => {
-                (*rust_dec).last_error = match e {
-                    VideoError::BadFile(_) => -2,
-                    VideoError::Eof => -5,
-                    VideoError::OutOfBuffer => -4,
-                    VideoError::NotInitialized => -1,
-                    VideoError::IoError(_) => -1,
-                    VideoError::BadArg(_) => -3,
-                };
-                false
-            }
+    // SAFETY: the registered vtable receives its initialized record, a terminated filename,
+    // and a directory that the caller retains through this admission.
+    let (rust_dec, filename, files) = unsafe {
+        (
+            &mut *decoder.cast::<TFB_RustDukVideoDecoder>(),
+            CStr::from_ptr(filename),
+            crate::io::uio_owned::directory(dir),
+        )
+    };
+    let loaded = files
+        .map_err(|_| -1)
+        .and_then(|files| super::files::open(&files, filename));
+    let duk = match loaded {
+        Ok(duk) => duk,
+        Err(error) => {
+            rust_dec.last_error = error;
+            return false;
         }
+    };
+    let (width, height) = (duk.width(), duk.height());
+    let base = &mut rust_dec.base;
+    base.w = width;
+    base.h = height;
+    base.frame_count = duk.frame_count();
+    base.length = duk.duration();
+    base.interframe_wait = (1000.0 / DUCK_FPS) as u32;
+    base.audio_synced = false;
+    base.pos = 0.0;
+    base.cur_frame = 0;
+    base.error = 0;
+    base.dir = dir;
+    rust_dec.rust_decoder = Some(Box::new(duk));
+    let scale = calculate_video_scale(width, height);
+    if scale > 1 {
+        rust_dec.scaler = Some(Box::new(VideoScaler::new(
+            width,
+            height,
+            width * scale,
+            height * scale,
+        )));
     }
+    true
 }
 
 #[allow(
@@ -480,11 +416,9 @@ extern "C" fn rust_dukv_DecodeNext(decoder: *mut TFB_VideoDecoder) -> c_int {
 
     unsafe {
         let rust_dec = decoder as *mut TFB_RustDukVideoDecoder;
-        if (*rust_dec).rust_decoder.is_null() {
+        let Some(duk) = (*rust_dec).rust_decoder.as_deref_mut() else {
             return -1;
-        }
-
-        let duk = &mut *((*rust_dec).rust_decoder as *mut DukVideoDecoder);
+        };
         let cur_frame = (*decoder).cur_frame;
 
         if cur_frame >= (*decoder).frame_count {
@@ -503,8 +437,7 @@ extern "C" fn rust_dukv_DecodeNext(decoder: *mut TFB_VideoDecoder) -> c_int {
 
                 if let Some(get_canvas_line) = (*decoder).callbacks.GetCanvasLine {
                     let fmt = &*(*decoder).format;
-                    if !(*rust_dec).scaler.is_null() {
-                        let scaler = &mut *((*rust_dec).scaler as *mut VideoScaler);
+                    if let Some(scaler) = (*rust_dec).scaler.as_deref_mut() {
                         if let Some(scaled_pixels) = scaler.scale(&frame.data) {
                             let (dst_w, dst_h) = scaler.dst_dimensions();
                             let scaled_frame = VideoFrame {
@@ -549,20 +482,18 @@ extern "C" fn rust_dukv_DecodeNext(decoder: *mut TFB_VideoDecoder) -> c_int {
     reason = "function name matches the legacy C decoder vtable ABI; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
 )]
 extern "C" fn rust_dukv_SeekFrame(decoder: *mut TFB_VideoDecoder, frame: u32) -> u32 {
-    if decoder.is_null() {
-        return 0;
-    }
-    unsafe {
-        let frame_count = (*decoder).frame_count;
+    with_decoder_record(decoder, None, |record, _| {
+        let frame_count = record.base.frame_count;
         let target = if frame >= frame_count {
             frame_count.saturating_sub(1)
         } else {
             frame
         };
-        (*decoder).cur_frame = target;
-        (*decoder).pos = target as f32 / DUCK_FPS;
+        record.base.cur_frame = target;
+        record.base.pos = target as f32 / DUCK_FPS;
         target
-    }
+    })
+    .unwrap_or(0)
 }
 
 #[allow(
@@ -585,10 +516,7 @@ extern "C" fn rust_dukv_SeekTime(decoder: *mut TFB_VideoDecoder, time: f32) -> f
     reason = "function name matches the legacy C decoder vtable ABI; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
 )]
 extern "C" fn rust_dukv_GetFrame(decoder: *mut TFB_VideoDecoder) -> u32 {
-    if decoder.is_null() {
-        return 0;
-    }
-    unsafe { (*decoder).cur_frame }
+    with_decoder_record(decoder, None, |record, _| record.base.cur_frame).unwrap_or(0)
 }
 
 #[allow(
@@ -596,10 +524,7 @@ extern "C" fn rust_dukv_GetFrame(decoder: *mut TFB_VideoDecoder) -> u32 {
     reason = "function name matches the legacy C decoder vtable ABI; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
 )]
 extern "C" fn rust_dukv_GetTime(decoder: *mut TFB_VideoDecoder) -> f32 {
-    if decoder.is_null() {
-        return 0.0;
-    }
-    unsafe { (*decoder).pos }
+    with_decoder_record(decoder, None, |record, _| record.base.pos).unwrap_or(0.0)
 }
 
 pub static RUST_DUKV_DECODER_VTBL: TFB_VideoDecoderFuncs = TFB_VideoDecoderFuncs {

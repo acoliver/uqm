@@ -158,7 +158,7 @@ pub(crate) mod live {
         }
         let current_ship = state.current_ship;
         if keys[KEY_MENU_SPECIAL as usize] != 0 && current_ship != 255 {
-            crate::front_end::fmv::runtime::do_ship_spin(cx, io, current_ship as u16);
+            crate::front_end::fmv::do_ship_spin(cx, io, current_ship as u16, None);
             return 1;
         }
         let selected = navigate(

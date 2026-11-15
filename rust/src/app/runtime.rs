@@ -220,14 +220,7 @@ fn dispatch(cx: &mut Cx<'_>, io: &mut Io<'_>, decision: ActivityDecision) {
                         game_options: |cx, io| {
                             crate::front_end::gameopt::game_options(cx, io, None)
                         },
-                        ship_spin: |cx, _io, index, music| {
-                            let music =
-                                music.map_or(std::ptr::null_mut(), |music| music.as_raw().cast());
-                            // SAFETY: the supplied music and campaign remain retained during the presentation.
-                            cx.with_legacy(|| {
-                                crate::front_end::fmv::runtime::DoShipSpin(index, music)
-                            });
-                        },
+                        ship_spin: crate::front_end::fmv::do_ship_spin,
                     },
                 )
             };

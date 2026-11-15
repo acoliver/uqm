@@ -148,6 +148,12 @@ impl ContextFrame {
         unsafe { drawable_abi::SetFrameHot(self.frame, hotspot) }
     }
 
+    pub fn transparent_color(&self, color: Color) {
+        let frame = self.as_raw();
+        // SAFETY: the retained non-screen frame belongs to this graphics thread.
+        unsafe { super::drawable_abi::SetFrameTransparentColor(frame, color) };
+    }
+
     pub fn same_frame(&self, other: &Self) -> bool {
         self.frame == other.frame
     }

@@ -46,6 +46,10 @@ pub trait InputRuntime {
     fn input(&self) -> &InputSession;
     fn observer(&self) -> Box<dyn crate::observe::Observer<Option<crate::observe::CampaignView>>>;
     fn yield_poll(&self, cx: &mut Cx<'_>);
+    fn yield_task(&self, cx: &mut Cx<'_>) {
+        // SAFETY: the installed runtime retains initialized game-thread input and display.
+        cx.with_legacy(|| unsafe { crate::threading::legacy_abi::TaskSwitch() });
+    }
     fn sleep(&self, cx: &mut Cx<'_>, ticks: u32);
     fn sleep_until(&self, cx: &mut Cx<'_>, deadline: u32);
     fn flush(&self);

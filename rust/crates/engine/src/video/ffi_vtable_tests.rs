@@ -241,6 +241,26 @@ fn null_decoders_are_refused_by_every_entry_point() {
 
 #[test]
 #[serial]
+fn the_decoder_record_owns_and_releases_its_payload() {
+    let mut session = Session::open(NATIVE_RGBA);
+    let decoder = session.raw();
+    {
+        // SAFETY: the session owns the zero-initialized vtable-sized record through each borrow.
+        let record = unsafe { &*decoder.cast::<super::ffi::TFB_RustDukVideoDecoder>() };
+        let payload: &Option<Box<DukVideoDecoder>> = &record.rust_decoder;
+        assert_eq!(payload.as_ref().unwrap().frame_count(), LOGO_FRAMES);
+    }
+    assert_eq!(session.decode_next(), 1);
+    (funcs().Close)(decoder);
+    // SAFETY: Close releases the payload, not the session's record allocation.
+    let record = unsafe { &*decoder.cast::<super::ffi::TFB_RustDukVideoDecoder>() };
+    assert!(record.rust_decoder.is_none());
+    assert!(record.scaler.is_none());
+    (funcs().Term)(decoder);
+}
+
+#[test]
+#[serial]
 fn opening_the_logo_reports_its_geometry_and_frame_timing() {
     let mut session = Session::open(NATIVE_RGBA);
     let reference = DukVideoDecoder::open(&logo_dir(), "logo").unwrap();

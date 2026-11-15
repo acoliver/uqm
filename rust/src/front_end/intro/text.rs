@@ -1,62 +1,66 @@
-use crate::navigation::abi::{COORD, RECT, SIZE, TEXT};
+use crate::graphics::native_abi::{POINT, RECT};
+use std::ffi::CString;
 
-pub(super) fn split_lines(lines: &mut [TEXT], buffer: &mut [u8]) -> usize {
-    let end = buffer
+pub(in crate::front_end) fn owned_lines(bytes: &[u8], capacity: usize) -> Vec<CString> {
+    let end = bytes
         .iter()
-        .position(|byte| *byte == 0)
-        .unwrap_or_else(|| panic!("presentation text requires a terminating NUL"));
-    let mut start = 0;
-    let mut count = 0;
-    for line in lines {
-        if start >= end {
-            break;
-        }
-        let term = buffer[start..end]
+        .position(|&byte| byte == 0)
+        .unwrap_or(bytes.len());
+    let mut bytes = &bytes[..end];
+    let mut lines = Vec::new();
+    while !bytes.is_empty() && lines.len() < capacity {
+        let end = bytes
             .iter()
-            .position(|byte| *byte == b'\n')
-            .map_or(end, |offset| start + offset);
-        buffer[term] = 0;
-        line.pStr = buffer.as_mut_ptr().wrapping_add(start).cast();
-        line.CharCount = crate::navigation::abi::COUNT::MAX;
-        start = term + 1;
-        count += 1;
+            .position(|&byte| byte == b'\n')
+            .unwrap_or(bytes.len());
+        lines.push(
+            CString::new(&bytes[..end])
+                .unwrap_or_else(|error| panic!("bounded presentation text contains NUL: {error}")),
+        );
+        bytes = &bytes[(end + 1).min(bytes.len())..];
     }
-    count
+    lines
+}
+
+pub(super) struct TextLine {
+    pub text: CString,
+    pub baseline: POINT,
 }
 
 pub(super) fn position_lines(
-    lines: &mut [TEXT],
+    lines: &mut [TextLine],
     clip: RECT,
-    leading: SIZE,
+    leading: i16,
     alignment: i32,
     width: i32,
 ) -> RECT {
     let (fade, mut y) = layout(clip, lines.len() as i32, leading, alignment);
     for line in lines {
-        line.align = crate::navigation::abi::TEXT_ALIGN_ALIGN_CENTER;
-        line.baseline.x = (width / 2) as COORD;
-        line.baseline.y = y;
-        y = (y as i32 + leading as i32) as COORD;
+        line.baseline = POINT {
+            x: (width / 2) as i16,
+            y,
+        };
+        y = (i32::from(y) + i32::from(leading)) as i16;
     }
     fade
 }
 
-pub(super) fn layout(mut clip: RECT, count: i32, leading: SIZE, alignment: i32) -> (RECT, COORD) {
-    let height = count * leading as i32;
+pub(super) fn layout(mut clip: RECT, count: i32, leading: i16, alignment: i32) -> (RECT, i16) {
+    let height = count * i32::from(leading);
     let first = match alignment {
         84 => leading,
-        77 => ((clip.extent.height as i32 - height) / 2) as COORD,
-        _ => (clip.extent.height as i32 - height) as COORD,
+        77 => ((i32::from(clip.extent.height) - height) / 2) as i16,
+        _ => (i32::from(clip.extent.height) - height) as i16,
     };
-    clip.corner.y = (clip.corner.y as i32 + first as i32 - leading as i32) as COORD;
-    clip.extent.height = ((count + 1) * leading as i32) as COORD;
+    clip.corner.y = (i32::from(clip.corner.y) + i32::from(first) - i32::from(leading)) as i16;
+    clip.extent.height = ((count + 1) * i32::from(leading)) as i16;
     (clip, first)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::navigation::abi::{EXTENT, POINT};
+    use crate::graphics::native_abi::EXTENT;
 
     #[test]
     fn position_lines_updates_baselines_without_changing_the_text() {
@@ -67,19 +71,15 @@ mod tests {
                 height: 100,
             },
         };
-        let mut lines = [TEXT {
+        let mut lines: [_; 2] = std::array::from_fn(|_| TextLine {
+            text: c"hello".to_owned(),
             baseline: POINT { x: 0, y: 0 },
-            pStr: std::ptr::null(),
-            align: 0,
-            CharCount: 5,
-        }; 2];
+        });
         let fade = position_lines(&mut lines, clip, 8, 77, 320);
         assert_eq!((lines[0].baseline.x, lines[0].baseline.y), (160, 42));
         assert_eq!((lines[1].baseline.x, lines[1].baseline.y), (160, 50));
         assert_eq!((fade.corner.y, fade.extent.height), (44, 24));
-        assert!(lines
-            .iter()
-            .all(|line| line.pStr.is_null() && line.CharCount == 5));
+        assert!(lines.iter().all(|line| line.text.as_c_str() == c"hello"));
     }
 
     #[test]

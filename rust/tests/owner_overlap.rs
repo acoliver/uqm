@@ -279,11 +279,7 @@ fn starbase_releases_world_before_communication_and_cleanup() {
                         game_options: |cx, io| {
                             uqm_rust::front_end::gameopt::game_options(cx, io, None)
                         },
-                        ship_spin: |cx, _, index, music| {
-                            let music =
-                                music.map_or(std::ptr::null_mut(), |music| music.as_raw().cast());
-                            cx.with_legacy(|| uqm_rust::front_end::fmv::DoShipSpin(index, music));
-                        },
+                        ship_spin: uqm_rust::front_end::fmv::do_ship_spin,
                     },
                 );
             })

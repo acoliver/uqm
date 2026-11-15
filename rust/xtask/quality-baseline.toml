@@ -2946,7 +2946,7 @@ phase7_input_access_unsafe = { limit = 8, ends = "phase-7", scopes = { "unsafe|u
 phase7_render_access_unsafe = { limit = 54, ends = "phase-7", scopes = { "unsafe|unsafe_block_lines|uqm-engine::battle::access::<Cx<'_>>::intersect_elements" = 7, "unsafe|unsafe_block_lines|uqm-engine::battle::access::<Cx<'_>>::refresh_intersect_frame" = 3, "unsafe|unsafe_block_lines|uqm-engine::battle::access::<Cx<'_>>::screen_dimensions" = 1, "unsafe|unsafe_block_lines|uqm-engine::battle::access::record_ops::<Cx<'_>>::projected_intersect" = 1, "unsafe|unsafe_block_lines|uqm::battle::context_access::<Cx<'_> as ContextOps>::draw_final_battle_captain" = 11, "unsafe|unsafe_block_lines|uqm::battle::context_access::<Cx<'_> as ContextOps>::init_ship_status" = 8, "unsafe|unsafe_block_lines|uqm::battle::context_access::status_native_access::<Cx<'_> as StatusOps>::draw_captain_controls" = 3, "unsafe|unsafe_block_lines|uqm::battle::context_access::status_native_access::<Cx<'_> as StatusOps>::draw_energy_label" = 3, "unsafe|unsafe_block_lines|uqm::battle::context_access::status_native_access::<Cx<'_> as StatusOps>::draw_explosion_flash" = 8, "unsafe|unsafe_blocks|uqm-engine::battle::access::<Cx<'_>>::intersect_elements" = 1, "unsafe|unsafe_blocks|uqm-engine::battle::access::<Cx<'_>>::refresh_intersect_frame" = 1, "unsafe|unsafe_blocks|uqm-engine::battle::access::<Cx<'_>>::screen_dimensions" = 1, "unsafe|unsafe_blocks|uqm-engine::battle::access::record_ops::<Cx<'_>>::projected_intersect" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::<Cx<'_> as ContextOps>::draw_final_battle_captain" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::<Cx<'_> as ContextOps>::init_ship_status" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::status_native_access::<Cx<'_> as StatusOps>::draw_captain_controls" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::status_native_access::<Cx<'_> as StatusOps>::draw_energy_label" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::status_native_access::<Cx<'_> as StatusOps>::draw_explosion_flash" = 1 } }
 phase7_sound_access_unsafe = { limit = 48, ends = "phase-7", scopes = { "unsafe|unsafe_block_lines|uqm-engine::battle::access::<Cx<'_>>::set_ship_sound_bank" = 1, "unsafe|unsafe_block_lines|uqm-engine::battle::access::<Cx<'_>>::ship_sound_count" = 1, "unsafe|unsafe_block_lines|uqm-engine::battle::access::<Cx<'_>>::sound_point" = 7, "unsafe|unsafe_block_lines|uqm::battle::context_access::<Cx<'_> as ContextOps>::game_sound" = 4, "unsafe|unsafe_block_lines|uqm::battle::context_access::<Cx<'_> as ContextOps>::process_ship_sound" = 4, "unsafe|unsafe_block_lines|uqm::battle::context_access::<Cx<'_> as ContextOps>::start_battle_song_if_ready" = 5, "unsafe|unsafe_block_lines|uqm::battle::context_access::<Cx<'_> as ContextOps>::unlink" = 2, "unsafe|unsafe_block_lines|uqm::battle::context_access::sound_legacy::FlushSounds" = 3, "unsafe|unsafe_block_lines|uqm::battle::context_access::sound_legacy::UpdateSoundPositions" = 3, "unsafe|unsafe_block_lines|uqm::battle::context_access::tactrans_native_access::<Cx<'_> as TransitionOps>::play_ditty" = 3, "unsafe|unsafe_block_lines|uqm::battle::context_access::tactrans_native_access::<Cx<'_> as TransitionOps>::stop_battle_music" = 3, "unsafe|unsafe_blocks|uqm-engine::battle::access::<Cx<'_>>::set_ship_sound_bank" = 1, "unsafe|unsafe_blocks|uqm-engine::battle::access::<Cx<'_>>::ship_sound_count" = 1, "unsafe|unsafe_blocks|uqm-engine::battle::access::<Cx<'_>>::sound_point" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::<Cx<'_> as ContextOps>::game_sound" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::<Cx<'_> as ContextOps>::process_ship_sound" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::<Cx<'_> as ContextOps>::start_battle_song_if_ready" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::<Cx<'_> as ContextOps>::unlink" = 2, "unsafe|unsafe_blocks|uqm::battle::context_access::sound_legacy::FlushSounds" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::sound_legacy::UpdateSoundPositions" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::tactrans_native_access::<Cx<'_> as TransitionOps>::play_ditty" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::tactrans_native_access::<Cx<'_> as TransitionOps>::stop_battle_music" = 1 } }
 u6_04_content_edges = { limit = 107, ends = "U6-04", scopes = { "layers|module_edges|uqm::battle::ai_entry::@file" = 4, "layers|module_edges|uqm::battle::cyborg_native::@file" = 2, "layers|module_edges|uqm::battle::process_native::@file" = 2, "layers|module_edges|uqm::battle::ship_native::@file" = 3, "layers|module_edges|uqm::battle::weapon_native::@file" = 4, "layers|module_edges|uqm::battle::world_elements::@file" = 2, "layers|module_edges|uqm::ships::races::androsynth_native::engine::@file" = 1, "layers|module_edges|uqm::ships::races::arilou_native::@file" = 2, "layers|module_edges|uqm::ships::races::blackurq_native::engine::@file" = 1, "layers|module_edges|uqm::ships::races::chenjesu_native::engine::@file" = 1, "layers|module_edges|uqm::ships::races::chmmr_native::engine::@file" = 2, "layers|module_edges|uqm::ships::races::druuge_native::engine::@file" = 1, "layers|module_edges|uqm::ships::races::human_native::engine::@file" = 2, "layers|module_edges|uqm::ships::races::ilwrath_native::@file" = 2, "layers|module_edges|uqm::ships::races::melnorme_native::engine::@file" = 1, "layers|module_edges|uqm::ships::races::mmrnmhrm_native::engine::@file" = 2, "layers|module_edges|uqm::ships::races::mycon_native::engine::@file" = 1, "layers|module_edges|uqm::ships::races::orz_native::engine::@file" = 2, "layers|module_edges|uqm::ships::races::pkunk_native::engine::@file" = 3, "layers|module_edges|uqm::ships::races::samatra::engine::@file" = 2, "layers|module_edges|uqm::ships::races::shofixti_native::engine::@file" = 3, "layers|module_edges|uqm::ships::races::sis_native::engine::@file" = 3, "layers|module_edges|uqm::ships::races::slylandro_native::engine::@file" = 2, "layers|module_edges|uqm::ships::races::spathi_native::@file" = 1, "layers|module_edges|uqm::ships::races::supox_native::engine::@file" = 2, "layers|module_edges|uqm::ships::races::syreen_native::engine::@file" = 2, "layers|module_edges|uqm::ships::races::thraddash_native::engine::@file" = 2, "layers|module_edges|uqm::ships::races::umgah_native::engine::@file" = 1, "layers|module_edges|uqm::ships::races::urquan_native::engine::@file" = 2, "layers|module_edges|uqm::ships::races::utwig_native::engine::@file" = 1, "layers|module_edges|uqm::ships::races::vux_native::engine::@file" = 1, "layers|module_edges|uqm::ships::races::yehat_native::engine::@file" = 1, "layers|module_edges|uqm::ships::races::zoqfot_native::engine::@file" = 1, "layers|planned.uqm-content|uqm::ships::races::androsynth_native::engine::@file" = 1, "layers|planned.uqm-content|uqm::ships::races::arilou_native::@file" = 2, "layers|planned.uqm-content|uqm::ships::races::blackurq_native::engine::@file" = 1, "layers|planned.uqm-content|uqm::ships::races::chenjesu_native::engine::@file" = 1, "layers|planned.uqm-content|uqm::ships::races::chmmr_native::engine::@file" = 2, "layers|planned.uqm-content|uqm::ships::races::druuge_native::engine::@file" = 1, "layers|planned.uqm-content|uqm::ships::races::human_native::engine::@file" = 2, "layers|planned.uqm-content|uqm::ships::races::ilwrath_native::@file" = 2, "layers|planned.uqm-content|uqm::ships::races::melnorme_native::engine::@file" = 1, "layers|planned.uqm-content|uqm::ships::races::mmrnmhrm_native::engine::@file" = 2, "layers|planned.uqm-content|uqm::ships::races::mycon_native::engine::@file" = 1, "layers|planned.uqm-content|uqm::ships::races::orz_native::engine::@file" = 2, "layers|planned.uqm-content|uqm::ships::races::pkunk_native::engine::@file" = 3, "layers|planned.uqm-content|uqm::ships::races::samatra::engine::@file" = 2, "layers|planned.uqm-content|uqm::ships::races::shofixti_native::engine::@file" = 3, "layers|planned.uqm-content|uqm::ships::races::sis_native::engine::@file" = 3, "layers|planned.uqm-content|uqm::ships::races::slylandro_native::engine::@file" = 2, "layers|planned.uqm-content|uqm::ships::races::spathi_native::@file" = 1, "layers|planned.uqm-content|uqm::ships::races::supox_native::engine::@file" = 2, "layers|planned.uqm-content|uqm::ships::races::syreen_native::engine::@file" = 2, "layers|planned.uqm-content|uqm::ships::races::thraddash_native::engine::@file" = 2, "layers|planned.uqm-content|uqm::ships::races::umgah_native::engine::@file" = 1, "layers|planned.uqm-content|uqm::ships::races::urquan_native::engine::@file" = 2, "layers|planned.uqm-content|uqm::ships::races::utwig_native::engine::@file" = 1, "layers|planned.uqm-content|uqm::ships::races::vux_native::engine::@file" = 1, "layers|planned.uqm-content|uqm::ships::races::yehat_native::engine::@file" = 1, "layers|planned.uqm-content|uqm::ships::races::zoqfot_native::engine::@file" = 1 } }
-u6_04_world_projection = { limit = 32, ends = "U6-04", scopes = { "ffi|owner_projections|uqm::comm::glue::resolve_phrase" = 1, "ffi|owner_projections|uqm::comm::speech_graphics::<SpeechGraphics>::update" = 2, "ffi|owner_projections|uqm::comm::speech_graphics::activity_frame" = 1, "ffi|owner_projections|uqm::front_end::credits::runtime::Credits" = 3, "ffi|owner_projections|uqm::front_end::credits::runtime::credits_input" = 1, "ffi|owner_projections|uqm::front_end::credits::runtime::outtakes" = 1, "ffi|owner_projections|uqm::front_end::fmv::runtime::splash_screen" = 4, "ffi|owner_projections|uqm::front_end::intro::runtime::fade_clear_screen" = 1, "ffi|owner_projections|uqm::front_end::intro::runtime::generate_sis" = 2, "ffi|owner_projections|uqm::front_end::intro::runtime::presentation_commands" = 1, "ffi|owner_projections|uqm::front_end::intro::runtime::show_slides" = 1, "ffi|owner_projections|uqm::front_end::intro::runtime::video_input" = 1, "ffi|owner_projections|uqm::mainloop::restart_menu::menu_abi::uqm_get_utwig_bomb" = 1, "ffi|owner_projections|uqm::mainloop::restart_menu::menu_abi::uqm_get_utwig_bomb_on_ship" = 1, "ffi|owner_projections|uqm::mainloop::restart_menu::menu_abi::uqm_set_utwig_bomb_on_ship" = 1, "ffi|owner_projections|uqm::planets::cargo::live::ShowRemainingCapacity" = 1, "ffi|owner_projections|uqm::planets::cargo::live::discard" = 3, "ffi|owner_projections|uqm::planets::cargo::live::display" = 1, "ffi|owner_projections|uqm::planets::cargo::live::element_amount" = 3, "ffi|owner_projections|uqm::planets::report::live::make_report" = 1, "ffi|owner_projections|uqm::planets::sphere::live::tint_frame" = 1 } }
+u6_04_world_projection = { limit = 17, ends = "U6-04", scopes = { "ffi|owner_projections|uqm::comm::glue::resolve_phrase" = 1, "ffi|owner_projections|uqm::comm::speech_graphics::<SpeechGraphics>::update" = 2, "ffi|owner_projections|uqm::comm::speech_graphics::activity_frame" = 1, "ffi|owner_projections|uqm::front_end::credits::runtime::Credits" = 0, "ffi|owner_projections|uqm::front_end::credits::runtime::credits_input" = 0, "ffi|owner_projections|uqm::front_end::credits::runtime::outtakes" = 0, "ffi|owner_projections|uqm::front_end::fmv::runtime::splash_screen" = 0, "ffi|owner_projections|uqm::front_end::intro::runtime::fade_clear_screen" = 0, "ffi|owner_projections|uqm::front_end::intro::runtime::generate_sis" = 0, "ffi|owner_projections|uqm::front_end::intro::runtime::presentation_commands" = 0, "ffi|owner_projections|uqm::front_end::intro::runtime::show_slides" = 0, "ffi|owner_projections|uqm::front_end::intro::runtime::video_input" = 0, "ffi|owner_projections|uqm::mainloop::restart_menu::menu_abi::uqm_get_utwig_bomb" = 1, "ffi|owner_projections|uqm::mainloop::restart_menu::menu_abi::uqm_get_utwig_bomb_on_ship" = 1, "ffi|owner_projections|uqm::mainloop::restart_menu::menu_abi::uqm_set_utwig_bomb_on_ship" = 1, "ffi|owner_projections|uqm::planets::cargo::live::ShowRemainingCapacity" = 1, "ffi|owner_projections|uqm::planets::cargo::live::discard" = 3, "ffi|owner_projections|uqm::planets::cargo::live::display" = 1, "ffi|owner_projections|uqm::planets::cargo::live::element_amount" = 3, "ffi|owner_projections|uqm::planets::report::live::make_report" = 1, "ffi|owner_projections|uqm::planets::sphere::live::tint_frame" = 1 } }
 
 [entry]
 "allows|cfg_not_test_modules|uqm-engine::battle::access::lifecycle" = 1
@@ -2967,9 +2967,7 @@ u6_04_world_projection = { limit = 32, ends = "U6-04", scopes = { "ffi|owner_pro
 "allows|cfg_not_test_modules|uqm::comm::talk_segue::c_bridge" = 1
 "allows|cfg_not_test_modules|uqm::comm::talk_segue::dinput" = 1
 "allows|cfg_not_test_modules|uqm::front_end::credits::runtime" = 1
-"allows|cfg_not_test_modules|uqm::front_end::fmv::runtime" = 1
 "allows|cfg_not_test_modules|uqm::front_end::gameopt::runtime" = 1
-"allows|cfg_not_test_modules|uqm::front_end::intro::runtime" = 1
 "allows|cfg_not_test_modules|uqm::game_init::cleanup" = 1
 "allows|cfg_not_test_modules|uqm::game_init::kernel_abi" = 1
 "allows|cfg_not_test_modules|uqm::game_init::macro_abi" = 1
@@ -3175,12 +3173,12 @@ u6_04_world_projection = { limit = 32, ends = "U6-04", scopes = { "ffi|owner_pro
 "allows|non_snake_case|uqm-engine::video::ffi::rust_dukv_GetStructSize" = 7
 "allows|non_snake_case|uqm-engine::video::ffi::rust_dukv_GetTime" = 10
 "allows|non_snake_case|uqm-engine::video::ffi::rust_dukv_InitModule" = 7
-"allows|non_snake_case|uqm-engine::video::ffi::rust_dukv_Open" = 94
+"allows|non_snake_case|uqm-engine::video::ffi::rust_dukv_Open" = 54
 "allows|non_snake_case|uqm-engine::video::ffi::rust_dukv_SeekFrame" = 20
 "allows|non_snake_case|uqm-engine::video::ffi::rust_dukv_SeekTime" = 14
 "allows|non_snake_case|uqm-engine::video::ffi::rust_dukv_Term" = 20
 "allows|non_snake_case|uqm-engine::video::ffi::rust_dukv_TermModule" = 9
-"allows|non_snake_case|uqm-engine::video::legacy" = 139
+"allows|non_snake_case|uqm-engine::video::legacy" = 106
 "allows|non_snake_case|uqm-engine::video::registry" = 267
 "allows|non_snake_case|uqm::battle::status_native::engine" = 185
 "allows|non_snake_case|uqm::c_bindings::controller_input" = 23
@@ -3316,9 +3314,6 @@ u6_04_world_projection = { limit = 32, ends = "U6-04", scopes = { "ffi|owner_pro
 "complexity|cognitive|uqm::comm::races::utwig::<Dialogue<'_,A>>::neutral_utwig" = 35
 "complexity|cognitive|uqm::comm::races::vux::dialogue::<Dialogue<'_,A>>::menagerie" = 50
 "complexity|cognitive|uqm::comm::races::zoqfot::<Dialogue<'_,A>>::zoq_fot_home" = 39
-"complexity|cognitive|uqm::front_end::credits::runtime::process_frame" = 44
-"complexity|cognitive|uqm::front_end::credits::runtime::render_text_frame" = 48
-"complexity|cognitive|uqm::front_end::intro::runtime::presentation_commands" = 105
 "complexity|cognitive|uqm::mainloop::dir_prep::expand_dollar_vars" = 32
 "complexity|cognitive|uqm::navigation::hyper_encounters::process" = 59
 "complexity|cognitive|uqm::navigation::hyper_radar::seed_universe" = 42
@@ -3455,8 +3450,6 @@ u6_04_world_projection = { limit = 32, ends = "U6-04", scopes = { "ffi|owner_pro
 "complexity|cyclomatic|uqm::comm::races::vux::dialogue::<Dialogue<'_,A>>::menagerie" = 44
 "complexity|cyclomatic|uqm::comm::races::yehat::dialogue::<Dialogue<'_,A>>::space" = 27
 "complexity|cyclomatic|uqm::comm::races::zoqfot::<Dialogue<'_,A>>::zoq_fot_home" = 26
-"complexity|cyclomatic|uqm::front_end::credits::runtime::render_text_frame" = 33
-"complexity|cyclomatic|uqm::front_end::intro::runtime::presentation_commands" = 71
 "complexity|cyclomatic|uqm::front_end::uqmdebug::labels::star_presence_string" = 48
 "complexity|cyclomatic|uqm::mainloop::options::apply_boolean_config" = 28
 "complexity|cyclomatic|uqm::navigation::events::dispatch_event" = 27
@@ -3520,7 +3513,6 @@ u6_04_world_projection = { limit = 32, ends = "U6-04", scopes = { "ffi|owner_pro
 "complexity|loc|uqm-engine::sound::trackplayer::splice_track" = 125
 "complexity|loc|uqm-engine::sound::wav_ffi::rust_wav_Open" = 94
 "complexity|loc|uqm-engine::video::decoder::<DukVideoDecoder>::decode_frame_v2_range" = 92
-"complexity|loc|uqm-engine::video::ffi::rust_dukv_Open" = 86
 "complexity|loc|uqm-engine::video::ffi::rust_play_video_direct_window" = 90
 "complexity|loc|uqm-engine::video::ffi::rust_present_video_to_window" = 116
 "complexity|loc|uqm-engine::video::player::<VideoPlayer>::process_frame" = 102
@@ -3640,9 +3632,6 @@ u6_04_world_projection = { limit = 32, ends = "U6-04", scopes = { "ffi|owner_pro
 "complexity|loc|uqm::comm::races::zoqfot::<Dialogue<'_,A>>::zoq_fot_home" = 171
 "complexity|loc|uqm::comm::races::zoqfot::<Dialogue<'_,A>>::zoq_fot_info" = 94
 "complexity|loc|uqm::comm::races::zoqfot::<Dialogue<'_,A>>::zoq_fot_intro" = 100
-"complexity|loc|uqm::front_end::credits::runtime::process_frame" = 101
-"complexity|loc|uqm::front_end::credits::runtime::render_text_frame" = 148
-"complexity|loc|uqm::front_end::intro::runtime::presentation_commands" = 404
 "complexity|loc|uqm::mainloop::options::build_command" = 245
 "complexity|loc|uqm::mainloop::startup::live::initialize" = 123
 "complexity|loc|uqm::navigation::events::dispatch_event" = 85
@@ -3681,12 +3670,10 @@ u6_04_world_projection = { limit = 32, ends = "U6-04", scopes = { "ffi|owner_pro
 "ffi|bridge_calls|uqm-engine::uqm-engine" = 1
 "ffi|bridge_calls|uqm::automation" = 6
 "ffi|bridge_calls|uqm::battle" = 1
-"ffi|bridge_calls|uqm::front_end" = 1
 "ffi|bridge_calls|uqm::game_init" = 2
 "ffi|bridge_calls|uqm::mainloop" = 1
-"ffi|extern_c_fn|uqm-engine::uqm-engine" = 542
+"ffi|extern_c_fn|uqm-engine::uqm-engine" = 537
 "ffi|extern_c_fn|uqm::automation" = 1
-"ffi|extern_c_fn|uqm::front_end" = 1
 "ffi|extern_c_fn|uqm::game_init" = 22
 "ffi|extern_c_fn|uqm::mainloop" = 7
 "ffi|extern_c_fn|uqm::time" = 2
@@ -3698,31 +3685,26 @@ u6_04_world_projection = { limit = 32, ends = "U6-04", scopes = { "ffi|owner_pro
 "ffi|foreign_items|uqm::ships" = 8
 "ffi|link_name|uqm::automation" = 2
 "ffi|no_mangle|uqm-engine::uqm-engine" = 384
-"ffi|no_mangle|uqm::front_end" = 1
 "ffi|no_mangle|uqm::game_init" = 9
 "ffi|no_mangle|uqm::mainloop" = 3
-"ffi|owner_projections|uqm::front_end" = 0
 "ffi|owner_projections|uqm::mainloop" = 0
-"ffi|raw_pointer_parameters|uqm-engine::uqm-engine" = 942
+"ffi|raw_pointer_parameters|uqm-engine::uqm-engine" = 938
 "ffi|raw_pointer_parameters|uqm::automation" = 1
 "ffi|raw_pointer_parameters|uqm::comm" = 30
-"ffi|raw_pointer_parameters|uqm::front_end" = 8
 "ffi|raw_pointer_parameters|uqm::game_init" = 7
 "ffi|raw_pointer_parameters|uqm::mainloop" = 42
 "ffi|raw_pointer_parameters|uqm::navigation" = 11
 "ffi|raw_pointer_parameters|uqm::savegame" = 4
 "ffi|raw_pointer_parameters|uqm::ships" = 17
 "ffi|raw_pointer_parameters|uqm::state" = 24
-"ffi|repr_c|uqm-engine::uqm-engine" = 144
+"ffi|repr_c|uqm-engine::uqm-engine" = 142
 "ffi|repr_c|uqm::automation" = 5
 "ffi|repr_c|uqm::comm" = 8
-"ffi|repr_c|uqm::front_end" = 1
 "ffi|repr_c|uqm::mainloop" = 1
 "ffi|repr_c|uqm::navigation" = 30
 "ffi|repr_c|uqm::ships" = 6
 "ffi|repr_c|uqm::state" = 1
 "ffi|static_mut|uqm-engine::uqm-engine" = 72
-"ffi|static_mut|uqm::front_end" = 17
 "layers|crate_os|uqm-engine::cpal" = 1
 "layers|crate_os|uqm-engine::gl" = 1
 "layers|crate_os|uqm-engine::libc" = 1
@@ -4011,7 +3993,7 @@ u6_04_world_projection = { limit = 32, ends = "U6-04", scopes = { "ffi|owner_pro
 "loc|loc|uqm-engine::sound::heart_ffi::@file" = 960
 "loc|loc|uqm-engine::sound::stream::@file" = 1081
 "loc|loc|uqm-engine::sound::trackplayer::@file" = 894
-"loc|loc|uqm-engine::video::ffi::@file" = 999
+"loc|loc|uqm-engine::video::ffi::@file" = 951
 "loc|loc|uqm-xtask::abi_check::@file" = 1461
 "loc|loc|uqm-xtask::native_suite::@file" = 1516
 "loc|loc|uqm::automation::child_session::@file" = 2774
@@ -4031,15 +4013,15 @@ u6_04_world_projection = { limit = 32, ends = "U6-04", scopes = { "ffi|owner_pro
 "loc|loc|uqm::ships::registry::@file" = 943
 "loc|loc|uqm::starbase::shipyard_screen::@file" = 910
 "loc|loc|uqm::target::uqm-gameplay-proof::@file" = 2277
-"unsafe|unsafe_block_lines|uqm-engine::uqm-engine" = 2359
+"unsafe|unsafe_block_lines|uqm-engine::uqm-engine" = 2336
 "unsafe|unsafe_block_lines|uqm-xtask::uqm-xtask" = 8
-"unsafe|unsafe_block_lines|uqm::app" = 65
+"unsafe|unsafe_block_lines|uqm::app" = 59
 "unsafe|unsafe_block_lines|uqm::automation" = 678
 "unsafe|unsafe_block_lines|uqm::battle" = 4
 "unsafe|unsafe_block_lines|uqm::comm" = 428
 "unsafe|unsafe_block_lines|uqm::front_end" = 4
 "unsafe|unsafe_block_lines|uqm::game_init" = 2
-"unsafe|unsafe_block_lines|uqm::mainloop" = 187
+"unsafe|unsafe_block_lines|uqm::mainloop" = 183
 "unsafe|unsafe_block_lines|uqm::navigation" = 1
 "unsafe|unsafe_block_lines|uqm::planets" = 14
 "unsafe|unsafe_block_lines|uqm::savegame" = 16
@@ -4051,20 +4033,19 @@ u6_04_world_projection = { limit = 32, ends = "U6-04", scopes = { "ffi|owner_pro
 "unsafe|unsafe_blocks|uqm::automation" = 124
 "unsafe|unsafe_blocks|uqm::battle" = 4
 "unsafe|unsafe_blocks|uqm::comm" = 101
-"unsafe|unsafe_blocks|uqm::front_end" = 2
+"unsafe|unsafe_blocks|uqm::front_end" = 1
 "unsafe|unsafe_blocks|uqm::game_init" = 2
-"unsafe|unsafe_blocks|uqm::mainloop" = 94
+"unsafe|unsafe_blocks|uqm::mainloop" = 90
 "unsafe|unsafe_blocks|uqm::navigation" = 1
 "unsafe|unsafe_blocks|uqm::planets" = 12
 "unsafe|unsafe_blocks|uqm::savegame" = 7
 "unsafe|unsafe_blocks|uqm::ships" = 8
 "unsafe|unsafe_blocks|uqm::uqm" = 1
-"unsafe|unsafe_fn_lines|uqm-engine::uqm-engine" = 14113
+"unsafe|unsafe_fn_lines|uqm-engine::uqm-engine" = 14044
 "unsafe|unsafe_fn_lines|uqm::app" = 3
 "unsafe|unsafe_fn_lines|uqm::automation" = 196
 "unsafe|unsafe_fn_lines|uqm::battle" = 3
 "unsafe|unsafe_fn_lines|uqm::comm" = 1442
-"unsafe|unsafe_fn_lines|uqm::front_end" = 1393
 "unsafe|unsafe_fn_lines|uqm::game_init" = 368
 "unsafe|unsafe_fn_lines|uqm::mainloop" = 659
 "unsafe|unsafe_fn_lines|uqm::navigation" = 524
@@ -4073,12 +4054,11 @@ u6_04_world_projection = { limit = 32, ends = "U6-04", scopes = { "ffi|owner_pro
 "unsafe|unsafe_fn_lines|uqm::ships" = 117
 "unsafe|unsafe_fn_lines|uqm::state" = 215
 "unsafe|unsafe_fn_lines|uqm::time" = 7
-"unsafe|unsafe_fn|uqm-engine::uqm-engine" = 894
+"unsafe|unsafe_fn|uqm-engine::uqm-engine" = 889
 "unsafe|unsafe_fn|uqm::app" = 1
 "unsafe|unsafe_fn|uqm::automation" = 5
 "unsafe|unsafe_fn|uqm::battle" = 1
 "unsafe|unsafe_fn|uqm::comm" = 64
-"unsafe|unsafe_fn|uqm::front_end" = 38
 "unsafe|unsafe_fn|uqm::game_init" = 32
 "unsafe|unsafe_fn|uqm::mainloop" = 70
 "unsafe|unsafe_fn|uqm::navigation" = 28
@@ -4093,13 +4073,13 @@ u6_04_world_projection = { limit = 32, ends = "U6-04", scopes = { "ffi|owner_pro
 "unsafe|unsafe_impl|uqm::comm" = 2
 "unsafe|unsafe_lines|uqm-engine::uqm-engine" = 15965
 "unsafe|unsafe_lines|uqm-xtask::uqm-xtask" = 8
-"unsafe|unsafe_lines|uqm::app" = 67
+"unsafe|unsafe_lines|uqm::app" = 61
 "unsafe|unsafe_lines|uqm::automation" = 749
 "unsafe|unsafe_lines|uqm::battle" = 38
 "unsafe|unsafe_lines|uqm::comm" = 1834
-"unsafe|unsafe_lines|uqm::front_end" = 1397
+"unsafe|unsafe_lines|uqm::front_end" = 13
 "unsafe|unsafe_lines|uqm::game_init" = 370
-"unsafe|unsafe_lines|uqm::mainloop" = 830
+"unsafe|unsafe_lines|uqm::mainloop" = 828
 "unsafe|unsafe_lines|uqm::navigation" = 525
 "unsafe|unsafe_lines|uqm::planets" = 1248
 "unsafe|unsafe_lines|uqm::savegame" = 107

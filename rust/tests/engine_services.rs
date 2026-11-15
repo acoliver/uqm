@@ -6,12 +6,50 @@ use uqm_rust::graphics::sdl::lifecycle_abi::{
 };
 use uqm_rust::io::uio_bridge as uio;
 use uqm_rust::resource::ffi_bridge::_cur_resfile_name;
-use uqm_rust::strings::{sfileins::LoadStringTableFile, string_table::FreeStringTable};
+use uqm_rust::strings::{owned_table::LoadedTextTable, sfileins::LoadStringTableFile};
 use uqm_rust::video::{control::*, ffi::*, legacy::*};
+
+fn retained_playback_keeps_its_clip_after_descriptor_drop() {
+    assert!(LoadedVideo::load(c"fixture.unknown").is_none());
+    let absent =
+        LoadedVideo::load(c"fixture.absent").unwrap_or_else(|| panic!("missing-file descriptor"));
+    assert!(absent.play().is_none());
+    drop(absent);
+    let descriptor =
+        LoadedVideo::load(c"fixture.video").unwrap_or_else(|| panic!("logo descriptor"));
+    let playback = descriptor.play().unwrap_or_else(|| panic!("logo playback"));
+    drop(descriptor);
+    assert!(playback.is_playing());
+    assert!(playback.process_frame());
+    drop(playback);
+}
+
+fn retained_string_table_loads_owned_text() {
+    assert!(LoadedTextTable::load_file(c"missing").is_none());
+    let table = LoadedTextTable::load_file(c"strings.txt")
+        .unwrap_or_else(|| panic!("owned strings fixture did not load"));
+    assert_eq!(table.len(), 2);
+    assert_eq!(
+        table
+            .text(0)
+            .unwrap_or_else(|| panic!("owned strings fixture has no first entry")),
+        c"Hello, captain."
+    );
+}
 
 #[test]
 fn file_resources_and_movie_playback_share_the_live_content_directory() {
-    let directory = tempfile::tempdir().unwrap();
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../tmp");
+    std::fs::create_dir_all(&root).unwrap_or_else(|error| panic!("fixture root: {error}"));
+    let directory =
+        tempfile::tempdir_in(root).unwrap_or_else(|error| panic!("fixture directory: {error}"));
+    std::fs::write(
+        directory.path().join("video.rmp"),
+        b"fixture.video = 3DOVID:logo.duk
+fixture.absent = 3DOVID:missing.duk
+",
+    )
+    .unwrap_or_else(|error| panic!("video resource index: {error}"));
     std::fs::write(
         directory.path().join("strings.txt"),
         b"#(HELLO)\nHello, captain.\n#(BYE)\nGoodbye.\n",
@@ -49,17 +87,8 @@ fn file_resources_and_movie_playback_share_the_live_content_directory() {
         let dir = uio::uio_openDir(repository, c"/".as_ptr(), 0);
         assert!(!dir.is_null());
         uqm_rust::io::handles::contentDir = dir;
-        assert!(LoadStringTableFile(dir.cast(), c"missing".as_ptr()).is_null());
-        let table = LoadStringTableFile(dir.cast(), c"strings.txt".as_ptr());
-        assert!(!table.is_null());
-        assert_eq!((*table).size, 2);
-        let first = &*(*table).strings;
-        assert_eq!(
-            std::slice::from_raw_parts(first.data.cast::<u8>(), first.length as usize),
-            b"Hello, captain.\0"
-        );
+        retained_string_table_loads_owned_text();
         assert!((*ptr::addr_of!(_cur_resfile_name)).is_null());
-        FreeStringTable(table);
         _cur_resfile_name = c"busy".as_ptr();
         assert!(LoadStringTableFile(dir.cast(), c"strings.txt".as_ptr()).is_null());
         _cur_resfile_name = ptr::null();
@@ -88,19 +117,14 @@ fn file_resources_and_movie_playback_share_the_live_content_directory() {
         assert!(VidPlaying().is_null());
         assert_eq!(DestroyVideo(clip), 1);
         assert_eq!(DestroyVideo(ptr::null_mut()), 0);
-        let mut legacy = LegacyVideo {
-            video: c"logo.duk".as_ptr().cast_mut(),
-            audio: ptr::null_mut(),
-            speech: ptr::null_mut(),
-            loop_frame: u32::MAX,
-        };
-        let reference = PlayLegacyVideo(&mut legacy);
-        assert!(!reference.is_null());
-        assert_eq!(PlayingLegacyVideo(reference), 1);
-        StopLegacyVideo(reference);
-        assert_eq!(PlayingLegacyVideo(ptr::null_mut()), 0);
-        assert!(PlayLegacyVideo(ptr::null_mut()).is_null());
-        StopLegacyVideo(ptr::null_mut());
+        uqm_rust::resource::ffi_bridge::InitResourceSystem();
+        uqm_rust::resource::ffi_bridge::LoadResourceIndex(
+            dir.cast(),
+            c"video.rmp".as_ptr(),
+            ptr::null(),
+        );
+        retained_playback_keeps_its_clip_after_descriptor_drop();
+        assert!(VidPlaying().is_null());
         assert!(!rust_present_video_to_window(ptr::null(), 0, 0, 0));
         assert!(!rust_play_video(dir.cast(), ptr::null(), 0, 0, false));
         assert!(!rust_play_video(
