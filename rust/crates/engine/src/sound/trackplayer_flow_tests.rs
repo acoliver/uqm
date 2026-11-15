@@ -57,6 +57,22 @@ fn subtitle_snapshots_keep_identity_and_bytes_after_seeking_and_teardown() {
 }
 
 #[test]
+fn equal_subtitle_bytes_keep_distinct_page_identities() {
+    let _engine = engine();
+    for _ in 0..2 {
+        splice_track(Some("voice"), Some("Same"), None, None, vec![voice(1, 1.0)]).unwrap();
+    }
+    let history = subtitle_history();
+    assert_eq!(history.len(), 2);
+    assert_eq!(history[0].text, history[1].text);
+    assert_ne!(history[0].identity, history[1].identity);
+    play_track(false).unwrap();
+    assert_eq!(subtitle_snapshot().unwrap(), history[0]);
+    fast_forward_page().unwrap();
+    assert_eq!(subtitle_snapshot().unwrap(), history[1]);
+}
+
+#[test]
 fn subtitle_history_skips_untagged_number_audio_without_changing_page_order() {
     let _engine = engine();
     splice_two_pages(None);

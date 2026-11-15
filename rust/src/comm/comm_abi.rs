@@ -378,6 +378,14 @@ mod owner_tests {
             clear_subtitles(comm);
             assert!(comm.display.subtitle.current.is_none());
             assert_eq!(comm.display.last_subtitle, None);
+            let leading = FontLease::retain(NonNull::new(comm.data.alien_font.cast()).unwrap()).leading();
+            for (valign, expected) in [(0, 20 + leading), (1, 20 - leading / 2 + leading), (2, 20), (3, 20 + leading)] {
+                clear_subtitles(comm);
+                comm.data.definition.alien_text_valign = valign;
+                comm.display.subtitle.current = Some(snapshot.clone());
+                comm_redraw_subtitles(comm, true);
+                assert_eq!(comm.display.last_baseline, expected);
+            }
             comm.data.alien_font = std::ptr::null_mut();
         });
     }
