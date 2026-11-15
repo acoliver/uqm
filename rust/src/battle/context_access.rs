@@ -330,7 +330,6 @@ pub trait ContextOps {
     ) -> Option<ElementId>;
     fn delta_crew(&mut self, id: ElementId, amount: i16) -> bool;
 
-    fn unlink(&mut self, id: ElementId);
     fn draw_statistics(&mut self, ship: ShipId, crew: i16, energy: i16);
     fn draw_captain_controls_pass(
         &mut self,
@@ -511,15 +510,6 @@ impl ContextOps for Cx<'_> {
 
     fn delta_crew(&mut self, id: ElementId, amount: i16) -> bool {
         crate::battle::status_native::delta_crew(self, id, amount)
-    }
-
-    fn unlink(&mut self, id: ElementId) {
-        assert!(self.elements().linked(id), "element is not linked");
-        // SAFETY: stereo configuration belongs to the game thread.
-        if self.kernel.configuration.preferences().stereo_sfx != 0 {
-            crate::battle::sounds::engine::remove_sounds(self.kernel, Some(id));
-        }
-        self.unlink_storage(id);
     }
 
     fn draw_statistics(&mut self, ship: ShipId, crew: i16, energy: i16) {
