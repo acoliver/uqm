@@ -1282,19 +1282,6 @@ pub use crate::mainloop::input_abi::live::SetMenuSounds;
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
-pub struct LASER_BLOCK {
-    pub cx: COORD,
-    pub cy: COORD,
-    pub ex: COORD,
-    pub ey: COORD,
-    pub flags: ELEMENT_FLAGS,
-    pub sender: SIZE,
-    pub pixoffs: SIZE,
-    pub face: COUNT,
-    pub color: Color,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
 pub struct MISSILE_BLOCK {
     pub cx: COORD,
     pub cy: COORD,
