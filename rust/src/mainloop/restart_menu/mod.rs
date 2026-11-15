@@ -1,5 +1,4 @@
 //! Restart menu ownership, frame rules and campaign-start orchestration.
-pub mod c_extern;
 pub mod do_restart;
 pub mod menu_logic;
 pub mod orchestration;
