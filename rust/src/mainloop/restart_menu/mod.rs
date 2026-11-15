@@ -24,3 +24,6 @@ pub mod types;
 #[cfg(not(test))]
 pub mod menu_abi;
 pub mod render_abi;
+
+#[cfg(test)]
+mod owned_tests;
