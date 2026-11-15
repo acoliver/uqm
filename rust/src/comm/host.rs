@@ -219,4 +219,39 @@ mod tests {
             assert_eq!(second.data.definition.alien_ambient_array[2].anim_flags, 0);
         });
     }
+    #[test]
+    #[serial_test::serial]
+    fn supplied_names_are_copied_into_responses_and_admitted_to_real_speech() {
+        use crate::sound::trackplayer;
+        fn selected(comm: &mut Comm, _: &mut crate::engine::battle::Cx<'_>, reference: u32) {
+            comm.disable_phrase(reference as i32);
+        }
+        trackplayer::stop_track().unwrap();
+        trackplayer::splice_track(Some("greeting"), Some("Hello "), None, None, vec![]).unwrap();
+        crate::comm::with_test_context(|cx| {
+            cx.world.data.flagship.commander_name[..5].copy_from_slice("Zoë\0".as_bytes());
+            cx.world.data.flagship.ship_name[..4].copy_from_slice("船\0".as_bytes());
+            let mut comm = Comm::new();
+            {
+                let mut host = Host::new(&mut comm, cx, |_: ()| {
+                    selected as crate::comm::response::ResponseFunc
+                });
+                host.response(71, (), &[GLOBAL_PLAYER_NAME, GLOBAL_SHIP_NAME]);
+                host.npc(GLOBAL_PLAYER_NAME);
+                host.npc(GLOBAL_SHIP_NAME);
+            }
+            assert_eq!(comm.responses().get(0).unwrap().response_text, "Zoë船");
+            assert_eq!(
+                trackplayer::subtitle_history()[0].text.as_c_str(),
+                c"Hello Zoë船"
+            );
+            cx.world.data.flagship.commander_name.fill(0);
+            cx.world.data.flagship.ship_name.fill(0);
+            assert_eq!(comm.responses().get(0).unwrap().response_text, "Zoë船");
+            comm.responses_mut().select(0);
+            assert_eq!(crate::comm::ffi::rust_execute_response(&mut comm, cx), 71);
+            assert!(!comm.phrase_enabled(71));
+        });
+        trackplayer::stop_track().unwrap();
+    }
 }
