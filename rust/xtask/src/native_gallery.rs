@@ -911,6 +911,7 @@ mod tests {
             path: path.to_string(),
             expected_input_ticks: None,
             outer_child_timeout_ms: None,
+            addons: Vec::new(),
         }
     }
 
@@ -1211,6 +1212,7 @@ mod tests {
                     path: hostile.into(),
                     expected_input_ticks: None,
                     outer_child_timeout_ms: None,
+                    addons: Vec::new(),
                 },
                 directory: "scenarios/0000".into(),
                 state: "failed".into(),

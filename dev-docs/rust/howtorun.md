@@ -29,3 +29,33 @@ The native runner takes the package directory as `--content`, unlike the game's
 `--contentdir`, which takes the content root. Native scenarios require a real
 macOS window. See [the scenario guide](../testing/scenarios.md) for scenario and
 save handling. Remove run output when it is no longer needed.
+
+### Optional content in native checks
+
+A scenario can select pinned optional content in a sibling `.native.toml` file:
+
+```toml
+addons = ["3dovideo"]
+```
+
+The native runner copies only the selected addon's pinned files from
+`sc2/content/addons/<name>` in the source checkout into its isolated content root.
+Each file must match the length and SHA-256 in
+`rust/tests/fixtures/native/3dovideo-pins.json`. Missing files, symlinks, unknown
+addons and digest mismatches fail before the game launches. Extra host files are
+not copied. The game receives `--addon=3dovideo`; it never receives a host addon
+path. The retained bundle's offline validation checks the addon selection and
+pinned bytes too. With no sidecar, requests and game arguments remain unchanged.
+
+The ship-spin fixture is native-only, outside the replay corpus. From the
+repository root:
+
+```sh
+cargo run --release --locked --manifest-path rust/xtask/Cargo.toml -- native run \
+  --scenarios rust/tests/fixtures/native/ship-spin-3do-v1.json \
+  --artifacts tmp/ship-spin --content sc2/content/packages
+```
+
+It opens Arilou in the melee ship picker and captures OS checkpoints before,
+during and after its 3DO video. The shared iTerm launcher takes the fixture path
+relative to `rust/`: `tests/fixtures/native/ship-spin-3do-v1.json`.

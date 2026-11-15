@@ -29,7 +29,7 @@ use crate::automation::trace::{RecordKind, TraceRecord};
 ///
 /// @plan PLAN-20260723-RUNTIME-AUTOMATION.P06
 /// @requirement REQ-SCRIPT-005, REQ-INJECT-003
-pub const MENU_KEY_INDICES: [u8; 8] = [5, 6, 7, 8, 9, 10, 18, 3];
+pub const MENU_KEY_INDICES: [u8; 9] = [5, 6, 7, 8, 9, 10, 18, 3, 11];
 
 /// Total number of menu keys (from `NUM_MENU_KEYS` in controls.h).
 pub const NUM_MENU_KEYS: u8 = 24;
@@ -46,6 +46,7 @@ pub fn menu_key_to_index(key: MenuKey) -> u8 {
         MenuKey::Select => MENU_KEY_INDICES[4],
         MenuKey::Cancel => MENU_KEY_INDICES[5],
         MenuKey::Delete => MENU_KEY_INDICES[6],
+        MenuKey::Special => MENU_KEY_INDICES[8],
     }
 }
 

@@ -22,6 +22,7 @@ pub struct ScriptAdmission {
 }
 
 pub fn admit_script(root: &Path, scenario: &Scenario) -> Result<ScriptAdmission, String> {
+    uqm_rust::automation::native_addons::members(&scenario.addons)?;
     let path = root.join(&scenario.path);
     let bytes = crate::read_regular_file_bounded(&path, SCRIPT_LIMIT_BYTES)?;
     let document = parse_script(&bytes, &path).map_err(|error| error.to_string())?;
@@ -160,20 +161,6 @@ fn html_escape(value: &str) -> String {
         .replace('\'', "&#39;")
 }
 
-fn validate_script_identity(
-    expected: &Scenario,
-    actual: &uqm_rust::automation::NativeRetainedInput,
-) -> Result<(), String> {
-    let filename = Path::new(&expected.path)
-        .file_name()
-        .and_then(|value| value.to_str())
-        .ok_or("script has no filename")?;
-    if actual.relative_path != format!("inputs/{filename}") {
-        return Err("native scenario proof used a different selected script".into());
-    }
-    Ok(())
-}
-
 fn validate_journal(events: &[SuiteManifest]) -> Result<(), String> {
     let first = events.first().ok_or("native suite journal is empty")?;
     if first.sequence != 0
@@ -289,6 +276,7 @@ mod journal_regressions {
             path: format!("rust/scripts/{name}.json"),
             expected_input_ticks: None,
             outer_child_timeout_ms: None,
+            addons: Vec::new(),
         }
     }
 
@@ -413,6 +401,7 @@ mod journal_regressions {
             path: "rust/scripts/a.json".into(),
             expected_input_ticks: None,
             outer_child_timeout_ms: None,
+            addons: Vec::new(),
         }];
         let mut suite = SuiteAccounting::create(&root, &selected).unwrap();
         suite.begin(0).unwrap();
@@ -454,6 +443,7 @@ mod journal_regressions {
             path: "rust/scripts/a.json".into(),
             expected_input_ticks: None,
             outer_child_timeout_ms: None,
+            addons: Vec::new(),
         }];
         let mut suite = SuiteAccounting::create(&root, &selected).unwrap();
         suite.begin(0).unwrap();
@@ -504,6 +494,7 @@ mod journal_regressions {
             path: "rust/scripts/a.json".into(),
             expected_input_ticks: None,
             outer_child_timeout_ms: None,
+            addons: Vec::new(),
         }];
         let mut suite = SuiteAccounting::create(&root, &selected).unwrap();
         suite.begin(0).unwrap();
@@ -532,6 +523,7 @@ mod journal_regressions {
             path: "rust/scripts/a.json".into(),
             expected_input_ticks: None,
             outer_child_timeout_ms: None,
+            addons: Vec::new(),
         }];
         let mut suite = SuiteAccounting::create(&root, &selected).unwrap();
         suite
@@ -565,6 +557,7 @@ mod journal_regressions {
             path: "rust/scripts/a.json".into(),
             expected_input_ticks: None,
             outer_child_timeout_ms: None,
+            addons: Vec::new(),
         }];
         let mut suite = SuiteAccounting::create(&root, &selected).unwrap();
         suite.begin(0).unwrap();
@@ -614,6 +607,7 @@ mod teardown_regressions {
             path: format!("rust/scripts/{name}.json"),
             expected_input_ticks: None,
             outer_child_timeout_ms: None,
+            addons: Vec::new(),
         }
     }
 
@@ -2175,7 +2169,7 @@ impl SuiteAccounting {
             .map_err(|error| error.to_string())?;
         let proof: uqm_rust::automation::NativeAcceptanceManifest = serde_json::from_slice(&bytes)
             .map_err(|error| format!("parse native scenario proof: {error}"))?;
-        validate_script_identity(&row.script, &proof.script)?;
+        row.script.validate_proof(&proof.script, &proof.command)?;
         uqm_rust::automation::validate_native_acceptance_bundle(&self.directory(index)?, &proof)
             .map_err(|error| format!("validate native scenario proof: {error:?}"))?;
         self.manifest.scenarios[index].elapsed_ms = millis(
@@ -2505,7 +2499,7 @@ fn validate_retained_scenarios(
             }
             let native: uqm_rust::automation::NativeAcceptanceManifest =
                 serde_json::from_slice(bytes).map_err(|error| error.to_string())?;
-            validate_script_identity(&row.script, &native.script)?;
+            row.script.validate_proof(&native.script, &native.command)?;
             validate_completed_snapshot(snapshot, &row.directory)?;
         }
     }
@@ -2580,6 +2574,7 @@ mod tests {
                     path: format!("rust/scripts/{id}.json"),
                     expected_input_ticks: None,
                     outer_child_timeout_ms: None,
+                    addons: Vec::new(),
                 })
                 .to_vec()
         }
@@ -2693,6 +2688,7 @@ mod tests {
                 path: format!("rust/scripts/missing-{index}.json"),
                 expected_input_ticks: None,
                 outer_child_timeout_ms: None,
+                addons: Vec::new(),
             })
             .collect();
         let error = preflight(root, &scripts).unwrap_err();
@@ -2712,6 +2708,7 @@ mod finalization_regressions {
             path: "rust/scripts/battle-v1.json".into(),
             expected_input_ticks: None,
             outer_child_timeout_ms: None,
+            addons: Vec::new(),
         }
     }
 
@@ -2852,6 +2849,7 @@ mod finalization_regressions {
             path: "rust/scripts/fixture.json".into(),
             expected_input_ticks: None,
             outer_child_timeout_ms: None,
+            addons: Vec::new(),
         }];
         let mut suite = SuiteAccounting::create(&root, &selected).unwrap();
         suite

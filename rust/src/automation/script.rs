@@ -2896,6 +2896,49 @@ mod tests {
     // --- REQ-SCRIPT-005: typed six-key mappings ---
 
     #[test]
+    fn ship_spin_script_uses_the_special_menu_control() {
+        let native = include_bytes!("../../tests/fixtures/native/ship-spin-3do-v1.json");
+        validate_script(parse_script(native, p()).unwrap(), p()).unwrap();
+        let key = MenuKey::from_name("special").unwrap();
+        assert_eq!(
+            key.index(),
+            crate::engine::input::frames::KEY_MENU_SPECIAL as u8
+        );
+        assert_eq!(crate::automation::input::menu_key_to_index(key), 11);
+        assert_eq!(MenuKey::from_index(11), Some(key));
+    }
+
+    #[test]
+    fn ship_spin_fixture_selects_arilou_melee_index_and_video_resource() {
+        use crate::supermelee::types::MeleeShip;
+        let bytes = include_bytes!("../../tests/fixtures/native/ship-spin-3do-v1.json");
+        let script = validate_script(parse_script(bytes, p()).unwrap(), p()).unwrap();
+        let picker = script.steps().iter().position(|action| {
+            matches!(action, Action::Capture(CaptureStep { label, .. }) if label == "arilou-picker-before-video")
+        }).unwrap();
+        let keys: Vec<_> = script.steps()[..picker]
+            .iter()
+            .filter_map(|action| match action {
+                Action::TapMenuKey(tap) => Some(tap.key),
+                _ => None,
+            })
+            .collect();
+        assert!(keys.ends_with(&[
+            MenuKey::Delete,
+            MenuKey::Left,
+            MenuKey::Select,
+            MenuKey::Right
+        ]));
+        assert_eq!(MeleeShip::Androsynth as u8, 0);
+        assert_eq!(MeleeShip::Arilou as u8, 1);
+        let index = MeleeShip::Arilou as u8;
+        let resource =
+            format!("slides.spins.{index:02} = 3DOVID:addons/3dovideo/ships/ship{index:02}.duk:");
+        let map = include_str!("../../../sc2/content/addons/3dovideo/3dovideo.rmp");
+        assert!(map.lines().any(|line| line.starts_with(&resource)));
+    }
+
+    #[test]
     fn debug_key_script_reaches_the_real_controls_index() {
         let text = r#"{"version":1,"name":"debug-key","budgets":{"max_input_ticks":10,"max_presentations":10,"max_wallclock_seconds":10},"steps":[{"action":"tap_menu_key","key":"debug","value":1,"hold":1,"settle":1},{"action":"finish"}]}"#;
         let doc = parse_script(text.as_bytes(), p()).unwrap();
@@ -2941,7 +2984,7 @@ mod tests {
     fn menu_key_rejects_numeric_or_out_of_range_indices() {
         assert_eq!(MenuKey::from_index(0), None);
         assert_eq!(MenuKey::from_index(4), None);
-        assert_eq!(MenuKey::from_index(11), None);
+        assert_eq!(MenuKey::from_index(12), None);
         assert_eq!(MenuKey::from_index(17), None);
         assert_eq!(MenuKey::from_index(19), None);
         assert_eq!(MenuKey::from_index(255), None);
