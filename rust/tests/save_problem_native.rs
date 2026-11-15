@@ -569,7 +569,6 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
                     }
                 }
                 {
-                    use uqm_rust::battle::ContextOps;
                     let portrait = LoadedDrawable::create(8, 1, 1, 1).unwrap();
                     let icon = portrait.lease().frame(0).unwrap();
                     let target = context_lease.target();
