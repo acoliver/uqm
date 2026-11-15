@@ -47,12 +47,3 @@ pub fn subtitle_history() -> Vec<SubtitleSnapshot> {
     }
     history
 }
-/// Get the subtitle text for the current position.
-pub fn get_track_subtitle() -> Option<String> {
-    let state = TRACK_STATE.lock();
-    state.sound_sample.as_ref()?;
-    state
-        .cur_sub_chunk
-        .map(|c| unsafe { c.as_ref() })
-        .and_then(|c| c.text.clone())
-}

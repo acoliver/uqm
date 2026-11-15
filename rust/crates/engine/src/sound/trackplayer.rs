@@ -106,18 +106,7 @@ pub struct SubPage {
 
 #[path = "trackplayer_subtitles.rs"]
 mod subtitles;
-pub use subtitles::{
-    get_track_subtitle, subtitle_history, subtitle_snapshot, SubtitleIdentity, SubtitleSnapshot,
-};
-
-/// A reference to a subtitle in the current track.
-#[derive(Debug, Clone)]
-pub struct SubtitleRef {
-    /// The subtitle text.
-    pub text: String,
-    /// Track number.
-    pub track_num: u32,
-}
+pub use subtitles::{subtitle_history, subtitle_snapshot, SubtitleIdentity, SubtitleSnapshot};
 
 /// Global track player state.
 ///
@@ -824,31 +813,6 @@ pub fn get_track_subtitle_cstr() -> *const std::os::raw::c_char {
     chunk.text_cstr_ptr()
 }
 
-/// Get the first subtitle in the track.
-pub fn get_first_track_subtitle() -> Option<SubtitleRef> {
-    let state = TRACK_STATE.lock();
-    state.chunks_head.as_ref().map(|c| SubtitleRef {
-        text: c.text.clone().unwrap_or_default(),
-        track_num: c.track_num,
-    })
-}
-
-/// Get the next subtitle after the current one.
-pub fn get_next_track_subtitle() -> Option<SubtitleRef> {
-    let state = TRACK_STATE.lock();
-    let next = find_next_page_inner(state.cur_sub_chunk)?;
-    let chunk = unsafe { next.as_ref() };
-    Some(SubtitleRef {
-        text: chunk.text.clone().unwrap_or_default(),
-        track_num: chunk.track_num,
-    })
-}
-
-/// Get the text of a subtitle reference.
-pub fn get_track_subtitle_text(sub_ref: &SubtitleRef) -> Option<&str> {
-    Some(sub_ref.text.as_str())
-}
-
 // =============================================================================
 // Chunk pointer API — raw pointer iteration matching C's SUBTITLE_REF contract
 // =============================================================================
@@ -1327,12 +1291,13 @@ mod tests {
     }
 
     #[test]
-    fn test_subtitle_ref() {
-        let sub = SubtitleRef {
-            text: "Hello world".into(),
-            track_num: 0,
-        };
-        assert_eq!(sub.text, "Hello world");
+    fn subtitle_history_owns_text_after_the_track_is_stopped() {
+        let _serial = ENGINE_TEST_LOCK.lock();
+        stop_track().unwrap();
+        splice_track(Some("voice"), Some("Hello world"), None, None, vec![]).unwrap();
+        let history = subtitle_history();
+        stop_track().unwrap();
+        assert_eq!(history[0].text.as_c_str(), c"Hello world");
     }
 
     #[test]
@@ -1549,15 +1514,17 @@ mod tests {
 
     // REQ-TRACK-SUBTITLE-01..04: Subtitles
     #[test]
-    fn test_get_track_subtitle_none_when_empty() {
+    fn test_subtitle_snapshot_none_when_empty() {
         let _serial = ENGINE_TEST_LOCK.lock();
-        assert!(get_track_subtitle().is_none());
+        stop_track().unwrap();
+        assert!(subtitle_snapshot().is_none());
     }
 
     #[test]
-    fn test_get_first_track_subtitle_none() {
+    fn test_subtitle_history_empty_without_tracks() {
         let _serial = ENGINE_TEST_LOCK.lock();
-        assert!(get_first_track_subtitle().is_none());
+        stop_track().unwrap();
+        assert!(subtitle_history().is_empty());
     }
 
     // REQ-TRACK-SEEK-11..12: Navigation

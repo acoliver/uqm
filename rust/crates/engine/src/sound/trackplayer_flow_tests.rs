@@ -544,7 +544,10 @@ fn playing_a_track_starts_speech_at_the_first_page_and_reports_the_total_length(
     assert_eq!(calls.lock().as_slice(), [0], "its callback fired once");
     assert_eq!(playing_track_num(), 1);
     assert!(playing_track());
-    assert_eq!(get_track_subtitle(), Some("First line...".to_string()));
+    assert_eq!(
+        subtitle_snapshot().unwrap().text.as_c_str(),
+        c"First line..."
+    );
     let sample = TRACK_STATE.lock().sound_sample.clone().unwrap();
     assert!(
         sample.lock().decoder.is_some(),
@@ -721,7 +724,10 @@ fn a_played_tagged_buffer_shows_its_page_once_and_releases_the_tag() {
     assert_eq!(cur_sub_chunk(), Some(chunk_at(1)));
     assert_eq!(calls.lock().as_slice(), [0]);
     assert!(stream::find_tagged_buffer(&sample.lock(), 55).is_none());
-    assert_eq!(get_track_subtitle(), Some("..Second line".to_string()));
+    assert_eq!(
+        subtitle_snapshot().unwrap().text.as_c_str(),
+        c"..Second line"
+    );
 }
 
 #[test]
@@ -892,7 +898,10 @@ fn paging_forward_restarts_speech_at_the_next_page_and_paging_back_returns() {
     assert_eq!(cur_sub_chunk(), Some(chunk_at(1)));
     assert_eq!(cur_chunk(), Some(chunk_at(1)));
     assert_eq!(speech_start_time(), -(ms_to_ticks(1000) as i32));
-    assert_eq!(get_track_subtitle(), Some("..Second line".to_string()));
+    assert_eq!(
+        subtitle_snapshot().unwrap().text.as_c_str(),
+        c"..Second line"
+    );
 
     fast_reverse_page().unwrap();
     assert_eq!(cur_sub_chunk(), Some(chunk_at(0)));
@@ -923,21 +932,22 @@ fn paging_does_nothing_without_a_conversation() {
 #[test]
 fn subtitles_can_be_walked_from_the_first_page_to_the_last() {
     let _engine = engine();
-    assert!(get_first_track_subtitle().is_none());
-    assert!(get_next_track_subtitle().is_none());
+    assert!(subtitle_history().is_empty());
+    assert!(subtitle_snapshot().is_none());
     splice_two_pages(None);
     play_track(false).unwrap();
 
-    let first = get_first_track_subtitle().unwrap();
-    assert_eq!(get_track_subtitle_text(&first), Some("First line..."));
-    assert_eq!(first.track_num, 0);
-    let next = get_next_track_subtitle().unwrap();
-    assert_eq!(next.text, "..Second line");
-    fast_forward_page().unwrap();
-    assert!(
-        get_next_track_subtitle().is_none(),
-        "nothing after the last page"
+    let history = subtitle_history();
+    assert_eq!(history.len(), 2);
+    assert_eq!(history[0].text.as_c_str(), c"First line...");
+    assert_eq!(
+        TRACK_STATE.lock().chunks_head.as_ref().unwrap().track_num,
+        0
     );
+    assert_eq!(subtitle_snapshot().unwrap(), history[0]);
+    assert_eq!(history[1].text.as_c_str(), c"..Second line");
+    fast_forward_page().unwrap();
+    assert_eq!(&subtitle_snapshot().unwrap(), history.last().unwrap());
 }
 
 #[test]
