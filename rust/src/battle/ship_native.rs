@@ -147,8 +147,7 @@ pub(crate) mod engine {
                 characteristics.thrust_increment,
                 characteristics.max_thrust,
             );
-            cx.ship_state_mut(ship).status &=
-                !((SHIP_AT_MAX_SPEED | SHIP_BEYOND_MAX_SPEED | SHIP_IN_GRAVITY_WELL) as u16);
+            cx.ship_state_mut(ship).status &= !crate::engine::battle::flags::SHIP_SPEED_FLAGS;
             cx.ship_state_mut(ship).status |= result;
             cx.element_mut(e)
                 .set_thrust_wait(characteristics.thrust_wait);

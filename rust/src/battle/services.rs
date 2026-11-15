@@ -1,14 +1,22 @@
 //! Battle-mode presentation supplied explicitly by application composition.
+#[cfg(not(test))]
 use crate::engine::battle::services::PrimitiveServices;
+#[cfg(not(test))]
 use crate::engine::battle::views::FrameSelection;
+#[cfg(not(test))]
 use crate::engine::battle::{Cx, ElementId, ShipId};
+#[cfg(not(test))]
 use crate::graphics::native_abi::{POINT, RECT, SIZE};
+#[cfg(not(test))]
 use crate::ships::native::abi::OPT_PC;
 
+#[cfg(not(test))]
 pub fn install(kernel: &mut crate::engine::Kernel) {
     kernel.install_primitive_services(&ModeServices);
 }
+#[cfg(not(test))]
 struct ModeServices;
+#[cfg(not(test))]
 impl PrimitiveServices for ModeServices {
     fn draw_statistics(&self, cx: &mut Cx<'_>, ship: ShipId, crew: i16, energy: i16) {
         if crew == 0 && energy == 0 {

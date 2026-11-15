@@ -20,3 +20,7 @@ pub const SHIP_IN_GRAVITY_WELL: u32 = 256;
 pub const NPC_PLAYER_NUM: u32 = 1;
 pub const NEUTRAL_PLAYER_NUM: i32 = -1;
 pub const IN_LAST_BATTLE: std::os::raw::c_uint = 1;
+
+/// Status bits replaced together after a ship thrust update.
+pub const SHIP_SPEED_FLAGS: u16 =
+    (SHIP_AT_MAX_SPEED | SHIP_BEYOND_MAX_SPEED | SHIP_IN_GRAVITY_WELL) as u16;

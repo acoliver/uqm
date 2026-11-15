@@ -310,7 +310,13 @@ fn primitive_effects_require_explicit_installation_on_the_supplied_owner() {
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 cx.draw_statistics(ship, -1, 0);
             }));
-            assert!(result.is_err());
+            let Err(error) = result else {
+                panic!("uninstalled services must fail");
+            };
+            assert_eq!(
+                error.downcast_ref::<&str>(),
+                Some(&"battle primitive services were not installed")
+            );
             assert_eq!(cx.race_stats(ship).ship_info.crew_level, 10);
             uqm_rust::battle::services::install(cx.kernel);
             cx.draw_statistics(ship, -1, 0);
@@ -372,6 +378,87 @@ fn damage_keeps_gravity_immunity_and_native_byte_narrowing_without_services() {
             assert_eq!(cx.element(e).hits, 0);
             assert_eq!(cx.element(e).life, 0);
             assert_eq!(cx.element(e).flags, 64);
+        },
+    );
+}
+
+#[test]
+#[serial_test::serial]
+fn projectile_records_preserve_geometry_widths_callbacks_and_exhaustion() {
+    use uqm_engine::battle::{
+        views::{Frames, Laser, Missile},
+        weapon::collision_cb,
+    };
+    with_context(
+        || panic!("projectile allocation must not draw RNG"),
+        |cx| {
+            let mut laser = Laser {
+                origin: POINT { x: 100, y: 200 },
+                end: POINT { x: 32, y: -16 },
+                flags: 256,
+                sender: 1,
+                pixoffs: 3,
+                face: 4,
+                color: uqm_engine::graphics::native_abi::Color {
+                    r: 1,
+                    g: 2,
+                    b: 3,
+                    a: 255,
+                },
+            };
+            let id = cx
+                .laser(&mut laser)
+                .unwrap_or_else(|| panic!("laser allocation"));
+            let e = cx.element(id);
+            assert_eq!((e.current.location.x, e.current.location.y), (112, 200));
+            assert_eq!(e.velocity.get_current_components(), (640, -512));
+            assert_eq!(
+                (e.hits, e.mass, e.life, e.thrust, e.player),
+                (1, 1, 1, 1, 1)
+            );
+            assert_eq!(e.flags, 8 | 1024 | 256);
+            assert_eq!(
+                e.collide.map(|hook| hook.address()),
+                Some(collision_cb as *const () as usize)
+            );
+            assert_eq!(cx.primitive_style_mut(id).kind, 3);
+            let mut missile = Missile {
+                cx: 100,
+                cy: 200,
+                flags: 256,
+                sender: 0,
+                pixoffs: 3,
+                speed: 7,
+                hit_points: 257,
+                damage: 258,
+                face: 4,
+                index: 0,
+                life: 9,
+                frames: Frames::ABSENT,
+                preprocess: None,
+                blast_offs: 259,
+            };
+            let id = cx
+                .missile(&mut missile)
+                .unwrap_or_else(|| panic!("missile allocation"));
+            let e = cx.element(id);
+            assert_eq!((e.current.location.x, e.current.location.y), (105, 200));
+            assert_eq!(e.velocity.get_current_components(), (224, 0));
+            assert_eq!(
+                (e.hits, e.mass, e.life, e.thrust, e.player),
+                (1, 2, 9, 3, 0)
+            );
+            assert_eq!(e.flags, 8 | 1024 | 256);
+            assert_eq!(
+                e.collide.map(|hook| hook.address()),
+                Some(collision_cb as *const () as usize)
+            );
+            assert_eq!(cx.primitive_style_mut(id).kind, 1);
+            for _ in 0..6 {
+                assert!(cx.alloc_element().is_some());
+            }
+            assert!(cx.laser(&mut laser).is_none());
+            assert!(cx.missile(&mut missile).is_none());
         },
     );
 }

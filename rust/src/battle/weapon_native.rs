@@ -1,4 +1,4 @@
-//! Live laser/missile, collision, silhouette and homing behavior from weapon.c.
+//! Battle-mode silhouette changes for the supplied status display.
 
 use crate::ships::native::abi::*;
 
