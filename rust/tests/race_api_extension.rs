@@ -1,4 +1,4 @@
-use uqm_rust::battle::{ContextOps, RaceOps, StarOps};
+use uqm_rust::battle::{RaceOps, StarOps};
 #[test]
 fn owning_frame_slots_reject_foreign_drawables_without_mutation() {
     battle_context::run(|_| {
