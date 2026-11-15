@@ -2,8 +2,6 @@
 #[cfg(not(test))]
 use super::*;
 #[cfg(not(test))]
-use crate::battle::context_access::ContextOps;
-#[cfg(not(test))]
 use crate::engine::battle::StoryKey;
 
 #[cfg(not(test))]
