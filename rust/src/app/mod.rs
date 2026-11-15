@@ -30,6 +30,7 @@ impl Application {
             input,
             self.game.kernel.configuration.clone(),
         );
+        crate::battle::services::install(&mut self.game.kernel);
         self.game
             .kernel
             .install_input_runtime(std::rc::Rc::new(runtime));
