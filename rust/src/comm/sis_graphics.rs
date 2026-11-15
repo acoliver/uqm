@@ -512,6 +512,8 @@ mod tests {
             assert!(!state.has_next());
             let input = crate::engine::input::InputSession::default();
             assert!(!do_summary_page_frame(comm, &input, &mut state, CHECK_ABORT));
+            state.print_next = false;
+            assert!(do_summary_page_frame(comm, &input, &mut state, 0));
             let frames = crate::graphics::drawable_abi::LoadedDrawable::create(8, 13, 5, 8).unwrap();
             let frame = frames.lease().context_frame(0);
             assert_eq!(scroll_indicator_origin(&frame, 124), POINT { x: 228, y: 124 });
@@ -521,5 +523,33 @@ mod tests {
             context.flush();
             comm.presentation.activity_frame = std::ptr::null_mut();
         });
+    }
+    #[test]
+    #[serial_test::serial]
+    fn text_wraps_at_the_measured_word_boundary_with_the_real_font() {
+        super::super::sis_graphics_font_tests::with_display(
+            "comm::sis_graphics::tests::text_wraps_at_the_measured_word_boundary_with_the_real_font",
+            |comm, context| {
+                let font = player_font(comm);
+                let baseline = POINT { x: 10, y: 135 };
+                let mut text = Text::new(c"AAA AAA", baseline, 0, u16::MAX);
+                let width = font.measure(text.text, baseline, 0, u16::MAX).rect.extent.width;
+                let line = text.fit(&font, width, u16::MAX);
+                assert!(!line.end_of_line);
+                assert_eq!((line.characters, line.next), (3, 4));
+                text.draw(context, &font, Color { r: 255, g: 255, b: 255, a: 255 });
+                context.flush();
+                let frame = context.target();
+                assert!((125..145).any(|y| (0..100).any(|x| {
+                    let pixel = frame.pixel(POINT { x, y });
+                    pixel.r == 255 && pixel.g == 255 && pixel.b == 255
+                })));
+                text.text = suffix(text.text, line.next);
+                text.char_count = u16::MAX;
+                let last = text.fit(&font, width, u16::MAX);
+                assert!(last.end_of_line);
+                assert_eq!((last.characters, last.next), (3, 3));
+            },
+        );
     }
 }
