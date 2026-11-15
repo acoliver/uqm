@@ -73,6 +73,7 @@ impl StarMapFlash {
 }
 
 pub struct Kernel {
+    pub(crate) primitive_services: Option<&'static dyn crate::battle::services::PrimitiveServices>,
     pub diagnostics: diagnostics::Diagnostics,
     pub configuration: crate::configuration::Configuration,
     pub(super) input_runtime: Option<std::rc::Rc<dyn super::input::InputRuntime>>,
@@ -272,6 +273,7 @@ impl Kernel {
 
     pub fn new() -> Self {
         Self {
+            primitive_services: None,
             diagnostics: diagnostics::Diagnostics::default(),
             configuration: crate::configuration::Configuration::default(),
             input_runtime: None,

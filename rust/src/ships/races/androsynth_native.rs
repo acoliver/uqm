@@ -91,7 +91,7 @@ pub(crate) mod engine {
         cx.element_mut(a).set_life_span(old_life);
         cx.element_mut(a).set_hit_points(old_crew_level);
         cx.element_mut(a).flags &= !((DISAPPEARING | NONSOLID) as u16);
-        crate::battle::ship_native::collision(cx, a, pa, b, pb);
+        crate::engine::battle::motion::collision(cx, a, pa, b, pb);
     }
 
     pub(crate) fn bubble_preprocess(cx: &mut Cx<'_>, missile: ElementId) {

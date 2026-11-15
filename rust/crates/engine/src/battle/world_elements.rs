@@ -1,8 +1,14 @@
 //! Live planet, asteroid, rubble, damage and floating-crew callbacks.
 
+use super::flags::*;
 #[cfg(not(test))]
-use crate::battle::context_access::ContextOps;
-use crate::ships::native::abi::*;
+use crate::graphics::native_abi::EMPTY_PRIMITIVE as gfx_object_NUM_PRIMS;
+use crate::graphics::native_abi::{Color, POINT};
+use crate::math::battle_types::{FACING_SHIFT, FULL_CIRCLE, HALF_CIRCLE, MAX_REDUCTION, ONE_SHIFT};
+#[cfg(not(test))]
+const POINT_PRIMITIVE: u8 = 0;
+#[cfg(not(test))]
+use crate::graphics::STAMP_PRIMITIVE;
 
 fn damage_object(mass: u8, hp: &mut u16, life: &mut u16, flags: &mut u16, damage: i16) {
     if mass > 100 {
@@ -62,14 +68,17 @@ fn aligned_random(random: u32, extent: i32) -> i16 {
 }
 
 #[cfg(not(test))]
-pub(crate) mod engine {
+mod engine {
     use super::*;
+    use crate::battle::hooks::animation_preprocess;
+    use crate::battle::motion::collision;
+    use crate::battle::views::SharedFrames;
+    use crate::battle::{CollisionHook, ElementHook};
+    use crate::battle::{Cx, ElementId, Parent};
     use crate::collections::observation::image;
-    use crate::engine::battle::views::SharedFrames;
-    use crate::engine::battle::{Cx, ElementId, Parent};
-    use crate::ships::native::{angle_to_facing, cosine, normalize_facing, sine};
+    use crate::math::{angle_to_facing, cosine, normalize_facing, sine};
 
-    pub(crate) fn gravity_postprocess(cx: &mut Cx<'_>, e: ElementId) {
+    pub fn gravity_postprocess(cx: &mut Cx<'_>, e: ElementId) {
         cx.gravity(e);
     }
 
@@ -81,14 +90,14 @@ pub(crate) mod engine {
         cx.element_mut(e).hits = 200;
         cx.element_mut(e).flags = APPEARING as u16;
         cx.element_mut(e).life = (NORMAL_LIFE + 1) as u16;
-        cx.primitive_style_mut(e).kind = gfx_object_STAMP_PRIM as u8;
+        cx.primitive_style_mut(e).kind = STAMP_PRIMITIVE;
         let frames = cx.planet_frames();
         cx.set_frames(e, false, frames.clone());
         cx.set_frame(e, false, cx.frames_first(&frames).to_owned());
         cx.element_mut(e).collide = Some(CollisionHook::Native(collision));
         cx.element_mut(e).post = Some(ElementHook::Native(gravity_postprocess));
         // SAFETY: the legacy velocity record admits the zero state.
-        cx.element_mut(e).velocity = crate::battle::velocity::VelocityDesc::default();
+        cx.element_mut(e).velocity = crate::math::velocity::VelocityDesc::default();
         let (sw, sh) = cx.screen_dimensions();
         loop {
             cx.element_mut(e).current.location.x = aligned_random(cx.random(), width(sw));
@@ -101,7 +110,7 @@ pub(crate) mod engine {
         cx.put(e);
     }
 
-    pub(crate) fn spawn_rubble(cx: &mut Cx<'_>, source: ElementId) {
+    pub fn spawn_rubble(cx: &mut Cx<'_>, source: ElementId) {
         let Some(e) = cx.alloc_element() else {
             return;
         };
@@ -111,7 +120,7 @@ pub(crate) mod engine {
         cx.element_mut(e).set_life_span(5);
         cx.element_mut(e).set_turn_wait(0);
         cx.element_mut(e).set_thrust_wait(0);
-        cx.primitive_style_mut(e).kind = gfx_object_STAMP_PRIM as u8;
+        cx.primitive_style_mut(e).kind = STAMP_PRIMITIVE;
         let array = cx.shared_frame_set(SharedFrames::Asteroid);
         cx.set_frames(e, false, array);
         let frame = cx.absolute_frame(
@@ -124,7 +133,7 @@ pub(crate) mod engine {
         cx.element_mut(e).death = Some(ElementHook::Native(spawn_asteroid));
     }
 
-    pub(crate) fn asteroid_preprocess(cx: &mut Cx<'_>, e: ElementId) {
+    pub fn asteroid_preprocess(cx: &mut Cx<'_>, e: ElementId) {
         let wait = cx.element(e).turn_wait();
         if wait > 0 {
             cx.element_mut(e).set_turn_wait(wait - 1);
@@ -164,7 +173,7 @@ pub(crate) mod engine {
         cx.element_mut(e).set_mass_points(3);
         cx.element_mut(e).flags = APPEARING as u16;
         cx.element_mut(e).set_life_span(NORMAL_LIFE as u16);
-        cx.primitive_style_mut(e).kind = gfx_object_STAMP_PRIM as u8;
+        cx.primitive_style_mut(e).kind = STAMP_PRIMITIVE;
         let value = cx.random() as u16;
         let (w, h) = cx.screen_dimensions();
         if value & 1 != 0 {
@@ -198,12 +207,8 @@ pub(crate) mod engine {
         cx.put(e);
     }
 
-    pub trait ElementDamage {
-        fn damage(&mut self, e: ElementId, damage: i16);
-    }
-
-    impl ElementDamage for Cx<'_> {
-        fn damage(&mut self, e: ElementId, damage: i16) {
+    impl Cx<'_> {
+        pub fn damage(&mut self, e: ElementId, damage: i16) {
             if self.element(e).flags & PLAYER_SHIP as u16 != 0 {
                 if !self.delta_crew(e, damage.wrapping_neg()) {
                     self.element_mut(e).set_life_span(0);
@@ -309,7 +314,7 @@ pub(crate) mod engine {
             cx.element_mut(crew).hits = 1;
             cx.element_mut(crew).flags = (APPEARING | FINITE_LIFE | CREW_OBJECT) as u16;
             cx.element_mut(crew).life = 300;
-            cx.primitive_style_mut(crew).kind = gfx_object_POINT_PRIM as u8;
+            cx.primitive_style_mut(crew).kind = POINT_PRIMITIVE;
             cx.primitive_style_mut(crew).color = crew_color(false);
             cx.set_star_image(crew);
             cx.element_mut(crew).pre = Some(ElementHook::Native(crew_preprocess));
@@ -365,9 +370,7 @@ pub(crate) mod engine {
 }
 
 #[cfg(not(test))]
-pub use engine::{
-    abandon_ship, create_asteroid, crew_collision, crew_preprocess, spawn_asteroid, spawn_planet,
-};
+pub use engine::*;
 
 #[cfg(test)]
 mod tests {
@@ -375,11 +378,11 @@ mod tests {
 
     #[test]
     fn damage_preserves_gravity_objects_and_byte_truncation() {
-        let mut e = ElementRecord {
+        let mut e = crate::battle::record::ElementRecord {
             hits: 200,
             mass: 100,
             life: 7,
-            ..ElementRecord::default()
+            ..crate::battle::record::ElementRecord::default()
         };
         damage_object(e.mass, &mut e.hits, &mut e.life, &mut e.state_flags, 257);
         assert_eq!(e.hits, 199);
@@ -396,15 +399,18 @@ mod tests {
 
     #[test]
     fn crew_motion_preserves_signed_wrapping_and_exact_half_extent_ties() {
-        use crate::battle::element::Point;
+        use crate::graphics::native_abi::POINT as Point;
+        fn point(x: i16, y: i16) -> Point {
+            Point { x, y }
+        }
         for (from, target, expected) in [
-            (Point::new(0, 0), Point::new(1, -1), Point::new(4, -4)),
-            (Point::new(0, 0), Point::new(512, -512), Point::new(4, -4)),
-            (Point::new(0, 0), Point::new(513, -513), Point::new(-4, 4)),
+            (point(0, 0), point(1, -1), point(4, -4)),
+            (point(0, 0), point(512, -512), point(4, -4)),
+            (point(0, 0), point(513, -513), point(-4, 4)),
             (
-                Point::new(i16::MAX, i16::MIN),
-                Point::new(i16::MIN, i16::MAX),
-                Point::new(-32765, 32764),
+                point(i16::MAX, i16::MIN),
+                point(i16::MIN, i16::MAX),
+                point(-32765, 32764),
             ),
         ] {
             let mut next = from;
@@ -415,7 +421,11 @@ mod tests {
                 (target.x, target.y),
                 (1024, 1024),
             );
-            assert_eq!(next, expected, "from={from:?} target={target:?}");
+            assert_eq!(
+                (next.x, next.y),
+                (expected.x, expected.y),
+                "from={from:?} target={target:?}"
+            );
         }
     }
 

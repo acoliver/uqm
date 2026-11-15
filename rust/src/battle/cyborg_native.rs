@@ -32,7 +32,7 @@ fn subject_owner(subject: &Subject) -> ShipId {
 #[cfg(not(test))]
 fn is_crew_preprocess(subject: &Subject) -> bool {
     subject.pre.is_some_and(|f| {
-        f.address() == crate::battle::world_elements::engine::crew_preprocess as *const () as usize
+        f.address() == crate::engine::battle::world_elements::crew_preprocess as *const () as usize
     })
 }
 #[cfg(not(test))]
@@ -106,7 +106,7 @@ pub(crate) fn thrust_ship(cx: &mut Cx<'_>, ship: &mut Subject, angle: COUNT) -> 
     }
     if should {
         let stats = cx.race_stats(starship);
-        crate::battle::ship_native::thrust(
+        crate::engine::battle::motion::thrust(
             &mut ship.velocity,
             cx.ship_state(starship).facing,
             cx.ship_state(starship).status,

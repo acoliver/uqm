@@ -283,7 +283,7 @@ impl<'a> Ship<'a> {
             ship.descriptor_mut().ship_data.special = frames[2].array();
             ship.element_mut().collision_func =
                 Some(uqm_rust::engine::battle::CollisionHook::Native(
-                    uqm_rust::battle::ship_native::collision,
+                    uqm_rust::engine::battle::motion::collision,
                 ));
             ship.element_mut().set_life_span(NORMAL_LIFE as u16);
             let crew = ship.descriptor_mut().ship_info.crew_level;

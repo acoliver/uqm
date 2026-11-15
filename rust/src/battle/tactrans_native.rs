@@ -140,7 +140,7 @@ pub(crate) mod engine {
     use crate::ships::native::{cosine, facing_to_angle, sine};
     use abi::*;
 
-    use crate::battle::world_elements::engine::crew_preprocess;
+    use crate::engine::battle::world_elements::crew_preprocess;
 
     use crate::battle::ship_native::engine::animation_preprocess;
 

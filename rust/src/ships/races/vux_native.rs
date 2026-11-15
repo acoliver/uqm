@@ -107,12 +107,13 @@ pub(crate) mod engine {
         origin: WeaponOrigin,
     ) -> WeaponSpawn {
         let face = cx.ship_state(ss).facing;
-        let mut block = LASER_BLOCK {
+        let mut block = crate::engine::battle::views::Laser {
             face,
-            cx: origin.next.location.x,
-            cy: origin.next.location.y,
-            ex: cosine(facing_to_angle(i32::from(face)), 162 << ONE_SHIFT),
-            ey: sine(facing_to_angle(i32::from(face)), 162 << ONE_SHIFT),
+            origin: origin.next.location,
+            end: POINT {
+                x: cosine(facing_to_angle(i32::from(face)), 162 << ONE_SHIFT),
+                y: sine(facing_to_angle(i32::from(face)), 162 << ONE_SHIFT),
+            },
             sender: origin.player,
             flags: IGNORE_SIMILAR as u16,
             pixoffs: 12,

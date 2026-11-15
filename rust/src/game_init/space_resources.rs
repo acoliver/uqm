@@ -249,9 +249,9 @@ pub(crate) mod live {
             }
         } else if planet {
             for _ in 0..5 {
-                crate::battle::world_elements::create_asteroid(cx, None);
+                crate::engine::battle::world_elements::create_asteroid(cx, None);
             }
-            crate::battle::world_elements::spawn_planet(cx);
+            crate::engine::battle::world_elements::spawn_planet(cx);
         }
     }
 

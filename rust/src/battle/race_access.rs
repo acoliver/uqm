@@ -70,29 +70,19 @@ impl RaceOps for Cx<'_> {
     }
 
     fn abandon_ship(&mut self, victim: ElementId, source: ElementId, count: u16) {
-        crate::battle::world_elements::abandon_ship(self, victim, source, count);
+        crate::engine::battle::world_elements::abandon_ship(self, victim, source, count);
     }
 
     fn apply_inertial_thrust(&mut self, id: ElementId) -> u16 {
-        crate::battle::ship_native::inertial_thrust(self, id)
+        crate::engine::battle::motion::inertial_thrust(self, id)
     }
 
     fn untarget(&mut self, id: ElementId) {
         crate::battle::process_native::engine::untarget(self, id);
     }
 
-    fn spawn_laser(&mut self, laser: crate::engine::battle::views::Laser) -> Option<ElementId> {
-        self.laser(&mut LASER_BLOCK {
-            cx: laser.origin.x,
-            cy: laser.origin.y,
-            ex: laser.end.x,
-            ey: laser.end.y,
-            flags: laser.flags,
-            sender: laser.sender,
-            pixoffs: laser.pixoffs,
-            face: laser.face,
-            color: laser.color,
-        })
+    fn spawn_laser(&mut self, mut laser: crate::engine::battle::views::Laser) -> Option<ElementId> {
+        self.laser(&mut laser)
     }
 
     fn play_battle_sound(

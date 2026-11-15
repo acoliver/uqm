@@ -231,7 +231,7 @@ pub(crate) mod engine {
         b: ElementId,
         pb: &mut POINT,
     ) {
-        crate::battle::ship_native::collision(cx, a, pa, b, pb);
+        crate::engine::battle::motion::collision(cx, a, pa, b, pb);
         if cx.element(b).flags & PLAYER_SHIP as u16 != 0
             && cx.element(a).player != cx.element(b).player
         {
