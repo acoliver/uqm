@@ -72,11 +72,16 @@ impl StarMapFlash {
     }
 }
 
-pub struct Kernel {
+#[derive(Default)]
+pub(crate) struct KernelServices {
     pub(crate) primitive_services: Option<&'static dyn crate::battle::services::PrimitiveServices>,
+    pub(crate) input_runtime: Option<std::rc::Rc<dyn super::input::InputRuntime>>,
+}
+
+pub struct Kernel {
+    pub(crate) services: KernelServices,
     pub diagnostics: diagnostics::Diagnostics,
     pub configuration: crate::configuration::Configuration,
-    pub(super) input_runtime: Option<std::rc::Rc<dyn super::input::InputRuntime>>,
     pub last_activity: u16,
     pub player_control: [u8; 2],
     pub h_res_index: *mut std::ffi::c_void,
@@ -273,10 +278,9 @@ impl Kernel {
 
     pub fn new() -> Self {
         Self {
-            primitive_services: None,
+            services: KernelServices::default(),
             diagnostics: diagnostics::Diagnostics::default(),
             configuration: crate::configuration::Configuration::default(),
-            input_runtime: None,
             last_activity: 0,
             player_control: [0; 2],
             h_res_index: ptr::null_mut(),

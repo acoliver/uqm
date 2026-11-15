@@ -17,10 +17,11 @@ pub trait PrimitiveServices {
 }
 impl crate::Kernel {
     pub fn install_primitive_services(&mut self, services: &'static dyn PrimitiveServices) {
-        self.primitive_services = Some(services);
+        self.services.primitive_services = Some(services);
     }
     pub fn primitive_services(&self) -> &'static dyn PrimitiveServices {
-        self.primitive_services
+        self.services
+            .primitive_services
             .unwrap_or_else(|| panic!("battle primitive services were not installed"))
     }
 }

@@ -62,14 +62,15 @@ pub trait InputRuntime {
 impl super::Kernel {
     pub fn install_input_runtime(&mut self, runtime: Rc<dyn InputRuntime>) {
         assert!(
-            self.input_runtime.is_none(),
+            self.services.input_runtime.is_none(),
             "input runtime already installed"
         );
-        self.input_runtime = Some(runtime);
+        self.services.input_runtime = Some(runtime);
     }
 
     pub fn input_controls(&self) -> &InputControls {
-        self.input_runtime
+        self.services
+            .input_runtime
             .as_ref()
             .unwrap_or_else(|| panic!("input runtime is not installed"))
             .input()
@@ -77,7 +78,8 @@ impl super::Kernel {
     }
 
     pub fn input_runtime(&self) -> Rc<dyn InputRuntime> {
-        self.input_runtime
+        self.services
+            .input_runtime
             .clone()
             .unwrap_or_else(|| panic!("input runtime is not installed"))
     }
