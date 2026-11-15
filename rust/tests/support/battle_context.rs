@@ -9,6 +9,7 @@ pub fn run<R>(body: impl FnOnce(&uqm_rust::engine::input::InputSession) -> R) ->
     // SAFETY: the test mutex serializes all use of this binary's game authorities.
     unsafe {
         let mut game = uqm_rust::engine::Game::new();
+        uqm_rust::battle::services::install(&mut game.kernel);
         game.world.set_catalog(std::borrow::Cow::Borrowed(
             &uqm_rust::planets::tables::STARMAP_ARRAY,
         ));
