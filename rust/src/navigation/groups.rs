@@ -227,6 +227,12 @@ pub(crate) mod live {
             .seek(i64::from(offset), SeekWhence::Set)
             .unwrap_or_else(|error| panic!("group state-file seek: {error}"));
     }
+    fn close(world: &mut World, file: usize) {
+        world
+            .files
+            .close(file)
+            .unwrap_or_else(|error| panic!("group state-file close: {error}"));
+    }
     fn validate_date(
         world: &World,
         relative: bool,
@@ -553,20 +559,14 @@ pub(crate) mod live {
                     .0 as u16
                 || !validate_date(world, false, &mut month, &mut day, &mut year))
         {
-            world
-                .files
-                .close(file)
-                .unwrap_or_else(|error| panic!("group state-file close: {error}"));
+            close(world, file);
             world
                 .files
                 .open(RANDGRPINFO_FILE, FileMode::Write)
                 .unwrap_or_else(|error| panic!("random groups file open: {error}"));
             let file = RANDGRPINFO_FILE;
             write(world, file, &encode_header(&empty_header()));
-            world
-                .files
-                .close(file)
-                .unwrap_or_else(|error| panic!("group state-file close: {error}"));
+            close(world, file);
             return 0;
         }
         for which in 1..=header.num_groups {
@@ -585,16 +585,10 @@ pub(crate) mod live {
         if offset != 0 {
             init_group_info(world, 0);
         } else if validate_date(world, false, &mut month, &mut day, &mut year) {
-            world
-                .files
-                .close(file)
-                .unwrap_or_else(|error| panic!("group state-file close: {error}"));
+            close(world, file);
             return 1;
         }
-        world
-            .files
-            .close(file)
-            .unwrap_or_else(|error| panic!("group state-file close: {error}"));
+        close(world, file);
         u32::from(world.ip_groups_ref().head().is_some())
     }
 
@@ -621,10 +615,7 @@ pub(crate) mod live {
             "solar group initialization requires supplied geometry"
         );
         if header.group_offset[which as usize] == 0 {
-            world
-                .files
-                .close(file)
-                .unwrap_or_else(|error| panic!("group state-file close: {error}"));
+            close(world, file);
             return 0;
         }
         if which == 0 {
@@ -659,10 +650,7 @@ pub(crate) mod live {
                 }
                 number -= 1;
             }
-            world
-                .files
-                .close(file)
-                .unwrap_or_else(|error| panic!("group state-file close: {error}"));
+            close(world, file);
             u32::from(world.ip_groups_ref().head().is_some())
         } else {
             world.last_encounter_group = which;
@@ -684,10 +672,7 @@ pub(crate) mod live {
                 *world.npc_built_ships().get_mut(id) = fragment;
                 number -= 1;
             }
-            world
-                .files
-                .close(file)
-                .unwrap_or_else(|error| panic!("group state-file close: {error}"));
+            close(world, file);
             u32::from(world.npc_built_ships_ref().head().is_some())
         }
     }
@@ -725,10 +710,7 @@ pub(crate) mod live {
             .unwrap_or_else(|| panic!("group state requires a selected star"))
             .0 as u16;
         flush(world, &mut header, offset, which, file);
-        world
-            .files
-            .close(file)
-            .unwrap_or_else(|error| panic!("group state-file close: {error}"));
+        close(world, file);
         offset
     }
 }
