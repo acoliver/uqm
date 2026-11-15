@@ -2,7 +2,7 @@
 #[cfg(not(test))]
 use crate::battle::context_access::race_access::RaceOps;
 #[cfg(not(test))]
-use crate::engine::battle::{frames::FrameSelection, Cx, ElementId, ShipId, Subject};
+use crate::engine::battle::{Cx, ElementId, ShipId, Subject};
 #[cfg(not(test))]
 use crate::ships::native::abi::*;
 

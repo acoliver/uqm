@@ -1,5 +1,6 @@
 //! Battle-mode silhouette changes for the supplied status display.
 
+#[cfg(not(test))]
 use crate::ships::native::abi::*;
 
 #[cfg(not(test))]
