@@ -2,8 +2,6 @@
 use crate::battle::context_access::ContextOps;
 #[cfg(not(test))]
 use crate::engine::battle::{Cx, Subject};
-#[cfg(not(test))]
-use crate::graphics::native_abi::INTERSECT_CONTROL;
 
 #[cfg(not(test))]
 pub(crate) fn computer_intelligence(
@@ -32,12 +30,6 @@ pub trait AiOps {
         raw: &mut [crate::engine::battle::Concern],
         count: u16,
     );
-    fn projected_intersect(
-        &self,
-        a: &mut INTERSECT_CONTROL,
-        b: &mut INTERSECT_CONTROL,
-        time: u16,
-    ) -> u16;
     fn selection_delay(&self);
 }
 
@@ -66,15 +58,6 @@ impl AiOps for Cx<'_> {
         self.race_intelligence_with_junk(ship, &mut concerns);
         *subject = concerns.subject;
         raw.copy_from_slice(&concerns.objects[..raw.len()]);
-    }
-    fn projected_intersect(
-        &self,
-        a: &mut INTERSECT_CONTROL,
-        b: &mut INTERSECT_CONTROL,
-        time: u16,
-    ) -> u16 {
-        // SAFETY: the local projections retain both loaded intersect frames.
-        unsafe { crate::ships::native::abi::DrawablesIntersect(a, b, time) }
     }
 
     fn selection_delay(&self) {

@@ -1,8 +1,6 @@
 //! Live planet, asteroid, rubble, damage and floating-crew callbacks.
 
 #[cfg(not(test))]
-use crate::battle::context_access::ai_legacy::AiOps;
-#[cfg(not(test))]
 use crate::battle::context_access::ContextOps;
 use crate::ships::native::abi::*;
 

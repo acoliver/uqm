@@ -1,5 +1,4 @@
 //! Exercise Shofixti's live callbacks against the linked engine.
-use uqm_rust::battle::ContextOps;
 use uqm_rust::ships::races::{intruder_preprocess, marine_collision};
 use uqm_rust::supermelee::native::battle_picker::live::FleetSelection;
 #[path = "support/battle_context.rs"]

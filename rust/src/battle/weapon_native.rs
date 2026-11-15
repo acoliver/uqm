@@ -1,8 +1,6 @@
 //! Live laser/missile, collision, silhouette and homing behavior from weapon.c.
 
 #[cfg(not(test))]
-use crate::battle::context_access::ai_legacy::AiOps;
-#[cfg(not(test))]
 use crate::battle::context_access::ContextOps;
 use crate::ships::native::{abi::*, angle_to_facing, normalize_facing};
 
@@ -13,27 +11,12 @@ fn blast_index(angle: u16) -> u16 {
     ((facing >> 2) << 1) + u16::from(facing & 3 != 0)
 }
 
-fn turn_toward(facing: u16, delta: i16, random: impl FnOnce() -> u32) -> u16 {
-    if delta <= 0 {
-        return facing;
-    }
-    let half = angle_to_facing(HALF_CIRCLE as i32) as i16;
-    let step = if delta == half {
-        (((random() as u8 & 1) as i32) << 1) - 1
-    } else if delta < half {
-        1
-    } else {
-        -1
-    };
-    normalize_facing(i32::from(facing) + step)
-}
-
 #[cfg(not(test))]
 pub(crate) mod engine {
     use super::*;
     use crate::collections::observation::image;
-    use crate::engine::battle::{Cx, ElementId, Subject};
-    use crate::ships::native::{cosine, sine, wrap_delta};
+    use crate::engine::battle::{Cx, ElementId};
+    use crate::ships::native::{cosine, sine};
 
     pub(crate) fn collision_cb(
         cx: &mut crate::engine::battle::Cx<'_>,
@@ -255,73 +238,6 @@ pub(crate) mod engine {
             cx.draw_stamp(frame.view(), object.IntersectStamp.origin, true);
         }
     }
-
-    pub fn track_ship(cx: &mut Cx<'_>, id: ElementId, facing: &mut u16) -> i16 {
-        let mut subject = cx.weapon_origin(id);
-        let result = track_subject(cx, &mut subject, facing);
-        cx.set_target(id, subject.target);
-        result
-    }
-
-    pub fn track_subject(cx: &mut Cx<'_>, tracker: &mut Subject, facing: &mut u16) -> i16 {
-        let mut best_distance: i16 = 0;
-        let mut best_facing: i16 = -1;
-        let explicit = tracker.target.is_some();
-        let mut handle = if explicit {
-            tracker.target.take()
-        } else {
-            cx.elements().head()
-        };
-        while let Some(target) = handle {
-            let next = if explicit {
-                None
-            } else {
-                cx.elements().succ(target)
-            };
-            let state = cx.element(target);
-            if explicit
-                || (state.flags & PLAYER_SHIP as u16 != 0
-                    && state.player != tracker.player
-                    && (!cx.object_cloaked(target)
-                        || tracker.flags & (PLAYER_SHIP | APPEARING) as u16
-                            == (PLAYER_SHIP | APPEARING) as u16))
-            {
-                let ship = cx.owner(target);
-                if state.life != 0 && cx.race_stats(ship).ship_info.crew_level != 0 {
-                    let (t, s) = if tracker.flags & PRE_PROCESS as u16 != 0 {
-                        (state.next.location, tracker.next.location)
-                    } else {
-                        (state.current.location, tracker.current.location)
-                    };
-                    let (width, height) = cx.screen_dimensions();
-                    let mut dx = wrap_delta(
-                        t.x.wrapping_sub(s.x),
-                        (width - 64) << (ONE_SHIFT + MAX_REDUCTION),
-                    );
-                    let mut dy =
-                        wrap_delta(t.y.wrapping_sub(s.y), height << (ONE_SHIFT + MAX_REDUCTION));
-                    let delta = normalize_facing(
-                        angle_to_facing(crate::math::arctan(dx, dy) as i32) - i32::from(*facing),
-                    ) as i16;
-                    if dx < 0 {
-                        dx = dx.wrapping_neg();
-                    }
-                    if dy < 0 {
-                        dy = dy.wrapping_neg();
-                    }
-                    dx = dx.wrapping_add(dy);
-                    if best_distance == 0 || dx < best_distance {
-                        best_distance = dx;
-                        best_facing = delta;
-                        tracker.target = Some(target);
-                    }
-                }
-            }
-            handle = next;
-        }
-        *facing = turn_toward(*facing, best_facing, || cx.random());
-        best_facing
-    }
 }
 
 #[cfg(not(test))]
@@ -337,15 +253,5 @@ mod tests {
             (0..16).map(|i| blast_index(i * 4)).collect::<Vec<_>>(),
             vec![4, 5, 5, 5, 6, 7, 7, 7, 0, 1, 1, 1, 2, 3, 3, 3]
         );
-    }
-
-    #[test]
-    fn homing_randomness_is_only_consumed_for_opposite_heading() {
-        assert_eq!(turn_toward(15, 1, || panic!()), 0);
-        assert_eq!(turn_toward(0, 15, || panic!()), 15);
-        assert_eq!(turn_toward(3, 0, || panic!()), 3);
-        assert_eq!(turn_toward(3, -1, || panic!()), 3);
-        assert_eq!(turn_toward(0, 8, || 0), 15);
-        assert_eq!(turn_toward(0, 8, || 1), 1);
     }
 }

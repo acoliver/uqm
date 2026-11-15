@@ -868,3 +868,5 @@ impl Cx<'_> {
         unsafe { crate::strings::string_table::GetStringTableCount(sounds.cast()) }
     }
 }
+
+mod record_ops;

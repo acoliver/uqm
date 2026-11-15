@@ -1,3 +1,6 @@
+pub use crate::engine::battle::flags::{
+    APPEARING, DISAPPEARING, FINITE_LIFE, MAX_TIME_VALUE, NONSOLID, PLAYER_SHIP, PRE_PROCESS,
+};
 use crate::graphics::flash::FlashContext;
 pub use crate::engine::battle::{ElementHook, CollisionHook};
 pub use crate::engine::battle::record::{
@@ -53,7 +56,6 @@ pub const STR_MIDDLE_DOT: &[u8; 3] = b"\xC2\xB7\0";
 pub const UNICHAR_BULLET: u32 = 8226;
 pub const STR_BULLET: &[u8; 4] = b"\xE2\x80\xA2\0";
 pub const TIME_SHIFT: u32 = 8;
-pub const MAX_TIME_VALUE: u32 = 257;
 pub const DRAW_FACTOR_1: u32 = 255;
 pub const NUM_PLAYERS: u32 = 2;
 pub const NUM_SIDES: u32 = 2;
@@ -131,16 +133,10 @@ pub const SIN_SCALE: u32 = 16384;
 pub const VELOCITY_SHIFT: u32 = 5;
 pub const VELOCITY_SCALE: u32 = 32;
 pub const NORMAL_LIFE: u32 = 1;
-pub const PLAYER_SHIP: u32 = 4;
-pub const APPEARING: u32 = 8;
-pub const DISAPPEARING: u32 = 16;
 pub const CHANGING: u32 = 32;
-pub const NONSOLID: u32 = 64;
 pub const COLLISION: u32 = 128;
 pub const IGNORE_SIMILAR: u32 = 256;
 pub const DEFY_PHYSICS: u32 = 512;
-pub const FINITE_LIFE: u32 = 1024;
-pub const PRE_PROCESS: u32 = 2048;
 pub const POST_PROCESS: u32 = 4096;
 pub const IGNORE_VELOCITY: u32 = 8192;
 pub const CREW_OBJECT: u32 = 16384;

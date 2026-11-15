@@ -1,4 +1,4 @@
-use crate::battle::gravity::{calculate_gravity, time_space_matter_conflict};
+use crate::engine::battle::gravity::{calculate_gravity, time_space_matter_conflict};
 use crate::engine::battle::{Battle, Cx, ElementId, World};
 use std::cell::Cell;
 
@@ -59,7 +59,7 @@ fn conflict_checks_player_ships_even_when_nonsolid() {
     with_elements(|cx, [subject, other, _]| {
         cx.element_mut(subject).current.location.x = 100;
         cx.element_mut(other).flags = NONSOLID as u16;
-        let control = crate::battle::gravity::control(
+        let control = crate::engine::battle::gravity::control(
             cx,
             subject,
             crate::engine::battle::views::FrameSelection::ABSENT,

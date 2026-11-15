@@ -1,19 +1,15 @@
 //! Gravity and spawn overlap checks over the live ordered element pool.
 
-use crate::engine::battle::{Cx, ElementId};
-use crate::ships::native::abi::{
-    DISAPPEARING, INTERSECT_CONTROL, NONSOLID, PLAYER_SHIP, PRE_PROCESS,
-};
+use super::flags::{DISAPPEARING, NONSOLID, PLAYER_SHIP, PRE_PROCESS};
+use crate::battle::{Cx, ElementId};
+
+use crate::graphics::native_abi::INTERSECT_CONTROL;
 
 fn gravity_mass(mass: u8) -> bool {
     mass > 100
 }
 
-pub(crate) fn calculate_gravity(
-    cx: &mut Cx<'_>,
-    element: ElementId,
-    dimensions: (i32, i32),
-) -> bool {
+pub fn calculate_gravity(cx: &mut Cx<'_>, element: ElementId, dimensions: (i32, i32)) -> bool {
     let elem = cx.element(element);
     let has_gravity = elem.flags & (NONSOLID | DISAPPEARING) as u16 == 0
         && gravity_mass(elem.mass.wrapping_add(1));
@@ -46,17 +42,17 @@ pub(crate) fn calculate_gravity(
         }
         let angle = crate::math::arctan(dx, dy);
         cx.element_mut(test).velocity.delta_components(
-            super::battle_types::cosine(angle, 1 << 5),
-            super::battle_types::sine(angle, 1 << 5),
+            crate::math::battle_types::cosine(angle, 1 << 5),
+            crate::math::battle_types::sine(angle, 1 << 5),
         );
     }
     false
 }
 
-pub(crate) fn control(
+pub fn control(
     cx: &Cx<'_>,
     id: ElementId,
-    frame: crate::engine::battle::views::FrameSelection,
+    frame: crate::battle::views::FrameSelection,
 ) -> INTERSECT_CONTROL {
     let current = cx.element(id).current;
     let origin = crate::graphics::native_abi::POINT {
@@ -73,7 +69,7 @@ pub(crate) fn control(
     }
 }
 
-pub(crate) fn time_space_matter_conflict(
+pub fn time_space_matter_conflict(
     cx: &Cx<'_>,
     element: ElementId,
     mut intersects: impl FnMut(ElementId) -> bool,
