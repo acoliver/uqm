@@ -106,7 +106,7 @@ fn file_extension(name: &str) -> Option<&str> {
 ///
 /// Each page gets its own decoder that seeks to the correct offset and
 /// limits decoding to its timestamp duration.
-unsafe fn create_per_page_decoders(
+fn create_per_page_decoders(
     track_name: Option<&str>,
     track_text: Option<&str>,
     timestamp: Option<&str>,
@@ -190,9 +190,10 @@ unsafe fn create_per_page_decoders(
         }
     }
 
-    let file_data = CString::new(name)
-        .ok()
-        .and_then(|c_name| read_content_file(c_name.as_ptr()));
+    let file_data = CString::new(name).ok().and_then(|c_name| {
+        // SAFETY: c_name owns the terminated path throughout this content read.
+        unsafe { read_content_file(c_name.as_ptr()) }
+    });
     page_decoders(name, file_data.as_deref(), &page_run_times)
 }
 
@@ -598,20 +599,22 @@ pub unsafe extern "C" fn GraphForegroundStream(
 // Speech track facade
 // =============================================================================
 
-///
-/// # Safety
-///
-/// Non-null strings must be NUL-terminated and valid for the call.
-/// Any callback must remain valid whenever playback or seeking dispatches it.
-pub unsafe fn splice_track(
-    track_name_ptr: *const c_char,
-    track_text_ptr: *const c_char,
-    timestamp_ptr: *const c_char,
+/// Decode and append speech while retaining the supplied callback for playback and seeking.
+pub fn splice_track(
+    track_name: Option<&CStr>,
+    track_text: Option<&CStr>,
+    timestamp: Option<&CStr>,
     callback: Option<Box<dyn Fn(i32) + Send>>,
 ) {
-    let name = unicode_ptr_to_option(track_name_ptr);
-    let text = unicode_ptr_to_option(track_text_ptr);
-    let timestamp = unicode_ptr_to_option(timestamp_ptr);
+    let name = track_name
+        .filter(|s| !s.is_empty())
+        .map(CStr::to_string_lossy);
+    let text = track_text
+        .filter(|s| !s.is_empty())
+        .map(CStr::to_string_lossy);
+    let timestamp = timestamp
+        .filter(|s| !s.is_empty())
+        .map(CStr::to_string_lossy);
     eprintln!(
         "[SpliceTrack] name={:?} text_len={:?} ts_len={:?} cb={}",
         name,
@@ -632,29 +635,19 @@ pub unsafe fn splice_track(
     );
 }
 
-///
-/// # Safety
-///
-/// The names array must be null or NUL-terminated; each non-null string
-/// must be NUL-terminated and valid for the call.
-pub unsafe fn splice_multi_track(
-    track_names_ptr: *const *const c_char,
-    track_text_ptr: *const c_char,
-) {
-    if track_names_ptr.is_null() {
-        return;
-    }
-    let Some(text) = unicode_ptr_to_option(track_text_ptr) else {
+/// Append complete number clips, preserving the timed null decoder for absent voice content.
+pub fn splice_multi_track(track_names: &[&CStr], track_text: Option<&CStr>) {
+    let Some(text) = track_text
+        .filter(|s| !s.is_empty())
+        .map(CStr::to_string_lossy)
+    else {
         return;
     };
     let mut decoders = Vec::new();
-    for i in 0..trackplayer::MAX_MULTI_TRACKS {
-        let name_ptr = *track_names_ptr.add(i);
-        if name_ptr.is_null() {
-            break;
-        }
-        let name = CStr::from_ptr(name_ptr).to_string_lossy();
-        let data = read_content_file(name_ptr);
+    for clip in track_names.iter().take(trackplayer::MAX_MULTI_TRACKS) {
+        let name = clip.to_string_lossy();
+        // SAFETY: the borrowed clip is terminated and remains live for this load.
+        let data = unsafe { read_content_file(clip.as_ptr()) };
         // C loads the complete clip, or its timed null decoder when voice
         // content is absent. Never append an audio chunk without a decoder.
         decoders.extend(page_decoders(

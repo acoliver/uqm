@@ -109,18 +109,15 @@ mod api {
             fn speak(&mut self, phrase: u16, speaker: Speaker) {
                 let comm = &mut **self.comm.borrow_mut();
 
-                // SAFETY: the session owns the phrase table and retains its speaker callback until playback ends.
-                unsafe {
-                    crate::comm::ffi::rust_npc_phrase_cb(
-                        self.cx.borrow().world,
-                        comm,
-                        i32::from(phrase),
-                        Some(match speaker {
-                            Speaker::Zoq => zoq,
-                            Speaker::Pik => pik,
-                        }),
-                    );
-                }
+                crate::comm::ffi::npc_phrase(
+                    self.cx.borrow().world,
+                    comm,
+                    i32::from(phrase),
+                    Some(match speaker {
+                        Speaker::Zoq => zoq,
+                        Speaker::Pik => pik,
+                    }),
+                );
             }
             fn begin_talk(&mut self, track: u16) {
                 {

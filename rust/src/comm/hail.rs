@@ -73,7 +73,6 @@ pub(super) mod c_bridge {
         pub(super) space_ctx: *mut crate::graphics::native_abi::context_desc,
         pub(super) anim_ctx: *mut crate::graphics::native_abi::context_desc,
         pub(super) old_font: *mut crate::graphics::native_abi::font_desc,
-        pub(super) phrases: *mut crate::strings::string_table::StringTableEntry,
         pub(super) alien_song: *mut std::ffi::c_void,
         pub(super) alien_cmap: *mut crate::strings::string_table::StringTableEntry,
         pub(super) alien_font: *mut std::ffi::c_void,
@@ -88,7 +87,6 @@ pub(super) mod c_bridge {
                 space_ctx,
                 anim_ctx,
                 old_font,
-                phrases,
                 alien_song,
                 alien_cmap,
                 alien_font,
@@ -146,8 +144,7 @@ pub(super) mod c_bridge {
                 // already do Release+Destroy internally.  Non-captured resources
                 // (Font, Music) go straight to Destroy.
 
-                // ConversationPhrases — captured; Release to get back STRING_TABLE, then Destroy
-                DestroyStringTable(ReleaseStringTable(phrases));
+                drop(comm.display.phrases.take());
 
                 // AlienSong — not captured, direct Destroy
                 DestroyMusic(alien_song);
@@ -330,17 +327,12 @@ pub unsafe fn hail_alien(_comm: &mut Comm, cx: &mut Cx<'_>, io: &mut Io<'_>) {
             let alien_song = load_alien_song(descriptor);
             _comm.data.alien_song = alien_song;
 
-            // ConversationPhrases: load → capture → set
-            let phrases_raw =
-                LoadStringTableInstance(resource_key(descriptor.conversation_phrases_res));
-            let phrases = CaptureStringTable(phrases_raw);
-            _comm.data.conversation_phrases = phrases.cast();
+            _comm.display.phrases = descriptor
+                .conversation_phrases_res
+                .and_then(crate::strings::conversation::ConversationTable::load);
 
-            // Populate COMM_STATE.comm_data so Rust-side NPCPhrase can
-            // resolve conversation phrases without calling back into C.
             {
                 let comm_data = super::types::CommData {
-                    conversation_phrases: phrases.cast(),
                     alien_frame: alien_frame.cast(),
                     alien_font,
                     alien_color_map: alien_cmap.cast(),
@@ -449,7 +441,6 @@ pub unsafe fn hail_alien(_comm: &mut Comm, cx: &mut Cx<'_>, io: &mut Io<'_>) {
                 space_ctx,
                 anim_ctx,
                 old_font,
-                phrases,
                 alien_song,
                 alien_cmap,
                 alien_font,

@@ -230,7 +230,7 @@ pub fn set_comm_intro_mode(comm: &mut Comm, mode: u32, duration: u32) {
 }
 
 pub(crate) struct RuntimeState {
-    pub(crate) phrase_buf: [c_char; 2048],
+    pub(crate) phrases: Option<crate::strings::conversation::ConversationTable>,
     pub(crate) window: CRect,
     pub(crate) anim_context: *mut c_void,
     pub(crate) text_cache_context: *mut crate::graphics::native_abi::context_desc,
@@ -243,7 +243,7 @@ pub(crate) struct RuntimeState {
 impl Default for RuntimeState {
     fn default() -> Self {
         Self {
-            phrase_buf: [0; 2048],
+            phrases: None,
             window: CRect {
                 corner: CPoint { x: 7, y: 10 },
                 width: 0,
@@ -328,7 +328,7 @@ mod owner_tests {
             assert!(!frame.is_null());
             let mut first = Comm::new();
             let second = Comm::new();
-            first.display.phrase_buf[0] = b'X' as c_char;
+            assert!(first.add_response(1, "X", None));
             set_anim_context(&mut first, context.cast());
             set_text_cache_context(&mut first, context.cast());
             set_text_cache_frame(&mut first, frame.cast());
@@ -338,7 +338,7 @@ mod owner_tests {
             assert!(second.display.anim_context.is_null());
             assert!(second.display.text_cache_context.is_null());
             assert!(second.display.text_cache_frame.is_null());
-            assert_eq!(second.display.phrase_buf[0], 0);
+            assert_eq!(second.responses().count(), 0);
             drop(first);
             assert_eq!(drawable_abi::DestroyDrawable(drawable), 1);
             assert_eq!(context_abi::DestroyContext(context), 1);

@@ -559,7 +559,7 @@ fn the_track_player_exports_are_quiet_with_no_track() {
         assert!(get_first_track_subtitle().is_null());
         assert!(get_next_track_subtitle(ptr::null_mut()).is_null());
         assert!(get_track_subtitle_text(ptr::null_mut()).is_null());
-        splice_multi_track(ptr::null(), ptr::null());
+        splice_multi_track(&[], None);
     }
 }
 

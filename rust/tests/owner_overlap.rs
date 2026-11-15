@@ -74,12 +74,7 @@ fn empty_npc_phrase_does_not_acquire_an_owner() {
     unsafe {
         bridge::with_game(&mut game, || {
             World::current().write(|world| {
-                uqm_rust::comm::ffi::rust_npc_phrase_cb(
-                    world,
-                    &mut uqm_rust::comm::Comm::new(),
-                    0,
-                    None,
-                )
+                uqm_rust::comm::ffi::npc_phrase(world, &mut uqm_rust::comm::Comm::new(), 0, None)
             });
         });
     }

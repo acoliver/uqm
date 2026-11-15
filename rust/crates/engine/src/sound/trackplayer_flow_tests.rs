@@ -405,22 +405,19 @@ fn a_second_track_continues_the_numbering_and_the_decoder_offset() {
 #[test]
 fn numbered_sale_speech_has_decoders_for_the_number_and_continuation() {
     let _engine = engine();
-    unsafe {
-        crate::sound::heart_ffi::splice_track(
-            c"comm/melnorme/prefix.ogg".as_ptr(),
-            c"You have ".as_ptr(),
-            std::ptr::null(),
-            None,
-        );
-        let numbers = [c"comm/melnorme/seven.ogg".as_ptr(), std::ptr::null()];
-        crate::sound::heart_ffi::splice_multi_track(numbers.as_ptr(), c"7".as_ptr());
-        crate::sound::heart_ffi::splice_track(
-            c"comm/melnorme/suffix.ogg".as_ptr(),
-            c" credits".as_ptr(),
-            std::ptr::null(),
-            None,
-        );
-    }
+    crate::sound::heart_ffi::splice_track(
+        Some(c"comm/melnorme/prefix.ogg"),
+        Some(c"You have "),
+        None,
+        None,
+    );
+    crate::sound::heart_ffi::splice_multi_track(&[c"comm/melnorme/seven.ogg"], Some(c"7"));
+    crate::sound::heart_ffi::splice_track(
+        Some(c"comm/melnorme/suffix.ogg"),
+        Some(c" credits"),
+        None,
+        None,
+    );
     assert_eq!(chunk_count(), 3);
     for i in 0..3 {
         assert!(

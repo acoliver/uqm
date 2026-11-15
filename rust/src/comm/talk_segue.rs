@@ -290,9 +290,8 @@ pub mod dinput {
         KEY_MENU_RIGHT,
     };
     use crate::engine::{battle::Cx, observe::Io};
-    use crate::mainloop::restart_menu::c_extern::SetMenuSounds;
 
-    const MENU_SOUND_NONE: u32 = 0;
+    const MENU_SOUND_NONE: u16 = 0;
     const OPT_PC: c_int = 0x02;
     const CHECK_ABORT: u32 = 0x4000;
 
@@ -431,9 +430,10 @@ pub mod dinput {
             } else if c_bridge::PlayingTrack() == 0 {
                 c_bridge::PlayTrack();
             }
-
-            SetMenuSounds(input, MENU_SOUND_NONE as u16, MENU_SOUND_NONE as u16);
         });
+        cx.kernel
+            .input_controls()
+            .set_menu_sounds(MENU_SOUND_NONE, MENU_SOUND_NONE);
         comm.run_input(cx, io, false, |comm, cx, _| {
             let activity = cx.world.activity();
             cx.with_legacy(|| unsafe { do_talk_segue_frame(comm, input, &mut ts, activity) != 0 })
@@ -1599,8 +1599,9 @@ fn intro_transition(mode: u32, fade_time: u32) -> IntroTransition {
 fn comm_intro_transition(_comm: &mut Comm) {
     #[cfg(not(test))]
     unsafe {
-        use crate::mainloop::restart_menu::c_extern::{FadeScreen, FADE_ALL_TO_COLOR};
+        use crate::graphics::cmap_abi::FadeScreen;
         use std::ffi::{c_uint, c_void};
+        const FADE_ALL_TO_COLOR: u32 = 253;
 
         // Ported from c_CommIntroTransition in rust_comm.c
         let mode = crate::comm::ffi::rust_get_comm_intro_mode(_comm);

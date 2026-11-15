@@ -83,43 +83,36 @@ pub fn get_segue(cx: &crate::engine::battle::Cx<'_>) -> u32 {
 
 pub(crate) mod runtime {
     use super::*;
-    use std::ffi::c_char;
-    use std::ptr::null_mut;
+    use std::ffi::CString;
 
-    use crate::sound::heart_ffi::splice_multi_track as SpliceMultiTrack;
-    use crate::sound::heart_ffi::splice_track as SpliceTrack;
-
-    use crate::strings::string_table::GetStringSoundClip;
-
-    use crate::strings::string_table::SetAbsStringTableIndex;
-
-    /// # Safety
-    /// Called from the game thread with a valid printf integer format or null.
-    pub unsafe fn npc_number(comm: &mut Comm, number: i32, format: *const c_char) {
-        let format = if format.is_null() {
-            c"%d".as_ptr()
+    pub(super) fn number_text(number: i32, padded: bool) -> CString {
+        let text = if padded {
+            format!("{number:03}")
         } else {
-            format
+            number.to_string()
         };
+        CString::new(text).expect("decimal integers contain no NUL bytes")
+    }
+
+    pub fn npc_number(comm: &mut Comm, number: i32, padded: bool) {
+        let text = number_text(number, padded);
         if let Some(speech) = comm.data.definition.alien_number_speech {
             let mut indices = Vec::new();
             number_phrases(speech, number, true, &mut indices);
-            let mut tracks = [std::ptr::null::<c_char>(); 20];
-            assert!(indices.len() < tracks.len());
-            for (track, index) in tracks.iter_mut().zip(indices) {
-                *track = GetStringSoundClip(SetAbsStringTableIndex(
-                    (comm.data.conversation_phrases).cast(),
-                    index.wrapping_sub(1),
-                ))
-                .cast();
-            }
-            let mut buffer = [0 as c_char; 60];
-            libc::snprintf(buffer.as_mut_ptr(), buffer.len(), format, number);
-            SpliceMultiTrack(tracks.as_ptr(), buffer.as_ptr());
+            assert!(indices.len() < crate::sound::trackplayer::MAX_MULTI_TRACKS);
+            let tracks: Vec<_> = indices
+                .into_iter()
+                .map_while(|index| {
+                    comm.display
+                        .phrases
+                        .as_ref()?
+                        .phrase(index.wrapping_sub(1))?
+                        .clip
+                })
+                .collect();
+            crate::sound::heart_ffi::splice_multi_track(&tracks, Some(&text));
         } else {
-            let mut buffer = [0 as c_char; 32];
-            libc::snprintf(buffer.as_mut_ptr(), buffer.len(), format, number);
-            SpliceTrack(null_mut(), buffer.as_mut_ptr(), null_mut(), None);
+            crate::sound::heart_ffi::splice_track(None, Some(&text), None, None);
         }
     }
 }

@@ -2,7 +2,6 @@
 
 use crate::comm::Comm;
 use crate::engine::observe::CheckpointView;
-#[cfg(not(test))]
 use crate::engine::StoryKey;
 use std::ffi::{c_char, c_int, c_uint, CStr};
 
@@ -262,26 +261,16 @@ pub fn rust_select_response_index(comm: &mut Comm, index: c_int) -> c_int {
 
 /// Resolve a phrase name against the offered list on the game thread.
 pub fn response_choices(comm: &Comm) -> crate::engine::observe::ResponseChoices {
-    #[cfg(not(test))]
-    {
-        use crate::strings::string_table::{
-            GetStringName, GetStringTableCount, SetAbsStringTableIndex,
-        };
-        // The current conversation owns this table until communication teardown.
-        let table = { comm.data.conversation_phrases.cast() };
-        comm.responses().choices(|reference| unsafe {
-            if reference == 0 || reference > u32::from(GetStringTableCount(table)) {
-                return None;
-            }
-            let entry = SetAbsStringTableIndex(table, (reference - 1) as u16);
-            let name = GetStringName(entry);
-            (!name.is_null()).then(|| CStr::from_ptr(name).to_string_lossy().into_owned())
-        })
-    }
-    #[cfg(test)]
-    {
-        comm.responses().choices(|_| None)
-    }
+    comm.responses().choices(|reference| {
+        let table = comm.display.phrases.as_ref()?;
+        if reference == 0 || reference as usize > table.len() {
+            return None;
+        }
+        table
+            .phrase((reference - 1) as u16)?
+            .name
+            .map(|name| name.to_string_lossy().into_owned())
+    })
 }
 
 /// Get number of responses
@@ -1001,33 +990,10 @@ pub fn rust_show_conversation_summary(
 // @requirement REQ-NP-001, REQ-NP-002, REQ-NP-003, REQ-NP-004
 // ============================================================================
 
-#[cfg(not(test))]
-// Special phrase-index constants matching commglue.h enum values.
-#[cfg(not(test))]
 const GLOBAL_PLAYER_NAME: c_int = -1_000_000;
-#[cfg(not(test))]
 const GLOBAL_SHIP_NAME: c_int = -999_999;
-#[cfg(not(test))]
 const GLOBAL_ALLIANCE_NAME: c_int = -999_998;
-
-// Size of the per-call alliance-name working buffer (matches C npcphrase_cb buf[400]).
-#[cfg(not(test))]
 const ALLIANCE_NAME_BUF_SIZE: usize = 400;
-
-// C bridge declarations used only by NPCPhrase (not test-compiled).
-// Splice one or more voice clips with text (used by npcphrase_splice when clip exists).
-#[cfg(not(test))]
-use crate::sound::heart_ffi::splice_multi_track as SpliceMultiTrack;
-#[cfg(not(test))]
-use crate::sound::heart_ffi::splice_track as SpliceTrack;
-#[cfg(not(test))]
-use crate::strings::string_table::GetStringAddress;
-#[cfg(not(test))]
-use crate::strings::string_table::GetStringSoundClip;
-#[cfg(not(test))]
-use crate::strings::string_table::GetStringTimeStamp;
-#[cfg(not(test))]
-use crate::strings::string_table::SetAbsStringTableIndex;
 
 fn format_alliance_name(buffer: &mut [u8], phrase: &[u8], commander: Option<&[u8]>) {
     let mut used = phrase.len().min(buffer.len() - 1);
@@ -1044,201 +1010,81 @@ fn format_alliance_name(buffer: &mut [u8], phrase: &[u8], commander: Option<&[u8
     buffer[used] = 0;
 }
 
-/// Ported from C's c_get_alliance_name_full: full alliance name with CommanderName append.
-#[cfg(not(test))]
-unsafe fn get_alliance_name_full(
+pub fn npc_phrase(
     world: &crate::engine::World,
     comm: &mut Comm,
-    adjusted_index: c_int,
-    buf: *mut std::ffi::c_char,
-    buf_len: c_int,
-) -> *const std::ffi::c_char {
-    use std::ffi::CStr;
-
-    let phrases = comm.data.conversation_phrases;
-    if phrases.is_null() || buf.is_null() || buf_len <= 0 {
-        return std::ptr::null();
-    }
-
-    let i = world.story_state(StoryKey::NEW_ALLIANCE_NAME) as c_int;
-    let s = SetAbsStringTableIndex((phrases).cast(), ((adjusted_index - 1) + i) as u16);
-    let src = GetStringAddress(s);
-    if src.is_null() {
-        return std::ptr::null();
-    }
-
-    let name = (i == 3).then_some(world.data.flagship.commander_name);
-    format_alliance_name(
-        std::slice::from_raw_parts_mut(buf.cast(), buf_len as usize),
-        CStr::from_ptr(src).to_bytes(),
-        name.as_ref().map(|name| name.as_slice()),
-    );
-
-    buf as *const std::ffi::c_char
-}
-
-/// NPCPhrase with callback — the Rust replacement for C's npcphrase_cb.
-///
-/// Implements all six branches from commglue.c npcphrase_cb (lines 36–97):
-///  1. index == 0: no-op, return immediately
-///  2. GLOBAL_PLAYER_NAME: use commander name, null clip/timestamp
-///  3. GLOBAL_SHIP_NAME: use ship name, null clip/timestamp
-///  4. index < 0 (negative): alliance-name variant with GET_GAME_STATE lookup;
-///     state==3 appends CommanderName
-///  5. index > 0 (normal): look up ConversationPhrases[index-1] for text,
-///     clip, and timestamp
-///  6. For all non-zero paths: call SpliceTrack with resolved data + cb
-///
-/// # Safety
-/// Must be called from the game thread with a valid encounter active.
-///
-/// @plan PLAN-20260326-COMMPT2.P04
-/// @requirement REQ-NP-001, REQ-NP-002, REQ-NP-003, REQ-NP-004
-pub unsafe fn rust_npc_phrase_cb(
-    _world: &crate::engine::World,
-    comm: &mut Comm,
     index: c_int,
-    cb: super::glue::PhraseCallback,
+    callback: super::glue::PhraseCallback,
 ) {
-    eprintln!(
-        "[DBG] rust_NPCPhrase_cb: index={} cb={}",
-        index,
-        cb.is_some()
-    );
-    // Branch 1: no-op
     if index == 0 {
-        eprintln!("[DBG] rust_NPCPhrase_cb: index=0, returning");
         return;
     }
-
-    // Suppress unused-variable warning in test builds where the #[cfg(not(test))]
-    // block below is omitted and cb is not consumed.
-    let _ = cb;
-
-    let _cb = comm.queue_phrase_callback(cb);
-    #[cfg(not(test))]
-    {
-        use std::ffi::c_void;
-        use std::ptr;
-
-        if index == GLOBAL_PLAYER_NAME || index == GLOBAL_SHIP_NAME {
-            let name = if index == GLOBAL_PLAYER_NAME {
-                _world.data.flagship.commander_name
-            } else {
-                _world.data.flagship.ship_name
-            };
-            SpliceTrack(ptr::null_mut(), name.as_ptr().cast(), ptr::null_mut(), _cb);
-        } else if index < 0 {
-            // Branch 4: alliance-name variant
-            let adjusted = index - GLOBAL_ALLIANCE_NAME;
-            let mut buf = [0u8; ALLIANCE_NAME_BUF_SIZE];
-            let text_ptr = get_alliance_name_full(
-                _world,
-                comm,
-                adjusted,
-                buf.as_mut_ptr() as *mut _,
-                ALLIANCE_NAME_BUF_SIZE as c_int,
-            );
-            if text_ptr.is_null() {
-                return;
-            }
-            SpliceTrack(ptr::null_mut(), text_ptr as *mut _, ptr::null_mut(), _cb);
+    let callback = comm.queue_phrase_callback(callback);
+    if index == GLOBAL_PLAYER_NAME || index == GLOBAL_SHIP_NAME {
+        let bytes = if index == GLOBAL_PLAYER_NAME {
+            &world.data.flagship.commander_name
         } else {
-            // Branch 5: normal phrase from ConversationPhrases[index-1]
-            let phrases = {
-                let state = &*comm;
-                state
-                    .comm_data()
-                    .map(|d| d.conversation_phrases as *const c_void)
-                    .unwrap_or(ptr::null())
-            };
-
-            if phrases.is_null() {
-                eprintln!(
-                    "[DBG] rust_NPCPhrase_cb: phrases is NULL (comm_data not set?), returning"
-                );
-                return;
-            }
-
-            // Direct SetAbsStringTableIndex + GetStringAddress (1-based phrase index)
-            let s = SetAbsStringTableIndex(phrases as *mut _, (index - 1) as u16);
-            let text = GetStringAddress(s);
-            if text.is_null() {
-                return;
-            }
-            let table_idx = (index - 1) as u16;
-            let s2 = SetAbsStringTableIndex(phrases as *mut _, table_idx);
-            let clip = GetStringSoundClip(s2);
-            let s3 = SetAbsStringTableIndex(phrases as *mut _, table_idx);
-            let timestamp = GetStringTimeStamp(s3);
-
-            SpliceTrack(clip as *mut _, text as *mut _, timestamp as *mut _, _cb);
-        }
+            &world.data.flagship.ship_name
+        };
+        let name = CStr::from_bytes_until_nul(bytes).expect("flagship name is terminated");
+        crate::sound::heart_ffi::splice_track(None, Some(name), None, callback);
+    } else if index < 0 {
+        let variant = world.story_state(StoryKey::NEW_ALLIANCE_NAME) as c_int;
+        let adjusted = index - GLOBAL_ALLIANCE_NAME;
+        let Some(phrase) = comm
+            .display
+            .phrases
+            .as_ref()
+            .and_then(|table| table.phrase(((adjusted - 1) + variant) as u16))
+            .and_then(|phrase| phrase.text)
+        else {
+            return;
+        };
+        let mut buffer = [0; ALLIANCE_NAME_BUF_SIZE];
+        format_alliance_name(
+            &mut buffer,
+            phrase.to_bytes(),
+            (variant == 3).then_some(world.data.flagship.commander_name.as_slice()),
+        );
+        let text = CStr::from_bytes_until_nul(&buffer).expect("alliance name is terminated");
+        crate::sound::heart_ffi::splice_track(None, Some(text), None, callback);
+    } else {
+        let Some(phrase) = comm
+            .display
+            .phrases
+            .as_ref()
+            .and_then(|table| table.phrase((index - 1) as u16))
+        else {
+            return;
+        };
+        let Some(text) = phrase.text else { return };
+        crate::sound::heart_ffi::splice_track(phrase.clip, Some(text), phrase.timestamp, callback);
     }
-
-    // Update conversation summary to record this phrase emission.
     comm.rebuild_summary();
 }
 
-/// npcphrase_splice variant preserving C `npcphrase_splice` behavior.
-///
-/// C semantics (commglue.c):
-/// - index == 0: return
-/// - resolve text and clip for phrase index-1
-/// - if clip is NULL: SpliceTrack(NULL, text, NULL, NULL)
-/// - else: SpliceMultiTrack([clip, NULL], text)
-///
-/// # Safety
-/// Must be called from the game thread with a valid encounter active.
-///
-/// @plan PLAN-20260326-COMMPT2.P04
-/// @requirement REQ-NP-002
-pub unsafe fn rust_npc_phrase_splice(_world: &crate::engine::World, comm: &mut Comm, index: c_int) {
+pub fn splice_phrase(world: &crate::engine::World, comm: &mut Comm, index: c_int) {
     if index == 0 {
         return;
     }
-
-    #[cfg(not(test))]
-    {
-        use std::ffi::c_void;
-        use std::ptr;
-
-        if index < 0 {
-            // For special negative phrases, reuse npcphrase_cb behavior.
-            rust_npc_phrase_cb(_world, comm, index, None);
-            return;
-        }
-
-        let phrases = {
-            let state = &*comm;
-            state
-                .comm_data()
-                .map(|d| d.conversation_phrases as *const c_void)
-                .unwrap_or(ptr::null())
-        };
-        if phrases.is_null() {
-            return;
-        }
-
-        // Direct SetAbsStringTableIndex + GetStringAddress (1-based phrase index)
-        let s = SetAbsStringTableIndex(phrases as *mut _, (index - 1) as u16);
-        let text = GetStringAddress(s);
-        if text.is_null() {
-            return;
-        }
-
-        let table_idx = (index - 1) as u16;
-        let s2 = SetAbsStringTableIndex(phrases as *mut _, table_idx);
-        let clip = GetStringSoundClip(s2);
-
-        if clip.is_null() {
-            SpliceTrack(ptr::null_mut(), text as *mut _, ptr::null_mut(), None);
-        } else {
-            let tracks: [*const std::ffi::c_char; 2] = [clip.cast(), ptr::null()];
-            SpliceMultiTrack(tracks.as_ptr(), text);
-        }
+    if index < 0 {
+        npc_phrase(world, comm, index, None);
+        return;
     }
-
+    let Some(phrase) = comm
+        .display
+        .phrases
+        .as_ref()
+        .and_then(|table| table.phrase((index - 1) as u16))
+    else {
+        return;
+    };
+    let Some(text) = phrase.text else { return };
+    if let Some(clip) = phrase.clip {
+        crate::sound::heart_ffi::splice_multi_track(&[clip], Some(text));
+    } else {
+        crate::sound::heart_ffi::splice_track(None, Some(text), None, None);
+    }
     comm.rebuild_summary();
 }
 
