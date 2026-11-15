@@ -2945,11 +2945,12 @@ phase7_assets_access_unsafe = { limit = 61, ends = "phase-7", scopes = { "unsafe
 phase7_input_access_unsafe = { limit = 8, ends = "phase-7", scopes = { "unsafe|unsafe_block_lines|uqm::battle::context_access::ai_legacy::<Cx<'_> as AiOps>::human_input" = 1, "unsafe|unsafe_block_lines|uqm::battle::context_access::ai_legacy::<Cx<'_> as AiOps>::selection_delay" = 3, "unsafe|unsafe_block_lines|uqm::battle::context_access::race_access::<Cx<'_> as RaceOps>::hyperspace_cancel_pressed" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::ai_legacy::<Cx<'_> as AiOps>::human_input" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::ai_legacy::<Cx<'_> as AiOps>::selection_delay" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::race_access::<Cx<'_> as RaceOps>::hyperspace_cancel_pressed" = 1 } }
 phase7_render_access_unsafe = { limit = 54, ends = "phase-7", scopes = { "unsafe|unsafe_block_lines|uqm-engine::battle::access::<Cx<'_>>::intersect_elements" = 7, "unsafe|unsafe_block_lines|uqm-engine::battle::access::<Cx<'_>>::refresh_intersect_frame" = 3, "unsafe|unsafe_block_lines|uqm-engine::battle::access::<Cx<'_>>::screen_dimensions" = 1, "unsafe|unsafe_block_lines|uqm-engine::battle::access::record_ops::<Cx<'_>>::projected_intersect" = 1, "unsafe|unsafe_block_lines|uqm::battle::context_access::<Cx<'_> as ContextOps>::draw_final_battle_captain" = 11, "unsafe|unsafe_block_lines|uqm::battle::context_access::<Cx<'_> as ContextOps>::init_ship_status" = 8, "unsafe|unsafe_block_lines|uqm::battle::context_access::status_native_access::<Cx<'_> as StatusOps>::draw_captain_controls" = 3, "unsafe|unsafe_block_lines|uqm::battle::context_access::status_native_access::<Cx<'_> as StatusOps>::draw_energy_label" = 3, "unsafe|unsafe_block_lines|uqm::battle::context_access::status_native_access::<Cx<'_> as StatusOps>::draw_explosion_flash" = 8, "unsafe|unsafe_blocks|uqm-engine::battle::access::<Cx<'_>>::intersect_elements" = 1, "unsafe|unsafe_blocks|uqm-engine::battle::access::<Cx<'_>>::refresh_intersect_frame" = 1, "unsafe|unsafe_blocks|uqm-engine::battle::access::<Cx<'_>>::screen_dimensions" = 1, "unsafe|unsafe_blocks|uqm-engine::battle::access::record_ops::<Cx<'_>>::projected_intersect" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::<Cx<'_> as ContextOps>::draw_final_battle_captain" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::<Cx<'_> as ContextOps>::init_ship_status" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::status_native_access::<Cx<'_> as StatusOps>::draw_captain_controls" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::status_native_access::<Cx<'_> as StatusOps>::draw_energy_label" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::status_native_access::<Cx<'_> as StatusOps>::draw_explosion_flash" = 1 } }
 phase7_sound_access_unsafe = { limit = 48, ends = "phase-7", scopes = { "unsafe|unsafe_block_lines|uqm-engine::battle::access::<Cx<'_>>::set_ship_sound_bank" = 1, "unsafe|unsafe_block_lines|uqm-engine::battle::access::<Cx<'_>>::ship_sound_count" = 1, "unsafe|unsafe_block_lines|uqm-engine::battle::access::<Cx<'_>>::sound_point" = 7, "unsafe|unsafe_block_lines|uqm::battle::context_access::<Cx<'_> as ContextOps>::game_sound" = 4, "unsafe|unsafe_block_lines|uqm::battle::context_access::<Cx<'_> as ContextOps>::process_ship_sound" = 4, "unsafe|unsafe_block_lines|uqm::battle::context_access::<Cx<'_> as ContextOps>::start_battle_song_if_ready" = 5, "unsafe|unsafe_block_lines|uqm::battle::context_access::<Cx<'_> as ContextOps>::unlink" = 2, "unsafe|unsafe_block_lines|uqm::battle::context_access::sound_legacy::FlushSounds" = 3, "unsafe|unsafe_block_lines|uqm::battle::context_access::sound_legacy::UpdateSoundPositions" = 3, "unsafe|unsafe_block_lines|uqm::battle::context_access::tactrans_native_access::<Cx<'_> as TransitionOps>::play_ditty" = 3, "unsafe|unsafe_block_lines|uqm::battle::context_access::tactrans_native_access::<Cx<'_> as TransitionOps>::stop_battle_music" = 3, "unsafe|unsafe_blocks|uqm-engine::battle::access::<Cx<'_>>::set_ship_sound_bank" = 1, "unsafe|unsafe_blocks|uqm-engine::battle::access::<Cx<'_>>::ship_sound_count" = 1, "unsafe|unsafe_blocks|uqm-engine::battle::access::<Cx<'_>>::sound_point" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::<Cx<'_> as ContextOps>::game_sound" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::<Cx<'_> as ContextOps>::process_ship_sound" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::<Cx<'_> as ContextOps>::start_battle_song_if_ready" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::<Cx<'_> as ContextOps>::unlink" = 2, "unsafe|unsafe_blocks|uqm::battle::context_access::sound_legacy::FlushSounds" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::sound_legacy::UpdateSoundPositions" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::tactrans_native_access::<Cx<'_> as TransitionOps>::play_ditty" = 1, "unsafe|unsafe_blocks|uqm::battle::context_access::tactrans_native_access::<Cx<'_> as TransitionOps>::stop_battle_music" = 1 } }
-u6_04_content_edges = { limit = 107, ends = "U6-04", scopes = { "layers|module_edges|uqm::battle::ai_entry::@file" = 4, "layers|module_edges|uqm::battle::cyborg_native::@file" = 2, "layers|module_edges|uqm::battle::process_native::@file" = 2, "layers|module_edges|uqm::battle::ship_native::@file" = 3, "layers|module_edges|uqm::battle::weapon_native::@file" = 4, "layers|module_edges|uqm::battle::world_elements::@file" = 2, "layers|module_edges|uqm::ships::races::androsynth_native::engine::@file" = 1, "layers|module_edges|uqm::ships::races::arilou_native::@file" = 2, "layers|module_edges|uqm::ships::races::blackurq_native::engine::@file" = 1, "layers|module_edges|uqm::ships::races::chenjesu_native::engine::@file" = 1, "layers|module_edges|uqm::ships::races::chmmr_native::engine::@file" = 2, "layers|module_edges|uqm::ships::races::druuge_native::engine::@file" = 1, "layers|module_edges|uqm::ships::races::human_native::engine::@file" = 2, "layers|module_edges|uqm::ships::races::ilwrath_native::@file" = 2, "layers|module_edges|uqm::ships::races::melnorme_native::engine::@file" = 1, "layers|module_edges|uqm::ships::races::mmrnmhrm_native::engine::@file" = 2, "layers|module_edges|uqm::ships::races::mycon_native::engine::@file" = 1, "layers|module_edges|uqm::ships::races::orz_native::engine::@file" = 2, "layers|module_edges|uqm::ships::races::pkunk_native::engine::@file" = 3, "layers|module_edges|uqm::ships::races::samatra::engine::@file" = 2, "layers|module_edges|uqm::ships::races::shofixti_native::engine::@file" = 3, "layers|module_edges|uqm::ships::races::sis_native::engine::@file" = 3, "layers|module_edges|uqm::ships::races::slylandro_native::engine::@file" = 2, "layers|module_edges|uqm::ships::races::spathi_native::@file" = 1, "layers|module_edges|uqm::ships::races::supox_native::engine::@file" = 2, "layers|module_edges|uqm::ships::races::syreen_native::engine::@file" = 2, "layers|module_edges|uqm::ships::races::thraddash_native::engine::@file" = 2, "layers|module_edges|uqm::ships::races::umgah_native::engine::@file" = 1, "layers|module_edges|uqm::ships::races::urquan_native::engine::@file" = 2, "layers|module_edges|uqm::ships::races::utwig_native::engine::@file" = 1, "layers|module_edges|uqm::ships::races::vux_native::engine::@file" = 1, "layers|module_edges|uqm::ships::races::yehat_native::engine::@file" = 1, "layers|module_edges|uqm::ships::races::zoqfot_native::engine::@file" = 1, "layers|planned.uqm-content|uqm::ships::races::androsynth_native::engine::@file" = 1, "layers|planned.uqm-content|uqm::ships::races::arilou_native::@file" = 2, "layers|planned.uqm-content|uqm::ships::races::blackurq_native::engine::@file" = 1, "layers|planned.uqm-content|uqm::ships::races::chenjesu_native::engine::@file" = 1, "layers|planned.uqm-content|uqm::ships::races::chmmr_native::engine::@file" = 2, "layers|planned.uqm-content|uqm::ships::races::druuge_native::engine::@file" = 1, "layers|planned.uqm-content|uqm::ships::races::human_native::engine::@file" = 2, "layers|planned.uqm-content|uqm::ships::races::ilwrath_native::@file" = 2, "layers|planned.uqm-content|uqm::ships::races::melnorme_native::engine::@file" = 1, "layers|planned.uqm-content|uqm::ships::races::mmrnmhrm_native::engine::@file" = 2, "layers|planned.uqm-content|uqm::ships::races::mycon_native::engine::@file" = 1, "layers|planned.uqm-content|uqm::ships::races::orz_native::engine::@file" = 2, "layers|planned.uqm-content|uqm::ships::races::pkunk_native::engine::@file" = 3, "layers|planned.uqm-content|uqm::ships::races::samatra::engine::@file" = 2, "layers|planned.uqm-content|uqm::ships::races::shofixti_native::engine::@file" = 3, "layers|planned.uqm-content|uqm::ships::races::sis_native::engine::@file" = 3, "layers|planned.uqm-content|uqm::ships::races::slylandro_native::engine::@file" = 2, "layers|planned.uqm-content|uqm::ships::races::spathi_native::@file" = 1, "layers|planned.uqm-content|uqm::ships::races::supox_native::engine::@file" = 2, "layers|planned.uqm-content|uqm::ships::races::syreen_native::engine::@file" = 2, "layers|planned.uqm-content|uqm::ships::races::thraddash_native::engine::@file" = 2, "layers|planned.uqm-content|uqm::ships::races::umgah_native::engine::@file" = 1, "layers|planned.uqm-content|uqm::ships::races::urquan_native::engine::@file" = 2, "layers|planned.uqm-content|uqm::ships::races::utwig_native::engine::@file" = 1, "layers|planned.uqm-content|uqm::ships::races::vux_native::engine::@file" = 1, "layers|planned.uqm-content|uqm::ships::races::yehat_native::engine::@file" = 1, "layers|planned.uqm-content|uqm::ships::races::zoqfot_native::engine::@file" = 1 } }
+u6_04_content_edges = { limit = 105, ends = "U6-04", scopes = { "layers|module_edges|uqm::battle::ai_entry::@file" = 4, "layers|module_edges|uqm::battle::cyborg_native::@file" = 2, "layers|module_edges|uqm::battle::process_native::@file" = 2, "layers|module_edges|uqm::battle::ship_native::@file" = 3, "layers|module_edges|uqm::battle::weapon_native::@file" = 4, "layers|module_edges|uqm::ships::races::androsynth_native::engine::@file" = 1, "layers|module_edges|uqm::ships::races::arilou_native::@file" = 2, "layers|module_edges|uqm::ships::races::blackurq_native::engine::@file" = 1, "layers|module_edges|uqm::ships::races::chenjesu_native::engine::@file" = 1, "layers|module_edges|uqm::ships::races::chmmr_native::engine::@file" = 2, "layers|module_edges|uqm::ships::races::druuge_native::engine::@file" = 1, "layers|module_edges|uqm::ships::races::human_native::engine::@file" = 2, "layers|module_edges|uqm::ships::races::ilwrath_native::@file" = 2, "layers|module_edges|uqm::ships::races::melnorme_native::engine::@file" = 1, "layers|module_edges|uqm::ships::races::mmrnmhrm_native::engine::@file" = 2, "layers|module_edges|uqm::ships::races::mycon_native::engine::@file" = 1, "layers|module_edges|uqm::ships::races::orz_native::engine::@file" = 2, "layers|module_edges|uqm::ships::races::pkunk_native::engine::@file" = 3, "layers|module_edges|uqm::ships::races::samatra::engine::@file" = 2, "layers|module_edges|uqm::ships::races::shofixti_native::engine::@file" = 3, "layers|module_edges|uqm::ships::races::sis_native::engine::@file" = 3, "layers|module_edges|uqm::ships::races::slylandro_native::engine::@file" = 2, "layers|module_edges|uqm::ships::races::spathi_native::@file" = 1, "layers|module_edges|uqm::ships::races::supox_native::engine::@file" = 2, "layers|module_edges|uqm::ships::races::syreen_native::engine::@file" = 2, "layers|module_edges|uqm::ships::races::thraddash_native::engine::@file" = 2, "layers|module_edges|uqm::ships::races::umgah_native::engine::@file" = 1, "layers|module_edges|uqm::ships::races::urquan_native::engine::@file" = 2, "layers|module_edges|uqm::ships::races::utwig_native::engine::@file" = 1, "layers|module_edges|uqm::ships::races::vux_native::engine::@file" = 1, "layers|module_edges|uqm::ships::races::yehat_native::engine::@file" = 1, "layers|module_edges|uqm::ships::races::zoqfot_native::engine::@file" = 1, "layers|planned.uqm-content|uqm::ships::races::androsynth_native::engine::@file" = 1, "layers|planned.uqm-content|uqm::ships::races::arilou_native::@file" = 2, "layers|planned.uqm-content|uqm::ships::races::blackurq_native::engine::@file" = 1, "layers|planned.uqm-content|uqm::ships::races::chenjesu_native::engine::@file" = 1, "layers|planned.uqm-content|uqm::ships::races::chmmr_native::engine::@file" = 2, "layers|planned.uqm-content|uqm::ships::races::druuge_native::engine::@file" = 1, "layers|planned.uqm-content|uqm::ships::races::human_native::engine::@file" = 2, "layers|planned.uqm-content|uqm::ships::races::ilwrath_native::@file" = 2, "layers|planned.uqm-content|uqm::ships::races::melnorme_native::engine::@file" = 1, "layers|planned.uqm-content|uqm::ships::races::mmrnmhrm_native::engine::@file" = 2, "layers|planned.uqm-content|uqm::ships::races::mycon_native::engine::@file" = 1, "layers|planned.uqm-content|uqm::ships::races::orz_native::engine::@file" = 2, "layers|planned.uqm-content|uqm::ships::races::pkunk_native::engine::@file" = 3, "layers|planned.uqm-content|uqm::ships::races::samatra::engine::@file" = 2, "layers|planned.uqm-content|uqm::ships::races::shofixti_native::engine::@file" = 3, "layers|planned.uqm-content|uqm::ships::races::sis_native::engine::@file" = 3, "layers|planned.uqm-content|uqm::ships::races::slylandro_native::engine::@file" = 2, "layers|planned.uqm-content|uqm::ships::races::spathi_native::@file" = 1, "layers|planned.uqm-content|uqm::ships::races::supox_native::engine::@file" = 2, "layers|planned.uqm-content|uqm::ships::races::syreen_native::engine::@file" = 2, "layers|planned.uqm-content|uqm::ships::races::thraddash_native::engine::@file" = 2, "layers|planned.uqm-content|uqm::ships::races::umgah_native::engine::@file" = 1, "layers|planned.uqm-content|uqm::ships::races::urquan_native::engine::@file" = 2, "layers|planned.uqm-content|uqm::ships::races::utwig_native::engine::@file" = 1, "layers|planned.uqm-content|uqm::ships::races::vux_native::engine::@file" = 1, "layers|planned.uqm-content|uqm::ships::races::yehat_native::engine::@file" = 1, "layers|planned.uqm-content|uqm::ships::races::zoqfot_native::engine::@file" = 1 } }
 u6_04_world_projection = { limit = 17, ends = "U6-04", scopes = { "ffi|owner_projections|uqm::comm::glue::resolve_phrase" = 1, "ffi|owner_projections|uqm::comm::speech_graphics::<SpeechGraphics>::update" = 2, "ffi|owner_projections|uqm::comm::speech_graphics::activity_frame" = 1, "ffi|owner_projections|uqm::front_end::credits::runtime::Credits" = 0, "ffi|owner_projections|uqm::front_end::credits::runtime::credits_input" = 0, "ffi|owner_projections|uqm::front_end::credits::runtime::outtakes" = 0, "ffi|owner_projections|uqm::front_end::fmv::runtime::splash_screen" = 0, "ffi|owner_projections|uqm::front_end::intro::runtime::fade_clear_screen" = 0, "ffi|owner_projections|uqm::front_end::intro::runtime::generate_sis" = 0, "ffi|owner_projections|uqm::front_end::intro::runtime::presentation_commands" = 0, "ffi|owner_projections|uqm::front_end::intro::runtime::show_slides" = 0, "ffi|owner_projections|uqm::front_end::intro::runtime::video_input" = 0, "ffi|owner_projections|uqm::mainloop::restart_menu::menu_abi::uqm_get_utwig_bomb" = 1, "ffi|owner_projections|uqm::mainloop::restart_menu::menu_abi::uqm_get_utwig_bomb_on_ship" = 1, "ffi|owner_projections|uqm::mainloop::restart_menu::menu_abi::uqm_set_utwig_bomb_on_ship" = 1, "ffi|owner_projections|uqm::planets::cargo::live::ShowRemainingCapacity" = 1, "ffi|owner_projections|uqm::planets::cargo::live::discard" = 3, "ffi|owner_projections|uqm::planets::cargo::live::display" = 1, "ffi|owner_projections|uqm::planets::cargo::live::element_amount" = 3, "ffi|owner_projections|uqm::planets::report::live::make_report" = 1, "ffi|owner_projections|uqm::planets::sphere::live::tint_frame" = 1 } }
 
 [entry]
 "allows|cfg_not_test_modules|uqm-engine::battle::access::lifecycle" = 1
+"allows|cfg_not_test_modules|uqm-engine::battle::world_elements::engine" = 1
 "allows|cfg_not_test_modules|uqm::battle::battle_native::engine" = 1
 "allows|cfg_not_test_modules|uqm::battle::context_access::lifecycle" = 1
 "allows|cfg_not_test_modules|uqm::battle::ffi::live_counters" = 1
@@ -2959,7 +2960,6 @@ u6_04_world_projection = { limit = 17, ends = "U6-04", scopes = { "ffi|owner_pro
 "allows|cfg_not_test_modules|uqm::battle::status_native::engine" = 1
 "allows|cfg_not_test_modules|uqm::battle::tactrans_native::engine" = 1
 "allows|cfg_not_test_modules|uqm::battle::weapon_native::engine" = 1
-"allows|cfg_not_test_modules|uqm::battle::world_elements::engine" = 1
 "allows|cfg_not_test_modules|uqm::comm::hail::c_bridge" = 1
 "allows|cfg_not_test_modules|uqm::comm::sis_graphics::c_bridge" = 1
 "allows|cfg_not_test_modules|uqm::comm::speech_graphics::c_bridge" = 1
@@ -3715,28 +3715,19 @@ u6_04_world_projection = { limit = 17, ends = "U6-04", scopes = { "ffi|owner_pro
 "layers|crate_os|uqm::sdl2" = 1
 "layers|crate_os|uqm::sdl2-sys" = 1
 "layers|module_edges|uqm::battle::ai::<AiInput>::to_status_flags::@file" = 5
-"layers|module_edges|uqm::battle::ai_entry::@file" = 0
 "layers|module_edges|uqm::battle::ai_entry::route::@file" = 3
 "layers|module_edges|uqm::battle::c_bridge::@file" = 2
-"layers|module_edges|uqm::battle::cyborg_native::@file" = 0
 "layers|module_edges|uqm::battle::cyborg_native::break_opposite_facing_tie::@file" = 1
-"layers|module_edges|uqm::battle::process_native::@file" = 0
-"layers|module_edges|uqm::battle::ship_native::@file" = 0
 "layers|module_edges|uqm::battle::ship_native::engine::@file" = 2
 "layers|module_edges|uqm::battle::ship_native::engine::next_star_ship::@file" = 1
 "layers|module_edges|uqm::battle::ship_native::engine::ship_postprocess::@file" = 1
 "layers|module_edges|uqm::battle::ship_native::engine::ship_preprocess::@file" = 1
 "layers|module_edges|uqm::battle::ship_native::engine::spawn_ship::@file" = 1
 "layers|module_edges|uqm::battle::sounds::engine::@file" = 1
-"layers|module_edges|uqm::battle::weapon_native::@file" = 0
 "layers|module_edges|uqm::battle::weapon_native::blast_index::@file" = 2
 "layers|module_edges|uqm::battle::weapon_native::engine::@file" = 2
 "layers|module_edges|uqm::battle::weapon_native::engine::weapon_collision::@file" = 3
 "layers|module_edges|uqm::battle::world_elements::@file" = 0
-"layers|module_edges|uqm::battle::world_elements::engine::@file" = 4
-"layers|module_edges|uqm::battle::world_elements::engine::abandon_ship::@file" = 2
-"layers|module_edges|uqm::battle::world_elements::engine::asteroid_preprocess::@file" = 1
-"layers|module_edges|uqm::battle::world_elements::engine::spawn_rubble::@file" = 1
 "layers|module_edges|uqm::comm::commanim_abi::runtime::@file" = 1
 "layers|module_edges|uqm::comm::commanim_abi::runtime::init_comm_animations::@file" = 1
 "layers|module_edges|uqm::comm::commanim_abi::runtime::process_comm_animations::@file" = 1
@@ -3810,34 +3801,7 @@ u6_04_world_projection = { limit = 17, ends = "U6-04", scopes = { "ffi|owner_pro
 "layers|module_edges|uqm::ships::native::engine::set_context::@file" = 1
 "layers|module_edges|uqm::ships::native::engine::set_mipmap::@file" = 1
 "layers|module_edges|uqm::ships::native::engine::sleep_thread::@file" = 1
-"layers|module_edges|uqm::ships::races::androsynth_native::engine::@file" = 0
-"layers|module_edges|uqm::ships::races::arilou_native::@file" = 0
-"layers|module_edges|uqm::ships::races::blackurq_native::engine::@file" = 0
-"layers|module_edges|uqm::ships::races::chenjesu_native::engine::@file" = 0
-"layers|module_edges|uqm::ships::races::chmmr_native::engine::@file" = 0
-"layers|module_edges|uqm::ships::races::druuge_native::engine::@file" = 0
-"layers|module_edges|uqm::ships::races::human_native::engine::@file" = 0
-"layers|module_edges|uqm::ships::races::ilwrath_native::@file" = 0
-"layers|module_edges|uqm::ships::races::melnorme_native::engine::@file" = 0
-"layers|module_edges|uqm::ships::races::mmrnmhrm_native::engine::@file" = 0
-"layers|module_edges|uqm::ships::races::mycon_native::engine::@file" = 0
-"layers|module_edges|uqm::ships::races::orz_native::engine::@file" = 0
-"layers|module_edges|uqm::ships::races::pkunk_native::engine::@file" = 0
-"layers|module_edges|uqm::ships::races::samatra::engine::@file" = 0
 "layers|module_edges|uqm::ships::races::samatra_state::Snapshot::player::@file" = 1
-"layers|module_edges|uqm::ships::races::shofixti_native::engine::@file" = 0
-"layers|module_edges|uqm::ships::races::sis_native::engine::@file" = 0
-"layers|module_edges|uqm::ships::races::slylandro_native::engine::@file" = 0
-"layers|module_edges|uqm::ships::races::spathi_native::@file" = 0
-"layers|module_edges|uqm::ships::races::supox_native::engine::@file" = 0
-"layers|module_edges|uqm::ships::races::syreen_native::engine::@file" = 0
-"layers|module_edges|uqm::ships::races::thraddash_native::engine::@file" = 0
-"layers|module_edges|uqm::ships::races::umgah_native::engine::@file" = 0
-"layers|module_edges|uqm::ships::races::urquan_native::engine::@file" = 0
-"layers|module_edges|uqm::ships::races::utwig_native::engine::@file" = 0
-"layers|module_edges|uqm::ships::races::vux_native::engine::@file" = 0
-"layers|module_edges|uqm::ships::races::yehat_native::engine::@file" = 0
-"layers|module_edges|uqm::ships::races::zoqfot_native::engine::@file" = 0
 "layers|module_edges|uqm::starbase::module_chooser::<ModuleChooser>::step::@file" = 1
 "layers|module_edges|uqm::starbase::module_chooser::@file" = 2
 "layers|module_edges|uqm::starbase::module_chooser::ChooserInput::activity::@file" = 1
@@ -3894,34 +3858,7 @@ u6_04_world_projection = { limit = 17, ends = "U6-04", scopes = { "ffi|owner_pro
 "layers|planned.uqm-content|uqm::planets::generate::zoq::restore_world::@file" = 1
 "layers|planned.uqm-content|uqm::planets::tables::@file" = 1
 "layers|planned.uqm-content|uqm::planets::tables::star::@file" = 1
-"layers|planned.uqm-content|uqm::ships::races::androsynth_native::engine::@file" = 0
-"layers|planned.uqm-content|uqm::ships::races::arilou_native::@file" = 0
-"layers|planned.uqm-content|uqm::ships::races::blackurq_native::engine::@file" = 0
-"layers|planned.uqm-content|uqm::ships::races::chenjesu_native::engine::@file" = 0
-"layers|planned.uqm-content|uqm::ships::races::chmmr_native::engine::@file" = 0
-"layers|planned.uqm-content|uqm::ships::races::druuge_native::engine::@file" = 0
-"layers|planned.uqm-content|uqm::ships::races::human_native::engine::@file" = 0
-"layers|planned.uqm-content|uqm::ships::races::ilwrath_native::@file" = 0
-"layers|planned.uqm-content|uqm::ships::races::melnorme_native::engine::@file" = 0
-"layers|planned.uqm-content|uqm::ships::races::mmrnmhrm_native::engine::@file" = 0
-"layers|planned.uqm-content|uqm::ships::races::mycon_native::engine::@file" = 0
-"layers|planned.uqm-content|uqm::ships::races::orz_native::engine::@file" = 0
-"layers|planned.uqm-content|uqm::ships::races::pkunk_native::engine::@file" = 0
-"layers|planned.uqm-content|uqm::ships::races::samatra::engine::@file" = 0
 "layers|planned.uqm-content|uqm::ships::races::samatra_state::Snapshot::player::@file" = 1
-"layers|planned.uqm-content|uqm::ships::races::shofixti_native::engine::@file" = 0
-"layers|planned.uqm-content|uqm::ships::races::sis_native::engine::@file" = 0
-"layers|planned.uqm-content|uqm::ships::races::slylandro_native::engine::@file" = 0
-"layers|planned.uqm-content|uqm::ships::races::spathi_native::@file" = 0
-"layers|planned.uqm-content|uqm::ships::races::supox_native::engine::@file" = 0
-"layers|planned.uqm-content|uqm::ships::races::syreen_native::engine::@file" = 0
-"layers|planned.uqm-content|uqm::ships::races::thraddash_native::engine::@file" = 0
-"layers|planned.uqm-content|uqm::ships::races::umgah_native::engine::@file" = 0
-"layers|planned.uqm-content|uqm::ships::races::urquan_native::engine::@file" = 0
-"layers|planned.uqm-content|uqm::ships::races::utwig_native::engine::@file" = 0
-"layers|planned.uqm-content|uqm::ships::races::vux_native::engine::@file" = 0
-"layers|planned.uqm-content|uqm::ships::races::yehat_native::engine::@file" = 0
-"layers|planned.uqm-content|uqm::ships::races::zoqfot_native::engine::@file" = 0
 "layers|planned.uqm-modes|uqm::comm::commanim_abi::runtime::@file" = 1
 "layers|planned.uqm-modes|uqm::comm::commanim_abi::runtime::init_comm_animations::@file" = 1
 "layers|planned.uqm-modes|uqm::comm::commanim_abi::runtime::process_comm_animations::@file" = 1
@@ -4085,6 +4022,9 @@ u6_04_world_projection = { limit = 17, ends = "U6-04", scopes = { "ffi|owner_pro
 "uqm::battle::cyborg_native::intercept_window" = "uqm-engine::battle::intercept::intercept_window"
 "uqm::battle::gravity" = "uqm-engine::battle::gravity"
 "uqm::battle::weapon_native::engine::track_subject" = "uqm-engine::battle::tracking::track_subject"
+"uqm::battle::weapon_native::projectile" = "uqm-engine::battle::projectile"
+"uqm::battle::world_elements::engine" = "uqm-engine::battle::world_elements::engine"
+"uqm::battle::world_elements::engine::<Cx<'_> as ElementDamage>::damage" = "uqm-engine::battle::world_elements::engine::<Cx<'_>>::damage"
 "uqm::graphics" = "uqm-engine::graphics"
 "uqm::input" = "uqm-engine::input_port"
 "uqm::io" = "uqm-engine::io"
