@@ -257,11 +257,12 @@ unsafe fn load_conversation_text(comm: &mut Comm) {
         std::ptr::NonNull::new(comm.presentation.game_strings.cast())
             .expect("conversation game strings"),
     ));
-    comm.display.phrases = comm
+    let phrases = comm
         .data
         .definition
         .conversation_phrases_res
         .and_then(crate::strings::conversation::ConversationTable::load);
+    comm.set_conversation_phrases(phrases);
 }
 
 /// Run the full alien encounter sequence.

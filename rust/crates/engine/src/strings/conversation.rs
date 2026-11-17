@@ -5,6 +5,15 @@ use std::{ffi::CStr, ptr::NonNull};
 
 pub struct ConversationTable(NonNull<StringTable>);
 
+impl From<super::owned_table::LoadedTextTable> for ConversationTable {
+    fn from(table: super::owned_table::LoadedTextTable) -> Self {
+        Self(
+            NonNull::new(table.into_raw())
+                .unwrap_or_else(|| panic!("owned text table allocation is null")),
+        )
+    }
+}
+
 pub struct ConversationPhrase<'a> {
     pub text: Option<&'a CStr>,
     pub name: Option<&'a CStr>,

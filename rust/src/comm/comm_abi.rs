@@ -15,6 +15,19 @@ use std::{
     ptr::{null_mut, NonNull},
 };
 
+impl Comm {
+    pub fn set_conversation_phrases(
+        &mut self,
+        phrases: Option<crate::strings::conversation::ConversationTable>,
+    ) {
+        self.display.phrases = phrases;
+    }
+
+    pub fn conversation_phrases(&self) -> Option<&crate::strings::conversation::ConversationTable> {
+        self.display.phrases.as_ref()
+    }
+}
+
 fn count_lines(comm: &Comm, text: &mut Text<'_>, font: &FontLease) -> i32 {
     let mut input = text.text;
     let mut count = 0;
