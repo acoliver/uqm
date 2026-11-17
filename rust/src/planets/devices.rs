@@ -1,15 +1,11 @@
 //! Devices menu, ported from `planets/devices.c`.
 
 use super::device_effects::{effect_state, repair_ultron, ULTRON_COMPONENTS};
-use crate::battle::c_bridge::SleepThread;
 use crate::engine::{battle::Cx, observe::Io};
 use crate::engine::{StoryKey, World};
 
-use crate::mainloop::{
-    input_abi::live::SetMenuSounds,
-    restart_menu::c_extern::{uqm_sleep_thread_until as SleepThreadUntil, FadeScreen},
-    types::activity_flags::{CHECK_LOAD, START_ENCOUNTER},
-};
+use crate::graphics::context_abi::ContextLease;
+use crate::mainloop::types::activity_flags::{CHECK_LOAD, START_ENCOUNTER};
 
 use crate::comm::locdata::{CColor, CRect};
 use crate::engine::species::ship;
@@ -139,7 +135,7 @@ fn draw(menu: &Menu, g: &Graphics, old: Option<usize>, refresh: bool) {
     g.unbatch();
 }
 
-unsafe fn reset_groups(world: &mut World) {
+fn reset_groups(world: &mut World) {
     world.encounter_group = 0;
     put_group_info(world, 0, 255);
     world.ip_groups().reinit();
@@ -152,11 +148,7 @@ fn orbit_is(solar: Option<&SolarSystem>, planet: u8) -> bool {
     })
 }
 
-unsafe fn use_caster(
-    cx: &mut Cx<'_>,
-    solar: Option<&SolarSystem>,
-    next_activity: &mut u16,
-) -> bool {
+fn use_caster(cx: &mut Cx<'_>, solar: Option<&SolarSystem>, next_activity: &mut u16) -> bool {
     if in_hqspace(cx.world) != 0 {
         if get(cx.world, StoryKey::ARILOU_SPACE_SIDE) <= 1 {
             set(cx.world, StoryKey::USED_BROADCASTER, 1);
@@ -176,7 +168,7 @@ unsafe fn use_caster(
         cx.world.set_activity(cx.world.activity() | START_ENCOUNTER);
         reset_groups(cx.world);
         set(cx.world, StoryKey::GLOBAL_FLAGS_AND_DATA, 1 << 7);
-        save_solar_location(cx.world, solar);
+        save_solar_location(cx.world, cx.kernel, solar);
         return true;
     }
     let home = star == ILWRATH_DEFINED;
@@ -199,18 +191,13 @@ unsafe fn use_caster(
         if home { 1 << 4 } else { 1 << 5 },
     );
     if solar.in_orbit() {
-        save_solar_location(cx.world, solar);
+        save_solar_location(cx.world, cx.kernel, solar);
     }
     true
 }
 
 /// Returns the original DeviceStatus (failure, success, success without sound).
-unsafe fn invoke(
-    cx: &mut Cx<'_>,
-    solar: Option<&SolarSystem>,
-    id: u8,
-    next_activity: &mut u16,
-) -> u8 {
+fn invoke(cx: &mut Cx<'_>, solar: Option<&SolarSystem>, id: u8, next_activity: &mut u16) -> u8 {
     match id {
         4..=6 => repair_ultron(cx.world, ULTRON_COMPONENTS[usize::from(id - 4)]),
         3 => {
@@ -220,10 +207,12 @@ unsafe fn invoke(
                 return 0;
             };
             crate::ui::settings::play_menu_sound(cx.kernel, cx.world, 3);
-            cx.with_legacy(|| SleepThreadUntil(FadeScreen(250, 840).wrapping_add(1680)));
+            let context = ContextLease::require(cx.kernel.status_context);
+            let deadline = context.fade_screen(250, 840).wrapping_add(1680);
+            cx.kernel.input_runtime().sleep_until(cx, deadline);
             let star = solar.sys.star_index();
             if star != CHMMR_DEFINED || !orbit_is(Some(solar), 1) {
-                cx.with_legacy(|| FadeScreen(253, 1680));
+                context.fade_screen(253, 1680);
             } else {
                 set(cx.world, StoryKey::CHMMR_EMERGING, 1);
                 cx.world.set_activity(cx.world.activity() | START_ENCOUNTER);
@@ -262,7 +251,7 @@ unsafe fn invoke(
                     set(cx.world, StoryKey::READY_TO_CONFUSE_URQUAN, 1);
                 }
                 if solar.in_orbit() {
-                    save_solar_location(cx.world, solar);
+                    save_solar_location(cx.world, cx.kernel, solar);
                 }
             }
             1
@@ -280,7 +269,7 @@ unsafe fn invoke(
     }
 }
 
-unsafe fn frame(
+fn frame(
     cx: &mut Cx<'_>,
     io: &mut Io<'_>,
     input: &crate::engine::input::InputSession,
@@ -347,19 +336,19 @@ unsafe fn frame(
         cx.kernel.device_observation.selected = next;
         publish(cx.kernel, io);
     }
-    cx.with_legacy(|| SleepThread(840 / 30));
+    cx.kernel.input_runtime().sleep(cx, 840 / 30);
     1
 }
 
-/// # Safety
-/// Requires the initialized UI and campaign on the owning game thread.
-pub unsafe fn devices_menu(cx: &mut Cx<'_>, io: &mut Io<'_>, solar: Option<&SolarSystem>) -> i32 {
+pub fn devices_menu(cx: &mut Cx<'_>, io: &mut Io<'_>, solar: Option<&SolarSystem>) -> i32 {
     let runtime = cx.kernel.input_runtime();
     let input = runtime.input();
     let Some(mut menu) = prepare_devices_menu(cx) else {
         return 0;
     };
-    cx.with_legacy(|| SetMenuSounds(input, 0x000f | 0x0080 | 0x0100, 0x0010));
+    input
+        .controls()
+        .set_menu_sounds(0x000f | 0x0080 | 0x0100, 0x0010);
     publish(cx.kernel, io);
     cx.run_input(io, true, |cx, io| {
         let mut next_activity = 0;
@@ -367,7 +356,7 @@ pub unsafe fn devices_menu(cx: &mut Cx<'_>, io: &mut Io<'_>, solar: Option<&Sola
         cx.world.next_activity |= next_activity;
         result
     });
-    cx.with_legacy(|| SetMenuSounds(input, 0x000f, 0x0010));
+    input.controls().set_menu_sounds(0x000f, 0x0010);
     cx.kernel.device_observation.list = None;
     publish(cx.kernel, io);
     if cx.world.data.flagship.crew_enlisted == u16::MAX || cx.world.activity() & 0x4000 != 0 {
@@ -384,7 +373,7 @@ pub unsafe fn devices_menu(cx: &mut Cx<'_>, io: &mut Io<'_>, solar: Option<&Sola
     )
 }
 
-unsafe fn prepare_devices_menu(cx: &mut Cx<'_>) -> Option<Menu> {
+fn prepare_devices_menu(cx: &mut Cx<'_>) -> Option<Menu> {
     let list = super::device_effects::inventory(cx.world, 28);
     if list.is_empty() {
         return None;

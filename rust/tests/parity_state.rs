@@ -1,5 +1,4 @@
 //! Production checkpoint and fighter callers, including cross-process address stability.
-use uqm_rust::battle::ContextOps;
 #[path = "support/battle.rs"]
 mod battle;
 #[path = "support/battle_context.rs"]
@@ -386,7 +385,7 @@ fn race_custom_fields(observer: &AutomationObserver, directory: &Path) {
             );
             assert_eq!(fields["race.pkunk.last_sound"], "0");
             uqm_rust::app::bridge::enter(|cx| {
-                cx.unlink(phoenix_object.id);
+                uqm_rust::battle::sounds::engine::unlink(cx, phoenix_object.id);
                 cx.dispose(phoenix_object.id);
             });
             let (retired, _) = snapshot(observer, directory);
@@ -410,7 +409,9 @@ fn race_custom_fields(observer: &AutomationObserver, directory: &Path) {
                 reallocated["ships.0.0.custom.phoenix"],
                 fields["ships.0.0.custom.phoenix"]
             );
-            uqm_rust::app::bridge::enter(|cx| cx.unlink(reused.id));
+            uqm_rust::app::bridge::enter(|cx| {
+                uqm_rust::battle::sounds::engine::unlink(cx, reused.id)
+            });
             uqm_rust::app::bridge::enter(|cx| {
                 let mut ships = cx.kernel_mut().ships(0);
                 let link = ships.link(owner.ship_id);

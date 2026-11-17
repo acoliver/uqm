@@ -237,13 +237,13 @@ unsafe fn apply(cx: &mut Cx<'_>, effect: Effect, checkpoint: &dyn Fn()) -> Resul
                 }
                 Effect::Remove(ids) => {
                     for id in ids {
-                        cx.unlink(id);
+                        crate::battle::sounds::engine::unlink(cx, id);
                         cx.dispose(id);
                     }
                 }
                 Effect::Spawn(ship) => return Ok(Reply::Loaded(cx.fixture_spawn(ship))),
                 Effect::PhoenixFirst(id) => {
-                    cx.unlink(id);
+                    crate::battle::sounds::engine::unlink(cx, id);
                     let head = cx.elements().head();
                     cx.insert_before(id, head);
                 }

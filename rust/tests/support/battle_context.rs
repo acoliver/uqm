@@ -1,5 +1,4 @@
 use std::sync::Mutex;
-use uqm_rust::battle::ContextOps;
 
 static CONTEXT: Mutex<()> = Mutex::new(());
 
@@ -46,7 +45,7 @@ pub unsafe fn unlink(handle: *mut std::ffi::c_void) {
                 .elements()
                 .id(std::ptr::NonNull::new(handle))
                 .unwrap_or_else(|| panic!("fixture element"));
-            cx.unlink(id);
+            uqm_rust::battle::sounds::engine::unlink(cx, id);
         });
     }
 }

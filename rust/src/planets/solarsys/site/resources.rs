@@ -276,16 +276,9 @@ impl crate::planets::generate::sol::Pickup for Site<'_, '_, '_> {
 impl PlanetNames for Site<'_, '_, '_> {
     fn set_planet_name(&mut self, index: u16) {
         let mut game = self.game.borrow_mut();
-        use crate::strings::string_table::{GetStringAddress, SetAbsStringTableIndex};
-        let strings = game.kernel.game_strings.cast();
-        // SAFETY: the retained kernel owns the initialized string table and its selected text.
-        let text = unsafe { GetStringAddress(SetAbsStringTableIndex(strings, index)) };
-        let name = &mut game.world.data.flagship.planet_name;
-        let destination = name.as_mut_ptr().cast();
-        let capacity = name.len();
-        let source = text.cast();
-        // SAFETY: the retained world owns the entire destination buffer; text stays live in the kernel.
-        unsafe { crate::strings::unicode::utf8_string_copy(destination, capacity, source) };
+        let game = &mut *game;
+        let text = game.kernel.game_text(usize::from(index));
+        game.world.set_planet_name(text);
     }
     fn set_battle_planet(&mut self, value: u8) {
         self.game

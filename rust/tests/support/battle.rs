@@ -4,7 +4,7 @@
 )]
 use std::{ptr, rc::Rc};
 use uqm_rust::battle::process_native::init_display_list;
-use uqm_rust::battle::{AiOps, ContextOps};
+use uqm_rust::battle::AiOps;
 
 use uqm_rust::{
     engine::battle::{ElementId, RaceState, ShipId},
@@ -611,7 +611,7 @@ impl Drop for Ship<'_> {
             uqm_rust::app::bridge::enter(|cx| {
                 if cx.elements().contains(self.id) {
                     if cx.elements().linked(self.id) {
-                        cx.unlink(self.id);
+                        uqm_rust::battle::sounds::engine::unlink(cx, self.id);
                     }
                     cx.dispose(self.id);
                 }
@@ -851,7 +851,7 @@ impl Drop for Object<'_> {
             uqm_rust::app::bridge::enter(|cx| {
                 if cx.elements().contains(self.id) {
                     if cx.elements().linked(self.id) {
-                        cx.unlink(self.id);
+                        uqm_rust::battle::sounds::engine::unlink(cx, self.id);
                     }
                     cx.dispose(self.id);
                 }
@@ -906,7 +906,7 @@ impl Drop for PoolElement {
             uqm_rust::app::bridge::enter(|cx| {
                 if cx.elements().contains(self.id) {
                     if cx.elements().linked(self.id) {
-                        cx.unlink(self.id);
+                        uqm_rust::battle::sounds::engine::unlink(cx, self.id);
                     }
                     cx.dispose(self.id);
                 }

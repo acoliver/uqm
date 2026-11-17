@@ -120,8 +120,6 @@ pub(crate) mod live {
 
     use crate::ui::sis::capacity::crew_capacity;
 
-    use crate::mainloop::input_abi::live::SetMenuSounds;
-
     struct Menu {
         selected: usize,
         positions: Vec<(i16, i16)>,
@@ -152,7 +150,7 @@ pub(crate) mod live {
         crate::ui::sis::highlight_rect(kernel, crate::ui::sis::status_message_rect());
     }
 
-    unsafe fn delta_crew(cx: &mut Cx<'_>, menu: &mut Menu, delta: i16) -> bool {
+    fn delta_crew(cx: &mut Cx<'_>, menu: &mut Menu, delta: i16) -> bool {
         let Some((frame, value)) = update_crew(cx.world, menu.point, delta) else {
             return false;
         };
@@ -170,7 +168,7 @@ pub(crate) mod live {
         true
     }
 
-    unsafe fn select(cx: &mut Cx<'_>, menu: &mut Menu, index: usize) {
+    fn select(cx: &mut Cx<'_>, menu: &mut Menu, index: usize) {
         menu.point = menu.positions[index];
         menu.frame = None;
         delta_crew(cx, menu, 0);
@@ -183,7 +181,7 @@ pub(crate) mod live {
         }
     }
 
-    unsafe fn redraw_selection(cx: &mut Cx<'_>, menu: &mut Menu, next: usize) {
+    fn redraw_selection(cx: &mut Cx<'_>, menu: &mut Menu, next: usize) {
         let context = menu.context.clone();
         context.with_batch(|| {
             if next != menu.selected {
@@ -195,11 +193,7 @@ pub(crate) mod live {
         });
     }
 
-    unsafe fn modify(
-        cx: &mut Cx<'_>,
-        input: &crate::engine::input::InputSession,
-        menu: &mut Menu,
-    ) -> i32 {
+    fn modify(cx: &mut Cx<'_>, input: &crate::engine::input::InputSession, menu: &mut Menu) -> i32 {
         if cx.world.activity() & (1 << 14) != 0 {
             return 0;
         }
@@ -216,13 +210,13 @@ pub(crate) mod live {
             menu.modifying ^= true;
             if !menu.modifying {
                 crate::ui::sis::clear_flash(cx.kernel);
-                cx.with_legacy(|| SetMenuSounds(input, 15, 16));
+                input.controls().set_menu_sounds(15, 16);
             } else {
                 menu.context.select();
                 menu.context.set_foreground(crate::ui::rgb15(31, 31, 31));
                 draw(menu, true);
                 flash_crew(cx.kernel);
-                cx.with_legacy(|| SetMenuSounds(input, 3, 48));
+                input.controls().set_menu_sounds(3, 48);
             }
         } else if menu.modifying {
             let mut delta = 0;
@@ -254,14 +248,11 @@ pub(crate) mod live {
             // SAFETY: the roster retains all ship frames and the selected status context.
             redraw_selection(cx, menu, next);
         }
-        // SAFETY: the admitted menu keeps initialized game-thread pacing callbacks live.
-        cx.with_legacy(|| crate::battle::c_bridge::SleepThread(840 / 30));
+        cx.kernel.input_runtime().sleep(cx, 840 / 30);
         1
     }
 
-    /// # Safety
-    /// Call on the game thread with campaign globals and screen resources initialized.
-    pub unsafe fn roster_menu(cx: &mut Cx<'_>, io: &mut Io<'_>) -> i32 {
+    pub fn roster_menu(cx: &mut Cx<'_>, io: &mut Io<'_>) -> i32 {
         let runtime = cx.kernel.input_runtime();
         let input = runtime.input();
         let count = cx.world.built_ships_ref().count();
@@ -285,7 +276,7 @@ pub(crate) mod live {
             menu
         };
         select(cx, &mut menu, 0);
-        cx.with_legacy(|| SetMenuSounds(input, 15, 16));
+        input.controls().set_menu_sounds(15, 16);
         cx.run_input(io, true, |cx, _| modify(cx, input, &mut menu) != 0);
         menu.context.select();
         draw(&menu, false);

@@ -1,4 +1,4 @@
-use uqm_rust::battle::{ContextOps, RaceOps, StarOps};
+use uqm_rust::battle::{RaceOps, StarOps};
 #[test]
 fn owning_frame_slots_reject_foreign_drawables_without_mutation() {
     battle_context::run(|_| {
@@ -90,7 +90,7 @@ fn abandonment_keeps_allocation_rng_parent_and_target_order() {
                     assert_eq!(cx.target(id), Some(b.id));
                     assert_eq!(cx.element(id).life, 300);
                     assert_ne!(cx.element(id).flags & CREW_OBJECT as u16, 0);
-                    cx.unlink(id);
+                    uqm_rust::battle::sounds::engine::unlink(cx, id);
                     cx.dispose(id);
                 }
             });
@@ -432,7 +432,7 @@ fn allocated_copy_keeps_primitive_identity_parent_target_and_observations() {
                         && *bytes == std::mem::size_of::<ElementRecord>())
                 );
                 cx.put(dest);
-                cx.unlink(dest);
+                uqm_rust::battle::sounds::engine::unlink(cx, dest);
                 cx.dispose(dest);
                 assert!(cx.elements().linked(ship.id));
             });

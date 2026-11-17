@@ -13,7 +13,6 @@ pub(crate) mod lifecycle;
 pub(crate) mod resources;
 
 use crate::graphics::native_abi as c;
-use std::ffi::c_void;
 use std::ptr;
 
 pub mod site;

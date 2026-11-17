@@ -92,7 +92,7 @@ pub(crate) mod engine {
         pb: &mut POINT,
     ) {
         if let Some(h) = cx.weapon_collision(a, pa, b, pb) {
-            cx.unlink(h);
+            crate::battle::sounds::engine::unlink(cx, h);
             cx.dispose(h);
             cx.element_mut(a).flags &= !(DISAPPEARING as u16);
         }

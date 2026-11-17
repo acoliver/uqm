@@ -656,7 +656,7 @@ pub(crate) mod engine {
     }
 
     fn retire(cx: &mut Cx<'_>, id: ElementId) {
-        cx.unlink(id);
+        crate::battle::sounds::engine::unlink(cx, id);
         cx.dispose(id);
     }
 

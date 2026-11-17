@@ -207,6 +207,14 @@ impl World {
         self.data.flagship.crew_enlisted = crew;
     }
 
+    pub fn set_planet_name(&mut self, text: &std::ffi::CStr) {
+        let name = &mut self.data.flagship.planet_name;
+        let text = text.to_bytes();
+        let length = text.len().min(name.len() - 1);
+        name.fill(0);
+        name[..length].copy_from_slice(&text[..length]);
+    }
+
     pub fn set_catalog(&mut self, catalog: std::borrow::Cow<'static, [CStarDesc; CATALOG_LEN]>) {
         self.current_star = None;
         self.catalog = Some(std::rc::Rc::new(catalog));
@@ -375,6 +383,23 @@ mod tests {
         assert_eq!(world.story_value(StoryKey::GLOBAL_FLAGS_AND_DATA), Some(0));
         world.set_story_state(StoryKey::GLOBAL_FLAGS_AND_DATA, 3);
         assert_eq!(world.story_value(StoryKey::GLOBAL_FLAGS_AND_DATA), Some(3));
+    }
+
+    #[test]
+    fn planet_names_keep_byte_truncation_termination_and_zero_padding() {
+        let mut world = World::new();
+        let text = std::ffi::CString::new([0xc3, 0xa1].repeat(9)).unwrap();
+        world.set_planet_name(&text);
+        assert_eq!(
+            &world.data.flagship.planet_name[..15],
+            &text.as_bytes()[..15]
+        );
+        assert_eq!(world.data.flagship.planet_name[15], 0);
+        world.set_planet_name(c"Sol");
+        assert_eq!(&world.data.flagship.planet_name[..4], b"Sol\0");
+        assert_eq!(&world.data.flagship.planet_name[4..], &[0; 12]);
+        world.set_planet_name(c"");
+        assert_eq!(world.data.flagship.planet_name, [0; 16]);
     }
 
     #[test]
