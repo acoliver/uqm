@@ -3,8 +3,6 @@
 use super::*;
 #[cfg(not(test))]
 use crate::battle::context_access::fixture::FixtureOps;
-#[cfg(not(test))]
-use crate::battle::context_access::ContextOps;
 
 fn zoom_matches(
     view: usize,
