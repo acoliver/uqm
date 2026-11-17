@@ -16,7 +16,7 @@ fn solar_host_round_trips_group_order_and_records_in_its_own_state_file() {
     game.world.data.game.game_clock.month_index = 2;
     game.world.data.game.game_clock.day_index = 17;
     let initialize: fn(&mut uqm_rust::engine::World, u32) =
-        uqm_rust::navigation::abi::init_group_info;
+        uqm_rust::navigation::groups::init_group_info;
     initialize(&mut game.world, 1);
     {
         let mut fleets = game.world.avail_races();

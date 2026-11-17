@@ -8,7 +8,7 @@ use super::super::{SaveFile, SaveSlots};
 use crate::engine::world::generation::SolarSnapshot;
 use crate::mainloop::dir_prep::saveDir;
 use crate::navigation::globals::in_hqspace;
-use crate::navigation::groups::live::put_group_info;
+use crate::navigation::groups::put_group_info;
 use uqm_engine::io::uio_owned::directory;
 use uqm_save::SlotError;
 

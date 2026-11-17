@@ -29,7 +29,7 @@ use crate::engine::world::fleet::start_sphere_tracking;
 
 use crate::navigation::{
     globals::{in_hqspace, in_hyper_space},
-    groups::live::put_group_info,
+    groups::put_group_info,
 };
 
 use crate::engine::world::generation::Body;

@@ -2,6 +2,8 @@
 
 use super::abi::*;
 #[cfg(not(test))]
+use super::groups::{init_group_info, uninit_group_info};
+#[cfg(not(test))]
 use crate::engine::world::new_game::{FleetRoster, FleetTemplate, NewGameInputs};
 use crate::engine::StoryKey;
 #[cfg(not(test))]

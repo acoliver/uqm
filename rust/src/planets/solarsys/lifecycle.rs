@@ -293,7 +293,7 @@ fn run_planet_orbit(cx: &mut Cx<'_>, io: &mut Io<'_>, solar: &mut SolarSystem) {
             },
             save_location: save_solar_location,
             store_groups: |world| {
-                crate::navigation::groups::live::put_group_info(world, 0, u8::MAX);
+                crate::navigation::groups::put_group_info(world, 0, u8::MAX);
             },
         };
         planet_orbit_menu(cx, io, solar, &presentation, &services);
@@ -512,7 +512,7 @@ pub(super) fn uninit_solar_sys(cx: &mut Cx<'_>, io: &mut Io<'_>, solar: &mut Sol
     if cx.world.activity() & START_ENCOUNTER != 0 && cx.world.encounter_group != 0 {
         {
             let world = &mut *cx.world;
-            crate::navigation::groups::live::get_group_info(
+            crate::navigation::groups::get_group_info(
                 world,
                 world.data.game.battle_group_ref,
                 world.encounter_group,

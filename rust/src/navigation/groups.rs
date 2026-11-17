@@ -1,7 +1,22 @@
 //! Save-compatible battle-group records and encounter group construction.
 
+use crate::engine::species::ship::{SLYLANDRO_SHIP, SUPOX_SHIP, UTWIG_SHIP};
+use crate::engine::{
+    graphics::native_abi::POINT,
+    math::battle_types::{CIRCLE_SHIFT, FACING_SHIFT},
+    save::groups::MAX_BATTLE_GROUPS,
+    world::{
+        fleet::SPHERE_RADIUS_INCREMENT,
+        queues::{FleetInfo as FLEET_INFO, MAX_REVOLUTIONS, STATION_RADIUS},
+    },
+};
+use crate::math::{random as TFB_Random, square_root};
+use crate::navigation::get;
+use crate::planets::generate::identities::*;
+
+use crate::engine::world::state_file::{FileMode, SeekWhence, DEFGRPINFO_FILE, RANDGRPINFO_FILE};
+
 use crate::engine::world::queues::{IpGroup as IP_GROUP, ShipFragment as SHIP_FRAGMENT};
-#[cfg(not(test))]
 use crate::engine::StoryKey;
 use crate::engine::World;
 use uqm_save::statefiles::GroupHeader;
@@ -153,568 +168,537 @@ fn cosine(angle: u32, magnitude: i32) -> i32 {
     sine(angle + 16, magnitude)
 }
 
-#[cfg(not(test))]
-pub(crate) mod live {
-    use super::*;
-    use crate::engine::species::ship::{SLYLANDRO_SHIP, SUPOX_SHIP, UTWIG_SHIP};
-    use crate::engine::world::queues::IpGroup as IP_GROUP;
-    use crate::engine::{
-        graphics::native_abi::POINT,
-        math::battle_types::{CIRCLE_SHIFT, FACING_SHIFT},
-        save::groups::MAX_BATTLE_GROUPS,
-        world::{
-            fleet::SPHERE_RADIUS_INCREMENT,
-            queues::{FleetInfo as FLEET_INFO, MAX_REVOLUTIONS, STATION_RADIUS},
-        },
+const ENCOUNTER_PERCENT: [u8; 24] = [
+    0, 0, 0, 20, 20, 0, 10, 20, 20, 20, 20, 40, 0, 20, 60, 20, 5, 20, 40, 0, 0, 40, 40, 0,
+];
+const HOME_SYSTEMS: [u8; 23] = [
+    0,
+    0,
+    0,
+    ORZ_DEFINED,
+    PKUNK_DEFINED,
+    0,
+    SPATHI_DEFINED,
+    SUPOX_DEFINED,
+    THRADD_DEFINED,
+    UTWIG_DEFINED,
+    VUX_DEFINED,
+    YEHAT_DEFINED,
+    0,
+    DRUUGE_DEFINED,
+    ILWRATH_DEFINED,
+    MYCON_DEFINED,
+    0,
+    TALKING_PET_DEFINED,
+    0,
+    ZOQFOT_DEFINED,
+    0,
+    0,
+    0,
+];
+const ENCOUNTER_MAKEUP: [u8; 23] = [
+    0x51, 0, 0, 0x51, 0x51, 0, 0x51, 0x51, 0x51, 0x51, 0x51, 0x51, 0x11, 0x51, 0x51, 0x51, 0x11,
+    0x51, 0x51, 0x51, 0, 0x51, 0x51,
+];
+fn open(world: &mut World, offset: u32, group: u8) -> usize {
+    let file = if offset != 0 && group != 0 {
+        DEFGRPINFO_FILE
+    } else {
+        RANDGRPINFO_FILE
     };
-    use crate::math::{random as TFB_Random, square_root};
-    use crate::navigation::get;
-    use crate::planets::generate::identities::*;
+    world
+        .files
+        .open(file, FileMode::ReadWrite)
+        .unwrap_or_else(|error| panic!("group state-file open: {error}"));
+    file
+}
+fn seek(world: &mut World, file: usize, offset: u32) {
+    world
+        .files
+        .get_file_mut(file)
+        .unwrap_or_else(|| panic!("group state-file index"))
+        .seek(i64::from(offset), SeekWhence::Set)
+        .unwrap_or_else(|error| panic!("group state-file seek: {error}"));
+}
+fn close(world: &mut World, file: usize) {
+    world
+        .files
+        .close(file)
+        .unwrap_or_else(|error| panic!("group state-file close: {error}"));
+}
+fn validate_date(
+    world: &World,
+    relative: bool,
+    month: &mut u16,
+    day: &mut u16,
+    year: &mut u16,
+) -> bool {
+    let clock = &world.data.game.game_clock;
+    let now = (
+        clock.year_index,
+        u16::from(clock.month_index),
+        u16::from(clock.day_index),
+    );
+    let date = crate::time::clock_abi::event_date(now, relative, (*year, *month, *day));
+    if relative {
+        (*year, *month, *day) = date;
+    }
+    date >= now
+}
 
-    use crate::engine::world::state_file::{
-        FileMode, SeekWhence, DEFGRPINFO_FILE, RANDGRPINFO_FILE,
+pub fn init_group_info(world: &mut World, first: u32) {
+    world
+        .files
+        .open(RANDGRPINFO_FILE, FileMode::Write)
+        .unwrap_or_else(|error| panic!("random groups file open: {error}"));
+    write(world, RANDGRPINFO_FILE, &encode_header(&empty_header()));
+    world
+        .files
+        .close(RANDGRPINFO_FILE)
+        .unwrap_or_else(|error| panic!("random groups file close: {error}"));
+    if first != 0 {
+        world
+            .files
+            .open(DEFGRPINFO_FILE, FileMode::Write)
+            .unwrap_or_else(|error| panic!("defined groups file open: {error}"));
+        write(world, DEFGRPINFO_FILE, &[0]);
+        world
+            .files
+            .close(DEFGRPINFO_FILE)
+            .unwrap_or_else(|error| panic!("defined groups file close: {error}"));
+    }
+}
+pub fn uninit_group_info(world: &mut crate::engine::World) {
+    world
+        .files
+        .delete(DEFGRPINFO_FILE)
+        .unwrap_or_else(|error| panic!("defined groups file delete: {error}"));
+    world
+        .files
+        .delete(RANDGRPINFO_FILE)
+        .unwrap_or_else(|error| panic!("random groups file delete: {error}"));
+}
+
+pub fn build_group(
+    world: &mut World,
+    race: u8,
+) -> Option<crate::engine::battle::link_queue::LinkId<crate::engine::world::queues::Group>> {
+    let fleets = world.avail_races_ref();
+    let icon = fleets.get(fleets.at(usize::from(race))?).melee_icon;
+    let mut groups = world.ip_groups();
+    let id = groups.alloc()?;
+    groups.get_mut(id).race_id = race;
+    groups.get_mut(id).melee_icon = icon;
+    groups.put(id);
+    Some(id)
+}
+fn clone_npc(
+    world: &mut World,
+    race: u8,
+) -> Option<crate::engine::battle::link_queue::LinkId<crate::engine::world::queues::Fragment>> {
+    let fleets = world.avail_races_ref();
+    let template = *fleets.get(fleets.at(usize::from(race))?);
+    world.npc_built_ships().clone_fragment(
+        &template,
+        race,
+        0,
+        crate::comm::dispatch::production_captain_name,
+    )
+}
+
+fn encounter_chance(fleet: &FLEET_INFO, universe: POINT, base: u16) -> Option<u16> {
+    let infinite = fleet.actual_strength == u16::MAX;
+    let radius = if infinite {
+        20000
+    } else {
+        ((fleet.actual_strength as u32 * SPHERE_RADIUS_INCREMENT) >> 1) as u16
     };
+    let dx = universe.x.wrapping_sub(fleet.loc.x).wrapping_abs() as u16;
+    let dy = universe.y.wrapping_sub(fleet.loc.y).wrapping_abs() as u16;
+    let squared = dx as u32 * dx as u32 + dy as u32 * dy as u32;
+    if dx >= radius || dy >= radius || squared >= radius as u32 * radius as u32 {
+        return None;
+    }
+    Some(if infinite {
+        base
+    } else {
+        70 - (square_root(squared) as u32 * 60 / radius as u32) as u16
+    })
+}
 
-    const ENCOUNTER_PERCENT: [u8; 24] = [
-        0, 0, 0, 20, 20, 0, 10, 20, 20, 20, 20, 40, 0, 20, 60, 20, 5, 20, 40, 0, 0, 40, 40, 0,
-    ];
-    const HOME_SYSTEMS: [u8; 23] = [
-        0,
-        0,
-        0,
-        ORZ_DEFINED,
-        PKUNK_DEFINED,
-        0,
-        SPATHI_DEFINED,
-        SUPOX_DEFINED,
-        THRADD_DEFINED,
-        UTWIG_DEFINED,
-        VUX_DEFINED,
-        YEHAT_DEFINED,
-        0,
-        DRUUGE_DEFINED,
-        ILWRATH_DEFINED,
-        MYCON_DEFINED,
-        0,
-        TALKING_PET_DEFINED,
-        0,
-        ZOQFOT_DEFINED,
-        0,
-        0,
-        0,
-    ];
-    const ENCOUNTER_MAKEUP: [u8; 23] = [
-        0x51, 0, 0, 0x51, 0x51, 0, 0x51, 0x51, 0x51, 0x51, 0x51, 0x51, 0x11, 0x51, 0x51, 0x51,
-        0x11, 0x51, 0x51, 0x51, 0, 0x51, 0x51,
-    ];
-    fn open(world: &mut World, offset: u32, group: u8) -> usize {
-        let file = if offset != 0 && group != 0 {
-            DEFGRPINFO_FILE
-        } else {
-            RANDGRPINFO_FILE
-        };
-        world
-            .files
-            .open(file, FileMode::ReadWrite)
-            .unwrap_or_else(|error| panic!("group state-file open: {error}"));
-        file
-    }
-    fn seek(world: &mut World, file: usize, offset: u32) {
-        world
-            .files
-            .get_file_mut(file)
-            .unwrap_or_else(|| panic!("group state-file index"))
-            .seek(i64::from(offset), SeekWhence::Set)
-            .unwrap_or_else(|error| panic!("group state-file seek: {error}"));
-    }
-    fn close(world: &mut World, file: usize) {
-        world
-            .files
-            .close(file)
-            .unwrap_or_else(|error| panic!("group state-file close: {error}"));
-    }
-    fn validate_date(
-        world: &World,
-        relative: bool,
-        month: &mut u16,
-        day: &mut u16,
-        year: &mut u16,
-    ) -> bool {
-        let clock = &world.data.game.game_clock;
-        let now = (
-            clock.year_index,
-            u16::from(clock.month_index),
-            u16::from(clock.day_index),
-        );
-        let date = crate::time::clock_abi::event_date(now, relative, (*year, *month, *day));
-        if relative {
-            (*year, *month, *day) = date;
-        }
-        date >= now
-    }
-
-    pub fn init_group_info(world: &mut World, first: u32) {
-        world
-            .files
-            .open(RANDGRPINFO_FILE, FileMode::Write)
-            .unwrap_or_else(|error| panic!("random groups file open: {error}"));
-        write(world, RANDGRPINFO_FILE, &encode_header(&empty_header()));
-        world
-            .files
-            .close(RANDGRPINFO_FILE)
-            .unwrap_or_else(|error| panic!("random groups file close: {error}"));
-        if first != 0 {
-            world
-                .files
-                .open(DEFGRPINFO_FILE, FileMode::Write)
-                .unwrap_or_else(|error| panic!("defined groups file open: {error}"));
-            write(world, DEFGRPINFO_FILE, &[0]);
-            world
-                .files
-                .close(DEFGRPINFO_FILE)
-                .unwrap_or_else(|error| panic!("defined groups file close: {error}"));
-        }
-    }
-    pub fn uninit_group_info(world: &mut crate::engine::World) {
-        world
-            .files
-            .delete(DEFGRPINFO_FILE)
-            .unwrap_or_else(|error| panic!("defined groups file delete: {error}"));
-        world
-            .files
-            .delete(RANDGRPINFO_FILE)
-            .unwrap_or_else(|error| panic!("random groups file delete: {error}"));
-    }
-
-    pub fn build_group(
-        world: &mut World,
-        race: u8,
-    ) -> Option<crate::engine::battle::link_queue::LinkId<crate::engine::world::queues::Group>>
-    {
+fn select_encounter(world: &World, home: &[u8; 23], percent: &[u8; 24]) -> (usize, u16) {
+    let universe = world
+        .selected_star()
+        .unwrap_or_else(|| panic!("group encounter requires a selected star"))
+        .star_pt;
+    let mut best_index = 0usize;
+    let mut best_percent = 0u16;
+    let mut handle = world.avail_races_ref().head();
+    let mut index = 0usize;
+    while let Some(id) = handle {
         let fleets = world.avail_races_ref();
-        let icon = fleets.get(fleets.at(usize::from(race))?).melee_icon;
-        let mut groups = world.ip_groups();
-        let id = groups.alloc()?;
-        groups.get_mut(id).race_id = race;
-        groups.get_mut(id).melee_icon = icon;
-        groups.put(id);
-        Some(id)
-    }
-    fn clone_npc(
-        world: &mut World,
-        race: u8,
-    ) -> Option<crate::engine::battle::link_queue::LinkId<crate::engine::world::queues::Fragment>>
-    {
-        let fleets = world.avail_races_ref();
-        let template = *fleets.get(fleets.at(usize::from(race))?);
-        world.npc_built_ships().clone_fragment(
-            &template,
-            race,
-            0,
-            crate::comm::dispatch::production_captain_name,
-        )
-    }
-
-    fn encounter_chance(fleet: &FLEET_INFO, universe: POINT, base: u16) -> Option<u16> {
-        let infinite = fleet.actual_strength == u16::MAX;
-        let radius = if infinite {
-            20000
-        } else {
-            ((fleet.actual_strength as u32 * SPHERE_RADIUS_INCREMENT) >> 1) as u16
-        };
-        let dx = universe.x.wrapping_sub(fleet.loc.x).wrapping_abs() as u16;
-        let dy = universe.y.wrapping_sub(fleet.loc.y).wrapping_abs() as u16;
-        let squared = dx as u32 * dx as u32 + dy as u32 * dy as u32;
-        if dx >= radius || dy >= radius || squared >= radius as u32 * radius as u32 {
-            return None;
-        }
-        Some(if infinite {
-            base
-        } else {
-            70 - (square_root(squared) as u32 * 60 / radius as u32) as u16
-        })
-    }
-
-    fn select_encounter(world: &World, home: &[u8; 23], percent: &[u8; 24]) -> (usize, u16) {
-        let universe = world
-            .selected_star()
-            .unwrap_or_else(|| panic!("group encounter requires a selected star"))
-            .star_pt;
-        let mut best_index = 0usize;
-        let mut best_percent = 0u16;
-        let mut handle = world.avail_races_ref().head();
-        let mut index = 0usize;
-        while let Some(id) = handle {
-            let fleets = world.avail_races_ref();
-            let fleet = fleets.get(id);
-            let next = fleets.succ(id);
-            let radius = fleet.actual_strength;
-            let chance = percent[index] as u16;
-            if radius != 0 && chance != 0 {
-                if home[index] != 0
-                    && world
-                        .selected_star()
-                        .unwrap_or_else(|| panic!("group encounter requires a selected star"))
-                        .index
-                        == home[index]
-                {
-                    best_index = index;
-                    best_percent = if home[index] == SPATHI_DEFINED || home[index] == SUPOX_DEFINED
-                    {
-                        2
-                    } else {
-                        70
-                    };
-                    break;
-                }
-                if let Some(mut chance) = encounter_chance(fleet, universe, chance) {
-                    let random = TFB_Random();
-                    if (random as u16 % 100) < chance
-                        && (best_percent == 0
-                            || ((random >> 16) % (chance + best_percent) as u32) < chance as u32)
-                    {
-                        if fleet.actual_strength == u16::MAX {
-                            chance = 4;
-                        }
-                        best_percent = chance;
-                        best_index = index;
-                    }
-                }
-            }
-            handle = next;
-            index += 1;
-        }
-        (best_index, best_percent)
-    }
-
-    pub fn build_groups(
-        world: &mut World,
-        solar: &crate::engine::world::generation::SolarSnapshot,
-    ) {
-        let mut home = HOME_SYSTEMS;
-        let mut percent = ENCOUNTER_PERCENT;
-        percent[SLYLANDRO_SHIP as usize] = percent[SLYLANDRO_SHIP as usize]
-            .wrapping_mul(get(world, StoryKey::SLYLANDRO_MULTIPLIER));
-        let mission = get(world, StoryKey::UTWIG_SUPOX_MISSION);
-        if mission > 1 && mission < 5 {
-            home[UTWIG_SHIP as usize] = 0;
-            home[SUPOX_SHIP as usize] = 0;
-        }
-        let (best_index, best_percent) = select_encounter(world, &home, &percent);
-        if best_percent != 0 {
-            let mut number = ((TFB_Random() as u16 % (best_percent >> 1)) + 1) as u8;
-            if number > MAX_BATTLE_GROUPS {
-                number = MAX_BATTLE_GROUPS;
-            } else if number < 5
-                && home[best_index] != 0
+        let fleet = fleets.get(id);
+        let next = fleets.succ(id);
+        let radius = fleet.actual_strength;
+        let chance = percent[index] as u16;
+        if radius != 0 && chance != 0 {
+            if home[index] != 0
                 && world
                     .selected_star()
                     .unwrap_or_else(|| panic!("group encounter requires a selected star"))
                     .index
-                    == home[best_index]
+                    == home[index]
             {
-                number = 5;
-            }
-            let mut which = 0u8;
-            while number != 0 {
-                let makeup = ENCOUNTER_MAKEUP[best_index];
-                for ships in (1..=makeup >> 4).rev() {
-                    if ships <= makeup & 15 || (TFB_Random() as u16 % 100) < 50 {
-                        clone_npc(world, best_index as u8);
-                    }
-                }
-                which += 1;
-                put_group_info(world, 0, which);
-                world.npc_built_ships().reinit();
-                number -= 1;
-            }
-        }
-        initialize_solar_groups(world, 0, solar);
-    }
-
-    fn initialize_group(
-        group: &mut IP_GROUP,
-        which: u8,
-        solar: &crate::engine::world::generation::SolarSnapshot,
-    ) {
-        group.group_id = which;
-        group.in_system = 1;
-        let random = TFB_Random();
-        let mut task = random as u8 % IP_GROUP::ON_STATION;
-        if task == IP_GROUP::FLEE {
-            task = IP_GROUP::ON_STATION;
-        }
-        group.orbit_pos = (random >> 16) as u8 & 15;
-        let mut location = solar.planet_count;
-        if location == 1 && task == IP_GROUP::EXPLORE {
-            task = IP_GROUP::IN_ORBIT;
-        } else {
-            location = ((random >> 8) as u8 % location) + 1;
-        }
-        group.dest_loc = location;
-        let random = TFB_Random();
-        group.loc.x = ((random as u16 % 10000) as i32 - 5000) as i16;
-        group.loc.y = (((random >> 16) % 10000) as i32 - 5000) as i16;
-        group.group_counter = 0;
-        if task == IP_GROUP::EXPLORE {
-            group.group_counter = (TFB_Random() as u16 % MAX_REVOLUTIONS as u16) << FACING_SHIFT;
-        } else if task == IP_GROUP::ON_STATION {
-            let origin = crate::planets::solar_coords::outer_location(solar, location as u16 - 1);
-            let angle = (group.orbit_pos as u32 + 1) << (CIRCLE_SHIFT - FACING_SHIFT);
-            group.loc.x = (origin.x as i32 + cosine(angle, STATION_RADIUS as i32)) as i16;
-            group.loc.y = (origin.y as i32 + sine(angle, STATION_RADIUS as i32)) as i16;
-            location = 0;
-        }
-        group.task = task;
-        group.sys_loc = location;
-    }
-
-    fn flush(world: &mut World, header: &mut GroupHeader, offset: u32, which: u8, file: usize) {
-        if which == 0 {
-            if header.group_offset[0] == 0 {
-                header.group_offset[0] = world
-                    .files
-                    .get_file(file)
-                    .unwrap_or_else(|| panic!("group state-file index"))
-                    .length() as u32;
-            }
-            assert_eq!(world.npc_built_ships_ref().count(), 0);
-            let mut next = world.ip_groups_ref().head();
-            while let Some(id) = next {
-                let groups = world.ip_groups_ref();
-                let group = *groups.get(id);
-                next = groups.succ(id);
-                if group.in_system == 0 {
-                    if world.data.game.battle_group_ref != 0 {
-                        put_group_info(world, world.data.game.battle_group_ref, group.group_id);
-                    } else {
-                        flush(world, header, 0, group.group_id, file);
-                    }
-                    header.group_offset[usize::from(group.group_id)] = 0;
-                    world.ip_groups().remove(id);
-                    world.ip_groups().free(id);
-                }
-            }
-        } else if which > header.num_groups {
-            header.num_groups = which;
-            header.group_offset[usize::from(which)] = world
-                .files
-                .get_file(file)
-                .unwrap_or_else(|| panic!("group state-file index"))
-                .length() as u32;
-        }
-        seek(world, file, offset);
-        write(world, file, &encode_header(header));
-        if which == 0 {
-            seek(world, file, header.group_offset[0]);
-            write(
-                world,
-                file,
-                &[
-                    world.last_encounter_group,
-                    world.ip_groups_ref().count() as u8,
-                ],
-            );
-            let mut next = world.ip_groups_ref().head();
-            while let Some(id) = next {
-                let groups = world.ip_groups_ref();
-                let group = *groups.get(id);
-                next = groups.succ(id);
-                write(world, file, &[group.race_id]);
-                super::write_ip_group(world, file, &group);
-            }
-        } else {
-            let ships = world.npc_built_ships_ref();
-            let race = ships.head().map_or(0, |id| ships.get(id).race_id);
-            let count = ships.count() as u8;
-            seek(world, file, header.group_offset[usize::from(which)]);
-            write(world, file, &[race, count]);
-            let mut next = world.npc_built_ships_ref().head();
-            while let Some(id) = next {
-                let ships = world.npc_built_ships_ref();
-                let fragment = *ships.get(id);
-                next = ships.succ(id);
-                write(world, file, &[fragment.race_id]);
-                super::write_ship_fragment(world, file, &fragment);
-            }
-        }
-    }
-
-    fn initialize_saved_groups(
-        world: &mut World,
-        file: usize,
-        offset: u32,
-        header: &GroupHeader,
-        solar: &crate::engine::world::generation::SolarSnapshot,
-    ) -> u32 {
-        world.ip_groups().reinit();
-        let mut day = header.day_index as u16;
-        let mut month = header.month_index as u16;
-        let mut year = header.year_index;
-        if offset == 0
-            && (header.star_index
-                != world
-                    .current_star
-                    .unwrap_or_else(|| panic!("group state requires a selected star"))
-                    .0 as u16
-                || !validate_date(world, false, &mut month, &mut day, &mut year))
-        {
-            close(world, file);
-            world
-                .files
-                .open(RANDGRPINFO_FILE, FileMode::Write)
-                .unwrap_or_else(|error| panic!("random groups file open: {error}"));
-            let file = RANDGRPINFO_FILE;
-            write(world, file, &encode_header(&empty_header()));
-            close(world, file);
-            return 0;
-        }
-        for which in 1..=header.num_groups {
-            if header.group_offset[which as usize] == 0 {
-                continue;
-            }
-            seek(world, file, header.group_offset[which as usize]);
-            let race = read::<1>(world, file)[0];
-            let ships = read::<1>(world, file)[0];
-            if ships == 0 {
-                continue;
-            }
-            let id = build_group(world, race).unwrap_or_else(|| panic!("IP group capacity"));
-            initialize_group(world.ip_groups().get_mut(id), which, solar);
-        }
-        if offset != 0 {
-            init_group_info(world, 0);
-        } else if validate_date(world, false, &mut month, &mut day, &mut year) {
-            close(world, file);
-            return 1;
-        }
-        close(world, file);
-        u32::from(world.ip_groups_ref().head().is_some())
-    }
-
-    pub fn initialize_solar_groups(
-        world: &mut World,
-        offset: u32,
-        solar: &crate::engine::world::generation::SolarSnapshot,
-    ) -> u32 {
-        let file = open(world, offset, u8::MAX);
-        seek(world, file, offset);
-        let mut header = empty_header();
-        super::read_group_header(world, file, &mut header);
-        initialize_saved_groups(world, file, offset, &header, solar)
-    }
-
-    pub fn get_group_info(world: &mut World, offset: u32, which: u8) -> u32 {
-        let file = open(world, offset, which);
-        seek(world, file, offset);
-        let mut header = empty_header();
-        super::read_group_header(world, file, &mut header);
-        assert_ne!(
-            which,
-            u8::MAX,
-            "solar group initialization requires supplied geometry"
-        );
-        if header.group_offset[which as usize] == 0 {
-            close(world, file);
-            return 0;
-        }
-        if which == 0 {
-            let left = world.npc_built_ships_ref().count();
-            seek(world, file, header.group_offset[0]);
-            world.last_encounter_group = read::<1>(world, file)[0];
-            if world.last_encounter_group != 0 {
-                if world.data.game.battle_group_ref != 0 {
-                    put_group_info(
-                        world,
-                        world.data.game.battle_group_ref,
-                        world.last_encounter_group,
-                    );
+                best_index = index;
+                best_percent = if home[index] == SPATHI_DEFINED || home[index] == SUPOX_DEFINED {
+                    2
                 } else {
-                    flush(world, &mut header, offset, world.last_encounter_group, file);
+                    70
+                };
+                break;
+            }
+            if let Some(mut chance) = encounter_chance(fleet, universe, chance) {
+                let random = TFB_Random();
+                if (random as u16 % 100) < chance
+                    && (best_percent == 0
+                        || ((random >> 16) % (chance + best_percent) as u32) < chance as u32)
+                {
+                    if fleet.actual_strength == u16::MAX {
+                        chance = 4;
+                    }
+                    best_percent = chance;
+                    best_index = index;
                 }
             }
-            world.npc_built_ships().reinit();
-            world.ip_groups().reinit();
-            seek(world, file, header.group_offset[0] + 1);
-            let mut number = read::<1>(world, file)[0];
-            while number != 0 {
-                let race = read::<1>(world, file)[0];
-                let id =
-                    build_group(world, race).unwrap_or_else(|| panic!("saved IP group capacity"));
-                let mut group = *world.ip_groups_ref().get(id);
-                super::read_ip_group(world, file, &mut group);
-                *world.ip_groups().get_mut(id) = group;
-                if group.group_id == world.last_encounter_group && left == 0 {
-                    world.ip_groups().remove(id);
-                    world.ip_groups().free(id);
+        }
+        handle = next;
+        index += 1;
+    }
+    (best_index, best_percent)
+}
+
+pub fn build_groups(world: &mut World, solar: &crate::engine::world::generation::SolarSnapshot) {
+    let mut home = HOME_SYSTEMS;
+    let mut percent = ENCOUNTER_PERCENT;
+    percent[SLYLANDRO_SHIP as usize] =
+        percent[SLYLANDRO_SHIP as usize].wrapping_mul(get(world, StoryKey::SLYLANDRO_MULTIPLIER));
+    let mission = get(world, StoryKey::UTWIG_SUPOX_MISSION);
+    if mission > 1 && mission < 5 {
+        home[UTWIG_SHIP as usize] = 0;
+        home[SUPOX_SHIP as usize] = 0;
+    }
+    let (best_index, best_percent) = select_encounter(world, &home, &percent);
+    if best_percent != 0 {
+        let mut number = ((TFB_Random() as u16 % (best_percent >> 1)) + 1) as u8;
+        if number > MAX_BATTLE_GROUPS {
+            number = MAX_BATTLE_GROUPS;
+        } else if number < 5
+            && home[best_index] != 0
+            && world
+                .selected_star()
+                .unwrap_or_else(|| panic!("group encounter requires a selected star"))
+                .index
+                == home[best_index]
+        {
+            number = 5;
+        }
+        let mut which = 0u8;
+        while number != 0 {
+            let makeup = ENCOUNTER_MAKEUP[best_index];
+            for ships in (1..=makeup >> 4).rev() {
+                if ships <= makeup & 15 || (TFB_Random() as u16 % 100) < 50 {
+                    clone_npc(world, best_index as u8);
                 }
-                number -= 1;
             }
-            close(world, file);
-            u32::from(world.ip_groups_ref().head().is_some())
-        } else {
-            world.last_encounter_group = which;
-            if offset != 0 {
-                put_group_info(world, 0, 0);
-            } else {
-                flush(world, &mut header, 0, 0, file);
-            }
-            world.ip_groups().reinit();
+            which += 1;
+            put_group_info(world, 0, which);
             world.npc_built_ships().reinit();
-            seek(world, file, header.group_offset[which as usize] + 1);
-            let mut number = read::<1>(world, file)[0];
-            while number != 0 {
-                let race = read::<1>(world, file)[0];
-                let id =
-                    clone_npc(world, race).unwrap_or_else(|| panic!("saved NPC fragment capacity"));
-                let mut fragment = *world.npc_built_ships_ref().get(id);
-                super::read_ship_fragment(world, file, &mut fragment);
-                *world.npc_built_ships().get_mut(id) = fragment;
-                number -= 1;
-            }
-            close(world, file);
-            u32::from(world.npc_built_ships_ref().head().is_some())
+            number -= 1;
         }
     }
+    initialize_solar_groups(world, 0, solar);
+}
 
-    pub fn put_group_info(world: &mut World, mut offset: u32, mut which: u8) -> u32 {
-        let file = open(world, offset, which);
-        let mut header = empty_header();
-        if offset == u32::MAX {
-            offset = world
+fn initialize_group(
+    group: &mut IP_GROUP,
+    which: u8,
+    solar: &crate::engine::world::generation::SolarSnapshot,
+) {
+    group.group_id = which;
+    group.in_system = 1;
+    let random = TFB_Random();
+    let mut task = random as u8 % IP_GROUP::ON_STATION;
+    if task == IP_GROUP::FLEE {
+        task = IP_GROUP::ON_STATION;
+    }
+    group.orbit_pos = (random >> 16) as u8 & 15;
+    let mut location = solar.planet_count;
+    if location == 1 && task == IP_GROUP::EXPLORE {
+        task = IP_GROUP::IN_ORBIT;
+    } else {
+        location = ((random >> 8) as u8 % location) + 1;
+    }
+    group.dest_loc = location;
+    let random = TFB_Random();
+    group.loc.x = ((random as u16 % 10000) as i32 - 5000) as i16;
+    group.loc.y = (((random >> 16) % 10000) as i32 - 5000) as i16;
+    group.group_counter = 0;
+    if task == IP_GROUP::EXPLORE {
+        group.group_counter = (TFB_Random() as u16 % MAX_REVOLUTIONS as u16) << FACING_SHIFT;
+    } else if task == IP_GROUP::ON_STATION {
+        let origin = crate::planets::solar_coords::outer_location(solar, location as u16 - 1);
+        let angle = (group.orbit_pos as u32 + 1) << (CIRCLE_SHIFT - FACING_SHIFT);
+        group.loc.x = (origin.x as i32 + cosine(angle, STATION_RADIUS as i32)) as i16;
+        group.loc.y = (origin.y as i32 + sine(angle, STATION_RADIUS as i32)) as i16;
+        location = 0;
+    }
+    group.task = task;
+    group.sys_loc = location;
+}
+
+fn flush(world: &mut World, header: &mut GroupHeader, offset: u32, which: u8, file: usize) {
+    if which == 0 {
+        if header.group_offset[0] == 0 {
+            header.group_offset[0] = world
                 .files
                 .get_file(file)
                 .unwrap_or_else(|| panic!("group state-file index"))
                 .length() as u32;
-            seek(world, file, offset);
-            header = empty_header();
-            write(world, file, &encode_header(&header));
         }
-        if which != 0 {
-            seek(world, file, offset);
-            if which == u8::MAX {
-                world.last_encounter_group = 0;
-                which = 0;
+        assert_eq!(world.npc_built_ships_ref().count(), 0);
+        let mut next = world.ip_groups_ref().head();
+        while let Some(id) = next {
+            let groups = world.ip_groups_ref();
+            let group = *groups.get(id);
+            next = groups.succ(id);
+            if group.in_system == 0 {
+                if world.data.game.battle_group_ref != 0 {
+                    put_group_info(world, world.data.game.battle_group_ref, group.group_id);
+                } else {
+                    flush(world, header, 0, group.group_id, file);
+                }
+                header.group_offset[usize::from(group.group_id)] = 0;
+                world.ip_groups().remove(id);
+                world.ip_groups().free(id);
             }
         }
-        super::read_group_header(world, file, &mut header);
-        let mut month = 0;
-        let mut day = 7;
-        let mut year = 0;
-        validate_date(world, true, &mut month, &mut day, &mut year);
-        header.day_index = day as u8;
-        header.month_index = month as u8;
-        header.year_index = year;
-        header.star_index = world
-            .current_star
-            .unwrap_or_else(|| panic!("group state requires a selected star"))
-            .0 as u16;
-        flush(world, &mut header, offset, which, file);
-        close(world, file);
-        offset
+    } else if which > header.num_groups {
+        header.num_groups = which;
+        header.group_offset[usize::from(which)] = world
+            .files
+            .get_file(file)
+            .unwrap_or_else(|| panic!("group state-file index"))
+            .length() as u32;
+    }
+    seek(world, file, offset);
+    write(world, file, &encode_header(header));
+    if which == 0 {
+        seek(world, file, header.group_offset[0]);
+        write(
+            world,
+            file,
+            &[
+                world.last_encounter_group,
+                world.ip_groups_ref().count() as u8,
+            ],
+        );
+        let mut next = world.ip_groups_ref().head();
+        while let Some(id) = next {
+            let groups = world.ip_groups_ref();
+            let group = *groups.get(id);
+            next = groups.succ(id);
+            write(world, file, &[group.race_id]);
+            write_ip_group(world, file, &group);
+        }
+    } else {
+        let ships = world.npc_built_ships_ref();
+        let race = ships.head().map_or(0, |id| ships.get(id).race_id);
+        let count = ships.count() as u8;
+        seek(world, file, header.group_offset[usize::from(which)]);
+        write(world, file, &[race, count]);
+        let mut next = world.npc_built_ships_ref().head();
+        while let Some(id) = next {
+            let ships = world.npc_built_ships_ref();
+            let fragment = *ships.get(id);
+            next = ships.succ(id);
+            write(world, file, &[fragment.race_id]);
+            write_ship_fragment(world, file, &fragment);
+        }
     }
 }
 
+fn initialize_saved_groups(
+    world: &mut World,
+    file: usize,
+    offset: u32,
+    header: &GroupHeader,
+    solar: &crate::engine::world::generation::SolarSnapshot,
+) -> u32 {
+    world.ip_groups().reinit();
+    let mut day = header.day_index as u16;
+    let mut month = header.month_index as u16;
+    let mut year = header.year_index;
+    if offset == 0
+        && (header.star_index
+            != world
+                .current_star
+                .unwrap_or_else(|| panic!("group state requires a selected star"))
+                .0 as u16
+            || !validate_date(world, false, &mut month, &mut day, &mut year))
+    {
+        close(world, file);
+        world
+            .files
+            .open(RANDGRPINFO_FILE, FileMode::Write)
+            .unwrap_or_else(|error| panic!("random groups file open: {error}"));
+        let file = RANDGRPINFO_FILE;
+        write(world, file, &encode_header(&empty_header()));
+        close(world, file);
+        return 0;
+    }
+    for which in 1..=header.num_groups {
+        if header.group_offset[which as usize] == 0 {
+            continue;
+        }
+        seek(world, file, header.group_offset[which as usize]);
+        let race = read::<1>(world, file)[0];
+        let ships = read::<1>(world, file)[0];
+        if ships == 0 {
+            continue;
+        }
+        let id = build_group(world, race).unwrap_or_else(|| panic!("IP group capacity"));
+        initialize_group(world.ip_groups().get_mut(id), which, solar);
+    }
+    if offset != 0 {
+        init_group_info(world, 0);
+    } else if validate_date(world, false, &mut month, &mut day, &mut year) {
+        close(world, file);
+        return 1;
+    }
+    close(world, file);
+    u32::from(world.ip_groups_ref().head().is_some())
+}
+
+pub fn initialize_solar_groups(
+    world: &mut World,
+    offset: u32,
+    solar: &crate::engine::world::generation::SolarSnapshot,
+) -> u32 {
+    let file = open(world, offset, u8::MAX);
+    seek(world, file, offset);
+    let mut header = empty_header();
+    read_group_header(world, file, &mut header);
+    initialize_saved_groups(world, file, offset, &header, solar)
+}
+
+pub fn get_group_info(world: &mut World, offset: u32, which: u8) -> u32 {
+    let file = open(world, offset, which);
+    seek(world, file, offset);
+    let mut header = empty_header();
+    read_group_header(world, file, &mut header);
+    assert_ne!(
+        which,
+        u8::MAX,
+        "solar group initialization requires supplied geometry"
+    );
+    if header.group_offset[which as usize] == 0 {
+        close(world, file);
+        return 0;
+    }
+    if which == 0 {
+        let left = world.npc_built_ships_ref().count();
+        seek(world, file, header.group_offset[0]);
+        world.last_encounter_group = read::<1>(world, file)[0];
+        if world.last_encounter_group != 0 {
+            if world.data.game.battle_group_ref != 0 {
+                put_group_info(
+                    world,
+                    world.data.game.battle_group_ref,
+                    world.last_encounter_group,
+                );
+            } else {
+                flush(world, &mut header, offset, world.last_encounter_group, file);
+            }
+        }
+        world.npc_built_ships().reinit();
+        world.ip_groups().reinit();
+        seek(world, file, header.group_offset[0] + 1);
+        let mut number = read::<1>(world, file)[0];
+        while number != 0 {
+            let race = read::<1>(world, file)[0];
+            let id = build_group(world, race).unwrap_or_else(|| panic!("saved IP group capacity"));
+            let mut group = *world.ip_groups_ref().get(id);
+            read_ip_group(world, file, &mut group);
+            *world.ip_groups().get_mut(id) = group;
+            if group.group_id == world.last_encounter_group && left == 0 {
+                world.ip_groups().remove(id);
+                world.ip_groups().free(id);
+            }
+            number -= 1;
+        }
+        close(world, file);
+        u32::from(world.ip_groups_ref().head().is_some())
+    } else {
+        world.last_encounter_group = which;
+        if offset != 0 {
+            put_group_info(world, 0, 0);
+        } else {
+            flush(world, &mut header, 0, 0, file);
+        }
+        world.ip_groups().reinit();
+        world.npc_built_ships().reinit();
+        seek(world, file, header.group_offset[which as usize] + 1);
+        let mut number = read::<1>(world, file)[0];
+        while number != 0 {
+            let race = read::<1>(world, file)[0];
+            let id =
+                clone_npc(world, race).unwrap_or_else(|| panic!("saved NPC fragment capacity"));
+            let mut fragment = *world.npc_built_ships_ref().get(id);
+            read_ship_fragment(world, file, &mut fragment);
+            *world.npc_built_ships().get_mut(id) = fragment;
+            number -= 1;
+        }
+        close(world, file);
+        u32::from(world.npc_built_ships_ref().head().is_some())
+    }
+}
+
+pub fn put_group_info(world: &mut World, mut offset: u32, mut which: u8) -> u32 {
+    let file = open(world, offset, which);
+    let mut header = empty_header();
+    if offset == u32::MAX {
+        offset = world
+            .files
+            .get_file(file)
+            .unwrap_or_else(|| panic!("group state-file index"))
+            .length() as u32;
+        seek(world, file, offset);
+        header = empty_header();
+        write(world, file, &encode_header(&header));
+    }
+    if which != 0 {
+        seek(world, file, offset);
+        if which == u8::MAX {
+            world.last_encounter_group = 0;
+            which = 0;
+        }
+    }
+    read_group_header(world, file, &mut header);
+    let mut month = 0;
+    let mut day = 7;
+    let mut year = 0;
+    validate_date(world, true, &mut month, &mut day, &mut year);
+    header.day_index = day as u8;
+    header.month_index = month as u8;
+    header.year_index = year;
+    header.star_index = world
+        .current_star
+        .unwrap_or_else(|| panic!("group state requires a selected star"))
+        .0 as u16;
+    flush(world, &mut header, offset, which, file);
+    close(world, file);
+    offset
+}
 #[cfg(test)]
 mod tests {
     use super::*;

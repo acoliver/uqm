@@ -5,7 +5,7 @@ use crate::comm::dispatch::CPoint;
 use crate::engine::species::ship;
 use crate::engine::world::queues::IpGroup as IP_GROUP;
 use crate::engine::StoryKey;
-use crate::navigation::groups::live::{
+use crate::navigation::groups::{
     self as group_storage, build_groups, get_group_info, initialize_solar_groups,
 };
 use crate::planets::c_api::*;

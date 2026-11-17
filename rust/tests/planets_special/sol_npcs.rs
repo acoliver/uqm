@@ -44,7 +44,8 @@ pub fn check(h: &mut Harness) {
             uqm_rust::engine::World::current().write(uqm_rust::time::clock_bridge::rust_clock_init),
             0
         );
-        uqm_rust::engine::World::current().write(|world| c_api::init_group_info(world, 1));
+        uqm_rust::engine::World::current()
+            .write(|world| uqm_rust::navigation::groups::init_group_info(world, 1));
         h.set_star(0, 0);
         h.state.sys.sun.num_planets = 9;
         let (saved_catalog, saved_star) =
@@ -204,7 +205,7 @@ pub fn check(h: &mut Harness) {
             world.set_catalog(std::borrow::Cow::Owned(saved_catalog));
             world.current_star = saved_star;
         });
-        uqm_rust::engine::World::current().write(c_api::uninit_group_info);
+        uqm_rust::engine::World::current().write(uqm_rust::navigation::groups::uninit_group_info);
         assert_ne!(
             uqm_rust::engine::World::current()
                 .write(uqm_rust::time::clock_bridge::rust_clock_uninit),
