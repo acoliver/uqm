@@ -12,6 +12,100 @@ use std::{
     ptr::NonNull,
 };
 
+pub(crate) struct ConversationResources {
+    pub commander_name: CString,
+    pub ship_name: CString,
+    pub display: Option<ConversationDisplay>,
+}
+
+#[derive(Clone)]
+pub(crate) struct ConversationDisplay {
+    pub space: ContextLease,
+    pub player_font: FontLease,
+    pub history_font: FontLease,
+    pub game_strings: crate::strings::owned_table::LoadedTextTable,
+    pub subtitles: SubtitleCache,
+}
+
+#[derive(Clone)]
+pub(crate) struct SubtitleCache {
+    pub target: ContextLease,
+    pub context: ContextLease,
+    pub frame: ContextFrame,
+    pub font: FontLease,
+}
+
+impl ConversationDisplay {
+    /// # Safety
+    /// The supplied session's loaded plain-text table must still be live.
+    pub(crate) unsafe fn retain(comm: &Comm) -> Result<Self, &'static str> {
+        let space =
+            NonNull::new(comm.presentation.space_context).ok_or("conversation space context")?;
+        let player =
+            NonNull::new(comm.player_font.current().cast()).ok_or("conversation player font")?;
+        let history =
+            NonNull::new(comm.presentation.tiny_font).ok_or("conversation history font")?;
+        let labels = NonNull::new(comm.presentation.game_strings.cast())
+            .ok_or("conversation game strings")?;
+        let target = NonNull::new(comm.display.anim_context.cast())
+            .ok_or("conversation animation context")?;
+        let cache = NonNull::new(comm.display.text_cache_context)
+            .ok_or("conversation subtitle cache context")?;
+        let frame = NonNull::new(comm.display.text_cache_frame.cast())
+            .ok_or("conversation subtitle cache frame")?;
+        let alien = NonNull::new(comm.data.alien_font.cast()).ok_or("conversation alien font")?;
+        Ok(Self {
+            space: ContextLease::retain(space),
+            player_font: FontLease::retain(player),
+            history_font: FontLease::retain(history),
+            game_strings: crate::strings::owned_table::LoadedTextTable::retain(labels),
+            subtitles: SubtitleCache {
+                target: ContextLease::retain(target),
+                context: ContextLease::retain(cache),
+                frame: ContextFrame::retain(Some(frame)),
+                font: FontLease::retain(alien),
+            },
+        })
+    }
+}
+
+impl ConversationResources {
+    pub(crate) fn new(
+        world: &crate::engine::World,
+    ) -> Result<Self, std::ffi::FromBytesUntilNulError> {
+        Ok(Self {
+            commander_name: CStr::from_bytes_until_nul(&world.data.flagship.commander_name)?
+                .to_owned(),
+            ship_name: CStr::from_bytes_until_nul(&world.data.flagship.ship_name)?.to_owned(),
+            display: None,
+        })
+    }
+}
+
+impl Comm {
+    pub fn admit_conversation_names(
+        &mut self,
+        world: &crate::engine::World,
+    ) -> Result<(), std::ffi::FromBytesUntilNulError> {
+        self.display.resources = Some(ConversationResources::new(world)?);
+        Ok(())
+    }
+
+    pub(crate) fn conversation_resources(&self) -> &ConversationResources {
+        self.display
+            .resources
+            .as_ref()
+            .expect("conversation resources were not admitted")
+    }
+
+    pub(crate) fn conversation_display(&self) -> &ConversationDisplay {
+        self.conversation_resources()
+            .display
+            .as_ref()
+            .expect("conversation display was not admitted")
+    }
+}
+
 #[derive(Clone, Copy)]
 pub(crate) struct Text<'a> {
     pub text: &'a CStr,
@@ -62,8 +156,7 @@ impl<'a> Text<'a> {
 }
 
 pub(crate) fn suffix(text: &CStr, offset: usize) -> &CStr {
-    CStr::from_bytes_with_nul(&text.to_bytes_with_nul()[offset..])
-        .expect("layout returns a terminated suffix")
+    &text[offset..]
 }
 
 const WON_LAST_BATTLE: u8 = 5;
@@ -113,22 +206,15 @@ fn window_rect() -> RECT {
 }
 
 fn space_context(comm: &Comm) -> ContextLease {
-    ContextLease::require(comm.presentation.space_context)
+    comm.conversation_display().space.clone()
 }
 
 fn player_font(comm: &Comm) -> FontLease {
-    FontLease::retain(
-        NonNull::new(comm.player_font.current().cast()).expect("conversation player font"),
-    )
+    comm.conversation_display().player_font.clone()
 }
 
 fn game_string(comm: &Comm, index: u16) -> &CStr {
-    comm.display
-        .game_strings
-        .as_ref()
-        .expect("conversation game strings were not admitted")
-        .label(index)
-        .0
+    comm.conversation_display().game_strings.label(index).0
 }
 
 fn with_player_font<R>(context: &ContextLease, font: &FontLease, draw: impl FnOnce() -> R) -> R {
@@ -206,13 +292,12 @@ pub fn feedback_player_phrase(comm: &Comm, activity: u16, text: Option<&CStr>) {
 }
 
 fn response_page_text(text: &str) -> CString {
-    let bytes = text.as_bytes();
-    let end = bytes
-        .iter()
-        .position(|&byte| byte == 0)
-        .unwrap_or(bytes.len())
-        .min(1023);
-    CString::new(&bytes[..end]).expect("response display bytes exclude NUL")
+    CString::from(
+        text.bytes()
+            .map_while(std::num::NonZeroU8::new)
+            .take(1023)
+            .collect::<Vec<_>>(),
+    )
 }
 
 fn scroll_indicator(context: &ContextLease, comm: &Comm, index: u16, origin_y: i16) {
@@ -306,16 +391,17 @@ fn more_prompt(more: &CStr) -> CString {
     let blen = copy_prompt_bytes(bullet, &mut buffer, 0);
     let mlen = copy_prompt_bytes(more.to_bytes(), &mut buffer, blen);
     copy_prompt_bytes(bullet, &mut buffer, blen + mlen);
-    CStr::from_bytes_until_nul(&buffer)
-        .expect("bounded history prompt is terminated")
-        .to_owned()
+    CString::from(
+        buffer
+            .into_iter()
+            .map_while(std::num::NonZeroU8::new)
+            .collect::<Vec<_>>(),
+    )
 }
 
 fn draw_summary_page_contents(comm: &Comm, state: &mut SummaryLoopState) {
     let context = space_context(comm);
-    let font = FontLease::retain(
-        NonNull::new(comm.presentation.tiny_font).expect("conversation history font"),
-    );
+    let font = comm.conversation_display().history_font.clone();
     context.with_selected(|| {
         context.fill_rectangle(COMM_HISTORY_BACKGROUND_COLOR, window_rect());
         context.set_foreground(COMM_HISTORY_TEXT_COLOR);
@@ -432,6 +518,35 @@ pub fn select_conversation_summary(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn conversation_names_are_admitted_once_and_reject_unterminated_buffers() {
+        let mut game = crate::engine::Game::new();
+        game.world.data.flagship.commander_name[..5].copy_from_slice("Zoë\0".as_bytes());
+        game.world.data.flagship.ship_name[..4].copy_from_slice("船\0".as_bytes());
+        let mut comm = Comm::new();
+        comm.admit_conversation_names(&game.world).unwrap();
+        game.world.data.flagship.commander_name.fill(b'x');
+        game.world.data.flagship.ship_name.fill(b'x');
+        assert_eq!(comm.conversation_resources().commander_name, c"Zoë");
+        assert_eq!(comm.conversation_resources().ship_name, c"船");
+        assert!(Comm::new().admit_conversation_names(&game.world).is_err());
+    }
+
+    #[test]
+    #[should_panic(expected = "conversation resources were not admitted")]
+    fn names_cannot_be_used_without_session_admission() {
+        let comm = Comm::new();
+        comm.conversation_resources();
+    }
+
+    #[test]
+    fn missing_display_resources_fail_at_admission() {
+        let comm = Comm::new();
+        // SAFETY: admission rejects missing handles before retaining any resource.
+        let result = unsafe { ConversationDisplay::retain(&comm) };
+        assert!(matches!(result, Err("conversation space context")));
+    }
 
     #[test]
     fn response_display_preserves_its_native_byte_limit_and_nul_boundary() {

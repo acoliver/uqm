@@ -3,7 +3,7 @@ mod chmmr;
 use crate::comm::races::script::*;
 use crate::comm::Comm;
 use crate::engine::StoryKey;
-use std::ffi::CStr;
+use std::ffi::CString;
 
 use crate::strings::string_table::SetAbsStringTableIndex;
 use crate::ui::sis::draw_landers;
@@ -37,6 +37,41 @@ impl<'a, 'b, H> Host<'a, 'b, H> {
     }
 }
 
+fn response_text(comm: &Comm, phrase: u16, fragments: &[i32]) -> Result<CString, &'static str> {
+    let phrase_text = |index| {
+        comm.display
+            .phrases
+            .as_ref()
+            .and_then(|table| table.phrase(index))
+            .and_then(|entry| entry.text)
+            .ok_or("response phrase has no text")
+    };
+    if fragments.is_empty() {
+        return Ok(phrase_text(phrase - 1)?.to_owned());
+    }
+    let mut text = Vec::new();
+    for &fragment in fragments {
+        let part = match fragment {
+            GLOBAL_PLAYER_NAME => comm.conversation_resources().commander_name.as_c_str(),
+            GLOBAL_SHIP_NAME => comm.conversation_resources().ship_name.as_c_str(),
+            _ => {
+                phrase_text(u16::try_from(fragment - 1).map_err(|_| "invalid response fragment")?)?
+            }
+        };
+        text.extend(
+            part.to_bytes()
+                .iter()
+                .copied()
+                .map_while(std::num::NonZeroU8::new),
+        );
+    }
+    assert!(
+        text.len() < 2048,
+        "constructed dialogue response exceeds shared buffer"
+    );
+    Ok(CString::from(text))
+}
+
 impl<H> DialogueHost<H> for Host<'_, '_, H> {
     fn get(&self, key: StoryKey) -> u8 {
         self.cx.borrow().world.story_state(key) as u8
@@ -58,44 +93,7 @@ impl<H> DialogueHost<H> for Host<'_, '_, H> {
     fn response(&mut self, phrase: u16, handler: H, fragments: &[i32]) {
         let comm = &mut **self.comm.borrow_mut();
 
-        let cx = self.cx.borrow();
-        let text = if fragments.is_empty() {
-            comm.display
-                .phrases
-                .as_ref()
-                .and_then(|table| table.phrase(phrase - 1))
-                .and_then(|entry| entry.text)
-                .expect("response phrase has no text")
-                .to_owned()
-        } else {
-            let world = &cx.world.data;
-            let mut text = Vec::new();
-            for &fragment in fragments {
-                let part = match fragment {
-                    GLOBAL_PLAYER_NAME => {
-                        CStr::from_bytes_until_nul(&world.flagship.commander_name)
-                            .expect("commander name is terminated")
-                    }
-                    GLOBAL_SHIP_NAME => CStr::from_bytes_until_nul(&world.flagship.ship_name)
-                        .expect("ship name is terminated"),
-                    _ => {
-                        let index = u16::try_from(fragment - 1).expect("invalid response fragment");
-                        comm.display
-                            .phrases
-                            .as_ref()
-                            .and_then(|table| table.phrase(index))
-                            .and_then(|entry| entry.text)
-                            .expect("response fragment has no text")
-                    }
-                };
-                text.extend_from_slice(part.to_bytes());
-            }
-            assert!(
-                text.len() < 2048,
-                "constructed dialogue response exceeds shared buffer"
-            );
-            std::ffi::CString::new(text).expect("response fragments contain no NUL bytes")
-        };
+        let text = response_text(comm, phrase, fragments).expect("invalid dialogue response");
         crate::comm::ffi::do_response_phrase(
             comm,
             u32::from(phrase),
@@ -179,6 +177,27 @@ mod tests {
     use super::*;
 
     #[test]
+    fn response_preparation_rejects_missing_text_and_invalid_fragments() {
+        let mut comm = Comm::new();
+        assert_eq!(
+            response_text(&comm, 1, &[]),
+            Err("response phrase has no text")
+        );
+        comm.set_conversation_phrases(Some(
+            crate::strings::owned_table::LoadedTextTable::new(vec![
+                c"éclair ".to_owned(),
+                c"船".to_owned(),
+            ])
+            .into(),
+        ));
+        assert_eq!(response_text(&comm, 1, &[1, 2]).unwrap(), c"éclair 船");
+        assert_eq!(
+            response_text(&comm, 1, &[0]),
+            Err("invalid response fragment")
+        );
+    }
+
+    #[test]
     #[serial_test::serial]
     fn local_effects_do_not_publish_over_another_context() {
         crate::comm::with_test_context(|cx| {
@@ -232,6 +251,7 @@ mod tests {
             cx.world.data.flagship.commander_name[..5].copy_from_slice("Zoë\0".as_bytes());
             cx.world.data.flagship.ship_name[..4].copy_from_slice("船\0".as_bytes());
             let mut comm = Comm::new();
+            comm.admit_conversation_names(cx.world).unwrap();
             {
                 let mut host = Host::new(&mut comm, cx, |_: ()| {
                     selected as crate::comm::response::ResponseFunc

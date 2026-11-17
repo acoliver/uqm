@@ -5,14 +5,11 @@ use super::{
     sis_graphics::{suffix, Text},
     Comm,
 };
-use crate::graphics::{
-    context_abi::{ContextFrame, ContextLease},
-    native_font::FontLease,
-};
+use crate::graphics::{context_abi::ContextLease, native_font::FontLease};
 use crate::sound::trackplayer::{SubtitleIdentity, SubtitleSnapshot};
 use std::{
     ffi::{c_void, CString},
-    ptr::{null_mut, NonNull},
+    ptr::null_mut,
 };
 
 impl Comm {
@@ -69,14 +66,16 @@ fn layout_subtitle(comm: &Comm, cache: &ContextLease, font: &FontLease, text: &m
         );
         remaining = remaining.wrapping_sub(text.char_count).saturating_sub(1);
         input = suffix(input, fitted.next);
-        let line: String = text
-            .text
-            .to_str()
-            .expect("subtitle UTF-8")
-            .chars()
-            .take(text.char_count as usize)
-            .collect();
-        let line = CString::new(line).expect("subtitle line excludes NUL");
+        let (line, _) = crate::strings::unicode::split_utf8_prefix(
+            text.text.to_bytes(),
+            text.char_count as usize,
+        );
+        let line = CString::from(
+            line.iter()
+                .copied()
+                .map_while(std::num::NonZeroU8::new)
+                .collect::<Vec<_>>(),
+        );
         cache.draw_traced_text(
             font,
             &line,
@@ -92,20 +91,18 @@ fn layout_subtitle(comm: &Comm, cache: &ContextLease, font: &FontLease, text: &m
 }
 
 fn draw_subtitle(comm: &mut Comm, snapshot: &SubtitleSnapshot) -> i16 {
-    let target = ContextLease::require(comm.display.anim_context.cast());
-    let frame = ContextFrame::retain(Some(
-        NonNull::new(comm.display.text_cache_frame.cast()).expect("subtitle cache frame"),
-    ));
+    let super::sis_graphics::SubtitleCache {
+        target,
+        context: cache,
+        frame,
+        font,
+    } = comm.conversation_display().subtitles.clone();
     target.with_selected(|| {
         target.with_batch(|| {
             if comm.display.last_subtitle == Some(snapshot.identity) {
                 target.draw_stamp(&frame, CPoint { x: 0, y: 0 });
                 return comm.display.last_baseline;
             }
-            let cache = ContextLease::require(comm.display.text_cache_context);
-            let font = FontLease::retain(
-                NonNull::new(comm.data.alien_font.cast()).expect("conversation alien font"),
-            );
             let mut text = Text::new(
                 &snapshot.text,
                 comm.display.subtitle.baseline,
@@ -240,7 +237,7 @@ pub(crate) struct SubtitleState {
 
 pub(crate) struct RuntimeState {
     pub(crate) phrases: Option<crate::strings::conversation::ConversationTable>,
-    pub(crate) game_strings: Option<crate::strings::owned_table::LoadedTextTable>,
+    pub(crate) resources: Option<super::sis_graphics::ConversationResources>,
     pub(crate) window: CRect,
     pub(crate) anim_context: *mut c_void,
     pub(crate) text_cache_context: *mut crate::graphics::native_abi::context_desc,
@@ -254,7 +251,7 @@ impl Default for RuntimeState {
     fn default() -> Self {
         Self {
             phrases: None,
-            game_strings: None,
+            resources: None,
             window: CRect {
                 corner: CPoint { x: 7, y: 10 },
                 width: 0,
@@ -274,6 +271,7 @@ impl Default for RuntimeState {
 #[cfg(test)]
 mod owner_tests {
     use super::*;
+    use std::ptr::NonNull;
 
     #[test]
     #[serial_test::serial]
@@ -373,6 +371,11 @@ mod owner_tests {
             comm.display.text_cache_context = cache_context.as_raw();
             comm.display.text_cache_frame = drawable.lease().context_frame(0).as_raw().cast();
             comm.data.alien_font = comm.presentation.tiny_font.cast();
+            comm.display.resources.as_mut().unwrap().display.as_mut().unwrap().subtitles = super::super::sis_graphics::SubtitleCache {
+                target: context.clone(), context: cache_context.clone(),
+                frame: drawable.lease().context_frame(0),
+                font: FontLease::retain(NonNull::new(comm.data.alien_font.cast()).unwrap()),
+            };
             comm.data.definition.alien_text_width = 100;
             comm.data.definition.alien_text_fcolor = Color { r: 255, g: 255, b: 255, a: 255 };
             comm.display.subtitle.baseline = POINT { x: 10, y: 20 };

@@ -53,17 +53,23 @@ pub(super) fn with_display(name: &str, call: impl FnOnce(&mut Comm, &ContextLeas
             comm.presentation.space_context = context.as_raw();
             comm.presentation.tiny_font = game.kernel.tiny_font;
             comm.presentation.game_strings = game.kernel.game_strings;
-            comm.display.game_strings =
-                Some(crate::strings::owned_table::LoadedTextTable::new(vec![
-                    c"A".to_owned(),
-                ]));
             comm.player_font.install(font.as_raw().cast()).unwrap();
+            comm.admit_conversation_names(&game.world).unwrap();
+            comm.display.anim_context = context.as_raw().cast();
+            comm.display.text_cache_context = context.as_raw();
+            comm.display.text_cache_frame = game.kernel.screen.cast();
+            comm.data.alien_font = game.kernel.tiny_font.cast();
+            // SAFETY: the display fixture owns all registered handles and the Kernel text table.
+            let display =
+                unsafe { super::sis_graphics::ConversationDisplay::retain(&comm) }.unwrap();
+            comm.display.resources.as_mut().unwrap().display = Some(display);
             let mut release = Release {
                 context: context.clone(),
                 font: Some(font),
                 drained: false,
             };
             call(&mut comm, &context);
+            drop(comm.display.resources.as_mut().unwrap().display.take());
             comm.player_font.release(&mut release);
             assert!(release.drained);
             assert!(release.font.is_none());
@@ -94,6 +100,28 @@ fn refreshing_responses_keeps_the_font_alive_until_queued_draws_are_consumed() {
         assert!(has_text(context));
         assert_eq!(comm.response_display, [0, 2, 0]);
     });
+}
+
+#[test]
+#[serial_test::serial]
+fn admitted_display_renders_without_recovering_raw_resources() {
+    with_display(
+        "comm::sis_graphics_font_tests::admitted_display_renders_without_recovering_raw_resources",
+        |comm, context| {
+            comm.presentation.space_context = std::ptr::null_mut();
+            comm.presentation.tiny_font = std::ptr::null_mut();
+            comm.presentation.game_strings = std::ptr::null_mut();
+            comm.display.anim_context = std::ptr::null_mut();
+            comm.display.text_cache_context = std::ptr::null_mut();
+            comm.display.text_cache_frame = std::ptr::null_mut();
+            comm.data.alien_font = std::ptr::null_mut();
+            comm.add_response(1, "A A", None);
+            super::sis_graphics::refresh_responses(comm, 0, 0, 1, 0);
+            assert!(has_text(context));
+            super::sis_graphics::feedback_player_phrase(comm, 0, Some(c"A"));
+            assert!(has_text(context));
+        },
+    );
 }
 
 #[test]

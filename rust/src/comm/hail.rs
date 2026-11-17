@@ -94,6 +94,9 @@ pub(super) mod c_bridge {
                 text_cache_ctx,
                 text_cache_frame,
             } = self;
+            if let Some(resources) = comm.display.resources.as_mut() {
+                drop(resources.display.take());
+            }
             cx.with_legacy(|| {
                 // AnimContext teardown (C lines 1126–1128)
                 SetContext(space_ctx.cast());
@@ -252,11 +255,7 @@ unsafe fn load_alien_song(
     crate::sound::resource_types::LoadMusicInstance(resource_key(descriptor.alien_song_res))
 }
 
-unsafe fn load_conversation_text(comm: &mut Comm) {
-    comm.display.game_strings = Some(crate::strings::owned_table::LoadedTextTable::retain(
-        std::ptr::NonNull::new(comm.presentation.game_strings.cast())
-            .expect("conversation game strings"),
-    ));
+fn load_conversation_text(comm: &mut Comm) {
     let phrases = comm
         .data
         .definition
@@ -292,7 +291,10 @@ pub unsafe fn hail_alien(_comm: &mut Comm, cx: &mut Cx<'_>, io: &mut Io<'_>) {
         // C statics (pCurInputState, TalkingFinished) via bridges.
         // ----------------------------------------------------------------
         let activity = cx.world.activity();
-        let resources = cx.with_legacy(|| {
+        let names = super::sis_graphics::ConversationResources::new(cx.world)
+            .map_err(|error| error.to_string());
+        let resources: Result<_, String> = cx.with_legacy(|| {
+            let mut retained = names?;
             eprintln!("[DBG] HailAlien: clearing COMM_STATE");
             _comm.reset_for_encounter();
             {
@@ -313,7 +315,7 @@ pub unsafe fn hail_alien(_comm: &mut Comm, cx: &mut Cx<'_>, io: &mut Io<'_>) {
             _comm
                 .player_font
                 .install(player_font)
-                .unwrap_or_else(|error| panic!("HailAlien: {error}"));
+                .map_err(|error| error.to_string())?;
 
             // ----------------------------------------------------------------
             // Step 3: Load and set alien resources
@@ -447,7 +449,11 @@ pub unsafe fn hail_alien(_comm: &mut Comm, cx: &mut Cx<'_>, io: &mut Io<'_>) {
                 }
             }
 
-            c_bridge::HailResources {
+            retained.display = Some(
+                super::sis_graphics::ConversationDisplay::retain(_comm).map_err(str::to_owned)?,
+            );
+            _comm.display.resources = Some(retained);
+            Ok(c_bridge::HailResources {
                 space_ctx,
                 anim_ctx,
                 old_font,
@@ -457,8 +463,9 @@ pub unsafe fn hail_alien(_comm: &mut Comm, cx: &mut Cx<'_>, io: &mut Io<'_>) {
                 alien_frame,
                 text_cache_ctx,
                 text_cache_frame,
-            }
+            })
         });
+        let resources = resources.unwrap_or_else(|error| panic!("HailAlien: {error}"));
 
         if activity & 0xff != 5 {
             let title = is_starbase_conversation(cx.world).then_some(STARBASE_STRING_BASE as usize);
@@ -521,12 +528,8 @@ mod tests {
         super::super::sis_graphics_font_tests::with_display(
             "comm::hail::tests::conversation_text_admission_retains_the_supplied_game_labels",
             |comm, _| {
-                // SAFETY: the real display fixture lends its Kernel-owned plain-text table.
-                unsafe { super::load_conversation_text(comm) };
-                assert_eq!(
-                    comm.display.game_strings.as_ref().unwrap().label(256).0,
-                    c"A"
-                );
+                super::load_conversation_text(comm);
+                assert_eq!(comm.conversation_display().game_strings.label(256).0, c"A");
                 assert!(comm.display.phrases.is_none());
             },
         );

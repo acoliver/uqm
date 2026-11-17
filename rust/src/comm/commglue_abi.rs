@@ -6,7 +6,12 @@ use crate::engine::StoryKey;
 use crate::comm::races::descriptor::NumberSpeech;
 
 /// Collect one-based phrase indices in the same recursive order as NPCNumberPhrase.
-fn number_phrases(speech: &NumberSpeech, mut number: i32, top: bool, out: &mut Vec<u16>) {
+fn number_phrases(
+    speech: &NumberSpeech,
+    mut number: i32,
+    top: bool,
+    out: &mut Vec<u16>,
+) -> Result<(), &'static str> {
     let start = out.len();
     for digit in speech.digits {
         let quotient = number / digit.divider;
@@ -24,7 +29,7 @@ fn number_phrases(speech: &NumberSpeech, mut number: i32, top: bool, out: &mut V
             }
             out.push(index);
         } else {
-            number_phrases(speech, quotient, false, out);
+            number_phrases(speech, quotient, false, out)?;
         }
         if !digit.names.is_empty() {
             if let Some(name) = digit
@@ -46,9 +51,10 @@ fn number_phrases(speech: &NumberSpeech, mut number: i32, top: bool, out: &mut V
                 .digits
                 .last()
                 .and_then(|digit| digit.strings)
-                .expect("number speech has no zero digit")[0],
+                .ok_or("number speech has no zero digit")?[0],
         );
     }
+    Ok(())
 }
 
 pub fn set_segue(comm: &mut Comm, cx: &mut crate::engine::battle::Cx<'_>, segue: u32) {
@@ -85,20 +91,27 @@ pub(crate) mod runtime {
     use super::*;
     use std::ffi::CString;
 
-    pub(super) fn number_text(number: i32, padded: bool) -> CString {
+    pub(super) fn number_text(number: i32, padded: bool) -> Result<CString, std::ffi::NulError> {
         let text = if padded {
             format!("{number:03}")
         } else {
             number.to_string()
         };
-        CString::new(text).expect("decimal integers contain no NUL bytes")
+        CString::new(text)
     }
 
     pub fn npc_number(comm: &mut Comm, number: i32, padded: bool) {
-        let text = number_text(number, padded);
-        if let Some(speech) = comm.data.definition.alien_number_speech {
+        let speech = comm.data.definition.alien_number_speech;
+        let (text, indices) = (|| {
+            let text = number_text(number, padded).map_err(|_| "decimal integer contains NUL")?;
             let mut indices = Vec::new();
-            number_phrases(speech, number, true, &mut indices);
+            if let Some(speech) = speech {
+                number_phrases(speech, number, true, &mut indices)?;
+            }
+            Ok::<_, &str>((text, indices))
+        })()
+        .expect("invalid number speech");
+        if speech.is_some() {
             assert!(indices.len() < crate::sound::trackplayer::MAX_MULTI_TRACKS);
             let tracks: Vec<_> = indices
                 .into_iter()
@@ -132,8 +145,14 @@ mod tests {
             (i32::MIN, c"-2147483648", c"-2147483648"),
             (i32::MAX, c"2147483647", c"2147483647"),
         ] {
-            assert_eq!(runtime::number_text(number, false).as_c_str(), plain);
-            assert_eq!(runtime::number_text(number, true).as_c_str(), padded);
+            assert_eq!(
+                runtime::number_text(number, false).unwrap().as_c_str(),
+                plain
+            );
+            assert_eq!(
+                runtime::number_text(number, true).unwrap().as_c_str(),
+                padded
+            );
         }
         let _: fn(&mut Comm, i32, bool) = runtime::npc_number;
     }
@@ -166,7 +185,7 @@ mod tests {
                 (1_001_010, vec![one, thousand, one, thousand, ten]),
             ] {
                 let mut out = Vec::new();
-                number_phrases(speech, number, true, &mut out);
+                number_phrases(speech, number, true, &mut out).unwrap();
                 assert_eq!(out, expected, "{number}");
             }
         }
@@ -192,7 +211,7 @@ mod tests {
             (2034, vec![3, 200, 30, 5]),
         ] {
             let mut out = Vec::new();
-            number_phrases(&speech, number, true, &mut out);
+            number_phrases(&speech, number, true, &mut out).unwrap();
             assert_eq!(out, expected);
         }
         const NAMED: [SpeechDigit; 5] = {
@@ -214,7 +233,7 @@ mod tests {
         let speech = NumberSpeech { digits: &NAMED };
         for (number, expected) in [(101, vec![2, 400, 2]), (102, vec![2, 500, 3])] {
             let mut out = Vec::new();
-            number_phrases(&speech, number, true, &mut out);
+            number_phrases(&speech, number, true, &mut out).unwrap();
             assert_eq!(out, expected);
         }
     }

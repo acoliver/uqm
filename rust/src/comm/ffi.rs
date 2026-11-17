@@ -3,7 +3,7 @@
 use crate::comm::Comm;
 use crate::engine::observe::CheckpointView;
 use crate::engine::StoryKey;
-use std::ffi::{c_int, c_uint, CStr};
+use std::ffi::{c_int, c_uint};
 
 use super::segue::Segue;
 use super::types::CommIntroMode;
@@ -915,12 +915,12 @@ pub fn npc_phrase(
     }
     let callback = comm.queue_phrase_callback(callback);
     if index == GLOBAL_PLAYER_NAME || index == GLOBAL_SHIP_NAME {
-        let bytes = if index == GLOBAL_PLAYER_NAME {
-            &world.data.flagship.commander_name
+        let resources = comm.conversation_resources();
+        let name = if index == GLOBAL_PLAYER_NAME {
+            resources.commander_name.as_c_str()
         } else {
-            &world.data.flagship.ship_name
+            resources.ship_name.as_c_str()
         };
-        let name = CStr::from_bytes_until_nul(bytes).expect("flagship name is terminated");
         crate::sound::heart_ffi::splice_track(None, Some(name), None, callback);
     } else if index < 0 {
         let variant = world.story_state(StoryKey::NEW_ALLIANCE_NAME) as c_int;
@@ -940,8 +940,13 @@ pub fn npc_phrase(
             phrase.to_bytes(),
             (variant == 3).then_some(world.data.flagship.commander_name.as_slice()),
         );
-        let text = CStr::from_bytes_until_nul(&buffer).expect("alliance name is terminated");
-        crate::sound::heart_ffi::splice_track(None, Some(text), None, callback);
+        let text = std::ffi::CString::from(
+            buffer
+                .into_iter()
+                .map_while(std::num::NonZeroU8::new)
+                .collect::<Vec<_>>(),
+        );
+        crate::sound::heart_ffi::splice_track(None, Some(&text), None, callback);
     } else {
         let Some(phrase) = comm
             .display

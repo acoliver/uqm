@@ -208,6 +208,7 @@ fn live_callbacks_keep_the_supplied_session_and_phrase_owner(
                     2048
                 ]);
             let admitted_text = phrases.text(0).ok_or("missing phrase text")?.as_ptr();
+            comm.admit_conversation_names(cx.world)?;
             comm.set_conversation_phrases(Some(phrases.into()));
             descriptor.alien_font = cx.kernel.tiny_font.cast();
             let (intro, post, uninit) = (
