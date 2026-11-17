@@ -410,7 +410,6 @@ impl ContextOps for Cx<'_> {
         crate::battle::status_native::preprocess_status(self, id)
     }
 
-
     fn draw_captain_controls_pass(
         &mut self,
         ship: ShipId,
