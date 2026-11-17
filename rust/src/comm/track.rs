@@ -30,8 +30,12 @@ impl CTrackBridge {
 
     /// Get the current subtitle from the C trackplayer.
     pub fn current_subtitle() -> Option<String> {
-        crate::sound::trackplayer::subtitle_snapshot()
-            .map(|subtitle| subtitle.text.into_string().expect("subtitle UTF-8"))
+        crate::sound::trackplayer::subtitle_snapshot().map(|subtitle| {
+            subtitle
+                .text
+                .into_string()
+                .unwrap_or_else(|error| panic!("subtitle UTF-8: {error}"))
+        })
     }
 
     /// Enumerate all subtitle history entries from the C trackplayer.
@@ -39,7 +43,12 @@ impl CTrackBridge {
         crate::sound::trackplayer::subtitle_history()
             .into_iter()
             .filter(|subtitle| !subtitle.text.is_empty())
-            .map(|subtitle| subtitle.text.into_string().expect("subtitle UTF-8"))
+            .map(|subtitle| {
+                subtitle
+                    .text
+                    .into_string()
+                    .unwrap_or_else(|error| panic!("subtitle UTF-8: {error}"))
+            })
             .collect()
     }
 

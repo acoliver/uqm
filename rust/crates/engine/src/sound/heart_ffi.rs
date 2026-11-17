@@ -11,7 +11,7 @@ pub use self::{destroy_music as DestroyMusic, destroy_sound as DestroySound};
 use std::ffi::{c_char, c_int, c_uint, c_void, CStr, CString};
 use std::panic::{self, AssertUnwindSafe};
 use std::path::Path;
-use std::ptr::{self, null_mut};
+use std::ptr::null_mut;
 use std::sync::Arc;
 
 use parking_lot::Mutex;
@@ -1400,7 +1400,7 @@ mod tests {
     #[test]
 
     fn test_load_sound_file_null_returns_null() {
-        let result = unsafe { LoadSoundFile(ptr::null()) };
+        let result = unsafe { LoadSoundFile(std::ptr::null()) };
         assert!(result.is_null());
     }
 

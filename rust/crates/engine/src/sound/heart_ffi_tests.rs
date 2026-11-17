@@ -545,21 +545,19 @@ fn stopping_all_sound_stops_effect_sources() {
 #[test]
 fn the_track_player_exports_are_quiet_with_no_track() {
     let _engine = Engine::start();
-    unsafe {
-        stop_track();
-        pause_track();
-        resume_track();
-        jump_track();
-        fast_forward_smooth();
-        fast_reverse_smooth();
-        fast_forward_page();
-        fast_reverse_page();
-        assert_eq!(playing_track(), 0);
-        assert_eq!(get_track_position(1), 0);
-        assert!(trackplayer::subtitle_snapshot().is_none());
-        assert!(trackplayer::subtitle_history().is_empty());
-        splice_multi_track(&[], None);
-    }
+    stop_track();
+    pause_track();
+    resume_track();
+    jump_track();
+    fast_forward_smooth();
+    fast_reverse_smooth();
+    fast_forward_page();
+    fast_reverse_page();
+    assert_eq!(playing_track(), 0);
+    assert_eq!(get_track_position(1), 0);
+    assert!(trackplayer::subtitle_snapshot().is_none());
+    assert!(trackplayer::subtitle_history().is_empty());
+    splice_multi_track(&[], None);
 }
 
 #[test]
