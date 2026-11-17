@@ -22,7 +22,6 @@ use crate::engine::{battle::Cx, observe::Io};
 #[cfg(not(test))]
 pub(super) mod c_bridge {
     use crate::comm::Comm;
-    use std::ffi::c_int;
 
     pub use crate::graphics::context_abi::{
         CreateContextAux, DestroyContext, SetContext, SetContextBackGroundColor, SetContextClipRect,
@@ -57,12 +56,6 @@ pub(super) mod c_bridge {
 
     pub use crate::comm::comm_abi::setup_subtitle_text_from_comm_data;
 
-    extern "C" {
-
-        pub static mut ScreenWidth: c_int;
-        pub static mut ScreenHeight: c_int;
-
-    }
     pub use crate::graphics::gfx_common_abi::BatchGraphics;
     pub use crate::sound::heart_ffi::DestroyMusic;
     pub use crate::threading::pacing::linked::sleep_thread_until as SleepThreadUntil;
@@ -82,8 +75,13 @@ pub(super) mod c_bridge {
     }
 
     impl HailResources {
+        /// # Safety
+        /// Run on the initialized game's serialized graphics thread. The caller must
+        /// transfer the returned context and frame to HailResources and keep them
+        /// live while registered in Comm, releasing them only in finish.
         pub(super) unsafe fn setup_subtitle_cache(
             comm: &mut Comm,
+            (screen_width, screen_height): (i32, i32),
         ) -> (
             *mut crate::graphics::native_abi::context_desc,
             *mut crate::graphics::native_abi::frame_desc,
@@ -93,8 +91,8 @@ pub(super) mod c_bridge {
 
             let text_cache_ctx_name = c"TextCacheContext".as_ptr() as *const _;
             let text_cache_ctx = super::create_named_context(text_cache_ctx_name);
-            let sis_width = ScreenWidth - 78;
-            let sis_height = ScreenHeight - 13;
+            let sis_width = screen_width - 78;
+            let sis_height = screen_height - 13;
             let slider_y = 107;
             let slider_height = 15;
             let cache_height = sis_height - slider_y - slider_height + 2;
@@ -330,6 +328,7 @@ pub unsafe fn hail_alien(_comm: &mut Comm, cx: &mut Cx<'_>, io: &mut Io<'_>) {
         // C statics (pCurInputState, TalkingFinished) via bridges.
         // ----------------------------------------------------------------
         let activity = cx.world.activity();
+        let dimensions = cx.screen_dimensions();
         let names = super::sis_graphics::ConversationResources::new(cx.world)
             .map_err(|error| error.to_string());
         let resources: Result<_, String> = cx.with_legacy(|| {
@@ -396,8 +395,10 @@ pub unsafe fn hail_alien(_comm: &mut Comm, cx: &mut Cx<'_>, io: &mut Io<'_>) {
             // ----------------------------------------------------------------
             // Steps 4–5: Subtitle text and TextCacheContext setup
             // ----------------------------------------------------------------
+            // SAFETY: hail runs on the initialized game/graphics thread; the returned
+            // handles enter HailResources below and stay registered until finish.
             let (text_cache_ctx, text_cache_frame, sis_w) =
-                HailResources::setup_subtitle_cache(_comm);
+                unsafe { HailResources::setup_subtitle_cache(_comm, dimensions) };
 
             // ----------------------------------------------------------------
             // Step 6: Clear phrase buffer
