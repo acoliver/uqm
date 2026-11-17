@@ -82,6 +82,45 @@ pub(super) mod c_bridge {
     }
 
     impl HailResources {
+        pub(super) unsafe fn setup_subtitle_cache(
+            comm: &mut Comm,
+        ) -> (
+            *mut crate::graphics::native_abi::context_desc,
+            *mut crate::graphics::native_abi::frame_desc,
+            i32,
+        ) {
+            setup_subtitle_text_from_comm_data(comm);
+
+            let text_cache_ctx_name = c"TextCacheContext".as_ptr() as *const _;
+            let text_cache_ctx = super::create_named_context(text_cache_ctx_name);
+            let sis_width = ScreenWidth - 78;
+            let sis_height = ScreenHeight - 13;
+            let slider_y = 107;
+            let slider_height = 15;
+            let cache_height = sis_height - slider_y - slider_height + 2;
+
+            let want_pixmap: std::ffi::c_uint = 2; // WANT_PIXMAP = 1 << 1
+            let cache_frame_raw =
+                CreateDrawable(want_pixmap as u8, sis_width as i16, cache_height as i16, 1);
+            let text_cache_frame = CaptureDrawable(cache_frame_raw);
+
+            set_text_cache_context(comm, text_cache_ctx.cast());
+            set_text_cache_frame(comm, text_cache_frame.cast());
+            SetContext(text_cache_ctx);
+            SetContextFGFrame(text_cache_frame);
+            // TextBack = BUILD_COLOR(MAKE_RGB15(0x00, 0x00, 0x10), 0x00)
+            let text_back = crate::graphics::native_abi::Color {
+                r: 0,
+                g: 0,
+                b: (0x10 << 3) | (0x10 >> 2),
+                a: 0xff,
+            };
+            SetContextBackGroundColor(text_back);
+            ClearDrawable();
+            SetFrameTransparentColor(text_cache_frame, text_back);
+            (text_cache_ctx, text_cache_frame, sis_width)
+        }
+
         pub(super) unsafe fn finish(self, comm: &mut Comm, cx: &mut crate::engine::battle::Cx<'_>) {
             let Self {
                 space_ctx,
@@ -355,41 +394,10 @@ pub unsafe fn hail_alien(_comm: &mut Comm, cx: &mut Cx<'_>, io: &mut Io<'_>) {
             }
 
             // ----------------------------------------------------------------
-            // Step 4: Subtitle text setup
+            // Steps 4–5: Subtitle text and TextCacheContext setup
             // ----------------------------------------------------------------
-            setup_subtitle_text_from_comm_data(_comm);
-
-            // ----------------------------------------------------------------
-            // Step 5: TextCacheContext setup
-            // ----------------------------------------------------------------
-            let text_cache_ctx_name = c"TextCacheContext".as_ptr() as *const _;
-            let text_cache_ctx = create_named_context(text_cache_ctx_name);
-
-            let sis_w = unsafe { c_bridge::ScreenWidth - 78 };
-            let sis_h = unsafe { c_bridge::ScreenHeight - 13 };
-            let slider_y = 107;
-            let slider_h = 15;
-            let cache_height = sis_h - slider_y - slider_h + 2;
-
-            let want_pixmap: std::ffi::c_uint = 2; // WANT_PIXMAP = 1 << 1
-            let cache_frame_raw =
-                CreateDrawable(want_pixmap as u8, sis_w as i16, cache_height as i16, 1);
-            let text_cache_frame = CaptureDrawable(cache_frame_raw);
-
-            set_text_cache_context(_comm, text_cache_ctx.cast());
-            set_text_cache_frame(_comm, text_cache_frame.cast());
-            SetContext(text_cache_ctx);
-            SetContextFGFrame(text_cache_frame);
-            // TextBack = BUILD_COLOR(MAKE_RGB15(0x00, 0x00, 0x10), 0x00)
-            let text_back = crate::graphics::native_abi::Color {
-                r: 0,
-                g: 0,
-                b: (0x10 << 3) | (0x10 >> 2),
-                a: 0xff,
-            };
-            SetContextBackGroundColor(text_back);
-            ClearDrawable();
-            SetFrameTransparentColor(text_cache_frame, text_back);
+            let (text_cache_ctx, text_cache_frame, sis_w) =
+                HailResources::setup_subtitle_cache(_comm);
 
             // ----------------------------------------------------------------
             // Step 6: Clear phrase buffer
