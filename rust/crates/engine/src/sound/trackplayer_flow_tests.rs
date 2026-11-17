@@ -951,42 +951,30 @@ fn subtitles_can_be_walked_from_the_first_page_to_the_last() {
 }
 
 #[test]
-fn chunk_pointers_walk_the_tagged_pages_and_refuse_foreign_pointers() {
+fn subtitle_history_walks_the_tagged_pages_without_lending_chunk_pointers() {
     let _engine = engine();
-    assert!(get_first_chunk_ptr().is_null());
+    assert!(subtitle_history().is_empty());
     splice_two_pages(None);
 
-    let first = get_first_chunk_ptr();
-    assert_eq!(get_chunk_text(first), Some("First line...".to_string()));
-    let second = get_next_chunk_ptr(first);
-    assert_eq!(get_chunk_text(second), Some("..Second line".to_string()));
-    assert!(get_next_chunk_ptr(second).is_null());
-    assert!(get_next_chunk_ptr(std::ptr::null()).is_null());
-
-    let foreign = 0x10 as *const u8;
-    assert!(get_next_chunk_ptr(foreign).is_null());
-    assert_eq!(get_chunk_text(foreign), None);
-    assert_eq!(get_chunk_text(std::ptr::null()), None);
-    assert!(get_chunk_text_cstr(foreign).is_null());
-    assert!(get_chunk_text_cstr(std::ptr::null()).is_null());
+    let history = subtitle_history();
+    assert_eq!(history.len(), 2);
+    assert_eq!(history[0].text.as_c_str(), c"First line...");
+    assert_eq!(history[1].text.as_c_str(), c"..Second line");
+    assert_ne!(history[0].identity, history[1].identity);
 }
 
 #[test]
-fn the_c_string_for_a_page_is_stable_so_callers_can_compare_pointers() {
+fn a_page_identity_is_stable_across_current_and_history_snapshots() {
     let _engine = engine();
-    assert!(get_track_subtitle_cstr().is_null());
+    assert!(subtitle_snapshot().is_none());
     splice_two_pages(None);
     play_track(false).unwrap();
 
-    let once = get_track_subtitle_cstr();
-    let twice = get_track_subtitle_cstr();
-    assert!(!once.is_null());
-    assert_eq!(once, twice);
-    let text = unsafe { std::ffi::CStr::from_ptr(once) }.to_str().unwrap();
-    assert_eq!(text, "First line...");
-
-    let by_chunk = get_chunk_text_cstr(get_first_chunk_ptr());
-    assert_eq!(by_chunk, once, "the same cached string serves both lookups");
+    let once = subtitle_snapshot().unwrap();
+    let twice = subtitle_snapshot().unwrap();
+    assert_eq!(once.identity, twice.identity);
+    assert_eq!(once.text.as_c_str(), c"First line...");
+    assert_eq!(subtitle_history()[0], once);
 }
 
 #[test]
@@ -1037,11 +1025,14 @@ fn a_chunk_caches_one_nul_terminated_copy_of_its_text() {
         callback: None,
         next: None,
     };
-    let first = chunk.text_cstr_ptr();
-    assert_eq!(first, chunk.text_cstr_ptr());
-    assert_eq!(unsafe { std::ffi::CStr::from_ptr(first) }.to_bytes(), b"hi");
+    chunk.ensure_text_cstr();
+    let first = chunk.text_cstr.as_ref().unwrap().as_ptr();
+    chunk.ensure_text_cstr();
+    assert_eq!(first, chunk.text_cstr.as_ref().unwrap().as_ptr());
+    assert_eq!(chunk.text_cstr.as_ref().unwrap().to_bytes(), b"hi");
 
     chunk.text = None;
     chunk.text_cstr = None;
-    assert!(chunk.text_cstr_ptr().is_null());
+    chunk.ensure_text_cstr();
+    assert!(chunk.text_cstr.is_none());
 }

@@ -158,7 +158,7 @@ pub(super) fn refresh_responses(activity: u16, comm: &mut Comm) {
         let top = comm.response_ui().top_response() as u8;
         let count = comm.responses().count() as u8;
         let cur = comm.responses().selected().max(0) as u8;
-        refresh_responses_production(comm, activity, top, count, cur);
+        super::sis_graphics::refresh_responses(comm, activity, top, count, cur);
     }
     #[cfg(test)]
     {
@@ -180,17 +180,6 @@ pub(super) fn select_conversation_summary(cx: &mut Cx<'_>, io: &mut Io<'_>, comm
         let _ = (cx, io);
         comm.rebuild_summary();
     }
-}
-
-// ============================================================================
-// Production rendering functions (ported to Rust — no C bridge needed)
-// ============================================================================
-
-/// Public entry point for talk_segue.rs to call refresh_responses.
-#[cfg(not(test))]
-pub fn refresh_responses_production(comm: &mut Comm, activity: u16, top: u8, count: u8, cur: u8) {
-    // Safety: called from single-threaded game loop with initialized graphics.
-    crate::comm::sis_graphics::refresh_responses(comm, activity, top, count, cur);
 }
 
 // ============================================================================

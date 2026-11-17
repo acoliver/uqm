@@ -172,7 +172,6 @@ pub(super) mod c_bridge {
                 // Steps 19–20: Clear CommData fields and pCurInputState
                 // ----------------------------------------------------------------
                 comm.data.definition.conversation_phrases_res = None;
-                comm.data.conversation_phrases = std::ptr::null_mut();
                 // Clear Rust-side comm_data (resources already destroyed above)
                 comm.clear_comm_data();
                 // pCurInputState was already cleared by c_RunEncounterDoInput.

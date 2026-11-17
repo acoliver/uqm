@@ -29,7 +29,6 @@ pub struct Comm {
     pub(crate) display: super::comm_abi::RuntimeState,
     pub(crate) animation_runtime: super::commanim_abi::runtime::RuntimeState,
     pub(crate) response_display: [u8; 3],
-    pub(crate) subtitle_buf: Vec<u8>,
     pub(crate) player_font: super::player_font::ConversationFont,
     pub(crate) next_speech_time: u32,
     /// Whether communication is initialized
@@ -128,7 +127,6 @@ impl Comm {
             display: Default::default(),
             animation_runtime: Default::default(),
             response_display: [0; 3],
-            subtitle_buf: Vec::with_capacity(512),
             player_font: super::player_font::ConversationFont::new(),
             next_speech_time: 0,
             initialized: false,
@@ -522,7 +520,7 @@ impl Comm {
         self.response_ui
             .refresh_responses(activity, &self.responses, selected);
         #[cfg(not(test))]
-        super::response_ui::refresh_responses_production(
+        super::sis_graphics::refresh_responses(
             self,
             activity,
             self.response_ui.top_response() as u8,

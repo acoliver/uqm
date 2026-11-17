@@ -1,6 +1,6 @@
 //! SIS conversation responses, feedback and paginated subtitle history.
 
-use super::locdata::{CColor, CPoint};
+use super::locdata::CColor;
 use super::Comm;
 use crate::graphics::{
     context_abi::{ContextFrame, ContextLease},
@@ -11,35 +11,6 @@ use std::{
     ffi::{CStr, CString},
     ptr::NonNull,
 };
-
-// This record remains consumed by the existing raw text_layout adapter until its caller release.
-#[repr(C)]
-#[derive(Clone, Copy)]
-pub(crate) struct CText {
-    pub(crate) baseline: CPoint,
-    _pad0: [u8; 4],
-    pub(crate) p_str: *const std::ffi::c_char,
-    pub(crate) align: std::ffi::c_int,
-    pub(crate) char_count: u16,
-    _pad1: [u8; 2],
-}
-impl CText {
-    pub(crate) const fn new(p_str: *const std::ffi::c_char, char_count: u16) -> Self {
-        Self {
-            baseline: CPoint { x: 0, y: 0 },
-            _pad0: [0; 4],
-            p_str,
-            align: 0,
-            char_count,
-            _pad1: [0; 2],
-        }
-    }
-}
-impl Default for CText {
-    fn default() -> Self {
-        Self::new(std::ptr::null(), 0)
-    }
-}
 
 #[derive(Clone, Copy)]
 pub(crate) struct Text<'a> {

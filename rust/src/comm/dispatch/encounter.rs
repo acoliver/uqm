@@ -122,7 +122,7 @@ mod tests {
                 comm.data.uninit_encounter_func.unwrap()
             ));
             assert!(comm.data.alien_frame.is_null());
-            assert!(comm.data.conversation_phrases.is_null());
+            assert!(comm.display.phrases.is_none());
 
             cx.world.set_story_state(StoryKey::GLOBAL_FLAGS_AND_DATA, 0);
             cx.world.set_story_state(StoryKey::FOUND_PLUTO_SPATHI, 1);

@@ -49,7 +49,6 @@ use super::null::NullDecoder;
 use super::sfx;
 use super::stream;
 use super::trackplayer;
-// SubtitleRef no longer needed — subtitle iteration uses raw chunk pointers
 use super::types::*;
 
 // =============================================================================
@@ -317,9 +316,6 @@ fn convert_c_callbacks(ptr: *mut c_void) -> Option<Box<dyn StreamCallbacks + Sen
         sample_ptr: ptr,
     }))
 }
-
-// (SUBTITLE_REF_CACHE removed — subtitle iteration now uses raw chunk pointers
-// matching C's SUBTITLE_REF = TFB_SoundChunk* semantics)
 
 // =============================================================================
 // Stream FFI (18 functions)
@@ -692,42 +688,6 @@ pub fn fast_forward_page() {
 
 pub fn get_track_position(in_units: c_int) -> c_int {
     trackplayer::get_track_position(in_units as u32) as c_int
-}
-
-pub fn get_track_subtitle() -> *const c_char {
-    // Return a stable pointer from the chunk's cached CString.
-    // C's CheckSubtitles uses pointer identity to detect subtitle changes.
-    trackplayer::get_track_subtitle_cstr()
-}
-
-pub fn get_first_track_subtitle() -> *mut c_void {
-    // Return the actual chunks_head pointer (matches C: returns chunks_head as SUBTITLE_REF)
-    trackplayer::get_first_chunk_ptr() as *mut c_void
-}
-
-///
-/// # Safety
-///
-/// Caller must ensure pointer arguments are valid and properly aligned.
-pub unsafe fn get_next_track_subtitle(last_ref: *mut c_void) -> *mut c_void {
-    // Match C ABI: GetNextTrackSubtitle(SUBTITLE_REF LastRef)
-    // LastRef is an opaque pointer to a SoundChunk in the linked list
-    if last_ref.is_null() {
-        return null_mut();
-    }
-    trackplayer::get_next_chunk_ptr(last_ref as *const u8) as *mut c_void
-}
-
-///
-/// # Safety
-///
-/// Caller must ensure pointer arguments are valid and properly aligned.
-pub unsafe fn get_track_subtitle_text(sub_ref_ptr: *mut c_void) -> *const c_char {
-    if sub_ref_ptr.is_null() {
-        return ptr::null();
-    }
-    // Return stable CString pointer from the chunk itself
-    trackplayer::get_chunk_text_cstr(sub_ref_ptr as *const u8)
 }
 
 // =============================================================================

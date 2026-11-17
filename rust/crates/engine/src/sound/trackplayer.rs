@@ -56,7 +56,7 @@ pub struct SoundChunk {
     pub track_num: u32,
     /// Subtitle text for this chunk.
     pub text: Option<String>,
-    /// Cached CString for FFI — stable pointer for C pointer-identity comparisons.
+    /// Cached CString supplies page identity independently of snapshot text copies.
     /// Created lazily from `text`.
     pub text_cstr: Option<std::ffi::CString>,
     /// Per-chunk callback (first page only).
@@ -73,15 +73,6 @@ impl SoundChunk {
             if let Some(ref text) = self.text {
                 self.text_cstr = std::ffi::CString::new(text.as_str()).ok();
             }
-        }
-    }
-
-    /// Get a stable pointer to the CString text (for C pointer-identity comparisons).
-    pub fn text_cstr_ptr(&mut self) -> *const std::os::raw::c_char {
-        self.ensure_text_cstr();
-        match self.text_cstr.as_ref() {
-            Some(cs) => cs.as_ptr(),
-            None => std::ptr::null(),
         }
     }
 }
@@ -791,87 +782,6 @@ fn track_position(in_units: u32, read_position: impl FnOnce() -> u32) -> u32 {
     } else {
         (in_units as u64 * pos as u64 / len as u64) as u32
     }
-}
-
-// =============================================================================
-// Public API — Subtitles (spec §3.2.3)
-// =============================================================================
-
-/// Return a stable C string pointer for the current subtitle.
-/// The pointer remains valid and identical as long as `cur_sub_chunk` doesn't change.
-/// This is critical for C's pointer-identity comparison in `CheckSubtitles`.
-pub fn get_track_subtitle_cstr() -> *const std::os::raw::c_char {
-    let state = TRACK_STATE.lock();
-    let Some(cur_ptr) = state.cur_sub_chunk else {
-        return std::ptr::null();
-    };
-
-    // SAFETY: `cur_sub_chunk` is maintained as a pointer into the owned linked list
-    // (`chunks_head`) and only reset/updated while holding TRACK_STATE. We hold the
-    // mutex here, so taking a mutable reference for lazy CString caching is safe.
-    let chunk = unsafe { &mut *cur_ptr.as_ptr() };
-    chunk.text_cstr_ptr()
-}
-
-// =============================================================================
-// Chunk pointer API — raw pointer iteration matching C's SUBTITLE_REF contract
-// =============================================================================
-
-/// Return the raw pointer to chunks_head (matching C's GetFirstTrackSubtitle).
-pub fn get_first_chunk_ptr() -> *const u8 {
-    let state = TRACK_STATE.lock();
-    match state.chunks_head.as_ref() {
-        Some(c) => c.as_ref() as *const SoundChunk as *const u8,
-        None => std::ptr::null(),
-    }
-}
-
-/// Given a chunk pointer `last_ref`, walk to the next tagged page
-/// (matching C's GetNextTrackSubtitle(SUBTITLE_REF LastRef)).
-pub fn get_next_chunk_ptr(last_ref: *const u8) -> *const u8 {
-    if last_ref.is_null() {
-        return std::ptr::null();
-    }
-    let state = TRACK_STATE.lock();
-    // Validate that last_ref points to a chunk in our list
-    if !chunk_is_in_list(&state.chunks_head, last_ref as *const SoundChunk) {
-        return std::ptr::null();
-    }
-    let chunk = unsafe { &*(last_ref as *const SoundChunk) };
-    let mut ptr = chunk.next.as_deref();
-    while let Some(c) = ptr {
-        if c.tag_me {
-            return c as *const SoundChunk as *const u8;
-        }
-        ptr = c.next.as_deref();
-    }
-    std::ptr::null()
-}
-
-/// Given a chunk pointer, return its subtitle text (matching C's GetTrackSubtitleText).
-pub fn get_chunk_text(chunk_ptr: *const u8) -> Option<String> {
-    if chunk_ptr.is_null() {
-        return None;
-    }
-    let state = TRACK_STATE.lock();
-    if !chunk_is_in_list(&state.chunks_head, chunk_ptr as *const SoundChunk) {
-        return None;
-    }
-    let chunk = unsafe { &*(chunk_ptr as *const SoundChunk) };
-    chunk.text.clone()
-}
-
-/// Given a chunk pointer, return a stable CString pointer (matching C's GetTrackSubtitleText).
-pub fn get_chunk_text_cstr(chunk_ptr: *const u8) -> *const std::os::raw::c_char {
-    if chunk_ptr.is_null() {
-        return std::ptr::null();
-    }
-    let state = TRACK_STATE.lock();
-    if !chunk_is_in_list(&state.chunks_head, chunk_ptr as *const SoundChunk) {
-        return std::ptr::null();
-    }
-    let chunk = unsafe { &mut *(chunk_ptr as *mut SoundChunk) };
-    chunk.text_cstr_ptr()
 }
 
 // =============================================================================

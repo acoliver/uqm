@@ -233,7 +233,7 @@ pub(super) mod c_bridge {
     ) {
         let activity = cx.world.activity();
         cx.with_legacy(|| {
-            super::super::response_ui::refresh_responses_production(comm, activity, top, count, cur)
+            super::super::sis_graphics::refresh_responses(comm, activity, top, count, cur)
         });
     }
     #[cfg(not(test))]

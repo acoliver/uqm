@@ -229,8 +229,6 @@ pub struct CommData {
     pub alien_color_map: *mut c_void,
     /// Loaded alien music handle (`AlienSong`).
     pub alien_song: *mut c_void,
-    /// Loaded conversation phrase string table (`ConversationPhrases`).
-    pub conversation_phrases: *mut c_void,
 
     // -----------------------------------------------------------------------
     // Number-speech definition
@@ -267,7 +265,6 @@ impl Default for CommData {
             alien_font: std::ptr::null_mut(),
             alien_color_map: std::ptr::null_mut(),
             alien_song: std::ptr::null_mut(),
-            conversation_phrases: std::ptr::null_mut(),
             alien_number_speech: None,
         }
     }
@@ -311,7 +308,6 @@ impl CommData {
         self.alien_font = std::ptr::null_mut();
         self.alien_color_map = std::ptr::null_mut();
         self.alien_song = std::ptr::null_mut();
-        self.conversation_phrases = std::ptr::null_mut();
         self.alien_number_speech = None;
     }
 }
