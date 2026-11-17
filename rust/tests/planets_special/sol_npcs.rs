@@ -4,7 +4,6 @@ use super::Harness;
 use uqm_rust::comm::dispatch::{CHECK_ABORT, CHECK_LOAD, START_ENCOUNTER};
 use uqm_rust::engine::world::queues::IpGroup;
 use uqm_rust::engine::StoryKey;
-use uqm_rust::planets::c_api;
 use uqm_rust::planets::generate::sol::Generator as GENERATE_SOL_FUNCTIONS;
 use uqm_rust::planets::generate::special::Story;
 use uqm_rust::state::game_state_keys::get_game_state;

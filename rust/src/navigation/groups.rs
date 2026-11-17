@@ -814,6 +814,87 @@ mod record_tests {
     use super::*;
 
     #[test]
+    fn campaign_group_lifecycle_uses_the_actual_safe_module() {
+        use crate::engine::world::state_file::{DEFGRPINFO_FILE, RANDGRPINFO_FILE, STARINFO_FILE};
+        let initialize: fn(&mut World, u32) = super::init_group_info;
+        let uninitialize: fn(&mut World) = super::uninit_group_info;
+        let mut world = World::new();
+        let other = World::new();
+        world
+            .files
+            .replace_contents(STARINFO_FILE, b"planets")
+            .unwrap();
+        world
+            .files
+            .replace_contents(DEFGRPINFO_FILE, b"defined groups")
+            .unwrap();
+        world
+            .files
+            .replace_contents(RANDGRPINFO_FILE, b"random groups")
+            .unwrap();
+
+        initialize(&mut world, 0);
+        assert_eq!(
+            world.files.get_file(RANDGRPINFO_FILE).unwrap().contents(),
+            encode_header(&empty_header())
+        );
+        assert_eq!(
+            world.files.get_file(DEFGRPINFO_FILE).unwrap().contents(),
+            b"defined groups"
+        );
+        initialize(&mut world, 1);
+        assert_eq!(
+            world.files.get_file(RANDGRPINFO_FILE).unwrap().contents(),
+            encode_header(&empty_header())
+        );
+        assert_eq!(
+            world.files.get_file(DEFGRPINFO_FILE).unwrap().contents(),
+            &[0]
+        );
+        uninitialize(&mut world);
+        assert!(world
+            .files
+            .get_file(DEFGRPINFO_FILE)
+            .unwrap()
+            .contents()
+            .is_empty());
+        assert!(world
+            .files
+            .get_file(RANDGRPINFO_FILE)
+            .unwrap()
+            .contents()
+            .is_empty());
+        assert_eq!(
+            world.files.get_file(STARINFO_FILE).unwrap().contents(),
+            b"planets"
+        );
+        assert!(other
+            .files
+            .get_file(RANDGRPINFO_FILE)
+            .unwrap()
+            .contents()
+            .is_empty());
+    }
+
+    #[test]
+    fn group_allocation_uses_the_supplied_fleet_and_queue() {
+        let mut world = World::new();
+        let mut fleets = world.avail_races();
+        let fleet = fleets.alloc().unwrap();
+        fleets.put(fleet);
+        let icon = 0x200usize as crate::graphics::native_abi::FRAME;
+        fleets.get_mut(fleet).melee_icon = icon;
+        assert!(super::build_group(&mut world, 1).is_none());
+        assert_eq!(world.ip_groups_ref().count(), 0);
+        let group = super::build_group(&mut world, 0).unwrap();
+        assert_eq!(world.ip_groups_ref().head(), Some(group));
+        assert_eq!(world.ip_groups_ref().get(group).race_id, 0);
+        assert_eq!(world.ip_groups_ref().get(group).melee_icon, icon);
+        let other = World::new();
+        assert_eq!(other.ip_groups_ref().count(), 0);
+    }
+
+    #[test]
     fn record_io_uses_safe_world_owned_file_indices() {
         use crate::engine::world::state_file::{FileMode, SeekWhence, RANDGRPINFO_FILE};
         let mut first = World::new();
