@@ -3,7 +3,7 @@
 Nine phases (0-8), ordered by dependency and risk. Each phase is a series of PRs;
 `main` stays playable and green after every one. Target design:
 [architecture.md](architecture.md). Checks: [quality-gates.md](quality-gates.md).
-The PRs are listed as 40 work units in [work-items.md](work-items.md).
+The PRs are listed as 39 work units in [work-items.md](work-items.md).
 Implementing agents follow [AGENTS.md](AGENTS.md).
 
 ## 1. Starting numbers
@@ -159,12 +159,12 @@ the summary from live solar state and clears `in_orbit` (`live/save.rs:16-34`).
   lists the normalisations of the current path as data (activity, `in_orbit`,
   summary fields, IP group queue), so a capture may differ from its input file.
 
-**V4. Native scenarios** (macOS). `native smoke` (`rust/xtask/smoke.json`) plus a
-list of scenario ids fixed per unit in work-items.md; units that touch world state
-or saves run all 45 `load-*-v1` scenarios. None of those saves starts in hyperspace
-(41 assert `IN_INTERPLANETARY`), so hyperspace work uses `fly-to-alpha-centauri-v1`,
-`load-save-v1` and `load-alpha-centauri-v1`. OS screenshots are inspected with the
-image-comparer, per standards section 7.
+**V4. Native scenarios** (macOS). `native smoke` (`rust/xtask/smoke.json`) plus the
+scenario lists of the native milestones in work-items.md. V4 runs at those milestones,
+after a subsystem is finished or when something breaks, not per unit. None of the 45
+`load-*-v1` saves starts in hyperspace (41 assert `IN_INTERPLANETARY`), so hyperspace
+work uses `fly-to-alpha-centauri-v1`, `load-save-v1` and `load-alpha-centauri-v1`. OS
+screenshots are inspected with the image-comparer, per standards section 7.
 
 **V5. Gates.** `cargo xtask quality`, `clippy`, `cargo test`, `deny`, `coverage`, five
 release builds.
@@ -189,8 +189,10 @@ release builds.
 3. **Mechanical and semantic changes in separate commits of the same PR.** Moving
    `GlobData.x` reads to accessors, CamelCase renames and crate moves are mechanical;
    V1 is the oracle for every commit.
-4. **Size.** Up to about 6,000 non-mechanical changed lines per PR; mechanical
-   commits (git mv, renames, accessor swaps, generated golden data) do not count.
+4. **Size.** No fixed limit. A unit is one coherent subsystem change that one lane can
+   carry; its PR reports inclusive and non-mechanical changed lines. Mechanical commits
+   (git mv, renames, accessor swaps, generated golden data) stay separate from semantic
+   ones and are reported separately.
 5. **Tests move with the code.** 34 of the 61 files in `rust/tests/` declare `extern
    "C"` symbols (for example `tests/arilou_native.rs:8-14`). A PR that removes a
    symbol rewrites its test against the Rust API and keeps the golden data (for
@@ -533,10 +535,10 @@ CoreGraphics and sandbox parts of automation (U7-06).
 Exit criteria: `unsafe` only in `UNSAFE_ALLOWED` modules; `uqm-engine` carries
 `#![forbid(unsafe_code)]` and no OS crate dependency; `FrameSetRef` handles backed by
 `ResourceCache`; no `include!` of `abi/*` except under `uqm-platform`.
-Verification: V1 with canvas digests for every corpus entry, V2, V3, V4 including the
-intro presentation (`tests/intro_presentation.rs`) and real-window screenshots
-inspected for every smoke scenario, five release builds, V5.
-Size: about 170 files, 24-28k lines. Units: U7-01 to U7-06.
+Verification: V1 with canvas digests for every corpus entry, V2, V3, V5 (including the
+intro presentation, `tests/intro_presentation.rs`), five release builds, and V4 at
+milestones M4 and M5 (work-items.md).
+Size: about 170 files, 24-28k lines. Units: U7-OS, U7-G, U7-P (U7-01 to U7-06 regrouped by seam; the carve is in U8-C).
 
 ### Phase 8: closeout
 
@@ -550,7 +552,7 @@ Exit criteria: crate-wide `static_mut` = 0, `extern_c_fn` = 0 outside platform,
 `bridge_calls` = 0, `allow` attributes only the platform `unsafe_code` allows,
 `unwrap`/`expect` in production = 0, coverage ≥ 70%. Remaining baseline entries are
 LOC and complexity only. Verification: full V1-V5, with the `S8` bundle once
-`abi-check` is gone. Size: about 40 files, net deletion. Units: U8-01.
+`abi-check` is gone. Size: about 40 files, net deletion. Units: U8-C (with the carve of `uqm-platform`).
 
 ## 6. Review response
 
@@ -588,11 +590,10 @@ include all four:
 
 ## 7. Work units and agents
 
-[work-items.md](work-items.md) splits the phases into 40 work units (P0 6, P1 4,
-P2 9, P3 2, P4 4, P5 4, P6 4, P7 6, P8 1), each one PR with its dependencies,
-reserved and shared files, scope, deletes, acceptance commands (V4 scenario ids
-included), exit counters and risks, plus the transitional adapters, the waves (28),
-the critical path (24 units), the mapping from the earlier 63 units and the label
+[work-items.md](work-items.md) splits the phases into 39 work units (P0 6, P1 4,
+P2 9, P3 2, P4 4, P5 4, P6 6, P7 3, P8 1), each one PR with its dependencies,
+reserved and shared files, scope, deletes, acceptance commands, exit counters and risks, plus the transitional adapters, the waves (25),
+the critical path (21 units), the mapping from the earlier 63 units and the label
 set. The issues are the source of truth once they exist. Agents follow [AGENTS.md](AGENTS.md).
 
 ## 8. Review 2 response
@@ -636,10 +637,10 @@ The owner's rule: the change and the migration happen in the same unit, and remo
 the dead code is part of its acceptance; 63 PRs were too many. Every unit is now a
 vertical slice that introduces the new representation or API, migrates every user and
 deletes the replaced code, with a Deletes list and a zero-count check per item
-(`cargo xtask quality ident`, added to U0-02 for this). A semantic unit may reach about
-6,000 changed lines; mechanical commits do not count.
+(`cargo xtask quality ident`, added to U0-02 for this). A unit has no size limit;
+mechanical commits stay separate from semantic ones and are reported separately.
 
-Unit count: 63 before, 40 now (P0 6, P1 4, P2 9, P3 2, P4 4, P5 4, P6 4, P7 6, P8 1).
+Unit count: 63 before, 39 now (P0 6, P1 4, P2 9, P3 2, P4 4, P5 4, P6 6, P7 3, P8 1; U6-04 split into three and U7-01..U8-01 regrouped by seam).
 The merges join units that only separated adding from migrating or deleting: the pool
 with Stage C; Stage B with the process loop; queue views with the queue storage;
 `World` accessors with the owned `World`; the first generators with the vtable
@@ -654,7 +655,7 @@ are two units again: once every comm-global reader (hail, the comm ABI helpers, 
 locdata copier, credits) and the comm runtime statics joined the session unit, it
 passed 6,000 lines. U6-01 moves every reader and writer, the dialogue adapters
 included, and U6-02 changes only the adapters' form, so no adapter sits between them.
-The critical path is 24 units over 28 waves.
+The critical path is 21 units over 25 waves.
 
 Each fix of the table above still holds:
 
@@ -670,8 +671,8 @@ Each fix of the table above still holds:
 | 8 | U7-06 moves the POSIX process, descriptor and errno code behind `os` before its carve commit |
 | 9 | U0-05 routes `now_ms` through `time::source` with an order test |
 | 10 | U0-01 uses S0; U0-06 depends on U0-03, U0-04 and U0-05; `OrderedPool` (U2-09) depends on U1-04 |
-| 11 | race units sized by source plus test lines, one hard race each; semantic units at most about 6,000 lines |
+| 11 | race units sized by source plus test lines, one hard race each; units have no fixed line limit |
 | 12 | AGENTS.md "Unsafe during the migration" and "Goldens" (creation by U0-06 only) |
 | 13 | one filter per invocation; `--expect` and `test $? -eq 1` forms; `S8` in U8-01; replay summary test in U0-05; `parity counts` and goldens in U0-06 |
-| 14 | every unit lists its exact V4 scenario ids, unions of the merged units' lists |
+| 14 | V4 runs at the native milestones of work-items.md, not per unit |
 | 15 | `touches` and `shared` per unit, the one shared-file rule, waves and critical path recomputed |

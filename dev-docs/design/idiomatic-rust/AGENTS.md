@@ -38,8 +38,8 @@ truth for its scope and acceptance.
   `LazyLock`, `lazy_static`, or `static` holding atomics, locks or cells. Immutable
   tables are fine. Moving an existing global, or adding a field to one, is allowed
   when the unit says so. The plan adds exactly two: U0-05's set-once replay time
-  source `TIME_SOURCE` in `time::source` (U1-04 moves it into `uqm-engine`, U7-05
-  removes it) and the `app::bridge` context slot of U1-02 (U6-04 removes it).
+  source `TIME_SOURCE` in `time::source` (U1-04 moves it into `uqm-engine`, U7-P
+  removes it) and the `app::bridge` context slot of U1-02 (U6-04A removes it).
 - Change, migrate and delete in one PR; the PR is not done until the replaced code
   is gone. Your unit introduces the new representation or API, moves every user of
   the thing it replaces, and deletes the replaced code. Every item under the issue's
@@ -52,7 +52,7 @@ truth for its scope and acceptance.
 - Adapters: a transitional adapter may exist only while live, unconverted users of the
   old path remain in code that a later unit owns. Use only the adapters listed in
   work-items.md (Transitional adapters); the unit that converts an adapter's last user
-  deletes it. Do not add another; if your unit seems to need one, stop and file.
+  deletes it (A4 U6-04A, A5 U7-G, A6 U7-P, A7 U8-C). Do not add another; if your unit seems to need one, stop and file.
 - Gate counters only fall. Never edit `rust/xtask/quality-baseline.toml` by hand; use
   `cargo xtask quality --tighten` and `cargo xtask quality move`. Never apply
   `quality-growth-approved`.
@@ -77,14 +77,14 @@ The end state allows `unsafe` only in the `UNSAFE_ALLOWED` modules of `uqm-platf
   no `unsafe`. `uqm-save`, `uqm-content` and `uqm-modes` forbid it from creation.
 - `unsafe` may move: from a caller into a safe wrapper in `uqm-engine` (for example a
   C-style graphics or sound call needed by a mode), into the `src/engine/` staging
-  accessors, or into `engine::platform::os` (U7-06). The PR's workspace total of each
+  accessors, or into `engine::platform::os` (U7-OS). The PR's workspace total of each
   `unsafe` metric must not rise; `cargo xtask quality --base origin/main` checks it.
 - New `unsafe` that is not such a move is allowed only where the unit states an
   unsafe allowance (U1-02's staging accessors). Those units carry `owner-review`, and
   the owner applies `quality-growth-approved`.
 - The soundness fixes that turn safe pointer-taking functions into `unsafe fn` land
   in U0-01, before the first baseline (U0-02), so they are not growth.
-- `uqm-engine` becomes `forbid(unsafe_code)` in U7-06 and the root in U8-01.
+- `uqm-engine` becomes `forbid(unsafe_code)` in U8-C and the root in U8-C.
 
 ### Goldens
 
@@ -100,7 +100,7 @@ The end state allows `unsafe` only in the `UNSAFE_ALLOWED` modules of `uqm-platf
 ## Verify
 
 Run every command in the issue's Acceptance section from the repository root; issue
-bodies spell out each check bundle and the unit's V4 commands. Then:
+bodies spell out each check bundle. Then:
 
 1. `cd rust && cargo xtask quality --base origin/main` shows no growth, and the exit
    numbers in the issue moved as stated.
@@ -109,22 +109,26 @@ bodies spell out each check bundle and the unit's V4 commands. Then:
    match) passes, and no adapter outside work-items.md's list remains.
 3. From U0-06 on, `cd rust && cargo xtask parity check --base origin/main` is
    identical.
-4. The four native scenarios pass (`V2`). If you cannot run macOS natively, say so in
-   the PR and rely on the `failure-scenarios` job.
-5. For `V4`, inspect both galleries with the image-comparer, not by file size.
+4. `V2` runs as the CI `failure-scenarios` job on the ready PR. No local native run is
+   required.
+5. `V4` is not a per-PR gate. Real-window runs and screenshot inspection happen at the
+   native milestones in work-items.md, scheduled by the orchestrator. If a change can
+   alter what reaches the window but not the internal canvas (present, scaling, window
+   or texture code), say so in the PR.
 
 Open the PR titled `<unit-id>: <title>` with `Closes #<issue>`, the Deletes list
 checked off item by item, the exit numbers (base and PR values), the acceptance output
-summaries and, for crate splits, the `--timings` comparison. CI must be green on every job before review.
+summaries and, for crate splits, the `--timings` comparison. The PR states which native
+milestone will cover it. CI must be green on every job before review.
 
 ## Stop and file an issue instead
 
 Stop, add `blocked` to the unit, and open an issue linked to it when:
 
 - a parity or save check differs and the cause is not a mistake in your own change;
-- the unit needs more than about 6,000 non-mechanical changed lines (git mv for crate
-  splits, renames, accessor swaps and generated golden data do not count), or files
-  outside its `touches` and `shared` lists;
+- the unit needs files outside its `touches` and `shared` lists. Units have no size
+  limit; the PR reports inclusive and non-mechanical changed lines, and keeps mechanical
+  and semantic changes in separate commits;
 - an item under Deletes cannot go in this PR, or the change needs an adapter that
   work-items.md does not list;
 - a budget or baseline would have to rise, or a golden would have to change;

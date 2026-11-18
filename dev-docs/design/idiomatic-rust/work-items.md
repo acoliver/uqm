@@ -1,6 +1,6 @@
 # Work items: the migration as GitHub issues
 
-This file breaks [plan.md](plan.md) into 40 work units. Each unit is one GitHub issue
+This file breaks [plan.md](plan.md) into 39 work units. Each unit is one GitHub issue
 and one PR that a single agent can finish and land with every CI job green.
 Implementing agents read [AGENTS.md](AGENTS.md) first, then their unit's issue.
 
@@ -18,7 +18,7 @@ the old units it replaces under **Replaces**; the mapping is complete (see "Old 
 - **Nine phase issues** (`P0`..`P8`, #589 to #597): exit criteria and a checklist of
   their units. A phase closes when all its units have merged and its exit criteria hold
   on `main`.
-- **40 unit issues** (`U<phase>-<nn>`): scope, files, change, deletes, out of scope,
+- **39 unit issues** (`U<phase>-<nn>`): scope, files, change, deletes, out of scope,
   acceptance commands, exit numbers and risks.
 
 Every unit is a vertical slice. It introduces the new representation or API, migrates
@@ -30,10 +30,10 @@ zero-count check (`cargo xtask quality report ... --expect 0`,
 match). No unit leaves code with zero callers or two live implementations of the same
 thing. Units that only add tooling say so under Deletes and replace nothing.
 
-A semantic unit is at most about 6,000 changed lines; mechanical commits (git mv for
-crate splits, renames, accessor swaps, generated golden data) do not count. Inside a
-unit, mechanical and semantic changes are separate commits, and V1 is the oracle for
-each. A crate move is the last commit of its unit and changes nothing inside moved files
+A unit has no size limit: it is one coherent subsystem change that one lane can carry,
+and its PR reports inclusive and non-mechanical changed lines. Mechanical commits (git
+mv for crate splits, renames, accessor swaps, generated golden data) stay separate from
+semantic ones and are reported separately. V1 is the oracle for each commit. A crate move is the last commit of its unit and changes nothing inside moved files
 except visibility. Each unit leaves `main` building, passing every CI job and playable.
 
 Rules that hold for every unit are in [AGENTS.md](AGENTS.md) and are not repeated per
@@ -52,10 +52,14 @@ AGENTS.md allows.
 | 3 | Super Melee and netplay | 2 | U3-01..U3-02 |
 | 4 | world state, queues and main loop; engine core into uqm-engine | 4 | U4-01..U4-04 |
 | 5 | navigation and planets | 4 | U5-01..U5-04 |
-| 6 | comm, starbase and menus; uqm-content and uqm-modes | 4 | U6-01..U6-04 |
-| 7 | platform and content loading; uqm-platform | 6 | U7-01..U7-06 |
-| 8 | closeout | 1 | U8-01 |
-| | **Total** | **40** | |
+| 6 | comm, starbase and menus; uqm-content and uqm-modes | 6 | U6-01..U6-03, U6-04A..U6-04C |
+| 7 | platform and content loading; uqm-platform | 3 | U7-OS, U7-G, U7-P |
+| 8 | closeout; uqm-platform carve | 1 | U8-C |
+| | **Total** | **39** | |
+
+U6-04 lands as U6-04A, U6-04B and U6-04C, and the remaining Phase 7 and 8 units are
+regrouped by seam (see "Remaining units after U6-03"). The unit entries below for U6-04
+and U7-01..U8-01 are the scope those units carry, split among the new units.
 
 Handoffs that keep every PR green:
 
@@ -79,13 +83,13 @@ Handoffs that keep every PR green:
 - The comm statics move into the `Comm` session with every reader and writer, the
   dialogue adapters, hail, credits and the locdata copier included (U6-01), before the
   adapters take their content and modes form (U6-02).
-- The last semantic commits of U6-04 bring `planned.uqm-content` and
-  `planned.uqm-modes` to 0 before its move commit.
-- Video moves with graphics (U7-01 presentation, U7-02 screen format); the Files port
-  arrives with every one of its callers and the `uio_*` deletion (U7-03).
+- U6-04A and U6-04B bring `planned.uqm-content` and `planned.uqm-modes` to 0 in their
+  paths; U6-04C asserts 0 before its move commit.
+- Video moves with graphics (U7-G: presentation and screen format); the Files port
+  arrives with every one of its callers and the `uio_*` deletion (U7-P).
 - Automation's POSIX process and descriptor code and `platform.rs` move behind
-  `platform::os` in the same unit that carves `uqm-platform` (U7-06), before the root
-  `forbid(unsafe_code)` (U8-01).
+  `platform::os` in U7-OS, before the unit that carves `uqm-platform` (U8-C) and the
+  root `forbid(unsafe_code)` (U8-C).
 
 ## Transitional adapters
 
@@ -98,10 +102,10 @@ its last user. Any other adapter is a stop-and-file case (AGENTS.md).
 | A1 | Hook::Legacy (ElementHook::Legacy, CollisionHook::Legacy), the legacy arm of invoke_* and the legacy_hooks budget | U1-02 | U2-08 | unconverted races (U2-01 to U2-05, U2-08) and the hyperspace and IP element callbacks (U2-07) |
 | A2 | race-level dispatch through RACE_DESC function pointers for races without a race(species) arm, and their static templates in INITIALIZERS | U1-03 | U2-08 | races not yet converted (U2-01 to U2-05, U2-08) |
 | A3 | the Stage B view over raw records: ElementTable's raw decoding (HELEMENT <-> ElementId, parent() by address range, generation side array) over the Stage A authority statics, and LinkQueue's QUEUE backing for race_q | U1-02 (ElementTable), U2-06 (LinkQueue) | U2-09 | unconverted races and record readers dereference ELEMENT, STARSHIP and DisplayArray directly until U2-08 |
-| A4 | app::bridge: the published NonNull<Cx> slot, bridge::enter and the counted bridge accessors (bridge_calls budget) | U1-02 | U2-08 (battle entry points), U6-04 (the rest) | Rust entry points called from legacy hooks (AllocElement, do_damage, ProcessSound) until U2-08, which converts the last legacy hook; mode entry points without Game or Cx (comm, planets, ui, front_end, starbase) until U6-04 |
-| A5 | present_hook and readback_hook fn-pointer fields in the graphics backend state, set by automation | U1-04 | U7-01 | automation capture and the presented-frame callback |
-| A6 | the time::source module and its TIME_SOURCE set-once static (Real or Replay clock): src/time/source.rs, moved with the counter to crates/engine/src/time/source.rs by U1-04 | U0-05 | U7-05 | the install in src/main.rs, GetTimeCounter, the replay PacingEnv and the callback alarm clock |
-| A7 | root re-exports of modules moved into crates (savegame codec, the libs layer, src/engine, content, modes, platform) | U0-04, U1-04, U4-04, U6-04, U7-06 | U8-01 | root code that still names the old module paths |
+| A4 | app::bridge: the published NonNull<Cx> slot, bridge::enter and the counted bridge accessors (bridge_calls budget) | U1-02 | U2-08 (battle entry points), U6-04A (the rest) | Rust entry points called from legacy hooks (AllocElement, do_damage, ProcessSound) until U2-08, which converts the last legacy hook; mode entry points without Game or Cx (comm, planets, ui, front_end, starbase) until U6-04A |
+| A5 | present_hook and readback_hook fn-pointer fields in the graphics backend state, set by automation | U1-04 | U7-G | automation capture and the presented-frame callback |
+| A6 | the time::source module and its TIME_SOURCE set-once static (Real or Replay clock): src/time/source.rs, moved with the counter to crates/engine/src/time/source.rs by U1-04 | U0-05 | U7-P | the install in src/main.rs, GetTimeCounter, the replay PacingEnv and the callback alarm clock |
+| A7 | root re-exports of modules moved into crates (savegame codec, the libs layer, src/engine, content, modes, platform) | U0-04, U1-04, U4-04, U6-04C, U8-C | U8-C | root code that still names the old module paths |
 
 The three-stage storage transition (architecture.md 4.1) is kept only for the battle
 records (A1 to A4): 28 races, the AI and four groups of readers dereference
@@ -160,28 +164,79 @@ worktrees exist. Units are placed in order of their longest remaining dependency
 | 19 | U6-01 |  |
 | 20 | U6-02 |  |
 | 21 | U5-03 |  |
-| 22 | U6-04 |  |
-| 23 | U7-01 |  |
-| 24 | U7-03, U7-05 | U7-03/U7-05 |
-| 25 | U7-02 |  |
-| 26 | U7-04 |  |
-| 27 | U7-06 |  |
-| 28 | U8-01 |  |
+| 22 | U6-04A, U6-04B, U7-OS | U6-04A/U6-04B (gate lines in the shared `mod.rs` files) |
+| 23 | U6-04C (U7-OS may stay open) |  |
+| 24 | U7-G, U7-P (U7-OS if still open) | U7-G/U7-P (`host.rs`, `src/app/mod.rs`) |
+| 25 | U8-C |  |
+
+Waves 22 to 25 replace the earlier waves 22 to 28 (U6-04, U7-01 to U7-06 and U8-01); the
+unit table below is their definition.
 
 The race units have no order among themselves except U2-08, which waits for the others.
 Lanes inside a phase (the `lane` field) group units by subsystem.
 
 **Critical path.** The longest dependency chain weighted by changed lines, mechanical
-included: 24 units, about 119,500 changed lines.
+included:
 
-U0-01 → U0-02 → U0-03 → U0-04 → U0-06 → U1-01 → U1-02 → U1-03 → U2-01 → U2-08 → U2-09 → U4-01 → U4-02 → U4-04 → U5-01 → U5-02 → U5-03 → U6-04 → U7-01 → U7-03 → U7-02 → U7-04 → U7-06 → U8-01.
+U0-01 → U0-02 → U0-03 → U0-04 → U0-06 → U1-01 → U1-02 → U1-03 → U2-01 → U2-08 → U2-09 → U4-01 → U4-02 → U4-04 → U5-01 → U5-02 → U5-03 → U6-04B → U6-04C → U7-G → U8-C.
 
 The race unit on the path stands for any of U2-01, U2-03 and U2-04, which have the same
 weight. Between U5-01 and U6-04 two chains have the same weight, about 8,300 changed
 lines each: U5-02 → U5-03 (shown) and U6-01 → U6-02. All four carry `critical-path`;
 they share files, so they run one after another (waves 18 to 21). The remaining units,
 U0-05, U1-04, U2-02, U2-03, U2-04, U2-05, U2-06, U2-07, U3-01, U3-02, U4-03, U5-04,
-U6-03 and U7-05, run in parallel lanes.
+U6-03, U6-04A, U7-OS and U7-P, run in parallel lanes.
+
+## Remaining units after U6-03
+
+U6-04 and the Phase 7 and 8 units are regrouped by seam, so that every caller is
+touched once and a lane can carry a whole subsystem. At most four lanes plus the root
+checkout run at once. Each unit keeps the rules in AGENTS.md: change, migrate and delete
+in one PR, no adapter outside the table above, no growth, no golden change, mechanical
+and semantic changes in separate commits, parity identical.
+
+| Unit | What | Replaces | Depends on |
+|---|---|---|---|
+| U6-04A | battle, ships, pickers and SIS menus: open the test gates in their paths, delete `app::bridge`, `handoff.rs` and the `bridge_calls` budget (A4), move the input admission and observer contract onto `Cx`/`Io`, make battle and ship code safe | part of U6-04 | U6-03 and the comm-local controls work |
+| U6-04B | world modes: delete `navigation_abi.rs` and the `navigation::abi` module (whichever of A and B merges second does it), planned counters to 0 in its paths, open its test gates, encounter entry, comm, credits and solarsys code safe, apply D4 to `savegame::{live, runtime}` importers | part of U6-04 | T0 for its final measurement |
+| U6-04C | crate move: `uqm-content`, `uqm-modes`, `state` and the game clock into `uqm-engine`; `forbid(unsafe_code)` in both new crates; asserts both planned counters at 0 before the move commit; closes #694 | part of U6-04 | U6-04A, U6-04B |
+| U7-OS | automation and `platform.rs` OS calls behind `engine::platform::os` | first half of U7-06 | none |
+| U7-G | graphics, video presentation and resources: `Platform::present`, pixel-buffer canvases, DCQ as a Rust enum, one safe drawing API, `ResourceCache`, every caller; deletes the graphics ABI, `res_*` and the A5 hooks | U7-01, U7-02 | U6-04C |
+| U7-P | platform services: Files mounts and the last `uio_*`, trait `Decoder`, the audio port, `VControl` on `Platform::poll_input`, Platform clock replacing `time::source` (A6), owned callback queue, app-layer startup made safe | U7-03 Part 3, U7-04, U7-05 | U6-04C |
+| U8-C | carve `uqm-platform` and close out: delete `abi/`, root re-exports (A7), naming allows, production unwrap/expect; `forbid(unsafe_code)` in `uqm-engine` and the root | carve half of U7-06, U8-01 | U7-G, U7-P, U7-OS |
+
+The layer assignment these units rely on is the layer table of architecture.md section
+2 and `MODULE_LAYERS` in `xtask/src/quality/layers.rs`: `uqm-content` takes `ships`,
+`planets::{generate, tables}` and `comm::races`; `uqm-modes` takes root `battle`,
+`supermelee`, `pickship`, `navigation`, the other `planets` modules, `planet_side`, the
+other `comm` modules, `starbase`, `ui`, `front_end` and `mainloop::restart_menu`;
+`uqm-engine` takes `state` and the game clock; `savegame::{live, runtime}` stay in the
+app. `include!`d ABI files move with the module that includes them and are deleted by
+U8-C.
+
+U6-04C runs when no open unit has edits under the paths it renames; U7-OS may stay
+open. U7-G and U7-P start from U6-04C's merge, and when both touch `host.rs` or
+`src/app/mod.rs`, the second to merge rebases and keeps both.
+
+## Native milestones
+
+Real-window runs and screenshot inspection are not per-PR gates. The orchestrator runs
+them on `main` after a subsystem lands, or when something breaks, through
+`tmp/pt-runs/iterm-run.sh`, with screenshot inspection in batches of ten. The four
+failure scenarios (`V2`) still run on every ready PR as the CI `failure-scenarios` job.
+Any unexpected frame is first checked against headless parity traces before it is called
+a defect.
+
+| Milestone | After | Scenarios | Why these |
+|---|---|---|---|
+| M1 | U6-04A | `super-melee-v1`, `super-melee-mutual-loss-v1`, `battle-v1`, `lost-battle-v1`, `samatra-dev-fixture-v1`, `campaign-s12a-connected-samatra`, `probe-encounter-v2`, `fly-to-alpha-centauri-v1`, `load-save-v1`, `setup-menu-v1` | battle and race code, pickers, input admission, SIS menus in hyperspace, Samatra |
+| M2 | U6-04B | `native smoke` (5), `main-menu-v1`, `first-open-load-empty-v1`, `first-open-load-populated-v1`, `netplay-dialog-v1`, `introduction-v1`, `starbase-visit-v1`, `real-sol-starbase-alliance`, `comm-encounter-v1`, `real-sol-probe-to-commander-responses`, `campaign-s08-talking-pet`, `real-sol-earth-orbit`, `real-sol-pluto-orbit-scan`, `lander-destroyed-v1`, `out-of-fuel-v1`, `load-alpha-centauri-v1`, `campaign-s13-connected-ending` (credits) | conversation entry, credits, starbase, orbit and scan, front end, save modules |
+| M3 | U6-04C (Phase 6 exit) | the connected campaign in order `campaign-s01-funded-sol` … `campaign-s13-connected-ending`; all 45 `load-*-v1`; the four failure scenarios | first full start-to-finish playthrough on the split crates. U6-04C changes no code, so if it lands soon after U6-04B, M2 and M3 run together on its head |
+| M4 | U7-G | smoke, `introduction-v1`, `comm-encounter-v1`, `real-sol-earth-orbit`, `real-sol-pluto-orbit-scan`, `starbase-visit-v1`, `battle-v1`, `setup-menu-v1`, `campaign-s13-connected-ending`, plus the optional 3DO videos (ship spin, intro, ending) with addon content | present, scaling and window texture path, which canvas digests do not cover; colour-map fades |
+| M5 | U7-P | `first-open-load-populated-v1`, `first-open-load-empty-v1`, `load-save-v1`, `super-melee-mutual-loss-v1` (team files), `introduction-v1` and `comm-encounter-v1` (decoders and speech), `main-menu-v1`, `setup-menu-v1`, `battle-v1` (input timing), `uqm --check-content` | mounts, decoders, audio thread, input and clock on the real clock. Audio content itself is not checked by screenshots; the run checks the rodio backend log for errors |
+| M6 | U8-C (release candidate) | M3's full set again, smoke, and the five release builds in CI | the shipped binary after the platform carve and root `forbid` |
+
+If U7-G and U7-P merge close together, M4 and M5 run as one batch.
 
 ## Old units
 
@@ -282,8 +337,8 @@ plus `critical-path` and `owner-review` where they apply. Agents set `in-progres
 Each unit issue holds `<!-- ir:{id} -->` as its stable key, links to the epic and its
 phase, its dependencies as issue links, the old issues it replaces, "Read first:
 AGENTS.md, then {refs}", and the sections of its entry below. Every check bundle named
-in Acceptance is expanded into its commands with `{unit}` replaced by the unit id, and
-the V4 block is copied as written, so an issue states its complete acceptance set. The
+in Acceptance is expanded into its commands with `{unit}` replaced by the unit id, so an
+issue states its complete acceptance set. The
 issue ends with:
 
 ```markdown
@@ -302,10 +357,9 @@ Issues are created in dependency order so that every "Depends on" link resolves.
 Commands run from the repository root; `{unit}` is the unit id. `S0` is CI before
 U0-03 merges, `S` from U0-03 until U8-01, `S8` within U8-01 (after `abi-check` is
 deleted). `P` exists from U0-06 and `V3` in full from U0-06. A unit with no dependency
-on U0-03 lists "S0 or S" and runs the one `main` uses when its PR opens. Native runs
-(`V2`, `V4`) need macOS; a unit that cannot run them locally relies on the
-`failure-scenarios` job for `V2` and says so in the PR. `V4` galleries are inspected
-with the image-comparer, not by file size.
+on U0-03 lists "S0 or S" and runs the one `main` uses when its PR opens. `V2` is the CI
+`failure-scenarios` job. `V4` runs only at the native milestones below; units do not
+list `V4` commands.
 
 **S0**: CI as it is before U0-03 merges.
 
@@ -351,7 +405,8 @@ cargo xtask parity check --base origin/main
 cargo xtask parity counts check --all
 ```
 
-**V2**: native failure scenarios on a real macOS window (failure-scenarios job).
+**V2**: native failure scenarios on a real macOS window (the `failure-scenarios` CI job;
+the command is what the job runs).
 
 ```sh
 pkill -x uqm || true
@@ -377,11 +432,11 @@ cd .. && python3 -m unittest discover -s scripts/release -p 'test_*.py'
 ```
 
 **V4**: `native smoke` (main-menu-v1, real-sol-starbase-to-mars, load-save-v1,
-comm-encounter-v1, battle-v1 from `rust/xtask/smoke.json`) plus the unit's own
-scenarios, each unit's block below. None of the 45 `load-*-v1` scenarios starts in
-hyperspace (41 assert `IN_INTERPLANETARY`), so hyperspace work uses
+comm-encounter-v1, battle-v1 from `rust/xtask/smoke.json`) plus scenario lists, run only at
+the native milestones (section "Native milestones"). None of the 45 `load-*-v1` scenarios
+starts in hyperspace (41 assert `IN_INTERPLANETARY`), so hyperspace work uses
 `fly-to-alpha-centauri-v1`, `load-save-v1` (which flies into hyperspace) and
-`load-alpha-centauri-v1`. Units that touch world state or saves run all 45.
+`load-alpha-centauri-v1`.
 
 ## Units
 
@@ -1301,7 +1356,6 @@ Phase 2 · semantic · lane `battle` · about 3,800 changed lines · depends on 
 
 **Risks**
 - A pool that reuses slots in another order than FreeLink changes element order; the randomized comparison is the oracle.
-- Accessors written in Stage B confine call-site changes; if the PR passes 6,000 non-mechanical lines, stop and file (AGENTS.md).
 
 ## Phase 3: Super Melee and netplay
 
@@ -1362,7 +1416,6 @@ Phase 3 · semantic · lane `netplay` · about 5,700 semantic and 600 mechanical
 - Never regenerate byte fixtures from the new codec; they are the oracle.
 - Non-blocking connect differs between std::net and WinSock; the Windows game-build jobs are the check.
 - Connections must survive between battles of one melee session exactly as the globals did; the session is lent to Battle and returned, never rebuilt. netplay-dialog-v1 and the loopback test cover it.
-- The unit is near the size limit; if it passes 6,000 non-mechanical lines, stop and file.
 
 ### U3-02 Super Melee setup, teams and ship picking as a session; .mle into uqm-save
 
@@ -1736,7 +1789,6 @@ Phase 5 · semantic · lane `planets` · about 5,800 changed lines · depends on
 **Risks**
 - IP group movement order is saved; V3b and the star-contact fixture are the oracles.
 - Scan reveals minerals with RNG draws; their order is in the solar-flight entry.
-- The unit is close to the size limit; if it passes 6,000 non-mechanical lines, stop and file.
 
 ### U5-03 Planet side on the session; delete abi/global_state_abi.rs
 
@@ -2014,29 +2066,16 @@ Phase 6 · semantic · lane `menus` · about 3,000 semantic and 2,000 mechanical
 - `cd rust && cargo test -p uqm-content -p uqm-modes --locked`
 - `mkdir -p tmp/U6-04 && cd rust && cargo tree -p uqm-modes -e normal --locked > ../tmp/U6-04/tree.txt && { grep -q 'uqm-rust ' ../tmp/U6-04/tree.txt; test $? -eq 1; }`
 - `mkdir -p tmp/U6-04 && cd rust && cargo build --locked && touch crates/modes/src/lib.rs && cargo build --locked > ../tmp/U6-04/rebuild.log 2>&1 && { grep -qE 'Compiling uqm-(engine|content) ' ../tmp/U6-04/rebuild.log; test $? -eq 1; }`
-- V2 (check bundle)
 - R5 (check bundle)
-- V4 (smoke plus 6 scenarios); inspect both galleries with the image-comparer:
-
-  ```sh
-  pkill -x uqm || true
-  cargo run --release --locked --manifest-path rust/xtask/Cargo.toml -- native smoke --artifacts "$PWD/tmp/U6-04/v4-smoke" --content "$PWD/sc2/content/packages"
-  cargo run --release --locked --manifest-path rust/xtask/Cargo.toml -- native gallery "$PWD/tmp/U6-04/v4-smoke" --output "$PWD/tmp/U6-04/v4-smoke-gallery"
-  pkill -x uqm || true
-  cargo run --release --locked --manifest-path rust/xtask/Cargo.toml -- native run --artifacts "$PWD/tmp/U6-04/v4-run" --content "$PWD/sc2/content/packages" \
-    --scenarios "main-menu-v1,setup-menu-v1,first-open-load-empty-v1,first-open-load-populated-v1,netplay-dialog-v1,introduction-v1"
-  cargo run --release --locked --manifest-path rust/xtask/Cargo.toml -- native gallery "$PWD/tmp/U6-04/v4-run" --output "$PWD/tmp/U6-04/v4-run-gallery"
-  ```
 
 **Exit numbers.** cfg_not_test_modules = 0; bridge_calls = 0 and budget deleted; planned.uqm-content = 0 and planned.uqm-modes = 0, entries deleted; workspace members 4 -> 6; both new crates unsafe 0 by forbid.
 
 **Risks**
-- If the planned counters show more than this PR can resolve within 6,000 non-mechanical lines, stop and file the remainder as a unit before the move.
-- Do the move commit last, when no other unit is in progress; every open branch rebases right after the merge.
+- U6-04 lands as U6-04A, U6-04B and U6-04C. U6-04C runs when no open unit has edits under the paths it renames.
 
 ## Phase 7: platform and content loading; uqm-platform
 
-Exit: uio_* = 0 with every caller on Files; unsafe only in UNSAFE_ALLOWED modules of uqm-platform; uqm-engine has forbid(unsafe_code) and no OS crate; canvas digests match for every corpus entry; real-window screenshots inspected for the smoke set and the intro.
+Exit: uio_* = 0 with every caller on Files; unsafe only in UNSAFE_ALLOWED modules of uqm-platform; uqm-engine has forbid(unsafe_code) and no OS crate; canvas digests match for every corpus entry; milestones M4 and M5 passed.
 
 ### U7-01 Render pipeline: Platform present, pixel-buffer canvases and video presentation; DCQ, contexts and primitives behind safe types
 
@@ -2072,19 +2111,7 @@ Phase 7 · semantic · lane `graphics` · about 5,800 changed lines · depends o
 - `cd rust && for f in dcqueue_abi context_abi tfb_draw_abi tfb_prim_abi gfx_common_abi; do test ! -e crates/engine/src/graphics/$f.rs || exit 1; done`
 - `cd rust && cargo xtask quality ident present_hook readback_hook screen_global --expect 0`
 - `cd rust && cargo xtask quality ident SDL_Surface --expect-only graphics/sdl`
-- V2 (check bundle)
 - R5 (check bundle)
-- V4 (smoke plus 5 scenarios); inspect both galleries with the image-comparer:
-
-  ```sh
-  pkill -x uqm || true
-  cargo run --release --locked --manifest-path rust/xtask/Cargo.toml -- native smoke --artifacts "$PWD/tmp/U7-01/v4-smoke" --content "$PWD/sc2/content/packages"
-  cargo run --release --locked --manifest-path rust/xtask/Cargo.toml -- native gallery "$PWD/tmp/U7-01/v4-smoke" --output "$PWD/tmp/U7-01/v4-smoke-gallery"
-  pkill -x uqm || true
-  cargo run --release --locked --manifest-path rust/xtask/Cargo.toml -- native run --artifacts "$PWD/tmp/U7-01/v4-run" --content "$PWD/sc2/content/packages" \
-    --scenarios "introduction-v1,battle-v1,real-sol-earth-orbit,setup-menu-v1,starbase-visit-v1"
-  cargo run --release --locked --manifest-path rust/xtask/Cargo.toml -- native gallery "$PWD/tmp/U7-01/v4-run" --output "$PWD/tmp/U7-01/v4-run-gallery"
-  ```
 
 **Exit numbers.** SDL_Surface uses outside graphics/sdl: 0, video included; the five *_abi.rs files deleted and their no_mangle and extern_c_fn counts 0.
 
@@ -2124,18 +2151,6 @@ Phase 7 · semantic · lane `graphics` · about 5,500 changed lines · depends o
 - `cd rust && for m in no_mangle extern_c_fn; do cargo xtask quality report $m:graphics --expect 0 || exit 1; done`
 - `cd rust && cargo xtask quality ident TFB_DrawCanvas_GetScreenFormat CaptureDrawable ReleaseDrawable DestroyDrawable --expect 0`
 - `cd rust && rg -q '\bres_[A-Za-z]+\(' src crates; test $? -eq 1`
-- V2 (check bundle)
-- V4 (smoke plus 5 scenarios); inspect both galleries with the image-comparer:
-
-  ```sh
-  pkill -x uqm || true
-  cargo run --release --locked --manifest-path rust/xtask/Cargo.toml -- native smoke --artifacts "$PWD/tmp/U7-02/v4-smoke" --content "$PWD/sc2/content/packages"
-  cargo run --release --locked --manifest-path rust/xtask/Cargo.toml -- native gallery "$PWD/tmp/U7-02/v4-smoke" --output "$PWD/tmp/U7-02/v4-smoke-gallery"
-  pkill -x uqm || true
-  cargo run --release --locked --manifest-path rust/xtask/Cargo.toml -- native run --artifacts "$PWD/tmp/U7-02/v4-run" --content "$PWD/sc2/content/packages" \
-    --scenarios "introduction-v1,comm-encounter-v1,real-sol-earth-orbit,starbase-visit-v1,real-sol-pluto-orbit-scan"
-  cargo run --release --locked --manifest-path rust/xtask/Cargo.toml -- native gallery "$PWD/tmp/U7-02/v4-run" --output "$PWD/tmp/U7-02/v4-run-gallery"
-  ```
 
 **Exit numbers.** graphics no_mangle 243 -> 0, extern_c_fn 295 -> 0; res_* functions 0.
 
@@ -2181,25 +2196,12 @@ Phase 7 · semantic · lane `content-loading` · about 5,500 semantic and 500 me
 - `cd rust && cargo xtask quality report banned_std:uqm-modes --expect 0 && cargo xtask quality report unsafe:io --expect 0`
 - `cd rust && cargo build --release --locked --bin uqm && target/release/uqm --check-content --contentdir=../sc2/content`
 - V3 (check bundle)
-- V2 (check bundle)
-- V4 (smoke plus 7 scenarios); inspect both galleries with the image-comparer:
-
-  ```sh
-  pkill -x uqm || true
-  cargo run --release --locked --manifest-path rust/xtask/Cargo.toml -- native smoke --artifacts "$PWD/tmp/U7-03/v4-smoke" --content "$PWD/sc2/content/packages"
-  cargo run --release --locked --manifest-path rust/xtask/Cargo.toml -- native gallery "$PWD/tmp/U7-03/v4-smoke" --output "$PWD/tmp/U7-03/v4-smoke-gallery"
-  pkill -x uqm || true
-  cargo run --release --locked --manifest-path rust/xtask/Cargo.toml -- native run --artifacts "$PWD/tmp/U7-03/v4-run" --content "$PWD/sc2/content/packages" \
-    --scenarios "first-open-load-populated-v1,load-save-v1,first-open-load-empty-v1,super-melee-mutual-loss-v1,introduction-v1,comm-encounter-v1,starbase-visit-v1"
-  cargo run --release --locked --manifest-path rust/xtask/Cargo.toml -- native gallery "$PWD/tmp/U7-03/v4-run" --output "$PWD/tmp/U7-03/v4-run-gallery"
-  ```
 
 **Exit numbers.** one Vfs implementation; uio_* functions 0; io unsafe 0; std::fs in uqm-modes 0.
 
 **Risks**
-- Addon and package precedence decide which file wins; --check-content and V4 screenshots are the check.
+- Addon and package precedence decide which file wins; --check-content and the native milestones are the check.
 - A failed save write must leave no slot file, as today; slot tests cover it.
-- The unit is at the size limit; if it passes 6,000 non-mechanical lines, stop and file.
 
 ### U7-04 Sound and video decoders as trait Decoder; the Platform audio port
 
@@ -2230,18 +2232,6 @@ Phase 7 · semantic · lane `content-loading` · about 2,500 changed lines · de
 - `cd rust && cargo test --locked --test sound_integration --test video_native --test intro_presentation`
 - `cd rust && cargo xtask quality ident rust_ova_DecoderVtbl --expect 0`
 - `cd rust && cargo xtask quality report unsafe:sound --expect-only sound/rodio_audio.rs,sound/rodio_backend.rs && cargo xtask quality report unsafe:video --expect 0`
-- V2 (check bundle)
-- V4 (smoke plus 2 scenarios); inspect both galleries with the image-comparer:
-
-  ```sh
-  pkill -x uqm || true
-  cargo run --release --locked --manifest-path rust/xtask/Cargo.toml -- native smoke --artifacts "$PWD/tmp/U7-04/v4-smoke" --content "$PWD/sc2/content/packages"
-  cargo run --release --locked --manifest-path rust/xtask/Cargo.toml -- native gallery "$PWD/tmp/U7-04/v4-smoke" --output "$PWD/tmp/U7-04/v4-smoke-gallery"
-  pkill -x uqm || true
-  cargo run --release --locked --manifest-path rust/xtask/Cargo.toml -- native run --artifacts "$PWD/tmp/U7-04/v4-run" --content "$PWD/sc2/content/packages" \
-    --scenarios "introduction-v1,comm-encounter-v1"
-  cargo run --release --locked --manifest-path rust/xtask/Cargo.toml -- native gallery "$PWD/tmp/U7-04/v4-run" --output "$PWD/tmp/U7-04/v4-run-gallery"
-  ```
 
 **Exit numbers.** decoder vtables 0; sound and video unsafe outside the rodio backend: 0.
 
@@ -2278,23 +2268,11 @@ Phase 7 · semantic · lane `graphics` · about 2,600 changed lines · depends o
 - `cd rust && cargo test --locked replay::`
 - `cd rust && test ! -e crates/engine/src/threading/legacy_abi.rs && test ! -e crates/engine/src/time/source.rs && cargo xtask quality ident TIME_SOURCE TimeSource CreateThread_Core --expect 0`
 - `cd rust && for s in input threading callback; do cargo xtask quality report unsafe:$s --expect-only input/sdl_input.rs,threading/qos.rs || exit 1; done`
-- V2 (check bundle)
-- V4 (smoke plus 3 scenarios); inspect both galleries with the image-comparer:
-
-  ```sh
-  pkill -x uqm || true
-  cargo run --release --locked --manifest-path rust/xtask/Cargo.toml -- native smoke --artifacts "$PWD/tmp/U7-05/v4-smoke" --content "$PWD/sc2/content/packages"
-  cargo run --release --locked --manifest-path rust/xtask/Cargo.toml -- native gallery "$PWD/tmp/U7-05/v4-smoke" --output "$PWD/tmp/U7-05/v4-smoke-gallery"
-  pkill -x uqm || true
-  cargo run --release --locked --manifest-path rust/xtask/Cargo.toml -- native run --artifacts "$PWD/tmp/U7-05/v4-run" --content "$PWD/sc2/content/packages" \
-    --scenarios "setup-menu-v1,main-menu-v1,battle-v1"
-  cargo run --release --locked --manifest-path rust/xtask/Cargo.toml -- native gallery "$PWD/tmp/U7-05/v4-run" --output "$PWD/tmp/U7-05/v4-run-gallery"
-  ```
 
 **Exit numbers.** input, threading, callback unsafe outside sdl_input and qos: 0; new globals of the plan: 0.
 
 **Risks**
-- Key repeat and joystick timing read the real clock in native mode; V2 and V4 check them.
+- Key repeat and joystick timing read the real clock in native mode; native milestone M5 checks them.
 
 ### U7-06 Process, descriptor and file-system OS calls behind platform::os; carve uqm-platform out of uqm-engine
 
@@ -2326,20 +2304,12 @@ Phase 7 · semantic · lane `platform` · about 2,200 semantic and 2,000 mechani
 - `cd rust && cargo xtask quality report unsafe:automation --expect 0`
 - `cd rust && cargo xtask quality report crate_os:uqm-engine --expect 0`
 - `cd rust && cargo run --release --locked -p uqm-platform --example platform_smoke --features bundled-sdl`
-- V2 (check bundle)
 - R5 (check bundle)
-- V4 (smoke only); inspect both galleries with the image-comparer:
-
-  ```sh
-  pkill -x uqm || true
-  cargo run --release --locked --manifest-path rust/xtask/Cargo.toml -- native smoke --artifacts "$PWD/tmp/U7-06/v4-smoke" --content "$PWD/sc2/content/packages"
-  cargo run --release --locked --manifest-path rust/xtask/Cargo.toml -- native gallery "$PWD/tmp/U7-06/v4-smoke" --output "$PWD/tmp/U7-06/v4-smoke-gallery"
-  ```
 
 **Exit numbers.** automation unsafe 0; workspace members 6 -> 7; uqm-engine unsafe 0 by forbid and no OS crate.
 
 **Risks**
-- Child-session pipes carry the native harness protocol; V2 and V4 exercise it end to end.
+- Child-session pipes carry the native harness protocol; the `failure-scenarios` job and native milestone M5 exercise it end to end.
 - Release packaging finds sdl2-sys through cargo metadata; run the release-tools tests (R5).
 
 ## Phase 8: closeout
@@ -2377,22 +2347,9 @@ Phase 8 · semantic · lane `closeout` · about 3,000 semantic and 6,000 mechani
 - `cd rust && test ! -e src/abi && test ! -e xtask/src/abi_check.rs && { grep -q 'abi-check' ../.github/workflows/ci.yaml; test $? -eq 1; }`
 - `cd rust && cargo xtask quality report foreign_items --expect-only uqm-platform`
 - `cd rust && rg -q 'non_snake_case|non_upper_case_globals|non_camel_case_types' src crates; test $? -eq 1`
-- V2 (check bundle)
 - R5 (check bundle)
-- V4 (smoke plus 46 scenarios); inspect both galleries with the image-comparer:
-
-  ```sh
-  pkill -x uqm || true
-  cargo run --release --locked --manifest-path rust/xtask/Cargo.toml -- native smoke --artifacts "$PWD/tmp/U8-01/v4-smoke" --content "$PWD/sc2/content/packages"
-  cargo run --release --locked --manifest-path rust/xtask/Cargo.toml -- native gallery "$PWD/tmp/U8-01/v4-smoke" --output "$PWD/tmp/U8-01/v4-smoke-gallery"
-  pkill -x uqm || true
-  cargo run --release --locked --manifest-path rust/xtask/Cargo.toml -- native run --artifacts "$PWD/tmp/U8-01/v4-run" --content "$PWD/sc2/content/packages" \
-    --scenarios "load-alpha-centauri-v1,load-bomb-preguard-v1,load-bomb-refueled-v1,load-broken-ultron-v1,load-burvixese-caster-v1,load-caster-diversion-v1,load-connected-ambush-v1,load-connected-arilou-v1,load-connected-chmmr-bomb-v1,load-connected-combat-prep-v1,load-connected-final-fleet-v1,load-connected-full-drives-v1,load-connected-funded-fleet-v1,load-connected-jugger-prep-v1,load-connected-lure-prep-v1,load-connected-lure-v1,load-connected-rainbow-funded-v1,load-connected-samatra-distraction-v1,load-connected-samatra-remnants-v1,load-connected-shattered-v1,load-connected-sun-device-v1,load-connected-syreen-v1,load-connected-taalo-v1,load-connected-talking-pet-v1,load-connected-umgah-fleet-v1,load-connected-vault-resupply-v1,load-connected-vault-v1,load-funded-sol-v1,load-ilwrath-approach-v1,load-north-artifacts-v1,load-north-ready-v1,load-north-refueled-v1,load-portal-sol-v1,load-portal-staging-v1,load-repaired-ultron-v1,load-save-v1,load-south-refueled-v1,load-southeast-staging-v1,load-spindle-pkunk-v1,load-starbase-armed-v1,load-thraddash-diverted-v1,load-utwig-alliance-v1,load-utwig-bomb-v1,load-war-cleared-v1,load-west-bomb-refueled-v1,introduction-v1"
-  cargo run --release --locked --manifest-path rust/xtask/Cargo.toml -- native gallery "$PWD/tmp/U8-01/v4-run" --output "$PWD/tmp/U8-01/v4-run-gallery"
-  ```
 
 **Exit numbers.** foreign items outside uqm-platform 0; naming allows 0; unwrap/expect in production 0; coverage >= 70%; baseline holds LOC and complexity only.
 
 **Risks**
 - Renames are debt transfers; record them with quality move.
-- If leftover unwraps exceed 6,000 non-mechanical lines, stop and file a unit per crate before this one (AGENTS.md).
