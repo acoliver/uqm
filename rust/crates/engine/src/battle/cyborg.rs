@@ -279,7 +279,7 @@ fn pursue(cx: &mut Cx<'_>, ship: &mut Subject, eval: &mut Concern) {
                         break;
                     }
                     fire <<= 1;
-                    facing = facing.wrapping_add(QUADRANT as u16);
+                    facing = facing.wrapping_add(QUADRANT);
                 }
             }
             if thrust_angle != turn_angle
@@ -344,7 +344,7 @@ fn entice(cx: &mut Cx<'_>, ship: &mut Subject, eval: &mut Concern) {
     if eval.movement == MOVEMENT_STATE_AVOID {
         turn_angle = normalize_angle(turn_angle as i32 - eval.facing as i32) as u16;
         let direction = if normalize_facing(angle_to_facing(turn_angle as i32)) != 0 {
-            if turn_angle <= HALF_CIRCLE as u16 {
+            if turn_angle <= HALF_CIRCLE {
                 RIGHT as u16
             } else {
                 LEFT as u16
@@ -353,26 +353,22 @@ fn entice(cx: &mut Cx<'_>, ship: &mut Subject, eval: &mut Concern) {
             turn_angle = normalize_angle(
                 facing_to_angle(cx.ship_state(rd).facing as i32) - eval.facing as i32,
             ) as u16;
-            if turn_angle & (HALF_CIRCLE as u16 - 1) == 0 {
+            if turn_angle & (HALF_CIRCLE - 1) == 0 {
                 if cx.random() & 1 != 0 {
                     RIGHT as u16
                 } else {
                     LEFT as u16
                 }
-            } else if turn_angle < HALF_CIRCLE as u16 {
+            } else if turn_angle < HALF_CIRCLE {
                 RIGHT as u16
             } else {
                 LEFT as u16
             }
         };
         thrust_angle = if direction == LEFT as u16 {
-            eval.facing
-                .wrapping_sub(QUADRANT as u16)
-                .wrapping_add(OCTANT as u16 / 2)
+            eval.facing.wrapping_sub(QUADRANT).wrapping_add(OCTANT / 2)
         } else {
-            eval.facing
-                .wrapping_add(QUADRANT as u16)
-                .wrapping_sub(OCTANT as u16 / 2)
+            eval.facing.wrapping_add(QUADRANT).wrapping_sub(OCTANT / 2)
         };
         thrust_angle = normalize_angle(thrust_angle as i32) as u16;
     } else if other.mass as u16 > (MAX_SHIP_MASS * 10) as u16 {
@@ -423,7 +419,7 @@ fn entice(cx: &mut Cx<'_>, ship: &mut Subject, eval: &mut Concern) {
                 if flags & fire != 0 {
                     cone =
                         normalize_angle(turn_angle as i32 - facing as i32 + OCTANT as i32) as u16;
-                    if cone <= QUADRANT as u16
+                    if cone <= QUADRANT
                         && (ox != 0 || oy != 0)
                         && normalize_angle(
                             other_velocity.travel_angle as i32 + HALF_CIRCLE as i32 - facing as i32
@@ -439,7 +435,7 @@ fn entice(cx: &mut Cx<'_>, ship: &mut Subject, eval: &mut Concern) {
                     }
                 }
                 fire <<= 1;
-                facing = facing.wrapping_add(QUADRANT as u16);
+                facing = facing.wrapping_add(QUADRANT);
             }
             if go_maneuver {
                 if maneuver & (LEFT | RIGHT) as u8 != 0 {
@@ -470,7 +466,7 @@ fn entice(cx: &mut Cx<'_>, ship: &mut Subject, eval: &mut Concern) {
                 thrust_angle as i32 - facing_to_angle(cx.ship_state(rd).facing as i32)
                     + OCTANT as i32,
             ) <= QUADRANT as i32
-                || cone > QUADRANT as u16
+                || cone > QUADRANT
             {
                 thrust_angle = turn_angle;
             } else {
