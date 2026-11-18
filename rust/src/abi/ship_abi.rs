@@ -132,19 +132,19 @@ pub const SIN_SHIFT: u32 = 14;
 pub const SIN_SCALE: u32 = 16384;
 pub const VELOCITY_SHIFT: u32 = 5;
 pub const VELOCITY_SCALE: u32 = 32;
-pub const NORMAL_LIFE: u32 = 1;
-pub const CHANGING: u32 = 32;
-pub const COLLISION: u32 = 128;
+pub use crate::engine::battle::flags::NORMAL_LIFE;
+pub use crate::engine::battle::flags::CHANGING;
+pub use crate::engine::battle::flags::COLLISION;
 pub const IGNORE_SIMILAR: u32 = 256;
 pub const DEFY_PHYSICS: u32 = 512;
 pub const POST_PROCESS: u32 = 4096;
 pub const IGNORE_VELOCITY: u32 = 8192;
-pub const CREW_OBJECT: u32 = 16384;
+pub use crate::engine::battle::flags::CREW_OBJECT;
 pub const BACKGROUND_OBJECT: u32 = 32768;
 pub const HYPERJUMP_LIFE: u32 = 15;
 pub const NUM_EXPLOSION_FRAMES: u32 = 12;
 pub const GAME_SOUND_PRIORITY: u32 = 2;
-pub const NEUTRAL_PLAYER_NUM: i32 = -1;
+pub use crate::engine::battle::flags::NEUTRAL_PLAYER_NUM;
 pub const MAX_DISPLAY_ELEMENTS: u32 = 150;
 pub const MAX_CREW_SIZE: u32 = 42;
 pub const MAX_ENERGY_SIZE: u32 = 42;
@@ -438,7 +438,7 @@ pub const SEEKING_WEAPON: u32 = 4;
 pub const SEEKING_SPECIAL: u32 = 8;
 pub const POINT_DEFENSE: u32 = 16;
 pub const IMMEDIATE_WEAPON: u32 = 32;
-pub const CREW_IMMUNE: u32 = 64;
+pub use crate::engine::battle::flags::CREW_IMMUNE;
 pub const FIRES_FORE: u32 = 128;
 pub const FIRES_RIGHT: u32 = 256;
 pub const FIRES_AFT: u32 = 512;
@@ -451,13 +451,13 @@ pub const RIGHT: u32 = 2;
 pub const THRUST: u32 = 4;
 pub const WEAPON: u32 = 8;
 pub const SPECIAL: u32 = 16;
-pub const LOW_ON_ENERGY: u32 = 32;
-pub const SHIP_BEYOND_MAX_SPEED: u32 = 64;
-pub const SHIP_AT_MAX_SPEED: u32 = 128;
-pub const SHIP_IN_GRAVITY_WELL: u32 = 256;
+pub use crate::engine::battle::flags::LOW_ON_ENERGY;
+pub use crate::engine::battle::flags::SHIP_BEYOND_MAX_SPEED;
+pub use crate::engine::battle::flags::SHIP_AT_MAX_SPEED;
+pub use crate::engine::battle::flags::SHIP_IN_GRAVITY_WELL;
 pub const PLAY_VICTORY_DITTY: u32 = 512;
 pub const RPG_PLAYER_NUM: u32 = 0;
-pub const NPC_PLAYER_NUM: u32 = 1;
+pub use crate::engine::battle::flags::NPC_PLAYER_NUM;
 pub const FAST_SHIP: u32 = 150;
 pub const MEDIUM_SHIP: u32 = 45;
 pub const SLOW_SHIP: u32 = 25;
@@ -1282,19 +1282,6 @@ pub use crate::mainloop::input_abi::live::SetMenuSounds;
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
-pub struct LASER_BLOCK {
-    pub cx: COORD,
-    pub cy: COORD,
-    pub ex: COORD,
-    pub ey: COORD,
-    pub flags: ELEMENT_FLAGS,
-    pub sender: SIZE,
-    pub pixoffs: SIZE,
-    pub face: COUNT,
-    pub color: Color,
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
 pub struct MISSILE_BLOCK {
     pub cx: COORD,
     pub cy: COORD,
@@ -1326,10 +1313,10 @@ pub use crate::battle::ship_native::engine::ship_preprocess;
 pub use crate::battle::ship_native::engine::ship_postprocess;
 
 #[cfg(not(test))]
-pub use crate::battle::ship_native::engine::collision;
+pub use crate::engine::battle::motion::collision;
 
 #[cfg(not(test))]
-pub use crate::battle::ship_native::engine::inertial_thrust;
+pub use crate::engine::battle::motion::inertial_thrust;
 
 #[cfg(not(test))]
 pub use crate::engine::world::fleet::set_race_allied;
@@ -1570,7 +1557,7 @@ pub type _bindgen_ty_11 = ::std::os::raw::c_uint;
 pub use crate::engine::world::story::native_bits::*;
 pub type _bindgen_ty_12 = ::std::os::raw::c_uint;
 pub const SUPER_MELEE: _bindgen_ty_13 = 0;
-pub const IN_LAST_BATTLE: _bindgen_ty_13 = 1;
+pub use crate::engine::battle::flags::IN_LAST_BATTLE;
 pub const IN_ENCOUNTER: _bindgen_ty_13 = 2;
 pub use crate::engine::world::IN_HYPERSPACE;
 pub const IN_INTERPLANETARY: _bindgen_ty_13 = 4;

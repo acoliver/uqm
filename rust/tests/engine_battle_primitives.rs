@@ -299,3 +299,166 @@ fn dispatch_rejects_an_uninstalled_race() {
         },
     );
 }
+
+#[test]
+#[serial_test::serial]
+fn primitive_effects_require_explicit_installation_on_the_supplied_owner() {
+    with_context(
+        || panic!("status must not draw RNG"),
+        |cx| {
+            let (ship, _) = owner(cx, 0, POINT { x: 0, y: 0 });
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                cx.draw_statistics(ship, -1, 0);
+            }));
+            let Err(error) = result else {
+                panic!("uninstalled services must fail");
+            };
+            assert_eq!(
+                error.downcast_ref::<&str>(),
+                Some(&"battle primitive services were not installed")
+            );
+            assert_eq!(cx.race_stats(ship).ship_info.crew_level, 10);
+            uqm_rust::battle::services::install(cx.kernel);
+            cx.draw_statistics(ship, -1, 0);
+            assert_eq!(cx.race_stats(ship).ship_info.crew_level, 9);
+        },
+    );
+}
+
+#[test]
+#[serial_test::serial]
+fn installed_primitives_run_real_crew_and_energy_updates_without_publication() {
+    with_context(
+        || panic!("status must not draw RNG"),
+        |cx| {
+            uqm_rust::battle::services::install(cx.kernel);
+            let (ship, element) = owner(cx, 0, POINT { x: 0, y: 0 });
+            cx.element_mut(element).hits = 10;
+            cx.race_stats_mut(ship).ship_info.max_energy = 20;
+            cx.race_stats_mut(ship).ship_info.energy_level = 12;
+            cx.race_stats_mut(ship).characteristics.energy_wait = 7;
+            assert!(cx.delta_energy(element, 10));
+            assert_eq!(cx.race_stats(ship).ship_info.energy_level, 20);
+            assert_eq!(cx.ship_state(ship).energy_counter, 7);
+            assert!(!cx.delta_energy(element, -21));
+            assert_ne!(cx.ship_state(ship).status & 32, 0);
+            assert_eq!(cx.race_stats(ship).ship_info.energy_level, 20);
+            assert!(cx.delta_crew(element, -3));
+            assert_eq!(cx.element(element).hits, 7);
+            assert_eq!(cx.race_stats(ship).ship_info.crew_level, 7);
+            cx.damage(element, 7);
+            assert_eq!(cx.element(element).hits, 0);
+            assert_eq!(cx.race_stats(ship).ship_info.crew_level, 0);
+            assert_eq!(cx.element(element).life, 0);
+            assert_ne!(cx.element(element).flags & 64, 0);
+        },
+    );
+}
+
+#[test]
+#[serial_test::serial]
+fn damage_keeps_gravity_immunity_and_native_byte_narrowing_without_services() {
+    with_context(
+        || panic!("damage must not draw RNG"),
+        |cx| {
+            let e = cx
+                .alloc_element()
+                .unwrap_or_else(|| panic!("fixture allocation"));
+            cx.element_mut(e).hits = 200;
+            cx.element_mut(e).mass = 100;
+            cx.element_mut(e).life = 7;
+            cx.damage(e, 257);
+            assert_eq!(cx.element(e).hits, 199);
+            cx.element_mut(e).mass = 101;
+            cx.damage(e, 255);
+            assert_eq!(cx.element(e).hits, 199);
+            assert_eq!(cx.element(e).life, 7);
+            cx.element_mut(e).mass = 3;
+            cx.damage(e, 199);
+            assert_eq!(cx.element(e).hits, 0);
+            assert_eq!(cx.element(e).life, 0);
+            assert_eq!(cx.element(e).flags, 64);
+        },
+    );
+}
+
+#[test]
+#[serial_test::serial]
+fn projectile_records_preserve_geometry_widths_callbacks_and_exhaustion() {
+    use uqm_engine::battle::{
+        views::{Frames, Laser, Missile},
+        weapon::collision_cb,
+    };
+    with_context(
+        || panic!("projectile allocation must not draw RNG"),
+        |cx| {
+            let mut laser = Laser {
+                origin: POINT { x: 100, y: 200 },
+                end: POINT { x: 32, y: -16 },
+                flags: 256,
+                sender: 1,
+                pixoffs: 3,
+                face: 4,
+                color: uqm_engine::graphics::native_abi::Color {
+                    r: 1,
+                    g: 2,
+                    b: 3,
+                    a: 255,
+                },
+            };
+            let id = cx
+                .laser(&mut laser)
+                .unwrap_or_else(|| panic!("laser allocation"));
+            let e = cx.element(id);
+            assert_eq!((e.current.location.x, e.current.location.y), (112, 200));
+            assert_eq!(e.velocity.get_current_components(), (640, -512));
+            assert_eq!(
+                (e.hits, e.mass, e.life, e.thrust, e.player),
+                (1, 1, 1, 1, 1)
+            );
+            assert_eq!(e.flags, 8 | 1024 | 256);
+            assert_eq!(
+                e.collide.map(|hook| hook.address()),
+                Some(collision_cb as *const () as usize)
+            );
+            assert_eq!(cx.primitive_style_mut(id).kind, 3);
+            let mut missile = Missile {
+                cx: 100,
+                cy: 200,
+                flags: 256,
+                sender: 0,
+                pixoffs: 3,
+                speed: 7,
+                hit_points: 257,
+                damage: 258,
+                face: 4,
+                index: 0,
+                life: 9,
+                frames: Frames::ABSENT,
+                preprocess: None,
+                blast_offs: 259,
+            };
+            let id = cx
+                .missile(&mut missile)
+                .unwrap_or_else(|| panic!("missile allocation"));
+            let e = cx.element(id);
+            assert_eq!((e.current.location.x, e.current.location.y), (105, 200));
+            assert_eq!(e.velocity.get_current_components(), (224, 0));
+            assert_eq!(
+                (e.hits, e.mass, e.life, e.thrust, e.player),
+                (1, 2, 9, 3, 0)
+            );
+            assert_eq!(e.flags, 8 | 1024 | 256);
+            assert_eq!(
+                e.collide.map(|hook| hook.address()),
+                Some(collision_cb as *const () as usize)
+            );
+            assert_eq!(cx.primitive_style_mut(id).kind, 1);
+            for _ in 0..6 {
+                assert!(cx.alloc_element().is_some());
+            }
+            assert!(cx.laser(&mut laser).is_none());
+            assert!(cx.missile(&mut missile).is_none());
+        },
+    );
+}

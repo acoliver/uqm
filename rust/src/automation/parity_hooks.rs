@@ -122,11 +122,11 @@ fn part2() -> Vec<(usize, &'static str)> {
 fn status() -> Vec<(usize, &'static str)> {
     vec![
         (
-            crate::battle::status_native::engine::delta_crew as *const () as usize,
+            crate::engine::battle::statistics::delta_crew as *const () as usize,
             "battle::status_native::DeltaCrew",
         ),
         (
-            crate::battle::status_native::engine::delta_energy as *const () as usize,
+            crate::engine::battle::statistics::delta_energy as *const () as usize,
             "battle::status_native::DeltaEnergy",
         ),
         (

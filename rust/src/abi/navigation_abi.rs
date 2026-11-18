@@ -2092,10 +2092,10 @@ pub type STATE = state;
 
 #[cfg(not(test))]
 #[cfg(not(test))]
-pub use crate::battle::world_elements::engine::spawn_planet;
+pub use crate::engine::battle::world_elements::spawn_planet;
 
 #[cfg(not(test))]
-pub use crate::battle::world_elements::engine::spawn_asteroid;
+pub use crate::engine::battle::world_elements::spawn_asteroid;
 
 #[cfg(not(test))]
 
@@ -2612,7 +2612,7 @@ pub use crate::battle::ship_native::engine::ship_preprocess;
 pub use crate::battle::ship_native::engine::ship_postprocess;
 
 #[cfg(not(test))]
-pub use crate::battle::ship_native::engine::collision;
+pub use crate::engine::battle::motion::collision;
 
 #[cfg(not(test))]
 pub use crate::ui::settings::toggle_music;

@@ -11,11 +11,11 @@ fn part0() -> Vec<(usize, &'static str)> {
             "battle::ship_native::animation_preprocess",
         ),
         (
-            crate::battle::ship_native::engine::collision as *const () as usize,
+            crate::engine::battle::motion::collision as *const () as usize,
             "battle::ship_native::collision",
         ),
         (
-            crate::battle::ship_native::engine::inertial_thrust as *const () as usize,
+            crate::engine::battle::motion::inertial_thrust as *const () as usize,
             "battle::ship_native::inertial_thrust",
         ),
         (
@@ -27,7 +27,7 @@ fn part0() -> Vec<(usize, &'static str)> {
             "battle::ship_native::ship_preprocess",
         ),
         (
-            crate::battle::world_elements::engine::abandon_ship as *const () as usize,
+            crate::engine::battle::world_elements::abandon_ship as *const () as usize,
             "battle::world_elements::AbandonShip",
         ),
     ]
@@ -36,27 +36,27 @@ fn part0() -> Vec<(usize, &'static str)> {
 fn part1() -> Vec<(usize, &'static str)> {
     vec![
         (
-            crate::battle::world_elements::engine::asteroid_preprocess as *const () as usize,
+            crate::engine::battle::world_elements::asteroid_preprocess as *const () as usize,
             "battle::world_elements::asteroid_preprocess",
         ),
         (
-            crate::battle::world_elements::engine::crew_collision as *const () as usize,
+            crate::engine::battle::world_elements::crew_collision as *const () as usize,
             "battle::world_elements::crew_collision",
         ),
         (
-            crate::battle::world_elements::engine::crew_preprocess as *const () as usize,
+            crate::engine::battle::world_elements::crew_preprocess as *const () as usize,
             "battle::world_elements::crew_preprocess",
         ),
         (
-            crate::battle::world_elements::engine::gravity_postprocess as *const () as usize,
+            crate::engine::battle::world_elements::gravity_postprocess as *const () as usize,
             "battle::world_elements::gravity_postprocess",
         ),
         (
-            crate::battle::world_elements::engine::spawn_asteroid as *const () as usize,
+            crate::engine::battle::world_elements::spawn_asteroid as *const () as usize,
             "battle::world_elements::spawn_asteroid",
         ),
         (
-            crate::battle::world_elements::engine::spawn_rubble as *const () as usize,
+            crate::engine::battle::world_elements::spawn_rubble as *const () as usize,
             "battle::world_elements::spawn_rubble",
         ),
         (
@@ -68,7 +68,7 @@ fn part1() -> Vec<(usize, &'static str)> {
             "battle::weapon_native::track_ship",
         ),
         (
-            crate::battle::weapon_native::engine::collision_cb as *const () as usize,
+            crate::engine::battle::weapon::collision_cb as *const () as usize,
             "battle::weapon_native::collision_cb",
         ),
     ]
@@ -76,7 +76,7 @@ fn part1() -> Vec<(usize, &'static str)> {
 #[cfg(not(test))]
 fn part2() -> Vec<(usize, &'static str)> {
     vec![(
-        crate::battle::weapon_native::engine::weapon_collision as *const () as usize,
+        crate::engine::battle::weapon::weapon_collision as *const () as usize,
         "battle::weapon_native::weapon_collision",
     )]
 }

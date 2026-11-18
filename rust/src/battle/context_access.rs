@@ -2,7 +2,7 @@
 #[cfg(not(test))]
 use crate::battle::context_access::race_access::RaceOps;
 #[cfg(not(test))]
-use crate::engine::battle::{frames::FrameSelection, Cx, ElementId, ShipId, Subject};
+use crate::engine::battle::{Cx, ElementId, ShipId, Subject};
 #[cfg(not(test))]
 use crate::ships::native::abi::*;
 
@@ -287,7 +287,6 @@ pub trait ContextOps {
     fn finish_battle(&mut self);
     fn ship_weapons(&mut self, ship: &Subject, other: &Subject, margin: u16) -> u32;
     fn ship_intelligence(&mut self, _ship: ShipId, concerns: &mut crate::engine::battle::Concerns);
-    fn delta_energy(&mut self, id: ElementId, delta: i16) -> bool;
     fn negotiate_battle(
         &mut self,
         net: &dyn crate::engine::battle::net::BattleNet,
@@ -299,38 +298,12 @@ pub trait ContextOps {
         index: u16,
         source: impl Into<Option<ElementId>>,
     );
-    fn silhouette(
-        &mut self,
-        source: ElementId,
-        frame: crate::engine::battle::views::FrameSelection,
-        flags: u8,
-    );
-    fn silhouette_at(
-        &mut self,
-        source: ElementId,
-        origin: POINT,
-        frame: crate::engine::battle::views::FrameSelection,
-        flags: u8,
-    );
-    fn missile(&mut self, value: &mut crate::engine::battle::views::Missile) -> Option<ElementId>;
-    fn laser(&mut self, block: &mut LASER_BLOCK) -> Option<ElementId>;
     fn draw_final_battle_captain(&mut self, ship: ShipId);
-    fn init_ship_status(&mut self, ship: ShipId, clip: Option<RECT>);
     fn start_battle_song_if_ready(&mut self, ship: ShipId);
     fn hyper_transition(&mut self, id: ElementId) -> bool;
     fn move_hyperspace(&mut self, dx: &mut i16, dy: &mut i16);
     fn preprocess_status(&mut self, id: ElementId);
-    fn game_sound(&mut self, index: u16, source: ElementId);
-    fn weapon_collision(
-        &mut self,
-        a: ElementId,
-        pa: &mut POINT,
-        b: ElementId,
-        pb: &mut POINT,
-    ) -> Option<ElementId>;
-    fn delta_crew(&mut self, id: ElementId, amount: i16) -> bool;
 
-    fn draw_statistics(&mut self, ship: ShipId, crew: i16, energy: i16);
     fn draw_captain_controls_pass(
         &mut self,
         ship: ShipId,
@@ -339,10 +312,6 @@ pub trait ContextOps {
         current: u16,
         pass: u16,
     );
-    fn set_star_image(&mut self, id: ElementId);
-    fn set_blast_frames(&mut self, id: ElementId);
-    fn planet_frames(&self) -> crate::engine::battle::views::Frames;
-    fn silhouette_frame(&mut self, id: ElementId, frame: FrameSelection, flags: u8);
 }
 
 #[cfg(not(test))]
@@ -375,10 +344,6 @@ impl ContextOps for Cx<'_> {
         );
     }
 
-    fn delta_energy(&mut self, id: ElementId, delta: i16) -> bool {
-        crate::battle::status_native::delta_energy(self, id, delta)
-    }
-
     fn negotiate_battle(
         &mut self,
         net: &dyn crate::engine::battle::net::BattleNet,
@@ -404,33 +369,6 @@ impl ContextOps for Cx<'_> {
         self.queue_sound(sound, source.into());
     }
 
-    fn silhouette(
-        &mut self,
-        source: ElementId,
-        frame: crate::engine::battle::views::FrameSelection,
-        flags: u8,
-    ) {
-        self.silhouette_at(source, POINT { x: 0, y: 0 }, frame, flags);
-    }
-
-    fn silhouette_at(
-        &mut self,
-        source: ElementId,
-        origin: POINT,
-        frame: crate::engine::battle::views::FrameSelection,
-        flags: u8,
-    ) {
-        crate::battle::weapon_native::modify_silhouette(self, source, origin, frame, flags);
-    }
-
-    fn missile(&mut self, value: &mut crate::engine::battle::views::Missile) -> Option<ElementId> {
-        crate::battle::weapon_native::initialize_missile(self, value)
-    }
-
-    fn laser(&mut self, block: &mut LASER_BLOCK) -> Option<ElementId> {
-        crate::battle::weapon_native::initialize_laser(self, block)
-    }
-
     fn draw_final_battle_captain(&mut self, ship: ShipId) {
         let frame = self.take_captain_background(ship);
         // SAFETY: this consumes the live descriptor's captain release authority.
@@ -443,23 +381,6 @@ impl ContextOps for Cx<'_> {
             DrawStamp(&mut stamp);
             DestroyDrawable(ReleaseDrawable(frame));
             SetContext(old);
-        }
-    }
-
-    fn init_ship_status(&mut self, ship: ShipId, clip: Option<RECT>) {
-        crate::ui::shipstat::draw_battle_status(self, ship, clip);
-        if clip.is_none() {
-            let context = std::ptr::NonNull::new(self.kernel.status_context)
-                .map(crate::graphics::context_abi::ContextLease::retain);
-            let height = (self.screen_dimensions().1 >> 1) as SIZE;
-            let pc_menu = self.kernel.configuration.preferences().menu == OPT_PC as i32;
-            crate::battle::status_native::draw_captains_window(
-                self,
-                ship,
-                context.as_ref(),
-                height,
-                pc_menu,
-            );
         }
     }
 
@@ -489,53 +410,6 @@ impl ContextOps for Cx<'_> {
         crate::battle::status_native::preprocess_status(self, id)
     }
 
-    fn game_sound(&mut self, index: u16, source: ElementId) {
-        let sound = self
-            .kernel
-            .game_sounds
-            .as_ref()
-            .map(|bank| bank.clip(index));
-        self.queue_sound(sound, Some(source));
-    }
-
-    fn weapon_collision(
-        &mut self,
-        a: ElementId,
-        pa: &mut POINT,
-        b: ElementId,
-        pb: &mut POINT,
-    ) -> Option<ElementId> {
-        crate::battle::weapon_native::weapon_collision(self, a, pa, b, pb)
-    }
-
-    fn delta_crew(&mut self, id: ElementId, amount: i16) -> bool {
-        crate::battle::status_native::delta_crew(self, id, amount)
-    }
-
-    fn draw_statistics(&mut self, ship: ShipId, crew: i16, energy: i16) {
-        if crew == 0 && energy == 0 {
-            return;
-        }
-        let y = self.status_offset(ship);
-        let context = std::ptr::NonNull::new(self.kernel.status_context)
-            .map(crate::graphics::context_abi::ContextLease::retain)
-            .and_then(|context| context.selected_context());
-        let font = self.kernel.battle_font();
-        let mut info = self.desc(ship).ship_info;
-        crate::ui::shipstat::update_statistics(
-            context.as_ref(),
-            true,
-            self.kernel.configuration.preferences().menu == OPT_PC as i32,
-            font.as_ref(),
-            &mut info,
-            y,
-            (crew, energy),
-        );
-        let mut stats = self.race_stats_mut(ship);
-        stats.ship_info.crew_level = info.crew_level;
-        stats.ship_info.energy_level = info.energy_level;
-    }
-
     fn draw_captain_controls_pass(
         &mut self,
         ship: ShipId,
@@ -545,31 +419,5 @@ impl ContextOps for Cx<'_> {
         pass: u16,
     ) {
         crate::battle::status_native::engine::captains_window(self, ship, y, delta, current, pass);
-    }
-
-    fn set_star_image(&mut self, id: ElementId) {
-        use crate::engine::battle::views::{Frames, SharedFrames};
-        let frames = Frames::retain_shared(
-            SharedFrames::Stars,
-            std::slice::from_ref(&self.kernel.stars_in_space),
-        );
-        let frame = self.retreat_frame(frames.view(0));
-        self.set_frame(id, false, frame);
-        self.set_frames(id, false, frames);
-    }
-    fn set_blast_frames(&mut self, id: ElementId) {
-        use crate::engine::battle::views::{Frames, SharedFrames};
-        let frames = Frames::retain_shared(SharedFrames::Blast, &self.kernel.blast);
-        self.set_frames(id, false, frames);
-    }
-    fn planet_frames(&self) -> crate::engine::battle::views::Frames {
-        crate::engine::battle::views::Frames::retain_shared(
-            crate::engine::battle::views::SharedFrames::Planet,
-            &self.kernel.planet,
-        )
-    }
-
-    fn silhouette_frame(&mut self, id: ElementId, frame: FrameSelection, flags: u8) {
-        self.silhouette(id, frame, flags);
     }
 }

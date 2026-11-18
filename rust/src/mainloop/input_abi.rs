@@ -5,7 +5,7 @@ use crate::threading::pacing::yield_input_loop;
 
 #[cfg(all(not(test), feature = "debug-process"))]
 use crate::{
-    battle::status_native::{delta_crew, delta_energy},
+    engine::battle::statistics::{delta_crew, delta_energy},
     front_end::uqmdebug::debug_key_pressed_synchronous,
 };
 #[cfg(not(test))]

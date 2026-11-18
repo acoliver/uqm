@@ -34,8 +34,8 @@ pub mod sounds;
 pub mod status_native;
 pub mod tactrans_native;
 pub use crate::math::velocity;
+pub mod services;
 pub mod weapon_native;
-pub mod world_elements;
 
 pub use ai::*;
 pub use battle_types::*;

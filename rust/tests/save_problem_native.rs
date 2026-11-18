@@ -194,6 +194,7 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
         let waits = Rc::new(Cell::new(0));
         let polls = Rc::new(Cell::new(0));
         let mut game = Game::new();
+        uqm_rust::battle::services::install(&mut game.kernel);
         game.kernel.space_context = context;
         game.kernel.star_con_font = font;
         game.kernel.game_strings = CaptureStringTable(strings).cast();
@@ -568,7 +569,6 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
                     }
                 }
                 {
-                    use uqm_rust::battle::ContextOps;
                     let portrait = LoadedDrawable::create(8, 1, 1, 1).unwrap();
                     let icon = portrait.lease().frame(0).unwrap();
                     let target = context_lease.target();

@@ -761,7 +761,7 @@ fn owner_cleanup_during_collision_scan_invalidates_the_active_napalm() {
             // Avoid a spawn overlap, so the unfixed traversal reaches its callback.
             (*enemy.ptr()).state_flags |= (PRE_PROCESS | FINITE_LIFE) as u16;
             (*enemy.ptr()).collision_func = Some(uqm_rust::engine::battle::CollisionHook::Native(
-                uqm_rust::battle::ship_native::collision,
+                uqm_rust::engine::battle::motion::collision,
             ));
             (*enemy.ptr()).current.location = (*trail).current.location;
             (*enemy.ptr()).next = (*enemy.ptr()).current.clone();
@@ -858,7 +858,7 @@ fn napalm_and_horn_collide_with_battle_objects_without_optional_callback_skips()
                     (*t).mass = mass;
                     (*t).collision_func = if flags & (NONSOLID | DISAPPEARING) == 0 {
                         Some(uqm_rust::engine::battle::CollisionHook::Native(
-                            uqm_rust::battle::ship_native::collision,
+                            uqm_rust::engine::battle::motion::collision,
                         ))
                     } else {
                         None
