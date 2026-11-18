@@ -319,10 +319,7 @@ pub(crate) mod live {
             crate::navigation::hyper_data::load_hyperspace(cx, |cx, operation| {
                 use crate::navigation::hyper_data::EntryDisplay;
                 if let EntryDisplay::Palette(quasispace) = operation {
-                    // SAFETY: load_hyperspace retains the palette tables on the supplied Kernel.
-                    unsafe {
-                        crate::engine::battle::hyperspace::select_palette(cx.kernel, quasispace);
-                    }
+                    crate::engine::battle::hyperspace::select_palette(cx.kernel, quasispace);
                     return;
                 }
                 let dimensions = cx.screen_dimensions();

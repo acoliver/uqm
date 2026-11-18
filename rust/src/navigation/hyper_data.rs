@@ -70,6 +70,6 @@ mod tests {
         resources::free_hyperspace(&mut game.kernel);
         assert!(game.kernel.hyperstars.iter().all(|frame| frame.is_null()));
         assert!(game.kernel.stars_in_space.is_null());
-        assert!(game.kernel.cmaps.iter().all(|map| map.is_null()));
+        assert!(game.kernel.cmaps.iter().all(Option::is_none));
     }
 }

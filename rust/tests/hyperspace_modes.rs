@@ -5,7 +5,7 @@ fn resource_teardown_uses_only_the_supplied_kernel() {
     let mut game = Game::new();
     hyper_data::free_hyper_data(&mut game.kernel);
     assert!(game.kernel.hyperstars.iter().all(|frame| frame.is_null()));
-    assert!(game.kernel.cmaps.iter().all(|map| map.is_null()));
+    assert!(game.kernel.cmaps.iter().all(Option::is_none));
     uqm_rust::engine::battle::hyperspace::free_hyperspace(&mut game.kernel);
     assert!(game.kernel.stars_in_space.is_null());
 }
@@ -284,29 +284,77 @@ fn flagship_entry(loading: bool) {
     }
 }
 
+fn load_palette_fixture() -> [Option<uqm_rust::graphics::palette_cycle::PaletteCycle>; 2] {
+    use std::{ffi::CString, ptr};
+    use uqm_rust::{
+        graphics::palette_cycle::PaletteCycle,
+        io::uio_bridge as uio,
+        resource::ffi_bridge::{InitResourceSystem, LoadResourceIndex},
+    };
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../tmp");
+    std::fs::create_dir_all(&root).unwrap();
+    let directory = tempfile::tempdir_in(root).unwrap();
+    for channel in [12u8, 90] {
+        let mut bytes = Vec::new();
+        for word in [u32::MAX, 1, 0, 770] {
+            bytes.extend_from_slice(&word.to_be_bytes());
+        }
+        bytes.extend_from_slice(&[17, 17]);
+        bytes.extend(std::iter::repeat_n(channel, 768));
+        std::fs::write(directory.path().join(format!("{channel}.ct")), bytes).unwrap();
+    }
+    std::fs::write(
+        directory.path().join("palettes.rmp"),
+        "fixture.hyper = BINTAB:12.ct\nfixture.quasi = BINTAB:90.ct\n",
+    )
+    .unwrap();
+    let host = CString::new(directory.path().canonicalize().unwrap().to_str().unwrap()).unwrap();
+    // SAFETY: this serialized fixture restores the content directory before closing its own mount.
+    unsafe {
+        uio::uio_init();
+        let repository = uio::uio_openRepository(0);
+        let mount = uio::uio_mountDir(
+            repository,
+            c"/".as_ptr(),
+            1,
+            ptr::null_mut(),
+            ptr::null(),
+            host.as_ptr(),
+            ptr::null_mut(),
+            6,
+            ptr::null_mut(),
+        );
+        assert!(!mount.is_null());
+        let content = uio::uio_openDir(repository, c"/".as_ptr(), 0);
+        let previous = uqm_rust::mainloop::dir_prep::contentDir;
+        uqm_rust::mainloop::dir_prep::contentDir = content.cast();
+        InitResourceSystem();
+        LoadResourceIndex(content.cast(), c"palettes.rmp".as_ptr(), ptr::null());
+        let palettes =
+            [c"fixture.hyper", c"fixture.quasi"].map(|key| Some(PaletteCycle::load(key).unwrap()));
+        uqm_rust::mainloop::dir_prep::contentDir = previous;
+        uio::uio_closeDir(content);
+        uio::uio_closeRepository(repository);
+        uio::uio_unInit();
+        palettes
+    }
+}
+
 #[test]
 #[serial_test::serial]
 fn owned_palette_selection_uses_the_supplied_tables_and_status_context() {
-    use std::ptr;
     use uqm_rust::{
         engine::battle::hyperspace as resources,
         graphics::{cmap_abi::*, context_abi::*, native_abi::Color},
-        strings::string_table::{AllocStringTable, CaptureStringTable},
     };
     let mut game = Game::new();
-    // SAFETY: the fixture owns the two tables, context and all acquired palette references.
+    game.kernel.cmaps = load_palette_fixture();
+    let select: fn(&uqm_rust::engine::Kernel, bool) = resources::select_palette;
+    // SAFETY: the fixture owns the context and all acquired palette references.
     unsafe {
         InitColorMaps();
         for (side, channel) in [12u8, 90].into_iter().enumerate() {
-            let table = CaptureStringTable(AllocStringTable(1, 0));
-            let mut palette = vec![17, 17];
-            palette.extend(std::iter::repeat_n(channel, 768));
-            let bytes = uqm_rust::memory::rust_hmalloc(palette.len()).cast::<u8>();
-            ptr::copy_nonoverlapping(palette.as_ptr(), bytes, palette.len());
-            (*table).data = bytes.cast();
-            (*table).length = palette.len() as i32;
-            game.kernel.cmaps[side] = table;
-            resources::select_palette(&game.kernel, side != 0);
+            select(&game.kernel, side != 0);
             let selected = TFB_GetColorMap(17);
             assert!((0..256).all(|index| {
                 let color = uqm_rust::graphics::sdl::palette::GetNativePaletteColor(
@@ -337,7 +385,7 @@ fn owned_palette_selection_uses_the_supplied_tables_and_status_context() {
         DestroyContext(context);
         game.kernel.status_context = std::ptr::null_mut();
         resources::free_hyper_data(&mut game.kernel);
-        assert!(game.kernel.cmaps.iter().all(|map| map.is_null()));
+        assert!(game.kernel.cmaps.iter().all(Option::is_none));
         UninitColorMaps();
     }
 }

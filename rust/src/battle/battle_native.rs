@@ -402,7 +402,8 @@ pub(crate) mod engine {
             seed_battle_rng(activity, 4, |domain, fallback| seed(io, domain, fallback))
         });
         battle_song(cx.kernel, cx.world, false);
-        let mut count = crate::game_init::space_resources::init_battle_ships(cx);
+        let ships = cx.kernel.ship_lifecycle();
+        let mut count = (ships.init)(cx);
         if cx.kernel.instant_victory != 0 {
             count = 0;
             cx.b.counters = [1, 0];
@@ -460,7 +461,7 @@ pub(crate) mod engine {
             net.finish();
         }
         finish_battle(cx, count != 0);
-        crate::game_init::space_resources::uninit_ships(cx);
+        (ships.uninit)(cx);
         free_battle_song(cx.kernel);
         if !had_net {
             cx.b.net = None;
