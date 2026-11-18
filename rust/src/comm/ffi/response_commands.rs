@@ -70,7 +70,7 @@ pub(super) fn deliver_selected(
     let result = {
         let state = &mut *comm;
         let activity = cx.world.activity();
-        cx.with_legacy(|| crate::comm::talk_segue::select_response(activity, state))
+        crate::comm::talk_segue::select_response(activity, state)
     };
     if let Some((func, reference)) = result {
         eprintln!("[DBG] rust_DoCommunication: calling response callback ref={reference}");
@@ -88,14 +88,18 @@ mod tests {
     use super::*;
     use crate::engine::{
         battle::{Battle, Cx},
-        observe::{CampaignView, CheckpointView, Injected, InputView, Io, Observer, Presented},
+        observe::{CheckpointView, Injected, InputView, Io, Observer, Presented},
         Game,
     };
 
     struct Counts(Vec<usize>);
 
-    impl Observer<Option<CampaignView>> for Counts {
-        fn input_admitted(&mut self, _: &InputView, _: &Option<CampaignView>) -> Injected {
+    impl Observer for Counts {
+        fn input_admitted(
+            &mut self,
+            _: &InputView,
+            _: &mut crate::engine::battle::Cx<'_>,
+        ) -> Injected {
             Injected::default()
         }
         fn checkpoint(&mut self, view: &CheckpointView<'_>) {

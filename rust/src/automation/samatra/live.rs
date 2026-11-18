@@ -8,9 +8,8 @@ use crate::{
     ships::{native::abi::*, races::samatra::engine},
 };
 
-pub fn observe() -> (Events, Option<Snapshot>) {
-    // SAFETY: the synchronous input service owns the published game-thread context.
-    unsafe { crate::app::bridge::enter(snapshot) }
+pub fn observe(cx: &Cx<'_>) -> (Events, Option<Snapshot>) {
+    snapshot(cx)
 }
 
 fn project_events(state: &crate::engine::battle::race::SaMatraState) -> Events {
@@ -21,7 +20,7 @@ fn project_events(state: &crate::engine::battle::race::SaMatraState) -> Events {
     }
 }
 
-fn snapshot(cx: &mut Cx<'_>) -> (Events, Option<Snapshot>) {
+fn snapshot(cx: &Cx<'_>) -> (Events, Option<Snapshot>) {
     if let Some(RaceState::SaMatra(state)) = cx.terminal_outcome() {
         return (project_events(state), None);
     }

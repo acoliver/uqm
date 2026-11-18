@@ -106,7 +106,7 @@ mod tests {
     use crate::engine::{
         battle::{input::InputContext, Battle},
         input::{Frame, InputControls, InputRuntime, InputSession},
-        observe::{CampaignView, Observer, Unobserved},
+        observe::{Observer, Unobserved},
         Game,
     };
     use std::rc::Rc;
@@ -116,7 +116,7 @@ mod tests {
         fn input(&self) -> &InputSession {
             &self.0
         }
-        fn observer(&self) -> Box<dyn Observer<Option<CampaignView>>> {
+        fn observer(&self) -> Box<dyn Observer> {
             Box::new(Unobserved)
         }
         fn update(&self, _: &mut Cx<'_>) {}

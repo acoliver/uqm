@@ -1,8 +1,6 @@
 //! Remaining state.c entry points. File storage stays in `ffi`'s sole manager.
 
 use super::ffi::*;
-#[cfg(test)]
-use crate::engine::World;
 use std::ffi::{c_char, c_int, c_long, c_void};
 use std::ptr;
 
@@ -197,60 +195,31 @@ mod tests {
         let mut game = crate::engine::Game::new();
         // SAFETY: serial tests own the published lifecycle until this call returns.
         unsafe {
-            crate::app::bridge::with_game(&mut game, || {
-                World::current().write(rust_init_game_state);
-                assert!(World::current()
-                    .write(|world| open_state_file(world, -1, c"wb".as_ptr()))
-                    .is_null());
-                assert!(World::current()
-                    .write(|world| open_state_file(world, 3, c"wb".as_ptr()))
-                    .is_null());
-                let file =
-                    World::current().write(|world| open_state_file(world, 1, c"wb".as_ptr()));
+            {
+                rust_init_game_state(&mut game.world);
+                assert!(open_state_file(&mut game.world, -1, c"wb".as_ptr()).is_null());
+                assert!(open_state_file(&mut game.world, 3, c"wb".as_ptr()).is_null());
+                let file = open_state_file(&mut game.world, 1, c"wb".as_ptr());
                 assert!(!file.is_null());
                 let data = [11u8, 22, 33, 44];
                 assert_eq!(
-                    World::current().write(|world| write_state_file(
-                        world,
-                        data.as_ptr().cast(),
-                        2,
-                        2,
-                        file
-                    )),
+                    write_state_file(&mut game.world, data.as_ptr().cast(), 2, 2, file),
                     2
                 );
-                assert_eq!(
-                    World::current().read(|world| length_state_file(world, file)),
-                    4
-                );
-                assert_eq!(
-                    World::current().read(|world| rust_length_state_file(world, 1)),
-                    4
-                );
-                assert_eq!(
-                    World::current().write(|world| seek_state_file(world, file, -2, 2)),
-                    1
-                );
+                assert_eq!(length_state_file(&game.world, file), 4);
+                assert_eq!(rust_length_state_file(&game.world, 1), 4);
+                assert_eq!(seek_state_file(&mut game.world, file, -2, 2), 1);
                 let mut output = [0u8; 2];
                 assert_eq!(
-                    World::current().write(|world| read_state_file(
-                        world,
-                        output.as_mut_ptr().cast(),
-                        1,
-                        2,
-                        file
-                    )),
+                    read_state_file(&mut game.world, output.as_mut_ptr().cast(), 1, 2, file),
                     2
                 );
                 assert_eq!(output, [33, 44]);
-                World::current().write(|world| close_state_file(world, file));
-                assert_eq!(
-                    World::current().write(|world| open_state_file(world, 1, c"rb".as_ptr())),
-                    file
-                );
-                World::current().write(|world| close_state_file(world, file));
-                World::current().write(|world| delete_state_file(world, 1));
-            })
+                close_state_file(&mut game.world, file);
+                assert_eq!(open_state_file(&mut game.world, 1, c"rb".as_ptr()), file);
+                close_state_file(&mut game.world, file);
+                delete_state_file(&mut game.world, 1);
+            }
         }
     }
 }

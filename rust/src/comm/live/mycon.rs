@@ -80,7 +80,7 @@ mod api {
 
     impl MyconApi for crate::comm::host::Host<'_, '_, Handler> {
         fn random(&mut self) -> u32 {
-            self.cx.borrow_mut().with_legacy(crate::math::random)
+            crate::math::random()
         }
     }
 }

@@ -113,6 +113,7 @@ fn campaign_reads_the_supplied_observers_ending_and_encounter_state() {
     handle.checkpoint(&CheckpointView::EncounterMenu(true));
     let world = campaign_state::empty_view();
     let campaign = LiveCampaign {
+        boss: Default::default(),
         world: &world,
         ui: &handle.0.ui,
         ending: *handle.0.ending.lock(),
@@ -325,20 +326,20 @@ fn lander_admission_consumes_only_its_observers_request_and_sequence() {
         .lock()
         .queue(FixtureLayout::MineralGallery)
         .unwrap();
-    let first_trip = first
-        .input_admitted(&InputView::PlanetSideBegin, &None)
+    let first_trip = crate::engine::Game::new()
+        .with_context(|cx| first.input_admitted(&InputView::PlanetSideBegin, cx))
         .planet_side
         .unwrap();
     assert_eq!(first_trip.generation, 1);
     assert_eq!(first_trip.fixture, Some(FixtureLayout::MineralGallery));
-    let next_trip = first
-        .input_admitted(&InputView::PlanetSideBegin, &None)
+    let next_trip = crate::engine::Game::new()
+        .with_context(|cx| first.input_admitted(&InputView::PlanetSideBegin, cx))
         .planet_side
         .unwrap();
     assert_eq!(next_trip.generation, 2);
     assert_eq!(next_trip.fixture, None);
-    let other_trip = second
-        .input_admitted(&InputView::PlanetSideBegin, &None)
+    let other_trip = crate::engine::Game::new()
+        .with_context(|cx| second.input_admitted(&InputView::PlanetSideBegin, cx))
         .planet_side
         .unwrap();
     assert_eq!(other_trip.generation, 1);

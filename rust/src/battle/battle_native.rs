@@ -66,11 +66,16 @@ fn run_away_allowed(world: &crate::engine::World) -> bool {
         && world.story_state(StoryKey::BOMB_CARRIER) == 0
 }
 
-fn seed(io: &mut crate::engine::observe::Io<'_>, domain: u32, fallback: u32) -> u32 {
+fn seed(
+    cx: &mut crate::engine::battle::Cx<'_>,
+    io: &mut crate::engine::observe::Io<'_>,
+    domain: u32,
+    fallback: u32,
+) -> u32 {
     io.observer
         .input_admitted(
             &crate::engine::observe::InputView::Seed { domain, fallback },
-            &None,
+            cx,
         )
         .seed
         .unwrap_or(fallback)
@@ -82,10 +87,14 @@ fn reset_observation(io: &mut crate::engine::observe::Io<'_>) {
         .checkpoint(&crate::engine::observe::CheckpointView::BattleReset);
 }
 
-fn advance_observation(io: &mut crate::engine::observe::Io<'_>) {
+fn advance_observation(
+    cx: &crate::engine::battle::Cx<'_>,
+    io: &mut crate::engine::observe::Io<'_>,
+) {
     crate::collections::observation::advance();
     io.observer
         .checkpoint(&crate::engine::observe::CheckpointView::BattleAdvanced);
+    io.observer.simulation(cx, "battle");
 }
 
 fn initialize_battle(
@@ -159,10 +168,10 @@ pub(crate) mod engine {
             cx.primitive_style_mut(e).color = rgb15(0x0b, 0, 0);
             cx.primitive_style_mut(e).kind = gfx_object_STAMPFILL_PRIM as u8;
             cx.ship_state_mut(ship).input = 0;
-            cx.with_legacy(|| {
+            {
                 io.observer
                     .checkpoint(&crate::engine::observe::CheckpointView::ShipEscaped);
-            });
+            };
         }
     }
 
@@ -318,7 +327,7 @@ pub(crate) mod engine {
             redraw_queue(cx, true);
             if session.first_time {
                 session.first_time = false;
-                cx.with_legacy(|| context.transition(Some(rect)));
+                context.transition(Some(rect));
             }
         });
         if cx.world.activity() & IN_BATTLE as u16 == 0
@@ -349,7 +358,7 @@ pub(crate) mod engine {
             io,
             crate::engine::observe::battle::BattlePhase::Advanced,
         );
-        cx.with_legacy(|| advance_observation(io));
+        advance_observation(cx, io);
     }
 
     fn select_all_ships(cx: &mut crate::engine::battle::Cx<'_>, count: SIZE) -> BOOLEAN {
@@ -395,9 +404,11 @@ pub(crate) mod engine {
     ) -> bool {
         let (net, had_net) = initialize_battle(cx);
         let activity = cx.world.activity() as u8;
-        cx.with_legacy(|| {
-            seed_battle_rng(activity, 4, |domain, fallback| seed(io, domain, fallback))
-        });
+        {
+            seed_battle_rng(activity, 4, |domain, fallback| {
+                seed(cx, io, domain, fallback)
+            })
+        };
         battle_song(cx.kernel, cx.world, false);
         let ships = cx.kernel.ship_lifecycle();
         let mut count = (ships.init)(cx);
@@ -410,7 +421,7 @@ pub(crate) mod engine {
             cx.world
                 .set_activity(cx.world.activity() | IN_BATTLE as u16);
             cx.b.counters = std::array::from_fn(|side| cx.kernel.ships(side).count() as u8);
-            cx.with_legacy(|| reset_observation(io));
+            reset_observation(io);
             if cx.kernel.configuration.preferences().melee_scale != SCALE_STEP {
                 crate::graphics::context_abi::ContextLease::require(cx.kernel.space_context)
                     .scale_mode(cx.kernel.configuration.preferences().melee_scale);
@@ -472,10 +483,20 @@ pub use engine::{battle, free_battle_song};
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::observe::{
-        CampaignView, CheckpointView, Injected, InputView, Io, Observer, Presented,
-    };
+    use crate::engine::battle::Cx;
+    use crate::engine::observe::{CheckpointView, Injected, InputView, Io, Observer, Presented};
     use std::{cell::RefCell, rc::Rc};
+
+    fn with_context(body: impl FnOnce(&mut Cx<'_>)) {
+        let mut game = crate::engine::Game::new();
+        let mut battle = crate::engine::battle::Battle::new();
+        body(&mut Cx::new(
+            &mut battle,
+            &mut game.world,
+            &mut game.kernel,
+            crate::math::random,
+        ));
+    }
 
     #[derive(Debug, PartialEq)]
     enum Observed {
@@ -483,6 +504,7 @@ mod tests {
         Seed(u32, u32),
         Reset(u64),
         Advanced(u64),
+        Simulated(u64),
     }
 
     struct Recording {
@@ -490,13 +512,8 @@ mod tests {
         seed: Option<u32>,
     }
 
-    impl Observer<Option<CampaignView>> for Recording {
-        fn input_admitted(
-            &mut self,
-            view: &InputView,
-            campaign: &Option<CampaignView>,
-        ) -> Injected {
-            assert!(campaign.is_none());
+    impl Observer for Recording {
+        fn input_admitted(&mut self, view: &InputView, _: &mut Cx<'_>) -> Injected {
             let InputView::Seed { domain, fallback } = *view else {
                 panic!("unexpected input {view:?}");
             };
@@ -509,6 +526,12 @@ mod tests {
                 planet_side: None,
                 comm_response: None,
             }
+        }
+
+        fn simulation(&mut self, _: &Cx<'_>, boundary: &str) {
+            assert_eq!(boundary, "battle");
+            let frame = crate::collections::observation::current_frame();
+            self.events.borrow_mut().push(Observed::Simulated(frame));
         }
 
         fn checkpoint(&mut self, view: &CheckpointView<'_>) {
@@ -532,23 +555,25 @@ mod tests {
             events: events.clone(),
             seed: Some(17),
         };
-        let mut io = Io {
-            observer: &mut observer,
-        };
-        assert_eq!(
-            seed(&mut io, 4, {
-                events.borrow_mut().push(Observed::Fallback);
-                123
-            }),
-            17
-        );
-        assert_eq!(seed(&mut io, 2, 0), 17);
-        observer.seed = None;
-        let mut io = Io {
-            observer: &mut observer,
-        };
-        assert_eq!(seed(&mut io, 4, 456), 456);
-        assert_eq!(seed(&mut io, 2, 0), 0);
+        with_context(|cx| {
+            let mut io = Io {
+                observer: &mut observer,
+            };
+            assert_eq!(
+                seed(cx, &mut io, 4, {
+                    events.borrow_mut().push(Observed::Fallback);
+                    123
+                }),
+                17
+            );
+            assert_eq!(seed(cx, &mut io, 2, 0), 17);
+            observer.seed = None;
+            let mut io = Io {
+                observer: &mut observer,
+            };
+            assert_eq!(seed(cx, &mut io, 4, 456), 456);
+            assert_eq!(seed(cx, &mut io, 2, 0), 0);
+        });
         assert_eq!(
             *events.borrow(),
             [
@@ -570,18 +595,22 @@ mod tests {
             seed: None,
         };
         crate::collections::observation::advance();
-        let mut io = Io {
-            observer: &mut observer,
-        };
-        reset_observation(&mut io);
-        advance_observation(&mut io);
-        advance_observation(&mut io);
+        with_context(|cx| {
+            let mut io = Io {
+                observer: &mut observer,
+            };
+            reset_observation(&mut io);
+            advance_observation(cx, &mut io);
+            advance_observation(cx, &mut io);
+        });
         assert_eq!(
             *events.borrow(),
             [
                 Observed::Reset(0),
                 Observed::Advanced(1),
-                Observed::Advanced(2)
+                Observed::Simulated(1),
+                Observed::Advanced(2),
+                Observed::Simulated(2)
             ]
         );
     }

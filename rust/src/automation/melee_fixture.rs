@@ -1,5 +1,6 @@
 //! Bounded parity setups on the loaded game world. No fixture owns a global.
 
+use crate::engine::battle::Cx;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -155,19 +156,29 @@ impl FixtureRun {
         }
     }
 
-    pub fn advance(&mut self, checkpoint: &dyn Fn()) -> Result<(), String> {
+    pub fn advance(&mut self, cx: &mut Cx<'_>, checkpoint: &dyn Fn(&Cx<'_>)) -> Result<(), String> {
         if self.fixture == FixtureName::StarContact {
-            execute(Operation::Advance(self), checkpoint)?;
+            execute(cx, Operation::Advance(self), checkpoint)?;
         }
         Ok(())
     }
 
-    pub fn saved(&mut self, slot: u16, checkpoint: &dyn Fn()) -> Result<(), String> {
-        execute(Operation::SaveWitness(self, slot, false), checkpoint).map(|_| ())
+    pub fn saved(
+        &mut self,
+        cx: &mut Cx<'_>,
+        slot: u16,
+        checkpoint: &dyn Fn(&Cx<'_>),
+    ) -> Result<(), String> {
+        execute(cx, Operation::SaveWitness(self, slot, false), checkpoint).map(|_| ())
     }
 
-    pub fn loaded(&mut self, slot: u16, checkpoint: &dyn Fn()) -> Result<(), String> {
-        execute(Operation::SaveWitness(self, slot, true), checkpoint).map(|_| ())
+    pub fn loaded(
+        &mut self,
+        cx: &mut Cx<'_>,
+        slot: u16,
+        checkpoint: &dyn Fn(&Cx<'_>),
+    ) -> Result<(), String> {
+        execute(cx, Operation::SaveWitness(self, slot, true), checkpoint).map(|_| ())
     }
 
     fn require(&mut self, condition: bool, check: &'static str) -> Result<(), String> {
@@ -303,9 +314,13 @@ impl CorpusCoverage {
     }
 }
 
-pub(crate) fn run(request: &FixtureRequest, checkpoint: &dyn Fn()) -> Result<FixtureRun, String> {
+pub(crate) fn run(
+    cx: &mut Cx<'_>,
+    request: &FixtureRequest,
+    checkpoint: &dyn Fn(&Cx<'_>),
+) -> Result<FixtureRun, String> {
     crate::collections::observation::enable();
-    let proof = execute(Operation::Fixture(request.fixture), checkpoint)?
+    let proof = execute(cx, Operation::Fixture(request.fixture), checkpoint)?
         .ok_or("fixture operation returned no proof")?;
     if request.fixture != FixtureName::StarContact {
         proof.verify()?;
@@ -313,14 +328,18 @@ pub(crate) fn run(request: &FixtureRequest, checkpoint: &dyn Fn()) -> Result<Fix
     Ok(proof)
 }
 
-pub(crate) fn corpus(request: CorpusRequest, checkpoint: &dyn Fn()) -> Result<(), String> {
+pub(crate) fn corpus(
+    cx: &mut Cx<'_>,
+    request: CorpusRequest,
+    checkpoint: &dyn Fn(&Cx<'_>),
+) -> Result<(), String> {
     request.validate()?;
     crate::collections::observation::enable();
-    execute(Operation::Corpus(request), checkpoint).map(|_| ())
+    execute(cx, Operation::Corpus(request), checkpoint).map(|_| ())
 }
 
-pub(crate) fn trigger(checkpoint: &dyn Fn()) -> Result<(), String> {
-    execute(Operation::MutualLoss, checkpoint).map(|_| ())
+pub(crate) fn trigger(cx: &mut Cx<'_>, checkpoint: &dyn Fn(&Cx<'_>)) -> Result<(), String> {
+    execute(cx, Operation::MutualLoss, checkpoint).map(|_| ())
 }
 
 enum Operation<'a> {
@@ -332,13 +351,6 @@ enum Operation<'a> {
 }
 
 use live::execute;
-#[cfg(test)]
-fn execute(
-    _operation: Operation<'_>,
-    _checkpoint: &dyn Fn(),
-) -> Result<Option<FixtureRun>, String> {
-    Err("parity fixtures require the loaded game on its input thread".into())
-}
 
 /// Place the active melee ships within glory-device range and arm its last switch.
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]

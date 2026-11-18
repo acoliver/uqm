@@ -26,8 +26,13 @@ struct WaitObserver {
     frame: *mut frame_desc,
 }
 
-impl Observer<Option<CampaignView>> for WaitObserver {
-    fn input_admitted(&mut self, view: &InputView, campaign: &Option<CampaignView>) -> Injected {
+impl Observer for WaitObserver {
+    fn input_admitted(
+        &mut self,
+        view: &InputView,
+        cx: &mut uqm_rust::engine::battle::Cx<'_>,
+    ) -> Injected {
+        let campaign = CampaignView::for_input(*view, || CampaignView::capture(cx));
         assert_eq!(*view, InputView::Nested);
         assert_eq!(
             self.polls.get(),
@@ -61,7 +66,7 @@ impl InputRuntime for Runtime {
         &self.1
     }
 
-    fn observer(&self) -> Box<dyn Observer<Option<CampaignView>>> {
+    fn observer(&self) -> Box<dyn Observer> {
         Box::new(self.0.clone())
     }
     fn yield_poll(&self, _: &mut uqm_engine::battle::Cx<'_>) {

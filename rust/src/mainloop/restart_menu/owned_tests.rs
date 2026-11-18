@@ -98,9 +98,9 @@ fn production_menu_controls_keep_owner_isolation_and_original_byte_narrowing() {
 
 #[derive(Default)]
 struct Admissions(Vec<InputView>);
-impl Observer<Option<CampaignView>> for Admissions {
-    fn input_admitted(&mut self, view: &InputView, world: &Option<CampaignView>) -> Injected {
-        assert!(world.is_none());
+impl Observer for Admissions {
+    fn input_admitted(&mut self, view: &InputView, cx: &mut Cx<'_>) -> Injected {
+        assert!(CampaignView::for_input(*view, || CampaignView::capture(cx)).is_none());
         self.0.push(*view);
         Injected {
             stop: matches!(view, InputView::ReplacesIntroduction),

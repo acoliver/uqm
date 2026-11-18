@@ -5,12 +5,7 @@ use crate::automation::parity::Journal;
 use crate::engine::battle::access::observe::ElementObservation;
 use crate::{battle::netplay::CrcState, engine::battle::observation::ShipState};
 
-pub fn checkpoint(journal: &mut Journal, boundary: &str) -> std::io::Result<()> {
-    // SAFETY: the checkpoint owns the immutable live graph until this operation returns.
-    unsafe { crate::app::bridge::enter(|cx| checkpoint_with_context(cx, journal, boundary)) }
-}
-
-fn checkpoint_with_context(
+pub fn checkpoint(
     cx: &crate::engine::battle::Cx<'_>,
     journal: &mut Journal,
     boundary: &str,

@@ -4,7 +4,6 @@ fn ship_teardown_needed(kernel: &crate::engine::Kernel, activity: u16) -> bool {
     kernel.ships_initialized || activity as u8 == crate::ships::native::abi::IN_ENCOUNTER as u8
 }
 
-#[cfg(not(test))]
 pub(crate) mod live {
     use crate::ships::native::abi::{
         in_hqspace, IN_LAST_BATTLE, RPG_PLAYER_NUM, SPECIES_ID_SIS_SHIP_ID,
@@ -327,5 +326,4 @@ mod tests {
     }
 }
 
-#[cfg(not(test))]
 pub use live::*;

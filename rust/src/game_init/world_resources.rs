@@ -76,7 +76,6 @@ fn gravity_keys(selector: u8) -> [Option<String>; 3] {
     }
 }
 
-#[cfg(not(test))]
 pub(crate) mod live {
     use super::gravity_keys;
     use std::{ffi::CString, ptr};
@@ -130,5 +129,4 @@ mod tests {
     }
 }
 
-#[cfg(not(test))]
 pub use live::free_gravity_well;

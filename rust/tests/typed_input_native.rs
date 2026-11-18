@@ -13,8 +13,13 @@ struct Recording {
     stop: bool,
 }
 
-impl Observer<Option<CampaignView>> for Recording {
-    fn input_admitted(&mut self, view: &InputView, campaign: &Option<CampaignView>) -> Injected {
+impl Observer for Recording {
+    fn input_admitted(
+        &mut self,
+        view: &InputView,
+        cx: &mut uqm_rust::engine::battle::Cx<'_>,
+    ) -> Injected {
+        let campaign = CampaignView::for_input(*view, || CampaignView::capture(cx));
         match view {
             InputView::BeforeUpdate => {
                 assert!(

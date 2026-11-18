@@ -79,6 +79,7 @@ pub(crate) struct KernelServices {
     pub(crate) race_services: Option<&'static dyn crate::battle::race_services::RaceServices>,
     pub(crate) primitive_services: Option<&'static dyn crate::battle::services::PrimitiveServices>,
     pub(crate) ship_lifecycle: Option<crate::battle::services::ShipLifecycle>,
+    pub(crate) options_menu: Option<crate::battle::services::OptionsMenu>,
     pub(crate) input_runtime: Option<std::rc::Rc<dyn super::input::InputRuntime>>,
     pub(crate) save_slots: Option<crate::save::slots::SaveSlots>,
 }

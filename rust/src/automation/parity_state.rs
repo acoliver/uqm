@@ -16,11 +16,6 @@ pub use live::checkpoint;
 pub(super) use live::fighters;
 
 #[cfg(test)]
-pub fn checkpoint(_journal: &mut super::parity::Journal, _boundary: &str) -> std::io::Result<()> {
-    Ok(())
-}
-
-#[cfg(test)]
 pub(super) fn test_directory() -> tempfile::TempDir {
     let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../tmp/verify");
     std::fs::create_dir_all(root)
@@ -32,16 +27,24 @@ pub(super) fn test_directory() -> tempfile::TempDir {
 #[cfg(test)]
 mod tests {
     #[test]
-    fn unlinked_checkpoint_is_inert_and_does_not_write_a_fake_state() {
+    #[serial_test::serial]
+    fn checkpoint_records_the_supplied_context_once() {
         let directory = super::test_directory();
         let mut journal = crate::automation::parity::Journal::create(directory.path()).unwrap();
-        super::checkpoint(&mut journal, "unlinked").unwrap();
+        let mut game = crate::engine::Game::new();
+        game.world.set_activity(0x0203);
+        game.with_context(|cx| super::checkpoint(cx, &mut journal, "supplied"))
+            .unwrap();
         journal.flush().unwrap();
-        assert!(std::fs::read(directory.path().join("parity.trace"))
-            .unwrap()
-            .is_empty());
-        assert!(std::fs::read(directory.path().join("parity.fields"))
-            .unwrap()
-            .is_empty());
+        let trace = std::fs::read_to_string(directory.path().join("parity.trace")).unwrap();
+        assert_eq!(
+            trace
+                .lines()
+                .filter(|line| line.starts_with("S 1 515 "))
+                .count(),
+            1
+        );
+        let fields = std::fs::read_to_string(directory.path().join("parity.fields")).unwrap();
+        assert!(fields.contains(r#""mode.boundary":"supplied""#));
     }
 }

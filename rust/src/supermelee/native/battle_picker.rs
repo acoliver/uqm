@@ -102,7 +102,7 @@ pub mod live {
         if network {
             crate::ui::settings::play_menu_sound(cx.kernel, cx.world, 1);
             if let Some(net) = &state.net {
-                cx.with_legacy(|| net.ship_selected(choice));
+                net.ship_selected(choice);
             }
         }
         s.done = true;
@@ -132,7 +132,7 @@ pub mod live {
                 s.row = row;
                 s.col = col;
                 crate::ui::settings::play_menu_sound(cx.kernel, cx.world, 0);
-                cx.with_legacy(|| changed(state, player));
+                changed(state, player);
             }
         }
         1
@@ -526,9 +526,9 @@ pub mod live {
                     pressed = button;
                     button = false;
                 }
-                cx.with_legacy(|| {
+                {
                     Async_process();
-                });
+                };
                 cx.kernel.input_runtime().sleep(cx, 840 / 40);
                 if cx.world.activity() & CHECK_ABORT as u16 != 0
                     || button
@@ -618,9 +618,9 @@ pub mod live {
                 );
             }
             let mut ok = cx.negotiate_battle(net.as_ref(), NetState_NetState_selectShip);
-            cx.with_legacy(|| {
+            {
                 SetDefaultMenuRepeatDelay(input);
-            });
+            };
             let runtime = cx.kernel.input_runtime();
             let mut observer = runtime.observer();
             let mut io = Io {
@@ -631,7 +631,7 @@ pub mod live {
                 choose(cx, io, input, &mut state, &inputs) != 0
             });
             let mut ships = [None; 2];
-            cx.with_legacy(|| {
+            {
                 WaitForSoundEnd(0);
                 for (player, p) in state.player.iter_mut().enumerate() {
                     if !p.selecting {
@@ -644,7 +644,7 @@ pub mod live {
                         ok = false;
                     }
                 }
-            });
+            };
             if ok {
                 ok = cx.negotiate_battle(net.as_ref(), NetState_NetState_interBattle);
             } else {

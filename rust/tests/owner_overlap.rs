@@ -232,8 +232,12 @@ fn starbase_releases_world_before_communication_and_cleanup() {
         CampaignView, CheckpointView, Injected, InputView, Io, Observer, Presented,
     };
     struct Recording(Vec<String>);
-    impl Observer<Option<CampaignView>> for Recording {
-        fn input_admitted(&mut self, _: &InputView, _: &Option<CampaignView>) -> Injected {
+    impl Observer for Recording {
+        fn input_admitted(
+            &mut self,
+            _: &InputView,
+            _: &mut crate::engine::battle::Cx<'_>,
+        ) -> Injected {
             Injected::default()
         }
         fn checkpoint(&mut self, view: &CheckpointView<'_>) {

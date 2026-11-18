@@ -19,9 +19,7 @@ impl Request {
 
 pub(crate) fn connect(
     setup: &mut crate::automation::input_admission::Target<'_>,
-    observer: &mut dyn crate::engine::observe::Observer<
-        Option<crate::engine::observe::CampaignView>,
-    >,
+    observer: &mut dyn crate::engine::observe::Observer,
     request: &Request,
 ) -> Result<(), String> {
     request.validate()?;
@@ -98,13 +96,15 @@ mod tests {
                 assert_eq!(client.validate().is_ok(), remote_player < 2 && port != 0);
             }
         }
-        assert!(crate::engine::observe::InputSetup::connect_peer(
-            &mut crate::automation::input_admission::Unavailable,
-            0,
-            false,
-            21837,
-            &mut crate::engine::observe::Unobserved,
-        )
+        assert!(crate::automation::input_admission::with_supplied(|setup| {
+            crate::engine::observe::InputSetup::connect_peer(
+                setup,
+                0,
+                false,
+                21837,
+                &mut crate::engine::observe::Unobserved,
+            )
+        })
         .is_err());
     }
 }

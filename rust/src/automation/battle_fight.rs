@@ -428,15 +428,17 @@ impl BattleSnapshot {
     /// Panics when `disp_q` is not a valid element pool while a battle runs:
     /// the game's own queue is broken and no fight can be judged from it.
     #[must_use]
-    pub fn live(world: &crate::engine::observe::CampaignView) -> Self {
+    pub fn live(
+        cx: &crate::engine::battle::Cx<'_>,
+        world: &crate::engine::observe::CampaignView,
+    ) -> Self {
         let (width, height) = crate::automation::input_ffi::screen_size();
         let arena = arena_size(width, height);
         let activity = world.activity;
         if activity & crate::mainloop::types::activity_flags::IN_BATTLE == 0 {
             return Self::none(arena);
         }
-        // SAFETY: the automation snapshot is a synchronous game-thread operation.
-        unsafe { crate::app::bridge::enter(|cx| Self::from_context(cx, arena)) }
+        Self::from_context(cx, arena)
     }
 
     fn from_context(cx: &crate::engine::battle::Cx<'_>, arena: (i32, i32)) -> Self {
@@ -448,16 +450,6 @@ impl BattleSnapshot {
             enemy,
             arena,
         }
-    }
-}
-
-#[cfg(test)]
-impl BattleSnapshot {
-    /// Without the linked game there is no battle to read.
-    #[must_use]
-    pub fn live(_world: &crate::engine::observe::CampaignView) -> Self {
-        let (width, height) = crate::automation::input_ffi::screen_size();
-        Self::none(arena_size(width, height))
     }
 }
 

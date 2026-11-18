@@ -2,6 +2,7 @@
 // @plan PLAN-20260314-SHIPS.P06
 // @requirement REQ-CATALOG, REQ-CATALOG-SORT, REQ-CATALOG-STARTUP, REQ-CATALOG-SHUTDOWN, REQ-CATALOG-EXCLUSION, REQ-CATALOG-LOOKUP
 
+use super::c_bridge::{RegistryResources, ResourceBridge};
 use super::loader::{load_ship, LoadTier};
 use super::types::{FleetStuff, ShipInfo, ShipsError, SpeciesId};
 use std::mem;
@@ -110,7 +111,7 @@ pub fn load_master_ship_list() -> Result<(), ShipsError> {
         let species = SpeciesId::from_i32(species_val)
             .ok_or_else(|| ShipsError::LoadFailed(format!("Invalid species ID {}", species_val)))?;
 
-        let mut desc = load_ship(species, LoadTier::MetadataOnly)?;
+        let mut desc = load_ship(&mut RegistryResources, species, LoadTier::MetadataOnly)?;
 
         // Transfer ownership of metadata handles using mem::replace.
         // This structurally ensures the source descriptor's handles are zeroed
@@ -148,17 +149,17 @@ pub fn free_master_ship_list() {
         for entry in &mut entries {
             // Free the metadata handles owned by the catalog entry
             if entry.ship_info.icons != 0 {
-                super::c_bridge::free_graphic(entry.ship_info.icons);
+                RegistryResources.free_graphic(entry.ship_info.icons);
                 entry.ship_info.icons = 0;
             }
 
             if entry.ship_info.melee_icon != 0 {
-                super::c_bridge::free_graphic(entry.ship_info.melee_icon);
+                RegistryResources.free_graphic(entry.ship_info.melee_icon);
                 entry.ship_info.melee_icon = 0;
             }
 
             if entry.ship_info.race_strings != 0 {
-                super::c_bridge::free_string_table(entry.ship_info.race_strings);
+                RegistryResources.free_string_table(entry.ship_info.race_strings);
                 entry.ship_info.race_strings = 0;
             }
         }
@@ -587,10 +588,7 @@ mod tests {
     #[test]
     #[serial]
     fn catalog_owns_metadata_handles() {
-        use crate::ships::c_bridge::{mock_allocated_count, mock_reset};
-
         reset_catalog();
-        mock_reset();
 
         // Load catalog (currently all resource IDs are 0, so no actual allocations)
         load_master_ship_list().unwrap();
@@ -602,10 +600,7 @@ mod tests {
         // Free catalog
         free_master_ship_list();
 
-        // All handles should be freed (currently 0 since no real resources)
-        assert_eq!(mock_allocated_count(), 0);
-
-        mock_reset();
+        assert!(!is_catalog_loaded());
     }
 
     // -- Integration tests --------------------------------------------------

@@ -367,7 +367,7 @@ pub(crate) fn encounter_ship(
     }
     if fleet_is_infinite(cx.world, which_player) != 0 {
         if let Some(last) = last {
-            let captain = cx.with_legacy(production_captain_name);
+            let captain = production_captain_name();
             let mut queue = cx.kernel.ships(side);
             queue.edit(queue.link(last), |value| {
                 value.crew = value.max_crew;

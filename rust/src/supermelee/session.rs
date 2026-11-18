@@ -12,26 +12,18 @@ pub enum MenuPhase {
     Building,
 }
 
-#[cfg(not(test))]
 pub(crate) struct MeleeFiles {
     pub config: uqm_engine::io::uio_owned::Directory,
     pub teams: uqm_engine::io::uio_owned::Directory,
 }
 
 pub struct MeleeSession {
-    #[cfg(not(test))]
     pub(crate) files: Option<MeleeFiles>,
-    #[cfg(not(test))]
     pub(crate) build_picker: Option<crate::supermelee::native::build_picker::live::BuildPicker>,
-    #[cfg(not(test))]
     pub(crate) fleet_picker: Option<crate::supermelee::native::battle_picker::live::FleetPicker>,
-    #[cfg(not(test))]
     pub(crate) menu_graphic: Option<uqm_engine::graphics::drawable_abi::LoadedDrawable>,
-    #[cfg(not(test))]
     pub(crate) menu_context: Option<uqm_engine::graphics::context_abi::ContextLease>,
-    #[cfg(not(test))]
     pub(crate) menu_target: Option<uqm_engine::graphics::context_abi::ContextFrame>,
-    #[cfg(not(test))]
     pub(crate) menu_font: Option<uqm_engine::graphics::native_font::FontLease>,
     next_selection_flash: u32,
     selection_highlighted: bool,
@@ -108,7 +100,6 @@ impl MeleeSession {
         Some(self.selection_highlighted)
     }
 
-    #[cfg(not(test))]
     pub(crate) fn menu_frames(&self) -> uqm_engine::graphics::drawable_abi::DrawableLease {
         self.menu_graphic
             .as_ref()
@@ -163,7 +154,6 @@ impl MeleeSession {
         Ok(())
     }
 
-    #[cfg(not(test))]
     pub(crate) fn load_config(&mut self, controls: &mut [u8; 2]) -> bool {
         let Ok(mut stream) = self.files().config.open(c"melee.cfg") else {
             return false;
@@ -172,7 +162,6 @@ impl MeleeSession {
         self.read_config(&mut stream, length, controls)
     }
 
-    #[cfg(not(test))]
     pub(crate) fn save_config(&self, controls: [u8; 2]) -> bool {
         let directory = &self.files().config;
         let Ok(mut stream) = directory.create(c"melee.cfg") else {
@@ -188,7 +177,6 @@ impl MeleeSession {
         }
     }
 
-    #[cfg(not(test))]
     pub(crate) fn build_picker(
         &self,
     ) -> &crate::supermelee::native::build_picker::live::BuildPicker {
@@ -197,7 +185,6 @@ impl MeleeSession {
             .unwrap_or_else(|| panic!("popup resources not admitted"))
     }
 
-    #[cfg(not(test))]
     pub(crate) fn files(&self) -> &MeleeFiles {
         self.files
             .as_ref()
@@ -209,19 +196,12 @@ impl MeleeSession {
         catalog: Vec<crate::ships::master_native::ShipChoice>,
     ) -> Self {
         Self {
-            #[cfg(not(test))]
             files: None,
-            #[cfg(not(test))]
             build_picker: None,
-            #[cfg(not(test))]
             fleet_picker: None,
-            #[cfg(not(test))]
             menu_graphic: None,
-            #[cfg(not(test))]
             menu_context: None,
-            #[cfg(not(test))]
             menu_target: None,
-            #[cfg(not(test))]
             menu_font: None,
             next_selection_flash: 0,
             selection_highlighted: false,

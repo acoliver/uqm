@@ -10,7 +10,7 @@ use std::ptr::NonNull;
 use super::site::dispatch::invoke;
 use crate::comm::locdata::CPoint;
 use crate::engine::world::generation::Body;
-use crate::planets::devices::devices_menu;
+use crate::planets::devices::{devices_menu, SolarVisit};
 use crate::planets::generate::calc::preview_body;
 use crate::planets::{
     solar_coords::star_seed,
@@ -231,7 +231,7 @@ pub(super) fn free_solar_sys(cx: &mut Cx<'_>, solar: &mut SolarSystem) {
         }
     }
     solar.clear_system_image();
-    cx.with_legacy(stop_music);
+    stop_music();
 }
 
 pub(super) fn reset_solar_sys(cx: &mut Cx<'_>, solar: &mut SolarSystem, next_activity: u16) {
@@ -278,7 +278,7 @@ fn run_planet_orbit(cx: &mut Cx<'_>, io: &mut Io<'_>, solar: &mut SolarSystem) {
         let services = crate::planets::orbit::OrbitServices {
             submenu: |cx, io, solar, selection| match selection {
                 crate::planets::orbit::OrbitSubmenu::Devices => {
-                    devices_menu(cx, io, Some(solar)) != 0
+                    devices_menu(cx, io, Some(solar_visit(solar))) != 0
                 }
                 crate::planets::orbit::OrbitSubmenu::Cargo => {
                     cargo_menu(cx, io);
@@ -575,6 +575,13 @@ fn prepare_explore_solar_sys(
     id
 }
 
+fn solar_visit(system: &SolarSystem) -> SolarVisit<'_> {
+    SolarVisit {
+        system,
+        save_location: save_solar_location,
+    }
+}
+
 pub fn save_solar_location(world: &mut World, kernel: &Kernel, solar: &SolarSystem) {
     if !solar.in_orbit() {
         save_non_orbital_location(world, kernel, solar);
@@ -618,7 +625,7 @@ fn do_solar_sys_menu(
     crate::ui::sis::clear_flash(cx.kernel);
     match menu.current {
         EQUIP_DEVICE => {
-            select = devices_menu(cx, io, Some(solar)) as c::BOOLEAN;
+            select = devices_menu(cx, io, Some(solar_visit(solar))) as c::BOOLEAN;
             if cx.world.activity() & START_ENCOUNTER != 0 {
                 return 0;
             }

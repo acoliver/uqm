@@ -1,5 +1,4 @@
 //! Protocol work borrows the input frame that admitted it.
-#[cfg(not(test))]
 use crate::engine::battle::net::ProtocolNoticeKind;
 use crate::engine::{
     battle::{
@@ -8,7 +7,6 @@ use crate::engine::{
     },
     observe::Io,
 };
-#[cfg(not(test))]
 use std::ffi::CStr;
 
 type NoticeHandler<'a> = dyn FnMut(&mut Cx<'_>, &mut Io<'_>, ProtocolNotice) + 'a;
@@ -42,7 +40,6 @@ impl ProtocolDriver for Driver<'_, '_, '_> {
     }
 }
 
-#[cfg(not(test))]
 pub(crate) fn with_battle_driver<R>(
     cx: &mut Cx<'_>,
     io: &mut Io<'_>,
@@ -51,7 +48,6 @@ pub(crate) fn with_battle_driver<R>(
     action(&mut Driver::new(cx, io, &mut battle_notice))
 }
 
-#[cfg(not(test))]
 pub(crate) fn feedback(
     cx: &mut Cx<'_>,
     io: &mut Io<'_>,
@@ -95,7 +91,6 @@ pub(crate) fn feedback(
     }
 }
 
-#[cfg(not(test))]
 pub(crate) fn battle_notice(cx: &mut Cx<'_>, io: &mut Io<'_>, notice: ProtocolNotice) {
     feedback(cx, io, notice, |_, _| {
         panic!("a battle protocol notice requested menu status: {notice:?}")

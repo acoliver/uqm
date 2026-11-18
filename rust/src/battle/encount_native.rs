@@ -173,7 +173,7 @@ pub(crate) mod engine {
         ) {
             SelectionAction::Finish => return false,
             SelectionAction::Options => {
-                if crate::front_end::gameopt::game_options(cx, io, None) == 0 {
+                if !cx.options_menu(io) {
                     return false;
                 }
                 crate::ui::menu::draw_menu_state(
@@ -445,7 +445,7 @@ pub(crate) mod engine {
             draw_encounter_fleet(cx.world, &context, dimensions);
         });
         drop(segue);
-        cx.with_legacy(|| context.transition(None));
+        context.transition(None);
     }
 
     pub fn init_encounter(
@@ -547,7 +547,7 @@ pub(crate) mod engine {
         } else {
             IN_ENCOUNTER as u16
         });
-        cx.with_legacy(|| WaitForSoundEnd(COUNT::MAX));
+        WaitForSoundEnd(COUNT::MAX);
         let mut saved = None;
         if cx.world.data.game.glob_flags & CYBORG_ENABLED as u8 != 0 {
             cx.b.nth_frame = 1 | ((combat_speed(cx.world.data.game.glob_flags) as u16) << 8);

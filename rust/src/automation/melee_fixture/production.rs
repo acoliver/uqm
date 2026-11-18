@@ -45,8 +45,9 @@ fn hooks() -> Hooks {
 }
 
 pub(in crate::automation::melee_fixture) fn execute(
+    cx: &mut Cx<'_>,
     operation: Operation<'_>,
-    checkpoint: &dyn Fn(),
+    checkpoint: &dyn Fn(&Cx<'_>),
 ) -> Result<Option<FixtureRun>, String> {
     let hooks = hooks();
     let mut registry = crate::ships::hook_registry::hooks();
@@ -83,8 +84,7 @@ pub(in crate::automation::melee_fixture) fn execute(
             .collect();
         drive(cx, *task, &hooks, &catalog, checkpoint)
     };
-    // SAFETY: the admitted fixture exclusively borrows the published game context.
-    unsafe { crate::app::bridge::enter(run) }
+    run(cx)
 }
 
 fn drive(
@@ -92,17 +92,15 @@ fn drive(
     mut task: Task<'_>,
     hooks: &Hooks,
     catalog: &BTreeMap<u8, u32>,
-    checkpoint: &dyn Fn(),
+    checkpoint: &dyn Fn(&Cx<'_>),
 ) -> Result<Option<FixtureRun>, String> {
     let mut retained: Option<crate::battle::context_access::fixture::Descriptor> = None;
     let mut retained_owner = None;
     let mut old_scale = 0;
     loop {
         let mut world = borrow_world(cx);
-        // SAFETY: planning owns only copied values; its legacy checkpoint may enter Cx.
-        let effects = unsafe {
-            crate::app::bridge::publish(cx, || task.advance(&mut world, hooks, catalog, checkpoint))
-        };
+        // Planning owns only copied values; its checkpoint reads the committed context.
+        let effects = task.advance(&mut world, hooks, catalog, &|| checkpoint(cx));
         world.commit(cx);
         let elements = world.order;
         let ships = world.ship_order;
@@ -110,8 +108,8 @@ fn drive(
             break;
         };
         for effect in effects {
-            // SAFETY: planning values are committed and no record borrow crosses any effect.
-            let reply = unsafe {
+            // Planning values are committed and no record borrow crosses any effect.
+            let reply = {
                 match effect {
                     Effect::RetainDescriptor(owner) => {
                         retained_owner = Some(owner);
@@ -193,16 +191,14 @@ pub(super) enum Reply {
     Captain(FrameSelection),
 }
 
-/// # Safety
-/// Handles and callback addresses must have come from the just-dropped live
-/// graph. No borrowed Element, ship, descriptor or frame may cross this call.
-unsafe fn apply(cx: &mut Cx<'_>, effect: Effect, checkpoint: &dyn Fn()) -> Result<Reply, String> {
-    // SAFETY: effects execute at the published game-thread boundary after command planning commits.
-    unsafe {
+/// Apply one committed plan effect. Handles and callback addresses come from
+/// the just-dropped live graph; no borrowed record crosses this call.
+fn apply(cx: &mut Cx<'_>, effect: Effect, checkpoint: &dyn Fn(&Cx<'_>)) -> Result<Reply, String> {
+    {
         match effect {
             Effect::Redraw(check) => {
                 crate::battle::process_native::engine::redraw_queue(cx, false);
-                crate::app::bridge::publish(cx, || redrawn(check, checkpoint));
+                redrawn(check, &|| checkpoint(cx));
                 return Ok(Reply::None);
             }
             Effect::ClearStar => {

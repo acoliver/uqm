@@ -2,7 +2,7 @@ use super::*;
 use crate::engine::{
     battle::{input::InputContext, Battle},
     input::{frames::InputState, Frame, InputControls, InputRuntime},
-    observe::{CampaignView, Observer, Unobserved},
+    observe::{Observer, Unobserved},
     Game,
 };
 use std::{
@@ -21,7 +21,7 @@ impl InputRuntime for Driver {
     fn input(&self) -> &InputSession {
         &self.input
     }
-    fn observer(&self) -> Box<dyn Observer<Option<CampaignView>>> {
+    fn observer(&self) -> Box<dyn Observer> {
         Box::new(Unobserved)
     }
     fn yield_poll(&self, _: &mut Cx<'_>) {

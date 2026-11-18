@@ -389,6 +389,11 @@ pub fn label_satisfies(label: &str, prefix: &str, predicate: &StatePredicate) ->
 /// The running game, read on the game thread.
 pub struct LiveCampaign<'a> {
     pub world: &'a CampaignView,
+    /// The boss observation read from the supplied context at this boundary.
+    pub boss: (
+        crate::engine::battle::observation::samatra::Events,
+        Option<crate::engine::battle::observation::samatra::Snapshot>,
+    ),
     pub ui: &'a super::ui_observation::UiObservation,
     pub ending: super::ending::Ending,
     pub flagship_destroyed: bool,
@@ -435,7 +440,8 @@ fn read_hyperspace_state(
 
 impl StateSource for LiveCampaign<'_> {
     fn read(&self, key: StateKey) -> Option<u32> {
-        use crate::automation::{input_ffi, samatra::observe as boss_observation};
+        use crate::automation::input_ffi;
+        let boss_observation = || self.boss.clone();
         let world = self.world;
         match key {
             StateKey::Ending(index) => {
@@ -507,8 +513,8 @@ impl StateSource for LiveCampaign<'_> {
             StateKey::DateMonth => Some(u32::from(world.date.1)),
             StateKey::DateYear => Some(u32::from(world.date.2)),
             StateKey::FlagshipDestroyed => Some(u32::from(self.flagship_destroyed)),
-            StateKey::BattleShipsP1 => input_ffi::battle_fleets().map(|(p1, _)| u32::from(p1)),
-            StateKey::BattleShipsP2 => input_ffi::battle_fleets().map(|(_, p2)| u32::from(p2)),
+            StateKey::BattleShipsP1 => input_ffi::battle_fleets(world).map(|(p1, _)| u32::from(p1)),
+            StateKey::BattleShipsP2 => input_ffi::battle_fleets(world).map(|(_, p2)| u32::from(p2)),
         }
     }
 }
@@ -533,6 +539,7 @@ mod tests {
         world.date = (17, 8, 2161);
         let campaign = LiveCampaign {
             ui: &ui,
+            boss: Default::default(),
             ending: Default::default(),
             world: &world,
             flagship_destroyed: false,
@@ -556,12 +563,14 @@ mod tests {
         let world = empty_view();
         let running = LiveCampaign {
             ui: &ui,
+            boss: Default::default(),
             ending: Default::default(),
             world: &world,
             flagship_destroyed: false,
         };
         let destroyed = LiveCampaign {
             ui: &ui,
+            boss: Default::default(),
             ending: Default::default(),
             world: &world,
             flagship_destroyed: true,
@@ -831,6 +840,7 @@ mod tests {
             assert_eq!(
                 LiveCampaign {
                     ui: &ui,
+                    boss: Default::default(),
                     ending: Default::default(),
                     world: &world,
                     flagship_destroyed: false,
@@ -855,6 +865,7 @@ mod tests {
         assert_eq!(
             LiveCampaign {
                 ui: &ui,
+                boss: Default::default(),
                 ending: Default::default(),
                 world: &empty_view(),
                 flagship_destroyed: false,

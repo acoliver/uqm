@@ -4,7 +4,7 @@ use crate::comm::talk_segue;
 use crate::comm::Comm;
 use crate::engine::{
     battle::Cx,
-    observe::{CampaignView, CheckpointView, InputView, Io},
+    observe::{CheckpointView, InputView, Io},
 };
 
 pub(super) fn run_pending(
@@ -38,23 +38,17 @@ pub(super) fn run_pending(
             .checkpoint(&CheckpointView::ResponsesReady(false));
 
         let response_count = comm.responses().count();
-        let campaign = CampaignView::capture(cx.world, cx.kernel);
-        let semantic_skip = cx.with_legacy(|| {
-            comm.admit_observer(io, &InputView::PendingSpeech, &Some(campaign.clone()))
+        let semantic_skip = comm.admit_observer(io, &InputView::PendingSpeech, cx).stop
+            || comm
+                .admit_observer(
+                    io,
+                    &InputView::PendingResponse {
+                        count: response_count,
+                    },
+                    cx,
+                )
                 .stop
-                || comm
-                    .admit_observer(
-                        io,
-                        &InputView::PendingResponse {
-                            count: response_count,
-                        },
-                        &Some(campaign.clone()),
-                    )
-                    .stop
-                || comm
-                    .admit_observer(io, &InputView::ClosingSpeech, &Some(campaign))
-                    .stop
-        });
+            || comm.admit_observer(io, &InputView::ClosingSpeech, cx).stop;
         if semantic_skip {
             let _ = crate::sound::trackplayer::jump_track(0);
         }
@@ -73,7 +67,7 @@ pub(super) fn run_pending(
         comm.set_talking_finished(ended);
 
         if ended {
-            cx.with_legacy(talk_segue::fade_music_to_foreground_bridge);
+            talk_segue::fade_music_to_foreground_bridge();
         }
 
         return true;

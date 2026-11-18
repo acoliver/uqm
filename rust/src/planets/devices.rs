@@ -34,7 +34,19 @@ use crate::navigation::{
 
 use crate::engine::world::generation::Body;
 use crate::planets::solar_system::SolarSystem;
-use crate::planets::solarsys::lifecycle::save_solar_location;
+
+/// The solar visit a device acts in, with its owner's location save.
+#[derive(Clone, Copy)]
+pub struct SolarVisit<'a> {
+    pub system: &'a SolarSystem,
+    pub save_location: fn(&mut crate::engine::World, &crate::engine::Kernel, &SolarSystem),
+}
+
+impl SolarVisit<'_> {
+    fn save(self, cx: &mut Cx<'_>) {
+        (self.save_location)(cx.world, cx.kernel, self.system);
+    }
+}
 
 use crate::ui::util::draw_starcon_box;
 
@@ -148,7 +160,7 @@ fn orbit_is(solar: Option<&SolarSystem>, planet: u8) -> bool {
     })
 }
 
-fn use_caster(cx: &mut Cx<'_>, solar: Option<&SolarSystem>, next_activity: &mut u16) -> bool {
+fn use_caster(cx: &mut Cx<'_>, visit: Option<SolarVisit<'_>>, next_activity: &mut u16) -> bool {
     if in_hqspace(cx.world) != 0 {
         if get(cx.world, StoryKey::ARILOU_SPACE_SIDE) <= 1 {
             set(cx.world, StoryKey::USED_BROADCASTER, 1);
@@ -156,9 +168,10 @@ fn use_caster(cx: &mut Cx<'_>, solar: Option<&SolarSystem>, next_activity: &mut 
         }
         return false;
     }
-    let Some(solar) = solar.filter(|_| cx.world.activity() & 0xff == 4) else {
+    let Some(visit) = visit.filter(|_| cx.world.activity() & 0xff == 4) else {
         return false;
     };
+    let solar = visit.system;
     let star = solar.sys.star_index();
     if orbit_is(Some(solar), 1)
         && star == CHMMR_DEFINED
@@ -168,7 +181,7 @@ fn use_caster(cx: &mut Cx<'_>, solar: Option<&SolarSystem>, next_activity: &mut 
         cx.world.set_activity(cx.world.activity() | START_ENCOUNTER);
         reset_groups(cx.world);
         set(cx.world, StoryKey::GLOBAL_FLAGS_AND_DATA, 1 << 7);
-        save_solar_location(cx.world, cx.kernel, solar);
+        visit.save(cx);
         return true;
     }
     let home = star == ILWRATH_DEFINED;
@@ -191,18 +204,19 @@ fn use_caster(cx: &mut Cx<'_>, solar: Option<&SolarSystem>, next_activity: &mut 
         if home { 1 << 4 } else { 1 << 5 },
     );
     if solar.in_orbit() {
-        save_solar_location(cx.world, cx.kernel, solar);
+        visit.save(cx);
     }
     true
 }
 
 /// Returns the original DeviceStatus (failure, success, success without sound).
-fn invoke(cx: &mut Cx<'_>, solar: Option<&SolarSystem>, id: u8, next_activity: &mut u16) -> u8 {
+fn invoke(cx: &mut Cx<'_>, visit: Option<SolarVisit<'_>>, id: u8, next_activity: &mut u16) -> u8 {
     match id {
         4..=6 => repair_ultron(cx.world, ULTRON_COMPONENTS[usize::from(id - 4)]),
         3 => {
-            let Some(solar) =
-                solar.filter(|solar| cx.world.activity() & 0xff == 4 && solar.in_orbit())
+            let Some(solar) = visit
+                .map(|visit| visit.system)
+                .filter(|solar| cx.world.activity() & 0xff == 4 && solar.in_orbit())
             else {
                 return 0;
             };
@@ -243,20 +257,21 @@ fn invoke(cx: &mut Cx<'_>, solar: Option<&SolarSystem>, id: u8, next_activity: &
                     set(cx.world, StoryKey::SHIP_TO_COMPEL, 1);
                     reset_groups(cx.world);
                 }
-                let Some(solar) = solar else {
+                let Some(visit) = visit else {
                     panic!("device effect requires a solar visit");
                 };
+                let solar = visit.system;
                 let star = solar.sys.star_index();
                 if star == SAMATRA_DEFINED {
                     set(cx.world, StoryKey::READY_TO_CONFUSE_URQUAN, 1);
                 }
                 if solar.in_orbit() {
-                    save_solar_location(cx.world, cx.kernel, solar);
+                    visit.save(cx);
                 }
             }
             1
         }
-        12 | 13 => u8::from(use_caster(cx, solar, next_activity)),
+        12 | 13 => u8::from(use_caster(cx, visit, next_activity)),
         0 => {
             if in_hyper_space(cx.world) == 0 || cx.world.data.flagship.fuel_on_board < 1000 {
                 return 0;
@@ -273,7 +288,7 @@ fn frame(
     cx: &mut Cx<'_>,
     io: &mut Io<'_>,
     input: &crate::engine::input::InputSession,
-    solar: Option<&SolarSystem>,
+    visit: Option<SolarVisit<'_>>,
     menu: &mut Menu,
     next_activity: &mut u16,
 ) -> i32 {
@@ -284,7 +299,7 @@ fn frame(
     if keys[9] != 0 {
         let id = menu.list[menu.selected];
         let before = effect_state(cx.world);
-        let status = invoke(cx, solar, id, next_activity);
+        let status = invoke(cx, visit, id, next_activity);
         if status == 0 {
             crate::ui::settings::play_menu_sound(cx.kernel, cx.world, 2);
         } else if status == 1 {
@@ -340,7 +355,7 @@ fn frame(
     1
 }
 
-pub fn devices_menu(cx: &mut Cx<'_>, io: &mut Io<'_>, solar: Option<&SolarSystem>) -> i32 {
+pub fn devices_menu(cx: &mut Cx<'_>, io: &mut Io<'_>, visit: Option<SolarVisit<'_>>) -> i32 {
     let runtime = cx.kernel.input_runtime();
     let input = runtime.input();
     let Some(mut menu) = prepare_devices_menu(cx) else {
@@ -352,7 +367,7 @@ pub fn devices_menu(cx: &mut Cx<'_>, io: &mut Io<'_>, solar: Option<&SolarSystem
     publish(cx.kernel, io);
     cx.run_input(io, true, |cx, io| {
         let mut next_activity = 0;
-        let result = frame(cx, io, input, solar, &mut menu, &mut next_activity) != 0;
+        let result = frame(cx, io, input, visit, &mut menu, &mut next_activity) != 0;
         cx.world.next_activity |= next_activity;
         result
     });

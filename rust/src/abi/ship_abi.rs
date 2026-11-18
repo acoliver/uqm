@@ -1095,13 +1095,9 @@ pub use crate::supermelee::native::menu::live::changes::local_change_team;
 pub unsafe fn Flash_createHighlight(gfxContext: CONTEXT, rect: *const RECT) -> *mut FlashContext {
     crate::graphics::flash::Flash_createHighlight(gfxContext.cast(), rect.cast()).cast()
 }
-#[cfg(test)]
-pub use crate::graphics::flash::Flash_createHighlight;
 pub unsafe fn Flash_setRect(context: *mut FlashContext, rect: *const RECT) {
     crate::graphics::flash::Flash_setRect(context.cast(), rect.cast());
 }
-#[cfg(test)]
-pub use crate::graphics::flash::Flash_setRect;
 pub const KEY_UP: _bindgen_ty_1 = 0;
 pub const KEY_DOWN: _bindgen_ty_1 = 1;
 pub const KEY_LEFT: _bindgen_ty_1 = 2;
@@ -1276,10 +1272,6 @@ pub use crate::engine::world::fleet::set_race_allied;
 pub use crate::engine::world::fleet::start_sphere_tracking;
 
 pub use crate::ui::settings::stop_music;
-#[cfg(test)]
-extern "C" {
-    pub fn stop_music();
-}
 pub type Mutex = *mut crate::threading::RustMutex;
 pub type CondVar = *mut crate::threading::RustCondVar;
 pub const SYNC_CLASS_TOPLEVEL: _bindgen_ty_6 = 1;

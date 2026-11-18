@@ -1,4 +1,3 @@
-pub mod bridge;
 mod lifecycle;
 mod runtime;
 #[cfg(not(test))]
@@ -31,6 +30,9 @@ impl Application {
             self.game.kernel.configuration.clone(),
         );
         crate::battle::services::install(&mut self.game.kernel);
+        self.game.kernel.install_options_menu(|cx, io| {
+            crate::front_end::gameopt::game_options(cx, io, None) != 0
+        });
         self.game
             .kernel
             .install_ship_lifecycle(crate::engine::battle::services::ShipLifecycle {
@@ -43,13 +45,6 @@ impl Application {
         self.game
             .kernel
             .install_input_runtime(std::rc::Rc::new(runtime));
-    }
-
-    /// # Safety
-    /// The game-thread call must not retain owner references after returning.
-    pub unsafe fn legacy<R>(&mut self, call: impl FnOnce() -> R) -> R {
-        // SAFETY: the application owns Game and suspends direct access for this call.
-        unsafe { bridge::with_game(&mut self.game, call) }
     }
 
     pub fn observer(&self) -> Option<&Arc<crate::automation::AutomationObserver>> {

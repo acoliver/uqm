@@ -214,9 +214,7 @@ fn check_drawable_ownership(h: &mut Harness) {
             let io = std::cell::RefCell::new(uqm_rust::engine::observe::Io {
                 observer: &mut observer,
             });
-            let definition = game
-                .borrow_mut()
-                .with_legacy(|| CapturedSurface::pixmap(map_width / 2, map_height / 2, 2));
+            let definition = CapturedSurface::pixmap(map_width / 2, map_height / 2, 2);
             let mut pickup = uqm_rust::planet_side::special_effects::PickupContext::NoLander;
             let mut site = uqm_rust::planets::solarsys::site::Site::new(
                 &game,

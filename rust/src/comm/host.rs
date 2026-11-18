@@ -187,18 +187,6 @@ mod tests {
     }
 
     #[test]
-    #[serial_test::serial]
-    fn local_effects_do_not_publish_over_another_context() {
-        crate::comm::with_test_context(|cx| {
-            cx.with_legacy(|| {
-                std::thread::spawn(story_and_animation_effects_use_only_the_supplied_owners)
-                    .join()
-                    .unwrap_or_else(|panic| std::panic::resume_unwind(panic));
-            });
-        });
-    }
-
-    #[test]
     fn story_and_animation_effects_use_only_the_supplied_owners() {
         crate::comm::with_test_context(|cx| {
             cx.world.story = Some(crate::engine::world::story::StoryState::new());

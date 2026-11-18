@@ -348,7 +348,7 @@ mod tests {
             frames::FrameSelection, input::InputContext, link_queue::ShipPickerResources, Battle,
         },
         input::{Frame, InputRuntime, InputSession},
-        observe::{CampaignView, Observer, Unobserved},
+        observe::{Observer, Unobserved},
         Game,
     };
     use std::{cell::Cell, rc::Rc};
@@ -363,7 +363,7 @@ mod tests {
         fn input(&self) -> &InputSession {
             &self.input
         }
-        fn observer(&self) -> Box<dyn Observer<Option<CampaignView>>> {
+        fn observer(&self) -> Box<dyn Observer> {
             Box::new(Unobserved)
         }
         fn sleep(&self, _: &mut Cx<'_>, _: u32) {

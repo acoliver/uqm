@@ -2,6 +2,7 @@
 
 pub mod planet_side;
 
+use crate::battle::Cx;
 use crate::graphics::presented_frame::PresentedFrame;
 
 pub mod starmap;
@@ -27,7 +28,6 @@ pub enum InputView {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CheckpointView<'a> {
-    Simulation(&'a str),
     PlanetSide(&'a planet_side::PlanetSideSnapshot),
     PlanetSideReport(bool),
     BattleReset,
@@ -86,49 +86,54 @@ pub struct PeerSetup {
     pub disconnected: bool,
 }
 
-pub trait InputSetup<W = ()> {
+pub trait InputSetup {
     fn configure_fleet(&mut self, ships: [[u8; 7]; 2], cyborg: bool) -> Result<(), String>;
     fn connect_peer(
         &mut self,
         remote_player: u16,
         server: bool,
         port: u16,
-        observer: &mut dyn Observer<W>,
+        observer: &mut dyn Observer,
     ) -> Result<Option<u16>, String>;
     fn peer_setup(&self, remote_player: u16) -> Option<PeerSetup>;
-    fn poll_peer(&mut self, observer: &mut dyn Observer<W>);
-    /// Run an unconverted observation effect in the frame's existing publication scope.
-    fn with_legacy(&mut self, operation: &mut dyn FnMut());
+    fn poll_peer(&mut self, observer: &mut dyn Observer);
+    /// Lend the admitted frame's context to a synchronous observation effect.
+    fn with_context(&mut self, operation: &mut dyn FnMut(&mut Cx<'_>));
 }
 
-pub trait Observer<W = ()> {
-    fn input_admitted(&mut self, view: &InputView, world: &W) -> Injected;
+/// Observation boundaries. Admission and simulation checkpoints receive the
+/// supplied context; observers copy what they record and retain no borrow.
+pub trait Observer {
+    fn input_admitted(&mut self, view: &InputView, cx: &mut Cx<'_>) -> Injected;
     fn input_admitted_with_setup(
         &mut self,
         view: &InputView,
-        world: &W,
-        _setup: &mut dyn InputSetup<W>,
+        setup: &mut dyn InputSetup,
     ) -> Injected {
-        self.input_admitted(view, world)
+        let mut injected = Injected::default();
+        setup.with_context(&mut |cx| injected = self.input_admitted(view, cx));
+        injected
     }
     fn battle_diagnostics(&self) -> bool {
         false
     }
     fn battle_tick(&mut self, _tick: &crate::observe::battle::BattleTick) {}
     fn replacement_gate(&mut self, _gate: &crate::observe::battle::ReplacementGate) {}
+    /// A completed simulation step whose state the observer may record.
+    fn simulation(&mut self, _cx: &Cx<'_>, _boundary: &str) {}
     fn checkpoint(&mut self, view: &CheckpointView<'_>);
     fn presented(&mut self, presented: &mut Presented);
 }
 
-pub struct ObservationIo<'a, W = ()> {
-    pub observer: &'a mut dyn Observer<W>,
+pub struct ObservationIo<'a> {
+    pub observer: &'a mut dyn Observer,
 }
 
 #[derive(Default)]
 pub struct Unobserved;
 
-impl<W> Observer<W> for Unobserved {
-    fn input_admitted(&mut self, _: &InputView, _: &W) -> Injected {
+impl Observer for Unobserved {
+    fn input_admitted(&mut self, _: &InputView, _: &mut Cx<'_>) -> Injected {
         Injected::default()
     }
 
@@ -151,16 +156,30 @@ pub struct DeviceObservation {
 mod tests {
     use super::*;
 
+    fn with_context<R>(body: impl FnOnce(&mut Cx<'_>) -> R) -> R {
+        let mut game = crate::Game::new();
+        let mut battle = crate::battle::Battle::new();
+        body(&mut Cx::new(
+            &mut battle,
+            &mut game.world,
+            &mut game.kernel,
+            crate::math::random,
+        ))
+    }
+
     #[test]
     fn unobserved_boundaries_do_not_inject_or_stop() {
         let mut observer = Unobserved;
         let io = ObservationIo {
             observer: &mut observer,
         };
-        assert_eq!(
-            io.observer.input_admitted(&InputView::BeforeUpdate, &()),
-            Injected::default()
-        );
+        with_context(|cx| {
+            assert_eq!(
+                io.observer.input_admitted(&InputView::BeforeUpdate, cx),
+                Injected::default()
+            );
+            io.observer.simulation(cx, "battle");
+        });
         io.observer.checkpoint(&CheckpointView::BattleAdvanced);
         let mut presented = Presented {
             frame: None,
@@ -176,14 +195,13 @@ mod tests {
             nested: usize,
         }
         impl Observer for Observed {
-            fn input_admitted(&mut self, _: &InputView, _: &()) -> Injected {
+            fn input_admitted(&mut self, _: &InputView, _: &mut Cx<'_>) -> Injected {
                 self.nested += 1;
                 Injected::default()
             }
             fn input_admitted_with_setup(
                 &mut self,
                 _: &InputView,
-                _: &(),
                 setup: &mut dyn InputSetup,
             ) -> Injected {
                 setup.configure_fleet([[3; 7]; 2], true).unwrap();
@@ -218,10 +236,12 @@ mod tests {
                 assert_eq!((player, server, port), (1, true, 2020));
                 self.effects.push("connect");
                 let io = ObservationIo { observer };
-                assert_eq!(
-                    io.observer.input_admitted(&InputView::Nested, &()),
-                    Injected::default()
-                );
+                with_context(|cx| {
+                    assert_eq!(
+                        io.observer.input_admitted(&InputView::Nested, cx),
+                        Injected::default()
+                    )
+                });
                 self.effects.push("connected");
                 Ok(Some(port))
             }
@@ -231,15 +251,14 @@ mod tests {
             fn poll_peer(&mut self, _: &mut dyn Observer) {
                 panic!("unexpected peer poll")
             }
-            fn with_legacy(&mut self, operation: &mut dyn FnMut()) {
-                operation()
+            fn with_context(&mut self, operation: &mut dyn FnMut(&mut Cx<'_>)) {
+                with_context(|cx| operation(cx))
             }
         }
         let mut observer = Observed { nested: 0 };
         let mut effects = Vec::new();
         let result = observer.input_admitted_with_setup(
             &InputView::BeforeUpdate,
-            &(),
             &mut Setup {
                 effects: &mut effects,
             },

@@ -32,7 +32,6 @@ fn page(top: u16, bottom: u16, current: u16, count: u16, keys: [bool; 4]) -> (u1
     (next_top, next)
 }
 
-#[cfg(not(test))]
 pub(crate) mod live {
     use super::page;
     use crate::graphics::{
@@ -200,10 +199,10 @@ pub(crate) mod live {
         }
         SetMenuSounds(input, 1 | 2 | 128 | 256, 16);
         if state.initialized == 0 {
-            cx.with_legacy(|| {
+            {
                 draw(state);
                 select(state, true);
-            });
+            };
             state.initialized = 1;
             state.phase = crate::supermelee::session::MenuPhase::Loading;
             return 1;
@@ -246,16 +245,16 @@ pub(crate) mod live {
         );
         if index != state.load.current {
             if top == state.load.top {
-                cx.with_legacy(|| select(state, false));
+                select(state, false);
             } else {
                 state.load.top = top;
-                cx.with_legacy(|| draw(state));
+                draw(state);
             }
             state.load.current = index;
         }
-        cx.with_legacy(|| {
+        {
             flash(state);
-        });
+        };
         cx.kernel
             .input_runtime()
             .sleep_until(cx, time.wrapping_add(840 / 30));

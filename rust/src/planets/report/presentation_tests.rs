@@ -2,9 +2,7 @@ use super::live::discovery_report;
 use crate::engine::{
     battle::{input::InputContext, Battle, Cx},
     input::{frames::InputState, Frame, InputControls, InputRuntime, InputSession},
-    observe::{
-        CampaignView, CheckpointView, Injected, InputView, Io, Observer, Presented, Unobserved,
-    },
+    observe::{CheckpointView, Injected, InputView, Io, Observer, Presented, Unobserved},
     strings::owned_table::LoadedTextTable,
     world::generation::ReportSlot,
     Game,
@@ -36,7 +34,7 @@ impl InputRuntime for Driver {
     fn input(&self) -> &InputSession {
         &self.input
     }
-    fn observer(&self) -> Box<dyn Observer<Option<CampaignView>>> {
+    fn observer(&self) -> Box<dyn Observer> {
         Box::new(Unobserved)
     }
     fn yield_poll(&self, _: &mut Cx<'_>) {
@@ -80,8 +78,12 @@ struct Recording {
     visibility: Vec<bool>,
     nested: usize,
 }
-impl Observer<Option<CampaignView>> for Recording {
-    fn input_admitted(&mut self, view: &InputView, _: &Option<CampaignView>) -> Injected {
+impl Observer for Recording {
+    fn input_admitted(
+        &mut self,
+        view: &InputView,
+        _: &mut crate::engine::battle::Cx<'_>,
+    ) -> Injected {
         assert!(self.active, "report input escaped its visibility scope");
         assert!(matches!(view, InputView::Nested));
         self.nested += 1;

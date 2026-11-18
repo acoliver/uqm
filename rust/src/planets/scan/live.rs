@@ -199,18 +199,18 @@ pub fn redraw_surface_scan(
     visible: impl Fn(u16, u16) -> bool,
 ) {
     scan.context().with_selected(|| {
-        cx.with_legacy(|| {
+        {
             drawing::batch();
             scan.draw_surface(0, black());
-        });
+        };
         draw_scanned_objects(cx, true, visible);
-        cx.with_legacy(|| {
+        {
             if let Some(location) = location {
                 set_location(scan, location, false);
                 draw_cursor(scan, false);
             }
             drawing::unbatch();
-        });
+        };
     });
 }
 
@@ -255,14 +255,14 @@ fn dispatch_lander(
 ) -> bool {
     let runtime = cx.kernel.input_runtime();
     let misc_data = ContextFrame::retain(std::ptr::NonNull::new(cx.kernel.misc_data_frame));
-    let (landing_fuel, old_callback) = cx.with_legacy(|| {
+    let (landing_fuel, old_callback) = {
         let landing_fuel = fuel(solar) as i16;
         erase_coarse(planet, scan);
         let old_callback = runtime.input().replace_callback(None);
         (landing_fuel, old_callback)
-    });
+    };
     crate::ui::sis::delta_sis_gauges(cx.kernel, cx.world, 0, -landing_fuel, 0);
-    let context = cx.with_legacy(|| prepare_lander(scan, misc_data, solar));
+    let context = prepare_lander(scan, misc_data, solar);
     let reply = run_session(
         crate::planet_side::graphics_adapter::SurfaceDrawing {
             planet: planet.clone(),
@@ -303,7 +303,7 @@ fn dispatch_lander(
     }
     redraw_planet_orbit_display(cx, planet, scan);
     display::coarse(cx, solar, planet, runtime.input().preferences().coarse_scan);
-    cx.with_legacy(|| runtime.input().replace_callback(old_callback));
+    runtime.input().replace_callback(old_callback);
     true
 }
 
@@ -420,10 +420,10 @@ fn pick_side(
     let result = if state.success {
         dispatch_lander(solar, planet, scan, cx, io, services)
     } else {
-        cx.with_legacy(|| restore_location_image(scan));
+        restore_location_image(scan);
         true
     };
-    cx.with_legacy(|| input.set_menu_sounds(15, 16));
+    input.set_menu_sounds(15, 16);
     result
 }
 
@@ -441,13 +441,13 @@ fn prepare_pick_side(
     let fuel = fuel(solar);
     let dimensions = cx.screen_dimensions();
     crate::ui::sis::clear_sis_rect(cx.kernel, cx.world, dimensions, 1 << 2);
-    cx.with_legacy(|| {
+    {
         scan.context().select();
         drawing::batch();
         scan.draw_surface(0, black());
-    });
+    };
     draw_scanned(cx, solar, false);
-    let message = cx.with_legacy(|| {
+    let message = {
         drawing::unbatch();
         CString::new(format!(
             "{}{:.1}",
@@ -455,15 +455,15 @@ fn prepare_pick_side(
             f32::from(fuel) / 100.0
         ))
         .unwrap()
-    });
+    };
     crate::ui::sis::draw_status_message(cx.kernel, cx.world, Some(&message));
-    cx.with_legacy(|| {
+    {
         let location = scan.cursor.borrow().location;
         scan.cursor.borrow_mut().move_to(location);
         save_location_image(scan);
         draw_lander(radar, assets, status);
         input.set_menu_sounds(0, 16);
-    });
+    };
 }
 
 fn scanned_stuff(solar: &SolarSystem, cx: &mut crate::engine::battle::Cx<'_>, y: u16, scan: u16) {
@@ -540,7 +540,7 @@ fn scan_planet(
             .unwrap_or_else(|| panic!("scan micro font is not loaded")),
     );
     for scan in start..=end {
-        let (mut timeout, tint) = cx.with_legacy(|| {
+        let (mut timeout, tint) = {
             let baseline_y = dimensions.1 - 13 - 75 - 7;
             planet.select();
             repair = CRect {
@@ -566,39 +566,39 @@ fn scan_planet(
             scan_state.draw_surface(0, black());
             drawing::unbatch();
             (GetTimeCounter(), color(TINT_COLORS[usize::from(scan)]))
-        });
+        };
         let mut line = 0;
         while line < 84 {
             timeout = timeout.wrapping_add((840 * 7 / 4) / 84);
             if wait_for_any_button_until(cx, io, 1, timeout, 0) != 0 {
                 break;
             }
-            cx.with_legacy(|| {
+            {
                 drawing::batch();
                 scan_state.draw_surface(line, tint);
-            });
+            };
             scanned_stuff(solar, cx, line as u16, scan);
             drawing::unbatch();
             line += 1;
         }
         if line < 84 {
-            cx.with_legacy(|| {
+            {
                 drawing::batch();
                 scan_state.draw_surface(83, tint);
-            });
+            };
             scanned_stuff(solar, cx, 83, scan);
             drawing::unbatch();
         }
     }
-    cx.with_legacy(|| {
+    {
         planet.select();
         repair_back_rect(planet, &repair);
         scan_state.context().select();
-    });
+    };
     if scan_type == 4 {
-        cx.with_legacy(|| {
+        {
             scan_state.draw_surface(0, black());
-        });
+        };
         draw_scanned(cx, solar, false);
     }
     cx.kernel.input_runtime().flush();
@@ -690,13 +690,13 @@ pub fn scan_system(
     let input = runtime.input();
     let mut menu = 0;
     prepare_scan_system(solar, cx, scan, planet, input, &mut menu);
-    cx.with_legacy(|| input.set_menu_sounds(15, 16));
+    input.set_menu_sounds(15, 16);
     io.observer.checkpoint(&CheckpointView::PlanetMenu(2));
     solar.run_input(cx, io, false, |cx, io, solar| {
         scan_input(solar, scan, planet, cx, io, &mut menu, services) != 0
     });
     io.observer.checkpoint(&CheckpointView::PlanetMenu(0));
-    cx.with_legacy(|| finish_scan_system(scan, planet, &g));
+    finish_scan_system(scan, planet, &g);
 }
 
 fn prepare_scan_system(
@@ -708,7 +708,7 @@ fn prepare_scan_system(
     menu: &mut u8,
 ) {
     let dimensions = cx.screen_dimensions();
-    cx.with_legacy(|| {
+    {
         if input.preferences().menu == 1 && unavailable(solar) {
             *menu = 3;
         } else {
@@ -722,7 +722,7 @@ fn prepare_scan_system(
             scan.cursor.borrow_mut().rect.height = cursor.extent.height;
             scan.context().select();
         }
-    });
+    };
     if *menu == 4 {
         draw_scanned(cx, solar, false);
     }
