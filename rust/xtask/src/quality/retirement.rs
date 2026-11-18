@@ -28,11 +28,39 @@ pub fn transfer_base(
     held: &Budgets,
     moves: &BTreeMap<String, String>,
 ) -> Result<TransferBase, String> {
-    let retired: Budgets = recorded
-        .iter()
-        .filter(|(name, _)| !held.contains_key(*name))
-        .map(|(name, budget)| (name.clone(), budget.clone()))
-        .collect();
+    let mut retired = Budgets::new();
+    let mut budgets = Budgets::new();
+    for (name, budget) in recorded {
+        let Some(current_budget) = held.get(name) else {
+            retired.insert(name.clone(), budget.clone());
+            continue;
+        };
+        if budget.scopes.is_empty() {
+            budgets.insert(name.clone(), budget.clone());
+            continue;
+        }
+        let mut kept = budget.clone();
+        let mut removed = budget.clone();
+        kept.scopes.clear();
+        removed.scopes.clear();
+        for (key, value) in &budget.scopes {
+            if current_budget.scopes.contains_key(key)
+                || current_budget.scopes.contains_key(&relocated(key, moves)?)
+            {
+                kept.scopes.insert(key.clone(), *value);
+            } else {
+                removed.scopes.insert(key.clone(), *value);
+            }
+        }
+        kept.limit = kept.scopes.values().sum();
+        removed.limit = removed.scopes.values().sum();
+        if !kept.scopes.is_empty() {
+            budgets.insert(name.clone(), kept);
+        }
+        if !removed.scopes.is_empty() {
+            retired.insert(name.clone(), removed);
+        }
+    }
     for (name, budget) in &retired {
         let scopes = budget
             .scopes
@@ -68,11 +96,6 @@ pub fn transfer_base(
             }
         })
     });
-    let budgets = recorded
-        .iter()
-        .filter(|(name, _)| held.contains_key(*name))
-        .map(|(name, budget)| (name.clone(), budget.clone()))
-        .collect();
     Ok(TransferBase {
         measurement,
         budgets,
