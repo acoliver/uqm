@@ -28,8 +28,7 @@ pub(super) fn run_pending(
                 state.first_talk_call = true;
                 // Drop lock before calling C bridges
 
-                // SAFETY: the retained game-thread encounter owns initialized speech resources.
-                unsafe { talk_segue::alien_talk_first_call_init(comm, cx) };
+                talk_segue::alien_talk_first_call_init(comm, cx);
             }
         }
 

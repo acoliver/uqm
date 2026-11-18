@@ -5,14 +5,11 @@ use crate::comm::Comm;
 use super::*;
 
 pub(super) fn load_descriptor(comm: &mut Comm, cx: &mut Cx<'_>, comm_id: u32) {
-    // SAFETY: dispatch owns the game thread and retains the descriptor resources through teardown.
-    unsafe {
-        let descriptor = race_descriptor(comm, cx, comm_id);
-        comm.install_descriptor(descriptor);
-    }
+    let descriptor = race_descriptor(comm, cx, comm_id);
+    comm.install_descriptor(descriptor);
 }
 
-pub(super) fn finish_unhailed(comm: &mut Comm, cx: &mut Cx<'_>) {
+pub(in crate::comm) fn finish_callbacks(comm: &mut Comm, cx: &mut Cx<'_>) {
     let active = cx.world.activity() & (CHECK_ABORT | CHECK_LOAD) == 0;
     let post = comm.data.post_encounter_func;
     if active {
@@ -121,7 +118,6 @@ mod tests {
                 view.uninit_encounter_func.unwrap(),
                 comm.data.uninit_encounter_func.unwrap()
             ));
-            assert!(comm.data.alien_frame.is_null());
             assert!(comm.display.phrases.is_none());
 
             cx.world.set_story_state(StoryKey::GLOBAL_FLAGS_AND_DATA, 0);
@@ -192,9 +188,8 @@ mod tests {
                         crate::comm::races::chmmr::descriptor::descriptor(),
                     )
                 };
-                // SAFETY: the unplayed definition owns no loaded resources.
-                unsafe { comm.install_descriptor(data) };
-                finish_unhailed(&mut comm, cx);
+                comm.install_descriptor(data);
+                finish_callbacks(&mut comm, cx);
                 assert_eq!(
                     cx.world
                         .story_state(crate::engine::StoryKey::CHMMR_BOMB_STATE),
@@ -202,7 +197,7 @@ mod tests {
                 );
                 comm.data.post_encounter_func = None;
                 comm.data.uninit_encounter_func = None;
-                finish_unhailed(&mut comm, cx);
+                finish_callbacks(&mut comm, cx);
                 assert_eq!(
                     cx.world
                         .story_state(crate::engine::StoryKey::CHMMR_BOMB_STATE),

@@ -1,7 +1,7 @@
 //! Campaign-owned rendering resources borrowed for a synchronous conversation.
 
 use crate::engine::Kernel;
-use crate::graphics::native_abi::{CONTEXT, FONT, FRAME, STRING};
+use crate::graphics::native_abi::{CONTEXT, FONT, FRAME};
 
 #[derive(Default)]
 pub(crate) struct Presentation {
@@ -11,22 +11,25 @@ pub(crate) struct Presentation {
     pub screen: FRAME,
     pub activity_frame: FRAME,
     pub tiny_font: FONT,
-    pub game_strings: STRING,
     pub using_speech: u32,
     pub scope_buffer:
         std::rc::Rc<std::cell::OnceCell<Option<crate::graphics::drawable_abi::LoadedDrawable>>>,
 }
 
 impl Presentation {
-    pub(crate) fn scope_buffer_frame(&self, width: i16, height: i16) -> FRAME {
-        // Retain the allocation across conversations, including the native null result on allocation failure.
+    pub(crate) fn scope_buffer_frame(
+        &self,
+        width: i16,
+        height: i16,
+    ) -> crate::graphics::context_abi::ContextFrame {
         self.scope_buffer
             .get_or_init(|| {
                 crate::graphics::drawable_abi::LoadedDrawable::create(6, width, height, 1)
             })
             .as_ref()
-            .and_then(|drawable| drawable.lease().frame(0))
-            .unwrap_or(std::ptr::null_mut())
+            .unwrap_or_else(|| panic!("oscilloscope buffer allocation failed"))
+            .lease()
+            .context_frame(0)
     }
 }
 
@@ -39,7 +42,6 @@ impl From<&Kernel> for Presentation {
             screen: kernel.screen,
             activity_frame: kernel.activity_frame,
             tiny_font: kernel.tiny_font,
-            game_strings: kernel.game_strings,
             using_speech: kernel.using_speech,
             scope_buffer: std::rc::Rc::clone(&kernel.comm_scope_buffer),
         }
@@ -61,7 +63,6 @@ mod tests {
         assert_eq!(presentation.screen, kernel.screen);
         assert_eq!(presentation.activity_frame, kernel.activity_frame);
         assert_eq!(presentation.tiny_font, kernel.tiny_font);
-        assert_eq!(presentation.game_strings, kernel.game_strings);
         assert_eq!(presentation.using_speech, 1);
     }
 }

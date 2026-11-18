@@ -1,6 +1,5 @@
 //! Core types for the communication system
 use crate::comm::Comm;
-use std::ffi::c_void;
 use std::fmt;
 
 use super::races::descriptor::{AnimationDescriptor, MAX_ANIMATIONS};
@@ -149,9 +148,8 @@ impl From<u32> for CommIntroMode {
 /// Communication data for an alien encounter — the Rust equivalent of C `LOCDATA`.
 ///
 /// Resource ID fields (`*_res`) are the string-key handles used by the C resource
-/// system (opaque from Rust's perspective, stored as raw pointers).  Loaded-handle
-/// fields (`alien_frame`, `alien_font`, …) are set after the resource is resolved
-/// and hold whatever pointer or index the C graphics/audio layer returns.
+/// system. Loaded resources live in the conversation owner, separately from
+/// this descriptor projection.
 ///
 /// `alien_number_speech` borrows an immutable content definition.
 #[derive(Debug, Clone)]
@@ -219,18 +217,6 @@ pub struct CommData {
     pub alien_song_flags: u32,
 
     // -----------------------------------------------------------------------
-    // Loaded handles (set after resource resolution, opaque to Rust)
-    // -----------------------------------------------------------------------
-    /// Loaded alien sprite-sheet frame handle (`AlienFrame`).
-    pub alien_frame: *mut c_void,
-    /// Loaded alien font handle (`AlienFont`).
-    pub alien_font: *mut c_void,
-    /// Loaded alien color-map handle (`AlienColorMap`).
-    pub alien_color_map: *mut c_void,
-    /// Loaded alien music handle (`AlienSong`).
-    pub alien_song: *mut c_void,
-
-    // -----------------------------------------------------------------------
     // Number-speech definition
     // -----------------------------------------------------------------------
     /// Immutable race-specific numeric speech data.
@@ -261,10 +247,6 @@ impl Default for CommData {
             alien_transition_desc: AnimationDescriptor::default(),
             alien_talk_desc: AnimationDescriptor::default(),
             alien_song_flags: 0,
-            alien_frame: std::ptr::null_mut(),
-            alien_font: std::ptr::null_mut(),
-            alien_color_map: std::ptr::null_mut(),
-            alien_song: std::ptr::null_mut(),
             alien_number_speech: None,
         }
     }
@@ -298,17 +280,6 @@ impl CommData {
         func: fn(&mut Comm, &mut crate::engine::battle::Cx<'_>) -> u16,
     ) {
         self.uninit_encounter_func = Some(func);
-    }
-
-    /// Clear all loaded handles (set to null), leaving resource IDs intact.
-    ///
-    /// Call this before freeing C-side resources so Rust cannot use stale pointers.
-    pub fn clear_handles(&mut self) {
-        self.alien_frame = std::ptr::null_mut();
-        self.alien_font = std::ptr::null_mut();
-        self.alien_color_map = std::ptr::null_mut();
-        self.alien_song = std::ptr::null_mut();
-        self.alien_number_speech = None;
     }
 }
 
@@ -367,7 +338,6 @@ mod tests {
         let data = CommData::default();
         assert!(data.alien_frame_res.is_null());
         assert!(data.alien_font_res.is_null());
-        assert!(data.alien_frame.is_null());
         assert!(data.alien_number_speech.is_none());
         assert_eq!(data.alien_text_fcolor, 0);
         assert_eq!(data.alien_text_width, 0);
@@ -382,17 +352,6 @@ mod tests {
         assert_eq!(desc.num_frames, 0);
         assert_eq!(desc.anim_flags, 0);
         assert_eq!(desc.block_mask, 0);
-    }
-
-    #[test]
-    fn test_comm_data_clear_handles() {
-        let mut data = CommData::new();
-        data.alien_frame = 0x1234 as *mut c_void;
-        data.alien_font = 0x5678 as *mut c_void;
-        data.clear_handles();
-        assert!(data.alien_frame.is_null());
-        assert!(data.alien_font.is_null());
-        assert!(data.alien_number_speech.is_none());
     }
 
     #[test]

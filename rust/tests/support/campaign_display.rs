@@ -35,6 +35,15 @@ impl CampaignDisplay {
         load: impl FnOnce(),
         draw: impl FnOnce(&mut Game),
     ) -> Result<Self, Box<dyn std::error::Error>> {
+        Self::install_prepared_with_options(game, load, draw, GraphicsOptions::default())
+    }
+
+    pub fn install_prepared_with_options(
+        game: &mut Game,
+        load: impl FnOnce(),
+        draw: impl FnOnce(&mut Game),
+        options: GraphicsOptions,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../tmp");
         std::fs::create_dir_all(&root)?;
         let directory = tempfile::tempdir_in(root.canonicalize()?)?;
@@ -46,9 +55,20 @@ impl CampaignDisplay {
         image::RgbaImage::from_pixel(1, 1, image::Rgba([255, 255, 255, 255]))
             .save(directory.path().join("effect.png"))?;
         std::fs::write(directory.path().join("effect.ani"), "effect.png -1 0 0 0\n")?;
+        let mut comm_frames = String::new();
+        for (index, color) in [[180, 0, 0, 255], [0, 180, 0, 255], [0, 0, 180, 255]]
+            .into_iter()
+            .enumerate()
+        {
+            let name = format!("comm-{index}.png");
+            image::RgbaImage::from_pixel(242, 100, image::Rgba(color))
+                .save(directory.path().join(&name))?;
+            comm_frames.push_str(&format!("{name} -1 0 0 0\n"));
+        }
+        std::fs::write(directory.path().join("comm.ani"), comm_frames)?;
         std::fs::write(
             directory.path().join("fixture.rmp"),
-            "fixture.tiny = FONTRES:font\nfont.lander = FONTRES:font\ngraphics.landerfonteffect = GFXRES:effect.ani\ncredits.credits = STRTAB:credits.txt\ncredits.background = GFXRES:effect.ani\ngraphics.newgame = GFXRES:effect.ani\ncredits.font.pt13 = FONTRES:font\ncredits.font.pt17 = FONTRES:font\ncredits.font.pt45 = FONTRES:font\ngraphics.flagshipskeleton = GFXRES:effect.ani\ngraphics.outfitmodules = GFXRES:effect.ani\n",
+            "fixture.tiny = FONTRES:font\nfont.player = FONTRES:font\nfixture.comm.font = FONTRES:font\nfixture.comm.graphics = GFXRES:comm.ani\nfont.lander = FONTRES:font\ngraphics.landerfonteffect = GFXRES:effect.ani\ncredits.credits = STRTAB:credits.txt\ncredits.background = GFXRES:effect.ani\ngraphics.newgame = GFXRES:effect.ani\ncredits.font.pt13 = FONTRES:font\ncredits.font.pt17 = FONTRES:font\ncredits.font.pt45 = FONTRES:font\ngraphics.flagshipskeleton = GFXRES:effect.ani\ngraphics.outfitmodules = GFXRES:effect.ani\n",
         )?;
         std::fs::write(
             directory.path().join("credits.txt"),
@@ -65,13 +85,7 @@ impl CampaignDisplay {
         // SAFETY: the serialized fixture owns SDL and the temporary resource mount.
         unsafe {
             assert_eq!(
-                TFB_InitGraphics(
-                    1,
-                    0,
-                    ptr::from_ref(&GraphicsOptions::default()).cast(),
-                    320,
-                    240
-                ),
+                TFB_InitGraphics(1, 0, ptr::from_ref(&options).cast(), 320, 240),
                 0
             );
             uio::uio_init();

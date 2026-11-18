@@ -7,10 +7,7 @@ use super::{
 };
 use crate::graphics::{context_abi::ContextLease, native_font::FontLease};
 use crate::sound::trackplayer::{SubtitleIdentity, SubtitleSnapshot};
-use std::{
-    ffi::{c_void, CString},
-    ptr::null_mut,
-};
+use std::ffi::CString;
 
 impl Comm {
     pub fn set_conversation_phrases(
@@ -166,32 +163,11 @@ pub fn comm_redraw_subtitles(comm: &mut Comm, enabled: bool) {
     }
 }
 
-pub fn set_talking_finished(comm: &mut Comm, finished: i32) {
-    super::ffi::rust_set_talking_finished(comm, finished);
-}
 pub fn setup_subtitle_text_from_comm_data(comm: &mut Comm) {
     comm.display.subtitle.baseline = comm.data.definition.alien_text_baseline;
     comm.display.subtitle.align = comm.data.definition.alien_text_align as i32;
 }
 
-/// # Safety
-/// Context must remain live while registered; game thread only.
-pub unsafe fn set_anim_context(comm: &mut Comm, context: *mut c_void) {
-    comm.display.anim_context = context;
-}
-/// # Safety
-/// Context must remain live while registered; game thread only.
-pub unsafe fn set_text_cache_context(comm: &mut Comm, context: *mut c_void) {
-    comm.display.text_cache_context = (context).cast();
-}
-/// # Safety
-/// Frame must remain live while registered; game thread only.
-pub unsafe fn set_text_cache_frame(comm: &mut Comm, frame: *mut c_void) {
-    comm.display.text_cache_frame = frame;
-}
-pub fn anim_context(comm: &mut Comm) -> *mut c_void {
-    comm.display.anim_context
-}
 pub fn clear_subtitles_pending(comm: &mut Comm) -> i32 {
     i32::from(comm.display.clear_subtitles)
 }
@@ -239,9 +215,7 @@ pub(crate) struct RuntimeState {
     pub(crate) phrases: Option<crate::strings::conversation::ConversationTable>,
     pub(crate) resources: Option<super::sis_graphics::ConversationResources>,
     pub(crate) window: CRect,
-    pub(crate) anim_context: *mut c_void,
-    pub(crate) text_cache_context: *mut crate::graphics::native_abi::context_desc,
-    pub(crate) text_cache_frame: *mut c_void,
+    pub(crate) assets: Option<super::assets::Assets>,
     pub(crate) clear_subtitles: bool,
     pub(crate) subtitle: SubtitleState,
     pub(crate) last_subtitle: Option<SubtitleIdentity>,
@@ -257,9 +231,7 @@ impl Default for RuntimeState {
                 width: 0,
                 height: 0,
             },
-            anim_context: null_mut(),
-            text_cache_context: null_mut(),
-            text_cache_frame: null_mut(),
+            assets: None,
             clear_subtitles: false,
             subtitle: SubtitleState::default(),
             last_subtitle: None,
@@ -278,7 +250,6 @@ mod owner_tests {
     fn subtitle_invalidation_drains_only_the_supplied_sessions_callbacks() {
         let _: fn(&mut Comm) = clear_subtitles;
         let _: fn(&mut Comm) = setup_subtitle_text_from_comm_data;
-        let _: fn(&mut Comm) -> *mut c_void = anim_context;
         let _: fn(&mut Comm) = reset_clear_subtitles;
         let _: fn(&mut Comm) -> i32 = clear_subtitles_pending;
         fn move_baseline(comm: &mut Comm) {
@@ -304,7 +275,7 @@ mod owner_tests {
             assert_eq!(first.data.definition.alien_talk_desc.anim_flags & 16, 16);
             enable_talking_anim(&mut first, 1);
             assert_eq!(first.data.definition.alien_talk_desc.anim_flags & 16, 0);
-            set_talking_finished(&mut first, 1);
+            first.set_talking_finished(true);
         }
         set_comm_intro_mode(&mut first, 2, 840);
         assert_eq!(first.fade_time(), 840);
@@ -323,38 +294,6 @@ mod owner_tests {
 
     #[test]
     #[serial_test::serial]
-    fn render_registrations_borrow_resources_for_only_the_supplied_session() {
-        use crate::graphics::{context_abi, drawable_abi, pixmap_abi};
-        // SAFETY: the serialized fixture creates its own drawable/context and frees them after borrowed registrations end.
-        unsafe {
-            #[cfg(feature = "debug-process")]
-            let context = context_abi::CreateContextAux(c"comm-session".as_ptr());
-            #[cfg(not(feature = "debug-process"))]
-            let context = context_abi::CreateContextAux();
-            let drawable = drawable_abi::CreateDrawable(0, 0, 0, 1);
-            let frame = pixmap_abi::CaptureDrawable(drawable);
-            assert!(!context.is_null());
-            assert!(!frame.is_null());
-            let mut first = Comm::new();
-            let second = Comm::new();
-            assert!(first.add_response(1, "X", None));
-            set_anim_context(&mut first, context.cast());
-            set_text_cache_context(&mut first, context.cast());
-            set_text_cache_frame(&mut first, frame.cast());
-            assert_eq!(anim_context(&mut first), context.cast());
-            assert_eq!(first.display.text_cache_context, context);
-            assert_eq!(first.display.text_cache_frame, frame.cast());
-            assert!(second.display.anim_context.is_null());
-            assert!(second.display.text_cache_context.is_null());
-            assert!(second.display.text_cache_frame.is_null());
-            assert_eq!(second.responses().count(), 0);
-            drop(first);
-            assert_eq!(drawable_abi::DestroyDrawable(drawable), 1);
-            assert_eq!(context_abi::DestroyContext(context), 1);
-        }
-    }
-    #[test]
-    #[serial_test::serial]
     fn subtitle_bridge_renders_and_reuses_the_real_cache_without_test_substitutes() {
         super::super::sis_graphics_font_tests::with_display("comm::comm_abi::owner_tests::subtitle_bridge_renders_and_reuses_the_real_cache_without_test_substitutes", |comm, context| {
             use crate::graphics::{context_abi::LoadedContext, drawable_abi::LoadedDrawable, native_abi::{Color, POINT}};
@@ -367,14 +306,10 @@ mod owner_tests {
             let drawable = LoadedDrawable::create(8, 242, 122, 1).unwrap();
             let cache_context = cache.lease();
             cache_context.set_frame(drawable.lease().context_frame(0));
-            comm.display.anim_context = context.as_raw().cast();
-            comm.display.text_cache_context = cache_context.as_raw();
-            comm.display.text_cache_frame = drawable.lease().context_frame(0).as_raw().cast();
-            comm.data.alien_font = comm.presentation.tiny_font.cast();
             comm.display.resources.as_mut().unwrap().display.as_mut().unwrap().subtitles = super::super::sis_graphics::SubtitleCache {
                 target: context.clone(), context: cache_context.clone(),
                 frame: drawable.lease().context_frame(0),
-                font: FontLease::retain(NonNull::new(comm.data.alien_font.cast()).unwrap()),
+                font: FontLease::retain(NonNull::new(comm.presentation.tiny_font).unwrap()),
             };
             comm.data.definition.alien_text_width = 100;
             comm.data.definition.alien_text_fcolor = Color { r: 255, g: 255, b: 255, a: 255 };
@@ -394,7 +329,7 @@ mod owner_tests {
             clear_subtitles(comm);
             assert!(comm.display.subtitle.current.is_none());
             assert_eq!(comm.display.last_subtitle, None);
-            let leading = FontLease::retain(NonNull::new(comm.data.alien_font.cast()).unwrap()).leading();
+            let leading = FontLease::retain(NonNull::new(comm.presentation.tiny_font).unwrap()).leading();
             for (valign, expected) in [(0, 20 + leading), (1, 20 - leading / 2 + leading), (2, 20), (3, 20 + leading)] {
                 clear_subtitles(comm);
                 comm.data.definition.alien_text_valign = valign;
@@ -402,7 +337,6 @@ mod owner_tests {
                 comm_redraw_subtitles(comm, true);
                 assert_eq!(comm.display.last_baseline, expected);
             }
-            comm.data.alien_font = std::ptr::null_mut();
         });
     }
 }

@@ -21,19 +21,6 @@ pub const HAIL: u32 = 0;
 pub const ATTACK: u32 = 1;
 
 // ============================================================================
-// C FFI declarations — encounter flow helpers
-// ============================================================================
-
-#[cfg(not(test))]
-use crate::graphics::drawable_abi::DestroyDrawable;
-#[cfg(not(test))]
-use crate::graphics::font_abi::DestroyFont;
-#[cfg(not(test))]
-use crate::sound::heart_ffi::DestroyMusic;
-#[cfg(not(test))]
-use crate::strings::string_table::DestroyStringTable;
-
-// ============================================================================
 // Callback tracking
 // ============================================================================
 
@@ -91,80 +78,6 @@ impl CallbackTracker {
 // Encounter state
 // ============================================================================
 
-/// Tracks resource handles loaded during hail_alien for teardown.
-/// All handles are pointer-sized (usize) since C returns uintptr_t.
-#[derive(Debug, Default)]
-pub struct EncounterResources {
-    pub alien_frame: usize,
-    pub alien_font: usize,
-    pub alien_colormap: usize,
-    pub alien_song: usize,
-    pub conversation_phrases: usize,
-    pub player_font: usize,
-    pub text_cache_context: usize,
-    pub text_cache_frame: usize,
-}
-
-impl EncounterResources {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn has_resources(&self) -> bool {
-        self.alien_frame != 0
-            || self.alien_font != 0
-            || self.alien_colormap != 0
-            || self.alien_song != 0
-            || self.conversation_phrases != 0
-    }
-
-    /// Destroy all loaded resources in reverse order (EC-REQ-014).
-    #[cfg(not(test))]
-    pub fn destroy(&mut self) {
-        unsafe {
-            if self.conversation_phrases != 0 {
-                DestroyStringTable((self.conversation_phrases as *mut std::ffi::c_void).cast());
-                self.conversation_phrases = 0;
-            }
-            if self.alien_song != 0 {
-                DestroyMusic(self.alien_song as *mut std::ffi::c_void);
-                self.alien_song = 0;
-            }
-            if self.alien_colormap != 0 {
-                // DestroyColorMap is #define DestroyColorMap DestroyStringTable in gfxlib.h
-                DestroyStringTable((self.alien_colormap as *mut std::ffi::c_void).cast());
-                self.alien_colormap = 0;
-            }
-            if self.alien_font != 0 {
-                DestroyFont((self.alien_font as *mut std::ffi::c_void).cast());
-                self.alien_font = 0;
-            }
-            if self.alien_frame != 0 {
-                DestroyDrawable((self.alien_frame as *mut std::ffi::c_void).cast());
-                self.alien_frame = 0;
-            }
-            if self.player_font != 0 {
-                DestroyFont((self.player_font as *mut std::ffi::c_void).cast());
-                self.player_font = 0;
-            }
-            if self.text_cache_frame != 0 {
-                DestroyDrawable((self.text_cache_frame as *mut std::ffi::c_void).cast());
-                self.text_cache_frame = 0;
-            }
-            if self.text_cache_context != 0 {
-                // Context destruction handled by C side
-                self.text_cache_context = 0;
-            }
-        }
-    }
-
-    #[cfg(test)]
-    pub fn destroy(&mut self) {
-        // In test mode, just zero out handles
-        *self = Self::default();
-    }
-}
-
 // ============================================================================
 // Encounter lifecycle
 // ============================================================================
@@ -176,8 +89,6 @@ pub struct EncounterState {
     pub active: bool,
     /// Callback invocation tracking.
     pub callbacks: CallbackTracker,
-    /// Loaded resource handles for teardown.
-    pub resources: EncounterResources,
     /// Whether this is an abort/load exit.
     pub aborted: bool,
 }
@@ -193,7 +104,6 @@ impl EncounterState {
         Self {
             active: false,
             callbacks: CallbackTracker::new(),
-            resources: EncounterResources::new(),
             aborted: false,
         }
     }
@@ -201,7 +111,6 @@ impl EncounterState {
     pub fn reset(&mut self) {
         self.active = false;
         self.callbacks.reset();
-        self.resources.destroy();
         self.aborted = false;
     }
 }
@@ -235,7 +144,6 @@ pub fn end_encounter_normal(comm: &mut Comm) -> CommResult<()> {
     }
     enc.callbacks.mark_post()?;
     enc.callbacks.mark_uninit()?;
-    enc.resources.destroy();
     enc.active = false;
     // Reset callbacks for next encounter reuse
     enc.callbacks.reset();
@@ -251,7 +159,6 @@ pub fn end_encounter_abort(comm: &mut Comm) -> CommResult<()> {
     }
     enc.aborted = true;
     enc.callbacks.mark_uninit()?;
-    enc.resources.destroy();
     enc.active = false;
     enc.callbacks.reset();
     enc.aborted = false;
@@ -266,7 +173,6 @@ pub fn end_encounter_attack(comm: &mut Comm) -> CommResult<()> {
     enc.active = true;
     enc.callbacks.mark_post()?;
     enc.callbacks.mark_uninit()?;
-    enc.resources.destroy();
     enc.active = false;
     enc.callbacks.reset();
     Ok(())
@@ -363,26 +269,6 @@ mod tests {
 
     #[test]
     #[serial]
-    fn test_resource_teardown() {
-        let mut owner = Comm::new();
-        let comm = &mut owner;
-        reset_state(comm);
-        {
-            let state = &mut *comm;
-            state.encounter.resources.alien_frame = 42;
-            state.encounter.resources.alien_font = 43;
-            state.encounter.resources.alien_song = 44;
-        }
-
-        assert!(begin_encounter(comm).is_ok());
-        assert!(end_encounter_normal(comm).is_ok());
-
-        let state = &*comm;
-        assert!(!state.encounter.resources.has_resources());
-    }
-
-    #[test]
-    #[serial]
     fn test_state_valid_after_teardown() {
         let mut owner = Comm::new();
         let comm = &mut owner;
@@ -426,11 +312,5 @@ mod tests {
         let mut tracker = CallbackTracker::new();
         assert!(tracker.mark_post().is_ok());
         assert!(tracker.mark_post().is_err());
-    }
-
-    #[test]
-    fn test_encounter_resources_default() {
-        let res = EncounterResources::new();
-        assert!(!res.has_resources());
     }
 }

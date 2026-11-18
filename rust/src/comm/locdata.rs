@@ -88,10 +88,6 @@ pub struct SessionData {
     pub init_encounter_func: Option<fn(&mut Comm, &mut crate::engine::battle::Cx<'_>)>,
     pub post_encounter_func: Option<fn(&mut Comm, &mut crate::engine::battle::Cx<'_>)>,
     pub uninit_encounter_func: Option<fn(&mut Comm, &mut crate::engine::battle::Cx<'_>) -> u16>,
-    pub alien_frame: *mut c_void,
-    pub alien_font: *mut c_void,
-    pub alien_colormap: *mut c_void,
-    pub alien_song: *mut c_void,
 }
 
 impl SessionData {
@@ -138,10 +134,6 @@ pub fn session_view(ld: &SessionData) -> CommData {
         alien_transition_desc: definition.alien_transition_desc,
         alien_talk_desc: definition.alien_talk_desc,
         alien_number_speech: definition.alien_number_speech,
-        alien_frame: ld.alien_frame,
-        alien_font: ld.alien_font,
-        alien_color_map: ld.alien_colormap,
-        alien_song: ld.alien_song,
         num_animations: u32::from(definition.num_animations),
         alien_ambient_array: ambient,
     }
@@ -200,13 +192,8 @@ mod tests {
     fn loaded_state_keeps_content_independent_of_its_resource_handles() {
         let mut first = SessionData::new(crate::comm::races::orz::descriptor::descriptor());
         let second = SessionData::new(first.definition.clone());
-        first.alien_frame = std::ptr::dangling_mut();
         first.definition.alien_ambient_array[12].block_mask = 0;
         assert_eq!(first.definition.alien_ambient_array[12].block_mask, 0);
-        assert!(second.alien_frame.is_null());
-        assert!(second.alien_font.is_null());
-        assert!(second.alien_colormap.is_null());
-        assert!(second.alien_song.is_null());
         assert_eq!(
             session_view(&second).conversation_phrases_res,
             resource_key(second.definition.conversation_phrases_res)

@@ -1,298 +1,17 @@
-//! hail_alien encounter orchestration.
-//!
-//! Implements the full alien encounter sequence replacing C's `hail_alien(comm)`.
-//! Follows comm.c:1183–1308 step-by-step plus DoCommunication exit handling
-//! from comm.c:1100–1138.
-//!
-//! @plan PLAN-20260326-COMMPT2.P07
-//! @requirement REQ-HL-001
+//! Resource admission, encounter execution and ordered teardown.
 
-#[cfg(not(test))]
-use crate::comm::locdata::resource_key;
-use crate::comm::Comm;
-#[cfg(not(test))]
-use crate::engine::StoryKey;
+use super::{
+    assets::Assets,
+    sis_graphics::{ConversationDisplay, ConversationResources},
+    Comm,
+};
+use crate::engine::{battle::Cx, observe::Io, StoryKey};
+use crate::graphics::{
+    context_abi::{ContextFrame, ContextLease},
+    native_abi::{EXTENT, RECT},
+};
 
-use crate::engine::{battle::Cx, observe::Io};
-
-// ============================================================================
-// C bridge declarations (not compiled in test builds)
-// ============================================================================
-
-#[cfg(not(test))]
-pub(super) mod c_bridge {
-    use crate::comm::Comm;
-
-    pub use crate::graphics::context_abi::{
-        CreateContextAux, DestroyContext, SetContext, SetContextBackGroundColor, SetContextClipRect,
-    };
-    pub use crate::graphics::drawable_abi::{
-        CreateDrawable, DestroyDrawable, GetFrameRect, SetContextFGFrame, SetFrameTransparentColor,
-    };
-    pub use crate::graphics::font_abi::{DestroyFont, SetContextFont};
-    pub use crate::graphics::gfx_common_abi::SetTransitionSource;
-    pub use crate::graphics::pixmap_abi::{CaptureDrawable, ReleaseDrawable};
-    pub use crate::sound::heart_ffi::stop_track as StopTrack;
-    pub use crate::sound::heart_ffi::{fade_music as FadeMusic, stop_sound as StopSound};
-    pub use crate::strings::sresins::LoadStringTableInstance;
-    pub use crate::strings::string_table::{
-        CaptureStringTable, DestroyStringTable, ReleaseStringTable,
-    };
-    pub use crate::ui::settings::stop_music;
-
-    pub use crate::graphics::resgfx::LoadGraphicInstance;
-
-    pub use crate::comm::comm_abi::set_anim_context;
-
-    pub use crate::comm::comm_abi::set_text_cache_context;
-
-    pub use crate::comm::comm_abi::set_text_cache_frame;
-
-    pub use crate::graphics::frame_abi::ClearDrawable;
-
-    pub use crate::graphics::cmap_abi::FlushColorXForms;
-
-    pub use crate::comm::comm_abi::set_talking_finished;
-
-    pub use crate::comm::comm_abi::setup_subtitle_text_from_comm_data;
-
-    pub use crate::graphics::gfx_common_abi::BatchGraphics;
-    pub use crate::sound::heart_ffi::DestroyMusic;
-    pub use crate::threading::pacing::linked::sleep_thread_until as SleepThreadUntil;
-
-    use super::{CFontRelease, NORMAL_VOLUME};
-
-    pub(super) struct HailResources {
-        pub(super) space_ctx: *mut crate::graphics::native_abi::context_desc,
-        pub(super) anim_ctx: *mut crate::graphics::native_abi::context_desc,
-        pub(super) old_font: *mut crate::graphics::native_abi::font_desc,
-        pub(super) alien_song: *mut std::ffi::c_void,
-        pub(super) alien_cmap: *mut crate::strings::string_table::StringTableEntry,
-        pub(super) alien_font: *mut std::ffi::c_void,
-        pub(super) alien_frame: *mut crate::graphics::native_abi::frame_desc,
-        pub(super) text_cache_ctx: *mut crate::graphics::native_abi::context_desc,
-        pub(super) text_cache_frame: *mut crate::graphics::native_abi::frame_desc,
-    }
-
-    impl HailResources {
-        /// # Safety
-        /// Run on the initialized game's serialized graphics thread. The caller must
-        /// transfer the returned context and frame to HailResources and keep them
-        /// live while registered in Comm, releasing them only in finish.
-        pub(super) unsafe fn setup_subtitle_cache(
-            comm: &mut Comm,
-            (screen_width, screen_height): (i32, i32),
-        ) -> (
-            *mut crate::graphics::native_abi::context_desc,
-            *mut crate::graphics::native_abi::frame_desc,
-            i32,
-        ) {
-            setup_subtitle_text_from_comm_data(comm);
-
-            let text_cache_ctx_name = c"TextCacheContext".as_ptr() as *const _;
-            let text_cache_ctx = super::create_named_context(text_cache_ctx_name);
-            let sis_width = screen_width - 78;
-            let sis_height = screen_height - 13;
-            let slider_y = 107;
-            let slider_height = 15;
-            let cache_height = sis_height - slider_y - slider_height + 2;
-
-            let want_pixmap: std::ffi::c_uint = 2; // WANT_PIXMAP = 1 << 1
-            let cache_frame_raw =
-                CreateDrawable(want_pixmap as u8, sis_width as i16, cache_height as i16, 1);
-            let text_cache_frame = CaptureDrawable(cache_frame_raw);
-
-            set_text_cache_context(comm, text_cache_ctx.cast());
-            set_text_cache_frame(comm, text_cache_frame.cast());
-            SetContext(text_cache_ctx);
-            SetContextFGFrame(text_cache_frame);
-            // TextBack = BUILD_COLOR(MAKE_RGB15(0x00, 0x00, 0x10), 0x00)
-            let text_back = crate::graphics::native_abi::Color {
-                r: 0,
-                g: 0,
-                b: (0x10 << 3) | (0x10 >> 2),
-                a: 0xff,
-            };
-            SetContextBackGroundColor(text_back);
-            ClearDrawable();
-            SetFrameTransparentColor(text_cache_frame, text_back);
-            (text_cache_ctx, text_cache_frame, sis_width)
-        }
-
-        pub(super) unsafe fn finish(self, comm: &mut Comm, cx: &mut crate::engine::battle::Cx<'_>) {
-            let Self {
-                space_ctx,
-                anim_ctx,
-                old_font,
-                alien_song,
-                alien_cmap,
-                alien_font,
-                alien_frame,
-                text_cache_ctx,
-                text_cache_frame,
-            } = self;
-            if let Some(resources) = comm.display.resources.as_mut() {
-                drop(resources.display.take());
-            }
-            cx.with_legacy(|| {
-                // AnimContext teardown (C lines 1126–1128)
-                SetContext(space_ctx.cast());
-                DestroyContext(anim_ctx);
-
-                // FlushColorXForms, ClearSubtitles (C lines 1130–1131)
-                FlushColorXForms();
-                crate::comm::ffi::rust_clear_subtitles(comm);
-
-                // Stop audio, fade music (C lines 1133–1136)
-                stop_music();
-                StopSound();
-                StopTrack();
-                let fade_end = FadeMusic(NORMAL_VOLUME as u8, 0);
-                SleepThreadUntil(fade_end.wrapping_add(840 / 60));
-
-                // ----------------------------------------------------------------
-                // Step 16: Call post/uninit encounter funcs
-                // ----------------------------------------------------------------
-            });
-            let activity = cx.world.activity();
-            if (activity & 0x4000) == 0 && (activity & 0x1000) == 0 {
-                if let Some(callback) = comm.data.post_encounter_func {
-                    callback(comm, cx);
-                }
-            }
-            if let Some(callback) = comm.data.uninit_encounter_func {
-                callback(comm, cx);
-            }
-
-            // ----------------------------------------------------------------
-            // Step 17: Restore context and font
-            // ----------------------------------------------------------------
-            cx.with_legacy(|| {
-                SetContext(space_ctx.cast());
-                SetContextFont(old_font);
-
-                // ----------------------------------------------------------------
-                // Step 18: Destroy all resources in exact C order
-                // Captured resources: Release first, then Destroy the raw handle.
-                // Non-captured resources: Destroy directly.
-                // Order: ConversationPhrases → AlienSong → AlienColorMap →
-                //        AlienFont → AlienFrame → TextCacheContext → TextCacheFrame
-                //        → PlayerFont
-                // ----------------------------------------------------------------
-
-                // c_Destroy* for captured resources (Drawable, ColorMap, StringTable)
-                // already do Release+Destroy internally.  Non-captured resources
-                // (Font, Music) go straight to Destroy.
-
-                drop(comm.display.phrases.take());
-
-                // AlienSong — not captured, direct Destroy
-                DestroyMusic(alien_song);
-
-                // AlienColorMap — captured; release before destroying the table
-                DestroyStringTable(ReleaseStringTable(alien_cmap));
-
-                // AlienFont — not captured, direct Destroy
-                DestroyFont(alien_font.cast());
-
-                // AlienFrame — captured; ReleaseDrawable to get back raw handle, then DestroyDrawable
-                DestroyDrawable(ReleaseDrawable(alien_frame));
-
-                // TextCacheContext — context, direct destroy
-                DestroyContext(text_cache_ctx);
-
-                // TextCacheFrame — captured; ReleaseDrawable to get back raw handle, then DestroyDrawable
-                DestroyDrawable(ReleaseDrawable(text_cache_frame));
-
-                // PlayerFont — not captured; queued response/feedback glyph draws may
-                // still read it, so the release drains the draw queue first.
-                comm.player_font.release(&mut CFontRelease);
-
-                // ----------------------------------------------------------------
-                // Steps 19–20: Clear CommData fields and pCurInputState
-                // ----------------------------------------------------------------
-                comm.data.definition.conversation_phrases_res = None;
-                // Clear Rust-side comm_data (resources already destroyed above)
-                comm.clear_comm_data();
-                // pCurInputState was already cleared by c_RunEncounterDoInput.
-            });
-        }
-    }
-}
-
-// ============================================================================
-// AlienSongFlags constant — matches LDASF_USE_ALTERNATE from comm.h
-// ============================================================================
-
-/// LDASF_USE_ALTERNATE: try AlienAltSongRes before AlienSongRes.
-#[cfg(not(test))]
-const LDASF_USE_ALTERNATE: u32 = 0x0001;
-
-// ============================================================================
-// STARBASE_STRING_BASE — matches gamestr.h
-// ============================================================================
-
-/// Game string base index for starbase strings (from gamestr.h).
-#[cfg(not(test))]
-const STARBASE_STRING_BASE: i32 = 0x0200;
-
-/// Frees conversation fonts through the C graphics exports.
-#[cfg(not(test))]
-struct CFontRelease;
-
-#[cfg(not(test))]
-impl super::player_font::FontRelease for CFontRelease {
-    fn drain_draw_queue(&mut self) {
-        crate::mainloop::input_frame::drain_committed_draws();
-    }
-
-    fn destroy_font(&mut self, font: *mut std::ffi::c_void) {
-        // SAFETY: `font` is the conversation font, released exactly once.
-        unsafe { c_bridge::DestroyFont(font.cast()) };
-    }
-}
-
-/// Check if this is a starbase conversation by reading C game state.
-/// Matches: GET_GAME_STATE(GLOBAL_FLAGS_AND_DATA) == 0xFF && GET_GAME_STATE(STARBASE_AVAILABLE)
-#[cfg(not(test))]
-fn is_starbase_conversation(world: &crate::engine::World) -> bool {
-    // Direct game state access (replaces c_IsStarbaseConversation)
-    let global_flags = world.story_state(StoryKey::GLOBAL_FLAGS_AND_DATA);
-    let starbase_available = world.story_state(StoryKey::STARBASE_AVAILABLE);
-    global_flags == 0xFF && starbase_available != 0
-}
-
-/// Draw the player communication panel using the shared C-parity renderer.
-#[cfg(not(test))]
-fn draw_sis_com_window(comm: &mut Comm, activity: u16) {
-    super::sis_graphics::draw_sis_com_window(comm, activity);
-}
-
-// ============================================================================
-// NORMAL_VOLUME — matches libs/sndlib.h
-// ============================================================================
-#[cfg(not(test))]
-const NORMAL_VOLUME: i32 = 128;
-
-// ============================================================================
-// hail_alien — full encounter orchestration
-// ============================================================================
-
-#[cfg(not(test))]
-unsafe fn load_alien_song(
-    descriptor: &super::races::descriptor::CommDescriptor,
-) -> *mut std::ffi::c_void {
-    let alt_song = resource_key(descriptor.alien_alt_song_res);
-    if descriptor.alien_song_flags & LDASF_USE_ALTERNATE != 0 && !alt_song.is_null() {
-        let song = crate::sound::resource_types::LoadMusicInstance(alt_song);
-        if !song.is_null() {
-            return song;
-        }
-    }
-    crate::sound::resource_types::LoadMusicInstance(resource_key(descriptor.alien_song_res))
-}
-
-fn load_conversation_text(comm: &mut Comm) {
+pub(super) fn load_conversation_text(comm: &mut Comm) {
     let phrases = comm
         .data
         .definition
@@ -301,236 +20,214 @@ fn load_conversation_text(comm: &mut Comm) {
     comm.set_conversation_phrases(phrases);
 }
 
-/// Run the full alien encounter sequence.
-///
-/// Implements C's `hail_alien(comm)` (comm.c:1183–1308) plus the
-/// `DoCommunication` exit-handling path (comm.c:1100–1138).
-///
-/// # Safety
-/// Must be called from the game thread with CommData fully initialized.
-///
-/// @plan PLAN-20260326-COMMPT2.P07
-/// @requirement REQ-HL-001
-pub unsafe fn hail_alien(_comm: &mut Comm, cx: &mut Cx<'_>, io: &mut Io<'_>) {
-    #[cfg(test)]
-    let _ = (cx, io);
-    #[cfg(not(test))]
-    use crate::engine::observe::{CheckpointView, InputView};
-    #[cfg(not(test))]
+/// Load and admit retained resources using the supplied campaign graphics.
+pub fn prepare(
+    comm: &mut Comm,
+    world: &crate::engine::World,
+    kernel: &crate::engine::Kernel,
+    dimensions: (i32, i32),
+) -> Result<(), String> {
+    assert!(
+        comm.display.assets.is_none(),
+        "conversation assets already loaded"
+    );
+    comm.presentation = super::presentation::Presentation::from(kernel);
+    let mut retained = ConversationResources::new(world).map_err(|error| error.to_string())?;
+    comm.reset_for_encounter();
+    comm.set_talking_finished(false);
+    let space = ContextLease::require(comm.presentation.space_context);
+    let mut assets = space
+        .with_selected(|| Assets::load(&comm.data.definition, dimensions))
+        .map_err(str::to_owned)?;
+    let display = ConversationDisplay::new(comm, &assets, kernel)?;
+    load_conversation_text(comm);
+    comm.set_comm_data(super::locdata::session_view(&comm.data));
+    super::comm_abi::setup_subtitle_text_from_comm_data(comm);
+    assets.old_font = space.font_lease();
+    space.select();
+    space.set_font(&assets.player.lease());
+    let animation = assets
+        .animation
+        .as_ref()
+        .unwrap_or_else(|| panic!("animation context not loaded"))
+        .lease();
+    animation.select();
+    animation.set_frame(ContextFrame::retain(std::ptr::NonNull::new(
+        comm.presentation.screen,
+    )));
+    comm.display.window.width = (dimensions.0 - 78) as i16;
+    comm.display.window.height = assets.frame.lease().context_frame(0).rect().extent.height;
+    if let Some(window) = &comm.options.window {
+        window.set(comm.display.window);
+    }
+    animation.transition_source(None);
+    assets.intro_batch = Some(animation.batch());
+    if world.activity() & 0xff != 5 && comm.options.window.is_none() {
+        comm.display.window.corner = super::locdata::CPoint { x: 7, y: 10 };
+    }
+    animation.set_clip(RECT {
+        corner: comm.display.window.corner,
+        extent: EXTENT {
+            width: comm.display.window.width,
+            height: comm.display.window.height,
+        },
+    });
+    retained.display = Some(display);
+    comm.display.resources = Some(retained);
+    comm.display.assets = Some(assets);
+    Ok(())
+}
+
+/// Finish callbacks and release the admitted conversation in resource order.
+pub fn finish(comm: &mut Comm, cx: &mut Cx<'_>) {
+    let space = comm.conversation_display().space.clone();
+    drop(
+        comm.display
+            .resources
+            .as_mut()
+            .unwrap_or_else(|| panic!("conversation resources not admitted"))
+            .display
+            .take(),
+    );
+    space.select();
+    drop(
+        comm.display
+            .assets
+            .as_mut()
+            .unwrap_or_else(|| panic!("conversation assets not loaded"))
+            .intro_batch
+            .take(),
+    );
+    drop(
+        comm.display
+            .assets
+            .as_mut()
+            .unwrap_or_else(|| panic!("conversation assets not loaded"))
+            .animation
+            .take(),
+    );
+    space.finish_color_transforms();
+    super::ffi::rust_clear_subtitles(comm);
+    crate::ui::settings::stop_music();
+    crate::sound::heart_ffi::stop_sound();
+    crate::sound::heart_ffi::stop_track();
+    let fade_end = crate::sound::heart_ffi::fade_music(128, 0);
+    crate::threading::pacing::GameThreadPacer::new(space.clone())
+        .sleep_until(fade_end.wrapping_add(840 / 60));
+    super::dispatch::finish_callbacks(comm, cx);
+    let mut assets = comm
+        .display
+        .assets
+        .take()
+        .unwrap_or_else(|| panic!("conversation assets not loaded"));
+    space.select();
+    space.replace_font(assets.old_font.take());
+    drop(comm.display.phrases.take());
+    assets.release(&space);
+    comm.data.definition.conversation_phrases_res = None;
+    comm.clear_comm_data();
+}
+
+pub fn hail_alien(comm: &mut Comm, cx: &mut Cx<'_>, io: &mut Io<'_>) {
+    use crate::engine::observe::CheckpointView;
+    let input = cx.kernel.input_runtime().input().clone();
+    let activity = cx.world.activity();
+    prepare(comm, cx.world, cx.kernel, cx.screen_dimensions())
+        .unwrap_or_else(|error| panic!("HailAlien: {error}"));
     {
-        let input = cx.kernel.input_runtime().input().clone();
-        use c_bridge::*;
-        use std::ptr;
-
-        // ----------------------------------------------------------------
-        // Step 1: Encounter state initialization
-        // Reset Rust-side comm state for the new encounter, then sync
-        // C statics (pCurInputState, TalkingFinished) via bridges.
-        // ----------------------------------------------------------------
-        let activity = cx.world.activity();
-        let dimensions = cx.screen_dimensions();
-        let names = super::sis_graphics::ConversationResources::new(cx.world)
-            .map_err(|error| error.to_string());
-        let resources: Result<_, String> = cx.with_legacy(|| {
-            let mut retained = names?;
-            eprintln!("[DBG] HailAlien: clearing COMM_STATE");
-            _comm.reset_for_encounter();
-            {
-                let s = &*_comm;
-                eprintln!(
-                    "[DBG] HailAlien: after clear, talking_finished={}",
-                    s.is_talking_finished()
-                );
-            }
-            set_talking_finished(_comm, 0);
-
-            // ----------------------------------------------------------------
-            // Step 2: Load PlayerFont
-            // ----------------------------------------------------------------
-            let player_font = LoadGraphicInstance(c"font.player".as_ptr());
-            // The conversation owns this font: the response and feedback renderers
-            // borrow it, and it is freed only at teardown after queued draws drain.
-            _comm
-                .player_font
-                .install(player_font)
-                .map_err(|error| error.to_string())?;
-
-            // ----------------------------------------------------------------
-            // Step 3: Load and set alien resources
-            // ----------------------------------------------------------------
-
-            // AlienFrame: load → capture → set
-            let descriptor = &_comm.data.definition;
-            let alien_frame_raw = LoadGraphicInstance(resource_key(descriptor.alien_frame_res));
-            let alien_frame = CaptureDrawable(alien_frame_raw.cast());
-            _comm.data.alien_frame = alien_frame.cast();
-
-            // AlienFont: load → set (not captured, direct Destroy on exit)
-            let alien_font = LoadGraphicInstance(resource_key(descriptor.alien_font_res));
-            _comm.data.alien_font = alien_font;
-
-            // AlienColorMap: load → capture → set
-            let alien_cmap_raw =
-                LoadStringTableInstance(resource_key(descriptor.alien_colormap_res));
-            let alien_cmap = CaptureStringTable(alien_cmap_raw);
-            _comm.data.alien_colormap = alien_cmap.cast();
-
-            // AlienSong: alt-song fallback then primary
-            let alien_song = load_alien_song(descriptor);
-            _comm.data.alien_song = alien_song;
-
-            load_conversation_text(_comm);
-
-            {
-                let comm_data = super::types::CommData {
-                    alien_frame: alien_frame.cast(),
-                    alien_font,
-                    alien_color_map: alien_cmap.cast(),
-                    alien_song,
-                    ..Default::default()
-                };
-                _comm.set_comm_data(comm_data);
-            }
-
-            // ----------------------------------------------------------------
-            // Steps 4–5: Subtitle text and TextCacheContext setup
-            // ----------------------------------------------------------------
-            // SAFETY: hail runs on the initialized game/graphics thread; the returned
-            // handles enter HailResources below and stay registered until finish.
-            let (text_cache_ctx, text_cache_frame, sis_w) =
-                unsafe { HailResources::setup_subtitle_cache(_comm, dimensions) };
-
-            // ----------------------------------------------------------------
-            // Step 6: Clear phrase buffer
-            // ----------------------------------------------------------------
-
-            // ----------------------------------------------------------------
-            // Step 7: Set SpaceContext and save old font
-            // ----------------------------------------------------------------
-            let space_ctx = { _comm.presentation.space_context };
-            SetContext(space_ctx.cast());
-            let old_font = SetContextFont(player_font.cast());
-
-            // ----------------------------------------------------------------
-            // Step 8: Create AnimContext and configure
-            // ----------------------------------------------------------------
-            let anim_ctx = create_named_context(c"AnimContext".as_ptr().cast());
-            set_anim_context(_comm, anim_ctx.cast());
-            SetContext(anim_ctx);
-            let screen = { _comm.presentation.screen };
-            SetContextFGFrame(screen.cast());
-
-            let mut frame_rect = crate::comm::locdata::CRect::default();
-            GetFrameRect(alien_frame, ptr::addr_of_mut!(frame_rect).cast());
-
-            // CommWndRect.extent = { SIS_SCREEN_WIDTH, frame_rect.height }
-            // CommWndRect.corner stays at its current value for WON_LAST_BATTLE
-            let wnd_x = { _comm.display.window.corner.x as i32 };
-            let wnd_y = { _comm.display.window.corner.y as i32 };
-            {
-                _comm.display.window.corner.x = wnd_x as i16;
-                _comm.display.window.corner.y = wnd_y as i16;
-                _comm.display.window.width = sis_w as i16;
-                _comm.display.window.height = frame_rect.height;
-            }
-
-            if let Some(window) = &_comm.options.window {
-                window.set(_comm.display.window);
-            }
-
-            // ----------------------------------------------------------------
-            // Steps 9–10: Transition, batch, draw SIS UI
-            // ----------------------------------------------------------------
-            SetTransitionSource(ptr::null());
-            BatchGraphics();
-
-            if (activity & 0xFF) == 5 || _comm.options.window.is_some() {
-                // WON_LAST_BATTLE branch: set clip to current CommWndRect
-                unsafe {
-                    SetContextClipRect((&raw mut _comm.display.window).cast());
-                }
-            } else {
-                // Normal branch: set clip to SIS origin + CommWndRect size
-                unsafe {
-                    _comm.display.window.corner.x = 7; // SIS_ORG_X
-                    _comm.display.window.corner.y = 10; // SIS_ORG_Y
-                    SetContextClipRect((&raw mut _comm.display.window).cast());
-                }
-            }
-
-            retained.display = Some(
-                super::sis_graphics::ConversationDisplay::retain(_comm).map_err(str::to_owned)?,
-            );
-            _comm.display.resources = Some(retained);
-            Ok(c_bridge::HailResources {
-                space_ctx,
-                anim_ctx,
-                old_font,
-                alien_song,
-                alien_cmap,
-                alien_font,
-                alien_frame,
-                text_cache_ctx,
-                text_cache_frame,
-            })
-        });
-        let resources = resources.unwrap_or_else(|error| panic!("HailAlien: {error}"));
-
         if activity & 0xff != 5 {
-            let title = is_starbase_conversation(cx.world).then_some(STARBASE_STRING_BASE as usize);
+            let title = (cx.world.story_state(StoryKey::GLOBAL_FLAGS_AND_DATA) == 0xff
+                && cx.world.story_state(StoryKey::STARBASE_AVAILABLE) != 0)
+                .then_some(0x0200);
             let dimensions = cx.screen_dimensions();
             crate::ui::border::draw_conversation_frame(cx.kernel, cx.world, dimensions, title);
         }
-        cx.with_legacy(|| draw_sis_com_window(_comm, activity));
-
+        super::sis_graphics::draw_sis_com_window(comm, activity);
         cx.kernel.last_activity |= 0x1000;
-        if let Some(callback) = _comm.data.init_encounter_func {
-            callback(_comm, cx);
-            super::ffi::observe_responses(_comm, io);
+        if let Some(callback) = comm.data.init_encounter_func {
+            callback(comm, cx);
+            super::ffi::observe_responses(comm, io);
         }
-
-        // Run the encounter loop: DoInput with rust_do_communication as InputFunc.
-        // Allocates ENCOUNTER_STATE, wires InputFunc, registers pCurInputState,
-        // runs DoInput, then clears pCurInputState.
-        {
-            const MENU_SOUND_UP: u16 = 1 << 0;
-            const MENU_SOUND_DOWN: u16 = 1 << 1;
-            const MENU_SOUND_SELECT: u16 = 1 << 4;
-            cx.with_legacy(|| {
-                input.set_menu_sounds(MENU_SOUND_UP | MENU_SOUND_DOWN, MENU_SOUND_SELECT);
-            });
-            io.observer
-                .checkpoint(&CheckpointView::CommunicationStarted);
-            _comm.run_input(cx, io, false, |_comm, cx, io| {
-                crate::comm::ffi::rust_do_communication(_comm, &input, cx, io) != 0
-            });
-            io.observer.checkpoint(&CheckpointView::CommunicationEnded);
-        }
-
-        // ----------------------------------------------------------------
-        // DoCommunication exit handling (C lines 1126–1136):
-        // These operations execute when DoCommunication returns FALSE.
-        // In the Rust path, c_RunEncounterDoInput has already returned,
-        // meaning the DoInput loop has finished. The teardown that C does
-        // inside the final DoCommunication iteration (AnimContext destroy,
-        // FlushColorXForms, ClearSubtitles, stop audio) is performed here.
-        // ----------------------------------------------------------------
-
-        resources.finish(_comm, cx);
-        let campaign = crate::engine::observe::CampaignView::capture(cx.world, cx.kernel);
-        cx.with_legacy(|| {
-            _comm.admit_observer(io, &InputView::CommunicationCompleted, &Some(campaign))
+        input.set_menu_sounds((1 << 0) | (1 << 1), 1 << 4);
+        io.observer
+            .checkpoint(&CheckpointView::CommunicationStarted);
+        comm.run_input(cx, io, false, |comm, cx, io| {
+            super::ffi::rust_do_communication(comm, &input, cx, io) != 0
         });
+        io.observer.checkpoint(&CheckpointView::CommunicationEnded);
     }
+    finish(comm, cx);
+    admit_completion(comm, cx, io);
 }
 
-// ============================================================================
-// Tests
-// ============================================================================
+fn admit_completion(comm: &mut Comm, cx: &mut Cx<'_>, io: &mut Io<'_>) {
+    let admitted = crate::engine::input::admit_observer(
+        cx,
+        io,
+        crate::engine::observe::InputView::CommunicationCompleted,
+    );
+    comm.apply_input(admitted);
+}
 
 #[cfg(test)]
 mod tests {
-    use crate::comm::Comm;
+    use crate::engine::{
+        observe::{CampaignView, CheckpointView, Injected, InputView, Io, Observer, Presented},
+        Kernel, World,
+    };
+
+    struct CompletionObserver {
+        world: *mut World,
+        kernel: *mut Kernel,
+        calls: usize,
+    }
+
+    impl Observer<Option<CampaignView>> for CompletionObserver {
+        fn input_admitted(
+            &mut self,
+            view: &InputView,
+            campaign: &Option<CampaignView>,
+        ) -> Injected {
+            assert!(matches!(view, InputView::CommunicationCompleted));
+            assert_eq!(campaign.as_ref().map(|view| view.activity), Some(17));
+            assert_eq!(World::current().pointer, self.world);
+            assert_eq!(Kernel::current().pointer, self.kernel);
+            self.calls += 1;
+            Injected {
+                comm_response: Some(1),
+                ..Injected::default()
+            }
+        }
+
+        fn checkpoint(&mut self, _: &CheckpointView<'_>) {}
+        fn presented(&mut self, _: &mut Presented) {}
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn completion_admission_preserves_the_current_input_owner_contract() {
+        crate::comm::with_test_context(|cx| {
+            cx.world.set_activity(17);
+            let mut comm = crate::comm::Comm::new();
+            comm.add_response(17, "First", None);
+            comm.add_response(23, "Second", None);
+            let mut observer = CompletionObserver {
+                world: std::ptr::from_mut(cx.world),
+                kernel: std::ptr::from_mut(cx.kernel),
+                calls: 0,
+            };
+            super::admit_completion(
+                &mut comm,
+                cx,
+                &mut Io {
+                    observer: &mut observer,
+                },
+            );
+            assert_eq!(observer.calls, 1);
+            assert_eq!(comm.selected_response(), 1);
+        });
+    }
+
     #[test]
     #[serial_test::serial]
     fn conversation_text_admission_retains_the_supplied_game_labels() {
@@ -542,44 +239,5 @@ mod tests {
                 assert!(comm.display.phrases.is_none());
             },
         );
-    }
-
-    /// hail_alien is a no-op in test builds (all C bridge calls are gated
-    /// behind #[cfg(not(test))]). The public function must exist and be callable.
-    #[test]
-    fn test_hail_alien_compiles() {
-        let mut owner = Comm::new();
-        let comm = &mut owner;
-        // Verify the function exists and is callable in test context.
-        // The actual logic is gated behind cfg(not(test)) and requires
-        // the full C game runtime, so we just confirm it compiles.
-        let mut game = crate::engine::Game::new();
-        let mut battle = crate::engine::battle::Battle::new();
-        let mut cx = crate::engine::battle::Cx::new(
-            &mut battle,
-            &mut game.world,
-            &mut game.kernel,
-            crate::math::random,
-        );
-        let mut observer = crate::engine::observe::Unobserved;
-        let mut io = crate::engine::observe::Io {
-            observer: &mut observer,
-        };
-        unsafe { super::hail_alien(comm, &mut cx, &mut io) };
-    }
-}
-
-#[cfg(not(test))]
-unsafe fn create_named_context(
-    name: *const std::ffi::c_char,
-) -> *mut crate::graphics::native_abi::context_desc {
-    #[cfg(feature = "debug-process")]
-    {
-        c_bridge::CreateContextAux(name)
-    }
-    #[cfg(not(feature = "debug-process"))]
-    {
-        let _ = name;
-        c_bridge::CreateContextAux()
     }
 }

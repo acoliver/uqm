@@ -20,6 +20,10 @@ impl FontLease {
         Self(allocation)
     }
 
+    pub fn same_font(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.0, &other.0)
+    }
+
     pub fn leading(&self) -> i16 {
         // SAFETY: the lease retains the font on its registered graphics thread.
         unsafe { (*self.as_raw()).Leading as i16 }

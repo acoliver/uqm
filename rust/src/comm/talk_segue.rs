@@ -101,29 +101,13 @@ pub(super) mod c_bridge {
     pub use crate::sound::heart_ffi::play_track as PlayTrack;
     pub use crate::sound::heart_ffi::playing_track as PlayingTrack;
     pub use crate::sound::heart_ffi::stop_track as StopTrack;
-    use crate::sound::music::remember_native_music;
+    use crate::sound::music::{remember_music, MusicRequest};
     pub use crate::time::source as clock;
-    use std::{ffi::c_int, ptr::NonNull};
+    use std::ffi::c_int;
 
     pub use crate::comm::comm_abi::check_subtitles;
 
     pub use crate::comm::comm_abi::clear_subtitles;
-
-    pub use crate::comm::oscill_abi::runtime::set_slider_image;
-
-    pub use crate::comm::oscill_abi::runtime::init_oscilloscope;
-
-    pub use crate::comm::oscill_abi::runtime::init_slider;
-
-    pub use crate::graphics::pixmap_abi::SetAbsFrameIndex;
-
-    pub use crate::comm::oscill_abi::runtime::draw_oscilloscope;
-
-    pub use crate::comm::oscill_abi::runtime::draw_slider;
-
-    pub use crate::graphics::context_abi::SetContext;
-
-    pub use crate::comm::comm_abi::anim_context;
 
     pub use crate::comm::comm_abi::clear_subtitles_pending;
 
@@ -133,20 +117,11 @@ pub(super) mod c_bridge {
 
     pub use crate::comm::comm_abi::comm_redraw_subtitles;
 
-    pub use crate::graphics::cmap_abi::GetColorMapAddress;
-
-    pub use crate::graphics::cmap_abi::SetColorMap;
-
     pub use crate::comm::commanim_abi::runtime::draw_alien_frame;
 
     pub use crate::comm::commanim_abi::runtime::init_comm_animations;
 
     pub use crate::mainloop::input_abi::live::UpdateInputState;
-
-    pub use crate::graphics::gfx_common_abi::ScreenTransition;
-
-    pub use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
-    pub use crate::threading::pacing::linked::sleep_thread as SleepThread;
 
     pub fn pulsed_menu_key(input: &super::InputSession, key_index: c_int) -> c_int {
         input.pulsed().menu[key_index as usize]
@@ -154,64 +129,6 @@ pub(super) mod c_bridge {
 
     pub fn current_menu_key(input: &super::InputSession, key_index: c_int) -> c_int {
         input.current().menu[key_index as usize]
-    }
-
-    /// Check if CommData.AlienTransitionDesc.NumFrames > 0 (replaces c_HasTransitionAnim)
-    pub unsafe fn has_transition_anim(comm: &Comm) -> c_int {
-        if comm.data.definition.alien_transition_desc.num_frames > 0 {
-            1
-        } else {
-            0
-        }
-    }
-
-    const WAIT_TALKING: u8 = 1 << 3;
-    const PAUSE_TALKING: u8 = 1 << 4;
-    const TALK_INTRO: u8 = 1 << 5;
-    const TALK_DONE: u8 = 1 << 6;
-
-    pub unsafe fn want_talking_anim(comm: &Comm) -> c_int {
-        if comm.data.definition.alien_talk_desc.anim_flags & PAUSE_TALKING == 0 {
-            1
-        } else {
-            0
-        }
-    }
-
-    pub unsafe fn have_talking_anim(comm: &Comm) -> c_int {
-        if comm.data.definition.alien_talk_desc.num_frames > 0 {
-            1
-        } else {
-            0
-        }
-    }
-
-    pub unsafe fn set_run_talking_anim(comm: &mut Comm) {
-        comm.data.definition.alien_talk_desc.anim_flags |= WAIT_TALKING;
-    }
-
-    pub unsafe fn set_stop_talking_anim(comm: &mut Comm) {
-        comm.data.definition.alien_talk_desc.anim_flags |= TALK_DONE;
-    }
-
-    pub unsafe fn running_talking_anim(comm: &Comm) -> c_int {
-        if comm.data.definition.alien_talk_desc.anim_flags & WAIT_TALKING != 0 {
-            1
-        } else {
-            0
-        }
-    }
-
-    pub unsafe fn set_run_intro_anim(comm: &mut Comm) {
-        comm.data.definition.alien_transition_desc.anim_flags |= TALK_INTRO;
-    }
-
-    pub unsafe fn running_intro_anim(comm: &Comm) -> c_int {
-        if comm.data.definition.alien_transition_desc.anim_flags & TALK_INTRO != 0 {
-            1
-        } else {
-            0
-        }
     }
 
     pub mod music_volume {
@@ -246,7 +163,7 @@ pub(super) mod c_bridge {
     }
     #[cfg(not(test))]
     pub fn call_update_comm_graphics(comm: &mut Comm, input: &crate::engine::input::InputSession) {
-        unsafe { super::do_update_animations(comm, input, false) }
+        super::do_update_animations(comm, input, false)
     }
     #[cfg(not(test))]
     pub fn call_feedback_player_phrase(comm: &mut Comm, cx: &mut super::Cx<'_>) {
@@ -256,22 +173,15 @@ pub(super) mod c_bridge {
 
     /// Play alien music from CommData.AlienSong (port of c_PlayAlienMusic).
     pub fn play_alien_music(comm: &mut Comm, enabled: bool) {
-        let song = comm.data.alien_song;
-        if song.is_null() {
-            return;
+        if let Some(song) = &comm.assets().song {
+            remember_music(MusicRequest::Track(song.playback()), true, 1, enabled);
         }
-        // SAFETY: the encounter retains the loaded song through synchronous sample admission.
-        unsafe { remember_native_music(NonNull::new(song.cast()), true, 1, enabled) };
     }
 
-    /// Apply alien colormap from CommData.AlienColorMap (port of c_SetColorMapFromCommData).
     pub fn set_color_map_from_comm_data(comm: &mut Comm) {
-        let cmap = comm.data.alien_colormap;
-        if cmap.is_null() {
-            return;
+        if let Some(palette) = &comm.assets().palette {
+            palette.apply();
         }
-        // SAFETY: hail retains the loaded colormap until encounter resource teardown.
-        unsafe { SetColorMap(GetColorMapAddress((cmap).cast())) };
     }
 }
 
@@ -370,7 +280,7 @@ pub mod dinput {
             c_bridge::check_subtitles(comm);
         }
 
-        unsafe { super::do_update_animations(comm, input, ts.seeking != 0) };
+        super::do_update_animations(comm, input, ts.seeking != 0);
         rust_update_speech_graphics(comm);
 
         let cur_track = c_bridge::PlayingTrack();
@@ -393,15 +303,13 @@ pub mod dinput {
     ) -> bool {
         cx.with_legacy(|| {
             // Transition animation to talking comm
-            if unsafe { c_bridge::want_talking_anim(comm) } != 0
-                && unsafe { c_bridge::have_talking_anim(comm) } != 0
-            {
-                if unsafe { c_bridge::has_transition_anim(comm) } != 0 {
-                    unsafe { c_bridge::set_run_intro_anim(comm) };
+            if super::want_talking_anim(comm) && super::have_talking_anim(comm) {
+                if super::has_transition_anim(comm) {
+                    super::set_run_intro_anim(comm);
                 }
-                unsafe { c_bridge::set_run_talking_anim(comm) };
-                while unsafe { c_bridge::running_intro_anim(comm) } != 0 {
-                    unsafe { super::do_run_comm_anim_frame(comm, input) };
+                super::set_run_talking_anim(comm);
+                while super::running_intro_anim(comm) {
+                    super::do_run_comm_anim_frame(comm, input);
                 }
             }
         });
@@ -440,15 +348,15 @@ pub mod dinput {
             c_bridge::clear_subtitles(comm);
 
             if ts.ended != 0 {
-                unsafe { super::set_slider_image_frame(comm, 8) };
+                super::set_slider_image_frame(comm, 8);
             }
 
             // Transition back to silent
-            if unsafe { c_bridge::running_talking_anim(comm) } != 0 {
-                unsafe { c_bridge::set_stop_talking_anim(comm) };
+            if super::running_talking_anim(comm) {
+                super::set_stop_talking_anim(comm);
             }
-            while unsafe { c_bridge::running_talking_anim(comm) } != 0 {
-                unsafe { super::do_run_comm_anim_frame(comm, input) };
+            while super::running_talking_anim(comm) {
+                super::do_run_comm_anim_frame(comm, input);
             }
         });
         ts.ended != 0
@@ -510,7 +418,7 @@ pub mod dinput {
                 + (c_bridge::ONE_SECOND_TICKS as u32) / 60;
         }
 
-        unsafe { cx.with_legacy(|| super::do_update_animations(comm, input, false)) };
+        cx.with_legacy(|| super::do_update_animations(comm, input, false));
 
         unsafe { cx.with_legacy(|| SleepThreadUntil(lrs.next_time)) };
         lrs.next_time = c_bridge::clock::now_ticks() + (c_bridge::ONE_SECOND_TICKS as u32) / 40;
@@ -685,8 +593,9 @@ pub fn do_talk_segue(
     // Yield to UQM cooperative threading so the track player can advance.
     // Matches C DoTalkSegue: SleepThreadUntil(NextTime) with ONE_SECOND/60 rate.
     #[cfg(not(test))]
-    unsafe {
-        c_bridge::SleepThread(14); // ONE_SECOND / 60 = 840 / 60 = 14
+    {
+        crate::threading::pacing::GameThreadPacer::new(comm.animation_context()).sleep_for(14);
+        // ONE_SECOND / 60
     }
 
     let cur_track = playing_track(comm);
@@ -788,10 +697,7 @@ pub fn alien_talk_segue(input: &InputSession, cx: &mut Cx<'_>, comm: &mut Comm, 
             play_alien_music(comm, music_enabled);
             set_music_background_vol(comm);
 
-            #[cfg(not(test))]
-            unsafe {
-                c_bridge::init_comm_animations(comm)
-            };
+            super::commanim_abi::runtime::init_comm_animations(comm);
         });
         cx.kernel.last_activity &= !0x1000;
     }
@@ -920,9 +826,7 @@ pub fn player_response_input(
 /// alien frame draw, intro transition, music, animations. These are all C bridge
 /// calls that don't need the Rust lock.
 ///
-/// # Safety
-/// Must be called from the game thread with CommData fully initialized.
-pub unsafe fn alien_talk_first_call_init(_comm: &mut Comm, cx: &mut Cx<'_>) {
+pub fn alien_talk_first_call_init(_comm: &mut Comm, cx: &mut Cx<'_>) {
     let _enabled = cx.world.data.game.glob_flags & 8 == 0;
     #[cfg(not(test))]
     cx.with_legacy(|| {
@@ -1262,7 +1166,7 @@ fn clear_subtitles(comm: &mut Comm) {
 fn update_speech_graphics(comm: &mut Comm) {
     let _ = comm;
     #[cfg(not(test))]
-    unsafe {
+    {
         // Ported from c_UpdateSpeechGraphics in rust_comm.c
         // Rate-limited to ONE_SECOND/32 ticks
 
@@ -1272,40 +1176,30 @@ fn update_speech_graphics(comm: &mut Comm) {
         }
         comm.next_speech_time = now + (840 / 32); // ONE_SECOND = 840
 
-        let old_ctx = c_bridge::SetContext(comm.presentation.radar_context);
-        c_bridge::draw_oscilloscope(comm);
-        c_bridge::SetContext(comm.presentation.space_context);
-        c_bridge::draw_slider(comm);
-        c_bridge::SetContext(old_ctx);
+        comm.draw_speech_widgets();
     }
 }
 
 fn init_speech_graphics(comm: &mut Comm) {
     let _ = comm;
     #[cfg(not(test))]
-    unsafe {
-        // Ported from c_InitSpeechGraphics in rust_comm.c
-        // SLIDER_Y = 107 (comm.h), SIS_SCREEN_WIDTH = SPACE_WIDTH - 14
-        let slider_y: std::ffi::c_int = 107;
-        let sis_w: std::ffi::c_int = 320 - 64 - 14;
-        let af = comm.presentation.activity_frame;
-        let frame5 = c_bridge::SetAbsFrameIndex(af, 5);
-        let frame2 = c_bridge::SetAbsFrameIndex(af, 2);
-        let frame9 = c_bridge::SetAbsFrameIndex(af, 9);
-        c_bridge::init_oscilloscope(comm, frame9);
-        c_bridge::init_slider(comm, 0, slider_y, sis_w, frame5, frame2);
+    {
+        super::speech_graphics::SpeechGraphics::init(comm);
     }
 }
 
 #[cfg(not(test))]
-unsafe fn set_slider_image_frame(comm: &mut Comm, index: u16) {
-    let frame = c_bridge::SetAbsFrameIndex((comm.presentation.activity_frame).cast(), index);
-    c_bridge::set_slider_image(comm, frame);
+fn set_slider_image_frame(comm: &mut Comm, index: u16) {
+    let frame = crate::graphics::context_abi::ContextFrame::retain(std::ptr::NonNull::new(
+        comm.presentation.activity_frame,
+    ))
+    .wrapped_frame(index);
+    super::oscill_abi::runtime::set_slider_image(comm, frame);
 }
 
 fn set_slider_image(comm: &mut Comm, img: SliderImage) {
     #[cfg(not(test))]
-    unsafe {
+    {
         let _ = comm;
         set_slider_image_frame(comm, img as u16);
     }
@@ -1317,53 +1211,54 @@ fn set_slider_image(comm: &mut Comm, img: SliderImage) {
 
 fn update_animations(_input: &crate::engine::input::InputSession, comm: &mut Comm, seeking: bool) {
     #[cfg(not(test))]
-    unsafe {
+    {
         let _ = comm;
         do_update_animations(comm, _input, seeking);
     }
     #[cfg(test)]
     {
-        comm.animations_mut().process(if seeking { 0 } else { 1 });
+        if !seeking {
+            let now = comm.animation_runtime.last_time.wrapping_add(1);
+            super::commanim_abi::runtime::advance_at(comm, now, &mut crate::math::random);
+        }
     }
 }
 
 /// Ported from c_UpdateAnimations — processes communication animations with
 /// context switching, batched graphics, and subtitle redraw.
 ///
-/// # Safety
-/// Must be called from the game thread with initialized graphics context.
 #[cfg(not(test))]
-unsafe fn do_update_animations(
+fn do_update_animations(
     comm: &mut Comm,
     input: &crate::engine::input::InputSession,
     seeking: bool,
 ) {
     comm.apply_phrase_events();
     let do_clear = c_bridge::clear_subtitles_pending(comm);
-    let old_ctx = c_bridge::SetContext((c_bridge::anim_context(comm)).cast());
-    c_bridge::BatchGraphics();
-    let change = c_bridge::process_comm_animations(comm, do_clear, if seeking { 1 } else { 0 });
-    if change != 0 || do_clear != 0 {
-        c_bridge::comm_redraw_subtitles(comm, input.preferences().subtitles != 0);
-    }
-    c_bridge::UnbatchGraphics();
+    let context = comm.animation_context();
+    context.with_selected(|| {
+        context.with_batch(|| {
+            let change =
+                c_bridge::process_comm_animations(comm, do_clear, if seeking { 1 } else { 0 });
+            if change != 0 || do_clear != 0 {
+                c_bridge::comm_redraw_subtitles(comm, input.preferences().subtitles != 0);
+            }
+        })
+    });
     c_bridge::reset_clear_subtitles(comm);
-    c_bridge::SetContext(old_ctx);
 }
 
 /// Ported from c_RunCommAnimFrame — one animation frame + sleep.
 ///
-/// # Safety
-/// Must be called from the game thread.
 #[cfg(not(test))]
-unsafe fn do_run_comm_anim_frame(comm: &mut Comm, input: &crate::engine::input::InputSession) {
+fn do_run_comm_anim_frame(comm: &mut Comm, input: &crate::engine::input::InputSession) {
     do_update_animations(comm, input, false);
-    c_bridge::SleepThread(840 / 40); // ONE_SECOND / 40
+    crate::threading::pacing::GameThreadPacer::new(comm.animation_context()).sleep_for(840 / 40);
 }
 
 fn update_comm_graphics(_input: &crate::engine::input::InputSession, comm: &mut Comm) {
     #[cfg(not(test))]
-    unsafe {
+    {
         let _ = comm;
         // UpdateCommGraphics() — calls UpdateAnimations + redraw
         do_update_animations(comm, _input, false);
@@ -1377,112 +1272,48 @@ fn update_comm_graphics(_input: &crate::engine::input::InputSession, comm: &mut 
 // ---------- animation helpers ----------------------------------------------
 
 fn want_talking_anim(comm: &Comm) -> bool {
-    #[cfg(not(test))]
-    unsafe {
-        let _ = comm;
-        c_bridge::want_talking_anim(comm) != 0
-    }
-    #[cfg(test)]
-    {
-        comm.animations().want_talking_anim()
-    }
+    comm.data.definition.alien_talk_desc.anim_flags & 16 == 0
 }
 
 fn have_talking_anim(comm: &Comm) -> bool {
-    #[cfg(not(test))]
-    unsafe {
-        let _ = comm;
-        c_bridge::have_talking_anim(comm) != 0
-    }
-    #[cfg(test)]
-    {
-        comm.animations().have_talking_anim()
-    }
+    comm.data.definition.alien_talk_desc.num_frames > 0
 }
 
 fn has_transition_anim(comm: &Comm) -> bool {
-    // @plan PLAN-20260326-COMMPT2.P03 @requirement REQ-AT-001
-    #[cfg(not(test))]
-    unsafe {
-        let _ = comm;
-        c_bridge::has_transition_anim(comm) != 0
-    }
-    #[cfg(test)]
-    {
-        comm.animations().has_transition_anim()
-    }
+    comm.data.definition.alien_transition_desc.num_frames > 0
 }
 
 fn set_run_intro_anim(comm: &mut Comm) {
-    #[cfg(not(test))]
-    unsafe {
-        let _ = comm;
-        c_bridge::set_run_intro_anim(comm);
-    }
-    #[cfg(test)]
-    {
-        comm.animations_mut().set_intro_anim(true);
-    }
+    comm.data.definition.alien_transition_desc.anim_flags |= 32;
 }
 
 fn set_run_talking_anim(comm: &mut Comm) {
-    #[cfg(not(test))]
-    unsafe {
-        let _ = comm;
-        c_bridge::set_run_talking_anim(comm);
-    }
-    #[cfg(test)]
-    {
-        comm.animations_mut().start_talking_anim();
-    }
+    comm.data.definition.alien_talk_desc.anim_flags |= 8;
 }
 
 fn set_stop_talking_anim(comm: &mut Comm) {
-    #[cfg(not(test))]
-    unsafe {
-        let _ = comm;
-        c_bridge::set_stop_talking_anim(comm);
-    }
-    #[cfg(test)]
-    {
-        comm.animations_mut().stop_talking_anim();
-    }
+    comm.data.definition.alien_talk_desc.anim_flags |= 64;
 }
 
 fn running_intro_anim(comm: &Comm) -> bool {
-    #[cfg(not(test))]
-    unsafe {
-        let _ = comm;
-        c_bridge::running_intro_anim(comm) != 0
-    }
-    #[cfg(test)]
-    {
-        comm.animations().is_intro_anim_running()
-    }
+    comm.data.definition.alien_transition_desc.anim_flags & 32 != 0
 }
 
 fn running_talking_anim(comm: &Comm) -> bool {
-    #[cfg(not(test))]
-    unsafe {
-        let _ = comm;
-        c_bridge::running_talking_anim(comm) != 0
-    }
-    #[cfg(test)]
-    {
-        comm.animations().is_talking_anim_running()
-    }
+    comm.data.definition.alien_talk_desc.anim_flags & 8 != 0
 }
 
 fn run_comm_anim_frame(_input: &crate::engine::input::InputSession, comm: &mut Comm) {
     #[cfg(not(test))]
-    unsafe {
+    {
         let _ = comm;
         do_run_comm_anim_frame(comm, _input);
     }
     #[cfg(test)]
     {
         // Advance animations by one tick
-        comm.animations_mut().process(1);
+        let now = comm.animation_runtime.last_time.wrapping_add(1);
+        super::commanim_abi::runtime::advance_at(comm, now, &mut crate::math::random);
     }
 }
 
@@ -1550,7 +1381,7 @@ fn set_colormap(_comm: &mut Comm) {
 
 fn draw_alien_frame(comm: &mut Comm) {
     #[cfg(not(test))]
-    unsafe {
+    {
         let _ = comm;
         c_bridge::draw_alien_frame(comm, 0, 1);
     }
@@ -1589,9 +1420,8 @@ fn intro_transition(mode: u32, fade_time: u32) -> IntroTransition {
 
 fn comm_intro_transition(_comm: &mut Comm) {
     #[cfg(not(test))]
-    unsafe {
-        use crate::graphics::cmap_abi::FadeScreen;
-        use std::ffi::{c_uint, c_void};
+    {
+        use std::ffi::c_uint;
         const FADE_ALL_TO_COLOR: u32 = 253;
 
         // Ported from c_CommIntroTransition in rust_comm.c
@@ -1607,31 +1437,48 @@ fn comm_intro_transition(_comm: &mut Comm) {
         let sis_screen_width: c_int = 320 - 64 - 14; // SPACE_WIDTH - 14
         let sis_screen_height: c_int = 240 - 13; // SPACE_HEIGHT - 13
 
+        let context = _comm.animation_context();
+        let intro_batch = _comm
+            .display
+            .assets
+            .as_mut()
+            .unwrap_or_else(|| panic!("conversation assets not loaded"))
+            .intro_batch
+            .take()
+            .unwrap_or_else(|| panic!("conversation intro batch not started"));
         match intro_transition(mode, fade_time) {
             IntroTransition::CrossfadeScreen => {
-                c_bridge::ScreenTransition(3, std::ptr::null());
-                c_bridge::UnbatchGraphics();
+                context.transition(None);
+                drop(intro_batch);
             }
             IntroTransition::CrossfadeSpace => {
-                let mut rect = crate::comm::locdata::CRect {
+                let rect = crate::graphics::native_abi::RECT {
                     corner: crate::comm::locdata::CPoint {
                         x: sis_org_x as i16,
                         y: sis_org_y as i16,
                     },
-                    width: sis_screen_width as i16,
-                    height: sis_screen_height as i16,
+                    extent: crate::graphics::native_abi::EXTENT {
+                        width: sis_screen_width as i16,
+                        height: sis_screen_height as i16,
+                    },
                 };
-                c_bridge::ScreenTransition(3, (&mut rect as *mut _ as *const c_void).cast());
-                c_bridge::UnbatchGraphics();
+                context.transition(Some(rect));
+                drop(intro_batch);
             }
             IntroTransition::CrossfadeWindow => {
-                let rect_ptr = std::ptr::addr_of_mut!(_comm.display.window) as *const c_void;
-                c_bridge::ScreenTransition(3, (rect_ptr).cast());
-                c_bridge::UnbatchGraphics();
+                let window = _comm.display.window;
+                context.transition(Some(crate::graphics::native_abi::RECT {
+                    corner: window.corner,
+                    extent: crate::graphics::native_abi::EXTENT {
+                        width: window.width,
+                        height: window.height,
+                    },
+                }));
+                drop(intro_batch);
             }
             IntroTransition::FadeInScreen { fade_time } => {
-                c_bridge::UnbatchGraphics();
-                FadeScreen(
+                drop(intro_batch);
+                context.fade_screen(
                     FADE_ALL_TO_COLOR,
                     i16::try_from(fade_time).expect("comm fade time fits a SIZE"),
                 );
@@ -2138,93 +1985,6 @@ mod tests {
     // body, so doc-comment lines above each stub (which mention CommData fields
     // by name) cannot produce false positives.
 
-    /// verify_c_bridge_reads_commdata_colormap:
-    /// Ported to Rust: set_color_map_from_comm_data must reference comm.data.alien_colormap.
-    #[test]
-    fn verify_c_bridge_reads_commdata_colormap() {
-        let source = include_str!("talk_segue.rs");
-        assert!(
-            source.contains("comm.data.alien_colormap"),
-            "set_color_map_from_comm_data must read comm.data.alien_colormap"
-        );
-    }
-
-    /// verify_c_bridge_null_guard_colormap:
-    /// Ported to Rust: set_color_map_from_comm_data must contain a null guard.
-    #[test]
-    fn verify_c_bridge_null_guard_colormap() {
-        let source = include_str!("talk_segue.rs");
-        let body_start = source
-            .find("pub fn set_color_map_from_comm_data(comm:")
-            .expect("set_color_map_from_comm_data must be defined");
-        let body = &source[body_start..];
-        let body_end = body.find("}").expect("function must have a body");
-        let body = &body[..body_end];
-        let has_guard = body.contains("is_null()");
-        assert!(
-            has_guard,
-            "set_color_map_from_comm_data must contain a null guard"
-        );
-    }
-
-    /// verify_c_music_reads_commdata:
-    /// Ported to Rust: play_alien_music must reference comm.data.alien_song.
-    #[test]
-    fn verify_c_music_reads_commdata() {
-        let source = include_str!("talk_segue.rs");
-        assert!(
-            source.contains("comm.data.alien_song"),
-            "play_alien_music must read comm.data.alien_song"
-        );
-    }
-
-    /// verify_c_bridge_functions_exist_with_impl:
-    /// Ported to Rust: both functions must have real implementation bodies.
-    #[test]
-    fn verify_c_bridge_functions_exist_with_impl() {
-        let source = include_str!("talk_segue.rs");
-
-        fn extract_rust_fn_body<'a>(src: &'a str, name: &str) -> Option<&'a str> {
-            let pattern = format!("pub fn {}(comm:", name);
-            let idx = src.find(&pattern)?;
-            let rest = &src[idx..];
-            let mut depth = 0i32;
-            let mut end = 0;
-            for (i, c) in rest.char_indices() {
-                if c == '{' {
-                    depth += 1;
-                } else if c == '}' {
-                    depth -= 1;
-                    if depth == 0 {
-                        end = i;
-                        break;
-                    }
-                }
-            }
-            Some(&rest[..end])
-        }
-
-        // set_color_map_from_comm_data must have a real body
-        let cmap_body = extract_rust_fn_body(source, "set_color_map_from_comm_data")
-            .expect("set_color_map_from_comm_data must be defined");
-        let cmap_has_impl =
-            cmap_body.contains("SetColorMap") && cmap_body.contains("GetColorMapAddress");
-        assert!(
-            cmap_has_impl,
-            "set_color_map_from_comm_data must call SetColorMap and GetColorMapAddress"
-        );
-
-        // play_alien_music must have a real body
-        let music_body = extract_rust_fn_body(source, "play_alien_music")
-            .expect("play_alien_music must be defined");
-        let music_has_impl =
-            music_body.contains("remember_native_music") && music_body.contains("is_null()");
-        assert!(
-            music_has_impl,
-            "play_alien_music must admit native music with null guard"
-        );
-    }
-
     // ========================================================================
     // P10: DoCommunication TDD
     //
@@ -2661,7 +2421,6 @@ mod tests {
     /// "FIXME", "HACK", "placeholder", "todo!", "unimplemented!"
     ///
     /// Exempt lines: contain "test", start with "///", contain "cfg(test)",
-    /// or contain "stubs in commanim" (C reference note).
     ///
     /// After P14 removes the stale comment this test PASSES.
     #[test]
@@ -2701,9 +2460,6 @@ mod tests {
                     return false;
                 }
                 // Exempt: known C-reference note
-                if t.contains("stubs in commanim") {
-                    return false;
-                }
                 // Case-insensitive check for stale marker patterns
                 let lower = line.to_lowercase();
                 stale_patterns
@@ -2759,9 +2515,6 @@ mod tests {
                 if t.contains("cfg(test)") {
                     return false;
                 }
-                if t.contains("stubs in commanim") {
-                    return false;
-                }
                 if t.contains("stale_patterns") || t.contains("c_line_is_comment") {
                     return false;
                 }
@@ -2793,12 +2546,6 @@ mod tests {
     /// the exemption logic in the stale-marker tests stays honest.
     #[test]
     fn verify_exemptions_valid_p13() {
-        let ffi_source = include_str!("ffi.rs");
-        assert!(
-            ffi_source.contains("stubs in commanim"),
-            "expected exemption 'stubs in commanim' must exist in ffi.rs"
-        );
-
         let phrase_source = include_str!("phrase_state.rs");
         assert!(
             phrase_source.contains("not yet disabled"),

@@ -36,35 +36,19 @@ pub(crate) struct SubtitleCache {
 }
 
 impl ConversationDisplay {
-    /// # Safety
-    /// The supplied session's loaded plain-text table must still be live.
-    pub(crate) unsafe fn retain(comm: &Comm) -> Result<Self, &'static str> {
-        let space =
-            NonNull::new(comm.presentation.space_context).ok_or("conversation space context")?;
-        let player =
-            NonNull::new(comm.player_font.current().cast()).ok_or("conversation player font")?;
+    pub(crate) fn new(
+        comm: &Comm,
+        assets: &super::assets::Assets,
+        kernel: &crate::engine::Kernel,
+    ) -> Result<Self, &'static str> {
         let history =
             NonNull::new(comm.presentation.tiny_font).ok_or("conversation history font")?;
-        let labels = NonNull::new(comm.presentation.game_strings.cast())
-            .ok_or("conversation game strings")?;
-        let target = NonNull::new(comm.display.anim_context.cast())
-            .ok_or("conversation animation context")?;
-        let cache = NonNull::new(comm.display.text_cache_context)
-            .ok_or("conversation subtitle cache context")?;
-        let frame = NonNull::new(comm.display.text_cache_frame.cast())
-            .ok_or("conversation subtitle cache frame")?;
-        let alien = NonNull::new(comm.data.alien_font.cast()).ok_or("conversation alien font")?;
         Ok(Self {
-            space: ContextLease::retain(space),
-            player_font: FontLease::retain(player),
+            space: ContextLease::require(comm.presentation.space_context),
+            player_font: assets.player.lease(),
             history_font: FontLease::retain(history),
-            game_strings: crate::strings::owned_table::LoadedTextTable::retain(labels),
-            subtitles: SubtitleCache {
-                target: ContextLease::retain(target),
-                context: ContextLease::retain(cache),
-                frame: ContextFrame::retain(Some(frame)),
-                font: FontLease::retain(alien),
-            },
+            game_strings: kernel.game_text_table(),
+            subtitles: assets.subtitles(),
         })
     }
 }
@@ -538,14 +522,6 @@ mod tests {
     fn names_cannot_be_used_without_session_admission() {
         let comm = Comm::new();
         comm.conversation_resources();
-    }
-
-    #[test]
-    fn missing_display_resources_fail_at_admission() {
-        let comm = Comm::new();
-        // SAFETY: admission rejects missing handles before retaining any resource.
-        let result = unsafe { ConversationDisplay::retain(&comm) };
-        assert!(matches!(result, Err("conversation space context")));
     }
 
     #[test]

@@ -384,72 +384,6 @@ fn clearing_responses_empties_the_list() {
 
 #[test]
 #[serial]
-fn intro_and_talking_animation_flags_follow_their_setters() {
-    let mut owner = Comm::new();
-    let comm = &mut owner;
-    assert_eq!(rust_init_communication(comm), 1);
-
-    rust_init_comm_animations(comm);
-    assert_eq!(rust_running_intro_anim(comm), 0);
-    rust_set_run_intro_anim(comm, 1);
-    assert_eq!(rust_running_intro_anim(comm), 1);
-    rust_set_run_intro_anim(comm, 0);
-    assert_eq!(rust_running_intro_anim(comm), 0);
-
-    assert_eq!(rust_running_talking_anim(comm), 0);
-    rust_set_run_talking_anim(comm, 1);
-    assert_eq!(rust_running_talking_anim(comm), 1);
-    rust_set_stop_talking_anim(comm);
-    assert_eq!(
-        rust_running_talking_anim(comm),
-        1,
-        "stopping is a request the animation loop honours on its next step"
-    );
-    assert_eq!(
-        rust_want_talking_anim(comm),
-        0,
-        "no talking sequence is defined"
-    );
-    assert_eq!(rust_have_talking_anim(comm), 0, "so none can be active");
-    assert_eq!(
-        rust_get_comm_animation_frame(comm, 99),
-        0,
-        "no such animation"
-    );
-}
-
-#[test]
-#[serial]
-fn animation_callbacks_report_a_change_on_redraw_and_none_when_paused() {
-    let mut owner = Comm::new();
-    let comm = &mut owner;
-    assert_eq!(rust_init_communication(comm), 1);
-
-    assert_eq!(
-        rust_process_comm_animations_cb(comm, 0, 1),
-        0,
-        "paused advances nothing"
-    );
-    assert_eq!(
-        rust_process_comm_animations_cb(comm, 1, 1),
-        0,
-        "paused even on a full redraw"
-    );
-    assert_eq!(
-        rust_process_comm_animations_cb(comm, 1, 0),
-        1,
-        "a full redraw always reports a change"
-    );
-    assert_eq!(
-        rust_process_comm_animations_cb(comm, 0, 0),
-        0,
-        "no animations means no change"
-    );
-    assert_eq!(rust_process_comm_animations(comm, 4), 0);
-}
-
-#[test]
-#[serial]
 fn the_encounter_lifecycle_begins_and_ends_in_order() {
     let mut owner = Comm::new();
     let comm = &mut owner;
@@ -589,10 +523,8 @@ fn updating_with_time_does_not_disturb_an_idle_conversation() {
 
 #[test]
 #[serial]
-fn the_speech_graphics_and_subtitle_display_refresh_without_a_screen() {
-    let mut owner = Comm::new();
-    let comm = &mut owner;
-    assert_eq!(rust_init_communication(comm), 1);
+fn the_speech_graphics_and_subtitle_display_refresh_on_the_real_renderer() {
+    super::sis_graphics_font_tests::with_display("comm::ffi_behavior_tests::the_speech_graphics_and_subtitle_display_refresh_on_the_real_renderer", |comm, _| {
     let line = CString::new("Subtitle text").unwrap();
     rust_init_speech_graphics(comm);
     rust_update_speech_graphics(comm);
@@ -609,7 +541,7 @@ fn the_speech_graphics_and_subtitle_display_refresh_without_a_screen() {
         rust_get_response_count(comm),
         1,
         "refreshing the list leaves the responses alone"
-    );
+    );    });
 }
 
 #[test]
@@ -682,17 +614,6 @@ fn state_accessors_use_safe_rust_signatures() {
     let _: fn(&mut Comm) -> c_int = rust_get_selected_response;
     let _: fn(&mut Comm, index: c_int) -> c_int = rust_select_response_index;
     let _: fn(&mut Comm) -> c_int = rust_get_response_count;
-    let _: fn(&mut Comm) = rust_init_comm_animations;
-    let _: fn(&mut Comm, delta_ticks: c_uint) -> c_int = rust_process_comm_animations;
-    let _: fn(&mut Comm, clear: c_int, paused: c_int) -> c_int = rust_process_comm_animations_cb;
-    let _: fn(&mut Comm) -> c_int = rust_want_talking_anim;
-    let _: fn(&mut Comm) -> c_int = rust_have_talking_anim;
-    let _: fn(&mut Comm, _run: c_int) = rust_set_run_talking_anim;
-    let _: fn(&mut Comm) = rust_set_stop_talking_anim;
-    let _: fn(&mut Comm, run: c_int) = rust_set_run_intro_anim;
-    let _: fn(&mut Comm) -> c_int = rust_running_intro_anim;
-    let _: fn(&mut Comm) -> c_int = rust_running_talking_anim;
-    let _: fn(&mut Comm, index: c_uint) -> c_uint = rust_get_comm_animation_frame;
     let _: fn(&mut Comm) -> c_int = rust_begin_encounter;
     let _: fn(&mut Comm) -> c_int = rust_end_encounter_normal;
     let _: fn(&mut Comm) -> c_int = rust_end_encounter_abort;
