@@ -1,7 +1,7 @@
 //! Star catalog lookup and cluster naming, ported from starmap.c.
 
 use crate::comm::dispatch::CPoint;
-use crate::savegame::runtime::star::{CStarDesc, NUM_HYPER_VORTICES, NUM_SOLAR_SYSTEMS};
+use crate::engine::world::{CStarDesc, NUM_HYPER_VORTICES, NUM_SOLAR_SYSTEMS};
 
 pub(crate) fn catalog_star_count(catalog: &[CStarDesc]) -> usize {
     catalog

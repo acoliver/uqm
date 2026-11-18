@@ -8,18 +8,20 @@
 //! `pickupEnergy`. Story flags: `UMGAH_ZOMBIE_BLOBBIES`, `TALKING_PET`,
 //! `PLAYER_HYPNOTIZED`.
 
-use crate::comm::dispatch::{
-    CHECK_ABORT, CHECK_LOAD, IN_HYPERSPACE, START_ENCOUNTER, START_INTERPLANETARY,
+use crate::engine::world::activity::activity_flags::{
+    CHECK_ABORT, CHECK_LOAD, START_ENCOUNTER, START_INTERPLANETARY,
 };
+use crate::engine::world::activity::ActivityKind;
 use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
+use crate::engine::world::FUEL_TANK_SCALE;
 use crate::engine::StoryKey;
 use crate::math::{square_root, RandomContext};
 use crate::planets::generate::default;
 use crate::planets::generate::home_contact::HomeContactSite;
 use crate::planets::generate::special::{self, Body, Story, TELLURIC_WORLD};
-use crate::starbase::sis_modules::FUEL_TANK_SCALE;
 
 const WORLD: Body = Body::Planet(0);
+const IN_HYPERSPACE: u16 = ActivityKind::InHyperspace as u16;
 
 /// `GLOBAL_FLAGS_AND_DATA` during either conversation: `1 << 7`.
 const TALK_FLAGS: u8 = 1 << 7;

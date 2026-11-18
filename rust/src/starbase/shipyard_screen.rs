@@ -33,7 +33,7 @@ use super::shipyard::{
     SHIP_WIN_FRAMES, SHIP_WIN_HEIGHT, SHIP_WIN_WIDTH,
 };
 use super::sis_modules::EMPTY_MODULE_SLOT;
-use crate::mainloop::types::activity_flags;
+use crate::engine::world::activity::activity_flags;
 
 /// `HANGAR_ANIM_RATE`: power line frames per second.
 const HANGAR_ANIM_RATE: u32 = 15;

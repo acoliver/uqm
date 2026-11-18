@@ -1,7 +1,7 @@
 use super::lifecycle_tests::{group, pair, QueueHost, Trace};
 use super::orbital::{Orbital, Queues, Scene};
 use super::*;
-use crate::comm::dispatch::{CHECK_ABORT, CHECK_LOAD, START_ENCOUNTER};
+use crate::engine::world::activity::activity_flags::{CHECK_ABORT, CHECK_LOAD, START_ENCOUNTER};
 use crate::engine::world::planet::{PlanetDesc, SystemInfo};
 use crate::engine::StoryKey;
 use crate::planets::generate::calc::{AnalysisSite, StarDescription};

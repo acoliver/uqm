@@ -1,5 +1,8 @@
 //! VUX home, Zex' maidens and Zex' beast, ported from `genvux.c`.
 
+use crate::engine::world::activity::activity_flags::{
+    CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY,
+};
 use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
 use crate::engine::StoryKey;
 use crate::math::RandomContext;
@@ -11,7 +14,6 @@ use crate::planets::generate::home_contact::{HomeContactSite, LanderTakeoff};
 use crate::planets::generate::identities::{MAIDENS_DEFINED, VUX_BEAST_DEFINED, VUX_DEFINED};
 use crate::planets::generate::special::{self, Body, Story, REDUX_WORLD, WATER_WORLD};
 use crate::planets::generate::surface;
-use crate::planets::generate::yehat::{CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY};
 
 const WORLD: Body = Body::Planet(0);
 // `units.h`: FULL_CIRCLE=64, HALF_CIRCLE=32, OCTANT=8.

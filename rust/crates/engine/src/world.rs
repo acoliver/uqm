@@ -325,6 +325,9 @@ pub const NUM_SOLAR_SYSTEMS: usize = 502;
 pub const NUM_HYPER_VORTICES: usize = 15;
 pub const CATALOG_LEN: usize = NUM_SOLAR_SYSTEMS + 1 + (NUM_HYPER_VORTICES + 1) + 1;
 
+/// `FUEL_TANK_SCALE` (`sis.h`): raw fuel points per displayed fuel unit.
+pub const FUEL_TANK_SCALE: u32 = 100;
+
 #[repr(C)]
 #[derive(Debug, Copy, Clone, Default)]
 pub struct SisState {
