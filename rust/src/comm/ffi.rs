@@ -6,7 +6,6 @@ use crate::engine::StoryKey;
 use std::ffi::{c_int, c_uint};
 
 use super::segue::Segue;
-use super::types::CommIntroMode;
 
 mod response_commands;
 pub(crate) use response_commands::observe_responses;
@@ -339,35 +338,6 @@ pub fn rust_set_talking_finished(comm: &mut Comm, finished: c_int) {
     comm.set_talking_finished(finished != 0);
 }
 
-/// Get intro mode
-pub fn rust_get_comm_intro_mode(comm: &mut Comm) -> c_uint {
-    comm.intro_mode() as c_uint
-}
-
-/// Set intro mode
-pub fn rust_set_comm_intro_mode(comm: &mut Comm, mode: c_uint) {
-    comm.set_intro_mode(CommIntroMode::from(mode));
-}
-
-/// C `SetCommIntroMode (mode, howLong)` (comm.c:1357): the mode and fade time
-/// that the talk segue's intro transition reads. Callers that run in Rust set
-/// them here, not through the C function, whose statics Rust never reads.
-pub fn set_comm_intro_mode(comm: &mut Comm, mode: u32, how_long: u32) {
-    let state = &mut *comm;
-    state.set_intro_mode(CommIntroMode::from(mode));
-    state.set_fade_time(how_long);
-}
-
-/// Get fade time
-pub fn rust_get_comm_fade_time(comm: &mut Comm) -> c_uint {
-    comm.fade_time()
-}
-
-/// Set fade time
-pub fn rust_set_comm_fade_time(comm: &mut Comm, time: c_uint) {
-    comm.set_fade_time(time);
-}
-
 /// Check if input is paused
 pub fn rust_is_comm_input_paused(comm: &mut Comm) -> c_int {
     if comm.is_input_paused() {
@@ -385,25 +355,6 @@ pub fn rust_set_comm_input_paused(comm: &mut Comm, paused: c_int) {
 /// Update communication state
 pub fn rust_update_communication(comm: &mut Comm, delta_time: f32) {
     comm.update(delta_time);
-}
-
-// ============================================================================
-// Phrase State (P04)
-// @plan PLAN-20260314-COMM.P04
-// ============================================================================
-
-/// Check if a phrase is enabled (not disabled this encounter).
-pub fn rust_phrase_enabled(comm: &mut Comm, index: c_int) -> c_int {
-    if comm.phrase_enabled(index) {
-        1
-    } else {
-        0
-    }
-}
-
-/// Disable a phrase for the remainder of this encounter.
-pub fn rust_disable_phrase(comm: &mut Comm, index: c_int) {
-    comm.disable_phrase(index);
 }
 
 // ============================================================================
@@ -1048,11 +999,11 @@ mod tests {
         rust_set_talking_finished(comm, 1);
         assert_eq!(rust_is_talking_finished(comm), 1);
 
-        rust_set_comm_intro_mode(comm, 2);
-        assert_eq!(rust_get_comm_intro_mode(comm), 2);
+        comm.set_intro_mode(super::super::CommIntroMode::from(2));
+        assert_eq!(comm.intro_mode() as u32, 2);
 
-        rust_set_comm_fade_time(comm, 30);
-        assert_eq!(rust_get_comm_fade_time(comm), 30);
+        comm.set_fade_time(30);
+        assert_eq!(comm.fade_time(), 30);
 
         assert_eq!(rust_is_comm_input_paused(comm), 0);
         rust_set_comm_input_paused(comm, 1);
@@ -1150,19 +1101,19 @@ mod tests {
     /// the talk segue reads, and it must survive the hail's state reset.
     #[test]
     #[serial]
-    fn set_comm_intro_mode_feeds_the_mode_the_talk_segue_reads() {
+    fn supplied_intro_transition_survives_the_encounter_reset() {
         let mut owner = Comm::new();
         let comm = &mut owner;
         reset_state(comm);
         rust_init_communication(comm);
 
-        set_comm_intro_mode(comm, 3, 1680);
-        assert_eq!(rust_get_comm_intro_mode(comm), 3);
-        assert_eq!(rust_get_comm_fade_time(comm), 1680);
+        comm.set_intro_transition(super::super::CommIntroMode::from(3), 1680);
+        assert_eq!(comm.intro_mode() as u32, 3);
+        assert_eq!(comm.fade_time(), 1680);
 
         comm.reset_for_encounter();
-        assert_eq!(rust_get_comm_intro_mode(comm), 3);
-        assert_eq!(rust_get_comm_fade_time(comm), 1680);
+        assert_eq!(comm.intro_mode() as u32, 3);
+        assert_eq!(comm.fade_time(), 1680);
 
         rust_uninit_communication(comm);
     }

@@ -101,12 +101,7 @@ mod api {
             }
         }
         fn talking(&mut self, enabled: bool) {
-            let comm = &mut **self.comm.borrow_mut();
-            self.cx.borrow_mut().with_legacy(|| {
-                use crate::comm::comm_abi::enable_talking_anim;
-                // SAFETY: this synchronous callback owns the initialized communication display.
-                unsafe { enable_talking_anim(comm, i32::from(u8::from(enabled))) };
-            })
+            self.comm.borrow_mut().set_talking_animation(enabled);
         }
     }
 }

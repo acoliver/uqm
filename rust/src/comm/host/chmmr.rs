@@ -82,11 +82,10 @@ impl ChmmrApi for crate::comm::host::Host<'_, '_, Handler> {
         }
     }
     fn intro_mode(&mut self, mode: i32, duration: i32) {
-        let comm = &mut **self.comm.borrow_mut();
-        self.cx.borrow_mut().with_legacy(|| {
-            use crate::comm::comm_abi::set_comm_intro_mode;
-            set_comm_intro_mode(comm, mode as u32, duration as u32);
-        })
+        self.comm.borrow_mut().set_intro_transition(
+            crate::comm::CommIntroMode::from(mode as u32),
+            duration as u32,
+        );
     }
 }
 

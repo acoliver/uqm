@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod local_tests;
+
 mod chmmr;
 
 use crate::comm::races::script::*;
@@ -98,19 +101,11 @@ impl<H> DialogueHost<H> for Host<'_, '_, H> {
     }
 
     fn enabled(&self, phrase: u16) -> bool {
-        let comm = &mut **self.comm.borrow_mut();
-
-        self.cx
-            .borrow_mut()
-            .with_legacy(|| crate::comm::ffi::rust_phrase_enabled(comm, i32::from(phrase)) != 0)
+        self.comm.borrow().phrase_enabled(i32::from(phrase))
     }
 
     fn disable(&mut self, phrase: u16) {
-        let comm = &mut **self.comm.borrow_mut();
-
-        self.cx
-            .borrow_mut()
-            .with_legacy(|| crate::comm::ffi::rust_disable_phrase(comm, i32::from(phrase)))
+        self.comm.borrow_mut().disable_phrase(i32::from(phrase));
     }
 
     fn supplies(&self) -> Supplies {
@@ -155,9 +150,7 @@ impl<H> DialogueHost<H> for Host<'_, '_, H> {
     }
 
     fn disable_animation(&mut self, index: usize) {
-        let comm = &mut **self.comm.borrow_mut();
-
-        comm.data.definition.alien_ambient_array[index].anim_flags |= ANIM_DISABLED;
+        self.comm.borrow_mut().set_ambient_animation(index, false);
     }
 
     fn fade_palette(&mut self, index: u16, duration: i16) {

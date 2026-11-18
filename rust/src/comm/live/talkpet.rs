@@ -125,12 +125,7 @@ mod api {
             ) != 0
         }
         fn strobe(&mut self) {
-            let comm = &mut **self.comm.borrow_mut();
-
-            self.cx.borrow_mut().with_legacy(|| {
-                comm.data.definition.alien_ambient_array[16].anim_flags &=
-                    !crate::comm::races::script::ANIM_DISABLED;
-            })
+            self.comm.borrow_mut().set_ambient_animation(16, true);
         }
     }
 }

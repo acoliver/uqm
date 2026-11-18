@@ -193,17 +193,6 @@ pub unsafe fn alien_talk_segue(
     }
 }
 
-pub unsafe fn enable_talking_anim(comm: &mut Comm, enable: i32) {
-    if enable != 0 {
-        comm.data.definition.alien_talk_desc.anim_flags &= !16;
-    } else {
-        comm.data.definition.alien_talk_desc.anim_flags |= 16;
-    }
-}
-pub fn set_comm_intro_mode(comm: &mut Comm, mode: u32, duration: u32) {
-    super::ffi::set_comm_intro_mode(comm, mode, duration);
-}
-
 #[derive(Default)]
 pub(crate) struct SubtitleState {
     pub(crate) current: Option<SubtitleSnapshot>,
@@ -259,25 +248,22 @@ mod owner_tests {
         let second = Comm::new();
         first.data.definition.alien_text_baseline.x = 17;
         first.queue_phrase_callback(Some(move_baseline)).unwrap()(0);
-        // SAFETY: the serialized fixture owns both sessions and uses unloaded, null resource handles.
-        unsafe {
-            setup_subtitle_text_from_comm_data(&mut first);
-            assert_eq!(first.display.subtitle.baseline.x, 17);
-            check_subtitles(&mut first);
-            assert_eq!(first.display.subtitle.baseline.y, 23);
-            clear_subtitles(&mut first);
-            assert_eq!(clear_subtitles_pending(&mut first), 1);
-            comm_redraw_subtitles(&mut first, false);
-            assert_eq!(clear_subtitles_pending(&mut first), 1);
-            reset_clear_subtitles(&mut first);
-            assert_eq!(clear_subtitles_pending(&mut first), 0);
-            enable_talking_anim(&mut first, 0);
-            assert_eq!(first.data.definition.alien_talk_desc.anim_flags & 16, 16);
-            enable_talking_anim(&mut first, 1);
-            assert_eq!(first.data.definition.alien_talk_desc.anim_flags & 16, 0);
-            first.set_talking_finished(true);
-        }
-        set_comm_intro_mode(&mut first, 2, 840);
+        setup_subtitle_text_from_comm_data(&mut first);
+        assert_eq!(first.display.subtitle.baseline.x, 17);
+        check_subtitles(&mut first);
+        assert_eq!(first.display.subtitle.baseline.y, 23);
+        clear_subtitles(&mut first);
+        assert_eq!(clear_subtitles_pending(&mut first), 1);
+        comm_redraw_subtitles(&mut first, false);
+        assert_eq!(clear_subtitles_pending(&mut first), 1);
+        reset_clear_subtitles(&mut first);
+        assert_eq!(clear_subtitles_pending(&mut first), 0);
+        first.set_talking_animation(false);
+        assert_eq!(first.data.definition.alien_talk_desc.anim_flags & 16, 16);
+        first.set_talking_animation(true);
+        assert_eq!(first.data.definition.alien_talk_desc.anim_flags & 16, 0);
+        first.set_talking_finished(true);
+        first.set_intro_transition(super::super::CommIntroMode::from(2), 840);
         assert_eq!(first.fade_time(), 840);
         assert!(!second.is_talking_finished());
         assert_eq!(second.display.subtitle.baseline.x, 0);
