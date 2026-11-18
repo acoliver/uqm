@@ -4801,9 +4801,11 @@ mod os_tests {
     }
 
     fn assert_exact_child_reaped(pid: u32) {
-        let error = sys::process::has_exited_without_reaping(pid as libc::pid_t)
-            .expect_err("a reaped child is no longer waitable");
-        assert_eq!(error.raw_os_error(), Some(libc::ECHILD));
+        let result = sys::process::has_exited_without_reaping(pid as libc::pid_t);
+        assert!(
+            matches!(&result, Err(error) if error.raw_os_error() == Some(libc::ECHILD)),
+            "a reaped child is no longer waitable, got {result:?}"
+        );
     }
 
     #[test]
