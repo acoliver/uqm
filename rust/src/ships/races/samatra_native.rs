@@ -1,12 +1,7 @@
 //! Live Sa-Matra callbacks translated from ships/lastbat/lastbat.c.
 
-pub use super::samatra_state as observation;
 #[cfg(not(test))]
 pub(crate) mod engine {
-    #[cfg(not(test))]
-    use crate::battle::context_access::race_access::RaceOps;
-    #[cfg(not(test))]
-    use crate::battle::context_access::ContextOps;
     use crate::engine::battle::race::SaMatraState;
     use crate::engine::battle::views::Missile;
     use crate::engine::battle::{
@@ -16,7 +11,7 @@ pub(crate) mod engine {
         abi::*, angle_to_facing, cosine, normalize_facing, sine, wrap_delta,
     };
 
-    use super::observation;
+    use crate::engine::battle::observation::samatra as observation;
     const COMET_SPEED: SIZE = 12 << ONE_SHIFT;
     const SENTINEL_SPEED: SIZE = 8 << ONE_SHIFT;
     const RECOIL: i32 = (10 << ONE_SHIFT) << VELOCITY_SHIFT;
@@ -127,7 +122,7 @@ pub(crate) mod engine {
                 cx.element_mut(e).life = life;
                 cx.element_mut(e).flags &= !((DISAPPEARING | NONSOLID | COLLISION) as u16);
                 if let Some(blast) = blast {
-                    crate::battle::sounds::engine::unlink(cx, blast);
+                    cx.unlink_element(blast);
                     cx.dispose(blast);
                 }
             }
@@ -240,7 +235,7 @@ pub(crate) mod engine {
                 cx.element_mut(e).flags &= !((DISAPPEARING | NONSOLID | COLLISION) as u16);
                 cx.element_mut(e).life = NORMAL_LIFE as COUNT;
                 if let Some(blast) = blast {
-                    crate::battle::sounds::engine::unlink(cx, blast);
+                    cx.unlink_element(blast);
                     cx.dispose(blast);
                 }
             }

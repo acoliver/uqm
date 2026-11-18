@@ -26,6 +26,7 @@ impl CoordInner {
             native_battle_previous_ms: [None; 3],
             flight_position: FlightPositionTracker::default(),
             battle_loss: BattleLossTracker::default(),
+            pkunk_rebirth: Default::default(),
             flagship_turn: FlagshipTurnTracker::default(),
             planet_minerals: PlanetMineralsTracker::default(),
             battle_fight: BattleFightTracker::default(),

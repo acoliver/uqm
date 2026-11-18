@@ -1,0 +1,22 @@
+{
+  "schema": "uqm-start-save-provenance-v1",
+  "save": {
+    "path": "rust/scripts/saves/allied-starbase.sav",
+    "slot": 0,
+    "sha256": "f899d079a97f6d19944dd0db328e733504eb4a667d933853ee4ac8d481dee510",
+    "byte_length": 3276
+  },
+  "scenario": {
+    "name": "real-sol-starbase-alliance",
+    "path": "rust/scripts/real-sol-starbase-alliance.json",
+    "sha256": "8a350ecb2787a435fc0416b158fe71997cdcb695d4e67dcf8c8b93ad8ec37ba0"
+  },
+  "producing_commit": "69710305dafe07c494a29d9580c7d83b9d86a4e5",
+  "run_id": "art-real-sol-starbase-alliance/scenarios/0000",
+  "terminal_reason": "success",
+  "asserted_before_save": {
+    "action": "assert_ship_resources",
+    "fuel_on_board": 896,
+    "res_units": 2500
+  }
+}

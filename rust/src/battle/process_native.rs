@@ -1,8 +1,6 @@
 //! Live element, collision traversal, camera and display-list processing.
 //! Integer narrowing follows `uqm/process.c` and its header macros.
 
-#[cfg(not(test))]
-use crate::battle::context_access::ContextOps;
 use crate::math::wrap_delta;
 use crate::ships::native::abi::*;
 
@@ -220,20 +218,10 @@ pub(crate) mod engine {
         cx.damage(id, amount);
     }
 
-    pub(crate) fn untarget(cx: &mut Cx<'_>, dead: ElementId) {
-        let mut next = cx.elements().head();
-        while let Some(id) = next {
-            next = cx.elements().succ(id);
-            if cx.target(id) == Some(dead) {
-                cx.set_target(id, None);
-            }
-        }
-    }
-
     fn preprocess(cx: &mut Cx<'_>, e: ElementId) {
         if cx.elements()[e].life == 0 {
             if cx.elements()[e].parent != crate::engine::battle::Parent::None {
-                untarget(cx, e);
+                cx.untarget(e);
             }
             cx.element_mut(e).flags |= DISAPPEARING as ELEMENT_FLAGS;
             if let Some(death) = cx.elements()[e].death_func {
@@ -421,7 +409,7 @@ pub(crate) mod engine {
                                     if cx.elements()[test].parent
                                         != crate::engine::battle::Parent::None
                                     {
-                                        untarget(cx, test);
+                                        cx.untarget(test);
                                     }
                                     cx.element_mut(test).flags |=
                                         (COLLISION | DISAPPEARING) as ELEMENT_FLAGS;
@@ -434,7 +422,7 @@ pub(crate) mod engine {
                                     if cx.elements()[el].parent
                                         != crate::engine::battle::Parent::None
                                     {
-                                        untarget(cx, el);
+                                        cx.untarget(el);
                                     }
                                     cx.element_mut(el).flags |=
                                         (COLLISION | DISAPPEARING) as ELEMENT_FLAGS;

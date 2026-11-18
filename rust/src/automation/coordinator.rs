@@ -246,6 +246,7 @@ struct CoordInner {
     flight_position: FlightPositionTracker,
     /// Fleet sizes at the start of the battle a ship-loss wait is watching.
     battle_loss: BattleLossTracker,
+    pkunk_rebirth: super::pkunk_rebirth::Tracker,
     /// Facing at which the current `turn_flagship` step began.
     flagship_turn: FlagshipTurnTracker,
     /// Ticks and trip of the current `collect_planet_minerals` step.
@@ -982,49 +983,8 @@ impl AutomationObserver {
             }
         } else if let Some(result) = self.service_planet_side_wait(inner) {
             scheduler_event = self.record_planet_side_result(inner, result, scheduler_event);
-        } else if let Some(Action::WaitForBattleFrames(wait)) =
-            self.actions.get(inner.sched_state.step_index)
-        {
-            let actual = crate::automation::battle_observer::current_frame();
-            if battle_frame_floor_reached(actual, wait.minimum) {
-                inner.verified_battle_frames = inner.verified_battle_frames.max(actual);
-                scheduler_event = SchedulerEvent::ConditionReached;
-                self.write_trace_labeled(
-                    inner,
-                    RecordKind::SemanticAssertion,
-                    format!(
-                        "battle_frames_reached:count={actual}:minimum={}",
-                        wait.minimum
-                    ),
-                );
-            }
-        } else if let Some(Action::WaitForBattleShipLoss(wait)) =
-            self.actions.get(inner.sched_state.step_index)
-        {
-            match inner.battle_loss.observe(
-                mode::require_live(world, &self.ui, self.scene.lock().active_scene()),
-                crate::automation::battle_observer::current_frame(),
-                battle_outcome::live_fleets(),
-                wait.minimum_ships,
-            ) {
-                Ok(Some(proof)) => {
-                    scheduler_event = SchedulerEvent::ConditionReached;
-                    self.write_trace_labeled(
-                        inner,
-                        RecordKind::SemanticAssertion,
-                        proof.trace_label(),
-                    );
-                }
-                Ok(None) => {}
-                Err(error) => {
-                    self.write_trace_labeled(
-                        inner,
-                        RecordKind::SemanticAssertion,
-                        error.trace_label(),
-                    );
-                    self.set_terminal(inner, TerminalClass::SemanticMismatch);
-                }
-            }
+        } else if let Some(result) = self.service_battle_wait(inner, world, scheduler_event) {
+            scheduler_event = result;
         } else if let Some(Action::WaitForState(wait)) =
             self.actions.get(inner.sched_state.step_index)
         {

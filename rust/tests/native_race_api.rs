@@ -296,7 +296,7 @@ fn native_races_cannot_escape_the_real_accessor_boundary() -> Result<(), Box<dyn
         ("legacy_table", "fn probe(cx: &mut Cx<'_>, id: ElementId) { cx.records()[id].next.image.frames = crate::engine::battle::views::Frames::ABSENT; }", "E0599"),
         ("legacy_subject", "fn probe(cx: &mut Cx<'_>, raw: &crate::engine::battle::record::ElementRecord) { let _ = cx.legacy_subject(raw); }", "E0599"),
         ("sound", "fn probe(cx: &mut Cx<'_>) { cx.queue_sound(1, None); }", "E0599"),
-        ("sound_trait", "use crate::battle::context_access::SoundOps;", "E0603"),
+        ("sound_operations", "use crate::engine::battle::race_ops;", "E0603"),
         ("subject", "fn probe(mut subject: crate::engine::battle::Subject) { subject.intersect.IntersectStamp.frame = std::ptr::NonNull::dangling().as_ptr(); }", "E0616"),
     ];
     let probes = probes.into_iter().chain([
@@ -320,7 +320,7 @@ fn native_races_cannot_escape_the_real_accessor_boundary() -> Result<(), Box<dyn
     for (name, probe, error) in probes {
         let input = scratch.path().join(format!("{name}.rs"));
         let output = scratch.path().join(format!("{name}.rmeta"));
-        std::fs::write(&input, format!("{actual_modules}\nmod native_race_probe {{ use crate::battle::context_access::ContextOps; use crate::battle::context_access::race_access::RaceOps; use crate::engine::battle::{{Cx, ElementId, ShipId}}; {probe} }}"))?;
+        std::fs::write(&input, format!("{actual_modules}\nmod native_race_probe {{ use crate::engine::battle::{{Cx, ElementId, ShipId}}; {probe} }}"))?;
         let mut command = Command::new("rustc");
         command
             .args([

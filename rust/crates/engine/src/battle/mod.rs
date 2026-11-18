@@ -6,8 +6,13 @@ pub mod frames;
 pub mod hooks;
 pub mod input;
 pub use access::link_queue;
+pub mod ai_constants;
+pub mod cyborg;
 pub mod net;
+pub mod observation;
 pub mod race;
+mod race_ops;
+pub mod race_services;
 pub use access::record;
 
 pub use access::table;

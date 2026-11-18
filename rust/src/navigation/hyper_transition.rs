@@ -2,7 +2,6 @@
 use super::abi::*;
 use super::{get, set};
 use crate::battle::context_access::navigation::NavigationOps;
-use crate::battle::context_access::StarOps;
 use crate::engine::StoryKey;
 use std::ptr;
 

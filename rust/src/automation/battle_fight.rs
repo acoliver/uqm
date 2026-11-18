@@ -57,14 +57,7 @@ pub const fn arena_size(screen_width: i32, screen_height: i32) -> (i32, i32) {
     ((screen_width - STATUS_WIDTH) << 5, screen_height << 5)
 }
 
-/// One ship in the battle, as `ELEMENT` and `STARSHIP` publish it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ShipState {
-    pub x: i32,
-    pub y: i32,
-    pub facing: u8,
-    pub crew: u16,
-}
+use crate::engine::battle::observation::ShipState;
 
 /// One read of the running battle.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

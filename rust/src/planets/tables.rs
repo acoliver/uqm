@@ -7,8 +7,8 @@
 use crate::engine::world::planet::{ElementEntry, PlanetFrame};
 use std::ffi::CStr;
 
-use crate::comm::dispatch::CPoint;
-use crate::savegame::runtime::star::{CStarDesc, CATALOG_LEN};
+use crate::engine::graphics::native_abi::point as CPoint;
+use crate::engine::world::{CStarDesc, CATALOG_LEN};
 
 /// Entries of `starmap_array`, including the terminating sentinel.
 pub const STAR_CATALOG_LEN: usize = CATALOG_LEN;

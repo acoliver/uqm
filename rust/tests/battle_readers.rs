@@ -1,4 +1,3 @@
-use uqm_rust::battle::ContextOps;
 #[path = "support/battle.rs"]
 mod battle;
 #[path = "support/battle_context.rs"]
@@ -31,7 +30,7 @@ fn legacy_slylandro_receives_the_fifth_junk_concern() {
             ship.descriptor_mut().ship_info.energy_level = 0;
             ship.ship_mut().special_counter = 0;
             uqm_rust::app::bridge::enter(|cx| {
-                uqm_rust::battle::cyborg_native::tactical(cx, ship.ship_id)
+                uqm_engine::battle::cyborg::tactical(cx, ship.ship_id)
             });
             assert_ne!(ship.ship_mut().ship_input_state & SPECIAL as u8, 0);
         }

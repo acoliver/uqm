@@ -1,8 +1,6 @@
 //! Androsynth behavior, retaining the original integer widths and RNG order.
 #[cfg(not(test))]
 pub(crate) mod engine {
-    #[cfg(not(test))]
-    use crate::battle::context_access::ContextOps;
     use crate::engine::battle::{
         Concerns, Cx, ElementId, Race, RaceState, ShipId, WeaponOrigin, WeaponSpawn,
     };
@@ -312,7 +310,7 @@ pub(crate) mod engine {
                 cx.race_stats_mut(ss).characteristics.turn_wait = BLAZER_TURN_WAIT;
             }
             if cx.race_stats(ss).ship_info.energy_level == 0 {
-                cx.element_mut(ship).velocity = crate::battle::velocity::VelocityDesc::new();
+                cx.element_mut(ship).velocity = crate::engine::math::velocity::VelocityDesc::new();
                 flags &= !((LEFT | RIGHT | SHIP_AT_MAX_SPEED | SHIP_BEYOND_MAX_SPEED) as u16);
                 cx.race_stats_mut(ss).characteristics.turn_wait =
                     cx.race_stats(ss).characteristics.special_wait;

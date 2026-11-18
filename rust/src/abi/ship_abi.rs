@@ -1,3 +1,10 @@
+pub use crate::engine::battle::ai_constants::{
+    CREW_OBJECT_INDEX, DONT_CHASE, ENEMY_SHIP_INDEX, ENEMY_WEAPON_INDEX,
+    FIRES_FORE, FIRES_LEFT, FIRST_EMPTY_INDEX, GRAVITY_MASS_INDEX, IGNORE_SIMILAR,
+    IMMEDIATE_WEAPON, LEFT, MAX_SHIP_MASS, MEDIUM_SHIP, MOVEMENT_STATE_AVOID,
+    MOVEMENT_STATE_ENTICE, MOVEMENT_STATE_NO_MOVEMENT, MOVEMENT_STATE_PURSUE, RIGHT,
+    SEEKING_SPECIAL, SEEKING_WEAPON, SPECIAL, THRUST, WEAPON,
+};
 pub use crate::engine::battle::flags::{
     APPEARING, DISAPPEARING, FINITE_LIFE, MAX_TIME_VALUE, NONSOLID, PLAYER_SHIP, PRE_PROCESS,
 };
@@ -135,7 +142,6 @@ pub const VELOCITY_SCALE: u32 = 32;
 pub use crate::engine::battle::flags::NORMAL_LIFE;
 pub use crate::engine::battle::flags::CHANGING;
 pub use crate::engine::battle::flags::COLLISION;
-pub const IGNORE_SIMILAR: u32 = 256;
 pub const DEFY_PHYSICS: u32 = 512;
 pub const POST_PROCESS: u32 = 4096;
 pub const IGNORE_VELOCITY: u32 = 8192;
@@ -148,7 +154,6 @@ pub use crate::engine::battle::flags::NEUTRAL_PLAYER_NUM;
 pub const MAX_DISPLAY_ELEMENTS: u32 = 150;
 pub const MAX_CREW_SIZE: u32 = 42;
 pub const MAX_ENERGY_SIZE: u32 = 42;
-pub const MAX_SHIP_MASS: u32 = 10;
 pub const UNDEFINED_LEVEL: u32 = 0;
 pub const NUM_MELEE_ROWS: u32 = 2;
 pub const NUM_MELEE_COLUMNS: u32 = 7;
@@ -434,23 +439,12 @@ pub const COLLISION_THRUST_WAIT: u32 = 3;
 pub const SKIP_COLLISION: u32 = 80;
 pub const RACES_PER_PLAYER: u32 = 7;
 pub const MAX_SHIPS_PER_SIDE: u32 = 14;
-pub const SEEKING_WEAPON: u32 = 4;
-pub const SEEKING_SPECIAL: u32 = 8;
 pub const POINT_DEFENSE: u32 = 16;
-pub const IMMEDIATE_WEAPON: u32 = 32;
 pub use crate::engine::battle::flags::CREW_IMMUNE;
-pub const FIRES_FORE: u32 = 128;
 pub const FIRES_RIGHT: u32 = 256;
 pub const FIRES_AFT: u32 = 512;
-pub const FIRES_LEFT: u32 = 1024;
 pub const SHIELD_DEFENSE: u32 = 2048;
-pub const DONT_CHASE: u32 = 4096;
 pub const PLAYER_CAPTAIN: u32 = 8192;
-pub const LEFT: u32 = 1;
-pub const RIGHT: u32 = 2;
-pub const THRUST: u32 = 4;
-pub const WEAPON: u32 = 8;
-pub const SPECIAL: u32 = 16;
 pub use crate::engine::battle::flags::LOW_ON_ENERGY;
 pub use crate::engine::battle::flags::SHIP_BEYOND_MAX_SPEED;
 pub use crate::engine::battle::flags::SHIP_AT_MAX_SPEED;
@@ -459,7 +453,6 @@ pub const PLAY_VICTORY_DITTY: u32 = 512;
 pub const RPG_PLAYER_NUM: u32 = 0;
 pub use crate::engine::battle::flags::NPC_PLAYER_NUM;
 pub const FAST_SHIP: u32 = 150;
-pub const MEDIUM_SHIP: u32 = 45;
 pub const SLOW_SHIP: u32 = 25;
 pub const CREW_XOFFS: u32 = 4;
 pub const ENERGY_XOFFS: u32 = 52;
@@ -1213,10 +1206,6 @@ pub const SPECIES_ID_SA_MATRA_ID: SPECIES_ID = 27;
 pub const SPECIES_ID_UR_QUAN_PROBE_ID: SPECIES_ID = 28;
 pub const SPECIES_ID_NUM_SPECIES_ID: SPECIES_ID = 29;
 pub type SPECIES_ID = ::std::os::raw::c_uint;
-pub const MOVEMENT_STATE_PURSUE: MOVEMENT_STATE = 0;
-pub const MOVEMENT_STATE_AVOID: MOVEMENT_STATE = 1;
-pub const MOVEMENT_STATE_ENTICE: MOVEMENT_STATE = 2;
-pub const MOVEMENT_STATE_NO_MOVEMENT: MOVEMENT_STATE = 3;
 pub use crate::engine::world::queues::ShipFragment as SHIP_FRAGMENT;
 pub use crate::engine::world::queues::FleetInfo as FLEET_INFO;
 pub const DEAD_GUY: _bindgen_ty_3 = 0;
@@ -1254,11 +1243,6 @@ pub type _bindgen_ty_4 = ::std::os::raw::c_uint;
 #[cfg(not(test))]
 pub use crate::supermelee::native::battle_picker::live::get_initial_melee_star_ships;
 
-pub const ENEMY_SHIP_INDEX: _bindgen_ty_5 = 0;
-pub const CREW_OBJECT_INDEX: _bindgen_ty_5 = 1;
-pub const ENEMY_WEAPON_INDEX: _bindgen_ty_5 = 2;
-pub const GRAVITY_MASS_INDEX: _bindgen_ty_5 = 3;
-pub const FIRST_EMPTY_INDEX: _bindgen_ty_5 = 4;
 pub type _bindgen_ty_5 = ::std::os::raw::c_uint;
 
 #[cfg(not(test))]

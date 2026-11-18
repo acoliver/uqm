@@ -114,7 +114,7 @@ impl Observer<Option<super::campaign_state::CampaignView>> for Handle {
     }
 
     fn battle_diagnostics(&self) -> bool {
-        self.0.native_diagnostics()
+        self.0.native_diagnostics() || self.0.observes_pkunk_rebirth()
     }
 
     fn battle_tick(&mut self, tick: &crate::engine::observe::battle::BattleTick) {
@@ -134,7 +134,7 @@ impl Observer<Option<super::campaign_state::CampaignView>> for Handle {
             CheckpointView::PlanetSideReport(active) => {
                 *self.0.planet_side_report.lock() = active;
             }
-            CheckpointView::BattleReset => {}
+            CheckpointView::BattleReset => self.0.reset_pkunk_observation(),
             CheckpointView::BattleAdvanced => {
                 self.0
                     .native_battle_frame_completed(crate::mainloop::types::ActivityValue(

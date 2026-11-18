@@ -13,11 +13,8 @@ pub use context_access::ai_legacy::AiOps;
 #[cfg(not(test))]
 pub use context_access::navigation::NavigationOps;
 #[cfg(not(test))]
-pub use context_access::race_access::RaceOps;
-#[cfg(not(test))]
-pub use context_access::{ContextOps, StarContact, StarOps, StatusOps, TransitionOps};
+pub use context_access::{ContextOps, StatusOps};
 
-pub mod cyborg_native;
 pub mod element;
 pub mod encount_native;
 pub mod ffi;
@@ -34,6 +31,7 @@ pub mod sounds;
 pub mod status_native;
 pub mod tactrans_native;
 pub use crate::math::velocity;
+mod race_services;
 pub mod services;
 pub mod weapon_native;
 

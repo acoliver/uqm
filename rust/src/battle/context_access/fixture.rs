@@ -1,6 +1,4 @@
 //! Typed, value-only command planning views for synchronous automation fixtures.
-#[cfg(not(test))]
-use crate::battle::context_access::race_access::RaceOps;
 #[cfg(test)]
 #[test]
 fn ship_detachment_is_an_explicit_fixture_command() {
@@ -242,7 +240,7 @@ impl FixtureOps for Cx<'_> {
     }
 
     fn fixture_think(&mut self, ship: ShipId, crew: u16) {
-        let input = crate::battle::cyborg_native::tactical(self, ship);
+        let input = crate::engine::battle::cyborg::tactical(self, ship);
         self.ship_state_mut(ship).input = crate::battle::battle_native::ship_input(input, crew);
     }
     fn fixture_intelligence(

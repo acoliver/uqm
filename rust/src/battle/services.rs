@@ -13,9 +13,10 @@ use crate::ships::native::abi::OPT_PC;
 #[cfg(not(test))]
 pub fn install(kernel: &mut crate::engine::Kernel) {
     kernel.install_primitive_services(&ModeServices);
+    kernel.install_race_services(&ModeServices);
 }
 #[cfg(not(test))]
-struct ModeServices;
+pub(super) struct ModeServices;
 #[cfg(not(test))]
 impl PrimitiveServices for ModeServices {
     fn draw_statistics(&self, cx: &mut Cx<'_>, ship: ShipId, crew: i16, energy: i16) {

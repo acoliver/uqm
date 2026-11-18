@@ -1,4 +1,3 @@
-use uqm_rust::battle::{RaceOps, TransitionOps};
 #[path = "support/battle.rs"]
 mod battle;
 #[path = "support/battle_context.rs"]

@@ -9,7 +9,23 @@ impl AutomationObserver {
         self.native_trace.is_some() && !crate::time::source::is_replay()
     }
 
+    pub(crate) fn observes_pkunk_rebirth(&self) -> bool {
+        self.actions
+            .iter()
+            .any(|action| matches!(action, Action::WaitForPkunkRebirth(_)))
+    }
+
+    pub(crate) fn reset_pkunk_observation(&self) {
+        self.inner.lock().pkunk_rebirth.finish();
+    }
+
     pub(crate) fn trace_battle_tick(&self, tick: &BattleTick) {
+        if self.observes_pkunk_rebirth() {
+            self.inner
+                .lock()
+                .pkunk_rebirth
+                .observe(crate::collections::observation::current_frame(), tick);
+        }
         self.trace_native_battle(Some(*tick), None);
     }
 
@@ -68,6 +84,89 @@ impl AutomationObserver {
                 .to_jsonl()
                 .unwrap_or_else(|error| panic!("serialize native battle sample: {error}")),
         );
+    }
+}
+
+impl AutomationObserver {
+    pub(super) fn service_battle_wait(
+        &self,
+        inner: &mut CoordInner,
+        world: &campaign_state::CampaignView,
+        mut scheduler_event: SchedulerEvent,
+    ) -> Option<SchedulerEvent> {
+        match self.actions.get(inner.sched_state.step_index)? {
+            Action::WaitForBattleFrames(wait) => {
+                self.service_battle_frames(inner, wait, scheduler_event)
+            }
+            Action::WaitForPkunkRebirth(wait) => {
+                self.service_pkunk_wait(inner, *wait, scheduler_event)
+            }
+            Action::WaitForBattleShipLoss(wait) => {
+                match inner.battle_loss.observe(
+                    mode::require_live(world, &self.ui, self.scene.lock().active_scene()),
+                    crate::automation::battle_observer::current_frame(),
+                    battle_outcome::live_fleets(),
+                    wait.minimum_ships,
+                ) {
+                    Ok(Some(proof)) => {
+                        scheduler_event = SchedulerEvent::ConditionReached;
+                        self.write_trace_labeled(
+                            inner,
+                            RecordKind::SemanticAssertion,
+                            proof.trace_label(),
+                        );
+                    }
+                    Ok(None) => {}
+                    Err(error) => {
+                        self.write_trace_labeled(
+                            inner,
+                            RecordKind::SemanticAssertion,
+                            error.trace_label(),
+                        );
+                        self.set_terminal(inner, TerminalClass::SemanticMismatch);
+                    }
+                }
+                Some(scheduler_event)
+            }
+            _ => None,
+        }
+    }
+    fn service_battle_frames(
+        &self,
+        inner: &mut CoordInner,
+        wait: &crate::automation::script::WaitForBattleFramesStep,
+        mut scheduler_event: SchedulerEvent,
+    ) -> Option<SchedulerEvent> {
+        let actual = crate::automation::battle_observer::current_frame();
+        if battle_frame_floor_reached(actual, wait.minimum) {
+            inner.verified_battle_frames = inner.verified_battle_frames.max(actual);
+            scheduler_event = SchedulerEvent::ConditionReached;
+            self.write_trace_labeled(
+                inner,
+                RecordKind::SemanticAssertion,
+                format!(
+                    "battle_frames_reached:count={actual}:minimum={}",
+                    wait.minimum
+                ),
+            );
+        }
+        Some(scheduler_event)
+    }
+    fn service_pkunk_wait(
+        &self,
+        inner: &mut CoordInner,
+        wait: crate::automation::pkunk_rebirth::WaitStep,
+        mut scheduler_event: SchedulerEvent,
+    ) -> Option<SchedulerEvent> {
+        inner.pkunk_rebirth.begin(wait.side);
+        if let Some(proof) = inner.pkunk_rebirth.proof(wait) {
+            scheduler_event = SchedulerEvent::ConditionReached;
+            self.write_trace_labeled(inner, RecordKind::SemanticAssertion, proof.trace_label());
+            if wait.phase == crate::automation::pkunk_rebirth::Phase::Restored {
+                inner.pkunk_rebirth.finish();
+            }
+        }
+        Some(scheduler_event)
     }
 }
 

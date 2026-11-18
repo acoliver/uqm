@@ -1,11 +1,7 @@
 //! Ship death, replacement, warp transitions, and battle-end synchronization.
 
 #[cfg(not(test))]
-use crate::battle::context_access::race_access::RaceOps;
-#[cfg(not(test))]
 use crate::battle::context_access::ContextOps;
-#[cfg(not(test))]
-use crate::battle::context_access::TransitionOps;
 use crate::ships::native::abi;
 
 pub const fn minimum_ditty_frames(ticks_per_second: u32) -> u16 {

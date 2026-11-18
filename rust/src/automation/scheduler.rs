@@ -7,6 +7,7 @@
 //! @requirement REQ-SCHED-001..003, REQ-DET-001
 
 mod assertions;
+mod battle_waits;
 use assertions::reduce_capture_and_assertion;
 
 use crate::automation::script::{Action, MainMenuTransition, MenuKey, PlayerKey};
@@ -329,6 +330,7 @@ fn valid_action_phase(action: &Action, phase: ActionPhase) -> bool {
         | Action::SelectPlanetMenu(_)
         | Action::PickBattleShip(_)
         | Action::WaitForBattleFrames(_)
+        | Action::WaitForPkunkRebirth(_)
         | Action::WaitForBattleShipLoss(_)
         | Action::WaitForDispatch(_)
         | Action::WaitForState(_)
@@ -453,21 +455,9 @@ pub fn scheduler_reduce(
             }
         }
         SchedulerEvent::ConditionReached => {
-            if matches!(
+            if valid_action_phase(
                 current_action,
-                Action::WaitForCommunicationEnd(_)
-                    | Action::WaitForCommunicationReplay(_)
-                    | Action::WaitForBattleFrames(_)
-                    | Action::WaitForBattleShipLoss(_)
-                    | Action::WaitForDispatch(_)
-                    | Action::WaitForState(_)
-                    | Action::SelectResponse(_)
-                    | Action::SelectCommunicationResponse(_)
-                    | Action::WaitForCommunicationResponses(_)
-                    | Action::WaitForPlanetSideStart(_)
-                    | Action::WaitForPlanetSideEnd(_)
-                    | Action::SelectPlanetMenu(_)
-                    | Action::PickBattleShip(_)
+                ActionPhase::WaitingCondition { remaining: 0 },
             ) {
                 match state.phase {
                     ActionPhase::WaitingForInput
@@ -1047,6 +1037,9 @@ fn reduce_condition_wait(
     action: &Action,
     sv: u64,
 ) -> Option<SchedulerTransition> {
+    if let Some(transition) = battle_waits::reduce(action, state, sv) {
+        return Some(transition);
+    }
     Some(match (action, state.phase) {
         (Action::SelectPlanetMenu(select), ActionPhase::WaitingForInput) => SchedulerTransition {
             new_state: SchedulerState {
@@ -1171,72 +1164,6 @@ fn reduce_condition_wait(
                 new_state: SchedulerState {
                     phase: ActionPhase::WaitingCondition {
                         remaining: remaining - 1,
-                    },
-                    state_version: sv,
-                    ..*state
-                },
-                effects: EffectPlan::none(),
-            }
-        }
-        (Action::WaitForBattleFrames(wait), ActionPhase::WaitingForInput) => SchedulerTransition {
-            new_state: SchedulerState {
-                phase: ActionPhase::WaitingCondition {
-                    remaining: wait.max_ticks.saturating_sub(1),
-                },
-                state_version: sv,
-                ..*state
-            },
-            effects: EffectPlan::none(),
-        },
-        (Action::WaitForBattleFrames(_), ActionPhase::WaitingCondition { remaining: 0 }) => {
-            SchedulerTransition {
-                new_state: SchedulerState {
-                    terminal: Some(TerminalOutcome::SemanticMismatch),
-                    state_version: sv,
-                    ..*state
-                },
-                effects: EffectPlan::none(),
-            }
-        }
-        (Action::WaitForBattleFrames(_), ActionPhase::WaitingCondition { remaining }) => {
-            SchedulerTransition {
-                new_state: SchedulerState {
-                    phase: ActionPhase::WaitingCondition {
-                        remaining: remaining.saturating_sub(1),
-                    },
-                    state_version: sv,
-                    ..*state
-                },
-                effects: EffectPlan::none(),
-            }
-        }
-        (Action::WaitForBattleShipLoss(wait), ActionPhase::WaitingForInput) => {
-            SchedulerTransition {
-                new_state: SchedulerState {
-                    phase: ActionPhase::WaitingCondition {
-                        remaining: wait.max_ticks.saturating_sub(1),
-                    },
-                    state_version: sv,
-                    ..*state
-                },
-                effects: EffectPlan::none(),
-            }
-        }
-        (Action::WaitForBattleShipLoss(_), ActionPhase::WaitingCondition { remaining: 0 }) => {
-            SchedulerTransition {
-                new_state: SchedulerState {
-                    terminal: Some(TerminalOutcome::SemanticMismatch),
-                    state_version: sv,
-                    ..*state
-                },
-                effects: EffectPlan::none(),
-            }
-        }
-        (Action::WaitForBattleShipLoss(_), ActionPhase::WaitingCondition { remaining }) => {
-            SchedulerTransition {
-                new_state: SchedulerState {
-                    phase: ActionPhase::WaitingCondition {
-                        remaining: remaining.saturating_sub(1),
                     },
                     state_version: sv,
                     ..*state
@@ -3511,6 +3438,11 @@ mod budgeted_wait_tests {
                 max_ticks,
             }),
             Action::PickBattleShip(PickBattleShipStep { max_ticks }),
+            Action::WaitForPkunkRebirth(crate::automation::pkunk_rebirth::WaitStep {
+                side: 0,
+                phase: crate::automation::pkunk_rebirth::Phase::Dead,
+                max_ticks,
+            }),
             Action::WaitForBattleShipLoss(WaitForBattleShipLossStep {
                 minimum_ships: 1,
                 max_ticks,

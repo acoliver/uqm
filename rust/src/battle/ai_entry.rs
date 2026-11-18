@@ -50,7 +50,7 @@ pub(crate) fn computer_input(
         Route::None => 0,
         Route::Human => cx.human_input(player),
         Route::Tactical(escape) => {
-            let mut input = crate::battle::cyborg_native::tactical(
+            let mut input = crate::engine::battle::cyborg::tactical(
                 cx,
                 ship.unwrap_or_else(|| panic!("missing checked battle value")),
             );
