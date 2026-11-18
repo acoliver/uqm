@@ -65,11 +65,24 @@ pub struct World {
     pub current_star: Option<StarId>,
     pub encounter_race: i16,
     pub encounter_group: u8,
+    campaign_probe: Option<crate::battle::access::CampaignProbeAssets>,
     fleet_resources:
         std::collections::BTreeMap<u32, crate::battle::link_queue::ShipPickerResources>,
 }
 
 impl World {
+    pub fn retain_campaign_probe(&mut self, assets: crate::battle::access::CampaignProbeAssets) {
+        assert!(
+            self.campaign_probe.is_none(),
+            "campaign probe already loaded"
+        );
+        self.campaign_probe = Some(assets);
+    }
+
+    pub fn release_campaign_probe(&mut self) {
+        self.campaign_probe = None;
+    }
+
     pub fn retain_fleet_resources(
         &mut self,
         species: u32,
@@ -110,6 +123,7 @@ impl World {
     pub fn new() -> Self {
         Self {
             activity: activity::ActivityState::new(0),
+            campaign_probe: None,
             fleet_resources: std::collections::BTreeMap::new(),
             data: WorldData::new(),
             next_activity: 0,

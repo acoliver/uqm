@@ -1,19 +1,53 @@
 //! Resource ownership follows a descriptor through attachment and detachment.
 use crate::battle::{frames::FrameArray, record::*, RaceDesc};
-use crate::graphics::native_abi::FRAME;
 #[cfg(not(test))]
 use crate::graphics::{drawable_abi::DestroyDrawable, pixmap_abi::ReleaseDrawable};
+use crate::graphics::{drawable_abi::LoadedDrawable, native_abi::FRAME};
 use crate::strings::owned_table::LoadedTextTable;
 
 #[derive(Debug)]
 pub struct ShipAssets {
-    icons: FRAME,
-    melee_icon: FRAME,
-    strings: Option<LoadedTextTable>,
+    navigation: ShipNavigationAssets,
     captain: FRAME,
     victory: Option<crate::sound::resource_types::LoadedMusic>,
     sounds: Option<crate::sound::owned_bank::LoadedSoundBank>,
     animations: [FrameArray; 3],
+}
+
+struct ShipNavigationAssets {
+    // Release authority follows melee icon, icons, then strings, including on campaign teardown.
+    melee_icon: Option<LoadedDrawable>,
+    icons: Option<LoadedDrawable>,
+    strings: Option<LoadedTextTable>,
+}
+
+impl std::fmt::Debug for ShipNavigationAssets {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ShipNavigationAssets")
+            .field(
+                "melee_icon",
+                &self.melee_icon.as_ref().map(|icon| icon.lease().frame(0)),
+            )
+            .field(
+                "icons",
+                &self.icons.as_ref().map(|icon| icon.lease().frame(0)),
+            )
+            .field("strings", &self.strings)
+            .finish()
+    }
+}
+
+/// The probe's loaded resources outlive its descriptor and belong to one campaign.
+#[derive(Debug)]
+pub struct CampaignProbeAssets {
+    _navigation: ShipNavigationAssets,
+}
+
+fn icon_frame(owner: &Option<LoadedDrawable>) -> FRAME {
+    owner
+        .as_ref()
+        .and_then(|icon| icon.lease().frame(0))
+        .unwrap_or(std::ptr::null_mut())
 }
 
 impl RaceDesc {
@@ -28,8 +62,12 @@ impl RaceDesc {
             .as_ref()
             .unwrap_or_else(|| panic!("picker resources require loaded assets"));
         crate::battle::link_queue::ShipPickerResources::new(
-            assets.strings.as_ref().and_then(|table| table.entry(0)),
-            crate::battle::frames::FrameSelection::retain(assets.icons),
+            assets
+                .navigation
+                .strings
+                .as_ref()
+                .and_then(|table| table.entry(0)),
+            crate::battle::frames::FrameSelection::retain(icon_frame(&assets.navigation.icons)),
         )
     }
 }
@@ -39,6 +77,7 @@ impl RaceDescriptor {
         self.assets
             .as_ref()
             .unwrap_or_else(|| panic!("ship labels require loaded assets"))
+            .navigation
             .strings
             .as_ref()
             .map_or((c"", 0), |table| table.label(index))
@@ -81,14 +120,11 @@ fn load_animation_set(keys: [Option<&'static std::ffi::CStr>; 3]) -> Option<Fram
 #[cfg(not(test))]
 impl RaceDesc {
     pub fn initialize_assets(&mut self, battle: bool) -> bool {
-        let strings = self.initialize_icons();
+        let navigation = self.initialize_icons();
         let loaded = !battle || self.initialize_battle_assets();
         let data = &self.raw.ship_data;
-        let info = self.info();
         self.raw.assets = Some(Box::new(ShipAssets {
-            icons: info.icons,
-            melee_icon: info.melee_icon,
-            strings,
+            navigation,
             captain: data.captain_control.background,
             victory: self.raw.loaded_victory.take(),
             sounds: self.raw.loaded_sounds.take(),
@@ -97,19 +133,22 @@ impl RaceDesc {
         loaded
     }
 
-    fn initialize_icons(&mut self) -> Option<LoadedTextTable> {
+    fn initialize_icons(&mut self) -> ShipNavigationAssets {
+        let resources = &self.raw.resources;
+        let icons = resources.icons.and_then(LoadedDrawable::load);
+        let melee_icon = resources.melee_icon.and_then(LoadedDrawable::load);
+        let strings = resources.strings.and_then(LoadedTextTable::load);
         let info = &mut self.raw.ship_info;
-        if let Some(key) = self.raw.resources.icons {
-            info.icons = crate::battle::frames::load_graphic(key);
-        }
-        if let Some(key) = self.raw.resources.melee_icon {
-            info.melee_icon = crate::battle::frames::load_graphic(key);
-        }
-        let strings = self.raw.resources.strings.and_then(LoadedTextTable::load);
+        info.icons = icon_frame(&icons);
+        info.melee_icon = icon_frame(&melee_icon);
         info.race_strings = strings
             .as_ref()
             .map_or(std::ptr::null_mut(), |table| table.as_raw().cast());
-        strings
+        ShipNavigationAssets {
+            melee_icon,
+            icons,
+            strings,
+        }
     }
 
     fn initialize_battle_assets(&mut self) -> bool {
@@ -165,17 +204,43 @@ impl RaceDesc {
         true
     }
 
-    pub fn unload(mut self, world: &mut crate::World, icons: bool, battle: bool) {
+    pub fn unload(mut self, world: &mut crate::World, battle: bool) {
         self.cleanup(world);
         crate::collections::observation::record(
             crate::collections::observation::Event::ResourcesFree {
                 descriptor: self.address(),
-                icons,
+                icons: true,
                 battle,
             },
         );
         if let Some(assets) = self.raw.assets.take() {
-            assets.release(icons, battle);
+            assets.release(battle);
+        }
+    }
+
+    pub fn into_campaign_probe(mut self, world: &mut crate::World) -> CampaignProbeAssets {
+        self.cleanup(world);
+        crate::collections::observation::record(
+            crate::collections::observation::Event::ResourcesFree {
+                descriptor: self.address(),
+                icons: false,
+                battle: false,
+            },
+        );
+        let assets = self
+            .raw
+            .assets
+            .take()
+            .unwrap_or_else(|| panic!("campaign probe requires loaded assets"));
+        assert!(
+            assets.animations.iter().all(FrameArray::is_absent)
+                && assets.captain.is_null()
+                && assets.victory.is_none()
+                && assets.sounds.is_none(),
+            "campaign probe must be loaded without battle resources"
+        );
+        CampaignProbeAssets {
+            _navigation: assets.navigation,
         }
     }
 
@@ -186,6 +251,7 @@ impl RaceDesc {
             .as_ref()
             .unwrap_or_else(|| panic!("catalog descriptor has no loaded assets"));
         assets
+            .navigation
             .strings
             .as_ref()
             .and_then(|table| table.text(2))
@@ -196,7 +262,7 @@ impl RaceDesc {
 
 #[cfg(not(test))]
 impl ShipAssets {
-    fn release(self, icons: bool, battle: bool) {
+    fn release(self, battle: bool) {
         if battle {
             for array in &self.animations {
                 let mut raw = array.views().map(|frame| frame.raw());
@@ -210,16 +276,7 @@ impl ShipAssets {
             drop(self.victory);
             drop(self.sounds);
         }
-        if icons {
-            // SAFETY: these handles originate in their matching loaders and are released once.
-            unsafe {
-                DestroyDrawable(ReleaseDrawable(self.melee_icon.cast()));
-                DestroyDrawable(ReleaseDrawable(self.icons.cast()));
-            }
-        } else if let Some(strings) = self.strings {
-            // The legacy campaign teardown retains the probe's native release authority.
-            strings.into_raw();
-        }
+        drop(self.navigation);
     }
 }
 
@@ -231,14 +288,79 @@ mod tests {
     use super::*;
 
     #[test]
+    #[serial_test::serial]
+    fn campaign_owner_releases_melee_then_icons_and_keeps_retained_readers_alive() {
+        use crate::collections::observation::{self, Event};
+        observation::enable();
+        observation::drain();
+        let melee_icon = LoadedDrawable::create(2, 0, 0, 1).unwrap();
+        let icons = LoadedDrawable::create(2, 0, 0, 2).unwrap();
+        let melee = melee_icon.lease();
+        let icon_frames = icons.lease();
+        let allocated: Vec<_> = observation::drain()
+            .into_iter()
+            .filter_map(|event| match event {
+                Event::Drawable(address) => Some(address),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(allocated.len(), 2);
+        let strings = LoadedTextTable::fixture(vec![b"probe\0".to_vec()]);
+        let retained_text = strings.entry(0).unwrap();
+        let mut descriptor = RaceDesc::empty();
+        descriptor.raw.assets = Some(Box::new(ShipAssets {
+            navigation: ShipNavigationAssets {
+                melee_icon: Some(melee_icon),
+                icons: Some(icons),
+                strings: Some(strings),
+            },
+            captain: std::ptr::null_mut(),
+            victory: None,
+            sounds: None,
+            animations: std::array::from_fn(|_| FrameArray::EMPTY),
+        }));
+        let picker = descriptor.picker_resources();
+        let assets = descriptor.raw.assets.take().unwrap();
+        let mut world = crate::World::new();
+        let mut other = crate::World::new();
+        world.retain_campaign_probe(CampaignProbeAssets {
+            _navigation: assets.navigation,
+        });
+        drop(descriptor);
+        world.reset_game_data();
+        other.release_campaign_probe();
+        assert!(observation::drain().is_empty());
+        world.release_campaign_probe();
+        let released: Vec<_> = observation::drain()
+            .into_iter()
+            .filter_map(|event| match event {
+                Event::DrawableFree(address) => Some(address),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(released, allocated);
+        assert_eq!(retained_text.current_label(), (c"probe", 5));
+        assert_eq!(
+            picker.strings.as_ref().unwrap().current_label(),
+            (c"probe", 5)
+        );
+        assert!(melee.frame(0).is_some());
+        assert!(icon_frames.frame(1).is_some());
+        world.release_campaign_probe();
+        assert!(observation::drain().is_empty());
+    }
+
+    #[test]
     fn descriptor_labels_borrow_the_owned_table_and_keep_character_bounds() {
         let mut descriptor = RaceDesc::empty();
         let table = LoadedTextTable::fixture(vec![b"Z\xc3\xb6q\0extra\0".to_vec(), vec![0]]);
         let pointer = table.text(0).unwrap().as_ptr();
         descriptor.raw.assets = Some(Box::new(ShipAssets {
-            icons: std::ptr::null_mut(),
-            melee_icon: std::ptr::null_mut(),
-            strings: Some(table),
+            navigation: ShipNavigationAssets {
+                icons: None,
+                melee_icon: None,
+                strings: Some(table),
+            },
             captain: std::ptr::null_mut(),
             victory: None,
             sounds: None,
@@ -257,9 +379,11 @@ mod tests {
         let captain = std::ptr::dangling_mut();
         let mut descriptor = RaceDesc::empty();
         descriptor.raw.assets = Some(Box::new(ShipAssets {
-            icons: std::ptr::null_mut(),
-            melee_icon: std::ptr::null_mut(),
-            strings: None,
+            navigation: ShipNavigationAssets {
+                icons: None,
+                melee_icon: None,
+                strings: None,
+            },
             captain,
             victory: None,
             sounds: None,
@@ -275,9 +399,9 @@ mod tests {
             .is_null());
         let assets = descriptor.raw.assets.as_ref().unwrap();
         assert!(assets.captain.is_null());
-        assert!(assets.icons.is_null());
-        assert!(assets.melee_icon.is_null());
-        assert!(assets.strings.is_none());
+        assert!(assets.navigation.icons.is_none());
+        assert!(assets.navigation.melee_icon.is_none());
+        assert!(assets.navigation.strings.is_none());
         assert!(assets.victory.is_none());
         assert!(assets.sounds.is_none());
         assert!(assets.animations.iter().all(FrameArray::is_absent));

@@ -8,57 +8,23 @@ use crate::engine::world::new_game::{FleetRoster, FleetTemplate, NewGameInputs};
 use crate::engine::StoryKey;
 #[cfg(not(test))]
 use crate::ships::DescriptorLoader;
-#[cfg(not(test))]
-use std::ptr;
 
 #[cfg(not(test))]
-unsafe fn create_radar(kernel: &mut crate::engine::Kernel) {
-    if kernel.radar_context.is_null() {
-        #[cfg(feature = "debug-process")]
-        {
-            kernel.radar_context = CreateContextAux(c"RadarContext".as_ptr());
-        }
-        #[cfg(not(feature = "debug-process"))]
-        {
-            (*kernel).radar_context = CreateContextAux();
-        }
-        let old = SetContext(kernel.radar_context);
-        SetContextFGFrame(kernel.screen);
-        let mut rect = RECT {
-            corner: POINT {
-                x: (4 + ScreenWidth - STATUS_WIDTH as i32 - SAFE_X as i32) as i16,
-                y: (10 + ScreenHeight - 13 - RADAR_HEIGHT as i32) as i16,
-            },
-            extent: EXTENT {
-                width: RADAR_WIDTH as i16,
-                height: RADAR_HEIGHT as i16,
-            },
-        };
-        SetContextClipRect(&mut rect);
-        SetContext(old);
+fn load_sc2_data(cx: &mut crate::engine::battle::Cx<'_>) -> BOOLEAN {
+    let (width, height) = cx.screen_dimensions();
+    let radar_clip = RECT {
+        corner: POINT {
+            x: (4 + width - STATUS_WIDTH as i32 - SAFE_X as i32) as i16,
+            y: (10 + height - 13 - RADAR_HEIGHT as i32) as i16,
+        },
+        extent: EXTENT {
+            width: RADAR_WIDTH as i16,
+            height: RADAR_HEIGHT as i16,
+        },
+    };
+    if !cx.kernel.load_navigation_graphics(radar_clip) {
+        return 0;
     }
-}
-
-/// # Safety
-/// Resource system and screen contexts must be initialized on the game thread.
-#[cfg(not(test))]
-pub unsafe fn load_sc2_data(cx: &mut crate::engine::battle::Cx<'_>) -> BOOLEAN {
-    let kernel = &mut *cx.kernel;
-    if kernel.flag_stat_frame.is_null() {
-        kernel.flag_stat_frame =
-            CaptureDrawable(LoadGraphicInstance(c"graphics.flagshipstatus".as_ptr()).cast());
-        if kernel.flag_stat_frame.is_null() {
-            return 0;
-        }
-        kernel.misc_data_frame =
-            CaptureDrawable(LoadGraphicInstance(c"graphics.miscdata".as_ptr()).cast());
-        if kernel.misc_data_frame.is_null() {
-            return 0;
-        }
-        kernel.font_grad_frame =
-            CaptureDrawable(LoadGraphicInstance(c"graphics.fontgradient".as_ptr()).cast());
-    }
-    create_radar(kernel);
     if cx.world.activity() as u8 == IN_HYPERSPACE as u8 {
         cx.world.data.game.ship_stamp.origin.x = -1;
         cx.world.data.game.ship_stamp.origin.y = -1;
@@ -96,7 +62,8 @@ fn initialize_races(cx: &mut crate::engine::battle::Cx<'_>) {
                 if let Some(desc) = crate::engine::battle::RaceDesc::load(world, species, false) {
                     let template = fleet_template(desc.info(), desc.fleet());
                     world.retain_fleet_resources(species, desc.picker_resources());
-                    desc.unload(world, false, false);
+                    let assets = desc.into_campaign_probe(world);
+                    world.retain_campaign_probe(assets);
                     template
                 } else {
                     FleetTemplate::default()
@@ -125,18 +92,16 @@ fn campaign_names(kernel: &crate::engine::Kernel) -> ([u8; 16], [u8; 16]) {
     (copy(2), copy(3))
 }
 
-/// # Safety
-/// Game-thread initialization, before any world queues have been allocated.
+/// Initialize campaign owners before allocating the new world queues.
 #[cfg(not(test))]
-pub unsafe fn init_game_structures(cx: &mut crate::engine::battle::Cx<'_>) -> BOOLEAN {
+pub fn init_game_structures(cx: &mut crate::engine::battle::Cx<'_>) -> BOOLEAN {
     let battle = &mut *cx.b;
     let kernel = &mut *cx.kernel;
     let rng = cx.rng;
     cx.world.new_game(
         |world| {
             let mut cx = crate::engine::battle::Cx::new(battle, world, kernel, rng);
-            cx.kernel.play_frame =
-                CaptureDrawable(LoadGraphicInstance(c"graphics.playmenu".as_ptr()).cast());
+            cx.kernel.load_navigation_play();
             initialize_races(&mut cx);
             let dimensions = cx.screen_dimensions();
             init_siscontexts(cx.kernel, dimensions);
@@ -164,40 +129,19 @@ pub unsafe fn init_game_structures(cx: &mut crate::engine::battle::Cx<'_>) -> BO
     1
 }
 
-/// # Safety
-/// No renderer may be using these contexts or resources.
+/// Release campaign resources after the active game has stopped using them.
 #[cfg(not(test))]
-pub unsafe fn free_sc2_data(kernel: &mut crate::engine::Kernel) {
-    DestroyContext(kernel.radar_context);
-    kernel.radar_context = ptr::null_mut();
-    DestroyDrawable(ReleaseDrawable(kernel.font_grad_frame));
-    kernel.font_grad_frame = ptr::null_mut();
-    DestroyDrawable(ReleaseDrawable(kernel.misc_data_frame));
-    kernel.misc_data_frame = ptr::null_mut();
-    DestroyDrawable(ReleaseDrawable(kernel.flag_stat_frame));
-    kernel.flag_stat_frame = ptr::null_mut();
-}
-
-/// # Safety
-/// The initialized game structures must no longer be in use.
-#[cfg(not(test))]
-pub unsafe fn uninit_game_structures(cx: &mut crate::engine::battle::Cx<'_>) {
+pub fn uninit_game_structures(cx: &mut crate::engine::battle::Cx<'_>) {
     cx.world.encounters().reinit();
     cx.world.ip_groups().reinit();
     cx.world.npc_built_ships().reinit();
     cx.world.built_ships().reinit();
     uninit_group_info(cx.world);
     crate::state::ffi::rust_uninit_planet_info(cx.world);
-    if let Some(probe) = cx.world.avail_races_ref().tail() {
-        let probe = *cx.world.avail_races_ref().get(probe);
-        DestroyDrawable(ReleaseDrawable(probe.melee_icon));
-        DestroyDrawable(ReleaseDrawable(probe.icons));
-        DestroyStringTable(ReleaseStringTable(probe.race_strings));
-    }
+    cx.world.release_campaign_probe();
     cx.world.avail_races().reinit();
     cx.world.clear_fleet_resources();
-    DestroyDrawable(ReleaseDrawable(cx.kernel.play_frame));
-    cx.kernel.play_frame = ptr::null_mut();
+    cx.kernel.release_navigation_play();
 }
 
 pub fn in_hqspace(world: &crate::engine::World) -> BOOLEAN {

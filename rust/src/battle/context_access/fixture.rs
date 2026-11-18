@@ -89,7 +89,7 @@ pub(crate) struct Descriptor(Option<crate::engine::battle::RaceDesc>);
 impl Descriptor {
     pub(crate) fn free(self, world: &mut crate::engine::World) {
         if let Some(descriptor) = self.0 {
-            descriptor.unload(world, true, true);
+            descriptor.unload(world, true);
         }
     }
 }

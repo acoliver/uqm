@@ -112,8 +112,7 @@ fn run_game(
 #[cfg(not(test))]
 fn initialize_campaign(cx: &mut Cx<'_>) {
     cx.kernel.install_player_inputs();
-    // SAFETY: the application retains initialized kernel resources for campaign setup.
-    unsafe { crate::navigation::globals::init_game_structures(cx) };
+    crate::navigation::globals::init_game_structures(cx);
     crate::time::clock_bridge::rust_clock_init(cx.world);
     let mut random = cx.rng;
     let mut services = crate::navigation::events::EventServices {
@@ -191,8 +190,7 @@ fn run_campaign(
     }
     cx.with_legacy(crate::sound::heart_ffi::stop_sound);
     crate::time::clock_bridge::rust_clock_uninit(cx.world);
-    // SAFETY: the active mode has returned before its campaign resources are released.
-    unsafe { crate::navigation::globals::uninit_game_structures(cx) };
+    crate::navigation::globals::uninit_game_structures(cx);
     cx.kernel.clear_player_inputs();
 }
 

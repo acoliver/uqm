@@ -145,9 +145,9 @@ fn code_resources_and_species_loader_preserve_mapping_copy_ownership_and_failure
                 assert_eq!(loaded.info().ship_cost, original);
                 assert!(loaded.race().is_some());
                 assert_eq!(loaded.callbacks(), first.callbacks());
-                uqm_rust::engine::World::current().write(|world| first.unload(world, true, false));
-                uqm_rust::engine::World::current().write(|world| second.unload(world, true, false));
-                uqm_rust::engine::World::current().write(|world| loaded.unload(world, true, false));
+                uqm_rust::engine::World::current().write(|world| first.unload(world, false));
+                uqm_rust::engine::World::current().write(|world| second.unload(world, false));
+                uqm_rust::engine::World::current().write(|world| loaded.unload(world, false));
             }
             assert!(uqm_rust::engine::World::current()
                 .write(|world| RaceDesc::load(world, SPECIES_ID_NUM_SPECIES_ID, false))
@@ -166,7 +166,7 @@ fn code_resources_and_species_loader_preserve_mapping_copy_ownership_and_failure
             loaded.set_race(&TEARDOWN_RACE);
             uqm_rust::collections::observation::enable();
             uqm_rust::collections::observation::drain();
-            uqm_rust::engine::World::current().write(|world| loaded.unload(world, true, true));
+            uqm_rust::engine::World::current().write(|world| loaded.unload(world, true));
             assert_eq!(UNINIT.load(Ordering::SeqCst), 1);
             assert!(uqm_rust::collections::observation::drain()
                 .iter()
@@ -174,6 +174,52 @@ fn code_resources_and_species_loader_preserve_mapping_copy_ownership_and_failure
                     event,
                     uqm_rust::collections::observation::Event::ResourcesFree { .. }
                 )));
+            let mut probe = uqm_rust::engine::World::current()
+                .write(|world| RaceDesc::load(world, SPECIES_ID_UR_QUAN_PROBE_ID, false))
+                .unwrap();
+            probe.set_race(&TEARDOWN_RACE);
+            // The shared callback fixture expects this scalar and must run before observation.
+            (*(probe.address() as *mut uqm_rust::engine::battle::record::RaceDescriptor))
+                .ship_info
+                .ship_cost = 16;
+            let descriptor = probe.address();
+            uqm_rust::collections::observation::drain();
+            uqm_rust::engine::World::current().write(|world| {
+                let assets = probe.into_campaign_probe(world);
+                world.retain_campaign_probe(assets);
+                world.reset_game_data();
+            });
+            assert_eq!(UNINIT.load(Ordering::SeqCst), 2);
+            assert!(
+                matches!(uqm_rust::collections::observation::drain().as_slice(),
+                [uqm_rust::collections::observation::Event::ResourcesFree {
+                    descriptor: address, icons: false, battle: false
+                }] if *address == descriptor)
+            );
+            let decoy =
+                uqm_rust::graphics::drawable_abi::LoadedDrawable::create(2, 0, 0, 1).unwrap();
+            let decoy_frames = decoy.lease();
+            uqm_rust::engine::World::current().write(|world| {
+                let id = world.avail_races().alloc().unwrap();
+                let mut fleets = world.avail_races();
+                fleets.get_mut(id).icons = decoy_frames.frame(0).unwrap();
+                fleets.get_mut(id).melee_icon = decoy_frames.frame(0).unwrap();
+                fleets.put(id);
+            });
+            uqm_rust::collections::observation::drain();
+            uqm_rust::app::bridge::enter(|cx| {
+                uqm_rust::navigation::globals::uninit_game_structures(cx);
+                assert_eq!(cx.world.avail_races_ref().count(), 0);
+                assert_eq!(cx.world.encounters_ref().count(), 0);
+                assert_eq!(cx.world.ip_groups_ref().count(), 0);
+                assert_eq!(cx.world.npc_built_ships_ref().count(), 0);
+                assert_eq!(cx.world.built_ships_ref().count(), 0);
+                cx.world.release_campaign_probe();
+            });
+            assert_eq!(UNINIT.load(Ordering::SeqCst), 2);
+            assert!(uqm_rust::collections::observation::drain().is_empty());
+            assert!(decoy_frames.frame(0).is_some());
+            drop(decoy);
             ffi_bridge::UninitResourceSystem();
             assert_eq!(uio_bridge::uio_closeDir(dir), 0);
             uio_bridge::uio_closeRepository(repository);
