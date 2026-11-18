@@ -1,4 +1,12 @@
 use super::*;
+use crate::engine::species::ship::BLACK_URQUAN_SHIP;
+use crate::planets::generate::{
+    orbits::FIRST_GAS_GIANT, sam::SA_MATRA, special::HIERARCHY_STARBASE,
+};
+use crate::starbase::ids::{GAMESTR_COUNT, SCAN_STRING_BASE};
+
+const IN_HYPERSPACE: u16 = ActivityKind::InHyperspace as u16;
+const IN_INTERPLANETARY: u16 = ActivityKind::InInterplanetary as u16;
 use crate::engine::{
     clock::{CEvent, ARILOU_ENTRANCE_EVENT, ARILOU_EXIT_EVENT, ARILOU_UMGAH_CHECK},
     world::story::StoryState,
@@ -78,7 +86,10 @@ fn diagnostic_text_preserves_raw_bytes_truncation_and_category_output() {
     ));
     let first = planet_type_string(&kernel, 0);
     assert_eq!(first, [vec![b'x'; 38], vec![0xff]].concat());
-    assert_eq!(planet_type_string(&kernel, FIRST_GAS_GIANT as i32), b"gas");
+    assert_eq!(
+        planet_type_string(&kernel, i32::from(FIRST_GAS_GIANT)),
+        b"gas"
+    );
     assert_eq!(first[38], 0xff);
     let mut out = Vec::new();
     let mut errors = Vec::new();
@@ -93,7 +104,7 @@ fn diagnostic_text_preserves_raw_bytes_truncation_and_category_output() {
     dump_planet_type(
         &kernel,
         &mut types,
-        FIRST_GAS_GIANT as i32,
+        i32::from(FIRST_GAS_GIANT),
         &crate::planets::tables::PLANET_ARRAY[0],
     )
     .unwrap();
@@ -115,7 +126,7 @@ fn empty_battle_resets_do_not_acquire_a_context_or_apply_an_effect() {
         &mut game.kernel,
         crate::math::random,
     );
-    for activity in [0, IN_BATTLE as u16, IN_HYPERSPACE as u16 | IN_BATTLE as u16] {
+    for activity in [0, IN_BATTLE, IN_HYPERSPACE | IN_BATTLE] {
         cx.world.set_activity(activity);
         reset_crew_battle(&mut cx, |_, _, _| panic!("no battle ship"));
         reset_energy_battle(&mut cx, |_, _, _| panic!("no battle ship"));
@@ -162,7 +173,7 @@ fn battle_refills_borrow_the_player_descriptor_and_restore_status_selection() {
     };
     let mut game = crate::engine::Game::new();
     game.world.story = Some(StoryState::new());
-    game.world.set_activity(IN_BATTLE as u16);
+    game.world.set_activity(IN_BATTLE);
     game.kernel.reset_ship_capacity(RPG_PLAYER_NUM as usize, 1);
     // SAFETY: this serialized fixture owns and releases the context after all leases.
     let status = unsafe { context_abi::CreateContextAux(c"refill status".as_ptr()) };
@@ -180,7 +191,7 @@ fn battle_refills_borrow_the_player_descriptor_and_restore_status_selection() {
     let element = cx.alloc_element().unwrap();
     {
         let mut state = cx.element_mut(element);
-        state.flags = PLAYER_SHIP as u16;
+        state.flags = PLAYER_SHIP;
         state.player = RPG_PLAYER_NUM as i16;
     }
     cx.set_parent(element, Some(ship));
@@ -243,7 +254,7 @@ fn debug_key_uses_the_supplied_rng_and_real_status_resources() {
     use crate::graphics::{context_abi::ContextFrame, drawable_abi::LoadedDrawable};
     let mut game = crate::engine::Game::new();
     game.world.story = Some(StoryState::new());
-    game.world.set_activity(IN_INTERPLANETARY as u16);
+    game.world.set_activity(IN_INTERPLANETARY);
     let display = crate::campaign_display_test::CampaignDisplay::install(&mut game).unwrap();
     game.kernel.screen_context = game.kernel.status_context;
     game.kernel.space_context = game.kernel.status_context;
@@ -259,7 +270,7 @@ fn debug_key_uses_the_supplied_rng_and_real_status_resources() {
     context.set_frame(ContextFrame::retain(std::ptr::NonNull::new(
         game.kernel.screen,
     )));
-    for species in 0..=BLACK_URQUAN_SHIP {
+    for species in 0..=u32::from(BLACK_URQUAN_SHIP) {
         let mut fleets = game.world.avail_races();
         let id = fleets.alloc().unwrap();
         fleets.get_mut(id).species_id = species;
@@ -302,7 +313,7 @@ fn event_skip_uses_the_supplied_calendar_and_dispatches_equal_date_events() {
     use crate::graphics::context_abi::ContextFrame;
     let mut game = crate::engine::Game::new();
     game.world.story = Some(StoryState::new());
-    game.world.set_activity(IN_INTERPLANETARY as u16);
+    game.world.set_activity(IN_INTERPLANETARY);
     game.world.clock.init();
     let display = crate::campaign_display_test::CampaignDisplay::install(&mut game).unwrap();
     let context = ContextLease::require(game.kernel.status_context);
@@ -428,7 +439,7 @@ fn moon_dump_preserves_world_bytes_and_skips_shielded_and_special_scans() {
         (HIERARCHY_STARBASE, b"StarBase".as_slice()),
         (SA_MATRA, b"Sa-Matra".as_slice()),
     ] {
-        solar.sys.moons[0].data_index = kind as u8;
+        solar.sys.moons[0].data_index = kind;
         out.clear();
         dump_moon(&mut cx, &mut io, &mut out, &mut solar, body, &mut NoScans).unwrap();
         let mut expected = b"  - Moon a".to_vec();

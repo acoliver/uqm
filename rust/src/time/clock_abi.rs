@@ -8,6 +8,13 @@ use super::clock_bridge::days_in_month;
 use crate::engine::battle::link_queue::LinkId;
 use crate::engine::clock::{GameClock, ScheduledEvent};
 
+/// `ABSOLUTE_EVENT` (clock.h): the date is a calendar date.
+pub const ABSOLUTE_EVENT: u32 = 0;
+/// `RELATIVE_EVENT` (clock.h): the date is an offset from today.
+pub const RELATIVE_EVENT: u32 = 1;
+/// `START_YEAR` (clock.h): the campaign's first year.
+pub const START_YEAR: u16 = 2155;
+
 pub(crate) fn event_date(
     now: (u16, u16, u16),
     relative: bool,
@@ -90,7 +97,7 @@ pub(crate) fn schedule_event(
     year: u16,
     selector: u8,
 ) -> Option<LinkId<ScheduledEvent>> {
-    if kind == 1 && month == 0 && day == 0 && year == 0 {
+    if kind == RELATIVE_EVENT && month == 0 && day == 0 && year == 0 {
         dispatch(world, selector);
     } else {
         let clock = &world.data.game.game_clock;
@@ -99,7 +106,7 @@ pub(crate) fn schedule_event(
             u16::from(clock.month_index),
             u16::from(clock.day_index),
         );
-        let date = event_date(now, kind == 1, (year, month, day));
+        let date = event_date(now, kind == RELATIVE_EVENT, (year, month, day));
         if date >= now {
             return insert_event(&mut world.clock, date, selector);
         }

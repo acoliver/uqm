@@ -6,6 +6,7 @@ mod pilot_flash;
 pub mod planet_animation;
 pub mod roster_flash;
 pub mod solar_resources;
+mod space_resources;
 use super::battle::{
     kernel::{Channels, SoundQueue, StarPlane},
     link_queue::RacePool,

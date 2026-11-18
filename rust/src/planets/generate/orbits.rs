@@ -8,7 +8,7 @@ use crate::planets::generate::orbit_tables::{
 };
 
 const FIRST_LARGE_ROCKY_WORLD: u8 = 29;
-const FIRST_GAS_GIANT: u8 = (NUMBER_OF_PLANET_TYPES - 9) as u8;
+pub const FIRST_GAS_GIANT: u8 = (NUMBER_OF_PLANET_TYPES - 9) as u8;
 const MAX_GENERATED_PLANETS: u16 = 9;
 
 const MIN_PLANET_RADIUS: u16 = 4 << 6;

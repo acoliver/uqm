@@ -174,7 +174,7 @@ unsafe fn init_kernel(kernel: &mut crate::engine::Kernel, activity: u16) -> u32 
         return 0;
     }
     init_status_offsets(kernel, ScreenHeight);
-    super::space_resources::init_space(kernel, activity)
+    u32::from(kernel.init_space(activity))
 }
 
 /// # Safety

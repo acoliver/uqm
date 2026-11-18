@@ -1,7 +1,16 @@
 //! Hyperspace encounter elements, transition animation, tracking and radar.
-use super::abi::*;
 use super::get;
+use crate::battle::element::{
+    APPEARING, CHANGING, DISAPPEARING, FINITE_LIFE, IGNORE_SIMILAR, IGNORE_VELOCITY,
+    NEUTRAL_PLAYER_NUM, NONSOLID, PLAYER_SHIP,
+};
+use crate::comm::dispatch::{ENCOUNTER_REFORMING, MAX_HYPER_SHIPS, ONE_SHOT_ENCOUNTER};
+use crate::engine::battle::{CollisionHook, ElementHook};
+use crate::engine::world::activity::activity_flags::IN_BATTLE;
+use crate::engine::world::queues::EncounterRecord;
 use crate::engine::StoryKey;
+use crate::graphics::native_abi::POINT;
+use crate::math::arctan as ARCTAN;
 
 use super::hyper_transition::{init_transition, sis_element};
 use super::hyper_units::Geometry;
@@ -25,8 +34,8 @@ pub(super) const YOFFS: i16 = (50 * 12 + 50 * 4) / 2;
 pub(super) fn allocate(cx: &mut Cx<'_>, point: POINT) -> Option<ElementId> {
     let geometry = Geometry::new(cx.screen_dimensions());
     let element = cx.alloc_element()?;
-    cx.element_mut(element).player = NEUTRAL_PLAYER_NUM as i16;
-    cx.element_mut(element).flags = (CHANGING | FINITE_LIFE) as u16;
+    cx.element_mut(element).player = NEUTRAL_PLAYER_NUM;
+    cx.element_mut(element).flags = CHANGING | FINITE_LIFE;
     cx.element_mut(element).life = 1;
     cx.element_mut(element).mass = 1;
     let lx = geometry.log_x(point.x) + (geometry.width() >> 1) - cx.world.data.flagship.log_x;
@@ -61,8 +70,8 @@ pub(super) fn ambient(cx: &mut Cx<'_>) {
     let Some(element) = cx.alloc_element() else {
         return;
     };
-    cx.element_mut(element).player = NEUTRAL_PLAYER_NUM as i16;
-    cx.element_mut(element).flags = (APPEARING | FINITE_LIFE | NONSOLID) as u16;
+    cx.element_mut(element).player = NEUTRAL_PLAYER_NUM;
+    cx.element_mut(element).flags = APPEARING | FINITE_LIFE | NONSOLID;
     cx.primitive_style_mut(element).kind = STAMP_PRIMITIVE;
     cx.element_mut(element).pre = Some(ElementHook::Native(animation_preprocess));
     let random = cx.random();
@@ -96,7 +105,7 @@ pub fn transition(
     cx: &mut crate::engine::battle::Cx<'_>,
     element: crate::engine::battle::ElementId,
 ) {
-    cx.element_mut(element).flags &= !(DISAPPEARING as u16);
+    cx.element_mut(element).flags &= !DISAPPEARING;
     cx.element_mut(element).life = 1;
     let state = cx.element(element);
     if state.turn != 0 {
@@ -123,9 +132,7 @@ pub(crate) fn collision(
     ship: ElementId,
     _: &mut POINT,
 ) {
-    if cx.element(ship).flags & PLAYER_SHIP as u16 == 0
-        || cx.world.activity() & IN_BATTLE as u16 == 0
-    {
+    if cx.element(ship).flags & PLAYER_SHIP == 0 || cx.world.activity() & IN_BATTLE == 0 {
         return;
     }
     init_transition(cx, source, ship, 0);
@@ -138,14 +145,14 @@ pub(crate) fn collision(
             .elements()
             .id(std::ptr::NonNull::new(encounter.h_element))
         {
-            cx.element_mut(element).flags |= (NONSOLID | IGNORE_SIMILAR) as u16;
+            cx.element_mut(element).flags |= NONSOLID | IGNORE_SIMILAR;
         }
     }
     let target = sis_element(cx);
     cx.set_target(source, target);
     cx.element_mut(source).velocity.zero();
 }
-fn populate_ships(cx: &mut Cx<'_>, encounter: &mut ENCOUNTER) {
+fn populate_ships(cx: &mut Cx<'_>, encounter: &mut EncounterRecord) {
     let race = encounter.race_id as usize;
     let makeup = MAKEUP[race];
     let mut ships = makeup & 15;
@@ -169,15 +176,15 @@ fn populate_ships(cx: &mut Cx<'_>, encounter: &mut ENCOUNTER) {
         brief.max_energy = fleet.max_energy;
     }
 }
-fn add(cx: &mut Cx<'_>, encounter: &mut ENCOUNTER, universe: POINT) -> Option<ElementId> {
+fn add(cx: &mut Cx<'_>, encounter: &mut EncounterRecord, universe: POINT) -> Option<ElementId> {
     let geometry = Geometry::new(cx.screen_dimensions());
     if get(cx.world, StoryKey::ARILOU_SPACE_SIDE) >= 2 {
         return None;
     }
-    if encounter.flags & ENCOUNTER_REFORMING as u8 != 0 {
-        encounter.flags &= !(ENCOUNTER_REFORMING as u8);
+    if encounter.flags & ENCOUNTER_REFORMING != 0 {
+        encounter.flags &= !ENCOUNTER_REFORMING;
         encounter.transition_state = 100;
-        if encounter.flags & ONE_SHOT_ENCOUNTER as u8 != 0 || encounter.num_ships == 0 {
+        if encounter.flags & ONE_SHOT_ENCOUNTER != 0 || encounter.num_ships == 0 {
             return None;
         }
     }
@@ -237,7 +244,7 @@ fn add(cx: &mut Cx<'_>, encounter: &mut ENCOUNTER, universe: POINT) -> Option<El
             cx.retreat_frame(Frame::retain(cx.kernel.stars_in_space).view()),
         );
         cx.primitive_style_mut(element).kind = EMPTY_PRIMITIVE;
-        cx.element_mut(element).flags |= (NONSOLID | IGNORE_VELOCITY) as u16;
+        cx.element_mut(element).flags |= NONSOLID | IGNORE_VELOCITY;
         let tail = cx.elements().tail();
         cx.insert_before(element, tail);
     }
@@ -246,7 +253,7 @@ fn add(cx: &mut Cx<'_>, encounter: &mut ENCOUNTER, universe: POINT) -> Option<El
 }
 fn process(
     cx: &mut Cx<'_>,
-    encounter: &mut ENCOUNTER,
+    encounter: &mut EncounterRecord,
     universe: POINT,
     ox: i16,
     oy: i16,
@@ -332,7 +339,7 @@ fn process(
             || dy >= radius
             || dx as u32 * dx as u32 + dy as u32 * dy as u32 >= radius as u32 * radius as u32
         {
-            cx.element_mut(element).flags |= NONSOLID as u16;
+            cx.element_mut(element).flags |= NONSOLID;
             cx.element_mut(element).life = 0;
             if encounter.transition_state == 0 {
                 cx.element_mut(element).death = Some(ElementHook::Native(transition));
@@ -354,17 +361,17 @@ fn process(
             y: ((encounter.log_y - cx.world.data.flagship.log_y) as i16 as i32
                 + (geometry.height() >> 1)) as i16,
         };
-        if cx.element_mut(element).flags & NONSOLID as u16 != 0 && encounter.transition_state == 0 {
+        if cx.element_mut(element).flags & NONSOLID != 0 && encounter.transition_state == 0 {
             let next = cx.element(element).next.location;
             cx.element_mut(element).current.location = next;
             cx.primitive_style_mut(element).kind = STAMP_PRIMITIVE;
             if cx.element_mut(element).death.is_none() {
                 cx.init_intersect_start(element);
-                cx.element_mut(element).flags &= !(NONSOLID as u16);
+                cx.element_mut(element).flags &= !NONSOLID;
             }
         }
     } else {
-        cx.element_mut(element).flags |= NONSOLID as u16;
+        cx.element_mut(element).flags |= NONSOLID;
         if dx < -(XOFFS as i32) || dx > XOFFS as i32 || dy < -(YOFFS as i32) || dy > YOFFS as i32 {
             cx.element_mut(element).life = 0;
             cx.element_mut(element).death = None;
@@ -424,18 +431,18 @@ mod tests {
             panic!("unexpected RNG draw")
         });
         let mut encounter = crate::engine::world::queues::EncounterRecord {
-            flags: (ENCOUNTER_REFORMING | ONE_SHOT_ENCOUNTER) as u8,
+            flags: (ENCOUNTER_REFORMING | ONE_SHOT_ENCOUNTER),
             num_ships: 1,
             ..Default::default()
         };
         assert!(add(&mut cx, &mut encounter, POINT { x: 100, y: 100 }).is_none());
         assert_eq!(encounter.transition_state, 100);
-        assert_eq!(encounter.flags, ONE_SHOT_ENCOUNTER as u8);
+        assert_eq!(encounter.flags, ONE_SHOT_ENCOUNTER);
         cx.world.set_story_state(StoryKey::ARILOU_SPACE_SIDE, 3);
-        encounter.flags = ENCOUNTER_REFORMING as u8;
+        encounter.flags = ENCOUNTER_REFORMING;
         encounter.transition_state = 9;
         assert!(add(&mut cx, &mut encounter, POINT { x: 100, y: 100 }).is_none());
         assert_eq!(encounter.transition_state, 9);
-        assert_eq!(encounter.flags, ENCOUNTER_REFORMING as u8);
+        assert_eq!(encounter.flags, ENCOUNTER_REFORMING);
     }
 }

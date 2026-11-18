@@ -1,100 +1,14 @@
 //! Space animation ownership, ported from init.c (GPL-2.0-or-later).
 
-#[cfg(not(test))]
-use crate::collections::observation::observe_views;
-
-const SPACE_ANIMATION_KEYS: [[&std::ffi::CStr; 3]; 3] = [
-    [
-        c"graphics.boom.large",
-        c"graphics.boom.medium",
-        c"graphics.boom.small",
-    ],
-    [
-        c"graphics.blast.large",
-        c"graphics.blast.medium",
-        c"graphics.blast.small",
-    ],
-    [
-        c"graphics.asteroid.large",
-        c"graphics.asteroid.medium",
-        c"graphics.asteroid.small",
-    ],
-];
-
 fn ship_teardown_needed(kernel: &crate::engine::Kernel, activity: u16) -> bool {
     kernel.ships_initialized || activity as u8 == crate::ships::native::abi::IN_ENCOUNTER as u8
 }
 
 #[cfg(not(test))]
-use crate::engine::battle::frames::{free_image, load_animation, load_graphic};
-
-#[cfg(not(test))]
 pub(crate) mod live {
-    use super::*;
     use crate::ships::native::abi::{
         in_hqspace, IN_LAST_BATTLE, RPG_PLAYER_NUM, SPECIES_ID_SIS_SHIP_ID,
     };
-
-    pub fn init_space(kernel: &mut crate::engine::Kernel, activity: u16) -> u32 {
-        {
-            let old = kernel.space_init_count;
-            kernel.space_init_count = kernel.space_init_count.wrapping_add(1);
-            if old == 0 && activity as u8 <= crate::ships::native::abi::IN_ENCOUNTER as u8 {
-                let stars = &mut kernel.stars_in_space;
-                *stars = load_graphic(c"graphics.stars");
-                if stars.is_null() {
-                    return 0;
-                }
-                observe_views(std::slice::from_ref(stars), "engine-global:stars", |f| {
-                    *f as usize
-                });
-                if [
-                    &mut kernel.explosion,
-                    &mut kernel.blast,
-                    &mut kernel.asteroid,
-                ]
-                .into_iter()
-                .zip(SPACE_ANIMATION_KEYS)
-                .zip([
-                    "engine-global:explosion",
-                    "engine-global:blast",
-                    "engine-global:asteroid",
-                ])
-                .any(|((frames, [big, medium, small]), role)| {
-                    load_animation(frames, [Some(big), Some(medium), Some(small)], role) == 0
-                }) {
-                    return 0;
-                }
-            }
-            crate::collections::observation::record(
-                crate::collections::observation::Event::SpaceActive(true),
-            );
-            1
-        }
-    }
-
-    pub fn uninit_space(kernel: &mut crate::engine::Kernel) {
-        {
-            if kernel.space_init_count != 0 {
-                kernel.space_init_count -= 1;
-                if kernel.space_init_count == 0 {
-                    crate::collections::observation::record(
-                        crate::collections::observation::Event::SpaceActive(false),
-                    );
-                    free_image(&mut kernel.blast, "engine-global:blast");
-                    free_image(&mut kernel.explosion, "engine-global:explosion");
-                    free_image(&mut kernel.asteroid, "engine-global:asteroid");
-                    let stars = &mut kernel.stars_in_space;
-                    for plane in kernel.star_planes.iter_mut() {
-                        plane
-                            .frames
-                            .fill(crate::engine::battle::frames::FrameSelection::ABSENT);
-                    }
-                    free_image(std::array::from_mut(stars), "engine-global:stars");
-                }
-            }
-        }
-    }
 
     use crate::graphics::context_abi::{ContextFrame, ContextLease};
 
@@ -142,7 +56,7 @@ pub(crate) mod live {
             return;
         }
         crate::sound::heart_ffi::stop_sound();
-        crate::game_init::space_resources::uninit_space(cx.kernel);
+        cx.kernel.uninit_space();
         let mut ships = [None; 2];
         let crew = remaining_battle_crew(cx);
         let replacement =
@@ -258,7 +172,7 @@ pub(crate) mod live {
     fn prepare_arena(cx: &mut crate::engine::battle::Cx<'_>) -> Option<(ArenaGraphics, u16, bool)> {
         let activity = cx.world.activity();
         let hyperspace = in_hqspace(cx.world) != 0;
-        if crate::game_init::space_resources::init_space(cx.kernel, activity) == 0 {
+        if !cx.kernel.init_space(activity) {
             return None;
         }
         Some((
@@ -334,7 +248,7 @@ pub(crate) mod live {
                         cx.kernel,
                         cx.world,
                         (dimensions.0, dimensions.1),
-                        crate::navigation::abi::DRAW_SIS_DISPLAY as u8,
+                        crate::ui::sis::DRAW_SIS_DISPLAY,
                     ),
                     EntryDisplay::ClearMessage => crate::ui::sis::draw_campaign_message(
                         cx.kernel,
@@ -346,7 +260,7 @@ pub(crate) mod live {
                         cx.kernel,
                         cx.world,
                         (dimensions.0, dimensions.1),
-                        crate::navigation::abi::CLEAR_SIS_RADAR as u8,
+                        crate::ui::sis::CLEAR_SIS_RADAR,
                     ),
                     EntryDisplay::Palette(_) => unreachable!(),
                 };
@@ -410,12 +324,6 @@ mod tests {
             ),
             0
         );
-    }
-    #[test]
-    fn animation_keys_keep_explosion_blast_asteroid_order_and_three_sizes() {
-        assert_eq!(SPACE_ANIMATION_KEYS[0][0], c"graphics.boom.large");
-        assert_eq!(SPACE_ANIMATION_KEYS[1][1], c"graphics.blast.medium");
-        assert_eq!(SPACE_ANIMATION_KEYS[2][2], c"graphics.asteroid.small");
     }
 }
 

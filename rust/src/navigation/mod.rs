@@ -1,14 +1,5 @@
 //! Navigation-world state, encounters and movement.
 
-#[allow(
-    clippy::all,
-    dead_code,
-    improper_ctypes,
-    non_camel_case_types,
-    non_snake_case,
-    non_upper_case_globals,
-    reason = "Rust-owned engine ABI declarations, including opaque resources"
-)]
 pub mod abi {
     include!("../abi/navigation_abi.rs");
 }

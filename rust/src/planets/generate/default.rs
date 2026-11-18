@@ -23,9 +23,7 @@ pub const GENERATE_ALL: u16 = !0;
 pub const NUM_RACE_RUINS: u16 = 16;
 /// `YEHAT_SHIP` (`races.h`).
 pub const YEHAT_SHIP: u8 = 11;
-/// `LARGE_ROCKY_WORLD` and `GAS_GIANT` (`plandata.h`).
-const LARGE_ROCKY_WORLD: u8 = 1;
-const GAS_GIANT: u8 = 2;
+use super::consts::{GAS_GIANT, LARGE_ROCKY_WORLD};
 
 /// The ship groups of the solar system and the state they depend on.
 pub trait Npcs {

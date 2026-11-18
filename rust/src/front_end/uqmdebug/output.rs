@@ -3,8 +3,11 @@
 use super::*;
 use crate::engine::world::planet::PlanetFrame;
 use crate::engine::{clock::CEvent, world::CStarDesc};
+use crate::planets::generate::{
+    orbits::FIRST_GAS_GIANT, sam::SA_MATRA, special::HIERARCHY_STARBASE,
+};
 use crate::planets::tables::PLANET_ARRAY;
-use crate::starbase::ids::STAR_NUMBER_BASE;
+use crate::starbase::ids::*;
 use std::io::{self, Write};
 
 pub fn dump_event(out: &mut impl Write, event: &CEvent) -> io::Result<()> {
@@ -62,14 +65,14 @@ pub fn dump_system(
 }
 
 pub fn planet_type_string(kernel: &Kernel, index: i32) -> Vec<u8> {
-    let mut bytes = if index >= FIRST_GAS_GIANT as i32 {
+    let mut bytes = if index >= i32::from(FIRST_GAS_GIANT) {
         kernel
             .game_text(SCAN_STRING_BASE as usize + 55)
             .to_bytes()
             .to_vec()
     } else {
         let mut bytes = kernel
-            .game_text((SCAN_STRING_BASE as i32 + 4 + index) as usize)
+            .game_text((SCAN_STRING_BASE + 4 + index) as usize)
             .to_bytes()
             .to_vec();
         bytes.push(b' ');
@@ -81,7 +84,10 @@ pub fn planet_type_string(kernel: &Kernel, index: i32) -> Vec<u8> {
 }
 
 pub fn tectonics_string(value: u8) -> String {
-    match u32::from(value) {
+    use crate::planets::generate::consts::{
+        HIGH_TECTONICS, LOW_TECTONICS, MED_TECTONICS, NO_TECTONICS, SUPER_TECTONICS,
+    };
+    match value {
         NO_TECTONICS => "none".into(),
         LOW_TECTONICS => "low".into(),
         MED_TECTONICS => "medium".into(),
@@ -126,7 +132,7 @@ pub fn dump_moon<G: Generation>(
     };
     write!(out, "  - Moon {:<30}  ", char::from(b'a' + moon))?;
     let kind = solar.sys.descriptor(body).data_index;
-    match u32::from(kind) {
+    match kind {
         HIERARCHY_STARBASE => out.write_all(b"StarBase")?,
         SA_MATRA => out.write_all(b"Sa-Matra")?,
         _ => out.write_all(&planet_type_string(cx.kernel, i32::from(kind & !0x80)))?,
@@ -144,7 +150,7 @@ fn dump_world<G: Generation>(
     generation: &mut G,
 ) -> io::Result<()> {
     let kind = solar.sys.descriptor(body).data_index;
-    if u32::from(kind) == HIERARCHY_STARBASE || u32::from(kind) == SA_MATRA {
+    if kind == HIERARCHY_STARBASE || kind == SA_MATRA {
         return Ok(());
     }
     let info = solar.sys.info.planet_info;
@@ -217,7 +223,7 @@ pub fn tally_resources<G: Generation, W: Write>(
         tally: &mut ResourceTally<'_, W>,
     ) -> io::Result<()> {
         let kind = solar.sys.descriptor(body).data_index;
-        if u32::from(kind) != HIERARCHY_STARBASE && u32::from(kind) != SA_MATRA {
+        if kind != HIERARCHY_STARBASE && kind != SA_MATRA {
             tally.bio = tally
                 .bio
                 .wrapping_add(calculate_bio_value(cx, io, solar, body, generation));

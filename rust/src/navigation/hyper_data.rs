@@ -1,12 +1,11 @@
 //! Hyperspace graphics resources and entry/exit lifecycle.
-use super::{
-    abi::{CHECK_LOAD, POINT},
-    color,
-};
+use super::color;
+use crate::engine::world::activity::activity_flags::CHECK_LOAD;
 use crate::engine::{
     battle::{hyperspace as resources, Cx},
     StoryKey,
 };
+use crate::graphics::native_abi::POINT;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum EntryDisplay {
@@ -30,7 +29,7 @@ pub fn load_hyperspace(cx: &mut Cx<'_>, mut display: impl FnMut(&mut Cx<'_>, Ent
     cx.world.data.game.ship_stamp.origin = POINT { x: -9999, y: -9999 };
     resources::load(cx.kernel);
     resources::free_hyperspace(cx.kernel);
-    if cx.kernel.last_activity & CHECK_LOAD as u16 == 0 {
+    if cx.kernel.last_activity & CHECK_LOAD == 0 {
         display(cx, EntryDisplay::RepairBorder);
     } else if cx.kernel.last_activity as u8 == 0 {
         display(cx, EntryDisplay::DrawFrame);
