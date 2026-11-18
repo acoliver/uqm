@@ -29,6 +29,9 @@ pub enum BattlePhase {
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct BattleShip {
+    /// Pool slot and generation, scoped to the current battle.
+    pub identity: [u32; 2],
+    pub species: u32,
     pub position: [i16; 2],
     pub velocity: [i32; 2],
     pub facing: u16,
@@ -103,6 +106,8 @@ fn capture(
             let state = cx.ship_state(owner);
             let (vx, vy) = element.velocity.get_current_components();
             ships[side] = Some(BattleShip {
+                identity: [u32::from(owner.slot()), owner.generation()],
+                species: cx.ship(owner).SpeciesID,
                 position: [element.current.location.x, element.current.location.y],
                 velocity: [vx, vy],
                 facing: state.facing,
@@ -209,6 +214,7 @@ mod tests {
             descriptor.ship_info.crew_level = 8 + side as u16;
             descriptor.ship_info.energy_level = 12 + side as u8;
             ship.descriptor = Some(Box::new(descriptor));
+            ship.SpeciesID = 13 + side as u32;
             ship.hShip = Some(element);
             ship.ship_facing = 3 + side as u16;
             ship.ship_input_state = 1 << side;
@@ -230,6 +236,8 @@ mod tests {
             assert_eq!(
                 *ship,
                 Some(BattleShip {
+                    identity: [0, 1],
+                    species: 13 + side as u32,
                     position: [100 + side as i16, -50],
                     velocity: [256, -512],
                     facing: 3 + side as u16,

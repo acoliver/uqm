@@ -14,7 +14,9 @@
 //! @requirement REQ-SCRIPT-001..006
 
 mod assertions;
+mod waits;
 use assertions::validate_assertion_step;
+use waits::validate_wait_step;
 
 use crate::automation::campaign_state::StatePredicate;
 use crate::automation::error::AutomationError;
@@ -839,6 +841,7 @@ pub enum Action {
     AssertShipElement(ShipElementAssertion),
     WaitForBattleFrames(WaitForBattleFramesStep),
     WaitForBattleShipLoss(WaitForBattleShipLossStep),
+    WaitForPkunkRebirth(super::pkunk_rebirth::WaitStep),
     AssertPlanetSideCollisions(PlanetSideCollisionAssertion),
     SelectCommunicationResponse(SelectCommunicationResponseStep),
     SelectResponse(SelectResponseStep),
@@ -1886,109 +1889,6 @@ fn validate_key_step(
         _ => return None,
     };
     Some(outcome)
-}
-
-/// Validate bounded waits and selections. Returns `None` for other steps.
-fn validate_wait_step(
-    step: &Action,
-    index: usize,
-    path: &str,
-    requirements: &mut StepRequirements,
-) -> Option<Result<(), AutomationError>> {
-    let (max_ticks, field) = match step {
-        Action::WaitForDispatch(wait) => (wait.max_ticks, "wait_for_dispatch"),
-        Action::WaitForState(wait) => {
-            if let Err(reason) = wait.predicate.validate() {
-                return Some(Err(AutomationError::step(
-                    path,
-                    index,
-                    format!("wait_for_state: {reason}"),
-                )));
-            }
-            (wait.max_ticks, "wait_for_state")
-        }
-        Action::WaitForBattleFrames(wait) => {
-            if wait.minimum == 0 {
-                return Some(Err(AutomationError::step(
-                    path,
-                    index,
-                    "wait_for_battle_frames minimum must be positive",
-                )));
-            }
-            (wait.max_ticks, "wait_for_battle_frames")
-        }
-        Action::WaitForBattleShipLoss(wait) => {
-            if wait.minimum_ships == 0 {
-                return Some(Err(AutomationError::step(
-                    path,
-                    index,
-                    "wait_for_battle_ship_loss minimum_ships must be positive",
-                )));
-            }
-            (wait.max_ticks, "wait_for_battle_ship_loss")
-        }
-        Action::WaitForCommunicationReplay(wait) => {
-            (wait.max_ticks, "wait_for_communication_replay")
-        }
-        Action::WaitForPlanetSideStart(wait) => (wait.max_ticks, "wait_for_planet_side_start"),
-        Action::WaitForPlanetSideEnd(wait) => (wait.max_ticks, "wait_for_planet_side_end"),
-        Action::SelectPlanetMenu(select) => (select.max_ticks, "select_planet_menu"),
-        Action::PickBattleShip(pick) => (pick.max_ticks, "pick_battle_ship"),
-        Action::SelectResponse(select) => {
-            if select.phrase.is_empty()
-                || !select
-                    .phrase
-                    .bytes()
-                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
-            {
-                return Some(Err(AutomationError::step(
-                    path,
-                    index,
-                    "select_response phrase must be a nonempty string-table name",
-                )));
-            }
-            (select.max_ticks, "select_response")
-        }
-        Action::SelectCommunicationResponse(select) => {
-            if select.index >= 8 {
-                return Some(Err(AutomationError::step(
-                    path,
-                    index,
-                    "select_communication_response index must be 0..=7",
-                )));
-            }
-            (select.max_ticks, "select_communication_response")
-        }
-        Action::WaitForCommunicationResponses(wait) => {
-            if wait.minimum == 0 {
-                return Some(Err(AutomationError::step(
-                    path,
-                    index,
-                    "wait_for_communication_responses minimum must be positive",
-                )));
-            }
-            (wait.max_ticks, "wait_for_communication_responses")
-        }
-        Action::WaitForCommunicationEnd(wait) => {
-            if wait.minimum_completions == 0 {
-                return Some(Err(AutomationError::step(
-                    path,
-                    index,
-                    "wait_for_communication_end minimum_completions must be positive",
-                )));
-            }
-            (wait.max_ticks, "wait_for_communication_end")
-        }
-        _ => return None,
-    };
-    if max_ticks == 0 {
-        return Some(Err(AutomationError::step(
-            path,
-            index,
-            format!("{field} max_ticks must be positive"),
-        )));
-    }
-    Some(requirements.add_bounded_wait(max_ticks, index, path))
 }
 
 /// Validate solar-system navigation steps. Returns `None` for other steps.
@@ -4450,6 +4350,55 @@ mod tests {
         ] {
             assert!(validated(step).is_err(), "{step}");
         }
+    }
+
+    #[test]
+    fn pkunk_waits_are_closed_read_only_and_budgeted() {
+        for phase in ["dead", "restored"] {
+            let step = format!(
+                r#"{{"action":"wait_for_pkunk_rebirth","side":0,"phase":"{phase}","max_ticks":2}}"#
+            );
+            assert!(validated(&step).is_ok());
+        }
+        for step in [
+            r#"{"action":"wait_for_pkunk_rebirth","side":0,"phase":"dead","max_ticks":50000}"#,
+            r#"{"action":"wait_for_pkunk_rebirth","side":2,"phase":"dead","max_ticks":2}"#,
+            r#"{"action":"wait_for_pkunk_rebirth","side":0,"phase":"spawned","max_ticks":2}"#,
+            r#"{"action":"wait_for_pkunk_rebirth","side":0,"phase":"dead","max_ticks":0}"#,
+            r#"{"action":"wait_for_pkunk_rebirth","side":0,"phase":"dead","max_ticks":2,"damage":8}"#,
+        ] {
+            assert!(validated(step).is_err(), "{step}");
+        }
+    }
+
+    #[test]
+    fn native_pkunk_plan_never_runs_a_lifecycle_fixture() {
+        let source = include_bytes!("../../native-scripts/native-pkunk-rebirth-v1.json");
+        let script = validate_script(parse_script(source, p()).unwrap(), p()).unwrap();
+        assert_eq!(script.seed(), 2);
+        assert!(!script.steps().iter().any(|action| matches!(
+            action,
+            Action::RunParityFixture(_) | Action::RunParityCorpus(_) | Action::AssertParityFixture
+        )));
+        let phases: Vec<_> = script
+            .steps()
+            .iter()
+            .filter_map(|action| match action {
+                Action::WaitForPkunkRebirth(wait) => Some((wait.side, wait.phase)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            phases,
+            [
+                (0, super::super::pkunk_rebirth::Phase::Dead),
+                (0, super::super::pkunk_rebirth::Phase::Restored)
+            ]
+        );
+        assert!(
+            crate::automation::native_checkpoint::NativeCheckpointPlan::derive(source, &script)
+                .is_ok()
+        );
     }
 
     #[test]

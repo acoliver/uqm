@@ -33,6 +33,7 @@ pub fn checkpoint_class(action: &Action) -> Result<Option<CheckpointClass>, Stri
         | Action::WaitForDispatch(_)
         | Action::WaitForState(_)
         | Action::WaitForBattleFrames(_)
+        | Action::WaitForPkunkRebirth(_)
         | Action::WaitForBattleShipLoss(_)
         | Action::WaitForCommunicationResponses(_)
         | Action::WaitForCommunicationEnd(_)
@@ -98,7 +99,7 @@ pub(super) fn parity_label(
     )))
 }
 
-fn number(label: &str, key: &str) -> Option<u64> {
+pub(super) fn number(label: &str, key: &str) -> Option<u64> {
     label
         .split(':')
         .find_map(|field| field.strip_prefix(key))?
@@ -116,7 +117,7 @@ fn has_category(label: &str, category: crate::planet_side::cargo::ElementCategor
         .any(|field| field.strip_prefix("category=") == Some(category.name()))
 }
 
-fn shape(label: &str, prefix: &str, keys: &[&str]) -> bool {
+pub(super) fn shape(label: &str, prefix: &str, keys: &[&str]) -> bool {
     let mut fields = label.split(':');
     fields.next() == Some(prefix)
         && keys.iter().all(|key| {
@@ -200,6 +201,30 @@ fn semantic_satisfied(action: &Action, label: &str) -> bool {
             shape(label, "battle_frames_verified", &["count="])
                 && at_least(label, "count=", value.minimum)
         }
+        Action::AssertShipResources(value) => {
+            super::ship_resources::verified_label_satisfies(label, *value)
+        }
+        Action::AssertState(predicate) => {
+            super::campaign_state::label_satisfies(label, "state_verified", predicate)
+        }
+        Action::AssertShipElement(value) => {
+            shape(
+                label,
+                "ship_element_verified",
+                &["category=", "amount=", "minimum="],
+            ) && has_category(label, value.category)
+                && number(label, "minimum=") == Some(u64::from(value.minimum))
+                && at_least(label, "amount=", u64::from(value.minimum))
+        }
+        Action::AssertPlanetSideCollisions(value) => collision_satisfied(label, value),
+        Action::AssertMainMenuTransition(value) => menu_transition_satisfied(label, value),
+        Action::WaitForPkunkRebirth(value) => super::pkunk_rebirth::satisfies_label(value, label),
+        _ => flight_or_navigation_satisfied(action, label),
+    }
+}
+
+fn flight_or_navigation_satisfied(action: &Action, label: &str) -> bool {
+    match action {
         Action::AssertHyperspaceDisplacement(value) => {
             shape(
                 label,
@@ -227,23 +252,6 @@ fn semantic_satisfied(action: &Action, label: &str) -> bool {
                 && number(label, "y=").is_some()
                 && number(label, "y=") == number(label, "saved_y=")
         }
-        Action::AssertShipResources(value) => {
-            super::ship_resources::verified_label_satisfies(label, *value)
-        }
-        Action::AssertState(predicate) => {
-            super::campaign_state::label_satisfies(label, "state_verified", predicate)
-        }
-        Action::AssertShipElement(value) => {
-            shape(
-                label,
-                "ship_element_verified",
-                &["category=", "amount=", "minimum="],
-            ) && has_category(label, value.category)
-                && number(label, "minimum=") == Some(u64::from(value.minimum))
-                && at_least(label, "amount=", u64::from(value.minimum))
-        }
-        Action::AssertPlanetSideCollisions(value) => collision_satisfied(label, value),
-        Action::AssertMainMenuTransition(value) => menu_transition_satisfied(label, value),
         _ => wait_or_navigation_satisfied(action, label),
     }
 }
@@ -534,6 +542,7 @@ fn menu_transition_satisfied(label: &str, value: &super::script::MainMenuTransit
 /// Consumption history mirrors the one-shot production observation contracts.
 #[derive(Clone, Debug, Default)]
 pub(super) struct PredicateHistory {
+    pkunk: super::pkunk_rebirth::History,
     dispatch: u64,
     response: u64,
     replay: u64,
@@ -572,14 +581,18 @@ impl PredicateHistory {
         records: &[TraceRecord],
         frame: &super::trace::PresentationEvidence,
     ) -> bool {
-        let Some(record) = records
+        let Some((index, record)) = records
             .iter()
-            .find(|record| satisfied(action, std::slice::from_ref(*record), frame))
+            .enumerate()
+            .find(|(_, record)| satisfied(action, std::slice::from_ref(*record), frame))
         else {
             return false;
         };
         let label = record.label.as_deref().unwrap_or_default();
         match action {
+            Action::WaitForPkunkRebirth(value) => {
+                self.pkunk.verify(value, label, &records[..index])
+            }
             Action::WaitForDispatch(_) => advance(&mut self.dispatch, number(label, "generation=")),
             Action::SelectCommunicationResponse(_) | Action::SelectResponse(_) => {
                 advance(&mut self.response, number(label, "generation="))
@@ -607,6 +620,14 @@ impl PredicateHistory {
                 self.completions = actual;
                 true
             }
+            Action::WaitForPlanetSideStart(_) | Action::WaitForPlanetSideEnd(_) => {
+                self.verify_planet_side(action, label)
+            }
+            _ => true,
+        }
+    }
+    fn verify_planet_side(&mut self, action: &Action, label: &str) -> bool {
+        match action {
             Action::WaitForPlanetSideStart(_) => {
                 if self.awaited_planet_side.is_some()
                     || !advance(&mut self.last_planet_side, number(label, "generation="))
@@ -625,12 +646,12 @@ impl PredicateHistory {
                 self.awaited_planet_side = None;
                 true
             }
-            _ => true,
+            _ => unreachable!(),
         }
     }
 }
 
-fn advance(previous: &mut u64, observed: Option<u64>) -> bool {
+pub(super) fn advance(previous: &mut u64, observed: Option<u64>) -> bool {
     let Some(observed) = observed else {
         return false;
     };
@@ -642,7 +663,7 @@ fn advance(previous: &mut u64, observed: Option<u64>) -> bool {
 }
 
 #[cfg(test)]
-mod tests {
+pub(super) mod tests {
     use super::*;
     use serde_json::json;
 
@@ -665,6 +686,113 @@ mod tests {
         record.kind = RecordKind::SemanticAssertion;
         record.label = Some(label.into());
         record
+    }
+
+    pub(in crate::automation) fn pkunk_records(label: &str, restored: bool) -> Vec<TraceRecord> {
+        use crate::engine::observe::battle::{BattlePhase, BattleShip, BattleTick};
+        let mut result = Vec::new();
+        for (frame, crew) in if restored {
+            vec![(12, 8)]
+        } else {
+            vec![(10, 8), (11, 0)]
+        } {
+            let mut sample = record("");
+            sample.kind = RecordKind::NativeBattle;
+            sample.schema = TraceRecord::NATIVE_SCHEMA;
+            sample.native_battle = Some(super::super::trace::NativeBattleEvidence {
+                frame,
+                tick: Some(BattleTick {
+                    phase: BattlePhase::Advanced,
+                    activity: 0x202,
+                    keys: [[0; 7]; 2],
+                    pulsed: [[0; 7]; 2],
+                    menu: [0; 24],
+                    menu_pulsed: [0; 24],
+                    rng: 42,
+                    ditty: 0,
+                    counters: [1, 1],
+                    ships: [
+                        Some(BattleShip {
+                            identity: [3, 7],
+                            species: crate::ships::native::abi::SPECIES_ID_PKUNK_ID,
+                            position: [0; 2],
+                            velocity: [0; 2],
+                            facing: 0,
+                            crew,
+                            energy: 12,
+                            input: 0,
+                            status: 0,
+                        }),
+                        None,
+                    ],
+                }),
+                gate: None,
+                picker_active: false,
+                picker_generation: 0,
+                delta_ms: None,
+            });
+            result.push(sample);
+        }
+        result.push(record(label));
+        result
+    }
+
+    #[test]
+    fn pkunk_restoration_requires_its_own_ordered_death_and_identity() {
+        let action = |phase: &str| {
+            serde_json::from_value::<Action>(json!({
+                "action":"wait_for_pkunk_rebirth","side":0,"phase":phase,"max_ticks":100
+            }))
+            .unwrap()
+        };
+        let dead = "pkunk_dead:side=0:slot=3:generation=7:alive_tick=10:death_tick=11:crew=0";
+        let restored = "pkunk_restored:side=0:slot=3:generation=7:alive_tick=10:death_tick=11:crew=8:restored_tick=12";
+        let mut history = PredicateHistory::default();
+        assert!(!history.verify(&action("dead"), &[record(dead)], &frame()));
+        assert!(!history.verify(
+            &action("restored"),
+            &pkunk_records(restored, true),
+            &frame()
+        ));
+        let mut unordered = pkunk_records(dead, false);
+        unordered.swap(0, 1);
+        assert!(!history.verify(&action("dead"), &unordered, &frame()));
+        assert!(history.verify(&action("dead"), &pkunk_records(dead, false), &frame()));
+        assert!(!history.verify(&action("dead"), &pkunk_records(dead, false), &frame()));
+        for bad in [
+            restored.replace("side=0", "side=1"),
+            restored.replace("slot=3", "slot=4"),
+            restored.replace("generation=7", "generation=8"),
+            restored.replace("crew=8", "crew=0"),
+            restored.replace("restored_tick=12", "restored_tick=11"),
+            restored.replace("alive_tick=10", "alive_tick=11"),
+            "parity_fixture_started".into(),
+            "parity_fixture_verified:reborn".into(),
+            "battle_ship_loss_reached:lost=1:minimum=1:start=1,1:left=0,1".into(),
+        ] {
+            assert!(
+                !history.verify(&action("restored"), &pkunk_records(&bad, true), &frame()),
+                "{bad}"
+            );
+        }
+        let proof = pkunk_records(restored, true);
+        for mutation in 0..6 {
+            let mut bad = proof.clone();
+            let actual = bad[0].native_battle.as_mut().unwrap();
+            let tick = actual.tick.as_mut().unwrap();
+            let ship = tick.ships[0].as_mut().unwrap();
+            match mutation {
+                0 => ship.species = 1,
+                1 => ship.identity[1] += 1,
+                2 => ship.crew = 0,
+                3 => actual.frame = 11,
+                4 => tick.counters[0] = 0,
+                _ => tick.phase = crate::engine::observe::battle::BattlePhase::Input,
+            }
+            assert!(!history.clone().verify(&action("restored"), &bad, &frame()));
+        }
+        assert!(history.verify(&action("restored"), &proof, &frame()));
+        assert!(!history.verify(&action("restored"), &proof, &frame()));
     }
 
     #[test]

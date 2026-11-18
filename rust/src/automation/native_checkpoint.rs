@@ -514,6 +514,92 @@ mod tests {
     }
 
     #[test]
+    fn pkunk_committed_scan_keeps_death_across_capture_and_requires_live_restoration() {
+        let (source, script) = script(serde_json::json!([
+            {"action":"wait_for_pkunk_rebirth","side":0,"phase":"dead","max_ticks":100},
+            {"action":"capture","label":"death"},
+            {"action":"wait_for_pkunk_rebirth","side":0,"phase":"restored","max_ticks":100},
+            {"action":"capture","label":"restored"},
+            {"action":"finish"}
+        ]));
+        let plan = NativeCheckpointPlan::derive(&source, &script).unwrap();
+        let mut trace = Vec::new();
+        for (index, label) in [
+            "pkunk_dead:side=0:slot=3:generation=7:alive_tick=10:death_tick=11:crew=0",
+            "death_gen9",
+            "pkunk_restored:side=0:slot=3:generation=7:alive_tick=10:death_tick=11:crew=8:restored_tick=12",
+            "restored_gen9",
+        ].into_iter().enumerate() {
+            let obligation = &plan.checkpoints[index];
+            if index % 2 == 0 {
+                let samples = super::super::native_predicate::tests::pkunk_records(label, index == 2);
+                trace.extend(samples);
+            }
+            let frame = super::super::trace::PresentationEvidence { count: index as u64 + 1, generation: 9, width: 320, height: 240 };
+            let mut present = record(RecordKind::Presentation, "", 0);
+            present.presentation = Some(frame.clone());
+            trace.push(present);
+            if index % 2 == 1 {
+                let mut capture = record(RecordKind::Capture, label, 0);
+                capture.presentation = Some(frame.clone());
+                trace.push(capture);
+            }
+            let mut marker = record(RecordKind::Checkpoint, "", 0);
+            marker.presentation = Some(frame.clone());
+            marker.checkpoint = Some(super::super::trace::CheckpointEvidence {id: obligation.id.clone()});
+            trace.push(marker);
+        }
+        for (sequence, record) in trace.iter_mut().enumerate() {
+            record.sequence = sequence as u64;
+        }
+        assert_eq!(plan.committed(&trace).unwrap().len(), 4);
+        let mut wrong = trace.clone();
+        let restored = wrong
+            .iter_mut()
+            .find(|record| {
+                record
+                    .native_battle
+                    .as_ref()
+                    .is_some_and(|sample| sample.frame == 12)
+            })
+            .unwrap();
+        restored
+            .native_battle
+            .as_mut()
+            .unwrap()
+            .tick
+            .as_mut()
+            .unwrap()
+            .ships[0]
+            .as_mut()
+            .unwrap()
+            .identity[1] += 1;
+        assert!(plan.committed(&wrong).is_err());
+        wrong = trace.clone();
+        wrong.retain(|record| record.kind != RecordKind::NativeBattle);
+        for (sequence, record) in wrong.iter_mut().enumerate() {
+            record.sequence = sequence as u64;
+        }
+        assert!(plan.committed(&wrong).is_err());
+    }
+
+    #[test]
+    fn pkunk_death_and_restoration_are_distinct_native_obligations() {
+        let (source, script) = script(serde_json::json!([
+            {"action":"wait_for_pkunk_rebirth","side":0,"phase":"dead","max_ticks":100},
+            {"action":"capture","label":"pkunk-dead"},
+            {"action":"wait_for_pkunk_rebirth","side":0,"phase":"restored","max_ticks":100},
+            {"action":"capture","label":"pkunk-restored"},
+            {"action":"finish"}
+        ]));
+        let plan = NativeCheckpointPlan::derive(&source, &script).unwrap();
+        assert_eq!(plan.checkpoints.len(), 4);
+        assert_eq!(plan.checkpoints[0].class, CheckpointClass::SemanticWait);
+        assert_eq!(plan.checkpoints[2].class, CheckpointClass::SemanticWait);
+        assert_ne!(plan.checkpoints[0].id, plan.checkpoints[2].id);
+    }
+
+    #[test]
     fn unsupported_predicates_are_rejected_during_plan_construction() {
         let (source, script) = script(serde_json::json!([
             {"action":"assert_parity_fixture"}, {"action":"finish"}

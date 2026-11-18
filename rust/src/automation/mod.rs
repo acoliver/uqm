@@ -84,6 +84,7 @@ pub mod parity;
 mod parity_hooks;
 mod parity_mode;
 mod parity_state;
+mod pkunk_rebirth;
 pub mod planet_minerals;
 pub mod proof;
 pub mod runtime;
