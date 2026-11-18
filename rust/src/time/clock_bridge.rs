@@ -6,11 +6,11 @@ use crate::bridge_log::rust_bridge_log_msg;
 
 pub use crate::engine::battle::schema::CLOCK_STATE as ClockState;
 
+use super::clock_abi::START_YEAR;
 use crate::engine::World;
 
 // Constants from clock.h
 const CLOCK_BASE_FRAMERATE: usize = 24;
-const START_YEAR: u16 = 2155;
 
 // Event type constants
 

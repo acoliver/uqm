@@ -7,10 +7,16 @@ use crate::engine::clock::{
     SHOFIXTI_RETURN_EVENT, SLYLANDRO_RAMP_DOWN, SLYLANDRO_RAMP_UP, SPATHI_SHIELD_EVENT,
     YEHAT_REBEL_EVENT, ZOQFOT_DEATH_EVENT, ZOQFOT_DISTRESS_EVENT,
 };
-use crate::navigation::abi::*;
+use crate::planets::generate::consts::{
+    BLUE_BODY, CRATERED_ALGO, CYAN_BODY, DWARF_STAR, GAS_DENSITY, GAS_GIANT, GAS_GIANT_ALGO,
+    GIANT_STAR, GREEN_BODY, HEAVY, HIGH_DENSITY, LARGE_ROCKY_WORLD, LIGHT, LIGHT_DENSITY,
+    LOW_DENSITY, MEDIUM, NORMAL_DENSITY, ORANGE_BODY, PURPLE_BODY, RED_BODY, SMALL_ROCKY_WORLD,
+    SUPER_DENSITY, SUPER_GIANT_STAR, TOPO_ALGO, VIOLET_BODY, WHITE_BODY, YELLOW_BODY,
+};
+use crate::planets::generate::identities::*;
 
-pub fn event_name(value: BYTE) -> &'static str {
-    match value as u32 {
+pub fn event_name(value: u8) -> &'static str {
+    match u32::from(value) {
         ARILOU_ENTRANCE_EVENT => "ARILOU_ENTRANCE_EVENT",
         ARILOU_EXIT_EVENT => "ARILOU_EXIT_EVENT",
         HYPERSPACE_ENCOUNTER_EVENT => "HYPERSPACE_ENCOUNTER_EVENT",
@@ -33,8 +39,8 @@ pub fn event_name(value: BYTE) -> &'static str {
     }
 }
 
-pub fn body_color_string(value: BYTE) -> &'static str {
-    match value as u32 {
+pub fn body_color_string(value: u8) -> &'static str {
+    match value {
         BLUE_BODY => "blue",
         GREEN_BODY => "green",
         ORANGE_BODY => "orange",
@@ -48,8 +54,8 @@ pub fn body_color_string(value: BYTE) -> &'static str {
     }
 }
 
-pub fn star_type_string(value: BYTE) -> &'static str {
-    match value as u32 {
+pub fn star_type_string(value: u8) -> &'static str {
+    match value {
         DWARF_STAR => "dwarf",
         GIANT_STAR => "giant",
         SUPER_GIANT_STAR => "super giant",
@@ -57,8 +63,8 @@ pub fn star_type_string(value: BYTE) -> &'static str {
     }
 }
 
-pub fn star_presence_string(value: BYTE) -> &'static str {
-    match value as u32 {
+pub fn star_presence_string(value: u8) -> &'static str {
+    match value {
         0 => "",
         SOL_DEFINED => "Sol",
         SHOFIXTI_DEFINED => "Shofixti male",
@@ -109,8 +115,8 @@ pub fn star_presence_string(value: BYTE) -> &'static str {
     }
 }
 
-pub fn world_size_string(value: BYTE) -> &'static str {
-    match value as u32 {
+pub fn world_size_string(value: u8) -> &'static str {
+    match value {
         SMALL_ROCKY_WORLD => "small rocky world",
         LARGE_ROCKY_WORLD => "large rocky world",
         GAS_GIANT => "gas giant",
@@ -118,8 +124,8 @@ pub fn world_size_string(value: BYTE) -> &'static str {
     }
 }
 
-pub fn world_gen_algo_string(value: BYTE) -> &'static str {
-    match value as u32 {
+pub fn world_gen_algo_string(value: u8) -> &'static str {
+    match value {
         TOPO_ALGO => "TOPO_ALGO",
         CRATERED_ALGO => "CRATERED_ALGO",
         GAS_GIANT_ALGO => "GAS_GIANT_ALGO",
@@ -127,8 +133,8 @@ pub fn world_gen_algo_string(value: BYTE) -> &'static str {
     }
 }
 
-pub fn atmosphere_string(value: BYTE) -> &'static str {
-    match value as u32 {
+pub fn atmosphere_string(value: u8) -> &'static str {
+    match value {
         LIGHT => "thin",
         MEDIUM => "normal",
         HEAVY => "thick",
@@ -136,8 +142,8 @@ pub fn atmosphere_string(value: BYTE) -> &'static str {
     }
 }
 
-pub fn density_string(value: BYTE) -> &'static str {
-    match value as u32 {
+pub fn density_string(value: u8) -> &'static str {
+    match value {
         GAS_DENSITY => "gaseous",
         LIGHT_DENSITY => "light",
         LOW_DENSITY => "low",
@@ -148,8 +154,8 @@ pub fn density_string(value: BYTE) -> &'static str {
     }
 }
 
-pub fn deposit_quality_string(value: BYTE) -> &'static str {
-    match value as u32 {
+pub fn deposit_quality_string(value: u8) -> &'static str {
+    match value {
         LIGHT => "low",
         MEDIUM => "medium",
         HEAVY => "high",
@@ -161,9 +167,9 @@ pub fn deposit_quality_string(value: BYTE) -> &'static str {
 mod tests {
     use super::*;
 
-    fn check(label: fn(u8) -> &'static str, cases: &[(u32, &str)]) {
+    fn check<T: Copy + Into<u32>>(label: fn(u8) -> &'static str, cases: &[(T, &str)]) {
         for &(value, expected) in cases {
-            let value = u8::try_from(value)
+            let value = u8::try_from(value.into())
                 .unwrap_or_else(|error| panic!("debug label index does not fit: {error}"));
             assert_eq!(label(value), expected, "index {value}");
         }
@@ -202,7 +208,7 @@ mod tests {
         check(
             star_presence_string,
             &[
-                (0, ""),
+                (0u8, ""),
                 (SOL_DEFINED, "Sol"),
                 (SHOFIXTI_DEFINED, "Shofixti male"),
                 (MAIDENS_DEFINED, "Shofixti maidens"),
@@ -248,7 +254,7 @@ mod tests {
                 (ILWRATH_DEFINED, "Ilwrath home"),
                 (ANDROSYNTH_DEFINED, "Androsynth ruins"),
                 (MYCON_TRAP_DEFINED, "Mycon trap"),
-                (255, "???"),
+                (255u8, "???"),
             ],
         );
     }
@@ -267,7 +273,7 @@ mod tests {
                 (CYAN_BODY, "cyan"),
                 (PURPLE_BODY, "purple"),
                 (VIOLET_BODY, "violet"),
-                (255, "???"),
+                (255u8, "???"),
             ],
         );
         check(
@@ -276,7 +282,7 @@ mod tests {
                 (DWARF_STAR, "dwarf"),
                 (GIANT_STAR, "giant"),
                 (SUPER_GIANT_STAR, "super giant"),
-                (255, "???"),
+                (255u8, "???"),
             ],
         );
         check(
@@ -285,7 +291,7 @@ mod tests {
                 (SMALL_ROCKY_WORLD, "small rocky world"),
                 (LARGE_ROCKY_WORLD, "large rocky world"),
                 (GAS_GIANT, "gas giant"),
-                (255, "???"),
+                (255u8, "???"),
             ],
         );
         check(
@@ -294,7 +300,7 @@ mod tests {
                 (TOPO_ALGO, "TOPO_ALGO"),
                 (CRATERED_ALGO, "CRATERED_ALGO"),
                 (GAS_GIANT_ALGO, "GAS_GIANT_ALGO"),
-                (255, "???"),
+                (255u8, "???"),
             ],
         );
         check(
@@ -303,7 +309,7 @@ mod tests {
                 (LIGHT, "thin"),
                 (MEDIUM, "normal"),
                 (HEAVY, "thick"),
-                (255, "super thick"),
+                (255u8, "super thick"),
             ],
         );
         check(
@@ -315,7 +321,7 @@ mod tests {
                 (NORMAL_DENSITY, "normal"),
                 (HIGH_DENSITY, "high"),
                 (SUPER_DENSITY, "super high"),
-                (255, "???"),
+                (255u8, "???"),
             ],
         );
         check(
@@ -324,7 +330,7 @@ mod tests {
                 (LIGHT, "low"),
                 (MEDIUM, "medium"),
                 (HEAVY, "high"),
-                (255, "???"),
+                (255u8, "???"),
             ],
         );
     }

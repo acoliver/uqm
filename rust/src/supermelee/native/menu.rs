@@ -9,7 +9,6 @@ pub(crate) mod live {
     use crate::graphics::{context_abi::ContextLease, drawable_abi::LoadedDrawable};
     use std::ptr::NonNull;
 
-    use crate::navigation::abi::{init_space, uninit_space};
     use crate::sound::heart_ffi::fade_music as FadeMusic;
 
     use crate::ships::native::abi::*;
@@ -296,7 +295,7 @@ pub(crate) mod live {
         state.fleet_picker =
             Some(crate::supermelee::native::battle_picker::live::FleetPicker::new(&offscreen));
         load_menu_graphics(&mut state, offscreen);
-        init_space(cx.kernel, cx.world.activity());
+        cx.kernel.init_space(cx.world.activity());
         load_team_list(&mut state);
         load_setup(&mut state, cx);
         state.side = 0;
@@ -326,7 +325,7 @@ pub(crate) mod live {
             changes::apply_protocol_event(&mut state, cx, io, event)
         });
         drop(state.h_music.take());
-        uninit_space(cx.kernel);
+        cx.kernel.uninit_space();
         cx.kernel.game_sounds = None;
         cx.with_legacy(|| {
             drop(state.fleet_picker.take());

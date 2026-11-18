@@ -67,7 +67,7 @@ impl InputRuntime for Driver {
         assert!(nested.is_empty(), "nested inspection must not recurse");
         assert!(!self.panic_on_run.get(), "injected diagnostic unwind");
         let mut pressed = InputState::default();
-        pressed.menu[crate::navigation::abi::KEY_MENU_SELECT as usize] = 1;
+        pressed.menu[crate::input::frames::KEY_MENU_SELECT as usize] = 1;
         let now = self.calls.get() as u32 * 1000;
         self.input
             .advance(InputState::default(), InputState::default(), now - 1);

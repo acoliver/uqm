@@ -11,8 +11,6 @@ extern "C" {
     fn UninitPlayerInput();
 }
 
-use crate::game_init::space_resources::live::uninit_space;
-
 /// # Safety
 /// Run on the game thread after the game loop stops, before graphics teardown.
 pub unsafe fn free_kernel(kernel: &mut crate::engine::Kernel) {
@@ -38,7 +36,7 @@ unsafe fn uninit_contexts(kernel: &mut crate::engine::Kernel) {
 }
 
 unsafe fn uninit_kernel(kernel: &mut crate::engine::Kernel) {
-    uninit_space(kernel);
+    kernel.uninit_space();
     {
         kernel.release_menu_sounds();
         kernel.release_encounter_text();

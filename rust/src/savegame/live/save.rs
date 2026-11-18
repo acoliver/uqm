@@ -2,9 +2,9 @@
 use crate::engine::battle::Cx;
 use std::ffi::CStr;
 
-use super::super::abi::SummaryDesc;
 use super::super::runtime::{self, groups, live};
 use super::super::{SaveFile, SaveSlots};
+use crate::engine::save::summary_record::SummaryDesc;
 use crate::engine::world::generation::SolarSnapshot;
 use crate::mainloop::dir_prep::saveDir;
 use crate::navigation::globals::in_hqspace;

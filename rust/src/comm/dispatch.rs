@@ -98,9 +98,6 @@ pub const WON_LAST_BATTLE: u16 = 5;
 /// C: `CYBORG_ENABLED`
 pub const CYBORG_ENABLED: u8 = 1 << 5;
 
-/// C: `DRAW_SIS_DISPLAY`
-pub const DRAW_SIS_DISPLAY: u16 = 1 << 3;
-
 // ---------------------------------------------------------------------------
 // Conversation IDs (from commglue.h enum)
 // ---------------------------------------------------------------------------
@@ -342,7 +339,7 @@ pub unsafe fn init_communication_with_options(
                 cx.kernel,
                 cx.world,
                 (dimensions.0, dimensions.1),
-                (DRAW_SIS_DISPLAY) as u8,
+                crate::ui::sis::DRAW_SIS_DISPLAY,
             );
             crate::ui::sis::repair_sis_border(cx.kernel, (dimensions.0, dimensions.1));
         }
@@ -721,7 +718,7 @@ mod tests {
 
     #[test]
     fn comm_display_and_cyborg_masks_match_headers() {
-        assert_eq!(DRAW_SIS_DISPLAY, 1 << 3);
+        assert_eq!(crate::ui::sis::DRAW_SIS_DISPLAY, 1 << 3);
         assert_eq!(CYBORG_ENABLED, 1 << 5);
     }
 

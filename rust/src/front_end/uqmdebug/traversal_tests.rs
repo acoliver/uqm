@@ -1,4 +1,8 @@
+use super::traversal::BIO_CREDIT_VALUE;
 use super::*;
+use crate::engine::world::activity::ActivityKind;
+
+const IN_INTERPLANETARY: u16 = ActivityKind::InInterplanetary as u16;
 use crate::engine::{world::CStarDesc, StarId};
 use crate::planets::generate::{testing::NoEffects, SiteHost, SystemGenerator};
 use std::{borrow::Cow, io};
@@ -56,7 +60,7 @@ fn traversal_uses_real_generation_and_restores_supplied_state_on_writer_error() 
     }
     let mut game = game();
     game.world.current_star = None;
-    game.world.set_activity(IN_INTERPLANETARY as u16);
+    game.world.set_activity(IN_INTERPLANETARY);
     let mut expected = SolarSystem::new(&game.world, StarId(0));
     expected
         .sys
@@ -98,7 +102,7 @@ fn traversal_uses_real_generation_and_restores_supplied_state_on_writer_error() 
     );
     assert_eq!(generation.0, 1);
     assert_eq!(cx.world.current_star, None);
-    assert_eq!(cx.world.activity(), IN_INTERPLANETARY as u16);
+    assert_eq!(cx.world.activity(), IN_INTERPLANETARY);
     assert!(cx.kernel.diagnostics.interactive());
     assert!(cx.solar_frame.is_none());
 }
@@ -126,7 +130,7 @@ fn resource_totals_and_indices_use_actual_default_scan_nodes_in_order() {
         generator.generate_life(&mut solar.sys, body, index, &mut node, &NoEffects);
         expected_bio[usize::from(node.type_)] += 1;
         bio_value = bio_value.wrapping_add(
-            (BIO_CREDIT_VALUE as i32 * uqm_debug_creature_bio_value(node.type_ as u8)) as u16,
+            (BIO_CREDIT_VALUE * uqm_debug_creature_bio_value(node.type_ as u8)) as u16,
         );
     }
     let mineral_count =
@@ -184,7 +188,7 @@ fn resource_totals_and_indices_use_actual_default_scan_nodes_in_order() {
 fn empty_traversal_does_not_admit_generation_or_change_supplied_state() {
     let mut game = game();
     game.world.current_star = Some(StarId(7));
-    game.world.set_activity(IN_INTERPLANETARY as u16);
+    game.world.set_activity(IN_INTERPLANETARY);
     let mut battle = crate::engine::battle::Battle::new();
     let mut cx = Cx::new(&mut battle, &mut game.world, &mut game.kernel, || {
         panic!("an empty traversal cannot consume RNG")
@@ -210,7 +214,7 @@ fn empty_traversal_does_not_admit_generation_or_change_supplied_state() {
     .unwrap();
     assert_eq!(generation.0, 0);
     assert_eq!(cx.world.current_star, Some(StarId(7)));
-    assert_eq!(cx.world.activity(), IN_INTERPLANETARY as u16);
+    assert_eq!(cx.world.activity(), IN_INTERPLANETARY);
     assert!(cx.kernel.diagnostics.interactive());
 }
 
@@ -361,7 +365,7 @@ fn traversal_visits_each_planet_and_moon_in_order_before_system_post() {
     }
     let mut game = game();
     game.world.current_star = Some(StarId(7));
-    game.world.set_activity(IN_INTERPLANETARY as u16);
+    game.world.set_activity(IN_INTERPLANETARY);
     let mut battle = crate::engine::battle::Battle::new();
     let mut cx = Cx::new(&mut battle, &mut game.world, &mut game.kernel, || {
         panic!("traversal must not consume campaign RNG")
@@ -397,6 +401,6 @@ fn traversal_visits_each_planet_and_moon_in_order_before_system_post() {
     );
     assert_eq!(generation.loads, visits.orbitals);
     assert_eq!(cx.world.current_star, Some(StarId(7)));
-    assert_eq!(cx.world.activity(), IN_INTERPLANETARY as u16);
+    assert_eq!(cx.world.activity(), IN_INTERPLANETARY);
     assert!(cx.kernel.diagnostics.interactive());
 }

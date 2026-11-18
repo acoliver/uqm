@@ -5,7 +5,9 @@ use crate::graphics::{
     drawable_abi::LoadedDrawable,
     native_abi::{POINT, RECT, TEXT_ALIGN_ALIGN_CENTER},
 };
+use crate::input::frames::{KEY_MENU_CANCEL, KEY_MENU_SELECT};
 use std::io::{self, Write};
+use uqm_engine::time::counter_abi::ONE_SECOND;
 
 struct ScreenRestore {
     context: ContextLease,

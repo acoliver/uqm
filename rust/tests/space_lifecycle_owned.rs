@@ -5,7 +5,7 @@ use uqm_rust::engine::{
     battle::{Battle, Cx},
     Game,
 };
-use uqm_rust::game_init::space_resources::{init_battle_ships, uninit_ships, uninit_space};
+use uqm_rust::game_init::space_resources::{init_battle_ships, uninit_ships};
 use uqm_rust::ships::native::abi::{IN_BATTLE, SUPER_MELEE};
 
 #[test]
@@ -64,7 +64,7 @@ fn battle_ship_lifecycle_uses_the_unpublished_owner_even_when_resources_fail() {
         assert_eq!(first.elements().head(), Some(element));
         assert_eq!(second.kernel.space_init_count, 0);
         assert!(second.kernel.ships_initialized);
-        uninit_space(first.kernel);
+        first.kernel.uninit_space();
 
         (ships.uninit)(&mut first);
         assert_eq!(first.elements().head(), Some(element));

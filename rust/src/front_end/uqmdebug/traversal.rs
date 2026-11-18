@@ -1,11 +1,18 @@
 //! Ordered universe diagnostics over the same supplied generation calls as play.
 
 use super::*;
+use crate::engine::world::NUM_SOLAR_SYSTEMS;
 use crate::engine::{
     observe::CheckpointView,
     world::{generation::SolarSys, CStarDesc},
 };
-use crate::planets::generate::{SiteHost, SystemGenerator};
+use crate::planet_side::creatures::CREATURE_COUNT;
+use crate::planets::generate::{
+    sam::SA_MATRA, special::HIERARCHY_STARBASE, SiteHost, SystemGenerator,
+};
+
+/// `BIO_CREDIT_VALUE` (lander.h): credits per biological data unit.
+pub(super) const BIO_CREDIT_VALUE: i32 = 2;
 use crate::planets::solar_coords::star_seed;
 use std::io;
 
@@ -50,7 +57,7 @@ pub fn universe_recurse<T, G: Generation>(
     let saved_activity = cx.world.activity();
     let _quiet = cx.kernel.diagnostics.suppress_interaction();
     let result = (|| {
-        for index in 0..NUM_SOLAR_SYSTEMS as usize {
+        for index in 0..NUM_SOLAR_SYSTEMS {
             star_recurse(cx, io, generation, crate::engine::StarId(index), arg)?;
         }
         Ok(())
@@ -129,7 +136,7 @@ fn planet_recurse<T, G: Generation>(
                 generation,
                 solar,
                 target,
-                data != HIERARCHY_STARBASE as u8 && data != SA_MATRA as u8,
+                data != HIERARCHY_STARBASE && data != SA_MATRA,
             );
             callback(cx, io, solar, target, generation, recurse.arg)?;
         }
@@ -188,7 +195,7 @@ pub fn calculate_bio_value<G: Generation>(
         let info = scan_node(cx, io, generation, solar, body, node, 2).1;
         let bio = uqm_debug_creature_bio_value(info.type_ as u8);
         assert!(bio >= 0, "invalid generated creature {}", info.type_);
-        value = value.wrapping_add((BIO_CREDIT_VALUE as i32 * bio) as u16);
+        value = value.wrapping_add((BIO_CREDIT_VALUE * bio) as u16);
     }
     value
 }
@@ -222,7 +229,7 @@ pub fn generate_bio_index<G: Generation>(
     generation: &mut G,
 ) -> Vec<u16> {
     let count = scan_node(cx, io, generation, solar, body, u16::MAX, 2).0;
-    let mut values = vec![0u16; (NUM_CREATURE_TYPES + NUM_SPECIAL_CREATURE_TYPES) as usize];
+    let mut values = vec![0u16; CREATURE_COUNT];
     for node in 0..count {
         let info = scan_node(cx, io, generation, solar, body, node, 2).1;
         values[info.type_ as usize] = values[info.type_ as usize].wrapping_add(1);

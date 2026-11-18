@@ -5,7 +5,6 @@
 
 pub use uqm_save::{decode, encode, error, format, types};
 
-pub mod abi;
 pub mod legacy;
 #[cfg(not(test))]
 pub(crate) mod live;

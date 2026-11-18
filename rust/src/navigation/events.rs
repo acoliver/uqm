@@ -4,7 +4,7 @@
 #[path = "events/supplied_tests.rs"]
 mod supplied_tests;
 
-use super::abi::*;
+use crate::comm::dispatch::{DEAD_GUY, GOOD_GUY};
 use crate::engine::clock::{
     ADVANCE_ILWRATH_MISSION, ADVANCE_MYCON_MISSION, ADVANCE_PKUNK_MISSION, ADVANCE_THRADD_MISSION,
     ADVANCE_UTWIG_SUPOX_MISSION, ARILOU_ENTRANCE_EVENT, ARILOU_EXIT_EVENT, ARILOU_UMGAH_CHECK,
@@ -12,8 +12,29 @@ use crate::engine::clock::{
     SHOFIXTI_RETURN_EVENT, SLYLANDRO_RAMP_DOWN, SLYLANDRO_RAMP_UP, SPATHI_SHIELD_EVENT,
     YEHAT_REBEL_EVENT, ZOQFOT_DEATH_EVENT, ZOQFOT_DISTRESS_EVENT,
 };
+use crate::engine::species::ship::{
+    BLACK_URQUAN_SHIP, DRUUGE_SHIP, ILWRATH_SHIP, MYCON_SHIP, PKUNK_SHIP, SHOFIXTI_SHIP,
+    SPATHI_SHIP, SUPOX_SHIP, THRADDASH_SHIP, URQUAN_SHIP, UTWIG_SHIP, YEHAT_REBEL_SHIP, YEHAT_SHIP,
+    ZOQFOTPIK_SHIP,
+};
+use crate::engine::world::activity::{activity_flags::IN_BATTLE, ActivityKind};
 use crate::engine::world::fleet::{set_race_allied, start_sphere_tracking};
+use crate::engine::world::queues::FleetInfo;
 use crate::engine::{StoryKey, World};
+use crate::graphics::native_abi::POINT;
+use crate::math::square_root;
+use crate::navigation::hyper_units::{SOL_X, SOL_Y};
+use crate::navigation::hyperspace::check_hyperspace_encounter;
+use crate::planets::generate::identities::{SAMATRA_DEFINED, SPATHI_DEFINED, ZOQFOT_DEFINED};
+use crate::time::clock_abi::{ABSOLUTE_EVENT, RELATIVE_EVENT, START_YEAR};
+
+/// `ARILOU_SPACE` story values (gameev.c): the portal opens, then closes.
+const ARILOU_GATE_CLOSING: u32 = 0;
+const ARILOU_GATE_OPENING: u32 = 1;
+/// `MAX_FLEET_STRENGTH` (races.h): a growing fleet stops at this strength.
+const MAX_FLEET_STRENGTH: i16 = 2794;
+/// `YEARS_TO_KOHRAH_VICTORY` (gameev.c).
+const YEARS_TO_KOHRAH_VICTORY: u16 = 4;
 
 pub(crate) fn dispatcher(
     dimensions: (i32, i32),
@@ -37,21 +58,15 @@ struct ScheduledCampaignEvent {
 fn apply_story_event(world: &mut World, selector: u8) -> Option<ScheduledCampaignEvent> {
     let (kind, month, day, year, selector) = match u32::from(selector) {
         ARILOU_ENTRANCE_EVENT => {
-            world.set_story_state(StoryKey::ARILOU_SPACE, ARILOU_GATE_STATE_OPENING);
-            (EVENT_TYPE_RELATIVE_EVENT, 0, 3, 0, ARILOU_EXIT_EVENT)
+            world.set_story_state(StoryKey::ARILOU_SPACE, ARILOU_GATE_OPENING);
+            (RELATIVE_EVENT, 0, 3, 0, ARILOU_EXIT_EVENT)
         }
         ARILOU_EXIT_EVENT => {
             let clock = &world.data.game.game_clock;
             let month = u16::from(clock.month_index) % 12;
             let year = clock.year_index.wrapping_add(u16::from(month == 0));
-            world.set_story_state(StoryKey::ARILOU_SPACE, ARILOU_GATE_STATE_CLOSING);
-            (
-                EVENT_TYPE_ABSOLUTE_EVENT,
-                month + 1,
-                17,
-                year,
-                ARILOU_ENTRANCE_EVENT,
-            )
+            world.set_story_state(StoryKey::ARILOU_SPACE, ARILOU_GATE_CLOSING);
+            (ABSOLUTE_EVENT, month + 1, 17, year, ARILOU_ENTRANCE_EVENT)
         }
         ARILOU_UMGAH_CHECK => {
             world.set_story_state(StoryKey::ARILOU_CHECKED_UMGAH, 2);
@@ -66,7 +81,7 @@ fn apply_story_event(world: &mut World, selector: u8) -> Option<ScheduledCampaig
                 return None;
             }
             world.set_story_state(StoryKey::SLYLANDRO_MULTIPLIER, u32::from(factor));
-            (EVENT_TYPE_RELATIVE_EVENT, 0, 182, 0, SLYLANDRO_RAMP_UP)
+            (RELATIVE_EVENT, 0, 182, 0, SLYLANDRO_RAMP_UP)
         }
         _ => return None,
     };
@@ -79,7 +94,7 @@ fn apply_story_event(world: &mut World, selector: u8) -> Option<ScheduledCampaig
     })
 }
 
-fn grow_fleet(fleet: &mut FLEET_INFO) -> Option<u8> {
+fn grow_fleet(fleet: &mut FleetInfo) -> Option<u8> {
     if fleet.actual_strength == 0 || fleet.actual_strength == u16::MAX {
         return None;
     }
@@ -95,9 +110,9 @@ fn grow_fleet(fleet: &mut FLEET_INFO) -> Option<u8> {
     delta = delta.wrapping_add(fleet.actual_strength as i16);
     if delta <= 0 {
         delta = 0;
-        fleet.allied_state = DEAD_GUY as u16;
-    } else if delta > MAX_FLEET_STRENGTH as i16 {
-        delta = MAX_FLEET_STRENGTH as i16;
+        fleet.allied_state = DEAD_GUY;
+    } else if delta > MAX_FLEET_STRENGTH {
+        delta = MAX_FLEET_STRENGTH;
     }
     fleet.actual_strength = delta as u16;
     if fleet.actual_strength != 0 && fleet.days_left != 0 {
@@ -135,7 +150,7 @@ use crate::navigation::{get, set};
 
 fn fleet(
     world: &World,
-    race: u32,
+    race: u8,
 ) -> crate::engine::battle::link_queue::LinkId<crate::engine::world::queues::Fleet> {
     world
         .avail_races_ref()
@@ -153,18 +168,18 @@ fn relative(
     crate::time::clock_abi::schedule_event(
         world,
         &mut |world, selector| dispatch_event(world, services, selector),
-        EVENT_TYPE_RELATIVE_EVENT,
+        RELATIVE_EVENT,
         month,
         day,
         year,
         selector as u8,
     );
 }
-fn at_star(world: &World, index: u32) -> bool {
-    world.activity() as u8 as u32 == IN_INTERPLANETARY
+fn at_star(world: &World, index: u8) -> bool {
+    world.activity() as u8 == ActivityKind::InInterplanetary as u8
         && world
             .selected_star()
-            .is_some_and(|star| u32::from(star.index) == index)
+            .is_some_and(|star| u32::from(star.index) == u32::from(index))
 }
 
 pub fn schedule_initial_events(world: &mut World, services: &mut EventServices<'_>) {
@@ -172,10 +187,10 @@ pub fn schedule_initial_events(world: &mut World, services: &mut EventServices<'
     crate::time::clock_abi::schedule_event(
         world,
         &mut |world, selector| dispatch_event(world, services, selector),
-        EVENT_TYPE_ABSOLUTE_EVENT,
+        ABSOLUTE_EVENT,
         3,
         17,
-        START_YEAR as u16,
+        START_YEAR,
         ARILOU_ENTRANCE_EVENT as u8,
     );
     relative(
@@ -183,7 +198,7 @@ pub fn schedule_initial_events(world: &mut World, services: &mut EventServices<'
         services,
         0,
         0,
-        YEARS_TO_KOHRAH_VICTORY as u16,
+        YEARS_TO_KOHRAH_VICTORY,
         KOHR_AH_VICTORIOUS_EVENT,
     );
     relative(world, services, 0, 0, 0, SLYLANDRO_RAMP_UP);
@@ -238,12 +253,12 @@ pub fn dispatch_event(world: &mut World, services: &mut EventServices<'_>, selec
             } else if get(world, StoryKey::ZOQFOT_DISTRESS) != 0 {
                 let race = fleet(world, ZOQFOTPIK_SHIP);
                 world.avail_races().get_mut(race).actual_strength = 0;
-                world.avail_races().get_mut(race).allied_state = DEAD_GUY as u16;
+                world.avail_races().get_mut(race).allied_state = DEAD_GUY;
                 set(world, StoryKey::ZOQFOT_DISTRESS, 2);
             }
         }
         SHOFIXTI_RETURN_EVENT => {
-            set_race_allied(world, SHOFIXTI_SHIP as u16, 1);
+            set_race_allied(world, u16::from(SHOFIXTI_SHIP), 1);
             world.data.game.crew_cost = world.data.game.crew_cost.wrapping_sub(2);
             set(world, StoryKey::CREW_PURCHASED0, 0);
             set(world, StoryKey::CREW_PURCHASED1, 0);
@@ -255,7 +270,7 @@ pub fn dispatch_event(world: &mut World, services: &mut EventServices<'_>, selec
             } else {
                 let race = fleet(world, SPATHI_SHIP);
                 if world.avail_races_ref().get(race).actual_strength != 0 {
-                    set_race_allied(world, SPATHI_SHIP as u16, 0);
+                    set_race_allied(world, u16::from(SPATHI_SHIP), 0);
                     set(world, StoryKey::SPATHI_SHIELDED_SELVES, 1);
                     world.avail_races().get_mut(race).actual_strength = 0;
                 }
@@ -283,12 +298,12 @@ fn yehat_rebellion(world: &mut World) {
     world.avail_races().get_mut(rebel).actual_strength =
         world.avail_races_ref().get(royal).actual_strength;
     world.avail_races().get_mut(rebel).loc = POINT { x: 5150, y: 0 };
-    start_sphere_tracking(world, YEHAT_REBEL_SHIP as u16);
+    start_sphere_tracking(world, u16::from(YEHAT_REBEL_SHIP));
 }
 
 /// `race` identifies an allocated fleet in the supplied world queue.
 pub fn set_race_destination(world: &mut World, race: u8, x: i16, y: i16, days: u8, selector: u8) {
-    let current = fleet(world, race as u32);
+    let current = fleet(world, race);
     world.avail_races().get_mut(current).dest_loc = POINT { x, y };
     world.avail_races().get_mut(current).days_left = days;
     world.avail_races().get_mut(current).func_index = selector;
@@ -303,8 +318,8 @@ fn genocide(world: &mut World) {
     let mut handle = world.avail_races_ref().head();
     while let Some(current) = handle {
         handle = world.avail_races_ref().succ(current);
-        if index as u32 != BLACK_URQUAN_SHIP
-            && index as u32 != URQUAN_SHIP
+        if index != BLACK_URQUAN_SHIP
+            && index != URQUAN_SHIP
             && world.avail_races_ref().get(current).actual_strength != u16::MAX
         {
             let dx = world
@@ -320,15 +335,15 @@ fn genocide(world: &mut World) {
                 .y
                 .wrapping_sub(world.avail_races_ref().get(black).loc.y);
             if dx == 0 && dy == 0 {
-                world.avail_races().get_mut(current).allied_state = DEAD_GUY as u16;
+                world.avail_races().get_mut(current).allied_state = DEAD_GUY;
                 world.avail_races().get_mut(current).actual_strength = 0;
             } else if world.avail_races_ref().get(current).actual_strength != 0 {
                 let dist = dx as i64 * dx as i64 + dy as i64 * dy as i64;
-                if best_dist < 0 || dist < best_dist || index as u32 == DRUUGE_SHIP {
+                if best_dist < 0 || dist < best_dist || index == DRUUGE_SHIP {
                     best_dist = dist;
                     best_dx = dx;
                     best_dy = dy;
-                    if index as u32 == DRUUGE_SHIP {
+                    if index == DRUUGE_SHIP {
                         handle = None;
                     }
                 }
@@ -337,7 +352,7 @@ fn genocide(world: &mut World) {
         index = index.wrapping_add(1);
     }
     if best_dist < 0 && best_dx == 0 && best_dy == 0 {
-        world.set_activity(world.activity() & !(IN_BATTLE as u16));
+        world.set_activity(world.activity() & !(IN_BATTLE));
         world.data.flagship.crew_enlisted = u16::MAX;
         set(world, StoryKey::KOHR_AH_KILLED_ALL, 1);
     } else {
@@ -358,7 +373,7 @@ fn genocide(world: &mut World) {
         let location = world.avail_races_ref().get(black).loc;
         set_race_destination(
             world,
-            BLACK_URQUAN_SHIP as u8,
+            BLACK_URQUAN_SHIP,
             location.x.wrapping_add(best_dx),
             location.y.wrapping_add(best_dy),
             speed,
@@ -390,8 +405,8 @@ fn pkunk(world: &mut World, services: &mut EventServices<'_>) {
     }
     if world.avail_races_ref().get(race).actual_strength == 0 {
         set(world, StoryKey::YEHAT_ABSORBED_PKUNK, 1);
-        world.avail_races().get_mut(race).allied_state = DEAD_GUY as u16;
-        start_sphere_tracking(world, YEHAT_SHIP as u16);
+        world.avail_races().get_mut(race).allied_state = DEAD_GUY;
+        start_sphere_tracking(world, u16::from(YEHAT_SHIP));
     } else {
         let (x, y) = if mission & 1 == 0 {
             (4970, 400)
@@ -403,7 +418,7 @@ fn pkunk(world: &mut World, services: &mut EventServices<'_>) {
         let days_left = world.avail_races_ref().get(race).days_left;
         set_race_destination(
             world,
-            PKUNK_SHIP as u8,
+            PKUNK_SHIP,
             x,
             y,
             (182u16.wrapping_sub(days_left as u16)) as u8,
@@ -433,7 +448,7 @@ fn thradd(world: &mut World, services: &mut EventServices<'_>) {
         }
         set_race_destination(
             world,
-            THRADDASH_SHIP as u8,
+            THRADDASH_SHIP,
             x,
             y,
             14,
@@ -455,8 +470,8 @@ fn ilwrath(world: &mut World) {
     {
         world.avail_races().get_mut(ilwrath).actual_strength = 0;
         world.avail_races().get_mut(thradd).actual_strength = 0;
-        world.avail_races().get_mut(ilwrath).allied_state = DEAD_GUY as u16;
-        world.avail_races().get_mut(thradd).allied_state = DEAD_GUY as u16;
+        world.avail_races().get_mut(ilwrath).allied_state = DEAD_GUY;
+        world.avail_races().get_mut(thradd).allied_state = DEAD_GUY;
     } else if world.avail_races_ref().get(ilwrath).actual_strength != 0 {
         if get(world, StoryKey::ILWRATH_FIGHT_THRADDASH) == 0
             && (world.avail_races_ref().get(ilwrath).dest_loc.x != 2500
@@ -464,7 +479,7 @@ fn ilwrath(world: &mut World) {
         {
             set_race_destination(
                 world,
-                ILWRATH_SHIP as u8,
+                ILWRATH_SHIP,
                 2500,
                 8070,
                 90,
@@ -480,7 +495,7 @@ fn ilwrath(world: &mut World) {
                     (((loss % 128) << 8) / 128) as u8;
                 set_race_destination(
                     world,
-                    ILWRATH_SHIP as u8,
+                    ILWRATH_SHIP,
                     (2500 + 2535) / 2,
                     (8070 + 8358) / 2,
                     127,
@@ -491,8 +506,8 @@ fn ilwrath(world: &mut World) {
                 world.avail_races().get_mut(thradd).growth_fract =
                     (((loss % 128) << 8) / 128) as u8;
                 set(world, StoryKey::THRADD_VISITS, 0);
-                if world.avail_races_ref().get(thradd).allied_state == GOOD_GUY as u16 {
-                    set_race_allied(world, THRADDASH_SHIP as u16, 0);
+                if world.avail_races_ref().get(thradd).allied_state == GOOD_GUY {
+                    set_race_allied(world, u16::from(THRADDASH_SHIP), 0);
                 }
             }
             let mission = get(world, StoryKey::THRADD_MISSION);
@@ -500,7 +515,7 @@ fn ilwrath(world: &mut World) {
                 let days_left = world.avail_races_ref().get(ilwrath).days_left;
                 set_race_destination(
                     world,
-                    THRADDASH_SHIP as u8,
+                    THRADDASH_SHIP,
                     (2500 + 2535) / 2,
                     (8070 + 8358) / 2,
                     days_left.wrapping_add(1),
@@ -509,7 +524,7 @@ fn ilwrath(world: &mut World) {
             } else if mission < 3 {
                 set_race_destination(
                     world,
-                    THRADDASH_SHIP as u8,
+                    THRADDASH_SHIP,
                     2535,
                     8358,
                     10,
@@ -565,13 +580,13 @@ fn utwig_supox(world: &mut World, services: &mut EventServices<'_>) {
             }
             set_race_destination(
                 world,
-                UTWIG_SHIP as u8,
+                UTWIG_SHIP,
                 ux,
                 uy,
                 21,
                 ADVANCE_UTWIG_SUPOX_MISSION as u8,
             );
-            set_race_destination(world, SUPOX_SHIP as u8, sx, sy, 21, u8::MAX);
+            set_race_destination(world, SUPOX_SHIP, sx, sy, 21, u8::MAX);
         }
     }
     set(
@@ -588,7 +603,7 @@ fn mycon(world: &mut World, services: &mut EventServices<'_>) {
     }
     if world.avail_races_ref().get(race).growth != 0 {
         set(world, StoryKey::MYCON_KNOW_AMBUSH, 1);
-        set_race_destination(world, MYCON_SHIP as u8, 6392, 2200, 30, u8::MAX);
+        set_race_destination(world, MYCON_SHIP, 6392, 2200, 30, u8::MAX);
         world.avail_races().get_mut(race).growth = 0;
         world.avail_races().get_mut(race).growth_fract = 0;
     } else if world.avail_races_ref().get(race).loc.x != 6858
@@ -596,7 +611,7 @@ fn mycon(world: &mut World, services: &mut EventServices<'_>) {
     {
         set_race_destination(
             world,
-            MYCON_SHIP as u8,
+            MYCON_SHIP,
             6858,
             577,
             30,
@@ -650,7 +665,7 @@ mod tests {
 
     #[test]
     fn growth_fraction_and_destination_arrival_match_the_original_integer_math() {
-        let mut fleet: FLEET_INFO = unsafe { std::mem::zeroed() };
+        let mut fleet: FleetInfo = unsafe { std::mem::zeroed() };
         fleet.actual_strength = 100;
         fleet.growth = (-3i8) as u8;
         fleet.growth_fract = 128;
@@ -677,17 +692,17 @@ mod tests {
 
     #[test]
     fn extinct_and_infinite_fleets_do_not_move_and_losses_can_kill_a_fleet() {
-        let mut fleet: FLEET_INFO = unsafe { std::mem::zeroed() };
+        let mut fleet: FleetInfo = unsafe { std::mem::zeroed() };
         fleet.actual_strength = u16::MAX;
         fleet.days_left = 3;
         assert_eq!(grow_fleet(&mut fleet), None);
         assert_eq!(fleet.days_left, 3);
         fleet.actual_strength = 1;
         fleet.growth = (-2i8) as u8;
-        fleet.allied_state = GOOD_GUY as u16;
+        fleet.allied_state = GOOD_GUY;
         assert_eq!(grow_fleet(&mut fleet), None);
         assert_eq!(fleet.actual_strength, 0);
-        assert_eq!(fleet.allied_state, DEAD_GUY as u16);
+        assert_eq!(fleet.allied_state, DEAD_GUY);
         assert_eq!(fleet.days_left, 3);
     }
 }
@@ -713,7 +728,7 @@ mod story_event_tests {
         };
         assert_eq!(
             world.story_state(StoryKey::ARILOU_SPACE),
-            ARILOU_GATE_STATE_OPENING
+            ARILOU_GATE_OPENING
         );
         assert_eq!(
             (
@@ -723,14 +738,14 @@ mod story_event_tests {
                 opening.year,
                 opening.selector
             ),
-            (EVENT_TYPE_RELATIVE_EVENT, 0, 3, 0, ARILOU_EXIT_EVENT as u8)
+            (RELATIVE_EVENT, 0, 3, 0, ARILOU_EXIT_EVENT as u8)
         );
         let Some(closing) = apply_story_event(&mut world, ARILOU_EXIT_EVENT as u8) else {
             panic!("portal exit must prepare the next entrance");
         };
         assert_eq!(
             world.story_state(StoryKey::ARILOU_SPACE),
-            ARILOU_GATE_STATE_CLOSING
+            ARILOU_GATE_CLOSING
         );
         assert_eq!(
             (
@@ -740,13 +755,7 @@ mod story_event_tests {
                 closing.year,
                 closing.selector
             ),
-            (
-                EVENT_TYPE_ABSOLUTE_EVENT,
-                1,
-                17,
-                0,
-                ARILOU_ENTRANCE_EVENT as u8
-            )
+            (ABSOLUTE_EVENT, 1, 17, 0, ARILOU_ENTRANCE_EVENT as u8)
         );
     }
 
@@ -760,13 +769,7 @@ mod story_event_tests {
         assert_eq!(world.story_state(StoryKey::SLYLANDRO_MULTIPLIER), 4);
         assert_eq!(
             (next.kind, next.month, next.day, next.year, next.selector),
-            (
-                EVENT_TYPE_RELATIVE_EVENT,
-                0,
-                182,
-                0,
-                SLYLANDRO_RAMP_UP as u8
-            )
+            (RELATIVE_EVENT, 0, 182, 0, SLYLANDRO_RAMP_UP as u8)
         );
         assert!(apply_story_event(&mut world, SLYLANDRO_RAMP_UP as u8).is_none());
         assert_eq!(world.story_state(StoryKey::SLYLANDRO_MULTIPLIER), 4);
