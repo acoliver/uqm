@@ -624,12 +624,12 @@ fn immediate_open_failure_does_not_retain_a_connection() {
     let mut session = NetplaySession::default();
     session.options_mut().peer[0].port = "invalid service with spaces".into();
     let mut events = Vec::<Event>::new();
-    uqm_rust::platform::set_errno(0);
+    uqm_rust::platform::os::errno::set_errno(0);
     assert!(!session.open_player_network_connection(0, &mut |event| {
         let Effect::Error(error) = event.effect else {
             panic!("unexpected open feedback {event:?}");
         };
-        assert_eq!(uqm_rust::platform::errno(), error);
+        assert_eq!(uqm_rust::platform::os::errno::errno(), error);
         events.push(event);
     }));
     assert_eq!(events.len(), 1);

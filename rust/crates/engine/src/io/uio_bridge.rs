@@ -2,7 +2,7 @@
 // Reference: sc2/src/libs/uio/io.h, uiostream.h
 
 use crate::bridge_log::rust_bridge_log_msg;
-use crate::platform::set_errno;
+use crate::platform::os::errno::set_errno;
 use std::collections::HashMap;
 
 use std::os::raw::{c_char, c_int};
@@ -25,7 +25,7 @@ const UIO_FSTYPE_STDIO: c_int = 1;
 const UIO_FSTYPE_ZIP: c_int = 2;
 
 #[cfg(test)]
-use crate::platform::errno as current_errno;
+use crate::platform::os::errno::errno as current_errno;
 
 /// @plan PLAN-20260314-FILE-IO.P05
 /// @requirement REQ-FIO-PANIC-SAFETY

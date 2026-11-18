@@ -57,24 +57,8 @@ pub fn install() -> Result<(), InterruptError> {
 }
 
 fn install_one(signal: libc::c_int) -> Result<(), InterruptError> {
-    // SAFETY: sigaction is zeroed before use and the handler is a plain extern
-    // "C" function that performs one atomic store.
-    let mut action: libc::sigaction = unsafe { std::mem::zeroed() };
-    let handler: extern "C" fn(libc::c_int) = record_signal;
-    action.sa_sigaction = handler as *const () as usize;
-    // SAFETY: the set is initialized by sigemptyset before it is read.
-    unsafe {
-        libc::sigemptyset(&raw mut action.sa_mask);
-    }
-    // SAFETY: action is fully initialized and outlives the call.
-    let installed = unsafe { libc::sigaction(signal, &raw const action, std::ptr::null_mut()) };
-    if installed == -1 {
-        return Err(InterruptError {
-            signal,
-            error: io::Error::last_os_error(),
-        });
-    }
-    Ok(())
+    crate::platform::os::signal::install_handler(signal, record_signal)
+        .map_err(|error| InterruptError { signal, error })
 }
 
 /// The signal that interrupted this process, if one has arrived.
@@ -113,9 +97,15 @@ mod tests {
         install().expect("install interruption handling");
 
         // Without a handler this terminates the test process outright.
-        // SAFETY: raise delivers to this thread and the handler is installed.
-        assert_eq!(unsafe { libc::raise(libc::SIGTERM) }, 0);
+        let own_pid = libc::pid_t::try_from(std::process::id()).unwrap();
+        crate::platform::os::process::send_signal(own_pid, libc::SIGTERM).unwrap();
 
+        // Delivery to a process-directed signal may land on another thread, so
+        // wait for the handler to have recorded it.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while interrupted().is_none() && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
         assert_eq!(
             interrupted(),
             Some(libc::SIGTERM),

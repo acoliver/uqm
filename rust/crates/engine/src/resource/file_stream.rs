@@ -26,7 +26,7 @@ pub(super) unsafe fn stream_open(
     match result {
         Ok(file) => Box::into_raw(Box::new(file)).cast(),
         Err(error) => {
-            crate::platform::set_errno(crate::platform::io_errno(&error));
+            crate::platform::os::errno::set_errno(crate::platform::io_errno(&error));
             ptr::null_mut()
         }
     }
