@@ -1,10 +1,8 @@
 use super::*;
-use crate::{
-    engine::{
-        battle::{Battle, Cx},
-        Game, StoryKey, World,
-    },
-    navigation::abi::ARILOU_UMGAH_CHECK,
+use crate::engine::{
+    battle::{Battle, Cx},
+    clock::ARILOU_UMGAH_CHECK,
+    Game, StoryKey, World,
 };
 
 fn world() -> World {

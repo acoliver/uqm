@@ -15,7 +15,24 @@ pub trait PrimitiveServices {
         flags: u8,
     );
 }
+
+/// Application-supplied arena setup and teardown, borrowing the active battle owner.
+#[derive(Clone, Copy)]
+pub struct ShipLifecycle {
+    pub init: fn(&mut Cx<'_>) -> i16,
+    pub uninit: fn(&mut Cx<'_>),
+}
 impl crate::Kernel {
+    pub fn install_ship_lifecycle(&mut self, lifecycle: ShipLifecycle) {
+        self.services.ship_lifecycle = Some(lifecycle);
+    }
+
+    pub fn ship_lifecycle(&self) -> ShipLifecycle {
+        self.services
+            .ship_lifecycle
+            .unwrap_or_else(|| panic!("battle ship lifecycle was not installed"))
+    }
+
     pub fn install_primitive_services(&mut self, services: &'static dyn PrimitiveServices) {
         self.services.primitive_services = Some(services);
     }

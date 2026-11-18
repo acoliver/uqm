@@ -77,6 +77,7 @@ impl StarMapFlash {
 pub(crate) struct KernelServices {
     pub(crate) race_services: Option<&'static dyn crate::battle::race_services::RaceServices>,
     pub(crate) primitive_services: Option<&'static dyn crate::battle::services::PrimitiveServices>,
+    pub(crate) ship_lifecycle: Option<crate::battle::services::ShipLifecycle>,
     pub(crate) input_runtime: Option<std::rc::Rc<dyn super::input::InputRuntime>>,
 }
 
@@ -143,7 +144,7 @@ pub struct Kernel {
     pub space_init_count: u8,
     pub ships_initialized: bool,
     pub hyperstars: [crate::graphics::native_abi::FRAME; 3],
-    pub cmaps: [crate::graphics::native_abi::STRING; 2],
+    pub cmaps: [Option<crate::graphics::palette_cycle::PaletteCycle>; 2],
     pub hyperspace_ship_hooks: (
         Option<crate::battle::ElementHook>,
         Option<crate::battle::ElementHook>,
@@ -341,7 +342,7 @@ impl Kernel {
             space_init_count: 0,
             ships_initialized: false,
             hyperstars: [ptr::null_mut(); 3],
-            cmaps: [ptr::null_mut(); 2],
+            cmaps: [None, None],
             hyperspace_ship_hooks: (None, None),
             portal_point: POINT { x: 0, y: 0 },
             elements: super::battle::ElementTable::with_capacity(150),

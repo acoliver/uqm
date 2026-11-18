@@ -3,9 +3,10 @@ use crate::comm::races::{alliance::AllianceApi, encounter::EncounterApi};
 use crate::comm::Comm;
 use crate::engine::{
     battle::{Battle, Cx},
+    clock::ARILOU_UMGAH_CHECK,
     Game, StoryKey,
 };
-use crate::navigation::abi::{ARILOU_UMGAH_CHECK, YEHAT_REBEL_SHIP, YEHAT_SHIP};
+use crate::navigation::abi::{YEHAT_REBEL_SHIP, YEHAT_SHIP};
 
 #[test]
 #[serial_test::serial]

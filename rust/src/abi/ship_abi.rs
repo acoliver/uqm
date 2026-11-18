@@ -997,12 +997,6 @@ pub use crate::graphics::cmap_abi::FadeScreen;
 
 pub use crate::graphics::cmap_abi::FlushColorXForms;
 
-#[cfg(not(test))]
-pub use crate::game_init::space_resources::live::InitShips;
-
-#[cfg(not(test))]
-pub use crate::game_init::space_resources::live::UninitShips;
-
 pub type SOUND_REF = STRING_TABLE;
 pub type SOUND = STRING;
 #[repr(C)]

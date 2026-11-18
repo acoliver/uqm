@@ -1,5 +1,9 @@
 use super::*;
-use crate::engine::{clock::CEvent, world::story::StoryState, StoryKey, World};
+use crate::engine::{
+    clock::{CEvent, ARILOU_ENTRANCE_EVENT, ARILOU_EXIT_EVENT, ARILOU_UMGAH_CHECK},
+    world::story::StoryState,
+    StoryKey, World,
+};
 
 #[test]
 fn devices_change_only_the_supplied_unpublished_campaign() {

@@ -30,21 +30,18 @@ pub fn load(kernel: &mut Kernel) {
 }
 
 unsafe fn load_owned(kernel: &mut Kernel) {
-    use crate::{
-        graphics::{pixmap_abi::CaptureDrawable, resgfx::LoadGraphicInstance},
-        strings::{sresins::LoadStringTableInstance, string_table::CaptureStringTable},
+    use crate::graphics::{
+        palette_cycle::PaletteCycle, pixmap_abi::CaptureDrawable, resgfx::LoadGraphicInstance,
     };
     if kernel.hyperstars[0].is_null() {
         kernel.hyperstars[0] =
             CaptureDrawable(LoadGraphicInstance(c"graphics.ambient".as_ptr()).cast());
         kernel.hyperstars[1] =
             CaptureDrawable(LoadGraphicInstance(c"graphics.hyperstars".as_ptr()).cast());
-        kernel.cmaps[0] =
-            CaptureStringTable(LoadStringTableInstance(c"colortable.hyperspace".as_ptr()));
+        kernel.cmaps[0] = PaletteCycle::load(c"colortable.hyperspace");
         kernel.hyperstars[2] =
             CaptureDrawable(LoadGraphicInstance(c"graphics.quasispace".as_ptr()).cast());
-        kernel.cmaps[1] =
-            CaptureStringTable(LoadStringTableInstance(c"colortable.quasispace".as_ptr()));
+        kernel.cmaps[1] = PaletteCycle::load(c"colortable.quasispace");
     }
 }
 
@@ -54,25 +51,20 @@ pub fn free_hyper_data(kernel: &mut Kernel) {
 }
 
 unsafe fn free_owned(kernel: &mut Kernel) {
-    use crate::{
-        graphics::{drawable_abi::DestroyDrawable, pixmap_abi::ReleaseDrawable},
-        strings::string_table::{DestroyStringTable, ReleaseStringTable},
-    };
+    use crate::graphics::{drawable_abi::DestroyDrawable, pixmap_abi::ReleaseDrawable};
     for frame in &mut kernel.hyperstars {
         DestroyDrawable(ReleaseDrawable(*frame));
         *frame = std::ptr::null_mut();
     }
     for map in &mut kernel.cmaps {
-        DestroyStringTable(ReleaseStringTable(*map));
-        *map = std::ptr::null_mut();
+        *map = None;
     }
 }
 
-/// # Safety
-/// The kernel retains the loaded palette tables on the game thread throughout the copy.
-pub unsafe fn select_palette(kernel: &Kernel, quasispace: bool) {
-    use crate::graphics::cmap_abi::{GetColorMapAddress, SetColorMap};
-    SetColorMap(GetColorMapAddress(kernel.cmaps[usize::from(quasispace)]));
+pub fn select_palette(kernel: &Kernel, quasispace: bool) {
+    if let Some(palette) = &kernel.cmaps[usize::from(quasispace)] {
+        palette.apply();
+    }
 }
 
 pub fn free_hyperspace(kernel: &mut Kernel) {

@@ -33,6 +33,12 @@ impl Application {
         crate::battle::services::install(&mut self.game.kernel);
         self.game
             .kernel
+            .install_ship_lifecycle(crate::engine::battle::services::ShipLifecycle {
+                init: crate::game_init::space_resources::init_battle_ships,
+                uninit: crate::game_init::space_resources::uninit_ships,
+            });
+        self.game
+            .kernel
             .install_input_runtime(std::rc::Rc::new(runtime));
     }
 
