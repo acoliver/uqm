@@ -1,5 +1,4 @@
 //! Real virtual controls, restart dispatch, DoInput reset and save enumeration.
-use uqm_rust::graphics::flash::FlashContext;
 #[path = "support/battle_context.rs"]
 mod battle_context;
 use std::{ffi::CString, ptr};
@@ -14,11 +13,33 @@ use uqm_rust::{
         input_abi::{DoInput, FlushInput, SetDefaultMenuRepeatDelay, UpdateInputState},
         restart_menu::{
             do_restart::{do_restart_frame, DoRestartState},
-            restart_ops::CffiOps,
+            restart_ops::{RestartHost, RestartMenu, RestartMenuOps},
         },
     },
     savegame::{decode_save, SaveSlots},
 };
+
+struct NoLifecycle;
+impl RestartHost for NoLifecycle {
+    fn melee(
+        &mut self,
+        _: &mut uqm_rust::engine::battle::Cx<'_>,
+        _: &mut uqm_rust::engine::observe::Io<'_>,
+    ) {
+        panic!("unexpected melee");
+    }
+    fn credits(
+        &mut self,
+        _: &mut uqm_rust::engine::battle::Cx<'_>,
+        _: &mut uqm_rust::engine::observe::Io<'_>,
+        _: bool,
+    ) {
+        panic!("unexpected credits");
+    }
+    fn free_game_data(&mut self, _: &mut uqm_rust::engine::battle::Cx<'_>) {
+        panic!("unexpected cleanup");
+    }
+}
 
 const SELECT: usize = 9;
 const CANCEL: usize = 10;
@@ -81,24 +102,30 @@ unsafe fn open_from_restart_while_select_is_held(
     key_event(RETURN, true, false);
     uqm_rust::app::bridge::enter(|cx| UpdateInputState(cx, input));
     assert_ne!(input.pulsed().menu[SELECT], 0);
-    let mut flash: FlashContext = std::mem::zeroed();
+    let context = uqm_rust::graphics::context_abi::LoadedContext::create(c"load-picker-restart");
+    let mut owner = RestartMenu::default();
+    let mut host = NoLifecycle;
     let mut menu = DoRestartState {
         initialized: true,
         cur_state: 1,
-        flash_context: ptr::addr_of_mut!(flash) as usize,
         inact_timeout: u32::MAX,
         ..Default::default()
     };
-    // SAFETY: the serialized fixture publishes its unique game context for this call.
-    unsafe {
-        uqm_rust::app::bridge::enter(|cx| {
-            let mut observer = uqm_rust::engine::observe::Unobserved;
-            let mut io = uqm_rust::engine::observe::Io {
-                observer: &mut observer,
-            };
-            assert!(!do_restart_frame(&CffiOps::new(cx, &mut io), &mut menu));
-        });
-    }
+    uqm_rust::app::bridge::enter(|cx| {
+        let previous = cx.kernel.screen_context;
+        cx.kernel.screen_context = context.lease().as_raw();
+        let mut observer = uqm_rust::engine::observe::Unobserved;
+        let mut io = uqm_rust::engine::observe::Io {
+            observer: &mut observer,
+        };
+        {
+            let mut ops = owner.operations(cx, &mut io, &mut host);
+            ops.set_screen_context();
+            ops.create_flash_overlay();
+            assert!(!do_restart_frame(&mut ops, &mut menu));
+        }
+        cx.kernel.screen_context = previous;
+    });
     assert_eq!(
         uqm_rust::engine::Kernel::current().read(|kernel| kernel.last_activity),
         0x1000

@@ -10,6 +10,10 @@ use crate::time::counter_abi::GetTimeCounter;
 use parking_lot::Mutex;
 use std::ptr;
 
+pub const FADE_ALL_TO_WHITE: u32 = 250;
+pub const FADE_ALL_TO_BLACK: u32 = 252;
+pub const FADE_ALL_TO_COLOR: u32 = 253;
+
 #[repr(C)]
 pub struct ColorMap {
     pub index: i32,
@@ -314,9 +318,9 @@ extern "C" {
 }
 fn fade_target(kind: u32) -> Option<i32> {
     match kind {
-        252 | 254 => Some(0),
-        253 | 255 => Some(FADE_NORMAL_INTENSITY),
-        250 | 251 => Some(FADE_FULL_INTENSITY),
+        FADE_ALL_TO_BLACK | 254 => Some(0),
+        FADE_ALL_TO_COLOR | 255 => Some(FADE_NORMAL_INTENSITY),
+        FADE_ALL_TO_WHITE | 251 => Some(FADE_FULL_INTENSITY),
         _ => None,
     }
 }

@@ -6,9 +6,16 @@
 //! @plan PLAN-20260707-RESTARTMENU.P07
 //! @requirement REQ-RM-007
 
-use super::c_extern;
 use super::do_restart::DoRestartState;
 use super::restart_ops::RestartMenuOps;
+use crate::{
+    engine::input::frames::{MENU_SOUND_DOWN, MENU_SOUND_SELECT, MENU_SOUND_UP},
+    graphics::{
+        cmap_abi::{FADE_ALL_TO_BLACK, FADE_ALL_TO_WHITE},
+        native_abi::Color,
+    },
+};
+use uqm_engine::time::counter_abi::ONE_SECOND;
 
 // ===========================================================================
 //  Constants (from C headers)
@@ -25,8 +32,6 @@ const CHECK_RESTART: u16 = 0x2000;
 const SUPER_MELEE: u16 = 0;
 /// `WON_LAST_BATTLE = 5` (globdata.h activity enum).
 const WON_LAST_BATTLE: u16 = 5;
-/// `FadeAllToWhite = 250` (gfxlib.h).
-const FADE_ALL_TO_WHITE: u32 = c_extern::FADE_ALL_TO_WHITE;
 /// `HUMAN_CONTROL = 1 << 0 = 1` (intel.h).
 const HUMAN_CONTROL: u8 = 1;
 /// `COMPUTER_CONTROL = (1<<1) | (1<<2) = 6` (intel.h).
@@ -50,7 +55,7 @@ const AWESOME_RATING: u8 = 64;
 /// @plan PLAN-20260707-RESTARTMENU.P07
 /// @requirement REQ-RM-007
 pub fn restart_menu_impl<O: RestartMenuOps + ?Sized>(
-    ops: &O,
+    ops: &mut O,
     menu_state: &mut DoRestartState,
 ) -> bool {
     let time_out: u32;
@@ -72,16 +77,16 @@ pub fn restart_menu_impl<O: RestartMenuOps + ?Sized>(
         // Player blew himself up with Utwig bomb
         ops.set_utwig_bomb_on_ship(0);
 
-        let fade_result = ops.fade_screen(FADE_ALL_TO_WHITE, (c_extern::ONE_SECOND / 8) as i16);
-        ops.sleep_thread_until(fade_result.wrapping_add(c_extern::ONE_SECOND / 60));
+        let fade_result = ops.fade_screen(FADE_ALL_TO_WHITE, (ONE_SECOND / 8) as i16);
+        ops.sleep_thread_until(fade_result.wrapping_add(ONE_SECOND / 60));
 
-        ops.set_bg_color(c_extern::Color::white_gray());
+        ops.set_bg_color(Color::white_gray());
         ops.clear_drawable();
         ops.flush_color_xforms();
 
-        time_out = c_extern::ONE_SECOND / 8;
+        time_out = ONE_SECOND / 8;
     } else {
-        time_out = c_extern::ONE_SECOND / 2;
+        time_out = ONE_SECOND / 2;
 
         // Victory check (restart.c:288-296)
         let last_activity = ops.get_last_activity();
@@ -99,28 +104,22 @@ pub fn restart_menu_impl<O: RestartMenuOps + ?Sized>(
     ops.set_next_activity(0);
 
     // Fade to black (restart.c:302-304)
-    let fade_result = ops.fade_screen(c_extern::FADE_ALL_TO_BLACK, time_out as i16);
+    let fade_result = ops.fade_screen(FADE_ALL_TO_BLACK, time_out as i16);
     ops.sleep_thread_until(fade_result);
 
     // Extra wait for utwig bomb path (restart.c:305-306)
-    if time_out == c_extern::ONE_SECOND / 8 {
-        ops.sleep_thread(c_extern::ONE_SECOND * 3);
+    if time_out == ONE_SECOND / 8 {
+        ops.sleep_thread(ONE_SECOND * 3);
     }
 
     // Load and draw menu graphic (restart.c:308-309)
-    let load_result = ops.load_menu_graphic();
-    let cur_frame = ops.capture_drawable(load_result);
-    // Sync CurFrame to C MENU_STATE — DrawRestartMenuGraphic reads pMS->CurFrame
-    ops.sync_cur_frame(cur_frame);
+    ops.load_menu_graphic();
     ops.draw_restart_menu_graphic();
 
     // Clear CHECK_ABORT and configure menu (restart.c:310-312)
     let activity = ops.get_current_activity();
     ops.set_current_activity(activity & !CHECK_ABORT);
-    ops.set_menu_sounds(
-        c_extern::MENU_SOUND_UP | c_extern::MENU_SOUND_DOWN,
-        c_extern::MENU_SOUND_SELECT,
-    );
+    ops.set_menu_sounds(MENU_SOUND_UP | MENU_SOUND_DOWN, MENU_SOUND_SELECT);
     ops.set_default_menu_repeat_delay();
 
     // Reset menu for DoInput loop (restart.c:310-312)
@@ -132,16 +131,9 @@ pub fn restart_menu_impl<O: RestartMenuOps + ?Sized>(
 
     // Cleanup (restart.c:315-322)
     ops.stop_music();
-    if menu_state.music_handle != 0 {
-        ops.destroy_music(menu_state.music_handle);
-        menu_state.music_handle = 0;
-    }
-    if menu_state.flash_context != 0 {
-        ops.flash_terminate(menu_state.flash_context);
-        menu_state.flash_context = 0;
-    }
-    let drawable = ops.release_drawable(cur_frame);
-    ops.destroy_drawable(drawable);
+    ops.destroy_music();
+    ops.flash_terminate();
+    ops.destroy_menu_graphic();
 
     // Check timeout (restart.c:324-325)
     let activity = ops.get_current_activity();
@@ -155,10 +147,7 @@ pub fn restart_menu_impl<O: RestartMenuOps + ?Sized>(
     }
 
     // Final fade and flush (restart.c:330-342)
-    let fade_result = ops.fade_screen(
-        c_extern::FADE_ALL_TO_BLACK,
-        (c_extern::ONE_SECOND / 2) as i16,
-    );
+    let fade_result = ops.fade_screen(FADE_ALL_TO_BLACK, (ONE_SECOND / 2) as i16);
     ops.sleep_thread_until(fade_result);
     ops.flush_color_xforms();
     ops.seed_random();
@@ -188,12 +177,8 @@ pub struct CampaignStart {
 ///
 /// @plan PLAN-20260707-RESTARTMENU.P07
 /// @requirement REQ-RM-007
-pub fn try_start_game_impl<O: RestartMenuOps + ?Sized>(ops: &O) -> Option<CampaignStart> {
-    // Create and initialize MENU_STATE (restart.c:357-359)
-    let menu_ptr = ops.create_menu_state();
+pub fn try_start_game_impl<O: RestartMenuOps + ?Sized>(ops: &mut O) -> Option<CampaignStart> {
     let mut menu_state = DoRestartState::default();
-
-    ops.set_menu_state_ptr(menu_ptr);
 
     // Save LastActivity, clear CurrentActivity (restart.c:360-361)
     let activity = ops.get_current_activity();
@@ -204,7 +189,6 @@ pub fn try_start_game_impl<O: RestartMenuOps + ?Sized>(ops: &O) -> Option<Campai
         let started_game = restart_menu_impl(ops, &mut menu_state);
 
         if started_game {
-            ops.destroy_menu_state(menu_ptr);
             return Some(CampaignStart {
                 scene_replaces_introduction: menu_state.scene_replaces_introduction,
             });
@@ -220,16 +204,11 @@ pub fn try_start_game_impl<O: RestartMenuOps + ?Sized>(ops: &O) -> Option<Campai
             // Loop back to show menu again
         } else if activity == !0u16 {
             // Timeout (restart.c:371-374)
-            let fade_result = ops.fade_screen(
-                c_extern::FADE_ALL_TO_BLACK,
-                (c_extern::ONE_SECOND / 2) as i16,
-            );
+            let fade_result = ops.fade_screen(FADE_ALL_TO_BLACK, (ONE_SECOND / 2) as i16);
             ops.sleep_thread_until(fade_result);
-            ops.destroy_menu_state(menu_ptr);
             return None;
         } else if activity & CHECK_ABORT != 0 {
             // Quit (restart.c:376-377)
-            ops.destroy_menu_state(menu_ptr);
             return None;
         }
         // Otherwise loop again
@@ -249,7 +228,7 @@ pub fn try_start_game_impl<O: RestartMenuOps + ?Sized>(ops: &O) -> Option<Campai
 ///
 /// @plan PLAN-20260707-RESTARTMENU.P07
 /// @requirement REQ-RM-007
-pub fn start_game_impl<O: RestartMenuOps + ?Sized>(ops: &O) -> bool {
+pub fn start_game_impl<O: RestartMenuOps + ?Sized>(ops: &mut O) -> bool {
     loop {
         let start = loop {
             if let Some(start) = try_start_game_impl(ops) {
@@ -277,7 +256,7 @@ pub fn start_game_impl<O: RestartMenuOps + ?Sized>(ops: &O) -> bool {
     true
 }
 
-fn play_campaign_introduction(ops: &(impl RestartMenuOps + ?Sized), start: CampaignStart) {
+fn play_campaign_introduction(ops: &mut (impl RestartMenuOps + ?Sized), start: CampaignStart) {
     if ops.get_last_activity() & CHECK_RESTART != 0 && !start.scene_replaces_introduction {
         ops.introduction();
     }
@@ -289,15 +268,16 @@ fn play_campaign_introduction(ops: &(impl RestartMenuOps + ?Sized), start: Campa
 
 #[cfg(test)]
 mod tests {
-    use super::super::c_extern::Color;
     use super::super::restart_ops::RestartMenuOps;
     use super::*;
+    use crate::graphics::native_abi::Color;
     use std::cell::Cell;
     use std::os::raw::{c_int, c_short};
 
     // Re-use the MockOps pattern from do_restart tests
     struct MockOps {
         current_activity: Cell<u16>,
+        music_loaded: Cell<bool>,
         last_activity: Cell<u16>,
         next_activity: Cell<u16>,
         crew_enlisted: Cell<u16>,
@@ -330,6 +310,7 @@ mod tests {
         fn new() -> Self {
             Self {
                 current_activity: Cell::new(0),
+                music_loaded: Cell::new(false),
                 last_activity: Cell::new(0),
                 next_activity: Cell::new(0),
                 crew_enlisted: Cell::new(0),
@@ -360,59 +341,43 @@ mod tests {
     }
 
     impl RestartMenuOps for MockOps {
-        fn get_current_activity(&self) -> u16 {
+        fn get_current_activity(&mut self) -> u16 {
             self.current_activity.get()
         }
-        fn set_current_activity(&self, v: u16) {
+        fn set_current_activity(&mut self, v: u16) {
             self.current_activity.set(v);
         }
-        fn get_last_activity(&self) -> u16 {
+        fn get_last_activity(&mut self) -> u16 {
             self.last_activity.get()
         }
-        fn set_last_activity(&self, v: u16) {
+        fn set_last_activity(&mut self, v: u16) {
             self.last_activity.set(v);
         }
-        fn set_next_activity(&self, v: u16) {
+        fn set_next_activity(&mut self, v: u16) {
             self.next_activity.set(v);
         }
-        fn set_menu_state_ptr(&self, _ptr: usize) {}
-        fn get_menu_state_ptr(&self) -> usize {
-            0
-        }
-        fn get_menu_frame(&self) -> usize {
-            0
-        }
-        fn create_menu_state(&self) -> usize {
-            0
-        }
-        fn destroy_menu_state(&self, _ptr: usize) {}
-        fn sync_flash_context(&self, _ctx: usize) {}
-        fn sync_initialized(&self, _val: bool) {}
-        fn sync_cur_state(&self, _state: u8) {}
-        fn sync_cur_frame(&self, _frame: usize) {}
-        fn sync_h_music(&self, _handle: usize) {}
-        fn get_menu_input(&self) -> super::super::types::MenuInputState {
+        fn get_menu_input(&mut self) -> super::super::types::MenuInputState {
             Default::default()
         }
-        fn get_time_counter(&self) -> u32 {
+        fn get_time_counter(&mut self) -> u32 {
             self.time_counter.get()
         }
-        fn get_utwig_bomb_on_ship(&self) -> u8 {
+        fn get_utwig_bomb_on_ship(&mut self) -> u8 {
             self.utwig_bomb_on_ship.get()
         }
-        fn set_utwig_bomb_on_ship(&self, v: u8) {
+        fn set_utwig_bomb_on_ship(&mut self, v: u8) {
             self.utwig_bomb_on_ship.set(v);
         }
-        fn get_utwig_bomb(&self) -> u8 {
+        fn get_utwig_bomb(&mut self) -> u8 {
             self.utwig_bomb.get()
         }
-        fn get_crew_enlisted(&self) -> u16 {
+        fn get_crew_enlisted(&mut self) -> u16 {
             self.crew_enlisted.get()
         }
-        fn set_game_paused(&self, _val: bool) {}
-        fn reinit_race_queues(&self) {}
-        fn set_screen_context(&self) {}
-        fn fade_screen(&self, fade_type: u32, _duration: c_short) -> u32 {
+        fn set_game_paused(&mut self, _val: bool) {}
+        fn reinit_race_queues(&mut self) {}
+        fn set_screen_context(&mut self) {}
+        fn fade_screen(&mut self, fade_type: u32, _duration: c_short) -> u32 {
             if !self.first_fade_recorded.get() {
                 self.first_fade_type.set(fade_type);
                 self.first_fade_recorded.set(true);
@@ -420,37 +385,29 @@ mod tests {
             self.fade_screen_type.set(fade_type);
             200
         }
-        fn sleep_thread_until(&self, _time: u32) {}
-        fn sleep_thread(&self, _duration: u32) {}
-        fn batch_graphics(&self) {}
-        fn unbatch_graphics(&self) {}
-        fn clear_drawable(&self) {
+        fn sleep_thread_until(&mut self, _time: u32) {}
+        fn sleep_thread(&mut self, _duration: u32) {}
+        fn batch_graphics(&mut self) {}
+        fn unbatch_graphics(&mut self) {}
+        fn clear_drawable(&mut self) {
             self.clear_drawable_called.set(true);
         }
-        fn flush_color_xforms(&self) {}
-        fn screen_transition(&self, _a: c_int) {}
-        fn set_bg_color(&self, _color: Color) {
+        fn flush_color_xforms(&mut self) {}
+        fn screen_transition(&mut self, _a: c_int) {}
+        fn set_bg_color(&mut self, _color: Color) {
             self.set_bg_color_called.set(true);
         }
-        fn seed_random(&self) {
+        fn seed_random(&mut self) {
             self.seed_random_called.set(true);
         }
-        fn load_menu_graphic(&self) -> usize {
-            1
-        }
-        fn capture_drawable(&self, _load_result: usize) -> usize {
-            1
-        }
-        fn destroy_drawable(&self, _handle: usize) {}
-        fn release_drawable(&self, _handle: usize) -> usize {
-            0
-        }
-        fn draw_restart_menu_graphic(&self) {}
-        fn draw_restart_menu_state(&self, _state: u8) {}
-        fn set_menu_sounds(&self, _s0: u16, _s1: u16) {}
-        fn set_default_menu_repeat_delay(&self) {}
-        fn set_transition_source_null(&self) {}
-        fn run_do_input(&self, _reset_input: bool, _state: &mut DoRestartState) {
+        fn load_menu_graphic(&mut self) {}
+        fn destroy_menu_graphic(&mut self) {}
+        fn draw_restart_menu_graphic(&mut self) {}
+        fn draw_restart_menu_state(&mut self, _state: u8) {}
+        fn set_menu_sounds(&mut self, _s0: u16, _s1: u16) {}
+        fn set_default_menu_repeat_delay(&mut self) {}
+        fn set_transition_source_null(&mut self) {}
+        fn run_do_input(&mut self, _reset_input: bool, _state: &mut DoRestartState) {
             self.input_callbacks.set(self.input_callbacks.get() + 1);
             // Simulate DoInput setting activity via user selection.
             // For new game (IN_INTERPLANETARY), DoRestart also sets
@@ -469,43 +426,45 @@ mod tests {
                 );
             }
         }
-        fn load_menu_music(&self) -> usize {
-            0
+        fn has_menu_music(&mut self) -> bool {
+            self.music_loaded.get()
         }
-        fn play_music(&self, _handle: usize) {}
-        fn stop_music(&self) {}
-        fn destroy_music(&self, _handle: usize) {}
-        fn fade_music(&self, _end_vol: u8, _time_interval: c_short) -> u32 {
+        fn load_menu_music(&mut self) -> bool {
+            false
+        }
+        fn play_music(&mut self) {}
+        fn stop_music(&mut self) {}
+        fn destroy_music(&mut self) {
+            self.music_loaded.set(false);
+        }
+        fn fade_music(&mut self, _end_vol: u8, _time_interval: c_short) -> u32 {
             200
         }
-        fn create_flash_overlay(&self) -> usize {
-            0
-        }
-        fn flash_process(&self, _ctx: usize) {}
-        fn flash_pause(&self, _ctx: usize) {}
-        fn flash_continue(&self, _ctx: usize) {}
-        fn flash_start(&self, _ctx: usize) {}
-        fn flash_terminate(&self, _ctx: usize) {}
-        fn flash_set_merge_factors(&self, _ctx: usize, _a: c_int, _b: c_int, _c: c_int) {}
-        fn flash_set_speed(&self, _ctx: usize, _a: u32, _b: u32, _c: u32, _d: u32) {}
-        fn flash_set_frame_time(&self, _ctx: usize, _t: u32) {}
-        fn flash_set_state_fade_in(&self, _ctx: usize, _duration: u32) {}
-        fn flash_set_overlay(&self, _ctx: usize, _frame_idx: u32) {}
-        fn melee(&self) {
+        fn create_flash_overlay(&mut self) {}
+        fn flash_process(&mut self) {}
+        fn flash_pause(&mut self) {}
+        fn flash_continue(&mut self) {}
+        fn flash_start(&mut self) {}
+        fn flash_terminate(&mut self) {}
+        fn flash_set_merge_factors(&mut self, _a: c_int, _b: c_int, _c: c_int) {}
+        fn flash_set_speed(&mut self, _a: u32, _b: u32, _c: u32, _d: u32) {}
+        fn flash_set_frame_time(&mut self, _t: u32) {}
+        fn flash_set_state_fade_in(&mut self, _duration: u32) {}
+        fn melee(&mut self) {
             self.melee_called.set(true);
         }
-        fn setup_menu(&self) {}
-        fn free_game_data(&self) {
+        fn setup_menu(&mut self) {}
+        fn free_game_data(&mut self) {
             self.free_game_data_called.set(true);
         }
-        fn credits(&self, victory: bool) {
+        fn credits(&mut self, victory: bool) {
             self.credits_called.set(true);
             self.credits_victory.set(victory);
         }
-        fn victory(&self) {
+        fn victory(&mut self) {
             self.victory_called.set(true);
         }
-        fn introduction(&self) {
+        fn introduction(&mut self) {
             self.introduction_calls
                 .set(self.introduction_calls.get() + 1);
             if self.abort_introduction.get() {
@@ -513,13 +472,13 @@ mod tests {
                 self.do_input_activity_after.set(CHECK_ABORT);
             }
         }
-        fn splash_screen(&self) {
+        fn splash_screen(&mut self) {
             self.splash_called.set(true);
             // After splash, simulate user quitting on next menu
             self.do_input_activity_after.set(CHECK_ABORT);
         }
-        fn do_popup_window_msg(&self, _string_id: u16) {}
-        fn set_player_control(&self, player: u8, control: u16) {
+        fn do_popup_window_msg(&mut self, _string_id: u16) {}
+        fn set_player_control(&mut self, player: u8, control: u16) {
             if player == 0 {
                 self.player_control_0.set(control);
             } else {
@@ -532,12 +491,12 @@ mod tests {
 
     #[test]
     fn restart_menu_new_game_returns_true() {
-        let ops = MockOps::new();
+        let mut ops = MockOps::new();
         ops.do_input_activity_after
             .set(in_interplanetary_activity());
 
         let mut state = DoRestartState::default();
-        let result = restart_menu_impl(&ops, &mut state);
+        let result = restart_menu_impl(&mut ops, &mut state);
 
         assert!(result, "non-melee selection should return true");
         assert!(ops.seed_random_called.get());
@@ -545,47 +504,47 @@ mod tests {
 
     #[test]
     fn restart_menu_super_melee_returns_false() {
-        let ops = MockOps::new();
+        let mut ops = MockOps::new();
         ops.do_input_activity_after.set(SUPER_MELEE);
 
         let mut state = DoRestartState::default();
-        let result = restart_menu_impl(&ops, &mut state);
+        let result = restart_menu_impl(&mut ops, &mut state);
 
         assert!(!result, "Super Melee should return false from RestartMenu");
     }
 
     #[test]
     fn restart_menu_quit_returns_false() {
-        let ops = MockOps::new();
+        let mut ops = MockOps::new();
         ops.do_input_activity_after.set(CHECK_ABORT);
 
         let mut state = DoRestartState::default();
-        let result = restart_menu_impl(&ops, &mut state);
+        let result = restart_menu_impl(&mut ops, &mut state);
 
         assert!(!result, "quit should return false");
     }
 
     #[test]
     fn restart_menu_timeout_returns_false() {
-        let ops = MockOps::new();
+        let mut ops = MockOps::new();
         ops.do_input_activity_after.set(!0u16);
 
         let mut state = DoRestartState::default();
-        let result = restart_menu_impl(&ops, &mut state);
+        let result = restart_menu_impl(&mut ops, &mut state);
 
         assert!(!result, "timeout should return false");
     }
 
     #[test]
     fn restart_menu_utwig_bomb_path_sets_bg_color() {
-        let ops = MockOps::new();
+        let mut ops = MockOps::new();
         ops.crew_enlisted.set(0xFFFF);
         ops.utwig_bomb_on_ship.set(1);
         ops.utwig_bomb.set(0);
         ops.do_input_activity_after.set(4); // IN_INTERPLANETARY
 
         let mut state = DoRestartState::default();
-        let _ = restart_menu_impl(&ops, &mut state);
+        let _ = restart_menu_impl(&mut ops, &mut state);
 
         assert_eq!(ops.first_fade_type.get(), FADE_ALL_TO_WHITE);
         assert!(
@@ -605,12 +564,12 @@ mod tests {
 
     #[test]
     fn restart_menu_victory_path_calls_victory_and_credits() {
-        let ops = MockOps::new();
+        let mut ops = MockOps::new();
         ops.last_activity.set(WON_LAST_BATTLE);
         ops.do_input_activity_after.set(4); // IN_INTERPLANETARY
 
         let mut state = DoRestartState::default();
-        let _ = restart_menu_impl(&ops, &mut state);
+        let _ = restart_menu_impl(&mut ops, &mut state);
 
         assert!(ops.victory_called.get(), "Victory should be called");
         assert!(ops.credits_called.get(), "Credits should be called");
@@ -628,10 +587,10 @@ mod tests {
 
     #[test]
     fn try_start_game_succeeds() {
-        let ops = MockOps::new();
+        let mut ops = MockOps::new();
         ops.do_input_activity_after.set(4); // IN_INTERPLANETARY → started
 
-        let result = try_start_game_impl(&ops);
+        let result = try_start_game_impl(&mut ops);
         assert!(
             result.is_some(),
             "a started game returns its startup policy"
@@ -640,19 +599,19 @@ mod tests {
 
     #[test]
     fn try_start_game_quit_returns_false() {
-        let ops = MockOps::new();
+        let mut ops = MockOps::new();
         ops.do_input_activity_after.set(CHECK_ABORT);
 
-        let result = try_start_game_impl(&ops);
+        let result = try_start_game_impl(&mut ops);
         assert!(result.is_none(), "quit cannot start a campaign");
     }
 
     #[test]
     fn try_start_game_timeout_returns_false() {
-        let ops = MockOps::new();
+        let mut ops = MockOps::new();
         ops.do_input_activity_after.set(!0u16);
 
-        let result = try_start_game_impl(&ops);
+        let result = try_start_game_impl(&mut ops);
         assert!(result.is_none(), "timeout cannot start a campaign");
     }
 
@@ -660,10 +619,10 @@ mod tests {
 
     #[test]
     fn new_game_plays_introduction_before_lifecycle_handoff() {
-        let ops = MockOps::new();
+        let mut ops = MockOps::new();
         ops.do_input_activity_after.set(4);
 
-        assert!(start_game_impl(&ops));
+        assert!(start_game_impl(&mut ops));
         assert_eq!(ops.current_activity.get(), 4);
         assert_eq!(ops.last_activity.get(), CHECK_LOAD | CHECK_RESTART);
         assert_eq!(ops.introduction_calls.get(), 1);
@@ -684,11 +643,11 @@ mod tests {
 
     #[test]
     fn declared_start_scene_reaches_lifecycle_without_consuming_input_in_introduction() {
-        let ops = MockOps::new();
+        let mut ops = MockOps::new();
         ops.do_input_activity_after.set(4);
         ops.last_activity.set(CHECK_LOAD | CHECK_RESTART);
         play_campaign_introduction(
-            &ops,
+            &mut ops,
             CampaignStart {
                 scene_replaces_introduction: true,
             },
@@ -699,30 +658,30 @@ mod tests {
 
     #[test]
     fn loaded_game_does_not_play_introduction() {
-        let ops = MockOps::new();
+        let mut ops = MockOps::new();
         ops.do_input_activity_after.set(4);
         ops.new_game.set(false);
-        assert!(start_game_impl(&ops));
+        assert!(start_game_impl(&mut ops));
         assert_eq!(ops.introduction_calls.get(), 0);
     }
 
     #[test]
     fn aborted_introduction_returns_to_menu_before_quitting() {
-        let ops = MockOps::new();
+        let mut ops = MockOps::new();
         ops.do_input_activity_after.set(4);
         ops.abort_introduction.set(true);
-        assert!(!start_game_impl(&ops));
+        assert!(!start_game_impl(&mut ops));
         assert_eq!(ops.introduction_calls.get(), 1);
         assert_eq!(ops.input_callbacks.get(), 2);
     }
 
     #[test]
     fn start_game_sets_player_controls() {
-        let ops = MockOps::new();
+        let mut ops = MockOps::new();
         ops.do_input_activity_after.set(4); // IN_INTERPLANETARY
         ops.last_activity.set(0); // No CHECK_RESTART → loaded game
 
-        let result = start_game_impl(&ops);
+        let result = start_game_impl(&mut ops);
         assert!(result, "should return true");
         assert_eq!(
             ops.player_control_0.get(),
@@ -736,19 +695,19 @@ mod tests {
 
     #[test]
     fn start_game_quit_returns_false() {
-        let ops = MockOps::new();
+        let mut ops = MockOps::new();
         ops.do_input_activity_after.set(CHECK_ABORT);
 
-        let result = start_game_impl(&ops);
+        let result = start_game_impl(&mut ops);
         assert!(!result, "quit cannot start a campaign");
     }
 
     #[test]
     fn start_game_timeout_shows_splash_and_credits() {
-        let ops = MockOps::new();
+        let mut ops = MockOps::new();
         ops.do_input_activity_after.set(!0u16); // Timeout
 
-        let result = start_game_impl(&ops);
+        let result = start_game_impl(&mut ops);
         assert!(!result, "timeout should eventually return false");
         assert!(
             ops.splash_called.get(),

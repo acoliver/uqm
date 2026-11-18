@@ -1,5 +1,9 @@
 //! Exclusive flashing-region ownership with its retained drawing context.
-use super::{ffi, flash, native_abi::*, native_context::ContextLease};
+use super::{
+    ffi, flash,
+    native_abi::*,
+    native_context::{ContextFrame, ContextLease},
+};
 use crate::{
     callback::ffi::{AlarmId, Alarm_addAbsoluteMs, Alarm_remove},
     time::counter_abi::ONE_SECOND,
@@ -16,6 +20,10 @@ enum Operation {
     Merge(i32, i32, i32),
     FrameTime(u32),
     Speed(u32, u32, u32, u32),
+    Overlay(POINT, FRAME),
+    FadeIn(u32),
+    Pause,
+    Continue,
     Start,
     Process,
     NextTime,
@@ -52,6 +60,12 @@ impl Highlight {
                 Operation::Speed(fade_in, on, fade_out, off) => {
                     flash::Flash_setSpeed(native, fade_in, on, fade_out, off)
                 }
+                Operation::Overlay(origin, frame) => {
+                    flash::Flash_setOverlay(native, &origin, frame)
+                }
+                Operation::FadeIn(spent) => flash::Flash_setState(native, flash::FADE_IN, spent),
+                Operation::Pause => flash::Flash_pause(native),
+                Operation::Continue => flash::Flash_continue(native),
                 Operation::Start => flash::Flash_start(native),
                 Operation::Process => flash::Flash_process(native),
                 Operation::NextTime => return flash::Flash_nextTime(native),
@@ -111,6 +125,66 @@ impl Highlight {
         drop(registry);
         state.borrow_mut().schedule();
         ScheduledHighlight(state)
+    }
+}
+
+/// An exclusive overlay that terminates its flash before releasing the source frame.
+pub struct Overlay {
+    flash: Highlight,
+    frame: Option<ContextFrame>,
+}
+
+impl ContextLease {
+    pub fn overlay(&self) -> Overlay {
+        Overlay::new(self.clone())
+    }
+}
+
+impl Overlay {
+    fn new(context: ContextLease) -> Self {
+        // SAFETY: the context lease retains this graphics-thread context until termination.
+        let native = unsafe {
+            flash::Flash_createOverlay(context.as_raw(), std::ptr::null(), std::ptr::null_mut())
+        };
+        Self {
+            flash: Highlight {
+                native: NonNull::new(native).unwrap_or_else(|| panic!("overlay allocation failed")),
+                context,
+            },
+            frame: None,
+        }
+    }
+
+    pub fn set_frame(&mut self, origin: POINT, frame: ContextFrame) {
+        let native = frame.as_raw();
+        assert!(!native.is_null(), "overlay requires a retained frame");
+        self.flash.apply(Operation::Overlay(origin, native));
+        self.frame = Some(frame);
+    }
+
+    pub fn set_merge_factors(&mut self, start: i32, end: i32, denominator: i32) {
+        self.flash.set_merge_factors(start, end, denominator);
+    }
+    pub fn set_speed(&mut self, fade_in: u32, on: u32, fade_out: u32, off: u32) {
+        self.flash.set_speed(fade_in, on, fade_out, off);
+    }
+    pub fn set_frame_time(&mut self, time: u32) {
+        self.flash.set_frame_time(time);
+    }
+    pub fn fade_in(&mut self, spent: u32) {
+        self.flash.apply(Operation::FadeIn(spent));
+    }
+    pub fn start(&mut self) {
+        self.flash.start();
+    }
+    pub fn process(&mut self) {
+        self.flash.process();
+    }
+    pub fn pause(&mut self) {
+        self.flash.apply(Operation::Pause);
+    }
+    pub fn resume(&mut self) {
+        self.flash.apply(Operation::Continue);
     }
 }
 
@@ -273,5 +347,67 @@ mod tests {
         })
         .join()
         .unwrap_or_else(|_| panic!("graphics fixture ownership handoff failed"));
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn overlay_retains_context_and_replaced_frames_until_termination() {
+        // SAFETY: the serialized fixture owns all native allocation/release calls.
+        let (raw, drawable) = unsafe {
+            let context = {
+                #[cfg(feature = "debug-process")]
+                {
+                    context_abi::CreateContextAux(c"overlay-owner-test".as_ptr())
+                }
+                #[cfg(not(feature = "debug-process"))]
+                {
+                    context_abi::CreateContextAux()
+                }
+            };
+            (context, super::super::drawable_abi::AllocDrawable(2))
+        };
+        let context = context_abi::ContextLease::retain(NonNull::new(raw).unwrap());
+        let allocation = ffi::native_allocations()
+            .contexts
+            .get(&(raw as usize))
+            .unwrap()
+            .clone();
+        let weak_context = Rc::downgrade(&allocation);
+        drop(allocation);
+        // SAFETY: the fixture owns this registered two-frame drawable.
+        let first = unsafe {
+            super::super::native_context::ContextFrame::retain(NonNull::new(
+                (*drawable).Frame.cast(),
+            ))
+        };
+        let weak_frame = {
+            let leases =
+                super::super::native_drawables::retain_frame_allocations(&[first.as_raw()]);
+            Rc::downgrade(&leases[0]._allocation)
+        };
+        let mut overlay = context.overlay();
+        overlay.set_frame(POINT { x: 0, y: 0 }, first.clone());
+        overlay.set_frame(POINT { x: 2, y: 3 }, first.indexed_frame(1));
+        drop(first);
+        // SAFETY: the fixture consumes both native authorities; the overlay retains their allocations.
+        unsafe {
+            assert_eq!(context_abi::DestroyContext(raw), 1);
+            assert_eq!(super::super::drawable_abi::DestroyDrawable(drawable), 1);
+        }
+        drop(context);
+        assert!(weak_context.upgrade().is_some());
+        assert!(weak_frame.upgrade().is_some());
+        overlay.set_merge_factors(-3, 3, 16);
+        overlay.set_speed(315, 0, 315, 0);
+        overlay.set_frame_time(52);
+        overlay.fade_in(157);
+        overlay.process();
+        overlay.pause();
+        overlay.resume();
+        drop(overlay);
+        assert!(weak_context.upgrade().is_none());
+        assert!(weak_frame.upgrade().is_none());
+        // SAFETY: no animation remains in the serialized fixture.
+        unsafe { super::super::flash::release_work_context_for_test() };
     }
 }

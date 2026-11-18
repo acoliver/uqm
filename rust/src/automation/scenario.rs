@@ -351,23 +351,21 @@ impl SceneEntryOps for LinkedSceneEntry<'_> {
     }
 
     fn clear_screen(&mut self) {
-        use crate::mainloop::restart_menu::c_extern;
         // SAFETY: the screen context exists once game initialization is
         // complete, and scene activation runs on the main thread.
         unsafe {
-            c_extern::SetContext(self.screen_context);
-            c_extern::ClearDrawable();
+            crate::graphics::context_abi::SetContext(self.screen_context);
+            crate::graphics::frame_abi::ClearDrawable();
         }
     }
 
     fn fade_screen_to_color(&mut self) {
-        use crate::mainloop::restart_menu::c_extern;
         // SAFETY: FadeScreen is called from the main thread; the returned
         // completion time is deliberately not awaited, as in the C entry.
         unsafe {
-            c_extern::FadeScreen(
-                c_extern::FADE_ALL_TO_COLOR,
-                (c_extern::ONE_SECOND / 2) as i16,
+            crate::graphics::cmap_abi::FadeScreen(
+                crate::graphics::cmap_abi::FADE_ALL_TO_COLOR,
+                (crate::time::counter_abi::ONE_SECOND / 2) as i16,
             );
         }
     }

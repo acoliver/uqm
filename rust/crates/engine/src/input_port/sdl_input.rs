@@ -135,6 +135,7 @@ struct InputState {
     controls: Vec<VCONTROL_GESTURE>,
     names: [String; 6],
     initialized: bool,
+    mouse_button_down: bool,
     character_mode: bool,
     applied_character_mode: bool,
     characters: CharacterBuffer,
@@ -151,6 +152,7 @@ impl InputState {
             controls: Vec::new(),
             names: [const { String::new() }; 6],
             initialized: false,
+            mouse_button_down: false,
             character_mode: false,
             applied_character_mode: false,
             characters: CharacterBuffer::new(),
@@ -348,8 +350,9 @@ pub extern "C" fn GetLastCharacter() -> u32 {
     INPUT.lock().characters.last
 }
 
-#[no_mangle]
-pub static mut MouseButtonDown: c_int = 0;
+pub fn mouse_button_down() -> bool {
+    INPUT.lock().mouse_button_down
+}
 
 unsafe fn is_numpad_character(event: &sys::SDL_Event, character_mode: bool) -> bool {
     character_mode
@@ -368,8 +371,8 @@ pub unsafe extern "C" fn process_input_event(event: *const sys::SDL_Event) {
     }
     let event = &*event;
     match event.type_ {
-        0x401 => ptr::write_volatile(ptr::addr_of_mut!(MouseButtonDown), 1),
-        0x402 => ptr::write_volatile(ptr::addr_of_mut!(MouseButtonDown), 0),
+        0x401 => state.mouse_button_down = true,
+        0x402 => state.mouse_button_down = false,
         _ => {}
     }
     if state.character_mode && !state.applied_character_mode {

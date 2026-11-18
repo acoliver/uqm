@@ -23,7 +23,7 @@ use crate::c_bindings::controller_input::{
 
 use crate::comm::locdata::{CColor, CPoint, CRect};
 
-use crate::mainloop::{restart_menu::c_extern as base, types::activity_flags::CHECK_ABORT};
+use crate::mainloop::types::activity_flags::CHECK_ABORT;
 
 use crate::starbase::{gfx::Rgba, platform::ONE_SECOND, sis_modules::FUEL_TANK_SCALE};
 
@@ -224,7 +224,7 @@ fn do_pick_battle_ship(
     }
 
     // SAFETY: plain call.
-    base::SetMenuSounds(input, MENU_SOUND_NONE, MENU_SOUND_NONE);
+    input.set_menu_sounds(MENU_SOUND_NONE, MENU_SOUND_NONE);
 
     if !state.initialized {
         state.initialized = true;
@@ -289,7 +289,7 @@ fn get_armada_star_ship(
                 .tiny_font_lease()
                 .unwrap_or_else(|| panic!("picker font")),
         };
-        base::SetMenuSounds(input, MENU_SOUND_ARROWS, MENU_SOUND_SELECT);
+        input.set_menu_sounds(MENU_SOUND_ARROWS, MENU_SOUND_SELECT);
         let runtime = cx.kernel.input_runtime();
         let mut observer = runtime.observer();
         let mut io = Io {
