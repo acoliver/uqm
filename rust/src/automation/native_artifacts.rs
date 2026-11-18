@@ -373,7 +373,7 @@ impl SharedInputs {
 
     /// Create a no-clobber runtime alias between bound directory descriptors.
     pub fn link_runtime(&self, root: &Path, logical: &str, limit: u64) -> Result<(), String> {
-        use std::os::fd::AsRawFd;
+        use std::os::fd::AsFd as _;
         self.validate(root)?;
         self.read(root, logical, limit)?;
         let (_, shared) = Self::shared_directory(root)?;
@@ -385,22 +385,13 @@ impl SharedInputs {
             relative_parent(&scenario, logical).map_err(|error| error.to_string())?;
         let source = std::ffi::CString::new(source_name).map_err(|error| error.to_string())?;
         let target = std::ffi::CString::new(target_name).map_err(|error| error.to_string())?;
-        // SAFETY: both directories and C strings remain owned across linkat; flags do not follow symlinks.
-        if unsafe {
-            libc::linkat(
-                source_parent.as_raw_fd(),
-                source.as_ptr(),
-                target_parent.as_raw_fd(),
-                target.as_ptr(),
-                0,
-            )
-        } != 0
-        {
-            return Err(format!(
-                "claim runtime alias: {}",
-                io::Error::last_os_error()
-            ));
-        }
+        crate::platform::os::fs::link_at(
+            source_parent.as_fd(),
+            &source,
+            target_parent.as_fd(),
+            &target,
+        )
+        .map_err(|error| format!("claim runtime alias: {error}"))?;
         if read_identity(
             &scenario,
             &NativeRetainedInput {
@@ -532,22 +523,15 @@ fn create_relative(directory: &File, relative: &str) -> io::Result<File> {
 }
 #[cfg(unix)]
 fn open_at(directory: &File, name: &str, flags: i32) -> io::Result<File> {
-    use std::os::fd::{AsRawFd, FromRawFd};
+    use std::os::fd::AsFd as _;
     let name = std::ffi::CString::new(name).map_err(io::Error::other)?;
-    // SAFETY: directory and name remain valid; a successful descriptor is immediately owned.
-    let fd = unsafe {
-        libc::openat(
-            directory.as_raw_fd(),
-            name.as_ptr(),
-            flags | libc::O_NOFOLLOW | libc::O_CLOEXEC,
-            0o500,
-        )
-    };
-    if fd < 0 {
-        return Err(io::Error::last_os_error());
-    }
-    // SAFETY: openat returned a new owned descriptor.
-    Ok(unsafe { File::from_raw_fd(fd) })
+    crate::platform::os::fd::open_at(
+        directory.as_fd(),
+        &name,
+        flags | libc::O_NOFOLLOW | libc::O_CLOEXEC,
+        0o500,
+    )
+    .map(File::from)
 }
 
 #[cfg(test)]

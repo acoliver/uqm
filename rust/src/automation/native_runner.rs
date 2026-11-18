@@ -32,6 +32,7 @@ use crate::automation::{
     NATIVE_LINKED_BUILD_RECEIPT_SCHEMA, NATIVE_WINDOW_ACK_SCHEMA, NATIVE_WINDOW_CONFIG_SCHEMA,
 };
 use crate::mainloop::options::{DEFAULT_RESOLUTION_HEIGHT, DEFAULT_RESOLUTION_WIDTH};
+use crate::platform::os as sys;
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -457,15 +458,12 @@ impl BoundedNativeObserver {
         name: &std::ffi::OsStr,
         flags: libc::c_int,
     ) -> Result<(), NativeWindowObserverError> {
-        use std::os::fd::AsRawFd as _;
+        use std::os::fd::AsFd as _;
         use std::os::unix::ffi::OsStrExt as _;
         let name_c = std::ffi::CString::new(name.as_bytes()).map_err(|_| {
             NativeWindowObserverError::Os("native observer member contains NUL".to_string())
         })?;
-        if unsafe { libc::unlinkat(self.scratch_directory.as_raw_fd(), name_c.as_ptr(), flags) }
-            != 0
-        {
-            let error = io::Error::last_os_error();
+        if let Err(error) = sys::fs::unlink_at(self.scratch_directory.as_fd(), &name_c, flags) {
             if error.kind() != io::ErrorKind::NotFound {
                 return Err(NativeWindowObserverError::Os(format!(
                     "remove native observer member {}: {error}",
@@ -524,28 +522,25 @@ fn read_bounded_regular_at(
     name: &std::ffi::OsStr,
     budget: u64,
 ) -> Result<Vec<u8>, NativeWindowObserverError> {
-    use std::os::fd::{AsRawFd as _, FromRawFd as _};
+    use std::os::fd::AsFd as _;
     use std::os::unix::ffi::OsStrExt as _;
 
     let name_c = std::ffi::CString::new(name.as_bytes()).map_err(|_| {
         NativeWindowObserverError::Os("native observer member contains NUL".to_string())
     })?;
-    let descriptor = unsafe {
-        libc::openat(
-            parent.as_raw_fd(),
-            name_c.as_ptr(),
-            libc::O_RDONLY | libc::O_CLOEXEC | libc::O_NOFOLLOW | libc::O_NONBLOCK,
-        )
-    };
-    if descriptor < 0 {
-        return Err(NativeWindowObserverError::Os(format!(
-            "open native observer output {}: {}",
-            name.to_string_lossy(),
-            io::Error::last_os_error()
-        )));
-    }
-    let file = fs::File::from(unsafe { std::os::fd::OwnedFd::from_raw_fd(descriptor) });
-    read_bounded_open_file(file, budget)
+    let descriptor = sys::fd::open_at(
+        parent.as_fd(),
+        &name_c,
+        libc::O_RDONLY | libc::O_CLOEXEC | libc::O_NOFOLLOW | libc::O_NONBLOCK,
+        0,
+    )
+    .map_err(|error| {
+        NativeWindowObserverError::Os(format!(
+            "open native observer output {}: {error}",
+            name.to_string_lossy()
+        ))
+    })?;
+    read_bounded_open_file(fs::File::from(descriptor), budget)
 }
 
 fn read_bounded_open_file(
@@ -1305,10 +1300,9 @@ fn native_execution_identity() -> Result<NativeExecutionIdentity, String> {
     let launchd_manager_uid = launchd_manager_value("manageruid")?
         .parse::<u32>()
         .map_err(|error| format!("launchd manager UID is invalid: {error}"))?;
-    // SAFETY: getuid and geteuid have no preconditions.
     Ok(NativeExecutionIdentity {
-        real_uid: unsafe { libc::getuid() },
-        effective_uid: unsafe { libc::geteuid() },
+        real_uid: sys::process::real_user_id(),
+        effective_uid: sys::process::effective_user_id(),
         launchd_manager_uid,
         launchd_manager_name: launchd_manager_value("managername")?,
     })
@@ -2463,7 +2457,7 @@ struct MaterializedContent {
 
 impl MaterializedContent {
     fn cleanup(&mut self) -> Result<(), String> {
-        use std::os::fd::AsRawFd as _;
+        use std::os::fd::AsFd as _;
 
         while let Some(entry) = self.entries.pop() {
             let removal = (|| -> Result<(), String> {
@@ -2472,14 +2466,12 @@ impl MaterializedContent {
                     MaterializedEntryKind::File => 0,
                     MaterializedEntryKind::Directory => libc::AT_REMOVEDIR,
                 };
-                if unsafe { libc::unlinkat(parent.as_raw_fd(), filename.as_ptr(), flags) } != 0 {
-                    return Err(format!(
-                        "remove materialized content {}: {}",
-                        entry.relative_path.display(),
-                        io::Error::last_os_error()
-                    ));
-                }
-                Ok(())
+                sys::fs::unlink_at(parent.as_fd(), &filename, flags).map_err(|error| {
+                    format!(
+                        "remove materialized content {}: {error}",
+                        entry.relative_path.display()
+                    )
+                })
             })();
             if let Err(error) = removal {
                 self.entries.push(entry);
@@ -2490,30 +2482,21 @@ impl MaterializedContent {
     }
 
     fn is_removed(&self) -> Result<bool, String> {
-        use std::os::fd::AsRawFd as _;
+        use std::os::fd::AsFd as _;
         use std::os::unix::ffi::OsStrExt as _;
 
         for name in &self.top_level {
             let name = std::ffi::CString::new(name.as_bytes())
                 .map_err(|_| "materialized top-level name contains a NUL byte".to_string())?;
-            let mut status = std::mem::MaybeUninit::<libc::stat>::uninit();
-            if unsafe {
-                libc::fstatat(
-                    self.root.as_raw_fd(),
-                    name.as_ptr(),
-                    status.as_mut_ptr(),
-                    libc::AT_SYMLINK_NOFOLLOW,
-                )
-            } == 0
-            {
+            let present =
+                sys::fs::exists_at_no_follow(self.root.as_fd(), &name).map_err(|error| {
+                    format!(
+                        "inspect materialized content {}: {error}",
+                        name.to_string_lossy()
+                    )
+                })?;
+            if present {
                 return Ok(false);
-            }
-            if io::Error::last_os_error().raw_os_error() != Some(libc::ENOENT) {
-                return Err(format!(
-                    "inspect materialized content {}: {}",
-                    name.to_string_lossy(),
-                    io::Error::last_os_error()
-                ));
             }
         }
         Ok(true)
@@ -2766,7 +2749,7 @@ fn ensure_directories(
     materialized: &mut MaterializedContent,
     relative: &Path,
 ) -> Result<std::os::fd::OwnedFd, String> {
-    use std::os::fd::AsRawFd as _;
+    use std::os::fd::AsFd as _;
 
     let mut current = duplicate_fd(&materialized.root)?;
     let mut traversed = PathBuf::new();
@@ -2776,29 +2759,27 @@ fn ensure_directories(
         };
         let name_c = component_cstring(name)?;
         traversed.push(name);
-        let created = if unsafe { libc::mkdirat(current.as_raw_fd(), name_c.as_ptr(), 0o700) } == 0
-        {
-            materialized.entries.push(MaterializedEntry {
-                relative_path: traversed.clone(),
-                kind: MaterializedEntryKind::Directory,
-            });
-            true
-        } else if io::Error::last_os_error().raw_os_error() == Some(libc::EEXIST) {
-            false
-        } else {
-            return Err(format!(
-                "create content directory {}: {}",
-                traversed.display(),
-                io::Error::last_os_error()
-            ));
+        let created = match sys::fs::make_directory_at(current.as_fd(), &name_c, 0o700) {
+            Ok(()) => {
+                materialized.entries.push(MaterializedEntry {
+                    relative_path: traversed.clone(),
+                    kind: MaterializedEntryKind::Directory,
+                });
+                true
+            }
+            Err(error) if error.raw_os_error() == Some(libc::EEXIST) => false,
+            Err(error) => {
+                return Err(format!(
+                    "create content directory {}: {error}",
+                    traversed.display()
+                ));
+            }
         };
         current = open_directory_at(&current, &name_c, &traversed)?;
-        if created && unsafe { libc::fchmod(current.as_raw_fd(), 0o750) } != 0 {
-            return Err(format!(
-                "publish content directory {}: {}",
-                traversed.display(),
-                io::Error::last_os_error()
-            ));
+        if created {
+            sys::fs::change_mode(current.as_fd(), 0o750).map_err(|error| {
+                format!("publish content directory {}: {error}", traversed.display())
+            })?;
         }
     }
     Ok(current)
@@ -2859,22 +2840,11 @@ fn open_directory_raw(
     path: &std::ffi::CStr,
     display: &Path,
 ) -> Result<std::os::fd::OwnedFd, String> {
-    use std::os::fd::FromRawFd as _;
-
-    let fd = unsafe {
-        libc::open(
-            path.as_ptr(),
-            libc::O_RDONLY | libc::O_DIRECTORY | libc::O_CLOEXEC | libc::O_NOFOLLOW,
-        )
-    };
-    if fd < 0 {
-        return Err(format!(
-            "open content directory {}: {}",
-            display.display(),
-            io::Error::last_os_error()
-        ));
-    }
-    Ok(unsafe { std::os::fd::OwnedFd::from_raw_fd(fd) })
+    sys::fd::open(
+        path,
+        libc::O_RDONLY | libc::O_DIRECTORY | libc::O_CLOEXEC | libc::O_NOFOLLOW,
+    )
+    .map_err(|error| format!("open content directory {}: {error}", display.display()))
 }
 
 fn open_directory_at(
@@ -2882,23 +2852,15 @@ fn open_directory_at(
     name: &std::ffi::CStr,
     display: &Path,
 ) -> Result<std::os::fd::OwnedFd, String> {
-    use std::os::fd::{AsRawFd as _, FromRawFd as _};
+    use std::os::fd::AsFd as _;
 
-    let fd = unsafe {
-        libc::openat(
-            parent.as_raw_fd(),
-            name.as_ptr(),
-            libc::O_RDONLY | libc::O_DIRECTORY | libc::O_CLOEXEC | libc::O_NOFOLLOW,
-        )
-    };
-    if fd < 0 {
-        return Err(format!(
-            "open content directory {}: {}",
-            display.display(),
-            io::Error::last_os_error()
-        ));
-    }
-    Ok(unsafe { std::os::fd::OwnedFd::from_raw_fd(fd) })
+    sys::fd::open_at(
+        parent.as_fd(),
+        name,
+        libc::O_RDONLY | libc::O_DIRECTORY | libc::O_CLOEXEC | libc::O_NOFOLLOW,
+        0,
+    )
+    .map_err(|error| format!("open content directory {}: {error}", display.display()))
 }
 
 fn create_file_at(
@@ -2906,37 +2868,23 @@ fn create_file_at(
     name: &std::ffi::CStr,
     display: &Path,
 ) -> Result<fs::File, String> {
-    use std::os::fd::{AsRawFd as _, FromRawFd as _};
+    use std::os::fd::AsFd as _;
 
-    let fd = unsafe {
-        libc::openat(
-            parent.as_raw_fd(),
-            name.as_ptr(),
-            libc::O_WRONLY | libc::O_CREAT | libc::O_EXCL | libc::O_CLOEXEC | libc::O_NOFOLLOW,
-            0o600,
-        )
-    };
-    if fd < 0 {
-        return Err(format!(
-            "create content entry {}: {}",
-            display.display(),
-            io::Error::last_os_error()
-        ));
-    }
-    Ok(unsafe { fs::File::from_raw_fd(fd) })
+    sys::fd::open_at(
+        parent.as_fd(),
+        name,
+        libc::O_WRONLY | libc::O_CREAT | libc::O_EXCL | libc::O_CLOEXEC | libc::O_NOFOLLOW,
+        0o600,
+    )
+    .map(fs::File::from)
+    .map_err(|error| format!("create content entry {}: {error}", display.display()))
 }
 
 fn duplicate_fd(fd: &std::os::fd::OwnedFd) -> Result<std::os::fd::OwnedFd, String> {
-    use std::os::fd::{AsRawFd as _, FromRawFd as _};
+    use std::os::fd::AsFd as _;
 
-    let duplicate = unsafe { libc::fcntl(fd.as_raw_fd(), libc::F_DUPFD_CLOEXEC, 0) };
-    if duplicate < 0 {
-        return Err(format!(
-            "duplicate content directory descriptor: {}",
-            io::Error::last_os_error()
-        ));
-    }
-    Ok(unsafe { std::os::fd::OwnedFd::from_raw_fd(duplicate) })
+    sys::fd::duplicate_close_on_exec(fd.as_fd())
+        .map_err(|error| format!("duplicate content directory descriptor: {error}"))
 }
 
 fn component_cstring(value: &std::ffi::OsStr) -> Result<std::ffi::CString, String> {
@@ -2959,22 +2907,19 @@ impl FreshRoot {
 
 impl Drop for FreshRoot {
     fn drop(&mut self) {
-        use std::os::fd::AsRawFd as _;
+        use std::os::fd::AsFd as _;
 
         // The process is exiting after a production run. Tests need the restore
         // so a bound-root check cannot affect later cases in the same binary.
-        if unsafe { libc::fchdir(self.previous_directory.as_raw_fd()) } != 0 {
-            eprintln!(
-                "uqm-native-acceptance: restore working directory: {}",
-                io::Error::last_os_error()
-            );
+        if let Err(error) = sys::fs::change_directory(self.previous_directory.as_fd()) {
+            eprintln!("uqm-native-acceptance: restore working directory: {error}");
         }
     }
 }
 
 fn create_fresh_root(root: &Path) -> Result<FreshRoot, String> {
     use std::ffi::CString;
-    use std::os::fd::{AsRawFd as _, FromRawFd as _};
+    use std::os::fd::AsFd as _;
     use std::os::unix::ffi::OsStrExt as _;
 
     let requested_parent = root
@@ -2993,67 +2938,37 @@ fn create_fresh_root(root: &Path) -> Result<FreshRoot, String> {
         .map_err(|_| "evidence root parent contains a NUL byte".to_string())?;
     let filename = CString::new(filename_os.as_bytes())
         .map_err(|_| "evidence root filename contains a NUL byte".to_string())?;
-    let parent_fd = unsafe {
-        libc::open(
-            parent.as_ptr(),
-            libc::O_RDONLY | libc::O_DIRECTORY | libc::O_CLOEXEC | libc::O_NOFOLLOW,
-        )
+    let parent_fd = sys::fd::open(
+        &parent,
+        libc::O_RDONLY | libc::O_DIRECTORY | libc::O_CLOEXEC | libc::O_NOFOLLOW,
+    )
+    .map_err(|error| format!("open evidence root parent: {error}"))?;
+    let previous_directory =
+        sys::fd::open(c".", libc::O_RDONLY | libc::O_DIRECTORY | libc::O_CLOEXEC)
+            .map_err(|error| format!("bind current directory: {error}"))?;
+    sys::fs::make_directory_at(parent_fd.as_fd(), &filename, 0o700)
+        .map_err(|error| format!("create evidence root: {error}"))?;
+    let remove_partial_root = || {
+        let _ = sys::fs::unlink_at(parent_fd.as_fd(), &filename, libc::AT_REMOVEDIR);
     };
-    if parent_fd < 0 {
-        return Err(format!(
-            "open evidence root parent: {}",
-            std::io::Error::last_os_error()
-        ));
-    }
-    let parent_fd = unsafe { std::os::fd::OwnedFd::from_raw_fd(parent_fd) };
-    let previous_directory = unsafe {
-        libc::open(
-            c".".as_ptr(),
-            libc::O_RDONLY | libc::O_DIRECTORY | libc::O_CLOEXEC,
-        )
-    };
-    if previous_directory < 0 {
-        return Err(format!(
-            "bind current directory: {}",
-            std::io::Error::last_os_error()
-        ));
-    }
-    let previous_directory = unsafe { std::os::fd::OwnedFd::from_raw_fd(previous_directory) };
-    if unsafe { libc::mkdirat(parent_fd.as_raw_fd(), filename.as_ptr(), 0o700) } != 0 {
-        return Err(format!(
-            "create evidence root: {}",
-            std::io::Error::last_os_error()
-        ));
-    }
-    let directory = unsafe {
-        libc::openat(
-            parent_fd.as_raw_fd(),
-            filename.as_ptr(),
-            libc::O_RDONLY | libc::O_DIRECTORY | libc::O_CLOEXEC | libc::O_NOFOLLOW,
-        )
-    };
-    if directory < 0 {
-        let error = std::io::Error::last_os_error();
-        unsafe {
-            libc::unlinkat(parent_fd.as_raw_fd(), filename.as_ptr(), libc::AT_REMOVEDIR);
-        }
-        return Err(format!("bind evidence root: {error}"));
-    }
-    let directory = unsafe { std::os::fd::OwnedFd::from_raw_fd(directory) };
-    if unsafe { libc::fchmod(directory.as_raw_fd(), 0o750) } != 0 {
-        let error = std::io::Error::last_os_error();
-        unsafe {
-            libc::unlinkat(parent_fd.as_raw_fd(), filename.as_ptr(), libc::AT_REMOVEDIR);
-        }
-        return Err(format!("publish evidence root: {error}"));
-    }
-    if unsafe { libc::fchdir(directory.as_raw_fd()) } != 0 {
-        let error = std::io::Error::last_os_error();
-        unsafe {
-            libc::unlinkat(parent_fd.as_raw_fd(), filename.as_ptr(), libc::AT_REMOVEDIR);
-        }
-        return Err(format!("enter bound evidence root: {error}"));
-    }
+    let directory = sys::fd::open_at(
+        parent_fd.as_fd(),
+        &filename,
+        libc::O_RDONLY | libc::O_DIRECTORY | libc::O_CLOEXEC | libc::O_NOFOLLOW,
+        0,
+    )
+    .map_err(|error| {
+        remove_partial_root();
+        format!("bind evidence root: {error}")
+    })?;
+    sys::fs::change_mode(directory.as_fd(), 0o750).map_err(|error| {
+        remove_partial_root();
+        format!("publish evidence root: {error}")
+    })?;
+    sys::fs::change_directory(directory.as_fd()).map_err(|error| {
+        remove_partial_root();
+        format!("enter bound evidence root: {error}")
+    })?;
     Ok(FreshRoot {
         previous_directory,
         _directory: directory,
@@ -3588,29 +3503,12 @@ fn verify_spawned_executable(
     expected_path: &Path,
     expected: &NativeRetainedInput,
 ) -> Result<(), String> {
-    use std::{ffi::OsString, os::unix::ffi::OsStringExt as _};
-
-    unsafe extern "C" {
-        fn proc_pidpath(
-            pid: libc::c_int,
-            buffer: *mut libc::c_void,
-            buffer_size: u32,
-        ) -> libc::c_int;
-    }
-
-    let pid = i32::try_from(identity.pid).map_err(|_| "child PID exceeds i32".to_string())?;
-    let mut bytes = vec![0_u8; 4096];
-    // SAFETY: the buffer is writable for its declared length and `pid` identifies the
-    // already-launched child owned by `ChildSession`.
-    let count = unsafe { proc_pidpath(pid, bytes.as_mut_ptr().cast(), bytes.len() as u32) };
-    if count <= 0 {
-        return Err(format!(
-            "cannot resolve executable backing child PID {}",
+    let backing_path = sys::process::executable_path(identity.pid).map_err(|error| {
+        format!(
+            "cannot resolve executable backing child PID {}: {error}",
             identity.pid
-        ));
-    }
-    bytes.truncate(count as usize);
-    let backing_path = PathBuf::from(OsString::from_vec(bytes));
+        )
+    })?;
     let expected_canonical = expected_path
         .canonicalize()
         .map_err(|error| format!("canonicalize retained executable: {error}"))?;
@@ -3725,7 +3623,6 @@ fn trace_semantics(path: &Path, limit: u64) -> Result<(u64, u64), String> {
 
 #[cfg(unix)]
 fn opened_parent(path: &Path) -> Result<(std::os::fd::OwnedFd, std::ffi::CString), String> {
-    use std::os::fd::FromRawFd as _;
     use std::os::unix::ffi::OsStrExt as _;
 
     let parent = path
@@ -3738,45 +3635,27 @@ fn opened_parent(path: &Path) -> Result<(std::os::fd::OwnedFd, std::ffi::CString
         .map_err(|_| format!("path parent contains NUL: {}", path.display()))?;
     let filename = std::ffi::CString::new(filename.as_bytes())
         .map_err(|_| format!("path filename contains NUL: {}", path.display()))?;
-    let descriptor = unsafe {
-        libc::open(
-            parent.as_ptr(),
-            libc::O_RDONLY | libc::O_DIRECTORY | libc::O_CLOEXEC | libc::O_NOFOLLOW,
-        )
-    };
-    if descriptor < 0 {
-        return Err(format!(
-            "open parent directory {}: {}",
-            path.display(),
-            std::io::Error::last_os_error()
-        ));
-    }
-    Ok((
-        unsafe { std::os::fd::OwnedFd::from_raw_fd(descriptor) },
-        filename,
-    ))
+    let descriptor = sys::fd::open(
+        &parent,
+        libc::O_RDONLY | libc::O_DIRECTORY | libc::O_CLOEXEC | libc::O_NOFOLLOW,
+    )
+    .map_err(|error| format!("open parent directory {}: {error}", path.display()))?;
+    Ok((descriptor, filename))
 }
 
 #[cfg(unix)]
 fn relative_regular_file_identity(path: &Path) -> Result<(u64, String), String> {
-    use std::os::fd::{AsRawFd as _, FromRawFd as _};
+    use std::os::fd::AsFd as _;
 
     let (parent, filename) = opened_parent(path)?;
-    let descriptor = unsafe {
-        libc::openat(
-            parent.as_raw_fd(),
-            filename.as_ptr(),
-            libc::O_RDONLY | libc::O_CLOEXEC | libc::O_NOFOLLOW | libc::O_NONBLOCK,
-        )
-    };
-    if descriptor < 0 {
-        return Err(format!(
-            "open retained input {}: {}",
-            path.display(),
-            std::io::Error::last_os_error()
-        ));
-    }
-    let mut file = fs::File::from(unsafe { std::os::fd::OwnedFd::from_raw_fd(descriptor) });
+    let descriptor = sys::fd::open_at(
+        parent.as_fd(),
+        &filename,
+        libc::O_RDONLY | libc::O_CLOEXEC | libc::O_NOFOLLOW | libc::O_NONBLOCK,
+        0,
+    )
+    .map_err(|error| format!("open retained input {}: {error}", path.display()))?;
+    let mut file = fs::File::from(descriptor);
     let metadata = file
         .metadata()
         .map_err(|error| format!("inspect retained input {}: {error}", path.display()))?;
@@ -3815,7 +3694,7 @@ fn relative_regular_file_identity(path: &Path) -> Result<(u64, String), String> 
 #[cfg(unix)]
 pub(super) fn write_bytes_atomic_noclobber(path: &Path, bytes: &[u8]) -> Result<(), String> {
     super::native_budget::reserve(path, bytes.len() as u64)?;
-    use std::os::fd::{AsRawFd as _, FromRawFd as _};
+    use std::os::fd::AsFd as _;
     use std::os::unix::ffi::OsStringExt as _;
     use std::os::unix::fs::PermissionsExt as _;
 
@@ -3828,22 +3707,14 @@ pub(super) fn write_bytes_atomic_noclobber(path: &Path, bytes: &[u8]) -> Result<
     temporary_name.extend_from_slice(b".tmp");
     let temporary_name = std::ffi::CString::new(temporary_name)
         .map_err(|_| format!("temporary path contains NUL: {}", path.display()))?;
-    let descriptor = unsafe {
-        libc::openat(
-            parent.as_raw_fd(),
-            temporary_name.as_ptr(),
-            libc::O_WRONLY | libc::O_CREAT | libc::O_EXCL | libc::O_CLOEXEC | libc::O_NOFOLLOW,
-            0o600,
-        )
-    };
-    if descriptor < 0 {
-        return Err(format!(
-            "create temporary for {}: {}",
-            path.display(),
-            std::io::Error::last_os_error()
-        ));
-    }
-    let mut file = fs::File::from(unsafe { std::os::fd::OwnedFd::from_raw_fd(descriptor) });
+    let descriptor = sys::fd::open_at(
+        parent.as_fd(),
+        &temporary_name,
+        libc::O_WRONLY | libc::O_CREAT | libc::O_EXCL | libc::O_CLOEXEC | libc::O_NOFOLLOW,
+        0o600,
+    )
+    .map_err(|error| format!("create temporary for {}: {error}", path.display()))?;
+    let mut file = fs::File::from(descriptor);
     use std::io::Write as _;
     if let Err(error) = file
         .write_all(bytes)
@@ -3851,38 +3722,19 @@ pub(super) fn write_bytes_atomic_noclobber(path: &Path, bytes: &[u8]) -> Result<
         .and_then(|()| file.sync_all())
     {
         drop(file);
-        unsafe { libc::unlinkat(parent.as_raw_fd(), temporary_name.as_ptr(), 0) };
+        let _ = sys::fs::unlink_at(parent.as_fd(), &temporary_name, 0);
         return Err(format!("write temporary for {}: {error}", path.display()));
     }
     drop(file);
-    if unsafe {
-        libc::linkat(
-            parent.as_raw_fd(),
-            temporary_name.as_ptr(),
-            parent.as_raw_fd(),
-            filename.as_ptr(),
-            0,
-        )
-    } != 0
+    if let Err(error) = sys::fs::link_at(parent.as_fd(), &temporary_name, parent.as_fd(), &filename)
     {
-        let error = std::io::Error::last_os_error();
-        unsafe { libc::unlinkat(parent.as_raw_fd(), temporary_name.as_ptr(), 0) };
+        let _ = sys::fs::unlink_at(parent.as_fd(), &temporary_name, 0);
         return Err(format!("publish {}: {error}", path.display()));
     }
-    if unsafe { libc::unlinkat(parent.as_raw_fd(), temporary_name.as_ptr(), 0) } != 0 {
-        return Err(format!(
-            "remove temporary for {}: {}",
-            path.display(),
-            std::io::Error::last_os_error()
-        ));
-    }
-    if unsafe { libc::fsync(parent.as_raw_fd()) } != 0 {
-        return Err(format!(
-            "sync parent for {}: {}",
-            path.display(),
-            std::io::Error::last_os_error()
-        ));
-    }
+    sys::fs::unlink_at(parent.as_fd(), &temporary_name, 0)
+        .map_err(|error| format!("remove temporary for {}: {error}", path.display()))?;
+    sys::fs::sync(parent.as_fd())
+        .map_err(|error| format!("sync parent for {}: {error}", path.display()))?;
     Ok(())
 }
 
@@ -4740,16 +4592,9 @@ mod tests {
 
     #[test]
     fn observer_helper_that_never_responds_is_terminated_killed_and_reaped() {
-        use std::os::unix::process::CommandExt as _;
-
         let mut command = Command::new("/bin/sleep");
         command.arg("30");
-        unsafe {
-            command.pre_exec(|| {
-                libc::signal(libc::SIGTERM, libc::SIG_IGN);
-                Ok(())
-            });
-        }
+        sys::process::before_exec(&mut command, || sys::signal::ignore(libc::SIGTERM));
         let scratch = tempfile::tempdir().unwrap();
         let executable = PathBuf::from("/bin/sleep");
         let mut observer = observer_for_helper_test(
@@ -5387,8 +5232,11 @@ mod tests {
         symlink(&regular, &linked).unwrap();
         assert!(read_bounded_regular(&linked, 1024).is_err());
 
-        let fifo_name = std::ffi::CString::new(fifo.as_os_str().as_encoded_bytes()).unwrap();
-        assert_eq!(unsafe { libc::mkfifo(fifo_name.as_ptr(), 0o600) }, 0);
+        assert!(Command::new("mkfifo")
+            .arg(&fifo)
+            .status()
+            .unwrap()
+            .success());
         assert!(fs::OpenOptions::new()
             .read(true)
             .custom_flags(libc::O_NONBLOCK)
