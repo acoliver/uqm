@@ -6,6 +6,9 @@
 //! `ILWRATH_DECEIVED`.
 
 use crate::engine::math::battle_types::normalize_angle;
+use crate::engine::world::activity::activity_flags::{
+    CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY,
+};
 use crate::engine::world::planet::{PlanetDesc, PlanetFrame};
 use crate::engine::StoryKey;
 use crate::math::RandomContext;
@@ -14,7 +17,6 @@ use crate::planets::generate::default;
 use crate::planets::generate::special::{
     self, Body, Story, HIERARCHY_STARBASE, MIN_MOON_RADIUS, SAPPHIRE_WORLD,
 };
-use crate::planets::generate::yehat::{CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY};
 
 /// `END_INTERPLANETARY` is `START_INTERPLANETARY` (`planets.h`).
 const END_INTERPLANETARY: u16 = START_INTERPLANETARY;

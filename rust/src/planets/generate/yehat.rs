@@ -11,9 +11,9 @@ use crate::math::RandomContext;
 use crate::planets::generate::default;
 use crate::planets::generate::special::{self, Body, WATER_WORLD};
 
-/// `START_INTERPLANETARY`, `CHECK_ABORT` and `CHECK_LOAD` of
-/// `GLOBAL (CurrentActivity)`.
-pub use crate::comm::dispatch::{CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY};
+use crate::engine::world::activity::activity_flags::{
+    CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY,
+};
 
 /// `GLOBAL_FLAGS_AND_DATA` value that marks the Yehat conversation as a
 /// capital contact: `1 << 7`.

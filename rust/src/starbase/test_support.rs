@@ -19,7 +19,7 @@ use super::platform::{
     SisView, StarbaseError, StateKey, StatusMessageMode, UiStyle,
 };
 use super::sis_modules::{ModuleSlots, EMPTY_MODULE_SLOT};
-use crate::mainloop::types::ActivityValue;
+use crate::engine::world::activity::ActivityValue;
 
 /// Everything a screen asked the platform to do, in order.
 #[derive(Debug, Clone, PartialEq)]
@@ -820,7 +820,7 @@ impl Platform for RecordingPlatform {
             self.consumed.set(consumed);
             if self.abort_after_pulses.get() == Some(consumed) {
                 self.activity.set(ActivityValue::new(
-                    crate::mainloop::types::activity_flags::CHECK_ABORT,
+                    crate::engine::world::activity::activity_flags::CHECK_ABORT,
                 ));
             }
             if !frame() {

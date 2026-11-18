@@ -2,7 +2,9 @@
 //! recording site: every host call and state write, in order.
 
 use super::{enter_orbit, YehatSite, CAPITAL_CONTACT_FLAGS};
-use crate::comm::dispatch::{CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY};
+use crate::engine::world::activity::activity_flags::{
+    CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY,
+};
 use crate::planets::generate::special::Body;
 
 const IN_INTERPLANETARY: u16 = 4;

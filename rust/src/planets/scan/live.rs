@@ -1,9 +1,9 @@
 use super::{landing_fuel, move_cursor};
 use crate::battle::element::ElementFlags;
-use crate::c_bindings::controller_input::*;
 use crate::comm::locdata::{CColor, CPoint, CRect};
 use crate::engine::battle::views::FrameSelection;
 use crate::engine::graphics::context_abi::{ContextFrame, ContextLease};
+use crate::engine::world::activity::activity_flags::{CHECK_ABORT, CHECK_LOAD, START_ENCOUNTER};
 use crate::engine::{
     battle::Cx,
     input::InputSession,
@@ -11,7 +11,9 @@ use crate::engine::{
     StoryKey,
 };
 use crate::graphics::menu as drawing;
-use crate::mainloop::types::activity_flags::{CHECK_ABORT, CHECK_LOAD, START_ENCOUNTER};
+use crate::input::frames::{
+    KEY_MENU_CANCEL, KEY_MENU_DOWN, KEY_MENU_LEFT, KEY_MENU_RIGHT, KEY_MENU_SELECT, KEY_MENU_UP,
+};
 use crate::planet_side::ffi::{run_session, TripError, TripInput};
 use crate::planets::orbit::OrbitServices;
 use crate::planets::solar_system::SolarSystem;
@@ -32,7 +34,7 @@ const TINT_COLORS: [Rgba; 3] = [
 
 mod display;
 
-use crate::time::counter_abi::GetTimeCounter;
+use uqm_engine::time::counter_abi::GetTimeCounter;
 
 use super::state::ScanState;
 use crate::engine::graphics::drawable_abi::LoadedDrawable;

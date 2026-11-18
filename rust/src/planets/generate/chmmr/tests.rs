@@ -5,7 +5,9 @@ use crate::engine::StoryKey;
 use std::collections::HashMap;
 
 use super::{enter_orbit, ChmmrSite, CHMMR_CONTACT_FLAGS, ILWRATH_AMBUSH_FLAGS};
-use crate::comm::dispatch::{CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY};
+use crate::engine::world::activity::activity_flags::{
+    CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY,
+};
 use crate::planets::generate::special::{Body, Story};
 
 const IN_INTERPLANETARY: u16 = 4;

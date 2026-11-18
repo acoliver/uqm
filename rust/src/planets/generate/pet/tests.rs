@@ -10,10 +10,10 @@ use super::{
     generate_energy, generate_orbital, generate_planets, pickup_energy, zap_to_urquan_encounter,
     TalkingPetSite, UrquanEncounterSite, TALK_FLAGS, URQUAN_LOC, WORLD,
 };
-use crate::comm::dispatch::{
-    CHECK_ABORT, CHECK_LOAD, IN_HYPERSPACE, IN_INTERPLANETARY, START_ENCOUNTER,
-    START_INTERPLANETARY,
+use crate::engine::world::activity::activity_flags::{
+    CHECK_ABORT, CHECK_LOAD, START_ENCOUNTER, START_INTERPLANETARY,
 };
+use crate::engine::world::activity::ActivityKind;
 use crate::math::RandomContext;
 use crate::planet_side::report_adapter::{DiscoveryReportPort, ReportDisposition};
 use crate::planet_side::runtime::AdapterError;
@@ -270,6 +270,9 @@ fn visit(
 }
 
 use Call::*;
+
+const IN_HYPERSPACE: u16 = ActivityKind::InHyperspace as u16;
+const IN_INTERPLANETARY: u16 = ActivityKind::InInterplanetary as u16;
 
 const ENTER: [Call; 4] = [
     NotifyOthers,

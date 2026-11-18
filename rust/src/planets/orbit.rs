@@ -37,11 +37,13 @@ pub(crate) mod live {
     use super::{presentation::OrbitPresentation, submenu_selection};
     use crate::comm::locdata::CRect;
     use crate::engine::graphics::context_abi::ContextLease;
+    use crate::engine::world::activity::activity_flags::{
+        CHECK_ABORT, CHECK_LOAD, START_ENCOUNTER,
+    };
     use crate::engine::{
         battle::Cx,
         observe::{CheckpointView, Io},
     };
-    use crate::mainloop::types::activity_flags::{CHECK_ABORT, CHECK_LOAD, START_ENCOUNTER};
     use crate::planets::solar_system::SolarSystem;
     use crate::starbase::gfx::{ContextId, Gfx, Point, Rect, Rgba, Stamp};
     use crate::starbase::graphics::Graphics;
@@ -349,7 +351,7 @@ pub(crate) mod live {
     ) -> u32 {
         let runtime = cx.kernel.input_runtime();
         let input = runtime.input();
-        use crate::c_bindings::controller_input::KEY_MENU_SELECT;
+        use crate::input::frames::KEY_MENU_SELECT;
         let mut selected = input.pulsed().menu[KEY_MENU_SELECT as usize] != 0;
         if cx.world.activity() & (CHECK_ABORT | CHECK_LOAD) != 0
             || cx.world.data.flagship.crew_enlisted == u16::MAX

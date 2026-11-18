@@ -9,6 +9,9 @@
 //! `UTWIG_HAVE_ULTRON`, `BOMB_UNPROTECTED`, `UTWIG_BOMB_ON_SHIP`,
 //! `DRUUGE_MANNER`, `DRUUGE_VISITS`, `DRUUGE_HOME_VISITS`.
 
+use crate::engine::world::activity::activity_flags::{
+    CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY,
+};
 use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
 use crate::engine::StoryKey;
 use crate::math::RandomContext;
@@ -16,7 +19,6 @@ use crate::planets::generate::default::{self, Npcs};
 use crate::planets::generate::home_contact::{self, HomeContactSite, LanderTakeoff};
 use crate::planets::generate::identities::{BOMB_DEFINED, UTWIG_DEFINED};
 use crate::planets::generate::special::{self, Body, Story, WATER_WORLD};
-use crate::planets::generate::yehat::{CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY};
 
 /// The Utwig home world.
 const HOME: Body = Body::Planet(0);

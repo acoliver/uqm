@@ -6,7 +6,7 @@
 //! functions state what the reference game does and leave the doing to the
 //! caller.
 
-use crate::mainloop::types::{activity_flags, ActivityKind, ActivityValue};
+use crate::engine::world::activity::{activity_flags, ActivityKind, ActivityValue};
 
 /// `LOST_DAYS` (`starbase.c:425`): game days the arrival transport takes.
 pub const LOST_DAYS: u32 = 14;

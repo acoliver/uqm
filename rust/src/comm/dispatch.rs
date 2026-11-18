@@ -17,6 +17,7 @@ use routing::conversation_setup;
 use crate::engine::battle::Cx;
 #[cfg(not(test))]
 use crate::engine::observe::{CheckpointView, Io};
+use crate::engine::world::activity::ActivityKind;
 use crate::engine::StoryKey;
 use crate::engine::World;
 use std::os::raw::c_void;
@@ -75,25 +76,15 @@ pub const INFINITE_FLEET: u16 = !0;
 // Activity flags (from globdata.h)
 // ---------------------------------------------------------------------------
 
-/// C: `CHECK_ABORT`
-pub const CHECK_ABORT: u16 = 0x4000;
-/// C: `CHECK_LOAD`
-pub const CHECK_LOAD: u16 = 0x1000;
-/// C: `START_ENCOUNTER`
-pub use crate::engine::save::START_ENCOUNTER;
-/// C: `START_INTERPLANETARY`
-pub const START_INTERPLANETARY: u16 = 0x0800;
+pub use crate::engine::world::activity::activity_flags::{
+    CHECK_ABORT, CHECK_LOAD, START_ENCOUNTER, START_INTERPLANETARY,
+};
 
-/// C: `IN_LAST_BATTLE`
-pub const IN_LAST_BATTLE: u16 = 1;
-/// C: `IN_ENCOUNTER`
-pub const IN_ENCOUNTER: u16 = 2;
-/// C: `IN_HYPERSPACE`
-pub const IN_HYPERSPACE: u16 = 3;
-/// C: `IN_INTERPLANETARY`
-pub const IN_INTERPLANETARY: u16 = 4;
-/// C: `WON_LAST_BATTLE`
-pub const WON_LAST_BATTLE: u16 = 5;
+pub const IN_LAST_BATTLE: u16 = ActivityKind::InLastBattle as u16;
+pub const IN_ENCOUNTER: u16 = ActivityKind::InEncounter as u16;
+pub const IN_HYPERSPACE: u16 = ActivityKind::InHyperspace as u16;
+pub const IN_INTERPLANETARY: u16 = ActivityKind::InInterplanetary as u16;
+pub const WON_LAST_BATTLE: u16 = ActivityKind::WonLastBattle as u16;
 
 /// C: `CYBORG_ENABLED`
 pub const CYBORG_ENABLED: u8 = 1 << 5;
@@ -364,7 +355,7 @@ pub unsafe fn init_communication_with_options(
             let star = &*cx
                 .world
                 .star_pointer()
-                .cast::<crate::savegame::runtime::star::CStarDesc>();
+                .cast::<crate::engine::world::CStarDesc>();
             {
                 let point = CPoint {
                     x: star.star_pt.x,
