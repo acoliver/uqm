@@ -284,7 +284,9 @@ fn flagship_entry(loading: bool) {
     }
 }
 
-fn load_palette_fixture() -> [Option<uqm_rust::graphics::palette_cycle::PaletteCycle>; 2] {
+fn load_palette_fixture(
+) -> Result<[Option<uqm_rust::graphics::palette_cycle::PaletteCycle>; 2], Box<dyn std::error::Error>>
+{
     use std::{ffi::CString, ptr};
     use uqm_rust::{
         graphics::palette_cycle::PaletteCycle,
@@ -292,8 +294,8 @@ fn load_palette_fixture() -> [Option<uqm_rust::graphics::palette_cycle::PaletteC
         resource::ffi_bridge::{InitResourceSystem, LoadResourceIndex},
     };
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../tmp");
-    std::fs::create_dir_all(&root).unwrap();
-    let directory = tempfile::tempdir_in(root).unwrap();
+    std::fs::create_dir_all(&root)?;
+    let directory = tempfile::tempdir_in(root)?;
     for channel in [12u8, 90] {
         let mut bytes = Vec::new();
         for word in [u32::MAX, 1, 0, 770] {
@@ -301,14 +303,19 @@ fn load_palette_fixture() -> [Option<uqm_rust::graphics::palette_cycle::PaletteC
         }
         bytes.extend_from_slice(&[17, 17]);
         bytes.extend(std::iter::repeat_n(channel, 768));
-        std::fs::write(directory.path().join(format!("{channel}.ct")), bytes).unwrap();
+        std::fs::write(directory.path().join(format!("{channel}.ct")), bytes)?;
     }
     std::fs::write(
         directory.path().join("palettes.rmp"),
         "fixture.hyper = BINTAB:12.ct\nfixture.quasi = BINTAB:90.ct\n",
-    )
-    .unwrap();
-    let host = CString::new(directory.path().canonicalize().unwrap().to_str().unwrap()).unwrap();
+    )?;
+    let host = CString::new(
+        directory
+            .path()
+            .canonicalize()?
+            .to_str()
+            .ok_or("fixture path is not UTF-8")?,
+    )?;
     // SAFETY: this serialized fixture restores the content directory before closing its own mount.
     unsafe {
         uio::uio_init();
@@ -330,25 +337,34 @@ fn load_palette_fixture() -> [Option<uqm_rust::graphics::palette_cycle::PaletteC
         uqm_rust::mainloop::dir_prep::contentDir = content.cast();
         InitResourceSystem();
         LoadResourceIndex(content.cast(), c"palettes.rmp".as_ptr(), ptr::null());
-        let palettes =
-            [c"fixture.hyper", c"fixture.quasi"].map(|key| Some(PaletteCycle::load(key).unwrap()));
+        let palettes = [
+            Some(
+                PaletteCycle::load(c"fixture.hyper")
+                    .ok_or("hyperspace fixture palette failed to load")?,
+            ),
+            Some(
+                PaletteCycle::load(c"fixture.quasi")
+                    .ok_or("quasispace fixture palette failed to load")?,
+            ),
+        ];
         uqm_rust::mainloop::dir_prep::contentDir = previous;
         uio::uio_closeDir(content);
         uio::uio_closeRepository(repository);
         uio::uio_unInit();
-        palettes
+        Ok(palettes)
     }
 }
 
 #[test]
 #[serial_test::serial]
-fn owned_palette_selection_uses_the_supplied_tables_and_status_context() {
+fn owned_palette_selection_uses_the_supplied_tables_and_status_context(
+) -> Result<(), Box<dyn std::error::Error>> {
     use uqm_rust::{
         engine::battle::hyperspace as resources,
         graphics::{cmap_abi::*, context_abi::*, native_abi::Color},
     };
     let mut game = Game::new();
-    game.kernel.cmaps = load_palette_fixture();
+    game.kernel.cmaps = load_palette_fixture()?;
     let select: fn(&uqm_rust::engine::Kernel, bool) = resources::select_palette;
     // SAFETY: the fixture owns the context and all acquired palette references.
     unsafe {
@@ -388,4 +404,5 @@ fn owned_palette_selection_uses_the_supplied_tables_and_status_context() {
         assert!(game.kernel.cmaps.iter().all(Option::is_none));
         UninitColorMaps();
     }
+    Ok(())
 }
