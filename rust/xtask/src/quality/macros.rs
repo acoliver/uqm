@@ -13,7 +13,6 @@ pub const HANDLERS: &[(&str, &str)] = &[
     ("src/collections/hash_table.rs", "define_hash_table"),
     ("src/comm/live/comandr.rs", "callbacks"),
     ("src/world/story/schema.rs", "game_state_fields"),
-    ("src/c_bindings.rs", "assert_c_layout"),
 ];
 
 pub fn archived_registry(rust: &std::path::Path) -> Result<Vec<(String, String)>, String> {

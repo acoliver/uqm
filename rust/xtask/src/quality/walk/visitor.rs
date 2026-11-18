@@ -389,10 +389,7 @@ impl<'a> Visit<'a> for Walker {
                 .last()
                 .map(|s| s.ident.to_string())
                 .unwrap_or_default();
-            if self.context.definitions.contains_key(&name)
-                || name == "include"
-                || name == "assert_c_layout"
-            {
+            if self.context.definitions.contains_key(&name) || name == "include" {
                 self.expand(&stmt.mac);
             } else {
                 visit::visit_stmt_macro(self, stmt);
