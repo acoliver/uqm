@@ -1,8 +1,6 @@
 //! Live captain-window rendering and crew/energy bookkeeping from status.c.
 
-#[cfg(not(test))]
 use crate::battle::context_access::ContextOps;
-#[cfg(not(test))]
 use crate::battle::context_access::StatusOps;
 use crate::ships::native::abi::*;
 
@@ -259,7 +257,6 @@ pub(crate) fn draw_battle_crew_amount(
     );
 }
 
-#[cfg(not(test))]
 #[allow(non_snake_case)]
 pub(crate) mod engine {
     use super::*;
@@ -422,7 +419,6 @@ pub(crate) mod engine {
     }
 }
 
-#[cfg(not(test))]
 pub use engine::{draw_captains_window, preprocess_status, PostProcessStatus};
 
 #[cfg(test)]

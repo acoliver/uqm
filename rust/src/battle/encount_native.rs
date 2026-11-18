@@ -122,16 +122,12 @@ pub(crate) mod engine {
     mod display;
     mod salvage;
     use super::*;
-    #[cfg(not(test))]
     use crate::battle::battle_native::battle;
-    #[cfg(not(test))]
     use crate::battle::battle_native::engine::{
         AWESOME_RATING, CYBORG_CONTROL, HUMAN_CONTROL, STANDARD_RATING,
     };
     use crate::engine::battle::link_queue;
-    #[cfg(not(test))]
     use crate::engine::StoryKey;
-    #[cfg(not(test))]
     use crate::pickship::ffi::draw_armada_pick_ship_in as draw_armada;
     use crate::ships::native::abi::*;
     use crate::ui::rgb15;
@@ -150,7 +146,6 @@ pub(crate) mod engine {
         (23, 0, 0),
     ];
 
-    #[cfg(not(test))]
     use crate::planets::starmap::naming::cluster_name;
 
     fn escape_pressed(input: &crate::engine::input::InputSession) -> bool {
@@ -163,7 +158,6 @@ pub(crate) mod engine {
         Total,
     }
 
-    #[cfg(not(test))]
     fn do_select_action(
         cx: &mut crate::engine::battle::Cx<'_>,
         io: &mut crate::engine::observe::Io<'_>,
@@ -250,7 +244,6 @@ pub(crate) mod engine {
         queue.free(id);
     }
 
-    #[cfg(not(test))]
     pub fn build_battle(
         world: &mut crate::engine::World,
         kernel: &mut crate::engine::Kernel,
@@ -333,10 +326,8 @@ pub(crate) mod engine {
         }
     }
 
-    #[cfg(not(test))]
     pub(crate) use crate::battle::context_access::reader_legacy::update_ship_frag_crew;
 
-    #[cfg(not(test))]
     fn draw_encounter_location(
         cx: &mut crate::engine::battle::Cx<'_>,
         cluster: Option<&std::ffi::CStr>,
@@ -403,7 +394,6 @@ pub(crate) mod engine {
         }
     }
 
-    #[cfg(not(test))]
     fn prepare_encounter(cx: &mut crate::engine::battle::Cx<'_>) {
         let context = crate::graphics::context_abi::ContextLease::require(cx.kernel.space_context);
         let font = cx
@@ -458,7 +448,6 @@ pub(crate) mod engine {
         cx.with_legacy(|| context.transition(None));
     }
 
-    #[cfg(not(test))]
     pub fn init_encounter(
         cx: &mut crate::engine::battle::Cx<'_>,
         io: &mut crate::engine::observe::Io<'_>,
@@ -478,7 +467,6 @@ pub(crate) mod engine {
         COUNT::from(menu.choice)
     }
 
-    #[cfg(not(test))]
     pub fn uninit_encounter(
         cx: &mut crate::engine::battle::Cx<'_>,
         io: &mut crate::engine::observe::Io<'_>,
@@ -548,7 +536,6 @@ pub(crate) mod engine {
         apply_thraddash_body_count(cx.world, killed)
     }
 
-    #[cfg(not(test))]
     pub fn encounter_battle(
         cx: &mut crate::engine::battle::Cx<'_>,
         io: &mut crate::engine::observe::Io<'_>,
@@ -647,7 +634,6 @@ pub(crate) mod engine {
     }
 }
 
-#[cfg(not(test))]
 pub use engine::*;
 
 #[cfg(test)]

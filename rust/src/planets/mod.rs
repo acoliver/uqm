@@ -14,8 +14,6 @@ pub mod tables;
 pub mod topography;
 pub mod universe_units;
 
-#[cfg(not(test))]
-#[cfg(not(test))]
 pub mod devices;
 
 pub mod cargo;

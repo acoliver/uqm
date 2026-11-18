@@ -1,22 +1,13 @@
 //! Race effects implemented by modes over the supplied owners.
-#[cfg(not(test))]
 use crate::battle::battle_native::engine::rgb15;
-#[cfg(not(test))]
 use crate::battle::tactrans_native::engine::*;
-#[cfg(not(test))]
 use crate::engine::battle::race_services::{RaceServices, StarContact};
-#[cfg(not(test))]
 use crate::engine::battle::views::BattleSoundBank;
-#[cfg(not(test))]
 use crate::engine::battle::{Cx, ElementId, ShipId};
-#[cfg(not(test))]
 use crate::navigation::hyper_transition::{element_universe, init_transition};
-#[cfg(not(test))]
 use crate::planets::starmap::find_star_id;
-#[cfg(not(test))]
 use crate::ships::native::{abi::*, cosine, facing_to_angle, sine};
 
-#[cfg(not(test))]
 impl RaceServices for super::services::ModeServices {
     fn play_battle_sound(
         &self,

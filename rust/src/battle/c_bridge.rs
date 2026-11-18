@@ -23,15 +23,12 @@ pub use crate::graphics::tfb_draw_abi::TFB_DrawScreen_SetMipmap;
 
 pub use crate::sound::heart_ffi::PLRPlaying;
 
-#[cfg(not(test))]
 pub use crate::mainloop::input_abi::live::CurrentInputToBattleInput;
 
-#[cfg(not(test))]
 pub use crate::mainloop::input_abi::live::DoInput;
 
 pub use crate::graphics::drawable_abi::DestroyDrawable;
 
-#[cfg(not(test))]
 pub use crate::navigation::globals::in_hqspace;
 
 pub use crate::sound::heart_ffi::DestroyMusic;

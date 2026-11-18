@@ -21,7 +21,6 @@ fn next_element(current: u8, back: bool, forward: bool) -> u8 {
     }
 }
 
-#[cfg(not(test))]
 pub(crate) mod live {
     use super::next_element;
     use crate::c_bindings::controller_input::*;

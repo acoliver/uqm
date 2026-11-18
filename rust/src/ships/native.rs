@@ -21,12 +21,10 @@ pub(crate) fn copy_display_name(target: &mut [std::ffi::c_char], source: &[u8]) 
     clippy::all
 )]
 pub mod abi {
-    #[cfg(not(test))]
     pub use crate::ships::DescriptorLoader;
 
     include!("../abi/ship_abi.rs");
 
-    #[cfg(not(test))]
     pub use super::engine::{
         abs_frame_index as SetAbsFrameIndex, abs_string_index as SetAbsStringTableIndex,
         capture_drawable as CaptureDrawable, dec_frame_index as DecFrameIndex,
@@ -44,29 +42,22 @@ pub mod abi {
 
     // Bindgen does not translate these cast-expression macros from controls.h
     // and intel.h. Keep their C operand widths at the shared ABI boundary.
-    #[cfg(not(test))]
     pub use super::engine::sleep_thread as SleepThread;
-    #[cfg(not(test))]
     pub use super::engine::{
         draw_batch as DrawBatch, draw_rectangle as DrawRectangle, frame_count as GetFrameCount,
         frame_index as GetFrameIndex, rel_frame_index as SetRelFrameIndex,
     };
-    #[cfg(not(test))]
     pub use crate::battle::encount_native::fleet_is_infinite;
-    #[cfg(not(test))]
     pub use crate::battle::galaxy::move_galaxy;
     pub use crate::engine::battle::ai_constants::{
         AWESOME_RATING, BATTLE_LEFT, BATTLE_RIGHT, BATTLE_SPECIAL, BATTLE_THRUST, BATTLE_WEAPON,
         GOOD_RATING, STANDARD_RATING,
     };
-    #[cfg(not(test))]
     pub use crate::math::seed_random as TFB_SeedRandom;
 
-    #[cfg(not(test))]
     pub use crate::engine::battle::tracking::track_ship;
 }
 
-#[cfg(not(test))]
 mod engine {
     use super::abi;
 
@@ -304,7 +295,6 @@ mod engine {
     }
 }
 
-#[cfg(not(test))]
 pub use engine::{frame_count, frame_index, rel_frame_index};
 
 pub use crate::math::{angle_to_facing, facing_to_angle, normalize_angle, normalize_facing};

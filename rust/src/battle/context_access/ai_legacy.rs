@@ -1,7 +1,5 @@
-#[cfg(not(test))]
 use crate::engine::battle::{Cx, Subject};
 
-#[cfg(not(test))]
 pub(crate) fn computer_intelligence(
     cx: &mut Cx<'_>,
     player: u16,
@@ -19,7 +17,6 @@ pub(crate) fn computer_intelligence(
     crate::battle::ai_entry::computer_input(cx, player, id, control)
 }
 
-#[cfg(not(test))]
 pub trait AiOps {
     fn invoke_intelligence(
         &mut self,
@@ -31,7 +28,6 @@ pub trait AiOps {
     fn selection_delay(&self);
 }
 
-#[cfg(not(test))]
 impl AiOps for Cx<'_> {
     fn invoke_intelligence(
         &mut self,

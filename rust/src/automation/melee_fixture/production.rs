@@ -1,7 +1,6 @@
 //! The synchronous fixture driver commits plans before callbacks and resource retirement.
 
 use super::*;
-#[cfg(not(test))]
 use crate::battle::context_access::fixture::FixtureOps;
 
 fn zoom_matches(
@@ -17,7 +16,6 @@ fn zoom_matches(
         && (view != 1 || mipmap.is_some_and(|(actual, adjacent)| actual != 0 && actual == adjacent))
 }
 
-#[cfg(not(test))]
 fn hooks() -> Hooks {
     use crate::ships::races::{
         androsynth_native, chmmr_native, pkunk_native, urquan_native, vux_native,
@@ -46,7 +44,6 @@ fn hooks() -> Hooks {
     }
 }
 
-#[cfg(not(test))]
 pub(in crate::automation::melee_fixture) fn execute(
     operation: Operation<'_>,
     checkpoint: &dyn Fn(),
@@ -90,7 +87,6 @@ pub(in crate::automation::melee_fixture) fn execute(
     unsafe { crate::app::bridge::enter(run) }
 }
 
-#[cfg(not(test))]
 fn drive(
     cx: &mut Cx<'_>,
     mut task: Task<'_>,
@@ -169,7 +165,6 @@ fn drive(
     task.finish()
 }
 
-#[cfg(not(test))]
 fn borrow_world(cx: &Cx<'_>) -> World {
     let mut world = World::new(
         cx.world.activity(),
@@ -201,7 +196,6 @@ pub(super) enum Reply {
 /// # Safety
 /// Handles and callback addresses must have come from the just-dropped live
 /// graph. No borrowed Element, ship, descriptor or frame may cross this call.
-#[cfg(not(test))]
 unsafe fn apply(cx: &mut Cx<'_>, effect: Effect, checkpoint: &dyn Fn()) -> Result<Reply, String> {
     // SAFETY: effects execute at the published game-thread boundary after command planning commits.
     unsafe {
@@ -333,7 +327,6 @@ pub(super) fn loaded(reply: Reply) -> Result<(), String> {
     }
 }
 
-#[cfg(not(test))]
 fn redrawn(check: bool, checkpoint: &dyn Fn()) {
     crate::collections::observation::advance();
     if check {

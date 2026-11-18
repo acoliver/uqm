@@ -171,7 +171,6 @@ impl StarPlaneOps for STAR_BLOCK {
     }
 }
 
-#[cfg(not(test))]
 pub(crate) mod engine {
     use super::*;
     use crate::engine::battle::Cx;
@@ -362,7 +361,6 @@ pub(crate) mod engine {
     }
 }
 
-#[cfg(not(test))]
 pub use engine::{init_galaxy, move_galaxy};
 
 #[cfg(test)]

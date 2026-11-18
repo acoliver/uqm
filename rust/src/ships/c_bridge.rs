@@ -3,7 +3,6 @@
 
 use super::types::ShipsError;
 
-#[cfg(not(test))]
 use std::ffi::c_void;
 
 // ---------------------------------------------------------------------------
@@ -29,33 +28,19 @@ pub const NULL_RESOURCE: u32 = 0;
 // FFI declarations for C resource loading functions
 // ---------------------------------------------------------------------------
 
-#[cfg(not(test))]
 use crate::game_init::macro_abi::CaptureSound;
-#[cfg(not(test))]
 use crate::game_init::macro_abi::LoadGraphic;
-#[cfg(not(test))]
 use crate::game_init::macro_abi::LoadMusic;
-#[cfg(not(test))]
 use crate::game_init::macro_abi::LoadSound;
-#[cfg(not(test))]
 use crate::game_init::macro_abi::LoadStringTable;
-#[cfg(not(test))]
 use crate::game_init::macro_abi::ReleaseSound;
-#[cfg(not(test))]
 use crate::graphics::drawable_abi::DestroyDrawable;
-#[cfg(not(test))]
 use crate::graphics::pixmap_abi::CaptureDrawable;
-#[cfg(not(test))]
 use crate::graphics::pixmap_abi::ReleaseDrawable;
-#[cfg(not(test))]
 use crate::sound::heart_ffi::DestroyMusic;
-#[cfg(not(test))]
 use crate::sound::heart_ffi::DestroySound;
-#[cfg(not(test))]
 use crate::strings::string_table::CaptureStringTable;
-#[cfg(not(test))]
 use crate::strings::string_table::DestroyStringTable;
-#[cfg(not(test))]
 use crate::strings::string_table::ReleaseStringTable;
 
 // ---------------------------------------------------------------------------
@@ -68,7 +53,6 @@ use crate::strings::string_table::ReleaseStringTable;
 ///
 /// # Errors
 /// Returns `ShipsError::LoadFailed` if the resource cannot be loaded.
-#[cfg(not(test))]
 pub fn load_graphic(res_id: u32) -> Result<DrawableHandle, ShipsError> {
     if res_id == NULL_RESOURCE {
         return Ok(0);
@@ -100,7 +84,6 @@ pub fn load_graphic(res_id: u32) -> Result<DrawableHandle, ShipsError> {
 ///
 /// # Errors
 /// Returns `ShipsError::LoadFailed` if the resource cannot be loaded.
-#[cfg(not(test))]
 pub fn load_music(res_id: u32) -> Result<MusicHandle, ShipsError> {
     if res_id == NULL_RESOURCE {
         return Ok(0);
@@ -125,7 +108,6 @@ pub fn load_music(res_id: u32) -> Result<MusicHandle, ShipsError> {
 ///
 /// # Errors
 /// Returns `ShipsError::LoadFailed` if the resource cannot be loaded.
-#[cfg(not(test))]
 pub fn load_sound(res_id: u32) -> Result<SoundHandle, ShipsError> {
     if res_id == NULL_RESOURCE {
         return Ok(0);
@@ -157,7 +139,6 @@ pub fn load_sound(res_id: u32) -> Result<SoundHandle, ShipsError> {
 ///
 /// # Errors
 /// Returns `ShipsError::LoadFailed` if the resource cannot be loaded.
-#[cfg(not(test))]
 pub fn load_string_table(res_id: u32) -> Result<StringTableHandle, ShipsError> {
     if res_id == NULL_RESOURCE {
         return Ok(0);
@@ -186,7 +167,6 @@ pub fn load_string_table(res_id: u32) -> Result<StringTableHandle, ShipsError> {
 /// Frees a graphic drawable handle.
 ///
 /// Wraps C `ReleaseDrawable()` + `DestroyDrawable()`.
-#[cfg(not(test))]
 pub fn free_graphic(handle: DrawableHandle) {
     if handle == 0 {
         return;
@@ -202,7 +182,6 @@ pub fn free_graphic(handle: DrawableHandle) {
 /// Frees a music handle.
 ///
 /// Wraps C `DestroyMusic()`.
-#[cfg(not(test))]
 pub fn free_music(handle: MusicHandle) {
     if handle == 0 {
         return;
@@ -217,7 +196,6 @@ pub fn free_music(handle: MusicHandle) {
 /// Frees a sound handle.
 ///
 /// Wraps C `ReleaseSound()` + `DestroySound()`.
-#[cfg(not(test))]
 pub fn free_sound(handle: SoundHandle) {
     if handle == 0 {
         return;
@@ -233,7 +211,6 @@ pub fn free_sound(handle: SoundHandle) {
 /// Frees a string table handle.
 ///
 /// Wraps C `ReleaseStringTable()` + `DestroyStringTable()`.
-#[cfg(not(test))]
 pub fn free_string_table(handle: StringTableHandle) {
     if handle == 0 {
         return;

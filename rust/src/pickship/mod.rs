@@ -7,7 +7,6 @@
 //! says. [`ffi`] drives the C drawing and input calls with those results and
 //! exports the C entry points `GetEncounterStarShip` and `DrawArmadaPickShip`.
 
-#[cfg(not(test))]
 pub mod ffi;
 
 /// `NUM_PICK_SHIP_ROWS`.

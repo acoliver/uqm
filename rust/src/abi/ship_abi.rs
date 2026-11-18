@@ -1089,24 +1089,18 @@ pub const MeleeShip_MELEE_UNSET: MeleeShip = 254;
 pub const MeleeShip_MELEE_NONE: MeleeShip = 255;
 pub type MeleeShip = ::std::os::raw::c_uint;
 
-#[cfg(not(test))]
 pub use crate::supermelee::native::menu::live::do_melee;
 
-#[cfg(not(test))]
 pub use crate::supermelee::native::menu::live::changes::local_change_team;
-#[cfg(not(test))]
 pub unsafe fn Flash_createHighlight(gfxContext: CONTEXT, rect: *const RECT) -> *mut FlashContext {
     crate::graphics::flash::Flash_createHighlight(gfxContext.cast(), rect.cast()).cast()
 }
 #[cfg(test)]
-#[cfg(not(test))]
 pub use crate::graphics::flash::Flash_createHighlight;
-#[cfg(not(test))]
 pub unsafe fn Flash_setRect(context: *mut FlashContext, rect: *const RECT) {
     crate::graphics::flash::Flash_setRect(context.cast(), rect.cast());
 }
 #[cfg(test)]
-#[cfg(not(test))]
 pub use crate::graphics::flash::Flash_setRect;
 pub const KEY_UP: _bindgen_ty_1 = 0;
 pub const KEY_DOWN: _bindgen_ty_1 = 1;
@@ -1155,16 +1149,12 @@ pub type _controller_input_state = uqm_engine::input_port::frames::InputState;
 pub type CONTROLLER_INPUT_STATE = _controller_input_state;
 pub type BATTLE_INPUT_STATE = UBYTE;
 
-#[cfg(not(test))]
 pub use crate::mainloop::input_abi::live::PulsedInputToBattleInput;
 
-#[cfg(not(test))]
 pub use crate::mainloop::input_abi::live::FlushInput;
 
-#[cfg(not(test))]
 pub use crate::mainloop::input_abi::live::SetDefaultMenuRepeatDelay;
 
-#[cfg(not(test))]
 pub use crate::mainloop::input_abi::live::ConfirmExit;
 
 pub type STATUS_FLAGS = UWORD;
@@ -1234,28 +1224,20 @@ pub const SAMATRA_SHIP: _bindgen_ty_4 = crate::engine::world::queues::SAMATRA_RA
 pub const NUM_AVAILABLE_RACES: _bindgen_ty_4 = 24;
 pub type _bindgen_ty_4 = ::std::os::raw::c_uint;
 
-#[cfg(not(test))]
 pub use crate::supermelee::native::battle_picker::live::get_initial_melee_star_ships;
 
 pub type _bindgen_ty_5 = ::std::os::raw::c_uint;
 
-#[cfg(not(test))]
 
-#[cfg(not(test))]
 
-#[cfg(not(test))]
 
-#[cfg(not(test))]
 pub use crate::battle::status_native::init_status_offsets;
 
-#[cfg(not(test))]
 
-#[cfg(not(test))]
 pub use crate::battle::status_native::engine::PostProcessStatus;
 
 pub type MENU_SOUND_FLAGS = UWORD;
 
-#[cfg(not(test))]
 pub use crate::mainloop::input_abi::live::SetMenuSounds;
 
 #[repr(C)]
@@ -1277,32 +1259,22 @@ pub struct MISSILE_BLOCK {
     pub blast_offs: SIZE,
 }
 
-#[cfg(not(test))]
 
-#[cfg(not(test))]
 
-#[cfg(not(test))]
 pub use crate::battle::ship_native::engine::animation_preprocess;
 
-#[cfg(not(test))]
 pub use crate::battle::ship_native::engine::ship_preprocess;
 
-#[cfg(not(test))]
 pub use crate::battle::ship_native::engine::ship_postprocess;
 
-#[cfg(not(test))]
 pub use crate::engine::battle::motion::collision;
 
-#[cfg(not(test))]
 pub use crate::engine::battle::motion::inertial_thrust;
 
-#[cfg(not(test))]
 pub use crate::engine::world::fleet::set_race_allied;
 
-#[cfg(not(test))]
 pub use crate::engine::world::fleet::start_sphere_tracking;
 
-#[cfg(not(test))]
 pub use crate::ui::settings::stop_music;
 #[cfg(test)]
 extern "C" {
@@ -1493,7 +1465,6 @@ pub const BOMB_MODULE_5: _bindgen_ty_10 = 19;
 pub const NUM_MODULES: _bindgen_ty_10 = 20;
 pub type _bindgen_ty_10 = ::std::os::raw::c_uint;
 pub use crate::engine::world::SisState as SIS_STATE;
-#[cfg(not(test))]
 pub use crate::ui::border::init_siscontexts;
 pub const StatMsgMode_SMM_UNDEFINED: StatMsgMode = 0;
 pub const StatMsgMode_SMM_DATE: StatMsgMode = 1;
@@ -1571,14 +1542,10 @@ pub const DEFGRP_SAMATRA: _bindgen_ty_14 = 14;
 pub const NUM_DEFGRPS: _bindgen_ty_14 = 15;
 pub type _bindgen_ty_14 = ::std::os::raw::c_uint;
 
-#[cfg(not(test))]
 pub use crate::navigation::globals::in_quasi_space;
 
-#[cfg(not(test))]
 
-#[cfg(not(test))]
 
-#[cfg(not(test))]
 pub const TFB_GFXDRIVER_SDL_OPENGL: _bindgen_ty_15 = 0;
 pub const TFB_GFXDRIVER_SDL_PURE: _bindgen_ty_15 = 1;
 pub type _bindgen_ty_15 = ::std::os::raw::c_uint;
@@ -1601,32 +1568,21 @@ unsafe extern "C" {
     pub static mut GraphicsDriver: ::std::os::raw::c_int;
 }
 
-#[cfg(not(test))]
 pub use crate::battle::tactrans_native::engine::ship_transition;
 
-#[cfg(not(test))]
 
-#[cfg(not(test))]
 pub use crate::battle::tactrans_native::engine::new_ship;
 
-#[cfg(not(test))]
 pub use crate::battle::tactrans_native::engine::ship_death;
 
-#[cfg(not(test))]
 
-#[cfg(not(test))]
 pub use crate::battle::tactrans_native::engine::flee_preprocess;
 
-#[cfg(not(test))]
 pub use crate::battle::tactrans_native::engine::reset_winner;
 
-#[cfg(not(test))]
 
-#[cfg(not(test))]
 
-#[cfg(not(test))]
 
-#[cfg(not(test))]
 
 pub const GLOBAL_PLAYER_NAME: _bindgen_ty_17 = -1000000;
 pub const GLOBAL_SHIP_NAME: _bindgen_ty_17 = -999999;
@@ -1833,7 +1789,6 @@ pub const HAIL: _bindgen_ty_26 = 0;
 pub const ATTACK: _bindgen_ty_26 = 1;
 pub type _bindgen_ty_26 = ::std::os::raw::c_uint;
 
-#[cfg(not(test))]
 unsafe extern "C" {
 }
 pub const STAR_STRING_BASE: _bindgen_ty_27 = 0;
@@ -1860,10 +1815,8 @@ pub const NETMELEE_STRING_BASE: _bindgen_ty_27 = 560;
 pub const GAMESTR_COUNT: _bindgen_ty_27 = 579;
 pub type _bindgen_ty_27 = ::std::os::raw::c_uint;
 
-#[cfg(not(test))]
 pub use crate::game_init::world_resources::live::load_gravity_well;
 
-#[cfg(not(test))]
 pub use crate::game_init::world_resources::live::free_gravity_well;
 
 pub type TFB_Canvas = *mut ::std::os::raw::c_void;

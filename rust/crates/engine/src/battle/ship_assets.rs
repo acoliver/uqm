@@ -1,6 +1,5 @@
 //! Resource ownership follows a descriptor through attachment and detachment.
 use crate::battle::{frames::FrameArray, record::*, RaceDesc};
-#[cfg(not(test))]
 use crate::graphics::{drawable_abi::DestroyDrawable, pixmap_abi::ReleaseDrawable};
 use crate::graphics::{drawable_abi::LoadedDrawable, native_abi::FRAME};
 use crate::strings::owned_table::LoadedTextTable;
@@ -82,14 +81,12 @@ impl RaceDescriptor {
             .as_ref()
             .map_or((c"", 0), |table| table.label(index))
     }
-    #[cfg(not(test))]
     pub fn sound_bank(&self) -> Option<&crate::sound::owned_bank::LoadedSoundBank> {
         self.assets
             .as_ref()
             .and_then(|assets| assets.sounds.as_ref())
     }
 
-    #[cfg(not(test))]
     pub fn victory_music(&self) -> Option<&crate::sound::resource_types::LoadedMusic> {
         self.assets
             .as_ref()
@@ -105,7 +102,6 @@ impl RaceDescriptor {
     }
 }
 
-#[cfg(not(test))]
 fn load_animation_set(keys: [Option<&'static std::ffi::CStr>; 3]) -> Option<FrameArray> {
     let mut raw = [std::ptr::null_mut(); 3];
     if load_animation(&mut raw, keys, "animation") == 0 {
@@ -117,7 +113,6 @@ fn load_animation_set(keys: [Option<&'static std::ffi::CStr>; 3]) -> Option<Fram
     Some(array)
 }
 
-#[cfg(not(test))]
 impl RaceDesc {
     pub fn initialize_assets(&mut self, battle: bool) -> bool {
         let navigation = self.initialize_icons();
@@ -260,7 +255,6 @@ impl RaceDesc {
     }
 }
 
-#[cfg(not(test))]
 impl ShipAssets {
     fn release(self, battle: bool) {
         if battle {
@@ -280,7 +274,6 @@ impl ShipAssets {
     }
 }
 
-#[cfg(not(test))]
 use crate::battle::frames::{free_image, load_animation};
 
 #[cfg(test)]

@@ -1,9 +1,7 @@
 //! The application implementation of the kernel's typed input port.
 
-#[cfg(not(test))]
 use super::live::*;
 
-#[cfg(not(test))]
 fn run_loop(reset: bool, step: &mut InputLoop<'_, '_, '_, '_>) {
     let controls = step.input;
     if reset {
@@ -48,7 +46,6 @@ fn run_loop(reset: bool, step: &mut InputLoop<'_, '_, '_, '_>) {
     }
 }
 
-#[cfg(not(test))]
 struct InputLoop<'a, 'b, 'c, 'd> {
     cx: &'a mut crate::engine::battle::Cx<'b>,
     io: &'a mut crate::engine::observe::Io<'c>,
@@ -57,7 +54,6 @@ struct InputLoop<'a, 'b, 'c, 'd> {
     automation: Option<&'a crate::automation::AutomationObserver>,
 }
 
-#[cfg(not(test))]
 impl InputLoop<'_, '_, '_, '_> {
     fn input(
         &mut self,
@@ -114,13 +110,11 @@ impl InputLoop<'_, '_, '_, '_> {
     }
 }
 
-#[cfg(not(test))]
 pub struct NativeInputRuntime {
     observer: Option<std::sync::Arc<crate::automation::AutomationObserver>>,
     input: crate::engine::input::InputSession,
 }
 
-#[cfg(not(test))]
 impl NativeInputRuntime {
     pub fn new(
         observer: Option<std::sync::Arc<crate::automation::AutomationObserver>>,
@@ -134,7 +128,6 @@ impl NativeInputRuntime {
     }
 }
 
-#[cfg(not(test))]
 impl crate::engine::input::InputRuntime for NativeInputRuntime {
     fn input(&self) -> &crate::engine::input::InputSession {
         &self.input

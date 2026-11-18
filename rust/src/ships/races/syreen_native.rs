@@ -3,7 +3,6 @@
 //! Every value and expression below mirrors `sc2/src/uqm/ships/syreen/syreen.c`,
 //! including C integer promotion and truncation, so battles replay identically.
 
-#[cfg(not(test))]
 pub(crate) mod engine {
     use crate::ships::native::abi::*;
 

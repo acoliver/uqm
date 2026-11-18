@@ -88,13 +88,11 @@ pub fn ship_record(
     }
 }
 
-#[cfg(not(test))]
 pub struct ShipResourceObservation<'a> {
     pub descriptor: Option<DescriptorRecordObservation<'a>>,
     pub icons: Option<&'a crate::graphics::native_abi::frame_desc>,
     pub strings: Option<&'a crate::strings::string_table::StringTableEntry>,
 }
-#[cfg(not(test))]
 pub struct DescriptorRecordObservation<'a> {
     pub address: usize,
     pub info: &'a SHIP_INFO,
@@ -108,7 +106,6 @@ pub struct DescriptorRecordObservation<'a> {
 }
 /// # Safety
 /// The caller retains every descriptor and loaded resource referenced by this immutable queue view.
-#[cfg(not(test))]
 pub unsafe fn ship_resources(
     pool: &super::super::link_queue::RacePool,
     id: LinkId<Starship>,

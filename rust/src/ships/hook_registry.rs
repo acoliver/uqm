@@ -2,7 +2,6 @@
 
 mod assigned;
 mod ships;
-#[cfg(not(test))]
 pub fn hooks() -> Vec<(usize, &'static str)> {
     ships::hooks()
         .into_iter()

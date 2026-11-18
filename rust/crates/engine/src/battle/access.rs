@@ -1,5 +1,4 @@
 //! Stage B resource and record projections. Borrows end before legacy handoffs.
-#[cfg(not(test))]
 impl Cx<'_> {
     pub fn alloc_element(&mut self) -> Option<ElementId> {
         let allocated = self.kernel.elements.alloc();
@@ -51,12 +50,9 @@ impl Cx<'_> {
     }
 }
 
-#[cfg(not(test))]
-#[cfg(not(test))]
 use super::Parent;
 use super::{Cx, ElementId, ShipId};
 
-#[cfg(not(test))]
 impl Cx<'_> {
     pub fn owner(&self, id: ElementId) -> ShipId {
         match self.parent(id) {
@@ -119,7 +115,6 @@ impl Cx<'_> {
 
 use super::views::*;
 
-#[cfg(not(test))]
 impl Cx<'_> {
     pub fn ship_frame_set(&self, id: ShipId, role: usize) -> Frames {
         super::frames::Frames::ship(id, role.into(), self.ship_array(id, role).clone())
@@ -149,7 +144,6 @@ impl Cx<'_> {
     }
 }
 
-#[cfg(not(test))]
 impl Cx<'_> {
     #[inline]
     pub fn weapon_origin(&self, id: ElementId) -> super::Subject {
@@ -178,7 +172,6 @@ impl Cx<'_> {
     }
 }
 
-#[cfg(not(test))]
 impl Cx<'_> {
     #[inline]
     pub fn copy_visual_to_next(&mut self, id: ElementId, visual: Visual) {
@@ -202,7 +195,6 @@ impl Cx<'_> {
     }
 }
 
-#[cfg(not(test))]
 impl Cx<'_> {
     #[inline]
     pub fn callbacks(&self, ship: ShipId) -> super::Callbacks {
@@ -242,7 +234,6 @@ impl Cx<'_> {
     }
     /// Records a SPECIAL activation that runs inline in a race callback under
     /// that race's `special` hook. `marker` only names the hook; it is not called.
-    #[cfg(not(test))]
     pub fn observe_special(&self, ship: ShipId, marker: fn(&mut Cx<'_>, ShipId)) {
         crate::collections::observation::observe(marker as usize, self.ship_pointer(ship) as usize);
     }
@@ -253,18 +244,14 @@ pub fn invoke<R>(callback: usize, parent: usize, call: impl FnOnce() -> R) -> R 
     call()
 }
 
-#[cfg(not(test))]
 impl Cx<'_> {
     pub fn take_captain_background(&mut self, ship: ShipId) -> crate::graphics::native_abi::FRAME {
         self.desc_mut(ship).take_captain_background()
     }
 }
 
-#[cfg(not(test))]
 use crate::graphics::native_abi::FRAME;
-#[cfg(not(test))]
 use crate::graphics::pixmap_abi::{IncFrameIndex, SetAbsFrameIndex, SetEquFrameIndex};
-#[cfg(not(test))]
 impl Cx<'_> {
     pub(super) fn ship_array(&self, ship: ShipId, role: usize) -> &super::frames::FrameArray {
         let data = &self.desc(ship).ship_data;
@@ -293,7 +280,6 @@ impl Cx<'_> {
     }
 }
 
-#[cfg(not(test))]
 impl Cx<'_> {
     pub fn shared_frame_selection(&self, role: SharedFrames) -> FrameSelection {
         self.shared_frame_set(role).view(0).to_owned()
@@ -308,7 +294,6 @@ impl Cx<'_> {
     pub fn shared_frame_set(&self, role: SharedFrames) -> Frames {
         Frames::retain_shared(role, self.kernel.shared_frame_source(role))
     }
-    #[cfg(not(test))]
     pub fn setup_element(&mut self, id: ElementId) {
         self.copy_current_to_next(id);
         if self.element(id).flags & ((1 << 4) | (1 << 6)) == 0 {
@@ -341,7 +326,6 @@ impl Cx<'_> {
     }
 }
 
-#[cfg(not(test))]
 impl Cx<'_> {
     pub fn primitive_style_mut(
         &mut self,
@@ -364,7 +348,6 @@ impl Cx<'_> {
     }
 }
 
-#[cfg(not(test))]
 impl Cx<'_> {
     pub fn frame_count(&self, frame: FrameRef<'_>) -> u16 {
         // SAFETY: opaque frames originate in retained battle resources, or are absent.
@@ -443,7 +426,6 @@ impl Cx<'_> {
     }
 }
 
-#[cfg(not(test))]
 impl Cx<'_> {
     pub fn set_ship_sound_bank(&mut self, ship: ShipId, index: u16) {
         let sounds = self.desc(ship).ship_data.ship_sounds;
@@ -458,7 +440,6 @@ impl Cx<'_> {
     }
 }
 
-#[cfg(not(test))]
 impl Cx<'_> {
     pub fn set_ship_identity(&mut self, id: ShipId, species: u32, index: u16) {
         let record = self.ship_mut(id);
@@ -506,7 +487,6 @@ pub mod record;
 #[path = "table.rs"]
 pub mod table;
 
-#[cfg(not(test))]
 impl Cx<'_> {
     pub fn screen_dimensions(&self) -> (i32, i32) {
         use crate::graphics::gfx_common_abi::{ScreenHeight, ScreenWidth};
@@ -521,7 +501,6 @@ impl Cx<'_> {
     }
 }
 
-#[cfg(not(test))]
 impl Cx<'_> {
     pub fn primitive_stamp(&mut self, id: ElementId) -> crate::graphics::native_abi::STAMP {
         self.primitive(id).stamp()
@@ -558,7 +537,6 @@ impl Cx<'_> {
     }
 }
 
-#[cfg(not(test))]
 impl Cx<'_> {
     pub fn has_descriptor(&self, ship: ShipId) -> bool {
         !self.ship(ship).descriptor.is_none()
@@ -583,7 +561,6 @@ pub unsafe fn observe_descriptor_record(record: &super::record::RaceDescriptor) 
     RaceStats::decode(record)
 }
 
-#[cfg(not(test))]
 impl Cx<'_> {
     pub fn frames_first<'a>(&self, frames: &'a Frames) -> FrameRef<'a> {
         // SAFETY: the supplied frame set belongs to this context's loaded resources.
@@ -595,7 +572,6 @@ impl Cx<'_> {
     }
 }
 
-#[cfg(not(test))]
 impl Cx<'_> {
     pub fn intersect_elements(&mut self, a: ElementId, b: ElementId, time: u16) -> u16 {
         assert_ne!(a, b, "collision operands alias");
@@ -611,7 +587,6 @@ impl Cx<'_> {
     }
 }
 
-#[cfg(not(test))]
 impl Cx<'_> {
     pub fn attach_descriptor(&mut self, ship: ShipId, descriptor: super::RaceDesc) {
         self.ship_mut(ship).descriptor = Some(descriptor.into_storage());
@@ -636,7 +611,6 @@ impl Cx<'_> {
     }
 }
 
-#[cfg(not(test))]
 impl Cx<'_> {
     pub fn captain_controls_mut(&mut self, ship: ShipId) -> &mut super::record::CAPTAIN_STUFF {
         &mut self.desc_mut(ship).ship_data.captain_control
@@ -655,7 +629,6 @@ impl Cx<'_> {
     }
 }
 
-#[cfg(not(test))]
 impl Cx<'_> {
     pub fn status_offset(&mut self, ship: ShipId) -> i16 {
         self.kernel.status_offsets[self.ship_state(ship).player as usize]
@@ -734,7 +707,6 @@ mod intersection_projection_tests {
     }
 }
 
-#[cfg(not(test))]
 impl Cx<'_> {
     pub fn assign_primitive(&mut self, id: ElementId) {
         self.kernel.elements.record_mut(id).PrimIndex = self
@@ -801,7 +773,6 @@ mod processing;
 mod ship_assets;
 pub use ship_assets::CampaignProbeAssets;
 
-#[cfg(not(test))]
 impl Cx<'_> {
     pub fn draw_stamp(
         &self,
@@ -825,7 +796,6 @@ impl Cx<'_> {
     }
 }
 
-#[cfg(not(test))]
 impl Cx<'_> {
     pub fn set_mipmap(
         &self,
@@ -851,7 +821,6 @@ impl Cx<'_> {
     }
 }
 
-#[cfg(not(test))]
 impl Cx<'_> {
     pub fn insert_before(&mut self, id: ElementId, before: Option<ElementId>) {
         assert!(!self.elements().linked(id), "element already linked");

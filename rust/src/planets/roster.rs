@@ -109,7 +109,6 @@ fn update_crew(
     Some((frame, label))
 }
 
-#[cfg(not(test))]
 pub(crate) mod live {
     use super::{navigate, update_crew, SHIP_POS};
     use crate::c_bindings::controller_input::*;

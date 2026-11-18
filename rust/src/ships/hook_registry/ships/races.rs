@@ -1,5 +1,4 @@
 //! Stable callback entries.
-#[cfg(not(test))]
 pub(super) fn hooks() -> Vec<(usize, &'static str)> {
     [
         part0(),
@@ -22,7 +21,6 @@ pub(super) fn hooks() -> Vec<(usize, &'static str)> {
     .flatten()
     .collect()
 }
-#[cfg(not(test))]
 fn part0() -> Vec<(usize, &'static str)> {
     vec![
         (
@@ -63,7 +61,6 @@ fn part0() -> Vec<(usize, &'static str)> {
         ),
     ]
 }
-#[cfg(not(test))]
 fn part1() -> Vec<(usize, &'static str)> {
     vec![
         (
@@ -108,7 +105,6 @@ fn part1() -> Vec<(usize, &'static str)> {
         ),
     ]
 }
-#[cfg(not(test))]
 fn part2() -> Vec<(usize, &'static str)> {
     vec![
         (
@@ -153,7 +149,6 @@ fn part2() -> Vec<(usize, &'static str)> {
         ),
     ]
 }
-#[cfg(not(test))]
 fn part3() -> Vec<(usize, &'static str)> {
     vec![
         (
@@ -198,7 +193,6 @@ fn part3() -> Vec<(usize, &'static str)> {
         ),
     ]
 }
-#[cfg(not(test))]
 fn part4() -> Vec<(usize, &'static str)> {
     vec![
         (
@@ -243,7 +237,6 @@ fn part4() -> Vec<(usize, &'static str)> {
         ),
     ]
 }
-#[cfg(not(test))]
 fn part5() -> Vec<(usize, &'static str)> {
     vec![
         (
@@ -284,7 +277,6 @@ fn part5() -> Vec<(usize, &'static str)> {
         ),
     ]
 }
-#[cfg(not(test))]
 fn part6() -> Vec<(usize, &'static str)> {
     vec![
         (
@@ -325,7 +317,6 @@ fn part6() -> Vec<(usize, &'static str)> {
         ),
     ]
 }
-#[cfg(not(test))]
 fn part7() -> Vec<(usize, &'static str)> {
     vec![
         (
@@ -366,7 +357,6 @@ fn part7() -> Vec<(usize, &'static str)> {
         ),
     ]
 }
-#[cfg(not(test))]
 fn part8() -> Vec<(usize, &'static str)> {
     vec![
         (
@@ -411,7 +401,6 @@ fn part8() -> Vec<(usize, &'static str)> {
         ),
     ]
 }
-#[cfg(not(test))]
 fn part9() -> Vec<(usize, &'static str)> {
     vec![
         (
@@ -456,7 +445,6 @@ fn part9() -> Vec<(usize, &'static str)> {
         ),
     ]
 }
-#[cfg(not(test))]
 fn part10() -> Vec<(usize, &'static str)> {
     vec![
         (
@@ -501,7 +489,6 @@ fn part10() -> Vec<(usize, &'static str)> {
         ),
     ]
 }
-#[cfg(not(test))]
 fn part11() -> Vec<(usize, &'static str)> {
     vec![
         (
@@ -546,7 +533,6 @@ fn part11() -> Vec<(usize, &'static str)> {
         ),
     ]
 }
-#[cfg(not(test))]
 fn part12() -> Vec<(usize, &'static str)> {
     vec![
         (
@@ -591,7 +577,6 @@ fn part12() -> Vec<(usize, &'static str)> {
         ),
     ]
 }
-#[cfg(not(test))]
 fn part13() -> Vec<(usize, &'static str)> {
     vec![
         (
@@ -636,7 +621,6 @@ fn part13() -> Vec<(usize, &'static str)> {
         ),
     ]
 }
-#[cfg(not(test))]
 fn part14() -> Vec<(usize, &'static str)> {
     vec![
         (

@@ -12,9 +12,7 @@ pub(super) fn value(fields: &mut Fields, prefix: &str, name: &str, value: impl s
     fields.insert(format!("{prefix}.{name}"), value.to_string());
 }
 
-#[cfg(not(test))]
 pub use live::checkpoint;
-#[cfg(not(test))]
 pub(super) use live::fighters;
 
 #[cfg(test)]

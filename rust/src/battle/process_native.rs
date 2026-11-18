@@ -191,7 +191,6 @@ fn calc_display_coord(c: COORD, origin: COORD, reduction: SIZE, step: bool) -> C
     }) as COORD
 }
 
-#[cfg(not(test))]
 use helpers::*;
 mod helpers {
     use super::*;
@@ -207,7 +206,6 @@ mod helpers {
     }
 }
 
-#[cfg(not(test))]
 pub(crate) mod engine {
     use super::invoke_element::invoke_element;
     use super::*;
@@ -817,7 +815,6 @@ pub(crate) mod engine {
     }
 }
 
-#[cfg(not(test))]
 pub use engine::{init_display_list, process_collisions};
 
 #[cfg(test)]

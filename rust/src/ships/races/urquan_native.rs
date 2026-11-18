@@ -1,5 +1,4 @@
 //! Ur-Quan live fusion and fighter callbacks, translated from ships/urquan/urquan.c.
-#[cfg(not(test))]
 pub(crate) mod engine {
     use crate::ships::native::{
         abi::*, angle_to_facing, cosine, facing_to_angle, normalize_angle, normalize_facing, sine,

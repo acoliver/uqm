@@ -31,7 +31,6 @@ pub(crate) mod zoqfot_native;
 #[path = "samatra_native.rs"]
 pub mod samatra;
 
-#[cfg(not(test))]
 pub fn race(species: u32) -> Option<&'static crate::engine::battle::Race> {
     use crate::ships::native::abi::*;
     [
@@ -77,14 +76,10 @@ pub fn race(species: u32) -> Option<&'static crate::engine::battle::Race> {
     .find_map(|(id, race)| (id == species).then_some(race))
 }
 
-#[cfg(not(test))]
 pub use crate::ships::code_resources::descriptor;
 
-#[cfg(not(test))]
 pub use orz_native::engine::ORZ;
 
-#[cfg(not(test))]
 pub use orz_native::engine::{intruder_preprocess, marine_collision};
 
-#[cfg(not(test))]
 pub use slylandro_native::engine::lightning_segment;

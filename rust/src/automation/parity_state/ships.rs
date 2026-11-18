@@ -75,7 +75,6 @@ impl<'a> Ship<'a> {
     /// # Safety
     /// All resource and custom-data pointers reachable from this ship must remain
     /// live and immutable for the returned borrow, on the game thread.
-    #[cfg(not(test))]
     pub(super) unsafe fn resources(&self) -> ShipResources<'_> {
         let state = &self.observation;
         let race = state.race.as_ref().map(|race| {

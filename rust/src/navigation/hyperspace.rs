@@ -28,7 +28,6 @@ fn move_axis(position: &mut i32, delta: i16, maximum: i32) -> i16 {
     }
 }
 
-#[cfg(not(test))]
 pub(crate) mod live {
 
     pub(crate) fn debit_sis_fuel(cx: &mut crate::engine::battle::Cx<'_>, amount: i16) {

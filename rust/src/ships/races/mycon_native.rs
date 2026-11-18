@@ -1,6 +1,5 @@
 //! Mycon Podship callbacks and descriptor ported from `sc2/src/uqm/ships/mycon/mycon.c`.
 
-#[cfg(not(test))]
 pub(crate) mod engine {
     use crate::ships::native::{abi::*, angle_to_facing, normalize_facing};
 

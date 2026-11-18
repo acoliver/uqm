@@ -6,7 +6,6 @@
 //! number of evaluations of their arguments, because `TFB_Random` is one of
 //! those arguments.
 
-#[cfg(not(test))]
 pub(crate) mod engine {
     use crate::engine::battle::{
         Concerns, Cx, ElementId, RaceState, Selection, ShipId, WeaponOrigin, WeaponSpawn,

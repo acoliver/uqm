@@ -1,5 +1,4 @@
 //! Live flagship callbacks translated from ships/sis_ship/sis_ship.c.
-#[cfg(not(test))]
 pub(crate) mod engine {
     use crate::engine::battle::race::{FlagshipWeapon, SisState};
     use crate::engine::battle::views::{Laser, Missile};

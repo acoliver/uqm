@@ -28,7 +28,6 @@ fn navigate(ship: u32, left: bool, right: bool, up: bool, down: bool) -> u32 {
     selected
 }
 
-#[cfg(not(test))]
 pub(crate) mod live {
     use super::navigate;
     use crate::graphics::{

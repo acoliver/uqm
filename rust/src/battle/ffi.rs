@@ -1,5 +1,4 @@
 /// Game-thread access to the owned battle counters.
-#[cfg(not(test))]
 pub(crate) mod live_counters {
     /// # Safety
     /// Game-thread legacy boundary with the battle context published.

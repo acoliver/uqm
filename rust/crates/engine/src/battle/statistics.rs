@@ -1,7 +1,5 @@
 //! Crew and energy record changes before the supplied presentation effect.
-#[cfg(not(test))]
 use super::flags::{IN_LAST_BATTLE, LOW_ON_ENERGY, NPC_PLAYER_NUM};
-#[cfg(not(test))]
 use super::{Cx, ElementId};
 use crate::graphics::native_abi::{BYTE, COUNT, SIZE};
 fn energy_delta(current: BYTE, maximum: BYTE, delta: SIZE) -> (bool, SIZE) {
@@ -33,7 +31,6 @@ fn crew_delta(current: COUNT, original: COUNT, maximum: COUNT, delta: SIZE) -> (
         (true, current, 0)
     }
 }
-#[cfg(not(test))]
 pub fn delta_energy(cx: &mut Cx<'_>, e: ElementId, delta: SIZE) -> bool {
     let ship = cx.owner(e);
     let info = cx.race_stats(ship).ship_info;
@@ -47,7 +44,6 @@ pub fn delta_energy(cx: &mut Cx<'_>, e: ElementId, delta: SIZE) -> bool {
     }
     success
 }
-#[cfg(not(test))]
 pub fn delta_crew(cx: &mut Cx<'_>, e: ElementId, delta: SIZE) -> bool {
     if cx.world.activity() as BYTE == IN_LAST_BATTLE as BYTE
         && cx.element(e).player == NPC_PLAYER_NUM as SIZE
