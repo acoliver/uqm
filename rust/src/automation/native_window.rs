@@ -1574,7 +1574,22 @@ pub fn observe_native_window(
     pid: u32,
     expected_window_id: Option<u64>,
 ) -> Result<ObservedNativeWindow, NativeWindowObserverError> {
-    darwin::observe(pid, expected_window_id)
+    let matches = crate::platform::macos::observe(pid)
+        .map_err(|error| NativeWindowObserverError::Os(error.to_string()))?
+        .into_iter()
+        .map(|window| ObservedNativeWindow {
+            window_id: window.id,
+            os_bounds: NativeWindowBounds {
+                x: window.x.round() as i32,
+                y: window.y.round() as i32,
+                width: window.width.round() as u32,
+                height: window.height.round() as u32,
+            },
+            visible: window.on_screen,
+            minimized: !window.on_screen,
+        })
+        .collect();
+    unique_visible_window(pid, expected_window_id, matches)
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -1586,57 +1601,30 @@ pub fn observe_native_window(
 }
 
 #[cfg(target_os = "macos")]
-mod darwin {
-    use super::{NativeWindowBounds, NativeWindowObserverError, ObservedNativeWindow};
-
-    pub(super) fn observe(
-        pid: u32,
-        expected_window_id: Option<u64>,
-    ) -> Result<ObservedNativeWindow, NativeWindowObserverError> {
-        let windows = crate::platform::macos::windows_of_process(pid)
-            .map_err(|error| NativeWindowObserverError::Os(error.to_string()))?;
-        let matches = windows
-            .into_iter()
-            .map(|window| ObservedNativeWindow {
-                window_id: window.id,
-                os_bounds: NativeWindowBounds {
-                    x: window.x.round() as i32,
-                    y: window.y.round() as i32,
-                    width: window.width.round() as u32,
-                    height: window.height.round() as u32,
-                },
-                visible: window.on_screen,
-                minimized: !window.on_screen,
-            })
-            .collect();
-        select_observed_native_window(pid, expected_window_id, matches)
-    }
-
-    pub(super) fn select_observed_native_window(
-        pid: u32,
-        expected_window_id: Option<u64>,
-        mut matches: Vec<ObservedNativeWindow>,
-    ) -> Result<ObservedNativeWindow, NativeWindowObserverError> {
-        matches.retain(|window| {
-            window.visible
-                && !window.minimized
-                && expected_window_id.is_none_or(|expected| window.window_id == expected)
-        });
-        matches.sort_by_key(|window| {
-            (
-                window.window_id,
-                window.os_bounds.x,
-                window.os_bounds.y,
-                window.os_bounds.width,
-                window.os_bounds.height,
-            )
-        });
-        matches.dedup();
-        match matches.len() {
-            0 => Err(NativeWindowObserverError::NotFound { pid }),
-            1 => Ok(matches[0]),
-            count => Err(NativeWindowObserverError::Ambiguous { pid, count }),
-        }
+fn unique_visible_window(
+    pid: u32,
+    expected_window_id: Option<u64>,
+    mut matches: Vec<ObservedNativeWindow>,
+) -> Result<ObservedNativeWindow, NativeWindowObserverError> {
+    matches.retain(|window| {
+        window.visible
+            && !window.minimized
+            && expected_window_id.is_none_or(|expected| window.window_id == expected)
+    });
+    matches.sort_by_key(|window| {
+        (
+            window.window_id,
+            window.os_bounds.x,
+            window.os_bounds.y,
+            window.os_bounds.width,
+            window.os_bounds.height,
+        )
+    });
+    matches.dedup();
+    match matches.len() {
+        0 => Err(NativeWindowObserverError::NotFound { pid }),
+        1 => Ok(matches[0]),
+        count => Err(NativeWindowObserverError::Ambiguous { pid, count }),
     }
 }
 
@@ -3680,12 +3668,7 @@ mod tests {
             ..visible
         };
         assert_eq!(
-            darwin::select_observed_native_window(
-                7,
-                None,
-                vec![hidden, hidden, visible, visible, hidden]
-            )
-            .unwrap(),
+            unique_visible_window(7, None, vec![hidden, hidden, visible, visible, hidden]).unwrap(),
             visible
         );
 
@@ -3694,11 +3677,11 @@ mod tests {
             ..visible
         };
         assert_eq!(
-            darwin::select_observed_native_window(7, None, vec![visible, second_visible]),
+            unique_visible_window(7, None, vec![visible, second_visible]),
             Err(NativeWindowObserverError::Ambiguous { pid: 7, count: 2 })
         );
         assert_eq!(
-            darwin::select_observed_native_window(
+            unique_visible_window(
                 7,
                 Some(second_visible.window_id),
                 vec![visible, second_visible]
@@ -3714,7 +3697,7 @@ mod tests {
             ..visible
         };
         assert_eq!(
-            darwin::select_observed_native_window(
+            unique_visible_window(
                 7,
                 Some(visible.window_id),
                 vec![visible, conflicting_duplicate]

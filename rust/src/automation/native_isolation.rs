@@ -6,7 +6,7 @@ use std::process::Command;
 /// Restrict only the candidate child. The controller and observer keep their existing identity.
 /// There is no same-UID permission-based substitute when the OS refuses this profile.
 #[cfg(target_os = "macos")]
-pub fn restrict_candidate(
+pub fn confine_candidate(
     command: &mut Command,
     config: &Path,
     automation: &Path,
@@ -42,13 +42,13 @@ pub fn restrict_candidate(
         (deny mach-priv-task-port)
         {shared_rule}");
     let profile = std::ffi::CString::new(profile).map_err(|error| error.to_string())?;
-    crate::platform::macos::sandbox_before_exec(command, profile);
+    crate::platform::macos::sandbox::restrict_candidate(command, profile);
     Ok(())
 }
 
 /// The native observer is macOS-only; unsupported hosts cannot launch unprotected candidates.
 #[cfg(not(target_os = "macos"))]
-pub fn restrict_candidate(
+pub fn confine_candidate(
     _command: &mut Command,
     _config: &Path,
     _automation: &Path,
@@ -109,7 +109,7 @@ mod tests {
                 "--nocapture",
             ])
             .env("UQM_ISOLATION_TEST_ROOT", root);
-        restrict_candidate(
+        confine_candidate(
             &mut command,
             &root.join("config"),
             &root.join("automation"),

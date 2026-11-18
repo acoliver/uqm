@@ -19,15 +19,19 @@ pub fn set_errno(error: c_int) {
     unsafe { *errno_cell() = error };
 }
 
-unsafe fn errno_cell() -> *mut c_int {
+fn errno_cell() -> *mut c_int {
+    // SAFETY: each runtime's accessor takes no arguments and returns the
+    // calling thread's errno cell.
     #[cfg(windows)]
     {
-        _errno()
+        unsafe { _errno() }
     }
+    // SAFETY: as above.
     #[cfg(any(target_os = "linux", target_os = "android"))]
     {
-        libc::__errno_location()
+        unsafe { libc::__errno_location() }
     }
+    // SAFETY: as above.
     #[cfg(any(
         target_vendor = "apple",
         target_os = "freebsd",
@@ -35,7 +39,7 @@ unsafe fn errno_cell() -> *mut c_int {
         target_os = "openbsd"
     ))]
     {
-        libc::__error()
+        unsafe { libc::__error() }
     }
 }
 

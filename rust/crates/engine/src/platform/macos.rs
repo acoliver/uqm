@@ -1,11 +1,10 @@
-//! macOS-only OS services: the window list, the sandbox, and kqueue
-//! registration.
+//! macOS-only OS services: the window list and kqueue registration.
 
-use std::ffi::{c_void, CString};
+use std::ffi::c_void;
 use std::io;
 use std::os::fd::{AsRawFd as _, BorrowedFd};
-use std::os::unix::process::CommandExt as _;
-use std::process::Command;
+
+pub mod sandbox;
 
 type CfArrayRef = *const c_void;
 type CfDictionaryRef = *const c_void;
@@ -56,16 +55,6 @@ unsafe extern "C" {
     ) -> u8;
 }
 
-#[link(name = "sandbox")]
-unsafe extern "C" {
-    fn sandbox_init(
-        profile: *const libc::c_char,
-        flags: u64,
-        error: *mut *mut libc::c_char,
-    ) -> libc::c_int;
-    fn sandbox_free_error(error: *mut libc::c_char);
-}
-
 const CF_NUMBER_I64: i32 = 4;
 
 /// One window of a process as the window server reports it.
@@ -85,7 +74,7 @@ pub struct Window {
 /// # Errors
 ///
 /// Returns an error when the window server returns no list.
-pub fn windows_of_process(pid: u32) -> io::Result<Vec<Window>> {
+pub fn observe(pid: u32) -> io::Result<Vec<Window>> {
     // SAFETY: CoreGraphics returns an owned immutable CFArray, or null.
     let windows = unsafe { CGWindowListCopyWindowInfo(0, 0) };
     if windows.is_null() {
@@ -168,29 +157,6 @@ unsafe fn dictionary_i64(dictionary: CfDictionaryRef, key: *const c_void) -> Opt
         .then_some(number)
 }
 
-/// Confine the child to the sandbox `profile`, installed between `fork` and
-/// `exec`. The child fails to start if the OS refuses the profile.
-pub fn sandbox_before_exec(command: &mut Command, profile: CString) {
-    // SAFETY: the profile CString is allocated before fork and outlives
-    // sandbox_init; sandbox_init and sandbox_free_error are the only calls the
-    // hook makes, and neither allocates through Rust.
-    unsafe {
-        command.pre_exec(move || {
-            let mut error = std::ptr::null_mut();
-            if sandbox_init(profile.as_ptr(), 0, &raw mut error) != 0 {
-                if !error.is_null() {
-                    sandbox_free_error(error);
-                }
-                return Err(io::Error::new(
-                    io::ErrorKind::PermissionDenied,
-                    "native candidate sandbox installation failed",
-                ));
-            }
-            Ok(())
-        });
-    }
-}
-
 /// Apply `changes` to the kqueue `queue` without waiting for any event.
 ///
 /// # Errors
@@ -225,29 +191,10 @@ mod tests {
     #[test]
     fn a_process_without_windows_lists_none() {
         // A host without a window server answers with an error instead of a list.
-        match windows_of_process(u32::MAX) {
+        match observe(u32::MAX) {
             Ok(windows) => assert!(windows.is_empty()),
             Err(error) => assert!(error.to_string().contains("CGWindowListCopyWindowInfo")),
         }
-    }
-
-    #[test]
-    fn an_accepted_sandbox_profile_lets_the_child_run() {
-        let mut command = Command::new("/usr/bin/true");
-        sandbox_before_exec(
-            &mut command,
-            CString::new("(version 1) (allow default)").unwrap(),
-        );
-        assert!(command.status().unwrap().success());
-    }
-
-    #[test]
-    fn a_refused_sandbox_profile_fails_the_spawn() {
-        let mut command = Command::new("/usr/bin/true");
-        sandbox_before_exec(&mut command, CString::new("not a profile").unwrap());
-        // std reports a pre-exec failure without an OS code as EINVAL, so only
-        // the refusal itself is observable.
-        assert!(command.status().is_err());
     }
 
     #[test]

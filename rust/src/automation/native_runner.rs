@@ -1738,7 +1738,7 @@ fn run(inputs: RunInputs<'_>) -> Result<(), String> {
             .env_clear()
             .env("SDL_AUDIODRIVER", "dummy");
         let shared_root = shared_runtime_root(shared.as_ref(), root, linked_build_member_limit)?;
-        super::native_isolation::restrict_candidate(
+        super::native_isolation::confine_candidate(
             &mut command,
             &config_root,
             &automation,
