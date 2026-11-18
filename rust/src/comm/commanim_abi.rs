@@ -632,3 +632,38 @@ mod owner_tests {
         assert_eq!(moved.animation_runtime.total, 3);
     }
 }
+
+#[cfg(test)]
+mod supplied_tests {
+    use super::*;
+
+    #[test]
+    fn supplied_animation_clock_rng_and_descriptor_changes_use_the_live_engine() {
+        let mut comm = Comm::new();
+        comm.data.definition.num_animations = 2;
+        for descriptor in &mut comm.data.definition.alien_ambient_array[..2] {
+            *descriptor = AnimationDescriptor {
+                start_index: 10,
+                num_frames: 3,
+                anim_flags: CIRCULAR,
+                base_frame_rate: 2,
+                base_restart_rate: 4,
+                ..Default::default()
+            };
+        }
+        comm.data.definition.alien_ambient_array[0].block_mask = 2;
+        comm.data.definition.alien_ambient_array[1].block_mask = 1;
+        let mut calls = 0;
+        let mut rng = || { calls += 1; 0 };
+        runtime::initialize_at(&mut comm, u32::MAX - 2, &mut rng);
+        runtime::advance_at(&mut comm, 2, &mut rng);
+        assert_eq!(comm.animation_runtime.active_mask, 1);
+        assert_eq!(comm.animation_runtime.sequences[2].current, 0);
+        assert_eq!(comm.animation_runtime.sequences[3].current, 2);
+        comm.data.definition.alien_ambient_array[0].anim_flags |= DISABLED;
+        runtime::advance_at(&mut comm, 5, &mut rng);
+        assert_eq!(comm.animation_runtime.sequences[2].current, 0);
+        assert_eq!(comm.animation_runtime.last_time, 5);
+        assert_eq!(calls, 5);
+    }
+}
