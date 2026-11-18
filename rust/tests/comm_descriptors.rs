@@ -14,7 +14,6 @@ use uqm_rust::{
 };
 
 #[test]
-#[test]
 #[serial_test::serial]
 fn missing_player_font_aborts_resource_admission() -> Result<(), Box<dyn std::error::Error>> {
     if !native_process::own_graphics_process("missing_player_font_aborts_resource_admission") {
@@ -39,6 +38,7 @@ fn missing_player_font_aborts_resource_admission() -> Result<(), Box<dyn std::er
     Ok(())
 }
 
+#[test]
 #[serial_test::serial]
 fn descriptor_factories_return_independent_values_and_reselect_variants() {
     let mut game = Game::new();
