@@ -25,7 +25,6 @@ pub use crate::sound::heart_ffi::PLRPlaying;
 
 pub use crate::mainloop::input_abi::live::CurrentInputToBattleInput;
 
-pub use crate::mainloop::input_abi::live::DoInput;
 
 pub use crate::graphics::drawable_abi::DestroyDrawable;
 

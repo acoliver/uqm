@@ -171,14 +171,12 @@ mod api {
             }
             fn sleep(&mut self, ticks: u32) {
                 // SAFETY: the exclusive Cx loan publishes live game-thread UI and pacing owners.
-                self.cx.borrow_mut().with_legacy(|| unsafe {
+                unsafe {
                     SleepThread(ticks);
-                })
+                }
             }
             fn now(&mut self) -> u32 {
-                self.cx
-                    .borrow_mut()
-                    .with_legacy(|| crate::engine::time::counter_abi::GetTimeCounter())
+                crate::engine::time::counter_abi::GetTimeCounter()
             }
             fn skip_sale(&mut self) -> bool {
                 let runtime = self.cx.borrow().kernel.input_runtime();

@@ -233,7 +233,7 @@ pub(super) fn free_solar_sys(cx: &mut Cx<'_>, solar: &mut SolarSystem) {
         }
     }
     solar.clear_system_image();
-    cx.with_legacy(stop_music);
+    stop_music();
 }
 
 pub(super) fn reset_solar_sys(cx: &mut Cx<'_>, solar: &mut SolarSystem, next_activity: u16) {

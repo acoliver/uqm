@@ -55,7 +55,7 @@ pub(super) fn coarse(cx: &mut Cx<'_>, solar: &SolarSystem, planet: &ContextLease
             std::ptr::NonNull::new(cx.kernel.tiny_font)
                 .unwrap_or_else(|| panic!("scan tiny font is not loaded")),
         );
-        cx.with_legacy(|| pc(solar, &g, planet, &micro, &tiny));
+        pc(solar, &g, planet, &micro, &tiny);
     } else {
         let junk = cx
             .kernel
@@ -65,7 +65,7 @@ pub(super) fn coarse(cx: &mut Cx<'_>, solar: &SolarSystem, planet: &ContextLease
             .unwrap_or_else(|| panic!("interplanetary resources are not loaded"))
             .junk
             .lease();
-        cx.with_legacy(|| three_do(solar, &g, planet, &micro, &junk));
+        three_do(solar, &g, planet, &micro, &junk);
     }
 }
 

@@ -223,7 +223,7 @@ impl crate::engine::input::InputRuntime for Driver {
     }
     fn observer(
         &self,
-    ) -> Box<dyn crate::engine::observe::Observer<Option<crate::engine::observe::CampaignView>>>
+    ) -> Box<dyn crate::engine::observe::Observer>
     {
         Box::new(crate::engine::observe::Unobserved)
     }

@@ -1702,7 +1702,6 @@ pub type InputFrameCallback = ::std::option::Option<unsafe extern "C" fn()>;
 pub use crate::mainloop::input_abi::live::SetInputCallback;
 
 #[cfg(not(test))]
-pub use crate::mainloop::input_abi::live::DoInput;
 pub const OPT_ENABLABLE_OPTVAL_DISABLED: OPT_ENABLABLE = 0;
 pub const OPT_ENABLABLE_OPTVAL_ENABLED: OPT_ENABLABLE = 1;
 pub type OPT_ENABLABLE = ::std::os::raw::c_uint;

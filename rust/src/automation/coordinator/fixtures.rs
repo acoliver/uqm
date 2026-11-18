@@ -9,7 +9,7 @@ impl AutomationObserver {
         inner: &mut CoordInner,
         event: SchedulerEvent,
         setup: &mut crate::automation::input_admission::Target<'_>,
-        sink: &mut dyn crate::engine::observe::Observer<Option<campaign_state::CampaignView>>,
+        sink: &mut dyn crate::engine::observe::Observer,
     ) -> bool {
         let result = self.execute_parity_fixture(inner, event, setup, sink);
         match result {
@@ -40,20 +40,20 @@ impl AutomationObserver {
         inner: &mut CoordInner,
         event: SchedulerEvent,
         setup: &mut crate::automation::input_admission::Target<'_>,
-        sink: &mut dyn crate::engine::observe::Observer<Option<campaign_state::CampaignView>>,
+        sink: &mut dyn crate::engine::observe::Observer,
     ) -> Result<Option<String>, String> {
-        let checkpoint = || self.parity_checkpoint("fixture");
-        crate::automation::input_admission::legacy(setup, || -> Result<(), String> {
+        let checkpoint = |cx: &crate::engine::battle::Cx<'_>| self.parity_checkpoint(cx, "fixture");
+        crate::automation::input_admission::with_context(setup, |cx| -> Result<(), String> {
             let witnesses = crate::collections::observation::take_saves();
             if let Some(run) = inner.parity_fixture.as_mut() {
                 for (slot, loading) in witnesses {
                     if loading {
-                        run.loaded(slot, &checkpoint)?;
+                        run.loaded(cx, slot, &checkpoint)?;
                     } else {
-                        run.saved(slot, &checkpoint)?;
+                        run.saved(cx, slot, &checkpoint)?;
                     }
                 }
-                run.advance(&checkpoint)?;
+                run.advance(cx, &checkpoint)?;
             }
             Ok(())
         })?;
@@ -73,17 +73,17 @@ impl AutomationObserver {
                 setup.configure_fleet(request.ships, request.cyborg)?;
                 Ok(Some("parity_melee_configured".into()))
             }
-            _ => crate::automation::input_admission::legacy(setup, || {
+            _ => crate::automation::input_admission::with_context(setup, |cx| {
                 match self.actions.get(inner.sched_state.step_index) {
                     Some(Action::RunParityCorpus(request)) => {
-                        melee_fixture::corpus(*request, &checkpoint)?;
+                        melee_fixture::corpus(cx, *request, &checkpoint)?;
                         Ok(Some(format!("parity_corpus_completed:{}", request.fleet)))
                     }
                     Some(Action::RunParityFixture(request)) => {
                         if inner.parity_fixture.is_some() {
                             return Err("a parity fixture is already active".into());
                         }
-                        inner.parity_fixture = Some(melee_fixture::run(request, &checkpoint)?);
+                        inner.parity_fixture = Some(melee_fixture::run(cx, request, &checkpoint)?);
                         Ok(Some("parity_fixture_started".into()))
                     }
                     Some(Action::AssertParityFixture) => {

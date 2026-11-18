@@ -6,17 +6,17 @@ fn run_loop(reset: bool, step: &mut InputLoop<'_, '_, '_, '_>) {
     let controls = step.input;
     if reset {
         // SAFETY: the native driver owns game-thread input for this synchronous loop.
-        step.legacy(|| unsafe { FlushInput(controls) });
+        unsafe { FlushInput(controls) };
     }
-    step.legacy(crate::mainloop::input_frame::rust_begin_input_loop);
+    crate::mainloop::input_frame::rust_begin_input_loop();
     loop {
         // SAFETY: event dispatch and task switching run on the initialized game thread.
-        step.legacy(|| unsafe {
+        unsafe {
             crate::callback::ffi::Async_process();
             crate::graphics::sdl::lifecycle_abi::TFB_ProcessEvents();
             process_utility_keys(controls);
             super::yield_input_loop(|| crate::threading::legacy_abi::TaskSwitch());
-        });
+        }
         if step
             .input(crate::engine::observe::InputView::BeforeUpdate)
             .stop
@@ -42,7 +42,7 @@ fn run_loop(reset: bool, step: &mut InputLoop<'_, '_, '_, '_>) {
     }
     if reset {
         // SAFETY: the synchronous loop still owns initialized input on this thread.
-        step.legacy(|| unsafe { FlushInput(controls) });
+        unsafe { FlushInput(controls) };
     }
 }
 
@@ -104,8 +104,7 @@ impl InputLoop<'_, '_, '_, '_> {
         if let Some(callback) = callback {
             let io = &mut self.io;
             let controls = self.input.controls();
-            self.cx
-                .with_legacy(|| callback.call(&mut |view| io.observer.checkpoint(&view), controls));
+            callback.call(&mut |view| io.observer.checkpoint(&view), controls);
         }
     }
 
@@ -113,15 +112,9 @@ impl InputLoop<'_, '_, '_, '_> {
         self.frame.frame(self.cx, self.io)
     }
 
-    fn legacy<R>(&mut self, call: impl FnOnce() -> R) -> R {
-        self.cx.with_legacy(call)
-    }
-
     fn complete(&mut self, keep: bool) -> bool {
-        let io = &mut self.io;
-        self.cx.with_legacy(|| {
-            crate::mainloop::input_frame::rust_complete_input_frame(i32::from(keep), io) != 0
-        })
+        crate::mainloop::input_frame::rust_complete_input_frame(self.cx, i32::from(keep), self.io)
+            != 0
     }
 }
 
@@ -148,34 +141,31 @@ impl crate::engine::input::InputRuntime for NativeInputRuntime {
         &self.input
     }
 
-    fn observer(
-        &self,
-    ) -> Box<dyn crate::engine::observe::Observer<Option<crate::engine::observe::CampaignView>>>
-    {
+    fn observer(&self) -> Box<dyn crate::engine::observe::Observer> {
         match &self.observer {
             Some(observer) => Box::new(crate::automation::observer::Handle(observer.clone())),
             None => Box::new(crate::engine::observe::Unobserved),
         }
     }
 
-    fn yield_poll(&self, cx: &mut crate::engine::battle::Cx<'_>) {
-        cx.with_legacy(|| {
+    fn yield_poll(&self, _cx: &mut crate::engine::battle::Cx<'_>) {
+        {
             crate::callback::ffi::Async_process();
             // SAFETY: the retained runtime and handoff own game-thread event pumping.
             unsafe { crate::threading::legacy_abi::TaskSwitch() };
-        });
+        };
     }
 
-    fn sleep(&self, cx: &mut crate::engine::battle::Cx<'_>, ticks: u32) {
+    fn sleep(&self, _cx: &mut crate::engine::battle::Cx<'_>, ticks: u32) {
         // SAFETY: the retained runtime supplies the initialized game-thread lifecycle.
-        cx.with_legacy(|| unsafe { crate::threading::pacing::linked::sleep_thread(ticks) });
+        unsafe { crate::threading::pacing::linked::sleep_thread(ticks) };
     }
 
-    fn sleep_until(&self, cx: &mut crate::engine::battle::Cx<'_>, deadline: u32) {
+    fn sleep_until(&self, _cx: &mut crate::engine::battle::Cx<'_>, deadline: u32) {
         // SAFETY: pacing runs callbacks and presentation inside the caller's bounded handoff.
-        cx.with_legacy(|| unsafe {
+        unsafe {
             crate::threading::pacing::linked::sleep_thread_until(deadline)
-        });
+        };
     }
 
     fn flush(&self) {

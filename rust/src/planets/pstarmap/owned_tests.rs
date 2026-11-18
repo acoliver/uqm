@@ -33,7 +33,7 @@ impl InputRuntime for Driver {
     fn input(&self) -> &InputSession {
         &self.input
     }
-    fn observer(&self) -> Box<dyn Observer<Option<CampaignView>>> {
+    fn observer(&self) -> Box<dyn Observer> {
         Box::new(Unobserved)
     }
     fn yield_poll(&self, _: &mut Cx<'_>) {}
@@ -78,8 +78,8 @@ impl InputRuntime for Driver {
 }
 #[derive(Default)]
 struct Recorded(Vec<Option<StarMapView>>);
-impl Observer<Option<CampaignView>> for Recorded {
-    fn input_admitted(&mut self, _: &InputView, _: &Option<CampaignView>) -> Injected {
+impl Observer for Recorded {
+    fn input_admitted(&mut self, _: &InputView, _: &mut crate::engine::battle::Cx<'_>) -> Injected {
         Injected::default()
     }
     fn checkpoint(&mut self, view: &CheckpointView<'_>) {

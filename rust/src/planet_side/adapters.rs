@@ -24,17 +24,8 @@ impl CffiPlanetSideInput {
         cx: &mut crate::engine::battle::Cx<'_>,
         io: &mut crate::engine::observe::Io<'_>,
     ) -> Result<FrameInput, AdapterError> {
-        use crate::engine::observe::{CampaignView, InputView};
-        let campaign = CampaignView::for_input(InputView::BeforeUpdate, || {
-            CampaignView::capture(cx.world, cx.kernel)
-        });
-        if cx
-            .with_legacy(|| {
-                io.observer
-                    .input_admitted(&InputView::BeforeUpdate, &campaign)
-            })
-            .stop
-        {
+        use crate::engine::observe::InputView;
+        if io.observer.input_admitted(&InputView::BeforeUpdate, cx).stop {
             return Ok(FrameInput {
                 abort: true,
                 ..FrameInput::default()
@@ -46,11 +37,9 @@ impl CffiPlanetSideInput {
             runtime.update(cx);
         }
         let activity = cx.world.activity();
-        if cx
-            .with_legacy(|| {
-                io.observer
-                    .input_admitted(&InputView::AfterUpdate(activity), &None)
-            })
+        if io
+            .observer
+            .input_admitted(&InputView::AfterUpdate(activity), cx)
             .stop
         {
             return Ok(FrameInput {
@@ -280,8 +269,8 @@ mod tests {
         use std::rc::Rc;
 
         struct Recording(Rc<RefCell<Vec<PlanetSideSnapshot>>>);
-        impl Observer<Option<CampaignView>> for Recording {
-            fn input_admitted(&mut self, _: &InputView, _: &Option<CampaignView>) -> Injected {
+        impl Observer for Recording {
+            fn input_admitted(&mut self, _: &InputView, _: &mut crate::engine::battle::Cx<'_>) -> Injected {
                 Default::default()
             }
             fn checkpoint(&mut self, view: &CheckpointView<'_>) {
@@ -411,12 +400,13 @@ mod tests {
             stop: Option<InputView>,
             inputs: Vec<(InputView, Option<u16>)>,
         }
-        impl Observer<Option<CampaignView>> for Recording {
+        impl Observer for Recording {
             fn input_admitted(
                 &mut self,
                 view: &InputView,
-                world: &Option<CampaignView>,
+                cx: &mut Cx<'_>,
             ) -> Injected {
+                let world = CampaignView::for_input(*view, || CampaignView::capture(cx));
                 self.inputs
                     .push((*view, world.as_ref().map(|world| world.activity)));
                 Injected {

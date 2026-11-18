@@ -14,7 +14,6 @@ pub use context_access::{ContextOps, StatusOps};
 
 pub mod element;
 pub mod encount_native;
-pub mod ffi;
 pub mod galaxy;
 pub mod gendef;
 #[cfg(test)]

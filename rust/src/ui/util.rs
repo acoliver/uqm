@@ -150,7 +150,7 @@ pub fn pause_game(cx: &mut Cx<'_>, input: &InputSession) -> u32 {
                         && input.paused()
                     {
                         uqm_engine::input_port::sdl_input::BeginInputFrame();
-                        cx.with_legacy(uqm_engine::threading::yield_game_thread);
+                        uqm_engine::threading::yield_game_thread();
                     }
                 }
                 input.set_paused(false);
@@ -167,7 +167,7 @@ pub fn pause_game(cx: &mut Cx<'_>, input: &InputSession) -> u32 {
     if playing_track() != 0 {
         resume_track();
     }
-    cx.with_legacy(uqm_engine::threading::yield_game_thread);
+    uqm_engine::threading::yield_game_thread();
     cx.world.set_activity(cx.world.activity() & !0x100);
     1
 }
@@ -261,7 +261,7 @@ pub fn sleep_game(cx: &mut Cx<'_>) {
     if playing_track() != 0 {
         resume_track();
     }
-    cx.with_legacy(uqm_engine::threading::yield_game_thread);
+    uqm_engine::threading::yield_game_thread();
 }
 
 #[cfg(test)]

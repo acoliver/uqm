@@ -408,7 +408,7 @@ pub unsafe fn rust_alien_talk_segue(
             |comm, (cx, io), wait| {
                 super::talk_segue::dinput::run_talk_segue_dinput(comm, input, cx, io, wait)
             },
-            |_, (cx, _)| cx.with_legacy(super::talk_segue::fade_music_to_foreground_bridge),
+            |_, _| super::talk_segue::fade_music_to_foreground_bridge(),
         )
     }
     #[cfg(test)]
@@ -561,7 +561,7 @@ pub fn rust_do_communication(
 
     if left {
         // Replay last phrase — all C bridge calls, no lock
-        cx.with_legacy(super::talk_segue::fade_music_to_background_bridge);
+        super::talk_segue::fade_music_to_background_bridge();
         super::talk_segue::c_bridge::call_feedback_player_phrase(comm, cx);
         #[cfg(not(test))]
         let _ = super::talk_segue::dinput::run_talk_segue_dinput(comm, input, cx, io, 0);
@@ -575,7 +575,7 @@ pub fn rust_do_communication(
                 )
             };
             super::talk_segue::c_bridge::call_refresh_responses(comm, cx, top, count, cur);
-            cx.with_legacy(super::talk_segue::fade_music_to_foreground_bridge);
+            super::talk_segue::fade_music_to_foreground_bridge();
         }
         return 1;
     }
@@ -604,7 +604,7 @@ pub fn rust_do_communication(
     }
 
     // Step 2e: Update animations (C bridge, no lock)
-    cx.with_legacy(|| super::talk_segue::c_bridge::call_update_comm_graphics(comm, input));
+    super::talk_segue::c_bridge::call_update_comm_graphics(comm, input);
 
     1
 }

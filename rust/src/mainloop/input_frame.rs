@@ -67,6 +67,7 @@ pub fn rust_begin_input_loop() {
 /// Returns the callback's original continue value after presenting its complete
 /// draw transaction in Rust-owned-main builds.
 pub fn rust_complete_input_frame(
+    cx: &crate::engine::battle::Cx<'_>,
     keep_running: i32,
     io: &mut crate::engine::observe::Io<'_>,
 ) -> i32 {
@@ -78,10 +79,7 @@ pub fn rust_complete_input_frame(
         unsafe { present_complete_transaction() };
     }
 
-    io.observer
-        .checkpoint(&crate::engine::observe::CheckpointView::Simulation(
-            "input-loop",
-        ));
+    io.observer.simulation(cx, "input-loop");
     i32::from(result.keep_running)
 }
 

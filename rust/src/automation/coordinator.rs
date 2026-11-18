@@ -720,6 +720,7 @@ impl AutomationObserver {
     pub(crate) fn service_and_should_skip_pending_communication_speech(
         &self,
         capture: &mut dyn FnMut() -> campaign_state::CampaignView,
+        setup: &mut crate::automation::input_admission::Target<'_>,
     ) -> bool {
         for _ in 0..4 {
             if self.should_skip_pending_communication_speech() {
@@ -728,7 +729,7 @@ impl AutomationObserver {
 
             let coord = self;
             let before = coord.inner.lock().sched_state.step_index;
-            if coord.process_input_inner(capture) {
+            if coord.process_input_inner(capture, setup) {
                 return false;
             }
             if self.should_skip_pending_communication_speech() {
@@ -747,11 +748,12 @@ impl AutomationObserver {
     pub(crate) fn service_communication_completion_boundary(
         &self,
         capture: &mut dyn FnMut() -> campaign_state::CampaignView,
+        setup: &mut crate::automation::input_admission::Target<'_>,
     ) -> bool {
         for _ in 0..2 {
             let coord = self;
             let before = coord.inner.lock().sched_state.step_index;
-            if coord.process_input_inner(capture) {
+            if coord.process_input_inner(capture, setup) {
                 return true;
             }
             let after = coord.inner.lock().sched_state.step_index;
@@ -764,10 +766,12 @@ impl AutomationObserver {
 
     fn campaign_source<'a>(
         &'a self,
+        cx: &crate::engine::battle::Cx<'_>,
         world: &'a campaign_state::CampaignView,
     ) -> campaign_state::LiveCampaign<'a> {
         campaign_state::LiveCampaign {
             world,
+            boss: crate::automation::samatra::observe(cx),
             ui: &self.ui,
             ending: *self.ending.lock(),
             flagship_destroyed: self.flagship_destroyed.load(Ordering::SeqCst),
@@ -780,6 +784,7 @@ impl AutomationObserver {
     /// condition was reached; injected input never satisfies a wait.
     fn service_semantic_waits(
         &self,
+        cx: &crate::engine::battle::Cx<'_>,
         world: &campaign_state::CampaignView,
         inner: &mut CoordInner,
         released_semantic_select: bool,
@@ -991,7 +996,7 @@ impl AutomationObserver {
             let expired =
                 inner.sched_state.phase == (ActionPhase::WaitingCondition { remaining: 0 });
             let evaluation =
-                campaign_state::evaluate(&wait.predicate, &self.campaign_source(world));
+                campaign_state::evaluate(&wait.predicate, &self.campaign_source(cx, world));
             if expired {
                 // The scheduler ends the proof on this tick; say what the
                 // game state was instead of leaving a bare mismatch.
@@ -1080,6 +1085,7 @@ impl AutomationObserver {
     /// would press.
     fn service_battle_fight(
         &self,
+        cx: &crate::engine::battle::Cx<'_>,
         world: &campaign_state::CampaignView,
         inner: &mut CoordInner,
         fight: crate::automation::script::FightBattleStep,
@@ -1087,7 +1093,7 @@ impl AutomationObserver {
     ) -> SchedulerEvent {
         let progress = inner
             .battle_fight
-            .observe(&BattleSnapshot::live(world), &fight);
+            .observe(&BattleSnapshot::live(cx, world), &fight);
         match progress {
             Ok(FightProgress::Fighting { control, report }) => {
                 if !self.set_fight_controls(control) {
@@ -1188,6 +1194,7 @@ impl AutomationObserver {
 
     fn service_samatra(
         &self,
+        cx: &crate::engine::battle::Cx<'_>,
         world: &campaign_state::CampaignView,
         inner: &mut CoordInner,
         step: crate::automation::samatra::FightSamatraStep,
@@ -1195,7 +1202,7 @@ impl AutomationObserver {
     ) -> SchedulerEvent {
         use crate::automation::samatra::{Controls, Progress};
         use crate::automation::script::{MenuKey, PlayerKey};
-        let (events, snapshot) = crate::automation::samatra::observe();
+        let (events, snapshot) = crate::automation::samatra::observe(cx);
         let observation = crate::automation::input_ffi::fleet_fight_observation(world, &self.ui);
         if inner.input_seen % 60 == 1 || inner.sched_state.phase == ActionPhase::WaitingForInput {
             self.write_trace_labeled(
@@ -1525,6 +1532,7 @@ impl AutomationObserver {
     /// is running, and report arrival.
     fn service_navigation(
         &self,
+        cx: &crate::engine::battle::Cx<'_>,
         world: &campaign_state::CampaignView,
         inner: &mut CoordInner,
         mut scheduler_event: SchedulerEvent,
@@ -1691,7 +1699,7 @@ impl AutomationObserver {
         } else if let Some(Action::FightSamatra(fight)) =
             self.actions.get(inner.sched_state.step_index)
         {
-            scheduler_event = self.service_samatra(world, inner, *fight, scheduler_event);
+            scheduler_event = self.service_samatra(cx, world, inner, *fight, scheduler_event);
         } else if let Some(Action::FightEncounter(fight)) =
             self.actions.get(inner.sched_state.step_index)
         {
@@ -1705,7 +1713,8 @@ impl AutomationObserver {
         } else if let Some(Action::FightBattle(fight)) =
             self.actions.get(inner.sched_state.step_index)
         {
-            scheduler_event = self.service_battle_fight(world, inner, *fight, scheduler_event);
+            scheduler_event =
+                self.service_battle_fight(cx, world, inner, *fight, scheduler_event);
         } else if let Some(Action::NavigateToMoon(navigation)) =
             self.actions.get(inner.sched_state.step_index)
         {
@@ -1814,8 +1823,9 @@ impl AutomationObserver {
     fn process_input_inner(
         &self,
         capture: &mut dyn FnMut() -> campaign_state::CampaignView,
+        setup: &mut crate::automation::input_admission::Target<'_>,
     ) -> bool {
-        self.process_input_at_boundary(capture, false)
+        self.process_input_at_boundary(capture, false, setup)
     }
 
     /// When a `wait_for_planet_side_end` ran out of ticks, record the last
@@ -1836,6 +1846,7 @@ impl AutomationObserver {
 
     fn verify_runtime_assertions(
         &self,
+        cx: &crate::engine::battle::Cx<'_>,
         world: &campaign_state::CampaignView,
         inner: &mut CoordInner,
     ) -> bool {
@@ -2112,7 +2123,7 @@ impl AutomationObserver {
         }
         if let Some(Action::AssertState(predicate)) = self.actions.get(inner.sched_state.step_index)
         {
-            let evaluation = campaign_state::evaluate(predicate, &self.campaign_source(world));
+            let evaluation = campaign_state::evaluate(predicate, &self.campaign_source(cx, world));
             if evaluation.held {
                 self.write_trace_labeled(
                     inner,

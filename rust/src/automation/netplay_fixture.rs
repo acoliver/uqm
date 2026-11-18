@@ -19,9 +19,7 @@ impl Request {
 
 pub(crate) fn connect(
     setup: &mut crate::automation::input_admission::Target<'_>,
-    observer: &mut dyn crate::engine::observe::Observer<
-        Option<crate::engine::observe::CampaignView>,
-    >,
+    observer: &mut dyn crate::engine::observe::Observer,
     request: &Request,
 ) -> Result<(), String> {
     request.validate()?;

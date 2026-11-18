@@ -101,19 +101,6 @@ pub(crate) mod live {
         }) | (u16::from(state.menu[KEY_MENU_BACKSPACE as usize] != 0) << 9)
     }
 
-    /// # Safety
-    /// The initialized game-thread context must be published by the calling legacy UI.
-    pub unsafe fn DoInput(reset: u32, frame: &mut dyn crate::engine::input::Frame) {
-        crate::app::bridge::enter(|cx| {
-            let runtime = cx.kernel.input_runtime();
-            let mut observer = runtime.observer();
-            let mut io = crate::engine::observe::Io {
-                observer: &mut *observer,
-            };
-            runtime.run(cx, &mut io, reset != 0, frame);
-        });
-    }
-
     pub fn SetMenuSounds(input: &InputControls, first: u16, second: u16) {
         input.set_menu_sounds(first, second);
     }

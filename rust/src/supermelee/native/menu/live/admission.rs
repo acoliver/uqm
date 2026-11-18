@@ -2,7 +2,7 @@
 use crate::engine::{
     battle::Cx,
     input::Frame,
-    observe::{CampaignView, Injected, InputSetup, InputView, Io, Observer, PeerSetup},
+    observe::{Injected, InputSetup, InputView, Io, Observer, PeerSetup},
 };
 use crate::supermelee::session::MeleeSession;
 
@@ -11,7 +11,7 @@ struct Setup<'s, 'c, 'w> {
     cx: &'c mut Cx<'w>,
 }
 
-impl InputSetup<Option<CampaignView>> for Setup<'_, '_, '_> {
+impl InputSetup for Setup<'_, '_, '_> {
     fn configure_fleet(&mut self, ships: [[u8; 7]; 2], cyborg: bool) -> Result<(), String> {
         self.state.configure_fleets(
             &mut self.cx.kernel.player_control,
@@ -26,7 +26,7 @@ impl InputSetup<Option<CampaignView>> for Setup<'_, '_, '_> {
         remote_player: u16,
         server: bool,
         port: u16,
-        observer: &mut dyn Observer<Option<CampaignView>>,
+        observer: &mut dyn Observer,
     ) -> Result<Option<u16>, String> {
         if self.state.melee_started != 0 {
             return Err("cannot connect the netplay fixture during battle".into());
@@ -67,7 +67,7 @@ impl InputSetup<Option<CampaignView>> for Setup<'_, '_, '_> {
         })
     }
 
-    fn poll_peer(&mut self, observer: &mut dyn Observer<Option<CampaignView>>) {
+    fn poll_peer(&mut self, observer: &mut dyn Observer) {
         let session = self.state.netplay.clone();
         let state = &mut *self.state;
         let cx = &mut *self.cx;
@@ -77,8 +77,8 @@ impl InputSetup<Option<CampaignView>> for Setup<'_, '_, '_> {
         });
     }
 
-    fn with_legacy(&mut self, operation: &mut dyn FnMut()) {
-        self.cx.with_legacy(operation);
+    fn with_context(&mut self, operation: &mut dyn FnMut(&mut Cx<'_>)) {
+        operation(self.cx);
     }
 }
 
@@ -88,9 +88,8 @@ pub(crate) fn observe(
     io: &mut Io<'_>,
     view: InputView,
 ) -> Injected {
-    let campaign = CampaignView::for_input(view, || CampaignView::capture(cx.world, cx.kernel));
     io.observer
-        .input_admitted_with_setup(&view, &campaign, &mut Setup { state, cx })
+        .input_admitted_with_setup(&view, &mut Setup { state, cx })
 }
 
 pub(crate) struct SessionFrame<'a, F> {

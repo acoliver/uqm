@@ -29,9 +29,9 @@ impl Comm {
         &mut self,
         io: &mut Io<'_>,
         view: &InputView,
-        campaign: &Option<crate::engine::observe::CampaignView>,
+        cx: &mut Cx<'_>,
     ) -> Injected {
-        let admitted = io.observer.input_admitted(view, campaign);
+        let admitted = io.observer.input_admitted(view, cx);
         self.apply_input(admitted);
         admitted
     }
@@ -64,8 +64,8 @@ mod tests {
         calls: usize,
     }
 
-    impl Observer<Option<CampaignView>> for Select {
-        fn input_admitted(&mut self, _: &InputView, _: &Option<CampaignView>) -> Injected {
+    impl Observer for Select {
+        fn input_admitted(&mut self, _: &InputView, _: &mut crate::engine::battle::Cx<'_>) -> Injected {
             self.calls += 1;
             Injected {
                 comm_response: Some(1),
@@ -89,7 +89,9 @@ mod tests {
         let mut io = Io {
             observer: &mut observer,
         };
-        first.admit_observer(&mut io, &InputView::PendingResponse { count: 2 }, &None);
+        crate::comm::with_test_context(|cx| {
+            first.admit_observer(&mut io, &InputView::PendingResponse { count: 2 }, cx);
+        });
         assert_eq!(first.selected_response(), 1);
         assert_eq!(second.selected_response(), 0);
         first.responses_mut().select(0);
@@ -152,7 +154,7 @@ pub(crate) mod fixture {
         fn input(&self) -> &InputSession {
             &self.0
         }
-        fn observer(&self) -> Box<dyn Observer<Option<CampaignView>>> {
+        fn observer(&self) -> Box<dyn Observer> {
             Box::new(Unobserved)
         }
         fn run(&self, cx: &mut Cx<'_>, io: &mut Io<'_>, reset: bool, frame: &mut dyn Frame) {

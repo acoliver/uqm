@@ -4,7 +4,6 @@ use super::*;
 
 impl AutomationObserver {
     /// Admit V3b loading at the existing initialized-game hook.
-    #[cfg(not(test))]
     pub(crate) fn activate_save_capture(&self) {
         if let Some(request) = self.inner.lock().save_capture.as_mut() {
             request.admit_load();
@@ -26,7 +25,7 @@ impl AutomationObserver {
                 RecordKind::SemanticAssertion,
                 format!("save_capture_load_failed:{error:#}"),
             );
-            cx.with_legacy(|| self.set_terminal(&mut inner, TerminalClass::SemanticMismatch));
+            self.set_terminal(&mut inner, TerminalClass::SemanticMismatch);
         }
         #[cfg(test)]
         {
@@ -51,7 +50,6 @@ impl AutomationObserver {
     }
 
     /// Complete the admitted save after the input observer returns its borrowed owner.
-    #[cfg(not(test))]
     pub(crate) fn complete_save_capture(&self, cx: &mut crate::engine::battle::Cx<'_>) {
         let mut inner = self.inner.lock();
         let Some(request) = inner.save_capture.as_mut() else {
@@ -68,7 +66,7 @@ impl AutomationObserver {
             ),
         };
         self.write_trace_labeled(&mut inner, RecordKind::SemanticAssertion, label);
-        cx.with_legacy(|| self.set_terminal(&mut inner, class));
+        self.set_terminal(&mut inner, class);
     }
 }
 

@@ -76,7 +76,7 @@ pub fn run_session(
     let observe = std::cell::RefCell::new(crate::engine::observe::Io {
         observer: &mut *io.observer,
     });
-    let admission = admit_trip(&observe);
+    let admission = admit_trip(&mut game.borrow_mut(), &observe);
     let result = run_retained_session(
         drawing, controls, activity, &game, solar, &input, &admission,
     );
@@ -91,12 +91,13 @@ struct TripAdmission<'a, 'observer> {
 }
 
 fn admit_trip<'a, 'observer>(
+    cx: &mut crate::engine::battle::Cx<'_>,
     observe: &'a std::cell::RefCell<crate::engine::observe::Io<'observer>>,
 ) -> TripAdmission<'a, 'observer> {
     let admission = observe
         .borrow_mut()
         .observer
-        .input_admitted(&InputView::PlanetSideBegin, &None)
+        .input_admitted(&InputView::PlanetSideBegin, cx)
         .planet_side;
     let trip = std::rc::Rc::new(std::cell::RefCell::new(TripTelemetry::pending(
         admission.map_or(0, |admission| admission.generation),
@@ -354,8 +355,8 @@ mod tests {
 
         #[derive(Default)]
         struct Recording(Vec<PlanetSideSnapshot>);
-        impl Observer<Option<CampaignView>> for Recording {
-            fn input_admitted(&mut self, _: &InputView, _: &Option<CampaignView>) -> Injected {
+        impl Observer for Recording {
+            fn input_admitted(&mut self, _: &InputView, _: &mut crate::engine::battle::Cx<'_>) -> Injected {
                 Default::default()
             }
             fn checkpoint(&mut self, view: &CheckpointView<'_>) {

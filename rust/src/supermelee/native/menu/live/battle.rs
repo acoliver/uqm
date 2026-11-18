@@ -133,7 +133,7 @@ pub(super) fn start(
             cx,
             &state.melee_setup,
         );
-        cx.with_legacy(|| WaitForSoundEnd(u16::MAX));
+        WaitForSoundEnd(u16::MAX);
         let selector = (cx.random() as u16 % NUMBER_OF_PLANET_TYPES as u16) as u8;
         load_gravity_well(cx.kernel, selector);
         assert!(cx.b.net.is_none(), "melee battle already owns a session");

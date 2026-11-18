@@ -16,11 +16,6 @@ pub use live::checkpoint;
 pub(super) use live::fighters;
 
 #[cfg(test)]
-pub fn checkpoint(_journal: &mut super::parity::Journal, _boundary: &str) -> std::io::Result<()> {
-    Ok(())
-}
-
-#[cfg(test)]
 pub(super) fn test_directory() -> tempfile::TempDir {
     let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../tmp/verify");
     std::fs::create_dir_all(root)

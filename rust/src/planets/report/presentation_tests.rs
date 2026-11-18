@@ -36,7 +36,7 @@ impl InputRuntime for Driver {
     fn input(&self) -> &InputSession {
         &self.input
     }
-    fn observer(&self) -> Box<dyn Observer<Option<CampaignView>>> {
+    fn observer(&self) -> Box<dyn Observer> {
         Box::new(Unobserved)
     }
     fn yield_poll(&self, _: &mut Cx<'_>) {
@@ -80,8 +80,8 @@ struct Recording {
     visibility: Vec<bool>,
     nested: usize,
 }
-impl Observer<Option<CampaignView>> for Recording {
-    fn input_admitted(&mut self, view: &InputView, _: &Option<CampaignView>) -> Injected {
+impl Observer for Recording {
+    fn input_admitted(&mut self, view: &InputView, _: &mut crate::engine::battle::Cx<'_>) -> Injected {
         assert!(self.active, "report input escaped its visibility scope");
         assert!(matches!(view, InputView::Nested));
         self.nested += 1;

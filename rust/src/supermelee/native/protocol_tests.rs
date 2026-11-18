@@ -17,7 +17,7 @@ impl InputRuntime for Runtime {
         &self.input
     }
 
-    fn observer(&self) -> Box<dyn Observer<Option<crate::engine::observe::CampaignView>>> {
+    fn observer(&self) -> Box<dyn Observer> {
         Box::new(Unobserved)
     }
 

@@ -100,16 +100,11 @@ fn main() {
     application.install_input(input);
     let exit_code = uqm_rust::app::run(&mut application, &c_args, &parsed);
     let observer = application.observer().cloned();
-    // SAFETY: finalization runs synchronously before the application releases Game.
-    let exit_code = unsafe {
-        application.legacy(|| {
-            finish_automation(
-                observer.as_deref(),
-                exit_code,
-                parsed.replay_summary.as_deref(),
-            )
-        })
-    };
+    let exit_code = finish_automation(
+        observer.as_deref(),
+        exit_code,
+        parsed.replay_summary.as_deref(),
+    );
     exit(exit_code);
 }
 

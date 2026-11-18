@@ -105,7 +105,7 @@ impl AutomationObserver {
                 match inner.battle_loss.observe(
                     mode::require_live(world, &self.ui, self.scene.lock().active_scene()),
                     crate::automation::battle_observer::current_frame(),
-                    battle_outcome::live_fleets(),
+                    battle_outcome::live_fleets(world),
                     wait.minimum_ships,
                 ) {
                     Ok(Some(proof)) => {

@@ -30,7 +30,7 @@ impl InputRuntime for Driver {
     fn input(&self) -> &InputSession {
         &self.input
     }
-    fn observer(&self) -> Box<dyn Observer<Option<CampaignView>>> {
+    fn observer(&self) -> Box<dyn Observer> {
         Box::new(Unobserved)
     }
     fn yield_poll(&self, _: &mut Cx<'_>) {

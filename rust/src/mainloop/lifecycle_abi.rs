@@ -45,23 +45,23 @@ fn on_battle_frame(
 
 unsafe fn background_init_kernel(cx: &mut crate::engine::battle::Cx<'_>, timeout: u32) {
     for species in SPECIES_ID_ARILOU_ID..=SPECIES_ID_LAST_MELEE_ID {
-        cx.with_legacy(|| crate::threading::legacy_abi::TaskSwitch());
+        crate::threading::legacy_abi::TaskSwitch();
         crate::ships::master_native::engine::load_entry(cx.world, cx.kernel, species);
     }
-    cx.with_legacy(|| crate::threading::legacy_abi::TaskSwitch());
+    crate::threading::legacy_abi::TaskSwitch();
     crate::game_init::kernel_abi::InitGameKernel(cx.kernel, cx.world.activity());
     let input = cx.kernel.input_runtime();
     while crate::time::counter_abi::GetTimeCounter() <= timeout
         && cx.world.activity() & CHECK_ABORT as u16 == 0
     {
         input.update(cx);
-        cx.with_legacy(|| {
+        {
             if crate::time::source::is_replay() {
                 crate::threading::pacing::linked::sleep_thread_until(timeout.saturating_add(1));
             } else {
                 crate::threading::legacy_abi::TaskSwitch();
             }
-        });
+        };
     }
 }
 

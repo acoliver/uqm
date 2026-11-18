@@ -69,11 +69,11 @@ mod tests {
     use std::{cell::RefCell, rc::Rc};
 
     struct Recording(Rc<RefCell<Vec<bool>>>);
-    impl Observer<Option<crate::engine::observe::CampaignView>> for Recording {
+    impl Observer for Recording {
         fn input_admitted(
             &mut self,
             _: &InputView,
-            _: &Option<crate::engine::observe::CampaignView>,
+            _: &mut crate::engine::battle::Cx<'_>,
         ) -> Injected {
             Default::default()
         }

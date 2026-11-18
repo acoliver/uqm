@@ -113,7 +113,7 @@ mod tests {
         fn input(&self) -> &InputSession {
             &self.0
         }
-        fn observer(&self) -> Box<dyn Observer<Option<CampaignView>>> {
+        fn observer(&self) -> Box<dyn Observer> {
             Box::new(Unobserved)
         }
         fn update(&self, _: &mut Cx<'_>) {}

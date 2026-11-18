@@ -283,7 +283,7 @@ pub(crate) mod live {
                 domain: 1,
                 fallback,
             },
-            &None,
+            cx,
         );
         state.current_ship = 255;
         state.cur_index = u16::MAX;
@@ -315,10 +315,10 @@ pub(crate) mod live {
             cx.run_input_frame(io, true, &mut frame);
         }
         // SAFETY: the input session has stopped and no callback retains these resources.
-        cx.with_legacy(|| {
+        {
             crate::ui::settings::stop_loaded_music(state.h_music.as_ref());
             WaitForSoundEnd(u16::MAX);
-        });
+        };
         state.save_config(cx.kernel.player_control);
         let session = state.netplay.clone();
         session.close_all_connections(&mut |event| {
@@ -327,12 +327,12 @@ pub(crate) mod live {
         drop(state.h_music.take());
         uninit_space(cx.kernel);
         cx.kernel.game_sounds = None;
-        cx.with_legacy(|| {
+        {
             drop(state.fleet_picker.take());
             drop(state.menu_graphic.take());
             drop(state.build_picker.take());
             state.netplay.setup_input_delay(0);
-        });
+        };
         runtime.flush();
     }
 }

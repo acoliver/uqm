@@ -211,7 +211,7 @@ mod api {
                 self.cx.borrow().kernel.using_speech != 0
             }
             fn random(&mut self) -> u32 {
-                self.cx.borrow_mut().with_legacy(crate::math::random)
+                crate::math::random()
             }
             fn talking_animation(&mut self, enabled: bool) {
                 self.comm.borrow_mut().set_talking_animation(enabled);
@@ -241,27 +241,25 @@ mod api {
                 crate::ui::sis::clear_sis_rect(cx.kernel, cx.world, dimensions, 1 << 3)
             }
             fn now(&mut self) -> u32 {
-                self.cx
-                    .borrow_mut()
-                    .with_legacy(|| crate::engine::time::counter_abi::GetTimeCounter())
+                crate::engine::time::counter_abi::GetTimeCounter()
             }
             fn sleep(&mut self, ticks: u32) {
                 // SAFETY: the exclusive Cx loan publishes live game-thread UI and pacing owners.
-                self.cx.borrow_mut().with_legacy(|| unsafe {
+                unsafe {
                     SleepThread(ticks);
-                })
+                }
             }
             fn sleep_until(&mut self, time: u32) {
                 // SAFETY: the exclusive Cx loan publishes live game-thread UI and pacing owners.
-                self.cx.borrow_mut().with_legacy(|| unsafe {
+                unsafe {
                     SleepThreadUntil(time);
-                })
+                }
             }
             fn task_switch(&mut self) {
                 // SAFETY: the exclusive Cx loan publishes live game-thread UI and pacing owners.
-                self.cx.borrow_mut().with_legacy(|| unsafe {
+                unsafe {
                     TaskSwitch();
-                })
+                }
             }
             fn skip_sale(&mut self) -> bool {
                 let runtime = self.cx.borrow().kernel.input_runtime();

@@ -86,11 +86,12 @@ impl AutomationObserver {
         &self,
         capture: &mut dyn FnMut() -> campaign_state::CampaignView,
         button_wait: bool,
+        setup: &mut crate::automation::input_admission::Target<'_>,
     ) -> bool {
         self.process_input_admission(
             capture,
             button_wait,
-            &mut crate::automation::input_admission::Unavailable,
+            setup,
             &mut crate::engine::observe::Unobserved,
         )
     }
@@ -100,11 +101,11 @@ impl AutomationObserver {
         capture: &mut dyn FnMut() -> campaign_state::CampaignView,
         button_wait: bool,
         setup: &mut crate::automation::input_admission::Target<'_>,
-        sink: &mut dyn crate::engine::observe::Observer<Option<campaign_state::CampaignView>>,
+        sink: &mut dyn crate::engine::observe::Observer,
     ) -> bool {
         let mut inner = self.inner.lock();
-        let event = match crate::automation::input_admission::legacy(setup, || {
-            self.prepare_input_boundary(&mut inner, capture, button_wait)
+        let event = match crate::automation::input_admission::with_context(setup, |cx| {
+            self.prepare_input_boundary(&mut inner, cx, capture, button_wait)
         }) {
             std::ops::ControlFlow::Break(stop) => return stop,
             std::ops::ControlFlow::Continue(event) => event,
@@ -112,8 +113,8 @@ impl AutomationObserver {
         if self.parity_fixture_input(&mut inner, event, setup, sink) {
             return true;
         }
-        crate::automation::input_admission::legacy(setup, || {
-            self.queue_input_fixture(&mut inner, event)
+        crate::automation::input_admission::with_context(setup, |cx| {
+            self.queue_input_fixture(&mut inner, cx, event)
                 || self.commit_input_event(&mut inner, event)
         })
     }
@@ -121,6 +122,7 @@ impl AutomationObserver {
     fn prepare_input_boundary(
         &self,
         inner: &mut CoordInner,
+        cx: &crate::engine::battle::Cx<'_>,
         capture: &mut dyn FnMut() -> campaign_state::CampaignView,
         button_wait: bool,
     ) -> std::ops::ControlFlow<bool, SchedulerEvent> {
@@ -163,7 +165,7 @@ impl AutomationObserver {
             return std::ops::ControlFlow::Break(self.apply_main_menu_ready(inner));
         }
         let world = &capture();
-        if self.verify_runtime_assertions(world, inner)
+        if self.verify_runtime_assertions(cx, world, inner)
             || self.verify_activity_assertion(world, inner)
         {
             return std::ops::ControlFlow::Break(true);
@@ -172,6 +174,7 @@ impl AutomationObserver {
         // Step 2: Feed to scheduler. Runtime waits are satisfied only by
         // observed production state, never by injected input.
         let mut scheduler_event = self.service_semantic_waits(
+            cx,
             world,
             inner,
             released_semantic_select,
@@ -181,7 +184,7 @@ impl AutomationObserver {
             return std::ops::ControlFlow::Break(true);
         }
 
-        scheduler_event = self.service_navigation(world, inner, scheduler_event);
+        scheduler_event = self.service_navigation(cx, world, inner, scheduler_event);
 
         if inner.terminal_class.is_some() {
             return std::ops::ControlFlow::Break(true);
@@ -198,14 +201,21 @@ impl AutomationObserver {
             )
     }
 
-    fn queue_input_fixture(&self, inner: &mut CoordInner, scheduler_event: SchedulerEvent) -> bool {
+    fn queue_input_fixture(
+        &self,
+        inner: &mut CoordInner,
+        cx: &mut crate::engine::battle::Cx<'_>,
+        scheduler_event: SchedulerEvent,
+    ) -> bool {
         if matches!(
             self.actions.get(inner.sched_state.step_index),
             Some(Action::SetupMeleeMutualLossFixture(_))
         ) && inner.sched_state.phase == ActionPhase::WaitingForInput
             && scheduler_event == SchedulerEvent::AdmittedInput
         {
-            match crate::automation::melee_fixture::trigger(&|| self.parity_checkpoint("fixture")) {
+            match crate::automation::melee_fixture::trigger(cx, &|cx| {
+                self.parity_checkpoint(cx, "fixture")
+            }) {
                 Ok(()) => self.write_trace_labeled(
                     inner,
                     RecordKind::SemanticAssertion,
@@ -382,7 +392,7 @@ mod tests {
             effects: Vec<&'static str>,
             ready: bool,
         }
-        impl InputSetup<Option<CampaignView>> for Setup<'_> {
+        impl InputSetup for Setup<'_> {
             fn configure_fleet(&mut self, ships: [[u8; 7]; 2], cyborg: bool) -> Result<(), String> {
                 assert_eq!(ships, [[0; 7]; 2]);
                 assert!(cyborg);
@@ -395,7 +405,7 @@ mod tests {
                 player: u16,
                 server: bool,
                 port: u16,
-                observer: &mut dyn Observer<Option<CampaignView>>,
+                observer: &mut dyn Observer,
             ) -> Result<Option<u16>, String> {
                 assert_eq!((player, server, port), (1, true, 0));
                 assert!(self.coordinator.inner.try_lock().is_none());
@@ -409,7 +419,7 @@ mod tests {
                     disconnected: false,
                 })
             }
-            fn poll_peer(&mut self, observer: &mut dyn Observer<Option<CampaignView>>) {
+            fn poll_peer(&mut self, observer: &mut dyn Observer) {
                 assert!(self.coordinator.inner.try_lock().is_none());
                 assert!(observer.input_admitted(&InputView::Active, &None).stop);
                 self.effects.push("poll");

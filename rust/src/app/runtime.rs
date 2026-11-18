@@ -29,17 +29,15 @@ pub fn run(
     argv.push(std::ptr::null_mut());
     let runtime = application.game.kernel.input_runtime();
     let observer = application.observer().cloned();
-    // SAFETY: argv remains live while the application suspends Game for initialization.
+    // SAFETY: argv remains live on the game thread throughout initialization.
     let initialized = unsafe {
-        application.legacy(|| {
-            crate::mainloop::startup::initialize(
-                runtime.input(),
-                parsed,
-                (argv.len() - 1) as c_int,
-                argv.as_mut_ptr(),
-                observer,
-            )
-        })
+        crate::mainloop::startup::initialize(
+            runtime.input(),
+            parsed,
+            (argv.len() - 1) as c_int,
+            argv.as_mut_ptr(),
+            observer,
+        )
     };
     if initialized != 0 {
         return initialized.max(0);
@@ -53,8 +51,7 @@ pub fn run(
             1
         }
     };
-    // SAFETY: the campaign has stopped, and subsystem teardown returns before Game is released.
-    unsafe { application.legacy(crate::mainloop::teardown::teardown_subsystems) };
+    crate::mainloop::teardown::teardown_subsystems();
     result
 }
 
@@ -70,7 +67,7 @@ fn run_game(
         &mut game.kernel,
         crate::math::random,
     );
-    cx.with_legacy(|| {
+    {
         // SAFETY: startup initialized the audio options before the game kernel is loaded.
         unsafe {
             crate::sound::audio_init::initAudio(
@@ -78,7 +75,7 @@ fn run_game(
                 crate::sound::volume_globals::soundflags,
             );
         }
-    });
+    };
     // SAFETY: the application retains both owners; argc zero permits a null argv.
     if unsafe {
         crate::game_init::kernel_abi::LoadKernel(cx.kernel, cx.world, 0, std::ptr::null_mut())
@@ -110,7 +107,7 @@ fn run_game(
         crate::ships::master_native::engine::free(cx.world, cx.kernel);
         crate::game_init::cleanup::free_kernel(cx.kernel);
     }
-    cx.with_legacy(|| crate::log_abi::log_showBox(false, false));
+    crate::log_abi::log_showBox(false, false);
     Ok(())
 }
 
@@ -224,7 +221,7 @@ fn run_campaign(
             break;
         }
     }
-    cx.with_legacy(crate::sound::heart_ffi::stop_sound);
+    crate::sound::heart_ffi::stop_sound();
     crate::time::clock_bridge::rust_clock_uninit(cx.world);
     crate::navigation::globals::uninit_game_structures(cx);
     cx.kernel.clear_player_inputs();
