@@ -13,7 +13,7 @@ fn terminal_outcome_survives_descriptor_teardown_until_the_next_battle() {
                 battle.initialize(&mut **uqm_rust::engine::Kernel::current())
             });
             let mut ship = boss(&battle);
-            let expected = uqm_rust::ships::races::samatra::observation::Events {
+            let expected = uqm_engine::battle::observation::samatra::Events {
                 generation: 1,
                 destroyed: 255,
                 gate_entered: true,

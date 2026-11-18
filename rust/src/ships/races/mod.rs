@@ -30,7 +30,6 @@ pub(crate) mod zoqfot_native;
 
 #[path = "samatra_native.rs"]
 pub mod samatra;
-pub mod samatra_state;
 
 #[cfg(not(test))]
 pub fn race(species: u32) -> Option<&'static crate::engine::battle::Race> {

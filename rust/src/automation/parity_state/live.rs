@@ -5,7 +5,7 @@ use super::{custom, elements, ships::Ship, value};
 use crate::automation::parity::Journal;
 use crate::engine::battle::access::observe::ElementObservation;
 #[cfg(not(test))]
-use crate::{automation::battle_fight::ShipState, battle::netplay::CrcState};
+use crate::{battle::netplay::CrcState, engine::battle::observation::ShipState};
 
 #[cfg(not(test))]
 pub fn checkpoint(journal: &mut Journal, boundary: &str) -> std::io::Result<()> {

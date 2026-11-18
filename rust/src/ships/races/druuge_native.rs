@@ -2,8 +2,6 @@
 
 #[cfg(not(test))]
 pub(crate) mod engine {
-    #[cfg(not(test))]
-    use crate::battle::context_access::ContextOps;
     use crate::ships::native::{abi::*, cosine, facing_to_angle, sine};
 
     const MAX_CREW: u16 = 14;

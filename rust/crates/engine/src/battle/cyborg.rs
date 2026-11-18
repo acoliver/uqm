@@ -3,25 +3,28 @@
 //! The arithmetic helpers are kept independent of engine state so their C
 //! integer-width behavior can be tested without linking the game archive.
 
+use super::ai_constants::*;
 #[cfg(not(test))]
-use crate::battle::context_access::ContextOps;
+use super::flags::*;
 #[cfg(not(test))]
-use crate::engine::battle::intercept::{next_velocity, plot_intercept};
+use crate::battle::intercept::{next_velocity, plot_intercept};
+use crate::math::battle_types::{HALF_CIRCLE, OCTANT};
+#[cfg(not(test))]
+use crate::math::battle_types::{MAX_REDUCTION, ONE_SHIFT, QUADRANT};
+#[cfg(not(test))]
+use crate::math::square_root;
 use crate::math::{angle_to_facing, normalize_facing};
 #[cfg(not(test))]
 use crate::math::{facing_to_angle, normalize_angle};
-use crate::ships::native::abi;
 
 #[inline]
 fn break_opposite_facing_tie(delta: u16, random: impl FnOnce() -> u32) -> u16 {
-    let jitter = angle_to_facing((abi::OCTANT >> 1) as i32);
+    let jitter = angle_to_facing((OCTANT >> 1) as i32);
     normalize_facing(i32::from(delta) + if random() & 1 != 0 { jitter } else { -jitter })
 }
 
 #[cfg(not(test))]
-use crate::engine::battle::{Concern, Concerns, Cx, Parent, ShipId, Subject};
-#[cfg(not(test))]
-use abi::*;
+use crate::battle::{Concern, Concerns, Cx, Parent, ShipId, Subject};
 #[cfg(not(test))]
 fn subject_owner(subject: &Subject) -> ShipId {
     match subject.parent {
@@ -32,7 +35,7 @@ fn subject_owner(subject: &Subject) -> ShipId {
 #[cfg(not(test))]
 fn is_crew_preprocess(subject: &Subject) -> bool {
     subject.pre.is_some_and(|f| {
-        f.address() == crate::engine::battle::world_elements::crew_preprocess as *const () as usize
+        f.address() == crate::battle::world_elements::crew_preprocess as *const () as usize
     })
 }
 #[cfg(not(test))]
@@ -55,7 +58,7 @@ const LONG_RANGE_WEAPON: u16 = (1000 << ONE_SHIFT) as u16;
 const FAST_SHIP: u16 = 150;
 
 #[cfg(not(test))]
-pub(crate) fn turn_ship(cx: &mut Cx<'_>, ship: &mut Subject, angle: COUNT) -> BOOLEAN {
+fn turn_ship(cx: &mut Cx<'_>, ship: &mut Subject, angle: u16) -> u32 {
     let starship = subject_owner(ship);
     let facing = cx.ship_state(starship).facing;
     let mut delta = normalize_facing(angle_to_facing(i32::from(angle)) - i32::from(facing));
@@ -80,7 +83,7 @@ pub(crate) fn turn_ship(cx: &mut Cx<'_>, ship: &mut Subject, angle: COUNT) -> BO
 }
 
 #[cfg(not(test))]
-pub(crate) fn thrust_ship(cx: &mut Cx<'_>, ship: &mut Subject, angle: COUNT) -> BOOLEAN {
+fn thrust_ship(cx: &mut Cx<'_>, ship: &mut Subject, angle: u16) -> u32 {
     let starship = subject_owner(ship);
     let mut should = cx.ship_state(starship).input & THRUST as u8 != 0;
     if !should {
@@ -106,7 +109,7 @@ pub(crate) fn thrust_ship(cx: &mut Cx<'_>, ship: &mut Subject, angle: COUNT) -> 
     }
     if should {
         let stats = cx.race_stats(starship);
-        crate::engine::battle::motion::thrust(
+        crate::battle::motion::thrust(
             &mut ship.velocity,
             cx.ship_state(starship).facing,
             cx.ship_state(starship).status,
@@ -115,16 +118,11 @@ pub(crate) fn thrust_ship(cx: &mut Cx<'_>, ship: &mut Subject, angle: COUNT) -> 
         );
         cx.ship_state_mut(starship).input |= THRUST as u8;
     }
-    should as BOOLEAN
+    should as u32
 }
 
 #[cfg(not(test))]
-pub(crate) fn weapons(
-    cx: &mut Cx<'_>,
-    ship: &Subject,
-    other: &Subject,
-    mut margin: COUNT,
-) -> BOOLEAN {
+pub(crate) fn weapons(cx: &mut Cx<'_>, ship: &Subject, other: &Subject, mut margin: u16) -> u32 {
     if cx.subject_cloaked(other) {
         margin = margin.wrapping_add((40 << ONE_SHIFT) as u16);
     }
@@ -166,7 +164,7 @@ pub(crate) fn intelligence(
     cx: &mut Cx<'_>,
     ship: &mut Subject,
     concerns: &mut [Concern],
-    count: COUNT,
+    count: u16,
 ) {
     let owner = subject_owner(ship);
     let mut ship_moved = ship.turn != 0 && ship.thrust != 0;
@@ -221,7 +219,7 @@ pub(crate) fn intelligence(
 }
 
 #[cfg(not(test))]
-pub(crate) fn pursue(cx: &mut Cx<'_>, ship: &mut Subject, eval: &mut Concern) {
+fn pursue(cx: &mut Cx<'_>, ship: &mut Subject, eval: &mut Concern) {
     let object = eval.object.unwrap_or_else(|| panic!("AI object missing"));
     let other = cx.weapon_origin(object);
     let mut ship_velocity = ship.velocity;
@@ -315,7 +313,7 @@ pub(crate) fn pursue(cx: &mut Cx<'_>, ship: &mut Subject, eval: &mut Concern) {
 }
 
 #[cfg(not(test))]
-pub(crate) fn entice(cx: &mut Cx<'_>, ship: &mut Subject, eval: &mut Concern) {
+fn entice(cx: &mut Cx<'_>, ship: &mut Subject, eval: &mut Concern) {
     let object = eval.object.unwrap_or_else(|| panic!("AI object missing"));
     let other = cx.weapon_origin(object);
     let mut ship_velocity = ship.velocity;
@@ -532,7 +530,7 @@ fn init_cyborg(cx: &mut Cx<'_>, ship: ShipId) {
 }
 
 #[cfg(not(test))]
-pub fn tactical(cx: &mut Cx<'_>, owner: ShipId) -> BATTLE_INPUT_STATE {
+pub fn tactical(cx: &mut Cx<'_>, owner: ShipId) -> u8 {
     let rd = owner;
     if cx.race_stats(rd).intelligence.maneuverability == 0 {
         init_cyborg(cx, owner);
@@ -540,7 +538,7 @@ pub fn tactical(cx: &mut Cx<'_>, owner: ShipId) -> BATTLE_INPUT_STATE {
     let handle = cx.ship_element(owner);
     let ship = cx.weapon_origin(handle);
     if cx.race_stats(rd).ship_info.crew_level == 0
-        || u32::from(cx.subject_style(&ship).kind) == gfx_object_NUM_PRIMS
+        || cx.subject_style(&ship).kind == crate::graphics::native_abi::EMPTY_PRIMITIVE
     {
         return 0;
     }
@@ -789,9 +787,9 @@ pub fn tactical(cx: &mut Cx<'_>, owner: ShipId) -> BATTLE_INPUT_STATE {
         subject: ship_copy,
         count: FIRST_EMPTY_INDEX as u16,
     };
-    cx.race_intelligence_with_junk(owner, &mut evaluation);
+    cx.race_intelligence(owner, &mut evaluation);
     cx.ship_state_mut(owner).facing = original_facing;
-    crate::battle::process_native::dispatch::battle_input(cx.ship_state(owner).input)
+    battle_input(cx.ship_state(owner).input)
 }
 
 #[cfg(test)]
@@ -800,7 +798,7 @@ mod tests {
 
     #[test]
     fn opposite_heading_tie_uses_c_jitter_and_consumes_one_random_value() {
-        let opposite = angle_to_facing(abi::HALF_CIRCLE as i32) as u16;
+        let opposite = angle_to_facing(HALF_CIRCLE as i32) as u16;
         let mut calls = 0;
         assert_eq!(
             break_opposite_facing_tie(opposite, || {
@@ -811,5 +809,39 @@ mod tests {
         );
         assert_eq!(calls, 1);
         assert_eq!(break_opposite_facing_tie(opposite, || 1), 9);
+    }
+}
+
+fn battle_input(state: u8) -> u8 {
+    let mut input = 0;
+    if state & LEFT as u8 != 0 {
+        input |= BATTLE_LEFT;
+    } else if state & RIGHT as u8 != 0 {
+        input |= BATTLE_RIGHT;
+    }
+    if state & THRUST as u8 != 0 {
+        input |= BATTLE_THRUST;
+    }
+    if state & WEAPON as u8 != 0 {
+        input |= BATTLE_WEAPON;
+    }
+    if state & SPECIAL as u8 != 0 {
+        input |= BATTLE_SPECIAL;
+    }
+    input
+}
+
+#[cfg(test)]
+mod input_tests {
+    use super::*;
+    #[test]
+    fn intelligence_input_preserves_left_priority_and_independent_action_bits() {
+        assert_eq!(battle_input((LEFT | RIGHT) as u8), BATTLE_LEFT);
+        assert_eq!(battle_input(RIGHT as u8), BATTLE_RIGHT);
+        assert_eq!(
+            battle_input((LEFT | RIGHT | THRUST | WEAPON | SPECIAL) as u8),
+            BATTLE_LEFT | BATTLE_THRUST | BATTLE_WEAPON | BATTLE_SPECIAL
+        );
+        assert_eq!(battle_input(0), 0);
     }
 }

@@ -2,8 +2,6 @@
 
 #[cfg(not(test))]
 use crate::battle::context_access::ContextOps;
-#[cfg(not(test))]
-use crate::battle::context_access::TransitionOps;
 use crate::ships::native::abi::*;
 
 const INPUT_FLAGS: STATUS_FLAGS = (LEFT | RIGHT | THRUST | WEAPON | SPECIAL) as STATUS_FLAGS;

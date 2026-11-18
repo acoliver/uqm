@@ -1,6 +1,4 @@
 #[cfg(not(test))]
-use crate::battle::context_access::ContextOps;
-#[cfg(not(test))]
 use crate::engine::battle::{Cx, Subject};
 
 #[cfg(not(test))]
@@ -55,7 +53,7 @@ impl AiOps for Cx<'_> {
             subject: subject.clone(),
             count,
         };
-        self.race_intelligence_with_junk(ship, &mut concerns);
+        self.race_intelligence(ship, &mut concerns);
         *subject = concerns.subject;
         raw.copy_from_slice(&concerns.objects[..raw.len()]);
     }

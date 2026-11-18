@@ -1,6 +1,4 @@
 use super::*;
-#[cfg(not(test))]
-use crate::battle::context_access::race_access::RaceOps;
 use crate::engine::{
     battle::{input::InputContext, net::ProtocolNoticeKind, Battle},
     input::{Frame, InputRuntime, InputSession},

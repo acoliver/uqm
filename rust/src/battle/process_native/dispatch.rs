@@ -12,25 +12,6 @@ pub(crate) fn record_spawn(address: usize, side: i16, species: u32) {
     });
 }
 
-pub(crate) fn battle_input(state: u8) -> BATTLE_INPUT_STATE {
-    let mut input = 0;
-    if state & LEFT as u8 != 0 {
-        input |= BATTLE_LEFT;
-    } else if state & RIGHT as u8 != 0 {
-        input |= BATTLE_RIGHT;
-    }
-    if state & THRUST as u8 != 0 {
-        input |= BATTLE_THRUST;
-    }
-    if state & WEAPON as u8 != 0 {
-        input |= BATTLE_WEAPON;
-    }
-    if state & SPECIAL as u8 != 0 {
-        input |= BATTLE_SPECIAL;
-    }
-    input
-}
-
 pub(crate) fn collision_order(test_is_player: bool) -> [usize; 2] {
     if test_is_player {
         [1, 0]
@@ -74,17 +55,6 @@ mod tests {
                 parent: 456
             }
         )));
-    }
-
-    #[test]
-    fn intelligence_input_preserves_left_priority_and_independent_action_bits() {
-        assert_eq!(battle_input((LEFT | RIGHT) as u8), BATTLE_LEFT);
-        assert_eq!(battle_input(RIGHT as u8), BATTLE_RIGHT);
-        assert_eq!(
-            battle_input((LEFT | RIGHT | THRUST | WEAPON | SPECIAL) as u8),
-            BATTLE_LEFT | BATTLE_THRUST | BATTLE_WEAPON | BATTLE_SPECIAL
-        );
-        assert_eq!(battle_input(0), 0);
     }
 
     #[test]

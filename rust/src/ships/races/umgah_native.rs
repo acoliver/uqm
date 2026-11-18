@@ -2,8 +2,6 @@
 
 #[cfg(not(test))]
 pub(crate) mod engine {
-    #[cfg(not(test))]
-    use crate::battle::context_access::ContextOps;
     use crate::ships::native::{
         abi::*, angle_to_facing, cosine, facing_to_angle, normalize_angle, sine,
     };
@@ -92,7 +90,7 @@ pub(crate) mod engine {
         pb: &mut POINT,
     ) {
         if let Some(h) = cx.weapon_collision(a, pa, b, pb) {
-            crate::battle::sounds::engine::unlink(cx, h);
+            cx.unlink_element(h);
             cx.dispose(h);
             cx.element_mut(a).flags &= !(DISAPPEARING as u16);
         }

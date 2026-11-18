@@ -1,6 +1,5 @@
 use std::{cell::Cell, ptr, rc::Rc};
 use uqm_rust::{
-    battle::RaceOps,
     engine::input::frames::{KEY_MENU_RIGHT, KEY_MENU_SELECT},
     engine::world::activity::activity_flags::IN_BATTLE,
     engine::{
@@ -122,6 +121,7 @@ fn native_menu_navigates_empty_devices_and_restores_the_retained_display() {
         ContextLease::retain(ptr::NonNull::new(space).unwrap()).set_background(background);
         SetContext(status);
         let mut game = Game::new();
+        uqm_rust::battle::services::install(&mut game.kernel);
         game.world.story = Some(uqm_rust::engine::world::story::StoryState::new());
         game.world.set_activity(IN_BATTLE);
         game.kernel

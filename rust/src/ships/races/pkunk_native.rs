@@ -8,12 +8,6 @@
 
 #[cfg(not(test))]
 pub(crate) mod engine {
-    #[cfg(not(test))]
-    use crate::battle::context_access::race_access::RaceOps;
-    #[cfg(not(test))]
-    use crate::battle::context_access::ContextOps;
-    #[cfg(not(test))]
-    use crate::battle::context_access::TransitionOps;
     use crate::engine::battle::{
         Concerns, Cx, ElementId, RaceState, Selection, ShipId, WeaponOrigin, WeaponSpawn,
     };
@@ -267,7 +261,7 @@ pub(crate) mod engine {
         };
         if let Some(phoenix) = phoenix.filter(|_| cx.ship_state(ss).control & STANDARD_RATING != 0)
         {
-            crate::battle::sounds::engine::unlink(cx, phoenix);
+            cx.unlink_element(phoenix);
             cx.dispose(phoenix);
             cx.race_stats_mut(ss).state = RaceState::Pkunk {
                 phoenix: None,

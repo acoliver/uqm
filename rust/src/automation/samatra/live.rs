@@ -1,16 +1,14 @@
 //! Read-only boss observations over the game thread's published battle context.
 
 #[cfg(not(test))]
-use super::{Events, Snapshot};
+use crate::engine::battle::observation::samatra as observation;
+
 #[cfg(not(test))]
-use crate::battle::context_access::race_access::RaceOps;
+use super::{Events, Snapshot};
 #[cfg(not(test))]
 use crate::{
     engine::battle::{Cx, ElementId, RaceState, ShipId},
-    ships::{
-        native::abi::*,
-        races::samatra::{engine, observation},
-    },
+    ships::{native::abi::*, races::samatra::engine},
 };
 
 #[cfg(not(test))]
@@ -113,7 +111,7 @@ fn project_player(cx: &Cx<'_>, id: ElementId, owner: ShipId, result: &mut Snapsh
     result.bomb_carrier = species == SPECIES_ID_SIS_SHIP_ID
         && cx.story_state(crate::engine::battle::StoryKey::BOMB_CARRIER) != 0;
     result.velocity = (i32::from(vx as SIZE), i32::from(vy as SIZE));
-    result.player = Some(crate::automation::battle_fight::ShipState {
+    result.player = Some(crate::engine::battle::observation::ShipState {
         x: i32::from(e.current.location.x),
         y: i32::from(e.current.location.y),
         facing: (cx.ship_state(owner).facing % 16) as u8,

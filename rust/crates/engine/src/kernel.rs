@@ -75,6 +75,7 @@ impl StarMapFlash {
 
 #[derive(Default)]
 pub(crate) struct KernelServices {
+    pub(crate) race_services: Option<&'static dyn crate::battle::race_services::RaceServices>,
     pub(crate) primitive_services: Option<&'static dyn crate::battle::services::PrimitiveServices>,
     pub(crate) input_runtime: Option<std::rc::Rc<dyn super::input::InputRuntime>>,
 }
