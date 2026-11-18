@@ -799,6 +799,7 @@ mod processing;
 
 #[path = "ship_assets.rs"]
 mod ship_assets;
+pub use ship_assets::CampaignProbeAssets;
 
 #[cfg(not(test))]
 impl Cx<'_> {

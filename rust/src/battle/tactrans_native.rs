@@ -322,7 +322,7 @@ pub(crate) mod engine {
         let descriptor = cx
             .take_descriptor(ship)
             .unwrap_or_else(|| panic!("dead ship descriptor"));
-        descriptor.unload(cx.world, true, true);
+        descriptor.unload(cx.world, true);
 
         let _pause = std::ptr::NonNull::new(cx.kernel.space_context).map(|context| {
             crate::graphics::context_abi::ContextLease::retain(context).pause_batch()

@@ -1624,39 +1624,6 @@ pub use crate::state::ffi::rust_get_game_state_bits as getGameState;
 #[cfg(not(test))]
 pub use crate::state::ffi::rust_set_game_state_bits as setGameState;
 
-#[cfg(not(test))]
-pub use crate::navigation::globals::free_sc2_data;
-#[cfg(test)]
-extern "C" {
-    pub fn free_sc2_data();
-}
-
-#[cfg(not(test))]
-pub use crate::navigation::globals::init_glob_data;
-#[cfg(not(test))]
-pub use crate::navigation::globals::load_sc2_data;
-#[cfg(test)]
-extern "C" {
-    pub fn init_glob_data();
-}
-
-#[cfg(not(test))]
-pub use crate::navigation::globals::in_hqspace;
-
-#[cfg(not(test))]
-pub use crate::navigation::globals::in_hyper_space;
-
-#[cfg(not(test))]
-pub use crate::navigation::globals::in_quasi_space;
-
-#[cfg(not(test))]
-pub use crate::navigation::globals::uninit_game_structures;
-#[cfg(test)]
-extern "C" {
-    pub fn uninit_game_structures();
-}
-
-
 pub const KEY_UP: _bindgen_ty_10 = 0;
 pub const KEY_DOWN: _bindgen_ty_10 = 1;
 pub const KEY_LEFT: _bindgen_ty_10 = 2;
@@ -2306,12 +2273,6 @@ pub use crate::engine::world::fleet::set_race_allied;
 
 #[cfg(not(test))]
 pub use crate::engine::world::fleet::start_sphere_tracking;
-
-#[cfg(not(test))]
-pub use crate::navigation::groups::live::init_group_info;
-
-#[cfg(not(test))]
-pub use crate::navigation::groups::live::uninit_group_info;
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]

@@ -152,7 +152,7 @@ pub(crate) mod live {
             next = cx.elements().succ(id);
             if let Some((ship, descriptor)) = retire_element_ship(cx, id, crew, replacement) {
                 ships[cx.ship_state(ship).player as usize] = Some(ship);
-                descriptor.unload(cx.world, true, true);
+                descriptor.unload(cx.world, true);
             }
         }
         let activity = cx.world.activity() & !(IN_BATTLE as u16);
@@ -165,7 +165,7 @@ pub(crate) mod live {
             while let Some(ship) = next {
                 next = cx.next_ship(ship);
                 if let Some(descriptor) = cx.take_descriptor(ship) {
-                    descriptor.unload(cx.world, true, true);
+                    descriptor.unload(cx.world, true);
                 }
             }
         }

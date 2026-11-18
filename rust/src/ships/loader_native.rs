@@ -10,7 +10,7 @@ impl DescriptorLoader for crate::engine::battle::RaceDesc {
         let race = crate::ships::races::race(species)?;
         let mut descriptor = (race.descriptor)(world);
         if !descriptor.initialize_assets(battle) {
-            descriptor.unload(world, true, true);
+            descriptor.unload(world, true);
             return None;
         }
         Some(descriptor)

@@ -54,7 +54,7 @@ unsafe fn uninit_kernel(kernel: &mut crate::engine::Kernel) {
 /// # Safety
 /// Game thread only; all game resource owners must still be initialized.
 pub unsafe fn free_game_data(cx: &mut crate::engine::battle::Cx<'_>) {
-    crate::navigation::globals::free_sc2_data(cx.kernel);
+    cx.kernel.release_navigation_graphics();
     cx.kernel.lander_resources = None;
     cx.kernel.solar_presentation.assets = None;
     crate::navigation::hyper_data::free_hyper_data(cx.kernel);

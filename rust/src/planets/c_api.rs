@@ -6,10 +6,6 @@ use crate::planets::universe_units::{universe_to_logx, universe_to_logy};
 
 pub use crate::log_abi::log_init;
 
-pub use crate::navigation::groups::live::init_group_info;
-
-pub use crate::navigation::groups::live::uninit_group_info;
-
 pub use crate::planets::orbit::live::{free_planet, load_planet};
 
 /// `GROUP_INIT_IP`, `GROUP_SAVE_IP` (`state.h`): `(BYTE)~0`.

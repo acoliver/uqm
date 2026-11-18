@@ -87,7 +87,7 @@ pub(crate) mod engine {
         let queue = &mut kernel.master_queue;
         while let Some(id) = queue.head() {
             queue.remove(id);
-            queue.free(id).descriptor.unload(world, true, false);
+            queue.free(id).descriptor.unload(world, false);
         }
         queue.reinit();
     }
