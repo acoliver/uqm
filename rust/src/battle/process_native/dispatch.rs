@@ -1,7 +1,5 @@
 //! Observation precedes invocation without retaining a borrow across a game hook.
 
-use super::*;
-
 pub(crate) use crate::engine::battle::access::invoke;
 
 pub(crate) fn record_spawn(address: usize, side: i16, species: u32) {
