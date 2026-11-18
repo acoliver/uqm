@@ -302,7 +302,7 @@ fn move_baseline(root: &Path, path: &Path, options: &Options) -> Result<(), Stri
     let mut baseline = Baseline::read(path)?;
     let reference = options.base.as_deref().unwrap_or("origin/main");
     let (base, recorded) = baseline::archived_measurement(root, reference)?;
-    let base_moves = recorded.map(|b| b.moved).unwrap_or_default();
+    let recorded = recorded.unwrap_or_default();
     let current = walk::measure(root, None, false)?;
     let pairs: Vec<_> = options.positional[1..]
         .as_chunks::<2>()
@@ -319,7 +319,7 @@ fn move_baseline(root: &Path, path: &Path, options: &Options) -> Result<(), Stri
     {
         return Err("move source is not a declaration; use --prefix for a module or crate".into());
     }
-    baseline.add_moves(&pairs, &current, &base, &base_moves)?;
+    baseline.add_moves(&pairs, &current, &base, &recorded)?;
     baseline.write(path)
 }
 

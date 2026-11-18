@@ -577,7 +577,7 @@ fn inherited_relocation_follows_a_validated_target_rename() {
     f.current = measure(root);
     let prior = Baseline::read(&path).unwrap();
     f.baseline
-        .add_moves(&[(TARGET, renamed)], &f.current, &before, &prior.moved)
+        .add_moves(&[(TARGET, renamed)], &f.current, &before, &prior)
         .unwrap();
     assert!(!f.baseline.coverage_moves.debt.contains_key(TARGET));
     assert_eq!(f.baseline.coverage_moves.debt[renamed], original);
@@ -624,7 +624,7 @@ fn tightening_repairs_a_legacy_target_without_new_coverage_credit() {
     f.current = measure(root);
     let prior = Baseline::read(&path).unwrap();
     f.baseline
-        .add_moves(&[(TARGET, renamed)], &f.current, &before, &prior.moved)
+        .add_moves(&[(TARGET, renamed)], &f.current, &before, &prior)
         .unwrap();
     f.baseline.coverage_moves.debt.remove(renamed);
     f.baseline
@@ -671,12 +671,7 @@ fn renamed_target_with_two_active_owners_and_sources() -> Fixture {
     f.current = measure(root);
     let prior = Baseline::read(&path).unwrap();
     f.baseline
-        .add_moves(
-            &[(TARGET, "uqm::host::speak")],
-            &f.current,
-            &before,
-            &prior.moved,
-        )
+        .add_moves(&[(TARGET, "uqm::host::speak")], &f.current, &before, &prior)
         .unwrap();
     f
 }
@@ -752,7 +747,7 @@ fn add_moves_rejects_merging_coverage_credits_without_mutating_the_baseline() {
     let current = measure(root);
     let error = f
         .baseline
-        .add_moves(&[(TARGET, other)], &current, &before, &original.moved)
+        .add_moves(&[(TARGET, other)], &current, &before, &original)
         .unwrap_err();
     assert!(error.contains("merge coverage debt"), "{error}");
     assert_eq!(f.baseline, original);

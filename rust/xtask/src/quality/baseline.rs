@@ -232,7 +232,17 @@ impl Baseline {
         current: &Measurement,
         base: &Measurement,
     ) -> Result<(), String> {
-        self.add_moves(&[(old, new)], current, base, &BTreeMap::new())
+        let mut moves = self.moved.clone();
+        super::transfers::retire(&mut moves, base);
+        let reverse = moves
+            .iter()
+            .map(|(source, target)| (target.clone(), source.clone()))
+            .collect();
+        let recorded = Self {
+            budget: super::budgets::relocated(&self.budget, &reverse)?,
+            ..Default::default()
+        };
+        self.add_moves(&[(old, new)], current, base, &recorded)
     }
 
     pub fn add_moves(
@@ -240,12 +250,12 @@ impl Baseline {
         steps: &[(&str, &str)],
         current: &Measurement,
         base: &Measurement,
-        base_moves: &BTreeMap<String, String>,
+        recorded: &Baseline,
     ) -> Result<(), String> {
         if steps.is_empty() {
             return Err("move needs at least one source and target".into());
         }
-        let pending = super::transfers::pending(&self.moved, Some(base_moves));
+        let pending = super::transfers::pending(&self.moved, Some(&recorded.moved));
         let mut previous = self.remaining_moves(base);
         previous.retain(|source, _| pending.contains_key(source));
         let mut moves = previous.clone();
@@ -260,6 +270,15 @@ impl Baseline {
             .map(|(old, new)| (new.clone(), old.clone()))
             .collect();
         let original_budgets = super::budgets::relocated(&self.budget, &reverse)?;
+        let transferable = super::retirement::transfer_base(
+            base,
+            current,
+            &recorded.budget,
+            &original_budgets,
+            &moves,
+        )?;
+        let base = &transferable.measurement;
+        let original_budgets = transferable.budgets;
         let measured = super::budgets::scoped_entries(base, &original_budgets);
         let mut intermediate = current.clone();
         for &(old, new) in steps.iter().rev() {

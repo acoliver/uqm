@@ -826,7 +826,10 @@ mod nested_tests {
             &[("uqm-engine::story::get", "uqm-engine::story::read")],
             &current,
             &base,
-            &historical,
+            &super::super::baseline::Baseline {
+                moved: historical.clone(),
+                ..Default::default()
+            },
         )?;
         assert_eq!(baseline.entries, transferred);
         assert_eq!(baseline.moved, moves);
@@ -911,7 +914,10 @@ mod nested_tests {
             &[("uqm-engine::input_port", "uqm-engine::new_port")],
             &current,
             &base,
-            &historical,
+            &super::super::baseline::Baseline {
+                moved: historical.clone(),
+                ..Default::default()
+            },
         )?;
         assert_eq!(baseline.entries, transferred);
         assert_eq!(

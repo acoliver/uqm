@@ -585,3 +585,8 @@ scope keys. It rejects retirement while any matching finding remains, without
 writing the baseline. Once those scopes are empty, it removes only that budget;
 unrelated findings remain subject to their existing ratchets. Unscoped budgets
 continue to use their named metric.
+
+Removing zero-valued exact scopes from a retained budget follows the same rule.
+Quality moves and base comparison validate the removed scopes after identity
+relocation, omit their archived allowance, and retain the other original scope
+limits. Removed scopes cannot fund ordinary debt or another destination.

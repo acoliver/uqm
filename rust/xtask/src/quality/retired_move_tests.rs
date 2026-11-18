@@ -84,7 +84,7 @@ fn moved_comparison(retain: bool, remaining: bool, credit: bool) -> Result<(), S
     if !retain {
         baseline.budget.remove(NAME);
     }
-    baseline.add_moves(&[(OLD, NEW)], &measured, &base, &recorded.unwrap().moved)?;
+    baseline.add_moves(&[(OLD, NEW)], &measured, &base, &recorded.unwrap())?;
     if credit {
         baseline
             .entries
@@ -152,7 +152,7 @@ fn retired_projection_moved_to_an_unrelated_function_is_growth() {
         Baseline::read(&root.path().join("rust/xtask/quality-baseline.toml")).unwrap();
     baseline.budget.remove(NAME);
     baseline
-        .add_moves(&[(OLD, NEW)], &measured, &base, &recorded.unwrap().moved)
+        .add_moves(&[(OLD, NEW)], &measured, &base, &recorded.unwrap())
         .unwrap();
     let error = compare_base(
         root.path(),
@@ -214,4 +214,100 @@ fn scoped_and_unscoped_retirement_without_a_move_require_zero_debt() {
                 .unwrap();
         assert!(error.contains("1 remaining sites"), "{error}");
     }
+}
+
+fn partially_retired_comparison(remaining: bool, credit: bool) -> Result<(), String> {
+    let root = archived_fixture();
+    let source = root.path().join("rust/src/lib.rs");
+    let retained = "pub mod retained { pub fn selected() { crate::engine::World::current(); } }";
+    std::fs::write(&source, format!("pub mod comm {{ pub mod races {{ pub mod adapter {{ pub fn selected() {{ crate::engine::World::current(); }} }} {retained} }} }}")).unwrap();
+    let measured = measure_fixture(root.path())?;
+    let path = root.path().join("rust/xtask/quality-baseline.toml");
+    let mut baseline = Baseline::read(&path)?;
+    let retained_scope = "ffi|owner_projections|uqm::comm::races::retained::selected";
+    let mut scopes = baseline.budget[NAME].scopes.clone();
+    scopes.insert(retained_scope.into(), 1);
+    budgets::set_scoped(&mut baseline.budget, NAME, 2, scopes, true)?;
+    baseline.entries = budgets::scoped_entries(&measured, &baseline.budget);
+    baseline.write(&path)?;
+    tool::status(
+        Command::new("git")
+            .current_dir(root.path())
+            .args(["add", "."]),
+    )?;
+    tool::status(Command::new("git").current_dir(root.path()).args([
+        "-c",
+        "user.name=Test",
+        "-c",
+        "user.email=test@example.invalid",
+        "commit",
+        "-qm",
+        "retained scope",
+    ]))?;
+    let body = if remaining {
+        "crate::engine::World::current();"
+    } else {
+        ""
+    };
+    std::fs::write(&source, format!("pub mod comm {{ pub mod live {{ pub mod adapter {{ pub fn selected() {{ {body} }} }} }} pub mod races {{ {retained} }} }}")).unwrap();
+    let measured = measure_fixture(root.path())?;
+    let (base, recorded) = baseline::archived_measurement(root.path(), "HEAD")?;
+    run(
+        root.path(),
+        &[
+            "budget".into(),
+            NAME.into(),
+            "1".into(),
+            "--scope".into(),
+            format!("{retained_scope}=1"),
+        ],
+    )?;
+    baseline = Baseline::read(&path)?;
+    baseline.add_moves(&[(OLD, NEW)], &measured, &base, &recorded.unwrap())?;
+    if credit {
+        baseline
+            .entries
+            .insert("ffi|owner_projections|uqm::comm".into(), 1);
+    }
+    compare_base(
+        root.path(),
+        "HEAD",
+        &measured,
+        &mut baseline,
+        &Options::default(),
+    )?;
+    assert_eq!(baseline.budget[NAME].limit, 1);
+    assert_eq!(
+        baseline.budget[NAME].scopes,
+        BTreeMap::from([(retained_scope.into(), 1)])
+    );
+    assert_eq!(
+        baseline
+            .entries
+            .get("ffi|owner_projections|uqm::comm")
+            .copied()
+            .unwrap_or(0),
+        0
+    );
+    Ok(())
+}
+
+#[test]
+fn zero_scope_can_retire_while_other_budget_scopes_survive_an_owner_move() {
+    partially_retired_comparison(false, false).unwrap();
+}
+
+#[test]
+fn removed_live_scope_cannot_hide_behind_a_retained_budget() {
+    let error = partially_retired_comparison(true, false).unwrap_err();
+    assert!(error.contains("remaining sites"), "{error}");
+}
+
+#[test]
+fn partially_retired_scope_cannot_supply_ordinary_transfer_credit() {
+    let error = partially_retired_comparison(false, true).unwrap_err();
+    assert!(
+        error.contains("quality growth") && error.contains("owner_projections"),
+        "{error}"
+    );
 }
