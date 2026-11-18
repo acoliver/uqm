@@ -44,14 +44,6 @@ pub mod abi {
 
     // Bindgen does not translate these cast-expression macros from controls.h
     // and intel.h. Keep their C operand widths at the shared ABI boundary.
-    pub const BATTLE_LEFT: BATTLE_INPUT_STATE = 1 << 0;
-    pub const BATTLE_RIGHT: BATTLE_INPUT_STATE = 1 << 1;
-    pub const BATTLE_THRUST: BATTLE_INPUT_STATE = 1 << 2;
-    pub const BATTLE_WEAPON: BATTLE_INPUT_STATE = 1 << 3;
-    pub const BATTLE_SPECIAL: BATTLE_INPUT_STATE = 1 << 4;
-    pub const STANDARD_RATING: BYTE = 1 << 4;
-    pub const GOOD_RATING: BYTE = 1 << 5;
-    pub const AWESOME_RATING: BYTE = 1 << 6;
     #[cfg(not(test))]
     pub use super::engine::sleep_thread as SleepThread;
     #[cfg(not(test))]
@@ -63,6 +55,10 @@ pub mod abi {
     pub use crate::battle::encount_native::fleet_is_infinite;
     #[cfg(not(test))]
     pub use crate::battle::galaxy::move_galaxy;
+    pub use crate::engine::battle::ai_constants::{
+        AWESOME_RATING, BATTLE_LEFT, BATTLE_RIGHT, BATTLE_SPECIAL, BATTLE_THRUST, BATTLE_WEAPON,
+        GOOD_RATING, STANDARD_RATING,
+    };
     #[cfg(not(test))]
     pub use crate::math::seed_random as TFB_SeedRandom;
 

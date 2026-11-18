@@ -1,0 +1,33 @@
+//! Native battle input and intelligence flags, preserving their operand widths.
+
+pub const DONT_CHASE: u32 = 4096;
+pub const FIRES_FORE: u32 = 128;
+pub const FIRES_LEFT: u32 = 1024;
+pub const IGNORE_SIMILAR: u32 = 256;
+pub const IMMEDIATE_WEAPON: u32 = 32;
+pub const MAX_SHIP_MASS: u32 = 10;
+pub const SEEKING_SPECIAL: u32 = 8;
+pub const SEEKING_WEAPON: u32 = 4;
+pub const LEFT: u32 = 1;
+pub const RIGHT: u32 = 2;
+pub const THRUST: u32 = 4;
+pub const WEAPON: u32 = 8;
+pub const SPECIAL: u32 = 16;
+pub const MOVEMENT_STATE_PURSUE: u32 = 0;
+pub const MOVEMENT_STATE_AVOID: u32 = 1;
+pub const MOVEMENT_STATE_ENTICE: u32 = 2;
+pub const MOVEMENT_STATE_NO_MOVEMENT: u32 = 3;
+pub const ENEMY_SHIP_INDEX: u32 = 0;
+pub const CREW_OBJECT_INDEX: u32 = 1;
+pub const ENEMY_WEAPON_INDEX: u32 = 2;
+pub const GRAVITY_MASS_INDEX: u32 = 3;
+pub const FIRST_EMPTY_INDEX: u32 = 4;
+pub const MEDIUM_SHIP: u32 = 45;
+pub const STANDARD_RATING: u8 = 1 << 4;
+pub const GOOD_RATING: u8 = 1 << 5;
+pub const AWESOME_RATING: u8 = 1 << 6;
+pub const BATTLE_LEFT: u8 = 1 << 0;
+pub const BATTLE_RIGHT: u8 = 1 << 1;
+pub const BATTLE_THRUST: u8 = 1 << 2;
+pub const BATTLE_WEAPON: u8 = 1 << 3;
+pub const BATTLE_SPECIAL: u8 = 1 << 4;

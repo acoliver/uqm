@@ -8,6 +8,7 @@ pub mod input;
 pub use access::link_queue;
 pub mod net;
 pub mod race;
+pub mod ai_constants;
 pub use access::record;
 
 pub use access::table;
