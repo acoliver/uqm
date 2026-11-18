@@ -678,33 +678,6 @@ impl Walker {
                 }
                 Err(e) => self.error(format!("{name}!: {e}")),
             }
-        } else if name == "assert_c_layout" {
-            // This exported macro is invoked with a path, outside its defining module.
-            let path = self.rust.join("src/c_bindings.rs");
-            let result = fs::read_to_string(path)
-                .map_err(|e| e.to_string())
-                .and_then(|s| syn::parse_file(&s).map_err(|e| e.to_string()))
-                .and_then(|f| {
-                    f.items
-                        .into_iter()
-                        .find_map(|item| match item {
-                            Item::Macro(m)
-                                if m.ident.as_ref().is_some_and(|n| n == "assert_c_layout") =>
-                            {
-                                Some(m.mac.tokens)
-                            }
-                            _ => None,
-                        })
-                        .ok_or("assert_c_layout macro missing".into())
-                })
-                .and_then(Definition::parse);
-            match result {
-                Ok(d) => {
-                    self.context.definitions.insert(name, Rc::new(d));
-                    self.expand(mac);
-                }
-                Err(e) => self.error(e),
-            }
         }
     }
 
