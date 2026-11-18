@@ -55,18 +55,15 @@ pub const PLANNED: &[(&str, &[&str])] = &[
             "platform",
             "time::counter_abi",
             "time::source",
+            "time::clock_abi",
+            "time::clock_bridge",
+            "state",
         ],
     ),
     (
         "uqm-content",
         &[
-            "ships::races",
-            "ships::registry",
-            "ships::loader",
-            "ships::loader_native",
-            "ships::catalog",
-            "ships::types",
-            "ships::code_resources",
+            "ships",
             "planets::generate",
             "planets::tables",
             "comm::races",
@@ -75,16 +72,11 @@ pub const PLANNED: &[(&str, &[&str])] = &[
     (
         "uqm-modes",
         &[
-            "battle::battle_native",
-            "battle::tactrans_native",
-            "battle::encount_native",
+            "battle",
             "supermelee",
             "pickship",
             "navigation",
-            "planets::solarsys",
-            "planets::orbit",
-            "planets::scan",
-            "planets::pstarmap",
+            "planets",
             "planet_side",
             "comm",
             "starbase",
@@ -149,16 +141,6 @@ const MODULE_LAYERS: &[(&str, Layer)] = &[
     ("planets::generate", Layer::Content),
     ("planets::tables", Layer::Content),
     ("comm::races", Layer::Content),
-    ("battle::process_native", Layer::Engine),
-    ("battle::velocity", Layer::Engine),
-    ("battle::gravity", Layer::Engine),
-    ("battle::world_elements", Layer::Engine),
-    ("battle::weapon_native", Layer::Engine),
-    ("battle::ship_native", Layer::Engine),
-    ("battle::sounds", Layer::Engine),
-    ("battle::cyborg_native", Layer::Engine),
-    ("battle::ai", Layer::Engine),
-    ("battle::ai_entry", Layer::Engine),
     ("state", Layer::Engine),
     ("time::clock_abi", Layer::Engine),
     ("time::clock_bridge", Layer::Engine),
@@ -177,8 +159,6 @@ const MODULE_LAYERS: &[(&str, Layer)] = &[
     ("logging", Layer::Engine),
     ("log_abi", Layer::Engine),
     ("bridge_log", Layer::Engine),
-    ("savegame::live", Layer::Engine),
-    ("savegame::runtime", Layer::Engine),
     ("battle", Layer::Modes),
     ("supermelee", Layer::Modes),
     ("pickship", Layer::Modes),
@@ -521,6 +501,59 @@ mod tests {
         assert_eq!(layer("supermelee::setup::persistence"), Layer::Save);
         assert!(!permitted(Layer::Engine, Layer::Platform));
         assert!(permitted(Layer::App, Layer::Platform));
+    }
+    #[test]
+    fn root_battle_is_a_mode_and_live_savegame_is_app() {
+        for module in [
+            "battle::process_native",
+            "battle::ship_native",
+            "battle::ai_entry",
+            "battle::context_access",
+            "battle::battle_native",
+        ] {
+            assert_eq!(layer(module), Layer::Modes, "{module}");
+            assert_eq!(planned_owner(module), Some("uqm-modes"), "{module}");
+        }
+        assert_eq!(layer("state::ffi"), Layer::Engine);
+        assert_eq!(layer("state::state_file"), Layer::Save);
+        assert_eq!(layer("time::clock_abi"), Layer::Engine);
+        assert_eq!(layer("savegame::live"), Layer::App);
+        assert_eq!(layer("savegame::runtime::autosave"), Layer::App);
+        assert_eq!(layer("savegame::types"), Layer::Save);
+        assert_eq!(layer("planets::report"), Layer::Modes);
+        assert_eq!(planned_owner("planets::report"), Some("uqm-modes"));
+        assert_eq!(planned_owner("planets::generate::orz"), Some("uqm-content"));
+        assert_eq!(planned_owner("ships::native"), Some("uqm-content"));
+        assert_eq!(planned_owner("mainloop::restart_menu"), Some("uqm-modes"));
+        assert_eq!(planned_owner("mainloop::startup"), None);
+    }
+    #[test]
+    fn planned_closure_counts_content_and_modes_reaching_outside_their_crate() {
+        let metrics = |module: &str, target: &str| -> Vec<String> {
+            reference(&source(module), &format!("crate::{target}::call"))
+                .into_iter()
+                .map(|f| f.metric)
+                .collect()
+        };
+        // Content may not name a mode, even one that stays root-resident today.
+        assert!(metrics("ships::native", "battle::context_access")
+            .contains(&"planned.uqm-content".into()));
+        assert!(metrics("planets::generate::pet", "comm::dispatch")
+            .contains(&"planned.uqm-content".into()));
+        // Modes reach content, engine and root battle, but not app modules.
+        assert!(!metrics("starbase::visit", "ships::native").contains(&"planned.uqm-modes".into()));
+        assert!(!metrics("pickship::ffi", "battle::velocity").contains(&"planned.uqm-modes".into()));
+        assert!(
+            !metrics("navigation::hyperspace", "state::ffi").contains(&"planned.uqm-modes".into())
+        );
+        for app_target in ["savegame::live", "savegame::runtime", "mainloop::dir_prep"] {
+            let found = metrics("planets::scan", app_target);
+            assert!(found.contains(&"planned.uqm-modes".into()), "{app_target}");
+            assert!(found.contains(&"module_edges".into()), "{app_target}");
+        }
+        // The engine rows now include state and the game clock.
+        assert!(metrics("state::ffi", "automation::record").contains(&"planned.uqm-engine".into()));
+        assert!(metrics("time::clock_abi", "comm::dispatch").contains(&"planned.uqm-engine".into()));
     }
     #[test]
     fn every_workspace_edge_must_be_in_the_reviewed_table() {
