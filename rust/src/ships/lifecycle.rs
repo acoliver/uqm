@@ -29,6 +29,7 @@
 //! - Super Melee ship selection UI (GetInitialMeleeStarShips)
 //! - Player order (GetPlayerOrder)
 
+use super::c_bridge::RegistryResources;
 use super::loader::{load_ship, LoadTier};
 use super::types::{ShipsError, Starship};
 use std::sync::Mutex;
@@ -118,7 +119,7 @@ pub fn spawn_ship(starship: &mut Starship, activity: u8) -> Result<SpawnResult, 
     }
 
     // Load descriptor
-    let mut desc = load_ship(starship.species_id, LoadTier::BattleReady)?;
+    let mut desc = load_ship(&mut RegistryResources, starship.species_id, LoadTier::BattleReady)?;
 
     // Clear input/status
     starship.ship_input_state = 0;
@@ -432,6 +433,7 @@ mod tests {
 
         // Get species default for comparison
         let default_desc = crate::ships::loader::load_ship(
+            &mut RegistryResources,
             SpeciesId::Earthling,
             crate::ships::loader::LoadTier::MetadataOnly,
         )
@@ -473,6 +475,7 @@ mod tests {
 
         // Get species default for comparison
         let default_desc = crate::ships::loader::load_ship(
+            &mut RegistryResources,
             SpeciesId::Utwig,
             crate::ships::loader::LoadTier::MetadataOnly,
         )

@@ -1,6 +1,5 @@
 //! Space animation ownership, ported from init.c (GPL-2.0-or-later).
 
-#[cfg(not(test))]
 use crate::collections::observation::observe_views;
 
 const SPACE_ANIMATION_KEYS: [[&std::ffi::CStr; 3]; 3] = [
@@ -25,10 +24,8 @@ fn ship_teardown_needed(kernel: &crate::engine::Kernel, activity: u16) -> bool {
     kernel.ships_initialized || activity as u8 == crate::ships::native::abi::IN_ENCOUNTER as u8
 }
 
-#[cfg(not(test))]
 use crate::engine::battle::frames::{free_image, load_animation, load_graphic};
 
-#[cfg(not(test))]
 pub(crate) mod live {
     use super::*;
     use crate::ships::native::abi::{
@@ -419,5 +416,4 @@ mod tests {
     }
 }
 
-#[cfg(not(test))]
 pub use live::*;

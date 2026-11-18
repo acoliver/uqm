@@ -14,7 +14,7 @@ fn run_loop(reset: bool, step: &mut InputLoop<'_, '_, '_, '_>) {
         step.legacy(|| unsafe {
             crate::callback::ffi::Async_process();
             crate::graphics::sdl::lifecycle_abi::TFB_ProcessEvents();
-            crate::mainloop::lifecycle_abi::process_utility_keys(controls);
+            process_utility_keys(controls);
             super::yield_input_loop(|| crate::threading::legacy_abi::TaskSwitch());
         });
         if step
@@ -43,6 +43,21 @@ fn run_loop(reset: bool, step: &mut InputLoop<'_, '_, '_, '_>) {
     if reset {
         // SAFETY: the synchronous loop still owns initialized input on this thread.
         step.legacy(|| unsafe { FlushInput(controls) });
+    }
+}
+
+/// The abort and fullscreen utility keys, applied after immediate input is sampled.
+fn process_utility_keys(input: &crate::engine::input::InputSession) {
+    use crate::engine::input::frames::{KEY_ABORT, KEY_FULLSCREEN};
+    let state = input.immediate();
+    if state.menu[KEY_ABORT as usize] != 0 {
+        crate::log_abi::log_showBox(false, false);
+        std::process::exit(0);
+    }
+    if state.menu[KEY_FULLSCREEN as usize] != 0 {
+        // SAFETY: the driver owns game-thread input for this synchronous loop.
+        unsafe { FlushInput(input) };
+        crate::graphics::tfb_draw_abi::toggle_fullscreen();
     }
 }
 

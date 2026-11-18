@@ -1,5 +1,4 @@
 //! Element and display storage lifecycle on the owning game thread.
-#![cfg(not(test))]
 use super::super::record::Kernel;
 
 pub fn init_elements(kernel: &mut Kernel, capacity: u16) -> bool {

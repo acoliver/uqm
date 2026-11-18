@@ -2376,10 +2376,8 @@ pub type _bindgen_ty_27 = ::std::os::raw::c_uint;
 
 pub type FleetShipIndex = COUNT;
 
-#[cfg(not(test))]
 pub use crate::game_init::space_resources::live::init_space;
 
-#[cfg(not(test))]
 pub use crate::game_init::space_resources::live::uninit_space;
 pub const PacketType_PACKET_INIT: PacketType = 0;
 pub const PacketType_PACKET_PING: PacketType = 1;

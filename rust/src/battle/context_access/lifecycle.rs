@@ -1,5 +1,4 @@
 //! Lifecycle of the Kernel-owned battle ship pools.
-#![cfg(not(test))]
 use crate::engine::battle::record::Kernel;
 
 pub(crate) fn init_ships(kernel: &mut Kernel) {

@@ -75,7 +75,7 @@ impl RaceServices for super::services::ModeServices {
                     true
                 }
                 4 => crate::planets::roster::live::roster_menu(cx, io) != 0,
-                5 => crate::front_end::gameopt::game_options(cx, io, None) != 0,
+                5 => cx.options_menu(io),
                 _ => unreachable!("invalid hyperspace submenu"),
             }
         }

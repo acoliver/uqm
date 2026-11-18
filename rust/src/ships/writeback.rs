@@ -39,6 +39,7 @@
 //! Empty queue returns false.
 
 use super::lifecycle::{spawn_ship, NUM_PLAYERS};
+use super::c_bridge::RegistryResources;
 use super::loader::free_ship;
 use super::types::{ShipsError, SpeciesId, Starship, StatusFlags};
 
@@ -231,7 +232,7 @@ pub fn new_ship_transition(
 
     // 2. Free descriptor (C: tactrans.c lines 476-477)
     if let Some(mut desc) = race_queue[starship_index].race_desc.take() {
-        free_ship(&mut desc, true, true);
+        free_ship(&mut RegistryResources, &mut desc, true, true);
     }
 
     // 3. Check if fleet is infinite (C: tactrans.c line 501)
@@ -435,7 +436,7 @@ pub fn battle_teardown_writeback(
     for (side, race_queue) in race_queues.iter_mut().enumerate() {
         for starship in race_queue.iter_mut() {
             if let Some(mut desc) = starship.race_desc.take() {
-                free_ship(&mut desc, true, true);
+                free_ship(&mut RegistryResources, &mut desc, true, true);
             }
         }
 
@@ -562,7 +563,7 @@ mod tests {
 
         let mut starship = make_test_starship(SpeciesId::Spathi, 30, 0);
         starship.race_desc = Some(Box::new(
-            load_ship(SpeciesId::Spathi, LoadTier::MetadataOnly).unwrap(),
+            load_ship(&mut RegistryResources, SpeciesId::Spathi, LoadTier::MetadataOnly).unwrap(),
         ));
 
         ship_death(&mut starship).unwrap();
@@ -717,7 +718,7 @@ mod tests {
 
         // Load descriptor for dead ship
         race_queue[0].race_desc = Some(Box::new(
-            load_ship(SpeciesId::Earthling, LoadTier::MetadataOnly).unwrap(),
+            load_ship(&mut RegistryResources, SpeciesId::Earthling, LoadTier::MetadataOnly).unwrap(),
         ));
 
         let result = new_ship_transition(
@@ -748,7 +749,7 @@ mod tests {
         let mut cursor = WritebackCursor::new(1);
 
         race_queue[0].race_desc = Some(Box::new(
-            load_ship(SpeciesId::Earthling, LoadTier::MetadataOnly).unwrap(),
+            load_ship(&mut RegistryResources, SpeciesId::Earthling, LoadTier::MetadataOnly).unwrap(),
         ));
 
         let result = new_ship_transition(
@@ -781,7 +782,7 @@ mod tests {
         let mut cursor = WritebackCursor::new(1);
 
         race_queue[0].race_desc = Some(Box::new(
-            load_ship(SpeciesId::Earthling, LoadTier::MetadataOnly).unwrap(),
+            load_ship(&mut RegistryResources, SpeciesId::Earthling, LoadTier::MetadataOnly).unwrap(),
         ));
 
         let result = new_ship_transition(
@@ -816,7 +817,7 @@ mod tests {
         let mut cursor = WritebackCursor::new(2);
 
         // Load descriptor and set crew to match starship state
-        let mut desc = load_ship(SpeciesId::Earthling, LoadTier::MetadataOnly).unwrap();
+        let mut desc = load_ship(&mut RegistryResources, SpeciesId::Earthling, LoadTier::MetadataOnly).unwrap();
         desc.ship_info.crew_level = 10; // Damaged crew matches starship
         race_queue[0].race_desc = Some(Box::new(desc));
 
@@ -849,11 +850,11 @@ mod tests {
         ];
 
         // Load descriptors and set their crew to match starship state
-        let mut desc0 = load_ship(SpeciesId::Earthling, LoadTier::MetadataOnly).unwrap();
+        let mut desc0 = load_ship(&mut RegistryResources, SpeciesId::Earthling, LoadTier::MetadataOnly).unwrap();
         desc0.ship_info.crew_level = 15; // Damaged from battle
         race_queues[0][0].race_desc = Some(Box::new(desc0));
 
-        let mut desc1 = load_ship(SpeciesId::Spathi, LoadTier::MetadataOnly).unwrap();
+        let mut desc1 = load_ship(&mut RegistryResources, SpeciesId::Spathi, LoadTier::MetadataOnly).unwrap();
         desc1.ship_info.crew_level = 20; // Current crew
         race_queues[1][0].race_desc = Some(Box::new(desc1));
 
@@ -906,11 +907,11 @@ mod tests {
         ];
 
         // Load descriptors and set crew to match starship state
-        let mut desc0 = load_ship(SpeciesId::Earthling, LoadTier::MetadataOnly).unwrap();
+        let mut desc0 = load_ship(&mut RegistryResources, SpeciesId::Earthling, LoadTier::MetadataOnly).unwrap();
         desc0.ship_info.crew_level = 15;
         race_queues[0][0].race_desc = Some(Box::new(desc0));
 
-        let mut desc1 = load_ship(SpeciesId::Spathi, LoadTier::MetadataOnly).unwrap();
+        let mut desc1 = load_ship(&mut RegistryResources, SpeciesId::Spathi, LoadTier::MetadataOnly).unwrap();
         desc1.ship_info.crew_level = 20;
         race_queues[1][0].race_desc = Some(Box::new(desc1));
 
@@ -939,7 +940,7 @@ mod tests {
         ];
 
         race_queues[0][0].race_desc = Some(Box::new(
-            load_ship(SpeciesId::Earthling, LoadTier::MetadataOnly).unwrap(),
+            load_ship(&mut RegistryResources, SpeciesId::Earthling, LoadTier::MetadataOnly).unwrap(),
         ));
 
         // Try to add 10 floating crew, but only 1 fits
@@ -1037,15 +1038,15 @@ mod tests {
         ];
 
         // Load descriptors and set crew to match starship state
-        let mut desc0 = load_ship(SpeciesId::Earthling, LoadTier::MetadataOnly).unwrap();
+        let mut desc0 = load_ship(&mut RegistryResources, SpeciesId::Earthling, LoadTier::MetadataOnly).unwrap();
         desc0.ship_info.crew_level = 15;
         race_queues[0][0].race_desc = Some(Box::new(desc0));
 
-        let mut desc1 = load_ship(SpeciesId::Spathi, LoadTier::MetadataOnly).unwrap();
+        let mut desc1 = load_ship(&mut RegistryResources, SpeciesId::Spathi, LoadTier::MetadataOnly).unwrap();
         desc1.ship_info.crew_level = 25;
         race_queues[0][1].race_desc = Some(Box::new(desc1));
 
-        let mut desc2 = load_ship(SpeciesId::Orz, LoadTier::MetadataOnly).unwrap();
+        let mut desc2 = load_ship(&mut RegistryResources, SpeciesId::Orz, LoadTier::MetadataOnly).unwrap();
         desc2.ship_info.crew_level = 10;
         race_queues[1][0].race_desc = Some(Box::new(desc2));
 
@@ -1072,11 +1073,11 @@ mod tests {
         ];
 
         // Load descriptors and set crew to match starship state
-        let mut desc0 = load_ship(SpeciesId::Earthling, LoadTier::MetadataOnly).unwrap();
+        let mut desc0 = load_ship(&mut RegistryResources, SpeciesId::Earthling, LoadTier::MetadataOnly).unwrap();
         desc0.ship_info.crew_level = 0; // Dead
         race_queues[0][0].race_desc = Some(Box::new(desc0));
 
-        let mut desc1 = load_ship(SpeciesId::Spathi, LoadTier::MetadataOnly).unwrap();
+        let mut desc1 = load_ship(&mut RegistryResources, SpeciesId::Spathi, LoadTier::MetadataOnly).unwrap();
         desc1.ship_info.crew_level = 20;
         race_queues[1][0].race_desc = Some(Box::new(desc1));
 
@@ -1116,7 +1117,7 @@ mod tests {
         let mut cursor = WritebackCursor::new(1);
 
         race_queue[0].race_desc = Some(Box::new(
-            load_ship(SpeciesId::Earthling, LoadTier::MetadataOnly).unwrap(),
+            load_ship(&mut RegistryResources, SpeciesId::Earthling, LoadTier::MetadataOnly).unwrap(),
         ));
 
         assert!(!race_queue[0].audio_stopped); // Initially false
@@ -1148,7 +1149,7 @@ mod tests {
         ];
 
         // Load descriptor and set crew to match starship state
-        let mut desc = load_ship(SpeciesId::Earthling, LoadTier::MetadataOnly).unwrap();
+        let mut desc = load_ship(&mut RegistryResources, SpeciesId::Earthling, LoadTier::MetadataOnly).unwrap();
         desc.ship_info.crew_level = 15;
         race_queues[0][0].race_desc = Some(Box::new(desc));
 

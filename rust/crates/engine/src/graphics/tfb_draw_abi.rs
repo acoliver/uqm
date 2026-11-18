@@ -297,6 +297,22 @@ pub unsafe extern "C" fn TFB_DrawScreen_ReinitVideo(
     };
     enqueue(&mut c);
 }
+/// Queue a video reinitialization that toggles fullscreen at the current
+/// actual resolution, as the utility fullscreen key does.
+pub fn toggle_fullscreen() {
+    use super::sdl::lifecycle_abi::GfxFlags;
+    use crate::graphics::gfx_common_abi::{GraphicsDriver, ScreenHeightActual, ScreenWidthActual};
+    const TFB_GFXFLAGS_FULLSCREEN: i32 = 1;
+    // SAFETY: the game thread owns the graphics globals and queues this command.
+    unsafe {
+        TFB_DrawScreen_ReinitVideo(
+            GraphicsDriver,
+            GfxFlags ^ TFB_GFXFLAGS_FULLSCREEN,
+            ScreenWidthActual,
+            ScreenHeightActual,
+        );
+    }
+}
 /// # Safety
 /// Pointer arguments and referenced image/canvas resources must remain live through this serialized graphics operation.
 #[no_mangle]

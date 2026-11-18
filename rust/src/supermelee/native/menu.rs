@@ -1,6 +1,5 @@
 //! Super Melee setup lifecycle and menu dispatch.
 pub(super) mod rules;
-#[cfg(not(test))]
 pub(crate) mod live {
     use crate::battle::{COMPUTER_CONTROL, HUMAN_CONTROL, NETWORK_CONTROL, PSYTRON_CONTROL};
     use crate::engine::Kernel as KernelOwner;

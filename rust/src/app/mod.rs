@@ -31,6 +31,9 @@ impl Application {
             self.game.kernel.configuration.clone(),
         );
         crate::battle::services::install(&mut self.game.kernel);
+        self.game.kernel.install_options_menu(|cx, io| {
+            crate::front_end::gameopt::game_options(cx, io, None) != 0
+        });
         self.game
             .kernel
             .install_ship_lifecycle(crate::engine::battle::services::ShipLifecycle {

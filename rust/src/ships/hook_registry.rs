@@ -9,11 +9,6 @@ pub fn hooks() -> Vec<(usize, &'static str)> {
         .collect()
 }
 
-#[cfg(test)]
-pub fn hooks() -> Vec<(usize, &'static str)> {
-    Vec::new()
-}
-
 pub fn name(hooks: &[(usize, &'static str)], address: usize) -> &'static str {
     name_for_species(hooks, address, 0)
 }

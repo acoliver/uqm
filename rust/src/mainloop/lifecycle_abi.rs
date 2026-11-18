@@ -85,22 +85,3 @@ pub unsafe fn battle_with_frame_callback(
     crate::battle::battle_native::battle(cx, io, Some(on_battle_frame));
 }
 
-/// # Safety
-/// Called by the game thread after immediate input has been sampled.
-pub unsafe fn process_utility_keys(input: &crate::engine::input::InputSession) {
-    let state = input.immediate();
-    if state.menu[KEY_ABORT as usize] != 0 {
-        crate::log_abi::log_showBox(false, false);
-        std::process::exit(0);
-    }
-    if state.menu[KEY_FULLSCREEN as usize] != 0 {
-        let flags = GfxFlags ^ TFB_GFXFLAGS_FULLSCREEN as i32;
-        FlushInput(input);
-        crate::graphics::tfb_draw_abi::TFB_DrawScreen_ReinitVideo(
-            GraphicsDriver,
-            flags,
-            ScreenWidthActual,
-            ScreenHeightActual,
-        );
-    }
-}

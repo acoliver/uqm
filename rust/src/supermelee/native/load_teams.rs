@@ -32,7 +32,6 @@ fn page(top: u16, bottom: u16, current: u16, count: u16, keys: [bool; 4]) -> (u1
     (next_top, next)
 }
 
-#[cfg(not(test))]
 pub(crate) mod live {
     use super::page;
     use crate::graphics::{

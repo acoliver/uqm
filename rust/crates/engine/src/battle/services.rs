@@ -22,7 +22,15 @@ pub struct ShipLifecycle {
     pub init: fn(&mut Cx<'_>) -> i16,
     pub uninit: fn(&mut Cx<'_>),
 }
+/// Application-supplied game options menu, entered from battle and hyperspace
+/// menus; returns whether the caller's menu continues.
+pub type OptionsMenu = fn(&mut Cx<'_>, &mut crate::observe::Io<'_>) -> bool;
+
 impl crate::Kernel {
+    pub fn install_options_menu(&mut self, menu: OptionsMenu) {
+        self.services.options_menu = Some(menu);
+    }
+
     pub fn install_ship_lifecycle(&mut self, lifecycle: ShipLifecycle) {
         self.services.ship_lifecycle = Some(lifecycle);
     }
@@ -43,6 +51,14 @@ impl crate::Kernel {
     }
 }
 impl Cx<'_> {
+    pub fn options_menu(&mut self, io: &mut crate::observe::Io<'_>) -> bool {
+        let menu = self
+            .kernel
+            .services
+            .options_menu
+            .unwrap_or_else(|| panic!("game options menu was not installed"));
+        menu(self, io)
+    }
     pub fn draw_statistics(&mut self, ship: ShipId, crew: i16, energy: i16) {
         self.kernel
             .primitive_services()
