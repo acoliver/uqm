@@ -21,12 +21,20 @@ fn descriptor() -> CommDescriptor {
 }
 
 fn with_game(name: &str, run: impl FnOnce(&mut Game, &ContextLease)) {
+    with_game_options(name, Default::default(), run);
+}
+
+fn with_game_options(
+    name: &str,
+    options: crate::graphics::sdl::lifecycle_abi::GraphicsOptions,
+    run: impl FnOnce(&mut Game, &ContextLease),
+) {
     if !crate::native_test_process::own_graphics_process(name) {
         return;
     }
     let mut game = Game::new();
     game.world.story = Some(crate::state::game_state::StoryState::new());
-    let fixture = crate::campaign_display_test::CampaignDisplay::install_prepared(
+    let fixture = crate::campaign_display_test::CampaignDisplay::install_prepared_with_options(
         &mut game,
         || {},
         |game| {
@@ -41,6 +49,7 @@ fn with_game(name: &str, run: impl FnOnce(&mut Game, &ContextLease)) {
             ));
             run(game, &space);
         },
+        options,
     )
     .unwrap();
     fixture.finish(game);
@@ -162,6 +171,57 @@ fn failed_loads_drop_partial_owners_and_duplicate_admission_is_rejected() {
                 let pixel = space.target().pixel(POINT { x, y });
                 pixel.r == 255 && pixel.g == 255 && pixel.b == 255
             })));
+        },
+    );
+}
+
+#[test]
+#[serial_test::serial]
+fn releasing_assets_drains_pixels_without_presenting_a_frame() {
+    let presentations = std::rc::Rc::new(std::cell::Cell::new(0));
+    let observed = presentations.clone();
+    let options = crate::graphics::sdl::lifecycle_abi::GraphicsOptions {
+        readback_hook: Some(std::rc::Rc::new(move |count, _| {
+            observed.set(count);
+            None
+        })),
+        ..Default::default()
+    };
+    with_game_options(
+        "comm::assets_tests::releasing_assets_drains_pixels_without_presenting_a_frame",
+        options,
+        |game, space| {
+            let mut comm = Comm::new();
+            comm.presentation = super::presentation::Presentation::from(&game.kernel);
+            comm.data.definition = descriptor();
+            hail::prepare(&mut comm, &game.world, &game.kernel, (320, 240)).unwrap();
+            let mut assets = comm.display.assets.take().unwrap();
+            drop(assets.intro_batch.take());
+            space.draw_stamp(&assets.frame.lease().context_frame(0), POINT { x: 0, y: 0 });
+            let mut width = 0;
+            let mut height = 0;
+            // SAFETY: the isolated fixture owns the initialized graphics thread and display.
+            let display =
+                unsafe { crate::graphics::drawable_abi::CreateDisplay(0, &mut width, &mut height) };
+            assert!(!display.is_null());
+            // SAFETY: the live display has one registered frame retained through the drain.
+            let screen = ContextFrame::retain(std::ptr::NonNull::new(unsafe {
+                crate::graphics::pixmap_abi::CaptureDrawable(display)
+            }));
+            let before = presentations.get();
+            space.with_frame(screen, || {
+                space.draw_stamp(&assets.frame.lease().context_frame(0), POINT { x: 0, y: 0 });
+                assets.release(space);
+            });
+            // SAFETY: drawing has drained and the fixture uniquely owns this display allocation.
+            unsafe { crate::graphics::drawable_abi::DestroyDrawable(display) };
+            assert_eq!(
+                presentations.get(),
+                before,
+                "resource drain presented a frame"
+            );
+            let pixel = space.target().pixel(POINT { x: 0, y: 0 });
+            assert_eq!((pixel.r, pixel.g, pixel.b), (180, 0, 0));
         },
     );
 }

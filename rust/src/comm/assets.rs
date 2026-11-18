@@ -101,7 +101,7 @@ impl Assets {
             old_font: _,
             intro_batch,
         } = self;
-        space.flush();
+        space.drain();
         drop(intro_batch);
         drop(animation);
         drop(song);

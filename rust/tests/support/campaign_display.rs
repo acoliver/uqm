@@ -35,6 +35,15 @@ impl CampaignDisplay {
         load: impl FnOnce(),
         draw: impl FnOnce(&mut Game),
     ) -> Result<Self, Box<dyn std::error::Error>> {
+        Self::install_prepared_with_options(game, load, draw, GraphicsOptions::default())
+    }
+
+    pub fn install_prepared_with_options(
+        game: &mut Game,
+        load: impl FnOnce(),
+        draw: impl FnOnce(&mut Game),
+        options: GraphicsOptions,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../tmp");
         std::fs::create_dir_all(&root)?;
         let directory = tempfile::tempdir_in(root.canonicalize()?)?;
@@ -76,13 +85,7 @@ impl CampaignDisplay {
         // SAFETY: the serialized fixture owns SDL and the temporary resource mount.
         unsafe {
             assert_eq!(
-                TFB_InitGraphics(
-                    1,
-                    0,
-                    ptr::from_ref(&GraphicsOptions::default()).cast(),
-                    320,
-                    240
-                ),
+                TFB_InitGraphics(1, 0, ptr::from_ref(&options).cast(), 320, 240),
                 0
             );
             uio::uio_init();

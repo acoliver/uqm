@@ -94,6 +94,13 @@ impl Drop for ContextTarget {
 }
 
 impl ContextLease {
+    /// Execute committed drawing without presenting a frame before releasing its resources.
+    pub fn drain(&self) {
+        super::super::dcqueue_abi::require_queue(self);
+        // The screen wait drains without swapping while a graphics batch is active.
+        self.with_batch(|| self.flush());
+    }
+
     pub fn with_frame<R>(&self, target: ContextFrame, draw: impl FnOnce() -> R) -> R {
         self.with_selected(|| {
             let restore = ContextTarget {
