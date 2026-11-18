@@ -129,7 +129,7 @@ pub fn finish(comm: &mut Comm, cx: &mut Cx<'_>) {
 }
 
 pub fn hail_alien(comm: &mut Comm, cx: &mut Cx<'_>, io: &mut Io<'_>) {
-    use crate::engine::observe::{CheckpointView, InputView};
+    use crate::engine::observe::CheckpointView;
     let input = cx.kernel.input_runtime().input().clone();
     let activity = cx.world.activity();
     prepare(comm, cx.world, cx.kernel, cx.screen_dimensions())
@@ -157,12 +157,77 @@ pub fn hail_alien(comm: &mut Comm, cx: &mut Cx<'_>, io: &mut Io<'_>) {
         io.observer.checkpoint(&CheckpointView::CommunicationEnded);
     }
     finish(comm, cx);
-    let campaign = crate::engine::observe::CampaignView::capture(cx.world, cx.kernel);
-    comm.admit_observer(io, &InputView::CommunicationCompleted, &Some(campaign));
+    admit_completion(comm, cx, io);
+}
+
+fn admit_completion(comm: &mut Comm, cx: &mut Cx<'_>, io: &mut Io<'_>) {
+    let admitted = crate::engine::input::admit_observer(
+        cx,
+        io,
+        crate::engine::observe::InputView::CommunicationCompleted,
+    );
+    comm.apply_input(admitted);
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::engine::{
+        observe::{CampaignView, CheckpointView, Injected, InputView, Io, Observer, Presented},
+        Kernel, World,
+    };
+
+    struct CompletionObserver {
+        world: *mut World,
+        kernel: *mut Kernel,
+        calls: usize,
+    }
+
+    impl Observer<Option<CampaignView>> for CompletionObserver {
+        fn input_admitted(
+            &mut self,
+            view: &InputView,
+            campaign: &Option<CampaignView>,
+        ) -> Injected {
+            assert!(matches!(view, InputView::CommunicationCompleted));
+            assert_eq!(campaign.as_ref().map(|view| view.activity), Some(17));
+            assert_eq!(World::current().pointer, self.world);
+            assert_eq!(Kernel::current().pointer, self.kernel);
+            self.calls += 1;
+            Injected {
+                comm_response: Some(1),
+                ..Injected::default()
+            }
+        }
+
+        fn checkpoint(&mut self, _: &CheckpointView<'_>) {}
+        fn presented(&mut self, _: &mut Presented) {}
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn completion_admission_preserves_the_current_input_owner_contract() {
+        crate::comm::with_test_context(|cx| {
+            cx.world.set_activity(17);
+            let mut comm = crate::comm::Comm::new();
+            comm.add_response(17, "First", None);
+            comm.add_response(23, "Second", None);
+            let mut observer = CompletionObserver {
+                world: std::ptr::from_mut(cx.world),
+                kernel: std::ptr::from_mut(cx.kernel),
+                calls: 0,
+            };
+            super::admit_completion(
+                &mut comm,
+                cx,
+                &mut Io {
+                    observer: &mut observer,
+                },
+            );
+            assert_eq!(observer.calls, 1);
+            assert_eq!(comm.selected_response(), 1);
+        });
+    }
+
     #[test]
     #[serial_test::serial]
     fn conversation_text_admission_retains_the_supplied_game_labels() {
