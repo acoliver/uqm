@@ -12,7 +12,6 @@ pub use setup::*;
 
 pub mod world_resources;
 
-#[cfg(not(test))]
 pub mod macro_abi;
 
 #[cfg(not(test))]
