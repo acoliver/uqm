@@ -516,11 +516,11 @@ fn campaign_events_schedule_and_dispatch_using_the_existing_world() {
     ) {
         return;
     }
+    use uqm_rust::engine::clock::{ARILOU_ENTRANCE_EVENT, ARILOU_EXIT_EVENT, ARILOU_UMGAH_CHECK};
     use uqm_rust::engine::{
         battle::{Battle, Cx},
         StoryKey,
     };
-    use uqm_rust::navigation::abi::{ARILOU_ENTRANCE_EVENT, ARILOU_EXIT_EVENT, ARILOU_UMGAH_CHECK};
     use uqm_rust::navigation::{
         events::{dispatch_event, EventServices},
         hyper_units::Geometry,

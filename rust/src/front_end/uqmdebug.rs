@@ -3,6 +3,7 @@
 
 use crate::engine::{
     battle::{Cx, ElementId, ShipId},
+    clock::HYPERSPACE_ENCOUNTER_EVENT,
     observe::Io,
     world::generation::Body,
     Kernel, StoryKey, World,
