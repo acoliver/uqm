@@ -1,23 +1,18 @@
 //! Read-only boss observations over the game thread's published battle context.
 
-#[cfg(not(test))]
 use crate::engine::battle::observation::samatra as observation;
 
-#[cfg(not(test))]
 use super::{Events, Snapshot};
-#[cfg(not(test))]
 use crate::{
     engine::battle::{Cx, ElementId, RaceState, ShipId},
     ships::{native::abi::*, races::samatra::engine},
 };
 
-#[cfg(not(test))]
 pub fn observe() -> (Events, Option<Snapshot>) {
     // SAFETY: the synchronous input service owns the published game-thread context.
     unsafe { crate::app::bridge::enter(snapshot) }
 }
 
-#[cfg(not(test))]
 fn project_events(state: &crate::engine::battle::race::SaMatraState) -> Events {
     Events {
         generation: state.generation,
@@ -26,7 +21,6 @@ fn project_events(state: &crate::engine::battle::race::SaMatraState) -> Events {
     }
 }
 
-#[cfg(not(test))]
 fn snapshot(cx: &mut Cx<'_>) -> (Events, Option<Snapshot>) {
     if let Some(RaceState::SaMatra(state)) = cx.terminal_outcome() {
         return (project_events(state), None);
@@ -102,7 +96,6 @@ fn snapshot(cx: &mut Cx<'_>) -> (Events, Option<Snapshot>) {
     )
 }
 
-#[cfg(not(test))]
 fn project_player(cx: &Cx<'_>, id: ElementId, owner: ShipId, result: &mut Snapshot) {
     let e = cx.element(id);
     let species = cx.pick_ship(owner).species;

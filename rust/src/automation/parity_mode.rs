@@ -3,7 +3,6 @@ use super::parity::Fields;
 use super::parity_state::value;
 use crate::savegame::types::GlobalState;
 
-#[cfg(not(test))]
 pub(super) fn capture(
     fields: &mut Fields,
     world: &crate::engine::World,
@@ -98,7 +97,6 @@ pub(super) fn story(fields: &mut Fields, state: Option<&crate::state::game_state
     }
 }
 
-#[cfg(not(test))]
 fn events(fields: &mut Fields, clock: &crate::engine::clock::GameClock) {
     value(fields, "mode.events", "initialized", clock.initialized());
     if !clock.initialized() {
@@ -116,7 +114,6 @@ fn events(fields: &mut Fields, clock: &crate::engine::clock::GameClock) {
     }
 }
 
-#[cfg(not(test))]
 fn groups(fields: &mut Fields, world: &crate::engine::World, journal: &mut super::parity::Journal) {
     let groups = world.ip_groups_ref();
     let mut next = groups.head();

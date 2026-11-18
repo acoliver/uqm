@@ -1,10 +1,8 @@
 //! Per-instance race data, borrowed using the actual race-owned types.
-#[cfg(not(test))]
 use super::resources::Frame;
 use super::{ships::characteristics, value, Fields};
 use crate::automation::parity::Journal;
 pub(super) use crate::battle::context_access::observe::CustomData as RaceData;
-#[cfg(not(test))]
 use crate::engine::battle::kernel::LAST_PKUNK_SOUND as LAST_SOUND;
 use crate::ships::native::abi::*;
 impl RaceData<'_> {
@@ -19,7 +17,6 @@ impl RaceData<'_> {
         value(fields, &prefix, "present", !matches!(self, Self::None));
         match self {
             Self::None => (),
-            #[cfg(not(test))]
             Self::Androsynth(data) => hook(
                 fields,
                 &prefix,
@@ -28,7 +25,6 @@ impl RaceData<'_> {
                 SPECIES_ID_ANDROSYNTH_ID,
                 _hooks,
             ),
-            #[cfg(not(test))]
             Self::NativePkunk { phoenix, saved } => {
                 value(fields, &prefix, "phoenix", _journal.identity(*phoenix));
                 for (name, callback) in ["saved_preprocess", "saved_postprocess", "saved_death"]
@@ -45,12 +41,10 @@ impl RaceData<'_> {
                     );
                 }
             }
-            #[cfg(not(test))]
             Self::NativeUmgah(previous) => value(fields, &prefix, "prev_facing", *previous),
             Self::Mmrnmhrm(data) => {
                 characteristics(fields, &format!("{prefix}.characteristics"), data)
             }
-            #[cfg(not(test))]
             Self::Sis(data) => {
                 value(fields, &prefix, "num_trackers", data.trackers);
                 value(fields, &prefix, "num_blasters", data.blasters);
@@ -68,7 +62,6 @@ impl RaceData<'_> {
     }
 }
 
-#[cfg(not(test))]
 pub(super) fn pkunk_sound(fields: &mut Fields) {
     value(
         fields,
@@ -78,7 +71,6 @@ pub(super) fn pkunk_sound(fields: &mut Fields) {
     );
 }
 
-#[cfg(not(test))]
 fn hook(
     fields: &mut Fields,
     prefix: &str,
@@ -95,7 +87,6 @@ fn hook(
     );
 }
 
-#[cfg(not(test))]
 fn missile_fields(
     fields: &mut Fields,
     prefix: &str,

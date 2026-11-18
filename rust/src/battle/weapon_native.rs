@@ -1,9 +1,7 @@
 //! Battle-mode silhouette changes for the supplied status display.
 
-#[cfg(not(test))]
 use crate::ships::native::abi::*;
 
-#[cfg(not(test))]
 pub(crate) mod engine {
     use super::*;
     use crate::collections::observation::image;
@@ -85,5 +83,4 @@ pub(crate) mod engine {
     }
 }
 
-#[cfg(not(test))]
 pub use engine::*;

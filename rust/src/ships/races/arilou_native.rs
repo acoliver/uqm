@@ -71,7 +71,6 @@ const fn wrap_val(value: i32, extent: i32) -> u16 {
     }) as u16
 }
 
-#[cfg(not(test))]
 pub(crate) mod engine {
     use super::*;
     use crate::engine::battle::{Concerns, Cx, ShipId, WeaponOrigin, WeaponSpawn};

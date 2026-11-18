@@ -8,11 +8,8 @@ pub mod battle_native;
 pub use crate::math::battle_types;
 pub mod c_bridge;
 pub(crate) mod context_access;
-#[cfg(not(test))]
 pub use context_access::ai_legacy::AiOps;
-#[cfg(not(test))]
 pub use context_access::navigation::NavigationOps;
-#[cfg(not(test))]
 pub use context_access::{ContextOps, StatusOps};
 
 pub mod element;

@@ -1,6 +1,5 @@
 //! Battle entry, ordered input processing, and frame scheduling from `battle.c`.
 
-#[cfg(not(test))]
 use crate::battle::context_access::ContextOps;
 use crate::ships::native::abi;
 
@@ -89,7 +88,6 @@ fn advance_observation(io: &mut crate::engine::observe::Io<'_>) {
         .checkpoint(&crate::engine::observe::CheckpointView::BattleAdvanced);
 }
 
-#[cfg(not(test))]
 fn initialize_battle(
     cx: &mut crate::engine::battle::Cx<'_>,
 ) -> (std::rc::Rc<dyn crate::engine::battle::net::BattleNet>, bool) {
@@ -109,7 +107,6 @@ fn initialize_battle(
     (net, had_net)
 }
 
-#[cfg(not(test))]
 pub(crate) mod engine {
     use super::*;
     use crate::battle::tactrans_native::{flee_preprocess, reset_winner, stop_ditty};
@@ -470,7 +467,6 @@ pub(crate) mod engine {
     }
 }
 
-#[cfg(not(test))]
 pub use engine::{battle, free_battle_song};
 
 #[cfg(test)]

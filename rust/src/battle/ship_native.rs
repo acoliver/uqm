@@ -1,6 +1,5 @@
 //! Native ship motion and collision callbacks ported from ship.c.
 
-#[cfg(not(test))]
 use crate::battle::context_access::ContextOps;
 use crate::ships::native::abi::*;
 
@@ -35,7 +34,6 @@ fn spawn_coordinate(random: u32, extent: i32) -> COORD {
     }) as COUNT as COORD
 }
 
-#[cfg(not(test))]
 fn install_ship_hooks(
     cx: &mut crate::engine::battle::Cx<'_>,
     element: crate::engine::battle::ElementId,
@@ -57,8 +55,6 @@ fn install_ship_hooks(
     cx.set_target(element, None);
 }
 
-#[cfg(not(test))]
-#[cfg(not(test))]
 pub(crate) mod engine {
     use super::*;
     use crate::battle::status_native::PostProcessStatus;
@@ -325,7 +321,6 @@ pub(crate) mod engine {
     }
 }
 
-#[cfg(not(test))]
 pub use engine::{
     animation_preprocess, initial_star_ships, next_star_ship, ship_postprocess, ship_preprocess,
     spawn_ship,

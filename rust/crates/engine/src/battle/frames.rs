@@ -583,7 +583,6 @@ impl crate::collections::observation::ImagePointer for FrameSelection {
 }
 
 use crate::graphics::native_abi::frame_desc;
-#[cfg(not(test))]
 use crate::{
     collections::observation::observe_views,
     graphics::{
@@ -613,13 +612,11 @@ fn release_images<const N: usize>(
     result
 }
 
-#[cfg(not(test))]
 pub fn load_graphic(key: &std::ffi::CStr) -> FRAME {
     // SAFETY: the borrowed key remains live through decoding; a successful load owns its frames.
     unsafe { CaptureDrawable(LoadGraphicInstance(key.as_ptr()).cast()) }
 }
 
-#[cfg(not(test))]
 pub fn load_animation(
     frames: &mut [*mut frame_desc; 3],
     keys: [Option<&std::ffi::CStr>; 3],
@@ -644,7 +641,6 @@ pub fn load_animation(
     1
 }
 
-#[cfg(not(test))]
 pub fn free_image<const N: usize>(frames: &mut [*mut frame_desc; N], role: &str) -> u32 {
     let _allocations = crate::graphics::drawable_abi::retain_frame_allocations(frames);
     let freed = release_images(frames, |frame| {

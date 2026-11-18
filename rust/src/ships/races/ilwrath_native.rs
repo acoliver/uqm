@@ -63,7 +63,6 @@ const fn decloak_step(color: Color) -> Option<Color> {
     }
 }
 
-#[cfg(not(test))]
 pub(crate) mod engine {
     use super::*;
     use crate::engine::battle::views::Missile;

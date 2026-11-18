@@ -1,11 +1,8 @@
 //! Checked mutations used by the ordered element processing pass.
 
-#[cfg(not(test))]
 use crate::battle::{Cx, ElementId};
-#[cfg(not(test))]
 use crate::graphics::native_abi::POINT;
 
-#[cfg(not(test))]
 impl Cx<'_> {
     pub fn set_intersect_origin(&mut self, id: ElementId, point: POINT) {
         self.kernel

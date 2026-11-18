@@ -1,12 +1,10 @@
 //! Scoped live records and fixture phases. No record borrow crosses an engine call.
 
 use super::*;
-#[cfg(not(test))]
 use crate::battle::context_access::fixture::FixtureOps;
 use crate::battle::context_access::fixture::{Element, Phoenix, Ship};
 use crate::battle::element::ElementFlags;
 use crate::engine::battle::views::{FrameSelection, Frames};
-#[cfg(not(test))]
 use crate::engine::battle::Cx;
 use crate::engine::battle::{Concern, ElementId, Parent, ShipId};
 use crate::graphics::native_abi::POINT as Point;
@@ -28,7 +26,6 @@ mod specials;
 #[path = "star.rs"]
 mod star;
 
-#[cfg(not(test))]
 pub(super) use production::execute;
 
 struct World {
@@ -85,7 +82,6 @@ impl World {
         }
         Ok([a, b])
     }
-    #[cfg(not(test))]
     fn commit(&self, cx: &mut Cx<'_>) {
         for (&id, element) in &self.elements {
             *cx.element_mut(id) = element.state.clone();

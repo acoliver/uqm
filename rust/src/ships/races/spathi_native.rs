@@ -28,7 +28,6 @@ const fn within_half_circle(direction_facing: u16, subtracted: i32) -> bool {
     normalize_facing(direction_facing as i32 - subtracted + QUARTER_FACING) as i32 <= HALF_FACING
 }
 
-#[cfg(not(test))]
 pub(crate) mod engine {
     use super::*;
     use crate::ships::native::abi::*;

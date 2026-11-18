@@ -331,7 +331,6 @@ enum Operation<'a> {
     SaveWitness(&'a mut FixtureRun, u16, bool),
 }
 
-#[cfg(not(test))]
 use live::execute;
 #[cfg(test)]
 fn execute(

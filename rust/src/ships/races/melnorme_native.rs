@@ -1,7 +1,6 @@
 //! Melnorme callbacks and descriptor for the live battle engine.
 //! Expressions preserve the C promotions, truncations, traversal and RNG order.
 
-#[cfg(not(test))]
 pub(crate) mod engine {
     use crate::engine::battle::views::Missile;
     use crate::engine::battle::{

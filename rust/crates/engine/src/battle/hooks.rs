@@ -47,7 +47,6 @@ impl ElementHooks {
     }
 }
 
-#[cfg(not(test))]
 pub fn animation_preprocess(cx: &mut Cx<'_>, e: ElementId) {
     let wait = cx.element(e).turn_wait();
     if wait > 0 {

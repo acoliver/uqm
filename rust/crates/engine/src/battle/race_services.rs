@@ -46,7 +46,6 @@ impl crate::Kernel {
     }
 }
 
-#[cfg(not(test))]
 impl Cx<'_> {
     pub fn play_battle_sound(
         &mut self,

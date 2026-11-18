@@ -1,5 +1,4 @@
 //! Shofixti live callbacks translated from `sc2/src/uqm/ships/shofixti/shofixti.c`.
-#[cfg(not(test))]
 pub(crate) mod engine {
     use crate::engine::battle::{Concerns, Cx, ElementId, ShipId, WeaponOrigin, WeaponSpawn};
     use crate::ships::native::abi::*;

@@ -420,7 +420,6 @@ impl BattleFightTracker {
     }
 }
 
-#[cfg(not(test))]
 impl BattleSnapshot {
     /// The running battle, read on the game thread.
     ///

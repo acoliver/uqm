@@ -42,7 +42,6 @@ impl crate::Kernel {
             .unwrap_or_else(|| panic!("battle primitive services were not installed"))
     }
 }
-#[cfg(not(test))]
 impl Cx<'_> {
     pub fn draw_statistics(&mut self, ship: ShipId, crew: i16, energy: i16) {
         self.kernel

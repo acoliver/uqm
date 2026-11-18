@@ -1,13 +1,9 @@
 //! Homing over the explicit ordered element pool.
 
-#[cfg(not(test))]
 use super::flags::*;
-#[cfg(not(test))]
 use super::{Cx, ElementId, Subject};
 use crate::math::battle_types::HALF_CIRCLE;
-#[cfg(not(test))]
 use crate::math::battle_types::{MAX_REDUCTION, ONE_SHIFT};
-#[cfg(not(test))]
 use crate::math::wrap_delta;
 use crate::math::{angle_to_facing, normalize_facing};
 
@@ -26,7 +22,6 @@ fn turn_toward(facing: u16, delta: i16, random: impl FnOnce() -> u32) -> u16 {
     normalize_facing(i32::from(facing) + step)
 }
 
-#[cfg(not(test))]
 pub fn track_ship(cx: &mut Cx<'_>, id: ElementId, facing: &mut u16) -> i16 {
     let mut subject = cx.weapon_origin(id);
     let result = track_subject(cx, &mut subject, facing);
@@ -34,7 +29,6 @@ pub fn track_ship(cx: &mut Cx<'_>, id: ElementId, facing: &mut u16) -> i16 {
     result
 }
 
-#[cfg(not(test))]
 pub fn track_subject(cx: &mut Cx<'_>, tracker: &mut Subject, facing: &mut u16) -> i16 {
     let mut best_distance: i16 = 0;
     let mut best_facing: i16 = -1;

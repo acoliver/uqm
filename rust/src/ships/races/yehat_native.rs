@@ -1,5 +1,4 @@
 //! Live yehat callbacks translated from ships/yehat/yehat.c.
-#[cfg(not(test))]
 pub(crate) mod engine {
     use crate::ships::native::{abi::*, cosine, facing_to_angle, sine};
     fn descriptor(_world: &mut crate::engine::battle::World) -> crate::engine::battle::RaceDesc {

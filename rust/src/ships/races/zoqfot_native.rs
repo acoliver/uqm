@@ -1,5 +1,4 @@
 //! Live zoqfotpik callbacks translated from ships/zoqfot/zoqfot.c.
-#[cfg(not(test))]
 pub(crate) mod engine {
     use crate::ships::native::{
         abi::*, angle_to_facing, cosine, facing_to_angle, normalize_facing, sine,

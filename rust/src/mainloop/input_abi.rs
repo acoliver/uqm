@@ -1,14 +1,12 @@
 //! Native input repeat, nested loops and battle controls.
 
-#[cfg(not(test))]
 use crate::threading::pacing::yield_input_loop;
 
-#[cfg(all(not(test), feature = "debug-process"))]
+#[cfg(feature = "debug-process")]
 use crate::{
     engine::battle::statistics::{delta_crew, delta_energy},
     front_end::uqmdebug::debug_key_pressed_synchronous,
 };
-#[cfg(not(test))]
 use crate::{
     engine::{
         battle::Cx,
@@ -17,7 +15,6 @@ use crate::{
     ships::native::abi::*,
 };
 
-#[cfg(not(test))]
 pub(crate) mod live {
     #![allow(non_snake_case)]
     use super::*;
@@ -170,7 +167,5 @@ pub(crate) mod live {
 }
 #[path = "input_driver.rs"]
 mod driver;
-#[cfg(not(test))]
 pub use driver::NativeInputRuntime;
-#[cfg(not(test))]
 pub use live::*;

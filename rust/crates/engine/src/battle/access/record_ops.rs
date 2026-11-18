@@ -1,11 +1,8 @@
 //! Engine-owned operations on battle records and retained projections.
 
-#[cfg(not(test))]
 use crate::battle::flags::*;
-#[cfg(not(test))]
 use crate::battle::{Cx, ElementId, ShipId, Subject, WeaponOrigin};
 
-#[cfg(not(test))]
 impl Cx<'_> {
     /// Predict contact from value projections without moving either live element.
     pub fn plot_intercept(&mut self, a: &Subject, b: &Subject, turns: u16, margin: u16) -> u16 {

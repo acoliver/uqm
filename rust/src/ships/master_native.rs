@@ -1,6 +1,5 @@
 //! Master metadata owns its descriptors in the game lifecycle's typed ship queue.
 use crate::engine::battle::kernel::MasterCatalog;
-#[cfg(not(test))]
 use crate::ships::DescriptorLoader;
 
 #[derive(Clone, Debug)]
@@ -43,7 +42,6 @@ pub(crate) fn find(queue: &MasterCatalog, species: u32) -> i32 {
     -1
 }
 
-#[cfg(not(test))]
 pub(crate) mod engine {
     use super::*;
     use crate::engine::battle::{
@@ -157,7 +155,6 @@ pub(crate) mod engine {
         None
     }
 }
-#[cfg(not(test))]
 pub use engine::{descriptor_in, find_master_ship, master_in};
 
 #[cfg(test)]

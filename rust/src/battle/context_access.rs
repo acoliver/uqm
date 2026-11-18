@@ -1,25 +1,18 @@
 //! Game and resource operations wired to the explicit battle context.
-#[cfg(not(test))]
 use crate::engine::battle::{Cx, ElementId, ShipId};
-#[cfg(not(test))]
 use crate::ships::native::abi::*;
 
 mod status_native_access {
-    #[cfg(not(test))]
     use super::*;
-    #[cfg(not(test))]
     use crate::battle::status_native::engine::*;
-    #[cfg(not(test))]
     use crate::battle::status_native::explosion_flash;
 
-    #[cfg(not(test))]
     pub trait StatusOps {
         fn draw_explosion_flash(&mut self, life: u16, y: i16);
         fn draw_energy_label(&mut self, y: i16, change: i16);
         fn draw_captain_controls(&mut self, ship: ShipId, y: i16, delta: u16, current: u16);
     }
 
-    #[cfg(not(test))]
     impl StatusOps for Cx<'_> {
         fn draw_explosion_flash(&mut self, life: u16, y: i16) {
             let Some(context) = std::ptr::NonNull::new(self.kernel.status_context)
@@ -73,10 +66,8 @@ pub(crate) mod observe;
 
 pub(crate) mod fixture;
 
-#[cfg(not(test))]
 pub use status_native_access::StatusOps;
 
-#[cfg(not(test))]
 pub trait ContextOps {
     fn finish_battle(&mut self);
 
@@ -101,7 +92,6 @@ pub trait ContextOps {
     );
 }
 
-#[cfg(not(test))]
 impl ContextOps for Cx<'_> {
     fn finish_battle(&mut self) {
         let mut current = self.elements().head();

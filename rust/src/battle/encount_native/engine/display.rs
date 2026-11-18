@@ -1,7 +1,6 @@
 //! Encounter location text over retained display resources.
 #[cfg(test)]
 use crate::navigation::globals::in_hqspace;
-#[cfg(not(test))]
 use crate::ships::native::abi::*;
 
 pub(super) fn draw_title(cx: &mut crate::engine::battle::Cx<'_>) {

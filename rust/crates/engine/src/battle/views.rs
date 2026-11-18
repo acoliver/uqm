@@ -200,7 +200,6 @@ pub struct PrimitiveStyle {
     pub color: crate::graphics::native_abi::Color,
 }
 
-#[cfg(not(test))]
 impl Subject {
     pub fn intersection(&self) -> crate::graphics::native_abi::INTERSECT_CONTROL {
         self.intersect

@@ -19,7 +19,6 @@ fn use_defense(cooldown: u8, weapon_turn: Option<u16>, enemy_turn: Option<u16>) 
         && (weapon_turn.is_some_and(|turn| turn <= 2) || enemy_turn.is_some_and(|turn| turn <= 4))
 }
 
-#[cfg(not(test))]
 pub(crate) mod engine {
     use super::{in_defense_range, nuke_speed, use_defense, MISSILE_LIFE};
     use crate::engine::battle::{Concerns, Cx, ElementId, ShipId, WeaponOrigin, WeaponSpawn};

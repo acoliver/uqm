@@ -1,6 +1,5 @@
 //! Live engine callbacks for the Mmrnmhrm, mirroring `mmrnmhrm.c`.
 
-#[cfg(not(test))]
 pub(crate) mod engine {
     use crate::ships::native::{
         abi::*, cosine, facing_to_angle, normalize_angle, normalize_facing, sine,

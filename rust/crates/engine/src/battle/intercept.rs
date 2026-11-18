@@ -1,12 +1,8 @@
 //! Fixed-width prediction over retained subject projections.
 
-#[cfg(not(test))]
 use super::flags::*;
-#[cfg(not(test))]
 use super::{Cx, Subject};
-#[cfg(not(test))]
 use crate::graphics::native_abi::COUNT;
-#[cfg(not(test))]
 use crate::math::battle_types::ONE_SHIFT;
 use crate::math::velocity::VELOCITY_SHIFT;
 
@@ -129,13 +125,11 @@ fn axis_possible(t0: i32, t1: i32, velocity: i32) -> bool {
     (t0 <= 0 && t1 >= 0) || (t0 > 0 && velocity >= t0) || (t1 < 0 && velocity <= t1)
 }
 
-#[cfg(not(test))]
 fn current_velocity(v: &crate::math::velocity::VelocityDesc) -> (i16, i16) {
     let (x, y) = v.get_current_components();
     (x as i16, y as i16)
 }
 
-#[cfg(not(test))]
 pub fn plot_intercept(
     cx: &mut Cx<'_>,
     a: &Subject,
@@ -335,7 +329,6 @@ mod conversion_tests {
     }
 }
 
-#[cfg(not(test))]
 pub fn next_velocity(v: &mut crate::math::velocity::VelocityDesc, turns: u16) -> (i16, i16) {
     let (x, y) = v.get_next_components(turns);
     (x as i16, y as i16)

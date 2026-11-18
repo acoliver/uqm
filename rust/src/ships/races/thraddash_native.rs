@@ -1,6 +1,5 @@
 //! Thraddash callbacks and descriptor translated from `thradd.c`.
 
-#[cfg(not(test))]
 pub(crate) mod engine {
     use crate::engine::battle::views::Missile;
     use crate::engine::battle::{

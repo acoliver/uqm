@@ -1,6 +1,5 @@
 //! Chenjesu callbacks and descriptor translated from `sc2/src/uqm/ships/chenjesu/chenjesu.c`.
 
-#[cfg(not(test))]
 pub(crate) mod engine {
     use crate::engine::battle::views::Missile;
     use crate::engine::battle::{

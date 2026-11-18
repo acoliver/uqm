@@ -2,15 +2,10 @@
 
 use super::flags::*;
 use crate::graphics::native_abi::Color;
-#[cfg(not(test))]
 use crate::graphics::native_abi::EMPTY_PRIMITIVE as gfx_object_NUM_PRIMS;
-#[cfg(not(test))]
 use crate::graphics::native_abi::POINT;
-#[cfg(not(test))]
 use crate::math::battle_types::{FACING_SHIFT, FULL_CIRCLE, HALF_CIRCLE, MAX_REDUCTION, ONE_SHIFT};
-#[cfg(not(test))]
 const POINT_PRIMITIVE: u8 = 0;
-#[cfg(not(test))]
 use crate::graphics::STAMP_PRIMITIVE;
 
 fn damage_object(mass: u8, hp: &mut u16, life: &mut u16, flags: &mut u16, damage: i16) {
@@ -57,20 +52,16 @@ const fn crew_color(high: bool) -> Color {
     }
 }
 
-#[cfg(not(test))]
 fn width(pixels: i32) -> i32 {
     (pixels - 64) << (ONE_SHIFT + MAX_REDUCTION)
 }
-#[cfg(not(test))]
 fn height(pixels: i32) -> i32 {
     pixels << (ONE_SHIFT + MAX_REDUCTION)
 }
-#[cfg(not(test))]
 fn aligned_random(random: u32, extent: i32) -> i16 {
     ((i32::from(random as u16) % extent) as i16) & !((1 << ONE_SHIFT) - 1)
 }
 
-#[cfg(not(test))]
 mod engine {
     use super::*;
     use crate::battle::hooks::animation_preprocess;
@@ -372,7 +363,6 @@ mod engine {
     }
 }
 
-#[cfg(not(test))]
 pub use engine::*;
 
 #[cfg(test)]
