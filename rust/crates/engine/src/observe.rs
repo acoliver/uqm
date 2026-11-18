@@ -17,6 +17,7 @@ pub struct CampaignView {
     pub ship_position: (i16, i16),
     pub ship_facing: i32,
     pub flight_facing: Option<u8>,
+    pub hyperspace_ready: bool,
     pub autopilot: (i16, i16),
     pub combat_flags: u8,
     pub instant_move: bool,
@@ -46,6 +47,17 @@ impl CampaignView {
             });
         }
         let ships = kernel.ships_ref(0);
+        // Entry/exit transitions suppress SIS callbacks while leaving velocity at zero.
+        view.hyperspace_ready = world.activity() as u8 == 3
+            && ships
+                .head()
+                .and_then(|ship| ships.element_handle(ship))
+                .is_some_and(|element| {
+                    use crate::battle::flags::{APPEARING, DISAPPEARING, NONSOLID, PLAYER_SHIP};
+                    kernel.elements[element].state_flags
+                        & (PLAYER_SHIP | APPEARING | DISAPPEARING | NONSOLID) as u16
+                        == PLAYER_SHIP as u16
+                });
         let mut next = ships.head();
         while let Some(id) = next {
             view.player_ships.push(ships.get(id));
@@ -93,6 +105,7 @@ impl CampaignView {
             ship_position: (game.ship_stamp.origin.x, game.ship_stamp.origin.y),
             ship_facing: 0,
             flight_facing: None,
+            hyperspace_ready: false,
             autopilot: (game.autopilot.x, game.autopilot.y),
             combat_flags: game.glob_flags,
             date: (
@@ -120,6 +133,39 @@ impl CampaignView {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn hyperspace_readiness_excludes_stationary_transition_and_absent_flagship() {
+        use crate::battle::flags::{APPEARING, DISAPPEARING, NONSOLID, PLAYER_SHIP};
+        let mut world = World::new();
+        world.set_activity(515);
+        let mut kernel = Kernel::new();
+        assert!(!CampaignView::capture(&world, &kernel).hyperspace_ready);
+        kernel.reset_ship_capacity(0, 1);
+        kernel.reset_element_capacity(1);
+        let element = kernel.elements.alloc().unwrap();
+        let mut ships = kernel.ships(0);
+        let link = ships.alloc().unwrap();
+        let owner = ships.ship_id(link);
+        ships.put(link);
+        let pool = kernel.races[0].fixture_pool();
+        let key = pool.id_at(usize::from(owner.slot())).unwrap();
+        pool.get_mut(key).hShip = Some(element);
+        kernel.elements.fixture_record_mut(element).parent = crate::battle::Parent::Ship(owner);
+        kernel.elements.put(element);
+        for flags in [0, APPEARING, NONSOLID, DISAPPEARING] {
+            kernel.elements.fixture_record_mut(element).state_flags = (PLAYER_SHIP | flags) as u16;
+            let view = CampaignView::capture(&world, &kernel);
+            assert_eq!(view.velocity, (0, 0));
+            assert_eq!(view.hyperspace_ready, flags == 0);
+        }
+        world.set_activity(512);
+        assert!(!CampaignView::capture(&world, &kernel).hyperspace_ready);
+        world.set_activity(515);
+        kernel.elements.fixture_record_mut(element).state_flags = 0;
+        assert!(!CampaignView::capture(&world, &kernel).hyperspace_ready);
+        assert!(!CampaignView::from_world(&world).hyperspace_ready);
+    }
 
     #[test]
     fn capture_reads_flagship_facing_from_its_unpublished_kernel() {

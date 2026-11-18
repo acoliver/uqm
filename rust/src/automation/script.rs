@@ -4372,6 +4372,50 @@ mod tests {
     }
 
     #[test]
+    fn native_sis_plans_wait_for_flight_readiness_before_menu_input() {
+        for source in [
+            include_bytes!("../../native-scripts/sis-weapon-menu-cancel-v1.json").as_slice(),
+            include_bytes!("../../native-scripts/sis-cancel-starmap-cancel-v1.json").as_slice(),
+        ] {
+            let script = validate_script(parse_script(source, p()).unwrap(), p()).unwrap();
+            let stationary = script
+                .steps()
+                .iter()
+                .position(|action| matches!(action, Action::AssertHyperspaceStationary(_)))
+                .unwrap();
+            assert!(matches!(
+                script.steps()[stationary + 1],
+                Action::RecordHyperspacePosition(_)
+            ));
+            let departed = script
+                .steps()
+                .iter()
+                .position(|action| matches!(action, Action::NavigateToHyperspace(_)))
+                .unwrap();
+            let entry = script
+                .steps()
+                .iter()
+                .enumerate()
+                .skip(departed + 1)
+                .find(|(_, action)| {
+                    matches!(action, Action::TapMenuKey(_) | Action::TapPlayerKey(_))
+                })
+                .unwrap()
+                .0;
+            let wanted: crate::automation::campaign_state::StatePredicate = serde_json::from_str(
+                r#"{"all":[{"key":"hyper:stopped","op":"eq","value":1},{"key":"hyper:ready","op":"eq","value":1}]}"#
+            ).unwrap();
+            assert!(script.steps()[departed + 1..entry].iter().any(|action| {
+                matches!(action, Action::WaitForState(wait) if wait.predicate == wanted)
+            }));
+            assert!(
+                crate::automation::native_checkpoint::NativeCheckpointPlan::derive(source, &script)
+                    .is_ok()
+            );
+        }
+    }
+
+    #[test]
     fn native_pkunk_plan_never_runs_a_lifecycle_fixture() {
         let source = include_bytes!("../../native-scripts/native-pkunk-rebirth-v1.json");
         let script = validate_script(parse_script(source, p()).unwrap(), p()).unwrap();

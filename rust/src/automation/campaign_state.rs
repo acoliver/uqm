@@ -35,6 +35,8 @@ pub enum StateKey {
     HyperY,
     /// Whether the hyperspace flight velocity has reached zero on both axes.
     HyperStopped,
+    /// The flagship is present and no longer suppressing flight callbacks for a transition.
+    HyperReady,
     StarmapCursorX,
     StarmapCursorY,
     /// `GLOBAL_SIS(FuelOnBoard)`, raw fuel points.
@@ -70,6 +72,19 @@ pub enum StateKey {
 }
 
 impl StateKey {
+    fn navigation_key(text: &str) -> Option<Self> {
+        match text {
+            "star:current" => Some(Self::StarCurrent),
+            "hyper:x" => Some(Self::HyperX),
+            "hyper:y" => Some(Self::HyperY),
+            "hyper:stopped" => Some(Self::HyperStopped),
+            "hyper:ready" => Some(Self::HyperReady),
+            "starmap:cursor_x" => Some(Self::StarmapCursorX),
+            "starmap:cursor_y" => Some(Self::StarmapCursorY),
+            _ => None,
+        }
+    }
+
     /// Parse a script key.
     ///
     /// # Errors
@@ -103,6 +118,9 @@ impl StateKey {
                 .map(Self::EscortSpecies)
                 .ok_or_else(|| format!("invalid escort race '{text}'"));
         }
+        if let Some(key) = Self::navigation_key(text) {
+            return Ok(key);
+        }
         match text {
             "ending:won" => Ok(Self::Ending(0)),
             "ending:presentation_started" => Ok(Self::Ending(1)),
@@ -117,12 +135,6 @@ impl StateKey {
             "samatra:bomb_carrier" => Ok(Self::BossBombCarrier),
             "samatra:selected_species" => Ok(Self::BossSelectedSpecies),
             "activity" => Ok(Self::Activity),
-            "star:current" => Ok(Self::StarCurrent),
-            "hyper:x" => Ok(Self::HyperX),
-            "hyper:y" => Ok(Self::HyperY),
-            "hyper:stopped" => Ok(Self::HyperStopped),
-            "starmap:cursor_x" => Ok(Self::StarmapCursorX),
-            "starmap:cursor_y" => Ok(Self::StarmapCursorY),
             "escorts:count" => Ok(Self::EscortCount),
             "combat:cyborg" => Ok(Self::CyborgEnabled),
             "combat:speed" => Ok(Self::CombatSpeed),
@@ -140,7 +152,7 @@ impl StateKey {
             "battle:ships_p2" => Ok(Self::BattleShipsP2),
             _ => Err(format!(
                 "unknown state key '{text}'; use activity, sis:fuel|ru|crew|landers, \
-                 date:day|month|year, star:current, hyper:x|y|stopped, starmap:cursor_x|cursor_y, game:flagship_destroyed, battle:ships_p1|p2 or story:NAME"
+                 date:day|month|year, star:current, hyper:x|y|stopped|ready, starmap:cursor_x|cursor_y, game:flagship_destroyed, battle:ships_p1|p2 or story:NAME"
             )),
         }
     }
@@ -171,7 +183,8 @@ impl StateKey {
             Self::FlagshipDestroyed
             | Self::CyborgEnabled
             | Self::EncounterMenu
-            | Self::HyperStopped => 1,
+            | Self::HyperStopped
+            | Self::HyperReady => 1,
             Self::CombatSpeed => 3,
             Self::EscortCount | Self::EscortSpecies(_) => 12,
             Self::BattleShipsP1 | Self::BattleShipsP2 => u32::from(u8::MAX),
@@ -400,6 +413,26 @@ fn read_star_state(
     }
 }
 
+fn read_hyperspace_state(
+    world: &CampaignView,
+    ui: &super::ui_observation::UiObservation,
+    key: StateKey,
+) -> Option<u32> {
+    use crate::automation::input_ffi;
+    match key {
+        StateKey::HyperX => {
+            input_ffi::hyperspace_position(world).and_then(|(x, _)| u32::try_from(x).ok())
+        }
+        StateKey::HyperY => {
+            input_ffi::hyperspace_position(world).and_then(|(_, y)| u32::try_from(y).ok())
+        }
+        StateKey::HyperStopped => input_ffi::hyperspace_stopped(world, ui).map(u32::from),
+        StateKey::HyperReady => (world.activity as u8 == 3 && !ui.conversation_snapshot().active)
+            .then_some(u32::from(world.hyperspace_ready)),
+        _ => unreachable!(),
+    }
+}
+
 impl StateSource for LiveCampaign<'_> {
     fn read(&self, key: StateKey) -> Option<u32> {
         use crate::automation::{input_ffi, samatra::observe as boss_observation};
@@ -433,13 +466,9 @@ impl StateSource for LiveCampaign<'_> {
             StateKey::StarCurrent | StateKey::StarmapCursorX | StateKey::StarmapCursorY => {
                 read_star_state(world, self.ui, key)
             }
-            StateKey::HyperX => {
-                input_ffi::hyperspace_position(world).and_then(|(x, _)| u32::try_from(x).ok())
+            StateKey::HyperX | StateKey::HyperY | StateKey::HyperStopped | StateKey::HyperReady => {
+                read_hyperspace_state(world, self.ui, key)
             }
-            StateKey::HyperY => {
-                input_ffi::hyperspace_position(world).and_then(|(_, y)| u32::try_from(y).ok())
-            }
-            StateKey::HyperStopped => input_ffi::hyperspace_stopped(world, self.ui).map(u32::from),
             StateKey::Story(key) => world.story_value(key).map(u32::from),
             StateKey::Activity => Some(u32::from(world.activity)),
             StateKey::SisDrive(slot) => {
@@ -759,6 +788,7 @@ mod tests {
             ("hyper:x", i32::MAX as u32),
             ("hyper:y", i32::MAX as u32),
             ("hyper:stopped", 1),
+            ("hyper:ready", 1),
             ("starmap:cursor_x", 9999),
             ("starmap:cursor_y", 9999),
         ] {
@@ -782,6 +812,32 @@ mod tests {
                 .unwrap()],
             };
             assert!(too_wide.validate().is_err());
+        }
+    }
+
+    #[test]
+    fn hyperspace_ready_requires_live_flight_after_transition() {
+        let ui = super::super::ui_observation::UiObservation::default();
+        let mut world = empty_view();
+        let key = StateKey::parse("hyper:ready").unwrap();
+        for (activity, ready, expected) in [
+            (4, false, None),
+            (515, false, Some(0)),
+            (515, true, Some(1)),
+            (4, true, None),
+        ] {
+            world.activity = activity;
+            world.hyperspace_ready = ready;
+            assert_eq!(
+                LiveCampaign {
+                    ui: &ui,
+                    ending: Default::default(),
+                    world: &world,
+                    flagship_destroyed: false,
+                }
+                .read(key),
+                expected
+            );
         }
     }
 
