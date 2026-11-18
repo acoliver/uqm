@@ -166,8 +166,6 @@ mod api {
 
         use crate::engine::world::fleet::escorts_worth;
 
-        use crate::comm::comm_abi::enable_talking_anim;
-
         use crate::planets::cargo::draw_cargo;
 
         use crate::planets::cargo::show_capacity;
@@ -216,11 +214,7 @@ mod api {
                 self.cx.borrow_mut().with_legacy(crate::math::random)
             }
             fn talking_animation(&mut self, enabled: bool) {
-                let comm = &mut **self.comm.borrow_mut();
-                // SAFETY: the exclusive Cx loan publishes live game-thread UI and pacing owners.
-                self.cx.borrow_mut().with_legacy(|| unsafe {
-                    enable_talking_anim(comm, (u8::from(enabled)) as i32);
-                })
+                self.comm.borrow_mut().set_talking_animation(enabled);
             }
             fn mineral_amount(&self, category: usize) -> u16 {
                 self.cx.borrow().world.data.flagship.element_amounts[category]

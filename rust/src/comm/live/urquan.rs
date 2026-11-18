@@ -95,11 +95,9 @@ mod api {
         }
 
         fn intro_mode(&mut self, mode: i32, duration: u32) {
-            let comm = &mut **self.comm.borrow_mut();
-            self.cx.borrow_mut().with_legacy(|| {
-                use crate::comm::comm_abi::set_comm_intro_mode;
-                set_comm_intro_mode(comm, mode as u32, duration)
-            })
+            self.comm
+                .borrow_mut()
+                .set_intro_transition(crate::comm::CommIntroMode::from(mode as u32), duration);
         }
     }
 }

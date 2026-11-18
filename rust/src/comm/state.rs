@@ -409,6 +409,28 @@ impl Comm {
         self.intro_mode = mode;
     }
 
+    pub fn set_intro_transition(&mut self, mode: CommIntroMode, duration: u32) {
+        self.intro_mode = mode;
+        self.fade_time = duration;
+    }
+
+    pub(crate) fn set_talking_animation(&mut self, enabled: bool) {
+        if enabled {
+            self.data.definition.alien_talk_desc.anim_flags &= !16;
+        } else {
+            self.data.definition.alien_talk_desc.anim_flags |= 16;
+        }
+    }
+
+    pub(crate) fn set_ambient_animation(&mut self, index: usize, enabled: bool) {
+        let flags = &mut self.data.definition.alien_ambient_array[index].anim_flags;
+        if enabled {
+            *flags &= !super::races::script::ANIM_DISABLED;
+        } else {
+            *flags |= super::races::script::ANIM_DISABLED;
+        }
+    }
+
     /// Get fade time
     pub fn fade_time(&self) -> u32 {
         self.fade_time

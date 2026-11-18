@@ -456,18 +456,18 @@ fn talking_state_intro_mode_fade_and_input_pause_are_plain_settings() {
     assert_eq!(rust_is_talking_finished(comm), 0);
 
     for mode in 0..4 {
-        rust_set_comm_intro_mode(comm, mode);
-        assert_eq!(rust_get_comm_intro_mode(comm), mode);
+        comm.set_intro_mode(super::CommIntroMode::from(mode));
+        assert_eq!(comm.intro_mode() as u32, mode);
     }
-    rust_set_comm_intro_mode(comm, 77);
+    comm.set_intro_mode(super::CommIntroMode::from(77));
     assert_eq!(
-        rust_get_comm_intro_mode(comm),
+        comm.intro_mode() as u32,
         0,
         "unknown modes fall back to the default"
     );
 
-    rust_set_comm_fade_time(comm, 250);
-    assert_eq!(rust_get_comm_fade_time(comm), 250);
+    comm.set_fade_time(250);
+    assert_eq!(comm.fade_time(), 250);
 
     assert_eq!(rust_is_comm_input_paused(comm), 0);
     rust_set_comm_input_paused(comm, 1);
@@ -483,11 +483,11 @@ fn phrases_can_be_disabled_once_and_stay_disabled() {
     let comm = &mut owner;
     assert_eq!(rust_init_communication(comm), 1);
 
-    assert_eq!(rust_phrase_enabled(comm, 5), 1);
-    rust_disable_phrase(comm, 5);
-    assert_eq!(rust_phrase_enabled(comm, 5), 0);
+    assert_eq!(i32::from(comm.phrase_enabled(5)), 1);
+    comm.disable_phrase(5);
+    assert_eq!(i32::from(comm.phrase_enabled(5)), 0);
     assert_eq!(
-        rust_phrase_enabled(comm, 6),
+        i32::from(comm.phrase_enabled(6)),
         1,
         "other phrases are unaffected"
     );
@@ -625,15 +625,15 @@ fn state_accessors_use_safe_rust_signatures() {
     let _: fn(&mut Comm) -> c_int = rust_is_talking;
     let _: fn(&mut Comm) -> c_int = rust_is_talking_finished;
     let _: fn(&mut Comm, finished: c_int) = rust_set_talking_finished;
-    let _: fn(&mut Comm) -> c_uint = rust_get_comm_intro_mode;
-    let _: fn(&mut Comm, mode: c_uint) = rust_set_comm_intro_mode;
-    let _: fn(&mut Comm) -> c_uint = rust_get_comm_fade_time;
-    let _: fn(&mut Comm, time: c_uint) = rust_set_comm_fade_time;
+    let _: fn(&Comm) -> super::CommIntroMode = Comm::intro_mode;
+    let _: fn(&mut Comm, super::CommIntroMode) = Comm::set_intro_mode;
+    let _: fn(&Comm) -> u32 = Comm::fade_time;
+    let _: fn(&mut Comm, u32) = Comm::set_fade_time;
+    let _: fn(&Comm, i32) -> bool = Comm::phrase_enabled;
+    let _: fn(&mut Comm, i32) = Comm::disable_phrase;
     let _: fn(&mut Comm) -> c_int = rust_is_comm_input_paused;
     let _: fn(&mut Comm, paused: c_int) = rust_set_comm_input_paused;
     let _: fn(&mut Comm, delta_time: f32) = rust_update_communication;
-    let _: fn(&mut Comm, index: c_int) -> c_int = rust_phrase_enabled;
-    let _: fn(&mut Comm, index: c_int) = rust_disable_phrase;
     let _: fn(&mut Comm, segue: c_uint) = rust_set_segue;
     let _: fn(&mut Comm) -> c_uint = rust_get_segue;
     let _: fn(&mut Comm) -> c_uint = rust_get_battle_segue;

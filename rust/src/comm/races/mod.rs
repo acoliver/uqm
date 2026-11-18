@@ -11,7 +11,7 @@
 //! - `Response` → `rust_DoResponsePhrase` (FFI to Rust response system)
 //! - `GET_GAME_STATE`/`SET_GAME_STATE` → Rust game state singleton (P09)
 //! - `setSegue`/`getSegue` → Rust `comm::state::Comm`
-//! - `PHRASE_ENABLED`/`DISABLE_PHRASE` → `rust_phrase_enabled`/`rust_disable_phrase`
+//! - `PHRASE_ENABLED`/`DISABLE_PHRASE` → `Comm::phrase_enabled`/`Comm::disable_phrase`
 //!
 //! @plan PLAN-20260724-MAINLOOP-AND-COMM.P12-P15
 

@@ -52,9 +52,7 @@ mod api {
                 self.comm.borrow().race_scratch.slyland_choices
             }
             fn remember_choices(&mut self, choices: [u16; 5]) {
-                self.cx.borrow_mut().with_legacy(|| {
-                    self.comm.borrow_mut().race_scratch.slyland_choices = choices;
-                })
+                self.comm.borrow_mut().race_scratch.slyland_choices = choices;
             }
             fn position(&self) -> (i32, i32, i32, i32) {
                 let cx = self.cx.borrow();

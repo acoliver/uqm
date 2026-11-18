@@ -1425,8 +1425,8 @@ fn comm_intro_transition(_comm: &mut Comm) {
         const FADE_ALL_TO_COLOR: u32 = 253;
 
         // Ported from c_CommIntroTransition in rust_comm.c
-        let mode = crate::comm::ffi::rust_get_comm_intro_mode(_comm);
-        let fade_time = crate::comm::ffi::rust_get_comm_fade_time(_comm);
+        let mode = _comm.intro_mode() as u32;
+        let fade_time = _comm.fade_time();
 
         // CIM_DEFAULT from comm.h
         const CIM_DEFAULT: c_uint = 0;
@@ -1485,7 +1485,7 @@ fn comm_intro_transition(_comm: &mut Comm) {
             }
         }
 
-        crate::comm::ffi::rust_set_comm_intro_mode(_comm, CIM_DEFAULT);
+        _comm.set_intro_mode(crate::comm::CommIntroMode::from(CIM_DEFAULT));
     }
 }
 
