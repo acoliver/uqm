@@ -307,66 +307,55 @@ pub(crate) mod live {
         }
     }
 
-    unsafe fn init_published_ships() -> i16 {
-        use crate::ships::native::abi::{ScreenHeight, ScreenWidth};
-        crate::app::bridge::enter(|cx| {
-            let players = init_ships(
-                cx,
-                (ScreenWidth - 64) as i16,
-                ScreenHeight as i16,
-                cx.kernel.configuration.preferences().melee_scale == 0,
-            );
-            if players == 1 {
-                crate::navigation::hyper_data::load_hyperspace(cx, |cx, operation| {
-                    use crate::navigation::hyper_data::EntryDisplay;
-                    if let EntryDisplay::Palette(quasispace) = operation {
+    pub fn init_battle_ships(cx: &mut crate::engine::battle::Cx<'_>) -> i16 {
+        let (width, height) = cx.screen_dimensions();
+        let players = init_ships(
+            cx,
+            (width - 64) as i16,
+            height as i16,
+            cx.kernel.configuration.preferences().melee_scale == 0,
+        );
+        if players == 1 {
+            crate::navigation::hyper_data::load_hyperspace(cx, |cx, operation| {
+                use crate::navigation::hyper_data::EntryDisplay;
+                if let EntryDisplay::Palette(quasispace) = operation {
+                    // SAFETY: load_hyperspace retains the palette tables on the supplied Kernel.
+                    unsafe {
                         crate::engine::battle::hyperspace::select_palette(cx.kernel, quasispace);
-                        return;
                     }
-                    let dimensions = cx.screen_dimensions();
-                    match operation {
-                        EntryDisplay::RepairBorder => crate::ui::sis::repair_sis_border(
-                            cx.kernel,
-                            (dimensions.0, dimensions.1),
-                        ),
-                        EntryDisplay::DrawFrame => {
-                            crate::ui::border::draw_sis_frame(cx.kernel, cx.world, dimensions)
-                        }
-                        EntryDisplay::DrawGauges => crate::ui::sis::clear_sis_rect(
-                            cx.kernel,
-                            cx.world,
-                            (dimensions.0, dimensions.1),
-                            crate::navigation::abi::DRAW_SIS_DISPLAY as u8,
-                        ),
-                        EntryDisplay::ClearMessage => crate::ui::sis::draw_campaign_message(
-                            cx.kernel,
-                            cx.world,
-                            dimensions.0,
-                            None,
-                        ),
-                        EntryDisplay::ClearRadar => crate::ui::sis::clear_sis_rect(
-                            cx.kernel,
-                            cx.world,
-                            (dimensions.0, dimensions.1),
-                            crate::navigation::abi::CLEAR_SIS_RADAR as u8,
-                        ),
-                        EntryDisplay::Palette(_) => unreachable!(),
-                    };
-                });
-            }
-            players
-        })
-    }
-
-    #[no_mangle]
-    pub extern "C" fn InitShips() -> i16 {
-        // SAFETY: this existing ABI entry runs with a published game-thread context before battle.
-        unsafe { init_published_ships() }
-    }
-    #[no_mangle]
-    pub extern "C" fn UninitShips() {
-        // SAFETY: the battle loop has relinquished Cx before this teardown entry.
-        unsafe { crate::app::bridge::enter(uninit_ships) }
+                    return;
+                }
+                let dimensions = cx.screen_dimensions();
+                match operation {
+                    EntryDisplay::RepairBorder => {
+                        crate::ui::sis::repair_sis_border(cx.kernel, (dimensions.0, dimensions.1))
+                    }
+                    EntryDisplay::DrawFrame => {
+                        crate::ui::border::draw_sis_frame(cx.kernel, cx.world, dimensions)
+                    }
+                    EntryDisplay::DrawGauges => crate::ui::sis::clear_sis_rect(
+                        cx.kernel,
+                        cx.world,
+                        (dimensions.0, dimensions.1),
+                        crate::navigation::abi::DRAW_SIS_DISPLAY as u8,
+                    ),
+                    EntryDisplay::ClearMessage => crate::ui::sis::draw_campaign_message(
+                        cx.kernel,
+                        cx.world,
+                        dimensions.0,
+                        None,
+                    ),
+                    EntryDisplay::ClearRadar => crate::ui::sis::clear_sis_rect(
+                        cx.kernel,
+                        cx.world,
+                        (dimensions.0, dimensions.1),
+                        crate::navigation::abi::CLEAR_SIS_RADAR as u8,
+                    ),
+                    EntryDisplay::Palette(_) => unreachable!(),
+                };
+            });
+        }
+        players
     }
 }
 
