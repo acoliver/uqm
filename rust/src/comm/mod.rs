@@ -17,7 +17,9 @@
 //! The comm system is mostly single-threaded but stream callbacks
 //! come from the audio thread. Shared state is protected by Mutex.
 
-pub mod animation;
+mod assets;
+#[cfg(test)]
+mod assets_tests;
 pub(crate) mod comm_abi;
 mod commanim_abi;
 mod commglue_abi;
@@ -36,7 +38,6 @@ pub mod locdata;
 mod oscill_abi;
 pub mod oscilloscope;
 pub mod phrase_state;
-pub mod player_font;
 mod presentation;
 pub mod races;
 pub mod response;
@@ -57,7 +58,6 @@ pub mod types;
 
 pub use races::descriptor::{AnimationDescriptor, MAX_ANIMATIONS};
 
-pub use animation::{AnimContext, CommAnimState};
 pub use oscilloscope::Oscilloscope;
 pub use response::{ResponseEntry, ResponseSystem};
 pub use state::Comm;

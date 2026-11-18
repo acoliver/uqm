@@ -8,6 +8,7 @@
 //! @requirement REQ-ML-007, REQ-COMM-DISPATCH
 
 mod encounter;
+pub(super) use encounter::finish_callbacks;
 mod routing;
 use crate::comm::Comm;
 
@@ -444,10 +445,9 @@ fn run_encounter(
         }
     };
     if status == HAIL {
-        // SAFETY: the loaded descriptor and resources remain live for the synchronous session.
-        unsafe { crate::comm::hail::hail_alien(comm, cx, io) };
+        crate::comm::hail::hail_alien(comm, cx, io);
     } else {
-        encounter::finish_unhailed(comm, cx);
+        encounter::finish_callbacks(comm, cx);
     }
     let status = encounter::fight_if_selected(cx, io);
     let runtime = cx.kernel.input_runtime();

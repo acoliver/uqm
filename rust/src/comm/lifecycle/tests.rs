@@ -59,7 +59,6 @@ fn host_lifecycle_runs_each_registered_race() {
                 first.definition.alien_frame_res,
                 second.definition.alien_frame_res
             );
-            assert!(first.alien_frame.is_null());
             let entry = &LIFECYCLES[kind as usize];
             assert!(std::ptr::fn_addr_eq(
                 first.init_encounter_func.unwrap(),

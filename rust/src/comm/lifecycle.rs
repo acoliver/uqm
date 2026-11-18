@@ -314,7 +314,6 @@ pub(super) fn session(comm: &mut Comm, cx: &mut Cx<'_>, kind: DialogueKind) -> S
         init_encounter_func: Some(entry.intro),
         post_encounter_func: Some(entry.post),
         uninit_encounter_func: Some(entry.uninit),
-        ..SessionData::default()
     }
 }
 

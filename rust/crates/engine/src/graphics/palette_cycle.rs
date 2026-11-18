@@ -15,9 +15,9 @@ impl PaletteCycle {
             entry: NonNull::new(entry).unwrap_or_else(|| panic!("palette table has no entries")),
         })
     }
-    pub fn apply(&self) {
+    fn bytes(&self, entry: NonNull<StringTableEntry>) -> &[u8] {
         // SAFETY: this owner keeps the table and its selected binary entry allocated.
-        let entry = unsafe { self.entry.as_ref() };
+        let entry = unsafe { entry.as_ref() };
         let length = usize::try_from(entry.length)
             .unwrap_or_else(|e| panic!("invalid palette entry length: {e}"));
         assert!(length >= 2, "palette range is truncated");
@@ -27,8 +27,29 @@ impl PaletteCycle {
         assert!(bytes[0] <= bytes[1], "palette range is reversed");
         let required = 2 + (usize::from(bytes[1]) - usize::from(bytes[0]) + 1) * 256 * 3;
         assert!(bytes.len() >= required, "palette colors are truncated");
-        // SAFETY: the entry contains its complete palette range, validated above.
-        unsafe { super::cmap_abi::SetColorMap(bytes.as_ptr()) };
+        bytes
+    }
+    pub fn apply(&self) {
+        // SAFETY: the retained entry contains the validated complete palette range.
+        unsafe { super::cmap_abi::SetColorMap(self.bytes(self.entry).as_ptr()) };
+    }
+    pub fn select(&mut self, index: u16) {
+        // SAFETY: absolute indexing wraps within the owned table.
+        self.entry = NonNull::new(unsafe {
+            string_table::SetAbsStringTableIndex(self.entry.as_ptr(), index)
+        })
+        .unwrap_or_else(|| panic!("palette table has no entries"));
+    }
+    pub fn transform(&self, index: u16, duration: i16) -> u32 {
+        // SAFETY: absolute indexing stays in this owned binary table.
+        let entry = unsafe { string_table::SetAbsStringTableIndex(self.entry.as_ptr(), index) };
+        let entry = NonNull::new(entry).unwrap_or_else(|| panic!("palette table has no entries"));
+        // SAFETY: the complete validated target is copied into the transform before this borrow ends.
+        unsafe { super::cmap_abi::XFormColorMap(self.bytes(entry).as_ptr(), duration) }
+    }
+    pub fn step_transforms() -> u32 {
+        // SAFETY: active transforms own their target bytes.
+        unsafe { super::cmap_abi::XFormColorMap_step() }
     }
     pub fn advance(&mut self) {
         // SAFETY: relative indexing stays inside this retained table and wraps at its ends.

@@ -5,12 +5,7 @@ use crate::comm::Comm;
 use crate::engine::StoryKey;
 use std::ffi::CString;
 
-use crate::strings::string_table::SetAbsStringTableIndex;
 use crate::ui::sis::draw_landers;
-
-use crate::graphics::cmap_abi::GetColorMapAddress;
-
-use crate::graphics::cmap_abi::XFormColorMap;
 
 use crate::comm::comm_abi::alien_talk_segue;
 
@@ -142,11 +137,15 @@ impl<H> DialogueHost<H> for Host<'_, '_, H> {
     fn palette(&mut self, index: u16) {
         let comm = &mut **self.comm.borrow_mut();
 
-        // SAFETY: the session retains the loaded colormap throughout this indexed lookup.
-        self.cx.borrow_mut().with_legacy(|| unsafe {
-            comm.data.alien_colormap =
-                (SetAbsStringTableIndex((comm.data.alien_colormap).cast(), index)).cast()
-        })
+        if let Some(palette) = &mut comm
+            .display
+            .assets
+            .as_mut()
+            .unwrap_or_else(|| panic!("conversation assets not loaded"))
+            .palette
+        {
+            palette.select(index);
+        }
     }
 
     fn talk_segue(&mut self, track: u16) {
@@ -164,11 +163,9 @@ impl<H> DialogueHost<H> for Host<'_, '_, H> {
     fn fade_palette(&mut self, index: u16, duration: i16) {
         let comm = &mut **self.comm.borrow_mut();
 
-        // SAFETY: the session retains the colormap; the synchronous transform consumes its current map.
-        self.cx.borrow_mut().with_legacy(|| unsafe {
-            let map = SetAbsStringTableIndex((comm.data.alien_colormap).cast(), index);
-            XFormColorMap(GetColorMapAddress(map), duration);
-        })
+        if let Some(palette) = &comm.assets().palette {
+            palette.transform(index, duration);
+        }
     }
 }
 

@@ -220,20 +220,7 @@ fn frame_index(d: &AnimationDescriptor, from: u16, random: &mut impl FnMut() -> 
 
 pub(crate) mod runtime {
     use super::*;
-    use crate::comm::locdata::{CPoint, CStamp};
-
-    use crate::graphics::cmap_abi::GetColorMapAddress;
-
-    use crate::graphics::cmap_abi::XFormColorMap;
-
-    use crate::graphics::cmap_abi::XFormColorMap_step;
-
-    use crate::graphics::frame_abi::DrawStamp;
-    use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
-
-    use crate::graphics::pixmap_abi::SetAbsFrameIndex;
-
-    use crate::strings::string_table::SetAbsStringTableIndex;
+    use crate::graphics::{native_abi::POINT, palette_cycle::PaletteCycle};
     use crate::time::counter_abi::GetTimeCounter;
 
     const EMPTY_DESC: AnimationDescriptor = AnimationDescriptor {
@@ -271,9 +258,11 @@ pub(crate) mod runtime {
         crate::math::random()
     }
 
-    /// # Safety
-    /// CommData must be initialized and exclusively owned by the game thread.
-    pub unsafe fn init_comm_animations(comm: &mut Comm) {
+    pub fn init_comm_animations(comm: &mut Comm) {
+        initialize_at(comm, GetTimeCounter(), &mut random);
+    }
+
+    pub(crate) fn initialize_at(comm: &mut Comm, now: u32, random: &mut impl FnMut() -> u32) {
         comm.animation_runtime.active_mask = 0;
         comm.animation_runtime.talk_desc = comm.data.definition.alien_talk_desc;
         comm.animation_runtime.transit_desc = comm.data.definition.alien_transition_desc;
@@ -283,20 +272,65 @@ pub(crate) mod runtime {
         comm.animation_runtime.sequences[1] = Sequence::EMPTY;
         for i in 0..usize::from(comm.data.definition.num_animations) {
             comm.animation_runtime.sequences[i + 2] =
-                Sequence::setup_ambient(&comm.data.definition.alien_ambient_array[i], &mut random);
+                Sequence::setup_ambient(&comm.data.definition.alien_ambient_array[i], random);
         }
         comm.animation_runtime.total = 2 + comm.data.definition.num_animations;
-        comm.animation_runtime.last_time = GetTimeCounter();
+        comm.animation_runtime.last_time = now;
     }
 
-    /// # Safety
-    /// Called from the game thread with initialized animations and graphics.
-    pub unsafe fn process_comm_animations(comm: &mut Comm, mut full: i32, paused: i32) -> i32 {
+    pub fn process_comm_animations(comm: &mut Comm, mut full: i32, paused: i32) -> i32 {
         if paused != 0 {
-            XFormColorMap_step();
+            PaletteCycle::step_transforms();
             return 0;
         }
-        let now = GetTimeCounter();
+        let next_mask = advance_at(comm, GetTimeCounter(), &mut random);
+        let context = comm.animation_context();
+        context.with_batch(|| {
+            if PaletteCycle::step_transforms() != 0 {
+                full = 1;
+            }
+            for i in 0..usize::from(comm.data.definition.num_animations) {
+                let sequence = &mut comm.animation_runtime.sequences[i + 2];
+                let descriptor = &comm.data.definition.alien_ambient_array[i];
+                if descriptor.anim_flags & DISABLED != 0
+                    || sequence.kind != 1
+                    || sequence.change == 0
+                {
+                    continue;
+                }
+                if let Some(palette) = &comm
+                    .display
+                    .assets
+                    .as_ref()
+                    .unwrap_or_else(|| panic!("conversation assets not loaded"))
+                    .palette
+                {
+                    palette.transform(
+                        descriptor.start_index.wrapping_add(sequence.current),
+                        sequence.alarm.wrapping_sub(1) as i16,
+                    );
+                }
+                sequence.change = 0;
+            }
+            let change = draw_alien_frame(comm, comm.animation_runtime.total, full);
+            for i in 0..usize::from(comm.data.definition.num_animations) {
+                let descriptor = &mut comm.data.definition.alien_ambient_array[i];
+                if descriptor.anim_flags & DISABLED == 0
+                    && descriptor.anim_flags & INTRO != 0
+                    && next_mask & (1 << i) == 0
+                {
+                    descriptor.anim_flags |= DISABLED;
+                }
+            }
+            if full != 0 {
+                1
+            } else {
+                change
+            }
+        })
+    }
+
+    pub(crate) fn advance_at(comm: &mut Comm, now: u32, random: &mut impl FnMut() -> u32) -> u32 {
         let elapsed = now.wrapping_sub(comm.animation_runtime.last_time);
         comm.animation_runtime.last_time = now;
         let mut next_mask = comm.animation_runtime.active_mask;
@@ -322,9 +356,9 @@ pub(crate) mod runtime {
                     "Check animations' mutual blocking masks"
                 );
                 assert!(s.neutral(d));
-                s.alarm = restart_rate(d, &mut random) + 1;
+                s.alarm = restart_rate(d, random) + 1;
                 continue;
-            } else if s.advance_ambient(d, &mut random) {
+            } else if s.advance_ambient(d, random) {
                 comm.animation_runtime.active_mask |= bit;
                 next_mask |= bit;
             } else {
@@ -340,44 +374,16 @@ pub(crate) mod runtime {
             }
         }
         comm.animation_runtime.active_mask = next_mask;
-        process_talking(comm, elapsed, can_talk);
-        BatchGraphics();
-        if XFormColorMap_step() != 0 {
-            full = 1;
-        }
-        for i in 0..usize::from(comm.data.definition.num_animations) {
-            let s = &mut comm.animation_runtime.sequences[i + 2];
-            let d = &comm.data.definition.alien_ambient_array[i];
-            if d.anim_flags & DISABLED != 0 || s.kind != 1 || s.change == 0 {
-                continue;
-            }
-            XFormColorMap(
-                GetColorMapAddress(SetAbsStringTableIndex(
-                    (comm.data.alien_colormap).cast(),
-                    d.start_index.wrapping_add(s.current),
-                )),
-                s.alarm.wrapping_sub(1) as i16,
-            );
-            s.change = 0;
-        }
-        let mut change = draw_alien_frame(comm, comm.animation_runtime.total, full);
-        if full != 0 {
-            change = 1;
-        }
-        UnbatchGraphics();
-        for i in 0..usize::from(comm.data.definition.num_animations) {
-            let d = &mut comm.data.definition.alien_ambient_array[i];
-            if d.anim_flags & DISABLED != 0 {
-                continue;
-            }
-            if d.anim_flags & INTRO != 0 && next_mask & (1 << i) == 0 {
-                d.anim_flags |= DISABLED;
-            }
-        }
-        change
+        process_talking(comm, elapsed, can_talk, random);
+        next_mask
     }
 
-    fn process_talking(comm: &mut Comm, elapsed: u32, can_talk: bool) {
+    fn process_talking(
+        comm: &mut Comm,
+        elapsed: u32,
+        can_talk: bool,
+        random: &mut impl FnMut() -> u32,
+    ) {
         let flags = comm.data.definition.alien_talk_desc.anim_flags;
         if can_talk
             && comm.data.definition.alien_talk_desc.num_frames > 0
@@ -397,14 +403,14 @@ pub(crate) mod runtime {
                     &mut comm.animation_runtime.transit_desc,
                     elapsed,
                     &mut comm.data.definition.alien_transition_desc,
-                    &mut random,
+                    random,
                 );
             } else if flags & DONE == 0 {
                 comm.animation_runtime.sequences[1].advance_talk(
                     &mut comm.animation_runtime.talk_desc,
                     elapsed,
                     comm.data.definition.alien_talk_desc,
-                    &mut random,
+                    random,
                 );
             } else {
                 comm.animation_runtime.sequences[1].reset();
@@ -418,56 +424,51 @@ pub(crate) mod runtime {
         }
     }
 
-    /// # Safety
-    /// Sequence array, CommData, and drawing context must be live and exclusive.
-    pub unsafe fn draw_alien_frame(comm: &mut Comm, count: u16, full: i32) -> i32 {
+    pub fn draw_alien_frame(comm: &mut Comm, count: u16, full: i32) -> i32 {
+        let context = comm.animation_context();
+        let frame = comm.assets().frame.lease().context_frame(0);
         let mut change = 0;
-        BatchGraphics();
-        let mut stamp = CStamp {
-            origin: CPoint { x: 0, y: 0 },
-            frame: comm.data.alien_frame,
-        };
-        if full != 0 {
-            DrawStamp((&raw mut stamp).cast());
-            for i in (0..usize::from(comm.data.definition.num_animations)).rev() {
-                let descriptor = &raw mut comm.data.definition.alien_ambient_array[i];
-                let d = &mut *descriptor;
-                if d.anim_flags & (RANDOM | CIRCULAR | YOYO) != 0 {
-                    continue;
-                }
-                d.anim_flags |= DISABLED;
-                if d.anim_flags & COLOR == 0 {
-                    stamp.frame =
-                        (SetAbsFrameIndex((comm.data.alien_frame).cast(), d.start_index)).cast();
-                    DrawStamp((&raw mut stamp).cast());
+        context.with_batch(|| {
+            if full != 0 {
+                context.draw_stamp(&frame, POINT { x: 0, y: 0 });
+                for descriptor in comm.data.definition.alien_ambient_array
+                    [..usize::from(comm.data.definition.num_animations)]
+                    .iter_mut()
+                    .rev()
+                {
+                    if descriptor.anim_flags & (RANDOM | CIRCULAR | YOYO) != 0 {
+                        continue;
+                    }
+                    descriptor.anim_flags |= DISABLED;
+                    if descriptor.anim_flags & COLOR == 0 {
+                        context.draw_stamp(
+                            &frame.wrapped_frame(descriptor.start_index),
+                            POINT { x: 0, y: 0 },
+                        );
+                    }
                 }
             }
-        }
-        {
             for i in (0..usize::from(count)).rev() {
-                let s = &mut comm.animation_runtime.sequences[i];
-                let d = match i {
+                let sequence = &mut comm.animation_runtime.sequences[i];
+                let descriptor = match i {
                     0 => &comm.animation_runtime.transit_desc,
                     1 => &comm.animation_runtime.talk_desc,
                     _ => &comm.data.definition.alien_ambient_array[i - 2],
                 };
-                if d.anim_flags & DISABLED != 0 || s.kind != 0 {
+                if descriptor.anim_flags & DISABLED != 0
+                    || sequence.kind != 0
+                    || (full == 0 && sequence.change == 0)
+                {
                     continue;
                 }
-                if full == 0 && s.change == 0 {
-                    continue;
-                }
-                stamp.frame = (SetAbsFrameIndex(
-                    (comm.data.alien_frame).cast(),
-                    d.start_index.wrapping_add(s.current),
-                ))
-                .cast();
-                DrawStamp((&raw mut stamp).cast());
-                s.change = 0;
+                context.draw_stamp(
+                    &frame.wrapped_frame(descriptor.start_index.wrapping_add(sequence.current)),
+                    POINT { x: 0, y: 0 },
+                );
+                sequence.change = 0;
                 change = 1;
             }
-        }
-        UnbatchGraphics();
+        });
         change
     }
 }
@@ -617,17 +618,12 @@ mod owner_tests {
         first.data.definition.num_animations = 1;
         first.data.definition.alien_ambient_array[0].num_frames = 1;
         first.data.definition.alien_ambient_array[0].anim_flags = CIRCULAR;
-        unsafe {
-            runtime::init_comm_animations(&mut first);
-        }
+        runtime::init_comm_animations(&mut first);
         first.animation_runtime.last_time = 17;
         let mut moved = Box::new(first);
         assert_eq!(moved.animation_runtime.total, 3);
         assert_eq!(second.animation_runtime.total, 0);
-        assert_eq!(
-            unsafe { runtime::process_comm_animations(&mut moved, 0, 1) },
-            0
-        );
+        assert_eq!(runtime::process_comm_animations(&mut moved, 0, 1), 0);
         assert_eq!(moved.animation_runtime.last_time, 17);
         assert_eq!(moved.animation_runtime.total, 3);
     }
@@ -654,7 +650,10 @@ mod supplied_tests {
         comm.data.definition.alien_ambient_array[0].block_mask = 2;
         comm.data.definition.alien_ambient_array[1].block_mask = 1;
         let mut calls = 0;
-        let mut rng = || { calls += 1; 0 };
+        let mut rng = || {
+            calls += 1;
+            0
+        };
         runtime::initialize_at(&mut comm, u32::MAX - 2, &mut rng);
         runtime::advance_at(&mut comm, 2, &mut rng);
         assert_eq!(comm.animation_runtime.active_mask, 1);
@@ -664,6 +663,6 @@ mod supplied_tests {
         runtime::advance_at(&mut comm, 5, &mut rng);
         assert_eq!(comm.animation_runtime.sequences[2].current, 0);
         assert_eq!(comm.animation_runtime.last_time, 5);
-        assert_eq!(calls, 5);
+        assert_eq!(calls, 4);
     }
 }

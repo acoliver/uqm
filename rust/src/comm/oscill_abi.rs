@@ -6,173 +6,152 @@ fn button_y(y: i32, button_height: i16, slider_height: i16) -> i16 {
 
 pub(crate) mod runtime {
     use super::button_y;
-    use crate::comm::locdata::{CColor, CPoint, CStamp};
     use crate::comm::Comm;
-    use crate::graphics::context_abi::{SetContext, SetContextClipRect, SetContextForeGroundColor};
-    use crate::graphics::drawable_abi::{GetFramePixel, SetContextFGFrame};
-    use crate::graphics::frame_abi::{DrawLine, DrawStamp};
-    use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
-    use crate::graphics::native_abi::{frame_desc, line as Line};
-    use crate::sound::heart_ffi::get_track_position as GetTrackPosition;
-    use crate::sound::heart_ffi::GraphForegroundStream;
-    use std::ptr::null_mut;
-
-    const EMPTY_STAMP: CStamp = CStamp {
-        origin: CPoint { x: 0, y: 0 },
-        frame: null_mut(),
+    use crate::graphics::{
+        context_abi::{ContextFrame, ContextLease},
+        native_abi::{Color, POINT},
     };
 
+    #[derive(Default)]
     pub(crate) struct RuntimeState {
-        pub(crate) scope_frame: *mut frame_desc,
-        pub(crate) scope_init: bool,
-        pub(crate) scope_work: *mut frame_desc,
-        pub(crate) scope_color: CColor,
+        pub(crate) scope_frame: Option<ContextFrame>,
+        pub(crate) scope_work: Option<ContextFrame>,
+        pub(crate) scope_color: Color,
         pub(crate) scope_width: i16,
         pub(crate) scope_height: i16,
-        pub(crate) slider: CStamp,
-        pub(crate) button: CStamp,
+        pub(crate) slider: Option<ContextFrame>,
+        pub(crate) button: Option<ContextFrame>,
+        pub(crate) slider_origin: POINT,
+        pub(crate) button_origin: POINT,
         pub(crate) slider_changed: bool,
-        pub(crate) last_offset: i32,
+        pub(crate) last_offset: Option<i32>,
         pub(crate) slider_space: i32,
     }
-    impl Default for RuntimeState {
-        fn default() -> Self {
-            Self {
-                scope_frame: null_mut(),
-                scope_init: false,
-                scope_work: null_mut(),
-                scope_color: CColor {
-                    r: 0,
-                    g: 0,
-                    b: 0,
-                    a: 0,
-                },
-                scope_width: 0,
-                scope_height: 0,
-                slider: EMPTY_STAMP,
-                button: EMPTY_STAMP,
-                slider_changed: false,
-                last_offset: -1,
-                slider_space: 0,
-            }
-        }
-    }
-    /// # Safety
-    /// Called on the graphics thread with a live background frame.
-    pub unsafe fn init_oscilloscope(comm: &mut Comm, background: *mut frame_desc) {
-        comm.scope.scope_frame = background;
-        if !comm.scope.scope_init {
-            let size = (*background).Bounds;
-            comm.scope.scope_color = GetFramePixel(
-                background,
-                CPoint {
-                    x: size.width / 2,
-                    y: size.height / 2,
-                },
-            );
+
+    pub fn init_oscilloscope(comm: &mut Comm, background: ContextFrame) {
+        if comm.scope.scope_work.is_none() {
+            let size = background.rect().extent;
+            comm.scope.scope_color = background.pixel(POINT {
+                x: size.width / 2,
+                y: size.height / 2,
+            });
             comm.scope.scope_color.a = 255;
-            comm.scope.scope_work = comm
-                .presentation
-                .scope_buffer_frame(size.width, size.height);
+            comm.scope.scope_work = Some(
+                comm.presentation
+                    .scope_buffer_frame(size.width, size.height),
+            );
             comm.scope.scope_width = size.width - 2;
             comm.scope.scope_height = size.height - 2;
-            comm.scope.scope_init = true;
         }
+        comm.scope.scope_frame = Some(background);
     }
 
-    /// # Safety
-    /// Oscilloscope and graphics contexts must be initialized.
-    pub unsafe fn draw_oscilloscope(comm: &mut Comm) {
+    pub fn draw_oscilloscope(comm: &mut Comm) {
         if !comm.options.oscilloscope {
             return;
         }
         let mut data = [0u8; 128];
         assert!(comm.scope.scope_width as usize <= data.len());
         assert!(comm.scope.scope_height < 256);
-        let mut stamp = EMPTY_STAMP;
-        if GraphForegroundStream(
-            data.as_mut_ptr(),
-            comm.scope.scope_width.into(),
-            comm.scope.scope_height.into(),
-            comm.presentation.using_speech as i32,
-        ) != 0
-        {
-            let old = SetContext(comm.presentation.off_screen_context);
-            SetContextFGFrame(comm.scope.scope_work);
-            SetContextClipRect(std::ptr::null_mut());
-            stamp.frame = comm.scope.scope_frame.cast();
-            DrawStamp((&raw mut stamp).cast());
-            SetContextForeGroundColor(comm.scope.scope_color);
-            for i in 0..i32::from(comm.scope.scope_width) - 1 {
-                DrawLine(&mut Line {
-                    first: CPoint {
-                        x: (i + 1) as i16,
-                        y: i16::from(data[i as usize]) + 1,
-                    },
-                    second: CPoint {
-                        x: (i + 2) as i16,
-                        y: i16::from(data[i as usize + 1]) + 1,
-                    },
-                });
-            }
-            SetContext(old);
-            stamp.frame = comm.scope.scope_work.cast();
+        let background = comm
+            .scope
+            .scope_frame
+            .as_ref()
+            .unwrap_or_else(|| panic!("oscilloscope not initialized"));
+        let waveform = crate::sound::stream::graph_foreground_stream(
+            &mut data,
+            comm.scope.scope_width as usize,
+            comm.scope.scope_height as usize,
+            comm.presentation.using_speech != 0,
+        ) != 0;
+        let frame = if waveform {
+            let context = ContextLease::require(comm.presentation.off_screen_context);
+            let work = comm
+                .scope
+                .scope_work
+                .as_ref()
+                .unwrap_or_else(|| panic!("oscilloscope buffer not initialized"));
+            context.set_frame(work.clone());
+            context.clear_clip();
+            context.with_selected(|| {
+                context.draw_stamp(background, POINT { x: 0, y: 0 });
+                context.set_foreground(comm.scope.scope_color);
+                for i in 0..i32::from(comm.scope.scope_width) - 1 {
+                    context.draw_line(
+                        comm.scope.scope_color,
+                        POINT {
+                            x: (i + 1) as i16,
+                            y: i16::from(data[i as usize]) + 1,
+                        },
+                        POINT {
+                            x: (i + 2) as i16,
+                            y: i16::from(data[i as usize + 1]) + 1,
+                        },
+                    );
+                }
+            });
+            work
         } else {
-            stamp.frame = comm.scope.scope_frame.cast();
-        }
-        DrawStamp((&raw mut stamp).cast());
+            background
+        };
+        let context = ContextLease::require(comm.presentation.radar_context);
+        context.draw_stamp(frame, POINT { x: 0, y: 0 });
     }
 
-    /// # Safety
-    /// Frames must be live; called only on the graphics thread.
-    pub unsafe fn init_slider(
+    pub fn init_slider(
         comm: &mut Comm,
         x: i32,
         y: i32,
         width: i32,
-        slider: *mut frame_desc,
-        button: *mut frame_desc,
+        slider: ContextFrame,
+        button: ContextFrame,
     ) {
-        let slider_size = (*slider).Bounds;
-        let button_size = (*button).Bounds;
-        comm.scope.slider = CStamp {
-            origin: CPoint {
-                x: x as i16,
-                y: y as i16,
-            },
-            frame: slider.cast(),
+        let slider_size = slider.rect().extent;
+        let button_size = button.rect().extent;
+        comm.scope.slider = Some(slider);
+        comm.scope.button = Some(button);
+        comm.scope.slider_origin = POINT {
+            x: x as i16,
+            y: y as i16,
         };
-        comm.scope.button = CStamp {
-            origin: CPoint {
-                x: x as i16,
-                y: button_y(y, button_size.height, slider_size.height),
-            },
-            frame: button.cast(),
+        comm.scope.button_origin = POINT {
+            x: x as i16,
+            y: button_y(y, button_size.height, slider_size.height),
         };
         comm.scope.slider_space = width - i32::from(button_size.width);
     }
 
-    /// Cache the borrowed image; drawing requires it to remain live on the graphics thread.
-    pub fn set_slider_image(comm: &mut Comm, frame: *mut frame_desc) {
+    pub fn set_slider_image(comm: &mut Comm, frame: ContextFrame) {
         comm.scope.slider_changed = true;
-        comm.scope.button.frame = frame.cast();
+        comm.scope.button = Some(frame);
     }
 
-    /// # Safety
-    /// Slider and graphics context must be initialized.
-    pub unsafe fn draw_slider(comm: &mut Comm) {
+    pub fn draw_slider(comm: &mut Comm) {
         if !comm.options.slider {
             return;
         }
-        let offset = GetTrackPosition(comm.scope.slider_space);
-        if offset != comm.scope.last_offset || comm.scope.slider_changed {
+        let offset = crate::sound::heart_ffi::get_track_position(comm.scope.slider_space);
+        if Some(offset) != comm.scope.last_offset || comm.scope.slider_changed {
             comm.scope.slider_changed = false;
-            comm.scope.last_offset = offset;
-            comm.scope.button.origin.x = (i32::from(comm.scope.slider.origin.x) + offset) as i16;
-            BatchGraphics();
-            DrawStamp((&raw mut comm.scope.slider).cast());
-            DrawStamp((&raw mut comm.scope.button).cast());
-            UnbatchGraphics();
+            comm.scope.last_offset = Some(offset);
+            comm.scope.button_origin.x = (i32::from(comm.scope.slider_origin.x) + offset) as i16;
+            let context = ContextLease::require(comm.presentation.space_context);
+            context.with_batch(|| {
+                context.draw_stamp(
+                    comm.scope
+                        .slider
+                        .as_ref()
+                        .unwrap_or_else(|| panic!("slider not initialized")),
+                    comm.scope.slider_origin,
+                );
+                context.draw_stamp(
+                    comm.scope
+                        .button
+                        .as_ref()
+                        .unwrap_or_else(|| panic!("slider button not initialized")),
+                    comm.scope.button_origin,
+                );
+            });
         }
     }
 
@@ -203,30 +182,30 @@ pub(crate) mod runtime {
             // SAFETY: the fixture owns both surfaces and restores the borrowed globals before they drop.
             unsafe {
                 let mut comm = Comm::new();
-                assert!(!comm.scope.scope_init);
+                assert!(comm.scope.scope_work.is_none());
                 let restore = Restore(lifecycle_abi::format_conv_surf, lifecycle_abi::SDL_Screen);
                 lifecycle_abi::format_conv_surf = format.raw().cast();
                 lifecycle_abi::SDL_Screen = screen.raw().cast();
                 let background = LoadedDrawable::create(6, 8, 6, 1).ok_or("missing background")?;
-                let frame = background.lease().frame(0).ok_or("missing frame")?;
-                init_oscilloscope(&mut comm, frame);
-                let work = comm.scope.scope_work;
+                let frame = background.lease().context_frame(0);
+                init_oscilloscope(&mut comm, frame.clone());
+                let work = comm.scope.scope_work.as_ref().unwrap().as_raw();
                 assert!(!work.is_null());
-                init_oscilloscope(&mut comm, frame);
+                init_oscilloscope(&mut comm, frame.clone());
                 assert_eq!(
                     (
-                        comm.scope.scope_work,
+                        comm.scope.scope_work.as_ref().unwrap().as_raw(),
                         comm.scope.scope_width,
                         comm.scope.scope_height
                     ),
                     (work, 6, 4)
                 );
-                init_slider(&mut comm, 3, 4, 20, frame, frame);
-                set_slider_image(&mut comm, frame);
+                init_slider(&mut comm, 3, 4, 20, frame.clone(), frame.clone());
+                set_slider_image(&mut comm, frame.clone());
                 assert_eq!(
                     (
-                        comm.scope.slider.origin.x,
-                        comm.scope.button.origin.y,
+                        comm.scope.slider_origin.x,
+                        comm.scope.button_origin.y,
                         comm.scope.slider_space
                     ),
                     (3, 4, 12)
@@ -244,7 +223,7 @@ pub(crate) mod runtime {
                 draw_slider(&mut disabled);
                 assert_eq!(
                     (disabled.scope.last_offset, disabled.scope.slider_changed),
-                    (-1, true)
+                    (None, true)
                 );
                 drop(restore);
             }
@@ -273,14 +252,14 @@ mod owner_tests {
     fn widget_caches_belong_to_the_conversation() {
         let mut first = Comm::new();
         let second = Comm::new();
-        first.scope.scope_init = true;
+
         first.scope.scope_width = 17;
         first.scope.slider_changed = true;
-        first.scope.last_offset = 9;
-        assert!(!second.scope.scope_init);
+        first.scope.last_offset = Some(9);
+        assert!(second.scope.scope_work.is_none());
         assert_eq!(second.scope.scope_width, 0);
         assert!(!second.scope.slider_changed);
-        assert_eq!(second.scope.last_offset, -1);
+        assert_eq!(second.scope.last_offset, None);
     }
 
     #[test]
@@ -293,12 +272,9 @@ mod owner_tests {
         });
         comm.scope.scope_width = -1;
         comm.scope.slider_changed = true;
-        // SAFETY: disabled widgets must return without accessing any native handle.
-        unsafe {
-            draw_oscilloscope(&mut comm);
-            draw_slider(&mut comm);
-        }
-        assert_eq!(comm.scope.last_offset, -1);
+        draw_oscilloscope(&mut comm);
+        draw_slider(&mut comm);
+        assert_eq!(comm.scope.last_offset, None);
         assert!(comm.scope.slider_changed);
     }
 }
@@ -336,7 +312,7 @@ mod lifetime_tests {
             restore
         };
         let background = LoadedDrawable::create(6, 8, 6, 1).unwrap();
-        let frame = background.lease().frame(0).unwrap();
+        let frame = background.lease().context_frame(0);
         observation::enable();
         observation::drain();
         let kernel = crate::engine::Kernel::new();
@@ -344,16 +320,16 @@ mod lifetime_tests {
         comm.presentation = crate::comm::presentation::Presentation::from(&kernel);
         // SAFETY: this serialized fixture retains the initialized native background throughout both sessions.
         let work = unsafe {
-            init_oscilloscope(&mut comm, frame);
-            init_slider(&mut comm, 3, 4, 20, frame, frame);
-            set_slider_image(&mut comm, frame);
-            ReleaseDrawable(comm.scope.scope_work) as usize
+            init_oscilloscope(&mut comm, frame.clone());
+            init_slider(&mut comm, 3, 4, 20, frame.clone(), frame.clone());
+            set_slider_image(&mut comm, frame.clone());
+            ReleaseDrawable(comm.scope.scope_work.as_ref().unwrap().as_raw()) as usize
         };
-        assert_eq!(comm.scope.slider.origin.x, 3);
+        assert_eq!(comm.scope.slider_origin.x, 3);
         assert_eq!(comm.scope.slider_space, 12);
         assert!(comm.scope.slider_changed);
         let moved = Box::new(comm);
-        assert!(moved.scope.scope_init);
+        assert!(moved.scope.scope_work.is_some());
         drop(moved);
         assert!(observation::inspect_pending(|events| events
             .iter()
@@ -362,8 +338,8 @@ mod lifetime_tests {
         next.presentation = crate::comm::presentation::Presentation::from(&kernel);
         // SAFETY: the same background and kernel-owned work allocation remain live.
         let next_work = unsafe {
-            init_oscilloscope(&mut next, frame);
-            ReleaseDrawable(next.scope.scope_work) as usize
+            init_oscilloscope(&mut next, frame.clone());
+            ReleaseDrawable(next.scope.scope_work.as_ref().unwrap().as_raw()) as usize
         };
         assert_eq!(next_work, work);
         drop(next);

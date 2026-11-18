@@ -2,7 +2,6 @@
 //!
 //! State retained by one synchronous conversation.
 
-use super::animation::AnimContext;
 use super::encounter::EncounterState;
 use super::oscilloscope::Oscilloscope;
 use super::phrase_state::PhraseState;
@@ -29,7 +28,6 @@ pub struct Comm {
     pub(crate) display: super::comm_abi::RuntimeState,
     pub(crate) animation_runtime: super::commanim_abi::runtime::RuntimeState,
     pub(crate) response_display: [u8; 3],
-    pub(crate) player_font: super::player_font::ConversationFont,
     pub(crate) next_speech_time: u32,
     /// Whether communication is initialized
     initialized: bool,
@@ -45,9 +43,6 @@ pub struct Comm {
 
     /// Response system
     responses: ResponseSystem,
-
-    /// Animation context
-    animations: AnimContext,
 
     /// Oscilloscope display
     oscilloscope: Oscilloscope,
@@ -127,14 +122,12 @@ impl Comm {
             display: Default::default(),
             animation_runtime: Default::default(),
             response_display: [0; 3],
-            player_font: super::player_font::ConversationFont::new(),
             next_speech_time: 0,
             initialized: false,
             comm_data: None,
             track: TrackManager::new(),
             subtitles: SubtitleTracker::new(),
             responses: ResponseSystem::new(),
-            animations: AnimContext::new(),
             oscilloscope: Oscilloscope::new(),
             talking: false,
             talking_finished: false,
@@ -224,7 +217,6 @@ impl Comm {
         self.track.clear();
         self.subtitles.clear();
         self.responses.clear();
-        self.animations.clear();
         self.oscilloscope.clear();
         self.talking = false;
         self.talking_finished = false;
@@ -244,10 +236,7 @@ impl Comm {
     }
 
     /// Install the descriptor and its typed conversation view together.
-    ///
-    /// # Safety
-    /// Descriptor resources must remain live through session teardown.
-    pub unsafe fn install_descriptor(&mut self, data: super::locdata::SessionData) {
+    pub fn install_descriptor(&mut self, data: super::locdata::SessionData) {
         self.set_comm_data(super::locdata::session_view(&data));
         self.data = data;
     }
@@ -371,18 +360,6 @@ impl Comm {
     /// Get selected response index
     pub fn selected_response(&self) -> i32 {
         self.responses.selected()
-    }
-
-    // Animation management
-
-    /// Get animation context
-    pub fn animations(&self) -> &AnimContext {
-        &self.animations
-    }
-
-    /// Get mutable animation context
-    pub fn animations_mut(&mut self) -> &mut AnimContext {
-        &mut self.animations
     }
 
     // Oscilloscope
@@ -575,10 +552,6 @@ impl Comm {
         // Update subtitles
         self.subtitles.update(self.track.position());
 
-        // Update animations (convert seconds to ticks, ~60fps = 1 tick per frame)
-        let delta_ticks = (delta_time * 60.0) as u32;
-        self.animations.process(delta_ticks);
-
         // Update oscilloscope
         self.oscilloscope.update();
 
@@ -628,10 +601,6 @@ mod tests {
         assert!(second.race_scratch.melnorm.is_none());
         assert!(second.race_scratch.spathi.is_none());
         assert!(second.race_scratch.starbas.is_none());
-        assert_eq!(
-            first.player_font.install(std::ptr::null_mut()),
-            Err(super::super::player_font::ConversationFontError::LoadFailed)
-        );
         first.reset_for_encounter();
         assert_eq!(first.responses().count(), 0);
         assert!(first.phrase_enabled(9));
@@ -908,14 +877,10 @@ mod session_owner_tests {
             intro: (2, 840),
         });
         assert!(comm.is_initialized());
-        // SAFETY: disabled widgets return before using any native surface or resource handle.
-        unsafe {
-            super::super::oscill_abi::runtime::draw_oscilloscope(&mut comm);
-            super::super::oscill_abi::runtime::draw_slider(&mut comm);
-        }
-        assert!(!comm.scope.scope_init);
-        assert!(comm.scope.scope_work.is_null());
-        assert_eq!(comm.scope.last_offset, -1);
+        super::super::oscill_abi::runtime::draw_oscilloscope(&mut comm);
+        super::super::oscill_abi::runtime::draw_slider(&mut comm);
+        assert!(comm.scope.scope_work.is_none());
+        assert_eq!(comm.scope.last_offset, None);
         assert_eq!(
             (comm.display.window.corner.x, comm.display.window.corner.y),
             (31, 47)

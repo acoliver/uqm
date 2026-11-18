@@ -1,28 +1,11 @@
 //! Exercise the production conversation renderer with registered fonts and pixel storage.
 
-use super::{player_font::FontRelease, Comm};
+use super::Comm;
 use crate::graphics::{
     context_abi::{ContextFrame, ContextLease},
     native_abi::{EXTENT, POINT, RECT},
     native_font::LoadedFont,
 };
-
-struct Release {
-    context: ContextLease,
-    font: Option<LoadedFont>,
-    drained: bool,
-}
-impl FontRelease for Release {
-    fn drain_draw_queue(&mut self) {
-        self.context.flush();
-        self.drained = true;
-    }
-    fn destroy_font(&mut self, font: *mut std::ffi::c_void) {
-        assert!(self.drained);
-        assert_eq!(font, self.font.as_ref().unwrap().as_raw().cast());
-        drop(self.font.take());
-    }
-}
 
 pub(super) fn with_display(name: &str, call: impl FnOnce(&mut Comm, &ContextLease)) {
     if !crate::native_test_process::own_graphics_process(name) {
@@ -50,29 +33,35 @@ pub(super) fn with_display(name: &str, call: impl FnOnce(&mut Comm, &ContextLeas
             context.set_font(&original);
             let font = LoadedFont::load(c"fixture.tiny").unwrap();
             let mut comm = Comm::new();
+            comm.init().unwrap();
             comm.presentation.space_context = context.as_raw();
             comm.presentation.tiny_font = game.kernel.tiny_font;
-            comm.presentation.game_strings = game.kernel.game_strings;
-            comm.player_font.install(font.as_raw().cast()).unwrap();
             comm.admit_conversation_names(&game.world).unwrap();
-            comm.display.anim_context = context.as_raw().cast();
-            comm.display.text_cache_context = context.as_raw();
-            comm.display.text_cache_frame = game.kernel.screen.cast();
-            comm.data.alien_font = game.kernel.tiny_font.cast();
-            // SAFETY: the display fixture owns all registered handles and the Kernel text table.
-            let display =
-                unsafe { super::sis_graphics::ConversationDisplay::retain(&comm) }.unwrap();
-            comm.display.resources.as_mut().unwrap().display = Some(display);
-            let mut release = Release {
-                context: context.clone(),
-                font: Some(font),
-                drained: false,
+            let history = crate::graphics::native_font::FontLease::retain(
+                std::ptr::NonNull::new(game.kernel.tiny_font).unwrap(),
+            );
+            let display = super::sis_graphics::ConversationDisplay {
+                space: context.clone(),
+                player_font: font.lease(),
+                history_font: history.clone(),
+                game_strings: game.kernel.game_text_table(),
+                subtitles: super::sis_graphics::SubtitleCache {
+                    target: context.clone(),
+                    context: context.clone(),
+                    frame: context.target(),
+                    font: history,
+                },
             };
+            comm.display.resources.as_mut().unwrap().display = Some(display);
+            let activity =
+                crate::graphics::drawable_abi::LoadedDrawable::create(6, 8, 6, 10).unwrap();
+            comm.presentation.activity_frame = activity.lease().frame(0).unwrap();
+            comm.presentation.radar_context = context.as_raw();
+            comm.presentation.off_screen_context = context.as_raw();
             call(&mut comm, &context);
             drop(comm.display.resources.as_mut().unwrap().display.take());
-            comm.player_font.release(&mut release);
-            assert!(release.drained);
-            assert!(release.font.is_none());
+            context.flush();
+            drop(font);
         },
     )
     .unwrap();
@@ -110,11 +99,6 @@ fn admitted_display_renders_without_recovering_raw_resources() {
         |comm, context| {
             comm.presentation.space_context = std::ptr::null_mut();
             comm.presentation.tiny_font = std::ptr::null_mut();
-            comm.presentation.game_strings = std::ptr::null_mut();
-            comm.display.anim_context = std::ptr::null_mut();
-            comm.display.text_cache_context = std::ptr::null_mut();
-            comm.display.text_cache_frame = std::ptr::null_mut();
-            comm.data.alien_font = std::ptr::null_mut();
             comm.add_response(1, "A A", None);
             super::sis_graphics::refresh_responses(comm, 0, 0, 1, 0);
             assert!(has_text(context));
@@ -156,13 +140,13 @@ fn rendering_restores_the_context_font_it_found() {
 #[serial_test::serial]
 fn a_conversation_draws_with_one_font_and_frees_it_only_at_teardown() {
     with_display("comm::sis_graphics_font_tests::a_conversation_draws_with_one_font_and_frees_it_only_at_teardown", |comm, context| {
-        let original = comm.player_font.current();
+        let original = comm.conversation_display().player_font.clone();
         comm.add_response(1, "A", None);
         comm.add_response(2, "A A", None);
         super::sis_graphics::refresh_responses(comm, 0, 0, 2, 0);
         super::sis_graphics::feedback_player_phrase(comm, 0, Some(c"A A"));
         super::sis_graphics::refresh_responses(comm, 0, 0, 2, 1);
-        assert_eq!(comm.player_font.current(), original);
+        assert!(comm.conversation_display().player_font.same_font(&original));
         assert!(has_text(context));
         super::sis_graphics::refresh_responses(comm, 0, 1, 2, 1);
         assert_eq!(comm.response_display, [1, 2, 1]);

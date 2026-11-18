@@ -1,8 +1,7 @@
 //! Speech graphics state — oscilloscope and slider rendering state.
 //!
 //! Tracks display state for the oscilloscope waveform visualizer and playback
-//! slider. Actual pixel rendering is delegated to C bridge functions; Rust
-//! manages the state and rate-limiting logic only.
+//! slider using retained conversation frames and supplied drawing contexts.
 //!
 //! @plan PLAN-20260314-COMM.P10
 
@@ -48,8 +47,7 @@ impl SliderState {
 
 /// Speech graphics state (oscilloscope + slider).
 ///
-/// Tracks what the speech graphics subsystem is currently showing. All actual
-/// drawing is delegated to C bridge functions via FFI.
+/// Tracks widget state and rate limits rendering on the conversation contexts.
 #[derive(Debug)]
 pub struct SpeechGraphics {
     initialized: bool,
@@ -74,33 +72,35 @@ impl SpeechGraphics {
         }
     }
 
-    /// Initialize speech graphics. Sets slider to Play and calls C bridge
-    /// to initialize oscilloscope and slider widgets.
+    /// Initialize the retained oscilloscope and slider with the play image.
     pub fn init(comm: &mut Comm) {
         comm.speech_graphics_mut().initialized = true;
         comm.speech_graphics_mut().slider_state = SliderState::Play;
         comm.speech_graphics_mut().last_update_ms = 0;
 
-        #[cfg(not(test))]
-        unsafe {
-            let oscilloscope = activity_frame(comm, 9);
-            let slider = activity_frame(comm, 5);
-            let play = activity_frame(comm, SliderState::Play.frame_index() as u16);
-            c_bridge::init_oscilloscope(comm, (oscilloscope).cast());
-            c_bridge::init_slider(comm, 0, 107, 242, slider.cast(), play.cast());
-        }
+        let activity = crate::graphics::context_abi::ContextFrame::retain(std::ptr::NonNull::new(
+            comm.presentation.activity_frame,
+        ));
+        super::oscill_abi::runtime::init_oscilloscope(comm, activity.wrapped_frame(9));
+        super::oscill_abi::runtime::init_slider(
+            comm,
+            0,
+            107,
+            242,
+            activity.wrapped_frame(5),
+            activity.wrapped_frame(2),
+        );
     }
 
-    /// Update slider state and notify C bridge to redraw the slider image.
+    /// Select the retained image for the next slider redraw.
     pub fn set_slider_state(comm: &mut Comm, state: SliderState) {
         comm.speech_graphics_mut().slider_state = state;
 
-        #[cfg(not(test))]
-        {
-            // SAFETY: the conversation retains the initialized activity drawable on its graphics thread.
-            let frame = unsafe { activity_frame(comm, state.frame_index() as u16) };
-            c_bridge::set_slider_image(comm, frame.cast());
-        }
+        let frame = crate::graphics::context_abi::ContextFrame::retain(std::ptr::NonNull::new(
+            comm.presentation.activity_frame,
+        ))
+        .wrapped_frame(state.frame_index() as u16);
+        super::oscill_abi::runtime::set_slider_image(comm, frame);
     }
 
     /// Rate-limited update: redraws oscilloscope and slider if enough time has
@@ -117,14 +117,7 @@ impl SpeechGraphics {
 
         comm.speech_graphics_mut().last_update_ms = now_ms;
 
-        #[cfg(not(test))]
-        unsafe {
-            let old_context = c_bridge::SetContext(comm.presentation.radar_context);
-            c_bridge::draw_oscilloscope(comm);
-            c_bridge::SetContext(comm.presentation.space_context);
-            c_bridge::draw_slider(comm);
-            c_bridge::SetContext(old_context);
-        }
+        comm.draw_speech_widgets();
     }
 
     /// Reset to uninitialized state.
@@ -143,32 +136,6 @@ impl SpeechGraphics {
     pub fn slider_state(&self) -> SliderState {
         self.slider_state
     }
-}
-
-// ============================================================================
-// C bridge
-// ============================================================================
-#[cfg(not(test))]
-unsafe fn activity_frame(comm: &Comm, index: u16) -> *mut std::ffi::c_void {
-    (c_bridge::SetAbsFrameIndex((comm.presentation.activity_frame).cast(), index)).cast()
-}
-
-#[cfg(not(test))]
-mod c_bridge {
-
-    pub use crate::comm::oscill_abi::runtime::init_oscilloscope;
-
-    pub use crate::comm::oscill_abi::runtime::init_slider;
-
-    pub use crate::graphics::pixmap_abi::SetAbsFrameIndex;
-
-    pub use crate::comm::oscill_abi::runtime::set_slider_image;
-
-    pub use crate::graphics::context_abi::SetContext;
-
-    pub use crate::comm::oscill_abi::runtime::draw_oscilloscope;
-
-    pub use crate::comm::oscill_abi::runtime::draw_slider;
 }
 
 // ============================================================================
@@ -208,67 +175,87 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn test_init_sets_play_state() {
-        let comm = &mut Comm::new();
-        SpeechGraphics::init(comm);
-        assert!(comm.speech_graphics().is_initialized());
-        assert_eq!(comm.speech_graphics().slider_state(), SliderState::Play);
+        super::super::sis_graphics_font_tests::with_display(
+            "comm::speech_graphics::tests::test_init_sets_play_state",
+            |comm, _| {
+                SpeechGraphics::init(comm);
+                assert!(comm.speech_graphics().is_initialized());
+                assert_eq!(comm.speech_graphics().slider_state(), SliderState::Play);
+            },
+        );
     }
 
     #[test]
+    #[serial_test::serial]
     fn test_slider_state_changes() {
-        let comm = &mut Comm::new();
-        SpeechGraphics::init(comm);
+        super::super::sis_graphics_font_tests::with_display(
+            "comm::speech_graphics::tests::test_slider_state_changes",
+            |comm, _| {
+                SpeechGraphics::init(comm);
 
-        SpeechGraphics::set_slider_state(comm, SliderState::Forward);
-        assert_eq!(comm.speech_graphics().slider_state(), SliderState::Forward);
+                SpeechGraphics::set_slider_state(comm, SliderState::Forward);
+                assert_eq!(comm.speech_graphics().slider_state(), SliderState::Forward);
 
-        SpeechGraphics::set_slider_state(comm, SliderState::Reverse);
-        assert_eq!(comm.speech_graphics().slider_state(), SliderState::Reverse);
+                SpeechGraphics::set_slider_state(comm, SliderState::Reverse);
+                assert_eq!(comm.speech_graphics().slider_state(), SliderState::Reverse);
 
-        SpeechGraphics::set_slider_state(comm, SliderState::Stop);
-        assert_eq!(comm.speech_graphics().slider_state(), SliderState::Stop);
+                SpeechGraphics::set_slider_state(comm, SliderState::Stop);
+                assert_eq!(comm.speech_graphics().slider_state(), SliderState::Stop);
 
-        SpeechGraphics::set_slider_state(comm, SliderState::Play);
-        assert_eq!(comm.speech_graphics().slider_state(), SliderState::Play);
+                SpeechGraphics::set_slider_state(comm, SliderState::Play);
+                assert_eq!(comm.speech_graphics().slider_state(), SliderState::Play);
+            },
+        );
     }
 
     #[test]
+    #[serial_test::serial]
     fn test_update_rate_limited() {
-        let comm = &mut Comm::new();
-        SpeechGraphics::init(comm);
+        super::super::sis_graphics_font_tests::with_display(
+            "comm::speech_graphics::tests::test_update_rate_limited",
+            |comm, _| {
+                SpeechGraphics::init(comm);
 
-        // First update at t=0 — should proceed (last_update_ms starts at 0).
-        SpeechGraphics::update(comm, 100);
-        assert_eq!(comm.speech_graphics().last_update_ms, 100);
+                // First update at t=0 — should proceed (last_update_ms starts at 0).
+                SpeechGraphics::update(comm, 100);
+                assert_eq!(comm.speech_graphics().last_update_ms, 100);
 
-        // Update 1ms later — less than OSCILLOSCOPE_RATE_MS — should be skipped.
-        SpeechGraphics::update(comm, 101);
-        assert_eq!(
-            comm.speech_graphics().last_update_ms,
-            100,
-            "update should be rate-limited"
-        );
+                // Update 1ms later — less than OSCILLOSCOPE_RATE_MS — should be skipped.
+                SpeechGraphics::update(comm, 101);
+                assert_eq!(
+                    comm.speech_graphics().last_update_ms,
+                    100,
+                    "update should be rate-limited"
+                );
 
-        // Update after enough time has passed.
-        SpeechGraphics::update(comm, 100 + OSCILLOSCOPE_RATE_MS);
-        assert_eq!(
-            comm.speech_graphics().last_update_ms,
-            100 + OSCILLOSCOPE_RATE_MS
+                // Update after enough time has passed.
+                SpeechGraphics::update(comm, 100 + OSCILLOSCOPE_RATE_MS);
+                assert_eq!(
+                    comm.speech_graphics().last_update_ms,
+                    100 + OSCILLOSCOPE_RATE_MS
+                );
+            },
         );
     }
 
     #[test]
+    #[serial_test::serial]
     fn test_clear_resets() {
-        let comm = &mut Comm::new();
-        SpeechGraphics::init(comm);
-        SpeechGraphics::set_slider_state(comm, SliderState::Stop);
+        super::super::sis_graphics_font_tests::with_display(
+            "comm::speech_graphics::tests::test_clear_resets",
+            |comm, _| {
+                SpeechGraphics::init(comm);
+                SpeechGraphics::set_slider_state(comm, SliderState::Stop);
 
-        comm.speech_graphics_mut().clear();
+                comm.speech_graphics_mut().clear();
 
-        assert!(!comm.speech_graphics().is_initialized());
-        assert_eq!(comm.speech_graphics().slider_state(), SliderState::Play);
-        assert_eq!(comm.speech_graphics().last_update_ms, 0);
+                assert!(!comm.speech_graphics().is_initialized());
+                assert_eq!(comm.speech_graphics().slider_state(), SliderState::Play);
+                assert_eq!(comm.speech_graphics().last_update_ms, 0);
+            },
+        );
     }
 
     #[test]

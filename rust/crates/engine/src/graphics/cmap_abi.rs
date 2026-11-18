@@ -149,10 +149,9 @@ static FADE: Mutex<Fade> = Mutex::new(Fade {
     start: 0,
     interval: 0,
 });
-#[derive(Clone, Copy)]
 struct Xform {
     index: i32,
-    map: *const u8,
+    map: Vec<u8>,
     ticks: i16,
     start: u32,
     end: u32,
@@ -161,7 +160,7 @@ struct Xform {
 impl Xform {
     const EMPTY: Self = Self {
         index: -1,
-        map: ptr::null(),
+        map: Vec::new(),
         ticks: 0,
         start: 0,
         end: 0,
@@ -177,15 +176,14 @@ struct Xforms {
     slots: [Xform; 16],
     highest: i32,
 }
-// Target table pointers stay live for the duration of each transform per engine contract.
-unsafe impl Send for Xforms {}
 static XFORMS: Mutex<Xforms> = Mutex::new(Xforms {
-    slots: [Xform::EMPTY; 16],
+    slots: [const { Xform::EMPTY }; 16],
     highest: -1,
 });
 impl Xforms {
     unsafe fn finish(&mut self, which: usize) {
-        MAPS.lock().set(self.slots[which].map);
+        MAPS.lock().set(self.slots[which].map.as_ptr());
+        self.slots[which].map.clear();
         self.slots[which].index = -1;
         if which as i32 == self.highest {
             let mut x = which as i32 - 1;
@@ -199,7 +197,7 @@ impl Xforms {
         let mut changed = 0;
         let mut x = 0;
         while x as i32 <= self.highest {
-            let control = self.slots[x];
+            let control = &self.slots[x];
             let left = control.end.wrapping_sub(now) as i32;
             if control.index < 0 {
                 x += 1;
@@ -217,7 +215,7 @@ impl Xforms {
             if left > 0 {
                 let new = maps.alloc(cur, control.index);
                 let fraction = (i32::from(control.ticks) - left) * 65536 / i32::from(control.ticks);
-                let mut clr = control.map.add(2);
+                let mut clr = control.map.as_ptr().add(2);
                 for i in 0..NUMBER_OF_PLUTVALS {
                     let old = control.old[i];
                     SetNativePaletteColor(
@@ -348,14 +346,15 @@ pub unsafe extern "C" fn FadeScreen(kind: u32, mut interval: i16) -> u32 {
     }
 }
 /// # Safety
-/// Tables associated with active transforms must remain live.
+/// Call on the serialized graphics thread with the palette subsystem initialized.
 #[no_mangle]
 pub unsafe extern "C" fn XFormColorMap_step() -> u32 {
     let now = GetTimeCounter();
     XFORMS.lock().step(now)
 }
 /// # Safety
-/// Table must stay live until the transform is completed or flushed.
+/// Table must contain the complete palette range during this call.
+/// The transform owns a copy of its target bytes until completion.
 #[no_mangle]
 pub unsafe extern "C" fn XFormColorMap(map: *const u8, mut interval: i16) -> u32 {
     if map.is_null() {
@@ -394,14 +393,18 @@ pub unsafe extern "C" fn XFormColorMap(map: *const u8, mut interval: i16) -> u32
     GetColorMapColors(control.old.as_mut_ptr(), current);
     drop(maps);
     control.index = index;
-    control.map = map;
+    // SAFETY: admission requires the complete declared palette range for this call.
+    control.map = unsafe {
+        let length = 2 + (usize::from(*map.add(1)) - usize::from(*map) + 1) * 256 * 3;
+        std::slice::from_raw_parts(map, length).to_vec()
+    };
     control.ticks = interval.max(0);
     control.start = now;
     control.end = now.wrapping_add(control.ticks as u32);
     control.end
 }
 /// # Safety
-/// Tables associated with active transforms must remain live.
+/// Call on the serialized graphics thread with the palette subsystem initialized.
 #[no_mangle]
 pub unsafe extern "C" fn FlushColorXForms() {
     FADE.lock().finish();
@@ -451,6 +454,45 @@ mod tests {
         assert_eq!(blend(255, 0, 32768), 128);
         assert_eq!(blend(0, 255, 32768), 127);
     }
+    #[test]
+    #[serial_test::serial]
+    fn transform_owns_target_bytes_through_interpolation_and_full_range_flush() {
+        InitColorMaps();
+        let mut black = vec![17, 18];
+        black.extend(std::iter::repeat_n(0, 2 * 768));
+        // SAFETY: both tables contain the complete declared range; this serialized test owns palette admission.
+        unsafe {
+            SetColorMap(black.as_ptr());
+            let mut target = vec![17, 18];
+            target.extend(std::iter::repeat_n(80, 768));
+            target.extend(std::iter::repeat_n(160, 768));
+            XFormColorMap(target.as_ptr(), 10);
+            drop(target);
+            {
+                let mut transforms = XFORMS.lock();
+                let slot = transforms
+                    .slots
+                    .iter_mut()
+                    .find(|slot| slot.index == 17)
+                    .unwrap();
+                slot.start = 100;
+                slot.end = 110;
+                assert_eq!(transforms.step(105), 1);
+            }
+            let current = TFB_GetColorMap(17);
+            assert_eq!(GetNativePaletteColor((*current).palette, 0).r, 40);
+            TFB_ReturnColorMap(current);
+            FlushColorXForms();
+            for (index, expected) in [(17, 80), (18, 160)] {
+                let current = TFB_GetColorMap(index);
+                assert_eq!(GetNativePaletteColor((*current).palette, 255).r, expected);
+                TFB_ReturnColorMap(current);
+            }
+            assert_eq!(XFORMS.lock().highest, -1);
+            UninitColorMaps();
+        }
+    }
+
     #[test]
     fn map_replacement_preserves_held_snapshot_and_increments_version() {
         unsafe {
