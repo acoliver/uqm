@@ -1,8 +1,5 @@
 //! Word wrapping used by dialogue subtitles and response lists.
 
-use super::sis_graphics::CText;
-use std::ffi::c_char;
-
 pub(crate) struct FittedLine {
     pub end_of_line: bool,
     pub characters: u16,
@@ -56,40 +53,14 @@ pub(crate) fn fit_text_line(
     }
 }
 
-/// # Safety
-/// Text must reference a NUL-terminated UTF-8 string; measure may inspect it.
-pub(super) unsafe fn fit_line(
-    text: &mut CText,
-    next: &mut *const c_char,
-    max_width: i16,
-    max_chars: u16,
-    mut measure: impl FnMut(&mut CText) -> i16,
-) -> bool {
-    let input = std::ffi::CStr::from_ptr(text.p_str);
-    let fitted = fit_text_line(input, text.char_count, max_width, max_chars, |count| {
-        text.char_count = count;
-        (measure(text), text.char_count)
-    });
-    text.char_count = fitted.characters;
-    *next = input.as_ptr().add(fitted.next);
-    fitted.end_of_line
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::ffi::CStr;
 
     fn wrap(input: &CStr, width: i16, limit: u16) -> (bool, u16, usize) {
-        let mut text = CText::new(input.as_ptr(), u16::MAX);
-        let mut next = std::ptr::null();
-        let eol = unsafe { fit_line(&mut text, &mut next, width, limit, |t| t.char_count as i16) };
-        let result = (eol, text.char_count, unsafe {
-            next.offset_from(input.as_ptr()) as usize
-        });
-        let owned = fit_text_line(input, u16::MAX, width, limit, |count| (count as i16, count));
-        assert_eq!(result, (owned.end_of_line, owned.characters, owned.next));
-        result
+        let line = fit_text_line(input, u16::MAX, width, limit, |count| (count as i16, count));
+        (line.end_of_line, line.characters, line.next)
     }
     #[test]
     fn wrapping_keeps_the_measurements_adjusted_character_count() {

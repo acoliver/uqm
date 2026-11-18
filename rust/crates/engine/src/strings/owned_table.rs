@@ -132,6 +132,22 @@ impl TextEntry {
 }
 
 impl LoadedTextTable {
+    /// # Safety
+    /// The entry must belong to a live plain-text table produced by this loader.
+    pub unsafe fn retain(entry: std::ptr::NonNull<StringTableEntry>) -> Self {
+        // SAFETY: the caller lends this loader's live entry and its parent allocation.
+        unsafe {
+            let table = entry.as_ref().parent;
+            assert!(
+                (*table).owned_text,
+                "game labels require an owned text table"
+            );
+            let allocation = table.cast::<TableAllocation>();
+            Rc::increment_strong_count(allocation);
+            Self(Rc::from_raw(allocation))
+        }
+    }
+
     pub fn new(strings: Vec<std::ffi::CString>) -> Self {
         Self::from_strings(
             strings
@@ -222,6 +238,17 @@ impl LoadedTextTable {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn borrowed_native_text_retains_labels_after_its_original_owner_drops() {
+        let original = LoadedTextTable::new(vec![c"You say:".to_owned(), c"MORE".to_owned()]);
+        // SAFETY: the original owner lends its live native entry throughout admission.
+        let retained =
+            unsafe { LoadedTextTable::retain(std::ptr::NonNull::new(original.as_raw()).unwrap()) };
+        drop(original);
+        assert_eq!(retained.label(256), (c"You say:", 8));
+        assert_eq!(retained.label(257), (c"MORE", 4));
+    }
 
     #[test]
     fn text_views_use_entry_bounds_and_preserve_embedded_terminators() {

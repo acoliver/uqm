@@ -33,6 +33,73 @@ impl Drop for Engine {
     }
 }
 
+#[test]
+fn subtitle_snapshots_keep_identity_and_bytes_after_seeking_and_teardown() {
+    let _engine = engine();
+    assert!(subtitle_snapshot().is_none());
+    splice_two_pages(None);
+    play_track(false).unwrap();
+    let first = subtitle_snapshot().unwrap();
+    assert_eq!(first, subtitle_snapshot().unwrap());
+    assert_eq!(first.text.as_c_str(), c"First line...");
+    let history = subtitle_history();
+    assert_eq!(history.len(), 2);
+    assert_eq!(history[0], first);
+    fast_forward_page().unwrap();
+    let second = subtitle_snapshot().unwrap();
+    assert_ne!(second.identity, first.identity);
+    assert_eq!(second.text.as_c_str(), c"..Second line");
+    stop_track().unwrap();
+    assert!(subtitle_snapshot().is_none());
+    assert!(subtitle_history().is_empty());
+    assert_eq!(first.text.as_c_str(), c"First line...");
+    assert_eq!(history[1].text.as_c_str(), c"..Second line");
+}
+
+#[test]
+fn equal_subtitle_bytes_keep_distinct_page_identities() {
+    let _engine = engine();
+    for _ in 0..2 {
+        splice_track(Some("voice"), Some("Same"), None, None, vec![voice(1, 1.0)]).unwrap();
+    }
+    let history = subtitle_history();
+    assert_eq!(history.len(), 2);
+    assert_eq!(history[0].text, history[1].text);
+    assert_ne!(history[0].identity, history[1].identity);
+    play_track(false).unwrap();
+    assert_eq!(subtitle_snapshot().unwrap(), history[0]);
+    fast_forward_page().unwrap();
+    assert_eq!(subtitle_snapshot().unwrap(), history[1]);
+}
+
+#[test]
+fn subtitle_history_skips_untagged_number_audio_without_changing_page_order() {
+    let _engine = engine();
+    splice_two_pages(None);
+    splice_multi_track(vec![voice(1, 0.24)], Some("")).unwrap();
+    TRACK_STATE.lock().no_page_break = false;
+    splice_track(Some("next"), Some("Third"), None, None, vec![voice(1, 1.0)]).unwrap();
+    let history = subtitle_history();
+    assert_eq!(
+        history
+            .iter()
+            .map(|page| page.text.as_c_str())
+            .collect::<Vec<_>>(),
+        [c"First line...", c"..Second line", c"Third"]
+    );
+    assert_ne!(history[0].identity, history[1].identity);
+    assert_ne!(history[1].identity, history[2].identity);
+}
+
+#[test]
+fn speech_admission_requires_borrowed_strings_and_bounded_clip_slices() {
+    use std::ffi::CStr;
+    type SpeechAdmission =
+        fn(Option<&CStr>, Option<&CStr>, Option<&CStr>, Option<Box<dyn Fn(i32) + Send>>);
+    let _: SpeechAdmission = crate::sound::heart_ffi::splice_track;
+    let _: fn(&[&CStr], Option<&CStr>) = crate::sound::heart_ffi::splice_multi_track;
+}
+
 /// A decoder with `pcm_chunks` blocks of audio that lasts `secs` seconds.
 fn voice(pcm_chunks: usize, secs: f32) -> Box<dyn SoundDecoder> {
     let chunks = (0..pcm_chunks).map(|i| vec![i as u8; 400]).collect();
@@ -355,22 +422,19 @@ fn a_second_track_continues_the_numbering_and_the_decoder_offset() {
 #[test]
 fn numbered_sale_speech_has_decoders_for_the_number_and_continuation() {
     let _engine = engine();
-    unsafe {
-        crate::sound::heart_ffi::splice_track(
-            c"comm/melnorme/prefix.ogg".as_ptr(),
-            c"You have ".as_ptr(),
-            std::ptr::null(),
-            None,
-        );
-        let numbers = [c"comm/melnorme/seven.ogg".as_ptr(), std::ptr::null()];
-        crate::sound::heart_ffi::splice_multi_track(numbers.as_ptr(), c"7".as_ptr());
-        crate::sound::heart_ffi::splice_track(
-            c"comm/melnorme/suffix.ogg".as_ptr(),
-            c" credits".as_ptr(),
-            std::ptr::null(),
-            None,
-        );
-    }
+    crate::sound::heart_ffi::splice_track(
+        Some(c"comm/melnorme/prefix.ogg"),
+        Some(c"You have "),
+        None,
+        None,
+    );
+    crate::sound::heart_ffi::splice_multi_track(&[c"comm/melnorme/seven.ogg"], Some(c"7"));
+    crate::sound::heart_ffi::splice_track(
+        Some(c"comm/melnorme/suffix.ogg"),
+        Some(c" credits"),
+        None,
+        None,
+    );
     assert_eq!(chunk_count(), 3);
     for i in 0..3 {
         assert!(
@@ -480,7 +544,10 @@ fn playing_a_track_starts_speech_at_the_first_page_and_reports_the_total_length(
     assert_eq!(calls.lock().as_slice(), [0], "its callback fired once");
     assert_eq!(playing_track_num(), 1);
     assert!(playing_track());
-    assert_eq!(get_track_subtitle(), Some("First line...".to_string()));
+    assert_eq!(
+        subtitle_snapshot().unwrap().text.as_c_str(),
+        c"First line..."
+    );
     let sample = TRACK_STATE.lock().sound_sample.clone().unwrap();
     assert!(
         sample.lock().decoder.is_some(),
@@ -657,7 +724,10 @@ fn a_played_tagged_buffer_shows_its_page_once_and_releases_the_tag() {
     assert_eq!(cur_sub_chunk(), Some(chunk_at(1)));
     assert_eq!(calls.lock().as_slice(), [0]);
     assert!(stream::find_tagged_buffer(&sample.lock(), 55).is_none());
-    assert_eq!(get_track_subtitle(), Some("..Second line".to_string()));
+    assert_eq!(
+        subtitle_snapshot().unwrap().text.as_c_str(),
+        c"..Second line"
+    );
 }
 
 #[test]
@@ -828,7 +898,10 @@ fn paging_forward_restarts_speech_at_the_next_page_and_paging_back_returns() {
     assert_eq!(cur_sub_chunk(), Some(chunk_at(1)));
     assert_eq!(cur_chunk(), Some(chunk_at(1)));
     assert_eq!(speech_start_time(), -(ms_to_ticks(1000) as i32));
-    assert_eq!(get_track_subtitle(), Some("..Second line".to_string()));
+    assert_eq!(
+        subtitle_snapshot().unwrap().text.as_c_str(),
+        c"..Second line"
+    );
 
     fast_reverse_page().unwrap();
     assert_eq!(cur_sub_chunk(), Some(chunk_at(0)));
@@ -859,60 +932,49 @@ fn paging_does_nothing_without_a_conversation() {
 #[test]
 fn subtitles_can_be_walked_from_the_first_page_to_the_last() {
     let _engine = engine();
-    assert!(get_first_track_subtitle().is_none());
-    assert!(get_next_track_subtitle().is_none());
+    assert!(subtitle_history().is_empty());
+    assert!(subtitle_snapshot().is_none());
     splice_two_pages(None);
     play_track(false).unwrap();
 
-    let first = get_first_track_subtitle().unwrap();
-    assert_eq!(get_track_subtitle_text(&first), Some("First line..."));
-    assert_eq!(first.track_num, 0);
-    let next = get_next_track_subtitle().unwrap();
-    assert_eq!(next.text, "..Second line");
-    fast_forward_page().unwrap();
-    assert!(
-        get_next_track_subtitle().is_none(),
-        "nothing after the last page"
+    let history = subtitle_history();
+    assert_eq!(history.len(), 2);
+    assert_eq!(history[0].text.as_c_str(), c"First line...");
+    assert_eq!(
+        TRACK_STATE.lock().chunks_head.as_ref().unwrap().track_num,
+        0
     );
+    assert_eq!(subtitle_snapshot().unwrap(), history[0]);
+    assert_eq!(history[1].text.as_c_str(), c"..Second line");
+    fast_forward_page().unwrap();
+    assert_eq!(&subtitle_snapshot().unwrap(), history.last().unwrap());
 }
 
 #[test]
-fn chunk_pointers_walk_the_tagged_pages_and_refuse_foreign_pointers() {
+fn subtitle_history_walks_the_tagged_pages_without_lending_chunk_pointers() {
     let _engine = engine();
-    assert!(get_first_chunk_ptr().is_null());
+    assert!(subtitle_history().is_empty());
     splice_two_pages(None);
 
-    let first = get_first_chunk_ptr();
-    assert_eq!(get_chunk_text(first), Some("First line...".to_string()));
-    let second = get_next_chunk_ptr(first);
-    assert_eq!(get_chunk_text(second), Some("..Second line".to_string()));
-    assert!(get_next_chunk_ptr(second).is_null());
-    assert!(get_next_chunk_ptr(std::ptr::null()).is_null());
-
-    let foreign = 0x10 as *const u8;
-    assert!(get_next_chunk_ptr(foreign).is_null());
-    assert_eq!(get_chunk_text(foreign), None);
-    assert_eq!(get_chunk_text(std::ptr::null()), None);
-    assert!(get_chunk_text_cstr(foreign).is_null());
-    assert!(get_chunk_text_cstr(std::ptr::null()).is_null());
+    let history = subtitle_history();
+    assert_eq!(history.len(), 2);
+    assert_eq!(history[0].text.as_c_str(), c"First line...");
+    assert_eq!(history[1].text.as_c_str(), c"..Second line");
+    assert_ne!(history[0].identity, history[1].identity);
 }
 
 #[test]
-fn the_c_string_for_a_page_is_stable_so_callers_can_compare_pointers() {
+fn a_page_identity_is_stable_across_current_and_history_snapshots() {
     let _engine = engine();
-    assert!(get_track_subtitle_cstr().is_null());
+    assert!(subtitle_snapshot().is_none());
     splice_two_pages(None);
     play_track(false).unwrap();
 
-    let once = get_track_subtitle_cstr();
-    let twice = get_track_subtitle_cstr();
-    assert!(!once.is_null());
-    assert_eq!(once, twice);
-    let text = unsafe { std::ffi::CStr::from_ptr(once) }.to_str().unwrap();
-    assert_eq!(text, "First line...");
-
-    let by_chunk = get_chunk_text_cstr(get_first_chunk_ptr());
-    assert_eq!(by_chunk, once, "the same cached string serves both lookups");
+    let once = subtitle_snapshot().unwrap();
+    let twice = subtitle_snapshot().unwrap();
+    assert_eq!(once.identity, twice.identity);
+    assert_eq!(once.text.as_c_str(), c"First line...");
+    assert_eq!(subtitle_history()[0], once);
 }
 
 #[test]
@@ -963,11 +1025,14 @@ fn a_chunk_caches_one_nul_terminated_copy_of_its_text() {
         callback: None,
         next: None,
     };
-    let first = chunk.text_cstr_ptr();
-    assert_eq!(first, chunk.text_cstr_ptr());
-    assert_eq!(unsafe { std::ffi::CStr::from_ptr(first) }.to_bytes(), b"hi");
+    chunk.ensure_text_cstr();
+    let first = chunk.text_cstr.as_ref().unwrap().as_ptr();
+    chunk.ensure_text_cstr();
+    assert_eq!(first, chunk.text_cstr.as_ref().unwrap().as_ptr());
+    assert_eq!(chunk.text_cstr.as_ref().unwrap().to_bytes(), b"hi");
 
     chunk.text = None;
     chunk.text_cstr = None;
-    assert!(chunk.text_cstr_ptr().is_null());
+    chunk.ensure_text_cstr();
+    assert!(chunk.text_cstr.is_none());
 }

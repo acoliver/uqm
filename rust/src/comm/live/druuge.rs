@@ -129,13 +129,7 @@ mod api {
         }
         fn number(&mut self, value: i32) {
             let comm = &mut **self.comm.borrow_mut();
-            self.cx.borrow_mut().with_legacy(|| {
-                use crate::comm::commglue_abi::runtime::npc_number;
-                // SAFETY: the session owns the loaded number phrases; a null format requests the default.
-                unsafe {
-                    npc_number(comm, value, std::ptr::null());
-                }
-            })
+            crate::comm::commglue_abi::runtime::npc_number(comm, value, false);
         }
     }
 }

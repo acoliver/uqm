@@ -173,6 +173,12 @@ impl GameThreadPacer {
     pub fn now(&self) -> u32 {
         crate::time::counter_abi::GetTimeCounter()
     }
+    pub fn sleep_for(&mut self, duration: u32) {
+        crate::graphics::dcqueue_abi::require_presentation(&self._context);
+        // SAFETY: the retained context admits this initialized display's graphics thread.
+        unsafe { linked::sleep_thread(duration) };
+    }
+
     pub fn sleep_until(&mut self, deadline: u32) {
         crate::graphics::dcqueue_abi::require_presentation(&self._context);
         // SAFETY: this admitted graphics thread owns the initialized display being pumped.

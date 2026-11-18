@@ -68,29 +68,11 @@ mod api {
             }
             fn splice(&mut self, phrase: u32) {
                 let comm = &mut **self.comm.borrow_mut();
-                // SAFETY: the borrowed session retains its loaded phrase resources while splicing.
-                unsafe {
-                    crate::comm::ffi::rust_npc_phrase_splice(
-                        self.cx.borrow().world,
-                        comm,
-                        phrase as i32,
-                    );
-                }
+                crate::comm::ffi::splice_phrase(self.cx.borrow().world, comm, phrase as i32);
             }
             fn number(&mut self, number: i32, padded: bool) {
                 let comm = &mut **self.comm.borrow_mut();
-                // SAFETY: the session retains its number table, and the optional format is a static C string.
-                self.cx.borrow_mut().with_legacy(|| unsafe {
-                    npc_number(
-                        comm,
-                        number,
-                        if padded {
-                            c"%03d".as_ptr()
-                        } else {
-                            std::ptr::null()
-                        },
-                    );
-                })
+                npc_number(comm, number, padded);
             }
         }
     }

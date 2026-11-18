@@ -6,7 +6,12 @@ use crate::engine::StoryKey;
 use crate::comm::races::descriptor::NumberSpeech;
 
 /// Collect one-based phrase indices in the same recursive order as NPCNumberPhrase.
-fn number_phrases(speech: &NumberSpeech, mut number: i32, top: bool, out: &mut Vec<u16>) {
+fn number_phrases(
+    speech: &NumberSpeech,
+    mut number: i32,
+    top: bool,
+    out: &mut Vec<u16>,
+) -> Result<(), &'static str> {
     let start = out.len();
     for digit in speech.digits {
         let quotient = number / digit.divider;
@@ -24,7 +29,7 @@ fn number_phrases(speech: &NumberSpeech, mut number: i32, top: bool, out: &mut V
             }
             out.push(index);
         } else {
-            number_phrases(speech, quotient, false, out);
+            number_phrases(speech, quotient, false, out)?;
         }
         if !digit.names.is_empty() {
             if let Some(name) = digit
@@ -46,9 +51,10 @@ fn number_phrases(speech: &NumberSpeech, mut number: i32, top: bool, out: &mut V
                 .digits
                 .last()
                 .and_then(|digit| digit.strings)
-                .expect("number speech has no zero digit")[0],
+                .ok_or("number speech has no zero digit")?[0],
         );
     }
+    Ok(())
 }
 
 pub fn set_segue(comm: &mut Comm, cx: &mut crate::engine::battle::Cx<'_>, segue: u32) {
@@ -83,43 +89,43 @@ pub fn get_segue(cx: &crate::engine::battle::Cx<'_>) -> u32 {
 
 pub(crate) mod runtime {
     use super::*;
-    use std::ffi::c_char;
-    use std::ptr::null_mut;
+    use std::ffi::CString;
 
-    use crate::sound::heart_ffi::splice_multi_track as SpliceMultiTrack;
-    use crate::sound::heart_ffi::splice_track as SpliceTrack;
-
-    use crate::strings::string_table::GetStringSoundClip;
-
-    use crate::strings::string_table::SetAbsStringTableIndex;
-
-    /// # Safety
-    /// Called from the game thread with a valid printf integer format or null.
-    pub unsafe fn npc_number(comm: &mut Comm, number: i32, format: *const c_char) {
-        let format = if format.is_null() {
-            c"%d".as_ptr()
+    pub(super) fn number_text(number: i32, padded: bool) -> Result<CString, std::ffi::NulError> {
+        let text = if padded {
+            format!("{number:03}")
         } else {
-            format
+            number.to_string()
         };
-        if let Some(speech) = comm.data.definition.alien_number_speech {
+        CString::new(text)
+    }
+
+    pub fn npc_number(comm: &mut Comm, number: i32, padded: bool) {
+        let speech = comm.data.definition.alien_number_speech;
+        let (text, indices) = (|| {
+            let text = number_text(number, padded).map_err(|_| "decimal integer contains NUL")?;
             let mut indices = Vec::new();
-            number_phrases(speech, number, true, &mut indices);
-            let mut tracks = [std::ptr::null::<c_char>(); 20];
-            assert!(indices.len() < tracks.len());
-            for (track, index) in tracks.iter_mut().zip(indices) {
-                *track = GetStringSoundClip(SetAbsStringTableIndex(
-                    (comm.data.conversation_phrases).cast(),
-                    index.wrapping_sub(1),
-                ))
-                .cast();
+            if let Some(speech) = speech {
+                number_phrases(speech, number, true, &mut indices)?;
             }
-            let mut buffer = [0 as c_char; 60];
-            libc::snprintf(buffer.as_mut_ptr(), buffer.len(), format, number);
-            SpliceMultiTrack(tracks.as_ptr(), buffer.as_ptr());
+            Ok::<_, &str>((text, indices))
+        })()
+        .expect("invalid number speech");
+        if speech.is_some() {
+            assert!(indices.len() < crate::sound::trackplayer::MAX_MULTI_TRACKS);
+            let tracks: Vec<_> = indices
+                .into_iter()
+                .map_while(|index| {
+                    comm.display
+                        .phrases
+                        .as_ref()?
+                        .phrase(index.wrapping_sub(1))?
+                        .clip
+                })
+                .collect();
+            crate::sound::heart_ffi::splice_multi_track(&tracks, Some(&text));
         } else {
-            let mut buffer = [0 as c_char; 32];
-            libc::snprintf(buffer.as_mut_ptr(), buffer.len(), format, number);
-            SpliceTrack(null_mut(), buffer.as_mut_ptr(), null_mut(), None);
+            crate::sound::heart_ffi::splice_track(None, Some(&text), None, None);
         }
     }
 }
@@ -128,6 +134,28 @@ pub(crate) mod runtime {
 mod tests {
     use super::*;
     use crate::comm::races::descriptor::{DigitName, SpeechDigit};
+
+    #[test]
+    fn number_text_preserves_decimal_and_three_column_printf_bytes() {
+        for (number, plain, padded) in [
+            (0, c"0", c"000"),
+            (7, c"7", c"007"),
+            (-7, c"-7", c"-07"),
+            (1234, c"1234", c"1234"),
+            (i32::MIN, c"-2147483648", c"-2147483648"),
+            (i32::MAX, c"2147483647", c"2147483647"),
+        ] {
+            assert_eq!(
+                runtime::number_text(number, false).unwrap().as_c_str(),
+                plain
+            );
+            assert_eq!(
+                runtime::number_text(number, true).unwrap().as_c_str(),
+                padded
+            );
+        }
+        let _: fn(&mut Comm, i32, bool) = runtime::npc_number;
+    }
 
     #[test]
     fn immutable_race_number_tables_preserve_zero_teens_and_recursive_thousands() {
@@ -157,7 +185,7 @@ mod tests {
                 (1_001_010, vec![one, thousand, one, thousand, ten]),
             ] {
                 let mut out = Vec::new();
-                number_phrases(speech, number, true, &mut out);
+                number_phrases(speech, number, true, &mut out).unwrap();
                 assert_eq!(out, expected, "{number}");
             }
         }
@@ -183,7 +211,7 @@ mod tests {
             (2034, vec![3, 200, 30, 5]),
         ] {
             let mut out = Vec::new();
-            number_phrases(&speech, number, true, &mut out);
+            number_phrases(&speech, number, true, &mut out).unwrap();
             assert_eq!(out, expected);
         }
         const NAMED: [SpeechDigit; 5] = {
@@ -205,7 +233,7 @@ mod tests {
         let speech = NumberSpeech { digits: &NAMED };
         for (number, expected) in [(101, vec![2, 400, 2]), (102, vec![2, 500, 3])] {
             let mut out = Vec::new();
-            number_phrases(&speech, number, true, &mut out);
+            number_phrases(&speech, number, true, &mut out).unwrap();
             assert_eq!(out, expected);
         }
     }

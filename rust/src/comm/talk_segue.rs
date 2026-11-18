@@ -233,7 +233,7 @@ pub(super) mod c_bridge {
     ) {
         let activity = cx.world.activity();
         cx.with_legacy(|| {
-            super::super::response_ui::refresh_responses_production(comm, activity, top, count, cur)
+            super::super::sis_graphics::refresh_responses(comm, activity, top, count, cur)
         });
     }
     #[cfg(not(test))]
@@ -242,7 +242,7 @@ pub(super) mod c_bridge {
         cx: &mut super::Cx<'_>,
         io: &mut super::Io<'_>,
     ) {
-        super::super::response_ui::select_conversation_summary_production(comm, cx, io);
+        super::super::sis_graphics::select_conversation_summary(comm, cx, io);
     }
     #[cfg(not(test))]
     pub fn call_update_comm_graphics(comm: &mut Comm, input: &crate::engine::input::InputSession) {
@@ -251,13 +251,7 @@ pub(super) mod c_bridge {
     #[cfg(not(test))]
     pub fn call_feedback_player_phrase(comm: &mut Comm, cx: &mut super::Cx<'_>) {
         let activity = cx.world.activity();
-        cx.with_legacy(|| unsafe {
-            super::super::response_ui::feedback_player_phrase_production(
-                comm,
-                activity,
-                std::ptr::null(),
-            )
-        });
+        super::super::sis_graphics::feedback_player_phrase(comm, activity, None);
     }
 
     /// Play alien music from CommData.AlienSong (port of c_PlayAlienMusic).
@@ -290,9 +284,8 @@ pub mod dinput {
         KEY_MENU_RIGHT,
     };
     use crate::engine::{battle::Cx, observe::Io};
-    use crate::mainloop::restart_menu::c_extern::SetMenuSounds;
 
-    const MENU_SOUND_NONE: u32 = 0;
+    const MENU_SOUND_NONE: u16 = 0;
     const OPT_PC: c_int = 0x02;
     const CHECK_ABORT: u32 = 0x4000;
 
@@ -431,9 +424,10 @@ pub mod dinput {
             } else if c_bridge::PlayingTrack() == 0 {
                 c_bridge::PlayTrack();
             }
-
-            SetMenuSounds(input, MENU_SOUND_NONE as u16, MENU_SOUND_NONE as u16);
         });
+        cx.kernel
+            .input_controls()
+            .set_menu_sounds(MENU_SOUND_NONE, MENU_SOUND_NONE);
         comm.run_input(cx, io, false, |comm, cx, _| {
             let activity = cx.world.activity();
             cx.with_legacy(|| unsafe { do_talk_segue_frame(comm, input, &mut ts, activity) != 0 })
@@ -495,7 +489,7 @@ pub mod dinput {
                     c_bridge::ONE_SECOND_TICKS as i16,
                 )
             });
-            super::super::response_ui::select_conversation_summary_production(comm, cx, io);
+            super::super::sis_graphics::select_conversation_summary(comm, cx, io);
             lrs.time_out = cx
                 .with_legacy(|| c_bridge::FadeMusic(0, (c_bridge::ONE_SECOND_TICKS * 2) as i16))
                 + (c_bridge::ONE_SECOND_TICKS as u32) / 60;
@@ -1244,10 +1238,7 @@ fn get_scroll_mode(input: &InputSession) -> ScrollMode {
 
 fn check_subtitles(comm: &mut Comm) {
     #[cfg(not(test))]
-    unsafe {
-        let _ = comm;
-        c_bridge::check_subtitles(comm);
-    }
+    c_bridge::check_subtitles(comm);
     #[cfg(test)]
     {
         // In tests, update the subtitle tracker position from the track.
@@ -1599,8 +1590,9 @@ fn intro_transition(mode: u32, fade_time: u32) -> IntroTransition {
 fn comm_intro_transition(_comm: &mut Comm) {
     #[cfg(not(test))]
     unsafe {
-        use crate::mainloop::restart_menu::c_extern::{FadeScreen, FADE_ALL_TO_COLOR};
+        use crate::graphics::cmap_abi::FadeScreen;
         use std::ffi::{c_uint, c_void};
+        const FADE_ALL_TO_COLOR: u32 = 253;
 
         // Ported from c_CommIntroTransition in rust_comm.c
         let mode = crate::comm::ffi::rust_get_comm_intro_mode(_comm);

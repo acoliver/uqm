@@ -12,9 +12,9 @@ use std::sync::atomic::{AtomicU32, Ordering};
 
 use super::decoder::SoundDecoder;
 use super::heart_ffi::*;
-use super::stream;
 use super::test_support::{ScriptedDecoder, ENGINE_TEST_LOCK};
 use super::types::{SoundPosition, MUSIC_SOURCE};
+use super::{stream, trackplayer};
 
 const SOURCE: u32 = MUSIC_SOURCE as u32;
 
@@ -545,22 +545,19 @@ fn stopping_all_sound_stops_effect_sources() {
 #[test]
 fn the_track_player_exports_are_quiet_with_no_track() {
     let _engine = Engine::start();
-    unsafe {
-        stop_track();
-        pause_track();
-        resume_track();
-        jump_track();
-        fast_forward_smooth();
-        fast_reverse_smooth();
-        fast_forward_page();
-        fast_reverse_page();
-        assert_eq!(playing_track(), 0);
-        assert_eq!(get_track_position(1), 0);
-        assert!(get_first_track_subtitle().is_null());
-        assert!(get_next_track_subtitle(ptr::null_mut()).is_null());
-        assert!(get_track_subtitle_text(ptr::null_mut()).is_null());
-        splice_multi_track(ptr::null(), ptr::null());
-    }
+    stop_track();
+    pause_track();
+    resume_track();
+    jump_track();
+    fast_forward_smooth();
+    fast_reverse_smooth();
+    fast_forward_page();
+    fast_reverse_page();
+    assert_eq!(playing_track(), 0);
+    assert_eq!(get_track_position(1), 0);
+    assert!(trackplayer::subtitle_snapshot().is_none());
+    assert!(trackplayer::subtitle_history().is_empty());
+    splice_multi_track(&[], None);
 }
 
 #[test]
@@ -592,8 +589,8 @@ fn speech_controls_have_safe_rust_signatures() {
     let _: fn() = fast_reverse_page;
     let _: fn() = fast_forward_page;
     let _: fn(c_int) -> c_int = get_track_position;
-    let _: fn() -> *const std::ffi::c_char = get_track_subtitle;
-    let _: fn() -> *mut c_void = get_first_track_subtitle;
+    let _: fn() -> Option<trackplayer::SubtitleSnapshot> = trackplayer::subtitle_snapshot;
+    let _: fn() -> Vec<trackplayer::SubtitleSnapshot> = trackplayer::subtitle_history;
     let _: Option<unsafe fn()> = None::<super::types::PhraseCallback>;
 }
 

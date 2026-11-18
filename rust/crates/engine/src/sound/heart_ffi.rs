@@ -11,7 +11,7 @@ pub use self::{destroy_music as DestroyMusic, destroy_sound as DestroySound};
 use std::ffi::{c_char, c_int, c_uint, c_void, CStr, CString};
 use std::panic::{self, AssertUnwindSafe};
 use std::path::Path;
-use std::ptr::{self, null_mut};
+use std::ptr::null_mut;
 use std::sync::Arc;
 
 use parking_lot::Mutex;
@@ -49,7 +49,6 @@ use super::null::NullDecoder;
 use super::sfx;
 use super::stream;
 use super::trackplayer;
-// SubtitleRef no longer needed — subtitle iteration uses raw chunk pointers
 use super::types::*;
 
 // =============================================================================
@@ -106,7 +105,7 @@ fn file_extension(name: &str) -> Option<&str> {
 ///
 /// Each page gets its own decoder that seeks to the correct offset and
 /// limits decoding to its timestamp duration.
-unsafe fn create_per_page_decoders(
+fn create_per_page_decoders(
     track_name: Option<&str>,
     track_text: Option<&str>,
     timestamp: Option<&str>,
@@ -190,9 +189,10 @@ unsafe fn create_per_page_decoders(
         }
     }
 
-    let file_data = CString::new(name)
-        .ok()
-        .and_then(|c_name| read_content_file(c_name.as_ptr()));
+    let file_data = CString::new(name).ok().and_then(|c_name| {
+        // SAFETY: c_name owns the terminated path throughout this content read.
+        unsafe { read_content_file(c_name.as_ptr()) }
+    });
     page_decoders(name, file_data.as_deref(), &page_run_times)
 }
 
@@ -276,21 +276,6 @@ unsafe fn c_str_to_option(ptr: *const c_char) -> Option<&'static str> {
     }
 }
 
-/// Convert a UNICODE* (which is really char* / C string) to Option<String>.
-/// UQM's UNICODE is typedef'd to `char`, not u16.
-unsafe fn unicode_ptr_to_option(ptr: *const c_char) -> Option<String> {
-    if ptr.is_null() {
-        return None;
-    }
-    let cstr = std::ffi::CStr::from_ptr(ptr);
-    let s = cstr.to_string_lossy().into_owned();
-    if s.is_empty() {
-        None
-    } else {
-        Some(s)
-    }
-}
-
 /// MUSIC_REF is a double pointer: `Box<Arc<Mutex<SoundSample>>>` stored as
 /// `*mut *mut c_void`. The outer Box is the "MUSIC_REF" handle.
 /// Borrow the Arc from a MUSIC_REF (double-pointer) WITHOUT taking ownership.
@@ -331,9 +316,6 @@ fn convert_c_callbacks(ptr: *mut c_void) -> Option<Box<dyn StreamCallbacks + Sen
         sample_ptr: ptr,
     }))
 }
-
-// (SUBTITLE_REF_CACHE removed — subtitle iteration now uses raw chunk pointers
-// matching C's SUBTITLE_REF = TFB_SoundChunk* semantics)
 
 // =============================================================================
 // Stream FFI (18 functions)
@@ -598,20 +580,22 @@ pub unsafe extern "C" fn GraphForegroundStream(
 // Speech track facade
 // =============================================================================
 
-///
-/// # Safety
-///
-/// Non-null strings must be NUL-terminated and valid for the call.
-/// Any callback must remain valid whenever playback or seeking dispatches it.
-pub unsafe fn splice_track(
-    track_name_ptr: *const c_char,
-    track_text_ptr: *const c_char,
-    timestamp_ptr: *const c_char,
+/// Decode and append speech while retaining the supplied callback for playback and seeking.
+pub fn splice_track(
+    track_name: Option<&CStr>,
+    track_text: Option<&CStr>,
+    timestamp: Option<&CStr>,
     callback: Option<Box<dyn Fn(i32) + Send>>,
 ) {
-    let name = unicode_ptr_to_option(track_name_ptr);
-    let text = unicode_ptr_to_option(track_text_ptr);
-    let timestamp = unicode_ptr_to_option(timestamp_ptr);
+    let name = track_name
+        .filter(|s| !s.is_empty())
+        .map(CStr::to_string_lossy);
+    let text = track_text
+        .filter(|s| !s.is_empty())
+        .map(CStr::to_string_lossy);
+    let timestamp = timestamp
+        .filter(|s| !s.is_empty())
+        .map(CStr::to_string_lossy);
     eprintln!(
         "[SpliceTrack] name={:?} text_len={:?} ts_len={:?} cb={}",
         name,
@@ -632,29 +616,19 @@ pub unsafe fn splice_track(
     );
 }
 
-///
-/// # Safety
-///
-/// The names array must be null or NUL-terminated; each non-null string
-/// must be NUL-terminated and valid for the call.
-pub unsafe fn splice_multi_track(
-    track_names_ptr: *const *const c_char,
-    track_text_ptr: *const c_char,
-) {
-    if track_names_ptr.is_null() {
-        return;
-    }
-    let Some(text) = unicode_ptr_to_option(track_text_ptr) else {
+/// Append complete number clips, preserving the timed null decoder for absent voice content.
+pub fn splice_multi_track(track_names: &[&CStr], track_text: Option<&CStr>) {
+    let Some(text) = track_text
+        .filter(|s| !s.is_empty())
+        .map(CStr::to_string_lossy)
+    else {
         return;
     };
     let mut decoders = Vec::new();
-    for i in 0..trackplayer::MAX_MULTI_TRACKS {
-        let name_ptr = *track_names_ptr.add(i);
-        if name_ptr.is_null() {
-            break;
-        }
-        let name = CStr::from_ptr(name_ptr).to_string_lossy();
-        let data = read_content_file(name_ptr);
+    for clip in track_names.iter().take(trackplayer::MAX_MULTI_TRACKS) {
+        let name = clip.to_string_lossy();
+        // SAFETY: the borrowed clip is terminated and remains live for this load.
+        let data = unsafe { read_content_file(clip.as_ptr()) };
         // C loads the complete clip, or its timed null decoder when voice
         // content is absent. Never append an audio chunk without a decoder.
         decoders.extend(page_decoders(
@@ -714,42 +688,6 @@ pub fn fast_forward_page() {
 
 pub fn get_track_position(in_units: c_int) -> c_int {
     trackplayer::get_track_position(in_units as u32) as c_int
-}
-
-pub fn get_track_subtitle() -> *const c_char {
-    // Return a stable pointer from the chunk's cached CString.
-    // C's CheckSubtitles uses pointer identity to detect subtitle changes.
-    trackplayer::get_track_subtitle_cstr()
-}
-
-pub fn get_first_track_subtitle() -> *mut c_void {
-    // Return the actual chunks_head pointer (matches C: returns chunks_head as SUBTITLE_REF)
-    trackplayer::get_first_chunk_ptr() as *mut c_void
-}
-
-///
-/// # Safety
-///
-/// Caller must ensure pointer arguments are valid and properly aligned.
-pub unsafe fn get_next_track_subtitle(last_ref: *mut c_void) -> *mut c_void {
-    // Match C ABI: GetNextTrackSubtitle(SUBTITLE_REF LastRef)
-    // LastRef is an opaque pointer to a SoundChunk in the linked list
-    if last_ref.is_null() {
-        return null_mut();
-    }
-    trackplayer::get_next_chunk_ptr(last_ref as *const u8) as *mut c_void
-}
-
-///
-/// # Safety
-///
-/// Caller must ensure pointer arguments are valid and properly aligned.
-pub unsafe fn get_track_subtitle_text(sub_ref_ptr: *mut c_void) -> *const c_char {
-    if sub_ref_ptr.is_null() {
-        return ptr::null();
-    }
-    // Return stable CString pointer from the chunk itself
-    trackplayer::get_chunk_text_cstr(sub_ref_ptr as *const u8)
 }
 
 // =============================================================================
@@ -1462,7 +1400,7 @@ mod tests {
     #[test]
 
     fn test_load_sound_file_null_returns_null() {
-        let result = unsafe { LoadSoundFile(ptr::null()) };
+        let result = unsafe { LoadSoundFile(std::ptr::null()) };
         assert!(result.is_null());
     }
 

@@ -3,13 +3,10 @@ mod chmmr;
 use crate::comm::races::script::*;
 use crate::comm::Comm;
 use crate::engine::StoryKey;
-use std::ffi::CStr;
-
-use crate::ui::sis::draw_landers;
+use std::ffi::CString;
 
 use crate::strings::string_table::SetAbsStringTableIndex;
-
-use crate::strings::string_table::GetStringAddress;
+use crate::ui::sis::draw_landers;
 
 use crate::graphics::cmap_abi::GetColorMapAddress;
 
@@ -40,6 +37,41 @@ impl<'a, 'b, H> Host<'a, 'b, H> {
     }
 }
 
+fn response_text(comm: &Comm, phrase: u16, fragments: &[i32]) -> Result<CString, &'static str> {
+    let phrase_text = |index| {
+        comm.display
+            .phrases
+            .as_ref()
+            .and_then(|table| table.phrase(index))
+            .and_then(|entry| entry.text)
+            .ok_or("response phrase has no text")
+    };
+    if fragments.is_empty() {
+        return Ok(phrase_text(phrase - 1)?.to_owned());
+    }
+    let mut text = Vec::new();
+    for &fragment in fragments {
+        let part = match fragment {
+            GLOBAL_PLAYER_NAME => comm.conversation_resources().commander_name.as_c_str(),
+            GLOBAL_SHIP_NAME => comm.conversation_resources().ship_name.as_c_str(),
+            _ => {
+                phrase_text(u16::try_from(fragment - 1).map_err(|_| "invalid response fragment")?)?
+            }
+        };
+        text.extend(
+            part.to_bytes()
+                .iter()
+                .copied()
+                .map_while(std::num::NonZeroU8::new),
+        );
+    }
+    assert!(
+        text.len() < 2048,
+        "constructed dialogue response exceeds shared buffer"
+    );
+    Ok(CString::from(text))
+}
+
 impl<H> DialogueHost<H> for Host<'_, '_, H> {
     fn get(&self, key: StoryKey) -> u8 {
         self.cx.borrow().world.story_state(key) as u8
@@ -55,61 +87,19 @@ impl<H> DialogueHost<H> for Host<'_, '_, H> {
     fn npc(&mut self, phrase: i32) {
         let comm = &mut **self.comm.borrow_mut();
 
-        // SAFETY: the borrowed session retains its loaded phrase resources through registration.
-        unsafe { crate::comm::ffi::rust_npc_phrase_cb(self.cx.borrow().world, comm, phrase, None) }
+        crate::comm::ffi::npc_phrase(self.cx.borrow().world, comm, phrase, None);
     }
 
     fn response(&mut self, phrase: u16, handler: H, fragments: &[i32]) {
         let comm = &mut **self.comm.borrow_mut();
 
-        let cx = self.cx.borrow();
-        {
-            // SAFETY: phrase tables and name buffers outlive this registration; the owned buffer is capacity-checked.
-            unsafe {
-                let world = &cx.world.data;
-                let text = if fragments.is_empty() {
-                    GetStringAddress(SetAbsStringTableIndex(
-                        (comm.data.conversation_phrases).cast(),
-                        phrase - 1,
-                    ))
-                } else {
-                    // Concatenate bytes exactly as construct_response does, including
-                    // the spaces already present in the translated phrase fragments.
-                    let mut text = Vec::new();
-                    for &fragment in fragments {
-                        let ptr = match fragment {
-                            GLOBAL_PLAYER_NAME => {
-                                std::ptr::addr_of!(world.flagship.commander_name).cast()
-                            }
-                            GLOBAL_SHIP_NAME => std::ptr::addr_of!(world.flagship.ship_name).cast(),
-                            _ => {
-                                let index =
-                                    u16::try_from(fragment - 1).expect("invalid response fragment");
-                                GetStringAddress(SetAbsStringTableIndex(
-                                    (comm.data.conversation_phrases).cast(),
-                                    index,
-                                ))
-                            }
-                        };
-                        text.extend_from_slice(CStr::from_ptr(ptr).to_bytes());
-                    }
-                    assert!(
-                        text.len() < 2048,
-                        "constructed dialogue response exceeds shared buffer"
-                    );
-                    let buf = std::ptr::addr_of_mut!(comm.display.phrase_buf).cast::<u8>();
-                    std::ptr::copy_nonoverlapping(text.as_ptr(), buf, text.len());
-                    buf.add(text.len()).write(0);
-                    buf.cast()
-                };
-                crate::comm::ffi::do_response_phrase(
-                    comm,
-                    u32::from(phrase),
-                    Some(CStr::from_ptr(text)),
-                    Some((self.callback)(handler)),
-                );
-            }
-        }
+        let text = response_text(comm, phrase, fragments).expect("invalid dialogue response");
+        crate::comm::ffi::do_response_phrase(
+            comm,
+            u32::from(phrase),
+            Some(&text),
+            Some((self.callback)(handler)),
+        );
     }
 
     fn enabled(&self, phrase: u16) -> bool {
@@ -187,6 +177,27 @@ mod tests {
     use super::*;
 
     #[test]
+    fn response_preparation_rejects_missing_text_and_invalid_fragments() {
+        let mut comm = Comm::new();
+        assert_eq!(
+            response_text(&comm, 1, &[]),
+            Err("response phrase has no text")
+        );
+        comm.set_conversation_phrases(Some(
+            crate::strings::owned_table::LoadedTextTable::new(vec![
+                c"éclair ".to_owned(),
+                c"船".to_owned(),
+            ])
+            .into(),
+        ));
+        assert_eq!(response_text(&comm, 1, &[1, 2]).unwrap(), c"éclair 船");
+        assert_eq!(
+            response_text(&comm, 1, &[0]),
+            Err("invalid response fragment")
+        );
+    }
+
+    #[test]
     #[serial_test::serial]
     fn local_effects_do_not_publish_over_another_context() {
         crate::comm::with_test_context(|cx| {
@@ -226,5 +237,41 @@ mod tests {
             );
             assert_eq!(second.data.definition.alien_ambient_array[2].anim_flags, 0);
         });
+    }
+    #[test]
+    #[serial_test::serial]
+    fn supplied_names_are_copied_into_responses_and_admitted_to_real_speech() {
+        use crate::sound::trackplayer;
+        fn selected(comm: &mut Comm, _: &mut crate::engine::battle::Cx<'_>, reference: u32) {
+            comm.disable_phrase(reference as i32);
+        }
+        trackplayer::stop_track().unwrap();
+        trackplayer::splice_track(Some("greeting"), Some("Hello "), None, None, vec![]).unwrap();
+        crate::comm::with_test_context(|cx| {
+            cx.world.data.flagship.commander_name[..5].copy_from_slice("Zoë\0".as_bytes());
+            cx.world.data.flagship.ship_name[..4].copy_from_slice("船\0".as_bytes());
+            let mut comm = Comm::new();
+            comm.admit_conversation_names(cx.world).unwrap();
+            {
+                let mut host = Host::new(&mut comm, cx, |_: ()| {
+                    selected as crate::comm::response::ResponseFunc
+                });
+                host.response(71, (), &[GLOBAL_PLAYER_NAME, GLOBAL_SHIP_NAME]);
+                host.npc(GLOBAL_PLAYER_NAME);
+                host.npc(GLOBAL_SHIP_NAME);
+            }
+            assert_eq!(comm.responses().get(0).unwrap().response_text, "Zoë船");
+            assert_eq!(
+                trackplayer::subtitle_history()[0].text.as_c_str(),
+                c"Hello Zoë船"
+            );
+            cx.world.data.flagship.commander_name.fill(0);
+            cx.world.data.flagship.ship_name.fill(0);
+            assert_eq!(comm.responses().get(0).unwrap().response_text, "Zoë船");
+            comm.responses_mut().select(0);
+            assert_eq!(crate::comm::ffi::rust_execute_response(&mut comm, cx), 71);
+            assert!(!comm.phrase_enabled(71));
+        });
+        trackplayer::stop_track().unwrap();
     }
 }

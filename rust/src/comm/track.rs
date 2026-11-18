@@ -8,17 +8,12 @@
 //! @requirement TP-REQ-001, TP-REQ-003, TP-REQ-007, TP-REQ-008, TP-REQ-009
 
 #[cfg(not(test))]
-use std::ffi::CStr;
-
-#[cfg(not(test))]
 use crate::sound::heart_ffi::{
     fast_forward_page as FastForward_Page, fast_forward_smooth as FastForward_Smooth,
     fast_reverse_page as FastReverse_Page, fast_reverse_smooth as FastReverse_Smooth,
-    get_first_track_subtitle as GetFirstTrackSubtitle,
-    get_next_track_subtitle as GetNextTrackSubtitle, get_track_position as GetTrackPosition,
-    get_track_subtitle as GetTrackSubtitle, get_track_subtitle_text as GetTrackSubtitleText,
-    jump_track as JumpTrack, pause_track as PauseTrack, play_track as PlayTrack,
-    playing_track as PlayingTrack, resume_track as ResumeTrack, stop_track as StopTrack,
+    get_track_position as GetTrackPosition, jump_track as JumpTrack, pause_track as PauseTrack,
+    play_track as PlayTrack, playing_track as PlayingTrack, resume_track as ResumeTrack,
+    stop_track as StopTrack,
 };
 
 /// Bridge to the authoritative C trackplayer.
@@ -35,34 +30,26 @@ impl CTrackBridge {
 
     /// Get the current subtitle from the C trackplayer.
     pub fn current_subtitle() -> Option<String> {
-        unsafe {
-            let ptr = GetTrackSubtitle();
-            if ptr.is_null() {
-                None
-            } else {
-                CStr::from_ptr(ptr).to_str().ok().map(|s| s.to_string())
-            }
-        }
+        crate::sound::trackplayer::subtitle_snapshot().map(|subtitle| {
+            subtitle
+                .text
+                .into_string()
+                .unwrap_or_else(|error| panic!("subtitle UTF-8: {error}"))
+        })
     }
 
     /// Enumerate all subtitle history entries from the C trackplayer.
     pub fn enumerate_subtitle_history() -> Vec<String> {
-        let mut entries = Vec::new();
-        unsafe {
-            let mut sub = GetFirstTrackSubtitle();
-            while !sub.is_null() {
-                let text_ptr = GetTrackSubtitleText(sub);
-                if !text_ptr.is_null() {
-                    if let Ok(s) = CStr::from_ptr(text_ptr).to_str() {
-                        if !s.is_empty() {
-                            entries.push(s.to_string());
-                        }
-                    }
-                }
-                sub = GetNextTrackSubtitle(sub);
-            }
-        }
-        entries
+        crate::sound::trackplayer::subtitle_history()
+            .into_iter()
+            .filter(|subtitle| !subtitle.text.is_empty())
+            .map(|subtitle| {
+                subtitle
+                    .text
+                    .into_string()
+                    .unwrap_or_else(|error| panic!("subtitle UTF-8: {error}"))
+            })
+            .collect()
     }
 
     /// Stop playback via the C trackplayer.

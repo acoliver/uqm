@@ -153,10 +153,7 @@ mod api {
             }
             fn number(&mut self, number: i32) {
                 let comm = &mut **self.comm.borrow_mut();
-                // SAFETY: the session retains the loaded number phrases; a null format requests the default.
-                self.cx.borrow_mut().with_legacy(|| unsafe {
-                    npc_number(comm, number, std::ptr::null());
-                })
+                npc_number(comm, number, false);
             }
             fn status_mode(&mut self, mode: i32) -> i32 {
                 self.cx

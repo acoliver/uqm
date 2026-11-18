@@ -1,140 +1,146 @@
-//! Remaining live dialogue API and subtitle cache, ported from comm.c.
-//! Copyright Paul Reiche, Fred Ford, 1992-2002. GPL-2.0-or-later.
+//! Supplied conversation state and retained subtitle rendering.
 
-use crate::comm::locdata::{CPoint, CRect, CStamp};
-use crate::comm::Comm;
+use super::{
+    locdata::{CPoint, CRect},
+    sis_graphics::{suffix, Text},
+    Comm,
+};
+use crate::graphics::{context_abi::ContextLease, native_font::FontLease};
+use crate::sound::trackplayer::{SubtitleIdentity, SubtitleSnapshot};
+use std::{
+    ffi::{c_void, CString},
+    ptr::null_mut,
+};
 
-use super::sis_graphics::CText;
-use std::ffi::{c_char, c_void};
-use std::ptr::{null, null_mut};
+impl Comm {
+    pub fn set_conversation_phrases(
+        &mut self,
+        phrases: Option<crate::strings::conversation::ConversationTable>,
+    ) {
+        self.display.phrases = phrases;
+    }
 
-use crate::graphics::context_abi::SetContext;
-
-use crate::graphics::font_abi::font_DrawTracedText;
-
-use crate::graphics::font_abi::GetContextFontLeading;
-
-use crate::graphics::font_abi::SetContextFont;
-
-use crate::graphics::font_abi::TextRect;
-
-use crate::graphics::frame_abi::ClearDrawable;
-
-use crate::graphics::frame_abi::DrawStamp;
-use crate::sound::heart_ffi::get_track_subtitle as GetTrackSubtitle;
-
-use crate::graphics::gfx_common_abi::{BatchGraphics, UnbatchGraphics};
-
-/// # Safety
-/// Text and next must be writable; text must reference a NUL-terminated string.
-pub unsafe fn get_line_within_width(
-    text: *mut CText,
-    next: *mut *const c_char,
-    width: i16,
-    max_chars: u16,
-) -> i32 {
-    i32::from(super::text_layout::fit_line(
-        &mut *text,
-        &mut *next,
-        width,
-        max_chars,
-        |text| {
-            let mut rect = CRect::default();
-            TextRect(
-                std::ptr::from_mut(text).cast(),
-                std::ptr::from_mut(&mut rect).cast(),
-                null_mut(),
-            );
-            rect.width
-        },
-    ))
+    pub fn conversation_phrases(&self) -> Option<&crate::strings::conversation::ConversationTable> {
+        self.display.phrases.as_ref()
+    }
 }
 
-unsafe fn count_lines(comm: &mut Comm, text: &mut CText) -> i32 {
-    let width = comm.data.definition.alien_text_width as i16;
-    SetContextFont((comm.data.alien_font).cast());
-    let mut ptr = text.p_str;
+fn count_lines(comm: &Comm, text: &mut Text<'_>, font: &FontLease) -> i32 {
+    let mut input = text.text;
     let mut count = 0;
     loop {
         count += 1;
-        text.p_str = ptr;
-        if get_line_within_width(text, &mut ptr, width, u16::MAX) != 0 {
+        text.text = input;
+        let fitted = text.fit(font, comm.data.definition.alien_text_width as i16, u16::MAX);
+        input = suffix(input, fitted.next);
+        if fitted.end_of_line {
             break;
         }
     }
-    text.p_str = ptr;
+    text.text = input;
     count
 }
 
-unsafe fn draw_subtitle(comm: &mut Comm, text: &mut CText) -> i16 {
-    BatchGraphics();
-    let mut stamp = CStamp {
-        origin: CPoint { x: 0, y: 0 },
-        frame: comm.display.text_cache_frame,
-    };
-    if comm.display.last_subtitle == text.p_str {
-        DrawStamp(std::ptr::from_mut(&mut stamp).cast());
-        UnbatchGraphics();
-        return comm.display.last_baseline;
-    }
-    let old_context = SetContext(comm.display.text_cache_context);
-    ClearDrawable();
-    comm.display.last_subtitle = text.p_str;
-    let width = comm.data.definition.alien_text_width as i16;
-    SetContextFont((comm.data.alien_font).cast());
-    let mut leading = 0i16;
-    GetContextFontLeading(&mut leading);
-    let mut ptr = text.p_str;
-    if comm.data.definition.alien_text_valign & 3 != 0 {
-        let lines = count_lines(comm, text);
-        if comm.data.definition.alien_text_valign == 2 {
+fn layout_subtitle(comm: &Comm, cache: &ContextLease, font: &FontLease, text: &mut Text<'_>) {
+    let leading = font.leading();
+    let mut input = text.text;
+    let valign = comm.data.definition.alien_text_valign;
+    if valign & 3 != 0 {
+        let lines = count_lines(comm, text, font);
+        if valign == 2 {
             text.baseline.y = (i32::from(text.baseline.y) - i32::from(leading) * lines) as i16;
-        } else if comm.data.definition.alien_text_valign == 1 {
+        } else if valign == 1 {
             text.baseline.y =
                 (i32::from(text.baseline.y) - (i32::from(leading) * lines) / 2) as i16;
         }
-        if text.baseline.y < 0 {
-            text.baseline.y = 0;
-        }
+        text.baseline.y = text.baseline.y.max(0);
     }
-    let mut max_chars = u16::MAX;
+    let mut remaining = u16::MAX;
     loop {
-        text.p_str = ptr;
+        text.text = input;
         text.baseline.y = text.baseline.y.wrapping_add(leading);
-        let eol = get_line_within_width(text, &mut ptr, width, max_chars);
-        max_chars = max_chars.wrapping_sub(text.char_count).saturating_sub(1);
-        font_DrawTracedText(
-            std::ptr::from_mut(text).cast(),
+        let fitted = text.fit(
+            font,
+            comm.data.definition.alien_text_width as i16,
+            remaining,
+        );
+        remaining = remaining.wrapping_sub(text.char_count).saturating_sub(1);
+        input = suffix(input, fitted.next);
+        let (line, _) = crate::strings::unicode::split_utf8_prefix(
+            text.text.to_bytes(),
+            text.char_count as usize,
+        );
+        let line = CString::from(
+            line.iter()
+                .copied()
+                .map_while(std::num::NonZeroU8::new)
+                .collect::<Vec<_>>(),
+        );
+        cache.draw_traced_text(
+            font,
+            &line,
+            text.baseline,
+            text.align as u32,
             comm.data.definition.alien_text_fcolor,
             comm.data.definition.alien_text_bcolor,
         );
-        if eol != 0 || max_chars == 0 {
+        if fitted.end_of_line || remaining == 0 {
             break;
         }
     }
-    text.p_str = ptr;
-    SetContext(old_context);
-    DrawStamp(std::ptr::from_mut(&mut stamp).cast());
-    comm.display.last_baseline = text.baseline.y;
-    UnbatchGraphics();
-    text.baseline.y
+}
+
+fn draw_subtitle(comm: &mut Comm, snapshot: &SubtitleSnapshot) -> i16 {
+    let super::sis_graphics::SubtitleCache {
+        target,
+        context: cache,
+        frame,
+        font,
+    } = comm.conversation_display().subtitles.clone();
+    target.with_selected(|| {
+        target.with_batch(|| {
+            if comm.display.last_subtitle == Some(snapshot.identity) {
+                target.draw_stamp(&frame, CPoint { x: 0, y: 0 });
+                return comm.display.last_baseline;
+            }
+            let mut text = Text::new(
+                &snapshot.text,
+                comm.display.subtitle.baseline,
+                comm.display.subtitle.align,
+                u16::MAX,
+            );
+            cache.with_selected(|| {
+                cache.clear();
+                comm.display.last_subtitle = Some(snapshot.identity);
+                cache.set_font(&font);
+                layout_subtitle(comm, &cache, &font, &mut text);
+            });
+            target.draw_stamp(&frame, CPoint { x: 0, y: 0 });
+            comm.display.last_baseline = text.baseline.y;
+            text.baseline.y
+        })
+    })
 }
 
 pub fn clear_subtitles(comm: &mut Comm) {
     comm.display.clear_subtitles = true;
-    comm.display.last_subtitle = null();
-    comm.display.subtitle.p_str = null();
-    comm.display.subtitle.char_count = 0;
+    comm.display.last_subtitle = None;
+    comm.display.subtitle.current = None;
 }
 
-/// # Safety
-/// Track player and CommData must be initialized on the game thread.
-pub unsafe fn check_subtitles(comm: &mut Comm) {
+pub fn check_subtitles(comm: &mut Comm) {
     comm.apply_phrase_events();
-    let text = GetTrackSubtitle();
+    let current = crate::sound::trackplayer::subtitle_snapshot();
+    let identity = current.as_ref().map(|snapshot| snapshot.identity);
+    let previous = comm
+        .display
+        .subtitle
+        .current
+        .as_ref()
+        .map(|snapshot| snapshot.identity);
     let baseline = comm.data.definition.alien_text_baseline;
     let align = comm.data.definition.alien_text_align as i32;
-    if text != comm.display.subtitle.p_str
+    if identity != previous
         || comm.display.subtitle.baseline.x != baseline.x
         || comm.display.subtitle.baseline.y != baseline.y
         || comm.display.subtitle.align != align
@@ -142,32 +148,25 @@ pub unsafe fn check_subtitles(comm: &mut Comm) {
         comm.display.clear_subtitles = true;
         comm.display.subtitle.baseline = baseline;
         comm.display.subtitle.align = align;
-        if comm.display.subtitle.p_str == text {
+        if previous == identity {
             crate::log_abi::log_message(
                 crate::log_abi::LOG_WARNING,
                 "Dialog text and location changed out of sync",
             );
         }
-        comm.display.subtitle.p_str = text;
-        comm.display.subtitle.char_count = if text.is_null() { 0 } else { u16::MAX };
+        comm.display.subtitle.current = current;
     }
 }
 
-/// # Safety
-/// Subtitle cache and current drawing context must be live on the game thread.
-pub unsafe fn comm_redraw_subtitles(comm: &mut Comm, enabled: bool) {
-    if !enabled {
-        return;
-    }
-    if !comm.display.subtitle.p_str.is_null() {
-        let mut text = comm.display.subtitle;
-        draw_subtitle(comm, &mut text);
+pub fn comm_redraw_subtitles(comm: &mut Comm, enabled: bool) {
+    if enabled {
+        if let Some(current) = comm.display.subtitle.current.clone() {
+            draw_subtitle(comm, &current);
+        }
     }
 }
 
-/// # Safety
-/// Called from the game thread, outside a COMM_STATE lock.
-pub unsafe fn set_talking_finished(comm: &mut Comm, finished: i32) {
+pub fn set_talking_finished(comm: &mut Comm, finished: i32) {
     super::ffi::rust_set_talking_finished(comm, finished);
 }
 pub fn setup_subtitle_text_from_comm_data(comm: &mut Comm) {
@@ -229,21 +228,30 @@ pub fn set_comm_intro_mode(comm: &mut Comm, mode: u32, duration: u32) {
     super::ffi::set_comm_intro_mode(comm, mode, duration);
 }
 
+#[derive(Default)]
+pub(crate) struct SubtitleState {
+    pub(crate) current: Option<SubtitleSnapshot>,
+    pub(crate) baseline: CPoint,
+    pub(crate) align: i32,
+}
+
 pub(crate) struct RuntimeState {
-    pub(crate) phrase_buf: [c_char; 2048],
+    pub(crate) phrases: Option<crate::strings::conversation::ConversationTable>,
+    pub(crate) resources: Option<super::sis_graphics::ConversationResources>,
     pub(crate) window: CRect,
     pub(crate) anim_context: *mut c_void,
     pub(crate) text_cache_context: *mut crate::graphics::native_abi::context_desc,
     pub(crate) text_cache_frame: *mut c_void,
     pub(crate) clear_subtitles: bool,
-    pub(crate) subtitle: CText,
-    pub(crate) last_subtitle: *const c_char,
+    pub(crate) subtitle: SubtitleState,
+    pub(crate) last_subtitle: Option<SubtitleIdentity>,
     pub(crate) last_baseline: i16,
 }
 impl Default for RuntimeState {
     fn default() -> Self {
         Self {
-            phrase_buf: [0; 2048],
+            phrases: None,
+            resources: None,
             window: CRect {
                 corner: CPoint { x: 7, y: 10 },
                 width: 0,
@@ -253,8 +261,8 @@ impl Default for RuntimeState {
             text_cache_context: null_mut(),
             text_cache_frame: null_mut(),
             clear_subtitles: false,
-            subtitle: CText::new(null(), 0),
-            last_subtitle: null(),
+            subtitle: SubtitleState::default(),
+            last_subtitle: None,
             last_baseline: 0,
         }
     }
@@ -263,6 +271,7 @@ impl Default for RuntimeState {
 #[cfg(test)]
 mod owner_tests {
     use super::*;
+    use std::ptr::NonNull;
 
     #[test]
     #[serial_test::serial]
@@ -328,7 +337,7 @@ mod owner_tests {
             assert!(!frame.is_null());
             let mut first = Comm::new();
             let second = Comm::new();
-            first.display.phrase_buf[0] = b'X' as c_char;
+            assert!(first.add_response(1, "X", None));
             set_anim_context(&mut first, context.cast());
             set_text_cache_context(&mut first, context.cast());
             set_text_cache_frame(&mut first, frame.cast());
@@ -338,10 +347,62 @@ mod owner_tests {
             assert!(second.display.anim_context.is_null());
             assert!(second.display.text_cache_context.is_null());
             assert!(second.display.text_cache_frame.is_null());
-            assert_eq!(second.display.phrase_buf[0], 0);
+            assert_eq!(second.responses().count(), 0);
             drop(first);
             assert_eq!(drawable_abi::DestroyDrawable(drawable), 1);
             assert_eq!(context_abi::DestroyContext(context), 1);
         }
+    }
+    #[test]
+    #[serial_test::serial]
+    fn subtitle_bridge_renders_and_reuses_the_real_cache_without_test_substitutes() {
+        super::super::sis_graphics_font_tests::with_display("comm::comm_abi::owner_tests::subtitle_bridge_renders_and_reuses_the_real_cache_without_test_substitutes", |comm, context| {
+            use crate::graphics::{context_abi::LoadedContext, drawable_abi::LoadedDrawable, native_abi::{Color, POINT}};
+            use crate::sound::trackplayer;
+            trackplayer::stop_track().unwrap();
+            trackplayer::splice_track(Some("subtitle"), Some("A A"), None, None, vec![]).unwrap();
+            let snapshot = trackplayer::subtitle_history().remove(0);
+            trackplayer::stop_track().unwrap();
+            let cache = LoadedContext::create(c"conversation subtitle fixture");
+            let drawable = LoadedDrawable::create(8, 242, 122, 1).unwrap();
+            let cache_context = cache.lease();
+            cache_context.set_frame(drawable.lease().context_frame(0));
+            comm.display.anim_context = context.as_raw().cast();
+            comm.display.text_cache_context = cache_context.as_raw();
+            comm.display.text_cache_frame = drawable.lease().context_frame(0).as_raw().cast();
+            comm.data.alien_font = comm.presentation.tiny_font.cast();
+            comm.display.resources.as_mut().unwrap().display.as_mut().unwrap().subtitles = super::super::sis_graphics::SubtitleCache {
+                target: context.clone(), context: cache_context.clone(),
+                frame: drawable.lease().context_frame(0),
+                font: FontLease::retain(NonNull::new(comm.data.alien_font.cast()).unwrap()),
+            };
+            comm.data.definition.alien_text_width = 100;
+            comm.data.definition.alien_text_fcolor = Color { r: 255, g: 255, b: 255, a: 255 };
+            comm.display.subtitle.baseline = POINT { x: 10, y: 20 };
+            comm.display.subtitle.current = Some(snapshot.clone());
+            super::super::subtitle_display::SubtitleDisplay::redraw(comm, false);
+            assert_eq!(comm.display.last_subtitle, None);
+            super::super::subtitle_display::SubtitleDisplay::redraw(comm, true);
+            context.flush();
+            assert_eq!(comm.display.last_subtitle, Some(snapshot.identity));
+            let pixels = || (0..122).flat_map(|y| (0..242).map(move |x| POINT { x, y })).map(|point| drawable.lease().context_frame(0).pixel(point)).map(|pixel| (pixel.r, pixel.g, pixel.b, pixel.a)).collect::<Vec<_>>();
+            let original = pixels();
+            assert!(original.contains(&(255, 255, 255, 255)));
+            comm_redraw_subtitles(comm, true);
+            context.flush();
+            assert_eq!(pixels(), original);
+            clear_subtitles(comm);
+            assert!(comm.display.subtitle.current.is_none());
+            assert_eq!(comm.display.last_subtitle, None);
+            let leading = FontLease::retain(NonNull::new(comm.data.alien_font.cast()).unwrap()).leading();
+            for (valign, expected) in [(0, 20 + leading), (1, 20 - leading / 2 + leading), (2, 20), (3, 20 + leading)] {
+                clear_subtitles(comm);
+                comm.data.definition.alien_text_valign = valign;
+                comm.display.subtitle.current = Some(snapshot.clone());
+                comm_redraw_subtitles(comm, true);
+                assert_eq!(comm.display.last_baseline, expected);
+            }
+            comm.data.alien_font = std::ptr::null_mut();
+        });
     }
 }

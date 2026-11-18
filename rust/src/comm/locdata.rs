@@ -92,7 +92,6 @@ pub struct SessionData {
     pub alien_font: *mut c_void,
     pub alien_colormap: *mut c_void,
     pub alien_song: *mut c_void,
-    pub conversation_phrases: *mut c_void,
 }
 
 impl SessionData {
@@ -143,7 +142,6 @@ pub fn session_view(ld: &SessionData) -> CommData {
         alien_font: ld.alien_font,
         alien_color_map: ld.alien_colormap,
         alien_song: ld.alien_song,
-        conversation_phrases: ld.conversation_phrases,
         num_animations: u32::from(definition.num_animations),
         alien_ambient_array: ambient,
     }
@@ -209,7 +207,10 @@ mod tests {
         assert!(second.alien_font.is_null());
         assert!(second.alien_colormap.is_null());
         assert!(second.alien_song.is_null());
-        assert!(second.conversation_phrases.is_null());
+        assert_eq!(
+            session_view(&second).conversation_phrases_res,
+            resource_key(second.definition.conversation_phrases_res)
+        );
         assert_eq!(second.definition.alien_ambient_array[12].block_mask, 1024);
         assert_eq!(
             session_view(&second).alien_ambient_array[11].start_index,

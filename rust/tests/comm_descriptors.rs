@@ -207,7 +207,9 @@ fn live_callbacks_keep_the_supplied_session_and_phrase_owner(
                     b"A\0".to_vec();
                     2048
                 ]);
-            descriptor.conversation_phrases = phrases.as_raw().cast();
+            let admitted_text = phrases.text(0).ok_or("missing phrase text")?.as_ptr();
+            comm.admit_conversation_names(cx.world)?;
+            comm.set_conversation_phrases(Some(phrases.into()));
             descriptor.alien_font = cx.kernel.tiny_font.cast();
             let (intro, post, uninit) = (
                 descriptor.init_encounter_func.ok_or("missing intro")?,
@@ -245,11 +247,18 @@ fn live_callbacks_keep_the_supplied_session_and_phrase_owner(
             }
             post(&mut comm, &mut cx);
             assert_eq!(uninit(&mut comm, &mut cx), 0);
+            comm.comm_data().ok_or("session data missing")?;
+            let retained = comm
+                .conversation_phrases()
+                .ok_or("session phrases missing")?;
+            assert_eq!(retained.len(), 2048);
             assert_eq!(
-                comm.comm_data()
-                    .ok_or("session data missing")?
-                    .conversation_phrases,
-                phrases.as_raw().cast()
+                retained
+                    .phrase(0)
+                    .and_then(|phrase| phrase.text)
+                    .ok_or("session phrase missing")?
+                    .as_ptr(),
+                admitted_text
             );
             comm.uninit();
         }
