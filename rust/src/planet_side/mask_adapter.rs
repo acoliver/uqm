@@ -30,21 +30,23 @@ pub fn extract_lander_masks(base: &ContextFrame) -> Result<Vec<CollisionMask>, A
 mod tests {
     use super::*;
     use crate::graphics::{
-        drawable_abi::{LoadedDrawable, WriteFramePixelColors},
+        drawable_abi::LoadedDrawable,
         native_abi::{Color, HOT_SPOT},
     };
 
     #[test]
     #[serial_test::serial]
     fn absent_frame_does_not_enter_another_threads_live_registry() {
-        if !crate::native_test_process::own_graphics_process(concat!(
+        if !uqm_engine::test_support::native_process::own_graphics_process(concat!(
             module_path!(),
             "::absent_frame_does_not_enter_another_threads_live_registry"
         )) {
             return;
         }
         let mut game = crate::engine::Game::new();
-        let display = crate::campaign_display_test::CampaignDisplay::install(&mut game).unwrap();
+        let display =
+            uqm_engine::test_support::campaign_display::CampaignDisplay::install(&mut game)
+                .unwrap();
         let frame = ContextFrame::retain(std::ptr::NonNull::new(game.kernel.screen));
         assert!(
             std::thread::spawn(|| {
@@ -63,7 +65,9 @@ mod tests {
     #[serial_test::serial]
     fn retained_mask_uses_normal_alpha_and_hotspot_after_owner_release() {
         let mut game = crate::engine::Game::new();
-        let display = crate::campaign_display_test::CampaignDisplay::install(&mut game).unwrap();
+        let display =
+            uqm_engine::test_support::campaign_display::CampaignDisplay::install(&mut game)
+                .unwrap();
         let owner = LoadedDrawable::create(8, 2, 2, 16).unwrap();
         let lease = owner.lease();
         lease.set_hotspot(0, HOT_SPOT { x: 1, y: -2 });
@@ -73,11 +77,12 @@ mod tests {
             b: 0,
             a,
         });
-        // SAFETY: this serialized fixture owns the four-pixel destination and complete source buffer.
-        assert_ne!(
-            unsafe { WriteFramePixelColors(lease.frame(0).unwrap(), pixels.as_ptr(), 2, 2) },
-            0
-        );
+        assert!(uqm_engine::test_support::native_probe::write_pixels(
+            lease.frame(0).unwrap(),
+            &pixels,
+            2,
+            2
+        ));
         let frame = lease.context_frame(0);
         drop(lease);
         drop(owner);

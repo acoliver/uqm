@@ -156,11 +156,13 @@ impl orbital::Queues for QueueHost {
 }
 
 pub(super) fn group(race: u8, task: u8) -> IP_GROUP {
-    let mut group: IP_GROUP = unsafe { std::mem::zeroed() };
-    group.race_id = race;
-    group.task = task;
-    group.sys_loc = 9;
-    group.dest_loc = 8;
+    let mut group: IP_GROUP = IP_GROUP {
+        race_id: race,
+        task,
+        sys_loc: 9,
+        dest_loc: 8,
+        ..Default::default()
+    };
     group.loc.x = 77;
     group.loc.y = -91;
     group.group_counter = 233;

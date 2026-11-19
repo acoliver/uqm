@@ -129,11 +129,7 @@ pub mod engine {
             .set_turn_wait(make_byte(turn_wait, thrust_wait));
     }
 
-    pub(crate) fn initialize_bubble(
-        cx: &mut Cx<'_>,
-        ss: ShipId,
-        origin: WeaponOrigin,
-    ) -> WeaponSpawn {
+    pub fn initialize_bubble(cx: &mut Cx<'_>, ss: ShipId, origin: WeaponOrigin) -> WeaponSpawn {
         let mut block = crate::engine::battle::views::Missile {
             cx: origin.next.location.x,
             cy: origin.next.location.y,

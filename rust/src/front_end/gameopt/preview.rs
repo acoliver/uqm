@@ -87,7 +87,7 @@ mod tests {
         crate::planet_side::resources::tests::with_packaged_resources(|game| {
             use crate::graphics::{
                 context_abi::{ContextFrame, ContextLease},
-                native_abi::{Color, EXTENT, POINT, RECT},
+                native_abi::{EXTENT, POINT, RECT},
             };
             game.kernel.radar_context = game.kernel.status_context;
             let radar = ContextLease::require(game.kernel.radar_context);
@@ -128,19 +128,9 @@ mod tests {
             summary.flags = 0x52;
             lander(&game.kernel, &summary);
             radar.flush();
-            let mut pixels = vec![Color::default(); 320 * 240];
-            assert_ne!(
-                // SAFETY: the supplied target and complete buffer remain live through readback.
-                unsafe {
-                    crate::graphics::drawable_abi::ReadFramePixelColors(
-                        game.kernel.screen,
-                        pixels.as_mut_ptr(),
-                        320,
-                        240,
-                    )
-                },
-                0
-            );
+            let pixels =
+                uqm_engine::test_support::native_probe::read_pixels(game.kernel.screen, 320, 240)
+                    .unwrap();
             assert!(pixels
                 .iter()
                 .any(|pixel| pixel.r != 0 || pixel.g != 0 || pixel.b != 0));

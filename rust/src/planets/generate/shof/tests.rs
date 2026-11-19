@@ -120,10 +120,12 @@ impl ShofixtiSite for Host {
 }
 
 fn group(race_id: u8, task: u8) -> IP_GROUP {
-    let mut group: IP_GROUP = unsafe { std::mem::zeroed() };
-    group.race_id = race_id;
-    group.task = task;
-    group.dest_loc = 9;
+    let group: IP_GROUP = IP_GROUP {
+        race_id,
+        task,
+        dest_loc: 9,
+        ..Default::default()
+    };
     group
 }
 
@@ -312,7 +314,7 @@ fn a_missing_group_means_a_shofixti_died() {
 #[test]
 fn three_selenic_and_three_metal_worlds_with_no_moons() {
     let mut rng = RandomContext::with_seed(3);
-    let mut planets: Vec<PlanetDesc> = vec![unsafe { std::mem::zeroed() }; 16];
+    let mut planets: Vec<PlanetDesc> = vec![Default::default(); 16];
     for planet in &mut planets {
         planet.num_planets = 4;
     }

@@ -1,11 +1,11 @@
 use super::*;
+use crate::engine::world::generation::ReportDisposition;
 use crate::engine::world::planet::{PlanetDesc, PlanetFrame, SystemInfo};
 use crate::engine::StoryKey;
-use crate::planet_side::report_adapter::ReportDisposition;
-use crate::planet_side::runtime::AdapterError;
 use crate::planets::generate::calc::{AnalysisSite, StarDescription};
 use crate::planets::generate::home_contact::tests::FakeStory;
 use crate::planets::generate::special::Orbit;
+use crate::planets::generate::testing::RecordReport;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -144,10 +144,10 @@ impl crate::planets::generate::sam::SamatraSite for Site {
 }
 
 pub(crate) struct Pickup(pub Calls);
-impl DiscoveryReportPort for Pickup {
-    fn present(&mut self, disposition: ReportDisposition) -> Result<bool, AdapterError> {
+impl RecordReport for Pickup {
+    fn present(&mut self, disposition: ReportDisposition) -> bool {
         record(&self.0, format!("report:{disposition:?}"));
-        Ok(true)
+        true
     }
 }
 impl LanderTakeoff for Pickup {
@@ -160,10 +160,12 @@ pub(crate) fn with_orbit(run: impl FnOnce(&mut Orbit<'_>)) -> (SystemInfo, u32) 
     let mut rng = RandomContext::with_seed(104729);
     // The returned SYSTEM_INFO retains PlanDataPtr after this helper returns.
     static TABLE: [PlanetFrame; 59] = [PlanetFrame::EMPTY; 59];
-    let mut world: PlanetDesc = unsafe { std::mem::zeroed() };
-    world.rand_seed = 7919;
-    world.radius = 512;
-    let mut info: SystemInfo = unsafe { std::mem::zeroed() };
+    let world: PlanetDesc = PlanetDesc {
+        rand_seed: 7919,
+        radius: 512,
+        ..Default::default()
+    };
+    let mut info: SystemInfo = Default::default();
     info.planet_info.scan_seed = [101, 202, 303];
     run(&mut Orbit {
         rng: &mut rng,
@@ -450,7 +452,7 @@ fn pickup_and_queue_invariants_fail_before_side_effects() {
 fn beast_insertion_and_maidens_second_layout_preserve_whole_descriptors() {
     let table = vec![PlanetFrame::default(); 59];
     for seed in [1, 7919, 190056, u32::MAX] {
-        let mut base: Vec<PlanetDesc> = vec![unsafe { std::mem::zeroed() }; 16];
+        let mut base: Vec<PlanetDesc> = vec![Default::default(); 16];
         for (i, desc) in base.iter_mut().enumerate() {
             desc.next_index = i as u16 + 37;
             desc.image.origin.x = -53;

@@ -159,7 +159,7 @@ fn event_dump_walks_the_supplied_fifo_without_mutating_it() {
 #[serial_test::serial]
 fn battle_refills_borrow_the_player_descriptor_and_restore_status_selection() {
     use crate::engine::battle::{Race, RaceTemplate};
-    use crate::graphics::context_abi::{self, LoadedContext};
+    use crate::graphics::context_abi::LoadedContext;
     fn descriptor(_: &mut World) -> crate::engine::battle::RaceDesc {
         RaceTemplate::default().descriptor(&RACE)
     }
@@ -175,9 +175,8 @@ fn battle_refills_borrow_the_player_descriptor_and_restore_status_selection() {
     game.world.story = Some(StoryState::new());
     game.world.set_activity(IN_BATTLE);
     game.kernel.reset_ship_capacity(RPG_PLAYER_NUM as usize, 1);
-    // SAFETY: this serialized fixture owns and releases the context after all leases.
-    let status = unsafe { context_abi::CreateContextAux(c"refill status".as_ptr()) };
-    game.kernel.status_context = status;
+    let status = LoadedContext::create(c"refill status");
+    game.kernel.status_context = status.lease().as_raw();
     let previous = LoadedContext::create(c"refill previous");
     let previous_context = previous.lease();
     previous_context.select();
@@ -238,14 +237,13 @@ fn battle_refills_borrow_the_player_descriptor_and_restore_status_selection() {
             b"refill previous"
         );
     }
-    // SAFETY: all refill calls and their temporary leases have ended.
-    unsafe { context_abi::DestroyContext(status) };
+    drop(status);
 }
 
 #[test]
 #[serial_test::serial]
 fn debug_key_uses_the_supplied_rng_and_real_status_resources() {
-    if !crate::native_test_process::own_graphics_process(
+    if !uqm_engine::test_support::native_process::own_graphics_process(
         "front_end::uqmdebug::supplied_tests::debug_key_uses_the_supplied_rng_and_real_status_resources",
     ) {
         return;
@@ -255,7 +253,8 @@ fn debug_key_uses_the_supplied_rng_and_real_status_resources() {
     let mut game = crate::engine::Game::new();
     game.world.story = Some(StoryState::new());
     game.world.set_activity(IN_INTERPLANETARY);
-    let display = crate::campaign_display_test::CampaignDisplay::install(&mut game).unwrap();
+    let display =
+        uqm_engine::test_support::campaign_display::CampaignDisplay::install(&mut game).unwrap();
     game.kernel.screen_context = game.kernel.status_context;
     game.kernel.space_context = game.kernel.status_context;
     game.kernel
@@ -305,7 +304,7 @@ fn debug_key_uses_the_supplied_rng_and_real_status_resources() {
 #[test]
 #[serial_test::serial]
 fn event_skip_uses_the_supplied_calendar_and_dispatches_equal_date_events() {
-    if !crate::native_test_process::own_graphics_process(
+    if !uqm_engine::test_support::native_process::own_graphics_process(
         "front_end::uqmdebug::supplied_tests::event_skip_uses_the_supplied_calendar_and_dispatches_equal_date_events",
     ) {
         return;
@@ -315,7 +314,8 @@ fn event_skip_uses_the_supplied_calendar_and_dispatches_equal_date_events() {
     game.world.story = Some(StoryState::new());
     game.world.set_activity(IN_INTERPLANETARY);
     game.world.clock.init();
-    let display = crate::campaign_display_test::CampaignDisplay::install(&mut game).unwrap();
+    let display =
+        uqm_engine::test_support::campaign_display::CampaignDisplay::install(&mut game).unwrap();
     let context = ContextLease::require(game.kernel.status_context);
     context.set_frame(ContextFrame::retain(std::ptr::NonNull::new(
         game.kernel.screen,

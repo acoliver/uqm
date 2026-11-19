@@ -23,7 +23,7 @@ use std::os::raw::c_void;
 
 use crate::engine::battle::link_queue::LinkId;
 use crate::engine::world::queues::Fragment;
-use crate::savegame::types::MAX_HYPER_SHIPS as ENCOUNTER_SHIP_CAPACITY;
+use uqm_save::types::MAX_HYPER_SHIPS as ENCOUNTER_SHIP_CAPACITY;
 
 // ---------------------------------------------------------------------------
 // Resource and geometry types used by retained presentation calls
@@ -382,7 +382,6 @@ fn run_encounter(
     options: crate::comm::CommOptions,
 ) -> u16 {
     if ship_type != u16::from(ship::URQUAN_DRONE_SHIP) {
-        // SAFETY: the mode owns the initialized campaign during resource dispatch.
         crate::engine::world::fleet::start_sphere_tracking(cx.world, ship_type);
         let build = which_comm == conv::ORZ
             || (which_comm == conv::TALKING_PET
@@ -449,9 +448,6 @@ pub(crate) fn clone_npc_fragment(
 
 /// `PickCaptainName ()` as the running game draws it.
 pub(crate) fn production_captain_name() -> u8 {
-    // SAFETY: `random` takes no arguments and touches only the game's
-    // random state.
-
     pick_captain_name()
 }
 

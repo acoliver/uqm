@@ -405,12 +405,12 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn owned_gauges_and_border_draw_without_publishing_campaign_state() {
-        if !crate::native_test_process::own_graphics_process("ui::sis::gauges::tests::owned_gauges_and_border_draw_without_publishing_campaign_state") { return; }
+        if !uqm_engine::test_support::native_process::own_graphics_process("ui::sis::gauges::tests::owned_gauges_and_border_draw_without_publishing_campaign_state") { return; }
         use crate::{
-            campaign_display_test::CampaignDisplay,
             engine::Game,
             graphics::{context_abi::ContextFrame, drawable_abi::LoadedDrawable},
         };
+        use uqm_engine::test_support::campaign_display::CampaignDisplay;
         let mut game = Game::new();
         let display = CampaignDisplay::install(&mut game)
             .unwrap_or_else(|error| panic!("gauge fixture: {error}"));
@@ -420,17 +420,8 @@ mod tests {
             ));
         let font = font(&game.kernel);
         game.kernel.screen_context = game.kernel.status_context;
-        // SAFETY: this serial fixture owns and releases its separate space context.
-        let space = unsafe {
-            #[cfg(feature = "debug-process")]
-            {
-                crate::graphics::context_abi::CreateContextAux(c"gauge-space".as_ptr())
-            }
-            #[cfg(not(feature = "debug-process"))]
-            {
-                crate::graphics::context_abi::CreateContextAux()
-            }
-        };
+        let space_owner = crate::graphics::context_abi::LoadedContext::create(c"gauge-space");
+        let space = space_owner.lease().as_raw();
         game.kernel.space_context = space;
         let frames =
             LoadedDrawable::create(8, 64, 140, 100).unwrap_or_else(|| panic!("gauge frames"));
@@ -508,8 +499,7 @@ mod tests {
         drop(context);
         drop(font);
         drop(frames);
-        // SAFETY: queued draws are flushed; no borrowed space lease remains.
-        unsafe { crate::graphics::context_abi::DestroyContext(space) };
+        drop(space_owner);
         display.finish(game);
     }
 

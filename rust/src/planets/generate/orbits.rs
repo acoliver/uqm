@@ -213,7 +213,7 @@ mod tests {
                 for seed in 0..60 {
                     let seed = seed * 7919 + 1;
                     let mut rng = RandomContext::with_seed(seed);
-                    let mut planets: [PlanetDesc; 9] = unsafe { std::mem::zeroed() };
+                    let mut planets: [PlanetDesc; 9] = Default::default();
                     let count = fill_orbits(
                         &mut rng,
                         OrbitRequest {

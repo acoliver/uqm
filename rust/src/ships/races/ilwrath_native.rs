@@ -230,11 +230,7 @@ pub mod engine {
         }
     }
 
-    pub(crate) fn initialize_flame(
-        cx: &mut Cx<'_>,
-        ss: ShipId,
-        origin: WeaponOrigin,
-    ) -> WeaponSpawn {
+    pub fn initialize_flame(cx: &mut Cx<'_>, ss: ShipId, origin: WeaponOrigin) -> WeaponSpawn {
         let mut block = Missile {
             cx: origin.next.location.x,
             cy: origin.next.location.y,

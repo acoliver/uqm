@@ -3,24 +3,24 @@
 use super::{
     generate_energy, generate_orbital, generate_planets, pickup_energy, AndrosynthSite, WORLD,
 };
+use crate::engine::world::generation::ReportDisposition;
 use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
 use crate::engine::StoryKey;
 use crate::math::RandomContext;
-use crate::planet_side::report_adapter::{DiscoveryReportPort, ReportDisposition};
-use crate::planet_side::runtime::AdapterError;
 use crate::planets::generate::calc::{AnalysisSite, StarDescription};
 use crate::planets::generate::consts::EARTH_RADIUS;
 use crate::planets::generate::home_contact::tests::FakeStory;
 use crate::planets::generate::special::{Body, Orbit, Story, TELLURIC_WORLD};
 use crate::planets::generate::surface::ENERGY_SCAN;
+use crate::planets::generate::testing::RecordReport;
 
 #[derive(Default)]
 struct FakeReport(Vec<ReportDisposition>);
 
-impl DiscoveryReportPort for FakeReport {
-    fn present(&mut self, disposition: ReportDisposition) -> Result<bool, AdapterError> {
+impl RecordReport for FakeReport {
+    fn present(&mut self, disposition: ReportDisposition) -> bool {
         self.0.push(disposition);
-        Ok(true)
+        true
     }
 }
 
@@ -48,10 +48,12 @@ const OTHER_BODIES: [Body; 3] = [
 fn orbital(body: Body, energy_mask: u32) -> (Site, SystemInfo) {
     let mut site = Site::default();
     let mut rng = RandomContext::with_seed(11);
-    let mut sys_info: SystemInfo = unsafe { std::mem::zeroed() };
+    let mut sys_info: SystemInfo = Default::default();
     sys_info.planet_info.scan_retrieve_mask[ENERGY_SCAN] = energy_mask;
-    let mut world: PlanetDesc = unsafe { std::mem::zeroed() };
-    world.radius = 400;
+    let world: PlanetDesc = PlanetDesc {
+        radius: 400,
+        ..Default::default()
+    };
     let plan_data: Vec<PlanetFrame> = vec![PlanetFrame::default(); 128];
     let mut loaded = 0;
     {
@@ -133,7 +135,7 @@ fn the_world_has_a_fixed_climate_and_other_bodies_are_left_alone() {
 fn planet_one_is_the_telluric_world() {
     let mut rng = RandomContext::with_seed(5);
     let plan_data: Vec<PlanetFrame> = vec![PlanetFrame::default(); 128];
-    let mut planets: Vec<PlanetDesc> = vec![unsafe { std::mem::zeroed() }; 16];
+    let mut planets: Vec<PlanetDesc> = vec![Default::default(); 16];
     // A frame table of zeros has the C layout drawn from the same RNG.
     let drawn = generate_planets(&mut rng, &plan_data, 0, 2, &mut planets);
     assert!(drawn >= 2, "the layout always has a planet 1 to place");
@@ -146,11 +148,11 @@ fn planet_one_is_the_telluric_world() {
 
 #[test]
 fn only_planet_one_has_ruins() {
-    let mut info: SystemInfo = unsafe { std::mem::zeroed() };
+    let mut info: SystemInfo = Default::default();
     info.planet_info.scan_seed = [1, 2, 3];
     let count = |body| {
         let mut rng = RandomContext::with_seed(7);
-        let mut node: NodeInfo = unsafe { std::mem::zeroed() };
+        let mut node: NodeInfo = Default::default();
         generate_energy(&mut rng, &info, body, !0, &mut node)
     };
     assert_eq!(count(WORLD), 16);
@@ -161,7 +163,7 @@ fn only_planet_one_has_ruins() {
 
 #[test]
 fn a_new_ruin_is_marked_and_reported_and_a_visited_one_is_not() {
-    let mut info = unsafe { std::mem::zeroed::<SystemInfo>() }.planet_info;
+    let mut info = SystemInfo::default().planet_info;
     let mut story = FakeStory::default();
     let mut report = FakeReport::default();
 
@@ -229,7 +231,7 @@ fn a_new_ruin_is_marked_and_reported_and_a_visited_one_is_not() {
 #[test]
 fn other_bodies_report_nothing() {
     for body in OTHER_BODIES {
-        let mut info = unsafe { std::mem::zeroed::<SystemInfo>() }.planet_info;
+        let mut info = SystemInfo::default().planet_info;
         let mut story = FakeStory::default();
         let mut report = FakeReport::default();
         assert!(!crate::planets::generate::testing::with_info(
@@ -256,7 +258,7 @@ fn other_bodies_report_nothing() {
 #[test]
 #[should_panic(expected = "has no visited bit")]
 fn a_ruin_past_the_sixteenth_is_a_broken_invariant() {
-    let mut info = unsafe { std::mem::zeroed::<SystemInfo>() }.planet_info;
+    let mut info = SystemInfo::default().planet_info;
     let mut story = FakeStory::default();
     let mut report = FakeReport::default();
     crate::planets::generate::testing::with_info(&mut info, |system| {

@@ -62,11 +62,7 @@ pub mod engine {
         intelligence: Some(utwig_intelligence),
         uninit: None,
     };
-    pub(crate) fn initialize_lance(
-        cx: &mut Cx<'_>,
-        ss: ShipId,
-        origin: WeaponOrigin,
-    ) -> WeaponSpawn {
+    pub fn initialize_lance(cx: &mut Cx<'_>, ss: ShipId, origin: WeaponOrigin) -> WeaponSpawn {
         let mut out = Vec::new();
         let mut block = Missile {
             frames: cx.ship_frame_set(ss, 1),

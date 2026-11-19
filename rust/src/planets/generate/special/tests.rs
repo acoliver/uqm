@@ -4,13 +4,13 @@
 use crate::engine::StoryKey;
 use std::collections::HashMap;
 
+use crate::engine::world::generation::ReportDisposition;
 use crate::engine::world::queues::IpGroup as IP_GROUP;
-use crate::planet_side::report_adapter::{DiscoveryReportPort, ReportDisposition};
-use crate::planet_side::runtime::AdapterError;
 use crate::planets::generate::default::Npcs;
 use crate::planets::generate::special::{
     Body, FleetGroups, Story, MELNORME_SHIP, URQUAN_SHIP, ZOQFOTPIK_SHIP,
 };
+use crate::planets::generate::testing::RecordReport;
 use crate::planets::generate::{colony, rainbow, syreen, vault, wreck, yehat, zfpscout};
 
 #[derive(Default)]
@@ -40,10 +40,10 @@ impl Story for FakeStory {
 #[derive(Default)]
 struct FakeReport(Vec<ReportDisposition>);
 
-impl DiscoveryReportPort for FakeReport {
-    fn present(&mut self, disposition: ReportDisposition) -> Result<bool, AdapterError> {
+impl RecordReport for FakeReport {
+    fn present(&mut self, disposition: ReportDisposition) -> bool {
         self.0.push(disposition);
-        Ok(true)
+        true
     }
 }
 
@@ -323,7 +323,7 @@ fn syreen_moon_slot_is_the_starbase_only_for_planet_zero() {
     use crate::engine::world::planet::PlanetDesc;
     use crate::math::RandomContext;
     for (body, starbase) in [(Body::Planet(0), true), (Body::Planet(1), false)] {
-        let mut moons: Vec<PlanetDesc> = vec![unsafe { std::mem::zeroed() }; 16];
+        let mut moons: Vec<PlanetDesc> = vec![Default::default(); 16];
         let mut rng = RandomContext::with_seed(7);
         syreen::generate_moons(&mut rng, 0, 0, 2, &mut moons, body);
         assert_eq!(moons[0].data_index == 127 | 0x80, starbase);
@@ -421,11 +421,13 @@ impl FleetGroups for FakeFleet {
 }
 
 fn group(race_id: u8, task: u8) -> IP_GROUP {
-    let mut group: IP_GROUP = unsafe { std::mem::zeroed() };
-    group.race_id = race_id;
-    group.task = task;
-    group.sys_loc = 9;
-    group.dest_loc = 9;
+    let mut group: IP_GROUP = IP_GROUP {
+        race_id,
+        task,
+        sys_loc: 9,
+        dest_loc: 9,
+        ..Default::default()
+    };
     group.loc.x = 5;
     group.loc.y = 5;
     group.group_counter = 5;

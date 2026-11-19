@@ -13,10 +13,9 @@ use super::{
 use crate::engine::world::activity::activity_flags::{
     CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY,
 };
+use crate::engine::world::generation::ReportDisposition;
 use crate::engine::world::queues::IpGroup as IP_GROUP;
 use crate::math::RandomContext;
-use crate::planet_side::report_adapter::{DiscoveryReportPort, ReportDisposition};
-use crate::planet_side::runtime::AdapterError;
 use crate::planets::generate::calc::{AnalysisSite, StarDescription};
 use crate::planets::generate::consts::EARTH_RADIUS;
 use crate::planets::generate::default::Npcs;
@@ -24,6 +23,7 @@ use crate::planets::generate::home_contact::tests::FakeStory;
 use crate::planets::generate::home_contact::{HomeContactSite, LanderTakeoff};
 use crate::planets::generate::identities::{BOMB_DEFINED, UTWIG_DEFINED};
 use crate::planets::generate::special::{Body, Orbit, Story, WATER_WORLD};
+use crate::planets::generate::testing::RecordReport;
 
 const MOON: Body = Body::Moon { planet: 0, moon: 0 };
 const IN_INTERPLANETARY: u16 = 4;
@@ -31,10 +31,10 @@ const IN_INTERPLANETARY: u16 = 4;
 #[derive(Default)]
 struct FakeReport(Vec<ReportDisposition>);
 
-impl DiscoveryReportPort for FakeReport {
-    fn present(&mut self, disposition: ReportDisposition) -> Result<bool, AdapterError> {
+impl RecordReport for FakeReport {
+    fn present(&mut self, disposition: ReportDisposition) -> bool {
         self.0.push(disposition);
-        Ok(true)
+        true
     }
 }
 
@@ -230,10 +230,10 @@ impl Npcs for Site {
 }
 
 fn nodes(star_index: u8, body: Body, story: &FakeStory) -> u16 {
-    let mut info: SystemInfo = unsafe { std::mem::zeroed() };
+    let mut info: SystemInfo = Default::default();
     info.planet_info.scan_seed = [1, 2, 3];
     let mut rng = RandomContext::with_seed(7);
-    let mut node: NodeInfo = unsafe { std::mem::zeroed() };
+    let mut node: NodeInfo = Default::default();
     generate_energy(&mut rng, &info, star_index, body, !0, &mut node, story)
 }
 
@@ -489,9 +489,11 @@ fn visit(
     configure(&mut site);
 
     let mut rng = RandomContext::with_seed(11);
-    let mut sys_info: SystemInfo = unsafe { std::mem::zeroed() };
-    let mut world: PlanetDesc = unsafe { std::mem::zeroed() };
-    world.radius = 400;
+    let mut sys_info: SystemInfo = Default::default();
+    let world: PlanetDesc = PlanetDesc {
+        radius: 400,
+        ..Default::default()
+    };
     let plan_data: Vec<PlanetFrame> = vec![PlanetFrame::default(); 128];
     let mut orbit = Orbit {
         rng: &mut rng,
@@ -722,7 +724,7 @@ fn other_worlds_go_straight_to_the_default_orbital() {
 fn layout(star_index: u8) -> Vec<PlanetDesc> {
     let mut rng = RandomContext::with_seed(5);
     let plan_data: Vec<PlanetFrame> = vec![PlanetFrame::default(); 128];
-    let mut planets: Vec<PlanetDesc> = vec![unsafe { std::mem::zeroed() }; 16];
+    let mut planets: Vec<PlanetDesc> = vec![Default::default(); 16];
     generate_planets(&mut rng, &plan_data, 0, 2, &mut planets, star_index);
     planets
 }

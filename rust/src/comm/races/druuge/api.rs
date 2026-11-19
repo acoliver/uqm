@@ -29,7 +29,7 @@ pub(crate) struct World {
 impl Default for World {
     fn default() -> Self {
         Self {
-            ship: unsafe { std::mem::zeroed() },
+            ship: Default::default(),
             escorts: false,
             crew_cost: 3,
             numbers: Vec::new(),

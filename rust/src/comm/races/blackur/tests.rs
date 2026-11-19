@@ -243,7 +243,7 @@ fn intro_priorities_activity_low_byte_and_samatra_group_match() {
             ActivityKind::InInterplanetary as u16 | 0x100,
             true,
         ),
-        (1, 1, crate::comm::dispatch::IN_HYPERSPACE, false),
+        (1, 1, ActivityKind::InHyperspace as u16, false),
     ] {
         let mut f = Api {
             activity,

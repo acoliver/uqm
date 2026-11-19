@@ -974,14 +974,13 @@ mod tests {
         let canned = files.borrow().canned_node((1, 2, 1, 0)).unwrap();
         assert_eq!(canned.value, 1);
         assert!(files.borrow().canned_node((1, 2, 0, 0)).is_none());
-        let mut save = crate::savegame::decode_save(include_bytes!(
+        let mut save = uqm_save::decode_save(include_bytes!(
             "../../tests/fixtures/savegame/legacy-save.00"
         ))
         .unwrap();
         assert!(save.canned_nodes.is_empty());
         save.canned_nodes.push(canned);
-        let loaded =
-            crate::savegame::decode_save(&crate::savegame::encode_save(&save).unwrap()).unwrap();
+        let loaded = uqm_save::decode_save(&uqm_save::encode_save(&save).unwrap()).unwrap();
         let files = std::rc::Rc::new(std::cell::RefCell::new(StateFileManager::new()));
         for node in loaded.canned_nodes {
             files.borrow_mut().can_node(node);

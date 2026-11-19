@@ -2,20 +2,20 @@
 //! fake game state.
 
 use super::pickup_energy;
+use crate::engine::world::generation::ReportDisposition;
 use crate::engine::StoryKey;
-use crate::planet_side::report_adapter::{DiscoveryReportPort, ReportDisposition};
-use crate::planet_side::runtime::AdapterError;
 use crate::planets::generate::home_contact::tests::FakeStory;
 use crate::planets::generate::home_contact::LanderTakeoff;
 use crate::planets::generate::special::{Body, Story};
+use crate::planets::generate::testing::RecordReport;
 
 #[derive(Default)]
 struct FakeReport(Vec<ReportDisposition>);
 
-impl DiscoveryReportPort for FakeReport {
-    fn present(&mut self, disposition: ReportDisposition) -> Result<bool, AdapterError> {
+impl RecordReport for FakeReport {
+    fn present(&mut self, disposition: ReportDisposition) -> bool {
         self.0.push(disposition);
-        Ok(true)
+        true
     }
 }
 

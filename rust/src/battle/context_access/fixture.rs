@@ -2,8 +2,7 @@
 #[cfg(test)]
 #[test]
 fn ship_detachment_is_an_explicit_fixture_command() {
-    // SAFETY: zero is valid for the native record's scalars and optional pointers.
-    let record: ShipRecord = unsafe { std::mem::zeroed() };
+    let record: ShipRecord = Default::default();
     let descriptor = RaceDescriptor::EMPTY;
     let id = ElementId::fixture(0, 1);
     let mut ship = Ship::for_test(&record, &descriptor, id);
@@ -87,7 +86,7 @@ impl Descriptor {
     }
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 impl Element {
     pub fn new() -> Self {
         let record = crate::engine::battle::record::ElementRecord::default();
@@ -99,20 +98,22 @@ impl Element {
         }
     }
 }
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
+impl Default for Element {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+#[cfg(any(test, feature = "test-support"))]
 impl Ship {
     pub fn for_test(s: &ShipRecord, d: &RaceDescriptor, element: ElementId) -> Self {
         Self {
-            // SAFETY: the retained ship pool remains immutable during observation.
-            state: unsafe { crate::engine::battle::access::observe_ship_record(s) },
+            state: crate::engine::battle::access::observe_ship_record(s),
             species: s.SpeciesID,
             index: s.index,
             element: Some(element),
             clear_element: false,
-            // SAFETY: the test retains its descriptor throughout this value snapshot.
-            info: Some(
-                unsafe { crate::engine::battle::access::observe_descriptor_record(d) }.ship_info,
-            ),
+            info: Some(crate::engine::battle::access::observe_descriptor_record(d).ship_info),
             data: Some(ShipFrames {
                 ship: Frames::shared(
                     crate::engine::battle::frames::SharedFrames::Fixture(0),

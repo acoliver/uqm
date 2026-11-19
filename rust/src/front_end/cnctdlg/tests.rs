@@ -1,29 +1,3 @@
-struct NativeCharacterInput(crate::engine::input::InputSession);
-impl NativeCharacterInput {
-    fn new(input: &crate::engine::input::InputSession) -> Self {
-        use crate::engine::input::frames::{FLIGHT_KEYS, MENU_KEYS, TEMPLATES};
-        let state = input.immediate_ptr();
-        // SAFETY: the retained input owns both stable vectors until unbinding in Drop.
-        unsafe {
-            crate::input::sdl_input::tfb_set_input_vectors(
-                std::ptr::addr_of_mut!((*state).menu).cast(),
-                MENU_KEYS as i32,
-                std::ptr::addr_of_mut!((*state).key).cast(),
-                TEMPLATES as i32,
-                FLIGHT_KEYS as i32,
-            );
-            assert_eq!(crate::input::sdl_input::TFB_InitInput(0, 0), 0);
-        }
-        Self(input.clone())
-    }
-}
-impl Drop for NativeCharacterInput {
-    fn drop(&mut self) {
-        crate::input::sdl_input::TFB_UninitInput();
-        self.0.clear_menu_state();
-    }
-}
-
 #[test]
 #[serial_test::serial]
 fn editor_keeps_initial_49_bytes_but_inserts_only_up_to_48_utf8_bytes() {
@@ -57,7 +31,8 @@ fn editor_keeps_initial_49_bytes_but_inserts_only_up_to_48_utf8_bytes() {
             ),
             sleeps: std::cell::Cell::new(0),
         });
-        let _characters = NativeCharacterInput::new(&driver.input);
+        let _characters =
+            uqm_engine::test_support::native_session::NativeInput::bind(&driver.input);
         game.kernel.install_input_runtime(driver.clone());
         let mut cx = Cx::new(&mut battle, &mut game.world, &mut game.kernel, || 0);
         let mut observer = Unobserved;
@@ -203,73 +178,22 @@ struct Display {
     screen: crate::graphics::drawable_abi::LoadedDrawable,
     player: Option<LoadedFont>,
     button: Option<LoadedFont>,
+    _graphics: uqm_engine::test_support::native_session::Graphics,
 }
 
 impl Display {
     fn new() -> Self {
-        use crate::{graphics::sdl::lifecycle_abi::*, io::uio_bridge as uio};
-        use std::{ffi::CString, ptr};
-        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../tmp");
-        std::fs::create_dir_all(&root).unwrap();
-        let directory = tempfile::tempdir_in(root.canonicalize().unwrap()).unwrap();
-        std::fs::create_dir(directory.path().join("font")).unwrap();
-        for code in 32..=127 {
-            image::RgbaImage::from_pixel(1, 1, image::Rgba([255, 255, 255, 255]))
-                .save(directory.path().join(format!("font/{code:04x}.png")))
-                .unwrap();
-        }
-        std::fs::write(
-            directory.path().join("fixture.rmp"),
-            "fixture.font = FONTRES:font\n",
-        )
-        .unwrap();
-        let path = CString::new(directory.path().to_str().unwrap()).unwrap();
-        std::env::set_var("SDL_VIDEODRIVER", "dummy");
-        std::env::set_var("SDL_AUDIODRIVER", "dummy");
-        // SAFETY: serial fixtures own SDL and this temporary mount for all font loads.
-        let (player, button) = unsafe {
-            assert_eq!(
-                TFB_InitGraphics(
-                    1,
-                    0,
-                    ptr::from_ref(&GraphicsOptions::default()).cast(),
-                    320,
-                    240
-                ),
-                0
-            );
-            uio::uio_init();
-            let repository = uio::uio_openRepository(0);
-            assert!(!uio::uio_mountDir(
-                repository,
-                c"/".as_ptr(),
-                1,
-                ptr::null_mut(),
-                ptr::null(),
-                path.as_ptr(),
-                ptr::null_mut(),
-                6,
-                ptr::null_mut()
+        let files = uqm_engine::test_support::native_session::FixtureFiles::new();
+        files.write_font(32..=127);
+        files.write("fixture.rmp", "fixture.font = FONTRES:font\n");
+        let graphics = uqm_engine::test_support::native_session::Graphics::start();
+        let (player, button) = {
+            let mount = uqm_engine::test_support::native_session::ContentMount::new(files.path());
+            mount.init_resources("fixture.rmp");
+            (
+                LoadedFont::load(c"fixture.font").unwrap(),
+                LoadedFont::load(c"fixture.font").unwrap(),
             )
-            .is_null());
-            let content = uio::uio_openDir(repository, c"/".as_ptr(), 0);
-            let previous = crate::mainloop::dir_prep::contentDir;
-            crate::mainloop::dir_prep::contentDir = content.cast();
-            crate::resource::ffi_bridge::InitResourceSystem();
-            crate::resource::ffi_bridge::LoadResourceIndex(
-                content.cast(),
-                c"fixture.rmp".as_ptr(),
-                ptr::null(),
-            );
-            let fonts = (
-                LoadedFont::load(c"fixture.font").unwrap(),
-                LoadedFont::load(c"fixture.font").unwrap(),
-            );
-            crate::mainloop::dir_prep::contentDir = previous;
-            uio::uio_closeDir(content);
-            uio::uio_closeRepository(repository);
-            uio::uio_unInit();
-            fonts
         };
         let context = crate::graphics::context_abi::LoadedContext::create(c"connection fixture");
         let screen = crate::graphics::drawable_abi::LoadedDrawable::create(8, 320, 240, 1).unwrap();
@@ -279,6 +203,7 @@ impl Display {
             screen,
             player: Some(player),
             button: Some(button),
+            _graphics: graphics,
         }
     }
 
@@ -291,15 +216,6 @@ impl Display {
             width: 320,
             height: 240,
         }
-    }
-}
-
-impl Drop for Display {
-    fn drop(&mut self) {
-        drop(self.player.take());
-        drop(self.button.take());
-        // SAFETY: the serial fixture has completed all rendering before SDL teardown.
-        unsafe { crate::graphics::sdl::lifecycle_abi::TFB_UninitGraphics() };
     }
 }
 
@@ -399,14 +315,7 @@ impl crate::engine::input::InputRuntime for Driver {
             self.input.clear_menu_state();
             let mut pulse = crate::engine::input::frames::InputState::default();
             if key == usize::MAX {
-                // SAFETY: this valid SDL text event supplies one UTF-8 character to the real editor.
-                unsafe {
-                    let mut event: sdl2_sys::SDL_Event = std::mem::zeroed();
-                    event.type_ = 0x303;
-                    event.text.text[0] = 0xc3u8 as std::ffi::c_char;
-                    event.text.text[1] = 0xa9u8 as std::ffi::c_char;
-                    crate::input::sdl_input::process_input_event(&event);
-                }
+                uqm_engine::test_support::native_session::text_input("é");
             } else {
                 pulse.menu[key] = 1;
             }

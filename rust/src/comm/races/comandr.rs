@@ -1,7 +1,8 @@
 //! Earth Commander dialogue, ported from comm/comandr/comandr.c.
 
+pub use super::script::DialogueHost;
 pub(crate) use super::script::{
-    DialogueHost, ANIM_DISABLED, FUEL_TANK_SCALE, GLOBAL_PLAYER_NAME, GLOBAL_SHIP_NAME, ONE_SECOND,
+    ANIM_DISABLED, FUEL_TANK_SCALE, GLOBAL_PLAYER_NAME, GLOBAL_SHIP_NAME, ONE_SECOND,
 };
 pub use crate::comm::races::descriptor::CommDescriptor;
 pub use crate::engine::StoryKey;

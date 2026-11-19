@@ -337,7 +337,7 @@ mod tests {
             manager.get_planet_info(1, 0, 0, &[1]).unwrap().to_array(),
             [0; 3]
         );
-        let mut save = crate::savegame::decode_save(include_bytes!(
+        let mut save = uqm_save::decode_save(include_bytes!(
             "../../tests/fixtures/savegame/legacy-save.00"
         ))
         .unwrap();
@@ -352,8 +352,7 @@ mod tests {
                 .map(|b| u32::from_le_bytes(*b))
                 .collect(),
         );
-        let loaded =
-            crate::savegame::decode_save(&crate::savegame::encode_save(&save).unwrap()).unwrap();
+        let loaded = uqm_save::decode_save(&uqm_save::encode_save(&save).unwrap()).unwrap();
         let bytes: Vec<_> = loaded
             .scan
             .unwrap()

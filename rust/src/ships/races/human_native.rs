@@ -107,11 +107,7 @@ pub mod engine {
             .set_vector(i32::from(speed), facing);
     }
 
-    pub(crate) fn initialize_nuke(
-        cx: &mut Cx<'_>,
-        ss: ShipId,
-        origin: WeaponOrigin,
-    ) -> WeaponSpawn {
+    pub fn initialize_nuke(cx: &mut Cx<'_>, ss: ShipId, origin: WeaponOrigin) -> WeaponSpawn {
         let facing = cx.ship_state(ss).facing;
         let mut block = crate::engine::battle::views::Missile {
             cx: origin.next.location.x,

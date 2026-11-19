@@ -2,14 +2,14 @@
 //! system's orbital, against recording fakes.
 
 use super::{generate_energy, generate_orbital, pickup_energy, BurvScenes};
+use crate::engine::world::generation::ReportDisposition;
 use crate::engine::world::planet::{NodeInfo, PlanetFrame, SystemInfo};
 use crate::engine::StoryKey;
 use crate::math::RandomContext;
-use crate::planet_side::report_adapter::{DiscoveryReportPort, ReportDisposition};
-use crate::planet_side::runtime::AdapterError;
 use crate::planets::generate::home_contact::tests::FakeStory;
 use crate::planets::generate::home_contact::LanderTakeoff;
 use crate::planets::generate::special::{Body, Orbit, Story};
+use crate::planets::generate::testing::RecordReport;
 
 const HOME: Body = Body::Planet(0);
 const MOON: Body = Body::Moon { planet: 0, moon: 0 };
@@ -17,10 +17,10 @@ const MOON: Body = Body::Moon { planet: 0, moon: 0 };
 #[derive(Default)]
 struct FakeReport(Vec<ReportDisposition>);
 
-impl DiscoveryReportPort for FakeReport {
-    fn present(&mut self, disposition: ReportDisposition) -> Result<bool, AdapterError> {
+impl RecordReport for FakeReport {
+    fn present(&mut self, disposition: ReportDisposition) -> bool {
         self.0.push(disposition);
-        Ok(true)
+        true
     }
 }
 
@@ -52,10 +52,10 @@ impl BurvScenes for FakeScenes {
 }
 
 fn node_count(body: Body, story: &FakeStory) -> u16 {
-    let mut info: SystemInfo = unsafe { std::mem::zeroed() };
+    let mut info: SystemInfo = Default::default();
     info.planet_info.scan_seed = [1, 2, 3];
     let mut rng = RandomContext::with_seed(7);
-    let mut node: NodeInfo = unsafe { std::mem::zeroed() };
+    let mut node: NodeInfo = Default::default();
     generate_energy(&mut rng, &info, body, !0, &mut node, story)
 }
 
@@ -211,11 +211,14 @@ fn other_worlds_pick_up_nothing() {
 fn orbit_scenes(body: Body, story: &FakeStory) -> (u32, u32, (u8, u8), u32) {
     use crate::planets::generate::calc::{AnalysisSite, StarDescription};
     let mut rng = RandomContext::with_seed(11);
-    let mut sys_info: SystemInfo = unsafe { std::mem::zeroed() };
+    let mut sys_info: SystemInfo = Default::default();
     sys_info.planet_info.weather = 9;
     sys_info.planet_info.tectonics = 9;
-    let mut world: crate::engine::world::planet::PlanetDesc = unsafe { std::mem::zeroed() };
-    world.radius = 400;
+    let world: crate::engine::world::planet::PlanetDesc =
+        crate::engine::world::planet::PlanetDesc {
+            radius: 400,
+            ..Default::default()
+        };
     let plan_data: Vec<PlanetFrame> = vec![PlanetFrame::default(); 128];
     let mut orbit = Orbit {
         rng: &mut rng,

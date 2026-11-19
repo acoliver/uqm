@@ -142,7 +142,7 @@ fn production_menu_admits_the_supplied_observer_without_requiring_display_resour
 #[test]
 #[serial_test::serial]
 fn retained_production_menu_draws_centered_pixels_after_campaign_resources_are_dropped() {
-    if !crate::native_test_process::own_graphics_process("mainloop::restart_menu::owned_tests::retained_production_menu_draws_centered_pixels_after_campaign_resources_are_dropped") {
+    if !uqm_engine::test_support::native_process::own_graphics_process("mainloop::restart_menu::owned_tests::retained_production_menu_draws_centered_pixels_after_campaign_resources_are_dropped") {
         return;
     }
     use crate::graphics::{
@@ -156,7 +156,7 @@ fn retained_production_menu_draws_centered_pixels_after_campaign_resources_are_d
     let mut io = Io {
         observer: &mut observer,
     };
-    let fixture = crate::campaign_display_test::CampaignDisplay::install_prepared(
+    let fixture = uqm_engine::test_support::campaign_display::CampaignDisplay::install_prepared(
         &mut game,
         || {},
         |game| {

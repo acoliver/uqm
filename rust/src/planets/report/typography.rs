@@ -61,14 +61,15 @@ mod tests {
         let mut game = crate::engine::Game::new();
         let first = ReportResources::default();
         let second = ReportResources::default();
-        let display = crate::campaign_display_test::CampaignDisplay::install_with_resources(
-            &mut game,
-            || {
-                first.load();
-                second.load();
-            },
-        )
-        .unwrap();
+        let display =
+            uqm_engine::test_support::campaign_display::CampaignDisplay::install_with_resources(
+                &mut game,
+                || {
+                    first.load();
+                    second.load();
+                },
+            )
+            .unwrap();
         let retained = first.snapshot().unwrap();
         let other = second.snapshot().unwrap();
         assert_ne!(retained.font.as_raw(), other.font.as_raw());

@@ -431,7 +431,7 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn presentation_requires_initialized_display() {
-        if !crate::native_test_process::own_graphics_process(concat!(
+        if !uqm_engine::test_support::native_process::own_graphics_process(concat!(
             module_path!(),
             "::presentation_requires_initialized_display"
         )) {
@@ -446,7 +446,9 @@ mod tests {
             .is_err());
         }
         let mut game = crate::engine::Game::new();
-        let display = crate::campaign_display_test::CampaignDisplay::install(&mut game).unwrap();
+        let display =
+            uqm_engine::test_support::campaign_display::CampaignDisplay::install(&mut game)
+                .unwrap();
         crate::graphics::dcqueue_abi::present_retained(
             &crate::graphics::context_abi::ContextLease::require(game.kernel.status_context),
         );

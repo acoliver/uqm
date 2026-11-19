@@ -113,7 +113,7 @@ fn world_scan_order_preserves_energy_and_matches_direct_analysis() {
             orbit.world,
         );
         orbit.sys_info.planet_info.scan_seed[MINERAL_SCAN] = orbit.rng.seed();
-        let mut node = unsafe { std::mem::zeroed() };
+        let mut node = Default::default();
         surface::generate_mineral_deposits(
             orbit.rng,
             orbit.sys_info,

@@ -11,14 +11,15 @@ use crate::engine::{
 #[test]
 #[serial_test::serial]
 fn clock_adapters_schedule_and_dispatch_on_the_supplied_campaign() {
-    if !crate::native_test_process::own_graphics_process(concat!(
+    if !uqm_engine::test_support::native_process::own_graphics_process(concat!(
         module_path!(),
         "::clock_adapters_schedule_and_dispatch_on_the_supplied_campaign"
     )) {
         return;
     }
     let mut game = Game::new();
-    let display = crate::campaign_display_test::CampaignDisplay::install(&mut game).unwrap();
+    let display =
+        uqm_engine::test_support::campaign_display::CampaignDisplay::install(&mut game).unwrap();
     game.world.story = Some(crate::engine::world::story::StoryState::new());
     crate::time::clock_bridge::rust_clock_init(&mut game.world);
     for _ in 0..=YEHAT_REBEL_SHIP {

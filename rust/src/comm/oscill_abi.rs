@@ -158,75 +158,55 @@ pub(crate) mod runtime {
     #[cfg(test)]
     mod tests {
         use super::*;
-        use crate::graphics::{drawable_abi::LoadedDrawable, sdl::lifecycle_abi};
+        use crate::graphics::drawable_abi::LoadedDrawable;
 
         #[test]
         #[serial_test::serial]
         fn widget_initialization_preserves_cache_and_slider_geometry(
         ) -> Result<(), Box<dyn std::error::Error>> {
-            struct Restore(
-                *mut crate::graphics::ffi::SDL_Surface,
-                *mut crate::graphics::ffi::SDL_Surface,
+            let surfaces = uqm_engine::test_support::native_probe::SdlSurfaces::install(8, 6)?;
+            let mut comm = Comm::new();
+            assert!(comm.scope.scope_work.is_none());
+            let background = LoadedDrawable::create(6, 8, 6, 1).ok_or("missing background")?;
+            let frame = background.lease().context_frame(0);
+            init_oscilloscope(&mut comm, frame.clone());
+            let work = comm.scope.scope_work.as_ref().unwrap().as_raw();
+            assert!(!work.is_null());
+            init_oscilloscope(&mut comm, frame.clone());
+            assert_eq!(
+                (
+                    comm.scope.scope_work.as_ref().unwrap().as_raw(),
+                    comm.scope.scope_width,
+                    comm.scope.scope_height
+                ),
+                (work, 6, 4)
             );
-            impl Drop for Restore {
-                fn drop(&mut self) {
-                    // SAFETY: the serialized fixture restores both borrowed surface globals.
-                    unsafe {
-                        lifecycle_abi::format_conv_surf = self.0;
-                        lifecycle_abi::SDL_Screen = self.1;
-                    }
-                }
-            }
-            let format = sdl2::surface::Surface::new(8, 6, sdl2::pixels::PixelFormatEnum::RGBA32)?;
-            let screen = sdl2::surface::Surface::new(8, 6, sdl2::pixels::PixelFormatEnum::RGB888)?;
-            // SAFETY: the fixture owns both surfaces and restores the borrowed globals before they drop.
-            unsafe {
-                let mut comm = Comm::new();
-                assert!(comm.scope.scope_work.is_none());
-                let restore = Restore(lifecycle_abi::format_conv_surf, lifecycle_abi::SDL_Screen);
-                lifecycle_abi::format_conv_surf = format.raw().cast();
-                lifecycle_abi::SDL_Screen = screen.raw().cast();
-                let background = LoadedDrawable::create(6, 8, 6, 1).ok_or("missing background")?;
-                let frame = background.lease().context_frame(0);
-                init_oscilloscope(&mut comm, frame.clone());
-                let work = comm.scope.scope_work.as_ref().unwrap().as_raw();
-                assert!(!work.is_null());
-                init_oscilloscope(&mut comm, frame.clone());
-                assert_eq!(
-                    (
-                        comm.scope.scope_work.as_ref().unwrap().as_raw(),
-                        comm.scope.scope_width,
-                        comm.scope.scope_height
-                    ),
-                    (work, 6, 4)
-                );
-                init_slider(&mut comm, 3, 4, 20, frame.clone(), frame.clone());
-                set_slider_image(&mut comm, frame.clone());
-                assert_eq!(
-                    (
-                        comm.scope.slider_origin.x,
-                        comm.scope.button_origin.y,
-                        comm.scope.slider_space
-                    ),
-                    (3, 4, 12)
-                );
-                assert!(comm.scope.slider_changed);
-                let mut disabled = Comm::with_options(crate::comm::CommOptions {
-                    oscilloscope: false,
-                    slider: false,
-                    ..Default::default()
-                });
-                // Disabled widgets must not inspect an unusable waveform cache or consume the slider update.
-                disabled.scope.scope_width = -1;
-                disabled.scope.slider_changed = true;
-                draw_oscilloscope(&mut disabled);
-                draw_slider(&mut disabled);
-                assert_eq!(
-                    (disabled.scope.last_offset, disabled.scope.slider_changed),
-                    (None, true)
-                );
-                drop(restore);
-            }
+            init_slider(&mut comm, 3, 4, 20, frame.clone(), frame.clone());
+            set_slider_image(&mut comm, frame.clone());
+            assert_eq!(
+                (
+                    comm.scope.slider_origin.x,
+                    comm.scope.button_origin.y,
+                    comm.scope.slider_space
+                ),
+                (3, 4, 12)
+            );
+            assert!(comm.scope.slider_changed);
+            let mut disabled = Comm::with_options(crate::comm::CommOptions {
+                oscilloscope: false,
+                slider: false,
+                ..Default::default()
+            });
+            // Disabled widgets must not inspect an unusable waveform cache or consume the slider update.
+            disabled.scope.scope_width = -1;
+            disabled.scope.slider_changed = true;
+            draw_oscilloscope(&mut disabled);
+            draw_slider(&mut disabled);
+            assert_eq!(
+                (disabled.scope.last_offset, disabled.scope.slider_changed),
+                (None, true)
+            );
+            drop(surfaces);
             Ok(())
         }
     }
@@ -284,33 +264,12 @@ mod lifetime_tests {
     use super::runtime::*;
     use crate::collections::observation::{self, Event};
     use crate::comm::Comm;
-    use crate::graphics::{drawable_abi::LoadedDrawable, pixmap_abi::ReleaseDrawable};
+    use crate::graphics::drawable_abi::LoadedDrawable;
 
     #[test]
     #[serial_test::serial]
     fn scope_buffer_survives_two_conversations_until_kernel_drop() {
-        use crate::graphics::{ffi::SDL_Surface, sdl::lifecycle_abi};
-        struct Format(*mut SDL_Surface, *mut SDL_Surface);
-        impl Drop for Format {
-            fn drop(&mut self) {
-                // SAFETY: the serialized fixture restores borrowed globals before their surfaces drop.
-                unsafe {
-                    lifecycle_abi::format_conv_surf = self.0;
-                    lifecycle_abi::SDL_Screen = self.1;
-                }
-            }
-        }
-        let surface =
-            sdl2::surface::Surface::new(8, 6, sdl2::pixels::PixelFormatEnum::RGBA32).unwrap();
-        let screen =
-            sdl2::surface::Surface::new(8, 6, sdl2::pixels::PixelFormatEnum::RGB888).unwrap();
-        // SAFETY: both surfaces remain owned until after the borrowed globals are restored.
-        let _restore = unsafe {
-            let restore = Format(lifecycle_abi::format_conv_surf, lifecycle_abi::SDL_Screen);
-            lifecycle_abi::format_conv_surf = surface.raw().cast();
-            lifecycle_abi::SDL_Screen = screen.raw().cast();
-            restore
-        };
+        let _surfaces = uqm_engine::test_support::native_probe::SdlSurfaces::install(8, 6).unwrap();
         let background = LoadedDrawable::create(6, 8, 6, 1).unwrap();
         let frame = background.lease().context_frame(0);
         observation::enable();
@@ -318,13 +277,12 @@ mod lifetime_tests {
         let kernel = crate::engine::Kernel::new();
         let mut comm = Comm::new();
         comm.presentation = crate::comm::presentation::Presentation::from(&kernel);
-        // SAFETY: this serialized fixture retains the initialized native background throughout both sessions.
-        let work = unsafe {
-            init_oscilloscope(&mut comm, frame.clone());
-            init_slider(&mut comm, 3, 4, 20, frame.clone(), frame.clone());
-            set_slider_image(&mut comm, frame.clone());
-            ReleaseDrawable(comm.scope.scope_work.as_ref().unwrap().as_raw()) as usize
-        };
+        init_oscilloscope(&mut comm, frame.clone());
+        init_slider(&mut comm, 3, 4, 20, frame.clone(), frame.clone());
+        set_slider_image(&mut comm, frame.clone());
+        let work = uqm_engine::test_support::native_probe::release_drawable(
+            comm.scope.scope_work.as_ref().unwrap().as_raw(),
+        );
         assert_eq!(comm.scope.slider_origin.x, 3);
         assert_eq!(comm.scope.slider_space, 12);
         assert!(comm.scope.slider_changed);
@@ -336,11 +294,10 @@ mod lifetime_tests {
             .all(|event| !matches!(event, Event::DrawableFree(_)))));
         let mut next = Comm::new();
         next.presentation = crate::comm::presentation::Presentation::from(&kernel);
-        // SAFETY: the same background and kernel-owned work allocation remain live.
-        let next_work = unsafe {
-            init_oscilloscope(&mut next, frame.clone());
-            ReleaseDrawable(next.scope.scope_work.as_ref().unwrap().as_raw()) as usize
-        };
+        init_oscilloscope(&mut next, frame.clone());
+        let next_work = uqm_engine::test_support::native_probe::release_drawable(
+            next.scope.scope_work.as_ref().unwrap().as_raw(),
+        );
         assert_eq!(next_work, work);
         drop(next);
         assert!(observation::inspect_pending(|events| events

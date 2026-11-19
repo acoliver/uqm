@@ -1,4 +1,10 @@
-use super::{CSisState, EncounterApi, Handler};
+use super::{CSisState, EncounterApi, Handler, Session};
+
+impl Default for Session {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 pub trait MelnormApi: EncounterApi<Handler> {
     fn ship(&self) -> CSisState;

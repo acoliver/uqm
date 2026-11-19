@@ -257,11 +257,7 @@ pub mod engine {
         }
     }
 
-    pub(crate) fn initialize_plasma(
-        cx: &mut Cx<'_>,
-        ss: ShipId,
-        origin: WeaponOrigin,
-    ) -> WeaponSpawn {
+    pub fn initialize_plasma(cx: &mut Cx<'_>, ss: ShipId, origin: WeaponOrigin) -> WeaponSpawn {
         let mut out = Vec::new();
         let mut block = Missile {
             cx: origin.next.location.x,

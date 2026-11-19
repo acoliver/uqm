@@ -126,7 +126,7 @@ fn pluto_pickup_stops_on_crew_failure_and_retains_the_node_on_success() {
         assert_eq!(host.flag(StoryKey::MOONBASE_ON_SHIP), 0);
         assert_eq!(host.flag(StoryKey::SHOFIXTI_VISITS), 93);
         assert!(host.words.is_empty());
-        let mut node: NodeInfo = unsafe { std::mem::zeroed() };
+        let mut node: NodeInfo = Default::default();
         assert_eq!(
             generate_energy(PLUTO, Some(&mut node), &host),
             u16::from(!survive)

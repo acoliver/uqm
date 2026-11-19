@@ -111,11 +111,12 @@ fn real_report_presents_before_nested_input_and_restores_retained_background() {
             .configuration
             .update_preferences(|preferences| preferences.fonts = style);
         let reports = super::typography::ReportResources::default();
-        let display = crate::campaign_display_test::CampaignDisplay::install_with_resources(
-            &mut game,
-            || reports.load(),
-        )
-        .unwrap();
+        let display =
+            uqm_engine::test_support::campaign_display::CampaignDisplay::install_with_resources(
+                &mut game,
+                || reports.load(),
+            )
+            .unwrap();
         game.kernel.space_context = game.kernel.off_screen_context;
         let context = ContextLease::require(game.kernel.space_context);
         let frame = ContextFrame::retain(NonNull::new(game.kernel.screen));

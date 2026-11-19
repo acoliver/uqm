@@ -189,14 +189,13 @@ pub fn set_menu_flash(kernel: &Kernel, dimensions: (i32, i32), any: bool) {
 mod tests {
     use crate::graphics::{
         context_abi::{ContextFrame, ContextLease},
-        dcqueue_abi::TFB_FlushGraphics,
-        drawable_abi::GetFramePixel,
         native_abi::*,
     };
-    use crate::native_test_process::own_graphics_process;
     use crate::ui::settings::OPT_PC;
     use crate::ui::sis::{DSME_BLOCKCUR, DSME_CLEARFR, DSME_MYCOLOR, DSME_SETFR};
-    use crate::{campaign_display_test as campaign_display, engine::Game, ui};
+    use crate::{engine::Game, ui};
+    use uqm_engine::test_support::campaign_display;
+    use uqm_engine::test_support::native_process::own_graphics_process;
 
     #[test]
     #[serial_test::serial]
@@ -221,7 +220,7 @@ mod tests {
         let mut game = Game::new();
         let display = campaign_display::CampaignDisplay::install(&mut game)
             .unwrap_or_else(|error| panic!("campaign panel fixture failed: {error}"));
-        uqm_rust::callback::ffi::Alarm_init();
+        crate::callback::ffi::Alarm_init();
         game.kernel.screen_context = game.kernel.off_screen_context;
         let context = ContextLease::require(game.kernel.off_screen_context);
         context.set_frame(ContextFrame::retain(std::ptr::NonNull::new(
@@ -253,9 +252,8 @@ mod tests {
                 flags
             ));
             assert_eq!(context.clip_rect().extent.width, 320);
-            // SAFETY: the fixture owns the retained screen; flushing completes the edit before pixel reads.
-            unsafe {
-                TFB_FlushGraphics();
+            uqm_engine::test_support::native_probe::flush_graphics();
+            {
                 for (offset, color) in [
                     (
                         0,
@@ -274,7 +272,7 @@ mod tests {
                         },
                     ),
                 ] {
-                    let pixel = GetFramePixel(
+                    let pixel = uqm_engine::test_support::native_probe::frame_pixel(
                         game.kernel.screen,
                         POINT {
                             x: 8 + glyph.x + offset,
@@ -291,7 +289,10 @@ mod tests {
                             .map(|&x| i16::from(x))
                             .sum::<i16>()
                         - i16::from(cursor < 2);
-                    let pixel = GetFramePixel(game.kernel.screen, POINT { x, y: 2 });
+                    let pixel = uqm_engine::test_support::native_probe::frame_pixel(
+                        game.kernel.screen,
+                        POINT { x, y: 2 },
+                    );
                     assert_eq!((pixel.r, pixel.g, pixel.b), (0, 0, 0));
                 }
             }
@@ -346,7 +347,7 @@ mod tests {
         ui::sis::set_menu_flash(&game.kernel, (320, 240), false);
         assert!(game.kernel.sis_highlight.context.borrow().is_some());
         game.kernel.sis_highlight.context.borrow_mut().take();
-        uqm_rust::callback::ffi::Alarm_uninit();
+        crate::callback::ffi::Alarm_uninit();
         let long_label = std::ffi::CString::new("A".repeat(100))
             .unwrap_or_else(|error| panic!("fixture label: {error}"));
         assert!(!ui::sis::draw_message(

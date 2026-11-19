@@ -888,7 +888,6 @@ pub const match_MatchType_match_MATCH_SUFFIX: match_MatchType = 2;
 pub const match_MatchType_match_MATCH_SUBSTRING: match_MatchType = 3;
 pub const match_MatchType_match_MATCH_REGEX: match_MatchType = 4;
 pub type match_MatchType = ::std::os::raw::c_uint;
-pub type FILE = libc::FILE;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct resource_index_desc {
@@ -1762,8 +1761,8 @@ mod ship_abi_tests {
 
     #[test]
     fn velocity_adapters_preserve_signed_components_and_frame_steps() {
-        unsafe {
-            let mut velocity: VELOCITY_DESC = std::mem::zeroed();
+        {
+            let mut velocity = VELOCITY_DESC::default();
             (velocity).set_components(96, -64);
             let (velocity_x, velocity_y) = (velocity).get_current_components();
 let (mut dx, mut dy) = (velocity_x as i16, velocity_y as i16);

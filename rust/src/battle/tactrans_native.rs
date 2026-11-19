@@ -401,10 +401,7 @@ pub mod engine {
         crate::ui::settings::stop_battle_music();
     }
 
-    pub(crate) fn find_alive_ship(
-        cx: &Cx<'_>,
-        dead: ElementId,
-    ) -> Option<crate::engine::battle::ShipId> {
+    pub fn find_alive_ship(cx: &Cx<'_>, dead: ElementId) -> Option<crate::engine::battle::ShipId> {
         let mut next = cx.elements().head();
         while let Some(e) = next {
             let state = cx.element(e);

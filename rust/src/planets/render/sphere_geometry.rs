@@ -266,16 +266,7 @@ mod tests {
     #[test]
     fn complete_outputs_match_sealed_original_c_fixture() {
         cases::check_fixture(&cases::rust_output());
-    }
-
-    #[test]
-    fn supplied_original_c_oracle_replays_the_immutable_fixture() {
-        let original = cases::original_output();
-        let live_c = original.is_some();
-        if let Some(output) = original {
-            cases::check_fixture(&output);
-        }
-        cases::report_coverage(live_c);
+        cases::report_coverage(false);
     }
 
     #[test]

@@ -8,11 +8,11 @@ use crate::graphics::{
 };
 
 pub(super) fn with_display(name: &str, call: impl FnOnce(&mut Comm, &ContextLease)) {
-    if !crate::native_test_process::own_graphics_process(name) {
+    if !uqm_engine::test_support::native_process::own_graphics_process(name) {
         return;
     }
     let mut game = crate::engine::Game::new();
-    let fixture = crate::campaign_display_test::CampaignDisplay::install_prepared(
+    let fixture = uqm_engine::test_support::campaign_display::CampaignDisplay::install_prepared(
         &mut game,
         || {},
         |game| {
@@ -125,13 +125,14 @@ fn rendering_restores_the_context_font_it_found() {
     with_display(
         "comm::sis_graphics_font_tests::rendering_restores_the_context_font_it_found",
         |comm, context| {
-            // SAFETY: this fixture retains the selected registered context throughout both draws.
-            let original = unsafe { (*context.as_raw()).Font };
+            let original = uqm_engine::test_support::native_probe::context_font(context.as_raw());
             comm.add_response(1, "A", None);
             super::sis_graphics::refresh_responses(comm, 0, 0, 1, 0);
             super::sis_graphics::feedback_player_phrase(comm, 0, Some(c"A"));
-            // SAFETY: the context remains retained by the fixture.
-            assert_eq!(unsafe { (*context.as_raw()).Font }, original);
+            assert_eq!(
+                uqm_engine::test_support::native_probe::context_font(context.as_raw()),
+                original
+            );
         },
     );
 }

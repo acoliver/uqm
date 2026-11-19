@@ -5,11 +5,7 @@ use crate::comm::Comm;
 use crate::engine::battle::Cx;
 
 fn run(comm: &mut Comm, cx: &mut Cx<'_>, f: impl FnOnce(&mut Dialogue<'_, Host<'_, '_, Handler>>)) {
-    let mut session = comm
-        .race_scratch
-        .melnorm
-        .take()
-        .unwrap_or_else(Session::new);
+    let mut session = comm.race_scratch.melnorm.take().unwrap_or_default();
     {
         let mut api = Host::new(comm, cx, callback);
         f(&mut Dialogue {

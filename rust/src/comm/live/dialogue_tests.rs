@@ -217,7 +217,7 @@ fn with_fixture(mut body: impl FnMut(&mut Game, crate::graphics::native_abi::FRA
         native_font::FontLease,
     };
     let mut game = Game::new();
-    let display = crate::campaign_display_test::CampaignDisplay::install_prepared(
+    let display = uqm_engine::test_support::campaign_display::CampaignDisplay::install_prepared(
         &mut game,
         || {},
         |game| {
@@ -273,7 +273,7 @@ fn run_all(story: &[(StoryKey, u32)]) {
 #[test]
 #[serial_test::serial]
 fn every_conversation_walks_its_responses_on_a_fresh_campaign() {
-    if !crate::native_test_process::own_graphics_process(concat!(
+    if !uqm_engine::test_support::native_process::own_graphics_process(concat!(
         module_path!(),
         "::every_conversation_walks_its_responses_on_a_fresh_campaign"
     )) {
@@ -285,7 +285,7 @@ fn every_conversation_walks_its_responses_on_a_fresh_campaign() {
 #[test]
 #[serial_test::serial]
 fn every_conversation_walks_its_responses_in_drawn_story_states() {
-    if !crate::native_test_process::own_graphics_process(concat!(
+    if !uqm_engine::test_support::native_process::own_graphics_process(concat!(
         module_path!(),
         "::every_conversation_walks_its_responses_in_drawn_story_states"
     )) {
@@ -681,7 +681,7 @@ fn handler_tables() -> Vec<(DialogueKind, Vec<crate::comm::response::ResponseFun
 #[test]
 #[serial_test::serial]
 fn every_response_handler_runs_from_its_callback_table() {
-    if !crate::native_test_process::own_graphics_process(concat!(
+    if !uqm_engine::test_support::native_process::own_graphics_process(concat!(
         module_path!(),
         "::every_response_handler_runs_from_its_callback_table"
     )) {
@@ -724,7 +724,7 @@ fn host_queries_and_effects_read_and_change_the_supplied_campaign() {
         urquan::api::UrquanApi, zoqfot::api::ZoqApi,
     };
     use crate::engine::species::ship::{ORZ_SHIP, PKUNK_SHIP, SPATHI_SHIP};
-    if !crate::native_test_process::own_graphics_process(concat!(
+    if !uqm_engine::test_support::native_process::own_graphics_process(concat!(
         module_path!(),
         "::host_queries_and_effects_read_and_change_the_supplied_campaign"
     )) {
@@ -943,7 +943,7 @@ fn first_talk_segue_presents_once_and_consumes_only_the_load_flag() {
     use crate::comm::talk_segue::{
         alien_talk_segue, do_communication, CommunicationResult, WAIT_TRACK_ALL,
     };
-    if !crate::native_test_process::own_graphics_process(concat!(
+    if !uqm_engine::test_support::native_process::own_graphics_process(concat!(
         module_path!(),
         "::first_talk_segue_presents_once_and_consumes_only_the_load_flag"
     )) {

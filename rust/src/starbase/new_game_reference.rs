@@ -50,8 +50,8 @@ impl PieceNumbers {
 }
 
 pub fn new_game_crew_cost() -> u8 {
-    let mut sis = unsafe { std::mem::zeroed() };
-    let mut state = unsafe { std::mem::zeroed() };
+    let mut sis = Default::default();
+    let mut state = Default::default();
     crate::engine::world::new_game::prices(&mut sis, &mut state);
     state.crew_cost
 }
@@ -85,8 +85,8 @@ pub struct NewGameFlagship {
 
 impl NewGameFlagship {
     pub fn from_initializer() -> Self {
-        let mut sis = unsafe { std::mem::zeroed() };
-        let mut state = unsafe { std::mem::zeroed() };
+        let mut sis = Default::default();
+        let mut state = Default::default();
         crate::engine::world::new_game::equipment(&mut sis);
         crate::engine::world::new_game::prices(&mut sis, &mut state);
         Self {

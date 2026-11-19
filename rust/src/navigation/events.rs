@@ -720,14 +720,16 @@ mod tests {
 
     #[test]
     fn growth_fraction_and_destination_arrival_match_the_original_integer_math() {
-        let mut fleet: FleetInfo = unsafe { std::mem::zeroed() };
-        fleet.actual_strength = 100;
-        fleet.growth = (-3i8) as u8;
-        fleet.growth_fract = 128;
-        fleet.growth_err_term = 127;
-        fleet.days_left = 2;
-        fleet.dest_loc = POINT { x: 5, y: -5 };
-        fleet.func_index = 4;
+        let mut fleet: FleetInfo = FleetInfo {
+            actual_strength: 100,
+            growth: (-3i8) as u8,
+            growth_fract: 128,
+            growth_err_term: 127,
+            days_left: 2,
+            dest_loc: POINT { x: 5, y: -5 },
+            func_index: 4,
+            ..Default::default()
+        };
         assert_eq!(grow_fleet(&mut fleet), None);
         assert_eq!(
             (
@@ -747,9 +749,11 @@ mod tests {
 
     #[test]
     fn extinct_and_infinite_fleets_do_not_move_and_losses_can_kill_a_fleet() {
-        let mut fleet: FleetInfo = unsafe { std::mem::zeroed() };
-        fleet.actual_strength = u16::MAX;
-        fleet.days_left = 3;
+        let mut fleet: FleetInfo = FleetInfo {
+            actual_strength: u16::MAX,
+            days_left: 3,
+            ..Default::default()
+        };
         assert_eq!(grow_fleet(&mut fleet), None);
         assert_eq!(fleet.days_left, 3);
         fleet.actual_strength = 1;

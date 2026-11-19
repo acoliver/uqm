@@ -81,37 +81,23 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn production_boundary_rejects_drift_and_restores_the_queue() {
-        use crate::graphics::{
-            dcqueue_abi::{Init_DrawCommandQueue, Uninit_DrawCommandQueue},
-            gfx_common_abi::{BatchGraphics, GetBatchDepth, UnbatchGraphics},
+        use uqm_engine::test_support::native_probe::{
+            batch_depth, batch_graphics, unbatch_graphics, DrawQueue,
         };
         let context = crate::graphics::context_abi::LoadedContext::create(c"queue-callback");
         let context = context.lease();
-        struct Queue;
-        impl Drop for Queue {
-            fn drop(&mut self) {
-                // SAFETY: this serialized fixture owns the initialized queue.
-                unsafe { Uninit_DrawCommandQueue() };
-            }
-        }
-        // SAFETY: the serialized fixture owns the queue through its guard.
-        unsafe { Init_DrawCommandQueue() };
-        let _queue = Queue;
+        let _queue = DrawQueue::init();
         let error = calling_native_unbatched(&context, "pickup_drift", || {
-            // SAFETY: the serialized callback deliberately introduces one leaked level.
-            unsafe { BatchGraphics() };
+            batch_graphics();
         });
         assert_eq!(error.unwrap_err().batch_depth_corrections, 1);
-        // SAFETY: the serialized fixture owns this queue.
-        assert_eq!(unsafe { GetBatchDepth() }, 0);
+        assert_eq!(batch_depth(), 0);
         assert_eq!(calling_native_unbatched(&context, "balanced", || 7), Ok(7));
-        // SAFETY: the serialized fixture balances this level before dropping the queue.
-        unsafe { BatchGraphics() };
+        batch_graphics();
         assert!(
             calling_native_unbatched(&context, "held", || panic!("held callback ran")).is_err()
         );
-        // SAFETY: balance the level acquired above.
-        unsafe { UnbatchGraphics() };
+        unbatch_graphics();
     }
 
     #[test]

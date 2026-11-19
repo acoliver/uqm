@@ -8,9 +8,9 @@ use super::{enter_orbit, pickup_artifact, HomeContactSite, LanderTakeoff, HOME_C
 use crate::engine::world::activity::activity_flags::{
     CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY,
 };
-use crate::planet_side::report_adapter::{DiscoveryReportPort, ReportDisposition};
-use crate::planet_side::runtime::AdapterError;
+use crate::engine::world::generation::ReportDisposition;
 use crate::planets::generate::special::Story;
+use crate::planets::generate::testing::RecordReport;
 
 const IN_INTERPLANETARY: u16 = 4;
 
@@ -270,10 +270,10 @@ impl Story for FakeStory {
 #[derive(Default)]
 struct FakeReport(Vec<ReportDisposition>);
 
-impl DiscoveryReportPort for FakeReport {
-    fn present(&mut self, disposition: ReportDisposition) -> Result<bool, AdapterError> {
+impl RecordReport for FakeReport {
+    fn present(&mut self, disposition: ReportDisposition) -> bool {
         self.0.push(disposition);
-        Ok(true)
+        true
     }
 }
 

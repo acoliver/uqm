@@ -62,7 +62,9 @@ mod tests {
     #[serial_test::serial]
     fn orbit_images_release_in_the_original_teardown_order() {
         let mut game = crate::engine::Game::new();
-        let display = crate::campaign_display_test::CampaignDisplay::install(&mut game).unwrap();
+        let display =
+            uqm_engine::test_support::campaign_display::CampaignDisplay::install(&mut game)
+                .unwrap();
         observation::enable();
         observation::drain();
         let mut images = OrbitImages::new(4);

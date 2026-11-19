@@ -306,7 +306,6 @@ pub mod live {
                 |state: &mut MeleeSession,
                  cx: &mut crate::engine::battle::Cx<'_>,
                  io: &mut crate::engine::observe::Io<'_>| {
-                    // SAFETY: the frame exclusively lends its menu to each synchronous step.
                     {
                         run_menu_frame(state, cx, io, input)
                     }
@@ -314,7 +313,6 @@ pub mod live {
             );
             cx.run_input_frame(io, true, &mut frame);
         }
-        // SAFETY: the input session has stopped and no callback retains these resources.
         {
             crate::ui::settings::stop_loaded_music(state.h_music.as_ref());
             WaitForSoundEnd(u16::MAX);

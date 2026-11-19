@@ -57,7 +57,7 @@ use crate::{
     },
     starbase::ids::{MONTHS_STRING_BASE, SAFE_X},
 };
-const SAVE_NAME_SIZE: usize = crate::savegame::types::SAVE_NAME_SIZE;
+const SAVE_NAME_SIZE: usize = uqm_save::types::SAVE_NAME_SIZE;
 const DDSHS_EDIT: u16 = 1;
 const DDSHS_BLOCKCUR: u16 = 2;
 pub(super) fn draw_name_string(
@@ -216,9 +216,10 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn owned_name_renderers_measure_and_draw_without_published_campaign_owners() {
-        if !crate::native_test_process::own_graphics_process("front_end::gameopt::naming::tests::owned_name_renderers_measure_and_draw_without_published_campaign_owners") { return; }
+        if !uqm_engine::test_support::native_process::own_graphics_process("front_end::gameopt::naming::tests::owned_name_renderers_measure_and_draw_without_published_campaign_owners") { return; }
+        use crate::engine::Game;
         use crate::graphics::context_abi::{ContextFrame, ContextLease};
-        use crate::{campaign_display_test::CampaignDisplay, engine::Game};
+        use uqm_engine::test_support::campaign_display::CampaignDisplay;
         let mut game = Game::new();
         let display = CampaignDisplay::install(&mut game)
             .unwrap_or_else(|error| panic!("naming display: {error}"));
@@ -289,10 +290,10 @@ mod tests {
         ));
         draw_name_string(&game.kernel, &game.world, true, c"A", 0, DDSHS_EDIT);
         context.flush();
-        // SAFETY: this serial fixture retains its screen until all queued drawing is flushed.
-        let pixel = unsafe {
-            crate::graphics::drawable_abi::GetFramePixel(game.kernel.screen, POINT { x: 3, y: 10 })
-        };
+        let pixel = uqm_engine::test_support::native_probe::frame_pixel(
+            game.kernel.screen,
+            POINT { x: 3, y: 10 },
+        );
         assert_eq!((pixel.r, pixel.g, pixel.b), (82, 82, 255));
         drop(context);
         display.finish(game);

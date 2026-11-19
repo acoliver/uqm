@@ -8,7 +8,7 @@ pub const MENU_SOUND_NONE: u16 = 0;
 ///
 /// ```compile_fail
 /// fn require_send<T: Send>() {}
-/// require_send::<uqm_rust::planet_side::menu_sounds::MenuSoundSilence<'static>>();
+/// require_send::<uqm_modes::planet_side::menu_sounds::MenuSoundSilence<'static>>();
 /// ```
 pub struct MenuSoundSilence<'a> {
     input: &'a InputControls,

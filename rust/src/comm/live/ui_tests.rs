@@ -46,7 +46,7 @@ fn starbase_adapter_uses_the_supplied_inventory_and_calendar() {
 #[serial_test::serial]
 fn unblocked_ui_adapters_initialize_with_supplied_campaign_owners(
 ) -> Result<(), Box<dyn std::error::Error>> {
-    if !crate::native_test_process::own_graphics_process(concat!(
+    if !uqm_engine::test_support::native_process::own_graphics_process(concat!(
         module_path!(),
         "::unblocked_ui_adapters_initialize_with_supplied_campaign_owners"
     )) {
@@ -59,7 +59,7 @@ fn unblocked_ui_adapters_initialize_with_supplied_campaign_owners(
         Melnorm, Slyland,
     ];
     let mut game = Game::new();
-    let display = crate::campaign_display_test::CampaignDisplay::install(&mut game)?;
+    let display = uqm_engine::test_support::campaign_display::CampaignDisplay::install(&mut game)?;
     for kind in adapters {
         let name = format!("{kind:?}");
         game.world = crate::engine::World::new();

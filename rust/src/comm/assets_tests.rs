@@ -29,29 +29,30 @@ fn with_game_options(
     options: crate::graphics::sdl::lifecycle_abi::GraphicsOptions,
     run: impl FnOnce(&mut Game, &ContextLease),
 ) {
-    if !crate::native_test_process::own_graphics_process(name) {
+    if !uqm_engine::test_support::native_process::own_graphics_process(name) {
         return;
     }
     let mut game = Game::new();
     game.world.story = Some(crate::state::game_state::StoryState::new());
-    let fixture = crate::campaign_display_test::CampaignDisplay::install_prepared_with_options(
-        &mut game,
-        || {},
-        |game| {
-            let space = ContextLease::require(game.kernel.status_context);
-            space.set_frame(ContextFrame::retain(std::ptr::NonNull::new(
-                game.kernel.screen,
-            )));
-            game.kernel.space_context = space.as_raw();
-            game.kernel.radar_context = space.as_raw();
-            space.set_font(&crate::graphics::native_font::FontLease::retain(
-                std::ptr::NonNull::new(game.kernel.tiny_font).unwrap(),
-            ));
-            run(game, &space);
-        },
-        options,
-    )
-    .unwrap();
+    let fixture =
+        uqm_engine::test_support::campaign_display::CampaignDisplay::install_prepared_with_options(
+            &mut game,
+            || {},
+            |game| {
+                let space = ContextLease::require(game.kernel.status_context);
+                space.set_frame(ContextFrame::retain(std::ptr::NonNull::new(
+                    game.kernel.screen,
+                )));
+                game.kernel.space_context = space.as_raw();
+                game.kernel.radar_context = space.as_raw();
+                space.set_font(&crate::graphics::native_font::FontLease::retain(
+                    std::ptr::NonNull::new(game.kernel.tiny_font).unwrap(),
+                ));
+                run(game, &space);
+            },
+            options,
+        )
+        .unwrap();
     fixture.finish(game);
 }
 
@@ -198,23 +199,14 @@ fn releasing_assets_drains_pixels_without_presenting_a_frame() {
             let mut assets = comm.display.assets.take().unwrap();
             drop(assets.intro_batch.take());
             space.draw_stamp(&assets.frame.lease().context_frame(0), POINT { x: 0, y: 0 });
-            let mut width = 0;
-            let mut height = 0;
-            // SAFETY: the isolated fixture owns the initialized graphics thread and display.
-            let display =
-                unsafe { crate::graphics::drawable_abi::CreateDisplay(0, &mut width, &mut height) };
-            assert!(!display.is_null());
-            // SAFETY: the live display has one registered frame retained through the drain.
-            let screen = ContextFrame::retain(std::ptr::NonNull::new(unsafe {
-                crate::graphics::pixmap_abi::CaptureDrawable(display)
-            }));
+            let display = uqm_engine::test_support::native_probe::Display::create();
+            let screen = ContextFrame::retain(std::ptr::NonNull::new(display.frame()));
             let before = presentations.get();
             space.with_frame(screen, || {
                 space.draw_stamp(&assets.frame.lease().context_frame(0), POINT { x: 0, y: 0 });
                 assets.release(space);
             });
-            // SAFETY: drawing has drained and the fixture uniquely owns this display allocation.
-            unsafe { crate::graphics::drawable_abi::DestroyDrawable(display) };
+            drop(display);
             assert_eq!(
                 presentations.get(),
                 before,

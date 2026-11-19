@@ -97,11 +97,7 @@ pub mod engine {
         intelligence: Some(syreen_intelligence),
         uninit: None,
     };
-    pub(crate) fn initialize_dagger(
-        cx: &mut Cx<'_>,
-        ss: ShipId,
-        origin: WeaponOrigin,
-    ) -> WeaponSpawn {
+    pub fn initialize_dagger(cx: &mut Cx<'_>, ss: ShipId, origin: WeaponOrigin) -> WeaponSpawn {
         let mut out = Vec::new();
         let mut block = Missile {
             cx: origin.next.location.x,

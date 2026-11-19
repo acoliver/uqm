@@ -11,10 +11,11 @@ use crate::graphics::{
 #[test]
 #[serial_test::serial]
 fn prepared_picker_draws_empty_and_populated_pages_without_published_owners() {
-    if !crate::native_test_process::own_graphics_process("front_end::gameopt::render_tests::prepared_picker_draws_empty_and_populated_pages_without_published_owners") { return; }
+    if !uqm_engine::test_support::native_process::own_graphics_process("front_end::gameopt::render_tests::prepared_picker_draws_empty_and_populated_pages_without_published_owners") { return; }
     use crate::graphics::drawable_abi::LoadedDrawable;
     let mut game = Game::new();
-    let fixture = crate::campaign_display_test::CampaignDisplay::install(&mut game).unwrap();
+    let fixture =
+        uqm_engine::test_support::campaign_display::CampaignDisplay::install(&mut game).unwrap();
     game.kernel.space_context = game.kernel.status_context;
     game.kernel.radar_context = game.kernel.status_context;
     game.kernel.star_con_font = game.kernel.tiny_font;

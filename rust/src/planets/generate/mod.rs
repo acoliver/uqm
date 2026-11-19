@@ -32,7 +32,7 @@ pub mod yehat;
 pub mod zfpscout;
 pub mod zoq;
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 mod test_npcs;
 
 pub mod calc;
@@ -84,5 +84,5 @@ pub fn generator(index: u8) -> &'static dyn SystemGenerator {
     }
 }
 
-#[cfg(test)]
-pub(crate) mod testing;
+#[cfg(any(test, feature = "test-support"))]
+pub mod testing;
