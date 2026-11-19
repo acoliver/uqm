@@ -3503,7 +3503,7 @@ u6_04_world_projection = { limit = 11, ends = "U6-04", scopes = { "ffi|owner_pro
 "complexity|loc|uqm::starbase::draw::draw_ship_piece" = 129
 "complexity|loc|uqm::starbase::screen::<OutfitScreen<'a,P>>::initialize" = 86
 "complexity|loc|uqm::starbase::shipyard_screen::<ShipyardScreen<'a,P>>::show_combat_ships" = 93
-"complexity|loc|uqm::supermelee::setup::persistence::builtin_teams" = 94
+"complexity|loc|uqm::supermelee::setup::builtin::builtin_teams" = 94
 "complexity|loc|uqm::target::uqm-gameplay-proof::build_gallery" = 83
 "complexity|loc|uqm::target::uqm::main" = 86
 "complexity|loc|uqm::ui::outfit::do_install_module" = 149
@@ -3846,5 +3846,6 @@ u6_04_world_projection = { limit = 11, ends = "U6-04", scopes = { "ffi|owner_pro
 "uqm::network" = "uqm-engine::network"
 "uqm::resource" = "uqm-engine::resource"
 "uqm::sound" = "uqm-engine::sound"
+"uqm::supermelee::setup::persistence::builtin_teams" = "uqm::supermelee::setup::builtin::builtin_teams"
 "uqm::threading" = "uqm-engine::threading"
 "uqm::video" = "uqm-engine::video"
