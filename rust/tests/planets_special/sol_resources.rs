@@ -202,7 +202,7 @@ unsafe fn names(h: &mut Harness) {
             assert_eq!(
                 crate::battle_context::with(|cx| {
                     uqm_rust::state::game_state_keys::get_game_state(
-                        &cx.world,
+                        cx.world,
                         uqm_rust::engine::StoryKey::BATTLE_PLANET,
                     )
                 }),
@@ -230,7 +230,7 @@ unsafe fn names(h: &mut Harness) {
             assert_eq!(
                 crate::battle_context::with(|cx| {
                     uqm_rust::state::game_state_keys::get_game_state(
-                        &cx.world,
+                        cx.world,
                         uqm_rust::engine::StoryKey::BATTLE_PLANET,
                     )
                 }),
@@ -238,7 +238,7 @@ unsafe fn names(h: &mut Harness) {
             );
         }
         crate::battle_context::with(|cx| {
-            uqm_rust::engine::Kernel::release_encounter_text(&mut cx.kernel)
+            uqm_rust::engine::Kernel::release_encounter_text(cx.kernel)
         });
         queue::TFB_FlushGraphicsEx(1);
         println!("Sol name ABI: real game strings, parent names and parent battle frames for planets and moons");
@@ -266,18 +266,10 @@ unsafe fn scenes(h: &mut Harness) {
         };
         (*world).rand_seed = 104729;
         crate::battle_context::with(|cx| {
-            set_game_state(
-                &mut cx.world,
-                uqm_rust::engine::StoryKey::FOUND_PLUTO_SPATHI,
-                0,
-            )
+            set_game_state(cx.world, uqm_rust::engine::StoryKey::FOUND_PLUTO_SPATHI, 0)
         });
         crate::battle_context::with(|cx| {
-            set_game_state(
-                &mut cx.world,
-                uqm_rust::engine::StoryKey::MOONBASE_DESTROYED,
-                0,
-            )
+            set_game_state(cx.world, uqm_rust::engine::StoryKey::MOONBASE_DESTROYED, 0)
         });
         // SAFETY: Harness retains installed owners and live solar/planet
         // descriptors throughout this synchronous orbital callback.

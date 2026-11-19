@@ -64,13 +64,13 @@ impl Ops for Harness {
     fn scan(&mut self, case: Scan, info: &SystemInfo, node: &mut NodeInfo) -> (u16, u32) {
         self.set_star(0, 0);
         crate::battle_context::with(|cx| {
-            (&mut cx.world).set_story_state(
+            cx.world.set_story_state(
                 uqm_rust::engine::StoryKey::FOUND_PLUTO_SPATHI,
                 u32::from(case.pluto),
             )
         });
         crate::battle_context::with(|cx| {
-            (&mut cx.world).set_story_state(
+            cx.world.set_story_state(
                 uqm_rust::engine::StoryKey::MOONBASE_DESTROYED,
                 u32::from(case.destroyed),
             )
@@ -113,14 +113,14 @@ impl Ops for Harness {
         );
         assert_eq!(
             crate::battle_context::with(|cx| get_game_state(
-                &cx.world,
+                cx.world,
                 uqm_rust::engine::StoryKey::FOUND_PLUTO_SPATHI
             )),
             u32::from(case.pluto)
         );
         assert_eq!(
             crate::battle_context::with(|cx| get_game_state(
-                &cx.world,
+                cx.world,
                 uqm_rust::engine::StoryKey::MOONBASE_DESTROYED
             )),
             u32::from(case.destroyed)

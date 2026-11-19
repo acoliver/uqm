@@ -22,7 +22,7 @@ impl Ops for Harness {
         self.state.sys.planets.copy_from_slice(planets);
         self.state.sys.sun.num_planets = 0;
         crate::battle_context::with(|cx| {
-            (&mut cx.world).set_story_state(
+            cx.world.set_story_state(
                 uqm_rust::engine::StoryKey::SPATHI_SHIELDED_SELVES,
                 u32::from(case.shielded),
             )
@@ -79,9 +79,7 @@ impl Ops for Harness {
             uqm_rust::engine::StoryKey::SHOFIXTI_MAIDENS,
             uqm_rust::engine::StoryKey::UMGAH_BROADCASTERS,
         ] {
-            crate::battle_context::with(|cx| {
-                (&mut cx.world).set_story_state(key, u32::from(case.taken))
-            });
+            crate::battle_context::with(|cx| cx.world.set_story_state(key, u32::from(case.taken)));
         }
         self.state.sys.planets = unsafe { std::mem::zeroed() };
         self.state.sys.moons = unsafe { std::mem::zeroed() };
@@ -128,7 +126,7 @@ impl Ops for Harness {
             uqm_rust::engine::StoryKey::UMGAH_BROADCASTERS,
         ] {
             assert_eq!(
-                crate::battle_context::with(|cx| get_game_state(&cx.world, key)),
+                crate::battle_context::with(|cx| get_game_state(cx.world, key)),
                 u32::from(case.taken)
             );
         }

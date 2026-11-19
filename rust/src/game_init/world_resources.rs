@@ -98,6 +98,8 @@ pub(crate) mod live {
     }
 }
 
+pub use live::free_gravity_well;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -128,5 +130,3 @@ mod tests {
         }
     }
 }
-
-pub use live::free_gravity_well;

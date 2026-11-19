@@ -268,6 +268,8 @@ pub(crate) mod live {
     }
 }
 
+pub use live::*;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -324,5 +326,3 @@ mod tests {
         );
     }
 }
-
-pub use live::*;

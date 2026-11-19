@@ -33,7 +33,7 @@ impl MyconOps for Harness {
         self.set_star(0, 0);
         crate::battle_context::with(|cx| {
             set_game_state(
-                &mut cx.world,
+                cx.world,
                 uqm_rust::engine::StoryKey::SUN_DEVICE,
                 u32::from(case.taken),
             )
@@ -83,7 +83,7 @@ impl MyconOps for Harness {
         assert_eq!(
             crate::battle_context::with(|cx| {
                 uqm_rust::state::game_state_keys::get_game_state(
-                    &cx.world,
+                    cx.world,
                     uqm_rust::engine::StoryKey::SUN_DEVICE,
                 )
             }),

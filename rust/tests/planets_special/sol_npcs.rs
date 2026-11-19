@@ -14,7 +14,7 @@ pub fn check(h: &mut Harness) {
         uqm_rust::engine::StoryKey::PROBE_MESSAGE_DELIVERED,
         uqm_rust::engine::StoryKey::GLOBAL_FLAGS_AND_DATA,
     ];
-    let story = keys.map(|key| crate::battle_context::with(|cx| (&cx.world).story_state(key)));
+    let story = keys.map(|key| crate::battle_context::with(|cx| cx.world.story_state(key)));
     let word = crate::battle_context::with(|cx| cx.world.word(StoryKey::URQUAN_PROBE_GRPOFFS0));
     let activity = crate::battle_context::with(|cx| cx.world.activity());
     unsafe {
@@ -39,12 +39,12 @@ pub fn check(h: &mut Harness) {
         });
         assert_ne!(
             crate::battle_context::with(|cx| uqm_rust::time::clock_bridge::rust_clock_init(
-                &mut cx.world
+                cx.world
             )),
             0
         );
         crate::battle_context::with(|cx| {
-            uqm_rust::navigation::groups::init_group_info(&mut cx.world, 1)
+            uqm_rust::navigation::groups::init_group_info(cx.world, 1)
         });
         h.set_star(0, 0);
         h.state.sys.sun.num_planets = 9;
@@ -64,10 +64,12 @@ pub fn check(h: &mut Harness) {
         });
         crate::battle_context::with(|cx| cx.world.set_word(StoryKey::URQUAN_PROBE_GRPOFFS0, 0));
         crate::battle_context::with(|cx| {
-            (&mut cx.world).set_story_state(uqm_rust::engine::StoryKey::CHMMR_BOMB_STATE, 0)
+            cx.world
+                .set_story_state(uqm_rust::engine::StoryKey::CHMMR_BOMB_STATE, 0)
         });
         crate::battle_context::with(|cx| {
-            (&mut cx.world).set_story_state(uqm_rust::engine::StoryKey::PROBE_MESSAGE_DELIVERED, 0)
+            cx.world
+                .set_story_state(uqm_rust::engine::StoryKey::PROBE_MESSAGE_DELIVERED, 0)
         });
         assert!(crate::invoke_generation(&mut h.state, |system, host| {
             GENERATE_SOL_FUNCTIONS.init_npcs(system, host)
@@ -96,7 +98,7 @@ pub fn check(h: &mut Harness) {
         assert_eq!((group.loc.x, group.loc.y, group.group_counter), (0, 0, 0));
         let file = || {
             crate::battle_context::with(|cx| {
-                uqm_rust::state::ffi::with_state_files(&mut cx.world, |files| {
+                uqm_rust::state::ffi::with_state_files(cx.world, |files| {
                     files
                         .get_file(uqm_rust::engine::world::state_file::DEFGRPINFO_FILE)
                         .unwrap()
@@ -154,7 +156,8 @@ pub fn check(h: &mut Harness) {
         assert_eq!(probe.task, IpGroup::FLEE | IpGroup::IGNORE_FLAGSHIP);
         assert_eq!(probe.dest_loc, 0);
         crate::battle_context::with(|cx| {
-            (&mut cx.world).set_story_state(uqm_rust::engine::StoryKey::PROBE_MESSAGE_DELIVERED, 1)
+            cx.world
+                .set_story_state(uqm_rust::engine::StoryKey::PROBE_MESSAGE_DELIVERED, 1)
         });
         assert!(crate::invoke_generation(&mut h.state, |system, host| {
             GENERATE_SOL_FUNCTIONS.init_npcs(system, host)
@@ -187,7 +190,7 @@ pub fn check(h: &mut Harness) {
             );
             assert_eq!(
                 crate::battle_context::with(|cx| get_game_state(
-                    &cx.world,
+                    cx.world,
                     uqm_rust::engine::StoryKey::GLOBAL_FLAGS_AND_DATA
                 )),
                 255
@@ -209,12 +212,10 @@ pub fn check(h: &mut Harness) {
             cx.world.set_catalog(std::borrow::Cow::Owned(saved_catalog));
             cx.world.current_star = saved_star;
         });
-        crate::battle_context::with(|cx| {
-            uqm_rust::navigation::groups::uninit_group_info(&mut cx.world)
-        });
+        crate::battle_context::with(|cx| uqm_rust::navigation::groups::uninit_group_info(cx.world));
         assert_ne!(
             crate::battle_context::with(|cx| uqm_rust::time::clock_bridge::rust_clock_uninit(
-                &mut cx.world
+                cx.world
             )),
             0
         );
@@ -224,7 +225,7 @@ pub fn check(h: &mut Harness) {
         });
     }
     for (key, value) in keys.into_iter().zip(story) {
-        crate::battle_context::with(|cx| (&mut cx.world).set_story_state(key, value));
+        crate::battle_context::with(|cx| cx.world.set_story_state(key, value));
     }
     crate::battle_context::with(|cx| cx.world.set_word(StoryKey::URQUAN_PROBE_GRPOFFS0, word));
     crate::battle_context::with(|cx| cx.world.set_activity(activity));
