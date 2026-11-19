@@ -39,7 +39,7 @@ mod oscill_abi;
 pub mod oscilloscope;
 pub mod phrase_state;
 mod presentation;
-pub mod races;
+pub use uqm_content::comm::races;
 pub mod response;
 pub mod response_ui;
 pub mod segue;

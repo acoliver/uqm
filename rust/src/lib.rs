@@ -4,20 +4,20 @@
 // Phase 6: Input/VControl system
 // Phase 7: Alien Communication system
 
-pub mod battle;
 pub use uqm_engine::callback;
+pub use uqm_modes::battle;
 
-pub mod supermelee;
+pub use uqm_modes::supermelee;
 
 pub mod automation;
 pub use uqm_engine::bridge_log;
 pub mod c_bindings;
 pub mod cli;
 pub use uqm_engine::collections;
-pub mod comm;
+pub use uqm_modes::comm;
 pub mod config;
 pub use uqm_engine as engine;
-pub mod front_end;
+pub use uqm_modes::front_end;
 pub mod game_init;
 pub use uqm_engine::graphics;
 pub use uqm_engine::input_port as input;
@@ -28,18 +28,18 @@ pub mod mainloop;
 pub use uqm_engine::math;
 pub use uqm_engine::memory;
 pub use uqm_engine::network;
-pub mod pickship;
-pub mod planet_side;
-pub mod planets;
 pub use uqm_engine::platform;
 pub use uqm_engine::resource;
+pub use uqm_modes::pickship;
+pub use uqm_modes::planet_side;
+pub use uqm_modes::planets;
 pub mod savegame;
-pub mod ships;
+pub use uqm_content::ships;
 pub use uqm_engine::sound;
-pub mod starbase;
-pub mod state;
+pub use uqm_engine::state;
 pub use uqm_engine::strings;
 pub use uqm_engine::threading;
+pub use uqm_modes::starbase;
 pub mod time;
 pub use uqm_engine::video;
 
@@ -52,9 +52,9 @@ pub use logging::LogLevel;
 pub use sound::rust_ova_DecoderVtbl;
 pub use sound::rust_wav_DecoderVtbl;
 
-pub mod navigation;
+pub use uqm_modes::navigation;
 
-pub mod ui;
+pub use uqm_modes::ui;
 
 pub use uqm_engine::{log_debug, log_error, log_fatal, log_info, log_warning};
 

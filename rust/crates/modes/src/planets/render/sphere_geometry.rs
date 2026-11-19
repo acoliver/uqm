@@ -220,7 +220,7 @@ mod tests {
     mod cases {
         include!(concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/tests/planets_render/sphere_cases.rs"
+            "/../../tests/planets_render/sphere_cases.rs"
         ));
     }
 

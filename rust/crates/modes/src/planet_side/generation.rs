@@ -338,7 +338,7 @@ mod tests {
             [0; 3]
         );
         let mut save = uqm_save::decode_save(include_bytes!(
-            "../../tests/fixtures/savegame/legacy-save.00"
+            "../../../../tests/fixtures/savegame/legacy-save.00"
         ))
         .unwrap();
         save.scan = Some(

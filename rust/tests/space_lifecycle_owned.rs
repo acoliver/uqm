@@ -9,7 +9,7 @@ use uqm_rust::ships::native::abi::{IN_BATTLE, SUPER_MELEE};
 
 #[test]
 fn battle_entry_has_no_application_lifecycle_dependency() {
-    let source = include_str!("../src/battle/battle_native.rs");
+    let source = include_str!("../crates/modes/src/battle/battle_native.rs");
     assert!(
         !source.contains("crate::game_init"),
         "battle must receive lifecycle operations from application composition"

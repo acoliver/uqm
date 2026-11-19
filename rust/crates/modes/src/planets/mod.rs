@@ -7,10 +7,10 @@ pub mod solar_system;
 
 pub mod c_api;
 pub mod device_effects;
-pub mod generate;
+pub use uqm_content::planets::generate;
 pub mod render;
 pub mod starmap;
-pub mod tables;
+pub use uqm_content::planets::tables;
 pub mod topography;
 pub mod universe_units;
 

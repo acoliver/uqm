@@ -4,10 +4,10 @@ use std::ffi::c_int;
 
 use crate::bridge_log::rust_bridge_log_msg;
 
-pub use crate::engine::battle::schema::CLOCK_STATE as ClockState;
+pub use crate::battle::schema::CLOCK_STATE as ClockState;
 
 use super::clock_abi::START_YEAR;
-use crate::engine::World;
+use crate::World;
 
 // Constants from clock.h
 const CLOCK_BASE_FRAMERATE: usize = 24;
@@ -19,9 +19,9 @@ pub fn log_clock_bridge(message: &str) {
     rust_bridge_log_msg(message);
 }
 
-pub(crate) use crate::engine::clock::days_in_month;
+pub(crate) use crate::clock::days_in_month;
 #[cfg(test)]
-use crate::engine::clock::is_leap_year;
+use crate::clock::is_leap_year;
 
 // Helper: Advance to next day (internal version that takes &mut ClockState)
 pub fn next_clock_day_internal(clock: &mut ClockState) {
@@ -128,7 +128,7 @@ mod tests {
 
     #[test]
     fn ticking_preserves_pauses_and_rolls_the_calendar_once() {
-        let mut world = crate::engine::World::new();
+        let mut world = crate::World::new();
         let clock = &mut world.data.game.game_clock;
         clock.year_index = 2000;
         clock.month_index = 2;
@@ -154,8 +154,8 @@ mod tests {
 
     #[test]
     fn supplied_clock_tick_uses_only_its_world_and_rolls_the_year() {
-        let mut first = crate::engine::World::new();
-        let mut second = crate::engine::World::new();
+        let mut first = crate::World::new();
+        let mut second = crate::World::new();
         for world in [&mut first, &mut second] {
             let clock = &mut world.data.game.game_clock;
             clock.year_index = 2155;
@@ -177,7 +177,7 @@ mod tests {
 
     #[test]
     fn supplied_clock_tick_does_not_advance_a_paused_clock() {
-        let mut world = crate::engine::World::new();
+        let mut world = crate::World::new();
         let clock = &mut world.data.game.game_clock;
         clock.year_index = 2156;
         clock.month_index = 2;

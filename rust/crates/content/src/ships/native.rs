@@ -23,7 +23,7 @@ pub fn copy_display_name(target: &mut [std::ffi::c_char], source: &[u8]) {
 pub mod abi {
     pub use crate::ships::DescriptorLoader;
 
-    include!("../abi/ship_abi.rs");
+    include!("ship_abi.rs");
 
     pub use crate::engine::battle::ai_constants::{
         AWESOME_RATING, BATTLE_LEFT, BATTLE_RIGHT, BATTLE_SPECIAL, BATTLE_THRUST, BATTLE_WEAPON,

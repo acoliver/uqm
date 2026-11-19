@@ -975,7 +975,7 @@ mod tests {
         assert_eq!(canned.value, 1);
         assert!(files.borrow().canned_node((1, 2, 0, 0)).is_none());
         let mut save = uqm_save::decode_save(include_bytes!(
-            "../../tests/fixtures/savegame/legacy-save.00"
+            "../../../../tests/fixtures/savegame/legacy-save.00"
         ))
         .unwrap();
         assert!(save.canned_nodes.is_empty());

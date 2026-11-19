@@ -5,8 +5,8 @@
 mod owner_tests;
 
 use super::clock_bridge::days_in_month;
-use crate::engine::battle::link_queue::LinkId;
-use crate::engine::clock::{GameClock, ScheduledEvent};
+use crate::battle::link_queue::LinkId;
+use crate::clock::{GameClock, ScheduledEvent};
 
 /// `ABSOLUTE_EVENT` (clock.h): the date is a calendar date.
 pub const ABSOLUTE_EVENT: u32 = 0;
@@ -85,8 +85,8 @@ fn take_day_event(
 }
 
 pub fn schedule_event(
-    world: &mut crate::engine::World,
-    dispatch: &mut impl FnMut(&mut crate::engine::World, u8),
+    world: &mut crate::World,
+    dispatch: &mut impl FnMut(&mut crate::World, u8),
     kind: u32,
     month: u16,
     day: u16,
@@ -113,9 +113,9 @@ pub fn schedule_event(
 /// Run every event scheduled for `today`, in queue order; each is removed
 /// before its callback so the callback may schedule more for the same day.
 pub fn dispatch_day_events(
-    world: &mut crate::engine::World,
+    world: &mut crate::World,
     today: (u16, u16, u16),
-    mut dispatch: impl FnMut(&mut crate::engine::World, u8),
+    mut dispatch: impl FnMut(&mut crate::World, u8),
 ) {
     while let Some((id, selector)) = take_day_event(&mut world.clock, today) {
         dispatch(world, selector);
@@ -175,7 +175,7 @@ mod tests {
         assert_eq!(queue.succ(second), Some(middle));
         assert_eq!(queue.succ(middle), Some(late));
         assert_eq!(queue.tail(), Some(late));
-        for _ in 4..crate::engine::clock::NUM_EVENTS {
+        for _ in 4..crate::clock::NUM_EVENTS {
             assert!(insert_event(&mut clock, (2156, 1, 1), 5).is_some());
         }
         assert!(insert_event(&mut clock, (2155, 1, 1), 6).is_none());

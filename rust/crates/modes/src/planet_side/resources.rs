@@ -57,7 +57,7 @@ pub(crate) mod tests {
             uqm_engine::test_support::campaign_display::CampaignDisplay::install(&mut game)
                 .unwrap();
         let content_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../sc2/content")
+            .join("../../../sc2/content")
             .canonicalize()
             .unwrap();
         let mount = uqm_engine::test_support::native_session::ContentMount::new(&content_root);

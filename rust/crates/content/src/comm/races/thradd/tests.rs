@@ -9,7 +9,7 @@ fn descriptor_resources_exist_in_the_shipped_map() {
     let desc = descriptor();
     let map = include_str!(concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../sc2/content/uqm.rmp"
+        "/../../../sc2/content/uqm.rmp"
     ));
     for resource in [
         desc.alien_frame_res,
