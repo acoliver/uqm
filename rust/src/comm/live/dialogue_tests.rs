@@ -836,6 +836,17 @@ fn host_queries_and_effects_read_and_change_the_supplied_campaign() {
             "a full hangar takes no gift"
         );
         cx.world.built_ships().reinit();
+        cx.world.avail_races().reinit();
+        assert_eq!(
+            host(&mut cx, DialogueKind::Pkunk, |h: &mut Host<'_, '_, _>| h
+                .gift_ships()),
+            0,
+            "no Pkunk fleet, no gift"
+        );
+        crate::time::clock_bridge::rust_clock_uninit(cx.world);
+        campaign(cx.world, art, &[]);
+        cx.world.data.game.game_clock.year_index = 2157;
+        cx.world.data.game.game_clock.month_index = 4;
 
         let biomass = cx.world.data.flagship.total_bio_mass;
         host(&mut cx, DialogueKind::Umgah, |h: &mut Host<'_, '_, _>| {
