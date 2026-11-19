@@ -108,7 +108,13 @@ impl SessionCore {
             match result {
                 Ok(false) => return,
                 Err(error) => {
-                    self.error(side, error.raw_os_error().unwrap_or(libc::EIO), emit);
+                    self.error(
+                        side,
+                        error
+                            .raw_os_error()
+                            .unwrap_or(crate::engine::platform::os::errno::EIO),
+                        emit,
+                    );
                     return;
                 }
                 Ok(true) => {}
@@ -177,7 +183,13 @@ impl SessionCore {
                 Err(error) if error.kind() == io::ErrorKind::WouldBlock => return,
                 Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
                 Err(error) => {
-                    self.error(side, error.raw_os_error().unwrap_or(libc::EIO), emit);
+                    self.error(
+                        side,
+                        error
+                            .raw_os_error()
+                            .unwrap_or(crate::engine::platform::os::errno::EIO),
+                        emit,
+                    );
                     return;
                 }
             };
@@ -210,7 +222,7 @@ impl SessionCore {
                     }
                     Err(DecodeError::Incomplete) => break,
                     Err(_) => {
-                        self.error(side, libc::EBADMSG, emit);
+                        self.error(side, crate::engine::platform::os::errno::EBADMSG, emit);
                         return;
                     }
                 }

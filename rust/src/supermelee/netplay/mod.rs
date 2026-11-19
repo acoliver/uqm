@@ -10,7 +10,7 @@ pub mod abi {
 }
 mod battle;
 pub mod checkbuf;
-pub(crate) mod checksum;
+pub mod checksum;
 pub(crate) mod crc;
 pub mod netconnection;
 pub(crate) mod netmelee;

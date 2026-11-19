@@ -2,6 +2,9 @@
 
 use std::ffi::c_int;
 
+/// The C runtime error numbers that callers outside the platform layer report.
+pub use libc::{EBADMSG, EIO, ENOBUFS, ENOSYS};
+
 #[cfg(windows)]
 unsafe extern "C" {
     fn _errno() -> *mut c_int;
