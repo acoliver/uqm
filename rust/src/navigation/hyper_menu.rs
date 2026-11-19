@@ -103,7 +103,7 @@ mod tests {
     use crate::engine::{
         battle::{input::InputContext, Battle},
         input::{Frame, InputControls, InputRuntime, InputSession},
-        observe::{CampaignView, Observer, Unobserved},
+        observe::{Observer, Unobserved},
         Game,
     };
     use std::rc::Rc;

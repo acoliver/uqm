@@ -69,7 +69,7 @@ mod tests {
             Default::default(),
             Default::default(),
         );
-        let world = crate::engine::observe::CampaignView::capture(&game.world, &game.kernel);
+        let world = crate::engine::observe::CampaignView::from_world(&game.world);
         let mut observation = DeviceObservation {
             list: Some(vec![Device::PortalSpawner.id()]),
             activation: Some((1, Device::PortalSpawner.id(), "old".into(), true)),

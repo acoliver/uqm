@@ -88,7 +88,7 @@ mod tests {
     use super::*;
     use crate::engine::{
         battle::{Battle, Cx},
-        observe::{CampaignView, CheckpointView, Injected, InputView, Io, Observer, Presented},
+        observe::{CheckpointView, Injected, InputView, Io, Observer, Presented},
         Game,
     };
 

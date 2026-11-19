@@ -263,7 +263,7 @@ mod tests {
     #[test]
     fn copied_observation_is_published_before_the_clock_pumps_presentations() {
         use crate::engine::observe::{
-            CampaignView, CheckpointView, Injected, InputView, Io, Observer, Presented,
+            CheckpointView, Injected, InputView, Io, Observer, Presented,
         };
         use crate::engine::observe_port::planet_side::PlanetSideSnapshot;
         use std::rc::Rc;

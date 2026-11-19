@@ -200,7 +200,7 @@ fn world() -> World {
 #[test]
 #[serial_test::serial]
 fn frame_admission_publishes_before_input_and_nested_input_uses_the_copy() {
-    use crate::engine::observe::{CampaignView, Observer, Presented};
+    use crate::engine::observe::{Observer, Presented};
     struct Recording {
         ui: crate::automation::ui_observation::UiObservation,
         admissions: Vec<(i16, bool)>,

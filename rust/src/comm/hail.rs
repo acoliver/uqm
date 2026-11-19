@@ -172,7 +172,7 @@ fn admit_completion(comm: &mut Comm, cx: &mut Cx<'_>, io: &mut Io<'_>) {
 #[cfg(test)]
 mod tests {
     use crate::engine::{
-        observe::{CampaignView, CheckpointView, Injected, InputView, Io, Observer, Presented},
+        observe::{CheckpointView, Injected, InputView, Io, Observer, Presented},
         Kernel, World,
     };
 

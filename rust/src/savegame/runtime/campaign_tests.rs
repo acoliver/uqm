@@ -1,5 +1,4 @@
 use super::{groups, queues, statefiles, *};
-use crate::engine::World;
 use crate::savegame::{decode_save, encode_save};
 use crate::state::ffi::{rust_init_game_state, with_state_owners};
 use crate::state::game_state_keys::STATE_KEYS;
@@ -131,9 +130,7 @@ fn paid_lure_preparation_preserves_the_surviving_cruiser() {
 #[serial]
 fn every_committed_campaign_save_restores_and_round_trips_its_state() {
     let mut game_owner = crate::engine::Game::new();
-    // SAFETY: the serialized fixture owns this published lifecycle.
-    unsafe {
-        crate::app::bridge::with_game(&mut game_owner, || {
+    {
             let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts/saves");
             let mut saves: Vec<_> = std::fs::read_dir(&root)
                 .unwrap()
@@ -151,22 +148,21 @@ fn every_committed_campaign_save_restores_and_round_trips_its_state() {
                     path.display()
                 );
                 {
-                    World::current().write(rust_init_game_state);
+                    rust_init_game_state(&mut game_owner.world);
                 }
                 let mut game = super::queue_tests::LiveGame::new();
                 let mut clock = crate::engine::clock::GameClock::new();
 
-                let restored = World::current()
-                    .write(|world| {
+                let restored = {
                         restore_runtime(
                             &mut game.data.game,
-                            &mut world.story,
+                            &mut game_owner.world.story,
                             &saved.global,
                             &saved.game_state,
                             &saved.events,
                             &mut clock,
                         )
-                    })
+                    }
                     .unwrap();
                 assert_eq!(restored.next_activity, saved.global.current_activity);
                 game.set_activity(restored.next_activity);
@@ -188,12 +184,11 @@ fn every_committed_campaign_save_restores_and_round_trips_its_state() {
                 };
                 groups::restore_groups(&mut game, &g).unwrap();
                 assert_eq!(groups::capture_groups(&game).unwrap(), g);
-                World::current()
-                    .write(|world| {
+                {
                         statefiles::restore_state_files(
                             &mut game.data.game,
-                            &mut world.story,
-                            &mut world.files,
+                            &mut game_owner.world.story,
+                            &mut game_owner.world.files,
                             &statefiles::StateFileSections {
                                 scan: saved.scan.clone(),
                                 canned_nodes: saved.canned_nodes.clone(),
@@ -201,12 +196,11 @@ fn every_committed_campaign_save_restores_and_round_trips_its_state() {
                                 battle_groups: saved.battle_groups.clone(),
                             },
                         )
-                    })
+                    }
                     .unwrap();
-                let actual = World::current()
-                    .write(|world| {
-                        capture_runtime(&game.data.game, game.activity(), &world.story, &clock)
-                    })
+                let actual = {
+                        capture_runtime(&game.data.game, game.activity(), &game_owner.world.story, &clock)
+                    }
                     .unwrap();
                 assert_eq!(actual.global, saved.global);
                 assert_eq!(actual.events, saved.events);
@@ -306,9 +300,8 @@ fn every_committed_campaign_save_restores_and_round_trips_its_state() {
                     ),
                     expected
                 );
-                World::current()
-                    .write(|world| {
-                        with_state_owners(world, |game, _| {
+                {
+                        with_state_owners(&mut game_owner.world, |game, _| {
                             for (name, value) in state.as_object().into_iter().flatten() {
                                 if let Some(name) = name.strip_prefix("story:") {
                                     let (_, start, width) =
@@ -325,9 +318,8 @@ fn every_committed_campaign_save_restores_and_round_trips_its_state() {
                                 }
                             }
                         })
-                    })
+                    }
                     .unwrap();
             }
-        })
-    }
+        }
 }

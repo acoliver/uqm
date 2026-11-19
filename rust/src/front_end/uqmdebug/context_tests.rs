@@ -3,7 +3,7 @@ use crate::{
     engine::{
         battle::{input::InputContext, Battle, Cx},
         input::{frames::InputState, Frame, InputControls, InputRuntime, InputSession},
-        observe::{CampaignView, Io, Observer, Unobserved},
+        observe::{Io, Observer, Unobserved},
         Game,
     },
     front_end::uqmdebug::debug_contexts,

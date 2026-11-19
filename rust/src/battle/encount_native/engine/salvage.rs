@@ -348,7 +348,7 @@ mod tests {
             frames::FrameSelection, input::InputContext, link_queue::ShipPickerResources, Battle,
         },
         input::{Frame, InputRuntime, InputSession},
-        observe::{CampaignView, Observer, Unobserved},
+        observe::{Observer, Unobserved},
         Game,
     };
     use std::{cell::Cell, rc::Rc};

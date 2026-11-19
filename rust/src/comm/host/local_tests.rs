@@ -99,18 +99,3 @@ fn talking_strobe_and_probe_choices_do_not_borrow_a_campaign() {
     assert_eq!(second.race_scratch.slyland_choices, [0; 5]);
 }
 
-#[test]
-#[serial_test::serial]
-fn local_controls_do_not_publish_over_another_threads_context() {
-    crate::comm::with_test_context(|cx| {
-        {
-            std::thread::spawn(|| {
-                phrase_and_ambient_controls_need_only_the_supplied_conversation();
-                chmmr_and_urquan_intro_controls_keep_native_modes_and_durations();
-                talking_strobe_and_probe_choices_do_not_borrow_a_campaign();
-            })
-            .join()
-            .unwrap_or_else(|panic| std::panic::resume_unwind(panic));
-        };
-    });
-}

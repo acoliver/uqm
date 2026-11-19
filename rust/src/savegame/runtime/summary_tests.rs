@@ -31,12 +31,13 @@ use crate::state::ffi::replace_game_state;
 use crate::state::game_state::NUM_GAME_STATE_BYTES;
 
 fn capture_summary(
+    world: &World,
     sis: &CSisState,
     game: &LiveGame,
     solar: &dyn SolarSystemOwner,
     name: &[u8],
 ) -> Result<crate::savegame::types::Summary, SummaryError> {
-    World::current().read(|world| {
+    {
         super::summary::capture_summary(
             game.activity(),
             sis,
@@ -56,7 +57,7 @@ fn capture_summary(
             },
             name,
         )
-    })
+    }
 }
 
 // Chunk positions inside C_WRITTEN_SAVE, worked out from `save.c`.
@@ -103,10 +104,8 @@ fn set_key(bytes: &mut StateBytes, name: &str, value: u8) {
     set_bits(bytes, start, width, value);
 }
 
-fn install(bytes: &StateBytes) {
-    World::current()
-        .write(|world| replace_game_state(world, bytes))
-        .expect("the singleton is not poisoned");
+fn install(world: &mut World, bytes: &StateBytes) {
+    replace_game_state(world, bytes).expect("the singleton is not poisoned");
 }
 
 /// The one-bit "on ship" flags, by device id, as `InventoryDevices` reads them
@@ -209,9 +208,7 @@ fn blank_state() -> StateBytes {
 #[serial]
 fn summary_of_the_game_the_c_save_came_from_matches_what_c_wrote() {
     let mut game_owner = crate::engine::Game::new();
-    // SAFETY: the serialized fixture owns this published lifecycle.
-    unsafe {
-        crate::app::bridge::with_game(&mut game_owner, || {
+    {
             assert_eq!(&C_WRITTEN_SAVE[4..8], b"Summ");
             assert_eq!(le32(&C_WRITTEN_SAVE[8..12]), 160);
             let raw = &C_WRITTEN_SAVE[FIXTURE_SUMM];
@@ -220,7 +217,7 @@ fn summary_of_the_game_the_c_save_came_from_matches_what_c_wrote() {
             let mut state = blank_state();
             let gmst = &C_WRITTEN_SAVE[FIXTURE_GMST];
             state[..gmst.len()].copy_from_slice(gmst);
-            install(&state);
+            install(&mut game_owner.world, &state);
 
             let mut game = LiveGame::bare();
             game.set_activity(le16(&C_WRITTEN_SAVE[FIXTURE_GLST_ACTIVITY..]));
@@ -251,7 +248,7 @@ fn summary_of_the_game_the_c_save_came_from_matches_what_c_wrote() {
             // nothing; the activity is the C one's.
             let mut solar = Solar::new();
             solar.planet = raw[106..122].try_into().unwrap();
-            let summary = capture_summary(&flagship, &game, &solar, b"").unwrap();
+            let summary = capture_summary(&game_owner.world, &flagship, &game, &solar, b"").unwrap();
 
             assert_eq!(game.activity() & 0xff, 4);
             assert_eq!(summary.activity, raw[122]);
@@ -273,22 +270,19 @@ fn summary_of_the_game_the_c_save_came_from_matches_what_c_wrote() {
             assert_eq!(&summary.sis.commander_name[..7], b"Zelnick");
             assert_eq!(&summary.sis.planet_name[..], &raw[106..122]);
             assert!(summary.save_name.as_bytes().is_empty());
-        })
-    }
+        }
 }
 
 #[test]
 #[serial]
 fn summary_copies_the_flagship_state_field_by_field() {
     let mut game_owner = crate::engine::Game::new();
-    // SAFETY: the serialized fixture owns this published lifecycle.
-    unsafe {
-        crate::app::bridge::with_game(&mut game_owner, || {
-            install(&blank_state());
+    {
+            install(&mut game_owner.world, &blank_state());
             let mut game = LiveGame::bare();
             game.set_activity(3);
             let flagship = sis();
-            let summary = capture_summary(&flagship, &game, &Solar::new(), b"x").unwrap();
+            let summary = capture_summary(&game_owner.world, &flagship, &game, &Solar::new(), b"x").unwrap();
             assert_eq!(summary.sis.log_x, -123_456);
             assert_eq!(summary.sis.log_y, 654_321);
             assert_eq!(summary.sis.res_units, 0xA1B2_C3D4);
@@ -305,8 +299,7 @@ fn summary_copies_the_flagship_state_field_by_field() {
             assert_eq!(&summary.sis.commander_name[..7], b"Zelnick");
             // Hyperspace keeps the planet name the flagship holds.
             assert_eq!(&summary.sis.planet_name[..], b"Alpha Centauri\0\0");
-        })
-    }
+        }
 }
 
 // ---------------------------------------------------------------------------
@@ -327,9 +320,7 @@ fn expected_activity(lobyte: u8, arilou_side: u8, starbase: bool, orbit: bool) -
 #[serial]
 fn the_activity_of_a_summary_follows_prepare_summary_for_every_state() {
     let mut game_owner = crate::engine::Game::new();
-    // SAFETY: the serialized fixture owns this published lifecycle.
-    unsafe {
-        crate::app::bridge::with_game(&mut game_owner, || {
+    {
             for arilou in 0u8..4 {
                 for starbase in [false, true] {
                     let mut state = blank_state();
@@ -337,7 +328,7 @@ fn the_activity_of_a_summary_follows_prepare_summary_for_every_state() {
                     if starbase {
                         set_key(&mut state, "GLOBAL_FLAGS_AND_DATA", 0xFF);
                     }
-                    install(&state);
+                    install(&mut game_owner.world, &state);
                     let mut game = LiveGame::bare();
                     for orbit in [false, true] {
                         let mut solar = Solar::new();
@@ -345,7 +336,7 @@ fn the_activity_of_a_summary_follows_prepare_summary_for_every_state() {
                         for lobyte in 0u16..=8 {
                             for high in 0u16..128 {
                                 game.set_activity(lobyte | (high << 8));
-                                let summary = capture_summary(&sis(), &game, &solar, b"s").unwrap();
+                                let summary = capture_summary(&game_owner.world, &sis(), &game, &solar, b"s").unwrap();
                                 assert_eq!(
                                     summary.activity,
                                     expected_activity(lobyte as u8, arilou, starbase, orbit),
@@ -357,23 +348,20 @@ fn the_activity_of_a_summary_follows_prepare_summary_for_every_state() {
                     }
                 }
             }
-        })
-    }
+        }
 }
 
 #[test]
 #[serial]
 fn the_solar_system_owner_is_asked_only_where_prepare_summary_asks_it() {
     let mut game_owner = crate::engine::Game::new();
-    // SAFETY: the serialized fixture owns this published lifecycle.
-    unsafe {
-        crate::app::bridge::with_game(&mut game_owner, || {
-            install(&blank_state());
+    {
+            install(&mut game_owner.world, &blank_state());
             for activity in [0u16, 1, 2, 3, 4, 5, 6, 7, 8] {
                 let mut game = LiveGame::bare();
                 game.set_activity(activity | START_ENCOUNTER);
                 let solar = Solar::new();
-                let summary = capture_summary(&sis(), &game, &solar, b"").unwrap();
+                let summary = capture_summary(&game_owner.world, &sis(), &game, &solar, b"").unwrap();
                 match activity {
                     4 => {
                         assert_eq!(solar.name_asks.get(), 1);
@@ -398,29 +386,25 @@ fn the_solar_system_owner_is_asked_only_where_prepare_summary_asks_it() {
                     }
                 }
             }
-        })
-    }
+        }
 }
 
 #[test]
 #[serial]
 fn a_starbase_visit_does_not_ask_whether_the_flagship_is_in_orbit() {
     let mut game_owner = crate::engine::Game::new();
-    // SAFETY: the serialized fixture owns this published lifecycle.
-    unsafe {
-        crate::app::bridge::with_game(&mut game_owner, || {
+    {
             let mut state = blank_state();
             set_key(&mut state, "GLOBAL_FLAGS_AND_DATA", 0xFF);
-            install(&state);
+            install(&mut game_owner.world, &state);
             let mut game = LiveGame::bare();
             game.set_activity(4);
             let solar = Solar::new();
-            let summary = capture_summary(&sis(), &game, &solar, b"").unwrap();
+            let summary = capture_summary(&game_owner.world, &sis(), &game, &solar, b"").unwrap();
             assert_eq!(summary.activity, IN_STARBASE);
             assert_eq!(solar.orbit_asks.get(), 0);
             assert_eq!(solar.name_asks.get(), 1);
-        })
-    }
+        }
 }
 
 // ---------------------------------------------------------------------------
@@ -431,18 +415,16 @@ fn a_starbase_visit_does_not_ask_whether_the_flagship_is_in_orbit() {
 #[serial]
 fn credit_and_lander_flags_come_from_the_singleton_bits() {
     let mut game_owner = crate::engine::Game::new();
-    // SAFETY: the serialized fixture owns this published lifecycle.
-    unsafe {
-        crate::app::bridge::with_game(&mut game_owner, || {
+    {
             let mut state = blank_state();
             set_key(&mut state, "MELNORME_CREDIT0", 0xA5);
             set_key(&mut state, "MELNORME_CREDIT1", 0x5A);
             set_key(&mut state, "LANDER_SHIELDS", 0b1010);
             set_key(&mut state, "IMPROVED_LANDER_CARGO", 1);
-            install(&state);
+            install(&mut game_owner.world, &state);
             let mut game = LiveGame::bare();
             game.set_activity(3);
-            let summary = capture_summary(&sis(), &game, &Solar::new(), b"").unwrap();
+            let summary = capture_summary(&game_owner.world, &sis(), &game, &Solar::new(), b"").unwrap();
             assert_eq!(summary.mcredit_lo, 0xA5);
             assert_eq!(summary.mcredit_hi, 0x5A);
             assert_eq!(summary.flags, 0b0010_1010);
@@ -461,12 +443,11 @@ fn credit_and_lander_flags_come_from_the_singleton_bits() {
                 set_key(&mut state, "IMPROVED_LANDER_CARGO", cargo);
                 set_key(&mut state, "IMPROVED_LANDER_SHOT", shot);
                 set_key(&mut state, "CHMMR_BOMB_STATE", bomb);
-                install(&state);
-                let summary = capture_summary(&sis(), &game, &Solar::new(), b"").unwrap();
+                install(&mut game_owner.world, &state);
+                let summary = capture_summary(&game_owner.world, &sis(), &game, &Solar::new(), b"").unwrap();
                 assert_eq!(summary.flags, flags, "{speed} {cargo} {shot} {bomb}");
             }
-        })
-    }
+        }
 }
 
 #[test]
@@ -485,9 +466,7 @@ fn the_state_bits_used_here_are_where_globdata_h_puts_them() {
 #[serial]
 fn each_device_is_listed_by_its_id_when_only_its_condition_holds() {
     let mut game_owner = crate::engine::Game::new();
-    // SAFETY: the serialized fixture owns this published lifecycle.
-    unsafe {
-        crate::app::bridge::with_game(&mut game_owner, || {
+    {
             let game = {
                 let mut game = LiveGame::bare();
                 game.set_activity(3);
@@ -496,8 +475,8 @@ fn each_device_is_listed_by_its_id_when_only_its_condition_holds() {
             for (id, name) in DEVICE_FLAGS {
                 let mut state = blank_state();
                 set_key(&mut state, name, 1);
-                install(&state);
-                let summary = capture_summary(&sis(), &game, &Solar::new(), b"").unwrap();
+                install(&mut game_owner.world, &state);
+                let summary = capture_summary(&game_owner.world, &sis(), &game, &Solar::new(), b"").unwrap();
                 assert_eq!(summary.num_devices, 1, "device {id}");
                 assert_eq!(summary.device_list[0], id);
                 assert!(summary.device_list[1..].iter().all(|&slot| slot == 0));
@@ -515,8 +494,8 @@ fn each_device_is_listed_by_its_id_when_only_its_condition_holds() {
             ] {
                 let mut state = blank_state();
                 set_key(&mut state, "ULTRON_CONDITION", condition);
-                install(&state);
-                let summary = capture_summary(&sis(), &game, &Solar::new(), b"").unwrap();
+                install(&mut game_owner.world, &state);
+                let summary = capture_summary(&game_owner.world, &sis(), &game, &Solar::new(), b"").unwrap();
                 match expected {
                     Some(id) => {
                         assert_eq!(summary.num_devices, 1, "condition {condition}");
@@ -525,33 +504,29 @@ fn each_device_is_listed_by_its_id_when_only_its_condition_holds() {
                     None => assert_eq!(summary.num_devices, 0, "condition {condition}"),
                 }
             }
-        })
-    }
+        }
 }
 
 #[test]
 #[serial]
 fn devices_are_listed_in_id_order_and_stop_at_sixteen() {
     let mut game_owner = crate::engine::Game::new();
-    // SAFETY: the serialized fixture owns this published lifecycle.
-    unsafe {
-        crate::app::bridge::with_game(&mut game_owner, || {
+    {
             let mut state = blank_state();
             for (_, name) in DEVICE_FLAGS {
                 set_key(&mut state, name, 1);
             }
             set_key(&mut state, "ULTRON_CONDITION", 2);
-            install(&state);
+            install(&mut game_owner.world, &state);
             let mut game = LiveGame::bare();
             game.set_activity(3);
-            let summary = capture_summary(&sis(), &game, &Solar::new(), b"").unwrap();
+            let summary = capture_summary(&game_owner.world, &sis(), &game, &Solar::new(), b"").unwrap();
             assert_eq!(summary.num_devices, 16);
             assert_eq!(
                 summary.device_list,
                 [0, 1, 2, 3, 4, 5, 6, 8, 11, 12, 13, 17, 18, 19, 20, 21]
             );
-        })
-    }
+        }
 }
 
 #[test]
@@ -591,13 +566,11 @@ fn live_device_ids_and_reserved_slots_preserve_the_save_format() {
 #[serial]
 fn escorts_and_date_follow_the_live_queue_and_clock() {
     let mut game_owner = crate::engine::Game::new();
-    // SAFETY: the serialized fixture owns this published lifecycle.
-    unsafe {
-        crate::app::bridge::with_game(&mut game_owner, || {
-            install(&blank_state());
+    {
+            install(&mut game_owner.world, &blank_state());
             let mut game = LiveGame::bare();
             game.set_activity(3);
-            let before = capture_summary(&sis(), &game, &Solar::new(), b"").unwrap();
+            let before = capture_summary(&game_owner.world, &sis(), &game, &Solar::new(), b"").unwrap();
             assert_eq!(before.num_ships, 0);
             assert_eq!(before.ship_list, [0; 12]);
 
@@ -610,70 +583,61 @@ fn escorts_and_date_follow_the_live_queue_and_clock() {
             game.data.game.game_clock.month_index = 12;
             game.data.game.game_clock.year_index = 2160;
 
-            let after = capture_summary(&sis(), &game, &Solar::new(), b"").unwrap();
+            let after = capture_summary(&game_owner.world, &sis(), &game, &Solar::new(), b"").unwrap();
             assert_eq!(after.num_ships, 4);
             assert_eq!(after.ship_list, [2, 7, 7, 11, 0, 0, 0, 0, 0, 0, 0, 0]);
             assert_eq!(
                 (after.day_index, after.month_index, after.year_index),
                 (28, 12, 2160)
             );
-        })
-    }
+        }
 }
 
 #[test]
 #[serial]
 fn a_full_hangar_fills_the_ship_list() {
     let mut game_owner = crate::engine::Game::new();
-    // SAFETY: the serialized fixture owns this published lifecycle.
-    unsafe {
-        crate::app::bridge::with_game(&mut game_owner, || {
-            install(&blank_state());
+    {
+            install(&mut game_owner.world, &blank_state());
             let mut game = LiveGame::bare();
             game.set_activity(3);
             for race in 1..=12u8 {
                 game.push_fragment(false, race, 0);
             }
-            let summary = capture_summary(&sis(), &game, &Solar::new(), b"").unwrap();
+            let summary = capture_summary(&game_owner.world, &sis(), &game, &Solar::new(), b"").unwrap();
             assert_eq!(summary.num_ships, 12);
             assert_eq!(summary.ship_list, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
-        })
-    }
+        }
 }
 
 #[test]
 #[serial]
 fn a_full_summary_pool_cannot_grow_past_the_ship_list() {
     let mut game_owner = crate::engine::Game::new();
-    // SAFETY: this serialized fixture owns the published game lifecycle.
-    unsafe {
-        crate::app::bridge::with_game(&mut game_owner, || {
-            install(&blank_state());
+    {
+            install(&mut game_owner.world, &blank_state());
             let mut game = LiveGame::bare();
             game.set_activity(3);
             for race in 1..=12 {
                 game.push_fragment(false, race, 0);
             }
             assert!(game.built_ships().alloc().is_none());
-            let summary = capture_summary(&sis(), &game, &Solar::new(), b"").unwrap();
+            let summary = capture_summary(&game_owner.world, &sis(), &game, &Solar::new(), b"").unwrap();
             assert_eq!(summary.num_ships, 12);
             assert_eq!(summary.ship_list, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
-        })
-    };
+        };
 }
 
 #[test]
 #[serial]
 fn the_save_name_is_cut_where_strncpy_cuts_it() {
     let mut game_owner = crate::engine::Game::new();
-    // SAFETY: the serialized fixture owns this published lifecycle.
-    unsafe {
-        crate::app::bridge::with_game(&mut game_owner, || {
-            install(&blank_state());
+    {
+            install(&mut game_owner.world, &blank_state());
             let mut game = LiveGame::bare();
             game.set_activity(3);
             let name = |bytes: &[u8]| {
-                capture_summary(&sis(), &game, &Solar::new(), bytes)
+                capture_summary(&game_owner.world, &sis(), &game, &Solar::new(), bytes)
                     .unwrap()
                     .save_name
                     .as_bytes()
@@ -690,8 +654,7 @@ fn the_save_name_is_cut_where_strncpy_cuts_it() {
             let mut long = vec![b'a'; 62];
             long.extend_from_slice("é".as_bytes());
             assert_eq!(name(&long), long[..63].to_vec());
-        })
-    }
+        }
 }
 
 #[test]
@@ -713,29 +676,26 @@ fn utf8_string_copy_terminates_inside_the_buffer() {
 #[serial]
 fn a_changed_owner_changes_the_summary() {
     let mut game_owner = crate::engine::Game::new();
-    // SAFETY: the serialized fixture owns this published lifecycle.
-    unsafe {
-        crate::app::bridge::with_game(&mut game_owner, || {
-            install(&blank_state());
+    {
+            install(&mut game_owner.world, &blank_state());
             let mut game = LiveGame::bare();
             game.set_activity(3);
             let mut flagship = sis();
-            let first = capture_summary(&flagship, &game, &Solar::new(), b"a").unwrap();
+            let first = capture_summary(&game_owner.world, &flagship, &game, &Solar::new(), b"a").unwrap();
 
             flagship.fuel_on_board += 50;
             flagship.num_landers = 2;
             game.data.game.game_clock.year_index += 1;
             let mut state = blank_state();
             set_key(&mut state, "MELNORME_CREDIT0", 9);
-            install(&state);
-            let second = capture_summary(&flagship, &game, &Solar::new(), b"a").unwrap();
+            install(&mut game_owner.world, &state);
+            let second = capture_summary(&game_owner.world, &flagship, &game, &Solar::new(), b"a").unwrap();
 
             assert_eq!(second.sis.fuel_on_board, first.sis.fuel_on_board + 50);
             assert_eq!(second.sis.num_landers, 2);
             assert_eq!(second.year_index, first.year_index + 1);
             assert_eq!((first.mcredit_lo, second.mcredit_lo), (0, 9));
-        })
-    }
+        }
 }
 
 // ---------------------------------------------------------------------------
@@ -755,118 +715,105 @@ fn interplanetary_game() -> LiveGame {
 }
 
 fn summary_over(
+    world: &World,
     system: &System,
     game: &LiveGame,
     star: Option<u8>,
 ) -> Result<crate::savegame::types::Summary, SummaryError> {
-    capture_summary(&sis(), game, &owner(system, star, sis().planet_name), b"")
+    capture_summary(world, &sis(), game, &owner(system, star, sis().planet_name), b"")
 }
 
 #[test]
 #[serial]
 fn the_summary_names_the_moon_the_flagship_orbits() {
     let mut game_owner = crate::engine::Game::new();
-    // SAFETY: the serialized fixture owns this published lifecycle.
-    unsafe {
-        crate::app::bridge::with_game(&mut game_owner, || {
-            install(&blank_state());
+    {
+            install(&mut game_owner.world, &blank_state());
             let game = interplanetary_game();
             let summary =
-                summary_over(&System::orbiting_moon(2, 1), &game, Some(SOL_STAR)).unwrap();
+                summary_over(&game_owner.world, &System::orbiting_moon(2, 1), &game, Some(SOL_STAR)).unwrap();
             assert_eq!(text(summary.sis.planet_name), LUNA);
             assert_eq!(summary.activity, IN_PLANET_ORBIT);
             // Everything else of the flagship is the live `SIS_STATE`.
             assert_eq!(summary.sis.fuel_on_board, sis().fuel_on_board);
             assert_eq!(summary.sis.ship_name, sis().ship_name);
-        })
-    }
+        }
 }
 
 #[test]
 #[serial]
 fn a_changed_solar_system_changes_the_summary() {
     let mut game_owner = crate::engine::Game::new();
-    // SAFETY: the serialized fixture owns this published lifecycle.
-    unsafe {
-        crate::app::bridge::with_game(&mut game_owner, || {
-            install(&blank_state());
+    {
+            install(&mut game_owner.world, &blank_state());
             let game = interplanetary_game();
 
             let mut system = System::orbiting_planet(2);
-            let at_earth = summary_over(&system, &game, Some(SOL_STAR)).unwrap();
+            let at_earth = summary_over(&game_owner.world, &system, &game, Some(SOL_STAR)).unwrap();
             assert_eq!(text(at_earth.sis.planet_name), EARTH);
             assert_eq!(at_earth.activity, IN_PLANET_ORBIT);
 
             // Leaving orbit keeps the name of the inner system's planet but not the
             // orbit activity.
             system.finish_orbit();
-            let flying = summary_over(&system, &game, Some(SOL_STAR)).unwrap();
+            let flying = summary_over(&game_owner.world, &system, &game, Some(SOL_STAR)).unwrap();
             assert_eq!(text(flying.sis.planet_name), EARTH);
             assert_eq!(flying.activity, IN_INTERPLANETARY as u8);
 
             // Back out to the outer system: the flagship's own planet name.
             let outer = System::outer();
-            let outside = summary_over(&outer, &game, Some(SOL_STAR)).unwrap();
+            let outside = summary_over(&game_owner.world, &outer, &game, Some(SOL_STAR)).unwrap();
             assert_eq!(&outside.sis.planet_name, &sis().planet_name);
             assert_eq!(outside.activity, IN_INTERPLANETARY as u8);
 
             // Orbiting an unnamed moon of an unnamed star.
             let moon = System::orbiting_moon(3, 2);
-            let at_moon = summary_over(&moon, &game, Some(6)).unwrap();
+            let at_moon = summary_over(&game_owner.world, &moon, &game, Some(6)).unwrap();
             assert_eq!(text(at_moon.sis.planet_name), "Alpha Centauri");
             let mut short = sis();
             short.planet_name = FLAGSHIP_NAME;
             let at_moon =
-                capture_summary(&short, &game, &owner(&moon, Some(6), FLAGSHIP_NAME), b"").unwrap();
+                capture_summary(&game_owner.world, &short, &game, &owner(&moon, Some(6), FLAGSHIP_NAME), b"").unwrap();
             assert_eq!(text(at_moon.sis.planet_name), "Beta Hydri-C");
-        })
-    }
+        }
 }
 
 #[test]
 #[serial]
 fn a_starbase_visit_is_a_starbase_even_in_orbit_and_is_still_named() {
     let mut game_owner = crate::engine::Game::new();
-    // SAFETY: the serialized fixture owns this published lifecycle.
-    unsafe {
-        crate::app::bridge::with_game(&mut game_owner, || {
+    {
             let mut state = blank_state();
             set_key(&mut state, "GLOBAL_FLAGS_AND_DATA", 0xFF);
-            install(&state);
+            install(&mut game_owner.world, &state);
             let game = interplanetary_game();
             let summary =
-                summary_over(&System::orbiting_moon(2, 0), &game, Some(SOL_STAR)).unwrap();
+                summary_over(&game_owner.world, &System::orbiting_moon(2, 0), &game, Some(SOL_STAR)).unwrap();
             assert_eq!(summary.activity, IN_STARBASE);
             assert_eq!(text(summary.sis.planet_name), "s422");
-        })
-    }
+        }
 }
 
 #[test]
 #[serial]
 fn the_final_battle_summary_names_sa_matra_whatever_the_system_holds() {
     let mut game_owner = crate::engine::Game::new();
-    // SAFETY: the serialized fixture owns this published lifecycle.
-    unsafe {
-        crate::app::bridge::with_game(&mut game_owner, || {
-            install(&blank_state());
+    {
+            install(&mut game_owner.world, &blank_state());
             let mut game = LiveGame::bare();
             game.set_activity(IN_LAST_BATTLE | START_ENCOUNTER);
-            let summary = summary_over(&System::orbiting_planet(2), &game, Some(SOL_STAR)).unwrap();
+            let summary = summary_over(&game_owner.world, &System::orbiting_planet(2), &game, Some(SOL_STAR)).unwrap();
             assert_eq!(text(summary.sis.planet_name), SA_MATRA_NAME);
             assert_eq!(summary.activity, IN_LAST_BATTLE as u8);
-        })
-    }
+        }
 }
 
 #[test]
 #[serial]
 fn the_other_activities_do_not_read_the_solar_system() {
     let mut game_owner = crate::engine::Game::new();
-    // SAFETY: the serialized fixture owns this published lifecycle.
-    unsafe {
-        crate::app::bridge::with_game(&mut game_owner, || {
-            install(&blank_state());
+    {
+            install(&mut game_owner.world, &blank_state());
             // A state `planet_or_moon_name` would reject.
             let broken = System::inner(2);
             let mut snapshot = broken.snapshot((320, 240));
@@ -874,7 +821,7 @@ fn the_other_activities_do_not_read_the_solar_system() {
             for activity in [0u16, 2, 3, 5, 6, 7, 8] {
                 let mut game = LiveGame::bare();
                 game.set_activity(activity | START_ENCOUNTER);
-                let summary = capture_summary(
+                let summary = capture_summary(&game_owner.world, 
                     &sis(),
                     &game,
                     &SolarSummary::new(Some(snapshot), Some(SOL_STAR), sis().planet_name, &Table),
@@ -887,24 +834,21 @@ fn the_other_activities_do_not_read_the_solar_system() {
                     "activity {activity}"
                 );
             }
-        })
-    }
+        }
 }
 
 #[test]
 #[serial]
 fn a_broken_solar_system_is_an_error_not_a_guessed_name() {
     let mut game_owner = crate::engine::Game::new();
-    // SAFETY: the serialized fixture owns this published lifecycle.
-    unsafe {
-        crate::app::bridge::with_game(&mut game_owner, || {
-            install(&blank_state());
+    {
+            install(&mut game_owner.world, &blank_state());
             let game = interplanetary_game();
             let broken = System::inner(2);
             let mut snapshot = broken.snapshot((320, 240));
             snapshot.selected = None;
             assert_eq!(
-                capture_summary(
+                capture_summary(&game_owner.world, 
                     &sis(),
                     &game,
                     &SolarSummary::new(Some(snapshot), Some(SOL_STAR), sis().planet_name, &Table),
@@ -913,25 +857,21 @@ fn a_broken_solar_system_is_an_error_not_a_guessed_name() {
                 .unwrap_err(),
                 SummaryError::Solar(SolarError::OrbitalWorldMissing)
             );
-        })
-    }
+        }
 }
 
 #[test]
 #[serial]
 fn no_solar_system_summarises_as_plain_interplanetary_flight() {
     let mut game_owner = crate::engine::Game::new();
-    // SAFETY: the serialized fixture owns this published lifecycle.
-    unsafe {
-        crate::app::bridge::with_game(&mut game_owner, || {
-            install(&blank_state());
+    {
+            install(&mut game_owner.world, &blank_state());
             let game = interplanetary_game();
             let solar = SolarSummary::new(None, None, sis().planet_name, &Table);
-            let summary = capture_summary(&sis(), &game, &solar, b"").unwrap();
+            let summary = capture_summary(&game_owner.world, &sis(), &game, &solar, b"").unwrap();
             assert_eq!(summary.activity, IN_INTERPLANETARY as u8);
             assert_eq!(&summary.sis.planet_name, &sis().planet_name);
-        })
-    }
+        }
 }
 
 // ---------------------------------------------------------------------------

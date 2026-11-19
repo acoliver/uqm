@@ -18,7 +18,6 @@ impl AutomationObserver {
         if !request.load_admitted {
             return;
         }
-        #[cfg(not(test))]
         if let Err(error) = request.load(cx) {
             self.write_trace_labeled(
                 &mut inner,
@@ -26,11 +25,6 @@ impl AutomationObserver {
                 format!("save_capture_load_failed:{error:#}"),
             );
             self.set_terminal(&mut inner, TerminalClass::SemanticMismatch);
-        }
-        #[cfg(test)]
-        {
-            let _ = cx;
-            panic!("runtime save load cannot run in unit tests: {request:?}");
         }
     }
 

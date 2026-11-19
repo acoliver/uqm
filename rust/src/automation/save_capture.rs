@@ -65,7 +65,6 @@ impl Request {
     }
 }
 
-#[cfg(not(test))]
 impl Request {
     /// The caller is the post-game-initialization hook on the game thread.
     pub fn load(&mut self, cx: &mut crate::engine::battle::Cx<'_>) -> anyhow::Result<()> {

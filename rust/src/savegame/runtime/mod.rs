@@ -9,7 +9,6 @@ pub use crate::engine::save::global;
 pub use crate::engine::save::groups;
 pub use crate::engine::save::hyper_save;
 pub use crate::engine::save::ip_group_save;
-#[cfg(not(test))]
 pub mod live;
 pub mod location;
 pub use crate::engine::save::queues;

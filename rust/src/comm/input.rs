@@ -58,7 +58,7 @@ impl Comm {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::observe::{CampaignView, CheckpointView, Observer, Presented};
+    use crate::engine::observe::{CheckpointView, Observer, Presented};
 
     struct Select {
         calls: usize,
@@ -146,7 +146,7 @@ pub(crate) mod fixture {
     use crate::engine::{
         battle::{input::InputContext, Cx},
         input::{Frame, InputRuntime, InputSession},
-        observe::{CampaignView, InputView, Io, Observer, Unobserved},
+        observe::{InputView, Io, Observer, Unobserved},
     };
 
     pub struct Driver(pub InputSession);

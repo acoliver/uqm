@@ -309,12 +309,9 @@ fn root_cancel_applies_and_persists_on_the_actual_input_loop() {
     };
     let configuration = fixture.configuration();
     let resources = fixture.resources();
-    // SAFETY: this fixture exclusively publishes its game during the synchronous menu loop.
-    unsafe {
-        crate::app::bridge::with_game(&mut game, || {
-            crate::app::bridge::enter(|cx| setup_menu(cx, &mut io, configuration, resources))
-        })
-    };
+    {
+            game.with_context(|cx| setup_menu(cx, &mut io, configuration, resources))
+        };
     assert!(driver.keys.borrow().is_empty());
     assert_eq!(driver.sleeps.get(), 1);
     let saved = std::fs::read_to_string(fixture.files.path().join("uqm.cfg")).unwrap();
@@ -341,10 +338,8 @@ fn retained_renderer_draws_all_pages_and_native_binding_changes_refresh_owned_va
     let mut io = Io {
         observer: &mut observer,
     };
-    // SAFETY: all retained graphics/input resources belong to this fixture's synchronous game.
-    unsafe {
-        crate::app::bridge::with_game(&mut game, || {
-            crate::app::bridge::enter(|cx| {
+    {
+            game.with_context(|cx| {
                 session.populate_keys();
                 assert_eq!(session.controls[0][0], c"Up");
                 session.act(Action::Rebind(0), cx, &mut io);
@@ -358,8 +353,7 @@ fn retained_renderer_draws_all_pages_and_native_binding_changes_refresh_owned_va
                     session.draw();
                 }
             })
-        })
-    };
+        };
     session.menu.enter(0, true);
     session.draw();
     session.resources.context.flush();
@@ -391,10 +385,8 @@ fn template_editor_accepts_utf8_preserves_cancel_and_bounds_the_native_name() {
     let mut io = Io {
         observer: &mut observer,
     };
-    // SAFETY: this fixture owns the game publication, native vectors and editor resources.
-    unsafe {
-        crate::app::bridge::with_game(&mut game, || {
-            crate::app::bridge::enter(|cx| {
+    {
+            game.with_context(|cx| {
                 session.edit(cx, &mut io);
                 assert_eq!(session.entry.text, c"oneé");
                 assert_eq!(session.names[0], c"oneé");
@@ -409,8 +401,7 @@ fn template_editor_accepts_utf8_preserves_cancel_and_bounds_the_native_name() {
                 assert_eq!(session.names[0].to_bytes(), "a".repeat(28).as_bytes());
                 assert_eq!(session.names[0].to_str().unwrap(), "a".repeat(28));
             })
-        })
-    };
+        };
     assert_eq!(driver.sleeps.get(), 3);
     assert!(!session.entry.editing);
 }
@@ -446,12 +437,9 @@ fn scripted_audio_changes_apply_on_return_and_abort_clears_the_activity_bit() {
         };
         let configuration = fixture.configuration();
         let resources = fixture.resources();
-        // SAFETY: each serial fixture exclusively owns this game's native input loop.
-        unsafe {
-            crate::app::bridge::with_game(&mut game, || {
-                crate::app::bridge::enter(|cx| setup_menu(cx, &mut io, configuration, resources))
-            })
-        };
+        {
+                game.with_context(|cx| setup_menu(cx, &mut io, configuration, resources))
+            };
         assert_eq!(
             Settings.integer("config.musicvol"),
             Some(if abort { 25 } else { 30 })

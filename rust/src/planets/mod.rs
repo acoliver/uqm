@@ -5,7 +5,6 @@
 
 pub mod solar_system;
 
-#[cfg(not(test))]
 pub mod c_api;
 pub(crate) mod device_effects;
 pub mod generate;

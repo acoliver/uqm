@@ -350,7 +350,7 @@ mod tests {
     #[test]
     fn finalization_publishes_each_outcome_as_a_copy_of_its_own_trip() {
         use super::super::{runtime::AdapterError, session::SessionOutcome};
-        use crate::engine::observe::{CampaignView, Injected, Observer, Presented};
+        use crate::engine::observe::{Injected, Observer, Presented};
         use crate::engine::observe_port::planet_side::{terminal, PlanetSideSnapshot};
 
         #[derive(Default)]

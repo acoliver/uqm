@@ -3,7 +3,7 @@ use crate::engine::{
     battle::{input::InputContext, Battle, Cx},
     input::{frames::InputState, Frame, InputControls, InputRuntime, InputSession},
     observe::{
-        CampaignView, CheckpointView, Injected, InputView, Io, Observer, Presented, Unobserved,
+        CheckpointView, Injected, InputView, Io, Observer, Presented, Unobserved,
     },
     strings::owned_table::LoadedTextTable,
     world::generation::ReportSlot,

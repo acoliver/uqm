@@ -53,21 +53,15 @@ pub(crate) fn with_context<R>(
     result.unwrap_or_else(|| panic!("synchronous effect was executed"))
 }
 
+/// Lend a fresh game's context, as an admitted frame does, to an automation test.
+#[cfg(test)]
+pub(crate) fn with_supplied<R>(body: impl FnOnce(&mut Supplied<'_, '_>) -> R) -> R {
+    crate::engine::Game::new().with_context(|cx| body(&mut Supplied { cx }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn with_supplied<R>(body: impl FnOnce(&mut Supplied<'_, '_>) -> R) -> R {
-        let mut game = crate::engine::Game::new();
-        let mut battle = crate::engine::battle::Battle::new();
-        let mut cx = Cx::new(
-            &mut battle,
-            &mut game.world,
-            &mut game.kernel,
-            crate::math::random,
-        );
-        body(&mut Supplied { cx: &mut cx })
-    }
 
     #[test]
     fn supplied_context_rejects_fleet_and_connection_effects() {

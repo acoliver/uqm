@@ -539,6 +539,7 @@ mod tests {
         world.date = (17, 8, 2161);
         let campaign = LiveCampaign {
             ui: &ui,
+            boss: Default::default(),
             ending: Default::default(),
             world: &world,
             flagship_destroyed: false,
@@ -562,12 +563,14 @@ mod tests {
         let world = empty_view();
         let running = LiveCampaign {
             ui: &ui,
+            boss: Default::default(),
             ending: Default::default(),
             world: &world,
             flagship_destroyed: false,
         };
         let destroyed = LiveCampaign {
             ui: &ui,
+            boss: Default::default(),
             ending: Default::default(),
             world: &world,
             flagship_destroyed: true,
@@ -837,6 +840,7 @@ mod tests {
             assert_eq!(
                 LiveCampaign {
                     ui: &ui,
+                    boss: Default::default(),
                     ending: Default::default(),
                     world: &world,
                     flagship_destroyed: false,
@@ -861,6 +865,7 @@ mod tests {
         assert_eq!(
             LiveCampaign {
                 ui: &ui,
+                boss: Default::default(),
                 ending: Default::default(),
                 world: &empty_view(),
                 flagship_destroyed: false,

@@ -2,7 +2,7 @@ use super::*;
 use crate::engine::{
     battle::{input::InputContext, Battle},
     input::{frames::InputState, InputControls, InputRuntime},
-    observe::{CampaignView, Observer, Presented, Unobserved},
+    observe::{Observer, Presented, Unobserved},
     Game,
 };
 use std::{
