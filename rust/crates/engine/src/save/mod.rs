@@ -9,6 +9,7 @@ pub mod hyper_save;
 pub mod ip_group_save;
 pub mod location;
 pub mod queues;
+pub mod slots;
 pub mod statefiles;
 pub mod summary;
 pub mod summary_record;

@@ -1,6 +1,13 @@
 //! The save menu persistence entry points, called on the game thread.
-pub(crate) mod load;
-pub(crate) mod save;
+pub mod load;
+pub mod save;
+
+/// The save-slot service the game options menu reaches through the kernel.
+pub const SLOTS: crate::engine::save::slots::SaveSlots = crate::engine::save::slots::SaveSlots {
+    describe: load::load_game_descriptions,
+    save: |cx, solar, slot, summary, name| save::save_game(cx, solar, slot, summary, name) != 0,
+    load: |cx, slot| load::load_game(slot, load::LoadRequest::Restore(cx)) != 0,
+};
 
 fn complete(result: anyhow::Result<()>, operation: &str, witness: Option<(u16, bool)>) -> u32 {
     match result {

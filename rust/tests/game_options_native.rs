@@ -117,6 +117,8 @@ fn options_entry(keys: &[u32], from_main: bool) -> (u32, u8, [u8; 16], [u8; 16])
         keys: RefCell::new(keys.iter().map(|&key| key as usize).collect()),
     });
     game.kernel.install_input_runtime(runtime.clone());
+    game.kernel
+        .install_save_slots(uqm_rust::savegame::live::SLOTS);
     let mut observer = Unobserved;
     let mut io = Io {
         observer: &mut observer,
