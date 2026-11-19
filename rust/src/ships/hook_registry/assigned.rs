@@ -1,10 +1,20 @@
 //! Assigned callbacks with non-element first arguments and restored hooks.
 pub(super) fn hooks() -> Vec<(usize, &'static str)> {
-    [part0(), part1(), part2(), part3(), part4(), part5()]
-        .into_iter()
-        .flatten()
-        .collect()
+    [
+        part0(),
+        part1(),
+        part2(),
+        part3(),
+        part4(),
+        part5(),
+        part6(),
+        part7(),
+    ]
+    .into_iter()
+    .flatten()
+    .collect()
 }
+
 fn part0() -> Vec<(usize, &'static str)> {
     vec![
         (
@@ -47,6 +57,11 @@ fn part0() -> Vec<(usize, &'static str)> {
                 as usize,
             "ships::races::slylandro_native::slylandro_postprocess",
         ),
+    ]
+}
+
+fn part1() -> Vec<(usize, &'static str)> {
+    vec![
         (
             crate::ships::races::slylandro_native::engine::slylandro_preprocess as *const ()
                 as usize,
@@ -57,10 +72,6 @@ fn part0() -> Vec<(usize, &'static str)> {
                 as usize,
             "ships::races::pkunk_native::pkunk_reincarnation_death",
         ),
-    ]
-}
-fn part1() -> Vec<(usize, &'static str)> {
-    vec![
         (
             crate::ships::races::pkunk_native::engine::uninit_pkunk as *const () as usize,
             "ships::races::pkunk_native::uninit_pkunk",
@@ -90,6 +101,11 @@ fn part1() -> Vec<(usize, &'static str)> {
                 as usize,
             "ships::races::mmrnmhrm_native::mmrnmhrm_intelligence",
         ),
+    ]
+}
+
+fn part2() -> Vec<(usize, &'static str)> {
+    vec![
         (
             crate::ships::races::mmrnmhrm_native::engine::mmrnmhrm_postprocess as *const ()
                 as usize,
@@ -109,10 +125,6 @@ fn part1() -> Vec<(usize, &'static str)> {
                 as usize,
             "ships::races::melnorme_native::initialize_confusion",
         ),
-    ]
-}
-fn part2() -> Vec<(usize, &'static str)> {
-    vec![
         (
             crate::ships::races::melnorme_native::engine::initialize_test_pump_up as *const ()
                 as usize,
@@ -133,6 +145,11 @@ fn part2() -> Vec<(usize, &'static str)> {
                 as usize,
             "ships::races::shofixti_native::initialize_standard_missile",
         ),
+    ]
+}
+
+fn part3() -> Vec<(usize, &'static str)> {
+    vec![
         (
             crate::ships::races::shofixti_native::engine::self_destruct_kill_objects as *const ()
                 as usize,
@@ -163,10 +180,6 @@ fn part2() -> Vec<(usize, &'static str)> {
                 as usize,
             "ships::races::androsynth_native::androsynth_intelligence",
         ),
-    ]
-}
-fn part3() -> Vec<(usize, &'static str)> {
-    vec![
         (
             crate::ships::races::androsynth_native::engine::androsynth_postprocess as *const ()
                 as usize,
@@ -177,6 +190,11 @@ fn part3() -> Vec<(usize, &'static str)> {
                 as usize,
             "ships::races::androsynth_native::androsynth_preprocess",
         ),
+    ]
+}
+
+fn part4() -> Vec<(usize, &'static str)> {
+    vec![
         (
             crate::ships::races::androsynth_native::engine::uninit_androsynth as *const () as usize,
             "ships::races::androsynth_native::uninit_androsynth",
@@ -217,7 +235,8 @@ fn part3() -> Vec<(usize, &'static str)> {
         ),
     ]
 }
-fn part4() -> Vec<(usize, &'static str)> {
+
+fn part5() -> Vec<(usize, &'static str)> {
     vec![
         (
             crate::ships::races::thraddash_native::engine::thraddash_preprocess as *const ()
@@ -260,7 +279,8 @@ fn part4() -> Vec<(usize, &'static str)> {
         ),
     ]
 }
-fn part5() -> Vec<(usize, &'static str)> {
+
+fn part6() -> Vec<(usize, &'static str)> {
     vec![
         (
             crate::ships::races::arilou_native::engine::special_hook as *const () as usize,
@@ -294,6 +314,11 @@ fn part5() -> Vec<(usize, &'static str)> {
             crate::ships::races::druuge_native::engine::special_hook as *const () as usize,
             "ships::races::druuge_native::special",
         ),
+    ]
+}
+
+fn part7() -> Vec<(usize, &'static str)> {
+    vec![
         (
             crate::ships::races::ilwrath_native::engine::special_hook as *const () as usize,
             "ships::races::ilwrath_native::special",
