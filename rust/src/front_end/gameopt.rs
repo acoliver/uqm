@@ -17,7 +17,6 @@ use picker::MAX_SAVED_GAMES;
 use picker::SAVES_PER_PAGE;
 pub use picker::{picker_action, PickerAction};
 
-#[cfg(not(test))]
 pub use runtime::game_options;
 
 pub(crate) mod runtime {

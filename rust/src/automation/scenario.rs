@@ -387,7 +387,7 @@ impl super::coordinator::AutomationObserver {
         self.scene.lock().begin(scene);
 
         #[cfg(not(test))]
-        unsafe {
+        {
             if scene == AutomationScene::SamatraDevFixture {
                 crate::comm::dispatch::prepare_samatra_dev_fixture(cx)
                     .map_err(SceneError::SetupFailed)?;

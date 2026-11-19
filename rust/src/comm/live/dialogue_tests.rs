@@ -933,3 +933,74 @@ fn zoq_and_pik_speaker_switches_when_its_line_starts() {
     assert_eq!(comm.race_scratch.last_alien, 0);
     assert_eq!(comm.data.definition.alien_text_baseline.x, 61);
 }
+
+/// The first talk segue of an encounter shows the conversation (alien frame,
+/// palette, music at background volume, animations) once, consumes only the
+/// kernel's load flag, and is skipped while the campaign is aborting.
+#[test]
+#[serial_test::serial]
+fn first_talk_segue_presents_once_and_consumes_only_the_load_flag() {
+    use crate::comm::talk_segue::{
+        alien_talk_segue, do_communication, CommunicationResult, WAIT_TRACK_ALL,
+    };
+    if !crate::native_test_process::own_graphics_process(concat!(
+        module_path!(),
+        "::first_talk_segue_presents_once_and_consumes_only_the_load_flag"
+    )) {
+        return;
+    }
+    with_fixture(|game, art| {
+        campaign(&mut game.world, art, &[]);
+        let mut battle = Battle::new();
+        let mut cx = Cx::new(&mut battle, &mut game.world, &mut game.kernel, || 7);
+        converse(&mut cx, DialogueKind::Arilou, |comm, cx| {
+            let input = InputSession::default();
+            cx.kernel.last_activity = 0x5003;
+            cx.world.set_activity(0x4003);
+            alien_talk_segue(&input, cx, comm, WAIT_TRACK_ALL);
+            assert_eq!(
+                cx.kernel.last_activity, 0x5003,
+                "an aborting segue changes nothing"
+            );
+            assert!(!comm.first_talk_call);
+
+            cx.world.set_activity(3);
+            alien_talk_segue(&input, cx, comm, WAIT_TRACK_ALL);
+            assert_eq!(
+                cx.kernel.last_activity, 0x4003,
+                "the first segue consumes CHECK_LOAD"
+            );
+            assert!(comm.first_talk_call);
+            assert!(
+                comm.is_talking_finished(),
+                "with no track the segue ends at once"
+            );
+
+            comm.set_talking_finished(false);
+            cx.kernel.last_activity |= 0x1000;
+            alien_talk_segue(&input, cx, comm, WAIT_TRACK_ALL);
+            assert_eq!(
+                cx.kernel.last_activity, 0x5003,
+                "later segues leave the flag alone"
+            );
+        });
+        converse(&mut cx, DialogueKind::Arilou, |comm, cx| {
+            let input = InputSession::default();
+            let mut observer = crate::engine::observe::Unobserved;
+            let mut io = crate::engine::observe::Io {
+                observer: &mut observer,
+            };
+            assert!(!comm.is_talking_finished());
+            assert_eq!(
+                do_communication(&input, cx, &mut io, comm),
+                CommunicationResult::Talking,
+                "while the alien talks, communication stays in the talking phase"
+            );
+            assert!(
+                comm.top_response.is_none(),
+                "responses are not offered while talking"
+            );
+        });
+        crate::time::clock_bridge::rust_clock_uninit(cx.world);
+    });
+}

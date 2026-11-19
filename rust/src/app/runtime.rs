@@ -209,8 +209,7 @@ fn run_campaign(
         match action {
             BreakAction::Continue => {}
             BreakAction::InitBlackUrqCommunication => {
-                // SAFETY: the retained owners keep communication resources live through the mode.
-                unsafe { crate::comm::dispatch::init_communication(cx, io, 21) };
+                crate::comm::dispatch::init_communication(cx, io, 21);
                 break;
             }
             BreakAction::ClearRestart => {
@@ -237,31 +236,25 @@ fn dispatch(cx: &mut Cx<'_>, io: &mut Io<'_>, decision: ActivityDecision) {
             crate::ui::starbase::install_bomb_at_earth(cx);
         }
         ActivityDecision::VisitStarBase => {
-            // SAFETY: the campaign and display remain live through the starbase mode.
-            unsafe {
-                crate::ui::starbase::run_starbase_visit(
-                    cx,
-                    io,
-                    &crate::ui::MenuServices {
-                        communicate: |cx, io, conversation, options| {
-                            crate::comm::dispatch::init_communication_with_options(
-                                cx,
-                                io,
-                                conversation,
-                                options,
-                            )
-                        },
-                        game_options: |cx, io| {
-                            crate::front_end::gameopt::game_options(cx, io, None)
-                        },
-                        ship_spin: crate::front_end::fmv::do_ship_spin,
+            crate::ui::starbase::run_starbase_visit(
+                cx,
+                io,
+                &crate::ui::MenuServices {
+                    communicate: |cx, io, conversation, options| {
+                        crate::comm::dispatch::init_communication_with_options(
+                            cx,
+                            io,
+                            conversation,
+                            options,
+                        )
                     },
-                )
-            };
+                    game_options: |cx, io| crate::front_end::gameopt::game_options(cx, io, None),
+                    ship_spin: crate::front_end::fmv::do_ship_spin,
+                },
+            );
         }
         ActivityDecision::RaceCommunication => {
-            // SAFETY: the campaign retains the communication mode's owners and resources.
-            unsafe { crate::comm::dispatch::race_communication(cx, io) };
+            crate::comm::dispatch::race_communication(cx, io);
         }
         ActivityDecision::ExploreSolarSystem | ActivityDecision::Battle => {
             cx.kernel.pilot_flash.borrow_mut().reset();

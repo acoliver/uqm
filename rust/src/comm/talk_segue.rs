@@ -84,10 +84,8 @@ pub(super) mod c_bridge {
 
     pub use crate::comm::comm_abi::comm_redraw_subtitles;
 
-    #[cfg(not(test))]
     pub use crate::comm::commanim_abi::runtime::draw_alien_frame;
 
-    #[cfg(not(test))]
     pub use crate::comm::commanim_abi::runtime::init_comm_animations;
 
     pub fn pulsed_menu_key(input: &super::InputSession, key_index: c_int) -> c_int {
@@ -783,23 +781,21 @@ pub fn player_response_input(
 /// alien frame draw, intro transition, music, animations. These are all C bridge
 /// calls that don't need the Rust lock.
 ///
-pub fn alien_talk_first_call_init(_comm: &mut Comm, cx: &mut Cx<'_>) {
-    let _enabled = cx.world.data.game.glob_flags & 8 == 0;
-    #[cfg(not(test))]
+pub fn alien_talk_first_call_init(comm: &mut Comm, cx: &mut Cx<'_>) {
+    let enabled = cx.world.data.game.glob_flags & 8 == 0;
     cx.with_legacy(|| {
-        rust_init_speech_graphics(_comm);
-        c_bridge::set_color_map_from_comm_data(_comm);
-        c_bridge::draw_alien_frame(_comm, 0, 1);
-        rust_update_speech_graphics(_comm);
-        comm_intro_transition(_comm);
-        c_bridge::play_alien_music(_comm, _enabled);
+        rust_init_speech_graphics(comm);
+        c_bridge::set_color_map_from_comm_data(comm);
+        c_bridge::draw_alien_frame(comm, 0, 1);
+        rust_update_speech_graphics(comm);
+        comm_intro_transition(comm);
+        c_bridge::play_alien_music(comm, enabled);
         c_bridge::FadeMusic((c_bridge::music_volume::BACKGROUND) as u8, 0i16);
-        c_bridge::init_comm_animations(_comm);
+        c_bridge::init_comm_animations(comm);
     });
     cx.kernel.last_activity &= !0x1000;
 }
 
-#[cfg(not(test))]
 use crate::comm::ffi::{rust_init_speech_graphics, rust_update_speech_graphics};
 
 /// Fade music to foreground volume after talk segue finishes (no lock needed).
@@ -807,13 +803,10 @@ use crate::comm::ffi::{rust_init_speech_graphics, rust_update_speech_graphics};
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
 pub fn fade_music_to_foreground_bridge() {
-    #[cfg(not(test))]
-    {
-        c_bridge::FadeMusic(
-            c_bridge::music_volume::FOREGROUND as u8,
-            c_bridge::ONE_SECOND_TICKS as i16,
-        );
-    }
+    c_bridge::FadeMusic(
+        c_bridge::music_volume::FOREGROUND as u8,
+        c_bridge::ONE_SECOND_TICKS as i16,
+    );
 }
 
 /// One iteration of the top-level communication comm machine.
@@ -1276,21 +1269,12 @@ fn run_comm_anim_frame(_input: &crate::engine::input::InputSession, comm: &mut C
 /// @plan PLAN-20260325-COMMPT3.P03
 /// @requirement REQ-MU-001, REQ-MU-002
 /// @pseudocode 001-colormap-music-bridges lines 09-15
-fn play_alien_music(_comm: &mut Comm, _enabled: bool) {
-    #[cfg(not(test))]
-    c_bridge::play_alien_music(_comm, _enabled);
+fn play_alien_music(comm: &mut Comm, enabled: bool) {
+    c_bridge::play_alien_music(comm, enabled);
 }
 
-fn set_music_background_vol(comm: &mut Comm) {
-    #[cfg(not(test))]
-    {
-        let _ = comm;
-        c_bridge::FadeMusic((c_bridge::music_volume::BACKGROUND) as u8, 0i16);
-    }
-    #[cfg(test)]
-    {
-        let _ = comm;
-    }
+fn set_music_background_vol(_comm: &mut Comm) {
+    c_bridge::FadeMusic((c_bridge::music_volume::BACKGROUND) as u8, 0i16);
 }
 
 fn fade_music_to_foreground(comm: &mut Comm) {
@@ -1652,36 +1636,6 @@ mod tests {
 
     #[test]
     #[serial]
-    fn test_alien_talk_segue_first_call_sets_flag() {
-        let input = InputSession::default();
-        let world = crate::engine::World::new();
-        with_world(world, |cx, _| {
-            let mut s = Comm::new();
-            s.init().unwrap();
-            assert!(!s.first_talk_call);
-
-            // Set abort immediately so we don't actually loop
-            cx.world.set_activity(0x4000);
-            alien_talk_segue(&input, cx, &mut s, WAIT_TRACK_ALL);
-
-            // first_talk_call should be set (but then skip due to abort)
-            // check_abort returns true before first_talk_call check → skip
-            // Actually check_abort is first, so first_talk_call stays false here.
-            // Let's check the non-abort path:
-            let mut s2 = Comm::new();
-            s2.init().unwrap();
-            // With no track loaded, the first segue finishes immediately.
-            cx.world.set_activity(0);
-            alien_talk_segue(&input, cx, &mut s2, WAIT_TRACK_ALL);
-            assert!(
-                s2.first_talk_call,
-                "first_talk_call should be set after first call"
-            );
-        });
-    }
-
-    #[test]
-    #[serial]
     fn test_alien_talk_segue_skips_if_abort() {
         let input = InputSession::default();
         let mut world = crate::engine::World::new();
@@ -1817,19 +1771,6 @@ mod tests {
 
     #[test]
     #[serial]
-    fn test_communication_talks_first() {
-        let input = InputSession::default();
-        let world = crate::engine::World::new();
-        let mut s = Comm::new();
-        s.init().unwrap();
-        assert!(!s.is_talking_finished());
-
-        let result = with_world(world, |cx, io| do_communication(&input, cx, io, &mut s));
-        assert_eq!(result, CommunicationResult::Talking);
-    }
-
-    #[test]
-    #[serial]
     fn test_communication_exits_no_responses() {
         let input = InputSession::default();
         let world = crate::engine::World::new();
@@ -1867,56 +1808,6 @@ mod tests {
 
     // ---- Call-site wiring tests (EXPECTED TO PASS with P03 stubs) ----------
 
-    /// REQ-CM-001: set_colormap() executes inside alien_talk_segue's first-call
-    /// initialization block.  The production path calls c_SetColorMapFromCommData()
-    /// (not a null_mut stub).  In test mode the bridge is a no-op, so we verify
-    /// the structural invariant: first_talk_call is set iff the init block ran.
-    #[test]
-    #[serial]
-    fn test_set_colormap_calls_bridge() {
-        let input = InputSession::default();
-        let world = crate::engine::World::new();
-        let mut s = Comm::new();
-        s.init().unwrap();
-        assert!(
-            !s.first_talk_call,
-            "precondition: first_talk_call not yet set"
-        );
-
-        with_world(world, |cx, _| {
-            alien_talk_segue(&input, cx, &mut s, WAIT_TRACK_ALL)
-        });
-
-        assert!(
-            s.first_talk_call,
-            "alien_talk_segue must execute the first-call block (includes set_colormap)"
-        );
-    }
-
-    /// REQ-MU-001: play_alien_music() executes inside alien_talk_segue's first-call
-    /// initialization block.  Same structural witness as test_set_colormap_calls_bridge.
-    #[test]
-    #[serial]
-    fn test_play_alien_music_calls_bridge() {
-        let input = InputSession::default();
-        let world = crate::engine::World::new();
-        let mut s = Comm::new();
-        s.init().unwrap();
-        assert!(
-            !s.first_talk_call,
-            "precondition: first_talk_call not yet set"
-        );
-
-        with_world(world, |cx, _| {
-            alien_talk_segue(&input, cx, &mut s, WAIT_TRACK_ALL)
-        });
-
-        assert!(
-            s.first_talk_call,
-            "alien_talk_segue must execute the first-call block (includes play_alien_music)"
-        );
-    }
-
     /// REQ-SM-001: the "for now" placeholder comment must not appear in the
     /// set_colormap function body in this file.  P03 removed it.
     #[test]
@@ -1952,34 +1843,6 @@ mod tests {
     //   `cargo test` still exits 0, while documenting the required behavior.
 
     // ---- Test 1 ------------------------------------------------------------
-
-    /// REQ-DC-002: while talking_finished == false, do_communication must return
-    /// Talking without calling player_response_input.
-    ///
-    /// PASSES against stub (stub returns Talking unconditionally).
-    #[test]
-    #[serial]
-    fn test_do_comm_talking_phase_p10() {
-        let input = InputSession::default();
-        let world = crate::engine::World::new();
-        let mut s = Comm::new();
-        s.init().unwrap();
-        // talking_finished starts false
-        assert!(!s.is_talking_finished());
-
-        let result = with_world(world, |cx, io| do_communication(&input, cx, io, &mut s));
-        assert_eq!(
-            result,
-            CommunicationResult::Talking,
-            "while talking_finished=false, must return Talking"
-        );
-        // top_response must NOT have been initialised (player_response_input
-        // initialises it on first call; it must not have been called).
-        assert!(
-            s.top_response.is_none(),
-            "player_response_input must not be called during talking phase"
-        );
-    }
 
     // ---- Test 2 ------------------------------------------------------------
 
@@ -2695,30 +2558,5 @@ mod tests {
     #[should_panic(expected = "Unknown comm intro transition")]
     fn an_unknown_comm_intro_mode_is_an_invariant_failure() {
         let _ = intro_transition(4, 0);
-    }
-
-    #[test]
-    #[serial_test::serial]
-    fn first_talk_consumes_only_the_supplied_kernel_load_flag() {
-        let input = InputSession::default();
-        let world = World::new();
-        let mut comm = Comm::new();
-        with_world(world, |cx, _| {
-            cx.kernel.last_activity = 0x5003;
-            cx.world.set_activity(0x4003);
-            alien_talk_segue(&input, cx, &mut comm, WAIT_TRACK_ALL);
-            assert_eq!(cx.kernel.last_activity, 0x5003);
-            assert!(!comm.first_talk_call);
-
-            cx.world.set_activity(3);
-            alien_talk_segue(&input, cx, &mut comm, WAIT_TRACK_ALL);
-            assert_eq!(cx.kernel.last_activity, 0x4003);
-            assert!(comm.first_talk_call);
-
-            comm.set_talking_finished(false);
-            cx.kernel.last_activity |= 0x1000;
-            alien_talk_segue(&input, cx, &mut comm, WAIT_TRACK_ALL);
-            assert_eq!(cx.kernel.last_activity, 0x5003);
-        });
     }
 }
