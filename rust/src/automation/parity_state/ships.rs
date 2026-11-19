@@ -203,7 +203,7 @@ impl<'a> Race<'a> {
                 fields,
                 prefix,
                 name,
-                crate::ships::hook_registry::name_for_species(hooks, address, self.species),
+                crate::battle::hook_registry::name_for_species(hooks, address, self.species),
             );
         }
         value(fields, prefix, "race.code.loaded", self.code_loaded);

@@ -52,7 +52,7 @@ fn inventory_recognizes_legacy_native_and_race_assignments() -> Result<(), Box<d
 fn every_assigned_native_battle_and_navigation_callback_has_a_stable_registry_name(
 ) -> Result<(), Box<dyn Error>> {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
-    let mut registry = uqm_rust::ships::hook_registry::hooks();
+    let mut registry = uqm_rust::battle::hook_registry::hooks();
     // Mode callbacks are deliberately registered by their owning layer.
     let mode_registry = std::fs::read_to_string(root.join("automation/parity_hooks.rs"))?;
     let quoted = regex::Regex::new(r#""([\w:]+)""#)?;

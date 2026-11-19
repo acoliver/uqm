@@ -5,7 +5,7 @@ pub(super) fn hooks() -> Vec<(usize, &'static str)> {
 fn part0() -> Vec<(usize, &'static str)> {
     vec![
         (
-            crate::battle::ship_native::engine::animation_preprocess as *const () as usize,
+            crate::engine::battle::hooks::animation_preprocess as *const () as usize,
             "battle::ship_native::animation_preprocess",
         ),
         (

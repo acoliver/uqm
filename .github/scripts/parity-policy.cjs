@@ -4,7 +4,7 @@ const prefixes = [
   'rust/scripts/',
   'rust/tests/fixtures/',
   'rust/src/automation/',
-  'rust/src/ships/hook_registry/',
+  'rust/src/battle/hook_registry/',
   '.github/scripts/parity-policy',
 ];
 const files = new Set([
@@ -14,7 +14,7 @@ const files = new Set([
   'rust/src/sound/replay_audio.rs',
   'rust/src/mainloop/input_frame.rs',
   'rust/src/threading/pacing.rs',
-  'rust/src/ships/hook_registry.rs',
+  'rust/src/battle/hook_registry.rs',
   'rust/src/collections/observation.rs',
   '.github/workflows/ci.yaml',
 ]);

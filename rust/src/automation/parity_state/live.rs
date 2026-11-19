@@ -10,7 +10,7 @@ pub fn checkpoint(
     journal: &mut Journal,
     boundary: &str,
 ) -> std::io::Result<()> {
-    let mut hooks = crate::ships::hook_registry::hooks();
+    let mut hooks = crate::battle::hook_registry::hooks();
     hooks.extend(crate::automation::parity_hooks::hooks());
     let mut fields = Fields::new();
     value(&mut fields, "mode", "boundary", boundary);

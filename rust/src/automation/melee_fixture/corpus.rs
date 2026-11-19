@@ -38,7 +38,7 @@ impl Observations {
                         if let Some(side) = self.parents.get(parent) {
                             self.coverage.hook(
                                 *side,
-                                crate::ships::hook_registry::name(&self.registry, *callback),
+                                crate::battle::hook_registry::name(&self.registry, *callback),
                             );
                         }
                     }

@@ -50,7 +50,7 @@ pub(in crate::automation::melee_fixture) fn execute(
     checkpoint: &dyn Fn(&Cx<'_>),
 ) -> Result<Option<FixtureRun>, String> {
     let hooks = hooks();
-    let mut registry = crate::ships::hook_registry::hooks();
+    let mut registry = crate::battle::hook_registry::hooks();
     registry.extend(crate::automation::parity_hooks::hooks());
     let run = |cx: &mut Cx<'_>| {
         // SAFETY: automation admits operations on the game thread after initialization.

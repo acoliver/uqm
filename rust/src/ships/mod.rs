@@ -15,5 +15,3 @@ pub mod races;
 pub mod registry;
 pub mod types;
 pub mod writeback;
-
-pub mod hook_registry;

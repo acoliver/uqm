@@ -6,7 +6,6 @@ pub mod ai;
 pub mod ai_entry;
 pub mod battle_native;
 pub use crate::math::battle_types;
-pub mod c_bridge;
 pub(crate) mod context_access;
 pub use context_access::ai_legacy::AiOps;
 pub use context_access::navigation::NavigationOps;
@@ -18,6 +17,7 @@ pub mod galaxy;
 pub mod gendef;
 #[cfg(test)]
 mod gravity_tests;
+pub mod hook_registry;
 mod integration_tests_p14;
 pub mod lifecycle;
 pub mod netplay;

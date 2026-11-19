@@ -344,7 +344,7 @@ fn race_custom_fields(observer: &AutomationObserver, directory: &Path) {
     // SAFETY: native initializers run on this sole game thread; all test allocations
     // match the races' repr(C) saved-data records and outlive the snapshots.
     unsafe {
-        let human = uqm_rust::ships::hook_registry::hooks()
+        let human = uqm_rust::battle::hook_registry::hooks()
             .into_iter()
             .find_map(|(address, name)| {
                 (name == "ships::races::human_native::nuke_preprocess").then_some(address)
@@ -475,7 +475,7 @@ fn race_custom_fields(observer: &AutomationObserver, directory: &Path) {
 }
 
 fn known_collision() -> uqm_rust::engine::battle::CollisionFn {
-    let registry = uqm_rust::ships::hook_registry::hooks();
+    let registry = uqm_rust::battle::hook_registry::hooks();
     let address = registry
         .iter()
         .find(|(_, name)| *name == "battle::ship_native::collision")

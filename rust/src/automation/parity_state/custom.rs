@@ -83,7 +83,7 @@ fn hook(
         fields,
         prefix,
         name,
-        crate::ships::hook_registry::name_for_species(hooks, address, species),
+        crate::battle::hook_registry::name_for_species(hooks, address, species),
     );
 }
 

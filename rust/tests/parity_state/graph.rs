@@ -418,7 +418,7 @@ pub(super) fn non_ship_parent_fields(observer: &AutomationObserver, directory: &
         element.parent = uqm_rust::engine::battle::Parent::IpGroup(group_id);
         attach_elements(std::slice::from_mut(&mut element));
         observation::record(Event::Allocate(element.pointer() as usize));
-        let callback = uqm_rust::ships::hook_registry::hooks()
+        let callback = uqm_rust::battle::hook_registry::hooks()
             .into_iter()
             .find(|(_, name)| *name == "battle::ship_native::collision")
             .unwrap_or_else(|| panic!("collision callback is absent from the registry"))

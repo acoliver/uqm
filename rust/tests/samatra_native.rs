@@ -125,8 +125,8 @@ fn live_observation_projects_owned_events_generators_hazards_and_player() {
                 .into_iter()
                 .find(|h| {
                     (*battle::element(*h)).collision_func.is_some_and(|hook| {
-                        uqm_rust::ships::hook_registry::name(
-                            &uqm_rust::ships::hook_registry::hooks(),
+                        uqm_rust::battle::hook_registry::name(
+                            &uqm_rust::battle::hook_registry::hooks(),
                             hook.address(),
                         ) == "ships::races::samatra::gate_collision"
                     })
@@ -197,8 +197,8 @@ fn lifecycle_counts_each_identity_once_and_retains_gate_entry() {
                 .into_iter()
                 .find(|h| {
                     (*battle::element(*h)).collision_func.is_some_and(|hook| {
-                        uqm_rust::ships::hook_registry::name(
-                            &uqm_rust::ships::hook_registry::hooks(),
+                        uqm_rust::battle::hook_registry::name(
+                            &uqm_rust::battle::hook_registry::hooks(),
                             hook.address(),
                         ) == "ships::races::samatra::gate_collision"
                     })

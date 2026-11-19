@@ -626,7 +626,7 @@ pub fn descriptor(species: u32) -> RaceDescriptor {
 pub unsafe fn call_element(name: &str, id: ElementId) {
     // SAFETY: The caller retains the serialized battle and all operand records through this synchronous operation.
 
-    let address = uqm_rust::ships::hook_registry::hooks()
+    let address = uqm_rust::battle::hook_registry::hooks()
         .into_iter()
         .find_map(|(address, n)| (n == name).then_some(address))
         .unwrap_or_else(|| panic!("{}", "registered element hook"));
@@ -644,7 +644,7 @@ pub unsafe fn call_element(name: &str, id: ElementId) {
 }
 
 pub fn call_collision(name: &str, a: ElementId, pa: &mut POINT, b: ElementId, pb: &mut POINT) {
-    let address = uqm_rust::ships::hook_registry::hooks()
+    let address = uqm_rust::battle::hook_registry::hooks()
         .into_iter()
         .find_map(|(address, n)| (n == name).then_some(address))
         .unwrap_or_else(|| panic!("{}", "registered collision hook"));

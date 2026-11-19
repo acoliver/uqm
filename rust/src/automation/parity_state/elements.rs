@@ -40,7 +40,7 @@ pub(super) fn element(
             fields,
             prefix,
             name,
-            crate::ships::hook_registry::name_for_species(
+            crate::battle::hook_registry::name_for_species(
                 hooks,
                 address,
                 journal.species(e.parent),
