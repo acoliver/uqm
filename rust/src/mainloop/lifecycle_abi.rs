@@ -84,4 +84,3 @@ pub unsafe fn battle_with_frame_callback(
 ) {
     crate::battle::battle_native::battle(cx, io, Some(on_battle_frame));
 }
-

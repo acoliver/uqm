@@ -98,4 +98,3 @@ fn talking_strobe_and_probe_choices_do_not_borrow_a_campaign() {
     assert_eq!(second.data.definition.alien_ambient_array[16].anim_flags, 0);
     assert_eq!(second.race_scratch.slyland_choices, [0; 5]);
 }
-

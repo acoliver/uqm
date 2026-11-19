@@ -361,7 +361,9 @@ mod tests {
             Default::default(),
         );
         let mut capture = || panic!("admission must not acquire a campaign owner");
-        assert!(!crate::automation::input_admission::with_supplied(|setup| observer.process_input_at_boundary(&mut capture, true, setup)));
+        assert!(!crate::automation::input_admission::with_supplied(
+            |setup| observer.process_input_at_boundary(&mut capture, true, setup)
+        ));
         assert_eq!(observer.inner.lock().input_seen, 1);
         assert_eq!(observer.inner.lock().sched_state, SchedulerState::initial());
         observer
@@ -380,7 +382,9 @@ mod tests {
             1
         );
         assert_eq!(input_ffi::after_input_update(&observer, 0), 1);
-        assert!(crate::automation::input_admission::with_supplied(|setup| observer.process_input_at_boundary(&mut capture, false, setup)));
+        assert!(crate::automation::input_admission::with_supplied(|setup| {
+            observer.process_input_at_boundary(&mut capture, false, setup)
+        }));
         assert_eq!(observer.inner.lock().input_seen, 1);
     }
 
@@ -409,7 +413,11 @@ mod tests {
             ) -> Result<Option<u16>, String> {
                 assert_eq!((player, server, port), (1, true, 0));
                 assert!(self.coordinator.inner.try_lock().is_none());
-                assert!(crate::engine::Game::new().with_context(|cx| observer.input_admitted(&InputView::Active, cx)).stop);
+                assert!(
+                    crate::engine::Game::new()
+                        .with_context(|cx| observer.input_admitted(&InputView::Active, cx))
+                        .stop
+                );
                 self.effects.push("connect");
                 Ok(Some(2020))
             }
@@ -421,11 +429,18 @@ mod tests {
             }
             fn poll_peer(&mut self, observer: &mut dyn Observer) {
                 assert!(self.coordinator.inner.try_lock().is_none());
-                assert!(crate::engine::Game::new().with_context(|cx| observer.input_admitted(&InputView::Active, cx)).stop);
+                assert!(
+                    crate::engine::Game::new()
+                        .with_context(|cx| observer.input_admitted(&InputView::Active, cx))
+                        .stop
+                );
                 self.effects.push("poll");
                 self.ready = true;
             }
-            fn with_context(&mut self, operation: &mut dyn FnMut(&mut crate::engine::battle::Cx<'_>)) {
+            fn with_context(
+                &mut self,
+                operation: &mut dyn FnMut(&mut crate::engine::battle::Cx<'_>),
+            ) {
                 crate::engine::Game::new().with_context(|cx| operation(cx));
             }
         }
@@ -532,7 +547,9 @@ mod tests {
         if case == "watchdog" {
             let mut stopped = false;
             for _ in 0..11 {
-                if crate::automation::input_admission::with_supplied(|setup| coord.process_input_at_boundary(&mut campaign_state::empty_view, true, setup)) {
+                if crate::automation::input_admission::with_supplied(|setup| {
+                    coord.process_input_at_boundary(&mut campaign_state::empty_view, true, setup)
+                }) {
                     stopped = true;
                     break;
                 }
@@ -544,10 +561,14 @@ mod tests {
             assert_eq!(coord.inner.lock().sched_state, SchedulerState::initial());
         } else {
             if case != "melee" {
-                assert!(!crate::automation::input_admission::with_supplied(|setup| coord.process_input_inner(&mut campaign_state::empty_view, setup)));
+                assert!(!crate::automation::input_admission::with_supplied(
+                    |setup| coord.process_input_inner(&mut campaign_state::empty_view, setup)
+                ));
                 assert_eq!(coord.inner.lock().sched_state.step_index, 1);
             }
-            assert!(crate::automation::input_admission::with_supplied(|setup| coord.process_input_inner(&mut campaign_state::empty_view, setup)));
+            assert!(crate::automation::input_admission::with_supplied(|setup| {
+                coord.process_input_inner(&mut campaign_state::empty_view, setup)
+            }));
             assert_eq!(
                 coord.inner.lock().terminal_class,
                 Some(TerminalClass::SemanticMismatch)

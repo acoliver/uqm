@@ -356,7 +356,11 @@ mod tests {
         #[derive(Default)]
         struct Recording(Vec<PlanetSideSnapshot>);
         impl Observer for Recording {
-            fn input_admitted(&mut self, _: &InputView, _: &mut crate::engine::battle::Cx<'_>) -> Injected {
+            fn input_admitted(
+                &mut self,
+                _: &InputView,
+                _: &mut crate::engine::battle::Cx<'_>,
+            ) -> Injected {
                 Default::default()
             }
             fn checkpoint(&mut self, view: &CheckpointView<'_>) {

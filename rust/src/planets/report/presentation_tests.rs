@@ -2,9 +2,7 @@ use super::live::discovery_report;
 use crate::engine::{
     battle::{input::InputContext, Battle, Cx},
     input::{frames::InputState, Frame, InputControls, InputRuntime, InputSession},
-    observe::{
-        CheckpointView, Injected, InputView, Io, Observer, Presented, Unobserved,
-    },
+    observe::{CheckpointView, Injected, InputView, Io, Observer, Presented, Unobserved},
     strings::owned_table::LoadedTextTable,
     world::generation::ReportSlot,
     Game,
@@ -81,7 +79,11 @@ struct Recording {
     nested: usize,
 }
 impl Observer for Recording {
-    fn input_admitted(&mut self, view: &InputView, _: &mut crate::engine::battle::Cx<'_>) -> Injected {
+    fn input_admitted(
+        &mut self,
+        view: &InputView,
+        _: &mut crate::engine::battle::Cx<'_>,
+    ) -> Injected {
         assert!(self.active, "report input escaped its visibility scope");
         assert!(matches!(view, InputView::Nested));
         self.nested += 1;

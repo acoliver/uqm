@@ -39,7 +39,8 @@ pub enum LoadTier {
 /// Returns `ShipsError::LoadFailed` if loading fails.
 fn load_animation(
     res: &mut impl ResourceBridge,
-    res_ids: &[u32; NUM_VIEWS]) -> Result<[DrawableHandle; NUM_VIEWS], ShipsError> {
+    res_ids: &[u32; NUM_VIEWS],
+) -> Result<[DrawableHandle; NUM_VIEWS], ShipsError> {
     if res_ids[0] == NULL_RESOURCE {
         return Err(ShipsError::LoadFailed(
             "load_animation: big_res (index 0) is NULL_RESOURCE".to_string(),
@@ -121,7 +122,9 @@ fn free_image(res: &mut impl ResourceBridge, pixarray: &mut [DrawableHandle; NUM
 /// - `ShipsError::LoadFailed` if any resource load fails.
 pub fn load_ship(
     res: &mut impl ResourceBridge,
-    species: SpeciesId, tier: LoadTier) -> Result<RaceDesc, ShipsError> {
+    species: SpeciesId,
+    tier: LoadTier,
+) -> Result<RaceDesc, ShipsError> {
     let mut desc = create_metadata_only_desc(species)?;
 
     // Track what we've loaded for cleanup on failure
@@ -386,7 +389,10 @@ pub fn load_ship(
 /// - Safe to call multiple times (handles already zero are skipped).
 pub fn free_ship(
     res: &mut impl ResourceBridge,
-    desc: &mut RaceDesc, free_icon_data: bool, free_battle_data: bool) {
+    desc: &mut RaceDesc,
+    free_icon_data: bool,
+    free_battle_data: bool,
+) {
     // Call teardown hook first
 
     if free_battle_data {
@@ -774,8 +780,7 @@ mod tests {
         // Set it on the desc and simulate cleanup
         desc.ship_info.icons = icon_handle;
         cleanup_partial_load(
-            &mut res,
-            &mut desc, true, false, false, false, false, false, false, false, false,
+            &mut res, &mut desc, true, false, false, false, false, false, false, false, false,
         );
         // Icons should be freed
         assert!(!res.is_allocated(icon_handle));
@@ -797,8 +802,7 @@ mod tests {
         desc.ship_info.race_strings = h_strings;
         // Simulate battle failure: cleanup should free all metadata
         cleanup_partial_load(
-            &mut res,
-            &mut desc, true, true, true, false, false, false, false, false, false,
+            &mut res, &mut desc, true, true, true, false, false, false, false, false, false,
         );
         assert_eq!(res.allocated_count(), 0);
         assert_eq!(desc.ship_info.icons, 0);
@@ -819,8 +823,7 @@ mod tests {
         desc.ship_data.ship = [h_ship_big, h_ship_med, h_ship_med]; // med shared with sml
         desc.ship_data.captain.background = h_captain;
         cleanup_partial_load(
-            &mut res,
-            &mut desc, true, false, false, true, false, false, true, false, false,
+            &mut res, &mut desc, true, false, false, true, false, false, true, false, false,
         );
         // All should be freed (ship handles with double-free avoidance)
         assert_eq!(res.allocated_count(), 0);

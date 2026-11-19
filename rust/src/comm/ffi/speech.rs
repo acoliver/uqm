@@ -38,9 +38,7 @@ pub(super) fn run_pending(
             .checkpoint(&CheckpointView::ResponsesReady(false));
 
         let response_count = comm.responses().count();
-        let semantic_skip = comm
-            .admit_observer(io, &InputView::PendingSpeech, cx)
-            .stop
+        let semantic_skip = comm.admit_observer(io, &InputView::PendingSpeech, cx).stop
             || comm
                 .admit_observer(
                     io,
@@ -50,9 +48,7 @@ pub(super) fn run_pending(
                     cx,
                 )
                 .stop
-            || comm
-                .admit_observer(io, &InputView::ClosingSpeech, cx)
-                .stop;
+            || comm.admit_observer(io, &InputView::ClosingSpeech, cx).stop;
         if semantic_skip {
             let _ = crate::sound::trackplayer::jump_track(0);
         }

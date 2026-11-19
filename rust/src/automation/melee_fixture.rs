@@ -1,7 +1,7 @@
 //! Bounded parity setups on the loaded game world. No fixture owns a global.
 
-use serde::{Deserialize, Serialize};
 use crate::engine::battle::Cx;
+use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
 mod live;
@@ -156,11 +156,7 @@ impl FixtureRun {
         }
     }
 
-    pub fn advance(
-        &mut self,
-        cx: &mut Cx<'_>,
-        checkpoint: &dyn Fn(&Cx<'_>),
-    ) -> Result<(), String> {
+    pub fn advance(&mut self, cx: &mut Cx<'_>, checkpoint: &dyn Fn(&Cx<'_>)) -> Result<(), String> {
         if self.fixture == FixtureName::StarContact {
             execute(cx, Operation::Advance(self), checkpoint)?;
         }

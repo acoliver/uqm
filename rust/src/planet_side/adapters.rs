@@ -25,7 +25,11 @@ impl CffiPlanetSideInput {
         io: &mut crate::engine::observe::Io<'_>,
     ) -> Result<FrameInput, AdapterError> {
         use crate::engine::observe::InputView;
-        if io.observer.input_admitted(&InputView::BeforeUpdate, cx).stop {
+        if io
+            .observer
+            .input_admitted(&InputView::BeforeUpdate, cx)
+            .stop
+        {
             return Ok(FrameInput {
                 abort: true,
                 ..FrameInput::default()
@@ -270,7 +274,11 @@ mod tests {
 
         struct Recording(Rc<RefCell<Vec<PlanetSideSnapshot>>>);
         impl Observer for Recording {
-            fn input_admitted(&mut self, _: &InputView, _: &mut crate::engine::battle::Cx<'_>) -> Injected {
+            fn input_admitted(
+                &mut self,
+                _: &InputView,
+                _: &mut crate::engine::battle::Cx<'_>,
+            ) -> Injected {
                 Default::default()
             }
             fn checkpoint(&mut self, view: &CheckpointView<'_>) {
@@ -401,11 +409,7 @@ mod tests {
             inputs: Vec<(InputView, Option<u16>)>,
         }
         impl Observer for Recording {
-            fn input_admitted(
-                &mut self,
-                view: &InputView,
-                cx: &mut Cx<'_>,
-            ) -> Injected {
+            fn input_admitted(&mut self, view: &InputView, cx: &mut Cx<'_>) -> Injected {
                 let world = CampaignView::for_input(*view, || CampaignView::capture(cx));
                 self.inputs
                     .push((*view, world.as_ref().map(|world| world.activity)));

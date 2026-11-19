@@ -119,7 +119,11 @@ pub fn spawn_ship(starship: &mut Starship, activity: u8) -> Result<SpawnResult, 
     }
 
     // Load descriptor
-    let mut desc = load_ship(&mut RegistryResources, starship.species_id, LoadTier::BattleReady)?;
+    let mut desc = load_ship(
+        &mut RegistryResources,
+        starship.species_id,
+        LoadTier::BattleReady,
+    )?;
 
     // Clear input/status
     starship.ship_input_state = 0;

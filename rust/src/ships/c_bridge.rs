@@ -59,7 +59,10 @@ pub trait ResourceBridge {
     }
 }
 
-fn load(res_id: u32, load: impl FnOnce(u32) -> Result<usize, ShipsError>) -> Result<usize, ShipsError> {
+fn load(
+    res_id: u32,
+    load: impl FnOnce(u32) -> Result<usize, ShipsError>,
+) -> Result<usize, ShipsError> {
     if res_id == NULL_RESOURCE {
         Ok(0)
     } else {

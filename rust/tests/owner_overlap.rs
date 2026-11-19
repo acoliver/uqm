@@ -233,7 +233,11 @@ fn starbase_releases_world_before_communication_and_cleanup() {
     };
     struct Recording(Vec<String>);
     impl Observer for Recording {
-        fn input_admitted(&mut self, _: &InputView, _: &mut crate::engine::battle::Cx<'_>) -> Injected {
+        fn input_admitted(
+            &mut self,
+            _: &InputView,
+            _: &mut crate::engine::battle::Cx<'_>,
+        ) -> Injected {
             Injected::default()
         }
         fn checkpoint(&mut self, view: &CheckpointView<'_>) {

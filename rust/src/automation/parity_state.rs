@@ -37,7 +37,13 @@ mod tests {
             .unwrap();
         journal.flush().unwrap();
         let trace = std::fs::read_to_string(directory.path().join("parity.trace")).unwrap();
-        assert_eq!(trace.lines().filter(|line| line.starts_with("S 1 515 ")).count(), 1);
+        assert_eq!(
+            trace
+                .lines()
+                .filter(|line| line.starts_with("S 1 515 "))
+                .count(),
+            1
+        );
         let fields = std::fs::read_to_string(directory.path().join("parity.fields")).unwrap();
         assert!(fields.contains(r#""mode.boundary":"supplied""#));
     }

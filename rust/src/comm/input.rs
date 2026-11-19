@@ -65,7 +65,11 @@ mod tests {
     }
 
     impl Observer for Select {
-        fn input_admitted(&mut self, _: &InputView, _: &mut crate::engine::battle::Cx<'_>) -> Injected {
+        fn input_admitted(
+            &mut self,
+            _: &InputView,
+            _: &mut crate::engine::battle::Cx<'_>,
+        ) -> Injected {
             self.calls += 1;
             Injected {
                 comm_response: Some(1),

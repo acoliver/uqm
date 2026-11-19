@@ -206,7 +206,11 @@ fn frame_admission_publishes_before_input_and_nested_input_uses_the_copy() {
         admissions: Vec<(i16, bool)>,
     }
     impl Observer for Recording {
-        fn input_admitted(&mut self, _: &InputView, _: &mut crate::engine::battle::Cx<'_>) -> Injected {
+        fn input_admitted(
+            &mut self,
+            _: &InputView,
+            _: &mut crate::engine::battle::Cx<'_>,
+        ) -> Injected {
             let snapshot = self
                 .ui
                 .solar_snapshot()

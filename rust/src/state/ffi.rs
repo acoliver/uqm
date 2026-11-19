@@ -1,6 +1,5 @@
 #[cfg(test)]
 // FFI bindings for state management.
-
 use std::ffi::CStr;
 use std::os::raw::{c_char, c_int, c_uchar};
 
@@ -621,10 +620,7 @@ mod tests {
                     rust_init_game_state(&mut game.world);
                     game.world.set_story_state(StoryKey::MOONBASE_DESTROYED, 1);
                     game.world.set_story_state(StoryKey::MOONBASE_ON_SHIP, 1);
-                    assert_eq!(
-                        game.world.story_state(StoryKey::MOONBASE_DESTROYED),
-                        1
-                    );
+                    assert_eq!(game.world.story_state(StoryKey::MOONBASE_DESTROYED), 1);
 
                     rust_init_game_state(&mut game.world);
 
@@ -633,10 +629,7 @@ mod tests {
                         0,
                         "a new game must start with the moon base intact"
                     );
-                    assert_eq!(
-                        game.world.story_state(StoryKey::MOONBASE_ON_SHIP),
-                        0
-                    );
+                    assert_eq!(game.world.story_state(StoryKey::MOONBASE_ON_SHIP), 0);
                 }
             }
         }
@@ -713,18 +706,9 @@ mod tests {
                     game.world.set_story_state(StoryKey::SHOFIXTI_RECRUITED, 1);
                     game.world.set_story_state(StoryKey::SPATHI_VISITS, 3);
 
-                    assert_eq!(
-                        game.world.story_state(StoryKey::SHOFIXTI_VISITS),
-                        5
-                    );
-                    assert_eq!(
-                        game.world.story_state(StoryKey::SHOFIXTI_RECRUITED),
-                        1
-                    );
-                    assert_eq!(
-                        game.world.story_state(StoryKey::SPATHI_VISITS),
-                        3
-                    );
+                    assert_eq!(game.world.story_state(StoryKey::SHOFIXTI_VISITS), 5);
+                    assert_eq!(game.world.story_state(StoryKey::SHOFIXTI_RECRUITED), 1);
+                    assert_eq!(game.world.story_state(StoryKey::SPATHI_VISITS), 3);
                     assert!(StoryKey::from_name("NOT_A_REAL_STATE").is_none());
                 }
             }
@@ -870,10 +854,7 @@ mod tests {
                 let mut output_mask = [0u32; NUM_SCAN_TYPES];
 
                 {
-                    assert_eq!(
-                        rust_init_planet_info(&mut game.world, 8),
-                        1
-                    );
+                    assert_eq!(rust_init_planet_info(&mut game.world, 8), 1);
                     assert_eq!(
                         rust_put_planet_info(
                             &mut game.world,
@@ -940,7 +921,13 @@ mod tests {
                         rust_open_state_file(&mut game.world, 0, c"wb".as_ptr() as *const c_char)
                     };
                     let written = {
-                        rust_write_state_file(&mut game.world, 0, test_data.as_ptr(), 1, test_data.len())
+                        rust_write_state_file(
+                            &mut game.world,
+                            0,
+                            test_data.as_ptr(),
+                            1,
+                            test_data.len(),
+                        )
                     };
                     assert_eq!(written, test_data.len());
 
@@ -948,7 +935,13 @@ mod tests {
 
                     let mut buf = vec![0u8; test_data.len()];
                     let read = {
-                        rust_read_state_file(&mut game.world, 0, buf.as_mut_ptr(), 1, test_data.len())
+                        rust_read_state_file(
+                            &mut game.world,
+                            0,
+                            buf.as_mut_ptr(),
+                            1,
+                            test_data.len(),
+                        )
                     };
                     assert_eq!(read, test_data.len());
                     assert_eq!(&buf, test_data);
@@ -973,7 +966,13 @@ mod tests {
                         rust_open_state_file(&mut game.world, 1, c"wb".as_ptr() as *const c_char)
                     };
                     {
-                        rust_write_state_file(&mut game.world, 1, test_data.as_ptr(), 1, test_data.len())
+                        rust_write_state_file(
+                            &mut game.world,
+                            1,
+                            test_data.as_ptr(),
+                            1,
+                            test_data.len(),
+                        )
                     };
                 }
 
@@ -999,7 +998,13 @@ mod tests {
                         rust_open_state_file(&mut game.world, 2, c"wb".as_ptr() as *const c_char)
                     };
                     {
-                        rust_write_state_file(&mut game.world, 2, test_data.as_ptr(), 1, test_data.len())
+                        rust_write_state_file(
+                            &mut game.world,
+                            2,
+                            test_data.as_ptr(),
+                            1,
+                            test_data.len(),
+                        )
                     };
                 }
 
@@ -1026,7 +1031,13 @@ mod tests {
                         rust_open_state_file(&mut game.world, 0, c"wb".as_ptr() as *const c_char)
                     };
                     {
-                        rust_write_state_file(&mut game.world, 0, test_data.as_ptr(), 1, test_data.len())
+                        rust_write_state_file(
+                            &mut game.world,
+                            0,
+                            test_data.as_ptr(),
+                            1,
+                            test_data.len(),
+                        )
                     };
                 }
 
@@ -1099,10 +1110,7 @@ mod tests {
                 rust_reset_game_state(&mut game.world);
                 rust_init_game_state(&mut game.world);
 
-                assert_eq!(
-                    rust_get_game_state_bits(&game.world, 0, 7),
-                    0
-                );
+                assert_eq!(rust_get_game_state_bits(&game.world, 0, 7), 0);
 
                 {
                     {
@@ -1110,10 +1118,7 @@ mod tests {
                     };
                 }
 
-                assert_eq!(
-                    rust_get_game_state_bits(&game.world, 0, 7),
-                    0xAB
-                );
+                assert_eq!(rust_get_game_state_bits(&game.world, 0, 7), 0xAB);
             }
         }
     }

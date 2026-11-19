@@ -281,6 +281,9 @@ mod tests {
         assert_eq!(captured.contact_race, Some(5));
         assert_eq!(captured.escorts, vec![(3, 12), (7, 19)]);
         assert_eq!(captured.groups, vec![(2, 8, (2, -2)), (6, 10, (6, -6))]);
-        assert_eq!(CampaignView::capture_owners(&world, &kernel, [0; 2]).escorts[0], (3, 99));
+        assert_eq!(
+            CampaignView::capture_owners(&world, &kernel, [0; 2]).escorts[0],
+            (3, 99)
+        );
     }
 }

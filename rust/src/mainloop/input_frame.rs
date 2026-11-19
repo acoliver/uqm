@@ -45,9 +45,7 @@ unsafe fn present_complete_transaction() {
 pub fn drain_committed_draws() {
     // SAFETY: Called on the game/main thread, where the legacy renderer
     // consumes the draw queue.
-    unsafe {
-        TFB_FlushGraphicsEx(1)
-    };
+    unsafe { TFB_FlushGraphicsEx(1) };
 }
 
 /// Present drawing committed before a synchronous `DoInput` loop begins.
@@ -57,9 +55,7 @@ pub fn drain_committed_draws() {
 pub fn rust_begin_input_loop() {
     // SAFETY: Called on the game/main thread after the owner has completed the
     // draw transaction that establishes this input loop's initial state.
-    unsafe {
-        present_complete_transaction()
-    };
+    unsafe { present_complete_transaction() };
 }
 
 /// Complete the typed input callback and notify its supplied observer.

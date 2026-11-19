@@ -87,7 +87,10 @@ fn reset_observation(io: &mut crate::engine::observe::Io<'_>) {
         .checkpoint(&crate::engine::observe::CheckpointView::BattleReset);
 }
 
-fn advance_observation(cx: &crate::engine::battle::Cx<'_>, io: &mut crate::engine::observe::Io<'_>) {
+fn advance_observation(
+    cx: &crate::engine::battle::Cx<'_>,
+    io: &mut crate::engine::observe::Io<'_>,
+) {
     crate::collections::observation::advance();
     io.observer
         .checkpoint(&crate::engine::observe::CheckpointView::BattleAdvanced);
@@ -402,7 +405,9 @@ pub(crate) mod engine {
         let (net, had_net) = initialize_battle(cx);
         let activity = cx.world.activity() as u8;
         {
-            seed_battle_rng(activity, 4, |domain, fallback| seed(cx, io, domain, fallback))
+            seed_battle_rng(activity, 4, |domain, fallback| {
+                seed(cx, io, domain, fallback)
+            })
         };
         battle_song(cx.kernel, cx.world, false);
         let ships = cx.kernel.ship_lifecycle();

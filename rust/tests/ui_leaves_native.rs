@@ -167,7 +167,11 @@ fn cancellation_restores_confirmation_popup_pixels_and_input_policy() {
 #[derive(Default)]
 struct WaitObserver(usize);
 impl Observer for WaitObserver {
-    fn input_admitted(&mut self, view: &InputView, _: &mut crate::engine::battle::Cx<'_>) -> Injected {
+    fn input_admitted(
+        &mut self,
+        view: &InputView,
+        _: &mut crate::engine::battle::Cx<'_>,
+    ) -> Injected {
         assert_eq!(*view, InputView::Nested);
         self.0 += 1;
         Injected {

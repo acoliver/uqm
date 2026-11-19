@@ -163,9 +163,7 @@ impl crate::engine::input::InputRuntime for NativeInputRuntime {
 
     fn sleep_until(&self, _cx: &mut crate::engine::battle::Cx<'_>, deadline: u32) {
         // SAFETY: pacing runs callbacks and presentation inside the caller's bounded handoff.
-        unsafe {
-            crate::threading::pacing::linked::sleep_thread_until(deadline)
-        };
+        unsafe { crate::threading::pacing::linked::sleep_thread_until(deadline) };
     }
 
     fn flush(&self) {

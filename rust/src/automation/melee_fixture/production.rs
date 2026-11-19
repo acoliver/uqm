@@ -193,11 +193,7 @@ pub(super) enum Reply {
 
 /// Apply one committed plan effect. Handles and callback addresses come from
 /// the just-dropped live graph; no borrowed record crosses this call.
-fn apply(
-    cx: &mut Cx<'_>,
-    effect: Effect,
-    checkpoint: &dyn Fn(&Cx<'_>),
-) -> Result<Reply, String> {
+fn apply(cx: &mut Cx<'_>, effect: Effect, checkpoint: &dyn Fn(&Cx<'_>)) -> Result<Reply, String> {
     {
         match effect {
             Effect::Redraw(check) => {

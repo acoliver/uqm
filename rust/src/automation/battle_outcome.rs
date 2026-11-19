@@ -133,9 +133,11 @@ impl BattleLossTracker {
 /// The live fleet sizes, when this build links the game.
 #[must_use]
 pub fn live_fleets(world: &crate::engine::observe::CampaignView) -> Option<BattleFleets> {
-    crate::automation::input_ffi::battle_fleets(world).map(|(player_one, player_two)| BattleFleets {
-        player_one,
-        player_two,
+    crate::automation::input_ffi::battle_fleets(world).map(|(player_one, player_two)| {
+        BattleFleets {
+            player_one,
+            player_two,
+        }
     })
 }
 
