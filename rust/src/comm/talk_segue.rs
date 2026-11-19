@@ -113,9 +113,9 @@ pub(super) mod c_bridge {
         cur: u8,
     ) {
         let activity = cx.world.activity();
-        cx.with_legacy(|| {
+        {
             super::super::sis_graphics::refresh_responses(comm, activity, top, count, cur)
-        });
+        };
     }
     pub fn call_select_conversation_summary(
         comm: &mut Comm,
@@ -258,7 +258,7 @@ pub mod dinput {
         io: &mut Io<'_>,
         wait_track: u32,
     ) -> bool {
-        cx.with_legacy(|| {
+        {
             // Transition animation to talking comm
             if super::want_talking_anim(comm) && super::have_talking_anim(comm) {
                 if super::has_transition_anim(comm) {
@@ -269,7 +269,7 @@ pub mod dinput {
                     super::do_run_comm_anim_frame(comm, input);
                 }
             }
-        });
+        };
         let mut ts = TalkingStateDInput {
             next_time: 0,
             wait_track: if wait_track == 0 {
@@ -282,21 +282,21 @@ pub mod dinput {
             ended: 0,
         };
 
-        cx.with_legacy(|| {
+        {
             if wait_track == 0 {
                 io.observer
                     .checkpoint(&CheckpointView::CommunicationReplay(true));
             } else if c_bridge::PlayingTrack() == 0 {
                 c_bridge::PlayTrack();
             }
-        });
+        };
         cx.kernel
             .input_controls()
             .set_menu_sounds(MENU_SOUND_NONE, MENU_SOUND_NONE);
         let runtime = cx.kernel.input_runtime();
         comm.run_input(cx, io, false, |comm, cx, _| {
             let activity = cx.world.activity();
-            let Some(more) = cx.with_legacy(|| do_talk_segue_frame(comm, input, &mut ts, activity))
+            let Some(more) = do_talk_segue_frame(comm, input, &mut ts, activity)
             else {
                 return false;
             };
@@ -304,7 +304,7 @@ pub mod dinput {
             ts.next_time = c_bridge::clock::now_ticks() + (c_bridge::ONE_SECOND_TICKS as u32) / 60;
             more != 0
         });
-        cx.with_legacy(|| {
+        {
             if wait_track == 0 {
                 io.observer
                     .checkpoint(&CheckpointView::CommunicationReplay(false));
@@ -322,7 +322,7 @@ pub mod dinput {
             while super::running_talking_anim(comm) {
                 super::do_run_comm_anim_frame(comm, input);
             }
-        });
+        };
         ts.ended != 0
     }
 
@@ -352,7 +352,7 @@ pub mod dinput {
 
         if cancel_pressed && !won_last_battle {
             let speech = cx.kernel.using_speech;
-            cx.with_legacy(|| {
+            {
                 c_bridge::FadeMusic(
                     super::communication_background_volume(
                         crate::sound::types::NORMAL_VOLUME as u8,
@@ -360,14 +360,13 @@ pub mod dinput {
                     ),
                     c_bridge::ONE_SECOND_TICKS as i16,
                 )
-            });
+            };
             super::super::sis_graphics::select_conversation_summary(comm, cx, io);
-            lrs.time_out = cx
-                .with_legacy(|| c_bridge::FadeMusic(0, (c_bridge::ONE_SECOND_TICKS * 2) as i16))
+            lrs.time_out = c_bridge::FadeMusic(0, (c_bridge::ONE_SECOND_TICKS * 2) as i16)
                 + (c_bridge::ONE_SECOND_TICKS as u32) / 60;
         } else if left_pressed {
             let speech = cx.kernel.using_speech;
-            cx.with_legacy(|| {
+            {
                 c_bridge::FadeMusic(
                     super::communication_background_volume(
                         crate::sound::types::NORMAL_VOLUME as u8,
@@ -375,14 +374,13 @@ pub mod dinput {
                     ),
                     c_bridge::ONE_SECOND_TICKS as i16,
                 )
-            });
+            };
             run_talk_segue_dinput(comm, input, cx, io, 0);
-            lrs.time_out = cx
-                .with_legacy(|| c_bridge::FadeMusic(0, (c_bridge::ONE_SECOND_TICKS * 2) as i16))
+            lrs.time_out = c_bridge::FadeMusic(0, (c_bridge::ONE_SECOND_TICKS * 2) as i16)
                 + (c_bridge::ONE_SECOND_TICKS as u32) / 60;
         }
 
-        cx.with_legacy(|| super::do_update_animations(comm, input, false));
+        super::do_update_animations(comm, input, false);
 
         cx.kernel.input_runtime().sleep_until(cx, lrs.next_time);
         lrs.next_time = c_bridge::clock::now_ticks() + (c_bridge::ONE_SECOND_TICKS as u32) / 40;
@@ -642,7 +640,7 @@ pub fn alien_talk_segue(input: &InputSession, cx: &mut Cx<'_>, comm: &mut Comm, 
         comm.first_talk_call = true;
         // First call this encounter — initialize speech subsystem
         let music_enabled = cx.world.data.game.glob_flags & 8 == 0;
-        cx.with_legacy(|| {
+        {
             init_speech_graphics(comm);
             set_colormap(comm);
             draw_alien_frame(comm);
@@ -653,7 +651,7 @@ pub fn alien_talk_segue(input: &InputSession, cx: &mut Cx<'_>, comm: &mut Comm, 
             set_music_background_vol(comm);
 
             super::commanim_abi::runtime::init_comm_animations(comm);
-        });
+        };
         cx.kernel.last_activity &= !0x1000;
     }
 
@@ -783,7 +781,7 @@ pub fn player_response_input(
 ///
 pub fn alien_talk_first_call_init(comm: &mut Comm, cx: &mut Cx<'_>) {
     let enabled = cx.world.data.game.glob_flags & 8 == 0;
-    cx.with_legacy(|| {
+    {
         rust_init_speech_graphics(comm);
         c_bridge::set_color_map_from_comm_data(comm);
         c_bridge::draw_alien_frame(comm, 0, 1);
@@ -792,7 +790,7 @@ pub fn alien_talk_first_call_init(comm: &mut Comm, cx: &mut Cx<'_>) {
         c_bridge::play_alien_music(comm, enabled);
         c_bridge::FadeMusic((c_bridge::music_volume::BACKGROUND) as u8, 0i16);
         c_bridge::init_comm_animations(comm);
-    });
+    };
     cx.kernel.last_activity &= !0x1000;
 }
 

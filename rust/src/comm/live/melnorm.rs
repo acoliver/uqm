@@ -173,9 +173,7 @@ mod api {
                 runtime.sleep(&mut self.cx.borrow_mut(), ticks);
             }
             fn now(&mut self) -> u32 {
-                self.cx
-                    .borrow_mut()
-                    .with_legacy(|| crate::engine::time::counter_abi::GetTimeCounter())
+                crate::engine::time::counter_abi::GetTimeCounter()
             }
             fn skip_sale(&mut self) -> bool {
                 let runtime = self.cx.borrow().kernel.input_runtime();

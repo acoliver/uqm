@@ -206,7 +206,7 @@ mod api {
                 self.cx.borrow().kernel.using_speech != 0
             }
             fn random(&mut self) -> u32 {
-                self.cx.borrow_mut().with_legacy(crate::math::random)
+                crate::math::random()
             }
             fn talking_animation(&mut self, enabled: bool) {
                 self.comm.borrow_mut().set_talking_animation(enabled);
@@ -236,9 +236,7 @@ mod api {
                 crate::ui::sis::clear_sis_rect(cx.kernel, cx.world, dimensions, 1 << 3)
             }
             fn now(&mut self) -> u32 {
-                self.cx
-                    .borrow_mut()
-                    .with_legacy(|| crate::engine::time::counter_abi::GetTimeCounter())
+                crate::engine::time::counter_abi::GetTimeCounter()
             }
             fn sleep(&mut self, ticks: u32) {
                 let runtime = self.cx.borrow().kernel.input_runtime();
