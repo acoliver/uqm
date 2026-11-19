@@ -1578,7 +1578,7 @@ pub fn observe_native_window(
         .map_err(|error| NativeWindowObserverError::Os(error.to_string()))?
         .into_iter()
         .map(|window| ObservedNativeWindow {
-            window_id: window.id,
+            window_id: window.id as u64,
             os_bounds: NativeWindowBounds {
                 x: window.x.round() as i32,
                 y: window.y.round() as i32,

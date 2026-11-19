@@ -57,15 +57,29 @@ unsafe extern "C" {
 
 const CF_NUMBER_I64: i32 = 4;
 
-/// One window of a process as the window server reports it.
+/// One window as the window server reports it.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Window {
-    pub id: u64,
+    pub owner_pid: i64,
+    pub layer: i64,
+    pub id: i64,
     pub x: f64,
     pub y: f64,
     pub width: f64,
     pub height: f64,
     pub on_screen: bool,
+}
+
+impl Window {
+    /// A layer-0 window of `pid` with a positive ID and a bounds rectangle of
+    /// at least one point in each direction.
+    fn is_content_window_of(&self, pid: u32) -> bool {
+        self.owner_pid == i64::from(pid)
+            && self.layer == 0
+            && self.id > 0
+            && self.width >= 1.0
+            && self.height >= 1.0
+    }
 }
 
 /// The layer-0 windows owned by `pid` that have a positive ID and a bounds
@@ -75,40 +89,46 @@ pub struct Window {
 ///
 /// Returns an error when the window server returns no list.
 pub fn observe(pid: u32) -> io::Result<Vec<Window>> {
+    Ok(list_windows()?
+        .into_iter()
+        .filter(|window| window.is_content_window_of(pid))
+        .collect())
+}
+
+fn list_windows() -> io::Result<Vec<Window>> {
     // SAFETY: CoreGraphics returns an owned immutable CFArray, or null.
     let windows = unsafe { CGWindowListCopyWindowInfo(0, 0) };
     if windows.is_null() {
         return Err(io::Error::other("CGWindowListCopyWindowInfo returned null"));
     }
-    let mut matches = Vec::new();
+    let mut listed = Vec::new();
     // SAFETY: windows is a live CFArray.
     let count = unsafe { CFArrayGetCount(windows) };
     for index in 0..count {
         // SAFETY: index is in range; the dictionary is borrowed from windows and
         // stays valid until the matching CFRelease below.
         let dictionary = unsafe { CFArrayGetValueAtIndex(windows, index) };
-        if let Some(window) = window_of_process(dictionary, pid) {
-            matches.push(window);
+        if let Some(window) = read_window(dictionary) {
+            listed.push(window);
         }
     }
     // SAFETY: windows is owned by this call and released exactly once.
     unsafe { CFRelease(windows) };
-    Ok(matches)
+    Ok(listed)
 }
 
-fn window_of_process(dictionary: CfDictionaryRef, pid: u32) -> Option<Window> {
+/// A window whose owner, layer and number are present; a missing or malformed
+/// bounds entry reads as an empty rectangle, which no filter accepts.
+fn read_window(dictionary: CfDictionaryRef) -> Option<Window> {
     // SAFETY: dictionary is a live CGWindow dictionary and the keys are the
     // CFString constants CoreGraphics exports.
-    let (owner, layer, id) = unsafe {
+    let (owner_pid, layer, id) = unsafe {
         (
             dictionary_i64(dictionary, kCGWindowOwnerPID)?,
             dictionary_i64(dictionary, kCGWindowLayer)?,
             dictionary_i64(dictionary, kCGWindowNumber)?,
         )
     };
-    if owner != i64::from(pid) || layer != 0 {
-        return None;
-    }
     let mut bounds = CGRect {
         origin: CGPoint { x: 0.0, y: 0.0 },
         size: CGSize {
@@ -116,23 +136,25 @@ fn window_of_process(dictionary: CfDictionaryRef, pid: u32) -> Option<Window> {
             height: 0.0,
         },
     };
-    // SAFETY: the dictionary is live, the key is exported by CoreGraphics and
+    // SAFETY: the dictionary is live, the keys are exported by CoreGraphics and
     // bounds is writable CGRect storage.
-    let (bounds_value, on_screen) = unsafe {
+    let on_screen = unsafe {
         let bounds_value = CFDictionaryGetValue(dictionary, kCGWindowBounds);
+        if bounds_value.is_null()
+            || CGRectMakeWithDictionaryRepresentation(bounds_value, &raw mut bounds) == 0
+        {
+            bounds.size = CGSize {
+                width: 0.0,
+                height: 0.0,
+            };
+        }
         let on_screen = CFDictionaryGetValue(dictionary, kCGWindowIsOnscreen);
-        let valid = !bounds_value.is_null()
-            && CGRectMakeWithDictionaryRepresentation(bounds_value, &raw mut bounds) != 0;
-        (
-            valid,
-            !on_screen.is_null() && CFBooleanGetValue(on_screen) != 0,
-        )
+        !on_screen.is_null() && CFBooleanGetValue(on_screen) != 0
     };
-    if !bounds_value || id <= 0 || bounds.size.width < 1.0 || bounds.size.height < 1.0 {
-        return None;
-    }
     Some(Window {
-        id: id as u64,
+        owner_pid,
+        layer,
+        id,
         x: bounds.origin.x,
         y: bounds.origin.y,
         width: bounds.size.width,
@@ -188,11 +210,35 @@ mod tests {
     use super::*;
     use std::os::fd::AsFd as _;
 
+    fn window(owner_pid: i64, layer: i64, id: i64, width: f64, height: f64) -> Window {
+        Window {
+            owner_pid,
+            layer,
+            id,
+            x: 0.0,
+            y: 0.0,
+            width,
+            height,
+            on_screen: true,
+        }
+    }
+
     #[test]
-    fn a_process_without_windows_lists_none() {
+    fn only_a_sized_layer_zero_window_of_the_process_is_content() {
+        assert!(window(7, 0, 3, 1.0, 1.0).is_content_window_of(7));
+        assert!(!window(8, 0, 3, 100.0, 100.0).is_content_window_of(7));
+        assert!(!window(7, 25, 3, 100.0, 100.0).is_content_window_of(7));
+        assert!(!window(7, 0, 0, 100.0, 100.0).is_content_window_of(7));
+        assert!(!window(7, 0, -4, 100.0, 100.0).is_content_window_of(7));
+        assert!(!window(7, 0, 3, 0.5, 100.0).is_content_window_of(7));
+        assert!(!window(7, 0, 3, 100.0, 0.0).is_content_window_of(7));
+    }
+
+    #[test]
+    fn the_window_server_list_is_readable_and_a_process_without_windows_lists_none() {
         // A host without a window server answers with an error instead of a list.
-        match observe(u32::MAX) {
-            Ok(windows) => assert!(windows.is_empty()),
+        match list_windows() {
+            Ok(_) => assert!(observe(u32::MAX).unwrap().is_empty()),
             Err(error) => assert!(error.to_string().contains("CGWindowListCopyWindowInfo")),
         }
     }

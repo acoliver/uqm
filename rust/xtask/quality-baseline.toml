@@ -3764,7 +3764,7 @@ u6_04_world_projection = { limit = 11, ends = "U6-04", scopes = { "ffi|owner_pro
 "loc|loc|uqm::ships::registry::@file" = 943
 "loc|loc|uqm::starbase::shipyard_screen::@file" = 910
 "loc|loc|uqm::target::uqm-gameplay-proof::@file" = 2277
-"unsafe|unsafe_block_lines|uqm-engine::uqm-engine" = 2493
+"unsafe|unsafe_block_lines|uqm-engine::uqm-engine" = 2496
 "unsafe|unsafe_block_lines|uqm-xtask::uqm-xtask" = 8
 "unsafe|unsafe_block_lines|uqm::app" = 70
 "unsafe|unsafe_block_lines|uqm::automation" = 242
@@ -3816,7 +3816,7 @@ u6_04_world_projection = { limit = 11, ends = "U6-04", scopes = { "ffi|owner_pro
 "unsafe|unsafe_impl_lines|uqm::comm" = 2
 "unsafe|unsafe_impl|uqm-engine::uqm-engine" = 15
 "unsafe|unsafe_impl|uqm::comm" = 2
-"unsafe|unsafe_lines|uqm-engine::uqm-engine" = 15835
+"unsafe|unsafe_lines|uqm-engine::uqm-engine" = 15838
 "unsafe|unsafe_lines|uqm-xtask::uqm-xtask" = 8
 "unsafe|unsafe_lines|uqm::app" = 72
 "unsafe|unsafe_lines|uqm::automation" = 306
