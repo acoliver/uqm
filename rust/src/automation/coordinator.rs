@@ -577,7 +577,6 @@ impl AutomationObserver {
         }
     }
 
-    #[cfg(not(test))]
     pub(crate) fn finish_start_scene(&self, plan: &scenario::ScenePlan) {
         let mut inner = self.inner.lock();
         self.write_trace_labeled(

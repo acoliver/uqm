@@ -333,14 +333,12 @@ pub fn enter_scene(plan: &ScenePlan, ops: &mut impl SceneEntryOps) {
     ops.fade_screen_to_color();
 }
 
-#[cfg(not(test))]
 pub(crate) struct LinkedSceneEntry<'a> {
     pub(crate) world: &'a mut crate::engine::World,
     pub(crate) kernel: &'a mut crate::engine::Kernel,
     pub(crate) screen_context: crate::graphics::native_abi::CONTEXT,
 }
 
-#[cfg(not(test))]
 impl SceneEntryOps for LinkedSceneEntry<'_> {
     fn set_last_activity(&mut self, activity: u16) {
         self.kernel.last_activity = activity;
@@ -386,7 +384,6 @@ impl super::coordinator::AutomationObserver {
         let plan = scene_plan(scene, boundary)?;
         self.scene.lock().begin(scene);
 
-        #[cfg(not(test))]
         {
             if scene == AutomationScene::SamatraDevFixture {
                 crate::comm::dispatch::prepare_samatra_dev_fixture(cx)
@@ -409,16 +406,6 @@ impl super::coordinator::AutomationObserver {
             enter(&plan);
         }
 
-        #[cfg(test)]
-        {
-            let _ = (cx, plan, enter);
-            *self.scene.lock() = SceneObservation::default();
-            return Err(SceneError::SetupFailed(
-                "runtime scene activation is unavailable in isolated unit tests",
-            ));
-        }
-
-        #[allow(unreachable_code)]
         Ok(plan)
     }
 }

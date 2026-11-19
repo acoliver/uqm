@@ -15,7 +15,6 @@ use crate::comm::Comm;
 use routing::conversation_setup;
 
 use crate::engine::battle::Cx;
-#[cfg(not(test))]
 use crate::engine::observe::{CheckpointView, Io};
 use crate::engine::world::activity::ActivityKind;
 use crate::engine::StoryKey;
@@ -193,7 +192,6 @@ fn in_hq_space(activity: u16) -> bool {
 // RaceCommunication — ported from comm.c:1503
 // ---------------------------------------------------------------------------
 
-#[cfg(not(test))]
 /// Port of C `RaceCommunication()`. Determines which alien to talk to,
 /// prepares the npc ship queue, and calls InitCommunication.
 pub fn race_communication(cx: &mut Cx<'_>, io: &mut Io<'_>) {
@@ -288,14 +286,12 @@ pub fn race_communication(cx: &mut Cx<'_>, io: &mut Io<'_>) {
 // InitCommunication — ported from comm.c:1359
 // ---------------------------------------------------------------------------
 
-#[cfg(not(test))]
 /// Map the conversation to a ship, run the dialogue or attack selection, and
 /// return whether combat was selected before EncounterBattle runs.
 pub fn init_communication(cx: &mut Cx<'_>, io: &mut Io<'_>, which_comm: u32) -> u16 {
     init_communication_with_options(cx, io, which_comm, crate::comm::CommOptions::default())
 }
 
-#[cfg(not(test))]
 /// `InitCommunication` with presentation options supplied by the caller.
 pub fn init_communication_with_options(
     cx: &mut Cx<'_>,
@@ -377,7 +373,6 @@ pub fn init_communication_with_options(
     run_encounter(cx, io, conversation, ship_type, options)
 }
 
-#[cfg(not(test))]
 /// Perform sphere tracking, battle setup, dialogue and teardown in C order.
 fn run_encounter(
     cx: &mut Cx<'_>,
@@ -475,7 +470,6 @@ pub fn prepare_automation_sol_probe_encounter(world: &mut World) -> Result<(), &
 
 /// Development-only fleet setup, before the normal final encounter dispatch.
 /// This grants fixture equipment and escorts, so it cannot establish campaign progress.
-#[cfg(not(test))]
 pub(crate) fn prepare_samatra_dev_fixture(
     cx: &mut crate::engine::battle::Cx<'_>,
 ) -> Result<(), &'static str> {

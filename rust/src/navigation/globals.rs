@@ -1,30 +1,19 @@
 //! Ownership and lifecycle of the live navigation world, ported from globdata.c.
 
-#[cfg(not(test))]
 use super::groups::{init_group_info, uninit_group_info};
-#[cfg(not(test))]
 use crate::engine::battle::record::{FLEET_STUFF, SHIP_INFO};
-#[cfg(not(test))]
 use crate::engine::world::activity::activity_flags::START_INTERPLANETARY;
 use crate::engine::world::activity::ActivityKind;
-#[cfg(not(test))]
 use crate::engine::world::new_game::{FleetRoster, FleetTemplate, NewGameInputs};
 use crate::engine::StoryKey;
-#[cfg(not(test))]
 use crate::graphics::native_abi::{EXTENT, POINT, RECT};
-#[cfg(not(test))]
 use crate::navigation::hyper_units::{SOL_X, SOL_Y};
-#[cfg(not(test))]
 use crate::ships::DescriptorLoader;
-#[cfg(not(test))]
 use crate::ships::{master_native::find_master_ship, types::SpeciesId};
 use crate::starbase::ids::NAMING_STRING_BASE;
-#[cfg(not(test))]
 use crate::starbase::ids::{RADAR_HEIGHT, RADAR_WIDTH, SAFE_X, STATUS_WIDTH};
-#[cfg(not(test))]
 use crate::ui::border::init_siscontexts;
 
-#[cfg(not(test))]
 fn load_sc2_data(cx: &mut crate::engine::battle::Cx<'_>) -> u32 {
     let (width, height) = cx.screen_dimensions();
     let radar_clip = RECT {
@@ -47,7 +36,6 @@ fn load_sc2_data(cx: &mut crate::engine::battle::Cx<'_>) -> u32 {
     1
 }
 
-#[cfg(not(test))]
 fn fleet_template(info: &SHIP_INFO, fleet: &FLEET_STUFF) -> FleetTemplate {
     FleetTemplate {
         crew_level: info.crew_level,
@@ -61,7 +49,6 @@ fn fleet_template(info: &SHIP_INFO, fleet: &FLEET_STUFF) -> FleetTemplate {
     }
 }
 
-#[cfg(not(test))]
 fn initialize_races(cx: &mut crate::engine::battle::Cx<'_>) {
     let kernel = &mut *cx.kernel;
     cx.world.initialize_fleets(
@@ -108,7 +95,6 @@ fn campaign_names(kernel: &crate::engine::Kernel) -> ([u8; 16], [u8; 16]) {
 }
 
 /// Initialize campaign owners before allocating the new world queues.
-#[cfg(not(test))]
 pub fn init_game_structures(cx: &mut crate::engine::battle::Cx<'_>) -> u32 {
     let battle = &mut *cx.b;
     let kernel = &mut *cx.kernel;
@@ -145,7 +131,6 @@ pub fn init_game_structures(cx: &mut crate::engine::battle::Cx<'_>) -> u32 {
 }
 
 /// Release campaign resources after the active game has stopped using them.
-#[cfg(not(test))]
 pub fn uninit_game_structures(cx: &mut crate::engine::battle::Cx<'_>) {
     cx.world.encounters().reinit();
     cx.world.ip_groups().reinit();
