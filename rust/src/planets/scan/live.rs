@@ -706,20 +706,18 @@ fn prepare_scan_system(
     menu: &mut u8,
 ) {
     let dimensions = cx.screen_dimensions();
-    {
-        if input.preferences().menu == 1 && unavailable(solar) {
-            *menu = 3;
-        } else {
-            *menu = 4;
-            scan.cursor.borrow_mut().location = CPoint {
-                x: (width(dimensions.0) >> 1) << 2,
-                y: (75 >> 1) << 2,
-            };
-            let cursor = cursor_frame(scan).rect();
-            scan.cursor.borrow_mut().rect.width = cursor.extent.width;
-            scan.cursor.borrow_mut().rect.height = cursor.extent.height;
-            scan.context().select();
-        }
+    if input.preferences().menu == 1 && unavailable(solar) {
+        *menu = 3;
+    } else {
+        *menu = 4;
+        scan.cursor.borrow_mut().location = CPoint {
+            x: (width(dimensions.0) >> 1) << 2,
+            y: (75 >> 1) << 2,
+        };
+        let cursor = cursor_frame(scan).rect();
+        scan.cursor.borrow_mut().rect.width = cursor.extent.width;
+        scan.cursor.borrow_mut().rect.height = cursor.extent.height;
+        scan.context().select();
     };
     if *menu == 4 {
         draw_scanned(cx, solar, false);

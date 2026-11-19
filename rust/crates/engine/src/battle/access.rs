@@ -245,8 +245,21 @@ pub fn invoke<R>(callback: usize, parent: usize, call: impl FnOnce() -> R) -> R 
 }
 
 impl Cx<'_> {
-    pub fn take_captain_background(&mut self, ship: ShipId) -> crate::graphics::native_abi::FRAME {
-        self.desc_mut(ship).take_captain_background()
+    /// Stamp the ship's captain background into the status context and release it.
+    pub fn draw_final_captain(&mut self, ship: ShipId) {
+        let frame = self.desc_mut(ship).take_captain_background();
+        let old = crate::graphics::menu::select(self.kernel.status_context);
+        crate::graphics::menu::stamp(frame, crate::graphics::native_abi::POINT { x: 0, y: 0 });
+        let _allocation = crate::graphics::drawable_abi::retain_frame_allocations(&[frame]);
+        if !frame.is_null() {
+            // SAFETY: the descriptor transferred this captured captain's release authority.
+            unsafe {
+                crate::graphics::drawable_abi::DestroyDrawable(
+                    crate::graphics::pixmap_abi::ReleaseDrawable(frame),
+                )
+            };
+        }
+        crate::graphics::menu::select(old);
     }
 }
 

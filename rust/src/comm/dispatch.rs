@@ -421,10 +421,8 @@ fn run_encounter(
     } else {
         conv::YEHAT_REBEL
     };
-    {
-        io.observer
-            .checkpoint(&CheckpointView::DialogueDispatch(comm_id))
-    };
+    io.observer
+        .checkpoint(&CheckpointView::DialogueDispatch(comm_id));
     let comm = &mut Comm::with_options(options);
     encounter::load_descriptor(comm, cx, comm_id);
     let status = if cx.world.story_state(StoryKey::BATTLE_SEGUE) == 0 {
@@ -432,10 +430,8 @@ fn run_encounter(
     } else {
         io.observer.checkpoint(&CheckpointView::EncounterMenu(true));
         let status = crate::battle::encount_native::init_encounter(cx, io);
-        {
-            io.observer
-                .checkpoint(&CheckpointView::EncounterMenu(false))
-        };
+        io.observer
+            .checkpoint(&CheckpointView::EncounterMenu(false));
         if status == HAIL {
             cx.world.set_story_state(StoryKey::BATTLE_SEGUE, 0);
             HAIL

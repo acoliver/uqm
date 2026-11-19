@@ -67,14 +67,12 @@ fn run_game(
         &mut game.kernel,
         crate::math::random,
     );
-    {
-        // SAFETY: startup initialized the audio options before the game kernel is loaded.
-        unsafe {
-            crate::sound::audio_init::initAudio(
-                crate::sound::volume_globals::snddriver,
-                crate::sound::volume_globals::soundflags,
-            );
-        }
+    // SAFETY: startup initialized the audio options before the game kernel is loaded.
+    unsafe {
+        crate::sound::audio_init::initAudio(
+            crate::sound::volume_globals::snddriver,
+            crate::sound::volume_globals::soundflags,
+        );
     };
     // SAFETY: the application retains both owners; argc zero permits a null argv.
     if unsafe {

@@ -908,9 +908,7 @@ mod tests {
                 let test_data = b"Hello, World!";
 
                 {
-                    {
-                        rust_open_state_file(&mut game.world, 0, c"wb".as_ptr() as *const c_char)
-                    };
+                    rust_open_state_file(&mut game.world, 0, c"wb".as_ptr() as *const c_char);
                     let written = {
                         rust_write_state_file(
                             &mut game.world,
@@ -953,18 +951,14 @@ mod tests {
                 let test_data = b"Test";
 
                 {
-                    {
-                        rust_open_state_file(&mut game.world, 1, c"wb".as_ptr() as *const c_char)
-                    };
-                    {
-                        rust_write_state_file(
-                            &mut game.world,
-                            1,
-                            test_data.as_ptr(),
-                            1,
-                            test_data.len(),
-                        )
-                    };
+                    rust_open_state_file(&mut game.world, 1, c"wb".as_ptr() as *const c_char);
+                    rust_write_state_file(
+                        &mut game.world,
+                        1,
+                        test_data.as_ptr(),
+                        1,
+                        test_data.len(),
+                    );
                 }
 
                 let length = rust_length_state_file(&game.world, 1);
@@ -985,18 +979,14 @@ mod tests {
                 let test_data = b"Test";
 
                 {
-                    {
-                        rust_open_state_file(&mut game.world, 2, c"wb".as_ptr() as *const c_char)
-                    };
-                    {
-                        rust_write_state_file(
-                            &mut game.world,
-                            2,
-                            test_data.as_ptr(),
-                            1,
-                            test_data.len(),
-                        )
-                    };
+                    rust_open_state_file(&mut game.world, 2, c"wb".as_ptr() as *const c_char);
+                    rust_write_state_file(
+                        &mut game.world,
+                        2,
+                        test_data.as_ptr(),
+                        1,
+                        test_data.len(),
+                    );
                 }
 
                 rust_delete_state_file(&mut game.world, 2);
@@ -1018,18 +1008,14 @@ mod tests {
                 let test_data = b"HelloWorld";
 
                 {
-                    {
-                        rust_open_state_file(&mut game.world, 0, c"wb".as_ptr() as *const c_char)
-                    };
-                    {
-                        rust_write_state_file(
-                            &mut game.world,
-                            0,
-                            test_data.as_ptr(),
-                            1,
-                            test_data.len(),
-                        )
-                    };
+                    rust_open_state_file(&mut game.world, 0, c"wb".as_ptr() as *const c_char);
+                    rust_write_state_file(
+                        &mut game.world,
+                        0,
+                        test_data.as_ptr(),
+                        1,
+                        test_data.len(),
+                    );
                 }
 
                 let result = rust_seek_state_file(&mut game.world, 0, 5, 0);
@@ -1102,9 +1088,7 @@ mod tests {
                 assert_eq!(rust_get_game_state_bits(&game.world, 0, 7), 0);
 
                 {
-                    {
-                        rust_restore_game_state_from_bytes(&mut game.world, buffer.as_ptr(), size)
-                    };
+                    rust_restore_game_state_from_bytes(&mut game.world, buffer.as_ptr(), size);
                 }
 
                 assert_eq!(rust_get_game_state_bits(&game.world, 0, 7), 0xAB);

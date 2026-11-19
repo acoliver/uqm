@@ -641,16 +641,6 @@ pub fn load_animation(
     1
 }
 
-/// Destroy a frame's drawable after its owner has taken release authority.
-pub fn free_frame(frame: *mut frame_desc) {
-    let frames = [frame];
-    let _allocations = crate::graphics::drawable_abi::retain_frame_allocations(&frames);
-    if !frame.is_null() {
-        // SAFETY: the caller owned this frame's release; its allocation is retained through release.
-        unsafe { DestroyDrawable(ReleaseDrawable(frame)) };
-    }
-}
-
 pub fn free_image<const N: usize>(frames: &mut [*mut frame_desc; N], role: &str) -> u32 {
     let _allocations = crate::graphics::drawable_abi::retain_frame_allocations(frames);
     let freed = release_images(frames, |frame| {
