@@ -42,7 +42,7 @@ fn portal_open(world: &World) -> bool {
     world.story_state(StoryKey::ARILOU_SPACE) != 0
 }
 fn current_location(world: &World, dimensions: (i32, i32)) -> POINT {
-    if crate::navigation::globals::in_hqspace(world) == 0 {
+    if !world.in_hqspace() {
         world
             .selected_star()
             .unwrap_or_else(|| panic!("map requires a selected star"))

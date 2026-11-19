@@ -128,7 +128,6 @@ pub(crate) mod engine {
     };
     use crate::engine::battle::link_queue;
     use crate::engine::StoryKey;
-    use crate::navigation::globals::in_hqspace;
     use crate::pickship::ffi::draw_armada_pick_ship_in as draw_armada;
     use crate::ships::native::abi::*;
     use crate::ui::rgb15;
@@ -417,7 +416,7 @@ pub(crate) mod engine {
             context.set_background(rgb15(0, 0, 0));
             context.clear();
             context.draw_stamp(&segue.lease().context_frame(0), POINT { x: 0, y: 0 });
-            let cluster = if in_hqspace(cx.world) == 0 {
+            let cluster = if !cx.world.in_hqspace() {
                 let star = cx
                     .world
                     .selected_star()

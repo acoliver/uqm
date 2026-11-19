@@ -1534,7 +1534,6 @@ pub const DEFGRP_SAMATRA: _bindgen_ty_14 = 14;
 pub const NUM_DEFGRPS: _bindgen_ty_14 = 15;
 pub type _bindgen_ty_14 = ::std::os::raw::c_uint;
 
-pub use crate::navigation::globals::in_quasi_space;
 
 
 

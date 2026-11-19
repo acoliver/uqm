@@ -1,7 +1,6 @@
 //! Native ship motion and collision callbacks ported from ship.c.
 
 use crate::battle::context_access::ContextOps;
-use crate::navigation::globals::in_hqspace;
 use crate::ships::native::abi::*;
 
 const INPUT_FLAGS: STATUS_FLAGS = (LEFT | RIGHT | THRUST | WEAPON | SPECIAL) as STATUS_FLAGS;
@@ -251,7 +250,7 @@ pub(crate) mod engine {
             cx.element_mut(id).life += 1;
         } else {
             cx.ship_state_mut(ship).facing = normalize_facing(cx.random() as i32);
-            if in_hqspace(cx.world) != 0 {
+            if cx.world.in_hqspace() {
                 let facing = cx.world.data.game.ship_facing;
                 cx.ship_state_mut(ship).facing = if facing > 0 { facing - 1 } else { facing };
             }

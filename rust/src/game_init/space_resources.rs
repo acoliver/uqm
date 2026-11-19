@@ -5,7 +5,6 @@ fn ship_teardown_needed(kernel: &crate::engine::Kernel, activity: u16) -> bool {
 }
 
 pub(crate) mod live {
-    use crate::navigation::globals::in_hqspace;
     use crate::ships::native::abi::{IN_LAST_BATTLE, RPG_PLAYER_NUM, SPECIES_ID_SIS_SHIP_ID};
 
     use crate::graphics::context_abi::{ContextFrame, ContextLease};
@@ -84,7 +83,7 @@ pub(crate) mod live {
         if cx.world.activity() as u8 != IN_ENCOUNTER as u8 {
             cx.reset_ships(0);
             cx.reset_ships(1);
-            if in_hqspace(cx.world) != 0 {
+            if cx.world.in_hqspace() {
                 crate::engine::battle::hyperspace::free_hyperspace(cx.kernel);
             }
         }
@@ -169,7 +168,7 @@ pub(crate) mod live {
 
     fn prepare_arena(cx: &mut crate::engine::battle::Cx<'_>) -> Option<(ArenaGraphics, u16, bool)> {
         let activity = cx.world.activity();
-        let hyperspace = in_hqspace(cx.world) != 0;
+        let hyperspace = cx.world.in_hqspace();
         if !cx.kernel.init_space(activity) {
             return None;
         }

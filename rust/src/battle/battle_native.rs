@@ -119,7 +119,6 @@ fn initialize_battle(
 pub(crate) mod engine {
     use super::*;
     use crate::battle::tactrans_native::{flee_preprocess, reset_winner, stop_ditty};
-    use crate::navigation::globals::{in_hqspace, in_hyper_space};
     use abi::*;
 
     const BATTLE_ESCAPE: u8 = 1 << 5;
@@ -246,9 +245,9 @@ pub(crate) mod engine {
         play: bool,
     ) {
         if kernel.battle_music.is_none() {
-            let resource = if in_hyper_space(world) != 0 {
+            let resource = if world.in_hyper_space() {
                 c"music.hyperspace"
-            } else if in_quasi_space(world) != 0 {
+            } else if world.in_quasi_space() {
                 c"music.quasispace"
             } else {
                 c"music.battle"
@@ -443,7 +442,7 @@ pub(crate) mod engine {
                     cx.world
                         .set_activity(cx.world.activity() | CHECK_ABORT as u16);
                 } else {
-                    session.first_time = in_hqspace(cx.world) != 0;
+                    session.first_time = cx.world.in_hqspace();
                     cx.run_input(io, false, |cx, io| {
                         do_battle(cx, io, &mut session, &*net, callback)
                     });

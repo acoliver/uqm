@@ -191,12 +191,12 @@ fn space_queries_use_the_world_of_the_entered_context() {
     {
         {
             game.with_context(|cx| {
-                assert_ne!(uqm_rust::navigation::globals::in_hqspace(cx.world), 0);
-                assert_ne!(uqm_rust::navigation::globals::in_hyper_space(cx.world), 0);
+                assert!(cx.world.in_hqspace());
+                assert!(cx.world.in_hyper_space());
                 cx.world
                     .set_story_state(uqm_rust::engine::StoryKey::ARILOU_SPACE_SIDE, 2);
-                assert_ne!(uqm_rust::navigation::globals::in_quasi_space(cx.world), 0);
-                assert_eq!(uqm_rust::navigation::globals::in_hyper_space(cx.world), 0);
+                assert!(cx.world.in_quasi_space());
+                assert!(!cx.world.in_hyper_space());
             });
         };
     }

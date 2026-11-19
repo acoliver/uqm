@@ -27,10 +27,7 @@ use crate::navigation::hyper_transition::save_sis_hyper_state;
 
 use crate::engine::world::fleet::start_sphere_tracking;
 
-use crate::navigation::{
-    globals::{in_hqspace, in_hyper_space},
-    groups::put_group_info,
-};
+use crate::navigation::groups::put_group_info;
 
 use crate::engine::world::generation::Body;
 use crate::planets::solar_system::SolarSystem;
@@ -161,7 +158,7 @@ fn orbit_is(solar: Option<&SolarSystem>, planet: u8) -> bool {
 }
 
 fn use_caster(cx: &mut Cx<'_>, visit: Option<SolarVisit<'_>>, next_activity: &mut u16) -> bool {
-    if in_hqspace(cx.world) != 0 {
+    if cx.world.in_hqspace() {
         if get(cx.world, StoryKey::ARILOU_SPACE_SIDE) <= 1 {
             set(cx.world, StoryKey::USED_BROADCASTER, 1);
             return true;
@@ -245,7 +242,7 @@ fn invoke(cx: &mut Cx<'_>, visit: Option<SolarVisit<'_>>, id: u8, next_activity:
             *next_activity |= CHECK_LOAD;
             cx.world.set_activity(cx.world.activity() | START_ENCOUNTER);
             set(cx.world, StoryKey::GLOBAL_FLAGS_AND_DATA, 0);
-            if in_hqspace(cx.world) != 0 {
+            if cx.world.in_hqspace() {
                 if cx.world.encounters_ref().head().is_some() {
                     set(cx.world, StoryKey::SHIP_TO_COMPEL, 1);
                 }
@@ -273,7 +270,7 @@ fn invoke(cx: &mut Cx<'_>, visit: Option<SolarVisit<'_>>, id: u8, next_activity:
         }
         12 | 13 => u8::from(use_caster(cx, visit, next_activity)),
         0 => {
-            if in_hyper_space(cx.world) == 0 || cx.world.data.flagship.fuel_on_board < 1000 {
+            if !cx.world.in_hyper_space() || cx.world.data.flagship.fuel_on_board < 1000 {
                 return 0;
             }
             cx.world.data.flagship.fuel_on_board -= 1000;

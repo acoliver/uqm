@@ -4,6 +4,8 @@
 mod catalog_tests;
 pub mod generation;
 pub mod planet;
+#[cfg(test)]
+mod space_tests;
 
 use crate::battle::schema::GAME_STATE;
 pub const MUSIC_DISABLED: u8 = 8;
@@ -196,6 +198,19 @@ impl World {
 
     pub fn story_state(&self, key: StoryKey) -> u32 {
         self.story_value(key).map_or(0, u32::from)
+    }
+
+    /// HyperSpace activity, on either the hyperspace or the quasispace side.
+    pub fn in_hqspace(&self) -> bool {
+        self.activity() as u8 == activity::ActivityKind::InHyperspace as u8
+    }
+
+    pub fn in_hyper_space(&self) -> bool {
+        self.in_hqspace() && self.story_state(StoryKey::ARILOU_SPACE_SIDE) <= 1
+    }
+
+    pub fn in_quasi_space(&self) -> bool {
+        self.in_hqspace() && self.story_state(StoryKey::ARILOU_SPACE_SIDE) > 1
     }
 
     pub fn set_story_state(&mut self, key: StoryKey, value: u32) {

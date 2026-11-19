@@ -2,7 +2,6 @@
 //! Integer narrowing follows `uqm/process.c` and its header macros.
 
 use crate::math::wrap_delta;
-use crate::navigation::globals::in_hqspace;
 use crate::ships::native::abi::*;
 
 mod collision_motion;
@@ -605,7 +604,7 @@ pub(crate) mod engine {
     ) -> ViewState {
         let (dx, dy) = scroll;
         let state = if cx.b.zoom_out == next_reduction {
-            if dx == 0 && dy == 0 && in_hqspace(cx.world) == 0 {
+            if dx == 0 && dy == 0 && !cx.world.in_hqspace() {
                 ViewState::Stable
             } else {
                 ViewState::Scroll
@@ -786,7 +785,7 @@ pub(crate) mod engine {
         let (bounds, minimum) = preprocess_queue(cx, scale);
         let (w, h) = view_dimensions(cx);
         let (mut sx, mut sy) = view_scroll(bounds.origin, bounds.ships_alive, w, h);
-        if (sx != 0 || sy != 0) && in_hqspace(cx.world) != 0 {
+        if (sx != 0 || sy != 0) && cx.world.in_hqspace() {
             cx.move_hyperspace(&mut sx, &mut sy);
         }
         let state = calc_view_engine(cx, minimum, (sx, sy), bounds.ships_alive, scale);

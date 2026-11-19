@@ -7,7 +7,6 @@ use super::super::{SaveFile, SaveSlots};
 use crate::engine::save::summary_record::SummaryDesc;
 use crate::engine::world::generation::SolarSnapshot;
 use crate::mainloop::dir_prep::saveDir;
-use crate::navigation::globals::in_hqspace;
 use crate::navigation::groups::put_group_info;
 use uqm_engine::io::uio_owned::directory;
 use uqm_save::SlotError;
@@ -21,7 +20,7 @@ pub(crate) unsafe fn capture(
 ) -> anyhow::Result<SaveFile> {
     let star = live::capture_live_star(cx.world)?;
     let point = cx.world.data.game.ip_location;
-    if in_hqspace(cx.world) != 0 {
+    if cx.world.in_hqspace() {
         crate::engine::save::hyper_save::prepare_hyper_state(cx.world, cx.kernel)?;
     } else if let Some(solar) = solar {
         live::prepare_live_solar_location(cx.world, &solar)?;

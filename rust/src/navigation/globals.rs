@@ -5,7 +5,6 @@ use crate::engine::battle::record::{FLEET_STUFF, SHIP_INFO};
 use crate::engine::world::activity::activity_flags::START_INTERPLANETARY;
 use crate::engine::world::activity::ActivityKind;
 use crate::engine::world::new_game::{FleetRoster, FleetTemplate, NewGameInputs};
-use crate::engine::StoryKey;
 use crate::graphics::native_abi::{EXTENT, POINT, RECT};
 use crate::navigation::hyper_units::{SOL_X, SOL_Y};
 use crate::ships::DescriptorLoader;
@@ -144,24 +143,11 @@ pub fn uninit_game_structures(cx: &mut crate::engine::battle::Cx<'_>) {
     cx.kernel.release_navigation_play();
 }
 
-pub fn in_hqspace(world: &crate::engine::World) -> u32 {
-    u32::from(world.activity() as u8 == ActivityKind::InHyperspace as u8)
-}
-
-pub fn in_hyper_space(world: &crate::engine::World) -> u32 {
-    u32::from(in_hqspace(world) != 0 && world.story_state(StoryKey::ARILOU_SPACE_SIDE) <= 1)
-}
-
-pub fn in_quasi_space(world: &crate::engine::World) -> u32 {
-    u32::from(in_hqspace(world) != 0 && world.story_state(StoryKey::ARILOU_SPACE_SIDE) > 1)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::{world::state_file::RANDGRPINFO_FILE, World};
+    use crate::engine::{world::state_file::RANDGRPINFO_FILE, StoryKey, World};
     const IN_HYPERSPACE: u16 = ActivityKind::InHyperspace as u16;
-    const IN_INTERPLANETARY: u16 = ActivityKind::InInterplanetary as u16;
 
     #[test]
     fn campaign_names_read_retained_text_and_keep_byte_truncation_and_padding() {
@@ -214,25 +200,5 @@ mod tests {
             b"retained groups"
         );
         assert_eq!(other.activity(), IN_HYPERSPACE);
-    }
-
-    #[test]
-    fn space_classification_masks_activity_flags_and_checks_both_sides() {
-        let classify: fn(&World) -> u32 = super::in_quasi_space;
-        let mut world = World::new();
-        world.story = Some(crate::engine::world::story::StoryState::new());
-        for activity in [IN_HYPERSPACE, IN_HYPERSPACE | 0xff00] {
-            world.set_activity(activity);
-            for side in 0..=3 {
-                world.set_story_state(StoryKey::ARILOU_SPACE_SIDE, side);
-                assert_eq!(in_hqspace(&world), 1);
-                assert_eq!(in_hyper_space(&world), u32::from(side <= 1));
-                assert_eq!(classify(&world), u32::from(side > 1));
-            }
-        }
-        world.set_activity(IN_INTERPLANETARY);
-        assert_eq!(in_hqspace(&world), 0);
-        assert_eq!(in_hyper_space(&world), 0);
-        assert_eq!(classify(&world), 0);
     }
 }

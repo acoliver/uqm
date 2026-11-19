@@ -201,7 +201,6 @@ pub struct EventServices<'a> {
     pub random: &'a mut dyn FnMut() -> u32,
 }
 
-use crate::navigation::globals::in_hyper_space;
 use crate::navigation::{get, set};
 
 fn fleet(
@@ -278,7 +277,7 @@ pub fn dispatch_event(world: &mut World, services: &mut EventServices<'_>, selec
             advance_fleets(world, |world, callback| {
                 dispatch_event(world, services, callback)
             });
-            if in_hyper_space(world) != 0 {
+            if world.in_hyper_space() {
                 check_hyperspace_encounter(world, services.geometry, &mut services.random);
             }
             relative(world, services, 0, 1, 0, HYPERSPACE_ENCOUNTER_EVENT);

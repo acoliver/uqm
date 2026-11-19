@@ -118,9 +118,7 @@ pub fn equip_ship(cx: &mut Cx<'_>) {
         equipment::update_flight(&cx.world.data.flagship, &mut flight);
         effects.set(Some(flight));
     }
-    if crate::navigation::globals::in_hqspace(cx.world) != 0
-        || cx.world.activity() as u8 == ActivityKind::InInterplanetary as u8
-    {
+    if cx.world.in_hqspace() || cx.world.activity() as u8 == ActivityKind::InInterplanetary as u8 {
         crate::ui::sis::delta_sis_gauges(cx.kernel, cx.world, 32767, 32767, 32767);
     }
 }
@@ -178,8 +176,7 @@ pub fn find_player_ship(cx: &Cx<'_>, player: i16) -> Option<ShipId> {
 }
 
 fn refill(cx: &mut Cx<'_>, energy: bool, apply: impl FnOnce(&mut Cx<'_>, ElementId, i16) -> bool) {
-    if cx.world.activity() & IN_BATTLE == 0 || crate::navigation::globals::in_hqspace(cx.world) != 0
-    {
+    if cx.world.activity() & IN_BATTLE == 0 || cx.world.in_hqspace() {
         return;
     }
     let Some(ship) = find_player_ship(cx, RPG_PLAYER_NUM as i16) else {
