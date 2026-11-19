@@ -6,13 +6,12 @@ use std::process::Command;
 /// Restrict only the candidate child. The controller and observer keep their existing identity.
 /// There is no same-UID permission-based substitute when the OS refuses this profile.
 #[cfg(target_os = "macos")]
-pub fn restrict_candidate(
+pub fn confine_candidate(
     command: &mut Command,
     config: &Path,
     automation: &Path,
     shared: Option<&Path>,
 ) -> Result<(), String> {
-    use std::os::unix::process::CommandExt;
     let quote = |path: &Path| -> Result<String, String> {
         let path = std::fs::canonicalize(path).map_err(|error| error.to_string())?;
         serde_json::to_string(path.to_str().ok_or("sandbox path is not UTF-8")?)
@@ -43,40 +42,13 @@ pub fn restrict_candidate(
         (deny mach-priv-task-port)
         {shared_rule}");
     let profile = std::ffi::CString::new(profile).map_err(|error| error.to_string())?;
-    // SAFETY: only the forked child installs the profile before exec. The CString
-    // is allocated before fork and remains alive throughout sandbox_init.
-    unsafe {
-        command.pre_exec(move || {
-            let mut error = std::ptr::null_mut();
-            if sandbox_init(profile.as_ptr(), 0, &mut error) != 0 {
-                if !error.is_null() {
-                    sandbox_free_error(error);
-                }
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::PermissionDenied,
-                    "native candidate sandbox installation failed",
-                ));
-            }
-            Ok(())
-        });
-    }
+    crate::platform::macos::sandbox::restrict_candidate(command, profile);
     Ok(())
-}
-
-#[cfg(target_os = "macos")]
-#[link(name = "sandbox")]
-extern "C" {
-    fn sandbox_init(
-        profile: *const libc::c_char,
-        flags: u64,
-        error: *mut *mut libc::c_char,
-    ) -> libc::c_int;
-    fn sandbox_free_error(error: *mut libc::c_char);
 }
 
 /// The native observer is macOS-only; unsupported hosts cannot launch unprotected candidates.
 #[cfg(not(target_os = "macos"))]
-pub fn restrict_candidate(
+pub fn confine_candidate(
     _command: &mut Command,
     _config: &Path,
     _automation: &Path,
@@ -137,7 +109,7 @@ mod tests {
                 "--nocapture",
             ])
             .env("UQM_ISOLATION_TEST_ROOT", root);
-        restrict_candidate(
+        confine_candidate(
             &mut command,
             &root.join("config"),
             &root.join("automation"),

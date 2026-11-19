@@ -10,6 +10,8 @@ use std::{
 
 #[cfg(target_os = "macos")]
 use super::child_session::{ChildSession, ChildSessionConfig, ChildSessionError};
+#[cfg(unix)]
+use crate::platform::os as sys;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 pub const NATIVE_WINDOW_CONFIG_SCHEMA: &str = "uqm-native-window-config-v1";
@@ -218,49 +220,30 @@ impl BoundOutputDirectory {
     fn publish(&self, name: &std::ffi::OsStr, bytes: &[u8], label: &str) -> Result<(), String> {
         use std::ffi::CString;
         use std::io::Write as _;
-        use std::os::fd::{AsRawFd as _, FromRawFd as _};
+        use std::os::fd::AsFd as _;
         use std::os::unix::ffi::OsStrExt as _;
 
         let name = CString::new(name.as_bytes())
             .map_err(|_| format!("native-window {label} filename contains NUL"))?;
         let temporary = CString::new(format!(".{}.tmp", name.to_string_lossy()))
             .map_err(|_| format!("native-window {label} temporary filename contains NUL"))?;
-        let descriptor = unsafe {
-            libc::openat(
-                self.directory.as_raw_fd(),
-                temporary.as_ptr(),
-                libc::O_WRONLY | libc::O_CREAT | libc::O_EXCL | libc::O_CLOEXEC | libc::O_NOFOLLOW,
-                0o600,
-            )
-        };
-        if descriptor < 0 {
-            return Err(format!(
-                "create native-window {label} temporary: {}",
-                std::io::Error::last_os_error()
-            ));
-        }
-        let mut file = unsafe { fs::File::from_raw_fd(descriptor) };
+        let directory = self.directory.as_fd();
+        let descriptor = sys::fd::open_at(
+            directory,
+            &temporary,
+            libc::O_WRONLY | libc::O_CREAT | libc::O_EXCL | libc::O_CLOEXEC | libc::O_NOFOLLOW,
+            0o600,
+        )
+        .map_err(|error| format!("create native-window {label} temporary: {error}"))?;
+        let mut file = fs::File::from(descriptor);
         if let Err(error) = file.write_all(bytes).and_then(|()| file.write_all(b"\n")) {
             drop(file);
-            unsafe {
-                libc::unlinkat(self.directory.as_raw_fd(), temporary.as_ptr(), 0);
-            }
+            let _ = sys::fs::unlink_at(directory, &temporary, 0);
             return Err(format!("write native-window {label}: {error}"));
         }
         drop(file);
-        if unsafe {
-            libc::renameat(
-                self.directory.as_raw_fd(),
-                temporary.as_ptr(),
-                self.directory.as_raw_fd(),
-                name.as_ptr(),
-            )
-        } != 0
-        {
-            let error = std::io::Error::last_os_error();
-            unsafe {
-                libc::unlinkat(self.directory.as_raw_fd(), temporary.as_ptr(), 0);
-            }
+        if let Err(error) = sys::fs::rename_at(directory, &temporary, directory, &name) {
+            let _ = sys::fs::unlink_at(directory, &temporary, 0);
             return Err(format!("publish native-window {label}: {error}"));
         }
         Ok(())
@@ -299,25 +282,19 @@ impl BoundOutputDirectory {
     ) -> Result<Vec<u8>, String> {
         use std::ffi::CString;
         use std::io::Read as _;
-        use std::os::fd::{AsRawFd as _, FromRawFd as _};
+        use std::os::fd::AsFd as _;
         use std::os::unix::ffi::OsStrExt as _;
 
         let name = CString::new(name.as_bytes())
             .map_err(|_| format!("native-window {label} filename contains NUL"))?;
-        let descriptor = unsafe {
-            libc::openat(
-                self.directory.as_raw_fd(),
-                name.as_ptr(),
-                libc::O_RDONLY | libc::O_CLOEXEC | libc::O_NOFOLLOW | libc::O_NONBLOCK,
-            )
-        };
-        if descriptor < 0 {
-            return Err(format!(
-                "open native-window {label}: {}",
-                std::io::Error::last_os_error()
-            ));
-        }
-        let mut file = unsafe { fs::File::from_raw_fd(descriptor) };
+        let descriptor = sys::fd::open_at(
+            self.directory.as_fd(),
+            &name,
+            libc::O_RDONLY | libc::O_CLOEXEC | libc::O_NOFOLLOW | libc::O_NONBLOCK,
+            0,
+        )
+        .map_err(|error| format!("open native-window {label}: {error}"))?;
+        let mut file = fs::File::from(descriptor);
         if !file
             .metadata()
             .map_err(|error| format!("inspect native-window {label}: {error}"))?
@@ -393,26 +370,18 @@ impl BoundOutputDirectory {
 
     #[cfg(target_os = "macos")]
     fn change_wake_macos(&self) -> std::io::Result<DirectoryChangeWake> {
-        use std::os::fd::{AsRawFd as _, FromRawFd as _, OwnedFd};
+        use std::os::fd::{AsFd as _, AsRawFd as _};
 
-        let here = c".";
-        // SAFETY: the bound descriptor is open and `here` is NUL-terminated.
-        let raw_directory = unsafe {
-            libc::openat(
-                self.directory.as_raw_fd(),
-                here.as_ptr(),
-                libc::O_RDONLY
-                    | libc::O_DIRECTORY
-                    | libc::O_NOFOLLOW
-                    | libc::O_CLOEXEC
-                    | libc::O_EVTONLY,
-            )
-        };
-        if raw_directory < 0 {
-            return Err(std::io::Error::last_os_error());
-        }
-        // SAFETY: openat returned a new descriptor that nothing else owns.
-        let directory = unsafe { OwnedFd::from_raw_fd(raw_directory) };
+        let directory = sys::fd::open_at(
+            self.directory.as_fd(),
+            c".",
+            libc::O_RDONLY
+                | libc::O_DIRECTORY
+                | libc::O_NOFOLLOW
+                | libc::O_CLOEXEC
+                | libc::O_EVTONLY,
+            0,
+        )?;
 
         let queue = crate::threading::critical_timer::create_queue()?;
 
@@ -424,20 +393,7 @@ impl BoundOutputDirectory {
             data: 0,
             udata: std::ptr::null_mut(),
         };
-        // SAFETY: one valid change record, no event list, no timeout.
-        let registered = unsafe {
-            libc::kevent(
-                queue.as_raw_fd(),
-                &registration,
-                1,
-                std::ptr::null_mut(),
-                0,
-                std::ptr::null(),
-            )
-        };
-        if registered != 0 {
-            return Err(std::io::Error::last_os_error());
-        }
+        crate::platform::macos::register_events(queue.as_fd(), &[registration])?;
         Ok(DirectoryChangeWake {
             changed: std::sync::atomic::AtomicBool::new(true),
             queue,
@@ -508,30 +464,13 @@ impl BoundOutputDirectory {
     #[cfg(unix)]
     fn contains(&self, name: &std::ffi::OsStr) -> Result<bool, String> {
         use std::ffi::CString;
-        use std::mem::MaybeUninit;
-        use std::os::fd::AsRawFd as _;
+        use std::os::fd::AsFd as _;
         use std::os::unix::ffi::OsStrExt as _;
 
         let name = CString::new(name.as_bytes())
             .map_err(|_| "native-window output filename contains NUL".to_string())?;
-        let mut metadata = MaybeUninit::<libc::stat>::uninit();
-        if unsafe {
-            libc::fstatat(
-                self.directory.as_raw_fd(),
-                name.as_ptr(),
-                metadata.as_mut_ptr(),
-                libc::AT_SYMLINK_NOFOLLOW,
-            )
-        } == 0
-        {
-            return Ok(true);
-        }
-        let error = std::io::Error::last_os_error();
-        if error.kind() == std::io::ErrorKind::NotFound {
-            Ok(false)
-        } else {
-            Err(format!("inspect native-window output: {error}"))
-        }
+        sys::fs::exists_at_no_follow(self.directory.as_fd(), &name)
+            .map_err(|error| format!("inspect native-window output: {error}"))
     }
 
     #[cfg(not(unix))]
@@ -1379,7 +1318,7 @@ fn read_physical_relative_regular_nofollow_bounded(
     use std::{
         ffi::CString,
         io::Read as _,
-        os::fd::{AsRawFd as _, FromRawFd as _},
+        os::fd::AsFd as _,
         os::unix::{ffi::OsStrExt as _, fs::OpenOptionsExt as _},
     };
 
@@ -1391,20 +1330,13 @@ fn read_physical_relative_regular_nofollow_bounded(
         let name = CString::new(name.as_bytes()).map_err(|_| {
             std::io::Error::new(std::io::ErrorKind::InvalidInput, "path contains NUL")
         })?;
-        // SAFETY: `name` is NUL-terminated, the directory descriptor stays open for the
-        // call, and a successful descriptor is immediately owned by `File`.
-        let descriptor = unsafe {
-            libc::openat(
-                directory.as_raw_fd(),
-                name.as_ptr(),
-                flags | libc::O_CLOEXEC | libc::O_NOFOLLOW,
-            )
-        };
-        if descriptor < 0 {
-            return Err(std::io::Error::last_os_error());
-        }
-        // SAFETY: `openat` returned a fresh owned descriptor.
-        Ok(unsafe { fs::File::from_raw_fd(descriptor) })
+        sys::fd::open_at(
+            directory.as_fd(),
+            &name,
+            flags | libc::O_CLOEXEC | libc::O_NOFOLLOW,
+            0,
+        )
+        .map(fs::File::from)
     }
 
     let root_file = fs::OpenOptions::new()
@@ -1520,21 +1452,7 @@ pub fn capture_native_window(
         .arg("-o")
         .arg(format!("-l{window_id}"))
         .arg(path);
-    use std::os::unix::process::CommandExt as _;
-
-    let capture_budget = contract.capture_budget_bytes as libc::rlim_t;
-    unsafe {
-        command.pre_exec(move || {
-            let limit = libc::rlimit {
-                rlim_cur: capture_budget,
-                rlim_max: capture_budget,
-            };
-            if libc::setrlimit(libc::RLIMIT_FSIZE, &limit) != 0 {
-                return Err(std::io::Error::last_os_error());
-            }
-            Ok(())
-        });
-    }
+    sys::process::limit_file_size_before_exec(&mut command, contract.capture_budget_bytes);
     let session = ChildSession::spawn(
         command,
         ChildSessionConfig {
@@ -1656,7 +1574,22 @@ pub fn observe_native_window(
     pid: u32,
     expected_window_id: Option<u64>,
 ) -> Result<ObservedNativeWindow, NativeWindowObserverError> {
-    darwin::observe(pid, expected_window_id)
+    let matches = crate::platform::macos::observe(pid)
+        .map_err(|error| NativeWindowObserverError::Os(error.to_string()))?
+        .into_iter()
+        .map(|window| ObservedNativeWindow {
+            window_id: window.id as u64,
+            os_bounds: NativeWindowBounds {
+                x: window.x.round() as i32,
+                y: window.y.round() as i32,
+                width: window.width.round() as u32,
+                height: window.height.round() as u32,
+            },
+            visible: window.on_screen,
+            minimized: !window.on_screen,
+        })
+        .collect();
+    unique_visible_window(pid, expected_window_id, matches)
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -1668,162 +1601,30 @@ pub fn observe_native_window(
 }
 
 #[cfg(target_os = "macos")]
-mod darwin {
-    use super::{NativeWindowBounds, NativeWindowObserverError, ObservedNativeWindow};
-    use std::ffi::c_void;
-
-    type CfArrayRef = *const c_void;
-    type CfDictionaryRef = *const c_void;
-    type CfTypeRef = *const c_void;
-
-    #[repr(C)]
-    #[derive(Clone, Copy)]
-    struct CGPoint {
-        x: f64,
-        y: f64,
-    }
-
-    #[repr(C)]
-    #[derive(Clone, Copy)]
-    struct CGSize {
-        width: f64,
-        height: f64,
-    }
-
-    #[repr(C)]
-    #[derive(Clone, Copy)]
-    struct CGRect {
-        origin: CGPoint,
-        size: CGSize,
-    }
-
-    #[link(name = "CoreFoundation", kind = "framework")]
-    unsafe extern "C" {
-        fn CFArrayGetCount(array: CfArrayRef) -> isize;
-        fn CFArrayGetValueAtIndex(array: CfArrayRef, index: isize) -> *const c_void;
-        fn CFDictionaryGetValue(dictionary: CfDictionaryRef, key: *const c_void) -> *const c_void;
-        fn CFNumberGetValue(number: CfTypeRef, number_type: i32, value: *mut c_void) -> u8;
-        fn CFBooleanGetValue(boolean: CfTypeRef) -> u8;
-        fn CFRelease(value: CfTypeRef);
-    }
-
-    #[link(name = "CoreGraphics", kind = "framework")]
-    unsafe extern "C" {
-        static kCGWindowOwnerPID: *const c_void;
-        static kCGWindowNumber: *const c_void;
-        static kCGWindowBounds: *const c_void;
-        static kCGWindowIsOnscreen: *const c_void;
-        static kCGWindowLayer: *const c_void;
-        fn CGWindowListCopyWindowInfo(option: u32, relative_to_window: u32) -> CfArrayRef;
-        fn CGRectMakeWithDictionaryRepresentation(
-            dictionary: CfDictionaryRef,
-            bounds: *mut CGRect,
-        ) -> u8;
-    }
-
-    const CF_NUMBER_I64: i32 = 4;
-
-    pub(super) fn observe(
-        pid: u32,
-        expected_window_id: Option<u64>,
-    ) -> Result<ObservedNativeWindow, NativeWindowObserverError> {
-        // SAFETY: CoreGraphics returns an owned immutable CFArray. Every borrowed
-        // dictionary/key/value remains valid until the matching CFRelease.
-        unsafe {
-            let windows = CGWindowListCopyWindowInfo(0, 0);
-            if windows.is_null() {
-                return Err(NativeWindowObserverError::Os(
-                    "CGWindowListCopyWindowInfo returned null".to_string(),
-                ));
-            }
-            let mut matches = Vec::new();
-            let count = CFArrayGetCount(windows);
-            for index in 0..count {
-                let dictionary = CFArrayGetValueAtIndex(windows, index) as CfDictionaryRef;
-                let Some(owner) = dictionary_i64(dictionary, kCGWindowOwnerPID) else {
-                    continue;
-                };
-                let Some(layer) = dictionary_i64(dictionary, kCGWindowLayer) else {
-                    continue;
-                };
-                if owner != i64::from(pid) || layer != 0 {
-                    continue;
-                }
-                let Some(window_id) = dictionary_i64(dictionary, kCGWindowNumber) else {
-                    continue;
-                };
-                let bounds_value = CFDictionaryGetValue(dictionary, kCGWindowBounds);
-                let mut bounds = CGRect {
-                    origin: CGPoint { x: 0.0, y: 0.0 },
-                    size: CGSize {
-                        width: 0.0,
-                        height: 0.0,
-                    },
-                };
-                if bounds_value.is_null()
-                    || CGRectMakeWithDictionaryRepresentation(bounds_value, &mut bounds) == 0
-                    || window_id <= 0
-                    || bounds.size.width < 1.0
-                    || bounds.size.height < 1.0
-                {
-                    continue;
-                }
-                let on_screen = CFDictionaryGetValue(dictionary, kCGWindowIsOnscreen);
-                let visible = !on_screen.is_null() && CFBooleanGetValue(on_screen) != 0;
-                matches.push(ObservedNativeWindow {
-                    window_id: window_id as u64,
-                    os_bounds: NativeWindowBounds {
-                        x: bounds.origin.x.round() as i32,
-                        y: bounds.origin.y.round() as i32,
-                        width: bounds.size.width.round() as u32,
-                        height: bounds.size.height.round() as u32,
-                    },
-                    visible,
-                    minimized: !visible,
-                });
-            }
-            CFRelease(windows);
-            select_observed_native_window(pid, expected_window_id, matches)
-        }
-    }
-
-    pub(super) fn select_observed_native_window(
-        pid: u32,
-        expected_window_id: Option<u64>,
-        mut matches: Vec<ObservedNativeWindow>,
-    ) -> Result<ObservedNativeWindow, NativeWindowObserverError> {
-        matches.retain(|window| {
-            window.visible
-                && !window.minimized
-                && expected_window_id.is_none_or(|expected| window.window_id == expected)
-        });
-        matches.sort_by_key(|window| {
-            (
-                window.window_id,
-                window.os_bounds.x,
-                window.os_bounds.y,
-                window.os_bounds.width,
-                window.os_bounds.height,
-            )
-        });
-        matches.dedup();
-        match matches.len() {
-            0 => Err(NativeWindowObserverError::NotFound { pid }),
-            1 => Ok(matches[0]),
-            count => Err(NativeWindowObserverError::Ambiguous { pid, count }),
-        }
-    }
-
-    unsafe fn dictionary_i64(dictionary: CfDictionaryRef, key: *const c_void) -> Option<i64> {
-        // SAFETY: callers provide a live CGWindow dictionary and one of its exported CFString keys.
-        let value = unsafe { CFDictionaryGetValue(dictionary, key) };
-        if value.is_null() {
-            return None;
-        }
-        let mut number = 0_i64;
-        // SAFETY: `number` is correctly aligned and sized for kCFNumberSInt64Type.
-        (unsafe { CFNumberGetValue(value, CF_NUMBER_I64, (&mut number as *mut i64).cast()) } != 0)
-            .then_some(number)
+fn unique_visible_window(
+    pid: u32,
+    expected_window_id: Option<u64>,
+    mut matches: Vec<ObservedNativeWindow>,
+) -> Result<ObservedNativeWindow, NativeWindowObserverError> {
+    matches.retain(|window| {
+        window.visible
+            && !window.minimized
+            && expected_window_id.is_none_or(|expected| window.window_id == expected)
+    });
+    matches.sort_by_key(|window| {
+        (
+            window.window_id,
+            window.os_bounds.x,
+            window.os_bounds.y,
+            window.os_bounds.width,
+            window.os_bounds.height,
+        )
+    });
+    matches.dedup();
+    match matches.len() {
+        0 => Err(NativeWindowObserverError::NotFound { pid }),
+        1 => Ok(matches[0]),
+        count => Err(NativeWindowObserverError::Ambiguous { pid, count }),
     }
 }
 
@@ -2414,87 +2215,34 @@ fn collect_inventory(
 ) -> Result<(), NativeWindowProofError> {
     use std::{
         ffi::{CString, OsStr},
-        os::fd::{AsRawFd as _, FromRawFd as _},
-        os::unix::{
-            ffi::{OsStrExt as _, OsStringExt as _},
-            fs::OpenOptionsExt as _,
-        },
+        os::fd::AsFd as _,
+        os::unix::{ffi::OsStrExt as _, fs::OpenOptionsExt as _},
     };
 
     fn open_at(directory: &fs::File, name: &OsStr) -> std::io::Result<fs::File> {
         let name = CString::new(name.as_bytes()).map_err(|_| {
             std::io::Error::new(std::io::ErrorKind::InvalidInput, "path contains NUL")
         })?;
-        // SAFETY: `name` and the directory descriptor remain valid for the call. A successful
-        // descriptor is immediately transferred to `File`.
-        let descriptor = unsafe {
-            libc::openat(
-                directory.as_raw_fd(),
-                name.as_ptr(),
-                libc::O_RDONLY | libc::O_CLOEXEC | libc::O_NOFOLLOW | libc::O_NONBLOCK,
-            )
-        };
-        if descriptor < 0 {
-            return Err(std::io::Error::last_os_error());
-        }
-        // SAFETY: `openat` returned a fresh owned descriptor.
-        Ok(unsafe { fs::File::from_raw_fd(descriptor) })
+        sys::fd::open_at(
+            directory.as_fd(),
+            &name,
+            libc::O_RDONLY | libc::O_CLOEXEC | libc::O_NOFOLLOW | libc::O_NONBLOCK,
+            0,
+        )
+        .map(fs::File::from)
     }
 
     fn directory_names(
         directory: &fs::File,
         budget: &mut NativeInventoryBudget,
     ) -> Result<Vec<std::ffi::OsString>, NativeWindowProofError> {
-        struct Directory(*mut libc::DIR);
-        impl Drop for Directory {
-            fn drop(&mut self) {
-                // SAFETY: `fdopendir` returned this owned directory stream and it is closed once.
-                unsafe { libc::closedir(self.0) };
-            }
-        }
-
-        #[cfg(target_os = "macos")]
-        fn errno_pointer() -> *mut libc::c_int {
-            unsafe { libc::__error() }
-        }
-        #[cfg(not(target_os = "macos"))]
-        fn errno_pointer() -> *mut libc::c_int {
-            unsafe { libc::__errno_location() }
-        }
-
-        // `fdopendir` owns its descriptor, so duplicate the exact no-follow directory descriptor.
-        // SAFETY: `directory` holds a valid descriptor for the duration of this call.
-        let duplicated = unsafe { libc::dup(directory.as_raw_fd()) };
-        if duplicated < 0 {
-            return Err(NativeWindowProofError::Receipt);
-        }
-        // SAFETY: `duplicated` is an owned directory descriptor. On failure, close it below.
-        let stream = unsafe { libc::fdopendir(duplicated) };
-        if stream.is_null() {
-            // SAFETY: `fdopendir` did not take ownership after returning null.
-            unsafe { libc::close(duplicated) };
-            return Err(NativeWindowProofError::Receipt);
-        }
-        let stream = Directory(stream);
         let mut names = Vec::new();
-        loop {
-            // POSIX requires clearing errno before `readdir` to distinguish EOF from failure.
-            unsafe { *errno_pointer() = 0 };
-            // SAFETY: the directory stream remains valid and exclusively used by this loop.
-            let entry = unsafe { libc::readdir(stream.0) };
-            if entry.is_null() {
-                if unsafe { *errno_pointer() } != 0 {
-                    return Err(NativeWindowProofError::Receipt);
-                }
-                break;
-            }
-            // SAFETY: `d_name` is NUL-terminated for the lifetime of the returned directory entry.
-            let name = unsafe { std::ffi::CStr::from_ptr((*entry).d_name.as_ptr()) }.to_bytes();
-            if name == b"." || name == b".." {
-                continue;
-            }
+        for name in sys::fs::DirectoryNames::open(directory.as_fd())
+            .map_err(|_| NativeWindowProofError::Receipt)?
+        {
+            let name = name.map_err(|_| NativeWindowProofError::Receipt)?;
             budget.admit_name(name.len())?;
-            names.push(std::ffi::OsString::from_vec(name.to_vec()));
+            names.push(name);
         }
         names.sort();
         Ok(names)
@@ -3920,12 +3668,7 @@ mod tests {
             ..visible
         };
         assert_eq!(
-            darwin::select_observed_native_window(
-                7,
-                None,
-                vec![hidden, hidden, visible, visible, hidden]
-            )
-            .unwrap(),
+            unique_visible_window(7, None, vec![hidden, hidden, visible, visible, hidden]).unwrap(),
             visible
         );
 
@@ -3934,11 +3677,11 @@ mod tests {
             ..visible
         };
         assert_eq!(
-            darwin::select_observed_native_window(7, None, vec![visible, second_visible]),
+            unique_visible_window(7, None, vec![visible, second_visible]),
             Err(NativeWindowObserverError::Ambiguous { pid: 7, count: 2 })
         );
         assert_eq!(
-            darwin::select_observed_native_window(
+            unique_visible_window(
                 7,
                 Some(second_visible.window_id),
                 vec![visible, second_visible]
@@ -3954,7 +3697,7 @@ mod tests {
             ..visible
         };
         assert_eq!(
-            darwin::select_observed_native_window(
+            unique_visible_window(
                 7,
                 Some(visible.window_id),
                 vec![visible, conflicting_duplicate]
@@ -5850,7 +5593,7 @@ mod tests {
     #[cfg(target_os = "macos")]
     mod change_wake {
         use super::*;
-        use std::os::fd::AsRawFd as _;
+        use std::os::fd::AsFd as _;
         use std::time::{Duration, Instant};
 
         fn publish(bound: &BoundOutputDirectory) {
@@ -5963,10 +5706,7 @@ mod tests {
             let bound = BoundOutputDirectory::open(root.path()).unwrap();
             let wake = bound.change_wake().unwrap();
             for descriptor in [&wake.queue, &wake._directory] {
-                // SAFETY: the descriptor is open for the life of `wake`.
-                let flags = unsafe { libc::fcntl(descriptor.as_raw_fd(), libc::F_GETFD) };
-                assert!(flags >= 0);
-                assert_ne!(flags & libc::FD_CLOEXEC, 0);
+                assert!(sys::fd::is_close_on_exec(descriptor.as_fd()).unwrap());
             }
         }
     }

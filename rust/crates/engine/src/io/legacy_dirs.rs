@@ -30,7 +30,7 @@ const EP_DOTS: c_int = 8;
 const EP_SLASHES: c_int = 16;
 const EP_SINGLESEP: c_int = 32;
 
-use crate::platform::set_errno;
+use crate::platform::os::errno::set_errno;
 
 /// # Safety
 /// `dir` must be a NUL-terminated path.

@@ -23,9 +23,13 @@
 use std::path::PathBuf;
 
 #[cfg(unix)]
+use crate::platform::os as sys;
+#[cfg(unix)]
 use std::io;
 #[cfg(unix)]
 use std::os::fd::RawFd;
+#[cfg(unix)]
+use sys::clock::monotonic_millis;
 
 /// Environment variable carrying the full-duplex nested-group registration descriptor.
 #[cfg(unix)]
@@ -215,13 +219,10 @@ impl NestedGroupProtocol {
 
     /// Clear close-on-exec on every protocol descriptor.
     ///
-    /// This performs only `fcntl`, so it is suitable for `pre_exec`.
+    /// This performs only `fcntl`, so it is suitable for a pre-exec hook.
     pub fn make_inheritable(self) -> io::Result<()> {
         for descriptor in self.descriptors() {
-            // SAFETY: each descriptor belongs to the inherited protocol.
-            if unsafe { libc::fcntl(descriptor, libc::F_SETFD, 0) } == -1 {
-                return Err(io::Error::last_os_error());
-            }
+            sys::fd::set_inheritable(descriptor)?;
         }
         Ok(())
     }
@@ -267,7 +268,7 @@ impl NestedGroupProtocol {
         let release_reserve = (budget / 4).clamp(1, 100).min(budget);
         let operation_deadline = deadline.saturating_sub(release_reserve);
         let mut token = [0_u8; 1];
-        fd_io_until(self.token_read, &mut token, false, operation_deadline)?;
+        sys::fd::read_exact_until(self.token_read, &mut token, operation_deadline)?;
         let result = exchange_locked_until(
             self.registration,
             operation,
@@ -279,10 +280,9 @@ impl NestedGroupProtocol {
         // The release gets its own budget: the token must go back even when
         // the exchange ran past the caller's deadline.
         let release = monotonic_millis().and_then(|now| {
-            fd_io_until(
+            sys::fd::write_all_until(
                 self.token_write,
-                &mut token,
-                true,
+                &token,
                 now.saturating_add(TOKEN_RELEASE_BUDGET_MS),
             )
         });
@@ -298,8 +298,7 @@ impl NestedGroupProtocol {
 #[cfg(unix)]
 fn next_nonce() -> u64 {
     static COUNTER: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
-    // SAFETY: getpid has no preconditions.
-    let pid = u32::from_ne_bytes(unsafe { libc::getpid() }.to_ne_bytes());
+    let pid = std::process::id();
     let count = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     (u64::from(pid) << 32) | u64::from(count)
 }
@@ -316,85 +315,10 @@ fn duration_millis(duration: std::time::Duration) -> u64 {
     u64::try_from(duration.as_millis()).unwrap_or(u64::MAX)
 }
 
+/// The deadline for a single unbudgeted protocol read or write.
 #[cfg(unix)]
-fn monotonic_millis() -> io::Result<u64> {
-    let mut value = std::mem::MaybeUninit::<libc::timespec>::uninit();
-    // SAFETY: value points to writable timespec storage.
-    if unsafe { libc::clock_gettime(libc::CLOCK_MONOTONIC, value.as_mut_ptr()) } == -1 {
-        return Err(io::Error::last_os_error());
-    }
-    // SAFETY: clock_gettime initialized value on success.
-    let value = unsafe { value.assume_init() };
-    let seconds =
-        u64::try_from(value.tv_sec).map_err(|_| io::Error::from_raw_os_error(libc::EOVERFLOW))?;
-    let nanos =
-        u64::try_from(value.tv_nsec).map_err(|_| io::Error::from_raw_os_error(libc::EOVERFLOW))?;
-    seconds
-        .checked_mul(1_000)
-        .and_then(|millis| millis.checked_add(nanos / 1_000_000))
-        .ok_or_else(|| io::Error::from_raw_os_error(libc::EOVERFLOW))
-}
-
-#[cfg(unix)]
-fn fd_io(fd: RawFd, bytes: &mut [u8], write: bool) -> io::Result<()> {
-    let deadline = monotonic_millis()?.saturating_add(5_000);
-    fd_io_until(fd, bytes, write, deadline)
-}
-
-#[cfg(unix)]
-fn fd_io_until(fd: RawFd, bytes: &mut [u8], write: bool, deadline: u64) -> io::Result<()> {
-    let mut offset = 0;
-    while offset < bytes.len() {
-        let now = monotonic_millis()?;
-        if now >= deadline {
-            return Err(io::Error::from_raw_os_error(libc::ETIMEDOUT));
-        }
-        let remaining = i32::try_from(deadline - now).unwrap_or(i32::MAX);
-        let mut descriptor = libc::pollfd {
-            fd,
-            events: if write { libc::POLLOUT } else { libc::POLLIN },
-            revents: 0,
-        };
-        // SAFETY: descriptor points to one initialized pollfd.
-        let ready = unsafe { libc::poll(&mut descriptor, 1, remaining) };
-        if ready == 0 {
-            return Err(io::Error::from_raw_os_error(libc::ETIMEDOUT));
-        }
-        if ready == -1 {
-            let error = io::Error::last_os_error();
-            if error.kind() == io::ErrorKind::Interrupted {
-                continue;
-            }
-            return Err(error);
-        }
-        if descriptor.revents & (libc::POLLERR | libc::POLLNVAL) != 0
-            || descriptor.revents & descriptor.events == 0
-        {
-            return Err(io::Error::from_raw_os_error(libc::EPIPE));
-        }
-        // SAFETY: bytes is valid for the operation and fd is its protocol endpoint.
-        let result = unsafe {
-            if write {
-                libc::write(fd, bytes[offset..].as_ptr().cast(), bytes.len() - offset)
-            } else {
-                libc::read(
-                    fd,
-                    bytes[offset..].as_mut_ptr().cast(),
-                    bytes.len() - offset,
-                )
-            }
-        };
-        if result > 0 {
-            offset += result as usize;
-        } else if result == -1 && io::Error::last_os_error().kind() == io::ErrorKind::Interrupted {
-            continue;
-        } else if result == 0 {
-            return Err(io::Error::from_raw_os_error(libc::EPIPE));
-        } else {
-            return Err(io::Error::last_os_error());
-        }
-    }
-    Ok(())
+fn default_io_deadline() -> io::Result<u64> {
+    Ok(monotonic_millis()?.saturating_add(5_000))
 }
 
 #[cfg(unix)]
@@ -410,14 +334,14 @@ fn exchange_locked_until(
     request[0] = operation as u8;
     request[4..8].copy_from_slice(&pid.to_ne_bytes());
     request[8..16].copy_from_slice(&nonce.to_ne_bytes());
-    fd_io_until(registration_fd, &mut request, true, deadline)?;
+    sys::fd::write_all_until(registration_fd, &request, deadline)?;
     // The request is out, so its reply is read to completion even past the
     // caller's deadline; abandoning it would leave it in front of the next reply.
     let reply_deadline = monotonic_millis()?
         .saturating_add(reply_hard_limit_millis)
         .max(deadline);
     let mut response = [0_u8; NESTED_GROUP_RESPONSE_LEN];
-    fd_io_until(registration_fd, &mut response, false, reply_deadline)?;
+    sys::fd::read_exact_until(registration_fd, &mut response, reply_deadline)?;
     let status = i32::from_ne_bytes([response[0], response[1], response[2], response[3]]);
     let response_pid = i32::from_ne_bytes([response[4], response[5], response[6], response[7]]);
     let anchor_pid = i32::from_ne_bytes([response[8], response[9], response[10], response[11]]);
@@ -455,7 +379,7 @@ fn exchange_locked_until(
 #[cfg(unix)]
 pub fn read_nested_group_request(fd: RawFd) -> io::Result<NestedGroupRequest> {
     let mut request = [0_u8; NESTED_GROUP_REQUEST_LEN];
-    fd_io(fd, &mut request, false)?;
+    sys::fd::read_exact_until(fd, &mut request, default_io_deadline()?)?;
     if request[1..4] != [0; 3] {
         return Err(io::Error::from_raw_os_error(libc::EPROTO));
     }
@@ -489,7 +413,7 @@ pub fn write_nested_group_response(
     response[4..8].copy_from_slice(&pid.to_ne_bytes());
     response[8..12].copy_from_slice(&anchor.to_ne_bytes());
     response[12..20].copy_from_slice(&nonce.to_ne_bytes());
-    fd_io(fd, &mut response, true)
+    sys::fd::write_all_until(fd, &response, default_io_deadline()?)
 }
 // ===========================================================================
 //  Session state machine (REQ-PROOF-002)
@@ -826,18 +750,16 @@ impl ProofResult {
 
 #[cfg(unix)]
 mod os {
-    #[cfg(target_os = "macos")]
-    use std::ffi::{c_int, c_void};
     use std::fs::{File, OpenOptions};
     use std::io::{self, ErrorKind, Read, Write};
-    use std::os::fd::AsRawFd;
-    use std::os::unix::process::CommandExt;
+    use std::os::fd::AsFd;
     use std::path::{Path, PathBuf};
     use std::process::{Child, Command, ExitStatus, Stdio};
     use std::thread::{self, JoinHandle};
     use std::time::{Duration, Instant};
 
     use crate::automation::identity::{digest_hex, sha256_file};
+    use crate::platform::os as sys;
 
     use super::{
         ChangeWait, NestedGroupOperation, NestedGroupProtocol, ProcessIdentity, SleepWait,
@@ -1078,71 +1000,20 @@ mod os {
     #[cfg(target_os = "macos")]
     #[must_use]
     pub fn process_start_micros(pid: u32) -> Option<u64> {
-        #[repr(C)]
-        #[derive(Clone, Copy)]
-        struct StartTimeval {
-            seconds: i64,
-            microseconds: i32,
-            _padding: i32,
-        }
+        // The record begins with the start timeval: an i64 of seconds, an i32
+        // of microseconds, and four bytes of padding.
+        const START_TIMEVAL_LEN: usize = 16;
 
-        let mut mib: [c_int; 4] = [
-            libc::CTL_KERN,
-            libc::KERN_PROC,
-            libc::KERN_PROC_PID,
-            c_int::try_from(pid).ok()?,
-        ];
-        let mut required: usize = 0;
-        // SAFETY: mib names KERN_PROC_PID for one PID, and a null buffer with a
-        // writable length requests the record size without writing any bytes.
-        let sized = unsafe {
-            libc::sysctl(
-                mib.as_mut_ptr(),
-                mib.len() as u32,
-                std::ptr::null_mut(),
-                &raw mut required,
-                std::ptr::null_mut(),
-                0,
-            )
-        };
-        if sized != 0 || required < std::mem::size_of::<StartTimeval>() {
-            return None;
-        }
-        let mut record = vec![0_u8; required];
-        let mut written = required;
-        // SAFETY: record is writable for written bytes, and the kernel reports
-        // the byte count it produced through written.
-        let read = unsafe {
-            libc::sysctl(
-                mib.as_mut_ptr(),
-                mib.len() as u32,
-                record.as_mut_ptr().cast::<c_void>(),
-                &raw mut written,
-                std::ptr::null_mut(),
-                0,
-            )
-        };
-        if read != 0 || written < std::mem::size_of::<StartTimeval>() {
-            return None;
-        }
-        let mut start = StartTimeval {
-            seconds: 0,
-            microseconds: 0,
-            _padding: 0,
-        };
-        // SAFETY: the record begins with the process start timeval and holds at
-        // least that many initialized bytes, and both operands are plain data.
-        unsafe {
-            std::ptr::copy_nonoverlapping(
-                record.as_ptr(),
-                (&raw mut start).cast::<u8>(),
-                std::mem::size_of::<StartTimeval>(),
-            );
-        }
-        u64::try_from(start.seconds)
+        let record = sys::process::kernel_process_record(
+            libc::pid_t::try_from(pid).ok()?,
+            START_TIMEVAL_LEN,
+        )?;
+        let seconds = i64::from_ne_bytes(record[0..8].try_into().ok()?);
+        let microseconds = i32::from_ne_bytes(record[8..12].try_into().ok()?);
+        u64::try_from(seconds)
             .ok()?
             .checked_mul(1_000_000)?
-            .checked_add(u64::try_from(start.microseconds).ok()?)
+            .checked_add(u64::try_from(microseconds).ok()?)
     }
 
     /// Capture the process start time on Linux via `/proc/<pid>/stat`.
@@ -1155,10 +1026,7 @@ mod os {
     #[must_use]
     pub fn process_start_micros(pid: u32) -> Option<u64> {
         let contents = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
-        // SAFETY: sysconf is a read-only configuration query.
-        let hz = unsafe { libc::sysconf(libc::_SC_CLK_TCK) };
-        let hz = u64::try_from(hz).ok().filter(|value| *value > 0)?;
-        parse_linux_proc_start_micros(&contents, hz)
+        parse_linux_proc_start_micros(&contents, sys::process::clock_ticks_per_second()?)
     }
 
     /// Parse Linux `/proc/<pid>/stat` and convert field 22 (`starttime`) from
@@ -1427,9 +1295,9 @@ mod os {
             if recorded_process_state(identity)? != Some(true) {
                 break;
             }
-            // SAFETY: the identity was re-verified immediately above, so this
-            // signals the exact recorded process and never a recycled pid.
-            if unsafe { libc::kill(pid, signal) } == 0 {
+            // The identity was re-verified immediately above, so this signals the
+            // exact recorded process and never a recycled pid.
+            if sys::process::send_signal(pid, signal).is_ok() {
                 *sent = true;
             }
             let deadline = std::time::Instant::now() + grace;
@@ -1511,20 +1379,16 @@ mod os {
                     operation: "open guard",
                     error,
                 })?;
-            // SAFETY: guard is an open file descriptor owned by this RunLock.
-            let locked = unsafe { libc::flock(guard.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };
-            if locked == -1 {
-                let error = io::Error::last_os_error();
-                if error.raw_os_error() == Some(libc::EWOULDBLOCK)
-                    || error.raw_os_error() == Some(libc::EAGAIN)
-                {
-                    return Err(classify_existing_lock(&root, &record_path)?);
+            match sys::lock::try_lock_exclusive(guard.as_fd()) {
+                Ok(true) => {}
+                Ok(false) => return Err(classify_existing_lock(&root, &record_path)?),
+                Err(error) => {
+                    return Err(ChildSessionError::RunLockIo {
+                        path: guard_path,
+                        operation: "acquire guard",
+                        error,
+                    });
                 }
-                return Err(ChildSessionError::RunLockIo {
-                    path: guard_path,
-                    operation: "acquire guard",
-                    error,
-                });
             }
 
             let owner = current_process_identity()?;
@@ -1600,14 +1464,13 @@ mod os {
                     });
                 }
             }
-            // SAFETY: guard remains open and locked until this release call.
-            if unsafe { libc::flock(self.guard.as_raw_fd(), libc::LOCK_UN) } == -1 {
-                return Err(ChildSessionError::RunLockIo {
+            sys::lock::unlock(self.guard.as_fd()).map_err(|error| {
+                ChildSessionError::RunLockIo {
                     path: self.guard_path.clone(),
                     operation: "release guard",
-                    error: io::Error::last_os_error(),
-                });
-            }
+                    error,
+                }
+            })?;
             self.released = true;
             Ok(())
         }
@@ -1702,35 +1565,12 @@ mod os {
     fn process_exists(pid: u32) -> io::Result<bool> {
         let pid = libc::pid_t::try_from(pid)
             .map_err(|_| io::Error::new(ErrorKind::InvalidInput, "PID does not fit pid_t"))?;
-        // SAFETY: signal zero performs an existence and permission check only.
-        if unsafe { libc::kill(pid, 0) } == 0 {
-            return Ok(true);
-        }
-        let error = io::Error::last_os_error();
-        match error.raw_os_error() {
-            Some(libc::ESRCH) => Ok(false),
-            Some(libc::EPERM) => Ok(true),
-            _ => Err(error),
-        }
+        sys::process::exists(pid)
     }
 
     #[cfg(target_os = "macos")]
     fn process_executable_path(pid: u32) -> io::Result<PathBuf> {
-        use std::os::unix::ffi::OsStringExt as _;
-
-        let pid = libc::c_int::try_from(pid)
-            .map_err(|_| io::Error::new(ErrorKind::InvalidInput, "PID does not fit c_int"))?;
-        let mut bytes = vec![0_u8; libc::PROC_PIDPATHINFO_MAXSIZE as usize];
-        // SAFETY: bytes is writable for the length passed to proc_pidpath.
-        let count = unsafe {
-            libc::proc_pidpath(pid, bytes.as_mut_ptr().cast(), bytes.len() as libc::c_uint)
-        };
-        let count = usize::try_from(count)
-            .ok()
-            .filter(|count| *count > 0 && *count <= bytes.len())
-            .ok_or_else(io::Error::last_os_error)?;
-        bytes.truncate(count);
-        Ok(PathBuf::from(std::ffi::OsString::from_vec(bytes)))
+        sys::process::executable_path(pid)
     }
 
     #[cfg(not(target_os = "macos"))]
@@ -2006,36 +1846,19 @@ mod os {
             if self.observed {
                 return Ok(true);
             }
-            let mut info = std::mem::MaybeUninit::<libc::siginfo_t>::zeroed();
-            // SAFETY: info points to writable siginfo_t storage. WNOWAIT leaves
-            // the exact child waitable, so its PID and process-group identity
-            // cannot be reused before group cleanup is complete.
-            let result = unsafe {
-                libc::waitid(
-                    libc::P_PID,
-                    self.pid as libc::id_t,
-                    info.as_mut_ptr(),
-                    libc::WEXITED | libc::WNOHANG | libc::WNOWAIT,
-                )
-            };
-            if result == -1 {
-                let error = io::Error::last_os_error();
+            // WNOWAIT leaves the exact child waitable, so its PID and
+            // process-group identity cannot be reused before group cleanup is
+            // complete.
+            match sys::process::has_exited_without_reaping(self.pid) {
+                Ok(exited) => self.observed = exited,
                 // A leader that no longer exists as a child is the absence this
                 // observation is looking for, not a failure to observe. Cleanup
                 // already treats ESRCH that way everywhere else it asks the
                 // kernel about this process; ECHILD is the same answer from
                 // waitid. Reporting it as an observer failure displaces the
                 // failure the caller was actually trying to record.
-                if error.raw_os_error() == Some(libc::ECHILD) {
-                    self.observed = true;
-                    return Ok(true);
-                }
-                return Err(error);
-            }
-            // SAFETY: waitid initialized info on success.
-            let info = unsafe { info.assume_init() };
-            if unsafe { info.si_pid() } != 0 {
-                self.observed = true;
+                Err(error) if error.raw_os_error() == Some(libc::ECHILD) => self.observed = true,
+                Err(error) => return Err(error),
             }
             Ok(self.observed)
         }
@@ -2077,40 +1900,7 @@ mod os {
         const MINIMUM_RECORD: usize = GROUP_OFFSET + std::mem::size_of::<i32>();
         const ZOMBIE_STATE: u8 = 5;
 
-        let mut mib: [c_int; 4] = [libc::CTL_KERN, libc::KERN_PROC, libc::KERN_PROC_PID, pid];
-        let mut required: usize = 0;
-        // SAFETY: mib names KERN_PROC_PID for one PID, and a null buffer with a
-        // writable length requests the record size without writing any bytes.
-        let sized = unsafe {
-            libc::sysctl(
-                mib.as_mut_ptr(),
-                mib.len() as u32,
-                std::ptr::null_mut(),
-                &raw mut required,
-                std::ptr::null_mut(),
-                0,
-            )
-        };
-        if sized != 0 || required < MINIMUM_RECORD {
-            return None;
-        }
-        let mut record = vec![0_u8; required];
-        let mut written = required;
-        // SAFETY: record is writable for written bytes, and the kernel reports
-        // the byte count it produced through written.
-        let read = unsafe {
-            libc::sysctl(
-                mib.as_mut_ptr(),
-                mib.len() as u32,
-                record.as_mut_ptr().cast::<c_void>(),
-                &raw mut written,
-                std::ptr::null_mut(),
-                0,
-            )
-        };
-        if read != 0 || written < MINIMUM_RECORD {
-            return None;
-        }
+        let record = sys::process::kernel_process_record(pid, MINIMUM_RECORD)?;
         let field = |offset: usize| -> i32 {
             let mut bytes = [0_u8; 4];
             bytes.copy_from_slice(&record[offset..offset + 4]);
@@ -2127,63 +1917,22 @@ mod os {
         process_group: u32,
         ignored: &[libc::pid_t],
     ) -> io::Result<Option<libc::pid_t>> {
-        const PROC_PGRP_ONLY: u32 = 2;
-        // Query and retry if the process table grows between calls.
-        for _ in 0..3 {
-            // SAFETY: a null buffer requests the required byte count.
-            let required = unsafe {
-                libc::proc_listpids(PROC_PGRP_ONLY, process_group, std::ptr::null_mut(), 0)
+        let group = i32::try_from(process_group)
+            .map_err(|_| io::Error::other("process group does not fit c_int"))?;
+        for pid in sys::process::process_group_pids(process_group)?
+            .into_iter()
+            .filter(|pid| *pid > 0 && !ignored.contains(pid))
+        {
+            // The filter can name a process that has left the group, whose PID
+            // was reused, or that has exited unreaped.
+            let Some((member_group, terminal)) = macos_process_group_and_state(pid) else {
+                continue;
             };
-            if required < 0 {
-                return Err(io::Error::last_os_error());
-            }
-            let slots = usize::try_from(required)
-                .ok()
-                .and_then(|bytes| bytes.checked_div(std::mem::size_of::<libc::pid_t>()))
-                .and_then(|count| count.checked_add(16))
-                .ok_or_else(|| io::Error::other("process-group member count overflow"))?;
-            let mut pids = vec![0 as libc::pid_t; slots];
-            let bytes = i32::try_from(pids.len() * std::mem::size_of::<libc::pid_t>())
-                .map_err(|_| io::Error::other("process-group buffer does not fit c_int"))?;
-            // SAFETY: pids is writable for exactly bytes bytes.
-            let written = unsafe {
-                libc::proc_listpids(
-                    PROC_PGRP_ONLY,
-                    process_group,
-                    pids.as_mut_ptr().cast(),
-                    bytes,
-                )
-            };
-            if written < 0 {
-                return Err(io::Error::last_os_error());
-            }
-            if written < bytes {
-                let count = usize::try_from(written)
-                    .ok()
-                    .and_then(|value| value.checked_div(std::mem::size_of::<libc::pid_t>()))
-                    .ok_or_else(|| io::Error::other("invalid process-group byte count"))?;
-                let group = i32::try_from(process_group)
-                    .map_err(|_| io::Error::other("process group does not fit c_int"))?;
-                for pid in pids[..count]
-                    .iter()
-                    .copied()
-                    .filter(|pid| *pid > 0 && !ignored.contains(pid))
-                {
-                    // The filter can name a process that has left the group,
-                    // whose PID was reused, or that has exited unreaped.
-                    let Some((member_group, terminal)) = macos_process_group_and_state(pid) else {
-                        continue;
-                    };
-                    if member_group == group && !terminal {
-                        return Ok(Some(pid));
-                    }
-                }
-                return Ok(None);
+            if member_group == group && !terminal {
+                return Ok(Some(pid));
             }
         }
-        Err(io::Error::other(
-            "process-group membership changed during every inspection",
-        ))
+        Ok(None)
     }
 
     #[cfg(target_os = "macos")]
@@ -2245,13 +1994,8 @@ mod os {
             anchor.permits_group_operation(),
             "process-group signal requires an unreaped leader anchor"
         );
-        // SAFETY: the unreaped exact leader prevents reuse of this process-group ID.
-        let rc = unsafe { libc::kill(-anchor.pid, signal) };
-        if rc == 0 {
-            Ok(())
-        } else {
-            Err(io::Error::last_os_error())
-        }
+        // The unreaped exact leader prevents reuse of this process-group ID.
+        sys::process::send_signal_to_group(anchor.pid, signal)
     }
 
     // --- Transactional readers and receipt-bearing supervision ------------
@@ -2525,36 +2269,31 @@ mod os {
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped())
                 .stdin(Stdio::null());
-            // Captured by value so pre_exec only reads a Copy Duration after fork.
+            // Captured by value so the hook only reads a Copy Duration after fork.
             let exchange_timeout = handshake_timeout;
-            // SAFETY: setsid, setpgid, fcntl, read, write, and getpid are
-            // async-signal-safe. A nested group stays in the monitor's session
-            // so its stable anchor can join; an unmonitored child owns a session.
-            unsafe {
-                command.pre_exec(move || {
-                    if let Some(protocol) = protocol {
-                        if libc::setpgid(0, 0) == -1 {
-                            return Err(io::Error::last_os_error());
-                        }
-                        protocol.make_inheritable()?;
-                        protocol.exchange_with_timeout(
-                            NestedGroupOperation::Register,
-                            libc::getpid(),
-                            exchange_timeout,
-                        )?;
-                        if !inherit_protocol {
-                            for descriptor in protocol.descriptors() {
-                                if libc::fcntl(descriptor, libc::F_SETFD, libc::FD_CLOEXEC) == -1 {
-                                    return Err(io::Error::last_os_error());
-                                }
-                            }
-                        }
-                    } else if libc::setsid() == -1 {
-                        return Err(io::Error::last_os_error());
+            // The hook is async-signal-safe: setsid, setpgid, fcntl, poll, read,
+            // write and getpid. A nested group stays in the monitor's session so
+            // its stable anchor can join; an unmonitored child owns a session.
+            sys::process::before_exec(&mut command, move || {
+                let Some(protocol) = protocol else {
+                    return sys::process::start_new_session();
+                };
+                sys::process::start_new_process_group()?;
+                protocol.make_inheritable()?;
+                let pid = libc::pid_t::try_from(std::process::id())
+                    .map_err(|_| io::Error::from_raw_os_error(libc::EOVERFLOW))?;
+                protocol.exchange_with_timeout(
+                    NestedGroupOperation::Register,
+                    pid,
+                    exchange_timeout,
+                )?;
+                if !inherit_protocol {
+                    for descriptor in protocol.descriptors() {
+                        sys::fd::set_close_on_exec(descriptor)?;
                     }
-                    Ok(())
-                });
-            }
+                }
+                Ok(())
+            });
             let mut child = super::spawn_guarded(&mut command).map_err(ChildSessionError::Spawn)?;
             let pid = child.id();
             let monitor_anchor_pid = match protocol {
@@ -3830,21 +3569,20 @@ mod tests {
     #[cfg(target_os = "macos")]
     #[test]
     fn macos_record_classifies_an_exited_child_as_terminal_in_this_group() {
-        // SAFETY: fork has no preconditions here; the child exits immediately.
-        let child = unsafe { libc::fork() };
-        assert!(child >= 0, "fork failed");
-        if child == 0 {
-            // SAFETY: the child does nothing but exit.
-            unsafe { libc::_exit(0) };
-        }
+        let mut child = std::process::Command::new("/usr/bin/true")
+            .spawn()
+            .expect("spawn immediate-exit child");
+        let child_pid = libc::pid_t::try_from(child.id()).expect("child pid");
+        let (own_group, _) =
+            super::os::macos_group_and_state(libc::pid_t::try_from(std::process::id()).unwrap())
+                .expect("record for this process");
 
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
         loop {
             let (group, terminal) =
-                super::os::macos_group_and_state(child).expect("record for exited child");
+                super::os::macos_group_and_state(child_pid).expect("record for exited child");
             if terminal {
-                // SAFETY: getpgrp has no preconditions.
-                assert_eq!(group, unsafe { libc::getpgrp() });
+                assert_eq!(group, own_group);
                 break;
             }
             assert!(
@@ -3854,11 +3592,7 @@ mod tests {
             std::thread::sleep(std::time::Duration::from_millis(10));
         }
 
-        // SAFETY: child is this process's direct child.
-        assert_eq!(
-            unsafe { libc::waitpid(child, std::ptr::null_mut(), 0) },
-            child
-        );
+        child.wait().expect("reap exited child");
     }
 
     use super::*;
@@ -3874,10 +3608,10 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn nested_group_exchange_times_out_when_token_peer_stalls() {
-        let mut token = [0; 2];
-        // SAFETY: token contains storage for both descriptors.
-        assert_eq!(unsafe { libc::pipe(token.as_mut_ptr()) }, 0);
-        let protocol = NestedGroupProtocol::new(token[0], token[1], token[1]);
+        use std::os::fd::AsRawFd as _;
+        let (reader, writer) = std::io::pipe().expect("token pipe");
+        let protocol =
+            NestedGroupProtocol::new(reader.as_raw_fd(), writer.as_raw_fd(), writer.as_raw_fd());
         let error = protocol
             .exchange_with_timeout(
                 NestedGroupOperation::Register,
@@ -3886,11 +3620,6 @@ mod tests {
             )
             .unwrap_err();
         assert_eq!(error.raw_os_error(), Some(libc::ETIMEDOUT));
-        // SAFETY: both descriptors were returned by pipe and are closed once.
-        unsafe {
-            libc::close(token[0]);
-            libc::close(token[1]);
-        }
     }
 
     /// A containment monitor that answers on a socketpair, with the first
@@ -4592,13 +4321,16 @@ mod os_tests {
     fn nested_registration_is_bounded_by_the_handshake_budget_not_a_fixed_constant() {
         let dir = TempDir::new().expect("tempdir");
         let config = make_config(&dir, Duration::from_secs(60), Duration::from_secs(1));
-        let mut registration = [0; 2];
-        let mut token = [0; 2];
-        // SAFETY: each array has storage for both descriptors of one pipe.
-        assert_eq!(unsafe { libc::pipe(registration.as_mut_ptr()) }, 0);
-        assert_eq!(unsafe { libc::pipe(token.as_mut_ptr()) }, 0);
+        use std::os::fd::AsRawFd as _;
+        let (registration_reader, registration_writer) =
+            std::io::pipe().expect("registration pipe");
+        let (token_reader, token_writer) = std::io::pipe().expect("token pipe");
         // Nothing ever writes the token, so the monitor "never answers".
-        let protocol = NestedGroupProtocol::new(registration[1], token[0], token[1]);
+        let protocol = NestedGroupProtocol::new(
+            registration_writer.as_raw_fd(),
+            token_reader.as_raw_fd(),
+            token_writer.as_raw_fd(),
+        );
         let started = std::time::Instant::now();
         let result = ChildSession::spawn_with_handshake(
             Command::new("sh"),
@@ -4608,13 +4340,12 @@ mod os_tests {
             Duration::from_millis(50),
         );
         let elapsed = started.elapsed();
-        // SAFETY: all four descriptors were returned by pipe and are closed once.
-        unsafe {
-            libc::close(registration[0]);
-            libc::close(registration[1]);
-            libc::close(token[0]);
-            libc::close(token[1]);
-        }
+        drop((
+            registration_reader,
+            registration_writer,
+            token_reader,
+            token_writer,
+        ));
         let error = match result {
             Ok(session) => panic!(
                 "registration unexpectedly succeeded for pid {}",
@@ -4835,22 +4566,21 @@ mod os_tests {
 
     #[test]
     fn identity_survives_a_child_that_exits_before_it_is_captured() {
-        let child = Command::new("/usr/bin/true")
+        let mut child = Command::new("/usr/bin/true")
             .spawn()
             .expect("spawn immediate-exit child");
         let pid = child.id();
-        let mut status = 0;
-        let mut info = std::mem::MaybeUninit::<libc::siginfo_t>::zeroed();
-        // Leave the child waitable so its PID stays pinned while unreaped.
-        let observed = unsafe {
-            libc::waitid(
-                libc::P_PID,
-                pid,
-                info.as_mut_ptr(),
-                libc::WEXITED | libc::WNOWAIT,
-            )
-        };
-        assert_eq!(observed, 0, "child must reach a terminal state");
+        // Observing leaves the child waitable, so its PID stays pinned while unreaped.
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        while !sys::process::has_exited_without_reaping(libc::pid_t::try_from(pid).unwrap())
+            .expect("observe child")
+        {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "child must reach a terminal state"
+            );
+            std::thread::sleep(Duration::from_millis(5));
+        }
 
         let identity = capture_identity(pid, "deadbeef").expect("identity of an exited child");
         assert_eq!(identity.pid, pid);
@@ -4863,11 +4593,7 @@ mod os_tests {
             identity.start_time
         );
 
-        assert_eq!(
-            unsafe { libc::waitpid(pid as libc::pid_t, &raw mut status, 0) },
-            pid as libc::pid_t
-        );
-        drop(child);
+        child.wait().expect("reap exited child");
     }
 
     #[test]
@@ -4881,8 +4607,7 @@ mod os_tests {
         let pid = session.pid();
         drop(session);
         // After Drop, the child should be dead.
-        // SAFETY: kill(pid, 0) existence check.
-        let alive = unsafe { libc::kill(pid as libc::pid_t, 0) == 0 };
+        let alive = sys::process::exists(pid as libc::pid_t).expect("probe child");
         assert!(!alive, "child should be killed by Drop backstop");
         assert!(
             !dir.path().join(super::os::RUN_LOCK_RECORD_NAME).exists(),
@@ -4971,9 +4696,7 @@ mod os_tests {
 
         #[cfg(not(target_os = "linux"))]
         {
-            // SAFETY: signal zero only checks whether this exact PID exists.
-            let result = unsafe { libc::kill(pid as libc::pid_t, 0) };
-            result == 0 || std::io::Error::last_os_error().raw_os_error() != Some(libc::ESRCH)
+            sys::process::exists(pid as libc::pid_t).unwrap_or(true)
         }
     }
 
@@ -5031,18 +4754,9 @@ mod os_tests {
     }
 
     fn partial_cleanup_child(seconds: &str) -> (std::process::Child, super::os::LeaderAnchor) {
-        use std::os::unix::process::CommandExt as _;
-
         let mut command = Command::new("/bin/sleep");
         command.arg(seconds);
-        unsafe {
-            command.pre_exec(|| {
-                if libc::setsid() == -1 {
-                    return Err(std::io::Error::last_os_error());
-                }
-                Ok(())
-            });
-        }
+        sys::process::before_exec(&mut command, sys::process::start_new_session);
         let child = command.spawn().expect("spawn isolated cleanup child");
         let anchor = super::os::LeaderAnchor::new(child.id(), None).expect("create leader anchor");
         (child, anchor)
@@ -5086,12 +4800,10 @@ mod os_tests {
     }
 
     fn assert_exact_child_reaped(pid: u32) {
-        let mut status = 0;
-        let result = unsafe { libc::waitpid(pid as libc::pid_t, &mut status, libc::WNOHANG) };
-        assert_eq!(result, -1);
-        assert_eq!(
-            std::io::Error::last_os_error().raw_os_error(),
-            Some(libc::ECHILD)
+        let result = sys::process::has_exited_without_reaping(pid as libc::pid_t);
+        assert!(
+            matches!(&result, Err(error) if error.raw_os_error() == Some(libc::ECHILD)),
+            "a reaped child is no longer waitable, got {result:?}"
         );
     }
 

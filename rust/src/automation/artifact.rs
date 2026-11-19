@@ -23,7 +23,7 @@ pub fn read_regular_relative_nofollow(
 ) -> std::io::Result<Vec<u8>> {
     use std::ffi::CString;
     use std::io::Read as _;
-    use std::os::fd::{AsRawFd as _, FromRawFd as _};
+    use std::os::fd::AsFd as _;
     use std::os::unix::{ffi::OsStrExt as _, fs::OpenOptionsExt as _};
     use std::path::Component;
 
@@ -51,14 +51,8 @@ pub fn read_regular_relative_nofollow(
             | libc::O_NOFOLLOW
             | libc::O_NONBLOCK
             | if is_directory { libc::O_DIRECTORY } else { 0 };
-        // SAFETY: the directory remains open and name is NUL-terminated. A fresh
-        // descriptor is immediately transferred to File ownership on success.
-        let fd = unsafe { libc::openat(directory.as_raw_fd(), name.as_ptr(), flags) };
-        if fd < 0 {
-            return Err(std::io::Error::last_os_error());
-        }
-        // SAFETY: openat returned a fresh descriptor owned by this call.
-        directory = unsafe { File::from_raw_fd(fd) };
+        directory =
+            crate::platform::os::fd::open_at(directory.as_fd(), &name, flags, 0).map(File::from)?;
     }
     let before = directory.metadata()?;
     if !before.is_file() || before.len() > limit {

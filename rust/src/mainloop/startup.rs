@@ -44,7 +44,7 @@ mod live {
         crate::log_abi::log_init(15);
         crate::bridge_log::rust_bridge_init();
         if let Some(path) = &parsed.log_file {
-            if let Err(error) = crate::platform::redirect_stderr(std::path::Path::new(path)) {
+            if let Err(error) = crate::platform::os::stderr::redirect_stderr(path.as_ref()) {
                 eprintln!("Could not open logfile: {error}");
                 return 1;
             }
