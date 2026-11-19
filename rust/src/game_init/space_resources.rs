@@ -352,6 +352,8 @@ pub(crate) mod live {
     }
 }
 
+pub use live::*;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -414,5 +416,3 @@ mod tests {
         assert_eq!(SPACE_ANIMATION_KEYS[2][2], c"graphics.asteroid.small");
     }
 }
-
-pub use live::*;

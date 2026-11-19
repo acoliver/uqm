@@ -84,16 +84,20 @@ fn check_initialized_identity(h: &mut Harness) {
 fn check_bomb_queue(h: &mut Harness) {
     // This uses the real live queue adapter, not a recording FleetGroups host.
     let old_bomb = crate::battle_context::with(|cx| {
-        (&cx.world).story_state(uqm_rust::engine::StoryKey::CHMMR_BOMB_STATE)
+        cx.world
+            .story_state(uqm_rust::engine::StoryKey::CHMMR_BOMB_STATE)
     });
     let old_probe = crate::battle_context::with(|cx| {
-        (&cx.world).story_state(uqm_rust::engine::StoryKey::PROBE_MESSAGE_DELIVERED)
+        cx.world
+            .story_state(uqm_rust::engine::StoryKey::PROBE_MESSAGE_DELIVERED)
     });
     crate::battle_context::with(|cx| {
-        (&mut cx.world).set_story_state(uqm_rust::engine::StoryKey::CHMMR_BOMB_STATE, 3)
+        cx.world
+            .set_story_state(uqm_rust::engine::StoryKey::CHMMR_BOMB_STATE, 3)
     });
     crate::battle_context::with(|cx| {
-        (&mut cx.world).set_story_state(uqm_rust::engine::StoryKey::PROBE_MESSAGE_DELIVERED, 1)
+        cx.world
+            .set_story_state(uqm_rust::engine::StoryKey::PROBE_MESSAGE_DELIVERED, 1)
     });
     unsafe {
         let saved = crate::battle_context::with(|cx| {
@@ -116,10 +120,11 @@ fn check_bomb_queue(h: &mut Harness) {
         });
     }
     crate::battle_context::with(|cx| {
-        (&mut cx.world).set_story_state(uqm_rust::engine::StoryKey::CHMMR_BOMB_STATE, old_bomb)
+        cx.world
+            .set_story_state(uqm_rust::engine::StoryKey::CHMMR_BOMB_STATE, old_bomb)
     });
     crate::battle_context::with(|cx| {
-        (&mut cx.world).set_story_state(
+        cx.world.set_story_state(
             uqm_rust::engine::StoryKey::PROBE_MESSAGE_DELIVERED,
             old_probe,
         )

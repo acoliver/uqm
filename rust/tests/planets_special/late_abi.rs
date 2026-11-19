@@ -65,14 +65,15 @@ pub fn check() {
 
     for retrieved in 0..=32 {
         crate::battle_context::with(|cx| {
-            (&mut cx.world)
+            cx.world
                 .set_story_state(uqm_rust::engine::StoryKey::SPATHI_CREATURES_ELIMINATED, 0)
         });
         crate::battle_context::with(|cx| {
-            (&mut cx.world).set_story_state(uqm_rust::engine::StoryKey::SPATHI_SHIELDED_SELVES, 0)
+            cx.world
+                .set_story_state(uqm_rust::engine::StoryKey::SPATHI_SHIELDED_SELVES, 0)
         });
         crate::battle_context::with(|cx| {
-            (&mut cx.world)
+            cx.world
                 .set_story_state(uqm_rust::engine::StoryKey::SPATHI_CREATURES_EXAMINED, 0)
         });
         harness.state.sys.info.planet_info.scan_retrieve_mask[BIOLOGICAL_SCAN] = if retrieved == 32
@@ -94,14 +95,14 @@ pub fn check() {
         });
         assert_eq!(
             crate::battle_context::with(|cx| get_game_state(
-                &cx.world,
+                cx.world,
                 uqm_rust::engine::StoryKey::SPATHI_CREATURES_EXAMINED
             )),
             1
         );
         assert_eq!(
             crate::battle_context::with(|cx| get_game_state(
-                &cx.world,
+                cx.world,
                 uqm_rust::engine::StoryKey::SPATHI_CREATURES_ELIMINATED
             )),
             u32::from(retrieved == 31)
@@ -114,7 +115,8 @@ pub fn check() {
     }
 
     crate::battle_context::with(|cx| {
-        (&mut cx.world).set_story_state(uqm_rust::engine::StoryKey::SPATHI_CREATURES_EXAMINED, 0)
+        cx.world
+            .set_story_state(uqm_rust::engine::StoryKey::SPATHI_CREATURES_EXAMINED, 0)
     });
     assert!(unsafe {
         crate::invoke_generation(&mut harness.state, |view, host| {
@@ -128,7 +130,7 @@ pub fn check() {
     });
     assert_eq!(
         crate::battle_context::with(|cx| get_game_state(
-            &cx.world,
+            cx.world,
             uqm_rust::engine::StoryKey::SPATHI_CREATURES_EXAMINED
         )),
         0
@@ -157,7 +159,6 @@ pub fn check() {
 }
 
 fn check_live_queues(harness: &mut Harness) {
-    use uqm_rust::engine::World;
     use uqm_rust::planets::generate::sam::GuardSite;
     extern "C" {
         static mut ScreenHeight: i32;
@@ -219,7 +220,7 @@ fn check_live_queues(harness: &mut Harness) {
         );
         assert_eq!(
             crate::battle_context::with(|cx| get_game_state(
-                &cx.world,
+                cx.world,
                 uqm_rust::engine::StoryKey::UTWIG_BOMB
             )),
             0

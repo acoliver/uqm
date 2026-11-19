@@ -73,7 +73,7 @@ impl Harness {
     fn new() -> Self {
         unsafe {
             // `set_game_state` is a no-op until the game state exists.
-            crate::battle_context::with(|cx| rust_init_game_state(&mut cx.world));
+            crate::battle_context::with(|cx| rust_init_game_state(cx.world));
             ScreenWidth = 320;
         }
         let previous_catalog = crate::battle_context::with(|cx| *cx.world.catalog());
@@ -268,7 +268,7 @@ impl SpecialOps for Harness {
         if let Some(unleashed) = system.strip_prefix("chmmr") {
             crate::battle_context::with(|cx| {
                 set_game_state(
-                    &mut cx.world,
+                    cx.world,
                     uqm_rust::engine::StoryKey::CHMMR_UNLEASHED,
                     unleashed.parse().expect("0 or 1"),
                 )
@@ -291,7 +291,7 @@ impl SpecialOps for Harness {
         if let Some(taken) = system.strip_prefix("burv") {
             crate::battle_context::with(|cx| {
                 set_game_state(
-                    &mut cx.world,
+                    cx.world,
                     uqm_rust::engine::StoryKey::BURVIXESE_BROADCASTERS,
                     taken.parse().expect("0 or 1"),
                 )
@@ -300,7 +300,7 @@ impl SpecialOps for Harness {
         if let Some(taken) = system.strip_prefix("aqua") {
             crate::battle_context::with(|cx| {
                 set_game_state(
-                    &mut cx.world,
+                    cx.world,
                     uqm_rust::engine::StoryKey::AQUA_HELIX,
                     taken.parse().expect("0 or 1"),
                 )
@@ -309,7 +309,7 @@ impl SpecialOps for Harness {
         if let Some(taken) = system.strip_prefix("bomb") {
             crate::battle_context::with(|cx| {
                 set_game_state(
-                    &mut cx.world,
+                    cx.world,
                     uqm_rust::engine::StoryKey::UTWIG_BOMB,
                     taken.parse().expect("0 or 1"),
                 )
@@ -318,7 +318,7 @@ impl SpecialOps for Harness {
         if let Some(taken) = system.strip_prefix("sun") {
             crate::battle_context::with(|cx| {
                 set_game_state(
-                    &mut cx.world,
+                    cx.world,
                     uqm_rust::engine::StoryKey::SUN_DEVICE,
                     taken.parse().expect("0 or 1"),
                 )
@@ -327,7 +327,7 @@ impl SpecialOps for Harness {
         if let Some(taken) = system.strip_prefix("taalo") {
             crate::battle_context::with(|cx| {
                 set_game_state(
-                    &mut cx.world,
+                    cx.world,
                     uqm_rust::engine::StoryKey::TAALO_PROTECTOR,
                     taken.parse().expect("0 or 1"),
                 )

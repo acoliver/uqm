@@ -40,14 +40,14 @@ impl Ops for Harness {
         );
         assert_eq!(
             crate::battle_context::with(|cx| get_game_state(
-                &cx.world,
+                cx.world,
                 uqm_rust::engine::StoryKey::FOUND_PLUTO_SPATHI
             )),
             1
         );
         assert_eq!(
             crate::battle_context::with(|cx| get_game_state(
-                &cx.world,
+                cx.world,
                 uqm_rust::engine::StoryKey::MOONBASE_DESTROYED
             )),
             1
@@ -67,17 +67,21 @@ impl DebugTraversal {
         let saved = Self {
             _quiet: crate::battle_context::with(|cx| cx.kernel.diagnostics.suppress_interaction()),
             pluto_spathi: crate::battle_context::with(|cx| {
-                (&cx.world).story_state(uqm_rust::engine::StoryKey::FOUND_PLUTO_SPATHI)
+                cx.world
+                    .story_state(uqm_rust::engine::StoryKey::FOUND_PLUTO_SPATHI)
             }),
             moonbase_destroyed: crate::battle_context::with(|cx| {
-                (&cx.world).story_state(uqm_rust::engine::StoryKey::MOONBASE_DESTROYED)
+                cx.world
+                    .story_state(uqm_rust::engine::StoryKey::MOONBASE_DESTROYED)
             }),
         };
         crate::battle_context::with(|cx| {
-            (&mut cx.world).set_story_state(uqm_rust::engine::StoryKey::FOUND_PLUTO_SPATHI, 1)
+            cx.world
+                .set_story_state(uqm_rust::engine::StoryKey::FOUND_PLUTO_SPATHI, 1)
         });
         crate::battle_context::with(|cx| {
-            (&mut cx.world).set_story_state(uqm_rust::engine::StoryKey::MOONBASE_DESTROYED, 1)
+            cx.world
+                .set_story_state(uqm_rust::engine::StoryKey::MOONBASE_DESTROYED, 1)
         });
         saved
     }
@@ -86,13 +90,13 @@ impl DebugTraversal {
 impl Drop for DebugTraversal {
     fn drop(&mut self) {
         crate::battle_context::with(|cx| {
-            (&mut cx.world).set_story_state(
+            cx.world.set_story_state(
                 uqm_rust::engine::StoryKey::FOUND_PLUTO_SPATHI,
                 self.pluto_spathi,
             )
         });
         crate::battle_context::with(|cx| {
-            (&mut cx.world).set_story_state(
+            cx.world.set_story_state(
                 uqm_rust::engine::StoryKey::MOONBASE_DESTROYED,
                 self.moonbase_destroyed,
             )
