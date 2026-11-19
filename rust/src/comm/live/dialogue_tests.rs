@@ -56,6 +56,44 @@ const KINDS: [DialogueKind; DialogueKind::COUNT] = {
     ]
 };
 
+/// Story fields drawn from a fixed xorshift seed, each within its own width.
+/// Counters the scripts advance from zero and cap (visits, counts, mineral
+/// loads) are drawn within the range the scripts leave them in.
+fn drawn_story(seed: u64) -> Vec<(StoryKey, u32)> {
+    let mut state = seed;
+    let mut drawn: Vec<_> = crate::engine::world::story::GAME_STATE_FIELDS
+        .iter()
+        .map(|&(name, start, end)| {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            let width = end - start + 1;
+            let visits = name.ends_with("_VISITS") || name.ends_with("_COUNT");
+            let mask = if visits {
+                1
+            } else if name.ends_with("_MINERAL_LOAD") {
+                3
+            } else if width >= 32 {
+                u32::MAX
+            } else {
+                (1u32 << width) - 1
+            };
+            let key = StoryKey::from_name(name).unwrap_or_else(|| panic!("{name}"));
+            (visits, key, state as u32 & mask)
+        })
+        .collect();
+    // Some fields alias the bits of others; the visit counters are written last.
+    drawn.sort_by_key(|&(visits, ..)| visits);
+    let mut story: Vec<_> = drawn
+        .into_iter()
+        .map(|(_, key, value)| (key, value))
+        .collect();
+    // The starbase visit date is a calendar date.
+    story.push((StoryKey::STARBASE_MONTH, 1 + (seed % 12) as u32));
+    story.push((StoryKey::STARBASE_DAY, 1 + (seed % 28) as u32));
+    story
+}
+
 fn campaign(world: &mut World, art: crate::graphics::native_abi::FRAME, story: &[(StoryKey, u32)]) {
     use crate::engine::battle::{frames::FrameSelection, link_queue::ShipPickerResources};
     *world = World::new();
@@ -95,6 +133,14 @@ fn phrases() -> ConversationTable {
 /// The descriptor's art is swapped for the fixture's, and every phrase has
 /// text, so each response the script offers can be built and chosen.
 fn walk(cx: &mut Cx<'_>, kind: DialogueKind, choose: fn(usize, usize) -> usize) -> usize {
+    // The Starbase conversation runs inside the starbase visit, which shows
+    // resource units on the status line.
+    let status = if matches!(kind, DialogueKind::Starbas | DialogueKind::Comandr) {
+        crate::starbase::platform::StatusMessageMode::ResUnits
+    } else {
+        crate::starbase::platform::StatusMessageMode::Credits
+    };
+    let previous = cx.kernel.set_status_message_mode(status as u32);
     let mut comm = Comm::new();
     let mut descriptor = lifecycle::session(&mut comm, cx, kind);
     descriptor.definition.alien_frame_res = Some(c"fixture.comm.graphics");
@@ -128,6 +174,7 @@ fn walk(cx: &mut Cx<'_>, kind: DialogueKind, choose: fn(usize, usize) -> usize) 
         delivered += 1;
     }
     crate::comm::hail::finish(&mut comm, cx);
+    cx.kernel.set_status_message_mode(previous);
     delivered
 }
 
@@ -201,4 +248,22 @@ fn every_conversation_walks_its_responses_on_a_fresh_campaign() {
         return;
     }
     run_all(&[]);
+}
+
+#[test]
+#[serial_test::serial]
+fn every_conversation_walks_its_responses_in_drawn_story_states() {
+    if !crate::native_test_process::own_graphics_process(concat!(
+        module_path!(),
+        "::every_conversation_walks_its_responses_in_drawn_story_states"
+    )) {
+        return;
+    }
+    for seed in [
+        0x9e37_79b9_7f4a_7c15,
+        0x0123_4567_89ab_cdef,
+        0x5bd1_e995_c2b2_ae35,
+    ] {
+        run_all(&drawn_story(seed));
+    }
 }
