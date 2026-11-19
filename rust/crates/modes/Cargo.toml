@@ -1,0 +1,36 @@
+[package]
+name = "uqm-modes"
+version.workspace = true
+edition = "2021"
+publish = false
+license.workspace = true
+
+[lints]
+workspace = true
+
+[lib]
+crate-type = ["rlib"]
+
+[dependencies]
+uqm-engine = { path = "../engine", version = "=0.9.0", default-features = false }
+uqm-content = { path = "../content", version = "=0.9.0", default-features = false }
+uqm-save = { path = "../save", version = "=0.9.0" }
+thiserror = "1.0"
+parking_lot = "0.12"
+log = "0.4"
+bitflags = "2.4"
+serde = { version = "1", features = ["derive"] }
+
+[features]
+default = ["audio_heart"]
+audio_heart = ["uqm-engine/audio_heart", "uqm-content/audio_heart"]
+debug-process = ["uqm-engine/debug-process"]
+test-support = ["uqm-engine/test-support", "uqm-content/test-support"]
+
+[dev-dependencies]
+uqm-content = { path = "../content", version = "=0.9.0", default-features = false, features = ["test-support"] }
+uqm-engine = { path = "../engine", version = "=0.9.0", default-features = false, features = ["test-support"] }
+image = { version = "0.25", default-features = false, features = ["png"] }
+tempfile = "3"
+serial_test = "3.0"
+sha2 = "0.10"
