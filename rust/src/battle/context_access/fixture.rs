@@ -48,7 +48,6 @@ impl Element {
         self.flags &= !(crate::ships::native::abi::APPEARING as u16);
     }
 }
-pub(crate) type ZoomSample = ((usize, u16), (usize, u16), Option<(usize, usize)>);
 #[derive(Clone)]
 pub(crate) struct ShipFrames {
     pub ship: Frames,
@@ -149,13 +148,6 @@ pub(crate) trait FixtureOps {
         element: ElementId,
         objects: [crate::engine::battle::Concern; 4],
     );
-    fn zoom_sample(
-        &self,
-        frames: Frames,
-        element: ElementId,
-        view: usize,
-        index: u16,
-    ) -> ZoomSample;
 }
 
 impl FixtureOps for Cx<'_> {
@@ -260,33 +252,5 @@ impl FixtureOps for Cx<'_> {
             self.race_intelligence(ship, &mut concerns),
             "fixture intelligence callback"
         );
-    }
-    fn zoom_sample(
-        &self,
-        frames: Frames,
-        element: ElementId,
-        view: usize,
-        index: u16,
-    ) -> ZoomSample {
-        assert!(view < 3, "fixture zoom view");
-        // SAFETY: the fixture retains the descriptor's three views and all selected drawable images.
-        unsafe {
-            let frame = &*self.element(element).current.image.frame.raw();
-            let expected = &**frames.raw().add(view);
-            let mipmap = (view == 1).then(|| {
-                let adjacent = &*crate::graphics::pixmap_abi::SetAbsFrameIndex(
-                    (*frames.raw().add(view + 1)).cast(),
-                    index,
-                );
-                let selected = &*frame.image;
-                let adjacent = &*adjacent.image;
-                (selected.MipmapImg as usize, adjacent.NormalImg as usize)
-            });
-            (
-                (frame.parent as usize, frame.Index),
-                (expected.parent as usize, index),
-                mipmap,
-            )
-        }
     }
 }

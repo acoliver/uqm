@@ -88,8 +88,6 @@ impl<'a> CustomData<'a> {
         Self::None
     }
 }
-/// # Safety
-/// The queue, ship resources and descriptor allocations remain immutable for the borrow.
 pub(crate) fn ships<'a>(
     queue: &'a crate::engine::battle::link_queue::RacePool,
     elements: &crate::engine::battle::ElementTable,
@@ -101,9 +99,7 @@ pub(crate) fn ships<'a>(
         let s = crate::engine::battle::access::observe::ship_record(queue, id, elements);
         next = ships.succ(id);
         let (race, icons, strings) = {
-            // SAFETY: the retained queue and all loaded ship resources stay immutable.
-            let resources =
-                unsafe { crate::engine::battle::access::observe::ship_resources(queue, id) };
+            let resources = crate::engine::battle::access::observe::ship_resources(queue, id);
             let race = resources.descriptor.map(|d| DescriptorObservation {
                 address: d.address,
                 info: d.info,
@@ -118,7 +114,6 @@ pub(crate) fn ships<'a>(
             (race, resources.icons, resources.strings)
         };
         result.push(ShipObservation {
-            // SAFETY: the retained ship pool remains immutable during observation.
             state: s.state,
             pick: s.pick,
             address: s.address,

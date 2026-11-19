@@ -104,9 +104,8 @@ pub struct DescriptorRecordObservation<'a> {
     pub code_loaded: bool,
     pub state: &'a super::super::RaceState,
 }
-/// # Safety
-/// The caller retains every descriptor and loaded resource referenced by this immutable queue view.
-pub unsafe fn ship_resources(
+/// The descriptor and picker resources the queue entry owns, borrowed with the pool.
+pub fn ship_resources(
     pool: &super::super::link_queue::RacePool,
     id: LinkId<Starship>,
 ) -> ShipResourceObservation<'_> {
@@ -131,7 +130,8 @@ pub unsafe fn ship_resources(
                 code_loaded: d.race.is_some(),
                 state: &d.race_state,
             }),
-        // SAFETY: the caller retains the loaded icon array for the observation lifetime.
+        // SAFETY: the icon array belongs to the entry's retained picker resources,
+        // which cannot be released while the pool is borrowed.
         icons: unsafe { icons.as_ref() },
         strings: s
             .picker_resources

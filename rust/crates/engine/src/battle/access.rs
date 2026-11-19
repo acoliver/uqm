@@ -361,7 +361,43 @@ impl Cx<'_> {
     }
 }
 
+/// The drawable and index of the element's selected frame, the drawable and
+/// index the zoom level should select, and for the medium view the selected
+/// mipmap image and the small view's normal image at the same index.
+pub type ZoomSample = ((usize, u16), (usize, u16), Option<(usize, usize)>);
+
 impl Cx<'_> {
+    /// Samples which zoom-level frame an element shows, for the melee fixture's
+    /// trilinear checks.
+    pub fn zoom_sample(
+        &self,
+        frames: Frames,
+        element: ElementId,
+        view: usize,
+        index: u16,
+    ) -> ZoomSample {
+        assert!(view < 3, "fixture zoom view");
+        // SAFETY: the fixture retains the descriptor's three views and all selected drawable images.
+        unsafe {
+            let frame = &*self.element(element).current.image.frame.raw();
+            let expected = &**frames.raw().add(view);
+            let mipmap = (view == 1).then(|| {
+                let adjacent = &*crate::graphics::pixmap_abi::SetAbsFrameIndex(
+                    (*frames.raw().add(view + 1)).cast(),
+                    index,
+                );
+                let selected = &*frame.image;
+                let adjacent = &*adjacent.image;
+                (selected.MipmapImg as usize, adjacent.NormalImg as usize)
+            });
+            (
+                (frame.parent as usize, frame.Index),
+                (expected.parent as usize, index),
+                mipmap,
+            )
+        }
+    }
+
     pub fn frame_count(&self, frame: FrameRef<'_>) -> u16 {
         // SAFETY: opaque frames originate in retained battle resources, or are absent.
         unsafe { crate::graphics::pixmap_abi::GetFrameCount(frame.raw().cast()) }
