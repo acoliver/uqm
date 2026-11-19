@@ -596,17 +596,13 @@ fn observe_element_record(record: &super::record::ElementRecord) -> ElementState
     ElementState::decode(record)
 }
 
-/// # Safety
-/// The caller retains the ship pool throughout this staging observation.
 #[cfg(any(test, feature = "test-support"))]
-pub unsafe fn observe_ship_record(record: &super::record::ShipRecord) -> ShipState {
+pub fn observe_ship_record(record: &super::record::ShipRecord) -> ShipState {
     ShipState::decode(record)
 }
 
 #[cfg(any(test, feature = "test-support"))]
-/// # Safety
-/// The caller retains the test descriptor and all resources referenced by its state.
-pub unsafe fn observe_descriptor_record(record: &super::record::RaceDescriptor) -> RaceStats {
+pub fn observe_descriptor_record(record: &super::record::RaceDescriptor) -> RaceStats {
     RaceStats::decode(record)
 }
 
