@@ -128,6 +128,7 @@ pub(crate) mod engine {
     };
     use crate::engine::battle::link_queue;
     use crate::engine::StoryKey;
+    use crate::navigation::globals::in_hqspace;
     use crate::pickship::ffi::draw_armada_pick_ship_in as draw_armada;
     use crate::ships::native::abi::*;
     use crate::ui::rgb15;

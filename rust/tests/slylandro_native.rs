@@ -10,9 +10,8 @@ use battle::{prim, Battle as PoolBattle, PoolElement, Ship};
 mod special_hooks;
 use std::{ffi::CStr, mem, ptr};
 use uqm_rust::collections::observation;
-use uqm_rust::ships::native::{
-    abi::*, cosine, facing_to_angle, frame_index, normalize_facing, sine,
-};
+use uqm_rust::graphics::pixmap_abi::GetFrameIndex;
+use uqm_rust::ships::native::{abi::*, cosine, facing_to_angle, normalize_facing, sine};
 
 struct Battle {
     _pool: PoolBattle,
@@ -704,7 +703,10 @@ fn movement_reverses_on_thrust_press_turns_with_left_priority_and_animates_next_
                 (*ship.ptr()).thrust,
                 if thrust_wait == 0 { 1 } else { thrust_wait }
             );
-            assert_eq!(frame_index((*ship.ptr()).next.image.frame.raw()), 0);
+            assert_eq!(
+                GetFrameIndex((*ship.ptr()).next.image.frame.raw().cast()),
+                0
+            );
             assert_ne!((*ship.ptr()).state_flags & CHANGING as u16, 0);
             if thrust_wait == 0 {
                 assert_eq!(velocity(&(*ship.ptr()).velocity), vector(60, facing));

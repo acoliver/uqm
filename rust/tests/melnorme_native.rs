@@ -6,7 +6,8 @@ mod battle;
 mod battle_context;
 use battle::{prim, Battle, FrameSet, PoolElement, Ship};
 use std::{ffi::CStr, mem};
-use uqm_rust::ships::native::{abi::*, cosine, facing_to_angle, frame_index, sine};
+use uqm_rust::graphics::pixmap_abi::GetFrameIndex;
+use uqm_rust::ships::native::{abi::*, cosine, facing_to_angle, sine};
 
 unsafe fn trader(battle: &Battle, player: SIZE) -> Ship<'_> {
     // SAFETY: the serialized fixture retains the battle pools and the ship's frame resources.
@@ -251,7 +252,7 @@ fn initial_pump_uses_the_c_missile_block_at_all_facings_and_coordinate_limits() 
                 );
                 assert_eq!((*e).playerNr, 0);
                 assert_eq!((*e).current.image.frames, ship.frame_set(1));
-                assert_eq!(frame_index((*e).current.image.frame.raw()), 0);
+                assert_eq!(GetFrameIndex((*e).current.image.frame.raw().cast()), 0);
                 assert!((*e).preprocess_func.is_none());
                 assert!((*e).postprocess_func.is_some() && (*e).collision_func.is_some());
                 assert!(
@@ -330,7 +331,7 @@ fn held_charge_replaces_the_element_and_uses_the_old_level_for_damage() {
                     assert_eq!((*p).turn, reverse | next_level);
                     assert_eq!((*p).thrust, 72);
                     assert_eq!(
-                        frame_index((*p).current.image.frame.raw()),
+                        GetFrameIndex((*p).current.image.frame.raw().cast()),
                         u16::from(next_level) * 5 + 2
                     );
                     assert_eq!((*p).hits, 2u16 << level);
@@ -375,7 +376,7 @@ fn charge_wait_wraps_as_a_byte_and_hit_points_truncate_after_the_c_assignment_ch
             let p = battle::element(battle::tail());
             assert_eq!((*p).thrust, 255);
             assert_eq!((*p).turn, 8);
-            assert_eq!(frame_index((*p).current.image.frame.raw()), 1);
+            assert_eq!(GetFrameIndex((*p).current.image.frame.raw().cast()), 1);
             assert_eq!((*p).hits, 512);
             assert_eq!((*p).mass, 0);
         }
@@ -447,7 +448,7 @@ fn fired_charge_animation_bounces_at_each_five_frame_boundary_without_changing_l
                     assert_eq!((*p).thrust, 1);
                     assert_eq!((*p).turn, level | next_reverse);
                     assert_eq!(
-                        frame_index((*p).next.image.frame.raw()),
+                        GetFrameIndex((*p).next.image.frame.raw().cast()),
                         u16::from(level) * 5 + next
                     );
                     assert_ne!((*p).state_flags & CHANGING as u16, 0);
@@ -502,7 +503,7 @@ fn pump_collision_restores_the_shared_blast_counter_and_sets_the_level_blast_ani
                 assert_eq!((*blast).turn, 0);
                 assert_eq!((*blast).thrust, 0);
                 assert_eq!((*blast).current.image.frames, (*e).next.image.frames);
-                assert_eq!(frame_index((*blast).current.image.frame.raw()), 20);
+                assert_eq!(GetFrameIndex((*blast).current.image.frame.raw().cast()), 20);
                 let offset = i32::from((width >> 1) as u8) << ONE_SHIFT;
                 assert_eq!((*blast).current.location.x, 80 + cosine(0, offset));
                 assert_eq!((*blast).current.location.y, 120 + sine(0, offset));
@@ -514,7 +515,7 @@ fn pump_collision_restores_the_shared_blast_counter_and_sets_the_level_blast_ani
                 assert_eq!((*blast).turn, 0);
                 assert_eq!((*blast).state_flags & CHANGING as u16, 0);
                 hooks::invoke_element_pointer(animate, blast);
-                assert_eq!(frame_index((*blast).next.image.frame.raw()), 21);
+                assert_eq!(GetFrameIndex((*blast).next.image.frame.raw().cast()), 21);
                 assert_eq!((*blast).turn, 3);
                 assert_ne!((*blast).state_flags & CHANGING as u16, 0);
                 assert_rng_after(33, 0);
@@ -580,7 +581,7 @@ fn confusion_special_obeys_energy_input_and_cooldown_boundaries() {
                         uqm_rust::engine::battle::Parent::Ship(ship.ship_id)
                     );
                     assert_eq!((*e).current.image.frames, ship.frame_set(2));
-                    assert_eq!(frame_index((*e).current.image.frame.raw()), 0);
+                    assert_eq!(GetFrameIndex((*e).current.image.frame.raw().cast()), 0);
                     assert_eq!(
                         velocity_fields(&(*e).velocity),
                         velocity_fields(&velocity_for(120, ship.ship_mut().ship_facing))
@@ -645,7 +646,7 @@ fn solid_confusion_animation_wraps_in_the_first_eight_frames() {
                 (*e).state_flags &= !(CHANGING as u16);
                 TFB_SeedRandom(17);
                 hooks::invoke_element_pointer(pre, e);
-                assert_eq!(frame_index((*e).next.image.frame.raw()), expected);
+                assert_eq!(GetFrameIndex((*e).next.image.frame.raw().cast()), expected);
                 assert_ne!((*e).state_flags & CHANGING as u16, 0);
                 assert_rng_after(17, 0);
             }
@@ -685,7 +686,10 @@ fn confusion_collision_inserts_a_controller_at_the_head_with_exactly_one_rng_dra
                     uqm_rust::engine::battle::Parent::Ship(ship.ship_id)
                 );
                 assert_eq!((*controller).current.image.frames, (*e).next.image.frames);
-                assert_eq!(frame_index((*controller).current.image.frame.raw()), 8);
+                assert_eq!(
+                    GetFrameIndex((*controller).current.image.frame.raw().cast()),
+                    8
+                );
                 assert_eq!(
                     (*controller).next.image.frame.raw(),
                     (*controller).current.image.frame.raw()
@@ -764,7 +768,10 @@ fn confusion_reuses_the_first_same_player_nonsolid_special_even_if_it_is_a_trail
                 victim.ship_mut().hShip,
                 "reuse does not retarget"
             );
-            assert_eq!(frame_index((*chosen).current.image.frame.raw()), 11);
+            assert_eq!(
+                GetFrameIndex((*chosen).current.image.frame.raw().cast()),
+                11
+            );
             assert!(
                 (*chosen).preprocess_func.is_none(),
                 "reuse does not initialize the callback"
@@ -841,7 +848,10 @@ fn controller_follows_target_overrides_controls_wraps_animation_and_emits_one_fr
                     ((*controller).next.location.x, (*controller).next.location.y),
                     (-123, 456)
                 );
-                assert_eq!(frame_index((*controller).next.image.frame.raw()), 8);
+                assert_eq!(
+                    GetFrameIndex((*controller).next.image.frame.raw().cast()),
+                    8
+                );
                 assert_eq!(queue().len(), before + 1);
                 let trail = battle::element(battle::tail());
                 assert_eq!((*trail).playerNr, 0);
@@ -903,7 +913,10 @@ fn controller_still_overrides_controls_when_trail_allocation_fails() {
             TFB_SeedRandom(9);
             hooks::invoke_element_pointer((*controller).preprocess_func.unwrap(), controller);
             assert_eq!(victim.ship_mut().ship_input_state, (RIGHT | WEAPON) as u8);
-            assert_eq!(frame_index((*controller).next.image.frame.raw()), 9);
+            assert_eq!(
+                GetFrameIndex((*controller).next.image.frame.raw().cast()),
+                9
+            );
             assert_eq!(queue(), before);
             assert_rng_after(9, 0);
             for h in exhausted {
@@ -1068,7 +1081,10 @@ fn held_charge_uses_the_same_ping_pong_animation_as_a_released_pulse() {
                 let p = battle::element(battle::tail());
                 assert_eq!((*p).thrust, 1);
                 assert_eq!((*p).turn, expected_turn);
-                assert_eq!(frame_index((*p).current.image.frame.raw()), expected_index);
+                assert_eq!(
+                    GetFrameIndex((*p).current.image.frame.raw().cast()),
+                    expected_index
+                );
                 assert_eq!((*p).state_flags & CHANGING as u16, 0);
                 remove(p);
                 remove(e);

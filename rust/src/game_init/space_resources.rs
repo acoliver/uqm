@@ -5,9 +5,8 @@ fn ship_teardown_needed(kernel: &crate::engine::Kernel, activity: u16) -> bool {
 }
 
 pub(crate) mod live {
-    use crate::ships::native::abi::{
-        in_hqspace, IN_LAST_BATTLE, RPG_PLAYER_NUM, SPECIES_ID_SIS_SHIP_ID,
-    };
+    use crate::navigation::globals::in_hqspace;
+    use crate::ships::native::abi::{IN_LAST_BATTLE, RPG_PLAYER_NUM, SPECIES_ID_SIS_SHIP_ID};
 
     use crate::graphics::context_abi::{ContextFrame, ContextLease};
 

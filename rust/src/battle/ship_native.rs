@@ -1,6 +1,7 @@
 //! Native ship motion and collision callbacks ported from ship.c.
 
 use crate::battle::context_access::ContextOps;
+use crate::navigation::globals::in_hqspace;
 use crate::ships::native::abi::*;
 
 const INPUT_FLAGS: STATUS_FLAGS = (LEFT | RIGHT | THRUST | WEAPON | SPECIAL) as STATUS_FLAGS;

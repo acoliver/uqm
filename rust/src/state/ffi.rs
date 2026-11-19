@@ -594,8 +594,7 @@ mod tests {
     #[serial]
     fn test_rust_init_game_state() {
         let mut game = crate::engine::Game::new();
-        // SAFETY: serial tests own the published lifecycle until this call returns.
-        unsafe {
+        {
             {
                 rust_init_game_state(&mut game.world);
 
@@ -608,8 +607,7 @@ mod tests {
     #[serial]
     fn starting_a_second_game_does_not_inherit_the_first_games_state() {
         let mut game = crate::engine::Game::new();
-        // SAFETY: serial tests own the published lifecycle until this call returns.
-        unsafe {
+        {
             {
                 // InitGlobData memsets the C shadow and calls this to match, so a New
                 // Game after finishing one must not remember what the player already
@@ -639,8 +637,7 @@ mod tests {
     #[serial]
     fn a_new_game_clears_every_state_bit() {
         let mut game = crate::engine::Game::new();
-        // SAFETY: serial tests own the published lifecycle until this call returns.
-        unsafe {
+        {
             {
                 use super::super::game_state::NUM_GAME_STATE_BITS;
 
@@ -696,8 +693,7 @@ mod tests {
     #[serial]
     fn test_typed_state_keys_use_generated_ranges() {
         let mut game = crate::engine::Game::new();
-        // SAFETY: serial tests own the published lifecycle until this call returns.
-        unsafe {
+        {
             {
                 rust_init_game_state(&mut game.world);
 
@@ -719,8 +715,7 @@ mod tests {
     #[serial]
     fn test_rust_get_set_game_state_bits() {
         let mut game = crate::engine::Game::new();
-        // SAFETY: serial tests own the published lifecycle until this call returns.
-        unsafe {
+        {
             {
                 rust_init_game_state(&mut game.world);
                 rust_set_game_state_bits(&mut game.world, 0, 2, 5);
@@ -734,8 +729,7 @@ mod tests {
     #[serial]
     fn test_rust_get_set_game_state_32() {
         let mut game = crate::engine::Game::new();
-        // SAFETY: serial tests own the published lifecycle until this call returns.
-        unsafe {
+        {
             {
                 rust_init_game_state(&mut game.world);
 
@@ -751,7 +745,6 @@ mod tests {
     #[test]
     #[serial]
     fn test_raw_byte_buffer_ffi_access() {
-        let mut game = crate::engine::Game::new();
         // SAFETY: serial tests own the published lifecycle until this call returns.
         unsafe {
             {
@@ -779,7 +772,6 @@ mod tests {
     #[test]
     #[serial]
     fn test_raw_byte_buffer_copy_matches_c_semantics() {
-        let mut game = crate::engine::Game::new();
         // SAFETY: serial tests own the published lifecycle until this call returns.
         unsafe {
             {
@@ -826,8 +818,7 @@ mod tests {
     #[serial]
     fn test_rust_reset_game_state() {
         let mut game = crate::engine::Game::new();
-        // SAFETY: serial tests own the published lifecycle until this call returns.
-        unsafe {
+        {
             {
                 rust_init_game_state(&mut game.world);
 
@@ -1079,9 +1070,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_rust_get_game_state_size() {
-        let mut game = crate::engine::Game::new();
-        // SAFETY: serial tests own the published lifecycle until this call returns.
-        unsafe {
+        {
             {
                 let size = rust_get_game_state_size();
                 assert_eq!(size, super::super::game_state::NUM_GAME_STATE_BYTES);
