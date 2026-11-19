@@ -1,17 +1,13 @@
 //! Hyperspace movement and encounter spawning.
 
-use super::abi::*;
+use crate::battle::element::PLAYER_SHIP;
+use crate::comm::dispatch::ONE_SHOT_ENCOUNTER;
+use crate::engine::graphics::native_abi::POINT;
+use crate::engine::species::ship::{MELNORME_SHIP, SLYLANDRO_SHIP};
+use crate::engine::world::activity::activity_flags::IN_BATTLE;
 use crate::engine::world::fleet::SPHERE_RADIUS_INCREMENT;
 use crate::engine::StoryKey;
 use crate::math::square_root;
-
-pub(crate) fn sine(angle: u16, magnitude: i32) -> i16 {
-    ((crate::math::sinetab[(angle & 63) as usize] as i64 * magnitude as i64)
-        >> crate::navigation::abi::SIN_SHIFT) as i16
-}
-pub(crate) fn cosine(angle: u16, magnitude: i32) -> i16 {
-    sine(angle.wrapping_add(16), magnitude)
-}
 
 fn move_axis(position: &mut i32, delta: i16, maximum: i32) -> i16 {
     *position -= delta as i32;
@@ -59,7 +55,7 @@ pub fn move_sis(
         *dy = y;
         let mut handle = cx.elements().tail();
         while let Some(element) = handle {
-            if cx.element(element).flags & PLAYER_SHIP as u16 == 0 {
+            if cx.element(element).flags & PLAYER_SHIP == 0 {
                 handle = cx.elements().pred(element);
             } else {
                 cx.element_mut(element).next.location = POINT {
@@ -117,7 +113,7 @@ pub fn check_hyperspace_encounter(
     let mut handle = world.avail_races_ref().head();
     let mut race = 0usize;
     while let Some(id) = handle {
-        if world.activity() & IN_BATTLE as u16 == 0 {
+        if world.activity() & IN_BATTLE == 0 {
             break;
         }
         let fleets = world.avail_races_ref();
@@ -132,7 +128,7 @@ pub fn check_hyperspace_encounter(
             } else {
                 radius = 20000;
                 if race == SLYLANDRO_SHIP as usize {
-                    flags = ONE_SHOT_ENCOUNTER as u8;
+                    flags = ONE_SHOT_ENCOUNTER;
                     percent = if (world.story_state(StoryKey::STARBASE_AVAILABLE) as u8) == 0 {
                         100
                     } else {
@@ -148,7 +144,7 @@ pub fn check_hyperspace_encounter(
                     } else {
                         100
                     };
-                    flags = ONE_SHOT_ENCOUNTER as u8;
+                    flags = ONE_SHOT_ENCOUNTER;
                 }
                 if world
                     .encounters_ref()
@@ -319,7 +315,7 @@ mod tests {
                 panic!("movement RNG")
             });
         let ship = cx.alloc_element().unwrap();
-        cx.element_mut(ship).flags = PLAYER_SHIP as u16;
+        cx.element_mut(ship).flags = PLAYER_SHIP;
         cx.put(ship);
         let other = cx.alloc_element().unwrap();
         cx.put(other);

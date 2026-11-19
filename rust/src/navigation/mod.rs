@@ -1,9 +1,5 @@
 //! Navigation-world state, encounters and movement.
 
-pub mod abi {
-    include!("../abi/navigation_abi.rs");
-}
-
 pub mod events;
 pub mod globals;
 pub mod groups;

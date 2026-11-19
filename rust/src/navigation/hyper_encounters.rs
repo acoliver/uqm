@@ -14,11 +14,11 @@ use crate::math::arctan as ARCTAN;
 
 use super::hyper_transition::{init_transition, sis_element};
 use super::hyper_units::Geometry;
-use super::hyperspace::{cosine, sine};
 use crate::engine::battle::hooks::animation_preprocess;
 use crate::engine::battle::views::{FrameSelection as Frame, Frames};
 use crate::engine::battle::{Cx, ElementId};
 use crate::engine::graphics::{EMPTY_PRIMITIVE, STAMP_PRIMITIVE};
+use crate::math::{cosine, sine};
 use std::ptr;
 
 const MAKEUP: [u8; 23] = [
@@ -310,8 +310,8 @@ fn process(
                 }
                 let angle = facing.wrapping_shl(2);
                 cx.element_mut(element).velocity.set_components(
-                    i32::from(cosine(angle, speed as i32)),
-                    i32::from(sine(angle, speed as i32)),
+                    i32::from(cosine(i32::from(angle), speed as i32)),
+                    i32::from(sine(i32::from(angle), speed as i32)),
                 );
                 let components = cx.element_mut(element).velocity.get_next_components(1);
                 (dx, dy) = (components.0 as i16, components.1 as i16);
