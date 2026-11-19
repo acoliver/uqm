@@ -126,255 +126,54 @@ pub fn load_ship(
     tier: LoadTier,
 ) -> Result<RaceDesc, ShipsError> {
     let mut desc = create_metadata_only_desc(species)?;
-
-    // Track what we've loaded for cleanup on failure
-    let mut loaded_icons = false;
-    let mut loaded_melee_icon = false;
-    let mut loaded_race_strings = false;
-    let mut loaded_ship = false;
-    let mut loaded_weapon = false;
-    let mut loaded_special = false;
-    let mut loaded_captain = false;
-    let mut loaded_victory = false;
-    let mut loaded_sounds = false;
-
-    // Load metadata assets
-    if desc.ship_info.icons_res != NULL_RESOURCE {
-        match res.load_graphic(desc.ship_info.icons_res) {
-            Ok(handle) => {
-                desc.ship_info.icons = handle;
-                loaded_icons = true;
-            }
-            Err(e) => {
-                cleanup_partial_load(
-                    res,
-                    &mut desc,
-                    loaded_icons,
-                    loaded_melee_icon,
-                    loaded_race_strings,
-                    loaded_ship,
-                    loaded_weapon,
-                    loaded_special,
-                    loaded_captain,
-                    loaded_victory,
-                    loaded_sounds,
-                );
-                return Err(e);
-            }
-        }
+    // A fresh descriptor holds no handles, so every non-zero handle after a
+    // failure was loaded here and free_ship releases exactly those.
+    if let Err(error) = load_assets(res, &mut desc, tier) {
+        free_ship(res, &mut desc, true, true);
+        return Err(error);
     }
-
-    if desc.ship_info.melee_icon_res != NULL_RESOURCE {
-        match res.load_graphic(desc.ship_info.melee_icon_res) {
-            Ok(handle) => {
-                desc.ship_info.melee_icon = handle;
-                loaded_melee_icon = true;
-            }
-            Err(e) => {
-                cleanup_partial_load(
-                    res,
-                    &mut desc,
-                    loaded_icons,
-                    loaded_melee_icon,
-                    loaded_race_strings,
-                    loaded_ship,
-                    loaded_weapon,
-                    loaded_special,
-                    loaded_captain,
-                    loaded_victory,
-                    loaded_sounds,
-                );
-                return Err(e);
-            }
-        }
-    }
-
-    if desc.ship_info.race_strings_res != NULL_RESOURCE {
-        match res.load_string_table(desc.ship_info.race_strings_res) {
-            Ok(handle) => {
-                desc.ship_info.race_strings = handle;
-                loaded_race_strings = true;
-            }
-            Err(e) => {
-                cleanup_partial_load(
-                    res,
-                    &mut desc,
-                    loaded_icons,
-                    loaded_melee_icon,
-                    loaded_race_strings,
-                    loaded_ship,
-                    loaded_weapon,
-                    loaded_special,
-                    loaded_captain,
-                    loaded_victory,
-                    loaded_sounds,
-                );
-                return Err(e);
-            }
-        }
-    }
-
-    // If MetadataOnly, we're done
-    if tier == LoadTier::MetadataOnly {
-        return Ok(desc);
-    }
-
-    // Load battle assets for BattleReady tier
-    if desc.ship_data.ship_res[0] != NULL_RESOURCE {
-        match load_animation(res, &desc.ship_data.ship_res) {
-            Ok(frames) => {
-                desc.ship_data.ship = frames;
-                loaded_ship = true;
-            }
-            Err(e) => {
-                cleanup_partial_load(
-                    res,
-                    &mut desc,
-                    loaded_icons,
-                    loaded_melee_icon,
-                    loaded_race_strings,
-                    loaded_ship,
-                    loaded_weapon,
-                    loaded_special,
-                    loaded_captain,
-                    loaded_victory,
-                    loaded_sounds,
-                );
-                return Err(e);
-            }
-        }
-    }
-
-    if desc.ship_data.weapon_res[0] != NULL_RESOURCE {
-        match load_animation(res, &desc.ship_data.weapon_res) {
-            Ok(frames) => {
-                desc.ship_data.weapon = frames;
-                loaded_weapon = true;
-            }
-            Err(e) => {
-                cleanup_partial_load(
-                    res,
-                    &mut desc,
-                    loaded_icons,
-                    loaded_melee_icon,
-                    loaded_race_strings,
-                    loaded_ship,
-                    loaded_weapon,
-                    loaded_special,
-                    loaded_captain,
-                    loaded_victory,
-                    loaded_sounds,
-                );
-                return Err(e);
-            }
-        }
-    }
-
-    if desc.ship_data.special_res[0] != NULL_RESOURCE {
-        match load_animation(res, &desc.ship_data.special_res) {
-            Ok(frames) => {
-                desc.ship_data.special = frames;
-                loaded_special = true;
-            }
-            Err(e) => {
-                cleanup_partial_load(
-                    res,
-                    &mut desc,
-                    loaded_icons,
-                    loaded_melee_icon,
-                    loaded_race_strings,
-                    loaded_ship,
-                    loaded_weapon,
-                    loaded_special,
-                    loaded_captain,
-                    loaded_victory,
-                    loaded_sounds,
-                );
-                return Err(e);
-            }
-        }
-    }
-
-    if desc.ship_data.captain.captain_res != NULL_RESOURCE {
-        match res.load_graphic(desc.ship_data.captain.captain_res) {
-            Ok(handle) => {
-                desc.ship_data.captain.background = handle;
-                loaded_captain = true;
-            }
-            Err(e) => {
-                cleanup_partial_load(
-                    res,
-                    &mut desc,
-                    loaded_icons,
-                    loaded_melee_icon,
-                    loaded_race_strings,
-                    loaded_ship,
-                    loaded_weapon,
-                    loaded_special,
-                    loaded_captain,
-                    loaded_victory,
-                    loaded_sounds,
-                );
-                return Err(e);
-            }
-        }
-    }
-
-    if desc.ship_data.victory_ditty_res != NULL_RESOURCE {
-        match res.load_music(desc.ship_data.victory_ditty_res) {
-            Ok(handle) => {
-                desc.ship_data.victory_ditty = handle;
-                loaded_victory = true;
-            }
-            Err(e) => {
-                cleanup_partial_load(
-                    res,
-                    &mut desc,
-                    loaded_icons,
-                    loaded_melee_icon,
-                    loaded_race_strings,
-                    loaded_ship,
-                    loaded_weapon,
-                    loaded_special,
-                    loaded_captain,
-                    loaded_victory,
-                    loaded_sounds,
-                );
-                return Err(e);
-            }
-        }
-    }
-
-    if desc.ship_data.ship_sounds_res != NULL_RESOURCE {
-        match res.load_sound(desc.ship_data.ship_sounds_res) {
-            Ok(handle) => {
-                desc.ship_data.ship_sounds = handle;
-                loaded_sounds = true;
-            }
-            Err(e) => {
-                cleanup_partial_load(
-                    res,
-                    &mut desc,
-                    loaded_icons,
-                    loaded_melee_icon,
-                    loaded_race_strings,
-                    loaded_ship,
-                    loaded_weapon,
-                    loaded_special,
-                    loaded_captain,
-                    loaded_victory,
-                    loaded_sounds,
-                );
-                return Err(e);
-            }
-        }
-    }
-
-    // loaded_sounds is used by cleanup_partial_load in error paths above;
-    // the final assignment is dead but required for structural consistency.
-    let _ = loaded_sounds;
-
     Ok(desc)
+}
+
+fn load_assets(
+    res: &mut impl ResourceBridge,
+    desc: &mut RaceDesc,
+    tier: LoadTier,
+) -> Result<(), ShipsError> {
+    let info = &mut desc.ship_info;
+    if info.icons_res != NULL_RESOURCE {
+        info.icons = res.load_graphic(info.icons_res)?;
+    }
+    if info.melee_icon_res != NULL_RESOURCE {
+        info.melee_icon = res.load_graphic(info.melee_icon_res)?;
+    }
+    if info.race_strings_res != NULL_RESOURCE {
+        info.race_strings = res.load_string_table(info.race_strings_res)?;
+    }
+    if tier == LoadTier::MetadataOnly {
+        return Ok(());
+    }
+
+    let data = &mut desc.ship_data;
+    if data.ship_res[0] != NULL_RESOURCE {
+        data.ship = load_animation(res, &data.ship_res)?;
+    }
+    if data.weapon_res[0] != NULL_RESOURCE {
+        data.weapon = load_animation(res, &data.weapon_res)?;
+    }
+    if data.special_res[0] != NULL_RESOURCE {
+        data.special = load_animation(res, &data.special_res)?;
+    }
+    if data.captain.captain_res != NULL_RESOURCE {
+        data.captain.background = res.load_graphic(data.captain.captain_res)?;
+    }
+    if data.victory_ditty_res != NULL_RESOURCE {
+        data.victory_ditty = res.load_music(data.victory_ditty_res)?;
+    }
+    if data.ship_sounds_res != NULL_RESOURCE {
+        data.ship_sounds = res.load_sound(data.ship_sounds_res)?;
+    }
+    Ok(())
 }
 
 /// Frees a ship descriptor's loaded assets.
@@ -431,67 +230,6 @@ pub fn free_ship(
             res.free_string_table(desc.ship_info.race_strings);
             desc.ship_info.race_strings = 0;
         }
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Internal Cleanup Helper
-// ---------------------------------------------------------------------------
-
-#[allow(clippy::too_many_arguments)]
-fn cleanup_partial_load(
-    res: &mut impl ResourceBridge,
-    desc: &mut RaceDesc,
-    loaded_icons: bool,
-    loaded_melee_icon: bool,
-    loaded_race_strings: bool,
-    loaded_ship: bool,
-    loaded_weapon: bool,
-    loaded_special: bool,
-    loaded_captain: bool,
-    loaded_victory: bool,
-    loaded_sounds: bool,
-) {
-    if loaded_sounds {
-        res.free_sound(desc.ship_data.ship_sounds);
-        desc.ship_data.ship_sounds = 0;
-    }
-
-    if loaded_victory {
-        res.free_music(desc.ship_data.victory_ditty);
-        desc.ship_data.victory_ditty = 0;
-    }
-
-    if loaded_captain {
-        res.free_graphic(desc.ship_data.captain.background);
-        desc.ship_data.captain.background = 0;
-    }
-
-    if loaded_special {
-        free_image(res, &mut desc.ship_data.special);
-    }
-
-    if loaded_weapon {
-        free_image(res, &mut desc.ship_data.weapon);
-    }
-
-    if loaded_ship {
-        free_image(res, &mut desc.ship_data.ship);
-    }
-
-    if loaded_race_strings {
-        res.free_string_table(desc.ship_info.race_strings);
-        desc.ship_info.race_strings = 0;
-    }
-
-    if loaded_melee_icon {
-        res.free_graphic(desc.ship_info.melee_icon);
-        desc.ship_info.melee_icon = 0;
-    }
-
-    if loaded_icons {
-        res.free_graphic(desc.ship_info.icons);
-        desc.ship_info.icons = 0;
     }
 }
 
@@ -772,16 +510,13 @@ mod tests {
         desc.ship_info.race_strings_res = 300;
         // Icons (100) will load, melee_icon (200) will fail
         res.fail_on(200);
-        // We can't use load_ship directly since it creates its own desc.
-        // Instead test cleanup_partial_load via load_ship with modified template.
-        // First load icons manually to simulate the partial state.
+        // Registry descriptors carry no resource ids, so build the partial
+        // state load_ship leaves behind when the melee icon fails.
         let icon_handle = res.load_graphic(100).unwrap();
         assert!(res.is_allocated(icon_handle));
         // Set it on the desc and simulate cleanup
         desc.ship_info.icons = icon_handle;
-        cleanup_partial_load(
-            &mut res, &mut desc, true, false, false, false, false, false, false, false, false,
-        );
+        free_ship(&mut res, &mut desc, true, true);
         // Icons should be freed
         assert!(!res.is_allocated(icon_handle));
         assert_eq!(desc.ship_info.icons, 0);
@@ -801,9 +536,7 @@ mod tests {
         desc.ship_info.melee_icon = h_melee;
         desc.ship_info.race_strings = h_strings;
         // Simulate battle failure: cleanup should free all metadata
-        cleanup_partial_load(
-            &mut res, &mut desc, true, true, true, false, false, false, false, false, false,
-        );
+        free_ship(&mut res, &mut desc, true, true);
         assert_eq!(res.allocated_count(), 0);
         assert_eq!(desc.ship_info.icons, 0);
         assert_eq!(desc.ship_info.melee_icon, 0);
@@ -822,9 +555,7 @@ mod tests {
         desc.ship_info.icons = h_icons;
         desc.ship_data.ship = [h_ship_big, h_ship_med, h_ship_med]; // med shared with sml
         desc.ship_data.captain.background = h_captain;
-        cleanup_partial_load(
-            &mut res, &mut desc, true, false, false, true, false, false, true, false, false,
-        );
+        free_ship(&mut res, &mut desc, true, true);
         // All should be freed (ship handles with double-free avoidance)
         assert_eq!(res.allocated_count(), 0);
         assert_eq!(desc.ship_info.icons, 0);
