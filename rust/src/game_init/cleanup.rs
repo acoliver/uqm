@@ -1,18 +1,10 @@
 //! Kernel resource teardown, ported from cleanup.c (GPL-2.0-or-later).
 
 use crate::graphics::context_abi::DestroyContext;
-use crate::ships::native::abi::*;
+use crate::graphics::{drawable_abi::DestroyDrawable, pixmap_abi::ReleaseDrawable};
 use std::ptr;
 
-#[cfg(not(test))]
 use crate::game_init::kernel_abi::UninitPlayerInput;
-#[cfg(test)]
-extern "C" {
-    fn UninitPlayerInput();
-}
-
-use crate::game_init::space_resources::live::uninit_space;
-
 /// # Safety
 /// Run on the game thread after the game loop stops, before graphics teardown.
 pub unsafe fn free_kernel(kernel: &mut crate::engine::Kernel) {
@@ -38,7 +30,7 @@ unsafe fn uninit_contexts(kernel: &mut crate::engine::Kernel) {
 }
 
 unsafe fn uninit_kernel(kernel: &mut crate::engine::Kernel) {
-    uninit_space(kernel);
+    kernel.uninit_space();
     {
         kernel.release_menu_sounds();
         kernel.release_encounter_text();
@@ -46,7 +38,7 @@ unsafe fn uninit_kernel(kernel: &mut crate::engine::Kernel) {
         DestroyDrawable(ReleaseDrawable(kernel.activity_frame));
         kernel.release_tiny_font();
         kernel.release_battle_font();
-        crate::battle::context_access::lifecycle::uninit_ships(&mut *kernel);
+        kernel.reset_race_capacities(0);
         kernel.activity_frame = ptr::null_mut();
     }
 }

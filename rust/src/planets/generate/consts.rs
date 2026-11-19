@@ -7,6 +7,51 @@ pub const PLANET_SHIELDED: u8 = 0x80;
 /// `PLANALGO` mask and gas algorithm tag from `plandata.h`.
 pub const PLAN_ALGO_MASK: u8 = 0x0c;
 pub const GAS_GIANT_ALGO: u8 = 2 << 2;
+/// The other two `PLANALGO` tags.
+pub const TOPO_ALGO: u8 = 0;
+pub const CRATERED_ALGO: u8 = 1 << 2;
+
+/// `STAR_TYPE` values (`plandata.h`).
+pub const DWARF_STAR: u8 = 0;
+pub const GIANT_STAR: u8 = 1;
+pub const SUPER_GIANT_STAR: u8 = 2;
+
+/// `STAR_COLOR` values (`plandata.h`); `NUM_STAR_COLORS` counts the star colours.
+pub const BLUE_BODY: u8 = 0;
+pub const GREEN_BODY: u8 = 1;
+pub const ORANGE_BODY: u8 = 2;
+pub const RED_BODY: u8 = 3;
+pub const WHITE_BODY: u8 = 4;
+pub const YELLOW_BODY: u8 = 5;
+pub const NUM_STAR_COLORS: u8 = 6;
+pub const CYAN_BODY: u8 = 6;
+pub const PURPLE_BODY: u8 = 7;
+pub const VIOLET_BODY: u8 = 8;
+
+/// `PLANSIZE` values (`plandata.h`).
+pub const SMALL_ROCKY_WORLD: u8 = 0;
+pub const LARGE_ROCKY_WORLD: u8 = 1;
+pub const GAS_GIANT: u8 = 2;
+
+/// Deposit-quality and atmosphere classes (`plandata.h`).
+pub const LIGHT: u8 = 0;
+pub const MEDIUM: u8 = 1;
+pub const HEAVY: u8 = 2;
+
+/// Tectonics thresholds (`plandata.h`).
+pub const NO_TECTONICS: u8 = 0;
+pub const LOW_TECTONICS: u8 = 40;
+pub const MED_TECTONICS: u8 = 80;
+pub const HIGH_TECTONICS: u8 = 140;
+pub const SUPER_TECTONICS: u8 = 200;
+
+/// Density classes of `AtmoAndDensity` (`plandata.h`).
+pub const GAS_DENSITY: u8 = 0;
+pub const LIGHT_DENSITY: u8 = 1;
+pub const LOW_DENSITY: u8 = 2;
+pub const NORMAL_DENSITY: u8 = 3;
+pub const HIGH_DENSITY: u8 = 4;
+pub const SUPER_DENSITY: u8 = 5;
 
 /// `EARTH_RADIUS` = `SCALE_RADIUS(8)`.
 pub const EARTH_RADIUS: i16 = 8 << 6;

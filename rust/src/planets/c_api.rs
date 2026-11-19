@@ -8,11 +8,6 @@ pub use crate::log_abi::log_init;
 
 pub use crate::planets::orbit::live::{free_planet, load_planet};
 
-/// `GROUP_INIT_IP`, `GROUP_SAVE_IP` (`state.h`): `(BYTE)~0`.
-pub(super) const GROUP_SAVE_IP: u8 = !0;
-/// `GROUP_LOAD_IP` is `GROUP_LIST` (`state.h`).
-pub(super) const GROUP_LOAD_IP: u8 = 0;
-
 /// Clear the guard encounter so the interplanetary groups do not chase.
 pub fn reset_encounter(world: &mut crate::engine::World) {
     world.encounter_group = 0;
@@ -30,11 +25,6 @@ pub fn rebel_escort_feasible(world: &crate::engine::World) -> bool {
     }
 }
 
-/// `GROUPS_RANDOM`.
-pub(super) const GROUPS_RANDOM: u32 = 0;
-
-/// `GROUPS_ADD_NEW` (`state.h`).
-pub(super) const GROUPS_ADD_NEW: u32 = !0;
 /// `SYREEN_CONVERSATION` and `SLYLANDRO_HOME_CONVERSATION` (`commglue.h`).
 pub const SYREEN_CONVERSATION: u32 = 20;
 pub const SLYLANDRO_HOME_CONVERSATION: u32 = 23;

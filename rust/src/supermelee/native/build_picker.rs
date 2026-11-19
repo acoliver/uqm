@@ -28,9 +28,9 @@ fn navigate(ship: u32, left: bool, right: bool, up: bool, down: bool) -> u32 {
     selected
 }
 
-#[cfg(not(test))]
 pub(crate) mod live {
     use super::navigate;
+    use crate::engine::time::counter_abi::GetTimeCounter;
     use crate::graphics::{
         context_abi::{ContextFrame, ContextLease},
         drawable_abi::{DrawableLease, LoadedDrawable},
@@ -150,7 +150,7 @@ pub(crate) mod live {
             state.build_pick_confirmed = 0;
             return 0;
         }
-        SetMenuSounds(input, 15, 16);
+        input.set_menu_sounds(15, 16);
         let keys = input.pulsed().menu;
         if keys[KEY_MENU_SELECT as usize] != 0 || keys[KEY_MENU_CANCEL as usize] != 0 {
             state.build_pick_confirmed = u32::from(keys[KEY_MENU_CANCEL as usize] == 0);

@@ -1,7 +1,7 @@
 //! Shared state entry points formerly supplied by rust_bridge_mainloop.c.
 use crate::io::uio_bridge::{uio_DirHandle, uio_MountHandle, uio_Repository};
 
-use crate::ships::native::abi as options;
+use crate::io::handles as options;
 extern "C" {
     static mut contentMountHandle: *mut uio_MountHandle;
 }

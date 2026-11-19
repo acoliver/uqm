@@ -9,7 +9,7 @@ fn owning_frame_slots_reject_foreign_drawables_without_mutation() {
             let original = ship.frame(2, 0);
             for foreign in [ship.frame(0, 0), other.frame(2, 0), FrameSelection::ABSENT] {
                 let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    uqm_rust::app::bridge::enter(|cx| {
+                    crate::battle_context::with(|cx| {
                         cx.set_ship_frame(ship.ship_id, 2, 0, foreign);
                     });
                 }));
@@ -39,27 +39,22 @@ fn teardown_receives_final_crew_and_owned_state() {
     };
     battle_context::run(|_| {
         let owner = Battle::new(2);
-        // SAFETY: the serialized fixture owns the enlisted-crew authority and restores it after teardown.
-        unsafe {
-            let saved_crew = (**uqm_rust::engine::WorldData::current())
-                .flagship
-                .crew_enlisted;
+        {
+            let saved_crew = crate::battle_context::with(|cx| cx.world.data.flagship.crew_enlisted);
             let mut ship = Ship::native(&owner, &RACE, 0);
-            uqm_rust::app::bridge::enter(|cx| {
+            crate::battle_context::with(|cx| {
                 cx.race_stats_mut(ship.ship_id).ship_info.crew_level = 23;
                 cx.race_stats_mut(ship.ship_id).state = RaceState::Umgah {
                     previous_facing: Some(4),
                 };
             });
             ship.uninit();
-            uqm_rust::app::bridge::enter(|cx| {
+            crate::battle_context::with(|cx| {
                 assert_eq!(cx.flagship_config().crew, 23);
                 assert!(matches!(cx.race_stats(ship.ship_id).state, RaceState::None));
             });
             drop(ship);
-            (**uqm_rust::engine::WorldData::current())
-                .flagship
-                .crew_enlisted = saved_crew;
+            crate::battle_context::with(|cx| cx.world.data.flagship.crew_enlisted = saved_crew);
         }
     });
 }
@@ -73,10 +68,9 @@ fn abandonment_keeps_allocation_rng_parent_and_target_order() {
             let a = Ship::new(&owner, SPECIES_ID_VUX_ID, 0);
             let b = Ship::new(&owner, SPECIES_ID_VUX_ID, 1);
             let frames = battle::NativeFrameSet::new(4);
-            let old = (**uqm_rust::engine::battle::record::Kernel::current()).stars_in_space;
-            (**uqm_rust::engine::battle::record::Kernel::current()).stars_in_space =
-                frames.frame(0);
-            uqm_rust::app::bridge::enter(|cx| {
+            let old = crate::battle_context::with(|cx| cx.kernel.stars_in_space);
+            crate::battle_context::with(|cx| cx.kernel.stars_in_space = frames.frame(0));
+            crate::battle_context::with(|cx| {
                 let crew = cx.race_stats(a.ship_id).ship_info.crew_level;
                 battle::with_rng(1234, 4, || cx.abandon_ship(a.id, b.id, 3));
                 assert_eq!(cx.race_stats(a.ship_id).ship_info.crew_level, crew - 2);
@@ -93,7 +87,7 @@ fn abandonment_keeps_allocation_rng_parent_and_target_order() {
                     cx.dispose(id);
                 }
             });
-            (**uqm_rust::engine::battle::record::Kernel::current()).stars_in_space = old;
+            crate::battle_context::with(|cx| cx.kernel.stars_in_space = old);
         }
     });
 }
@@ -106,7 +100,7 @@ fn self_destruct_selects_a_surviving_opponent_before_the_dead_owner() {
         unsafe {
             let a = Ship::new(&owner, SPECIES_ID_VUX_ID, 0);
             let b = Ship::new(&owner, SPECIES_ID_VUX_ID, 1);
-            uqm_rust::app::bridge::enter(|cx| {
+            crate::battle_context::with(|cx| {
                 cx.select_self_destruct_winner(a.id);
                 assert_eq!(cx.winner(), Some(b.ship_id));
                 assert_ne!(
@@ -130,7 +124,7 @@ fn sound_banks_are_per_ship_and_pkunk_taunts_share_the_existing_authority() {
             let table = AllocStringTable(5, 0);
             a.descriptor_mut().ship_data.ship_sounds = CaptureStringTable(table).cast();
             b.descriptor_mut().ship_data.ship_sounds = CaptureStringTable(table).cast();
-            uqm_rust::app::bridge::enter(|cx| {
+            crate::battle_context::with(|cx| {
                 assert_eq!(cx.ship_sound_count(a.ship_id), 5);
                 cx.set_ship_sound_bank(a.ship_id, 2);
                 assert_eq!(cx.ship_sound_count(a.ship_id), 5);
@@ -159,9 +153,8 @@ fn sound_bank_selection_rejects_an_out_of_range_index() {
     battle_context::run(|_| {
         let owner = Battle::new(2);
         let ship = Ship::bare(&owner, SPECIES_ID_VUX_ID, 0);
-        // SAFETY: the fixture retains its descriptor while the checked operation rejects its absent bank.
-        unsafe {
-            uqm_rust::app::bridge::enter(|cx| {
+        {
+            crate::battle_context::with(|cx| {
                 let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                     cx.set_ship_sound_bank(ship.ship_id, 0);
                 }));
@@ -179,7 +172,7 @@ fn self_destruct_winner_preserves_simultaneous_death_and_an_existing_winner() {
         unsafe {
             let a = Ship::new(&owner, SPECIES_ID_VUX_ID, 0);
             let b = Ship::new(&owner, SPECIES_ID_VUX_ID, 1);
-            uqm_rust::app::bridge::enter(|cx| {
+            crate::battle_context::with(|cx| {
                 cx.race_stats_mut(b.ship_id).ship_info.crew_level = 0;
                 assert!(cx.winner().is_none());
                 cx.select_self_destruct_winner(a.id);
@@ -208,7 +201,7 @@ fn abandonment_pool_exhaustion_keeps_crew_and_rng_unchanged() {
         unsafe {
             let a = Ship::new(&owner, SPECIES_ID_VUX_ID, 0);
             let b = Ship::new(&owner, SPECIES_ID_VUX_ID, 1);
-            uqm_rust::app::bridge::enter(|cx| {
+            crate::battle_context::with(|cx| {
                 let crew = cx.race_stats(a.ship_id).ship_info.crew_level;
                 battle::with_rng(1234, 0, || cx.abandon_ship(a.id, b.id, 2));
                 assert_eq!(cx.race_stats(a.ship_id).ship_info.crew_level, crew);
@@ -222,14 +215,13 @@ fn abandonment_pool_exhaustion_keeps_crew_and_rng_unchanged() {
 fn navigation_world_projections_write_the_single_authority() {
     battle_context::run(|_| {
         let _owner = Battle::new(2);
-        // SAFETY: this test serializes and restores every modified world value.
-        unsafe {
-            let activity = uqm_rust::engine::World::current().read(|world| world.activity());
-            let autopilot = (**uqm_rust::engine::WorldData::current()).game.autopilot;
-            let velocity = (**uqm_rust::engine::WorldData::current()).game.velocity;
-            let sis = (**uqm_rust::engine::WorldData::current()).flagship;
-            uqm_rust::engine::World::current().write(uqm_rust::state::ffi::rust_init_game_state);
-            uqm_rust::app::bridge::enter(|cx| {
+        {
+            let activity = crate::battle_context::with(|cx| cx.world.activity());
+            let autopilot = crate::battle_context::with(|cx| cx.world.data.game.autopilot);
+            let velocity = crate::battle_context::with(|cx| cx.world.data.game.velocity);
+            let sis = crate::battle_context::with(|cx| cx.world.data.flagship);
+            crate::battle_context::with(|cx| uqm_rust::state::ffi::rust_init_game_state(cx.world));
+            crate::battle_context::with(|cx| {
                 cx.set_activity(42);
                 assert_eq!(cx.world.activity(), 42);
                 cx.set_autopilot(POINT { x: 17, y: 19 });
@@ -266,7 +258,7 @@ fn typed_laser_and_thrust_use_live_ship_geometry_and_lifecycle() {
         // SAFETY: fixtures retain pool slots and the serialized battle authority.
         unsafe {
             let ship = Ship::new(&owner, SPECIES_ID_VUX_ID, 0);
-            uqm_rust::app::bridge::enter(|cx| {
+            crate::battle_context::with(|cx| {
                 let _ = cx.apply_inertial_thrust(ship.id);
                 assert!(!cx.element(ship.id).velocity.is_zero());
                 cx.set_target(ship.id, Some(ship.id));
@@ -324,9 +316,8 @@ fn absent_callbacks_remain_absent_in_metadata_and_dispatch() {
     battle_context::run(|_| {
         let owner = Battle::new(4);
         let ship = Ship::native(&owner, &EMPTY_RACE, 0);
-        // SAFETY: the serialized fixture retains all pool storage.
-        unsafe {
-            uqm_rust::app::bridge::enter(|cx| {
+        {
+            crate::battle_context::with(|cx| {
                 assert_eq!(empty_descriptor(cx.world).into_legacy().callbacks(), [0; 5]);
                 assert!(cx
                     .spawn_weapons(ship.ship_id, cx.weapon_origin(ship.id))
@@ -362,7 +353,7 @@ fn frames_keep_wrapping_bounds_absence_and_ship_view_identity() {
             let ship = Ship::new(&owner, SPECIES_ID_VUX_ID, 0);
             let first = ship.frame(2, 0);
             let set = ship.frame_set(2);
-            uqm_rust::app::bridge::enter(|cx| {
+            crate::battle_context::with(|cx| {
                 assert!(!first.is_absent());
                 assert!(FrameSelection::ABSENT.is_absent());
                 assert_eq!(cx.frame_count(FrameSelection::ABSENT.view()), 0);
@@ -400,7 +391,7 @@ fn allocated_copy_keeps_primitive_identity_parent_target_and_observations() {
         // SAFETY: the fixtures and destination slot belong to this serialized battle.
         unsafe {
             let ship = Ship::new(&owner, SPECIES_ID_VUX_ID, 0);
-            uqm_rust::app::bridge::enter(|cx| {
+            crate::battle_context::with(|cx| {
                 let dest = cx.alloc_element().unwrap();
                 let index = cx.elements()[dest].PrimIndex;
                 cx.set_target(ship.id, Some(ship.id));
@@ -445,9 +436,8 @@ fn per_ship_state_and_control_round_trip_without_sharing() {
         let owner = Battle::new(4);
         let a = Ship::bare(&owner, SPECIES_ID_VUX_ID, 0);
         let b = Ship::bare(&owner, SPECIES_ID_VUX_ID, 1);
-        // SAFETY: checked fixtures retain both descriptor copies.
-        unsafe {
-            uqm_rust::app::bridge::enter(|cx| {
+        {
+            crate::battle_context::with(|cx| {
                 let alternate = cx.race_stats(a.ship_id).characteristics;
                 cx.race_stats_mut(a.ship_id).state = RaceState::Mmrnmhrm { alternate };
                 assert!(matches!(cx.race_stats(b.ship_id).state, RaceState::None));
@@ -538,58 +528,51 @@ fn descriptor_world_observes_activity_and_typed_story_and_writes_the_same_author
         ..EMPTY_RACE
     };
     battle_context::run(|_| {
-        // SAFETY: the serialized fixture owns and restores the world authorities.
-        unsafe {
-            let activity = uqm_rust::engine::World::current().read(|world| world.activity());
-            let crew = (**uqm_rust::engine::WorldData::current())
-                .flagship
-                .crew_enlisted;
-            uqm_rust::engine::World::current().write(uqm_rust::state::ffi::rust_init_game_state);
-            uqm_rust::app::bridge::enter(|cx| {
-                cx.world.set_activity(IN_ENCOUNTER as u16);
-                cx.world.set_flagship_crew(17);
-                let keys = [
-                    (StoryKey::SHOFIXTI_RECRUITED, 0),
-                    (StoryKey::PROBE_ILWRATH_ENCOUNTER, 1),
-                    (StoryKey::ARILOU_SPACE_SIDE, 2),
-                    (StoryKey::CHMMR_BOMB_STATE, 3),
-                    (StoryKey::BOMB_CARRIER, 0),
-                ];
-                for &(key, value) in &keys {
-                    cx.world.set_story_state(key, value);
-                    assert_eq!(cx.story_state(key), value);
-                }
-                let d = (RACE.descriptor)(cx.world).into_legacy();
-                assert_eq!(d.ship_info.crew_level, 17);
-                assert_eq!(
-                    d.ship_data.captain_control.captain_rsc,
-                    c"ship.synthetic.oldcaptain".as_ptr()
-                );
-                assert_eq!(cx.world.story_state(StoryKey::BOMB_CARRIER), 1);
-                cx.set_story_state(StoryKey::SHOFIXTI_RECRUITED, 1);
-                assert!((RACE.descriptor)(cx.world)
-                    .into_legacy()
-                    .ship_data
-                    .captain_control
-                    .captain_rsc
-                    .is_null());
-                cx.set_story_state(StoryKey::SHOFIXTI_RECRUITED, 0);
-                cx.set_activity(SUPER_MELEE as u16);
-                assert!((RACE.descriptor)(cx.world)
-                    .into_legacy()
-                    .ship_data
-                    .captain_control
-                    .captain_rsc
-                    .is_null());
-                for &(key, _) in &keys {
-                    cx.world.set_story_state(key, 0);
-                }
-            });
-            uqm_rust::engine::World::current().write(|world| world.set_activity(activity));
-            (**uqm_rust::engine::WorldData::current())
-                .flagship
-                .crew_enlisted = crew;
-        }
+        let activity = crate::battle_context::with(|cx| cx.world.activity());
+        let crew = crate::battle_context::with(|cx| cx.world.data.flagship.crew_enlisted);
+        crate::battle_context::with(|cx| uqm_rust::state::ffi::rust_init_game_state(cx.world));
+        crate::battle_context::with(|cx| {
+            cx.world.set_activity(IN_ENCOUNTER as u16);
+            cx.world.set_flagship_crew(17);
+            let keys = [
+                (StoryKey::SHOFIXTI_RECRUITED, 0),
+                (StoryKey::PROBE_ILWRATH_ENCOUNTER, 1),
+                (StoryKey::ARILOU_SPACE_SIDE, 2),
+                (StoryKey::CHMMR_BOMB_STATE, 3),
+                (StoryKey::BOMB_CARRIER, 0),
+            ];
+            for &(key, value) in &keys {
+                cx.world.set_story_state(key, value);
+                assert_eq!(cx.story_state(key), value);
+            }
+            let d = (RACE.descriptor)(cx.world).into_legacy();
+            assert_eq!(d.ship_info.crew_level, 17);
+            assert_eq!(
+                d.ship_data.captain_control.captain_rsc,
+                c"ship.synthetic.oldcaptain".as_ptr()
+            );
+            assert_eq!(cx.world.story_state(StoryKey::BOMB_CARRIER), 1);
+            cx.set_story_state(StoryKey::SHOFIXTI_RECRUITED, 1);
+            assert!((RACE.descriptor)(cx.world)
+                .into_legacy()
+                .ship_data
+                .captain_control
+                .captain_rsc
+                .is_null());
+            cx.set_story_state(StoryKey::SHOFIXTI_RECRUITED, 0);
+            cx.set_activity(SUPER_MELEE as u16);
+            assert!((RACE.descriptor)(cx.world)
+                .into_legacy()
+                .ship_data
+                .captain_control
+                .captain_rsc
+                .is_null());
+            for &(key, _) in &keys {
+                cx.world.set_story_state(key, 0);
+            }
+        });
+        crate::battle_context::with(|cx| cx.world.set_activity(activity));
+        crate::battle_context::with(|cx| cx.world.data.flagship.crew_enlisted = crew);
     });
 }
 
@@ -606,8 +589,7 @@ fn hyperspace_cancel_observation_preserves_weapon_cancel_and_counter_conditions(
     battle_context::run(|input| {
         let owner = Battle::new(2);
         let ship = Ship::bare(&owner, SPECIES_ID_VUX_ID, 0);
-        // SAFETY: the fixture serializes the game context throughout the matrix.
-        unsafe {
+        {
             for weapon in [false, true] {
                 for cancel in [false, true] {
                     for counter in [0, 1] {
@@ -620,7 +602,7 @@ fn hyperspace_cancel_observation_preserves_weapon_cancel_and_counter_conditions(
                                 uqm_rust::time::counter_abi::GetTimeCounter(),
                             );
                         }
-                        uqm_rust::app::bridge::enter(|cx| {
+                        crate::battle_context::with(|cx| {
                             cx.ship_state_mut(ship.ship_id).status =
                                 if weapon { WEAPON as u16 } else { 0 };
                             cx.ship_state_mut(ship.ship_id).special_counter = counter;

@@ -1,5 +1,4 @@
 //! Stage B resource and record projections. Borrows end before legacy handoffs.
-#[cfg(not(test))]
 impl Cx<'_> {
     pub fn alloc_element(&mut self) -> Option<ElementId> {
         let allocated = self.kernel.elements.alloc();
@@ -51,12 +50,9 @@ impl Cx<'_> {
     }
 }
 
-#[cfg(not(test))]
-#[cfg(not(test))]
 use super::Parent;
 use super::{Cx, ElementId, ShipId};
 
-#[cfg(not(test))]
 impl Cx<'_> {
     pub fn owner(&self, id: ElementId) -> ShipId {
         match self.parent(id) {
@@ -119,7 +115,6 @@ impl Cx<'_> {
 
 use super::views::*;
 
-#[cfg(not(test))]
 impl Cx<'_> {
     pub fn ship_frame_set(&self, id: ShipId, role: usize) -> Frames {
         super::frames::Frames::ship(id, role.into(), self.ship_array(id, role).clone())
@@ -149,7 +144,6 @@ impl Cx<'_> {
     }
 }
 
-#[cfg(not(test))]
 impl Cx<'_> {
     #[inline]
     pub fn weapon_origin(&self, id: ElementId) -> super::Subject {
@@ -178,7 +172,6 @@ impl Cx<'_> {
     }
 }
 
-#[cfg(not(test))]
 impl Cx<'_> {
     #[inline]
     pub fn copy_visual_to_next(&mut self, id: ElementId, visual: Visual) {
@@ -202,7 +195,6 @@ impl Cx<'_> {
     }
 }
 
-#[cfg(not(test))]
 impl Cx<'_> {
     #[inline]
     pub fn callbacks(&self, ship: ShipId) -> super::Callbacks {
@@ -242,7 +234,6 @@ impl Cx<'_> {
     }
     /// Records a SPECIAL activation that runs inline in a race callback under
     /// that race's `special` hook. `marker` only names the hook; it is not called.
-    #[cfg(not(test))]
     pub fn observe_special(&self, ship: ShipId, marker: fn(&mut Cx<'_>, ShipId)) {
         crate::collections::observation::observe(marker as usize, self.ship_pointer(ship) as usize);
     }
@@ -253,18 +244,27 @@ pub fn invoke<R>(callback: usize, parent: usize, call: impl FnOnce() -> R) -> R 
     call()
 }
 
-#[cfg(not(test))]
 impl Cx<'_> {
-    pub fn take_captain_background(&mut self, ship: ShipId) -> crate::graphics::native_abi::FRAME {
-        self.desc_mut(ship).take_captain_background()
+    /// Stamp the ship's captain background into the status context and release it.
+    pub fn draw_final_captain(&mut self, ship: ShipId) {
+        let frame = self.desc_mut(ship).take_captain_background();
+        let old = crate::graphics::menu::select(self.kernel.status_context);
+        crate::graphics::menu::stamp(frame, crate::graphics::native_abi::POINT { x: 0, y: 0 });
+        let _allocation = crate::graphics::drawable_abi::retain_frame_allocations(&[frame]);
+        if !frame.is_null() {
+            // SAFETY: the descriptor transferred this captured captain's release authority.
+            unsafe {
+                crate::graphics::drawable_abi::DestroyDrawable(
+                    crate::graphics::pixmap_abi::ReleaseDrawable(frame),
+                )
+            };
+        }
+        crate::graphics::menu::select(old);
     }
 }
 
-#[cfg(not(test))]
 use crate::graphics::native_abi::FRAME;
-#[cfg(not(test))]
 use crate::graphics::pixmap_abi::{IncFrameIndex, SetAbsFrameIndex, SetEquFrameIndex};
-#[cfg(not(test))]
 impl Cx<'_> {
     pub(super) fn ship_array(&self, ship: ShipId, role: usize) -> &super::frames::FrameArray {
         let data = &self.desc(ship).ship_data;
@@ -293,7 +293,6 @@ impl Cx<'_> {
     }
 }
 
-#[cfg(not(test))]
 impl Cx<'_> {
     pub fn shared_frame_selection(&self, role: SharedFrames) -> FrameSelection {
         self.shared_frame_set(role).view(0).to_owned()
@@ -308,7 +307,6 @@ impl Cx<'_> {
     pub fn shared_frame_set(&self, role: SharedFrames) -> Frames {
         Frames::retain_shared(role, self.kernel.shared_frame_source(role))
     }
-    #[cfg(not(test))]
     pub fn setup_element(&mut self, id: ElementId) {
         self.copy_current_to_next(id);
         if self.element(id).flags & ((1 << 4) | (1 << 6)) == 0 {
@@ -341,7 +339,6 @@ impl Cx<'_> {
     }
 }
 
-#[cfg(not(test))]
 impl Cx<'_> {
     pub fn primitive_style_mut(
         &mut self,
@@ -364,8 +361,43 @@ impl Cx<'_> {
     }
 }
 
-#[cfg(not(test))]
+/// The drawable and index of the element's selected frame, the drawable and
+/// index the zoom level should select, and for the medium view the selected
+/// mipmap image and the small view's normal image at the same index.
+pub type ZoomSample = ((usize, u16), (usize, u16), Option<(usize, usize)>);
+
 impl Cx<'_> {
+    /// Samples which zoom-level frame an element shows, for the melee fixture's
+    /// trilinear checks.
+    pub fn zoom_sample(
+        &self,
+        frames: Frames,
+        element: ElementId,
+        view: usize,
+        index: u16,
+    ) -> ZoomSample {
+        assert!(view < 3, "fixture zoom view");
+        // SAFETY: the fixture retains the descriptor's three views and all selected drawable images.
+        unsafe {
+            let frame = &*self.element(element).current.image.frame.raw();
+            let expected = &**frames.raw().add(view);
+            let mipmap = (view == 1).then(|| {
+                let adjacent = &*crate::graphics::pixmap_abi::SetAbsFrameIndex(
+                    (*frames.raw().add(view + 1)).cast(),
+                    index,
+                );
+                let selected = &*frame.image;
+                let adjacent = &*adjacent.image;
+                (selected.MipmapImg as usize, adjacent.NormalImg as usize)
+            });
+            (
+                (frame.parent as usize, frame.Index),
+                (expected.parent as usize, index),
+                mipmap,
+            )
+        }
+    }
+
     pub fn frame_count(&self, frame: FrameRef<'_>) -> u16 {
         // SAFETY: opaque frames originate in retained battle resources, or are absent.
         unsafe { crate::graphics::pixmap_abi::GetFrameCount(frame.raw().cast()) }
@@ -443,7 +475,6 @@ impl Cx<'_> {
     }
 }
 
-#[cfg(not(test))]
 impl Cx<'_> {
     pub fn set_ship_sound_bank(&mut self, ship: ShipId, index: u16) {
         let sounds = self.desc(ship).ship_data.ship_sounds;
@@ -458,7 +489,6 @@ impl Cx<'_> {
     }
 }
 
-#[cfg(not(test))]
 impl Cx<'_> {
     pub fn set_ship_identity(&mut self, id: ShipId, species: u32, index: u16) {
         let record = self.ship_mut(id);
@@ -506,7 +536,6 @@ pub mod record;
 #[path = "table.rs"]
 pub mod table;
 
-#[cfg(not(test))]
 impl Cx<'_> {
     pub fn screen_dimensions(&self) -> (i32, i32) {
         use crate::graphics::gfx_common_abi::{ScreenHeight, ScreenWidth};
@@ -521,7 +550,6 @@ impl Cx<'_> {
     }
 }
 
-#[cfg(not(test))]
 impl Cx<'_> {
     pub fn primitive_stamp(&mut self, id: ElementId) -> crate::graphics::native_abi::STAMP {
         self.primitive(id).stamp()
@@ -558,7 +586,6 @@ impl Cx<'_> {
     }
 }
 
-#[cfg(not(test))]
 impl Cx<'_> {
     pub fn has_descriptor(&self, ship: ShipId) -> bool {
         !self.ship(ship).descriptor.is_none()
@@ -583,7 +610,6 @@ pub unsafe fn observe_descriptor_record(record: &super::record::RaceDescriptor) 
     RaceStats::decode(record)
 }
 
-#[cfg(not(test))]
 impl Cx<'_> {
     pub fn frames_first<'a>(&self, frames: &'a Frames) -> FrameRef<'a> {
         // SAFETY: the supplied frame set belongs to this context's loaded resources.
@@ -595,7 +621,6 @@ impl Cx<'_> {
     }
 }
 
-#[cfg(not(test))]
 impl Cx<'_> {
     pub fn intersect_elements(&mut self, a: ElementId, b: ElementId, time: u16) -> u16 {
         assert_ne!(a, b, "collision operands alias");
@@ -611,7 +636,6 @@ impl Cx<'_> {
     }
 }
 
-#[cfg(not(test))]
 impl Cx<'_> {
     pub fn attach_descriptor(&mut self, ship: ShipId, descriptor: super::RaceDesc) {
         self.ship_mut(ship).descriptor = Some(descriptor.into_storage());
@@ -636,7 +660,6 @@ impl Cx<'_> {
     }
 }
 
-#[cfg(not(test))]
 impl Cx<'_> {
     pub fn captain_controls_mut(&mut self, ship: ShipId) -> &mut super::record::CAPTAIN_STUFF {
         &mut self.desc_mut(ship).ship_data.captain_control
@@ -655,7 +678,6 @@ impl Cx<'_> {
     }
 }
 
-#[cfg(not(test))]
 impl Cx<'_> {
     pub fn status_offset(&mut self, ship: ShipId) -> i16 {
         self.kernel.status_offsets[self.ship_state(ship).player as usize]
@@ -734,7 +756,6 @@ mod intersection_projection_tests {
     }
 }
 
-#[cfg(not(test))]
 impl Cx<'_> {
     pub fn assign_primitive(&mut self, id: ElementId) {
         self.kernel.elements.record_mut(id).PrimIndex = self
@@ -801,7 +822,6 @@ mod processing;
 mod ship_assets;
 pub use ship_assets::CampaignProbeAssets;
 
-#[cfg(not(test))]
 impl Cx<'_> {
     pub fn draw_stamp(
         &self,
@@ -825,7 +845,6 @@ impl Cx<'_> {
     }
 }
 
-#[cfg(not(test))]
 impl Cx<'_> {
     pub fn set_mipmap(
         &self,
@@ -851,7 +870,6 @@ impl Cx<'_> {
     }
 }
 
-#[cfg(not(test))]
 impl Cx<'_> {
     pub fn insert_before(&mut self, id: ElementId, before: Option<ElementId>) {
         assert!(!self.elements().linked(id), "element already linked");

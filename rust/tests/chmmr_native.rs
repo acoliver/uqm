@@ -10,7 +10,8 @@ use battle::{prim, PoolElement, Ship};
 use uqm_rust::collections::observation;
 
 use std::{ffi::CStr, mem, ptr};
-use uqm_rust::ships::native::{abi::*, cosine, facing_to_angle, frame_index, sine};
+use uqm_rust::graphics::pixmap_abi::GetFrameIndex;
+use uqm_rust::ships::native::{abi::*, cosine, facing_to_angle, sine};
 
 use battle::Battle as Battlefield;
 
@@ -56,7 +57,7 @@ unsafe fn assert_rng_after(seed: u32, draws: usize) {
 unsafe fn exhaust() -> Vec<*mut std::ffi::c_void> {
     let mut handles = Vec::new();
     loop {
-        let h = uqm_rust::app::bridge::enter(|cx| {
+        let h = crate::battle_context::with(|cx| {
             cx.alloc_element()
                 .map_or(std::ptr::null_mut(), |id| cx.elements().raw(id))
         });
@@ -276,7 +277,7 @@ fn laser_death_obeys_range_byte_gate_count_draw_and_animation() {
                             point((*spot).current.location),
                             (origin.x + magnitude as i16, origin.y)
                         );
-                        assert_eq!(frame_index((*spot).current.image.frame.raw()), 32);
+                        assert_eq!(GetFrameIndex((*spot).current.image.frame.raw().cast()), 32);
                         assert_eq!((*spot).current.image.frames, ship.frame_set(1));
                         assert_eq!((*spot).life, 9);
                         assert_eq!((*spot).thrust, 0);
@@ -292,7 +293,7 @@ fn laser_death_obeys_range_byte_gate_count_draw_and_animation() {
                         assert_eq!((*spot).turn, 0);
                         assert!((*spot).next.image.frame.is_absent());
                         hooks::invoke_element_pointer(animate, spot);
-                        assert_eq!(frame_index((*spot).next.image.frame.raw()), 33);
+                        assert_eq!(GetFrameIndex((*spot).next.image.frame.raw().cast()), 33);
                         assert_eq!((*spot).turn, 3);
                         assert_ne!((*spot).state_flags & CHANGING as u16, 0);
                         assert_rng_after(seed, 2);
@@ -362,7 +363,7 @@ fn muzzle_flash_requires_friendly_appearing_tail_line_and_even_cycle() {
                         point((*flash).current.location),
                         point((*ship.ptr()).next.location)
                     );
-                    assert_eq!(frame_index((*flash).current.image.frame.raw()), 21);
+                    assert_eq!(GetFrameIndex((*flash).current.image.frame.raw().cast()), 21);
                     assert_eq!((*flash).life, 1);
                     assert_eq!((*prim(flash)).kind, gfx_object_STAMP_PRIM as u8);
                     assert_eq!(
@@ -426,7 +427,7 @@ fn delayed_satellites_spawn_around_live_ship_with_three_ordered_rng_draws() {
                     point((*s).current.location),
                     (7000 + cosine(angle, 256), 6000 + sine(angle, 256))
                 );
-                assert_eq!(frame_index((*s).current.image.frame.raw()), index);
+                assert_eq!(GetFrameIndex((*s).current.image.frame.raw().cast()), index);
                 assert_eq!((*prim(s)).kind, gfx_object_STAMP_PRIM as u8);
                 assert!((*s).preprocess_func.is_some());
                 assert!((*s).postprocess_func.is_some());
@@ -509,7 +510,7 @@ fn satellites_wrap_space_cap_speed_and_preserve_half_space_ties() {
                 hooks::invoke_element_pointer(preprocess, s);
                 assert_eq!((*s).life, 0);
                 assert_eq!((*s).turn, 0);
-                assert_eq!(frame_index((*s).next.image.frame.raw()), 0);
+                assert_eq!(GetFrameIndex((*s).next.image.frame.raw().cast()), 0);
                 assert_ne!(
                     ship.descriptor_mut().ship_info.ship_flags & POINT_DEFENSE as u16,
                     0
@@ -569,16 +570,16 @@ fn satellite_collision_is_noop_and_death_installs_four_tick_animation() {
             assert_eq!((*s).life, 4);
             assert_eq!((*s).turn, 1);
             assert_eq!((*s).thrust, 0);
-            assert_eq!(frame_index((*s).next.image.frame.raw()), 8);
+            assert_eq!(GetFrameIndex((*s).next.image.frame.raw().cast()), 8);
             assert!((*s).postprocess_func.is_none());
             assert!((*s).collision_func.is_none());
             assert!((*s).death_func.is_none());
             (*s).current = (*s).next.clone();
             let animate = (*s).preprocess_func.unwrap();
             hooks::invoke_element_pointer(animate, s);
-            assert_eq!(frame_index((*s).next.image.frame.raw()), 8);
+            assert_eq!(GetFrameIndex((*s).next.image.frame.raw().cast()), 8);
             hooks::invoke_element_pointer(animate, s);
-            assert_eq!(frame_index((*s).next.image.frame.raw()), 9);
+            assert_eq!(GetFrameIndex((*s).next.image.frame.raw().cast()), 9);
             // A surviving satellite restores point defense on its next preprocess.
             let survivor = battle::element(satellites[1]);
             hooks::invoke_element_pointer((*survivor).preprocess_func.unwrap(), survivor);

@@ -1,6 +1,9 @@
 //! Controller storage retained by the native input runtime and its observers.
 
-use super::frames::{InputFrames, InputState, TEMPLATES};
+use super::frames::{
+    InputFrames, InputState, FLIGHT_KEYS, KEY_DOWN, KEY_ESCAPE, KEY_LEFT, KEY_RIGHT, KEY_SPECIAL,
+    KEY_UP, KEY_WEAPON, TEMPLATES,
+};
 use std::cell::UnsafeCell;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread::ThreadId;
@@ -14,6 +17,23 @@ struct ControllerState {
     exit_requested: bool,
     menu_sounds: (u16, u16),
     injection_rejected: bool,
+}
+
+/// `BATTLE_INPUT_STATE` bits of the flight keys, in the order of `controls.h`.
+fn battle_input(keys: &[i32; FLIGHT_KEYS]) -> u8 {
+    [
+        (KEY_UP, 2),
+        (KEY_LEFT, 0),
+        (KEY_RIGHT, 1),
+        (KEY_WEAPON, 3),
+        (KEY_SPECIAL, 4),
+        (KEY_ESCAPE, 5),
+        (KEY_DOWN, 6),
+    ]
+    .into_iter()
+    .fold(0, |flags, (key, bit)| {
+        flags | (u8::from(keys[key as usize] != 0) << bit)
+    })
 }
 
 /// Clones retain the same allocation; access stays on the provider's owner thread.
@@ -81,6 +101,22 @@ impl InputControls {
             .configure_repeat(minimum, maximum, step, gestalt, now);
     }
 
+    /// `SetDefaultMenuRepeatDelay`: the first repeat after half a second, then
+    /// one every twelfth of a second.
+    pub fn set_default_menu_repeat(&self, now: u32) {
+        self.configure_repeat(840 / 12, 840 / 2, 840 / 12, false, now);
+    }
+
+    /// One player's held flight keys as battle input flags.
+    pub fn current_battle_input(&self, player: u16) -> u8 {
+        battle_input(&self.current().key[self.player_controls()[usize::from(player)] as usize])
+    }
+
+    /// One player's newly pressed flight keys as battle input flags.
+    pub fn pulsed_battle_input(&self, player: u16) -> u8 {
+        battle_input(&self.pulsed().key[self.player_controls()[usize::from(player)] as usize])
+    }
+
     pub fn repeat_config(&self) -> (u32, u32, u32, bool) {
         self.state().frames.repeat_config()
     }
@@ -146,5 +182,39 @@ impl InputControls {
 
     pub fn injection_rejected(&self) -> bool {
         self.state().injection_rejected
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn battle_input_maps_the_players_template_keys_to_battle_flags() {
+        let controls = InputControls::default();
+        controls.set_player_control(1, 2);
+        let mut state = InputState::default();
+        state.key[2][KEY_UP as usize] = 1;
+        state.key[2][KEY_WEAPON as usize] = 1;
+        state.key[2][KEY_DOWN as usize] = 1;
+        state.key[0][KEY_LEFT as usize] = 1;
+        controls.advance(state, state, 0);
+        assert_eq!(
+            controls.current_battle_input(1),
+            (1 << 2) | (1 << 3) | (1 << 6)
+        );
+        assert_eq!(controls.current_battle_input(0), 1 << 0);
+        // The first frame with the keys down pulses all of them.
+        assert_eq!(
+            controls.pulsed_battle_input(1),
+            (1 << 2) | (1 << 3) | (1 << 6)
+        );
+    }
+
+    #[test]
+    fn default_menu_repeat_is_a_half_second_delay_then_a_twelfth() {
+        let controls = InputControls::default();
+        controls.set_default_menu_repeat(0);
+        assert_eq!(controls.repeat_config(), (70, 420, 70, false));
     }
 }

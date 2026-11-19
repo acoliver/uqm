@@ -12,6 +12,15 @@ use crate::planets::c_api::*;
 use crate::planets::generate::default::Npcs;
 use crate::planets::generate::special::FleetGroups;
 
+/// `GROUP_INIT_IP`, `GROUP_SAVE_IP` (`state.h`): `(BYTE)~0`.
+const GROUP_SAVE_IP: u8 = !0;
+/// `GROUP_LOAD_IP` is `GROUP_LIST` (`state.h`).
+const GROUP_LOAD_IP: u8 = 0;
+/// `GROUPS_RANDOM`.
+const GROUPS_RANDOM: u32 = 0;
+/// `GROUPS_ADD_NEW` (`state.h`).
+const GROUPS_ADD_NEW: u32 = !0;
+
 impl Npcs for Site<'_, '_, '_> {
     fn init_ip_groups(&mut self) -> bool {
         let mut game = self.game.borrow_mut();

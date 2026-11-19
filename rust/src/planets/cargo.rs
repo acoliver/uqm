@@ -21,11 +21,10 @@ fn next_element(current: u8, back: bool, forward: bool) -> u8 {
     }
 }
 
-#[cfg(not(test))]
 pub(crate) mod live {
     use super::next_element;
-    use crate::c_bindings::controller_input::*;
     use crate::engine::{battle::Cx, observe::Io};
+    use crate::input::frames::*;
     use std::ffi::CString;
 
     const CARGO_STRINGS: i32 = 162;

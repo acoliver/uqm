@@ -1,14 +1,12 @@
 //! Native input repeat, nested loops and battle controls.
 
-#[cfg(not(test))]
 use crate::threading::pacing::yield_input_loop;
 
-#[cfg(all(not(test), feature = "debug-process"))]
+#[cfg(feature = "debug-process")]
 use crate::{
     engine::battle::statistics::{delta_crew, delta_energy},
     front_end::uqmdebug::debug_key_pressed_synchronous,
 };
-#[cfg(not(test))]
 use crate::{
     engine::{
         battle::Cx,
@@ -17,7 +15,6 @@ use crate::{
     ships::native::abi::*,
 };
 
-#[cfg(not(test))]
 pub(crate) mod live {
     #![allow(non_snake_case)]
     use super::*;
@@ -73,10 +70,6 @@ pub(crate) mod live {
         );
     }
 
-    pub fn SetDefaultMenuRepeatDelay(input: &InputControls) {
-        SetMenuRepeatDelay(input, 840 / 12, 840 / 2, 840 / 12, 0);
-    }
-
     /// # Safety
     /// The provider's initialized input vectors borrow this runtime's live buffer.
     pub unsafe fn FlushInput(input: &InputControls) {
@@ -105,53 +98,6 @@ pub(crate) mod live {
     }
 
     /// # Safety
-    /// The initialized game-thread context must be published by the calling legacy UI.
-    pub unsafe fn DoInput(reset: u32, frame: &mut dyn crate::engine::input::Frame) {
-        crate::app::bridge::enter(|cx| {
-            let runtime = cx.kernel.input_runtime();
-            let mut observer = runtime.observer();
-            let mut io = crate::engine::observe::Io {
-                observer: &mut *observer,
-            };
-            runtime.run(cx, &mut io, reset != 0, frame);
-        });
-    }
-
-    pub fn SetMenuSounds(input: &InputControls, first: u16, second: u16) {
-        input.set_menu_sounds(first, second);
-    }
-
-    /// # Safety
-    /// Both output pointers must be writable for the synchronous call.
-    pub unsafe fn GetMenuSounds(input: &InputControls, first: *mut u16, second: *mut u16) {
-        (*first, *second) = input.menu_sounds();
-    }
-
-    fn battle_input(keys: &[i32; crate::engine::input::frames::FLIGHT_KEYS]) -> u8 {
-        [
-            (KEY_UP, 2),
-            (KEY_LEFT, 0),
-            (KEY_RIGHT, 1),
-            (KEY_WEAPON, 3),
-            (KEY_SPECIAL, 4),
-            (KEY_ESCAPE, 5),
-            (KEY_DOWN, 6),
-        ]
-        .into_iter()
-        .fold(0, |flags, (key, bit)| {
-            flags | (u8::from(keys[key as usize] != 0) << bit)
-        })
-    }
-
-    pub fn CurrentInputToBattleInput(input: &InputControls, player: u16) -> u8 {
-        battle_input(&input.current().key[input.player_controls()[player as usize] as usize])
-    }
-
-    pub fn PulsedInputToBattleInput(input: &InputControls, player: u16) -> u8 {
-        battle_input(&input.pulsed().key[input.player_controls()[player as usize] as usize])
-    }
-
-    /// # Safety
     /// Input, including the nested pause/exit UI, is initialized on the game thread.
     pub unsafe fn AnyButtonPress(cx: &mut Cx<'_>, input: &InputSession, _special: u32) -> u32 {
         UpdateInputState(cx, input);
@@ -162,7 +108,7 @@ pub(crate) mod live {
     /// The underlying confirmation UI retains its resources and this input owner.
     pub unsafe fn ConfirmExit(cx: &mut Cx<'_>, input: &InputSession) -> u32 {
         let old = input.repeat_config();
-        SetDefaultMenuRepeatDelay(input);
+        input.set_default_menu_repeat(crate::time::counter_abi::GetTimeCounter());
         let result = crate::ui::confirm::do_confirm_exit(cx, input);
         SetMenuRepeatDelay(input, old.0, old.1, old.2, u32::from(old.3));
         result
@@ -170,7 +116,5 @@ pub(crate) mod live {
 }
 #[path = "input_driver.rs"]
 mod driver;
-#[cfg(not(test))]
 pub use driver::NativeInputRuntime;
-#[cfg(not(test))]
 pub use live::*;

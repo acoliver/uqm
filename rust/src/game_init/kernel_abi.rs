@@ -1,15 +1,15 @@
 //! Live game kernel and resource globals, ported from setup.c.
 #![allow(non_snake_case)]
 
-use crate::engine::battle::access::lifecycle;
 use crate::graphics::native_abi as gfx;
 use crate::graphics::{context_abi, drawable_abi, pixmap_abi};
-use crate::io::uio_bridge as uio;
+use crate::io::{handles::contentDir, uio_bridge as uio};
 use crate::ships::native::abi::*;
 use crate::strings::{
     sresins::LoadStringTableInstance,
     string_table::{CaptureStringTable, DestroyStringTable, ReleaseStringTable},
 };
+use crate::{battle::status_native::init_status_offsets, engine::battle::access::lifecycle};
 use std::{
     ffi::{c_char, CStr},
     ptr,
@@ -133,7 +133,7 @@ pub unsafe fn InitContexts(kernel: &mut crate::engine::Kernel) -> u32 {
 unsafe fn init_kernel(kernel: &mut crate::engine::Kernel, activity: u16) -> u32 {
     // SAFETY: only resource loaders run during the owner borrow.
     let loaded = {
-        crate::battle::context_access::lifecycle::init_ships(&mut *kernel);
+        kernel.reset_race_capacities(crate::ships::native::abi::MAX_SHIPS_PER_SIDE as usize);
         let Some(font) = crate::graphics::native_font::LoadedFont::load(c"font.starcon") else {
             return 0;
         };
@@ -174,7 +174,7 @@ unsafe fn init_kernel(kernel: &mut crate::engine::Kernel, activity: u16) -> u32 
         return 0;
     }
     init_status_offsets(kernel, ScreenHeight);
-    super::space_resources::init_space(kernel, activity)
+    u32::from(kernel.init_space(activity))
 }
 
 /// # Safety

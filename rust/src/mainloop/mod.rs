@@ -30,10 +30,8 @@ pub mod init_reference;
 pub mod init_wrappers;
 pub mod input_frame;
 pub mod logging;
-#[cfg(not(test))]
 pub mod main2_abi;
 pub mod options;
-#[cfg(not(test))]
 pub mod options_abi;
 pub mod restart_menu;
 pub mod startup;
@@ -66,8 +64,6 @@ pub enum MainLoopError {
 pub mod platform_abi;
 
 pub mod input_abi;
-#[cfg(not(test))]
 pub mod lifecycle_abi;
 
-#[cfg(not(test))]
 pub mod state_abi;

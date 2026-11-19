@@ -1,6 +1,17 @@
 //! Debug cheats, universe inspection and graphics-context diagnostics.
 #![cfg(feature = "debug-process")]
 
+use crate::battle::element::PLAYER_SHIP;
+use crate::comm::dispatch::RPG_PLAYER_NUM;
+use crate::engine::battle::link_queue::{NAME_OFFSET, NUM_CAPTAINS_NAMES};
+use crate::engine::species::ship::{
+    ARILOU_SHIP, BLACK_URQUAN_SHIP, DRUUGE_SHIP, ILWRATH_SHIP, MELNORME_SHIP, MYCON_SHIP,
+    PKUNK_SHIP, SLYLANDRO_SHIP, UMGAH_SHIP, URQUAN_SHIP, VUX_SHIP, YEHAT_SHIP,
+};
+use crate::engine::world::activity::{
+    activity_flags::{IN_BATTLE, START_INTERPLANETARY},
+    ActivityKind,
+};
 use crate::engine::{
     battle::{Cx, ElementId, ShipId},
     clock::HYPERSPACE_ENCOUNTER_EVENT,
@@ -9,7 +20,8 @@ use crate::engine::{
     Kernel, StoryKey, World,
 };
 use crate::graphics::context_abi::ContextLease;
-use crate::{navigation::abi::*, planets::solar_system::SolarSystem};
+use crate::graphics::native_abi::POINT;
+use crate::planets::solar_system::SolarSystem;
 
 mod catalog;
 pub use catalog::uqm_debug_creature_bio_value;
@@ -52,9 +64,10 @@ pub fn debug_key_pressed_synchronous(
         BLACK_URQUAN_SHIP,
     ] {
         let random = cx.rng;
-        let added = crate::engine::world::fleet::add_escort_ships(cx.world, race as u16, 1, || {
-            ((random() as u16 & (NUM_CAPTAINS_NAMES - 1) as u16) + NAME_OFFSET as u16) as u8
-        });
+        let added =
+            crate::engine::world::fleet::add_escort_ships(cx.world, u16::from(race), 1, || {
+                ((random() as u16 & (NUM_CAPTAINS_NAMES - 1) as u16) + NAME_OFFSET as u16) as u8
+            });
         if added.is_some() {
             crate::ui::sis::delta_sis_gauges(cx.kernel, cx.world, 32767, 32767, 32767);
         }
@@ -88,7 +101,7 @@ pub fn forward_to_next_event(cx: &mut Cx<'_>, skip_hee: bool) {
             let clock = &cx.world.data.game.game_clock;
             (clock.year_index, clock.month_index, clock.day_index) < date
         } {
-            crate::time::clock_abi::advance_days(cx, 1);
+            crate::navigation::events::advance_days(cx, 1);
         }
         if done {
             break;
@@ -105,9 +118,7 @@ pub fn equip_ship(cx: &mut Cx<'_>) {
         equipment::update_flight(&cx.world.data.flagship, &mut flight);
         effects.set(Some(flight));
     }
-    if crate::navigation::globals::in_hqspace(cx.world) != 0
-        || cx.world.activity() as u8 as u32 == IN_INTERPLANETARY
-    {
+    if cx.world.in_hqspace() || cx.world.activity() as u8 == ActivityKind::InInterplanetary as u8 {
         crate::ui::sis::delta_sis_gauges(cx.kernel, cx.world, 32767, 32767, 32767);
     }
 }
@@ -156,7 +167,7 @@ pub fn find_player_ship(cx: &Cx<'_>, player: i16) -> Option<ShipId> {
     let mut next = cx.elements().head();
     while let Some(element) = next {
         let state = cx.element(element);
-        if state.flags & PLAYER_SHIP as u16 != 0 && state.player == player {
+        if state.flags & PLAYER_SHIP != 0 && state.player == player {
             return Some(cx.owner(element));
         }
         next = cx.elements().succ(element);
@@ -165,9 +176,7 @@ pub fn find_player_ship(cx: &Cx<'_>, player: i16) -> Option<ShipId> {
 }
 
 fn refill(cx: &mut Cx<'_>, energy: bool, apply: impl FnOnce(&mut Cx<'_>, ElementId, i16) -> bool) {
-    if cx.world.activity() & IN_BATTLE as u16 == 0
-        || crate::navigation::globals::in_hqspace(cx.world) != 0
-    {
+    if cx.world.activity() & IN_BATTLE == 0 || cx.world.in_hqspace() {
         return;
     }
     let Some(ship) = find_player_ship(cx, RPG_PLAYER_NUM as i16) else {
@@ -220,11 +229,11 @@ pub fn move_flagship(world: &mut World, dimensions: (i32, i32)) {
         );
         if world.current_star.is_some() {
             world.set_story_state(StoryKey::USED_BROADCASTER, 0);
-            world.set_activity(world.activity() & !(IN_BATTLE as u16));
+            world.set_activity(world.activity() & !IN_BATTLE);
             world.data.game.ship_facing = 0;
             world.data.game.ip_planet = 0;
             world.data.game.in_orbit = 0;
-            world.set_activity(world.activity() | START_INTERPLANETARY as u16);
+            world.set_activity(world.activity() | START_INTERPLANETARY);
         }
     }
     world.data.game.autopilot = POINT { x: -1, y: -1 };
@@ -257,17 +266,19 @@ mod tests {
     }
     #[test]
     fn debug_names_use_header_indices_and_unknown_fallbacks() {
+        use crate::planets::generate::consts::{CRATERED_ALGO, CYAN_BODY};
+        use crate::planets::generate::identities::MELNORME8_DEFINED;
         assert_eq!(
             event_name(HYPERSPACE_ENCOUNTER_EVENT as u8),
             "HYPERSPACE_ENCOUNTER_EVENT"
         );
         assert_eq!(
-            star_presence_string(MELNORME8_DEFINED as u8),
+            star_presence_string(MELNORME8_DEFINED),
             "Melnorme trader #8"
         );
         assert_eq!(star_presence_string(0), "");
-        assert_eq!(body_color_string(CYAN_BODY as u8), "cyan");
-        assert_eq!(world_gen_algo_string(CRATERED_ALGO as u8), "CRATERED_ALGO");
+        assert_eq!(body_color_string(CYAN_BODY), "cyan");
+        assert_eq!(world_gen_algo_string(CRATERED_ALGO), "CRATERED_ALGO");
         assert_eq!(event_name(u8::MAX), "???");
         assert_eq!(atmosphere_string(u8::MAX), "super thick");
     }

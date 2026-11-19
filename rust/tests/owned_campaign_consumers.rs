@@ -1,4 +1,3 @@
-use uqm_rust::app::bridge;
 use uqm_rust::engine::{Game, World};
 
 #[test]
@@ -18,14 +17,13 @@ fn starbase_and_probe_setup_use_owned_campaign_storage() {
             fleets.put(id);
         }
     }
-    // SAFETY: the serialized fixture owns its published game; queue operations do not enter UI.
-    unsafe {
-        bridge::with_game(&mut game, || {
-            World::current().write(|world| {
-                let fleets = world.avail_races_ref();
+    {
+        {
+            {
+                let fleets = game.world.avail_races_ref();
                 assert_eq!(fleets.count(), 24);
                 let template = *fleets.get(fleets.at(0).unwrap());
-                let mut ships = world.built_ships();
+                let mut ships = game.world.built_ships();
                 assert_eq!(ships.count(), 0);
                 let mut captain = 0;
                 let mut name = || {
@@ -54,24 +52,22 @@ fn starbase_and_probe_setup_use_owned_campaign_storage() {
                 assert_eq!(ships.count(), 12);
                 assert!(ships.clone_fragment(&template, 0, 1, &mut name).is_none());
                 assert_eq!(ships.count(), 12);
-            });
-            World::current().write(|world| {
-                uqm_rust::comm::dispatch::prepare_automation_sol_probe_encounter(world).unwrap()
-            });
-            let first = World::current().read(|world| world.npc_built_ships_ref().head().unwrap());
-            World::current().write(|world| {
-                uqm_rust::comm::dispatch::prepare_automation_sol_probe_encounter(world).unwrap()
-            });
-            World::current().read(|world| {
-                let ships = world.npc_built_ships_ref();
+            };
+            uqm_rust::comm::dispatch::prepare_automation_sol_probe_encounter(&mut game.world)
+                .unwrap();
+            let first = game.world.npc_built_ships_ref().head().unwrap();
+            uqm_rust::comm::dispatch::prepare_automation_sol_probe_encounter(&mut game.world)
+                .unwrap();
+            {
+                let ships = game.world.npc_built_ships_ref();
                 assert!(!ships.contains(first));
                 assert_eq!(ships.count(), 1);
                 let probe = ships.get(ships.head().unwrap());
                 assert_eq!(probe.race_id, 23);
                 assert_eq!(probe.crew_level, 12);
                 assert_eq!(probe.max_crew, 18);
-            });
-        });
+            };
+        };
     }
     assert_eq!(game.world.built_ships_ref().count(), 12);
 }

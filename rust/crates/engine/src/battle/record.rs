@@ -420,7 +420,6 @@ impl Cx<'_> {
             .as_deref_mut()
             .unwrap_or_else(|| panic!("ship {id:?} has no descriptor"))
     }
-    #[cfg(not(test))]
     pub fn captain_controls(&self, id: ShipId) -> &CAPTAIN_STUFF {
         &self.desc(id).ship_data.captain_control
     }
@@ -428,7 +427,6 @@ impl Cx<'_> {
     pub fn legacy_element(&self, id: ElementId) -> *mut ElementRecord {
         self.kernel.elements.raw(id).cast()
     }
-    #[cfg(not(test))]
     pub(super) fn primitive(&mut self, id: ElementId) -> &mut crate::battle::DisplayPrimitive {
         let index = usize::from(self.kernel.elements[id].PrimIndex);
         assert!(index < 330, "invalid primitive index {index}");
@@ -481,7 +479,6 @@ impl RaceDesc {
     pub(super) fn from_storage(raw: Box<RaceDescriptor>) -> Self {
         Self { raw }
     }
-    #[cfg(not(test))]
     pub(super) fn into_storage(self) -> Box<RaceDescriptor> {
         self.raw
     }
@@ -497,14 +494,12 @@ impl RaceDesc {
     pub fn callbacks(&self) -> [usize; 5] {
         self.raw.callbacks()
     }
-    #[cfg(not(test))]
     pub fn fleet(&self) -> &FLEET_STUFF {
         &self.raw.fleet
     }
     pub fn address(&self) -> usize {
         std::ptr::from_ref(&*self.raw) as usize
     }
-    #[cfg(not(test))]
     pub fn cleanup(&mut self, world: &mut crate::battle::World) {
         self.raw.cleanup(world);
     }
@@ -751,7 +746,6 @@ mod projection_tests {
     }
 }
 
-#[cfg(not(test))]
 impl RaceDescriptor {
     pub fn cleanup(&mut self, world: &mut crate::battle::World) {
         if let Some(uninit) = self.race.and_then(|race| race.uninit) {
@@ -849,7 +843,6 @@ mod kernel_tests {
     }
 }
 
-#[cfg(not(test))]
 impl RaceDesc {
     pub fn recover_crew(&mut self, crew: u16) -> u16 {
         let info = &mut self.raw.ship_info;
@@ -878,7 +871,6 @@ pub fn recover_ship_crew(remaining: &mut u16, maximum: u16, crew: u16) -> u16 {
 }
 
 impl Kernel {
-    #[cfg(not(test))]
     pub fn reset_race_capacities(&mut self, capacity: usize) {
         for pool in &mut self.races {
             pool.reset_capacity(capacity);
@@ -900,7 +892,6 @@ impl Kernel {
 }
 
 impl Kernel {
-    #[cfg(not(test))]
     pub fn element_sound_source(&self, token: usize) -> Option<crate::battle::ElementId> {
         self.elements.sound_source(token)
     }

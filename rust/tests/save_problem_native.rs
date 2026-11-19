@@ -26,8 +26,13 @@ struct WaitObserver {
     frame: *mut frame_desc,
 }
 
-impl Observer<Option<CampaignView>> for WaitObserver {
-    fn input_admitted(&mut self, view: &InputView, campaign: &Option<CampaignView>) -> Injected {
+impl Observer for WaitObserver {
+    fn input_admitted(
+        &mut self,
+        view: &InputView,
+        cx: &mut uqm_rust::engine::battle::Cx<'_>,
+    ) -> Injected {
+        let campaign = CampaignView::for_input(*view, || CampaignView::capture(cx));
         assert_eq!(*view, InputView::Nested);
         assert_eq!(
             self.polls.get(),
@@ -61,7 +66,7 @@ impl InputRuntime for Runtime {
         &self.1
     }
 
-    fn observer(&self) -> Box<dyn Observer<Option<CampaignView>>> {
+    fn observer(&self) -> Box<dyn Observer> {
         Box::new(self.0.clone())
     }
     fn yield_poll(&self, _: &mut uqm_engine::battle::Cx<'_>) {
@@ -206,7 +211,7 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
             },
             uqm_rust::engine::input::InputSession::default(),
         )));
-        uqm_rust::app::bridge::with_game(&mut game, || {
+        {
             {
                 use uqm_rust::{callback::ffi as alarms, time::source};
                 source::install(true);
@@ -589,7 +594,7 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
                         },
                     );
                     context_lease.set_frame(target);
-                    uqm_rust::app::bridge::enter(|cx| {
+                    game.with_context(|cx| {
                         let old = (
                             cx.kernel.status_context,
                             cx.kernel.status_frame,
@@ -923,7 +928,7 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
                 *(*message).data = text as std::ffi::c_char;
                 (*message).length = i32::from(text != 0);
                 SetContext(previous);
-                uqm_rust::app::bridge::enter(|cx| {
+                game.with_context(|cx| {
                     let mut observer = cx.kernel_mut().input_runtime().observer();
                     let mut io = Io {
                         observer: &mut *observer,
@@ -957,7 +962,7 @@ fn save_failure_restores_the_drawable_after_text_and_empty_resource_messages() {
                     }
                 }
             }
-        });
+        };
         assert_eq!(waits.get(), 2);
         assert_eq!(polls.get(), 4);
         game.kernel.game_strings = ptr::null_mut();

@@ -2,6 +2,9 @@
 
 use crate::engine::graphics::native_abi::POINT;
 use crate::engine::math::battle_types::{arctan, cosine, sine};
+use crate::engine::world::activity::activity_flags::{
+    CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY,
+};
 use crate::engine::world::planet::{PlanetDesc, PlanetFrame};
 use crate::engine::world::queues::{IpGroup as IP_GROUP, STATION_RADIUS};
 use crate::engine::StoryKey;
@@ -10,12 +13,11 @@ use crate::planets::generate::default;
 use crate::planets::generate::home_contact::HomeContactSite;
 use crate::planets::generate::orbits::MOON_DELTA;
 use crate::planets::generate::special::{self, Body, Story, MIN_MOON_RADIUS, URQUAN_SHIP};
-use crate::planets::generate::yehat::{CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY};
 
 // `races.h`, `grpinfo.h`, `plandata.h`, `units.h` and `globdata.h`.
 const BLACK_URQUAN_SHIP: u8 = 21;
 const MAX_SHIPS_PER_SIDE: u8 = 14;
-const SA_MATRA: u8 = 126 | 0x80;
+pub const SA_MATRA: u8 = 126 | 0x80;
 const LAST_BATTLE: u16 = 1 | (1 << 10);
 const GUARDS: usize = 16;
 const WORLD: Body = Body::Moon { planet: 4, moon: 0 };

@@ -1,5 +1,4 @@
 //! Live utwig callbacks translated from ships/utwig/utwig.c.
-#[cfg(not(test))]
 pub(crate) mod engine {
     use crate::ships::native::{abi::*, cosine, facing_to_angle, sine};
     const fn color(r: u8, g: u8, b: u8) -> Color {

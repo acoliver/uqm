@@ -1,5 +1,4 @@
 //! Live black_urquan callbacks translated from ships/blackurq/blackurq.c.
-#[cfg(not(test))]
 pub(crate) mod engine {
     use crate::ships::native::{abi::*, angle_to_facing, normalize_facing, wrap_delta};
 

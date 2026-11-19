@@ -26,14 +26,10 @@ pub mod battle;
 pub mod clock;
 pub mod observe;
 
-pub mod handoff;
 pub mod input;
 pub mod kernel;
-mod owner;
 pub mod world;
 pub use kernel::Kernel;
-pub use owner::Owner;
-pub use owner::Projection;
 pub use world::StoryKey;
 pub use world::{Game, StarId, World, WorldData};
 

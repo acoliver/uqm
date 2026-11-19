@@ -2,17 +2,11 @@
 
 mod assigned;
 mod ships;
-#[cfg(not(test))]
 pub fn hooks() -> Vec<(usize, &'static str)> {
     ships::hooks()
         .into_iter()
         .chain(assigned::hooks())
         .collect()
-}
-
-#[cfg(test)]
-pub fn hooks() -> Vec<(usize, &'static str)> {
-    Vec::new()
 }
 
 pub fn name(hooks: &[(usize, &'static str)], address: usize) -> &'static str {

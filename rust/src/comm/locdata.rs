@@ -3,10 +3,7 @@ use crate::comm::Comm;
 // @plan PLAN-20260314-COMM.P03
 // @requirement EC-REQ-003, DS-REQ-004, SC-REQ-003
 
-use std::ffi::{c_char, c_void};
-
-use crate::battle::velocity::VelocityDesc;
-use crate::c_bindings::assert_c_layout;
+use std::ffi::c_char;
 
 #[cfg(test)]
 use super::races::descriptor::AnimationDescriptor;
@@ -22,14 +19,6 @@ pub use crate::graphics::native_abi::Color as CColor;
 
 /// C `POINT` struct: { COORD x, y } where COORD = SIZE = SWORD = i16.
 pub use crate::graphics::native_abi::point as CPoint;
-
-/// C `STAMP` struct: a screen origin and an opaque `FRAME` pointer.
-#[repr(C)]
-#[derive(Clone, Copy, Default)]
-pub struct CStamp {
-    pub origin: CPoint,
-    pub frame: *mut c_void,
-}
 
 /// C `RECT` struct (units.h / comm.h).
 #[repr(C)]
@@ -57,29 +46,6 @@ const _: () = {
 
 pub use crate::engine::battle::schema::GAME_STATE as CGameState;
 pub use crate::ships::native::abi::SIS_STATE as CSisState;
-
-mod layout {
-    use super::*;
-
-    assert_c_layout!(CPoint, crate::graphics::native_abi::POINT { x: x, y: y });
-    assert_c_layout!(
-        CStamp,
-        crate::graphics::native_abi::STAMP {
-            origin: origin,
-            frame: frame
-        }
-    );
-    assert_c_layout!(
-        VelocityDesc,
-        crate::ships::native::abi::VELOCITY_DESC {
-            travel_angle: travel_angle,
-            vector: vector,
-            fract: fract,
-            error: error,
-            incr: incr,
-        }
-    );
-}
 
 /// Loaded resources and callbacks owned by one conversation mode.
 #[derive(Default)]
@@ -212,7 +178,6 @@ mod tests {
         assert_eq!(std::mem::offset_of!(CSisState, module_slots), 22);
         assert_eq!(std::mem::offset_of!(CSisState, drive_slots), 38);
         assert_eq!(std::mem::offset_of!(CSisState, ship_name), 74);
-        assert_eq!(std::mem::size_of::<CStamp>(), 16);
         assert_eq!(std::mem::size_of::<CGameState>(), 104);
         assert_eq!(std::mem::offset_of!(CGameState, game_clock), 40);
         assert_eq!(std::mem::offset_of!(CGameState, ship_stamp), 56);

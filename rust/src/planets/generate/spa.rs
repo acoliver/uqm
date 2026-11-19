@@ -1,5 +1,8 @@
 //! `genspa.c`: Spathiwa, its moon, the broadcasters and the Evil Ones.
 
+use crate::engine::world::activity::activity_flags::{
+    CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY,
+};
 use crate::engine::world::planet::{NodeInfo, PlanetDesc, SystemInfo};
 use crate::engine::StoryKey;
 use crate::math::RandomContext;
@@ -10,7 +13,6 @@ use crate::planets::generate::home_contact::{HomeContactSite, LanderTakeoff};
 use crate::planets::generate::orbits::{self, OrbitRequest, MOON_DELTA};
 use crate::planets::generate::special::{self, Body, Orbit, Story, MIN_MOON_RADIUS, WATER_WORLD};
 use crate::planets::generate::surface::{self, BIOLOGICAL_SCAN, MINERAL_SCAN};
-use crate::planets::generate::yehat::{CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY};
 
 const WORLD: Body = Body::Planet(0);
 const MOON: Body = Body::Moon { planet: 0, moon: 0 };

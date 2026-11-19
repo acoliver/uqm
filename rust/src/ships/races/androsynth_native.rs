@@ -1,5 +1,4 @@
 //! Androsynth behavior, retaining the original integer widths and RNG order.
-#[cfg(not(test))]
 pub(crate) mod engine {
     use crate::engine::battle::{
         Concerns, Cx, ElementId, Race, RaceState, ShipId, WeaponOrigin, WeaponSpawn,

@@ -1,6 +1,5 @@
 //! Descriptor for the noncombat Ur-Quan drone.
 
-#[cfg(not(test))]
 pub(crate) mod engine {
 
     fn descriptor(_world: &mut crate::engine::battle::World) -> crate::engine::battle::RaceDesc {

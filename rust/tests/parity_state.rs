@@ -140,7 +140,7 @@ fn exercise_live_callers(directory: &Path) {
         .observer()
         .unwrap_or_else(|| panic!("state test application has no observer"))
         .as_ref();
-    uqm_rust::engine::World::current().write(uqm_rust::state::ffi::rust_init_game_state);
+    crate::battle_context::with(|cx| uqm_rust::state::ffi::rust_init_game_state(cx.world));
     observation::record(Event::SpaceActive(true));
     descriptor_fields(observer, directory);
     elements_and_fighters(observer, directory);
@@ -156,7 +156,7 @@ fn exercise_live_callers(directory: &Path) {
 
 fn snapshot(observer: &AutomationObserver, directory: &Path) -> (Fields, String) {
     uqm_rust::math::seed_random(123456);
-    observer.parity_checkpoint("integration");
+    crate::battle_context::with(|cx| observer.parity_checkpoint(cx, "integration"));
     assert_eq!(
         uqm_rust::math::seed_random(123456),
         123456,
@@ -324,8 +324,8 @@ fn assert_characteristics(fields: &Fields, prefix: &str) {
 unsafe fn install_ship(ship: &mut ShipRecord) {
     // SAFETY: the caller owns the idle queues and keeps ship at this address
     // until the synchronous snapshot finishes and the queue is detached.
-    unsafe {
-        uqm_rust::app::bridge::enter(|cx| {
+    {
+        crate::battle_context::with(|cx| {
             let mut ships = cx.kernel_mut().ships(0);
             let link = ships
                 .id(ptr::from_mut(ship) as usize)
@@ -344,7 +344,7 @@ fn race_custom_fields(observer: &AutomationObserver, directory: &Path) {
     // SAFETY: native initializers run on this sole game thread; all test allocations
     // match the races' repr(C) saved-data records and outlive the snapshots.
     unsafe {
-        let human = uqm_rust::ships::hook_registry::hooks()
+        let human = uqm_rust::battle::hook_registry::hooks()
             .into_iter()
             .find_map(|(address, name)| {
                 (name == "ships::races::human_native::nuke_preprocess").then_some(address)
@@ -367,7 +367,7 @@ fn race_custom_fields(observer: &AutomationObserver, directory: &Path) {
                 saved_death: human,
             };
             let ship = ptr::from_mut(owner.ship_mut());
-            uqm_rust::app::bridge::enter(|cx| {
+            crate::battle_context::with(|cx| {
                 let mut ships = cx.kernel_mut().ships(0);
                 let link = ships.link(owner.ship_id);
                 ships.put(link);
@@ -384,7 +384,7 @@ fn race_custom_fields(observer: &AutomationObserver, directory: &Path) {
                 fields["elements.0.identity"]
             );
             assert_eq!(fields["race.pkunk.last_sound"], "0");
-            uqm_rust::app::bridge::enter(|cx| {
+            crate::battle_context::with(|cx| {
                 uqm_rust::battle::sounds::engine::unlink(cx, phoenix_object.id);
                 cx.dispose(phoenix_object.id);
             });
@@ -396,7 +396,7 @@ fn race_custom_fields(observer: &AutomationObserver, directory: &Path) {
             let mut reused = battle::Object::new(&pool);
             assert_eq!(reused.id.slot(), phoenix_object.id.slot());
             assert_ne!(reused.id.generation(), phoenix_object.id.generation());
-            assert!(!uqm_rust::app::bridge::enter(|cx| cx
+            assert!(!crate::battle_context::with(|cx| cx
                 .elements()
                 .contains(phoenix_object.id)));
             battle::put(reused.ptr().cast());
@@ -409,10 +409,10 @@ fn race_custom_fields(observer: &AutomationObserver, directory: &Path) {
                 reallocated["ships.0.0.custom.phoenix"],
                 fields["ships.0.0.custom.phoenix"]
             );
-            uqm_rust::app::bridge::enter(|cx| {
+            crate::battle_context::with(|cx| {
                 uqm_rust::battle::sounds::engine::unlink(cx, reused.id)
             });
-            uqm_rust::app::bridge::enter(|cx| {
+            crate::battle_context::with(|cx| {
                 let mut ships = cx.kernel_mut().ships(0);
                 let link = ships.link(owner.ship_id);
                 ships.remove(link);
@@ -456,7 +456,7 @@ fn race_custom_fields(observer: &AutomationObserver, directory: &Path) {
         assert!(fields["ships.0.0.custom.collision"].ends_with("::collision"));
         ship.SpeciesID = SPECIES_ID_MMRNMHRM_ID;
         let mut mmrnmhrm = Box::new(
-            uqm_rust::app::bridge::enter(|cx| {
+            crate::battle_context::with(|cx| {
                 uqm_rust::ships::races::descriptor(cx.world, SPECIES_ID_MMRNMHRM_ID)
             })
             .into_legacy(),
@@ -475,7 +475,7 @@ fn race_custom_fields(observer: &AutomationObserver, directory: &Path) {
 }
 
 fn known_collision() -> uqm_rust::engine::battle::CollisionFn {
-    let registry = uqm_rust::ships::hook_registry::hooks();
+    let registry = uqm_rust::battle::hook_registry::hooks();
     let address = registry
         .iter()
         .find(|(_, name)| *name == "battle::ship_native::collision")
@@ -487,8 +487,8 @@ fn known_collision() -> uqm_rust::engine::battle::CollisionFn {
 }
 
 unsafe fn sis_fields(observer: &AutomationObserver, directory: &Path, ship: &mut ShipRecord) {
-    uqm_rust::engine::World::current().write(|world| {
-        let sis = &mut world.data.flagship;
+    crate::battle_context::with(|cx| {
+        let sis = &mut cx.world.data.flagship;
         sis.module_slots
             .fill(uqm_rust::starbase::sis_modules::EMPTY_SLOT);
         sis.module_slots[15] = GUN_WEAPON as u8;
@@ -498,12 +498,12 @@ unsafe fn sis_fields(observer: &AutomationObserver, directory: &Path, ship: &mut
             .fill(uqm_rust::starbase::sis_modules::EMPTY_SLOT);
         sis.jet_slots
             .fill(uqm_rust::starbase::sis_modules::EMPTY_SLOT);
-        world.set_activity(SUPER_MELEE as u16);
+        cx.world.set_activity(SUPER_MELEE as u16);
     });
     ship.SpeciesID = SPECIES_ID_SIS_SHIP_ID;
     // SAFETY: the caller runs native initialization on the sole game thread.
-    let descriptor = unsafe {
-        uqm_rust::app::bridge::enter(|cx| {
+    let descriptor = {
+        crate::battle_context::with(|cx| {
             uqm_rust::ships::races::descriptor(cx.world, SPECIES_ID_SIS_SHIP_ID)
         })
         .into_legacy()
@@ -540,9 +540,8 @@ unsafe fn sis_fields(observer: &AutomationObserver, directory: &Path, ship: &mut
     assert_eq!(fields["ships.0.0.custom.missiles.1.hit_points"], "6");
     assert_eq!(fields["ships.0.0.custom.missiles.0.blast_offs"], "8");
     assert!(fields["ships.0.0.custom.missiles.0.preprocess"].ends_with("::blaster_preprocess"));
-    // SAFETY: the descriptor and published world outlive this synchronous teardown.
-    unsafe {
-        uqm_rust::app::bridge::enter(|cx| {
+    {
+        crate::battle_context::with(|cx| {
             let race = descriptor
                 .race
                 .unwrap_or_else(|| panic!("Native SIS descriptor"));
@@ -567,29 +566,16 @@ unsafe fn sis_fields(observer: &AutomationObserver, directory: &Path, ship: &mut
 
 fn campaign_fields(observer: &AutomationObserver, directory: &Path) {
     let (before, _) = snapshot(observer, directory);
-    // SAFETY: the game is idle and this is its sole thread.
-    unsafe {
-        (**uqm_rust::engine::WorldData::current())
-            .game
-            .game_clock
-            .day_index = 7;
-        (**uqm_rust::engine::WorldData::current())
-            .game
-            .game_clock
-            .month_index = 9;
-        (**uqm_rust::engine::WorldData::current())
-            .game
-            .game_clock
-            .year_index = 2161;
-        (**uqm_rust::engine::WorldData::current())
-            .game
-            .game_clock
-            .tick_count = -17;
-        (**uqm_rust::engine::WorldData::current())
-            .game
-            .battle_group_ref = 123;
-        uqm_rust::engine::World::current()
-            .write(|world| world.set_story_state(uqm_rust::engine::StoryKey::BOMB_CARRIER, 1));
+    {
+        crate::battle_context::with(|cx| cx.world.data.game.game_clock.day_index = 7);
+        crate::battle_context::with(|cx| cx.world.data.game.game_clock.month_index = 9);
+        crate::battle_context::with(|cx| cx.world.data.game.game_clock.year_index = 2161);
+        crate::battle_context::with(|cx| cx.world.data.game.game_clock.tick_count = -17);
+        crate::battle_context::with(|cx| cx.world.data.game.battle_group_ref = 123);
+        crate::battle_context::with(|cx| {
+            cx.world
+                .set_story_state(uqm_rust::engine::StoryKey::BOMB_CARRIER, 1)
+        });
     }
     let (after, _) = snapshot(observer, directory);
     assert_eq!(after["mode.clock.day"], "7");

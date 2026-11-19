@@ -3,7 +3,7 @@ use crate::{
     engine::{
         battle::{input::InputContext, Battle, Cx},
         input::{frames::InputState, Frame, InputControls, InputRuntime, InputSession},
-        observe::{CampaignView, Io, Observer, Unobserved},
+        observe::{Io, Observer, Unobserved},
         Game,
     },
     front_end::uqmdebug::debug_contexts,
@@ -30,7 +30,7 @@ impl InputRuntime for Driver {
     fn input(&self) -> &InputSession {
         &self.input
     }
-    fn observer(&self) -> Box<dyn Observer<Option<CampaignView>>> {
+    fn observer(&self) -> Box<dyn Observer> {
         Box::new(Unobserved)
     }
     fn yield_poll(&self, _: &mut Cx<'_>) {
@@ -67,7 +67,7 @@ impl InputRuntime for Driver {
         assert!(nested.is_empty(), "nested inspection must not recurse");
         assert!(!self.panic_on_run.get(), "injected diagnostic unwind");
         let mut pressed = InputState::default();
-        pressed.menu[crate::navigation::abi::KEY_MENU_SELECT as usize] = 1;
+        pressed.menu[crate::input::frames::KEY_MENU_SELECT as usize] = 1;
         let now = self.calls.get() as u32 * 1000;
         self.input
             .advance(InputState::default(), InputState::default(), now - 1);

@@ -5,7 +5,8 @@ mod battle_context;
 mod battle;
 use battle::*;
 use std::mem;
-use uqm_rust::ships::native::{abi::*, angle_to_facing, frame_index, normalize_facing};
+use uqm_rust::graphics::pixmap_abi::GetFrameIndex;
+use uqm_rust::ships::native::{abi::*, angle_to_facing, normalize_facing};
 #[test]
 fn descriptor_laser_and_limpet_launch() {
     battle_context::run(|_| {
@@ -56,7 +57,7 @@ fn descriptor_laser_and_limpet_launch() {
             with_rng(11, 0, || {
                 hooks::invoke_element_pointer((*e).preprocess_func.unwrap(), e)
             });
-            assert_eq!(frame_index((*e).next.image.frame.raw()), 1);
+            assert_eq!(GetFrameIndex((*e).next.image.frame.raw().cast()), 1);
         }
     })
 }
@@ -132,13 +133,13 @@ fn warp_in_is_disabled_in_encounters_and_one_shot_in_melee() {
             (*enemy.ptr()).current.location = POINT { x: 5000, y: 5000 };
             (*enemy.ptr()).next = (*enemy.ptr()).current.clone();
             (*ship.ptr()).state_flags |= APPEARING as u16;
-            let previous = uqm_rust::engine::World::current().read(|world| world.activity());
-            uqm_rust::engine::World::current().write(|world| world.set_activity(IN_ENCOUNTER as _));
+            let previous = crate::battle_context::with(|cx| cx.world.activity());
+            crate::battle_context::with(|cx| cx.world.set_activity(IN_ENCOUNTER as _));
             with_rng(42, 0, || ship.preprocess());
             assert_eq!((*ship.ptr()).current.location.x, 4000);
             assert_eq!(ship.descriptor_mut().callbacks()[1], 0);
             ship.descriptor_mut().race_callbacks.pre = uqm_rust::engine::battle::Selection::Default;
-            uqm_rust::engine::World::current().write(|world| world.set_activity(0));
+            crate::battle_context::with(|cx| cx.world.set_activity(0));
             TFB_SeedRandom(42);
             let raw_x = 5000 - 832 + (TFB_Random() as COUNT) % 1664;
             let raw_y = 5000 - 832 + (TFB_Random() as COUNT) % 1664;
@@ -157,14 +158,17 @@ fn warp_in_is_disabled_in_encounters_and_one_shot_in_melee() {
                 (5000 - i32::from(raw_y)) as SIZE,
             ))));
             assert_eq!(ship.ship_mut().ship_facing, face);
-            assert_eq!(frame_index((*ship.ptr()).current.image.frame.raw()), face);
+            assert_eq!(
+                GetFrameIndex((*ship.ptr()).current.image.frame.raw().cast()),
+                face
+            );
             assert!((*ship.ptr()).target.is_none());
             assert_eq!(ship.descriptor_mut().callbacks()[1], 0);
             assert_eq!(
                 (*ship.ptr()).IntersectControl.EndPoint.x,
                 (x >> ONE_SHIFT) as i16
             );
-            uqm_rust::engine::World::current().write(|world| world.set_activity(previous));
+            crate::battle_context::with(|cx| cx.world.set_activity(previous));
         }
     })
 }

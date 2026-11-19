@@ -1,21 +1,22 @@
-//! Real virtual controls, restart dispatch, DoInput reset and save enumeration.
+//! Real virtual controls, restart dispatch, input reset and save enumeration.
 #[path = "support/battle_context.rs"]
 mod battle_context;
 use std::{ffi::CString, ptr};
 use uqm_rust::{
     engine::save::summary_record::SummaryDesc as SUMMARY_DESC,
-    front_end::gameopt::{load_game_descriptions, picker_action, PickerAction},
+    front_end::gameopt::{picker_action, PickerAction},
     graphics::dcqueue_abi::{Init_DrawCommandQueue, Uninit_DrawCommandQueue},
     input::ffi::*,
     io::uio_bridge as uio,
     mainloop::{
         dir_prep::saveDir,
-        input_abi::{DoInput, FlushInput, SetDefaultMenuRepeatDelay, UpdateInputState},
+        input_abi::{FlushInput, UpdateInputState},
         restart_menu::{
             do_restart::{do_restart_frame, DoRestartState},
             restart_ops::{RestartHost, RestartMenu, RestartMenuOps},
         },
     },
+    savegame::live::load::load_game_descriptions,
     savegame::{decode_save, SaveSlots},
 };
 
@@ -98,9 +99,10 @@ unsafe fn open_from_restart_while_select_is_held(
     occupied: bool,
 ) {
     FlushInput(input);
-    uqm_rust::engine::World::current().write(|world| world.set_activity(0));
+    crate::battle_context::with(|cx| cx.world.set_activity(0));
     key_event(RETURN, true, false);
-    uqm_rust::app::bridge::enter(|cx| UpdateInputState(cx, input));
+    // SAFETY: the serialized fixture owns initialized game-thread input.
+    crate::battle_context::with(|cx| unsafe { UpdateInputState(cx, input) });
     assert_ne!(input.pulsed().menu[SELECT], 0);
     let context = uqm_rust::graphics::context_abi::LoadedContext::create(c"load-picker-restart");
     let mut owner = RestartMenu::default();
@@ -111,7 +113,7 @@ unsafe fn open_from_restart_while_select_is_held(
         inact_timeout: u32::MAX,
         ..Default::default()
     };
-    uqm_rust::app::bridge::enter(|cx| {
+    crate::battle_context::with(|cx| {
         let previous = cx.kernel.screen_context;
         cx.kernel.screen_context = context.lease().as_raw();
         let mut observer = uqm_rust::engine::observe::Unobserved;
@@ -127,13 +129,10 @@ unsafe fn open_from_restart_while_select_is_held(
         cx.kernel.screen_context = previous;
     });
     assert_eq!(
-        uqm_rust::engine::Kernel::current().read(|kernel| kernel.last_activity),
+        crate::battle_context::with(|cx| cx.kernel.last_activity),
         0x1000
     );
-    assert_eq!(
-        uqm_rust::engine::World::current().read(|world| world.activity()),
-        4
-    );
+    assert_eq!(crate::battle_context::with(|cx| cx.world.activity()), 4);
     // A queued Cancel is cleared at the same ownership boundary as Select.
     key_event(ESCAPE, true, false);
     let mut picker = PickerProbe {
@@ -143,13 +142,15 @@ unsafe fn open_from_restart_while_select_is_held(
         repeat_pulses: (-1, -1),
     };
     // No key-up for the menu's Select has happened before picker entry.
-    DoInput(
-        1,
-        &mut |cx: &mut uqm_rust::engine::battle::Cx<'_>,
-              _: &mut uqm_rust::engine::observe::Io<'_>| {
+    crate::battle_context::with(|cx| {
+        let mut observer = uqm_rust::engine::observe::Unobserved;
+        let mut io = uqm_rust::engine::observe::Io {
+            observer: &mut observer,
+        };
+        cx.run_input(&mut io, true, |cx, _| {
             picker_frame(cx, &mut picker, input) != 0
-        },
-    );
+        });
+    });
     assert_eq!(picker.initial_pulses, (0, 0));
     assert_eq!(picker.repeat_pulses, (0, 0));
     let expected = if occupied {
@@ -178,7 +179,7 @@ fn first_load_entry_flushes_held_keys_and_enumeration_cannot_exit_the_picker() {
         unsafe {
             uqm_rust::graphics::sdl::lifecycle_abi::GameActive = 1;
             Init_DrawCommandQueue();
-            SetDefaultMenuRepeatDelay(input);
+            input.set_default_menu_repeat(uqm_rust::engine::time::counter_abi::GetTimeCounter());
             assert_eq!(rust_v_control_init(), 0);
             assert_eq!(
                 rust_vcontrol_add_key_binding(
@@ -244,10 +245,10 @@ fn first_load_entry_flushes_held_keys_and_enumeration_cannot_exit_the_picker() {
             std::fs::write(saves.join("starcon2.49"), legacy).unwrap();
             std::fs::write(saves.join("starcon2.47"), b"bad").unwrap();
             for _ in 0..10 {
-                uqm_rust::engine::World::current().write(|world| world.set_activity(4));
+                crate::battle_context::with(|cx| cx.world.set_activity(4));
                 load_game_descriptions(&mut summaries);
                 assert_eq!(
-                    uqm_rust::engine::World::current().read(|world| world.activity()),
+                    crate::battle_context::with(|cx| cx.world.activity()),
                     4,
                     "enumeration must not set abort/load flags"
                 );

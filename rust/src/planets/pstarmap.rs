@@ -9,6 +9,7 @@ mod state;
 use crate::engine::observe_port::starmap::signed_div_with_error;
 use crate::engine::observe_port::starmap::Projection;
 use crate::engine::time::counter_abi::GetTimeCounter;
+use crate::engine::world::{CStarDesc, NUM_SOLAR_SYSTEMS};
 use crate::engine::{
     battle::{link_queue::LinkId, Cx},
     input::{Frame, InputSession},
@@ -21,7 +22,6 @@ use crate::graphics::{
     native_abi::{Color, EXTENT, POINT, RECT},
     native_font::FontLease,
 };
-use crate::savegame::runtime::star::{CStarDesc, NUM_SOLAR_SYSTEMS};
 use screen::{enlarge, repair_rectangle, Display};
 use state::MapState;
 use std::{
@@ -42,7 +42,7 @@ fn portal_open(world: &World) -> bool {
     world.story_state(StoryKey::ARILOU_SPACE) != 0
 }
 fn current_location(world: &World, dimensions: (i32, i32)) -> POINT {
-    if crate::navigation::globals::in_hqspace(world) == 0 {
+    if !world.in_hqspace() {
         world
             .selected_star()
             .unwrap_or_else(|| panic!("map requires a selected star"))

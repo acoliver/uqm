@@ -10,7 +10,8 @@ mod special_hooks;
 
 use std::{ffi::CStr, ptr};
 use uqm_rust::collections::observation;
-use uqm_rust::ships::native::{abi::*, cosine, facing_to_angle, frame_index, sine};
+use uqm_rust::graphics::pixmap_abi::GetFrameIndex;
+use uqm_rust::ships::native::{abi::*, cosine, facing_to_angle, sine};
 
 // FRAME_DESC and DRAWABLE_DESC layouts from drawable.h.
 
@@ -212,7 +213,15 @@ fn per_init_descriptor_copies_isolate_energy_resources_animation_and_custom_data
                 battle::element(h),
             );
             assert_eq!(
-                frame_index(first.descriptor_mut().ship_data.special.view(0).raw()),
+                GetFrameIndex(
+                    first
+                        .descriptor_mut()
+                        .ship_data
+                        .special
+                        .view(0)
+                        .raw()
+                        .cast()
+                ),
                 21
             );
             first.descriptor_mut().ship_info.energy_level = 1;
@@ -227,7 +236,15 @@ fn per_init_descriptor_copies_isolate_energy_resources_animation_and_custom_data
             assert_eq!(second.descriptor_mut().ship_info.energy_level, 30);
             assert_eq!(second.descriptor_mut().characteristics.special_wait, 2);
             assert_eq!(
-                frame_index(second.descriptor_mut().ship_data.special.view(0).raw()),
+                GetFrameIndex(
+                    second
+                        .descriptor_mut()
+                        .ship_data
+                        .special
+                        .view(0)
+                        .raw()
+                        .cast()
+                ),
                 0
             );
             second.ship_mut().ship_facing = 9;
@@ -235,7 +252,15 @@ fn per_init_descriptor_copies_isolate_energy_resources_animation_and_custom_data
             assert_ne!(previous_facing(&mut first), previous_facing(&mut second));
             assert_eq!(previous_facing(&mut first), data);
             assert_eq!(
-                frame_index(first.descriptor_mut().ship_data.special.view(0).raw()),
+                GetFrameIndex(
+                    first
+                        .descriptor_mut()
+                        .ship_data
+                        .special
+                        .view(0)
+                        .raw()
+                        .cast()
+                ),
                 21
             );
             first.uninit();
@@ -246,7 +271,15 @@ fn per_init_descriptor_copies_isolate_energy_resources_animation_and_custom_data
                 battle::element(other),
             );
             assert_eq!(
-                frame_index(second.descriptor_mut().ship_data.special.view(0).raw()),
+                GetFrameIndex(
+                    second
+                        .descriptor_mut()
+                        .ship_data
+                        .special
+                        .view(0)
+                        .raw()
+                        .cast()
+                ),
                 25
             );
             battle_context::dispose(h);
@@ -330,13 +363,16 @@ fn held_cone_advances_by_16_preserves_phase_and_resets_only_when_facing_changes(
                 let data = previous_facing(&mut ship);
                 assert!(data.is_some());
                 assert_eq!(data, Some(5));
-                assert_eq!(frame_index((*cone).current.image.frame.raw()), index);
+                assert_eq!(
+                    GetFrameIndex((*cone).current.image.frame.raw().cast()),
+                    index
+                );
                 let old_frame = (*cone).next.image.frame.raw();
                 with_rng(3, 0, || {
                     hooks::invoke_element_pointer((*cone).preprocess_func.unwrap(), cone)
                 });
                 assert_eq!(
-                    frame_index(ship.descriptor_mut().ship_data.special.view(0).raw()),
+                    GetFrameIndex(ship.descriptor_mut().ship_data.special.view(0).raw().cast()),
                     (index + 16) % 48
                 );
                 assert_eq!((*cone).next.image.frame.raw(), old_frame);
@@ -351,7 +387,7 @@ fn held_cone_advances_by_16_preserves_phase_and_resets_only_when_facing_changes(
                     "holding facing keeps the saved facing"
                 );
                 assert_eq!(
-                    frame_index((*battle::element(next)).current.image.frame.raw()),
+                    GetFrameIndex((*battle::element(next)).current.image.frame.raw().cast()),
                     (index + 16) % 48
                 );
                 battle_context::dispose(next);
@@ -361,7 +397,7 @@ fn held_cone_advances_by_16_preserves_phase_and_resets_only_when_facing_changes(
             let h = fire(&mut ship);
             assert_eq!(previous_facing(&mut ship).unwrap(), 9);
             assert_eq!(
-                frame_index((*battle::element(h)).current.image.frame.raw()),
+                GetFrameIndex((*battle::element(h)).current.image.frame.raw().cast()),
                 9
             );
             assert_eq!(
@@ -418,7 +454,7 @@ fn failed_cone_allocation_still_updates_private_facing_and_returns_one_slot() {
             assert!(!previous_facing(&mut ship).is_none());
             assert_eq!(previous_facing(&mut ship).unwrap(), 15);
             assert_eq!(
-                frame_index(ship.descriptor_mut().ship_data.special.view(0).raw()),
+                GetFrameIndex(ship.descriptor_mut().ship_data.special.view(0).raw().cast()),
                 15
             );
             assert_eq!(ship.descriptor_mut().ship_info.energy_level, 30);
@@ -426,7 +462,7 @@ fn failed_cone_allocation_still_updates_private_facing_and_returns_one_slot() {
             assert!(fire(&mut ship).is_null());
             assert_eq!(previous_facing(&mut ship).unwrap(), 4);
             assert_eq!(
-                frame_index(ship.descriptor_mut().ship_data.special.view(0).raw()),
+                GetFrameIndex(ship.descriptor_mut().ship_data.special.view(0).raw().cast()),
                 4
             );
             assert_eq!(queued(), vec![ship.handle]);
@@ -475,7 +511,7 @@ fn collision_removes_and_frees_the_blast_but_does_not_restore_cone_life_or_solid
             assert_eq!((*cone).life, 0);
             assert_eq!((*cone).hits, 0);
             assert_eq!(hit.hits, 3);
-            let freed_blast = uqm_rust::app::bridge::enter(|cx| {
+            let freed_blast = crate::battle_context::with(|cx| {
                 cx.alloc_element()
                     .map_or(std::ptr::null_mut(), |id| cx.elements().raw(id))
             });
@@ -483,7 +519,7 @@ fn collision_removes_and_frees_the_blast_but_does_not_restore_cone_life_or_solid
                 !freed_blast.is_null(),
                 "blast element returned to the queue free list"
             );
-            assert!(uqm_rust::app::bridge::enter(|cx| cx
+            assert!(crate::battle_context::with(|cx| cx
                 .alloc_element()
                 .map_or(std::ptr::null_mut(), |id| cx.elements().raw(id)))
             .is_null());

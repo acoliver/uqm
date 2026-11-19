@@ -5,10 +5,12 @@
 //!
 //! The callers check the body; everything here is about planet 0.
 
+use crate::engine::world::activity::activity_flags::{
+    CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY,
+};
 use crate::engine::world::generation::SolarSys;
 use crate::engine::StoryKey;
 use crate::planets::generate::special::Story;
-use crate::planets::generate::yehat::{CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY};
 
 /// `GLOBAL_FLAGS_AND_DATA` value that marks the conversation as a home
 /// contact: `1 << 7`.

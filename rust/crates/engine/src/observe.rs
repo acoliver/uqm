@@ -6,7 +6,7 @@ pub use super::observe_port::{
 };
 pub mod battle;
 use super::{Kernel, World};
-pub type Io<'a> = super::observe_port::ObservationIo<'a, Option<CampaignView>>;
+pub type Io<'a> = super::observe_port::ObservationIo<'a>;
 
 /// Values copied for one observer call; this view never outlives its input boundary.
 #[derive(Clone)]
@@ -28,12 +28,19 @@ pub struct CampaignView {
     pub escorts: Vec<(u8, u16)>,
     pub player_ships: Vec<crate::battle::link_queue::PickShip>,
     pub groups: Vec<(u8, u8, (i16, i16))>,
+    /// Ships left on each side of the live or last battle.
+    pub battle_counters: [u8; 2],
 }
 
 impl CampaignView {
-    pub fn capture(world: &World, kernel: &Kernel) -> Self {
+    pub fn capture(cx: &crate::battle::Cx<'_>) -> Self {
+        Self::capture_owners(cx.world, cx.kernel, cx.b.counters)
+    }
+
+    fn capture_owners(world: &World, kernel: &Kernel, battle_counters: [u8; 2]) -> Self {
         let game = &world.data.game;
         let mut view = Self::from_world(world);
+        view.battle_counters = battle_counters;
         view.instant_move = kernel.instant_move;
         view.flight_facing =
             super::save::hyper_save::read_flagship_facing(&kernel.races[0], &kernel.elements)
@@ -120,6 +127,7 @@ impl CampaignView {
             escorts: Vec::new(),
             player_ships: Vec::new(),
             groups: Vec::new(),
+            battle_counters: [0; 2],
         }
     }
 
@@ -140,7 +148,7 @@ mod tests {
         let mut world = World::new();
         world.set_activity(515);
         let mut kernel = Kernel::new();
-        assert!(!CampaignView::capture(&world, &kernel).hyperspace_ready);
+        assert!(!CampaignView::capture_owners(&world, &kernel, [0; 2]).hyperspace_ready);
         kernel.reset_ship_capacity(0, 1);
         kernel.reset_element_capacity(1);
         let element = kernel.elements.alloc().unwrap();
@@ -155,15 +163,15 @@ mod tests {
         kernel.elements.put(element);
         for flags in [0, APPEARING, NONSOLID, DISAPPEARING] {
             kernel.elements.fixture_record_mut(element).state_flags = (PLAYER_SHIP | flags) as u16;
-            let view = CampaignView::capture(&world, &kernel);
+            let view = CampaignView::capture_owners(&world, &kernel, [0; 2]);
             assert_eq!(view.velocity, (0, 0));
             assert_eq!(view.hyperspace_ready, flags == 0);
         }
         world.set_activity(512);
-        assert!(!CampaignView::capture(&world, &kernel).hyperspace_ready);
+        assert!(!CampaignView::capture_owners(&world, &kernel, [0; 2]).hyperspace_ready);
         world.set_activity(515);
         kernel.elements.fixture_record_mut(element).state_flags = 0;
-        assert!(!CampaignView::capture(&world, &kernel).hyperspace_ready);
+        assert!(!CampaignView::capture_owners(&world, &kernel, [0; 2]).hyperspace_ready);
         assert!(!CampaignView::from_world(&world).hyperspace_ready);
     }
 
@@ -189,13 +197,13 @@ mod tests {
         record.state_flags = 1 << 2;
         record.parent = super::super::battle::Parent::Ship(owner);
         kernel.elements.put(element);
-        let captured = CampaignView::capture(&world, &kernel);
+        let captured = CampaignView::capture_owners(&world, &kernel, [0; 2]);
         crate::battle::Cx::new(&mut battle, &mut world, &mut kernel, crate::math::random)
             .ship_state_mut(owner)
             .facing = 11;
         assert_eq!(captured.flight_facing, Some(9));
         assert_eq!(
-            CampaignView::capture(&world, &kernel).flight_facing,
+            CampaignView::capture_owners(&world, &kernel, [0; 2]).flight_facing,
             Some(11)
         );
     }
@@ -215,7 +223,7 @@ mod tests {
             });
             ships.put(id);
         }
-        let captured = CampaignView::capture(&world, &kernel);
+        let captured = CampaignView::capture_owners(&world, &kernel, [0; 2]);
         let first = kernel.ships_ref(0).head().unwrap();
         kernel.ships(0).edit(first, |ship| ship.crew = 1);
         assert_eq!(
@@ -227,7 +235,7 @@ mod tests {
             [(4, 7, 9), (0, 2, 0), (1, 0, 42)],
         );
         assert_eq!(
-            CampaignView::capture(&world, &kernel).player_ships[0].crew,
+            CampaignView::capture_owners(&world, &kernel, [0; 2]).player_ships[0].crew,
             1
         );
     }
@@ -265,7 +273,7 @@ mod tests {
                 groups.put(id);
             }
         }
-        let captured = CampaignView::capture(&world, &kernel);
+        let captured = CampaignView::capture_owners(&world, &kernel, [0; 2]);
         world.data.flagship.fuel_on_board = 99;
         let first = world.built_ships_ref().head().unwrap();
         world.built_ships().get_mut(first).crew_level = 99;
@@ -273,6 +281,9 @@ mod tests {
         assert_eq!(captured.contact_race, Some(5));
         assert_eq!(captured.escorts, vec![(3, 12), (7, 19)]);
         assert_eq!(captured.groups, vec![(2, 8, (2, -2)), (6, 10, (6, -6))]);
-        assert_eq!(CampaignView::capture(&world, &kernel).escorts[0], (3, 99));
+        assert_eq!(
+            CampaignView::capture_owners(&world, &kernel, [0; 2]).escorts[0],
+            (3, 99)
+        );
     }
 }

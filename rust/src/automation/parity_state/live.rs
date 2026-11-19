@@ -1,25 +1,16 @@
 //! Synchronous game-thread graph borrowing and journal orchestration.
 use super::Fields;
-#[cfg(not(test))]
 use super::{custom, elements, ships::Ship, value};
 use crate::automation::parity::Journal;
 use crate::engine::battle::access::observe::ElementObservation;
-#[cfg(not(test))]
 use crate::{battle::netplay::CrcState, engine::battle::observation::ShipState};
 
-#[cfg(not(test))]
-pub fn checkpoint(journal: &mut Journal, boundary: &str) -> std::io::Result<()> {
-    // SAFETY: the checkpoint owns the immutable live graph until this operation returns.
-    unsafe { crate::app::bridge::enter(|cx| checkpoint_with_context(cx, journal, boundary)) }
-}
-
-#[cfg(not(test))]
-fn checkpoint_with_context(
+pub fn checkpoint(
     cx: &crate::engine::battle::Cx<'_>,
     journal: &mut Journal,
     boundary: &str,
 ) -> std::io::Result<()> {
-    let mut hooks = crate::ships::hook_registry::hooks();
+    let mut hooks = crate::battle::hook_registry::hooks();
     hooks.extend(crate::automation::parity_hooks::hooks());
     let mut fields = Fields::new();
     value(&mut fields, "mode", "boundary", boundary);
@@ -74,7 +65,6 @@ fn checkpoint_with_context(
     journal.checkpoint(cx.world.activity(), crc.finish(), &fields)
 }
 
-#[cfg(not(test))]
 pub(in crate::automation) fn fighters(
     cx: &crate::engine::battle::Cx<'_>,
 ) -> ([Option<ShipState>; 2], [u8; 2]) {

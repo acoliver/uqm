@@ -1,11 +1,13 @@
 //! Persistent gameplay resources and pools owned by Game.
 pub mod diagnostics;
+mod gravity_well;
 pub mod lander_resources;
 mod navigation_resources;
 mod pilot_flash;
 pub mod planet_animation;
 pub mod roster_flash;
 pub mod solar_resources;
+mod space_resources;
 use super::battle::{
     kernel::{Channels, SoundQueue, StarPlane},
     link_queue::RacePool,
@@ -78,7 +80,9 @@ pub(crate) struct KernelServices {
     pub(crate) race_services: Option<&'static dyn crate::battle::race_services::RaceServices>,
     pub(crate) primitive_services: Option<&'static dyn crate::battle::services::PrimitiveServices>,
     pub(crate) ship_lifecycle: Option<crate::battle::services::ShipLifecycle>,
+    pub(crate) options_menu: Option<crate::battle::services::OptionsMenu>,
     pub(crate) input_runtime: Option<std::rc::Rc<dyn super::input::InputRuntime>>,
+    pub(crate) save_slots: Option<crate::save::slots::SaveSlots>,
 }
 
 #[derive(Default)]

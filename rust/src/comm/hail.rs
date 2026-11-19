@@ -172,7 +172,7 @@ fn admit_completion(comm: &mut Comm, cx: &mut Cx<'_>, io: &mut Io<'_>) {
 #[cfg(test)]
 mod tests {
     use crate::engine::{
-        observe::{CampaignView, CheckpointView, Injected, InputView, Io, Observer, Presented},
+        observe::{CheckpointView, Injected, InputView, Io, Observer, Presented},
         Kernel, World,
     };
 
@@ -182,16 +182,16 @@ mod tests {
         calls: usize,
     }
 
-    impl Observer<Option<CampaignView>> for CompletionObserver {
+    impl Observer for CompletionObserver {
         fn input_admitted(
             &mut self,
             view: &InputView,
-            campaign: &Option<CampaignView>,
+            cx: &mut crate::engine::battle::Cx<'_>,
         ) -> Injected {
             assert!(matches!(view, InputView::CommunicationCompleted));
-            assert_eq!(campaign.as_ref().map(|view| view.activity), Some(17));
-            assert_eq!(World::current().pointer, self.world);
-            assert_eq!(Kernel::current().pointer, self.kernel);
+            assert_eq!(cx.world.activity(), 17);
+            assert_eq!(std::ptr::from_mut(cx.world), self.world);
+            assert_eq!(std::ptr::from_mut(cx.kernel), self.kernel);
             self.calls += 1;
             Injected {
                 comm_response: Some(1),

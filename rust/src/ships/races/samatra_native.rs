@@ -1,6 +1,5 @@
 //! Live Sa-Matra callbacks translated from ships/lastbat/lastbat.c.
 
-#[cfg(not(test))]
 pub(crate) mod engine {
     use crate::engine::battle::race::SaMatraState;
     use crate::engine::battle::views::Missile;

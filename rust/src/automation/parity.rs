@@ -245,7 +245,7 @@ impl Journal {
                     self.event(format!("spawn {side} {species}"));
                 }
                 Event::Hook { parent, callback } => {
-                    let name = crate::ships::hook_registry::name_for_species(
+                    let name = crate::battle::hook_registry::name_for_species(
                         registry,
                         callback,
                         self.owner_species(parent).1,

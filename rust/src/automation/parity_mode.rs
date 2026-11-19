@@ -3,7 +3,6 @@ use super::parity::Fields;
 use super::parity_state::value;
 use crate::savegame::types::GlobalState;
 
-#[cfg(not(test))]
 pub(super) fn capture(
     fields: &mut Fields,
     world: &crate::engine::World,
@@ -98,7 +97,6 @@ pub(super) fn story(fields: &mut Fields, state: Option<&crate::state::game_state
     }
 }
 
-#[cfg(not(test))]
 fn events(fields: &mut Fields, clock: &crate::engine::clock::GameClock) {
     value(fields, "mode.events", "initialized", clock.initialized());
     if !clock.initialized() {
@@ -116,7 +114,6 @@ fn events(fields: &mut Fields, clock: &crate::engine::clock::GameClock) {
     }
 }
 
-#[cfg(not(test))]
 fn groups(fields: &mut Fields, world: &crate::engine::World, journal: &mut super::parity::Journal) {
     let groups = world.ip_groups_ref();
     let mut next = groups.head();
@@ -167,21 +164,14 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn story_reports_the_current_state_owner() {
-        let mut game_owner = crate::engine::Game::new();
-        // SAFETY: the serialized fixture owns this published lifecycle.
-        unsafe {
-            crate::app::bridge::with_game(&mut game_owner, || {
-                let mut fields = Fields::new();
-                crate::app::bridge::enter(|cx| story(&mut fields, cx.world.story.as_ref()));
-                // Other state tests may initialize the shared owner. Either state must
-                // produce a complete result without requiring native game initialization.
-                if fields.contains_key("mode.story.initialized") {
-                    assert_eq!(fields["mode.story.initialized"], "true");
-                    assert!(fields.contains_key("mode.story.0"));
-                } else {
-                    assert!(fields.contains_key("mode.story.unavailable"));
-                }
-            })
-        }
+        let mut game = crate::engine::Game::new();
+        let mut fields = Fields::new();
+        story(&mut fields, game.world.story.as_ref());
+        assert!(fields.contains_key("mode.story.unavailable"));
+        crate::state::ffi::rust_init_game_state(&mut game.world);
+        let mut fields = Fields::new();
+        story(&mut fields, game.world.story.as_ref());
+        assert_eq!(fields["mode.story.initialized"], "true");
+        assert!(fields.contains_key("mode.story.0"));
     }
 }

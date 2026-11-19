@@ -1,6 +1,6 @@
 //! Campaign initialization from retained resource metadata and prepared names.
 use super::super::battle::schema::GAME_STATE;
-use super::{queues::FleetInfo, story::StoryState, SisState, World, WorldData};
+use super::{queues::FleetInfo, story::StoryState, SisState, World, WorldData, FUEL_TANK_SCALE};
 use crate::graphics::native_abi::{FRAME, POINT, STRING};
 
 #[derive(Clone, Copy)]
@@ -133,7 +133,6 @@ const FUEL_TANK: u32 = 5;
 const DYNAMO_UNIT: u32 = 7;
 const GUN_WEAPON: u32 = 9;
 const CREW_POD_CAPACITY: u16 = 50;
-const FUEL_TANK_SCALE: u32 = 100;
 const MODULE_COST_SCALE: u32 = 50;
 
 pub fn equipment(sis: &mut SisState) {

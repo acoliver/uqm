@@ -5,7 +5,7 @@ use uqm_rust::{
     engine::{
         battle::{input::InputContext, Battle, Cx},
         input::{frames::InputState, Frame, InputControls, InputRuntime, InputSession},
-        observe::{CampaignView, Io, Observer, Unobserved},
+        observe::{Io, Observer, Unobserved},
         Game,
     },
     graphics::{
@@ -26,7 +26,7 @@ impl InputRuntime for MenuDriver {
     fn input(&self) -> &InputSession {
         &self.input
     }
-    fn observer(&self) -> Box<dyn Observer<Option<CampaignView>>> {
+    fn observer(&self) -> Box<dyn Observer> {
         Box::new(Unobserved)
     }
     fn yield_poll(&self, _: &mut Cx<'_>) {

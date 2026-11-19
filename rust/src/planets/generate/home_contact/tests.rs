@@ -5,7 +5,9 @@ use crate::engine::StoryKey;
 use std::collections::HashMap;
 
 use super::{enter_orbit, pickup_artifact, HomeContactSite, LanderTakeoff, HOME_CONTACT_FLAGS};
-use crate::comm::dispatch::{CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY};
+use crate::engine::world::activity::activity_flags::{
+    CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY,
+};
 use crate::planet_side::report_adapter::{DiscoveryReportPort, ReportDisposition};
 use crate::planet_side::runtime::AdapterError;
 use crate::planets::generate::special::Story;

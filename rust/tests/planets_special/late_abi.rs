@@ -64,14 +64,17 @@ pub fn check() {
     harness.seed(104729);
 
     for retrieved in 0..=32 {
-        uqm_rust::engine::World::current().write(|world| {
-            (world).set_story_state(uqm_rust::engine::StoryKey::SPATHI_CREATURES_ELIMINATED, 0)
+        crate::battle_context::with(|cx| {
+            cx.world
+                .set_story_state(uqm_rust::engine::StoryKey::SPATHI_CREATURES_ELIMINATED, 0)
         });
-        uqm_rust::engine::World::current().write(|world| {
-            (world).set_story_state(uqm_rust::engine::StoryKey::SPATHI_SHIELDED_SELVES, 0)
+        crate::battle_context::with(|cx| {
+            cx.world
+                .set_story_state(uqm_rust::engine::StoryKey::SPATHI_SHIELDED_SELVES, 0)
         });
-        uqm_rust::engine::World::current().write(|world| {
-            (world).set_story_state(uqm_rust::engine::StoryKey::SPATHI_CREATURES_EXAMINED, 0)
+        crate::battle_context::with(|cx| {
+            cx.world
+                .set_story_state(uqm_rust::engine::StoryKey::SPATHI_CREATURES_EXAMINED, 0)
         });
         harness.state.sys.info.planet_info.scan_retrieve_mask[BIOLOGICAL_SCAN] = if retrieved == 32
         {
@@ -91,15 +94,15 @@ pub fn check() {
             })
         });
         assert_eq!(
-            uqm_rust::engine::World::current().read(|world| get_game_state(
-                world,
+            crate::battle_context::with(|cx| get_game_state(
+                cx.world,
                 uqm_rust::engine::StoryKey::SPATHI_CREATURES_EXAMINED
             )),
             1
         );
         assert_eq!(
-            uqm_rust::engine::World::current().read(|world| get_game_state(
-                world,
+            crate::battle_context::with(|cx| get_game_state(
+                cx.world,
                 uqm_rust::engine::StoryKey::SPATHI_CREATURES_ELIMINATED
             )),
             u32::from(retrieved == 31)
@@ -111,8 +114,9 @@ pub fn check() {
         assert_eq!(harness.rng_position(), 104729);
     }
 
-    uqm_rust::engine::World::current().write(|world| {
-        (world).set_story_state(uqm_rust::engine::StoryKey::SPATHI_CREATURES_EXAMINED, 0)
+    crate::battle_context::with(|cx| {
+        cx.world
+            .set_story_state(uqm_rust::engine::StoryKey::SPATHI_CREATURES_EXAMINED, 0)
     });
     assert!(unsafe {
         crate::invoke_generation(&mut harness.state, |view, host| {
@@ -125,8 +129,8 @@ pub fn check() {
         })
     });
     assert_eq!(
-        uqm_rust::engine::World::current().read(|world| get_game_state(
-            world,
+        crate::battle_context::with(|cx| get_game_state(
+            cx.world,
             uqm_rust::engine::StoryKey::SPATHI_CREATURES_EXAMINED
         )),
         0
@@ -155,14 +159,13 @@ pub fn check() {
 }
 
 fn check_live_queues(harness: &mut Harness) {
-    use uqm_rust::engine::World;
     use uqm_rust::planets::generate::sam::GuardSite;
     extern "C" {
         static mut ScreenHeight: i32;
     }
-    let (saved_queues, ids, first) = World::current().write(|world| {
-        let saved = std::mem::take(&mut world.queues);
-        let mut groups = world.ip_groups();
+    let (saved_queues, ids, first) = crate::battle_context::with(|cx| {
+        let saved = std::mem::take(&mut cx.world.queues);
+        let mut groups = cx.world.ip_groups();
         let ids = std::array::from_fn::<_, 3, _>(|i| {
             let id = groups
                 .alloc()
@@ -182,7 +185,8 @@ fn check_live_queues(harness: &mut Harness) {
                 group.task &= !8;
             });
         });
-        assert!(World::current().read(|world| ids.iter().all(|id| world
+        assert!(crate::battle_context::with(|cx| ids.iter().all(|id| cx
+            .world
             .ip_groups_ref()
             .get(*id)
             .task
@@ -190,15 +194,17 @@ fn check_live_queues(harness: &mut Harness) {
         assert_eq!(visited, [1, 2, 3]);
         harness.star_index = BOMB_DEFINED;
         harness.set_star(0, 0);
-        World::current()
-            .write(|world| world.set_story_state(uqm_rust::engine::StoryKey::UTWIG_BOMB, 0));
+        crate::battle_context::with(|cx| {
+            cx.world
+                .set_story_state(uqm_rust::engine::StoryKey::UTWIG_BOMB, 0)
+        });
         let before = format!("{:?}", crate::generation_data(&harness.state));
         assert!(crate::invoke_generation(
             &mut harness.state,
             |system, host| GENERATE_UTWIG_FUNCTIONS.init_npcs(system, host)
         ));
-        World::current().write(|world| {
-            let mut groups = world.ip_groups();
+        crate::battle_context::with(|cx| {
+            let mut groups = cx.world.ip_groups();
             assert!(groups.head().is_none() && groups.tail().is_none());
             assert!(ids.iter().all(|id| !groups.contains(*id)));
             let reused = groups
@@ -213,39 +219,40 @@ fn check_live_queues(harness: &mut Harness) {
             before
         );
         assert_eq!(
-            World::current()
-                .read(|world| get_game_state(world, uqm_rust::engine::StoryKey::UTWIG_BOMB)),
+            crate::battle_context::with(|cx| get_game_state(
+                cx.world,
+                uqm_rust::engine::StoryKey::UTWIG_BOMB
+            )),
             0
         );
         assert_eq!(harness.rng_position(), 104729);
-        World::current().write(|world| world.queues = saved_queues);
+        crate::battle_context::with(|cx| cx.world.queues = saved_queues);
 
         use uqm_rust::engine::graphics::native_abi::POINT;
-        let saved_race = World::current().read(|w| w.encounter_race);
-        let saved_group = World::current().read(|w| w.encounter_group);
-        World::current().write(|w| {
-            w.encounter_race = 18;
-            w.encounter_group = 7;
+        let saved_race = crate::battle_context::with(|cx| cx.world.encounter_race);
+        let saved_group = crate::battle_context::with(|cx| cx.world.encounter_group);
+        crate::battle_context::with(|cx| {
+            cx.world.encounter_race = 18;
+            cx.world.encounter_group = 7;
         });
         crate::invoke_generation(&mut harness.state, |_, host| {
             GuardSite::reset_encounter(host)
         });
-        assert_eq!(World::current().read(|w| w.encounter_race), -1);
-        assert_eq!(World::current().read(|w| w.encounter_group), 0);
-        World::current().write(|w| {
-            w.encounter_race = saved_race;
-            w.encounter_group = saved_group;
+        assert_eq!(
+            crate::battle_context::with(|cx| cx.world.encounter_race),
+            -1
+        );
+        assert_eq!(
+            crate::battle_context::with(|cx| cx.world.encounter_group),
+            0
+        );
+        crate::battle_context::with(|cx| {
+            cx.world.encounter_race = saved_race;
+            cx.world.encounter_group = saved_group;
         });
 
-        let saved_location =
-            std::ptr::addr_of!((**uqm_rust::engine::WorldData::current()).game.ip_location).read();
-        let saved_origin = std::ptr::addr_of!(
-            (**uqm_rust::engine::WorldData::current())
-                .game
-                .ship_stamp
-                .origin
-        )
-        .read();
+        let saved_location = crate::battle_context::with(|cx| cx.world.data.game.ip_location);
+        let saved_origin = crate::battle_context::with(|cx| cx.world.data.game.ship_stamp.origin);
         let saved_sun = harness.state.sys.sun;
         let saved_planet = harness.state.sys.planets[4];
         // units.h and solarsys.c: SIS height = screen height - 13;
@@ -268,26 +275,13 @@ fn check_live_queues(harness: &mut Harness) {
         let location =
             crate::invoke_generation(&mut harness.state, |_, host| GuardSite::ip_location(host));
         assert_eq!((location.x, location.y), (120, -90));
-        let origin = std::ptr::addr_of!(
-            (**uqm_rust::engine::WorldData::current())
-                .game
-                .ship_stamp
-                .origin
-        )
-        .read();
+        let origin = crate::battle_context::with(|cx| cx.world.data.game.ship_stamp.origin);
         assert_eq!(
             (i32::from(origin.x), i32::from(origin.y)),
             (half_width + 12, half_height - 9)
         );
-        std::ptr::addr_of_mut!((**uqm_rust::engine::WorldData::current()).game.ip_location)
-            .write(saved_location);
-        std::ptr::addr_of_mut!(
-            (**uqm_rust::engine::WorldData::current())
-                .game
-                .ship_stamp
-                .origin
-        )
-        .write(saved_origin);
+        crate::battle_context::with(|cx| cx.world.data.game.ip_location = saved_location);
+        crate::battle_context::with(|cx| cx.world.data.game.ship_stamp.origin = saved_origin);
         harness.state.sys.sun = saved_sun;
         harness.state.sys.planets[4] = saved_planet;
         println!("live adapter checks: guard traversal, bomb queue reset, encounter reset and coordinate ABI");

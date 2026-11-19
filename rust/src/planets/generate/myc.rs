@@ -11,6 +11,9 @@
 //! `MYCON_VISITS`, `KNOW_ABOUT_SHATTERED`, `EGG_CASE0_ON_SHIP`,
 //! `EGG_CASE1_ON_SHIP`, `EGG_CASE2_ON_SHIP`.
 
+use crate::engine::world::activity::activity_flags::{
+    CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY,
+};
 use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
 use crate::engine::StoryKey;
 use crate::math::RandomContext;
@@ -21,7 +24,6 @@ use crate::planets::generate::identities::{
 };
 use crate::planets::generate::special::{self, Body, Story, SHATTERED_WORLD};
 use crate::planets::generate::surface::ENERGY_SCAN;
-use crate::planets::generate::yehat::{CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY};
 
 /// Every hook looks at planet 0.
 const WORLD: Body = Body::Planet(0);

@@ -25,6 +25,6 @@ pub(crate) mod session;
 pub use netconnection::{Effect, Event};
 pub use session::NetplaySession;
 pub(crate) mod netinput;
-use crate::platform::os::errno::set_errno;
+use crate::engine::platform::os::errno::set_errno;
 #[cfg(test)]
 mod driver_tests;

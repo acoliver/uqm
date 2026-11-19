@@ -1,6 +1,7 @@
 //! Live element, collision traversal, camera and display-list processing.
 //! Integer narrowing follows `uqm/process.c` and its header macros.
 
+use crate::battle::galaxy::move_galaxy;
 use crate::math::wrap_delta;
 use crate::ships::native::abi::*;
 
@@ -191,7 +192,6 @@ fn calc_display_coord(c: COORD, origin: COORD, reduction: SIZE, step: bool) -> C
     }) as COORD
 }
 
-#[cfg(not(test))]
 use helpers::*;
 mod helpers {
     use super::*;
@@ -207,7 +207,6 @@ mod helpers {
     }
 }
 
-#[cfg(not(test))]
 pub(crate) mod engine {
     use super::invoke_element::invoke_element;
     use super::*;
@@ -606,7 +605,7 @@ pub(crate) mod engine {
     ) -> ViewState {
         let (dx, dy) = scroll;
         let state = if cx.b.zoom_out == next_reduction {
-            if dx == 0 && dy == 0 && in_hqspace(cx.world) == 0 {
+            if dx == 0 && dy == 0 && !cx.world.in_hqspace() {
                 ViewState::Stable
             } else {
                 ViewState::Scroll
@@ -787,7 +786,7 @@ pub(crate) mod engine {
         let (bounds, minimum) = preprocess_queue(cx, scale);
         let (w, h) = view_dimensions(cx);
         let (mut sx, mut sy) = view_scroll(bounds.origin, bounds.ships_alive, w, h);
-        if (sx != 0 || sy != 0) && in_hqspace(cx.world) != 0 {
+        if (sx != 0 || sy != 0) && cx.world.in_hqspace() {
             cx.move_hyperspace(&mut sx, &mut sy);
         }
         let state = calc_view_engine(cx, minimum, (sx, sy), bounds.ships_alive, scale);
@@ -817,7 +816,6 @@ pub(crate) mod engine {
     }
 }
 
-#[cfg(not(test))]
 pub use engine::{init_display_list, process_collisions};
 
 #[cfg(test)]

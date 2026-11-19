@@ -1,6 +1,9 @@
 //! Hyperspace menu sequencing over the retained game and input owners.
-use super::abi::{CHECK_ABORT, CHECK_LOAD, IN_BATTLE, KEY_MENU_SELECT, START_ENCOUNTER};
+use crate::engine::world::activity::activity_flags::{
+    CHECK_ABORT, CHECK_LOAD, IN_BATTLE, START_ENCOUNTER,
+};
 use crate::engine::{battle::Cx, observe::Io, StoryKey};
+use crate::input::frames::KEY_MENU_SELECT;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Display {
@@ -26,7 +29,7 @@ fn frame(
     let runtime = cx.kernel.input_runtime();
     let input = runtime.input();
     let mut select = input.pulsed().menu[KEY_MENU_SELECT as usize] != 0;
-    if cx.world.activity() & (CHECK_ABORT | CHECK_LOAD) as u16 != 0
+    if cx.world.activity() & (CHECK_ABORT | CHECK_LOAD) != 0
         || cx.world.data.flagship.crew_enlisted == u16::MAX
     {
         return false;
@@ -39,7 +42,7 @@ fn frame(
         2 => {
             select = action(cx, io, *state);
             if cx.world.story_state(StoryKey::PORTAL_COUNTER) != 0
-                || cx.world.activity() & START_ENCOUNTER as u16 != 0
+                || cx.world.activity() & START_ENCOUNTER != 0
             {
                 return false;
             }
@@ -60,7 +63,7 @@ fn frame(
         6 => return false,
         _ => {}
     }
-    if cx.world.activity() & CHECK_ABORT as u16 == 0 {
+    if cx.world.activity() & CHECK_ABORT == 0 {
         if select {
             if input.preferences().menu != 2 {
                 *state = 6;
@@ -85,12 +88,12 @@ pub fn run(
         frame(cx, io, &mut state, &mut choose, &mut action, &mut display)
     });
     display(cx, io, Display::Close);
-    if cx.world.activity() & (CHECK_ABORT | CHECK_LOAD) as u16 == 0 {
+    if cx.world.activity() & (CHECK_ABORT | CHECK_LOAD) == 0 {
         display(cx, io, Display::ClearRadar);
         display(cx, io, Display::Wait);
     }
     display(cx, io, Display::Restore);
-    if cx.world.activity() & IN_BATTLE as u16 == 0 {
+    if cx.world.activity() & IN_BATTLE == 0 {
         super::hyper_transition::cleanup(cx);
     }
     display(cx, io, Display::Batch);
@@ -103,7 +106,7 @@ mod tests {
     use crate::engine::{
         battle::{input::InputContext, Battle},
         input::{Frame, InputControls, InputRuntime, InputSession},
-        observe::{CampaignView, Observer, Unobserved},
+        observe::{Observer, Unobserved},
         Game,
     };
     use std::rc::Rc;
@@ -113,7 +116,7 @@ mod tests {
         fn input(&self) -> &InputSession {
             &self.0
         }
-        fn observer(&self) -> Box<dyn Observer<Option<CampaignView>>> {
+        fn observer(&self) -> Box<dyn Observer> {
             Box::new(Unobserved)
         }
         fn update(&self, _: &mut Cx<'_>) {}
@@ -168,11 +171,7 @@ mod tests {
     #[test]
     fn abort_load_and_dead_crew_exit_before_menu_selection() {
         fixture(|cx, io| {
-            for (activity, crew) in [
-                (CHECK_ABORT as u16, 0),
-                (CHECK_LOAD as u16, 0),
-                (0, u16::MAX),
-            ] {
+            for (activity, crew) in [(CHECK_ABORT, 0), (CHECK_LOAD, 0), (0, u16::MAX)] {
                 cx.world.set_activity(activity);
                 cx.world.data.flagship.crew_enlisted = crew;
                 assert!(!frame(
@@ -246,7 +245,7 @@ mod tests {
                         if portal {
                             cx.world.set_story_state(StoryKey::PORTAL_COUNTER, 1);
                         } else {
-                            cx.world.set_activity(START_ENCOUNTER as u16);
+                            cx.world.set_activity(START_ENCOUNTER);
                         }
                         true
                     },

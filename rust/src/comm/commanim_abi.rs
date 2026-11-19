@@ -221,7 +221,7 @@ fn frame_index(d: &AnimationDescriptor, from: u16, random: &mut impl FnMut() -> 
 pub(crate) mod runtime {
     use super::*;
     use crate::graphics::{native_abi::POINT, palette_cycle::PaletteCycle};
-    use crate::time::counter_abi::GetTimeCounter;
+    use uqm_engine::time::counter_abi::GetTimeCounter;
 
     const EMPTY_DESC: AnimationDescriptor = AnimationDescriptor {
         start_index: 0,

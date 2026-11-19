@@ -37,11 +37,13 @@ pub(crate) mod live {
     use super::{presentation::OrbitPresentation, submenu_selection};
     use crate::comm::locdata::CRect;
     use crate::engine::graphics::context_abi::ContextLease;
+    use crate::engine::world::activity::activity_flags::{
+        CHECK_ABORT, CHECK_LOAD, START_ENCOUNTER,
+    };
     use crate::engine::{
         battle::Cx,
         observe::{CheckpointView, Io},
     };
-    use crate::mainloop::types::activity_flags::{CHECK_ABORT, CHECK_LOAD, START_ENCOUNTER};
     use crate::planets::solar_system::SolarSystem;
     use crate::starbase::gfx::{ContextId, Gfx, Point, Rect, Rgba, Stamp};
     use crate::starbase::graphics::Graphics;
@@ -96,15 +98,13 @@ pub(crate) mod live {
                     },
                     frame: state.next.image.frame.raw() as usize,
                 };
-                cx.with_legacy(|| {
-                    crate::graphics::menu::stamp(
-                        stamp.frame as _,
-                        crate::graphics::native_abi::POINT {
-                            x: stamp.origin.x,
-                            y: stamp.origin.y,
-                        },
-                    )
-                });
+                crate::graphics::menu::stamp(
+                    stamp.frame as _,
+                    crate::graphics::native_abi::POINT {
+                        x: stamp.origin.x,
+                        y: stamp.origin.y,
+                    },
+                );
             }
         }
     }
@@ -156,7 +156,7 @@ pub(crate) mod live {
 
     fn draw_display(cx: &mut Cx<'_>, planet: &ContextLease, scan: &ScanState, mode: u8) {
         let g = Graphics::new(cx.kernel, cx.screen_dimensions());
-        let r = cx.with_legacy(|| {
+        let r = {
             g.set_context(ContextId::Space);
             let clip = g.context_clip_rect();
             g.batch();
@@ -168,7 +168,7 @@ pub(crate) mod live {
                 width: clip.width,
                 height: clip.height,
             }
-        });
+        };
         if mode != UPDATE {
             planet.transition_source(None);
             let dimensions = cx.screen_dimensions();
@@ -179,7 +179,7 @@ pub(crate) mod live {
             crate::ui::sis::draw_title(cx.kernel, dimensions.0, name);
             let space = ContextLease::require(cx.kernel.space_context);
             let screen_width = cx.screen_dimensions().0 as i16;
-            cx.with_legacy(|| {
+            {
                 draw_star_background(
                     &space,
                     scan.background
@@ -187,9 +187,9 @@ pub(crate) mod live {
                         .unwrap_or_else(|| panic!("orbit background is not supplied")),
                 );
                 draw_planet_surface_border(&g, &space, screen_width);
-            });
+            };
         }
-        cx.with_legacy(|| {
+        {
             if mode == WAIT {
                 scan.context().select();
                 let frame = crate::engine::graphics::drawable_abi::LoadedDrawable::load(
@@ -222,7 +222,7 @@ pub(crate) mod live {
             }
             g.unbatch();
             scan.context().save_screen_region(region);
-        });
+        };
     }
 
     pub fn redraw_planet_orbit_display(cx: &mut Cx<'_>, planet: &ContextLease, scan: &ScanState) {
@@ -271,7 +271,7 @@ pub(crate) mod live {
         if wait {
             draw_display(&mut game.borrow_mut(), &context, presentation.scan(), WAIT);
         }
-        let planet_type = game.borrow_mut().with_legacy(|| {
+        let planet_type = {
             crate::ui::settings::stop_music();
             let location = system.orbital_location(body);
             system.orbital(body, |data| {
@@ -290,14 +290,12 @@ pub(crate) mod live {
                 );
             });
             system.body_data_index(body) & !0x80
-        });
+        };
         populate(system, presentation.scan().report_context());
         play_planet_music(&game.borrow(), planet_type);
-        game.borrow_mut().with_legacy(|| {
-            if wait {
-                zoom_in_planet_sphere(&context, &sphere);
-            }
-        });
+        if wait {
+            zoom_in_planet_sphere(&context, &sphere);
+        };
         draw_display(
             &mut game.borrow_mut(),
             &context,
@@ -330,12 +328,12 @@ pub(crate) mod live {
     ///
     pub fn free_planet(cx: &mut Cx<'_>, solar: &mut SolarSystem) {
         let space_context = cx.kernel.space_context;
-        cx.with_legacy(|| {
+        {
             crate::ui::settings::stop_music();
             solar.sys.frames.fill_with(|| None);
             solar.sys.report.clear();
             crate::graphics::menu::select(space_context);
-        });
+        };
     }
 
     fn do_orbit(
@@ -349,7 +347,7 @@ pub(crate) mod live {
     ) -> u32 {
         let runtime = cx.kernel.input_runtime();
         let input = runtime.input();
-        use crate::c_bindings::controller_input::KEY_MENU_SELECT;
+        use crate::input::frames::KEY_MENU_SELECT;
         let mut selected = input.pulsed().menu[KEY_MENU_SELECT as usize] != 0;
         if cx.world.activity() & (CHECK_ABORT | CHECK_LOAD) != 0
             || cx.world.data.flagship.crew_enlisted == u16::MAX
@@ -383,14 +381,14 @@ pub(crate) mod live {
                 }
             }
             1 => {
-                let old = cx.with_legacy(|| runtime.input().replace_callback(None));
+                let old = runtime.input().replace_callback(None);
                 let dimensions = cx.screen_dimensions();
                 crate::ui::sis::repair_sis_border(cx.kernel, dimensions);
                 let autopilot = star_map(cx, io);
                 if cx.world.activity() & CHECK_ABORT != 0 {
                     return 0;
                 }
-                cx.with_legacy(|| runtime.input().replace_callback(old));
+                runtime.input().replace_callback(old);
                 if autopilot == 0 {
                     draw_display(cx, planet, scan, FULL);
                 } else {

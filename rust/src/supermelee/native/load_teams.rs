@@ -32,7 +32,6 @@ fn page(top: u16, bottom: u16, current: u16, count: u16, keys: [bool; 4]) -> (u1
     (next_top, next)
 }
 
-#[cfg(not(test))]
 pub(crate) mod live {
     use super::page;
     use crate::graphics::{
@@ -44,7 +43,9 @@ pub(crate) mod live {
     use crate::supermelee::native::menu::live::drawing::repair_frame;
     use crate::supermelee::session::MeleeSession;
 
+    use crate::engine::time::counter_abi::GetTimeCounter;
     use crate::ships::native::abi::*;
+    use crate::supermelee::native::menu::live::changes::local_change_team;
     use crate::supermelee::setup::{
         browser::write_team,
         team::{ship_cost, MeleeTeam as OwnedTeam},
@@ -198,12 +199,12 @@ pub(crate) mod live {
         if cx.world.activity() & CHECK_ABORT as u16 != 0 {
             return 0;
         }
-        SetMenuSounds(input, 1 | 2 | 128 | 256, 16);
+        input.set_menu_sounds(1 | 2 | 128 | 256, 16);
         if state.initialized == 0 {
-            cx.with_legacy(|| {
+            {
                 draw(state);
                 select(state, true);
-            });
+            };
             state.initialized = 1;
             state.phase = crate::supermelee::session::MenuPhase::Loading;
             return 1;
@@ -246,16 +247,16 @@ pub(crate) mod live {
         );
         if index != state.load.current {
             if top == state.load.top {
-                cx.with_legacy(|| select(state, false));
+                select(state, false);
             } else {
                 state.load.top = top;
-                cx.with_legacy(|| draw(state));
+                draw(state);
             }
             state.load.current = index;
         }
-        cx.with_legacy(|| {
+        {
             flash(state);
-        });
+        };
         cx.kernel
             .input_runtime()
             .sleep_until(cx, time.wrapping_add(840 / 30));

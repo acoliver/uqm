@@ -7,7 +7,9 @@
 //! `pickupEnergy`. Story flags: `TAALO_PROTECTOR`, `TAALO_PROTECTOR_ON_SHIP`,
 //! `TAALO_UNPROTECTED`.
 
-use crate::comm::dispatch::{CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY};
+use crate::engine::world::activity::activity_flags::{
+    CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY,
+};
 use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
 use crate::engine::StoryKey;
 use crate::math::RandomContext;

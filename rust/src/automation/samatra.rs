@@ -471,12 +471,7 @@ fn missile_aim(delta: (i32, i32), velocity: (i32, i32)) -> Option<u8> {
 }
 
 mod live;
-#[cfg(not(test))]
 pub use live::observe;
-#[cfg(test)]
-pub(crate) fn observe() -> (Events, Option<Snapshot>) {
-    (Events::default(), None)
-}
 
 #[cfg(test)]
 mod tests {

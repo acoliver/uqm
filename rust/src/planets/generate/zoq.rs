@@ -4,7 +4,9 @@
 //! Overridden: `initNpcs`, `generatePlanets`, `generateOrbital`,
 //! `generateEnergy`, `pickupEnergy`. Story flags: `ZOQFOT_DISTRESS`.
 
-use crate::comm::dispatch::{CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY};
+use crate::engine::world::activity::activity_flags::{
+    CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY,
+};
 use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
 use crate::engine::StoryKey;
 use crate::math::RandomContext;

@@ -145,8 +145,7 @@ impl<H> DialogueHost<H> for Host<'_, '_, H> {
 
     fn talk_segue(&mut self, track: u16) {
         let comm = &mut **self.comm.borrow_mut();
-        // SAFETY: both exclusive loans remain live through synchronous speech playback.
-        unsafe { alien_talk_segue(comm, &mut self.cx.borrow_mut(), track) }
+        alien_talk_segue(comm, &mut self.cx.borrow_mut(), track)
     }
 
     fn disable_animation(&mut self, index: usize) {
@@ -185,18 +184,6 @@ mod tests {
             response_text(&comm, 1, &[0]),
             Err("invalid response fragment")
         );
-    }
-
-    #[test]
-    #[serial_test::serial]
-    fn local_effects_do_not_publish_over_another_context() {
-        crate::comm::with_test_context(|cx| {
-            cx.with_legacy(|| {
-                std::thread::spawn(story_and_animation_effects_use_only_the_supplied_owners)
-                    .join()
-                    .unwrap_or_else(|panic| std::panic::resume_unwind(panic));
-            });
-        });
     }
 
     #[test]

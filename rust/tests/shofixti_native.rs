@@ -7,7 +7,9 @@ mod battle_context;
 mod shared;
 
 use std::{ffi::CStr, mem, ptr};
-use uqm_rust::ships::native::{abi::*, cosine, facing_to_angle, frame_index, sine};
+use uqm_rust::battle::tactrans_native::reset_winner;
+use uqm_rust::graphics::pixmap_abi::GetFrameIndex;
+use uqm_rust::ships::native::{abi::*, cosine, facing_to_angle, sine};
 
 use uqm_rust::graphics::context_abi::_GraphicsStatusFlags;
 
@@ -20,19 +22,19 @@ struct Battle {
 }
 impl Battle {
     unsafe fn new(capacity: COUNT) -> Self {
-        let globals = uqm_rust::engine::WorldData::current().read(|world| *world);
+        let globals = crate::battle_context::with(|cx| cx.world.data);
         let screen = (ScreenWidth, ScreenHeight);
         let graphics_flags = _GraphicsStatusFlags;
-        let counters = uqm_rust::app::bridge::battle(|b| b.counters);
+        let counters = crate::battle_context::with(|cx| cx.b.counters);
         let inner = shared::Battle::new(capacity);
-        uqm_rust::engine::World::current().write(|world| world.set_activity(IN_ENCOUNTER as _));
-        uqm_rust::engine::World::current().write(uqm_rust::state::ffi::rust_init_game_state);
+        crate::battle_context::with(|cx| cx.world.set_activity(IN_ENCOUNTER as _));
+        crate::battle_context::with(|cx| uqm_rust::state::ffi::rust_init_game_state(cx.world));
         set_recruited(true);
         ScreenWidth = 320;
         ScreenHeight = 240;
         _GraphicsStatusFlags &= !4;
-        uqm_rust::app::bridge::battle(|b| b.counters = [10, 10]);
-        uqm_rust::engine::Kernel::current().write(reset_winner);
+        crate::battle_context::with(|cx| cx.b.counters = [10, 10]);
+        crate::battle_context::with(|cx| reset_winner(cx.kernel));
         Self {
             inner,
             globals,
@@ -45,19 +47,19 @@ impl Battle {
 impl Drop for Battle {
     fn drop(&mut self) {
         unsafe {
-            uqm_rust::engine::Kernel::current().write(reset_winner);
-            uqm_rust::engine::WorldData::current().write(|world| *world = self.globals);
+            crate::battle_context::with(|cx| reset_winner(cx.kernel));
+            crate::battle_context::with(|cx| cx.world.data = self.globals);
             (ScreenWidth, ScreenHeight) = self.screen;
             _GraphicsStatusFlags = self.graphics_flags;
-            uqm_rust::app::bridge::battle(|b| b.counters = self.counters);
+            crate::battle_context::with(|cx| cx.b.counters = self.counters);
         }
     }
 }
 
 unsafe fn set_recruited(value: bool) {
-    uqm_rust::engine::World::current().write(|world| {
+    crate::battle_context::with(|cx| {
         uqm_rust::state::ffi::rust_set_game_state_bits(
-            world,
+            cx.world,
             SHOFIXTI_RECRUITED as i32,
             END_SHOFIXTI_RECRUITED as i32,
             value as BYTE,
@@ -108,7 +110,7 @@ impl<'a> Ship<'a> {
     }
 
     unsafe fn fire(&mut self, out: &mut [*mut std::ffi::c_void]) -> COUNT {
-        uqm_rust::app::bridge::enter(|cx| {
+        crate::battle_context::with(|cx| {
             let origin = cx.weapon_origin(self.inner.id);
             let weapons = cx.spawn_weapons(self.inner.ship_id, origin);
             for (slot, weapon) in out.iter_mut().zip(&weapons) {
@@ -144,11 +146,13 @@ impl<'a> Ship<'a> {
 }
 unsafe fn core(callback: uqm_rust::engine::battle::ElementFn, element: *mut ElementRecord) {
     let id = shared::id(element);
-    uqm_rust::app::bridge::enter(|cx| callback(cx, id));
+    crate::battle_context::with(|cx| callback(cx, id));
 }
 
 unsafe fn prim(e: *mut ElementRecord) -> *mut uqm_rust::engine::battle::DisplayPrimitive {
-    uqm_rust::app::bridge::enter(|cx| std::ptr::from_mut(cx.display_primitive((*e).PrimIndex)))
+    // SAFETY: the caller passes a live fixture element.
+    let index = unsafe { (*e).PrimIndex };
+    crate::battle_context::with(|cx| std::ptr::from_mut(cx.display_primitive(index)))
 }
 fn rgba(c: Color) -> (u8, u8, u8, u8) {
     (c.r, c.g, c.b, c.a)
@@ -202,7 +206,7 @@ fn complete_descriptor_and_damaged_tanaka_katana_variant_are_fresh_each_call() {
             (2, false, true),
             (0, false, false),
         ] {
-            uqm_rust::engine::World::current().write(|world| world.set_activity(activity));
+            crate::battle_context::with(|cx| cx.world.set_activity(activity));
             set_recruited(recruited);
             let mut original = shared::descriptor(SPECIES_ID_SHOFIXTI_ID);
             let p = &raw mut original;
@@ -359,7 +363,10 @@ fn darts_use_next_location_exact_facing_offset_speed_and_failure_count() {
                 (10, 1, 1, 1)
             );
             assert_eq!((*dart).playerNr, 1);
-            assert_eq!(frame_index((*dart).current.image.frame.raw()), facing % 16);
+            assert_eq!(
+                GetFrameIndex((*dart).current.image.frame.raw().cast()),
+                facing % 16
+            );
             assert_eq!(
                 (*dart).current.image.frame.raw(),
                 ship.weapon_frames.frame((facing % 16) as usize)
@@ -513,13 +520,14 @@ fn both_switch_edges_advance_and_only_the_third_remaining_frame_detonates() {
             ship.inner.ship_mut().cur_status_flags = current;
             with_rng(11, 0, || ship.inner.postprocess());
             assert_eq!(
-                frame_index(
+                GetFrameIndex(
                     ship.inner
                         .descriptor_mut()
                         .ship_data
                         .captain_control
                         .special
                         .raw()
+                        .cast()
                 ),
                 index
             );
@@ -647,12 +655,12 @@ fn glory_death_selects_the_winner_preserves_prior_winners_and_counts_the_death()
             other.inner.descriptor_mut().ship_info.crew_level = other_crew;
             (*other.ptr()).mass = other_mass;
             if prior == 1 {
-                uqm_rust::app::bridge::enter(|cx| {
+                crate::battle_context::with(|cx| {
                     uqm_rust::battle::tactrans_native::set_winner_ship(cx, Some(ship.inner.ship_id))
                 });
             }
             if prior == 2 {
-                uqm_rust::app::bridge::enter(|cx| {
+                crate::battle_context::with(|cx| {
                     uqm_rust::battle::tactrans_native::set_winner_ship(
                         cx,
                         Some(other.inner.ship_id),
@@ -668,7 +676,7 @@ fn glory_death_selects_the_winner_preserves_prior_winners_and_counts_the_death()
                 &raw mut *other.inner.ship_mut()
             };
             assert_eq!(
-                uqm_rust::app::bridge::enter(|cx| cx.winner()),
+                crate::battle_context::with(|cx| cx.winner()),
                 Some(if expected_self {
                     ship.inner.ship_id
                 } else {
@@ -676,7 +684,7 @@ fn glory_death_selects_the_winner_preserves_prior_winners_and_counts_the_death()
                 })
             );
             assert_eq!((*expected).cur_status_flags & 0x200 != 0, ditty);
-            assert_eq!(uqm_rust::app::bridge::battle(|b| b.counters[0]), 9);
+            assert_eq!(crate::battle_context::with(|cx| cx.b.counters[0]), 9);
             assert_eq!((*ship.ptr()).life, 36);
             assert_eq!(ship.inner.descriptor_mut().ship_info.energy_level, 0);
             assert_eq!((*ship.ptr()).velocity.travel_angle, 0);
@@ -749,7 +757,7 @@ fn glory_flash_switch_and_explosion_color_sequence_use_twelve_frame_ship_death()
             (*explosion).next.image.frame = ship.special_frames.selection(7);
             with_rng(3, 0, || hooks::invoke_element_pointer(animate, explosion));
             assert_eq!(
-                frame_index((*explosion).next.image.frame.raw()),
+                GetFrameIndex((*explosion).next.image.frame.raw().cast()),
                 1,
                 "advance current, not next frame"
             );
@@ -848,29 +856,30 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
             uqm_rust::graphics::sdl::lifecycle_abi::format_conv_surf = format.raw().cast();
             let picker = LoadedDrawable::create(2, 149, 55, 2).unwrap();
             let status = LoadedDrawable::create(2, 1, 1, 4).unwrap();
-            let saved_graphics = uqm_rust::engine::Kernel::current().write(|kernel| {
+            let saved_graphics = crate::battle_context::with(|cx| {
                 let saved = (
-                    kernel.off_screen_context,
-                    kernel.tiny_font,
-                    kernel.status_frame,
+                    cx.kernel.off_screen_context,
+                    cx.kernel.tiny_font,
+                    cx.kernel.status_frame,
                 );
-                kernel.off_screen_context = context.cast();
-                kernel.tiny_font = font.cast();
-                kernel.status_frame = status.lease().frame(0).unwrap().cast();
+                cx.kernel.off_screen_context = context.cast();
+                cx.kernel.tiny_font = font.cast();
+                cx.kernel.status_frame = status.lease().frame(0).unwrap().cast();
                 saved
             });
             for computer in [false, true] {
                 for initial in [[2, 2], [1, 2], [2, 1], [1, 1]] {
                     let _battle = Battle::new(16);
                     let saved_controls = input.player_controls();
-                    uqm_rust::app::bridge::battle(|battle| {
-                        battle.selection_frames = Some(std::array::from_fn(|player| {
+                    crate::battle_context::with(|cx| {
+                        cx.b.selection_frames = Some(std::array::from_fn(|player| {
                             picker.lease().context_frame(player)
                         }));
                     });
-                    uqm_rust::engine::World::current()
-                        .write(|world| world.set_activity((SUPER_MELEE | IN_BATTLE) as u16));
-                    uqm_rust::app::bridge::battle(|b| b.counters = initial);
+                    crate::battle_context::with(|cx| {
+                        cx.world.set_activity((SUPER_MELEE | IN_BATTLE) as u16)
+                    });
+                    crate::battle_context::with(|cx| cx.b.counters = initial);
                     let mut ship = Ship::new(&_battle, 0);
                     let mut other = Ship::new(&_battle, 1);
                     ship.inner.ship_mut().SpeciesID = SPECIES_ID_SHOFIXTI_ID;
@@ -882,9 +891,10 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
                             if computer && side == 1 { 2 } else { 1 },
                         )
                     });
-                    let saved_inputs = uqm_rust::engine::Kernel::current().write(|kernel| {
+                    let saved_inputs = crate::battle_context::with(|cx| {
                         std::array::from_fn::<_, 2, _>(|side| {
-                            kernel.replace_player_input(side, Some(inputs[side].clone()))
+                            cx.kernel
+                                .replace_player_input(side, Some(inputs[side].clone()))
                         })
                     });
                     for side in 0..2 {
@@ -896,8 +906,8 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
                         reserves[side].SpeciesID = SPECIES_ID_SHOFIXTI_ID;
                         reserves[side].index = 1;
                         reserves[side].playerNr = side as SIZE;
-                        uqm_rust::app::bridge::battle(|_| {
-                            let mut ships = (**uqm_rust::engine::Kernel::current()).ships(side);
+                        crate::battle_context::with(|cx| {
+                            let mut ships = cx.kernel.ships(side);
                             let active = ships.id(active as usize).unwrap();
                             ships.put(active);
                             if initial[side] > 1 {
@@ -919,7 +929,7 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
                     );
                     hooks::invoke_element_pointer((*ship.ptr()).death_func.unwrap(), ship.ptr());
                     core(transitions::ship_death, other.ptr());
-                    let remaining = uqm_rust::app::bridge::battle(|b| b.counters);
+                    let remaining = crate::battle_context::with(|cx| cx.b.counters);
                     assert_eq!(remaining, [initial[0] - 1, initial[1] - 1]);
                     assert_eq!(
                         (
@@ -930,7 +940,7 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
                     );
                     core(transitions::cleanup_dead_ship, ship.ptr());
                     core(transitions::cleanup_dead_ship, other.ptr());
-                    uqm_rust::engine::Kernel::current().write(transitions::stop_ditty);
+                    crate::battle_context::with(|cx| transitions::stop_ditty(cx.kernel));
                     let expected_selection = initial == [2, 2];
                     let mut selected = [false; 2];
                     for side in 0..2 {
@@ -946,7 +956,7 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
                         desc.ship_data.weapon = uqm_rust::engine::battle::frames::FrameArray::EMPTY;
                         desc.ship_data.special =
                             uqm_rust::engine::battle::frames::FrameArray::EMPTY;
-                        uqm_rust::app::bridge::enter(|cx| {
+                        crate::battle_context::with(|cx| {
                             let outgoing = cx
                                 .elements()
                                 .id(std::ptr::NonNull::new(outgoing.cast()))
@@ -1001,35 +1011,33 @@ fn glory_mutual_loss_applies_both_rosters_and_selects_both_replacements() {
                         });
                     }
                     assert_eq!(selected, [expected_selection; 2]);
-                    let remaining = uqm_rust::app::bridge::battle(|b| b.counters);
+                    let remaining = crate::battle_context::with(|cx| cx.b.counters);
                     assert_eq!(remaining, [initial[0] - 1, initial[1] - 1]);
                     assert_eq!(
-                        uqm_rust::engine::World::current().read(|world| world.activity())
-                            & CHECK_ABORT as u16,
+                        crate::battle_context::with(|cx| cx.world.activity()) & CHECK_ABORT as u16,
                         0
                     );
                     assert_eq!(
-                        uqm_rust::engine::World::current().read(|world| world.activity())
-                            & IN_BATTLE as u16
+                        crate::battle_context::with(|cx| cx.world.activity()) & IN_BATTLE as u16
                             != 0,
                         expected_selection
                     );
-                    uqm_rust::engine::Kernel::current().write(|kernel| {
+                    crate::battle_context::with(|cx| {
                         for (side, input) in saved_inputs.into_iter().enumerate() {
-                            kernel.replace_player_input(side, input);
+                            cx.kernel.replace_player_input(side, input);
                         }
                     });
-                    uqm_rust::app::bridge::battle(|battle| battle.selection_frames = None);
+                    crate::battle_context::with(|cx| cx.b.selection_frames = None);
                     for (side, template) in saved_controls.into_iter().enumerate() {
                         input.set_player_control(side, template);
                     }
                 }
             }
-            uqm_rust::engine::Kernel::current().write(|kernel| {
+            crate::battle_context::with(|cx| {
                 (
-                    kernel.off_screen_context,
-                    kernel.tiny_font,
-                    kernel.status_frame,
+                    cx.kernel.off_screen_context,
+                    cx.kernel.tiny_font,
+                    cx.kernel.status_frame,
                 ) = saved_graphics;
             });
             uqm_rust::graphics::font_abi::DestroyFont(font);

@@ -276,16 +276,14 @@ pub(crate) fn ship_element_amounts(_world: &CampaignView) -> Option<[u16; 8]> {
 ///
 /// `tactrans.c` decrements these when a ship dies. Nothing is written.
 #[cfg(not(test))]
-pub(crate) fn battle_fleets() -> Option<(u8, u8)> {
-    // SAFETY: the production game invokes the automation hooks synchronously
-    // on the game thread, so the counters cannot change during this read.
-    let counters = unsafe { crate::battle::ffi::live_counters::battle_counters() };
-    Some((counters[0], counters[1]))
+pub(crate) fn battle_fleets(world: &CampaignView) -> Option<(u8, u8)> {
+    let [player, enemy] = world.battle_counters;
+    Some((player, enemy))
 }
 
 /// Without the linked game there are no fleets to read.
 #[cfg(test)]
-pub(crate) fn battle_fleets() -> Option<(u8, u8)> {
+pub(crate) fn battle_fleets(_world: &CampaignView) -> Option<(u8, u8)> {
     None
 }
 
@@ -483,7 +481,7 @@ pub(crate) fn service_input(
     capture: &mut dyn FnMut() -> CampaignView,
     button_wait: bool,
     setup: &mut super::input_admission::Target<'_>,
-    sink: &mut dyn crate::engine::observe::Observer<Option<CampaignView>>,
+    sink: &mut dyn crate::engine::observe::Observer,
 ) -> i32 {
     // Step 1: ABI entry (saturating).
     let rt = &observer.runtime;
@@ -677,7 +675,7 @@ pub(crate) fn fleet_fight_observation(
     ui: &UiObservation,
 ) -> super::fleet_fight::Observation {
     let (cyborg, speed) = cyborg_settings(world).unwrap_or((false, 0));
-    let (player, enemy) = battle_fleets().unwrap_or((0, 0));
+    let (player, enemy) = battle_fleets(world).unwrap_or((0, 0));
     #[cfg(not(test))]
     let picker = {
         let (generation, active) = ui.ship_picker_observation();

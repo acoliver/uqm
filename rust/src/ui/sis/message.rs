@@ -3,7 +3,6 @@ use crate::engine::world::activity::ActivityKind;
 use crate::starbase::ids;
 use crate::{
     engine::{Kernel, World},
-    navigation::globals::in_hyper_space,
     planets::starmap::naming::cluster_name,
 };
 use std::ffi::CString;
@@ -17,9 +16,7 @@ pub fn default_message_text(kernel: &Kernel, world: &World) -> CString {
             cluster_name(kernel, star, ids::STAR_NUMBER_BASE as usize)
         }
         ActivityKind::InHyperspace => kernel
-            .game_text(
-                ids::NAVIGATION_STRING_BASE as usize + usize::from(in_hyper_space(world) == 0),
-            )
+            .game_text(ids::NAVIGATION_STRING_BASE as usize + usize::from(!world.in_hyper_space()))
             .to_owned(),
         _ => c"".to_owned(),
     }

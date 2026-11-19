@@ -4,17 +4,12 @@
 //! integer-width behavior can be tested without linking the game archive.
 
 use super::ai_constants::*;
-#[cfg(not(test))]
 use super::flags::*;
-#[cfg(not(test))]
 use crate::battle::intercept::{next_velocity, plot_intercept};
 use crate::math::battle_types::{HALF_CIRCLE, OCTANT};
-#[cfg(not(test))]
 use crate::math::battle_types::{MAX_REDUCTION, ONE_SHIFT, QUADRANT};
-#[cfg(not(test))]
 use crate::math::square_root;
 use crate::math::{angle_to_facing, normalize_facing};
-#[cfg(not(test))]
 use crate::math::{facing_to_angle, normalize_angle};
 
 #[inline]
@@ -23,26 +18,21 @@ fn break_opposite_facing_tie(delta: u16, random: impl FnOnce() -> u32) -> u16 {
     normalize_facing(i32::from(delta) + if random() & 1 != 0 { jitter } else { -jitter })
 }
 
-#[cfg(not(test))]
 use crate::battle::{Concern, Concerns, Cx, Parent, ShipId, Subject};
-#[cfg(not(test))]
 fn subject_owner(subject: &Subject) -> ShipId {
     match subject.parent {
         Parent::Ship(id) => id,
         other => panic!("AI subject has no ship owner: {other:?}"),
     }
 }
-#[cfg(not(test))]
 fn is_crew_preprocess(subject: &Subject) -> bool {
     subject.pre.is_some_and(|f| {
         f.address() == crate::battle::world_elements::crew_preprocess as *const () as usize
     })
 }
-#[cfg(not(test))]
 fn ai_arctan(x: i16, y: i16) -> u16 {
     crate::math::arctan(x, y)
 }
-#[cfg(not(test))]
 fn collision_possible(element: &Subject, ship: &Subject) -> bool {
     element.flags & (NONSOLID | DISAPPEARING) as u16 == 0
         && (ship.flags & element.flags) & COLLISION as u16 == 0
@@ -50,14 +40,10 @@ fn collision_possible(element: &Subject, ship: &Subject) -> bool {
             || ship.parent != element.parent)
         && (ship.mass != 0 || element.mass != 0)
 }
-#[cfg(not(test))]
 const CLOSE_RANGE_WEAPON: u16 = (50 << ONE_SHIFT) as u16;
-#[cfg(not(test))]
 const LONG_RANGE_WEAPON: u16 = (1000 << ONE_SHIFT) as u16;
-#[cfg(not(test))]
 const FAST_SHIP: u16 = 150;
 
-#[cfg(not(test))]
 fn turn_ship(cx: &mut Cx<'_>, ship: &mut Subject, angle: u16) -> u32 {
     let starship = subject_owner(ship);
     let facing = cx.ship_state(starship).facing;
@@ -82,7 +68,6 @@ fn turn_ship(cx: &mut Cx<'_>, ship: &mut Subject, angle: u16) -> u32 {
     1
 }
 
-#[cfg(not(test))]
 fn thrust_ship(cx: &mut Cx<'_>, ship: &mut Subject, angle: u16) -> u32 {
     let starship = subject_owner(ship);
     let mut should = cx.ship_state(starship).input & THRUST as u8 != 0;
@@ -121,7 +106,6 @@ fn thrust_ship(cx: &mut Cx<'_>, ship: &mut Subject, angle: u16) -> u32 {
     should as u32
 }
 
-#[cfg(not(test))]
 pub(crate) fn weapons(cx: &mut Cx<'_>, ship: &Subject, other: &Subject, mut margin: u16) -> u32 {
     if cx.subject_cloaked(other) {
         margin = margin.wrapping_add((40 << ONE_SHIFT) as u16);
@@ -159,7 +143,6 @@ pub(crate) fn weapons(cx: &mut Cx<'_>, ship: &Subject, other: &Subject, mut marg
     0
 }
 
-#[cfg(not(test))]
 pub(crate) fn intelligence(
     cx: &mut Cx<'_>,
     ship: &mut Subject,
@@ -218,7 +201,6 @@ pub(crate) fn intelligence(
     }
 }
 
-#[cfg(not(test))]
 fn pursue(cx: &mut Cx<'_>, ship: &mut Subject, eval: &mut Concern) {
     let object = eval.object.unwrap_or_else(|| panic!("AI object missing"));
     let other = cx.weapon_origin(object);
@@ -312,7 +294,6 @@ fn pursue(cx: &mut Cx<'_>, ship: &mut Subject, eval: &mut Concern) {
     }
 }
 
-#[cfg(not(test))]
 fn entice(cx: &mut Cx<'_>, ship: &mut Subject, eval: &mut Concern) {
     let object = eval.object.unwrap_or_else(|| panic!("AI object missing"));
     let other = cx.weapon_origin(object);
@@ -513,7 +494,6 @@ fn entice(cx: &mut Cx<'_>, ship: &mut Subject, eval: &mut Concern) {
     }
 }
 
-#[cfg(not(test))]
 fn init_cyborg(cx: &mut Cx<'_>, ship: ShipId) {
     let race = ship;
     let characteristics = cx.race_stats(race).characteristics;
@@ -525,7 +505,6 @@ fn init_cyborg(cx: &mut Cx<'_>, ship: ShipId) {
         product.checked_div(divisor).unwrap_or(product >> 1);
 }
 
-#[cfg(not(test))]
 pub fn tactical(cx: &mut Cx<'_>, owner: ShipId) -> u8 {
     let rd = owner;
     if cx.race_stats(rd).intelligence.maneuverability == 0 {

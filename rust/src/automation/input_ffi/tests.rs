@@ -43,8 +43,8 @@ fn service_without_an_observer_does_not_stop_input() {
         observer: &mut observer,
     };
     assert!(
-        !io.observer
-            .input_admitted(&InputView::BeforeUpdate, &None)
+        !crate::engine::Game::new()
+            .with_context(|cx| io.observer.input_admitted(&InputView::BeforeUpdate, cx))
             .stop
     );
 }
@@ -57,8 +57,8 @@ fn observation_without_an_observer_does_not_stop_input() {
         observer: &mut observer,
     };
     assert!(
-        !io.observer
-            .input_admitted(&InputView::AfterUpdate(0), &None)
+        !crate::engine::Game::new()
+            .with_context(|cx| io.observer.input_admitted(&InputView::AfterUpdate(0), cx))
             .stop
     );
 }

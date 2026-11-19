@@ -11,7 +11,9 @@ use super::{
     generate_energy, generate_orbital, pickup_energy, thraddash_defend, ThraddashSite,
     HELIX_TALK_FLAGS, THRADD_TALK_FLAGS,
 };
-use crate::comm::dispatch::{CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY};
+use crate::engine::world::activity::activity_flags::{
+    CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY,
+};
 use crate::math::RandomContext;
 use crate::planet_side::report_adapter::{DiscoveryReportPort, ReportDisposition};
 use crate::planet_side::runtime::AdapterError;

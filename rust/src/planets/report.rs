@@ -50,11 +50,11 @@ pub(crate) mod live {
         native_font::FontLease,
     };
     use crate::planets::scan::state::create_context;
-    use crate::time::counter_abi::GetTimeCounter;
     use crate::ui::util::{
         wait_for_any_button, wait_for_any_button_until, wait_for_no_input, SavedContext,
     };
     use std::ffi::{CStr, CString};
+    use uqm_engine::time::counter_abi::GetTimeCounter;
 
     const GREEN: Color = Color {
         r: 0,

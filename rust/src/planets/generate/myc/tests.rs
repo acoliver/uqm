@@ -10,7 +10,9 @@ use super::{
     generate_energy, generate_life, generate_orbital, generate_planets, pickup_energy,
     EnergyContext, MyconSite, Scene, AMBUSH_SHIPS, HOME_TALK_FLAGS, SUN_DEVICE_TALK_FLAGS, WORLD,
 };
-use crate::comm::dispatch::{CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY};
+use crate::engine::world::activity::activity_flags::{
+    CHECK_ABORT, CHECK_LOAD, START_INTERPLANETARY,
+};
 use crate::math::RandomContext;
 use crate::planet_side::report_adapter::{DiscoveryReportPort, ReportDisposition};
 use crate::planet_side::runtime::AdapterError;

@@ -28,7 +28,7 @@ fn normal(comm: &mut Comm, cx: &mut Cx<'_>, response: u32) {
     });
 }
 
-fn callback(handler: Handler) -> crate::comm::response::ResponseFunc {
+pub(super) fn callback(handler: Handler) -> crate::comm::response::ResponseFunc {
     match handler {
         Handler::Combat => combat,
         Handler::Menagerie => menagerie,

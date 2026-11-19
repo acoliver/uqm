@@ -1,12 +1,8 @@
 //! Record operations used by race hooks, independent of mode publication.
-#[cfg(not(test))]
 use super::race_services::StarContact;
-#[cfg(not(test))]
 use super::{Concerns, Cx, ElementId, ShipId, StoryKey};
-#[cfg(not(test))]
 use crate::graphics::native_abi::POINT;
 
-#[cfg(not(test))]
 impl Cx<'_> {
     pub fn set_flagship_crew(&mut self, crew: u16) {
         self.world.set_flagship_crew(crew);

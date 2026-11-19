@@ -26,7 +26,7 @@ use super::platform::SisView;
 use super::sis_modules::{
     ModuleSlot, ModuleSlots, ModuleSlotsError, ModuleType, EMPTY_SLOT, NUM_MODULE_SLOTS,
 };
-use crate::mainloop::types::{activity_flags, ActivityValue};
+use crate::engine::world::activity::{activity_flags, ActivityValue};
 
 /// The first module the player may buy for a module slot (`CREW_POD`).
 const FIRST_PURCHASE_MODULE: ModuleType = ModuleType::CrewPod;

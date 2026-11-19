@@ -172,15 +172,19 @@ pub fn repair_sis_border(kernel: &Kernel, dimensions: (i32, i32)) {
     });
 }
 
+/// `ClearSISRect` flags (`sis.h`): redraw the menu strip, then the gauges.
+pub const CLEAR_SIS_RADAR: u8 = 1 << 2;
+pub const DRAW_SIS_DISPLAY: u8 = 1 << 3;
+
 pub fn clear_sis_rect(kernel: &Kernel, world: &mut World, dimensions: (i32, i32), flags: u8) {
     let context = ContextLease::require(kernel.status_context);
     context.with_text_state(|| {
         context.set_foreground(rgb15(10, 10, 10));
         context.with_batch(|| {
-            if flags & 8 != 0 {
+            if flags & DRAW_SIS_DISPLAY != 0 {
                 delta_sis_gauges(kernel, world, 32767, 32767, 32767);
             }
-            if flags & 4 != 0 {
+            if flags & CLEAR_SIS_RADAR != 0 {
                 crate::ui::menu::draw_menu_state(kernel, world, dimensions, u8::MAX, 1);
             }
         });

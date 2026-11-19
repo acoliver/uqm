@@ -1,6 +1,5 @@
 //! Druuge callbacks registered with the live battle engine.
 
-#[cfg(not(test))]
 pub(crate) mod engine {
     use crate::ships::native::{abi::*, cosine, facing_to_angle, sine};
 

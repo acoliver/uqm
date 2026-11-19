@@ -4,6 +4,8 @@
 mod catalog_tests;
 pub mod generation;
 pub mod planet;
+#[cfg(test)]
+mod space_tests;
 
 use crate::battle::schema::GAME_STATE;
 pub const MUSIC_DISABLED: u8 = 8;
@@ -198,6 +200,19 @@ impl World {
         self.story_value(key).map_or(0, u32::from)
     }
 
+    /// HyperSpace activity, on either the hyperspace or the quasispace side.
+    pub fn in_hqspace(&self) -> bool {
+        self.activity() as u8 == activity::ActivityKind::InHyperspace as u8
+    }
+
+    pub fn in_hyper_space(&self) -> bool {
+        self.in_hqspace() && self.story_state(StoryKey::ARILOU_SPACE_SIDE) <= 1
+    }
+
+    pub fn in_quasi_space(&self) -> bool {
+        self.in_hqspace() && self.story_state(StoryKey::ARILOU_SPACE_SIDE) > 1
+    }
+
     pub fn set_story_state(&mut self, key: StoryKey, value: u32) {
         if let Some(story) = self.story.as_mut() {
             story.set_state(key.start(), key.end(), value as u8);
@@ -324,6 +339,9 @@ pub const IN_HYPERSPACE: u32 = 3;
 pub const NUM_SOLAR_SYSTEMS: usize = 502;
 pub const NUM_HYPER_VORTICES: usize = 15;
 pub const CATALOG_LEN: usize = NUM_SOLAR_SYSTEMS + 1 + (NUM_HYPER_VORTICES + 1) + 1;
+
+/// `FUEL_TANK_SCALE` (`sis.h`): raw fuel points per displayed fuel unit.
+pub const FUEL_TANK_SCALE: u32 = 100;
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone, Default)]

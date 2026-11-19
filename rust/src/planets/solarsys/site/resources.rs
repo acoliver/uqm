@@ -70,7 +70,7 @@ impl andro::AndrosynthSite for Site<'_, '_, '_> {
             world::generation::ReportSlot,
         };
         self.report_resources.load();
-        self.game.borrow_mut().with_legacy(|| {
+        {
             system.frames[1] = LoadedDrawable::load(c"graphics.ruins");
             let table = LoadedTextTable::load(c"text.androsynthruins");
             system.report = ReportSlot::new(table.and_then(|table| {
@@ -83,7 +83,7 @@ impl andro::AndrosynthSite for Site<'_, '_, '_> {
                     table.entry(visits)
                 }
             }));
-        });
+        };
     }
 }
 
@@ -99,7 +99,7 @@ impl crate::planets::generate::host::PlanetSite for Site<'_, '_, '_> {
         self.load_surface(system, body, None);
     }
     fn load_earth_planet(&mut self, system: &mut SolarSys<'_>, body: Body) {
-        let surface = self.game.borrow_mut().with_legacy(|| {
+        let surface = {
             let width = crate::planets::generate::consts::MAP_WIDTH as i16;
             let height = crate::planets::generate::consts::MAP_HEIGHT as i16;
             // SAFETY: this thread owns the detached resource through normalization and transfer.
@@ -108,7 +108,7 @@ impl crate::planets::generate::host::PlanetSite for Site<'_, '_, '_> {
                 .unwrap_or_else(|error| {
                     panic!("Earth surface definition could not be rescaled: {error:?}")
                 })
-        });
+        };
         self.load_surface(system, body, Some(surface));
     }
 }

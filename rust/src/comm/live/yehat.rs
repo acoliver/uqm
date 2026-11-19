@@ -38,7 +38,7 @@ fn space(comm: &mut Comm, cx: &mut Cx<'_>, response: u32) {
     });
 }
 
-fn callback(handler: Handler) -> crate::comm::response::ResponseFunc {
+pub(super) fn callback(handler: Handler) -> crate::comm::response::ResponseFunc {
     match handler {
         Handler::Exit => exit,
         Handler::Royalists => royalists,
@@ -81,7 +81,7 @@ mod api {
             (crate::math::random() & 1) as u8
         }
         fn schedule_rebel_event(&mut self) {
-            crate::time::clock_abi::add_event(&mut self.cx.borrow_mut(), 1, 0, 0, 0, 15);
+            crate::navigation::events::add_event(&mut self.cx.borrow_mut(), 1, 0, 0, 0, 15);
         }
     }
 }

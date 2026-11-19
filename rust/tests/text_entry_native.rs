@@ -110,10 +110,7 @@ impl uqm_rust::engine::input::InputRuntime for OneFrame {
         &self.0
     }
 
-    fn observer(
-        &self,
-    ) -> Box<dyn uqm_rust::engine::observe::Observer<Option<uqm_rust::engine::observe::CampaignView>>>
-    {
+    fn observer(&self) -> Box<dyn uqm_rust::engine::observe::Observer> {
         Box::new(Unobserved)
     }
 

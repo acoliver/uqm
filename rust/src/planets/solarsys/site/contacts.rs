@@ -127,12 +127,10 @@ impl UrquanEncounterSite for Site<'_, '_, '_> {
         let context = crate::engine::graphics::context_abi::ContextLease::require(
             self.game.borrow().kernel.screen_context,
         );
-        self.game
-            .borrow_mut()
-            .with_legacy(|| fade_to_black_for_two_seconds(context))
+        fade_to_black_for_two_seconds(context)
     }
     fn move_game_clock_days(&mut self, days: u16) {
-        crate::time::clock_abi::advance_days(&mut self.game.borrow_mut(), i32::from(days));
+        crate::navigation::events::advance_days(&mut self.game.borrow_mut(), i32::from(days));
     }
     fn star_point(&self) -> (i16, i16) {
         let point = self.game.borrow().world.catalog()[self.star.0].star_pt;
@@ -146,7 +144,7 @@ impl UrquanEncounterSite for Site<'_, '_, '_> {
         crate::ui::sis::delta_sis_gauges(cx.kernel, cx.world, 0, delta, 0);
     }
     fn random(&mut self) -> u32 {
-        self.game.borrow_mut().with_legacy(crate::math::random)
+        crate::math::random()
     }
     fn clear_sis_message(&mut self) {
         let cx = self.game.borrow();

@@ -79,8 +79,7 @@ pub fn check(h: &mut Harness) {
             &mut (*system).sys.info,
             uqm_rust::planets::generate::special::Body::Planet(2),
         );
-        let animation =
-            uqm_rust::engine::Kernel::current().read(|kernel| kernel.planet_animation.clone());
+        let animation = crate::battle_context::with(|cx| cx.kernel.planet_animation.clone());
         let mut sphere = uqm_rust::planets::sphere::SphereState::default();
         uqm_rust::planets::plangen::live::generate_planet_surface(
             &mut sphere,
@@ -131,7 +130,8 @@ pub fn check(h: &mut Harness) {
             );
         }
         println!("real Earth shield tint: all {} RGB pixels equal [255, source.g, source.b]; complete buffer equals isolated Rust additive core", after_tint.len());
-        uqm_rust::app::bridge::enter(|cx| c_api::free_planet(cx, &mut *system));
+        let planet_system = &mut *system;
+        crate::battle_context::with(|cx| c_api::free_planet(cx, planet_system));
         assert_eq!(sphere.elevation()[0], first_elevation);
         drop(topography);
         drop(sphere);
@@ -180,10 +180,10 @@ unsafe fn names(h: &mut Harness) {
     unsafe {
         let strings_owner =
             uqm_rust::engine::strings::owned_table::LoadedTextTable::load(c"text.starcon").unwrap();
-        uqm_rust::engine::Kernel::current().write(|kernel| {
-            assert!(kernel.game_strings.is_null());
-            assert!(kernel.micro_font.is_null());
-            kernel.install_game_text(strings_owner);
+        crate::battle_context::with(|cx| {
+            assert!(cx.kernel.game_strings.is_null());
+            assert!(cx.kernel.micro_font.is_null());
+            cx.kernel.install_game_text(strings_owner);
         });
         let system = &raw mut *h.state;
         for (index, expected) in [(0, "Mercury"), (2, "Earth"), (8, "Pluto")] {
@@ -196,14 +196,13 @@ unsafe fn names(h: &mut Harness) {
                     host,
                 )
             }));
-            let name =
-                uqm_rust::engine::WorldData::current().read(|world| world.flagship.planet_name);
+            let name = crate::battle_context::with(|cx| cx.world.data.flagship.planet_name);
             let name = name.as_ptr().cast::<std::ffi::c_char>();
             assert_eq!(std::ffi::CStr::from_ptr(name).to_str().unwrap(), expected);
             assert_eq!(
-                uqm_rust::engine::World::current().read(|world| {
+                crate::battle_context::with(|cx| {
                     uqm_rust::state::game_state_keys::get_game_state(
-                        world,
+                        cx.world,
                         uqm_rust::engine::StoryKey::BATTLE_PLANET,
                     )
                 }),
@@ -221,8 +220,7 @@ unsafe fn names(h: &mut Harness) {
                     host,
                 )
             }));
-            let name =
-                uqm_rust::engine::WorldData::current().read(|world| world.flagship.planet_name);
+            let name = crate::battle_context::with(|cx| cx.world.data.flagship.planet_name);
             assert_eq!(
                 std::ffi::CStr::from_ptr(name.as_ptr().cast())
                     .to_str()
@@ -230,24 +228,25 @@ unsafe fn names(h: &mut Harness) {
                 expected
             );
             assert_eq!(
-                uqm_rust::engine::World::current().read(|world| {
+                crate::battle_context::with(|cx| {
                     uqm_rust::state::game_state_keys::get_game_state(
-                        world,
+                        cx.world,
                         uqm_rust::engine::StoryKey::BATTLE_PLANET,
                     )
                 }),
                 index as u32 + 128
             );
         }
-        uqm_rust::engine::Kernel::current().write(uqm_rust::engine::Kernel::release_encounter_text);
+        crate::battle_context::with(|cx| {
+            uqm_rust::engine::Kernel::release_encounter_text(cx.kernel)
+        });
         queue::TFB_FlushGraphicsEx(1);
         println!("Sol name ABI: real game strings, parent names and parent battle frames for planets and moons");
     }
 }
 
 unsafe fn scenes(h: &mut Harness) {
-    let _quiet = uqm_rust::engine::Kernel::current()
-        .read(|kernel| kernel.diagnostics.suppress_interaction());
+    let _quiet = crate::battle_context::with(|cx| cx.kernel.diagnostics.suppress_interaction());
     for pluto in [true, false] {
         h.state.sys.info = std::mem::zeroed();
         h.state.sys.planets = std::mem::zeroed();
@@ -266,15 +265,15 @@ unsafe fn scenes(h: &mut Harness) {
             moon
         };
         (*world).rand_seed = 104729;
-        uqm_rust::engine::World::current().write(|world| {
-            set_game_state(world, uqm_rust::engine::StoryKey::FOUND_PLUTO_SPATHI, 0)
+        crate::battle_context::with(|cx| {
+            set_game_state(cx.world, uqm_rust::engine::StoryKey::FOUND_PLUTO_SPATHI, 0)
         });
-        uqm_rust::engine::World::current().write(|world| {
-            set_game_state(world, uqm_rust::engine::StoryKey::MOONBASE_DESTROYED, 0)
+        crate::battle_context::with(|cx| {
+            set_game_state(cx.world, uqm_rust::engine::StoryKey::MOONBASE_DESTROYED, 0)
         });
         // SAFETY: Harness retains installed owners and live solar/planet
         // descriptors throughout this synchronous orbital callback.
-        let typography = uqm_rust::app::bridge::enter(|cx| {
+        let typography = crate::battle_context::with(|cx| {
             let game = std::cell::RefCell::new(cx.reborrow());
             let mut observer = uqm_rust::engine::observe::Unobserved;
             let io = std::cell::RefCell::new(uqm_rust::engine::observe::Io {
@@ -324,7 +323,8 @@ unsafe fn scenes(h: &mut Harness) {
         assert!(h.state.sys.report.current().is_some());
         assert!(h.state.sys.frames[1].is_some());
         assert_eq!(info.planet_density, if pluto { 33 } else { 60 });
-        uqm_rust::app::bridge::enter(|cx| c_api::free_planet(cx, &mut *system));
+        let planet_system = &mut *system;
+        crate::battle_context::with(|cx| c_api::free_planet(cx, planet_system));
         queue::TFB_FlushGraphicsEx(1);
         assert!((*system).sys.report.current().is_none());
         drop(typography);

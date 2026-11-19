@@ -12,7 +12,7 @@ fn combat(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
 fn story(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
     run(comm, cx, |s| s.handle(Handler::Story, r as i32));
 }
-fn callback(h: Handler) -> crate::comm::response::ResponseFunc {
+pub(super) fn callback(h: Handler) -> crate::comm::response::ResponseFunc {
     match h {
         Handler::Combat => combat,
         Handler::Story => story,

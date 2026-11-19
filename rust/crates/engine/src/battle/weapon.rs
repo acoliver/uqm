@@ -1,21 +1,13 @@
 //! Projectile allocation, collision and blast records on the supplied context.
-#[cfg(not(test))]
 use super::flags::*;
-#[cfg(not(test))]
 use super::hooks::animation_preprocess;
-#[cfg(not(test))]
 use super::projectile;
-#[cfg(not(test))]
 use super::{CollisionHook, Cx, ElementHook, ElementId};
-#[cfg(not(test))]
 use crate::graphics::native_abi::{LINE_PRIMITIVE as gfx_object_LINE_PRIM, POINT};
-#[cfg(not(test))]
 use crate::graphics::STAMP_PRIMITIVE;
 use crate::math::battle_types::HALF_CIRCLE;
-#[cfg(not(test))]
 use crate::math::battle_types::{FULL_CIRCLE, ONE_SHIFT};
 use crate::math::{angle_to_facing, normalize_facing};
-#[cfg(not(test))]
 use crate::math::{cosine, sine};
 
 fn blast_index(angle: u16) -> u16 {
@@ -23,7 +15,6 @@ fn blast_index(angle: u16) -> u16 {
     ((facing >> 2) << 1) + u16::from(facing & 3 != 0)
 }
 
-#[cfg(not(test))]
 pub fn collision_cb(
     cx: &mut crate::battle::Cx<'_>,
     w: crate::battle::ElementId,
@@ -34,7 +25,6 @@ pub fn collision_cb(
     cx.weapon_collision(w, wp, h, hp);
 }
 
-#[cfg(not(test))]
 pub fn initialize_laser(cx: &mut Cx<'_>, b: &crate::battle::views::Laser) -> Option<ElementId> {
     let e = cx.alloc_element()?;
     cx.element_mut(e).player = b.sender;
@@ -63,7 +53,6 @@ pub fn initialize_laser(cx: &mut Cx<'_>, b: &crate::battle::views::Laser) -> Opt
     Some(e)
 }
 
-#[cfg(not(test))]
 pub fn initialize_missile(cx: &mut Cx<'_>, b: &crate::battle::views::Missile) -> Option<ElementId> {
     let e = cx.alloc_element()?;
     cx.element_mut(e).hits = b.hit_points as u8 as u16;
@@ -89,7 +78,6 @@ pub fn initialize_missile(cx: &mut Cx<'_>, b: &crate::battle::views::Missile) ->
     Some(e)
 }
 
-#[cfg(not(test))]
 pub fn weapon_collision(
     cx: &mut Cx<'_>,
     w: ElementId,

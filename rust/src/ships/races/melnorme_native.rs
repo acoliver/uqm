@@ -1,7 +1,6 @@
 //! Melnorme callbacks and descriptor for the live battle engine.
 //! Expressions preserve the C promotions, truncations, traversal and RNG order.
 
-#[cfg(not(test))]
 pub(crate) mod engine {
     use crate::engine::battle::views::Missile;
     use crate::engine::battle::{
@@ -9,6 +8,7 @@ pub(crate) mod engine {
         WeaponSpawn, World,
     };
 
+    use crate::engine::battle::hooks::animation_preprocess;
     use crate::ships::native::{abi::*, cosine, facing_to_angle, sine};
 
     const MAX_CREW: u16 = 20;

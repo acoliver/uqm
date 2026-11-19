@@ -200,13 +200,17 @@ fn world() -> World {
 #[test]
 #[serial_test::serial]
 fn frame_admission_publishes_before_input_and_nested_input_uses_the_copy() {
-    use crate::engine::observe::{CampaignView, Observer, Presented};
+    use crate::engine::observe::{Observer, Presented};
     struct Recording {
         ui: crate::automation::ui_observation::UiObservation,
         admissions: Vec<(i16, bool)>,
     }
-    impl Observer<Option<CampaignView>> for Recording {
-        fn input_admitted(&mut self, _: &InputView, _: &Option<CampaignView>) -> Injected {
+    impl Observer for Recording {
+        fn input_admitted(
+            &mut self,
+            _: &InputView,
+            _: &mut crate::engine::battle::Cx<'_>,
+        ) -> Injected {
             let snapshot = self
                 .ui
                 .solar_snapshot()

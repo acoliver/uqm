@@ -25,8 +25,8 @@ mod tests {
     }
 }
 
-#[cfg(not(test))]
 pub(crate) mod engine {
+    use crate::engine::battle::hooks::animation_preprocess;
     use crate::ships::native::{
         abi::*, angle_to_facing, cosine, facing_to_angle, normalize_angle, sine,
     };

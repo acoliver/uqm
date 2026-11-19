@@ -10,9 +10,8 @@ use battle::{prim, Battle as PoolBattle, PoolElement, Ship};
 mod special_hooks;
 use std::{ffi::CStr, mem, ptr};
 use uqm_rust::collections::observation;
-use uqm_rust::ships::native::{
-    abi::*, cosine, facing_to_angle, frame_index, normalize_facing, sine,
-};
+use uqm_rust::graphics::pixmap_abi::GetFrameIndex;
+use uqm_rust::ships::native::{abi::*, cosine, facing_to_angle, normalize_facing, sine};
 
 struct Battle {
     _pool: PoolBattle,
@@ -20,9 +19,9 @@ struct Battle {
 }
 impl Battle {
     unsafe fn new(capacity: COUNT) -> Self {
-        let activity = uqm_rust::engine::World::current().read(|world| world.activity());
+        let activity = crate::battle_context::with(|cx| cx.world.activity());
         let pool = PoolBattle::new(capacity);
-        uqm_rust::engine::World::current().write(|world| world.set_activity(0));
+        crate::battle_context::with(|cx| cx.world.set_activity(0));
         Self {
             _pool: pool,
             activity,
@@ -31,7 +30,7 @@ impl Battle {
 }
 impl Drop for Battle {
     fn drop(&mut self) {
-        uqm_rust::engine::World::current().write(|world| world.set_activity(self.activity));
+        crate::battle_context::with(|cx| cx.world.set_activity(self.activity));
     }
 }
 
@@ -704,7 +703,10 @@ fn movement_reverses_on_thrust_press_turns_with_left_priority_and_animates_next_
                 (*ship.ptr()).thrust,
                 if thrust_wait == 0 { 1 } else { thrust_wait }
             );
-            assert_eq!(frame_index((*ship.ptr()).next.image.frame.raw()), 0);
+            assert_eq!(
+                GetFrameIndex((*ship.ptr()).next.image.frame.raw().cast()),
+                0
+            );
             assert_ne!((*ship.ptr()).state_flags & CHANGING as u16, 0);
             if thrust_wait == 0 {
                 assert_eq!(velocity(&(*ship.ptr()).velocity), vector(60, facing));
@@ -913,7 +915,7 @@ fn ai_encounter_weapon_range_recharge_range_and_close_pursuit_boundaries() {
             (0, 15, 20, 14, MOVEMENT_STATE_PURSUE, MOVEMENT_STATE_PURSUE),
             (0, 6, 19, 14, MOVEMENT_STATE_AVOID, MOVEMENT_STATE_AVOID),
         ] {
-            uqm_rust::engine::World::current().write(|world| world.set_activity(activity));
+            crate::battle_context::with(|cx| cx.world.set_activity(activity));
             concerns[0].which_turn = turns;
             concerns[0].MoveState = move_state;
             concerns[2].ObjectPtr = enemy.ptr();
@@ -999,7 +1001,7 @@ fn native_ai_preserves_fifth_concern_and_expands_active_count() {
         ship.descriptor_mut().ship_info.energy_level = 0;
         ship.ship_mut().special_counter = 0;
         with_rng(8, 0, || {
-            uqm_rust::app::bridge::enter(|cx| {
+            crate::battle_context::with(|cx| {
                 let junk_id = cx
                     .elements()
                     .id(std::ptr::NonNull::new(debris.cast()))
@@ -1061,7 +1063,7 @@ unsafe fn at(ship: &mut Ship<'_>, x: COORD, y: COORD) {
 }
 unsafe fn fire_from(source: *mut ElementRecord) -> *mut std::ffi::c_void {
     // SAFETY: the fixture retains the source element in the published battle pool.
-    uqm_rust::app::bridge::enter(|cx| {
+    crate::battle_context::with(|cx| {
         let source = cx
             .elements()
             .id(std::ptr::NonNull::new(source.cast()))

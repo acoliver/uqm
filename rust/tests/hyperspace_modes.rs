@@ -13,12 +13,16 @@ fn resource_teardown_uses_only_the_supplied_kernel() {
 #[test]
 fn encounter_generation_keeps_forced_melnorme_draws_and_one_shot_suppression() {
     use uqm_rust::{
-        engine::{world::story::StoryState, StoryKey},
-        navigation::{abi::*, hyper_units::Geometry, hyperspace::check_hyperspace_encounter},
+        comm::dispatch::ONE_SHOT_ENCOUNTER,
+        engine::{
+            species::ship::MELNORME_SHIP, world::activity::activity_flags::IN_BATTLE,
+            world::story::StoryState, StoryKey,
+        },
+        navigation::{hyper_units::Geometry, hyperspace::check_hyperspace_encounter},
     };
     let mut game = Game::new();
     game.world.story = Some(StoryState::new());
-    game.world.set_activity(IN_BATTLE as u16);
+    game.world.set_activity(IN_BATTLE);
     let geometry = Geometry::new((320, 240));
     game.world.data.flagship.log_x = geometry.log_x(1752);
     game.world.data.flagship.log_y = geometry.log_y(1450);
@@ -43,8 +47,8 @@ fn encounter_generation_keeps_forced_melnorme_draws_and_one_shot_suppression() {
     let queue = game.world.encounters_ref();
     assert_eq!(queue.count(), 1);
     let encounter = *queue.get(queue.head().unwrap());
-    assert_eq!(encounter.race_id, MELNORME_SHIP as u8);
-    assert_eq!(encounter.flags, ONE_SHOT_ENCOUNTER as u8);
+    assert_eq!(encounter.race_id, MELNORME_SHIP);
+    assert_eq!(encounter.flags, ONE_SHOT_ENCOUNTER);
     assert_eq!(encounter.radius, 20000);
     game.world.set_story_state(StoryKey::USED_BROADCASTER, 1);
     check_hyperspace_encounter(&mut game.world, geometry, &mut random);
@@ -85,22 +89,21 @@ fn encounter_generation_keeps_forced_melnorme_draws_and_one_shot_suppression() {
 #[serial_test::serial]
 fn owned_entry_keeps_display_order_resource_swap_and_quasispace_state() {
     use uqm_rust::{
+        engine::world::activity::activity_flags::CHECK_LOAD,
         engine::{
             battle::{Battle, Cx},
             world::story::StoryState,
             StoryKey,
         },
+        graphics::native_abi::POINT,
         graphics::{
             context_abi::{CreateContextAux, DestroyContext},
             drawable_abi::{AllocDrawable, DestroyDrawable},
             pixmap_abi::{CaptureDrawable, ReleaseDrawable},
         },
-        navigation::{
-            abi::{CHECK_LOAD, POINT},
-            hyper_data::{load_hyperspace, EntryDisplay},
-        },
+        navigation::hyper_data::{load_hyperspace, EntryDisplay},
     };
-    for activity in [0, CHECK_LOAD as u16, CHECK_LOAD as u16 | 3] {
+    for activity in [0, CHECK_LOAD, CHECK_LOAD | 3] {
         for side in [0, 3] {
             let mut game = Game::new();
             game.world.story = Some(StoryState::new());
@@ -144,7 +147,7 @@ fn owned_entry_keeps_display_order_resource_swap_and_quasispace_state() {
             });
             let mut expected = match activity {
                 0 => vec![EntryDisplay::RepairBorder],
-                value if value == CHECK_LOAD as u16 => vec![EntryDisplay::DrawFrame],
+                value if value == CHECK_LOAD => vec![EntryDisplay::DrawFrame],
                 _ => vec![EntryDisplay::DrawGauges, EntryDisplay::RepairBorder],
             };
             expected.extend([
@@ -190,30 +193,34 @@ fn loaded_flagship_keeps_its_hooks_and_skips_the_entry_animation() {
 
 fn flagship_entry(loading: bool) {
     use uqm_rust::{
+        battle::{
+            element::{APPEARING, NONSOLID, PLAYER_SHIP},
+            ship_native::{ship_postprocess, ship_preprocess},
+        },
         engine::battle::{
             views::{FrameSelection, Frames, SharedFrames},
             Battle, Cx, ElementHook,
         },
+        engine::world::activity::{activity_flags::CHECK_LOAD, ActivityKind},
         graphics::{
             drawable_abi::{AllocDrawable, DestroyDrawable},
             pixmap_abi::CaptureDrawable,
         },
-        navigation::{
-            abi::*,
-            hyper_transition::{hyper_transition, save_sis_hyper_state},
-        },
+        navigation::hyper_transition::{hyper_transition, save_sis_hyper_state},
+        ships::types::SpeciesId,
     };
+    const IN_HYPERSPACE: u16 = ActivityKind::InHyperspace as u16;
     let mut game = Game::new();
     game.world.data.game.ship_facing = 1;
     if loading {
-        game.kernel.last_activity = CHECK_LOAD as u16 | IN_HYPERSPACE as u16;
+        game.kernel.last_activity = CHECK_LOAD | IN_HYPERSPACE;
     }
     game.kernel.reset_element_capacity(1);
     game.kernel.reset_ship_capacity(0, 1);
     let ship = game
         .kernel
         .ships(0)
-        .build(SPECIES_ID_SIS_SHIP_ID)
+        .build(SpeciesId::SisShip as u32)
         .unwrap_or_else(|| panic!("flagship fixture ship capacity exhausted"));
     let ship = game.kernel.ships(0).ship_id(ship);
     // SAFETY: the serialized fixture owns all animation frame records and their drawable.
@@ -246,11 +253,11 @@ fn flagship_entry(loading: bool) {
     let post = ElementHook::Native(ship_postprocess);
     cx.element_mut(element).pre = Some(pre);
     cx.element_mut(element).post = Some(post);
-    cx.element_mut(element).flags = (APPEARING | PLAYER_SHIP) as u16;
+    cx.element_mut(element).flags = APPEARING | PLAYER_SHIP;
     cx.copy_current_to_next(element);
     assert_eq!(hyper_transition(&mut cx, element), !loading);
     if loading {
-        assert_eq!(cx.kernel.last_activity, IN_HYPERSPACE as u16);
+        assert_eq!(cx.kernel.last_activity, IN_HYPERSPACE);
         assert!(cx.kernel.hyperspace_ship_hooks.0.is_none());
         assert!(cx.kernel.hyperspace_ship_hooks.1.is_none());
     } else {
@@ -259,7 +266,7 @@ fn flagship_entry(loading: bool) {
             cx.frame_number(cx.element(element).next.image.frame.view()),
             31
         );
-        cx.element_mut(element).flags &= !(APPEARING as u16);
+        cx.element_mut(element).flags &= !APPEARING;
         for _ in 0..16 {
             cx.copy_next_to_current(element);
             assert!(hyper_transition(&mut cx, element));
@@ -273,7 +280,7 @@ fn flagship_entry(loading: bool) {
         cx.element(element).post.map(ElementHook::address),
         Some(post.address())
     );
-    assert_eq!(cx.element(element).flags & NONSOLID as u16, 0);
+    assert_eq!(cx.element(element).flags & NONSOLID, 0);
     save_sis_hyper_state(&mut cx);
     assert_eq!(cx.world.data.game.ship_facing, 1);
     cx.set_ship_element(ship, None);

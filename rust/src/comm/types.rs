@@ -252,12 +252,6 @@ impl Default for CommData {
     }
 }
 
-// SAFETY: CommData contains raw pointers. All C-side pointers are either
-// null-initialized or set by C code before being read; Rust never dereferences
-// them. The struct is Send because it is only accessed behind a Mutex/RwLock.
-unsafe impl Send for CommData {}
-unsafe impl Sync for CommData {}
-
 impl CommData {
     /// Create new empty CommData.
     pub fn new() -> Self {

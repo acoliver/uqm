@@ -193,7 +193,6 @@ pub mod engine {
     }
 }
 
-#[cfg(not(test))]
 pub use engine::NON_POSITIONAL;
 
 fn encode_object(object: Option<ElementId>) -> usize {

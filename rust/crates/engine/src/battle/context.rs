@@ -131,6 +131,19 @@ impl<'a> Cx<'a> {
     }
 }
 
+impl crate::Game {
+    /// Run `call` with a context over this game's owners and a fresh battle record.
+    pub fn with_context<R>(&mut self, call: impl FnOnce(&mut Cx<'_>) -> R) -> R {
+        let mut battle = Battle::new();
+        call(&mut Cx::new(
+            &mut battle,
+            &mut self.world,
+            &mut self.kernel,
+            crate::math::random,
+        ))
+    }
+}
+
 impl Cx<'_> {
     pub fn kernel(&mut self) -> *mut super::record::Kernel {
         &raw mut *self.kernel

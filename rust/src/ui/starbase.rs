@@ -159,7 +159,7 @@ fn do_time_passage(cx: &mut Cx<'_>) {
     let interval = (ONE_SECOND * 2) as SIZE;
     let deadline = draw::fade_screen(draw::ScreenFade::Black, interval);
     cx.kernel.input_runtime().sleep_until(cx, deadline);
-    crate::time::clock_abi::advance_days(cx, 14);
+    crate::navigation::events::advance_days(cx, 14);
 }
 
 fn cleanup_after_star_base(world: &mut World) {

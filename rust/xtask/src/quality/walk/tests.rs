@@ -315,24 +315,7 @@ fn macro_handlers_expand_every_registered_definition() {
             count: 0,
         };
         calls.visit_file(&source);
-        if *name == "assert_c_layout" {
-            let expanded = definition
-                .expand(quote::quote!(
-                    Mirror,
-                    Record {
-                        first: first,
-                        second: second
-                    }
-                ))
-                .unwrap();
-            let file: syn::File = syn::parse2(expanded).unwrap();
-            assert_eq!(file.items.len(), 1);
-            assert!(file.to_token_stream().to_string().contains("unsafe"));
-        }
-        assert!(
-            calls.count > 0 || *name == "assert_c_layout",
-            "{file}::{name}"
-        );
+        assert!(calls.count > 0, "{file}::{name}");
     }
 }
 
@@ -738,18 +721,22 @@ fn inherited_allow_transfers_deduplicate_shared_lines_and_include_coverage() {
 #[test]
 fn anonymous_macro_identities_and_baseline_rekey_are_stable() {
     use super::super::baseline::Baseline;
-    let macros = "macro_rules! assert_c_layout { ($name:ident) => { const _: () = { #[allow(clippy::identity_op)] fn check() { let _ = 1 + 0; } }; }; }";
-    let source =
-        "include!(\"c_bindings.rs\");\nassert_c_layout!(First);\nassert_c_layout!(Second);\n";
+    // A registered item macro, so the walker expands it with its own transcriber.
+    let macros = "macro_rules! accessor { ($name:ident) => { const _: () = { #[allow(clippy::identity_op)] fn check() { let _ = 1 + 0; } }; }; }";
+    let source = format!("{macros}\naccessor!(First);\naccessor!(Second);\n");
+    let lib = "mod mainloop { mod state_abi; }";
     let base = fixture(
-        &[("src/lib.rs", source), ("src/c_bindings.rs", macros)],
+        &[("src/lib.rs", lib), ("src/mainloop/state_abi.rs", &source)],
         None,
         false,
     );
     let shifted = fixture(
         &[
-            ("src/lib.rs", &format!("struct Named;\n\n{source}")),
-            ("src/c_bindings.rs", macros),
+            ("src/lib.rs", lib),
+            (
+                "src/mainloop/state_abi.rs",
+                &format!("struct Named;\n\n{source}"),
+            ),
         ],
         None,
         false,

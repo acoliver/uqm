@@ -1,8 +1,15 @@
 //! Hyperspace collision and transition callbacks.
-use super::abi::*;
 use super::{get, set};
 use crate::battle::context_access::navigation::NavigationOps;
+use crate::battle::element::{
+    APPEARING, CHANGING, COLLISION_FLAG as COLLISION, DEFY_PHYSICS, NONSOLID, PLAYER_SHIP,
+};
+use crate::comm::dispatch::RPG_PLAYER_NUM;
+use crate::engine::battle::ai_constants::{LEFT, RIGHT, SPECIAL, THRUST, WEAPON};
+use crate::engine::battle::{Cx, ElementHook, ElementId};
+use crate::engine::world::activity::activity_flags::{CHECK_LOAD, IN_BATTLE, START_ENCOUNTER};
 use crate::engine::StoryKey;
+use crate::graphics::native_abi::POINT;
 use std::ptr;
 
 use crate::engine::graphics::EMPTY_PRIMITIVE;
@@ -39,7 +46,7 @@ pub(super) fn cleanup(cx: &mut Cx<'_>) {
     }
 }
 pub(crate) fn unhyper(cx: &mut Cx<'_>, element: ElementId) {
-    cx.element_mut(element).flags |= CHANGING as u16;
+    cx.element_mut(element).flags |= CHANGING;
     let current = cx.element(element).current.image.frame;
     let mut index = cx.frame_number(current.view());
     if index == 0 {
@@ -50,13 +57,11 @@ pub(crate) fn unhyper(cx: &mut Cx<'_>, element: ElementId) {
         index += 1;
         if index == cx.frame_count(current.view()) {
             cleanup(cx);
-            cx.world
-                .set_activity(cx.world.activity() & !(IN_BATTLE as u16));
+            cx.world.set_activity(cx.world.activity() & !IN_BATTLE);
             match cx.element(element).turn {
                 0 => {
                     save_sis_facing(cx);
-                    cx.world
-                        .set_activity(cx.world.activity() | START_ENCOUNTER as u16);
+                    cx.world.set_activity(cx.world.activity() | START_ENCOUNTER);
                 }
                 kind @ (1 | 2) => {
                     let point = element_universe(cx, element);
@@ -77,7 +82,7 @@ pub(crate) fn init_transition(cx: &mut Cx<'_>, source: ElementId, ship: ElementI
     let to = cx.element(ship).next.location;
     let dx = ((i32::from(from.x) - i32::from(to.x)) << 5) as i16;
     let dy = ((i32::from(from.y) - i32::from(to.y)) << 5) as i16;
-    cx.element_mut(ship).flags |= NONSOLID as u16;
+    cx.element_mut(ship).flags |= NONSOLID;
     cx.element_mut(ship).pre = Some(ElementHook::Native(unhyper));
     cx.element_mut(ship).post = None;
     cx.element_mut(ship).turn = kind;
@@ -101,19 +106,19 @@ pub fn hyper_transition(
     cx: &mut crate::engine::battle::Cx<'_>,
     element: crate::engine::battle::ElementId,
 ) -> bool {
-    if cx.element(element).flags & APPEARING as u16 != 0 {
+    if cx.element(element).flags & APPEARING != 0 {
         let last = cx.kernel.last_activity;
-        if last & CHECK_LOAD as u16 != 0 {
-            cx.kernel.last_activity = last & !(CHECK_LOAD as u16);
+        if last & CHECK_LOAD != 0 {
+            cx.kernel.last_activity = last & !CHECK_LOAD;
             cx.copy_next_to_current(element);
             cx.setup_element(element);
-            cx.element_mut(element).flags |= DEFY_PHYSICS as u16;
+            cx.element_mut(element).flags |= DEFY_PHYSICS;
             return false;
         } else {
             cx.kernel.hyperspace_ship_hooks = (cx.element(element).pre, cx.element(element).post);
             cx.element_mut(element).pre = Some(ElementHook::Native(hyper_preprocess));
             cx.element_mut(element).post = None;
-            cx.element_mut(element).flags |= NONSOLID as u16;
+            cx.element_mut(element).flags |= NONSOLID;
             let current = cx.element(element).current.image.frame;
             let frame = cx.absolute_frame(current.view(), cx.frame_count(current.view()) - 1);
             cx.set_frame(element, true, frame);
@@ -131,16 +136,16 @@ pub fn hyper_transition(
             if index == cx.ship_state(cx.owner(element)).facing {
                 cx.element_mut(element).pre = cx.kernel.hyperspace_ship_hooks.0;
                 cx.element_mut(element).post = cx.kernel.hyperspace_ship_hooks.1;
-                cx.element_mut(element).flags &= !(NONSOLID as u16);
+                cx.element_mut(element).flags &= !NONSOLID;
             }
         }
-        cx.element_mut(element).flags |= CHANGING as u16;
+        cx.element_mut(element).flags |= CHANGING;
         let frame = cx.absolute_frame(current.view(), index);
         cx.set_frame(element, true, frame);
-        if cx.element(element).flags & NONSOLID as u16 == 0 {
+        if cx.element(element).flags & NONSOLID == 0 {
             cx.copy_next_to_current(element);
             cx.setup_element(element);
-            cx.element_mut(element).flags |= DEFY_PHYSICS as u16;
+            cx.element_mut(element).flags |= DEFY_PHYSICS;
         }
     }
     true
@@ -152,30 +157,30 @@ pub(crate) fn star_collision(
     ship: crate::engine::battle::ElementId,
     _p1: &mut POINT,
 ) {
-    if cx.element(ship).flags & PLAYER_SHIP as u16 == 0 || cx.portal_counter() != 0 {
+    if cx.element(ship).flags & PLAYER_SHIP == 0 || cx.portal_counter() != 0 {
         return;
     }
     let contact = cx.star_contact(source);
     let parent = cx.owner(ship);
     let (dx, dy) = cx.element(ship).velocity.get_current_components();
     if contact.current
-        || cx.element(ship).flags & APPEARING as u16 != 0
+        || cx.element(ship).flags & APPEARING != 0
         || (dx == 0
             && dy == 0
             && cx.ship_state(parent).status & ((LEFT | RIGHT | THRUST | WEAPON | SPECIAL) as u16)
                 == 0)
     {
         cx.select_star(Some(contact));
-        cx.element_mut(source).flags |= (DEFY_PHYSICS | COLLISION) as u16;
+        cx.element_mut(source).flags |= DEFY_PHYSICS | COLLISION;
     } else {
         let autopilot = cx.autopilot();
-        if cx.world.activity() & IN_BATTLE as u16 != 0
+        if cx.world.activity() & IN_BATTLE != 0
             && (autopilot.x == -1
                 || autopilot.y == -1
                 || (autopilot.x == contact.position.x && autopilot.y == contact.position.y))
         {
             cx.select_star(Some(contact));
-            cx.element_mut(source).flags |= COLLISION as u16;
+            cx.element_mut(source).flags |= COLLISION;
             cx.init_hyper_transition(source, ship, 1);
         }
     }
@@ -184,9 +189,7 @@ pub(crate) fn star_death(
     cx: &mut crate::engine::battle::Cx<'_>,
     element: crate::engine::battle::ElementId,
 ) {
-    if cx.element(element).flags & DEFY_PHYSICS as u16 == 0
-        && cx.world.activity() & IN_BATTLE as u16 != 0
-    {
+    if cx.element(element).flags & DEFY_PHYSICS == 0 && cx.world.activity() & IN_BATTLE != 0 {
         cx.select_star(None);
     }
 }
@@ -194,7 +197,7 @@ pub(crate) fn portal_death(
     cx: &mut crate::engine::battle::Cx<'_>,
     element: crate::engine::battle::ElementId,
 ) {
-    if cx.element(element).flags & DEFY_PHYSICS as u16 == 0
+    if cx.element(element).flags & DEFY_PHYSICS == 0
         || get(cx.world, StoryKey::ARILOU_SPACE_COUNTER) == 0
     {
         set(
@@ -215,18 +218,18 @@ pub(crate) fn portal_collision(
     ship: crate::engine::battle::ElementId,
     _p1: &mut POINT,
 ) {
-    if cx.element(ship).flags & PLAYER_SHIP as u16 == 0 {
+    if cx.element(ship).flags & PLAYER_SHIP == 0 {
         return;
     }
     let side = get(cx.world, StoryKey::ARILOU_SPACE_SIDE);
     if side == 0 || side == 3 {
-        if cx.element(ship).flags & DEFY_PHYSICS as u16 != 0 {
+        if cx.element(ship).flags & DEFY_PHYSICS != 0 {
             set(cx.world, StoryKey::ARILOU_SPACE_SIDE, side ^ 1);
         } else {
             cx.init_hyper_transition(source, ship, 2);
         }
     }
-    cx.element_mut(source).flags |= (DEFY_PHYSICS | COLLISION) as u16;
+    cx.element_mut(source).flags |= DEFY_PHYSICS | COLLISION;
 }
 pub(super) fn sis_element(cx: &Cx<'_>) -> Option<ElementId> {
     let ship = cx.first_ship(RPG_PLAYER_NUM as usize)?;
@@ -241,8 +244,6 @@ fn save_sis_facing(cx: &mut Cx<'_>) {
 pub fn save_sis_hyper_state(cx: &mut Cx<'_>) {
     save_sis_facing(cx);
 }
-
-use crate::engine::battle::{Cx, ElementId};
 
 #[cfg(test)]
 mod tests {
@@ -260,7 +261,7 @@ mod tests {
         for side in 0..4 {
             cx.world.set_story_state(StoryKey::ARILOU_SPACE_SIDE, side);
             cx.world.set_story_state(StoryKey::ARILOU_SPACE_COUNTER, 1);
-            cx.element_mut(element).flags = DEFY_PHYSICS as u16;
+            cx.element_mut(element).flags = DEFY_PHYSICS;
             portal_death(&mut cx, element);
             assert_eq!(cx.world.story_state(StoryKey::ARILOU_SPACE_SIDE), side);
             cx.world.set_story_state(StoryKey::ARILOU_SPACE_COUNTER, 0);

@@ -15,7 +15,6 @@ fn ship_detachment_is_an_explicit_fixture_command() {
 }
 
 use crate::engine::battle::{record::*, views::*, ElementId, Parent};
-#[cfg(not(test))]
 use crate::engine::battle::{Cx, ShipId};
 #[derive(Clone)]
 pub(crate) struct Element {
@@ -49,8 +48,6 @@ impl Element {
         self.flags &= !(crate::ships::native::abi::APPEARING as u16);
     }
 }
-#[cfg(not(test))]
-pub(crate) type ZoomSample = ((usize, u16), (usize, u16), Option<(usize, usize)>);
 #[derive(Clone)]
 pub(crate) struct ShipFrames {
     pub ship: Frames,
@@ -81,9 +78,7 @@ impl Ship {
     }
 }
 
-#[cfg(not(test))]
 pub(crate) struct Descriptor(Option<crate::engine::battle::RaceDesc>);
-#[cfg(not(test))]
 impl Descriptor {
     pub(crate) fn free(self, world: &mut crate::engine::World) {
         if let Some(descriptor) = self.0 {
@@ -139,7 +134,6 @@ impl Ship {
     }
 }
 
-#[cfg(not(test))]
 pub(crate) trait FixtureOps {
     fn fixture_element(&self, id: ElementId) -> Element;
     fn fixture_ship(&self, id: ShipId) -> Ship;
@@ -154,16 +148,8 @@ pub(crate) trait FixtureOps {
         element: ElementId,
         objects: [crate::engine::battle::Concern; 4],
     );
-    fn zoom_sample(
-        &self,
-        frames: Frames,
-        element: ElementId,
-        view: usize,
-        index: u16,
-    ) -> ZoomSample;
 }
 
-#[cfg(not(test))]
 impl FixtureOps for Cx<'_> {
     fn fixture_element(&self, id: ElementId) -> Element {
         Element {
@@ -266,33 +252,5 @@ impl FixtureOps for Cx<'_> {
             self.race_intelligence(ship, &mut concerns),
             "fixture intelligence callback"
         );
-    }
-    fn zoom_sample(
-        &self,
-        frames: Frames,
-        element: ElementId,
-        view: usize,
-        index: u16,
-    ) -> ZoomSample {
-        assert!(view < 3, "fixture zoom view");
-        // SAFETY: the fixture retains the descriptor's three views and all selected drawable images.
-        unsafe {
-            let frame = &*self.element(element).current.image.frame.raw();
-            let expected = &**frames.raw().add(view);
-            let mipmap = (view == 1).then(|| {
-                let adjacent = &*crate::graphics::pixmap_abi::SetAbsFrameIndex(
-                    (*frames.raw().add(view + 1)).cast(),
-                    index,
-                );
-                let selected = &*frame.image;
-                let adjacent = &*adjacent.image;
-                (selected.MipmapImg as usize, adjacent.NormalImg as usize)
-            });
-            (
-                (frame.parent as usize, frame.Index),
-                (expected.parent as usize, index),
-                mipmap,
-            )
-        }
     }
 }

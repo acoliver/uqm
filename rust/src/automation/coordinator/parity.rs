@@ -90,7 +90,7 @@ impl AutomationObserver {
             .try_set(TerminalClass::TraceFailure);
     }
 
-    pub fn parity_checkpoint(&self, boundary: &str) {
+    pub fn parity_checkpoint(&self, cx: &crate::engine::battle::Cx<'_>, boundary: &str) {
         let coord = self;
         if coord.runtime.mirror.is_terminal() {
             return;
@@ -98,7 +98,7 @@ impl AutomationObserver {
         let Some(journal) = &coord.parity else {
             return;
         };
-        let result = super::super::parity_state::checkpoint(&mut journal.lock(), boundary);
+        let result = super::super::parity_state::checkpoint(cx, &mut journal.lock(), boundary);
         if let Err(error) = result {
             coord.parity_failure(boundary, error);
         }

@@ -6,6 +6,9 @@ pub const QUASI_SPACE_X: u32 = 5000;
 pub const QUASI_SPACE_Y: u32 = 5000;
 pub const ARILOU_HOME_X: u32 = 6134;
 pub const ARILOU_HOME_Y: u32 = 5900;
+/// Where Sol sits in the universe map (`SOL_X`, `SOL_Y` in hyper.h).
+pub const SOL_X: i16 = 1752;
+pub const SOL_Y: i16 = 1450;
 
 pub(super) fn log_x(universe: i16, space_width: i32) -> i32 {
     (universe as i32 * ((space_width << 5) >> 4) * 195 + 3125) / 6250

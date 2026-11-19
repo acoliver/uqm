@@ -15,8 +15,8 @@ impl PoolShip {
         &mut self,
         resources: uqm_rust::engine::battle::link_queue::ShipPickerResources,
     ) {
-        uqm_rust::engine::Kernel::current().write(|kernel| {
-            kernel
+        crate::battle_context::with(|cx| {
+            cx.kernel
                 .ships(self.side)
                 .set_picker_resources(self.link, resources);
         });
@@ -27,8 +27,8 @@ impl PoolShip {
         let side = player as usize;
         // SAFETY: the constructor's contract retains the serialized published fixture.
         let (pointer, link, ship_id) = {
-            uqm_rust::engine::Kernel::current().write(|kernel| {
-                let mut ships = kernel.ships(side);
+            crate::battle_context::with(|cx| {
+                let mut ships = cx.kernel.ships(side);
                 let link = ships
                     .alloc()
                     .unwrap_or_else(|| panic!("fixture ship pool exhausted"));
@@ -61,8 +61,8 @@ impl Drop for PoolShip {
     fn drop(&mut self) {
         // SAFETY: the fixture contract retains the published pool until this owner drops.
         {
-            uqm_rust::engine::Kernel::current().write(|kernel| {
-                let mut ships = kernel.ships(self.side);
+            crate::battle_context::with(|cx| {
+                let mut ships = cx.kernel.ships(self.side);
                 if ships.contains(self.link) {
                     if ships.linked(self.link) {
                         ships.remove(self.link);

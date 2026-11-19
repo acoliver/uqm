@@ -1,9 +1,11 @@
 //! Hyperspace radar, nearby star and portal elements.
-use super::abi::*;
+use crate::engine::battle::{CollisionHook, ElementHook};
 use crate::engine::{
     battle::{hyperspace as resources, Cx},
     StoryKey,
 };
+use crate::graphics::native_abi::{EXTENT, POINT, RECT};
+use crate::planets::generate::consts::{NUM_STAR_COLORS, SUPER_GIANT_STAR};
 
 use super::hyper_encounters::{allocate, ambient, process_all, XOFFS, YOFFS};
 use super::hyper_transition::{portal_collision, portal_death, star_collision, star_death};
@@ -80,7 +82,7 @@ pub fn seed_universe(
             let point = catalog[star.0].star_pt;
             let mut kind = (catalog[star.0].star_type >> 3) & 3;
             if side >= 2 && point.x == ARILOU_HOME_X as i16 && point.y == ARILOU_HOME_Y as i16 {
-                kind = SUPER_GIANT_STAR as u8;
+                kind = SUPER_GIANT_STAR;
             }
             draw(
                 &context,
@@ -158,7 +160,7 @@ pub fn seed_universe(
                             [1 + (get(cx.world, StoryKey::ARILOU_SPACE_SIDE) >> 1) as usize],
                     )
                     .view(),
-                    (((kind >> 3) & 3) as u16 * NUM_STAR_COLORS as u16) + (kind >> 5) as u16,
+                    (((kind >> 3) & 3) as u16 * u16::from(NUM_STAR_COLORS)) + (kind >> 5) as u16,
                 ),
             );
             cx.element_mut(element).pre = None;

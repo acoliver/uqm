@@ -9,8 +9,9 @@ mod battle;
 use battle::{Battle, Ship};
 use std::{ffi::CStr, mem, ptr};
 use uqm_rust::engine::battle::{CollisionFn, ElementFn};
+use uqm_rust::graphics::pixmap_abi::GetFrameIndex;
 use uqm_rust::ships::native::{
-    abi::*, angle_to_facing, cosine, facing_to_angle, frame_index, normalize_facing, sine,
+    abi::*, angle_to_facing, cosine, facing_to_angle, normalize_facing, sine,
 };
 
 unsafe fn orz(battle: &Battle, player: SIZE) -> Ship<'_> {
@@ -84,7 +85,9 @@ impl OrzFixture for Ship<'_> {
 }
 
 unsafe fn prim(e: *mut ElementRecord) -> *mut uqm_rust::engine::battle::DisplayPrimitive {
-    uqm_rust::app::bridge::enter(|cx| std::ptr::from_mut(cx.display_primitive((*e).PrimIndex)))
+    // SAFETY: the caller passes a live fixture element.
+    let index = unsafe { (*e).PrimIndex };
+    crate::battle_context::with(|cx| std::ptr::from_mut(cx.display_primitive(index)))
 }
 
 unsafe fn queued() -> Vec<*mut std::ffi::c_void> {
@@ -144,7 +147,7 @@ unsafe fn velocity_toward(speed: SIZE, facing: COUNT) -> [i32; 9] {
 }
 
 unsafe fn collide(marine: *mut ElementRecord, target: *mut ElementRecord) {
-    uqm_rust::app::bridge::enter(|cx| {
+    crate::battle_context::with(|cx| {
         let a = cx
             .elements()
             .id(std::ptr::NonNull::new(marine.cast()))
@@ -164,7 +167,7 @@ unsafe fn collide(marine: *mut ElementRecord, target: *mut ElementRecord) {
 }
 
 unsafe fn intruder(e: *mut ElementRecord) {
-    uqm_rust::app::bridge::enter(|cx| {
+    crate::battle_context::with(|cx| {
         let id = cx.elements().id(std::ptr::NonNull::new(e.cast())).unwrap();
         intruder_preprocess(cx, id);
     });
@@ -462,7 +465,7 @@ fn turret_replacement_decrements_wait_once_rotates_and_updates_firing_quadrant()
                     (*turret).current.image.frame.raw()
                 );
                 assert_eq!(
-                    frame_index((*turret).current.image.frame.raw()),
+                    GetFrameIndex((*turret).current.image.frame.raw().cast()),
                     normalize_facing(15 + i32::from(expected_offset))
                 );
                 assert_eq!(
@@ -1193,7 +1196,7 @@ fn marine_gravity_avoidance_uses_mass_threshold_distance_and_one_draw_for_head_o
             enemy.at(4500, 4000);
             let marine = ship.launch();
             (*marine).current.location = POINT { x: 4000, y: 4000 };
-            let planet_h = uqm_rust::app::bridge::enter(|cx| {
+            let planet_h = crate::battle_context::with(|cx| {
                 cx.alloc_element()
                     .map_or(std::ptr::null_mut(), |id| cx.elements().raw(id))
             });
@@ -1481,7 +1484,7 @@ fn failed_muzzle_flash_allocation_does_not_recoil_and_failed_ion_allocation_stil
                 let mut enemy = orz(&_battle, 1);
                 enemy.at(4500, 4000);
                 let marine = ship.launch();
-                let filler = uqm_rust::app::bridge::enter(|cx| {
+                let filler = crate::battle_context::with(|cx| {
                     cx.alloc_element()
                         .map_or(std::ptr::null_mut(), |id| cx.elements().raw(id))
                 });

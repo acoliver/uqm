@@ -1,6 +1,5 @@
 //! Ship death, replacement, warp transitions, and battle-end synchronization.
 
-#[cfg(not(test))]
 use crate::battle::context_access::ContextOps;
 use crate::ships::native::abi;
 
@@ -125,7 +124,6 @@ pub fn flee_cycle(index: u8, thrust: u8) -> (u8, u8, u8) {
     (next, thrust, wait)
 }
 
-#[cfg(not(test))]
 pub(crate) mod engine {
     use super::*;
     use crate::battle::battle_native::engine::battle_song;
@@ -588,7 +586,6 @@ pub(crate) mod engine {
     }
 }
 
-#[cfg(not(test))]
 pub use engine::*;
 
 #[cfg(test)]

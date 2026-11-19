@@ -1,6 +1,5 @@
 //! Umgah callbacks and descriptor translated from `umgah.c`.
 
-#[cfg(not(test))]
 pub(crate) mod engine {
     use crate::ships::native::{
         abi::*, angle_to_facing, cosine, facing_to_angle, normalize_angle, sine,

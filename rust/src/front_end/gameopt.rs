@@ -14,16 +14,11 @@ mod picker;
 #[cfg(test)]
 use picker::picker_slot;
 use picker::MAX_SAVED_GAMES;
-#[cfg(not(test))]
 use picker::SAVES_PER_PAGE;
 pub use picker::{picker_action, PickerAction};
 
-#[cfg(not(test))]
-pub use crate::savegame::live::load::load_game_descriptions;
-#[cfg(not(test))]
 pub use runtime::game_options;
 
-#[cfg(not(test))]
 pub(crate) mod runtime {
     use super::layout::{BLACK_COLOR, CAPTAIN_NAME_RECT, SHIP_NAME_RECT};
     use super::naming::{draw_name_string, draw_save_name_string};

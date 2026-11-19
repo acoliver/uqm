@@ -34,7 +34,7 @@ pub(crate) mod live {
     use crate::engine::world::queues::IpGroup as IP_GROUP;
     use crate::engine::world::queues::{MAX_REVOLUTIONS, ORBIT_RADIUS, STATION_RADIUS};
     use crate::math::arctan as ARCTAN;
-    use crate::navigation::hyperspace::{cosine, sine};
+    use crate::math::{cosine, sine};
     use crate::navigation::{get, set};
     use crate::planets::solar_coords::SolarCoordinates;
 
@@ -200,8 +200,8 @@ pub(crate) mod live {
                     };
                     let mut angle = (cx.ip_group_mut(element).orbit_pos as u16 + 1) << 2;
                     destination = POINT {
-                        x: origin.x.wrapping_add(cosine(angle, distance)),
-                        y: origin.y.wrapping_add(sine(angle, distance)),
+                        x: origin.x.wrapping_add(cosine(i32::from(angle), distance)),
+                        y: origin.y.wrapping_add(sine(i32::from(angle), distance)),
                     };
                     if cx.ip_group_mut(element).loc.x == destination.x
                         && cx.ip_group_mut(element).loc.y == destination.y
@@ -209,8 +209,8 @@ pub(crate) mod live {
                         cx.ip_group_mut(element).orbit_pos = (((angle + 2) >> 2) & 15) as u8;
                         angle += 4;
                         destination = POINT {
-                            x: origin.x.wrapping_add(cosine(angle, distance)),
-                            y: origin.y.wrapping_add(sine(angle, distance)),
+                            x: origin.x.wrapping_add(cosine(i32::from(angle), distance)),
+                            y: origin.y.wrapping_add(sine(i32::from(angle), distance)),
                         };
                         cx.element_mut(element).thrust = u8::MAX;
                         if cx.ip_group_mut(element).group_counter != 0 {
@@ -259,8 +259,8 @@ pub(crate) mod live {
                     cx.element_mut(element).thrust = 5;
                     IP_SPEED[cx.ip_group_mut(element).race_id as usize]
                 };
-                vx = cosine(angle, speed as i32);
-                vy = sine(angle, speed as i32);
+                vx = cosine(i32::from(angle), speed as i32);
+                vy = sine(i32::from(angle), speed as i32);
                 cx.element_mut(element)
                     .velocity
                     .set_components(i32::from(vx), i32::from(vy));
@@ -324,8 +324,8 @@ pub(crate) mod live {
                     let width = cx.screen_dimensions().0 - 64 - 14;
                     let height = cx.screen_dimensions().1 - 13;
                     let entry = POINT {
-                        x: ((width >> 1) - cosine(angle, width * 9 / 16) as i32) as i16,
-                        y: ((height >> 1) - sine(angle, height * 9 / 16) as i32) as i16,
+                        x: ((width >> 1) - cosine(i32::from(angle), width * 9 / 16) as i32) as i16,
+                        y: ((height >> 1) - sine(i32::from(angle), height * 9 / 16) as i32) as i16,
                     };
                     cx.ip_group_mut(element).loc =
                         SolarCoordinates::new(cx.screen_dimensions()).to_location(entry, MAX_ZOOM);

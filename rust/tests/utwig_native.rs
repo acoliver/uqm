@@ -8,7 +8,8 @@ mod special_hooks;
 use battle::*;
 use std::mem;
 use uqm_rust::collections::observation;
-use uqm_rust::ships::native::{abi::*, cosine, facing_to_angle, frame_index, sine};
+use uqm_rust::graphics::pixmap_abi::GetFrameIndex;
+use uqm_rust::ships::native::{abi::*, cosine, facing_to_angle, sine};
 
 #[test]
 fn descriptor_and_six_lance_order_and_coordinates() {
@@ -72,7 +73,7 @@ fn descriptor_and_six_lance_order_and_coordinates() {
                             )
                         );
                         assert_eq!(((*e).life, (*e).hits, (*e).mass), (10, 1, 1));
-                        assert_eq!(frame_index((*e).current.image.frame.raw()), facing);
+                        assert_eq!(GetFrameIndex((*e).current.image.frame.raw().cast()), facing);
                         assert_eq!(velocity(&(*e).velocity), toward(30 << ONE_SHIFT, facing));
                         battle_context::dispose(handles[i * 2 + side]);
                     }

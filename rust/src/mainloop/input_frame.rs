@@ -26,12 +26,9 @@ pub fn complete_input_frame(callback: impl FnOnce() -> bool) -> InputFrameResult
     }
 }
 
-#[cfg(not(test))]
 use crate::graphics::dcqueue_abi::TFB_FlushGraphicsEx;
-#[cfg(not(test))]
 use crate::graphics::sdl::lifecycle_abi::TFB_SwapBuffers;
 
-#[cfg(not(test))]
 unsafe fn present_complete_transaction() {
     // Drain even when batching already consumed part of the transaction, then
     // publish exactly one frame. TFB_FlushGraphics alone does not swap when the
@@ -46,12 +43,9 @@ unsafe fn present_complete_transaction() {
 /// (glyph data of a font, for example). Owners call this before freeing such a
 /// resource. A build without the C archive has no draw queue to drain.
 pub fn drain_committed_draws() {
-    #[cfg(not(test))]
     // SAFETY: Called on the game/main thread, where the legacy renderer
     // consumes the draw queue.
-    unsafe {
-        TFB_FlushGraphicsEx(1)
-    };
+    unsafe { TFB_FlushGraphicsEx(1) };
 }
 
 /// Present drawing committed before a synchronous `DoInput` loop begins.
@@ -59,12 +53,9 @@ pub fn drain_committed_draws() {
 /// Nested menus often draw their initial state immediately before calling
 /// `DoInput`; the outer callback cannot return while that nested loop runs.
 pub fn rust_begin_input_loop() {
-    #[cfg(not(test))]
     // SAFETY: Called on the game/main thread after the owner has completed the
     // draw transaction that establishes this input loop's initial state.
-    unsafe {
-        present_complete_transaction()
-    };
+    unsafe { present_complete_transaction() };
 }
 
 /// Complete the typed input callback and notify its supplied observer.
@@ -72,22 +63,19 @@ pub fn rust_begin_input_loop() {
 /// Returns the callback's original continue value after presenting its complete
 /// draw transaction in Rust-owned-main builds.
 pub fn rust_complete_input_frame(
+    cx: &crate::engine::battle::Cx<'_>,
     keep_running: i32,
     io: &mut crate::engine::observe::Io<'_>,
 ) -> i32 {
     let result = complete_input_frame(|| keep_running != 0);
 
-    #[cfg(not(test))]
     if result.present {
         // SAFETY: Called on the game/main thread at the same boundary where
         // legacy rendering would make committed input-frame draws visible.
         unsafe { present_complete_transaction() };
     }
 
-    io.observer
-        .checkpoint(&crate::engine::observe::CheckpointView::Simulation(
-            "input-loop",
-        ));
+    io.observer.simulation(cx, "input-loop");
     i32::from(result.keep_running)
 }
 

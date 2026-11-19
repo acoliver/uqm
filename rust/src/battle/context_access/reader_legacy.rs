@@ -1,9 +1,6 @@
-#[cfg(not(test))]
 use crate::engine::battle::ShipId;
-#[cfg(not(test))]
 use crate::ships::native::abi::{COUNT, RPG_PLAYER_NUM};
 
-#[cfg(not(test))]
 /// Selects an identity from the fleets borrowed by this context.
 pub fn get_encounter_star_ship(
     cx: &mut crate::engine::battle::Cx<'_>,
@@ -18,7 +15,6 @@ pub fn get_encounter_star_ship(
 }
 
 /// Queue access validates last and selected identities against the live player fleets.
-#[cfg(not(test))]
 pub fn get_encounter_star_ship_with_picker(
     cx: &mut crate::engine::battle::Cx<'_>,
     input: &crate::engine::input::InputSession,
@@ -31,7 +27,6 @@ pub fn get_encounter_star_ship_with_picker(
     crate::pickship::ffi::encounter_ship(cx, input, last, player, activity, pick)
 }
 
-#[cfg(not(test))]
 /// The owner's fragment queue matches battle ship link order in the supplied context.
 pub(crate) fn update_ship_frag_crew(cx: &mut crate::engine::battle::Cx<'_>, owner: ShipId) {
     let player = cx.ship_state(owner).player;
@@ -53,7 +48,6 @@ pub(crate) fn update_ship_frag_crew(cx: &mut crate::engine::battle::Cx<'_>, owne
     }
 }
 
-#[cfg(not(test))]
 fn write_fragment_crew<const N: usize>(
     mut queue: crate::engine::battle::link_queue::LinkQueue<
         '_,

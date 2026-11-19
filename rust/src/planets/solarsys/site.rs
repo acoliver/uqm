@@ -88,18 +88,17 @@ impl<'a, 'game, 'observer> Site<'a, 'game, 'observer> {
     fn communicate(&mut self, conversation: u32) {
         let mut game = self.game.borrow_mut();
         let mut io = self.io.borrow_mut();
-        // SAFETY: this host retains both supplied owners for the synchronous encounter.
-        unsafe { crate::comm::dispatch::init_communication(&mut game, &mut io, conversation) };
+        crate::comm::dispatch::init_communication(&mut game, &mut io, conversation);
     }
 
     fn load_report(&self, system: &mut SolarSys<'_>, strings: &CStr, report: u16) {
         use crate::engine::{strings::owned_table::LoadedTextTable, world::generation::ReportSlot};
         self.report_resources.load();
-        self.game.borrow_mut().with_legacy(|| {
+        {
             system.report = ReportSlot::new(
                 LoadedTextTable::load(strings).and_then(|table| table.entry(report)),
             );
-        });
+        };
     }
 
     fn load_scene(&self, system: &mut SolarSys<'_>, graphics: &CStr, strings: &CStr, report: u16) {
@@ -108,12 +107,12 @@ impl<'a, 'game, 'observer> Site<'a, 'game, 'observer> {
             world::generation::ReportSlot,
         };
         self.report_resources.load();
-        self.game.borrow_mut().with_legacy(|| {
+        {
             system.frames[1] = LoadedDrawable::load(graphics);
             system.report = ReportSlot::new(
                 LoadedTextTable::load(strings).and_then(|table| table.entry(report)),
             );
-        });
+        };
     }
 }
 

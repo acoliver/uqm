@@ -5,7 +5,6 @@ mod render;
 use control::{CreditsControl, CreditsKeys};
 use uqm_engine::time::counter_abi::ONE_SECOND;
 
-#[cfg(not(test))]
 pub(crate) mod runtime {
     use super::{
         render::{HookRestore, Resources, Session},
@@ -58,20 +57,17 @@ pub(crate) mod runtime {
             if cx.world.activity() & CHECK_ABORT != 0 {
                 break;
             }
-            // SAFETY: the supplied campaign and input retain the encounter lifecycle; Part 13 retires this boundary.
-            unsafe {
-                crate::comm::dispatch::init_communication_with_options(
-                    cx,
-                    io,
-                    conversation,
-                    CommOptions {
-                        oscilloscope: false,
-                        slider: false,
-                        window: Some(window.clone()),
-                        intro: (1, 0),
-                    },
-                )
-            };
+            crate::comm::dispatch::init_communication_with_options(
+                cx,
+                io,
+                conversation,
+                CommOptions {
+                    oscilloscope: false,
+                    slider: false,
+                    window: Some(window.clone()),
+                    intro: (1, 0),
+                },
+            );
         }
         configuration.update_preferences(|options| options.subtitles = old_subtitles);
     }
@@ -155,7 +151,6 @@ pub(crate) mod runtime {
     }
 }
 
-#[cfg(not(test))]
 pub use runtime::credits;
 #[cfg(test)]
 mod owned_tests;

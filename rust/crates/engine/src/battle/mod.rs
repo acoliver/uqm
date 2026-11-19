@@ -27,9 +27,7 @@ pub use access::views;
 
 pub use race::{Callbacks, Selection};
 
-#[cfg(not(test))]
 pub use access::androsynth_template;
-#[cfg(not(test))]
 pub use access::vux_template;
 
 pub mod kernel;

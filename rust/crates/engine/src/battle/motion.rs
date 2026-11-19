@@ -5,17 +5,11 @@ use crate::math::velocity::VELOCITY_SHIFT;
 const MAX_SPEED: u16 = SHIP_AT_MAX_SPEED as u16;
 const BEYOND_SPEED: u16 = SHIP_BEYOND_MAX_SPEED as u16;
 const GRAVITY: u16 = SHIP_IN_GRAVITY_WELL as u16;
-#[cfg(not(test))]
 use super::flags::{COLLISION, FINITE_LIFE};
-#[cfg(not(test))]
 use super::{Cx, ElementId};
-#[cfg(not(test))]
 use crate::graphics::native_abi::POINT;
-#[cfg(not(test))]
 const GRAVITY_MASS_NATIVE: u16 = 100;
-#[cfg(not(test))]
 const TARGET_DAMAGED_FOR_1_PT_NATIVE: i16 = 2;
-#[cfg(not(test))]
 const TARGET_DAMAGED_FOR_6_PLUS_PT_NATIVE: i16 = 5;
 fn velocity_squared(dx: i16, dy: i16) -> u32 {
     (i64::from(dx) * i64::from(dx) + i64::from(dy) * i64::from(dy)) as u32
@@ -123,7 +117,6 @@ pub fn thrust(
     }
     0
 }
-#[cfg(not(test))]
 pub fn inertial_thrust(cx: &mut Cx<'_>, e: ElementId) -> u16 {
     let ship = cx.owner(e);
     let state = cx.ship_state(ship);
@@ -139,7 +132,6 @@ pub fn inertial_thrust(cx: &mut Cx<'_>, e: ElementId) -> u16 {
     cx.element_mut(e).velocity = velocity;
     result
 }
-#[cfg(not(test))]
 pub fn collision(cx: &mut Cx<'_>, e0: ElementId, _p0: &mut POINT, e1: ElementId, _p1: &mut POINT) {
     if cx.element(e1).flags & FINITE_LIFE as u16 == 0 {
         cx.element_mut(e0).flags |= COLLISION as u16;

@@ -1,6 +1,5 @@
 //! Super Melee setup lifecycle and menu dispatch.
 pub(super) mod rules;
-#[cfg(not(test))]
 pub(crate) mod live {
     use crate::battle::{COMPUTER_CONTROL, HUMAN_CONTROL, NETWORK_CONTROL, PSYTRON_CONTROL};
     use crate::engine::Kernel as KernelOwner;
@@ -9,9 +8,9 @@ pub(crate) mod live {
     use crate::graphics::{context_abi::ContextLease, drawable_abi::LoadedDrawable};
     use std::ptr::NonNull;
 
-    use crate::navigation::abi::{init_space, uninit_space};
     use crate::sound::heart_ffi::fade_music as FadeMusic;
 
+    use crate::engine::time::counter_abi::GetTimeCounter;
     use crate::ships::native::abi::*;
 
     pub(crate) mod admission;
@@ -284,7 +283,7 @@ pub(crate) mod live {
                 domain: 1,
                 fallback,
             },
-            &None,
+            cx,
         );
         state.current_ship = 255;
         state.cur_index = u16::MAX;
@@ -296,11 +295,11 @@ pub(crate) mod live {
         state.fleet_picker =
             Some(crate::supermelee::native::battle_picker::live::FleetPicker::new(&offscreen));
         load_menu_graphics(&mut state, offscreen);
-        init_space(cx.kernel, cx.world.activity());
+        cx.kernel.init_space(cx.world.activity());
         load_team_list(&mut state);
         load_setup(&mut state, cx);
         state.side = 0;
-        SetMenuSounds(input, 15, 16);
+        input.set_menu_sounds(15, 16);
         {
             let mut frame = admission::SessionFrame::new(
                 &mut state,
@@ -316,24 +315,24 @@ pub(crate) mod live {
             cx.run_input_frame(io, true, &mut frame);
         }
         // SAFETY: the input session has stopped and no callback retains these resources.
-        cx.with_legacy(|| {
+        {
             crate::ui::settings::stop_loaded_music(state.h_music.as_ref());
             WaitForSoundEnd(u16::MAX);
-        });
+        };
         state.save_config(cx.kernel.player_control);
         let session = state.netplay.clone();
         session.close_all_connections(&mut |event| {
             changes::apply_protocol_event(&mut state, cx, io, event)
         });
         drop(state.h_music.take());
-        uninit_space(cx.kernel);
+        cx.kernel.uninit_space();
         cx.kernel.game_sounds = None;
-        cx.with_legacy(|| {
+        {
             drop(state.fleet_picker.take());
             drop(state.menu_graphic.take());
             drop(state.build_picker.take());
             state.netplay.setup_input_delay(0);
-        });
+        };
         runtime.flush();
     }
 }

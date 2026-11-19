@@ -186,7 +186,7 @@ impl super::session::SessionCore {
         activity: &crate::engine::world::activity::ActivityControl,
         driver: &mut dyn ProtocolDriver,
     ) -> u8 {
-        use crate::mainloop::activity_flags::CHECK_ABORT;
+        use crate::engine::world::activity::activity_flags::CHECK_ABORT;
         loop {
             if let Some(input) = self.pop_input(player) {
                 return input;

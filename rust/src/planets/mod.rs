@@ -5,7 +5,6 @@
 
 pub mod solar_system;
 
-#[cfg(not(test))]
 pub mod c_api;
 pub(crate) mod device_effects;
 pub mod generate;
@@ -15,8 +14,6 @@ pub mod tables;
 pub mod topography;
 pub mod universe_units;
 
-#[cfg(not(test))]
-#[cfg(not(test))]
 pub mod devices;
 
 pub mod cargo;
@@ -31,7 +28,6 @@ pub mod scan;
 pub mod sphere;
 
 pub(crate) mod solar_coords;
-#[cfg(not(test))]
 pub mod solarsys;
 
 pub mod pstarmap;

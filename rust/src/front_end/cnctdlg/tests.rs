@@ -358,10 +358,7 @@ impl crate::engine::input::InputRuntime for Driver {
     fn input(&self) -> &InputSession {
         &self.input
     }
-    fn observer(
-        &self,
-    ) -> Box<dyn crate::engine::observe::Observer<Option<crate::engine::observe::CampaignView>>>
-    {
+    fn observer(&self) -> Box<dyn crate::engine::observe::Observer> {
         Box::new(crate::engine::observe::Unobserved)
     }
     fn yield_poll(&self, _: &mut Cx<'_>) {

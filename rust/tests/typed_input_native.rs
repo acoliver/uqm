@@ -13,8 +13,13 @@ struct Recording {
     stop: bool,
 }
 
-impl Observer<Option<CampaignView>> for Recording {
-    fn input_admitted(&mut self, view: &InputView, campaign: &Option<CampaignView>) -> Injected {
+impl Observer for Recording {
+    fn input_admitted(
+        &mut self,
+        view: &InputView,
+        cx: &mut uqm_rust::engine::battle::Cx<'_>,
+    ) -> Injected {
+        let campaign = CampaignView::for_input(*view, || CampaignView::capture(cx));
         match view {
             InputView::BeforeUpdate => {
                 assert!(
@@ -45,13 +50,14 @@ impl Observer<Option<CampaignView>> for Recording {
         }
     }
 
+    fn simulation(&mut self, _: &uqm_rust::engine::battle::Cx<'_>, boundary: &str) {
+        assert_eq!(boundary, "input-loop");
+        self.events.borrow_mut().push("complete");
+    }
+
     fn checkpoint(&mut self, view: &CheckpointView<'_>) {
-        let event = match view {
-            CheckpointView::Simulation("input-loop") => "complete",
-            CheckpointView::Simulation("input-hook") => "hook",
-            _ => panic!("unexpected checkpoint {view:?}"),
-        };
-        self.events.borrow_mut().push(event);
+        assert_eq!(*view, CheckpointView::InputSampled(HOOK_SAMPLE));
+        self.events.borrow_mut().push("hook");
     }
 
     fn presented(&mut self, _: &mut Presented) {
@@ -64,8 +70,11 @@ fn record_hook(
     input: &uqm_rust::engine::input::InputControls,
 ) {
     assert_eq!(input.menu_sounds(), (32, 64));
-    emit(CheckpointView::Simulation("input-hook"));
+    emit(CheckpointView::InputSampled(HOOK_SAMPLE));
 }
+
+/// The sample the installed input hook reports, distinct from any test activity.
+const HOOK_SAMPLE: u16 = 0x7e57;
 
 #[test]
 fn nested_callbacks_complete_before_the_outer_frame_and_stopped_admission_does_not_update() {
@@ -74,7 +83,7 @@ fn nested_callbacks_complete_before_the_outer_frame_and_stopped_admission_does_n
         use uqm_rust::graphics::{dcqueue_abi, sdl::lifecycle_abi};
         lifecycle_abi::GameActive = 1;
         dcqueue_abi::Init_DrawCommandQueue();
-        uqm_rust::mainloop::input_abi::SetDefaultMenuRepeatDelay(input);
+        input.set_default_menu_repeat(uqm_rust::engine::time::counter_abi::GetTimeCounter());
         input.set_menu_sounds(32, 64);
         uqm_rust::mainloop::input_abi::SetInputCallback(
             input,
@@ -90,7 +99,7 @@ fn nested_callbacks_complete_before_the_outer_frame_and_stopped_admission_does_n
         let mut io = Io {
             observer: &mut observer,
         };
-        uqm_rust::app::bridge::enter(|cx| {
+        crate::battle_context::with(|cx| {
             cx.world.set_activity(0);
             cx.run_input(&mut io, true, |cx, io| {
                 events.borrow_mut().push("outer");
@@ -118,7 +127,7 @@ fn nested_callbacks_complete_before_the_outer_frame_and_stopped_admission_does_n
         let mut io = Io {
             observer: &mut observer,
         };
-        uqm_rust::app::bridge::enter(|cx| {
+        crate::battle_context::with(|cx| {
             cx.run_input(&mut io, false, |_, _| {
                 panic!("stopped admission invoked a frame")
             })
@@ -164,7 +173,7 @@ fn mode_owned_frame_admission_keeps_the_native_observer_order() {
         use uqm_rust::graphics::{dcqueue_abi, sdl::lifecycle_abi};
         lifecycle_abi::GameActive = 1;
         dcqueue_abi::Init_DrawCommandQueue();
-        uqm_rust::mainloop::input_abi::SetDefaultMenuRepeatDelay(input);
+        input.set_default_menu_repeat(uqm_rust::engine::time::counter_abi::GetTimeCounter());
         let events = Rc::new(RefCell::new(Vec::new()));
         let mut observer = Recording {
             events: events.clone(),
@@ -175,7 +184,7 @@ fn mode_owned_frame_admission_keeps_the_native_observer_order() {
             events: events.clone(),
             admissions: 0,
         };
-        uqm_rust::app::bridge::enter(|cx| {
+        crate::battle_context::with(|cx| {
             cx.run_input_frame(
                 &mut Io {
                     observer: &mut observer,

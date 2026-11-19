@@ -207,7 +207,6 @@ impl Records {
         assert_eq!(id.gen, key.generation(), "stale element {id:?}");
         key
     }
-    #[cfg(not(test))]
     pub fn reinit(&mut self) {
         self.pool.reinit();
     }
@@ -220,7 +219,6 @@ impl IndexMut<ElementId> for Records {
     }
 }
 impl ElementTable {
-    #[cfg(not(test))]
     pub(super) fn records_mut(&mut self) -> &mut Records {
         &mut self.records
     }

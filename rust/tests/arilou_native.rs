@@ -22,9 +22,9 @@ unsafe fn index_of(frame: FRAME) -> u16 {
 }
 
 unsafe fn prim_of(element: *mut ElementRecord) -> *mut uqm_rust::engine::battle::DisplayPrimitive {
-    uqm_rust::app::bridge::enter(|cx| {
-        std::ptr::from_mut(cx.display_primitive((*element).PrimIndex))
-    })
+    // SAFETY: the caller passes a live fixture element.
+    let index = unsafe { (*element).PrimIndex };
+    crate::battle_context::with(|cx| std::ptr::from_mut(cx.display_primitive(index)))
 }
 
 struct Fleet<'a> {
@@ -170,7 +170,7 @@ fn skiff_descriptor_matches_the_c_template() {
 
 unsafe fn fire(fleet: &mut Fleet, ship: *mut ElementRecord) -> *mut ElementRecord {
     let id = battle::id(ship);
-    uqm_rust::app::bridge::enter(|cx| {
+    crate::battle_context::with(|cx| {
         let origin = cx.weapon_origin(id);
         let out = cx.spawn_weapons(fleet.fixture.ship_id, origin);
         assert_eq!(out.len(), 1);
@@ -282,7 +282,7 @@ unsafe fn think(
     input: u8,
 ) -> u8 {
     fleet.fixture.ship_mut().ship_input_state = input;
-    let mut subject = uqm_rust::app::bridge::enter(|cx| {
+    let mut subject = crate::battle_context::with(|cx| {
         cx.weapon_origin(
             cx.elements()
                 .id(std::ptr::NonNull::new(ship.cast()))
@@ -898,7 +898,7 @@ fn init_intersect_start_preserves_endpoint_and_frame() {
         ship.element_mut().current.location = POINT { x: -9, y: 13 };
         ship.element_mut().next.location = POINT { x: 400, y: 800 };
         ship.element_mut().IntersectControl.EndPoint = POINT { x: 123, y: -456 };
-        uqm_rust::app::bridge::enter(|cx| cx.init_intersect_start(ship.id));
+        crate::battle_context::with(|cx| cx.init_intersect_start(ship.id));
         let control = ship.element_mut().IntersectControl;
         assert_eq!(
             (

@@ -13,7 +13,6 @@ impl AutomationObserver {
         self.runtime.mirror.terminal.try_set(class);
 
         // CHECK_ABORT is consumed by the activity state machine.
-        #[cfg(not(test))]
         {
             self.activity.raise_flags(0x4000);
         }

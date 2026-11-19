@@ -133,15 +133,15 @@ pub(super) fn start(
             cx,
             &state.melee_setup,
         );
-        cx.with_legacy(|| WaitForSoundEnd(u16::MAX));
+        WaitForSoundEnd(u16::MAX);
         let selector = (cx.random() as u16 % NUMBER_OF_PLANET_TYPES as u16) as u8;
-        load_gravity_well(cx.kernel, selector);
+        cx.kernel.load_gravity_well(selector);
         assert!(cx.b.net.is_none(), "melee battle already owns a session");
         cx.b.net = Some(state.netplay.battle_net());
         crate::battle::battle_native::battle(cx, io, None);
         cx.b.net = None;
         cx.b.selection_frames = None;
-        free_gravity_well(cx.kernel);
+        cx.kernel.free_gravity_well();
         cx.kernel.clear_player_inputs();
         if cx.world.activity() & CHECK_ABORT as u16 != 0 {
             return;
@@ -207,7 +207,7 @@ pub(super) fn connecting(
         if cx.world.activity() & CHECK_ABORT as u16 != 0 {
             return 0;
         }
-        SetMenuSounds(input, 0, 0);
+        input.set_menu_sounds(0, 0);
         if state.initialized == 0 {
             if !connection(state, side).is_none() {
                 close_player_network_connection(state, cx, io, side as u16);

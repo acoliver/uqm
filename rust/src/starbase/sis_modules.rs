@@ -23,8 +23,7 @@ pub const EMPTY_SLOT: u8 = NUM_MODULES as u8;
 /// (`globdata.c:395`, `outfit.c:258`).
 pub const EMPTY_MODULE_SLOT: u8 = EMPTY_SLOT + 2;
 
-/// `FUEL_TANK_SCALE` (`sis.h:40`): raw fuel points per displayed fuel unit.
-pub const FUEL_TANK_SCALE: u32 = 100;
+pub use crate::engine::world::FUEL_TANK_SCALE;
 /// `FUEL_TANK_CAPACITY` (`sis.h:41`): raw capacity of one `FUEL_TANK`.
 pub const FUEL_TANK_CAPACITY: u32 = 50 * FUEL_TANK_SCALE;
 /// `HEFUEL_TANK_CAPACITY` (`sis.h:42`): raw capacity of one

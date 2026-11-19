@@ -32,10 +32,7 @@ pub fn admit_observer(
     io: &mut Io<'_>,
     view: super::observe::InputView,
 ) -> super::observe::Injected {
-    let campaign = super::observe::CampaignView::for_input(view, || {
-        super::observe::CampaignView::capture(cx.world, cx.kernel)
-    });
-    let admitted = cx.with_legacy(|| io.observer.input_admitted(&view, &campaign));
+    let admitted = io.observer.input_admitted(&view, cx);
     if matches!(view, super::observe::InputView::AfterUpdate(_)) {
         super::observe::battle::observe_tick(cx, io, super::observe::battle::BattlePhase::Input);
     }
@@ -44,11 +41,11 @@ pub fn admit_observer(
 
 pub trait InputRuntime {
     fn input(&self) -> &InputSession;
-    fn observer(&self) -> Box<dyn crate::observe::Observer<Option<crate::observe::CampaignView>>>;
+    fn observer(&self) -> Box<dyn crate::observe::Observer>;
     fn yield_poll(&self, cx: &mut Cx<'_>);
-    fn yield_task(&self, cx: &mut Cx<'_>) {
+    fn yield_task(&self, _cx: &mut Cx<'_>) {
         // SAFETY: the installed runtime retains initialized game-thread input and display.
-        cx.with_legacy(|| unsafe { crate::threading::legacy_abi::TaskSwitch() });
+        unsafe { crate::threading::legacy_abi::TaskSwitch() };
     }
     fn sleep(&self, cx: &mut Cx<'_>, ticks: u32);
     fn sleep_until(&self, cx: &mut Cx<'_>, deadline: u32);
@@ -92,32 +89,20 @@ impl Cx<'_> {
             .battle_input(&InputContext::new(player, 1))
     }
 
-    /// Suspend this context for a synchronous provider that still uses the A4 slot.
-    pub fn with_legacy<R>(&mut self, call: impl FnOnce() -> R) -> R {
-        // SAFETY: the unique context is inaccessible to the caller until publication returns.
-        unsafe { crate::handoff::publish(self, call) }
-    }
-
     pub fn nested_input<R>(
         &mut self,
         io: &mut Io<'_>,
         sample: impl FnOnce(&mut Self) -> R,
     ) -> Option<R> {
-        use super::observe::{CampaignView, CheckpointView, InputView};
-        let campaign = CampaignView::for_input(InputView::Nested, || {
-            CampaignView::capture(self.world, self.kernel)
-        });
-        let admitted =
-            self.with_legacy(|| io.observer.input_admitted(&InputView::Nested, &campaign));
+        use super::observe::{CheckpointView, InputView};
+        let admitted = io.observer.input_admitted(&InputView::Nested, self);
         if admitted.stop {
             return None;
         }
         let result = sample(self);
         let activity = self.world.activity();
-        self.with_legacy(|| {
-            io.observer
-                .checkpoint(&CheckpointView::InputSampled(activity))
-        });
+        io.observer
+            .checkpoint(&CheckpointView::InputSampled(activity));
         super::observe::battle::observe_tick(self, io, super::observe::battle::BattlePhase::Input);
         Some(result)
     }
@@ -148,9 +133,7 @@ mod tests {
             &self.1
         }
 
-        fn observer(
-            &self,
-        ) -> Box<dyn crate::observe::Observer<Option<crate::observe::CampaignView>>> {
+        fn observer(&self) -> Box<dyn crate::observe::Observer> {
             Box::new(Unobserved)
         }
 
@@ -249,24 +232,6 @@ mod tests {
     }
 
     #[test]
-    #[serial_test::serial]
-    fn explicit_context_handoff_publishes_and_restores_the_same_owner() {
-        let mut game = Game::new();
-        let mut battle = Battle::new();
-        let mut cx = Cx::new(
-            &mut battle,
-            &mut game.world,
-            &mut game.kernel,
-            crate::math::random,
-        );
-        cx.world.set_activity(7);
-        cx.with_legacy(|| {
-            crate::World::current().write(|world| world.set_activity(11));
-        });
-        assert_eq!(cx.world.activity(), 11);
-    }
-
-    #[test]
     #[should_panic(expected = "input runtime is not installed")]
     fn missing_driver_is_an_initialization_error() {
         Game::new().kernel.input_runtime();
@@ -286,17 +251,14 @@ mod tests {
         stop: bool,
     }
 
-    impl crate::observe::Observer<Option<crate::observe::CampaignView>> for NestedObserver {
+    impl crate::observe::Observer for NestedObserver {
         fn input_admitted(
             &mut self,
             view: &crate::observe::InputView,
-            world: &Option<crate::observe::CampaignView>,
+            cx: &mut Cx<'_>,
         ) -> crate::observe::Injected {
             assert_eq!(*view, crate::observe::InputView::Nested);
-            let Some(world) = world else {
-                panic!("nested input must supply its owner view");
-            };
-            assert_eq!(world.activity, 3);
+            assert_eq!(cx.world.activity(), 3);
             self.events.borrow_mut().push("admitted");
             crate::observe::Injected {
                 stop: self.stop,
@@ -317,7 +279,6 @@ mod tests {
     }
 
     #[test]
-    #[serial_test::serial]
     fn nested_input_records_the_owner_activity_after_one_sample() {
         let events = Rc::new(RefCell::new(Vec::new()));
         let mut observer = NestedObserver {
@@ -356,7 +317,6 @@ mod tests {
     }
 
     #[test]
-    #[serial_test::serial]
     fn stopped_nested_input_neither_samples_nor_publishes_a_checkpoint() {
         let events = Rc::new(RefCell::new(Vec::new()));
         let mut observer = NestedObserver {

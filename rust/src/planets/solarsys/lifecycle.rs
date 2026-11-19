@@ -10,7 +10,7 @@ use std::ptr::NonNull;
 use super::site::dispatch::invoke;
 use crate::comm::locdata::CPoint;
 use crate::engine::world::generation::Body;
-use crate::planets::devices::devices_menu;
+use crate::planets::devices::{devices_menu, SolarVisit};
 use crate::planets::generate::calc::preview_body;
 use crate::planets::{
     solar_coords::star_seed,
@@ -28,9 +28,7 @@ const ONE_SECOND: u32 = 840;
 const IP_FRAME_RATE: u32 = ONE_SECOND / 30;
 const FUSION_THRUSTER: u8 = 1;
 const TURNING_JETS: u8 = 2;
-const IP_SHIP_THRUST_INCREMENT: u8 = 8;
-const IP_SHIP_TURN_WAIT: u8 = 17;
-const IP_SHIP_TURN_DECREMENT: u8 = 2;
+use crate::starbase::ids::{IP_SHIP_THRUST_INCREMENT, IP_SHIP_TURN_DECREMENT, IP_SHIP_TURN_WAIT};
 const STARMAP: u8 = 1;
 const EQUIP_DEVICE: u8 = 2;
 const CARGO: u8 = 3;
@@ -48,6 +46,7 @@ const KEY_MENU_SELECT: usize = 9;
 const KEY_MENU_CANCEL: usize = 10;
 const FADE_ALL_TO_COLOR: u32 = 253;
 
+use super::planet_info::{get_planet_info, put_planet_info};
 use crate::engine::time::counter_abi::GetTimeCounter;
 use crate::front_end::gameopt::runtime::game_options;
 use crate::navigation::interplanetary::do_missions;
@@ -55,7 +54,6 @@ use crate::planets::cargo::live::cargo_menu;
 use crate::planets::orbit::live::{free_planet, planet_orbit_menu};
 use crate::planets::pstarmap::star_map;
 use crate::planets::roster::live::roster_menu;
-use crate::state::c_api::planets::{get_planet_info, put_planet_info};
 use crate::ui::settings::stop_music;
 
 #[inline]
@@ -233,7 +231,7 @@ pub(super) fn free_solar_sys(cx: &mut Cx<'_>, solar: &mut SolarSystem) {
         }
     }
     solar.clear_system_image();
-    cx.with_legacy(stop_music);
+    stop_music();
 }
 
 pub(super) fn reset_solar_sys(cx: &mut Cx<'_>, solar: &mut SolarSystem, next_activity: u16) {
@@ -280,7 +278,7 @@ fn run_planet_orbit(cx: &mut Cx<'_>, io: &mut Io<'_>, solar: &mut SolarSystem) {
         let services = crate::planets::orbit::OrbitServices {
             submenu: |cx, io, solar, selection| match selection {
                 crate::planets::orbit::OrbitSubmenu::Devices => {
-                    devices_menu(cx, io, Some(solar)) != 0
+                    devices_menu(cx, io, Some(solar_visit(solar))) != 0
                 }
                 crate::planets::orbit::OrbitSubmenu::Cargo => {
                     cargo_menu(cx, io);
@@ -577,6 +575,13 @@ fn prepare_explore_solar_sys(
     id
 }
 
+fn solar_visit(system: &SolarSystem) -> SolarVisit<'_> {
+    SolarVisit {
+        system,
+        save_location: save_solar_location,
+    }
+}
+
 pub fn save_solar_location(world: &mut World, kernel: &Kernel, solar: &SolarSystem) {
     if !solar.in_orbit() {
         save_non_orbital_location(world, kernel, solar);
@@ -620,7 +625,7 @@ fn do_solar_sys_menu(
     crate::ui::sis::clear_flash(cx.kernel);
     match menu.current {
         EQUIP_DEVICE => {
-            select = devices_menu(cx, io, Some(solar)) as c::BOOLEAN;
+            select = devices_menu(cx, io, Some(solar_visit(solar))) as c::BOOLEAN;
             if cx.world.activity() & START_ENCOUNTER != 0 {
                 return 0;
             }

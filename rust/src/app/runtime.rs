@@ -1,22 +1,13 @@
-#[cfg(not(test))]
 use super::{lifecycle, Application};
-#[cfg(not(test))]
 use crate::engine::battle::{Battle, Cx};
-#[cfg(not(test))]
 use crate::engine::observe::{CheckpointView, Io, Observer};
-#[cfg(not(test))]
 use crate::mainloop::state_machine::{self, ActivityDecision, BreakAction};
-#[cfg(not(test))]
 use crate::mainloop::types::{activity_flags, ActivityValue};
-#[cfg(not(test))]
 use crate::mainloop::MainLoopError;
-#[cfg(not(test))]
 use std::ffi::{c_char, c_int, CString};
-#[cfg(not(test))]
 use std::sync::Arc;
 
 /// Run initialization, the campaign loop and subsystem teardown on the game thread.
-#[cfg(not(test))]
 pub fn run(
     application: &mut Application,
     arguments: &[CString],
@@ -29,17 +20,15 @@ pub fn run(
     argv.push(std::ptr::null_mut());
     let runtime = application.game.kernel.input_runtime();
     let observer = application.observer().cloned();
-    // SAFETY: argv remains live while the application suspends Game for initialization.
+    // SAFETY: argv remains live on the game thread throughout initialization.
     let initialized = unsafe {
-        application.legacy(|| {
-            crate::mainloop::startup::initialize(
-                runtime.input(),
-                parsed,
-                (argv.len() - 1) as c_int,
-                argv.as_mut_ptr(),
-                observer,
-            )
-        })
+        crate::mainloop::startup::initialize(
+            runtime.input(),
+            parsed,
+            (argv.len() - 1) as c_int,
+            argv.as_mut_ptr(),
+            observer,
+        )
     };
     if initialized != 0 {
         return initialized.max(0);
@@ -53,12 +42,10 @@ pub fn run(
             1
         }
     };
-    // SAFETY: the campaign has stopped, and subsystem teardown returns before Game is released.
-    unsafe { application.legacy(crate::mainloop::teardown::teardown_subsystems) };
+    crate::mainloop::teardown::teardown_subsystems();
     result
 }
 
-#[cfg(not(test))]
 fn run_game(
     game: &mut crate::engine::Game,
     observer: Option<Arc<crate::automation::AutomationObserver>>,
@@ -70,15 +57,13 @@ fn run_game(
         &mut game.kernel,
         crate::math::random,
     );
-    cx.with_legacy(|| {
-        // SAFETY: startup initialized the audio options before the game kernel is loaded.
-        unsafe {
-            crate::sound::audio_init::initAudio(
-                crate::sound::volume_globals::snddriver,
-                crate::sound::volume_globals::soundflags,
-            );
-        }
-    });
+    // SAFETY: startup initialized the audio options before the game kernel is loaded.
+    unsafe {
+        crate::sound::audio_init::initAudio(
+            crate::sound::volume_globals::snddriver,
+            crate::sound::volume_globals::soundflags,
+        );
+    };
     // SAFETY: the application retains both owners; argc zero permits a null argv.
     if unsafe {
         crate::game_init::kernel_abi::LoadKernel(cx.kernel, cx.world, 0, std::ptr::null_mut())
@@ -110,14 +95,12 @@ fn run_game(
         crate::ships::master_native::engine::free(cx.world, cx.kernel);
         crate::game_init::cleanup::free_kernel(cx.kernel);
     }
-    cx.with_legacy(|| crate::log_abi::log_showBox(false, false));
+    crate::log_abi::log_showBox(false, false);
     Ok(())
 }
 
-#[cfg(not(test))]
 struct RestartServices;
 
-#[cfg(not(test))]
 impl crate::mainloop::restart_menu::restart_ops::RestartHost for RestartServices {
     fn melee(&mut self, cx: &mut Cx<'_>, io: &mut Io<'_>) {
         use crate::engine::io::{handles, uio_owned::Directory};
@@ -145,7 +128,6 @@ impl crate::mainloop::restart_menu::restart_ops::RestartHost for RestartServices
     }
 }
 
-#[cfg(not(test))]
 fn initialize_campaign(cx: &mut Cx<'_>) {
     cx.kernel.install_player_inputs();
     crate::navigation::globals::init_game_structures(cx);
@@ -158,7 +140,6 @@ fn initialize_campaign(cx: &mut Cx<'_>) {
     crate::navigation::events::schedule_initial_events(cx.world, &mut services);
 }
 
-#[cfg(not(test))]
 fn activate_start_scene(
     cx: &mut Cx<'_>,
     observer: Option<&Arc<crate::automation::AutomationObserver>>,
@@ -185,7 +166,6 @@ fn activate_start_scene(
     observer.finish_start_scene(&plan);
 }
 
-#[cfg(not(test))]
 fn run_campaign(
     cx: &mut Cx<'_>,
     io: &mut Io<'_>,
@@ -209,8 +189,7 @@ fn run_campaign(
         match action {
             BreakAction::Continue => {}
             BreakAction::InitBlackUrqCommunication => {
-                // SAFETY: the retained owners keep communication resources live through the mode.
-                unsafe { crate::comm::dispatch::init_communication(cx, io, 21) };
+                crate::comm::dispatch::init_communication(cx, io, 21);
                 break;
             }
             BreakAction::ClearRestart => {
@@ -224,44 +203,37 @@ fn run_campaign(
             break;
         }
     }
-    cx.with_legacy(crate::sound::heart_ffi::stop_sound);
+    crate::sound::heart_ffi::stop_sound();
     crate::time::clock_bridge::rust_clock_uninit(cx.world);
     crate::navigation::globals::uninit_game_structures(cx);
     cx.kernel.clear_player_inputs();
 }
 
-#[cfg(not(test))]
 fn dispatch(cx: &mut Cx<'_>, io: &mut Io<'_>, decision: ActivityDecision) {
     match decision {
         ActivityDecision::InstallBombAtEarth => {
             crate::ui::starbase::install_bomb_at_earth(cx);
         }
         ActivityDecision::VisitStarBase => {
-            // SAFETY: the campaign and display remain live through the starbase mode.
-            unsafe {
-                crate::ui::starbase::run_starbase_visit(
-                    cx,
-                    io,
-                    &crate::ui::MenuServices {
-                        communicate: |cx, io, conversation, options| {
-                            crate::comm::dispatch::init_communication_with_options(
-                                cx,
-                                io,
-                                conversation,
-                                options,
-                            )
-                        },
-                        game_options: |cx, io| {
-                            crate::front_end::gameopt::game_options(cx, io, None)
-                        },
-                        ship_spin: crate::front_end::fmv::do_ship_spin,
+            crate::ui::starbase::run_starbase_visit(
+                cx,
+                io,
+                &crate::ui::MenuServices {
+                    communicate: |cx, io, conversation, options| {
+                        crate::comm::dispatch::init_communication_with_options(
+                            cx,
+                            io,
+                            conversation,
+                            options,
+                        )
                     },
-                )
-            };
+                    game_options: |cx, io| crate::front_end::gameopt::game_options(cx, io, None),
+                    ship_spin: crate::front_end::fmv::do_ship_spin,
+                },
+            );
         }
         ActivityDecision::RaceCommunication => {
-            // SAFETY: the campaign retains the communication mode's owners and resources.
-            unsafe { crate::comm::dispatch::race_communication(cx, io) };
+            crate::comm::dispatch::race_communication(cx, io);
         }
         ActivityDecision::ExploreSolarSystem | ActivityDecision::Battle => {
             cx.kernel.pilot_flash.borrow_mut().reset();

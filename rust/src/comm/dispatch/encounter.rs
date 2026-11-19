@@ -23,7 +23,6 @@ pub(in crate::comm) fn finish_callbacks(comm: &mut Comm, cx: &mut Cx<'_>) {
     }
 }
 
-#[cfg(not(test))]
 pub(super) fn fight_if_selected(cx: &mut Cx<'_>, io: &mut Io<'_>) -> u16 {
     let mut status = 0;
     let activity = cx.world.activity();

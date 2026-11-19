@@ -32,14 +32,10 @@ pub(crate) struct ShipObservation<'a> {
     pub element: usize,
     #[cfg(test)]
     lifetime: std::marker::PhantomData<&'a ()>,
-    #[cfg(not(test))]
     pub icons: Option<&'a crate::graphics::native_abi::frame_desc>,
-    #[cfg(not(test))]
     pub strings: Option<&'a crate::strings::string_table::StringTableEntry>,
-    #[cfg(not(test))]
     pub race: Option<DescriptorObservation<'a>>,
 }
-#[cfg(not(test))]
 pub(crate) struct DescriptorObservation<'a> {
     pub address: usize,
     pub info: &'a SHIP_INFO,
@@ -53,20 +49,15 @@ pub(crate) struct DescriptorObservation<'a> {
 }
 pub(crate) enum CustomData<'a> {
     None,
-    #[cfg(not(test))]
     Androsynth(Option<crate::engine::battle::CollisionHook>),
-    #[cfg(not(test))]
     NativePkunk {
         phoenix: usize,
         saved: [Option<crate::engine::battle::ElementHook>; 3],
     },
-    #[cfg(not(test))]
     NativeUmgah(u16),
     Mmrnmhrm(&'a CHARACTERISTIC_STUFF),
-    #[cfg(not(test))]
     Sis(&'a crate::engine::battle::race::SisState),
 }
-#[cfg(not(test))]
 impl<'a> CustomData<'a> {
     fn decode(
         state: &'a crate::engine::battle::RaceState,
@@ -97,8 +88,6 @@ impl<'a> CustomData<'a> {
         Self::None
     }
 }
-/// # Safety
-/// The queue, ship resources and descriptor allocations remain immutable for the borrow.
 pub(crate) fn ships<'a>(
     queue: &'a crate::engine::battle::link_queue::RacePool,
     elements: &crate::engine::battle::ElementTable,
@@ -109,11 +98,8 @@ pub(crate) fn ships<'a>(
     while let Some(id) = next {
         let s = crate::engine::battle::access::observe::ship_record(queue, id, elements);
         next = ships.succ(id);
-        #[cfg(not(test))]
         let (race, icons, strings) = {
-            // SAFETY: the retained queue and all loaded ship resources stay immutable.
-            let resources =
-                unsafe { crate::engine::battle::access::observe::ship_resources(queue, id) };
+            let resources = crate::engine::battle::access::observe::ship_resources(queue, id);
             let race = resources.descriptor.map(|d| DescriptorObservation {
                 address: d.address,
                 info: d.info,
@@ -128,18 +114,14 @@ pub(crate) fn ships<'a>(
             (race, resources.icons, resources.strings)
         };
         result.push(ShipObservation {
-            // SAFETY: the retained ship pool remains immutable during observation.
             state: s.state,
             pick: s.pick,
             address: s.address,
             pred: s.pred,
             succ: s.succ,
             element: s.element,
-            #[cfg(not(test))]
             icons,
-            #[cfg(not(test))]
             strings,
-            #[cfg(not(test))]
             race,
             #[cfg(test)]
             lifetime: std::marker::PhantomData,

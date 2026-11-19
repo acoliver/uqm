@@ -204,10 +204,10 @@ pub(super) fn draw_outer_system(cx: &mut Cx<'_>, solar: &mut SolarSystem) {
 }
 
 pub(super) fn draw_system_transition(cx: &mut Cx<'_>, solar: &mut SolarSystem, inner: bool) {
-    cx.with_legacy(|| {
+    {
         draw::transition_source();
         draw::batch();
-    });
+    };
     if inner {
         draw_inner_system(cx, solar);
     } else {
@@ -215,10 +215,10 @@ pub(super) fn draw_system_transition(cx: &mut Cx<'_>, solar: &mut SolarSystem, i
     }
     solar.refresh_frame(cx);
     crate::battle::process_native::engine::redraw_queue(cx, false);
-    cx.with_legacy(|| {
+    {
         draw::transition(3);
         draw::unbatch();
-    });
+    };
 }
 
 fn draw_system(world: &World, kernel: &Kernel, solar: &mut SolarSystem, radius: c::SIZE) {

@@ -203,7 +203,7 @@ impl SessionCore {
                             return;
                         }
                         if result == -1 {
-                            self.error(side, crate::platform::os::errno::errno(), emit);
+                            self.error(side, crate::engine::platform::os::errno::errno(), emit);
                             return;
                         }
                         processed += length;

@@ -1,6 +1,5 @@
 //! Owned sound queues and parallax planes for the game-thread lifecycle.
 
-#[cfg(not(test))]
 pub static LAST_PKUNK_SOUND: std::sync::atomic::AtomicU16 = std::sync::atomic::AtomicU16::new(0);
 use super::ElementId;
 use crate::graphics::native_abi::POINT;
@@ -91,9 +90,7 @@ impl Default for Channels {
 pub struct StarPlane {
     pub min_star_index: u16,
     pub points: Vec<POINT>,
-    #[cfg(not(test))]
     pub displayed: Vec<POINT>,
-    #[cfg(not(test))]
     pub frames: Vec<super::frames::FrameSelection>,
 }
 impl StarPlane {
@@ -101,9 +98,7 @@ impl StarPlane {
         Self {
             min_star_index: 0,
             points: vec![POINT { x: 0, y: 0 }; count],
-            #[cfg(not(test))]
             displayed: vec![POINT { x: 0, y: 0 }; count],
-            #[cfg(not(test))]
             frames: vec![super::frames::FrameSelection::ABSENT; count],
         }
     }

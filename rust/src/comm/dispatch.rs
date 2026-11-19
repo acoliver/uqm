@@ -15,8 +15,8 @@ use crate::comm::Comm;
 use routing::conversation_setup;
 
 use crate::engine::battle::Cx;
-#[cfg(not(test))]
 use crate::engine::observe::{CheckpointView, Io};
+use crate::engine::world::activity::ActivityKind;
 use crate::engine::StoryKey;
 use crate::engine::World;
 use std::os::raw::c_void;
@@ -75,31 +75,18 @@ pub const INFINITE_FLEET: u16 = !0;
 // Activity flags (from globdata.h)
 // ---------------------------------------------------------------------------
 
-/// C: `CHECK_ABORT`
-pub const CHECK_ABORT: u16 = 0x4000;
-/// C: `CHECK_LOAD`
-pub const CHECK_LOAD: u16 = 0x1000;
-/// C: `START_ENCOUNTER`
-pub use crate::engine::save::START_ENCOUNTER;
-/// C: `START_INTERPLANETARY`
-pub const START_INTERPLANETARY: u16 = 0x0800;
+pub use crate::engine::world::activity::activity_flags::{
+    CHECK_ABORT, CHECK_LOAD, START_ENCOUNTER, START_INTERPLANETARY,
+};
 
-/// C: `IN_LAST_BATTLE`
-pub const IN_LAST_BATTLE: u16 = 1;
-/// C: `IN_ENCOUNTER`
-pub const IN_ENCOUNTER: u16 = 2;
-/// C: `IN_HYPERSPACE`
-pub const IN_HYPERSPACE: u16 = 3;
-/// C: `IN_INTERPLANETARY`
-pub const IN_INTERPLANETARY: u16 = 4;
-/// C: `WON_LAST_BATTLE`
-pub const WON_LAST_BATTLE: u16 = 5;
+pub const IN_LAST_BATTLE: u16 = ActivityKind::InLastBattle as u16;
+pub const IN_ENCOUNTER: u16 = ActivityKind::InEncounter as u16;
+pub const IN_HYPERSPACE: u16 = ActivityKind::InHyperspace as u16;
+pub const IN_INTERPLANETARY: u16 = ActivityKind::InInterplanetary as u16;
+pub const WON_LAST_BATTLE: u16 = ActivityKind::WonLastBattle as u16;
 
 /// C: `CYBORG_ENABLED`
 pub const CYBORG_ENABLED: u8 = 1 << 5;
-
-/// C: `DRAW_SIS_DISPLAY`
-pub const DRAW_SIS_DISPLAY: u16 = 1 << 3;
 
 // ---------------------------------------------------------------------------
 // Conversation IDs (from commglue.h enum)
@@ -205,13 +192,9 @@ fn in_hq_space(activity: u16) -> bool {
 // RaceCommunication — ported from comm.c:1503
 // ---------------------------------------------------------------------------
 
-#[cfg(not(test))]
 /// Port of C `RaceCommunication()`. Determines which alien to talk to,
 /// prepares the npc ship queue, and calls InitCommunication.
-///
-/// # Safety
-/// Calls C FFI functions that access global state.
-pub unsafe fn race_communication(cx: &mut Cx<'_>, io: &mut Io<'_>) {
+pub fn race_communication(cx: &mut Cx<'_>, io: &mut Io<'_>) {
     if lobyte(cx.world.activity()) == IN_LAST_BATTLE {
         // Going into talking pet conversation
         cx.world.npc_built_ships().reinit();
@@ -303,20 +286,14 @@ pub unsafe fn race_communication(cx: &mut Cx<'_>, io: &mut Io<'_>) {
 // InitCommunication — ported from comm.c:1359
 // ---------------------------------------------------------------------------
 
-#[cfg(not(test))]
 /// Map the conversation to a ship, run the dialogue or attack selection, and
 /// return whether combat was selected before EncounterBattle runs.
-///
-/// # Safety
-/// Called on the game thread with initialized game state and resources.
-pub unsafe fn init_communication(cx: &mut Cx<'_>, io: &mut Io<'_>, which_comm: u32) -> u16 {
+pub fn init_communication(cx: &mut Cx<'_>, io: &mut Io<'_>, which_comm: u32) -> u16 {
     init_communication_with_options(cx, io, which_comm, crate::comm::CommOptions::default())
 }
 
-#[cfg(not(test))]
-/// # Safety
-/// The game-thread context and presentation resources must be initialized.
-pub unsafe fn init_communication_with_options(
+/// `InitCommunication` with presentation options supplied by the caller.
+pub fn init_communication_with_options(
     cx: &mut Cx<'_>,
     io: &mut Io<'_>,
     which_comm: u32,
@@ -342,7 +319,7 @@ pub unsafe fn init_communication_with_options(
                 cx.kernel,
                 cx.world,
                 (dimensions.0, dimensions.1),
-                (DRAW_SIS_DISPLAY) as u8,
+                crate::ui::sis::DRAW_SIS_DISPLAY,
             );
             crate::ui::sis::repair_sis_border(cx.kernel, (dimensions.0, dimensions.1));
         }
@@ -364,10 +341,10 @@ pub unsafe fn init_communication_with_options(
                 )
             };
         } else if cx.world.data.game.ip_planet == 0 {
-            let star = &*cx
+            let star = cx
                 .world
-                .star_pointer()
-                .cast::<crate::savegame::runtime::star::CStarDesc>();
+                .selected_star()
+                .unwrap_or_else(|| panic!("an interplanetary encounter has a current star"));
             {
                 let point = CPoint {
                     x: star.star_pt.x,
@@ -387,7 +364,8 @@ pub unsafe fn init_communication_with_options(
             crate::ui::sis::draw_title(
                 cx.kernel,
                 dimensions.0,
-                std::ffi::CStr::from_ptr((name.as_ptr()).cast()),
+                std::ffi::CStr::from_bytes_until_nul(&name)
+                    .unwrap_or_else(|error| panic!("unterminated planet name: {error}")),
             );
         }
     }
@@ -395,7 +373,6 @@ pub unsafe fn init_communication_with_options(
     run_encounter(cx, io, conversation, ship_type, options)
 }
 
-#[cfg(not(test))]
 /// Perform sphere tracking, battle setup, dialogue and teardown in C order.
 fn run_encounter(
     cx: &mut Cx<'_>,
@@ -421,21 +398,17 @@ fn run_encounter(
     } else {
         conv::YEHAT_REBEL
     };
-    cx.with_legacy(|| {
-        io.observer
-            .checkpoint(&CheckpointView::DialogueDispatch(comm_id))
-    });
+    io.observer
+        .checkpoint(&CheckpointView::DialogueDispatch(comm_id));
     let comm = &mut Comm::with_options(options);
     encounter::load_descriptor(comm, cx, comm_id);
     let status = if cx.world.story_state(StoryKey::BATTLE_SEGUE) == 0 {
         HAIL
     } else {
-        cx.with_legacy(|| io.observer.checkpoint(&CheckpointView::EncounterMenu(true)));
+        io.observer.checkpoint(&CheckpointView::EncounterMenu(true));
         let status = crate::battle::encount_native::init_encounter(cx, io);
-        cx.with_legacy(|| {
-            io.observer
-                .checkpoint(&CheckpointView::EncounterMenu(false))
-        });
+        io.observer
+            .checkpoint(&CheckpointView::EncounterMenu(false));
         if status == HAIL {
             cx.world.set_story_state(StoryKey::BATTLE_SEGUE, 0);
             HAIL
@@ -486,13 +459,8 @@ pub(crate) fn production_captain_name() -> u8 {
 ///
 /// The normal game-loop state machine performs the subsequent encounter and
 /// communication dispatch; this helper only constructs the race-23 queue.
-///
-/// # Safety
-/// Game structures and both fleet queues must already be initialized.
 #[cfg_attr(test, allow(dead_code))]
-pub unsafe fn prepare_automation_sol_probe_encounter(
-    world: &mut World,
-) -> Result<(), &'static str> {
+pub fn prepare_automation_sol_probe_encounter(world: &mut World) -> Result<(), &'static str> {
     world.npc_built_ships().reinit();
     if clone_npc_fragment(world, ship::URQUAN_DRONE_SHIP, 0).is_none() {
         return Err("failed to clone the Ur-Quan probe into the NPC queue");
@@ -502,11 +470,7 @@ pub unsafe fn prepare_automation_sol_probe_encounter(
 
 /// Development-only fleet setup, before the normal final encounter dispatch.
 /// This grants fixture equipment and escorts, so it cannot establish campaign progress.
-///
-/// # Safety
-/// Initialized fleets and SIS must be exclusively owned by the game thread.
-#[cfg(not(test))]
-pub(crate) unsafe fn prepare_samatra_dev_fixture(
+pub(crate) fn prepare_samatra_dev_fixture(
     cx: &mut crate::engine::battle::Cx<'_>,
 ) -> Result<(), &'static str> {
     cx.world.built_ships().reinit();
@@ -721,7 +685,7 @@ mod tests {
 
     #[test]
     fn comm_display_and_cyborg_masks_match_headers() {
-        assert_eq!(DRAW_SIS_DISPLAY, 1 << 3);
+        assert_eq!(crate::ui::sis::DRAW_SIS_DISPLAY, 1 << 3);
         assert_eq!(CYBORG_ENABLED, 1 << 5);
     }
 

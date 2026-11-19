@@ -139,12 +139,8 @@ mod tests {
 
     #[derive(Default)]
     struct Recorded(Vec<ReplacementGate>);
-    impl Observer<Option<crate::observe::CampaignView>> for Recorded {
-        fn input_admitted(
-            &mut self,
-            _: &InputView,
-            _: &Option<crate::observe::CampaignView>,
-        ) -> Injected {
+    impl Observer for Recorded {
+        fn input_admitted(&mut self, _: &InputView, _: &mut crate::battle::Cx<'_>) -> Injected {
             Injected::default()
         }
         fn checkpoint(&mut self, _: &CheckpointView<'_>) {}

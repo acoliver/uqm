@@ -56,7 +56,7 @@ fn zoq_fot_home(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
     });
 }
 
-fn callback(h: Handler) -> crate::comm::response::ResponseFunc {
+pub(super) fn callback(h: Handler) -> crate::comm::response::ResponseFunc {
     match h {
         Handler::ExitConversation => exit_conversation,
         Handler::ZoqFotIntro => zoq_fot_intro,
@@ -82,29 +82,32 @@ pub(crate) fn initialize(
     run(comm, cx, |s| s.initialize(desc));
 }
 
+/// The phrase callback that makes `speaker` the talking head when the
+/// track player reaches the line.
+pub(super) fn speaker_callback(speaker: crate::comm::races::zoqfot::api::Speaker) -> fn(&mut Comm) {
+    use crate::comm::races::zoqfot::api::{select_speaker, Speaker};
+    fn select(comm: &mut Comm, speaker: Speaker) {
+        select_speaker(
+            &mut comm.data.definition,
+            &mut comm.race_scratch.last_alien,
+            speaker,
+        );
+    }
+    match speaker {
+        Speaker::Zoq => |comm| select(comm, Speaker::Zoq),
+        Speaker::Pik => |comm| select(comm, Speaker::Pik),
+    }
+}
+
 mod api {
     use super::*;
 
     use crate::comm::races::zoqfot::api::*;
-    use crate::comm::Comm;
 
     mod live {
         use super::*;
         use crate::comm::host::Host;
         use crate::comm::races::script::DialogueHost;
-        fn select(comm: &mut Comm, speaker: Speaker) {
-            select_speaker(
-                &mut comm.data.definition,
-                &mut comm.race_scratch.last_alien,
-                speaker,
-            );
-        }
-        fn zoq(comm: &mut Comm) {
-            select(comm, Speaker::Zoq);
-        }
-        fn pik(comm: &mut Comm) {
-            select(comm, Speaker::Pik);
-        }
         impl ZoqApi for Host<'_, '_, Handler> {
             fn speak(&mut self, phrase: u16, speaker: Speaker) {
                 let comm = &mut **self.comm.borrow_mut();
@@ -113,17 +116,14 @@ mod api {
                     self.cx.borrow().world,
                     comm,
                     i32::from(phrase),
-                    Some(match speaker {
-                        Speaker::Zoq => zoq,
-                        Speaker::Pik => pik,
-                    }),
+                    Some(super::super::speaker_callback(speaker)),
                 );
             }
             fn begin_talk(&mut self, track: u16) {
                 {
                     let comm = &mut **self.comm.borrow_mut();
                     comm.race_scratch.last_alien = 1;
-                    select(comm, Speaker::Zoq);
+                    super::super::speaker_callback(Speaker::Zoq)(comm);
                 }
                 self.talk_segue(track);
             }

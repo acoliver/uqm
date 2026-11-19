@@ -10,7 +10,8 @@ use battle::{prim, Battle, FrameSet, PoolElement, PoolShip, Ship};
 use std::{ffi::CStr, mem, ptr};
 use uqm_rust::collections::observation;
 use uqm_rust::graphics::context_abi::_GraphicsStatusFlags;
-use uqm_rust::ships::native::{abi::*, cosine, facing_to_angle, frame_index, sine};
+use uqm_rust::graphics::pixmap_abi::GetFrameIndex;
+use uqm_rust::ships::native::{abi::*, cosine, facing_to_angle, sine};
 
 unsafe fn burn(ship: &mut Ship<'_>) -> *mut ElementRecord {
     ship.ship_mut().cur_status_flags |= SPECIAL as u16;
@@ -357,7 +358,7 @@ fn boost_uses_temporary_characteristics_and_preserves_the_inertial_thrust_result
                 let mut expected_ss = PoolShip::new(0);
                 expected_ss.SpeciesID = ship.ship_mut().SpeciesID;
                 expected_ss.hShip = ship.ship_mut().hShip;
-                uqm_rust::app::bridge::enter(|cx| {
+                crate::battle_context::with(|cx| {
                     let state = cx.ship_state(ship.ship_id);
                     *cx.ship_state_mut(expected_ss.ship_id) = state;
                 });
@@ -367,7 +368,7 @@ fn boost_uses_temporary_characteristics_and_preserves_the_inertial_thrust_result
                         !((SHIP_AT_MAX_SPEED | SHIP_BEYOND_MAX_SPEED) as u16);
                 }
                 let mut expected = PoolElement::new();
-                let thrust_status = uqm_rust::app::bridge::enter(|cx| {
+                let thrust_status = crate::battle_context::with(|cx| {
                     let id = cx
                         .elements()
                         .id(std::ptr::NonNull::new((&raw mut *expected).cast()))
@@ -551,7 +552,7 @@ fn napalm_decay_wait_and_loop_boundary_match_c_including_last_frame_wrap() {
                 (*e).turn = 0;
                 (*e).state_flags &= !(CHANGING as u16);
                 with_rng(3, 0, || hooks::invoke_element_pointer(callback, e));
-                assert_eq!(frame_index((*e).next.image.frame.raw()), expected);
+                assert_eq!(GetFrameIndex((*e).next.image.frame.raw().cast()), expected);
                 assert_eq!((*e).turn, 5);
                 assert_ne!((*e).state_flags & CHANGING as u16, 0);
                 assert_eq!((*e).life, life);
@@ -734,7 +735,10 @@ fn shared_ai_steers_before_thraddash_decides_whether_to_boost() {
             let input = with_rng(8, 0, || think(&mut ship, &mut c, 0, 1));
             assert_ne!(input & RIGHT as u8, 0);
             assert_eq!(input & (LEFT | SPECIAL) as u8, 0);
-            assert_eq!(frame_index((*ship.ptr()).next.image.frame.raw()), 1);
+            assert_eq!(
+                GetFrameIndex((*ship.ptr()).next.image.frame.raw().cast()),
+                1
+            );
         }
     })
 }
@@ -774,7 +778,7 @@ fn owner_cleanup_during_collision_scan_invalidates_the_active_napalm() {
                 uqm_rust::battle::tactrans_native::cleanup_dead_ship,
             ));
             _GraphicsStatusFlags |= 4;
-            let result = uqm_rust::app::bridge::enter(|cx| {
+            let result = crate::battle_context::with(|cx| {
                 let next = cx.elements().id(std::ptr::NonNull::new(ship.handle));
                 let element = cx
                     .elements()
@@ -867,7 +871,7 @@ fn napalm_and_horn_collide_with_battle_objects_without_optional_callback_skips()
                     (*t).IntersectControl.IntersectStamp.frame = target.raw_frame(0, 0);
                     let mut context: uqm_rust::graphics::native_abi::context_desc = mem::zeroed();
                     let old_context = uqm_rust::graphics::context_abi::SetContext(&mut context);
-                    uqm_rust::app::bridge::enter(|cx| {
+                    crate::battle_context::with(|cx| {
                         let next = cx.elements().id(std::ptr::NonNull::new(target.handle));
                         let element = cx
                             .elements()

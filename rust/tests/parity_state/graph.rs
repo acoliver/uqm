@@ -4,14 +4,14 @@ use super::*;
 pub(super) unsafe fn clear_queues() {
     // SAFETY: the caller owns the idle global queues and detaches all test
     // records before releasing their stack storage; there are no active readers.
-    unsafe {
-        uqm_rust::app::bridge::enter(|cx| {
+    {
+        crate::battle_context::with(|cx| {
             cx.kernel_mut().reset_element_capacity(150);
             for side in 0..2 {
                 cx.kernel_mut().reset_ship_capacity(side, 32);
             }
         });
-        uqm_rust::app::bridge::enter(|cx| {
+        crate::battle_context::with(|cx| {
             let scaled = cx.kernel_mut().configuration.preferences().melee_scale == 0;
             uqm_rust::battle::process_native::init_display_list(cx, scaled);
         });
@@ -52,9 +52,8 @@ pub(super) fn elements_and_fighters(observer: &AutomationObserver, directory: &P
     ));
 
     neutral.playerNr = -1;
-    // SAFETY: attachment publishes these allocated stack slots for this synchronous fixture.
-    unsafe {
-        uqm_rust::app::bridge::enter(|cx| {
+    {
+        crate::battle_context::with(|cx| {
             let source = cx
                 .elements()
                 .id(std::ptr::NonNull::new(neutral.pointer().cast()))
@@ -69,13 +68,14 @@ pub(super) fn elements_and_fighters(observer: &AutomationObserver, directory: &P
     // SAFETY: stack graph remains live; no renderer or pool allocator is running.
     let campaign = unsafe {
         install_ship(&mut owner);
-        uqm_rust::engine::World::current().write(|world| {
+        crate::battle_context::with(|cx| {
+            let world = &mut cx.world;
             world.set_activity(IN_BATTLE as u16);
             uqm_rust::engine::observe::CampaignView::from_world(world)
         })
     };
     uqm_rust::math::seed_random(654321);
-    let fighters = BattleSnapshot::live(&campaign);
+    let fighters = crate::battle_context::with(|cx| BattleSnapshot::live(cx, &campaign));
     assert_eq!(uqm_rust::math::seed_random(654321), 654321);
     let player = fighters
         .player
@@ -255,7 +255,8 @@ pub(super) fn fighters_without_journal(directory: &Path) {
     ));
     // SAFETY: this child has not initialized Coordinator, and it alone owns the graph.
     let campaign = unsafe {
-        let campaign = uqm_rust::engine::World::current().write(|world| {
+        let campaign = crate::battle_context::with(|cx| {
+            let world = &mut cx.world;
             world.set_activity(IN_BATTLE as u16);
             uqm_rust::engine::observe::CampaignView::from_world(world)
         });
@@ -264,7 +265,9 @@ pub(super) fn fighters_without_journal(directory: &Path) {
         campaign
     };
     uqm_rust::math::seed_random(56789);
-    let snapshot = uqm_rust::automation::battle_fight::BattleSnapshot::live(&campaign);
+    let snapshot = crate::battle_context::with(|cx| {
+        uqm_rust::automation::battle_fight::BattleSnapshot::live(cx, &campaign)
+    });
     let player = snapshot
         .player
         .unwrap_or_else(|| panic!("missing no-journal player ship"));
@@ -278,7 +281,7 @@ pub(super) fn fighters_without_journal(directory: &Path) {
     for side in [-1, 2, i16::MAX] {
         element.playerNr = side;
         element.parent = uqm_rust::engine::battle::Parent::Ship(ship.ship_id);
-        let snapshot = BattleSnapshot::live(&campaign);
+        let snapshot = crate::battle_context::with(|cx| BattleSnapshot::live(cx, &campaign));
         assert!(snapshot.player.is_none());
         assert!(snapshot.enemy.is_none());
     }
@@ -290,9 +293,8 @@ pub(super) fn fighters_without_journal(directory: &Path) {
 
 pub(super) unsafe fn attach_elements(elements: &mut [ElementRecord]) {
     for element in elements {
-        // SAFETY: each owner retains its allocated fixture slot on the game thread.
-        unsafe {
-            uqm_rust::app::bridge::enter(|cx| cx.put(element.id));
+        {
+            crate::battle_context::with(|cx| cx.put(element.id));
         }
     }
 }
@@ -306,7 +308,7 @@ impl ElementRecord {
     pub(super) fn new() -> Self {
         // SAFETY: the fixture owns the published context and every allocated operand.
         unsafe {
-            uqm_rust::app::bridge::enter(|cx| {
+            crate::battle_context::with(|cx| {
                 let id = cx
                     .alloc_element()
                     .unwrap_or_else(|| panic!("fixture capacity"));
@@ -347,7 +349,7 @@ impl Drop for ElementRecord {
     fn drop(&mut self) {
         // SAFETY: the owning serialized fixture outlives its allocated operands.
         unsafe {
-            uqm_rust::app::bridge::enter(|cx| {
+            crate::battle_context::with(|cx| {
                 if cx.elements().contains(self.id) {
                     (*self.pointer).PrimIndex = self.primitive;
                     if cx.elements().linked(self.id) {
@@ -363,8 +365,8 @@ impl Drop for ElementRecord {
 pub(super) fn event_queue_fields(observer: &AutomationObserver, directory: &Path) {
     use uqm_rust::savegame::{runtime::events::restore_events, types::EventEntry};
 
-    uqm_rust::engine::World::current().write(|world| {
-        world.clock.init();
+    crate::battle_context::with(|cx| {
+        cx.world.clock.init();
         let first = EventEntry {
             day_index: 8,
             month_index: 9,
@@ -377,7 +379,7 @@ pub(super) fn event_queue_fields(observer: &AutomationObserver, directory: &Path
             year_index: 2161,
             func_index: 2,
         };
-        restore_events(&mut world.clock, &[first, second])
+        restore_events(&mut cx.world.clock, &[first, second])
             .unwrap_or_else(|error| panic!("restore test events: {error}"));
     });
     let (fields, _) = snapshot(observer, directory);
@@ -392,15 +394,15 @@ pub(super) fn event_queue_fields(observer: &AutomationObserver, directory: &Path
             function.to_string()
         );
     }
-    uqm_rust::engine::World::current().write(|world| world.clock.uninit());
+    crate::battle_context::with(|cx| cx.world.clock.uninit());
 }
 
 pub(super) fn non_ship_parent_fields(observer: &AutomationObserver, directory: &Path) {
     let mut element = ElementRecord::new();
     // SAFETY: no game loop is running; this test owns both queues and the group pool.
     unsafe {
-        let (group_id, handle) = uqm_rust::engine::World::current().write(|world| {
-            let mut queue = world.ip_groups();
+        let (group_id, handle) = crate::battle_context::with(|cx| {
+            let mut queue = cx.world.ip_groups();
             let id = queue
                 .alloc()
                 .unwrap_or_else(|| panic!("fixture pool capacity"));
@@ -416,7 +418,7 @@ pub(super) fn non_ship_parent_fields(observer: &AutomationObserver, directory: &
         element.parent = uqm_rust::engine::battle::Parent::IpGroup(group_id);
         attach_elements(std::slice::from_mut(&mut element));
         observation::record(Event::Allocate(element.pointer() as usize));
-        let callback = uqm_rust::ships::hook_registry::hooks()
+        let callback = uqm_rust::battle::hook_registry::hooks()
             .into_iter()
             .find(|(_, name)| *name == "battle::ship_native::collision")
             .unwrap_or_else(|| panic!("collision callback is absent from the registry"))
@@ -435,6 +437,6 @@ pub(super) fn non_ship_parent_fields(observer: &AutomationObserver, directory: &
         assert_eq!(fields["elements.0.parent"], "group:32");
         assert_eq!(fields["mode.groups.32.counter"], "123");
         clear_queues();
-        uqm_rust::engine::World::current().write(|world| world.ip_groups().reinit());
+        crate::battle_context::with(|cx| cx.world.ip_groups().reinit());
     }
 }
