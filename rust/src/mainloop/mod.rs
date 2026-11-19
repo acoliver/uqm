@@ -33,7 +33,7 @@ pub mod logging;
 pub mod main2_abi;
 pub mod options;
 pub mod options_abi;
-pub mod restart_menu;
+pub use uqm_modes::mainloop::restart_menu;
 pub mod startup;
 pub mod state_machine;
 pub mod teardown;

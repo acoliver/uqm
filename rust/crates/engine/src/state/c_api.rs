@@ -19,7 +19,7 @@ static FILES: [GameStateFile; 3] = [
 /// # Safety
 /// `mode` must be a NUL-terminated C string.
 pub unsafe fn open_state_file(
-    world: &mut crate::engine::World,
+    world: &mut crate::World,
     index: c_int,
     mode: *const c_char,
 ) -> *mut GameStateFile {
@@ -34,26 +34,26 @@ pub unsafe fn open_state_file(
 
 /// # Safety
 /// `file` must be a handle returned by `OpenStateFile`.
-pub unsafe fn close_state_file(world: &mut crate::engine::World, file: *mut GameStateFile) {
+pub unsafe fn close_state_file(world: &mut crate::World, file: *mut GameStateFile) {
     rust_close_state_file(world, (*file).index);
 }
 
 /// # Safety
 /// Called on the game thread, without concurrent state-file access.
-pub fn delete_state_file(world: &mut crate::engine::World, index: c_int) {
+pub fn delete_state_file(world: &mut crate::World, index: c_int) {
     rust_delete_state_file(world, index);
 }
 
 /// # Safety
 /// `file` must be a handle returned by `OpenStateFile`.
-pub unsafe fn length_state_file(world: &crate::engine::World, file: *mut GameStateFile) -> u32 {
+pub unsafe fn length_state_file(world: &crate::World, file: *mut GameStateFile) -> u32 {
     rust_length_state_file(world, (*file).index) as u32
 }
 
 /// # Safety
 /// `buffer` must hold `size * count` writable bytes; `file` must be a live handle.
 pub unsafe fn read_state_file(
-    world: &mut crate::engine::World,
+    world: &mut crate::World,
     buffer: *mut c_void,
     size: u16,
     count: u16,
@@ -73,7 +73,7 @@ pub unsafe fn read_state_file(
 /// # Safety
 /// `buffer` must hold `size * count` readable bytes; `file` must be a live handle.
 pub unsafe fn write_state_file(
-    world: &mut crate::engine::World,
+    world: &mut crate::World,
     buffer: *const c_void,
     size: u16,
     count: u16,
@@ -93,7 +93,7 @@ pub unsafe fn write_state_file(
 /// # Safety
 /// `file` must be a handle returned by `OpenStateFile`.
 pub unsafe fn seek_state_file(
-    world: &mut crate::engine::World,
+    world: &mut crate::World,
     file: *mut GameStateFile,
     offset: c_long,
     whence: c_int,
@@ -108,7 +108,7 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn handles_share_the_existing_file_manager_and_preserve_io() {
-        let mut game = crate::engine::Game::new();
+        let mut game = crate::Game::new();
         // SAFETY: serial tests own the published lifecycle until this call returns.
         unsafe {
             {

@@ -6,7 +6,7 @@
     reason = "legacy scalar names shared with the remaining melee UI"
 )]
 pub mod abi {
-    include!("../../abi/netplay_abi.rs");
+    include!("netplay_abi.rs");
 }
 mod battle;
 pub mod checkbuf;

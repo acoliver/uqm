@@ -7,19 +7,15 @@ use super::game_state::{
     copy_state_bits_raw, get_state_32_raw, get_state_bits_raw, set_state_32_raw,
     set_state_bits_raw, StoryState, NUM_GAME_STATE_BITS, NUM_GAME_STATE_BYTES,
 };
-use crate::engine::world::planet_info::{PlanetInfoManager, ScanRetrieveMask, NUM_SCAN_TYPES};
-use crate::engine::world::state_file::{FileMode, StateFileManager};
+use crate::world::planet_info::{PlanetInfoManager, ScanRetrieveMask, NUM_SCAN_TYPES};
+use crate::world::state_file::{FileMode, StateFileManager};
 
-pub fn rust_init_game_state(world: &mut crate::engine::World) {
+pub fn rust_init_game_state(world: &mut crate::World) {
     world.story = Some(StoryState::new());
     world.files.canned_nodes.clear();
 }
 
-pub fn rust_get_game_state_bits(
-    world: &crate::engine::World,
-    start_bit: c_int,
-    end_bit: c_int,
-) -> c_uchar {
+pub fn rust_get_game_state_bits(world: &crate::World, start_bit: c_int, end_bit: c_int) -> c_uchar {
     if let Some((start_bit, end_bit)) = normalize_bit_range(start_bit, end_bit) {
         read_story(world, |state| state.get_state(start_bit, end_bit))
     } else {
@@ -28,7 +24,7 @@ pub fn rust_get_game_state_bits(
 }
 
 pub fn rust_set_game_state_bits(
-    world: &mut crate::engine::World,
+    world: &mut crate::World,
     start_bit: c_int,
     end_bit: c_int,
     value: c_uchar,
@@ -40,7 +36,7 @@ pub fn rust_set_game_state_bits(
     }
 }
 
-pub fn rust_get_game_state_32(world: &crate::engine::World, start_bit: c_int) -> u32 {
+pub fn rust_get_game_state_32(world: &crate::World, start_bit: c_int) -> u32 {
     let Some(start_bit) = normalize_start_bit_32(start_bit) else {
         return 0;
     };
@@ -48,7 +44,7 @@ pub fn rust_get_game_state_32(world: &crate::engine::World, start_bit: c_int) ->
     read_story(world, |state| state.get_state_32(start_bit))
 }
 
-pub fn rust_set_game_state_32(world: &mut crate::engine::World, start_bit: c_int, value: u32) {
+pub fn rust_set_game_state_32(world: &mut crate::World, start_bit: c_int, value: u32) {
     let Some(start_bit) = normalize_start_bit_32(start_bit) else {
         return;
     };
@@ -59,7 +55,7 @@ pub fn rust_set_game_state_32(world: &mut crate::engine::World, start_bit: c_int
 }
 
 pub fn rust_copy_game_state(
-    world: &mut crate::engine::World,
+    world: &mut crate::World,
     dest_bit: c_int,
     src_start_bit: c_int,
     src_end_bit: c_int,
@@ -76,7 +72,7 @@ pub fn rust_copy_game_state(
     });
 }
 
-pub fn rust_reset_game_state(world: &mut crate::engine::World) {
+pub fn rust_reset_game_state(world: &mut crate::World) {
     write_story(world, |state| {
         state.reset();
     });
@@ -87,7 +83,7 @@ pub fn rust_reset_game_state(world: &mut crate::engine::World) {
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
 pub unsafe fn rust_open_state_file(
-    world: &mut crate::engine::World,
+    world: &mut crate::World,
     file_index: c_int,
     mode: *const c_char,
 ) -> c_int {
@@ -116,19 +112,19 @@ pub unsafe fn rust_open_state_file(
     }
 }
 
-pub fn rust_close_state_file(world: &mut crate::engine::World, file_index: c_int) {
+pub fn rust_close_state_file(world: &mut crate::World, file_index: c_int) {
     write_files(world, |files| {
         let _ = files.close(file_index as usize);
     });
 }
 
-pub fn rust_delete_state_file(world: &mut crate::engine::World, file_index: c_int) {
+pub fn rust_delete_state_file(world: &mut crate::World, file_index: c_int) {
     write_files(world, |files| {
         let _ = files.delete(file_index as usize);
     });
 }
 
-pub fn rust_length_state_file(world: &crate::engine::World, file_index: c_int) -> usize {
+pub fn rust_length_state_file(world: &crate::World, file_index: c_int) -> usize {
     read_files(world, |files| {
         files
             .get_file(file_index as usize)
@@ -142,7 +138,7 @@ pub fn rust_length_state_file(world: &crate::engine::World, file_index: c_int) -
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
 pub unsafe fn rust_read_state_file(
-    world: &mut crate::engine::World,
+    world: &mut crate::World,
     file_index: c_int,
     buf: *mut u8,
     size: usize,
@@ -168,7 +164,7 @@ pub unsafe fn rust_read_state_file(
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
 pub unsafe fn rust_write_state_file(
-    world: &mut crate::engine::World,
+    world: &mut crate::World,
     file_index: c_int,
     buf: *const u8,
     size: usize,
@@ -193,12 +189,12 @@ pub unsafe fn rust_write_state_file(
 }
 
 pub fn rust_seek_state_file(
-    world: &mut crate::engine::World,
+    world: &mut crate::World,
     file_index: c_int,
     offset: i64,
     whence: c_int,
 ) -> c_int {
-    use crate::engine::world::state_file::SeekWhence;
+    use crate::world::state_file::SeekWhence;
 
     let seek_whence = match whence {
         0 => SeekWhence::Set,
@@ -218,7 +214,7 @@ pub fn rust_seek_state_file(
     })
 }
 
-pub fn rust_get_game_state_bytes(world: &crate::engine::World) -> *const u8 {
+pub fn rust_get_game_state_bytes(world: &crate::World) -> *const u8 {
     read_story(world, |state| state.as_bytes().as_ptr())
 }
 
@@ -235,7 +231,7 @@ pub fn rust_get_game_state_size() -> usize {
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
 pub unsafe fn rust_restore_game_state_from_bytes(
-    world: &mut crate::engine::World,
+    world: &mut crate::World,
     bytes: *const u8,
     size: usize,
 ) {
@@ -249,11 +245,11 @@ pub unsafe fn rust_restore_game_state_from_bytes(
     replace_game_state(world, &arr).expect("game-state singleton poisoned");
 }
 
-pub use crate::engine::world::story::GameStateOwnerError;
+pub use crate::world::story::GameStateOwnerError;
 
 /// Copy of the singleton's bytes: the game state a save writes as "GmSt".
 pub fn snapshot_game_state(
-    world: &crate::engine::World,
+    world: &crate::World,
 ) -> Result<[u8; NUM_GAME_STATE_BYTES], GameStateOwnerError> {
     world
         .story
@@ -264,7 +260,7 @@ pub fn snapshot_game_state(
 
 /// Borrow the story and file fields together for a synchronous game-thread operation.
 pub fn with_state_owners<R>(
-    world: &mut crate::engine::World,
+    world: &mut crate::World,
     f: impl FnOnce(&mut StoryState, &mut StateFileManager) -> R,
 ) -> Result<R, GameStateOwnerError> {
     let game = world
@@ -276,7 +272,7 @@ pub fn with_state_owners<R>(
 
 /// Borrow the owned state files for a synchronous game-thread operation.
 pub fn with_state_files<R>(
-    world: &mut crate::engine::World,
+    world: &mut crate::World,
     f: impl FnOnce(&mut StateFileManager) -> R,
 ) -> Result<R, GameStateOwnerError> {
     Ok(write_files(world, f))
@@ -285,7 +281,7 @@ pub fn with_state_files<R>(
 /// Replace the whole singleton with `bytes`, creating it when absent: a load
 /// defines the game state whether or not a New Game ran first.
 pub fn replace_game_state(
-    world: &mut crate::engine::World,
+    world: &mut crate::World,
     bytes: &[u8; NUM_GAME_STATE_BYTES],
 ) -> Result<(), GameStateOwnerError> {
     world.story = Some(StoryState::from_bytes(bytes));
@@ -385,7 +381,7 @@ pub unsafe fn rust_copy_game_state_bits_between_bytes(
     copy_state_bits_raw(dest_state, target, src_state, begin, end);
 }
 
-pub fn rust_init_planet_info(world: &mut crate::engine::World, num_stars: c_int) -> c_int {
+pub fn rust_init_planet_info(world: &mut crate::World, num_stars: c_int) -> c_int {
     if num_stars < 0 {
         return 0;
     }
@@ -399,7 +395,7 @@ pub fn rust_init_planet_info(world: &mut crate::engine::World, num_stars: c_int)
     }
 }
 
-pub fn rust_uninit_planet_info(world: &mut crate::engine::World) {
+pub fn rust_uninit_planet_info(world: &mut crate::World) {
     write_files(world, |files| {
         let mut manager = PlanetInfoManager::new(files);
         let _ = manager.uninit_planet_info();
@@ -411,7 +407,7 @@ pub fn rust_uninit_planet_info(world: &mut crate::engine::World) {
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
 pub unsafe fn rust_get_planet_info(
-    world: &mut crate::engine::World,
+    world: &mut crate::World,
     star_index: c_int,
     planet_index: c_int,
     moon_index: c_int,
@@ -455,7 +451,7 @@ pub unsafe fn rust_get_planet_info(
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
 pub unsafe fn rust_put_planet_info(
-    world: &mut crate::engine::World,
+    world: &mut crate::World,
     star_index: c_int,
     planet_index: c_int,
     moon_index: c_int,
@@ -559,26 +555,20 @@ unsafe fn normalize_state_bytes_mut<'a>(bytes: *mut u8, bit_count: usize) -> Opt
     Some(std::slice::from_raw_parts_mut(bytes, byte_count))
 }
 
-fn read_story<R: Default>(world: &crate::engine::World, f: impl FnOnce(&StoryState) -> R) -> R {
+fn read_story<R: Default>(world: &crate::World, f: impl FnOnce(&StoryState) -> R) -> R {
     world.story.as_ref().map_or_else(R::default, f)
 }
-fn write_story<R: Default>(
-    world: &mut crate::engine::World,
-    f: impl FnOnce(&mut StoryState) -> R,
-) -> R {
+fn write_story<R: Default>(world: &mut crate::World, f: impl FnOnce(&mut StoryState) -> R) -> R {
     world.story.as_mut().map_or_else(R::default, f)
 }
-fn read_files<R>(world: &crate::engine::World, f: impl FnOnce(&StateFileManager) -> R) -> R {
+fn read_files<R>(world: &crate::World, f: impl FnOnce(&StateFileManager) -> R) -> R {
     f(&world.files)
 }
-fn write_files<R>(
-    world: &mut crate::engine::World,
-    f: impl FnOnce(&mut StateFileManager) -> R,
-) -> R {
+fn write_files<R>(world: &mut crate::World, f: impl FnOnce(&mut StateFileManager) -> R) -> R {
     f(&mut world.files)
 }
 fn files_result<R, E>(
-    world: &mut crate::engine::World,
+    world: &mut crate::World,
     f: impl FnOnce(&mut StateFileManager) -> Result<R, E>,
 ) -> Option<R> {
     write_files(world, f).ok()
@@ -587,13 +577,13 @@ fn files_result<R, E>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::StoryKey;
+    use crate::StoryKey;
     use serial_test::serial;
 
     #[test]
     #[serial]
     fn test_rust_init_game_state() {
-        let mut game = crate::engine::Game::new();
+        let mut game = crate::Game::new();
         {
             {
                 rust_init_game_state(&mut game.world);
@@ -606,7 +596,7 @@ mod tests {
     #[test]
     #[serial]
     fn starting_a_second_game_does_not_inherit_the_first_games_state() {
-        let mut game = crate::engine::Game::new();
+        let mut game = crate::Game::new();
         {
             {
                 // InitGlobData memsets the C shadow and calls this to match, so a New
@@ -636,7 +626,7 @@ mod tests {
     #[test]
     #[serial]
     fn a_new_game_clears_every_state_bit() {
-        let mut game = crate::engine::Game::new();
+        let mut game = crate::Game::new();
         {
             {
                 use super::super::game_state::NUM_GAME_STATE_BITS;
@@ -692,7 +682,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_typed_state_keys_use_generated_ranges() {
-        let mut game = crate::engine::Game::new();
+        let mut game = crate::Game::new();
         {
             {
                 rust_init_game_state(&mut game.world);
@@ -714,7 +704,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_rust_get_set_game_state_bits() {
-        let mut game = crate::engine::Game::new();
+        let mut game = crate::Game::new();
         {
             {
                 rust_init_game_state(&mut game.world);
@@ -728,7 +718,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_rust_get_set_game_state_32() {
-        let mut game = crate::engine::Game::new();
+        let mut game = crate::Game::new();
         {
             {
                 rust_init_game_state(&mut game.world);
@@ -817,7 +807,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_rust_reset_game_state() {
-        let mut game = crate::engine::Game::new();
+        let mut game = crate::Game::new();
         {
             {
                 rust_init_game_state(&mut game.world);
@@ -834,7 +824,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_rust_planet_info_round_trip() {
-        let mut game = crate::engine::Game::new();
+        let mut game = crate::Game::new();
         // SAFETY: serial tests own the published lifecycle until this call returns.
         unsafe {
             {
@@ -880,7 +870,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_rust_open_state_file() {
-        let mut game = crate::engine::Game::new();
+        let mut game = crate::Game::new();
         // SAFETY: serial tests own the published lifecycle until this call returns.
         unsafe {
             {
@@ -899,7 +889,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_rust_write_read_state_file() {
-        let mut game = crate::engine::Game::new();
+        let mut game = crate::Game::new();
         // SAFETY: serial tests own the published lifecycle until this call returns.
         unsafe {
             {
@@ -942,7 +932,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_rust_length_state_file() {
-        let mut game = crate::engine::Game::new();
+        let mut game = crate::Game::new();
         // SAFETY: serial tests own the published lifecycle until this call returns.
         unsafe {
             {
@@ -970,7 +960,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_rust_delete_state_file() {
-        let mut game = crate::engine::Game::new();
+        let mut game = crate::Game::new();
         // SAFETY: serial tests own the published lifecycle until this call returns.
         unsafe {
             {
@@ -999,7 +989,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_rust_seek_state_file() {
-        let mut game = crate::engine::Game::new();
+        let mut game = crate::Game::new();
         // SAFETY: serial tests own the published lifecycle until this call returns.
         unsafe {
             {
@@ -1034,7 +1024,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_rust_get_game_state_bytes() {
-        let mut game = crate::engine::Game::new();
+        let mut game = crate::Game::new();
         // SAFETY: serial tests own the published lifecycle until this call returns.
         unsafe {
             {
@@ -1067,7 +1057,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_rust_restore_game_state_from_bytes() {
-        let mut game = crate::engine::Game::new();
+        let mut game = crate::Game::new();
         // SAFETY: serial tests own the published lifecycle until this call returns.
         unsafe {
             {

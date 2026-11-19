@@ -4,11 +4,11 @@ use super::platform::SisView;
 
 const MODULES_MENU_ANI: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/../sc2/content/base/ui/modulesmenu.ani"
+    "/../../../sc2/content/base/ui/modulesmenu.ani"
 ));
 const OUTFIT_MODULES_ANI: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/../sc2/content/base/ui/outfitmodules.ani"
+    "/../../../sc2/content/base/ui/outfitmodules.ani"
 ));
 
 /// Equipment numbers shared by the native initializer and Outfit tests.
