@@ -561,14 +561,10 @@ mod tests {
             assert_eq!(coord.inner.lock().sched_state, SchedulerState::initial());
         } else {
             if case != "melee" {
-                assert!(!crate::automation::input_admission::with_supplied(
-                    |setup| coord.process_input_inner(&mut campaign_state::empty_view, setup)
-                ));
+                assert!(!super::super::tests::process_supplied(&coord));
                 assert_eq!(coord.inner.lock().sched_state.step_index, 1);
             }
-            assert!(crate::automation::input_admission::with_supplied(|setup| {
-                coord.process_input_inner(&mut campaign_state::empty_view, setup)
-            }));
+            assert!(super::super::tests::process_supplied(&coord));
             assert_eq!(
                 coord.inner.lock().terminal_class,
                 Some(TerminalClass::SemanticMismatch)

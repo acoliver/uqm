@@ -726,15 +726,14 @@ impl AutomationObserver {
                 return true;
             }
 
-            let coord = self;
-            let before = coord.inner.lock().sched_state.step_index;
-            if coord.process_input_inner(capture, setup) {
+            let before = self.inner.lock().sched_state.step_index;
+            if self.process_input_at_boundary(capture, false, setup) {
                 return false;
             }
             if self.should_skip_pending_communication_speech() {
                 return true;
             }
-            let after = coord.inner.lock().sched_state.step_index;
+            let after = self.inner.lock().sched_state.step_index;
             if after == before {
                 return false;
             }
@@ -750,12 +749,11 @@ impl AutomationObserver {
         setup: &mut crate::automation::input_admission::Target<'_>,
     ) -> bool {
         for _ in 0..2 {
-            let coord = self;
-            let before = coord.inner.lock().sched_state.step_index;
-            if coord.process_input_inner(capture, setup) {
+            let before = self.inner.lock().sched_state.step_index;
+            if self.process_input_at_boundary(capture, false, setup) {
                 return true;
             }
-            let after = coord.inner.lock().sched_state.step_index;
+            let after = self.inner.lock().sched_state.step_index;
             if after == before {
                 break;
             }
@@ -1816,14 +1814,6 @@ impl AutomationObserver {
             };
             self.write_trace_labeled(inner, RecordKind::SemanticAssertion, label);
         }
-    }
-
-    fn process_input_inner(
-        &self,
-        capture: &mut dyn FnMut() -> campaign_state::CampaignView,
-        setup: &mut crate::automation::input_admission::Target<'_>,
-    ) -> bool {
-        self.process_input_at_boundary(capture, false, setup)
     }
 
     /// When a `wait_for_planet_side_end` ran out of ticks, record the last
@@ -2984,6 +2974,12 @@ fn presentation_wait_trace_label(count: u64) -> String {
 mod tests {
     use super::*;
 
+    pub(super) fn process_supplied(coord: &AutomationObserver) -> bool {
+        crate::automation::input_admission::with_supplied(|setup| {
+            coord.process_input_at_boundary(&mut campaign_state::empty_view, false, setup)
+        })
+    }
+
     #[test]
     fn application_releases_its_observer_while_external_handles_remain_alive() {
         const CHILD: &str = "UQM_OBSERVER_OWNERSHIP_TEST";
@@ -3313,13 +3309,9 @@ mod tests {
         }
         use crate::automation::ui_observation::PlanetMenuPhase;
         coord.observe_planet_menu(PlanetMenuPhase::Dispatch as usize);
-        assert!(!crate::automation::input_admission::with_supplied(
-            |setup| coord.process_input_inner(&mut campaign_state::empty_view, setup)
-        ));
+        assert!(!process_supplied(&coord));
         assert_eq!(coord.inner.lock().sched_state.step_index, 1);
-        assert!(crate::automation::input_admission::with_supplied(|setup| {
-            coord.process_input_inner(&mut campaign_state::empty_view, setup)
-        }));
+        assert!(process_supplied(&coord));
         assert_eq!(_app.observer().unwrap().finalize(0).unwrap(), 0);
     }
 
@@ -3374,9 +3366,7 @@ mod tests {
                 .map(|line| TraceRecord::from_jsonl(line).unwrap())
                 .collect::<Vec<_>>()
         };
-        assert!(!crate::automation::input_admission::with_supplied(
-            |setup| coord.process_input_inner(&mut campaign_state::empty_view, setup)
-        ));
+        assert!(!process_supplied(&coord));
         assert!(!_app.observer().unwrap().process_present(Some(frame(1, 1))));
         assert_eq!(
             coord.inner.lock().sched_state.step_index,
@@ -3384,24 +3374,16 @@ mod tests {
             "capture must leave activity awaiting its runtime verification"
         );
         assert_eq!(plan.committed(&records()).unwrap().len(), 1);
-        assert!(!crate::automation::input_admission::with_supplied(
-            |setup| coord.process_input_inner(&mut campaign_state::empty_view, setup)
-        ));
+        assert!(!process_supplied(&coord));
         assert_eq!(coord.inner.lock().sched_state.step_index, 2);
-        assert!(!crate::automation::input_admission::with_supplied(
-            |setup| coord.process_input_inner(&mut campaign_state::empty_view, setup)
-        ));
+        assert!(!process_supplied(&coord));
         assert!(coord.inner.lock().armed_capture_label.is_none());
         assert!(!_app.observer().unwrap().process_present(Some(frame(2, 1))));
         assert_eq!(plan.committed(&records()).unwrap().len(), 2);
-        assert!(!crate::automation::input_admission::with_supplied(
-            |setup| coord.process_input_inner(&mut campaign_state::empty_view, setup)
-        ));
+        assert!(!process_supplied(&coord));
         assert!(!_app.observer().unwrap().process_present(Some(frame(3, 2))));
         assert_eq!(plan.committed(&records()).unwrap().len(), 3);
-        assert!(crate::automation::input_admission::with_supplied(|setup| {
-            coord.process_input_inner(&mut campaign_state::empty_view, setup)
-        }));
+        assert!(process_supplied(&coord));
         assert_eq!(_app.observer().unwrap().finalize(0).unwrap(), 0);
         let trace = records();
         let counts: Vec<_> = trace
@@ -3480,12 +3462,7 @@ mod tests {
                 .map(|line| TraceRecord::from_jsonl(line).unwrap())
                 .collect();
             assert_eq!(plan.committed(&records).unwrap().len() as u64, count);
-            assert_eq!(
-                crate::automation::input_admission::with_supplied(
-                    |setup| coord.process_input_inner(&mut campaign_state::empty_view, setup)
-                ),
-                count == 2
-            );
+            assert_eq!(process_supplied(&coord), count == 2);
         }
         assert!(!coord.inner.lock().pending_main_menu_ready);
         assert_eq!(_app.observer().unwrap().finalize(0).unwrap(), 0);
@@ -3532,15 +3509,11 @@ mod tests {
             height: 1,
             rgba: vec![1, 2, 3, 255],
         };
-        assert!(!crate::automation::input_admission::with_supplied(
-            |setup| coord.process_input_inner(&mut campaign_state::empty_view, setup)
-        ));
+        assert!(!process_supplied(&coord));
         assert!(!_app.observer().unwrap().process_present(Some(frame(1, 0))));
         let first = std::fs::read(temp.path().join("trace.jsonl")).unwrap();
         for count in 2..=8 {
-            assert!(!crate::automation::input_admission::with_supplied(
-                |setup| coord.process_input_inner(&mut campaign_state::empty_view, setup)
-            ));
+            assert!(!process_supplied(&coord));
             assert!(!_app
                 .observer()
                 .unwrap()
@@ -3551,9 +3524,7 @@ mod tests {
             );
         }
         while coord.inner.lock().armed_capture_label.is_none() {
-            assert!(!crate::automation::input_admission::with_supplied(
-                |setup| coord.process_input_inner(&mut campaign_state::empty_view, setup)
-            ));
+            assert!(!process_supplied(&coord));
         }
         assert!(!_app.observer().unwrap().process_present(Some(frame(9, 1))));
         let boundary = std::fs::read(temp.path().join("trace.jsonl")).unwrap();
@@ -3569,9 +3540,7 @@ mod tests {
             .map(|record| record.presentation.as_ref().unwrap().count)
             .collect();
         assert_eq!(presentations, (1..=9).collect::<Vec<_>>());
-        assert!(crate::automation::input_admission::with_supplied(|setup| {
-            coord.process_input_inner(&mut campaign_state::empty_view, setup)
-        }));
+        assert!(process_supplied(&coord));
         assert_eq!(_app.observer().unwrap().finalize(0).unwrap(), 0);
         let finished = std::fs::read(temp.path().join("trace.jsonl")).unwrap();
         assert!(finished.starts_with(&boundary));
@@ -3693,9 +3662,7 @@ mod tests {
         let coord = _app.observer().cloned().unwrap();
         assert!(!_app.observer().unwrap().process_main_menu_ready());
         for _ in 0..3 {
-            assert!(!crate::automation::input_admission::with_supplied(
-                |setup| coord.process_input_inner(&mut campaign_state::empty_view, setup)
-            ));
+            assert!(!process_supplied(&coord));
             assert_eq!(coord.inner.lock().sched_state.step_index, 1);
             assert!(coord.inner.lock().armed_capture_label.is_none());
         }
@@ -3719,33 +3686,23 @@ mod tests {
             _app.observer().unwrap().native_window_semantic_snapshot().0
         );
         assert_eq!(plan.committed(&live_records).unwrap().len(), 1);
-        assert!(!crate::automation::input_admission::with_supplied(
-            |setup| coord.process_input_inner(&mut campaign_state::empty_view, setup)
-        ));
+        assert!(!process_supplied(&coord));
         assert_eq!(coord.inner.lock().sched_state.step_index, 2);
         assert_eq!(coord.inner.lock().pending_transitions.len(), 1);
-        assert!(!crate::automation::input_admission::with_supplied(
-            |setup| coord.process_input_inner(&mut campaign_state::empty_view, setup)
-        ));
+        assert!(!process_supplied(&coord));
         assert_eq!(coord.inner.lock().sched_state.step_index, 2);
         assert!(!_app.observer().unwrap().process_present(Some(frame(2, 0))));
-        assert!(!crate::automation::input_admission::with_supplied(
-            |setup| coord.process_input_inner(&mut campaign_state::empty_view, setup)
-        ));
+        assert!(!process_supplied(&coord));
         assert_eq!(coord.inner.lock().sched_state.step_index, 3);
         assert!(coord.inner.lock().pending_transitions.is_empty());
         assert!(!_app.observer().unwrap().process_present(Some(frame(3, 0))));
-        assert!(!crate::automation::input_admission::with_supplied(
-            |setup| coord.process_input_inner(&mut campaign_state::empty_view, setup)
-        ));
+        assert!(!process_supplied(&coord));
         assert_eq!(
             coord.inner.lock().armed_capture_label.as_deref(),
             Some("menu")
         );
         assert!(!_app.observer().unwrap().process_present(Some(frame(4, 1))));
-        assert!(crate::automation::input_admission::with_supplied(|setup| {
-            coord.process_input_inner(&mut campaign_state::empty_view, setup)
-        }));
+        assert!(process_supplied(&coord));
         assert_eq!(
             coord.inner.lock().terminal_class,
             Some(TerminalClass::Success)
