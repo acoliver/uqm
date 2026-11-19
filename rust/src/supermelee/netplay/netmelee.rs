@@ -38,7 +38,9 @@ impl super::session::SessionCore {
         match result {
             Ok(socket) => conn.socket = Some(socket),
             Err(error) => {
-                let error = error.raw_os_error().unwrap_or(libc::EIO);
+                let error = error
+                    .raw_os_error()
+                    .unwrap_or(crate::engine::platform::os::errno::EIO);
                 super::set_errno(error);
                 emit(conn.event(Effect::Error(error)));
                 return false;

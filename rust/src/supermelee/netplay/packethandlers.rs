@@ -16,7 +16,7 @@ pub(super) fn handle(
     (effects, result)
 }
 fn bad_message() -> i32 {
-    super::set_errno(libc::EBADMSG);
+    super::set_errno(crate::engine::platform::os::errno::EBADMSG);
     -1
 }
 fn battle_active(state: NetState) -> bool {
@@ -170,7 +170,7 @@ fn handle_init(
         effects.push(conn.event(Effect::Abort(
             NetplayAbortReason_AbortReason_versionMismatch,
         )));
-        super::set_errno(libc::ENOSYS);
+        super::set_errno(crate::engine::platform::os::errno::ENOSYS);
         return -1;
     }
     effects.extend(conn.remote_ready(session.frame_count.get()));
