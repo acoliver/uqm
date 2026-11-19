@@ -113,9 +113,7 @@ pub(super) mod c_bridge {
         cur: u8,
     ) {
         let activity = cx.world.activity();
-        {
-            super::super::sis_graphics::refresh_responses(comm, activity, top, count, cur)
-        };
+        super::super::sis_graphics::refresh_responses(comm, activity, top, count, cur);
     }
     pub fn call_select_conversation_summary(
         comm: &mut Comm,
@@ -258,16 +256,14 @@ pub mod dinput {
         io: &mut Io<'_>,
         wait_track: u32,
     ) -> bool {
-        {
-            // Transition animation to talking comm
-            if super::want_talking_anim(comm) && super::have_talking_anim(comm) {
-                if super::has_transition_anim(comm) {
-                    super::set_run_intro_anim(comm);
-                }
-                super::set_run_talking_anim(comm);
-                while super::running_intro_anim(comm) {
-                    super::do_run_comm_anim_frame(comm, input);
-                }
+        // Transition animation to talking comm
+        if super::want_talking_anim(comm) && super::have_talking_anim(comm) {
+            if super::has_transition_anim(comm) {
+                super::set_run_intro_anim(comm);
+            }
+            super::set_run_talking_anim(comm);
+            while super::running_intro_anim(comm) {
+                super::do_run_comm_anim_frame(comm, input);
             }
         };
         let mut ts = TalkingStateDInput {
@@ -282,13 +278,11 @@ pub mod dinput {
             ended: 0,
         };
 
-        {
-            if wait_track == 0 {
-                io.observer
-                    .checkpoint(&CheckpointView::CommunicationReplay(true));
-            } else if c_bridge::PlayingTrack() == 0 {
-                c_bridge::PlayTrack();
-            }
+        if wait_track == 0 {
+            io.observer
+                .checkpoint(&CheckpointView::CommunicationReplay(true));
+        } else if c_bridge::PlayingTrack() == 0 {
+            c_bridge::PlayTrack();
         };
         cx.kernel
             .input_controls()
@@ -296,8 +290,7 @@ pub mod dinput {
         let runtime = cx.kernel.input_runtime();
         comm.run_input(cx, io, false, |comm, cx, _| {
             let activity = cx.world.activity();
-            let Some(more) = do_talk_segue_frame(comm, input, &mut ts, activity)
-            else {
+            let Some(more) = do_talk_segue_frame(comm, input, &mut ts, activity) else {
                 return false;
             };
             runtime.sleep_until(cx, ts.next_time);
@@ -352,29 +345,25 @@ pub mod dinput {
 
         if cancel_pressed && !won_last_battle {
             let speech = cx.kernel.using_speech;
-            {
-                c_bridge::FadeMusic(
-                    super::communication_background_volume(
-                        crate::sound::types::NORMAL_VOLUME as u8,
-                        speech,
-                    ),
-                    c_bridge::ONE_SECOND_TICKS as i16,
-                )
-            };
+            c_bridge::FadeMusic(
+                super::communication_background_volume(
+                    crate::sound::types::NORMAL_VOLUME as u8,
+                    speech,
+                ),
+                c_bridge::ONE_SECOND_TICKS as i16,
+            );
             super::super::sis_graphics::select_conversation_summary(comm, cx, io);
             lrs.time_out = c_bridge::FadeMusic(0, (c_bridge::ONE_SECOND_TICKS * 2) as i16)
                 + (c_bridge::ONE_SECOND_TICKS as u32) / 60;
         } else if left_pressed {
             let speech = cx.kernel.using_speech;
-            {
-                c_bridge::FadeMusic(
-                    super::communication_background_volume(
-                        crate::sound::types::NORMAL_VOLUME as u8,
-                        speech,
-                    ),
-                    c_bridge::ONE_SECOND_TICKS as i16,
-                )
-            };
+            c_bridge::FadeMusic(
+                super::communication_background_volume(
+                    crate::sound::types::NORMAL_VOLUME as u8,
+                    speech,
+                ),
+                c_bridge::ONE_SECOND_TICKS as i16,
+            );
             run_talk_segue_dinput(comm, input, cx, io, 0);
             lrs.time_out = c_bridge::FadeMusic(0, (c_bridge::ONE_SECOND_TICKS * 2) as i16)
                 + (c_bridge::ONE_SECOND_TICKS as u32) / 60;
