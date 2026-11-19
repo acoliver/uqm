@@ -1,22 +1,13 @@
-#[cfg(not(test))]
 use super::{lifecycle, Application};
-#[cfg(not(test))]
 use crate::engine::battle::{Battle, Cx};
-#[cfg(not(test))]
 use crate::engine::observe::{CheckpointView, Io, Observer};
-#[cfg(not(test))]
 use crate::mainloop::state_machine::{self, ActivityDecision, BreakAction};
-#[cfg(not(test))]
 use crate::mainloop::types::{activity_flags, ActivityValue};
-#[cfg(not(test))]
 use crate::mainloop::MainLoopError;
-#[cfg(not(test))]
 use std::ffi::{c_char, c_int, CString};
-#[cfg(not(test))]
 use std::sync::Arc;
 
 /// Run initialization, the campaign loop and subsystem teardown on the game thread.
-#[cfg(not(test))]
 pub fn run(
     application: &mut Application,
     arguments: &[CString],
@@ -55,7 +46,6 @@ pub fn run(
     result
 }
 
-#[cfg(not(test))]
 fn run_game(
     game: &mut crate::engine::Game,
     observer: Option<Arc<crate::automation::AutomationObserver>>,
@@ -109,10 +99,8 @@ fn run_game(
     Ok(())
 }
 
-#[cfg(not(test))]
 struct RestartServices;
 
-#[cfg(not(test))]
 impl crate::mainloop::restart_menu::restart_ops::RestartHost for RestartServices {
     fn melee(&mut self, cx: &mut Cx<'_>, io: &mut Io<'_>) {
         use crate::engine::io::{handles, uio_owned::Directory};
@@ -140,7 +128,6 @@ impl crate::mainloop::restart_menu::restart_ops::RestartHost for RestartServices
     }
 }
 
-#[cfg(not(test))]
 fn initialize_campaign(cx: &mut Cx<'_>) {
     cx.kernel.install_player_inputs();
     crate::navigation::globals::init_game_structures(cx);
@@ -153,7 +140,6 @@ fn initialize_campaign(cx: &mut Cx<'_>) {
     crate::navigation::events::schedule_initial_events(cx.world, &mut services);
 }
 
-#[cfg(not(test))]
 fn activate_start_scene(
     cx: &mut Cx<'_>,
     observer: Option<&Arc<crate::automation::AutomationObserver>>,
@@ -180,7 +166,6 @@ fn activate_start_scene(
     observer.finish_start_scene(&plan);
 }
 
-#[cfg(not(test))]
 fn run_campaign(
     cx: &mut Cx<'_>,
     io: &mut Io<'_>,
@@ -224,7 +209,6 @@ fn run_campaign(
     cx.kernel.clear_player_inputs();
 }
 
-#[cfg(not(test))]
 fn dispatch(cx: &mut Cx<'_>, io: &mut Io<'_>, decision: ActivityDecision) {
     match decision {
         ActivityDecision::InstallBombAtEarth => {

@@ -28,7 +28,6 @@ pub mod scan;
 pub mod sphere;
 
 pub(crate) mod solar_coords;
-#[cfg(not(test))]
 pub mod solarsys;
 
 pub mod pstarmap;

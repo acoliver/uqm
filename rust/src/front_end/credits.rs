@@ -5,7 +5,6 @@ mod render;
 use control::{CreditsControl, CreditsKeys};
 use uqm_engine::time::counter_abi::ONE_SECOND;
 
-#[cfg(not(test))]
 pub(crate) mod runtime {
     use super::{
         render::{HookRestore, Resources, Session},
@@ -152,7 +151,6 @@ pub(crate) mod runtime {
     }
 }
 
-#[cfg(not(test))]
 pub use runtime::credits;
 #[cfg(test)]
 mod owned_tests;

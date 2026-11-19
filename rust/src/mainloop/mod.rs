@@ -64,8 +64,6 @@ pub enum MainLoopError {
 pub mod platform_abi;
 
 pub mod input_abi;
-#[cfg(not(test))]
 pub mod lifecycle_abi;
 
-#[cfg(not(test))]
 pub mod state_abi;

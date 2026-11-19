@@ -1,6 +1,5 @@
 mod lifecycle;
 mod runtime;
-#[cfg(not(test))]
 pub use runtime::run;
 
 use std::sync::Arc;
@@ -22,7 +21,6 @@ impl Application {
         Self { observer, game }
     }
 
-    #[cfg(not(test))]
     pub fn install_input(&mut self, input: crate::engine::input::InputControls) {
         let runtime = crate::mainloop::input_abi::NativeInputRuntime::new(
             self.observer().cloned(),

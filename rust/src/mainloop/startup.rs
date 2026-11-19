@@ -15,7 +15,6 @@ fn graphics_config(parsed: &super::options::ParsedOptions) -> (i32, i32) {
     (i32::from(!parsed.opengl), flags)
 }
 
-#[cfg(not(test))]
 mod live {
 
     use crate::automation::input_ffi::graphics_options;
@@ -167,7 +166,6 @@ mod live {
     }
 }
 
-#[cfg(not(test))]
 pub use live::*;
 
 #[cfg(test)]

@@ -14,10 +14,8 @@ pub mod world_resources;
 
 pub mod macro_abi;
 
-#[cfg(not(test))]
 pub mod cleanup;
 
 pub mod space_resources;
 
-#[cfg(not(test))]
 pub mod kernel_abi;

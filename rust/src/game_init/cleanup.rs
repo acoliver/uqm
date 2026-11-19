@@ -4,13 +4,7 @@ use crate::graphics::context_abi::DestroyContext;
 use crate::graphics::{drawable_abi::DestroyDrawable, pixmap_abi::ReleaseDrawable};
 use std::ptr;
 
-#[cfg(not(test))]
 use crate::game_init::kernel_abi::UninitPlayerInput;
-#[cfg(test)]
-extern "C" {
-    fn UninitPlayerInput();
-}
-
 /// # Safety
 /// Run on the game thread after the game loop stops, before graphics teardown.
 pub unsafe fn free_kernel(kernel: &mut crate::engine::Kernel) {
