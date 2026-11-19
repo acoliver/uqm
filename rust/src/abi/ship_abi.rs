@@ -888,17 +888,7 @@ pub const match_MatchType_match_MATCH_SUFFIX: match_MatchType = 2;
 pub const match_MatchType_match_MATCH_SUBSTRING: match_MatchType = 3;
 pub const match_MatchType_match_MATCH_REGEX: match_MatchType = 4;
 pub type match_MatchType = ::std::os::raw::c_uint;
-unsafe extern "C" {
-    pub fn printf(arg1: *const ::std::os::raw::c_char, ...) -> ::std::os::raw::c_int;
-}
 pub type FILE = libc::FILE;
-unsafe extern "C" {
-    pub fn sprintf(
-        arg1: *mut ::std::os::raw::c_char,
-        arg2: *const ::std::os::raw::c_char,
-        ...
-    ) -> ::std::os::raw::c_int;
-}
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct resource_index_desc {
@@ -916,20 +906,6 @@ pub type STRING = *mut STRING_TABLE_ENTRY_DESC;
 pub type STRINGPTR = *mut ::std::os::raw::c_char;
 pub type DIRENTRY_REF = STRING_TABLE;
 pub type DIRENTRY = STRING;
-pub unsafe fn LoadDirEntryTable(
-    dirHandle: *mut uio_DirHandle,
-    path: *const ::std::os::raw::c_char,
-    pattern: *const ::std::os::raw::c_char,
-    matchType: match_MatchType,
-) -> DIRENTRY_REF {
-    crate::resource::direct::LoadDirEntryTable(
-        dirHandle.cast(),
-        path,
-        pattern,
-        matchType as ::std::os::raw::c_int,
-    )
-    .cast()
-}
 pub use crate::graphics::native_abi::context_desc;
 pub type CONTEXT_DESC = context_desc;
 pub type FRAME_DESC = frame_desc;
@@ -1035,12 +1011,8 @@ pub type INPUT_TEMPLATE = _input_template;
 pub type BattleFrameCounter = DWORD;
 
 pub type Checksum = uint32;
-unsafe extern "C" {
-    pub static mut ScreenWidth: ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    pub static mut ScreenHeight: ::std::os::raw::c_int;
-}
+pub use crate::graphics::gfx_common_abi::ScreenWidth;
+pub use crate::graphics::gfx_common_abi::ScreenHeight;
 
 pub type VELOCITY_DESC = crate::math::velocity::VelocityDesc;
 pub const VIEW_STATE_VIEW_STABLE: VIEW_STATE = 0;
@@ -1080,12 +1052,6 @@ pub const MeleeShip_MELEE_NONE: MeleeShip = 255;
 pub type MeleeShip = ::std::os::raw::c_uint;
 
 
-pub unsafe fn Flash_createHighlight(gfxContext: CONTEXT, rect: *const RECT) -> *mut FlashContext {
-    crate::graphics::flash::Flash_createHighlight(gfxContext.cast(), rect.cast()).cast()
-}
-pub unsafe fn Flash_setRect(context: *mut FlashContext, rect: *const RECT) {
-    crate::graphics::flash::Flash_setRect(context.cast(), rect.cast());
-}
 pub const KEY_UP: _bindgen_ty_1 = 0;
 pub const KEY_DOWN: _bindgen_ty_1 = 1;
 pub const KEY_LEFT: _bindgen_ty_1 = 2;
@@ -1520,19 +1486,7 @@ pub const TFB_REDRAW_FADING: _bindgen_ty_16 = 1;
 pub const TFB_REDRAW_EXPOSE: _bindgen_ty_16 = 2;
 pub const TFB_REDRAW_YES: _bindgen_ty_16 = 3;
 pub type _bindgen_ty_16 = ::std::os::raw::c_uint;
-unsafe extern "C" {
-    pub static mut GfxFlags: ::std::os::raw::c_int;
-}
 pub use crate::graphics::gfx_common_abi::{SetGraphicScale, SetGraphicScaleMode};
-unsafe extern "C" {
-    pub static mut ScreenWidthActual: ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    pub static mut ScreenHeightActual: ::std::os::raw::c_int;
-}
-unsafe extern "C" {
-    pub static mut GraphicsDriver: ::std::os::raw::c_int;
-}
 
 
 
@@ -1750,8 +1704,6 @@ pub const HAIL: _bindgen_ty_26 = 0;
 pub const ATTACK: _bindgen_ty_26 = 1;
 pub type _bindgen_ty_26 = ::std::os::raw::c_uint;
 
-unsafe extern "C" {
-}
 pub const STAR_STRING_BASE: _bindgen_ty_27 = 0;
 pub const DEVICE_STRING_BASE: _bindgen_ty_27 = 133;
 pub const CARGO_STRING_BASE: _bindgen_ty_27 = 162;
