@@ -9,11 +9,8 @@ use battle::{prim as prim_of, Battle, FrameSet, Ship};
 mod special_hooks;
 use std::{ffi::CStr, ptr};
 use uqm_rust::collections::observation;
+use uqm_rust::graphics::menu::frame_index as index_of;
 use uqm_rust::ships::native::abi::*;
-
-unsafe fn index_of(frame: FRAME) -> u16 {
-    uqm_rust::graphics::pixmap_abi::GetFrameIndex(frame.cast())
-}
 
 unsafe fn spawn_ship(fleet: &mut Ship<'_>, x: COORD, y: COORD) -> *mut ElementRecord {
     let ship = fleet.ptr();
