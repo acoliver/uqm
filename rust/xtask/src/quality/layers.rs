@@ -144,7 +144,6 @@ const MODULE_LAYERS: &[(&str, Layer)] = &[
     ("savegame::lzh", Layer::Save),
     ("state::state_file", Layer::Save),
     ("state::planet_info", Layer::Save),
-    ("supermelee::setup::persistence", Layer::Save),
     ("ships", Layer::Content),
     ("planets::generate", Layer::Content),
     ("planets::tables", Layer::Content),
@@ -518,7 +517,6 @@ mod tests {
                     .any(|f| f.metric == format!("planned.{name}"))
             );
         }
-        assert_eq!(layer("supermelee::setup::persistence"), Layer::Save);
         assert!(!permitted(Layer::Engine, Layer::Platform));
         assert!(permitted(Layer::App, Layer::Platform));
     }

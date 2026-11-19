@@ -235,7 +235,7 @@ impl MeleeSession {
             col: 0,
             melee_setup: crate::supermelee::setup::team::MeleeSetup::new(),
             load: crate::supermelee::setup::browser::TeamBrowser::new(
-                crate::supermelee::setup::persistence::builtin_teams(),
+                crate::supermelee::setup::builtin::builtin_teams(),
             ),
             current_ship: 0,
             cur_index: 0,
