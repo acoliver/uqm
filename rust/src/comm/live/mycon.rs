@@ -46,7 +46,7 @@ fn normal_mycon(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
         )
     });
 }
-fn callback(h: Handler) -> crate::comm::response::ResponseFunc {
+pub(super) fn callback(h: Handler) -> crate::comm::response::ResponseFunc {
     match h {
         Handler::CombatIsInevitable => combat_is_inevitable,
         Handler::SunDevice => sun_device,

@@ -78,7 +78,7 @@ fn spathi_neutral(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
         )
     });
 }
-fn callback(handler: Handler) -> crate::comm::response::ResponseFunc {
+pub(super) fn callback(handler: Handler) -> crate::comm::response::ResponseFunc {
     match handler {
         Handler::ExitConversation => exit_conversation,
         Handler::SpathiOnPluto => spathi_on_pluto,

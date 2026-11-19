@@ -78,7 +78,7 @@ fn space(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
         )
     });
 }
-fn callback(h: Handler) -> crate::comm::response::ResponseFunc {
+pub(super) fn callback(h: Handler) -> crate::comm::response::ResponseFunc {
     match h {
         Handler::ExitConversation => exit_conversation,
         Handler::Buy => buy,
