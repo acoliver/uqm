@@ -103,7 +103,7 @@ fn checkpoint_observations_belong_to_each_observer() {
 
 #[test]
 fn campaign_reads_the_supplied_observers_ending_and_encounter_state() {
-    use campaign_state::{LiveCampaign, StateKey, StateSource};
+    use campaign_state::{BossObservation, LiveCampaign, StateKey, StateSource};
     let (_output, mut handle) = observer();
     handle.checkpoint(&CheckpointView::Won);
     handle.checkpoint(&CheckpointView::PresentationStarted);
@@ -113,7 +113,7 @@ fn campaign_reads_the_supplied_observers_ending_and_encounter_state() {
     handle.checkpoint(&CheckpointView::EncounterMenu(true));
     let world = campaign_state::empty_view();
     let campaign = LiveCampaign {
-        boss: Default::default(),
+        boss: &BossObservation::default,
         world: &world,
         ui: &handle.0.ui,
         ending: *handle.0.ending.lock(),

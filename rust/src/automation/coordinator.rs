@@ -498,9 +498,8 @@ impl AutomationObserver {
 
     /// Write only deterministic runtime observations, excluding host timing.
     pub fn write_replay_summary(&self, path: &std::path::Path) -> Result<(), String> {
-        let coord = self;
-        let inner = coord.inner.lock();
-        if let Some(journal) = &coord.parity {
+        let inner = self.inner.lock();
+        if let Some(journal) = &self.parity {
             journal.lock().flush().map_err(|e| e.to_string())?;
         }
         let summary = serde_json::json!({
@@ -761,18 +760,20 @@ impl AutomationObserver {
         false
     }
 
-    fn campaign_source<'a>(
-        &'a self,
+    fn evaluate_state(
+        &self,
         cx: &crate::engine::battle::Cx<'_>,
-        world: &'a campaign_state::CampaignView,
-    ) -> campaign_state::LiveCampaign<'a> {
-        campaign_state::LiveCampaign {
+        predicate: &campaign_state::StatePredicate,
+        world: &campaign_state::CampaignView,
+    ) -> campaign_state::Evaluation {
+        let source = campaign_state::LiveCampaign {
             world,
-            boss: crate::automation::samatra::observe(cx),
+            boss: &|| crate::automation::samatra::observe(cx),
             ui: &self.ui,
             ending: *self.ending.lock(),
             flagship_destroyed: self.flagship_destroyed.load(Ordering::SeqCst),
-        }
+        };
+        campaign_state::evaluate(predicate, &source)
     }
 
     /// Service whichever semantic wait the current step is blocked on.
@@ -992,8 +993,7 @@ impl AutomationObserver {
         {
             let expired =
                 inner.sched_state.phase == (ActionPhase::WaitingCondition { remaining: 0 });
-            let evaluation =
-                campaign_state::evaluate(&wait.predicate, &self.campaign_source(cx, world));
+            let evaluation = self.evaluate_state(cx, &wait.predicate, world);
             if expired {
                 // The scheduler ends the proof on this tick; say what the
                 // game state was instead of leaving a bare mismatch.
@@ -2111,7 +2111,7 @@ impl AutomationObserver {
         }
         if let Some(Action::AssertState(predicate)) = self.actions.get(inner.sched_state.step_index)
         {
-            let evaluation = campaign_state::evaluate(predicate, &self.campaign_source(cx, world));
+            let evaluation = self.evaluate_state(cx, predicate, world);
             if evaluation.held {
                 self.write_trace_labeled(
                     inner,

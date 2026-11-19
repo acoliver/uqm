@@ -52,7 +52,7 @@ fn public_campaign_copy_does_not_traverse_live_records() {
     let view = CampaignView::from_world(&world);
     assert_eq!(
         LiveCampaign {
-            boss: Default::default(),
+            boss: &uqm_rust::automation::campaign_state::BossObservation::default,
             ui: &Default::default(),
             ending: Default::default(),
             world: &view,
@@ -388,7 +388,7 @@ fn campaign_star_observation_releases_world_between_field_reads() {
         {
             assert_eq!(
                 LiveCampaign {
-                    boss: Default::default(),
+                    boss: &uqm_rust::automation::campaign_state::BossObservation::default,
                     ui: &Default::default(),
                     ending: Default::default(),
                     world: &view,
