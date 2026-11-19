@@ -118,7 +118,7 @@ fn sell_minerals(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
         )
     });
 }
-fn callback(handler: Handler) -> crate::comm::response::ResponseFunc {
+pub(super) fn callback(handler: Handler) -> crate::comm::response::ResponseFunc {
     match handler {
         Handler::ByeBye => bye_bye,
         Handler::AllianceInfo => alliance_info,

@@ -24,7 +24,7 @@ fn realize(comm: &mut Comm, cx: &mut Cx<'_>, _: u32) {
 fn friendly(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
     run(comm, cx, |s| s.handle(Handler::Friendly, r as i32))
 }
-fn callback(h: Handler) -> crate::comm::response::ResponseFunc {
+pub(super) fn callback(h: Handler) -> crate::comm::response::ResponseFunc {
     match h {
         Handler::Exit => exit,
         Handler::GiveMaidens => maidens,

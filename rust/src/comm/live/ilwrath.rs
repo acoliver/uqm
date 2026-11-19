@@ -54,7 +54,7 @@ fn gods_speak(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
         )
     });
 }
-fn callback(handler: Handler) -> crate::comm::response::ResponseFunc {
+pub(super) fn callback(handler: Handler) -> crate::comm::response::ResponseFunc {
     match handler {
         Handler::CombatIsInevitable => combat_is_inevitable,
         Handler::IlwrathGods => ilwrath_gods,

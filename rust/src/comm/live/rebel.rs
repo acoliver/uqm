@@ -15,7 +15,7 @@ fn info(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
 fn rebels(comm: &mut Comm, cx: &mut Cx<'_>, r: u32) {
     run(comm, cx, |s| s.handle(Handler::Rebels, r as i32))
 }
-fn callback(h: Handler) -> crate::comm::response::ResponseFunc {
+pub(super) fn callback(h: Handler) -> crate::comm::response::ResponseFunc {
     match h {
         Handler::Exit => exit,
         Handler::Info => info,
