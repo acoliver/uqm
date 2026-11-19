@@ -3,6 +3,8 @@
 #[cfg(test)]
 mod clock_tests;
 #[cfg(test)]
+mod dialogue_tests;
+#[cfg(test)]
 mod ui_tests;
 
 pub(crate) mod alliance;

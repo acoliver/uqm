@@ -26,7 +26,7 @@ use crate::battle::process_native::engine::redraw_queue;
 use crate::engine::battle::Cx;
 use crate::graphics::context_abi::{ContextFrame, ContextLease};
 use crate::graphics::geometry_ffi::FrameIntersection;
-use crate::time::clock_abi::game_clock_tick;
+use crate::navigation::events::game_clock_tick;
 use std::ptr::NonNull;
 
 #[inline]

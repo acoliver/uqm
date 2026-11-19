@@ -66,6 +66,7 @@ pub(super) mod c_bridge {
     pub use crate::sound::heart_ffi::jump_track as JumpTrack;
     pub use crate::sound::heart_ffi::play_track as PlayTrack;
     pub use crate::sound::heart_ffi::playing_track as PlayingTrack;
+    #[cfg(not(test))]
     pub use crate::sound::heart_ffi::stop_track as StopTrack;
     use crate::sound::music::{remember_music, MusicRequest};
     use std::ffi::c_int;
@@ -83,8 +84,10 @@ pub(super) mod c_bridge {
 
     pub use crate::comm::comm_abi::comm_redraw_subtitles;
 
+    #[cfg(not(test))]
     pub use crate::comm::commanim_abi::runtime::draw_alien_frame;
 
+    #[cfg(not(test))]
     pub use crate::comm::commanim_abi::runtime::init_comm_animations;
 
     pub fn pulsed_menu_key(input: &super::InputSession, key_index: c_int) -> c_int {

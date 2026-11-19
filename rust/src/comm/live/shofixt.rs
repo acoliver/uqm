@@ -57,7 +57,7 @@ mod api {
 
     impl ShofixtApi for crate::comm::host::Host<'_, '_, Handler> {
         fn schedule_return(&mut self) {
-            crate::time::clock_abi::add_event(&mut self.cx.borrow_mut(), 1, 2, 0, 0, 8);
+            crate::navigation::events::add_event(&mut self.cx.borrow_mut(), 1, 2, 0, 0, 8);
         }
     }
 }

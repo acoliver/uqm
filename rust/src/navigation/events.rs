@@ -1,6 +1,9 @@
 //! Campaign events and daily fleet movement, ported from gameev.c.
 
 #[cfg(test)]
+#[path = "events/clock_tests.rs"]
+mod clock_tests;
+#[cfg(test)]
 #[path = "events/supplied_tests.rs"]
 mod supplied_tests;
 
@@ -45,6 +48,59 @@ pub(crate) fn dispatcher(
         random,
     };
     move |world, selector| dispatch_event(world, &mut services, selector)
+}
+
+/// `AddEvent`: schedule a campaign event, or run it at once when it is due today.
+pub fn add_event(
+    cx: &mut crate::engine::battle::Cx<'_>,
+    kind: u32,
+    month: u16,
+    day: u16,
+    year: u16,
+    selector: u8,
+) -> Option<crate::engine::battle::link_queue::LinkId<crate::engine::clock::ScheduledEvent>> {
+    let mut random = cx.rng;
+    let mut dispatch = dispatcher(cx.screen_dimensions(), &mut random);
+    crate::time::clock_abi::schedule_event(
+        cx.world,
+        &mut dispatch,
+        kind,
+        month,
+        day,
+        year,
+        selector,
+    )
+}
+
+fn finish_clock_day(cx: &mut crate::engine::battle::Cx<'_>) {
+    crate::ui::sis::draw_status_message(cx.kernel, cx.world, None);
+    let clock = &cx.world.data.game.game_clock;
+    let today = (
+        clock.year_index,
+        u16::from(clock.month_index),
+        u16::from(clock.day_index),
+    );
+    let mut random = cx.rng;
+    let dispatch = dispatcher(cx.screen_dimensions(), &mut random);
+    crate::time::clock_abi::dispatch_day_events(cx.world, today, dispatch);
+}
+
+/// `GameClockTick`: advance the clock one tick and run a finished day's events.
+pub fn game_clock_tick(cx: &mut crate::engine::battle::Cx<'_>) {
+    if crate::time::clock_bridge::rust_clock_tick(cx.world) {
+        finish_clock_day(cx);
+    }
+}
+
+/// `MoveGameClockDays`: run each skipped day's events, then start a fresh day.
+pub fn advance_days(cx: &mut crate::engine::battle::Cx<'_>, days: i32) {
+    crate::time::clock_bridge::log_clock_bridge(&format!("RUST_CLOCK_MOVE: {} days", days));
+    for _ in 0..days {
+        crate::time::clock_bridge::next_clock_day_internal(&mut cx.world.data.game.game_clock);
+        finish_clock_day(cx);
+    }
+    let clock = &mut cx.world.data.game.game_clock;
+    clock.tick_count = clock.day_in_ticks;
 }
 
 struct ScheduledCampaignEvent {
