@@ -4,8 +4,8 @@
 
 use crate::supermelee::error::SuperMeleeError;
 use crate::supermelee::setup::build_pick::PickResult;
+use crate::supermelee::setup::builtin::builtin_teams;
 use crate::supermelee::setup::config::{load_melee_config, save_melee_config, ConfigLoadResult};
-use crate::supermelee::setup::persistence::builtin_teams;
 use crate::supermelee::setup::team::MeleeSetup;
 use crate::supermelee::types::{FleetShipIndex, MeleeShip, PlayerControl, NUM_SIDES};
 use std::path::Path;

@@ -95,8 +95,7 @@ mod tests {
     fn browser_owns_independent_view_values_and_matches_filenames_without_case() {
         let scratch = scratch();
         let directory = directory(&scratch);
-        let mut browser =
-            TeamBrowser::new(uqm_rust::supermelee::setup::persistence::builtin_teams());
+        let mut browser = TeamBrowser::new(uqm_rust::supermelee::setup::builtin::builtin_teams());
         write_team(&directory, c"Fleet.mle", &browser.builtins[1]).unwrap();
         browser.refresh(&directory);
         assert_eq!(browser.count(), 16);

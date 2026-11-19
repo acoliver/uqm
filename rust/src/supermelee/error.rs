@@ -10,10 +10,6 @@ pub enum SuperMeleeError {
     #[error("invalid ship id: {0}")]
     InvalidShipId(u8),
 
-    /// Loaded or provided team data is structurally invalid.
-    #[error("invalid team data: {0}")]
-    InvalidTeamData(String),
-
     /// A persistence (serialize/deserialize) operation failed.
     #[error("persistence error: {0}")]
     PersistenceError(String),
@@ -47,12 +43,6 @@ mod tests {
     fn invalid_ship_id_constructs_and_displays() {
         let err = SuperMeleeError::InvalidShipId(42);
         assert_eq!(format!("{}", err), "invalid ship id: 42");
-    }
-
-    #[test]
-    fn invalid_team_data_constructs_and_displays() {
-        let err = SuperMeleeError::InvalidTeamData("bad fleet".into());
-        assert_eq!(format!("{}", err), "invalid team data: bad fleet");
     }
 
     #[test]
