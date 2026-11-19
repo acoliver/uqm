@@ -47,7 +47,7 @@ pub enum ConfigLoadResult {
 pub fn load_melee_config(config_dir: &Path, setup: &mut MeleeSetup) -> ConfigLoadResult {
     let path = config_dir.join("melee.cfg");
 
-    let data = match std::fs::read(&path) {
+    let data = match crate::platform::sys::read_file(&path) {
         Ok(d) => d,
         Err(_) => return ConfigLoadResult::Missing,
     };
@@ -119,15 +119,8 @@ pub fn save_melee_config(config_dir: &Path, setup: &MeleeSetup) -> Result<(), Su
             .map_err(|e| SuperMeleeError::PersistenceError(e.to_string()))?;
     }
 
-    if let Err(e) = std::fs::write(&path, &buf) {
-        let _ = std::fs::remove_file(&path);
-        return Err(SuperMeleeError::PersistenceError(format!(
-            "melee.cfg write failed: {}",
-            e
-        )));
-    }
-
-    Ok(())
+    crate::platform::sys::write_file_or_remove(&path, &buf)
+        .map_err(|e| SuperMeleeError::PersistenceError(format!("melee.cfg write failed: {}", e)))
 }
 
 // ===========================================================================
