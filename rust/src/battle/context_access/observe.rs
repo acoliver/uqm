@@ -6,7 +6,7 @@ use crate::engine::battle::{
     views::*,
 };
 
-pub(crate) fn elements(
+pub fn elements(
     elements: &crate::engine::battle::ElementTable,
     parent_address: impl Fn(crate::engine::battle::ElementId) -> usize,
 ) -> Vec<ElementObservation> {
@@ -23,7 +23,7 @@ pub(crate) fn elements(
     result
 }
 
-pub(crate) struct ShipObservation<'a> {
+pub struct ShipObservation<'a> {
     pub state: ShipState,
     pub pick: crate::engine::battle::link_queue::PickShip,
     pub address: usize,
@@ -36,7 +36,7 @@ pub(crate) struct ShipObservation<'a> {
     pub strings: Option<&'a crate::strings::string_table::StringTableEntry>,
     pub race: Option<DescriptorObservation<'a>>,
 }
-pub(crate) struct DescriptorObservation<'a> {
+pub struct DescriptorObservation<'a> {
     pub address: usize,
     pub info: &'a SHIP_INFO,
     pub data: &'a DATA_STUFF,
@@ -47,7 +47,7 @@ pub(crate) struct DescriptorObservation<'a> {
     pub code_loaded: bool,
     pub custom: CustomData<'a>,
 }
-pub(crate) enum CustomData<'a> {
+pub enum CustomData<'a> {
     None,
     Androsynth(Option<crate::engine::battle::CollisionHook>),
     NativePkunk {
@@ -88,7 +88,7 @@ impl<'a> CustomData<'a> {
         Self::None
     }
 }
-pub(crate) fn ships<'a>(
+pub fn ships<'a>(
     queue: &'a crate::engine::battle::link_queue::RacePool,
     elements: &crate::engine::battle::ElementTable,
 ) -> Vec<ShipObservation<'a>> {

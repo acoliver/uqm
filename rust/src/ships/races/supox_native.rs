@@ -3,7 +3,7 @@
 //! Every value and expression below mirrors `sc2/src/uqm/ships/supox/supox.c`,
 //! including C integer promotion and truncation, so battles replay identically.
 
-pub(crate) mod engine {
+pub mod engine {
     use crate::ships::native::abi::*;
 
     // Core characteristics
@@ -116,7 +116,7 @@ pub(crate) mod engine {
         intelligence: Some(supox_intelligence),
         uninit: None,
     };
-    pub(crate) fn supox_intelligence(cx: &mut Cx<'_>, ss: ShipId, concerns: &mut Concerns) {
+    pub fn supox_intelligence(cx: &mut Cx<'_>, ss: ShipId, concerns: &mut Concerns) {
         let enemy = ENEMY_SHIP_INDEX as usize;
         if cx.ship_state(ss).special_counter != 0 || concerns.objects[enemy].object.is_none() {
             cx.ship_state_mut(ss).input &= !(SPECIAL as u8);
@@ -202,9 +202,9 @@ pub(crate) mod engine {
     }
 
     /// Names the sideways maneuver in the parity trace; observed inline, never called.
-    pub(crate) fn special_hook(_cx: &mut Cx<'_>, _ss: ShipId) {}
+    pub fn special_hook(_cx: &mut Cx<'_>, _ss: ShipId) {}
 
-    pub(crate) fn supox_preprocess(cx: &mut Cx<'_>, ss: ShipId) {
+    pub fn supox_preprocess(cx: &mut Cx<'_>, ss: ShipId) {
         let ship = cx.ship_element(ss);
         if cx.ship_state(ss).status & SPECIAL as u16 == 0 {
             return;

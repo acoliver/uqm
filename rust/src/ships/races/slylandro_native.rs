@@ -1,5 +1,5 @@
 //! Slylandro live callbacks translated from `sc2/src/uqm/ships/slylandr/slylandr.c`.
-pub(crate) mod engine {
+pub mod engine {
     use crate::ships::native::{
         abi::*, angle_to_facing, cosine, facing_to_angle, normalize_facing, sine,
     };
@@ -70,7 +70,7 @@ pub(crate) mod engine {
         }
     }
 
-    pub(crate) fn lightning_postprocess(cx: &mut Cx<'_>, e: ElementId) {
+    pub fn lightning_postprocess(cx: &mut Cx<'_>, e: ElementId) {
         if cx.element(e).turn != 0 && cx.element(e).flags & COLLISION as u16 == 0 {
             if let Some(h) = lightning_segment(cx, e) {
                 cx.put(h);
@@ -78,7 +78,7 @@ pub(crate) mod engine {
         }
     }
 
-    pub(crate) fn lightning_collision(
+    pub fn lightning_collision(
         cx: &mut Cx<'_>,
         a: ElementId,
         pa: &mut POINT,
@@ -192,7 +192,7 @@ pub(crate) mod engine {
         (out, origin)
     }
 
-    pub(crate) fn slylandro_intelligence(cx: &mut Cx<'_>, ss: ShipId, concerns: &mut Concerns) {
+    pub fn slylandro_intelligence(cx: &mut Cx<'_>, ss: ShipId, concerns: &mut Concerns) {
         if cx.world.activity() as u8 == IN_ENCOUNTER as u8 {
             concerns.objects[ENEMY_WEAPON_INDEX as usize].object = None;
         }
@@ -282,9 +282,9 @@ pub(crate) mod engine {
     }
 
     /// Names the junk harvest in the parity trace; observed inline, never called.
-    pub(crate) fn special_hook(_cx: &mut Cx<'_>, _ss: ShipId) {}
+    pub fn special_hook(_cx: &mut Cx<'_>, _ss: ShipId) {}
 
-    pub(crate) fn slylandro_postprocess(cx: &mut Cx<'_>, ss: ShipId) {
+    pub fn slylandro_postprocess(cx: &mut Cx<'_>, ss: ShipId) {
         let ship = cx.ship_element(ss);
         if cx.ship_state(ss).weapon_counter != 0 && cx.ship_state(ss).weapon_counter < WEAPON_WAIT {
             if let Some(h) = lightning_segment(cx, ship) {
@@ -300,7 +300,7 @@ pub(crate) mod engine {
         }
     }
 
-    pub(crate) fn slylandro_preprocess(cx: &mut Cx<'_>, ss: ShipId) {
+    pub fn slylandro_preprocess(cx: &mut Cx<'_>, ss: ShipId) {
         let ship = cx.ship_element(ss);
         if cx.element(ship).flags & (APPEARING | NONSOLID) as u16 == 0 {
             if cx.ship_state(ss).status & THRUST as u16 != 0

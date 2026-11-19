@@ -4,14 +4,14 @@
 
 pub(crate) use crate::comm::races::descriptor::Point;
 
-pub(crate) mod api;
-pub(crate) mod dialogue;
+pub mod api;
+pub mod dialogue;
 #[cfg(test)]
 mod parity_tests;
 mod phrases;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Handler {
+pub enum Handler {
     Exit,
     Royalists,
     StartRevolt,
@@ -106,4 +106,4 @@ pub(crate) fn text_layout(screen_width: i32) -> (Point, u16) {
 #[cfg(test)]
 mod tests;
 
-pub(crate) mod descriptor;
+pub mod descriptor;

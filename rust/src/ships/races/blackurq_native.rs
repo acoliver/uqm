@@ -1,5 +1,5 @@
 //! Live black_urquan callbacks translated from ships/blackurq/blackurq.c.
-pub(crate) mod engine {
+pub mod engine {
     use crate::ships::native::{abi::*, angle_to_facing, normalize_facing, wrap_delta};
 
     fn descriptor(_world: &mut crate::engine::battle::World) -> crate::engine::battle::RaceDesc {
@@ -59,7 +59,7 @@ pub(crate) mod engine {
         intelligence: Some(black_urquan_intelligence),
         uninit: None,
     };
-    pub(crate) fn spin_preprocess(cx: &mut Cx<'_>, e: ElementId) {
+    pub fn spin_preprocess(cx: &mut Cx<'_>, e: ElementId) {
         let ss = cx.owner(e);
         let ship = cx.ship_element(ss);
         if cx.element(ship).hits != 0 && {
@@ -93,7 +93,7 @@ pub(crate) mod engine {
         }
     }
 
-    pub(crate) fn buzztrack_preprocess(cx: &mut Cx<'_>, e: ElementId) {
+    pub fn buzztrack_preprocess(cx: &mut Cx<'_>, e: ElementId) {
         if cx.element(e).thrust != 0 {
             cx.element_mut(e).thrust -= 1;
         } else {
@@ -145,7 +145,7 @@ pub(crate) mod engine {
         spin_preprocess(cx, e);
     }
 
-    pub(crate) fn decelerate_preprocess(cx: &mut Cx<'_>, e: ElementId) {
+    pub fn decelerate_preprocess(cx: &mut Cx<'_>, e: ElementId) {
         let (x, y) = cx.element(e).velocity.get_current_components();
         let (mut dx, mut dy) = (x as SIZE, y as SIZE);
         dx /= 2;
@@ -158,7 +158,7 @@ pub(crate) mod engine {
         }
         spin_preprocess(cx, e);
     }
-    pub(crate) fn splinter_preprocess(cx: &mut Cx<'_>, e: ElementId) {
+    pub fn splinter_preprocess(cx: &mut Cx<'_>, e: ElementId) {
         cx.set_frame(
             e,
             true,
@@ -166,7 +166,7 @@ pub(crate) mod engine {
         );
         cx.element_mut(e).flags |= CHANGING as u16;
     }
-    pub(crate) fn buzzsaw_collision(
+    pub fn buzzsaw_collision(
         cx: &mut Cx<'_>,
         a: ElementId,
         pa: &mut POINT,
@@ -186,7 +186,7 @@ pub(crate) mod engine {
             cx.element_mut(a).pre = Some(ElementHook::Native(splinter_preprocess));
         }
     }
-    pub(crate) fn buzzsaw_preprocess(cx: &mut Cx<'_>, e: ElementId) {
+    pub fn buzzsaw_preprocess(cx: &mut Cx<'_>, e: ElementId) {
         let ss = cx.owner(e);
         if cx.ship_state(ss).status & WEAPON as u16 == 0 {
             cx.element_mut(e).life >>= 1;
@@ -194,7 +194,7 @@ pub(crate) mod engine {
         }
         spin_preprocess(cx, e);
     }
-    pub(crate) fn buzzsaw_postprocess(cx: &mut Cx<'_>, e: ElementId) {
+    pub fn buzzsaw_postprocess(cx: &mut Cx<'_>, e: ElementId) {
         cx.element_mut(e).post = None;
         if let Some(list) = cx.alloc_element() {
             cx.copy_allocated_element(list, e);
@@ -242,7 +242,7 @@ pub(crate) mod engine {
         }
         out
     }
-    pub(crate) fn black_urquan_intelligence(cx: &mut Cx<'_>, ss: ShipId, concerns: &mut Concerns) {
+    pub fn black_urquan_intelligence(cx: &mut Cx<'_>, ss: ShipId, concerns: &mut Concerns) {
         let weapon = ENEMY_WEAPON_INDEX as usize;
         if concerns.objects[weapon].object.is_some()
             && concerns.objects[weapon].movement == MOVEMENT_STATE_ENTICE
@@ -316,7 +316,7 @@ pub(crate) mod engine {
             }
         }
     }
-    pub(crate) fn gas_cloud_preprocess(cx: &mut Cx<'_>, e: ElementId) {
+    pub fn gas_cloud_preprocess(cx: &mut Cx<'_>, e: ElementId) {
         if cx.element(e).turn != 0 {
             cx.element_mut(e).turn -= 1;
         } else {
@@ -329,7 +329,7 @@ pub(crate) mod engine {
             cx.element_mut(e).turn = 2;
         }
     }
-    pub(crate) fn gas_cloud_collision(
+    pub fn gas_cloud_collision(
         cx: &mut Cx<'_>,
         a: ElementId,
         pa: &mut POINT,
@@ -343,7 +343,7 @@ pub(crate) mod engine {
         };
         cx.weapon_collision(a, pa, b, pb);
     }
-    pub(crate) fn spawn_gas_cloud(cx: &mut Cx<'_>, e: ElementId) {
+    pub fn spawn_gas_cloud(cx: &mut Cx<'_>, e: ElementId) {
         let ss = cx.owner(e);
         let mut block = Missile {
             cx: cx.element(e).next.location.x,
@@ -379,7 +379,7 @@ pub(crate) mod engine {
                 (i32::from(block.face) + angle_to_facing(FULL_CIRCLE as i32) / 16) as COUNT;
         }
     }
-    pub(crate) fn black_urquan_postprocess(cx: &mut Cx<'_>, ss: ShipId) {
+    pub fn black_urquan_postprocess(cx: &mut Cx<'_>, ss: ShipId) {
         let e = cx.ship_element(ss);
         if cx.ship_state(ss).status & SPECIAL as u16 != 0
             && cx.ship_state(ss).special_counter == 0
@@ -390,7 +390,7 @@ pub(crate) mod engine {
             cx.ship_state_mut(ss).special_counter = 9;
         }
     }
-    pub(crate) fn black_urquan_preprocess(cx: &mut Cx<'_>, ss: ShipId) {
+    pub fn black_urquan_preprocess(cx: &mut Cx<'_>, ss: ShipId) {
         cx.race_stats_mut(ss).characteristics.special_wait = 0;
         if cx.ship_state(ss).weapon_counter == 0
             && cx.ship_state(ss).status & cx.ship_state(ss).old_status & WEAPON as u16 != 0

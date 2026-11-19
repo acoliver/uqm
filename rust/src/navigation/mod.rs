@@ -13,11 +13,11 @@ pub mod hyperspace;
 pub mod interplanetary;
 mod portal;
 
-pub(crate) fn get(world: &crate::engine::World, key: crate::engine::StoryKey) -> u8 {
+pub fn get(world: &crate::engine::World, key: crate::engine::StoryKey) -> u8 {
     world.story_state(key) as u8
 }
 
-pub(crate) fn set(world: &mut crate::engine::World, key: crate::engine::StoryKey, value: u8) {
+pub fn set(world: &mut crate::engine::World, key: crate::engine::StoryKey, value: u8) {
     world.set_story_state(key, u32::from(value));
 }
 

@@ -5,11 +5,11 @@ pub(crate) use crate::comm::races::descriptor::{Color, CommDescriptor, Point};
 pub(crate) use crate::engine::StoryKey;
 mod phrases;
 use phrases::*;
-pub(crate) mod api;
+pub mod api;
 pub(crate) use super::alliance::ZOQFOTPIK_SHIP;
 pub(crate) use api::{Speaker, ZoqApi};
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Handler {
+pub enum Handler {
     ExitConversation,
     ZoqFotIntro,
     FormAlliance,
@@ -17,11 +17,11 @@ pub(crate) enum Handler {
     ZoqFotInfo,
     ZoqFotHome,
 }
-pub(crate) struct Dialogue<'a, A> {
-    pub(crate) api: &'a mut A,
+pub struct Dialogue<'a, A> {
+    pub api: &'a mut A,
 }
 impl<A: ZoqApi> Dialogue<'_, A> {
-    pub(crate) fn handle(&mut self, h: Handler, r: u16) {
+    pub fn handle(&mut self, h: Handler, r: u16) {
         match h {
             Handler::ExitConversation => self.exit_conversation(r),
             Handler::ZoqFotIntro => self.zoq_fot_intro(r),
@@ -31,7 +31,7 @@ impl<A: ZoqApi> Dialogue<'_, A> {
             Handler::ZoqFotHome => self.zoq_fot_home(r),
         }
     }
-    pub(crate) fn initialize(&mut self, _desc: &mut CommDescriptor) {
+    pub fn initialize(&mut self, _desc: &mut CommDescriptor) {
         self.api.segue(u32::from(
             self.api.alliance(ZOQFOTPIK_SHIP) != 1 && self.api.activity() as u8 != 5,
         ));
@@ -519,7 +519,7 @@ impl<A: ZoqApi> Dialogue<'_, A> {
         self.api
             .response(BYE_HOMEWORLD, Handler::ExitConversation, &[]);
     }
-    pub(crate) fn intro(&mut self) {
+    pub fn intro(&mut self) {
         let mut num_visits: u8;
         if (self.api.activity() as u8) == 5 {
             self.api.speak(OUT_TAKES0, Speaker::Zoq);
@@ -691,4 +691,4 @@ impl<A: ZoqApi> Dialogue<'_, A> {
 #[cfg(test)]
 mod tests;
 
-pub(crate) mod descriptor;
+pub mod descriptor;

@@ -1,7 +1,7 @@
 use super::Handler;
 use crate::comm::races::alliance::AllianceApi;
 
-pub(crate) trait TalkpetApi: AllianceApi<Handler> {
+pub trait TalkpetApi: AllianceApi<Handler> {
     fn flags(&self) -> u8;
     fn npc_ships(&self) -> bool;
     fn umgah_alive(&mut self) -> bool;

@@ -5,7 +5,7 @@ pub(crate) use crate::engine::StoryKey;
 mod phrases;
 pub(crate) use super::script::{GLOBAL_PLAYER_NAME, GLOBAL_SHIP_NAME};
 use phrases::*;
-pub(crate) mod api;
+pub mod api;
 pub(crate) use api::*;
 pub(crate) const SPATHI_SHIP: u16 = 6;
 pub(crate) const GOOD_GUY: u16 = 1;
@@ -14,7 +14,7 @@ pub(crate) const GOOD_GUY: u16 = 1;
 pub const STARBASE_READY_REWARD: u16 = 2500;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Handler {
+pub enum Handler {
     ByeBye,
     AllianceInfo,
     HierarchyInfo,
@@ -30,7 +30,7 @@ pub(crate) enum Handler {
     SellMinerals,
 }
 #[derive(Default)]
-pub(crate) struct Session {
+pub struct Session {
     bulletins: u32,
     stacks: [u8; 4],
     alliance: u8,
@@ -40,12 +40,12 @@ pub(crate) struct Session {
     ancient: u8,
     defeat: u8,
 }
-pub(crate) struct Dialogue<'a, A> {
-    pub(crate) api: &'a mut A,
-    pub(crate) session: &'a mut Session,
+pub struct Dialogue<'a, A> {
+    pub api: &'a mut A,
+    pub session: &'a mut Session,
 }
 impl<A: StarbaseApi> Dialogue<'_, A> {
-    pub(crate) fn handle(&mut self, handler: Handler, r: u16) {
+    pub fn handle(&mut self, handler: Handler, r: u16) {
         match handler {
             Handler::ByeBye => self.bye_bye(r),
             Handler::AllianceInfo => self.alliance_info(r),
@@ -282,7 +282,7 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
         self.normal_starbase(r);
     }
 
-    pub(crate) fn initialize(&mut self) {
+    pub fn initialize(&mut self) {
         self.session.bulletins = 0;
         self.api.segue(0);
     }
@@ -1439,10 +1439,10 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
         self.api.response(NEED_INFO, Handler::NeedInfo, &[]);
         self.api.response(GOODBYE_COMMANDER, Handler::ByeBye, &[]);
     }
-    pub(crate) fn intro(&mut self) {
+    pub fn intro(&mut self) {
         self.normal_starbase(0);
     }
-    pub(crate) fn post_starbase_enc(&mut self) {
+    pub fn post_starbase_enc(&mut self) {
         self.api.set(StoryKey::MOONBASE_ON_SHIP, 0_u8);
         if self.api.get(StoryKey::CHMMR_BOMB_STATE) == 2 {
             self.api.set(StoryKey::CHMMR_BOMB_STATE, 3_u8);
@@ -1453,4 +1453,4 @@ impl<A: StarbaseApi> Dialogue<'_, A> {
 #[cfg(test)]
 mod tests;
 
-pub(crate) mod descriptor;
+pub mod descriptor;

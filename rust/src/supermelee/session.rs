@@ -46,7 +46,7 @@ pub struct MeleeSession {
     pub(crate) catalog: Vec<crate::ships::master_native::ShipChoice>,
 }
 
-pub(crate) fn validate_fleets(ships: &[[u8; 7]; 2]) -> Result<(), String> {
+pub fn validate_fleets(ships: &[[u8; 7]; 2]) -> Result<(), String> {
     for (side, fleet) in ships.iter().enumerate() {
         if !fleet.iter().any(|ship| *ship < 25) {
             return Err(format!("parity fleet {side} is empty"));
@@ -61,7 +61,7 @@ pub(crate) fn validate_fleets(ships: &[[u8; 7]; 2]) -> Result<(), String> {
 }
 
 impl MeleeSession {
-    pub(crate) fn configure_fleets(
+    pub fn configure_fleets(
         &mut self,
         controls: &mut [u8; 2],
         battle_active: bool,
@@ -191,7 +191,7 @@ impl MeleeSession {
             .unwrap_or_else(|| panic!("melee file resources are not admitted"))
     }
 
-    pub(crate) fn new(
+    pub fn new(
         activity: crate::engine::world::activity::ActivityControl,
         catalog: Vec<crate::ships::master_native::ShipChoice>,
     ) -> Self {

@@ -1,7 +1,7 @@
 use super::Handler;
 use crate::comm::races::encounter::EncounterApi;
 use crate::engine::StoryKey;
-pub(crate) trait ShofixtApi: EncounterApi<Handler> {
+pub trait ShofixtApi: EncounterApi<Handler> {
     fn shofixti_name(&self) -> i32 {
         if self.get(StoryKey::SHOFIXTI_KIA) != 0 {
             super::phrases::KATANA

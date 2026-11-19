@@ -4,7 +4,7 @@ pub(crate) use crate::engine::StoryKey;
 mod phrases;
 use phrases::*;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Handler {
+pub enum Handler {
     ExitConversation,
     TaaloWorld,
     OrzAllied,
@@ -12,13 +12,13 @@ pub(crate) enum Handler {
     OrzNeutral,
     OrzAngry,
 }
-pub(crate) struct Dialogue<'a, A> {
-    pub(crate) api: &'a mut A,
+pub struct Dialogue<'a, A> {
+    pub api: &'a mut A,
 }
-pub(crate) mod api;
+pub mod api;
 pub(crate) use api::OrzApi;
 impl<A: OrzApi> Dialogue<'_, A> {
-    pub(crate) fn handle(&mut self, h: Handler, r: u16) {
+    pub fn handle(&mut self, h: Handler, r: u16) {
         match h {
             Handler::ExitConversation => self.exit_conversation(r),
             Handler::TaaloWorld => self.taalo_world(r),
@@ -438,7 +438,7 @@ impl<A: OrzApi> Dialogue<'_, A> {
         }
         self.api.response(BYE_ANGRY, Handler::ExitConversation, &[]);
     }
-    pub(crate) fn intro(&mut self) {
+    pub fn intro(&mut self) {
         let mut num_visits: u8;
         if i32::from((self.api.activity()) as u8) == 5 {
             self.api.npc(i32::from(OUT_TAKES));
@@ -687,7 +687,7 @@ impl<A: OrzApi> Dialogue<'_, A> {
             self.api.talking(true);
         }
     }
-    pub(crate) fn post_orz_enc(&mut self) {
+    pub fn post_orz_enc(&mut self) {
         let manner: u8;
         if ((self.api.get_segue()) as i32 == 1)
             && (i32::from({
@@ -703,7 +703,7 @@ impl<A: OrzApi> Dialogue<'_, A> {
             }
         }
     }
-    pub(crate) fn initialize(&mut self) {
+    pub fn initialize(&mut self) {
         if (i32::from(self.api.get(StoryKey::ORZ_MANNER)) == 3)
             || (i32::from((self.api.activity()) as u8) == 5)
         {
@@ -717,4 +717,4 @@ impl<A: OrzApi> Dialogue<'_, A> {
 #[cfg(test)]
 mod tests;
 
-pub(crate) mod descriptor;
+pub mod descriptor;

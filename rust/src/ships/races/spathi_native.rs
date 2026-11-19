@@ -28,7 +28,7 @@ const fn within_half_circle(direction_facing: u16, subtracted: i32) -> bool {
     normalize_facing(direction_facing as i32 - subtracted + QUARTER_FACING) as i32 <= HALF_FACING
 }
 
-pub(crate) mod engine {
+pub mod engine {
     use super::*;
     use crate::ships::native::abi::*;
 
@@ -131,7 +131,7 @@ pub(crate) mod engine {
         d.intelligence.weapon_range = MISSILE_RANGE;
         d.descriptor(&SPATHI)
     }
-    pub(crate) fn butt_missile_preprocess(cx: &mut Cx<'_>, missile: ElementId) {
+    pub fn butt_missile_preprocess(cx: &mut Cx<'_>, missile: ElementId) {
         if cx.element(missile).turn > 0 {
             cx.element_mut(missile).turn -= 1;
         } else {
@@ -153,7 +153,7 @@ pub(crate) mod engine {
         }
     }
 
-    pub(crate) fn spawn_butt_missile(cx: &mut Cx<'_>, ship: ElementId) {
+    pub fn spawn_butt_missile(cx: &mut Cx<'_>, ship: ElementId) {
         let ss = cx.owner(ship);
         let face = normalize_facing(cx.ship_state(ss).facing as i32 + HALF_FACING);
         let mut block = Missile {
@@ -183,7 +183,7 @@ pub(crate) mod engine {
         }
     }
 
-    pub(crate) fn spathi_intelligence(cx: &mut Cx<'_>, ss: ShipId, concerns: &mut Concerns) {
+    pub fn spathi_intelligence(cx: &mut Cx<'_>, ss: ShipId, concerns: &mut Concerns) {
         cx.ship_intelligence(ss, concerns);
 
         cx.ship_state_mut(ss).input &= !(SPECIAL as u8);
@@ -227,7 +227,7 @@ pub(crate) mod engine {
         }
     }
 
-    pub(crate) fn initialize_standard_missile(
+    pub fn initialize_standard_missile(
         cx: &mut Cx<'_>,
         ss: ShipId,
         origin: WeaponOrigin,
@@ -251,7 +251,7 @@ pub(crate) mod engine {
         vec![cx.missile(&mut block)]
     }
 
-    pub(crate) fn spathi_postprocess(cx: &mut Cx<'_>, ss: ShipId) {
+    pub fn spathi_postprocess(cx: &mut Cx<'_>, ss: ShipId) {
         let ship = cx.ship_element(ss);
         if cx.ship_state(ss).status & SPECIAL as u16 != 0
             && cx.ship_state(ss).special_counter == 0

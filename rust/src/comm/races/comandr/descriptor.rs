@@ -2,7 +2,7 @@ use super::ONE_SECOND;
 use crate::comm::races::descriptor::{Color, CommDescriptor, Point};
 use crate::comm::races::script::animation;
 
-pub(crate) fn descriptor() -> CommDescriptor {
+pub fn descriptor() -> CommDescriptor {
     let mut desc = CommDescriptor {
         alien_frame_res: Some(c"comm.commander.graphics"),
         alien_font_res: Some(c"comm.commander.font"),

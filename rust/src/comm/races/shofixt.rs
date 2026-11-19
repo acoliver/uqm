@@ -5,10 +5,10 @@ use crate::engine::world::activity::ActivityKind;
 pub(crate) use crate::engine::StoryKey;
 mod phrases;
 use phrases::*;
-pub(crate) mod api;
+pub mod api;
 pub(crate) use api::ShofixtApi;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Handler {
+pub enum Handler {
     Exit,
     GiveMaidens,
     Console,
@@ -16,11 +16,11 @@ pub(crate) enum Handler {
     Realize,
     Friendly,
 }
-pub(crate) struct Dialogue<'a, A> {
-    pub(crate) api: &'a mut A,
+pub struct Dialogue<'a, A> {
+    pub api: &'a mut A,
 }
 impl<A: ShofixtApi> Dialogue<'_, A> {
-    pub(crate) fn handle(&mut self, h: Handler, r: i32) {
+    pub fn handle(&mut self, h: Handler, r: i32) {
         match h {
             Handler::Exit => self.exit(r),
             Handler::GiveMaidens => self.give_maidens(r),
@@ -232,7 +232,7 @@ impl<A: ShofixtApi> Dialogue<'_, A> {
             &[BYE0, self.api.shofixti_name(), BYE1],
         )
     }
-    pub(crate) fn intro(&mut self) {
+    pub fn intro(&mut self) {
         if self.api.activity() as u8 == ActivityKind::WonLastBattle as u8 {
             self.api.npc(OUT_TAKES);
             self.api.segue(0);
@@ -277,7 +277,7 @@ impl<A: ShofixtApi> Dialogue<'_, A> {
             self.hostile()
         }
     }
-    pub(crate) fn initialize(&mut self) {
+    pub fn initialize(&mut self) {
         self.api.segue(0)
     }
 }
@@ -295,4 +295,4 @@ pub(crate) fn text_layout(screen_width: i32) -> (Point, u16) {
 #[cfg(test)]
 mod tests;
 
-pub(crate) mod descriptor;
+pub mod descriptor;

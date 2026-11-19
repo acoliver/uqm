@@ -2,11 +2,11 @@ use super::*;
 use crate::engine::StoryKey;
 
 impl<A: SlylandApi> Dialogue<'_, A> {
-    pub(crate) fn initialize(&mut self) {
+    pub fn initialize(&mut self) {
         self.api.segue(1);
     }
 
-    pub(crate) fn handle(&mut self, handler: Handler, response: i32) {
+    pub fn handle(&mut self, handler: Handler, response: i32) {
         match handler {
             Handler::Combat => self.combat(response),
         }
@@ -123,7 +123,7 @@ impl<A: SlylandApi> Dialogue<'_, A> {
         self.api.segue(1);
     }
 
-    pub(crate) fn intro(&mut self) {
+    pub fn intro(&mut self) {
         let n = self.api.get(StoryKey::SLYLANDRO_PROBE_VISITS);
         if let Some(&p) = [
             WE_COME_IN_PEACE_1,

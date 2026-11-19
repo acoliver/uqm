@@ -1,6 +1,6 @@
 //! Orz callbacks and descriptor translated from `sc2/src/uqm/ships/orz/orz.c`.
 
-pub(crate) mod engine {
+pub mod engine {
     use crate::engine::battle::hooks::animation_preprocess;
     use crate::engine::battle::views::Missile;
     use crate::engine::battle::{
@@ -126,7 +126,7 @@ pub(crate) mod engine {
         )
     }
 
-    pub(crate) fn howitzer_collision(
+    pub fn howitzer_collision(
         cx: &mut Cx<'_>,
         a: ElementId,
         pa: &mut POINT,
@@ -138,7 +138,7 @@ pub(crate) mod engine {
         }
     }
 
-    pub(crate) fn initialize_turret_missile(
+    pub fn initialize_turret_missile(
         cx: &mut Cx<'_>,
         ss: ShipId,
         origin: WeaponOrigin,
@@ -215,7 +215,7 @@ pub(crate) mod engine {
         count
     }
 
-    pub(crate) fn orz_intelligence(cx: &mut Cx<'_>, ss: ShipId, concerns: &mut Concerns) {
+    pub fn orz_intelligence(cx: &mut Cx<'_>, ss: ShipId, concerns: &mut Concerns) {
         let ship = cx.ship_element(ss);
         let turret = cx
             .elements()
@@ -287,7 +287,7 @@ pub(crate) mod engine {
         }
     }
 
-    pub(crate) fn ion_preprocess(cx: &mut Cx<'_>, e: ElementId) {
+    pub fn ion_preprocess(cx: &mut Cx<'_>, e: ElementId) {
         cx.element_mut(e).color_cycle = cx.element(e).color_cycle.wrapping_add(1);
         if usize::from(cx.element(e).color_cycle) != ION_COLORS.len() {
             cx.element_mut(e).life = u16::from(cx.element(e).thrust);
@@ -417,7 +417,7 @@ pub(crate) mod engine {
         }
     }
 
-    pub(crate) fn marine_preprocess(cx: &mut Cx<'_>, e: ElementId) {
+    pub fn marine_preprocess(cx: &mut Cx<'_>, e: ElementId) {
         let ss = cx.owner(e);
         let ship = cx.ship_element(ss);
         if owner_departed(cx, ship) {
@@ -667,7 +667,7 @@ pub(crate) mod engine {
         }
     }
 
-    pub(crate) fn turret_postprocess(cx: &mut Cx<'_>, e: ElementId) {
+    pub fn turret_postprocess(cx: &mut Cx<'_>, e: ElementId) {
         if cx.element(e).life != 0 {
             return;
         }
@@ -772,7 +772,7 @@ pub(crate) mod engine {
         }
     }
 
-    pub(crate) fn orz_preprocess(cx: &mut Cx<'_>, ss: ShipId) {
+    pub fn orz_preprocess(cx: &mut Cx<'_>, ss: ShipId) {
         let e = cx.ship_element(ss);
         if cx.element(e).flags & APPEARING as u16 == 0 {
             if (cx.ship_state(ss).status | cx.ship_state(ss).old_status) & SPECIAL as u16 != 0

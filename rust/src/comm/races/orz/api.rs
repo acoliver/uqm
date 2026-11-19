@@ -1,7 +1,7 @@
 use super::Handler;
 use crate::comm::races::alliance::AllianceApi;
 
-pub(crate) trait OrzApi: AllianceApi<Handler> {
+pub trait OrzApi: AllianceApi<Handler> {
     fn remove_escorts(&mut self, race: u16);
     fn talking(&mut self, enabled: bool);
 }

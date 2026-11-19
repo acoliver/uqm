@@ -6,7 +6,7 @@ pub(crate) fn star_seed(point: POINT) -> u32 {
 }
 
 #[derive(Clone, Copy)]
-pub(crate) struct SolarCoordinates {
+pub struct SolarCoordinates {
     width: i32,
     height: i32,
 }

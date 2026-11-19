@@ -4,12 +4,12 @@ use crate::comm::races::encounter::EncounterApi;
 use crate::engine::world::activity::ActivityKind;
 use crate::engine::StoryKey;
 
-pub(crate) struct Dialogue<'a, A> {
-    pub(crate) api: &'a mut A,
+pub struct Dialogue<'a, A> {
+    pub api: &'a mut A,
 }
 
 impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
-    pub(crate) fn handle(&mut self, handler: Handler, response: i32) {
+    pub fn handle(&mut self, handler: Handler, response: i32) {
         match handler {
             Handler::Combat => self.combat(response),
             Handler::Menagerie => self.menagerie(response),
@@ -311,13 +311,13 @@ impl<A: EncounterApi<Handler>> Dialogue<'_, A> {
         self.offer(BYE_HOSTILE_SPACE, Handler::Combat);
     }
 
-    pub(crate) fn initialize(&mut self) {
+    pub fn initialize(&mut self) {
         let peaceful = (self.api.get(StoryKey::GLOBAL_FLAGS_AND_DATA) & (1 << 6)) != 0
             || self.api.activity() as u8 == ActivityKind::WonLastBattle as u8;
         self.api.segue(if peaceful { 0 } else { 1 });
     }
 
-    pub(crate) fn intro(&mut self) {
+    pub fn intro(&mut self) {
         if self.api.activity() as u8 == ActivityKind::WonLastBattle as u8 {
             self.api.npc(OUT_TAKES as i32);
             self.api.segue(0);

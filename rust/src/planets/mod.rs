@@ -6,7 +6,7 @@
 pub mod solar_system;
 
 pub mod c_api;
-pub(crate) mod device_effects;
+pub mod device_effects;
 pub mod generate;
 pub mod render;
 pub mod starmap;
@@ -27,7 +27,7 @@ pub mod plangen;
 pub mod scan;
 pub mod sphere;
 
-pub(crate) mod solar_coords;
+pub mod solar_coords;
 pub mod solarsys;
 
 pub mod pstarmap;

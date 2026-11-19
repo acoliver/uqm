@@ -3,7 +3,7 @@ use super::Handler;
 use crate::comm::races::encounter::testing::Fake;
 use crate::comm::races::encounter::EncounterApi;
 
-pub(crate) trait YehatApi: EncounterApi<Handler> {
+pub trait YehatApi: EncounterApi<Handler> {
     fn have_shofixti_escort(&self) -> bool;
     fn random_bit(&mut self) -> u8;
     fn schedule_rebel_event(&mut self);

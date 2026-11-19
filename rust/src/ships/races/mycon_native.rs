@@ -1,6 +1,6 @@
 //! Mycon Podship callbacks and descriptor ported from `sc2/src/uqm/ships/mycon/mycon.c`.
 
-pub(crate) mod engine {
+pub mod engine {
     use crate::ships::native::{abi::*, angle_to_facing, normalize_facing};
 
     const MAX_CREW: u16 = 20;
@@ -80,7 +80,7 @@ pub(crate) mod engine {
         intelligence: Some(mycon_intelligence),
         uninit: None,
     };
-    pub(crate) fn plasma_preprocess(cx: &mut Cx<'_>, e: ElementId) {
+    pub fn plasma_preprocess(cx: &mut Cx<'_>, e: ElementId) {
         if u16::from(cx.element(e).mass) > cx.element(e).hits {
             cx.element_mut(e).life = cx.element(e).hits * PLASMA_DURATION as u16;
         } else {
@@ -115,7 +115,7 @@ pub(crate) mod engine {
         }
     }
 
-    pub(crate) fn plasma_blast_preprocess(cx: &mut Cx<'_>, e: ElementId) {
+    pub fn plasma_blast_preprocess(cx: &mut Cx<'_>, e: ElementId) {
         if cx.element(e).life >= u16::from(cx.element(e).thrust) {
             cx.set_frame(
                 e,
@@ -136,7 +136,7 @@ pub(crate) mod engine {
         cx.element_mut(e).flags |= CHANGING as u16;
     }
 
-    pub(crate) fn plasma_collision(
+    pub fn plasma_collision(
         cx: &mut Cx<'_>,
         e0: ElementId,
         p0: &mut POINT,
@@ -177,7 +177,7 @@ pub(crate) mod engine {
         );
     }
 
-    pub(crate) fn mycon_intelligence(cx: &mut Cx<'_>, ss: ShipId, concerns: &mut Concerns) {
+    pub fn mycon_intelligence(cx: &mut Cx<'_>, ss: ShipId, concerns: &mut Concerns) {
         let enemy_weapon = ENEMY_WEAPON_INDEX as usize;
         if concerns.objects[enemy_weapon].object.is_some()
             && concerns.objects[enemy_weapon].movement == MOVEMENT_STATE_ENTICE
@@ -287,7 +287,7 @@ pub(crate) mod engine {
         out
     }
 
-    pub(crate) fn mycon_postprocess(cx: &mut Cx<'_>, ss: ShipId) {
+    pub fn mycon_postprocess(cx: &mut Cx<'_>, ss: ShipId) {
         let e = cx.ship_element(ss);
         if cx.ship_state(ss).status & SPECIAL as u16 != 0
             && cx.ship_state(ss).special_counter == 0

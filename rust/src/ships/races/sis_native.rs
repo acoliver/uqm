@@ -1,5 +1,5 @@
 //! Live flagship callbacks translated from ships/sis_ship/sis_ship.c.
-pub(crate) mod engine {
+pub mod engine {
     use crate::engine::battle::race::{FlagshipWeapon, SisState};
     use crate::engine::battle::views::{Laser, Missile};
     use crate::engine::battle::{
@@ -54,7 +54,7 @@ pub(crate) mod engine {
             as i16;
         (ux, uy)
     }
-    pub(crate) fn sis_hyper_preprocess(cx: &mut Cx<'_>, ss: ShipId) {
+    pub fn sis_hyper_preprocess(cx: &mut Cx<'_>, ss: ShipId) {
         let config = cx.flagship_config();
         let (pixel_width, pixel_height) = cx.screen_dimensions();
         let e = cx.ship_element(ss);
@@ -171,7 +171,7 @@ pub(crate) mod engine {
         }
     }
 
-    pub(crate) fn sis_hyper_postprocess(cx: &mut Cx<'_>, ss: ShipId) {
+    pub fn sis_hyper_postprocess(cx: &mut Cx<'_>, ss: ShipId) {
         let e = cx.ship_element(ss);
         cx.set_flagship_velocity(cx.element(e).velocity);
         if (cx.ship_state(ss).status & WEAPON as u16 != 0 || cx.hyperspace_cancel_pressed())
@@ -183,7 +183,7 @@ pub(crate) mod engine {
         }
     }
 
-    pub(crate) fn spawn_point_defense(cx: &mut Cx<'_>, e: ElementId) {
+    pub fn spawn_point_defense(cx: &mut Cx<'_>, e: ElementId) {
         let ss = cx.owner(e);
         if cx.element(e).flags & PLAYER_SHIP as u16 != 0 {
             if let Some(d) = cx.alloc_element() {
@@ -265,7 +265,7 @@ pub(crate) mod engine {
         }
     }
 
-    pub(crate) fn sis_battle_preprocess(cx: &mut Cx<'_>, ss: ShipId) {
+    pub fn sis_battle_preprocess(cx: &mut Cx<'_>, ss: ShipId) {
         if cx.race_stats(ss).characteristics.special_energy_cost == 0 {
             cx.ship_state_mut(ss).status &= !(SPECIAL as u16);
             cx.ship_state_mut(ss).special_counter = 2;
@@ -278,7 +278,7 @@ pub(crate) mod engine {
             cx.ship_state_mut(ss).weapon_counter = 2;
         }
     }
-    pub(crate) fn sis_battle_postprocess(cx: &mut Cx<'_>, ss: ShipId) {
+    pub fn sis_battle_postprocess(cx: &mut Cx<'_>, ss: ShipId) {
         let e = cx.ship_element(ss);
         if cx.ship_state(ss).status & SPECIAL as u16 != 0
             && cx.ship_state(ss).special_counter == 0
@@ -287,7 +287,7 @@ pub(crate) mod engine {
             spawn_point_defense(cx, e);
         }
     }
-    pub(crate) fn blaster_collision(
+    pub fn blaster_collision(
         cx: &mut Cx<'_>,
         e: ElementId,
         p: &mut POINT,
@@ -326,7 +326,7 @@ pub(crate) mod engine {
             }
         }
     }
-    pub(crate) fn blaster_preprocess(cx: &mut Cx<'_>, e: ElementId) {
+    pub fn blaster_preprocess(cx: &mut Cx<'_>, e: ElementId) {
         let frame = cx.frame_number(cx.element(e).current.image.frame.view());
         match cx.element(e).mass {
             2 if frame < 8 => {
@@ -404,7 +404,7 @@ pub(crate) mod engine {
         }
         out
     }
-    pub(crate) fn sis_intelligence(cx: &mut Cx<'_>, ss: ShipId, concerns: &mut Concerns) {
+    pub fn sis_intelligence(cx: &mut Cx<'_>, ss: ShipId, concerns: &mut Concerns) {
         let RaceState::Sis(data) = cx.race_stats(ss).state else {
             panic!("SIS AI state");
         };
@@ -613,7 +613,7 @@ pub(crate) mod engine {
         d.info.energy_level = d.info.max_energy;
         d.descriptor(race)
     }
-    pub(crate) fn uninit_sis(world: &mut World, d: &mut crate::engine::battle::views::RaceStats) {
+    pub fn uninit_sis(world: &mut World, d: &mut crate::engine::battle::views::RaceStats) {
         if !world.flagship_config().hyperspace {
             let crew = if d.ship_info.ship_flags & PLAYER_CAPTAIN as u16 != 0 {
                 d.ship_info.crew_level.wrapping_sub(1)

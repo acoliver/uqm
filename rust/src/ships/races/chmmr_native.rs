@@ -25,7 +25,7 @@ mod tests {
     }
 }
 
-pub(crate) mod engine {
+pub mod engine {
     use crate::engine::battle::hooks::animation_preprocess;
     use crate::ships::native::{
         abi::*, angle_to_facing, cosine, facing_to_angle, normalize_angle, sine,
@@ -103,7 +103,7 @@ pub(crate) mod engine {
         d.intelligence.weapon_range = (50 << ONE_SHIFT) as u16;
         d.descriptor(&CHMMR)
     }
-    pub(crate) fn laser_death(cx: &mut Cx<'_>, e: ElementId) {
+    pub fn laser_death(cx: &mut Cx<'_>, e: ElementId) {
         let ss = cx.owner(e);
         cx.ship_state_mut(ss).special_counter = cx.element(e).turn;
         if let Some(ship) = cx.optional_ship_element(ss) {
@@ -162,7 +162,7 @@ pub(crate) mod engine {
         }
     }
 
-    pub(crate) fn initialize_megawatt_laser(
+    pub fn initialize_megawatt_laser(
         cx: &mut Cx<'_>,
         ss: ShipId,
         origin: WeaponOrigin,
@@ -201,7 +201,7 @@ pub(crate) mod engine {
         vec![out]
     }
 
-    pub(crate) fn chmmr_intelligence(cx: &mut Cx<'_>, ss: ShipId, concerns: &mut Concerns) {
+    pub fn chmmr_intelligence(cx: &mut Cx<'_>, ss: ShipId, concerns: &mut Concerns) {
         cx.ship_intelligence(ss, concerns);
         cx.ship_state_mut(ss).input &= !(SPECIAL as u8);
         let enemy = ENEMY_SHIP_INDEX as usize;
@@ -228,9 +228,9 @@ pub(crate) mod engine {
     }
 
     /// Names the tractor in the parity trace; observed inline, never called.
-    pub(crate) fn special_hook(_cx: &mut Cx<'_>, _ss: ShipId) {}
+    pub fn special_hook(_cx: &mut Cx<'_>, _ss: ShipId) {}
 
-    pub(crate) fn chmmr_postprocess(cx: &mut Cx<'_>, ss: ShipId) {
+    pub fn chmmr_postprocess(cx: &mut Cx<'_>, ss: ShipId) {
         let ship = cx.ship_element(ss);
         if cx.ship_state(ss).status & WEAPON as u16 != 0 {
             let last = cx
@@ -346,7 +346,7 @@ pub(crate) mod engine {
         cx.ship_state_mut(ss).special_counter = 0;
     }
 
-    pub(crate) fn satellite_preprocess(cx: &mut Cx<'_>, e: ElementId) {
+    pub fn satellite_preprocess(cx: &mut Cx<'_>, e: ElementId) {
         cx.element_mut(e).life = cx.element(e).life.wrapping_add(1);
         let frame = cx.absolute_frame(
             cx.element(e).current.image.frame.view(),
@@ -401,7 +401,7 @@ pub(crate) mod engine {
         }
     }
 
-    pub(crate) fn spawn_point_defense(cx: &mut Cx<'_>, e: ElementId) {
+    pub fn spawn_point_defense(cx: &mut Cx<'_>, e: ElementId) {
         let ss = cx.owner(e);
         let ship = cx.ship_element(ss);
         let satellite = cx.target(e).unwrap_or_else(|| panic!("defense satellite"));
@@ -489,7 +489,7 @@ pub(crate) mod engine {
         }
     }
 
-    pub(crate) fn satellite_postprocess(cx: &mut Cx<'_>, e: ElementId) {
+    pub fn satellite_postprocess(cx: &mut Cx<'_>, e: ElementId) {
         if cx.element(e).thrust != 0 || cx.element(e).life == 0 {
             cx.element_mut(e).thrust = cx.element(e).thrust.wrapping_sub(1);
         } else if let Some(defense) = cx.alloc_element() {
@@ -506,7 +506,7 @@ pub(crate) mod engine {
         }
     }
 
-    pub(crate) fn satellite_collision(
+    pub fn satellite_collision(
         _: &mut Cx<'_>,
         _: ElementId,
         _: &mut POINT,
@@ -515,7 +515,7 @@ pub(crate) mod engine {
     ) {
     }
 
-    pub(crate) fn satellite_death(cx: &mut Cx<'_>, e: ElementId) {
+    pub fn satellite_death(cx: &mut Cx<'_>, e: ElementId) {
         let ss = cx.owner(e);
         cx.race_stats_mut(ss).ship_info.ship_flags &= !(POINT_DEFENSE as u16);
         cx.element_mut(e).flags &= !(DISAPPEARING as u16);
@@ -531,7 +531,7 @@ pub(crate) mod engine {
         cx.element_mut(e).collide = None;
     }
 
-    pub(crate) fn spawn_satellites(cx: &mut Cx<'_>, e: ElementId) {
+    pub fn spawn_satellites(cx: &mut Cx<'_>, e: ElementId) {
         let ss = cx.owner(e);
         if let Some(ship) = cx.optional_ship_element(ss) {
             for i in 0..3 {
@@ -574,7 +574,7 @@ pub(crate) mod engine {
         }
     }
 
-    pub(crate) fn chmmr_preprocess(cx: &mut Cx<'_>, ss: ShipId) {
+    pub fn chmmr_preprocess(cx: &mut Cx<'_>, ss: ShipId) {
         let e = cx.ship_element(ss);
         if let Some(satellite) = cx.alloc_element() {
             cx.element_mut(satellite).player = cx.element(e).player;

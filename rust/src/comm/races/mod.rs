@@ -17,21 +17,21 @@
 
 pub use script::{DialogueHost, Supplies};
 
-pub(crate) mod alliance;
+pub mod alliance;
 pub mod arilou;
 pub mod blackur;
 pub mod chmmr;
 pub mod comandr;
 pub mod descriptor;
 pub mod druuge;
-pub(crate) mod encounter;
+pub mod encounter;
 pub mod ilwrath;
 pub mod melnorm;
 pub mod mycon;
 pub mod orz;
 pub mod pkunk;
 pub mod rebel;
-pub(crate) mod script;
+pub mod script;
 pub mod shofixt;
 pub mod slyhome;
 pub mod slyland;
@@ -50,7 +50,7 @@ pub mod yehat;
 pub mod zoqfot;
 
 #[derive(Default)]
-pub(crate) struct RuntimeScratch {
+pub struct RuntimeScratch {
     pub druuge: Option<druuge::Session>,
     pub mycon: Option<mycon::Session>,
     pub melnorm: Option<melnorm::Session>,

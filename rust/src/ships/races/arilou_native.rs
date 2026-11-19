@@ -71,7 +71,7 @@ const fn wrap_val(value: i32, extent: i32) -> u16 {
     }) as u16
 }
 
-pub(crate) mod engine {
+pub mod engine {
     use super::*;
     use crate::engine::battle::{Concerns, Cx, ShipId, WeaponOrigin, WeaponSpawn};
     use crate::ships::native::abi::*;
@@ -160,7 +160,7 @@ pub(crate) mod engine {
         uninit: None,
     };
 
-    pub(crate) fn initialize_autoaim_laser(
+    pub fn initialize_autoaim_laser(
         cx: &mut Cx<'_>,
         ss: ShipId,
         mut origin: WeaponOrigin,
@@ -192,7 +192,7 @@ pub(crate) mod engine {
         })]
     }
 
-    pub(crate) fn arilou_intelligence(cx: &mut Cx<'_>, ss: ShipId, concerns: &mut Concerns) {
+    pub fn arilou_intelligence(cx: &mut Cx<'_>, ss: ShipId, concerns: &mut Concerns) {
         cx.ship_state_mut(ss).input |= THRUST as u8;
         concerns.objects[ENEMY_SHIP_INDEX as usize].movement = MOVEMENT_STATE_ENTICE;
         cx.ship_intelligence(ss, concerns);
@@ -226,9 +226,9 @@ pub(crate) mod engine {
     }
 
     /// Names the teleport in the parity trace; observed inline, never called.
-    pub(crate) fn special_hook(_cx: &mut Cx<'_>, _ss: ShipId) {}
+    pub fn special_hook(_cx: &mut Cx<'_>, _ss: ShipId) {}
 
-    pub(crate) fn arilou_preprocess(cx: &mut Cx<'_>, ss: ShipId) {
+    pub fn arilou_preprocess(cx: &mut Cx<'_>, ss: ShipId) {
         let ship = cx.ship_element(ss);
         let special = cx.ship_frame_set(ss, 2);
         if cx.element(ship).flags & NONSOLID as u16 == 0 {

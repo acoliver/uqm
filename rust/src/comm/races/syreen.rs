@@ -2,10 +2,10 @@
 pub(crate) use crate::engine::StoryKey;
 mod phrases;
 use phrases::*;
-pub(crate) mod api;
+pub mod api;
 pub(crate) use api::SyreenApi;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Handler {
+pub enum Handler {
     FriendlyExit,
     Sex,
     Foreplay,
@@ -16,11 +16,11 @@ pub(crate) enum Handler {
     InitialSyreen,
     SyreenVault,
 }
-pub(crate) struct Dialogue<'a, A> {
-    pub(crate) api: &'a mut A,
+pub struct Dialogue<'a, A> {
+    pub api: &'a mut A,
 }
 impl<A: SyreenApi> Dialogue<'_, A> {
-    pub(crate) fn handle(&mut self, h: Handler, r: i32) {
+    pub fn handle(&mut self, h: Handler, r: i32) {
         match h {
             Handler::FriendlyExit => self.friendly_exit(r),
             Handler::Sex => self.sex(r),
@@ -470,7 +470,7 @@ impl<A: SyreenApi> Dialogue<'_, A> {
         self.api
             .response((BYE_BEFORE_VAULT) as u16, Handler::FriendlyExit, &[]);
     }
-    pub(crate) fn intro(&mut self) {
+    pub fn intro(&mut self) {
         let mut visits: i32;
         if (i32::from(self.api.activity()) as u8 as i32) == 5 {
             self.api.npc(OUT_TAKES);
@@ -597,8 +597,8 @@ impl<A: SyreenApi> Dialogue<'_, A> {
         }
         self.api.set(StoryKey::SYREEN_HOME_VISITS, visits as u8);
     }
-    pub(crate) fn post_syreen_enc(&mut self) {}
-    pub(crate) fn initialize(&mut self) {
+    pub fn post_syreen_enc(&mut self) {}
+    pub fn initialize(&mut self) {
         self.api.segue(0);
     }
 }
@@ -606,4 +606,4 @@ impl<A: SyreenApi> Dialogue<'_, A> {
 #[cfg(test)]
 mod tests;
 
-pub(crate) mod descriptor;
+pub mod descriptor;

@@ -2,15 +2,15 @@
 
 pub(crate) use super::encounter::EncounterApi;
 pub(crate) use crate::engine::{world::SisState as CSisState, StoryKey};
-pub(crate) mod api;
-pub(crate) mod numbers;
+pub mod api;
+pub mod numbers;
 mod phrases;
 mod rescue;
 pub(crate) use api::MelnormApi;
 use phrases::*;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Handler {
+pub enum Handler {
     ExitConversation,
     DoRescue,
     DoBuy,
@@ -41,7 +41,7 @@ pub(crate) const fn empty_ship() -> CSisState {
         planet_name: [0; 16],
     }
 }
-pub(crate) struct Session {
+pub struct Session {
     local_stack0: u8,
     local_stack1: u8,
     asked_to_buy: bool,
@@ -50,7 +50,7 @@ pub(crate) struct Session {
     sis_copy: CSisState,
 }
 impl Session {
-    pub(crate) const fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             local_stack0: 0,
             local_stack1: 0,
@@ -61,9 +61,9 @@ impl Session {
         }
     }
 }
-pub(crate) struct Dialogue<'a, A> {
-    pub(crate) api: &'a mut A,
-    pub(crate) session: &'a mut Session,
+pub struct Dialogue<'a, A> {
+    pub api: &'a mut A,
+    pub session: &'a mut Session,
 }
 
 #[derive(Clone, Copy)]
@@ -88,7 +88,7 @@ pub(crate) const TECHS: [Tech; 13] = [
     Tech::Module(8, 80),
 ];
 impl<A: MelnormApi> Dialogue<'_, A> {
-    pub(crate) fn handle(&mut self, h: Handler, r: u16) {
+    pub fn handle(&mut self, h: Handler, r: u16) {
         match h {
             Handler::ExitConversation => self.exit_conversation(r),
             Handler::DoRescue => self.do_rescue(r),
@@ -101,7 +101,7 @@ impl<A: MelnormApi> Dialogue<'_, A> {
             Handler::DoMelnormePissed => self.do_melnorme_pissed(r),
         }
     }
-    pub(crate) fn initialize(&mut self) {
+    pub fn initialize(&mut self) {
         self.session.local_stack0 = 0;
         self.session.local_stack1 = 0;
         self.session.prev_msg_mode = 0;
@@ -561,7 +561,7 @@ impl<A: MelnormApi> Dialogue<'_, A> {
         self.api
             .response(NO_TRADE_NOW, Handler::ExitConversation, &[]);
     }
-    pub(crate) fn post_melnorme_enc(&mut self) {
+    pub fn post_melnorme_enc(&mut self) {
         if self.session.prev_msg_mode != 0 {
             self.api.status_mode(self.session.prev_msg_mode);
         }
@@ -845,7 +845,7 @@ impl<A: MelnormApi> Dialogue<'_, A> {
         self.api
             .response(YOU_HATE_US_SO_WE_GO_AWAY, Handler::ExitConversation, &[]);
     }
-    pub(crate) fn intro(&mut self) {
+    pub fn intro(&mut self) {
         self.session.prev_msg_mode = self.api.status_mode(3);
         if self.api.get(StoryKey::MET_MELNORME) == 0 {
             self.api.set(StoryKey::MET_MELNORME, 1_u8);
@@ -876,4 +876,4 @@ impl<A: MelnormApi> Dialogue<'_, A> {
 #[cfg(test)]
 mod tests;
 
-pub(crate) mod descriptor;
+pub mod descriptor;

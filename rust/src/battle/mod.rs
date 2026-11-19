@@ -6,7 +6,7 @@ pub mod ai;
 pub mod ai_entry;
 pub mod battle_native;
 pub use crate::math::battle_types;
-pub(crate) mod context_access;
+pub mod context_access;
 pub use context_access::ai_legacy::AiOps;
 pub use context_access::navigation::NavigationOps;
 pub use context_access::{ContextOps, StatusOps};

@@ -17,7 +17,7 @@ fn ship_detachment_is_an_explicit_fixture_command() {
 use crate::engine::battle::{record::*, views::*, ElementId, Parent};
 use crate::engine::battle::{Cx, ShipId};
 #[derive(Clone)]
-pub(crate) struct Element {
+pub struct Element {
     pub state: ElementState,
     pub parent: Parent,
     pub target: Option<ElementId>,
@@ -49,18 +49,18 @@ impl Element {
     }
 }
 #[derive(Clone)]
-pub(crate) struct ShipFrames {
+pub struct ShipFrames {
     pub ship: Frames,
     pub weapon: Frames,
     pub special: Frames,
     pub captain_special: FrameSelection,
 }
 #[derive(Clone, Copy)]
-pub(crate) struct Phoenix {
+pub struct Phoenix {
     pub handle: Option<ElementId>,
     pub hooks: [usize; 3],
 }
-pub(crate) struct Ship {
+pub struct Ship {
     pub state: ShipState,
     pub species: u32,
     pub index: u16,
@@ -72,15 +72,15 @@ pub(crate) struct Ship {
     pub phoenix: Option<Phoenix>,
 }
 impl Ship {
-    pub(crate) fn clear_element(&mut self) {
+    pub fn clear_element(&mut self) {
         self.element = None;
         self.clear_element = true;
     }
 }
 
-pub(crate) struct Descriptor(Option<crate::engine::battle::RaceDesc>);
+pub struct Descriptor(Option<crate::engine::battle::RaceDesc>);
 impl Descriptor {
-    pub(crate) fn free(self, world: &mut crate::engine::World) {
+    pub fn free(self, world: &mut crate::engine::World) {
         if let Some(descriptor) = self.0 {
             descriptor.unload(world, true);
         }
@@ -89,7 +89,7 @@ impl Descriptor {
 
 #[cfg(test)]
 impl Element {
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         let record = crate::engine::battle::record::ElementRecord::default();
         Self {
             state: crate::engine::battle::access::fixture_element_state(&record),
@@ -101,7 +101,7 @@ impl Element {
 }
 #[cfg(test)]
 impl Ship {
-    pub(crate) fn for_test(s: &ShipRecord, d: &RaceDescriptor, element: ElementId) -> Self {
+    pub fn for_test(s: &ShipRecord, d: &RaceDescriptor, element: ElementId) -> Self {
         Self {
             // SAFETY: the retained ship pool remains immutable during observation.
             state: unsafe { crate::engine::battle::access::observe_ship_record(s) },
@@ -134,7 +134,7 @@ impl Ship {
     }
 }
 
-pub(crate) trait FixtureOps {
+pub trait FixtureOps {
     fn fixture_element(&self, id: ElementId) -> Element;
     fn fixture_ship(&self, id: ShipId) -> Ship;
     fn apply_fixture_ship(&mut self, id: ShipId, ship: &Ship);

@@ -180,7 +180,7 @@ fn append_point(out: &mut Vec<u8>, point: SphereMapPoint) {
         out.extend(weight.to_le_bytes());
     }
 }
-fn input() -> Vec<u8> {
+pub fn input() -> Vec<u8> {
     let mut out = Vec::new();
     for case in cases() {
         match case {

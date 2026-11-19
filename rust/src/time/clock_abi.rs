@@ -15,11 +15,7 @@ pub const RELATIVE_EVENT: u32 = 1;
 /// `START_YEAR` (clock.h): the campaign's first year.
 pub const START_YEAR: u16 = 2155;
 
-pub(crate) fn event_date(
-    now: (u16, u16, u16),
-    relative: bool,
-    date: (u16, u16, u16),
-) -> (u16, u16, u16) {
+pub fn event_date(now: (u16, u16, u16), relative: bool, date: (u16, u16, u16)) -> (u16, u16, u16) {
     let (mut year, mut month, mut day) = date;
     if relative {
         month = month.wrapping_add(now.1 - 1);
@@ -38,7 +34,7 @@ pub(crate) fn event_date(
     (year, month, day)
 }
 
-pub(crate) fn insert_event(
+pub fn insert_event(
     clock: &mut GameClock,
     date: (u16, u16, u16),
     selector: u8,
@@ -88,7 +84,7 @@ fn take_day_event(
     Some((id, selector))
 }
 
-pub(crate) fn schedule_event(
+pub fn schedule_event(
     world: &mut crate::engine::World,
     dispatch: &mut impl FnMut(&mut crate::engine::World, u8),
     kind: u32,
@@ -116,7 +112,7 @@ pub(crate) fn schedule_event(
 
 /// Run every event scheduled for `today`, in queue order; each is removed
 /// before its callback so the callback may schedule more for the same day.
-pub(crate) fn dispatch_day_events(
+pub fn dispatch_day_events(
     world: &mut crate::engine::World,
     today: (u16, u16, u16),
     mut dispatch: impl FnMut(&mut crate::engine::World, u8),

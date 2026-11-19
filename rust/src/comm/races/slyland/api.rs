@@ -1,7 +1,7 @@
 use super::Handler;
 use crate::comm::races::encounter::EncounterApi;
 
-pub(crate) trait SlylandApi: EncounterApi<Handler> {
+pub trait SlylandApi: EncounterApi<Handler> {
     fn choices(&self) -> [u16; 5];
     fn remember_choices(&mut self, choices: [u16; 5]);
     fn position(&self) -> (i32, i32, i32, i32);

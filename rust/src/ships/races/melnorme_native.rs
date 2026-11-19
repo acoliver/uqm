@@ -1,7 +1,7 @@
 //! Melnorme callbacks and descriptor for the live battle engine.
 //! Expressions preserve the C promotions, truncations, traversal and RNG order.
 
-pub(crate) mod engine {
+pub mod engine {
     use crate::engine::battle::views::Missile;
     use crate::engine::battle::{
         Concerns, Cx, ElementId, Race, RaceDesc, RaceTemplate, Selection, ShipId, WeaponOrigin,
@@ -100,7 +100,7 @@ pub(crate) mod engine {
         d.intelligence.weapon_range = (PUMPUP_SPEED as i32 * PUMPUP_LIFE as i32) as u16;
         d.descriptor(&MELNORME)
     }
-    pub(crate) fn pump_up_preprocess(cx: &mut Cx<'_>, e: ElementId) {
+    pub fn pump_up_preprocess(cx: &mut Cx<'_>, e: ElementId) {
         cx.element_mut(e).thrust = cx.element(e).thrust.wrapping_sub(1);
         if cx.element(e).thrust & 1 != 0 {
             let mut idx = cx.frame_number(cx.element(e).current.image.frame.view());
@@ -123,7 +123,7 @@ pub(crate) mod engine {
         }
     }
 
-    pub(crate) fn pump_up_postprocess(cx: &mut Cx<'_>, e: ElementId) {
+    pub fn pump_up_postprocess(cx: &mut Cx<'_>, e: ElementId) {
         if cx.element(e).flags & APPEARING as u16 != 0 {
             cx.element_mut(e).velocity = crate::engine::battle::record::VELOCITY_DESC::default();
             return;
@@ -200,7 +200,7 @@ pub(crate) mod engine {
         cx.element_mut(e).flags |= NONSOLID as u16;
     }
 
-    pub(crate) fn pump_up_collision(
+    pub fn pump_up_collision(
         cx: &mut Cx<'_>,
         a: ElementId,
         pa: &mut POINT,
@@ -260,7 +260,7 @@ pub(crate) mod engine {
         vec![missile]
     }
 
-    pub(crate) fn confuse_preprocess(cx: &mut Cx<'_>, e: ElementId) {
+    pub fn confuse_preprocess(cx: &mut Cx<'_>, e: ElementId) {
         if cx.element(e).flags & NONSOLID as u16 == 0 {
             cx.set_frame(
                 e,
@@ -308,7 +308,7 @@ pub(crate) mod engine {
         }
     }
 
-    pub(crate) fn confusion_collision(
+    pub fn confusion_collision(
         cx: &mut Cx<'_>,
         a: ElementId,
         _pa: &mut POINT,
@@ -390,7 +390,7 @@ pub(crate) mod engine {
         vec![missile]
     }
 
-    pub(crate) fn initialize_test_pump_up(
+    pub fn initialize_test_pump_up(
         cx: &mut Cx<'_>,
         ss: ShipId,
         origin: WeaponOrigin,
@@ -414,7 +414,7 @@ pub(crate) mod engine {
         vec![cx.missile(&mut block)]
     }
 
-    pub(crate) fn melnorme_intelligence(cx: &mut Cx<'_>, ss: ShipId, concerns: &mut Concerns) {
+    pub fn melnorme_intelligence(cx: &mut Cx<'_>, ss: ShipId, concerns: &mut Concerns) {
         cx.set_weapon(ss, Selection::Override(initialize_test_pump_up));
         let old = cx.ship_state(ss).weapon_counter;
         if old == WEAPON_WAIT {
@@ -467,7 +467,7 @@ pub(crate) mod engine {
         cx.set_weapon(ss, Selection::Override(initialize_pump_up));
     }
 
-    pub(crate) fn melnorme_postprocess(cx: &mut Cx<'_>, ss: ShipId) {
+    pub fn melnorme_postprocess(cx: &mut Cx<'_>, ss: ShipId) {
         let ship = cx.ship_element(ss);
         if cx.ship_state(ss).status & SPECIAL as u16 != 0
             && cx.ship_state(ss).special_counter == 0

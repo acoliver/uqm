@@ -1,6 +1,6 @@
 use super::{CSisState, EncounterApi, Handler};
 
-pub(crate) trait MelnormApi: EncounterApi<Handler> {
+pub trait MelnormApi: EncounterApi<Handler> {
     fn ship(&self) -> CSisState;
     fn set_ship(&mut self, ship: CSisState);
     fn module_cost(&self, id: usize) -> u8;

@@ -3,8 +3,8 @@
 pub(crate) use super::script::{
     DialogueHost, ANIM_DISABLED, FUEL_TANK_SCALE, GLOBAL_PLAYER_NAME, GLOBAL_SHIP_NAME, ONE_SECOND,
 };
-pub(crate) use crate::comm::races::descriptor::CommDescriptor;
-pub(crate) use crate::engine::StoryKey;
+pub use crate::comm::races::descriptor::CommDescriptor;
+pub use crate::engine::StoryKey;
 
 pub(crate) const GLAD_WHEN_YOU_COME_BACK: u16 = 1;
 pub(crate) const GIVE_FUEL: u16 = 2;
@@ -105,7 +105,7 @@ pub(crate) const WHAT_PROBE: u16 = 97;
 pub(crate) const TAKE_CARE_OF_BASE_AGAIN: u16 = 98;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Handler {
+pub enum Handler {
     ByeBye,
     NoRadioactives,
     AskAfterRadios,
@@ -116,7 +116,7 @@ pub(crate) enum Handler {
     GiveRadios,
 }
 
-pub(crate) struct Commander<'a, A>(pub(crate) &'a mut A);
+pub struct Commander<'a, A>(pub &'a mut A);
 
 impl<A: DialogueHost<Handler>> Commander<'_, A> {
     pub(crate) fn say(&mut self, phrase: u16) {
@@ -127,7 +127,7 @@ impl<A: DialogueHost<Handler>> Commander<'_, A> {
         self.0.response(phrase, handler, &[]);
     }
 
-    pub(crate) fn handle(&mut self, handler: Handler, r: u16) {
+    pub fn handle(&mut self, handler: Handler, r: u16) {
         match handler {
             Handler::ByeBye => self.bye_bye(r),
             Handler::NoRadioactives => self.no_radioactives(r),
@@ -465,7 +465,7 @@ impl<A: DialogueHost<Handler>> Commander<'_, A> {
         }
     }
 
-    pub(crate) fn intro(&mut self) {
+    pub fn intro(&mut self) {
         if self.0.get(StoryKey::PROBE_ILWRATH_ENCOUNTER) != 0 {
             self.say(VERY_IMPRESSIVE);
             for phrase in [
@@ -510,7 +510,7 @@ impl<A: DialogueHost<Handler>> Commander<'_, A> {
     }
 }
 
-pub(crate) fn configure(desc: &mut CommDescriptor, powered: bool) {
+pub fn configure(desc: &mut CommDescriptor, powered: bool) {
     if powered {
         desc.alien_ambient_array[2].anim_flags |= ANIM_DISABLED;
         desc.alien_song_flags &= !1;
@@ -524,4 +524,4 @@ pub(crate) fn configure(desc: &mut CommDescriptor, powered: bool) {
 #[cfg(test)]
 mod tests;
 
-pub(crate) mod descriptor;
+pub mod descriptor;

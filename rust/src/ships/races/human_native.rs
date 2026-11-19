@@ -19,7 +19,7 @@ fn use_defense(cooldown: u8, weapon_turn: Option<u16>, enemy_turn: Option<u16>) 
         && (weapon_turn.is_some_and(|turn| turn <= 2) || enemy_turn.is_some_and(|turn| turn <= 4))
 }
 
-pub(crate) mod engine {
+pub mod engine {
     use super::{in_defense_range, nuke_speed, use_defense, MISSILE_LIFE};
     use crate::engine::battle::{Concerns, Cx, ElementId, ShipId, WeaponOrigin, WeaponSpawn};
     use crate::ships::native::abi::*;
@@ -88,7 +88,7 @@ pub(crate) mod engine {
         uninit: None,
     };
 
-    pub(crate) fn nuke_preprocess(cx: &mut Cx<'_>, missile: ElementId) {
+    pub fn nuke_preprocess(cx: &mut Cx<'_>, missile: ElementId) {
         let mut facing = cx.frame_number(cx.element(missile).next.image.frame.view());
         if cx.element(missile).turn_wait() > 0 {
             let wait = cx.element(missile).turn_wait() - 1;
@@ -136,7 +136,7 @@ pub(crate) mod engine {
         vec![nuke]
     }
 
-    pub(crate) fn spawn_point_defense(cx: &mut Cx<'_>, source: ElementId) {
+    pub fn spawn_point_defense(cx: &mut Cx<'_>, source: ElementId) {
         let ss = cx.owner(source);
         if cx.element(source).flags & PLAYER_SHIP as u16 != 0 {
             if let Some(defense) = cx.alloc_element() {
@@ -202,14 +202,14 @@ pub(crate) mod engine {
         }
     }
 
-    pub(crate) fn human_postprocess(cx: &mut Cx<'_>, ss: ShipId) {
+    pub fn human_postprocess(cx: &mut Cx<'_>, ss: ShipId) {
         if cx.ship_state(ss).status & SPECIAL as u16 != 0 && cx.ship_state(ss).special_counter == 0
         {
             spawn_point_defense(cx, cx.ship_element(ss));
         }
     }
 
-    pub(crate) fn human_intelligence(cx: &mut Cx<'_>, ss: ShipId, concerns: &mut Concerns) {
+    pub fn human_intelligence(cx: &mut Cx<'_>, ss: ShipId, concerns: &mut Concerns) {
         let enemy = ENEMY_SHIP_INDEX as usize;
         let weapon = ENEMY_WEAPON_INDEX as usize;
         let enemy_turn = concerns.objects[enemy]

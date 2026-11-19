@@ -4,19 +4,19 @@ use crate::engine::world::activity::ActivityKind;
 pub(crate) use crate::engine::StoryKey;
 mod phrases;
 use phrases::*;
-pub(crate) mod api;
+pub mod api;
 pub(crate) use api::RebelApi;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Handler {
+pub enum Handler {
     Exit,
     Info,
     Rebels,
 }
-pub(crate) struct Dialogue<'a, A> {
-    pub(crate) api: &'a mut A,
+pub struct Dialogue<'a, A> {
+    pub api: &'a mut A,
 }
 impl<A: RebelApi> Dialogue<'_, A> {
-    pub(crate) fn handle(&mut self, h: Handler, r: i32) {
+    pub fn handle(&mut self, h: Handler, r: i32) {
         match h {
             Handler::Exit => {
                 if r == BYE_REBEL {
@@ -139,7 +139,7 @@ impl<A: RebelApi> Dialogue<'_, A> {
         }
         self.api.response(BYE_REBEL as u16, Handler::Exit, &[])
     }
-    pub(crate) fn intro(&mut self) {
+    pub fn intro(&mut self) {
         self.api.segue(0);
         if self.api.activity() as u8 == ActivityKind::InLastBattle as u8 {
             self.api.npc(YEHAT_CAVALRY);
@@ -171,7 +171,7 @@ impl<A: RebelApi> Dialogue<'_, A> {
             self.rebels(0)
         }
     }
-    pub(crate) fn initialize(&mut self) {
+    pub fn initialize(&mut self) {
         self.api.segue(0)
     }
 }
@@ -188,4 +188,4 @@ pub(crate) fn text_layout(screen_width: i32) -> (Point, u16) {
 #[cfg(test)]
 mod tests;
 
-pub(crate) mod descriptor;
+pub mod descriptor;

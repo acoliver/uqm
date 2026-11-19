@@ -1,5 +1,5 @@
 //! Shofixti live callbacks translated from `sc2/src/uqm/ships/shofixti/shofixti.c`.
-pub(crate) mod engine {
+pub mod engine {
     use crate::engine::battle::{Concerns, Cx, ElementId, ShipId, WeaponOrigin, WeaponSpawn};
     use crate::ships::native::abi::*;
     const MAX_CREW: u16 = 6;
@@ -127,7 +127,7 @@ pub(crate) mod engine {
         uninit: None,
     };
 
-    pub(crate) fn initialize_standard_missile(
+    pub fn initialize_standard_missile(
         cx: &mut Cx<'_>,
         ss: ShipId,
         origin: WeaponOrigin,
@@ -151,7 +151,7 @@ pub(crate) mod engine {
         })]
     }
 
-    pub(crate) fn destruct_preprocess(cx: &mut Cx<'_>, e: ElementId) {
+    pub fn destruct_preprocess(cx: &mut Cx<'_>, e: ElementId) {
         cx.element_mut(e).flags |= CHANGING as u16;
         let life = cx.element(e).life;
         if life > DESTRUCT_SWITCH {
@@ -203,7 +203,7 @@ pub(crate) mod engine {
         }
     }
 
-    pub(crate) fn self_destruct_kill_objects(cx: &mut Cx<'_>, e: ElementId) {
+    pub fn self_destruct_kill_objects(cx: &mut Cx<'_>, e: ElementId) {
         let mut h = cx.elements().head();
         while let Some(obj) = h {
             h = cx.elements().succ(obj);
@@ -254,7 +254,7 @@ pub(crate) mod engine {
         }
     }
 
-    pub(crate) fn self_destruct(cx: &mut Cx<'_>, e: ElementId) {
+    pub fn self_destruct(cx: &mut Cx<'_>, e: ElementId) {
         if let Some(d) = cx.alloc_element() {
             cx.element_mut(d).player = cx.element(e).player;
             cx.element_mut(d).flags = (APPEARING | NONSOLID | FINITE_LIFE) as u16;
@@ -271,7 +271,7 @@ pub(crate) mod engine {
         cx.element_mut(e).death = Some(ElementHook::Native(shofixti_destruct_death));
     }
 
-    pub(crate) fn shofixti_destruct_death(cx: &mut Cx<'_>, e: ElementId) {
+    pub fn shofixti_destruct_death(cx: &mut Cx<'_>, e: ElementId) {
         let ss = cx.owner(e);
         cx.stop_battle_music();
         cx.start_ship_explosion(e, false);
@@ -286,7 +286,7 @@ pub(crate) mod engine {
         cx.record_ship_death(e);
     }
 
-    pub(crate) fn shofixti_intelligence(cx: &mut Cx<'_>, ss: ShipId, concerns: &mut Concerns) {
+    pub fn shofixti_intelligence(cx: &mut Cx<'_>, ss: ShipId, concerns: &mut Concerns) {
         cx.ship_intelligence(ss, concerns);
         if cx.ship_state(ss).special_counter != 0 {
             return;
@@ -320,7 +320,7 @@ pub(crate) mod engine {
         }
     }
 
-    pub(crate) fn shofixti_postprocess(cx: &mut Cx<'_>, ss: ShipId) {
+    pub fn shofixti_postprocess(cx: &mut Cx<'_>, ss: ShipId) {
         if (cx.ship_state(ss).status ^ cx.ship_state(ss).old_status) & SPECIAL as u16 != 0 {
             let captain = cx.advance_frame(cx.captain_special(ss));
             cx.set_captain_special(ss, captain.clone());

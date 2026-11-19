@@ -1,6 +1,6 @@
 //! Chenjesu callbacks and descriptor translated from `sc2/src/uqm/ships/chenjesu/chenjesu.c`.
 
-pub(crate) mod engine {
+pub mod engine {
     use crate::engine::battle::hooks::animation_preprocess;
     use crate::engine::battle::views::Missile;
     use crate::engine::battle::{
@@ -99,7 +99,7 @@ pub(crate) mod engine {
         uninit: None,
     };
 
-    pub(crate) fn crystal_postprocess(cx: &mut Cx<'_>, e: ElementId) {
+    pub fn crystal_postprocess(cx: &mut Cx<'_>, e: ElementId) {
         let ss = cx.owner(e);
         let mut block = Missile {
             cx: cx.element(e).next.location.x,
@@ -129,7 +129,7 @@ pub(crate) mod engine {
         cx.process_ship_sound(ss, 1, e);
     }
 
-    pub(crate) fn crystal_preprocess(cx: &mut Cx<'_>, e: ElementId) {
+    pub fn crystal_preprocess(cx: &mut Cx<'_>, e: ElementId) {
         let ss = cx.owner(e);
         if cx.ship_state(ss).status & WEAPON as u16 != 0 {
             cx.element_mut(e).life = cx.element(e).life.wrapping_add(1);
@@ -139,7 +139,7 @@ pub(crate) mod engine {
         }
     }
 
-    pub(crate) fn crystal_collision(
+    pub fn crystal_collision(
         cx: &mut Cx<'_>,
         a: ElementId,
         pa: &mut POINT,
@@ -163,7 +163,7 @@ pub(crate) mod engine {
         }
     }
 
-    pub(crate) fn doggy_preprocess(cx: &mut Cx<'_>, e: ElementId) {
+    pub fn doggy_preprocess(cx: &mut Cx<'_>, e: ElementId) {
         let ss = cx.owner(e);
         cx.ship_state_mut(ss).special_counter = cx.ship_state(ss).special_counter.wrapping_add(1);
         if cx.element(e).thrust > 0 {
@@ -209,7 +209,7 @@ pub(crate) mod engine {
         }
     }
 
-    pub(crate) fn doggy_death(cx: &mut Cx<'_>, e: ElementId) {
+    pub fn doggy_death(cx: &mut Cx<'_>, e: ElementId) {
         cx.process_ship_sound(cx.owner(e), 3, e);
         cx.element_mut(e).flags &= !(DISAPPEARING as u16);
         cx.element_mut(e).flags |= (NONSOLID | FINITE_LIFE) as u16;
@@ -222,7 +222,7 @@ pub(crate) mod engine {
         cx.element_mut(e).thrust = 0;
     }
 
-    pub(crate) fn doggy_collision(
+    pub fn doggy_collision(
         cx: &mut Cx<'_>,
         a: ElementId,
         pa: &mut POINT,
@@ -244,7 +244,7 @@ pub(crate) mod engine {
         }
     }
 
-    pub(crate) fn spawn_doggy(cx: &mut Cx<'_>, e: ElementId) {
+    pub fn spawn_doggy(cx: &mut Cx<'_>, e: ElementId) {
         let h = cx.alloc_element();
         if let Some(h) = h {
             cx.element_mut(e).flags |= DEFY_PHYSICS as u16;
@@ -295,7 +295,7 @@ pub(crate) mod engine {
         turn == 0 || (turn == 1 && cx.plot_intercept(&crystal_origin, &target_origin, life, 0) == 0)
     }
 
-    pub(crate) fn chenjesu_intelligence(cx: &mut Cx<'_>, ss: ShipId, concerns: &mut Concerns) {
+    pub fn chenjesu_intelligence(cx: &mut Cx<'_>, ss: ShipId, concerns: &mut Concerns) {
         cx.ship_state_mut(ss).input &= !(SPECIAL as u8);
         let enemy = ENEMY_SHIP_INDEX as usize;
         let weapon = ENEMY_WEAPON_INDEX as usize;
@@ -402,7 +402,7 @@ pub(crate) mod engine {
         vec![out]
     }
 
-    pub(crate) fn chenjesu_postprocess(cx: &mut Cx<'_>, ss: ShipId) {
+    pub fn chenjesu_postprocess(cx: &mut Cx<'_>, ss: ShipId) {
         let e = cx.ship_element(ss);
         if cx.ship_state(ss).status & SPECIAL as u16 != 0
             && cx.ship_state(ss).special_counter < MAX_DOGGIES
@@ -413,7 +413,7 @@ pub(crate) mod engine {
         cx.ship_state_mut(ss).special_counter = 1;
     }
 
-    pub(crate) fn chenjesu_preprocess(cx: &mut Cx<'_>, ss: ShipId) {
+    pub fn chenjesu_preprocess(cx: &mut Cx<'_>, ss: ShipId) {
         if cx.ship_state(ss).special_counter > 1 {
             cx.ship_state_mut(ss).special_counter =
                 cx.ship_state(ss).special_counter.wrapping_add(MAX_DOGGIES);

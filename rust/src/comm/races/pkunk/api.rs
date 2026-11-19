@@ -1,7 +1,7 @@
 use super::Handler;
 use crate::comm::races::alliance::AllianceApi;
 
-pub(crate) trait PkunkApi: AllianceApi<Handler> {
+pub trait PkunkApi: AllianceApi<Handler> {
     fn date(&self) -> (u16, u16, u16);
     fn gift_ships(&mut self) -> u16;
 }

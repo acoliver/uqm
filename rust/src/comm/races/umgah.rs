@@ -2,20 +2,20 @@
 pub(crate) use crate::engine::StoryKey;
 mod phrases;
 use phrases::*;
-pub(crate) mod api;
+pub mod api;
 pub(crate) use api::UmgahApi;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Handler {
+pub enum Handler {
     CombatIsInevitable,
     Zombies,
     NormalUmgah,
     UmgahReward,
 }
-pub(crate) struct Dialogue<'a, A> {
-    pub(crate) api: &'a mut A,
+pub struct Dialogue<'a, A> {
+    pub api: &'a mut A,
 }
 impl<A: UmgahApi> Dialogue<'_, A> {
-    pub(crate) fn handle(&mut self, h: Handler, r: i32) {
+    pub fn handle(&mut self, h: Handler, r: i32) {
         match h {
             Handler::CombatIsInevitable => self.combat_is_inevitable(r),
             Handler::Zombies => self.zombies(r),
@@ -313,7 +313,7 @@ impl<A: UmgahApi> Dialogue<'_, A> {
         self.api
             .response((BYE_POST_ZOMBIE) as u16, Handler::CombatIsInevitable, &[]);
     }
-    pub(crate) fn intro(&mut self) {
+    pub fn intro(&mut self) {
         let mut visits: i32;
         if self.api.get(StoryKey::UMGAH_HOSTILE) != 0 {
             visits = i32::from(self.api.get(StoryKey::UMGAH_VISITS));
@@ -511,12 +511,12 @@ impl<A: UmgahApi> Dialogue<'_, A> {
             }
         }
     }
-    pub(crate) fn post_umgah_enc(&mut self) {
+    pub fn post_umgah_enc(&mut self) {
         if !(i32::from(self.api.get(StoryKey::UMGAH_ZOMBIE_BLOBBIES)) != 0) {
             self.api.set(StoryKey::MET_NORMAL_UMGAH, 1_u8);
         }
     }
-    pub(crate) fn initialize(&mut self) {
+    pub fn initialize(&mut self) {
         if ((i32::from(self.api.get(StoryKey::TALKING_PET)) != 0)
             && !(i32::from(self.api.get(StoryKey::UMGAH_HOSTILE)) != 0))
             || ((i32::from(self.api.activity()) as u8 as i32) == 5)
@@ -531,4 +531,4 @@ impl<A: UmgahApi> Dialogue<'_, A> {
 #[cfg(test)]
 mod tests;
 
-pub(crate) mod descriptor;
+pub mod descriptor;

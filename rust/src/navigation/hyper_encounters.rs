@@ -125,7 +125,7 @@ pub fn transition(
         cx.element_mut(element).turn = 1;
     }
 }
-pub(crate) fn collision(
+pub fn collision(
     cx: &mut Cx<'_>,
     source: ElementId,
     _: &mut POINT,

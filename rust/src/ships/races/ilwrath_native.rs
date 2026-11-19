@@ -63,7 +63,7 @@ const fn decloak_step(color: Color) -> Option<Color> {
     }
 }
 
-pub(crate) mod engine {
+pub mod engine {
     use super::*;
     use crate::engine::battle::views::Missile;
     use crate::engine::battle::{
@@ -167,7 +167,7 @@ pub(crate) mod engine {
             || (prim.kind == gfx_object_STAMPFILL_PRIM as u8 && same_color(prim.color, BLACK_COLOR))
     }
 
-    pub(crate) fn flame_preprocess(cx: &mut Cx<'_>, flame: ElementId) {
+    pub fn flame_preprocess(cx: &mut Cx<'_>, flame: ElementId) {
         if cx.element(flame).turn > 0 {
             cx.element_mut(flame).turn -= 1;
         } else {
@@ -182,7 +182,7 @@ pub(crate) mod engine {
         }
     }
 
-    pub(crate) fn flame_collision(
+    pub fn flame_collision(
         cx: &mut Cx<'_>,
         flame: ElementId,
         flame_point: &mut POINT,
@@ -194,7 +194,7 @@ pub(crate) mod engine {
         cx.element_mut(flame).flags |= NONSOLID as u16;
     }
 
-    pub(crate) fn ilwrath_intelligence(cx: &mut Cx<'_>, ss: ShipId, concerns: &mut Concerns) {
+    pub fn ilwrath_intelligence(cx: &mut Cx<'_>, ss: ShipId, concerns: &mut Concerns) {
         let enemy = ENEMY_SHIP_INDEX as usize;
         concerns.objects[enemy].movement = MOVEMENT_STATE_PURSUE;
         if concerns.objects[enemy].object.is_some() && concerns.objects[enemy].which_turn <= 10 {
@@ -315,9 +315,9 @@ pub(crate) mod engine {
     }
 
     /// Names the cloak in the parity trace; observed inline, never called.
-    pub(crate) fn special_hook(_cx: &mut Cx<'_>, _ss: ShipId) {}
+    pub fn special_hook(_cx: &mut Cx<'_>, _ss: ShipId) {}
 
-    pub(crate) fn ilwrath_preprocess(cx: &mut Cx<'_>, ss: ShipId) {
+    pub fn ilwrath_preprocess(cx: &mut Cx<'_>, ss: ShipId) {
         let ship = cx.ship_element(ss);
         // Local copy: clearing SPECIAL below must not touch cur_status_flags.
         let mut status_flags: STATUS_FLAGS = cx.ship_state(ss).status;

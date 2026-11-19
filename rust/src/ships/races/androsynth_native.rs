@@ -1,5 +1,5 @@
 //! Androsynth behavior, retaining the original integer widths and RNG order.
-pub(crate) mod engine {
+pub mod engine {
     use crate::engine::battle::{
         Concerns, Cx, ElementId, Race, RaceState, ShipId, WeaponOrigin, WeaponSpawn,
     };
@@ -70,7 +70,7 @@ pub(crate) mod engine {
         uninit: Some(uninit_androsynth),
     };
 
-    pub(crate) fn blazer_collision(
+    pub fn blazer_collision(
         cx: &mut Cx<'_>,
         a: ElementId,
         pa: &mut POINT,
@@ -91,7 +91,7 @@ pub(crate) mod engine {
         crate::engine::battle::motion::collision(cx, a, pa, b, pb);
     }
 
-    pub(crate) fn bubble_preprocess(cx: &mut Cx<'_>, missile: ElementId) {
+    pub fn bubble_preprocess(cx: &mut Cx<'_>, missile: ElementId) {
         let packed = cx.element(missile).turn_wait();
         let mut thrust_wait = packed >> 4;
         let mut turn_wait = packed & 0x0f;
@@ -174,7 +174,7 @@ pub(crate) mod engine {
         cx.ship_intelligence(ss, concerns);
     }
 
-    pub(crate) fn androsynth_intelligence(cx: &mut Cx<'_>, ss: ShipId, concerns: &mut Concerns) {
+    pub fn androsynth_intelligence(cx: &mut Cx<'_>, ss: ShipId, concerns: &mut Concerns) {
         let weapon = ENEMY_WEAPON_INDEX as usize;
         let enemy = ENEMY_SHIP_INDEX as usize;
         if concerns.subject.next.image.frames == cx.ship_frame_set(ss, 2) {
@@ -250,7 +250,7 @@ pub(crate) mod engine {
         }
     }
 
-    pub(crate) fn androsynth_postprocess(cx: &mut Cx<'_>, ss: ShipId) {
+    pub fn androsynth_postprocess(cx: &mut Cx<'_>, ss: ShipId) {
         let ship = cx.ship_element(ss);
         if cx.element(ship).next.image.frames == cx.ship_frame_set(ss, 2) {
             if cx.ship_state(ss).status & SPECIAL as u16 != 0
@@ -280,7 +280,7 @@ pub(crate) mod engine {
         }
     }
 
-    pub(crate) fn androsynth_preprocess(cx: &mut Cx<'_>, ss: ShipId) {
+    pub fn androsynth_preprocess(cx: &mut Cx<'_>, ss: ShipId) {
         let ship = cx.ship_element(ss);
         let mut flags = cx.ship_state(ss).status;
         if cx.element(ship).next.image.frames == cx.ship_frame_set(ss, 0) {
@@ -348,7 +348,7 @@ pub(crate) mod engine {
         cx.ship_state_mut(ss).status = flags;
     }
 
-    pub(crate) fn uninit_androsynth(
+    pub fn uninit_androsynth(
         _world: &mut crate::engine::battle::World,
         stats: &mut crate::engine::battle::views::RaceStats,
     ) {

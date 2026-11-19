@@ -4,18 +4,18 @@ pub(crate) use crate::engine::StoryKey;
 mod phrases;
 use phrases::*;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Handler {
+pub enum Handler {
     ExitConversation,
     ArilouHome,
     AngryHomeArilou,
     AngrySpaceArilou,
     FriendlySpaceArilou,
 }
-pub(crate) struct Dialogue<'a, A> {
-    pub(crate) api: &'a mut A,
+pub struct Dialogue<'a, A> {
+    pub api: &'a mut A,
 }
 impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
-    pub(crate) fn handle(&mut self, h: Handler, r: u16) {
+    pub fn handle(&mut self, h: Handler, r: u16) {
         match h {
             Handler::ExitConversation => self.exit_conversation(r),
             Handler::ArilouHome => self.arilou_home(r),
@@ -340,7 +340,7 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
         self.api
             .response(BYE_FRIENDLY_SPACE, Handler::ExitConversation, &[]);
     }
-    pub(crate) fn intro(&mut self) {
+    pub fn intro(&mut self) {
         let mut num_visits: u8;
         if i32::from((self.api.activity()) as u8) == 5 {
             self.api.npc(i32::from(OUT_TAKES));
@@ -504,7 +504,7 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
             }
         }
     }
-    pub(crate) fn post_arilou_enc(&mut self) {
+    pub fn post_arilou_enc(&mut self) {
         let manner: u8;
         if ((self.api.get_segue()) as i32 == 1)
             && (i32::from({
@@ -529,7 +529,7 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
             }
         }
     }
-    pub(crate) fn initialize(&mut self) {
+    pub fn initialize(&mut self) {
         if ((i32::from(self.api.get(StoryKey::ARILOU_SPACE_SIDE)) > 1)
             || (i32::from(self.api.get(StoryKey::ARILOU_MANNER)) == 3))
             || (i32::from((self.api.activity()) as u8) == 5)
@@ -544,4 +544,4 @@ impl<A: AllianceApi<Handler>> Dialogue<'_, A> {
 #[cfg(test)]
 mod tests;
 
-pub(crate) mod descriptor;
+pub mod descriptor;

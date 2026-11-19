@@ -3,7 +3,7 @@
 //! Every value and expression below mirrors `sc2/src/uqm/ships/syreen/syreen.c`,
 //! including C integer promotion and truncation, so battles replay identically.
 
-pub(crate) mod engine {
+pub mod engine {
     use crate::ships::native::abi::*;
 
     // Core characteristics
@@ -125,7 +125,7 @@ pub(crate) mod engine {
 
     /// Queued by the song's first pass and run again as the element's death
     /// function, which is when the nearby enemy ships actually lose crew.
-    pub(crate) fn spawn_crew(cx: &mut Cx<'_>, source: ElementId) {
+    pub fn spawn_crew(cx: &mut Cx<'_>, source: ElementId) {
         if cx.element(source).flags & PLAYER_SHIP as u16 != 0 {
             let crew_handle = cx.alloc_element();
             if let Some(crew) = crew_handle {
@@ -191,7 +191,7 @@ pub(crate) mod engine {
         }
     }
 
-    pub(crate) fn syreen_intelligence(cx: &mut Cx<'_>, ss: ShipId, concerns: &mut Concerns) {
+    pub fn syreen_intelligence(cx: &mut Cx<'_>, ss: ShipId, concerns: &mut Concerns) {
         cx.ship_intelligence(ss, concerns);
 
         let enemy = ENEMY_SHIP_INDEX as usize;
@@ -220,7 +220,7 @@ pub(crate) mod engine {
         }
     }
 
-    pub(crate) fn syreen_postprocess(cx: &mut Cx<'_>, ss: ShipId) {
+    pub fn syreen_postprocess(cx: &mut Cx<'_>, ss: ShipId) {
         let ship = cx.ship_element(ss);
         if cx.ship_state(ss).status & SPECIAL as u16 != 0
             && cx.ship_state(ss).special_counter == 0

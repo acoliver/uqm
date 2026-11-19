@@ -93,20 +93,20 @@ pub(crate) const ENUMERATE_SEVENTY: u32 = 84;
 pub(crate) const ENUMERATE_EIGHTY: u32 = 85;
 pub(crate) const ENUMERATE_NINETY: u32 = 86;
 
-pub(crate) mod api;
+pub mod api;
 pub(crate) use api::SlylandApi;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Handler {
+pub enum Handler {
     Combat,
 }
 
-pub(crate) struct Dialogue<'a, A> {
-    pub(crate) api: &'a mut A,
+pub struct Dialogue<'a, A> {
+    pub api: &'a mut A,
 }
 
 mod logic;
-pub(crate) mod numbers;
+pub mod numbers;
 
 // ---------------------------------------------------------------------------
 // Resource keys (from resinst.h)
@@ -159,4 +159,4 @@ mod tests {
     }
 }
 
-pub(crate) mod descriptor;
+pub mod descriptor;

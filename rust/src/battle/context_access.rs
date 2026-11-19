@@ -54,15 +54,15 @@ mod status_native_access {
 }
 
 pub(crate) mod ai_legacy;
-pub(crate) mod reader_legacy;
+pub mod reader_legacy;
 
 pub(crate) mod links;
 
 pub(crate) mod navigation;
 
-pub(crate) mod observe;
+pub mod observe;
 
-pub(crate) mod fixture;
+pub mod fixture;
 
 pub use status_native_access::StatusOps;
 

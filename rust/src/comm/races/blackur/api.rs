@@ -2,7 +2,7 @@ use super::Handler;
 use crate::comm::races::encounter::EncounterApi;
 use crate::engine::StoryKey;
 
-pub(crate) trait BlackurApi: EncounterApi<Handler> {
+pub trait BlackurApi: EncounterApi<Handler> {
     fn battle_group(&self, key: StoryKey) -> (u32, u32);
 
     fn in_samatra_battle(&self) -> bool {

@@ -45,7 +45,7 @@ pub(super) fn cleanup(cx: &mut Cx<'_>) {
         queue.get_mut(encounter).h_element = ptr::null_mut();
     }
 }
-pub(crate) fn unhyper(cx: &mut Cx<'_>, element: ElementId) {
+pub fn unhyper(cx: &mut Cx<'_>, element: ElementId) {
     cx.element_mut(element).flags |= CHANGING;
     let current = cx.element(element).current.image.frame;
     let mut index = cx.frame_number(current.view());
@@ -95,7 +95,7 @@ pub(crate) fn init_transition(cx: &mut Cx<'_>, source: ElementId, ship: ElementI
         .velocity
         .set_components(i32::from(dx / turns), i32::from(dy / turns));
 }
-pub(crate) fn hyper_preprocess(
+pub fn hyper_preprocess(
     cx: &mut crate::engine::battle::Cx<'_>,
     element: crate::engine::battle::ElementId,
 ) {
@@ -150,7 +150,7 @@ pub fn hyper_transition(
     }
     true
 }
-pub(crate) fn star_collision(
+pub fn star_collision(
     cx: &mut crate::engine::battle::Cx<'_>,
     source: crate::engine::battle::ElementId,
     _p0: &mut POINT,
@@ -185,7 +185,7 @@ pub(crate) fn star_collision(
         }
     }
 }
-pub(crate) fn star_death(
+pub fn star_death(
     cx: &mut crate::engine::battle::Cx<'_>,
     element: crate::engine::battle::ElementId,
 ) {
@@ -193,7 +193,7 @@ pub(crate) fn star_death(
         cx.select_star(None);
     }
 }
-pub(crate) fn portal_death(
+pub fn portal_death(
     cx: &mut crate::engine::battle::Cx<'_>,
     element: crate::engine::battle::ElementId,
 ) {
@@ -211,7 +211,7 @@ pub(crate) fn portal_death(
         );
     }
 }
-pub(crate) fn portal_collision(
+pub fn portal_collision(
     cx: &mut crate::engine::battle::Cx<'_>,
     source: crate::engine::battle::ElementId,
     _p0: &mut POINT,
