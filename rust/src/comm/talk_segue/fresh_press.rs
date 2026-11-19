@@ -1,6 +1,5 @@
 //! Release-before-repeat handling for the retained replay menu keys.
 
-#[cfg(not(test))]
 use super::c_bridge;
 use std::ffi::c_int;
 
@@ -19,7 +18,6 @@ pub(super) struct FreshPressLatch {
 impl FreshPressLatch {
     /// Arm only when the key is already up; an inherited hold must be
     /// released before it can act.
-    #[cfg(not(test))]
     pub(super) fn entering(input: &super::InputSession, key: c_int) -> Self {
         // SAFETY: the replay session reads initialized input on the game thread.
         Self::from_held(c_bridge::current_menu_key(input, key) != 0)
@@ -32,7 +30,6 @@ impl FreshPressLatch {
     }
 
     /// Report a fresh press, re-arming whenever the key is released.
-    #[cfg(not(test))]
     pub(super) fn pressed(&mut self, input: &super::InputSession, key: c_int) -> bool {
         // SAFETY: the replay session reads initialized input on the game thread.
         let held = c_bridge::current_menu_key(input, key) != 0;
