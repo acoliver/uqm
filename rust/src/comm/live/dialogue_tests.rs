@@ -709,3 +709,174 @@ fn every_response_handler_runs_from_its_callback_table() {
         }
     });
 }
+
+/// Host queries and effects the scripts reach only in narrow story states,
+/// each checked against the campaign owner it reads or changes.
+#[test]
+#[serial_test::serial]
+fn host_queries_and_effects_read_and_change_the_supplied_campaign() {
+    use crate::comm::host::Host;
+    use crate::comm::races::{
+        blackur::api::BlackurApi, chmmr::api::ChmmrApi, druuge::api::DruugeApi,
+        melnorm::api::MelnormApi, orz::api::OrzApi, pkunk::api::PkunkApi, script::DialogueHost,
+        slyland::api::SlylandApi, spahome::api::SpahomeApi, starbas::api::StarbaseApi,
+        syreen::api::SyreenApi, talkpet::api::TalkpetApi, umgah::api::UmgahApi,
+        urquan::api::UrquanApi, zoqfot::api::ZoqApi,
+    };
+    use crate::engine::species::ship::{ORZ_SHIP, PKUNK_SHIP, SPATHI_SHIP};
+    if !crate::native_test_process::own_graphics_process(concat!(
+        module_path!(),
+        "::host_queries_and_effects_read_and_change_the_supplied_campaign"
+    )) {
+        return;
+    }
+    fn host<H, R>(
+        cx: &mut Cx<'_>,
+        kind: DialogueKind,
+        body: impl FnOnce(&mut Host<'_, '_, H>) -> R,
+    ) -> R {
+        converse(cx, kind, |comm, cx| {
+            body(&mut Host::new(comm, cx, |_| panic!("unexpected response")))
+        })
+    }
+    with_fixture(|game, art| {
+        campaign(&mut game.world, art, &[]);
+        game.world.data.game.game_clock.year_index = 2157;
+        game.world.data.game.game_clock.month_index = 4;
+        game.world.data.game.game_clock.day_index = 9;
+        let mut battle = Battle::new();
+        let mut cx = Cx::new(&mut battle, &mut game.world, &mut game.kernel, || 7);
+
+        let gifted = host(&mut cx, DialogueKind::Pkunk, |h: &mut Host<'_, '_, _>| {
+            assert_eq!(PkunkApi::date(h), (2157, 4, 9));
+            h.gift_ships()
+        });
+        assert_eq!(gifted, 4);
+        let pkunk = |cx: &Cx<'_>| {
+            cx.world
+                .built_ships_ref()
+                .find(|ship| ship.species_id == u32::from(PKUNK_SHIP))
+                .is_some()
+        };
+        assert!(pkunk(&cx));
+
+        crate::engine::world::fleet::add_escort_ships(
+            cx.world,
+            ORZ_SHIP as u16,
+            2,
+            crate::engine::world::fleet::captain_name,
+        );
+        host(&mut cx, DialogueKind::Orz, |h: &mut Host<'_, '_, _>| {
+            h.remove_escorts(ORZ_SHIP as u16)
+        });
+        assert!(cx
+            .world
+            .built_ships_ref()
+            .find(|ship| ship.species_id == u32::from(ORZ_SHIP))
+            .is_none());
+
+        assert!(!host(
+            &mut cx,
+            DialogueKind::Spahome,
+            |h: &mut Host<'_, '_, _>| h.have_spathi_escort()
+        ));
+        crate::engine::world::fleet::add_escort_ships(
+            cx.world,
+            SPATHI_SHIP as u16,
+            1,
+            crate::engine::world::fleet::captain_name,
+        );
+        assert!(host(
+            &mut cx,
+            DialogueKind::Spahome,
+            |h: &mut Host<'_, '_, _>| h.have_spathi_escort()
+        ));
+        let worth = host(&mut cx, DialogueKind::Starbas, |h: &mut Host<'_, '_, _>| {
+            h.escorts_worth()
+        });
+        assert!(worth > 0);
+
+        cx.world.data.flagship.log_x = 4000;
+        cx.world.data.flagship.log_y = 8000;
+        let position = host(&mut cx, DialogueKind::Slyland, |h: &mut Host<'_, '_, _>| {
+            h.splice(1);
+            h.number(42, false);
+            h.number(7, true);
+            h.position()
+        });
+        assert_eq!(position.0, 4000);
+        assert_eq!(position.1, 8000);
+
+        cx.world.data.game.battle_group_ref = 77;
+        cx.world
+            .set_story_state(StoryKey::URQUAN_PROBE_GRPOFFS0, 77);
+        let (urquan, black) = host(&mut cx, DialogueKind::Urquan, |h: &mut Host<'_, '_, _>| {
+            (
+                h.group_battle(StoryKey::URQUAN_PROBE_GRPOFFS0),
+                h.get(StoryKey::URQUAN_PROBE_GRPOFFS0),
+            )
+        });
+        assert!(urquan);
+        assert_eq!(black, 77);
+        let group = host(&mut cx, DialogueKind::Blackur, |h: &mut Host<'_, '_, _>| {
+            h.battle_group(StoryKey::URQUAN_PROBE_GRPOFFS0)
+        });
+        assert_eq!(group, (77, 77));
+
+        let biomass = cx.world.data.flagship.total_bio_mass;
+        host(&mut cx, DialogueKind::Umgah, |h: &mut Host<'_, '_, _>| {
+            h.add_biomass(5)
+        });
+        assert_eq!(cx.world.data.flagship.total_bio_mass, biomass + 5);
+
+        let (cost, set) = host(&mut cx, DialogueKind::Druuge, |h: &mut Host<'_, '_, _>| {
+            let cost = h.crew_cost();
+            h.set_crew_cost(cost + 3);
+            (cost, h.crew_cost())
+        });
+        assert_eq!(set, cost + 3);
+
+        let landers = cx.world.data.flagship.num_landers;
+        let speech = host(&mut cx, DialogueKind::Syreen, |h: &mut Host<'_, '_, _>| {
+            h.add_lander();
+            SyreenApi::using_speech(h)
+        });
+        assert_eq!(cx.world.data.flagship.num_landers, landers + 1);
+        assert_eq!(speech, cx.kernel.configuration.preferences().speech != 0);
+
+        cx.world.data.game.glob_flags = 0x80;
+        assert_eq!(
+            host(&mut cx, DialogueKind::Talkpet, |h: &mut Host<'_, '_, _>| h
+                .flags()),
+            0x80
+        );
+        assert_eq!(
+            host(&mut cx, DialogueKind::Zoqfot, |h: &mut Host<'_, '_, _>| {
+                ZoqApi::date(h)
+            }),
+            (2157, 4)
+        );
+
+        host(&mut cx, DialogueKind::Melnorm, |h: &mut Host<'_, '_, _>| {
+            let mut ship = MelnormApi::ship(h);
+            ship.fuel_on_board = 1234;
+            h.set_ship(ship);
+            h.draw_cargo(0, 1);
+            h.clear_display();
+            let before = h.now();
+            h.sleep(1);
+            assert!(h.now() >= before);
+            assert!(!h.skip_sale());
+        });
+        assert_eq!(cx.world.data.flagship.fuel_on_board, 1234);
+
+        cx.world.set_story_state(StoryKey::STARBASE_AVAILABLE, 1);
+        host(&mut cx, DialogueKind::Chmmr, |h: &mut Host<'_, '_, _>| {
+            h.palette(0);
+            h.fade_palette(0, 0);
+            h.refit()
+        });
+        assert_eq!(cx.world.data.flagship.res_units, 1_000_000);
+        crate::time::clock_bridge::rust_clock_uninit(cx.world);
+    });
+}
