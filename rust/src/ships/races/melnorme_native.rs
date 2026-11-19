@@ -8,6 +8,7 @@ pub(crate) mod engine {
         WeaponSpawn, World,
     };
 
+    use crate::engine::battle::hooks::animation_preprocess;
     use crate::ships::native::{abi::*, cosine, facing_to_angle, sine};
 
     const MAX_CREW: u16 = 20;

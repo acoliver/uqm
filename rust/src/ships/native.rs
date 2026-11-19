@@ -25,8 +25,6 @@ pub mod abi {
 
     include!("../abi/ship_abi.rs");
 
-    pub use crate::battle::encount_native::fleet_is_infinite;
-    pub use crate::battle::galaxy::move_galaxy;
     pub use crate::engine::battle::ai_constants::{
         AWESOME_RATING, BATTLE_LEFT, BATTLE_RIGHT, BATTLE_SPECIAL, BATTLE_THRUST, BATTLE_WEAPON,
         GOOD_RATING, STANDARD_RATING,

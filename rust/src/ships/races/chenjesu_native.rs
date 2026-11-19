@@ -1,6 +1,7 @@
 //! Chenjesu callbacks and descriptor translated from `sc2/src/uqm/ships/chenjesu/chenjesu.c`.
 
 pub(crate) mod engine {
+    use crate::engine::battle::hooks::animation_preprocess;
     use crate::engine::battle::views::Missile;
     use crate::engine::battle::{
         Concerns, Cx, ElementId, Race, RaceTemplate, ShipId, WeaponOrigin, WeaponSpawn,

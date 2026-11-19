@@ -83,7 +83,7 @@ fn nested_callbacks_complete_before_the_outer_frame_and_stopped_admission_does_n
         use uqm_rust::graphics::{dcqueue_abi, sdl::lifecycle_abi};
         lifecycle_abi::GameActive = 1;
         dcqueue_abi::Init_DrawCommandQueue();
-        uqm_rust::mainloop::input_abi::SetDefaultMenuRepeatDelay(input);
+        input.set_default_menu_repeat(uqm_rust::engine::time::counter_abi::GetTimeCounter());
         input.set_menu_sounds(32, 64);
         uqm_rust::mainloop::input_abi::SetInputCallback(
             input,
@@ -173,7 +173,7 @@ fn mode_owned_frame_admission_keeps_the_native_observer_order() {
         use uqm_rust::graphics::{dcqueue_abi, sdl::lifecycle_abi};
         lifecycle_abi::GameActive = 1;
         dcqueue_abi::Init_DrawCommandQueue();
-        uqm_rust::mainloop::input_abi::SetDefaultMenuRepeatDelay(input);
+        input.set_default_menu_repeat(uqm_rust::engine::time::counter_abi::GetTimeCounter());
         let events = Rc::new(RefCell::new(Vec::new()));
         let mut observer = Recording {
             events: events.clone(),

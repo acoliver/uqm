@@ -43,7 +43,9 @@ pub(crate) mod live {
     use crate::supermelee::native::menu::live::drawing::repair_frame;
     use crate::supermelee::session::MeleeSession;
 
+    use crate::engine::time::counter_abi::GetTimeCounter;
     use crate::ships::native::abi::*;
+    use crate::supermelee::native::menu::live::changes::local_change_team;
     use crate::supermelee::setup::{
         browser::write_team,
         team::{ship_cost, MeleeTeam as OwnedTeam},
@@ -197,7 +199,7 @@ pub(crate) mod live {
         if cx.world.activity() & CHECK_ABORT as u16 != 0 {
             return 0;
         }
-        SetMenuSounds(input, 1 | 2 | 128 | 256, 16);
+        input.set_menu_sounds(1 | 2 | 128 | 256, 16);
         if state.initialized == 0 {
             {
                 draw(state);

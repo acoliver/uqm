@@ -1,7 +1,9 @@
 //! Native ship motion and collision callbacks ported from ship.c.
 
 use crate::battle::context_access::ContextOps;
+use crate::battle::tactrans_native::engine::{ship_death, ship_transition};
 use crate::ships::native::abi::*;
+use crate::supermelee::native::battle_picker::live::get_initial_melee_star_ships;
 
 const INPUT_FLAGS: STATUS_FLAGS = (LEFT | RIGHT | THRUST | WEAPON | SPECIAL) as STATUS_FLAGS;
 

@@ -10,8 +10,6 @@ pub use init::*;
 pub use master::*;
 pub use setup::*;
 
-pub mod world_resources;
-
 pub mod macro_abi;
 
 pub mod cleanup;

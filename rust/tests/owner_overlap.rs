@@ -206,11 +206,7 @@ fn space_queries_use_the_world_of_the_entered_context() {
 #[serial_test::serial]
 fn status_offsets_use_the_already_borrowed_kernel() {
     let mut game = Game::new();
-    {
-        {
-            init_status_offsets(&mut game.kernel, 240);
-        };
-    }
+    uqm_rust::battle::status_native::init_status_offsets(&mut game.kernel, 240);
 }
 
 #[cfg(feature = "debug-process")]
@@ -583,6 +579,7 @@ fn display_list_initializes_with_the_entered_context_and_explicit_scale() {
 #[test]
 #[serial_test::serial]
 fn fleet_infinity_reads_the_supplied_world_without_publication() {
+    use uqm_rust::battle::encount_native::fleet_is_infinite;
     let mut world = World::new();
     assert_eq!(fleet_is_infinite(&world, 0), 0);
     assert_eq!(fleet_is_infinite(&world, 1), 0);

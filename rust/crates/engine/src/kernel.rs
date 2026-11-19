@@ -1,5 +1,6 @@
 //! Persistent gameplay resources and pools owned by Game.
 pub mod diagnostics;
+mod gravity_well;
 pub mod lander_resources;
 mod navigation_resources;
 mod pilot_flash;

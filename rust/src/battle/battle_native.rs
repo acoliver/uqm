@@ -118,7 +118,10 @@ fn initialize_battle(
 
 pub(crate) mod engine {
     use super::*;
+    use crate::battle::netplay::CrcState as crc_State;
     use crate::battle::tactrans_native::{flee_preprocess, reset_winner, stop_ditty};
+    use crate::engine::time::counter_abi::GetTimeCounter;
+    use crate::supermelee::netplay::crc::{crc_finish, crc_init};
     use abi::*;
 
     const BATTLE_ESCAPE: u8 = 1 << 5;
@@ -275,7 +278,7 @@ pub(crate) mod engine {
         net: &dyn crate::engine::battle::net::BattleNet,
         callback: Option<fn(&mut crate::engine::battle::Cx<'_>, &mut Io<'_>)>,
     ) -> bool {
-        SetMenuSounds(cx.kernel.input_controls(), 0, 0);
+        cx.kernel.input_controls().set_menu_sounds(0, 0);
         let frame = net.frame();
         if net.peer_count() > 0 && frame.is_multiple_of(NETPLAY_CHECKSUM_INTERVAL) {
             let mut state = crc_State::new();

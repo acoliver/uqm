@@ -127,9 +127,11 @@ pub(crate) mod engine {
         AWESOME_RATING, CYBORG_CONTROL, HUMAN_CONTROL, STANDARD_RATING,
     };
     use crate::engine::battle::link_queue;
+    use crate::engine::time::counter_abi::GetTimeCounter;
     use crate::engine::StoryKey;
     use crate::pickship::ffi::draw_armada_pick_ship_in as draw_armada;
     use crate::ships::native::abi::*;
+    use crate::ui::border::init_siscontexts;
     use crate::ui::rgb15;
 
     const TEXT_FADE: [u8; 7] = [10, 9, 8, 6, 5, 4, 3];
@@ -165,7 +167,7 @@ pub(crate) mod engine {
     ) -> bool {
         let runtime = cx.kernel.input_runtime();
         let input = runtime.input();
-        SetMenuSounds(input, 0x0f, 1 << 4);
+        input.set_menu_sounds(0x0f, 1 << 4);
         match menu.advance(
             cx.world.activity() & CHECK_ABORT as u16 != 0,
             input.pulsed().menu[KEY_MENU_SELECT as usize] != 0,
@@ -263,7 +265,7 @@ pub(crate) mod engine {
                     world.story_state(StoryKey::BATTLE_PLANET) as u8
                 }
             };
-            load_gravity_well(kernel, selector);
+            kernel.load_gravity_well(selector);
         }
         kernel.ships(player as usize).reinit();
         let fragments = fragment_snapshot(world, player == RPG_PLAYER_NUM as COUNT);
@@ -472,7 +474,7 @@ pub(crate) mod engine {
         io: &mut crate::engine::observe::Io<'_>,
         input: &crate::engine::input::InputSession,
     ) -> COUNT {
-        free_gravity_well(cx.kernel);
+        cx.kernel.free_gravity_well();
         if encounter_has_no_salvage(cx.world) {
             return 0;
         }

@@ -194,7 +194,7 @@ pub(crate) mod live {
         let planet = activity as u8 != IN_LAST_BATTLE as u8;
         graphics.show_viewport(width, height);
         if !hyperspace && !planet {
-            crate::game_init::world_resources::free_gravity_well(cx.kernel);
+            cx.kernel.free_gravity_well();
         }
         create_arena_ships(cx, hyperspace, planet);
         cx.kernel.ships_initialized = true;

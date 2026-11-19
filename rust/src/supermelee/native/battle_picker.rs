@@ -54,6 +54,7 @@ pub mod live {
     const FADE_ALL_TO_COLOR: u32 = 253;
 
     use crate::engine::battle::ShipId;
+    use crate::engine::time::counter_abi::GetTimeCounter;
     use crate::ships::native::abi::*;
     use std::ffi::CString;
     fn by_index(
@@ -151,7 +152,7 @@ pub mod live {
                 cx,
                 state,
                 usize::from(player),
-                PulsedInputToBattleInput(input, player),
+                input.pulsed_battle_input(player),
             ),
             InputSource::Computer => {
                 if GetTimeCounter()
@@ -193,7 +194,7 @@ pub mod live {
         state: &mut FleetSelection,
         inputs: &[Option<crate::engine::battle::input::InputContext>; 2],
     ) -> u32 {
-        SetMenuSounds(input, 0, 0);
+        input.set_menu_sounds(0, 0);
         if !state.initialized {
             state.initialized = true;
             return 1;
@@ -619,7 +620,7 @@ pub mod live {
             }
             let mut ok = cx.negotiate_battle(net.as_ref(), NetState_NetState_selectShip);
             {
-                SetDefaultMenuRepeatDelay(input);
+                input.set_default_menu_repeat(GetTimeCounter());
             };
             let runtime = cx.kernel.input_runtime();
             let mut observer = runtime.observer();

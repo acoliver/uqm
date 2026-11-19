@@ -7,6 +7,7 @@ mod battle_context;
 mod shared;
 
 use std::{ffi::CStr, mem, ptr};
+use uqm_rust::battle::tactrans_native::reset_winner;
 use uqm_rust::graphics::pixmap_abi::GetFrameIndex;
 use uqm_rust::ships::native::{abi::*, cosine, facing_to_angle, sine};
 

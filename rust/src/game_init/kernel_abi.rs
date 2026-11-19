@@ -1,15 +1,15 @@
 //! Live game kernel and resource globals, ported from setup.c.
 #![allow(non_snake_case)]
 
-use crate::engine::battle::access::lifecycle;
 use crate::graphics::native_abi as gfx;
 use crate::graphics::{context_abi, drawable_abi, pixmap_abi};
-use crate::io::uio_bridge as uio;
+use crate::io::{handles::contentDir, uio_bridge as uio};
 use crate::ships::native::abi::*;
 use crate::strings::{
     sresins::LoadStringTableInstance,
     string_table::{CaptureStringTable, DestroyStringTable, ReleaseStringTable},
 };
+use crate::{battle::status_native::init_status_offsets, engine::battle::access::lifecycle};
 use std::{
     ffi::{c_char, CStr},
     ptr,

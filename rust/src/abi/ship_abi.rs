@@ -861,7 +861,6 @@ pub const ROM_DRAWABLE: u32 = 0;
 pub const RAM_DRAWABLE: u32 = 1;
 pub const SCREEN_DRAWABLE: u32 = 2;
 
-pub use crate::mainloop::platform_abi::strupr;
 pub type uint8 = ::std::os::raw::c_uchar;
 pub type sint8 = ::std::os::raw::c_schar;
 pub type uint16 = ::std::os::raw::c_ushort;
@@ -1012,7 +1011,6 @@ pub use crate::sound::heart_ffi::stop_sound as StopSound;
 pub use crate::sound::heart_ffi::wait_for_sound_end as WaitForSoundEnd;
 pub type TimeCount = DWORD;
 pub type TimePeriod = DWORD;
-pub use crate::time::counter_abi::GetTimeCounter;
 pub const NetplayResetReason_ResetReason_unspecified: NetplayResetReason = 0;
 pub const NetplayResetReason_ResetReason_syncLoss: NetplayResetReason = 1;
 pub const NetplayResetReason_ResetReason_manualReset: NetplayResetReason = 2;
@@ -1028,10 +1026,6 @@ pub const NetState_NetState_inBattle: NetState = 7;
 pub const NetState_NetState_endingBattle: NetState = 8;
 pub const NetState_NetState_endingBattle2: NetState = 9;
 pub type NetState = ::std::os::raw::c_uint;
-pub use crate::io::handles::contentDir;
-pub use crate::io::handles::configDir;
-pub use crate::io::handles::saveDir;
-pub use crate::io::handles::meleeDir;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct _input_template {
@@ -1041,9 +1035,6 @@ pub type INPUT_TEMPLATE = _input_template;
 pub type BattleFrameCounter = DWORD;
 
 pub type Checksum = uint32;
-pub use crate::battle::netplay::CrcState as crc_State;
-pub use crate::supermelee::netplay::crc::crc_finish;
-pub use crate::supermelee::netplay::crc::crc_init;
 unsafe extern "C" {
     pub static mut ScreenWidth: ::std::os::raw::c_int;
 }
@@ -1051,8 +1042,7 @@ unsafe extern "C" {
     pub static mut ScreenHeight: ::std::os::raw::c_int;
 }
 
-pub use crate::battle::velocity::VelocityDesc as velocity_desc;
-pub type VELOCITY_DESC = velocity_desc;
+pub type VELOCITY_DESC = crate::math::velocity::VelocityDesc;
 pub const VIEW_STATE_VIEW_STABLE: VIEW_STATE = 0;
 pub const VIEW_STATE_VIEW_SCROLL: VIEW_STATE = 1;
 pub const VIEW_STATE_VIEW_CHANGE: VIEW_STATE = 2;
@@ -1089,9 +1079,7 @@ pub const MeleeShip_MELEE_UNSET: MeleeShip = 254;
 pub const MeleeShip_MELEE_NONE: MeleeShip = 255;
 pub type MeleeShip = ::std::os::raw::c_uint;
 
-pub use crate::supermelee::native::menu::live::do_melee;
 
-pub use crate::supermelee::native::menu::live::changes::local_change_team;
 pub unsafe fn Flash_createHighlight(gfxContext: CONTEXT, rect: *const RECT) -> *mut FlashContext {
     crate::graphics::flash::Flash_createHighlight(gfxContext.cast(), rect.cast()).cast()
 }
@@ -1145,13 +1133,9 @@ pub type _controller_input_state = uqm_engine::input_port::frames::InputState;
 pub type CONTROLLER_INPUT_STATE = _controller_input_state;
 pub type BATTLE_INPUT_STATE = UBYTE;
 
-pub use crate::mainloop::input_abi::live::PulsedInputToBattleInput;
 
-pub use crate::mainloop::input_abi::live::FlushInput;
 
-pub use crate::mainloop::input_abi::live::SetDefaultMenuRepeatDelay;
 
-pub use crate::mainloop::input_abi::live::ConfirmExit;
 
 pub type STATUS_FLAGS = UWORD;
 pub const SPECIES_ID_NO_ID: SPECIES_ID = 0;
@@ -1220,21 +1204,17 @@ pub const SAMATRA_SHIP: _bindgen_ty_4 = crate::engine::world::queues::SAMATRA_RA
 pub const NUM_AVAILABLE_RACES: _bindgen_ty_4 = 24;
 pub type _bindgen_ty_4 = ::std::os::raw::c_uint;
 
-pub use crate::supermelee::native::battle_picker::live::get_initial_melee_star_ships;
 
 pub type _bindgen_ty_5 = ::std::os::raw::c_uint;
 
 
 
 
-pub use crate::battle::status_native::init_status_offsets;
 
 
-pub use crate::battle::status_native::engine::PostProcessStatus;
 
 pub type MENU_SOUND_FLAGS = UWORD;
 
-pub use crate::mainloop::input_abi::live::SetMenuSounds;
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -1257,11 +1237,8 @@ pub struct MISSILE_BLOCK {
 
 
 
-pub use crate::battle::ship_native::engine::animation_preprocess;
 
-pub use crate::battle::ship_native::engine::ship_preprocess;
 
-pub use crate::battle::ship_native::engine::ship_postprocess;
 
 pub use crate::engine::battle::motion::collision;
 
@@ -1271,7 +1248,6 @@ pub use crate::engine::world::fleet::set_race_allied;
 
 pub use crate::engine::world::fleet::start_sphere_tracking;
 
-pub use crate::ui::settings::stop_music;
 pub type Mutex = *mut crate::threading::RustMutex;
 pub type CondVar = *mut crate::threading::RustCondVar;
 pub const SYNC_CLASS_TOPLEVEL: _bindgen_ty_6 = 1;
@@ -1457,7 +1433,6 @@ pub const BOMB_MODULE_5: _bindgen_ty_10 = 19;
 pub const NUM_MODULES: _bindgen_ty_10 = 20;
 pub type _bindgen_ty_10 = ::std::os::raw::c_uint;
 pub use crate::engine::world::SisState as SIS_STATE;
-pub use crate::ui::border::init_siscontexts;
 pub const StatMsgMode_SMM_UNDEFINED: StatMsgMode = 0;
 pub const StatMsgMode_SMM_DATE: StatMsgMode = 1;
 pub const StatMsgMode_SMM_RES_UNITS: StatMsgMode = 2;
@@ -1559,17 +1534,12 @@ unsafe extern "C" {
     pub static mut GraphicsDriver: ::std::os::raw::c_int;
 }
 
-pub use crate::battle::tactrans_native::engine::ship_transition;
 
 
-pub use crate::battle::tactrans_native::engine::new_ship;
-
-pub use crate::battle::tactrans_native::engine::ship_death;
 
 
-pub use crate::battle::tactrans_native::engine::flee_preprocess;
 
-pub use crate::battle::tactrans_native::engine::reset_winner;
+
 
 
 
@@ -1806,9 +1776,7 @@ pub const NETMELEE_STRING_BASE: _bindgen_ty_27 = 560;
 pub const GAMESTR_COUNT: _bindgen_ty_27 = 579;
 pub type _bindgen_ty_27 = ::std::os::raw::c_uint;
 
-pub use crate::game_init::world_resources::live::load_gravity_well;
 
-pub use crate::game_init::world_resources::live::free_gravity_well;
 
 pub type TFB_Canvas = *mut ::std::os::raw::c_void;
 pub use crate::graphics::native_abi::tfb_image;

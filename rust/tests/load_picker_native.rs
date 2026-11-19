@@ -10,7 +10,7 @@ use uqm_rust::{
     io::uio_bridge as uio,
     mainloop::{
         dir_prep::saveDir,
-        input_abi::{FlushInput, SetDefaultMenuRepeatDelay, UpdateInputState},
+        input_abi::{FlushInput, UpdateInputState},
         restart_menu::{
             do_restart::{do_restart_frame, DoRestartState},
             restart_ops::{RestartHost, RestartMenu, RestartMenuOps},
@@ -179,7 +179,7 @@ fn first_load_entry_flushes_held_keys_and_enumeration_cannot_exit_the_picker() {
         unsafe {
             uqm_rust::graphics::sdl::lifecycle_abi::GameActive = 1;
             Init_DrawCommandQueue();
-            SetDefaultMenuRepeatDelay(input);
+            input.set_default_menu_repeat(uqm_rust::engine::time::counter_abi::GetTimeCounter());
             assert_eq!(rust_v_control_init(), 0);
             assert_eq!(
                 rust_vcontrol_add_key_binding(

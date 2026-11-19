@@ -1,6 +1,7 @@
 //! Live element, collision traversal, camera and display-list processing.
 //! Integer narrowing follows `uqm/process.c` and its header macros.
 
+use crate::battle::galaxy::move_galaxy;
 use crate::math::wrap_delta;
 use crate::ships::native::abi::*;
 

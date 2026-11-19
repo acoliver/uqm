@@ -10,6 +10,7 @@ pub(crate) mod live {
 
     use crate::sound::heart_ffi::fade_music as FadeMusic;
 
+    use crate::engine::time::counter_abi::GetTimeCounter;
     use crate::ships::native::abi::*;
 
     pub(crate) mod admission;
@@ -298,7 +299,7 @@ pub(crate) mod live {
         load_team_list(&mut state);
         load_setup(&mut state, cx);
         state.side = 0;
-        SetMenuSounds(input, 15, 16);
+        input.set_menu_sounds(15, 16);
         {
             let mut frame = admission::SessionFrame::new(
                 &mut state,

@@ -202,6 +202,6 @@ impl crate::engine::input::InputRuntime for NativeInputRuntime {
 
     fn battle_input(&self, input: &crate::engine::battle::input::InputContext) -> u8 {
         // SAFETY: InputContext validates its player when installed by the game thread.
-        CurrentInputToBattleInput(&self.input, input.player())
+        self.input.current_battle_input(input.player())
     }
 }

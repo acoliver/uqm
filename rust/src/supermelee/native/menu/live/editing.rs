@@ -79,7 +79,7 @@ pub(super) fn edit(
     if cx.world.activity() & CHECK_ABORT as u16 != 0 {
         return 0;
     }
-    SetMenuSounds(input, 15, 16 | 512);
+    input.set_menu_sounds(15, 16 | 512);
     if state.initialized == 0 {
         current(cx, state);
         state.initialized = 1;
