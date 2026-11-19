@@ -80,6 +80,7 @@ pub(crate) struct KernelServices {
     pub(crate) primitive_services: Option<&'static dyn crate::battle::services::PrimitiveServices>,
     pub(crate) ship_lifecycle: Option<crate::battle::services::ShipLifecycle>,
     pub(crate) input_runtime: Option<std::rc::Rc<dyn super::input::InputRuntime>>,
+    pub(crate) save_slots: Option<crate::save::slots::SaveSlots>,
 }
 
 #[derive(Default)]

@@ -18,8 +18,6 @@ use picker::SAVES_PER_PAGE;
 pub use picker::{picker_action, PickerAction};
 
 #[cfg(not(test))]
-pub use crate::savegame::live::load::load_game_descriptions;
-#[cfg(not(test))]
 pub use runtime::game_options;
 
 pub(crate) mod runtime {

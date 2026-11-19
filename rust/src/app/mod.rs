@@ -39,6 +39,9 @@ impl Application {
             });
         self.game
             .kernel
+            .install_save_slots(crate::savegame::live::SLOTS);
+        self.game
+            .kernel
             .install_input_runtime(std::rc::Rc::new(runtime));
     }
 

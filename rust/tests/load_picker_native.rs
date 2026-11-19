@@ -4,7 +4,7 @@ mod battle_context;
 use std::{ffi::CString, ptr};
 use uqm_rust::{
     engine::save::summary_record::SummaryDesc as SUMMARY_DESC,
-    front_end::gameopt::{load_game_descriptions, picker_action, PickerAction},
+    front_end::gameopt::{picker_action, PickerAction},
     graphics::dcqueue_abi::{Init_DrawCommandQueue, Uninit_DrawCommandQueue},
     input::ffi::*,
     io::uio_bridge as uio,
@@ -16,6 +16,7 @@ use uqm_rust::{
             restart_ops::{RestartHost, RestartMenu, RestartMenuOps},
         },
     },
+    savegame::live::load::load_game_descriptions,
     savegame::{decode_save, SaveSlots},
 };
 

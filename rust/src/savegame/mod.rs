@@ -6,7 +6,7 @@
 pub use uqm_save::{decode, encode, error, format, types};
 
 pub mod legacy;
-pub(crate) mod live;
+pub mod live;
 pub mod runtime;
 pub mod slots;
 
