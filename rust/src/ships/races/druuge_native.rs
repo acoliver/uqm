@@ -80,11 +80,7 @@ pub mod engine {
         intelligence: Some(druuge_intelligence),
         uninit: None,
     };
-    pub(crate) fn initialize_cannon(
-        cx: &mut Cx<'_>,
-        ss: ShipId,
-        origin: WeaponOrigin,
-    ) -> WeaponSpawn {
+    pub fn initialize_cannon(cx: &mut Cx<'_>, ss: ShipId, origin: WeaponOrigin) -> WeaponSpawn {
         let mut out = Vec::new();
         let mut block = Missile {
             cx: origin.next.location.x,

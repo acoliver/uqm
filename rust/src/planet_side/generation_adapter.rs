@@ -358,16 +358,7 @@ mod tests {
             crate::planets::report::typography::ReportContext,
         ),
     ) {
-        struct Queue;
-        impl Drop for Queue {
-            fn drop(&mut self) {
-                // SAFETY: this serialized fixture owns the initialized queue.
-                unsafe { crate::graphics::dcqueue_abi::Uninit_DrawCommandQueue() };
-            }
-        }
-        // SAFETY: the serialized fixture owns the queue until its guard drops.
-        unsafe { crate::graphics::dcqueue_abi::Init_DrawCommandQueue() };
-        let _queue = Queue;
+        let _queue = uqm_engine::test_support::native_probe::DrawQueue::init();
 
         let mut owners = crate::engine::Game::new();
         owners.world.set_catalog(std::borrow::Cow::Borrowed(
@@ -487,14 +478,12 @@ mod tests {
             solar.enter_inner(0);
             solar.enter_orbit(Body::Planet(0));
             let mut generator = CffiSurfaceGenerator::for_planet_side(game, io, &mut solar, report);
-            // SAFETY: this serialized fixture owns the initialized draw queue.
-            unsafe { crate::graphics::gfx_common_abi::BatchGraphics() };
+            uqm_engine::test_support::native_probe::batch_graphics();
             let result =
                 generator.pickup_with(ScanType::Energy, ScanNodeId::new(0).unwrap(), |_| {
                     panic!("held pickup callback ran")
                 });
-            // SAFETY: balance the fixture's entry level before inspecting the result.
-            unsafe { crate::graphics::gfx_common_abi::UnbatchGraphics() };
+            uqm_engine::test_support::native_probe::unbatch_graphics();
             assert_eq!(
                 result,
                 Err(AdapterError::new("surface_generator_pickup_batch"))

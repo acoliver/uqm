@@ -1,11 +1,12 @@
 use super::*;
+use crate::engine::Game;
 use crate::graphics::context_abi::ContextFrame;
-use crate::{campaign_display_test::CampaignDisplay, engine::Game};
+use uqm_engine::test_support::campaign_display::CampaignDisplay;
 
 #[test]
 #[serial_test::serial]
 fn pilot_uses_the_retained_panel_and_preserves_phase_across_reset() {
-    if !crate::native_test_process::own_graphics_process(concat!(
+    if !uqm_engine::test_support::native_process::own_graphics_process(concat!(
         module_path!(),
         "::pilot_uses_the_retained_panel_and_preserves_phase_across_reset"
     )) {

@@ -12,7 +12,7 @@ pub(super) fn install(input: &InputSession, context: ContextLease, draw: impl Fn
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::graphics::context_abi::{_pCurContext, LoadedContext};
+    use crate::graphics::context_abi::LoadedContext;
     use std::{cell::Cell, rc::Rc};
 
     #[test]
@@ -21,34 +21,37 @@ mod tests {
         let previous = LoadedContext::create(c"previous-shipyard-context");
         let space = LoadedContext::create(c"retained-shipyard-context");
         let context = space.lease();
-        // SAFETY: this serialized fixture reads selection while the lease is selected.
-        let raw = context.with_selected(|| unsafe { _pCurContext });
+        let raw = context.with_selected(uqm_engine::test_support::native_probe::selected_context);
         previous.lease().select();
-        // SAFETY: the previous owner remains selected on this thread.
-        let previous_raw = unsafe { _pCurContext };
+        let previous_raw = uqm_engine::test_support::native_probe::selected_context();
         let input = InputSession::default();
         let draws = Rc::new(Cell::new(0));
         let retained = Rc::downgrade(&draws);
         install(&input, context, move || {
-            // SAFETY: the hook selects its retained context on this serialized thread.
-            assert_eq!(unsafe { _pCurContext }, raw);
+            assert_eq!(
+                uqm_engine::test_support::native_probe::selected_context(),
+                raw
+            );
             draws.set(draws.get() + 1);
         });
         drop(space);
         input.callback().unwrap().call(&mut |_| {}, &input);
         assert_eq!(retained.upgrade().unwrap().get(), 1);
-        // SAFETY: the previous context remains owned throughout the callback.
-        assert_eq!(unsafe { _pCurContext }, previous_raw);
+        assert_eq!(
+            uqm_engine::test_support::native_probe::selected_context(),
+            previous_raw
+        );
         let suspended = input.replace_callback(None).unwrap();
         assert!(input.callback().is_none());
         suspended.call(&mut |_| {}, &input);
         assert_eq!(retained.upgrade().unwrap().get(), 2);
-        // SAFETY: the previous owner remains live after the suspended callback.
-        assert_eq!(unsafe { _pCurContext }, previous_raw);
+        assert_eq!(
+            uqm_engine::test_support::native_probe::selected_context(),
+            previous_raw
+        );
         drop(suspended);
         assert!(retained.upgrade().is_none());
         drop(previous);
-        // SAFETY: the serialized fixture has released both context owners.
-        assert!(unsafe { _pCurContext }.is_null());
+        assert!(uqm_engine::test_support::native_probe::selected_context().is_null());
     }
 }

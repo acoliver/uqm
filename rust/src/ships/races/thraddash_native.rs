@@ -120,11 +120,7 @@ pub mod engine {
         }
     }
 
-    pub(crate) fn initialize_horn(
-        cx: &mut Cx<'_>,
-        ss: ShipId,
-        origin: WeaponOrigin,
-    ) -> WeaponSpawn {
+    pub fn initialize_horn(cx: &mut Cx<'_>, ss: ShipId, origin: WeaponOrigin) -> WeaponSpawn {
         let mut b = Missile {
             cx: origin.next.location.x,
             cy: origin.next.location.y,

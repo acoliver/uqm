@@ -375,6 +375,22 @@ mod tests {
         assert_eq!(resolve_load_activity(cur, next), cur);
     }
 
+    #[test]
+    fn the_faked_starbase_cleanup_load_resolves_to_the_interplanetary_start() {
+        use crate::starbase::visit::{cleanup_after_starbase, CleanupOutcome};
+        let CleanupOutcome::Apply {
+            current_activity,
+            next_activity,
+            ..
+        } = cleanup_after_starbase(ActivityValue::new(0))
+        else {
+            panic!("a clean activity word must apply the cleanup");
+        };
+        let resolved = resolve_load_activity(current_activity, next_activity);
+        assert_eq!(resolved.kind(), ActivityKind::InInterplanetary);
+        assert!(resolved.has_flag(activity_flags::START_INTERPLANETARY));
+    }
+
     // -----------------------------------------------------------------------
     //  evaluate
     // -----------------------------------------------------------------------

@@ -365,11 +365,12 @@ mod tests {
     }
 
     fn group(race_id: u8, task: u8) -> IP_GROUP {
-        // SAFETY: `IP_GROUP` is integers and pointers; zero is a valid value.
-        let mut group: IP_GROUP = unsafe { std::mem::zeroed() };
-        group.race_id = race_id;
-        group.task = task;
-        group.dest_loc = 9;
+        let group: IP_GROUP = IP_GROUP {
+            race_id,
+            task,
+            dest_loc: 9,
+            ..Default::default()
+        };
         group
     }
 

@@ -98,11 +98,7 @@ pub mod engine {
         cx.weapon_collision(a, pa, b, pb);
     }
 
-    pub(crate) fn initialize_lightning(
-        cx: &mut Cx<'_>,
-        ss: ShipId,
-        origin: WeaponOrigin,
-    ) -> WeaponSpawn {
+    pub fn initialize_lightning(cx: &mut Cx<'_>, ss: ShipId, origin: WeaponOrigin) -> WeaponSpawn {
         vec![lightning(cx, ss, origin).0]
     }
 

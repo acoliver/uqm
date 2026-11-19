@@ -1,5 +1,4 @@
 use crate::{
-    campaign_display_test::CampaignDisplay,
     engine::{
         battle::{input::InputContext, Battle, Cx},
         input::{frames::InputState, Frame, InputControls, InputRuntime, InputSession},
@@ -13,6 +12,7 @@ use crate::{
     },
 };
 use std::{cell::Cell, io, rc::Rc};
+use uqm_engine::test_support::campaign_display::CampaignDisplay;
 
 fn rgba(color: Color) -> (u8, u8, u8, u8) {
     (color.r, color.g, color.b, color.a)
@@ -79,7 +79,7 @@ impl InputRuntime for Driver {
 #[test]
 #[serial_test::serial]
 fn contexts_draw_actual_pixels_and_restore_display_selection_and_owned_resources() {
-    if !crate::native_test_process::own_graphics_process(
+    if !uqm_engine::test_support::native_process::own_graphics_process(
         "front_end::uqmdebug::context_tests::contexts_draw_actual_pixels_and_restore_display_selection_and_owned_resources",
     ) {
         return;
@@ -133,7 +133,7 @@ fn contexts_draw_actual_pixels_and_restore_display_selection_and_owned_resources
         &mut battle,
         &mut game.world,
         &mut game.kernel,
-        uqm_rust::math::random,
+        crate::math::random,
     );
     let mut output = Vec::new();
     debug_contexts(&mut cx, &mut io, &mut output).unwrap();

@@ -367,9 +367,11 @@ pub fn get_initial_starships(
 // Testing Helper
 // ---------------------------------------------------------------------------
 
-#[cfg(test)]
-pub(crate) fn reset_battle_state() {
-    let mut state = BATTLE_STATE.lock().unwrap();
+#[cfg(any(test, feature = "test-support"))]
+pub fn reset_battle_state() {
+    let mut state = BATTLE_STATE
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     *state = BattleState::default();
 }
 

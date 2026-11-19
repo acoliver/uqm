@@ -1,12 +1,12 @@
 const GAMESTR_COUNT: usize = 579;
-#[path = "../../../tests/support/conversation_display.rs"]
-mod conversation_display;
 use super::*;
+use crate::engine::Game;
 use crate::graphics::{
     context_abi::{ContextFrame, LoadedContext},
     drawable_abi::LoadedDrawable,
 };
-use crate::{campaign_display_test::CampaignDisplay, engine::Game};
+use uqm_engine::test_support::campaign_display::CampaignDisplay;
+use uqm_engine::test_support::conversation_display;
 
 fn rgba(color: Color) -> (u8, u8, u8, u8) {
     (color.r, color.g, color.b, color.a)
@@ -61,7 +61,7 @@ fn check_equipment(game: &Game, context: &ContextLease, screen: &ContextFrame) {
 #[test]
 #[serial_test::serial]
 fn real_sis_and_menu_services_draw_with_retained_resources() {
-    if !crate::native_test_process::own_graphics_process(concat!(
+    if !uqm_engine::test_support::native_process::own_graphics_process(concat!(
         module_path!(),
         "::real_sis_and_menu_services_draw_with_retained_resources"
     )) {
@@ -173,7 +173,7 @@ fn real_sis_and_menu_services_draw_with_retained_resources() {
 #[test]
 #[serial_test::serial]
 fn conversation_headers_use_the_campaign_display_resources() {
-    if !crate::native_test_process::own_graphics_process(concat!(
+    if !uqm_engine::test_support::native_process::own_graphics_process(concat!(
         module_path!(),
         "::conversation_headers_use_the_campaign_display_resources"
     )) {

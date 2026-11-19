@@ -95,11 +95,7 @@ pub mod engine {
         }
     }
 
-    pub(crate) fn initialize_cone(
-        cx: &mut Cx<'_>,
-        ss: ShipId,
-        origin: WeaponOrigin,
-    ) -> WeaponSpawn {
+    pub fn initialize_cone(cx: &mut Cx<'_>, ss: ShipId, origin: WeaponOrigin) -> WeaponSpawn {
         let facing = cx.ship_state(ss).facing;
         let mut b = Missile {
             cx: origin.next.location.x,

@@ -88,11 +88,7 @@ pub mod engine {
             cx.element_mut(e).flags |= CHANGING as u16;
         }
     }
-    pub(crate) fn initialize_spit(
-        cx: &mut Cx<'_>,
-        ss: ShipId,
-        origin: WeaponOrigin,
-    ) -> WeaponSpawn {
+    pub fn initialize_spit(cx: &mut Cx<'_>, ss: ShipId, origin: WeaponOrigin) -> WeaponSpawn {
         let mut out = Vec::new();
         let mut block = Missile {
             cx: origin.next.location.x,

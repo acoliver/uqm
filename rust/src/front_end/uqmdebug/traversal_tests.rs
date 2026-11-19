@@ -4,7 +4,10 @@ use crate::engine::world::activity::ActivityKind;
 
 const IN_INTERPLANETARY: u16 = ActivityKind::InInterplanetary as u16;
 use crate::engine::{world::CStarDesc, StarId};
-use crate::planets::generate::{testing::NoEffects, SiteHost, SystemGenerator};
+use crate::planets::generate::{
+    testing::{NoEffects, RecordReport},
+    SiteHost, SystemGenerator,
+};
 use std::{borrow::Cow, io};
 
 struct GenerationCalls(usize);
@@ -226,24 +229,10 @@ fn traversal_visits_each_planet_and_moon_in_order_before_system_post() {
         loads: Vec<Body>,
     }
     struct NoReport;
-    impl crate::planet_side::report_adapter::DiscoveryReportPort for NoReport {
-        fn present(
-            &mut self,
-            _: crate::engine::world::generation::ReportDisposition,
-        ) -> Result<bool, crate::planet_side::runtime::AdapterError> {
+    impl RecordReport for NoReport {
+        fn present(&mut self, _: crate::engine::world::generation::ReportDisposition) -> bool {
             panic!("default traversal must not present a discovery report")
         }
-    }
-    impl<F: FnOnce()> SiteHost
-        for crate::planets::generate::testing::Effects<
-            '_,
-            NoEffects,
-            NoEffects,
-            NoReport,
-            NoEffects,
-            F,
-        >
-    {
     }
     impl Generation for OrbitalCalls {
         fn invoke<R>(

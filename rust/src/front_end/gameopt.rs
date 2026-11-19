@@ -44,7 +44,7 @@ pub(crate) mod runtime {
     use uqm_engine::time::counter_abi::ONE_SECOND;
 
     const SIS_NAME_SIZE: usize = 16;
-    const SAVE_NAME_SIZE: usize = crate::savegame::types::SAVE_NAME_SIZE;
+    const SAVE_NAME_SIZE: usize = uqm_save::types::SAVE_NAME_SIZE;
     const CYBORG_ENABLED: u8 = 32;
     const COMBAT_SPEED_SHIFT: u32 = 6;
     const COMBAT_SPEED_MASK: u8 = 192;

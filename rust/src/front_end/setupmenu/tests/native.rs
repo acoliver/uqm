@@ -1,17 +1,12 @@
 #![cfg(test)]
 use super::*;
 use crate::graphics::{
-    context_abi::LoadedContext,
-    drawable_abi::LoadedDrawable,
-    native_abi::POINT,
+    context_abi::LoadedContext, drawable_abi::LoadedDrawable, native_abi::POINT,
     native_font::LoadedFont,
-    sdl::lifecycle_abi::{GraphicsOptions, TFB_InitGraphics, TFB_UninitGraphics},
 };
-use crate::io::uio_bridge as uio;
 use std::{
     cell::{Cell, RefCell},
     collections::VecDeque,
-    ptr,
     rc::Rc,
 };
 
@@ -20,106 +15,26 @@ struct Fixture {
     screen: Option<LoadedDrawable>,
     font: Option<LoadedFont>,
     input: InputSession,
-    directory: *mut uio::uio_DirHandle,
-    config_directory: *mut uio::uio_DirHandle,
-    repository: *mut uio::uio_Repository,
-    previous_content: *mut uqm_engine::io::ffi::uio_DirHandle,
-    previous_config: *mut uqm_engine::io::ffi::uio_DirHandle,
-    files: tempfile::TempDir,
+    _native_input: uqm_engine::test_support::native_session::NativeInput,
+    _mount: uqm_engine::test_support::native_session::ContentMount,
+    _graphics: uqm_engine::test_support::native_session::Graphics,
+    files: uqm_engine::test_support::native_session::FixtureFiles,
 }
 impl Fixture {
     fn new() -> Self {
-        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../tmp")
-            .canonicalize()
-            .unwrap();
-        let files = tempfile::tempdir_in(root).unwrap();
-        std::fs::create_dir(files.path().join("font")).unwrap();
-        for code in 32..=127 {
-            image::RgbaImage::from_pixel(1, 1, image::Rgba([255, 255, 255, 255]))
-                .save(files.path().join(format!("font/{code:04x}.png")))
-                .unwrap();
-        }
-        std::fs::write(
-            files.path().join("fixture.rmp"),
+        let files = uqm_engine::test_support::native_session::FixtureFiles::new();
+        files.write_font(32..=127);
+        files.write(
+            "fixture.rmp",
             "fixture.font = FONTRES:font\nkeys.1.name = STRING:one\nkeys.1.up.1 = STRING:key Up\n",
-        )
-        .unwrap();
-        let path = CString::new(files.path().to_str().unwrap()).unwrap();
-        std::env::set_var("SDL_VIDEODRIVER", "dummy");
-        std::env::set_var("SDL_AUDIODRIVER", "dummy");
+        );
         let input = InputSession::default();
-        // SAFETY: each serial fixture retains its mount, vectors and display until teardown.
-        let (repository, directory, config_directory, previous_content, previous_config, font) = unsafe {
-            assert_eq!(
-                TFB_InitGraphics(
-                    1,
-                    0,
-                    ptr::from_ref(&GraphicsOptions::default()).cast(),
-                    320,
-                    240
-                ),
-                0
-            );
-            uio::uio_init();
-            let repository = uio::uio_openRepository(0);
-            assert!(!uio::uio_mountDir(
-                repository,
-                c"/".as_ptr(),
-                1,
-                ptr::null_mut(),
-                ptr::null(),
-                path.as_ptr(),
-                ptr::null_mut(),
-                6,
-                ptr::null_mut()
-            )
-            .is_null());
-            let directory = uio::uio_openDir(repository, c"/".as_ptr(), 0);
-            assert!(!uio::uio_mountDir(
-                repository,
-                c"/config".as_ptr(),
-                1,
-                ptr::null_mut(),
-                ptr::null(),
-                path.as_ptr(),
-                ptr::null_mut(),
-                4,
-                ptr::null_mut()
-            )
-            .is_null());
-            let config_directory = uio::uio_openDir(repository, c"/config".as_ptr(), 0);
-            let old = (
-                crate::mainloop::dir_prep::contentDir,
-                crate::mainloop::dir_prep::configDir,
-            );
-            crate::mainloop::dir_prep::contentDir = directory.cast();
-            crate::mainloop::dir_prep::configDir = config_directory.cast();
-            crate::resource::ffi_bridge::InitResourceSystem();
-            crate::resource::ffi_bridge::LoadResourceIndex(
-                directory.cast(),
-                c"fixture.rmp".as_ptr(),
-                ptr::null(),
-            );
-            let state = input.immediate_ptr();
-            use crate::engine::input::frames::{FLIGHT_KEYS, MENU_KEYS, TEMPLATES};
-            sdl_input::tfb_set_input_vectors(
-                ptr::addr_of_mut!((*state).menu).cast(),
-                MENU_KEYS as i32,
-                ptr::addr_of_mut!((*state).key).cast(),
-                TEMPLATES as i32,
-                FLIGHT_KEYS as i32,
-            );
-            assert_eq!(sdl_input::TFB_InitInput(0, 0), 0);
-            (
-                repository,
-                directory,
-                config_directory,
-                old.0,
-                old.1,
-                LoadedFont::load(c"fixture.font").unwrap(),
-            )
-        };
+        let graphics = uqm_engine::test_support::native_session::Graphics::start();
+        let mount = uqm_engine::test_support::native_session::ContentMount::new(files.path())
+            .with_config(files.path());
+        mount.init_resources("fixture.rmp");
+        let native_input = uqm_engine::test_support::native_session::NativeInput::bind(&input);
+        let font = LoadedFont::load(c"fixture.font").unwrap();
         let context = LoadedContext::create(c"setup fixture");
         let screen = LoadedDrawable::create(8, 320, 240, 1).unwrap();
         context.lease().set_frame(screen.lease().context_frame(0));
@@ -128,11 +43,9 @@ impl Fixture {
             screen: Some(screen),
             font: Some(font),
             input,
-            directory,
-            config_directory,
-            repository,
-            previous_content,
-            previous_config,
+            _native_input: native_input,
+            _mount: mount,
+            _graphics: graphics,
             files,
         }
     }
@@ -160,27 +73,6 @@ impl Fixture {
         }
     }
 }
-impl Drop for Fixture {
-    fn drop(&mut self) {
-        sdl_input::TFB_UninitInput();
-        // SAFETY: callbacks have returned and no vectors or directory leases escape the fixture.
-        unsafe {
-            sdl_input::tfb_set_input_vectors(ptr::null_mut(), 0, ptr::null_mut(), 0, 0);
-            crate::mainloop::dir_prep::contentDir = self.previous_content;
-            crate::mainloop::dir_prep::configDir = self.previous_config;
-            uio::uio_closeDir(self.directory);
-            uio::uio_closeDir(self.config_directory);
-            uio::uio_closeRepository(self.repository);
-            uio::uio_unInit();
-        }
-        drop(self.font.take());
-        drop(self.context.take());
-        drop(self.screen.take());
-        // SAFETY: all retained display resources have been released on the fixture's thread.
-        unsafe { TFB_UninitGraphics() };
-    }
-}
-
 fn table_rows() -> Vec<String> {
     let names = |count| {
         std::iter::repeat_n("A", count)
@@ -231,15 +123,7 @@ impl crate::engine::input::InputRuntime for Driver {
         self.sleeps.set(self.sleeps.get() + 1)
     }
     fn yield_poll(&self, _: &mut Cx<'_>) {
-        // SAFETY: a valid SDL key-down reaches the fixture's initialized native provider.
-        unsafe {
-            let mut event: sdl2_sys::SDL_Event = std::mem::zeroed();
-            event.type_ = 0x300;
-            event.key.state = 1;
-            event.key.keysym.sym = i32::from(b'w');
-            event.key.keysym.scancode = sdl2_sys::SDL_Scancode::SDL_SCANCODE_W;
-            sdl_input::process_input_event(&event);
-        }
+        uqm_engine::test_support::native_session::key_down(b'w');
     }
     fn flush(&self) {
         self.input.clear_menu_state()
@@ -270,14 +154,7 @@ impl crate::engine::input::InputRuntime for Driver {
             self.input.clear_menu_state();
             let mut pulse = crate::engine::input::frames::InputState::default();
             if key == usize::MAX {
-                // SAFETY: the initialized provider receives a terminated SDL UTF-8 event.
-                unsafe {
-                    let mut event: sdl2_sys::SDL_Event = std::mem::zeroed();
-                    event.type_ = 0x303;
-                    event.text.text[0] = 0xc3u8 as std::ffi::c_char;
-                    event.text.text[1] = 0xa9u8 as std::ffi::c_char;
-                    sdl_input::process_input_event(&event);
-                }
+                uqm_engine::test_support::native_session::text_input("é");
             } else {
                 pulse.menu[key] = 1;
             }

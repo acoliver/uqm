@@ -233,7 +233,7 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn capacity_drawing_uses_retained_context_and_preserves_flagship_inventory() {
-        if !crate::native_test_process::own_graphics_process(concat!(
+        if !uqm_engine::test_support::native_process::own_graphics_process(concat!(
             module_path!(),
             "::capacity_drawing_uses_retained_context_and_preserves_flagship_inventory"
         )) {
@@ -241,8 +241,9 @@ mod tests {
         }
         use crate::graphics::context_abi::{ContextFrame, ContextLease};
         let mut game = crate::engine::Game::new();
-        let display = crate::campaign_display_test::CampaignDisplay::install(&mut game)
-            .unwrap_or_else(|error| panic!("capacity fixture: {error}"));
+        let display =
+            uqm_engine::test_support::campaign_display::CampaignDisplay::install(&mut game)
+                .unwrap_or_else(|error| panic!("capacity fixture: {error}"));
         game.world.data.flagship = flagship();
         let state = &mut game.world.data.flagship;
         state.module_slots[11] = ModuleType::CrewPod as u8;

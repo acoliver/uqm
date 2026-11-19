@@ -14,14 +14,14 @@ use crate::engine::world::activity::activity_flags::{
     CHECK_ABORT, CHECK_LOAD, START_ENCOUNTER, START_INTERPLANETARY,
 };
 use crate::engine::world::activity::ActivityKind;
+use crate::engine::world::generation::ReportDisposition;
 use crate::math::RandomContext;
-use crate::planet_side::report_adapter::{DiscoveryReportPort, ReportDisposition};
-use crate::planet_side::runtime::AdapterError;
 use crate::planets::generate::calc::{AnalysisSite, StarDescription};
 use crate::planets::generate::consts::EARTH_RADIUS;
 use crate::planets::generate::home_contact::tests::FakeStory;
 use crate::planets::generate::home_contact::HomeContactSite;
 use crate::planets::generate::special::{Body, Orbit, TELLURIC_WORLD};
+use crate::planets::generate::testing::RecordReport;
 
 const OTHER_BODIES: [Body; 3] = [
     Body::Planet(1),
@@ -32,10 +32,10 @@ const OTHER_BODIES: [Body; 3] = [
 #[derive(Default)]
 struct FakeReport(Vec<ReportDisposition>);
 
-impl DiscoveryReportPort for FakeReport {
-    fn present(&mut self, disposition: ReportDisposition) -> Result<bool, AdapterError> {
+impl RecordReport for FakeReport {
+    fn present(&mut self, disposition: ReportDisposition) -> bool {
         self.0.push(disposition);
-        Ok(true)
+        true
     }
 }
 
@@ -228,10 +228,12 @@ fn visit(
     configure(&mut site);
 
     let mut rng = RandomContext::with_seed(11);
-    let mut sys_info: SystemInfo = unsafe { std::mem::zeroed() };
+    let mut sys_info: SystemInfo = Default::default();
     sys_info.planet_info.weather = 9;
-    let mut world: PlanetDesc = unsafe { std::mem::zeroed() };
-    world.radius = 400;
+    let world: PlanetDesc = PlanetDesc {
+        radius: 400,
+        ..Default::default()
+    };
     let plan_data: Vec<PlanetFrame> = vec![PlanetFrame::default(); 128];
     let mut loaded = 0;
     {
@@ -522,7 +524,7 @@ fn nothing_happens_when_there_is_no_encounter_to_use() {
 fn the_world_is_telluric_and_only_it_has_ruins() {
     let mut rng = RandomContext::with_seed(5);
     let plan_data: Vec<PlanetFrame> = vec![PlanetFrame::default(); 128];
-    let mut planets: Vec<PlanetDesc> = vec![unsafe { std::mem::zeroed() }; 16];
+    let mut planets: Vec<PlanetDesc> = vec![Default::default(); 16];
     generate_planets(&mut rng, &plan_data, 0, 2, &mut planets);
     assert_eq!(planets[0].data_index, TELLURIC_WORLD);
     assert_eq!(
@@ -530,11 +532,11 @@ fn the_world_is_telluric_and_only_it_has_ruins() {
         i32::from(EARTH_RADIUS) * 204 / 100
     );
 
-    let mut info: SystemInfo = unsafe { std::mem::zeroed() };
+    let mut info: SystemInfo = Default::default();
     info.planet_info.scan_seed = [1, 2, 3];
     let count = |body| {
         let mut rng = RandomContext::with_seed(7);
-        let mut node: NodeInfo = unsafe { std::mem::zeroed() };
+        let mut node: NodeInfo = Default::default();
         generate_energy(&mut rng, &info, body, !0, &mut node)
     };
     assert_eq!(count(WORLD), 16);

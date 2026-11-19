@@ -1,5 +1,4 @@
-#[path = "support/campaign_display.rs"]
-mod campaign_display;
+use uqm_engine::test_support::campaign_display;
 
 use uqm_rust::engine::{
     battle::{Battle, Cx},

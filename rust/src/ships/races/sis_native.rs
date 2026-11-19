@@ -365,11 +365,7 @@ pub mod engine {
             }
         }
     }
-    pub(crate) fn initialize_blasters(
-        cx: &mut Cx<'_>,
-        ss: ShipId,
-        origin: WeaponOrigin,
-    ) -> WeaponSpawn {
+    pub fn initialize_blasters(cx: &mut Cx<'_>, ss: ShipId, origin: WeaponOrigin) -> WeaponSpawn {
         let RaceState::Sis(data) = cx.race_stats(ss).state else {
             panic!("SIS weapon state");
         };

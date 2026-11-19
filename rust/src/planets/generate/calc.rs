@@ -349,15 +349,15 @@ mod tests {
 
     fn check_supplied_analysis(body: Body, preview: bool) {
         let mut rng = RandomContext::with_seed(7919);
-        // SAFETY: the test records contain only zero-valid scalar and pointer fields.
-        let mut world: PlanetDesc = unsafe { std::mem::zeroed() };
-        world.rand_seed = 1;
-        world.data_index = 42;
-        world.radius = 100;
+        let mut world: PlanetDesc = PlanetDesc {
+            rand_seed: 1,
+            data_index: 42,
+            radius: 100,
+            ..Default::default()
+        };
         world.location.x = 37;
         world.location.y = -53;
-        // SAFETY: this detached record has no owned pointer fields.
-        let mut info: SystemInfo = unsafe { std::mem::zeroed() };
+        let mut info: SystemInfo = Default::default();
         info.planet_info.scan_seed = [101, 202, 303];
         info.planet_info.scan_retrieve_mask = [11, 22, 33];
         info.planet_info.temperature = -999;
@@ -374,12 +374,7 @@ mod tests {
             is_orbit_entry: !preview,
         };
         let mut expected_rng = RandomContext::with_seed(7919);
-        let mut expected = if preview {
-            // SAFETY: preview starts from a detached zero-valid record, as in the C fixture.
-            unsafe { std::mem::zeroed() }
-        } else {
-            info
-        };
+        let mut expected = if preview { Default::default() } else { info };
         do_planetary_analysis(
             &mut expected_rng,
             &PLANET_ARRAY,

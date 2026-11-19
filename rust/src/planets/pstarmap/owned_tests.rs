@@ -93,7 +93,8 @@ impl Observer for Recorded {
 pub(super) fn with_map(test: impl FnOnce(&mut StarMap, &mut Cx<'_>, &Rc<Driver>)) {
     crate::callback::ffi::Alarm_init();
     let mut game = Game::new();
-    let display = crate::campaign_display_test::CampaignDisplay::install(&mut game).unwrap();
+    let display =
+        uqm_engine::test_support::campaign_display::CampaignDisplay::install(&mut game).unwrap();
     let misc = crate::graphics::drawable_abi::LoadedDrawable::create(8, 1, 1, 70).unwrap();
     game.kernel.misc_data_frame = misc.lease().frame(0).unwrap();
     game.kernel.space_context = game.kernel.off_screen_context;
@@ -131,8 +132,7 @@ pub(super) fn with_map(test: impl FnOnce(&mut StarMap, &mut Cx<'_>, &Rc<Driver>)
         test(&mut map, &mut cx, &driver);
     }
     game.kernel.sis_highlight.context.borrow_mut().take();
-    // SAFETY: this serialized fixture owns the native drawing queue and resources.
-    unsafe { crate::graphics::dcqueue_abi::TFB_FlushGraphics() };
+    uqm_engine::test_support::native_probe::flush_graphics();
     drop(context);
     drop(misc);
     display.finish(game);
@@ -178,10 +178,7 @@ fn cursor_frames_publish_visit_lifecycle_zoom_and_autopilot() {
 #[test]
 #[serial_test::serial]
 fn portal_overrides_a_snapped_star_and_quasispace_rejects_search() {
-    if !crate::native_test_process::own_graphics_process(concat!(
-        module_path!(),
-        "::portal_overrides_a_snapped_star_and_quasispace_rejects_search"
-    )) {
+    if !uqm_engine::test_support::native_process::own_graphics_process("planets::pstarmap::owned_tests::portal_overrides_a_snapped_star_and_quasispace_rejects_search") {
         return;
     }
     with_map(|map, cx, driver| {

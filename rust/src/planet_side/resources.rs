@@ -47,56 +47,26 @@ pub(crate) mod tests {
         engine::Game,
         graphics::{
             context_abi::ContextLease,
-            native_abi::{Color, EXTENT, POINT, RECT},
+            native_abi::{EXTENT, POINT, RECT},
         },
-        io::uio_bridge as uio,
     };
-    use std::{ffi::CString, ptr};
 
     pub(crate) fn with_packaged_resources(test: impl FnOnce(&mut Game)) {
         let mut game = Game::new();
-        let display = crate::campaign_display_test::CampaignDisplay::install(&mut game).unwrap();
+        let display =
+            uqm_engine::test_support::campaign_display::CampaignDisplay::install(&mut game)
+                .unwrap();
         let content_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../sc2/content")
             .canonicalize()
             .unwrap();
-        let path = CString::new(content_root.to_str().unwrap()).unwrap();
-        // SAFETY: this serialized fixture owns the temporary mount and restores its predecessor.
-        unsafe {
-            uio::uio_init();
-            let repo = uio::uio_openRepository(0);
-            assert!(!uio::uio_mountDir(
-                repo,
-                c"/".as_ptr(),
-                1,
-                ptr::null_mut(),
-                ptr::null(),
-                path.as_ptr(),
-                ptr::null_mut(),
-                6,
-                ptr::null_mut()
-            )
-            .is_null());
-            let content = uio::uio_openDir(repo, c"/".as_ptr(), 0);
-            let previous = crate::mainloop::dir_prep::contentDir;
-            crate::mainloop::dir_prep::contentDir = content.cast();
-            crate::resource::ffi_bridge::LoadResourceIndex(
-                content.cast(),
-                c"uqm.rmp".as_ptr(),
-                ptr::null(),
-            );
-            let palette =
-                crate::strings::sresins::load_binary_entry(c"colortable.main", 0).unwrap();
-            let map_count = usize::from(palette[1] - palette[0]) + 1;
-            assert_eq!(palette.len(), 2 + map_count * 256 * 3);
-            crate::graphics::cmap_abi::SetColorMap(palette.as_ptr());
-            test(&mut game);
-            crate::graphics::dcqueue_abi::TFB_FlushGraphics();
-            crate::mainloop::dir_prep::contentDir = previous;
-            uio::uio_closeDir(content);
-            uio::uio_closeRepository(repo);
-            uio::uio_unInit();
-        }
+        let mount = uqm_engine::test_support::native_session::ContentMount::new(&content_root);
+        mount.load_index("uqm.rmp");
+        let palette = crate::strings::sresins::load_binary_entry(c"colortable.main", 0).unwrap();
+        uqm_engine::test_support::native_probe::set_color_map(&palette);
+        test(&mut game);
+        uqm_engine::test_support::native_probe::flush_graphics();
+        drop(mount);
         display.finish(game);
     }
 
@@ -118,20 +88,12 @@ pub(crate) mod tests {
             ];
             observation::enable();
             for (successful, key) in keys.into_iter().enumerate() {
-                // SAFETY: the fixture's resource mount stays live for every reload and rollback.
-                unsafe {
-                    crate::resource::ffi_bridge::LoadResourceIndex(
-                        crate::mainloop::dir_prep::contentDir.cast(),
-                        c"uqm.rmp".as_ptr(),
-                        ptr::null(),
-                    );
-                    crate::graphics::dcqueue_abi::TFB_FlushGraphics();
-                    observation::drain();
-                    crate::resource::ffi_bridge::res_Remove(CString::new(key).unwrap().as_ptr());
-                }
+                uqm_engine::test_support::native_session::reload_content_index("uqm.rmp");
+                uqm_engine::test_support::native_probe::flush_graphics();
+                observation::drain();
+                uqm_engine::test_support::native_session::remove_resource(key);
                 assert!(matches!(LanderResources::load(), Err(failed) if failed == key));
-                // SAFETY: the fixture owns the graphics queue through deferred release.
-                unsafe { crate::graphics::dcqueue_abi::TFB_FlushGraphics() };
+                uqm_engine::test_support::native_probe::flush_graphics();
                 let events = observation::drain();
                 let acquired: Vec<_> = events
                     .iter()
@@ -215,32 +177,20 @@ pub(crate) mod tests {
             });
             let other = crate::graphics::context_abi::LoadedContext::create(c"preserved-selection");
             other.lease().select();
-            // SAFETY: this fixture owns the selected context until the assertion below.
-            let selected = unsafe { crate::graphics::context_abi::_pCurContext };
+            let selected = uqm_engine::test_support::native_probe::selected_context();
             crate::planet_side::init_lander::draw_lander(
                 &radar,
                 &assets,
                 crate::planet_side::init_lander::LanderStatus::campaign(&game.world),
             );
-            // SAFETY: this fixture owns both registered contexts and observes selection only.
             assert_eq!(
-                unsafe { crate::graphics::context_abi::_pCurContext },
+                uqm_engine::test_support::native_probe::selected_context(),
                 selected
             );
             radar.flush();
-            let mut pixels = vec![Color::default(); 320 * 240];
-            // SAFETY: the registered target and complete destination buffer remain live.
-            assert_ne!(
-                unsafe {
-                    crate::graphics::drawable_abi::ReadFramePixelColors(
-                        game.kernel.screen,
-                        pixels.as_mut_ptr(),
-                        320,
-                        240,
-                    )
-                },
-                0
-            );
+            let pixels =
+                uqm_engine::test_support::native_probe::read_pixels(game.kernel.screen, 320, 240)
+                    .unwrap();
             assert_eq!(
                 (pixels[0].r, pixels[0].g, pixels[0].b, pixels[0].a),
                 (0, 0, 0, 255)

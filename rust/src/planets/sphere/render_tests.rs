@@ -9,7 +9,8 @@ use crate::engine::graphics::{
 #[serial_test::serial]
 fn retained_pixels_preserve_row_padding_and_survive_owner_release() {
     let mut game = crate::engine::Game::new();
-    let display = crate::campaign_display_test::CampaignDisplay::install(&mut game).unwrap();
+    let display =
+        uqm_engine::test_support::campaign_display::CampaignDisplay::install(&mut game).unwrap();
     {
         let owner = LoadedDrawable::create(2 | 8, 3, 2, 1).unwrap();
         let frame = owner.lease().context_frame(0);
@@ -61,7 +62,8 @@ fn real_rotation_and_zoom_compile_in_the_library_test_target() {
 fn generated_shield_and_rotating_frames_use_the_supplied_owners() {
     use crate::engine::graphics::native_abi::{DrawMode, EXTENT, RECT};
     let mut game = crate::engine::Game::new();
-    let display = crate::campaign_display_test::CampaignDisplay::install(&mut game).unwrap();
+    let display =
+        uqm_engine::test_support::campaign_display::CampaignDisplay::install(&mut game).unwrap();
     {
         let definition = LoadedDrawable::create(2, 242, 75, 1).unwrap();
         let source = Color {
@@ -152,11 +154,9 @@ fn generated_shield_and_rotating_frames_use_the_supplied_owners() {
             },
             || {
                 context.with_scale(1, 137, || {
-                    // SAFETY: the selected retained context owns this serialized draw state.
-                    let mode = unsafe { crate::graphics::context_abi::GetContextDrawMode() };
+                    let mode = uqm_engine::test_support::native_probe::selected_draw_mode();
                     assert_eq!((mode.kind, mode.factor), (1, 83));
-                    // SAFETY: the surrounding scale scope holds the admitted graphics context.
-                    let scale = unsafe { crate::graphics::gfx_common_abi::GetGraphicScale() };
+                    let scale = uqm_engine::test_support::native_probe::graphic_scale();
                     assert_eq!(scale, 137);
                 });
             },
@@ -172,7 +172,8 @@ fn generated_shield_and_rotating_frames_use_the_supplied_owners() {
 fn normalized_definition_frames_keep_pixels_hotspots_and_release_authority() {
     use crate::engine::graphics::native_surface::CapturedSurface;
     let mut game = crate::engine::Game::new();
-    let display = crate::campaign_display_test::CampaignDisplay::install(&mut game).unwrap();
+    let display =
+        uqm_engine::test_support::campaign_display::CampaignDisplay::install(&mut game).unwrap();
     {
         let source = CapturedSurface::pixmap(2, 2, 2);
         let colors = [
@@ -190,24 +191,20 @@ fn normalized_definition_frames_keep_pixels_hotspots_and_release_authority() {
             },
         ];
         for (index, color) in colors.into_iter().enumerate() {
-            // SAFETY: the fixture exclusively owns the factory-created frames and full pixel buffer.
-            unsafe {
-                let frame = crate::graphics::pixmap_abi::SetAbsFrameIndex(
-                    source.as_frame().cast(),
-                    index as u16,
-                )
-                .cast();
-                crate::graphics::drawable_abi::WriteFramePixelColors(
-                    frame,
-                    [color; 4].as_ptr(),
-                    2,
-                    2,
-                );
-                crate::graphics::drawable_abi::SetFrameHot(
-                    frame.cast(),
-                    crate::comm::locdata::CPoint { x: -1, y: 1 },
-                );
-            }
+            let frame = uqm_engine::test_support::native_probe::frame_at(
+                source.as_frame().cast(),
+                index as u16,
+            );
+            assert!(uqm_engine::test_support::native_probe::write_pixels(
+                frame,
+                &[color; 4],
+                2,
+                2
+            ));
+            uqm_engine::test_support::native_probe::set_frame_hot_spot(
+                frame,
+                crate::comm::locdata::CPoint { x: -1, y: 1 },
+            );
         }
         let normalized = source
             .into_definition(4, 6)

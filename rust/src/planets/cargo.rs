@@ -111,13 +111,14 @@ mod tests {
         };
         let mut game = crate::engine::Game::new();
         let mut heading = None;
-        let display = crate::campaign_display_test::CampaignDisplay::install_with_resources(
-            &mut game,
-            || {
-                heading = LoadedFont::load(c"fixture.tiny");
-            },
-        )
-        .unwrap();
+        let display =
+            uqm_engine::test_support::campaign_display::CampaignDisplay::install_with_resources(
+                &mut game,
+                || {
+                    heading = LoadedFont::load(c"fixture.tiny");
+                },
+            )
+            .unwrap();
         let heading = heading.unwrap();
         game.kernel.star_con_font = heading.as_raw();
         let icons = LoadedDrawable::create(2, 1, 1, 74).unwrap();
@@ -141,27 +142,12 @@ mod tests {
         );
         let pixel = || {
             context.flush();
-            let mut pixels = vec![
-                crate::graphics::native_abi::Color {
-                    r: 0,
-                    g: 0,
-                    b: 0,
-                    a: 0
-                };
-                64 * 160
-            ];
-            assert_ne!(
-                // SAFETY: the serialized fixture retains this RAM frame and its complete pixel buffer.
-                unsafe {
-                    crate::graphics::drawable_abi::ReadFramePixelColors(
-                        canvas.lease().frame(0).unwrap(),
-                        pixels.as_mut_ptr(),
-                        64,
-                        160,
-                    )
-                },
-                0
-            );
+            let pixels = uqm_engine::test_support::native_probe::read_pixels(
+                canvas.lease().frame(0).unwrap(),
+                64,
+                160,
+            )
+            .unwrap();
             let value = pixels[35 * 64 + 20];
             (value.r, value.g, value.b, value.a)
         };

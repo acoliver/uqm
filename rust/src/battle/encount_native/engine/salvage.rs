@@ -395,11 +395,11 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn owned_salvage_keeps_rewards_icon_rows_fades_and_wait_order() {
-        if !crate::native_test_process::own_graphics_process("battle::encount_native::engine::salvage::tests::owned_salvage_keeps_rewards_icon_rows_fades_and_wait_order") { return; }
+        if !uqm_engine::test_support::native_process::own_graphics_process("battle::encount_native::engine::salvage::tests::owned_salvage_keeps_rewards_icon_rows_fades_and_wait_order") { return; }
         use crate::{
-            campaign_display_test::CampaignDisplay, graphics::drawable_abi::LoadedDrawable,
-            strings::owned_table::LoadedTextTable,
+            graphics::drawable_abi::LoadedDrawable, strings::owned_table::LoadedTextTable,
         };
+        use uqm_engine::test_support::campaign_display::CampaignDisplay;
         let mut game = Game::new();
         let display = CampaignDisplay::install(&mut game)
             .unwrap_or_else(|error| panic!("salvage display: {error}"));

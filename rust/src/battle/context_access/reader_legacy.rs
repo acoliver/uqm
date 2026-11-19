@@ -23,7 +23,6 @@ pub fn get_encounter_star_ship_with_picker(
     player: u16,
     pick: impl FnOnce(&mut crate::engine::battle::Cx<'_>, u16) -> Option<ShipId>,
 ) -> Option<ShipId> {
-    // SAFETY: the Native picker retains only an identity while the blocking UI runs.
     crate::pickship::ffi::encounter_ship(cx, input, last, player, activity, pick)
 }
 

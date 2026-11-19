@@ -33,12 +33,12 @@ struct Site {
 
 impl Site {
     fn new(queues: QueueHost, body: Body) -> Self {
-        let mut planets = unsafe { std::mem::zeroed() };
+        let mut planets = Default::default();
         generate_planets(&mut RandomContext::with_seed(1), &mut planets);
         let world = match body {
             Body::Planet(p) => planets[usize::from(p)],
             Body::Moon { planet, moon } => {
-                let mut moons = unsafe { std::mem::zeroed() };
+                let mut moons = Default::default();
                 generate_moons(
                     &mut RandomContext::with_seed(99),
                     0,
@@ -50,7 +50,7 @@ impl Site {
                 moons[usize::from(moon)]
             }
         };
-        let mut info: SystemInfo = unsafe { std::mem::zeroed() };
+        let mut info: SystemInfo = Default::default();
         info.planet_info.scan_seed = [11, 13, 17];
         info.planet_info.scan_retrieve_mask = [19, 23, 29];
         Self {

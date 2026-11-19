@@ -65,7 +65,9 @@ mod tests {
     #[serial_test::serial]
     fn independent_orbits_release_images_after_their_last_retained_frame() {
         let mut game = crate::engine::Game::new();
-        let display = crate::campaign_display_test::CampaignDisplay::install(&mut game).unwrap();
+        let display =
+            uqm_engine::test_support::campaign_display::CampaignDisplay::install(&mut game)
+                .unwrap();
         game.kernel.space_context = game.kernel.off_screen_context;
         let space = ContextLease::require(game.kernel.space_context);
         space.set_frame(ContextFrame::retain(NonNull::new(game.kernel.screen)));

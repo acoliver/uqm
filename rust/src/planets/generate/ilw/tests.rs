@@ -2,14 +2,14 @@
 //! a recording report. The contact flow is `home_contact`'s and tested there.
 
 use super::{pickup_energy, set_home_climate};
+use crate::engine::world::generation::ReportDisposition;
 use crate::engine::world::planet::SystemInfo;
-use crate::planet_side::report_adapter::{DiscoveryReportPort, ReportDisposition};
-use crate::planet_side::runtime::AdapterError;
 use crate::planets::generate::special::Body;
+use crate::planets::generate::testing::RecordReport;
 
 #[test]
 fn the_home_world_alone_gets_the_fixed_climate() {
-    let mut info: SystemInfo = unsafe { std::mem::zeroed() };
+    let mut info: SystemInfo = Default::default();
     set_home_climate(Body::Planet(1), &mut info);
     set_home_climate(Body::Moon { planet: 0, moon: 0 }, &mut info);
     assert_eq!(
@@ -27,10 +27,10 @@ fn the_home_world_alone_gets_the_fixed_climate() {
 #[derive(Default)]
 struct FakeReport(Vec<ReportDisposition>);
 
-impl DiscoveryReportPort for FakeReport {
-    fn present(&mut self, disposition: ReportDisposition) -> Result<bool, AdapterError> {
+impl RecordReport for FakeReport {
+    fn present(&mut self, disposition: ReportDisposition) -> bool {
         self.0.push(disposition);
-        Ok(true)
+        true
     }
 }
 

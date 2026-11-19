@@ -66,15 +66,17 @@ impl GuardSite for Guard {
 fn groups(count: usize) -> Vec<IP_GROUP> {
     (0..count)
         .map(|i| {
-            let mut g: IP_GROUP = unsafe { std::mem::zeroed() };
-            g.race_id = i as u8;
-            g.group_id = 27;
-            g.group_counter = 0xabcd;
-            g.sys_loc = 11;
-            g.dest_loc = 13;
-            g.orbit_pos = 15;
-            g.in_system = 17;
-            g.loc = POINT { x: -23, y: 29 };
+            let g: IP_GROUP = IP_GROUP {
+                race_id: i as u8,
+                group_id: 27,
+                group_counter: 0xabcd,
+                sys_loc: 11,
+                dest_loc: 13,
+                orbit_pos: 15,
+                in_system: 17,
+                loc: POINT { x: -23, y: 29 },
+                ..Default::default()
+            };
             g
         })
         .collect()

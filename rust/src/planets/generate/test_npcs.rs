@@ -1,7 +1,5 @@
 use super::special::Story;
 use super::{default, sam, shof, sol, special};
-#[cfg(not(test))]
-use crate::battle::context_access::navigation::NavigationOps;
 use crate::engine::StoryKey;
 
 impl<S: Story, H> Story for (&mut S, &mut H) {

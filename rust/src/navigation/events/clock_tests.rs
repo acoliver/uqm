@@ -7,6 +7,7 @@ use crate::engine::{
     clock::ARILOU_UMGAH_CHECK,
     Game, StoryKey, World,
 };
+use crate::time::clock_abi::schedule_event;
 
 fn world() -> World {
     let mut world = World::new();
@@ -39,14 +40,15 @@ fn zero_and_negative_day_passage_reset_ticks_without_drawing_or_dispatch() {
 #[test]
 #[serial_test::serial]
 fn supplied_day_passage_and_tick_dispatch_with_real_status_drawing() {
-    if !crate::native_test_process::own_graphics_process(concat!(
+    if !uqm_engine::test_support::native_process::own_graphics_process(concat!(
         module_path!(),
         "::supplied_day_passage_and_tick_dispatch_with_real_status_drawing"
     )) {
         return;
     }
     let mut game = Game::new();
-    let display = crate::campaign_display_test::CampaignDisplay::install(&mut game).unwrap();
+    let display =
+        uqm_engine::test_support::campaign_display::CampaignDisplay::install(&mut game).unwrap();
     game.world = world();
     game.world.data.game.game_clock.day_in_ticks = 2;
     game.world.data.game.game_clock.tick_count = 1;
@@ -79,4 +81,32 @@ fn supplied_day_passage_and_tick_dispatch_with_real_status_drawing() {
     let pixel = frame.pixel(crate::graphics::native_abi::POINT { x: 2, y: 130 });
     assert_eq!((pixel.r, pixel.g, pixel.b), (0, 66, 0));
     display.finish(game);
+}
+
+#[test]
+fn scheduling_dispatches_immediate_events_even_when_the_pool_is_full() {
+    let mut world = world();
+    let mut random = || panic!("story event sampled RNG");
+    let mut dispatch = super::dispatcher((320, 240), &mut random);
+    assert!(schedule_event(&mut world, &mut dispatch, 0, 2, 27, 2156, 99).is_none());
+    assert_eq!(world.clock.events_ref().count(), 0);
+    for selector in 0..crate::engine::clock::NUM_EVENTS {
+        assert!(schedule_event(&mut world, &mut dispatch, 1, 0, 1, 0, selector as u8).is_some());
+    }
+    assert!(schedule_event(&mut world, &mut dispatch, 1, 0, 1, 0, 99).is_none());
+    assert!(schedule_event(
+        &mut world,
+        &mut dispatch,
+        1,
+        0,
+        0,
+        0,
+        ARILOU_UMGAH_CHECK as u8
+    )
+    .is_none());
+    assert_eq!(world.story_state(StoryKey::ARILOU_CHECKED_UMGAH), 2);
+    assert_eq!(
+        world.clock.events_ref().count(),
+        crate::engine::clock::NUM_EVENTS
+    );
 }

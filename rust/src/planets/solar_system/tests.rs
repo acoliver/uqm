@@ -202,7 +202,7 @@ fn world() -> World {
 fn frame_admission_publishes_before_input_and_nested_input_uses_the_copy() {
     use crate::engine::observe::{Observer, Presented};
     struct Recording {
-        ui: crate::automation::ui_observation::UiObservation,
+        solar: Option<crate::engine::world::generation::SolarSnapshot>,
         admissions: Vec<(i16, bool)>,
     }
     impl Observer for Recording {
@@ -211,17 +211,14 @@ fn frame_admission_publishes_before_input_and_nested_input_uses_the_copy() {
             _: &InputView,
             _: &mut crate::engine::battle::Cx<'_>,
         ) -> Injected {
-            let snapshot = self
-                .ui
-                .solar_snapshot()
-                .expect("solar checkpoint precedes admission");
+            let snapshot = self.solar.expect("solar checkpoint precedes admission");
             self.admissions
                 .push((snapshot.planets[2].display_origin.x, snapshot.in_orbit));
             Injected::default()
         }
         fn checkpoint(&mut self, view: &CheckpointView<'_>) {
             if let CheckpointView::Solar(snapshot) = view {
-                self.ui.observe_solar(*snapshot);
+                self.solar = snapshot.copied();
             }
         }
         fn presented(&mut self, _: &mut Presented) {}
@@ -241,7 +238,7 @@ fn frame_admission_publishes_before_input_and_nested_input_uses_the_copy() {
     let mut battle = crate::engine::battle::Battle::new();
     let mut cx = Cx::new(&mut battle, &mut game.world, &mut game.kernel, || 0);
     let mut observer = Recording {
-        ui: Default::default(),
+        solar: None,
         admissions: Vec::new(),
     };
     {
@@ -267,13 +264,7 @@ fn frame_admission_publishes_before_input_and_nested_input_uses_the_copy() {
         frame.admit(&mut cx, &mut io, InputView::Nested);
     }
     assert_eq!(observer.admissions, [(37, true), (37, true), (90, false)]);
-    observer.ui.begin_communication();
-    assert_eq!(
-        observer.ui.solar_snapshot().unwrap().selected,
-        Some(Body::Planet(2))
-    );
-    observer.ui.observe_solar(None);
-    assert!(observer.ui.solar_snapshot().is_none());
+    assert_eq!(observer.solar.unwrap().selected, Some(Body::Planet(2)));
 }
 
 #[test]

@@ -19,7 +19,6 @@ pub(super) fn draw_title(cx: &mut crate::engine::battle::Cx<'_>) {
 
 #[cfg(test)]
 mod tests {
-    use crate::campaign_display_test as campaign_display;
     use crate::engine::world::{CStarDesc, CATALOG_LEN};
     use crate::ui;
     use crate::{
@@ -28,23 +27,24 @@ mod tests {
             world::StarId,
             Game,
         },
-        graphics::{dcqueue_abi::TFB_FlushGraphics, drawable_abi::GetFramePixel, native_abi::*},
+        graphics::native_abi::*,
         ships::native::abi::{IN_HYPERSPACE, IN_INTERPLANETARY},
     };
+    use uqm_engine::test_support::campaign_display;
 
     fn title_pixels(game: &Game) -> Vec<(u8, u8, u8)> {
-        // SAFETY: each serialized fixture retains its screen and drains its drawing queue before reading.
-        unsafe {
-            TFB_FlushGraphics();
-            (2..9)
-                .flat_map(|y| {
-                    (193..248).map(move |x| {
-                        let pixel = GetFramePixel(game.kernel.screen, POINT { x, y });
-                        (pixel.r, pixel.g, pixel.b)
-                    })
+        uqm_engine::test_support::native_probe::flush_graphics();
+        (2..9)
+            .flat_map(|y| {
+                (193..248).map(move |x| {
+                    let pixel = uqm_engine::test_support::native_probe::frame_pixel(
+                        game.kernel.screen,
+                        POINT { x, y },
+                    );
+                    (pixel.r, pixel.g, pixel.b)
                 })
-                .collect()
-        }
+            })
+            .collect()
     }
 
     #[test]

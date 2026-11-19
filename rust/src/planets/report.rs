@@ -307,17 +307,8 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn retained_report_batch_releases_on_return_and_panic() {
-        use crate::graphics::{batch_depth::depth, context_abi::LoadedContext, dcqueue_abi};
-        struct Queue;
-        impl Drop for Queue {
-            fn drop(&mut self) {
-                // SAFETY: this serialized fixture owns the queue.
-                unsafe { dcqueue_abi::Uninit_DrawCommandQueue() };
-            }
-        }
-        // SAFETY: this serialized fixture owns the queue until its guard drops.
-        unsafe { dcqueue_abi::Init_DrawCommandQueue() };
-        let _queue = Queue;
+        use crate::graphics::{batch_depth::depth, context_abi::LoadedContext};
+        let _queue = uqm_engine::test_support::native_probe::DrawQueue::init();
         let owner = LoadedContext::create(c"report-batch-test");
         let context = owner.lease();
         {

@@ -78,7 +78,6 @@ pub fn cleanup_after_starbase(current_activity: ActivityValue) -> CleanupOutcome
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mainloop::state_machine::resolve_load_activity;
 
     #[test]
     fn moonbase_arrival_loses_fourteen_days_after_a_two_second_fade() {
@@ -127,21 +126,6 @@ mod tests {
                 CleanupOutcome::Unchanged
             );
         }
-    }
-
-    #[test]
-    fn the_faked_load_resolves_to_the_interplanetary_start() {
-        let CleanupOutcome::Apply {
-            current_activity,
-            next_activity,
-            ..
-        } = cleanup_after_starbase(ActivityValue::new(0))
-        else {
-            panic!("a clean activity word must apply the cleanup");
-        };
-        let resolved = resolve_load_activity(current_activity, next_activity);
-        assert_eq!(resolved.kind(), ActivityKind::InInterplanetary);
-        assert!(resolved.has_flag(activity_flags::START_INTERPLANETARY));
     }
 
     #[test]

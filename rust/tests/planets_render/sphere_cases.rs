@@ -2,7 +2,6 @@
 use super::geometry::*;
 use super::{Color, Point};
 use sha2::{Digest, Sha256};
-use std::ffi::{c_void, CString};
 
 const GUARD: [u32; 16] = [0x51a7_cafe; 16];
 const INITIAL_BYTES: usize = 607_765;
@@ -347,40 +346,4 @@ pub fn report_coverage(live_c: bool) {
         cases().len(),
         FIXTURE.len()
     );
-}
-
-pub fn original_output() -> Option<Vec<u8>> {
-    type Run = unsafe extern "C" fn(*mut u8, usize, *const u8, usize) -> usize;
-    let path = std::env::var_os("UQM_SPHERE_GEOMETRY_ORACLE")?;
-    let path = CString::new(path.as_encoded_bytes()).unwrap();
-    let input = input();
-    let input_before = input.clone();
-    // Guard the caller's capture allocation as well as the C internal buffer.
-    let mut output = vec![0xcd; FIXTURE.len() + 128];
-    unsafe {
-        let handle = libc::dlopen(path.as_ptr(), libc::RTLD_NOW | libc::RTLD_LOCAL);
-        assert!(
-            !handle.is_null(),
-            "load original C sphere oracle: {:?}",
-            std::ffi::CStr::from_ptr(libc::dlerror())
-        );
-        let symbol = libc::dlsym(handle, c"original_sphere_geometry".as_ptr());
-        assert!(!symbol.is_null());
-        let run = std::mem::transmute::<*mut c_void, Run>(symbol);
-        assert_eq!(
-            run(
-                output.as_mut_ptr().add(64),
-                FIXTURE.len(),
-                input.as_ptr(),
-                input.len()
-            ),
-            FIXTURE.len(),
-            "C result length"
-        );
-        assert_eq!(libc::dlclose(handle), 0);
-    }
-    assert_eq!(input, input_before, "C changed its inputs");
-    assert_eq!(&output[..64], &[0xcd; 64]);
-    assert_eq!(&output[output.len() - 64..], &[0xcd; 64]);
-    Some(output[64..output.len() - 64].to_vec())
 }

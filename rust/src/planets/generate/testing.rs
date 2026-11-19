@@ -76,7 +76,9 @@ impl<T: Story + ?Sized> Story for &mut T {
 }
 impl<S, H, R, L, F: FnOnce()> PlanetSite for Effects<'_, S, H, R, L, F> {
     fn load_planet(&mut self, _: &mut SolarSys<'_>, _: Body) {
-        self.load.take().expect("one planet load")();
+        self.load
+            .take()
+            .unwrap_or_else(|| panic!("one planet load"))();
     }
     fn load_earth_planet(&mut self, system: &mut SolarSys<'_>, body: Body) {
         self.load_planet(system, body);
@@ -85,21 +87,18 @@ impl<S, H, R, L, F: FnOnce()> PlanetSite for Effects<'_, S, H, R, L, F> {
         panic!("explicit test ordinal")
     }
 }
-impl<S, H, R: crate::planet_side::report_adapter::DiscoveryReportPort, L, F> ReportSite
-    for Effects<'_, S, H, R, L, F>
-{
-    fn report(&mut self, _: &mut SolarSys<'_>, disposition: ReportDisposition) -> bool {
-        self.report.present(disposition).expect("recording report")
+/// A recording discovery-report presenter supplied by generator tests.
+pub trait RecordReport {
+    fn present(&mut self, disposition: ReportDisposition) -> bool;
+}
+impl<T: RecordReport + ?Sized> RecordReport for &mut T {
+    fn present(&mut self, disposition: ReportDisposition) -> bool {
+        T::present(self, disposition)
     }
 }
-impl<T: crate::planet_side::report_adapter::DiscoveryReportPort + ?Sized>
-    crate::planet_side::report_adapter::DiscoveryReportPort for &mut T
-{
-    fn present(
-        &mut self,
-        disposition: ReportDisposition,
-    ) -> Result<bool, crate::planet_side::runtime::AdapterError> {
-        T::present(self, disposition)
+impl<S, H, R: RecordReport, L, F> ReportSite for Effects<'_, S, H, R, L, F> {
+    fn report(&mut self, _: &mut SolarSys<'_>, disposition: ReportDisposition) -> bool {
+        self.report.present(disposition)
     }
 }
 impl<S, H, R, L: super::home_contact::LanderTakeoff, F> super::home_contact::LanderTakeoff
@@ -180,6 +179,10 @@ impl ReportSite for NoEffects {
     }
 }
 impl super::SiteHost for NoEffects {}
+impl<R: RecordReport, F: FnOnce()> super::SiteHost
+    for Effects<'_, NoEffects, NoEffects, R, NoEffects, F>
+{
+}
 
 impl<S: Story, H: super::host::PlanetSite> super::host::PlanetSite for (&mut S, &mut H) {
     fn load_planet(&mut self, system: &mut SolarSys<'_>, body: Body) {
@@ -234,6 +237,5 @@ pub fn story_label(key: StoryKey) -> &'static str {
     crate::engine::world::story::GAME_STATE_FIELDS
         .iter()
         .find(|(_, start, end)| *start == key.start() && *end == key.end())
-        .map(|(name, _, _)| *name)
-        .expect("named recording story key")
+        .map_or_else(|| panic!("named recording story key"), |(name, _, _)| *name)
 }

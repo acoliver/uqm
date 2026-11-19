@@ -35,13 +35,16 @@ fn records_keep_row_first_column_order_and_bounded_formats() {
 #[test]
 #[serial_test::serial]
 fn renderer_draws_pixels_and_releases_hook_state_on_unwind() {
-    if !crate::native_test_process::own_graphics_process("front_end::credits::render::tests::renderer_draws_pixels_and_releases_hook_state_on_unwind") { return; }
+    if !uqm_engine::test_support::native_process::own_graphics_process("front_end::credits::render::tests::renderer_draws_pixels_and_releases_hook_state_on_unwind") { return; }
     let mut game = Game::new();
     let mut loaded = None;
     let fixture =
-        crate::campaign_display_test::CampaignDisplay::install_with_resources(&mut game, || {
-            loaded = Resources::load();
-        })
+        uqm_engine::test_support::campaign_display::CampaignDisplay::install_with_resources(
+            &mut game,
+            || {
+                loaded = Resources::load();
+            },
+        )
         .unwrap();
     let loaded = loaded.unwrap();
     assert_eq!(loaded.table.len(), 1);

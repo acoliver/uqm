@@ -6,8 +6,6 @@ use crate::engine::world::activity::activity_flags::{
 use crate::engine::world::planet::{NodeInfo, PlanetDesc, PlanetFrame, SystemInfo};
 use crate::engine::StoryKey;
 use crate::math::RandomContext;
-#[cfg(test)]
-use crate::planet_side::report_adapter::DiscoveryReportPort;
 use crate::planets::generate::consts::EARTH_RADIUS;
 use crate::planets::generate::default;
 use crate::planets::generate::home_contact::{HomeContactSite, LanderTakeoff};

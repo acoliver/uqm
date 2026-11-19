@@ -230,11 +230,7 @@ pub mod engine {
         }
     }
 
-    pub(crate) fn initialize_pump_up(
-        cx: &mut Cx<'_>,
-        ss: ShipId,
-        origin: WeaponOrigin,
-    ) -> WeaponSpawn {
+    pub fn initialize_pump_up(cx: &mut Cx<'_>, ss: ShipId, origin: WeaponOrigin) -> WeaponSpawn {
         let mut block = Missile {
             cx: origin.next.location.x,
             cy: origin.next.location.y,
@@ -361,11 +357,7 @@ pub mod engine {
         cx.element_mut(a).flags |= (DISAPPEARING | COLLISION | NONSOLID) as u16;
     }
 
-    pub(crate) fn initialize_confusion(
-        cx: &mut Cx<'_>,
-        ss: ShipId,
-        origin: WeaponOrigin,
-    ) -> WeaponSpawn {
+    pub fn initialize_confusion(cx: &mut Cx<'_>, ss: ShipId, origin: WeaponOrigin) -> WeaponSpawn {
         let mut block = Missile {
             cx: origin.next.location.x,
             cy: origin.next.location.y,

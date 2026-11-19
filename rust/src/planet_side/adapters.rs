@@ -189,7 +189,7 @@ mod tests {
     #[test]
     #[serial_test::serial]
     fn pacing_requires_initialized_display() {
-        if !crate::native_test_process::own_graphics_process(concat!(
+        if !uqm_engine::test_support::native_process::own_graphics_process(concat!(
             module_path!(),
             "::pacing_requires_initialized_display"
         )) {
@@ -334,7 +334,9 @@ mod tests {
     #[serial_test::serial]
     fn clock_uses_the_actual_counter_and_pumps_an_elapsed_deadline() {
         let mut game = crate::engine::Game::new();
-        let display = crate::campaign_display_test::CampaignDisplay::install(&mut game).unwrap();
+        let display =
+            uqm_engine::test_support::campaign_display::CampaignDisplay::install(&mut game)
+                .unwrap();
         let context =
             crate::graphics::context_abi::ContextLease::require(game.kernel.status_context);
         let mut clock =

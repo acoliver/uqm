@@ -352,7 +352,9 @@ mod tests {
     #[serial_test::serial]
     fn life_variations_are_stable_and_limited_to_three() {
         let mut game = crate::engine::Game::new();
-        let display = crate::campaign_display_test::CampaignDisplay::install(&mut game).unwrap();
+        let display =
+            uqm_engine::test_support::campaign_display::CampaignDisplay::install(&mut game)
+                .unwrap();
         let mut visuals = CffiSurfaceVisuals::new(
             frame(1),
             None,
@@ -380,7 +382,9 @@ mod tests {
         // The production entry point rejects an invalid category through the shared
         // helper before any frame or mask work, using a typed entity.
         let mut game = crate::engine::Game::new();
-        let display = crate::campaign_display_test::CampaignDisplay::install(&mut game).unwrap();
+        let display =
+            uqm_engine::test_support::campaign_display::CampaignDisplay::install(&mut game)
+                .unwrap();
         let mut visuals = CffiSurfaceVisuals::new(
             frame(1),
             None,

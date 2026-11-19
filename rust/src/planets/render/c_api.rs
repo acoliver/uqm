@@ -194,16 +194,15 @@ pub fn render_native_topography(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::graphics::{
-        context_abi::LoadedContext,
-        drawable_abi::{LoadedDrawable, ReadFramePixelColors},
-    };
+    use crate::engine::graphics::{context_abi::LoadedContext, drawable_abi::LoadedDrawable};
 
     #[test]
     #[serial_test::serial]
     fn oval_retains_its_supplied_context_and_frame_after_owner_release() {
         let mut game = crate::engine::Game::new();
-        let display = crate::campaign_display_test::CampaignDisplay::install(&mut game).unwrap();
+        let display =
+            uqm_engine::test_support::campaign_display::CampaignDisplay::install(&mut game)
+                .unwrap();
         {
             let owner = LoadedContext::create(c"retained oval fixture");
             let drawable = LoadedDrawable::create(2, 32, 32, 1).unwrap();
@@ -218,8 +217,7 @@ mod tests {
             };
             context.set_foreground(color);
             let mut renderer = NativeOvalGfx::new(&context, 320, 240);
-            // SAFETY: the serialized fixture owns native drawing state.
-            let old_scale = unsafe { crate::graphics::gfx_common_abi::set_graphic_scale(171) };
+            let old_scale = uqm_engine::test_support::native_probe::set_graphic_scale(171);
             drop(owner);
             drop(drawable);
             drop(context);
@@ -234,27 +232,12 @@ mod tests {
                 a: 255,
             });
             let read_unrelated = || {
-                let mut pixels = vec![
-                    Color {
-                        r: 0,
-                        g: 0,
-                        b: 0,
-                        a: 0
-                    };
-                    32 * 32
-                ];
-                // SAFETY: the independent owner retains this RAM frame and complete pixel buffer.
-                assert_ne!(
-                    unsafe {
-                        ReadFramePixelColors(
-                            unrelated_frame.lease().frame(0).unwrap(),
-                            pixels.as_mut_ptr(),
-                            32,
-                            32,
-                        )
-                    },
-                    0
-                );
+                let pixels = uqm_engine::test_support::native_probe::read_pixels(
+                    unrelated_frame.lease().frame(0).unwrap(),
+                    32,
+                    32,
+                )
+                .unwrap();
                 pixels
                     .into_iter()
                     .map(|pixel| (pixel.r, pixel.g, pixel.b, pixel.a))
@@ -283,20 +266,8 @@ mod tests {
                 &mut renderer,
             );
             renderer.context.flush();
-            let mut pixels = vec![
-                Color {
-                    r: 0,
-                    g: 0,
-                    b: 0,
-                    a: 0
-                };
-                32 * 32
-            ];
-            // SAFETY: the renderer retains the initialized RAM frame and the buffer covers it.
-            assert_ne!(
-                unsafe { ReadFramePixelColors(frame, pixels.as_mut_ptr(), 32, 32) },
-                0
-            );
+            let pixels =
+                uqm_engine::test_support::native_probe::read_pixels(frame, 32, 32).unwrap();
             assert!(pixels
                 .iter()
                 .any(|p| (p.r, p.g, p.b, p.a) == (71, 131, 197, 255)));
@@ -307,11 +278,8 @@ mod tests {
                 (foreground.r, foreground.g, foreground.b, foreground.a),
                 (71, 131, 197, 255)
             );
-            // SAFETY: the serialized fixture owns native drawing state.
-            unsafe {
-                assert_eq!(crate::graphics::gfx_common_abi::get_graphic_scale(), 171);
-                crate::graphics::gfx_common_abi::set_graphic_scale(old_scale);
-            }
+            assert_eq!(uqm_engine::test_support::native_probe::graphic_scale(), 171);
+            uqm_engine::test_support::native_probe::set_graphic_scale(old_scale);
             ContextLease::require(game.kernel.status_context).select();
         }
         display.finish(game);
