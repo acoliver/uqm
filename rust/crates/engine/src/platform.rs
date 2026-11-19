@@ -6,6 +6,7 @@ use std::path::PathBuf;
 #[cfg(target_os = "macos")]
 pub mod macos;
 pub mod os;
+pub mod sys;
 
 /// Translate OS failures to the C runtime errno vocabulary used by the UIO API.
 pub fn io_errno(error: &std::io::Error) -> c_int {

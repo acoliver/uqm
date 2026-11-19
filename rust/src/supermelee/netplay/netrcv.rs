@@ -55,8 +55,7 @@ impl SessionCore {
         );
     }
     pub fn net_input_with(&self, timeout: u32, emit: &mut dyn FnMut(Event)) {
-        let deadline =
-            std::time::Instant::now() + std::time::Duration::from_millis(u64::from(timeout));
+        let deadline = crate::platform::sys::Deadline::after_millis(timeout);
         let before = self.connection_progress();
         loop {
             crate::callback::ffi::Async_process();
@@ -70,14 +69,10 @@ impl SessionCore {
             }
             self.flush_packet_queues(emit);
             crate::callback::ffi::Callback_process();
-            if self.connection_progress() != before || std::time::Instant::now() >= deadline {
+            if self.connection_progress() != before || deadline.has_passed() {
                 return;
             }
-            std::thread::sleep(
-                deadline
-                    .saturating_duration_since(std::time::Instant::now())
-                    .min(std::time::Duration::from_millis(1)),
-            );
+            deadline.nap();
         }
     }
     fn connection_progress(&self) -> [(u32, usize); 2] {
